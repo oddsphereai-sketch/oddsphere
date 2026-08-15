@@ -10,10 +10,10 @@ Last reviewed: 2026-08-15
 
 - Projection runtime: resolved automodel `v2_2`
 - First-inning runtime: `fi_v2` with the versioned unpublished-probable availability head below
-- Public calibration: `mlb_public_calibration_v20_total_price_stack_2026_08_15`
-- Decision release: `mlb_daily_edge_decision_2026_08_15_r47`
-- Rule bundle: `mlb_daily_edge_rule_bundle_v46_2026_08_15`
-- Grade policy: `mlb_public_grade_policy_v37_market_champion_actions_2026_08_15`
+- Public calibration: `mlb_public_calibration_v21_raw_projection_champions_2026_08_15`
+- Decision release: `mlb_daily_edge_decision_2026_08_15_r48`
+- Rule bundle: `mlb_daily_edge_rule_bundle_v47_2026_08_15`
+- Grade policy: `mlb_public_grade_policy_v38_raw_champion_scoped_action_2026_08_15`
 - Tracking contract: `member_facing_lock_v8_priority_retry_minute_cadence_2026_08_11`
 - Machine registry: `lib/automodel/mlbModelLayerVersions.ts`
 - Authoritative member-facing writer: `lib/services/predictionRecordService.ts`
@@ -38,6 +38,43 @@ opposite-side cohort qualified with an exact locked opposite price. Rollback is
 the r46 decision, v45 rule bundle, v36 grade policy, and v19 calibration.
 Complete evidence is in
 `docs/model-audits/2026-08-15-six-market-champion-rebuild-r47-v7.md`.
+
+The August 15 r48 raw-prediction champion release replaces the MLB Moneyline
+and Total upstream selected-side heads while retaining r47 action selection.
+Moneyline changes only an away selection when its locked selected-side market
+probability is at least 40% and below 45%, an exact home price exists, and the
+opposite home side can be published coherently. Across the 283 common
+validation/latest games, accuracy moved from 160-123 (56.5%) to 164-119
+(58.0%): validation improved from 83-52 to 85-50 and latest from 77-71 to
+79-69. Brier and log loss improved in both partitions, and two of four rolling
+folds improved. This narrow cohort was discovered during the fresh rebuild and
+is explicitly recorded as post-hoc evidence; it is not generalized to other
+market bands or sides.
+
+Total adopts a runtime-compatible ridge residual forecast of actual total
+minus the locked market line, using the existing independent/posterior totals,
+starter, bullpen, lineup, top-order, park, weather, and market-total fields.
+It changes the incumbent side only when the fitted probability of that side is
+below 40%. On 278 common validation/latest games, accuracy moved from 147-131
+(52.9%) to 150-128 (54.0%): validation improved from 70-63 to 72-61 and latest
+from 77-68 to 78-67. Brier and log loss improved in both partitions; three of
+four rolling accuracy folds and two of four projection-RMSE folds improved.
+Latest total RMSE improved from 4.1176 to 4.1121, while MAE moved from 3.3032
+to 3.3383 and is reported as a limitation.
+
+The moneyline action tournament qualified a zero-margin replacement only from
+-120 through +129. It retained 36 and 35 validation/latest actions, demoted 3
+and 2, promoted 28 and 16, and expanded the boards by 25 and 14 while improving
+paired units by 5.028 and 3.922. Prices outside that band retain r47 behavior;
+this does not cap valid favorites below -120 or -200. Newly changed forecast
+sides remain `no_bet` because they cannot coherently inherit an old-side action
+in the single-record writer. The totals action tournament produced no
+qualifier, so changed total sides also remain `no_bet`; unchanged totals retain
+r47 behavior. Rollback is r47, rule bundle v46,
+calibration v20, grade policy v37, schema v3, and the former market-specific
+probability heads. Evidence and the fresh research alignment review are in
+`docs/model-audits/2026-08-15-mlb-raw-projection-champions-r48.md` and
+`docs/model-audits/2026-08-15-research-alignment-review.md`.
 
 Moneyline precedence is immutable unless a later versioned release explicitly replaces it:
 

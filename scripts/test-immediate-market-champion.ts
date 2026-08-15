@@ -4,7 +4,10 @@ import {
   calibrateMlbTotalPickedProbability,
   calibrateWnbaSpreadPickedProbability,
   MLB_MONEYLINE_POSITIVE_EV_FAVORITE_RULE_ID,
+  MLB_MONEYLINE_RAW_CHAMPION_ACTION_RULE_ID,
   resolveMlbMoneylineChampionAction,
+  resolveMlbMoneylineRawSideChampion,
+  resolveMlbTotalRuntimeResidualChampion,
   resolveWnbaMoneylineChampionAction,
   resolveWnbaSpreadChampionAction,
   WNBA_MONEYLINE_POSITIVE_EV_ADDITION_RULE_ID,
@@ -19,25 +22,31 @@ assert.deepEqual(resolveMlbMoneylineChampionAction({
   blocked: true,
   modelProbability: null,
   oddsAmerican: null,
-}), { actionable: false, promoted: false, ruleId: null });
+}), { actionable: false, promoted: false, demoted: true, ruleId: null });
 
 assert.deepEqual(resolveMlbMoneylineChampionAction({
   currentActionable: false,
   blocked: false,
-  modelProbability: 0.56,
-  oddsAmerican: -110,
+  modelProbability: 0.6,
+  oddsAmerican: -135,
 }), {
   actionable: true,
   promoted: true,
+  demoted: false,
   ruleId: MLB_MONEYLINE_POSITIVE_EV_FAVORITE_RULE_ID,
 });
 
-assert.equal(resolveMlbMoneylineChampionAction({
+assert.deepEqual(resolveMlbMoneylineChampionAction({
   currentActionable: false,
   blocked: false,
   modelProbability: 0.6,
   oddsAmerican: 120,
-}).actionable, false);
+}), {
+  actionable: true,
+  promoted: true,
+  demoted: false,
+  ruleId: MLB_MONEYLINE_RAW_CHAMPION_ACTION_RULE_ID,
+});
 
 assert.equal(resolveMlbMoneylineChampionAction({
   currentActionable: false,
@@ -45,6 +54,97 @@ assert.equal(resolveMlbMoneylineChampionAction({
   modelProbability: 0.7,
   oddsAmerican: -220,
 }).actionable, true, "favorite promotions are not capped at -120 or -200");
+assert.deepEqual(resolveMlbMoneylineChampionAction({
+  currentActionable: true,
+  blocked: false,
+  modelProbability: 0.5,
+  oddsAmerican: -110,
+}), {
+  actionable: false,
+  promoted: false,
+  demoted: true,
+  ruleId: "mlb_moneyline_raw_champion_replace_minus120_plus129_v1_2026_08_15",
+}, "the qualified replacement policy demotes negative-EV rows only in its tested price band");
+assert.equal(resolveMlbMoneylineChampionAction({
+  currentActionable: true,
+  blocked: false,
+  modelProbability: 0.5,
+  oddsAmerican: -175,
+}).actionable, true, "the tested band does not cap or replace actions below -120");
+
+assert.deepEqual(resolveMlbMoneylineRawSideChampion({
+  currentSide: "away",
+  currentModelProbability: 0.58,
+  currentMarketProbability: 0.42,
+  homeOdds: -135,
+}), {
+  applied: true,
+  ruleId: "mlb_away_market_40_45_raw_side_champion_v1_2026_08_15",
+  correctedSide: "home",
+  correctedOdds: -135,
+  correctedModelProbability: 0.5800000000000001,
+  correctedMarketProbability: 0.5800000000000001,
+});
+assert.equal(resolveMlbMoneylineRawSideChampion({
+  currentSide: "home",
+  currentModelProbability: 0.58,
+  currentMarketProbability: 0.42,
+  homeOdds: -135,
+}).applied, false, "the moneyline champion is a narrow away-pick disagreement cohort");
+
+const runtimeTotalChampion = resolveMlbTotalRuntimeResidualChampion({
+  currentSide: "under",
+  currentMarketProbability: 0.52,
+  independentTotal: 18,
+  posteriorTotal: 9,
+  marketTotal: 8.5,
+  homeStarterEra: 4.2,
+  awayStarterEra: 4.2,
+  homeBullpenFactor: 1,
+  awayBullpenFactor: 1,
+  homeLineupWeightedOps: 0.72,
+  awayLineupWeightedOps: 0.72,
+  homeTopOrderOps: 0.72,
+  awayTopOrderOps: 0.72,
+  parkFactorRuns: 1,
+  weatherTotalAdjust: 0,
+  leagueAverageEra: 4.2,
+  leagueAverageOps: 0.72,
+  overOdds: -108,
+  underOdds: -112,
+  overLine: 8.5,
+  underLine: 8.5,
+});
+assert.equal(runtimeTotalChampion.applied, true);
+if (runtimeTotalChampion.applied) {
+  assert.equal(runtimeTotalChampion.correctedSide, "over");
+  assert.equal(runtimeTotalChampion.correctedOdds, -108);
+  assert.equal(runtimeTotalChampion.correctedLine, 8.5);
+  assert.ok(runtimeTotalChampion.correctedModelProbability > 0.6);
+}
+assert.equal(resolveMlbTotalRuntimeResidualChampion({
+  currentSide: "over",
+  currentMarketProbability: 0.52,
+  independentTotal: 8.5,
+  posteriorTotal: 8.5,
+  marketTotal: 8.5,
+  homeStarterEra: null,
+  awayStarterEra: null,
+  homeBullpenFactor: null,
+  awayBullpenFactor: null,
+  homeLineupWeightedOps: null,
+  awayLineupWeightedOps: null,
+  homeTopOrderOps: null,
+  awayTopOrderOps: null,
+  parkFactorRuns: null,
+  weatherTotalAdjust: null,
+  leagueAverageEra: null,
+  leagueAverageOps: null,
+  overOdds: -110,
+  underOdds: -110,
+  overLine: 8.5,
+  underLine: 8.5,
+}).applied, false, "the totals challenger changes only strong sub-40% disagreements");
 
 const calibratedTotalUnder = calibrateMlbTotalPickedProbability({
   rawPickedProbability: 0.56,

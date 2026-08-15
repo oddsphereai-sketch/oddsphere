@@ -1134,9 +1134,12 @@ console.log("\n━━━ MLB market-divergence Lean integration ━━━");
     }))]]),
   });
   const playbookOnlyMl = playbookOnlyResistance.find((record) => record.market === "moneyline")!;
+  const playbookOnlyDecision = (playbookOnlyMl.snapshot_json as any)?.decision_pipeline;
   check(
     "Playbook-only splits cannot activate SharpAPI-validated Moneyline promotion or stand-down",
-    playbookOnlyMl.play_grade !== "lean" && playbookOnlyMl.no_bet !== true,
+    playbookOnlyMl.no_bet !== true
+      && playbookOnlyDecision?.action_rule_id !== ML_MARKET_DIVERGENCE_LEAN_RULE_ID
+      && playbookOnlyDecision?.champion_correction_reasons?.includes?.(ML_SIGNED_MARKET_RESISTANCE_RULE_ID) !== true,
   );
 }
 

@@ -66,8 +66,8 @@ const layers = buildMlbModelLayerVersions("total", {});
 check("missing model env stamps resolved v2_2", layers.runtime_env.automodel_version === "v2_2");
 check("missing FI env stamps resolved fi_v2", layers.runtime_env.first_inning_model_version === "fi_v2");
 check(
-  "grade policy carries August 15 v37 market champion policy",
-  layers.grade_policy === "mlb_public_grade_policy_v37_market_champion_actions_2026_08_15",
+  "grade policy carries August 15 v38 raw champion scoped-action policy",
+  layers.grade_policy === "mlb_public_grade_policy_v38_raw_champion_scoped_action_2026_08_15",
 );
 check(
   "tracking contract carries the priority-retry minute-lock release",
@@ -79,9 +79,9 @@ check(
     layers.calibration_version === MLB_PUBLIC_CALIBRATION_VERSION,
 );
 check(
-  "MLB six-market champion is versioned as decision release r47",
-  MLB_DAILY_EDGE_DECISION_RELEASE_ID === "mlb_daily_edge_decision_2026_08_15_r47" &&
-    MLB_MODEL_LAYER_VERSION_SCHEMA === "mlb_model_layer_versions_v3" &&
+  "MLB raw projection champions are versioned as decision release r48",
+  MLB_DAILY_EDGE_DECISION_RELEASE_ID === "mlb_daily_edge_decision_2026_08_15_r48" &&
+    MLB_MODEL_LAYER_VERSION_SCHEMA === "mlb_model_layer_versions_v4" &&
     layers.schedule_time_policy === "mlb_official_schedule_time_v1_2026_07_30",
 );
 check("different final sides are a true correction", didFinalSideChange("home", "away"));
