@@ -126,6 +126,8 @@ export async function GET(request: Request) {
           startedAtIso: summary.startedAtIso,
           finishedAtIso: summary.finishedAtIso,
           durationMs: summary.durationMs,
+          settlementContractVersion: summary.settlementContractVersion,
+          stalePendingRepair: summary.stalePendingRepair,
           responseSnapshot,
         },
       };

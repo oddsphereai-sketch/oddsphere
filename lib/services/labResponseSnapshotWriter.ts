@@ -6,6 +6,7 @@ import {
   trackingSnapshotKey,
   upsertLabResponseSnapshot,
 } from "@/lib/services/labResponseSnapshots";
+import { TRACKING_SETTLEMENT_CONTRACT_VERSION } from "@/lib/services/trackingSettlementRepairService";
 
 const DAILY_EDGE_SNAPSHOT_TTL_MS = Number(
   // The lightest regular publisher runs every 15 minutes. Keep a five-minute
@@ -150,7 +151,7 @@ export async function refreshTrackingFoundationResponseSnapshot(input: {
       ttlMs: TRACKING_SNAPSHOT_TTL_MS,
       staleMs: TRACKING_SNAPSHOT_STALE_MS,
       source: input.source ?? "cron",
-      payloadVersion: "tracking-foundation-v1",
+      payloadVersion: TRACKING_SETTLEMENT_CONTRACT_VERSION,
     });
     if (!write.ok) return { ok: false, snapshotKey, error: write.error };
     return {

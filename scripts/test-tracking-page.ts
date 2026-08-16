@@ -30,6 +30,8 @@ const TRACK_RECORD = readFileSync("app/lab/track-record/page.tsx", "utf8");
 const LAB_NAV = readFileSync("app/lab/components/LabAppNav.tsx", "utf8");
 const SERVICE = readFileSync("lib/services/trackingAggregateService.ts", "utf8");
 const TRACKING_LOADING = readFileSync("app/lab/tracking/loading.tsx", "utf8");
+const TRACKING_SETTLEMENT = readFileSync("lib/services/trackingSettlementRepairService.ts", "utf8");
+const SNAPSHOT_WRITER = readFileSync("lib/services/labResponseSnapshotWriter.ts", "utf8");
 const PROPS_LOADING = readFileSync("app/mlb/props/loading.tsx", "utf8");
 const PUBLIC_TRACKING_SUMMARY = readFileSync("lib/services/tracking/publicTrackRecordSummary.ts", "utf8");
 
@@ -40,6 +42,13 @@ function check(name: string, cond: boolean, msg?: string) {
 }
 
 console.log(`\n━━━ tracking page tests (6B.2e — design reset) ━━━\n`);
+
+check(
+  "tracking snapshots are stamped with the bounded settlement contract",
+  SNAPSHOT_WRITER.includes("payloadVersion: TRACKING_SETTLEMENT_CONTRACT_VERSION") &&
+    TRACKING_SETTLEMENT.includes("MAX_REPAIR_DATES_PER_RUN = 3") &&
+    !API.includes("trackingSettlementContractVersion"),
+);
 
 check(
   "Homepage current tracking converts the canonical 0..1 hit rate to a display percentage",

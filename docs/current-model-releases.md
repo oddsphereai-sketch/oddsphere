@@ -4,7 +4,21 @@ This file is the human-readable production handoff registry. Runtime constants a
 prediction snapshots remain the machine authority. Future model work must start here, verify the
 constants, and preserve the precedence and writer ownership below.
 
-Last reviewed: 2026-08-15
+Last reviewed: 2026-08-16
+
+## Shared tracking settlement
+
+- Settlement contract: `tracking_settlement_v2_bounded_stale_pending_repair_2026_08_16`
+- Runtime constant: `lib/services/trackingSettlementRepairService.ts`
+- Authoritative writer: the existing sport-scoped `tracking_refresh` job under the shared
+  `prediction_pipeline` lease
+
+The v2 settlement contract retains every current model, calibration, selection, price, lock, and
+grading rule. It adds a bounded database-only catch-up (at most three historical slate dates per
+sport per run) for existing pending grades whose stored game is already terminal. This prevents a
+transient missed settlement from remaining pending after the slate leaves the normal
+yesterday/today/tomorrow provider window. The catch-up calls the same authoritative grader and
+does not add a second prediction writer or fetch historical provider slates.
 
 ## MLB champion
 
