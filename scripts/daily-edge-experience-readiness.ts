@@ -114,14 +114,21 @@ function auditMarket(
 
   const decision = market.recommendationDecision;
   if (decision?.sharpBookSplits) {
+    const sharpSection = decision.sharpBookSplits;
     if (
-      decision.sharpBookSplits.label !== "Sharp Book Splits" &&
-      decision.sharpBookSplits.label !== "Sharp Book Signal"
+      sharpSection.label !== "Sharp Book Splits" &&
+      sharpSection.label !== "Sharp Book Signal"
     ) {
       violations.push(`${prefix}: sharp section has a non-sharp label`);
     }
-    if (decision.sharpBookSplits.rows.length === 0) {
-      violations.push(`${prefix}: sharp section exists without rows`);
+    if (sharpSection.label === "Sharp Book Splits" && sharpSection.rows.length === 0) {
+      violations.push(`${prefix}: sharp split section exists without rows`);
+    }
+    if (
+      sharpSection.label === "Sharp Book Signal" &&
+      (sharpSection.rows.length > 0 || !sharpSection.signal?.trim())
+    ) {
+      violations.push(`${prefix}: sharp signal section has an invalid signal-only shape`);
     }
   }
   if (

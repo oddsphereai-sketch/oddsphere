@@ -41,6 +41,10 @@ const candidateDailyEdgeSource = readFileSync(
   "app/dev/experience-preview/ActualDailyEdgePreview.tsx",
   "utf8",
 );
+const dailyEdgeReadinessSource = readFileSync(
+  "scripts/daily-edge-experience-readiness.ts",
+  "utf8",
+);
 
 let passed = 0;
 let failed = 0;
@@ -160,6 +164,12 @@ check(
     dailyEdgeRouteSource.includes("await connection()") &&
     dailyEdgeRouteSource.indexOf("await connection()") <
       dailyEdgeRouteSource.indexOf("isDailyEdgeExperienceCandidateEnabled()"),
+);
+check(
+  "readiness accepts the canonical signal-only sharp-book section while rejecting empty split sections",
+  dailyEdgeReadinessSource.includes('sharpSection.label === "Sharp Book Splits" && sharpSection.rows.length === 0') &&
+    dailyEdgeReadinessSource.includes('sharpSection.label === "Sharp Book Signal" &&') &&
+    dailyEdgeReadinessSource.includes('!sharpSection.signal?.trim()'),
 );
 
 console.log("\n━━━ Reader selection contract ━━━");
