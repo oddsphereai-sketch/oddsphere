@@ -1587,8 +1587,22 @@ async function loadSourceAwareSplitSections(opts: {
 }): Promise<SourceAwareSplitLookup> {
   const result: SourceAwareSplitLookup = new Map();
   if (opts.eventIds.length === 0) return result;
-  const results = await Promise.all(
-    opts.eventIds.map((eventId) =>
+  // Always fetch the small current SharpAPI consensus set independently.
+  // A single game can have more than 500 historical split observations; if
+  // those rows share a poll timestamp, the per-event history cap can otherwise
+  // crowd the six current rows out of the response nondeterministically.
+  const [currentSharpResult, ...historyResults] = await Promise.all([
+    supabase
+      .from("market_split_observations_v2")
+      .select("canonical_event_id, market_type, selection_key, provider, source_book, source_type, bets_pct, money_pct, source_observed_at, fetched_at")
+      .eq("league", "mlb")
+      .eq("provider", "sharpapi")
+      .eq("source_book", "consensus")
+      .in("canonical_event_id", opts.eventIds)
+      .in("market_type", ["moneyline", "total"])
+      .order("fetched_at", { ascending: false })
+      .limit(Math.max(100, opts.eventIds.length * 8)),
+    ...opts.eventIds.map((eventId) =>
       supabase
         .from("market_split_observations_v2")
         .select("canonical_event_id, market_type, selection_key, provider, source_book, source_type, bets_pct, money_pct, source_observed_at, fetched_at")
@@ -1598,9 +1612,9 @@ async function loadSourceAwareSplitSections(opts: {
         .order("fetched_at", { ascending: false })
         .limit(500),
     ),
-  );
+  ]);
   const rows: SourceAwareSplitObservationRow[] = [];
-  for (const queryResult of results) {
+  for (const queryResult of [currentSharpResult, ...historyResults]) {
     if (queryResult.error) {
       console.warn(`daily-edge: source-aware split sections unavailable: ${queryResult.error.message}`);
       continue;

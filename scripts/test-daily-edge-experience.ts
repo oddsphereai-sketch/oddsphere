@@ -33,6 +33,10 @@ const dailyEdgeRouteSource = readFileSync(
   "app/lab/daily-edge/page.tsx",
   "utf8",
 );
+const dailyEdgeApiSource = readFileSync(
+  "app/api/lab/daily-edge/route.ts",
+  "utf8",
+);
 const legacyDailyEdgeSource = readFileSync(
   "app/lab/components/daily-edge/DailyEdgeShell.tsx",
   "utf8",
@@ -170,6 +174,13 @@ check(
   dailyEdgeReadinessSource.includes('sharpSection.label === "Sharp Book Splits" && sharpSection.rows.length === 0') &&
     dailyEdgeReadinessSource.includes('sharpSection.label === "Sharp Book Signal" &&') &&
     dailyEdgeReadinessSource.includes('!sharpSection.signal?.trim()'),
+);
+check(
+  "source-aware split loading protects current SharpAPI rows from the per-game history cap",
+  dailyEdgeApiSource.includes("const [currentSharpResult, ...historyResults]") &&
+    dailyEdgeApiSource.includes('.eq("provider", "sharpapi")') &&
+    dailyEdgeApiSource.includes('.eq("source_book", "consensus")') &&
+    dailyEdgeApiSource.includes("[currentSharpResult, ...historyResults]"),
 );
 
 console.log("\n━━━ Reader selection contract ━━━");

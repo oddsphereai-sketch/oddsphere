@@ -430,16 +430,14 @@ export async function GET(request: Request) {
         records += preLockSignals.records_updated ?? 0;
         apiCalls += preLockSignals.api_calls_made ?? 0;
 
-        if (!lockOnly) {
-          marketIntelligenceV2 = await runScheduledMarketIntelligenceV2Collection({
-            supabase,
-            sport,
-            slateDate: date,
-            phase: "pregame_sweep",
-          });
-          records += marketIntelligenceV2.recordsUpdated;
-          apiCalls += marketIntelligenceV2.apiCallsMade;
-        }
+        marketIntelligenceV2 = await runScheduledMarketIntelligenceV2Collection({
+          supabase,
+          sport,
+          slateDate: date,
+          phase: "pregame_sweep",
+        });
+        records += marketIntelligenceV2.recordsUpdated;
+        apiCalls += marketIntelligenceV2.apiCallsMade;
       }
 
       // ── 2. Final pre-lock auto-model pass for ENTERING_LOCK games ───

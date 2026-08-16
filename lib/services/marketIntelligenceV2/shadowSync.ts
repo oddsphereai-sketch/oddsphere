@@ -61,6 +61,9 @@ export type SharpSplitSlateAlignment = {
   currentSlateMatches: number;
   previousSlateMatches: number;
   currentCoverage: number;
+  eventDateMatches: number;
+  eventDateMismatches: number;
+  eventDateUnparseable: number;
 };
 
 /**
@@ -72,13 +75,22 @@ export function assessSharpApiSplitSlateAlignment(
   rows: readonly SharpSplitRowWithTeams[],
   currentGames: readonly Pick<GameRef, "awayAbbr" | "homeAbbr">[],
   previousGames: readonly Pick<GameRef, "awayAbbr" | "homeAbbr">[],
+  requestedSlateDate: string,
 ): SharpSplitSlateAlignment {
   const rowPairs = new Set<string>();
+  let eventDateMatches = 0;
+  let eventDateMismatches = 0;
+  let eventDateUnparseable = 0;
   for (const row of rows) {
     const league = String(row.league ?? "").toLowerCase();
     if (league && league !== "mlb") continue;
     const key = marketIntelligenceGameKey("mlb", row.away_team, row.home_team);
-    if (key !== null) rowPairs.add(key);
+    if (key === null) continue;
+    rowPairs.add(key);
+    const eventDate = extractEventIdDate(row.event_id);
+    if (eventDate === null) eventDateUnparseable++;
+    else if (eventDate === requestedSlateDate) eventDateMatches++;
+    else eventDateMismatches++;
   }
   const currentPairs = new Set(currentGames.map((game) => `${game.awayAbbr}@${game.homeAbbr}`));
   const previousPairs = new Set(previousGames.map((game) => `${game.awayAbbr}@${game.homeAbbr}`));
@@ -86,15 +98,19 @@ export function assessSharpApiSplitSlateAlignment(
   const previousSlateMatches = Array.from(rowPairs).filter((key) => previousPairs.has(key)).length;
   const validPairs = rowPairs.size;
   const currentCoverage = validPairs === 0 ? 0 : currentSlateMatches / validPairs;
+  const exactEventDateEvidence = eventDateMatches > 0 && eventDateMismatches === 0;
   return {
     aligned:
       validPairs > 0 &&
       currentCoverage >= 0.7 &&
-      currentSlateMatches > previousSlateMatches,
+      (currentSlateMatches > previousSlateMatches || exactEventDateEvidence),
     validPairs,
     currentSlateMatches,
     previousSlateMatches,
     currentCoverage,
+    eventDateMatches,
+    eventDateMismatches,
+    eventDateUnparseable,
   };
 }
 
@@ -579,6 +595,7 @@ async function collectSharpApiSplits(opts: {
     rows,
     opts.games,
     opts.previousGames,
+    opts.slateDate,
   );
   if (rows.length > 0 && !slateAlignment.aligned) {
     return {
@@ -594,7 +611,11 @@ async function collectSharpApiSplits(opts: {
           `SharpAPI split slate alignment rejected: current=${slateAlignment.currentSlateMatches}/${slateAlignment.validPairs}, ` +
           `previous=${slateAlignment.previousSlateMatches}/${slateAlignment.validPairs}`,
       })),
-      errors: [],
+      errors: [
+        `SharpAPI split payload rejected by slate alignment: current=${slateAlignment.currentSlateMatches}/${slateAlignment.validPairs}, ` +
+          `previous=${slateAlignment.previousSlateMatches}/${slateAlignment.validPairs}, ` +
+          `event_date_match=${slateAlignment.eventDateMatches}, event_date_mismatch=${slateAlignment.eventDateMismatches}`,
+      ],
       details: {
         slate_alignment: slateAlignment,
         stale_or_ambiguous_payload_rejected: true,

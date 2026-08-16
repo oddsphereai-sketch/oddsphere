@@ -15,7 +15,7 @@ export type MlbModelLayerMarket = "moneyline" | "total" | "first_inning";
 
 export const MLB_MODEL_LAYER_VERSION_SCHEMA = "mlb_model_layer_versions_v4";
 export const MLB_PUBLIC_CALIBRATION_VERSION = "mlb_public_calibration_v21_raw_projection_champions_2026_08_15";
-export const MLB_DAILY_EDGE_DECISION_RELEASE_ID = "mlb_daily_edge_decision_2026_08_15_r48";
+export const MLB_DAILY_EDGE_DECISION_RELEASE_ID = "mlb_daily_edge_decision_2026_08_16_r49";
 export const MLB_DAILY_EDGE_RULE_BUNDLE_VERSION = "mlb_daily_edge_rule_bundle_v47_2026_08_15";
 
 export const MLB_MODEL_LAYER_VERSION_IDS = {

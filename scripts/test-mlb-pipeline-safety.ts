@@ -79,8 +79,8 @@ check(
     layers.calibration_version === MLB_PUBLIC_CALIBRATION_VERSION,
 );
 check(
-  "MLB raw projection champions are versioned as decision release r48",
-  MLB_DAILY_EDGE_DECISION_RELEASE_ID === "mlb_daily_edge_decision_2026_08_15_r48" &&
+  "MLB sharp-split ingestion repair is versioned as decision release r49",
+  MLB_DAILY_EDGE_DECISION_RELEASE_ID === "mlb_daily_edge_decision_2026_08_16_r49" &&
     MLB_MODEL_LAYER_VERSION_SCHEMA === "mlb_model_layer_versions_v4" &&
     layers.schedule_time_policy === "mlb_official_schedule_time_v1_2026_07_30",
 );
@@ -366,10 +366,22 @@ check(
   sweepSource.includes("minIntervalMinutes: !dryRun && gateActive ? 0.75 : undefined") &&
     sweepSource.includes("leaseRetryMaxWaitMs: !dryRun && gateActive ? 20_000 : undefined"),
 );
+const preLockMarketCollectionIndex = sweepSource.indexOf(
+  "marketIntelligenceV2 = await runScheduledMarketIntelligenceV2Collection",
+);
+const preLockModelIndex = sweepSource.indexOf(
+  "const result = await generatePredictionsForSlate",
+  preLockMarketCollectionIndex,
+);
+const immutableLockIndex = sweepSource.indexOf(
+  "const lockResult = await applyLocks",
+  preLockModelIndex,
+);
 check(
-  "lock-only sweep avoids full market intelligence collection",
-  sweepSource.includes("if (!lockOnly)") &&
-    sweepSource.indexOf("if (lockOnly)") < sweepSource.indexOf('sport === "mlb" && marketIntelligenceV2 === null'),
+  "lock-only sweep collects market intelligence before the T-60 model and immutable lock",
+  preLockMarketCollectionIndex >= 0 &&
+    preLockModelIndex > preLockMarketCollectionIndex &&
+    immutableLockIndex > preLockModelIndex,
 );
 check(
   "unlocked pregame refresh republishes coherent member records and snapshot",

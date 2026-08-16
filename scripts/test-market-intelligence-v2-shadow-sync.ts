@@ -38,6 +38,7 @@ check(
       { awayAbbr: "BOS", homeAbbr: "NYY" },
       { awayAbbr: "MIL", homeAbbr: "LAD" },
     ],
+    "2026-08-14",
   );
   check(
     "Market Intelligence rejects date-advanced rows whose matchups fit the previous slate",
@@ -51,10 +52,53 @@ check(
       { awayAbbr: "MIL", homeAbbr: "LAD" },
     ],
     [{ awayAbbr: "MIL", homeAbbr: "LAD" }],
+    "2026-08-14",
   );
   check(
     "Market Intelligence accepts broad current-slate coverage with a better current fit",
     aligned.aligned && aligned.currentSlateMatches === 3 && aligned.previousSlateMatches === 1,
+  );
+
+  const repeatedSeries = assessSharpApiSplitSlateAlignment(
+    rows,
+    [
+      { awayAbbr: "MIA", homeAbbr: "NYM" },
+      { awayAbbr: "BOS", homeAbbr: "NYY" },
+      { awayAbbr: "MIL", homeAbbr: "LAD" },
+    ],
+    [
+      { awayAbbr: "MIA", homeAbbr: "NYM" },
+      { awayAbbr: "BOS", homeAbbr: "NYY" },
+      { awayAbbr: "MIL", homeAbbr: "LAD" },
+    ],
+    "2026-08-14",
+  );
+  check(
+    "Market Intelligence accepts an explicitly dated current payload when consecutive-series matchups overlap",
+    repeatedSeries.aligned &&
+      repeatedSeries.currentSlateMatches === 3 &&
+      repeatedSeries.previousSlateMatches === 3 &&
+      repeatedSeries.eventDateMatches === 3 &&
+      repeatedSeries.eventDateMismatches === 0,
+  );
+
+  const wrongDateRepeatedSeries = assessSharpApiSplitSlateAlignment(
+    rows,
+    [
+      { awayAbbr: "MIA", homeAbbr: "NYM" },
+      { awayAbbr: "BOS", homeAbbr: "NYY" },
+      { awayAbbr: "MIL", homeAbbr: "LAD" },
+    ],
+    [
+      { awayAbbr: "MIA", homeAbbr: "NYM" },
+      { awayAbbr: "BOS", homeAbbr: "NYY" },
+      { awayAbbr: "MIL", homeAbbr: "LAD" },
+    ],
+    "2026-08-15",
+  );
+  check(
+    "Market Intelligence still rejects overlapping-series payloads dated for another slate",
+    !wrongDateRepeatedSeries.aligned && wrongDateRepeatedSeries.eventDateMismatches === 3,
   );
 }
 check(

@@ -25,7 +25,7 @@ does not add a second prediction writer or fetch historical provider slates.
 - Projection runtime: resolved automodel `v2_2`
 - First-inning runtime: `fi_v2` with the versioned unpublished-probable availability head below
 - Public calibration: `mlb_public_calibration_v21_raw_projection_champions_2026_08_15`
-- Decision release: `mlb_daily_edge_decision_2026_08_15_r48`
+- Decision release: `mlb_daily_edge_decision_2026_08_16_r49`
 - Rule bundle: `mlb_daily_edge_rule_bundle_v47_2026_08_15`
 - Grade policy: `mlb_public_grade_policy_v38_raw_champion_scoped_action_2026_08_15`
 - Tracking contract: `member_facing_lock_v8_priority_retry_minute_cadence_2026_08_11`
@@ -89,6 +89,22 @@ calibration v20, grade policy v37, schema v3, and the former market-specific
 probability heads. Evidence and the fresh research alignment review are in
 `docs/model-audits/2026-08-15-mlb-raw-projection-champions-r48.md` and
 `docs/model-audits/2026-08-15-research-alignment-review.md`.
+
+The August 16 r49 incident release retains every r48 projection, calibration,
+grade rule, action rule, and price rule. It repairs the SharpAPI MLB split
+slate-identity gate for consecutive series: when the current and previous
+slates contain the same matchups, a payload with at least 70% current-slate
+matchup coverage is accepted only when its parseable provider event dates all
+equal the requested slate date. A wrong-date or low-coverage payload still
+fails closed. Rejected non-empty SharpAPI payloads now surface a cron error,
+and missing MLB Moneyline/Total sharp context is a high-severity Daily Edge
+health finding. The scheduled lock-only sweep now collects Market Intelligence
+v2 whenever a game enters T-60, before the final model pass and immutable lock,
+so every future locked MLB Moneyline and Total captures the available current
+sharp pair. Rollback is r48 plus the former matchup-only alignment gate;
+the rollback would restore the incident, so it is appropriate only if the
+provider event-date contract changes. Evidence is in
+`docs/model-audits/2026-08-16-mlb-sharp-split-ingestion-r49.md`.
 
 Moneyline precedence is immutable unless a later versioned release explicitly replaces it:
 
