@@ -72,6 +72,7 @@ import {
   activeMlbPropMarketModelVersions,
   MLB_PROPS_MODEL_RELEASE_ID,
 } from "./marketModelVersions";
+import { applyMlbPropsDisplayProjectionCalibration } from "./displayProjectionCalibration";
 import {
   compareMlbPropsMatchupHistoryCandidates,
   selectMlbPropsMatchupHistoryCandidates,
@@ -326,7 +327,7 @@ export async function refreshMlbPropsBoard(args: RefreshArgs): Promise<MlbPropsB
     })
     : null;
 
-  const props = applyValidatedHomeRunPortfolioPromotions(applyValidatedValuePortfolioPromotions(compactMemberBoardRows(attachMlbPropOddsMovement(buildDashboardRows({
+  const decisionProps = applyValidatedHomeRunPortfolioPromotions(applyValidatedValuePortfolioPromotions(compactMemberBoardRows(attachMlbPropOddsMovement(buildDashboardRows({
     mappedOdds,
     identities,
     probablePitchers,
@@ -335,6 +336,9 @@ export async function refreshMlbPropsBoard(args: RefreshArgs): Promise<MlbPropsB
     scoringCandidates: scoring?.summary.sampleCandidates ?? [],
     asOfTimestamp,
   }), openingOdds, previous), asOfTimestamp)));
+  // Expected-count calibration is intentionally applied only after every
+  // probability, side, grade, actionability, and stake decision is complete.
+  const props = applyMlbPropsDisplayProjectionCalibration(decisionProps);
   const data = buildDashboardData({
     slateDate: args.slateDate,
     asOfTimestamp,

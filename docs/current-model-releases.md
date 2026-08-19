@@ -305,11 +305,33 @@ Evidence and rollback details are recorded in
 
 ## MLB Player Props candidate
 
-- Release: `mlb_props_2026_08_19_r36`
+- Release: `mlb_props_2026_08_19_r37`
 - Machine registry: `lib/mlb/props/marketModelVersions.ts`
 - Authoritative writer: `/api/cron/mlb-player-props-refresh` through
   `refreshMlbPropsBoard`
 - Status: private launch candidate; not publicly enabled
+
+The August 19 r37 projection-accuracy release adds a post-decision affine
+expected-count calibration for Batter Hits + Runs + RBI, Batter Strikeouts,
+Batter Total Bases, Pitcher Earned Runs, Pitcher Hits Allowed, and Pitcher
+Strikeouts. It is downstream of the complete decision pipeline and is
+structurally unable to change a probability, selected side, grade,
+actionability, or stake. A non-regression guard retains the prior projection
+whenever calibration would introduce a new selected-side contradiction. The
+other markets remain byte-for-byte unchanged by the calibrator.
+
+Markets were selected on August 4-10 only when both MAE and RMSE improved and
+both improved on at least two-thirds of validation dates, then refit without
+holdout outcomes and opened once on August 11-17. All six selected markets
+held. Across 13,166 holdout rows, aggregate MAE improved from 0.80415 to
+0.78889 and RMSE from 1.22134 to 1.18411. Both date-clustered and player-game
+clustered bootstraps put the probability of aggregate improvement at 100% in
+20,000 resamples. Because this is expected-count calibration rather than a
+probability or betting-policy result, it provides no new permission to promote
+or stake a wager. Board impact is zero promotions, zero demotions, zero grade
+changes, zero stake changes, and zero actionable-count change. Rollback is r36.
+Evidence and the known projection/direction limitation are recorded in
+`docs/model-audits/2026-08-19-mlb-props-display-projection-calibration-r37.md`.
 
 The August 19 r36 incident release restores the existing optional-environment
 contract at the final publication boundary. Park and game-time weather gaps
