@@ -244,6 +244,24 @@ assert.equal(
 );
 assert.ok(leakedMissingResearch.errors.includes("REQUIRED_RESEARCH_INCOMPLETE_1"));
 
+const optionalEnvironmentGap = validateMlbPropsBoardData({
+  data: data([row({
+    playGrade: "WATCHLIST",
+    missingFeatures: ["game time weather"],
+    reasonCodes: ["MISSING_GAME_TIME_WEATHER"],
+  })]),
+  sourceRows: 1,
+  mappedRows: 1,
+  asOfTimestamp: asOf,
+});
+assert.equal(
+  optionalEnvironmentGap.publishable,
+  true,
+  "an explicitly optional environment gap cannot freeze an otherwise coherent slate",
+);
+assert.ok(optionalEnvironmentGap.warnings.includes("OPTIONAL_RESEARCH_GAPS_ROWS_1"));
+assert.ok(!optionalEnvironmentGap.errors.some((error) => error.startsWith("REQUIRED_RESEARCH_INCOMPLETE_")));
+
 const payloadEvidence = {
   recentForm: null,
   opponentProfile: null,
@@ -686,6 +704,44 @@ assert.equal(
   heldResearchLaunch.readyToOpen,
   true,
   "launch readiness accepts missing research only when the affected row is explicitly held",
+);
+const optionalEnvironmentLaunch = evaluateMlbPropsLaunchReadiness({
+  slateDate: "2026-07-16",
+  snapshots: launchSnapshots.map((item) => ({
+    ...item,
+    data: {
+      ...item.data,
+      props: item.data.props.map((prop, index) => index === 0 ? {
+        ...prop,
+        environment: {
+          ...prop.environment!,
+          weather: {
+            status: "unavailable" as const,
+            temperatureF: null,
+            conditions: null,
+            windSpeedMph: null,
+            windDirection: null,
+            precipitationProbability: null,
+            source: null,
+          },
+        },
+        missingFeatures: ["game time weather"],
+      } : prop),
+    },
+  })),
+  tracking: trackingHealth,
+  now: new Date("2026-07-16T16:10:00.000Z"),
+  env: {
+    ...process.env,
+    MLB_PLAYER_PROPS_CRON_ENABLED: "true",
+    ODDSPHERE_PROPS_INTERNAL_TRACKING_ENABLED: "true",
+    MLB_PLAYER_PROPS_SETTLEMENT_CRON_ENABLED: "true",
+  },
+});
+assert.equal(
+  optionalEnvironmentLaunch.readyToOpen,
+  true,
+  "launch readiness accepts a disclosed optional environment gap without weakening required-research holds",
 );
 const leakedResearchLaunch = evaluateMlbPropsLaunchReadiness({
   slateDate: "2026-07-16",

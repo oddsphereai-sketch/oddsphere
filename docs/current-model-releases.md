@@ -4,7 +4,7 @@ This file is the human-readable production handoff registry. Runtime constants a
 prediction snapshots remain the machine authority. Future model work must start here, verify the
 constants, and preserve the precedence and writer ownership below.
 
-Last reviewed: 2026-08-14
+Last reviewed: 2026-08-19
 
 ## MLB champion
 
@@ -305,11 +305,26 @@ Evidence and rollback details are recorded in
 
 ## MLB Player Props candidate
 
-- Release: `mlb_props_2026_08_14_r35`
+- Release: `mlb_props_2026_08_19_r36`
 - Machine registry: `lib/mlb/props/marketModelVersions.ts`
 - Authoritative writer: `/api/cron/mlb-player-props-refresh` through
   `refreshMlbPropsBoard`
 - Status: private launch candidate; not publicly enabled
+
+The August 19 r36 incident release restores the existing optional-environment
+contract at the final publication boundary. Park and game-time weather gaps
+were already explicitly optional model inputs and were accepted by the row
+scoring gate, but the later snapshot validator incorrectly counted those same
+disclosed gaps as missing required research. That contradiction rejected every
+scheduled refresh even though live prices, mappings, and model outputs were
+healthy. R36 excludes only the already-declared optional environment fields
+from the required-research publication error; opposing-starter, pitch-mix,
+identity, recent-form, and other required gaps still fail closed row by row.
+The paired August 19 dry run retained all 5,705 rows and 126 actionables with
+zero promotions and zero demotions. Rollback is r35, which restores the
+whole-slate publication outage whenever an optional environment field is
+unavailable. Evidence is in
+`docs/model-audits/2026-08-19-mlb-props-optional-environment-publication-r36.md`.
 
 The August 14 r35 stake-contract correction restores the owner-approved unit
 definition: every non-Home Run Lean or Best Angle is 1.00u, while the

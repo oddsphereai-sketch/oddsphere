@@ -2468,7 +2468,15 @@ export function validateMlbPropsBoardData(args: {
     errors.push("STALE_ODDS_PRESENT");
     warnings.push(`${staleOddsRows}_STALE_ODDS_ROWS_WITHHELD_FROM_SIGNALS`);
   }
-  const incompleteResearchRows = args.data.props.filter((row) => row.missingFeatures.length > 0);
+  const optionalResearchGapRows = args.data.props.filter((row) =>
+    row.missingFeatures.some(isSignalOptionalMemberFeature)
+  );
+  if (optionalResearchGapRows.length > 0) {
+    warnings.push(`OPTIONAL_RESEARCH_GAPS_ROWS_${optionalResearchGapRows.length}`);
+  }
+  const incompleteResearchRows = args.data.props.filter((row) =>
+    row.missingFeatures.some((feature) => !isSignalOptionalMemberFeature(feature))
+  );
   // Missing required research is a row-scoped hold when the row has already
   // failed closed to PENDING_DATA/RESEARCH. Do not let those explicitly held
   // rows freeze an otherwise coherent full-slate snapshot. Conversely, any

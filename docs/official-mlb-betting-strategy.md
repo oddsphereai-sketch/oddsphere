@@ -4,7 +4,7 @@ Strategy release: `oddsphere_mlb_betting_strategy_2026_08_14_r7`
 
 Daily Edge decision release: `mlb_daily_edge_decision_2026_08_14_r46`
 
-Player Props release: `mlb_props_2026_08_14_r35`
+Player Props release: `mlb_props_2026_08_19_r36`
 
 Reference unit: **1u = $25**
 

@@ -109,7 +109,7 @@ export function evaluateMlbPropsLaunchReadiness(args: {
     check("RESEARCH_HOLDS_FAIL_CLOSED", Boolean(research?.researchHoldsFailClosed), true, "Every active pregame row with missing required research is explicitly held as Pending Data or Research."),
     check("DIRECT_MATCHUP_VERIFIED", Boolean(research?.directMatchupComplete), true, "Every active pregame hitter prop has official matchup history or an explicit no-history result."),
     check("STARTER_CONTEXT", Boolean(latest?.data.slate?.matchups.some((matchup) => matchup.starterStatus !== "pending")), true, "Probable-pitcher context is present for the slate."),
-    check("ENVIRONMENT_CONTEXT", Boolean(research?.environmentComplete), true, "Every active pregame prop has park and game-time weather context."),
+    check("ENVIRONMENT_CONTEXT", Boolean(research?.environmentComplete), true, "Every active pregame prop has park/game-time weather context or an explicit optional environment gap."),
     check("LINEUP_CONTEXT", Boolean(research?.lineupsComplete), false, "Projected lineup context is being tracked; posted lineups refresh the board and are not required to open it."),
     check("LATEST_SETTLEMENT_HEALTHY", String(args.tracking.latestSettlementRun?.status ?? "none") !== "failed", false, "The latest settlement run did not fail."),
   ];
@@ -200,7 +200,9 @@ function summarizeSnapshotResearch(snapshot: MlbPropsBoardSnapshot) {
       "weak_pitcher_baseline",
     ].includes(warning))),
     researchHoldsFailClosed: rows.every((row) =>
-      row.missingFeatures.length === 0 || row.playGrade === "PENDING_DATA" || row.playGrade === "RESEARCH"
+      row.missingFeatures.every(isSignalOptionalMemberFeature)
+      || row.playGrade === "PENDING_DATA"
+      || row.playGrade === "RESEARCH"
     ),
     actionableRecentFormComplete: actionableRows.every(({ recentForm }) => (recentForm?.logs.length ?? 0) >= 5),
     actionableModelOutputComplete: actionableRows.every(({ row }) => row.finalProbability !== null && row.modelProbability !== null),
@@ -218,8 +220,9 @@ function summarizeSnapshotResearch(snapshot: MlbPropsBoardSnapshot) {
       rowIsResearchHeld(row) || matchupHistory !== null
     ),
     environmentComplete: evidence.every(({ row, environment }) => Boolean(
-      rowIsResearchHeld(row) ||
-      (environment?.park.status === "available" && (environment.weather.status === "available" || environment.roofStatus === "dome")),
+      rowIsResearchHeld(row)
+      || (environment?.park.status === "available" && (environment.weather.status === "available" || environment.roofStatus === "dome"))
+      || row.missingFeatures.some(isSignalOptionalMemberFeature),
     )),
     lineupsComplete: hitterRows.every(({ row }) => row.lineupStatus?.status === "posted" || row.lineupStatus?.status === "confirmed"),
   };
