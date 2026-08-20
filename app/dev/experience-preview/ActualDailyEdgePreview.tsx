@@ -723,10 +723,10 @@ function CompactMarketPulse({ market, showSplits = false }: { market: MarketEdge
         <span className="text-[8px] font-bold text-gray-600">Real market snapshot</span>
       </div>
       <p className="mt-3 text-[10px] leading-relaxed text-gray-400">{detail || "No additional market interpretation is available for this snapshot."}</p>
-      {showSplits ? <CompactPointLineMovement market={market} /> : null}
       {showSplits
         ? <CompactOddsMovement market={market} tone={tone} lineClass={style.line} />
         : <CompactFirstInningOddsMovement market={market} tone={tone} lineClass={style.line} />}
+      {showSplits ? <CompactPointLineMovement market={market} /> : null}
       {showSplits ? <DefaultSplitSummary market={market} /> : null}
     </div>
   );
