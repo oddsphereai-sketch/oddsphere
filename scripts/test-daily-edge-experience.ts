@@ -419,11 +419,11 @@ check(
     candidateSource.includes("to ${formatNumber(movement.currentLine)}"),
 );
 check(
-  "totals and WNBA spreads render a dedicated line tracker after price movement and before market splits",
+  "totals and WNBA spreads lead Market Pulse with the dedicated line tracker before price movement and market splits",
   candidateSource.includes("function CompactPointLineMovement") &&
     candidateSource.includes('const isSpread = !isTotal && stops.length > 0 && market.line !== null') &&
     candidateSource.includes('const marketLabel = isTotal ? "Total" : "Spread"') &&
-    candidateSource.indexOf("<CompactOddsMovement market={market}") < candidateSource.indexOf("<CompactPointLineMovement market={market}") &&
+    candidateSource.indexOf("<CompactPointLineMovement market={market}") < candidateSource.indexOf("<CompactOddsMovement market={market}") &&
     candidateSource.indexOf("<CompactPointLineMovement market={market}") < candidateSource.indexOf("<DefaultSplitSummary market={market}"),
 );
 check(
