@@ -726,7 +726,7 @@ function CompactMarketPulse({ market, showSplits = false }: { market: MarketEdge
       {showSplits
         ? <CompactOddsMovement market={market} tone={tone} lineClass={style.line} />
         : <CompactFirstInningOddsMovement market={market} tone={tone} lineClass={style.line} />}
-      {showSplits ? <CompactTotalLineMovement market={market} /> : null}
+      {showSplits ? <CompactPointLineMovement market={market} /> : null}
       {showSplits ? <DefaultSplitSummary market={market} /> : null}
     </div>
   );
@@ -782,10 +782,11 @@ function CompactOddsMovement({ market, tone, lineClass }: { market: MarketEdgeDt
   return <section className="mt-3 rounded-lg border border-white/[0.09] bg-black/25 p-3"><div className="flex items-center justify-between gap-2"><div><p className="text-[8px] font-black uppercase tracking-[0.15em] text-gray-300">Odds movement</p>{context ? <p className="mt-0.5 text-[7px] font-semibold text-gray-600">{context}</p> : null}</div><span className={`text-[7px] font-black uppercase tracking-wider ${tone === "emerald" ? "text-emerald-300" : tone === "amber" ? "text-amber-300" : "text-gray-500"}`}>{tone === "emerald" ? "Supporting" : tone === "amber" ? "Resisting" : "Neutral"}</span></div><div className="mt-3 grid gap-2">{rows.map((row) => <div key={row.key}>{movementRow(row.label, row.movement, row.selected)}</div>)}</div>{soccerBoard ? <p className="mt-2 text-[7px] leading-relaxed text-gray-600">All outcomes use the same Daily Edge movement timeline. The highlighted row is the graded side; the other rows are market context only.</p> : null}{evaluationDiffers ? <p className="mt-2 text-[7px] leading-relaxed text-gray-600">Current quote {formatAmerican(currentPrice)}{market.currentPriceSportsbook ? ` at ${formatSportsbook(market.currentPriceSportsbook)}` : ""}; recommendation evaluated at {formatAmerican(evaluatedPrice)}. Live movement does not silently re-grade the pick.</p> : null}{market.oddspherePostedAmerican != null && !publishedIsVerified ? <p className="mt-1 text-[7px] leading-relaxed text-gray-600">Published price omitted because its selected side was not explicitly verified.</p> : null}</section>;
 }
 
-function CompactTotalLineMovement({ market }: { market: MarketEdgeDto }) {
+function CompactPointLineMovement({ market }: { market: MarketEdgeDto }) {
   const isTotal = /^(Over|Under)\b/i.test(market.pick ?? "") || market.modelTotal !== null || market.marketTotal !== null;
-  if (!isTotal) return null;
   const stops = (market.lineTrail ?? []).filter((stop) => stop.line !== null && Number.isFinite(stop.line));
+  const isSpread = !isTotal && stops.length > 0 && market.line !== null;
+  if (!isTotal && !isSpread) return null;
   const terminal = stops[stops.length - 1] ?? null;
   const current = terminal?.line ?? market.line;
   if (current === null) return null;
@@ -807,7 +808,8 @@ function CompactTotalLineMovement({ market }: { market: MarketEdgeDto }) {
   }
   const direction = first === null || sameTrackedLine(first, current) ? "Unchanged" : current > first ? "Moved up" : "Moved down";
   const point = (label: string, value: number | null, currentPoint = false) => <div className="min-w-0"><p className="text-[6px] font-black uppercase tracking-wider text-gray-600">{label}</p><p className={`mt-0.5 font-mono text-sm font-black ${currentPoint ? "text-violet-200" : "text-gray-200"}`}>{value === null ? "—" : formatNumber(value)}</p></div>;
-  return <section className="mt-3 rounded-lg border border-white/[0.09] bg-black/25 p-3"><div className="flex items-center justify-between gap-2"><div><p className="text-[8px] font-black uppercase tracking-[0.15em] text-gray-300">Total line movement</p><p className="mt-0.5 text-[7px] font-semibold text-gray-600">{terminal?.sportsbook ? `${formatSportsbook(terminal.sportsbook)} · same-book line` : "Current total line"}</p></div><span className="text-[7px] font-black uppercase tracking-wider text-violet-300">{direction}</span></div><div className="mt-3 grid grid-cols-[auto_1fr_auto_1fr_auto] items-center gap-2">{point("Opening", first)}<div className="h-px bg-gradient-to-r from-gray-700 via-violet-500/50 to-violet-400/50" />{point("Prior", previous)}<div className="h-px bg-gradient-to-r from-gray-700 via-violet-500/50 to-violet-400/50" />{point("Current", current, true)}</div>{coherent ? null : <p className="mt-2 text-[7px] leading-relaxed text-gray-600">No later same-book move captured yet.</p>}</section>;
+  const marketLabel = isTotal ? "Total" : "Spread";
+  return <section className="mt-3 rounded-lg border border-white/[0.09] bg-black/25 p-3"><div className="flex items-center justify-between gap-2"><div><p className="text-[8px] font-black uppercase tracking-[0.15em] text-gray-300">{marketLabel} line movement</p><p className="mt-0.5 text-[7px] font-semibold text-gray-600">{terminal?.sportsbook ? `${formatSportsbook(terminal.sportsbook)} · same-book line` : `Current ${marketLabel.toLowerCase()} line`}</p></div><span className="text-[7px] font-black uppercase tracking-wider text-violet-300">{direction}</span></div><div className="mt-3 grid grid-cols-[auto_1fr_auto_1fr_auto] items-center gap-2">{point("Opening", first)}<div className="h-px bg-gradient-to-r from-gray-700 via-violet-500/50 to-violet-400/50" />{point("Prior", previous)}<div className="h-px bg-gradient-to-r from-gray-700 via-violet-500/50 to-violet-400/50" />{point("Current", current, true)}</div>{coherent ? null : <p className="mt-2 text-[7px] leading-relaxed text-gray-600">No later same-book move captured yet.</p>}</section>;
 }
 
 function AvailabilityContext({ report, market }: { report: DailyEdgeGameAvailability; market: MarketEdgeDto }) {
