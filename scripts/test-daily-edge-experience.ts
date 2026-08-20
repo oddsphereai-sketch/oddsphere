@@ -632,10 +632,19 @@ check(
     !wnbaAdapterSource.includes("? liveCandidates[0]"),
 );
 check(
-  "WNBA price trails stay on the current point line while the total line trail retains line changes",
+  "WNBA price trails stay on the current point line while total and spread line trails retain line changes",
   wnbaAdapterSource.includes("history.filter((row) => closeLine(row.line_value, currentLine))") &&
     wnbaAdapterSource.includes('totalLine: coherentPriceTrail(liveRows, cappedHistoryRows, "total"') &&
-    wnbaAdapterSource.includes("totalCurrent, true"),
+    wnbaAdapterSource.includes("totalCurrent, true") &&
+    wnbaAdapterSource.includes('spreadLine: coherentPriceTrail(liveRows, cappedHistoryRows, "spread"') &&
+    wnbaAdapterSource.includes("spreadCurrent, true") &&
+    wnbaAdapterSource.includes("lineTrail: game.pickedPrices?.spreadLine"),
+);
+check(
+  "WNBA number trackers use distinct line stops instead of repeated price polls",
+  wnbaAdapterSource.includes("reduce<WnbaPriceTrailStop[]>") &&
+    wnbaAdapterSource.includes("prior.line !== stop.line") &&
+    wnbaAdapterSource.includes("lastMoveLinePrev: pointLineStops.length > 1"),
 );
 check(
   "WNBA preserves repeated observations so steady markets still have a verified prior stop",
