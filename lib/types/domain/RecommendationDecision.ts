@@ -10,7 +10,7 @@ export type MarketReadStatus =
   | "insufficient_data";
 
 export type SplitSideDisplay = {
-  side: "home" | "away" | "over" | "under";
+  side: "home" | "draw" | "away" | "over" | "under" | "yes" | "no";
   label: string;
   moneyPct: number | null;
   betsPct: number | null;

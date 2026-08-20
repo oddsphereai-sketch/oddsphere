@@ -27,7 +27,8 @@ export default function Footer() {
     pathname.startsWith("/lab") ||
     pathname.startsWith("/admin") ||
     pathname === "/mlb/props" ||
-    pathname === "/dev/mlb-props-preview"
+    pathname === "/dev/mlb-props-preview" ||
+    pathname === "/dev/premier-league-preview"
   ) {
     return null;
   }

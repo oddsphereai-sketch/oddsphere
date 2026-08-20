@@ -203,7 +203,11 @@ check(
 );
 check(
   "Lifetime Tracking explains MLB auto-update + maintained other sports",
-  /MLB updates automatically as games grade[\s\S]{0,200}Other sports are maintained/.test(PAGE),
+  /Active models update automatically as games grade[\s\S]{0,200}Premier League results are tracked separately from World Cup history/.test(PAGE),
+);
+check(
+  "Premier League has its own competition-scoped tracking label",
+  /epl:\s*"Premier League"/.test(PAGE) && /soccer:\s*"World Cup"/.test(PAGE),
 );
 check(
   "Best Angles groups model categories inside separate sport sections",

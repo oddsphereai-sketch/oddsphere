@@ -6,9 +6,12 @@ import type {
 
 const SPLIT_DISPLAY_ORDER: Record<SplitSideDisplay["side"], number> = {
   away: 0,
-  home: 1,
+  draw: 1,
+  home: 2,
   over: 0,
   under: 1,
+  yes: 0,
+  no: 1,
 };
 
 /**

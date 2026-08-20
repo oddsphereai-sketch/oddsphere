@@ -46,6 +46,7 @@ import { ingestNbaFinalScores } from "./nba/nbaScoreIngestService";
 import { writeNhlPredictionRecords } from "./nhl/buildNhlPredictionRecords";
 import { ingestNhlFinalScores } from "./nhl/nhlScoreIngestService";
 import { ingestSoccerFinalScores } from "./soccer/soccerScoreIngestService";
+import { ingestEplFinalScores } from "./epl/eplScoreIngestService";
 import { buildWnbaPredictionRecords } from "./wnba/buildWnbaPredictionRecords";
 import { ingestWnbaFinalScores } from "./wnba/ingestWnbaFinalScores";
 import { moneyPuckSeasonStartYear } from "../providers/nhl/_moneyPuckClient";
@@ -403,16 +404,15 @@ export async function runTrackingRefresh(
           perDate.errors.push(`nhl-final-scores exception: ${e instanceof Error ? e.message : String(e)}`);
         }
       } else if (sport === "soccer") {
-        // WC tracking integration (2026-06-12). Soccer prediction_records
-        // are written by the soccer-daily-refresh cron, not here; this
-        // branch only finalizes finished WC fixtures so the shared grader
-        // (which now delegates soccer markets to soccerGrading) can resolve
-        // them. No record write, no locked-snapshot mutation.
+        // Soccer records are written by their competition refresh, not here.
+        // With EPL enabled, finalize only the EPL external-id namespace; the
+        // shared soccer-native grader then resolves Match Result, Double
+        // Chance, Total, and BTTS from the 90-minute score. No record write
+        // and no locked-snapshot mutation occurs in this branch.
         try {
-          const fsRes = await ingestSoccerFinalScores({
-            slateDate: date,
-            apply: opts.apply,
-          });
+          const fsRes = process.env.EPL_PIPELINE_ENABLED === "true"
+            ? await ingestEplFinalScores({ slateDate: date, apply: opts.apply })
+            : await ingestSoccerFinalScores({ slateDate: date, apply: opts.apply });
           perDate.final_scores_updated = fsRes.updated;
           perDate.final_scores_in_progress = 0;
           perDate.final_scores_scheduled = Math.max(0, fsRes.apiEventsFetched - fsRes.finalizedCount);

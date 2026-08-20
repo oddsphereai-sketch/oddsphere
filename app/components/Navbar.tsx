@@ -21,6 +21,7 @@ export default function Navbar() {
     pathname === "/dev/mlb-props-preview" ||
     pathname === "/dev/experience-preview" ||
     pathname === "/dev/tracking-preview" ||
+    pathname === "/dev/premier-league-preview" ||
     pathname === "/dev/relaunch-review" ||
     pathname === "/dev/device-review"
   ) {

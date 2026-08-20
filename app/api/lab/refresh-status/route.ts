@@ -105,7 +105,12 @@ function cronConfigsForSport(sport: Sport): CronCfg[] {
       { data_source: "pregame_sweep", per_sport: true, cadence_minutes: 30, frontline: false },
     ];
   }
-  if (sport === "soccer" || sport === "ucl") {
+  if (sport === "soccer") {
+    return [
+      { data_source: "epl_daily_refresh", per_sport: true, cadence_minutes: 30, frontline: true },
+    ];
+  }
+  if (sport === "ucl") {
     return [
       { data_source: "soccer_daily_refresh", per_sport: true, cadence_minutes: 60, frontline: true },
       { data_source: "tracking_refresh", per_sport: true, cadence_minutes: 120, frontline: true },

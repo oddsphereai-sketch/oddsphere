@@ -21,11 +21,18 @@ export const DAILY_EDGE_SPORTS: readonly DailyEdgeSportDefinition[] = [
   { key: "nfl", label: "NFL", memberAvailable: false },
   { key: "cfb", label: "CFB", memberAvailable: false },
   { key: "cbb", label: "CBB", memberAvailable: false },
-  { key: "ucl", label: "UCL", memberAvailable: false },
+  { key: "ucl", label: "UCL", memberAvailable: true, inSeason: false },
 ] as const;
 
 export const DAILY_EDGE_SPORT_KEYS: Sport[] = DAILY_EDGE_SPORTS.map(
   (definition) => definition.key,
+);
+
+/** Member navigation groups every soccer competition beneath one Soccer tab.
+ * The legacy `ucl` sport key remains available to data adapters and old URLs,
+ * but must not compete with Soccer in the top-level selector. */
+export const DAILY_EDGE_TOP_LEVEL_SPORT_KEYS: Sport[] = DAILY_EDGE_SPORT_KEYS.filter(
+  (sport) => sport !== "ucl",
 );
 
 export const AVAILABLE_DAILY_EDGE_SPORTS: Sport[] = DAILY_EDGE_SPORTS

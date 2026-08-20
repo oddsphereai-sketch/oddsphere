@@ -88,7 +88,7 @@ export function summarizePersistedOddsTrail(
         return 0;
       })[0] ?? null;
 
-  const summary = [
+  const summary = ([
     first ? { ...first, label: "first" as const } : null,
     middle ? { ...middle, label: "move" as const } : null,
     last
@@ -97,7 +97,7 @@ export function summarizePersistedOddsTrail(
           label: fallback.locked ? "locked" as const : "current" as const,
         }
       : null,
-  ].filter((stop): stop is DisplayOddsTrailStop => stop !== null);
+  ] as Array<DisplayOddsTrailStop | null>).filter((stop): stop is DisplayOddsTrailStop => stop !== null);
   return summary.filter((stop, index, arr) => {
     const previous = arr[index - 1];
     return previous === undefined || !sameOddsStop(previous, stop) || previous.label !== stop.label;

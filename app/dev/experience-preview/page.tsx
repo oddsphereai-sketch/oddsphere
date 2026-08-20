@@ -65,6 +65,11 @@ export default async function PrivateExperiencePreviewPage({
         sport={sport}
         freshContractRead={freshContractRead}
         reviewMode
+        soccerCompetition={sport === "soccer"
+          ? { active: "world_cup", label: "World Cup" }
+          : sport === "ucl"
+            ? { active: "champions_league", label: "Champions League" }
+            : undefined}
       />
     </ProductAppFrame>
   );

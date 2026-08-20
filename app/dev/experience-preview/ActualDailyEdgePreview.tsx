@@ -2,6 +2,8 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import Link from "next/link";
+import Image from "next/image";
 import type { DailyEdgeGameDto, DailyEdgeResponse, MarketEdgeDto } from "@/app/lab/lib/labTypes";
 import type { MarketSplitDisplaySection } from "@/lib/types/domain/RecommendationDecision";
 import type { Sport } from "@/lib/types/domain/Sport";
@@ -15,7 +17,7 @@ import SportSelector from "@/app/lab/components/SportSelector";
 import { LockBadge } from "@/app/lab/components/daily-edge/LockBadge";
 import {
   DAILY_EDGE_SPORT_AVAILABILITY,
-  DAILY_EDGE_SPORT_KEYS,
+  DAILY_EDGE_TOP_LEVEL_SPORT_KEYS,
 } from "@/app/lab/lib/dailyEdgeSports";
 import {
   buildReaderUrl,
@@ -42,6 +44,7 @@ export type PreviewHistoryPoint = {
   totalRuns: number;
   firstInningRuns: number | null;
   won: boolean;
+  drawn?: boolean;
 };
 
 export type PreviewHistoryByTeam = Record<string, PreviewHistoryPoint[]>;
@@ -50,6 +53,12 @@ export type PreviewPitcherFirstInningPoint = { date: string; runsAllowed: number
 export type PreviewPitcherFirstInningSide = { name: string; points: PreviewPitcherFirstInningPoint[] } | null;
 export type PreviewPitcherFirstInningByGame = Record<string, { away: PreviewPitcherFirstInningSide; home: PreviewPitcherFirstInningSide }>;
 export type PreviewAvailabilityByGame = Record<string, DailyEdgeGameAvailability>;
+
+export type SoccerCompetitionPreview = {
+  active: "premier_league" | "world_cup" | "champions_league";
+  label: string;
+};
+export type WeeklySlatePreview = { label: string; previousHref: string | null; nextHref: string | null };
 
 const MARKET_LABEL: Record<MarketKey, string> = {
   moneyline: "Moneyline",
@@ -91,6 +100,8 @@ export default function ActualDailyEdgePreview({
   freshContractRead,
   reviewMode = true,
   embeddedSample = false,
+  soccerCompetition,
+  weeklySlate,
 }: {
   snapshot: DailyEdgeResponse;
   history: PreviewHistoryByTeam;
@@ -99,6 +110,8 @@ export default function ActualDailyEdgePreview({
   freshContractRead: boolean;
   reviewMode?: boolean;
   embeddedSample?: boolean;
+  soccerCompetition?: SoccerCompetitionPreview;
+  weeklySlate?: WeeklySlatePreview;
 }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -130,6 +143,8 @@ export default function ActualDailyEdgePreview({
     setMobileSheetOpen(false);
     const params = new URLSearchParams(searchParams.toString());
     params.set("sport", next);
+    if (next === "soccer") params.set("league", "epl");
+    else params.delete("league");
     params.delete("game");
     params.delete("market");
     // A normal sport switch must show that sport's canonical current slate.
@@ -188,7 +203,7 @@ export default function ActualDailyEdgePreview({
   }, [displaySnapshot.date, displaySnapshot.games, embeddedSample, sport]);
 
   if (!game) {
-    return <div className="space-y-5 pb-16"><SlateHeader snapshot={displaySnapshot} sport={sport} onSportChange={switchSport} /><EmptyPreview snapshot={displaySnapshot} sport={sport} /></div>;
+    return <div className="space-y-5 pb-16"><SlateHeader snapshot={displaySnapshot} sport={sport} onSportChange={switchSport} soccerCompetition={soccerCompetition} weeklySlate={weeklySlate} reviewMode={reviewMode} /><EmptyPreview sport={sport} displayLabel={soccerCompetition?.label} /></div>;
   }
 
   const market = game.markets[marketKey];
@@ -242,7 +257,7 @@ export default function ActualDailyEdgePreview({
 
   return (
     <div className="space-y-5 pb-16">
-      <SlateHeader snapshot={displaySnapshot} sport={sport} onSportChange={switchSport} sample={embeddedSample} />
+      <SlateHeader snapshot={displaySnapshot} sport={sport} onSportChange={switchSport} sample={embeddedSample} soccerCompetition={soccerCompetition} weeklySlate={weeklySlate} reviewMode={reviewMode} />
 
       <div ref={readerRef} className="hidden scroll-mt-4 sm:block">
         {readerOpen ? <div>
@@ -250,7 +265,7 @@ export default function ActualDailyEdgePreview({
         </div> : <CollapsedReader game={game} market={market} marketKey={marketKey} sport={sport} onOpen={() => selectGame(game, marketKey)} onOpenMarket={(nextMarket) => selectGame(game, nextMarket)} index={displaySnapshot.games.indexOf(game)} total={displaySnapshot.games.length} />}
       </div>
 
-      <EdgeBoard games={displaySnapshot.games} sport={sport} activeId={game.id} activeMarket={marketKey} selectGame={selectGame} />
+      <EdgeBoard games={displaySnapshot.games} sport={sport} activeId={game.id} activeMarket={marketKey} selectGame={selectGame} groupByDay={Boolean(weeklySlate)} />
 
       {mobileSheetOpen ? (
         <MobileReaderSheet game={game} market={market} marketKey={marketKey} sport={sport} history={history} pitcherFirstInningHistory={pitcherFirstInningHistory} availability={availability[game.id] ?? null} sample={sample} setSample={setSample} deepOpen={deepOpen} setDeepOpen={setDeepOpen} deepView={deepView} setDeepView={setDeepView} setMarket={selectMarket} onClose={collapseReader} onPrev={displaySnapshot.games.indexOf(game) > 0 ? () => selectAdjacentGame(-1) : null} onNext={displaySnapshot.games.indexOf(game) < displaySnapshot.games.length - 1 ? () => selectAdjacentGame(1) : null} index={displaySnapshot.games.indexOf(game)} total={displaySnapshot.games.length} />
@@ -375,16 +390,24 @@ function ReaderSurface({ game, market, marketKey, sport, history, pitcherFirstIn
 
 function ReaderEvidence({ game, market, marketKey, sport, history, pitcherFirstInningHistory, availability, sample }: Pick<ReaderSurfaceProps, "game" | "market" | "marketKey" | "sport" | "history" | "pitcherFirstInningHistory" | "availability" | "sample">) {
   const firstInningMode = marketKey === "first_inning" && sport === "mlb";
+  const soccerLayout = sport === "soccer";
   return (
     <>
-      <div className="grid lg:grid-cols-[1fr_1.28fr_1fr] xl:grid-cols-[1.08fr_1.34fr_1.08fr]">
+      <div className={soccerLayout ? "grid items-start gap-3 border-t border-white/[0.07] bg-black/10 p-3 lg:grid-cols-[0.96fr_1.08fr_1.06fr] sm:p-4" : "grid lg:grid-cols-[1fr_1.28fr_1fr] xl:grid-cols-[1.08fr_1.34fr_1.08fr]"}>
         <QuickRead game={game} market={market} marketKey={marketKey} sport={sport} />
-        {firstInningMode ? <FirstInningIntelligence market={market} /> : <IntegratedEvidence market={market} availability={availability} sport={sport} />}
+        {firstInningMode ? <FirstInningIntelligence market={market} /> : <IntegratedEvidence game={game} market={market} marketKey={marketKey} sport={sport} availability={availability} />}
         <KeyStats game={game} market={market} marketKey={marketKey} history={history} sample={sample} sport={sport} />
       </div>
+      {soccerLayout ? <div className="border-t border-white/[0.07] px-4 pb-5 sm:px-5 xl:px-6"><HistoryStatSummary game={game} market={market} marketKey={marketKey} history={history} sample={sample} sport={sport} wide /></div> : null}
       {firstInningMode ? <FirstInningRecentContext game={game} history={history} pitcherHistory={pitcherFirstInningHistory[game.id] ?? null} sample={sample} pick={market.pick} /> : null}
     </>
   );
+}
+
+function SoccerDecisionSummary({ game, market }: { game: DailyEdgeGameDto; market: MarketEdgeDto }) {
+  const probabilityGap = displayedProbabilityGap(market);
+  const metric = (label: string, value: string) => <div className="min-w-0 rounded-lg border border-white/[0.07] bg-black/20 px-3 py-2.5"><p className="text-[7px] font-black uppercase tracking-wider text-gray-600">{label}</p><p className="mt-1 truncate text-sm font-black text-white">{value}</p></div>;
+  return <section className="mt-3 rounded-xl border border-violet-400/20 bg-gradient-to-br from-violet-500/[0.08] via-black/15 to-sky-500/[0.035] p-4"><div className="flex flex-wrap items-center justify-between gap-2"><div className="flex flex-wrap items-center gap-2"><VerdictBadge market={market} large /><span className="text-[8px] font-black uppercase tracking-wider text-gray-600">Current decision</span></div><span className="text-[7px] font-black uppercase tracking-wider text-violet-200">Daily Edge read</span></div><div className="mt-3 flex items-end justify-between gap-3"><div><h3 className="text-2xl font-black tracking-tight text-white">{market.pick ?? "Held"}</h3><p className="mt-1 text-[8px] text-gray-600">{game.awayTeam} at {game.homeTeam}</p></div><span className="text-right"><span className="block font-mono text-base font-black text-violet-100">{formatAmerican(currentDisplayedPrice(market))}</span><span className="block text-[7px] font-bold text-gray-600">{market.currentPriceSportsbook ? formatSportsbook(market.currentPriceSportsbook) : "Sportsbook unavailable"}</span></span></div><div className="mt-3 grid grid-cols-2 gap-2">{metric("Model", formatProbability(market.modelProb))}{metric("Market", formatMarketProbability(market))}{metric("Gap", probabilityGap === null ? "—" : `${probabilityGap > 0 ? "+" : ""}${probabilityGap.toFixed(1)} pp`)}{metric("Actionability", market.recommendationConfidence === null || market.recommendationConfidence === undefined ? "—" : `${market.recommendationConfidence.toFixed(0)}/100`)}</div><div className="mt-3 grid gap-2"><div className="rounded-lg border border-emerald-400/15 bg-emerald-400/[0.035] p-3"><p className="text-[7px] font-black uppercase tracking-wider text-emerald-300">Why it rates</p><p className="mt-1.5 text-[9px] leading-relaxed text-gray-400">{currentAwareGuidedGuide(market, market.whyLine)}</p></div><div className="rounded-lg border border-amber-400/15 bg-amber-400/[0.035] p-3"><p className="text-[7px] font-black uppercase tracking-wider text-amber-300">Main risk</p><p className="mt-1.5 text-[9px] leading-relaxed text-gray-400">{displayRiskLine(market)}</p></div></div></section>;
 }
 
 function MobileReaderSheet({ onClose, onPrev, onNext, ...reader }: ReaderSurfaceProps & { onClose: () => void; onPrev: (() => void) | null; onNext: (() => void) | null }) {
@@ -448,16 +471,28 @@ function replaceReaderUrl(sport: Sport, gameId: string, market: MarketKey) {
   );
 }
 
-function SlateHeader({ snapshot, sport, onSportChange, sample = false }: { snapshot: DailyEdgeResponse; sport: Sport; onSportChange: (sport: Sport) => void; sample?: boolean }) {
+function SlateHeader({ snapshot, sport, onSportChange, sample = false, soccerCompetition, weeklySlate, reviewMode = true }: { snapshot: DailyEdgeResponse; sport: Sport; onSportChange: (sport: Sport) => void; sample?: boolean; soccerCompetition?: SoccerCompetitionPreview; weeklySlate?: WeeklySlatePreview; reviewMode?: boolean }) {
+  const displaySport = soccerCompetition?.label ?? sportLabel(sport);
   return (
     <div>
       <div className="flex flex-col gap-2 px-1 sm:flex-row sm:items-end sm:justify-between">
-        <div><p className="text-[9px] font-black uppercase tracking-[0.2em] text-violet-300">OddSphere · {sportLabel(sport)}</p><h1 className="mt-1 text-2xl font-black tracking-tight text-white sm:text-3xl">Daily Edge</h1><p className="mt-1 text-xs text-gray-500">{sample ? "Sample slate" : snapshot.date} · {snapshot.games.length} {sportLabel(sport)} {snapshot.games.length === 1 ? "game" : "games"}{sample ? " · Interactive product preview" : ` · updated ${formatTimestamp(snapshot.as_of)}`}</p></div>
-        <p className="text-[8px] font-semibold uppercase tracking-[0.12em] text-gray-600"><span className="text-gray-400">Update rhythm</span> · hourly board · separate market feeds · minute lock checks</p>
+        <div><p className="text-[9px] font-black uppercase tracking-[0.2em] text-violet-300">OddSphere · {displaySport}</p><h1 className="mt-1 text-2xl font-black tracking-tight text-white sm:text-3xl">Daily Edge</h1><p className="mt-1 text-xs text-gray-500">{sample ? "Sample slate" : snapshot.date} · {snapshot.games.length} {displaySport} {snapshot.games.length === 1 ? "game" : "games"}{sample ? " · Interactive product preview" : ` · updated ${formatTimestamp(snapshot.as_of)}`}</p></div>
+        <p className="text-[8px] font-semibold uppercase tracking-[0.12em] text-gray-600"><span className="text-gray-400">Update rhythm</span> · {weeklySlate ? "30-minute board" : "hourly board"} · separate market feeds · minute lock checks</p>
       </div>
-      <div className="mt-5"><SportSelector active={sport} onChange={onSportChange} sports={DAILY_EDGE_SPORT_KEYS} showCounts={false} showPendingState availability={DAILY_EDGE_SPORT_AVAILABILITY} /></div>
+      <div className="mt-5"><SportSelector active={sport} onChange={onSportChange} sports={DAILY_EDGE_TOP_LEVEL_SPORT_KEYS} showCounts={false} showPendingState availability={soccerCompetition?.active === "premier_league" ? { ...DAILY_EDGE_SPORT_AVAILABILITY, soccer: { isLive: true, statusLabel: "Active" } } : DAILY_EDGE_SPORT_AVAILABILITY} labelOverrides={{ soccer: "Soccer" }} /></div>
+      {sport === "soccer" && soccerCompetition ? <SoccerCompetitionBar active={soccerCompetition.active} reviewMode={reviewMode} /> : null}
+      {weeklySlate ? <div className="mt-3 flex items-center justify-between rounded-xl border border-white/[0.07] bg-white/[0.025] px-3 py-2.5"><span className="text-[9px] font-black uppercase tracking-[0.15em] text-gray-400">{weeklySlate.label}</span><div className="flex gap-2">{weeklySlate.previousHref ? <Link href={weeklySlate.previousHref} className="rounded-md border border-white/[0.08] px-2.5 py-1.5 text-[8px] font-black uppercase tracking-wider text-gray-400 hover:text-white">← Previous</Link> : null}{weeklySlate.nextHref ? <Link href={weeklySlate.nextHref} className="rounded-md border border-white/[0.08] px-2.5 py-1.5 text-[8px] font-black uppercase tracking-wider text-gray-400 hover:text-white">Next →</Link> : null}</div></div> : null}
     </div>
   );
+}
+
+function SoccerCompetitionBar({ active, reviewMode }: { active: SoccerCompetitionPreview["active"]; reviewMode: boolean }) {
+  const items = [
+    { key: "premier_league", label: "Premier League", logo: "/league-logos/premier-league.svg", href: reviewMode ? "/dev/premier-league-preview" : "/lab/daily-edge?sport=soccer&league=epl", status: "Live board", dot: "bg-emerald-400" },
+    { key: "champions_league", label: "Champions League", logo: "/league-logos/champions-league.svg", href: reviewMode ? "/dev/experience-preview?sport=soccer&league=ucl" : "/lab/daily-edge?sport=soccer&league=ucl", status: "No games today", dot: "bg-gray-500" },
+    { key: "world_cup", label: "World Cup", logo: "/league-logos/world-cup.svg", href: reviewMode ? "/dev/experience-preview?sport=soccer&league=world-cup" : "/lab/daily-edge?sport=soccer&league=world-cup", status: "Offseason", dot: "bg-gray-600" },
+  ] as const;
+  return <nav aria-label="Soccer competitions" className="relative mt-3 rounded-2xl border border-violet-300/35 bg-gradient-to-br from-violet-500/[0.14] via-[#11101a] to-sky-500/[0.06] p-3 shadow-[0_18px_50px_-38px_rgba(167,139,250,0.9)] sm:p-4"><span className="absolute -top-2 left-6 h-3 w-3 rotate-45 border-l border-t border-violet-300/35 bg-[#161321]" /><div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between"><div className="flex items-center gap-2.5"><span className="flex h-7 w-7 items-center justify-center rounded-full border border-violet-300/30 bg-violet-400/15 text-[10px] font-black text-violet-100">2</span><div><p className="text-[10px] font-black uppercase tracking-[0.18em] text-white">Choose a soccer competition</p><p className="mt-0.5 text-[9px] text-gray-400">Soccer is selected above. Pick the league or tournament you want to view.</p></div></div><span className="rounded-full border border-violet-300/20 bg-violet-400/[0.08] px-3 py-1 text-[8px] font-black uppercase tracking-wider text-violet-100">Viewing · {items.find((item) => item.key === active)?.label}</span></div><div role="tablist" aria-label="Soccer competition" className="grid gap-2 sm:grid-cols-3">{items.map((item) => { const selected = active === item.key; return <Link key={item.key} role="tab" href={item.href} aria-selected={selected} aria-current={selected ? "page" : undefined} className={`group rounded-xl border p-3.5 transition ${selected ? "border-violet-300 bg-violet-500/25 text-white shadow-[inset_0_0_0_1px_rgba(196,181,253,0.18),0_8px_24px_-16px_rgba(167,139,250,1)]" : "border-white/[0.10] bg-black/30 text-gray-300 hover:border-violet-300/40 hover:bg-violet-400/[0.08] hover:text-white"}`}><div className="flex items-center gap-3"><span className={`flex h-11 w-14 shrink-0 items-center justify-center overflow-hidden rounded-lg border px-1.5 ${selected ? "border-violet-200/40 bg-violet-100/10" : "border-white/[0.08] bg-white/[0.04]"}`}><Image src={item.logo} alt={`${item.label} logo`} width={48} height={34} unoptimized className={`object-contain ${item.key === "premier_league" ? "h-auto w-full" : "h-8 w-8 brightness-0 invert"}`} /></span><div className="min-w-0 flex-1"><div className="flex items-center justify-between gap-2"><span className="truncate text-[11px] font-black uppercase tracking-[0.08em]">{item.label}</span><span className={`text-[9px] font-black ${selected ? "text-violet-100" : "text-gray-700 group-hover:text-gray-400"}`}>{selected ? "✓" : "→"}</span></div><span className={`mt-1 flex items-center gap-1.5 text-[8px] font-bold uppercase tracking-wider ${selected ? "text-violet-100" : "text-gray-600"}`}><i className={`h-1.5 w-1.5 rounded-full ${item.dot}`} />{selected ? `Selected · ${item.status}` : item.status}</span></div></div></Link>; })}</div></nav>;
 }
 
 function ReaderHeader({ game, market, onCollapse, index, total }: { game: DailyEdgeGameDto; market: MarketEdgeDto; onCollapse?: () => void; index: number; total: number }) {
@@ -501,24 +536,71 @@ function QuickRead({ game, market, marketKey, sport }: { game: DailyEdgeGameDto;
   const fiProjection = market.keyStats.find((stat) => /projected.*(?:first|1st).*inning/i.test(stat.label));
   const fiProjectionValue = fiProjection?.homeValue ?? fiProjection?.awayValue ?? "Unavailable";
   const probabilityGap = displayedProbabilityGap(market);
+  const soccerProjection = sport === "soccer" ? game.soccerProjection ?? null : null;
   return (
-    <div className="h-full border-b border-white/[0.07] p-4 sm:p-5 lg:border-b-0 lg:border-r xl:p-6">
-      <SectionHeading tone="emerald">Quick Read</SectionHeading>
+    <div className={sport === "soccer" ? "rounded-xl border border-emerald-400/15 bg-[#11131a] p-4 sm:p-5" : "h-full border-b border-white/[0.07] p-4 sm:p-5 lg:border-b-0 lg:border-r xl:p-6"}>
+      <SectionHeading tone="emerald">{sport === "soccer" ? "Forecast" : "Quick Read"}</SectionHeading>
       <div className="mt-4 rounded-xl border border-white/[0.07] bg-white/[0.025] p-4">
         <QuickMatchupIdentity game={game} sport={sport} />
-        {marketKey === "first_inning" && sport === "mlb" ? <div className="mt-4 rounded-lg border border-sky-400/15 bg-sky-400/[0.04] p-3"><div className="flex items-center justify-between gap-3"><div><p className="text-[8px] font-black uppercase tracking-[0.15em] text-sky-200">First-inning projection</p><p className="mt-1 text-xl font-black text-white">{fiProjectionValue}</p></div><div className="text-right"><p className="text-[7px] font-black uppercase tracking-wider text-gray-600">Decision line</p><p className="mt-1 font-mono text-sm font-black text-gray-300">0.5 runs</p></div></div><p className="mt-2 text-[9px] leading-relaxed text-gray-500">Opening-frame projection replaces the less relevant full-game score in this market view.</p></div> : <div className="mt-4 rounded-lg border border-white/[0.06] bg-black/25 p-3"><p className="text-[8px] font-black uppercase tracking-[0.15em] text-gray-600">Projected score</p><div className="mt-2 flex items-center justify-between text-sm font-black text-white"><span>{game.awayTeam} <strong className="ml-1 text-xl">{formatNumber(game.projected.away)}</strong></span><span className="text-gray-700">—</span><span><strong className="mr-1 text-xl">{formatNumber(game.projected.home)}</strong> {game.homeTeam}</span></div></div>}
-        <div className="mt-4">
+        {marketKey === "first_inning" && sport === "mlb" ? <div className="mt-4 rounded-lg border border-sky-400/15 bg-sky-400/[0.04] p-3"><div className="flex items-center justify-between gap-3"><div><p className="text-[8px] font-black uppercase tracking-[0.15em] text-sky-200">First-inning projection</p><p className="mt-1 text-xl font-black text-white">{fiProjectionValue}</p></div><div className="text-right"><p className="text-[7px] font-black uppercase tracking-wider text-gray-600">Decision line</p><p className="mt-1 font-mono text-sm font-black text-gray-300">0.5 runs</p></div></div><p className="mt-2 text-[9px] leading-relaxed text-gray-500">Opening-frame projection replaces the less relevant full-game score in this market view.</p></div> : <div className="mt-4 rounded-lg border border-white/[0.06] bg-black/25 p-3"><div className="flex items-center justify-between gap-3"><p className="text-[8px] font-black uppercase tracking-[0.15em] text-gray-600">{soccerProjection ? "Expected goals" : "Projected score"}</p>{soccerProjection ? <span className="text-[7px] font-black uppercase tracking-wider text-gray-600">Distribution average</span> : null}</div><div className="mt-2 flex items-center justify-between text-sm font-black text-white"><span>{game.awayTeam} <strong className="ml-1 text-xl">{formatNumber(soccerProjection?.expectedGoals.away ?? game.projected.away)}</strong></span><span className="text-gray-700">—</span><span><strong className="mr-1 text-xl">{formatNumber(soccerProjection?.expectedGoals.home ?? game.projected.home)}</strong> {game.homeTeam}</span></div>{soccerProjection ? <p className="mt-2 text-[8px] text-gray-500">Median total {soccerProjection.medianTotal} · Most likely total {soccerProjection.mostLikelyTotal}{soccerProjection.representativeScore ? ` · Coherent scenario ${game.awayTeam} ${soccerProjection.representativeScore.away}–${soccerProjection.representativeScore.home} ${game.homeTeam}` : " · No single scoreline fits all three forecast directions"}</p> : null}</div>}
+        {sport === "soccer" && marketKey === "moneyline" ? <SoccerThreeWayForecast game={game} market={market} /> : null}
+        {sport === "soccer" && marketKey === "total" ? <SoccerTotalForecast market={market} projection={soccerProjection} /> : null}
+        {sport === "soccer" && marketKey === "first_inning" ? <SoccerBttsForecast market={market} projection={soccerProjection} game={game} /> : null}
+        {sport !== "soccer" ? <div className="mt-4">
           <p className="text-[8px] font-black uppercase tracking-[0.16em] text-gray-600">OddSphere read</p>
           <div className="mt-1 flex items-end justify-between gap-3"><p className="text-2xl font-black tracking-tight text-white">{market.pick ?? "Held"}</p><span className="text-right"><span className="block font-mono text-base font-black text-gray-200">{formatAmerican(currentDisplayedPrice(market))}</span>{market.currentPriceSportsbook ? <span className="block text-[7px] font-bold text-gray-600">{formatSportsbook(market.currentPriceSportsbook)}</span> : null}</span></div>
           <p className="mt-1 text-[10px] text-gray-500">Model <span className="font-black text-gray-200">{formatProbability(market.modelProb)}</span> · publish-time market <span className="font-black text-gray-200">{formatMarketProbability(market)}</span></p>
           {(probabilityGap !== null || market.recommendationConfidence !== null) ? <p className="mt-1 text-[9px] text-gray-600">Publish-time gap <span className="font-black text-gray-300">{probabilityGap === null ? "—" : `${probabilityGap > 0 ? "+" : ""}${probabilityGap.toFixed(1)} pp`}</span> · actionability <span className="font-black text-gray-300">{market.recommendationConfidence === null || market.recommendationConfidence === undefined ? "—" : `${market.recommendationConfidence.toFixed(0)}/100`}</span></p> : null}
-        </div>
-        <div className="mt-4 rounded-lg border border-violet-400/15 bg-violet-500/[0.05] p-3"><p className="text-xs leading-relaxed text-gray-300">{currentAwareGuidedGuide(market, market.whyLine)}</p><p className="mt-2 text-[10px] leading-relaxed text-amber-200/70"><span className="font-black text-amber-300">Where it gets less clean:</span> {displayRiskLine(market)}</p></div>
+        </div> : null}
+        {sport !== "soccer" ? <div className="mt-4 rounded-lg border border-violet-400/15 bg-violet-500/[0.05] p-3"><p className="text-xs leading-relaxed text-gray-300">{currentAwareGuidedGuide(market, market.whyLine)}</p><p className="mt-2 text-[10px] leading-relaxed text-amber-200/70"><span className="font-black text-amber-300">Where it gets less clean:</span> {displayRiskLine(market)}</p></div> : null}
       </div>
-      <div className="mt-4"><p className="text-[8px] font-black uppercase tracking-[0.16em] text-gray-600">Play grade</p><div className="mt-2"><VerdictBadge market={market} large /></div><GradeScale market={market} /></div>
-      <DecisionMetricGrid market={market} />
+      {sport === "soccer" ? <SoccerDecisionSummary game={game} market={market} /> : null}
+      {sport !== "soccer" ? <><div className="mt-4"><p className="text-[8px] font-black uppercase tracking-[0.16em] text-gray-600">Play grade</p><div className="mt-2"><VerdictBadge market={market} large /></div><GradeScale market={market} /></div><DecisionMetricGrid market={market} /></> : null}
     </div>
   );
+}
+
+function SoccerTotalForecast({ market, projection }: { market: MarketEdgeDto; projection: DailyEdgeGameDto["soccerProjection"] }) {
+  const context = market.soccerTotalContext;
+  if (!context || !projection) return null;
+  const outcome = (label: string, probability: number, selected: boolean) => <div className={`rounded-lg border p-3 text-center ${selected ? "border-emerald-300/25 bg-emerald-400/[0.07]" : "border-white/[0.07] bg-black/20"}`}><p className="text-[8px] font-black uppercase tracking-wider text-gray-500">{label} {context.line}</p><p className={`mt-1 font-mono text-xl font-black ${selected ? "text-emerald-200" : "text-white"}`}>{(probability * 100).toFixed(1)}%</p></div>;
+  return <section className="mt-3 rounded-lg border border-emerald-400/15 bg-emerald-400/[0.025] p-3"><div className="flex items-end justify-between gap-3"><div><p className="text-[8px] font-black uppercase tracking-[0.15em] text-emerald-200">Total forecast</p><p className="mt-1 text-[11px] font-black text-white">Full score-distribution read</p></div><span className="text-right"><span className="block text-[7px] font-black uppercase text-gray-600">Expected total</span><strong className="font-mono text-base text-white">{context.projected_total.toFixed(2)}</strong></span></div><div className="mt-3 grid grid-cols-2 gap-2">{outcome("Over", context.over_p, context.displayed_side === "over")}{outcome("Under", context.under_p, context.displayed_side === "under")}</div><p className="mt-2 text-[8px] leading-relaxed text-gray-500">Median {projection.medianTotal} goals · most likely total {projection.mostLikelyTotal}. Probability, expected total and the betting line are shown separately.</p></section>;
+}
+
+function SoccerBttsForecast({ market, projection, game }: { market: MarketEdgeDto; projection: DailyEdgeGameDto["soccerProjection"]; game: DailyEdgeGameDto }) {
+  const context = market.soccerBttsContext;
+  if (!context || !projection) return null;
+  const awayScores = 1 - Math.exp(-projection.expectedGoals.away);
+  const homeScores = 1 - Math.exp(-projection.expectedGoals.home);
+  const outcome = (label: string, probability: number, selected: boolean) => <div className={`rounded-lg border p-3 text-center ${selected ? "border-emerald-300/25 bg-emerald-400/[0.07]" : "border-white/[0.07] bg-black/20"}`}><p className="text-[8px] font-black uppercase tracking-wider text-gray-500">{label}</p><p className={`mt-1 font-mono text-xl font-black ${selected ? "text-emerald-200" : "text-white"}`}>{(probability * 100).toFixed(1)}%</p></div>;
+  return <section className="mt-3 rounded-lg border border-emerald-400/15 bg-emerald-400/[0.025] p-3"><div><p className="text-[8px] font-black uppercase tracking-[0.15em] text-emerald-200">Both teams to score forecast</p><p className="mt-1 text-[11px] font-black text-white">Can each club find a goal?</p></div><div className="mt-3 grid grid-cols-2 gap-2">{outcome("Yes", context.yes_p, context.displayed_side === "yes")}{outcome("No", context.no_p, context.displayed_side === "no")}</div><div className="mt-2 grid grid-cols-2 gap-2 text-[8px]"><p className="rounded-md border border-white/[0.06] bg-black/20 px-2 py-1.5 text-gray-500"><strong className="text-gray-200">{game.awayTeam}</strong> scores 1+ · {(awayScores * 100).toFixed(0)}%</p><p className="rounded-md border border-white/[0.06] bg-black/20 px-2 py-1.5 text-gray-500"><strong className="text-gray-200">{game.homeTeam}</strong> scores 1+ · {(homeScores * 100).toFixed(0)}%</p></div><p className="mt-2 text-[8px] leading-relaxed text-gray-500">Team scoring probabilities and BTTS are derived from the same regulation score distribution.</p></section>;
+}
+
+function soccerForecastReliability(probability: number): { label: string; actual: number; sample: number; caution?: string } {
+  if (probability >= 0.6) return { label: "Strong model favorite", actual: 57.1, sample: 14, caution: "Small final-quarter sample" };
+  if (probability >= 0.5) return { label: "Model favorite", actual: 68.2, sample: 22 };
+  if (probability >= 0.4) return { label: "Open three-way", actual: 29.7, sample: 37 };
+  return { label: "Very open three-way", actual: 31.8, sample: 22 };
+}
+
+function SoccerThreeWayForecast({ game, market }: { game: DailyEdgeGameDto; market: MarketEdgeDto }) {
+  const context = market.soccerMatchResultContext;
+  if (!context) return null;
+  const outcomes = [
+    { key: "away" as const, label: game.awayTeam },
+    { key: "draw" as const, label: "Draw" },
+    { key: "home" as const, label: game.homeTeam },
+  ];
+  const favoriteProbability = context.model[context.displayed_side];
+  const reliability = soccerForecastReliability(favoriteProbability);
+  return <section className="mt-3 rounded-lg border border-sky-400/15 bg-sky-400/[0.035] p-3"><div className="flex flex-wrap items-start justify-between gap-2"><div><p className="text-[8px] font-black uppercase tracking-[0.15em] text-sky-200">Three-way win outlook</p><p className="mt-1 text-[11px] font-black text-white">{reliability.label}</p></div><span className="rounded-full border border-white/[0.08] px-2 py-1 text-[7px] font-black uppercase tracking-wider text-gray-400">Separate from price grade</span></div><div className="mt-3 grid grid-cols-3 gap-2">{outcomes.map((outcome) => { const selected = outcome.key === context.displayed_side; return <div key={outcome.key} className={`rounded-lg border p-2 text-center ${selected ? "border-sky-300/30 bg-sky-400/[0.09]" : "border-white/[0.07] bg-black/20"}`}><p className="truncate text-[8px] font-black text-gray-400">{outcome.label}</p><p className={`mt-1 font-mono text-base font-black ${selected ? "text-sky-200" : "text-white"}`}>{(context.model[outcome.key] * 100).toFixed(1)}%</p><p className="mt-0.5 text-[7px] text-gray-600">Market {context.market ? `${(context.market[outcome.key] * 100).toFixed(1)}%` : "—"}</p></div>; })}</div><p className="mt-2 text-[8px] leading-relaxed text-gray-500">In the untouched final quarter, this r2 model-probability band won {reliability.actual.toFixed(1)}% of {reliability.sample} matches. {reliability.caution ?? "That supports a forecast label, not a guarantee or parlay recommendation."}</p></section>;
+}
+
+function SoccerDoubleChancePanel({ game }: { game: DailyEdgeGameDto }) {
+  const market = game.soccerDoubleChanceMarket;
+  const context = market?.soccerDoubleChanceContext;
+  if (!market || !context) return null;
+  return <section className="mt-3 rounded-lg border border-violet-400/15 bg-violet-500/[0.035] p-3"><div className="flex items-start justify-between gap-2"><div><p className="text-[8px] font-black uppercase tracking-[0.15em] text-violet-200">Double Chance</p><p className="mt-1 text-[11px] font-black text-white">{market.pick}</p></div><VerdictBadge market={market} /></div><div className="mt-3 grid grid-cols-3 gap-1.5">{market.soccerPriceBoard?.rows.map((row) => <div key={row.side} className={`rounded-lg border p-2 ${row.selected ? "border-violet-300/30 bg-violet-400/[0.09]" : "border-white/[0.07] bg-black/20"}`}><p className="truncate text-[7px] font-black text-gray-400">{row.label}</p><p className="mt-1 font-mono text-[11px] font-black text-white">{formatAmerican(row.price_american)}</p><p className="mt-0.5 text-[7px] text-gray-600">Model {(row.model_probability * 100).toFixed(1)}%</p></div>) ?? <p className="col-span-3 text-[8px] text-gray-600">Current Double Chance prices are pending.</p>}</div><p className="mt-2 text-[8px] leading-relaxed text-gray-500">{context.side_explanation} Tracked separately from regulation Match Result.</p></section>;
 }
 
 function QuickMatchupIdentity({ game, sport }: { game: DailyEdgeGameDto; sport: Sport }) {
@@ -526,11 +608,12 @@ function QuickMatchupIdentity({ game, sport }: { game: DailyEdgeGameDto; sport: 
   return <div><div className="mb-2 flex items-center justify-between"><p className="text-[8px] font-black uppercase tracking-[0.16em] text-emerald-200">Matchup</p><span className="text-[8px] font-black text-gray-600">{game.awayTeam} @ {game.homeTeam}</span></div><div className="grid grid-cols-[1fr_auto_1fr] items-stretch gap-2">{side(game.awayTeam, game.awayTeamLogo, game.awayStarter)}<span className="self-center text-[9px] font-black text-gray-700">AT</span>{side(game.homeTeam, game.homeTeamLogo, game.homeStarter)}</div></div>;
 }
 
-function IntegratedEvidence({ market, availability, sport }: { market: MarketEdgeDto; availability: DailyEdgeGameAvailability | null; sport: Sport }) {
+function IntegratedEvidence({ game, market, marketKey, sport, availability }: { game: DailyEdgeGameDto; market: MarketEdgeDto; marketKey: MarketKey; sport: Sport; availability: DailyEdgeGameAvailability | null }) {
   return (
-    <div className="border-b border-white/[0.07] p-4 sm:p-5 lg:border-b-0 lg:border-r">
-      <SectionHeading tone="violet">Market Intelligence</SectionHeading>
+    <div className={sport === "soccer" ? "rounded-xl border border-violet-400/15 bg-[#121019] p-4 sm:p-5" : "border-b border-white/[0.07] p-4 sm:p-5 lg:border-b-0 lg:border-r"}>
+      <SectionHeading tone="violet">Market & Price</SectionHeading>
       <div className="mt-4 space-y-3">
+        {sport === "soccer" && marketKey === "moneyline" ? <SoccerDoubleChancePanel game={game} /> : null}
         <CompactMarketPulse market={market} showSplits />
         {availability ? <AvailabilityContext report={availability} market={market} /> : sport === "mlb" ? <MlbAvailabilityUnavailable /> : null}
       </div>
@@ -665,8 +748,9 @@ function CompactFirstInningOddsMovement({ market, tone, lineClass }: { market: M
 function CompactOddsMovement({ market, tone, lineClass }: { market: MarketEdgeDto; tone: "emerald" | "amber" | "gray"; lineClass: string }) {
   const movement = resolveCoherentMovement(market);
   const opposingMovement = resolveOpposingMovement(market);
+  const soccerBoard = market.soccerPriceBoard;
   const publishedIsVerified = market.oddspherePostedMatchesPick === true;
-  const trackedBook = movement.sportsbook;
+  const trackedBook = soccerBoard?.sportsbook ?? movement.sportsbook;
   const pickAlreadyIncludesLine = market.pick !== null && /(?:^|\s)[+-]?\d+(?:\.\d+)?(?:\s|$)/.test(market.pick);
   const trackedLine = movement.currentLine ?? market.line;
   const pickContext = market.pick && trackedLine !== null && !pickAlreadyIncludesLine ? `${market.pick} ${formatNumber(trackedLine)}` : market.pick;
@@ -678,9 +762,24 @@ function CompactOddsMovement({ market, tone, lineClass }: { market: MarketEdgeDt
     const direction = movementRowDirection(market, value, selected);
     const directionClass = direction.tone === "emerald" ? "text-emerald-300" : direction.tone === "teal" ? "text-teal-300" : direction.tone === "red" ? "text-red-300" : direction.tone === "amber" ? "text-amber-300" : "text-gray-600";
     const connectorClass = direction.tone === "emerald" ? "from-gray-700 via-emerald-500/50 to-emerald-400/50" : direction.tone === "teal" ? "from-gray-700 via-teal-500/40 to-teal-400/40" : direction.tone === "red" ? "from-gray-700 via-red-500/55 to-red-400/55" : direction.tone === "amber" ? "from-gray-700 via-amber-500/45 to-amber-400/45" : selected ? lineClass : "from-gray-700 via-violet-500/40 to-gray-600";
-    return <div className="rounded-lg border border-white/[0.08] bg-black/20 p-3"><div className="flex items-center justify-between gap-2"><p className="text-[9px] font-black text-gray-200">{label}</p><div className="flex items-center gap-2"><span className={`text-[7px] font-black uppercase tracking-wider ${directionClass}`}>{direction.label}</span><p className="text-[7px] font-semibold text-gray-600">{value.sportsbook ? formatSportsbook(value.sportsbook) : "book unavailable"}</p></div></div><div className="mt-3 grid grid-cols-[auto_1fr_auto_1fr_auto] items-center gap-2"><PricePoint label="First observed" value={formatAmerican(value.open)} line={value.openLine} /><div className={`h-px bg-gradient-to-r ${connectorClass}`} /><PricePoint label="Prior observed" value={formatAmerican(value.previous)} line={value.previousLine} /><div className={`h-px bg-gradient-to-r ${connectorClass}`} /><PricePoint label="Current" value={formatAmerican(value.current)} line={value.currentLine} tone={direction.tone} /></div>{value.coherentTrail ? null : <p className="mt-2 text-[7px] leading-relaxed text-gray-600">{selected ? "Directional movement is unavailable because a continuous same-book trail could not be verified. The current price is shown for context only." : "Current quote only; a continuous same-book movement trail is not available."}</p>}</div>;
+    return <div className="rounded-lg border border-white/[0.08] bg-black/20 p-3"><div className="flex items-center justify-between gap-2"><p className="text-[9px] font-black text-gray-200">{label}</p><div className="flex items-center gap-2"><span className={`text-[7px] font-black uppercase tracking-wider ${directionClass}`}>{direction.label}</span><p className="text-[7px] font-semibold text-gray-600">{value.sportsbook ? formatSportsbook(value.sportsbook) : "book unavailable"}</p></div></div>{value.coherentTrail ? <div className="mt-3 grid grid-cols-[auto_1fr_auto_1fr_auto] items-center gap-2"><PricePoint label="Opening" value={formatAmerican(value.open)} line={value.openLine} /><div className={`h-px bg-gradient-to-r ${connectorClass}`} /><PricePoint label="Prior" value={formatAmerican(value.previous)} line={value.previousLine} /><div className={`h-px bg-gradient-to-r ${connectorClass}`} /><PricePoint label="Current" value={formatAmerican(value.current)} line={value.currentLine} tone={direction.tone} /></div> : <div className="mt-3 flex items-end justify-between gap-3"><div><p className="text-[6px] font-black uppercase tracking-wider text-gray-600">Current quote</p><p className="mt-0.5 font-mono text-sm font-black text-gray-200">{formatAmerican(value.current)}</p></div><p className="max-w-[13rem] text-right text-[7px] leading-relaxed text-gray-600">No earlier different same-book quote is stored.</p></div>}</div>;
   };
-  return <section className="mt-3 rounded-lg border border-white/[0.09] bg-black/25 p-3"><div className="flex items-center justify-between gap-2"><div><p className="text-[8px] font-black uppercase tracking-[0.15em] text-gray-300">Odds movement</p>{context ? <p className="mt-0.5 text-[7px] font-semibold text-gray-600">{context}</p> : null}</div><span className={`text-[7px] font-black uppercase tracking-wider ${tone === "emerald" ? "text-emerald-300" : tone === "amber" ? "text-amber-300" : "text-gray-500"}`}>{tone === "emerald" ? "Supporting" : tone === "amber" ? "Resisting" : "Neutral"}</span></div><div className="mt-3 grid gap-2">{movementRow(market.pick ?? "Picked side", movement, true)}{opposingMovement && market.opposingOddsTrail ? movementRow(market.opposingOddsTrail.label, opposingMovement, false) : null}</div>{evaluationDiffers ? <p className="mt-2 text-[7px] leading-relaxed text-gray-600">Current quote {formatAmerican(currentPrice)}{market.currentPriceSportsbook ? ` at ${formatSportsbook(market.currentPriceSportsbook)}` : ""}; recommendation evaluated at {formatAmerican(evaluatedPrice)}. Live movement does not silently re-grade the pick.</p> : null}{market.oddspherePostedAmerican != null && !publishedIsVerified ? <p className="mt-1 text-[7px] leading-relaxed text-gray-600">Published price omitted because its selected side was not explicitly verified.</p> : null}</section>;
+  const rows = soccerBoard?.rows.length
+    ? [...soccerBoard.rows]
+        .sort((a, b) => Number(b.selected) - Number(a.selected))
+        .map((row) => ({
+          key: row.side,
+          label: row.label,
+          selected: row.selected,
+          movement: resolveStandaloneMovement(row.odds_trail ?? [], row.price_american, soccerBoard.sportsbook, market.line),
+        }))
+    : [
+        { key: "selected", label: market.pick ?? "Picked side", selected: true, movement },
+        ...(opposingMovement && market.opposingOddsTrail
+          ? [{ key: "opposing", label: market.opposingOddsTrail.label, selected: false, movement: opposingMovement }]
+          : []),
+      ];
+  return <section className="mt-3 rounded-lg border border-white/[0.09] bg-black/25 p-3"><div className="flex items-center justify-between gap-2"><div><p className="text-[8px] font-black uppercase tracking-[0.15em] text-gray-300">Odds movement</p>{context ? <p className="mt-0.5 text-[7px] font-semibold text-gray-600">{context}</p> : null}</div><span className={`text-[7px] font-black uppercase tracking-wider ${tone === "emerald" ? "text-emerald-300" : tone === "amber" ? "text-amber-300" : "text-gray-500"}`}>{tone === "emerald" ? "Supporting" : tone === "amber" ? "Resisting" : "Neutral"}</span></div><div className="mt-3 grid gap-2">{rows.map((row) => <div key={row.key}>{movementRow(row.label, row.movement, row.selected)}</div>)}</div>{soccerBoard ? <p className="mt-2 text-[7px] leading-relaxed text-gray-600">All outcomes use the same Daily Edge movement timeline. The highlighted row is the graded side; the other rows are market context only.</p> : null}{evaluationDiffers ? <p className="mt-2 text-[7px] leading-relaxed text-gray-600">Current quote {formatAmerican(currentPrice)}{market.currentPriceSportsbook ? ` at ${formatSportsbook(market.currentPriceSportsbook)}` : ""}; recommendation evaluated at {formatAmerican(evaluatedPrice)}. Live movement does not silently re-grade the pick.</p> : null}{market.oddspherePostedAmerican != null && !publishedIsVerified ? <p className="mt-1 text-[7px] leading-relaxed text-gray-600">Published price omitted because its selected side was not explicitly verified.</p> : null}</section>;
 }
 
 function CompactTotalLineMovement({ market }: { market: MarketEdgeDto }) {
@@ -708,7 +807,7 @@ function CompactTotalLineMovement({ market }: { market: MarketEdgeDto }) {
   }
   const direction = first === null || sameTrackedLine(first, current) ? "Unchanged" : current > first ? "Moved up" : "Moved down";
   const point = (label: string, value: number | null, currentPoint = false) => <div className="min-w-0"><p className="text-[6px] font-black uppercase tracking-wider text-gray-600">{label}</p><p className={`mt-0.5 font-mono text-sm font-black ${currentPoint ? "text-violet-200" : "text-gray-200"}`}>{value === null ? "—" : formatNumber(value)}</p></div>;
-  return <section className="mt-3 rounded-lg border border-white/[0.09] bg-black/25 p-3"><div className="flex items-center justify-between gap-2"><div><p className="text-[8px] font-black uppercase tracking-[0.15em] text-gray-300">Total line movement</p><p className="mt-0.5 text-[7px] font-semibold text-gray-600">{terminal?.sportsbook ? `${formatSportsbook(terminal.sportsbook)} · same-book line` : "Current total line"}</p></div><span className="text-[7px] font-black uppercase tracking-wider text-violet-300">{direction}</span></div><div className="mt-3 grid grid-cols-[auto_1fr_auto_1fr_auto] items-center gap-2">{point("First observed", first)}<div className="h-px bg-gradient-to-r from-gray-700 via-violet-500/50 to-violet-400/50" />{point("Prior observed", previous)}<div className="h-px bg-gradient-to-r from-gray-700 via-violet-500/50 to-violet-400/50" />{point("Current", current, true)}</div>{coherent ? null : <p className="mt-2 text-[7px] leading-relaxed text-gray-600">Current line only; an earlier same-book total line is not available.</p>}</section>;
+  return <section className="mt-3 rounded-lg border border-white/[0.09] bg-black/25 p-3"><div className="flex items-center justify-between gap-2"><div><p className="text-[8px] font-black uppercase tracking-[0.15em] text-gray-300">Total line movement</p><p className="mt-0.5 text-[7px] font-semibold text-gray-600">{terminal?.sportsbook ? `${formatSportsbook(terminal.sportsbook)} · same-book line` : "Current total line"}</p></div><span className="text-[7px] font-black uppercase tracking-wider text-violet-300">{direction}</span></div><div className="mt-3 grid grid-cols-[auto_1fr_auto_1fr_auto] items-center gap-2">{point("Opening", first)}<div className="h-px bg-gradient-to-r from-gray-700 via-violet-500/50 to-violet-400/50" />{point("Prior", previous)}<div className="h-px bg-gradient-to-r from-gray-700 via-violet-500/50 to-violet-400/50" />{point("Current", current, true)}</div>{coherent ? null : <p className="mt-2 text-[7px] leading-relaxed text-gray-600">No later same-book move captured yet.</p>}</section>;
 }
 
 function AvailabilityContext({ report, market }: { report: DailyEdgeGameAvailability; market: MarketEdgeDto }) {
@@ -812,14 +911,15 @@ function resolveCoherentMovement(market: MarketEdgeDto): { open: number | null; 
   }
   const canonical = market.marketReadV2?.movement;
   const canonicalLineIsStable = canonical !== null && canonical !== undefined && sameTrackedLine(canonical.firstTrackedLine, canonical.currentLine);
+  const firstObserved = trail.find((stop) => stop.label === "first" && (!displayedBook || stop.sportsbook === displayedBook)) ?? null;
   return {
-    open: canonicalLineIsStable ? canonical.firstTrackedPrice : null,
+    open: canonicalLineIsStable ? canonical.firstTrackedPrice : firstObserved?.american ?? null,
     previous: null,
     current: canonical?.currentPrice ?? currentDisplayedPrice(market),
-    openLine: canonicalLineIsStable ? canonical.firstTrackedLine : null,
+    openLine: canonicalLineIsStable ? canonical.firstTrackedLine : firstObserved?.line ?? null,
     previousLine: null,
     currentLine: canonical?.currentLine ?? market.line,
-    sportsbook: null,
+    sportsbook: currentDisplayedSportsbook(market),
     coherentTrail: false,
   };
 }
@@ -854,6 +954,46 @@ function movementRowDirection(market: MarketEdgeDto, movement: CoherentMovement,
   // while only material resistance is red and material support is green.
   if (magnitude < 1.25) return helpsPick ? { label: "Slight toward", tone: "teal" } : { label: "Slight against", tone: "amber" };
   return helpsPick ? { label: "Toward pick", tone: "emerald" } : { label: "Against pick", tone: "red" };
+}
+
+function resolveStandaloneMovement(
+  stops: OddsTrailStop[],
+  fallbackCurrent: number | null,
+  fallbackSportsbook: string | null,
+  fallbackLine: number | null,
+): CoherentMovement {
+  const valid = stops.filter((stop) => Number.isFinite(stop.american));
+  const terminal = valid.at(-1) ?? null;
+  const terminalBook = terminal?.sportsbook ?? fallbackSportsbook;
+  const sameBook = terminalBook ? valid.filter((stop) => stop.sportsbook === terminalBook) : valid;
+  const hasProviderOpening = sameBook.some((stop) => stop.source === "provider_opening");
+  const coherentTrail = sameBook.length >= 2 && (
+    terminal?.label === "current" ||
+    terminal?.label === "locked" ||
+    hasProviderOpening
+  );
+  const first = coherentTrail ? sameBook[0]! : null;
+  let previous: OddsTrailStop | null = null;
+  if (coherentTrail) {
+    for (let index = sameBook.length - 2; index > 0; index -= 1) {
+      const candidate = sameBook[index]!;
+      if (candidate.american !== terminal?.american || !sameTrackedLine(candidate.line, terminal?.line ?? null)) {
+        previous = candidate;
+        break;
+      }
+    }
+    if (previous === null && sameBook.length > 2) previous = sameBook[sameBook.length - 2]!;
+  }
+  return {
+    open: first?.american ?? valid.find((stop) => stop.label === "first" || stop.label === "open")?.american ?? null,
+    previous: previous?.american ?? null,
+    current: terminal?.american ?? fallbackCurrent,
+    openLine: first?.line ?? fallbackLine,
+    previousLine: previous?.line ?? null,
+    currentLine: terminal?.line ?? fallbackLine,
+    sportsbook: terminalBook,
+    coherentTrail,
+  };
 }
 
 function resolveOpposingMovement(market: MarketEdgeDto): CoherentMovement | null {
@@ -1131,30 +1271,36 @@ function RelevantTrend({ game, market, marketKey, history, sample, setSample }: 
   );
 }
 
-function MarketSpecificTrend({ rows, threshold, away, home, marketKey, pick }: { rows: Array<{ away: number; home: number }>; threshold: number | null; away: string; home: string; marketKey: MarketKey; pick: string | null }) {
+type MergedHistoryPoint = { away: number; home: number; awayOutcome?: "W" | "D" | "L"; homeOutcome?: "W" | "D" | "L" };
+
+function MarketSpecificTrend({ rows, threshold, away, home, marketKey, pick }: { rows: MergedHistoryPoint[]; threshold: number | null; away: string; home: string; marketKey: MarketKey; pick: string | null }) {
   if (marketKey === "moneyline") return <BinaryResultRows rows={rows} away={away} home={home} mode="moneyline" pick={pick} />;
   if (marketKey === "first_inning") return <BinaryResultRows rows={rows} away={away} home={home} mode="first_inning" pick={pick} />;
   return <TotalResultRows rows={rows} line={threshold} away={away} home={home} />;
 }
 
-function BinaryResultRows({ rows, away, home, mode, pick }: { rows: Array<{ away: number; home: number }>; away: string; home: string; mode: "moneyline" | "first_inning"; pick: string | null }) {
+function BinaryResultRows({ rows, away, home, mode, pick }: { rows: MergedHistoryPoint[]; away: string; home: string; mode: "moneyline" | "first_inning"; pick: string | null }) {
   const supportsYrfi = mode === "first_inning" && /yrfi/i.test(pick ?? "");
   const supportsNrfi = mode === "first_inning" && /nrfi/i.test(pick ?? "");
   const hasDirectionalFiPick = supportsYrfi || supportsNrfi;
   const supportsRead = (value: number) => mode === "moneyline" ? value > 0 : supportsNrfi ? value === 0 : value > 0;
   const renderRow = (team: string, key: "away" | "home") => {
     const hits = rows.filter((row) => supportsRead(row[key])).length;
-    return <div className="grid grid-cols-[42px_1fr_auto] items-center gap-2"><span className="text-[9px] font-black text-gray-400">{team}</span><div className="flex gap-1">{rows.map((row, index) => { const hit = supportsRead(row[key]); const rawRun = row[key] > 0; const directionalStyle = hit ? "border-emerald-300/30 bg-emerald-400/20 text-emerald-200" : "border-rose-300/25 bg-rose-500/15 text-rose-200"; const neutralStyle = rawRun ? "border-sky-300/30 bg-sky-400/20 text-sky-200" : "border-gray-500/30 bg-gray-600/20 text-gray-300"; return <span key={index} title={`${team}: ${mode === "moneyline" ? (hit ? "win" : "loss") : (rawRun ? "1+ run in first" : "scoreless first")}${hasDirectionalFiPick ? ` · ${hit ? "supports" : "challenges"} ${pick}` : ""}`} className={`flex h-7 min-w-6 flex-1 items-center justify-center rounded border text-[8px] font-black ${mode === "first_inning" && !hasDirectionalFiPick ? neutralStyle : directionalStyle}`}>{mode === "moneyline" ? (hit ? "W" : "L") : (rawRun ? "1+" : "0")}</span>; })}</div><span className="w-10 text-right text-[8px] font-black text-gray-400">{mode === "moneyline" ? `${hits}-${rows.length - hits}` : `${hits}/${rows.length}`}</span></div>;
+    const outcomeKey = key === "away" ? "awayOutcome" : "homeOutcome";
+    const wins = rows.filter((row) => row[outcomeKey] === "W").length;
+    const draws = rows.filter((row) => row[outcomeKey] === "D").length;
+    const losses = rows.filter((row) => row[outcomeKey] === "L").length;
+    return <div className="grid grid-cols-[42px_1fr_auto] items-center gap-2"><span className="text-[9px] font-black text-gray-400">{team}</span><div className="flex gap-1">{rows.map((row, index) => { const hit = supportsRead(row[key]); const rawRun = row[key] > 0; const outcome = row[outcomeKey]; const soccerStyle = outcome === "W" ? "border-emerald-300/30 bg-emerald-400/20 text-emerald-200" : outcome === "D" ? "border-amber-300/30 bg-amber-400/15 text-amber-200" : "border-rose-300/25 bg-rose-500/15 text-rose-200"; const directionalStyle = hit ? "border-emerald-300/30 bg-emerald-400/20 text-emerald-200" : "border-rose-300/25 bg-rose-500/15 text-rose-200"; const neutralStyle = rawRun ? "border-sky-300/30 bg-sky-400/20 text-sky-200" : "border-gray-500/30 bg-gray-600/20 text-gray-300"; return <span key={index} title={`${team}: ${mode === "moneyline" ? outcome === "W" ? "win" : outcome === "D" ? "draw" : "loss" : rawRun ? "1+ run in first" : "scoreless first"}${hasDirectionalFiPick ? ` · ${hit ? "supports" : "challenges"} ${pick}` : ""}`} className={`flex h-7 min-w-6 flex-1 items-center justify-center rounded border text-[8px] font-black ${mode === "moneyline" ? soccerStyle : mode === "first_inning" && !hasDirectionalFiPick ? neutralStyle : directionalStyle}`}>{mode === "moneyline" ? outcome ?? "—" : rawRun ? "1+" : "0"}</span>; })}</div><span className="w-14 text-right text-[8px] font-black text-gray-400">{mode === "moneyline" ? `${wins}-${draws}-${losses}` : `${hits}/${rows.length}`}</span></div>;
   };
   const legend = mode === "moneyline"
-    ? "green = win · red = loss"
+    ? "green = win · amber = draw · red = loss · record shown W-D-L"
     : hasDirectionalFiPick
       ? `green = supports ${pick} · red = challenges ${pick}`
       : "blue = 1+ run · gray = scoreless first";
   return <div className="mt-4 space-y-2">{renderRow(away, "away")}{renderRow(home, "home")}<p className="text-right text-[8px] text-gray-600">Oldest → newest · {legend}</p></div>;
 }
 
-function TotalResultRows({ rows, line, away, home }: { rows: Array<{ away: number; home: number }>; line: number | null; away: string; home: string }) {
+function TotalResultRows({ rows, line, away, home }: { rows: MergedHistoryPoint[]; line: number | null; away: string; home: string }) {
   const renderRow = (team: string, key: "away" | "home") => {
     const overs = line === null ? 0 : rows.filter((row) => row[key] > line).length;
     const unders = line === null ? 0 : rows.filter((row) => row[key] < line).length;
@@ -1177,14 +1323,16 @@ type HistoryComparison = {
   selectedSide?: "away" | "home" | null;
   awaySampleSize?: number;
   homeSampleSize?: number;
-  awayOutcomes?: boolean[];
-  homeOutcomes?: boolean[];
+  awayOutcomes?: Array<boolean | "draw">;
+  homeOutcomes?: Array<boolean | "draw">;
 };
 
-function HistoryStatSummary({ game, market, marketKey, history, sample, sport }: { game: DailyEdgeGameDto; market: MarketEdgeDto; marketKey: MarketKey; history: PreviewHistoryByTeam; sample: 5 | 10; sport: Sport }) {
+function HistoryStatSummary({ game, market, marketKey, history, sample, sport, wide = false }: { game: DailyEdgeGameDto; market: MarketEdgeDto; marketKey: MarketKey; history: PreviewHistoryByTeam; sample: 5 | 10; sport: Sport; wide?: boolean }) {
   const away = (history[game.awayTeam] ?? []).slice(0, sample);
   const home = (history[game.homeTeam] ?? []).slice(0, sample);
-  if (away.length === 0 || home.length === 0) return null;
+  if (away.length === 0 || home.length === 0) {
+    return <div className="mt-4 rounded-xl border border-amber-400/15 bg-amber-400/[0.035] p-4"><div className="flex items-center justify-between gap-2"><p className="text-[9px] font-black uppercase tracking-[0.15em] text-amber-200">Recent team context</p><span className="text-[8px] font-semibold text-gray-500">Prior EPL matches only</span></div><div className="mt-3 grid gap-2 sm:grid-cols-2"><InfoCard label={game.awayTeam} value={away.length ? `${away.length} completed EPL matches` : "No prior EPL sample"} /><InfoCard label={game.homeTeam} value={home.length ? `${home.length} completed EPL matches` : "No prior EPL sample"} /></div><p className="mt-3 text-[9px] leading-relaxed text-gray-500">The comparison is withheld when either club lacks a comparable completed Premier League sample. This usually affects a promoted club; Championship results are not silently mixed into the EPL history feed.</p></div>;
+  }
   const average = (rows: PreviewHistoryPoint[], select: (row: PreviewHistoryPoint) => number) => rows.reduce((sum, row) => sum + select(row), 0) / rows.length;
   const rate = (rows: PreviewHistoryPoint[], test: (row: PreviewHistoryPoint) => boolean) => (rows.filter(test).length / rows.length) * 100;
   const scoringNoun = sport === "soccer" || sport === "nhl" ? "goals" : sport === "nba" || sport === "wnba" ? "points" : "runs";
@@ -1194,8 +1342,10 @@ function HistoryStatSummary({ game, market, marketKey, history, sample, sport }:
   if (marketKey === "moneyline") {
     const awayWins = away.filter((row) => row.won).length;
     const homeWins = home.filter((row) => row.won).length;
+    const awayDraws = sport === "soccer" ? away.filter((row) => row.drawn).length : 0;
+    const homeDraws = sport === "soccer" ? home.filter((row) => row.drawn).length : 0;
     comparisons = [
-      { label: `Recent record · L${sample}`, awayValue: rate(away, (row) => row.won), homeValue: rate(home, (row) => row.won), awayDisplay: `${awayWins}-${away.length - awayWins}`, homeDisplay: `${homeWins}-${home.length - homeWins}`, kind: "record", context: "Completed-game wins and losses", advantage: "higher", supportLabel: `Supports ${market.pick ?? "moneyline read"}`, selectedSide, awaySampleSize: away.length, homeSampleSize: home.length, awayOutcomes: [...away].reverse().map((row) => row.won), homeOutcomes: [...home].reverse().map((row) => row.won) },
+      { label: `Recent record · L${sample}`, awayValue: rate(away, (row) => row.won), homeValue: rate(home, (row) => row.won), awayDisplay: sport === "soccer" ? `${awayWins}-${awayDraws}-${away.length - awayWins - awayDraws}` : `${awayWins}-${away.length - awayWins}`, homeDisplay: sport === "soccer" ? `${homeWins}-${homeDraws}-${home.length - homeWins - homeDraws}` : `${homeWins}-${home.length - homeWins}`, kind: "record", context: sport === "soccer" ? "Completed-game W-D-L" : "Completed-game wins and losses", advantage: "higher", supportLabel: `Supports ${market.pick ?? "moneyline read"}`, selectedSide, awaySampleSize: away.length, homeSampleSize: home.length, awayOutcomes: [...away].reverse().map((row) => sport === "soccer" && row.drawn ? "draw" : row.won), homeOutcomes: [...home].reverse().map((row) => sport === "soccer" && row.drawn ? "draw" : row.won) },
       { label: `Avg ${scoringNoun} scored`, awayValue: average(away, (row) => row.runsFor), homeValue: average(home, (row) => row.runsFor), awayDisplay: average(away, (row) => row.runsFor).toFixed(1), homeDisplay: average(home, (row) => row.runsFor).toFixed(1), kind: "average", advantage: "higher", supportLabel: `Supports ${market.pick ?? "moneyline read"}`, selectedSide },
       { label: `Avg ${scoringNoun} allowed`, awayValue: average(away, (row) => row.runsAgainst), homeValue: average(home, (row) => row.runsAgainst), awayDisplay: average(away, (row) => row.runsAgainst).toFixed(1), homeDisplay: average(home, (row) => row.runsAgainst).toFixed(1), kind: "average", context: "Lower is better defensively", advantage: "lower", supportLabel: `Supports ${market.pick ?? "moneyline read"}`, selectedSide },
     ];
@@ -1224,7 +1374,7 @@ function HistoryStatSummary({ game, market, marketKey, history, sample, sport }:
       { label: "Avg first-inning runs", awayValue: average(awayFirst, (row) => row.firstInningRuns ?? 0), homeValue: average(homeFirst, (row) => row.firstInningRuns ?? 0), awayDisplay: average(awayFirst, (row) => row.firstInningRuns ?? 0).toFixed(1), homeDisplay: average(homeFirst, (row) => row.firstInningRuns ?? 0).toFixed(1), kind: "average", context: "Combined opening-frame scoring", advantage: fiDirection, supportLabel: fiDirection ? `More supportive of ${market.pick}` : undefined },
     ];
   }
-  return <div className="mt-4 rounded-xl border border-white/[0.10] bg-black/20 p-4"><div className="flex items-center justify-between gap-2"><p className="text-[9px] font-black uppercase tracking-[0.15em] text-gray-200">Recent team context</p><span className="text-[8px] font-semibold text-gray-500">Actual completed games</span></div><div className="mt-4 space-y-4">{comparisons.map((comparison) => <StatComparison key={comparison.label} comparison={comparison} away={game.awayTeam} home={game.homeTeam} />)}</div></div>;
+  return <div className="mt-4 rounded-xl border border-white/[0.10] bg-black/20 p-4"><div className="flex items-center justify-between gap-2"><p className="text-[9px] font-black uppercase tracking-[0.15em] text-gray-200">Recent team context</p><span className="text-[8px] font-semibold text-gray-500">Actual completed games</span></div><div className={wide ? "mt-4 grid gap-4 xl:grid-cols-3" : "mt-4 space-y-4"}>{comparisons.map((comparison) => <StatComparison key={comparison.label} comparison={comparison} away={game.awayTeam} home={game.homeTeam} />)}</div></div>;
 }
 
 function StatComparison({ comparison, away, home }: { comparison: HistoryComparison; away: string; home: string }) {
@@ -1247,13 +1397,13 @@ function comparisonSignal(comparison: HistoryComparison): { support: "away" | "h
 
 function RecordComparison({ comparison, away, home }: { comparison: HistoryComparison; away: string; home: string }) {
   const signal = comparisonSignal(comparison);
-  const side = (team: string, display: string, value: number, opponentValue: number, outcomes: boolean[] | undefined) => {
+  const side = (team: string, display: string, value: number, opponentValue: number, outcomes: Array<boolean | "draw"> | undefined) => {
     const sideKey = team === away ? "away" : "home";
     const supportive = signal.support === sideKey;
     const challenging = signal.risk === sideKey;
     return <div className={`min-w-0 rounded-xl border p-3 ${supportive ? "border-emerald-400/25 bg-emerald-400/[0.055]" : challenging ? "border-amber-400/25 bg-amber-400/[0.045]" : "border-white/[0.08] bg-white/[0.025]"}`}><div className="flex items-start justify-between gap-2"><div className="min-w-0"><div className="flex flex-wrap items-center gap-1.5"><i className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: teamAccent(team) }} /><span className="text-[10px] font-black text-gray-200">{team}</span>{supportive || challenging ? <span className={`rounded-full border px-1.5 py-0.5 text-[7px] font-black uppercase tracking-wider ${supportive ? "border-emerald-400/20 bg-emerald-400/[0.08] text-emerald-200" : "border-amber-400/20 bg-amber-400/[0.08] text-amber-200"}`}>{signal.label}</span> : null}</div><p className="mt-1 text-[8px] text-gray-500">{value.toFixed(0)}% of completed games</p></div><strong className="shrink-0 whitespace-nowrap font-mono text-base font-black text-white">{display}</strong></div><div className="mt-3"><SampleTally outcomes={outcomes ?? []} color={teamAccent(team)} hitLabel="Win" missLabel="Loss" /></div></div>;
   };
-  return <section><ComparisonHeading comparison={comparison} /><div className="grid gap-2 sm:grid-cols-2">{side(away, comparison.awayDisplay, comparison.awayValue, comparison.homeValue, comparison.awayOutcomes)}{side(home, comparison.homeDisplay, comparison.homeValue, comparison.awayValue, comparison.homeOutcomes)}</div><p className="mt-1.5 text-right text-[7px] font-semibold text-gray-600">Oldest → newest · green = win · red = loss</p></section>;
+  return <section><ComparisonHeading comparison={comparison} /><div className="grid gap-2 sm:grid-cols-2">{side(away, comparison.awayDisplay, comparison.awayValue, comparison.homeValue, comparison.awayOutcomes)}{side(home, comparison.homeDisplay, comparison.homeValue, comparison.awayValue, comparison.homeOutcomes)}</div><p className="mt-1.5 text-right text-[7px] font-semibold text-gray-600">Oldest → newest · green = win · amber = draw · red = loss · W-D-L</p></section>;
 }
 
 function AverageComparison({ comparison, away, home }: { comparison: HistoryComparison; away: string; home: string }) {
@@ -1286,7 +1436,7 @@ function ComparisonHeading({ comparison }: { comparison: HistoryComparison }) {
 }
 
 function RateComparison({ comparison, away, home }: { comparison: HistoryComparison; away: string; home: string }) {
-  const row = (team: string, value: number, total: number | undefined, outcomes: boolean[] | undefined) => {
+  const row = (team: string, value: number, total: number | undefined, outcomes: Array<boolean | "draw"> | undefined) => {
     const sampleSize = total ?? 10;
     const hits = Math.round(value / 100 * sampleSize);
     const displayedOutcomes = outcomes ?? Array.from({ length: sampleSize }, (_, index) => index < hits);
@@ -1298,26 +1448,127 @@ function RateComparison({ comparison, away, home }: { comparison: HistoryCompari
   return <div><ComparisonHeading comparison={comparison} /><div className="space-y-2">{row(away, comparison.awayValue, comparison.awaySampleSize, comparison.awayOutcomes)}{row(home, comparison.homeValue, comparison.homeSampleSize, comparison.homeOutcomes)}</div><p className="mt-1.5 text-right text-[7px] font-semibold text-gray-600">{legend}</p></div>;
 }
 
-function SampleTally({ outcomes, color: _color, hitLabel = "Hit", missLabel = "Miss", neutral = false }: { outcomes: boolean[]; color: string; hitLabel?: string; missLabel?: string; neutral?: boolean }) {
+function SampleTally({ outcomes, color: _color, hitLabel = "Hit", missLabel = "Miss", neutral = false }: { outcomes: Array<boolean | "draw">; color: string; hitLabel?: string; missLabel?: string; neutral?: boolean }) {
   void _color;
-  return <div className="grid gap-1.5" style={{ gridTemplateColumns: `repeat(${Math.max(1, outcomes.length)}, minmax(0, 1fr))` }}>{outcomes.map((hit, index) => <span key={index} title={`Game ${index + 1}: ${hit ? hitLabel : missLabel}`} aria-label={`Game ${index + 1}: ${hit ? hitLabel : missLabel}`} className={`h-4 rounded-[4px] border shadow-[inset_0_1px_0_rgba(255,255,255,0.10)] ${neutral ? hit ? "border-sky-300/30 bg-sky-400/65" : "border-gray-500/30 bg-gray-600/55" : hit ? "border-emerald-300/35 bg-emerald-400/80" : "border-rose-300/30 bg-rose-500/65"}`} />)}</div>;
+  return <div className="grid gap-1.5" style={{ gridTemplateColumns: `repeat(${Math.max(1, outcomes.length)}, minmax(0, 1fr))` }}>{outcomes.map((hit, index) => { const label = hit === "draw" ? "Draw" : hit ? hitLabel : missLabel; return <span key={index} title={`Game ${index + 1}: ${label}`} aria-label={`Game ${index + 1}: ${label}`} className={`h-4 rounded-[4px] border shadow-[inset_0_1px_0_rgba(255,255,255,0.10)] ${hit === "draw" ? "border-amber-300/35 bg-amber-400/70" : neutral ? hit ? "border-sky-300/30 bg-sky-400/65" : "border-gray-500/30 bg-gray-600/55" : hit ? "border-emerald-300/35 bg-emerald-400/80" : "border-rose-300/30 bg-rose-500/65"}`} />; })}</div>;
 }
 
 function KeyStats({ game, market, marketKey, history, sample, sport }: { game: DailyEdgeGameDto; market: MarketEdgeDto; marketKey: MarketKey; history: PreviewHistoryByTeam; sample: 5 | 10; sport: Sport }) {
+  const visibleStats = market.keyStats;
+  if (sport === "soccer") return <SoccerMarketEvidence game={game} market={market} marketKey={marketKey} />;
   return (
     <div className="h-full p-4 sm:p-5 xl:p-6">
       <SectionHeading tone="sky">Key Stats & Notes</SectionHeading>
       <div className="mt-4">
-        <div className="flex items-center justify-between gap-2"><p className="text-[8px] font-black uppercase tracking-[0.17em] text-sky-200">{market.keyStats.length > 0 ? "Prediction drivers" : "Decision snapshot"}</p><span className="text-[7px] font-semibold text-gray-600">{market.keyStats.length > 0 ? `All ${market.keyStats.length} available` : "Core model output"}</span></div>
-        {market.keyStats.length > 0 ? <div className="mt-2 space-y-2">{market.keyStats.map((stat) => <PredictionDriverCard key={`${stat.label}-${stat.awayValue}-${stat.homeValue}`} stat={stat} away={game.awayTeam} home={game.homeTeam} awayStarter={game.awayStarter?.name ?? null} homeStarter={game.homeStarter?.name ?? null} marketKey={marketKey} pick={market.pick} />)}</div> : <CoreDecisionSnapshot game={game} market={market} marketKey={marketKey} />}
+        <div className="flex items-center justify-between gap-2"><p className="text-[8px] font-black uppercase tracking-[0.17em] text-sky-200">{visibleStats.length > 0 ? "Prediction drivers" : "Decision snapshot"}</p><span className="text-[7px] font-semibold text-gray-600">{visibleStats.length > 0 ? `${visibleStats.length} most relevant` : "Core model output"}</span></div>
+        {visibleStats.length > 0 ? <div className="mt-2 space-y-2">{visibleStats.map((stat) => <PredictionDriverCard key={`${stat.label}-${stat.awayValue}-${stat.homeValue}`} stat={stat} away={game.awayTeam} home={game.homeTeam} awayStarter={game.awayStarter?.name ?? null} homeStarter={game.homeStarter?.name ?? null} marketKey={marketKey} pick={market.pick} />)}</div> : <CoreDecisionSnapshot game={game} market={market} marketKey={marketKey} />}
       </div>
       {marketKey === "first_inning" && sport === "mlb" ? null : <HistoryStatSummary game={game} market={market} marketKey={marketKey} history={history} sample={sample} sport={sport} />}
-      <div className="mt-5 border-t border-white/[0.06] pt-4"><p className="text-[8px] font-black uppercase tracking-[0.17em] text-gray-600">OddSphere notes</p><Note label="Why" text={market.whyLine} tone="positive" /><Note label="Risk" text={displayRiskLine(market)} tone="risk" /><Note label="Data" text={coverageSentence(market)} tone="neutral" /></div>
+      <OddSphereNotes market={market} />
     </div>
   );
 }
 
+function soccerEvidencePriority(label: string, marketKey: MarketKey): number {
+  const priorities = marketKey === "moneyline"
+    ? [/result probabilities/i, /^expected goals$/i, /recent form|points from/i, /xg created|xg allowed/i, /goals for \/ against/i, /shots|big chances/i, /injury|lineup/i]
+    : marketKey === "total"
+      ? [/expected goals|projected total|goal projection/i, /over|under/i, /goals for \/ against/i, /xg created|xg allowed/i, /shots|big chances/i, /injury|lineup/i]
+      : [/btts yes \/ no|both teams/i, /expected goals|goal projection/i, /goals for \/ against/i, /xg created|xg allowed/i, /shots|big chances/i, /injury|lineup/i];
+  const index = priorities.findIndex((pattern) => pattern.test(label));
+  return index === -1 ? priorities.length : index;
+}
+
+function soccerEvidenceFocus(marketKey: MarketKey): { eyebrow: string; title: string; description: string } {
+  if (marketKey === "moneyline") return { eyebrow: "Match Result evidence", title: "Who has the stronger path to win?", description: "Team-strength, scoring and form inputs most relevant to the three-way result." };
+  if (marketKey === "total") return { eyebrow: "Totals evidence", title: "What shapes the scoring environment?", description: "Attacking creation and defensive resistance organized around the displayed total." };
+  return { eyebrow: "BTTS evidence", title: "Can both teams find a goal?", description: "Each club’s scoring path and the defensive conditions behind Yes or No." };
+}
+
+function soccerEvidenceRepeatsForecast(label: string, marketKey: MarketKey): boolean {
+  if (marketKey === "moneyline") return /^result probabilities$/i.test(label) || /^expected goals$/i.test(label);
+  if (marketKey === "total") return /^projected total goals$/i.test(label) || /^over \/ under 2\.5$/i.test(label);
+  return /^expected goals by side$/i.test(label) || /^btts yes \/ no$/i.test(label);
+}
+
+function SoccerMarketEvidence({ game, market, marketKey }: { game: DailyEdgeGameDto; market: MarketEdgeDto; marketKey: MarketKey }) {
+  const focus = soccerEvidenceFocus(marketKey);
+  const orderedStats = market.keyStats
+    .filter((stat) => !soccerEvidenceRepeatsForecast(stat.label, marketKey))
+    .map((stat, index) => ({ stat, index, priority: soccerEvidencePriority(stat.label, marketKey) }))
+    .sort((a, b) => a.priority - b.priority || a.index - b.index)
+    .map(({ stat }) => stat);
+  const primary = orderedStats.slice(0, 4);
+  const supporting = orderedStats.slice(4);
+  return <div className="rounded-xl border border-sky-400/15 bg-[#0f141c] p-4 sm:p-5"><SectionHeading tone="sky">Market Evidence</SectionHeading><div className="mt-4 rounded-xl border border-sky-400/15 bg-sky-400/[0.035] p-3.5"><div className="flex items-start justify-between gap-3"><div><p className="text-[8px] font-black uppercase tracking-[0.17em] text-sky-200">{focus.eyebrow}</p><h4 className="mt-1 text-sm font-black leading-tight text-white">{focus.title}</h4></div><span className="shrink-0 rounded-full border border-white/[0.08] bg-black/20 px-2 py-1 text-[7px] font-black uppercase tracking-wider text-gray-500">{orderedStats.length} verified</span></div><p className="mt-2 text-[9px] leading-relaxed text-gray-500">{focus.description} Forecast probabilities remain in the Forecast panel above.</p></div>{primary.length > 0 ? <div className="mt-3 space-y-2">{primary.map((stat, index) => <SoccerEvidenceRow key={`${stat.label}-${stat.awayValue}-${stat.homeValue}`} stat={stat} game={game} market={market} marketKey={marketKey} rank={index + 1} />)}</div> : <CoreDecisionSnapshot game={game} market={market} marketKey={marketKey} />}{supporting.length > 0 ? <details className="group mt-3 rounded-xl border border-white/[0.08] bg-black/20"><summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-3.5 py-3"><span><span className="block text-[8px] font-black uppercase tracking-[0.14em] text-gray-300">More supporting stats</span><span className="mt-0.5 block text-[8px] text-gray-600">{supporting.length} additional verified inputs</span></span><span className="text-sm text-gray-600 transition group-open:rotate-180">⌄</span></summary><div className="space-y-2 border-t border-white/[0.07] p-2.5">{supporting.map((stat, index) => <SoccerEvidenceRow key={`${stat.label}-${stat.awayValue}-${stat.homeValue}`} stat={stat} game={game} market={market} marketKey={marketKey} rank={primary.length + index + 1} compact />)}</div></details> : null}<SoccerAvailabilityPanel game={game} /></div>;
+}
+
+function SoccerFormSequence({ value, team }: { value: string | null; team: string }) {
+  const normalized = value?.trim() ?? "";
+  const results = /^[WDL](?:\s*·\s*[WDL])*$/.test(normalized) ? normalized.split(/\s*·\s*/) : [];
+  if (results.length === 0) return <p className="mt-1 break-words text-[10px] font-black leading-tight text-gray-300">{value ?? "Not reported"}</p>;
+  const resultLabel = { W: "Win", D: "Draw", L: "Loss" } as const;
+  const resultTone = {
+    W: "border-emerald-300/25 bg-emerald-400/[0.12] text-emerald-200",
+    D: "border-amber-300/25 bg-amber-400/[0.10] text-amber-200",
+    L: "border-rose-300/25 bg-rose-400/[0.10] text-rose-200",
+  } as const;
+  return <div className="mt-1.5" aria-label={`${team} recent form, newest first: ${results.map((result) => resultLabel[result as keyof typeof resultLabel]).join(", ")}`}><div className="flex flex-wrap gap-1">{results.map((result, index) => <span key={`${result}-${index}`} title={`${index === 0 ? "Newest · " : ""}${resultLabel[result as keyof typeof resultLabel]}`} className={`flex h-6 w-6 items-center justify-center rounded-md border text-[8px] font-black ${resultTone[result as keyof typeof resultTone]}`}>{result}</span>)}</div><p className="mt-1 text-[6px] font-bold uppercase tracking-wider text-gray-600">Newest first</p></div>;
+}
+
+function SoccerCompoundStat({ label, value, compact }: { label: string; value: string; compact: boolean }) {
+  const names = /goals for \/ against/i.test(label)
+    ? ["For", "Against"]
+    : /shots \/ on target/i.test(label)
+      ? ["Shots", "On target"]
+      : null;
+  const values = names ? value.split(/\s*\/\s*/) : [];
+  if (!names || values.length !== 2) return <p className={`mt-1 break-words font-black leading-tight ${compact ? "text-[10px]" : "text-[12px]"}`}>{value}</p>;
+  return <div className="mt-1.5 grid grid-cols-2 gap-1"><div><p className="text-[6px] font-bold uppercase tracking-wider text-gray-600">{names[0]}</p><p className={`${compact ? "text-[10px]" : "text-[12px]"} font-black text-gray-100`}>{values[0]}</p></div><div className="border-l border-white/[0.07] pl-2"><p className="text-[6px] font-bold uppercase tracking-wider text-gray-600">{names[1]}</p><p className={`${compact ? "text-[10px]" : "text-[12px]"} font-black text-gray-100`}>{values[1]}</p></div></div>;
+}
+
+function SoccerAvailabilityPanel({ game }: { game: DailyEdgeGameDto }) {
+  const report = game.soccerAvailability;
+  if (!report) return null;
+  const teams = [
+    { side: "away" as const, name: game.awayTeam, report: report.away },
+    { side: "home" as const, name: game.homeTeam, report: report.home },
+  ];
+  const updatedAt = teams
+    .flatMap((team) => team.report.injuries.map((row) => row.updatedAt))
+    .filter((value): value is string => Boolean(value))
+    .sort((a, b) => Date.parse(b) - Date.parse(a))[0] ?? null;
+  const teamSummary = (team: typeof teams[number]) => <div key={team.side} className="min-w-0 rounded-lg border border-white/[0.08] bg-black/25 p-2.5"><div className="flex min-w-0 items-center justify-between gap-2"><span className="truncate text-[8px] font-black uppercase tracking-wider text-gray-200">{team.name}</span><span className={`shrink-0 rounded-full border px-1.5 py-0.5 text-[6px] font-black uppercase ${team.report.startersPosted >= 11 ? "border-emerald-400/20 text-emerald-200" : "border-gray-700 text-gray-500"}`}>{team.report.startersPosted >= 11 ? "Lineup posted" : "Lineup pending"}</span></div><p className="mt-1.5 text-[8px] text-gray-500">{team.report.startersPosted > 0 ? `${team.report.startersPosted} starters listed` : "No starters posted yet"}</p><p className="mt-0.5 text-[8px] font-bold text-amber-200">{team.report.listedPlayerCount} provider-listed {team.report.listedPlayerCount === 1 ? "player" : "players"}</p></div>;
+  return <details className="group mt-3 rounded-xl border border-amber-300/15 bg-amber-400/[0.025]"><summary className="cursor-pointer list-none p-3.5"><div className="flex items-start justify-between gap-3"><div className="min-w-0"><p className="text-[8px] font-black uppercase tracking-[0.15em] text-amber-200">Lineups &amp; availability</p><p className="mt-1 text-[8px] leading-relaxed text-gray-600">Provider report · absence from this list does not confirm availability.</p></div><span className="shrink-0 text-sm text-gray-600 transition group-open:rotate-180">⌄</span></div><div className="mt-3 grid grid-cols-2 gap-2">{teams.map(teamSummary)}</div>{updatedAt ? <p className="mt-2 text-[7px] text-gray-600">Latest provider update · {formatAvailabilityTime(updatedAt)}</p> : null}</summary><div className="grid gap-2 border-t border-white/[0.07] p-3 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">{teams.map((team) => <div key={team.side} className="min-w-0 rounded-lg border border-white/[0.07] bg-black/20 p-2.5"><p className="text-[8px] font-black text-gray-200">{team.name}</p>{team.report.injuries.length > 0 ? <div className="mt-2 space-y-2">{team.report.injuries.map((player) => <div key={`${player.name}-${player.updatedAt}`} className="min-w-0 border-t border-white/[0.06] pt-2 first:border-0 first:pt-0"><div className="flex min-w-0 items-start justify-between gap-2"><p className="min-w-0 break-words text-[8px] font-bold leading-tight text-gray-300">{player.name}</p><span className="shrink-0 rounded-full border border-amber-400/15 px-1.5 py-0.5 text-[6px] font-black uppercase text-amber-200">{player.status ?? "Listed"}</span></div><p className="mt-0.5 break-words text-[7px] leading-relaxed text-gray-600">{player.injury ?? "Reason not reported"}</p></div>)}</div> : <p className="mt-2 text-[7px] leading-relaxed text-gray-600">No players returned by the provider for this club.</p>}</div>)}</div></details>;
+}
+
+function SoccerEvidenceRow({ stat, game, market, marketKey, rank, compact = false }: { stat: MarketEdgeDto["keyStats"][number]; game: DailyEdgeGameDto; market: MarketEdgeDto; marketKey: MarketKey; rank: number; compact?: boolean }) {
+  const category = driverCategory(stat.label);
+  const context = driverContext(stat.label, marketKey, market.pick);
+  const signal = contextualDriverSignal({ label: stat.label, awayValue: stat.awayValue, homeValue: stat.homeValue, away: game.awayTeam, home: game.homeTeam, marketKey, pick: market.pick });
+  const twoSided = keyStatIsTwoSided(stat.label, stat.awayValue, stat.homeValue);
+  const cellLabels = /btts yes \/ no/i.test(stat.label)
+    ? { away: "Yes", home: "No" }
+    : /over \/ under/i.test(stat.label)
+      ? { away: "Over", home: "Under" }
+      : /result probabilities/i.test(stat.label)
+        ? { away: `${game.awayTeam} / Draw`, home: game.homeTeam }
+        : { away: game.awayTeam, home: game.homeTeam };
+  const cell = (side: "away" | "home", team: string, value: string | null) => { const supports = signal?.support === side; const challenges = signal?.risk === side; return <div className={`min-w-0 rounded-md border px-2.5 py-2 ${supports ? "border-emerald-400/25 bg-emerald-400/[0.065]" : challenges ? "border-amber-400/20 bg-amber-400/[0.05]" : "border-white/[0.06] bg-black/20"}`}><div className="flex items-center gap-1.5"><i className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: teamAccent(team) }} /><span className="truncate text-[7px] font-black uppercase tracking-wider text-gray-500">{team}</span></div>{/recent form/i.test(stat.label) ? <SoccerFormSequence value={value} team={team} /> : <SoccerCompoundStat label={stat.label} value={value ?? "Not reported"} compact={compact} />}</div>; };
+  const singleValue = stat.homeValue ?? stat.awayValue ?? "Not reported";
+  return <section className={`rounded-xl border border-white/[0.08] bg-[#10131b] ${compact ? "p-2.5" : "p-3"}`}><div className="flex items-start gap-2.5"><span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-sky-400/20 bg-sky-400/[0.07] text-[7px] font-black text-sky-200">{rank}</span><div className="min-w-0 flex-1"><div className="flex items-start justify-between gap-2"><div className="min-w-0"><p className="text-[7px] font-black uppercase tracking-[0.13em] text-sky-300">{category}</p><p className="mt-0.5 break-words text-[10px] font-black text-gray-100">{stat.label}</p></div>{signal && twoSided ? <span className={`shrink-0 rounded-full border px-1.5 py-0.5 text-[6px] font-black uppercase tracking-wider ${signal.support ? "border-emerald-400/20 text-emerald-200" : "border-amber-400/20 text-amber-200"}`}>{signal.label}</span> : null}</div>{twoSided ? <div className="mt-2 grid grid-cols-2 gap-1.5">{cell("away", cellLabels.away, stat.awayValue)}{cell("home", cellLabels.home, stat.homeValue)}</div> : <div className="mt-2 rounded-md border border-white/[0.06] bg-black/20 px-3 py-2.5"><p className="text-[7px] font-black uppercase tracking-wider text-gray-600">Match projection</p><p className="mt-1 font-mono text-lg font-black text-white">{singleValue}</p></div>}{compact ? null : <p className="mt-2 text-[7.5px] leading-relaxed text-gray-600">{context}</p>}</div></div></section>;
+}
+
+function OddSphereNotes({ market }: { market: MarketEdgeDto }) {
+  return <div className="mt-5 border-t border-white/[0.06] pt-4"><p className="text-[8px] font-black uppercase tracking-[0.17em] text-gray-600">OddSphere notes</p><Note label="Why" text={market.whyLine} tone="positive" /><Note label="Risk" text={displayRiskLine(market)} tone="risk" /><Note label="Data" text={coverageSentence(market)} tone="neutral" /></div>;
+}
+
 function CoreDecisionSnapshot({ game, market, marketKey }: { game: DailyEdgeGameDto; market: MarketEdgeDto; marketKey: MarketKey }) {
+  if (game.sport === "soccer" && game.soccerProjection) {
+    const projection = game.soccerProjection;
+    const marketNumber = marketKey === "moneyline" ? formatAmerican(currentDisplayedPrice(market)) : market.line === null ? "—" : formatNumber(market.line);
+    return <div className="mt-2 grid grid-cols-2 gap-2"><ProofCell label="Expected goals" value={`${projection.expectedGoals.away.toFixed(2)} · ${projection.expectedGoals.home.toFixed(2)}`} note="Away · home distribution means" tone="violet" /><ProofCell label="Total distribution" value={`Median ${projection.medianTotal} · Mode ${projection.mostLikelyTotal}`} note={`Expected total ${(projection.expectedGoals.away + projection.expectedGoals.home).toFixed(2)}`} tone="violet" /><ProofCell label="Coherent scenario" value={projection.representativeScore ? `${game.awayTeam} ${projection.representativeScore.away} · ${game.homeTeam} ${projection.representativeScore.home}` : "No single score fits all heads"} note={projection.representativeScoreProbability === null ? "Independent market forecasts remain visible" : `${(projection.representativeScoreProbability * 100).toFixed(1)}% exact-score probability · not the modal score`} tone="gray" /><ProofCell label={marketKey === "moneyline" ? "Current price" : "Market line"} value={marketNumber} note={marketKey === "moneyline" && market.currentPriceSportsbook ? formatSportsbook(market.currentPriceSportsbook) : market.marketSource ?? "Source unavailable"} tone="gray" /></div>;
+  }
   const projectedTotal = game.projected.away + game.projected.home;
   const projectedMargin = Math.abs(game.projected.home - game.projected.away);
   const projectedLeader = game.projected.home === game.projected.away ? "Even" : game.projected.home > game.projected.away ? game.homeTeam : game.awayTeam;
@@ -1411,13 +1662,14 @@ function ModelDeepDive({ game, market }: { game: DailyEdgeGameDto; market: Marke
 }
 
 function PriceStops({ market }: { market: MarketEdgeDto }) {
+  const movement = resolveCoherentMovement(market);
   const stops = [
-    { label: "Open", value: market.lineOpenAmerican },
-    { label: "First published", value: market.oddspherePostedAmerican ?? null },
-    { label: "Current", value: currentDisplayedPrice(market) },
-    { label: "Locked", value: market.lockedLineAmerican ?? null },
+    { label: "Opening", value: movement.open ?? market.lineOpenAmerican, pending: "Not captured", note: movement.sportsbook },
+    { label: "Prior", value: movement.previous, pending: "No prior move", note: movement.sportsbook },
+    { label: "Current", value: movement.current, pending: "Price pending", note: movement.sportsbook ?? market.currentPriceSportsbook },
+    { label: "Locked", value: market.lockedLineAmerican ?? null, pending: "Not locked", note: null },
   ];
-  return <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-2">{stops.map((stop) => <div key={stop.label} className="rounded-lg border border-white/[0.08] bg-black/25 px-3 py-2"><p className="text-[7px] font-black uppercase tracking-wider text-gray-600">{stop.label}</p><p className="mt-1 font-mono text-xs font-black text-gray-200">{formatAmerican(stop.value)}</p></div>)}</div>;
+  return <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-2">{stops.map((stop) => <div key={stop.label} className="rounded-lg border border-white/[0.08] bg-black/25 px-3 py-2"><p className="text-[7px] font-black uppercase tracking-wider text-gray-600">{stop.label}</p><p className={`mt-1 font-mono font-black ${stop.value === null ? "text-[9px] text-gray-500" : "text-xs text-gray-200"}`}>{stop.value === null ? stop.pending : formatAmerican(stop.value)}</p>{stop.note ? <p className="mt-0.5 truncate text-[7px] text-gray-700">{formatSportsbook(stop.note)}</p> : null}</div>)}</div>;
 }
 
 function StarterDetailCard({ team, logo, starter, stats, side }: { team: string; logo: string | null; starter: DailyEdgeGameDto["awayStarter"]; stats: MarketEdgeDto["keyStats"]; side: "away" | "home" }) {
@@ -1433,20 +1685,28 @@ function AnalysisCard({ label, text }: { label: string; text: string }) {
   return <section className="rounded-xl border border-violet-400/20 bg-violet-500/[0.05] p-4"><p className="text-[8px] font-black uppercase tracking-[0.15em] text-violet-200">{label}</p><p className="mt-2 text-[11px] leading-relaxed text-gray-300">{text}</p></section>;
 }
 
-type BoardFilter = "all" | "best_angle" | "lean" | "watchlist" | "caution";
+type BoardFilter = "all" | "best_angle" | "lean" | "watchlist" | "caution" | "no_play";
 
-function EdgeBoard({ games, sport, activeId, activeMarket, selectGame }: { games: DailyEdgeGameDto[]; sport: Sport; activeId: string; activeMarket: MarketKey; selectGame: (game: DailyEdgeGameDto, market?: MarketKey) => void }) {
+function EdgeBoard({ games, sport, activeId, activeMarket, selectGame, groupByDay = false }: { games: DailyEdgeGameDto[]; sport: Sport; activeId: string; activeMarket: MarketKey; selectGame: (game: DailyEdgeGameDto, market?: MarketKey) => void; groupByDay?: boolean }) {
   const [filter, setFilter] = useState<BoardFilter>("all");
   const [focus, setFocus] = useState<MarketKey | null>(null);
-  const filters: Array<{ key: BoardFilter; label: string }> = [{ key: "all", label: "All" }, { key: "best_angle", label: "Best Angle" }, { key: "lean", label: "Lean" }, { key: "watchlist", label: "Watchlist" }, { key: "caution", label: "Caution" }];
+  const filters: Array<{ key: BoardFilter; label: string }> = [{ key: "all", label: "All" }, { key: "best_angle", label: "Best Angle" }, { key: "lean", label: "Lean" }, { key: "watchlist", label: "Watchlist" }, { key: "caution", label: "Caution" }, { key: "no_play", label: "No Play" }];
   const marketKeys: MarketKey[] = focus ? [focus] : ["moneyline", "total", "first_inning"];
   const count = (key: BoardFilter) => key === "all" ? games.length : games.filter((game) => marketKeys.some((marketKey) => game.markets[marketKey].verdict.key === key)).length;
   const visibleGames = filter === "all" ? games : games.filter((game) => marketKeys.some((marketKey) => game.markets[marketKey].verdict.key === filter));
+  const orderedGames = [...visibleGames].sort((a, b) => {
+    const completedOrder = Number(a.result?.finalScore !== null) - Number(b.result?.finalScore !== null);
+    if (completedOrder !== 0) return completedOrder;
+    return Date.parse(a.gameStartAt ?? "") - Date.parse(b.gameStartAt ?? "");
+  });
+  const groupedGames = groupByDay ? Object.entries(Object.groupBy(orderedGames, (game) => game.gameStartAt?.slice(0, 10) ?? "Unscheduled")) : [["", orderedGames] as const];
   const marketFilters: Array<{ key: MarketKey | null; label: string }> = [{ key: null, label: "Best market" }, { key: "moneyline", label: "Moneyline" }, { key: "total", label: "Totals" }, { key: "first_inning", label: marketLabelFor("first_inning", sport) }];
-  return <section><div className="mb-3 rounded-xl border border-white/[0.07] bg-white/[0.02] p-3"><div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div className="flex items-baseline gap-2"><span className="h-3.5 w-1 rounded-full bg-violet-400/65" /><h2 className="text-[10px] font-black uppercase tracking-[0.18em] text-violet-200">Slate Board</h2><span className="text-[11px] text-gray-600">·</span><span className="text-[11px] text-gray-400">{games.length} {games.length === 1 ? "game" : "games"}</span></div><div className="flex gap-1.5 overflow-x-auto pb-1">{marketFilters.map((item) => <button key={item.key ?? "best"} type="button" onClick={() => setFocus(item.key)} aria-pressed={focus === item.key} className={`whitespace-nowrap rounded-md border px-2.5 py-1.5 text-[8px] font-black uppercase tracking-wider ${focus === item.key ? "border-white/20 bg-white/[0.09] text-white" : "border-white/[0.06] text-gray-500"}`}>{item.label}</button>)}</div></div><div className="mt-3 flex gap-1.5 overflow-x-auto border-t border-white/[0.05] pt-3">{filters.map((item) => { const total = count(item.key); const active = filter === item.key; const disabled = item.key !== "all" && total === 0; return <button key={item.key} type="button" disabled={disabled} onClick={() => setFilter(item.key)} className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border px-2.5 py-1 text-[9px] font-black uppercase tracking-wider ${active ? "border-violet-400/55 bg-violet-500/[0.18] text-white" : disabled ? "border-white/[0.04] text-gray-800" : "border-white/[0.08] bg-white/[0.03] text-gray-400 hover:border-white/[0.16]"}`}>{item.label}<span className={active ? "text-violet-200" : "text-gray-600"}>{total}</span></button>; })}</div></div><div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">{visibleGames.map((game) => <BoardGameCard key={game.id} game={game} sport={sport} headlineMarket={focus ?? primaryMarket(game)} active={activeId === game.id} activeMarket={activeId === game.id ? activeMarket : null} selectGame={selectGame} />)}</div></section>;
+  return <section><div className="mb-3 rounded-xl border border-white/[0.07] bg-white/[0.02] p-3"><div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div className="flex items-baseline gap-2"><span className="h-3.5 w-1 rounded-full bg-violet-400/65" /><h2 className="text-[10px] font-black uppercase tracking-[0.18em] text-violet-200">{groupByDay ? "Weekly Slate" : "Slate Board"}</h2><span className="text-[11px] text-gray-600">·</span><span className="text-[11px] text-gray-400">{games.length} {games.length === 1 ? "game" : "games"}</span></div><div className="flex gap-1.5 overflow-x-auto pb-1">{marketFilters.map((item) => <button key={item.key ?? "best"} type="button" onClick={() => setFocus(item.key)} aria-pressed={focus === item.key} className={`whitespace-nowrap rounded-md border px-2.5 py-1.5 text-[8px] font-black uppercase tracking-wider ${focus === item.key ? "border-white/20 bg-white/[0.09] text-white" : "border-white/[0.06] text-gray-500"}`}>{item.label}</button>)}</div></div><div className="mt-3 flex gap-1.5 overflow-x-auto border-t border-white/[0.05] pt-3">{filters.map((item) => { const total = count(item.key); const active = filter === item.key; const disabled = item.key !== "all" && total === 0; return <button key={item.key} type="button" disabled={disabled} onClick={() => setFilter(item.key)} className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border px-2.5 py-1 text-[9px] font-black uppercase tracking-wider ${active ? "border-violet-400/55 bg-violet-500/[0.18] text-white" : disabled ? "border-white/[0.04] text-gray-800" : "border-white/[0.08] bg-white/[0.03] text-gray-400 hover:border-white/[0.16]"}`}>{item.label}<span className={active ? "text-violet-200" : "text-gray-600"}>{total}</span></button>; })}</div></div><div className="space-y-6">{groupedGames.map(([date, dayGames]) => { const rows = dayGames ?? []; return <section key={date || "slate"}>{date ? <div className="mb-3 flex items-center gap-3 border-b border-white/[0.07] pb-2"><span className="rounded-lg border border-violet-400/25 bg-violet-500/[0.08] px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.16em] text-violet-100">{new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", weekday: "long", month: "short", day: "numeric" }).format(new Date(`${date}T12:00:00Z`))}</span><span className="text-[9px] font-bold text-gray-600">{rows.length} {rows.length === 1 ? "match" : "matches"}</span></div> : null}<div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{rows.map((game) => <BoardGameCard key={game.id} game={game} sport={sport} headlineMarket={focus ?? primaryMarket(game)} active={activeId === game.id} activeMarket={activeId === game.id ? activeMarket : null} selectGame={selectGame} />)}</div></section>; })}</div></section>;
 }
 
 function BoardGameCard({ game, sport, headlineMarket, active, activeMarket, selectGame }: { game: DailyEdgeGameDto; sport: Sport; headlineMarket: MarketKey; active: boolean; activeMarket: MarketKey | null; selectGame: (game: DailyEdgeGameDto, market?: MarketKey) => void }) {
+  const compactSoccer = sport === "soccer";
+  const finalScore = game.result?.finalScore ?? null;
   const headlineKey = headlineMarket;
   const headlineMarketData = game.markets[headlineKey];
   const headline = {
@@ -1470,44 +1730,44 @@ function BoardGameCard({ game, sport, headlineMarket, active, activeMarket, sele
       className={`group relative flex h-full cursor-pointer flex-col overflow-hidden rounded-xl border bg-[#0D0D14] shadow-[0_4px_16px_-6px_rgba(0,0,0,0.55),inset_0_1px_0_rgba(255,255,255,0.05)] transition ${active ? "border-white/35 outline outline-2 outline-violet-400/25 outline-offset-2" : boardCardBorder(headline.verdict.key)}`}
     >
       <div className="h-[3px] w-full shrink-0" style={{ background: `linear-gradient(to right, ${teamTheme(game.awayTeam).primary} 0%, ${teamTheme(game.awayTeam).primary} 28%, rgba(255,255,255,0.06) 50%, ${teamTheme(game.homeTeam).primary} 72%, ${teamTheme(game.homeTeam).primary} 100%)` }} />
-      <div className="flex flex-1 flex-col p-5 sm:p-6">
-        <div className="grid gap-3">
+      <div className={`flex flex-1 flex-col ${compactSoccer ? "p-3.5 sm:p-4" : "p-5 sm:p-6"}`}>
+        <div className={compactSoccer ? "grid gap-2" : "grid gap-3"}>
           <div className="flex min-w-0 items-center gap-2.5">
             <TeamLogo src={game.awayTeamLogo} label={game.awayTeam} />
-            <span className="text-base font-black text-white">{game.awayTeam}</span>
+            <span className={compactSoccer ? "truncate text-[13px] font-black text-white" : "text-base font-black text-white"}>{game.awayTeam}</span>
             <span className="text-[11px] text-gray-700">@</span>
-            <span className="text-base font-black text-white">{game.homeTeam}</span>
+            <span className={compactSoccer ? "truncate text-[13px] font-black text-white" : "text-base font-black text-white"}>{game.homeTeam}</span>
             <TeamLogo src={game.homeTeamLogo} label={game.homeTeam} />
           </div>
-          <div className="flex min-h-8 items-center gap-2">
-            <VerdictBadge market={headline} large />
-            <span className="text-[10px] text-gray-500">{game.gameTime}</span>
-            <LockBadge lockState={game.lockState} lockedAt={game.lockedAt} scheduledLockAt={game.scheduledLockAt} className="font-black uppercase tracking-wider text-emerald-300" />
+          <div className={`flex items-center gap-2 ${compactSoccer ? "min-h-6" : "min-h-8"}`}>
+            <VerdictBadge market={headline} large={!compactSoccer} />
+            {finalScore ? <span className="rounded-full border border-white/[0.10] bg-white/[0.05] px-2 py-1 text-[9px] font-black uppercase tracking-wider text-gray-300">Final · {game.awayTeam} {finalScore.away}–{finalScore.home} {game.homeTeam}</span> : <><span className="text-[10px] text-gray-500">{game.gameTime}</span><LockBadge lockState={game.lockState} lockedAt={game.lockedAt} scheduledLockAt={game.scheduledLockAt} className="font-black uppercase tracking-wider text-emerald-300" /></>}
           </div>
         </div>
-        <div className="mt-5 flex flex-wrap items-baseline gap-2">
-          <span className="text-[30px] font-black leading-none tracking-tight text-white sm:text-[34px]">{displayPick(headline, headlineKey)}</span>
+        <div className={`${compactSoccer ? "mt-3" : "mt-5"} flex flex-wrap items-baseline gap-2`}>
+          <span className={compactSoccer ? "text-[22px] font-black leading-none tracking-tight text-white" : "text-[30px] font-black leading-none tracking-tight text-white sm:text-[34px]"}>{displayPick(headline, headlineKey)}</span>
           <span className="text-[10px] font-black uppercase tracking-wider text-gray-500">{marketLabelFor(headlineKey, sport)}</span>
           <span className="text-[15px] font-black text-gray-200">{formatProbability(headline.modelProb)}</span>
           <span className="font-mono text-[12px] font-bold text-gray-500">{formatAmerican(headline.priceAmerican)}</span>
         </div>
-        <p className="mt-3 line-clamp-2 text-[12px] leading-relaxed text-gray-400">{currentAwareGuidedGuide(headline, game.decisionLine)}</p>
-        <div className="mt-3 flex items-baseline gap-2">
-          <span className="text-[9px] font-black uppercase tracking-wider text-gray-600">Proj</span>
-          <span className="text-[12px] text-gray-400">{game.awayTeam} <strong className="text-[13px] text-white">{formatNumber(game.projected.away)}</strong> <span className="mx-1 text-gray-700">·</span> {game.homeTeam} <strong className="text-[13px] text-white">{formatNumber(game.projected.home)}</strong></span>
+        {sport === "soccer" && headlineKey === "moneyline" && headline.soccerMatchResultContext ? <div className="mt-2 rounded-lg border border-sky-400/12 bg-sky-400/[0.025] px-2.5 py-2"><div className="grid grid-cols-3 gap-2 text-center">{([{ key: "away", label: game.awayTeam }, { key: "draw", label: "Draw" }, { key: "home", label: game.homeTeam }] as const).map((outcome) => <div key={outcome.key}><p className="truncate text-[7px] font-black uppercase tracking-wider text-gray-600">{outcome.label}</p><p className={`font-mono text-[10px] font-black ${outcome.key === headline.soccerMatchResultContext?.displayed_side ? "text-sky-200" : "text-gray-300"}`}>{(headline.soccerMatchResultContext!.model[outcome.key] * 100).toFixed(1)}%</p></div>)}</div></div> : null}
+        <p className={`${compactSoccer ? "mt-2 text-[10px]" : "mt-3 text-[12px]"} line-clamp-2 leading-relaxed text-gray-400`}>{currentAwareGuidedGuide(headline, game.decisionLine)}</p>
+        <div className={`${compactSoccer ? "mt-2" : "mt-3"} flex items-baseline gap-2`}>
+          <span className="text-[9px] font-black uppercase tracking-wider text-gray-600">{sport === "soccer" && game.soccerProjection ? "xG" : "Proj"}</span>
+          <span className="text-[12px] text-gray-400">{game.awayTeam} <strong className="text-[13px] text-white">{formatNumber(game.soccerProjection?.expectedGoals.away ?? game.projected.away)}</strong> <span className="mx-1 text-gray-700">·</span> {game.homeTeam} <strong className="text-[13px] text-white">{formatNumber(game.soccerProjection?.expectedGoals.home ?? game.projected.home)}</strong>{sport === "soccer" && game.soccerProjection?.representativeScore ? <span className="ml-2 text-[9px] text-gray-600">Scenario {game.soccerProjection.representativeScore.away}–{game.soccerProjection.representativeScore.home}</span> : null}</span>
         </div>
-        <div className="mt-auto pt-3">
+        <div className={`mt-auto ${compactSoccer ? "pt-2" : "pt-3"}`}>
           <div className="flex items-center justify-between gap-1 overflow-hidden text-[9px] font-black uppercase tracking-[0.06em]">
             {marketKeys.map((key, index) => {
               const item = game.markets[key];
               return <span key={key} className="inline-flex min-w-0 items-center gap-1">{index > 0 ? <span className="mr-1 text-gray-700">·</span> : null}<span className="text-gray-600">{marketShortLabelFor(key, sport)}</span><span className={boardVerdictText(item.verdict.key)}>{verdictSymbol(item.verdict.key)} {item.verdict.label}</span></span>;
             })}
           </div>
-          <div className="mt-4 grid grid-cols-3 gap-2">
+          <div className={`${compactSoccer ? "mt-2 gap-1.5" : "mt-4 gap-2"} grid grid-cols-3`}>
             {marketKeys.map((key) => {
               const item = game.markets[key];
               const selected = active && activeMarket === key;
-              return <button key={key} type="button" data-market={key} onClick={(event) => { event.stopPropagation(); selectGame(game, key); }} className={`min-h-[70px] rounded-lg border px-3 py-3 text-left transition sm:min-h-[76px] sm:px-3.5 ${boardMarketPill(item.verdict.key)} ${selected ? "ring-2 ring-white/45 ring-offset-1 ring-offset-[#0D0D14]" : ""}`}><span className={`block text-[9.5px] font-black uppercase tracking-[0.1em] ${boardVerdictText(item.verdict.key)}`}>{marketShortLabelFor(key, sport)}</span><span className="mt-1.5 block truncate text-[14px] font-black text-gray-100 sm:text-[15px]">{displayPick(item, key)}</span></button>;
+              return <button key={key} type="button" data-market={key} onClick={(event) => { event.stopPropagation(); selectGame(game, key); }} className={`${compactSoccer ? "min-h-[50px] px-2 py-2" : "min-h-[70px] px-3 py-3 sm:min-h-[76px] sm:px-3.5"} rounded-lg border text-left transition ${boardMarketPill(item.verdict.key)} ${selected ? "ring-2 ring-white/45 ring-offset-1 ring-offset-[#0D0D14]" : ""}`}><span className={`block text-[8.5px] font-black uppercase tracking-[0.1em] ${boardVerdictText(item.verdict.key)}`}>{marketShortLabelFor(key, sport)}</span><span className={`${compactSoccer ? "mt-1 text-[11px]" : "mt-1.5 text-[14px] sm:text-[15px]"} block truncate font-black text-gray-100`}>{displayPick(item, key)}</span></button>;
             })}
           </div>
           <div className="mt-2 flex min-h-3 justify-end"><span className={`text-[8px] font-black uppercase tracking-[0.1em] ${active ? "text-gray-300" : "text-violet-200/60"}`}>{active ? "Open in reader ↑" : "View breakdown ↑"}</span></div>
@@ -1541,8 +1801,9 @@ function boardVerdictText(verdict: string): string {
   return "text-gray-600";
 }
 
-function EmptyPreview({ snapshot, sport }: { snapshot: DailyEdgeResponse; sport: Sport }) {
-  return <section className="rounded-2xl border border-violet-400/15 bg-gradient-to-br from-violet-500/[0.05] to-gray-950/60 p-10 text-center"><span className="inline-flex rounded-full border border-violet-400/20 bg-violet-400/[0.06] px-3 py-1 text-[8px] font-black uppercase tracking-wider text-violet-200">Model available</span><p className="mt-4 text-[9px] font-black uppercase tracking-wider text-gray-500">{sportLabel(sport)} · Daily Edge · {snapshot.requested_date ?? snapshot.date}</p><h2 className="mt-2 text-2xl font-black text-white">No {sportLabel(sport)} games today</h2><p className="mx-auto mt-2 max-w-xl text-sm leading-relaxed text-gray-500">The {sportLabel(sport)} model remains part of OddSphere. There is no current slate to analyze, so the board correctly stays empty instead of showing games from an older date.</p></section>;
+function EmptyPreview({ sport, displayLabel }: { sport: Sport; displayLabel?: string }) {
+  const label = displayLabel ?? sportLabel(sport);
+  return <section className="rounded-2xl border border-violet-400/15 bg-gradient-to-br from-violet-500/[0.05] to-gray-950/60 p-10 text-center"><span className="inline-flex rounded-full border border-violet-400/20 bg-violet-400/[0.06] px-3 py-1 text-[8px] font-black uppercase tracking-wider text-violet-200">Model available</span><p className="mt-4 text-[9px] font-black uppercase tracking-wider text-gray-500">Soccer · {label} · Daily Edge</p><h2 className="mt-2 text-2xl font-black text-white">No {label} games today</h2><p className="mx-auto mt-2 max-w-xl text-sm leading-relaxed text-gray-500">The {label} model remains part of OddSphere. There is no current slate to analyze, so the board correctly stays empty instead of showing games from an older date.</p></section>;
 }
 
 function SectionHeading({ tone, children }: { tone: "emerald" | "violet" | "sky"; children: React.ReactNode }) {
@@ -1634,7 +1895,7 @@ function gradeScaleColor(key: string): string {
 }
 
 function sportLabel(sport: Sport): string {
-  const labels: Record<Sport, string> = { mlb: "MLB", nba: "NBA", wnba: "WNBA", nfl: "NFL", cbb: "CBB", cfb: "CFB", nhl: "NHL", soccer: "World Cup", ucl: "UCL" };
+  const labels: Record<Sport, string> = { mlb: "MLB", nba: "NBA", wnba: "WNBA", nfl: "NFL", cbb: "CBB", cfb: "CFB", nhl: "NHL", soccer: "Soccer", ucl: "UCL" };
   return labels[sport];
 }
 
@@ -1655,11 +1916,13 @@ function marketShortLabelFor(key: MarketKey, sport: Sport): string {
   return "1st";
 }
 
-function mergeHistory(away: PreviewHistoryPoint[], home: PreviewHistoryPoint[], marketKey: MarketKey): Array<{ away: number; home: number }> {
+function mergeHistory(away: PreviewHistoryPoint[], home: PreviewHistoryPoint[], marketKey: MarketKey): MergedHistoryPoint[] {
   const count = Math.min(away.length, home.length);
   return Array.from({ length: count }, (_, index) => ({
     away: marketKey === "moneyline" ? (away[index].won ? 1 : 0) : marketKey === "total" ? away[index].totalRuns : away[index].firstInningRuns ?? 0,
     home: marketKey === "moneyline" ? (home[index].won ? 1 : 0) : marketKey === "total" ? home[index].totalRuns : home[index].firstInningRuns ?? 0,
+    awayOutcome: marketKey === "moneyline" ? away[index].won ? "W" : away[index].drawn ? "D" : "L" : undefined,
+    homeOutcome: marketKey === "moneyline" ? home[index].won ? "W" : home[index].drawn ? "D" : "L" : undefined,
   }));
 }
 
@@ -1670,6 +1933,10 @@ function displayPick(market: MarketEdgeDto, key: MarketKey): string {
 }
 
 function driverCategory(label: string): string {
+  if (/expected goals|\bxg\b/i.test(label)) return "Expected goals";
+  if (/recent form|points from|prior-season/i.test(label)) return "Club form";
+  if (/shots|big chances|possession/i.test(label)) return "Team performance";
+  if (/injury|availability|lineup/i.test(label) && !/ops|top-of-order/i.test(label)) return "Availability";
   if (/starter|pitcher|era|whip|fip/i.test(label)) return "Pitching";
   if (/bullpen/i.test(label)) return "Bullpen";
   if (/lineup|ops|top-of-order/i.test(label)) return "Lineup matchup";
@@ -1680,6 +1947,12 @@ function driverCategory(label: string): string {
 
 function driverContext(label: string, marketKey: MarketKey, pick: string | null): string {
   const normalizedPick = pick?.toLowerCase() ?? "";
+  if (/xg created/i.test(label)) return marketKey === "moneyline" ? `Higher recent xG creation supports ${pick ?? "the selected side"} when it belongs to that club.` : `Recent attacking chance quality, interpreted specifically against the ${pick ?? "displayed"} market.`;
+  if (/xg allowed/i.test(label)) return marketKey === "moneyline" ? `Lower recent xG allowed supports ${pick ?? "the selected side"}.` : `Recent defensive chance quality, interpreted specifically against the ${pick ?? "displayed"} market.`;
+  if (/points from recent form|recent form/i.test(label)) return "Completed EPL form only; newest result is shown first.";
+  if (/prior-season finish/i.test(label)) return "Final prior-season EPL table position and W-D-L record; promoted clubs are explicitly marked unavailable.";
+  if (/shots|big chances|possession/i.test(label)) return `Recent EPL team-performance sample used as matchup context for ${pick ?? "this read"}.`;
+  if (/injury|availability|lineup/i.test(label)) return "Current provider-listed availability; lineup counts appear only after starters are posted.";
   if (/era|whip|fip/i.test(label)) {
     if (marketKey === "first_inning") return normalizedPick.includes("yrfi") ? "Higher opening-frame run-allowed values support YRFI; lower values support NRFI." : normalizedPick.includes("nrfi") ? "Lower opening-frame run-allowed values support NRFI; higher values support YRFI." : "Opening-frame run-prevention comparison; no side is highlighted for a neutral read.";
     if (marketKey === "total") return normalizedPick.includes("over") ? "Higher run-allowed values are more supportive of the Over." : normalizedPick.includes("under") ? "Lower run-allowed values are more supportive of the Under." : "Run-prevention profile shown as neutral matchup context.";
@@ -1703,7 +1976,10 @@ function contextualDriverSignal({ label, awayValue, homeValue, away, home, marke
   const isRunPrevention = /era|whip|fip|runs allowed/i.test(label);
   const isOffense = /ops|lineup vs starter|top.of.order/i.test(label);
   const isBullpenQuality = /bullpen|quality/i.test(label);
-  if (!isRunPrevention && !isOffense && !isBullpenQuality) return null;
+  const isSoccerAttack = /xg created|shots \/ on target|avg big chances|avg possession|points from recent form/i.test(label);
+  const isSoccerDefense = /xg allowed/i.test(label);
+  const isTableRank = /prior-season finish/i.test(label);
+  if (!isRunPrevention && !isOffense && !isBullpenQuality && !isSoccerAttack && !isSoccerDefense && !isTableRank) return null;
   const parse = (value: string) => {
     if (/no .*sample|unavailable|^—$/i.test(value)) return null;
     if (/league average/i.test(value)) return 0;
@@ -1717,13 +1993,13 @@ function contextualDriverSignal({ label, awayValue, homeValue, away, home, marke
   if (awayNumber === null || homeNumber === null) return null;
   const rawDiff = awayNumber - homeNumber;
   const abs = Math.abs(rawDiff);
-  const thresholds = /ops/i.test(label) ? [0.02, 0.05] : /whip/i.test(label) ? [0.05, 0.15] : /era|fip/i.test(label) ? [0.2, 0.5] : [3, 7];
+  const thresholds = /ops/i.test(label) ? [0.02, 0.05] : /whip/i.test(label) ? [0.05, 0.15] : /era|fip/i.test(label) ? [0.2, 0.5] : /xg/i.test(label) ? [0.12, 0.3] : /points from/i.test(label) ? [2, 5] : /prior-season/i.test(label) ? [2, 6] : /possession/i.test(label) ? [2, 5] : /shots/i.test(label) ? [1, 3] : /big chances/i.test(label) ? [0.4, 1] : [3, 7];
   if (abs < thresholds[0]) return { support: null, risk: null, label: "Even for this read" };
 
   const normalizedPick = pick.toLowerCase();
   let higherSupports: boolean;
   if (marketKey === "moneyline") {
-    higherSupports = !isRunPrevention;
+    higherSupports = !isRunPrevention && !isSoccerDefense && !isTableRank;
     if (isBullpenQuality) higherSupports = true;
   } else if (marketKey === "total") {
     const over = normalizedPick.includes("over");
@@ -1733,8 +2009,10 @@ function contextualDriverSignal({ label, awayValue, homeValue, away, home, marke
   } else {
     const nrfi = normalizedPick.includes("nrfi");
     const yrfi = normalizedPick.includes("yrfi");
-    if (!nrfi && !yrfi) return null;
-    higherSupports = isBullpenQuality ? nrfi : yrfi;
+    const bttsYes = normalizedPick === "yes";
+    const bttsNo = normalizedPick === "no";
+    if (!nrfi && !yrfi && !bttsYes && !bttsNo) return null;
+    higherSupports = bttsYes || (isBullpenQuality ? nrfi : yrfi);
   }
 
   const directionalSide: "away" | "home" = higherSupports
@@ -1792,7 +2070,9 @@ function recentTrendInterpretation(away: PreviewHistoryPoint[], home: PreviewHis
   if (marketKey === "moneyline") {
     const awayWins = away.filter((row) => row.won).length;
     const homeWins = home.filter((row) => row.won).length;
-    return `${awayTeam} won ${awayWins} of ${away.length}; ${homeTeam} won ${homeWins} of ${home.length}. This is form context for the ${market.pick ?? "moneyline"} read, not a substitute for today’s price and matchup.`;
+    const awayDraws = away.filter((row) => row.drawn).length;
+    const homeDraws = home.filter((row) => row.drawn).length;
+    return `${awayTeam} went ${awayWins}-${awayDraws}-${away.length - awayWins - awayDraws}; ${homeTeam} went ${homeWins}-${homeDraws}-${home.length - homeWins - homeDraws} (W-D-L). This is form context for the ${market.pick ?? "match-result"} read, not a substitute for today’s price and matchup.`;
   }
   if (marketKey === "total") {
     const line = market.line;
