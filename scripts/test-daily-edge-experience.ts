@@ -9,6 +9,7 @@ import {
   AVAILABLE_DAILY_EDGE_SPORTS,
   DAILY_EDGE_SPORT_AVAILABILITY,
   DAILY_EDGE_SPORTS,
+  DAILY_EDGE_TOP_LEVEL_SPORT_KEYS,
 } from "../app/lab/lib/dailyEdgeSports";
 import { isDailyEdgeExperiencePreviewAvailable } from "../lib/config/dailyEdgeExperience";
 import { __WNBA_AVAILABILITY_TEST__ } from "../lib/services/wnba/espnWnbaAvailability";
@@ -108,8 +109,8 @@ check(
 );
 check(
   "candidate slate cards reserve a consistent row for Play Grade and time",
-  candidateDailyEdgeSource.includes('<div className="grid gap-3">') &&
-    candidateDailyEdgeSource.includes('<div className="flex min-h-8 items-center gap-2">') &&
+  candidateDailyEdgeSource.includes('compactSoccer ? "grid gap-2" : "grid gap-3"') &&
+    candidateDailyEdgeSource.includes('compactSoccer ? "min-h-6" : "min-h-8"') &&
     !candidateDailyEdgeSource.includes('className="flex flex-wrap items-center justify-between gap-3">\n          <div className="flex min-w-0 items-center gap-2.5"'),
 );
 check(
@@ -216,22 +217,32 @@ check(
 
 console.log("\n━━━ Cross-surface sport readiness registry ━━━");
 check(
-  "member-available Daily Edge sports are MLB, WNBA, World Cup, NBA, and NHL",
-  JSON.stringify(AVAILABLE_DAILY_EDGE_SPORTS) ===
-    JSON.stringify(["mlb", "wnba", "soccer", "nba", "nhl"]),
+  "member-available Daily Edge models retain Soccer competitions without a separate UCL top-level pill",
+  AVAILABLE_DAILY_EDGE_SPORTS.includes("soccer") &&
+    AVAILABLE_DAILY_EDGE_SPORTS.includes("ucl") &&
+    DAILY_EDGE_TOP_LEVEL_SPORT_KEYS.includes("soccer") &&
+    !DAILY_EDGE_TOP_LEVEL_SPORT_KEYS.includes("ucl"),
 );
 check(
-  "World Cup keeps the customer-facing World Cup label",
-  DAILY_EDGE_SPORTS.find((definition) => definition.key === "soccer")?.label ===
-    "World Cup",
+  "the shared Soccer selector owns Premier League, Champions League, and World Cup navigation",
+  candidateDailyEdgeSource.includes('labelOverrides={{ soccer: "Soccer" }}') &&
+    candidateDailyEdgeSource.includes('label: "Premier League"') &&
+    candidateDailyEdgeSource.includes('label: "Champions League"') &&
+    candidateDailyEdgeSource.includes('label: "World Cup"'),
 );
 check(
   "planned sports remain visible but unavailable",
-  ["nfl", "cfb", "cbb", "ucl"].every(
+  ["nfl", "cfb", "cbb"].every(
     (key) =>
       DAILY_EDGE_SPORTS.find((definition) => definition.key === key)
         ?.memberAvailable === false,
   ),
+);
+check(
+  "an explicit EPL request can never fall through to the World Cup snapshot",
+  candidateMemberPageSource.includes("const snapshot = eplRequested") &&
+    candidateMemberPageSource.includes(": emptyPreviewSnapshot(sport)\n    : await loadDailyEdgeSnapshot") &&
+    candidateMemberPageSource.includes('competition === "premier_league"\n          ? { active: "premier_league"'),
 );
 
 console.log("\n━━━ Candidate presentation truthfulness ━━━");
@@ -436,7 +447,7 @@ check(
 );
 check(
   "unverified movement fails closed instead of implying validated endpoints",
-  candidateSource.includes("Directional movement is unavailable because a continuous same-book trail could not be verified") &&
+  candidateSource.includes("this snapshot does not contain a continuous same-book trail that can support a directional movement claim") &&
     !candidateSource.includes("only validated market endpoints are shown"),
 );
 check(
@@ -492,11 +503,11 @@ check(
     candidateSource.includes('key === "caution"'),
 );
 check(
-  "recent records render actual chronological W/L tiles instead of text-only summaries",
+  "recent records render actual chronological W/D/L tiles instead of text-only summaries",
   candidateSource.includes("function RecordComparison") &&
-    candidateSource.includes('awayOutcomes: [...away].reverse().map((row) => row.won)') &&
+    candidateSource.includes('row.drawn ? "draw" : row.won') &&
     candidateSource.includes('hitLabel="Win" missLabel="Loss"') &&
-    candidateSource.includes("Oldest → newest · green = win · red = loss"),
+    candidateSource.includes("Oldest → newest · green = win · amber = draw · red = loss"),
 );
 check(
   "recent averages use direct comparison cards with an explicit meaningful delta",
@@ -556,7 +567,7 @@ check(
 check(
   "MLB availability remains in the Market & Price column and fails visibly when unavailable",
   candidateSource.includes('availability ? <AvailabilityContext report={availability} market={market} /> : sport === "mlb" ? <MlbAvailabilityUnavailable />') &&
-    candidateSource.includes('<IntegratedEvidence market={market} availability={availability} sport={sport} />') &&
+    candidateSource.includes('<IntegratedEvidence game={game} market={market} marketKey={marketKey} sport={sport} availability={availability} />') &&
     candidateSource.includes("Report temporarily unavailable") &&
     candidateSource.includes("missing report is not evidence that every player is available"),
 );
@@ -589,7 +600,8 @@ check(
 );
 check(
   "every supplied key-stat row remains reachable in the candidate",
-  candidateSource.includes("market.keyStats.map((stat)") &&
+  candidateSource.includes("visibleStats = market.keyStats") &&
+    candidateSource.includes("visibleStats.map((stat)") &&
     candidateSource.includes('game.markets[key as MarketKey].keyStats'),
 );
 check(

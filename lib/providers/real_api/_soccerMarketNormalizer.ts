@@ -247,7 +247,7 @@ export function normalizeDoubleChanceSelection(
   // SharpAPI emits "{home} / Draw", "{away} / Draw", "{home} / {away}" with various separators.
   const homeF = asciiFold(ctx.home_team);
   const awayF = asciiFold(ctx.away_team);
-  const includesDraw = folded.includes("draw");
+  const includesDraw = folded.includes("draw") || folded.includes("tie");
   const includesHome = folded.includes(homeF);
   const includesAway = folded.includes(awayF);
 

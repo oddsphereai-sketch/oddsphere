@@ -60,10 +60,11 @@ import { assertMlbChampionRuntime } from "@/lib/automodel/mlbChampionRuntime";
 
 export const maxDuration = 180;
 
-// World Cup automation is dormant after the 2026 tournament. Soccer remains
-// available through the explicit `?sport=soccer` override so historical fixes
-// and the next tournament do not require rebuilding the tracking pipeline.
-const DEFAULT_SPORTS: Sport[] = ["mlb", "nba", "nhl", "wnba"];
+// The active EPL pipeline stores under sport="soccer" and is competition-
+// scoped in snapshot_json. Include soccer in the scheduled cycle so EPL
+// scores and grades settle automatically; the ingest service only touches the
+// EPL external-id namespace and cannot rewrite historical World Cup games.
+const DEFAULT_SPORTS: Sport[] = ["mlb", "nba", "nhl", "wnba", "soccer"];
 
 export async function GET(request: Request) {
   const url = new URL(request.url);

@@ -473,13 +473,17 @@ function determineSportOrder(rows: ResultRow[]): Sport[] {
 async function loadSoccerGradeRows(): Promise<ResultRow[]> {
   const { data: records, error: recErr } = await supabase
     .from("prediction_records")
-    .select("id, market, slate_date")
+    .select("id, market, slate_date, snapshot_json")
     .eq("sport", "soccer")
     .gte("slate_date", SOCCER_OFFICIAL_TRACKING_START);
   if (recErr || !records || records.length === 0) return [];
 
   const byId = new Map<string, { market: string; slate_date: string }>();
-  for (const r of records as Array<{ id: string; market: string; slate_date: string }>) {
+  for (const r of records as Array<{ id: string; market: string; slate_date: string; snapshot_json: { competition?: string } | null }>) {
+    // The historical World Cup row on the public tracker remains a World Cup
+    // record. EPL has its own competition-scoped operator view and must never
+    // be silently blended into that lifetime number.
+    if (r.snapshot_json?.competition === "english_premier_league") continue;
     byId.set(String(r.id), { market: r.market, slate_date: String(r.slate_date).slice(0, 10) });
   }
 

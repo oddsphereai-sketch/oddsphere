@@ -70,6 +70,14 @@
       "schedule": "23,53 0-3 * * *"
     },
     {
+      "path": "/api/cron/epl-daily-refresh",
+      "schedule": "7,37 * * * *"
+    },
+    {
+      "path": "/api/cron/epl-pregame-lock",
+      "schedule": "*/5 10-22 * * *"
+    },
+    {
       "path": "/api/cron/tracking-refresh",
       "schedule": "33 * * * *"
     },

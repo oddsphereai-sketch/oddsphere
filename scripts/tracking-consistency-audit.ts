@@ -6,6 +6,7 @@ import {
   isTrackingRecordEligible,
   type AggregateMetrics,
   type SportMarketBucket,
+  type TrackingDisplaySport,
 } from "@/lib/services/trackingAggregateService";
 import { isPublicallyTracked } from "@/lib/config/officialTrackingStart";
 import type {
@@ -32,7 +33,7 @@ type CompactMetrics = Pick<
 >;
 
 type CompactBucket = {
-  sport: TrackedSport;
+  sport: TrackingDisplaySport;
   market: TrackedMarketV17;
   metrics: CompactMetrics;
   bestAngles: CompactMetrics;

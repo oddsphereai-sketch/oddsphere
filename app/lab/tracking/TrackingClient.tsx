@@ -118,11 +118,7 @@ type TrackingResponse = {
 
 const SPORT_LABEL: Record<string, string> = {
   mlb: "MLB", wnba: "WNBA", nfl: "NFL", nba: "NBA", nhl: "NHL", cfb: "CFB", cbb: "CBB", ucl: "UCL",
-  // Soccer surfaces in tracking as "World Cup" — UCL keeps its own label
-  // above. When a non-WC competition launches, the competition column on
-  // prediction_records (see project-wc-launch-contract) is the planned
-  // discriminator; today the tracker only filters by sport so soccer is
-  // a 1:1 stand-in for the WC tab.
+  epl: "Premier League",
   soccer: "World Cup",
 };
 
@@ -162,7 +158,7 @@ const SPORT_ORDER: Record<string, number> = {
   nba: 2, cbb: 3, wnba: 4,
   nfl: 5, cfb: 6,
   nhl: 7,
-  soccer: 8, ucl: 9,
+  epl: 8, soccer: 9, ucl: 10,
 };
 
 // ─── Format helpers ────────────────────────────────────────────────────
@@ -733,7 +729,7 @@ function LifetimeTrackingBoard({ records }: { records: LifetimeRecord[] }) {
         emptyBody="Lifetime records appear here as predictions settle and sport tracking comes online."
       />
       <p className="mt-3 text-[11px] leading-relaxed text-gray-500">
-        MLB updates automatically as games grade. Other sports are maintained as their models come online.
+        Active models update automatically as games grade. Premier League results are tracked separately from World Cup history.
       </p>
     </>
   );

@@ -21,6 +21,8 @@ type Props = {
   showCounts?: boolean;
   /** Opt-in optimistic feedback while a surface loads its next sport snapshot. */
   showPendingState?: boolean;
+  /** Surface-only labels; useful when one sport key contains competitions. */
+  labelOverrides?: Partial<Record<Sport, string>>;
 };
 
 export default function SportSelector({
@@ -30,6 +32,7 @@ export default function SportSelector({
   showCounts = true,
   showPendingState = false,
   availability,
+  labelOverrides,
 }: Props) {
   const [pendingSport, setPendingSport] = useState<Sport | null>(null);
   const waitingForSport = pendingSport !== active ? pendingSport : null;
@@ -77,7 +80,7 @@ export default function SportSelector({
                 <span className="text-xl sm:text-2xl" aria-hidden="true">
                   {meta.icon}
                 </span>
-                <span>{meta.label}</span>
+                <span>{labelOverrides?.[sport] ?? meta.label}</span>
               </span>
               {isPending ? (
                 <span className="inline-flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wider text-violet-200">

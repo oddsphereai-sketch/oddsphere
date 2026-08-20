@@ -26,12 +26,14 @@ export async function GET(request: Request) {
     sportRaw === "cfb" ||
     sportRaw === "cbb" ||
     sportRaw === "nhl" ||
-    sportRaw === "ucl"
+    sportRaw === "ucl" ||
+    sportRaw === "soccer"
       ? (sportRaw as TrackedSport)
       : undefined;
   const from = url.searchParams.get("from") ?? undefined;
   const to = url.searchParams.get("to") ?? undefined;
   const includeLaunchDay = url.searchParams.get("include_launch_day") !== "false";
+  const competition = url.searchParams.get("competition") ?? undefined;
 
   const result = await computeTrackingAggregate({
     supabase,
@@ -39,6 +41,7 @@ export async function GET(request: Request) {
     from,
     to,
     includeLaunchDay,
+    competition,
   });
   return Response.json(result, {
     headers: { "Cache-Control": "no-store" },

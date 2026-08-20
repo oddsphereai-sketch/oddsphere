@@ -10,6 +10,10 @@
  */
 
 import { computeRefreshDates } from "../lib/services/trackingRefreshService";
+import {
+  selectStalePendingRepairDates,
+  TRACKING_SETTLEMENT_CONTRACT_VERSION,
+} from "../lib/services/trackingSettlementRepairService";
 import { resolveRecordForGrading, shouldUpsertGrade } from "../lib/services/predictionGradingService";
 import { resolveScoreIngestNextScores } from "../lib/services/scoreIngestService";
 import { readFileSync } from "node:fs";
@@ -24,6 +28,53 @@ function check(label: string, ok: boolean, detail?: string): void {
 
 // ── computeRefreshDates ──────────────────────────────────────────
 console.log("━━━ computeRefreshDates (yesterday/today/tomorrow) ━━━");
+
+check(
+  "settlement repair contract is versioned",
+  TRACKING_SETTLEMENT_CONTRACT_VERSION ===
+    "tracking_settlement_v3_epl_competition_lock_2026_08_19",
+);
+
+{
+  const selected = selectStalePendingRepairDates({
+    beforeDate: "2026-08-15",
+    records: [
+      { id: 1, game_id: 11, slate_date: "2026-07-01", market: "spread" },
+      { id: 2, game_id: 12, slate_date: "2026-07-02", market: "total" },
+      { id: 3, game_id: 13, slate_date: "2026-08-15", market: "moneyline" },
+      { id: 4, game_id: 14, slate_date: "2026-07-03", market: "first_inning" },
+    ],
+    games: [
+      { id: 11, status: "final", home_score: 85, away_score: 80, first_inning_runs: null },
+      { id: 12, status: "scheduled", home_score: null, away_score: null, first_inning_runs: null },
+      { id: 13, status: "final", home_score: 5, away_score: 3, first_inning_runs: null },
+      { id: 14, status: "final", home_score: 4, away_score: 2, first_inning_runs: null },
+    ],
+  });
+  check("only historical terminal candidates are selected", JSON.stringify(selected.dates) === JSON.stringify(["2026-07-01"]));
+  check("final first-inning rows wait for inning data", selected.eligibleRecords === 1);
+}
+
+{
+  const selected = selectStalePendingRepairDates({
+    beforeDate: "2026-08-15",
+    maxDates: 3,
+    records: [1, 2, 3, 4].map((day) => ({
+      id: day,
+      game_id: day,
+      slate_date: `2026-07-0${day}`,
+      market: "moneyline",
+    })),
+    games: [1, 2, 3, 4].map((id) => ({
+      id,
+      status: "STATUS_FINAL",
+      home_score: 1,
+      away_score: 0,
+      first_inning_runs: null,
+    })),
+  });
+  check("repair work is capped and oldest-first", JSON.stringify(selected.dates) === JSON.stringify(["2026-07-01", "2026-07-02", "2026-07-03"]));
+}
 {
   const now = new Date("2026-06-06T18:00:00Z");
   const dates = computeRefreshDates(now);
@@ -80,6 +131,7 @@ const trackingCronSource = readFileSync(new URL("../app/api/cron/tracking-refres
 const healthCronSource = readFileSync(new URL("../app/api/cron/daily-edge-data-health/route.ts", import.meta.url), "utf8");
 const soccerCronSource = readFileSync(new URL("../app/api/cron/soccer-daily-refresh/route.ts", import.meta.url), "utf8");
 const dailyEdgeShellSource = readFileSync(new URL("../app/lab/components/daily-edge/DailyEdgeShell.tsx", import.meta.url), "utf8");
+const dailyEdgeSportsSource = readFileSync(new URL("../app/lab/lib/dailyEdgeSports.ts", import.meta.url), "utf8");
 const vercelConfig = JSON.parse(readFileSync(new URL("../vercel.json", import.meta.url), "utf8")) as {
   crons?: Array<{ path?: string; schedule?: string }>;
 };
@@ -102,8 +154,8 @@ check(
     soccerCronSource.includes("OFF-SEASON (2026-07-20)"),
 );
 check(
-  "hourly tracking excludes soccer by default but keeps the manual override",
-  trackingCronSource.includes('const DEFAULT_SPORTS: Sport[] = ["mlb", "nba", "nhl", "wnba"]') &&
+  "hourly tracking includes active EPL settlement and keeps the manual override",
+  trackingCronSource.includes('const DEFAULT_SPORTS: Sport[] = ["mlb", "nba", "nhl", "wnba", "soccer"]') &&
     trackingCronSource.includes("overrideSport") && trackingCronSource.includes("[overrideSport]"),
 );
 check(
@@ -121,9 +173,9 @@ check(
 );
 check(
   "Daily Edge labels World Cup as offseason while keeping history accessible",
-  dailyEdgeShellSource.includes('{ key: "soccer", label: "World Cup", live: true, inSeason: false }') &&
+  dailyEdgeSportsSource.includes('{ key: "soccer", label: "World Cup", memberAvailable: true, inSeason: false }') &&
     dailyEdgeShellSource.includes("const isActiveInSeason = isActive && s.inSeason === true") &&
-    dailyEdgeShellSource.includes('s.live && !s.inSeason ? "offseason model"'),
+    dailyEdgeShellSource.includes('s.memberAvailable && !s.inSeason ? "offseason model"'),
 );
 
 console.log("\n━━━ immutable FI grading substrate ━━━");

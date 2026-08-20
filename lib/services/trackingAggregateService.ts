@@ -66,12 +66,16 @@ export type DimensionRow<K extends string = string> = {
   metrics: AggregateMetrics;
 };
 
+/** Member-facing competition key. Database rows remain sport="soccer" so
+ * they continue to use the shared soccer grader and settlement contract. */
+export type TrackingDisplaySport = TrackedSport | "epl";
+
 /**
  * Sport+market joint split with the Best Angle / Lean cuts most members
  * want to see ("how is MLB NRFI doing? how are its Best Angles?").
  */
 export type SportMarketBucket = {
-  sport: TrackedSport;
+  sport: TrackingDisplaySport;
   market: TrackedMarketV17;
   metrics: AggregateMetrics;
   bestAngles: AggregateMetrics;
@@ -91,7 +95,7 @@ export type DailyBucket = {
  */
 export type RecentPickRow = {
   slate_date: string;
-  sport: TrackedSport;
+  sport: TrackingDisplaySport;
   market: TrackedMarketV17;
   matchup: string;
   pick: string | null;
@@ -117,7 +121,7 @@ export type RecentPickRow = {
  */
 export type RecentlySettledPickRow = {
   slate_date: string;
-  sport: TrackedSport;
+  sport: TrackingDisplaySport;
   market: TrackedMarketV17;
   matchup: string;
   pick: string | null;
@@ -216,7 +220,18 @@ function isTossUp(r: PredictionRecordRow): boolean {
  * Other sports retain their existing eligibility rules.
  */
 export function isTrackingRecordEligible(record: PredictionRecordRow): boolean {
-  return record.sport !== "mlb" || record.locked_at !== null;
+  if (record.sport === "mlb") return record.locked_at !== null;
+  if (isEplTrackingRecord(record)) return record.locked_at !== null;
+  return true;
+}
+
+export function isEplTrackingRecord(record: PredictionRecordRow): boolean {
+  return record.sport === "soccer"
+    && record.snapshot_json?.competition === "english_premier_league";
+}
+
+export function trackingDisplaySport(record: PredictionRecordRow): TrackingDisplaySport {
+  return isEplTrackingRecord(record) ? "epl" : record.sport;
 }
 
 type Row = {
@@ -391,7 +406,7 @@ function createdAtMs(record: PredictionRecordRow): number {
 
 function trackingDedupeKey(record: PredictionRecordRow): string {
   return [
-    record.sport,
+    trackingDisplaySport(record),
     record.slate_date,
     record.game_id ?? record.external_id ?? record.matchup,
     record.market,
@@ -402,6 +417,19 @@ function chooseCanonicalTrackingRecord(
   current: PredictionRecordRow,
   candidate: PredictionRecordRow,
 ): PredictionRecordRow {
+  if (isEplTrackingRecord(current) && isEplTrackingRecord(candidate)) {
+    if (Boolean(candidate.locked_at) !== Boolean(current.locked_at)) {
+      return candidate.locked_at ? candidate : current;
+    }
+    const currentCreated = Date.parse(current.created_at ?? "");
+    const candidateCreated = Date.parse(candidate.created_at ?? "");
+    if (Number.isFinite(currentCreated) && Number.isFinite(candidateCreated) && currentCreated !== candidateCreated) {
+      return candidateCreated > currentCreated ? candidate : current;
+    }
+    return (candidate.id ?? Number.NEGATIVE_INFINITY) > (current.id ?? Number.NEGATIVE_INFINITY)
+      ? candidate
+      : current;
+  }
   const currentGradeStrength = gradeStrength(current);
   const candidateGradeStrength = gradeStrength(candidate);
   if (candidateGradeStrength !== currentGradeStrength) {
@@ -453,6 +481,7 @@ async function fetchAllPredictionRecords(
     sport?: TrackedSport;
     from?: string;
     to?: string;
+    competition?: string;
   },
 ): Promise<{ rows: PredictionRecordRow[]; error: unknown | null }> {
   const out: PredictionRecordRow[] = [];
@@ -465,6 +494,7 @@ async function fetchAllPredictionRecords(
     if (opts.sport !== undefined) query = query.eq("sport", opts.sport);
     if (opts.from !== undefined) query = query.gte("slate_date", opts.from);
     if (opts.to !== undefined) query = query.lte("slate_date", opts.to);
+    if (opts.competition !== undefined) query = query.contains("snapshot_json", { competition: opts.competition });
     const { data, error } = await query;
     if (error) return { rows: out, error };
     const page = ((data ?? []) as unknown) as PredictionRecordRow[];
@@ -566,6 +596,7 @@ export async function computeTrackingAggregate(opts: {
   from?: string; // YYYY-MM-DD inclusive
   to?: string;   // YYYY-MM-DD inclusive
   includeLaunchDay?: boolean;
+  competition?: string;
 }): Promise<TrackingAggregateResult> {
   const result: TrackingAggregateResult = {
     rowsConsidered: 0,
@@ -620,6 +651,7 @@ export async function computeTrackingAggregate(opts: {
     sport: opts.sport,
     from: opts.from,
     to: opts.to,
+    competition: opts.competition,
   });
   if (recErr) {
     const message = recErr instanceof Error
@@ -731,7 +763,7 @@ export async function computeTrackingAggregate(opts: {
   function buildSportMarketBuckets(scopeRows: ReadonlyArray<Row>): SportMarketBucket[] {
     const groups = new Map<string, Row[]>();
     for (const r of scopeRows) {
-      const key = `${r.record.sport}::${r.record.market}`;
+      const key = `${trackingDisplaySport(r.record)}::${r.record.market}`;
       let arr = groups.get(key);
       if (arr === undefined) {
         arr = [];
@@ -766,7 +798,7 @@ export async function computeTrackingAggregate(opts: {
 
     const out: SportMarketBucket[] = [];
     for (const [key, rs] of groups) {
-      const [sport, market] = key.split("::") as [TrackedSport, TrackedMarketV17];
+      const [sport, market] = key.split("::") as [TrackingDisplaySport, TrackedMarketV17];
       const m = emptyMetrics();
       for (const r of rs) accumulate(m, r);
       finalize(m, rs);
@@ -858,7 +890,7 @@ export async function computeTrackingAggregate(opts: {
       const effectiveGrade = effectiveTrackingPlayGrade(r.record);
       return {
         slate_date: r.record.slate_date,
-        sport: r.record.sport,
+        sport: trackingDisplaySport(r.record),
         market: r.record.market,
         matchup: r.record.matchup,
         pick: r.record.pick,
@@ -904,7 +936,7 @@ export async function computeTrackingAggregate(opts: {
       const effectiveGrade = effectiveTrackingPlayGrade(r.record);
       return {
         slate_date: r.record.slate_date,
-        sport: r.record.sport,
+        sport: trackingDisplaySport(r.record),
         market: r.record.market,
         matchup: r.record.matchup,
         pick: r.record.pick,

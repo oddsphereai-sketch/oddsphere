@@ -195,8 +195,8 @@ export type OddsTrailStopDto = {
   line: number | null;
   observedAt: string | null;
   sportsbook: string | null;
-  source: "line_history" | "current_line" | "locked_snapshot";
-  label: "first" | "move" | "current" | "locked";
+  source: "provider_opening" | "line_history" | "current_line" | "locked_snapshot";
+  label: "open" | "first" | "move" | "current" | "locked";
 };
 
 export type MarketEdgeDto = {
@@ -255,8 +255,9 @@ export type MarketEdgeDto = {
    * Pre-R-13C the DTO only carried the model-picked side's
    * `moneyPct` / `betsPct`, hiding the opposing side's public bet
    * even when SharpAPI returned it. This array carries up to 2 rows
-   * keyed by side ("home"/"away" for ML/spread, "over"/"under" for
-   * total). Each row's moneyPct or betsPct is null when the
+   * keyed by side ("home"/"draw"/"away" for soccer 1X2,
+   * "over"/"under" for totals, and "yes"/"no" for BTTS). Each row's
+   * moneyPct or betsPct is null when the
    * provider didn't report that field — the UI shows "not reported"
    * for those instead of dropping the side. Empty array when no
    * sharp_signals rows exist for this (game, market), or for the
@@ -266,7 +267,7 @@ export type MarketEdgeDto = {
    * preserved for back-compat with existing MarketPulse callers.
    */
   publicSplits: Array<{
-    side: "home" | "away" | "over" | "under";
+    side: "home" | "draw" | "away" | "over" | "under" | "yes" | "no";
     /** Member-facing side label ("PHI", "SD", "Over", "Under"). */
     label: string;
     moneyPct: number | null;
@@ -578,6 +579,26 @@ export type MarketEdgeDto = {
     note: string;
   } | null;
 
+  /** Complete current soccer price board for the displayed market. The
+   * selected-side `priceAmerican` remains the grading price; these rows keep
+   * every coherent outcome visible in the reader. */
+  soccerPriceBoard?: {
+    sportsbook: string | null;
+    observed_at: string | null;
+    rows: Array<{
+      side: "home" | "draw" | "away" | "over" | "under" | "yes" | "no" | "home_or_draw" | "away_or_draw" | "home_or_away";
+      label: string;
+      price_american: number;
+      model_probability: number;
+      market_probability: number;
+      edge_pp: number;
+      selected: boolean;
+      /** Same-book observations for this exact outcome. This lets soccer
+       * retain home/draw/away (and both binary sides), not only the pick. */
+      odds_trail?: OddsTrailStopDto[];
+    }>;
+  } | null;
+
   soccerDoubleChanceContext?: {
     displayed_side: "home_or_draw" | "away_or_draw" | "home_or_away";
     /** Team abbreviations so the reader renders "{Team} or Draw" labels
@@ -820,6 +841,14 @@ export type DailyEdgeGameDto = {
     total: MarketEdgeDto;
     first_inning: MarketEdgeDto;
   };
+  /** Soccer-only fourth tracked market, displayed beneath Match Result. */
+  soccerDoubleChanceMarket?: MarketEdgeDto | null;
+  /** Soccer-only provider availability evidence. Kept structured so the reader
+   * never has to parse injury names or lineup state from a compressed stat string. */
+  soccerAvailability?: {
+    away: SoccerTeamAvailabilityDto;
+    home: SoccerTeamAvailabilityDto;
+  } | null;
   recommendationDecision?: RecommendationDecision;
   /**
    * 4.1.10 — short directive sentence for the v13.1 Edge Board card.
@@ -827,6 +856,18 @@ export type DailyEdgeGameDto = {
    */
   decisionLine: string;
   projected: { away: number; home: number };
+  /** Soccer keeps continuous expected goals primary. The optional representative
+   * score is the highest-probability exact score consistent with all three
+   * forecast directions; it is not mislabeled as the modal score. */
+  soccerProjection?: {
+    expectedGoals: { away: number; home: number };
+    likelyScore: { away: number; home: number };
+    likelyScoreProbability: number;
+    representativeScore: { away: number; home: number } | null;
+    representativeScoreProbability: number | null;
+    medianTotal: number;
+    mostLikelyTotal: number;
+  } | null;
   sharpSignals: SharpSignalDto[];
   /** 4.1.10 — per-game live status flags. */
   status: GameStatusDto;
@@ -867,6 +908,17 @@ export type DailyEdgeGameDto = {
   // headlinePrimaryMarket) which reads from predictions.<market>.grade
   // in ML → OU → NRFI precedence. The DB legacy columns are orphaned
   // post-6.3.5e — V14 cleanup migration drops them in a future commit.
+};
+
+export type SoccerTeamAvailabilityDto = {
+  startersPosted: number;
+  listedPlayerCount: number;
+  injuries: Array<{
+    name: string;
+    status: string | null;
+    injury: string | null;
+    updatedAt: string | null;
+  }>;
 };
 
 /**
