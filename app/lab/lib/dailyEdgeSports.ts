@@ -15,7 +15,7 @@ export type DailyEdgeSportDefinition = {
 export const DAILY_EDGE_SPORTS: readonly DailyEdgeSportDefinition[] = [
   { key: "mlb", label: "MLB", memberAvailable: true, inSeason: true },
   { key: "wnba", label: "WNBA", memberAvailable: true, inSeason: true },
-  { key: "soccer", label: "World Cup", memberAvailable: true, inSeason: false },
+  { key: "soccer", label: "Soccer", memberAvailable: true, inSeason: true },
   { key: "nba", label: "NBA", memberAvailable: true, inSeason: false },
   { key: "nhl", label: "NHL", memberAvailable: true, inSeason: false },
   { key: "nfl", label: "NFL", memberAvailable: false },
