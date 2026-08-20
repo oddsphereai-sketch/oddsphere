@@ -12,7 +12,7 @@ import {
   type PredictionRecordRow,
 } from "../lib/types/domain/Tracking";
 import { readFileSync } from "node:fs";
-import { dedupePredictionRecordsForTracking, isTrackingRecordEligible, trackingDisplaySport } from "../lib/services/trackingAggregateService";
+import { dedupePredictionRecordsForTracking, isTrackingRecordEligible, TRACKING_AGGREGATE_CONTRACT_VERSION, trackingDisplaySport } from "../lib/services/trackingAggregateService";
 
 let pass = 0;
 let fail = 0;
@@ -58,12 +58,15 @@ const eplRecord = (locked_at: string | null, id = 1, created_at = "2026-08-19T12
   slate_date: "2026-08-21",
   market: "double_chance",
   created_at,
-  snapshot_json: { competition: "english_premier_league" },
+  competition: "english_premier_league",
+  snapshot_json: null,
 } as PredictionRecordRow);
+check("EPL aggregate classification contract is versioned", TRACKING_AGGREGATE_CONTRACT_VERSION === "tracking_aggregate_v2_epl_projected_competition_2026_08_20");
 check("unlocked EPL row is excluded from official tracking", !isTrackingRecordEligible(eplRecord(null)));
 check("locked EPL row is officially tracking-eligible", isTrackingRecordEligible(eplRecord("2026-08-21T18:00:00Z")));
 check("EPL receives a separate member-facing competition key", trackingDisplaySport(eplRecord("2026-08-21T18:00:00Z")) === "epl");
-check("World Cup soccer keeps its own member-facing key", trackingDisplaySport({ ...eplRecord("2026-08-21T18:00:00Z"), snapshot_json: { competition: "world_cup" } }) === "soccer");
+check("World Cup soccer keeps its own member-facing key", trackingDisplaySport({ ...eplRecord("2026-08-21T18:00:00Z"), competition: "world_cup" }) === "soccer");
+check("full snapshot callers retain EPL classification compatibility", trackingDisplaySport({ ...eplRecord("2026-08-21T18:00:00Z"), competition: null, snapshot_json: { competition: "english_premier_league" } }) === "epl");
 const canonicalEpl = dedupePredictionRecordsForTracking([
   eplRecord(null, 10, "2026-08-19T11:00:00Z"),
   eplRecord("2026-08-21T18:00:00Z", 11, "2026-08-19T12:00:00Z"),
@@ -71,8 +74,10 @@ const canonicalEpl = dedupePredictionRecordsForTracking([
 check("EPL release dedupe preserves the immutable locked prediction", canonicalEpl.length === 1 && canonicalEpl[0]?.id === 11);
 const trackingCronSource = readFileSync("app/api/cron/tracking-refresh/route.ts", "utf8");
 const gradingSource = readFileSync("lib/services/predictionGradingService.ts", "utf8");
+const aggregateSource = readFileSync("lib/services/trackingAggregateService.ts", "utf8");
 check("scheduled tracking refresh includes soccer for active EPL settlement", /DEFAULT_SPORTS[^;]+"soccer"/.test(trackingCronSource));
 check("EPL grading is competition-scoped and locked-only", /sport === "soccer"[\s\S]{0,300}english_premier_league[\s\S]{0,200}locked_at/.test(gradingSource));
+check("bounded tracking reads retain the projected EPL competition identity", aggregateSource.includes('"competition:snapshot_json->>competition"'));
 
 console.log("\n━━━ Brier score sanity (manual computation) ━━━");
 // Brier = mean((p - outcome)^2)

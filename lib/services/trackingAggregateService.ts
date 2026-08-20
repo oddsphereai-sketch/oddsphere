@@ -70,6 +70,9 @@ export type DimensionRow<K extends string = string> = {
  * they continue to use the shared soccer grader and settlement contract. */
 export type TrackingDisplaySport = TrackedSport | "epl";
 
+export const TRACKING_AGGREGATE_CONTRACT_VERSION =
+  "tracking_aggregate_v2_epl_projected_competition_2026_08_20" as const;
+
 /**
  * Sport+market joint split with the Best Angle / Lean cuts most members
  * want to see ("how is MLB NRFI doing? how are its Best Angles?").
@@ -227,7 +230,7 @@ export function isTrackingRecordEligible(record: PredictionRecordRow): boolean {
 
 export function isEplTrackingRecord(record: PredictionRecordRow): boolean {
   return record.sport === "soccer"
-    && record.snapshot_json?.competition === "english_premier_league";
+    && (record.competition ?? record.snapshot_json?.competition) === "english_premier_league";
 }
 
 export function trackingDisplaySport(record: PredictionRecordRow): TrackingDisplaySport {
@@ -285,6 +288,7 @@ const TRACKING_RECORD_SELECT = [
   "locked_at",
   "published_at",
   "created_at",
+  "competition:snapshot_json->>competition",
   // Pull only the two member-grade values used by this aggregate. Selecting
   // the complete snapshot_json blob for every historical record made a cold
   // member Tracking request transfer thousands of large audit payloads.
