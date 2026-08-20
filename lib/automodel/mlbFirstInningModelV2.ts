@@ -32,7 +32,11 @@ import {
 } from "./mlbFirstInningMarketBaseline";
 
 // ─── trust coefficients (mirror V2.2 full-game) ──────────────────
-const FI_TRUST_INDEPENDENT_HIGH = 0.65;
+// Locked 2026 bridge calibration: high-quality FI rows remain model-informed,
+// but the complete same-book, two-sided no-vig market is the stronger current
+// calibration anchor. The independent model retains 25% weight so matchup
+// ranking survives without letting the stale ~55% NRFI base dominate.
+const FI_TRUST_INDEPENDENT_HIGH = 0.25;
 const FI_TRUST_INDEPENDENT_MEDIUM = 0.45;
 const FI_TRUST_INDEPENDENT_LOW = 0.25;
 const FI_TRUST_INDEPENDENT_NO_MARKET = 1.0;
@@ -81,6 +85,7 @@ const FI_TOSS_UP_MAX = FI_NRFI_THRESHOLD;
 const FI_BEST_ANGLE_MIN_EDGE_PCT = 6.0;
 const FI_BEST_ANGLE_MIN_CONFIDENCE = 56;
 const FI_BEST_ANGLE_MIN_PRICE_EXCLUSIVE = -130;
+const FI_LEAN_MIN_EDGE_PCT = 0;
 // MLB-P0 post-shrink large-edge backstop (abs edge %). FI is not
 // probability-regularized in P0 (its market prob is null on ~100% of
 // rows), but where a market line DOES exist an implausibly large
@@ -437,9 +442,9 @@ export function runMlbFirstInningModelV2(
     fi_play_grade = "best_angle";
     fi_play_grade_reason = "fi_best_angle_edge";
     fi_best_angle_eligible = true;
-  } else if (fi_edge_pct !== null && fi_edge_pct >= 1.5) {
+  } else if (fi_edge_pct !== null && fi_edge_pct >= FI_LEAN_MIN_EDGE_PCT) {
     fi_play_grade = "lean";
-    fi_play_grade_reason = "fi_lean_edge";
+    fi_play_grade_reason = "fi_market_backed_nonnegative_novig_edge_lean";
   } else {
     fi_play_grade = "no_bet";
     fi_play_grade_reason = "fi_no_bet_low_edge";
@@ -509,6 +514,7 @@ export const __TEST__ = {
   FI_YRFI_THRESHOLD,
   FI_BEST_ANGLE_MIN_EDGE_PCT,
   FI_BEST_ANGLE_MIN_CONFIDENCE,
+  FI_LEAN_MIN_EDGE_PCT,
   FI_POSTERIOR_NRFI_CAP,
   selectTrustIndependent,
   computeConfidence,
