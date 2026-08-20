@@ -4,19 +4,48 @@ This file is the human-readable production handoff registry. Runtime constants a
 prediction snapshots remain the machine authority. Future model work must start here, verify the
 constants, and preserve the precedence and writer ownership below.
 
-Last reviewed: 2026-08-19
+Last reviewed: 2026-08-20
 
 ## MLB champion
 
 - Projection runtime: resolved automodel `v2_2`
 - First-inning runtime: `fi_v2` with the versioned unpublished-probable availability head below
-- Public calibration: `mlb_public_calibration_v19_guarded_signed_market_evidence_2026_08_10`
-- Decision release: `mlb_daily_edge_decision_2026_08_14_r46`
-- Rule bundle: `mlb_daily_edge_rule_bundle_v45_2026_08_14`
-- Grade policy: `mlb_public_grade_policy_v36_first_inning_board_endpoint_coherence_2026_08_14`
+- Public calibration: `mlb_public_calibration_v22_first_inning_market_backed_2026_08_20`
+- Decision release: `mlb_daily_edge_decision_2026_08_20_r61`
+- Rule bundle: `mlb_daily_edge_rule_bundle_v50_2026_08_20`
+- Grade policy: `mlb_public_grade_policy_v40_first_inning_nonnegative_novig_edge_2026_08_20`
 - Tracking contract: `member_facing_lock_v8_priority_retry_minute_cadence_2026_08_11`
 - Machine registry: `lib/automodel/mlbModelLayerVersions.ts`
 - Authoritative member-facing writer: `lib/services/predictionRecordService.ts`
+
+The August 20 r61 first-inning bridge supersedes deployed r46 and the
+operator-only r60 stamps that were never present on production `main`. It
+changes only MLB first-inning probability calibration and its model-owned Lean
+gate. High-quality rows now blend 25% independent matchup probability with 75%
+same-book two-sided no-vig market probability instead of 65%/35%. A directional
+pick still requires the existing 52%/48% boundary, complete fresh half-run
+prices, publishable lineups, and starter/data-quality gates. A model-owned Lean
+requires nonnegative selected-side no-vig edge; negative-edge rows and the
+existing Toss-Up band remain non-actionable. No movement flip is added.
+
+The candidate was frozen before the earlier June 7-July 10 replication slice
+was opened. Across 902 locked games it produced 418 actions at 246-172
+(58.9%), +21.016 units, and +5.0% ROI. Replication was 121-78 (+18.907u),
+development 51-36 (+3.403u), August 1-10 validation 36-30 (-2.758u), and the
+August 11-20 settled diagnostic window 38-28 (+1.464u). Validation probability
+quality improved to .2447 Brier/.6824 log loss from .2468/.6865; the latest
+window improved to .2436/.6803 from .2456/.6843 on the identical 127 settled
+rows, while AUC improved from .545 to .593 under the market-backed blend. The
+paired action replay promoted 61 rows (38-23,
++5.195u) and demoted 149 (73-76, -4.134u), a transparent net reduction of 88
+actions rather than a hidden empty-board policy. On the August 20 locked slate,
+the dry run changes seven actionable NRFI rows and one NRFI No Play plus one
+Toss-Up into five NRFI Leans and four Toss-Ups. It does not force a YRFI side.
+
+Rollback is deployed r46/v45/v36/v19 with the prior 65% independent weight and
+1.5-point Lean edge floor. Locked historical rows remain immutable. The writer
+remains `predictionRecordService` under the shared sport-scoped
+`prediction_pipeline` lease.
 
 Moneyline precedence is immutable unless a later versioned release explicitly replaces it:
 
