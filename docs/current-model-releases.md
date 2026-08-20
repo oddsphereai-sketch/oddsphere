@@ -312,6 +312,14 @@ probability, side, grade, or stake, or refresh a full slate on no-op sweeps. The
 rollback evidence are recorded in
 `docs/model-audits/2026-08-11-mlb-lock-priority-retry-v8.md`.
 
+The August 20 EPL tracking-aggregate v2 release preserves the competition
+identity in the bounded tracking query. This keeps unlocked EPL rehearsals out
+of official accuracy, preserves the immutable T-60 locked row as canonical,
+and separates Premier League results from World Cup history without changing
+any EPL prediction, probability, projection, grade, price, or stake. Evidence
+and rollback details are recorded in
+`docs/model-audits/2026-08-20-epl-tracking-aggregate-identity-v2.md`.
+
 The August 11 r32 release adds a slate-level MLB Moneyline portfolio ranker after all existing
 side selection, correction, no-bet, price, freshness, and data-quality gates. It jointly scores
 the frozen model probability, offered-price break-even, model-versus-price edge, picked-side

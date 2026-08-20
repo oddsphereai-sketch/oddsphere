@@ -245,6 +245,9 @@ export type PredictionRecordRow = {
   locked_at: string | null;
   published_at: string | null;
   created_at?: string;
+  /** Projected JSON field used by bounded aggregate queries that intentionally
+   * avoid transferring the complete snapshot_json payload. */
+  competition?: string | null;
   snapshot_json: Record<string, unknown> | null;
   /**
    * Phase 6B.21 / 7A prep — tag for the calibration version active at
