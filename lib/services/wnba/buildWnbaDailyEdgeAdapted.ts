@@ -756,6 +756,7 @@ function buildWnbaPickedPrices(
     total: { ...totalTrail, current: lockedTotal?.odds_american ?? totalTrail.movementCurrent ?? totalCurrent, marketProb: pickedNoVigProb(liveRows, "total", totalSide, totalLockedLine) },
     spread: { ...spreadTrail, current: lockedSpread?.odds_american ?? spreadTrail.movementCurrent ?? spreadCurrent, marketProb: pickedNoVigProb(liveRows, "spread", spreadSide, spreadLockedLine) },
     totalLine: coherentPriceTrail(liveRows, cappedHistoryRows, "total", totalSide, totalCurrentLine, totalCurrent, true),
+    spreadLine: coherentPriceTrail(liveRows, cappedHistoryRows, "spread", spreadSide, spreadCurrentLine, spreadCurrent, true),
     opposingMl: coherentPriceTrail(liveRows, cappedHistoryRows, "moneyline", oppositeSide("moneyline", mlSide), null, pickedPrice(liveRows, "moneyline", oppositeSide("moneyline", mlSide), null)),
     opposingTotal: coherentPriceTrail(liveRows, cappedHistoryRows, "total", oppositeSide("total", totalSide), totalCurrentLine, pickedPrice(liveRows, "total", oppositeSide("total", totalSide), totalCurrentLine)),
     opposingSpread: coherentPriceTrail(liveRows, cappedHistoryRows, "spread", oppositeSide("spread", spreadSide), oppositeLine("spread", spreadCurrentLine), pickedPrice(liveRows, "spread", oppositeSide("spread", spreadSide), oppositeLine("spread", spreadCurrentLine))),
@@ -785,6 +786,7 @@ type WnbaPickedPrices = {
   opposingTotal: WnbaPriceTrail;
   opposingSpread: WnbaPriceTrail;
   totalLine: WnbaPriceTrail;
+  spreadLine: WnbaPriceTrail;
 };
 type PreviewGame = {
   game_id: number;
@@ -1247,8 +1249,23 @@ function buildMarket(opts: {
         label: index === 0 ? "first" as const : index === stops.length - 1 ? "current" as const : "move" as const,
       }))
     : undefined;
-  const lineTrail: MarketEdgeDto["lineTrail"] = opts.lineTrail?.coherent
-    ? (opts.lineTrail.stops ?? []).map((stop, index, stops) => ({
+  const pointLineStops = opts.lineTrail?.coherent
+    ? (opts.lineTrail.stops ?? []).reduce<WnbaPriceTrailStop[]>((stops, stop) => {
+        if (stop.line === null) return stops;
+        const prior = stops[stops.length - 1];
+        if (!prior || prior.line !== stop.line) {
+          stops.push(stop);
+        } else if (stops.length > 1) {
+          // Keep the first observation of the opening number, but keep the
+          // latest observation of every later plateau so the terminal stop is
+          // the current/locked quote rather than an earlier history poll.
+          stops[stops.length - 1] = stop;
+        }
+        return stops;
+      }, [])
+    : [];
+  const lineTrail: MarketEdgeDto["lineTrail"] = pointLineStops.length > 1
+    ? pointLineStops.map((stop, index, stops) => ({
         american: stop.american,
         line: stop.line,
         observedAt: stop.observedAt,
@@ -1288,8 +1305,8 @@ function buildMarket(opts: {
     lockedLineAmerican: opts.lockedAt ? priceAmerican : null,
     lockedLineAt: opts.lockedAt ?? null,
     lastMovePrevAmerican: opts.priceTrail?.previous ?? null,
-    lastMoveLinePrev: opts.priceTrail?.previousLine ?? null,
-    lastMoveLineNext: opts.priceTrail?.currentLine ?? null,
+    lastMoveLinePrev: pointLineStops.length > 1 ? pointLineStops[pointLineStops.length - 2]?.line ?? null : null,
+    lastMoveLineNext: pointLineStops.length > 1 ? pointLineStops[pointLineStops.length - 1]?.line ?? null : null,
     oddsTrail,
     lineTrail,
     opposingOddsTrail:
@@ -1467,6 +1484,7 @@ function adaptGame(
     whyLine: `Model margin ${game.model.margin > 0 ? "+" : ""}${game.model.margin} vs market spread ${game.market.spread ?? "n/a"}.`,
     publicSplits: game.publicSplits?.spread,
     priceTrail: game.pickedPrices?.spread,
+    lineTrail: game.pickedPrices?.spreadLine,
     opposingPriceTrail: game.pickedPrices?.opposingSpread,
     opposingSide: oppositeSide("spread", spreadPickIsHome ? "home" : spreadPickIsAway ? "away" : null) as "home" | "away" | null,
     opposingLabel: spreadPickIsHome ? awayAbbr : spreadPickIsAway ? homeAbbr : null,

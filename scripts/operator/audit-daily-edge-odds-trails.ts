@@ -94,7 +94,8 @@ async function main() {
         const marketType = dbMarket(sport, key);
         const marketLineTrail = (market.lineTrail ?? []) as TrailStop[];
         const terminalTrackedLine = marketLineTrail[marketLineTrail.length - 1]?.line ?? null;
-        const hasPointLineTransition = key === "total" && marketLineTrail.some(
+        const supportsPointLineTrail = key === "total" || (sport === "wnba" && key === "first_inning");
+        const hasPointLineTransition = supportsPointLineTrail && marketLineTrail.some(
           (stop) => stop.line !== null && terminalTrackedLine !== null && !close(stop.line, terminalTrackedLine),
         );
         const trails = [
@@ -135,7 +136,7 @@ async function main() {
         const lineTrail = marketLineTrail;
         if (lineTrail.length > 0) {
           verifiedLineTrails += 1;
-          if (key !== "total") failures.push(`${sport}/${game.id}/${key}: unexpected total line trail`);
+          if (!supportsPointLineTrail) failures.push(`${sport}/${game.id}/${key}: unexpected point line trail`);
           if (lineTrail.some((stop) => stop.line === null)) failures.push(`${sport}/${game.id}/${key}: null point in line trail`);
           if (new Set(lineTrail.map((stop) => stop.sportsbook).filter(Boolean)).size !== 1) failures.push(`${sport}/${game.id}/${key}: mixed-book line trail`);
         }

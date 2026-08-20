@@ -382,7 +382,7 @@ export type MarketEdgeDto = {
    * true price changes instead of repeated polling rows.
    */
   oddsTrail?: OddsTrailStopDto[];
-  /** Same-book point-line history for totals; separate from exact-line prices. */
+  /** Same-book point-line history for totals and spreads; separate from exact-line prices. */
   lineTrail?: OddsTrailStopDto[];
   /**
    * The other outcome at the same market and, when available, the same book.
