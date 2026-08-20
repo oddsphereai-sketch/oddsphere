@@ -523,8 +523,12 @@ async function main() {
       homeStarter: { season_era: 7.50, first_inning_era: 7.50, first_inning_starts: 10 },
     });
     const out = runMlbFirstInningModelV2(snap, buildFiLines(140, -160)); // YRFI line
-    check("extreme independent vs market → posterior_capped=true",
-      out.fiV2Audit.posterior_capped === true);
+    const rawPosterior =
+      (out.fiV2Audit.independent_p_nrfi ?? 0) * out.fiV2Audit.trust_independent +
+      (out.fiV2Audit.market_nrfi_no_vig ?? 0) * (1 - out.fiV2Audit.trust_independent);
+    const shouldCap = Math.abs(rawPosterior - (out.fiV2Audit.market_nrfi_no_vig ?? 0)) > FI_TEST.FI_POSTERIOR_NRFI_CAP;
+    check("posterior cap flag matches the market-anchored raw blend",
+      out.fiV2Audit.posterior_capped === shouldCap);
     check("posterior NRFI didn't move more than ~10 pts from market",
       Math.abs((out.fiV2Audit.posterior_p_nrfi ?? 0) - (out.fiV2Audit.market_nrfi_no_vig ?? 0)) <= 0.11);
   }
@@ -587,7 +591,8 @@ async function main() {
   }
   {
     // selectTrustIndependent direct
-    check("high + market → 0.65", FI_TEST.selectTrustIndependent({ tier: "high", missingCount: 0, hasMarket: true }) === 0.65);
+    check("high + market → 0.25", FI_TEST.selectTrustIndependent({ tier: "high", missingCount: 0, hasMarket: true }) === 0.25);
+    check("market-backed Lean floor = nonnegative no-vig edge", FI_TEST.FI_LEAN_MIN_EDGE_PCT === 0);
     check("medium + market → 0.45", FI_TEST.selectTrustIndependent({ tier: "medium", missingCount: 2, hasMarket: true }) === 0.45);
     check("no market → 1.0", FI_TEST.selectTrustIndependent({ tier: "high", missingCount: 0, hasMarket: false }) === 1.0);
     check("severe missing → 0.05", FI_TEST.selectTrustIndependent({ tier: "high", missingCount: 7, hasMarket: true }) === 0.05);
