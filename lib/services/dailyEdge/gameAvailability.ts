@@ -19,6 +19,10 @@ export type DailyEdgeGameAvailability = {
   source: "ESPN" | "Playbook";
   sourceLabel: string;
   sourceUrl: string | null;
+  /** Provider-declared report date when the source publishes one. */
+  reportDate?: string | null;
+  /** Previous-day reports remain visible as explicitly stale context. */
+  freshnessStatus?: "current" | "previous_day";
   reportUpdatedAt: string | null;
   teams: DailyEdgeTeamAvailability[];
 };

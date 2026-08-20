@@ -247,6 +247,10 @@ const availabilityRouteSource = readFileSync(
   "app/api/lab/daily-edge-availability/route.ts",
   "utf8",
 );
+const mlbAvailabilitySource = readFileSync(
+  "lib/services/mlb/playbookMlbAvailability.ts",
+  "utf8",
+);
 const productNavSource = readFileSync(
   "app/lab/components/LabAppNav.tsx",
   "utf8",
@@ -550,6 +554,19 @@ check(
     candidateSource.includes("does not by itself prove causation"),
 );
 check(
+  "MLB availability remains in the Market & Price column and fails visibly when unavailable",
+  candidateSource.includes('availability ? <AvailabilityContext report={availability} market={market} /> : sport === "mlb" ? <MlbAvailabilityUnavailable />') &&
+    candidateSource.includes('<IntegratedEvidence market={market} availability={availability} sport={sport} />') &&
+    candidateSource.includes("Report temporarily unavailable") &&
+    candidateSource.includes("missing report is not evidence that every player is available"),
+);
+check(
+  "previous-day MLB reports are labeled instead of silently discarded or presented as current",
+  candidateSource.includes("Previous report") &&
+    candidateSource.includes("has not published a report dated for today") &&
+    mlbAvailabilitySource.includes("isAcceptableReportDate"),
+);
+check(
   "availability uses a literal label instead of implying it caused the move",
   candidateSource.includes("Injuries &amp; Availability") &&
     candidateSource.includes("report.sourceLabel") &&
@@ -651,6 +668,12 @@ check(
     parsedMlbInjuries.teams[0]?.abbreviation === "WSH" &&
     parsedMlbInjuries.teams[0]?.players[0]?.status === "Out" &&
     parsedMlbInjuries.teams[0]?.players[0]?.detail === "Injury · 10-day injured list",
+);
+check(
+  "MLB availability accepts only the slate-date or immediately previous provider report",
+  __MLB_AVAILABILITY_TEST__.isAcceptableReportDate("2026-08-20", "2026-08-20") &&
+    __MLB_AVAILABILITY_TEST__.isAcceptableReportDate("2026-08-19", "2026-08-20") &&
+    !__MLB_AVAILABILITY_TEST__.isAcceptableReportDate("2026-08-18", "2026-08-20"),
 );
 check(
   "availability endpoint accepts only bounded exact matchup tokens",
