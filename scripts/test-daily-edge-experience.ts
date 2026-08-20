@@ -414,10 +414,12 @@ check(
     candidateSource.includes("to ${formatNumber(movement.currentLine)}"),
 );
 check(
-  "totals render a dedicated line tracker after price movement and before market splits",
-  candidateSource.includes("function CompactTotalLineMovement") &&
-    candidateSource.indexOf("<CompactOddsMovement market={market}") < candidateSource.indexOf("<CompactTotalLineMovement market={market}") &&
-    candidateSource.indexOf("<CompactTotalLineMovement market={market}") < candidateSource.indexOf("<DefaultSplitSummary market={market}"),
+  "totals and WNBA spreads render a dedicated line tracker after price movement and before market splits",
+  candidateSource.includes("function CompactPointLineMovement") &&
+    candidateSource.includes('const isSpread = !isTotal && stops.length > 0 && market.line !== null') &&
+    candidateSource.includes('const marketLabel = isTotal ? "Total" : "Spread"') &&
+    candidateSource.indexOf("<CompactOddsMovement market={market}") < candidateSource.indexOf("<CompactPointLineMovement market={market}") &&
+    candidateSource.indexOf("<CompactPointLineMovement market={market}") < candidateSource.indexOf("<DefaultSplitSummary market={market}"),
 );
 check(
   "Market Pulse keeps public consensus, sharp-book splits, and price movement source-coherent",
