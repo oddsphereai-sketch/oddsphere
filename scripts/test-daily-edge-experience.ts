@@ -224,6 +224,11 @@ check(
     !DAILY_EDGE_TOP_LEVEL_SPORT_KEYS.includes("ucl"),
 );
 check(
+  "the top-level Soccer model is labeled and presented as active while EPL has a live slate",
+  DAILY_EDGE_SPORTS.find((definition) => definition.key === "soccer")?.label === "Soccer" &&
+    DAILY_EDGE_SPORT_AVAILABILITY.soccer?.statusLabel === "Active",
+);
+check(
   "the shared Soccer selector owns Premier League, Champions League, and World Cup navigation",
   candidateDailyEdgeSource.includes('labelOverrides={{ soccer: "Soccer" }}') &&
     candidateDailyEdgeSource.includes('label: "Premier League"') &&
@@ -335,7 +340,7 @@ check(
 );
 check(
   "available offseason models remain selectable but are not presented as active today",
-  ["soccer", "nba", "nhl"].every(
+  ["nba", "nhl", "ucl"].every(
     (sport) =>
       DAILY_EDGE_SPORT_AVAILABILITY[sport as keyof typeof DAILY_EDGE_SPORT_AVAILABILITY]
         ?.statusLabel === "No games today",
