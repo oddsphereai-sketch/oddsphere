@@ -22,7 +22,9 @@ type NormalizedMlbAvailabilityReport = {
  * Read-only MLB injury context for the Daily Edge presentation. Playbook's
  * response is team-wide, so reports are attached only after both matchup
  * abbreviations resolve deterministically. Any missing key, provider error,
- * stale report date, or unmatched team fails closed.
+ * report older than the previous calendar day, or unmatched team fails closed.
+ * A previous-day report is allowed only as explicitly labeled stale context;
+ * it is never presented as today's verified report.
  */
 export async function fetchPlaybookMlbSlateAvailability(
   slateDate: string,
@@ -36,7 +38,8 @@ export async function fetchPlaybookMlbSlateAvailability(
     // reader open for the client's broader 20-second audit timeout.
     const response = await new PlaybookClient(apiKey, { timeoutMs: 2_500 }).injuries("mlb");
     const parsed = parsePlaybookMlbInjuries(response.body);
-    if (parsed === null || parsed.reportDate !== slateDate) return null;
+    if (parsed === null || !isAcceptableReportDate(parsed.reportDate, slateDate)) return null;
+    const freshnessStatus = parsed.reportDate === slateDate ? "current" : "previous_day";
 
     const teamByAbbreviation = new Map(
       parsed.teams.map((team) => [team.abbreviation, team]),
@@ -53,6 +56,8 @@ export async function fetchPlaybookMlbSlateAvailability(
         source: "Playbook",
         sourceLabel: "Playbook MLB injury report",
         sourceUrl: null,
+        reportDate: parsed.reportDate,
+        freshnessStatus,
         reportUpdatedAt: parsed.updatedAt,
         teams: [away, home],
       });
@@ -61,6 +66,15 @@ export async function fetchPlaybookMlbSlateAvailability(
   } catch {
     return null;
   }
+}
+
+function isAcceptableReportDate(reportDate: string | null, slateDate: string): boolean {
+  if (reportDate === null || !/^\d{4}-\d{2}-\d{2}$/.test(reportDate)) return false;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(slateDate)) return false;
+  if (reportDate === slateDate) return true;
+  const [year, month, day] = slateDate.split("-").map(Number);
+  const previous = new Date(Date.UTC(year, month - 1, day - 1)).toISOString().slice(0, 10);
+  return reportDate === previous;
 }
 
 function parsePlaybookMlbInjuries(value: unknown): NormalizedMlbAvailabilityReport | null {
@@ -106,4 +120,4 @@ function parseTeam(value: unknown): DailyEdgeTeamAvailability | null {
   return { abbreviation, teamName: row.teamName, players };
 }
 
-export const __MLB_AVAILABILITY_TEST__ = { parsePlaybookMlbInjuries };
+export const __MLB_AVAILABILITY_TEST__ = { parsePlaybookMlbInjuries, isAcceptableReportDate };
