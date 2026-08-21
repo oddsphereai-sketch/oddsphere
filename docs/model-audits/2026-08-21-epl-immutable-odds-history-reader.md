@@ -27,7 +27,7 @@ The live table also contained legacy exact-duplicate rows and incorrect historic
 
 1. EPL now loads `line_history` oldest-to-newest in bounded 1,000-row pages, matching the established WNBA Daily Edge contract. The weekly query remains scoped to current EPL game IDs and four supported markets; it adds no provider call and no per-member read.
 2. Economic trails remain scoped to the exact sportsbook, outcome, and Total line. FanDuel-to-Circa is never presented as same-book movement.
-3. Every soccer outcome also carries its earliest verified OddSphere capture across books. The member reader shows that capture separately only when it sits outside the displayed same-book trail.
+3. Every soccer outcome also carries its earliest verified OddSphere capture across books for internal audit and recovery context. The member reader does not present that cross-book observation as directional movement; its public trail remains strictly same-book Opening, Prior, and Current.
 4. Current selection and grading continue to use the coherent current price. Historical cross-book context cannot re-grade, promote, demote, or change a pick.
 
 ## Live read-only replay
@@ -47,7 +47,7 @@ The database contained 2,218 raw supported-market history rows for this fixture 
 - `npm run verify:model-change`
 - production build
 
-Live deployment proof must confirm the exact production commit, r16/v21 identifiers, shared lease health, coherent current prices, the Arsenal earliest-capture label, and unchanged board counts before the repair is declared live.
+Live deployment proof must confirm the exact production commit, r16/v21 identifiers, shared lease health, coherent current prices, same-book Opening/Prior/Current trails, and unchanged board counts before the repair is declared live.
 
 ## Rollback
 
