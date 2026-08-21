@@ -12,7 +12,7 @@
  *       NBA: spread (rendered in DailyEdgeShell as `Sprd*`)
  *       NHL: spread (rendered in DailyEdgeShell as `PL*`; puck-line
  *            is stored under market_type="spread")
- *   • Other sports (NFL, CBB, CFB, UCL): empty until intentional
+ *   • Other sports (CBB, CFB, UCL): empty until intentional
  *     product launch.
  *   • Unknown / unregistered (sport, market) tuples FAIL CLOSED
  *     (return false from both `isOfficiallyTrackedMarket` and
@@ -59,11 +59,13 @@ check("NHL spread (puck-line) NOT officially tracked", isOfficiallyTrackedMarket
 check("NHL spread (puck-line) IS context-only display", isContextOnlyDisplayMarket("nhl", "spread") === true);
 check("NHL first_inning NOT officially tracked", isOfficiallyTrackedMarket("nhl", "first_inning") === false);
 
-// Unlaunched sports — empty arrays, all queries return false
-check("NFL has empty official tracking registry", getOfficialTrackingMarkets("nfl").length === 0);
+// NFL — forward-only 2026 launch markets; preseason remains excluded by its
+// separate lifecycle and public-start boundary.
+check("NFL tracks moneyline, total, and spread from the 2026 regular season", JSON.stringify(getOfficialTrackingMarkets("nfl")) === JSON.stringify(["moneyline", "total", "spread"]));
 check("NFL has empty context-only registry", getContextOnlyDisplayMarkets("nfl").length === 0);
-check("NFL moneyline NOT officially tracked", isOfficiallyTrackedMarket("nfl", "moneyline") === false);
-check("NFL spread NOT officially tracked", isOfficiallyTrackedMarket("nfl", "spread") === false);
+check("NFL moneyline officially tracked", isOfficiallyTrackedMarket("nfl", "moneyline") === true);
+check("NFL total officially tracked", isOfficiallyTrackedMarket("nfl", "total") === true);
+check("NFL spread officially tracked", isOfficiallyTrackedMarket("nfl", "spread") === true);
 check("UCL has empty official tracking registry", getOfficialTrackingMarkets("ucl").length === 0);
 check("CBB has empty official tracking registry", getOfficialTrackingMarkets("cbb").length === 0);
 check("CFB has empty official tracking registry", getOfficialTrackingMarkets("cfb").length === 0);
@@ -100,6 +102,8 @@ check("OFFICIAL_TRACKING_MARKETS.soccer = [match_result, total, btts, double_cha
   JSON.stringify(OFFICIAL_TRACKING_MARKETS.soccer) === JSON.stringify(["match_result", "total", "btts", "double_chance"]));
 check("OFFICIAL_TRACKING_MARKETS.wnba = [moneyline, total, spread]",
   JSON.stringify(OFFICIAL_TRACKING_MARKETS.wnba) === JSON.stringify(["moneyline", "total", "spread"]));
+check("OFFICIAL_TRACKING_MARKETS.nfl = [moneyline, total, spread]",
+  JSON.stringify(OFFICIAL_TRACKING_MARKETS.nfl) === JSON.stringify(["moneyline", "total", "spread"]));
 check("CONTEXT_ONLY_DISPLAY_MARKETS.nba = [spread]",
   JSON.stringify(CONTEXT_ONLY_DISPLAY_MARKETS.nba) === JSON.stringify(["spread"]));
 check("CONTEXT_ONLY_DISPLAY_MARKETS.nhl = [spread]",
@@ -118,6 +122,9 @@ try {
   assertOfficialTrackingMarket("wnba", "moneyline");
   assertOfficialTrackingMarket("wnba", "total");
   assertOfficialTrackingMarket("wnba", "spread");
+  assertOfficialTrackingMarket("nfl", "moneyline");
+  assertOfficialTrackingMarket("nfl", "total");
+  assertOfficialTrackingMarket("nfl", "spread");
 } catch {
   assertHappyOk = false;
 }

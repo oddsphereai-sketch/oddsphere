@@ -18,6 +18,7 @@ import type { Sport } from "@/lib/types/domain/Sport";
 export const OFFICIAL_TRACKING_START: Partial<Record<Sport, string>> = {
   // mlb / nba / nhl / soccer already track via their existing launch handling.
   wnba: "2026-06-24", // WNBA launch — public lifetime starts 0-0 from this date, no backfill
+  nfl: "2026-09-10", // NFL Week 1 forward-only; preseason is permanently excluded
 };
 
 /**
@@ -25,7 +26,7 @@ export const OFFICIAL_TRACKING_START: Partial<Record<Sport, string>> = {
  * isPublicallyTracked — every other sport (MLB/NBA/NHL/soccer) keeps its
  * existing tracking behavior untouched (always returns true below).
  */
-const BOUNDARIED_SPORTS = new Set<Sport>(["wnba"]);
+const BOUNDARIED_SPORTS = new Set<Sport>(["wnba", "nfl"]);
 
 /** The official public-tracking start date for a sport, or null if not launched. */
 export function officialTrackingStart(sport: Sport): string | null {

@@ -59,7 +59,7 @@ import type { TrackedMarketV17 } from "../types/domain/Tracking";
  * is the intended pipeline. They show up on the public tracking page.
  *
  * Empty arrays for sports that have NOT YET been launched as tracked
- * categories (NFL, CBB, CFB, UCL). Adding a market to an empty array
+ * categories (CBB, CFB, UCL). Adding a market to an empty array
  * is a product launch decision.
  */
 export const OFFICIAL_TRACKING_MARKETS: Readonly<
@@ -68,7 +68,10 @@ export const OFFICIAL_TRACKING_MARKETS: Readonly<
   mlb: ["moneyline", "total", "first_inning"],
   nba: ["moneyline", "total"],
   nhl: ["moneyline", "total"],
-  nfl: [],
+  // NFL launches forward-only with the 2026 regular season. Preseason is
+  // excluded independently by the football tracking lifecycle and the
+  // future-dated public tracking boundary.
+  nfl: ["moneyline", "total", "spread"],
   cbb: [],
   cfb: [],
   ucl: [],

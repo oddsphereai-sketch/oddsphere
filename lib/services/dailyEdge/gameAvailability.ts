@@ -16,7 +16,7 @@ export type DailyEdgeGameAvailability = {
   eventId: string;
   awayTeam: string;
   homeTeam: string;
-  source: "ESPN" | "Playbook";
+  source: "ESPN" | "Playbook" | "BALLDONTLIE";
   sourceLabel: string;
   sourceUrl: string | null;
   /** Provider-declared report date when the source publishes one. */

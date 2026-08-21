@@ -141,7 +141,7 @@ export async function refreshTrackingFoundationResponseSnapshot(input: {
   const date = new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" });
   const snapshotKey = trackingFoundationSnapshotKey({ date });
   try {
-    const { buildTrackingFoundationSnapshotBody } = await import("@/app/api/lab/tracking-foundation/route");
+    const { buildTrackingFoundationSnapshotBody } = await import("@/lib/services/trackingFoundationSnapshot");
     const body = await buildTrackingFoundationSnapshotBody();
     const write = await upsertLabResponseSnapshot({
       snapshotKey,

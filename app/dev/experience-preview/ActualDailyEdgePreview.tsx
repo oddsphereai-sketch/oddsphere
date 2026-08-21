@@ -58,7 +58,7 @@ export type SoccerCompetitionPreview = {
   active: "premier_league" | "world_cup" | "champions_league";
   label: string;
 };
-export type WeeklySlatePreview = { label: string; previousHref: string | null; nextHref: string | null };
+export type WeeklySlatePreview = { label: string; evidence?: string; previousHref: string | null; nextHref: string | null };
 
 const MARKET_LABEL: Record<MarketKey, string> = {
   moneyline: "Moneyline",
@@ -96,22 +96,28 @@ export default function ActualDailyEdgePreview({
   snapshot,
   history,
   pitcherFirstInningHistory,
+  initialAvailability = {},
   sport,
   freshContractRead,
   reviewMode = true,
   embeddedSample = false,
   soccerCompetition,
   weeklySlate,
+  activePreviewSports = [],
+  sportSwitchDestinations,
 }: {
   snapshot: DailyEdgeResponse;
   history: PreviewHistoryByTeam;
   pitcherFirstInningHistory: PreviewPitcherFirstInningByGame;
+  initialAvailability?: PreviewAvailabilityByGame;
   sport: Sport;
   freshContractRead: boolean;
   reviewMode?: boolean;
   embeddedSample?: boolean;
   soccerCompetition?: SoccerCompetitionPreview;
   weeklySlate?: WeeklySlatePreview;
+  activePreviewSports?: Sport[];
+  sportSwitchDestinations?: Partial<Record<Sport, string>>;
 }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -134,13 +140,18 @@ export default function ActualDailyEdgePreview({
   const [deepView, setDeepView] = useState<DeepView>("case");
   const [sample, setSample] = useState<5 | 10>(10);
   const [mobileSheetOpen, setMobileSheetOpen] = useState(initialReaderRequested);
-  const [availability, setAvailability] = useState<PreviewAvailabilityByGame>({});
+  const [availability, setAvailability] = useState<PreviewAvailabilityByGame>(initialAvailability);
   const readerRef = useRef<HTMLDivElement>(null);
 
   function switchSport(next: Sport) {
     if (embeddedSample) return;
     setReaderOpen(false);
     setMobileSheetOpen(false);
+    const explicitDestination = sportSwitchDestinations?.[next];
+    if (explicitDestination) {
+      router.replace(explicitDestination, { scroll: false });
+      return;
+    }
     const params = new URLSearchParams(searchParams.toString());
     params.set("sport", next);
     if (next === "soccer") params.set("league", "epl");
@@ -203,7 +214,7 @@ export default function ActualDailyEdgePreview({
   }, [displaySnapshot.date, displaySnapshot.games, embeddedSample, sport]);
 
   if (!game) {
-    return <div className="space-y-5 pb-16"><SlateHeader snapshot={displaySnapshot} sport={sport} onSportChange={switchSport} soccerCompetition={soccerCompetition} weeklySlate={weeklySlate} reviewMode={reviewMode} /><EmptyPreview sport={sport} displayLabel={soccerCompetition?.label} /></div>;
+    return <div className="space-y-5 pb-16"><SlateHeader snapshot={displaySnapshot} sport={sport} onSportChange={switchSport} soccerCompetition={soccerCompetition} weeklySlate={weeklySlate} reviewMode={reviewMode} activePreviewSports={activePreviewSports} /><EmptyPreview sport={sport} displayLabel={soccerCompetition?.label} /></div>;
   }
 
   const market = game.markets[marketKey];
@@ -257,7 +268,7 @@ export default function ActualDailyEdgePreview({
 
   return (
     <div className="space-y-5 pb-16">
-      <SlateHeader snapshot={displaySnapshot} sport={sport} onSportChange={switchSport} sample={embeddedSample} soccerCompetition={soccerCompetition} weeklySlate={weeklySlate} reviewMode={reviewMode} />
+      <SlateHeader snapshot={displaySnapshot} sport={sport} onSportChange={switchSport} sample={embeddedSample} soccerCompetition={soccerCompetition} weeklySlate={weeklySlate} reviewMode={reviewMode} activePreviewSports={activePreviewSports} />
 
       <div ref={readerRef} className="hidden scroll-mt-4 sm:block">
         {readerOpen ? <div>
@@ -396,7 +407,7 @@ function ReaderEvidence({ game, market, marketKey, sport, history, pitcherFirstI
       <div className={soccerLayout ? "grid items-start gap-3 border-t border-white/[0.07] bg-black/10 p-3 lg:grid-cols-[0.96fr_1.08fr_1.06fr] sm:p-4" : "grid lg:grid-cols-[1fr_1.28fr_1fr] xl:grid-cols-[1.08fr_1.34fr_1.08fr]"}>
         <QuickRead game={game} market={market} marketKey={marketKey} sport={sport} />
         {firstInningMode ? <FirstInningIntelligence market={market} /> : <IntegratedEvidence game={game} market={market} marketKey={marketKey} sport={sport} availability={availability} />}
-        <KeyStats game={game} market={market} marketKey={marketKey} history={history} sample={sample} sport={sport} />
+        <KeyStats game={game} market={market} marketKey={marketKey} history={history} sample={sample} sport={sport} availability={availability} />
       </div>
       {soccerLayout ? <div className="border-t border-white/[0.07] px-4 pb-5 sm:px-5 xl:px-6"><HistoryStatSummary game={game} market={market} marketKey={marketKey} history={history} sample={sample} sport={sport} wide /></div> : null}
       {firstInningMode ? <FirstInningRecentContext game={game} history={history} pitcherHistory={pitcherFirstInningHistory[game.id] ?? null} sample={sample} pick={market.pick} /> : null}
@@ -471,17 +482,26 @@ function replaceReaderUrl(sport: Sport, gameId: string, market: MarketKey) {
   );
 }
 
-function SlateHeader({ snapshot, sport, onSportChange, sample = false, soccerCompetition, weeklySlate, reviewMode = true }: { snapshot: DailyEdgeResponse; sport: Sport; onSportChange: (sport: Sport) => void; sample?: boolean; soccerCompetition?: SoccerCompetitionPreview; weeklySlate?: WeeklySlatePreview; reviewMode?: boolean }) {
+function SlateHeader({ snapshot, sport, onSportChange, sample = false, soccerCompetition, weeklySlate, reviewMode = true, activePreviewSports = [] }: { snapshot: DailyEdgeResponse; sport: Sport; onSportChange: (sport: Sport) => void; sample?: boolean; soccerCompetition?: SoccerCompetitionPreview; weeklySlate?: WeeklySlatePreview; reviewMode?: boolean; activePreviewSports?: Sport[] }) {
   const displaySport = soccerCompetition?.label ?? sportLabel(sport);
+  const sportAvailability = activePreviewSports.reduce(
+    (availability, activeSport) => ({
+      ...availability,
+      [activeSport]: { isLive: true, statusLabel: "Active" },
+    }),
+    soccerCompetition?.active === "premier_league"
+      ? { ...DAILY_EDGE_SPORT_AVAILABILITY, soccer: { isLive: true, statusLabel: "Active" } }
+      : DAILY_EDGE_SPORT_AVAILABILITY,
+  );
   return (
     <div>
       <div className="flex flex-col gap-2 px-1 sm:flex-row sm:items-end sm:justify-between">
         <div><p className="text-[9px] font-black uppercase tracking-[0.2em] text-violet-300">OddSphere · {displaySport}</p><h1 className="mt-1 text-2xl font-black tracking-tight text-white sm:text-3xl">Daily Edge</h1><p className="mt-1 text-xs text-gray-500">{sample ? "Sample slate" : snapshot.date} · {snapshot.games.length} {displaySport} {snapshot.games.length === 1 ? "game" : "games"}{sample ? " · Interactive product preview" : ` · updated ${formatTimestamp(snapshot.as_of)}`}</p></div>
         <p className="text-[8px] font-semibold uppercase tracking-[0.12em] text-gray-600"><span className="text-gray-400">Update rhythm</span> · {weeklySlate ? "30-minute board" : "hourly board"} · separate market feeds · minute lock checks</p>
       </div>
-      <div className="mt-5"><SportSelector active={sport} onChange={onSportChange} sports={DAILY_EDGE_TOP_LEVEL_SPORT_KEYS} showCounts={false} showPendingState availability={soccerCompetition?.active === "premier_league" ? { ...DAILY_EDGE_SPORT_AVAILABILITY, soccer: { isLive: true, statusLabel: "Active" } } : DAILY_EDGE_SPORT_AVAILABILITY} labelOverrides={{ soccer: "Soccer" }} /></div>
+      <div className="mt-5"><SportSelector active={sport} onChange={onSportChange} sports={DAILY_EDGE_TOP_LEVEL_SPORT_KEYS} showCounts={false} showPendingState availability={sportAvailability} labelOverrides={{ soccer: "Soccer" }} /></div>
       {sport === "soccer" && soccerCompetition ? <SoccerCompetitionBar active={soccerCompetition.active} reviewMode={reviewMode} /> : null}
-      {weeklySlate ? <div className="mt-3 flex items-center justify-between rounded-xl border border-white/[0.07] bg-white/[0.025] px-3 py-2.5"><span className="text-[9px] font-black uppercase tracking-[0.15em] text-gray-400">{weeklySlate.label}</span><div className="flex gap-2">{weeklySlate.previousHref ? <Link href={weeklySlate.previousHref} className="rounded-md border border-white/[0.08] px-2.5 py-1.5 text-[8px] font-black uppercase tracking-wider text-gray-400 hover:text-white">← Previous</Link> : null}{weeklySlate.nextHref ? <Link href={weeklySlate.nextHref} className="rounded-md border border-white/[0.08] px-2.5 py-1.5 text-[8px] font-black uppercase tracking-wider text-gray-400 hover:text-white">Next →</Link> : null}</div></div> : null}
+      {weeklySlate ? <div className="mt-3 flex items-center justify-between gap-3 rounded-xl border border-white/[0.07] bg-white/[0.025] px-3 py-2.5"><div className="min-w-0"><p className="text-[9px] font-black uppercase tracking-[0.15em] text-gray-400">{weeklySlate.label}</p>{weeklySlate.evidence ? <p className="mt-1 text-[8px] font-semibold leading-relaxed text-gray-600">{weeklySlate.evidence}</p> : null}</div><div className="flex shrink-0 gap-2">{weeklySlate.previousHref ? <Link href={weeklySlate.previousHref} className="rounded-md border border-white/[0.08] px-2.5 py-1.5 text-[8px] font-black uppercase tracking-wider text-gray-400 hover:text-white">← Previous</Link> : null}{weeklySlate.nextHref ? <Link href={weeklySlate.nextHref} className="rounded-md border border-white/[0.08] px-2.5 py-1.5 text-[8px] font-black uppercase tracking-wider text-gray-400 hover:text-white">Next →</Link> : null}</div></div> : null}
     </div>
   );
 }
@@ -609,13 +629,14 @@ function QuickMatchupIdentity({ game, sport }: { game: DailyEdgeGameDto; sport: 
 }
 
 function IntegratedEvidence({ game, market, marketKey, sport, availability }: { game: DailyEdgeGameDto; market: MarketEdgeDto; marketKey: MarketKey; sport: Sport; availability: DailyEdgeGameAvailability | null }) {
+  const football = sport === "nfl" || sport === "cfb";
   return (
     <div className={sport === "soccer" ? "rounded-xl border border-violet-400/15 bg-[#121019] p-4 sm:p-5" : "border-b border-white/[0.07] p-4 sm:p-5 lg:border-b-0 lg:border-r"}>
       <SectionHeading tone="violet">Market & Price</SectionHeading>
       <div className="mt-4 space-y-3">
         {sport === "soccer" && marketKey === "moneyline" ? <SoccerDoubleChancePanel game={game} /> : null}
         <CompactMarketPulse market={market} showSplits />
-        {availability ? <AvailabilityContext report={availability} market={market} /> : sport === "mlb" ? <MlbAvailabilityUnavailable /> : null}
+        {!football && availability ? <AvailabilityContext report={availability} market={market} /> : sport === "mlb" ? <MlbAvailabilityUnavailable /> : null}
       </div>
     </div>
   );
@@ -762,7 +783,8 @@ function CompactOddsMovement({ market, tone, lineClass }: { market: MarketEdgeDt
     const direction = movementRowDirection(market, value, selected);
     const directionClass = direction.tone === "emerald" ? "text-emerald-300" : direction.tone === "teal" ? "text-teal-300" : direction.tone === "red" ? "text-red-300" : direction.tone === "amber" ? "text-amber-300" : "text-gray-600";
     const connectorClass = direction.tone === "emerald" ? "from-gray-700 via-emerald-500/50 to-emerald-400/50" : direction.tone === "teal" ? "from-gray-700 via-teal-500/40 to-teal-400/40" : direction.tone === "red" ? "from-gray-700 via-red-500/55 to-red-400/55" : direction.tone === "amber" ? "from-gray-700 via-amber-500/45 to-amber-400/45" : selected ? lineClass : "from-gray-700 via-violet-500/40 to-gray-600";
-    return <div className="rounded-lg border border-white/[0.08] bg-black/20 p-3"><div className="flex items-center justify-between gap-2"><p className="text-[9px] font-black text-gray-200">{label}</p><div className="flex items-center gap-2"><span className={`text-[7px] font-black uppercase tracking-wider ${directionClass}`}>{direction.label}</span><p className="text-[7px] font-semibold text-gray-600">{value.sportsbook ? formatSportsbook(value.sportsbook) : "book unavailable"}</p></div></div>{value.coherentTrail ? <div className="mt-3 grid grid-cols-[auto_1fr_auto_1fr_auto] items-center gap-2"><PricePoint label="Opening" value={formatAmerican(value.open)} line={value.openLine} /><div className={`h-px bg-gradient-to-r ${connectorClass}`} /><PricePoint label="Prior" value={formatAmerican(value.previous)} line={value.previousLine} /><div className={`h-px bg-gradient-to-r ${connectorClass}`} /><PricePoint label="Current" value={formatAmerican(value.current)} line={value.currentLine} tone={direction.tone} /></div> : <div className="mt-3 flex items-end justify-between gap-3"><div><p className="text-[6px] font-black uppercase tracking-wider text-gray-600">Current quote</p><p className="mt-0.5 font-mono text-sm font-black text-gray-200">{formatAmerican(value.current)}</p></div><p className="max-w-[13rem] text-right text-[7px] leading-relaxed text-gray-600">No earlier different same-book quote is stored.</p></div>}</div>;
+    const openingPoint = <PricePoint label={value.openingLabel} value={formatAmerican(value.open)} line={value.openLine} />;
+    return <div className="rounded-lg border border-white/[0.08] bg-black/20 p-3"><div className="flex items-center justify-between gap-2"><p className="text-[9px] font-black text-gray-200">{label}</p><div className="flex items-center gap-2"><span className={`text-[7px] font-black uppercase tracking-wider ${directionClass}`}>{direction.label}</span><p className="text-[7px] font-semibold text-gray-600">{value.sportsbook ? formatSportsbook(value.sportsbook) : "book unavailable"}</p></div></div>{value.coherentTrail ? <div className="mt-3 grid grid-cols-[auto_1fr_auto_1fr_auto] items-center gap-2">{openingPoint}<div className={`h-px bg-gradient-to-r ${connectorClass}`} /><PricePoint label="Prior" value={formatAmerican(value.previous)} line={value.previousLine} /><div className={`h-px bg-gradient-to-r ${connectorClass}`} /><PricePoint label="Current" value={formatAmerican(value.current)} line={value.currentLine} tone={direction.tone} /></div> : <div className="mt-3 flex items-end justify-between gap-3"><div><p className="text-[6px] font-black uppercase tracking-wider text-gray-600">Current quote</p><p className="mt-0.5 font-mono text-sm font-black text-gray-200">{formatAmerican(value.current)}</p></div><p className="max-w-[13rem] text-right text-[7px] leading-relaxed text-gray-600">No earlier different same-book quote is stored.</p></div>}</div>;
   };
   const rows = soccerBoard?.rows.length
     ? [...soccerBoard.rows]
@@ -861,7 +883,7 @@ function latestAvailabilityReportTime(report: DailyEdgeGameAvailability): string
 
 type OddsTrailStop = NonNullable<MarketEdgeDto["oddsTrail"]>[number];
 
-function resolveCoherentMovement(market: MarketEdgeDto): { open: number | null; previous: number | null; current: number | null; openLine: number | null; previousLine: number | null; currentLine: number | null; sportsbook: string | null; coherentTrail: boolean } {
+function resolveCoherentMovement(market: MarketEdgeDto): { open: number | null; previous: number | null; current: number | null; openLine: number | null; previousLine: number | null; currentLine: number | null; sportsbook: string | null; coherentTrail: boolean; openingLabel: "Opening" } {
   const displayedPrice = currentDisplayedPrice(market);
   const displayedBook = currentDisplayedSportsbook(market);
   const trail = (market.oddsTrail ?? [])
@@ -909,7 +931,7 @@ function resolveCoherentMovement(market: MarketEdgeDto): { open: number | null; 
       }
     }
     if (previous === null && coherent.length >= 2) previous = coherent[coherent.length - 2]!;
-    return { open: first.american, previous: previous?.american ?? null, current: terminal.american, openLine: first.line, previousLine: previous?.line ?? null, currentLine: terminal.line ?? first.line, sportsbook: terminal.sportsbook, coherentTrail: true };
+    return { open: first.american, previous: previous?.american ?? null, current: terminal.american, openLine: first.line, previousLine: previous?.line ?? null, currentLine: terminal.line ?? first.line, sportsbook: terminal.sportsbook, coherentTrail: true, openingLabel: "Opening" };
   }
   const canonical = market.marketReadV2?.movement;
   const canonicalLineIsStable = canonical !== null && canonical !== undefined && sameTrackedLine(canonical.firstTrackedLine, canonical.currentLine);
@@ -923,6 +945,7 @@ function resolveCoherentMovement(market: MarketEdgeDto): { open: number | null; 
     currentLine: canonical?.currentLine ?? market.line,
     sportsbook: currentDisplayedSportsbook(market),
     coherentTrail: false,
+    openingLabel: "Opening",
   };
 }
 
@@ -995,6 +1018,7 @@ function resolveStandaloneMovement(
     currentLine: terminal?.line ?? fallbackLine,
     sportsbook: terminalBook,
     coherentTrail,
+    openingLabel: "Opening",
   };
 }
 
@@ -1029,6 +1053,7 @@ function resolveOpposingMovement(market: MarketEdgeDto): CoherentMovement | null
     currentLine: terminal.line,
     sportsbook: terminal.sportsbook,
     coherentTrail,
+    openingLabel: "Opening",
   };
 }
 
@@ -1257,28 +1282,35 @@ function splitLeader(section: MarketSplitDisplaySection | null, valueKey: "money
   return section.rows.filter((row) => row[valueKey] !== null).sort((a, b) => (b[valueKey] ?? 0) - (a[valueKey] ?? 0))[0]?.label ?? null;
 }
 
-function RelevantTrend({ game, market, marketKey, history, sample, setSample }: { game: DailyEdgeGameDto; market: MarketEdgeDto; marketKey: MarketKey; history: PreviewHistoryByTeam; sample: 5 | 10; setSample: (sample: 5 | 10) => void }) {
+function RelevantTrend({ game, market, marketKey, sport, history, sample, setSample }: { game: DailyEdgeGameDto; market: MarketEdgeDto; marketKey: MarketKey; sport: Sport; history: PreviewHistoryByTeam; sample: 5 | 10; setSample: (sample: 5 | 10) => void }) {
   const away = (history[game.awayTeam] ?? []).slice(0, sample).reverse();
   const home = (history[game.homeTeam] ?? []).slice(0, sample).reverse();
-  const rows = mergeHistory(away, home, marketKey);
-  const threshold = marketKey === "total" ? market.line : marketKey === "first_inning" ? 0.5 : null;
-  const title = marketKey === "moneyline" ? "Recent game results" : marketKey === "total" ? "Recent game totals" : "Recent first-inning scoring";
-  const interpretation = recentTrendInterpretation(away, home, marketKey, market, game.awayTeam, game.homeTeam);
+  const footballSpread = marketKey === "first_inning" && (sport === "nfl" || sport === "cfb");
+  const rows = mergeHistory(away, home, marketKey, sport);
+  const threshold = marketKey === "total" ? market.line : footballSpread ? 0 : marketKey === "first_inning" ? 0.5 : null;
+  const title = marketKey === "moneyline" ? "Recent game results" : marketKey === "total" ? "Recent game totals" : footballSpread ? "Recent scoring margins" : "Recent first-inning scoring";
+  const interpretation = recentTrendInterpretation(away, home, marketKey, market, game.awayTeam, game.homeTeam, sport);
   return (
     <div>
       <div className="flex flex-wrap items-center justify-between gap-3"><div><p className="text-[8px] font-black uppercase tracking-[0.16em] text-sky-200">Relevant trends</p><p className="mt-1 text-xs font-black text-gray-300">{title}</p><p className="mt-1 text-[8px] text-gray-600">Past results are context—not standalone proof of today&rsquo;s edge.</p></div><div className="inline-flex rounded-lg border border-gray-800 bg-black/25 p-1">{([5, 10] as const).map((value) => <button key={value} type="button" onClick={() => setSample(value)} className={`rounded-md px-3 py-1.5 text-[8px] font-black ${sample === value ? "bg-violet-500/20 text-violet-200" : "text-gray-600"}`}>L{value}</button>)}</div></div>
       <section className="mt-4 rounded-xl border border-sky-400/15 bg-sky-400/[0.035] p-4"><p className="text-[8px] font-black uppercase tracking-[0.15em] text-sky-200">What the recent sample says</p><p className="mt-2 text-[11px] leading-relaxed text-gray-300">{interpretation}</p></section>
-      {rows.length > 0 ? <MarketSpecificTrend rows={rows} threshold={threshold} away={game.awayTeam} home={game.homeTeam} marketKey={marketKey} pick={market.pick} /> : <p className="mt-4 rounded-lg border border-gray-800 bg-black/20 p-4 text-[10px] text-gray-600">Completed-game history is unavailable for one or both teams.</p>}
+      {rows.length > 0 ? <MarketSpecificTrend rows={rows} threshold={threshold} away={game.awayTeam} home={game.homeTeam} marketKey={marketKey} pick={market.pick} sport={sport} /> : <p className="mt-4 rounded-lg border border-gray-800 bg-black/20 p-4 text-[10px] text-gray-600">Completed-game history is unavailable for one or both teams.</p>}
     </div>
   );
 }
 
 type MergedHistoryPoint = { away: number; home: number; awayOutcome?: "W" | "D" | "L"; homeOutcome?: "W" | "D" | "L" };
 
-function MarketSpecificTrend({ rows, threshold, away, home, marketKey, pick }: { rows: MergedHistoryPoint[]; threshold: number | null; away: string; home: string; marketKey: MarketKey; pick: string | null }) {
+function MarketSpecificTrend({ rows, threshold, away, home, marketKey, pick, sport }: { rows: MergedHistoryPoint[]; threshold: number | null; away: string; home: string; marketKey: MarketKey; pick: string | null; sport: Sport }) {
   if (marketKey === "moneyline") return <BinaryResultRows rows={rows} away={away} home={home} mode="moneyline" pick={pick} />;
+  if (marketKey === "first_inning" && (sport === "nfl" || sport === "cfb")) return <MarginResultRows rows={rows} away={away} home={home} />;
   if (marketKey === "first_inning") return <BinaryResultRows rows={rows} away={away} home={home} mode="first_inning" pick={pick} />;
   return <TotalResultRows rows={rows} line={threshold} away={away} home={home} />;
+}
+
+function MarginResultRows({ rows, away, home }: { rows: MergedHistoryPoint[]; away: string; home: string }) {
+  const renderRow = (team: string, key: "away" | "home") => <div className="grid grid-cols-[42px_1fr_auto] items-center gap-2"><span className="text-[9px] font-black text-gray-300">{team}</span><div className="flex gap-1">{rows.map((row, index) => { const margin = row[key]; return <span key={index} title={`${team}: ${margin > 0 ? "+" : ""}${margin} scoring margin`} className={`flex h-9 min-w-7 flex-1 flex-col items-center justify-center rounded border ${margin > 0 ? "border-emerald-300/30 bg-emerald-400/20 text-emerald-200" : margin < 0 ? "border-rose-300/25 bg-rose-500/15 text-rose-200" : "border-gray-600 bg-gray-700/50 text-gray-300"}`}><strong className="text-[8px] leading-none">{margin > 0 ? "W" : margin < 0 ? "L" : "T"}</strong><span className="mt-1 font-mono text-[7px] leading-none opacity-80">{margin > 0 ? "+" : ""}{margin}</span></span>; })}</div><span className="w-14 text-right text-[8px] font-black text-gray-500">{rows.filter((row) => row[key] > 0).length}-{rows.filter((row) => row[key] < 0).length}</span></div>;
+  return <div className="mt-4 space-y-2">{renderRow(away, "away")}{renderRow(home, "home")}<p className="text-right text-[8px] text-gray-600">Oldest → newest · completed-game scoring margin</p></div>;
 }
 
 function BinaryResultRows({ rows, away, home, mode, pick }: { rows: MergedHistoryPoint[]; away: string; home: string; mode: "moneyline" | "first_inning"; pick: string | null }) {
@@ -1333,11 +1365,12 @@ function HistoryStatSummary({ game, market, marketKey, history, sample, sport, w
   const away = (history[game.awayTeam] ?? []).slice(0, sample);
   const home = (history[game.homeTeam] ?? []).slice(0, sample);
   if (away.length === 0 || home.length === 0) {
-    return <div className="mt-4 rounded-xl border border-amber-400/15 bg-amber-400/[0.035] p-4"><div className="flex items-center justify-between gap-2"><p className="text-[9px] font-black uppercase tracking-[0.15em] text-amber-200">Recent team context</p><span className="text-[8px] font-semibold text-gray-500">Prior EPL matches only</span></div><div className="mt-3 grid gap-2 sm:grid-cols-2"><InfoCard label={game.awayTeam} value={away.length ? `${away.length} completed EPL matches` : "No prior EPL sample"} /><InfoCard label={game.homeTeam} value={home.length ? `${home.length} completed EPL matches` : "No prior EPL sample"} /></div><p className="mt-3 text-[9px] leading-relaxed text-gray-500">The comparison is withheld when either club lacks a comparable completed Premier League sample. This usually affects a promoted club; Championship results are not silently mixed into the EPL history feed.</p></div>;
+    const competition = sport === "soccer" ? "EPL matches" : sport === "nfl" || sport === "cfb" ? "football games" : "games";
+    return <div className="mt-4 rounded-xl border border-amber-400/15 bg-amber-400/[0.035] p-4"><div className="flex items-center justify-between gap-2"><p className="text-[9px] font-black uppercase tracking-[0.15em] text-amber-200">Recent team context</p><span className="text-[8px] font-semibold text-gray-500">Comparable completed games only</span></div><div className="mt-3 grid gap-2 sm:grid-cols-2"><InfoCard label={game.awayTeam} value={away.length ? `${away.length} completed ${competition}` : "No prior sample"} /><InfoCard label={game.homeTeam} value={home.length ? `${home.length} completed ${competition}` : "No prior sample"} /></div><p className="mt-3 text-[9px] leading-relaxed text-gray-500">The comparison is withheld when either team lacks a comparable completed-game sample. Results from a different competition or level are not silently mixed into the reader.</p></div>;
   }
   const average = (rows: PreviewHistoryPoint[], select: (row: PreviewHistoryPoint) => number) => rows.reduce((sum, row) => sum + select(row), 0) / rows.length;
   const rate = (rows: PreviewHistoryPoint[], test: (row: PreviewHistoryPoint) => boolean) => (rows.filter(test).length / rows.length) * 100;
-  const scoringNoun = sport === "soccer" || sport === "nhl" ? "goals" : sport === "nba" || sport === "wnba" ? "points" : "runs";
+  const scoringNoun = sport === "soccer" || sport === "nhl" ? "goals" : sport === "nba" || sport === "wnba" || sport === "nfl" || sport === "cfb" || sport === "cbb" ? "points" : "runs";
   const normalizedPick = market.pick?.toLowerCase() ?? "";
   const selectedSide = sideMatchesPick(game.awayTeam, market.pick) ? "away" as const : sideMatchesPick(game.homeTeam, market.pick) ? "home" as const : null;
   let comparisons: HistoryComparison[];
@@ -1363,6 +1396,13 @@ function HistoryStatSummary({ game, market, marketKey, history, sample, sport, w
       { label: totalLabel, awayValue: rate(away, totalTest), homeValue: rate(home, totalTest), awayDisplay: `${rate(away, totalTest).toFixed(0)}%`, homeDisplay: `${rate(home, totalTest).toFixed(0)}%`, kind: "rate", context: `Green = game supported ${market.pick ?? "today's total read"} · oldest → newest`, advantage: "higher", supportLabel: totalDirection ? `More supportive of ${market.pick}` : undefined, awaySampleSize: away.length, homeSampleSize: home.length, awayOutcomes: [...away].reverse().map(totalTest), homeOutcomes: [...home].reverse().map(totalTest) },
       { label: `Avg ${scoringNoun} scored`, awayValue: average(away, (row) => row.runsFor), homeValue: average(home, (row) => row.runsFor), awayDisplay: average(away, (row) => row.runsFor).toFixed(1), homeDisplay: average(home, (row) => row.runsFor).toFixed(1), kind: "average", advantage: totalDirection, supportLabel: totalDirection ? `More supportive of ${market.pick}` : undefined },
     ];
+  } else if (sport === "nfl" || sport === "cfb") {
+    const margin = (row: PreviewHistoryPoint) => row.runsFor - row.runsAgainst;
+    comparisons = [
+      { label: `Avg scoring margin · L${sample}`, awayValue: average(away, margin), homeValue: average(home, margin), awayDisplay: `${average(away, margin) >= 0 ? "+" : ""}${average(away, margin).toFixed(1)}`, homeDisplay: `${average(home, margin) >= 0 ? "+" : ""}${average(home, margin).toFixed(1)}`, kind: "average", context: "Completed-game point differential", advantage: "higher", supportLabel: `Supports ${market.pick ?? "spread read"}`, selectedSide },
+      { label: `Avg ${scoringNoun} scored`, awayValue: average(away, (row) => row.runsFor), homeValue: average(home, (row) => row.runsFor), awayDisplay: average(away, (row) => row.runsFor).toFixed(1), homeDisplay: average(home, (row) => row.runsFor).toFixed(1), kind: "average", advantage: "higher", supportLabel: `Supports ${market.pick ?? "spread read"}`, selectedSide },
+      { label: `Avg ${scoringNoun} allowed`, awayValue: average(away, (row) => row.runsAgainst), homeValue: average(home, (row) => row.runsAgainst), awayDisplay: average(away, (row) => row.runsAgainst).toFixed(1), homeDisplay: average(home, (row) => row.runsAgainst).toFixed(1), kind: "average", context: "Lower is better defensively", advantage: "lower", supportLabel: `Supports ${market.pick ?? "spread read"}`, selectedSide },
+    ];
   } else {
     const awayFirst = away.filter((row) => row.firstInningRuns !== null);
     const homeFirst = home.filter((row) => row.firstInningRuns !== null);
@@ -1376,7 +1416,20 @@ function HistoryStatSummary({ game, market, marketKey, history, sample, sport, w
       { label: "Avg first-inning runs", awayValue: average(awayFirst, (row) => row.firstInningRuns ?? 0), homeValue: average(homeFirst, (row) => row.firstInningRuns ?? 0), awayDisplay: average(awayFirst, (row) => row.firstInningRuns ?? 0).toFixed(1), homeDisplay: average(homeFirst, (row) => row.firstInningRuns ?? 0).toFixed(1), kind: "average", context: "Combined opening-frame scoring", advantage: fiDirection, supportLabel: fiDirection ? `More supportive of ${market.pick}` : undefined },
     ];
   }
+  if (!wide && (sport === "nfl" || sport === "cfb")) {
+    return <FootballRecentSummary game={game} market={market} marketKey={marketKey} sample={sample} comparisons={comparisons} />;
+  }
   return <div className="mt-4 rounded-xl border border-white/[0.10] bg-black/20 p-4"><div className="flex items-center justify-between gap-2"><p className="text-[9px] font-black uppercase tracking-[0.15em] text-gray-200">Recent team context</p><span className="text-[8px] font-semibold text-gray-500">Actual completed games</span></div><div className={wide ? "mt-4 grid gap-4 xl:grid-cols-3" : "mt-4 space-y-4"}>{comparisons.map((comparison) => <StatComparison key={comparison.label} comparison={comparison} away={game.awayTeam} home={game.homeTeam} />)}</div></div>;
+}
+
+function FootballRecentSummary({ game, market, marketKey, sample, comparisons }: { game: DailyEdgeGameDto; market: MarketEdgeDto; marketKey: MarketKey; sample: 5 | 10; comparisons: HistoryComparison[] }) {
+  const pick = displayPick(market, marketKey);
+  const cell = (side: "away" | "home", display: string, signal: ReturnType<typeof comparisonSignal>) => {
+    const supports = signal.support === side;
+    const challenges = signal.risk === side;
+    return <span className={`rounded-md border px-2 py-1.5 text-center font-mono text-[10px] font-black ${supports ? "border-emerald-400/25 bg-emerald-400/[0.07] text-emerald-200" : challenges ? "border-amber-400/25 bg-amber-400/[0.06] text-amber-200" : "border-white/[0.06] bg-black/20 text-gray-200"}`}>{display}</span>;
+  };
+  return <div className="mt-4 rounded-xl border border-white/[0.10] bg-black/20 p-4"><div className="flex items-start justify-between gap-2"><div><p className="text-[9px] font-black uppercase tracking-[0.15em] text-gray-200">Recent team context</p><p className="mt-1 text-[7px] text-gray-600">Supporting context for {pick}</p></div><span className="shrink-0 text-[8px] font-semibold text-gray-500">Actual L{sample}</span></div><div className="mt-3 overflow-hidden rounded-lg border border-white/[0.07]"><div className="grid grid-cols-[minmax(0,1.25fr)_minmax(54px,0.65fr)_minmax(54px,0.65fr)] gap-1.5 border-b border-white/[0.06] bg-white/[0.025] px-2.5 py-2 text-[7px] font-black uppercase tracking-wider text-gray-600"><span>Recent metric</span><span className="text-center">{game.awayTeam}</span><span className="text-center">{game.homeTeam}</span></div>{comparisons.map((comparison) => { const signal = comparisonSignal(comparison); return <div key={comparison.label} className="grid grid-cols-[minmax(0,1.25fr)_minmax(54px,0.65fr)_minmax(54px,0.65fr)] items-center gap-1.5 border-t border-white/[0.06] px-2.5 py-2 first:border-t-0"><span className="min-w-0 text-[8px] font-bold leading-tight text-gray-400">{comparison.label.replace(` · L${sample}`, "")}</span>{cell("away", comparison.awayDisplay, signal)}{cell("home", comparison.homeDisplay, signal)}</div>; })}</div><p className="mt-2 text-[7px] leading-relaxed text-gray-600">Green highlights the recent comparison that supports {pick}; amber flags a conflicting comparison.</p><details className="group mt-2 rounded-lg border border-white/[0.07] bg-white/[0.02]"><summary className="flex cursor-pointer list-none items-center justify-between px-3 py-2 text-[7px] font-black uppercase tracking-wider text-gray-500"><span>View game-by-game context</span><span className="transition group-open:rotate-180">⌄</span></summary><div className="space-y-4 border-t border-white/[0.06] p-3">{comparisons.map((comparison) => <StatComparison key={comparison.label} comparison={comparison} away={game.awayTeam} home={game.homeTeam} />)}</div></details></div>;
 }
 
 function StatComparison({ comparison, away, home }: { comparison: HistoryComparison; away: string; home: string }) {
@@ -1455,20 +1508,57 @@ function SampleTally({ outcomes, color: _color, hitLabel = "Hit", missLabel = "M
   return <div className="grid gap-1.5" style={{ gridTemplateColumns: `repeat(${Math.max(1, outcomes.length)}, minmax(0, 1fr))` }}>{outcomes.map((hit, index) => { const label = hit === "draw" ? "Draw" : hit ? hitLabel : missLabel; return <span key={index} title={`Game ${index + 1}: ${label}`} aria-label={`Game ${index + 1}: ${label}`} className={`h-4 rounded-[4px] border shadow-[inset_0_1px_0_rgba(255,255,255,0.10)] ${hit === "draw" ? "border-amber-300/35 bg-amber-400/70" : neutral ? hit ? "border-sky-300/30 bg-sky-400/65" : "border-gray-500/30 bg-gray-600/55" : hit ? "border-emerald-300/35 bg-emerald-400/80" : "border-rose-300/30 bg-rose-500/65"}`} />; })}</div>;
 }
 
-function KeyStats({ game, market, marketKey, history, sample, sport }: { game: DailyEdgeGameDto; market: MarketEdgeDto; marketKey: MarketKey; history: PreviewHistoryByTeam; sample: 5 | 10; sport: Sport }) {
+function KeyStats({ game, market, marketKey, history, sample, sport, availability }: { game: DailyEdgeGameDto; market: MarketEdgeDto; marketKey: MarketKey; history: PreviewHistoryByTeam; sample: 5 | 10; sport: Sport; availability: DailyEdgeGameAvailability | null }) {
   const visibleStats = market.keyStats;
+  const football = sport === "nfl" || sport === "cfb";
   if (sport === "soccer") return <SoccerMarketEvidence game={game} market={market} marketKey={marketKey} />;
   return (
     <div className="h-full p-4 sm:p-5 xl:p-6">
       <SectionHeading tone="sky">Key Stats & Notes</SectionHeading>
+      {football ? <FootballAvailabilityPanel report={availability} sport={sport} /> : null}
       <div className="mt-4">
-        <div className="flex items-center justify-between gap-2"><p className="text-[8px] font-black uppercase tracking-[0.17em] text-sky-200">{visibleStats.length > 0 ? "Prediction drivers" : "Decision snapshot"}</p><span className="text-[7px] font-semibold text-gray-600">{visibleStats.length > 0 ? `${visibleStats.length} most relevant` : "Core model output"}</span></div>
+        <div className="flex items-center justify-between gap-2"><p className="text-[8px] font-black uppercase tracking-[0.17em] text-sky-200">{visibleStats.length > 0 ? football ? "What moves this bet" : "Prediction drivers" : "Decision snapshot"}</p><span className="text-[7px] font-semibold text-gray-600">{visibleStats.length > 0 ? football ? `${visibleStats.length} decision checks` : `${visibleStats.length} most relevant` : "Core model output"}</span></div>
         {visibleStats.length > 0 ? <div className="mt-2 space-y-2">{visibleStats.map((stat) => <PredictionDriverCard key={`${stat.label}-${stat.awayValue}-${stat.homeValue}`} stat={stat} away={game.awayTeam} home={game.homeTeam} awayStarter={game.awayStarter?.name ?? null} homeStarter={game.homeStarter?.name ?? null} marketKey={marketKey} pick={market.pick} />)}</div> : <CoreDecisionSnapshot game={game} market={market} marketKey={marketKey} />}
       </div>
       {marketKey === "first_inning" && sport === "mlb" ? null : <HistoryStatSummary game={game} market={market} marketKey={marketKey} history={history} sample={sample} sport={sport} />}
-      <OddSphereNotes market={market} />
+      {football ? null : <OddSphereNotes market={market} />}
     </div>
   );
+}
+
+function FootballAvailabilityPanel({ report, sport }: { report: DailyEdgeGameAvailability | null; sport: Sport }) {
+  if (!report) {
+    return <section className="mt-4 rounded-xl border border-amber-300/15 bg-amber-400/[0.025] p-3.5"><div className="flex items-start justify-between gap-3"><div><p className="text-[8px] font-black uppercase tracking-[0.16em] text-amber-200">Injuries &amp; availability</p><p className="mt-1 text-[11px] font-black text-white">Not verified for this matchup</p></div><span className="shrink-0 rounded-full border border-amber-400/20 bg-amber-400/[0.06] px-2 py-1 text-[6px] font-black uppercase tracking-wider text-amber-200">Check pending</span></div><p className="mt-2 text-[8px] leading-relaxed text-gray-500">{sport === "cfb" ? "The current college-football provider does not include an injury feed. No player is assumed healthy because a report is missing." : "No verified injury report is attached to this game yet. The projection stays unchanged and availability remains a bettor check."}</p></section>;
+  }
+
+  const players = report.teams.flatMap((team) => team.players);
+  const quarterbacks = players.filter((player) => player.position?.toUpperCase() === "QB");
+  const latestReport = latestAvailabilityReportTime(report);
+  const headline = quarterbacks.length > 0
+    ? `${quarterbacks[0]!.name} · ${quarterbacks[0]!.status}`
+    : players.length > 0
+      ? `${players.length} player${players.length === 1 ? "" : "s"} listed · no QB listed`
+      : "No players returned by the provider";
+  const teamSummary = (team: DailyEdgeTeamAvailability) => {
+    const priority = [...team.players].sort((first, second) => availabilityPriority(second) - availabilityPriority(first))[0] ?? null;
+    return <div key={team.abbreviation} className="min-w-0 rounded-lg border border-white/[0.08] bg-black/25 p-2.5"><div className="flex items-center justify-between gap-2"><p className="text-[9px] font-black text-white">{team.abbreviation}</p><span className={`rounded-full border px-1.5 py-0.5 text-[6px] font-black uppercase tracking-wider ${availabilityTone(priority?.status ?? null)}`}>{priority?.position?.toUpperCase() === "QB" ? `QB ${priority.status}` : `${team.players.length} listed`}</span></div><p className="mt-1.5 truncate text-[8px] font-bold text-gray-300">{priority ? `${priority.name}${priority.position ? ` · ${priority.position}` : ""}` : "No player listed"}</p><p className="mt-0.5 truncate text-[7px] text-gray-600">{priority?.detail ?? "Absence from the feed is not a clearance."}</p></div>;
+  };
+
+  return <details className="group mt-4 rounded-xl border border-amber-300/15 bg-amber-400/[0.025]"><summary className="cursor-pointer list-none p-3.5"><div className="flex items-start justify-between gap-3"><div className="min-w-0"><p className="text-[8px] font-black uppercase tracking-[0.16em] text-amber-200">Injuries &amp; availability</p><p className="mt-1 truncate text-[11px] font-black text-white">{headline}</p></div><span className="shrink-0 text-sm text-gray-600 transition group-open:rotate-180">⌄</span></div><div className="mt-3 grid grid-cols-2 gap-2">{report.teams.map(teamSummary)}</div><div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-[7px] text-gray-600"><span>{report.sourceLabel}</span><span>{latestReport ? `Updated ${formatAvailabilityTime(latestReport)}` : "Update time unavailable"}</span></div></summary><div className="border-t border-white/[0.07] p-3"><div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">{report.teams.map((team) => <AvailabilityTeam key={team.abbreviation} team={team} />)}</div><p className="mt-3 text-[7px] leading-relaxed text-gray-600">Injury reporting is context only here. It does not silently change the prediction or play grade. In preseason, expected participation and coach-managed rest must be verified separately from injury status.</p></div></details>;
+}
+
+function availabilityPriority(player: DailyEdgeTeamAvailability["players"][number]): number {
+  const status = player.status.toLowerCase();
+  const position = player.position?.toUpperCase();
+  const severity = /out|injured reserve|inactive/.test(status) ? 40 : /doubtful/.test(status) ? 30 : /questionable|limited/.test(status) ? 20 : 10;
+  return severity + (position === "QB" ? 100 : position === "LT" || position === "OT" ? 20 : position === "WR" || position === "CB" ? 10 : 0);
+}
+
+function availabilityTone(status: string | null): string {
+  const normalized = status?.toLowerCase() ?? "";
+  if (/out|injured reserve|inactive|doubtful/.test(normalized)) return "border-rose-400/20 bg-rose-400/[0.06] text-rose-200";
+  if (/questionable|limited|monitor/.test(normalized)) return "border-amber-400/20 bg-amber-400/[0.06] text-amber-200";
+  return "border-white/[0.08] bg-white/[0.025] text-gray-500";
 }
 
 function soccerEvidencePriority(label: string, marketKey: MarketKey): number {
@@ -1587,7 +1677,7 @@ function PredictionDriverCard({ stat, away, home, awayStarter, homeStarter, mark
   const twoSided = keyStatIsTwoSided(stat.label, stat.awayValue, stat.homeValue);
   const signal = contextualDriverSignal({ label: stat.label, awayValue: stat.awayValue, homeValue: stat.homeValue, away, home, marketKey, pick });
   const teamValue = (side: "away" | "home", team: string, person: string | null, value: string | null) => { const supports = signal?.support === side; const challenges = signal?.risk === side; return <div className={`rounded-lg border px-3 py-2 ${supports ? "border-emerald-400/30 bg-emerald-400/[0.07]" : challenges ? "border-amber-400/25 bg-amber-400/[0.055]" : "border-white/[0.07] bg-black/25"}`}><div className="flex items-center gap-1.5"><span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: teamAccent(team) }} /><span className={`text-[8px] font-black ${supports ? "text-emerald-200" : challenges ? "text-amber-200" : "text-gray-400"}`}>{team}</span></div>{isPitching && person ? <p className={`mt-1 truncate text-[9px] font-black ${supports ? "text-emerald-100" : challenges ? "text-amber-100" : "text-gray-100"}`}>{person}</p> : null}<p className={`${isPitching && person ? "mt-0.5" : "mt-1"} text-sm font-black ${supports ? "text-emerald-200" : challenges ? "text-amber-200" : "text-white"}`}>{value ?? "—"}</p></div>; };
-  return <section className="rounded-xl border border-sky-400/20 bg-[#111723] p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.025)]"><div className="flex items-start justify-between gap-3"><div><span className="text-[7px] font-black uppercase tracking-[0.14em] text-sky-300">{category}</span><p className="mt-0.5 text-[10px] font-black text-gray-100">{stat.label}</p></div><div className="text-right"><span className="block text-[7px] font-bold uppercase tracking-wider text-gray-600">{stat.source.replaceAll("_", " ")}</span>{signal ? <span className={`mt-1 inline-flex rounded-full border px-2 py-0.5 text-[7px] font-black ${signal.support ? "border-emerald-400/25 bg-emerald-400/[0.08] text-emerald-200" : signal.risk ? "border-amber-400/25 bg-amber-400/[0.08] text-amber-200" : "border-gray-700 bg-gray-800/60 text-gray-500"}`}>{signal.label}</span> : null}</div></div>{twoSided ? <div className="mt-2 grid grid-cols-2 gap-2">{teamValue("away", away, awayStarter, stat.awayValue)}{teamValue("home", home, homeStarter, stat.homeValue)}</div> : <p className="mt-2 text-base font-black text-white">{stat.homeValue ?? stat.awayValue ?? "—"}</p>}<p className="mt-2 text-[8px] leading-relaxed text-gray-500">{context}</p></section>;
+  return <section className="rounded-xl border border-sky-400/20 bg-[#111723] p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.025)]"><div className="flex items-start justify-between gap-3"><div><span className="text-[7px] font-black uppercase tracking-[0.14em] text-sky-300">{category}</span><p className="mt-0.5 text-[10px] font-black text-gray-100">{stat.label}</p></div><div className="text-right"><span className="block text-[7px] font-bold uppercase tracking-wider text-gray-600">{driverSourceLabel(stat.source)}</span>{signal ? <span className={`mt-1 inline-flex rounded-full border px-2 py-0.5 text-[7px] font-black ${signal.support ? "border-emerald-400/25 bg-emerald-400/[0.08] text-emerald-200" : signal.risk ? "border-amber-400/25 bg-amber-400/[0.08] text-amber-200" : "border-gray-700 bg-gray-800/60 text-gray-500"}`}>{signal.label}</span> : null}</div></div>{twoSided ? <div className="mt-2 grid grid-cols-2 gap-2">{teamValue("away", away, awayStarter, stat.awayValue)}{teamValue("home", home, homeStarter, stat.homeValue)}</div> : <p className="mt-2 text-base font-black text-white">{stat.homeValue ?? stat.awayValue ?? "—"}</p>}<p className="mt-2 text-[8px] leading-relaxed text-gray-500">{context}</p></section>;
 }
 
 function DeepResearchToggle({ open, setOpen, market, marketKey, game }: { open: boolean; setOpen: (open: boolean) => void; market: MarketEdgeDto; marketKey: MarketKey; game: DailyEdgeGameDto }) {
@@ -1603,7 +1693,7 @@ function DeepResearch({ game, market, marketKey, sport, history, sample, setSamp
       <div className="flex max-w-full gap-1 overflow-x-auto rounded-lg border border-gray-800 bg-black/30 p-1">{views.map((item) => <button key={item.key} type="button" onClick={() => setView(item.key)} className={`min-w-max flex-1 rounded-md px-4 py-2 text-[8px] font-black uppercase tracking-[0.12em] ${view === item.key ? "bg-violet-500/15 text-violet-200 ring-1 ring-inset ring-violet-400/25" : "text-gray-600"}`}>{item.label}</button>)}</div>
       <div className="mt-4 rounded-xl border border-white/[0.07] bg-white/[0.02] p-4">
         {view === "case" && <CaseDeepDive game={game} market={market} marketKey={marketKey} />}
-        {view === "trend" && <RelevantTrend game={game} market={market} marketKey={marketKey} history={history} sample={sample} setSample={setSample} />}
+        {view === "trend" && <RelevantTrend game={game} market={market} marketKey={marketKey} sport={sport} history={history} sample={sample} setSample={setSample} />}
         {view === "market" && <MarketDeepDive market={market} />}
         {view === "matchup" && <MatchupDeepDive game={game} sport={sport} history={history} sample={sample} />}
         {view === "model" && <ModelDeepDive game={game} market={market} />}
@@ -1693,17 +1783,43 @@ function EdgeBoard({ games, sport, activeId, activeMarket, selectGame, groupByDa
   const [filter, setFilter] = useState<BoardFilter>("all");
   const [focus, setFocus] = useState<MarketKey | null>(null);
   const filters: Array<{ key: BoardFilter; label: string }> = [{ key: "all", label: "All" }, { key: "best_angle", label: "Best Angle" }, { key: "lean", label: "Lean" }, { key: "watchlist", label: "Watchlist" }, { key: "caution", label: "Caution" }, { key: "no_play", label: "No Play" }];
-  const marketKeys: MarketKey[] = focus ? [focus] : ["moneyline", "total", "first_inning"];
-  const count = (key: BoardFilter) => key === "all" ? games.length : games.filter((game) => marketKeys.some((marketKey) => game.markets[marketKey].verdict.key === key)).length;
-  const visibleGames = filter === "all" ? games : games.filter((game) => marketKeys.some((marketKey) => game.markets[marketKey].verdict.key === filter));
+  const footballBoard = groupByDay && (sport === "nfl" || sport === "cfb");
+  const marketKeys: MarketKey[] = ["moneyline", "total", "first_inning"];
+  const marketsInScope = (): MarketKey[] => focus === null ? marketKeys : [focus];
+  const predictionCount = games.reduce((total) => total + marketsInScope().length, 0);
+  const count = (key: BoardFilter) => footballBoard
+    ? key === "all"
+      ? predictionCount
+      : games.reduce(
+          (total, game) => total + marketsInScope().filter((market) => game.markets[market].verdict.key === key).length,
+          0,
+        )
+    : key === "all"
+      ? games.length
+      : games.filter((game) => marketsInScope().some((market) => game.markets[market].verdict.key === key)).length;
+  const visibleGames = filter === "all" ? games : games.filter((game) => marketsInScope().some((market) => game.markets[market].verdict.key === filter));
   const orderedGames = [...visibleGames].sort((a, b) => {
     const completedOrder = Number(a.result?.finalScore !== null) - Number(b.result?.finalScore !== null);
     if (completedOrder !== 0) return completedOrder;
     return Date.parse(a.gameStartAt ?? "") - Date.parse(b.gameStartAt ?? "");
   });
-  const groupedGames = groupByDay ? Object.entries(Object.groupBy(orderedGames, (game) => game.gameStartAt?.slice(0, 10) ?? "Unscheduled")) : [["", orderedGames] as const];
-  const marketFilters: Array<{ key: MarketKey | null; label: string }> = [{ key: null, label: "Best market" }, { key: "moneyline", label: "Moneyline" }, { key: "total", label: "Totals" }, { key: "first_inning", label: marketLabelFor("first_inning", sport) }];
-  return <section><div className="mb-3 rounded-xl border border-white/[0.07] bg-white/[0.02] p-3"><div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div className="flex items-baseline gap-2"><span className="h-3.5 w-1 rounded-full bg-violet-400/65" /><h2 className="text-[10px] font-black uppercase tracking-[0.18em] text-violet-200">{groupByDay ? "Weekly Slate" : "Slate Board"}</h2><span className="text-[11px] text-gray-600">·</span><span className="text-[11px] text-gray-400">{games.length} {games.length === 1 ? "game" : "games"}</span></div><div className="flex gap-1.5 overflow-x-auto pb-1">{marketFilters.map((item) => <button key={item.key ?? "best"} type="button" onClick={() => setFocus(item.key)} aria-pressed={focus === item.key} className={`whitespace-nowrap rounded-md border px-2.5 py-1.5 text-[8px] font-black uppercase tracking-wider ${focus === item.key ? "border-white/20 bg-white/[0.09] text-white" : "border-white/[0.06] text-gray-500"}`}>{item.label}</button>)}</div></div><div className="mt-3 flex gap-1.5 overflow-x-auto border-t border-white/[0.05] pt-3">{filters.map((item) => { const total = count(item.key); const active = filter === item.key; const disabled = item.key !== "all" && total === 0; return <button key={item.key} type="button" disabled={disabled} onClick={() => setFilter(item.key)} className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border px-2.5 py-1 text-[9px] font-black uppercase tracking-wider ${active ? "border-violet-400/55 bg-violet-500/[0.18] text-white" : disabled ? "border-white/[0.04] text-gray-800" : "border-white/[0.08] bg-white/[0.03] text-gray-400 hover:border-white/[0.16]"}`}>{item.label}<span className={active ? "text-violet-200" : "text-gray-600"}>{total}</span></button>; })}</div></div><div className="space-y-6">{groupedGames.map(([date, dayGames]) => { const rows = dayGames ?? []; return <section key={date || "slate"}>{date ? <div className="mb-3 flex items-center gap-3 border-b border-white/[0.07] pb-2"><span className="rounded-lg border border-violet-400/25 bg-violet-500/[0.08] px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.16em] text-violet-100">{new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", weekday: "long", month: "short", day: "numeric" }).format(new Date(`${date}T12:00:00Z`))}</span><span className="text-[9px] font-bold text-gray-600">{rows.length} {rows.length === 1 ? "match" : "matches"}</span></div> : null}<div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{rows.map((game) => <BoardGameCard key={game.id} game={game} sport={sport} headlineMarket={focus ?? primaryMarket(game)} active={activeId === game.id} activeMarket={activeId === game.id ? activeMarket : null} selectGame={selectGame} />)}</div></section>; })}</div></section>;
+  const groupedGames = groupByDay ? Object.entries(Object.groupBy(orderedGames, (game) => game.gameStartAt ? easternDateKey(game.gameStartAt) : "Unscheduled")) : [["", orderedGames] as const];
+  const marketFilters: Array<{ key: MarketKey | null; label: string }> = [{ key: null, label: footballBoard ? "All markets" : "Best market" }, { key: "moneyline", label: "Moneyline" }, { key: "total", label: "Totals" }, { key: "first_inning", label: marketLabelFor("first_inning", sport) }];
+  const countNote = focus === null
+    ? `Grade counts cover all ${predictionCount} predictions. A game appears when any of its three markets matches the selected grade.`
+    : `Grade counts cover the ${games.length} ${marketLabelFor(focus, sport).toLowerCase()} predictions.`;
+  return <section><div className="mb-3 rounded-xl border border-white/[0.07] bg-white/[0.02] p-3"><div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div className="flex items-baseline gap-2"><span className="h-3.5 w-1 rounded-full bg-violet-400/65" /><h2 className="text-[10px] font-black uppercase tracking-[0.18em] text-violet-200">{groupByDay ? "Weekly Slate" : "Slate Board"}</h2><span className="text-[11px] text-gray-600">·</span><span className="text-[11px] text-gray-400">{games.length} {games.length === 1 ? "game" : "games"}{footballBoard ? ` · ${games.length * 3} predictions` : ""}</span></div><div className="flex gap-1.5 overflow-x-auto pb-1">{marketFilters.map((item) => <button key={item.key ?? "best"} type="button" onClick={() => setFocus(item.key)} aria-pressed={focus === item.key} className={`whitespace-nowrap rounded-md border px-2.5 py-1.5 text-[8px] font-black uppercase tracking-wider ${focus === item.key ? "border-white/20 bg-white/[0.09] text-white" : "border-white/[0.06] text-gray-500"}`}>{item.label}</button>)}</div></div><div className="mt-3 flex flex-col gap-2 border-t border-white/[0.05] pt-3 sm:flex-row sm:items-center sm:justify-between"><div className="flex gap-1.5 overflow-x-auto">{filters.map((item) => { const total = count(item.key); const active = filter === item.key; const disabled = item.key !== "all" && total === 0; return <button key={item.key} type="button" disabled={disabled} onClick={() => setFilter(item.key)} className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border px-2.5 py-1 text-[9px] font-black uppercase tracking-wider ${active ? "border-violet-400/55 bg-violet-500/[0.18] text-white" : disabled ? "border-white/[0.04] text-gray-800" : "border-white/[0.08] bg-white/[0.03] text-gray-400 hover:border-white/[0.16]"}`}>{item.label}<span className={active ? "text-violet-200" : "text-gray-600"}>{total}</span></button>; })}</div>{footballBoard ? <p className="max-w-xl text-[8px] font-semibold leading-relaxed text-gray-600">{countNote}</p> : null}</div></div><div className="space-y-6">{groupedGames.map(([date, dayGames]) => { const rows = dayGames ?? []; return <section key={date || "slate"}>{date ? <div className="mb-3 flex items-center gap-3 border-b border-white/[0.07] pb-2"><span className="rounded-lg border border-violet-400/25 bg-violet-500/[0.08] px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.16em] text-violet-100">{new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", weekday: "long", month: "short", day: "numeric" }).format(new Date(`${date}T12:00:00Z`))}</span><span className="text-[9px] font-bold text-gray-600">{rows.length} {rows.length === 1 ? "match" : "matches"}</span></div> : null}<div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{rows.map((game) => <BoardGameCard key={game.id} game={game} sport={sport} headlineMarket={focus ?? primaryMarket(game)} active={activeId === game.id} activeMarket={activeId === game.id ? activeMarket : null} selectGame={selectGame} />)}</div></section>; })}</div></section>;
+}
+
+function easternDateKey(timestamp: string): string {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/New_York",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date(timestamp));
+  const value = (type: "year" | "month" | "day") => parts.find((part) => part.type === type)?.value ?? "";
+  return `${value("year")}-${value("month")}-${value("day")}`;
 }
 
 function BoardGameCard({ game, sport, headlineMarket, active, activeMarket, selectGame }: { game: DailyEdgeGameDto; sport: Sport; headlineMarket: MarketKey; active: boolean; activeMarket: MarketKey | null; selectGame: (game: DailyEdgeGameDto, market?: MarketKey) => void }) {
@@ -1902,7 +2018,7 @@ function sportLabel(sport: Sport): string {
 }
 
 function marketLabelFor(key: MarketKey, sport: Sport): string {
-  if (key === "first_inning" && (sport === "nba" || sport === "wnba")) return "Spread";
+  if (key === "first_inning" && (sport === "nba" || sport === "wnba" || sport === "nfl" || sport === "cfb")) return "Spread";
   if (key === "first_inning" && sport === "nhl") return "Puck Line";
   if (key === "first_inning" && sport === "soccer") return "Both Teams To Score";
   if (key === "moneyline" && sport === "soccer") return "Match Result";
@@ -1912,17 +2028,17 @@ function marketLabelFor(key: MarketKey, sport: Sport): string {
 function marketShortLabelFor(key: MarketKey, sport: Sport): string {
   if (key === "moneyline") return "ML";
   if (key === "total") return "Total";
-  if (sport === "nba" || sport === "wnba") return "Sprd";
+  if (sport === "nba" || sport === "wnba" || sport === "nfl" || sport === "cfb") return "Sprd";
   if (sport === "nhl") return "PL";
   if (sport === "soccer") return "BTTS";
   return "1st";
 }
 
-function mergeHistory(away: PreviewHistoryPoint[], home: PreviewHistoryPoint[], marketKey: MarketKey): MergedHistoryPoint[] {
+function mergeHistory(away: PreviewHistoryPoint[], home: PreviewHistoryPoint[], marketKey: MarketKey, sport?: Sport): MergedHistoryPoint[] {
   const count = Math.min(away.length, home.length);
   return Array.from({ length: count }, (_, index) => ({
-    away: marketKey === "moneyline" ? (away[index].won ? 1 : 0) : marketKey === "total" ? away[index].totalRuns : away[index].firstInningRuns ?? 0,
-    home: marketKey === "moneyline" ? (home[index].won ? 1 : 0) : marketKey === "total" ? home[index].totalRuns : home[index].firstInningRuns ?? 0,
+    away: marketKey === "moneyline" ? (away[index].won ? 1 : 0) : marketKey === "total" ? away[index].totalRuns : sport === "nfl" || sport === "cfb" ? away[index].runsFor - away[index].runsAgainst : away[index].firstInningRuns ?? 0,
+    home: marketKey === "moneyline" ? (home[index].won ? 1 : 0) : marketKey === "total" ? home[index].totalRuns : sport === "nfl" || sport === "cfb" ? home[index].runsFor - home[index].runsAgainst : home[index].firstInningRuns ?? 0,
     awayOutcome: marketKey === "moneyline" ? away[index].won ? "W" : away[index].drawn ? "D" : "L" : undefined,
     homeOutcome: marketKey === "moneyline" ? home[index].won ? "W" : home[index].drawn ? "D" : "L" : undefined,
   }));
@@ -1935,6 +2051,11 @@ function displayPick(market: MarketEdgeDto, key: MarketKey): string {
 }
 
 function driverCategory(label: string): string {
+  if (/projected result|projected scoring margin|projected total vs betting line|model total vs market line|model cushion vs spread|model vs market margin/i.test(label)) return "Model vs line";
+  if (/quarterback|passer rating/i.test(label)) return "Quarterback play";
+  if (/turnover/i.test(label)) return "Ball security";
+  if (/offensive plays per game|20\+ yard plays|neutral-situation pace|explosive-play rate/i.test(label)) return "Scoring profile";
+  if (/net yards per play|early-down pass efficiency|success rate/i.test(label)) return "Team strength";
   if (/expected goals|\bxg\b/i.test(label)) return "Expected goals";
   if (/recent form|points from|prior-season/i.test(label)) return "Club form";
   if (/shots|big chances|possession/i.test(label)) return "Team performance";
@@ -1944,11 +2065,25 @@ function driverCategory(label: string): string {
   if (/lineup|ops|top-of-order/i.test(label)) return "Lineup matchup";
   if (/park|weather|wind/i.test(label)) return "Environment";
   if (/projected|projection/i.test(label)) return "Model projection";
-  return "Matchup factor";
+  return "Team comparison";
 }
 
 function driverContext(label: string, marketKey: MarketKey, pick: string | null): string {
   const normalizedPick = pick?.toLowerCase() ?? "";
+  if (/projected result|projected scoring margin/i.test(label)) return "The model’s expected winner and final margin. This is the simplest view of which team the model rates higher.";
+  if (/quarterback passer rating/i.test(label)) return "A familiar summary of passing production. Higher is better, but the expected quarterback rotation still needs to be confirmed before kickoff.";
+  if (/turnover margin per game/i.test(label)) return "Takeaways minus giveaways per game. Positive teams create more extra possessions; negative teams give more away.";
+  if (/opponent-adjusted net epa\/play/i.test(label)) return "Expected points added per play after accounting for opponent strength. Positive is above average; higher is better.";
+  if (/quarterback availability/i.test(label)) return "Whether the expected quarterback situation is stable enough to trust the projection. Monitor means the read needs another availability check.";
+  if (/projected total vs betting line|model total vs market line/i.test(label)) return "The model’s expected combined score beside the sportsbook line. Projection above the line supports Over; below it supports Under.";
+  if (/offensive plays per game/i.test(label)) return "How many offensive snaps each team typically creates. More plays mean more chances to score, especially for an Over.";
+  if (/20\+ yard plays per game/i.test(label)) return "How often the offense produces a gain of at least 20 yards. Big plays create faster scoring chances and make totals more volatile.";
+  if (/neutral-situation pace/i.test(label)) return "Estimated plays before score and clock force a team to change style. More plays usually create more scoring opportunities.";
+  if (/explosive-play rate/i.test(label)) return "Share of plays producing large gains. Higher rates add scoring upside, but also make the total more volatile.";
+  if (/model cushion vs spread|model vs market margin/i.test(label)) return "How much room the model leaves after accounting for today’s spread. A larger positive cushion makes the spread pick more forgiving.";
+  if (/net yards per play/i.test(label)) return "Yards gained per play minus yards allowed per play. Positive is better and gives a quick read on overall team efficiency.";
+  if (/early-down pass efficiency/i.test(label)) return "Expected points added per pass on first and second down. Higher positive values mean the offense creates more value before obvious passing situations.";
+  if (/opponent-adjusted success rate/i.test(label)) return "Share of plays that keep the offense on schedule after adjusting for opponent strength. Higher is better; small differences should not decide a bet alone.";
   if (/xg created/i.test(label)) return marketKey === "moneyline" ? `Higher recent xG creation supports ${pick ?? "the selected side"} when it belongs to that club.` : `Recent attacking chance quality, interpreted specifically against the ${pick ?? "displayed"} market.`;
   if (/xg allowed/i.test(label)) return marketKey === "moneyline" ? `Lower recent xG allowed supports ${pick ?? "the selected side"}.` : `Recent defensive chance quality, interpreted specifically against the ${pick ?? "displayed"} market.`;
   if (/points from recent form|recent form/i.test(label)) return "Completed EPL form only; newest result is shown first.";
@@ -1981,7 +2116,12 @@ function contextualDriverSignal({ label, awayValue, homeValue, away, home, marke
   const isSoccerAttack = /xg created|shots \/ on target|avg big chances|avg possession|points from recent form/i.test(label);
   const isSoccerDefense = /xg allowed/i.test(label);
   const isTableRank = /prior-season finish/i.test(label);
-  if (!isRunPrevention && !isOffense && !isBullpenQuality && !isSoccerAttack && !isSoccerDefense && !isTableRank) return null;
+  const isQuarterback = /quarterback passer rating/i.test(label);
+  const isTurnoverMargin = /turnover margin per game/i.test(label);
+  const isFootballScoring = /offensive plays per game|20\+ yard plays per game/i.test(label);
+  const isFootballTeamStrength = /net yards per play/i.test(label);
+  const isFootballTeamMetric = isQuarterback || isTurnoverMargin || isFootballTeamStrength;
+  if (!isRunPrevention && !isOffense && !isBullpenQuality && !isSoccerAttack && !isSoccerDefense && !isTableRank && !isFootballTeamMetric && !isFootballScoring) return null;
   const parse = (value: string) => {
     if (/no .*sample|unavailable|^—$/i.test(value)) return null;
     if (/league average/i.test(value)) return 0;
@@ -1995,7 +2135,7 @@ function contextualDriverSignal({ label, awayValue, homeValue, away, home, marke
   if (awayNumber === null || homeNumber === null) return null;
   const rawDiff = awayNumber - homeNumber;
   const abs = Math.abs(rawDiff);
-  const thresholds = /ops/i.test(label) ? [0.02, 0.05] : /whip/i.test(label) ? [0.05, 0.15] : /era|fip/i.test(label) ? [0.2, 0.5] : /xg/i.test(label) ? [0.12, 0.3] : /points from/i.test(label) ? [2, 5] : /prior-season/i.test(label) ? [2, 6] : /possession/i.test(label) ? [2, 5] : /shots/i.test(label) ? [1, 3] : /big chances/i.test(label) ? [0.4, 1] : [3, 7];
+  const thresholds = /quarterback passer rating/i.test(label) ? [1.5, 5] : /turnover margin/i.test(label) ? [0.15, 0.5] : /offensive plays per game/i.test(label) ? [1, 3] : /20\+ yard plays/i.test(label) ? [0.25, 0.8] : /net yards per play/i.test(label) ? [0.1, 0.35] : /ops/i.test(label) ? [0.02, 0.05] : /whip/i.test(label) ? [0.05, 0.15] : /era|fip/i.test(label) ? [0.2, 0.5] : /xg/i.test(label) ? [0.12, 0.3] : /points from/i.test(label) ? [2, 5] : /prior-season/i.test(label) ? [2, 6] : /possession/i.test(label) ? [2, 5] : /shots/i.test(label) ? [1, 3] : /big chances/i.test(label) ? [0.4, 1] : [3, 7];
   if (abs < thresholds[0]) return { support: null, risk: null, label: "Even for this read" };
 
   const normalizedPick = pick.toLowerCase();
@@ -2008,6 +2148,8 @@ function contextualDriverSignal({ label, awayValue, homeValue, away, home, marke
     const under = normalizedPick.includes("under");
     if (!over && !under) return null;
     higherSupports = isBullpenQuality ? under : over;
+  } else if (isFootballTeamMetric) {
+    higherSupports = true;
   } else {
     const nrfi = normalizedPick.includes("nrfi");
     const yrfi = normalizedPick.includes("yrfi");
@@ -2022,7 +2164,8 @@ function contextualDriverSignal({ label, awayValue, homeValue, away, home, marke
     : rawDiff < 0 ? "away" : "home";
   const strength = abs >= thresholds[1] ? "clear" : "slight";
 
-  if (marketKey !== "moneyline") {
+  const sideMarket = marketKey === "moneyline" || (marketKey === "first_inning" && isFootballTeamMetric);
+  if (!sideMarket) {
     return { support: directionalSide, risk: null, label: `${directionalSide === "away" ? away : home} ${strength} support for ${pick}` };
   }
 
@@ -2032,6 +2175,12 @@ function contextualDriverSignal({ label, awayValue, homeValue, away, home, marke
     return { support: selectedSide, risk: null, label: `Supports ${pick}` };
   }
   return { support: null, risk: directionalSide, label: `Challenges ${pick}` };
+}
+
+function driverSourceLabel(source: string): string {
+  if (source === "computed") return "Model output";
+  if (source === "feature_snapshot") return "Team data";
+  return source.replaceAll("_", " ");
 }
 
 function coverageSentence(market: MarketEdgeDto): string {
@@ -2067,7 +2216,7 @@ function dedupeStats(stats: MarketEdgeDto["keyStats"]): MarketEdgeDto["keyStats"
   });
 }
 
-function recentTrendInterpretation(away: PreviewHistoryPoint[], home: PreviewHistoryPoint[], marketKey: MarketKey, market: MarketEdgeDto, awayTeam: string, homeTeam: string): string {
+function recentTrendInterpretation(away: PreviewHistoryPoint[], home: PreviewHistoryPoint[], marketKey: MarketKey, market: MarketEdgeDto, awayTeam: string, homeTeam: string, sport?: Sport): string {
   if (away.length === 0 || home.length === 0) return "A comparable recent sample is unavailable for one or both teams.";
   if (marketKey === "moneyline") {
     const awayWins = away.filter((row) => row.won).length;
@@ -2082,6 +2231,12 @@ function recentTrendInterpretation(away: PreviewHistoryPoint[], home: PreviewHis
     const awayOvers = away.filter((row) => row.totalRuns > line).length;
     const homeOvers = home.filter((row) => row.totalRuns > line).length;
     return `${awayTeam} games finished above ${line} in ${awayOvers} of ${away.length}; ${homeTeam} games did so in ${homeOvers} of ${home.length}. The tiles below show every result behind those rates.`;
+  }
+  if (sport === "nfl" || sport === "cfb") {
+    const averageMargin = (rows: PreviewHistoryPoint[]) => rows.reduce((sum, row) => sum + row.runsFor - row.runsAgainst, 0) / rows.length;
+    const awayMargin = averageMargin(away);
+    const homeMargin = averageMargin(home);
+    return `${awayTeam} averaged a ${awayMargin >= 0 ? "+" : ""}${awayMargin.toFixed(1)} scoring margin; ${homeTeam} averaged ${homeMargin >= 0 ? "+" : ""}${homeMargin.toFixed(1)}. This is recent form behind the ${market.pick ?? "spread"} read, not an against-the-spread record.`;
   }
   const awayKnown = away.filter((row) => row.firstInningRuns !== null);
   const homeKnown = home.filter((row) => row.firstInningRuns !== null);

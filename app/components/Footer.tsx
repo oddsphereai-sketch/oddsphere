@@ -28,6 +28,7 @@ export default function Footer() {
     pathname.startsWith("/admin") ||
     pathname === "/mlb/props" ||
     pathname === "/dev/mlb-props-preview" ||
+    pathname === "/dev/football-preview" ||
     pathname === "/dev/premier-league-preview"
   ) {
     return null;

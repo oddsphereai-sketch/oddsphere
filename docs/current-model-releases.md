@@ -6,6 +6,18 @@ constants, and preserve the precedence and writer ownership below.
 
 Last reviewed: 2026-08-20
 
+## NFL Daily Edge preseason publication candidate
+
+- Publication release: `nfl_daily_edge_preseason_publication_2026_08_20_r1`
+- Member snapshot release: `nfl_daily_edge_local_member_snapshot_2026_08_20_r3`
+- Regular model / decision releases: `nfl_pregame_real_local_current_refit_2026_08_19_r3` and `nfl_regular_price_value_decision_shadow_2026_08_20_r2`
+- Runtime constants: `lib/config/nflDailyEdge.ts`, `lib/services/football/footballModelContract.ts`, `lib/services/football/nflRegularDecision.ts`, and `lib/services/football/nflPublishedMemberSnapshotStore.ts`
+- Current board: the real 16-game 2026 Preseason Week 2 slate, with 48 moneyline/total/spread predictions, 48 current prices, 16 injury/depth snapshots, and 16 operational same-book Opening trails. The immutable package is `nfl_daily_edge_2026_preseason_week_2_f5c290ebcac4f462.json`, SHA-256 `f5c290ebcac4f4628f347ecfb97094a066c7ccba13298717ac66d6d71247629e`, captured `2026-08-20T22:48:23.153Z`.
+- Board impact: five preseason-rehearsal Leans, eight Watchlists, 35 No Plays, zero Cautions, and zero Best Angles. These are public dry-run labels, not official results. No prior actionable play was demoted by the publication release.
+- Publication boundary: production member reads use the existing signed-in Daily Edge route and make zero provider calls. The isolated `nfl::current-week` JSONB snapshot is readable only when `NFL_DAILY_EDGE_ENABLED=true`; publishing requires the independent `NFL_DAILY_EDGE_PUBLICATION_ENABLED=true` gate, complete/fresh evidence, exact checksum readback, and the shared `prediction_pipeline:nfl` lease. Already-started games are frozen against prediction rewrites.
+- Tracking boundary: preseason is permanently ineligible for prediction records, settlement, stakes, and lifetime totals. NFL moneyline, total, and spread are registered forward-only beginning `2026-09-10`; actual regular-season writes still require an approved pre-kickoff lock and must append to the pre-existing NFL lifetime record rather than reset or backfill it.
+- Evidence: `docs/model-audits/2026-08-20-nfl-preseason-publication-r14.md`. Rollback is `NFL_DAILY_EDGE_ENABLED=false`; the isolated snapshot can expire without affecting other sports or official tracking.
+
 ## Premier League production release (active)
 
 - Runtime/model release: `epl_goals_coherent_2026_08_20_r16`

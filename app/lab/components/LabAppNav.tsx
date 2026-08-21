@@ -56,6 +56,7 @@ const PRIVATE_REVIEW_TABS: Tab[] = [
 const ALIASED_AS: Record<string, string> = {
   "/lab/design-preview": "/lab/daily-edge",
   "/dev/experience-preview": "/lab/daily-edge",
+  "/dev/football-preview": "/lab/daily-edge",
   "/lab/player-props": "/mlb/props",
   "/dev/mlb-props-preview": "/mlb/props",
   "/dev/tracking-preview": "/lab/tracking",

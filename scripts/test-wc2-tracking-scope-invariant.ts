@@ -148,10 +148,15 @@ test("NHL tracked markets unchanged: moneyline, total", () => {
   assert(JSON.stringify(nhl) === JSON.stringify(["moneyline", "total"]), `NHL drifted: ${nhl.join(",")}`);
 });
 
-test("UCL/NFL/CBB/CFB registries remain empty", () => {
-  for (const sport of ["ucl", "nfl", "cbb", "cfb"] as const) {
+test("UCL/CBB/CFB registries remain empty", () => {
+  for (const sport of ["ucl", "cbb", "cfb"] as const) {
     assert(OFFICIAL_TRACKING_MARKETS[sport].length === 0, `${sport} should be empty`);
   }
+});
+
+test("NFL launch registry carries moneyline, total, and spread", () => {
+  const nfl = [...OFFICIAL_TRACKING_MARKETS.nfl].sort();
+  assert(JSON.stringify(nfl) === JSON.stringify(["moneyline", "spread", "total"]), `NFL drifted: ${nfl.join(",")}`);
 });
 
 console.log("\n" + "━".repeat(60));

@@ -78,6 +78,10 @@
       "schedule": "*/5 10-22 * * *"
     },
     {
+      "path": "/api/cron/nfl-daily-edge-health",
+      "schedule": "11,41 * * * *"
+    },
+    {
       "path": "/api/cron/tracking-refresh",
       "schedule": "33 * * * *"
     },
