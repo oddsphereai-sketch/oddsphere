@@ -1,5 +1,25 @@
 import type { DailyEdgeGameDto, DailyEdgeResponse } from "@/app/lab/lib/labTypes";
 
+export function eplSnapshotGamesNeedingLock(
+  snapshot: DailyEdgeResponse | null,
+  now: Date = new Date(),
+): number[] {
+  if (!snapshot) return [];
+  const nowMs = now.getTime();
+  return snapshot.games
+    .filter((game) => {
+      if (game.lockState === "locked" && game.lockedAt) return false;
+      const scheduledLockMs = Date.parse(game.scheduledLockAt ?? "");
+      const kickoffMs = Date.parse(game.gameStartAt ?? "");
+      return Number.isFinite(scheduledLockMs)
+        && Number.isFinite(kickoffMs)
+        && nowMs >= scheduledLockMs
+        && nowMs < kickoffMs;
+    })
+    .map((game) => Number(game.external_id))
+    .filter(Number.isFinite);
+}
+
 /**
  * A locked member read is the public betting record. Later refreshes may add
  * the official result and correct fixture metadata, but they cannot replace

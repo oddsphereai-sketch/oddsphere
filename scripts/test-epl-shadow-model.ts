@@ -6,7 +6,7 @@ import { deriveEplMatchResultDecision, deriveEplPreviewGrade, EPL_PREVIEW_GRADE_
 import { calibratedEplGoalProjection, calibratedEplTotalOverProbability, impliedEplBttsYesProbability, impliedEplGoalsMarketDistribution } from "../lib/services/epl/eplDerivedMarketForecast";
 import { eplTeamsMatch, normalizeEplSplits } from "../lib/providers/real_api/SharpApiEplMarketProvider";
 import { recentComparableEplMatches } from "../lib/services/epl/eplEvidence";
-import { preserveLockedEplGames } from "../lib/services/epl/eplLockedSnapshot";
+import { eplSnapshotGamesNeedingLock, preserveLockedEplGames } from "../lib/services/epl/eplLockedSnapshot";
 import type { DailyEdgeGameDto, DailyEdgeResponse } from "../app/lab/lib/labTypes";
 
 function match(id: number, date: string, home: number, away: number, homeScore: number, awayScore: number, homeXg = homeScore, awayXg = awayScore): EplTrainingMatch {
@@ -211,6 +211,8 @@ const resultSafe = preserveLockedEplGames(responseShell([finalLockedGame]), resp
 assert.deepEqual(resultSafe.result, refreshedGame.result, "a provider regression cannot clear an already stored final result");
 const openGame = { ...refreshedGame, external_id: 2, lockState: "open", lockedAt: null } as DailyEdgeGameDto;
 assert.strictEqual(preserveLockedEplGames(responseShell([openGame]), responseShell([{ ...openGame, markets: refreshedMarkets }])).games[0]!.markets, refreshedMarkets, "unlocked games continue updating normally");
+assert.deepEqual(eplSnapshotGamesNeedingLock(responseShell([openGame]), new Date("2026-08-21T18:06:00Z")), [2], "a due member snapshot remains eligible when the database writer locked first");
+assert.deepEqual(eplSnapshotGamesNeedingLock(responseShell([lockedGame]), new Date("2026-08-21T18:06:00Z")), [], "a published locked snapshot is terminal and does not trigger repeat provider calls");
 const confidenceLean = deriveEplMatchResultDecision({ model: { home: 0.54, draw: 0.27, away: 0.19 }, market: { home: 0.52, draw: 0.27, away: 0.21 }, prices: { home: -120, draw: 270, away: 340 }, promotedProxy: false });
 assert.equal(confidenceLean.selectedSide, "home");
 assert.equal(confidenceLean.grade.verdict.label, "Lean");
@@ -310,6 +312,9 @@ assert.match(slateBuilder, /SLATE_CACHE_TTL_MS = 5 \* 60 \* 1000/);
 assert.match(slateBuilder, /completedCurrentMatches/);
 assert.match(slateBuilder, /CURRENT_FOUNDATION_CACHE_TTL_MS = 15 \* 60 \* 1000/);
 assert.match(productionPipeline, /EPL_EXTERNAL_ID_OFFSET = 20_000_000/);
+assert.doesNotMatch(productionPipeline, /EPL_EXTERNAL_ID_OFFSET \+ 1_000_000/, "T-60 discovery must not assume provider fixture IDs fit in a one-million-wide namespace");
+assert.match(productionPipeline, /\.eq\("model_version", EPL_SHADOW_MODEL_RELEASE\)[\s\S]{0,100}\.is\("locked_at", null\)/, "T-60 discovery must scope candidates through current EPL release records");
+assert.match(productionPipeline, /\.in\("id", gameIds\)/, "T-60 discovery must resolve due fixtures from the release-owned game IDs");
 assert.match(productionPipeline, /scheduled_lock_at: lockAt/);
 assert.match(productionPipeline, /locked_at: shouldLock \? input\.now\.toISOString\(\) : null/);
 assert.match(productionPipeline, /trackedMarket: "match_result"/);
