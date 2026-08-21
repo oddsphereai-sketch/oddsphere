@@ -76,12 +76,19 @@ function boundedTrail(trail: NonNullable<MarketEdgeDto["oddsTrail"]>): NonNullab
   }
   const opening = compact.find((stop) => stop.label === "open") ?? null;
   const observed = compact.filter((stop) => stop !== opening);
-  observed.forEach((stop, index) => {
-    stop.label = index === 0 ? "first" : index === observed.length - 1 ? "current" : "move";
+  const boundedObserved = opening
+    ? observed.slice(-7)
+    : observed.length <= 8
+      ? observed
+      : [observed[0]!, ...observed.slice(-7)];
+  // Normalize after bounding. If the original first observation falls outside
+  // the eight-stop display window, normalizing before the slice leaves no
+  // `first` marker. trackedPrice then mistakes the terminal `current` stop for
+  // the first observation, and the reader rejects a real long same-book trail.
+  boundedObserved.forEach((stop, index) => {
+    stop.label = index === 0 ? "first" : index === boundedObserved.length - 1 ? "current" : "move";
   });
-  const normalized = opening ? [opening, ...observed] : observed;
-  if (normalized.length <= 8) return normalized;
-  return opening ? [opening, ...observed.slice(-7)] : observed.slice(-8);
+  return opening ? [opening, ...boundedObserved] : boundedObserved;
 }
 
 function mergePriceTrail(key: string, incoming: NonNullable<MarketEdgeDto["oddsTrail"]>): void {

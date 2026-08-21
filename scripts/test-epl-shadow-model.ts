@@ -93,6 +93,21 @@ hydrateEplStoredPriceHistory([
 const verifiedFlat = trackedPrice("778:match_result:away", 169, "pinnacle", null, null, null, "2026-08-18T13:35:00Z") ?? [];
 assert.deepEqual(verifiedFlat.map((stop) => stop.american), [169, 169], "two durable same-book captures verify a genuinely flat quote");
 assert.deepEqual(verifiedFlat.map((stop) => stop.label), ["first", "current"], "a verified flat trail exposes first and current without inventing movement");
+hydrateEplStoredPriceHistory(Array.from({ length: 10 }, (_, index) => ({
+  providerId: 780,
+  market: "total" as const,
+  side: "over",
+  line: 2.5,
+  american: -170 - index,
+  sportsbook: "pinnacle",
+  recordedAt: new Date(Date.UTC(2026, 7, 18, 13, index * 5)).toISOString(),
+  isOpener: index === 0,
+})));
+const boundedTotal = trackedPrice("780:total:over:2.5", -179, "pinnacle", null, 2.5, null, "2026-08-18T14:00:00Z") ?? [];
+assert.equal(boundedTotal.length, 8, "long soccer trails remain bounded to eight economic observations");
+assert.equal(boundedTotal[0]?.label, "first", "the first retained stop remains the bounded trail opening");
+assert.equal(boundedTotal[0]?.american, -170, "bounding preserves the actual first captured same-book quote");
+assert.equal(boundedTotal.at(-1)?.label, "current", "the latest retained stop remains current after bounding");
 const changed = trackedPrice("777:match_result:home", -650, "fanduel", "2026-08-18T14:00:00Z", null, null, "2026-08-18T14:00:00Z") ?? [];
 assert.deepEqual(changed.map((stop) => stop.american), [-700, -650], "a later changed quote appends to restored durable history");
 const fanduelOnly = trackedPrice("888:match_result:home", -650, "fanduel", null, null, null, "2026-08-18T15:00:00Z") ?? [];
