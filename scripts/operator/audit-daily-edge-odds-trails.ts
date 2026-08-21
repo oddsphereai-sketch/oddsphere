@@ -110,7 +110,16 @@ async function main() {
           // truthful coherent trail. The reader uses the first observation as
           // Prior when no distinct middle observation exists, so all three
           // display fields remain populated without inventing a market quote.
-          if (trail.stops.length < 2 && !hasPointLineTransition) failures.push(`${sport}/${game.id}/${key}/${trail.name}: fewer than two verified observations`);
+          // A single WNBA opposing-side capture is allowed as current context
+          // only. The reader renders it as unverified/current and never calls
+          // it movement; preserving the row is more truthful than hiding the
+          // other side when the current `lines` table is temporarily empty.
+          const currentOnlyContext =
+            sport === "wnba" &&
+            trail.name === "opposing" &&
+            trail.stops.length === 1 &&
+            terminal?.label === "current";
+          if (trail.stops.length < 2 && !hasPointLineTransition && !currentOnlyContext) failures.push(`${sport}/${game.id}/${key}/${trail.name}: fewer than two verified observations`);
           if (trail.stops.length > 1 && trail.stops[0]?.label !== "first") failures.push(`${sport}/${game.id}/${key}/${trail.name}: first observation is not labeled first`);
           if (terminal?.label !== "current" && terminal?.label !== "locked") failures.push(`${sport}/${game.id}/${key}/${trail.name}: terminal observation is not current/locked`);
           const books = new Set(trail.stops.map((stop: TrailStop) => stop.sportsbook).filter(Boolean));
