@@ -85,13 +85,34 @@ member-facing competition buckets. The scorer remains the shared regulation-time
 
 - Projection runtime: resolved automodel `v2_2`
 - First-inning runtime: `fi_v2` with the versioned unpublished-probable availability head below
-- Public calibration: `mlb_public_calibration_v22_first_inning_market_backed_2026_08_20`
-- Decision release: `mlb_daily_edge_decision_2026_08_20_r61`
-- Rule bundle: `mlb_daily_edge_rule_bundle_v50_2026_08_20`
-- Grade policy: `mlb_public_grade_policy_v40_first_inning_nonnegative_novig_edge_2026_08_20`
+- Public calibration: `mlb_public_calibration_v23_reconciled_market_champions_2026_08_21`
+- Decision release: `mlb_daily_edge_decision_2026_08_21_r62`
+- Rule bundle: `mlb_daily_edge_rule_bundle_v51_2026_08_21`
+- Grade policy: `mlb_public_grade_policy_v41_reconciled_market_context_2026_08_21`
 - Tracking contract: `member_facing_lock_v8_priority_retry_minute_cadence_2026_08_11`
 - Machine registry: `lib/automodel/mlbModelLayerVersions.ts`
 - Authoritative member-facing writer: `lib/services/predictionRecordService.ts`
+
+The August 21 r62 reconciliation restores the tested r48/r54/r55 Moneyline
+and Total release line on top of production r61 without changing the r61
+first-inning probability head, pick boundary, or grade gate. Moneyline again
+uses the scoped 40%-45% raw-side champion and rejects market-only opposite-side
+manufacture; Total again uses the guarded runtime-residual champion and its
+exact-price probability calibration. The confidence/value/context Lean paths
+are restored for unchanged coherent sides. The writer, shared
+`prediction_pipeline` lease, lock immutability, and one-record ownership remain
+unchanged.
+
+On the August 21 15-game read-only paired dry run, all 15 first-inning rows were
+identical to r61. Moneyline changed five nonactionable forecast sides without
+inheriting an old-side action and added two Leans with zero actionable
+demotions. Total added one Lean with zero actionable demotions. The resulting
+board moved from three to five actionable Moneylines and from zero to one
+actionable Total; locked rows remain immutable. Chronological validation and
+holdout evidence, exact promotion/demotion counts, and rollback boundaries are
+recorded in `docs/model-audits/2026-08-21-mlb-release-reconciliation-r62.md`.
+Rollback is r61/v50/v40/v22/schema v3; that rollback removes the restored
+Moneyline/Total layers while retaining the deployed first-inning bridge.
 
 The August 20 r61 first-inning bridge supersedes deployed r46 and the
 operator-only r60 stamps that were never present on production `main`. It

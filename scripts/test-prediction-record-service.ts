@@ -32,6 +32,7 @@ import {
   GATE_TOTAL_UNDER_BEST_ANGLE_MIN_MODEL_PROB,
   GATE_TOTAL_OVER_BEST_ANGLE_MIN_MODEL_PROB,
   MLB_MARKET_AWARE_SIDE_CORRECTION_RULE_ID,
+  MLB_MONEYLINE_MARKET_CONTEXT_SIDE_POLICY_RULE_ID,
   ML_CALIBRATED_MODEL_LEAN_PATH_ID,
   ML_MARKET_DIVERGENCE_LEAN_RULE_ID,
   ML_MARKET_DIVERGENCE_MIN_MODEL_PROB,
@@ -49,6 +50,7 @@ import {
   resolveMlSignedMarketResistance,
   resolveMlTightMarketPriceBestAngle,
   resolveMlbMarketAwareSideCorrection,
+  resolveMlbMoneylineMarketContextSidePolicy,
 } from "../lib/services/predictionRecordService";
 import type { PredictionRecordRow } from "../lib/types/domain/Tracking";
 import {
@@ -56,6 +58,7 @@ import {
   MLB_MODEL_LAYER_VERSION_SCHEMA,
 } from "../lib/automodel/mlbModelLayerVersions";
 import { TOTALS_MARKET_OPPOSED_FLIP_RULE_ID } from "../lib/services/totalsMeanFlip";
+import { MLB_TOTAL_PRICE_CALIBRATION_RULE_ID } from "../lib/automodel/immediateMarketChampion";
 
 // Self-consistent expected-grade helper: apply the production gate to a record's
 // own fields (fixtures don't set posterior_home_diff → run-gap null, so the
@@ -780,10 +783,10 @@ console.log("\n━━━ MLB total clean strong Best Angle promotion ━━━")
   const ou = recs.find((r) => r.market === "total")!;
   const promo = (ou.snapshot_json as any)?.total_clean_confirmed_best_angle_promotion;
   const ba = (ou.snapshot_json as any)?.best_angle_resolution;
-  check("clean strong total promotes to Best Angle", ou.best_angle === true && ou.play_grade === "best_angle");
+  check("probability champion preserves the existing clean strong Best Angle action", ou.best_angle === true && ou.play_grade === "best_angle");
   check("clean strong total promotion audit is stamped", promo?.rule_id === "total_clean_strong_best_angle_v4_2026_07_11");
-  check("clean strong total final BA resolution reflects promotion", ba?.clean_confirmed_promotion === true && ba?.final_best_angle === true);
-  check("clean strong total decision pipeline is actionable", (ou.snapshot_json as any)?.decision_pipeline?.board_action === "bet");
+  check("existing final Best Angle resolution remains authoritative", ba?.clean_confirmed_promotion === true && ba?.final_best_angle === true);
+  check("probability champion preserves the existing action pipeline", (ou.snapshot_json as any)?.decision_pipeline?.board_action === "bet" && (ou.snapshot_json as any)?.decision_pipeline?.champion_probability_rule_id === MLB_TOTAL_PRICE_CALIBRATION_RULE_ID);
 }
 {
   const conflictTotalPred = {
@@ -1133,9 +1136,12 @@ console.log("\n━━━ MLB market-divergence Lean integration ━━━");
     }))]]),
   });
   const playbookOnlyMl = playbookOnlyResistance.find((record) => record.market === "moneyline")!;
+  const playbookOnlyDecision = (playbookOnlyMl.snapshot_json as any)?.decision_pipeline;
   check(
     "Playbook-only splits cannot activate SharpAPI-validated Moneyline promotion or stand-down",
-    playbookOnlyMl.play_grade !== "lean" && playbookOnlyMl.no_bet !== true,
+    playbookOnlyMl.no_bet !== true
+      && playbookOnlyDecision?.action_rule_id !== ML_MARKET_DIVERGENCE_LEAN_RULE_ID
+      && playbookOnlyDecision?.champion_correction_reasons?.includes?.(ML_SIGNED_MARKET_RESISTANCE_RULE_ID) !== true,
   );
 }
 
@@ -1280,7 +1286,7 @@ console.log("\n━━━ MLB generic Lean positive-EV coherence ━━━");
   );
 }
 
-console.log("\n━━━ MLB market-aware final side correction ━━━");
+console.log("\n━━━ MLB model-coherent market-context side policy ━━━");
 {
   const distanceCapMlPred = {
     ...basePrediction,
@@ -1331,13 +1337,16 @@ console.log("\n━━━ MLB market-aware final side correction ━━━");
   });
   const ml = recs.find((r) => r.market === "moneyline")!;
   const correction = (ml.snapshot_json as any)?.market_aware_side_correction;
-  check("ML market-aware correction flips to priced opposite side", ml.pick === "away" && ml.odds_american === 125 && ml.confidence === 56);
-  check("ML market-aware correction is capped below Best Angle", ml.best_angle === false && ml.play_grade === "market_aligned" && ml.no_bet === false);
+  const policy = (ml.snapshot_json as any)?.ml_market_context_side_policy;
+  check("ML market context retains the independently modeled side and its price", ml.pick === "home" && ml.odds_american === -145 && ml.confidence === 56);
+  check("ML regularization context stands the original side down instead of manufacturing an opposite action", ml.best_angle === false && ml.play_grade === null && ml.no_bet === true);
   check(
-    "ML market-aware correction audit is stamped",
-    correction?.rule_id === MLB_MARKET_AWARE_SIDE_CORRECTION_RULE_ID &&
-      correction?.market === "moneyline" &&
-      correction?.reasons?.includes("regularization_distance_cap_applied"),
+    "retired ML opposite-side correction is absent and the grade-only policy is stamped",
+    correction == null &&
+      policy?.rule_id === MLB_MONEYLINE_MARKET_CONTEXT_SIDE_POLICY_RULE_ID &&
+      policy?.effective_action === "stand_down_original" &&
+      policy?.opposite_side_rejected === true &&
+      policy?.reasons?.includes("regularization_distance_cap_requires_independent_confirmation"),
   );
 }
 {
@@ -1390,8 +1399,48 @@ console.log("\n━━━ MLB market-aware final side correction ━━━");
   });
   const ml = recs.find((r) => r.market === "moneyline")!;
   const championCorrection = (ml.snapshot_json as any)?.champion_candidate_correction;
-  check("ML market-aware correction clears stale projection-conflict no-bet but remains below Best Angle", ml.pick === "away" && ml.best_angle === false && ml.play_grade === "market_aligned" && ml.no_bet === false);
-  check("ML market-aware correction does not keep original-side champion stand-down", championCorrection === null);
+  check("ML market context never changes a coherent original projection into the opposite side", ml.pick === "home" && ml.best_angle === false && ml.play_grade === null && ml.no_bet === true);
+  check(
+    "ML market-context stand-down is explicit in the champion audit",
+    championCorrection?.action === "stand_down" &&
+      championCorrection?.reasons?.includes("regularization_distance_cap_requires_independent_confirmation"),
+  );
+}
+
+{
+  const retiredCorrection = resolveMlbMarketAwareSideCorrection({
+    market: "moneyline",
+    side: "home",
+    modelProb: 0.64,
+    marketProb: 0.65,
+    originalConfidence: 64,
+    lineDirection: "against_pick",
+    publicSplitSupport: false,
+    publicSplitConflict: true,
+    distanceCapApplied: false,
+    homeOdds: -185,
+    awayOdds: 160,
+    overOdds: null,
+    underOdds: null,
+  });
+  const policy = resolveMlbMoneylineMarketContextSidePolicy({
+    side: "home",
+    lineDirection: "against_pick",
+    publicSplitConflict: true,
+    distanceCapApplied: false,
+  });
+  check(
+    "movement and splits cannot manufacture an ML opposite-side probability",
+    retiredCorrection.applied === false &&
+      retiredCorrection.reason === "moneyline_market_context_cannot_select_opposite_side",
+  );
+  check(
+    "movement and split conflict still diagnose and stand down the modeled side",
+    policy.action === "stand_down_original" &&
+      policy.oppositeCandidateSide === "away" &&
+      policy.reasons.includes("line_movement_against_pick") &&
+      policy.reasons.includes("opposing_public_split_conflict"),
+  );
 }
 {
   const splitSignalTotalPred = {
@@ -1459,7 +1508,7 @@ console.log("\n━━━ MLB market-aware final side correction ━━━");
   const rejection = (ou.snapshot_json as any)?.totals_correction_rejection;
   const validatedLeanStanddown = (ou.snapshot_json as any)?.total_validated_lean_forward_standdown;
   check("Supporting total split leaves original side official", ou.pick === "over" && ou.odds_american === -112);
-  check("Supporting total split preserves original edge", typeof ou.edge === "number" && ou.edge === 6);
+  check("Supporting total split publishes the price-calibrated edge", typeof ou.edge === "number" && (ou.snapshot_json as any)?.decision_pipeline?.champion_probability_rule_id === MLB_TOTAL_PRICE_CALIBRATION_RULE_ID);
   check("Forward-failed generic Total Lean is capped", ou.best_angle === false && ou.play_grade !== "lean");
   check(
     "Supporting total split does not create a rejected opposite-side correction",
@@ -1611,7 +1660,7 @@ console.log("\n━━━ MLB market-aware final side correction ━━━");
   const decision = (ou.snapshot_json as any)?.decision_pipeline;
   check("Rejected total correction restores a strong original side as Lean", ou.pick === "under" && ou.play_grade === "lean" && ou.best_angle === false && ou.no_bet === false);
   check("Rejected opposite total side remains hidden", rejection?.rejected_candidate_side === "over" && ou.pick !== rejection?.rejected_candidate_side);
-  check("Restored original total uses the calibrated-model Lean path", decision?.board_action === "bet" && decision?.action_rule_id === TOTAL_CALIBRATED_MODEL_LEAN_PATH_ID && decision?.original_side_restoration_rule_id === TOTAL_REJECTED_CORRECTION_ORIGINAL_SIDE_RULE_ID);
+  check("Restored original total keeps the calibrated-model Lean path", decision?.board_action === "bet" && decision?.action_rule_id === TOTAL_CALIBRATED_MODEL_LEAN_PATH_ID && decision?.original_side_restoration_rule_id === TOTAL_REJECTED_CORRECTION_ORIGINAL_SIDE_RULE_ID);
 }
 
 // ── launch_day flag ─────────────────────────────────────────────────
@@ -2380,10 +2429,10 @@ console.log("\n━━━ Totals divergence stand-down (integrity patch) ━━�
   });
   const resistanceTotal = resistanceRecords.find((record) => record.market === "total");
   const resistanceAudit = (resistanceTotal?.snapshot_json as any)?.total_under_low_ticket_resistance_lean;
-  check("low-ticket Under resistance promotes a guarded Watchlist to Lean", resistanceTotal?.play_grade === "lean" && resistanceTotal?.best_angle === false);
+  check("low-ticket Under resistance remains a guarded Lean", resistanceTotal?.play_grade === "lean" && resistanceTotal?.best_angle === false);
   check("low-ticket Under resistance records the additive rule", resistanceAudit?.rule_id === TOTAL_UNDER_LOW_TICKET_RESISTANCE_LEAN_RULE_ID && resistanceAudit?.money_minus_bets_pct === -10);
   check("low-ticket Under resistance records the validated SharpAPI provider", resistanceAudit?.split_provider === "sharpapi");
-  check("low-ticket Under resistance is actionable in the decision pipeline", (resistanceTotal?.snapshot_json as any)?.decision_pipeline?.action_rule_id === TOTAL_UNDER_LOW_TICKET_RESISTANCE_LEAN_RULE_ID && (resistanceTotal?.snapshot_json as any)?.decision_pipeline?.board_action === "bet");
+  check("low-ticket Under resistance remains actionable in the decision pipeline", (resistanceTotal?.snapshot_json as any)?.decision_pipeline?.action_rule_id === TOTAL_UNDER_LOW_TICKET_RESISTANCE_LEAN_RULE_ID && (resistanceTotal?.snapshot_json as any)?.decision_pipeline?.board_action === "bet");
 
   const marketAnchoredPred = {
     ...resistancePred,
@@ -2411,7 +2460,7 @@ console.log("\n━━━ Totals divergence stand-down (integrity patch) ━━�
   });
   const marketAnchoredTotal = marketAnchoredRecords.find((record) => record.market === "total");
   check(
-    "validated low-ticket Under market evidence is not blocked by an arbitrary model-probability or edge floor",
+    "validated low-ticket Under remains market anchored",
     marketAnchoredTotal?.play_grade === "lean" &&
       (marketAnchoredTotal?.snapshot_json as any)?.total_under_low_ticket_resistance_lean?.rule_id === TOTAL_UNDER_LOW_TICKET_RESISTANCE_LEAN_RULE_ID,
   );
@@ -2477,7 +2526,7 @@ console.log("\n━━━ Totals divergence stand-down (integrity patch) ━━�
   });
   const supportTotal = supportRecords.find((record) => record.market === "total");
   check(
-    "10-point selected-side SharpAPI money support promotes a guarded total to Lean",
+    "10-point selected-side SharpAPI support remains a guarded Lean",
     supportTotal?.play_grade === "lean" &&
       (supportTotal?.snapshot_json as any)?.decision_pipeline?.action_rule_id === TOTAL_SHARPAPI_SUPPORT_LEAN_RULE_ID,
   );
