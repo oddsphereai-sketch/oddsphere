@@ -8,6 +8,7 @@ import { eplTeamLogo } from "./eplTeamAssets";
 import { deriveEplMatchResultDecision, deriveEplPreviewGrade, EPL_PREVIEW_GRADE_RELEASE, type EplPreviewGrade } from "./eplPreviewGrade";
 import { calibratedEplGoalProjection, calibratedEplTotalOverProbability, impliedEplGoalsMarketDistribution } from "./eplDerivedMarketForecast";
 import { bivariatePoissonScoreDistribution } from "@/lib/services/soccer/dixonColes";
+import { deriveSoccerMarketProbabilities } from "@/lib/services/soccer/soccerMarketProbabilities";
 
 const BOOK_PRIORITY = ["pinnacle", "circa", "draftkings", "fanduel", "betmgm", "caesars"];
 const MAX_FIXTURE_RECOVERY_LOADS = 4;
@@ -576,6 +577,10 @@ function gameDto(match: EplShadowSlateMatch, sharp: EplSharpFixtureMarket, captu
   const publishedGoals = calibratedEplGoalProjection(match.prediction.lambdaHome, match.prediction.lambdaAway, goalsMarketDistribution);
   const publishedTotal = publishedGoals.home + publishedGoals.away;
   const publishedScoreSummary = projectedScoreSummary(publishedGoals.home, publishedGoals.away);
+  const goalOutlookProbabilities = deriveSoccerMarketProbabilities({
+    joint: bivariatePoissonScoreDistribution(publishedGoals.home, publishedGoals.away, -0.1),
+    totalLine: 2.5,
+  });
   const impliedBtts = goalsMarketDistribution?.bttsYes ?? null;
   const p = {
     ...clubP,
@@ -886,6 +891,15 @@ function gameDto(match: EplShadowSlateMatch, sharp: EplSharpFixtureMarket, captu
     projected: { away: publishedGoals.away, home: publishedGoals.home },
     soccerProjection: {
       expectedGoals: { away: publishedGoals.away, home: publishedGoals.home },
+      goalOutlookProbabilities: {
+        home: goalOutlookProbabilities.match_result.home,
+        draw: goalOutlookProbabilities.match_result.draw,
+        away: goalOutlookProbabilities.match_result.away,
+        over25: goalOutlookProbabilities.total.over,
+        under25: goalOutlookProbabilities.total.under,
+        bttsYes: goalOutlookProbabilities.btts.yes,
+        bttsNo: goalOutlookProbabilities.btts.no,
+      },
       likelyScore: { away: publishedScoreSummary.likely.away, home: publishedScoreSummary.likely.home },
       likelyScoreProbability: publishedScoreSummary.likely.probability,
       representativeScore: representativeScore
