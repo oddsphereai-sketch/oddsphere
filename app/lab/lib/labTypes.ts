@@ -596,6 +596,14 @@ export type MarketEdgeDto = {
       /** Same-book observations for this exact outcome. This lets soccer
        * retain home/draw/away (and both binary sides), not only the pick. */
       odds_trail?: OddsTrailStopDto[];
+      /** Earliest OddSphere-captured quote across sportsbooks for this exact
+       * outcome. It is market context only and must not be interpreted as a
+       * same-book move when its sportsbook differs from the current trail. */
+      earliest_market_quote?: {
+        american: number;
+        sportsbook: string | null;
+        observed_at: string | null;
+      } | null;
     }>;
   } | null;
 

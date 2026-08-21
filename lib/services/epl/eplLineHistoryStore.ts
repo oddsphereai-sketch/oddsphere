@@ -5,6 +5,7 @@ import { canonicalEplLineHistoryTimestamp, compactEplStoredPriceHistory, type Ep
 
 type MarketName = EplStoredPriceObservation["market"];
 type CurrentObservation = EplStoredPriceObservation & { gameId: number };
+const HISTORY_PAGE_SIZE = 1000;
 
 function markets(game: DailyEdgeResponse["games"][number]): Array<{ name: MarketName; value: MarketEdgeDto }> {
   return [
@@ -46,18 +47,24 @@ export async function readEplStoredPriceHistory(providerIds: number[]): Promise<
   const { providerByGameId } = await gameMaps(providerIds);
   const gameIds = [...providerByGameId.keys()];
   if (gameIds.length === 0) return [];
-  const { data, error } = await supabase
-    .from("line_history")
-    .select("game_id,market_type,sportsbook,side,line_value,odds_american,is_opener,recorded_at")
-    .in("game_id", gameIds)
-    .in("market_type", ["match_result", "double_chance", "total", "btts"])
-    .order("recorded_at", { ascending: false })
-    // The writer retains every complete sportsbook board without additional
-    // provider calls. Keep enough room for roughly ten books across the 100
-    // displayed outcomes while still bounding the weekly read.
-    .limit(12000);
-  if (error) throw new Error(`read EPL line history: ${error.message}`);
-  const parsed = ((data ?? []) as Array<Record<string, unknown>>).flatMap((row) => {
+  // Match the established WNBA Daily Edge contract: immutable history is
+  // loaded oldest-to-newest in bounded pages. A single newest-N cap can evict
+  // a real opening capture as the week accumulates observations.
+  const storedRows: Array<Record<string, unknown>> = [];
+  for (let from = 0; ; from += HISTORY_PAGE_SIZE) {
+    const { data, error } = await supabase
+      .from("line_history")
+      .select("game_id,market_type,sportsbook,side,line_value,odds_american,is_opener,recorded_at")
+      .in("game_id", gameIds)
+      .in("market_type", ["match_result", "double_chance", "total", "btts"])
+      .order("recorded_at", { ascending: true })
+      .range(from, from + HISTORY_PAGE_SIZE - 1);
+    if (error) throw new Error(`read EPL line history: ${error.message}`);
+    const page = (data ?? []) as Array<Record<string, unknown>>;
+    storedRows.push(...page);
+    if (page.length < HISTORY_PAGE_SIZE) break;
+  }
+  const parsed = storedRows.flatMap((row) => {
     const providerId = providerByGameId.get(Number(row.game_id));
     const american = Number(row.odds_american);
     if (providerId === undefined || !Number.isFinite(american) || typeof row.side !== "string") return [];
