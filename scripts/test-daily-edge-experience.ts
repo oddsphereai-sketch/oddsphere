@@ -474,11 +474,10 @@ check(
     candidateSource.includes(".filter((group) => group.length >= 2 && group.some"),
 );
 check(
-  "soccer preserves an earlier cross-book capture without calling it same-book movement",
-  candidateSource.includes("earliest_market_quote") &&
-    candidateSource.includes("Earlier market capture") &&
-    candidateSource.includes("Different book; not counted as") &&
-    candidateSource.includes("earliestMarketQuote.american !== value.open"),
+  "soccer movement rows stay on one sportsbook without a secondary cross-book capture",
+  candidateSource.includes('movement.coherentTrail ? "same-book trail"') &&
+    !candidateSource.includes("Earlier market capture") &&
+    !candidateSource.includes("Different book; not counted as"),
 );
 check(
   "total and spread summaries preserve both point lines instead of comparing unlike prices at one line",
