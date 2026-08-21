@@ -15,6 +15,7 @@ const MAX_FIXTURE_RECOVERY_LOADS = 4;
 type Selection = "home" | "draw" | "away" | "over" | "under" | "yes" | "no" | "home_or_draw" | "away_or_draw" | "home_or_away";
 type MarketRead = { probabilities: Partial<Record<Selection, number>>; prices: Partial<Record<Selection, number>>; sportsbook: string | null; observedAt: string | null; line: number | null; provider: "sharpapi" | "balldontlie" };
 const priceHistory = new Map<string, NonNullable<MarketEdgeDto["oddsTrail"]>>();
+const earliestMarketQuotes = new Map<string, NonNullable<NonNullable<MarketEdgeDto["soccerPriceBoard"]>["rows"][number]["earliest_market_quote"]>>();
 const previewCache = new Map<string, { expiresAt: number; response: DailyEdgeResponse; allBookPrices: EplStoredPriceObservation[] }>();
 
 type OpeningPrice = { price: number; sportsbook: string | null; observedAt: string | null };
@@ -92,9 +93,27 @@ function scopedPriceHistoryKey(key: string, sportsbook: string | null): string {
   return `${key}:book:${bookKey(sportsbook) || "unknown"}`;
 }
 
+function rememberEarliestMarketQuote(key: string, stop: NonNullable<MarketEdgeDto["oddsTrail"]>[number]): void {
+  if (stop.source === "provider_opening" || !Number.isFinite(stop.american) || !stop.observedAt) return;
+  const observed = Date.parse(stop.observedAt);
+  if (!Number.isFinite(observed)) return;
+  const current = earliestMarketQuotes.get(key);
+  if (!current || !current.observed_at || observed < Date.parse(current.observed_at)) {
+    earliestMarketQuotes.set(key, { american: stop.american, sportsbook: stop.sportsbook, observed_at: stop.observedAt });
+  }
+}
+
+/** Earliest verified OddSphere capture across books for one exact outcome.
+ * Directional movement remains scoped to a single sportsbook. */
+export function earliestEplMarketQuote(key: string) {
+  const quote = earliestMarketQuotes.get(key);
+  return quote ? { ...quote } : null;
+}
+
 function mergePriceTrailByBook(key: string, incoming: NonNullable<MarketEdgeDto["oddsTrail"]>): void {
   const grouped = new Map<string, NonNullable<MarketEdgeDto["oddsTrail"]>>();
   for (const stop of incoming) {
+    rememberEarliestMarketQuote(key, stop);
     const scoped = scopedPriceHistoryKey(key, stop.sportsbook);
     grouped.set(scoped, [...(grouped.get(scoped) ?? []), stop]);
   }
@@ -192,6 +211,7 @@ function openingMoneylinePrice(rows: BdlEplOdds[], side: "home" | "draw" | "away
 
 export function trackedPrice(key: string, price: number | null, sportsbook: string | null, providerObservedAt: string | null, line: number | null, opening: OpeningPrice | null = null, capturedAt = new Date().toISOString()): MarketEdgeDto["oddsTrail"] {
   if (price === null) return [];
+  rememberEarliestMarketQuote(key, { label: "current", american: price, line, sportsbook, source: "current_line", observedAt: capturedAt });
   const scopedKey = scopedPriceHistoryKey(key, sportsbook);
   const trail = priceHistory.get(scopedKey) ?? [];
   // This is the time OddSphere actually captured the economic quote. Provider
@@ -639,6 +659,7 @@ function gameDto(match: EplShadowSlateMatch, sharp: EplSharpFixtureMarket, captu
           edge_pp: (p[side] - mr.probabilities[side]!) * 100,
           selected: side === resultSide,
           odds_trail: trackedPrice(`${match.id}:match_result:${side}`, mr.prices[side]!, mr.sportsbook, mr.observedAt, null, openingMoneylinePrice(match.openingOdds, side, mr.sportsbook), capturedAt),
+          earliest_market_quote: earliestEplMarketQuote(`${match.id}:match_result:${side}`),
         })),
       } : null,
       soccerGradeContext: { calibration_label: mrGrade.verdict.key === "best_angle" ? "Validated value path: ≥5 pp, price > -300" : mrGrade.verdict.key === "lean" ? "Validated winner-confidence path: ≥50%, market agreement, price > -300" : "EPL production-candidate hierarchy", model_pct: p[resultSide] * 100, market_pct: mr?.probabilities[resultSide] === undefined ? null : mr.probabilities[resultSide]! * 100, edge_pp: mrEdge, grade_reason: mrGrade.reasons.join(" "), miscalibration_flag: mrGrade.candidateTier === "caution" },
@@ -702,6 +723,7 @@ function gameDto(match: EplShadowSlateMatch, sharp: EplSharpFixtureMarket, captu
           edge_pp: (dcProbabilities[side] - dc.probabilities[side]!) * 100,
           selected: side === dcSide,
           odds_trail: trackedPrice(`${match.id}:double_chance:${side}`, dc.prices[side]!, dc.sportsbook, dc.observedAt, null, null, capturedAt),
+          earliest_market_quote: earliestEplMarketQuote(`${match.id}:double_chance:${side}`),
         })),
       } : null,
       soccerGradeContext: { calibration_label: "Tracked coverage market; EPL price thresholds not validated", model_pct: dcProbabilities[dcSide] * 100, market_pct: dc?.probabilities[dcSide] === undefined ? null : dc.probabilities[dcSide]! * 100, edge_pp: dcEdge, grade_reason: dcGrade.reasons.join(" "), miscalibration_flag: dcGrade.candidateTier === "research_only" },
@@ -761,6 +783,7 @@ function gameDto(match: EplShadowSlateMatch, sharp: EplSharpFixtureMarket, captu
           edge_pp: ((side === "over" ? p.over25 : p.under25) - total.probabilities[side]!) * 100,
           selected: side === totalSide,
           odds_trail: trackedPrice(`${match.id}:total:${side}:${total.line}`, total.prices[side]!, total.sportsbook, total.observedAt, total.line, null, capturedAt),
+          earliest_market_quote: earliestEplMarketQuote(`${match.id}:total:${side}:${total.line}`),
         })),
       } : null,
       soccerGradeContext: { calibration_label: "Validated 55% winner-confidence Lean floor", model_pct: totalModelProb * 100, market_pct: total?.probabilities[totalSide] === undefined ? null : total.probabilities[totalSide]! * 100, edge_pp: totalEdge, grade_reason: totalGrade.reasons.join(" "), miscalibration_flag: totalGrade.candidateTier === "research_only" },
@@ -813,6 +836,7 @@ function gameDto(match: EplShadowSlateMatch, sharp: EplSharpFixtureMarket, captu
           edge_pp: ((side === "yes" ? p.bttsYes : p.bttsNo) - btts.probabilities[side]!) * 100,
           selected: side === bttsSide,
           odds_trail: trackedPrice(`${match.id}:btts:${side}`, btts.prices[side]!, btts.sportsbook, btts.observedAt, null, null, capturedAt),
+          earliest_market_quote: earliestEplMarketQuote(`${match.id}:btts:${side}`),
         })),
       } : null,
       soccerGradeContext: { calibration_label: "Validated 55% winner-confidence Lean floor", model_pct: bttsModelProb * 100, market_pct: btts?.probabilities[bttsSide] === undefined ? null : btts.probabilities[bttsSide]! * 100, edge_pp: bttsEdge, grade_reason: bttsGrade.reasons.join(" "), miscalibration_flag: bttsGrade.candidateTier === "research_only" },

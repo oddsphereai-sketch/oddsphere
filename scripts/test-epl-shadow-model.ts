@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { EPL_SHADOW_MODEL_RELEASE, fitEplShadowModel, predictEplMatch, type EplTrainingMatch } from "../lib/services/epl/eplShadowModel";
-import { bdlMoneylineRead, canonicalEplLineHistoryTimestamp, compactEplStoredPriceHistory, forecastAnchoredDoubleChanceSide, hydrateEplStoredPriceHistory, trackedPrice } from "../lib/services/epl/buildEplDailyEdgePreview";
+import { bdlMoneylineRead, canonicalEplLineHistoryTimestamp, compactEplStoredPriceHistory, earliestEplMarketQuote, forecastAnchoredDoubleChanceSide, hydrateEplStoredPriceHistory, trackedPrice } from "../lib/services/epl/buildEplDailyEdgePreview";
 import { deriveEplMatchResultDecision, deriveEplPreviewGrade, EPL_PREVIEW_GRADE_RELEASE } from "../lib/services/epl/eplPreviewGrade";
 import { calibratedEplGoalProjection, calibratedEplTotalOverProbability, impliedEplBttsYesProbability, impliedEplGoalsMarketDistribution } from "../lib/services/epl/eplDerivedMarketForecast";
 import { eplTeamsMatch, normalizeEplSplits } from "../lib/providers/real_api/SharpApiEplMarketProvider";
@@ -101,6 +101,16 @@ const fanduelRestored = trackedPrice("888:match_result:home", -650, "fanduel", n
 assert.deepEqual(fanduelOnly.map((stop) => stop.american), [-650]);
 assert.deepEqual(circaOnly.map((stop) => stop.american), [-600], "a sportsbook change starts an independent economic trail");
 assert.deepEqual(fanduelRestored.map((stop) => stop.american), [-650], "returning to a sportsbook restores only that book's trail");
+hydrateEplStoredPriceHistory([
+  { providerId: 889, market: "match_result", side: "home", line: null, american: -700, sportsbook: "fanduel", recordedAt: "2026-08-19T13:22:18Z", isOpener: false },
+  { providerId: 889, market: "match_result", side: "home", line: null, american: -600, sportsbook: "circa", recordedAt: "2026-08-19T21:07:48Z", isOpener: false },
+  { providerId: 889, market: "match_result", side: "home", line: null, american: -555, sportsbook: "circa", recordedAt: "2026-08-21T08:07:37Z", isOpener: false },
+]);
+assert.deepEqual(
+  earliestEplMarketQuote("889:match_result:home"),
+  { american: -700, sportsbook: "fanduel", observed_at: "2026-08-19T13:22:18Z" },
+  "the earliest cross-book capture remains visible without merging it into the current book's movement trail",
+);
 
 const promoted = predictEplMatch(fit, 99, 1);
 assert.equal(promoted.homeStrengthSource, "promoted_proxy");
@@ -214,6 +224,7 @@ assert.equal(bdlMoneylineRead([{ id: 2, match_id: 10, vendor: "DraftKings", mone
 
 const previewPage = readFileSync("app/dev/premier-league-preview/page.tsx", "utf8");
 const previewAdapter = readFileSync("lib/services/epl/buildEplDailyEdgePreview.ts", "utf8");
+const eplLineHistoryStore = readFileSync("lib/services/epl/eplLineHistoryStore.ts", "utf8");
 const previewReader = readFileSync("app/dev/experience-preview/ActualDailyEdgePreview.tsx", "utf8");
 const slateBuilder = readFileSync("lib/services/epl/buildEplShadowSlate.ts", "utf8");
 const sharpProvider = readFileSync("lib/providers/real_api/SharpApiEplMarketProvider.ts", "utf8");
@@ -250,6 +261,10 @@ for (const nonstandardGrade of ["Research Only", "Market-Aligned", "Price Cautio
 }
 assert.doesNotMatch(previewAdapter, /epl_splits_pending/);
 assert.doesNotMatch(previewAdapter, /supabase|prediction_records|\.upsert\(|\.insert\(/i);
+assert.match(eplLineHistoryStore, /HISTORY_PAGE_SIZE/);
+assert.match(eplLineHistoryStore, /\.order\("recorded_at", \{ ascending: true \}\)/);
+assert.match(eplLineHistoryStore, /\.range\(from, from \+ HISTORY_PAGE_SIZE - 1\)/);
+assert.doesNotMatch(eplLineHistoryStore, /\.limit\(12000\)/, "EPL history must not discard an opener behind a newest-N cap");
 assert.match(sharpProvider, /query: \{ sport: "soccer", league: SHARP_EPL_LEAGUE, limit: 200 \}/);
 assert.match(previewAdapter, /bdlMoneylineRead\(match\.currentMoneylineOdds\)/);
 assert.match(sharpProvider, /deltaMinutes > 90/);
