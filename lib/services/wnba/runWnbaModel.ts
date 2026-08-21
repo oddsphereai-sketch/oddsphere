@@ -18,6 +18,12 @@ import {
   EXPECTED_WNBA_DISTRIBUTION_VERSION,
   EXPECTED_WNBA_MODEL_VERSION,
 } from "../../automodel/wnbaChampionRuntime";
+import {
+  buildWnbaDecisionTuple,
+  WNBA_DECISION_TUPLE_CONTRACT_VERSION,
+  type WnbaDecisionPriceRow,
+  type WnbaDecisionTuple,
+} from "./wnbaDecisionTuple";
 
 // DB market_type → the SharpAPI-style key computeWnbaPrediction expects.
 const MKT_TO_MODEL: Record<string, string> = { moneyline: "moneyline", spread: "point_spread", total: "total_points" };
@@ -71,7 +77,7 @@ export async function runWnbaModel(opts: {
 
   const gameIds = games.map((g) => g.id as number);
   const { data: lineRows } = gameIds.length
-    ? await supabase.from("lines").select("game_id, market_type, side, sportsbook, line_value, odds_american").in("game_id", gameIds).is("player_id", null)
+    ? await supabase.from("lines").select("game_id, market_type, side, sportsbook, line_value, odds_american, fetched_at").in("game_id", gameIds).is("player_id", null)
     : { data: [] as Record<string, unknown>[] };
   const { data: historyRows } = gameIds.length
     ? await supabase
@@ -166,7 +172,9 @@ export async function runWnbaModel(opts: {
       book: l.sportsbook as string, sharp: SHARP_BOOKS.has(l.sportsbook as string),
       mkt: MKT_TO_MODEL[l.market_type as string] ?? (l.market_type as string), selType: l.side as string,
       odds: l.odds_american as number | null, line: l.line_value as number | null,
-      date: g.slate_date as string, h: homeBdl, a: awayBdl,
+      date: g.slate_date as string,
+      observedAt: (l.fetched_at ?? l.recorded_at ?? null) as string | null,
+      h: homeBdl, a: awayBdl,
     }));
     const p = computeWnbaPrediction(M, { id: g.id as number, date: g.slate_date as string, h: homeBdl, a: awayBdl }, oddRows, publicByGame.get(g.id as number) ?? {});
     result.gamesPredicted++;
@@ -197,6 +205,80 @@ export async function runWnbaModel(opts: {
     }
     if (lockedSet.has(g.id as number)) { result.skippedLocked++; continue; }
 
+    const tupleRows = oddRows.flatMap<WnbaDecisionPriceRow>((row) => {
+      const market = row.mkt === "moneyline"
+        ? "moneyline"
+        : row.mkt === "total_points"
+          ? "total"
+          : row.mkt === "point_spread"
+            ? "spread"
+            : null;
+      const side = row.selType === "home" || row.selType === "away" || row.selType === "over" || row.selType === "under"
+        ? row.selType
+        : null;
+      if (market === null || side === null || row.odds === null) return [];
+      return [{
+        market,
+        side,
+        sportsbook: row.book,
+        line: row.line,
+        priceAmerican: row.odds,
+        observedAt: row.observedAt ?? null,
+      }];
+    });
+    const probabilityComponents = p.model.components as typeof p.model.components & {
+      moneyline_picked_probability?: number | null;
+      moneyline_market_picked_probability?: number | null;
+      total_picked_probability?: number | null;
+      spread_picked_probability?: number | null;
+    };
+    const totalSide = p.total.side?.startsWith("Over") ? "over" : p.total.side?.startsWith("Under") ? "under" : null;
+    const spreadSide = p.spread.side?.startsWith(p.home_abbr ?? "") ? "home" : p.spread.side?.startsWith(p.away_abbr ?? "") ? "away" : null;
+    const spreadLine = spreadSide === "home"
+      ? p.spread.line
+      : spreadSide === "away" && p.spread.line !== null
+        ? -p.spread.line
+        : null;
+    const decisionTuples: Partial<Record<"moneyline" | "total" | "spread", WnbaDecisionTuple>> = {};
+    const moneylineTuple = buildWnbaDecisionTuple({
+      rows: tupleRows,
+      market: "moneyline",
+      side: mlSide,
+      line: null,
+      modelProbability: probabilityComponents.moneyline_picked_probability ?? p.moneyline.confidence / 100,
+      marketFairProbability: probabilityComponents.moneyline_market_picked_probability ?? null,
+      outcomeConfidence: p.moneyline.confidence / 100,
+      betGrade: p.moneyline.grade,
+      decisionAt: computedAt,
+    });
+    if (moneylineTuple) decisionTuples.moneyline = moneylineTuple;
+    if (totalSide !== null && p.total.line !== null && p.total.confidence !== null && p.total.grade !== null) {
+      const totalTuple = buildWnbaDecisionTuple({
+        rows: tupleRows,
+        market: "total",
+        side: totalSide,
+        line: p.total.line,
+        modelProbability: probabilityComponents.total_picked_probability ?? p.total.confidence / 100,
+        outcomeConfidence: p.total.confidence / 100,
+        betGrade: p.total.grade,
+        decisionAt: computedAt,
+      });
+      if (totalTuple) decisionTuples.total = totalTuple;
+    }
+    if (spreadSide !== null && spreadLine !== null && p.spread.confidence !== null && p.spread.grade !== null) {
+      const spreadTuple = buildWnbaDecisionTuple({
+        rows: tupleRows,
+        market: "spread",
+        side: spreadSide,
+        line: spreadLine,
+        modelProbability: probabilityComponents.spread_picked_probability ?? p.spread.confidence / 100,
+        outcomeConfidence: p.spread.confidence / 100,
+        betGrade: p.spread.grade,
+        decisionAt: computedAt,
+      });
+      if (spreadTuple) decisionTuples.spread = spreadTuple;
+    }
+
     payloads.push({
       game_id: g.id, prediction_source: "auto_v1_wnba", source_type: "real_api", is_override: false,
       model_version: EXPECTED_WNBA_MODEL_VERSION, computed_at: computedAt,
@@ -216,6 +298,8 @@ export async function runWnbaModel(opts: {
         cold_start: p.cold_start, data_quality: p.data_quality,
         wnba_core_model_calibration: p.wnba_core_model_calibration,
         public_market_context: p.public_market_context,
+        decision_tuple_contract_version: WNBA_DECISION_TUPLE_CONTRACT_VERSION,
+        decision_tuples: decisionTuples,
         moneyline: { side: p.moneyline.side, confidence: p.moneyline.confidence, grade: p.moneyline.grade, price: p.moneyline.price },
         total: { side: p.total.side, line: p.total.line, confidence: p.total.confidence, grade: p.total.grade },
         spread: { side: p.spread.side, line: p.spread.line, confidence: p.spread.confidence, grade: p.spread.grade },

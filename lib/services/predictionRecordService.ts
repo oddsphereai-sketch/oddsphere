@@ -54,6 +54,7 @@ import {
   MLB_PUBLIC_CALIBRATION_VERSION,
 } from "../automodel/mlbModelLayerVersions";
 import { didFinalSideChange } from "./finalSideDecision";
+import { selectBestCoherentPlayablePrice } from "./dailyEdge/bestPlayablePrice";
 import {
   americanBreakEvenProbability,
   calibrateMlbTotalPickedProbability,
@@ -935,6 +936,8 @@ type GameOddsSnapshot = {
   /** Forward Fix A — per-(market, side) source metadata for snapshot_json. */
   oddsSourceMl: { home: OddsSourceDetail; away: OddsSourceDetail };
   oddsSourceOu: { over: OddsSourceDetail; under: OddsSourceDetail };
+  /** Fresh, corroborated price-shop candidates used only for unlocked ML evaluation. */
+  bestPlayableMl?: { home: OddsSourceDetail; away: OddsSourceDetail };
 };
 
 type LineRowForOdds = {
@@ -1214,6 +1217,24 @@ export function buildGameOddsSnapshot(
   const freshLines = lines.filter((l) => isFreshLockPriceSource(l.fetched_at, freshnessReferenceMs));
   const mlHome = pickOddsWithFallback(freshLines, history, gameId, "moneyline", "home", freshnessReferenceMs);
   const mlAway = pickOddsWithFallback(freshLines, history, gameId, "moneyline", "away", freshnessReferenceMs);
+  const bestPlayableMl = (side: "home" | "away"): OddsSourceDetail => {
+    const row = selectBestCoherentPlayablePrice({
+      rows: freshLines.filter((candidate) => candidate.market_type === "moneyline"),
+      preferredSide: side,
+      expectedLine: null,
+      nowMs: freshnessReferenceMs,
+      maxAgeMinutes: 60,
+    });
+    return row === null
+      ? { source: "unavailable", book: null, odds: null, line: null, observedAt: null }
+      : {
+          source: "lines",
+          book: row.sportsbook,
+          odds: row.odds_american,
+          line: null,
+          observedAt: row.fetched_at ?? null,
+        };
+  };
   // Constrain totals to the CONSENSUS main line so over + under come from the SAME
   // line (not a divergent/alt-line single book — e.g. a lone Pinnacle 9.5/10). The
   // bet line + per-side prices in the locked snapshot then stay coherent.
@@ -1230,6 +1251,10 @@ export function buildGameOddsSnapshot(
     ouUnderOdds: ouUnder.odds,
     oddsSourceMl: { home: mlHome, away: mlAway },
     oddsSourceOu: { over: ouOver, under: ouUnder },
+    bestPlayableMl: {
+      home: bestPlayableMl("home"),
+      away: bestPlayableMl("away"),
+    },
   };
 }
 
@@ -1703,11 +1728,19 @@ function mlSharpPortfolioProbability(record: PredictionRecordRow): {
   };
 }
 
+function blocksMlbPriceOnlyPromotion(record: PredictionRecordRow): boolean {
+  const audit = readRecordOrNull(readRecordOrNull(record.snapshot_json)?.ml_evaluation_price);
+  return audit?.price_changed === true &&
+    audit?.baseline_board_action === "no_play" &&
+    audit?.price_only_promotion_authorized === false;
+}
+
 export function applyMlbSharpPortfolioLean(records: PredictionRecordRow[]): PredictionRecordRow[] {
   const candidates = records.flatMap((record, index) => {
     if (
       record.sport !== "mlb" ||
       record.market !== "moneyline" ||
+      blocksMlbPriceOnlyPromotion(record) ||
       record.best_angle ||
       record.play_grade === "lean" ||
       record.play_grade === "best_angle" ||
@@ -1781,6 +1814,7 @@ export function applyMlbMarketLedMovementLean(records: PredictionRecordRow[]): P
     if (
       record.sport !== "mlb" ||
       record.market !== "moneyline" ||
+      blocksMlbPriceOnlyPromotion(record) ||
       record.best_angle ||
       record.play_grade === "lean" ||
       record.play_grade === "best_angle" ||
@@ -1863,6 +1897,7 @@ export function applyMlbNeutralConsensusGrades(records: PredictionRecordRow[]): 
     if (
       record.sport !== "mlb" ||
       record.market !== "moneyline" ||
+      blocksMlbPriceOnlyPromotion(record) ||
       record.best_angle ||
       record.play_grade === "lean" ||
       record.play_grade === "best_angle" ||
@@ -2836,6 +2871,7 @@ function buildMlRecord(
   currentLinesForGame: LineRowForOdds[],
   sourceAwareSplitsForGame: SourceAwareSplitObservationRow[] = [],
   freshnessReferenceMs = Date.now(),
+  evaluationPricePolicy: "priority" | "best_playable" = "best_playable",
 ): PredictionRecordRow | null {
   const sp = (pred.sport_specific ?? {}) as Record<string, unknown>;
   const holdPicks = Array.isArray(sp.hold_picks) ? (sp.hold_picks as string[]) : [];
@@ -3015,6 +3051,31 @@ function buildMlRecord(
       finalMlPick,
     );
   }
+  // The probability head remains anchored to its verified two-sided market
+  // baseline, but an unlocked recommendation must be evaluated at a quote a
+  // member can actually play. The reader already price-shops with this same
+  // multi-book coherence gate; doing it here keeps price-sensitive grading in
+  // the authoritative writer instead of silently pairing a stale priority-book
+  // grade with a fresher displayed quote. Locked/T-60 records never enter this
+  // path and remain immutable.
+  const mlPriorityEvaluationOdds = finalMlOdds;
+  const mlBestPlayablePrice = finalMlPick === "home"
+    ? oddsForGame?.bestPlayableMl?.home ?? null
+    : finalMlPick === "away"
+      ? oddsForGame?.bestPlayableMl?.away ?? null
+      : null;
+  const useBestPlayablePrice =
+    evaluationPricePolicy === "best_playable" &&
+    pred.locked_at === null &&
+    mlBestPlayablePrice?.source === "lines" &&
+    mlBestPlayablePrice.odds !== null;
+  if (useBestPlayablePrice) finalMlOdds = mlBestPlayablePrice.odds;
+  const priorityBreakEven = americanBreakEvenProbability(mlPriorityEvaluationOdds);
+  const playableBreakEven = americanBreakEvenProbability(finalMlOdds);
+  const mlPlayablePriceImprovementPp =
+    priorityBreakEven === null || playableBreakEven === null
+      ? null
+      : (priorityBreakEven - playableBreakEven) * 100;
   const mlFinalSideChanged = didFinalSideChange(pred.predicted_ml_winner, finalMlPick);
   const mlProjectionConflict = projectionContradictsMoneylinePick(pred, v22, finalMlPick);
   const mlChampionGuardApplies =
@@ -3633,6 +3694,21 @@ function buildMlRecord(
       odds_source_at_lock_ml: oddsForGame
         ? { home: oddsForGame.oddsSourceMl.home, away: oddsForGame.oddsSourceMl.away }
         : null,
+      ml_evaluation_price: {
+        policy_id: "mlb_ml_fresh_coherent_best_playable_price_v1_2026_08_21",
+        policy_mode: evaluationPricePolicy,
+        locked: pred.locked_at !== null,
+        probability_market_baseline_odds: mlPriorityEvaluationOdds,
+        evaluated_odds: finalMlOdds,
+        evaluated_book: useBestPlayablePrice ? mlBestPlayablePrice.book : null,
+        evaluated_observed_at: useBestPlayablePrice ? mlBestPlayablePrice.observedAt : null,
+        coherent_pair_minimum: 2,
+        maximum_age_minutes: 60,
+        break_even_improvement_pp: mlPlayablePriceImprovementPp,
+        materially_improved:
+          mlPlayablePriceImprovementPp !== null && mlPlayablePriceImprovementPp >= 1,
+        role: "exact_price_actionability_only_probability_head_unchanged",
+      },
       market_aware_side_correction: mlMarketSideCorrection.applied === true
         ? {
             applied: true,
@@ -5104,6 +5180,65 @@ function buildFiRecord(
   };
 }
 
+function isActionableMlbRecord(record: PredictionRecordRow | null): boolean {
+  if (record === null) return false;
+  const decision = readRecordOrNull(readRecordOrNull(record.snapshot_json)?.decision_pipeline);
+  return record.best_angle === true || record.play_grade === "lean" ||
+    record.play_grade === "best_angle" || decision?.board_action === "bet";
+}
+
+/**
+ * A better quote fixes the public price tuple immediately, but this release
+ * does not invent a new betting sleeve from price shopping alone. Existing
+ * actionability may be retained at the better price; a price-only promotion is
+ * capped until chronological evidence separately validates that action rule.
+ */
+function preserveMlbPriceOnlyActionCeiling(
+  playable: PredictionRecordRow | null,
+  priority: PredictionRecordRow | null,
+): PredictionRecordRow | null {
+  if (playable === null || priority === null) return playable;
+  const playableSnapshot = readRecordOrNull(playable.snapshot_json) ?? {};
+  const priceAudit = readRecordOrNull(playableSnapshot.ml_evaluation_price) ?? {};
+  const priceChanged = playable.odds_american !== priority.odds_american;
+  const baselineActionable = isActionableMlbRecord(priority);
+  const candidateActionable = isActionableMlbRecord(playable);
+  const capPromotion = priceChanged && !baselineActionable && candidateActionable;
+  const prioritySnapshot = readRecordOrNull(priority.snapshot_json) ?? {};
+  return {
+    ...playable,
+    ...(capPromotion
+      ? {
+          play_grade: priority.play_grade,
+          best_angle: priority.best_angle,
+          no_bet: true,
+          no_bet_reason: priority.no_bet_reason ?? "price_only_promotion_not_validated",
+        }
+      : {}),
+    snapshot_json: {
+      ...playableSnapshot,
+      decision_pipeline: capPromotion
+        ? readRecordOrNull(prioritySnapshot.decision_pipeline)
+        : playableSnapshot.decision_pipeline,
+      ml_evaluation_price: {
+        ...priceAudit,
+        price_changed: priceChanged,
+        baseline_board_action: baselineActionable ? "bet" : "no_play",
+        candidate_board_action: candidateActionable ? "bet" : "no_play",
+        price_only_promotion_authorized: false,
+      },
+      ml_price_only_action_cap: capPromotion
+        ? {
+            action: "retain_nonactionable_grade",
+            reason: "price_only_promotion_not_validated",
+            priority_odds: priority.odds_american,
+            playable_odds: playable.odds_american,
+          }
+        : null,
+    },
+  };
+}
+
 /**
  * Build the list of prediction_records for the slate.
  *
@@ -5167,7 +5302,15 @@ export function buildPredictionRecordsFromSlate(args: {
     const currentLines = (args.currentLinesByGameId?.get(g.id) ?? []) as LineRowForOdds[];
     const sourceAwareSplits = (args.sourceAwareSplitsByGameId?.get(g.id) ?? []) as SourceAwareSplitObservationRow[];
     const freshnessReferenceMs = freshnessReferenceMsForGame(g, args.slateDate);
-    const ml = buildMlRecord(pred, g, home, away, args.slateDate, args.launchDay, sigs, odds, openers, currentLines, sourceAwareSplits, freshnessReferenceMs);
+    const mlPriority = buildMlRecord(
+      pred, g, home, away, args.slateDate, args.launchDay, sigs, odds, openers,
+      currentLines, sourceAwareSplits, freshnessReferenceMs, "priority",
+    );
+    const mlPlayable = buildMlRecord(
+      pred, g, home, away, args.slateDate, args.launchDay, sigs, odds, openers,
+      currentLines, sourceAwareSplits, freshnessReferenceMs, "best_playable",
+    );
+    const ml = preserveMlbPriceOnlyActionCeiling(mlPlayable, mlPriority);
     const ou = buildOuRecord(pred, g, home, away, args.slateDate, args.launchDay, sigs, odds, openers, currentLines, sourceAwareSplits, freshnessReferenceMs);
     const fi = buildFiRecord(
       pred,

@@ -87,13 +87,35 @@ member-facing competition buckets. The scorer remains the shared regulation-time
 
 - Projection runtime: resolved automodel `v2_2`
 - First-inning runtime: `fi_v2` with the versioned unpublished-probable availability head below
-- Public calibration: `mlb_public_calibration_v24_first_inning_price_aware_2026_08_21`
-- Decision release: `mlb_daily_edge_decision_2026_08_21_r64`
-- Rule bundle: `mlb_daily_edge_rule_bundle_v52_2026_08_21`
-- Grade policy: `mlb_public_grade_policy_v42_first_inning_price_aware_2026_08_21`
+- Public calibration: `mlb_public_calibration_v25_coherent_playable_price_2026_08_21`
+- Decision release: `mlb_daily_edge_decision_2026_08_21_r65`
+- Rule bundle: `mlb_daily_edge_rule_bundle_v53_2026_08_21`
+- Grade policy: `mlb_public_grade_policy_v43_coherent_playable_price_2026_08_21`
 - Tracking contract: `member_facing_lock_v8_priority_retry_minute_cadence_2026_08_11`
 - Machine registry: `lib/automodel/mlbModelLayerVersions.ts`
 - Authoritative member-facing writer: `lib/services/predictionRecordService.ts`
+
+The August 21 r65 Moneyline price-coherence repair retains every r64 projection,
+probability head, selected side, First Inning rule, Total rule, writer, lease, and
+T-60 lock boundary. An unlocked Moneyline recommendation is now evaluated at a
+fresh, same-book two-sided, multi-book-corroborated playable quote rather than
+silently keeping a sportsbook-priority price while the reader displays a better
+current quote. The probability-market baseline remains separately stamped and
+the probability head is unchanged. Price shopping cannot create a new action in
+r65; outcome confidence remains non-actionable likely-winner context, while Bet
+Grade remains price-sensitive. On the exact same-input August 21 paired dry run,
+r64 and r65 both produced 16 actions and 29 nonactions: zero promotions and zero
+demotions. CLE@COL moved from the current priority baseline -175 to fresh Saba
+-161 but remained No Play because validated money-below-tickets resistance still
+stood down the bet. The locked reconstruction used 72 unique current-head game
+locks with zero duplicate weighting; only six historically nonactionable rows had
+a material coherent price improvement, which was too sparse to authorize a new
+promotion sleeve. The supplementary availability path also rejects the stale,
+implausible August 19 Playbook report and falls back to current official MLB
+40-man injured-list statuses with explicit source health; availability remains
+explanatory and changes no model input. Evidence and rollback are recorded in
+`docs/model-audits/2026-08-21-mlb-price-coherence-availability-r65.md`. Rollback
+is r64/v52/v42/v24.
 
 The August 21 r64 first-inning action calibration retains r63's 25% independent / 75%
 same-book two-sided no-vig probability head, 52%/48% directional boundary,
@@ -462,7 +484,7 @@ The paired live-slate replay is recorded in
 - Distribution: `wnba_market_heads_value_calibrated_2026_08_02_v3`
 - Calibration schema: `wnba_core_calibration_v1`
 - Grade policy: `wnba_grade_policy_v6_authoritative_reader_grade_2026_08_13`
-- Prediction-record contract: `wnba_prediction_record_contract_v2_published_probability_2026_08_10`
+- Prediction-record contract: `wnba_prediction_record_contract_v3_exact_decision_tuple_2026_08_21`
 - Machine registry: `lib/automodel/wnbaChampionRuntime.ts`
 - Authoritative model writer: `lib/services/wnba/runWnbaModel.ts`
 - Tracking writer: `lib/services/wnba/buildWnbaPredictionRecords.ts`
@@ -497,6 +519,15 @@ zero promotions and zero demotions; an August 1-14 diagnostic found four histori
 Lean-to-Watchlist mismatches that demonstrate the forward risk without rewriting that history.
 Evidence and rollback details are recorded in
 `docs/model-audits/2026-08-13-wnba-authoritative-reader-grade-v6.md`.
+
+The August 21 v3 prediction-record contract preserves the champion model, side, probability,
+grade, and stake behavior while binding each WNBA decision to one immutable evidence tuple:
+model probability, market fair probability, outcome confidence, evaluated sportsbook/price/time,
+grade, decision time, and release identifiers. Tracking copies that writer-owned tuple instead of
+re-querying mutable odds. The reader exposes later quotes and point-line movement separately and
+cannot regrade them; T-60 and already locked tuples remain frozen. The paired current-board dry
+run retained three Leans and six Watchlists with zero promotions, demotions, side changes,
+confidence changes, or stake changes.
 
 ## MLB Player Props candidate
 

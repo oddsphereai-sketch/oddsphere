@@ -31,6 +31,11 @@ import {
   wnbaPredictionReleaseMismatches,
 } from "../../automodel/wnbaChampionRuntime";
 import { resolveWnbaMoneylineSide } from "./wnbaTeams";
+import {
+  isWnbaDecisionTuple,
+  WNBA_DECISION_TUPLE_CONTRACT_VERSION,
+  type WnbaDecisionTuple,
+} from "./wnbaDecisionTuple";
 
 const PLAY_GRADE: Record<string, string> = { "Best Angle": "best_angle", "Lean": "lean", "Watchlist": "watchlist", "Caution": "caution" };
 const median = (a: number[]) => (a.length ? [...a].sort((x, y) => x - y)[Math.floor(a.length / 2)]! : null);
@@ -38,7 +43,7 @@ const toDecimal = (o: number | null) => (o == null ? null : o > 0 ? o / 100 + 1 
 const HISTORY_PAGE_SIZE = 1000;
 const LOCK_WINDOW_MS = 60 * 60 * 1000;
 export const WNBA_PREDICTION_RECORD_CONTRACT_VERSION =
-  "wnba_prediction_record_contract_v2_published_probability_2026_08_10";
+  "wnba_prediction_record_contract_v3_exact_decision_tuple_2026_08_21";
 
 export function resolveWnbaPickedMoneylineProbabilities(input: {
   pickedHome: boolean;
@@ -238,6 +243,24 @@ export async function buildWnbaPredictionRecords(opts: {
     const market = ss.market as { home_win_prob: number | null };
     const trusted = ss.trusted as { home_win_prob: number | null };
     const dq = ss.data_quality as { flags: string[]; ml_books: number };
+    const tupleContractCurrent = ss.decision_tuple_contract_version === WNBA_DECISION_TUPLE_CONTRACT_VERSION;
+    const storedTuples = ss.decision_tuples && typeof ss.decision_tuples === "object"
+      ? ss.decision_tuples as Record<string, unknown>
+      : {};
+    const tupleFor = (
+      marketName: "moneyline" | "total" | "spread",
+      side: "home" | "away" | "over" | "under",
+      line: number | null,
+      grade: string | null,
+    ): WnbaDecisionTuple | null => {
+      const candidate = storedTuples[marketName];
+      if (!isWnbaDecisionTuple(candidate)) return null;
+      const lineMatches = candidate.line === null && line === null ||
+        candidate.line !== null && line !== null && Math.abs(candidate.line - line) < 0.01;
+      return candidate.market === marketName && candidate.side === side && lineMatches && candidate.bet_grade === grade
+        ? candidate
+        : null;
+    };
     const homeName = tById.get(g.home_team_id as number)?.name as string;
     const homeAbbr = ab(g.home_team_id as number);
     const awayAbbr = ab(g.away_team_id as number);
@@ -247,12 +270,13 @@ export async function buildWnbaPredictionRecords(opts: {
       continue;
     }
     const mlSideHome = mlSelection === "home";
-    const mlPrice = ml.price ?? priceAt(g.id as number, "moneyline", mlSideHome ? "home" : "away", null);
+    const mlTuple = tupleFor("moneyline", mlSideHome ? "home" : "away", null, ml.grade);
+    const mlPrice = mlTuple?.evaluated_price_american ?? ml.price ?? priceAt(g.id as number, "moneyline", mlSideHome ? "home" : "away", null);
 
     // ML must have side + price to be eligible.
-    if (!ml.side || mlPrice == null) {
+    if (!ml.side || mlPrice == null || (tupleContractCurrent && mlTuple === null)) {
       result.missingLinePrice.push(`${matchup} (ML price)`);
-      result.withheld.push({ matchup, slate, reason: "no ML price — withheld" });
+      result.withheld.push({ matchup, slate, reason: tupleContractCurrent ? "incoherent ML decision tuple — withheld" : "no ML price — withheld" });
       continue;
     }
     result.eligibleGames++;
@@ -294,7 +318,7 @@ export async function buildWnbaPredictionRecords(opts: {
       ...readWnbaCoreModelCalibrationFlagsFromEnv(),
     });
 
-    const baseRec = (market_type: string, side: string, pick: string, line_value: number | null, odds: number | null, confidence: number | null, gradeStr: string | null, modelProb: number | null, mktProb: number | null) => ({
+    const baseRec = (market_type: string, side: string, pick: string, line_value: number | null, odds: number | null, confidence: number | null, gradeStr: string | null, modelProb: number | null, mktProb: number | null, decisionTuple: WnbaDecisionTuple | null) => ({
       game_prediction_id: gp.id, game_id: g.id, external_id: g.external_id, sport: "wnba",
       slate_date: slate, game_date: g.game_date, matchup, market: market_type, pick, side,
       line_value, odds_american: odds, odds_decimal: toDecimal(odds),
@@ -314,6 +338,8 @@ export async function buildWnbaPredictionRecords(opts: {
         grade_policy_version: EXPECTED_WNBA_GRADE_POLICY_VERSION,
         spread_grade_policy: ss.spread_grade_policy ?? null,
         prediction_record_contract_version: WNBA_PREDICTION_RECORD_CONTRACT_VERSION,
+        decision_tuple_contract_version: decisionTuple?.contract_version ?? null,
+        decision_tuple: decisionTuple,
         moneyline_probability_contract: null as null | {
           published_picked_probability: number;
           independent_picked_probability: number;
@@ -334,7 +360,18 @@ export async function buildWnbaPredictionRecords(opts: {
     });
     const mlModelProb = mlProbabilities.publishedPickedProbability;
     const mlMktProb = (trusted.home_win_prob ?? market.home_win_prob) != null ? (mlSideHome ? (trusted.home_win_prob ?? market.home_win_prob)! : 1 - (trusted.home_win_prob ?? market.home_win_prob)!) : null;
-    const mlRecord = baseRec("moneyline", mlSideHome ? "home" : "away", ab(mlSideHome ? (g.home_team_id as number) : (g.away_team_id as number)), null, mlPrice, ml.confidence, ml.grade, mlModelProb, mlMktProb);
+    const mlRecord = baseRec(
+      "moneyline",
+      mlSideHome ? "home" : "away",
+      ab(mlSideHome ? (g.home_team_id as number) : (g.away_team_id as number)),
+      null,
+      mlPrice,
+      ml.confidence,
+      ml.grade,
+      mlTuple?.model_probability ?? mlModelProb,
+      mlTuple?.market_fair_probability ?? mlMktProb,
+      mlTuple,
+    );
     mlRecord.snapshot_json = {
       ...mlRecord.snapshot_json,
       moneyline_probability_contract: {
@@ -349,10 +386,15 @@ export async function buildWnbaPredictionRecords(opts: {
     // ── O/U record (if available) ──
     if (tot.side && tot.line != null) {
       const ouSide = tot.side.startsWith("Over") ? "over" : "under";
-      const ouPrice = priceAt(g.id as number, "total", ouSide, tot.line);
+      const totalTuple = tupleFor("total", ouSide, tot.line, tot.grade);
+      const ouPrice = totalTuple?.evaluated_price_american ?? priceAt(g.id as number, "total", ouSide, tot.line);
       if (ouPrice == null) result.missingLinePrice.push(`${matchup} (O/U price@${tot.line})`);
-      result.records.push(baseRec("total", ouSide, tot.side, tot.line, ouPrice, tot.confidence, tot.grade, tot.confidence != null ? tot.confidence / 100 : null, null));
-      result.counts.total++;
+      if (!tupleContractCurrent || totalTuple !== null) {
+        result.records.push(baseRec("total", ouSide, tot.side, tot.line, ouPrice, tot.confidence, tot.grade, totalTuple?.model_probability ?? (tot.confidence != null ? tot.confidence / 100 : null), totalTuple?.market_fair_probability ?? null, totalTuple));
+        result.counts.total++;
+      } else {
+        result.missingLinePrice.push(`${matchup} (incoherent Total decision tuple@${tot.line})`);
+      }
     }
 
     // ── Spread record (if available) — first-class market='spread' ──
@@ -362,11 +404,14 @@ export async function buildWnbaPredictionRecords(opts: {
       const sprSideAway = spr.side.startsWith(awayName) || spr.side.startsWith(awayAbbr);
       const sprSide = sprSideHome ? "home" : sprSideAway ? "away" : null;
       const sprLine = sprSide === "home" ? spr.line : sprSide === "away" ? -spr.line : null;
-      const sprPrice = sprLine === null || sprSide === null ? null : priceAt(g.id as number, "spread", sprSide, sprLine);
+      const spreadTuple = sprLine === null || sprSide === null ? null : tupleFor("spread", sprSide, sprLine, spr.grade);
+      const sprPrice = spreadTuple?.evaluated_price_american ?? (sprLine === null || sprSide === null ? null : priceAt(g.id as number, "spread", sprSide, sprLine));
       if (sprPrice == null) result.missingLinePrice.push(`${matchup} (Spread price@${sprLine})`);
-      if (sprSide !== null && sprLine !== null) {
-        result.records.push(baseRec("spread", sprSide, spr.side, sprLine, sprPrice, spr.confidence, spr.grade, spr.confidence != null ? spr.confidence / 100 : null, null));
+      if (sprSide !== null && sprLine !== null && (!tupleContractCurrent || spreadTuple !== null)) {
+        result.records.push(baseRec("spread", sprSide, spr.side, sprLine, sprPrice, spr.confidence, spr.grade, spreadTuple?.model_probability ?? (spr.confidence != null ? spr.confidence / 100 : null), spreadTuple?.market_fair_probability ?? null, spreadTuple));
         result.counts.spread++;
+      } else if (sprSide !== null && sprLine !== null && tupleContractCurrent) {
+        result.missingLinePrice.push(`${matchup} (incoherent Spread decision tuple@${sprLine})`);
       }
     }
   }

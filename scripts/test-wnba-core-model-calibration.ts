@@ -25,6 +25,13 @@ import { gradePrediction } from "../lib/services/predictionGrader";
 import { resolveWnbaMoneylineSide } from "../lib/services/wnba/wnbaTeams";
 import { applyPublicMarketContext } from "../lib/services/publicMarketContext";
 import { resolveWnbaReaderGrade } from "../lib/services/wnba/buildWnbaDailyEdgeAdapted";
+import {
+  buildWnbaDecisionTuple,
+  isWnbaDecisionTuple,
+  selectWnbaEvaluatedPriceRow,
+  WNBA_DECISION_TUPLE_CONTRACT_VERSION,
+  type WnbaDecisionPriceRow,
+} from "../lib/services/wnba/wnbaDecisionTuple";
 
 let pass = 0;
 let fail = 0;
@@ -450,7 +457,55 @@ check(
 );
 check(
   "WNBA prediction-record probability contract has a new immutable identifier",
-  WNBA_PREDICTION_RECORD_CONTRACT_VERSION === "wnba_prediction_record_contract_v2_published_probability_2026_08_10",
+  WNBA_PREDICTION_RECORD_CONTRACT_VERSION === "wnba_prediction_record_contract_v3_exact_decision_tuple_2026_08_21",
+);
+const decisionRows: WnbaDecisionPriceRow[] = [
+  { market: "spread", side: "away", sportsbook: "fanduel", line: -3.5, priceAmerican: -115, observedAt: "2026-08-21T14:00:00Z" },
+  { market: "spread", side: "home", sportsbook: "fanduel", line: 3.5, priceAmerican: -105, observedAt: "2026-08-21T14:00:00Z" },
+  { market: "spread", side: "away", sportsbook: "betmgm", line: -3.5, priceAmerican: -110, observedAt: "2026-08-21T14:00:00Z" },
+  { market: "spread", side: "home", sportsbook: "betmgm", line: 3.5, priceAmerican: -110, observedAt: "2026-08-21T14:00:00Z" },
+  { market: "spread", side: "away", sportsbook: "circa", line: -3.5, priceAmerican: -105, observedAt: "2026-08-21T14:00:00Z" },
+  { market: "spread", side: "home", sportsbook: "circa", line: 3.5, priceAmerican: -115, observedAt: "2026-08-21T14:00:00Z" },
+];
+const evaluatedSpread = selectWnbaEvaluatedPriceRow(decisionRows, "spread", "away", -3.5);
+check(
+  "WNBA decision tuple resolves the exact book row represented by the existing median price",
+  evaluatedSpread?.priceAmerican === -110 && evaluatedSpread.sportsbook === "betmgm",
+);
+const spreadDecisionTuple = buildWnbaDecisionTuple({
+  rows: decisionRows,
+  market: "spread",
+  side: "away",
+  line: -3.5,
+  modelProbability: 0.56,
+  outcomeConfidence: 0.56,
+  betGrade: "Lean",
+  decisionAt: "2026-08-21T14:00:05Z",
+});
+check(
+  "WNBA decision tuple freezes price, book, quote time, probabilities, grade, and release",
+  spreadDecisionTuple?.contract_version === WNBA_DECISION_TUPLE_CONTRACT_VERSION &&
+    spreadDecisionTuple.evaluated_price_american === -110 &&
+    spreadDecisionTuple.evaluated_sportsbook === "betmgm" &&
+    spreadDecisionTuple.evaluated_at === "2026-08-21T14:00:00Z" &&
+    spreadDecisionTuple.decision_at === "2026-08-21T14:00:05Z" &&
+    spreadDecisionTuple.model_probability === 0.56 &&
+    spreadDecisionTuple.market_fair_probability === 0.5 &&
+    spreadDecisionTuple.bet_grade === "Lean" &&
+    isWnbaDecisionTuple(spreadDecisionTuple),
+);
+check(
+  "WNBA decision tuple fails closed without a timestamped exact evaluated price",
+  buildWnbaDecisionTuple({
+    rows: decisionRows.map((row) => ({ ...row, observedAt: null })),
+    market: "spread",
+    side: "away",
+    line: -3.5,
+    modelProbability: 0.56,
+    outcomeConfidence: 0.56,
+    betGrade: "Lean",
+    decisionAt: "2026-08-21T14:00:05Z",
+  }) === null,
 );
 check(
   "WNBA record writer accepts only the exact current source release",

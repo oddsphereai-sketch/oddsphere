@@ -9,6 +9,7 @@
 import { readFileSync } from "node:fs";
 import {
   buildPredictionRecordsFromSlate,
+  buildGameOddsSnapshot,
   applyMlbMarketLedMovementLean,
   applyMlbNeutralConsensusGrades,
   applyMlbSharpPortfolioLean,
@@ -70,6 +71,7 @@ function expectGate(raw: string | null, rec: { model_probability: number | null;
     runGapAbs: null, totalLine: rec.market === "total" ? rec.line_value : null,
   });
 }
+
 function expectTotalGrade(raw: string | null, rec: { model_probability: number | null; odds_american: number | null; market: string; line_value: number | null; side: string | null }): string | null {
   let publicGrade = raw;
   const minProb =
@@ -97,6 +99,31 @@ function check(label: string, ok: boolean, detail?: string): void {
   if (ok) { pass++; console.log(`  ✓ ${label}`); }
   else { fail++; failures.push(`${label}${detail ? ` — ${detail}` : ""}`); console.log(`  ✗ ${label}${detail ? ` — ${detail}` : ""}`); }
 }
+
+console.log("\n━━━ MLB coherent best-playable Moneyline price ━━━");
+const priceNow = Date.parse("2026-08-21T18:14:00Z");
+const coherentPriceSnapshot = buildGameOddsSnapshot([
+  { game_id: 1, market_type: "moneyline", side: "away", sportsbook: "betrivers", odds_american: -210, line_value: null, fetched_at: "2026-08-21T17:05:56Z" },
+  { game_id: 1, market_type: "moneyline", side: "home", sportsbook: "betrivers", odds_american: 165, line_value: null, fetched_at: "2026-08-21T17:05:56Z" },
+  { game_id: 1, market_type: "moneyline", side: "away", sportsbook: "ballybet", odds_american: -175, line_value: null, fetched_at: "2026-08-21T18:13:13Z" },
+  { game_id: 1, market_type: "moneyline", side: "home", sportsbook: "ballybet", odds_american: 140, line_value: null, fetched_at: "2026-08-21T18:13:13Z" },
+  { game_id: 1, market_type: "moneyline", side: "away", sportsbook: "saba", odds_american: -161, line_value: null, fetched_at: "2026-08-21T18:13:13Z" },
+  { game_id: 1, market_type: "moneyline", side: "home", sportsbook: "saba", odds_american: 122, line_value: null, fetched_at: "2026-08-21T18:13:13Z" },
+], { gameId: 1, freshnessReferenceMs: priceNow });
+check(
+  "writer price-shops a fresh corroborated pair instead of the stale priority-book quote",
+  coherentPriceSnapshot.mlAwayOdds === -210 &&
+    coherentPriceSnapshot.bestPlayableMl?.away.odds === -161 &&
+    coherentPriceSnapshot.bestPlayableMl.away.book === "saba",
+);
+const singleBookPriceSnapshot = buildGameOddsSnapshot([
+  { game_id: 2, market_type: "moneyline", side: "away", sportsbook: "saba", odds_american: -161, line_value: null, fetched_at: "2026-08-21T18:13:13Z" },
+  { game_id: 2, market_type: "moneyline", side: "home", sportsbook: "saba", odds_american: 122, line_value: null, fetched_at: "2026-08-21T18:13:13Z" },
+], { gameId: 2, freshnessReferenceMs: priceNow });
+check(
+  "one book cannot establish its own best-playable truth",
+  singleBookPriceSnapshot.bestPlayableMl?.away.source === "unavailable",
+);
 
 console.log("━━━ MLB tight market-price Best Angle resolver ━━━");
 const tightMarketPriceBase = {
@@ -3650,6 +3677,10 @@ console.log("\n━━━ stale unlocked FI cleanup guard ━━━");
 console.log("\n━━━ post-start prediction record guard ━━━");
 {
   const src = readFileSync("lib/services/predictionRecordService.ts", "utf8");
+  check("best-playable evaluation is limited to unlocked records",
+        src.includes('evaluationPricePolicy === "best_playable"') &&
+        src.includes("pred.locked_at === null") &&
+        src.includes("Locked/T-60 records never enter this"));
   check("MLB sync identifies games that already started",
         src.includes("const startedGameIds = new Set") &&
         src.includes('sport === "mlb"'));

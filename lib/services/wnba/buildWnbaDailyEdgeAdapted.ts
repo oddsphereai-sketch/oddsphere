@@ -31,6 +31,7 @@ import { SHARP_READ_SENTENCES, type SharpReadKey } from "../sharpReadSelector";
 import { buildWnbaDailyEdgePreview } from "./buildWnbaDailyEdgePreview";
 import { selectWnbaSameBookTrail } from "./wnbaPriceTrail";
 import { resolveWnbaMoneylineSide, wnbaLogoUrl } from "./wnbaTeams";
+import { isWnbaDecisionTuple, type WnbaDecisionTuple } from "./wnbaDecisionTuple";
 import {
   EXPECTED_WNBA_GRADE_POLICY_VERSION,
   wnbaPredictionReleaseMismatches,
@@ -175,14 +176,14 @@ async function loadWnbaPredictionsFromDb(date: string): Promise<PreviewGame[]> {
   }
   const { data: lineRows } = await supabase
     .from("lines")
-    .select("game_id, market_type, side, sportsbook, line_value, odds_american")
+    .select("game_id, market_type, side, sportsbook, line_value, odds_american, fetched_at")
     .in("game_id", ids)
     .in("market_type", ["moneyline", "total", "spread"]);
-  const linesByGame = new Map<number, NonNullable<typeof lineRows>>();
+  const linesByGame = new Map<number, WnbaLineRow[]>();
   for (const r of lineRows ?? []) {
     const gid = r.game_id as number;
     if (!linesByGame.has(gid)) linesByGame.set(gid, []);
-    linesByGame.get(gid)!.push(r);
+    linesByGame.get(gid)!.push({ ...r, recorded_at: r.fetched_at });
   }
   const historyRows: Array<{
     game_id: number;
@@ -226,6 +227,15 @@ async function loadWnbaPredictionsFromDb(date: string): Promise<PreviewGame[]> {
     const lockedMl = lockedRecordsForGame.get("moneyline");
     const lockedTotal = lockedRecordsForGame.get("total");
     const lockedSpread = lockedRecordsForGame.get("spread");
+    const currentDecisionTuples = ss.decision_tuples && typeof ss.decision_tuples === "object"
+      ? ss.decision_tuples as Record<string, unknown>
+      : {};
+    const decisionTupleFor = (market: "moneyline" | "total" | "spread"): WnbaDecisionTuple | null => {
+      const lockedTuple = lockedRecordsForGame.get(market)?.snapshot_json?.decision_tuple;
+      if (isWnbaDecisionTuple(lockedTuple)) return lockedTuple;
+      const currentTuple = currentDecisionTuples[market];
+      return isWnbaDecisionTuple(currentTuple) ? currentTuple : null;
+    };
     const lockedAt =
       gp.locked_at ??
       Array.from(lockedRecordsForGame.values()).find((r) => r.locked_at !== null)?.locked_at ??
@@ -327,6 +337,11 @@ async function loadWnbaPredictionsFromDb(date: string): Promise<PreviewGame[]> {
         away.name as string,
         lockedAt,
       ),
+      decisionTuples: {
+        moneyline: decisionTupleFor("moneyline"),
+        total: decisionTupleFor("total"),
+        spread: decisionTupleFor("spread"),
+      },
       lockedAt,
     });
   }
@@ -704,12 +719,41 @@ function buildWnbaPickedPrices(
   const mlTrail = coherentPriceTrail(liveRows, cappedHistoryRows, "moneyline", mlSide, null, mlCurrent);
   const totalTrail = coherentPriceTrail(liveRows, cappedHistoryRows, "total", totalSide, totalCurrentLine, totalCurrent);
   const spreadTrail = coherentPriceTrail(liveRows, cappedHistoryRows, "spread", spreadSide, spreadCurrentLine, spreadCurrent);
+  const currentContext = (
+    market: "moneyline" | "total" | "spread",
+    side: string | null,
+    selectedLine: number | null,
+  ): Pick<WnbaPriceTrail, "currentQuote" | "currentQuoteLine" | "currentQuoteSportsbook" | "currentQuoteObservedAt"> => {
+    const currentLine = market === "moneyline"
+      ? null
+      : currentLineValue(rows, market, side, selectedLine) ?? selectedLine;
+    const currentPrice = pickedPrice(rows, market, side, currentLine) ?? latestPickedPrice(historyRows, market, side, currentLine);
+    const currentTrail = coherentPriceTrail(
+      rows,
+      historyRows,
+      market,
+      side,
+      currentLine,
+      currentPrice,
+      market !== "moneyline",
+    );
+    const terminal = currentTrail.stops?.[currentTrail.stops.length - 1] ?? null;
+    return {
+      currentQuote: currentTrail.movementCurrent ?? currentPrice,
+      currentQuoteLine: terminal?.line ?? currentLine,
+      currentQuoteSportsbook: currentTrail.sportsbook ?? null,
+      currentQuoteObservedAt: terminal?.observedAt ?? null,
+    };
+  };
+  const mlCurrentContext = currentContext("moneyline", mlSide, null);
+  const totalCurrentContext = currentContext("total", totalSide, totalLockedLine);
+  const spreadCurrentContext = currentContext("spread", spreadSide, spreadLockedLine);
   return {
-    ml: { ...mlTrail, current: lockedMl?.odds_american ?? mlTrail.movementCurrent ?? mlCurrent, marketProb: pickedNoVigProb(liveRows, "moneyline", mlSide, null) },
-    total: { ...totalTrail, current: lockedTotal?.odds_american ?? totalTrail.movementCurrent ?? totalCurrent, marketProb: pickedNoVigProb(liveRows, "total", totalSide, totalLockedLine) },
-    spread: { ...spreadTrail, current: lockedSpread?.odds_american ?? spreadTrail.movementCurrent ?? spreadCurrent, marketProb: pickedNoVigProb(liveRows, "spread", spreadSide, spreadLockedLine) },
-    totalLine: coherentPriceTrail(liveRows, cappedHistoryRows, "total", totalSide, totalCurrentLine, totalCurrent, true),
-    spreadLine: coherentPriceTrail(liveRows, cappedHistoryRows, "spread", spreadSide, spreadCurrentLine, spreadCurrent, true),
+    ml: { ...mlTrail, ...mlCurrentContext, current: lockedMl?.odds_american ?? mlTrail.movementCurrent ?? mlCurrent, marketProb: pickedNoVigProb(liveRows, "moneyline", mlSide, null) },
+    total: { ...totalTrail, ...totalCurrentContext, current: lockedTotal?.odds_american ?? totalTrail.movementCurrent ?? totalCurrent, marketProb: pickedNoVigProb(liveRows, "total", totalSide, totalLockedLine) },
+    spread: { ...spreadTrail, ...spreadCurrentContext, current: lockedSpread?.odds_american ?? spreadTrail.movementCurrent ?? spreadCurrent, marketProb: pickedNoVigProb(liveRows, "spread", spreadSide, spreadLockedLine) },
+    totalLine: coherentPriceTrail(rows, historyRows, "total", totalSide, totalCurrentContext.currentQuoteLine ?? totalCurrentLine, totalCurrentContext.currentQuote ?? totalCurrent, true),
+    spreadLine: coherentPriceTrail(rows, historyRows, "spread", spreadSide, spreadCurrentContext.currentQuoteLine ?? spreadCurrentLine, spreadCurrentContext.currentQuote ?? spreadCurrent, true),
     opposingMl: coherentPriceTrail(liveRows, cappedHistoryRows, "moneyline", oppositeSide("moneyline", mlSide), null, pickedPrice(liveRows, "moneyline", oppositeSide("moneyline", mlSide), null)),
     opposingTotal: coherentPriceTrail(liveRows, cappedHistoryRows, "total", oppositeSide("total", totalSide), totalCurrentLine, pickedPrice(liveRows, "total", oppositeSide("total", totalSide), totalCurrentLine)),
     opposingSpread: coherentPriceTrail(liveRows, cappedHistoryRows, "spread", oppositeSide("spread", spreadSide), oppositeLine("spread", spreadCurrentLine), pickedPrice(liveRows, "spread", oppositeSide("spread", spreadSide), oppositeLine("spread", spreadCurrentLine))),
@@ -731,6 +775,10 @@ type WnbaPriceTrail = {
   stops?: WnbaPriceTrailStop[];
   terminalSource?: "current_line" | "line_history";
   marketProb?: number | null;
+  currentQuote?: number | null;
+  currentQuoteLine?: number | null;
+  currentQuoteSportsbook?: string | null;
+  currentQuoteObservedAt?: string | null;
 };
 type WnbaPickedPrices = {
   ml: WnbaPriceTrail;
@@ -776,6 +824,11 @@ type PreviewGame = {
   publicSplits?: { ml: WnbaPublicSplit[]; total: WnbaPublicSplit[]; spread: WnbaPublicSplit[] };
   /** Current picked-side prices from `lines`; absent on live fallback. */
   pickedPrices?: WnbaPickedPrices;
+  decisionTuples?: {
+    moneyline: WnbaDecisionTuple | null;
+    total: WnbaDecisionTuple | null;
+    spread: WnbaDecisionTuple | null;
+  };
   lockedAt?: string | null;
 };
 
@@ -1124,8 +1177,12 @@ function buildMarket(opts: {
   marketReadV2?: MarketReadV2Dto | null;
   marketReadV2Enabled?: boolean;
   gradePolicyVersion?: string | null;
+  decisionTuple?: WnbaDecisionTuple | null;
 }): MarketEdgeDto {
-  const { slot, pick, confFrac, grade, modelProbPick, marketFairProbPick, priceAmerican, line, modelTotal, marketTotal, bookCount, aligned, whyLine } = opts;
+  const { slot, pick, confFrac, grade, line, modelTotal, marketTotal, bookCount, aligned, whyLine } = opts;
+  const modelProbPick = opts.decisionTuple?.model_probability ?? opts.modelProbPick;
+  const marketFairProbPick = opts.decisionTuple?.market_fair_probability ?? opts.marketFairProbPick;
+  const priceAmerican = opts.decisionTuple?.evaluated_price_american ?? opts.priceAmerican;
   const effectiveGrade = resolveWnbaReaderGrade({
     gradePolicyVersion: opts.gradePolicyVersion,
     grade,
@@ -1235,6 +1292,7 @@ function buildMarket(opts: {
       }))
     : undefined;
   return {
+    ...(opts.decisionTuple ? { wnbaDecisionTuple: opts.decisionTuple } : {}),
     pick,
     confidence: confFrac,
     grade: finalGrade,
@@ -1261,6 +1319,11 @@ function buildMarket(opts: {
     betsPct: pickedSplit?.betsPct ?? null,
     publicSplits,
     priceAmerican,
+    currentPriceAmerican: opts.priceTrail?.currentQuote ?? priceAmerican,
+    currentPriceSportsbook: opts.priceTrail?.currentQuoteSportsbook ?? null,
+    currentPriceObservedAt: opts.priceTrail?.currentQuoteObservedAt ?? null,
+    gradePriceAmerican: priceAmerican,
+    priceObservedAt: opts.decisionTuple?.evaluated_at ?? null,
     lineOpenAmerican: opts.priceTrail?.open ?? null,
     lockedLineAmerican: opts.lockedAt ? priceAmerican : null,
     lockedLineAt: opts.lockedAt ?? null,
@@ -1361,6 +1424,7 @@ function adaptGame(
     marketReadV2: mlMarketRead,
     marketReadV2Enabled: marketReadV2Lookup?.enabledByMarket.moneyline === true,
     gradePolicyVersion: game.grade_policy_version,
+    decisionTuple: game.decisionTuples?.moneyline ?? null,
   });
 
   // ── Total ──
@@ -1398,6 +1462,7 @@ function adaptGame(
     marketReadV2: totalMarketRead,
     marketReadV2Enabled: marketReadV2Lookup?.enabledByMarket.total === true,
     gradePolicyVersion: game.grade_policy_version,
+    decisionTuple: game.decisionTuples?.total ?? null,
   });
 
   // ── Spread (rendered on the first_inning slot, relabeled "Sprd*") ──
@@ -1452,6 +1517,7 @@ function adaptGame(
     marketReadV2: spreadMarketRead,
     marketReadV2Enabled: marketReadV2Lookup?.enabledByMarket.spread === true,
     gradePolicyVersion: game.grade_policy_version,
+    decisionTuple: game.decisionTuples?.spread ?? null,
   });
 
   // Top grade across the three markets drives the card verdict pill.
