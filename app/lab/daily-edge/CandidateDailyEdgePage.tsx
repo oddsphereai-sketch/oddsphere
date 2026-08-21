@@ -8,6 +8,7 @@ import {
 } from "@/app/dev/experience-preview/page";
 import { DAILY_EDGE_SPORT_KEYS } from "@/app/lab/lib/dailyEdgeSports";
 import { isNflDailyEdgeEnabled } from "@/lib/config/nflDailyEdge";
+import { filterWeeklyReaderSnapshot } from "@/lib/services/dailyEdge/weeklyReaderLifecycle";
 import type { Sport } from "@/lib/types/domain/Sport";
 import DailyEdgeLiveRefresh from "./DailyEdgeLiveRefresh";
 
@@ -68,6 +69,20 @@ export default async function CandidateDailyEdgePage({
     snapshot = await loadDailyEdgeSnapshot(competition === "champions_league" ? "ucl" : sport)
       .catch(() => emptyPreviewSnapshot(sport));
   }
+  const weeklySourceGameCount = snapshot.games.length;
+  if (nflFixture) {
+    snapshot = filterWeeklyReaderSnapshot(snapshot, "nfl");
+  } else if (eplRequested && eplEnabled) {
+    snapshot = filterWeeklyReaderSnapshot(snapshot, "soccer");
+  }
+  const visibleNflAvailability = nflFixture
+    ? Object.fromEntries(
+        snapshot.games.flatMap((game) => {
+          const availability = nflFixture.availability[game.id];
+          return availability ? [[game.id, availability]] : [];
+        }),
+      )
+    : undefined;
   const [history, pitcherFirstInningHistory] = nflFixture
     ? [nflFixture.history, {}]
     : await Promise.all([
@@ -83,7 +98,7 @@ export default async function CandidateDailyEdgePage({
         snapshot={snapshot}
         history={history}
         pitcherFirstInningHistory={pitcherFirstInningHistory}
-        initialAvailability={nflFixture?.availability}
+        initialAvailability={visibleNflAvailability}
         sport={sport}
         freshContractRead={false}
         reviewMode={false}
@@ -99,7 +114,7 @@ export default async function CandidateDailyEdgePage({
         weeklySlate={nflFixture
           ? {
               label: `NFL · ${nflFixture.week.label} · ${snapshot.games.length} games · ${snapshot.games.length * 3} predictions · ${nflFixture.tracking.seasonPhase === "preseason" ? "preseason is excluded from official tracking" : "tracking begins only with an approved pre-kickoff lock"}`,
-              evidence: `Stored ${new Date(nflFixture.storedAt).toLocaleString("en-US", { timeZone: "America/New_York" })} ET · schedule, odds, injuries and depth from BALLDONTLIE · team/QB context from checksum-backed nflverse data · ${nflFixture.provenance.firstObservedCoverageGames}/${snapshot.games.length} same-book Opening trails · ${nflFixture.provenance.splitCoverageGames}/${snapshot.games.length} Playbook public-consensus split sets${nflFixture.tracking.seasonPhase === "preseason" ? " (unavailable for this preseason slate)" : " (context-only until chronologically validated)"}`,
+              evidence: `Stored ${new Date(nflFixture.storedAt).toLocaleString("en-US", { timeZone: "America/New_York" })} ET · schedule, odds, injuries and depth from BALLDONTLIE · team/QB context from checksum-backed nflverse data · ${nflFixture.provenance.firstObservedCoverageGames}/${weeklySourceGameCount} weekly same-book Opening trails · ${nflFixture.provenance.splitCoverageGames}/${weeklySourceGameCount} weekly Playbook public-consensus split sets${nflFixture.tracking.seasonPhase === "preseason" ? " (unavailable for this preseason slate)" : " (context-only until chronologically validated)"} · ${snapshot.games.length} games currently displayed`,
               previousHref: null,
               nextHref: null,
             }
