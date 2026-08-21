@@ -593,9 +593,50 @@ async function main() {
     // selectTrustIndependent direct
     check("high + market → 0.25", FI_TEST.selectTrustIndependent({ tier: "high", missingCount: 0, hasMarket: true }) === 0.25);
     check("market-backed Lean floor = nonnegative no-vig edge", FI_TEST.FI_LEAN_MIN_EDGE_PCT === 0);
+    check("r64 marginal NRFI price gate is capped below 54%", FI_TEST.FI_MARGINAL_NRFI_PRICE_GATE_MAX === 0.54);
     check("medium + market → 0.45", FI_TEST.selectTrustIndependent({ tier: "medium", missingCount: 2, hasMarket: true }) === 0.45);
     check("no market → 1.0", FI_TEST.selectTrustIndependent({ tier: "high", missingCount: 0, hasMarket: false }) === 1.0);
     check("severe missing → 0.05", FI_TEST.selectTrustIndependent({ tier: "high", missingCount: 7, hasMarket: true }) === 0.05);
+  }
+  {
+    const demoted = FI_TEST.applyFiMarginalPricePolicy({
+      pick: "NRFI", pickReason: "fi_p_nrfi_above_threshold", posteriorNrfi: 0.535,
+      nrfiOdds: -120,
+    });
+    check("r64 marginal NRFI below offered break-even becomes Toss-Up",
+      demoted.pick === "Toss-Up" && demoted.pickReason === "fi_toss_up_marginal_nrfi_below_offered_break_even");
+    const retained = FI_TEST.applyFiMarginalPricePolicy({
+      pick: "NRFI", pickReason: "fi_p_nrfi_above_threshold", posteriorNrfi: 0.535,
+      nrfiOdds: -105,
+    });
+    check("r64 marginal NRFI that clears offered break-even remains NRFI", retained.pick === "NRFI");
+    const nrfiPromotion = FI_TEST.applyFiMarginalPricePolicy({
+      pick: "Toss-Up", pickReason: "fi_toss_up_probability", posteriorNrfi: 0.515,
+      nrfiOdds: 105,
+    });
+    check("r64 paired route promotes a price-qualified Toss-Up to NRFI",
+      nrfiPromotion.pick === "NRFI" && nrfiPromotion.pickReason === "fi_marginal_nrfi_clears_offered_break_even");
+    const yrfiPromotion = FI_TEST.applyFiMarginalPricePolicy({
+      pick: "Toss-Up", pickReason: "fi_toss_up_probability", posteriorNrfi: 0.49,
+      nrfiOdds: -130,
+    });
+    check("r64 sparse YRFI exception fails closed to the incumbent Toss-Up",
+      yrfiPromotion.pick === "Toss-Up" && yrfiPromotion.pickReason === "fi_toss_up_probability");
+    const neutral = FI_TEST.applyFiMarginalPricePolicy({
+      pick: "Toss-Up", pickReason: "fi_toss_up_probability", posteriorNrfi: 0.51,
+      nrfiOdds: -110,
+    });
+    check("r64 Toss-Up stays neutral when neither offered price is cleared", neutral.pick === "Toss-Up");
+    const tied = FI_TEST.applyFiMarginalPricePolicy({
+      pick: "Toss-Up", pickReason: "fi_toss_up_probability", posteriorNrfi: 0.5,
+      nrfiOdds: 105,
+    });
+    check("r64 exact 50/50 forecast cannot acquire an arbitrary side", tied.pick === "Toss-Up");
+    const sparse = FI_TEST.applyFiMarginalPricePolicy({
+      pick: "Toss-Up", pickReason: "fi_toss_up_sparse_named_starter_history", posteriorNrfi: 0.515,
+      nrfiOdds: 105,
+    });
+    check("r64 price route cannot override a data-quality Toss-Up", sparse.pick === "Toss-Up");
   }
   {
     // Toss-Up display: the pick string is literally "Toss-Up", not "-"

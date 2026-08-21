@@ -30,6 +30,7 @@ import {
   type FiMarketBaseline,
   type FiLineRow,
 } from "./mlbFirstInningMarketBaseline";
+import { americanToImpliedProb } from "./marketPrior";
 
 // ─── trust coefficients (mirror V2.2 full-game) ──────────────────
 // Locked 2026 bridge calibration: high-quality FI rows remain model-informed,
@@ -86,6 +87,11 @@ const FI_BEST_ANGLE_MIN_EDGE_PCT = 6.0;
 const FI_BEST_ANGLE_MIN_CONFIDENCE = 56;
 const FI_BEST_ANGLE_MIN_PRICE_EXCLUSIVE = -130;
 const FI_LEAN_MIN_EDGE_PCT = 0;
+// r64 price-aware bridge: marginal NRFI probabilities below 54% must clear
+// the actual offered price, not merely the de-vigged market midpoint. The
+// paired route may promote an NRFI-favored probability-band Toss-Up when NRFI
+// clears the actual offered break-even probability.
+const FI_MARGINAL_NRFI_PRICE_GATE_MAX = 0.54;
 // MLB-P0 post-shrink large-edge backstop (abs edge %). FI is not
 // probability-regularized in P0 (its market prob is null on ~100% of
 // rows), but where a market line DOES exist an implausibly large
@@ -224,6 +230,49 @@ function computeConfidence(args: {
   let base = probSide * 100;
   base = Math.max(FI_CONFIDENCE_FLOOR, base);
   return clamp(base, FI_CONFIDENCE_FLOOR, FI_CONFIDENCE_CEILING[args.tier]);
+}
+
+function applyFiMarginalPricePolicy(args: {
+  pick: FiPick;
+  pickReason: string;
+  posteriorNrfi: number;
+  nrfiOdds: number | null;
+}): { pick: FiPick; pickReason: string } {
+  const { posteriorNrfi } = args;
+  if (
+    args.pick === "NRFI" &&
+    posteriorNrfi < FI_MARGINAL_NRFI_PRICE_GATE_MAX &&
+    args.nrfiOdds !== null &&
+    args.nrfiOdds !== 0 &&
+    posteriorNrfi < americanToImpliedProb(args.nrfiOdds)
+  ) {
+    return { pick: "Toss-Up", pickReason: "fi_toss_up_marginal_nrfi_below_offered_break_even" };
+  }
+  if (args.pick !== "Toss-Up" || args.pickReason !== "fi_toss_up_probability") {
+    return { pick: args.pick, pickReason: args.pickReason };
+  }
+  if (posteriorNrfi === 0.5) {
+    return { pick: args.pick, pickReason: args.pickReason };
+  }
+  // The audit found 23 qualifying NRFI promotions but only one YRFI promotion
+  // and none in the latest window. Keep the new exception NRFI-only; YRFI
+  // remains available through the incumbent validated <=48% decision path.
+  if (posteriorNrfi <= 0.5) {
+    return { pick: args.pick, pickReason: args.pickReason };
+  }
+  const selectedProbability = posteriorNrfi;
+  const selectedOdds = args.nrfiOdds;
+  if (
+    selectedOdds !== null &&
+    selectedOdds !== 0 &&
+    selectedProbability >= americanToImpliedProb(selectedOdds)
+  ) {
+    return {
+      pick: "NRFI",
+      pickReason: "fi_marginal_nrfi_clears_offered_break_even",
+    };
+  }
+  return { pick: args.pick, pickReason: args.pickReason };
 }
 
 /**
@@ -368,6 +417,15 @@ export function runMlbFirstInningModelV2(
     fi_pick_reason = "fi_no_bet_data_quality";
   }
 
+  const priceAwarePick = applyFiMarginalPricePolicy({
+    pick: fi_pick,
+    pickReason: fi_pick_reason,
+    posteriorNrfi,
+    nrfiOdds: market.nrfi_odds_american,
+  });
+  fi_pick = priceAwarePick.pick;
+  fi_pick_reason = priceAwarePick.pickReason;
+
   // Edge (only meaningful when both sides know which side they're picking)
   let fi_edge_pct: number | null = null;
   if (hasMarket && (fi_pick === "NRFI" || fi_pick === "YRFI")) {
@@ -409,6 +467,8 @@ export function runMlbFirstInningModelV2(
     fi_play_grade_reason = fi_pick_reason;
     fi_no_bet_reason = sparseNamedStarterTossUp
       ? "Toss-Up — named probable starters are available, but verified starter history is too sparse for a directional play."
+      : fi_pick_reason === "fi_toss_up_marginal_nrfi_below_offered_break_even"
+        ? "Toss-Up — marginal NRFI forecast does not clear the offered price."
       : "Toss-Up — model probability in the neutral band.";
   } else if (!hasMarket) {
     fi_play_grade = "lean";
@@ -515,7 +575,9 @@ export const __TEST__ = {
   FI_BEST_ANGLE_MIN_EDGE_PCT,
   FI_BEST_ANGLE_MIN_CONFIDENCE,
   FI_LEAN_MIN_EDGE_PCT,
+  FI_MARGINAL_NRFI_PRICE_GATE_MAX,
   FI_POSTERIOR_NRFI_CAP,
   selectTrustIndependent,
   computeConfidence,
+  applyFiMarginalPricePolicy,
 };

@@ -85,13 +85,57 @@ member-facing competition buckets. The scorer remains the shared regulation-time
 
 - Projection runtime: resolved automodel `v2_2`
 - First-inning runtime: `fi_v2` with the versioned unpublished-probable availability head below
-- Public calibration: `mlb_public_calibration_v23_reconciled_market_champions_2026_08_21`
-- Decision release: `mlb_daily_edge_decision_2026_08_21_r63`
-- Rule bundle: `mlb_daily_edge_rule_bundle_v51_2026_08_21`
-- Grade policy: `mlb_public_grade_policy_v41_reconciled_market_context_2026_08_21`
+- Public calibration: `mlb_public_calibration_v24_first_inning_price_aware_2026_08_21`
+- Decision release: `mlb_daily_edge_decision_2026_08_21_r64`
+- Rule bundle: `mlb_daily_edge_rule_bundle_v52_2026_08_21`
+- Grade policy: `mlb_public_grade_policy_v42_first_inning_price_aware_2026_08_21`
 - Tracking contract: `member_facing_lock_v8_priority_retry_minute_cadence_2026_08_11`
 - Machine registry: `lib/automodel/mlbModelLayerVersions.ts`
 - Authoritative member-facing writer: `lib/services/predictionRecordService.ts`
+
+The August 21 r64 first-inning action calibration retains r63's 25% independent / 75%
+same-book two-sided no-vig probability head, 52%/48% directional boundary,
+starter and lineup holds, writer, lease, lock behavior, and every Moneyline and
+Total champion. It changes only the price-aware decision policy for marginal
+NRFI calls. An NRFI posterior below 54% is actionable only when it clears the
+actual offered NRFI break-even probability; otherwise it is a Toss-Up. The
+paired route permits an existing probability-band Toss-Up to become NRFI only
+when its NRFI posterior clears the actual offered break-even probability. The
+new YRFI exception fails closed because only one historical row qualified and
+none qualified in the latest window; YRFI remains available through the
+incumbent validated 48% boundary. The policy cannot override a data-quality, starter, lineup, or
+freshness hold, cannot bypass a provisional grade cap, and does not force an
+opposite side.
+
+The read-only chronological replay found 924 stored rows representing 922 unique
+game-lock observations from June 7 through August 20. Two duplicate lock rows
+were discarded before scoring; 921 unique observations had complete model and
+outcome fields and entered the metrics. Relative to r63, r64 moved from 424
+actions at 250-174 (59.0%) and +21.984 units to 364 actions at 218-146 (59.9%)
+and +26.138 units. The 129-game
+August 1-10 validation slice improved from 36-30, -2.758 units to 35-23,
++3.818 units; the 133-game August 11-20 diagnostic slice moved from 37-29,
+-0.259 units to 29-22, +0.050 units. Because probabilities are unchanged, Brier
+and log loss are unchanged. The rule demoted 83 marginal NRFI actions and
+promoted 23 price-qualified NRFI Toss-Ups (14-9, +4.970 units), for a transparent net
+reduction of 60 actions (14.2%). Actionable NRFI share fell in every window:
+71.1% to 66.5%, 70.5% to 67.1%, 63.6% to 58.6%, and 71.2% to 62.7%.
+
+On the exact 15-game August 21 unlocked slate captured at 10:23:52 a.m. EDT,
+r63 showed 10 NRFI / 0 YRFI / 5 Toss-Ups. The no-write r64 replay showed 5 NRFI
+/ 0 YRFI / 10 Toss-Ups: zero promotions and five NRFI-to-Toss-Up demotions—
+WSH@MIA at -120, NYM@CWS at -130, LAA@TEX at -130, CHC@SEA at -125, and
+PIT@LAD at -125. All 15 rows were unique, and locked rows remain immutable.
+
+A movement override was rejected: line history existed for only 50 latest rows
+and none of the earlier 789 rows, leaving no chronological validation path.
+Changing the blend, train-only logistic recalibration, starter first-inning ERA
+shrinkage, WHIP additions, asymmetric side weights, and a full-board posted-EV
+gate were also rejected for unstable held-out promotions, worse probability
+quality, or unacceptable board collapse. Evidence and rollback are recorded in
+`docs/model-audits/2026-08-21-mlb-first-inning-price-aware-calibration-r64.md`.
+Rollback is r63/v51/v41/v23 with the r61 first-inning bridge; locked historical
+rows remain immutable.
 
 The August 21 r63 incident repair retains every r62 projection, probability
 head, calibration, side-selection rule, grade policy, action threshold, stake
