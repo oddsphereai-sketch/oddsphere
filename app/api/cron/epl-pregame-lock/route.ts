@@ -3,6 +3,7 @@ import { buildEplDailyEdgePreview, hydrateEplPriceHistory, hydrateEplStoredPrice
 import { buildEplShadowSlate } from "@/lib/services/epl/buildEplShadowSlate";
 import { persistEplLineHistory, readEplStoredPriceHistory } from "@/lib/services/epl/eplLineHistoryStore";
 import { EPL_EXTERNAL_ID_OFFSET, findEplGamesEnteringLock, writeEplPredictionRecords } from "@/lib/services/epl/eplProductionPipeline";
+import { eplSnapshotGamesNeedingLock } from "@/lib/services/epl/eplLockedSnapshot";
 import { readCurrentEplMemberSnapshot, writeCurrentEplMemberSnapshot } from "@/lib/services/epl/eplMemberSnapshotStore";
 
 export const maxDuration = 300;
@@ -12,19 +13,24 @@ export async function GET(request: Request): Promise<Response> {
     if (process.env.EPL_LOCK_CRON_ENABLED !== "true") {
       return { records_updated: 0, details: { disabled: true, reason: "EPL_LOCK_CRON_ENABLED!=true" } };
     }
+    const currentSnapshot = await readCurrentEplMemberSnapshot();
     const candidates = await findEplGamesEnteringLock();
-    if (candidates.length === 0) {
+    const snapshotLockIds = eplSnapshotGamesNeedingLock(currentSnapshot);
+    if (candidates.length === 0 && snapshotLockIds.length === 0) {
       return { records_updated: 0, details: { competition: "english_premier_league", candidates: 0, provider_calls: 0 } };
     }
     const apply = process.env.EPL_DB_WRITES_ENABLED === "true";
     const slate = await buildEplShadowSlate();
     hydrateEplStoredPriceHistory(await readEplStoredPriceHistory(slate.matches.map((match) => match.id)));
-    hydrateEplPriceHistory(await readCurrentEplMemberSnapshot());
+    hydrateEplPriceHistory(currentSnapshot);
     let allBookPrices: Parameters<typeof persistEplLineHistory>[0]["allBookPrices"] = [];
     const response = await buildEplDailyEdgePreview(slate, { captureAllBookPrices: (rows) => { allBookPrices = rows; } });
     const lineHistory = await persistEplLineHistory({ response, allBookPrices, apply });
     const predictions = await writeEplPredictionRecords({ slate, response, apply });
-    const lockedProviderIds = new Set(candidates.map((row) => row.externalId - EPL_EXTERNAL_ID_OFFSET));
+    const lockedProviderIds = new Set([
+      ...candidates.map((row) => row.externalId - EPL_EXTERNAL_ID_OFFSET),
+      ...snapshotLockIds,
+    ]);
     const lockedAt = new Date().toISOString();
     const lockedResponse = {
       ...response,
@@ -45,6 +51,7 @@ export async function GET(request: Request): Promise<Response> {
         competition: "english_premier_league",
         apply,
         candidates,
+        snapshot_lock_repairs: snapshotLockIds,
         line_history: lineHistory,
         proposed: predictions.proposed.length,
         written: predictions.written,

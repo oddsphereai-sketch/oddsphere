@@ -18,31 +18,30 @@ export type EplLockCandidate = { gameId: number; externalId: number; kickoff: st
  */
 export async function findEplGamesEnteringLock(now: Date = new Date()): Promise<EplLockCandidate[]> {
   const lockWindowEnd = new Date(now.getTime() + EPL_LOCK_MINUTES * 60_000).toISOString();
-  const { data: games, error } = await supabase
-    .from("games")
-    .select("id,external_id,game_date,status")
-    .eq("sport", "soccer")
-    .gte("external_id", EPL_EXTERNAL_ID_OFFSET)
-    .lt("external_id", EPL_EXTERNAL_ID_OFFSET + 1_000_000)
-    .gt("game_date", now.toISOString())
-    .lte("game_date", lockWindowEnd);
-  if (error) throw new Error(`load EPL lock candidates: ${error.message}`);
-  const rows = (games ?? []) as Array<{ id: number; external_id: number; game_date: string | null; status: string | null }>;
-  if (rows.length === 0) return [];
-  const gameIds = rows.map((row) => row.id);
   const { data: records, error: recordError } = await supabase
     .from("prediction_records")
     .select("game_id,market,locked_at")
-    .in("game_id", gameIds)
-    .eq("model_version", EPL_SHADOW_MODEL_RELEASE);
+    .eq("model_version", EPL_SHADOW_MODEL_RELEASE)
+    .is("locked_at", null);
   if (recordError) throw new Error(`load EPL prediction locks: ${recordError.message}`);
   const unlockedByGame = new Map<number, number>();
   for (const row of (records ?? []) as Array<{ game_id: number; market: string; locked_at: string | null }>) {
     if (!row.locked_at) unlockedByGame.set(row.game_id, (unlockedByGame.get(row.game_id) ?? 0) + 1);
   }
+  const gameIds = [...unlockedByGame.keys()];
+  if (gameIds.length === 0) return [];
+  const { data: games, error } = await supabase
+    .from("games")
+    .select("id,external_id,game_date,status")
+    .eq("sport", "soccer")
+    .in("id", gameIds)
+    .gt("game_date", now.toISOString())
+    .lte("game_date", lockWindowEnd);
+  if (error) throw new Error(`load EPL lock candidates: ${error.message}`);
+  const rows = (games ?? []) as Array<{ id: number; external_id: number; game_date: string | null; status: string | null }>;
   return rows
     .filter((row) => !["final", "completed", "canceled", "cancelled", "postponed"].includes((row.status ?? "").toLowerCase()))
-    .map((row) => ({ gameId: row.id, externalId: row.external_id, kickoff: row.game_date!, unlockedMarkets: unlockedByGame.get(row.id) ?? 4 }))
+    .map((row) => ({ gameId: row.id, externalId: row.external_id, kickoff: row.game_date!, unlockedMarkets: unlockedByGame.get(row.id) ?? 0 }))
     .filter((row) => row.unlockedMarkets > 0);
 }
 
