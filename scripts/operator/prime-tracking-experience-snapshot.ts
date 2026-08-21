@@ -5,7 +5,7 @@
  * writing it. `--apply` publishes it through the same writer used by the
  * tracking refresh cron so the first member request never owns a cold build.
  */
-import { buildTrackingFoundationSnapshotBody } from "../../app/api/lab/tracking-foundation/route";
+import { buildTrackingFoundationSnapshotBody } from "../../lib/services/trackingFoundationSnapshot";
 import { refreshTrackingFoundationResponseSnapshot } from "../../lib/services/labResponseSnapshotWriter";
 
 const apply = process.argv.includes("--apply");

@@ -1,0 +1,12 @@
+{
+  "schemaRelease": "nfl_player_props_historical_schema_2026_08_20_r1",
+  "datasetRelease": "nfl_player_props_historical_features_2016_2025_2026_08_20_r1",
+  "sourceCacheRelease": "nfl_real_model_source_cache_2016_2025_2026_08_19_r1",
+  "minimumSeason": 2016,
+  "maximumSeason": 2025,
+  "phase": "regular",
+  "positions": ["QB", "RB", "FB", "WR", "TE"],
+  "phaseOneLabels": ["passing_attempts", "passing_completions", "passing_yards", "rushing_attempts", "rushing_yards", "receptions", "receiving_yards"],
+  "opportunityLabels": ["targets", "offense_snap_pct", "participated"],
+  "unstampedContextColumns": ["roster_status", "roster_status_description", "injury_report_status", "injury_practice_status"]
+}

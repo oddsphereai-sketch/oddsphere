@@ -42,6 +42,8 @@ yarn-error.log*
 next-env.d.ts
 
 # local research/output artifacts
+football-research/cache/
+football-research/reports/
 ops-local/*.json
 ops-local/learning-lab/
 ops-local/ai-sharp-analyst/*.json

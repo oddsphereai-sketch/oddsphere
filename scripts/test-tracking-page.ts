@@ -25,6 +25,8 @@ import { existsSync, readFileSync } from "node:fs";
 const PAGE = readFileSync("app/lab/tracking/TrackingClient.tsx", "utf8");
 const CHARTS = readFileSync("app/lab/tracking/components/TrackingCharts.tsx", "utf8");
 const API = readFileSync("app/api/lab/tracking-foundation/route.ts", "utf8");
+const TRACKING_SNAPSHOT = readFileSync("lib/services/trackingFoundationSnapshot.ts", "utf8");
+const TRACKING_RESPONSE_PATH = `${API}\n${TRACKING_SNAPSHOT}`;
 const TRACKING_PRIMER = readFileSync("scripts/operator/prime-tracking-experience-snapshot.ts", "utf8");
 const TRACK_RECORD = readFileSync("app/lab/track-record/page.tsx", "utf8");
 const LAB_NAV = readFileSync("app/lab/components/LabAppNav.tsx", "utf8");
@@ -419,11 +421,11 @@ check(
   /String\(r\.record\.pick \?\? ""\)\.toUpperCase\(\)\s*===\s*"NRFI"/.test(SERVICE) &&
     /String\(r\.record\.pick \?\? ""\)\.toUpperCase\(\)\s*===\s*"YRFI"/.test(SERVICE),
 );
-check("API surfaces bySportMarket",               API.includes("bySportMarket: result.bySportMarket"));
-check("API surfaces yesterday",                   API.includes("yesterday: result.yesterday"));
-check("API surfaces thisWeek",                    API.includes("thisWeek: result.thisWeek"));
-check("API surfaces recentPicks",                 API.includes("recentPicks: result.recentPicks"));
-check("API surfaces recentlySettled (6B.21)",     API.includes("recentlySettled: result.recentlySettled"));
+check("API surfaces bySportMarket",               TRACKING_RESPONSE_PATH.includes("bySportMarket: result.bySportMarket"));
+check("API surfaces yesterday",                   TRACKING_RESPONSE_PATH.includes("yesterday: result.yesterday"));
+check("API surfaces thisWeek",                    TRACKING_RESPONSE_PATH.includes("thisWeek: result.thisWeek"));
+check("API surfaces recentPicks",                 TRACKING_RESPONSE_PATH.includes("recentPicks: result.recentPicks"));
+check("API surfaces recentlySettled (6B.21)",     TRACKING_RESPONSE_PATH.includes("recentlySettled: result.recentlySettled"));
 check("API does not expose raw audit fields",     !/sport_specific|fi_v2_audit|v2_2_audit|snapshot_json/.test(API));
 check(
   "member tracking reads a cron-published fast snapshot before the expensive aggregate",
@@ -441,8 +443,8 @@ check(
 check(
   "background Tracking snapshot builds have a cron-safe budget while member requests still fail fast",
   API.includes("TRACKING_AGGREGATE_TIMEOUT_MS = 30000") &&
-    API.includes("TRACKING_SNAPSHOT_BUILD_TIMEOUT_MS = 120000") &&
-    API.includes("input.timeoutMs ?? TRACKING_SNAPSHOT_BUILD_TIMEOUT_MS"),
+    TRACKING_SNAPSHOT.includes("TRACKING_SNAPSHOT_BUILD_TIMEOUT_MS = 120000") &&
+    TRACKING_SNAPSHOT.includes("input.timeoutMs ?? TRACKING_SNAPSHOT_BUILD_TIMEOUT_MS"),
 );
 check("API does not expose model-version breakdowns to members", !API.includes("byModelVersion"));
 check("API excludes launch-day picks",            API.includes("includeLaunchDay: false"));

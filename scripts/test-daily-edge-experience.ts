@@ -14,7 +14,7 @@ import {
 import { isDailyEdgeExperiencePreviewAvailable } from "../lib/config/dailyEdgeExperience";
 import { __WNBA_AVAILABILITY_TEST__ } from "../lib/services/wnba/espnWnbaAvailability";
 import { __MLB_AVAILABILITY_TEST__ } from "../lib/services/mlb/playbookMlbAvailability";
-import { __DAILY_EDGE_AVAILABILITY_ROUTE_TEST__ } from "../app/api/lab/daily-edge-availability/route";
+import { parseDailyEdgeAvailabilityMatchup } from "../lib/services/dailyEdge/availabilityRequest";
 import { pitcherFirstInningPoint } from "../app/lab/lib/dailyEdgeFirstInningHistory";
 
 const snapshotPrimerSource = readFileSync(
@@ -245,9 +245,10 @@ check(
 );
 check(
   "an explicit EPL request can never fall through to the World Cup snapshot",
-  candidateMemberPageSource.includes("const snapshot = eplRequested") &&
-    candidateMemberPageSource.includes(": emptyPreviewSnapshot(sport)\n    : await loadDailyEdgeSnapshot") &&
-    candidateMemberPageSource.includes('competition === "premier_league"\n          ? { active: "premier_league"'),
+  candidateMemberPageSource.includes("else if (eplRequested && eplEnabled)") &&
+    candidateMemberPageSource.includes("else if (eplRequested)") &&
+    candidateMemberPageSource.includes("snapshot = emptyPreviewSnapshot(sport)") &&
+    candidateMemberPageSource.includes('competition === "premier_league" && eplEnabled'),
 );
 
 console.log("\n━━━ Candidate presentation truthfulness ━━━");
@@ -375,7 +376,7 @@ check(
 check(
   "sport-specific recent context uses goals, points, or runs",
   candidateSource.includes('const scoringNoun = sport === "soccer"') &&
-    candidateSource.includes('sport === "nba" || sport === "wnba" ? "points" : "runs"'),
+    candidateSource.includes('sport === "nba" || sport === "wnba" || sport === "nfl" || sport === "cfb" || sport === "cbb" ? "points" : "runs"'),
 );
 check(
   "MLB candidate uses the same established ESPN logo host as the current reader",
@@ -705,9 +706,9 @@ check(
 );
 check(
   "availability endpoint accepts only bounded exact matchup tokens",
-  __DAILY_EDGE_AVAILABILITY_ROUTE_TEST__.parseMatchup("mlb-42|WSH|PHI")?.homeTeam === "PHI" &&
-    __DAILY_EDGE_AVAILABILITY_ROUTE_TEST__.parseMatchup("mlb-42|WSH|PHI|extra") === null &&
-    __DAILY_EDGE_AVAILABILITY_ROUTE_TEST__.parseMatchup("../secret|WSH|PHI") === null,
+  parseDailyEdgeAvailabilityMatchup("mlb-42|WSH|PHI")?.homeTeam === "PHI" &&
+    parseDailyEdgeAvailabilityMatchup("mlb-42|WSH|PHI|extra") === null &&
+    parseDailyEdgeAvailabilityMatchup("../secret|WSH|PHI") === null,
 );
 
 console.log(`\n${passed} passed, ${failed} failed`);
