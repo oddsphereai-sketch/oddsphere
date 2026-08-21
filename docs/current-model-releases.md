@@ -529,6 +529,15 @@ cannot regrade them; T-60 and already locked tuples remain frozen. The paired cu
 run retained three Leans and six Watchlists with zero promotions, demotions, side changes,
 confidence changes, or stake changes.
 
+The August 21 incoherent-total integrity follow-up preserves that same v3 release when a transient
+provider board quotes the selected and opposing total sides at different point lines. The
+authoritative writer carries forward a prior tuple only when side, line, exact model probability,
+outcome confidence, grade, decision chronology, and every release identifier still match. The
+unlocked reader may likewise reuse only the complete matching v3 tracking tuple; newer quotes at
+another line remain separate context and cannot replace or regrade the evaluated decision. Locked
+tuples still win unconditionally. The live GS@CHI reproduction and focused regression are recorded
+in `docs/model-audits/2026-08-21-wnba-incoherent-total-tuple-fallback.md`.
+
 ## MLB Player Props candidate
 
 - Release: `mlb_props_2026_08_19_r37`

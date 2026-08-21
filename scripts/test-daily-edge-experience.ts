@@ -741,9 +741,9 @@ check(
   "WNBA price trails stay on the current point line while total and spread line trails retain line changes",
   wnbaTrailSource.includes("history.filter((row) => closeLine(row.line_value, currentLine))") &&
     wnbaAdapterSource.includes('totalLine: coherentPriceTrail(rows, historyRows, "total"') &&
-    wnbaAdapterSource.includes("totalCurrentContext.currentQuote ?? totalCurrent, true") &&
+    wnbaAdapterSource.includes("totalCurrentContext.currentQuote ?? totalDecisionPrice, true") &&
     wnbaAdapterSource.includes('spreadLine: coherentPriceTrail(rows, historyRows, "spread"') &&
-    wnbaAdapterSource.includes("spreadCurrentContext.currentQuote ?? spreadCurrent, true") &&
+    wnbaAdapterSource.includes("spreadCurrentContext.currentQuote ?? spreadDecisionPrice, true") &&
     wnbaAdapterSource.includes("lineTrail: game.pickedPrices?.spreadLine"),
 );
 check(
@@ -786,10 +786,17 @@ check(
 );
 check(
   "WNBA T-60 readers retain the locked tuple while current quotes continue independently",
-  wnbaAdapterSource.includes("const lockedTuple = lockedRecordsForGame.get(market)?.snapshot_json?.decision_tuple") &&
+  wnbaAdapterSource.includes("const lockedTuple = input.lockedRecord?.snapshot_json?.decision_tuple") &&
     wnbaAdapterSource.includes("if (isWnbaDecisionTuple(lockedTuple)) return lockedTuple") &&
     wnbaAdapterSource.includes("const currentPrice = pickedPrice(rows, market, side, currentLine)") &&
     wnbaAdapterSource.includes("currentQuoteSportsbook: currentTrail.sportsbook ?? null"),
+);
+check(
+  "WNBA unlocked readers reuse only a compatible last-known-good v3 tuple",
+  wnbaAdapterSource.includes("record.snapshot_json?.prediction_record_contract_version !== WNBA_V3_RECORD_CONTRACT_VERSION") &&
+    wnbaAdapterSource.includes("return retainCompatibleWnbaDecisionTuple(candidate, input.currentDecision)") &&
+    wnbaAdapterSource.includes("decisionTuples.total?.evaluated_price_american") &&
+    wnbaAdapterSource.includes('decisionLineRows("total", totalSide, totalDecisionLine)'),
 );
 
 const parsedEvent = __WNBA_AVAILABILITY_TEST__.parseScoreboardEvent({

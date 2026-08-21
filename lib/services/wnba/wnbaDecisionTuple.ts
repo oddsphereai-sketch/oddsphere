@@ -195,3 +195,38 @@ export function isWnbaDecisionTuple(value: unknown): value is WnbaDecisionTuple 
     tuple.grade_policy_version === EXPECTED_WNBA_GRADE_POLICY_VERSION
   );
 }
+
+/**
+ * Preserve the last authoritative tuple when a transient provider board cannot
+ * produce a new exact price for an otherwise unchanged decision. The tuple is
+ * reusable only when every decision-defining field still matches; current
+ * quotes remain separate reader context and never mutate this evidence.
+ */
+export function retainCompatibleWnbaDecisionTuple(
+  previous: unknown,
+  input: {
+    market: WnbaDecisionMarket;
+    side: WnbaDecisionSide;
+    line: number | null;
+    modelProbability: number;
+    outcomeConfidence: number;
+    betGrade: string;
+    decisionAt: string;
+  },
+): WnbaDecisionTuple | null {
+  if (!isWnbaDecisionTuple(previous)) return null;
+  const decisionMs = Date.parse(input.decisionAt);
+  const previousDecisionMs = Date.parse(previous.decision_at);
+  if (
+    !Number.isFinite(decisionMs) ||
+    !Number.isFinite(previousDecisionMs) ||
+    previousDecisionMs > decisionMs ||
+    previous.market !== input.market ||
+    previous.side !== input.side ||
+    !sameLine(previous.line, input.line) ||
+    Math.abs(previous.model_probability - input.modelProbability) >= 1e-12 ||
+    Math.abs(previous.outcome_confidence - input.outcomeConfidence) >= 1e-12 ||
+    previous.bet_grade !== input.betGrade
+  ) return null;
+  return previous;
+}
