@@ -55,13 +55,40 @@ type SharpSplitRowWithTeams = RawSharpApiSplitRowV2 & {
   away_team?: string | null;
 };
 
+type SharpEventCatalogRow = {
+  id?: string | null;
+  home_team?: string | null;
+  away_team?: string | null;
+  start_time?: string | null;
+  books?: string[] | null;
+};
+
 export type SharpSplitSlateAlignment = {
   aligned: boolean;
   validPairs: number;
   currentSlateMatches: number;
   previousSlateMatches: number;
   currentCoverage: number;
+  eventDateMatches: number;
+  eventDateMismatches: number;
+  eventDateUnparseable: number;
+  verifiedCurrentRows: number;
 };
+
+export function selectVerifiedSharpApiCurrentRows(
+  rows: readonly SharpSplitRowWithTeams[],
+  currentGames: readonly Pick<GameRef, "awayAbbr" | "homeAbbr">[],
+  requestedSlateDate: string,
+): SharpSplitRowWithTeams[] {
+  const currentPairs = new Set(currentGames.map((game) => `${game.awayAbbr}@${game.homeAbbr}`));
+  return rows.filter((row) => {
+    const league = String(row.league ?? "").toLowerCase();
+    if (league && league !== "mlb") return false;
+    if (extractEventIdDate(row.event_id) !== requestedSlateDate) return false;
+    const key = marketIntelligenceGameKey("mlb", row.away_team, row.home_team);
+    return key !== null && currentPairs.has(key);
+  });
+}
 
 /**
  * Whole-payload identity gate for the Market Intelligence observation writer.
@@ -72,13 +99,22 @@ export function assessSharpApiSplitSlateAlignment(
   rows: readonly SharpSplitRowWithTeams[],
   currentGames: readonly Pick<GameRef, "awayAbbr" | "homeAbbr">[],
   previousGames: readonly Pick<GameRef, "awayAbbr" | "homeAbbr">[],
+  requestedSlateDate: string,
 ): SharpSplitSlateAlignment {
   const rowPairs = new Set<string>();
+  let eventDateMatches = 0;
+  let eventDateMismatches = 0;
+  let eventDateUnparseable = 0;
   for (const row of rows) {
     const league = String(row.league ?? "").toLowerCase();
     if (league && league !== "mlb") continue;
     const key = marketIntelligenceGameKey("mlb", row.away_team, row.home_team);
-    if (key !== null) rowPairs.add(key);
+    if (key === null) continue;
+    rowPairs.add(key);
+    const eventDate = extractEventIdDate(row.event_id);
+    if (eventDate === null) eventDateUnparseable++;
+    else if (eventDate === requestedSlateDate) eventDateMatches++;
+    else eventDateMismatches++;
   }
   const currentPairs = new Set(currentGames.map((game) => `${game.awayAbbr}@${game.homeAbbr}`));
   const previousPairs = new Set(previousGames.map((game) => `${game.awayAbbr}@${game.homeAbbr}`));
@@ -86,15 +122,25 @@ export function assessSharpApiSplitSlateAlignment(
   const previousSlateMatches = Array.from(rowPairs).filter((key) => previousPairs.has(key)).length;
   const validPairs = rowPairs.size;
   const currentCoverage = validPairs === 0 ? 0 : currentSlateMatches / validPairs;
+  const exactEventDateEvidence = eventDateMatches > 0 && eventDateMismatches === 0;
+  const verifiedCurrentRows = selectVerifiedSharpApiCurrentRows(
+    rows,
+    currentGames,
+    requestedSlateDate,
+  ).length;
   return {
     aligned:
       validPairs > 0 &&
       currentCoverage >= 0.7 &&
-      currentSlateMatches > previousSlateMatches,
+      (currentSlateMatches > previousSlateMatches || exactEventDateEvidence),
     validPairs,
     currentSlateMatches,
     previousSlateMatches,
     currentCoverage,
+    eventDateMatches,
+    eventDateMismatches,
+    eventDateUnparseable,
+    verifiedCurrentRows,
   };
 }
 
@@ -166,8 +212,12 @@ export function marketIntelligenceGameKey(
 
 function extractEventIdDate(eventId: string | number | null | undefined): string | null {
   if (eventId === null || eventId === undefined) return null;
-  const m = String(eventId).replace(/_b\d+$/, "").match(/_(\d{4}-\d{2}-\d{2})$/);
+  const m = String(eventId).replace(/_b\d+(?:_g\d+)?$/, "").match(/_(\d{4}-\d{2}-\d{2})$/);
   return m?.[1] ?? null;
+}
+
+function stripSharpApiEventBucket(eventId: string): string {
+  return eventId.replace(/_b\d+(?:_g\d+)?$/, "");
 }
 
 function isTableMissing(message: string): boolean {
@@ -533,11 +583,34 @@ function findPlaybookGameMatch(
   return null;
 }
 
-function findSharpApiGameMatches(
-  candidates: readonly GameRef[],
-): GameRef[] {
+export function findSharpApiSplitGameMatches<T extends Pick<GameRef, "gameDate">>(
+  candidates: readonly T[],
+  providerEventId: string | null,
+): T[] {
   if (candidates.length <= 1) return [...candidates];
-  return [...candidates];
+  const gameNumberMatch = providerEventId?.match(/_g(\d+)(?:$|_)/i) ?? null;
+  const gameNumber = gameNumberMatch ? Number(gameNumberMatch[1]) : null;
+  if (gameNumber === null || !Number.isInteger(gameNumber) || gameNumber < 1) return [];
+  const ordered = [...candidates].sort((left, right) =>
+    Date.parse(left.gameDate ?? "") - Date.parse(right.gameDate ?? ""),
+  );
+  return ordered[gameNumber - 1] ? [ordered[gameNumber - 1]!] : [];
+}
+
+function findSharpApiCatalogGameMatch(
+  candidates: readonly GameRef[],
+  row: SharpEventCatalogRow,
+): GameRef | null {
+  if (candidates.length === 0) return null;
+  if (candidates.length === 1) return candidates[0] ?? null;
+  const providerStart = row.start_time ?? null;
+  if (!providerStart) return null;
+  const byDistance = candidates
+    .map((game) => ({ game, distance: timeDistanceMs(game.gameDate, providerStart) }))
+    .filter((entry): entry is { game: GameRef; distance: number } => entry.distance !== null)
+    .sort((a, b) => a.distance - b.distance);
+  const best = byDistance[0] ?? null;
+  return best && best.distance <= 6 * 60 * 60 * 1000 ? best.game : null;
 }
 
 async function collectSharpApiSplits(opts: {
@@ -549,6 +622,7 @@ async function collectSharpApiSplits(opts: {
   apiKey: string | undefined;
   now: Date;
   ingestionRunId: string;
+  includeHistory: boolean;
 }): Promise<{
   fetchedRows: number;
   observations: MarketSplitObservationV2[];
@@ -579,28 +653,41 @@ async function collectSharpApiSplits(opts: {
     rows,
     opts.games,
     opts.previousGames,
+    opts.slateDate,
   );
-  if (rows.length > 0 && !slateAlignment.aligned) {
-    return {
-      fetchedRows: rows.length,
-      observations: [],
-      rejected: rows.map((row) => ({
-        provider: "sharpapi" as const,
-        provider_event_id:
-          row.event_id === undefined || row.event_id === null ? null : String(row.event_id),
-        market_type: null,
-        selection_key: null,
-        reason:
-          `SharpAPI split slate alignment rejected: current=${slateAlignment.currentSlateMatches}/${slateAlignment.validPairs}, ` +
-          `previous=${slateAlignment.previousSlateMatches}/${slateAlignment.validPairs}`,
-      })),
-      errors: [],
-      details: {
-        slate_alignment: slateAlignment,
-        stale_or_ambiguous_payload_rejected: true,
-        history_requests_made: 0,
-      },
-    };
+  const verifiedCurrentRows = selectVerifiedSharpApiCurrentRows(
+    rows,
+    opts.games,
+    opts.slateDate,
+  );
+  const rejectedPayload = rows.length > 0 && !slateAlignment.aligned;
+  const partialPayloadRecovery = rejectedPayload && verifiedCurrentRows.length > 0;
+  const rowsToCollect = rejectedPayload ? verifiedCurrentRows : rows;
+  const providerErrors = rejectedPayload
+    ? [
+        `${partialPayloadRecovery ? "SharpAPI split payload partially recovered" : "SharpAPI split payload rejected by slate alignment"}: ` +
+          `accepted ${verifiedCurrentRows.length}/${rows.length} exact-date current-matchup rows; ` +
+          `current=${slateAlignment.currentSlateMatches}/${slateAlignment.validPairs}, ` +
+          `previous=${slateAlignment.previousSlateMatches}/${slateAlignment.validPairs}, ` +
+          `event_date_match=${slateAlignment.eventDateMatches}, event_date_mismatch=${slateAlignment.eventDateMismatches}`,
+      ]
+    : [];
+
+  let catalogRows: SharpEventCatalogRow[] = [];
+  if (opts.includeHistory) {
+    try {
+      const catalogDates = [opts.slateDate, offsetDate(opts.slateDate, 1)];
+      const catalogPages = await Promise.all(catalogDates.map((date) =>
+        client.fetchAll<SharpEventCatalogRow>({
+          path: "/events",
+          query: { league: "mlb", date, limit: 200 },
+          maxPages: 2,
+        })
+      ));
+      catalogRows = catalogPages.flat();
+    } catch (e) {
+      providerErrors.push(`SharpAPI event-catalog history recovery failed: ${e instanceof Error ? e.message : String(e)}`);
+    }
   }
 
   const gamesByKey = new Map<string, GameRef[]>();
@@ -615,52 +702,84 @@ async function collectSharpApiSplits(opts: {
     canonicalEventIds: opts.games.map((g) => String(g.externalId)),
   });
   const observations: MarketSplitObservationV2[] = [];
-  const rejected: CanonicalObservationRejection[] = [];
+  const rejected: CanonicalObservationRejection[] = rejectedPayload
+    ? rows
+        .filter((row) => !verifiedCurrentRows.includes(row))
+        .map((row) => ({
+          provider: "sharpapi" as const,
+          provider_event_id:
+            row.event_id === undefined || row.event_id === null ? null : String(row.event_id),
+          market_type: null,
+          selection_key: null,
+          reason: "excluded because the row is not an exact-date current-slate matchup",
+        }))
+    : [];
   const currentConsensusRows: SharpSplitRowWithTeams[] = [];
-  let duplicateMatchRows = 0;
+  let ambiguousDoubleheaderRowsRejected = 0;
   const historyRequests: Array<Promise<{
     eventId: string;
     game: GameRef;
     rows: RawSharpApiSplitHistoryRowV2[];
     startTime: string | null;
+    error: string | null;
   }>> = [];
-  for (const row of rows) {
+  const historyRequestKeys = new Set<string>();
+  let historyRequestsSkippedAfterStart = 0;
+  const queueHistoryRequest = (providerEventId: string, game: GameRef): void => {
+    if (!opts.includeHistory) return;
+    const eventStarted = game.gameDate !== null && Date.parse(game.gameDate) <= opts.now.getTime();
+    if (eventStarted) {
+      historyRequestsSkippedAfterStart++;
+      return;
+    }
+    const requestKey = `${game.externalId}|${providerEventId}`;
+    if (historyRequestKeys.has(requestKey)) return;
+    historyRequestKeys.add(requestKey);
+    const startTime = historyStartTimeForEvent(game, existingHistory);
+    historyRequests.push(
+      client.fetchAll<RawSharpApiSplitHistoryRowV2>({
+        path: "/splits/history",
+        query: startTime === null
+          ? { event_id: providerEventId }
+          : { event_id: providerEventId, start_time: startTime },
+        maxPages: 20,
+      })
+        .then((historyRows) => ({ eventId: providerEventId, game, rows: historyRows, startTime, error: null }))
+        .catch((e) => ({
+          eventId: providerEventId,
+          game,
+          rows: [],
+          startTime,
+          error: e instanceof Error ? e.message : String(e),
+        })),
+    );
+  };
+  for (const row of rowsToCollect) {
     const rowDate = extractEventIdDate(row.event_id);
     if (rowDate !== null && rowDate !== opts.slateDate) continue;
     const key = marketIntelligenceGameKey(opts.sport, row.away_team, row.home_team);
-    const matchedGames = key ? findSharpApiGameMatches(gamesByKey.get(key) ?? []) : [];
+    const providerEventId = row.event_id === undefined || row.event_id === null ? null : String(row.event_id);
+    const pairGames = key ? gamesByKey.get(key) ?? [] : [];
+    const matchedGames = findSharpApiSplitGameMatches(pairGames, providerEventId);
     if (matchedGames.length === 0) {
+      if (pairGames.length > 1) ambiguousDoubleheaderRowsRejected++;
       rejected.push({
         provider: "sharpapi",
-        provider_event_id: row.event_id === undefined || row.event_id === null ? null : String(row.event_id),
+        provider_event_id: providerEventId,
         market_type: null,
         selection_key: null,
-        reason: `unmatched SharpAPI split game ${row.away_team ?? "?"}@${row.home_team ?? "?"}`,
+        reason: pairGames.length > 1
+          ? `ambiguous SharpAPI doubleheader split identity ${providerEventId ?? "null"}`
+          : `unmatched SharpAPI split game ${row.away_team ?? "?"}@${row.home_team ?? "?"}`,
       });
       continue;
     }
-    if (matchedGames.length > 1) duplicateMatchRows += 1;
-    const providerEventId = row.event_id === undefined || row.event_id === null ? null : String(row.event_id);
     const sourceBook = String(row.sportsbook ?? "").toLowerCase();
     if (sourceBook === "consensus") {
       currentConsensusRows.push(row);
     }
     for (const game of matchedGames) {
-      const eventStarted = game.gameDate !== null && Date.parse(game.gameDate) <= opts.now.getTime();
-      if (providerEventId !== null && !eventStarted) {
-        const startTime = historyStartTimeForEvent(game, existingHistory);
-        historyRequests.push(
-          client.fetchAll<RawSharpApiSplitHistoryRowV2>({
-            path: "/splits/history",
-            query: startTime === null
-              ? { event_id: providerEventId }
-              : { event_id: providerEventId, start_time: startTime },
-            maxPages: 20,
-          })
-            .then((historyRows) => ({ eventId: providerEventId, game, rows: historyRows, startTime }))
-            .catch(() => ({ eventId: providerEventId, game, rows: [], startTime })),
-        );
-      }
+      if (providerEventId !== null) queueHistoryRequest(providerEventId, game);
       const built = buildSharpApiSplitObservationsV2({
         row,
         canonicalEventId: String(game.externalId),
@@ -675,11 +794,38 @@ async function collectSharpApiSplits(opts: {
       rejected.push(...built.rejected);
     }
   }
+
+  let catalogEventsMatched = 0;
+  const catalogGamesRecovered = new Set<number>();
+  for (const event of catalogRows) {
+    const providerEventId = event.id === undefined || event.id === null ? null : String(event.id);
+    if (!providerEventId || extractEventIdDate(providerEventId) !== opts.slateDate) continue;
+    const books = Array.isArray(event.books) ? event.books.map((book) => String(book).toLowerCase()) : [];
+    if (!books.includes("draftkings") && !books.includes("circa")) continue;
+    const key = marketIntelligenceGameKey(opts.sport, event.away_team, event.home_team);
+    const game = key ? findSharpApiCatalogGameMatch(gamesByKey.get(key) ?? [], event) : null;
+    if (!game) continue;
+    catalogEventsMatched++;
+    catalogGamesRecovered.add(game.externalId);
+    queueHistoryRequest(providerEventId, game);
+    // SharpAPI history has been observed under an unsuffixed canonical ID
+    // even when the event catalog and odds rows use a bucket suffix. The base
+    // ID is safe only for a single-game matchup; doubleheaders need their exact
+    // `_bN_gN` identities to remain independent.
+    if ((gamesByKey.get(key ?? "") ?? []).length === 1) {
+      const baseEventId = stripSharpApiEventBucket(providerEventId);
+      if (baseEventId !== providerEventId) queueHistoryRequest(baseEventId, game);
+    }
+  }
   const historyResults = await Promise.all(historyRequests);
   let historyRowsReceived = 0;
   let historyRowsAfterStartTime = 0;
   let historyCanonicalConstructed = 0;
   let historyCanonicalSkippedExisting = 0;
+  const historyRequestErrors = historyResults.flatMap((result) => result.error ? [result.error] : []);
+  if (historyRequestErrors.length > 0) {
+    providerErrors.push(`SharpAPI split history recovery failed for ${historyRequestErrors.length}/${historyResults.length} requests`);
+  }
   for (const result of historyResults) {
     historyRowsReceived += result.rows.length;
     for (const row of result.rows) {
@@ -721,14 +867,23 @@ async function collectSharpApiSplits(opts: {
     fetchedRows: rows.length + historyRowsFetched,
     observations,
     rejected,
-    errors: [],
+    errors: providerErrors,
     details: {
+      slate_alignment: slateAlignment,
+      stale_or_ambiguous_payload_rejected: rejectedPayload && !partialPayloadRecovery,
+      partial_payload_recovery: partialPayloadRecovery,
+      partial_rows_accepted: partialPayloadRecovery ? verifiedCurrentRows.length : 0,
+      partial_rows_rejected: rejectedPayload ? rows.length - verifiedCurrentRows.length : 0,
       current_split_rows_received: rows.length,
       current_consensus_rows_ingested: currentConsensusRows.length,
       current_consensus_sample: currentConsensusRows[0] ? sanitizeSharpSplitSample(currentConsensusRows[0]) : null,
-      duplicate_match_rows_copied_to_each_game: duplicateMatchRows,
+      ambiguous_doubleheader_rows_rejected: ambiguousDoubleheaderRowsRejected,
+      event_catalog_rows_received: catalogRows.length,
+      event_catalog_matches: catalogEventsMatched,
+      event_catalog_games_recovered: catalogGamesRecovered.size,
       history_requests_made: historyRequests.length,
-      history_requests_skipped_after_start: Math.max(0, rows.length - historyRequests.length),
+      history_requests_skipped_after_start: historyRequestsSkippedAfterStart,
+      history_request_errors: historyRequestErrors.length,
       history_rows_received: historyRowsReceived,
       history_rows_after_incremental_filter: historyRowsAfterStartTime,
       history_canonical_constructed: historyCanonicalConstructed,
@@ -868,6 +1023,7 @@ export async function syncMarketIntelligenceV2Shadow(opts: {
   now?: Date;
   playbookApiKey?: string;
   sharpApiKey?: string;
+  includeSharpApiHistory?: boolean;
   logger?: (message: string) => void;
 }): Promise<MarketIntelligenceV2ShadowSyncResult> {
   const now = opts.now ?? new Date();
@@ -930,6 +1086,7 @@ export async function syncMarketIntelligenceV2Shadow(opts: {
       apiKey: opts.sharpApiKey ?? process.env.SHARPAPI_KEY,
       now,
       ingestionRunId,
+      includeHistory: opts.includeSharpApiHistory !== false,
     }),
     loadPriceObservations({ supabase: opts.supabase, sport: opts.sport, games, now }),
   ]);

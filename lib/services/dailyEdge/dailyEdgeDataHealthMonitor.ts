@@ -1196,7 +1196,8 @@ function collectFindings(
       pushFinding(findings, row, "actionable_edge_missing", "high", "Actionable prediction is missing model-vs-market edge.");
     }
     if (row.identity.marketType !== "FI" && sharpStatus === "sharp_context_unavailable_current_source") {
-      pushFinding(findings, row, "ml_total_sharp_context_missing", "medium", "ML/Total row is missing Sharp Book context.");
+      const severity: DailyEdgeDataHealthSeverity = row.identity.sport === "mlb" ? "high" : "medium";
+      pushFinding(findings, row, "ml_total_sharp_context_missing", severity, "ML/Total row is missing Sharp Book context.");
     }
     if (
       row.identity.marketType !== "FI" &&

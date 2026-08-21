@@ -39,6 +39,10 @@
     },
     {
       "path": "/api/cron/public-splits-observations-refresh",
+      "schedule": "*/15 11-12 * * *"
+    },
+    {
+      "path": "/api/cron/public-splits-observations-refresh",
       "schedule": "*/15 13-23 * * *"
     },
     {

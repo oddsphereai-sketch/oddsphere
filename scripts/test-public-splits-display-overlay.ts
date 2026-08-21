@@ -2,6 +2,7 @@ import {
   alignMarketReadsToDisplayedPublicSplits,
   overlayResolvedPublicSplits,
   refreshDisplayedSplitFreshness,
+  stripAmbiguousDoubleheaderSharpSplits,
   type ResolvedDisplayByExtId,
 } from "../lib/services/publicSplitsDisplayOverlay";
 import type { DailyEdgeGameDto } from "../app/lab/lib/labTypes";
@@ -228,12 +229,77 @@ check(
   hourlyVerifiedSnapshot.markets.moneyline!.recommendationDecision?.sharpBookSplits?.rows[0]?.isStale === true,
 );
 
+function ambiguousDecision() {
+  return {
+    pick: "STL",
+    modelProbability: 0.52,
+    marketImplied: 0.51,
+    edgePp: 1,
+    price: -110,
+    consensusSplits: {
+      label: "Consensus Splits" as const,
+      rows: [
+        { side: "away" as const, label: "STL", moneyPct: 56, betsPct: 59 },
+        { side: "home" as const, label: "CIN", moneyPct: 44, betsPct: 41 },
+      ],
+      signal: null,
+      lastUpdated: "2026-08-17T16:40:00.000Z",
+    },
+    sharpBookSplits: {
+      label: "Sharp Book Splits" as const,
+      rows: [
+        { side: "away" as const, label: "STL", moneyPct: 72, betsPct: 65 },
+        { side: "home" as const, label: "CIN", moneyPct: 28, betsPct: 35 },
+      ],
+      signal: null,
+      lastUpdated: "2026-08-17T16:38:00.000Z",
+    },
+    lineMovement: "neutral" as const,
+    resolvedMarketRead: { status: "aligned" as const, label: "Market Support" as const, tone: "emerald" as const, copy: "Sharp book splits support STL." },
+    sourceConflict: false,
+    playGrade: "No Play" as const,
+    quickRead: "Sharp-book splits support our side.",
+    supportingEvidence: ["Consensus splits reviewed.", "Sharp book splits reviewed.", "Sharp book splits support STL."],
+    riskNote: "",
+    renderedQuickReadCopy: "Sharp-book splits support our side.",
+    renderedSupportingEvidenceCopy: "Sharp book money supports STL.",
+    reasonCodes: ["consensus_splits_available", "sharp_book_splits_available", "market_read_aligned", "grade_no_play"],
+  };
+}
+
+const doubleheaderOne = game();
+doubleheaderOne.external_id = 8202183;
+doubleheaderOne.awayTeam = "STL";
+doubleheaderOne.homeTeam = "CIN";
+doubleheaderOne.markets.moneyline!.recommendationDecision = ambiguousDecision();
+doubleheaderOne.recommendationDecision = {
+  sport: "mlb", slateDate: "2026-08-17", gameId: "8202183", awayTeam: "STL", homeTeam: "CIN",
+  markets: { moneyline: ambiguousDecision() },
+  sourceState: { consensusSplitsAvailable: true, sharpBookSplitsAvailable: true, staleSources: [], missingExpectedSources: [], sourceConflict: false },
+  audit: { deterministicStatus: "pass", aiStatus: "skipped", payloadHash: "test", canPublish: true },
+};
+const doubleheaderTwo = structuredClone(doubleheaderOne);
+doubleheaderTwo.external_id = 5059649;
+stripAmbiguousDoubleheaderSharpSplits([doubleheaderOne, doubleheaderTwo]);
+const correctedDecision = doubleheaderOne.markets.moneyline!.recommendationDecision!;
+check("ambiguous doubleheader sharp rows fail closed", correctedDecision.sharpBookSplits === null);
+check("ambiguous doubleheader copy is rebuilt from consensus only", correctedDecision.resolvedMarketRead.status === "consensus_support" && !/sharp/i.test(correctedDecision.resolvedMarketRead.copy));
+check("ambiguous doubleheader rendered sharp copy is removed", correctedDecision.renderedQuickReadCopy === null && correctedDecision.renderedSupportingEvidenceCopy === null);
+check("ambiguous doubleheader correction never changes the grade or pick", correctedDecision.playGrade === "No Play" && correctedDecision.pick === "STL");
+check("ambiguous doubleheader game source state reports sharp unavailable", doubleheaderOne.recommendationDecision?.sourceState.sharpBookSplitsAvailable === false);
+
+const singleGame = game();
+singleGame.markets.moneyline!.recommendationDecision = ambiguousDecision();
+stripAmbiguousDoubleheaderSharpSplits([singleGame]);
+check("single-game verified sharp sections are preserved", singleGame.markets.moneyline!.recommendationDecision?.sharpBookSplits !== null);
+
 const splitCron = readFileSync("app/api/cron/public-splits-observations-refresh/route.ts", "utf8");
 const vercel = readFileSync("vercel.json", "utf8");
 check("split refresh republishes the coherent Daily Edge snapshot", splitCron.includes("refreshDailyEdgeResponseSnapshot"));
 check("split refresh uses the shared prediction-pipeline lease", splitCron.includes('leaseGroup: "prediction_pipeline"') && splitCron.includes("requireLease: true"));
 check("split refresh is sport-scoped rather than writing MLB and WNBA under one lease", splitCron.includes("cronHandlerPerSport") && splitCron.includes("async ({ sport })"));
-check("split observations refresh every 15 minutes", (vercel.match(/"schedule": "\*\/15/g) ?? []).length === 2);
+check("split refresh recovers source-aware MLB rows from event history", splitCron.includes("runScheduledMarketIntelligenceV2Collection") && splitCron.includes("includeSharpApiHistory: true"));
+check("split observations refresh every 15 minutes", (vercel.match(/"schedule": "\*\/15/g) ?? []).length === 3);
 
 if (fail > 0) {
   console.error(`public splits display overlay tests: ${pass} passed, ${fail} failed`);

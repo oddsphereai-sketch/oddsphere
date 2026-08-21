@@ -21,6 +21,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { MarketEdgeDto, DailyEdgeGameDto } from "../../app/lab/lib/labTypes";
 import type { MarketReadV2Dto } from "../types/domain/MarketIntelligenceV2";
+import type { MarketDecision, ResolvedMarketRead } from "../types/domain/RecommendationDecision";
 import { STALE_AGE_MINUTES } from "./lastKnownGoodReader";
 
 type Market = "moneyline" | "total";
@@ -335,6 +336,95 @@ export function refreshDisplayedSplitFreshness(
 
       refreshDecision(dto.recommendationDecision);
       refreshDecision(game.recommendationDecision?.markets[market]);
+    }
+  }
+  return games;
+}
+
+function consensusOnlyRead(decision: MarketDecision): ResolvedMarketRead {
+  const pick = (decision.pick ?? "the pick").trim();
+  const pickUpper = pick.toUpperCase();
+  const selected = decision.consensusSplits?.rows.find((row) =>
+    row.label.trim().toUpperCase() === pickUpper ||
+    (pickUpper.includes("OVER") && row.side === "over") ||
+    (pickUpper.includes("UNDER") && row.side === "under")
+  ) ?? null;
+  const money = selected?.moneyPct ?? null;
+  const bets = selected?.betsPct ?? null;
+  const values = [money, bets].filter((value): value is number => value !== null);
+  if (values.length > 0 && values.every((value) => value >= 50)) {
+    return { status: "consensus_support", label: "Consensus Support", tone: "emerald", copy: `Consensus splits support ${pick}.` };
+  }
+  if (values.length > 0 && values.every((value) => value < 50)) {
+    return { status: "consensus_resistance", label: "Consensus Resistance", tone: "amber", copy: `Consensus splits show resistance against ${pick}.` };
+  }
+  return { status: "no_clear_signal", label: "No Clear Signal", tone: "gray", copy: "No clear market signal." };
+}
+
+function stripSharpSection(decision: MarketDecision | null | undefined): void {
+  if (!decision?.sharpBookSplits) return;
+  const previousReadCopy = decision.resolvedMarketRead.copy;
+  const resolvedMarketRead = consensusOnlyRead(decision);
+  decision.sharpBookSplits = null;
+  decision.resolvedMarketRead = resolvedMarketRead;
+  decision.sourceConflict = false;
+  decision.reasonCodes = [
+    ...decision.reasonCodes.filter((code) =>
+      code !== "sharp_book_splits_available" &&
+      code !== "source_conflict" &&
+      code !== "market_resistance" &&
+      !code.startsWith("market_read_")
+    ),
+    "sharp_book_splits_unavailable",
+    `market_read_${resolvedMarketRead.status}`,
+    ...(resolvedMarketRead.status === "consensus_resistance" ? ["market_resistance"] : []),
+  ];
+  decision.supportingEvidence = [
+    ...decision.supportingEvidence.filter((line) =>
+      line !== previousReadCopy && !/sharp(?:-| )book/i.test(line)
+    ),
+    "Sharp book splits unavailable.",
+    resolvedMarketRead.copy,
+  ];
+  if (/sharp(?:-| )book/i.test(decision.quickRead)) decision.quickRead = resolvedMarketRead.copy;
+  if (/sharp(?:-| )book/i.test(decision.renderedQuickReadCopy ?? "")) decision.renderedQuickReadCopy = null;
+  if (/sharp(?:-| )book/i.test(decision.renderedSupportingEvidenceCopy ?? "")) decision.renderedSupportingEvidenceCopy = null;
+}
+
+/**
+ * A provider matchup id without a game number cannot be attributed safely to
+ * either half of an MLB doubleheader. Until the response carries exact
+ * provider-event provenance, fail closed for duplicate team-pair cards rather
+ * than displaying a potentially copied sharp-book section.
+ *
+ * Display/evidence correction only: picks, probabilities, prices, grades and
+ * locked outcomes remain untouched.
+ */
+export function stripAmbiguousDoubleheaderSharpSplits(
+  games: DailyEdgeGameDto[],
+): DailyEdgeGameDto[] {
+  const pairCounts = new Map<string, number>();
+  for (const game of games) {
+    const key = `${game.awayTeam.trim().toUpperCase()}@${game.homeTeam.trim().toUpperCase()}`;
+    pairCounts.set(key, (pairCounts.get(key) ?? 0) + 1);
+  }
+  for (const game of games) {
+    const key = `${game.awayTeam.trim().toUpperCase()}@${game.homeTeam.trim().toUpperCase()}`;
+    if ((pairCounts.get(key) ?? 0) < 2) continue;
+    for (const market of ["moneyline", "total"] as const) {
+      stripSharpSection(game.markets[market]?.recommendationDecision);
+      stripSharpSection(game.recommendationDecision?.markets[market]);
+    }
+    if (game.recommendationDecision) {
+      const decisions = Object.values(game.recommendationDecision.markets).filter(Boolean) as MarketDecision[];
+      const sharpAvailable = decisions.some((decision) => decision.sharpBookSplits !== null);
+      game.recommendationDecision.sourceState.sharpBookSplitsAvailable = sharpAvailable;
+      game.recommendationDecision.sourceState.sourceConflict = decisions.some((decision) => decision.sourceConflict);
+      game.recommendationDecision.sourceState.staleSources = game.recommendationDecision.sourceState.staleSources
+        .filter((source) => source !== "Sharp Book Splits");
+      game.recommendationDecision.sourceState.missingExpectedSources = sharpAvailable
+        ? game.recommendationDecision.sourceState.missingExpectedSources
+        : Array.from(new Set([...game.recommendationDecision.sourceState.missingExpectedSources, "Sharp Book Splits"]));
     }
   }
   return games;

@@ -460,6 +460,26 @@ async function main() {
     check("doubleheader sibling — Game 2 real-book row is retained", result.records.some((row) => row.game_external_id === 7002 && row.sportsbook === "fanduel"));
   }
 
+  section("Doubleheader — direct schedule probe uses provider-valid bucket ordering");
+  {
+    const base = "mlb_royals_twins_2026-06-05";
+    const oddsMap = new Map<string, Array<Record<string, unknown>>>([
+      [`${base}_b3_g2`, [oddsRow({ market_type: "moneyline", sportsbook: "fanduel", selection_type: "home" })]],
+    ]);
+    const neverResolve = async (): Promise<number | null> => null;
+    const stub = new StubClient([], oddsMap);
+    const provider = new SharpAPIOddsProvider("stub-key", neverResolve, { client: stub });
+    const result = await provider.getGameLinesV2(SLATE, "mlb", {
+      slateGames: [{ externalId: 7002, home: "MIN", away: "KC", gameNumber: 2 }],
+    });
+    const eventIds = stub.calls
+      .filter((call) => call.path === "/odds")
+      .map((call) => String(call.query.event_id));
+    check("direct Game 2 — provider-valid _b3_g2 id is fetched", eventIds.includes(`${base}_b3_g2`));
+    check("direct Game 2 — invalid _g2_b3 id is never fetched", !eventIds.includes(`${base}_g2_b3`));
+    check("direct Game 2 — real-book row is retained", result.records.some((row) => row.game_external_id === 7002));
+  }
+
   // ── [2F.1-G] call cap behavior on speculative buckets ──
   section("Step 2F.1 — speculative buckets call-capped when cap exhausted");
   {
