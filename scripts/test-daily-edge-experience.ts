@@ -123,6 +123,20 @@ check(
     !candidateDailyEdgeSource.includes('className="flex flex-wrap items-center justify-between gap-3">\n          <div className="flex min-w-0 items-center gap-2.5"'),
 );
 check(
+  "Daily Edge labels outcome confidence separately from the exact-price Bet grade",
+  candidateDailyEdgeSource.includes("Outcome confidence") &&
+    candidateDailyEdgeSource.includes(">Bet grade</p>") &&
+    candidateDailyEdgeSource.includes("Bet grade · exact-price decision") &&
+    candidateDailyEdgeSource.includes("Selected-outcome probability") &&
+    !candidateDailyEdgeSource.includes(">Play grade</p>"),
+);
+check(
+  "the shared reader explains that confidence cannot silently override price-sensitive grading",
+  candidateDailyEdgeSource.includes("Outcome confidence is shown separately and does not override the Bet grade") &&
+    candidateDailyEdgeSource.includes("neither is a guarantee or automatic parlay recommendation") &&
+    candidateDailyEdgeSource.includes("recommendation evaluated at"),
+);
+check(
   "truth-like flag values do not accidentally open production",
   !isDailyEdgeExperiencePreviewAvailable({
     NODE_ENV: "production",
