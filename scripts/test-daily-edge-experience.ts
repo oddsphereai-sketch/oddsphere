@@ -16,6 +16,11 @@ import { __WNBA_AVAILABILITY_TEST__ } from "../lib/services/wnba/espnWnbaAvailab
 import { __MLB_AVAILABILITY_TEST__ } from "../lib/services/mlb/playbookMlbAvailability";
 import { parseDailyEdgeAvailabilityMatchup } from "../lib/services/dailyEdge/availabilityRequest";
 import { pitcherFirstInningPoint } from "../app/lab/lib/dailyEdgeFirstInningHistory";
+import {
+  DAILY_EDGE_WEEKLY_READER_LIFECYCLE_RELEASE,
+  filterWeeklyReaderSnapshot,
+  weeklyReaderGameIsVisible,
+} from "../lib/services/dailyEdge/weeklyReaderLifecycle";
 
 const snapshotPrimerSource = readFileSync(
   "scripts/operator/prime-daily-edge-experience-snapshots.ts",
@@ -236,12 +241,56 @@ check(
     candidateDailyEdgeSource.includes('label: "World Cup"'),
 );
 check(
-  "planned sports remain visible but unavailable",
-  ["nfl", "cfb", "cbb"].every(
+  "all active models lead the top-level pill bar and NFL is active",
+  DAILY_EDGE_TOP_LEVEL_SPORT_KEYS.slice(0, 4).join(",") === "mlb,wnba,soccer,nfl" &&
+    DAILY_EDGE_SPORT_AVAILABILITY.nfl?.isLive === true &&
+    DAILY_EDGE_SPORT_AVAILABILITY.nfl?.statusLabel === "Active",
+);
+check(
+  "planned football and basketball models remain visible but unavailable",
+  ["cfb", "cbb"].every(
     (key) =>
       DAILY_EDGE_SPORTS.find((definition) => definition.key === key)
         ?.memberAvailable === false,
   ),
+);
+
+console.log("\n━━━ Weekly member-board lifecycle ━━━");
+const thursdayKickoff = { gameStartAt: "2026-08-21T00:00:00.000Z" };
+const fridayKickoff = { gameStartAt: "2026-08-22T00:00:00.000Z" };
+check(
+  "the weekly reader lifecycle is explicitly released",
+  DAILY_EDGE_WEEKLY_READER_LIFECYCLE_RELEASE === "daily_edge_weekly_reader_lifecycle_2026_08_21_r1",
+);
+check(
+  "an NFL game stays visible throughout its Eastern game date",
+  weeklyReaderGameIsVisible(thursdayKickoff, "nfl", new Date("2026-08-21T03:59:59.000Z")),
+);
+check(
+  "an NFL game rolls off when Friday begins in the East",
+  !weeklyReaderGameIsVisible(thursdayKickoff, "nfl", new Date("2026-08-21T04:00:00.000Z")),
+);
+check(
+  "the EPL reader retains its existing 2 a.m. Eastern rollover",
+  weeklyReaderGameIsVisible(thursdayKickoff, "soccer", new Date("2026-08-21T05:59:59.000Z")) &&
+    !weeklyReaderGameIsVisible(thursdayKickoff, "soccer", new Date("2026-08-21T06:00:00.000Z")),
+);
+const weeklySnapshot = {
+  games: [
+    { id: "nfl-thursday", ...thursdayKickoff },
+    { id: "nfl-friday", ...fridayKickoff },
+    { id: "nfl-legacy", gameStartAt: null },
+  ],
+} as unknown as import("../app/lab/lib/labTypes").DailyEdgeResponse;
+const filteredWeeklySnapshot = filterWeeklyReaderSnapshot(
+  weeklySnapshot,
+  "nfl",
+  new Date("2026-08-21T12:00:00.000Z"),
+);
+check(
+  "filtering removes only prior-date games and fails open for legacy timestamps",
+  filteredWeeklySnapshot.games.map((row) => row.id).join(",") === "nfl-friday,nfl-legacy" &&
+    weeklySnapshot.games.length === 3,
 );
 check(
   "an explicit EPL request can never fall through to the World Cup snapshot",

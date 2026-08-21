@@ -47,6 +47,7 @@ check("invalid legacy game time fails safely", zonedWallTimeToIso("2026-08-02", 
 
 const dailyEdgeRoute = readFileSync("app/api/lab/daily-edge/route.ts", "utf8");
 const dailyEdgeUi = readFileSync("app/lab/components/daily-edge/DailyEdgeShell.tsx", "utf8");
+const candidateDailyEdgeUi = readFileSync("app/dev/experience-preview/ActualDailyEdgePreview.tsx", "utf8");
 const propsUi = readFileSync("app/mlb/props/components/PlayerPropsDashboard.tsx", "utf8");
 const provider = readFileSync("app/lab/components/UserTimeZone.tsx", "utf8");
 
@@ -54,6 +55,13 @@ check("Daily Edge publishes the canonical game timestamp", dailyEdgeRoute.includ
 check(
   "Daily Edge localizes legacy cached snapshots from their official slate time",
   dailyEdgeUi.includes("game.gameStartAt ?? legacyGameStartAt"),
+);
+check(
+  "the redesigned Daily Edge localizes every rendered game-time surface",
+  candidateDailyEdgeUi.includes('import { LocalTime } from "@/app/lab/components/UserTimeZone"') &&
+    (candidateDailyEdgeUi.match(/<LocalTime value=\{/g) ?? []).length === 4 &&
+    !candidateDailyEdgeUi.includes("{game.gameTime}</span>") &&
+    !candidateDailyEdgeUi.includes("{reader.game.gameTime}</span>"),
 );
 check("Player Props uses shared local-time rendering", propsUi.includes("<LocalTime") && propsUi.includes("hourInZone(row.gameStartTime, userTimeZone)"));
 check("timezone detection runs after hydration", provider.includes("useSyncExternalStore(") && provider.includes("resolvedOptions().timeZone"));

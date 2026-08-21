@@ -15,6 +15,7 @@ import type {
 } from "@/lib/services/dailyEdge/gameAvailability";
 import SportSelector from "@/app/lab/components/SportSelector";
 import { LockBadge } from "@/app/lab/components/daily-edge/LockBadge";
+import { LocalTime } from "@/app/lab/components/UserTimeZone";
 import {
   DAILY_EDGE_SPORT_AVAILABILITY,
   DAILY_EDGE_TOP_LEVEL_SPORT_KEYS,
@@ -359,7 +360,7 @@ function CollapsedReader({ game, market, marketKey, sport, onOpen, onOpenMarket,
             <TeamLogo src={game.homeTeamLogo} label={game.homeTeam} />
           </div>
           <VerdictBadge market={market} />
-          <span className="text-[9px] text-gray-600">{game.gameTime}</span>
+          <LocalTime value={game.gameStartAt} fallback={game.gameTime} className="text-[9px] text-gray-600" />
           <LockBadge lockState={game.lockState} lockedAt={game.lockedAt} scheduledLockAt={game.scheduledLockAt} className="font-black uppercase tracking-wider text-emerald-300" />
           <span className="ml-auto text-[8px] font-black uppercase tracking-wider text-gray-600">{index + 1} / {total}</span>
         </div>
@@ -454,7 +455,7 @@ function MobileReaderSheet({ onClose, onPrev, onNext, ...reader }: ReaderSurface
       <div className="absolute inset-x-0 bottom-0 top-12 flex flex-col overflow-hidden rounded-t-2xl border-t border-violet-400/35 bg-[#0a0910] shadow-[0_-24px_80px_-35px_rgba(124,58,237,0.85)]">
         <div className="shrink-0 border-b border-white/[0.07] bg-[#100e18] px-3 pb-2 pt-3">
           <div className="flex items-center justify-between gap-3">
-            <div className="flex min-w-0 items-center gap-2"><TeamLogo src={reader.game.awayTeamLogo} label={reader.game.awayTeam} /><span className="text-sm font-black text-white">{reader.game.awayTeam}</span><span className="text-[9px] text-gray-700">@</span><span className="text-sm font-black text-white">{reader.game.homeTeam}</span><TeamLogo src={reader.game.homeTeamLogo} label={reader.game.homeTeam} /><span className="truncate text-[9px] text-gray-600">{reader.game.gameTime}</span><LockBadge lockState={reader.game.lockState} lockedAt={reader.game.lockedAt} scheduledLockAt={reader.game.scheduledLockAt} className="font-black uppercase tracking-wider text-emerald-300" /></div>
+            <div className="flex min-w-0 items-center gap-2"><TeamLogo src={reader.game.awayTeamLogo} label={reader.game.awayTeam} /><span className="text-sm font-black text-white">{reader.game.awayTeam}</span><span className="text-[9px] text-gray-700">@</span><span className="text-sm font-black text-white">{reader.game.homeTeam}</span><TeamLogo src={reader.game.homeTeamLogo} label={reader.game.homeTeam} /><LocalTime value={reader.game.gameStartAt} fallback={reader.game.gameTime} className="truncate text-[9px] text-gray-600" /><LockBadge lockState={reader.game.lockState} lockedAt={reader.game.lockedAt} scheduledLockAt={reader.game.scheduledLockAt} className="font-black uppercase tracking-wider text-emerald-300" /></div>
             <button type="button" onClick={onClose} aria-label="Close reader" className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-white/[0.08] bg-white/[0.035] text-xl text-gray-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-300">×</button>
           </div>
           <div className="mt-2 flex items-center justify-between gap-2">
@@ -523,7 +524,7 @@ function ReaderHeader({ game, market, onCollapse, index, total }: { game: DailyE
         <div className="mt-3 flex flex-wrap items-center gap-2">
           <h2 className="text-lg font-black tracking-tight text-white sm:text-xl">{game.awayTeam} <span className="text-gray-600">@</span> {game.homeTeam}</h2>
           <VerdictBadge market={market} />
-          <span className="text-[10px] text-gray-600">{game.gameTime}</span>
+          <LocalTime value={game.gameStartAt} fallback={game.gameTime} className="text-[10px] text-gray-600" />
           <LockBadge lockState={game.lockState} lockedAt={game.lockedAt} scheduledLockAt={game.scheduledLockAt} className="font-black uppercase tracking-wider text-emerald-300" />
         </div>
       </div>
@@ -1859,7 +1860,7 @@ function BoardGameCard({ game, sport, headlineMarket, active, activeMarket, sele
           </div>
           <div className={`flex items-center gap-2 ${compactSoccer ? "min-h-6" : "min-h-8"}`}>
             <VerdictBadge market={headline} large={!compactSoccer} />
-            {finalScore ? <span className="rounded-full border border-white/[0.10] bg-white/[0.05] px-2 py-1 text-[9px] font-black uppercase tracking-wider text-gray-300">Final · {game.awayTeam} {finalScore.away}–{finalScore.home} {game.homeTeam}</span> : <><span className="text-[10px] text-gray-500">{game.gameTime}</span><LockBadge lockState={game.lockState} lockedAt={game.lockedAt} scheduledLockAt={game.scheduledLockAt} className="font-black uppercase tracking-wider text-emerald-300" /></>}
+            {finalScore ? <span className="rounded-full border border-white/[0.10] bg-white/[0.05] px-2 py-1 text-[9px] font-black uppercase tracking-wider text-gray-300">Final · {game.awayTeam} {finalScore.away}–{finalScore.home} {game.homeTeam}</span> : <><LocalTime value={game.gameStartAt} fallback={game.gameTime} className="text-[10px] text-gray-500" /><LockBadge lockState={game.lockState} lockedAt={game.lockedAt} scheduledLockAt={game.scheduledLockAt} className="font-black uppercase tracking-wider text-emerald-300" /></>}
           </div>
         </div>
         <div className={`${compactSoccer ? "mt-3" : "mt-5"} flex flex-wrap items-baseline gap-2`}>
