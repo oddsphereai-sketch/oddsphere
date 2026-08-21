@@ -85,8 +85,8 @@ check(
     layers.calibration_version === MLB_PUBLIC_CALIBRATION_VERSION,
 );
 check(
-  "MLB reconciliation is versioned as decision release r62 while retaining the r61 FI head",
-  MLB_DAILY_EDGE_DECISION_RELEASE_ID === "mlb_daily_edge_decision_2026_08_21_r62" &&
+  "MLB Sharp split recovery is versioned as decision release r63 while retaining every r62 champion head",
+  MLB_DAILY_EDGE_DECISION_RELEASE_ID === "mlb_daily_edge_decision_2026_08_21_r63" &&
     MLB_MODEL_LAYER_VERSION_SCHEMA === "mlb_model_layer_versions_v5" &&
     layers.rule_bundle_version === "mlb_daily_edge_rule_bundle_v51_2026_08_21" &&
     layers.correction_policy === "mlb_prediction_corrections_v15_reconciled_market_context_grade_only_2026_08_21" &&
@@ -439,10 +439,26 @@ check(
   sweepSource.includes("minIntervalMinutes: !dryRun && gateActive ? 0.75 : undefined") &&
     sweepSource.includes("leaseRetryMaxWaitMs: !dryRun && gateActive ? 20_000 : undefined"),
 );
+const enteringLockRefreshStart = sweepSource.indexOf(
+  "if (partition.entering_lock.length > 0 && sport === \"mlb\")",
+);
+const preLockModelIndex = sweepSource.indexOf(
+  "// ── 2. Final pre-lock auto-model pass",
+  enteringLockRefreshStart,
+);
+const enteringLockRefreshBlock = sweepSource.slice(
+  enteringLockRefreshStart,
+  preLockModelIndex,
+);
 check(
-  "lock-only sweep avoids full market intelligence collection",
-  sweepSource.includes("if (!lockOnly)") &&
-    sweepSource.indexOf("if (lockOnly)") < sweepSource.indexOf('sport === "mlb" && marketIntelligenceV2 === null'),
+  "one-game lock-only sweep cannot trigger full-slate Market Intelligence or Sharp history",
+  enteringLockRefreshStart >= 0 &&
+    preLockModelIndex > enteringLockRefreshStart &&
+    enteringLockRefreshBlock.includes("externalIdsFilter: enteringExternalIds") &&
+    enteringLockRefreshBlock.includes("if (!lockOnly)") &&
+    enteringLockRefreshBlock.indexOf("if (!lockOnly)") <
+      enteringLockRefreshBlock.indexOf("runScheduledMarketIntelligenceV2Collection") &&
+    !enteringLockRefreshBlock.includes("includeSharpApiHistory: true"),
 );
 check(
   "unlocked pregame refresh republishes coherent member records and snapshot",

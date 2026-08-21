@@ -21,6 +21,7 @@ import { syncPublicSplitsObservations } from "@/lib/services/syncPublicSplitsObs
 import { currentSlateDate } from "@/lib/dates/slateDate";
 import type { Sport } from "@/lib/types/domain/Sport";
 import { refreshDailyEdgeResponseSnapshot } from "@/lib/services/labResponseSnapshotWriter";
+import { runScheduledMarketIntelligenceV2Collection } from "@/lib/services/marketIntelligenceV2/scheduledCollection";
 
 const ENV = "PUBLIC_SPLITS_OBSERVATIONS_ENABLED";
 const SPORTS: Sport[] = ["mlb", "wnba"];
@@ -42,11 +43,26 @@ export async function GET(request: Request): Promise<Response> {
         apply: true,
         todayUtc: slate,
       });
+      const marketIntelligenceV2 = sport === "mlb"
+        ? await runScheduledMarketIntelligenceV2Collection({
+            supabase,
+            sport,
+            slateDate: slate,
+            phase: "public_splits_refresh",
+            // Incident recovery: the league-level Sharp snapshot can omit a
+            // current event while that event is already discoverable through
+            // the catalog/history route. Poll the bounded current-slate event
+            // inventory here so those rows are recovered without waiting for
+            // the hourly writer. The shared sport lease still owns the write.
+            includeSharpApiHistory: true,
+          })
+        : null;
       const errors = [
         ...(result.skippedTableMissing ? [`${sport} ${slate}: table not applied`] : []),
         ...result.errors,
+        ...(marketIntelligenceV2?.errors ?? []),
       ];
-      const responseSnapshot = errors.length === 0
+      const responseSnapshot = result.errors.length === 0 && !result.skippedTableMissing
         ? await refreshDailyEdgeResponseSnapshot({
             sport,
             date: slate,
@@ -57,8 +73,11 @@ export async function GET(request: Request): Promise<Response> {
         errors.push(`daily-edge snapshot publish failed: ${responseSnapshot.error ?? "unknown error"}`);
       }
       return {
-        records_updated: result.upserted + (responseSnapshot?.ok ? 1 : 0),
-        api_calls_made: 1,
+        records_updated:
+          result.upserted +
+          (marketIntelligenceV2?.recordsUpdated ?? 0) +
+          (responseSnapshot?.ok ? 1 : 0),
+        api_calls_made: 1 + (marketIntelligenceV2?.apiCallsMade ?? 0),
         partial: errors.length > 0,
         error_message: errors.length ? errors.slice(0, 5).join(" | ").slice(0, 1500) : null,
         details: {
@@ -66,6 +85,7 @@ export async function GET(request: Request): Promise<Response> {
           sharpapi: result.sharpapiRows,
           playbook: result.playbookRows,
           upserted: result.upserted,
+          market_intelligence_v2: marketIntelligenceV2,
           response_snapshot: responseSnapshot,
           errors: errors.slice(0, 20),
         },

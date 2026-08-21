@@ -309,17 +309,6 @@ export function buildSharpApiSplitObservationsV2(opts: {
     ? null
     : String(opts.row.event_id);
   const source = classifySharpApiSplitSourceBook(opts.row.sportsbook);
-  if (source.source_book === "betmgm") {
-    return {
-      observations,
-      rejected: [reject("sharpapi", {
-        providerEventId,
-        market: null,
-        selectionKey: null,
-        reason: "BetMGM ticket-share rows require public_bet_pct adapter; generic handle_pct mapping disabled",
-      })],
-    };
-  }
   if (source.source_book === null || source.source_type === null) {
     return {
       observations,
@@ -338,7 +327,12 @@ export function buildSharpApiSplitObservationsV2(opts: {
     const sideValues = MARKET_SIDES[market].map((side) => {
       const errors: string[] = [];
       const bets = normalizePercentToUnit(rawMarket.bets_pct?.[side], `${market}.${side}.bets`, errors);
-      const money = normalizePercentToUnit(rawMarket.handle_pct?.[side], `${market}.${side}.money`, errors);
+      // SharpAPI now emits current BetMGM aggregate rows through /splits.
+      // BetMGM is a ticket-share source: accept the provider's explicit
+      // bets_pct, but never reinterpret handle_pct as verified money share.
+      const money = source.source_book === "betmgm"
+        ? null
+        : normalizePercentToUnit(rawMarket.handle_pct?.[side], `${market}.${side}.money`, errors);
       return { side, bets, money, errors };
     });
     validateOpposingPercentages({

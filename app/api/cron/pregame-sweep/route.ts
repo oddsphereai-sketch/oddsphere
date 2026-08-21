@@ -430,6 +430,11 @@ export async function GET(request: Request) {
         records += preLockSignals.records_updated ?? 0;
         apiCalls += preLockSignals.api_calls_made ?? 0;
 
+        // The minute-cadence lock-only route must remain scoped to the games
+        // entering T-60. Market Intelligence v2 loads a slate and can perform
+        // bounded history recovery, so leave that work to the leased
+        // 15-minute public-splits collector. A non-lock-only operator sweep
+        // may still run the full collection here.
         if (!lockOnly) {
           marketIntelligenceV2 = await runScheduledMarketIntelligenceV2Collection({
             supabase,

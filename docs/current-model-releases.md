@@ -86,12 +86,28 @@ member-facing competition buckets. The scorer remains the shared regulation-time
 - Projection runtime: resolved automodel `v2_2`
 - First-inning runtime: `fi_v2` with the versioned unpublished-probable availability head below
 - Public calibration: `mlb_public_calibration_v23_reconciled_market_champions_2026_08_21`
-- Decision release: `mlb_daily_edge_decision_2026_08_21_r62`
+- Decision release: `mlb_daily_edge_decision_2026_08_21_r63`
 - Rule bundle: `mlb_daily_edge_rule_bundle_v51_2026_08_21`
 - Grade policy: `mlb_public_grade_policy_v41_reconciled_market_context_2026_08_21`
 - Tracking contract: `member_facing_lock_v8_priority_retry_minute_cadence_2026_08_11`
 - Machine registry: `lib/automodel/mlbModelLayerVersions.ts`
 - Authoritative member-facing writer: `lib/services/predictionRecordService.ts`
+
+The August 21 r63 incident repair retains every r62 projection, probability
+head, calibration, side-selection rule, grade policy, action threshold, stake
+rule, and the r61 first-inning bridge. It restores the previously tested
+source-aware MLB Sharp-split ingestion path that was absent from production
+`main`: exact-date current rows can be recovered from a mixed provider
+payload; bounded current-event history discovery runs through the existing
+Market Intelligence v2 writer; ambiguous doubleheaders fail closed; and the
+leased 15-minute split refresh publishes only verified evidence. The
+minute-cadence T-60 lock-only path remains scoped to entering game IDs and
+cannot invoke the slate/history collector.
+Playbook consensus is never relabeled as Sharp-book data. Evidence and rollback
+are recorded in
+`docs/model-audits/2026-08-21-mlb-sharp-splits-production-recovery-r63.md`.
+Rollback is r62, which preserves all model champions but returns MLB Sharp
+context to the known missing/fail-closed production state.
 
 The August 21 r62 reconciliation restores the tested r48/r54/r55 Moneyline
 and Total release line on top of production r61 without changing the r61

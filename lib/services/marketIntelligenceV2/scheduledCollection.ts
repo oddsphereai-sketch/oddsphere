@@ -15,7 +15,7 @@ export type ScheduledMarketIntelligenceV2Result = {
   enabled: boolean;
   sport: Sport;
   slateDate: string;
-  phase: "slate_cycle" | "pregame_sweep" | "wnba_daily_refresh" | "manual";
+  phase: "slate_cycle" | "pregame_sweep" | "wnba_daily_refresh" | "public_splits_refresh" | "manual";
   shadow: MarketIntelligenceV2ShadowSyncResult | null;
   snapshots: MarketIntelligenceV2SnapshotSyncResult | null;
   recordsUpdated: number;
@@ -29,6 +29,7 @@ export async function runScheduledMarketIntelligenceV2Collection(opts: {
   slateDate?: string;
   phase: ScheduledMarketIntelligenceV2Result["phase"];
   now?: Date;
+  includeSharpApiHistory?: boolean;
 }): Promise<ScheduledMarketIntelligenceV2Result> {
   const config = readMarketIntelligenceV2Config();
   const slateDate = opts.slateDate ?? currentSlateDate(opts.sport);
@@ -54,6 +55,7 @@ export async function runScheduledMarketIntelligenceV2Collection(opts: {
       apply: true,
       todayUtc: currentSlateDate(opts.sport),
       now,
+      includeSharpApiHistory: opts.includeSharpApiHistory,
     });
     result.shadow = shadow;
     result.recordsUpdated += shadow.splitObservationsWritten + shadow.priceObservationsWritten;

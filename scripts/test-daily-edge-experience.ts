@@ -39,6 +39,10 @@ const dailyEdgeRouteSource = readFileSync(
   "app/lab/daily-edge/page.tsx",
   "utf8",
 );
+const dailyEdgeApiSource = readFileSync(
+  "app/api/lab/daily-edge/route.ts",
+  "utf8",
+);
 const legacyDailyEdgeSource = readFileSync(
   "app/lab/components/daily-edge/DailyEdgeShell.tsx",
   "utf8",
@@ -166,6 +170,12 @@ check(
     dailyEdgeRouteSource.includes("await connection()") &&
     dailyEdgeRouteSource.indexOf("await connection()") <
       dailyEdgeRouteSource.indexOf("isDailyEdgeExperienceCandidateEnabled()"),
+);
+check(
+  "source-aware loading protects current Sharp rows from the per-event history cap",
+  dailyEdgeApiSource.includes("const [currentSharpResult, ...historyResults]") &&
+    dailyEdgeApiSource.includes('.eq("provider", "sharpapi")') &&
+    dailyEdgeApiSource.includes("[currentSharpResult, ...historyResults]"),
 );
 
 console.log("\n━━━ Reader selection contract ━━━");

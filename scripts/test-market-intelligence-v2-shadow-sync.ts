@@ -1,8 +1,10 @@
 import {
   dedupeSharpApiHistorySplitObservations,
   assessSharpApiSplitSlateAlignment,
+  findSharpApiSplitGameMatches,
   isSharpApiHistoryUniqueConflict,
   marketIntelligenceGameKey,
+  selectVerifiedSharpApiCurrentRows,
   writeRows,
 } from "../lib/services/marketIntelligenceV2/shadowSync";
 import type { MarketSplitObservationV2 } from "../lib/types/domain/MarketIntelligenceV2";
@@ -38,6 +40,7 @@ check(
       { awayAbbr: "BOS", homeAbbr: "NYY" },
       { awayAbbr: "MIL", homeAbbr: "LAD" },
     ],
+    "2026-08-14",
   );
   check(
     "Market Intelligence rejects date-advanced rows whose matchups fit the previous slate",
@@ -51,16 +54,107 @@ check(
       { awayAbbr: "MIL", homeAbbr: "LAD" },
     ],
     [{ awayAbbr: "MIL", homeAbbr: "LAD" }],
+    "2026-08-14",
   );
   check(
     "Market Intelligence accepts broad current-slate coverage with a better current fit",
     aligned.aligned && aligned.currentSlateMatches === 3 && aligned.previousSlateMatches === 1,
+  );
+
+  const repeatedSeries = assessSharpApiSplitSlateAlignment(
+    rows,
+    [
+      { awayAbbr: "MIA", homeAbbr: "NYM" },
+      { awayAbbr: "BOS", homeAbbr: "NYY" },
+      { awayAbbr: "MIL", homeAbbr: "LAD" },
+    ],
+    [
+      { awayAbbr: "MIA", homeAbbr: "NYM" },
+      { awayAbbr: "BOS", homeAbbr: "NYY" },
+      { awayAbbr: "MIL", homeAbbr: "LAD" },
+    ],
+    "2026-08-14",
+  );
+  check(
+    "Market Intelligence accepts an explicitly dated current payload when consecutive-series matchups overlap",
+    repeatedSeries.aligned &&
+      repeatedSeries.currentSlateMatches === 3 &&
+      repeatedSeries.previousSlateMatches === 3 &&
+      repeatedSeries.eventDateMatches === 3 &&
+      repeatedSeries.eventDateMismatches === 0,
+  );
+
+  const wrongDateRepeatedSeries = assessSharpApiSplitSlateAlignment(
+    rows,
+    [
+      { awayAbbr: "MIA", homeAbbr: "NYM" },
+      { awayAbbr: "BOS", homeAbbr: "NYY" },
+      { awayAbbr: "MIL", homeAbbr: "LAD" },
+    ],
+    [
+      { awayAbbr: "MIA", homeAbbr: "NYM" },
+      { awayAbbr: "BOS", homeAbbr: "NYY" },
+      { awayAbbr: "MIL", homeAbbr: "LAD" },
+    ],
+    "2026-08-15",
+  );
+  check(
+    "Market Intelligence still rejects overlapping-series payloads dated for another slate",
+    !wrongDateRepeatedSeries.aligned && wrongDateRepeatedSeries.eventDateMismatches === 3,
+  );
+
+  const contaminatedCurrentPayload = [
+    { event_id: "mlb_orioles_rays_2026-08-17", league: "mlb", away_team: "Baltimore Orioles", home_team: "Tampa Bay Rays" },
+    { event_id: "mlb_braves_diamondbacks_2026-08-17", league: "mlb", away_team: "Arizona Diamondbacks", home_team: "Atlanta Braves" },
+  ];
+  const verifiedRows = selectVerifiedSharpApiCurrentRows(
+    contaminatedCurrentPayload,
+    [{ awayAbbr: "BAL", homeAbbr: "TB" }],
+    "2026-08-17",
+  );
+  check(
+    "Market Intelligence isolates exact-date current matchups from a contaminated provider payload",
+    verifiedRows.length === 1 && verifiedRows[0]?.event_id === "mlb_orioles_rays_2026-08-17",
+  );
+  check(
+    "Market Intelligence never recovers a matching matchup stamped with the wrong date",
+    selectVerifiedSharpApiCurrentRows(
+      [{ ...contaminatedCurrentPayload[0], event_id: "mlb_orioles_rays_2026-08-16" }],
+      [{ awayAbbr: "BAL", homeAbbr: "TB" }],
+      "2026-08-17",
+    ).length === 0,
+  );
+  check(
+    "Market Intelligence recognizes SharpAPI doubleheader bucket ordering",
+    selectVerifiedSharpApiCurrentRows(
+      [{ event_id: "mlb_cardinals_reds_2026-08-17_b3_g2", league: "mlb", away_team: "St. Louis Cardinals", home_team: "Cincinnati Reds" }],
+      [{ awayAbbr: "STL", homeAbbr: "CIN" }],
+      "2026-08-17",
+    ).length === 1,
   );
 }
 check(
   "MLB key rejects unknown teams",
   marketIntelligenceGameKey("mlb", "Not A Team", "Detroit Tigers") === null,
 );
+{
+  const doubleheader = [
+    { gameDate: "2026-08-17T17:40:00Z", id: "g1" },
+    { gameDate: "2026-08-17T22:40:00Z", id: "g2" },
+  ];
+  check(
+    "SharpAPI unsuffixed doubleheader splits fail closed instead of copying to both games",
+    findSharpApiSplitGameMatches(doubleheader, "mlb_cardinals_reds_2026-08-17").length === 0,
+  );
+  check(
+    "SharpAPI exact Game 1 split identity maps only to the first game",
+    findSharpApiSplitGameMatches(doubleheader, "mlb_cardinals_reds_2026-08-17_b2_g1")[0]?.id === "g1",
+  );
+  check(
+    "SharpAPI exact Game 2 split identity maps only to the second game",
+    findSharpApiSplitGameMatches(doubleheader, "mlb_cardinals_reds_2026-08-17_b3_g2")[0]?.id === "g2",
+  );
+}
 check(
   "WNBA key normalizes known team names",
   marketIntelligenceGameKey("wnba", "Los Angeles Sparks", "Toronto Tempo") === "LA@TOR",

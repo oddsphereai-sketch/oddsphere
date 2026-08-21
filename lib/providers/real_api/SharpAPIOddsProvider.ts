@@ -674,7 +674,7 @@ export class SharpAPIOddsProvider implements IOddsProvider {
       );
       if ((game.gameNumber ?? 1) > 1) {
         candidates = candidates.map((id) =>
-          id.replace(/(_b\d+)$/, `_g${game.gameNumber}$1`),
+          id.replace(/(_b\d+)$/, `$1_g${game.gameNumber}`),
         );
       }
       const stripped = candidates[0]?.replace(/_b\d+$/, "") ??

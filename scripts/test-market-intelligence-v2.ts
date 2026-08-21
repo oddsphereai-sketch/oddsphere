@@ -288,7 +288,9 @@ const playbookRow: PlaybookSplitGame = {
     canonicalMarketId: marketId,
     selectionKey,
   });
-  check("Generic SharpAPI split adapter rejects BetMGM handle mapping", result.observations.length === 0 && result.rejected.length === 1);
+  const betMgmHome = result.observations.find((o) => o.selection_key.endsWith(":home"));
+  check("SharpAPI /splits accepts BetMGM ticket rows", result.observations.length === 2 && result.rejected.length === 0);
+  check("SharpAPI /splits never promotes BetMGM handle_pct to money share", betMgmHome?.bets_pct === 0.61 && betMgmHome.money_pct === null);
 }
 
 {
