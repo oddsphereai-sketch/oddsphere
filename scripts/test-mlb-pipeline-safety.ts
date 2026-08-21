@@ -225,8 +225,11 @@ check(
     .every((source) => source.includes("resolveWnbaMoneylineSide")),
 );
 check(
-  "WNBA reader only lets genuinely locked records override the current model payload",
-  wnbaReaderSource.includes("if (r.locked_at === null) continue;"),
+  "WNBA reader gives locked records unconditional priority and gates unlocked v3 fallback by exact compatibility",
+  wnbaReaderSource.includes("if (r.locked_at !== null)") &&
+    wnbaReaderSource.includes("if (isWnbaDecisionTuple(lockedTuple)) return lockedTuple") &&
+    wnbaReaderSource.includes("record.locked_at !== null") &&
+    wnbaReaderSource.includes("return retainCompatibleWnbaDecisionTuple(candidate, input.currentDecision)"),
 );
 check(
   "WNBA tracking writer fails closed on stale source release identifiers",

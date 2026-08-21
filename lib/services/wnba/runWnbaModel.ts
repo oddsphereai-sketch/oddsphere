@@ -20,6 +20,7 @@ import {
 } from "../../automodel/wnbaChampionRuntime";
 import {
   buildWnbaDecisionTuple,
+  retainCompatibleWnbaDecisionTuple,
   WNBA_DECISION_TUPLE_CONTRACT_VERSION,
   type WnbaDecisionPriceRow,
   type WnbaDecisionTuple,
@@ -150,9 +151,12 @@ export async function runWnbaModel(opts: {
 
   // Locked-row guard: never overwrite a game_predictions row that's already locked.
   const { data: lockedRows } = gameIds.length
-    ? await supabase.from("game_predictions").select("game_id, locked_at").in("game_id", gameIds)
+    ? await supabase.from("game_predictions").select("game_id, locked_at, sport_specific").in("game_id", gameIds)
     : { data: [] as Record<string, unknown>[] };
   const lockedSet = new Set((lockedRows ?? []).filter((r) => r.locked_at != null).map((r) => r.game_id as number));
+  const priorSportSpecificByGame = new Map(
+    (lockedRows ?? []).map((r) => [r.game_id as number, r.sport_specific as Record<string, unknown> | null]),
+  );
 
   const computedAt = new Date().toISOString();
   const payloads: Record<string, unknown>[] = [];
@@ -240,6 +244,11 @@ export async function runWnbaModel(opts: {
         ? -p.spread.line
         : null;
     const decisionTuples: Partial<Record<"moneyline" | "total" | "spread", WnbaDecisionTuple>> = {};
+    const priorDecisionTuples = priorSportSpecificByGame.get(g.id as number)?.decision_tuples;
+    const priorTupleFor = (market: "moneyline" | "total" | "spread"): unknown =>
+      priorDecisionTuples && typeof priorDecisionTuples === "object"
+        ? (priorDecisionTuples as Record<string, unknown>)[market]
+        : null;
     const moneylineTuple = buildWnbaDecisionTuple({
       rows: tupleRows,
       market: "moneyline",
@@ -251,7 +260,19 @@ export async function runWnbaModel(opts: {
       betGrade: p.moneyline.grade,
       decisionAt: computedAt,
     });
-    if (moneylineTuple) decisionTuples.moneyline = moneylineTuple;
+    const retainedMoneylineTuple = moneylineTuple ?? retainCompatibleWnbaDecisionTuple(
+      priorTupleFor("moneyline"),
+      {
+        market: "moneyline",
+        side: mlSide,
+        line: null,
+        modelProbability: probabilityComponents.moneyline_picked_probability ?? p.moneyline.confidence / 100,
+        outcomeConfidence: p.moneyline.confidence / 100,
+        betGrade: p.moneyline.grade,
+        decisionAt: computedAt,
+      },
+    );
+    if (retainedMoneylineTuple) decisionTuples.moneyline = retainedMoneylineTuple;
     if (totalSide !== null && p.total.line !== null && p.total.confidence !== null && p.total.grade !== null) {
       const totalTuple = buildWnbaDecisionTuple({
         rows: tupleRows,
@@ -263,7 +284,19 @@ export async function runWnbaModel(opts: {
         betGrade: p.total.grade,
         decisionAt: computedAt,
       });
-      if (totalTuple) decisionTuples.total = totalTuple;
+      const retainedTotalTuple = totalTuple ?? retainCompatibleWnbaDecisionTuple(
+        priorTupleFor("total"),
+        {
+          market: "total",
+          side: totalSide,
+          line: p.total.line,
+          modelProbability: probabilityComponents.total_picked_probability ?? p.total.confidence / 100,
+          outcomeConfidence: p.total.confidence / 100,
+          betGrade: p.total.grade,
+          decisionAt: computedAt,
+        },
+      );
+      if (retainedTotalTuple) decisionTuples.total = retainedTotalTuple;
     }
     if (spreadSide !== null && spreadLine !== null && p.spread.confidence !== null && p.spread.grade !== null) {
       const spreadTuple = buildWnbaDecisionTuple({
@@ -276,7 +309,19 @@ export async function runWnbaModel(opts: {
         betGrade: p.spread.grade,
         decisionAt: computedAt,
       });
-      if (spreadTuple) decisionTuples.spread = spreadTuple;
+      const retainedSpreadTuple = spreadTuple ?? retainCompatibleWnbaDecisionTuple(
+        priorTupleFor("spread"),
+        {
+          market: "spread",
+          side: spreadSide,
+          line: spreadLine,
+          modelProbability: probabilityComponents.spread_picked_probability ?? p.spread.confidence / 100,
+          outcomeConfidence: p.spread.confidence / 100,
+          betGrade: p.spread.grade,
+          decisionAt: computedAt,
+        },
+      );
+      if (retainedSpreadTuple) decisionTuples.spread = retainedSpreadTuple;
     }
 
     payloads.push({
