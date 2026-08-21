@@ -14,7 +14,13 @@ import {
   snapshotHasFinalSideCorrection,
   snapshotHasTrueMoneylineInversion,
 } from "../lib/services/finalSideDecision";
-import { withPredictionGradeHistory } from "../lib/services/predictionRecordService";
+import {
+  MLB_ML_CONFIDENCE_VALUE_CONTEXT_LEAN_RULE_ID,
+  MLB_TOTAL_CONFIDENCE_VALUE_CONTEXT_LEAN_RULE_ID,
+  resolveMlbMoneylineConfidenceValueContextLean,
+  resolveMlbTotalConfidenceValueContextLean,
+  withPredictionGradeHistory,
+} from "../lib/services/predictionRecordService";
 import { assertMlbChampionRuntime } from "../lib/automodel/mlbChampionRuntime";
 import {
   assertWnbaChampionRuntime,
@@ -66,8 +72,8 @@ const layers = buildMlbModelLayerVersions("total", {});
 check("missing model env stamps resolved v2_2", layers.runtime_env.automodel_version === "v2_2");
 check("missing FI env stamps resolved fi_v2", layers.runtime_env.first_inning_model_version === "fi_v2");
 check(
-  "grade policy carries August 20 v40 first-inning market-backed policy",
-  layers.grade_policy === "mlb_public_grade_policy_v40_first_inning_nonnegative_novig_edge_2026_08_20",
+  "grade policy carries the reconciled r62 MLB market hierarchy",
+  layers.grade_policy === "mlb_public_grade_policy_v41_reconciled_market_context_2026_08_21",
 );
 check(
   "tracking contract carries the priority-retry minute-lock release",
@@ -79,10 +85,77 @@ check(
     layers.calibration_version === MLB_PUBLIC_CALIBRATION_VERSION,
 );
 check(
-  "MLB first-inning market-backed bridge is versioned as decision release r61",
-  MLB_DAILY_EDGE_DECISION_RELEASE_ID === "mlb_daily_edge_decision_2026_08_20_r61" &&
-    MLB_MODEL_LAYER_VERSION_SCHEMA === "mlb_model_layer_versions_v3" &&
+  "MLB reconciliation is versioned as decision release r62 while retaining the r61 FI head",
+  MLB_DAILY_EDGE_DECISION_RELEASE_ID === "mlb_daily_edge_decision_2026_08_21_r62" &&
+    MLB_MODEL_LAYER_VERSION_SCHEMA === "mlb_model_layer_versions_v5" &&
+    layers.rule_bundle_version === "mlb_daily_edge_rule_bundle_v51_2026_08_21" &&
+    layers.correction_policy === "mlb_prediction_corrections_v15_reconciled_market_context_grade_only_2026_08_21" &&
+    layers.first_inning_probability_head === "mlb_first_inning_fi_v4_market_backed_weight25_2026_08_20" &&
     layers.schedule_time_policy === "mlb_official_schedule_time_v1_2026_07_30",
+);
+const mlConfidenceValueLean = resolveMlbMoneylineConfidenceValueContextLean({
+  blocked: false,
+  side: "home",
+  modelProbability: 0.635,
+  oddsAmerican: -182,
+  sameSideProjectionGap: 0.8,
+  lineDirection: "against_pick",
+  publicSplitConflict: false,
+});
+check(
+  "ML confidence/value/context hierarchy keeps a coherent expensive favorite as Lean",
+  mlConfidenceValueLean.lean &&
+    mlConfidenceValueLean.reason === MLB_ML_CONFIDENCE_VALUE_CONTEXT_LEAN_RULE_ID,
+);
+check(
+  "ML confidence/value/context hierarchy blocks a neutral market and excessive offered-price gap",
+  !resolveMlbMoneylineConfidenceValueContextLean({
+    blocked: false,
+    side: "home",
+    modelProbability: 0.698,
+    oddsAmerican: -295,
+    sameSideProjectionGap: 1.4,
+    lineDirection: "neutral",
+    publicSplitConflict: false,
+  }).lean,
+);
+check(
+  "ML confidence/value/context hierarchy preserves public/sharp conflict as a blocker",
+  !resolveMlbMoneylineConfidenceValueContextLean({
+    blocked: false,
+    side: "home",
+    modelProbability: 0.65,
+    oddsAmerican: -180,
+    sameSideProjectionGap: 1,
+    lineDirection: "toward_pick",
+    publicSplitConflict: true,
+  }).lean,
+);
+const totalConfidenceValueLean = resolveMlbTotalConfidenceValueContextLean({
+  blocked: false,
+  side: "over",
+  modelProbability: 0.558,
+  oddsAmerican: -127,
+  sameSideProjectionGap: 0.7,
+  lineDirection: "neutral",
+  publicSplitConflict: false,
+});
+check(
+  "Total confidence/value/context hierarchy promotes a clean coherent total to Lean",
+  totalConfidenceValueLean.lean &&
+    totalConfidenceValueLean.reason === MLB_TOTAL_CONFIDENCE_VALUE_CONTEXT_LEAN_RULE_ID,
+);
+check(
+  "Total confidence/value/context hierarchy preserves adverse movement as a blocker",
+  !resolveMlbTotalConfidenceValueContextLean({
+    blocked: false,
+    side: "under",
+    modelProbability: 0.58,
+    oddsAmerican: -120,
+    sameSideProjectionGap: 0.8,
+    lineDirection: "against_pick",
+    publicSplitConflict: false,
+  }).lean,
 );
 check("different final sides are a true correction", didFinalSideChange("home", "away"));
 check("same final side is not a correction", !didFinalSideChange("home", "home"));
