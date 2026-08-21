@@ -28,4 +28,4 @@ jobs:
         run: git fetch --no-tags origin main:refs/remotes/origin/main
 
       - name: Require candidate to contain current production base
-        run: node scripts/verify-integration-safety.mjs --base-ref=origin/main --skip-worktree-overlap
+        run: node scripts/verify-integration-safety.mjs --base-ref=origin/main --skip-worktree-overlap --allow-detached

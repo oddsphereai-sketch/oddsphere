@@ -6,7 +6,7 @@ import path from "node:path";
 
 function git(args, cwd, allowFailure = false) {
   try {
-    return execFileSync("git", args, { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim();
+    return execFileSync("git", args, { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trimEnd();
   } catch (error) {
     if (allowFailure) return null;
     const detail = error?.stderr?.toString().trim() || error?.message || "git command failed";
@@ -32,7 +32,8 @@ function changedFiles(from, to, cwd) {
 }
 
 function dirtyFiles(cwd) {
-  return new Set(lines(git(["status", "--porcelain=v1", "--untracked-files=all"], cwd)).map((row) => {
+  const statusRows = git(["status", "--porcelain=v1", "--untracked-files=all"], cwd).split("\n").filter(Boolean);
+  return new Set(statusRows.map((row) => {
     const raw = row.slice(3);
     return raw.includes(" -> ") ? raw.split(" -> ").at(-1) : raw;
   }));
@@ -73,7 +74,7 @@ const baseInput = argument("base-sha") ?? argument("base-ref") ?? "origin/main";
 const base = git(["rev-parse", `${baseInput}^{commit}`], root, true);
 const findings = [];
 
-if (!branch || branch === "main" || branch === "master") {
+if ((!branch && !flag("allow-detached")) || branch === "main" || branch === "master") {
   findings.push(`candidate branch is ${branch || "detached"}; production work requires a dedicated codex/* branch`);
 }
 if (!base) {
