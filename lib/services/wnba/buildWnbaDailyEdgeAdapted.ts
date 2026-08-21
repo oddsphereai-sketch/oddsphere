@@ -29,6 +29,7 @@ import type { Grade, MarketSignal, SignalType } from "../../../lib/types/domain/
 import type { Verdict } from "../verdictDerivation";
 import { SHARP_READ_SENTENCES, type SharpReadKey } from "../sharpReadSelector";
 import { buildWnbaDailyEdgePreview } from "./buildWnbaDailyEdgePreview";
+import { selectWnbaSameBookTrail } from "./wnbaPriceTrail";
 import { resolveWnbaMoneylineSide, wnbaLogoUrl } from "./wnbaTeams";
 import {
   EXPECTED_WNBA_GRADE_POLICY_VERSION,
@@ -606,16 +607,6 @@ function latestPickedPrice(rows: WnbaLineRow[], market: string, side: string | n
   );
 }
 
-const WNBA_MOVEMENT_BOOK_PRIORITY = [
-  "fanduel",
-  "betmgm",
-  "hardrock",
-  "pinnacle",
-  "caesars",
-  "betonline",
-  "thescorebet",
-];
-
 function coherentPriceTrail(
   liveRows: WnbaLineRow[],
   historyRows: WnbaLineRow[],
@@ -626,74 +617,36 @@ function coherentPriceTrail(
   allowLineChanges = false,
 ): WnbaPriceTrail {
   if (side === null) return { current: fallbackCurrent, open: null, previous: null, coherent: false };
-  const books = new Set(
-    [...historyRows, ...liveRows]
-      .filter((row) => row.market_type === market && row.side === side && row.sportsbook)
-      .map((row) => row.sportsbook as string),
+  const selection = selectWnbaSameBookTrail(
+    liveRows,
+    historyRows,
+    market,
+    side,
+    currentLine,
+    allowLineChanges,
   );
-  const rankedBooks = [...books].sort((a, b) => {
-    const aRank = WNBA_MOVEMENT_BOOK_PRIORITY.indexOf(a);
-    const bRank = WNBA_MOVEMENT_BOOK_PRIORITY.indexOf(b);
-    return (aRank < 0 ? 999 : aRank) - (bRank < 0 ? 999 : bRank) || a.localeCompare(b);
-  });
-
-  for (const sportsbook of rankedBooks) {
-    const history = historyRows
-      .filter((row) => row.market_type === market && row.side === side && row.sportsbook === sportsbook && typeof row.odds_american === "number")
-      .sort((a, b) => new Date(a.recorded_at ?? 0).getTime() - new Date(b.recorded_at ?? 0).getTime());
-    const liveCandidates = liveRows.filter((row) =>
-      row.market_type === market &&
-      row.side === side &&
-      row.sportsbook === sportsbook &&
-      typeof row.odds_american === "number",
-    );
-    const currentLineCandidates = currentLine === null
-      ? liveCandidates
-      : liveCandidates.filter((row) => closeLine(row.line_value, currentLine));
-    // line_history is loaded oldest → newest. The terminal stop must be the
-    // latest observation at this same book/side/line; selecting index 0 sent a
-    // completed trail back to its opener and made the UI correctly reject it.
-    const live = currentLineCandidates[currentLineCandidates.length - 1] ?? null;
-    const trackedHistory = allowLineChanges || currentLine === null
-      ? history
-      : history.filter((row) => closeLine(row.line_value, currentLine));
-    if (trackedHistory.length === 0 || !live) continue;
-
-    const stops: WnbaPriceTrailStop[] = [];
-    for (const row of [...trackedHistory, live]) {
-      const stop = {
-        american: row.odds_american as number,
-        line: row.line_value,
-        observedAt: row.recorded_at ?? null,
-      };
-      const prior = stops[stops.length - 1];
-      // A repeated price at a later timestamp is still a real prior
-      // observation. Preserve it so the reader can distinguish "steady across
-      // several checks" from "only one price was ever captured". Only discard
-      // an exact duplicate row.
-      if (
-        prior &&
-        prior.american === stop.american &&
-        prior.line === stop.line &&
-        prior.observedAt === stop.observedAt
-      ) continue;
-      stops.push(stop);
-    }
-    if (stops.length < 2) continue;
+  if (selection) {
+    const stops = selection.rows.map((row) => ({
+      american: row.odds_american as number,
+      line: row.line_value,
+      observedAt: row.recorded_at ?? null,
+    }));
     const open = stops[0]!;
     const current = stops[stops.length - 1]!;
-    const previous = stops.length > 2 ? stops[stops.length - 2]! : null;
+    const coherent = stops.length >= 2;
+    const previous = coherent && stops.length > 2 ? stops[stops.length - 2]! : null;
     return {
       current: fallbackCurrent,
-      open: open.american,
+      open: coherent ? open.american : null,
       previous: previous?.american ?? null,
       movementCurrent: current.american,
-      openLine: open.line,
+      openLine: coherent ? open.line : null,
       previousLine: previous?.line ?? null,
       currentLine: current.line,
-      sportsbook,
-      coherent: true,
+      sportsbook: selection.sportsbook,
+      coherent,
       stops,
+      terminalSource: selection.terminalSource,
     };
   }
   return { current: fallbackCurrent, open: null, previous: null, currentLine, coherent: false };
@@ -776,6 +729,7 @@ type WnbaPriceTrail = {
   sportsbook?: string | null;
   coherent: boolean;
   stops?: WnbaPriceTrailStop[];
+  terminalSource?: "current_line" | "line_history";
   marketProb?: number | null;
 };
 type WnbaPickedPrices = {
@@ -1223,8 +1177,10 @@ function buildMarket(opts: {
         line: stop.line,
         observedAt: stop.observedAt,
         sportsbook: opts.priceTrail?.sportsbook ?? null,
-        source: index === stops.length - 1 ? "current_line" as const : "line_history" as const,
-        label: index === 0 ? "first" as const : index === stops.length - 1 ? "current" as const : "move" as const,
+        source: index === stops.length - 1
+          ? opts.priceTrail?.terminalSource ?? "current_line" as const
+          : "line_history" as const,
+        label: stops.length === 1 ? "current" as const : index === 0 ? "first" as const : index === stops.length - 1 ? "current" as const : "move" as const,
       }))
     : undefined;
   if (oddsTrail && opts.lockedAt && priceAmerican !== null) {
@@ -1239,14 +1195,16 @@ function buildMarket(opts: {
       label: "locked",
     });
   }
-  const opposingStops: MarketEdgeDto["oddsTrail"] = opts.opposingPriceTrail?.coherent
-    ? (opts.opposingPriceTrail.stops ?? []).map((stop, index, stops) => ({
+  const opposingStops: MarketEdgeDto["oddsTrail"] = (opts.opposingPriceTrail?.stops?.length ?? 0) > 0
+    ? (opts.opposingPriceTrail?.stops ?? []).map((stop, index, stops) => ({
         american: stop.american,
         line: stop.line,
         observedAt: stop.observedAt,
         sportsbook: opts.opposingPriceTrail?.sportsbook ?? null,
-        source: index === stops.length - 1 ? "current_line" as const : "line_history" as const,
-        label: index === 0 ? "first" as const : index === stops.length - 1 ? "current" as const : "move" as const,
+        source: index === stops.length - 1
+          ? opts.opposingPriceTrail?.terminalSource ?? "current_line" as const
+          : "line_history" as const,
+        label: stops.length === 1 ? "current" as const : index === 0 ? "first" as const : index === stops.length - 1 ? "current" as const : "move" as const,
       }))
     : undefined;
   const pointLineStops = opts.lineTrail?.coherent
@@ -1270,7 +1228,9 @@ function buildMarket(opts: {
         line: stop.line,
         observedAt: stop.observedAt,
         sportsbook: opts.lineTrail?.sportsbook ?? null,
-        source: index === stops.length - 1 ? "current_line" as const : "line_history" as const,
+        source: index === stops.length - 1
+          ? opts.lineTrail?.terminalSource ?? "current_line" as const
+          : "line_history" as const,
         label: index === 0 ? "first" as const : index === stops.length - 1 ? "current" as const : "move" as const,
       }))
     : undefined;

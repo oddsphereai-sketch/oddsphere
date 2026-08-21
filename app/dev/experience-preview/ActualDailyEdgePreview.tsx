@@ -813,7 +813,7 @@ function CompactOddsMovement({ market, tone, lineClass }: { market: MarketEdgeDt
 function CompactPointLineMovement({ market }: { market: MarketEdgeDto }) {
   const isTotal = /^(Over|Under)\b/i.test(market.pick ?? "") || market.modelTotal !== null || market.marketTotal !== null;
   const stops = (market.lineTrail ?? []).filter((stop) => stop.line !== null && Number.isFinite(stop.line));
-  const isSpread = !isTotal && stops.length > 0 && market.line !== null;
+  const isSpread = !isTotal && market.line !== null && /(?:^|\s)[+-]\d+(?:\.\d+)?(?:\s|$)/.test(market.pick ?? "");
   if (!isTotal && !isSpread) return null;
   const terminal = stops[stops.length - 1] ?? null;
   const current = terminal?.line ?? market.line;

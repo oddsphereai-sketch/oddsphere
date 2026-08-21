@@ -488,7 +488,8 @@ check(
 check(
   "totals and WNBA spreads render the dedicated line tracker after price movement and before market splits",
   candidateSource.includes("function CompactPointLineMovement") &&
-    candidateSource.includes('const isSpread = !isTotal && stops.length > 0 && market.line !== null') &&
+    candidateSource.includes('const isSpread = !isTotal && market.line !== null') &&
+    candidateSource.includes('/(?:^|\\s)[+-]\\d+(?:\\.\\d+)?(?:\\s|$)/.test(market.pick ?? "")') &&
     candidateSource.includes('const marketLabel = isTotal ? "Total" : "Spread"') &&
     candidateSource.indexOf("<CompactOddsMovement market={market}") < candidateSource.indexOf("<CompactPointLineMovement market={market}") &&
     candidateSource.indexOf("<CompactPointLineMovement market={market}") < candidateSource.indexOf("<DefaultSplitSummary market={market}"),
@@ -690,6 +691,10 @@ const wnbaAdapterSource = readFileSync(
   "lib/services/wnba/buildWnbaDailyEdgeAdapted.ts",
   "utf8",
 );
+const wnbaTrailSource = readFileSync(
+  "lib/services/wnba/wnbaPriceTrail.ts",
+  "utf8",
+);
 check(
   "WNBA current lines and history both retain sportsbook identity",
   wnbaAdapterSource.includes('side, sportsbook, line_value, odds_american') &&
@@ -702,12 +707,18 @@ check(
 );
 check(
   "WNBA same-book trails terminate at the latest observation instead of looping back to the opener",
-  wnbaAdapterSource.includes("currentLineCandidates[currentLineCandidates.length - 1]") &&
+  wnbaAdapterSource.includes("selectWnbaSameBookTrail(") &&
     !wnbaAdapterSource.includes("? liveCandidates[0]"),
 );
 check(
+  "WNBA history-only boards preserve both sides when the current lines table is temporarily empty",
+  wnbaAdapterSource.includes("terminalSource: selection.terminalSource") &&
+    wnbaAdapterSource.includes("opposingPriceTrail: game.pickedPrices?.opposingTotal") &&
+    wnbaAdapterSource.includes("opposingPriceTrail: game.pickedPrices?.opposingSpread"),
+);
+check(
   "WNBA price trails stay on the current point line while total and spread line trails retain line changes",
-  wnbaAdapterSource.includes("history.filter((row) => closeLine(row.line_value, currentLine))") &&
+  wnbaTrailSource.includes("history.filter((row) => closeLine(row.line_value, currentLine))") &&
     wnbaAdapterSource.includes('totalLine: coherentPriceTrail(liveRows, cappedHistoryRows, "total"') &&
     wnbaAdapterSource.includes("totalCurrent, true") &&
     wnbaAdapterSource.includes('spreadLine: coherentPriceTrail(liveRows, cappedHistoryRows, "spread"') &&
@@ -722,8 +733,14 @@ check(
 );
 check(
   "WNBA preserves repeated observations so steady markets still have a verified prior stop",
-  wnbaAdapterSource.includes("prior.observedAt === stop.observedAt") &&
-    wnbaAdapterSource.includes("if (stops.length < 2) continue"),
+  wnbaTrailSource.includes("prior.recorded_at === row.recorded_at") &&
+    wnbaTrailSource.includes("if (rows.length >= 2) return selection"),
+);
+check(
+  "WNBA retains current-only opposing context without calling it coherent movement",
+  wnbaTrailSource.includes("currentOnlyFallback ??= selection") &&
+    wnbaAdapterSource.includes("const coherent = stops.length >= 2") &&
+    wnbaAdapterSource.includes('(opts.opposingPriceTrail?.stops?.length ?? 0) > 0'),
 );
 
 const parsedEvent = __WNBA_AVAILABILITY_TEST__.parseScoreboardEvent({

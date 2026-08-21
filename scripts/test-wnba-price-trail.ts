@@ -1,4 +1,5 @@
 import {
+  selectWnbaSameBookTrail,
   wnbaObservedConsensusPrices,
   type WnbaPriceTrailRow,
 } from "../lib/services/wnba/wnbaPriceTrail";
@@ -70,4 +71,22 @@ const fallback = wnbaObservedConsensusPrices(
 );
 assert("un-timestamped rows fall back to overall consensus", fallback[0] === -350);
 
-console.log("WNBA price trail consensus: 3/3 pass");
+const historyOnlySpread: WnbaPriceTrailRow[] = [
+  { market_type: "spread", side: "away", sportsbook: "fanduel", line_value: -4.5, odds_american: -110, recorded_at: "2026-08-21T01:00:00Z" },
+  { market_type: "spread", side: "home", sportsbook: "fanduel", line_value: 4.5, odds_american: -110, recorded_at: "2026-08-21T01:00:00Z" },
+  { market_type: "spread", side: "away", sportsbook: "fanduel", line_value: -3.5, odds_american: -115, recorded_at: "2026-08-21T03:00:00Z" },
+  { market_type: "spread", side: "home", sportsbook: "fanduel", line_value: 3.5, odds_american: -105, recorded_at: "2026-08-21T03:00:00Z" },
+];
+const pickedSpread = selectWnbaSameBookTrail([], historyOnlySpread, "spread", "away", -3.5, true);
+const opposingSpread = selectWnbaSameBookTrail([], historyOnlySpread, "spread", "home", 3.5, true);
+assert("history-only spread retains the picked side", pickedSpread?.rows.at(-1)?.odds_american === -115);
+assert("history-only spread retains the opposing side", opposingSpread?.rows.at(-1)?.odds_american === -105);
+assert("history-only spread labels both terminals as persisted history", pickedSpread?.terminalSource === "line_history" && opposingSpread?.terminalSource === "line_history");
+
+const oneCapturePerSide: WnbaPriceTrailRow[] = historyOnlySpread.slice(-2);
+const onePicked = selectWnbaSameBookTrail([], oneCapturePerSide, "spread", "away", -3.5);
+const oneOpposing = selectWnbaSameBookTrail([], oneCapturePerSide, "spread", "home", 3.5);
+assert("one captured quote still retains picked-side current context", onePicked?.rows.length === 1);
+assert("one captured quote still retains opposing-side current context", oneOpposing?.rows.length === 1);
+
+console.log("WNBA price trail consensus and history fallback: 8/8 pass");
