@@ -864,11 +864,24 @@ export type DailyEdgeGameDto = {
    */
   decisionLine: string;
   projected: { away: number; home: number };
-  /** Soccer keeps continuous expected goals primary. The optional representative
-   * score is the highest-probability exact score consistent with all three
-   * forecast directions; it is not mislabeled as the modal score. */
+  /** Soccer keeps continuous expected goals as scoring context. EPL's expected
+   * goals can use a market-informed calibration head that is separate from the
+   * released Match Result, Total, and BTTS probability heads. The optional
+   * representative score is the highest-probability exact score consistent
+   * with all three forecast directions; it is not their common source. */
   soccerProjection?: {
     expectedGoals: { away: number; home: number };
+    /** Marginals implied only by the displayed expected-goals distribution.
+     * Reader-only diagnostic: never a pick, grade, edge, or tracking input. */
+    goalOutlookProbabilities?: {
+      home: number;
+      draw: number;
+      away: number;
+      over25: number;
+      under25: number;
+      bttsYes: number;
+      bttsNo: number;
+    } | null;
     likelyScore: { away: number; home: number };
     likelyScoreProbability: number;
     representativeScore: { away: number; home: number } | null;

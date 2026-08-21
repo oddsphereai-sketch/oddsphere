@@ -264,6 +264,7 @@ assert.match(previewAdapter, /lineOpenAmerican: operationalOpening/);
 assert.match(previewAdapter, /eplTeamLogo/);
 assert.match(previewAdapter, /soccerPriceBoard:/);
 assert.match(previewAdapter, /soccerAvailability:/);
+assert.match(previewAdapter, /goalOutlookProbabilities:/, "EPL snapshots must expose reader-only goal-outlook marginals");
 assert.doesNotMatch(previewAdapter, /label: "Lineup \/ availability"|label: "Injury report"/, "availability must use the structured reader panel instead of compressed stat rows");
 assert.doesNotMatch(previewReader, /Complete price board/, "soccer must reuse the Daily Edge movement module instead of adding a separate price-board design");
 assert.match(previewReader, /All outcomes use the same Daily Edge movement timeline/);
@@ -271,6 +272,11 @@ assert.match(previewReader, /label: "Opening"/);
 assert.match(previewReader, /label: "Prior"/);
 assert.doesNotMatch(previewReader, /Provider pending|Provider open|First tracked|First captured|Prior captured/);
 assert.match(previewReader, /Consensus and sharp-book split data are unavailable for this market/);
+assert.match(previewReader, /Market-informed goal outlook/);
+assert.match(previewReader, /Context · separate heads/);
+assert.match(previewReader, /Dedicated Over\/Under probabilities/);
+assert.match(previewReader, /Dedicated Yes\/No probabilities/);
+assert.doesNotMatch(previewReader, /Team scoring probabilities and BTTS are derived from the same regulation score distribution\./);
 for (const nonstandardGrade of ["Research Only", "Market-Aligned", "Price Caution", "Model\/Market Caution"]) {
   assert.doesNotMatch(previewAdapter, new RegExp(nonstandardGrade), `EPL public grade must not include ${nonstandardGrade}`);
 }
