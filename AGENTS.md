@@ -4,6 +4,41 @@
 This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` before writing any code. Heed deprecation notices.
 <!-- END:nextjs-agent-rules -->
 
+## Mandatory concurrent-work safety protocol
+
+This repository is edited by multiple Codex tasks at the same time. Treat the shared primary
+checkout as user-owned state: never build, commit, rebase, reset, switch branches, or publish
+from it when it is dirty.
+
+For every production change:
+
+1. Resolve the latest remote `main` commit before editing. Create a dedicated `codex/*` branch
+   in its own clean worktree from that exact commit. Do not reuse another task's branch or
+   worktree.
+2. Record the starting base SHA. Keep the commit limited to task-owned files and preserve all
+   unrelated working-tree changes.
+3. Immediately before publication, resolve remote `main` again. If it moved, integrate the new
+   base into the task branch, review every overlapping hunk, and rerun all affected tests. A
+   previously green preview is not valid after the base changes.
+4. Run `node scripts/verify-integration-safety.mjs --base-ref=<latest-main-ref>` from a clean
+   committed worktree. It must prove that the latest production base is an ancestor of the
+   candidate and that no other local worktree has overlapping uncommitted changes. Reconcile
+   overlapping open PRs through the same fresh-base step before either one merges.
+5. Publish only through a pull request. GitHub protection for `main` must require the
+   `current-main-ancestor` check and must prevent a merge when the head branch is behind `main`
+   (enable **Require branches to be up to date before merging**, or use a merge queue that runs
+   the required check on the merge group). The workflow resolves `origin/main` when it runs and
+   also supports merge-queue checks, but a previously completed pull-request check cannot wake
+   itself merely because `main` advanced. Confirm the PR is still up to date, all required checks
+   are green, and the remote PR tree matches the locally verified tree before merging.
+6. If another PR merges first, stop and repeat steps 3–5. Never force-update `main`, bypass a
+   failed integration-safety check, or reconstruct a shared file from an older branch.
+7. After merge, verify the production commit and the affected live behavior. Do not declare
+   success from a branch preview alone.
+
+An overlap is a coordination requirement, not permission to discard either task's work. Preserve
+both changes in a fresh integration branch or stop and ask the user which behavior should win.
+
 ## Mandatory model-change safety protocol
 
 Any change that can alter a prediction, probability, projection, grade, promotion/demotion,

@@ -1,0 +1,31 @@
+name: Integration safety
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened, ready_for_review]
+  merge_group:
+    types: [checks_requested]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: integration-safety-${{ github.event.pull_request.number || github.event.merge_group.head_sha || github.sha }}
+  cancel-in-progress: true
+
+jobs:
+  current-main-ancestor:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out candidate with full history
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+
+      - name: Resolve current production main
+        run: git fetch --no-tags origin main:refs/remotes/origin/main
+
+      - name: Require candidate to contain current production base
+        run: node scripts/verify-integration-safety.mjs --base-ref=origin/main --skip-worktree-overlap --allow-detached
