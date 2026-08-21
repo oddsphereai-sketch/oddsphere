@@ -5,7 +5,10 @@ import {
   parseDailyEdgeAvailabilityMatchup,
   type RequestedDailyEdgeMatchup,
 } from "@/lib/services/dailyEdge/availabilityRequest";
-import { fetchPlaybookMlbSlateAvailability } from "@/lib/services/mlb/playbookMlbAvailability";
+import {
+  fetchPlaybookMlbSlateAvailability,
+  type MlbDailyEdgeGameAvailability,
+} from "@/lib/services/mlb/playbookMlbAvailability";
 import { fetchEspnWnbaSlateAvailability } from "@/lib/services/wnba/espnWnbaAvailability";
 
 export const dynamic = "force-dynamic";
@@ -25,7 +28,7 @@ export async function GET(request: Request) {
   const reports = sport === "mlb"
     ? await loadCachedMlbAvailability(date, matchups)
     : await loadCachedWnbaAvailability(date);
-  const byGame: Record<string, DailyEdgeGameAvailability> = {};
+  const byGame: Record<string, DailyEdgeGameAvailability | MlbDailyEdgeGameAvailability> = {};
   for (const matchup of matchups) {
     const report = reports?.find((candidate) =>
       candidate.awayTeam === matchup.awayTeam && candidate.homeTeam === matchup.homeTeam,
@@ -46,6 +49,6 @@ const loadCachedWnbaAvailability = unstable_cache(
 
 const loadCachedMlbAvailability = unstable_cache(
   fetchPlaybookMlbSlateAvailability,
-  ["daily-edge-experience-mlb-availability-v1"],
+  ["daily-edge-experience-mlb-availability-v2"],
   { revalidate: 15 * 60, tags: ["daily-edge-experience-mlb-availability"] },
 );

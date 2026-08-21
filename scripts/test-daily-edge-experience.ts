@@ -694,6 +694,14 @@ const wnbaTrailSource = readFileSync(
   "lib/services/wnba/wnbaPriceTrail.ts",
   "utf8",
 );
+const wnbaModelWriterSource = readFileSync(
+  "lib/services/wnba/runWnbaModel.ts",
+  "utf8",
+);
+const wnbaRecordWriterSource = readFileSync(
+  "lib/services/wnba/buildWnbaPredictionRecords.ts",
+  "utf8",
+);
 check(
   "WNBA current lines and history both retain sportsbook identity",
   wnbaAdapterSource.includes('side, sportsbook, line_value, odds_american') &&
@@ -718,10 +726,10 @@ check(
 check(
   "WNBA price trails stay on the current point line while total and spread line trails retain line changes",
   wnbaTrailSource.includes("history.filter((row) => closeLine(row.line_value, currentLine))") &&
-    wnbaAdapterSource.includes('totalLine: coherentPriceTrail(liveRows, cappedHistoryRows, "total"') &&
-    wnbaAdapterSource.includes("totalCurrent, true") &&
-    wnbaAdapterSource.includes('spreadLine: coherentPriceTrail(liveRows, cappedHistoryRows, "spread"') &&
-    wnbaAdapterSource.includes("spreadCurrent, true") &&
+    wnbaAdapterSource.includes('totalLine: coherentPriceTrail(rows, historyRows, "total"') &&
+    wnbaAdapterSource.includes("totalCurrentContext.currentQuote ?? totalCurrent, true") &&
+    wnbaAdapterSource.includes('spreadLine: coherentPriceTrail(rows, historyRows, "spread"') &&
+    wnbaAdapterSource.includes("spreadCurrentContext.currentQuote ?? spreadCurrent, true") &&
     wnbaAdapterSource.includes("lineTrail: game.pickedPrices?.spreadLine"),
 );
 check(
@@ -740,6 +748,34 @@ check(
   wnbaTrailSource.includes("currentOnlyFallback ??= selection") &&
     wnbaAdapterSource.includes("const coherent = stops.length >= 2") &&
     wnbaAdapterSource.includes('(opts.opposingPriceTrail?.stops?.length ?? 0) > 0'),
+);
+check(
+  "WNBA authoritative writer freezes one exact decision tuple for every market",
+  wnbaModelWriterSource.includes("buildWnbaDecisionTuple({") &&
+    wnbaModelWriterSource.includes("decision_tuple_contract_version") &&
+    wnbaModelWriterSource.includes("decision_tuples: decisionTuples") &&
+    wnbaModelWriterSource.includes("observedAt: (l.fetched_at ?? l.recorded_at ?? null)"),
+);
+check(
+  "WNBA tracking records copy the writer tuple instead of re-evaluating a later price",
+  wnbaRecordWriterSource.includes("mlTuple?.evaluated_price_american") &&
+    wnbaRecordWriterSource.includes("totalTuple?.evaluated_price_american") &&
+    wnbaRecordWriterSource.includes("spreadTuple?.evaluated_price_american") &&
+    wnbaRecordWriterSource.includes("decision_tuple: decisionTuple"),
+);
+check(
+  "WNBA DTO keeps the grade price immutable while exposing a later current quote separately",
+  wnbaAdapterSource.includes("const priceAmerican = opts.decisionTuple?.evaluated_price_american") &&
+    wnbaAdapterSource.includes("currentPriceAmerican: opts.priceTrail?.currentQuote ?? priceAmerican") &&
+    wnbaAdapterSource.includes("gradePriceAmerican: priceAmerican") &&
+    wnbaAdapterSource.includes("currentQuoteObservedAt: terminal?.observedAt ?? null"),
+);
+check(
+  "WNBA T-60 readers retain the locked tuple while current quotes continue independently",
+  wnbaAdapterSource.includes("const lockedTuple = lockedRecordsForGame.get(market)?.snapshot_json?.decision_tuple") &&
+    wnbaAdapterSource.includes("if (isWnbaDecisionTuple(lockedTuple)) return lockedTuple") &&
+    wnbaAdapterSource.includes("const currentPrice = pickedPrice(rows, market, side, currentLine)") &&
+    wnbaAdapterSource.includes("currentQuoteSportsbook: currentTrail.sportsbook ?? null"),
 );
 
 const parsedEvent = __WNBA_AVAILABILITY_TEST__.parseScoreboardEvent({
@@ -785,6 +821,36 @@ check(
   __MLB_AVAILABILITY_TEST__.isAcceptableReportDate("2026-08-20", "2026-08-20") &&
     __MLB_AVAILABILITY_TEST__.isAcceptableReportDate("2026-08-19", "2026-08-20") &&
     !__MLB_AVAILABILITY_TEST__.isAcceptableReportDate("2026-08-18", "2026-08-20"),
+);
+check(
+  "MLB availability rejects an implausible all-Out provider payload",
+  parsedMlbInjuries !== null &&
+    !__MLB_AVAILABILITY_TEST__.hasPlausiblePlaybookReport({
+      ...parsedMlbInjuries,
+      teams: Array.from({ length: 2 }, (_, teamIndex) => ({
+        abbreviation: teamIndex === 0 ? "CLE" : "COL",
+        teamName: teamIndex === 0 ? "Cleveland Guardians" : "Colorado Rockies",
+        players: Array.from({ length: 10 }, (_, playerIndex) => ({
+          name: `Player ${teamIndex}-${playerIndex}`,
+          status: "Out",
+          detail: null,
+          position: null,
+          reportedAt: null,
+        })),
+      })),
+    }),
+);
+const officialMlbTeam = __MLB_AVAILABILITY_TEST__.parseMlbStatsFortyManRoster("CLE", [
+  { person: { id: 1, fullName: "Healthy Player" }, position: { abbreviation: "P" }, status: { code: "A", description: "Active" } },
+  { person: { id: 2, fullName: "Injured Player" }, position: { abbreviation: "1B" }, status: { code: "D10", description: "Injured 10-Day" }, note: "Lower back inflammation." },
+  { person: { id: 3, fullName: "Minor League Player" }, position: { abbreviation: "OF" }, status: { code: "RM", description: "Reassigned to Minors" } },
+]);
+check(
+  "official MLB fallback includes only explicit injured-list statuses",
+  officialMlbTeam?.abbreviation === "CLE" &&
+    officialMlbTeam.players.length === 1 &&
+    officialMlbTeam.players[0]?.name === "Injured Player" &&
+    officialMlbTeam.players[0]?.detail === "Lower back inflammation.",
 );
 check(
   "availability endpoint accepts only bounded exact matchup tokens",

@@ -261,7 +261,7 @@ const daysBetween = (from: string | undefined, to: string) => {
 };
 
 // ── SharpAPI odds (cursor; game markets; resolve teams; pair+date; trusted consensus) ──
-export type OddRow = { book: string; sharp: boolean; mkt: string; selType: string; odds: number | null; line: number | null; date: string | null; h: number; a: number };
+export type OddRow = { book: string; sharp: boolean; mkt: string; selType: string; odds: number | null; line: number | null; date: string | null; observedAt?: string | null; h: number; a: number };
 export type WnbaPublicMarketSignals = Partial<Record<"moneyline" | "total" | "spread", Partial<Record<string, PublicMarketSignal>>>>;
 async function wnbaOdds(resolve: (s: string) => number | null): Promise<OddRow[]> {
   const key = process.env.SHARPAPI_KEY; if (!key) throw new Error("missing SHARPAPI_KEY");
@@ -280,8 +280,10 @@ async function wnbaOdds(resolve: (s: string) => number | null): Promise<OddRow[]
         const book = String(x.sportsbook ?? "").toLowerCase();
         if (BLOCKED.has(book) || x.is_main_line === false || x.is_stale_pregame_price === true) continue;
         const h = resolve(String(x.home_team)), a = resolve(String(x.away_team)); if (!h || !a || h === a) continue;
+        const providerObservedAt = [x.updated_at, x.fetched_at, x.observed_at]
+          .find((value) => typeof value === "string" && Number.isFinite(Date.parse(value))) as string | undefined;
         rows.push({ book, sharp: SHARP_BOOKS.has(book), mkt, selType: String(x.selection_type), odds: x.odds_american == null ? null : Number(x.odds_american),
-          line: x.line == null ? null : Number(x.line), date: evDate(String(x.event_id)) ?? evDate(String(x.event_start_time)), h, a });
+          line: x.line == null ? null : Number(x.line), date: evDate(String(x.event_id)) ?? evDate(String(x.event_start_time)), observedAt: providerObservedAt ?? null, h, a });
       }
       pages++; if (!j.pagination?.has_more || !j.pagination?.next_cursor) break; cursor = j.pagination.next_cursor;
     }
@@ -618,6 +620,11 @@ export function computeWnbaPrediction(
           mlBreakEvenProbability === null ? null : r1(mlBreakEvenProbability * 100) / 100,
         moneyline_expected_return_pct:
           mlExpectedReturn === null ? null : r1(mlExpectedReturn * 100),
+        moneyline_picked_probability: r1(finalPickedProbability * 1000) / 1000,
+        total_picked_probability:
+          pOver === null ? null : r1(Math.max(pOver, 1 - pOver) * 1000) / 1000,
+        spread_picked_probability:
+          pCoverHome === null ? null : r1(Math.max(pCoverHome, 1 - pCoverHome) * 1000) / 1000,
       },
     },
     wnba_core_model_calibration: calibrationAudit,
