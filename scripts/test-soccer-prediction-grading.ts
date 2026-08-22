@@ -66,6 +66,10 @@ ok("BTTS no loss (2-1)", grade("btts", "no", null, 2, 1) === "loss");
 ok("pending when not final", grade("match_result", "home", null, null, null, "scheduled") === "pending");
 ok("pending when final but scores missing", grade("match_result", "home", null, null, null, "final") === "pending");
 ok("total pending when line missing", grade("total", "over", null, 2, 1) === "pending");
+ok("EPL provider completed status grades a final 3-0 home win", grade("match_result", "home", null, 3, 0, "completed") === "win");
+ok("EPL provider completed status grades home-or-draw", grade("double_chance", "home_or_draw", null, 3, 0, "completed") === "win");
+ok("EPL provider completed status grades Over 2.5", grade("total", "over", 2.5, 3, 0, "completed") === "win");
+ok("EPL provider completed status grades BTTS No", grade("btts", "no", null, 3, 0, "completed") === "win");
 
 // 30 — no_bet is guidance, not a tracking exclusion. A real-sided no_bet
 // prediction still grades from the final score.

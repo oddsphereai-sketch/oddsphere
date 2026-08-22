@@ -32,7 +32,7 @@ console.log("━━━ computeRefreshDates (yesterday/today/tomorrow) ━━━"
 check(
   "settlement repair contract is versioned",
   TRACKING_SETTLEMENT_CONTRACT_VERSION ===
-    "tracking_settlement_v3_epl_competition_lock_2026_08_19",
+    "tracking_settlement_v4_epl_completed_status_2026_08_22",
 );
 
 {
@@ -53,6 +53,19 @@ check(
   });
   check("only historical terminal candidates are selected", JSON.stringify(selected.dates) === JSON.stringify(["2026-07-01"]));
   check("final first-inning rows wait for inning data", selected.eligibleRecords === 1);
+}
+
+{
+  const selected = selectStalePendingRepairDates({
+    beforeDate: "2026-08-22",
+    records: [
+      { id: 147542, game_id: 46550, slate_date: "2026-08-21", market: "match_result" },
+    ],
+    games: [
+      { id: 46550, status: "completed", home_score: 3, away_score: 0, first_inning_runs: null },
+    ],
+  });
+  check("EPL completed games are eligible for stale pending repair", JSON.stringify(selected.dates) === JSON.stringify(["2026-08-21"]));
 }
 
 {
