@@ -145,8 +145,8 @@ check(
 // ── Yesterday and Best Angles are lists; Lifetime shares category bars ──
 
 check(
-  "Yesterday board renders divider-list rows, not card grid",
-  /YesterdayBoard[\s\S]{0,800}divide-y/.test(PAGE),
+  "Yesterday board renders divider-list rows inside sport panels, not a card grid",
+  /YesterdayBoard[\s\S]{0,2200}divide-y/.test(PAGE),
 );
 check(
   "Weekly, monthly, and lifetime share the sport-grouped CategoryTrackingBoard",
@@ -158,10 +158,25 @@ check(
   /lifetimeSourceLabel[\s\S]{0,500}Lifetime · live \+\$\{record\.live_decided_contribution\}[\s\S]{0,300}Since launch/.test(PAGE),
 );
 check(
-  "Category tracking visibly groups models by sport with restrained separators",
+  "Category tracking visibly groups models by sport with labeled tinted sections",
   /function CategoryTrackingBoard/.test(PAGE) &&
-    /divide-y divide-white\/\[0\.07\]/.test(PAGE) &&
-    /\{prettySport\(group\.sport\)\} models/.test(PAGE),
+    /SportGroupHeader sport=\{group\.sport\}/.test(PAGE) &&
+    /style=\{\{ borderColor: theme\.border, background: theme\.surface \}\}/.test(PAGE),
+);
+check(
+  "Yesterday groups categories into labeled sport sections instead of one continuous cross-sport list",
+  /function YesterdayBoard[\s\S]{0,2200}groupBySport\(rows\)[\s\S]{0,1800}<SportGroupHeader sport=\{group\.sport\}/.test(PAGE) &&
+    /CategoryListRow bucket=\{bucket\} showSport=\{false\}/.test(PAGE),
+);
+check(
+  "Sport labels use distinct accessible palettes while remaining explicit text labels",
+  /const SPORT_THEME[\s\S]{0,2500}mlb:[\s\S]{0,500}wnba:[\s\S]{0,500}nfl:[\s\S]{0,800}epl:/.test(PAGE) &&
+    /function SportPill[\s\S]{0,700}\{prettySport\(sport\)\}/.test(PAGE),
+);
+check(
+  "Latest result cards carry the matching sport accent without replacing result-state color",
+  /function RecentPickCard[\s\S]{0,2600}border-l-\[3px\][\s\S]{0,400}borderLeftColor: theme\.accent/.test(PAGE) &&
+    /function RecentlySettledCard[\s\S]{0,3000}border-l-\[3px\][\s\S]{0,400}borderLeftColor: theme\.accent/.test(PAGE),
 );
 check(
   "Lifetime records expose numeric metrics without replacing merged history",
@@ -213,7 +228,7 @@ check(
 );
 check(
   "Best Angles groups model categories inside separate sport sections",
-  /BestAnglesBoard[\s\S]{0,1800}groups\.map[\s\S]{0,700}\{prettySport\(group\.sport\)\} models/.test(PAGE) &&
+  /BestAnglesBoard[\s\S]{0,1800}groups\.map[\s\S]{0,700}<SportGroupHeader sport=\{group\.sport\}/.test(PAGE) &&
     /BestAnglesBoard[\s\S]{0,2600}group\.rows\.map/.test(PAGE),
 );
 check(
