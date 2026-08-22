@@ -96,13 +96,30 @@ changed; only deterministic settlement of existing locked rows is affected.
 
 - Projection runtime: resolved automodel `v2_2`
 - First-inning runtime: `fi_v2` with the versioned unpublished-probable availability head below
-- Public calibration: `mlb_public_calibration_v26_same_book_evaluated_movement_2026_08_22`
-- Decision release: `mlb_daily_edge_decision_2026_08_22_r66`
-- Rule bundle: `mlb_daily_edge_rule_bundle_v54_2026_08_22`
-- Grade policy: `mlb_public_grade_policy_v44_same_book_evaluated_movement_2026_08_22`
+- Public calibration: `mlb_public_calibration_v27_strong_winner_resistance_lean_2026_08_22`
+- Decision release: `mlb_daily_edge_decision_2026_08_22_r67`
+- Rule bundle: `mlb_daily_edge_rule_bundle_v55_2026_08_22`
+- Grade policy: `mlb_public_grade_policy_v45_strong_winner_resistance_lean_2026_08_22`
 - Tracking contract: `member_facing_lock_v8_priority_retry_minute_cadence_2026_08_11`
 - Machine registry: `lib/automodel/mlbModelLayerVersions.ts`
 - Authoritative member-facing writer: `lib/services/predictionRecordService.ts`
+
+The August 22 r67 grading repair retains every r66 probability, projection,
+selected side, exact evaluated price, same-book movement trail, Total rule,
+First Inning rule, stake rule, writer, lease, and T-60 boundary. Validated
+SharpAPI money-below-ticket resistance remains visible as a warning, but it no
+longer erases a Moneyline Lean when the active probability head is at least
+60%, the run projection agrees with the side, the evaluated price is inside
+-300..+200, same-book movement is not adverse, and no independent public split
+conflict or correction/data hold applies. The exception is capped at Lean and
+can never create a Best Angle. The exact current-head locked replay was 6-1,
++1.652u, +23.6% ROI (3-1 through August 18; 3-0 from August 19 onward). The
+current read-only comparison produced three task-owned Moneyline promotions
+(MIA, HOU, and ARI), zero Moneyline demotions, and no Total or First Inning
+code change. Full evidence and the distinction between outcome confidence and
+exact-price value are recorded in
+`docs/model-audits/2026-08-22-mlb-strong-winner-resistance-lean-r67.md`.
+Rollback is r66/v54/v44/v26.
 
 The August 22 r66 movement-coherence repair retains every r65 projection,
 probability head, selected side, price-eligibility threshold, promotion rule,
