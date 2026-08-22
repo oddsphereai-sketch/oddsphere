@@ -161,6 +161,31 @@ const SPORT_ORDER: Record<string, number> = {
   epl: 8, soccer: 9, ucl: 10,
 };
 
+type SportTheme = {
+  accent: string;
+  accentSoft: string;
+  border: string;
+  surface: string;
+};
+
+const SPORT_THEME: Record<string, SportTheme> = {
+  mlb: { accent: "rgb(147 197 253)", accentSoft: "rgba(59,130,246,0.24)", border: "rgba(96,165,250,0.22)", surface: "rgba(59,130,246,0.045)" },
+  wnba: { accent: "rgb(253 186 116)", accentSoft: "rgba(249,115,22,0.24)", border: "rgba(251,146,60,0.22)", surface: "rgba(249,115,22,0.045)" },
+  nfl: { accent: "rgb(110 231 183)", accentSoft: "rgba(16,185,129,0.22)", border: "rgba(52,211,153,0.20)", surface: "rgba(16,185,129,0.04)" },
+  cfb: { accent: "rgb(252 211 77)", accentSoft: "rgba(245,158,11,0.22)", border: "rgba(251,191,36,0.20)", surface: "rgba(245,158,11,0.04)" },
+  epl: { accent: "rgb(216 180 254)", accentSoft: "rgba(168,85,247,0.24)", border: "rgba(192,132,252,0.22)", surface: "rgba(168,85,247,0.045)" },
+  soccer: { accent: "rgb(103 232 249)", accentSoft: "rgba(6,182,212,0.22)", border: "rgba(34,211,238,0.20)", surface: "rgba(6,182,212,0.04)" },
+  ucl: { accent: "rgb(196 181 253)", accentSoft: "rgba(139,92,246,0.22)", border: "rgba(167,139,250,0.20)", surface: "rgba(139,92,246,0.04)" },
+  nba: { accent: "rgb(252 165 165)", accentSoft: "rgba(239,68,68,0.22)", border: "rgba(248,113,113,0.20)", surface: "rgba(239,68,68,0.04)" },
+};
+
+const DEFAULT_SPORT_THEME: SportTheme = {
+  accent: "rgb(165 180 252)",
+  accentSoft: "rgba(99,102,241,0.22)",
+  border: "rgba(129,140,248,0.20)",
+  surface: "rgba(99,102,241,0.04)",
+};
+
 // ─── Format helpers ────────────────────────────────────────────────────
 
 function fmtRecord(m: Metrics): string {
@@ -183,6 +208,16 @@ function fmtShortDate(yyyyMmDd: string): string {
 function prettyMarket(label: string): string { return MARKET_LABEL[label] ?? label; }
 function shortMarket(label: string): string { return MARKET_SHORT[label] ?? label.toUpperCase(); }
 function prettySport(label: string): string { return SPORT_LABEL[label] ?? label.toUpperCase(); }
+function sportTheme(sport: string): SportTheme { return SPORT_THEME[sport] ?? DEFAULT_SPORT_THEME; }
+
+function groupBySport<T extends { sport: string }>(rows: T[]): Array<{ sport: string; rows: T[] }> {
+  return rows.reduce<Array<{ sport: string; rows: T[] }>>((groups, row) => {
+    const existing = groups.find((group) => group.sport === row.sport);
+    if (existing !== undefined) existing.rows.push(row);
+    else groups.push({ sport: row.sport, rows: [row] });
+    return groups;
+  }, []);
+}
 
 // Drop the rolled-up first_inning bucket when NRFI or YRFI is present —
 // those are the actionable categories and first_inning would otherwise
@@ -743,29 +778,22 @@ type CategoryTrackingRow = {
 };
 
 function CategoryTrackingBoard({ rows, emptyBody }: { rows: CategoryTrackingRow[]; emptyBody: string }) {
-  const groups = rows.reduce<Array<{ sport: string; rows: CategoryTrackingRow[] }>>((acc, row) => {
-    const existing = acc.find((group) => group.sport === row.sport);
-    if (existing !== undefined) existing.rows.push(row);
-    else acc.push({ sport: row.sport, rows: [row] });
-    return acc;
-  }, []);
+  const groups = groupBySport(rows);
 
   if (groups.length === 0) return <Card><Empty body={emptyBody} /></Card>;
 
   return (
     <Card>
-      <div className="divide-y divide-white/[0.07]">
-        {groups.map((group) => (
-          <section key={group.sport} className="py-5 first:pt-0 last:pb-0">
-            <div className="mb-4 flex items-center justify-between gap-3">
-              <div className="flex items-center gap-2.5">
-                <SportPill sport={group.sport} />
-                <h3 className="text-[13px] font-black text-gray-100">{prettySport(group.sport)} models</h3>
-              </div>
-              <span className="text-[9px] font-bold uppercase tracking-[0.14em] text-gray-600">
-                {group.rows.length} {group.rows.length === 1 ? "category" : "categories"}
-              </span>
-            </div>
+      <div className="space-y-3">
+        {groups.map((group) => {
+          const theme = sportTheme(group.sport);
+          return (
+          <section
+            key={group.sport}
+            className="rounded-xl border p-3.5 sm:p-4"
+            style={{ borderColor: theme.border, background: theme.surface }}
+          >
+            <SportGroupHeader sport={group.sport} count={group.rows.length} />
             <CategoryBars
               rows={group.rows.map((row) => ({
                 label: prettyMarket(row.market),
@@ -777,7 +805,8 @@ function CategoryTrackingBoard({ rows, emptyBody }: { rows: CategoryTrackingRow[
               emptyBody={`${prettySport(group.sport)} results appear once this window has graded picks.`}
             />
           </section>
-        ))}
+          );
+        })}
       </div>
     </Card>
   );
@@ -795,15 +824,30 @@ function YesterdayBoard({ date, rows, overall }: { date: string | null; rows: Sp
   }
   const decided = (overall?.wins ?? 0) + (overall?.losses ?? 0);
   const allPending = decided === 0 && (overall?.pending ?? 0) > 0;
+  const groups = groupBySport(rows);
   return (
     <Card>
-      <ul className="divide-y divide-white/[0.04] -my-2">
-        {rows.map((b) => (
-          <li key={`${b.sport}-${b.market}`} className="py-3 first:pt-0 last:pb-0">
-            <CategoryListRow bucket={b} />
-          </li>
-        ))}
-      </ul>
+      <div className="space-y-3">
+        {groups.map((group) => {
+          const theme = sportTheme(group.sport);
+          return (
+            <section
+              key={group.sport}
+              className="rounded-xl border p-3.5 sm:p-4"
+              style={{ borderColor: theme.border, background: theme.surface }}
+            >
+              <SportGroupHeader sport={group.sport} count={group.rows.length} />
+              <ul className="divide-y divide-white/[0.06]">
+                {group.rows.map((bucket) => (
+                  <li key={`${bucket.sport}-${bucket.market}`} className="py-3 first:pt-0 last:pb-0">
+                    <CategoryListRow bucket={bucket} showSport={false} />
+                  </li>
+                ))}
+              </ul>
+            </section>
+          );
+        })}
+      </div>
       {overall !== null && (
         <div className="mt-3 pt-3 border-t border-white/[0.04] flex items-baseline justify-between gap-3 flex-wrap">
           <span className="text-[10.5px] uppercase tracking-[0.16em] font-bold text-gray-500">Day total</span>
@@ -825,7 +869,7 @@ function YesterdayBoard({ date, rows, overall }: { date: string | null; rows: Sp
 //   top    — sport pill · category name · short badge · record · win-rate
 //   bottom — Best Angle · Lean · pending / pushes / voids
 // The bottom zone is suppressed when none of the sub-stats are populated.
-function CategoryListRow({ bucket }: { bucket: SportMarketBucket }) {
+function CategoryListRow({ bucket, showSport = true }: { bucket: SportMarketBucket; showSport?: boolean }) {
   const m = bucket.metrics;
   const decided = m.wins + m.losses;
   const allPending = decided === 0 && m.pending > 0;
@@ -840,7 +884,7 @@ function CategoryListRow({ bucket }: { bucket: SportMarketBucket }) {
     <div>
       <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:gap-2.5">
         <div className="flex min-w-0 flex-wrap items-center gap-2.5">
-        <SportPill sport={bucket.sport} />
+        {showSport ? <SportPill sport={bucket.sport} /> : null}
         <span className="text-[14.5px] sm:text-[15.5px] font-semibold text-gray-50">{prettyMarket(bucket.market)}</span>
         <CategoryBadge market={bucket.market} />
         </div>
@@ -893,13 +937,33 @@ function SubChip({ label, m, color }: { label: string; m: Metrics; color: string
 }
 
 function SportPill({ sport }: { sport: string }) {
+  const theme = sportTheme(sport);
   return (
     <span
       className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] uppercase tracking-[0.14em] font-bold text-white shrink-0"
-      style={{ background: "linear-gradient(180deg, rgba(99,102,241,0.6), rgba(99,102,241,0.3))" }}
+      style={{ color: theme.accent, background: theme.accentSoft, boxShadow: `inset 0 0 0 1px ${theme.border}` }}
     >
       {prettySport(sport)}
     </span>
+  );
+}
+
+function SportGroupHeader({ sport, count }: { sport: string; count: number }) {
+  const theme = sportTheme(sport);
+  return (
+    <div className="mb-3.5 flex items-center justify-between gap-2 border-b pb-3 sm:gap-3" style={{ borderColor: theme.border }}>
+      <div className="flex min-w-0 items-center gap-2 sm:gap-2.5">
+        <span className="h-5 w-1 rounded-full" style={{ background: theme.accent }} aria-hidden="true" />
+        <SportPill sport={sport} />
+        <h3 className="hidden text-[13px] font-black text-gray-100 sm:block">{prettySport(sport)} models</h3>
+      </div>
+      <span className="shrink-0 text-[9px] font-bold uppercase tracking-[0.12em] text-gray-500 sm:hidden">
+        {count} {count === 1 ? "cat" : "cats"}
+      </span>
+      <span className="hidden shrink-0 text-[9px] font-bold uppercase tracking-[0.14em] text-gray-500 sm:inline">
+        {count} {count === 1 ? "category" : "categories"}
+      </span>
+    </div>
   );
 }
 
@@ -921,27 +985,16 @@ function BestAnglesBoard({ rows }: { rows: SportMarketBucket[] }) {
       </Card>
     );
   }
-  const groups = rows.reduce<Array<{ sport: string; rows: SportMarketBucket[] }>>((acc, row) => {
-    const existing = acc.find((group) => group.sport === row.sport);
-    if (existing !== undefined) existing.rows.push(row);
-    else acc.push({ sport: row.sport, rows: [row] });
-    return acc;
-  }, []);
+  const groups = groupBySport(rows);
 
   return (
     <Card>
-      <div className="divide-y divide-white/[0.07]">
-        {groups.map((group) => (
-          <section key={group.sport} className="py-5 first:pt-0 last:pb-0">
-            <div className="mb-4 flex items-center justify-between gap-3">
-              <div className="flex items-center gap-2.5">
-                <SportPill sport={group.sport} />
-                <h3 className="text-[13px] font-black text-gray-100">{prettySport(group.sport)} models</h3>
-              </div>
-              <span className="text-[9px] font-bold uppercase tracking-[0.14em] text-gray-600">
-                {group.rows.length} {group.rows.length === 1 ? "category" : "categories"}
-              </span>
-            </div>
+      <div className="space-y-3">
+        {groups.map((group) => {
+          const theme = sportTheme(group.sport);
+          return (
+          <section key={group.sport} className="rounded-xl border p-3.5 sm:p-4" style={{ borderColor: theme.border, background: theme.surface }}>
+            <SportGroupHeader sport={group.sport} count={group.rows.length} />
             <div className="grid gap-3 lg:grid-cols-2">
               {group.rows.map((b) => {
                 const ba = b.bestAngles;
@@ -961,7 +1014,8 @@ function BestAnglesBoard({ rows }: { rows: SportMarketBucket[] }) {
               })}
             </div>
           </section>
-        ))}
+          );
+        })}
       </div>
     </Card>
   );
@@ -1035,11 +1089,12 @@ function RecentPickCard({ pick }: { pick: RecentPickRow }) {
   const playGradeLabel = pick.play_grade !== null ? PLAY_GRADE_LABEL[pick.play_grade] ?? null : null;
   const showBestAngle = pick.best_angle === true;
   const showLean = pick.play_grade === "lean" && !showBestAngle;
+  const theme = sportTheme(pick.sport);
 
   return (
     <div
-      className="rounded-xl p-3.5 sm:p-4 border border-white/[0.05]"
-      style={{ background: "linear-gradient(180deg, rgba(255,255,255,0.022), rgba(255,255,255,0.010))" }}
+      className="rounded-xl border border-l-[3px] p-3.5 sm:p-4"
+      style={{ borderColor: theme.border, borderLeftColor: theme.accent, background: `linear-gradient(90deg, ${theme.surface}, rgba(255,255,255,0.012) 42%)` }}
     >
       <div className="flex items-center gap-2 flex-wrap">
         <span className="text-[10px] uppercase tracking-[0.16em] font-bold text-gray-500 tabular-nums">{fmtShortDate(pick.slate_date)}</span>
@@ -1118,6 +1173,7 @@ function RecentlySettledCard({ pick }: { pick: RecentlySettledRow }) {
   const showBestAngle = pick.best_angle === true;
   const showLean = pick.play_grade === "lean" && !showBestAngle;
   const odds = fmtOdds(pick.odds_american);
+  const theme = sportTheme(pick.sport);
   const line = pick.line_value !== null ? pick.line_value.toString() : null;
   const conf = pick.confidence !== null ? `${Math.round(pick.confidence)}%` : null;
   const ago = fmtClock(pick.graded_at);
@@ -1130,8 +1186,8 @@ function RecentlySettledCard({ pick }: { pick: RecentlySettledRow }) {
 
   return (
     <div
-      className="rounded-xl p-3.5 sm:p-4 border border-white/[0.05]"
-      style={{ background: "linear-gradient(180deg, rgba(255,255,255,0.022), rgba(255,255,255,0.010))" }}
+      className="rounded-xl border border-l-[3px] p-3.5 sm:p-4"
+      style={{ borderColor: theme.border, borderLeftColor: theme.accent, background: `linear-gradient(90deg, ${theme.surface}, rgba(255,255,255,0.012) 42%)` }}
     >
       <div className="flex items-center gap-2 flex-wrap">
         <span className="text-[10px] uppercase tracking-[0.16em] font-bold text-emerald-300/70 tabular-nums">{ago}</span>
