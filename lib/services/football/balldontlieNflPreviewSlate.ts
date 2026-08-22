@@ -1,7 +1,7 @@
 export const BALLDONTLIE_NFL_PREVIEW_SLATE_RELEASE =
   "balldontlie_nfl_preview_slate_2026_08_19_r1" as const;
 export const BALLDONTLIE_NFL_REGULAR_SLATE_RELEASE =
-  "balldontlie_nfl_regular_slate_2026_08_19_r1" as const;
+  "balldontlie_nfl_regular_slate_2026_08_22_r2_multibook" as const;
 
 export type NflPreviewTeam = {
   id: number;
@@ -54,6 +54,10 @@ export type NflPreviewProviderSlate = {
 
 export type NflRegularProviderSlate = Omit<NflPreviewProviderSlate, "release"> & {
   release: typeof BALLDONTLIE_NFL_REGULAR_SLATE_RELEASE;
+  currentOddsAllBooksByGame: Record<string, NflPreviewBookOdds[]>;
+  currentOddsComparableBooksByGame: Record<string, NflPreviewBookOdds[]>;
+  openingOddsAllBooksByGame: Record<string, NflPreviewBookOdds[]>;
+  openingOddsComparableBooksByGame: Record<string, NflPreviewBookOdds[]>;
 };
 
 type JsonRecord = Record<string, unknown>;
@@ -72,6 +76,20 @@ const SPORTSBOOK_PRIORITY = [
   "fanatics",
   "betrivers",
 ] as const;
+
+export const NFL_COMPARABLE_SPORTSBOOKS = [
+  "fanduel",
+  "draftkings",
+  "caesars",
+  "betmgm",
+  "fanatics",
+  "betrivers",
+] as const;
+const NFL_COMPARABLE_SPORTSBOOK_SET = new Set<string>(NFL_COMPARABLE_SPORTSBOOKS);
+
+export function isComparableNflSportsbook(sportsbook: string): boolean {
+  return NFL_COMPARABLE_SPORTSBOOK_SET.has(sportsbook.trim().toLowerCase());
+}
 
 /**
  * BALLDONTLIE counts the Hall of Fame Game as its first preseason week.
@@ -215,8 +233,20 @@ export async function fetchBalldontlieNflRegularSlate(args: {
     optional: true,
   });
   if (openingRead.nextCursor !== null) throw new Error("BALLDONTLIE regular opening odds exceeded the pagination safety budget.");
-  const currentOddsByGame = selectRepresentativeBookByGame(currentRead.rows, new Set(gameIds));
-  const openingOddsByGame = selectRepresentativeBookByGame(openingRead.rows, new Set(gameIds), currentOddsByGame);
+  const requestedGameIds = new Set(gameIds);
+  const currentOddsAllBooksByGame = groupBooksByGame(currentRead.rows, requestedGameIds);
+  const currentOddsComparableBooksByGame = comparableBooksByGame(currentOddsAllBooksByGame);
+  const openingOddsAllBooksByGame = groupBooksByGame(openingRead.rows, requestedGameIds);
+  const openingOddsComparableBooksByGame = comparableBooksByGame(openingOddsAllBooksByGame);
+  const currentOddsByGame = selectRepresentativeNormalizedBooks(
+    Object.values(currentOddsComparableBooksByGame).flat(),
+    requestedGameIds,
+  );
+  const openingOddsByGame = selectRepresentativeNormalizedBooks(
+    Object.values(openingOddsComparableBooksByGame).flat(),
+    requestedGameIds,
+    currentOddsByGame,
+  );
   const missingCurrent = gameIds.filter((gameId) => !currentOddsByGame[gameId]);
   if (missingCurrent.length > 0) throw new Error(`BALLDONTLIE regular odds missing for ${missingCurrent.length} games.`);
   return {
@@ -228,6 +258,10 @@ export async function fetchBalldontlieNflRegularSlate(args: {
     games,
     currentOddsByGame,
     openingOddsByGame,
+    currentOddsAllBooksByGame,
+    currentOddsComparableBooksByGame,
+    openingOddsAllBooksByGame,
+    openingOddsComparableBooksByGame,
     providerRequests,
   };
 }
@@ -309,6 +343,14 @@ function selectRepresentativeBookByGame(
   currentSelection: Record<string, NflPreviewBookOdds> = {},
 ): Record<string, NflPreviewBookOdds> {
   const rows = values.map(normalizeOdds).filter((row): row is NflPreviewBookOdds => row !== null && requestedGameIds.has(row.providerGameId));
+  return selectRepresentativeNormalizedBooks(rows, requestedGameIds, currentSelection);
+}
+
+function selectRepresentativeNormalizedBooks(
+  rows: NflPreviewBookOdds[],
+  requestedGameIds: ReadonlySet<string>,
+  currentSelection: Record<string, NflPreviewBookOdds> = {},
+): Record<string, NflPreviewBookOdds> {
   const grouped = new Map<string, NflPreviewBookOdds[]>();
   for (const row of rows) grouped.set(row.providerGameId, [...(grouped.get(row.providerGameId) ?? []), row]);
   const selected: Record<string, NflPreviewBookOdds> = {};
@@ -321,6 +363,36 @@ function selectRepresentativeBookByGame(
     if (chosen) selected[gameId] = chosen;
   }
   return selected;
+}
+
+function groupBooksByGame(
+  values: unknown[],
+  requestedGameIds: ReadonlySet<string>,
+): Record<string, NflPreviewBookOdds[]> {
+  const grouped = new Map<string, Map<string, NflPreviewBookOdds[]>>();
+  for (const value of values) {
+    const row = normalizeOdds(value);
+    if (!row || !requestedGameIds.has(row.providerGameId)) continue;
+    const vendor = row.sportsbook.toLowerCase();
+    const byVendor = grouped.get(row.providerGameId) ?? new Map<string, NflPreviewBookOdds[]>();
+    byVendor.set(vendor, [...(byVendor.get(vendor) ?? []), row]);
+    grouped.set(row.providerGameId, byVendor);
+  }
+  return Object.fromEntries([...requestedGameIds].map((gameId) => {
+    const books = [...(grouped.get(gameId)?.values() ?? [])]
+      .map((rows) => [...rows].sort(compareOddsRows)[0]!)
+      .sort(compareOddsRows);
+    return [gameId, books];
+  }));
+}
+
+function comparableBooksByGame(
+  booksByGame: Record<string, NflPreviewBookOdds[]>,
+): Record<string, NflPreviewBookOdds[]> {
+  return Object.fromEntries(Object.entries(booksByGame).map(([gameId, books]) => [
+    gameId,
+    books.filter((book) => isComparableNflSportsbook(book.sportsbook)),
+  ]));
 }
 
 function compareOddsRows(first: NflPreviewBookOdds, second: NflPreviewBookOdds): number {
@@ -398,4 +470,6 @@ export const __BALLDONTLIE_NFL_PREVIEW_SLATE_TEST__ = {
   normalizeGame,
   normalizeOdds,
   selectRepresentativeBookByGame,
+  groupBooksByGame,
+  comparableBooksByGame,
 };

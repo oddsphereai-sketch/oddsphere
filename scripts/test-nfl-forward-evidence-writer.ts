@@ -2,13 +2,19 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import {
+  NFL_FORWARD_EVIDENCE_COLLECTOR_RELEASE,
   determineNflForwardCollectionNeed,
   planNflForwardEvidenceCaptures,
   type NflForwardEvidencePayload,
   type NflForwardStoredEvidence,
 } from "../lib/services/football/nflForwardEvidence";
 import { buildTeamDepthSnapshot } from "../lib/services/football/balldontlieNflRoster";
-import type { NflPreviewGame } from "../lib/services/football/balldontlieNflPreviewSlate";
+import {
+  __BALLDONTLIE_NFL_PREVIEW_SLATE_TEST__,
+  isComparableNflSportsbook,
+  type NflPreviewBookOdds,
+  type NflPreviewGame,
+} from "../lib/services/football/balldontlieNflPreviewSlate";
 import { __NFL_VENUE_WEATHER_TEST__ } from "../lib/services/football/nflVenueWeather";
 import { NFL_T60_MAX_CAPTURE_LAG_MINUTES } from "../lib/services/football/nflRegularDecisionEvidence";
 import {
@@ -34,7 +40,11 @@ function stored(stage: "opening" | "unlocked" | "t60", capturedAt: string): NflF
     capturedAt,
     gameStartAt: game.scheduledStart,
     payloadSha256: "a".repeat(64),
-    payload: { slateGameCount: 1 } as NflForwardEvidencePayload,
+    payload: {
+      slateGameCount: 1,
+      collectorRelease: NFL_FORWARD_EVIDENCE_COLLECTOR_RELEASE,
+      market: { comparableCurrentBooks: [{}, {}] },
+    } as NflForwardEvidencePayload,
   };
 }
 
@@ -97,6 +107,10 @@ assert.match(route, /tracking_attempted: false/);
 const writer = readFileSync(path.resolve("lib/services/football/nflForwardEvidenceWriter.ts"), "utf8");
 assert.doesNotMatch(writer, /writeCurrentNflPublishedMemberSnapshot|buildNflTrackingProposals/);
 assert.match(writer, /evaluatedBets: \[\], outcomeConfidence: \[\]/);
+assert.match(writer, /currentBooks/);
+assert.match(writer, /comparableCurrentBooks/);
+assert.match(writer, /multibook_consensus_unavailable/);
+assert.match(writer, /readLegacyNflForwardEvidence/);
 assert.equal(NFL_T60_MAX_CAPTURE_LAG_MINUTES, 20);
 assert.match(writer, /NFL_T60_MAX_CAPTURE_LAG_MINUTES/);
 assert.doesNotMatch(writer, /t60LagMinutes[^\n]*> 20/);
@@ -112,8 +126,8 @@ const vercel = JSON.parse(readFileSync(path.resolve("vercel.json"), "utf8")) as 
 assert.equal(vercel.crons.filter((cron) => cron.path === "/api/cron/nfl-forward-evidence").length, 1);
 
 const completePayload = (capturedAt: string, homePrice: number): NflForwardEvidencePayload => ({
-  schemaRelease: "nfl_forward_evidence_snapshot_2026_08_21_r1",
-  collectorRelease: "nfl_forward_evidence_collector_2026_08_21_r1",
+  schemaRelease: "nfl_forward_evidence_snapshot_2026_08_22_r2_multibook",
+  collectorRelease: "nfl_forward_evidence_collector_2026_08_22_r2_multibook",
   runId: `run-${capturedAt}`,
   season: 2026,
   week: 1,
@@ -133,7 +147,53 @@ const completePayload = (capturedAt: string, homePrice: number): NflForwardEvide
       spread: { awayLine: 2.5, homeLine: -2.5, awayPrice: -110, homePrice: -110 },
       total: { line: 44.5, overPrice: -110, underPrice: -110 },
     },
+    currentBooks: [
+      {
+        providerGameId: game.providerGameId,
+        sportsbook: "fanduel",
+        observedAt: capturedAt,
+        moneyline: { awayPrice: 120, homePrice },
+        spread: { awayLine: 2.5, homeLine: -2.5, awayPrice: -110, homePrice: -110 },
+        total: { line: 44.5, overPrice: -110, underPrice: -110 },
+      },
+      {
+        providerGameId: game.providerGameId,
+        sportsbook: "draftkings",
+        observedAt: capturedAt,
+        moneyline: { awayPrice: 122, homePrice: homePrice - 2 },
+        spread: { awayLine: 2.5, homeLine: -2.5, awayPrice: -108, homePrice: -112 },
+        total: { line: 44.5, overPrice: -108, underPrice: -112 },
+      },
+      {
+        providerGameId: game.providerGameId,
+        sportsbook: "kalshi",
+        observedAt: capturedAt,
+        moneyline: { awayPrice: 118, homePrice: homePrice + 2 },
+        spread: { awayLine: 2.5, homeLine: -2.5, awayPrice: -110, homePrice: -110 },
+        total: { line: 44.5, overPrice: -110, underPrice: -110 },
+      },
+    ],
+    comparableCurrentBooks: [
+      {
+        providerGameId: game.providerGameId,
+        sportsbook: "fanduel",
+        observedAt: capturedAt,
+        moneyline: { awayPrice: 120, homePrice },
+        spread: { awayLine: 2.5, homeLine: -2.5, awayPrice: -110, homePrice: -110 },
+        total: { line: 44.5, overPrice: -110, underPrice: -110 },
+      },
+      {
+        providerGameId: game.providerGameId,
+        sportsbook: "draftkings",
+        observedAt: capturedAt,
+        moneyline: { awayPrice: 122, homePrice: homePrice - 2 },
+        spread: { awayLine: 2.5, homeLine: -2.5, awayPrice: -108, homePrice: -112 },
+        total: { line: 44.5, overPrice: -108, underPrice: -112 },
+      },
+    ],
     providerOpening: null,
+    providerOpeningBooks: [],
+    comparableProviderOpeningBooks: [],
     operationalOpening: {
       provenance: "first_observed",
       capturedAt: early,
@@ -173,7 +233,7 @@ const completePayload = (capturedAt: string, homePrice: number): NflForwardEvide
   },
   weather: { venueTeam: "SEA", venueName: "Lumen Field", roofType: "outdoor", status: "outside_forecast_window", capturedAt, forecast: null },
   decisions: { evaluatedBets: [], outcomeConfidence: [], modelPromotionStatus: "blocked_pending_independent_validation", publicationEnabled: false, trackingEnabled: false },
-  coverage: { currentOdds: true, operationalOpening: true, rosterAndDepth: true, expectedQuarterbacks: true, injuries: true, playbookSplits: true, sharpApiSplits: false, weather: true, healthHolds: ["sharpapi_splits_unavailable"] },
+  coverage: { currentOdds: true, currentBookCount: 3, comparableCurrentBookCount: 2, multibookConsensusReady: true, operationalOpening: true, rosterAndDepth: true, expectedQuarterbacks: true, injuries: true, playbookSplits: true, sharpApiSplits: false, weather: true, healthHolds: ["sharpapi_splits_unavailable"] },
   requestBudget: { balldontlieSlate: 1, balldontlieRoster: 2, balldontlieInjuriesMaximum: 4, playbook: 2, sharpApi: 1, weather: 0, totalMaximum: 10 },
 });
 const evidenceRows: NflForwardStoredEvidence[] = [
@@ -189,6 +249,35 @@ assert.equal(board.coverage.playbookSplitGames, 1);
 assert.equal(board.coverage.sharpSplitGames, 0);
 assert.equal(board.publicationEnabled, false);
 assert.equal(board.trackingEnabled, false);
+
+assert.equal(isComparableNflSportsbook("FanDuel"), true);
+assert.equal(isComparableNflSportsbook("fanatics"), true);
+assert.equal(isComparableNflSportsbook("kalshi"), false);
+assert.equal(isComparableNflSportsbook("polymarket"), false);
+const rawOdds = (vendor: string, observedAt: string): Record<string, unknown> => ({
+  game_id: game.providerGameId,
+  vendor,
+  updated_at: observedAt,
+  moneyline_home_odds: -140,
+  moneyline_away_odds: 120,
+  spread_home_value: -2.5,
+  spread_home_odds: -110,
+  spread_away_value: 2.5,
+  spread_away_odds: -110,
+  total_value: 44.5,
+  total_over_odds: -110,
+  total_under_odds: -110,
+});
+const allBooks = __BALLDONTLIE_NFL_PREVIEW_SLATE_TEST__.groupBooksByGame([
+  rawOdds("FanDuel", "2026-08-22T12:00:00.000Z"),
+  rawOdds("FanDuel", "2026-08-22T13:00:00.000Z"),
+  rawOdds("DraftKings", "2026-08-22T13:00:00.000Z"),
+  rawOdds("Kalshi", "2026-08-22T13:00:00.000Z"),
+], new Set([game.providerGameId]));
+assert.equal(allBooks[game.providerGameId]?.length, 3);
+assert.equal(allBooks[game.providerGameId]?.find((row: NflPreviewBookOdds) => row.sportsbook === "FanDuel")?.observedAt, "2026-08-22T13:00:00.000Z");
+const comparableBooks = __BALLDONTLIE_NFL_PREVIEW_SLATE_TEST__.comparableBooksByGame(allBooks);
+assert.deepEqual(comparableBooks[game.providerGameId]?.map((row: NflPreviewBookOdds) => row.sportsbook), ["FanDuel", "DraftKings"]);
 
 const candidatePage = readFileSync(path.resolve("app/lab/daily-edge/CandidateDailyEdgePage.tsx"), "utf8");
 assert.match(candidatePage, /isNflWeekOneEvidenceBoardEnabled/);

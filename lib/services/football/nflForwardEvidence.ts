@@ -12,9 +12,11 @@ import type {
 import type { NflRegularSharpSplitSet } from "./sharpApiNflSplits";
 
 export const NFL_FORWARD_EVIDENCE_SCHEMA_RELEASE =
+  "nfl_forward_evidence_snapshot_2026_08_22_r2_multibook" as const;
+export const NFL_FORWARD_EVIDENCE_LEGACY_SCHEMA_RELEASE =
   "nfl_forward_evidence_snapshot_2026_08_21_r1" as const;
 export const NFL_FORWARD_EVIDENCE_COLLECTOR_RELEASE =
-  "nfl_forward_evidence_collector_2026_08_21_r1" as const;
+  "nfl_forward_evidence_collector_2026_08_22_r2_multibook" as const;
 
 export type NflForwardEvidenceStage = "opening" | "unlocked" | "t60";
 
@@ -104,7 +106,11 @@ export type NflForwardEvidencePayload = {
   game: NflPreviewGame;
   market: {
     current: NflPreviewBookOdds;
+    currentBooks: NflPreviewBookOdds[];
+    comparableCurrentBooks: NflPreviewBookOdds[];
     providerOpening: NflPreviewBookOdds | null;
+    providerOpeningBooks: NflPreviewBookOdds[];
+    comparableProviderOpeningBooks: NflPreviewBookOdds[];
     operationalOpening: NflForwardOperationalOpening;
     playbookLine: NflForwardPlaybookLine | null;
     playbookSplits: NflForwardPlaybookSplitSet | null;
@@ -125,6 +131,9 @@ export type NflForwardEvidencePayload = {
   };
   coverage: {
     currentOdds: boolean;
+    currentBookCount: number;
+    comparableCurrentBookCount: number;
+    multibookConsensusReady: boolean;
     operationalOpening: boolean;
     rosterAndDepth: boolean;
     expectedQuarterbacks: boolean;
@@ -145,6 +154,26 @@ export type NflForwardEvidencePayload = {
   };
 };
 
+export type NflForwardLegacyEvidencePayload = Omit<
+  NflForwardEvidencePayload,
+  "schemaRelease" | "collectorRelease" | "market" | "coverage"
+> & {
+  schemaRelease: typeof NFL_FORWARD_EVIDENCE_LEGACY_SCHEMA_RELEASE;
+  collectorRelease: "nfl_forward_evidence_collector_2026_08_21_r1";
+  market: Omit<
+    NflForwardEvidencePayload["market"],
+    "currentBooks" | "comparableCurrentBooks" | "providerOpeningBooks" | "comparableProviderOpeningBooks"
+  >;
+  coverage: Omit<
+    NflForwardEvidencePayload["coverage"],
+    "currentBookCount" | "comparableCurrentBookCount" | "multibookConsensusReady"
+  >;
+};
+
+export type NflForwardAnyEvidencePayload =
+  | NflForwardEvidencePayload
+  | NflForwardLegacyEvidencePayload;
+
 export type NflForwardStoredEvidence = {
   id: string;
   providerGameId: string;
@@ -152,7 +181,7 @@ export type NflForwardStoredEvidence = {
   capturedAt: string;
   gameStartAt: string;
   payloadSha256: string;
-  payload: NflForwardEvidencePayload;
+  payload: NflForwardAnyEvidencePayload;
 };
 
 export type NflForwardCapturePlan = {
@@ -225,7 +254,6 @@ export function determineNflForwardCollectionNeed(args: {
   const expected = Math.max(...args.existing.map((row) => row.payload.slateGameCount));
   const openings = args.existing.filter((row) => row.stage === "opening").length;
   if (openings < expected) return { collect: true, reason: "opening_incomplete", cadenceMinutes: null };
-
   const upcomingOutsideT60: number[] = [];
   for (const rows of byGame.values()) {
     const latestRow = [...rows].sort((first, second) => Date.parse(second.capturedAt) - Date.parse(first.capturedAt))[0]!;
@@ -246,7 +274,7 @@ export function determineNflForwardCollectionNeed(args: {
     : { collect: false, reason: "cadence_not_due", cadenceMinutes };
 }
 
-export function hashNflForwardEvidencePayload(payload: NflForwardEvidencePayload): string {
+export function hashNflForwardEvidencePayload(payload: NflForwardAnyEvidencePayload): string {
   return createHash("sha256").update(stableJson(payload)).digest("hex");
 }
 
