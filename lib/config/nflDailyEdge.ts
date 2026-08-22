@@ -1,6 +1,8 @@
 export const NFL_DAILY_EDGE_ENABLED_FLAG = "NFL_DAILY_EDGE_ENABLED" as const;
 export const NFL_DAILY_EDGE_PUBLICATION_ENABLED_FLAG =
   "NFL_DAILY_EDGE_PUBLICATION_ENABLED" as const;
+export const NFL_WEEK_ONE_EVIDENCE_BOARD_ENABLED_FLAG =
+  "NFL_WEEK_ONE_EVIDENCE_BOARD_ENABLED" as const;
 
 export const NFL_DAILY_EDGE_PUBLICATION_RELEASE =
   "nfl_daily_edge_preseason_publication_2026_08_20_r1" as const;
@@ -19,4 +21,14 @@ export function isNflDailyEdgePublicationEnabled(
   env: Readonly<Record<string, string | undefined>> = process.env,
 ): boolean {
   return env[NFL_DAILY_EDGE_PUBLICATION_ENABLED_FLAG] === "true";
+}
+
+/**
+ * Independent display gate for the evidence-only Regular Season Week 1 board.
+ * This never authorizes model predictions, grades, tracking, or settlement.
+ */
+export function isNflWeekOneEvidenceBoardEnabled(
+  env: Readonly<Record<string, string | undefined>> = process.env,
+): boolean {
+  return env[NFL_WEEK_ONE_EVIDENCE_BOARD_ENABLED_FLAG] === "true";
 }

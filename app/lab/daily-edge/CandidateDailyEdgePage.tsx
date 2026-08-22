@@ -7,7 +7,10 @@ import {
   loadTeamHistory,
 } from "@/app/dev/experience-preview/page";
 import { DAILY_EDGE_SPORT_KEYS } from "@/app/lab/lib/dailyEdgeSports";
-import { isNflDailyEdgeEnabled } from "@/lib/config/nflDailyEdge";
+import {
+  isNflDailyEdgeEnabled,
+  isNflWeekOneEvidenceBoardEnabled,
+} from "@/lib/config/nflDailyEdge";
 import { filterWeeklyReaderSnapshot } from "@/lib/services/dailyEdge/weeklyReaderLifecycle";
 import type { Sport } from "@/lib/types/domain/Sport";
 import DailyEdgeLiveRefresh from "./DailyEdgeLiveRefresh";
@@ -47,7 +50,21 @@ export default async function CandidateDailyEdgePage({
   const eplEnabled = process.env.PREMIER_LEAGUE_DAILY_EDGE_ENABLED === "true";
   const nflRequested = sport === "nfl";
   const nflEnabled = nflRequested && isNflDailyEdgeEnabled();
-  const nflFixture = !nflEnabled
+  const nflWeekOneEvidenceEnabled = nflEnabled && isNflWeekOneEvidenceBoardEnabled();
+  const nflWeekOneEvidenceBoard = !nflWeekOneEvidenceEnabled
+    ? null
+    : await Promise.all([
+        import("@/lib/db/supabase"),
+        import("@/lib/services/football/nflWeekOneEvidenceBoard"),
+      ])
+        .then(([{ supabase }, { readCurrentNflWeekOneEvidenceBoard }]) =>
+          readCurrentNflWeekOneEvidenceBoard({
+            client: supabase,
+            season: Number(process.env.NFL_FORWARD_SEASON ?? "2026"),
+            week: Number(process.env.NFL_FORWARD_WEEK ?? "1"),
+          }))
+        .catch(() => null);
+  const nflFixture = !nflEnabled || nflWeekOneEvidenceEnabled
     ? null
     : process.env.NODE_ENV !== "production"
       ? await (await import("@/lib/services/football/nflMemberSnapshotStore")).readCurrentNflMemberSnapshot()
@@ -109,8 +126,8 @@ export default async function CandidateDailyEdgePage({
             : competition === "world_cup"
               ? { active: "world_cup", label: "World Cup" }
               : undefined}
-        activePreviewSports={nflFixture ? ["nfl"] : []}
-        sportSwitchDestinations={nflFixture ? NFL_SPORT_SWITCH_DESTINATIONS : undefined}
+        activePreviewSports={nflFixture || nflWeekOneEvidenceEnabled ? ["nfl"] : []}
+        sportSwitchDestinations={nflFixture || nflWeekOneEvidenceEnabled ? NFL_SPORT_SWITCH_DESTINATIONS : undefined}
         weeklySlate={nflFixture
           ? {
               label: `NFL · ${nflFixture.week.label} · ${snapshot.games.length} games · ${snapshot.games.length * 3} predictions · ${nflFixture.tracking.seasonPhase === "preseason" ? "preseason is excluded from official tracking" : "tracking begins only with an approved pre-kickoff lock"}`,
@@ -118,9 +135,22 @@ export default async function CandidateDailyEdgePage({
               previousHref: null,
               nextHref: null,
             }
+          : nflWeekOneEvidenceEnabled
+            ? {
+                label: `NFL · Regular Season Week 1 · ${nflWeekOneEvidenceBoard ? "live evidence" : "evidence temporarily unavailable"} · model validation hold`,
+                evidence: nflWeekOneEvidenceBoard
+                  ? `Real Week 1 schedule and markets · ${nflWeekOneEvidenceBoard.coverage.currentOddsGames}/${nflWeekOneEvidenceBoard.games.length} current named-book boards · ${nflWeekOneEvidenceBoard.coverage.openingGames}/${nflWeekOneEvidenceBoard.games.length} operational Opening trails · ${nflWeekOneEvidenceBoard.coverage.playbookSplitGames}/${nflWeekOneEvidenceBoard.games.length} Playbook public-consensus sets · predictions and Bet grades remain withheld until independent validation`
+                  : "The stale preseason package is retired from the member reader. Week 1 evidence could not be verified for this request, so the board fails closed instead of restoring an older slate.",
+                previousHref: null,
+                nextHref: null,
+                displayGameCount: nflWeekOneEvidenceBoard?.games.length ?? 0,
+                asOf: nflWeekOneEvidenceBoard?.capturedAt ?? snapshot.as_of,
+                cadenceLabel: "six-hour early evidence · hourly inside 48h · 15-minute T-60 checks",
+              }
           : eplRequested && eplEnabled
             ? { label: `Weekly Premier League slate · ${snapshot.games.length} matches`, previousHref: null, nextHref: null }
             : undefined}
+        nflWeekOneEvidenceBoard={nflWeekOneEvidenceBoard}
       />
     </>
   );

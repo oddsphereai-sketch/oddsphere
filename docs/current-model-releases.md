@@ -4,21 +4,23 @@ This file is the human-readable production handoff registry. Runtime constants a
 prediction snapshots remain the machine authority. Future model work must start here, verify the
 constants, and preserve the precedence and writer ownership below.
 
-Last reviewed: 2026-08-21
+Last reviewed: 2026-08-22
 
-## NFL Daily Edge preseason publication candidate
+## NFL Daily Edge Regular Season Week 1 evidence board
 
-- Publication release: `nfl_daily_edge_preseason_publication_2026_08_20_r1`
-- Member snapshot release: `nfl_daily_edge_local_member_snapshot_2026_08_20_r3`
+- Active evidence-board release: `nfl_week_one_evidence_board_2026_08_22_r1`
+- Forward evidence schema / writer: `nfl_forward_evidence_snapshot_2026_08_21_r1` / `nfl_forward_evidence_writer_2026_08_21_r1`
+- Retired display snapshot: `nfl_daily_edge_preseason_publication_2026_08_20_r1` / `nfl_daily_edge_local_member_snapshot_2026_08_20_r3`; retained only as immutable internal rehearsal evidence and never used when the Week 1 evidence-board gate is enabled
 - Member reader lifecycle: `daily_edge_weekly_reader_lifecycle_2026_08_21_r1`
 - Regular model / decision releases: `nfl_pregame_real_local_current_refit_2026_08_19_r3` and `nfl_regular_price_value_decision_shadow_2026_08_20_r2`
-- Runtime constants: `lib/config/nflDailyEdge.ts`, `lib/services/football/footballModelContract.ts`, `lib/services/football/nflRegularDecision.ts`, and `lib/services/football/nflPublishedMemberSnapshotStore.ts`
-- Current board: the real 16-game 2026 Preseason Week 2 slate, with 48 moneyline/total/spread predictions, 48 current prices, 16 injury/depth snapshots, and 16 operational same-book Opening trails. The immutable package is `nfl_daily_edge_2026_preseason_week_2_f5c290ebcac4f462.json`, SHA-256 `f5c290ebcac4f4628f347ecfb97094a066c7ccba13298717ac66d6d71247629e`, captured `2026-08-20T22:48:23.153Z`.
-- Board impact: five preseason-rehearsal Leans, eight Watchlists, 35 No Plays, zero Cautions, and zero Best Angles. These are public dry-run labels, not official results. No prior actionable play was demoted by the publication release.
-- Publication boundary: production member reads use the existing signed-in Daily Edge route and make zero provider calls. The isolated `nfl::current-week` JSONB snapshot is readable only when `NFL_DAILY_EDGE_ENABLED=true`; publishing requires the independent `NFL_DAILY_EDGE_PUBLICATION_ENABLED=true` gate, complete/fresh evidence, exact checksum readback, and the shared `prediction_pipeline:nfl` lease. Already-started games are frozen against prediction rewrites.
-- Weekly-slate display lifecycle: the immutable weekly package retains every game for locks, audit, settlement, and tracking integrity. The member board removes a game only after its Eastern game date has ended, so Thursday games no longer occupy Friday's board. Kickoffs retain canonical UTC instants and all four redesigned reader surfaces render them in the member's browser time zone; Eastern time remains only the sportsbook slate boundary. This is display-only and changes zero projections, probabilities, sides, prices, grades, stakes, or official records.
+- Runtime constants: `lib/config/nflDailyEdge.ts`, `lib/services/football/nflWeekOneEvidenceBoard.ts`, `lib/services/football/nflForwardEvidence.ts`, `lib/services/football/footballModelContract.ts`, and `lib/services/football/nflRegularDecision.ts`
+- Current member state: the genuine 16-game 2026 Regular Season Week 1 schedule with 16/16 complete current FanDuel moneyline/spread/total boards, 16/16 immutable operational Opening trails, 16/16 Playbook public-consensus sets, 16/16 injury/depth snapshots, and all 32 expected quarterbacks. Expected quarterbacks remain projected rather than confirmed, SharpAPI has zero strictly matched Week 1 split sets, and outdoor weather is collected only inside its forecast window.
+- Prediction boundary: the public Week 1 evidence board contains no model probabilities, projected scores, sides, Bet grades, stakes, tracking rows, or settlement instructions. It labels the state `Model validation hold`; missing independent validation is not rendered as an ordinary `No Play`. Market prices and public splits remain evidence only and cannot masquerade as OddSphere predictions.
+- Board impact: the expired August 20 preseason display is removed as a phase transition, not regraded. Its remaining three rehearsal Leans, five Watchlists, and 25 No Plays are not promoted, demoted, settled, or imported into regular-season tracking. The Week 1 evidence board issues zero new grades. Same-slate promotion/demotion impact is therefore zero/zero.
+- Reader boundary: `NFL_WEEK_ONE_EVIDENCE_BOARD_ENABLED=true` independently selects the evidence-only reader. If the complete Week 1 evidence set cannot be verified, the reader fails closed with an evidence-unavailable hold and never restores the older preseason slate. `NFL_DAILY_EDGE_ENABLED` remains the top-level NFL visibility rollback.
+- Refresh boundary: the scheduled `/api/cron/nfl-forward-evidence` route owns the shared `prediction_pipeline:nfl` lease and captures opening, six-hour early, hourly inside 48 hours, and T-60 evidence. Member reads query stored evidence and make zero provider calls.
 - Tracking boundary: preseason is permanently ineligible for prediction records, settlement, stakes, and lifetime totals. NFL moneyline, total, and spread are registered forward-only beginning `2026-09-10`; actual regular-season writes still require an approved pre-kickoff lock and must append to the pre-existing NFL lifetime record rather than reset or backfill it.
-- Evidence: `docs/model-audits/2026-08-20-nfl-preseason-publication-r14.md`. Rollback is `NFL_DAILY_EDGE_ENABLED=false`; the isolated snapshot can expire without affecting other sports or official tracking.
+- Evidence: `docs/model-audits/2026-08-22-nfl-week1-evidence-board-r1.md`. This is an honest product-state repair, not approval of the failed Week 1 model candidate. Predictive and decision-policy research remains blocked from promotion until the mandatory chronological gates pass.
 
 ## Premier League production release (active)
 
