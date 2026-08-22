@@ -9,6 +9,7 @@ import type {
   NflRegularEvaluatedBetDecision,
   NflRegularOutcomeConfidence,
 } from "./nflRegularDecisionEvidence";
+import type { NflR6ShadowMoneylineDecision } from "./nflR6MoneylineShadow";
 import type { NflRegularSharpSplitSet } from "./sharpApiNflSplits";
 
 export const NFL_FORWARD_EVIDENCE_SCHEMA_RELEASE =
@@ -125,6 +126,7 @@ export type NflForwardEvidencePayload = {
   decisions: {
     evaluatedBets: NflRegularEvaluatedBetDecision[];
     outcomeConfidence: NflRegularOutcomeConfidence[];
+    shadowEvaluatedBets?: NflR6ShadowMoneylineDecision[];
     modelPromotionStatus: "blocked_pending_independent_validation";
     publicationEnabled: false;
     trackingEnabled: false;
