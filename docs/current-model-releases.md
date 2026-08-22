@@ -96,13 +96,25 @@ changed; only deterministic settlement of existing locked rows is affected.
 
 - Projection runtime: resolved automodel `v2_2`
 - First-inning runtime: `fi_v2` with the versioned unpublished-probable availability head below
-- Public calibration: `mlb_public_calibration_v25_coherent_playable_price_2026_08_21`
-- Decision release: `mlb_daily_edge_decision_2026_08_21_r65`
-- Rule bundle: `mlb_daily_edge_rule_bundle_v53_2026_08_21`
-- Grade policy: `mlb_public_grade_policy_v43_coherent_playable_price_2026_08_21`
+- Public calibration: `mlb_public_calibration_v26_same_book_evaluated_movement_2026_08_22`
+- Decision release: `mlb_daily_edge_decision_2026_08_22_r66`
+- Rule bundle: `mlb_daily_edge_rule_bundle_v54_2026_08_22`
+- Grade policy: `mlb_public_grade_policy_v44_same_book_evaluated_movement_2026_08_22`
 - Tracking contract: `member_facing_lock_v8_priority_retry_minute_cadence_2026_08_11`
 - Machine registry: `lib/automodel/mlbModelLayerVersions.ts`
 - Authoritative member-facing writer: `lib/services/predictionRecordService.ts`
+
+The August 22 r66 movement-coherence repair retains every r65 projection,
+probability head, selected side, price-eligibility threshold, promotion rule,
+stake rule, writer, lease, and T-60 boundary. Line movement is now measured
+only between the opening and current quote from the sportsbook whose exact
+price is evaluated for the Bet grade. A source change can no longer compare an
+opening quote from one book with a current quote from another and manufacture
+support or resistance. Missing same-book history fails closed as unknown.
+Locked records remain immutable. The paired current-board impact and production
+verification are recorded in
+`docs/model-audits/2026-08-22-mlb-same-book-evaluated-movement-r66.md`. Rollback
+is r65/v53/v43/v25.
 
 The August 21 r65 Moneyline price-coherence repair retains every r64 projection,
 probability head, selected side, First Inning rule, Total rule, writer, lease, and

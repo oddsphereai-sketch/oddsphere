@@ -72,8 +72,8 @@ const layers = buildMlbModelLayerVersions("total", {});
 check("missing model env stamps resolved v2_2", layers.runtime_env.automodel_version === "v2_2");
 check("missing FI env stamps resolved fi_v2", layers.runtime_env.first_inning_model_version === "fi_v2");
 check(
-  "grade policy carries the r65 coherent-playable-price hierarchy",
-  layers.grade_policy === "mlb_public_grade_policy_v43_coherent_playable_price_2026_08_21",
+  "grade policy carries the r66 same-book movement hierarchy",
+  layers.grade_policy === "mlb_public_grade_policy_v44_same_book_evaluated_movement_2026_08_22",
 );
 check(
   "tracking contract carries the priority-retry minute-lock release",
@@ -85,12 +85,12 @@ check(
     layers.calibration_version === MLB_PUBLIC_CALIBRATION_VERSION,
 );
 check(
-  "MLB r65 versions price evaluation without changing the champion probability heads",
-  MLB_DAILY_EDGE_DECISION_RELEASE_ID === "mlb_daily_edge_decision_2026_08_21_r65" &&
+  "MLB r66 versions same-book evaluated movement without changing the champion probability heads",
+  MLB_DAILY_EDGE_DECISION_RELEASE_ID === "mlb_daily_edge_decision_2026_08_22_r66" &&
     MLB_MODEL_LAYER_VERSION_SCHEMA === "mlb_model_layer_versions_v5" &&
-    layers.rule_bundle_version === "mlb_daily_edge_rule_bundle_v53_2026_08_21" &&
-    layers.moneyline_evaluation_price_policy === "mlb_ml_fresh_coherent_best_playable_price_v1_2026_08_21" &&
-    layers.correction_policy === "mlb_prediction_corrections_v17_price_only_promotion_ceiling_2026_08_21" &&
+    layers.rule_bundle_version === "mlb_daily_edge_rule_bundle_v54_2026_08_22" &&
+    layers.moneyline_evaluation_price_policy === "mlb_ml_fresh_coherent_best_playable_price_same_book_movement_v2_2026_08_22" &&
+    layers.correction_policy === "mlb_prediction_corrections_v18_same_book_evaluated_movement_2026_08_22" &&
     layers.first_inning_probability_head === "mlb_first_inning_fi_v4_market_backed_weight25_2026_08_20" &&
     layers.schedule_time_policy === "mlb_official_schedule_time_v1_2026_07_30",
 );
