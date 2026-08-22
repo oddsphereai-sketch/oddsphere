@@ -1,7 +1,9 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
+  NFL_FORWARD_EVIDENCE_LEGACY_SCHEMA_RELEASE,
   NFL_FORWARD_EVIDENCE_SCHEMA_RELEASE,
   hashNflForwardEvidencePayload,
+  type NflForwardAnyEvidencePayload,
   type NflForwardEvidencePayload,
   type NflForwardStoredEvidence,
 } from "./nflForwardEvidence";
@@ -21,15 +23,32 @@ export async function readNflForwardEvidence(args: {
   season: number;
   week: number;
 }): Promise<NflForwardStoredEvidence[]> {
+  return readNflForwardEvidenceRelease({ ...args, evidenceRelease: NFL_FORWARD_EVIDENCE_SCHEMA_RELEASE });
+}
+
+export async function readLegacyNflForwardEvidence(args: {
+  client: SupabaseClient;
+  season: number;
+  week: number;
+}): Promise<NflForwardStoredEvidence[]> {
+  return readNflForwardEvidenceRelease({ ...args, evidenceRelease: NFL_FORWARD_EVIDENCE_LEGACY_SCHEMA_RELEASE });
+}
+
+async function readNflForwardEvidenceRelease(args: {
+  client: SupabaseClient;
+  season: number;
+  week: number;
+  evidenceRelease: typeof NFL_FORWARD_EVIDENCE_SCHEMA_RELEASE | typeof NFL_FORWARD_EVIDENCE_LEGACY_SCHEMA_RELEASE;
+}): Promise<NflForwardStoredEvidence[]> {
   const { data, error } = await args.client
     .from("nfl_forward_evidence_snapshots")
     .select("id,provider_game_id,stage,captured_at,game_start_at,payload_sha256,payload")
-    .eq("evidence_release", NFL_FORWARD_EVIDENCE_SCHEMA_RELEASE)
+    .eq("evidence_release", args.evidenceRelease)
     .eq("season", args.season)
     .eq("week", args.week)
     .order("captured_at", { ascending: true });
   if (error) throw new Error(`NFL forward evidence read failed: ${error.message}`);
-  return ((data ?? []) as StoredRow[]).map(normalizeStoredRow);
+  return ((data ?? []) as StoredRow[]).map((row) => normalizeStoredRow(row, args.evidenceRelease));
 }
 
 export async function appendNflForwardEvidence(args: {
@@ -68,11 +87,14 @@ export async function appendNflForwardEvidence(args: {
   return { proposed: rows.length, inserted: data?.length ?? rows.length, hashes };
 }
 
-function normalizeStoredRow(row: StoredRow): NflForwardStoredEvidence {
+function normalizeStoredRow(
+  row: StoredRow,
+  expectedRelease: typeof NFL_FORWARD_EVIDENCE_SCHEMA_RELEASE | typeof NFL_FORWARD_EVIDENCE_LEGACY_SCHEMA_RELEASE,
+): NflForwardStoredEvidence {
   if (row.payload === null || typeof row.payload !== "object") throw new Error(`NFL evidence ${row.id} has no payload.`);
-  const payload = row.payload as NflForwardEvidencePayload;
+  const payload = row.payload as NflForwardAnyEvidencePayload;
   if (
-    payload.schemaRelease !== NFL_FORWARD_EVIDENCE_SCHEMA_RELEASE ||
+    payload.schemaRelease !== expectedRelease ||
     payload.game.providerGameId !== row.provider_game_id ||
     payload.stage !== row.stage ||
     payload.capturedAt !== new Date(row.captured_at).toISOString()

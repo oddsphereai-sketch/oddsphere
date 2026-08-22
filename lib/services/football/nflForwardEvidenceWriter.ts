@@ -17,7 +17,11 @@ import {
   type NflForwardStoredEvidence,
   type NflForwardTeamDepthSnapshot,
 } from "./nflForwardEvidence";
-import { appendNflForwardEvidence, readNflForwardEvidence } from "./nflForwardEvidenceStore";
+import {
+  appendNflForwardEvidence,
+  readLegacyNflForwardEvidence,
+  readNflForwardEvidence,
+} from "./nflForwardEvidenceStore";
 import { collectNflForwardWeather } from "./nflVenueWeather";
 import {
   completeSharpApiNflSplitSet,
@@ -27,7 +31,7 @@ import {
 import { NFL_T60_MAX_CAPTURE_LAG_MINUTES } from "./nflRegularDecisionEvidence";
 
 export const NFL_FORWARD_WRITER_RELEASE =
-  "nfl_forward_evidence_writer_2026_08_21_r1" as const;
+  "nfl_forward_evidence_writer_2026_08_22_r2_multibook" as const;
 
 export type NflForwardWriterResult = {
   writerRelease: typeof NFL_FORWARD_WRITER_RELEASE;
@@ -55,7 +59,11 @@ export async function runNflForwardEvidenceWriter(args: {
   sharpApiKey: string;
   weatherProvider: IWeatherProvider | null;
 }): Promise<NflForwardWriterResult> {
-  const existing = await readNflForwardEvidence({ client: args.client, season: args.season, week: args.week });
+  const [existing, legacyExisting] = await Promise.all([
+    readNflForwardEvidence({ client: args.client, season: args.season, week: args.week }),
+    readLegacyNflForwardEvidence({ client: args.client, season: args.season, week: args.week }),
+  ]);
+  const historicalExisting = [...legacyExisting, ...existing];
   const need = determineNflForwardCollectionNeed({ existing, now: args.now });
   if (!need.collect) return emptyResult(need.reason);
 
@@ -124,7 +132,21 @@ export async function runNflForwardEvidenceWriter(args: {
 
   const payloads = plans.map((plan): NflForwardEvidencePayload => {
     const current = requiredCurrentOdds(slate.currentOddsByGame[plan.game.providerGameId], plan.game.providerGameId);
-    const previous = latestEvidenceForGame(existing, plan.game.providerGameId);
+    const currentBooks = requiredCurrentBooks(
+      slate.currentOddsAllBooksByGame[plan.game.providerGameId],
+      plan.game.providerGameId,
+      "all-book",
+      true,
+    );
+    const comparableCurrentBooks = requiredCurrentBooks(
+      slate.currentOddsComparableBooksByGame[plan.game.providerGameId],
+      plan.game.providerGameId,
+      "comparable-book",
+      false,
+    );
+    const providerOpeningBooks = slate.openingOddsAllBooksByGame[plan.game.providerGameId] ?? [];
+    const comparableProviderOpeningBooks = slate.openingOddsComparableBooksByGame[plan.game.providerGameId] ?? [];
+    const previous = latestEvidenceForGame(historicalExisting, plan.game.providerGameId);
     const opening = operationalOpening({
       previous,
       providerOpening: slate.openingOddsByGame[plan.game.providerGameId] ?? null,
@@ -151,6 +173,7 @@ export async function runNflForwardEvidenceWriter(args: {
       injuries === null ? "injury_report_unavailable" : null,
       !playbookCoverage ? "playbook_splits_unavailable" : null,
       !sharpCoverage ? "sharpapi_splits_unavailable" : null,
+      comparableCurrentBooks.length < 2 ? "multibook_consensus_unavailable" : null,
       !weatherCoverage ? "weather_unavailable" : null,
       plan.stage === "t60" && (plan.t60LagMinutes ?? 0) > NFL_T60_MAX_CAPTURE_LAG_MINUTES
         ? "t60_capture_late"
@@ -171,7 +194,11 @@ export async function runNflForwardEvidenceWriter(args: {
       game: plan.game,
       market: {
         current,
+        currentBooks,
+        comparableCurrentBooks,
         providerOpening: slate.openingOddsByGame[plan.game.providerGameId] ?? null,
+        providerOpeningBooks,
+        comparableProviderOpeningBooks,
         operationalOpening: opening,
         playbookLine,
         playbookSplits,
@@ -186,7 +213,11 @@ export async function runNflForwardEvidenceWriter(args: {
         publicationEnabled: false, trackingEnabled: false,
       },
       coverage: {
-        currentOdds: true, operationalOpening: true, rosterAndDepth, expectedQuarterbacks,
+        currentOdds: true,
+        currentBookCount: currentBooks.length,
+        comparableCurrentBookCount: comparableCurrentBooks.length,
+        multibookConsensusReady: comparableCurrentBooks.length >= 2,
+        operationalOpening: true, rosterAndDepth, expectedQuarterbacks,
         injuries: injuries !== null, playbookSplits: playbookCoverage,
         sharpApiSplits: sharpCoverage, weather: weatherCoverage, healthHolds: holds,
       },
@@ -319,6 +350,21 @@ function latestEvidenceForGame(rows: NflForwardStoredEvidence[], providerGameId:
 function requiredCurrentOdds(value: NflPreviewBookOdds | undefined, gameId: string): NflPreviewBookOdds {
   if (!value?.moneyline || !value.spread || !value.total) throw new Error(`NFL current named-book quote is incomplete for ${gameId}.`);
   return value;
+}
+
+function requiredCurrentBooks(
+  value: NflPreviewBookOdds[] | undefined,
+  gameId: string,
+  label: string,
+  requireAtLeastOne: boolean,
+): NflPreviewBookOdds[] {
+  const books = value?.filter((row) => row.moneyline && row.spread && row.total) ?? [];
+  if (requireAtLeastOne && books.length === 0) {
+    throw new Error(`NFL current ${label} quotes are incomplete for ${gameId}.`);
+  }
+  const vendors = new Set(books.map((row) => row.sportsbook.toLowerCase()));
+  if (vendors.size !== books.length) throw new Error(`NFL current ${label} quotes contain duplicate books for ${gameId}.`);
+  return books;
 }
 
 function uniquePlannedGames(games: NflPreviewGame[]): NflPreviewGame[] {
