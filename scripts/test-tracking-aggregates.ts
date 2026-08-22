@@ -75,9 +75,11 @@ check("EPL release dedupe preserves the immutable locked prediction", canonicalE
 const trackingCronSource = readFileSync("app/api/cron/tracking-refresh/route.ts", "utf8");
 const gradingSource = readFileSync("lib/services/predictionGradingService.ts", "utf8");
 const aggregateSource = readFileSync("lib/services/trackingAggregateService.ts", "utf8");
+const consistencyAuditSource = readFileSync("scripts/tracking-consistency-audit.ts", "utf8");
 check("scheduled tracking refresh includes soccer for active EPL settlement", /DEFAULT_SPORTS[^;]+"soccer"/.test(trackingCronSource));
 check("EPL grading is competition-scoped and locked-only", /sport === "soccer"[\s\S]{0,300}english_premier_league[\s\S]{0,200}locked_at/.test(gradingSource));
 check("bounded tracking reads retain the projected EPL competition identity", aggregateSource.includes('"competition:snapshot_json->>competition"'));
+check("tracking consistency audit uses the same EPL display-sport projection", consistencyAuditSource.includes("trackingDisplaySport(row.record)"));
 
 console.log("\n━━━ Brier score sanity (manual computation) ━━━");
 // Brier = mean((p - outcome)^2)
