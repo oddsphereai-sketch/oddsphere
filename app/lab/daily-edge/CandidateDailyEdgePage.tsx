@@ -51,20 +51,22 @@ export default async function CandidateDailyEdgePage({
   const nflRequested = sport === "nfl";
   const nflEnabled = nflRequested && isNflDailyEdgeEnabled();
   const nflWeekOneEvidenceEnabled = nflEnabled && isNflWeekOneEvidenceBoardEnabled();
-  const nflWeekOneEvidenceBoard = !nflWeekOneEvidenceEnabled
+  const nflWeekOneHeldFixture = !nflWeekOneEvidenceEnabled
     ? null
     : await Promise.all([
         import("@/lib/db/supabase"),
-        import("@/lib/services/football/nflWeekOneEvidenceBoard"),
+        import("@/lib/services/football/nflWeekOneHeldMemberFixture"),
       ])
-        .then(([{ supabase }, { readCurrentNflWeekOneEvidenceBoard }]) =>
-          readCurrentNflWeekOneEvidenceBoard({
+        .then(([{ supabase }, { readCurrentNflWeekOneHeldMemberFixture }]) =>
+          readCurrentNflWeekOneHeldMemberFixture({
             client: supabase,
             season: Number(process.env.NFL_FORWARD_SEASON ?? "2026"),
             week: Number(process.env.NFL_FORWARD_WEEK ?? "1"),
           }))
         .catch(() => null);
-  const nflFixture = !nflEnabled || nflWeekOneEvidenceEnabled
+  const nflFixture = nflWeekOneEvidenceEnabled
+    ? nflWeekOneHeldFixture
+    : !nflEnabled
     ? null
     : process.env.NODE_ENV !== "production"
       ? await (await import("@/lib/services/football/nflMemberSnapshotStore")).readCurrentNflMemberSnapshot()
@@ -130,27 +132,26 @@ export default async function CandidateDailyEdgePage({
         sportSwitchDestinations={nflFixture || nflWeekOneEvidenceEnabled ? NFL_SPORT_SWITCH_DESTINATIONS : undefined}
         weeklySlate={nflFixture
           ? {
-              label: `NFL · ${nflFixture.week.label} · ${snapshot.games.length} games · ${snapshot.games.length * 3} predictions · ${nflFixture.tracking.seasonPhase === "preseason" ? "preseason is excluded from official tracking" : "tracking begins only with an approved pre-kickoff lock"}`,
-              evidence: `Stored ${new Date(nflFixture.storedAt).toLocaleString("en-US", { timeZone: "America/New_York" })} ET · schedule, odds, injuries and depth from BALLDONTLIE · team/QB context from checksum-backed nflverse data · ${nflFixture.provenance.firstObservedCoverageGames}/${weeklySourceGameCount} weekly same-book Opening trails · ${nflFixture.provenance.splitCoverageGames}/${weeklySourceGameCount} weekly Playbook public-consensus split sets${nflFixture.tracking.seasonPhase === "preseason" ? " (unavailable for this preseason slate)" : " (context-only until chronologically validated)"} · ${snapshot.games.length} games currently displayed`,
+              label: `NFL · ${nflFixture.week.label} · ${snapshot.games.length} games · ${snapshot.games.length * 3} predictions · ${"heldMemberFixtureRelease" in nflFixture ? "Bet grades held inside the normal Daily Edge reader" : nflFixture.tracking.seasonPhase === "preseason" ? "preseason is excluded from official tracking" : "tracking begins only with an approved pre-kickoff lock"}`,
+              evidence: `${"heldMemberFixtureRelease" in nflFixture ? "Captured" : "Stored"} ${new Date("capturedAt" in nflFixture ? nflFixture.capturedAt : nflFixture.storedAt).toLocaleString("en-US", { timeZone: "America/New_York" })} ET · schedule, named-book odds, injuries and depth from BALLDONTLIE · ${nflFixture.provenance.firstObservedCoverageGames}/${weeklySourceGameCount} weekly same-book Opening trails · ${nflFixture.provenance.splitCoverageGames}/${weeklySourceGameCount} weekly Playbook public-consensus split sets${"heldMemberFixtureRelease" in nflFixture ? " · model probabilities, score projections and Bet grades remain Held until the authoritative exact-price writer attaches one coherent evaluated tuple" : nflFixture.tracking.seasonPhase === "preseason" ? " (unavailable for this preseason slate)" : " (context-only until chronologically validated)"} · ${snapshot.games.length} games currently displayed`,
               previousHref: null,
               nextHref: null,
+              asOf: snapshot.as_of,
+              cadenceLabel: "six-hour early evidence · hourly inside 48h · 15-minute T-60 checks",
             }
           : nflWeekOneEvidenceEnabled
             ? {
-                label: `NFL · Regular Season Week 1 · ${nflWeekOneEvidenceBoard ? "live evidence" : "evidence temporarily unavailable"} · model validation hold`,
-                evidence: nflWeekOneEvidenceBoard
-                  ? `Real Week 1 schedule and markets · ${nflWeekOneEvidenceBoard.coverage.currentOddsGames}/${nflWeekOneEvidenceBoard.games.length} current named-book boards · ${nflWeekOneEvidenceBoard.coverage.openingGames}/${nflWeekOneEvidenceBoard.games.length} operational Opening trails · ${nflWeekOneEvidenceBoard.coverage.playbookSplitGames}/${nflWeekOneEvidenceBoard.games.length} Playbook public-consensus sets · predictions and Bet grades remain withheld until independent validation`
-                  : "The stale preseason package is retired from the member reader. Week 1 evidence could not be verified for this request, so the board fails closed instead of restoring an older slate.",
+                label: "NFL · Regular Season Week 1 · evidence temporarily unavailable · model validation hold",
+                evidence: "The stale preseason package is retired from the member reader. Week 1 evidence could not be verified for this request, so the board fails closed instead of restoring an older slate.",
                 previousHref: null,
                 nextHref: null,
-                displayGameCount: nflWeekOneEvidenceBoard?.games.length ?? 0,
-                asOf: nflWeekOneEvidenceBoard?.capturedAt ?? snapshot.as_of,
+                displayGameCount: 0,
+                asOf: snapshot.as_of,
                 cadenceLabel: "six-hour early evidence · hourly inside 48h · 15-minute T-60 checks",
               }
           : eplRequested && eplEnabled
             ? { label: `Weekly Premier League slate · ${snapshot.games.length} matches`, previousHref: null, nextHref: null }
             : undefined}
-        nflWeekOneEvidenceBoard={nflWeekOneEvidenceBoard}
       />
     </>
   );

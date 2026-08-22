@@ -1,15 +1,10 @@
 import { notFound } from "next/navigation";
-import { unstable_cache } from "next/cache";
 import ProductAppFrame from "@/app/lab/components/ProductAppFrame";
 import ActualDailyEdgePreview from "@/app/dev/experience-preview/ActualDailyEdgePreview";
 import type { Sport } from "@/lib/types/domain/Sport";
-import { loadNflRegularPipelinePreseasonSlate } from "@/lib/services/football/nflRegularLocalSlate";
-import { loadNflPreseasonLocalSlate } from "@/lib/services/football/nflLocalShadowSlate";
-import {
-  buildFootballPreviewFixture,
-  resolveNflPreviewWeek,
-  type FootballPreviewSport,
-} from "./footballPreviewFixture";
+import { supabase } from "@/lib/db/supabase";
+import { readCurrentNflWeekOneHeldMemberFixture } from "@/lib/services/football/nflWeekOneHeldMemberFixture";
+import type { FootballPreviewSport } from "./footballPreviewFixture";
 
 export const dynamic = "force-dynamic";
 
@@ -59,13 +54,16 @@ export default async function FootballPreviewPage({
   if (sport === "cfb") {
     return <FootballPreviewUnavailable detail="The real college-football slate adapter is not complete. No sample schedule, projections, prices, results, or injuries are being substituted." />;
   }
-  // One NFL product board. This explicit local pointer advances only after a
-  // complete, checksum-verified snapshot exists; query parameters cannot open
-  // a second or partially assembled board.
-  const week = resolveNflPreviewWeek(2);
-  let fixture: Awaited<ReturnType<typeof loadCachedNflPreview>>;
+  // One provider-backed Week 1 product board. This route intentionally reads
+  // the same append-only evidence used by the member candidate so founder QA
+  // never falls back to the retired preseason package or a fixture slate.
+  let fixture: Awaited<ReturnType<typeof readCurrentNflWeekOneHeldMemberFixture>>;
   try {
-    fixture = await loadCachedNflPreview(week.week);
+    fixture = await readCurrentNflWeekOneHeldMemberFixture({
+      client: supabase,
+      season: Number(process.env.NFL_FORWARD_SEASON ?? "2026"),
+      week: Number(process.env.NFL_FORWARD_WEEK ?? "1"),
+    });
   } catch (error) {
     const detail = error instanceof Error ? error.message : "Unknown local preview error.";
     return <FootballPreviewUnavailable detail={`${detail} No fallback or fabricated slate is shown.`} />;
@@ -90,38 +88,17 @@ export default async function FootballPreviewPage({
         activePreviewSports={["nfl"]}
         sportSwitchDestinations={SPORT_SWITCH_DESTINATIONS}
         weeklySlate={{
-          label: `NFL · ${fixture.week.label} · ${fixture.snapshot.games.length} games · ${fixture.snapshot.games.length * 3} predictions · ${range} · one verified board · preseason never tracked`,
-          evidence: `Stored snapshot · regular-season candidate pipeline on the real ${fixture.week.label} slate · ${fixture.provenance.modelRelease} uses nflverse play-by-play/QB/team state + BALLDONTLIE odds/injuries/depth · preseason phase comparison prevents false all-Over confidence · dry-run grades ${fixture.provenance.decisionRelease} are never official or tracked · Opening trails ${fixture.provenance.firstObservedCoverageGames}/${fixture.snapshot.games.length} (${fixture.provenance.minimumStoredPriceObservations}+ verified same-book snapshots/game) · public/sharp splits unavailable`,
+          label: `NFL · ${fixture.week.label} · ${fixture.snapshot.games.length} games · ${fixture.snapshot.games.length * 3} predictions · ${range} · Bet grades held inside the normal Daily Edge reader`,
+          evidence: `Captured ${new Date(fixture.capturedAt).toLocaleString("en-US", { timeZone: "America/New_York" })} ET · ${fixture.coverage.currentOddsGames}/${fixture.coverage.games} current named-book boards · ${fixture.coverage.openingGames}/${fixture.coverage.games} operational Opening trails · ${fixture.coverage.playbookSplitGames}/${fixture.coverage.games} Playbook split sets · ${fixture.coverage.injuryGames}/${fixture.coverage.games} injury reports · ${fixture.coverage.projectedQuarterbacks} projected QBs, ${fixture.coverage.confirmedQuarterbacks} confirmed · no preseason slate or result tracking`,
           previousHref: null,
           nextHref: null,
+          asOf: fixture.capturedAt,
+          cadenceLabel: "six-hour early evidence · hourly inside 48h · 15-minute T-60 checks",
         }}
       />
     </ProductAppFrame>
   );
 }
-
-const loadCachedNflPreview = unstable_cache(
-  async (productWeek: number) => {
-    const [loaded, phaseComparison] = await Promise.all([
-      loadNflRegularPipelinePreseasonSlate(productWeek),
-      loadNflPreseasonLocalSlate(productWeek),
-    ]);
-    if (loaded.providerSlate.fetchedAt !== phaseComparison.providerSlate.fetchedAt) {
-      throw new Error("NFL regular-core and preseason phase-comparison snapshots do not share one provider observation.");
-    }
-    return buildFootballPreviewFixture({
-      providerSlate: loaded.providerSlate,
-      shadowSlate: loaded.localSlate,
-      phaseComparisonSlate: phaseComparison.localSlate,
-      availability: loaded.availability,
-      priceHistoryByGame: loaded.priceHistoryByGame,
-      previousWeek: null,
-      nextWeek: null,
-    });
-  },
-  ["football-preview-real-nfl-single-stored-slate-v9"],
-  { revalidate: 5 * 60, tags: ["football-preview-real-nfl-slate"] },
-);
 
 function FootballPreviewUnavailable({ detail }: { detail: string }) {
   return (

@@ -281,11 +281,22 @@ assert.deepEqual(comparableBooks[game.providerGameId]?.map((row: NflPreviewBookO
 
 const candidatePage = readFileSync(path.resolve("app/lab/daily-edge/CandidateDailyEdgePage.tsx"), "utf8");
 assert.match(candidatePage, /isNflWeekOneEvidenceBoardEnabled/);
-assert.match(candidatePage, /nflWeekOneEvidenceBoard=\{nflWeekOneEvidenceBoard\}/);
+assert.match(candidatePage, /readCurrentNflWeekOneHeldMemberFixture/);
+assert.match(candidatePage, /initialAvailability=\{visibleNflAvailability\}/);
+assert.match(candidatePage, /Bet grades held inside the normal Daily Edge reader/);
+assert.doesNotMatch(candidatePage, /nflWeekOneEvidenceBoard=\{/);
 assert.match(candidatePage, /stale preseason package is retired/);
 const reader = readFileSync(path.resolve("app/dev/experience-preview/ActualDailyEdgePreview.tsx"), "utf8");
-assert.match(reader, /The real Week 1 market is live\. Predictions are still being validated\./);
+assert.match(reader, /No score forecast is being published yet/);
+assert.match(reader, /Held is separate from No Play/);
 assert.match(reader, /Missing validation is a visible hold—not an ordinary No Play\./);
 assert.doesNotMatch(reader, /Week 1 market is live[^\n]*Best Angle/);
 
-console.log("NFL forward evidence planner, cadence, roster/QB, immutable DB, evidence-board, lease, and no-publication boundaries passed.");
+const heldFixture = readFileSync(path.resolve("lib/services/football/nflWeekOneHeldMemberFixture.ts"), "utf8");
+assert.match(heldFixture, /readNflForwardEvidence/);
+assert.match(heldFixture, /pick: null/);
+assert.match(heldFixture, /modelProb: null/);
+assert.match(heldFixture, /trackingEligible: false/);
+assert.doesNotMatch(heldFixture, /client\.from|supabase\.from|\.insert\(|\.upsert\(/);
+
+console.log("NFL forward evidence planner, cadence, roster/QB, immutable DB, normal-layout Held adapter, lease, and no-publication boundaries passed.");
