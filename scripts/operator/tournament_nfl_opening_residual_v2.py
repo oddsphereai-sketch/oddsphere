@@ -137,6 +137,8 @@ def load_features(root: pathlib.Path) -> tuple[pd.DataFrame, dict[str, Any]]:
     feature_path = pathlib.Path(manifest["featureFile"])
     if not feature_path.is_absolute():
         feature_path = root / feature_path
+    elif not feature_path.exists():
+        feature_path = root / "football-research/cache/nfl-model" / feature_path.name
     if manifest.get("featureRelease") != FEATURE_RELEASE:
         raise RuntimeError("NFL feature release mismatch")
     if sha256_file(feature_path) != manifest.get("featureFileSha256"):
@@ -157,6 +159,8 @@ def load_openings(root: pathlib.Path, features: pd.DataFrame) -> tuple[pd.DataFr
         data_path = pathlib.Path(manifest["dataFile"])
         if not data_path.is_absolute():
             data_path = root / data_path
+        elif not data_path.exists():
+            data_path = root / "football-research/cache/nfl-market" / data_path.name
         if manifest.get("cacheRelease") != release or sha256_file(data_path) != manifest.get("dataSha256"):
             raise RuntimeError(f"opening cache mismatch: {release}")
         payload = json.loads(data_path.read_text(encoding="utf-8"))

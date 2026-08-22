@@ -578,20 +578,20 @@ function QuickRead({ game, market, marketKey, sport }: { game: DailyEdgeGameDto;
       <SectionHeading tone="emerald">{sport === "soccer" ? "Forecast" : "Quick Read"}</SectionHeading>
       <div className="mt-4 rounded-xl border border-white/[0.07] bg-white/[0.025] p-4">
         <QuickMatchupIdentity game={game} sport={sport} />
-        {marketKey === "first_inning" && sport === "mlb" ? <div className="mt-4 rounded-lg border border-sky-400/15 bg-sky-400/[0.04] p-3"><div className="flex items-center justify-between gap-3"><div><p className="text-[8px] font-black uppercase tracking-[0.15em] text-sky-200">First-inning projection</p><p className="mt-1 text-xl font-black text-white">{fiProjectionValue}</p></div><div className="text-right"><p className="text-[7px] font-black uppercase tracking-wider text-gray-600">Decision line</p><p className="mt-1 font-mono text-sm font-black text-gray-300">0.5 runs</p></div></div><p className="mt-2 text-[9px] leading-relaxed text-gray-500">Opening-frame projection replaces the less relevant full-game score in this market view.</p></div> : <div className="mt-4 rounded-lg border border-white/[0.06] bg-black/25 p-3"><div className="flex items-center justify-between gap-3"><p className="text-[8px] font-black uppercase tracking-[0.15em] text-gray-600">{soccerProjection ? "Market-informed goal outlook" : "Projected score"}</p>{soccerProjection ? <span className="text-[7px] font-black uppercase tracking-wider text-gray-600">Context · separate heads</span> : null}</div><div className="mt-2 flex items-center justify-between text-sm font-black text-white"><span>{game.awayTeam} <strong className="ml-1 text-xl">{formatNumber(soccerProjection?.expectedGoals.away ?? game.projected.away)}</strong></span><span className="text-gray-700">—</span><span><strong className="mr-1 text-xl">{formatNumber(soccerProjection?.expectedGoals.home ?? game.projected.home)}</strong> {game.homeTeam}</span></div>{soccerProjection ? <><p className="mt-2 text-[8px] text-gray-500">Median total {soccerProjection.medianTotal} · most likely total {soccerProjection.mostLikelyTotal}{soccerProjection.representativeScore ? ` · illustrative scenario ${game.awayTeam} ${soccerProjection.representativeScore.away}–${soccerProjection.representativeScore.home} ${game.homeTeam}` : ""}</p>{soccerSemantics ? <SoccerForecastSemanticsNote semantics={soccerSemantics} /> : null}</> : null}</div>}
+        {projectionIsHeld(game) ? <div className="mt-4 rounded-lg border border-amber-300/20 bg-amber-400/[0.045] p-3"><div className="flex items-center justify-between gap-3"><div><p className="text-[8px] font-black uppercase tracking-[0.15em] text-amber-200">Projection held</p><p className="mt-1 text-sm font-black text-white">No score forecast is being published yet</p></div><span className="rounded-full border border-amber-300/20 px-2 py-1 text-[7px] font-black uppercase tracking-wider text-amber-200">Data health hold</span></div><p className="mt-2 text-[9px] leading-relaxed text-gray-500">The real Week 1 matchup and market are visible below. OddSphere will add the score projection only when the authoritative model writer supplies it; a 0–0 placeholder is never shown as a forecast.</p></div> : marketKey === "first_inning" && sport === "mlb" ? <div className="mt-4 rounded-lg border border-sky-400/15 bg-sky-400/[0.04] p-3"><div className="flex items-center justify-between gap-3"><div><p className="text-[8px] font-black uppercase tracking-[0.15em] text-sky-200">First-inning projection</p><p className="mt-1 text-xl font-black text-white">{fiProjectionValue}</p></div><div className="text-right"><p className="text-[7px] font-black uppercase tracking-wider text-gray-600">Decision line</p><p className="mt-1 font-mono text-sm font-black text-gray-300">0.5 runs</p></div></div><p className="mt-2 text-[9px] leading-relaxed text-gray-500">Opening-frame projection replaces the less relevant full-game score in this market view.</p></div> : <div className="mt-4 rounded-lg border border-white/[0.06] bg-black/25 p-3"><div className="flex items-center justify-between gap-3"><p className="text-[8px] font-black uppercase tracking-[0.15em] text-gray-600">{soccerProjection ? "Market-informed goal outlook" : "Projected score"}</p>{soccerProjection ? <span className="text-[7px] font-black uppercase tracking-wider text-gray-600">Context · separate heads</span> : null}</div><div className="mt-2 flex items-center justify-between text-sm font-black text-white"><span>{game.awayTeam} <strong className="ml-1 text-xl">{formatNumber(soccerProjection?.expectedGoals.away ?? game.projected.away)}</strong></span><span className="text-gray-700">—</span><span><strong className="mr-1 text-xl">{formatNumber(soccerProjection?.expectedGoals.home ?? game.projected.home)}</strong> {game.homeTeam}</span></div>{soccerProjection ? <><p className="mt-2 text-[8px] text-gray-500">Median total {soccerProjection.medianTotal} · most likely total {soccerProjection.mostLikelyTotal}{soccerProjection.representativeScore ? ` · illustrative scenario ${game.awayTeam} ${soccerProjection.representativeScore.away}–${soccerProjection.representativeScore.home} ${game.homeTeam}` : ""}</p>{soccerSemantics ? <SoccerForecastSemanticsNote semantics={soccerSemantics} /> : null}</> : null}</div>}
         {sport === "soccer" && marketKey === "moneyline" ? <SoccerThreeWayForecast game={game} market={market} /> : null}
         {sport === "soccer" && marketKey === "total" ? <SoccerTotalForecast market={market} projection={soccerProjection} /> : null}
         {sport === "soccer" && marketKey === "first_inning" ? <SoccerBttsForecast market={market} projection={soccerProjection} game={game} /> : null}
         {sport !== "soccer" ? <div className="mt-4">
           <p className="text-[8px] font-black uppercase tracking-[0.16em] text-gray-600">OddSphere read</p>
-          <div className="mt-1 flex items-end justify-between gap-3"><p className="text-2xl font-black tracking-tight text-white">{market.pick ?? "Held"}</p><span className="text-right"><span className="block font-mono text-base font-black text-gray-200">{formatAmerican(currentDisplayedPrice(market))}</span>{market.currentPriceSportsbook ? <span className="block text-[7px] font-bold text-gray-600">{formatSportsbook(market.currentPriceSportsbook)}</span> : null}</span></div>
+          <div className="mt-1 flex items-end justify-between gap-3"><p className="text-2xl font-black tracking-tight text-white">{market.pick ?? "Held"}</p>{market.held ? <span className="text-right"><span className="block text-[8px] font-black uppercase tracking-wider text-amber-200">Evaluation held</span><span className="mt-0.5 block text-[7px] font-bold text-gray-600">Current odds shown below</span></span> : <span className="text-right"><span className="block font-mono text-base font-black text-gray-200">{formatAmerican(currentDisplayedPrice(market))}</span>{market.currentPriceSportsbook ? <span className="block text-[7px] font-bold text-gray-600">{formatSportsbook(market.currentPriceSportsbook)}</span> : null}</span>}</div>
           <p className="mt-1 text-[10px] text-gray-500">Outcome confidence <span className="font-black text-gray-200">{formatProbability(market.modelProb)}</span> · publish-time market <span className="font-black text-gray-200">{formatMarketProbability(market)}</span></p>
           {(probabilityGap !== null || market.recommendationConfidence !== null) ? <p className="mt-1 text-[9px] text-gray-600">Publish-time gap <span className="font-black text-gray-300">{probabilityGap === null ? "—" : `${probabilityGap > 0 ? "+" : ""}${probabilityGap.toFixed(1)} pp`}</span> · bet actionability <span className="font-black text-gray-300">{market.recommendationConfidence === null || market.recommendationConfidence === undefined ? "—" : `${market.recommendationConfidence.toFixed(0)}/100`}</span></p> : null}
         </div> : null}
         {sport !== "soccer" ? <div className="mt-4 rounded-lg border border-violet-400/15 bg-violet-500/[0.05] p-3"><p className="text-xs leading-relaxed text-gray-300">{currentAwareGuidedGuide(market, market.whyLine)}</p><p className="mt-2 text-[10px] leading-relaxed text-amber-200/70"><span className="font-black text-amber-300">Where it gets less clean:</span> {displayRiskLine(market)}</p></div> : null}
       </div>
       {sport === "soccer" ? <SoccerDecisionSummary game={game} market={market} /> : null}
-      {sport !== "soccer" ? <><div className="mt-4"><p className="text-[8px] font-black uppercase tracking-[0.16em] text-gray-600">Bet grade</p><div className="mt-2"><VerdictBadge market={market} large /></div><GradeScale market={market} /><p className="mt-2 text-[8px] leading-relaxed text-gray-600">Price-sensitive decision at the evaluated sportsbook quote. Outcome confidence is shown separately and does not override the Bet grade.</p></div><DecisionMetricGrid market={market} /></> : null}
+      {sport !== "soccer" ? <><div className="mt-4"><p className="text-[8px] font-black uppercase tracking-[0.16em] text-gray-600">Bet grade</p><div className="mt-2"><VerdictBadge market={market} large /></div><GradeScale market={market} /><p className="mt-2 text-[8px] leading-relaxed text-gray-600">{market.held ? "Held is a data or validation state—not a No Play. The market can be evaluated after the authoritative model and exact-price tuple are available." : "Price-sensitive decision at the evaluated sportsbook quote. Outcome confidence is shown separately and does not override the Bet grade."}</p></div><DecisionMetricGrid market={market} /></> : null}
     </div>
   );
 }
@@ -817,7 +817,7 @@ function CompactOddsMovement({ market, tone, lineClass }: { market: MarketEdgeDt
           movement: resolveStandaloneMovement(row.odds_trail ?? [], row.price_american, soccerBoard.sportsbook, market.line),
         }))
     : [
-        { key: "selected", label: market.pick ?? "Picked side", selected: true, movement },
+        { key: "selected", label: market.pick ?? heldTrackedSideLabel(market), selected: true, movement },
         ...(opposingMovement && market.opposingOddsTrail
           ? [{ key: "opposing", label: market.opposingOddsTrail.label, selected: false, movement: opposingMovement }]
           : []),
@@ -1682,6 +1682,10 @@ function CoreDecisionSnapshot({ game, market, marketKey }: { game: DailyEdgeGame
     const marketNumber = marketKey === "moneyline" ? formatAmerican(currentDisplayedPrice(market)) : market.line === null ? "—" : formatNumber(market.line);
     return <div className="mt-2 grid grid-cols-2 gap-2"><ProofCell label="Goal outlook" value={`${projection.expectedGoals.away.toFixed(2)} · ${projection.expectedGoals.home.toFixed(2)}`} note="Away · home scoring context" tone="violet" /><ProofCell label="Goal-outlook total" value={`Median ${projection.medianTotal} · Mode ${projection.mostLikelyTotal}`} note={`Mean ${(projection.expectedGoals.away + projection.expectedGoals.home).toFixed(2)} · not the market pick probability`} tone="violet" /><ProofCell label="Illustrative scenario" value={projection.representativeScore ? `${game.awayTeam} ${projection.representativeScore.away} · ${game.homeTeam} ${projection.representativeScore.home}` : "No shared scenario"} note={projection.representativeScoreProbability === null ? "Market-specific forecasts remain separate" : `${(projection.representativeScoreProbability * 100).toFixed(1)}% in the goal outlook · not a shared forecast source`} tone="gray" /><ProofCell label={marketKey === "moneyline" ? "Current price" : "Market line"} value={marketNumber} note={marketKey === "moneyline" && market.currentPriceSportsbook ? formatSportsbook(market.currentPriceSportsbook) : market.marketSource ?? "Source unavailable"} tone="gray" /></div>;
   }
+  if (projectionIsHeld(game)) {
+    const marketNumber = marketKey === "moneyline" ? "Two-sided board" : market.line === null ? "—" : formatNumber(market.line);
+    return <div className="mt-2 grid grid-cols-2 gap-2"><ProofCell label="Score projection" value="Held" note="Authoritative model output pending" tone="violet" /><ProofCell label="Outcome confidence" value="Held" note="Not replaced by market odds" tone="violet" /><ProofCell label="Bet grade" value="Held" note="Exact-price writer pending" tone="gray" /><ProofCell label={marketKey === "moneyline" ? "Current market" : "Market line"} value={marketNumber} note={market.marketSource ? formatSportsbook(market.marketSource) : "Source unavailable"} tone="gray" /></div>;
+  }
   const projectedTotal = game.projected.away + game.projected.home;
   const projectedMargin = Math.abs(game.projected.home - game.projected.away);
   const projectedLeader = game.projected.home === game.projected.away ? "Even" : game.projected.home > game.projected.away ? game.homeTeam : game.awayTeam;
@@ -1798,27 +1802,29 @@ function AnalysisCard({ label, text }: { label: string; text: string }) {
   return <section className="rounded-xl border border-violet-400/20 bg-violet-500/[0.05] p-4"><p className="text-[8px] font-black uppercase tracking-[0.15em] text-violet-200">{label}</p><p className="mt-2 text-[11px] leading-relaxed text-gray-300">{text}</p></section>;
 }
 
-type BoardFilter = "all" | "best_angle" | "lean" | "watchlist" | "caution" | "no_play";
+type BoardFilter = "all" | "held" | "best_angle" | "lean" | "watchlist" | "caution" | "no_play";
 
 function EdgeBoard({ games, sport, activeId, activeMarket, selectGame, groupByDay = false }: { games: DailyEdgeGameDto[]; sport: Sport; activeId: string; activeMarket: MarketKey; selectGame: (game: DailyEdgeGameDto, market?: MarketKey) => void; groupByDay?: boolean }) {
   const [filter, setFilter] = useState<BoardFilter>("all");
   const [focus, setFocus] = useState<MarketKey | null>(null);
-  const filters: Array<{ key: BoardFilter; label: string }> = [{ key: "all", label: "All" }, { key: "best_angle", label: "Best Angle" }, { key: "lean", label: "Lean" }, { key: "watchlist", label: "Watchlist" }, { key: "caution", label: "Caution" }, { key: "no_play", label: "No Play" }];
+  const filters: Array<{ key: BoardFilter; label: string }> = [{ key: "all", label: "All" }, { key: "held", label: "Held" }, { key: "best_angle", label: "Best Angle" }, { key: "lean", label: "Lean" }, { key: "watchlist", label: "Watchlist" }, { key: "caution", label: "Caution" }, { key: "no_play", label: "No Play" }];
   const footballBoard = groupByDay && (sport === "nfl" || sport === "cfb");
   const marketKeys: MarketKey[] = ["moneyline", "total", "first_inning"];
   const marketsInScope = (): MarketKey[] => focus === null ? marketKeys : [focus];
   const predictionCount = games.reduce((total) => total + marketsInScope().length, 0);
+  const matchesFilter = (market: MarketEdgeDto, key: Exclude<BoardFilter, "all">) =>
+    key === "held" ? market.held : !market.held && market.verdict.key === key;
   const count = (key: BoardFilter) => footballBoard
     ? key === "all"
       ? predictionCount
       : games.reduce(
-          (total, game) => total + marketsInScope().filter((market) => game.markets[market].verdict.key === key).length,
+          (total, game) => total + marketsInScope().filter((market) => matchesFilter(game.markets[market], key)).length,
           0,
         )
     : key === "all"
       ? games.length
-      : games.filter((game) => marketsInScope().some((market) => game.markets[market].verdict.key === key)).length;
-  const visibleGames = filter === "all" ? games : games.filter((game) => marketsInScope().some((market) => game.markets[market].verdict.key === filter));
+      : games.filter((game) => marketsInScope().some((market) => matchesFilter(game.markets[market], key))).length;
+  const visibleGames = filter === "all" ? games : games.filter((game) => marketsInScope().some((market) => matchesFilter(game.markets[market], filter)));
   const orderedGames = [...visibleGames].sort((a, b) => {
     const completedOrder = Number(a.result?.finalScore !== null) - Number(b.result?.finalScore !== null);
     if (completedOrder !== 0) return completedOrder;
@@ -1827,8 +1833,8 @@ function EdgeBoard({ games, sport, activeId, activeMarket, selectGame, groupByDa
   const groupedGames = groupByDay ? Object.entries(Object.groupBy(orderedGames, (game) => game.gameStartAt ? easternDateKey(game.gameStartAt) : "Unscheduled")) : [["", orderedGames] as const];
   const marketFilters: Array<{ key: MarketKey | null; label: string }> = [{ key: null, label: footballBoard ? "All markets" : "Best market" }, { key: "moneyline", label: "Moneyline" }, { key: "total", label: "Totals" }, { key: "first_inning", label: marketLabelFor("first_inning", sport) }];
   const countNote = focus === null
-    ? `Grade counts cover all ${predictionCount} predictions. A game appears when any of its three markets matches the selected grade.`
-    : `Grade counts cover the ${games.length} ${marketLabelFor(focus, sport).toLowerCase()} predictions.`;
+    ? `Status and grade counts cover all ${predictionCount} predictions. Held is separate from No Play.`
+    : `Status and grade counts cover the ${games.length} ${marketLabelFor(focus, sport).toLowerCase()} predictions.`;
   return <section><div className="mb-3 rounded-xl border border-white/[0.07] bg-white/[0.02] p-3"><div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div className="flex items-baseline gap-2"><span className="h-3.5 w-1 rounded-full bg-violet-400/65" /><h2 className="text-[10px] font-black uppercase tracking-[0.18em] text-violet-200">{groupByDay ? "Weekly Slate" : "Slate Board"}</h2><span className="text-[11px] text-gray-600">·</span><span className="text-[11px] text-gray-400">{games.length} {games.length === 1 ? "game" : "games"}{footballBoard ? ` · ${games.length * 3} predictions` : ""}</span></div><div className="flex gap-1.5 overflow-x-auto pb-1">{marketFilters.map((item) => <button key={item.key ?? "best"} type="button" onClick={() => setFocus(item.key)} aria-pressed={focus === item.key} className={`whitespace-nowrap rounded-md border px-2.5 py-1.5 text-[8px] font-black uppercase tracking-wider ${focus === item.key ? "border-white/20 bg-white/[0.09] text-white" : "border-white/[0.06] text-gray-500"}`}>{item.label}</button>)}</div></div><div className="mt-3 flex flex-col gap-2 border-t border-white/[0.05] pt-3 sm:flex-row sm:items-center sm:justify-between"><div className="flex gap-1.5 overflow-x-auto">{filters.map((item) => { const total = count(item.key); const active = filter === item.key; const disabled = item.key !== "all" && total === 0; return <button key={item.key} type="button" disabled={disabled} onClick={() => setFilter(item.key)} className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border px-2.5 py-1 text-[9px] font-black uppercase tracking-wider ${active ? "border-violet-400/55 bg-violet-500/[0.18] text-white" : disabled ? "border-white/[0.04] text-gray-800" : "border-white/[0.08] bg-white/[0.03] text-gray-400 hover:border-white/[0.16]"}`}>{item.label}<span className={active ? "text-violet-200" : "text-gray-600"}>{total}</span></button>; })}</div>{footballBoard ? <p className="max-w-xl text-[8px] font-semibold leading-relaxed text-gray-600">{countNote}</p> : null}</div></div><div className="space-y-6">{groupedGames.map(([date, dayGames]) => { const rows = dayGames ?? []; return <section key={date || "slate"}>{date ? <div className="mb-3 flex items-center gap-3 border-b border-white/[0.07] pb-2"><span className="rounded-lg border border-violet-400/25 bg-violet-500/[0.08] px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.16em] text-violet-100">{new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", weekday: "long", month: "short", day: "numeric" }).format(new Date(`${date}T12:00:00Z`))}</span><span className="text-[9px] font-bold text-gray-600">{rows.length} {rows.length === 1 ? "match" : "matches"}</span></div> : null}<div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{rows.map((game) => <BoardGameCard key={game.id} game={game} sport={sport} headlineMarket={focus ?? primaryMarket(game)} active={activeId === game.id} activeMarket={activeId === game.id ? activeMarket : null} selectGame={selectGame} />)}</div></section>; })}</div></section>;
 }
 
@@ -1893,7 +1899,7 @@ function BoardGameCard({ game, sport, headlineMarket, active, activeMarket, sele
         <p className={`${compactSoccer ? "mt-2 text-[10px]" : "mt-3 text-[12px]"} line-clamp-2 leading-relaxed text-gray-400`}>{currentAwareGuidedGuide(headline, game.decisionLine)}</p>
         <div className={`${compactSoccer ? "mt-2" : "mt-3"} flex items-baseline gap-2`}>
           <span className="text-[9px] font-black uppercase tracking-wider text-gray-600">{sport === "soccer" && game.soccerProjection ? "Goal outlook" : "Proj"}</span>
-          <span className="text-[12px] text-gray-400">{game.awayTeam} <strong className="text-[13px] text-white">{formatNumber(game.soccerProjection?.expectedGoals.away ?? game.projected.away)}</strong> <span className="mx-1 text-gray-700">·</span> {game.homeTeam} <strong className="text-[13px] text-white">{formatNumber(game.soccerProjection?.expectedGoals.home ?? game.projected.home)}</strong>{sport === "soccer" && game.soccerProjection?.representativeScore ? <span className="ml-2 text-[9px] text-gray-600">Illustration {game.soccerProjection.representativeScore.away}–{game.soccerProjection.representativeScore.home}</span> : null}</span>
+          {projectionIsHeld(game) ? <span className="text-[12px] font-bold text-amber-200/75">Held · authoritative model output pending</span> : <span className="text-[12px] text-gray-400">{game.awayTeam} <strong className="text-[13px] text-white">{formatNumber(game.soccerProjection?.expectedGoals.away ?? game.projected.away)}</strong> <span className="mx-1 text-gray-700">·</span> {game.homeTeam} <strong className="text-[13px] text-white">{formatNumber(game.soccerProjection?.expectedGoals.home ?? game.projected.home)}</strong>{sport === "soccer" && game.soccerProjection?.representativeScore ? <span className="ml-2 text-[9px] text-gray-600">Illustration {game.soccerProjection.representativeScore.away}–{game.soccerProjection.representativeScore.home}</span> : null}</span>}
         </div>
         <div className={`mt-auto ${compactSoccer ? "pt-2" : "pt-3"}`}>
           <div className="flex items-center justify-between gap-1 overflow-hidden text-[9px] font-black uppercase tracking-[0.06em]">
@@ -2135,10 +2141,18 @@ function VerdictGlyph({ market }: { market: MarketEdgeDto }) {
 }
 
 function GradeScale({ market }: { market: MarketEdgeDto }) {
+  if (market.held) {
+    return <div className="mt-3 rounded-lg border border-amber-300/15 bg-amber-400/[0.035] px-3 py-2"><div className="flex items-center justify-between gap-3"><span className="text-[7px] font-black uppercase tracking-[0.1em] text-amber-200">Held</span><span className="text-right text-[7px] font-semibold text-gray-600">Awaiting model + exact-price evaluation</span></div></div>;
+  }
   const grades = ["no_play", "caution", "watchlist", "lean", "best_angle"];
   const index = Math.max(0, grades.indexOf(market.verdict.key));
   const activeColor = gradeScaleColor(market.verdict.key);
   return <div className="mt-3"><div className="flex gap-1.5">{grades.map((grade, gradeIndex) => <span key={grade} className={`h-1.5 flex-1 rounded-full ${gradeIndex <= index ? activeColor : "bg-gray-800"}`} />)}</div><div className="mt-2 flex justify-between text-[7px] font-black uppercase tracking-[0.08em] text-gray-700"><span>No play</span><span>Lean</span><span>Best</span></div></div>;
+}
+
+function heldTrackedSideLabel(market: MarketEdgeDto): string {
+  const opposingSide = market.opposingOddsTrail?.side ?? null;
+  return market.publicSplits.find((row) => row.side !== opposingSide)?.label ?? "Tracked market side";
 }
 
 function gradeScaleColor(key: string): string {
@@ -2185,6 +2199,12 @@ function displayPick(market: MarketEdgeDto, key: MarketKey): string {
   if (!market.pick) return market.held ? "Held" : "—";
   if (key === "total" && market.line !== null && !/\d/.test(market.pick)) return `${market.pick} ${market.line}`;
   return market.pick;
+}
+
+function projectionIsHeld(game: DailyEdgeGameDto): boolean {
+  return Object.values(game.markets).every((market) => market.held) &&
+    game.projected.away === 0 &&
+    game.projected.home === 0;
 }
 
 function driverCategory(label: string): string {

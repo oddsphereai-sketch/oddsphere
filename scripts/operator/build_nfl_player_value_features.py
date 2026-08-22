@@ -115,6 +115,8 @@ def load_verified_inputs(
     base_manifest_path = root / "football-research/cache/nfl-model/nfl_pregame_features_2016_2025_r1.manifest.json"
     base_manifest = json.loads(base_manifest_path.read_text(encoding="utf-8"))
     base_path = pathlib.Path(base_manifest["featureFile"])
+    if not base_path.exists():
+        base_path = base_manifest_path.parent / base_path.name
     if (
         base_manifest.get("featureRelease") != BASE_FEATURE_RELEASE
         or not base_path.exists()
@@ -131,6 +133,8 @@ def load_verified_inputs(
         if item["dataset"] not in {"injuries", "snap_counts", "weekly_rosters"}:
             continue
         path = pathlib.Path(item["filename"])
+        if not path.exists():
+            path = source_manifest_path.parent / str(item["dataset"]) / path.name
         if not path.exists() or sha256_file(path) != item["sha256"]:
             raise RuntimeError(f"source checksum mismatch: {path}")
         paths[(str(item["dataset"]), int(item["season"]))] = path
