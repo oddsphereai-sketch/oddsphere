@@ -84,12 +84,12 @@ const IN_PROGRESS_STATUSES = new Set([
   "FUT", "PRE", "LIVE", "CRIT",
 ]);
 
-// Phase 7L Step 5 — recognize NHL terminal states "FINAL" and "OFF"
-// (per api-web.nhle.com /v1/score) so the shared grader can grade
-// NHL prediction_records via the existing rules. MLB ("final") and
-// NBA ("STATUS_FINAL") are unchanged.
+// Recognize the terminal vocabulary emitted by every authoritative score
+// ingester. EPL normalizes BallDontLie's final state to "completed" in the
+// games table, while MLB, NBA, and NHL use their provider-native final tokens.
 function isFinalStatus(s: string): boolean {
-  return s === "final" || s === "STATUS_FINAL" || s === "FINAL" || s === "OFF";
+  const normalized = s.trim().toLowerCase().replace(/^status_/, "");
+  return normalized === "final" || normalized === "completed" || normalized === "off";
 }
 
 function isVoidStatus(s: string): boolean {

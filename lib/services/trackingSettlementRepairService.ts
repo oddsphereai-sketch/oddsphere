@@ -2,7 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Sport } from "../types/domain/Sport";
 
 export const TRACKING_SETTLEMENT_CONTRACT_VERSION =
-  "tracking_settlement_v3_epl_competition_lock_2026_08_19";
+  "tracking_settlement_v4_epl_completed_status_2026_08_22";
 
 const MAX_PENDING_GRADES_SCANNED = 1_000;
 const MAX_REPAIR_DATES_PER_RUN = 3;
@@ -42,6 +42,7 @@ function chunks<T>(values: readonly T[], size: number): T[][] {
 function isTerminalStatus(status: string | null): boolean {
   const normalized = (status ?? "").trim().toLowerCase().replace(/^status_/, "");
   return normalized === "final" ||
+    normalized === "completed" ||
     normalized === "off" ||
     normalized.startsWith("final_") ||
     normalized === "postponed" ||

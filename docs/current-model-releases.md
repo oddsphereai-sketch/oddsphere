@@ -68,7 +68,7 @@ The four-season chronological tournament selected the runtime configuration on 2
 
 ## Shared tracking settlement
 
-- Settlement contract: `tracking_settlement_v3_epl_competition_lock_2026_08_19`
+- Settlement contract: `tracking_settlement_v4_epl_completed_status_2026_08_22`
 - Runtime constant: `lib/services/trackingSettlementRepairService.ts`
 - Authoritative writer: the existing sport-scoped `tracking_refresh` job under the shared
   `prediction_pipeline` lease
@@ -84,6 +84,13 @@ The v3 settlement contract retains v2's bounded repair and every non-EPL rule. I
 hourly shared tracking cycle, requires the immutable T-60 lock before an EPL record can grade or
 enter member aggregates, and separates `english_premier_league` from historical World Cup rows in
 member-facing competition buckets. The scorer remains the shared regulation-time soccer grader.
+
+The v4 settlement contract retains every v3 lock, competition, grading, and aggregation rule. It
+adds BallDontLie EPL's persisted terminal token `completed` to the shared grader and bounded
+pending-repair discovery. This closes the production mismatch where an EPL game had a trusted
+full-time score but remained pending because other sports use `final`, `STATUS_FINAL`, or `OFF`.
+No prediction, probability, projection, market side, play grade, price, stake, or locked record is
+changed; only deterministic settlement of existing locked rows is affected.
 
 ## MLB champion
 
