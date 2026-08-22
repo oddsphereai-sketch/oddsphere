@@ -11,6 +11,10 @@ import { buildTeamDepthSnapshot } from "../lib/services/football/balldontlieNflR
 import type { NflPreviewGame } from "../lib/services/football/balldontlieNflPreviewSlate";
 import { __NFL_VENUE_WEATHER_TEST__ } from "../lib/services/football/nflVenueWeather";
 import { NFL_T60_MAX_CAPTURE_LAG_MINUTES } from "../lib/services/football/nflRegularDecisionEvidence";
+import {
+  NFL_WEEK_ONE_EVIDENCE_BOARD_RELEASE,
+  buildNflWeekOneEvidenceBoard,
+} from "../lib/services/football/nflWeekOneEvidenceBoard";
 
 const game: NflPreviewGame = {
   providerGameId: "1001",
@@ -107,4 +111,92 @@ assert.doesNotMatch(executableMigration, /GRANT[^;]*(UPDATE|DELETE)[^;]*nfl_forw
 const vercel = JSON.parse(readFileSync(path.resolve("vercel.json"), "utf8")) as { crons: Array<{ path: string }> };
 assert.equal(vercel.crons.filter((cron) => cron.path === "/api/cron/nfl-forward-evidence").length, 1);
 
-console.log("NFL forward evidence planner, cadence, roster/QB, immutable DB, lease, and no-publication boundaries passed.");
+const completePayload = (capturedAt: string, homePrice: number): NflForwardEvidencePayload => ({
+  schemaRelease: "nfl_forward_evidence_snapshot_2026_08_21_r1",
+  collectorRelease: "nfl_forward_evidence_collector_2026_08_21_r1",
+  runId: `run-${capturedAt}`,
+  season: 2026,
+  week: 1,
+  slateGameCount: 1,
+  stage: capturedAt === early ? "opening" : "unlocked",
+  captureTiming: "on_time",
+  capturedAt,
+  cutoffAt: null,
+  t60LagMinutes: null,
+  game,
+  market: {
+    current: {
+      providerGameId: game.providerGameId,
+      sportsbook: "fanduel",
+      observedAt: capturedAt,
+      moneyline: { awayPrice: 120, homePrice },
+      spread: { awayLine: 2.5, homeLine: -2.5, awayPrice: -110, homePrice: -110 },
+      total: { line: 44.5, overPrice: -110, underPrice: -110 },
+    },
+    providerOpening: null,
+    operationalOpening: {
+      provenance: "first_observed",
+      capturedAt: early,
+      quote: {
+        providerGameId: game.providerGameId,
+        sportsbook: "fanduel",
+        observedAt: early,
+        moneyline: { awayPrice: 125, homePrice: -145 },
+        spread: { awayLine: 3, homeLine: -3, awayPrice: -110, homePrice: -110 },
+        total: { line: 45, overPrice: -110, underPrice: -110 },
+      },
+    },
+    playbookLine: null,
+    playbookSplits: {
+      moneyline: { provider: "playbook", capturedAt, booksUsed: 9, homeMoneyPct: 55, awayMoneyPct: 45, homeBetsPct: 52, awayBetsPct: 48, overMoneyPct: null, underMoneyPct: null, overBetsPct: null, underBetsPct: null },
+      spread: { provider: "playbook", capturedAt, booksUsed: 9, homeMoneyPct: 54, awayMoneyPct: 46, homeBetsPct: 51, awayBetsPct: 49, overMoneyPct: null, underMoneyPct: null, overBetsPct: null, underBetsPct: null },
+      total: { provider: "playbook", capturedAt, booksUsed: 10, homeMoneyPct: null, awayMoneyPct: null, homeBetsPct: null, awayBetsPct: null, overMoneyPct: 57, underMoneyPct: 43, overBetsPct: 53, underBetsPct: 47 },
+    },
+    sharpApiSplits: null,
+  },
+  startersAndDepth: {
+    away: { ...depth, team: "NE" },
+    home: { ...depth, team: "SEA" },
+  },
+  injuries: {
+    eventId: game.providerGameId,
+    awayTeam: "NE",
+    homeTeam: "SEA",
+    source: "BALLDONTLIE",
+    sourceLabel: "BALLDONTLIE NFL injuries",
+    sourceUrl: null,
+    reportUpdatedAt: capturedAt,
+    teams: [
+      { abbreviation: "NE", teamName: "New England Patriots", players: [] },
+      { abbreviation: "SEA", teamName: "Seattle Seahawks", players: [] },
+    ],
+  },
+  weather: { venueTeam: "SEA", venueName: "Lumen Field", roofType: "outdoor", status: "outside_forecast_window", capturedAt, forecast: null },
+  decisions: { evaluatedBets: [], outcomeConfidence: [], modelPromotionStatus: "blocked_pending_independent_validation", publicationEnabled: false, trackingEnabled: false },
+  coverage: { currentOdds: true, operationalOpening: true, rosterAndDepth: true, expectedQuarterbacks: true, injuries: true, playbookSplits: true, sharpApiSplits: false, weather: true, healthHolds: ["sharpapi_splits_unavailable"] },
+  requestBudget: { balldontlieSlate: 1, balldontlieRoster: 2, balldontlieInjuriesMaximum: 4, playbook: 2, sharpApi: 1, weather: 0, totalMaximum: 10 },
+});
+const evidenceRows: NflForwardStoredEvidence[] = [
+  { ...stored("opening", early), payload: completePayload(early, -140) },
+  { ...stored("unlocked", "2026-09-01T18:00:00.000Z"), payload: completePayload("2026-09-01T18:00:00.000Z", -150) },
+];
+const board = buildNflWeekOneEvidenceBoard(evidenceRows);
+assert.equal(board.release, NFL_WEEK_ONE_EVIDENCE_BOARD_RELEASE);
+assert.equal(board.games.length, 1);
+assert.equal(board.games[0]?.current.moneyline.homePrice, -150);
+assert.equal(board.games[0]?.opening.moneyline.homePrice, -145);
+assert.equal(board.coverage.playbookSplitGames, 1);
+assert.equal(board.coverage.sharpSplitGames, 0);
+assert.equal(board.publicationEnabled, false);
+assert.equal(board.trackingEnabled, false);
+
+const candidatePage = readFileSync(path.resolve("app/lab/daily-edge/CandidateDailyEdgePage.tsx"), "utf8");
+assert.match(candidatePage, /isNflWeekOneEvidenceBoardEnabled/);
+assert.match(candidatePage, /nflWeekOneEvidenceBoard=\{nflWeekOneEvidenceBoard\}/);
+assert.match(candidatePage, /stale preseason package is retired/);
+const reader = readFileSync(path.resolve("app/dev/experience-preview/ActualDailyEdgePreview.tsx"), "utf8");
+assert.match(reader, /The real Week 1 market is live\. Predictions are still being validated\./);
+assert.match(reader, /Missing validation is a visible hold—not an ordinary No Play\./);
+assert.doesNotMatch(reader, /Week 1 market is live[^\n]*Best Angle/);
+
+console.log("NFL forward evidence planner, cadence, roster/QB, immutable DB, evidence-board, lease, and no-publication boundaries passed.");

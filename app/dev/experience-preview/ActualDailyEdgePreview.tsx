@@ -35,6 +35,7 @@ import {
 } from "@/app/lab/lib/marketPulsePresentation";
 import { firstInningSupportTone } from "@/app/lab/lib/firstInningPresentation";
 import { soccerForecastSemantics } from "@/app/lab/lib/soccerForecastSemantics";
+import type { NflWeekOneEvidenceBoard } from "@/lib/services/football/nflWeekOneEvidenceBoard";
 
 type DeepView = "case" | "market" | "matchup" | "trend" | "model";
 
@@ -60,7 +61,15 @@ export type SoccerCompetitionPreview = {
   active: "premier_league" | "world_cup" | "champions_league";
   label: string;
 };
-export type WeeklySlatePreview = { label: string; evidence?: string; previousHref: string | null; nextHref: string | null };
+export type WeeklySlatePreview = {
+  label: string;
+  evidence?: string;
+  previousHref: string | null;
+  nextHref: string | null;
+  displayGameCount?: number;
+  asOf?: string;
+  cadenceLabel?: string;
+};
 
 const MARKET_LABEL: Record<MarketKey, string> = {
   moneyline: "Moneyline",
@@ -105,6 +114,7 @@ export default function ActualDailyEdgePreview({
   embeddedSample = false,
   soccerCompetition,
   weeklySlate,
+  nflWeekOneEvidenceBoard,
   activePreviewSports = [],
   sportSwitchDestinations,
 }: {
@@ -118,6 +128,7 @@ export default function ActualDailyEdgePreview({
   embeddedSample?: boolean;
   soccerCompetition?: SoccerCompetitionPreview;
   weeklySlate?: WeeklySlatePreview;
+  nflWeekOneEvidenceBoard?: NflWeekOneEvidenceBoard | null;
   activePreviewSports?: Sport[];
   sportSwitchDestinations?: Partial<Record<Sport, string>>;
 }) {
@@ -216,7 +227,7 @@ export default function ActualDailyEdgePreview({
   }, [displaySnapshot.date, displaySnapshot.games, embeddedSample, sport]);
 
   if (!game) {
-    return <div className="space-y-5 pb-16"><SlateHeader snapshot={displaySnapshot} sport={sport} onSportChange={switchSport} soccerCompetition={soccerCompetition} weeklySlate={weeklySlate} reviewMode={reviewMode} activePreviewSports={activePreviewSports} /><EmptyPreview sport={sport} displayLabel={soccerCompetition?.label} /></div>;
+    return <div className="space-y-5 pb-16"><SlateHeader snapshot={displaySnapshot} sport={sport} onSportChange={switchSport} soccerCompetition={soccerCompetition} weeklySlate={weeklySlate} reviewMode={reviewMode} activePreviewSports={activePreviewSports} />{nflWeekOneEvidenceBoard ? <NflWeekOneEvidenceMonitor board={nflWeekOneEvidenceBoard} /> : sport === "nfl" && weeklySlate ? <NflWeekOneEvidenceUnavailable /> : <EmptyPreview sport={sport} displayLabel={soccerCompetition?.label} />}</div>;
   }
 
   const market = game.markets[marketKey];
@@ -486,6 +497,8 @@ function replaceReaderUrl(sport: Sport, gameId: string, market: MarketKey) {
 
 function SlateHeader({ snapshot, sport, onSportChange, sample = false, soccerCompetition, weeklySlate, reviewMode = true, activePreviewSports = [] }: { snapshot: DailyEdgeResponse; sport: Sport; onSportChange: (sport: Sport) => void; sample?: boolean; soccerCompetition?: SoccerCompetitionPreview; weeklySlate?: WeeklySlatePreview; reviewMode?: boolean; activePreviewSports?: Sport[] }) {
   const displaySport = soccerCompetition?.label ?? sportLabel(sport);
+  const displayGameCount = weeklySlate?.displayGameCount ?? snapshot.games.length;
+  const displayAsOf = weeklySlate?.asOf ?? snapshot.as_of;
   const sportAvailability = activePreviewSports.reduce(
     (availability, activeSport) => ({
       ...availability,
@@ -498,8 +511,8 @@ function SlateHeader({ snapshot, sport, onSportChange, sample = false, soccerCom
   return (
     <div>
       <div className="flex flex-col gap-2 px-1 sm:flex-row sm:items-end sm:justify-between">
-        <div><p className="text-[9px] font-black uppercase tracking-[0.2em] text-violet-300">OddSphere · {displaySport}</p><h1 className="mt-1 text-2xl font-black tracking-tight text-white sm:text-3xl">Daily Edge</h1><p className="mt-1 text-xs text-gray-500">{sample ? "Sample slate" : snapshot.date} · {snapshot.games.length} {displaySport} {snapshot.games.length === 1 ? "game" : "games"}{sample ? " · Interactive product preview" : ` · updated ${formatTimestamp(snapshot.as_of)}`}</p></div>
-        <p className="text-[8px] font-semibold uppercase tracking-[0.12em] text-gray-600"><span className="text-gray-400">Update rhythm</span> · {weeklySlate ? "30-minute board" : "hourly board"} · separate market feeds · minute lock checks</p>
+        <div><p className="text-[9px] font-black uppercase tracking-[0.2em] text-violet-300">OddSphere · {displaySport}</p><h1 className="mt-1 text-2xl font-black tracking-tight text-white sm:text-3xl">Daily Edge</h1><p className="mt-1 text-xs text-gray-500">{sample ? "Sample slate" : snapshot.date} · {displayGameCount} {displaySport} {displayGameCount === 1 ? "game" : "games"}{sample ? " · Interactive product preview" : ` · updated ${formatTimestamp(displayAsOf)}`}</p></div>
+        <p className="text-[8px] font-semibold uppercase tracking-[0.12em] text-gray-600"><span className="text-gray-400">Update rhythm</span> · {weeklySlate?.cadenceLabel ?? (weeklySlate ? "30-minute board" : "hourly board")} · separate market feeds · minute lock checks</p>
       </div>
       <div className="mt-5"><SportSelector active={sport} onChange={onSportChange} sports={DAILY_EDGE_TOP_LEVEL_SPORT_KEYS} showCounts={false} showPendingState availability={sportAvailability} labelOverrides={{ soccer: "Soccer" }} /></div>
       {sport === "soccer" && soccerCompetition ? <SoccerCompetitionBar active={soccerCompetition.active} reviewMode={reviewMode} /> : null}
@@ -1930,6 +1943,122 @@ function boardVerdictText(verdict: string): string {
 function EmptyPreview({ sport, displayLabel }: { sport: Sport; displayLabel?: string }) {
   const label = displayLabel ?? sportLabel(sport);
   return <section className="rounded-2xl border border-violet-400/15 bg-gradient-to-br from-violet-500/[0.05] to-gray-950/60 p-10 text-center"><span className="inline-flex rounded-full border border-violet-400/20 bg-violet-400/[0.06] px-3 py-1 text-[8px] font-black uppercase tracking-wider text-violet-200">Model available</span><p className="mt-4 text-[9px] font-black uppercase tracking-wider text-gray-500">Soccer · {label} · Daily Edge</p><h2 className="mt-2 text-2xl font-black text-white">No {label} games today</h2><p className="mx-auto mt-2 max-w-xl text-sm leading-relaxed text-gray-500">The {label} model remains part of OddSphere. There is no current slate to analyze, so the board correctly stays empty instead of showing games from an older date.</p></section>;
+}
+
+function NflWeekOneEvidenceMonitor({ board }: { board: NflWeekOneEvidenceBoard }) {
+  const coverage = board.coverage;
+  return <div className="space-y-4">
+    <section className="rounded-2xl border border-amber-300/20 bg-gradient-to-br from-amber-400/[0.08] via-gray-950/90 to-violet-500/[0.06] p-5 sm:p-6">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div className="max-w-3xl">
+          <span className="inline-flex rounded-full border border-amber-300/25 bg-amber-300/[0.08] px-3 py-1 text-[8px] font-black uppercase tracking-[0.16em] text-amber-200">Model validation hold</span>
+          <p className="mt-4 text-[9px] font-black uppercase tracking-[0.2em] text-violet-300">2026 Regular Season · Week 1</p>
+          <h2 className="mt-1 text-2xl font-black tracking-tight text-white">The real Week 1 market is live. Predictions are still being validated.</h2>
+          <p className="mt-2 text-sm leading-relaxed text-gray-400">These are the actual Week 1 games, sportsbook prices, movement captures, public splits, injuries and expected quarterbacks. OddSphere is continuously collecting the inputs, but it is not presenting market prices as model probabilities or converting an unvalidated forecast into a Bet grade.</p>
+        </div>
+        <div className="shrink-0 rounded-xl border border-white/[0.08] bg-black/25 px-4 py-3 text-right">
+          <p className="text-[8px] font-black uppercase tracking-wider text-gray-600">Latest evidence capture</p>
+          <p className="mt-1 text-xs font-black text-white">{formatTimestamp(board.capturedAt)}</p>
+          <p className="mt-1 text-[8px] font-semibold text-gray-600">No publication or tracking decision was issued</p>
+        </div>
+      </div>
+      <div className="mt-5 grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-7">
+        <EvidenceCoverage label="Current odds" value={`${coverage.currentOddsGames}/${board.games.length}`} tone="emerald" />
+        <EvidenceCoverage label="Opening trails" value={`${coverage.openingGames}/${board.games.length}`} tone="emerald" />
+        <EvidenceCoverage label="Public splits" value={`${coverage.playbookSplitGames}/${board.games.length}`} tone="emerald" />
+        <EvidenceCoverage label="Injury reports" value={`${coverage.injuryGames}/${board.games.length}`} tone="emerald" />
+        <EvidenceCoverage label="Expected QBs" value={`${coverage.expectedQuarterbacks}/${board.games.length * 2}`} tone="emerald" />
+        <EvidenceCoverage label="Confirmed QBs" value={`${coverage.confirmedQuarterbacks}/${board.games.length * 2}`} tone={coverage.confirmedQuarterbacks === board.games.length * 2 ? "emerald" : "amber"} />
+        <EvidenceCoverage label="Sharp splits" value={`${coverage.sharpSplitGames}/${board.games.length}`} tone={coverage.sharpSplitGames > 0 ? "emerald" : "gray"} />
+      </div>
+      <p className="mt-4 text-[9px] leading-relaxed text-gray-500">A projected depth-chart QB is not labeled confirmed. SharpAPI coverage is shown only when its NFL fixture identity matches exactly. Missing validation is a visible hold—not an ordinary No Play.</p>
+    </section>
+
+    <section>
+      <div className="mb-3 flex items-end justify-between gap-3 px-1">
+        <div><p className="text-[9px] font-black uppercase tracking-[0.18em] text-gray-300">Week 1 evidence board</p><p className="mt-1 text-[9px] text-gray-600">Opening → current FanDuel market, public consensus and availability state</p></div>
+        <span className="text-[9px] font-black text-gray-600">{board.games.length} games</span>
+      </div>
+      <div className="grid gap-3 lg:grid-cols-2">
+        {board.games.map((game) => <NflEvidenceGameCard key={game.providerGameId} game={game} />)}
+      </div>
+    </section>
+  </div>;
+}
+
+function NflWeekOneEvidenceUnavailable() {
+  return <section className="rounded-2xl border border-amber-300/20 bg-gradient-to-br from-amber-400/[0.07] to-gray-950/70 p-10 text-center"><span className="inline-flex rounded-full border border-amber-300/25 bg-amber-300/[0.07] px-3 py-1 text-[8px] font-black uppercase tracking-wider text-amber-200">Evidence unavailable</span><p className="mt-4 text-[9px] font-black uppercase tracking-wider text-gray-500">NFL · Regular Season Week 1</p><h2 className="mt-2 text-2xl font-black text-white">The Week 1 board is temporarily held</h2><p className="mx-auto mt-2 max-w-2xl text-sm leading-relaxed text-gray-500">OddSphere could not verify the complete current Week 1 evidence set for this request. The reader will not fall back to the expired preseason slate or manufacture predictions from incomplete inputs.</p></section>;
+}
+
+function EvidenceCoverage({ label, value, tone }: { label: string; value: string; tone: "emerald" | "amber" | "gray" }) {
+  const style = tone === "emerald"
+    ? "border-emerald-400/20 bg-emerald-400/[0.06] text-emerald-200"
+    : tone === "amber"
+      ? "border-amber-300/20 bg-amber-300/[0.06] text-amber-200"
+      : "border-white/[0.07] bg-white/[0.025] text-gray-400";
+  return <div className={`rounded-lg border px-3 py-2.5 ${style}`}><p className="text-[7px] font-black uppercase tracking-wider opacity-60">{label}</p><p className="mt-1 text-sm font-black">{value}</p></div>;
+}
+
+function NflEvidenceGameCard({ game }: { game: NflWeekOneEvidenceBoard["games"][number] }) {
+  const splits = game.playbookSplits;
+  return <article className="rounded-2xl border border-white/[0.07] bg-gradient-to-br from-white/[0.035] to-black/30 p-4 sm:p-5">
+    <div className="flex items-start justify-between gap-3">
+      <div>
+        <div className="flex items-center gap-2"><span className="text-lg font-black text-white">{game.awayTeam}</span><span className="text-[9px] text-gray-700">@</span><span className="text-lg font-black text-white">{game.homeTeam}</span></div>
+        <LocalTime value={game.gameStartAt} fallback="Kickoff pending" className="mt-1 block text-[9px] font-semibold text-gray-500" />
+      </div>
+      <span className="rounded-full border border-amber-300/20 bg-amber-300/[0.06] px-2.5 py-1 text-[7px] font-black uppercase tracking-wider text-amber-200">Bet grade held</span>
+    </div>
+
+    <div className="mt-4 grid gap-2 sm:grid-cols-3">
+      <EvidenceMarket label="Moneyline" opening={`${game.awayTeam} ${formatAmerican(game.opening.moneyline.awayPrice)} · ${game.homeTeam} ${formatAmerican(game.opening.moneyline.homePrice)}`} current={`${game.awayTeam} ${formatAmerican(game.current.moneyline.awayPrice)} · ${game.homeTeam} ${formatAmerican(game.current.moneyline.homePrice)}`} />
+      <EvidenceMarket label="Spread" opening={`${game.awayTeam} ${formatSigned(game.opening.spread.awayLine)} ${formatAmerican(game.opening.spread.awayPrice)} · ${game.homeTeam} ${formatSigned(game.opening.spread.homeLine)} ${formatAmerican(game.opening.spread.homePrice)}`} current={`${game.awayTeam} ${formatSigned(game.current.spread.awayLine)} ${formatAmerican(game.current.spread.awayPrice)} · ${game.homeTeam} ${formatSigned(game.current.spread.homeLine)} ${formatAmerican(game.current.spread.homePrice)}`} />
+      <EvidenceMarket label="Total" opening={`O ${formatNumber(game.opening.total.line)} ${formatAmerican(game.opening.total.overPrice)} · U ${formatNumber(game.opening.total.line)} ${formatAmerican(game.opening.total.underPrice)}`} current={`O ${formatNumber(game.current.total.line)} ${formatAmerican(game.current.total.overPrice)} · U ${formatNumber(game.current.total.line)} ${formatAmerican(game.current.total.underPrice)}`} />
+    </div>
+
+    <div className="mt-3 grid gap-2 sm:grid-cols-2">
+      <div className="rounded-xl border border-white/[0.06] bg-black/20 p-3">
+        <p className="text-[7px] font-black uppercase tracking-wider text-gray-600">Expected quarterbacks · not confirmed</p>
+        <p className="mt-1.5 text-[9px] font-bold text-gray-300">{game.awayTeam} · {game.awayQuarterback.name ?? "Unavailable"} <span className="text-gray-600">({game.awayQuarterback.status})</span></p>
+        <p className="mt-1 text-[9px] font-bold text-gray-300">{game.homeTeam} · {game.homeQuarterback.name ?? "Unavailable"} <span className="text-gray-600">({game.homeQuarterback.status})</span></p>
+      </div>
+      <div className="rounded-xl border border-white/[0.06] bg-black/20 p-3">
+        <p className="text-[7px] font-black uppercase tracking-wider text-gray-600">Availability & venue</p>
+        <p className="mt-1.5 text-[9px] font-bold text-gray-300">Listed injuries · {game.awayTeam} {game.awayInjuryCount ?? "—"} · {game.homeTeam} {game.homeInjuryCount ?? "—"}</p>
+        <p className="mt-1 text-[9px] text-gray-600">{game.venueName} · {weatherStatusLabel(game.weatherStatus)}</p>
+      </div>
+    </div>
+
+    <div className="mt-3 rounded-xl border border-indigo-400/10 bg-indigo-400/[0.025] p-3">
+      <div className="flex items-center justify-between gap-2"><p className="text-[7px] font-black uppercase tracking-wider text-indigo-200">Public consensus</p><span className="text-[7px] font-semibold text-gray-600">{splits ? `Playbook · ${splits.moneyline.booksUsed ?? "—"} books` : "Unavailable"}</span></div>
+      {splits ? <div className="mt-2 grid gap-2 text-[8px] text-gray-400 sm:grid-cols-3">
+        <p><span className="font-black text-gray-300">ML</span> · money {game.awayTeam} {splits.moneyline.awayMoneyPct ?? "—"}% / {game.homeTeam} {splits.moneyline.homeMoneyPct ?? "—"}% · tickets {game.awayTeam} {splits.moneyline.awayBetsPct ?? "—"}% / {game.homeTeam} {splits.moneyline.homeBetsPct ?? "—"}%</p>
+        <p><span className="font-black text-gray-300">Spread</span> · money {game.awayTeam} {splits.spread.awayMoneyPct ?? "—"}% / {game.homeTeam} {splits.spread.homeMoneyPct ?? "—"}% · tickets {game.awayTeam} {splits.spread.awayBetsPct ?? "—"}% / {game.homeTeam} {splits.spread.homeBetsPct ?? "—"}%</p>
+        <p><span className="font-black text-gray-300">Total</span> · money O {splits.total.overMoneyPct ?? "—"}% / U {splits.total.underMoneyPct ?? "—"}% · tickets O {splits.total.overBetsPct ?? "—"}% / U {splits.total.underBetsPct ?? "—"}%</p>
+      </div> : <p className="mt-2 text-[8px] text-gray-600">Public split evidence is unavailable for this fixture.</p>}
+    </div>
+    <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-[7px] font-semibold text-gray-700"><span>{humanizeSportsbook(game.current.sportsbook)} current · {formatTimestamp(game.current.observedAt)}</span><span>{game.openingProvenance === "provider_opening" ? "Sportsbook opening" : "Earliest verified OddSphere quote"} · {formatTimestamp(game.opening.observedAt)}</span></div>
+  </article>;
+}
+
+function EvidenceMarket({ label, opening, current }: { label: string; opening: string; current: string }) {
+  return <div className="rounded-xl border border-white/[0.06] bg-black/20 p-3"><p className="text-[7px] font-black uppercase tracking-wider text-gray-600">{label}</p><p className="mt-1.5 text-[8px] leading-relaxed text-gray-600">Opening · {opening}</p><p className="mt-1 text-[9px] font-bold leading-relaxed text-white">Current · {current}</p></div>;
+}
+
+function formatSigned(value: number): string {
+  return value > 0 ? `+${formatNumber(value)}` : formatNumber(value);
+}
+
+function humanizeSportsbook(value: string): string {
+  return value.toLowerCase() === "fanduel" ? "FanDuel" : value;
+}
+
+function weatherStatusLabel(value: string): string {
+  if (value === "controlled_indoor") return "controlled indoor";
+  if (value === "forecast_available") return "forecast available";
+  if (value === "outside_forecast_window") return "outside forecast window";
+  if (value === "not_captured_for_unlocked") return "weather captured closer to kickoff";
+  return "weather unavailable";
 }
 
 function SectionHeading({ tone, children }: { tone: "emerald" | "violet" | "sky"; children: React.ReactNode }) {
