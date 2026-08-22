@@ -37,6 +37,11 @@ CREATE INDEX IF NOT EXISTS nfl_forward_evidence_week_stage_captured
 ALTER TABLE public.nfl_forward_evidence_snapshots ENABLE ROW LEVEL SECURITY;
 
 REVOKE ALL ON TABLE public.nfl_forward_evidence_snapshots FROM anon, authenticated;
+-- Supabase may grant service_role broad table privileges through default
+-- privileges at creation time. Remove every mutating privilege explicitly so
+-- rerunning this migration preserves the append-only contract.
+REVOKE UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER
+  ON TABLE public.nfl_forward_evidence_snapshots FROM service_role;
 GRANT SELECT, INSERT ON TABLE public.nfl_forward_evidence_snapshots TO service_role;
 
 COMMENT ON TABLE public.nfl_forward_evidence_snapshots IS
