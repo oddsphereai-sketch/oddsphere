@@ -441,6 +441,11 @@ export const ML_MARKET_DIVERGENCE_MIN_GAP = 10;
 export const ML_MARKET_DIVERGENCE_MIN_MODEL_PROB = 0.54;
 export const ML_SIGNED_MARKET_RESISTANCE_RULE_ID =
   "ml_signed_money_below_tickets_standdown_v1_2026_08_10";
+export const ML_STRONG_WINNER_RESISTANCE_LEAN_RULE_ID =
+  "ml_strong_winner_resistance_lean_v1_2026_08_22";
+export const ML_STRONG_WINNER_RESISTANCE_MIN_MODEL_PROBABILITY = 0.60;
+export const ML_STRONG_WINNER_RESISTANCE_MIN_ODDS = -300;
+export const ML_STRONG_WINNER_RESISTANCE_MAX_ODDS = 200;
 export const ML_SHARP_PORTFOLIO_LEAN_RULE_ID =
   "ml_sharp_portfolio_top1_lean_v2_selected_side_floor_2026_08_11";
 export const ML_SHARP_PORTFOLIO_MIN_MODEL_PROB = 0.50;
@@ -2174,11 +2179,49 @@ function offeredPriceEdgePp(
 }
 
 /**
+ * The signed split remains a warning, but it cannot erase a strong,
+ * projection-coherent winner when the exact price and same-book movement are
+ * still acceptable. This exception is capped at Lean and never flips a side
+ * or restores a Best Angle.
+ */
+export function resolveMlStrongWinnerResistanceLean(args: {
+  blocked: boolean;
+  signedMarketResistance: boolean;
+  side: string | null;
+  modelProbability: number | null;
+  oddsAmerican: number | null;
+  sameSideProjectionGap: number | null;
+  lineDirection: MlbGradeLineDirection;
+  publicSplitConflict: boolean;
+}): { lean: boolean; offeredPriceEdgePp: number | null; reason: string | null } {
+  const priceEdgePp = offeredPriceEdgePp(args.modelProbability, args.oddsAmerican);
+  const lean =
+    !args.blocked &&
+    args.signedMarketResistance &&
+    (args.side === "home" || args.side === "away") &&
+    args.modelProbability !== null &&
+    args.modelProbability >= ML_STRONG_WINNER_RESISTANCE_MIN_MODEL_PROBABILITY &&
+    args.oddsAmerican !== null &&
+    args.oddsAmerican >= ML_STRONG_WINNER_RESISTANCE_MIN_ODDS &&
+    args.oddsAmerican <= ML_STRONG_WINNER_RESISTANCE_MAX_ODDS &&
+    args.sameSideProjectionGap !== null &&
+    args.sameSideProjectionGap >= 0 &&
+    args.lineDirection !== "against_pick" &&
+    !args.publicSplitConflict;
+  return {
+    lean,
+    offeredPriceEdgePp: priceEdgePp,
+    reason: lean ? ML_STRONG_WINNER_RESISTANCE_LEAN_RULE_ID : null,
+  };
+}
+
+/**
  * A public Lean is allowed when the selected Moneyline side remains a strong,
  * projection-coherent winner candidate and the exact offered price is close
  * enough to its calibrated probability. Market evidence modifies the tier:
  * an observed directional move is required, while public/sharp conflict and
- * independently validated signed resistance still block the action.
+ * signed resistance outside the separately validated strong-winner exception
+ * still blocks the action.
  */
 export function resolveMlbMoneylineConfidenceValueContextLean(args: {
   blocked: boolean;
@@ -3149,13 +3192,31 @@ function buildMlRecord(
   const mlDataStatus = readStringOrNull(
     readRecordOrNull(sp.mlb_data_completeness)?.status,
   );
+  const mlStrongWinnerResistanceLean = resolveMlStrongWinnerResistanceLean({
+    blocked:
+      !mlChampionGuardApplies ||
+      mlProjectionConflict ||
+      readBoolish(v22.ml_requires_market_confirmation) ||
+      readBoolish(v22.ml_distance_cap_applied) ||
+      readBoolish(sp.v2_provisional) ||
+      mlDataStatus === "incomplete_missing_required_data",
+    signedMarketResistance: mlSignedMarketResistance.standDown,
+    side: finalMlPick,
+    modelProbability: finalMlModelProb,
+    oddsAmerican: finalMlOdds,
+    sameSideProjectionGap: mlSameSideProjectionGap,
+    lineDirection: finalMlLineDirection,
+    publicSplitConflict: finalMlPublicSplitConflict,
+  });
+  const mlEffectiveSignedMarketResistance =
+    mlSignedMarketResistance.standDown && !mlStrongWinnerResistanceLean.lean;
   const mlConfidenceValueContextLean = resolveMlbMoneylineConfidenceValueContextLean({
     blocked:
       !mlChampionGuardApplies ||
       mlProjectionConflict ||
       readBoolish(v22.ml_requires_market_confirmation) ||
       readBoolish(v22.ml_distance_cap_applied) ||
-      mlSignedMarketResistance.standDown ||
+      mlEffectiveSignedMarketResistance ||
       readBoolish(sp.v2_provisional) ||
       mlDataStatus === "incomplete_missing_required_data",
     side: finalMlPick,
@@ -3178,7 +3239,7 @@ function buildMlRecord(
     mlChampionGuardApplies && readBoolish(v22.ml_distance_cap_applied)
       ? "regularization_distance_cap_requires_independent_confirmation"
       : null,
-    mlSignedMarketResistance.standDown ? ML_SIGNED_MARKET_RESISTANCE_RULE_ID : null,
+    mlEffectiveSignedMarketResistance ? ML_SIGNED_MARKET_RESISTANCE_RULE_ID : null,
   ].filter((r): r is string => r !== null);
   const mlChampionStandDownReason =
     mlChampionCorrectionReasons.length > 0
@@ -3375,6 +3436,7 @@ function buildMlRecord(
         : trackedMlBestAngle
           ? "best_angle"
           : mlModelLeanRetained ||
+              mlStrongWinnerResistanceLean.lean ||
               mlConfidenceValueContextLean.lean ||
               mlLeanEligible ||
               mlMidPriceNearMarketLean.lean ||
@@ -3494,6 +3556,8 @@ function buildMlRecord(
               ? ML_TIGHT_MARKET_PRICE_BEST_ANGLE_RULE_ID
               : mlMidPriceEstablishedPricePromoted
                 ? ML_MID_PRICE_ESTABLISHED_PRICE_BEST_ANGLE_RULE_ID
+              : mlStrongWinnerResistanceLean.lean
+                ? ML_STRONG_WINNER_RESISTANCE_LEAN_RULE_ID
               : mlConfidenceValueContextLean.lean
                 ? MLB_ML_CONFIDENCE_VALUE_CONTEXT_LEAN_RULE_ID
               : mlMidPriceNearMarketLean.lean
@@ -3516,6 +3580,7 @@ function buildMlRecord(
                   mlCleanTightEdgePromoted ||
                   mlTightMarketPricePromoted ||
                   mlMidPriceEstablishedPricePromoted ||
+                  mlStrongWinnerResistanceLean.lean ||
                   mlConfidenceValueContextLean.lean ||
                   mlMidPriceNearMarketLean.lean ||
                   mlMarketDivergenceLean.lean ||
@@ -3610,7 +3675,7 @@ function buildMlRecord(
             public_split_conflict: finalMlPublicSplitConflict,
             signed_market_resistance: mlSignedMarketResistance.standDown,
             validation_note:
-              "Release-separated replay of unchanged MLB Moneyline sides: the coherent confidence, exact-price, projection, and directional-market cohort went 39-16 overall, 11-4 in development, 11-4 in validation, and 17-8 in holdout. Incremental nonactions went 28-12. Public/sharp conflict and signed resistance remain blockers; the rule never changes the predicted side or creates a Best Angle.",
+              "Release-separated replay of unchanged MLB Moneyline sides: the coherent confidence, exact-price, projection, and directional-market cohort went 39-16 overall, 11-4 in development, 11-4 in validation, and 17-8 in holdout. Incremental nonactions went 28-12. Public/sharp conflict and signed resistance outside the separately validated strong-winner exception remain blockers; the rule never changes the predicted side or creates a Best Angle.",
           }
         : null,
       ml_mid_price_near_market_lean_promotion: mlMidPriceNearMarketLean.lean
@@ -3659,8 +3724,33 @@ function buildMlRecord(
             maximum_gap: -ML_MARKET_DIVERGENCE_MIN_GAP,
             final_side: finalMlPick,
             final_side_changed: mlFinalSideChanged,
+            strong_winner_exception_applied: mlStrongWinnerResistanceLean.lean,
+            effective_action: mlStrongWinnerResistanceLean.lean
+              ? "retain_as_lean"
+              : "stand_down_unchanged_side",
             validation_note:
-              "Paired August 10 replay demotes signed market resistance without entering the side-correction or flip paths.",
+              "The August 10 rule remains a warning. The r67 current-head exception can retain a strong, projection-coherent, non-adverse exact-price candidate as Lean without flipping the side or restoring Best Angle.",
+          }
+        : null,
+      ml_strong_winner_resistance_lean: mlStrongWinnerResistanceLean.lean
+        ? {
+            rule_id: ML_STRONG_WINNER_RESISTANCE_LEAN_RULE_ID,
+            action: "retain_or_promote_to_lean",
+            model_probability: finalMlModelProb,
+            minimum_model_probability:
+              ML_STRONG_WINNER_RESISTANCE_MIN_MODEL_PROBABILITY,
+            odds_american: finalMlOdds,
+            minimum_odds_inclusive: ML_STRONG_WINNER_RESISTANCE_MIN_ODDS,
+            maximum_odds_inclusive: ML_STRONG_WINNER_RESISTANCE_MAX_ODDS,
+            offered_price_edge_pp: mlStrongWinnerResistanceLean.offeredPriceEdgePp,
+            same_side_projection_gap: mlSameSideProjectionGap,
+            line_direction: finalMlLineDirection,
+            public_split_conflict: finalMlPublicSplitConflict,
+            signed_money_over_tickets_gap:
+              mlSignedMarketResistance.moneyOverTicketsGap,
+            grade_cap: "lean",
+            validation_note:
+              "Exact current-head locked replay: 6-1, +1.652u, +23.6% ROI. Outcome confidence can retain Lean inside the bounded price band, while Best Angle remains disabled and exact-price value stays visible separately.",
           }
         : null,
       ml_mid_price_established_price_best_angle_promotion:

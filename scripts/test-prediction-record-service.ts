@@ -38,6 +38,7 @@ import {
   ML_MARKET_DIVERGENCE_LEAN_RULE_ID,
   ML_MARKET_DIVERGENCE_MIN_MODEL_PROB,
   ML_SIGNED_MARKET_RESISTANCE_RULE_ID,
+  ML_STRONG_WINNER_RESISTANCE_LEAN_RULE_ID,
   ML_SHARP_PORTFOLIO_LEAN_RULE_ID,
   ML_MARKET_LED_MOVEMENT_LEAN_RULE_ID,
   ML_NEUTRAL_CONSENSUS_RULE_ID,
@@ -1146,6 +1147,76 @@ console.log("\n━━━ MLB market-divergence Lean integration ━━━");
   check("signed market resistance never enters a flip path", (resistedMl.snapshot_json as any)?.decision_pipeline?.final_side_changed === false);
   check("signed market resistance audit is stamped", resistanceAudit?.rule_id === ML_SIGNED_MARKET_RESISTANCE_RULE_ID);
   check("signed market resistance records its validated SharpAPI provider", resistanceAudit?.split_provider === "sharpapi");
+
+  const strongWinnerPred = {
+    ...marketDivergencePred,
+    ml_confidence: 63.8,
+    predicted_home_score: 5.2,
+    predicted_away_score: 4.1,
+    sport_specific: {
+      ...marketDivergencePred.sport_specific,
+      v2_2_audit: {
+        ...marketDivergencePred.sport_specific.v2_2_audit,
+        ml_model_prob: 0.638,
+        ml_market_prob: 0.65,
+        ml_edge_pct: -1.2,
+        posterior_home_diff: 1.1,
+      },
+    },
+  };
+  const strongWinnerOddsByGameId = new Map([
+    [14771, {
+      mlHomeOdds: -186,
+      mlAwayOdds: 158,
+      ouOverOdds: -110,
+      ouUnderOdds: -110,
+      oddsSourceMl: {
+        home: { source: "lines" as const, book: "pinnacle", odds: -186, line: null, observedAt: "2026-07-28T16:00:00Z" },
+        away: { source: "lines" as const, book: "pinnacle", odds: 158, line: null, observedAt: "2026-07-28T16:00:00Z" },
+      },
+      oddsSourceOu: {
+        over: { source: "lines" as const, book: "pinnacle", odds: -110, line: 8.5, observedAt: "2026-07-28T16:00:00Z" },
+        under: { source: "lines" as const, book: "pinnacle", odds: -110, line: 8.5, observedAt: "2026-07-28T16:00:00Z" },
+      },
+    }],
+  ]);
+  const strongWinnerRecords = buildPredictionRecordsFromSlate({
+    sport: "mlb",
+    slateDate: "2026-07-28",
+    launchDay: false,
+    games: [baseGame],
+    predictionByGameId: new Map([[14771, strongWinnerPred]]),
+    abbrevByTeamId,
+    oddsByGameId: strongWinnerOddsByGameId,
+    signalsByGameId: new Map(),
+    sourceAwareSplitsByGameId: new Map([[14771, sharpMoneylineSupport.map((split: any) =>
+      split.selection_key.endsWith(":home")
+        ? { ...split, bets_pct: 80, money_pct: 68 }
+        : { ...split, bets_pct: 20, money_pct: 32 }
+    )]]),
+  });
+  const strongWinnerMl = strongWinnerRecords.find((record) => record.market === "moneyline")!;
+  const strongWinnerDecision = (strongWinnerMl.snapshot_json as any)?.decision_pipeline;
+  const strongWinnerAudit = (strongWinnerMl.snapshot_json as any)?.ml_strong_winner_resistance_lean;
+  const retainedResistanceAudit = (strongWinnerMl.snapshot_json as any)?.ml_signed_market_resistance_standdown;
+  check(
+    "strong coherent winner is retained as a resistance-capped Lean",
+    strongWinnerMl.pick === "home"
+      && strongWinnerMl.no_bet === false
+      && strongWinnerMl.play_grade === "lean"
+      && strongWinnerMl.best_angle === false,
+  );
+  check(
+    "strong-winner Lean stamps the exact action rule",
+    strongWinnerDecision?.action_rule_id === ML_STRONG_WINNER_RESISTANCE_LEAN_RULE_ID
+      && strongWinnerAudit?.rule_id === ML_STRONG_WINNER_RESISTANCE_LEAN_RULE_ID,
+  );
+  check(
+    "strong-winner Lean preserves the signed-resistance warning",
+    retainedResistanceAudit?.rule_id === ML_SIGNED_MARKET_RESISTANCE_RULE_ID
+      && retainedResistanceAudit?.strong_winner_exception_applied === true
+      && retainedResistanceAudit?.effective_action === "retain_as_lean",
+  );
 
   const playbookOnlyResistance = buildPredictionRecordsFromSlate({
     sport: "mlb",
