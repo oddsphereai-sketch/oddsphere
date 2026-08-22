@@ -51,6 +51,7 @@ import {
   buildMlbModelLayerVersions,
   MLB_DAILY_EDGE_DECISION_RELEASE_ID,
   MLB_DAILY_EDGE_RULE_BUNDLE_VERSION,
+  MLB_MODEL_LAYER_VERSION_IDS,
   MLB_PUBLIC_CALIBRATION_VERSION,
 } from "../automodel/mlbModelLayerVersions";
 import { didFinalSideChange } from "./finalSideDecision";
@@ -1000,6 +1001,7 @@ function pickPriorityLineRow(
   marketType: "moneyline" | "total",
   side: string,
   nowMs = Date.now(),
+  preferredSportsbook: string | null = null,
 ): LineRowForOdds | null {
   const candidates = rows.filter(
     (r) =>
@@ -1011,6 +1013,9 @@ function pickPriorityLineRow(
   const freshCandidates = candidates.filter((r) =>
     isFreshLockPriceSource(r.fetched_at, nowMs),
   );
+  if (preferredSportsbook !== null) {
+    return freshCandidates.find((r) => r.sportsbook === preferredSportsbook) ?? null;
+  }
   for (const book of BOOK_PRIORITY) {
     const hit = freshCandidates.find((r) => r.sportsbook === book);
     if (hit) return hit;
@@ -1353,6 +1358,7 @@ function pickPriorityOpener(
   openers: ReadonlyArray<LineHistoryOpenerRow>,
   market: "moneyline" | "total",
   side: string,
+  preferredSportsbook: string | null = null,
 ): LineHistoryOpenerRow | null {
   const candidates = openers.filter(
     (r) =>
@@ -1361,6 +1367,9 @@ function pickPriorityOpener(
       r.odds_american !== null &&
       !isBlockedSportsbook(r.sportsbook), // #39 — never open off a blocked book
   );
+  if (preferredSportsbook !== null) {
+    return candidates.find((r) => r.sportsbook === preferredSportsbook) ?? null;
+  }
   for (const book of BOOK_PRIORITY) {
     const hit = candidates.find((r) => r.sportsbook === book);
     if (hit) return hit;
@@ -1375,10 +1384,26 @@ export function buildLineMovementSnapshot(
   market: "moneyline" | "total",
   pickedSide: string | null,
   freshnessReferenceMs = Date.now(),
+  preferredSportsbook: string | null = null,
 ): Record<string, unknown> | null {
   if (pickedSide === null) return null;
-  const opener = pickPriorityOpener(openers, market, pickedSide);
-  const currentRow = pickPriorityLineRow(currentLines, market, pickedSide, freshnessReferenceMs);
+  const currentRow = pickPriorityLineRow(
+    currentLines,
+    market,
+    pickedSide,
+    freshnessReferenceMs,
+    preferredSportsbook,
+  );
+  // Price movement is meaningful only within one sportsbook. Selecting the
+  // opener independently from the current quote can fabricate a reversal when
+  // source priority or freshness changes. Missing same-book history fails
+  // closed instead of comparing two unrelated markets.
+  const opener = pickPriorityOpener(
+    openers,
+    market,
+    pickedSide,
+    currentRow?.sportsbook ?? preferredSportsbook,
+  );
   const currentOdds = currentRow?.odds_american ?? null;
   const openImplied = americanToImpliedProb(opener?.odds_american ?? null);
   const currentImplied = americanToImpliedProb(currentOdds);
@@ -1414,6 +1439,7 @@ export function buildLineMovementSnapshot(
     current_odds_american: currentOdds,
     open_implied_prob: openImplied,
     current_implied_prob: currentImplied,
+    sportsbook: currentRow?.sportsbook ?? preferredSportsbook,
     direction,
     magnitude_pp: magnitudePp,
     total_open: totalOpen,
@@ -1421,7 +1447,7 @@ export function buildLineMovementSnapshot(
     has_steam_move: steam,
     has_reverse_line_movement: rlm,
     rlm_direction: rlmDirection,
-    source: "line_history+lines+sharp_signals",
+    source: "same_book_line_history+lines+sharp_signals",
     opener_recorded_at: opener?.recorded_at ?? null,
   };
 }
@@ -2923,7 +2949,7 @@ function buildMlRecord(
   // This is tracking/display truth, not legacy market-grade influence. Even
   // when the market-aware engine is enabled, a Best Angle still needs the same
   // final confirmation/demotion layer that Daily Edge uses for member cards.
-  const mlBest = resolveMlbBestAngle({
+  let mlBest = resolveMlbBestAngle({
     baseEligible: mlBaseBestAngleEligible,
     requiresConfirmation: readBoolish(v22.ml_requires_market_confirmation),
     lineDirection: readLineDirection(mlLineMovement),
@@ -2988,7 +3014,7 @@ function buildMlRecord(
       : mlLineMovement;
   let finalMlLineDirection = readLineDirection(finalMlLineMovement);
   let finalMlPublicSplitConflict = hasOpposingPublicMoneyConflict(signalsForGame, "moneyline", finalMlPick);
-  const mlMarketContextSidePolicy = resolveMlbMoneylineMarketContextSidePolicy({
+  let mlMarketContextSidePolicy = resolveMlbMoneylineMarketContextSidePolicy({
     side: finalMlPick,
     lineDirection: finalMlLineDirection,
     publicSplitConflict: finalMlPublicSplitConflict,
@@ -3070,6 +3096,30 @@ function buildMlRecord(
     mlBestPlayablePrice?.source === "lines" &&
     mlBestPlayablePrice.odds !== null;
   if (useBestPlayablePrice) finalMlOdds = mlBestPlayablePrice.odds;
+  if (useBestPlayablePrice) {
+    finalMlLineMovement = buildLineMovementSnapshot(
+      openersForGame,
+      currentLinesForGame,
+      signalsForGame,
+      "moneyline",
+      finalMlPick,
+      freshnessReferenceMs,
+      mlBestPlayablePrice.book,
+    );
+    finalMlLineDirection = readLineDirection(finalMlLineMovement);
+    mlBest = resolveMlbBestAngle({
+      baseEligible: mlBaseBestAngleEligible,
+      requiresConfirmation: readBoolish(v22.ml_requires_market_confirmation),
+      lineDirection: finalMlLineDirection,
+      opposingPublicMoney: finalMlPublicSplitConflict,
+    });
+    mlMarketContextSidePolicy = resolveMlbMoneylineMarketContextSidePolicy({
+      side: finalMlPick,
+      lineDirection: finalMlLineDirection,
+      publicSplitConflict: finalMlPublicSplitConflict,
+      distanceCapApplied: readBoolish(v22.ml_distance_cap_applied),
+    });
+  }
   const priorityBreakEven = americanBreakEvenProbability(mlPriorityEvaluationOdds);
   const playableBreakEven = americanBreakEvenProbability(finalMlOdds);
   const mlPlayablePriceImprovementPp =
@@ -3695,7 +3745,7 @@ function buildMlRecord(
         ? { home: oddsForGame.oddsSourceMl.home, away: oddsForGame.oddsSourceMl.away }
         : null,
       ml_evaluation_price: {
-        policy_id: "mlb_ml_fresh_coherent_best_playable_price_v1_2026_08_21",
+        policy_id: MLB_MODEL_LAYER_VERSION_IDS.moneyline_evaluation_price_policy,
         policy_mode: evaluationPricePolicy,
         locked: pred.locked_at !== null,
         probability_market_baseline_odds: mlPriorityEvaluationOdds,

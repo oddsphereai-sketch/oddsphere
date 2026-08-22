@@ -2652,10 +2652,8 @@ check("impliedProb(+100) = 0.5", americanToImpliedProb(100) === 0.5);
   check("line_movement: opener -130 → current -120 → against_pick", snap.direction === "against_pick");
 }
 {
-  // A stale high-priority book must not override a fresh trusted book. The
-  // prediction price selector already enforced this freshness contract; line
-  // movement must use the same current reference or grades can contradict the
-  // displayed/stored price.
+  // A stale high-priority book must not override a fresh trusted book. A
+  // cross-book opener cannot be compared with that fresh current quote.
   const openers = [
     { game_id: 1, market_type: "moneyline", side: "home", sportsbook: "pinnacle", odds_american: -130, line_value: null, recorded_at: "2026-06-07T08:00:00Z" },
   ];
@@ -2665,7 +2663,34 @@ check("impliedProb(+100) = 0.5", americanToImpliedProb(100) === 0.5);
   ];
   const snap = buildLineMovementSnapshot(openers, current, [], "moneyline", "home") as any;
   check("line_movement: stale priority price is ignored", snap.current_odds_american === -150);
-  check("line_movement: fresh trusted price controls direction", snap.direction === "toward_pick");
+  check("line_movement: current sportsbook is stamped", snap.sportsbook === "ballybet");
+  check("line_movement: missing same-book opener fails closed", snap.direction === "unknown");
+}
+{
+  // Tampa regression: a BetMGM -135 opener plus a Bally Bet -132 current
+  // quote looked like movement against the pick even though Bally itself moved
+  // from -125 to -132. Movement must use the evaluated book on both ends.
+  const openers = [
+    { game_id: 1, market_type: "moneyline", side: "away", sportsbook: "betmgm", odds_american: -135, line_value: null, recorded_at: "2026-08-22T08:05:00Z" },
+    { game_id: 1, market_type: "moneyline", side: "away", sportsbook: "ballybet", odds_american: -125, line_value: null, recorded_at: "2026-08-22T08:07:00Z" },
+  ];
+  const current = [
+    { game_id: 1, market_type: "moneyline", side: "away", sportsbook: "betmgm", odds_american: -135, line_value: null, fetched_at: "2026-08-22T12:00:00Z" },
+    { game_id: 1, market_type: "moneyline", side: "away", sportsbook: "ballybet", odds_american: -132, line_value: null, fetched_at: "2026-08-22T15:43:22Z" },
+  ];
+  const snap = buildLineMovementSnapshot(
+    openers,
+    current,
+    [],
+    "moneyline",
+    "away",
+    Date.parse("2026-08-22T15:44:00Z"),
+    "ballybet",
+  ) as any;
+  check("line_movement: evaluated book is used for both quotes", snap.sportsbook === "ballybet");
+  check("line_movement: evaluated-book opener is retained", snap.open_odds_american === -125);
+  check("line_movement: evaluated-book current is retained", snap.current_odds_american === -132);
+  check("line_movement: same-book Tampa trail is toward pick", snap.direction === "toward_pick");
 }
 {
   const openers = [
