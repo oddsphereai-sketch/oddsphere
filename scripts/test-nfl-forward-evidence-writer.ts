@@ -97,8 +97,13 @@ assert.equal(NFL_T60_MAX_CAPTURE_LAG_MINUTES, 20);
 assert.match(writer, /NFL_T60_MAX_CAPTURE_LAG_MINUTES/);
 assert.doesNotMatch(writer, /t60LagMinutes[^\n]*> 20/);
 const migration = readFileSync(path.resolve("lib/db/schema-migration-v38-nfl-forward-evidence.sql"), "utf8");
+const executableMigration = migration.replace(/--.*$/gm, "");
 assert.match(migration, /GRANT SELECT, INSERT ON TABLE public\.nfl_forward_evidence_snapshots TO service_role/);
-assert.doesNotMatch(migration, /GRANT[^;]*(UPDATE|DELETE)[^;]*nfl_forward_evidence_snapshots/i);
+assert.match(
+  migration,
+  /REVOKE UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER\s+ON TABLE public\.nfl_forward_evidence_snapshots FROM service_role/,
+);
+assert.doesNotMatch(executableMigration, /GRANT[^;]*(UPDATE|DELETE)[^;]*nfl_forward_evidence_snapshots/i);
 const vercel = JSON.parse(readFileSync(path.resolve("vercel.json"), "utf8")) as { crons: Array<{ path: string }> };
 assert.equal(vercel.crons.filter((cron) => cron.path === "/api/cron/nfl-forward-evidence").length, 1);
 
