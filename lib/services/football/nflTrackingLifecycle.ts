@@ -1,5 +1,9 @@
 import type { DailyEdgeResponse, MarketEdgeDto } from "@/app/lab/lib/labTypes";
 import { footballTrackingEligibility } from "./footballTrackingPolicy";
+import {
+  assertNflT60CaptureTiming,
+  type NflRegularEvaluatedBetDecision,
+} from "./nflRegularDecisionEvidence";
 
 export const NFL_TRACKING_LIFECYCLE_RELEASE =
   "nfl_tracking_lifecycle_shadow_2026_08_20_r2" as const;
@@ -31,6 +35,17 @@ export type NflTrackingProposal = {
   trackingEligible: boolean;
   appendToExistingLifetime: boolean;
   trackingReason: string;
+};
+
+export const NFL_EVALUATED_TUPLE_TRACKING_BOUNDARY_RELEASE =
+  "nfl_evaluated_tuple_tracking_boundary_2026_08_21_r2" as const;
+
+export type NflEvaluatedTupleTrackingProposal = NflTrackingProposal & {
+  tupleBoundaryRelease: typeof NFL_EVALUATED_TUPLE_TRACKING_BOUNDARY_RELEASE;
+  decisionSchemaRelease: string;
+  evaluatedAt: string;
+  evaluatedSportsbook: string;
+  evaluatedQuoteObservedAt: string;
 };
 
 export type NflTrackingSettlement = {
@@ -94,6 +109,99 @@ export function buildNflTrackingProposals(args: {
   const expectedRows = args.snapshot.games.length * 3;
   if (rows.length !== expectedRows || new Set(rows.map((row) => `${row.gameId}:${row.market}`)).size !== expectedRows) {
     throw new Error(`NFL tracking lifecycle must produce exactly three unique markets per game; expected ${expectedRows}.`);
+  }
+  return rows;
+}
+
+/**
+ * Future production boundary: tracking rows must be written from the exact
+ * T-60 decision tuples, never reconstructed from a later reader quote. The
+ * current NFL model is not approved, so this function is intentionally not
+ * called by the forward evidence writer.
+ */
+export function buildNflTrackingProposalsFromEvaluatedDecisions(args: {
+  snapshot: DailyEdgeResponse;
+  decisions: NflRegularEvaluatedBetDecision[];
+  seasonPhase: "regular" | "postseason";
+  week: number;
+  modelApproved: boolean;
+  officialRegistryLaunched: boolean;
+}): NflEvaluatedTupleTrackingProposal[] {
+  if (args.snapshot.sport !== "nfl") throw new Error("NFL evaluated tracking received a non-NFL snapshot.");
+  if (args.snapshot.games.length === 0) throw new Error("NFL evaluated tracking received an empty weekly card.");
+  const publishedProviderIds = new Set(args.snapshot.games.map((game) => String(game.external_id)));
+  const decisionsByGame = new Map<string, NflRegularEvaluatedBetDecision[]>();
+  for (const decision of args.decisions) {
+    if (!publishedProviderIds.has(decision.providerGameId)) {
+      throw new Error(`NFL evaluated tuple references an unpublished game ${decision.providerGameId}.`);
+    }
+    if (decision.stage !== "t60_locked" || !decision.lockedAt) {
+      throw new Error(`NFL tracking requires a frozen T-60 tuple for ${decision.providerGameId}/${decision.market}.`);
+    }
+    assertNflT60CaptureTiming({ lockedAt: decision.lockedAt, gameStartsAt: decision.gameStartsAt });
+    decisionsByGame.set(decision.providerGameId, [...(decisionsByGame.get(decision.providerGameId) ?? []), decision]);
+  }
+  const rows = args.snapshot.games.flatMap((game) => {
+    const providerGameId = String(game.external_id);
+    const decisions = decisionsByGame.get(providerGameId) ?? [];
+    const markets = new Set(decisions.map((decision) => decision.market));
+    if (decisions.length !== 3 || markets.size !== 3) {
+      throw new Error(`NFL evaluated tracking requires exactly three unique T-60 market tuples for ${providerGameId}.`);
+    }
+    if (
+      new Set(decisions.map((decision) => decision.lockedAt)).size !== 1 ||
+      new Set(decisions.map((decision) => decision.modelRelease)).size !== 1 ||
+      new Set(decisions.map((decision) => decision.calibrationRelease)).size !== 1 ||
+      new Set(decisions.map((decision) => decision.decisionRelease)).size !== 1
+    ) {
+      throw new Error(`NFL evaluated tracking tuples are release- or lock-incoherent for ${providerGameId}.`);
+    }
+    return decisions.map((decision): NflEvaluatedTupleTrackingProposal => {
+      if (Date.parse(decision.gameStartsAt) !== Date.parse(game.gameStartAt ?? "")) {
+        throw new Error(`NFL evaluated tuple start time does not match the published game for ${providerGameId}.`);
+      }
+      const eligibility = footballTrackingEligibility({
+        seasonPhase: args.seasonPhase,
+        modelApproved: args.modelApproved,
+        officialRegistryLaunched: args.officialRegistryLaunched,
+        predictionLocked: Date.parse(decision.lockedAt!) < Date.parse(decision.gameStartsAt),
+      });
+      return {
+        lifecycleRelease: NFL_TRACKING_LIFECYCLE_RELEASE,
+        tupleBoundaryRelease: NFL_EVALUATED_TUPLE_TRACKING_BOUNDARY_RELEASE,
+        decisionSchemaRelease: decision.schemaRelease,
+        sport: "nfl",
+        season: 2026,
+        seasonPhase: args.seasonPhase,
+        week: args.week,
+        gameId: game.id,
+        providerGameId: game.external_id,
+        awayTeam: game.awayTeam,
+        homeTeam: game.homeTeam,
+        gameStartAt: decision.gameStartsAt,
+        lockedAt: decision.lockedAt!,
+        market: decision.market,
+        pick: decision.side,
+        line: decision.evaluatedQuote.line,
+        priceAmerican: decision.evaluatedQuote.price,
+        modelProbability: decision.modelProbability,
+        marketProbability: decision.marketFairProbability,
+        playGrade: decision.grade,
+        projectionRelease: decision.modelRelease,
+        calibrationRelease: decision.calibrationRelease,
+        decisionRelease: decision.decisionRelease,
+        trackingEligible: eligibility.eligible,
+        appendToExistingLifetime: eligibility.appendToExistingLifetime,
+        trackingReason: eligibility.reason,
+        evaluatedAt: decision.evaluatedAt,
+        evaluatedSportsbook: decision.evaluatedQuote.sportsbook,
+        evaluatedQuoteObservedAt: decision.evaluatedQuote.observedAt,
+      };
+    });
+  });
+  const expected = args.snapshot.games.length * 3;
+  if (rows.length !== expected || new Set(rows.map((row) => `${row.gameId}:${row.market}`)).size !== expected) {
+    throw new Error(`NFL evaluated tracking tuple count mismatch; expected ${expected}.`);
   }
   return rows;
 }
