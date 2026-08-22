@@ -4,6 +4,7 @@ import {
   dedupePredictionRecordsForTracking,
   effectiveTrackingPlayGrade,
   isTrackingRecordEligible,
+  trackingDisplaySport,
   type AggregateMetrics,
   type SportMarketBucket,
   type TrackingDisplaySport,
@@ -144,7 +145,7 @@ function addResult(metrics: CompactMetrics, row: Row): void {
   else if (grade.void) metrics.voids++;
 }
 
-function createBucket(sport: TrackedSport, market: TrackedMarketV17): CompactBucket {
+function createBucket(sport: TrackingDisplaySport, market: TrackedMarketV17): CompactBucket {
   return {
     sport,
     market,
@@ -173,7 +174,7 @@ async function fetchGrades(recordIds: number[]): Promise<Map<number, PredictionG
 function buildExpectedBuckets(rows: Row[]): CompactBucket[] {
   const groups = new Map<string, Row[]>();
   for (const row of rows) {
-    const key = `${row.record.sport}::${row.record.market}`;
+    const key = `${trackingDisplaySport(row.record)}::${row.record.market}`;
     const arr = groups.get(key) ?? [];
     arr.push(row);
     groups.set(key, arr);
@@ -189,7 +190,7 @@ function buildExpectedBuckets(rows: Row[]): CompactBucket[] {
 
   const out: CompactBucket[] = [];
   for (const [key, groupRows] of groups) {
-    const [sport, market] = key.split("::") as [TrackedSport, TrackedMarketV17];
+    const [sport, market] = key.split("::") as [TrackingDisplaySport, TrackedMarketV17];
     const bucket = createBucket(sport, market);
     for (const row of groupRows) {
       addResult(bucket.metrics, row);
