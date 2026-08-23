@@ -878,7 +878,11 @@ function buildWnbaPickedPrices(
   };
 }
 
-export const __WNBA_DAILY_EDGE_ADAPTER_TEST__ = { buildWnbaPickedPrices };
+export const __WNBA_DAILY_EDGE_ADAPTER_TEST__ = {
+  buildWnbaPickedPrices,
+  priceTrailMovementRead,
+  withVisiblePriceTrailMarketRead,
+};
 
 type PreviewMarket = { side: string | null; confidence: number | null; grade: PreviewModelGrade | null };
 type WnbaPriceTrailStop = { american: number; line: number | null; observedAt: string | null };
@@ -1114,7 +1118,12 @@ function priceTrailMovementRead(
               ? delta < 0 ? "support" : "resistance"
               : null;
       } else {
-        direction = delta < 0 ? "support" : "resistance";
+        // Spread trails are already normalized to the selected side. A move
+        // from +7.5 to +8.5 gives that side an extra point and therefore
+        // supports the pick; a move from -7.5 to -8.5 asks it to cover an
+        // extra point and resists it. The old sign check was reversed, which
+        // made the visible point-line tracker disagree with Market Pulse.
+        direction = delta > 0 ? "support" : "resistance";
       }
       strength = Math.min(0.05, Math.abs(delta) / 20);
     }
@@ -1172,9 +1181,17 @@ function withVisiblePriceTrailMarketRead(opts: {
   slot: "ml" | "total" | "spread";
   pick: string | null;
   trail?: WnbaPriceTrail;
+  lineTrail?: WnbaPriceTrail;
   generatedAt: string | null;
 }): MarketReadV2Dto | null {
-  const trailRead = priceTrailMovementRead(opts.slot, opts.pick, opts.trail, opts.generatedAt);
+  // Totals and spreads are point-line markets. Prefer their dedicated
+  // same-book line trail when the number moved; price-only movement at the
+  // current number is secondary context. This keeps Market Pulse aligned with
+  // the line tracker rendered directly below it.
+  const directionalTrail = opts.slot !== "ml" && opts.lineTrail?.coherent
+    ? opts.lineTrail
+    : opts.trail;
+  const trailRead = priceTrailMovementRead(opts.slot, opts.pick, directionalTrail, opts.generatedAt);
   if (!trailRead) {
     const projectionLed = projectionLedMarketRead(opts.existing, {
       evidenceAsOf: opts.generatedAt,
@@ -1558,6 +1575,7 @@ function adaptGame(
     slot: "total",
     pick: game.total.side,
     trail: game.pickedPrices?.total,
+    lineTrail: game.pickedPrices?.totalLine,
     generatedAt: game.lockedAt ?? asOf,
   });
   const total = buildMarket({
@@ -1613,6 +1631,7 @@ function adaptGame(
     slot: "spread",
     pick: spreadPick,
     trail: game.pickedPrices?.spread,
+    lineTrail: game.pickedPrices?.spreadLine,
     generatedAt: game.lockedAt ?? asOf,
   });
   const spread = buildMarket({
