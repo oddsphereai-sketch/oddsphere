@@ -21,6 +21,7 @@ import {
   filterWeeklyReaderSnapshot,
   weeklyReaderGameIsVisible,
 } from "../lib/services/dailyEdge/weeklyReaderLifecycle";
+import { resolvePointLineMarketPulseMovement } from "../app/lab/lib/dailyEdgeMarketPulseMovement";
 
 const snapshotPrimerSource = readFileSync(
   "scripts/operator/prime-daily-edge-experience-snapshots.ts",
@@ -506,6 +507,56 @@ check(
     candidateSource.includes('const marketLabel = isTotal ? "Total" : "Spread"') &&
     candidateSource.indexOf("<CompactOddsMovement market={market}") < candidateSource.indexOf("<CompactPointLineMovement market={market}") &&
     candidateSource.indexOf("<CompactPointLineMovement market={market}") < candidateSource.indexOf("<DefaultSplitSummary market={market}"),
+);
+const wnbaSpreadPointLinePulse = resolvePointLineMarketPulseMovement({
+  pick: "POR +4.5",
+  marketReadV2: {
+    movement: {
+      firstTrackedLine: 3.5,
+      firstTrackedPrice: -104,
+      currentLine: 4.5,
+      currentPrice: -104,
+      directionRelativeToPick: "support",
+      observedAt: "2026-08-23T13:23:26.920Z",
+    },
+  },
+  oddsTrail: [
+    {
+      american: -104,
+      line: 4.5,
+      observedAt: "2026-08-23T13:23:26.920Z",
+      sportsbook: "fanduel",
+      source: "current_line",
+      label: "current",
+    },
+  ],
+  lineTrail: [
+    {
+      american: -104,
+      line: 3.5,
+      observedAt: "2026-08-22T18:23:14.119Z",
+      sportsbook: "fanduel",
+      source: "line_history",
+      label: "first",
+    },
+    {
+      american: -104,
+      line: 4.5,
+      observedAt: "2026-08-23T13:23:26.920Z",
+      sportsbook: "fanduel",
+      source: "current_line",
+      label: "current",
+    },
+  ],
+} as unknown as DailyEdgeGameDto["markets"]["first_inning"]);
+check(
+  "Total/Spread Market Pulse prefers a canonical same-book point-line move over a current-only price trail",
+  wnbaSpreadPointLinePulse?.coherentTrail === true &&
+    wnbaSpreadPointLinePulse.openLine === 3.5 &&
+    wnbaSpreadPointLinePulse.currentLine === 4.5 &&
+    wnbaSpreadPointLinePulse.sportsbook === "fanduel" &&
+    candidateDailyEdgeSource.includes("resolveMarketPulseMovement(market)") &&
+    candidateDailyEdgeSource.includes("resolvePointLineMarketPulseMovement(market) ?? resolveCoherentMovement(market)"),
 );
 check(
   "Market Pulse keeps public consensus, sharp-book splits, and price movement source-coherent",

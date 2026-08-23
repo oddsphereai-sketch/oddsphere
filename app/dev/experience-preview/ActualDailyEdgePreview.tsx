@@ -35,6 +35,7 @@ import {
 } from "@/app/lab/lib/marketPulsePresentation";
 import { firstInningSupportTone } from "@/app/lab/lib/firstInningPresentation";
 import { soccerForecastSemantics } from "@/app/lab/lib/soccerForecastSemantics";
+import { resolvePointLineMarketPulseMovement } from "@/app/lab/lib/dailyEdgeMarketPulseMovement";
 import type { NflWeekOneEvidenceBoard } from "@/lib/services/football/nflWeekOneEvidenceBoard";
 
 type DeepView = "case" | "market" | "matchup" | "trend" | "model";
@@ -554,7 +555,7 @@ function MarketStrip({ game, sport, active, setActive }: { game: DailyEdgeGameDt
       {keys.map((key) => {
         const market = game.markets[key];
         const selected = active === key;
-        const pulse = sourceCoherentMarketPulse(market, resolveCoherentMovement(market));
+        const pulse = sourceCoherentMarketPulse(market, resolveMarketPulseMovement(market));
         return (
           <button key={key} type="button" role="tab" aria-selected={selected} onClick={() => setActive(key)} className={`min-w-0 rounded-lg border px-2 py-2.5 text-left transition sm:rounded-xl sm:px-4 sm:py-3 ${selected ? "border-violet-400/55 bg-gradient-to-br from-violet-500/25 to-violet-900/10 shadow-[0_0_22px_-12px_rgba(124,58,237,0.9)]" : "border-white/[0.07] bg-white/[0.025] hover:border-violet-400/25"}`}>
             <div className="flex min-w-0 items-center justify-between gap-1"><span className={`truncate text-[7px] font-black uppercase tracking-[0.08em] sm:text-[9px] sm:tracking-[0.15em] ${selected ? "text-violet-200" : "text-gray-600"}`}>{marketLabelFor(key, sport)}</span><span className="shrink-0 text-[8px] font-black text-gray-500 sm:text-[9px]">{formatProbability(market.modelProb)}</span></div>
@@ -775,7 +776,7 @@ function DecisionMetricGrid({ market }: { market: MarketEdgeDto }) {
 }
 
 function CompactMarketPulse({ market, showSplits = false }: { market: MarketEdgeDto; showSplits?: boolean }) {
-  const movement = resolveCoherentMovement(market);
+  const movement = resolveMarketPulseMovement(market);
   const claimsDirectionalMove = market.marketReadV2?.movement?.directionRelativeToPick === "support" || market.marketReadV2?.movement?.directionRelativeToPick === "resistance";
   const movementClaimIsUnverified = claimsDirectionalMove && !movement.coherentTrail;
   const presentation = sourceCoherentMarketPulse(market, movement);
@@ -1008,6 +1009,10 @@ function sameTrackedLine(first: number | null, current: number | null): boolean 
 type MarketPulseTone = "emerald" | "amber" | "gray";
 type CoherentMovement = ReturnType<typeof resolveCoherentMovement>;
 
+function resolveMarketPulseMovement(market: MarketEdgeDto): CoherentMovement {
+  return resolvePointLineMarketPulseMovement(market) ?? resolveCoherentMovement(market);
+}
+
 function movementRowDirection(market: MarketEdgeDto, movement: CoherentMovement, selected: boolean): { label: "Toward pick" | "Against pick" | "Slight toward" | "Slight against" | "Flat" | "Unverified"; tone: "emerald" | "teal" | "red" | "amber" | "gray" } {
   if (!movement.coherentTrail || movement.open === null || movement.current === null) return { label: "Unverified", tone: "gray" };
   if (!sameTrackedLine(movement.openLine, movement.currentLine)) {
@@ -1190,7 +1195,7 @@ function sourceCoherentMarketPulse(market: MarketEdgeDto, movement: CoherentMove
 function currentAwareGuidedGuide(market: MarketEdgeDto, fallback: string): string {
   const guide = market.guidedGuide || fallback;
   if (!/market support is on the same side/i.test(guide)) return guide;
-  const pulse = sourceCoherentMarketPulse(market, resolveCoherentMovement(market));
+  const pulse = sourceCoherentMarketPulse(market, resolveMarketPulseMovement(market));
   if (pulse.tone === "emerald") return guide;
   const currentMarketCopy = pulse.tone === "amber"
     ? " Current market signals add resistance."
@@ -1766,7 +1771,7 @@ function DeepResearch({ game, market, marketKey, sport, history, sample, setSamp
 }
 
 function CaseDeepDive({ game, market, marketKey }: { game: DailyEdgeGameDto; market: MarketEdgeDto; marketKey: MarketKey }) {
-  const pulse = sourceCoherentMarketPulse(market, resolveCoherentMovement(market));
+  const pulse = sourceCoherentMarketPulse(market, resolveMarketPulseMovement(market));
   const decisionCopy = pulse.detail || "Market confirmation is unavailable.";
   const primaryFactor = stripReasonPrefix(market.whyLine);
   const topDrivers = market.keyStats.slice(0, 3);
