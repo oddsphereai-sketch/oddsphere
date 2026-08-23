@@ -82,6 +82,10 @@ assert.doesNotMatch(candidateSource, /nflWeekOneEvidenceBoard=\{/);
 const readerSource = readFileSync("app/dev/experience-preview/ActualDailyEdgePreview.tsx", "utf8");
 assert.match(readerSource, /projectionIsHeld\(game\)/);
 assert.match(readerSource, /No score forecast is being published yet/);
+assert.match(readerSource, /footballOutcomeContext\(game\)/);
+assert.match(readerSource, /Outcome forecast/);
+assert.match(readerSource, /Win probability/);
+assert.match(readerSource, /Independent football model favors/);
 
 console.log("NFL Week 1 held member fixture: normal 16-game/48-market reader contract, real two-sided context, and per-market fail-closed holds passed");
 
