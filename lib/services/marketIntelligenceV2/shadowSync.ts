@@ -905,42 +905,47 @@ async function upsertSplitObservationsWithHistoryRetry(opts: {
   onConflict: string;
   legacyColumns: boolean;
 }): Promise<SplitUpsertResult> {
-  const payload = opts.legacyColumns ? opts.rows.map(stripV27SplitColumns) : [...opts.rows];
-  const { error } = await opts.supabase
-    .from("market_split_observations_v2")
-    .upsert(payload, {
-      onConflict: opts.onConflict,
-      ignoreDuplicates: true,
-    });
+  let pendingRows = [...opts.rows];
+  const maximumAttempts = 3;
+  for (let attempt = 0; attempt < maximumAttempts; attempt++) {
+    const payload = opts.legacyColumns
+      ? pendingRows.map(stripV27SplitColumns)
+      : pendingRows;
+    const { error } = await opts.supabase
+      .from("market_split_observations_v2")
+      .upsert(payload, {
+        onConflict: opts.onConflict,
+        ignoreDuplicates: true,
+      });
 
-  if (!error) return { written: opts.rows.length, tableMissing: false, error: null };
-  if (isTableMissing(error.message)) return { written: 0, tableMissing: true, error: null };
-  if (!isSharpApiHistoryUniqueConflict(error.message) || !opts.rows.some(isSharpApiHistoryIdentityRow)) {
-    return { written: 0, tableMissing: false, error: error.message };
+    if (!error) return { written: pendingRows.length, tableMissing: false, error: null };
+    if (isTableMissing(error.message)) return { written: 0, tableMissing: true, error: null };
+    if (
+      !isSharpApiHistoryUniqueConflict(error.message) ||
+      !pendingRows.some(isSharpApiHistoryIdentityRow)
+    ) {
+      return { written: 0, tableMissing: false, error: error.message };
+    }
+    if (attempt === maximumAttempts - 1) {
+      return { written: 0, tableMissing: false, error: error.message };
+    }
+
+    // Multiple leased jobs can finish history recovery together. A competing
+    // writer may win the race again after the first state reload, so reconcile
+    // against the database before each of two bounded retries. This never
+    // invents or rewrites an observation: it only removes identities that the
+    // competing writer has already committed.
+    const deduped = await dedupeSharpApiHistorySplitObservationsFromDb({
+      supabase: opts.supabase,
+      rows: pendingRows,
+    });
+    if (deduped.rows.length === 0) {
+      return { written: 0, tableMissing: false, error: null };
+    }
+    pendingRows = deduped.rows;
   }
 
-  // Another cron can insert the same SharpAPI history observation after our
-  // preflight state read but before this upsert. Reload the identity set and
-  // drop those now-existing history rows, then retry once. Non-history rows stay
-  // in the payload, and any non-race error still bubbles up.
-  const deduped = await dedupeSharpApiHistorySplitObservationsFromDb({
-    supabase: opts.supabase,
-    rows: opts.rows,
-  });
-  if (deduped.rows.length === 0) return { written: 0, tableMissing: false, error: null };
-
-  const retryPayload = opts.legacyColumns ? deduped.rows.map(stripV27SplitColumns) : deduped.rows;
-  const retry = await opts.supabase
-    .from("market_split_observations_v2")
-    .upsert(retryPayload, {
-      onConflict: opts.onConflict,
-      ignoreDuplicates: true,
-    });
-  if (retry.error) {
-    if (isTableMissing(retry.error.message)) return { written: 0, tableMissing: true, error: null };
-    return { written: 0, tableMissing: false, error: retry.error.message };
-  }
-  return { written: deduped.rows.length, tableMissing: false, error: null };
+  return { written: 0, tableMissing: false, error: "split upsert retry exhausted" };
 }
 
 export async function writeRows(opts: {

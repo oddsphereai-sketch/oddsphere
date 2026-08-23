@@ -297,6 +297,73 @@ async function runAsyncChecks(): Promise<void> {
     "SharpAPI history duplicate race retry payload excludes duplicate identity",
     retryPayload.length === 1 && (retryPayload[0] as MarketSplitObservationV2).selection_key.endsWith(":away"),
   );
+
+  const repeatedRacePayloads: unknown[][] = [];
+  let repeatedRaceSelectCalls = 0;
+  let repeatedRaceUpsertCalls = 0;
+  const repeatedRaceSupabase = {
+    from(table: string) {
+      if (table !== "market_split_observations_v2") {
+        throw new Error(`unexpected table ${table}`);
+      }
+      return {
+        select() {
+          return {
+            eq() { return this; },
+            in() { return this; },
+            not() { return this; },
+            async range() {
+              repeatedRaceSelectCalls++;
+              return {
+                data:
+                  repeatedRaceSelectCalls === 1
+                    ? []
+                    : repeatedRaceSelectCalls === 2
+                      ? [existingRow]
+                      : [
+                          existingRow,
+                          {
+                            ...existingRow,
+                            selection_key: "8201:moneyline:away",
+                          },
+                        ],
+                error: null,
+              };
+            },
+          };
+        },
+        async upsert(payload: unknown[]) {
+          repeatedRaceUpsertCalls++;
+          repeatedRacePayloads.push(payload);
+          return {
+            error: {
+              message: 'duplicate key value violates unique constraint "market_split_observations_v2_sharp_history_source_uidx"',
+            },
+          };
+        },
+      };
+    },
+  };
+
+  const repeatedRaceResult = await writeRows({
+    supabase: repeatedRaceSupabase as never,
+    splitObservations: [duplicate, keeper],
+    priceObservations: [],
+  });
+  check(
+    "repeated SharpAPI history race reconciles without a false cron error",
+    repeatedRaceResult.errors.length === 0,
+  );
+  check(
+    "repeated SharpAPI history race stays bounded",
+    repeatedRaceUpsertCalls === 2 && repeatedRaceSelectCalls === 3,
+    `${repeatedRaceUpsertCalls}/${repeatedRaceSelectCalls}`,
+  );
+  check(
+    "repeated race second payload retains only the not-yet-committed identity",
+    repeatedRacePayloads[1]?.length === 1 &&
+      (repeatedRacePayloads[1]?.[0] as MarketSplitObservationV2).selection_key.endsWith(":away"),
+  );
 }
 
 runAsyncChecks()
