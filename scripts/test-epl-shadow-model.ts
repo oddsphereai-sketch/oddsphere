@@ -278,6 +278,8 @@ assert.match(previewReader, /Consensus and sharp-book split data are unavailable
 assert.match(previewReader, /Market-informed goal outlook/);
 assert.match(previewReader, /Context · separate heads/);
 assert.match(previewReader, /Same model · Match Result/);
+assert.match(previewReader, /Snapshot refreshing/);
+assert.match(previewReader, /conflicting goals context withheld/);
 assert.match(previewReader, /Dedicated Over\/Under probabilities/);
 assert.match(previewReader, /Dedicated Yes\/No probabilities/);
 assert.doesNotMatch(previewReader, /Team scoring probabilities and BTTS are derived from the same regulation score distribution\./);
