@@ -576,6 +576,7 @@ function gameDto(match: EplShadowSlateMatch, sharp: EplSharpFixtureMarket, captu
   } : null);
   const publishedGoals = calibratedEplGoalProjection(match.prediction.lambdaHome, match.prediction.lambdaAway, goalsMarketDistribution);
   const publishedTotal = publishedGoals.home + publishedGoals.away;
+  const matchResultScoreSummary = projectedScoreSummary(match.prediction.lambdaHome, match.prediction.lambdaAway);
   const publishedScoreSummary = projectedScoreSummary(publishedGoals.home, publishedGoals.away);
   const goalOutlookProbabilities = deriveSoccerMarketProbabilities({
     joint: bivariatePoissonScoreDistribution(publishedGoals.home, publishedGoals.away, -0.1),
@@ -890,6 +891,13 @@ function gameDto(match: EplShadowSlateMatch, sharp: EplSharpFixtureMarket, captu
     decisionLine: `${mrGrade.verdict.label}: ${resultPick}${resultSide === forecastSide ? " is also the most likely result" : ` is the value side; ${forecastPick} remains the most likely result`}.`,
     projected: { away: publishedGoals.away, home: publishedGoals.home },
     soccerProjection: {
+      matchResultOutlook: {
+        expectedGoals: { away: match.prediction.lambdaAway, home: match.prediction.lambdaHome },
+        likelyScore: { away: matchResultScoreSummary.likely.away, home: matchResultScoreSummary.likely.home },
+        likelyScoreProbability: matchResultScoreSummary.likely.probability,
+        medianTotal: matchResultScoreSummary.medianTotal,
+        mostLikelyTotal: matchResultScoreSummary.mostLikelyTotal,
+      },
       expectedGoals: { away: publishedGoals.away, home: publishedGoals.home },
       goalOutlookProbabilities: {
         home: goalOutlookProbabilities.match_result.home,

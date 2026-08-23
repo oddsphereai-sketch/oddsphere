@@ -6,6 +6,13 @@ const game = {
   awayTeam: "MAN",
   homeTeam: "HUL",
   soccerProjection: {
+    matchResultOutlook: {
+      expectedGoals: { away: 1.11, home: 1.24 },
+      likelyScore: { away: 1, home: 1 },
+      likelyScoreProbability: 0.132,
+      medianTotal: 2,
+      mostLikelyTotal: 2,
+    },
     expectedGoals: { away: 2.03, home: 0.89 },
     goalOutlookProbabilities: {
       away: 0.6292,
