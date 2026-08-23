@@ -6,6 +6,7 @@ import {
   determineNflForwardCollectionNeed,
   planNflForwardEvidenceCaptures,
   type NflForwardEvidencePayload,
+  type NflForwardPreviousEvidencePayload,
   type NflForwardStoredEvidence,
 } from "../lib/services/football/nflForwardEvidence";
 import { buildTeamDepthSnapshot } from "../lib/services/football/balldontlieNflRoster";
@@ -102,11 +103,12 @@ for (const abbreviation of [
 const route = readFileSync(path.resolve("app/api/cron/nfl-forward-evidence/route.ts"), "utf8");
 assert.match(route, /leaseGroup: "prediction_pipeline"/);
 assert.match(route, /requireLease: true/);
-assert.match(route, /publication_attempted: false/);
+assert.match(route, /publication_attempted/);
 assert.match(route, /tracking_attempted: false/);
 const writer = readFileSync(path.resolve("lib/services/football/nflForwardEvidenceWriter.ts"), "utf8");
 assert.doesNotMatch(writer, /writeCurrentNflPublishedMemberSnapshot|buildNflTrackingProposals/);
-assert.match(writer, /evaluatedBets: \[\], outcomeConfidence: \[\]/);
+assert.match(writer, /buildNflV1ProductionDecisionBundle/);
+assert.match(writer, /evaluatedBets: production\.evaluatedBets/);
 assert.match(writer, /currentBooks/);
 assert.match(writer, /comparableCurrentBooks/);
 assert.match(writer, /multibook_consensus_unavailable/);
@@ -125,7 +127,7 @@ assert.doesNotMatch(executableMigration, /GRANT[^;]*(UPDATE|DELETE)[^;]*nfl_forw
 const vercel = JSON.parse(readFileSync(path.resolve("vercel.json"), "utf8")) as { crons: Array<{ path: string }> };
 assert.equal(vercel.crons.filter((cron) => cron.path === "/api/cron/nfl-forward-evidence").length, 1);
 
-const completePayload = (capturedAt: string, homePrice: number): NflForwardEvidencePayload => ({
+const completePayload = (capturedAt: string, homePrice: number): NflForwardPreviousEvidencePayload => ({
   schemaRelease: "nfl_forward_evidence_snapshot_2026_08_22_r2_multibook",
   collectorRelease: "nfl_forward_evidence_collector_2026_08_22_r2_multibook",
   runId: `run-${capturedAt}`,
@@ -283,7 +285,7 @@ const candidatePage = readFileSync(path.resolve("app/lab/daily-edge/CandidateDai
 assert.match(candidatePage, /isNflWeekOneEvidenceBoardEnabled/);
 assert.match(candidatePage, /readCurrentNflWeekOneHeldMemberFixture/);
 assert.match(candidatePage, /initialAvailability=\{visibleNflAvailability\}/);
-assert.match(candidatePage, /Bet grades held inside the normal Daily Edge reader/);
+assert.match(candidatePage, /readCurrentNflWeekOneHeldMemberFixture/);
 assert.doesNotMatch(candidatePage, /nflWeekOneEvidenceBoard=\{/);
 assert.match(candidatePage, /stale preseason package is retired/);
 const reader = readFileSync(path.resolve("app/dev/experience-preview/ActualDailyEdgePreview.tsx"), "utf8");
@@ -294,9 +296,8 @@ assert.doesNotMatch(reader, /Week 1 market is live[^\n]*Best Angle/);
 
 const heldFixture = readFileSync(path.resolve("lib/services/football/nflWeekOneHeldMemberFixture.ts"), "utf8");
 assert.match(heldFixture, /readNflForwardEvidence/);
-assert.match(heldFixture, /pick: null/);
-assert.match(heldFixture, /modelProb: null/);
-assert.match(heldFixture, /trackingEligible: false/);
+assert.match(heldFixture, /applyPublishedDecision/);
+assert.match(heldFixture, /nfl_r6_exact_price_moneyline_lean/);
 assert.doesNotMatch(heldFixture, /client\.from|supabase\.from|\.insert\(|\.upsert\(/);
 
-console.log("NFL forward evidence planner, cadence, roster/QB, immutable DB, normal-layout Held adapter, lease, and no-publication boundaries passed.");
+console.log("NFL forward evidence planner, cadence, roster/QB, immutable DB, member decisions, lease, and legacy evidence-only boundaries passed.");

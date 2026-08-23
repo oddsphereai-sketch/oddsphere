@@ -21,6 +21,7 @@ import {
   appendNflForwardEvidence,
   readLegacyNflForwardEvidence,
   readNflForwardEvidence,
+  readPreviousNflForwardEvidence,
 } from "./nflForwardEvidenceStore";
 import { collectNflForwardWeather } from "./nflVenueWeather";
 import {
@@ -30,9 +31,10 @@ import {
 } from "./sharpApiNflSplits";
 import { NFL_T60_MAX_CAPTURE_LAG_MINUTES } from "./nflRegularDecisionEvidence";
 import { buildNflR6ShadowMoneylineDecision } from "./nflR6MoneylineShadow";
+import { buildNflV1ProductionDecisionBundle } from "./nflV1ProductionDecision";
 
 export const NFL_FORWARD_WRITER_RELEASE =
-  "nfl_forward_evidence_writer_2026_08_22_r3_r6_shadow" as const;
+  "nfl_forward_evidence_writer_2026_08_23_r4_member" as const;
 
 export type NflForwardWriterResult = {
   writerRelease: typeof NFL_FORWARD_WRITER_RELEASE;
@@ -47,9 +49,13 @@ export type NflForwardWriterResult = {
   shadowHeld: number;
   shadowBlockingReasons: string[];
   quarterbackHealthReasons: string[];
+  publishedEvaluations: number;
+  publishedLeans: number;
+  publishedNoPlays: number;
+  publishedHeldGames: number;
   apiCallsMaximum: number;
   healthHolds: string[];
-  publicationAttempted: false;
+  publicationAttempted: boolean;
   trackingAttempted: false;
 };
 
@@ -65,11 +71,12 @@ export async function runNflForwardEvidenceWriter(args: {
   sharpApiKey: string;
   weatherProvider: IWeatherProvider | null;
 }): Promise<NflForwardWriterResult> {
-  const [existing, legacyExisting] = await Promise.all([
+  const [existing, previousExisting, legacyExisting] = await Promise.all([
     readNflForwardEvidence({ client: args.client, season: args.season, week: args.week }),
+    readPreviousNflForwardEvidence({ client: args.client, season: args.season, week: args.week }),
     readLegacyNflForwardEvidence({ client: args.client, season: args.season, week: args.week }),
   ]);
-  const historicalExisting = [...legacyExisting, ...existing];
+  const historicalExisting = [...legacyExisting, ...previousExisting, ...existing];
   const need = determineNflForwardCollectionNeed({ existing, now: args.now });
   if (!need.collect) return emptyResult(need.reason);
 
@@ -197,6 +204,14 @@ export async function runNflForwardEvidenceWriter(args: {
       t60LagMinutes: plan.t60LagMinutes,
       coverageHealthHolds: holds,
     });
+    const production = buildNflV1ProductionDecisionBundle({
+      providerGameId: plan.game.providerGameId,
+      awayTeam: plan.game.away.abbreviation,
+      homeTeam: plan.game.home.abbreviation,
+      gameStartsAt: plan.game.scheduledStart,
+      current,
+      shadowMoneyline,
+    });
     return {
       schemaRelease: NFL_FORWARD_EVIDENCE_SCHEMA_RELEASE,
       collectorRelease: NFL_FORWARD_EVIDENCE_COLLECTOR_RELEASE,
@@ -226,10 +241,12 @@ export async function runNflForwardEvidenceWriter(args: {
       injuries,
       weather,
       decisions: {
-        evaluatedBets: [], outcomeConfidence: [],
+        evaluatedBets: production.evaluatedBets,
+        outcomeConfidence: production.outcomeConfidence,
         shadowEvaluatedBets: [shadowMoneyline],
-        modelPromotionStatus: "blocked_pending_independent_validation",
-        publicationEnabled: false, trackingEnabled: false,
+        modelPromotionStatus: production.modelPromotionStatus,
+        publicationEnabled: production.publicationEnabled,
+        trackingEnabled: production.trackingEnabled,
       },
       coverage: {
         currentOdds: true,
@@ -250,6 +267,7 @@ export async function runNflForwardEvidenceWriter(args: {
 
   const write = await appendNflForwardEvidence({ client: args.client, runId: args.runId, payloads, apply: args.apply });
   const shadowEvaluations = payloads.flatMap((payload) => payload.decisions.shadowEvaluatedBets ?? []);
+  const publishedEvaluations = payloads.flatMap((payload) => payload.decisions.evaluatedBets);
   return {
     writerRelease: NFL_FORWARD_WRITER_RELEASE,
     collected: true,
@@ -263,9 +281,13 @@ export async function runNflForwardEvidenceWriter(args: {
     shadowHeld: shadowEvaluations.filter((decision) => decision.grade === "Held").length,
     shadowBlockingReasons: [...new Set(shadowEvaluations.flatMap((decision) => decision.health.blockingReasons))].sort(),
     quarterbackHealthReasons: [...new Set(shadowEvaluations.flatMap((decision) => decision.health.quarterbackReasons))].sort(),
+    publishedEvaluations: publishedEvaluations.length,
+    publishedLeans: publishedEvaluations.filter((decision) => decision.grade === "Lean").length,
+    publishedNoPlays: publishedEvaluations.filter((decision) => decision.grade === "No Play").length,
+    publishedHeldGames: payloads.filter((payload) => payload.decisions.evaluatedBets.length !== 3).length,
     apiCallsMaximum,
     healthHolds: [...new Set(payloads.flatMap((payload) => payload.coverage.healthHolds))].sort(),
-    publicationAttempted: false,
+    publicationAttempted: args.apply,
     trackingAttempted: false,
   };
 }
@@ -418,6 +440,10 @@ function emptyResult(reason: string): NflForwardWriterResult {
     shadowHeld: 0,
     shadowBlockingReasons: [],
     quarterbackHealthReasons: [],
+    publishedEvaluations: 0,
+    publishedLeans: 0,
+    publishedNoPlays: 0,
+    publishedHeldGames: 0,
     apiCallsMaximum: 0,
     healthHolds: [],
     publicationAttempted: false,

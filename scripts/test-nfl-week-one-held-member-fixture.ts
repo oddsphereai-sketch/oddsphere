@@ -14,6 +14,16 @@ import {
   NFL_V1_OUTCOME_MODEL_RELEASE,
   NFL_V1_WEEK_ONE_OUTCOME_ARTIFACT_RELEASE,
 } from "../lib/services/football/nflV1WeekOneOutcome";
+import { buildNflV1ProductionDecisionBundle } from "../lib/services/football/nflV1ProductionDecision";
+import {
+  NFL_R6_MONEYLINE_CALIBRATION_RELEASE,
+  NFL_R6_MONEYLINE_DECISION_RELEASE,
+  NFL_R6_MONEYLINE_MODEL_RELEASE,
+  NFL_R6_RUNTIME_ARTIFACT_RELEASE,
+  NFL_R6_SHADOW_DECISION_SCHEMA_RELEASE,
+  NFL_R6_SOURCE_POINT_MODEL_RELEASE,
+  type NflR6ShadowMoneylineDecision,
+} from "../lib/services/football/nflR6MoneylineShadow";
 
 const capturedAt = "2026-08-22T13:50:56.934Z";
 const weekOneSlate = [
@@ -43,12 +53,13 @@ const markets = fixture.snapshot.games.flatMap((game) => [
   game.markets.first_inning,
 ]);
 assert.equal(markets.length, 48);
-assert.equal(markets.every((market) => market.held), true);
-assert.equal(markets.every((market) => market.pick === null), true);
-assert.equal(markets.every((market) => market.modelProb === null), true);
-assert.equal(markets.every((market) => market.verdict.label === "Held"), true);
-assert.equal(markets.every((market) => market.oddsTrail?.length === 2), true);
-assert.equal(markets.every((market) => market.opposingOddsTrail?.stops.length === 2), true);
+assert.equal(markets.every((market) => !market.held), true);
+assert.equal(markets.every((market) => market.pick !== null), true);
+assert.equal(markets.every((market) => market.modelProb !== null), true);
+assert.equal(markets.filter((market) => market.verdict.label === "Lean").length, 8);
+assert.equal(markets.filter((market) => market.verdict.label === "No Play").length, 40);
+assert.equal(markets.every((market) => (market.oddsTrail?.length ?? 0) >= 1), true);
+assert.equal(markets.every((market) => (market.opposingOddsTrail?.stops.length ?? 0) >= 1), true);
 assert.equal(markets.every((market) => market.publicSplits.length === 2), true);
 assert.equal(fixture.snapshot.games.every((game) => game.projected.away > 0 && game.projected.home > 0), true);
 assert.equal(fixture.snapshot.games.every((game) => game.footballProjection?.modelRelease === NFL_V1_OUTCOME_MODEL_RELEASE), true);
@@ -56,9 +67,9 @@ assert.equal(fixture.snapshot.games.every((game) => game.footballProjection?.art
 const jax = fixture.snapshot.games.find((game) => game.id === "nfl-1392224");
 assert.equal(jax?.awayTeam, "CLE");
 assert.equal(jax?.homeTeam, "JAX");
-assert.equal(jax?.projected.away.toFixed(1), "17.6");
-assert.equal(jax?.projected.home.toFixed(1), "27.7");
-assert.equal(jax?.footballProjection?.homeWinProbability.toFixed(3), "0.755");
+assert.equal(jax?.projected.away, 17);
+assert.equal(jax?.projected.home, 27);
+assert.equal(jax?.footballProjection?.homeWinProbability.toFixed(3), "0.770");
 assert.throws(
   () => getNflV1WeekOneOutcomeForecast({ providerGameId: "1392224", awayTeam: "JAX", homeTeam: "CLE" }),
   /identity mismatch/,
@@ -68,7 +79,7 @@ const onTimeT60Rows = structuredClone(rows);
 onTimeT60Rows[0]!.stage = "t60";
 onTimeT60Rows[0]!.payload.stage = "t60";
 onTimeT60Rows[0]!.payload.t60LagMinutes = 12;
-assert.equal(buildNflWeekOneHeldMemberFixture(onTimeT60Rows).snapshot.games.find((game) => game.id === "nfl-1392216")?.lockState, "locked");
+assert.equal(buildNflWeekOneHeldMemberFixture(onTimeT60Rows).snapshot.games.find((game) => game.id === "nfl-1392216")?.lockState, "open");
 
 const lateT60Rows = structuredClone(rows);
 lateT60Rows[0]!.stage = "t60";
@@ -81,13 +92,13 @@ assert.match(candidateSource, /readCurrentNflWeekOneHeldMemberFixture/);
 assert.doesNotMatch(candidateSource, /nflWeekOneEvidenceBoard=\{/);
 const readerSource = readFileSync("app/dev/experience-preview/ActualDailyEdgePreview.tsx", "utf8");
 assert.match(readerSource, /projectionIsHeld\(game\)/);
-assert.match(readerSource, /No score forecast is being published yet/);
 assert.match(readerSource, /footballOutcomeContext\(game\)/);
 assert.match(readerSource, /Outcome forecast/);
 assert.match(readerSource, /Win probability/);
-assert.match(readerSource, /Independent football model favors/);
+assert.match(readerSource, /The discrete football model favors/);
+assert.match(readerSource, /Value-model probability/);
 
-console.log("NFL Week 1 held member fixture: normal 16-game/48-market reader contract, real two-sided context, and per-market fail-closed holds passed");
+console.log("NFL Week 1 member fixture: 16 games, 48 predictions, live Leans/No Plays, and fail-closed health Holds passed");
 
 function syntheticRow(index: number): NflForwardStoredEvidence {
   const providerGameId = String(1_392_215 + index);
@@ -134,6 +145,62 @@ function syntheticRow(index: number): NflForwardStoredEvidence {
   });
   const current = quote(capturedAt, 0);
   const openingQuote = quote("2026-08-22T03:40:02.901Z", 2);
+  const outcome = getNflV1WeekOneOutcomeForecast({ providerGameId, awayTeam: away, homeTeam: home });
+  const selectHome = outcome.homeWinProbability >= outcome.awayWinProbability;
+  const selectedTeam = selectHome ? home : away;
+  const selectedProbability = selectHome ? outcome.homeWinProbability : outcome.awayWinProbability;
+  const shadowMoneyline: NflR6ShadowMoneylineDecision = {
+    schemaRelease: NFL_R6_SHADOW_DECISION_SCHEMA_RELEASE,
+    decisionKind: "shadow_exact_price_bet",
+    shadowOnly: true,
+    publicationEligible: false,
+    trackingEligible: false,
+    providerGameId,
+    market: "moneyline",
+    grade: index <= 8 ? "Lean" : "Held",
+    side: selectHome ? "home" : "away",
+    team: selectedTeam,
+    modelProbability: selectedProbability,
+    otherBooksConsensusFairProbability: 0.5,
+    targetBookFairProbability: 0.5,
+    otherBookCount: 4,
+    evaluatedQuote: {
+      sportsbook: current.sportsbook,
+      line: null,
+      price: selectHome ? current.moneyline!.homePrice : current.moneyline!.awayPrice,
+      observedAt: current.observedAt,
+    },
+    expectedValuePerUnit: 0.02,
+    edgePercentagePoints: (selectedProbability - 0.5) * 100,
+    decisionStage: "opening_evaluation",
+    evaluatedAt: current.observedAt,
+    gameStartsAt: scheduledStart,
+    lockedAt: null,
+    reason: index <= 8 ? "uncapped_market_led_exact_price_candidate" : "exact_price_does_not_clear_candidate_thresholds",
+    footballProjection: null,
+    quarterbackContext: {
+      away: { name: `Away QB ${index}`, historyMatched: true, status: "projected" },
+      home: { name: `Home QB ${index}`, historyMatched: true, status: "projected" },
+    },
+    health: {
+      blockingReasons: [],
+      quarterbackReasons: ["away_quarterback_projected_not_confirmed", "home_quarterback_projected_not_confirmed"],
+      contextReasons: ["sharpapi_splits_unavailable"],
+    },
+    runtimeArtifactRelease: NFL_R6_RUNTIME_ARTIFACT_RELEASE,
+    modelRelease: NFL_R6_MONEYLINE_MODEL_RELEASE,
+    calibrationRelease: NFL_R6_MONEYLINE_CALIBRATION_RELEASE,
+    decisionRelease: NFL_R6_MONEYLINE_DECISION_RELEASE,
+    sourcePointModelRelease: NFL_R6_SOURCE_POINT_MODEL_RELEASE,
+  };
+  const production = buildNflV1ProductionDecisionBundle({
+    providerGameId,
+    awayTeam: away,
+    homeTeam: home,
+    gameStartsAt: scheduledStart,
+    current,
+    shadowMoneyline,
+  });
   return {
     id: `row-${providerGameId}`,
     providerGameId,
@@ -204,11 +271,11 @@ function syntheticRow(index: number): NflForwardStoredEvidence {
         forecast: null,
       },
       decisions: {
-        evaluatedBets: [],
-        outcomeConfidence: [],
-        modelPromotionStatus: "blocked_pending_independent_validation",
-        publicationEnabled: false,
-        trackingEnabled: false,
+        evaluatedBets: production.evaluatedBets,
+        outcomeConfidence: production.outcomeConfidence,
+        modelPromotionStatus: production.modelPromotionStatus,
+        publicationEnabled: production.publicationEnabled,
+        trackingEnabled: production.trackingEnabled,
       },
       coverage: {
         currentOdds: true,

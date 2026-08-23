@@ -45,7 +45,7 @@ assert.match(pageSource, /No fallback or fabricated slate is shown/);
 assert.match(pageSource, /activePreviewSports=\{\["nfl"\]\}/);
 assert.match(pageSource, /no preseason slate or result tracking/);
 assert.match(pageSource, /same append-only evidence used by the member candidate/);
-assert.match(pageSource, /Bet grades held inside the normal Daily Edge reader/);
+assert.match(pageSource, /live predictions and exact-price Bet grades/);
 assert.match(pageSource, /48 predictions|games\.length \* 3/);
 assert.match(pageSource, /Opening trails/);
 assert.doesNotMatch(pageSource, /fetchBalldontlieNflPreviewSlate/);
@@ -405,4 +405,4 @@ assert.match(readerSource, /marketsInScope\(\)/);
 assert.match(readerSource, /openingLabel: "Opening"/);
 assert.match(readerSource, /In preseason, expected participation and coach-managed rest must be verified separately/);
 
-console.log("Football product preview: provider-backed Week 1 Held reader plus legacy model and tracking boundaries passed");
+console.log("Football product preview: provider-backed Week 1 prediction/grade reader plus legacy model and tracking boundaries passed");

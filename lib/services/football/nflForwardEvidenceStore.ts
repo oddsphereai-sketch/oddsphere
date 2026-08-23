@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   NFL_FORWARD_EVIDENCE_LEGACY_SCHEMA_RELEASE,
+  NFL_FORWARD_EVIDENCE_PREVIOUS_SCHEMA_RELEASE,
   NFL_FORWARD_EVIDENCE_SCHEMA_RELEASE,
   hashNflForwardEvidencePayload,
   type NflForwardAnyEvidencePayload,
@@ -34,11 +35,22 @@ export async function readLegacyNflForwardEvidence(args: {
   return readNflForwardEvidenceRelease({ ...args, evidenceRelease: NFL_FORWARD_EVIDENCE_LEGACY_SCHEMA_RELEASE });
 }
 
+export async function readPreviousNflForwardEvidence(args: {
+  client: SupabaseClient;
+  season: number;
+  week: number;
+}): Promise<NflForwardStoredEvidence[]> {
+  return readNflForwardEvidenceRelease({ ...args, evidenceRelease: NFL_FORWARD_EVIDENCE_PREVIOUS_SCHEMA_RELEASE });
+}
+
 async function readNflForwardEvidenceRelease(args: {
   client: SupabaseClient;
   season: number;
   week: number;
-  evidenceRelease: typeof NFL_FORWARD_EVIDENCE_SCHEMA_RELEASE | typeof NFL_FORWARD_EVIDENCE_LEGACY_SCHEMA_RELEASE;
+  evidenceRelease:
+    | typeof NFL_FORWARD_EVIDENCE_SCHEMA_RELEASE
+    | typeof NFL_FORWARD_EVIDENCE_PREVIOUS_SCHEMA_RELEASE
+    | typeof NFL_FORWARD_EVIDENCE_LEGACY_SCHEMA_RELEASE;
 }): Promise<NflForwardStoredEvidence[]> {
   const { data, error } = await args.client
     .from("nfl_forward_evidence_snapshots")
@@ -89,7 +101,10 @@ export async function appendNflForwardEvidence(args: {
 
 function normalizeStoredRow(
   row: StoredRow,
-  expectedRelease: typeof NFL_FORWARD_EVIDENCE_SCHEMA_RELEASE | typeof NFL_FORWARD_EVIDENCE_LEGACY_SCHEMA_RELEASE,
+  expectedRelease:
+    | typeof NFL_FORWARD_EVIDENCE_SCHEMA_RELEASE
+    | typeof NFL_FORWARD_EVIDENCE_PREVIOUS_SCHEMA_RELEASE
+    | typeof NFL_FORWARD_EVIDENCE_LEGACY_SCHEMA_RELEASE,
 ): NflForwardStoredEvidence {
   if (row.payload === null || typeof row.payload !== "object") throw new Error(`NFL evidence ${row.id} has no payload.`);
   const payload = row.payload as NflForwardAnyEvidencePayload;
