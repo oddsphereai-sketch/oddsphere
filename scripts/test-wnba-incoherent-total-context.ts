@@ -158,6 +158,78 @@ assert.ok(prices.total.stops?.every((stop) => stop.line === 163.5), "selected mo
 assert.ok(prices.opposingTotal.coherent && (prices.opposingTotal.stops?.length ?? 0) >= 2, "opposing-side movement remains available at 163.5");
 assert.ok(prices.opposingTotal.stops?.every((stop) => stop.line === 163.5), "opposing movement uses the evaluated line");
 
+const spreadHelp = __WNBA_DAILY_EDGE_ADAPTER_TEST__.priceTrailMovementRead(
+  "spread",
+  "SEA +8.5",
+  {
+    current: -118,
+    open: -118,
+    previous: null,
+    openLine: 7.5,
+    currentLine: 8.5,
+    coherent: true,
+    sportsbook: "fanduel",
+  },
+  "2026-08-23T13:00:00.000Z",
+);
+assert.equal(
+  spreadHelp?.movement?.directionRelativeToPick,
+  "support",
+  "a selected spread moving from +7.5 to +8.5 supports the pick",
+);
+assert.ok((spreadHelp?.score ?? 0) > 0, "the supporting spread move produces a positive market-read score");
+
+const spreadResistance = __WNBA_DAILY_EDGE_ADAPTER_TEST__.priceTrailMovementRead(
+  "spread",
+  "DAL -8.5",
+  {
+    current: -104,
+    open: -104,
+    previous: null,
+    openLine: -7.5,
+    currentLine: -8.5,
+    coherent: true,
+    sportsbook: "fanduel",
+  },
+  "2026-08-23T13:00:00.000Z",
+);
+assert.equal(
+  spreadResistance?.movement?.directionRelativeToPick,
+  "resistance",
+  "a selected spread moving from -7.5 to -8.5 resists the pick",
+);
+assert.ok((spreadResistance?.score ?? 0) < 0, "the resisting spread move produces a negative market-read score");
+
+const spreadReadFromLineTracker = __WNBA_DAILY_EDGE_ADAPTER_TEST__.withVisiblePriceTrailMarketRead({
+  existing: null,
+  slot: "spread",
+  pick: "SEA +8.5",
+  trail: {
+    current: -118,
+    open: -118,
+    previous: null,
+    openLine: 8.5,
+    currentLine: 8.5,
+    coherent: true,
+    sportsbook: "fanduel",
+  },
+  lineTrail: {
+    current: -118,
+    open: -110,
+    previous: null,
+    openLine: 7.5,
+    currentLine: 8.5,
+    coherent: true,
+    sportsbook: "fanduel",
+  },
+  generatedAt: "2026-08-23T13:00:00.000Z",
+});
+assert.equal(
+  spreadReadFromLineTracker?.movement?.directionRelativeToPick,
+  "support",
+  "Market Pulse follows the WNBA spread line tracker instead of a flat current-number price trail",
+);
+
 const boardBefore = ["Lean", "Watchlist", "Watchlist", "Watchlist", "Watchlist", "Watchlist", "Lean", "Watchlist", "Lean"];
 const boardAfter = [...boardBefore];
 assert.deepEqual(boardAfter, boardBefore, "fallback changes no picks or grades");
