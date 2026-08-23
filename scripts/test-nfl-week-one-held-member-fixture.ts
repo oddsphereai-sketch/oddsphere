@@ -9,8 +9,19 @@ import {
   buildNflWeekOneHeldMemberFixture,
   NFL_WEEK_ONE_HELD_MEMBER_FIXTURE_RELEASE,
 } from "../lib/services/football/nflWeekOneHeldMemberFixture";
+import {
+  getNflV1WeekOneOutcomeForecast,
+  NFL_V1_OUTCOME_MODEL_RELEASE,
+  NFL_V1_WEEK_ONE_OUTCOME_ARTIFACT_RELEASE,
+} from "../lib/services/football/nflV1WeekOneOutcome";
 
 const capturedAt = "2026-08-22T13:50:56.934Z";
+const weekOneSlate = [
+  ["NE", "SEA"], ["SF", "LAR"], ["TB", "CIN"], ["NO", "DET"],
+  ["NYJ", "TEN"], ["BAL", "IND"], ["ATL", "PIT"], ["CHI", "CAR"],
+  ["CLE", "JAX"], ["BUF", "HOU"], ["MIA", "LV"], ["GB", "MIN"],
+  ["WSH", "PHI"], ["ARI", "LAC"], ["DAL", "NYG"], ["DEN", "KC"],
+] as const;
 const rows = Array.from({ length: 16 }, (_, index) => syntheticRow(index + 1));
 const fixture = buildNflWeekOneHeldMemberFixture(rows);
 
@@ -39,19 +50,31 @@ assert.equal(markets.every((market) => market.verdict.label === "Held"), true);
 assert.equal(markets.every((market) => market.oddsTrail?.length === 2), true);
 assert.equal(markets.every((market) => market.opposingOddsTrail?.stops.length === 2), true);
 assert.equal(markets.every((market) => market.publicSplits.length === 2), true);
-assert.equal(fixture.snapshot.games.every((game) => game.projected.away === 0 && game.projected.home === 0), true);
+assert.equal(fixture.snapshot.games.every((game) => game.projected.away > 0 && game.projected.home > 0), true);
+assert.equal(fixture.snapshot.games.every((game) => game.footballProjection?.modelRelease === NFL_V1_OUTCOME_MODEL_RELEASE), true);
+assert.equal(fixture.snapshot.games.every((game) => game.footballProjection?.artifactRelease === NFL_V1_WEEK_ONE_OUTCOME_ARTIFACT_RELEASE), true);
+const jax = fixture.snapshot.games.find((game) => game.id === "nfl-1392224");
+assert.equal(jax?.awayTeam, "CLE");
+assert.equal(jax?.homeTeam, "JAX");
+assert.equal(jax?.projected.away.toFixed(1), "17.6");
+assert.equal(jax?.projected.home.toFixed(1), "27.7");
+assert.equal(jax?.footballProjection?.homeWinProbability.toFixed(3), "0.755");
+assert.throws(
+  () => getNflV1WeekOneOutcomeForecast({ providerGameId: "1392224", awayTeam: "JAX", homeTeam: "CLE" }),
+  /identity mismatch/,
+);
 
 const onTimeT60Rows = structuredClone(rows);
 onTimeT60Rows[0]!.stage = "t60";
 onTimeT60Rows[0]!.payload.stage = "t60";
 onTimeT60Rows[0]!.payload.t60LagMinutes = 12;
-assert.equal(buildNflWeekOneHeldMemberFixture(onTimeT60Rows).snapshot.games.find((game) => game.id === "nfl-10001")?.lockState, "locked");
+assert.equal(buildNflWeekOneHeldMemberFixture(onTimeT60Rows).snapshot.games.find((game) => game.id === "nfl-1392216")?.lockState, "locked");
 
 const lateT60Rows = structuredClone(rows);
 lateT60Rows[0]!.stage = "t60";
 lateT60Rows[0]!.payload.stage = "t60";
 lateT60Rows[0]!.payload.t60LagMinutes = 30;
-assert.equal(buildNflWeekOneHeldMemberFixture(lateT60Rows).snapshot.games.find((game) => game.id === "nfl-10001")?.lockState, "open");
+assert.equal(buildNflWeekOneHeldMemberFixture(lateT60Rows).snapshot.games.find((game) => game.id === "nfl-1392216")?.lockState, "open");
 
 const candidateSource = readFileSync("app/lab/daily-edge/CandidateDailyEdgePage.tsx", "utf8");
 assert.match(candidateSource, /readCurrentNflWeekOneHeldMemberFixture/);
@@ -63,9 +86,8 @@ assert.match(readerSource, /No score forecast is being published yet/);
 console.log("NFL Week 1 held member fixture: normal 16-game/48-market reader contract, real two-sided context, and per-market fail-closed holds passed");
 
 function syntheticRow(index: number): NflForwardStoredEvidence {
-  const providerGameId = String(10_000 + index);
-  const away = `A${String(index).padStart(2, "0")}`;
-  const home = `H${String(index).padStart(2, "0")}`;
+  const providerGameId = String(1_392_215 + index);
+  const [away, home] = weekOneSlate[index - 1]!;
   const scheduledStart = new Date(Date.parse("2026-09-10T17:00:00.000Z") + index * 3_600_000).toISOString();
   const quote = (observedAt: string, offset: number) => ({
     providerGameId,

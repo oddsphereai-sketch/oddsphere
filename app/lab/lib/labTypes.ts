@@ -864,6 +864,18 @@ export type DailyEdgeGameDto = {
    */
   decisionLine: string;
   projected: { away: number; home: number };
+  /** NFL-only football forecast kept separate from exact-price Bet grades.
+   * A game may publish this outcome/score forecast while every market remains
+   * Held. These probabilities must never be reader-side converted into a
+   * Lean, Best Angle, stake, or tracking row. */
+  footballProjection?: {
+    awayWinProbability: number;
+    homeWinProbability: number;
+    modelRelease: string;
+    distributionRelease: string;
+    probabilityRelease: string;
+    artifactRelease: string;
+  } | null;
   /** Soccer keeps continuous expected goals as scoring context. EPL's expected
    * goals can use a market-informed calibration head that is separate from the
    * released Match Result, Total, and BTTS probability heads. The optional
