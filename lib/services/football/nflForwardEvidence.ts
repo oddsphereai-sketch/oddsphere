@@ -13,11 +13,13 @@ import type { NflR6ShadowMoneylineDecision } from "./nflR6MoneylineShadow";
 import type { NflRegularSharpSplitSet } from "./sharpApiNflSplits";
 
 export const NFL_FORWARD_EVIDENCE_SCHEMA_RELEASE =
+  "nfl_forward_evidence_snapshot_2026_08_23_r3_member" as const;
+export const NFL_FORWARD_EVIDENCE_PREVIOUS_SCHEMA_RELEASE =
   "nfl_forward_evidence_snapshot_2026_08_22_r2_multibook" as const;
 export const NFL_FORWARD_EVIDENCE_LEGACY_SCHEMA_RELEASE =
   "nfl_forward_evidence_snapshot_2026_08_21_r1" as const;
 export const NFL_FORWARD_EVIDENCE_COLLECTOR_RELEASE =
-  "nfl_forward_evidence_collector_2026_08_22_r2_multibook" as const;
+  "nfl_forward_evidence_collector_2026_08_23_r3_member" as const;
 
 export type NflForwardEvidenceStage = "opening" | "unlocked" | "t60";
 
@@ -127,8 +129,8 @@ export type NflForwardEvidencePayload = {
     evaluatedBets: NflRegularEvaluatedBetDecision[];
     outcomeConfidence: NflRegularOutcomeConfidence[];
     shadowEvaluatedBets?: NflR6ShadowMoneylineDecision[];
-    modelPromotionStatus: "blocked_pending_independent_validation";
-    publicationEnabled: false;
+    modelPromotionStatus: "nfl_v1_member_release_2026_08_23_r2";
+    publicationEnabled: true;
     trackingEnabled: false;
   };
   coverage: {
@@ -156,9 +158,25 @@ export type NflForwardEvidencePayload = {
   };
 };
 
+export type NflForwardPreviousEvidencePayload = Omit<
+  NflForwardEvidencePayload,
+  "schemaRelease" | "collectorRelease" | "decisions"
+> & {
+  schemaRelease: typeof NFL_FORWARD_EVIDENCE_PREVIOUS_SCHEMA_RELEASE;
+  collectorRelease: "nfl_forward_evidence_collector_2026_08_22_r2_multibook";
+  decisions: {
+    evaluatedBets: NflRegularEvaluatedBetDecision[];
+    outcomeConfidence: NflRegularOutcomeConfidence[];
+    shadowEvaluatedBets?: NflR6ShadowMoneylineDecision[];
+    modelPromotionStatus: "blocked_pending_independent_validation";
+    publicationEnabled: false;
+    trackingEnabled: false;
+  };
+};
+
 export type NflForwardLegacyEvidencePayload = Omit<
   NflForwardEvidencePayload,
-  "schemaRelease" | "collectorRelease" | "market" | "coverage"
+  "schemaRelease" | "collectorRelease" | "market" | "coverage" | "decisions"
 > & {
   schemaRelease: typeof NFL_FORWARD_EVIDENCE_LEGACY_SCHEMA_RELEASE;
   collectorRelease: "nfl_forward_evidence_collector_2026_08_21_r1";
@@ -170,10 +188,18 @@ export type NflForwardLegacyEvidencePayload = Omit<
     NflForwardEvidencePayload["coverage"],
     "currentBookCount" | "comparableCurrentBookCount" | "multibookConsensusReady"
   >;
+  decisions: {
+    evaluatedBets: NflRegularEvaluatedBetDecision[];
+    outcomeConfidence: NflRegularOutcomeConfidence[];
+    modelPromotionStatus: "blocked_pending_independent_validation";
+    publicationEnabled: false;
+    trackingEnabled: false;
+  };
 };
 
 export type NflForwardAnyEvidencePayload =
   | NflForwardEvidencePayload
+  | NflForwardPreviousEvidencePayload
   | NflForwardLegacyEvidencePayload;
 
 export type NflForwardStoredEvidence = {

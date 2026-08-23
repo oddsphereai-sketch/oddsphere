@@ -72,10 +72,8 @@ export type FootballPreviewFixture = {
   };
   tracking: {
     seasonPhase: "preseason" | "regular";
-    trackingEligible: false;
-    reason:
-      | "NFL preseason is excluded from official and lifetime tracking."
-      | "Regular-season tracking remains disabled until the model is launch-approved and a prediction is locked.";
+    trackingEligible: boolean;
+    reason: string;
   };
 };
 

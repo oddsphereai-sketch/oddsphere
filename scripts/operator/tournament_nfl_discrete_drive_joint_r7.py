@@ -422,6 +422,14 @@ def summarize(pmf: np.ndarray, home_line: float | None = None, total_line: float
         "tieProbability": tie,
         "margin80": central_interval(margin_values, margin_pmf, 0.80),
         "total80": central_interval(total_values, total_pmf, 0.80),
+        "marginDistribution": {
+            "values": [int(value) for value in margin_values.tolist()],
+            "probabilities": [float(value) for value in margin_pmf.tolist()],
+        },
+        "totalDistribution": {
+            "values": [int(value) for value in total_values.tolist()],
+            "probabilities": [float(value) for value in total_pmf.tolist()],
+        },
     }
     if home_line is not None:
         adjusted = home_index + home_line - away_index

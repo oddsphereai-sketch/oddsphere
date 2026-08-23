@@ -16,6 +16,7 @@ import {
 } from "./nflForwardEvidence";
 import { readNflForwardEvidence } from "./nflForwardEvidenceStore";
 import { NFL_T60_MAX_CAPTURE_LAG_MINUTES } from "./nflRegularDecisionEvidence";
+import type { NflRegularEvaluatedBetDecision } from "./nflRegularDecisionEvidence";
 import {
   getNflV1WeekOneOutcomeForecast,
   NFL_V1_OUTCOME_DISTRIBUTION_RELEASE,
@@ -25,12 +26,11 @@ import {
 } from "./nflV1WeekOneOutcome";
 
 export const NFL_WEEK_ONE_HELD_MEMBER_FIXTURE_RELEASE =
-  "nfl_week_one_held_member_fixture_2026_08_23_r2_outcome" as const;
+  "nfl_week_one_member_fixture_2026_08_23_r3_predictions_and_grades" as const;
 
 const MODEL_RELEASE = NFL_V1_OUTCOME_MODEL_RELEASE;
-const DECISION_RELEASE = "nfl_exact_price_decision_hold_2026_08_22_r1" as const;
-const HOLD_REASON =
-  "OddSphere's independent Week 1 score and winner forecast is available. Exact-price Bet grades remain Held; projected quarterbacks are context and do not create a wager.";
+const DECISION_RELEASE = "nfl_v1_daily_edge_decision_2026_08_23_r2" as const;
+const HOLD_REASON = "This market is Held because its exact-price decision tuple is incomplete or its data health failed.";
 
 export type NflWeekOneHeldMemberFixture = FootballPreviewFixture & {
   heldMemberFixtureRelease: typeof NFL_WEEK_ONE_HELD_MEMBER_FIXTURE_RELEASE;
@@ -97,7 +97,7 @@ export function buildNflWeekOneHeldMemberFixture(
       requested_date: slateDate,
       fallback_used: false,
       slateState: "today_draft_only",
-      slate_status: "week_one_model_held",
+      slate_status: "week_one_model_live",
       last_slate_update_at: capturedAt,
       games,
     },
@@ -114,7 +114,7 @@ export function buildNflWeekOneHeldMemberFixture(
     provenance: {
       schedule: "BALLDONTLIE NFL games from the leased forward-evidence collector",
       odds: "BALLDONTLIE named-sportsbook two-sided current and operational Opening quotes",
-      results: "No preseason results; regular-season tracking has not begun",
+      results: "No preseason results; official regular-season tracking is not enabled in this member release",
       modelRelease: MODEL_RELEASE,
       decisionRelease: DECISION_RELEASE,
       sourceChecksum,
@@ -127,7 +127,7 @@ export function buildNflWeekOneHeldMemberFixture(
     tracking: {
       seasonPhase: "regular",
       trackingEligible: false,
-      reason: "Regular-season tracking remains disabled until the model is launch-approved and a prediction is locked.",
+      reason: "Official NFL tracking is not enabled in this member release; forecasts and Bet grades remain separate from the public record.",
     },
     coverage: {
       games: latest.length,
@@ -161,8 +161,8 @@ function latestCompleteRows(rows: NflForwardStoredEvidence[]): Array<NflForwardS
   if (values.some((row) => `${row.payload.season}:${row.payload.week}` !== identity)) {
     throw new Error("NFL Week 1 held fixture contains mixed season/week identities.");
   }
-  if (values.some((row) => row.payload.decisions.publicationEnabled || row.payload.decisions.trackingEnabled)) {
-    throw new Error("NFL Week 1 held fixture cannot consume evidence with publication or tracking enabled.");
+  if (values.some((row) => !row.payload.decisions.publicationEnabled)) {
+    throw new Error("NFL Week 1 member fixture requires publication-enabled evidence.");
   }
   for (const row of values) {
     const { current, operationalOpening } = row.payload.market;
@@ -188,7 +188,7 @@ function buildHeldGame(row: NflForwardStoredEvidence & { payload: NflForwardEvid
     awayTeam: away,
     homeTeam: home,
   });
-  const moneyline = buildHeldMarket({
+  const moneylineBase = buildHeldMarket({
     slot: "moneyline",
     away,
     home,
@@ -216,7 +216,7 @@ function buildHeldGame(row: NflForwardStoredEvidence & { payload: NflForwardEvid
     opposingSide: "away",
     payload,
   });
-  const total = buildHeldMarket({
+  const totalBase = buildHeldMarket({
     slot: "total",
     away,
     home,
@@ -244,7 +244,7 @@ function buildHeldGame(row: NflForwardStoredEvidence & { payload: NflForwardEvid
     opposingSide: "under",
     payload,
   });
-  const spread = buildHeldMarket({
+  const spreadBase = buildHeldMarket({
     slot: "spread",
     away,
     home,
@@ -272,9 +272,23 @@ function buildHeldGame(row: NflForwardStoredEvidence & { payload: NflForwardEvid
     opposingSide: "away",
     payload,
   });
+  const decisions = payload.decisions.evaluatedBets;
+  const moneyline = applyPublishedDecision(moneylineBase, decisionFor(decisions, "moneyline"), {
+    slot: "moneyline", payload, primaryLabel: home, opposingLabel: away, primarySide: "home", opposingSide: "away",
+  });
+  const total = applyPublishedDecision(totalBase, decisionFor(decisions, "total"), {
+    slot: "total", payload, primaryLabel: `Over ${marketNumber(current.total!.line)}`,
+    opposingLabel: `Under ${marketNumber(current.total!.line)}`, primarySide: "over", opposingSide: "under",
+    expectedTotal: outcome.expectedAwayScore + outcome.expectedHomeScore,
+  });
+  const spread = applyPublishedDecision(spreadBase, decisionFor(decisions, "spread"), {
+    slot: "spread", payload, primaryLabel: `${home} ${signed(current.spread!.homeLine)}`,
+    opposingLabel: `${away} ${signed(current.spread!.awayLine)}`, primarySide: "home", opposingSide: "away",
+  });
   const locked = payload.stage === "t60" &&
     payload.t60LagMinutes !== null &&
-    payload.t60LagMinutes <= NFL_T60_MAX_CAPTURE_LAG_MINUTES;
+    payload.t60LagMinutes <= NFL_T60_MAX_CAPTURE_LAG_MINUTES &&
+    decisions.length === 3 && decisions.every((decision) => decision.stage === "t60_locked");
   const markets = { moneyline, total, first_inning: spread };
   const prediction = (market: MarketEdgeDto): DailyEdgePredictionDto => ({
     pick: market.pick,
@@ -302,7 +316,7 @@ function buildHeldGame(row: NflForwardStoredEvidence & { payload: NflForwardEvid
     lockedAt: locked ? payload.capturedAt : null,
     updatedAt: payload.capturedAt,
     generatedAt: payload.capturedAt,
-    holdReason: "nfl_week_one_model_validation_and_projected_qb_hold",
+    holdReason: decisions.length === 3 ? null : "nfl_week_one_exact_price_tuple_health_hold",
     dataCompleteness: null,
     homeStarter: null,
     awayStarter: null,
@@ -312,10 +326,10 @@ function buildHeldGame(row: NflForwardStoredEvidence & { payload: NflForwardEvid
       nrfi: prediction(spread),
     },
     markets,
-    decisionLine: "Independent score and winner forecasts are live in the reader. Exact-price Bet grades remain Held and are not inferred from the outcome forecast.",
+    decisionLine: "The discrete football forecast supplies the score and probabilities; each Bet grade separately evaluates the exact displayed sportsbook quote.",
     projected: {
-      away: outcome.projectedAwayScore,
-      home: outcome.projectedHomeScore,
+      away: outcome.representativeAwayScore,
+      home: outcome.representativeHomeScore,
     },
     footballProjection: {
       awayWinProbability: outcome.awayWinProbability,
@@ -334,12 +348,12 @@ function buildHeldGame(row: NflForwardStoredEvidence & { payload: NflForwardEvid
     },
     result: null,
     breakdown: {
-      verdict: { key: "no_play", label: "Held" },
+      verdict: moneyline.verdict,
       sharpRead: {
         key: "no_data",
         sentence: "Playbook public splits are displayed as market context; SharpAPI splits are not available in this capture.",
       },
-      modelBreakdown: "The independent football model supplies the displayed score and winner probability. Bet grades remain a separate exact-price decision and are Held.",
+      modelBreakdown: "A single discrete drive/scoring-event distribution supplies the displayed representative score and all three forecast probabilities. Exact-price Bet grades remain separate.",
     },
   };
 }
@@ -519,6 +533,168 @@ function buildHeldMarket(input: HeldMarketInput): MarketEdgeDto {
     reviewFlags: [NFL_WEEK_ONE_HELD_MEMBER_FIXTURE_RELEASE, MODEL_RELEASE, DECISION_RELEASE],
     reviewActionSummary: "hold",
   };
+}
+
+function decisionFor(
+  decisions: NflRegularEvaluatedBetDecision[],
+  market: "moneyline" | "spread" | "total",
+): NflRegularEvaluatedBetDecision | null {
+  const matches = decisions.filter((decision) => decision.market === market);
+  if (matches.length > 1) throw new Error(`NFL member fixture has duplicate ${market} decisions.`);
+  return matches[0] ?? null;
+}
+
+function applyPublishedDecision(
+  base: MarketEdgeDto,
+  decision: NflRegularEvaluatedBetDecision | null,
+  input: {
+    slot: "moneyline" | "spread" | "total";
+    payload: NflForwardEvidencePayload;
+    primaryLabel: string;
+    opposingLabel: string;
+    primarySide: "home" | "over";
+    opposingSide: "away" | "under";
+    expectedTotal?: number;
+  },
+): MarketEdgeDto {
+  if (!decision) return base;
+  const selectedPrimary = input.slot === "total"
+    ? decision.side.startsWith("Over ")
+    : decision.side === input.payload.game.home.abbreviation;
+  const selectedSide = selectedPrimary ? input.primarySide : input.opposingSide;
+  const opposingSide = selectedPrimary ? input.opposingSide : input.primarySide;
+  const selectedLabel = selectedPrimary ? input.primaryLabel : input.opposingLabel;
+  const opposingLabel = selectedPrimary ? input.opposingLabel : input.primaryLabel;
+  const baseSelectedTrail = selectedPrimary ? (base.oddsTrail ?? []) : (base.opposingOddsTrail?.stops ?? []);
+  const exactBookMatchesOpening = normalizeBookName(decision.evaluatedQuote.sportsbook) ===
+    normalizeBookName(input.payload.market.operationalOpening.quote.sportsbook);
+  const oddsTrail = exactBookMatchesOpening
+    ? baseSelectedTrail.map((stop, index, stops) => index === stops.length - 1
+      ? {
+          ...stop,
+          american: decision.evaluatedQuote.price,
+          line: decision.evaluatedQuote.line,
+          observedAt: decision.evaluatedQuote.observedAt,
+          sportsbook: decision.evaluatedQuote.sportsbook,
+        }
+      : stop)
+    : [{
+        american: decision.evaluatedQuote.price,
+        line: decision.evaluatedQuote.line,
+        observedAt: decision.evaluatedQuote.observedAt,
+        sportsbook: decision.evaluatedQuote.sportsbook,
+        source: decision.stage === "t60_locked" ? "locked_snapshot" as const : "current_line" as const,
+        label: decision.stage === "t60_locked" ? "locked" as const : "current" as const,
+      }];
+  const exactBook = input.payload.market.currentBooks.find((quote) =>
+    normalizeBookName(quote.sportsbook) === normalizeBookName(decision.evaluatedQuote.sportsbook));
+  const opposingQuote = exactBook ? oppositeQuote(exactBook, input.slot, selectedPrimary) : null;
+  const opposingStops: OddsTrailStopDto[] = opposingQuote ? [{
+    american: opposingQuote.price,
+    line: opposingQuote.line,
+    observedAt: exactBook!.observedAt,
+    sportsbook: exactBook!.sportsbook,
+    source: "current_line",
+    label: "current",
+  }] : [];
+  const selectedSplit = base.publicSplits.find((row) => row.side === selectedSide) ?? null;
+  const isLean = decision.grade === "Lean";
+  const actionability = isLean ? 62 : 32;
+  const marketName = input.slot === "moneyline" ? "moneyline" : input.slot;
+  const copy = isLean
+    ? `${selectedLabel} clears the validated NFL market-led value policy at ${formatAmerican(decision.evaluatedQuote.price)} from ${decision.evaluatedQuote.sportsbook}, with positive expected value at the displayed value-model probability.`
+    : `${selectedLabel} is the discrete model forecast side, but this independent outcome probability is not authorized as an exact-price ${marketName} betting edge.`;
+  return {
+    ...base,
+    pick: selectedLabel,
+    confidence: decision.modelProbability,
+    grade: isLean ? "model_only" : null,
+    signalType: isLean ? "model_only" : null,
+    held: false,
+    verdict: isLean ? { key: "lean", label: "Lean" } : { key: "no_play", label: "No Play" },
+    rawGrade: isLean ? "model_only" : null,
+    rawRecScore: actionability,
+    capReasons: [
+      isLean ? "nfl_r6_exact_price_moneyline_lean" : "nfl_exact_price_policy_not_cleared",
+      ...(input.payload.startersAndDepth.away.starterStatus !== "confirmed" ? ["away_expected_quarterback_projected"] : []),
+      ...(input.payload.startersAndDepth.home.starterStatus !== "confirmed" ? ["home_expected_quarterback_projected"] : []),
+    ],
+    finalGrade: isLean ? "model_only" : null,
+    finalRecScore: actionability,
+    actionabilityLabel: isLean ? "Lean" : "No Play",
+    displayReason: copy,
+    guidedGuide: copy,
+    guidedWatchOut: "Early-week prices and expected starters continue to refresh until the immutable T-60 decision.",
+    whyLine: copy,
+    riskLine: "The outcome forecast and exact-price Bet grade are separate; projected quarterback status is visible uncertainty, not an automatic Hold.",
+    modelProb: decision.modelProbability,
+    marketFairProb: decision.marketFairProbability,
+    pinnacleEvPct: isLean ? decision.expectedValue * 100 : null,
+    moneyPct: selectedSplit?.moneyPct ?? null,
+    betsPct: selectedSplit?.betsPct ?? null,
+    priceAmerican: decision.evaluatedQuote.price,
+    currentPriceAmerican: decision.evaluatedQuote.price,
+    currentPriceSportsbook: decision.evaluatedQuote.sportsbook,
+    currentPriceObservedAt: decision.evaluatedQuote.observedAt,
+    gradePriceAmerican: decision.evaluatedQuote.price,
+    lineOpenAmerican: oddsTrail.length > 1 ? oddsTrail[0]!.american : null,
+    priceObservedAt: decision.evaluatedQuote.observedAt,
+    lineOpenObservedAt: oddsTrail.length > 1 ? oddsTrail[0]!.observedAt : null,
+    oddspherePostedAmerican: decision.evaluatedQuote.price,
+    oddspherePostedAt: decision.evaluatedAt,
+    oddspherePostedMatchesPick: true,
+    lockedLineAmerican: decision.stage === "t60_locked" ? decision.evaluatedQuote.price : null,
+    lockedLineAt: decision.lockedAt,
+    oddsTrail,
+    lineTrail: input.slot === "moneyline" ? [] : oddsTrail,
+    opposingOddsTrail: {
+      side: opposingSide,
+      label: opposingLabel,
+      stops: opposingStops,
+    },
+    marketInterpretation: null,
+    lastMovePrevAmerican: oddsTrail.length > 1 ? oddsTrail[oddsTrail.length - 2]!.american : null,
+    lastMoveNextAmerican: oddsTrail.length > 1 ? oddsTrail[oddsTrail.length - 1]!.american : null,
+    lastMoveAtIso: oddsTrail.length > 1 ? oddsTrail[oddsTrail.length - 1]!.observedAt : null,
+    lastMoveLinePrev: oddsTrail.length > 1 ? oddsTrail[oddsTrail.length - 2]!.line : null,
+    lastMoveLineNext: oddsTrail.length > 1 ? oddsTrail[oddsTrail.length - 1]!.line : null,
+    modelTotal: input.slot === "total" ? input.expectedTotal ?? null : null,
+    line: decision.evaluatedQuote.line,
+    modelTrustPct: decision.modelProbability * 100,
+    marketImpliedPct: decision.marketFairProbability * 100,
+    modelMarketGapPct: (decision.modelProbability - decision.marketFairProbability) * 100,
+    recommendationConfidence: actionability,
+    marketSource: decision.evaluatedQuote.sportsbook,
+    reviewFlags: [NFL_WEEK_ONE_HELD_MEMBER_FIXTURE_RELEASE, decision.modelRelease, decision.decisionRelease],
+    reviewActionSummary: "keep",
+  };
+}
+
+function oppositeQuote(
+  quote: NflForwardEvidencePayload["market"]["current"],
+  slot: "moneyline" | "spread" | "total",
+  selectedPrimary: boolean,
+): { price: number; line: number | null } | null {
+  if (slot === "moneyline" && quote.moneyline) {
+    return selectedPrimary
+      ? { price: quote.moneyline.awayPrice, line: null }
+      : { price: quote.moneyline.homePrice, line: null };
+  }
+  if (slot === "spread" && quote.spread) {
+    return selectedPrimary
+      ? { price: quote.spread.awayPrice, line: quote.spread.awayLine }
+      : { price: quote.spread.homePrice, line: quote.spread.homeLine };
+  }
+  if (slot === "total" && quote.total) {
+    return selectedPrimary
+      ? { price: quote.total.underPrice, line: quote.total.line }
+      : { price: quote.total.overPrice, line: quote.total.line };
+  }
+  return null;
+}
+
+function normalizeBookName(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, "");
 }
 
 function splitRows(input: HeldMarketInput): MarketEdgeDto["publicSplits"] {
