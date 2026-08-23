@@ -113,6 +113,61 @@ type PitchingStatsLite = {
   first_inning_starts?: number | null;
 };
 
+const READINESS_LINE_PAGE_SIZE = 1_000;
+const READINESS_GAME_CHUNK_SIZE = 20;
+
+type ReadinessLineMarketRow = {
+  id: number;
+  game_id: number;
+  market_type: string | null;
+};
+
+type ReadinessLineReadClient = {
+  from(table: "lines"): {
+    select(columns: string): {
+      in(column: "game_id", values: number[]): {
+        order(column: "id", options: { ascending: true }): {
+          range(from: number, to: number): PromiseLike<{
+            data: ReadinessLineMarketRow[] | null;
+            error: { message?: string } | null;
+          }>;
+        };
+      };
+    };
+  };
+};
+
+/**
+ * Read every slate line identity without relying on PostgREST's default
+ * 1,000-row response limit. A full MLB slate can exceed that limit once all
+ * books, sides, markets, and player rows are present. Stable id ordering keeps
+ * page boundaries deterministic while the read is in progress.
+ */
+export async function loadAllReadinessLineMarketRows(args: {
+  client: ReadinessLineReadClient;
+  gameIds: number[];
+}): Promise<ReadinessLineMarketRow[]> {
+  const rows: ReadinessLineMarketRow[] = [];
+  for (let index = 0; index < args.gameIds.length; index += READINESS_GAME_CHUNK_SIZE) {
+    const gameIdChunk = args.gameIds.slice(index, index + READINESS_GAME_CHUNK_SIZE);
+    for (let from = 0; ; from += READINESS_LINE_PAGE_SIZE) {
+      const { data, error } = await args.client
+        .from("lines")
+        .select("id,game_id,market_type")
+        .in("game_id", gameIdChunk)
+        .order("id", { ascending: true })
+        .range(from, from + READINESS_LINE_PAGE_SIZE - 1);
+      if (error) {
+        throw new Error(`model readiness lines query failed: ${error.message ?? "unknown error"}`);
+      }
+      const page = data ?? [];
+      rows.push(...page);
+      if (page.length < READINESS_LINE_PAGE_SIZE) break;
+    }
+  }
+  return rows;
+}
+
 function hasUsableStarterPitchingStats(row: PitchingStatsLite | undefined): row is PitchingStatsLite {
   if (row === undefined) return false;
   return (
@@ -195,13 +250,13 @@ export async function auditMlbModelReadiness(args: {
     lineupCounts.set(k, (lineupCounts.get(k) ?? 0) + 1);
   }
 
-  const { data: lineRows } = await supabase
-    .from("lines")
-    .select("game_id, market_type")
-    .in("game_id", gameIds);
+  const lineRows = await loadAllReadinessLineMarketRows({
+    client: supabase as unknown as ReadinessLineReadClient,
+    gameIds,
+  });
   const fiCounts = new Map<number, number>();
   const fullGameCounts = new Map<number, number>();
-  for (const l of lineRows ?? []) {
+  for (const l of lineRows) {
     const k = l.game_id as number;
     if (l.market_type === "first_inning_total") fiCounts.set(k, (fiCounts.get(k) ?? 0) + 1);
     if (l.market_type === "moneyline" || l.market_type === "total" || l.market_type === "spread") {
