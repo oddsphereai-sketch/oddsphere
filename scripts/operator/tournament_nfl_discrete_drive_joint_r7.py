@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Frozen NFL r9 discrete possession/scoring-event distribution tournament."""
+"""Frozen NFL r10 discrete possession/scoring-event distribution tournament."""
 
 from __future__ import annotations
 
@@ -19,9 +19,9 @@ from scipy.optimize import root
 from scipy.signal import fftconvolve
 
 
-TOURNAMENT_RELEASE = "nfl_discrete_drive_joint_2026_08_23_r9"
-DISTRIBUTION_RELEASE = "nfl_discrete_drive_score_distribution_2026_08_23_r4"
-ARTIFACT_RELEASE = "nfl_week_one_discrete_joint_artifact_2026_08_23_r4"
+TOURNAMENT_RELEASE = "nfl_discrete_drive_joint_2026_08_23_r10"
+DISTRIBUTION_RELEASE = "nfl_discrete_drive_score_distribution_2026_08_23_r5"
+ARTIFACT_RELEASE = "nfl_week_one_discrete_joint_artifact_2026_08_23_r5"
 TRAINING_SEASONS = tuple(range(2016, 2023))
 SELECTION_SEASON = 2023
 CONFIRMATION_SEASONS = (2024, 2025)
@@ -44,6 +44,9 @@ TOTAL_WEIGHTS = np.asarray([
 ENVIRONMENT_SIGMA = 0.0
 EVENT_CONCENTRATION = 1.0
 REPRESENTATIVE_SCORE_WEIGHTS = (0.0, 0.05, 0.10, 0.20, 0.40)
+R9_REPRESENTATIVE_WEIGHT = 0.05
+SELECTION_MAE_TOLERANCE = 0.05
+CONFIRMATION_MAE_TOLERANCE = 0.15
 ENVIRONMENT_STATES = (-1.0, 0.0, 1.0)
 ENVIRONMENT_WEIGHTS = (0.2, 0.6, 0.2)
 TAIL_EPSILON = 1e-12
@@ -499,6 +502,7 @@ def evaluate(
             "tieContradictions": 0,
             "marginDistances": [],
             "totalDistances": [],
+            "pairsByWeek": {},
         }
         for weight in representative_weights
     }
@@ -530,6 +534,9 @@ def evaluate(
             metrics["tieContradictions"] += int(representative["tieContradiction"])
             metrics["marginDistances"].append(representative["marginDistance"])
             metrics["totalDistances"].append(representative["totalDistance"])
+            metrics["pairsByWeek"].setdefault(int(row.week), []).append(
+                (representative["awayScore"], representative["homeScore"])
+            )
     y = np.asarray(outcomes, dtype=float)
     p = np.clip(np.asarray(probabilities, dtype=float), 1e-9, 1 - 1e-9)
     result = {
@@ -542,8 +549,15 @@ def evaluate(
         "total80Coverage": total_hits / len(sample),
     }
     if representative_metrics:
-        result["representativeScores"] = {
-            str(weight): {
+        representative_results = {}
+        for weight, metrics in representative_metrics.items():
+            weekly_duplicate_rates = [
+                (len(pairs) - len(set(pairs))) / len(pairs)
+                for pairs in metrics["pairsByWeek"].values()
+                if pairs
+            ]
+            all_pairs = [pair for pairs in metrics["pairsByWeek"].values() for pair in pairs]
+            representative_results[str(weight)] = {
                 "teamScoreMae": float(np.mean(metrics["teamAbsoluteErrors"])),
                 "exactScoreHitRate": metrics["exactHits"] / len(sample),
                 "supportRate": metrics["supported"] / len(sample),
@@ -551,9 +565,10 @@ def evaluate(
                 "tieContradictions": int(metrics["tieContradictions"]),
                 "meanMarginCenterDistance": float(np.mean(metrics["marginDistances"])),
                 "meanTotalCenterDistance": float(np.mean(metrics["totalDistances"])),
+                "meanWeeklyDuplicatedPairRate": float(np.mean(weekly_duplicate_rates)),
+                "pooledDuplicatedPairs": int(len(all_pairs) - len(set(all_pairs))),
             }
-            for weight, metrics in representative_metrics.items()
-        }
+        result["representativeScores"] = representative_results
     return result
 
 
@@ -631,12 +646,21 @@ def main() -> None:
         (weight, selection_metrics["representativeScores"][str(weight)])
         for weight in REPRESENTATIVE_SCORE_WEIGHTS
     ]
-    selection.sort(key=lambda row: (
-        row[1]["teamScoreMae"],
+    best_selection_mae = min(metrics["teamScoreMae"] for _, metrics in selection)
+    eligible_selection = [
+        row for row in selection
+        if row[1]["teamScoreMae"] <= best_selection_mae + SELECTION_MAE_TOLERANCE
+        and row[1]["supportRate"] == 1.0
+        and row[1]["winnerFidelityRate"] == 1.0
+        and row[1]["tieContradictions"] == 0
+    ]
+    eligible_selection.sort(key=lambda row: (
+        row[1]["meanWeeklyDuplicatedPairRate"],
+        row[1]["meanMarginCenterDistance"] + row[1]["meanTotalCenterDistance"],
         -row[1]["exactScoreHitRate"],
         row[0],
     ))
-    selected_representative_weight = selection[0][0]
+    selected_representative_weight = eligible_selection[0][0]
     baseline = {
         str(SELECTION_SEASON): selection_metrics,
     }
@@ -647,11 +671,21 @@ def main() -> None:
             ENVIRONMENT_SIGMA,
             EVENT_CONCENTRATION,
             season,
-            (selected_representative_weight,),
+            tuple(sorted(set((selected_representative_weight, R9_REPRESENTATIVE_WEIGHT)))),
         )
         for season in CONFIRMATION_SEASONS
     }
     baseline.update(confirmation)
+    representative_gates = {
+        str(season): {
+            "supportComplete": confirmation[str(season)]["representativeScores"][str(selected_representative_weight)]["supportRate"] == 1.0,
+            "winnerFidelityComplete": confirmation[str(season)]["representativeScores"][str(selected_representative_weight)]["winnerFidelityRate"] == 1.0,
+            "zeroTieContradictions": confirmation[str(season)]["representativeScores"][str(selected_representative_weight)]["tieContradictions"] == 0,
+            "teamScoreMaeWithinTolerance": confirmation[str(season)]["representativeScores"][str(selected_representative_weight)]["teamScoreMae"] <= confirmation[str(season)]["representativeScores"][str(R9_REPRESENTATIVE_WEIGHT)]["teamScoreMae"] + CONFIRMATION_MAE_TOLERANCE,
+            "weeklyDuplicateRateNoWorseThanR9": confirmation[str(season)]["representativeScores"][str(selected_representative_weight)]["meanWeeklyDuplicatedPairRate"] <= confirmation[str(season)]["representativeScores"][str(R9_REPRESENTATIVE_WEIGHT)]["meanWeeklyDuplicatedPairRate"],
+        }
+        for season in CONFIRMATION_SEASONS
+    }
     gates = {
         str(season): {
             "finiteExactScoreLog": math.isfinite(confirmation[str(season)]["jointNegativeLogScore"]),
@@ -694,19 +728,22 @@ def main() -> None:
             "countPairs": [{"home": home, "away": away, "probability": probability} for home, away, probability in law.count_pairs],
         },
         "representativeSelectionRanking": [{"representativeWeight": weight, **metrics} for weight, metrics in selection],
+        "eligibleRepresentativeSelectionRanking": [{"representativeWeight": weight, **metrics} for weight, metrics in eligible_selection],
+        "representativeSelectionMaeTolerance": SELECTION_MAE_TOLERANCE,
         "selectedEnvironmentSigma": ENVIRONMENT_SIGMA,
         "selectedEventConcentration": EVENT_CONCENTRATION,
         "selectedRepresentativeWeight": selected_representative_weight,
         "neutralEventBaseline": baseline,
         "confirmation": confirmation,
         "confirmationGates": gates,
-        "historicalGatePassed": all(all(values.values()) for values in gates.values()),
+        "representativeConfirmationGates": representative_gates,
+        "historicalGatePassed": all(all(values.values()) for values in gates.values()) and all(all(values.values()) for values in representative_gates.values()),
         "currentWeek1": week,
         "currentStructuralGates": structural,
         "currentStructuralGatePassed": all(structural.values()),
     }
     report["qualified"] = report["historicalGatePassed"] and report["currentStructuralGatePassed"]
-    output = pathlib.Path("football-research/reports/nfl_discrete_drive_joint_2026_08_23_r9.json")
+    output = pathlib.Path("football-research/reports/nfl_discrete_drive_joint_2026_08_23_r10.json")
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n")
     print(json.dumps({
