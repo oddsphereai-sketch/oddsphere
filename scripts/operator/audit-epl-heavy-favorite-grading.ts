@@ -208,12 +208,18 @@ async function main() {
     const partitionRows = rows.filter((row) => row.partition === partition);
     const heavy = partitionRows.filter(heavyFavorite);
     const currentActionable = partitionRows.filter((row) => row.currentGrade === "Lean" || row.currentGrade === "Best Angle");
+    const bestAngles = partitionRows.filter((row) => row.currentGrade === "Best Angle");
+    const disagreementBestAngles = bestAngles.filter((row) => maxSide(row.market) !== row.forecastSide);
+    const subFiftyDisagreementBestAngles = disagreementBestAngles.filter((row) => row.probability < 0.5);
     const promoted = selectedPromotion && promotionPassesHoldout ? partitionRows.filter((row) => promotionEligible(row, selectedPromotion.rule)) : [];
     const candidateActionable = partitionRows.filter((row) => (row.currentGrade === "Lean" || row.currentGrade === "Best Angle") && !heavy).concat(promoted);
     return [partition, {
       probability: probabilityMetrics(partitionRows),
       currentGradeMix: gradeMix(partitionRows),
       currentActionable: selectionMetrics(currentActionable),
+      bestAngle: selectionMetrics(bestAngles),
+      marketDisagreementBestAngle: selectionMetrics(disagreementBestAngles),
+      subFiftyMarketDisagreementBestAngle: selectionMetrics(subFiftyDisagreementBestAngles),
       heavyFavoriteLean: selectionMetrics(heavy),
       heavyFavoritePriceBands: {
         minus300To399: selectionMetrics(heavy.filter((row) => row.american[row.forecastSide] >= -399)),
