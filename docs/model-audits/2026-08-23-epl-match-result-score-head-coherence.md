@@ -29,6 +29,13 @@ that distribution and identify it as the same model as Match Result. Total and
 BTTS retain the r12 market-informed goals context. The cross-market
 representative score is no longer substituted into the Match Result view.
 
+Legacy stored member snapshots can predate `matchResultOutlook` even after the
+reader deploys. In that state the moneyline card and reader withhold the
+separate market-informed goals context and label the same-head score context as
+refreshing. They never relabel the fallback distribution as the Match Result
+model. The existing three-way probabilities, pick, grade, and price remain
+visible and unchanged until an authoritative snapshot contains the new field.
+
 This is a truthful source-selection repair, not a synthesized score and not a
 new model head. r16/v21 remain the active releases. Board impact is zero
 promotions, zero demotions, and zero changed market decisions.
