@@ -1,6 +1,3 @@
-Warning: truncated output (original token count: 67961)
-Total output lines: 2599
-
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -1316,7 +1313,242 @@ function DefaultSplitSummary({ market }: { market: MarketEdgeDto }) {
   const hasSharpSource = sharp !== null;
   return (
     <div className="mt-3 border-t border-white/[0.06] pt-3">
-      <div className="flex flex-wrap items-center justify-between gap-2"><div><p className="text-[8px] font-black uppercase tracking-[0.15em] text-gray-300">Market splits</p><p className="mt-0.5 text-[7px] text-gray-600">{hasSharpSource ? "Public consensus and sharp-book activity remain separate signals" : "Public consensus money and ticket distribution"}</p></div>{displayedConflict ? <span className="rounded-full border border-amber-400/25 bg-amber-400/[0.08] px-2 py-0.5 text-[7px] font-black uppercase tracking-wider text-amber-200">{conflictIsHistorical ? "Historical source conflict" : "Sources conflict"}</…7961 tokens truncated…ap items-center gap-1.5"><i className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: teamAccent(team) }} /><span className="text-[10px] font-black text-gray-200">{team}</span>{supportive || challenging ? <span className={`rounded-full border px-1.5 py-0.5 text-[7px] font-black uppercase tracking-wider ${supportive ? "border-emerald-400/20 bg-emerald-400/[0.08] text-emerald-200" : "border-amber-400/20 bg-amber-400/[0.08] text-amber-200"}`}>{signal.label}</span> : null}</div><p className="mt-1 text-[8px] text-gray-500">{value.toFixed(0)}% of completed games</p></div><strong className="shrink-0 whitespace-nowrap font-mono text-base font-black text-white">{display}</strong></div><div className="mt-3"><SampleTally outcomes={outcomes ?? []} color={teamAccent(team)} hitLabel="Win" missLabel="Loss" /></div></div>;
+      <div className="flex flex-wrap items-center justify-between gap-2"><div><p className="text-[8px] font-black uppercase tracking-[0.15em] text-gray-300">Market splits</p><p className="mt-0.5 text-[7px] text-gray-600">{hasSharpSource ? "Public consensus and sharp-book activity remain separate signals" : "Public consensus money and ticket distribution"}</p></div>{displayedConflict ? <span className="rounded-full border border-amber-400/25 bg-amber-400/[0.08] px-2 py-0.5 text-[7px] font-black uppercase tracking-wider text-amber-200">{conflictIsHistorical ? "Historical source conflict" : "Sources conflict"}</span> : null}</div>
+      <div className="mt-2 grid gap-2">
+        <SplitSourcePanel source="PUBLIC CONSENSUS" section={consensus} pick={market.pick} />
+        {sharp ? <SplitSourcePanel source={sharp.label === "Sharp Book Signal" ? "SHARP BOOK SIGNAL" : "SHARP BOOK SPLITS"} section={sharp} pick={market.pick} /> : null}
+      </div>
+      {sharp?.rows.length ? <CrossSourceSplitRead consensus={consensus} sharp={sharp} /> : null}
+    </div>
+  );
+}
+
+function SplitSourcePanel({ source, section, pick }: { source: "PUBLIC CONSENSUS" | "SHARP BOOK SPLITS" | "SHARP BOOK SIGNAL"; section: MarketSplitDisplaySection | null; pick: string | null }) {
+  const moneyLeader = splitLeader(section, "moneyPct");
+  const ticketLeader = splitLeader(section, "betsPct");
+  const isSharp = source !== "PUBLIC CONSENSUS";
+  const stale = splitSectionIsStale(section);
+  const displayRows = canonicalSplitRows(section);
+  return <section className={`rounded-lg border p-3 ${isSharp ? "border-violet-400/20 bg-violet-500/[0.045]" : "border-white/[0.10] bg-black/20"}`}><div className="flex items-start justify-between gap-2"><div><div className="flex flex-wrap items-center gap-1.5"><p className={`text-[8px] font-black uppercase tracking-[0.14em] ${isSharp ? "text-violet-200" : "text-gray-300"}`}>{source}</p>{stale ? <span className="rounded-full border border-amber-400/20 bg-amber-400/[0.07] px-1.5 py-0.5 text-[6px] font-black uppercase tracking-wider text-amber-200">Stale snapshot</span> : null}</div><p className="mt-0.5 text-[7px] text-gray-600">{section?.lastUpdated ? formatTimestamp(section.lastUpdated) : section ? "Current snapshot" : "Unavailable"}</p></div>{moneyLeader ? <span className="rounded-full border border-white/[0.09] bg-black/20 px-2 py-0.5 text-[7px] font-black text-gray-300">Money → {moneyLeader}</span> : null}</div>{displayRows.length ? <div className="mt-3 space-y-3">{displayRows.slice(0, 2).map((row) => <SplitSideCard key={`${source}-${row.side}`} label={row.label} moneyPct={row.moneyPct} betsPct={row.betsPct} isPick={sideMatchesPick(row.label, pick)} />)}</div> : section?.signal ? <p className="mt-3 text-[9px] leading-relaxed text-gray-400">{section.signal}</p> : null}{moneyLeader && ticketLeader && moneyLeader.toLowerCase() !== ticketLeader.toLowerCase() ? <p className="mt-3 border-t border-white/[0.06] pt-2 text-[8px] leading-relaxed text-amber-200/80">Money leans {moneyLeader}; ticket count leans {ticketLeader}.</p> : null}</section>;
+}
+
+function SplitSideCard({ label, moneyPct, betsPct, isPick }: { label: string; moneyPct: number | null; betsPct: number | null; isPick: boolean }) {
+  return <div><div className="mb-1.5 flex items-center gap-1.5"><p className="text-[9px] font-black text-gray-200">{label}</p>{isPick ? <span className="rounded border border-violet-400/20 bg-violet-400/[0.07] px-1.5 py-0.5 text-[6px] font-black uppercase tracking-wider text-violet-200">Our read</span> : null}</div><div className="space-y-1.5"><SingleSplitBar label="Money" value={moneyPct} /><SingleSplitBar label="Tickets" value={betsPct} /></div></div>;
+}
+
+function SingleSplitBar({ label, value }: { label: "Money" | "Tickets"; value: number | null }) {
+  const width = value === null ? 0 : Math.max(0, Math.min(100, value));
+  const fill = label === "Money" ? "from-violet-700 to-violet-300" : "from-violet-900 to-violet-500";
+  return <div className="grid grid-cols-[48px_1fr_38px] items-center gap-2.5"><span className="text-[8px] font-black uppercase tracking-wider text-gray-400">{label}</span><div className="relative h-4 overflow-hidden rounded-md border border-white/[0.08] bg-white/[0.07] shadow-inner"><span className={`absolute inset-y-0 left-0 rounded-[3px] bg-gradient-to-r ${fill} shadow-[0_0_12px_rgba(167,139,250,0.35)] transition-[width] duration-300`} style={{ width: `${width}%` }} /><span className="absolute inset-y-0 left-1/2 w-px bg-white/25" /><span className="absolute inset-y-0 left-1/4 w-px bg-white/[0.07]" /><span className="absolute inset-y-0 left-3/4 w-px bg-white/[0.07]" /></div><span className="text-right font-mono text-[10px] font-black text-white">{value === null ? "—" : `${Math.round(value)}%`}</span></div>;
+}
+
+function CrossSourceSplitRead({ consensus, sharp }: { consensus: MarketSplitDisplaySection | null; sharp: MarketSplitDisplaySection | null }) {
+  const publicMoney = splitLeader(consensus, "moneyPct");
+  const sharpMoney = splitLeader(sharp, "moneyPct");
+  const publicTickets = splitLeader(consensus, "betsPct");
+  const sharpTickets = splitLeader(sharp, "betsPct");
+  if (!publicMoney && !sharpMoney && !publicTickets && !sharpTickets) return null;
+  const moneyRead = publicMoney && sharpMoney ? publicMoney.toLowerCase() === sharpMoney.toLowerCase() ? `Money agrees on ${publicMoney}` : `Money: Public ${publicMoney} · Sharp ${sharpMoney}` : `Money: ${publicMoney ? `Public ${publicMoney}` : `Sharp ${sharpMoney}`}`;
+  const ticketRead = publicTickets && sharpTickets ? publicTickets.toLowerCase() === sharpTickets.toLowerCase() ? `Tickets agree on ${publicTickets}` : `Tickets: Public ${publicTickets} · Sharp ${sharpTickets}` : `Tickets: ${publicTickets ? `Public ${publicTickets}` : `Sharp ${sharpTickets}`}`;
+  const historical = splitSectionIsStale(consensus) || splitSectionIsStale(sharp);
+  return <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border border-white/[0.07] bg-black/15 px-3 py-2"><span className="text-[7px] font-black uppercase tracking-[0.14em] text-gray-500">{historical ? "Historical cross-source read" : "Cross-source read"}</span><span className="text-[8px] font-bold text-gray-300">{moneyRead}</span><span className="hidden h-3 w-px bg-white/10 sm:block" /><span className="text-[8px] font-bold text-gray-400">{ticketRead}</span></div>;
+}
+
+function splitSourcesConflict(consensus: MarketSplitDisplaySection | null, sharp: MarketSplitDisplaySection | null): boolean {
+  const consensusLeader = splitSectionSignal(consensus).direction;
+  const sharpLeader = splitSectionSignal(sharp).direction;
+  return consensusLeader !== null && sharpLeader !== null && consensusLeader.toLowerCase() !== sharpLeader.toLowerCase();
+}
+
+function splitSectionIsStale(section: MarketSplitDisplaySection | null): boolean {
+  if (!section) return false;
+  if (section.rows.some((row) => row.isStale === true)) return true;
+  const latest = section.lastUpdated ?? section.rows.map((row) => row.observedAt).filter((value): value is string => Boolean(value)).sort((a, b) => Date.parse(b) - Date.parse(a))[0] ?? null;
+  if (!latest) return false;
+  const observedAtMs = Date.parse(latest);
+  return Number.isFinite(observedAtMs) && Date.now() - observedAtMs > 75 * 60 * 1000;
+}
+
+function splitLeader(section: MarketSplitDisplaySection | null, valueKey: "moneyPct" | "betsPct"): string | null {
+  if (!section) return null;
+  return section.rows.filter((row) => row[valueKey] !== null).sort((a, b) => (b[valueKey] ?? 0) - (a[valueKey] ?? 0))[0]?.label ?? null;
+}
+
+function RelevantTrend({ game, market, marketKey, sport, history, sample, setSample }: { game: DailyEdgeGameDto; market: MarketEdgeDto; marketKey: MarketKey; sport: Sport; history: PreviewHistoryByTeam; sample: 5 | 10; setSample: (sample: 5 | 10) => void }) {
+  const away = (history[game.awayTeam] ?? []).slice(0, sample).reverse();
+  const home = (history[game.homeTeam] ?? []).slice(0, sample).reverse();
+  const footballSpread = marketKey === "first_inning" && (sport === "nfl" || sport === "cfb");
+  const rows = mergeHistory(away, home, marketKey, sport);
+  const threshold = marketKey === "total" ? market.line : footballSpread ? 0 : marketKey === "first_inning" ? 0.5 : null;
+  const title = marketKey === "moneyline" ? "Recent game results" : marketKey === "total" ? "Recent game totals" : footballSpread ? "Recent scoring margins" : "Recent first-inning scoring";
+  const interpretation = recentTrendInterpretation(away, home, marketKey, market, game.awayTeam, game.homeTeam, sport);
+  return (
+    <div>
+      <div className="flex flex-wrap items-center justify-between gap-3"><div><p className="text-[8px] font-black uppercase tracking-[0.16em] text-sky-200">Relevant trends</p><p className="mt-1 text-xs font-black text-gray-300">{title}</p><p className="mt-1 text-[8px] text-gray-600">Past results are context—not standalone proof of today&rsquo;s edge.</p></div><div className="inline-flex rounded-lg border border-gray-800 bg-black/25 p-1">{([5, 10] as const).map((value) => <button key={value} type="button" onClick={() => setSample(value)} className={`rounded-md px-3 py-1.5 text-[8px] font-black ${sample === value ? "bg-violet-500/20 text-violet-200" : "text-gray-600"}`}>L{value}</button>)}</div></div>
+      <section className="mt-4 rounded-xl border border-sky-400/15 bg-sky-400/[0.035] p-4"><p className="text-[8px] font-black uppercase tracking-[0.15em] text-sky-200">What the recent sample says</p><p className="mt-2 text-[11px] leading-relaxed text-gray-300">{interpretation}</p></section>
+      {rows.length > 0 ? <MarketSpecificTrend rows={rows} threshold={threshold} away={game.awayTeam} home={game.homeTeam} marketKey={marketKey} pick={market.pick} sport={sport} /> : <p className="mt-4 rounded-lg border border-gray-800 bg-black/20 p-4 text-[10px] text-gray-600">Completed-game history is unavailable for one or both teams.</p>}
+    </div>
+  );
+}
+
+type MergedHistoryPoint = { away: number; home: number; awayOutcome?: "W" | "D" | "L"; homeOutcome?: "W" | "D" | "L" };
+
+function MarketSpecificTrend({ rows, threshold, away, home, marketKey, pick, sport }: { rows: MergedHistoryPoint[]; threshold: number | null; away: string; home: string; marketKey: MarketKey; pick: string | null; sport: Sport }) {
+  if (marketKey === "moneyline") return <BinaryResultRows rows={rows} away={away} home={home} mode="moneyline" pick={pick} />;
+  if (marketKey === "first_inning" && (sport === "nfl" || sport === "cfb")) return <MarginResultRows rows={rows} away={away} home={home} />;
+  if (marketKey === "first_inning") return <BinaryResultRows rows={rows} away={away} home={home} mode="first_inning" pick={pick} />;
+  return <TotalResultRows rows={rows} line={threshold} away={away} home={home} />;
+}
+
+function MarginResultRows({ rows, away, home }: { rows: MergedHistoryPoint[]; away: string; home: string }) {
+  const renderRow = (team: string, key: "away" | "home") => <div className="grid grid-cols-[42px_1fr_auto] items-center gap-2"><span className="text-[9px] font-black text-gray-300">{team}</span><div className="flex gap-1">{rows.map((row, index) => { const margin = row[key]; return <span key={index} title={`${team}: ${margin > 0 ? "+" : ""}${margin} scoring margin`} className={`flex h-9 min-w-7 flex-1 flex-col items-center justify-center rounded border ${margin > 0 ? "border-emerald-300/30 bg-emerald-400/20 text-emerald-200" : margin < 0 ? "border-rose-300/25 bg-rose-500/15 text-rose-200" : "border-gray-600 bg-gray-700/50 text-gray-300"}`}><strong className="text-[8px] leading-none">{margin > 0 ? "W" : margin < 0 ? "L" : "T"}</strong><span className="mt-1 font-mono text-[7px] leading-none opacity-80">{margin > 0 ? "+" : ""}{margin}</span></span>; })}</div><span className="w-14 text-right text-[8px] font-black text-gray-500">{rows.filter((row) => row[key] > 0).length}-{rows.filter((row) => row[key] < 0).length}</span></div>;
+  return <div className="mt-4 space-y-2">{renderRow(away, "away")}{renderRow(home, "home")}<p className="text-right text-[8px] text-gray-600">Oldest → newest · completed-game scoring margin</p></div>;
+}
+
+function BinaryResultRows({ rows, away, home, mode, pick }: { rows: MergedHistoryPoint[]; away: string; home: string; mode: "moneyline" | "first_inning"; pick: string | null }) {
+  const supportsYrfi = mode === "first_inning" && /yrfi/i.test(pick ?? "");
+  const supportsNrfi = mode === "first_inning" && /nrfi/i.test(pick ?? "");
+  const hasDirectionalFiPick = supportsYrfi || supportsNrfi;
+  const supportsRead = (value: number) => mode === "moneyline" ? value > 0 : supportsNrfi ? value === 0 : value > 0;
+  const renderRow = (team: string, key: "away" | "home") => {
+    const hits = rows.filter((row) => supportsRead(row[key])).length;
+    const outcomeKey = key === "away" ? "awayOutcome" : "homeOutcome";
+    const wins = rows.filter((row) => row[outcomeKey] === "W").length;
+    const draws = rows.filter((row) => row[outcomeKey] === "D").length;
+    const losses = rows.filter((row) => row[outcomeKey] === "L").length;
+    return <div className="grid grid-cols-[42px_1fr_auto] items-center gap-2"><span className="text-[9px] font-black text-gray-400">{team}</span><div className="flex gap-1">{rows.map((row, index) => { const hit = supportsRead(row[key]); const rawRun = row[key] > 0; const outcome = row[outcomeKey]; const soccerStyle = outcome === "W" ? "border-emerald-300/30 bg-emerald-400/20 text-emerald-200" : outcome === "D" ? "border-amber-300/30 bg-amber-400/15 text-amber-200" : "border-rose-300/25 bg-rose-500/15 text-rose-200"; const directionalStyle = hit ? "border-emerald-300/30 bg-emerald-400/20 text-emerald-200" : "border-rose-300/25 bg-rose-500/15 text-rose-200"; const neutralStyle = rawRun ? "border-sky-300/30 bg-sky-400/20 text-sky-200" : "border-gray-500/30 bg-gray-600/20 text-gray-300"; return <span key={index} title={`${team}: ${mode === "moneyline" ? outcome === "W" ? "win" : outcome === "D" ? "draw" : "loss" : rawRun ? "1+ run in first" : "scoreless first"}${hasDirectionalFiPick ? ` · ${hit ? "supports" : "challenges"} ${pick}` : ""}`} className={`flex h-7 min-w-6 flex-1 items-center justify-center rounded border text-[8px] font-black ${mode === "moneyline" ? soccerStyle : mode === "first_inning" && !hasDirectionalFiPick ? neutralStyle : directionalStyle}`}>{mode === "moneyline" ? outcome ?? "—" : rawRun ? "1+" : "0"}</span>; })}</div><span className="w-14 text-right text-[8px] font-black text-gray-400">{mode === "moneyline" ? `${wins}-${draws}-${losses}` : `${hits}/${rows.length}`}</span></div>;
+  };
+  const legend = mode === "moneyline"
+    ? "green = win · amber = draw · red = loss · record shown W-D-L"
+    : hasDirectionalFiPick
+      ? `green = supports ${pick} · red = challenges ${pick}`
+      : "blue = 1+ run · gray = scoreless first";
+  return <div className="mt-4 space-y-2">{renderRow(away, "away")}{renderRow(home, "home")}<p className="text-right text-[8px] text-gray-600">Oldest → newest · {legend}</p></div>;
+}
+
+function TotalResultRows({ rows, line, away, home }: { rows: MergedHistoryPoint[]; line: number | null; away: string; home: string }) {
+  const renderRow = (team: string, key: "away" | "home") => {
+    const overs = line === null ? 0 : rows.filter((row) => row[key] > line).length;
+    const unders = line === null ? 0 : rows.filter((row) => row[key] < line).length;
+    const pushes = line === null ? 0 : rows.length - overs - unders;
+    return <div className="grid grid-cols-[42px_1fr_auto] items-center gap-2"><span className="text-[9px] font-black text-gray-300">{team}</span><div className="flex gap-1">{rows.map((row, index) => { const value = row[key]; const result = line === null ? "—" : value > line ? "O" : value < line ? "U" : "P"; const style = result === "O" ? "border-violet-400/35 bg-violet-400/15 text-violet-200" : result === "U" ? "border-sky-400/35 bg-sky-400/15 text-sky-200" : "border-gray-600 bg-gray-700/50 text-gray-300"; return <span key={index} title={`${team}: ${value} total runs`} className={`${index < rows.length - 5 ? "hidden sm:flex" : "flex"} h-9 min-w-7 flex-1 flex-col items-center justify-center rounded border ${style}`}><strong className="text-[8px] leading-none">{result}</strong><span className="mt-1 font-mono text-[7px] leading-none opacity-80">{value}</span></span>; })}</div><span className="w-14 text-right text-[8px] font-black text-gray-500">{line === null ? "No line" : `${overs}O · ${unders}U${pushes ? ` · ${pushes}P` : ""}`}</span></div>;
+  };
+  return <div className="mt-4 space-y-2">{renderRow(away, "away")}{renderRow(home, "home")}<p className="text-right text-[8px] text-gray-600">Oldest → newest · O/U compares each completed-game total with today&rsquo;s {line ?? "unavailable"} line</p></div>;
+}
+
+type HistoryComparison = {
+  label: string;
+  awayValue: number;
+  homeValue: number;
+  awayDisplay: string;
+  homeDisplay: string;
+  kind: "rate" | "record" | "average";
+  context?: string;
+  advantage?: "higher" | "lower";
+  supportLabel?: string;
+  selectedSide?: "away" | "home" | null;
+  awaySampleSize?: number;
+  homeSampleSize?: number;
+  awayOutcomes?: Array<boolean | "draw">;
+  homeOutcomes?: Array<boolean | "draw">;
+};
+
+function HistoryStatSummary({ game, market, marketKey, history, sample, sport, wide = false }: { game: DailyEdgeGameDto; market: MarketEdgeDto; marketKey: MarketKey; history: PreviewHistoryByTeam; sample: 5 | 10; sport: Sport; wide?: boolean }) {
+  const away = (history[game.awayTeam] ?? []).slice(0, sample);
+  const home = (history[game.homeTeam] ?? []).slice(0, sample);
+  if (away.length === 0 || home.length === 0) {
+    const competition = sport === "soccer" ? "EPL matches" : sport === "nfl" || sport === "cfb" ? "football games" : "games";
+    return <div className="mt-4 rounded-xl border border-amber-400/15 bg-amber-400/[0.035] p-4"><div className="flex items-center justify-between gap-2"><p className="text-[9px] font-black uppercase tracking-[0.15em] text-amber-200">Recent team context</p><span className="text-[8px] font-semibold text-gray-500">Comparable completed games only</span></div><div className="mt-3 grid gap-2 sm:grid-cols-2"><InfoCard label={game.awayTeam} value={away.length ? `${away.length} completed ${competition}` : "No prior sample"} /><InfoCard label={game.homeTeam} value={home.length ? `${home.length} completed ${competition}` : "No prior sample"} /></div><p className="mt-3 text-[9px] leading-relaxed text-gray-500">The comparison is withheld when either team lacks a comparable completed-game sample. Results from a different competition or level are not silently mixed into the reader.</p></div>;
+  }
+  const average = (rows: PreviewHistoryPoint[], select: (row: PreviewHistoryPoint) => number) => rows.reduce((sum, row) => sum + select(row), 0) / rows.length;
+  const rate = (rows: PreviewHistoryPoint[], test: (row: PreviewHistoryPoint) => boolean) => (rows.filter(test).length / rows.length) * 100;
+  const scoringNoun = sport === "soccer" || sport === "nhl" ? "goals" : sport === "nba" || sport === "wnba" || sport === "nfl" || sport === "cfb" || sport === "cbb" ? "points" : "runs";
+  const normalizedPick = market.pick?.toLowerCase() ?? "";
+  const selectedSide = sideMatchesPick(game.awayTeam, market.pick) ? "away" as const : sideMatchesPick(game.homeTeam, market.pick) ? "home" as const : null;
+  let comparisons: HistoryComparison[];
+  if (marketKey === "moneyline") {
+    const awayWins = away.filter((row) => row.won).length;
+    const homeWins = home.filter((row) => row.won).length;
+    const awayDraws = sport === "soccer" ? away.filter((row) => row.drawn).length : 0;
+    const homeDraws = sport === "soccer" ? home.filter((row) => row.drawn).length : 0;
+    comparisons = [
+      { label: `Recent record · L${sample}`, awayValue: rate(away, (row) => row.won), homeValue: rate(home, (row) => row.won), awayDisplay: sport === "soccer" ? `${awayWins}-${awayDraws}-${away.length - awayWins - awayDraws}` : `${awayWins}-${away.length - awayWins}`, homeDisplay: sport === "soccer" ? `${homeWins}-${homeDraws}-${home.length - homeWins - homeDraws}` : `${homeWins}-${home.length - homeWins}`, kind: "record", context: sport === "soccer" ? "Completed-game W-D-L" : "Completed-game wins and losses", advantage: "higher", supportLabel: `Supports ${market.pick ?? "moneyline read"}`, selectedSide, awaySampleSize: away.length, homeSampleSize: home.length, awayOutcomes: [...away].reverse().map((row) => sport === "soccer" && row.drawn ? "draw" : row.won), homeOutcomes: [...home].reverse().map((row) => sport === "soccer" && row.drawn ? "draw" : row.won) },
+      { label: `Avg ${scoringNoun} scored`, awayValue: average(away, (row) => row.runsFor), homeValue: average(home, (row) => row.runsFor), awayDisplay: average(away, (row) => row.runsFor).toFixed(1), homeDisplay: average(home, (row) => row.runsFor).toFixed(1), kind: "average", advantage: "higher", supportLabel: `Supports ${market.pick ?? "moneyline read"}`, selectedSide },
+      { label: `Avg ${scoringNoun} allowed`, awayValue: average(away, (row) => row.runsAgainst), homeValue: average(home, (row) => row.runsAgainst), awayDisplay: average(away, (row) => row.runsAgainst).toFixed(1), homeDisplay: average(home, (row) => row.runsAgainst).toFixed(1), kind: "average", context: "Lower is better defensively", advantage: "lower", supportLabel: `Supports ${market.pick ?? "moneyline read"}`, selectedSide },
+    ];
+  } else if (marketKey === "total") {
+    const line = market.line;
+    const totalSupportsOver = normalizedPick.includes("over");
+    const totalSupportsUnder = normalizedPick.includes("under");
+    const totalDirection = totalSupportsOver ? "higher" as const : totalSupportsUnder ? "lower" as const : undefined;
+    const totalTest = (row: PreviewHistoryPoint) => totalSupportsUnder ? row.totalRuns < (line ?? 8.5) : row.totalRuns > (line ?? 8.5);
+    const totalLabel = totalSupportsUnder ? `Games below ${line ?? 8.5}` : `Games above ${line ?? 8.5}`;
+    comparisons = [
+      { label: `Avg game total · L${sample}`, awayValue: average(away, (row) => row.totalRuns), homeValue: average(home, (row) => row.totalRuns), awayDisplay: average(away, (row) => row.totalRuns).toFixed(1), homeDisplay: average(home, (row) => row.totalRuns).toFixed(1), kind: "average", advantage: totalDirection, supportLabel: totalDirection ? `More supportive of ${market.pick}` : undefined },
+      { label: totalLabel, awayValue: rate(away, totalTest), homeValue: rate(home, totalTest), awayDisplay: `${rate(away, totalTest).toFixed(0)}%`, homeDisplay: `${rate(home, totalTest).toFixed(0)}%`, kind: "rate", context: `Green = game supported ${market.pick ?? "today's total read"} · oldest → newest`, advantage: "higher", supportLabel: totalDirection ? `More supportive of ${market.pick}` : undefined, awaySampleSize: away.length, homeSampleSize: home.length, awayOutcomes: [...away].reverse().map(totalTest), homeOutcomes: [...home].reverse().map(totalTest) },
+      { label: `Avg ${scoringNoun} scored`, awayValue: average(away, (row) => row.runsFor), homeValue: average(home, (row) => row.runsFor), awayDisplay: average(away, (row) => row.runsFor).toFixed(1), homeDisplay: average(home, (row) => row.runsFor).toFixed(1), kind: "average", advantage: totalDirection, supportLabel: totalDirection ? `More supportive of ${market.pick}` : undefined },
+    ];
+  } else if (sport === "nfl" || sport === "cfb") {
+    const margin = (row: PreviewHistoryPoint) => row.runsFor - row.runsAgainst;
+    comparisons = [
+      { label: `Avg scoring margin · L${sample}`, awayValue: average(away, margin), homeValue: average(home, margin), awayDisplay: `${average(away, margin) >= 0 ? "+" : ""}${average(away, margin).toFixed(1)}`, homeDisplay: `${average(home, margin) >= 0 ? "+" : ""}${average(home, margin).toFixed(1)}`, kind: "average", context: "Completed-game point differential", advantage: "higher", supportLabel: `Supports ${market.pick ?? "spread read"}`, selectedSide },
+      { label: `Avg ${scoringNoun} scored`, awayValue: average(away, (row) => row.runsFor), homeValue: average(home, (row) => row.runsFor), awayDisplay: average(away, (row) => row.runsFor).toFixed(1), homeDisplay: average(home, (row) => row.runsFor).toFixed(1), kind: "average", advantage: "higher", supportLabel: `Supports ${market.pick ?? "spread read"}`, selectedSide },
+      { label: `Avg ${scoringNoun} allowed`, awayValue: average(away, (row) => row.runsAgainst), homeValue: average(home, (row) => row.runsAgainst), awayDisplay: average(away, (row) => row.runsAgainst).toFixed(1), homeDisplay: average(home, (row) => row.runsAgainst).toFixed(1), kind: "average", context: "Lower is better defensively", advantage: "lower", supportLabel: `Supports ${market.pick ?? "spread read"}`, selectedSide },
+    ];
+  } else {
+    const awayFirst = away.filter((row) => row.firstInningRuns !== null);
+    const homeFirst = home.filter((row) => row.firstInningRuns !== null);
+    if (awayFirst.length === 0 || homeFirst.length === 0) return null;
+    const supportsYrfi = normalizedPick.includes("yrfi");
+    const supportsNrfi = normalizedPick.includes("nrfi");
+    const fiTest = (row: PreviewHistoryPoint) => supportsYrfi ? (row.firstInningRuns ?? 0) > 0 : row.firstInningRuns === 0;
+    const fiDirection = supportsYrfi ? "higher" as const : supportsNrfi ? "lower" as const : undefined;
+    comparisons = [
+      { label: supportsYrfi ? `First inning with 1+ run · L${sample}` : `Scoreless first · L${sample}`, awayValue: rate(awayFirst, fiTest), homeValue: rate(homeFirst, fiTest), awayDisplay: `${rate(awayFirst, fiTest).toFixed(0)}%`, homeDisplay: `${rate(homeFirst, fiTest).toFixed(0)}%`, kind: "rate", context: `${supportsYrfi || supportsNrfi ? `Green = game supported ${market.pick}` : "Result context"} · oldest → newest`, advantage: "higher", supportLabel: supportsYrfi || supportsNrfi ? `More supportive of ${market.pick}` : undefined, awaySampleSize: awayFirst.length, homeSampleSize: homeFirst.length, awayOutcomes: [...awayFirst].reverse().map(fiTest), homeOutcomes: [...homeFirst].reverse().map(fiTest) },
+      { label: "Avg first-inning runs", awayValue: average(awayFirst, (row) => row.firstInningRuns ?? 0), homeValue: average(homeFirst, (row) => row.firstInningRuns ?? 0), awayDisplay: average(awayFirst, (row) => row.firstInningRuns ?? 0).toFixed(1), homeDisplay: average(homeFirst, (row) => row.firstInningRuns ?? 0).toFixed(1), kind: "average", context: "Combined opening-frame scoring", advantage: fiDirection, supportLabel: fiDirection ? `More supportive of ${market.pick}` : undefined },
+    ];
+  }
+  if (!wide && (sport === "nfl" || sport === "cfb")) {
+    return <FootballRecentSummary game={game} market={market} marketKey={marketKey} sample={sample} comparisons={comparisons} />;
+  }
+  return <div className="mt-4 rounded-xl border border-white/[0.10] bg-black/20 p-4"><div className="flex items-center justify-between gap-2"><p className="text-[9px] font-black uppercase tracking-[0.15em] text-gray-200">Recent team context</p><span className="text-[8px] font-semibold text-gray-500">Actual completed games</span></div><div className={wide ? "mt-4 grid gap-4 xl:grid-cols-3" : "mt-4 space-y-4"}>{comparisons.map((comparison) => <StatComparison key={comparison.label} comparison={comparison} away={game.awayTeam} home={game.homeTeam} />)}</div></div>;
+}
+
+function FootballRecentSummary({ game, market, marketKey, sample, comparisons }: { game: DailyEdgeGameDto; market: MarketEdgeDto; marketKey: MarketKey; sample: 5 | 10; comparisons: HistoryComparison[] }) {
+  const pick = displayPick(market, marketKey);
+  const cell = (side: "away" | "home", display: string, signal: ReturnType<typeof comparisonSignal>) => {
+    const supports = signal.support === side;
+    const challenges = signal.risk === side;
+    return <span className={`rounded-md border px-2 py-1.5 text-center font-mono text-[10px] font-black ${supports ? "border-emerald-400/25 bg-emerald-400/[0.07] text-emerald-200" : challenges ? "border-amber-400/25 bg-amber-400/[0.06] text-amber-200" : "border-white/[0.06] bg-black/20 text-gray-200"}`}>{display}</span>;
+  };
+  return <div className="mt-4 rounded-xl border border-white/[0.10] bg-black/20 p-4"><div className="flex items-start justify-between gap-2"><div><p className="text-[9px] font-black uppercase tracking-[0.15em] text-gray-200">Recent team context</p><p className="mt-1 text-[7px] text-gray-600">Supporting context for {pick}</p></div><span className="shrink-0 text-[8px] font-semibold text-gray-500">Actual L{sample}</span></div><div className="mt-3 overflow-hidden rounded-lg border border-white/[0.07]"><div className="grid grid-cols-[minmax(0,1.25fr)_minmax(54px,0.65fr)_minmax(54px,0.65fr)] gap-1.5 border-b border-white/[0.06] bg-white/[0.025] px-2.5 py-2 text-[7px] font-black uppercase tracking-wider text-gray-600"><span>Recent metric</span><span className="text-center">{game.awayTeam}</span><span className="text-center">{game.homeTeam}</span></div>{comparisons.map((comparison) => { const signal = comparisonSignal(comparison); return <div key={comparison.label} className="grid grid-cols-[minmax(0,1.25fr)_minmax(54px,0.65fr)_minmax(54px,0.65fr)] items-center gap-1.5 border-t border-white/[0.06] px-2.5 py-2 first:border-t-0"><span className="min-w-0 text-[8px] font-bold leading-tight text-gray-400">{comparison.label.replace(` · L${sample}`, "")}</span>{cell("away", comparison.awayDisplay, signal)}{cell("home", comparison.homeDisplay, signal)}</div>; })}</div><p className="mt-2 text-[7px] leading-relaxed text-gray-600">Green highlights the recent comparison that supports {pick}; amber flags a conflicting comparison.</p><details className="group mt-2 rounded-lg border border-white/[0.07] bg-white/[0.02]"><summary className="flex cursor-pointer list-none items-center justify-between px-3 py-2 text-[7px] font-black uppercase tracking-wider text-gray-500"><span>View game-by-game context</span><span className="transition group-open:rotate-180">⌄</span></summary><div className="space-y-4 border-t border-white/[0.06] p-3">{comparisons.map((comparison) => <StatComparison key={comparison.label} comparison={comparison} away={game.awayTeam} home={game.homeTeam} />)}</div></details></div>;
+}
+
+function StatComparison({ comparison, away, home }: { comparison: HistoryComparison; away: string; home: string }) {
+  if (comparison.kind === "rate") return <RateComparison comparison={comparison} away={away} home={home} />;
+  if (comparison.kind === "record") return <RecordComparison comparison={comparison} away={away} home={home} />;
+  return <AverageComparison comparison={comparison} away={away} home={home} />;
+}
+
+function comparisonSignal(comparison: HistoryComparison): { support: "away" | "home" | null; risk: "away" | "home" | null; label: string | null } {
+  if (!comparison.advantage || !comparison.supportLabel) return { support: null, risk: null, label: null };
+  const difference = comparison.awayValue - comparison.homeValue;
+  if (Math.abs(difference) < 0.05) return { support: null, risk: null, label: "Even" };
+  const directionalSide = comparison.advantage === "higher"
+    ? difference > 0 ? "away" : "home"
+    : difference < 0 ? "away" : "home";
+  if (!comparison.selectedSide) return { support: directionalSide, risk: null, label: comparison.supportLabel };
+  if (directionalSide === comparison.selectedSide) return { support: directionalSide, risk: null, label: comparison.supportLabel };
+  return { support: null, risk: directionalSide, label: `Challenges ${comparison.supportLabel.replace(/^Supports\s+/i, "")}` };
+}
+
+function RecordComparison({ comparison, away, home }: { comparison: HistoryComparison; away: string; home: string }) {
+  const signal = comparisonSignal(comparison);
+  const side = (team: string, display: string, value: number, opponentValue: number, outcomes: Array<boolean | "draw"> | undefined) => {
+    const sideKey = team === away ? "away" : "home";
+    const supportive = signal.support === sideKey;
+    const challenging = signal.risk === sideKey;
+    return <div className={`min-w-0 rounded-xl border p-3 ${supportive ? "border-emerald-400/25 bg-emerald-400/[0.055]" : challenging ? "border-amber-400/25 bg-amber-400/[0.045]" : "border-white/[0.08] bg-white/[0.025]"}`}><div className="flex items-start justify-between gap-2"><div className="min-w-0"><div className="flex flex-wrap items-center gap-1.5"><i className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: teamAccent(team) }} /><span className="text-[10px] font-black text-gray-200">{team}</span>{supportive || challenging ? <span className={`rounded-full border px-1.5 py-0.5 text-[7px] font-black uppercase tracking-wider ${supportive ? "border-emerald-400/20 bg-emerald-400/[0.08] text-emerald-200" : "border-amber-400/20 bg-amber-400/[0.08] text-amber-200"}`}>{signal.label}</span> : null}</div><p className="mt-1 text-[8px] text-gray-500">{value.toFixed(0)}% of completed games</p></div><strong className="shrink-0 whitespace-nowrap font-mono text-base font-black text-white">{display}</strong></div><div className="mt-3"><SampleTally outcomes={outcomes ?? []} color={teamAccent(team)} hitLabel="Win" missLabel="Loss" /></div></div>;
   };
   return <section><ComparisonHeading comparison={comparison} /><div className="grid gap-2 sm:grid-cols-2">{side(away, comparison.awayDisplay, comparison.awayValue, comparison.homeValue, comparison.awayOutcomes)}{side(home, comparison.homeDisplay, comparison.homeValue, comparison.awayValue, comparison.homeOutcomes)}</div><p className="mt-1.5 text-right text-[7px] font-semibold text-gray-600">Oldest → newest · green = win · amber = draw · red = loss · W-D-L</p></section>;
 }
