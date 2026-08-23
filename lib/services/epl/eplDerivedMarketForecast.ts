@@ -7,7 +7,7 @@ import { deriveSoccerMarketProbabilities } from "@/lib/services/soccer/soccerMar
 
 export const EPL_TOTAL_CLUB_WEIGHT = 0.25;
 export const EPL_GOAL_PROJECTION_CLUB_WEIGHT = 0.3;
-export const EPL_MATCH_RESULT_SCORE_READER_RELEASE = "epl_match_result_locked_score_reconstruction_2026_08_23_r1" as const;
+export const EPL_MATCH_RESULT_SCORE_READER_RELEASE = "epl_match_result_exact_locked_score_2026_08_23_r2" as const;
 
 export function calibratedEplTotalOverProbability(clubOver: number, marketOver: number | null): number {
   if (marketOver === null || !Number.isFinite(marketOver)) return clubOver;
@@ -81,6 +81,34 @@ export type EplMatchResultScoreOutlook = {
   mostLikelyTotal: number;
   fitLoss: number;
 };
+
+export function exactLockedEplScoreOutlook(input: {
+  locked: boolean;
+  expectedGoals: { home: number; away: number } | null;
+  likelyScore: { home: number; away: number } | null;
+  likelyScoreProbability: number | null;
+  medianTotal: number | null;
+  mostLikelyTotal: number | null;
+}): Omit<EplMatchResultScoreOutlook, "fitLoss"> | null {
+  if (!input.locked || !input.expectedGoals || !input.likelyScore) return null;
+  const numbers = [
+    input.expectedGoals.home,
+    input.expectedGoals.away,
+    input.likelyScore.home,
+    input.likelyScore.away,
+    input.likelyScoreProbability,
+    input.medianTotal,
+    input.mostLikelyTotal,
+  ];
+  if (numbers.some((value) => value === null || !Number.isFinite(value))) return null;
+  return {
+    expectedGoals: { ...input.expectedGoals },
+    likelyScore: { ...input.likelyScore },
+    likelyScoreProbability: input.likelyScoreProbability!,
+    medianTotal: input.medianTotal!,
+    mostLikelyTotal: input.mostLikelyTotal!,
+  };
+}
 
 const matchResultScoreCache = new Map<string, EplMatchResultScoreOutlook | null>();
 

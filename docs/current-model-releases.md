@@ -29,7 +29,7 @@ Last reviewed: 2026-08-23
 - Runtime/model release: `epl_goals_coherent_2026_08_20_r16`
 - Probability core: r8 Match Result; r11 market-derived Total and BTTS heads; r12 validation-selected coherent published goal projection; r15 independently timestamped all-book line verification; r16 member-snapshot lock enforcement
 - Display-grade / calibration release: `epl_grade_policy_2026_08_20_v21`
-- Match Result locked-score reader release: `epl_match_result_locked_score_reconstruction_2026_08_23_r1`
+- Match Result locked-score reader release: `epl_match_result_exact_locked_score_2026_08_23_r2`
 - Member reader lifecycle: `daily_edge_weekly_reader_lifecycle_2026_08_21_r1`
 - Runtime constants: `lib/services/epl/eplShadowModel.ts`
 - Provider boundary: BALLDONTLIE supplies fixtures/history/stats, a complete current three-way moneyline fallback, and its distinct opening endpoint. `lib/providers/real_api/SharpApiEplMarketProvider.ts` remains primary for per-book Match Result, Double Chance, Total, and BTTS prices and makes one cached league-level splits request. A live Playbook probe proved EPL is unsupported: EPL aliases silently returned NFL rows, so Playbook is not allowed into EPL odds or splits.
@@ -48,17 +48,19 @@ Last reviewed: 2026-08-23
 - Reader: local founder preview at `/dev/premier-league-preview`; the production Daily Edge branch is already wired to the stored snapshot behind `PREMIER_LEAGUE_DAILY_EDGE_ENABLED`.
 - Rollback: disable the seven EPL gates. World Cup records and readers remain separate; no World Cup release or writer is replaced.
 
-The August 23 locked-score reader release retains r16/v21 probabilities, picks,
-prices, grades, stakes, locks, tracking, writers, and provider budgets. A locked
-snapshot created before the same-head `matchResultOutlook` DTO existed still
-contains the immutable Dixon-Coles home/draw/away probabilities. The reader now
-deterministically inverts those three probabilities back into the closest
-tau=-0.1 Dixon-Coles goal rates, requires a squared probability-fit loss below
-0.00005, and displays that recovered Match Result score head. It fails closed
-when the stored probabilities cannot be reproduced. It never substitutes the
-separate market-informed Total/BTTS goal outlook and never mutates the locked
-snapshot. Board impact is zero promotions, zero demotions, and no decision or
-tracking change. Rollback is the fail-closed reader in PR #191.
+The August 23 r2 locked-score reader release retains r16/v21 probabilities,
+picks, prices, grades, stakes, locks, tracking, writers, and provider budgets.
+It corrects r1's reader-priority mistake: a legacy locked member snapshot can
+contain the exact score projection members saw at T-60 even though it predates
+the later `matchResultOutlook` field. r2 now prefers that immutable stored score
+before any mathematical reconstruction. For BOU@MNC, the lock captured at
+2026-08-23T12:03:35.791Z stores BOU 1.0419136028 / MNC 2.3228599219 and likely
+score 1-2; the reader must display those values rather than the r1 reconstruction
+BOU 1.145 / MNC 2.50. A probability reconstruction remains only a final fallback
+when both the same-head field and locked score are genuinely absent. New locks
+already persist `matchResultOutlook` directly. The locked snapshot is never
+mutated. Board impact is zero promotions, zero demotions, and no decision or
+tracking change. Rollback is r1 in PR #192.
 
 r8 keeps the strongest transferable World Cup architecture—one coherent Dixon–Coles score distribution, three-way result semantics, forecast/value separation, immutable lock evidence, and shared soccer settlement—without importing national-team Elo, neutral-site rules, tournament coefficients, or the rejected World Cup market blend. Match Result, score lambdas, and r4 probabilities are unchanged. Total and BTTS use calibration-selected, sign-preserving shrinkage toward 50%: 60% raw-model weight for Over 2.5 and 65% for BTTS Yes. The previous league-rate anchor could flip a marginal Under/No score-distribution forecast into Over/Yes merely because the league base rate exceeded 50%. On the untouched final quarter, neutral-shrunk Over Brier/log loss was 0.24788/0.68883 versus raw 0.24917/0.69131 and the 0.24256/0.67820 constant baseline. Neutral-shrunk BTTS was 0.24739/0.68785 versus raw 0.24833/0.68969 and the 0.24690/0.68694 constant baseline. Both remain below the betting-quality gate; the change improves forecast coherence, not actionability. r8 retains r6's World Cup-style distribution explanation and r7's provider-timestamp trail integrity for home/draw/away, Over/Under, and BTTS Yes/No. The separate soccer-only “Complete price board” is removed; all outcomes now render inside the same OddSphere Market Pulse → Odds movement timeline used by MLB and WNBA, with the graded outcome highlighted and other outcomes retained as context.
 
