@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { EPL_SHADOW_MODEL_RELEASE, fitEplShadowModel, predictEplMatch, type EplTrainingMatch } from "../lib/services/epl/eplShadowModel";
 import { bdlMoneylineRead, canonicalEplLineHistoryTimestamp, compactEplStoredPriceHistory, earliestEplMarketQuote, forecastAnchoredDoubleChanceSide, hydrateEplStoredPriceHistory, trackedPrice } from "../lib/services/epl/buildEplDailyEdgePreview";
 import { deriveEplMatchResultDecision, deriveEplPreviewGrade, EPL_PREVIEW_GRADE_RELEASE } from "../lib/services/epl/eplPreviewGrade";
-import { calibratedEplGoalProjection, calibratedEplTotalOverProbability, EPL_MATCH_RESULT_SCORE_READER_RELEASE, impliedEplBttsYesProbability, impliedEplGoalsMarketDistribution, impliedEplMatchResultScoreOutlook } from "../lib/services/epl/eplDerivedMarketForecast";
+import { calibratedEplGoalProjection, calibratedEplTotalOverProbability, EPL_MATCH_RESULT_SCORE_READER_RELEASE, exactLockedEplScoreOutlook, impliedEplBttsYesProbability, impliedEplGoalsMarketDistribution, impliedEplMatchResultScoreOutlook } from "../lib/services/epl/eplDerivedMarketForecast";
 import { eplTeamsMatch, normalizeEplSplits } from "../lib/providers/real_api/SharpApiEplMarketProvider";
 import { recentComparableEplMatches } from "../lib/services/epl/eplEvidence";
 import { eplSnapshotGamesNeedingLock, preserveLockedEplGames } from "../lib/services/epl/eplLockedSnapshot";
@@ -157,7 +157,18 @@ const publishedGoals = calibratedEplGoalProjection(1.8, 0.9, impliedGoals);
 assert.ok(publishedGoals.home > publishedGoals.away, "published goals must retain the fitted favorite direction");
 assert.ok(Math.abs(publishedGoals.home - (0.3 * 1.8 + 0.7 * impliedGoals.homeLambda)) < 1e-9, "published goals use the validation-selected 30/70 blend");
 const lockedManCityOutlook = impliedEplMatchResultScoreOutlook({ home: 0.661, draw: 0.19, away: 0.149 });
-assert.equal(EPL_MATCH_RESULT_SCORE_READER_RELEASE, "epl_match_result_locked_score_reconstruction_2026_08_23_r1");
+assert.equal(EPL_MATCH_RESULT_SCORE_READER_RELEASE, "epl_match_result_exact_locked_score_2026_08_23_r2");
+const exactManCityLock = exactLockedEplScoreOutlook({
+  locked: true,
+  expectedGoals: { away: 1.0419136028115643, home: 2.322859921925649 },
+  likelyScore: { away: 1, home: 2 },
+  likelyScoreProbability: 0.09723989573670938,
+  medianTotal: 3,
+  mostLikelyTotal: 3,
+});
+assert.deepEqual(exactManCityLock?.expectedGoals, { away: 1.0419136028115643, home: 2.322859921925649 }, "the exact Man City score stored at lock must remain byte-for-byte preferred");
+assert.deepEqual(exactManCityLock?.likelyScore, { away: 1, home: 2 });
+assert.equal(exactLockedEplScoreOutlook({ locked: false, expectedGoals: { away: 1.04, home: 2.32 }, likelyScore: { away: 1, home: 2 }, likelyScoreProbability: 0.1, medianTotal: 3, mostLikelyTotal: 3 }), null, "unlocked rows cannot enter the immutable legacy-lock path");
 assert.ok(lockedManCityOutlook !== null, "locked 1X2 probabilities must recover their own Dixon-Coles score head");
 assert.ok(lockedManCityOutlook.expectedGoals.home > lockedManCityOutlook.expectedGoals.away, "recovered Man City score head must agree with the locked home-win forecast");
 assert.ok(Math.abs(lockedManCityOutlook.expectedGoals.home - 2.5) < 0.02);
@@ -211,6 +222,7 @@ const responseShell = (games: DailyEdgeGameDto[]) => ({ games } as unknown as Da
 const lockSafe = preserveLockedEplGames(responseShell([lockedGame]), responseShell([refreshedGame])).games[0]!;
 assert.strictEqual(lockSafe.markets, lockedMarkets, "ordinary refresh cannot replace locked EPL markets or grades");
 assert.deepEqual(lockSafe.projected, lockedGame.projected, "ordinary refresh cannot replace the locked projection");
+assert.strictEqual(lockSafe.soccerProjection, lockedGame.soccerProjection, "ordinary refresh cannot reinterpret or replace the complete locked soccer projection payload");
 assert.equal(lockSafe.lockState, "locked");
 assert.equal(lockSafe.lockedAt, lockedGame.lockedAt);
 assert.equal(lockSafe.gameStartAt, refreshedGame.gameStartAt, "official fixture metadata may update after lock");
@@ -287,7 +299,10 @@ assert.match(previewReader, /Consensus and sharp-book split data are unavailable
 assert.match(previewReader, /Market-informed goal outlook/);
 assert.match(previewReader, /Context · separate heads/);
 assert.match(previewReader, /Same model · Match Result/);
-assert.match(previewReader, /Recovered from locked Match Result head/);
+assert.match(previewReader, /Recovered from Match Result head/);
+assert.match(previewReader, /projection\.matchResultOutlook\s*\?\?\s*lockedLegacyScoreOutlook\(game\)\s*\?\?/, "an immutable legacy lock score must win before a probability reconstruction");
+assert.match(previewReader, /Exact value stored at lock/);
+assert.match(previewReader, /This is the exact score projection stored in the immutable member snapshot at lock/);
 assert.match(previewReader, /Snapshot refreshing/);
 assert.match(previewReader, /conflicting goals context withheld/);
 assert.match(previewReader, /Dedicated Over\/Under probabilities/);

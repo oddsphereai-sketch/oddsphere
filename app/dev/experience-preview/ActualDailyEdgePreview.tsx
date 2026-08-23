@@ -37,7 +37,7 @@ import { firstInningSupportTone } from "@/app/lab/lib/firstInningPresentation";
 import { soccerForecastSemantics } from "@/app/lab/lib/soccerForecastSemantics";
 import { resolvePointLineMarketPulseMovement } from "@/app/lab/lib/dailyEdgeMarketPulseMovement";
 import type { NflWeekOneEvidenceBoard } from "@/lib/services/football/nflWeekOneEvidenceBoard";
-import { impliedEplMatchResultScoreOutlook } from "@/lib/services/epl/eplDerivedMarketForecast";
+import { exactLockedEplScoreOutlook, impliedEplMatchResultScoreOutlook } from "@/lib/services/epl/eplDerivedMarketForecast";
 
 type DeepView = "case" | "market" | "matchup" | "trend" | "model";
 
@@ -569,21 +569,44 @@ function MarketStrip({ game, sport, active, setActive }: { game: DailyEdgeGameDt
   );
 }
 
-function matchResultScoreOutlook(projection: NonNullable<DailyEdgeGameDto["soccerProjection"]>, market: MarketEdgeDto) {
-  return projection.matchResultOutlook ?? impliedEplMatchResultScoreOutlook(market.soccerMatchResultContext?.model ?? null);
+function lockedLegacyScoreOutlook(game: DailyEdgeGameDto) {
+  const projection = game.soccerProjection;
+  return exactLockedEplScoreOutlook({
+    locked: Boolean(projection && game.lockState === "locked" && game.lockedAt),
+    expectedGoals: projection ? { away: game.projected.away, home: game.projected.home } : null,
+    likelyScore: projection?.likelyScore ?? null,
+    likelyScoreProbability: projection?.likelyScoreProbability ?? null,
+    medianTotal: projection?.medianTotal ?? null,
+    mostLikelyTotal: projection?.mostLikelyTotal ?? null,
+  });
 }
 
-function soccerScoreContext(projection: NonNullable<DailyEdgeGameDto["soccerProjection"]>, marketKey: MarketKey, market: MarketEdgeDto) {
-  const resultOutlook = marketKey === "moneyline" ? matchResultScoreOutlook(projection, market) : null;
+function matchResultScoreOutlook(game: DailyEdgeGameDto, market: MarketEdgeDto) {
+  const projection = game.soccerProjection;
+  if (!projection) return null;
+  // A locked member snapshot is the public record. Older locked snapshots did
+  // not yet carry matchResultOutlook, but they still retain the exact score
+  // projection that members saw at lock. Prefer that immutable value before a
+  // mathematical reconstruction from the locked 1X2 probabilities.
+  return projection.matchResultOutlook
+    ?? lockedLegacyScoreOutlook(game)
+    ?? impliedEplMatchResultScoreOutlook(market.soccerMatchResultContext?.model ?? null);
+}
+
+function soccerScoreContext(game: DailyEdgeGameDto, marketKey: MarketKey, market: MarketEdgeDto) {
+  const projection = game.soccerProjection!;
+  const resultOutlook = marketKey === "moneyline" ? matchResultScoreOutlook(game, market) : null;
   if (resultOutlook) {
+    const exactLegacyLock = !projection.matchResultOutlook && Boolean(lockedLegacyScoreOutlook(game));
     return {
       expectedGoals: resultOutlook.expectedGoals,
       medianTotal: resultOutlook.medianTotal,
       mostLikelyTotal: resultOutlook.mostLikelyTotal,
       scenario: resultOutlook.likelyScore,
-      heading: "Match Result score outlook",
-      badge: projection.matchResultOutlook ? "Same model · Match Result" : "Recovered from locked Match Result head",
+      heading: exactLegacyLock ? "Locked score projection" : "Match Result score outlook",
+      badge: projection.matchResultOutlook ? "Same model · Match Result" : exactLegacyLock ? "Exact value stored at lock" : "Recovered from Match Result head",
       scenarioLabel: "most likely score",
+      exactLegacyLock,
     };
   }
   return {
@@ -594,6 +617,7 @@ function soccerScoreContext(projection: NonNullable<DailyEdgeGameDto["soccerProj
     heading: "Market-informed goal outlook",
     badge: "Context · separate heads",
     scenarioLabel: "illustrative scenario",
+    exactLegacyLock: false,
   };
 }
 
@@ -612,15 +636,15 @@ function QuickRead({ game, market, marketKey, sport }: { game: DailyEdgeGameDto;
   const fiProjectionValue = fiProjection?.homeValue ?? fiProjection?.awayValue ?? "Unavailable";
   const probabilityGap = displayedProbabilityGap(market);
   const soccerProjection = sport === "soccer" ? game.soccerProjection ?? null : null;
-  const matchResultScoreRefreshing = marketKey === "moneyline" && Boolean(soccerProjection && !matchResultScoreOutlook(soccerProjection, market));
-  const soccerScore = soccerProjection ? soccerScoreContext(soccerProjection, marketKey, market) : null;
+  const matchResultScoreRefreshing = marketKey === "moneyline" && Boolean(soccerProjection && !matchResultScoreOutlook(game, market));
+  const soccerScore = soccerProjection ? soccerScoreContext(game, marketKey, market) : null;
   const soccerSemantics = soccerProjection ? soccerForecastSemantics(game, market, marketKey) : null;
   return (
     <div className={sport === "soccer" ? "rounded-xl border border-emerald-400/15 bg-[#11131a] p-4 sm:p-5" : "h-full border-b border-white/[0.07] p-4 sm:p-5 lg:border-b-0 lg:border-r xl:p-6"}>
       <SectionHeading tone="emerald">{sport === "soccer" ? "Forecast" : "Quick Read"}</SectionHeading>
       <div className="mt-4 rounded-xl border border-white/[0.07] bg-white/[0.025] p-4">
         <QuickMatchupIdentity game={game} sport={sport} />
-        {projectionIsHeld(game) ? <div className="mt-4 rounded-lg border border-amber-300/20 bg-amber-400/[0.045] p-3"><div className="flex items-center justify-between gap-3"><div><p className="text-[8px] font-black uppercase tracking-[0.15em] text-amber-200">Projection held</p><p className="mt-1 text-sm font-black text-white">No score forecast is being published yet</p></div><span className="rounded-full border border-amber-300/20 px-2 py-1 text-[7px] font-black uppercase tracking-wider text-amber-200">Data health hold</span></div><p className="mt-2 text-[9px] leading-relaxed text-gray-500">The real Week 1 matchup and market are visible below. OddSphere will add the score projection only when the authoritative model writer supplies it; a 0–0 placeholder is never shown as a forecast.</p></div> : marketKey === "first_inning" && sport === "mlb" ? <div className="mt-4 rounded-lg border border-sky-400/15 bg-sky-400/[0.04] p-3"><div className="flex items-center justify-between gap-3"><div><p className="text-[8px] font-black uppercase tracking-[0.15em] text-sky-200">First-inning projection</p><p className="mt-1 text-xl font-black text-white">{fiProjectionValue}</p></div><div className="text-right"><p className="text-[7px] font-black uppercase tracking-wider text-gray-600">Decision line</p><p className="mt-1 font-mono text-sm font-black text-gray-300">0.5 runs</p></div></div><p className="mt-2 text-[9px] leading-relaxed text-gray-500">Opening-frame projection replaces the less relevant full-game score in this market view.</p></div> : matchResultScoreRefreshing ? <div className="mt-4 rounded-lg border border-amber-300/15 bg-amber-400/[0.035] p-3"><div className="flex items-center justify-between gap-3"><p className="text-[8px] font-black uppercase tracking-[0.15em] text-amber-200">Match Result score outlook</p><span className="text-[7px] font-black uppercase tracking-wider text-gray-600">Snapshot refreshing</span></div><p className="mt-2 text-sm font-black text-white">Score context temporarily withheld</p><p className="mt-1 text-[8px] leading-relaxed text-gray-500">This stored snapshot predates the same-head score field. The separate market-informed goals outlook is intentionally hidden here; the three-way Match Result probabilities below remain authoritative.</p></div> : <div className="mt-4 rounded-lg border border-white/[0.06] bg-black/25 p-3"><div className="flex items-center justify-between gap-3"><p className="text-[8px] font-black uppercase tracking-[0.15em] text-gray-600">{soccerScore?.heading ?? "Projected score"}</p>{soccerScore ? <span className="text-[7px] font-black uppercase tracking-wider text-gray-600">{soccerScore.badge}</span> : null}</div><div className="mt-2 flex items-center justify-between text-sm font-black text-white"><span>{game.awayTeam} <strong className="ml-1 text-xl">{formatNumber(soccerScore?.expectedGoals.away ?? game.projected.away)}</strong></span><span className="text-gray-700">—</span><span><strong className="mr-1 text-xl">{formatNumber(soccerScore?.expectedGoals.home ?? game.projected.home)}</strong> {game.homeTeam}</span></div>{soccerScore ? <><p className="mt-2 text-[8px] text-gray-500">Median total {soccerScore.medianTotal} · most likely total {soccerScore.mostLikelyTotal}{soccerScore.scenario ? ` · ${soccerScore.scenarioLabel} ${game.awayTeam} ${soccerScore.scenario.away}–${soccerScore.scenario.home} ${game.homeTeam}` : ""}</p>{marketKey === "moneyline" ? <p className="mt-2 text-[8px] leading-relaxed text-emerald-200/70">This score distribution is the same club model that supplies the Match Result probabilities, pick, and Bet grade.</p> : soccerSemantics ? <SoccerForecastSemanticsNote semantics={soccerSemantics} /> : null}</> : null}</div>}
+        {projectionIsHeld(game) ? <div className="mt-4 rounded-lg border border-amber-300/20 bg-amber-400/[0.045] p-3"><div className="flex items-center justify-between gap-3"><div><p className="text-[8px] font-black uppercase tracking-[0.15em] text-amber-200">Projection held</p><p className="mt-1 text-sm font-black text-white">No score forecast is being published yet</p></div><span className="rounded-full border border-amber-300/20 px-2 py-1 text-[7px] font-black uppercase tracking-wider text-amber-200">Data health hold</span></div><p className="mt-2 text-[9px] leading-relaxed text-gray-500">The real Week 1 matchup and market are visible below. OddSphere will add the score projection only when the authoritative model writer supplies it; a 0–0 placeholder is never shown as a forecast.</p></div> : marketKey === "first_inning" && sport === "mlb" ? <div className="mt-4 rounded-lg border border-sky-400/15 bg-sky-400/[0.04] p-3"><div className="flex items-center justify-between gap-3"><div><p className="text-[8px] font-black uppercase tracking-[0.15em] text-sky-200">First-inning projection</p><p className="mt-1 text-xl font-black text-white">{fiProjectionValue}</p></div><div className="text-right"><p className="text-[7px] font-black uppercase tracking-wider text-gray-600">Decision line</p><p className="mt-1 font-mono text-sm font-black text-gray-300">0.5 runs</p></div></div><p className="mt-2 text-[9px] leading-relaxed text-gray-500">Opening-frame projection replaces the less relevant full-game score in this market view.</p></div> : matchResultScoreRefreshing ? <div className="mt-4 rounded-lg border border-amber-300/15 bg-amber-400/[0.035] p-3"><div className="flex items-center justify-between gap-3"><p className="text-[8px] font-black uppercase tracking-[0.15em] text-amber-200">Match Result score outlook</p><span className="text-[7px] font-black uppercase tracking-wider text-gray-600">Snapshot refreshing</span></div><p className="mt-2 text-sm font-black text-white">Score context temporarily withheld</p><p className="mt-1 text-[8px] leading-relaxed text-gray-500">This stored snapshot predates the same-head score field. The separate market-informed goals outlook is intentionally hidden here; the three-way Match Result probabilities below remain authoritative.</p></div> : <div className="mt-4 rounded-lg border border-white/[0.06] bg-black/25 p-3"><div className="flex items-center justify-between gap-3"><p className="text-[8px] font-black uppercase tracking-[0.15em] text-gray-600">{soccerScore?.heading ?? "Projected score"}</p>{soccerScore ? <span className="text-[7px] font-black uppercase tracking-wider text-gray-600">{soccerScore.badge}</span> : null}</div><div className="mt-2 flex items-center justify-between text-sm font-black text-white"><span>{game.awayTeam} <strong className="ml-1 text-xl">{formatNumber(soccerScore?.expectedGoals.away ?? game.projected.away)}</strong></span><span className="text-gray-700">—</span><span><strong className="mr-1 text-xl">{formatNumber(soccerScore?.expectedGoals.home ?? game.projected.home)}</strong> {game.homeTeam}</span></div>{soccerScore ? <><p className="mt-2 text-[8px] text-gray-500">Median total {soccerScore.medianTotal} · most likely total {soccerScore.mostLikelyTotal}{soccerScore.scenario ? ` · ${soccerScore.scenarioLabel} ${game.awayTeam} ${soccerScore.scenario.away}–${soccerScore.scenario.home} ${game.homeTeam}` : ""}</p>{marketKey === "moneyline" ? <p className="mt-2 text-[8px] leading-relaxed text-emerald-200/70">{soccerScore.exactLegacyLock ? "This is the exact score projection stored in the immutable member snapshot at lock. It is not recomputed after lock." : "This score distribution is the same club model that supplies the Match Result probabilities, pick, and Bet grade."}</p> : soccerSemantics ? <SoccerForecastSemanticsNote semantics={soccerSemantics} /> : null}</> : null}</div>}
         {sport === "nfl" && game.footballProjection ? <FootballOutcomeForecast game={game} /> : null}
         {sport === "soccer" && marketKey === "moneyline" ? <SoccerThreeWayForecast game={game} market={market} /> : null}
         {sport === "soccer" && marketKey === "total" ? <SoccerTotalForecast market={market} projection={soccerProjection} /> : null}
@@ -1726,12 +1750,12 @@ function OddSphereNotes({ market }: { market: MarketEdgeDto }) {
 function CoreDecisionSnapshot({ game, market, marketKey }: { game: DailyEdgeGameDto; market: MarketEdgeDto; marketKey: MarketKey }) {
   if (game.sport === "soccer" && game.soccerProjection) {
     const projection = game.soccerProjection;
-    if (marketKey === "moneyline" && !matchResultScoreOutlook(projection, market)) {
+    if (marketKey === "moneyline" && !matchResultScoreOutlook(game, market)) {
       return <div className="mt-2 grid grid-cols-2 gap-2"><ProofCell label="Match Result score outlook" value="Refreshing" note="Legacy snapshot; conflicting goals context withheld" tone="violet" /><ProofCell label="Outcome confidence" value={formatProbability(market.modelProb)} note="Three-way Match Result head remains authoritative" tone="violet" /><ProofCell label="Bet grade" value={market.verdict.label} note="Unchanged by reader refresh" tone="gray" /><ProofCell label="Current price" value={formatAmerican(currentDisplayedPrice(market))} note={market.currentPriceSportsbook ? formatSportsbook(market.currentPriceSportsbook) : market.marketSource ?? "Source unavailable"} tone="gray" /></div>;
     }
-    const score = soccerScoreContext(projection, marketKey, market);
+    const score = soccerScoreContext(game, marketKey, market);
     const marketNumber = marketKey === "moneyline" ? formatAmerican(currentDisplayedPrice(market)) : market.line === null ? "—" : formatNumber(market.line);
-    return <div className="mt-2 grid grid-cols-2 gap-2"><ProofCell label={marketKey === "moneyline" ? "Match Result score outlook" : "Goal outlook"} value={`${score.expectedGoals.away.toFixed(2)} · ${score.expectedGoals.home.toFixed(2)}`} note={marketKey === "moneyline" ? "Same model as Match Result probabilities" : "Away · home scoring context"} tone="violet" /><ProofCell label={marketKey === "moneyline" ? "Match Result total" : "Goal-outlook total"} value={`Median ${score.medianTotal} · Mode ${score.mostLikelyTotal}`} note={`Mean ${(score.expectedGoals.away + score.expectedGoals.home).toFixed(2)} · scoring context`} tone="violet" /><ProofCell label={marketKey === "moneyline" ? "Most likely score" : "Illustrative scenario"} value={score.scenario ? `${game.awayTeam} ${score.scenario.away} · ${game.homeTeam} ${score.scenario.home}` : "No shared scenario"} note={marketKey === "moneyline" ? "Generated by the active Match Result head" : projection.representativeScoreProbability === null ? "Market-specific forecasts remain separate" : `${(projection.representativeScoreProbability * 100).toFixed(1)}% in the goal outlook · not a shared forecast source`} tone="gray" /><ProofCell label={marketKey === "moneyline" ? "Current price" : "Market line"} value={marketNumber} note={marketKey === "moneyline" && market.currentPriceSportsbook ? formatSportsbook(market.currentPriceSportsbook) : market.marketSource ?? "Source unavailable"} tone="gray" /></div>;
+    return <div className="mt-2 grid grid-cols-2 gap-2"><ProofCell label={marketKey === "moneyline" ? score.exactLegacyLock ? "Locked score projection" : "Match Result score outlook" : "Goal outlook"} value={`${score.expectedGoals.away.toFixed(2)} · ${score.expectedGoals.home.toFixed(2)}`} note={marketKey === "moneyline" ? score.exactLegacyLock ? "Exact immutable member snapshot" : "Same model as Match Result probabilities" : "Away · home scoring context"} tone="violet" /><ProofCell label={marketKey === "moneyline" ? "Match Result total" : "Goal-outlook total"} value={`Median ${score.medianTotal} · Mode ${score.mostLikelyTotal}`} note={`Mean ${(score.expectedGoals.away + score.expectedGoals.home).toFixed(2)} · scoring context`} tone="violet" /><ProofCell label={marketKey === "moneyline" ? "Most likely score" : "Illustrative scenario"} value={score.scenario ? `${game.awayTeam} ${score.scenario.away} · ${game.homeTeam} ${score.scenario.home}` : "No shared scenario"} note={marketKey === "moneyline" ? score.exactLegacyLock ? "Stored at lock; never recomputed" : "Generated by the active Match Result head" : projection.representativeScoreProbability === null ? "Market-specific forecasts remain separate" : `${(projection.representativeScoreProbability * 100).toFixed(1)}% in the goal outlook · not a shared forecast source`} tone="gray" /><ProofCell label={marketKey === "moneyline" ? "Current price" : "Market line"} value={marketNumber} note={marketKey === "moneyline" && market.currentPriceSportsbook ? formatSportsbook(market.currentPriceSportsbook) : market.marketSource ?? "Source unavailable"} tone="gray" /></div>;
   }
   if (projectionIsHeld(game)) {
     const marketNumber = marketKey === "moneyline" ? "Two-sided board" : market.line === null ? "—" : formatNumber(market.line);
@@ -1921,8 +1945,8 @@ function BoardGameCard({ game, sport, headlineMarket, active, activeMarket, sele
     ...headlineMarketData,
     priceAmerican: currentDisplayedPrice(headlineMarketData),
   };
-  const soccerMoneylineScoreRefreshing = headlineKey === "moneyline" && Boolean(game.soccerProjection && !matchResultScoreOutlook(game.soccerProjection, headline));
-  const soccerScore = game.soccerProjection && !soccerMoneylineScoreRefreshing ? soccerScoreContext(game.soccerProjection, headlineKey, headline) : null;
+  const soccerMoneylineScoreRefreshing = headlineKey === "moneyline" && Boolean(game.soccerProjection && !matchResultScoreOutlook(game, headline));
+  const soccerScore = game.soccerProjection && !soccerMoneylineScoreRefreshing ? soccerScoreContext(game, headlineKey, headline) : null;
   const footballOutcome = sport === "nfl" ? footballOutcomeContext(game) : null;
   const marketKeys: MarketKey[] = ["moneyline", "total", "first_inning"];
   return (

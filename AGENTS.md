@@ -39,6 +39,19 @@ For every production change:
 An overlap is a coordination requirement, not permission to discard either task's work. Preserve
 both changes in a fresh integration branch or stop and ask the user which behavior should win.
 
+## Mandatory locked-record immutability protocol
+
+A locked member snapshot is the public record. Do not mutate, replace, reinterpret, suppress, or
+reconstruct any stored locked projection, probability, pick, grade, price, stake, or evidence field
+merely because a newer model, DTO, or reader semantic exists. Reader migrations must render the
+exact legacy locked payload first; new semantics apply only to unlocked rows and future locks.
+
+If a locked payload is genuinely corrupt or incomplete, preserve it unchanged, document the
+problem, and obtain explicit owner approval before publishing any correction or replacement.
+Mathematical reconstruction is allowed only when the locked field was never stored, must be
+clearly labeled, and cannot overwrite or take precedence over an existing locked value. Tests for
+every lock-sensitive change must prove both writer immutability and reader precedence.
+
 ## Mandatory model-change safety protocol
 
 Any change that can alter a prediction, probability, projection, grade, promotion/demotion,
