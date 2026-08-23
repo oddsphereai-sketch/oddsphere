@@ -16,14 +16,21 @@ import {
 } from "./nflForwardEvidence";
 import { readNflForwardEvidence } from "./nflForwardEvidenceStore";
 import { NFL_T60_MAX_CAPTURE_LAG_MINUTES } from "./nflRegularDecisionEvidence";
+import {
+  getNflV1WeekOneOutcomeForecast,
+  NFL_V1_OUTCOME_DISTRIBUTION_RELEASE,
+  NFL_V1_OUTCOME_MODEL_RELEASE,
+  NFL_V1_OUTCOME_PROBABILITY_RELEASE,
+  NFL_V1_WEEK_ONE_OUTCOME_ARTIFACT_RELEASE,
+} from "./nflV1WeekOneOutcome";
 
 export const NFL_WEEK_ONE_HELD_MEMBER_FIXTURE_RELEASE =
-  "nfl_week_one_held_member_fixture_2026_08_22_r1" as const;
+  "nfl_week_one_held_member_fixture_2026_08_23_r2_outcome" as const;
 
-const MODEL_RELEASE = "nfl_model_validation_hold_2026_08_22_r1" as const;
+const MODEL_RELEASE = NFL_V1_OUTCOME_MODEL_RELEASE;
 const DECISION_RELEASE = "nfl_exact_price_decision_hold_2026_08_22_r1" as const;
 const HOLD_REASON =
-  "The independent Week 1 forecast is still being integrated with the authoritative exact-price writer. Expected quarterbacks are projected rather than confirmed, so Bet grades remain Held.";
+  "OddSphere's independent Week 1 score and winner forecast is available. Exact-price Bet grades remain Held; projected quarterbacks are context and do not create a wager.";
 
 export type NflWeekOneHeldMemberFixture = FootballPreviewFixture & {
   heldMemberFixtureRelease: typeof NFL_WEEK_ONE_HELD_MEMBER_FIXTURE_RELEASE;
@@ -176,6 +183,11 @@ function buildHeldGame(row: NflForwardStoredEvidence & { payload: NflForwardEvid
   const opening = payload.market.operationalOpening;
   const away = game.away.abbreviation;
   const home = game.home.abbreviation;
+  const outcome = getNflV1WeekOneOutcomeForecast({
+    providerGameId: game.providerGameId,
+    awayTeam: away,
+    homeTeam: home,
+  });
   const moneyline = buildHeldMarket({
     slot: "moneyline",
     away,
@@ -300,8 +312,19 @@ function buildHeldGame(row: NflForwardStoredEvidence & { payload: NflForwardEvid
       nrfi: prediction(spread),
     },
     markets,
-    decisionLine: "Bet grades are Held while the Week 1 model is connected to the authoritative exact-price writer. Real odds, Opening movement, splits, quarterbacks, injuries, and weather remain available in the normal reader.",
-    projected: { away: 0, home: 0 },
+    decisionLine: "Independent score and winner forecasts are live in the reader. Exact-price Bet grades remain Held and are not inferred from the outcome forecast.",
+    projected: {
+      away: outcome.projectedAwayScore,
+      home: outcome.projectedHomeScore,
+    },
+    footballProjection: {
+      awayWinProbability: outcome.awayWinProbability,
+      homeWinProbability: outcome.homeWinProbability,
+      modelRelease: NFL_V1_OUTCOME_MODEL_RELEASE,
+      distributionRelease: NFL_V1_OUTCOME_DISTRIBUTION_RELEASE,
+      probabilityRelease: NFL_V1_OUTCOME_PROBABILITY_RELEASE,
+      artifactRelease: NFL_V1_WEEK_ONE_OUTCOME_ARTIFACT_RELEASE,
+    },
     sharpSignals: [],
     status: {
       lineupConfirmed: payload.startersAndDepth.away.starterStatus === "confirmed" && payload.startersAndDepth.home.starterStatus === "confirmed",
@@ -316,7 +339,7 @@ function buildHeldGame(row: NflForwardStoredEvidence & { payload: NflForwardEvid
         key: "no_data",
         sentence: "Playbook public splits are displayed as market context; SharpAPI splits are not available in this capture.",
       },
-      modelBreakdown: "The Week 1 model candidate is not yet an authoritative published recommendation. No market price is being relabeled as an OddSphere probability.",
+      modelBreakdown: "The independent football model supplies the displayed score and winner probability. Bet grades remain a separate exact-price decision and are Held.",
     },
   };
 }

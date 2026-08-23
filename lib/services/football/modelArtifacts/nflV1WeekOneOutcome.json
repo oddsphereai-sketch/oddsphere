@@ -1,0 +1,31 @@
+{
+  "artifactRelease": "nfl_v1_week_one_outcome_artifact_2026_08_23_r1",
+  "modelRelease": "nfl_v1_comprehensive_outcome_2026_08_23_r1",
+  "distributionRelease": "nfl_v1_bivariate_score_distribution_2026_08_23_r1",
+  "probabilityRelease": "nfl_v1_beta_calibrated_win_ensemble_2026_08_23_r1",
+  "tournamentRelease": "nfl_v1_comprehensive_shadow_2026_08_23_r6",
+  "source": {
+    "featureRelease": "nfl_v1_comprehensive_features_2016_2025_2026_08_22_r1",
+    "featureSha256": "88b1a6ddc70322fb52cf562669d17581755e060cb5f07011cf0fbed0677e1d08",
+    "forwardEvidenceRelease": "nfl_forward_evidence_snapshot_2026_08_22_r2_multibook",
+    "forwardEvidenceSha256": "b13c50b08428ca236642019d375983f3bae52230449f15a643b897478f896436"
+  },
+  "games": [
+    { "providerGameId": "1392216", "awayTeam": "NE", "homeTeam": "SEA", "projectedAwayScore": 23.545075, "projectedHomeScore": 25.436997, "awayWinProbability": 0.428217, "homeWinProbability": 0.571783 },
+    { "providerGameId": "1392217", "awayTeam": "SF", "homeTeam": "LAR", "projectedAwayScore": 21.973613, "projectedHomeScore": 26.072522, "awayWinProbability": 0.409149, "homeWinProbability": 0.590851 },
+    { "providerGameId": "1392218", "awayTeam": "TB", "homeTeam": "CIN", "projectedAwayScore": 23.226969, "projectedHomeScore": 25.561343, "awayWinProbability": 0.44296, "homeWinProbability": 0.55704 },
+    { "providerGameId": "1392219", "awayTeam": "NO", "homeTeam": "DET", "projectedAwayScore": 22.123823, "projectedHomeScore": 26.308948, "awayWinProbability": 0.350837, "homeWinProbability": 0.649163 },
+    { "providerGameId": "1392220", "awayTeam": "NYJ", "homeTeam": "TEN", "projectedAwayScore": 20.737171, "projectedHomeScore": 21.763804, "awayWinProbability": 0.495593, "homeWinProbability": 0.504407 },
+    { "providerGameId": "1392221", "awayTeam": "BAL", "homeTeam": "IND", "projectedAwayScore": 25.148824, "projectedHomeScore": 21.637681, "awayWinProbability": 0.597051, "homeWinProbability": 0.402949 },
+    { "providerGameId": "1392222", "awayTeam": "ATL", "homeTeam": "PIT", "projectedAwayScore": 20.822304, "projectedHomeScore": 24.476796, "awayWinProbability": 0.419368, "homeWinProbability": 0.580632 },
+    { "providerGameId": "1392223", "awayTeam": "CHI", "homeTeam": "CAR", "projectedAwayScore": 23.340662, "projectedHomeScore": 21.410534, "awayWinProbability": 0.593335, "homeWinProbability": 0.406665 },
+    { "providerGameId": "1392224", "awayTeam": "CLE", "homeTeam": "JAX", "projectedAwayScore": 17.568898, "projectedHomeScore": 27.748328, "awayWinProbability": 0.245083, "homeWinProbability": 0.754917 },
+    { "providerGameId": "1392225", "awayTeam": "BUF", "homeTeam": "HOU", "projectedAwayScore": 24.610407, "projectedHomeScore": 23.719179, "awayWinProbability": 0.514461, "homeWinProbability": 0.485539 },
+    { "providerGameId": "1392226", "awayTeam": "MIA", "homeTeam": "LV", "projectedAwayScore": 24.402155, "projectedHomeScore": 20.299671, "awayWinProbability": 0.61165, "homeWinProbability": 0.38835 },
+    { "providerGameId": "1392227", "awayTeam": "GB", "homeTeam": "MIN", "projectedAwayScore": 19.698264, "projectedHomeScore": 23.117755, "awayWinProbability": 0.421897, "homeWinProbability": 0.578103 },
+    { "providerGameId": "1392228", "awayTeam": "WSH", "homeTeam": "PHI", "projectedAwayScore": 19.790875, "projectedHomeScore": 24.158817, "awayWinProbability": 0.402085, "homeWinProbability": 0.597915 },
+    { "providerGameId": "1392229", "awayTeam": "ARI", "homeTeam": "LAC", "projectedAwayScore": 20.000934, "projectedHomeScore": 24.967116, "awayWinProbability": 0.351065, "homeWinProbability": 0.648935 },
+    { "providerGameId": "1392230", "awayTeam": "DAL", "homeTeam": "NYG", "projectedAwayScore": 23.767034, "projectedHomeScore": 22.148064, "awayWinProbability": 0.560168, "homeWinProbability": 0.439832 },
+    { "providerGameId": "1392231", "awayTeam": "DEN", "homeTeam": "KC", "projectedAwayScore": 20.068199, "projectedHomeScore": 18.594416, "awayWinProbability": 0.583757, "homeWinProbability": 0.416243 }
+  ]
+}
