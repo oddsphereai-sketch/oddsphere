@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Frozen NFL r7 discrete possession/scoring-event distribution tournament."""
+"""Frozen NFL r9 discrete possession/scoring-event distribution tournament."""
 
 from __future__ import annotations
 
@@ -19,9 +19,9 @@ from scipy.optimize import root
 from scipy.signal import fftconvolve
 
 
-TOURNAMENT_RELEASE = "nfl_discrete_drive_joint_2026_08_23_r8"
-DISTRIBUTION_RELEASE = "nfl_discrete_drive_score_distribution_2026_08_23_r3"
-ARTIFACT_RELEASE = "nfl_week_one_discrete_joint_artifact_2026_08_23_r3"
+TOURNAMENT_RELEASE = "nfl_discrete_drive_joint_2026_08_23_r9"
+DISTRIBUTION_RELEASE = "nfl_discrete_drive_score_distribution_2026_08_23_r4"
+ARTIFACT_RELEASE = "nfl_week_one_discrete_joint_artifact_2026_08_23_r4"
 TRAINING_SEASONS = tuple(range(2016, 2023))
 SELECTION_SEASON = 2023
 CONFIRMATION_SEASONS = (2024, 2025)
@@ -42,7 +42,8 @@ TOTAL_WEIGHTS = np.asarray([
     0.4055128228811788, 0.0, 0.41784536527559807,
 ])
 ENVIRONMENT_SIGMA = 0.0
-EVENT_CONCENTRATION_CANDIDATES = (0.70, 0.85, 1.0, 1.15, 1.30, 1.50)
+EVENT_CONCENTRATION = 1.0
+REPRESENTATIVE_SCORE_WEIGHTS = (0.0, 0.05, 0.10, 0.20, 0.40)
 ENVIRONMENT_STATES = (-1.0, 0.0, 1.0)
 ENVIRONMENT_WEIGHTS = (0.2, 0.6, 0.2)
 TAIL_EPSILON = 1e-12
@@ -320,10 +321,82 @@ def one_dimensional(pmf: np.ndarray, kind: str) -> tuple[np.ndarray, np.ndarray]
 
 
 def central_interval(values: np.ndarray, probabilities: np.ndarray, mass: float) -> tuple[int, int]:
-    cdf = np.cumsum(probabilities)
-    lower = values[min(int(np.searchsorted(cdf, (1.0 - mass) / 2.0)), len(values) - 1)]
-    upper = values[min(int(np.searchsorted(cdf, 1.0 - (1.0 - mass) / 2.0)), len(values) - 1)]
-    return int(lower), int(upper)
+    """Shortest contiguous integer interval containing the requested mass."""
+    mean = float(np.sum(values * probabilities))
+    cumulative = np.concatenate(([0.0], np.cumsum(probabilities)))
+    candidates: list[tuple[tuple[float, float, float, int], tuple[int, int]]] = []
+    for lower_index in range(len(values)):
+        target = cumulative[lower_index] + mass
+        upper_index = int(np.searchsorted(cumulative, target, side="left")) - 1
+        if upper_index < lower_index or upper_index >= len(values):
+            continue
+        captured = float(cumulative[upper_index + 1] - cumulative[lower_index])
+        lower = int(values[lower_index])
+        upper = int(values[upper_index])
+        key = (
+            float(upper - lower),
+            max(0.0, captured - mass),
+            abs((lower + upper) / 2.0 - mean),
+            lower,
+        )
+        candidates.append((key, (lower, upper)))
+    if not candidates:
+        raise RuntimeError("unable to construct shortest probability interval")
+    return min(candidates, key=lambda row: row[0])[1]
+
+
+def representative_score(pmf: np.ndarray, summary: dict[str, Any], weight: float) -> dict[str, Any]:
+    """Choose a supported central score consistent with the PMF winner."""
+    home_index, away_index = np.indices(pmf.shape)
+    expected_margin = float(summary["expectedHomeScore"] - summary["expectedAwayScore"])
+    expected_total = float(summary["expectedHomeScore"] + summary["expectedAwayScore"])
+    forecast_home = float(summary["homeWinProbability"]) >= float(summary["awayWinProbability"])
+    margin = home_index - away_index
+    total = home_index + away_index
+    supported = pmf > 0.0
+    winner_consistent = margin > 0 if forecast_home else margin < 0
+    margin_interval = summary["margin80"]
+    total_interval = summary["total80"]
+    eligible = (
+        supported
+        & winner_consistent
+        & (margin >= margin_interval[0])
+        & (margin <= margin_interval[1])
+        & (total >= total_interval[0])
+        & (total <= total_interval[1])
+    )
+    rows, columns = np.where(eligible)
+    if len(rows) == 0:
+        raise RuntimeError("no supported representative score satisfies the frozen policy")
+    ranked: list[tuple[tuple[float, float, float, float, int, int], tuple[int, int]]] = []
+    for home_score, away_score in zip(rows.tolist(), columns.tolist(), strict=True):
+        probability = float(pmf[home_score, away_score])
+        margin_distance = abs((home_score - away_score) - expected_margin)
+        total_distance = abs((home_score + away_score) - expected_total)
+        objective = -math.log(probability) + weight * (margin_distance + total_distance)
+        key = (
+            objective,
+            margin_distance + total_distance,
+            -probability,
+            abs(home_score - summary["expectedHomeScore"]) + abs(away_score - summary["expectedAwayScore"]),
+            home_score,
+            away_score,
+        )
+        ranked.append((key, (home_score, away_score)))
+    _, (home_score, away_score) = min(ranked, key=lambda row: row[0])
+    probability = float(pmf[home_score, away_score])
+    return {
+        "homeScore": int(home_score),
+        "awayScore": int(away_score),
+        "probability": probability,
+        "expectedMargin": expected_margin,
+        "expectedTotal": expected_total,
+        "marginDistance": abs((home_score - away_score) - expected_margin),
+        "totalDistance": abs((home_score + away_score) - expected_total),
+        "winnerFidelity": bool((home_score > away_score) == forecast_home),
+        "tieContradiction": bool(home_score == away_score),
+        "supported": bool(probability > 0.0),
+    }
 
 
 def summarize(pmf: np.ndarray, home_line: float | None = None, total_line: float | None = None) -> dict[str, Any]:
@@ -404,12 +477,31 @@ def historical_predictions() -> pd.DataFrame:
     return base.merge(features, on=["game_id", "season", "week"], validate="one_to_one")
 
 
-def evaluate(frame: pd.DataFrame, law: DriveLaw, sigma: float, concentration: float, season: int) -> dict[str, Any]:
+def evaluate(
+    frame: pd.DataFrame,
+    law: DriveLaw,
+    sigma: float,
+    concentration: float,
+    season: int,
+    representative_weights: tuple[float, ...] = (),
+) -> dict[str, Any]:
     sample = frame[frame["season"].eq(season)]
     log_scores: list[float] = []
     probabilities: list[float] = []
     outcomes: list[int] = []
     margin_hits = total_hits = 0
+    representative_metrics = {
+        weight: {
+            "teamAbsoluteErrors": [],
+            "exactHits": 0,
+            "supported": 0,
+            "winnerFidelity": 0,
+            "tieContradictions": 0,
+            "marginDistances": [],
+            "totalDistances": [],
+        }
+        for weight in representative_weights
+    }
     for row in sample.itertuples(index=False):
         pmf = joint_pmf(law, float(row.projected_home_score), float(row.projected_away_score), sigma, concentration)
         actual_home = int(row.home_score)
@@ -423,9 +515,24 @@ def evaluate(frame: pd.DataFrame, law: DriveLaw, sigma: float, concentration: fl
         total = actual_home + actual_away
         margin_hits += int(summary["margin80"][0] <= margin <= summary["margin80"][1])
         total_hits += int(summary["total80"][0] <= total <= summary["total80"][1])
+        for weight, metrics in representative_metrics.items():
+            representative = representative_score(pmf, summary, weight)
+            metrics["teamAbsoluteErrors"].extend([
+                abs(representative["homeScore"] - actual_home),
+                abs(representative["awayScore"] - actual_away),
+            ])
+            metrics["exactHits"] += int(
+                representative["homeScore"] == actual_home
+                and representative["awayScore"] == actual_away
+            )
+            metrics["supported"] += int(representative["supported"])
+            metrics["winnerFidelity"] += int(representative["winnerFidelity"])
+            metrics["tieContradictions"] += int(representative["tieContradiction"])
+            metrics["marginDistances"].append(representative["marginDistance"])
+            metrics["totalDistances"].append(representative["totalDistance"])
     y = np.asarray(outcomes, dtype=float)
     p = np.clip(np.asarray(probabilities, dtype=float), 1e-9, 1 - 1e-9)
-    return {
+    result = {
         "games": int(len(sample)),
         "jointNegativeLogScore": float(np.mean(log_scores)),
         "moneylineBrier": float(np.mean((p - y) ** 2)),
@@ -434,9 +541,23 @@ def evaluate(frame: pd.DataFrame, law: DriveLaw, sigma: float, concentration: fl
         "margin80Coverage": margin_hits / len(sample),
         "total80Coverage": total_hits / len(sample),
     }
+    if representative_metrics:
+        result["representativeScores"] = {
+            str(weight): {
+                "teamScoreMae": float(np.mean(metrics["teamAbsoluteErrors"])),
+                "exactScoreHitRate": metrics["exactHits"] / len(sample),
+                "supportRate": metrics["supported"] / len(sample),
+                "winnerFidelityRate": metrics["winnerFidelity"] / len(sample),
+                "tieContradictions": int(metrics["tieContradictions"]),
+                "meanMarginCenterDistance": float(np.mean(metrics["marginDistances"])),
+                "meanTotalCenterDistance": float(np.mean(metrics["totalDistances"])),
+            }
+            for weight, metrics in representative_metrics.items()
+        }
+    return result
 
 
-def current_week(law: DriveLaw, sigma: float, concentration: float) -> dict[str, Any]:
+def current_week(law: DriveLaw, sigma: float, concentration: float, representative_weight: float) -> dict[str, Any]:
     outcome_path = pathlib.Path("lib/services/football/modelArtifacts/nflV1WeekOneOutcome.json")
     outcome = json.loads(outcome_path.read_text())
     evidence_path = pathlib.Path(os.environ.get(
@@ -455,6 +576,7 @@ def current_week(law: DriveLaw, sigma: float, concentration: float) -> dict[str,
         total_line = float(np.median(totals))
         pmf = joint_pmf(law, float(game["projectedHomeScore"]), float(game["projectedAwayScore"]), sigma, concentration)
         summary = summarize(pmf, home_line=home_line, total_line=total_line)
+        representative = representative_score(pmf, summary, representative_weight)
         games.append({
             "providerGameId": str(game["providerGameId"]),
             "awayTeam": game["awayTeam"],
@@ -464,23 +586,29 @@ def current_week(law: DriveLaw, sigma: float, concentration: float) -> dict[str,
             "evaluatedHomeSpread": home_line,
             "evaluatedTotal": total_line,
             **summary,
+            "representativeScore": representative,
         })
-    modal_away = np.asarray([game["modalAwayScore"] for game in games], dtype=float)
-    modal_home = np.asarray([game["modalHomeScore"] for game in games], dtype=float)
-    margins = modal_home - modal_away
-    totals = modal_home + modal_away
+    representative_away = np.asarray([game["representativeScore"]["awayScore"] for game in games], dtype=float)
+    representative_home = np.asarray([game["representativeScore"]["homeScore"] for game in games], dtype=float)
+    margins = representative_home - representative_away
+    totals = representative_home + representative_away
     over_count = sum(game["total"]["overProbability"] > 0.5 for game in games)
     return {
         "games": games,
         "dispersion": {
-            "teamScoreSd": float(np.std(np.concatenate([modal_away, modal_home]))),
+            "teamScoreSd": float(np.std(np.concatenate([representative_away, representative_home]))),
             "marginSd": float(np.std(margins)),
             "totalSd": float(np.std(totals)),
-            "teamScoreRange": [float(min(modal_away.min(), modal_home.min())), float(max(modal_away.max(), modal_home.max()))],
+            "teamScoreRange": [float(min(representative_away.min(), representative_home.min())), float(max(representative_away.max(), representative_home.max()))],
             "marginRange": [float(margins.min()), float(margins.max())],
             "totalRange": [float(totals.min()), float(totals.max())],
             "overDirections": int(over_count),
             "underDirections": int(len(games) - over_count),
+            "duplicatedRepresentativePairs": int(len(games) - len(set(zip(representative_away.tolist(), representative_home.tolist(), strict=True)))),
+            "winnerFidelityRate": float(np.mean([game["representativeScore"]["winnerFidelity"] for game in games])),
+            "tieContradictions": int(sum(game["representativeScore"]["tieContradiction"] for game in games)),
+            "meanMarginCenterDistance": float(np.mean([game["representativeScore"]["marginDistance"] for game in games])),
+            "meanTotalCenterDistance": float(np.mean([game["representativeScore"]["totalDistance"] for game in games])),
         },
     }
 
@@ -491,20 +619,39 @@ def main() -> None:
         raise RuntimeError(f"official scoring reconstruction failed: {reconstruction}")
     law = fit_drive_law(drives)
     predictions = historical_predictions()
-    baseline = {
-        str(season): evaluate(predictions, law, ENVIRONMENT_SIGMA, 1.0, season)
-        for season in (SELECTION_SEASON, *CONFIRMATION_SEASONS)
-    }
+    selection_metrics = evaluate(
+        predictions,
+        law,
+        ENVIRONMENT_SIGMA,
+        EVENT_CONCENTRATION,
+        SELECTION_SEASON,
+        REPRESENTATIVE_SCORE_WEIGHTS,
+    )
     selection = [
-        (concentration, evaluate(predictions, law, ENVIRONMENT_SIGMA, concentration, SELECTION_SEASON))
-        for concentration in EVENT_CONCENTRATION_CANDIDATES
+        (weight, selection_metrics["representativeScores"][str(weight)])
+        for weight in REPRESENTATIVE_SCORE_WEIGHTS
     ]
-    selection.sort(key=lambda row: (row[1]["jointNegativeLogScore"], abs(row[0] - 1.0), row[0]))
-    selected_concentration = selection[0][0]
+    selection.sort(key=lambda row: (
+        row[1]["teamScoreMae"],
+        -row[1]["exactScoreHitRate"],
+        row[0],
+    ))
+    selected_representative_weight = selection[0][0]
+    baseline = {
+        str(SELECTION_SEASON): selection_metrics,
+    }
     confirmation = {
-        str(season): evaluate(predictions, law, ENVIRONMENT_SIGMA, selected_concentration, season)
+        str(season): evaluate(
+            predictions,
+            law,
+            ENVIRONMENT_SIGMA,
+            EVENT_CONCENTRATION,
+            season,
+            (selected_representative_weight,),
+        )
         for season in CONFIRMATION_SEASONS
     }
+    baseline.update(confirmation)
     gates = {
         str(season): {
             "finiteExactScoreLog": math.isfinite(confirmation[str(season)]["jointNegativeLogScore"]),
@@ -516,13 +663,16 @@ def main() -> None:
             "total80CoverageCalibrated": 0.72 <= confirmation[str(season)]["total80Coverage"] <= 0.88,
         } for season in CONFIRMATION_SEASONS
     }
-    week = current_week(law, ENVIRONMENT_SIGMA, selected_concentration)
+    week = current_week(law, ENVIRONMENT_SIGMA, EVENT_CONCENTRATION, selected_representative_weight)
     dispersion = week["dispersion"]
     structural = {
         "teamScoreSdAtLeastTwo": dispersion["teamScoreSd"] >= 2.0,
         "marginSdAtLeastThree": dispersion["marginSd"] >= 3.0,
         "totalSdAtLeastTwo": dispersion["totalSd"] >= 2.0,
         "bothTotalDirectionsPresent": dispersion["overDirections"] > 0 and dispersion["underDirections"] > 0,
+        "representativeWinnerFidelity": dispersion["winnerFidelityRate"] == 1.0,
+        "zeroTieContradictions": dispersion["tieContradictions"] == 0,
+        "representativePairsDifferentiated": dispersion["duplicatedRepresentativePairs"] <= 6,
     }
     report = {
         "tournamentRelease": TOURNAMENT_RELEASE,
@@ -543,9 +693,10 @@ def main() -> None:
             "events": [{"offense": offense, "defense": defense, "probability": probability} for offense, defense, probability in law.events],
             "countPairs": [{"home": home, "away": away, "probability": probability} for home, away, probability in law.count_pairs],
         },
-        "selectionRanking": [{"eventConcentration": concentration, **metrics} for concentration, metrics in selection],
+        "representativeSelectionRanking": [{"representativeWeight": weight, **metrics} for weight, metrics in selection],
         "selectedEnvironmentSigma": ENVIRONMENT_SIGMA,
-        "selectedEventConcentration": selected_concentration,
+        "selectedEventConcentration": EVENT_CONCENTRATION,
+        "selectedRepresentativeWeight": selected_representative_weight,
         "neutralEventBaseline": baseline,
         "confirmation": confirmation,
         "confirmationGates": gates,
@@ -555,13 +706,14 @@ def main() -> None:
         "currentStructuralGatePassed": all(structural.values()),
     }
     report["qualified"] = report["historicalGatePassed"] and report["currentStructuralGatePassed"]
-    output = pathlib.Path("football-research/reports/nfl_discrete_drive_joint_2026_08_23_r8.json")
+    output = pathlib.Path("football-research/reports/nfl_discrete_drive_joint_2026_08_23_r9.json")
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n")
     print(json.dumps({
         "report": str(output),
         "selectedEnvironmentSigma": ENVIRONMENT_SIGMA,
-        "selectedEventConcentration": selected_concentration,
+        "selectedEventConcentration": EVENT_CONCENTRATION,
+        "selectedRepresentativeWeight": selected_representative_weight,
         "historicalGatePassed": report["historicalGatePassed"],
         "currentStructuralGatePassed": report["currentStructuralGatePassed"],
         "qualified": report["qualified"],
