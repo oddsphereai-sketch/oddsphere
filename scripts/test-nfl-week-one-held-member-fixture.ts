@@ -91,12 +91,27 @@ const candidateSource = readFileSync("app/lab/daily-edge/CandidateDailyEdgePage.
 assert.match(candidateSource, /readCurrentNflWeekOneHeldMemberFixture/);
 assert.doesNotMatch(candidateSource, /nflWeekOneEvidenceBoard=\{/);
 const readerSource = readFileSync("app/dev/experience-preview/ActualDailyEdgePreview.tsx", "utf8");
+const collapsedReaderSource = readerSource.slice(
+  readerSource.indexOf("function CollapsedReader"),
+  readerSource.indexOf("function ReaderSurface"),
+);
+const footballOutcomeForecastSource = readerSource.slice(
+  readerSource.indexOf("function FootballOutcomeForecast"),
+  readerSource.indexOf("function PredictionDriverCard"),
+);
 assert.match(readerSource, /projectionIsHeld\(game\)/);
 assert.match(readerSource, /footballOutcomeContext\(game\)/);
 assert.match(readerSource, /Outcome forecast/);
 assert.match(readerSource, /Win probability/);
 assert.match(readerSource, /The discrete football model favors/);
 assert.match(readerSource, /Value-model probability/);
+assert.match(readerSource, /nflSelectedBetGrade\(market\)/);
+assert.match(readerSource, /Bet grade \{footballBetGrade\.label\}/);
+assert.match(readerSource, /Bet grade \{betGrade\.label\}/);
+assert.match(readerSource, /currently \{betGrade\.label\}/);
+assert.doesNotMatch(collapsedReaderSource, /Bet grade held/);
+assert.doesNotMatch(collapsedReaderSource, /Bet grade remains separate and Held/);
+assert.doesNotMatch(footballOutcomeForecastSource, /Held does not erase the prediction/);
 
 console.log("NFL Week 1 member fixture: 16 games, 48 predictions, live Leans/No Plays, and fail-closed health Holds passed");
 
