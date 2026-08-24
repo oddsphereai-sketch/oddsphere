@@ -112,12 +112,25 @@ changed; only deterministic settlement of existing locked rows is affected.
 - Projection runtime: resolved automodel `v2_2`
 - First-inning runtime: `fi_v2` with the versioned unpublished-probable availability head below
 - Public calibration: `mlb_public_calibration_v27_strong_winner_resistance_lean_2026_08_22`
-- Decision release: `mlb_daily_edge_decision_2026_08_22_r67`
-- Rule bundle: `mlb_daily_edge_rule_bundle_v55_2026_08_22`
-- Grade policy: `mlb_public_grade_policy_v45_strong_winner_resistance_lean_2026_08_22`
+- Decision release: `mlb_daily_edge_decision_2026_08_23_r68`
+- Rule bundle: `mlb_daily_edge_rule_bundle_v56_market_scoped_grade_integrity_2026_08_23`
+- Grade policy: `mlb_public_grade_policy_v46_market_scoped_grade_integrity_2026_08_23`
 - Tracking contract: `member_facing_lock_v8_priority_retry_minute_cadence_2026_08_11`
 - Machine registry: `lib/automodel/mlbModelLayerVersions.ts`
 - Authoritative member-facing writer: `lib/services/predictionRecordService.ts`
+
+The August 23 r68 integrity repair retains every r67 probability, projection,
+selected side, exact evaluated price, signed-split threshold, movement
+threshold, promotion cohort, stake rule, writer, lease, and T-60 boundary. A
+missing Total-only field can no longer block an otherwise complete Moneyline
+decision. Final `best_angle`, `play_grade`, and `decision_pipeline` fields are
+serialized from one authoritative post-champion action so a candidate Best
+Angle that fails a genuine Moneyline/data gate cannot leak through a boolean
+fallback. Locked rows remain immutable. The predeclared cliff/hysteresis audit
+authorized no threshold change: every candidate missed the frozen confirmation
+sample gates. Full evidence and paired board impact are recorded in
+`docs/model-audits/2026-08-23-mlb-moneyline-grade-integrity-r68.md`. Rollback is
+r67/v55/v45/correction v19.
 
 The August 22 r67 grading repair retains every r66 probability, projection,
 selected side, exact evaluated price, same-book movement trail, Total rule,

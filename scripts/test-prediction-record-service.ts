@@ -996,6 +996,70 @@ console.log("\n━━━ MLB tight market-price Best Angle integration ━━━
   const promo = (ml.snapshot_json as any)?.ml_tight_market_price_best_angle_promotion;
   check("tight market-price ML promotes to Best Angle", ml.best_angle === true && ml.play_grade === "best_angle");
   check("tight market-price promotion audit is stamped", promo?.rule_id === ML_TIGHT_MARKET_PRICE_BEST_ANGLE_RULE_ID);
+
+  const totalOnlyIncompletePred = {
+    ...tightMarketMlPred,
+    sport_specific: {
+      ...tightMarketMlPred.sport_specific,
+      mlb_data_completeness: {
+        status: "incomplete_missing_required_data",
+        missing_fields: ["over_price", "under_price"],
+      },
+    },
+  };
+  const totalOnlyIncompleteRecords = buildPredictionRecordsFromSlate({
+    sport: "mlb",
+    slateDate: "2026-07-20",
+    launchDay: false,
+    games: [baseGame],
+    predictionByGameId: new Map([[14771, totalOnlyIncompletePred]]),
+    abbrevByTeamId,
+    oddsByGameId,
+    signalsByGameId: new Map(),
+  });
+  const totalOnlyIncompleteMl = totalOnlyIncompleteRecords.find((record) => record.market === "moneyline")!;
+  const totalOnlyDecision = (totalOnlyIncompleteMl.snapshot_json as any)?.decision_pipeline;
+  check(
+    "missing Total-only prices do not suppress a complete Moneyline Best Angle",
+    totalOnlyIncompleteMl.best_angle === true
+      && totalOnlyIncompleteMl.play_grade === "best_angle"
+      && totalOnlyDecision?.board_action === "bet"
+      && totalOnlyDecision?.actionable_grade === "best_angle",
+  );
+
+  const moneylineIncompletePred = {
+    ...tightMarketMlPred,
+    sport_specific: {
+      ...tightMarketMlPred.sport_specific,
+      mlb_data_completeness: {
+        status: "incomplete_missing_required_data",
+        missing_fields: ["home_moneyline_price"],
+      },
+    },
+  };
+  const moneylineIncompleteRecords = buildPredictionRecordsFromSlate({
+    sport: "mlb",
+    slateDate: "2026-07-20",
+    launchDay: false,
+    games: [baseGame],
+    predictionByGameId: new Map([[14771, moneylineIncompletePred]]),
+    abbrevByTeamId,
+    oddsByGameId,
+    signalsByGameId: new Map(),
+  });
+  const moneylineIncompleteMl = moneylineIncompleteRecords.find((record) => record.market === "moneyline")!;
+  const moneylineIncompleteSnapshot = moneylineIncompleteMl.snapshot_json as any;
+  check(
+    "genuine Moneyline incompleteness fails closed with one coherent public grade tuple",
+    moneylineIncompleteMl.best_angle === false
+      && moneylineIncompleteMl.play_grade === null
+      && moneylineIncompleteSnapshot?.decision_pipeline?.board_action === "no_play"
+      && moneylineIncompleteSnapshot?.decision_pipeline?.actionable_grade === null
+      && moneylineIncompleteSnapshot?.decision_pipeline?.action_rule_id === null
+      && moneylineIncompleteSnapshot?.decision_pipeline?.grade_source === null
+      && moneylineIncompleteSnapshot?.best_angle_resolution?.final_best_angle === false
+      && moneylineIncompleteSnapshot?.ml_grade_recalibration?.final_best_angle === false,
+  );
 }
 
 console.log("\n━━━ MLB mid-price near-market Lean integration ━━━");
