@@ -129,7 +129,9 @@ export type NflForwardEvidencePayload = {
     evaluatedBets: NflRegularEvaluatedBetDecision[];
     outcomeConfidence: NflRegularOutcomeConfidence[];
     shadowEvaluatedBets?: NflR6ShadowMoneylineDecision[];
-    modelPromotionStatus: "nfl_v1_member_release_2026_08_23_r2";
+    modelPromotionStatus:
+      | "nfl_v1_member_release_2026_08_23_r2"
+      | "nfl_v1_member_release_2026_08_24_r3_grading_tiers";
     publicationEnabled: true;
     trackingEnabled: false;
   };

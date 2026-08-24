@@ -57,7 +57,8 @@ assert.equal(markets.every((market) => !market.held), true);
 assert.equal(markets.every((market) => market.pick !== null), true);
 assert.equal(markets.every((market) => market.modelProb !== null), true);
 assert.equal(markets.filter((market) => market.verdict.label === "Lean").length, 8);
-assert.equal(markets.filter((market) => market.verdict.label === "No Play").length, 40);
+assert.equal(markets.filter((market) => market.verdict.label === "Watchlist").length, 8);
+assert.equal(markets.filter((market) => market.verdict.label === "No Play").length, 32);
 assert.equal(markets.every((market) => (market.oddsTrail?.length ?? 0) >= 1), true);
 assert.equal(markets.every((market) => (market.opposingOddsTrail?.stops.length ?? 0) >= 1), true);
 assert.equal(markets.every((market) => market.publicSplits.length === 2), true);
@@ -113,7 +114,7 @@ assert.doesNotMatch(collapsedReaderSource, /Bet grade held/);
 assert.doesNotMatch(collapsedReaderSource, /Bet grade remains separate and Held/);
 assert.doesNotMatch(footballOutcomeForecastSource, /Held does not erase the prediction/);
 
-console.log("NFL Week 1 member fixture: 16 games, 48 predictions, live Leans/No Plays, and fail-closed health Holds passed");
+console.log("NFL Week 1 member fixture: 16 games, 48 predictions, live Leans/Watchlists/No Plays, and fail-closed health Holds passed");
 
 function syntheticRow(index: number): NflForwardStoredEvidence {
   const providerGameId = String(1_392_215 + index);

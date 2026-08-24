@@ -2,6 +2,10 @@ import assert from "node:assert/strict";
 import { nflSelectedBetGrade } from "../app/lab/lib/nflReaderPresentation";
 
 assert.deepEqual(
+  nflSelectedBetGrade({ held: false, verdict: { key: "watchlist", label: "Watchlist" } }),
+  { label: "Watchlist", className: "text-amber-300" },
+);
+assert.deepEqual(
   nflSelectedBetGrade({ held: false, verdict: { key: "lean", label: "Lean" } }),
   { label: "Lean", className: "text-sky-300" },
 );
@@ -14,4 +18,4 @@ assert.deepEqual(
   { label: "Held", className: "text-amber-200" },
 );
 
-console.log("NFL reader selected-market Bet grade presentation: Lean, No Play, and Held passed");
+console.log("NFL reader selected-market Bet grade presentation: Lean, Watchlist, No Play, and Held passed");

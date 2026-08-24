@@ -24,12 +24,13 @@ import {
   NFL_V1_OUTCOME_PROBABILITY_RELEASE,
   NFL_V1_WEEK_ONE_OUTCOME_ARTIFACT_RELEASE,
 } from "./nflV1WeekOneOutcome";
+import { NFL_V1_PRODUCTION_DECISION_RELEASE } from "./nflV1ProductionDecision";
 
 export const NFL_WEEK_ONE_HELD_MEMBER_FIXTURE_RELEASE =
-  "nfl_week_one_member_fixture_2026_08_23_r3_predictions_and_grades" as const;
+  "nfl_week_one_member_fixture_2026_08_24_r4_grading_tiers" as const;
 
 const MODEL_RELEASE = NFL_V1_OUTCOME_MODEL_RELEASE;
-const DECISION_RELEASE = "nfl_v1_daily_edge_decision_2026_08_23_r2" as const;
+const DECISION_RELEASE = NFL_V1_PRODUCTION_DECISION_RELEASE;
 const HOLD_REASON = "This market is Held because its exact-price decision tuple is incomplete or its data health failed.";
 
 export type NflWeekOneHeldMemberFixture = FootballPreviewFixture & {
@@ -599,29 +600,40 @@ function applyPublishedDecision(
   }] : [];
   const selectedSplit = base.publicSplits.find((row) => row.side === selectedSide) ?? null;
   const isLean = decision.grade === "Lean";
-  const actionability = isLean ? 62 : 32;
+  const isWatchlist = decision.grade === "Watchlist";
+  const actionability = isLean ? 62 : isWatchlist ? 45 : 32;
   const marketName = input.slot === "moneyline" ? "moneyline" : input.slot;
   const copy = isLean
     ? `${selectedLabel} clears the validated NFL market-led value policy at ${formatAmerican(decision.evaluatedQuote.price)} from ${decision.evaluatedQuote.sportsbook}, with positive expected value at the displayed value-model probability.`
+    : isWatchlist
+      ? `${selectedLabel} is inside the validated NFL monitoring lane at ${formatAmerican(decision.evaluatedQuote.price)} from ${decision.evaluatedQuote.sportsbook}, but it does not clear the exact-price Lean policy. Monitor only.`
     : `${selectedLabel} is the discrete model forecast side, but this independent outcome probability is not authorized as an exact-price ${marketName} betting edge.`;
   return {
     ...base,
     pick: selectedLabel,
     confidence: decision.modelProbability,
-    grade: isLean ? "model_only" : null,
+    grade: isLean ? "model_only" : isWatchlist ? "market_watch" : null,
     signalType: isLean ? "model_only" : null,
     held: false,
-    verdict: isLean ? { key: "lean", label: "Lean" } : { key: "no_play", label: "No Play" },
-    rawGrade: isLean ? "model_only" : null,
+    verdict: isLean
+      ? { key: "lean", label: "Lean" }
+      : isWatchlist
+        ? { key: "watchlist", label: "Watchlist" }
+        : { key: "no_play", label: "No Play" },
+    rawGrade: isLean ? "model_only" : isWatchlist ? "market_watch" : null,
     rawRecScore: actionability,
     capReasons: [
-      isLean ? "nfl_r6_exact_price_moneyline_lean" : "nfl_exact_price_policy_not_cleared",
+      isLean
+        ? "nfl_r6_exact_price_moneyline_lean"
+        : isWatchlist
+          ? "nfl_moneyline_monitoring_lane"
+          : "nfl_exact_price_policy_not_cleared",
       ...(input.payload.startersAndDepth.away.starterStatus !== "confirmed" ? ["away_expected_quarterback_projected"] : []),
       ...(input.payload.startersAndDepth.home.starterStatus !== "confirmed" ? ["home_expected_quarterback_projected"] : []),
     ],
-    finalGrade: isLean ? "model_only" : null,
+    finalGrade: isLean ? "model_only" : isWatchlist ? "market_watch" : null,
     finalRecScore: actionability,
-    actionabilityLabel: isLean ? "Lean" : "No Play",
+    actionabilityLabel: isLean ? "Lean" : isWatchlist ? "Watchlist" : "No Play",
     displayReason: copy,
     guidedGuide: copy,
     guidedWatchOut: "Early-week prices and expected starters continue to refresh until the immutable T-60 decision.",
