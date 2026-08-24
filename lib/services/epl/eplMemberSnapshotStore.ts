@@ -1,10 +1,14 @@
 import type { DailyEdgeResponse } from "@/app/lab/lib/labTypes";
-import { readLabResponseSnapshot, upsertLabResponseSnapshot } from "@/lib/services/labResponseSnapshots";
+import { readLabResponseSnapshot, readLatestLabResponseSnapshot, upsertLabResponseSnapshot } from "@/lib/services/labResponseSnapshots";
 import { preserveLockedEplGames } from "./eplLockedSnapshot";
+import { eplEmergencySnapshotIsUsable } from "./eplMemberSnapshotContinuity";
 
 const CURRENT_KEY = "soccer::english_premier_league::current-week";
 const SNAPSHOT_TTL_MS = 20 * 60 * 1000;
 const SNAPSHOT_STALE_MS = 24 * 60 * 60 * 1000;
+
+export const EPL_MEMBER_SNAPSHOT_LIFECYCLE_RELEASE =
+  "epl_member_snapshot_lifecycle_2026_08_24_r2" as const;
 
 /**
  * EPL member reads use one prebuilt weekly snapshot. They never invoke paid
@@ -13,7 +17,10 @@ const SNAPSHOT_STALE_MS = 24 * 60 * 60 * 1000;
 export async function readCurrentEplMemberSnapshot(): Promise<DailyEdgeResponse | null> {
   const fresh = await readLabResponseSnapshot<DailyEdgeResponse>(CURRENT_KEY, "fresh");
   if (fresh) return fresh.payload;
-  return (await readLabResponseSnapshot<DailyEdgeResponse>(CURRENT_KEY, "stale"))?.payload ?? null;
+  const stale = await readLabResponseSnapshot<DailyEdgeResponse>(CURRENT_KEY, "stale");
+  if (stale) return stale.payload;
+  const latest = await readLatestLabResponseSnapshot<DailyEdgeResponse>(CURRENT_KEY);
+  return latest && eplEmergencySnapshotIsUsable(latest.payload, latest.generatedAt) ? latest.payload : null;
 }
 
 export async function writeCurrentEplMemberSnapshot(input: {
@@ -38,6 +45,6 @@ export async function writeCurrentEplMemberSnapshot(input: {
     ttlMs: SNAPSHOT_TTL_MS,
     staleMs: SNAPSHOT_STALE_MS,
     source: "epl_daily_refresh",
-    payloadVersion: `${input.modelRelease}::${input.calibrationRelease}::gw${input.round}`,
+    payloadVersion: `${input.modelRelease}::${input.calibrationRelease}::${EPL_MEMBER_SNAPSHOT_LIFECYCLE_RELEASE}::gw${input.round}`,
   });
 }

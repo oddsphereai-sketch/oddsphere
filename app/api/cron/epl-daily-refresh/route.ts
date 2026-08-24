@@ -4,6 +4,7 @@ import { buildEplShadowSlate } from "@/lib/services/epl/buildEplShadowSlate";
 import { persistEplLineHistory, readEplStoredPriceHistory } from "@/lib/services/epl/eplLineHistoryStore";
 import { seedEplSlate, writeEplPredictionRecords } from "@/lib/services/epl/eplProductionPipeline";
 import { readCurrentEplMemberSnapshot, writeCurrentEplMemberSnapshot } from "@/lib/services/epl/eplMemberSnapshotStore";
+import { evaluateEplPublicationCoverage } from "@/lib/services/epl/eplPublicationReadiness";
 
 export const maxDuration = 300;
 
@@ -21,24 +22,13 @@ export async function GET(request: Request): Promise<Response> {
     hydrateEplStoredPriceHistory(await readEplStoredPriceHistory(slate.matches.map((match) => match.id)));
     let allBookPrices: Parameters<typeof persistEplLineHistory>[0]["allBookPrices"] = [];
     const response = await buildEplDailyEdgePreview(slate, { captureAllBookPrices: (rows) => { allBookPrices = rows; } });
-    const marketRows = response.games.flatMap((game) => [
-      game.markets.moneyline,
-      game.soccerDoubleChanceMarket,
-      game.markets.total,
-      game.markets.first_inning,
-    ].filter((market) => market !== null && market !== undefined));
-    const selectedCurrent = marketRows.filter((market) => market.currentPriceAmerican !== null).length;
-    const outcomeCurrent = marketRows.reduce((sum, market) => sum + (market.soccerPriceBoard?.rows.length ?? 0), 0);
-    const coverageErrors = [
-      ...(selectedCurrent === slate.matches.length * 4 ? [] : [`selected current-price coverage ${selectedCurrent}/${slate.matches.length * 4}`]),
-      ...(outcomeCurrent === slate.matches.length * 10 ? [] : [`outcome price-board coverage ${outcomeCurrent}/${slate.matches.length * 10}`]),
-    ];
+    const coverage = evaluateEplPublicationCoverage(slate, response);
     const seeded = await seedEplSlate({ slate, apply });
     const lineHistory = seeded.errors.length === 0
       ? await persistEplLineHistory({ response, allBookPrices, apply })
       : { proposed: 0, written: 0, errors: ["line history skipped because slate seeding failed"] };
     const predictions = await writeEplPredictionRecords({ slate, response, apply });
-    const errors = [...coverageErrors, ...seeded.errors, ...lineHistory.errors, ...predictions.errors];
+    const errors = [...coverage.errors, ...seeded.errors, ...lineHistory.errors, ...predictions.errors];
     const publicationEnabled = process.env.EPL_PUBLICATION_ENABLED === "true";
     const publication = apply && publicationEnabled && errors.length === 0
       ? await writeCurrentEplMemberSnapshot({
@@ -57,7 +47,7 @@ export async function GET(request: Request): Promise<Response> {
         apply,
         round: slate.round,
         fixtures: slate.matches.length,
-        price_coverage: { selectedCurrent, selectedExpected: slate.matches.length * 4, outcomeCurrent, outcomeExpected: slate.matches.length * 10 },
+        price_coverage: coverage,
         model_release: slate.modelRelease,
         calibration_release: slate.calibrationRelease,
         seed: seeded,
