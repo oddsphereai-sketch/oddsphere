@@ -3189,9 +3189,37 @@ function buildMlRecord(
     pickedMoneyPct: mlValidatedSharpPublicSplit.moneyPct,
   });
   const mlSameSideProjectionGap = moneylineProjectionSameSideGap(pred, v22, finalMlPick);
-  const mlDataStatus = readStringOrNull(
-    readRecordOrNull(sp.mlb_data_completeness)?.status,
-  );
+  const mlDataCompleteness = readRecordOrNull(sp.mlb_data_completeness);
+  const mlDataStatus = readStringOrNull(mlDataCompleteness?.status);
+  const mlMissingFields = Array.isArray(mlDataCompleteness?.missing_fields)
+    ? mlDataCompleteness.missing_fields.filter((value): value is string => typeof value === "string")
+    : [];
+  const mlRequiredMissingFields = new Set([
+    "home_team_mapped",
+    "away_team_mapped",
+    "start_time",
+    "ml_pick",
+    "projected_home_score",
+    "projected_away_score",
+    "home_moneyline_price",
+    "away_moneyline_price",
+    "home_probable_pitcher",
+    "away_probable_pitcher",
+  ]);
+  // Completeness is card-wide. Missing Total-only fields must not demote an
+  // otherwise complete Moneyline tuple; genuine ML/team/starter gaps still
+  // fail closed.
+  const mlDataIncompleteForMoneyline =
+    mlDataStatus === "incomplete_missing_required_data" &&
+    (
+      mlMissingFields.length === 0 ||
+      mlMissingFields.some((field) => mlRequiredMissingFields.has(field))
+    );
+  const mlMarketScopedDataStatus = mlDataIncompleteForMoneyline
+    ? "incomplete_missing_required_data"
+    : mlDataStatus === "incomplete_missing_required_data"
+      ? "ready"
+      : mlDataStatus;
   const mlStrongWinnerResistanceLean = resolveMlStrongWinnerResistanceLean({
     blocked:
       !mlChampionGuardApplies ||
@@ -3199,7 +3227,7 @@ function buildMlRecord(
       readBoolish(v22.ml_requires_market_confirmation) ||
       readBoolish(v22.ml_distance_cap_applied) ||
       readBoolish(sp.v2_provisional) ||
-      mlDataStatus === "incomplete_missing_required_data",
+      mlDataIncompleteForMoneyline,
     signedMarketResistance: mlSignedMarketResistance.standDown,
     side: finalMlPick,
     modelProbability: finalMlModelProb,
@@ -3218,7 +3246,7 @@ function buildMlRecord(
       readBoolish(v22.ml_distance_cap_applied) ||
       mlEffectiveSignedMarketResistance ||
       readBoolish(sp.v2_provisional) ||
-      mlDataStatus === "incomplete_missing_required_data",
+      mlDataIncompleteForMoneyline,
     side: finalMlPick,
     modelProbability: finalMlModelProb,
     oddsAmerican: finalMlOdds,
@@ -3330,7 +3358,7 @@ function buildMlRecord(
       sameSideProjectionGap: mlSameSideProjectionGap,
       lineDirection: finalMlLineDirection,
       publicSplitConflict: finalMlPublicSplitConflict,
-      dataStatus: mlDataStatus,
+      dataStatus: mlMarketScopedDataStatus,
     });
   // The calibrated model grade is the primary path. Named historical sleeves
   // are additive promotions; they never replace a model Best Angle that has
@@ -3409,7 +3437,7 @@ function buildMlRecord(
     sameSideProjectionGap: mlSameSideProjectionGap,
     lineDirection: finalMlLineDirection,
     publicSplitConflict: finalMlPublicSplitConflict,
-    dataStatus: mlDataStatus,
+    dataStatus: mlMarketScopedDataStatus,
   });
   const mlMarketDivergenceLean = resolveMlMarketDivergenceLean({
     blocked:
@@ -3419,7 +3447,7 @@ function buildMlRecord(
       mlPickCalibrated ||
       mlMarketSideCorrected ||
       mlPublicPlayGrade === "provisional" ||
-      mlDataStatus === "incomplete_missing_required_data",
+      mlDataIncompleteForMoneyline,
     side: finalMlPick,
     oddsAmerican: finalMlOdds,
     modelProb: finalMlModelProb,
@@ -3456,7 +3484,7 @@ function buildMlRecord(
       || mlMarketSideCorrected
       || mlRawSideChampionApplied
       || mlChampionStandDownReason !== null
-      || mlDataStatus === "incomplete_missing_required_data"
+      || mlDataIncompleteForMoneyline
       || mlPublicPlayGrade === "provisional",
     modelProbability: finalMlModelProb,
     oddsAmerican: finalMlOdds,
@@ -3466,6 +3494,34 @@ function buildMlRecord(
     : mlChampionAction.demoted
       ? null
       : trackedMlPublicPlayGrade;
+  const mlFinalBestAngle = mlChampionAction.actionable && trackedMlBestAngle;
+  const mlFinalActionRuleId = mlTrueInversionActionable
+    ? ML_INVERSION_GRADE_RULE_ID
+    : !mlChampionAction.actionable
+      ? null
+      : mlFinalBestAngle && mlModelBestAngleRetained
+        ? ML_CALIBRATED_MODEL_BEST_ANGLE_PATH_ID
+        : mlCleanTightEdgePromoted
+          ? ML_CLEAN_TIGHT_EDGE_BEST_ANGLE_RULE_ID
+          : mlTightMarketPricePromoted
+            ? ML_TIGHT_MARKET_PRICE_BEST_ANGLE_RULE_ID
+            : mlMidPriceEstablishedPricePromoted
+              ? ML_MID_PRICE_ESTABLISHED_PRICE_BEST_ANGLE_RULE_ID
+              : mlStrongWinnerResistanceLean.lean
+                ? ML_STRONG_WINNER_RESISTANCE_LEAN_RULE_ID
+                : mlConfidenceValueContextLean.lean
+                  ? MLB_ML_CONFIDENCE_VALUE_CONTEXT_LEAN_RULE_ID
+                  : mlMidPriceNearMarketLean.lean
+                    ? ML_MID_PRICE_NEAR_MARKET_LEAN_RULE_ID
+                    : mlMarketDivergenceLean.lean
+                      ? ML_MARKET_DIVERGENCE_LEAN_RULE_ID
+                      : mlModelLeanRetained
+                        ? ML_CALIBRATED_MODEL_LEAN_PATH_ID
+                        : mlChampionAction.promoted
+                          ? mlChampionAction.ruleId
+                          : mlChampionPublicPlayGrade === "lean"
+                            ? ML_GENERIC_LEAN_POSITIVE_EV_RULE_ID
+                            : null;
   return {
     game_prediction_id: pred.id,
     game_id: game.id,
@@ -3505,7 +3561,7 @@ function buildMlRecord(
     // large-edge confirmation (see resolveMlbBestAngle). Tracking pending
     // BA count matches what members see on the live slate. Flipped/calibrated
     // rows are never Best Angle until grade calibration is separately validated.
-    best_angle: trackedMlBestAngle,
+    best_angle: mlFinalBestAngle,
     no_bet: mlNoBet,
     no_bet_reason: finalMlNoBetReason,
     market_aligned: readBoolish(sp.ml_market_aligned),
@@ -3541,38 +3597,16 @@ function buildMlRecord(
             : "no_play",
         actionable_grade: mlTrueInversionActionable
           ? "lean"
-          : mlChampionAction.actionable && trackedMlBestAngle
+          : mlFinalBestAngle
             ? "best_angle"
             : mlChampionAction.actionable && mlChampionPublicPlayGrade === "lean"
               ? "lean"
               : null,
-        action_rule_id: mlTrueInversionActionable
-          ? ML_INVERSION_GRADE_RULE_ID
-          : trackedMlBestAngle && mlModelBestAngleRetained
-            ? ML_CALIBRATED_MODEL_BEST_ANGLE_PATH_ID
-          : mlCleanTightEdgePromoted
-            ? ML_CLEAN_TIGHT_EDGE_BEST_ANGLE_RULE_ID
-            : mlTightMarketPricePromoted
-              ? ML_TIGHT_MARKET_PRICE_BEST_ANGLE_RULE_ID
-              : mlMidPriceEstablishedPricePromoted
-                ? ML_MID_PRICE_ESTABLISHED_PRICE_BEST_ANGLE_RULE_ID
-              : mlStrongWinnerResistanceLean.lean
-                ? ML_STRONG_WINNER_RESISTANCE_LEAN_RULE_ID
-              : mlConfidenceValueContextLean.lean
-                ? MLB_ML_CONFIDENCE_VALUE_CONTEXT_LEAN_RULE_ID
-              : mlMidPriceNearMarketLean.lean
-                ? ML_MID_PRICE_NEAR_MARKET_LEAN_RULE_ID
-                : mlMarketDivergenceLean.lean
-                  ? ML_MARKET_DIVERGENCE_LEAN_RULE_ID
-                : mlModelLeanRetained
-                  ? ML_CALIBRATED_MODEL_LEAN_PATH_ID
-                : mlChampionAction.promoted
-                  ? mlChampionAction.ruleId
-                : mlChampionPublicPlayGrade === "lean"
-                ? ML_GENERIC_LEAN_POSITIVE_EV_RULE_ID
-                : null,
+        action_rule_id: mlFinalActionRuleId,
         grade_source:
-          trackedMlBestAngle && mlModelBestAngleRetained
+          !mlTrueInversionActionable && !mlChampionAction.actionable
+            ? null
+          : mlFinalBestAngle && mlModelBestAngleRetained
             ? "calibrated_model"
             : mlModelLeanRetained
               ? "calibrated_model"
@@ -3617,7 +3651,7 @@ function buildMlRecord(
             ? ML_MID_PRICE_ESTABLISHED_PRICE_BEST_ANGLE_RULE_ID
             : null,
         broad_best_angle_demoted_by_recalibration: mlDemotedBroadBestAngle,
-        final_best_angle: trackedMlBestAngle,
+        final_best_angle: mlFinalBestAngle,
       },
       market_aware_corrected_grade: mlMarketAwareCorrectedGrade,
       ml_inversion_grade_resolution: mlFlipped
@@ -3635,7 +3669,7 @@ function buildMlRecord(
         rule_id: "ml_grade_recalibration_v3_2026_07_20",
         original_public_play_grade: mlPublicPlayGrade,
         final_public_play_grade: mlMarketAwareCorrectedGrade?.playGrade ?? mlChampionPublicPlayGrade,
-        final_best_angle: trackedMlBestAngle,
+        final_best_angle: mlFinalBestAngle,
         clean_tight_best_angle: mlCalibratedBestAngle,
         calibrated_model_lean_retained: mlModelLeanRetained,
         calibrated_model_lean_path_id: mlModelLeanRetained

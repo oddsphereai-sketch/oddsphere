@@ -74,8 +74,8 @@ const layers = buildMlbModelLayerVersions("total", {});
 check("missing model env stamps resolved v2_2", layers.runtime_env.automodel_version === "v2_2");
 check("missing FI env stamps resolved fi_v2", layers.runtime_env.first_inning_model_version === "fi_v2");
 check(
-  "grade policy carries the r67 strong-winner resistance hierarchy",
-  layers.grade_policy === "mlb_public_grade_policy_v45_strong_winner_resistance_lean_2026_08_22",
+  "grade policy carries the r68 market-scoped grade-integrity hierarchy",
+  layers.grade_policy === "mlb_public_grade_policy_v46_market_scoped_grade_integrity_2026_08_23",
 );
 check(
   "tracking contract carries the priority-retry minute-lock release",
@@ -87,12 +87,12 @@ check(
     layers.calibration_version === MLB_PUBLIC_CALIBRATION_VERSION,
 );
 check(
-  "MLB r67 versions the strong-winner resistance Lean without changing the champion probability heads",
-  MLB_DAILY_EDGE_DECISION_RELEASE_ID === "mlb_daily_edge_decision_2026_08_22_r67" &&
+  "MLB r68 versions market-scoped grade integrity without changing the champion probability heads",
+  MLB_DAILY_EDGE_DECISION_RELEASE_ID === "mlb_daily_edge_decision_2026_08_23_r68" &&
     MLB_MODEL_LAYER_VERSION_SCHEMA === "mlb_model_layer_versions_v5" &&
-    layers.rule_bundle_version === "mlb_daily_edge_rule_bundle_v55_2026_08_22" &&
+    layers.rule_bundle_version === "mlb_daily_edge_rule_bundle_v56_market_scoped_grade_integrity_2026_08_23" &&
     layers.moneyline_evaluation_price_policy === "mlb_ml_fresh_coherent_best_playable_price_same_book_movement_v2_2026_08_22" &&
-    layers.correction_policy === "mlb_prediction_corrections_v19_strong_winner_resistance_lean_2026_08_22" &&
+    layers.correction_policy === "mlb_prediction_corrections_v20_market_scoped_grade_integrity_2026_08_23" &&
     layers.first_inning_probability_head === "mlb_first_inning_fi_v4_market_backed_weight25_2026_08_20" &&
     layers.schedule_time_policy === "mlb_official_schedule_time_v1_2026_07_30",
 );
