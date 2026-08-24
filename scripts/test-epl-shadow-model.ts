@@ -7,7 +7,55 @@ import { calibratedEplGoalProjection, calibratedEplTotalOverProbability, EPL_MAT
 import { eplTeamsMatch, normalizeEplSplits } from "../lib/providers/real_api/SharpApiEplMarketProvider";
 import { recentComparableEplMatches } from "../lib/services/epl/eplEvidence";
 import { eplSnapshotGamesNeedingLock, preserveLockedEplGames } from "../lib/services/epl/eplLockedSnapshot";
+import { eplEmergencySnapshotIsUsable } from "../lib/services/epl/eplMemberSnapshotContinuity";
+import { evaluateEplPublicationCoverage } from "../lib/services/epl/eplPublicationReadiness";
 import type { DailyEdgeGameDto, DailyEdgeResponse } from "../app/lab/lib/labTypes";
+
+const completeMarket = {
+  currentPriceAmerican: -110,
+  soccerPriceBoard: { rows: [{}, {}, {}] },
+};
+const activeCoverage = evaluateEplPublicationCoverage(
+  {
+    matches: [
+      { id: 1, status: "final" },
+      { id: 2, status: "scheduled" },
+    ],
+  } as never,
+  {
+    games: [
+      {
+        external_id: "1",
+        markets: { moneyline: { currentPriceAmerican: null }, total: { currentPriceAmerican: null }, first_inning: { currentPriceAmerican: null } },
+        soccerDoubleChanceMarket: { currentPriceAmerican: null },
+      },
+      {
+        external_id: "2",
+        markets: { moneyline: completeMarket, total: { ...completeMarket, soccerPriceBoard: { rows: [{}, {}] } }, first_inning: { ...completeMarket, soccerPriceBoard: { rows: [{}, {}] } } },
+        soccerDoubleChanceMarket: completeMarket,
+      },
+    ],
+  } as never,
+);
+assert.deepEqual(
+  activeCoverage,
+  { activeFixtures: 1, selectedCurrent: 4, selectedExpected: 4, outcomeCurrent: 10, outcomeExpected: 10, errors: [] },
+  "EPL publication coverage must ignore full-time fixtures after sportsbooks remove their prices",
+);
+
+const emergencySnapshot = {
+  games: [{ gameStartAt: "2026-08-24T19:00:00.000Z" }],
+} as DailyEdgeResponse;
+assert.equal(
+  eplEmergencySnapshotIsUsable(emergencySnapshot, "2026-08-23T14:30:00.000Z", new Date("2026-08-24T14:45:00.000Z")),
+  true,
+  "a recently expired weekly snapshot remains readable when it contains today's upcoming EPL match",
+);
+assert.equal(
+  eplEmergencySnapshotIsUsable(emergencySnapshot, "2026-08-10T14:30:00.000Z", new Date("2026-08-24T14:45:00.000Z")),
+  false,
+  "an old EPL snapshot cannot remain visible indefinitely",
+);
 
 function match(id: number, date: string, home: number, away: number, homeScore: number, awayScore: number, homeXg = homeScore, awayXg = awayScore): EplTrainingMatch {
   return { id, season: 2025, home_team_id: home, away_team_id: away, date, name: `${away} at ${home}`, short_name: `${away} @ ${home}`, status: "STATUS_FULL_TIME", status_state: "final", status_detail: "FT", home_score: homeScore, away_score: awayScore, venue_name: "Test Ground", venue_city: "London", round_number: id, home_xg: homeXg, away_xg: awayXg };
@@ -270,6 +318,7 @@ const productionPipeline = readFileSync("lib/services/epl/eplProductionPipeline.
 const refreshRoute = readFileSync("app/api/cron/epl-daily-refresh/route.ts", "utf8");
 const lockRoute = readFileSync("app/api/cron/epl-pregame-lock/route.ts", "utf8");
 const memberStore = readFileSync("lib/services/epl/eplMemberSnapshotStore.ts", "utf8");
+const publicationReadiness = readFileSync("lib/services/epl/eplPublicationReadiness.ts", "utf8");
 const foundationStore = readFileSync("lib/services/epl/eplHistoricalFoundationStore.ts", "utf8");
 const candidatePage = readFileSync("app/lab/daily-edge/CandidateDailyEdgePage.tsx", "utf8");
 const dailyEdgeSports = readFileSync("app/lab/lib/dailyEdgeSports.ts", "utf8");
@@ -355,10 +404,14 @@ for (const route of [refreshRoute, lockRoute]) {
   assert.match(route, /requireLease: true/);
 }
 assert.match(refreshRoute, /EPL_PUBLICATION_ENABLED/);
-assert.match(refreshRoute, /selected current-price coverage/);
-assert.match(refreshRoute, /outcome price-board coverage/);
+assert.match(refreshRoute, /evaluateEplPublicationCoverage/);
+assert.match(publicationReadiness, /selected current-price coverage/);
+assert.match(publicationReadiness, /outcome price-board coverage/);
+assert.match(publicationReadiness, /match\.status !== "final"/, "completed EPL fixtures must not block publication after books remove their prices");
 assert.match(lockRoute, /findEplGamesEnteringLock/);
 assert.match(memberStore, /current-week/);
+assert.match(memberStore, /readLatestLabResponseSnapshot/, "EPL reads need a bounded emergency fallback when a valid weekly snapshot outlives its cache deadline");
+assert.match(memberStore, /epl_member_snapshot_lifecycle_2026_08_24_r2/, "EPL continuity behavior must carry its own immutable lifecycle release");
 assert.match(foundationStore, /historical-foundation::through-2025/);
 assert.match(slateBuilder, /EPL_FOUNDATION_CACHE_WRITES_ENABLED/);
 assert.match(candidatePage, /PREMIER_LEAGUE_DAILY_EDGE_ENABLED/);

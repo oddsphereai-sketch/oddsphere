@@ -73,6 +73,37 @@ export async function readLabResponseSnapshot<T extends LabResponseSnapshotPaylo
   };
 }
 
+/**
+ * Reads the newest stored value without treating its cache deadline as a
+ * truth deadline. Callers must apply their own narrow domain guard before
+ * exposing it. This is for continuity fallbacks only; normal reads should use
+ * the fresh/stale modes above.
+ */
+export async function readLatestLabResponseSnapshot<T extends LabResponseSnapshotPayload>(
+  snapshotKey: string,
+): Promise<LabResponseSnapshotReadResult<T> | null> {
+  const { data, error } = await supabase
+    .from("lab_response_snapshots")
+    .select("payload, generated_at, expires_at, stale_until")
+    .eq("snapshot_key", snapshotKey)
+    .maybeSingle();
+
+  if (error) {
+    if (TABLE_MISSING_RE.test(error.message)) return null;
+    console.warn(`lab_response_snapshots latest read failed for ${snapshotKey}: ${error.message}`);
+    return null;
+  }
+  if (!data) return null;
+
+  return {
+    payload: data.payload as T,
+    cacheState: "DB_SNAPSHOT_STALE",
+    generatedAt: String(data.generated_at),
+    expiresAt: String(data.expires_at),
+    staleUntil: String(data.stale_until),
+  };
+}
+
 export async function upsertLabResponseSnapshot(input: {
   snapshotKey: string;
   kind: LabResponseSnapshotKind;
