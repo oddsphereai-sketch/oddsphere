@@ -91,7 +91,7 @@ const scorePairs = fixture.snapshot.games.map((game) => ({
 if (markets.length !== 48 || markets.some(([, , market]) => market.held || !market.pick || market.modelProb === null)) {
   throw new Error("NFL v1 current board is missing a published prediction or contains an unexpected Hold.");
 }
-if (grades.Lean !== 8 || grades["No Play"] !== 40 || Object.keys(grades).length !== 2) {
+if (grades.Lean !== 8 || (grades.Watchlist ?? 0) < 1 || grades["No Play"] !== 40 - grades.Watchlist || Object.keys(grades).length !== 3) {
   throw new Error(`NFL v1 current board count mismatch: ${JSON.stringify(grades)}.`);
 }
 if (markets.some(([, , market]) => market.verdict.label === "Lean" && (market.pinnacleEvPct ?? 0) <= 0)) {

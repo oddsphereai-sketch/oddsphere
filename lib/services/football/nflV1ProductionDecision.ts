@@ -20,12 +20,21 @@ export const NFL_V1_PRODUCTION_MODEL_RELEASE =
 export const NFL_V1_PRODUCTION_CALIBRATION_RELEASE =
   "nfl_v1_daily_edge_calibration_2026_08_23_r2" as const;
 export const NFL_V1_PRODUCTION_DECISION_RELEASE =
-  "nfl_v1_daily_edge_decision_2026_08_23_r2" as const;
+  "nfl_v1_daily_edge_decision_2026_08_24_r3_grading_tiers" as const;
+export const NFL_V1_GRADE_POLICY_RELEASE =
+  "nfl_v1_grade_policy_2026_08_24_r3" as const;
+export const NFL_V1_MEMBER_RELEASE =
+  "nfl_v1_member_release_2026_08_24_r3_grading_tiers" as const;
+
+export const NFL_V1_WATCHLIST_MINIMUM_EXPECTED_VALUE = -0.01 as const;
+export const NFL_V1_WATCHLIST_MINIMUM_EDGE_PERCENTAGE_POINTS = -1.0 as const;
+export const NFL_V1_GRADE_MINIMUM_AMERICAN_PRICE = -300 as const;
+export const NFL_V1_GRADE_MAXIMUM_AMERICAN_PRICE = 300 as const;
 
 export type NflV1ProductionDecisionBundle = {
   evaluatedBets: NflRegularEvaluatedBetDecision[];
   outcomeConfidence: NflRegularOutcomeConfidence[];
-  modelPromotionStatus: "nfl_v1_member_release_2026_08_23_r2";
+  modelPromotionStatus: typeof NFL_V1_MEMBER_RELEASE;
   publicationEnabled: true;
   trackingEnabled: false;
 };
@@ -87,7 +96,7 @@ export function buildNflV1ProductionDecisionBundle(args: {
     return {
       evaluatedBets: [],
       outcomeConfidence,
-      modelPromotionStatus: "nfl_v1_member_release_2026_08_23_r2",
+      modelPromotionStatus: NFL_V1_MEMBER_RELEASE,
       publicationEnabled: true,
       trackingEnabled: false,
     };
@@ -113,17 +122,23 @@ export function buildNflV1ProductionDecisionBundle(args: {
   };
   const outcomeWinner = homeWinner ? args.homeTeam : args.awayTeam;
   const r6Lean = args.shadowMoneyline.grade === "Lean" && r6Team === outcomeWinner;
-  const moneylineTeam = r6Lean ? r6Team : homeWinner ? args.homeTeam : args.awayTeam;
-  const moneylineModelProbability = r6Lean
+  const moneylinePublicPrice = homeWinner ? moneylineBoard.homePrice : moneylineBoard.awayPrice;
+  const watchlistReason = !r6Lean && boundedGradePrice(moneylinePublicPrice)
+    ? nflV1WatchlistReason({ shadowMoneyline: args.shadowMoneyline, outcomeWinner })
+    : null;
+  const r6NearBoundary = watchlistReason === "near_exact_price_boundary";
+  const useR6Tuple = r6Lean || r6NearBoundary;
+  const moneylineTeam = useR6Tuple ? r6Team : homeWinner ? args.homeTeam : args.awayTeam;
+  const moneylineModelProbability = useR6Tuple
     ? r6Probability
     : homeWinner ? outcome.homeWinProbability : outcome.awayWinProbability;
-  const moneylineQuote = r6Lean ? r6EvaluatedQuote : {
+  const moneylineQuote = useR6Tuple ? r6EvaluatedQuote : {
     sportsbook: args.current.sportsbook,
     line: null,
-    price: homeWinner ? moneylineBoard.homePrice : moneylineBoard.awayPrice,
+    price: moneylinePublicPrice,
     observedAt: args.current.observedAt,
   };
-  const moneylineFairProbability = r6Lean
+  const moneylineFairProbability = useR6Tuple
     ? r6ConsensusFairProbability
     : twoSidedFair(
         homeWinner ? moneylineBoard.homePrice : moneylineBoard.awayPrice,
@@ -136,9 +151,9 @@ export function buildNflV1ProductionDecisionBundle(args: {
     modelProbability: moneylineModelProbability,
     marketFairProbability: moneylineFairProbability,
     evaluatedQuote: moneylineQuote,
-    grade: r6Lean ? "Lean" : "No Play",
-    modelRelease: r6Lean ? NFL_R6_MONEYLINE_MODEL_RELEASE : NFL_V1_PRODUCTION_MODEL_RELEASE,
-    calibrationRelease: r6Lean ? NFL_R6_MONEYLINE_CALIBRATION_RELEASE : NFL_V1_PRODUCTION_CALIBRATION_RELEASE,
+    grade: r6Lean ? "Lean" : watchlistReason ? "Watchlist" : "No Play",
+    modelRelease: useR6Tuple ? NFL_R6_MONEYLINE_MODEL_RELEASE : NFL_V1_PRODUCTION_MODEL_RELEASE,
+    calibrationRelease: useR6Tuple ? NFL_R6_MONEYLINE_CALIBRATION_RELEASE : NFL_V1_PRODUCTION_CALIBRATION_RELEASE,
   });
   const spreadDecision = buildNflRegularEvaluatedBetDecision({
     ...common,
@@ -182,13 +197,48 @@ export function buildNflV1ProductionDecisionBundle(args: {
   return {
     evaluatedBets,
     outcomeConfidence,
-    modelPromotionStatus: "nfl_v1_member_release_2026_08_23_r2",
+    modelPromotionStatus: NFL_V1_MEMBER_RELEASE,
     publicationEnabled: true,
     // The member release publishes coherent prediction/decision tuples into
     // the append-only forward-evidence store only. Official prediction-record
     // tracking is a separate, intentionally unimplemented release boundary.
     trackingEnabled: false,
   };
+}
+
+export type NflV1WatchlistReason =
+  | "r6_r10_direction_disagreement"
+  | "near_exact_price_boundary";
+
+export function nflV1WatchlistReason(args: {
+  shadowMoneyline: NflR6ShadowMoneylineDecision;
+  outcomeWinner: string;
+}): NflV1WatchlistReason | null {
+  const shadow = args.shadowMoneyline;
+  if (
+    shadow.health.blockingReasons.length > 0
+    || shadow.decisionStage === "t60_held"
+    || !shadow.team
+    || !shadow.evaluatedQuote
+    || shadow.expectedValuePerUnit === null
+    || shadow.edgePercentagePoints === null
+    || !boundedGradePrice(shadow.evaluatedQuote.price)
+  ) return null;
+  if (shadow.grade === "Lean" && shadow.team !== args.outcomeWinner) {
+    return "r6_r10_direction_disagreement";
+  }
+  if (
+    shadow.grade !== "Lean"
+    && shadow.team === args.outcomeWinner
+    && shadow.expectedValuePerUnit >= NFL_V1_WATCHLIST_MINIMUM_EXPECTED_VALUE
+    && shadow.edgePercentagePoints >= NFL_V1_WATCHLIST_MINIMUM_EDGE_PERCENTAGE_POINTS
+  ) return "near_exact_price_boundary";
+  return null;
+}
+
+function boundedGradePrice(price: number): boolean {
+  return price >= NFL_V1_GRADE_MINIMUM_AMERICAN_PRICE
+    && price <= NFL_V1_GRADE_MAXIMUM_AMERICAN_PRICE;
 }
 
 function twoSidedFair(selectedPrice: number, opposingPrice: number): number {

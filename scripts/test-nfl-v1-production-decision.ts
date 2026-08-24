@@ -43,18 +43,31 @@ const opposed = buildNflV1ProductionDecisionBundle({
   shadowMoneyline: shadow({ team: "NE", side: "away", grade: "Lean", probability: 0.55, price: 162 }),
 });
 const opposedMoneyline = opposed.evaluatedBets.find((decision) => decision.market === "moneyline")!;
-assert.equal(opposedMoneyline.grade, "No Play");
+assert.equal(opposedMoneyline.grade, "Watchlist");
 assert.equal(opposedMoneyline.side, "SEA");
 assert.equal(opposedMoneyline.modelProbability, outcome.homeWinProbability);
 assert.equal(opposedMoneyline.evaluatedQuote.sportsbook, "fanduel");
 
 const nonqualifier = buildNflV1ProductionDecisionBundle({
   providerGameId, awayTeam, homeTeam, gameStartsAt, current,
-  shadowMoneyline: shadow({ team: "SEA", side: "home", grade: "Held", probability: 0.61, price: -180 }),
+  shadowMoneyline: shadow({ team: "SEA", side: "home", grade: "Held", probability: 0.595, price: -180, expectedValue: -0.005, edgePp: -0.5 }),
 });
-assert.equal(nonqualifier.evaluatedBets.find((decision) => decision.market === "moneyline")?.grade, "No Play");
+assert.equal(nonqualifier.evaluatedBets.find((decision) => decision.market === "moneyline")?.grade, "Watchlist");
 assert.equal(nonqualifier.evaluatedBets.every((decision) => decision.side.length > 0), true);
 assert.equal(nonqualifier.trackingEnabled, false);
+
+const outsideBoundary = buildNflV1ProductionDecisionBundle({
+  providerGameId, awayTeam, homeTeam, gameStartsAt, current,
+  shadowMoneyline: shadow({ team: "SEA", side: "home", grade: "Held", probability: 0.57, price: -180, expectedValue: -0.03, edgePp: -3 }),
+});
+assert.equal(outsideBoundary.evaluatedBets.find((decision) => decision.market === "moneyline")?.grade, "No Play");
+
+const unboundedPublicPrice = buildNflV1ProductionDecisionBundle({
+  providerGameId, awayTeam, homeTeam, gameStartsAt,
+  current: { ...current, moneyline: { awayPrice: 255, homePrice: -325 } },
+  shadowMoneyline: shadow({ team: "NE", side: "away", grade: "Lean", probability: 0.55, price: 255 }),
+});
+assert.equal(unboundedPublicPrice.evaluatedBets.find((decision) => decision.market === "moneyline")?.grade, "No Play");
 
 const trueHealthHold = buildNflV1ProductionDecisionBundle({
   providerGameId, awayTeam, homeTeam, gameStartsAt, current,
@@ -69,7 +82,7 @@ assert.equal(trueHealthHold.outcomeConfidence.length, 3);
 assert.equal(trueHealthHold.publicationEnabled, true);
 assert.equal(trueHealthHold.trackingEnabled, false);
 
-console.log("NFL v1 decision bundle: r10 forecasts, r6 positive-EV Leans, direction coherence, No Plays, and true health Holds passed");
+console.log("NFL v1 decision bundle: r10 forecasts, r6 Leans, bounded Watchlists, No Plays, and true health Holds passed");
 
 function shadow(args: {
   team: "NE" | "SEA";
@@ -77,6 +90,8 @@ function shadow(args: {
   grade: "Lean" | "Held";
   probability: number;
   price: number;
+  expectedValue?: number;
+  edgePp?: number;
 }): NflR6ShadowMoneylineDecision {
   return {
     schemaRelease: NFL_R6_SHADOW_DECISION_SCHEMA_RELEASE,
@@ -94,8 +109,8 @@ function shadow(args: {
     targetBookFairProbability: 0.61,
     otherBookCount: 4,
     evaluatedQuote: { sportsbook: "draftkings", line: null, price: args.price, observedAt: evaluatedAt },
-    expectedValuePerUnit: 0.02,
-    edgePercentagePoints: (args.probability - 0.6) * 100,
+    expectedValuePerUnit: args.expectedValue ?? 0.02,
+    edgePercentagePoints: args.edgePp ?? (args.probability - 0.6) * 100,
     decisionStage: "unlocked",
     evaluatedAt,
     gameStartsAt,
