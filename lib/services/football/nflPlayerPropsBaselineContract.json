@@ -1,0 +1,25 @@
+{
+  "tournamentRelease": "nfl_player_props_baseline_tournament_2026_08_25_r1",
+  "shadowModelRelease": "nfl_player_props_distribution_shadow_2026_08_25_r1",
+  "calibrationRelease": "nfl_player_props_distribution_calibration_shadow_2026_08_25_r1",
+  "evaluationRelease": "nfl_player_props_chronological_evaluation_2026_08_25_r1",
+  "historicalDatasetRelease": "nfl_player_props_historical_features_2016_2025_2026_08_20_r1",
+  "mode": "local_shadow_only",
+  "actionable": false,
+  "lineProbabilityReady": false,
+  "splits": {
+    "trainingEnd": 2022,
+    "selection": 2023,
+    "confirmation": 2024,
+    "holdout": 2025
+  },
+  "markets": {
+    "passing_attempts": {"positions": ["QB"], "roleMetric": "passing_attempts", "minimumPriorAverage": 8.0, "distribution": "count"},
+    "passing_completions": {"positions": ["QB"], "roleMetric": "passing_attempts", "minimumPriorAverage": 8.0, "distribution": "count"},
+    "passing_yards": {"positions": ["QB"], "roleMetric": "passing_attempts", "minimumPriorAverage": 8.0, "distribution": "continuous"},
+    "rushing_attempts": {"positions": ["QB", "RB", "FB", "WR"], "roleMetric": "rushing_attempts", "minimumPriorAverage": 1.5, "distribution": "count"},
+    "rushing_yards": {"positions": ["QB", "RB", "FB", "WR"], "roleMetric": "rushing_attempts", "minimumPriorAverage": 1.5, "distribution": "continuous"},
+    "receptions": {"positions": ["RB", "FB", "WR", "TE"], "roleMetric": "targets", "minimumPriorAverage": 1.5, "distribution": "count"},
+    "receiving_yards": {"positions": ["RB", "FB", "WR", "TE"], "roleMetric": "targets", "minimumPriorAverage": 1.5, "distribution": "continuous"}
+  }
+}

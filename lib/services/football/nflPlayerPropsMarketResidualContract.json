@@ -1,0 +1,33 @@
+{
+  "marketResidualRelease": "nfl_player_props_market_residual_calibration_2026_08_25_r3_shared_context",
+  "baseModelRelease": "nfl_player_props_distribution_model_2026_08_25_r2_shared_context",
+  "baseCalibrationRelease": "nfl_player_props_distribution_calibration_2026_08_25_r2_shared_context",
+  "decisionRelease": "nfl_player_props_decision_2026_08_25_r2_exact_price_shared_context",
+  "marketBenchmark": "independent_book_consensus_excluding_target_book",
+  "selectionEnd": "2025-10-31",
+  "confirmationStart": "2025-11-01",
+  "lambdaCandidates": [0.2, 0.35, 0.5, 0.65, 0.8, 1.0],
+  "minimumModelWeight": 0.2,
+  "selectionObjective": "brier",
+  "qualification": {
+    "maximumCalibrationGap": 0.05,
+    "mustBeatRawModelBrier": true,
+    "mustBeatMarketBrier": true
+  },
+  "gradeThresholds": {
+    "watchlist": {"minimumEv": 0.0, "minimumProbabilityEdge": 0.0},
+    "lean": {"minimumEv": 0.04, "minimumProbabilityEdge": 0.025},
+    "bestAngle": {"minimumEv": 0.08, "minimumProbabilityEdge": 0.04}
+  },
+  "promotionPolicy": {
+    "receiving_yards": {"bestAngle": true, "lean": false, "watchlist": true},
+    "receptions": {"bestAngle": true, "lean": false, "watchlist": true},
+    "rushing_attempts": {"bestAngle": false, "lean": true, "watchlist": true},
+    "passing_attempts": {"bestAngle": false, "lean": false, "watchlist": false},
+    "passing_completions": {"bestAngle": false, "lean": false, "watchlist": false},
+    "passing_yards": {"bestAngle": false, "lean": false, "watchlist": false},
+    "rushing_yards": {"bestAngle": false, "lean": false, "watchlist": false}
+  },
+  "noQuotas": true,
+  "provisional": false
+}

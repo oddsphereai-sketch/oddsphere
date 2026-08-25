@@ -2,6 +2,7 @@ import { cronHandler } from "@/lib/cron/runCron";
 import { supabase } from "@/lib/db/supabase";
 import { OpenWeatherProvider } from "@/lib/providers/real_api/OpenWeatherProvider";
 import { runNflForwardEvidenceWriter } from "@/lib/services/football/nflForwardEvidenceWriter";
+import { runNflPlayerPropsProductionWriter } from "@/lib/services/football/nflPlayerPropsProductionWriter";
 
 export const maxDuration = 300;
 
@@ -27,23 +28,43 @@ export async function GET(request: Request): Promise<Response> {
     const weatherProvider = process.env.OPENWEATHER_API_KEY
       ? new OpenWeatherProvider(process.env.OPENWEATHER_API_KEY)
       : null;
+    const cycleNow = new Date().toISOString();
     const result = await runNflForwardEvidenceWriter({
       client: supabase,
       season,
       week,
       runId,
-      now: new Date().toISOString(),
+      now: cycleNow,
       apply: true,
       balldontlieApiKey,
       playbookApiKey,
       sharpApiKey,
       weatherProvider,
     });
+    let playerProps: Awaited<ReturnType<typeof runNflPlayerPropsProductionWriter>> | null = null;
+    let playerPropsError: string | null = null;
+    if (process.env.NFL_PLAYER_PROPS_ENABLED === "true") {
+      try {
+        playerProps = await runNflPlayerPropsProductionWriter({
+          client: supabase,
+          season,
+          week,
+          now: cycleNow,
+          apply: true,
+          ballDontLieApiKey: balldontlieApiKey,
+          sharpApiKey,
+        });
+      } catch (error) {
+        // Props retains its last complete snapshot. A provider failure must not
+        // roll back or suppress the authoritative NFL Daily Edge publication.
+        playerPropsError = error instanceof Error ? error.message : String(error);
+      }
+    }
     return {
-      records_updated: result.inserted,
-      api_calls_made: result.apiCallsMaximum,
-      partial: result.healthHolds.length > 0,
-      error_message: result.healthHolds.length > 0 ? result.healthHolds.join(",") : null,
+      records_updated: result.inserted + (playerProps?.memberRows ?? 0),
+      api_calls_made: result.apiCallsMaximum + (playerProps?.apiCallsMaximum ?? 0),
+      partial: result.healthHolds.length > 0 || playerPropsError !== null,
+      error_message: [result.healthHolds.join(","), playerPropsError].filter(Boolean).join(",") || null,
       details: {
         writer_release: result.writerRelease,
         collected: result.collected,
@@ -64,6 +85,9 @@ export async function GET(request: Request): Promise<Response> {
         tracking_records_proposed: result.trackingRecordsProposed,
         tracking_records_inserted: result.trackingRecordsInserted,
         tracking_records_existing: result.trackingRecordsExisting,
+        player_props_enabled: process.env.NFL_PLAYER_PROPS_ENABLED === "true",
+        player_props: playerProps,
+        player_props_error: playerPropsError,
       },
     };
   }, {

@@ -142,6 +142,7 @@ export async function collectNflPlayerPropsObservations(args: {
   if (sharpKey) {
     const sharp = new SharpApiClient(sharpKey);
     let offset = 0;
+    let cursor: string | null = null;
     for (let page = 0; page < MAX_SHARP_PAGES; page += 1) {
       const response: SharpApiResponse<unknown[]> = await sharp.fetch<unknown[]>({
         path: "/odds",
@@ -150,14 +151,14 @@ export async function collectNflPlayerPropsObservations(args: {
           market: "props",
           is_live: false,
           limit: SHARP_PAGE_SIZE,
-          offset,
+          ...(cursor ? { cursor } : { offset }),
         },
         signal: AbortSignal.timeout(20_000),
       });
       sharpRequests += 1;
       if (!Array.isArray(response.data)) throw new Error("SharpAPI NFL props returned malformed data.");
       sharpRaw.push(...response.data);
-      const next = response.pagination?.next_offset;
+      const next = nextSharpPropsPage(response.pagination, offset);
       if (response.pagination?.has_more !== true) {
         sharpComplete = true;
         break;
@@ -166,7 +167,8 @@ export async function collectNflPlayerPropsObservations(args: {
         healthFindings.push("SHARPAPI_PROPS_CURSOR_MISSING");
         break;
       }
-      offset = next;
+      offset = next.offset;
+      cursor = next.cursor;
     }
     if (!sharpComplete) healthFindings.push("SHARPAPI_PROPS_TRUNCATED_BY_PAGE_BUDGET");
   } else {
@@ -212,6 +214,20 @@ export async function collectNflPlayerPropsObservations(args: {
       sharpapi: sharpNormalization,
     },
   };
+}
+
+function nextSharpPropsPage(
+  pagination: SharpApiResponse<unknown[]>["pagination"],
+  currentOffset: number,
+): { offset: number; cursor: string | null } | null {
+  if (pagination?.has_more !== true) return null;
+  const withCursor = pagination as typeof pagination & { next_cursor?: unknown };
+  const cursor = text(withCursor?.next_cursor);
+  if (cursor) return { offset: currentOffset, cursor };
+  const nextOffset = pagination?.next_offset;
+  return typeof nextOffset === "number" && nextOffset > currentOffset
+    ? { offset: nextOffset, cursor: null }
+    : null;
 }
 
 function validateRequest(season: number, week: number, phase: NflPlayerPropPhase): void {
@@ -381,4 +397,5 @@ export const __NFL_PLAYER_PROPS_COLLECTOR_TEST__ = {
   enrichPlayerIdentities,
   normalizePlayerIdentity,
   reconcileSharpRowsToSlate,
+  nextSharpPropsPage,
 };

@@ -10,6 +10,7 @@ import {
   buildMlbPropsInitialMemberBoardData,
   selectMlbPropsResearchForRows,
 } from "@/lib/mlb/props/memberPayload";
+import { PlayerPropsLeaguePills } from "@/app/player-props/components/PlayerPropsLeaguePills";
 
 export const metadata = {
   title: "MLB Player Props Preview",
@@ -34,7 +35,7 @@ export default async function MlbPropsPreviewPage({ searchParams }: { searchPara
   if (firstQueryValue(query.source) === "fixture") {
     const data = fixture as PlayerPropsDashboardData;
     const initialSelectedId = data.props.some((row) => row.id === requestedReader) ? requestedReader : null;
-    return <ProductAppFrame><PlayerPropsDashboard data={data} mode="preview" initialSelectedId={initialSelectedId} presentation="candidate" /></ProductAppFrame>;
+    return <ProductAppFrame><PlayerPropsLeaguePills league="mlb" nflEnabled reviewMode /><PlayerPropsDashboard data={data} mode="preview" initialSelectedId={initialSelectedId} presentation="candidate" /></ProductAppFrame>;
   }
 
   const candidate = await loadCandidateSnapshot(slateDate);
@@ -55,7 +56,7 @@ export default async function MlbPropsPreviewPage({ searchParams }: { searchPara
   const initialSelectedId = previewData.props.some((row) => row.id === requestedReader) ? requestedReader : null;
   // Use the production member behavior in review as well. This keeps scoped
   // board hydration and on-demand player research identical at cutover.
-  return <ProductAppFrame><PlayerPropsDashboard data={previewData} mode="member" initialSelectedId={initialSelectedId} presentation="candidate" /></ProductAppFrame>;
+  return <ProductAppFrame><PlayerPropsLeaguePills league="mlb" nflEnabled reviewMode /><PlayerPropsDashboard data={previewData} mode="member" initialSelectedId={initialSelectedId} presentation="candidate" /></ProductAppFrame>;
 }
 
 async function loadCandidateSnapshot(slateDate: string) {

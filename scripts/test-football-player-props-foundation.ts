@@ -172,6 +172,15 @@ assert.throws(
 
 assert.equal(NFL_PLAYER_PROPS_COLLECTION_LIMITS.bdlConcurrency, 3);
 assert.ok(NFL_PLAYER_PROPS_COLLECTION_LIMITS.maxSharpPages <= 8);
+assert.deepEqual(
+  __NFL_PLAYER_PROPS_COLLECTOR_TEST__.nextSharpPropsPage({ has_more: true, next_offset: 200 }, 0),
+  { offset: 200, cursor: null },
+);
+assert.deepEqual(
+  __NFL_PLAYER_PROPS_COLLECTOR_TEST__.nextSharpPropsPage({ has_more: true, next_offset: undefined, next_cursor: "cursor-400" } as never, 400),
+  { offset: 400, cursor: "cursor-400" },
+);
+assert.equal(__NFL_PLAYER_PROPS_COLLECTOR_TEST__.nextSharpPropsPage({ has_more: false }, 400), null);
 assert.throws(() => __NFL_PLAYER_PROPS_COLLECTOR_TEST__.validateRequest(2026, 4, "preseason"), /1 through 3/);
 assert.equal(
   __NFL_PLAYER_PROPS_COLLECTOR_TEST__.inSlateWindow("2026-09-10T01:00:00Z", games),

@@ -1,0 +1,23 @@
+{
+  "tournamentRelease": "nfl_player_props_touchdown_tournament_2026_08_25_r2_team_expectation",
+  "modelRelease": "nfl_player_props_anytime_td_model_2026_08_25_r2_team_expectation",
+  "calibrationRelease": "nfl_player_props_anytime_td_calibration_2026_08_25_r2_team_expectation",
+  "priceDecisionRelease": "nfl_player_props_anytime_td_price_value_2026_08_25_r2_team_expectation",
+  "market": "anytime_td",
+  "eligibleLine": 0.5,
+  "minimumAmericanPrice": 100,
+  "chronology": {"trainingEnd": 2022, "modelSelection": 2023, "calibration": 2024, "lockedEvaluation": 2025},
+  "modelCandidates": ["prior_td_ewm", "logistic", "hgb_classifier"],
+  "requiredOpportunityFeatures": ["participation", "red_zone", "goal_line", "team_implied_touchdowns", "opponent_touchdown_allowance"],
+  "teamExpectationSource": "checksum_pinned_nflverse_pregame_total_and_spread",
+  "selectionObjective": "brier",
+  "priceThresholds": {
+    "watchlist": {"minimumEv": 0.0, "minimumProbabilityEdge": 0.0},
+    "lean": {"minimumEv": 0.07, "minimumProbabilityEdge": 0.02},
+    "bestAngle": {"minimumEv": 0.12, "minimumProbabilityEdge": 0.035}
+  },
+  "marketResidualWeights": [0.2, 0.35, 0.5, 0.65, 0.8, 1.0],
+  "minimumModelWeight": 0.2,
+  "provisional": true,
+  "noQuotas": true
+}

@@ -35,6 +35,7 @@ function allowedTarget(target: string): boolean {
   return [
     "/dev/experience-preview",
     "/dev/mlb-props-preview",
+    "/dev/nfl-props-preview",
     "/dev/tracking-preview",
     "/dev/homepage-preview",
   ].some((prefix) => target === prefix || target.startsWith(`${prefix}?`));
