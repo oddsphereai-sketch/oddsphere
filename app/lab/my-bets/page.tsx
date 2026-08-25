@@ -1,15 +1,10 @@
-"use client";
-
 /**
- * /lab/my-bets — V1 stub (Phase 6.2a).
- *
- * Per V2.1 spec Part 15: My Bets is "EXPLICITLY DEFERRED" — full feature in
- * Phase 9 post-launch. V1 ships a "Coming Soon" stub so the nav has a
- * destination and members can see what's planned.
+ * Keep the established /lab/my-bets path so existing member bookmarks remain
+ * valid while the fourth Lab tab becomes the in-app How It Works guide.
  */
 
-import MyBetsStub from "../components/MyBetsStub";
+import { HowItWorksGuide } from "@/app/components/how-it-works/HowItWorksGuide";
 
 export default function MyBetsPage() {
-  return <MyBetsStub />;
+  return <HowItWorksGuide />;
 }

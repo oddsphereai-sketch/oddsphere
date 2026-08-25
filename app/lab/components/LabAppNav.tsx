@@ -9,7 +9,7 @@
  *   /lab/daily-edge    → Daily Edge
  *   /mlb/props         → Player Props
  *   /lab/tracking      → Model Tracking (member-facing, Phase 6B.2b)
- *   /lab/my-bets       → My Bets (stub, V1)
+ *   /lab/my-bets       → How It Works
  *   /lab/account       → Account (stub, V1)
  *
  * /lab/track-record permanently redirects to /lab/tracking so legacy
@@ -40,7 +40,7 @@ const TABS: Tab[] = [
   { href: "/lab/daily-edge",   label: "Daily Edge",   icon: "🎯" },
   { href: "/mlb/props",        label: "Player Props", icon: "🎮" },
   { href: "/lab/tracking",     label: "Tracking",     icon: "📈" },
-  { href: "/lab/my-bets",      label: "My Bets",      icon: "📊" },
+  { href: "/lab/my-bets",      label: "How It Works", icon: "📖" },
 ];
 
 const PRIVATE_REVIEW_TABS: Tab[] = [
@@ -199,7 +199,7 @@ function abbreviateLabel(label: string): string {
     case "Daily Edge":   return "Edge";
     case "Player Props": return "Props";
     case "Tracking":     return "Tracking";
-    case "My Bets":      return "Bets";
+    case "How It Works": return "Guide";
     default:             return label;
   }
 }

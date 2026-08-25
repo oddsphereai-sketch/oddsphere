@@ -31,6 +31,7 @@ export default function Navbar() {
 
   const navLinks: Array<{ href: string; label: string }> = [
     { href: isPublicExperiencePreview ? "/dev/homepage-preview" : "/", label: "Home" },
+    { href: "/how-it-works", label: "How It Works" },
     { href: "/track-record", label: "Track Record" },
     { href: "/pricing", label: "Pricing" },
     { href: isPublicExperiencePreview ? "/dev/login-preview" : "/login", label: "Log In" },
@@ -71,7 +72,10 @@ export default function Navbar() {
               const isActive = pathname === link.href;
               const baseClasses =
                 "items-center px-2 sm:px-3 py-2 rounded-md text-xs sm:text-sm font-medium transition-colors focus-visible:outline-none focus-visible:bg-gray-800 focus-visible:text-white";
-              const mobileVisibility = link.label === "Log In" ? "inline-flex" : "hidden sm:inline-flex";
+              const mobileVisibility =
+                link.label === "Log In" || link.label === "How It Works"
+                  ? "inline-flex"
+                  : "hidden sm:inline-flex";
               const stateClasses = isActive
                 ? "bg-violet-600 text-white"
                 : "text-gray-300 hover:bg-gray-800 hover:text-white";
@@ -81,7 +85,12 @@ export default function Navbar() {
                   href={link.href}
                   className={`${baseClasses} ${mobileVisibility} ${stateClasses}`}
                 >
-                  {link.label === "Track Record" ? (
+                  {link.label === "How It Works" ? (
+                    <>
+                      <span className="sm:hidden">Guide</span>
+                      <span className="hidden sm:inline">How It Works</span>
+                    </>
+                  ) : link.label === "Track Record" ? (
                     <>
                       <span className="sm:hidden">Record</span>
                       <span className="hidden sm:inline">Track Record</span>
