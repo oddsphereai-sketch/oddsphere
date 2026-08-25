@@ -372,6 +372,12 @@ export async function HomePageContent({ presentation = "current" }: { presentati
             <TrialButton className="w-full sm:w-auto" />
             <HomepageDashboardPrototype candidate={candidate} />
           </div>
+          <Link
+            href="/how-it-works"
+            className="mt-4 inline-flex text-sm font-bold text-violet-200 transition hover:text-violet-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-300"
+          >
+            See how OddSphere works
+          </Link>
           <p className="mt-4 text-sm font-semibold text-violet-100">
             {TRIAL_DISCLOSURE}
           </p>
