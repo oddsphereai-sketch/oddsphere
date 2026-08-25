@@ -23,6 +23,7 @@ import {
 } from "../lib/services/dailyEdge/weeklyReaderLifecycle";
 import { resolvePointLineMarketPulseMovement } from "../app/lab/lib/dailyEdgeMarketPulseMovement";
 import { resolveDailyEdgeCurrentOnlyMovement } from "../app/lab/lib/dailyEdgeCurrentOnlyMovement";
+import { marketSplitSectionIsStale } from "../app/lab/lib/dailyEdgeSplitFreshness";
 
 const snapshotPrimerSource = readFileSync(
   "scripts/operator/prime-daily-edge-experience-snapshots.ts",
@@ -332,6 +333,28 @@ check(
 );
 
 console.log("\n━━━ Candidate presentation truthfulness ━━━");
+const nflSplitCapturedAt = "2026-08-25T15:36:00.000Z";
+const nflSplitSection = {
+  label: "Consensus Splits" as const,
+  rows: [{
+    side: "home" as const,
+    label: "SEA",
+    moneyPct: 60,
+    betsPct: 55,
+    observedAt: nflSplitCapturedAt,
+    staleAfterMinutes: 360,
+  }],
+  signal: null,
+  lastUpdated: nflSplitCapturedAt,
+};
+check(
+  "NFL split freshness honors its six-hour early-week collection contract",
+  !marketSplitSectionIsStale(nflSplitSection, Date.parse("2026-08-25T17:36:00.000Z")),
+);
+check(
+  "NFL split freshness becomes stale after its declared collection window",
+  marketSplitSectionIsStale(nflSplitSection, Date.parse("2026-08-25T21:37:00.000Z")),
+);
 const candidateSource = readFileSync(
   "app/dev/experience-preview/ActualDailyEdgePreview.tsx",
   "utf8",

@@ -4,6 +4,7 @@ import type { NflPreviewBookOdds } from "../lib/services/football/balldontlieNfl
 import {
   NFL_FORWARD_EVIDENCE_COLLECTOR_RELEASE,
   NFL_FORWARD_EVIDENCE_SCHEMA_RELEASE,
+  type NflForwardEvidencePayload,
   type NflForwardStoredEvidence,
 } from "../lib/services/football/nflForwardEvidence";
 import {
@@ -65,6 +66,139 @@ assert.equal(markets.filter((market) => market.verdict.label === "No Play").leng
 assert.equal(markets.every((market) => (market.oddsTrail?.length ?? 0) >= 1), true);
 assert.equal(markets.every((market) => (market.opposingOddsTrail?.stops.length ?? 0) >= 1), true);
 assert.equal(markets.every((market) => market.publicSplits.length === 2), true);
+
+const laterCapture = "2026-08-22T14:50:56.934Z";
+const laterFirstGame = structuredClone(rows[0]!);
+laterFirstGame.id = "row-1392216-later";
+laterFirstGame.stage = "unlocked";
+laterFirstGame.capturedAt = laterCapture;
+laterFirstGame.payloadSha256 = "f".repeat(64);
+const laterPayload = laterFirstGame.payload as NflForwardEvidencePayload;
+const firstPayload = rows[0]!.payload as NflForwardEvidencePayload;
+const moveQuote = (quote: NflPreviewBookOdds): NflPreviewBookOdds => ({
+  ...structuredClone(quote),
+  observedAt: laterCapture,
+  moneyline: quote.moneyline ? {
+    awayPrice: quote.moneyline.awayPrice + 7,
+    homePrice: quote.moneyline.homePrice - 7,
+  } : null,
+  spread: quote.spread ? {
+    awayLine: quote.spread.awayLine + 0.5,
+    awayPrice: quote.spread.awayPrice + 3,
+    homeLine: quote.spread.homeLine - 0.5,
+    homePrice: quote.spread.homePrice - 3,
+  } : null,
+  total: quote.total ? {
+    line: quote.total.line + 1,
+    overPrice: quote.total.overPrice - 4,
+    underPrice: quote.total.underPrice + 4,
+  } : null,
+});
+laterPayload.stage = "unlocked";
+laterPayload.capturedAt = laterCapture;
+laterPayload.runId = "test-run-later";
+laterPayload.market.current = moveQuote(laterPayload.market.current);
+laterPayload.market.currentBooks = laterPayload.market.currentBooks.map(moveQuote);
+laterPayload.market.comparableCurrentBooks = laterPayload.market.comparableCurrentBooks.map(moveQuote);
+laterPayload.decisions.evaluatedBets = laterPayload.decisions.evaluatedBets.map((decision) => {
+  const quote = laterPayload.market.currentBooks.find((candidate) =>
+    candidate.sportsbook === decision.evaluatedQuote.sportsbook)!;
+  const selectedHome = decision.side.startsWith(laterPayload.game.home.abbreviation);
+  const evaluatedQuote = decision.market === "moneyline"
+    ? { line: null, price: selectedHome ? quote.moneyline!.homePrice : quote.moneyline!.awayPrice }
+    : decision.market === "spread"
+      ? {
+          line: selectedHome ? quote.spread!.homeLine : quote.spread!.awayLine,
+          price: selectedHome ? quote.spread!.homePrice : quote.spread!.awayPrice,
+        }
+      : {
+          line: quote.total!.line,
+          price: decision.side.startsWith("Over") ? quote.total!.overPrice : quote.total!.underPrice,
+        };
+  return {
+    ...decision,
+    evaluatedAt: laterCapture,
+    evaluatedQuote: {
+      ...decision.evaluatedQuote,
+      ...evaluatedQuote,
+      observedAt: laterCapture,
+    },
+  };
+});
+const multiWaveFixture = buildNflWeekOneHeldMemberFixture([...rows, laterFirstGame]);
+const multiWaveGame = multiWaveFixture.snapshot.games.find((game) => game.id === "nfl-1392216")!;
+const multiWaveMarkets = [
+  ["moneyline", multiWaveGame.markets.moneyline],
+  ["total", multiWaveGame.markets.total],
+  ["spread", multiWaveGame.markets.first_inning],
+] as const;
+for (const [marketName, market] of multiWaveMarkets) {
+  assert.equal((market.oddsTrail?.length ?? 0) >= 2, true);
+  assert.equal(new Set(market.oddsTrail?.map((stop) => stop.sportsbook)).size, 1);
+  assert.equal(market.oddsTrail?.every((stop, index, stops) =>
+    index === 0 || Date.parse(stop.observedAt!) >= Date.parse(stops[index - 1]!.observedAt!)), true);
+  const prior = market.oddsTrail!.at(-2)!;
+  const current = market.oddsTrail!.at(-1)!;
+  const firstDecision = firstPayload.decisions.evaluatedBets.find((decision) => decision.market === marketName)!;
+  const laterDecision = laterPayload.decisions.evaluatedBets.find((decision) => decision.market === marketName)!;
+  assert.equal(prior.sportsbook, firstDecision.evaluatedQuote.sportsbook);
+  assert.equal(prior.american, firstDecision.evaluatedQuote.price);
+  assert.equal(prior.line, firstDecision.evaluatedQuote.line);
+  assert.equal(prior.observedAt, firstPayload.capturedAt);
+  assert.equal(current.sportsbook, laterDecision.evaluatedQuote.sportsbook);
+  assert.equal(current.american, laterDecision.evaluatedQuote.price);
+  assert.equal(current.line, laterDecision.evaluatedQuote.line);
+  assert.equal(current.observedAt, laterCapture);
+  assert.notDeepEqual(
+    { american: prior.american, line: prior.line },
+    { american: current.american, line: current.line },
+  );
+  assert.equal((market.opposingOddsTrail?.stops.length ?? 0) >= 2, true);
+  assert.equal(new Set(market.opposingOddsTrail?.stops.map((stop) => stop.sportsbook)).size, 1);
+  assert.equal(market.opposingOddsTrail?.stops.every((stop) => stop.sportsbook === current.sportsbook), true);
+}
+assert.notEqual(multiWaveFixture.provenance.sourceChecksum, fixture.provenance.sourceChecksum);
+
+const flatCapture = (source: NflForwardStoredEvidence, nextCapture: string, suffix: string) => {
+  const row = structuredClone(source);
+  row.id = `${source.id}-${suffix}`;
+  row.capturedAt = nextCapture;
+  row.payloadSha256 = suffix.repeat(64).slice(0, 64);
+  const payload = row.payload as NflForwardEvidencePayload;
+  payload.capturedAt = nextCapture;
+  payload.runId = `test-run-${suffix}`;
+  payload.market.current.observedAt = nextCapture;
+  payload.market.currentBooks = payload.market.currentBooks.map((quote) => ({ ...quote, observedAt: nextCapture }));
+  payload.market.comparableCurrentBooks = payload.market.comparableCurrentBooks.map((quote) => ({ ...quote, observedAt: nextCapture }));
+  payload.decisions.evaluatedBets = payload.decisions.evaluatedBets.map((decision) => ({
+    ...decision,
+    evaluatedAt: nextCapture,
+    evaluatedQuote: { ...decision.evaluatedQuote, observedAt: nextCapture },
+  }));
+  return row;
+};
+const flatIntermediateCapture = "2026-08-22T15:10:56.934Z";
+const flatTerminalCapture = "2026-08-22T15:30:56.934Z";
+const flatIntermediate = flatCapture(laterFirstGame, flatIntermediateCapture, "a");
+const flatTerminal = flatCapture(laterFirstGame, flatTerminalCapture, "b");
+const compactFixture = buildNflWeekOneHeldMemberFixture([
+  ...rows,
+  laterFirstGame,
+  flatIntermediate,
+  flatTerminal,
+]);
+const compactGame = compactFixture.snapshot.games.find((game) => game.id === "nfl-1392216")!;
+for (const market of [compactGame.markets.moneyline, compactGame.markets.total, compactGame.markets.first_inning]) {
+  const trail = market.oddsTrail!;
+  assert.equal(trail.at(-1)?.label, "current");
+  assert.equal(trail.at(-1)?.observedAt, flatTerminalCapture);
+  assert.equal(trail.some((stop) => stop.observedAt === laterCapture), true);
+  assert.equal(trail.some((stop) => stop.observedAt === flatIntermediateCapture), false);
+  assert.equal(trail.length <= 4, true);
+  assert.equal(trail.slice(1, -1).every((stop, index) =>
+    stop.american !== trail[index]!.american || stop.line !== trail[index]!.line), true);
+}
+
 assert.equal(fixture.snapshot.games.every((game) => game.projected.away > 0 && game.projected.home > 0), true);
 assert.equal(fixture.snapshot.games.every((game) => game.footballProjection?.modelRelease === NFL_V1_OUTCOME_MODEL_RELEASE), true);
 assert.equal(fixture.snapshot.games.every((game) => game.footballProjection?.artifactRelease === NFL_V1_WEEK_ONE_OUTCOME_ARTIFACT_RELEASE), true);
