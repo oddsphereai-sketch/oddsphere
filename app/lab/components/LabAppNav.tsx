@@ -80,7 +80,7 @@ export default function LabAppNav() {
   return (
     <header className="sticky top-0 z-40 bg-gray-950/85 backdrop-blur-md border-b border-gray-800">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex items-center justify-between gap-4 h-14 sm:h-16">
+        <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1 py-2 sm:h-16 sm:flex-nowrap sm:gap-4 sm:py-0">
           {/* Left: real OddSphere brand mark — matches production Navbar
               pattern (icon-logo on mobile, full wordmark on sm+). */}
           <Link
@@ -110,9 +110,9 @@ export default function LabAppNav() {
           <nav
             role="tablist"
             aria-label="Lab sections"
-            className="flex-1 flex justify-start sm:justify-center -mx-2 sm:mx-0 overflow-x-auto sm:overflow-visible"
+            className="order-3 flex w-full justify-center overflow-visible sm:order-none sm:mx-0 sm:w-auto sm:flex-1"
           >
-            <div className="flex gap-0.5 sm:gap-1 pl-1 sm:px-0 min-w-max">
+            <div className="flex w-full justify-between gap-0.5 sm:w-auto sm:min-w-max sm:justify-start sm:gap-1">
               {tabs.map((t) => {
                 const active = isActive(pathname, t.activeHref ?? t.href);
                 return (
@@ -122,7 +122,7 @@ export default function LabAppNav() {
                     role="tab"
                     aria-selected={active}
                     aria-label={t.label}
-                    className={`relative inline-flex items-center gap-1.5 whitespace-nowrap px-2.5 sm:px-3 py-2 min-h-10 rounded-md text-[11px] sm:text-xs font-bold uppercase tracking-[0.1em] transition-colors focus-visible:outline-none focus-visible:bg-gray-900/60 focus-visible:text-white ${
+                    className={`relative inline-flex min-h-10 items-center gap-1 whitespace-nowrap rounded-md px-1.5 py-2 text-[10px] font-bold uppercase tracking-[0.08em] transition-colors focus-visible:outline-none focus-visible:bg-gray-900/60 focus-visible:text-white sm:gap-1.5 sm:px-3 sm:text-xs sm:tracking-[0.1em] ${
                       active
                         ? "text-white"
                         : "text-gray-400 hover:text-violet-300"
@@ -183,7 +183,7 @@ function NavigationPendingIndicator() {
   return (
     <span
       aria-hidden="true"
-      className={`h-2 w-2 shrink-0 rounded-full border border-current border-r-transparent transition-opacity ${
+      className={`hidden h-2 w-2 shrink-0 rounded-full border border-current border-r-transparent transition-opacity sm:inline-block ${
         pending ? "animate-spin opacity-80" : "opacity-0"
       }`}
     />
@@ -198,7 +198,7 @@ function abbreviateLabel(label: string): string {
   switch (label) {
     case "Daily Edge":   return "Edge";
     case "Player Props": return "Props";
-    case "Tracking":     return "Tracking";
+    case "Tracking":     return "Track";
     case "How It Works": return "Guide";
     default:             return label;
   }
