@@ -33,7 +33,11 @@ import {
 } from "./sharpApiNflSplits";
 import { NFL_T60_MAX_CAPTURE_LAG_MINUTES } from "./nflRegularDecisionEvidence";
 import { buildNflR6ShadowMoneylineDecision } from "./nflR6MoneylineShadow";
-import { buildNflV1ActionableGradeBundle } from "./nflV1ActionableGradeCandidate";
+import {
+  buildNflV1ActionableGradeBundle,
+  NFL_V1_ACTIONABLE_GRADE_DECISION_RELEASE,
+  NFL_V1_ACTIONABLE_GRADE_MEMBER_RELEASE,
+} from "./nflV1ActionableGradeCandidate";
 import { nflForwardT60TrackingEligibility } from "./nflTrackingLifecycle";
 import {
   buildNflOfficialTrackingRecords,
@@ -41,7 +45,7 @@ import {
 } from "./nflOfficialTrackingRecord";
 
 export const NFL_FORWARD_WRITER_RELEASE =
-  "nfl_forward_evidence_writer_2026_08_25_r7_actionable_grades" as const;
+  "nfl_forward_evidence_writer_2026_08_25_r8_release_refresh" as const;
 
 export type NflForwardWriterResult = {
   writerRelease: typeof NFL_FORWARD_WRITER_RELEASE;
@@ -90,7 +94,15 @@ export async function runNflForwardEvidenceWriter(args: {
     readLegacyNflForwardEvidence({ client: args.client, season: args.season, week: args.week }),
   ]);
   const historicalExisting = [...legacyExisting, ...previousExisting, ...existing];
-  const need = determineNflForwardCollectionNeed({ existing, now: args.now });
+  const need = determineNflForwardCollectionNeed({
+    existing,
+    now: args.now,
+    requiredPublicRelease: {
+      memberRelease: NFL_V1_ACTIONABLE_GRADE_MEMBER_RELEASE,
+      decisionRelease: NFL_V1_ACTIONABLE_GRADE_DECISION_RELEASE,
+      evaluatedBetCount: 3,
+    },
+  });
   if (!need.collect) {
     const tracking = await writeOfficialTrackingFromPayloads({
       client: args.client,
