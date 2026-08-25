@@ -19,9 +19,10 @@ import {
   type CfbV1ExactPriceDecision,
   type CfbV1Market,
 } from "./cfbV1Decision";
+import { activeCfbWeeklyWindow, isGameInCfbWeeklyWindow } from "./cfbWeeklyWindow";
 
 export const CFB_MEMBER_FIXTURE_RELEASE =
-  "cfb_v1_member_fixture_2026_08_25_r1" as const;
+  "cfb_v1_member_fixture_2026_08_25_r2_weekly" as const;
 
 export type CfbMemberFixture = {
   fixtureRelease: typeof CFB_MEMBER_FIXTURE_RELEASE;
@@ -37,8 +38,9 @@ export async function readCurrentCfbMemberFixture(args: { client: SupabaseClient
   return buildCfbMemberFixture(await readCfbForwardEvidence({ client: args.client, season: args.season ?? 2026 }));
 }
 
-export function buildCfbMemberFixture(rows: CfbForwardStoredEvidence[]): CfbMemberFixture {
-  const latest = latestCompleteRows(rows);
+export function buildCfbMemberFixture(rows: CfbForwardStoredEvidence[], now = new Date().toISOString()): CfbMemberFixture {
+  const window = activeCfbWeeklyWindow(now);
+  const latest = latestCompleteRows(rows.filter((row) => isGameInCfbWeeklyWindow({ scheduledStart: row.gameStartAt }, window)));
   const capturedAt = latest.reduce((value, row) => Date.parse(row.capturedAt) > Date.parse(value) ? row.capturedAt : value, latest[0]!.capturedAt);
   const games = latest.map(buildGame).sort((a, b) => Date.parse(a.gameStartAt ?? "") - Date.parse(b.gameStartAt ?? ""));
   const date = localDate(games[0]!.gameStartAt!);
@@ -49,7 +51,7 @@ export function buildCfbMemberFixture(rows: CfbForwardStoredEvidence[]): CfbMemb
     capturedAt,
     snapshot: { as_of: capturedAt, sport: "cfb", date, requested_date: date, fallback_used: false, slateState: "today_draft_only", slate_status: "cfb_week_one_model_live", last_slate_update_at: capturedAt, games },
     history: {},
-    week: { label: "Opening Week" },
+    week: { label: window.boardStartDate === "2026-08-27" ? "Opening Week" : `Week of ${shortDate(window.boardStartDate)}` },
     provenance: {
       sourceChecksum,
       openingCoverageGames: latest.filter((row) => row.payload.market.operationalOpening !== null).length,
@@ -59,6 +61,10 @@ export function buildCfbMemberFixture(rows: CfbForwardStoredEvidence[]): CfbMemb
     },
     tracking: { trackingEligible: trackingGames > 0, reason: trackingGames > 0 ? `${trackingGames} game${trackingGames === 1 ? " has" : "s have"} a valid immutable T-60 exact-price tuple.` : "Official CFB tracking begins game by game only after a valid T-60 lock; unlocked grades are not counted yet." },
   };
+}
+
+function shortDate(value: string): string {
+  return new Intl.DateTimeFormat("en-US", { timeZone: "UTC", month: "short", day: "numeric" }).format(new Date(`${value}T12:00:00.000Z`));
 }
 
 function latestCompleteRows(rows: CfbForwardStoredEvidence[]): CfbForwardStoredEvidence[] {

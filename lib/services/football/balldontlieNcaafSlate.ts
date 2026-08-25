@@ -25,6 +25,7 @@ export type NcaafGame = {
   season: number;
   scheduledStart: string;
   status: string;
+  neutralSite?: boolean;
   awayScore: number | null;
   homeScore: number | null;
   away: NcaafTeam;
@@ -243,6 +244,7 @@ function normalizeGame(value: unknown): NcaafGame | null {
     season,
     scheduledStart,
     status: text(row.status_state) ?? text(row.status) ?? "scheduled",
+    neutralSite: boolean(row.neutral_site) ?? false,
     awayScore: integer(row.away_score) ?? integer(row.visitor_team_score),
     homeScore: integer(row.home_score) ?? integer(row.home_team_score),
     away,
@@ -348,6 +350,7 @@ function text(value: unknown): string | null { return typeof value === "string" 
 function stringOrNumber(value: unknown): string | null { return typeof value === "string" && value.trim() ? value.trim() : typeof value === "number" && Number.isFinite(value) ? String(value) : null; }
 function number(value: unknown): number | null { const parsed = typeof value === "number" ? value : typeof value === "string" && value.trim() ? Number(value) : Number.NaN; return Number.isFinite(parsed) ? parsed : null; }
 function integer(value: unknown): number | null { const parsed = number(value); return parsed !== null && Number.isInteger(parsed) ? parsed : null; }
+function boolean(value: unknown): boolean | null { if (typeof value === "boolean") return value; if (value === 1 || value === "1" || value === "true") return true; if (value === 0 || value === "0" || value === "false") return false; return null; }
 function price(value: unknown): number | null { const parsed = number(value); return parsed === 0 ? null : parsed; }
 function iso(value: unknown): string | null { const parsed = typeof value === "string" ? Date.parse(value) : Number.NaN; return Number.isFinite(parsed) ? new Date(parsed).toISOString() : null; }
 
