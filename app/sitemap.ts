@@ -33,6 +33,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
     page("/mlb-first-inning-picks", 0.75, "daily"), // SEO — NRFI/YRFI overview
     page("/world-cup-predictions", 0.75, "daily"), // SEO — World Cup/Soccer overview
     page("/sports-betting-ai", 0.75, "weekly"), // SEO — sports betting AI overview
+    page("/how-it-works", 0.8, "monthly"), // public product guide
     page("/pricing", 0.9, "monthly"), // premium conversion
     page("/track-record", 0.8, "daily"), // public proof / results (updates often)
     page("/legal/responsible-gambling", 0.3, "yearly"),
