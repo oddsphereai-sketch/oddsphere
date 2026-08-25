@@ -6,6 +6,7 @@ import Link from "next/link";
 import Image from "next/image";
 import type { DailyEdgeGameDto, DailyEdgeResponse, MarketEdgeDto } from "@/app/lab/lib/labTypes";
 import type { MarketSplitDisplaySection } from "@/lib/types/domain/RecommendationDecision";
+import { marketSplitSectionIsStale } from "@/app/lab/lib/dailyEdgeSplitFreshness";
 import type { Sport } from "@/lib/types/domain/Sport";
 import { currentSlateDate } from "@/lib/dates/slateDate";
 import { keyStatIsTwoSided } from "@/lib/services/keyStatsFormatter";
@@ -1405,12 +1406,7 @@ function splitSourcesConflict(consensus: MarketSplitDisplaySection | null, sharp
 }
 
 function splitSectionIsStale(section: MarketSplitDisplaySection | null): boolean {
-  if (!section) return false;
-  if (section.rows.some((row) => row.isStale === true)) return true;
-  const latest = section.lastUpdated ?? section.rows.map((row) => row.observedAt).filter((value): value is string => Boolean(value)).sort((a, b) => Date.parse(b) - Date.parse(a))[0] ?? null;
-  if (!latest) return false;
-  const observedAtMs = Date.parse(latest);
-  return Number.isFinite(observedAtMs) && Date.now() - observedAtMs > 75 * 60 * 1000;
+  return marketSplitSectionIsStale(section);
 }
 
 function splitLeader(section: MarketSplitDisplaySection | null, valueKey: "moneyPct" | "betsPct"): string | null {

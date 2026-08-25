@@ -30,7 +30,7 @@ import {
 } from "./nflV1ActionableGradeCandidate";
 
 export const NFL_WEEK_ONE_HELD_MEMBER_FIXTURE_RELEASE =
-  "nfl_week_one_member_fixture_2026_08_25_r7_actionable_grades" as const;
+  "nfl_week_one_member_fixture_2026_08_25_r8_same_book_history" as const;
 
 const MODEL_RELEASE = NFL_V1_OUTCOME_MODEL_RELEASE;
 const DECISION_RELEASE = NFL_V1_ACTIONABLE_GRADE_DECISION_RELEASE;
@@ -75,11 +75,18 @@ export function buildNflWeekOneHeldMemberFixture(
       ? [[`nfl-${row.providerGameId}`, row.payload.injuries] as const]
       : []),
   );
+  const movementRowsByGame = new Map(latest.map((row) => [
+    row.providerGameId,
+    movementRowsForGame(rows, row),
+  ]));
   const games = latest
-    .map((row) => buildHeldGame(row))
+    .map((row) => buildHeldGame(row, movementRowsByGame.get(row.providerGameId)!))
     .sort((first, second) => Date.parse(first.gameStartAt ?? "") - Date.parse(second.gameStartAt ?? ""));
   const sourceChecksum = createHash("sha256")
-    .update(latest.map((row) => `${row.providerGameId}:${row.payloadSha256}`).sort().join("|"))
+    .update([...movementRowsByGame.values()].flat()
+      .map((row) => `${row.providerGameId}:${row.capturedAt}:${row.payloadSha256}`)
+      .sort()
+      .join("|"))
     .digest("hex");
   const confirmedQuarterbacks = latest.reduce((count, row) => count +
     Number(row.payload.startersAndDepth.away.starterStatus === "confirmed") +
@@ -126,7 +133,11 @@ export function buildNflWeekOneHeldMemberFixture(
       providerRequests: 0,
       openingCoverageGames: latest.length,
       firstObservedCoverageGames: latest.length,
-      minimumStoredPriceObservations: 2,
+      minimumStoredPriceObservations: Math.min(...games.flatMap((game) => [
+        game.markets.moneyline.oddsTrail?.length ?? 0,
+        game.markets.total.oddsTrail?.length ?? 0,
+        game.markets.first_inning.oddsTrail?.length ?? 0,
+      ])),
       splitCoverageGames: latest.filter((row) => row.payload.market.playbookSplits !== null).length,
     },
     tracking: {
@@ -189,7 +200,22 @@ function latestCompleteRows(rows: NflForwardStoredEvidence[]): Array<NflForwardS
   return values;
 }
 
-function buildHeldGame(row: NflForwardStoredEvidence & { payload: NflForwardEvidencePayload }): DailyEdgeGameDto {
+function movementRowsForGame(
+  rows: NflForwardStoredEvidence[],
+  latest: NflForwardStoredEvidence & { payload: NflForwardEvidencePayload },
+): Array<NflForwardStoredEvidence & { payload: NflForwardEvidencePayload }> {
+  return rows
+    .filter((row): row is NflForwardStoredEvidence & { payload: NflForwardEvidencePayload } =>
+      row.providerGameId === latest.providerGameId &&
+      row.payload.schemaRelease === NFL_FORWARD_EVIDENCE_SCHEMA_RELEASE &&
+      Date.parse(row.capturedAt) <= Date.parse(latest.capturedAt))
+    .sort((first, second) => Date.parse(first.capturedAt) - Date.parse(second.capturedAt));
+}
+
+function buildHeldGame(
+  row: NflForwardStoredEvidence & { payload: NflForwardEvidencePayload },
+  movementRows: Array<NflForwardStoredEvidence & { payload: NflForwardEvidencePayload }>,
+): DailyEdgeGameDto {
   const payload = row.payload;
   const game = payload.game;
   const current = payload.market.current;
@@ -228,6 +254,7 @@ function buildHeldGame(row: NflForwardStoredEvidence & { payload: NflForwardEvid
     primarySide: "home",
     opposingSide: "away",
     payload,
+    movementRows,
   });
   const totalBase = buildHeldMarket({
     slot: "total",
@@ -256,6 +283,7 @@ function buildHeldGame(row: NflForwardStoredEvidence & { payload: NflForwardEvid
     primarySide: "over",
     opposingSide: "under",
     payload,
+    movementRows,
   });
   const spreadBase = buildHeldMarket({
     slot: "spread",
@@ -284,18 +312,19 @@ function buildHeldGame(row: NflForwardStoredEvidence & { payload: NflForwardEvid
     primarySide: "home",
     opposingSide: "away",
     payload,
+    movementRows,
   });
   const decisions = payload.decisions.evaluatedBets;
   const moneyline = applyPublishedDecision(moneylineBase, decisionFor(decisions, "moneyline"), {
-    slot: "moneyline", payload, primaryLabel: home, opposingLabel: away, primarySide: "home", opposingSide: "away",
+    slot: "moneyline", payload, movementRows, primaryLabel: home, opposingLabel: away, primarySide: "home", opposingSide: "away",
   });
   const total = applyPublishedDecision(totalBase, decisionFor(decisions, "total"), {
-    slot: "total", payload, primaryLabel: `Over ${marketNumber(current.total!.line)}`,
+    slot: "total", payload, movementRows, primaryLabel: `Over ${marketNumber(current.total!.line)}`,
     opposingLabel: `Under ${marketNumber(current.total!.line)}`, primarySide: "over", opposingSide: "under",
     expectedTotal: outcome.expectedAwayScore + outcome.expectedHomeScore,
   });
   const spread = applyPublishedDecision(spreadBase, decisionFor(decisions, "spread"), {
-    slot: "spread", payload, primaryLabel: `${home} ${signed(current.spread!.homeLine)}`,
+    slot: "spread", payload, movementRows, primaryLabel: `${home} ${signed(current.spread!.homeLine)}`,
     opposingLabel: `${away} ${signed(current.spread!.awayLine)}`, primarySide: "home", opposingSide: "away",
   });
   const locked = payload.stage === "t60" &&
@@ -385,6 +414,7 @@ type HeldMarketInput = {
   primarySide: "home" | "over";
   opposingSide: "away" | "under";
   payload: NflForwardEvidencePayload;
+  movementRows: Array<NflForwardStoredEvidence & { payload: NflForwardEvidencePayload }>;
 };
 
 type MarketQuoteSide = {
@@ -397,44 +427,28 @@ type MarketQuoteSide = {
 };
 
 function buildHeldMarket(input: HeldMarketInput): MarketEdgeDto {
-  const openingSource = input.opening.provenance === "provider_opening" ? "provider_opening" as const : "line_history" as const;
-  const openingLabel = input.opening.provenance === "provider_opening" ? "open" as const : "first" as const;
-  const primaryTrail: OddsTrailStopDto[] = [
-    {
-      american: input.opening.primaryPrice,
-      line: input.opening.primaryLine,
-      observedAt: input.opening.observedAt,
-      sportsbook: input.opening.sportsbook,
-      source: openingSource,
-      label: openingLabel,
-    },
-    {
+  const primaryTrail = buildSameBookTrail({
+    rows: input.movementRows,
+    sportsbook: input.current.sportsbook,
+    slot: input.slot,
+    selectedPrimary: true,
+    terminal: {
       american: input.current.primaryPrice,
       line: input.current.primaryLine,
       observedAt: input.current.observedAt,
-      sportsbook: input.current.sportsbook,
-      source: "current_line",
-      label: "current",
     },
-  ];
-  const opposingTrail: OddsTrailStopDto[] = [
-    {
-      american: input.opening.opposingPrice,
-      line: input.opening.opposingLine,
-      observedAt: input.opening.observedAt,
-      sportsbook: input.opening.sportsbook,
-      source: openingSource,
-      label: openingLabel,
-    },
-    {
+  });
+  const opposingTrail = buildSameBookTrail({
+    rows: input.movementRows,
+    sportsbook: input.current.sportsbook,
+    slot: input.slot,
+    selectedPrimary: false,
+    terminal: {
       american: input.current.opposingPrice,
       line: input.current.opposingLine,
       observedAt: input.current.observedAt,
-      sportsbook: input.current.sportsbook,
-      source: "current_line",
-      label: "current",
     },
-  ];
+  });
   const publicSplits = splitRows(input);
   const expectedAwayQuarterback = input.payload.startersAndDepth.away.expectedStartingQuarterback?.name ?? "Quarterback TBD";
   const expectedHomeQuarterback = input.payload.startersAndDepth.home.expectedStartingQuarterback?.name ?? "Quarterback TBD";
@@ -564,6 +578,7 @@ function applyPublishedDecision(
   input: {
     slot: "moneyline" | "spread" | "total";
     payload: NflForwardEvidencePayload;
+    movementRows: Array<NflForwardStoredEvidence & { payload: NflForwardEvidencePayload }>;
     primaryLabel: string;
     opposingLabel: string;
     primarySide: "home" | "over";
@@ -579,38 +594,33 @@ function applyPublishedDecision(
   const opposingSide = selectedPrimary ? input.opposingSide : input.primarySide;
   const selectedLabel = selectedPrimary ? input.primaryLabel : input.opposingLabel;
   const opposingLabel = selectedPrimary ? input.opposingLabel : input.primaryLabel;
-  const baseSelectedTrail = selectedPrimary ? (base.oddsTrail ?? []) : (base.opposingOddsTrail?.stops ?? []);
-  const exactBookMatchesOpening = normalizeBookName(decision.evaluatedQuote.sportsbook) ===
-    normalizeBookName(input.payload.market.operationalOpening.quote.sportsbook);
-  const oddsTrail = exactBookMatchesOpening
-    ? baseSelectedTrail.map((stop, index, stops) => index === stops.length - 1
-      ? {
-          ...stop,
-          american: decision.evaluatedQuote.price,
-          line: decision.evaluatedQuote.line,
-          observedAt: decision.evaluatedQuote.observedAt,
-          sportsbook: decision.evaluatedQuote.sportsbook,
-        }
-      : stop)
-    : [{
-        american: decision.evaluatedQuote.price,
-        line: decision.evaluatedQuote.line,
-        observedAt: decision.evaluatedQuote.observedAt,
-        sportsbook: decision.evaluatedQuote.sportsbook,
-        source: decision.stage === "t60_locked" ? "locked_snapshot" as const : "current_line" as const,
-        label: decision.stage === "t60_locked" ? "locked" as const : "current" as const,
-      }];
+  const oddsTrail = buildSameBookTrail({
+    rows: input.movementRows,
+    sportsbook: decision.evaluatedQuote.sportsbook,
+    slot: input.slot,
+    selectedPrimary,
+    terminal: {
+      american: decision.evaluatedQuote.price,
+      line: decision.evaluatedQuote.line,
+      observedAt: decision.evaluatedQuote.observedAt,
+      locked: decision.stage === "t60_locked",
+    },
+  });
   const exactBook = input.payload.market.currentBooks.find((quote) =>
     normalizeBookName(quote.sportsbook) === normalizeBookName(decision.evaluatedQuote.sportsbook));
   const opposingQuote = exactBook ? oppositeQuote(exactBook, input.slot, selectedPrimary) : null;
-  const opposingStops: OddsTrailStopDto[] = opposingQuote ? [{
-    american: opposingQuote.price,
-    line: opposingQuote.line,
-    observedAt: exactBook!.observedAt,
-    sportsbook: exactBook!.sportsbook,
-    source: "current_line",
-    label: "current",
-  }] : [];
+  const opposingStops = opposingQuote ? buildSameBookTrail({
+    rows: input.movementRows,
+    sportsbook: decision.evaluatedQuote.sportsbook,
+    slot: input.slot,
+    selectedPrimary: !selectedPrimary,
+    terminal: {
+      american: opposingQuote.price,
+      line: opposingQuote.line,
+      observedAt: exactBook!.observedAt,
+      locked: decision.stage === "t60_locked",
+    },
+  }) : [];
   const selectedSplit = base.publicSplits.find((row) => row.side === selectedSide) ?? null;
   const isBestAngle = decision.grade === "Best Angle";
   const isLean = decision.grade === "Lean";
@@ -721,6 +731,139 @@ function oppositeQuote(
     return selectedPrimary
       ? { price: quote.total.underPrice, line: quote.total.line }
       : { price: quote.total.overPrice, line: quote.total.line };
+  }
+  return null;
+}
+
+function buildSameBookTrail(args: {
+  rows: Array<NflForwardStoredEvidence & { payload: NflForwardEvidencePayload }>;
+  sportsbook: string;
+  slot: "moneyline" | "spread" | "total";
+  selectedPrimary: boolean;
+  terminal: {
+    american: number;
+    line: number | null;
+    observedAt: string;
+    locked?: boolean;
+  };
+}): OddsTrailStopDto[] {
+  const book = normalizeBookName(args.sportsbook);
+  const candidates: OddsTrailStopDto[] = [];
+  const append = (stop: OddsTrailStopDto, replaceDuplicate = false) => {
+    const key = `${normalizeBookName(stop.sportsbook ?? "")}:${stop.observedAt}:${stop.american}:${stop.line ?? "null"}`;
+    const duplicateIndex = candidates.findIndex((candidate) =>
+      `${normalizeBookName(candidate.sportsbook ?? "")}:${candidate.observedAt}:${candidate.american}:${candidate.line ?? "null"}` === key);
+    if (duplicateIndex >= 0) {
+      if (replaceDuplicate) candidates.splice(duplicateIndex, 1);
+      else return;
+    }
+    candidates.push(stop);
+  };
+
+  for (const row of args.rows) {
+    const openingBooks = [
+      ...row.payload.market.providerOpeningBooks,
+      ...(row.payload.market.providerOpening ? [row.payload.market.providerOpening] : []),
+    ];
+    for (const quote of openingBooks) {
+      if (normalizeBookName(quote.sportsbook) !== book) continue;
+      const side = quoteSide(quote, args.slot, args.selectedPrimary);
+      if (!side) continue;
+      append({
+        american: side.american,
+        line: side.line,
+        observedAt: quote.observedAt,
+        sportsbook: quote.sportsbook,
+        source: "provider_opening",
+        label: "open",
+      });
+    }
+  }
+
+  const operationalOpening = args.rows[0]?.payload.market.operationalOpening ?? null;
+  if (operationalOpening && normalizeBookName(operationalOpening.quote.sportsbook) === book) {
+    const side = quoteSide(operationalOpening.quote, args.slot, args.selectedPrimary);
+    if (side) {
+      append({
+        american: side.american,
+        line: side.line,
+        observedAt: operationalOpening.capturedAt,
+        sportsbook: operationalOpening.quote.sportsbook,
+        source: operationalOpening.provenance === "provider_opening" ? "provider_opening" : "line_history",
+        label: operationalOpening.provenance === "provider_opening" ? "open" : "first",
+      });
+    }
+  }
+
+  for (const row of args.rows.slice(0, -1)) {
+    const quote = row.payload.market.currentBooks.find((candidate) =>
+      normalizeBookName(candidate.sportsbook) === book) ??
+      (normalizeBookName(row.payload.market.current.sportsbook) === book
+        ? row.payload.market.current
+        : null);
+    if (!quote) continue;
+    const side = quoteSide(quote, args.slot, args.selectedPrimary);
+    if (!side) continue;
+    append({
+      american: side.american,
+      line: side.line,
+      observedAt: row.capturedAt,
+      sportsbook: quote.sportsbook,
+      source: "line_history",
+      label: "move",
+    });
+  }
+
+  append({
+    american: args.terminal.american,
+    line: args.terminal.line,
+    observedAt: args.terminal.observedAt,
+    sportsbook: args.sportsbook,
+    source: args.terminal.locked ? "locked_snapshot" : "current_line",
+    label: args.terminal.locked ? "locked" : "current",
+  }, true);
+
+  const materialStops = candidates.reduce<OddsTrailStopDto[]>((stops, stop, index) => {
+    if (index === 0) return [stop];
+    const previous = stops[stops.length - 1]!;
+    const changed = previous.american !== stop.american || previous.line !== stop.line;
+    const terminal = index === candidates.length - 1;
+    if (changed || terminal) stops.push(stop);
+    return stops;
+  }, []);
+
+  return materialStops.map((stop, index, stops) => ({
+    ...stop,
+    source: index === stops.length - 1
+      ? args.terminal.locked ? "locked_snapshot" : "current_line"
+      : stop.source === "provider_opening" ? "provider_opening" : "line_history",
+    label: index === stops.length - 1
+      ? args.terminal.locked ? "locked" : "current"
+      : index === 0
+        ? stop.source === "provider_opening" ? "open" : "first"
+        : "move",
+  }));
+}
+
+function quoteSide(
+  quote: NflForwardEvidencePayload["market"]["current"],
+  slot: "moneyline" | "spread" | "total",
+  selectedPrimary: boolean,
+): { american: number; line: number | null } | null {
+  if (slot === "moneyline" && quote.moneyline) {
+    return selectedPrimary
+      ? { american: quote.moneyline.homePrice, line: null }
+      : { american: quote.moneyline.awayPrice, line: null };
+  }
+  if (slot === "spread" && quote.spread) {
+    return selectedPrimary
+      ? { american: quote.spread.homePrice, line: quote.spread.homeLine }
+      : { american: quote.spread.awayPrice, line: quote.spread.awayLine };
+  }
+  if (slot === "total" && quote.total) {
+    return selectedPrimary
+      ? { american: quote.total.overPrice, line: quote.total.line }
+      : { american: quote.total.underPrice, line: quote.total.line };
   }
   return null;
 }
