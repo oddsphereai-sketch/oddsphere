@@ -22,6 +22,7 @@ import {
   weeklyReaderGameIsVisible,
 } from "../lib/services/dailyEdge/weeklyReaderLifecycle";
 import { resolvePointLineMarketPulseMovement } from "../app/lab/lib/dailyEdgeMarketPulseMovement";
+import { resolveDailyEdgeCurrentOnlyMovement } from "../app/lab/lib/dailyEdgeCurrentOnlyMovement";
 
 const snapshotPrimerSource = readFileSync(
   "scripts/operator/prime-daily-edge-experience-snapshots.ts",
@@ -163,6 +164,11 @@ check(
   snapshotPrimerSource.includes('/teamlogos/wnba/') &&
     snapshotPrimerSource.includes("movement trail mixes sportsbooks") &&
     snapshotPrimerSource.includes("must not render unsupported sharp-book splits"),
+);
+check(
+  "cutover validation runs the full MLB member tuple coherence audit",
+  snapshotPrimerSource.includes("auditDailyEdgeResponseCoherence") &&
+    snapshotPrimerSource.includes("violations.push(...auditDailyEdgeResponseCoherence(body)"),
 );
 check(
   "private Player Props navigation prefers the real read-only snapshot over fixture data",
@@ -368,12 +374,13 @@ check(
 );
 check(
   "consensus-only markets do not render an empty sharp-book panel",
-  candidateSource.includes("{sharp ? <SplitSourcePanel") &&
+  candidateSource.includes("sharp ?? (sharpAvailability === null ? null") &&
+    candidateSource.includes("{displayedSharp ? <SplitSourcePanel") &&
     !candidateSource.includes('<SplitSourcePanel source="SHARP BOOK SPLITS" section={sharp}'),
 );
 check(
   "cross-source split language is rendered only when sharp rows exist",
-  candidateSource.includes("{sharp?.rows.length ? <CrossSourceSplitRead"),
+  candidateSource.includes("{displayedSharp?.rows.length ? <CrossSourceSplitRead"),
 );
 check(
   "Daily Edge preserves the live product hierarchy with a compact selected reader by default",
@@ -595,6 +602,41 @@ check(
   "unverified movement fails closed instead of implying validated endpoints",
   candidateSource.includes("this snapshot does not contain a continuous same-book trail that can support a directional movement claim") &&
     !candidateSource.includes("only validated market endpoints are shown"),
+);
+check(
+  "current-only movement keeps the stored sportsbook price and line tuple intact",
+  candidateSource.includes("resolveDailyEdgeCurrentOnlyMovement") &&
+    !candidateSource.includes("current: canonical?.currentPrice ?? currentDisplayedPrice(market)"),
+);
+const currentOnlyTotalMovement = resolveDailyEdgeCurrentOnlyMovement({
+  trail: [{
+    american: -108,
+    line: 8.5,
+    observedAt: "2026-08-25T11:06:25.686Z",
+    sportsbook: "onexbet",
+    source: "current_line",
+    label: "current",
+  }],
+  displayedPrice: -108,
+  displayedBook: "onexbet",
+  fallbackLine: 8.5,
+});
+check(
+  "a current-only total cannot inherit a stale writer-time line or price",
+  currentOnlyTotalMovement.open === null &&
+    currentOnlyTotalMovement.openLine === null &&
+    currentOnlyTotalMovement.current === -108 &&
+    currentOnlyTotalMovement.currentLine === 8.5 &&
+    currentOnlyTotalMovement.sportsbook === "onexbet",
+);
+check(
+  "MLB Sharp panels expose complete, provider-limited, pending, and stale states",
+  dailyEdgeApiSource.includes('status: "complete"') &&
+    dailyEdgeApiSource.includes('status: "provider_limited"') &&
+    dailyEdgeApiSource.includes('status: "pending"') &&
+    dailyEdgeApiSource.includes('status: "stale"') &&
+    candidateDailyEdgeSource.includes("Provider limited") &&
+    candidateDailyEdgeSource.includes("Awaiting provider data"),
 );
 check(
   "first-inning reader distinguishes team results from starter-game context",

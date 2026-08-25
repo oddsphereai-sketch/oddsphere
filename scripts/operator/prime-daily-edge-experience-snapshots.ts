@@ -8,6 +8,7 @@
  */
 import { GET as getDailyEdge } from "../../app/api/lab/daily-edge/route";
 import type { DailyEdgeResponse } from "../../app/lab/lib/labTypes";
+import { auditDailyEdgeResponseCoherence } from "../../app/lab/lib/dailyEdgeResponseCoherence";
 import { AVAILABLE_DAILY_EDGE_SPORTS } from "../../app/lab/lib/dailyEdgeSports";
 import { currentSlateDate } from "../../lib/dates/slateDate";
 import { refreshDailyEdgeResponseSnapshot } from "../../lib/services/labResponseSnapshotWriter";
@@ -92,6 +93,9 @@ function validateResponse(sport: Sport, date: string, body: DailyEdgeResponse): 
       }
     }
   }
+  violations.push(...auditDailyEdgeResponseCoherence(body).map((issue) =>
+    `${issue.gameId}/${issue.market}: ${issue.code}`
+  ));
   return violations;
 }
 

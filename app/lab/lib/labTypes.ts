@@ -199,6 +199,12 @@ export type OddsTrailStopDto = {
   label: "open" | "first" | "move" | "current" | "locked";
 };
 
+export type MarketEvidenceCoherenceDto = {
+  status: "coherent" | "limited";
+  reasonCodes: string[];
+  note: string | null;
+};
+
 export type MarketEdgeDto = {
   // ── existing per-pick fields (preserved from DailyEdgePredictionDto) ──
   pick: string | null;
@@ -286,6 +292,23 @@ export type MarketEdgeDto = {
     /** Phase 7I — true when observedAt is older than the stale threshold. */
     isStale?: boolean;
   }>;
+  /**
+   * MLB-only source-health classification for the SharpAPI market panel.
+   * This is presentation state, not a grading input. A non-complete state
+   * keeps the panel visible with honest provider-availability copy instead of
+   * silently omitting it or relabeling Playbook consensus as sharp data.
+   */
+  sharpBookAvailability?: {
+    status: "complete" | "provider_limited" | "pending" | "stale" | "unavailable";
+    message: string;
+    lastUpdated: string | null;
+  } | null;
+  /**
+   * Response-boundary audit state for selected-line/current-quote evidence.
+   * Limited evidence is withheld per market without changing the prediction,
+   * evaluated price, grade, stake, or the rest of the published slate.
+   */
+  evidenceCoherence?: MarketEvidenceCoherenceDto;
   priceAmerican: number | null;
   /**
    * Fresh member-facing quote for the displayed pick. This is deliberately
