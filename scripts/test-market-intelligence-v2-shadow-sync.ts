@@ -1,12 +1,20 @@
 import {
   dedupeSharpApiHistorySplitObservations,
   assessSharpApiSplitSlateAlignment,
+  classifySharpHistoryFailure,
+  fetchSharpHistoryWithRetry,
   findSharpApiSplitGameMatches,
   isSharpApiHistoryUniqueConflict,
   marketIntelligenceGameKey,
   selectVerifiedSharpApiCurrentRows,
   writeRows,
 } from "../lib/services/marketIntelligenceV2/shadowSync";
+import {
+  SharpApiClient,
+  SharpApiClientError,
+  SharpApiNotFoundError,
+  SharpApiRateLimitError,
+} from "../lib/providers/real_api/_sharpApiClient";
 import type { MarketSplitObservationV2 } from "../lib/types/domain/MarketIntelligenceV2";
 
 let pass = 0;
@@ -231,6 +239,161 @@ check(
 );
 
 async function runAsyncChecks(): Promise<void> {
+  {
+    const originalFetch = globalThis.fetch;
+    let calls = 0;
+    globalThis.fetch = async () => {
+      calls++;
+      return new Response("rate limited", { status: 429 });
+    };
+    let caught: unknown = null;
+    try {
+      await new SharpApiClient("test-key").fetchAll({
+        path: "/splits/history",
+        query: { event_id: "mlb_test_2026-08-25" },
+        retryRateLimitInternally: false,
+      });
+    } catch (error) {
+      caught = error;
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+    check(
+      "SharpAPI per-event history caller can own the 429 retry without a hidden client retry",
+      caught instanceof SharpApiRateLimitError && calls === 1,
+    );
+  }
+
+  {
+    const transientServer = new SharpApiClientError("server unavailable", {
+      endpoint: "/splits/history",
+      status: 503,
+    });
+    const retryBudget = { remaining: 2 };
+    let calls = 0;
+    const result = await fetchSharpHistoryWithRetry({
+      fetchRows: async () => {
+        calls++;
+        if (calls === 1) throw transientServer;
+        return [{ id: "recovered" }];
+      },
+      retryBudget,
+      backoffMs: 0,
+    });
+    check(
+      "SharpAPI history retries one transient 5xx and recovers rows",
+      result.outcome === "rows" && result.attempts === 2 && result.retries === 1 && calls === 2,
+    );
+    check("SharpAPI history transient retry consumes the shared budget", retryBudget.remaining === 1);
+  }
+
+  {
+    const retryBudget = { remaining: 1 };
+    let calls = 0;
+    const result = await fetchSharpHistoryWithRetry({
+      fetchRows: async () => {
+        calls++;
+        throw new SharpApiNotFoundError({ endpoint: "/splits/history" });
+      },
+      retryBudget,
+      backoffMs: 0,
+    });
+    check(
+      "SharpAPI history treats 404 as definitive absence without retry",
+      result.outcome === "definitive_absence" && result.failureClass === "definitive_absence" &&
+        result.error === null && calls === 1 && retryBudget.remaining === 1,
+    );
+  }
+
+  {
+    const retryBudget = { remaining: 1 };
+    let calls = 0;
+    const result = await fetchSharpHistoryWithRetry<never>({
+      fetchRows: async () => {
+        calls++;
+        throw new SharpApiClientError("bad request", {
+          endpoint: "/splits/history",
+          status: 400,
+        });
+      },
+      retryBudget,
+      backoffMs: 0,
+    });
+    check(
+      "SharpAPI history does not retry a non-retryable 4xx",
+      result.outcome === "failed" && result.failureClass === "non_retryable_client" &&
+        calls === 1 && retryBudget.remaining === 1,
+    );
+  }
+
+  {
+    const retryBudget = { remaining: 0 };
+    let calls = 0;
+    const result = await fetchSharpHistoryWithRetry<never>({
+      fetchRows: async () => {
+        calls++;
+        throw new TypeError("fetch failed");
+      },
+      retryBudget,
+      backoffMs: 0,
+    });
+    check(
+      "SharpAPI history cannot exceed a depleted cycle retry budget",
+      result.outcome === "failed" && result.failureClass === "transient_network" && calls === 1,
+    );
+  }
+
+  {
+    const retryBudget = { remaining: 10 };
+    let calls = 0;
+    const result = await fetchSharpHistoryWithRetry<never>({
+      fetchRows: async () => {
+        calls++;
+        throw new SharpApiClientError("server unavailable", {
+          endpoint: "/splits/history",
+          status: 502,
+        });
+      },
+      retryBudget,
+      maxAttempts: 99,
+      backoffMs: 0,
+    });
+    check(
+      "SharpAPI history per-event retries remain capped at two attempts",
+      result.outcome === "failed" && result.attempts === 2 && result.retries === 1 &&
+        calls === 2 && retryBudget.remaining === 9,
+    );
+  }
+
+  {
+    const result = await fetchSharpHistoryWithRetry<{ id: string }>({
+      fetchRows: async () => [],
+      retryBudget: { remaining: 1 },
+      backoffMs: 0,
+    });
+    check(
+      "SharpAPI history records a successful empty response without retry",
+      result.outcome === "definitive_empty" && result.attempts === 1 && result.retries === 0,
+    );
+  }
+
+  check(
+    "SharpAPI history classifies 429 as transient rate limiting",
+    classifySharpHistoryFailure(new SharpApiRateLimitError({ endpoint: "/splits/history" })).failureClass ===
+      "transient_rate_limit",
+  );
+  check(
+    "SharpAPI history classifies timeout failures as transient",
+    classifySharpHistoryFailure(new Error("request timed out")).failureClass === "transient_timeout",
+  );
+  check(
+    "SharpAPI history classifies HTTP 408 as a transient timeout",
+    classifySharpHistoryFailure(new SharpApiClientError("request timeout", {
+      endpoint: "/splits/history",
+      status: 408,
+    })).failureClass === "transient_timeout",
+  );
+
   const existingRow = {
     provider: "sharpapi",
     source_book: "draftkings",

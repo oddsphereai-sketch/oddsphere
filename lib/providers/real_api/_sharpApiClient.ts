@@ -30,6 +30,7 @@ export type SharpApiRequestOptions = {
   path: string;
   query?: QueryParams;
   signal?: AbortSignal;
+  retryRateLimitInternally?: boolean;
 };
 
 /**
@@ -169,6 +170,9 @@ export class SharpApiClient {
 
   async fetch<T>(opts: SharpApiRequestOptions): Promise<SharpApiResponse<T>> {
     if (this.quota.remaining === 0) {
+      if (opts.retryRateLimitInternally === false) {
+        throw new SharpApiRateLimitError({ endpoint: opts.path });
+      }
       await this.waitUntilReset();
     }
 
@@ -193,7 +197,7 @@ export class SharpApiClient {
 
     let quota = parseQuotaHeaders(res.headers);
 
-    if (res.status === 429) {
+    if (res.status === 429 && opts.retryRateLimitInternally !== false) {
       const waitSec = (quota.retryAfter ?? 65) + 2;
       await sleep(waitSec * 1000);
       this.quota.remaining = null;
@@ -230,6 +234,12 @@ export class SharpApiClient {
 
     const text = await res.text();
 
+    if (res.status === 429) {
+      throw new SharpApiRateLimitError({
+        endpoint: opts.path,
+        bodyPreview: text.slice(0, 500),
+      });
+    }
     if (res.status === 401 || res.status === 403) {
       throw new SharpApiAuthError({
         endpoint: opts.path,
@@ -306,6 +316,7 @@ export class SharpApiClient {
         path: opts.path,
         query,
         signal: opts.signal,
+        retryRateLimitInternally: opts.retryRateLimitInternally,
       });
       const chunk = Array.isArray(res.data) ? res.data : [];
       out.push(...chunk);
