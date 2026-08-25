@@ -1,0 +1,38 @@
+{
+  "recalibrationRelease": "nfl_player_props_recalibration_tournament_2026_08_25_r2",
+  "shadowModelRelease": "nfl_player_props_distribution_shadow_2026_08_25_r1",
+  "calibrationRelease": "nfl_player_props_distribution_calibration_shadow_2026_08_25_r2",
+  "evaluationRelease": "nfl_player_props_chronological_evaluation_2026_08_25_r2",
+  "historicalDatasetRelease": "nfl_player_props_historical_features_2016_2025_2026_08_20_r1",
+  "mode": "local_shadow_only",
+  "actionable": false,
+  "lineProbabilityReady": false,
+  "projectionChampions": {
+    "passing_attempts": "hgb",
+    "passing_completions": "ridge",
+    "passing_yards": "ridge",
+    "rushing_attempts": "hgb",
+    "rushing_yards": "ridge",
+    "receptions": "ridge",
+    "receiving_yards": "ridge"
+  },
+  "chronology": {
+    "projectionTrainingEnd": 2022,
+    "calibrationFit": 2023,
+    "calibrationSelection": 2024,
+    "lockedEvaluation": 2025
+  },
+  "candidates": [
+    "parametric_r1",
+    "empirical_residual_global",
+    "empirical_residual_mean_quartile"
+  ],
+  "selection": {
+    "maximumAbsoluteCoverage80Error": 0.04,
+    "maximumAbsoluteCoverage90Error": 0.03,
+    "eligibleObjective": "minimum_crps",
+    "fallbackObjective": "minimum_coverage_error_then_crps"
+  },
+  "empiricalQuantileGridSize": 1001,
+  "minimumBucketRows": 150
+}

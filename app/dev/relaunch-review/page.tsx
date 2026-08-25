@@ -52,7 +52,8 @@ export default function RelaunchReviewPage() {
           <ReviewSection title="Supporting products" body="These candidates preserve Daily Edge as the center while making prop research and accountability feel like one OddSphere system.">
             <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
               <ReviewLink href="/dev/premier-league-preview" eyebrow="Local shadow · Gameweek 1" title="Premier League" body="Friday-through-Monday weekly slate with coherent model probabilities, promoted-club uncertainty, retained completed matches, and no live grades or stakes." />
-              <ReviewLink href="/dev/mlb-props-preview" eyebrow="Latest read-only snapshot" title="Player Props" body="Real prices and model rows first; research controls and complete available evidence remain on demand. A deterministic fixture remains available with ?source=fixture." />
+              <ReviewLink href="/dev/mlb-props-preview" eyebrow="Latest read-only snapshot" title="MLB Player Props" body="Real prices and model rows first; research controls and complete available evidence remain on demand. A deterministic fixture remains available with ?source=fixture." />
+              <ReviewLink href="/dev/nfl-props-preview" eyebrow="Local real-price Week 1 board" title="NFL Player Props" body="Market-specific calibrated probabilities, exact offered prices, independent-market context, and an MLB-aligned board-to-reader interaction. Publication remains disabled." />
               <ReviewLink href="/dev/tracking-preview" eyebrow="Live tracking payload" title="Tracking" body="Yesterday first, then weekly, monthly, and lifetime results grouped cleanly by sport and model. Recent grades and methodology remain available on demand." />
             </div>
           </ReviewSection>

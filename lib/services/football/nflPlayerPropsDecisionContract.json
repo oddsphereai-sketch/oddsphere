@@ -1,0 +1,60 @@
+{
+  "decisionRelease": "nfl_player_props_decision_2026_08_25_r2_exact_price_shared_context",
+  "modelRelease": "nfl_player_props_distribution_model_2026_08_25_r2_shared_context",
+  "calibrationRelease": "nfl_player_props_distribution_calibration_2026_08_25_r2_shared_context",
+  "touchdownModelRelease": "nfl_player_props_anytime_td_model_2026_08_25_r3_shared_context",
+  "touchdownCalibrationRelease": "nfl_player_props_anytime_td_calibration_2026_08_25_r3_shared_context",
+  "marketBoardRelease": "nfl_player_props_exact_market_board_2026_08_25_r1",
+  "mode": "production_qualified_unpublished",
+  "noQuotas": true,
+  "lockLeadMinutes": 60,
+  "maximumQuoteAgeHours": 6,
+  "volumeAndYardage": {
+    "watchlist": {"minimumEv": 0.0, "minimumProbabilityEdge": 0.0},
+    "lean": {"minimumEv": 0.04, "minimumProbabilityEdge": 0.02, "minimumParticipationProbability": 0.70, "minimumIndependentBooks": 1},
+    "bestAngle": {"minimumEv": 0.08, "minimumProbabilityEdge": 0.035, "minimumParticipationProbability": 0.85, "minimumIndependentBooks": 1}
+  },
+  "marketLanes": {
+    "passing_attempts": {"eligibleSides": [], "bestAngle": false, "lean": false, "watchlist": false},
+    "passing_completions": {"eligibleSides": [], "bestAngle": false, "lean": false, "watchlist": false},
+    "passing_yards": {"eligibleSides": [], "bestAngle": false, "lean": false, "watchlist": false},
+    "receiving_yards": {
+      "eligibleSides": ["under"], "bestAngle": true, "lean": false, "watchlist": true
+    },
+    "receptions": {"eligibleSides": ["under"], "bestAngle": true, "lean": false, "watchlist": true},
+    "rushing_attempts": {
+      "eligibleSides": ["over", "under"], "bestAngle": false, "lean": true, "watchlist": true,
+      "leanThresholds": {"minimumEv": 0.02, "minimumProbabilityEdge": 0.01, "minimumParticipationProbability": 0.70, "minimumIndependentBooks": 1}
+    },
+    "rushing_yards": {"eligibleSides": [], "bestAngle": false, "lean": false, "watchlist": false}
+  },
+  "touchdown": {
+    "watchlist": {"minimumEv": 0.0, "minimumProbabilityEdge": 0.0},
+    "lean": {"minimumEv": 0.07, "minimumProbabilityEdge": 0.02, "minimumParticipationProbability": 0.75},
+    "bestAngle": {"minimumEv": 0.12, "minimumProbabilityEdge": 0.035, "minimumParticipationProbability": 0.85, "minimumIndependentBooks": 2},
+    "minimumAmericanPrice": 100,
+    "eligibleLine": 0.5
+  },
+  "releaseEvidence": {
+    "minimumBestAngleBets": 30,
+    "minimumLeanBets": 50,
+    "maximumLargestWinShare": 0.35,
+    "maximumCalibrationGap": 0.05,
+    "requirePositiveFirstHalfRoi": true,
+    "requirePositiveSecondHalfRoi": true,
+    "requirePositiveMarketFamilyRoi": true,
+    "requireExactPrice": true,
+    "requireRoleCoherence": true
+  },
+  "heldReasons": [
+    "identity_ambiguous",
+    "role_ambiguous",
+    "player_listed_out",
+    "lock_observation_missing"
+  ],
+  "unavailableReasons": [
+    "exact_price_incomplete",
+    "independent_market_benchmark_incomplete",
+    "quote_stale"
+  ]
+}
