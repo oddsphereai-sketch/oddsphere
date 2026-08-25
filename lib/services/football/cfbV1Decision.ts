@@ -1,9 +1,12 @@
 import gradeArtifactJson from "./modelArtifacts/cfbV1GradePolicy.json";
 import scoreArtifactJson from "./modelArtifacts/cfbV1JointScoreArtifact.json";
+import weeklyArtifactJson from "./modelArtifacts/cfbV1WeeklyRuntimeArtifact.json";
 import type { NcaafBookOdds } from "./balldontlieNcaafSlate";
+import { CFB_V1_WEEKLY_BASE_ARTIFACT_RELEASE, getCfbV1WeeklyForecast } from "./cfbV1WeeklyForecast";
+import type { NcaafGame } from "./balldontlieNcaafSlate";
 
 export const CFB_V1_SCORE_ARTIFACT_RELEASE =
-  "cfb_v1_joint_score_artifact_2026_08_25_r2" as const;
+  "cfb_v1_joint_score_artifact_2026_08_25_r3_weekly" as const;
 export const CFB_V1_MODEL_RELEASE =
   "cfb_v1_independent_score_model_2026_08_25_r1" as const;
 export const CFB_V1_DISTRIBUTION_RELEASE =
@@ -15,7 +18,7 @@ export const CFB_V1_REPRESENTATIVE_SCORE_RELEASE =
 export const CFB_V1_GRADE_POLICY_RELEASE =
   "cfb_v1_composite_grade_policy_2026_08_25_r1" as const;
 export const CFB_V1_DECISION_RELEASE =
-  "cfb_v1_daily_edge_decision_2026_08_25_r4" as const;
+  "cfb_v1_daily_edge_decision_2026_08_25_r5_weekly" as const;
 export const CFB_V1_DECISION_SCHEMA_RELEASE =
   "cfb_v1_exact_price_decision_tuple_2026_08_25_r1" as const;
 export const CFB_T60_TARGET_MINUTES = 60 as const;
@@ -116,6 +119,12 @@ type ScoreArtifact = {
   forecasts: CfbV1Forecast[];
 };
 
+type WeeklyArtifact = {
+  artifactRelease: string;
+  baseArtifactRelease: string;
+  modelRelease: string;
+};
+
 type GradeArtifact = {
   policyRelease: string;
   decisionRelease: string;
@@ -123,6 +132,7 @@ type GradeArtifact = {
 };
 
 const scoreArtifact = scoreArtifactJson as unknown as ScoreArtifact;
+const weeklyArtifact = weeklyArtifactJson as unknown as WeeklyArtifact;
 const gradeArtifact = gradeArtifactJson as GradeArtifact;
 
 assertArtifactReleases();
@@ -131,6 +141,10 @@ export function getCfbV1Forecast(providerGameId: string): CfbV1Forecast {
   const forecast = scoreArtifact.forecasts.find((row) => row.providerGameId === providerGameId);
   if (!forecast) throw new Error(`CFB v1 has no qualified forecast for provider game ${providerGameId}.`);
   return forecast;
+}
+
+export function getCfbV1ForecastForGame(args: { game: NcaafGame; completedGames?: NcaafGame[] }): ReturnType<typeof getCfbV1WeeklyForecast> {
+  return getCfbV1WeeklyForecast(args);
 }
 
 export function getCfbV1Forecasts(): CfbV1Forecast[] {
@@ -186,8 +200,10 @@ export function buildCfbV1DecisionBundle(args: {
   evaluatedAt?: string;
   lockedAt?: string | null;
   healthHolds?: string[];
+  forecast?: CfbV1Forecast;
 }): CfbV1DecisionBundle {
-  const forecast = getCfbV1Forecast(args.providerGameId);
+  const forecast = args.forecast ?? getCfbV1Forecast(args.providerGameId);
+  if (forecast.providerGameId !== args.providerGameId) throw new Error("CFB decision forecast/game identity mismatch.");
   const stage = args.stage ?? "unlocked";
   const healthHolds = args.healthHolds ?? [];
   if (healthHolds.length > 0) {
@@ -451,7 +467,10 @@ function marketNumber(value: number): string { return Number.isInteger(value) ? 
 function signed(value: number): string { return value > 0 ? `+${marketNumber(value)}` : marketNumber(value); }
 
 function assertArtifactReleases(): void {
-  if (scoreArtifact.artifactRelease !== CFB_V1_SCORE_ARTIFACT_RELEASE || scoreArtifact.modelRelease !== CFB_V1_MODEL_RELEASE || scoreArtifact.distributionRelease !== CFB_V1_DISTRIBUTION_RELEASE || scoreArtifact.probabilityRelease !== CFB_V1_PROBABILITY_RELEASE || scoreArtifact.representativeScoreRelease !== CFB_V1_REPRESENTATIVE_SCORE_RELEASE) {
+  if (weeklyArtifact.artifactRelease !== CFB_V1_SCORE_ARTIFACT_RELEASE || weeklyArtifact.baseArtifactRelease !== CFB_V1_WEEKLY_BASE_ARTIFACT_RELEASE || weeklyArtifact.modelRelease !== CFB_V1_MODEL_RELEASE) {
+    throw new Error("CFB v1 weekly runtime artifact release mismatch.");
+  }
+  if (scoreArtifact.artifactRelease !== CFB_V1_WEEKLY_BASE_ARTIFACT_RELEASE || scoreArtifact.modelRelease !== CFB_V1_MODEL_RELEASE || scoreArtifact.distributionRelease !== CFB_V1_DISTRIBUTION_RELEASE || scoreArtifact.probabilityRelease !== CFB_V1_PROBABILITY_RELEASE || scoreArtifact.representativeScoreRelease !== CFB_V1_REPRESENTATIVE_SCORE_RELEASE) {
     throw new Error("CFB v1 score artifact release mismatch.");
   }
   if (gradeArtifact.policyRelease !== CFB_V1_GRADE_POLICY_RELEASE || gradeArtifact.decisionRelease !== CFB_V1_DECISION_RELEASE) {

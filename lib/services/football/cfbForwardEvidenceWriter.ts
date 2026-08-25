@@ -3,7 +3,7 @@ import { computeSlateDate } from "@/lib/dates/slateDate";
 import { isPublicallyTracked } from "@/lib/config/officialTrackingStart";
 import { assertOfficialTrackingMarket } from "@/lib/config/officialTrackingMarkets";
 import { PlaybookClient } from "@/lib/providers/playbook/playbookClient";
-import { fetchBalldontlieNcaafSlate, type NcaafBookOdds, type NcaafGame } from "./balldontlieNcaafSlate";
+import { fetchBalldontlieNcaafResults, fetchBalldontlieNcaafSlate, type NcaafBookOdds, type NcaafGame } from "./balldontlieNcaafSlate";
 import { fetchBalldontlieNcaafQuarterbacks } from "./balldontlieNcaafQuarterbacks";
 import { matchCfbPlaybookRow, normalizeCfbPlaybookLine, normalizeCfbPlaybookSplits } from "./cfbPlaybookEvidence";
 import {
@@ -19,11 +19,15 @@ import {
   type CfbForwardTeamQuarterbacks,
 } from "./cfbForwardEvidence";
 import { appendCfbForwardEvidence, readCfbForwardEvidence } from "./cfbForwardEvidenceStore";
-import { buildCfbV1DecisionBundle, CFB_T60_MAX_CAPTURE_LAG_MINUTES, CFB_V1_DECISION_RELEASE, getCfbV1Forecasts } from "./cfbV1Decision";
+import { buildCfbV1DecisionBundle, CFB_T60_MAX_CAPTURE_LAG_MINUTES, CFB_V1_DECISION_RELEASE, getCfbV1ForecastForGame } from "./cfbV1Decision";
 import { buildCfbOfficialTrackingRecords, cfbProviderIntegerId } from "./cfbOfficialTrackingRecord";
+import { activeCfbWeeklyWindow, eligibleCfbWeeklyGames, isGameInCfbWeeklyWindow } from "./cfbWeeklyWindow";
 
 export const CFB_FORWARD_WRITER_RELEASE =
-  "cfb_forward_evidence_writer_2026_08_25_r2_team_scoped_qb" as const;
+  "cfb_forward_evidence_writer_2026_08_25_r3_weekly" as const;
+export const CFB_FORWARD_MAX_QB_TEAMS_PER_RUN = 24 as const;
+export const CFB_FORWARD_RESULTS_BATCH_SIZE = 100 as const;
+export const CFB_FORWARD_MAX_PRIOR_GAME_IDS = 1200 as const;
 
 export type CfbForwardWriterResult = {
   writerRelease: typeof CFB_FORWARD_WRITER_RELEASE;
@@ -57,30 +61,31 @@ export async function runCfbForwardEvidenceWriter(args: {
   balldontlieApiKey: string;
   playbookApiKey: string;
 }): Promise<CfbForwardWriterResult> {
-  const existing = await readCfbForwardEvidence({ client: args.client, season: args.season });
-  const need = determineCfbForwardCollectionNeed({ existing, now: args.now });
+  const window = activeCfbWeeklyWindow(args.now);
+  const allExisting = await readCfbForwardEvidence({ client: args.client, season: args.season });
+  const existing = allExisting.filter((row) => isGameInCfbWeeklyWindow({ scheduledStart: row.gameStartAt }, window));
+  const ordinaryNeed = determineCfbForwardCollectionNeed({ existing, now: args.now });
+  const need = ordinaryNeed.collect ? ordinaryNeed : releaseRefreshNeed(existing, args.now) ?? ordinaryNeed;
   if (!need.collect) {
     const tracking = await writeOfficialTracking({ client: args.client, payloads: currentT60Payloads(existing), apply: args.apply });
     return emptyResult(need.reason, tracking);
   }
-  const forecasts = getCfbV1Forecasts();
-  const startDate = forecasts.map((row) => row.gameStartsAt.slice(0, 10)).sort()[0]!;
-  const endDate = forecasts.map((row) => row.gameStartsAt.slice(0, 10)).sort().at(-1)!;
-  const slate = await fetchBalldontlieNcaafSlate({ season: args.season, startDate, endDate, apiKey: args.balldontlieApiKey });
-  const requiredIds = new Set(forecasts.map((row) => row.providerGameId));
-  const games = slate.games.filter((game) => requiredIds.has(game.providerGameId));
-  if (games.length !== forecasts.length || new Set(games.map((game) => game.providerGameId)).size !== forecasts.length) {
-    throw new Error(`CFB authoritative slate identity is ${games.length}/${forecasts.length} qualified games.`);
-  }
+  const slate = await fetchBalldontlieNcaafSlate({ season: args.season, startDate: window.providerQueryStartDate, endDate: window.providerQueryEndDate, apiKey: args.balldontlieApiKey });
+  const games = eligibleCfbWeeklyGames(slate.games, window);
+  if (games.length === 0) throw new Error(`CFB authoritative weekly window ${window.boardStartDate}..${window.boardEndDate} has no eligible FBS games.`);
   const plans = planCfbForwardEvidenceCaptures({ games, existing, capturedAt: args.now, unlockedCadenceMinutes: need.cadenceMinutes ?? 360 });
   if (plans.length === 0) return emptyResult("capture_plan_empty", { trackingAttempted: false, trackingRecordsProposed: 0, trackingRecordsInserted: 0, trackingRecordsExisting: 0 });
   const playbook = new PlaybookClient(args.playbookApiKey);
+  const priorResults = await fetchPriorCompletedGames({ rows: allExisting, before: window.boardStartDate, apiKey: args.balldontlieApiKey });
   const teams = [...new Map(games.flatMap((game) => [[game.away.id, game.away] as const, [game.home.id, game.home] as const])).values()];
+  const priorQuarterbacks = latestQuarterbacksByTeam(allExisting);
+  const quarterbackTeams = selectQuarterbackTeams({ plans, teams, priorQuarterbacks, maximum: CFB_FORWARD_MAX_QB_TEAMS_PER_RUN });
   const [linesResult, splitsResult, quarterbacks] = await Promise.all([
     playbook.lines("ncaaf"),
     playbook.splits("ncaaf"),
-    fetchBalldontlieNcaafQuarterbacks({ teams: teams.map((team) => ({ id: team.id, abbreviation: team.abbreviation })), previousSeason: args.season - 1, capturedAt: args.now, apiKey: args.balldontlieApiKey }),
+    fetchBalldontlieNcaafQuarterbacks({ teams: quarterbackTeams.map((team) => ({ id: team.id, abbreviation: team.abbreviation })), previousSeason: args.season - 1, capturedAt: args.now, apiKey: args.balldontlieApiKey }),
   ]);
+  const quarterbackContext = new Map([...priorQuarterbacks, ...quarterbacks.byTeamId]);
   const lines = (linesResult.body.data ?? []) as unknown[];
   const splits = (splitsResult.body.data ?? []) as unknown[];
   const priorOpening = firstOpenings(existing);
@@ -91,16 +96,19 @@ export async function runCfbForwardEvidenceWriter(args: {
     const operationalOpening = providerOpening
       ? { provenance: "provider_opening" as const, capturedAt: providerOpening.observedAt, quote: providerOpening }
       : priorOpening.get(plan.game.providerGameId) ?? (current ? { provenance: "first_observed" as const, capturedAt: args.now, quote: current } : null);
-    const awayQuarterbacks = requiredQuarterbacks(quarterbacks.byTeamId, plan.game.away.id, plan.game.away.abbreviation, args.now);
-    const homeQuarterbacks = requiredQuarterbacks(quarterbacks.byTeamId, plan.game.home.id, plan.game.home.abbreviation, args.now);
+    const awayQuarterbacks = requiredQuarterbacks(quarterbackContext, plan.game.away.id, plan.game.away.abbreviation, args.now);
+    const homeQuarterbacks = requiredQuarterbacks(quarterbackContext, plan.game.home.id, plan.game.home.abbreviation, args.now);
     const playbookLineRow = lines.find((row) => matchCfbPlaybookRow(plan.game, row));
     const playbookSplitRow = splits.find((row) => matchCfbPlaybookRow(plan.game, row));
     const playbookLine = playbookLineRow ? normalizeCfbPlaybookLine(playbookLineRow, args.now) : null;
     const playbookSplits = playbookSplitRow ? normalizeCfbPlaybookSplits(playbookSplitRow, args.now) : null;
+    const weeklyForecast = getCfbV1ForecastForGame({ game: plan.game, completedGames: priorResults.games });
     const healthHolds = [
       ...(plan.stage === "t60" && (plan.t60LagMinutes ?? Infinity) > CFB_T60_MAX_CAPTURE_LAG_MINUTES ? ["t60_capture_late"] : []),
       ...(plan.stage === "t60" && awayQuarterbacks.expectedStartingQuarterback === null ? ["away_quarterback_roster_unavailable"] : []),
       ...(plan.stage === "t60" && homeQuarterbacks.expectedStartingQuarterback === null ? ["home_quarterback_roster_unavailable"] : []),
+      ...(weeklyForecast.featureHealth.awayProfile === "neutral_imputation" ? ["away_model_team_profile_unavailable"] : []),
+      ...(weeklyForecast.featureHealth.homeProfile === "neutral_imputation" ? ["home_model_team_profile_unavailable"] : []),
     ];
     const decisions = compactDecisionBundle(buildCfbV1DecisionBundle({
       providerGameId: plan.game.providerGameId,
@@ -112,6 +120,7 @@ export async function runCfbForwardEvidenceWriter(args: {
       evaluatedAt: args.now,
       lockedAt: plan.stage === "t60" && healthHolds.length === 0 ? args.now : null,
       healthHolds,
+      forecast: weeklyForecast.forecast,
     }));
     const targetExcludedConsensusReady = decisions.evaluatedBets.length === 3;
     return {
@@ -146,7 +155,7 @@ export async function runCfbForwardEvidenceWriter(args: {
         healthHolds,
         availabilityWarnings: ["quarterback_starter_projected_not_confirmed", "injury_feed_unavailable", "venue_weather_unavailable", "sharpapi_splits_unavailable"],
       },
-      requestBudget: { balldontlieSlate: slate.providerRequests, balldontlieQuarterbacks: quarterbacks.providerRequests, playbook: 2, totalMaximum: slate.providerRequests + quarterbacks.providerRequests + 2 },
+      requestBudget: { balldontlieSlate: slate.providerRequests + priorResults.providerRequests, balldontlieQuarterbacks: quarterbacks.providerRequests, playbook: 2, totalMaximum: slate.providerRequests + priorResults.providerRequests + quarterbacks.providerRequests + 2 },
     };
   });
   const write = await appendCfbForwardEvidence({ client: args.client, runId: args.runId, payloads, apply: args.apply });
@@ -166,11 +175,25 @@ export async function runCfbForwardEvidenceWriter(args: {
     publishedWatchlists: decisions.filter((row) => row.grade === "Watchlist").length,
     publishedNoPlays: decisions.filter((row) => row.grade === "No Play").length,
     heldMarkets: payloads.reduce((sum, payload) => sum + payload.decisions.heldMarkets.length, 0),
-    apiCallsMaximum: slate.providerRequests + quarterbacks.providerRequests + 2,
+    apiCallsMaximum: slate.providerRequests + priorResults.providerRequests + quarterbacks.providerRequests + 2,
     healthHolds: [...new Set(payloads.flatMap((payload) => payload.coverage.healthHolds))],
     publicationAttempted: true,
     ...tracking,
   };
+}
+
+async function fetchPriorCompletedGames(args: { rows: CfbForwardStoredEvidence[]; before: string; apiKey: string }): Promise<{ games: NcaafGame[]; providerRequests: number }> {
+  const ids = [...new Set(args.rows.filter((row) => row.gameStartAt.slice(0, 10) < args.before).map((row) => row.providerGameId))].sort();
+  if (ids.length > CFB_FORWARD_MAX_PRIOR_GAME_IDS) throw new Error(`CFB prior-game result coverage exceeds its ${CFB_FORWARD_MAX_PRIOR_GAME_IDS}-ID season budget.`);
+  const games: NcaafGame[] = [];
+  let providerRequests = 0;
+  for (let index = 0; index < ids.length; index += CFB_FORWARD_RESULTS_BATCH_SIZE) {
+    const result = await fetchBalldontlieNcaafResults({ gameIds: ids.slice(index, index + CFB_FORWARD_RESULTS_BATCH_SIZE), apiKey: args.apiKey, pageBudget: 2 });
+    providerRequests += result.providerRequests;
+    games.push(...result.games.filter((game) => game.awayScore !== null && game.homeScore !== null));
+  }
+  if (new Set(games.map((game) => game.providerGameId)).size !== games.length) throw new Error("CFB prior-game results contain duplicate provider IDs.");
+  return { games, providerRequests };
 }
 
 function firstOpenings(rows: CfbForwardStoredEvidence[]): Map<string, CfbForwardOperationalOpening> {
@@ -179,6 +202,52 @@ function firstOpenings(rows: CfbForwardStoredEvidence[]): Map<string, CfbForward
     if (row.payload.market.operationalOpening && !result.has(row.providerGameId)) result.set(row.providerGameId, row.payload.market.operationalOpening);
   }
   return result;
+}
+
+export function selectQuarterbackTeams(args: {
+  plans: Array<{ game: NcaafGame; stage: "opening" | "unlocked" | "t60" }>;
+  teams: NcaafGame["home"][];
+  priorQuarterbacks: Map<number, CfbForwardTeamQuarterbacks>;
+  maximum: number;
+}): NcaafGame["home"][] {
+  if (!Number.isInteger(args.maximum) || args.maximum < 0) throw new Error("CFB quarterback team budget must be a nonnegative integer.");
+  const byId = new Map(args.teams.map((team) => [team.id, team]));
+  const candidates = new Map<number, { team: NcaafGame["home"]; priority: number; startsAt: number }>();
+  for (const plan of args.plans) {
+    for (const team of [plan.game.away, plan.game.home]) {
+      if (args.priorQuarterbacks.get(team.id)?.activeQuarterbacks.length) continue;
+      const priority = plan.stage === "t60" ? 0 : plan.stage === "opening" ? 1 : 2;
+      const current = candidates.get(team.id);
+      if (!current || priority < current.priority || Date.parse(plan.game.scheduledStart) < current.startsAt) candidates.set(team.id, { team: byId.get(team.id) ?? team, priority, startsAt: Date.parse(plan.game.scheduledStart) });
+    }
+  }
+  return [...candidates.values()].sort((first, second) => first.priority - second.priority || first.startsAt - second.startsAt || first.team.id - second.team.id).slice(0, args.maximum).map((value) => value.team);
+}
+
+function latestQuarterbacksByTeam(rows: CfbForwardStoredEvidence[]): Map<number, CfbForwardTeamQuarterbacks> {
+  const result = new Map<number, CfbForwardTeamQuarterbacks>();
+  for (const row of [...rows].sort((first, second) => Date.parse(first.capturedAt) - Date.parse(second.capturedAt))) {
+    for (const value of [row.payload.quarterbacks.away, row.payload.quarterbacks.home]) {
+      if (value.activeQuarterbacks.length > 0) result.set(value.teamId, value);
+    }
+  }
+  return result;
+}
+
+function releaseRefreshNeed(rows: CfbForwardStoredEvidence[], now: string): { collect: true; reason: string; cadenceMinutes: number } | null {
+  const timestamp = Date.parse(now);
+  const latest = new Map<string, CfbForwardStoredEvidence>();
+  for (const row of rows) {
+    const current = latest.get(row.providerGameId);
+    if (!current || Date.parse(row.capturedAt) > Date.parse(current.capturedAt)) latest.set(row.providerGameId, row);
+  }
+  const staleUpcoming = [...latest.values()].some((row) =>
+    timestamp < Date.parse(row.gameStartAt) - 60 * 60_000 &&
+    (row.payload.memberRelease !== CFB_FORWARD_MEMBER_RELEASE ||
+      row.payload.decisions.decisionRelease !== CFB_V1_DECISION_RELEASE ||
+      row.payload.decisions.evaluatedBets.length + row.payload.decisions.heldMarkets.length !== 3)
+  );
+  return staleUpcoming ? { collect: true, reason: "release_refresh_due", cadenceMinutes: 0 } : null;
 }
 
 function compactDecisionBundle(
