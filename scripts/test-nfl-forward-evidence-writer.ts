@@ -32,6 +32,20 @@ const game: NflPreviewGame = {
   away: { id: 1, abbreviation: "NE", name: "New England Patriots" },
   home: { id: 2, abbreviation: "SEA", name: "Seattle Seahawks" },
 };
+const finalGame = __BALLDONTLIE_NFL_PREVIEW_SLATE_TEST__.normalizeGame({
+  id: 1001,
+  season: 2026,
+  week: 1,
+  date: game.scheduledStart,
+  status_state: "final",
+  home_team_score: 27,
+  visitor_team_score: 20,
+  home_team: { id: 2, abbreviation: "SEA", full_name: "Seattle Seahawks" },
+  visitor_team: { id: 1, abbreviation: "NE", full_name: "New England Patriots" },
+});
+assert.equal(finalGame?.status, "final");
+assert.equal(finalGame?.homeScore, 27);
+assert.equal(finalGame?.awayScore, 20);
 
 function stored(stage: "opening" | "unlocked" | "t60", capturedAt: string): NflForwardStoredEvidence {
   return {
@@ -104,11 +118,15 @@ const route = readFileSync(path.resolve("app/api/cron/nfl-forward-evidence/route
 assert.match(route, /leaseGroup: "prediction_pipeline"/);
 assert.match(route, /requireLease: true/);
 assert.match(route, /publication_attempted/);
-assert.match(route, /tracking_attempted: false/);
+assert.match(route, /tracking_attempted: result\.trackingAttempted/);
 const writer = readFileSync(path.resolve("lib/services/football/nflForwardEvidenceWriter.ts"), "utf8");
-assert.doesNotMatch(writer, /writeCurrentNflPublishedMemberSnapshot|buildNflTrackingProposals/);
-assert.match(writer, /buildNflV1ProductionDecisionBundle/);
+assert.doesNotMatch(writer, /writeCurrentNflPublishedMemberSnapshot|buildNflTrackingProposals\(/);
+assert.match(writer, /buildNflV1ActionableGradeBundle/);
 assert.match(writer, /evaluatedBets: production\.evaluatedBets/);
+assert.match(writer, /writeOfficialTrackingFromPayloads/);
+assert.match(writer, /buildNflOfficialTrackingRecords/);
+assert.match(writer, /\.from\("prediction_records"\)/);
+assert.match(writer, /isPublicallyTracked/);
 assert.match(writer, /currentBooks/);
 assert.match(writer, /comparableCurrentBooks/);
 assert.match(writer, /multibook_consensus_unavailable/);
@@ -290,14 +308,14 @@ assert.doesNotMatch(candidatePage, /nflWeekOneEvidenceBoard=\{/);
 assert.match(candidatePage, /stale preseason package is retired/);
 const reader = readFileSync(path.resolve("app/dev/experience-preview/ActualDailyEdgePreview.tsx"), "utf8");
 assert.match(reader, /No score forecast is being published yet/);
-assert.match(reader, /Held is separate from No Play/);
+assert.match(reader, /Counts show games containing at least one market with each grade/);
 assert.match(reader, /Missing validation is a visible hold—not an ordinary No Play\./);
 assert.doesNotMatch(reader, /Week 1 market is live[^\n]*Best Angle/);
 
 const heldFixture = readFileSync(path.resolve("lib/services/football/nflWeekOneHeldMemberFixture.ts"), "utf8");
 assert.match(heldFixture, /readNflForwardEvidence/);
 assert.match(heldFixture, /applyPublishedDecision/);
-assert.match(heldFixture, /nfl_r6_exact_price_moneyline_lean/);
+assert.match(heldFixture, /nfl_r9_exact_price_moneyline_best_angle/);
 assert.doesNotMatch(heldFixture, /client\.from|supabase\.from|\.insert\(|\.upsert\(/);
 
-console.log("NFL forward evidence planner, cadence, roster/QB, immutable DB, member decisions, lease, and legacy evidence-only boundaries passed.");
+console.log("NFL forward evidence planner, cadence, roster/QB, immutable DB, member decisions, lease, and result normalization passed.");

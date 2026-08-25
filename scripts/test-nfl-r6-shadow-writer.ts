@@ -182,14 +182,15 @@ assert.equal(falsifiedLagT60.lockedAt, null);
 assert.ok(falsifiedLagT60.health.blockingReasons.includes("t60_capture_late"));
 
 const writer = readFileSync(path.resolve("lib/services/football/nflForwardEvidenceWriter.ts"), "utf8");
-assert.match(writer, /nfl_forward_evidence_writer_2026_08_23_r4_member/);
+assert.match(writer, /nfl_forward_evidence_writer_2026_08_25_r7_actionable_grades/);
 assert.match(writer, /buildNflR6ShadowMoneylineDecision/);
-assert.match(writer, /buildNflV1ProductionDecisionBundle/);
+assert.match(writer, /buildNflV1ActionableGradeBundle/);
 assert.match(writer, /evaluatedBets: production\.evaluatedBets/);
-assert.match(writer, /shadowEvaluatedBets: \[shadowMoneyline\]/);
-assert.doesNotMatch(writer, /writeCurrentNflPublishedMemberSnapshot|buildNflTrackingProposals/);
+assert.doesNotMatch(writer, /shadowEvaluatedBets: \[shadowMoneyline\]/);
+assert.match(writer, /buildNflOfficialTrackingRecords/);
+assert.doesNotMatch(writer, /writeCurrentNflPublishedMemberSnapshot|buildNflTrackingProposals\(/);
 const route = readFileSync(path.resolve("app/api/cron/nfl-forward-evidence/route.ts"), "utf8");
 assert.match(route, /leaseGroup: "prediction_pipeline"/);
 assert.match(route, /requireLease: true/);
 
-console.log("NFL r6 portable parity, exact-price shadow tuple, QB health, single-writer, and T-60 fail-closed boundaries passed.");
+console.log("NFL r6 portable parity, internal exact-price tuple, QB health, single-writer, and T-60 fail-closed boundaries passed.");

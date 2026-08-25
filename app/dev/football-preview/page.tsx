@@ -89,7 +89,7 @@ export default async function FootballPreviewPage({
         sportSwitchDestinations={SPORT_SWITCH_DESTINATIONS}
         weeklySlate={{
           label: `NFL · ${fixture.week.label} · ${fixture.snapshot.games.length} games · ${fixture.snapshot.games.length * 3} predictions · ${range} · live predictions and exact-price Bet grades`,
-          evidence: `Captured ${new Date(fixture.capturedAt).toLocaleString("en-US", { timeZone: "America/New_York" })} ET · ${fixture.coverage.currentOddsGames}/${fixture.coverage.games} current named-book boards · ${fixture.coverage.openingGames}/${fixture.coverage.games} operational Opening trails · ${fixture.coverage.playbookSplitGames}/${fixture.coverage.games} Playbook split sets · ${fixture.coverage.injuryGames}/${fixture.coverage.games} injury reports · ${fixture.coverage.projectedQuarterbacks} projected QBs, ${fixture.coverage.confirmedQuarterbacks} confirmed · no preseason slate or result tracking`,
+          evidence: `Captured ${new Date(fixture.capturedAt).toLocaleString("en-US", { timeZone: "America/New_York" })} ET · ${fixture.coverage.currentOddsGames}/${fixture.coverage.games} current named-book boards · ${fixture.coverage.openingGames}/${fixture.coverage.games} operational Opening trails · ${fixture.coverage.playbookSplitGames}/${fixture.coverage.games} Playbook split sets · ${fixture.coverage.injuryGames}/${fixture.coverage.games} injury reports · ${fixture.coverage.projectedQuarterbacks} projected QBs, ${fixture.coverage.confirmedQuarterbacks} confirmed · no preseason slate or result tracking; regular-season tracking freezes per game at valid T-60`,
           previousHref: null,
           nextHref: null,
           asOf: fixture.capturedAt,

@@ -49,6 +49,7 @@ import { ingestSoccerFinalScores } from "./soccer/soccerScoreIngestService";
 import { ingestEplFinalScores } from "./epl/eplScoreIngestService";
 import { buildWnbaPredictionRecords } from "./wnba/buildWnbaPredictionRecords";
 import { ingestWnbaFinalScores } from "./wnba/ingestWnbaFinalScores";
+import { ingestNflFinalScores } from "./football/nflScoreIngestService";
 import { moneyPuckSeasonStartYear } from "../providers/nhl/_moneyPuckClient";
 
 export type TrackingRefreshOptions = {
@@ -402,6 +403,26 @@ export async function runTrackingRefresh(
           }
         } catch (e) {
           perDate.errors.push(`nhl-final-scores exception: ${e instanceof Error ? e.message : String(e)}`);
+        }
+      } else if (sport === "nfl") {
+        // NFL prediction_records are created only by the leased forward writer
+        // from immutable, on-time regular-season T-60 tuples. This cycle never
+        // reconstructs or changes them; it only ingests exact-id final scores
+        // and lets the shared grader settle the frozen rows.
+        const existing = await loadExistingRecordCounts(opts.supabase, sport, date);
+        perDate.records_existed_before = existing.total;
+        try {
+          const fsRes = await ingestNflFinalScores({
+            supabase: opts.supabase,
+            slateDate: date,
+            apply: opts.apply,
+          });
+          perDate.final_scores_updated = fsRes.updatedCount;
+          perDate.final_scores_in_progress = fsRes.inProgressCount;
+          perDate.final_scores_scheduled = fsRes.scheduledCount;
+          for (const e of fsRes.errors) perDate.errors.push(`nfl-final-scores: ${e.reason}`);
+        } catch (e) {
+          perDate.errors.push(`nfl-final-scores exception: ${e instanceof Error ? e.message : String(e)}`);
         }
       } else if (sport === "soccer") {
         // Soccer records are written by their competition refresh, not here.

@@ -40,6 +40,7 @@ const rows: NflForwardStoredEvidence[] = source.latestRows.map((row) => {
     homeTeam: previous.game.home.abbreviation,
     gameStartsAt: previous.game.scheduledStart,
     current: previous.market.current,
+    comparableCurrentBooks: previous.market.comparableCurrentBooks,
     shadowMoneyline: shadow,
   });
   const payload: NflForwardEvidencePayload = {

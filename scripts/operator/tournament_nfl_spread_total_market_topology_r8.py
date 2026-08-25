@@ -1,0 +1,277 @@
+#!/usr/bin/env python3
+"""Frozen NFL Spread/Total market-topology provisional tournament."""
+
+from __future__ import annotations
+
+import json
+import pathlib
+import time
+from dataclasses import asdict, dataclass
+from typing import Any
+
+import joblib
+import pandas as pd
+
+import tournament_nfl_spread_total_grading_r1 as r1
+import tournament_nfl_spread_total_pragmatic_v2 as pragmatic
+import tournament_nfl_spread_total_residual_blend_r3 as residual
+
+
+TOURNAMENT_RELEASE = "nfl_spread_total_market_topology_tournament_2026_08_24_r8"
+SELECTION_SEASON = 2023
+CONFIRMATION_SEASONS = (2024, 2025)
+PROBABILITY_FLOORS = (0.525, 0.55, 0.575, 0.60)
+EV_FLOORS = (-0.01, 0.0, 0.01, 0.02)
+EDGE_FLOORS_PP = (-1.0, 0.0, 1.0, 2.0)
+CUSHION_FLOORS = (0.0, 0.5, 1.0)
+
+
+@dataclass(frozen=True)
+class TopologyRule:
+    market: str
+    side_group: str
+    role_group: str
+    line_band: str
+    minimum_probability: float
+    minimum_ev: float
+    minimum_edge_pp: float
+    minimum_cushion: float
+
+    @property
+    def name(self) -> str:
+        return (
+            f"{self.market}__{self.side_group}__{self.role_group}__{self.line_band}"
+            f"__p{self.minimum_probability:.3f}__ev{self.minimum_ev:.2f}"
+            f"__edge{self.minimum_edge_pp:.1f}__cushion{self.minimum_cushion:.1f}"
+        )
+
+
+def add_topology(rows: pd.DataFrame) -> pd.DataFrame:
+    output = rows.copy()
+    output["sideGroup"] = output["side"]
+    output["roleGroup"] = "none"
+    spread = output["market"].eq("spread")
+    output.loc[spread & output["line"].lt(0), "roleGroup"] = "favorite"
+    output.loc[spread & output["line"].gt(0), "roleGroup"] = "underdog"
+    output["lineBand"] = "none"
+    magnitude = output["line"].abs()
+    output.loc[spread & magnitude.le(2.5), "lineBand"] = "small"
+    output.loc[spread & magnitude.between(3.0, 6.5, inclusive="both"), "lineBand"] = "medium"
+    output.loc[spread & magnitude.ge(7.0), "lineBand"] = "large"
+    total = output["market"].eq("total")
+    output.loc[total & output["line"].le(41.0), "lineBand"] = "low"
+    output.loc[total & output["line"].between(41.5, 47.5, inclusive="both"), "lineBand"] = "middle"
+    output.loc[total & output["line"].ge(48.0), "lineBand"] = "high"
+    return output
+
+
+def topology_options(market: str) -> list[tuple[str, str, str]]:
+    if market == "spread":
+        return [
+            (side, role, band)
+            for side in ("all", "home", "away")
+            for role in ("all", "favorite", "underdog")
+            for band in ("all", "small", "medium", "large")
+        ]
+    return [
+        (side, "all", band)
+        for side in ("over", "under")
+        for band in ("all", "low", "middle", "high")
+    ]
+
+
+def common_eligible(rows: pd.DataFrame, rule: TopologyRule) -> pd.Series:
+    eligible = (
+        rows["market"].eq(rule.market) & rows["baseHealth"] & rows["directionCoherent"]
+        & rows["looOtherBookCount"].ge(2) & rows["price"].between(-200, 200, inclusive="both")
+        & rows["priceAdvantagePp"].ge(-2.0)
+        & rows["cushion"].ge(rule.minimum_cushion + rows["cushionPenalty"])
+    )
+    if rule.side_group != "all":
+        eligible &= rows["sideGroup"].eq(rule.side_group)
+    if rule.role_group != "all":
+        eligible &= rows["roleGroup"].eq(rule.role_group)
+    if rule.line_band != "all":
+        eligible &= rows["lineBand"].eq(rule.line_band)
+    return eligible
+
+
+def select_rows(rows: pd.DataFrame, rule: TopologyRule) -> pd.DataFrame:
+    return r1.reduce_best_offer(rows[
+        common_eligible(rows, rule)
+        & rows["probability"].ge(rule.minimum_probability)
+        & rows["expectedValue"].ge(rule.minimum_ev)
+        & rows["edgePp"].ge(rule.minimum_edge_pp)
+    ].copy())
+
+
+def selection_passes(summary: dict[str, Any]) -> bool:
+    return bool(
+        summary["actions"] >= 12 and summary["weeksWithGrade"] >= 6
+        and summary["units"] > 0 and summary["unitsWithoutLargestWin"] >= -0.5
+        and summary["calibration"]["absoluteGap"] is not None
+        and summary["calibration"]["absoluteGap"] <= 0.12 and len(summary["bookMix"]) >= 2
+    )
+
+
+def select_rule(rows: pd.DataFrame, market: str) -> tuple[TopologyRule | None, list[dict[str, Any]]]:
+    universe = rows[rows["market"].eq(market)]
+    candidates: list[dict[str, Any]] = []
+    for side, role, band in topology_options(market):
+        for probability in PROBABILITY_FLOORS:
+            for ev in EV_FLOORS:
+                for edge in EDGE_FLOORS_PP:
+                    for cushion in CUSHION_FLOORS:
+                        rule = TopologyRule(market, side, role, band, probability, ev, edge, cushion)
+                        summary = pragmatic.summarize(select_rows(rows, rule), (SELECTION_SEASON,), universe)
+                        summary["rule"] = asdict(rule)
+                        summary["ruleName"] = rule.name
+                        summary["eligible"] = selection_passes(summary)
+                        candidates.append(summary)
+    eligible = [row for row in candidates if row["eligible"]]
+    eligible.sort(key=lambda row: (
+        -row["unitsWithoutLargestWin"], -row["units"], row["calibration"]["absoluteGap"],
+        row["actions"], row["ruleName"],
+    ))
+    return (None, candidates) if not eligible else (TopologyRule(**eligible[0]["rule"]), candidates)
+
+
+def confirmation_gates(summary: dict[str, Any], bootstrap: dict[str, Any]) -> dict[str, bool]:
+    seasons = list(summary["bySeason"].values())
+    return {
+        "minimumCounts": summary["actions"] >= 20 and all(row["actions"] >= 6 for row in seasons),
+        "positivePooledUnits": summary["units"] > 0,
+        "largestWinIndependent": summary["unitsWithoutLargestWin"] > 0,
+        "seasonRobustness": sum(row["units"] > 0 for row in seasons) >= 1 and all(
+            row["roi"] is not None and row["roi"] >= -0.10 for row in seasons
+        ),
+        "calibration": summary["calibration"]["absoluteGap"] is not None
+        and summary["calibration"]["absoluteGap"] <= 0.12 and all(
+            row["calibration"]["absoluteGap"] is not None
+            and row["calibration"]["absoluteGap"] <= 0.16 for row in seasons
+        ),
+        "bootstrapPositive": bootstrap["probabilityPositiveUnits"] is not None
+        and bootstrap["probabilityPositiveUnits"] >= 0.60,
+        "multiBook": len(summary["bookMix"]) >= 2,
+    }
+
+
+def watchlist(rows: pd.DataFrame, rule: TopologyRule, lean: pd.DataFrame) -> pd.DataFrame:
+    near = r1.reduce_best_offer(rows[
+        common_eligible(rows, rule)
+        & rows["probability"].ge(rule.minimum_probability - 0.025)
+        & rows["expectedValue"].ge(rule.minimum_ev - 0.02)
+        & rows["edgePp"].ge(rule.minimum_edge_pp - 2.0)
+    ].copy())
+    keys = set(zip(lean["season"], lean["gameId"], lean["market"], strict=True))
+    return near[[
+        (season, game, market) not in keys
+        for season, game, market in zip(near["season"], near["gameId"], near["market"], strict=True)
+    ]].copy()
+
+
+def best_angle(rows: pd.DataFrame, rule: TopologyRule) -> pd.DataFrame:
+    return rows[
+        rows["probability"].ge(max(rule.minimum_probability, 0.625))
+        & rows["expectedValue"].ge(max(rule.minimum_ev, 0.04))
+        & rows["edgePp"].ge(max(rule.minimum_edge_pp, 3.0))
+    ].copy()
+
+
+def best_angle_gates(summary: dict[str, Any], bootstrap: dict[str, Any]) -> dict[str, bool]:
+    seasons = list(summary["bySeason"].values())
+    return {
+        "minimumCounts": summary["actions"] >= 14 and all(row["actions"] >= 4 for row in seasons),
+        "positiveEachSeason": all(row["units"] > 0 for row in seasons),
+        "largestWinIndependentEachSeason": all(row["unitsWithoutLargestWin"] > 0 for row in seasons),
+        "minimumRoi": summary["roi"] is not None and summary["roi"] >= 0.04,
+        "calibration": all(row["calibration"]["absoluteGap"] is not None
+                           and row["calibration"]["absoluteGap"] <= 0.10 for row in seasons),
+        "bootstrapPositive": bootstrap["probabilityPositiveUnits"] is not None
+        and bootstrap["probabilityPositiveUnits"] >= 0.75,
+        "multiBook": len(summary["bookMix"]) >= 2,
+    }
+
+
+def run_market(rows: pd.DataFrame, market: str) -> dict[str, Any]:
+    universe = rows[rows["market"].eq(market)]
+    rule, candidates = select_rule(rows, market)
+    output: dict[str, Any] = {
+        "selectionCandidateCount": len(candidates),
+        "selectionEligibleCount": sum(bool(row["eligible"]) for row in candidates),
+        "selectedLeanRule": None if rule is None else asdict(rule),
+        "leanSelection": None, "leanConfirmation": None, "leanConfirmationBootstrap": None,
+        "leanConfirmationGates": {}, "leanAuthorized": False,
+        "watchlistSelection": None, "watchlistConfirmation": None, "watchlistAuthorized": False,
+        "bestAngleConfirmation": None, "bestAngleConfirmationBootstrap": None,
+        "bestAngleConfirmationGates": {}, "bestAngleAuthorized": False,
+        "topSelectionCandidates": [residual.compact(row) for row in sorted(
+            candidates, key=lambda row: (row["eligible"], row["unitsWithoutLargestWin"], row["units"]), reverse=True
+        )[:50]],
+    }
+    if rule is None:
+        return output
+    lean = select_rows(rows, rule)
+    confirmation_rows = lean[lean["season"].isin(CONFIRMATION_SEASONS)]
+    confirmation = pragmatic.summarize(lean, CONFIRMATION_SEASONS, universe)
+    bootstrap = r1.weekly_bootstrap(confirmation_rows)
+    gates = confirmation_gates(confirmation, bootstrap)
+    watch = watchlist(rows, rule, lean)
+    ba = best_angle(lean, rule)
+    ba_confirmation = pragmatic.summarize(ba, CONFIRMATION_SEASONS, universe)
+    ba_bootstrap = r1.weekly_bootstrap(ba[ba["season"].isin(CONFIRMATION_SEASONS)])
+    ba_gates = best_angle_gates(ba_confirmation, ba_bootstrap)
+    output.update({
+        "leanSelection": pragmatic.summarize(lean, (SELECTION_SEASON,), universe),
+        "leanConfirmation": confirmation, "leanConfirmationBootstrap": bootstrap,
+        "leanConfirmationGates": gates, "leanAuthorized": bool(all(gates.values())),
+        "watchlistSelection": pragmatic.summarize(watch, (SELECTION_SEASON,), universe),
+        "watchlistConfirmation": pragmatic.summarize(watch, CONFIRMATION_SEASONS, universe),
+        "watchlistAuthorized": bool(len(watch[watch["season"].eq(SELECTION_SEASON)]) > 0),
+        "bestAngleConfirmation": ba_confirmation, "bestAngleConfirmationBootstrap": ba_bootstrap,
+        "bestAngleConfirmationGates": ba_gates,
+        "bestAngleAuthorized": bool(all(gates.values()) and all(ba_gates.values())),
+    })
+    return output
+
+
+def main() -> None:
+    root = pathlib.Path.cwd()
+    cache_path = root / "football-research/cache/nfl-model/nfl_spread_total_offer_rows_2021_2025.joblib"
+    cached = joblib.load(cache_path)
+    rows = add_topology(cached["rows"])
+    rows = rows[rows["season"].isin((SELECTION_SEASON, *CONFIRMATION_SEASONS))].copy()
+    reports = {market: run_market(rows, market) for market in ("spread", "total")}
+    report = {
+        "tournamentRelease": TOURNAMENT_RELEASE,
+        "generatedAt": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "predeclaration": "docs/model-audits/2026-08-24-nfl-spread-total-market-topology-predeclaration.md",
+        "chronology": {"selection": [SELECTION_SEASON], "confirmation": list(CONFIRMATION_SEASONS)},
+        "shadowOnly": True, "productionBehaviorChanged": False,
+        "sourceEvidence": cached["evidence"], "marketReports": reports,
+        "boardImpact": {"promotions": 0, "demotions": 0, "netActionable": 0},
+    }
+    path = root / "football-research/reports" / f"{TOURNAMENT_RELEASE}.json"
+    path.write_text(json.dumps(residual.json_safe(report), indent=2, allow_nan=False) + "\n", encoding="utf-8")
+    print(json.dumps({
+        "tournamentRelease": TOURNAMENT_RELEASE,
+        "markets": {market: {
+            "selectionEligibleCount": values["selectionEligibleCount"],
+            "selectedLeanRule": values["selectedLeanRule"],
+            "leanSelection": residual.compact(values["leanSelection"]),
+            "leanConfirmation": residual.compact(values["leanConfirmation"]),
+            "leanConfirmationBootstrap": values["leanConfirmationBootstrap"],
+            "leanConfirmationGates": values["leanConfirmationGates"],
+            "leanAuthorized": values["leanAuthorized"],
+            "watchlistSelection": residual.compact(values["watchlistSelection"]),
+            "watchlistConfirmation": residual.compact(values["watchlistConfirmation"]),
+            "watchlistAuthorized": values["watchlistAuthorized"],
+            "bestAngleConfirmation": residual.compact(values["bestAngleConfirmation"]),
+            "bestAngleConfirmationGates": values["bestAngleConfirmationGates"],
+            "bestAngleAuthorized": values["bestAngleAuthorized"],
+        } for market, values in reports.items()}, "report": str(path),
+    }, indent=2, allow_nan=False))
+
+
+if __name__ == "__main__":
+    main()

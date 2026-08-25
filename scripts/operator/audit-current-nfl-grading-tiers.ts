@@ -38,6 +38,7 @@ async function main() {
     homeTeam: currentPayload.game.home.abbreviation,
     gameStartsAt: currentPayload.game.scheduledStart,
     current: currentPayload.market.current,
+    comparableCurrentBooks: currentPayload.market.comparableCurrentBooks,
     shadowMoneyline: shadow,
   });
   const outcomeWinner = decisions.outcomeConfidence.find((decision) => decision.market === "moneyline")?.likelySide;

@@ -5,7 +5,7 @@ export const NFL_WEEK_ONE_EVIDENCE_BOARD_ENABLED_FLAG =
   "NFL_WEEK_ONE_EVIDENCE_BOARD_ENABLED" as const;
 
 export const NFL_DAILY_EDGE_PUBLICATION_RELEASE =
-  "nfl_daily_edge_preseason_publication_2026_08_20_r1" as const;
+  "nfl_daily_edge_regular_week_one_publication_2026_08_25_r2_actionable_grades" as const;
 
 /**
  * Local development keeps the checksum-backed rehearsal board available.
@@ -24,8 +24,9 @@ export function isNflDailyEdgePublicationEnabled(
 }
 
 /**
- * Independent display gate for the evidence-only Regular Season Week 1 board.
- * This never authorizes model predictions, grades, tracking, or settlement.
+ * Independent display gate for the authoritative Regular Season Week 1 board.
+ * Model and grade publication still requires a coherent leased-writer tuple;
+ * official tracking separately requires an on-time frozen T-60 tuple.
  */
 export function isNflWeekOneEvidenceBoardEnabled(
   env: Readonly<Record<string, string | undefined>> = process.env,

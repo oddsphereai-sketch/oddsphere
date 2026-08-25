@@ -131,9 +131,13 @@ export type NflForwardEvidencePayload = {
     shadowEvaluatedBets?: NflR6ShadowMoneylineDecision[];
     modelPromotionStatus:
       | "nfl_v1_member_release_2026_08_23_r2"
-      | "nfl_v1_member_release_2026_08_24_r3_grading_tiers";
+      | "nfl_v1_member_release_2026_08_24_r3_grading_tiers"
+      | "nfl_v1_member_release_2026_08_24_r4_spread_total_watchlist"
+      | "nfl_v1_member_release_2026_08_24_r5_expected_points_primary"
+      | "nfl_v1_member_release_2026_08_25_r6_actionable_grades";
     publicationEnabled: true;
-    trackingEnabled: false;
+    /** True only after the authoritative regular/postseason T-60 boundary validates the complete tuple. */
+    trackingEnabled: boolean;
   };
   coverage: {
     currentOdds: boolean;

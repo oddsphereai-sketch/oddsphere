@@ -70,9 +70,7 @@ export default async function CandidateDailyEdgePage({
     ? null
     : process.env.NODE_ENV !== "production"
       ? await (await import("@/lib/services/football/nflMemberSnapshotStore")).readCurrentNflMemberSnapshot()
-      : await (await import("@/lib/services/football/nflPublishedMemberSnapshotStore"))
-          .readCurrentNflPublishedMemberSnapshot()
-          .then((published) => published?.fixture ?? null);
+      : null;
   let snapshot: DailyEdgeResponse;
   if (nflFixture) {
     snapshot = nflFixture.snapshot;
@@ -133,7 +131,7 @@ export default async function CandidateDailyEdgePage({
         weeklySlate={nflFixture
           ? {
               label: `NFL · ${nflFixture.week.label} · ${snapshot.games.length} games · ${snapshot.games.length * 3} predictions · ${"heldMemberFixtureRelease" in nflFixture ? "live predictions and exact-price Bet grades" : nflFixture.tracking.seasonPhase === "preseason" ? "preseason is excluded from official tracking" : "tracking begins only with an approved pre-kickoff lock"}`,
-              evidence: `${"heldMemberFixtureRelease" in nflFixture ? "Captured" : "Stored"} ${new Date("capturedAt" in nflFixture ? nflFixture.capturedAt : nflFixture.storedAt).toLocaleString("en-US", { timeZone: "America/New_York" })} ET · schedule, named-book odds, injuries and depth from BALLDONTLIE · ${nflFixture.provenance.firstObservedCoverageGames}/${weeklySourceGameCount} weekly same-book Opening trails · ${nflFixture.provenance.splitCoverageGames}/${weeklySourceGameCount} weekly Playbook public-consensus split sets${"heldMemberFixtureRelease" in nflFixture ? " · discrete score/winner/spread/total forecasts · exact-price moneyline Lean policy · immutable T-60 decision freeze · official tracking not enabled" : nflFixture.tracking.seasonPhase === "preseason" ? " (unavailable for this preseason slate)" : " (context-only until chronologically validated)"} · ${snapshot.games.length} games currently displayed`,
+              evidence: `${"heldMemberFixtureRelease" in nflFixture ? "Captured" : "Stored"} ${new Date("capturedAt" in nflFixture ? nflFixture.capturedAt : nflFixture.storedAt).toLocaleString("en-US", { timeZone: "America/New_York" })} ET · schedule, named-book odds, injuries and depth from BALLDONTLIE · ${nflFixture.provenance.firstObservedCoverageGames}/${weeklySourceGameCount} weekly same-book Opening trails · ${nflFixture.provenance.splitCoverageGames}/${weeklySourceGameCount} weekly Playbook public-consensus split sets${"heldMemberFixtureRelease" in nflFixture ? " · joint score/winner/spread/total forecasts · exact-price Best Angle/Lean/Watchlist/No Play grades across all three markets · immutable per-game T-60 tracking freeze" : nflFixture.tracking.seasonPhase === "preseason" ? " (unavailable for this preseason slate)" : " (context-only until chronologically validated)"} · ${snapshot.games.length} games currently displayed`,
               previousHref: null,
               nextHref: null,
               asOf: snapshot.as_of,

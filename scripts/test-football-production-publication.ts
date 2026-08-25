@@ -6,19 +6,25 @@ import {
   isNflDailyEdgePublicationEnabled,
   NFL_DAILY_EDGE_PUBLICATION_RELEASE,
 } from "../lib/config/nflDailyEdge";
-import type { NflMemberSnapshot } from "../lib/services/football/nflMemberSnapshotStore";
+import {
+  NFL_MEMBER_SNAPSHOT_RELEASE,
+  type NflMemberSnapshot,
+} from "../lib/services/football/nflMemberSnapshotStore";
 import {
   auditNflMemberSnapshot,
   buildNflPublishedMemberSnapshot,
 } from "../lib/services/football/nflPublishedMemberSnapshotStore";
 
-const root = path.resolve("football-research/cache/nfl-model/current");
+const root = process.env.NFL_RESEARCH_CURRENT_CACHE_ROOT
+  ? path.resolve(process.env.NFL_RESEARCH_CURRENT_CACHE_ROOT)
+  : path.resolve("football-research/cache/nfl-model/current");
 const pointer = JSON.parse(readFileSync(path.join(root, "nfl_daily_edge.current.json"), "utf8")) as {
   filename: string;
   sha256: string;
 };
 const fixture = JSON.parse(readFileSync(path.join(root, pointer.filename), "utf8")) as NflMemberSnapshot;
 const publicationReadyFixture = structuredClone(fixture);
+Object.assign(publicationReadyFixture, { memberSnapshotRelease: NFL_MEMBER_SNAPSHOT_RELEASE });
 publicationReadyFixture.storedAt = "2026-08-20T23:00:00.000Z";
 publicationReadyFixture.snapshot.as_of = "2026-08-20T23:00:00.000Z";
 
@@ -62,11 +68,13 @@ assert.equal(initial.publicationRelease, NFL_DAILY_EDGE_PUBLICATION_RELEASE);
 assert.deepEqual(initial.lockedGameIds, []);
 const refreshed = structuredClone(publicationReadyFixture);
 refreshed.snapshot.games[0].decisionLine = "This post-kickoff mutation must not publish.";
+const firstKickoff = Date.parse(initial.fixture.snapshot.games[0].gameStartAt ?? "");
+assert.equal(Number.isFinite(firstKickoff), true);
 const afterKickoff = buildNflPublishedMemberSnapshot({
   fixture: refreshed,
   sourceSnapshotSha256: pointer.sha256,
   existing: initial,
-  now: new Date("2026-08-21T00:01:00.000Z"),
+  now: new Date(firstKickoff + 60_000),
 });
 assert.equal(afterKickoff.lockedGameIds.includes(initial.fixture.snapshot.games[0].id), true);
 assert.equal(
@@ -84,11 +92,17 @@ const pageSource = readFileSync("app/lab/daily-edge/page.tsx", "utf8");
 const candidateSource = readFileSync("app/lab/daily-edge/CandidateDailyEdgePage.tsx", "utf8");
 const operatorSource = readFileSync("scripts/operator/publish-current-nfl-member-snapshot.ts", "utf8");
 const healthSource = readFileSync("app/api/cron/nfl-daily-edge-health/route.ts", "utf8");
+const writerSource = readFileSync("lib/services/football/nflForwardEvidenceWriter.ts", "utf8");
 assert.match(pageSource, /isNflDailyEdgeEnabled/);
-assert.match(candidateSource, /readCurrentNflPublishedMemberSnapshot/);
+assert.match(candidateSource, /readCurrentNflWeekOneHeldMemberFixture/);
+assert.doesNotMatch(candidateSource, /readCurrentNflPublishedMemberSnapshot/);
 assert.match(operatorSource, /NFL_DAILY_EDGE_PUBLICATION_ENABLED/);
 assert.match(operatorSource, /cronJobName\("prediction_pipeline", "nfl"\)/);
 assert.match(operatorSource, /readback/);
 assert.match(healthSource, /tracking_eligible/);
+assert.match(writerSource, /buildNflV1ActionableGradeBundle/);
+assert.match(writerSource, /writeOfficialTrackingFromPayloads/);
+assert.match(writerSource, /buildNflOfficialTrackingRecords/);
+assert.doesNotMatch(writerSource, /writeCurrentNflPublishedMemberSnapshot/);
 
-console.log("Football production publication: feature gates, freshness, coverage, tracking exclusion, post-kickoff freeze, and readback contract passed");
+console.log("Football production publication: legacy freeze safety plus authoritative Week 1 reader, grades, and T-60 writer passed");

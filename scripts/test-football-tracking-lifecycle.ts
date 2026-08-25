@@ -9,7 +9,9 @@ import {
 import { NFL_REGULAR_LOCAL_CALIBRATION_RELEASE, NFL_REGULAR_LOCAL_MODEL_RELEASE } from "../lib/services/football/nflRegularLocalSlate";
 import { NFL_REGULAR_DECISION_RELEASE } from "../lib/services/football/nflRegularDecision";
 
-const root = path.resolve("football-research/cache/nfl-model/current");
+const root = process.env.NFL_RESEARCH_CURRENT_CACHE_ROOT
+  ? path.resolve(process.env.NFL_RESEARCH_CURRENT_CACHE_ROOT)
+  : path.resolve("football-research/cache/nfl-model/current");
 function snapshot(pointerName: string) {
   const pointer = JSON.parse(readFileSync(path.join(root, pointerName), "utf8")) as { filename: string };
   return JSON.parse(readFileSync(path.join(root, pointer.filename), "utf8"));
@@ -89,9 +91,11 @@ const shadowRows = buildNflTrackingProposals({
 });
 assert.equal(shadowRows.every((row) => !row.trackingEligible && row.trackingReason === "model_not_approved"), true);
 
-const preseason = snapshot("nfl_daily_edge.preseason.json");
 const preseasonRows = buildNflTrackingProposals({
-  snapshot: preseason.snapshot,
+  // Season phase is an explicit tracking input. Reuse the checksum-verified
+  // regular card so this policy test does not depend on a retired preseason
+  // pointer while still proving every market is excluded from lifetime totals.
+  snapshot: regular.snapshot,
   seasonPhase: "preseason",
   week: 2,
   lockedAt: "2026-08-20T12:00:00.000Z",

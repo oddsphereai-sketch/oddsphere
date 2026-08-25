@@ -70,13 +70,8 @@ async function main() {
     if (row.payload.market.comparableCurrentBooks.length < 2) {
       throw new Error(`Comparable multi-book evidence is incomplete for ${row.providerGameId}.`);
     }
-    if (
-      row.payload.decisions.evaluatedBets.length > 0
-      || row.payload.decisions.outcomeConfidence.length > 0
-      || row.payload.decisions.publicationEnabled
-      || row.payload.decisions.trackingEnabled
-    ) {
-      throw new Error(`Evidence row ${row.id} violates the no-decision export boundary.`);
+    if (row.payload.decisions.trackingEnabled) {
+      throw new Error(`Evidence row ${row.id} unexpectedly enables official tracking.`);
     }
   }
 
