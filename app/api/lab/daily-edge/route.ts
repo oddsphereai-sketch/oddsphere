@@ -2525,6 +2525,11 @@ function buildGameDto(
     linesCurrent: (currentLinesByGameMarket.get(`${row.id}::total`) ?? []).filter(
       (r) => totalLine === null || r.line_value === totalLine || r.line_value === null,
     ),
+    // Presentation-only opposing outcome context must not disappear when a
+    // provider's latest Over and Under quotes sit on adjacent total lines.
+    // Keep the full current inventory separate from the selected-side pricing
+    // input so the grade remains evaluated only at its authoritative line.
+    opposingLinesCurrent: currentLinesByGameMarket.get(`${row.id}::total`) ?? [],
     bestAvailableLinesCurrent: liveBestPriceLines("total").filter(
       (r) => totalLine === null || r.line_value === totalLine || r.line_value === null,
     ),
@@ -2539,11 +2544,13 @@ function buildGameDto(
       displayOpenLinesByGameMarket.get(
         `${row.id}::total::${pred.predicted_ou_side ?? "null"}`
       ) ?? [],
-    opposingLineOpenCandidates: (
+    // The opposing side is display context, not a de-vig/grade input. Retain
+    // its own verified line instead of dropping it when the feed exposes (for
+    // example) Under 8.5 and Over 7.5 at the selected sportsbook.
+    opposingLineOpenCandidates:
       displayOpenLinesByGameMarket.get(
         `${row.id}::total::${oppositeDisplaySide(pred.predicted_ou_side) ?? "null"}`
-      ) ?? []
-    ).filter((r) => totalLine === null || r.line_value === totalLine || r.line_value === null),
+      ) ?? [],
     autoFactors,
     homeAbbr: home,
     awayAbbr: away,
@@ -3792,6 +3799,12 @@ type BuildMarketEdgeInput = {
   modelSide: Side | null;
   signals: SignalRow[];
   linesCurrent: LineRow[];
+  /**
+   * Presentation-only current inventory for the opposing outcome. Totals may
+   * expose Over and Under on adjacent lines; this inventory must never feed
+   * selected-side pricing, probability, edge, grade, or actionability.
+   */
+  opposingLinesCurrent?: LineRow[];
   /** Fresh live lines retained separately from immutable writer/lock substrate. */
   bestAvailableLinesCurrent: LineRow[];
   /**
@@ -4622,17 +4635,13 @@ function buildMarketEdge(input: BuildMarketEdgeInput): MarketEdgeDto {
     : [];
   const opposingSide =
     input.market === "first_inning" ? null : oppositeDisplaySide(input.modelSide);
-  const opposingExpectedLine =
-    input.market === "total" ? input.totalsExtras?.sportsbookLine ?? null : null;
-  const opposingCurrentRows = [
+  const opposingCurrentInventory = input.opposingLinesCurrent ?? [
     ...input.bestAvailableLinesCurrent,
     ...input.linesCurrent,
-  ].filter(
+  ];
+  const opposingCurrentRows = opposingCurrentInventory.filter(
     (row, index, rows) =>
       row.side === opposingSide &&
-      (opposingExpectedLine === null ||
-        row.line_value === null ||
-        sameLineValue(row.line_value, opposingExpectedLine)) &&
       rows.findIndex(
         (candidate) =>
           candidate.sportsbook === row.sportsbook &&
@@ -4648,6 +4657,13 @@ function buildMarketEdge(input: BuildMarketEdgeInput): MarketEdgeDto {
   const sameBookOpposingRows = selectedTrailBook === null
     ? []
     : opposingCurrentRows.filter((row) => row.sportsbook === selectedTrailBook);
+  const selectedTrailLine = trailCurrentLine;
+  const sameBookSameLineOpposingRows = sameBookOpposingRows.filter((row) =>
+    selectedTrailLine === null || sameLineValue(row.line_value, selectedTrailLine)
+  );
+  const sameLineOpposingRows = opposingCurrentRows.filter((row) =>
+    selectedTrailLine === null || sameLineValue(row.line_value, selectedTrailLine)
+  );
   // A locked card may only terminate an opposing-side trail with evidence
   // observed at or before the lock. Choosing the newest history row first and
   // filtering only inside buildPersistedOddsTrail could append a post-lock row
@@ -4663,9 +4679,20 @@ function buildMarketEdge(input: BuildMarketEdgeInput): MarketEdgeDto {
     : opposingHistoryCandidates.filter((row) => row.sportsbook === selectedTrailBook);
   const opposingPriceRow =
     input.isLockedRow === true
-      ? pickHistoryPriceRow(sameBookOpposingHistoryCandidates) ??
+      ? pickHistoryPriceRow(
+          sameBookOpposingHistoryCandidates.filter((row) =>
+            selectedTrailLine === null || sameLineValue(row.line_value, selectedTrailLine)
+          ),
+        ) ??
+        pickHistoryPriceRow(sameBookOpposingHistoryCandidates) ??
         pickHistoryPriceRow(opposingHistoryCandidates)
-      : pickPriceRow(sameBookOpposingRows, opposingSide as Side | null, {
+      : pickPriceRow(sameBookSameLineOpposingRows, opposingSide as Side | null, {
+          allowStaleFallback: false,
+        }) ??
+        pickPriceRow(sameBookOpposingRows, opposingSide as Side | null, {
+          allowStaleFallback: false,
+        }) ??
+        pickPriceRow(sameLineOpposingRows, opposingSide as Side | null, {
           allowStaleFallback: false,
         }) ??
         pickPriceRow(opposingCurrentRows, opposingSide as Side | null, {
@@ -4677,7 +4704,7 @@ function buildMarketEdge(input: BuildMarketEdgeInput): MarketEdgeDto {
         candidates: opposingHistoryCandidates,
         priceRow: opposingPriceRow,
         currentAmerican: opposingPriceRow?.odds_american ?? null,
-        currentLine: opposingPriceRow?.line_value ?? opposingExpectedLine,
+        currentLine: opposingPriceRow?.line_value ?? null,
         currentObservedAt: opposingPriceRow === null ? null : lineRowObservedAt(opposingPriceRow),
         lockedAmerican: null,
         lockedAt: input.isLockedRow === true ? input.lockedPriceAt ?? null : null,

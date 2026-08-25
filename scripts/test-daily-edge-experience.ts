@@ -500,6 +500,13 @@ check(
     candidateSource.includes("to ${formatNumber(movement.currentLine)}"),
 );
 check(
+  "MLB totals retain the opposing outcome at its own verified line without using it for grading",
+  dailyEdgeApiSource.includes("opposingLinesCurrent: currentLinesByGameMarket.get(`${row.id}::total`) ?? []") &&
+    dailyEdgeApiSource.includes("Presentation-only opposing outcome context must not disappear") &&
+    candidateSource.includes("The available opposing outcome is shown at its own verified book and line") &&
+    candidateSource.includes("not a two-sided fair-price pair or a grading input"),
+);
+check(
   "totals and WNBA spreads render the dedicated line tracker after price movement and before market splits",
   candidateSource.includes("function CompactPointLineMovement") &&
     candidateSource.includes('const isSpread = !isTotal && market.line !== null') &&
