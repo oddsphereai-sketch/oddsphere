@@ -198,6 +198,86 @@ assert.equal(qbResult.byTeamId.get(10)?.expectedStartingQuarterback?.name, "Expe
 assert.equal(qbResult.byTeamId.get(10)?.starterStatus, "projected");
 assert.equal(requestedUrls.every((url) => url.startsWith("https://api.balldontlie.io/ncaaf/v1/")), true);
 
+const launchTeams = [
+  { id: 10, abbreviation: "UNC" },
+  { id: 43, abbreviation: "TCU" },
+  { id: 101, abbreviation: "SJSU" },
+  { id: 63, abbreviation: "USC" },
+  { id: 9, abbreviation: "NCSU" },
+  { id: 15, abbreviation: "UVA" },
+  { id: 68, abbreviation: "JXST" },
+  { id: 183, abbreviation: "NDSU" },
+  { id: 146, abbreviation: "SAC" },
+  { id: 85, abbreviation: "EMU" },
+  { id: 97, abbreviation: "HAW" },
+  { id: 13, abbreviation: "STAN" },
+  { id: 74, abbreviation: "NMSU" },
+  { id: 5, abbreviation: "FSU" },
+  { id: 22, abbreviation: "MEM" },
+  { id: 102, abbreviation: "UNLV" },
+];
+const launchRosterUrls: string[] = [];
+const launchQbs = await fetchBalldontlieNcaafQuarterbacks({
+  teams: launchTeams,
+  previousSeason: 2025,
+  capturedAt: observedAt,
+  apiKey: "test",
+  fetchImpl: (async (input: URL | RequestInfo) => {
+    const url = new URL(String(input));
+    launchRosterUrls.push(url.toString());
+    if (url.pathname.endsWith("/players/active")) {
+      const requestedTeamIds = url.searchParams.getAll("team_ids[]");
+      assert.equal(requestedTeamIds.length, 1, "active roster requests must be scoped to one exact slate team");
+      const teamId = Number(requestedTeamIds[0]);
+      assert.ok(launchTeams.some((team) => team.id === teamId));
+      return Response.json({ data: [{ id: teamId * 100, first_name: `QB${teamId}`, last_name: "Starter", position_abbreviation: "QB", team: { id: teamId } }], meta: { next_cursor: null } });
+    }
+    const requestedPlayerIds = url.searchParams.getAll("player_ids[]").map(Number);
+    assert.equal(requestedPlayerIds.length, launchTeams.length);
+    return Response.json({ data: requestedPlayerIds.map((playerId) => ({ player: { id: playerId }, passing_attempts: playerId, passing_yards: playerId * 8 })), meta: { next_cursor: null } });
+  }) as typeof fetch,
+});
+assert.equal(launchQbs.byTeamId.size, 16);
+assert.equal(launchQbs.providerRequests, 17, "the exact eight-game launch slate must use 16 team-scoped roster calls plus one QB-stat call when each fits one page");
+assert.equal(launchRosterUrls.filter((url) => url.includes("/players/active")).length, 16);
+assert.ok(launchQbs.providerRequests <= 34, "the launch slate must remain inside the hard 34-call QB-context budget");
+
+let boundedFailureRequests = 0;
+await assert.rejects(
+  fetchBalldontlieNcaafQuarterbacks({
+    teams: [{ id: 10, abbreviation: "UNC" }],
+    previousSeason: 2025,
+    capturedAt: observedAt,
+    apiKey: "test",
+    activeRosterPagesPerTeam: 2,
+    statsPageBudget: 1,
+    maxProviderRequests: 3,
+    fetchImpl: (async () => {
+      boundedFailureRequests += 1;
+      return Response.json({ data: [{ id: 101, first_name: "QB", last_name: "One", position_abbreviation: "QB", team: { id: 10 } }], meta: { next_cursor: boundedFailureRequests } });
+    }) as typeof fetch,
+  }),
+  /\/players\/active exceeded its pagination budget/,
+);
+assert.equal(boundedFailureRequests, 2, "team-scoped pagination must fail closed at its declared per-team page limit");
+
+await assert.rejects(
+  fetchBalldontlieNcaafQuarterbacks({
+    teams: [{ id: 10, abbreviation: "UNC" }],
+    previousSeason: 2025,
+    capturedAt: observedAt,
+    apiKey: "test",
+    fetchImpl: (async () => Response.json({ data: [{ id: 999, first_name: "Wrong", last_name: "Team", position_abbreviation: "QB", team: { id: 43 } }], meta: { next_cursor: null } })) as typeof fetch,
+  }),
+  /returned team 43 for team-scoped request 10/,
+);
+
+const writerSource = readFileSync(path.join(process.cwd(), "lib/services/football/cfbForwardEvidenceWriter.ts"), "utf8");
+const quarterbackCollectionIndex = writerSource.indexOf("fetchBalldontlieNcaafQuarterbacks");
+const evidenceAppendIndex = writerSource.lastIndexOf("appendCfbForwardEvidence(");
+assert.ok(quarterbackCollectionIndex >= 0 && evidenceAppendIndex > quarterbackCollectionIndex, "the writer must finish bounded QB collection before its sole evidence append");
+assert.equal((writerSource.match(/appendCfbForwardEvidence\(/g) ?? []).length, 1, "the writer must keep one all-payload append and never insert partial game evidence inside the collection loop");
+
 const scoreReadClient = {
   from(table: string) {
     assert.equal(table, "games");

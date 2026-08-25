@@ -23,7 +23,7 @@ import { buildCfbV1DecisionBundle, CFB_T60_MAX_CAPTURE_LAG_MINUTES, CFB_V1_DECIS
 import { buildCfbOfficialTrackingRecords, cfbProviderIntegerId } from "./cfbOfficialTrackingRecord";
 
 export const CFB_FORWARD_WRITER_RELEASE =
-  "cfb_forward_evidence_writer_2026_08_25_r1" as const;
+  "cfb_forward_evidence_writer_2026_08_25_r2_team_scoped_qb" as const;
 
 export type CfbForwardWriterResult = {
   writerRelease: typeof CFB_FORWARD_WRITER_RELEASE;
