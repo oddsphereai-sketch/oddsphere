@@ -36,6 +36,7 @@ import {
 import { firstInningSupportTone } from "@/app/lab/lib/firstInningPresentation";
 import { soccerForecastSemantics } from "@/app/lab/lib/soccerForecastSemantics";
 import { resolvePointLineMarketPulseMovement } from "@/app/lab/lib/dailyEdgeMarketPulseMovement";
+import { resolveDailyEdgeCurrentOnlyMovement } from "@/app/lab/lib/dailyEdgeCurrentOnlyMovement";
 import { nflSelectedBetGrade } from "@/app/lab/lib/nflReaderPresentation";
 import type { NflWeekOneEvidenceBoard } from "@/lib/services/football/nflWeekOneEvidenceBoard";
 import { exactLockedEplScoreOutlook, impliedEplMatchResultScoreOutlook } from "@/lib/services/epl/eplDerivedMarketForecast";
@@ -728,7 +729,7 @@ function IntegratedEvidence({ game, market, marketKey, sport, availability }: { 
       <SectionHeading tone="violet">Market & Price</SectionHeading>
       <div className="mt-4 space-y-3">
         {sport === "soccer" && marketKey === "moneyline" ? <SoccerDoubleChancePanel game={game} /> : null}
-        <CompactMarketPulse market={market} showSplits />
+        <CompactMarketPulse market={market} showSplits sport={sport} />
         {!football && availability ? <AvailabilityContext report={availability} market={market} /> : sport === "mlb" ? <MlbAvailabilityUnavailable /> : null}
       </div>
     </div>
@@ -821,7 +822,7 @@ function DecisionMetricGrid({ market }: { market: MarketEdgeDto }) {
   return <div className="mt-4"><p className="text-[8px] font-black uppercase tracking-[0.16em] text-gray-600">Decision metrics</p><div className="mt-2 grid grid-cols-2 gap-2"><ProofCell label="Outcome confidence" value={formatProbability(market.modelProb)} note="Selected-outcome probability" tone="violet" /><ProofCell label="Market at publish" value={formatMarketProbability(market)} note={market.marketSource ? `${market.marketSource} · no-vig` : "Unavailable"} tone="gray" /><ProofCell label="Publish-time gap" value={probabilityGap === null ? "—" : `${probabilityGap > 0 ? "+" : ""}${probabilityGap.toFixed(1)} pp`} note="Displayed probability gap" tone={probabilityGap !== null && probabilityGap >= 1 ? "emerald" : "gray"} /><ProofCell label="Bet actionability" value={market.recommendationConfidence === null || market.recommendationConfidence === undefined ? "—" : `${market.recommendationConfidence.toFixed(0)}/100`} note="Exact-price grade strength" tone="violet" /></div></div>;
 }
 
-function CompactMarketPulse({ market, showSplits = false }: { market: MarketEdgeDto; showSplits?: boolean }) {
+function CompactMarketPulse({ market, showSplits = false, sport = null }: { market: MarketEdgeDto; showSplits?: boolean; sport?: Sport | null }) {
   const movement = resolveMarketPulseMovement(market);
   const claimsDirectionalMove = market.marketReadV2?.movement?.directionRelativeToPick === "support" || market.marketReadV2?.movement?.directionRelativeToPick === "resistance";
   const movementClaimIsUnverified = claimsDirectionalMove && !movement.coherentTrail;
@@ -841,7 +842,7 @@ function CompactMarketPulse({ market, showSplits = false }: { market: MarketEdge
         ? <CompactOddsMovement market={market} tone={tone} lineClass={style.line} />
         : <CompactFirstInningOddsMovement market={market} tone={tone} lineClass={style.line} />}
       {showSplits ? <CompactPointLineMovement market={market} /> : null}
-      {showSplits ? <DefaultSplitSummary market={market} /> : null}
+      {showSplits ? <DefaultSplitSummary market={market} sport={sport} /> : null}
     </div>
   );
 }
@@ -1034,17 +1035,26 @@ function resolveCoherentMovement(market: MarketEdgeDto): { open: number | null; 
     if (previous === null && coherent.length >= 2) previous = coherent[coherent.length - 2]!;
     return { open: first.american, previous: previous?.american ?? null, current: terminal.american, openLine: first.line, previousLine: previous?.line ?? null, currentLine: terminal.line ?? first.line, sportsbook: terminal.sportsbook, coherentTrail: true, openingLabel: "Opening" };
   }
-  const canonical = market.marketReadV2?.movement;
-  const canonicalLineIsStable = canonical !== null && canonical !== undefined && sameTrackedLine(canonical.firstTrackedLine, canonical.currentLine);
-  const firstObserved = trail.find((stop) => stop.label === "first" && (!displayedBook || stop.sportsbook === displayedBook)) ?? null;
+  // A current-only best-price trail must stay attached to that exact stored
+  // quote. `marketReadV2.movement` belongs to the writer-time evaluation and
+  // can legitimately reference a different book/line. Combining its price or
+  // line with the response-time displayed sportsbook creates a tuple that
+  // never existed. Use the persisted terminal trail stop whenever one exists
+  // and fail closed on Opening/Prior until that same book has another capture.
+  const currentOnly = resolveDailyEdgeCurrentOnlyMovement({
+    trail,
+    displayedPrice,
+    displayedBook,
+    fallbackLine: market.line,
+  });
   return {
-    open: canonicalLineIsStable ? canonical.firstTrackedPrice : firstObserved?.american ?? null,
+    open: currentOnly.open,
     previous: null,
-    current: canonical?.currentPrice ?? currentDisplayedPrice(market),
-    openLine: canonicalLineIsStable ? canonical.firstTrackedLine : firstObserved?.line ?? null,
+    current: currentOnly.current,
+    openLine: currentOnly.openLine,
     previousLine: null,
-    currentLine: canonical?.currentLine ?? market.line,
-    sportsbook: currentDisplayedSportsbook(market),
+    currentLine: currentOnly.currentLine,
+    sportsbook: currentOnly.sportsbook,
     coherentTrail: false,
     openingLabel: "Opening",
   };
@@ -1316,33 +1326,48 @@ function americanImpliedPct(value: number): number {
   return value < 0 ? (-value / (-value + 100)) * 100 : (100 / (value + 100)) * 100;
 }
 
-function DefaultSplitSummary({ market }: { market: MarketEdgeDto }) {
+function DefaultSplitSummary({ market, sport = null }: { market: MarketEdgeDto; sport?: Sport | null }) {
   const decision = market.recommendationDecision;
   const consensus = displayedConsensusSection(market);
   const sharp = decision?.sharpBookSplits ?? null;
-  const displayedConflict = splitSourcesConflict(consensus, sharp);
-  const conflictIsHistorical = displayedConflict && (splitSectionIsStale(consensus) || splitSectionIsStale(sharp));
-  if (consensus === null && sharp === null) return <Unavailable label="Consensus and sharp-book split data are unavailable for this market." />;
-  const hasSharpSource = sharp !== null;
+  // Old cached MLB responses may predate the explicit availability field.
+  // Keep their Sharp panel visible as Pending until the next snapshot refresh;
+  // other sports retain their established unsupported/absent behavior.
+  const sharpAvailability = market.sharpBookAvailability ?? (sport === "mlb" ? {
+    status: "pending" as const,
+    message: "Sharp-book split data is awaiting the next verified SharpAPI snapshot.",
+    lastUpdated: null,
+  } : null);
+  const displayedSharp = sharp ?? (sharpAvailability === null ? null : {
+    label: "Sharp Book Signal" as const,
+    rows: [],
+    signal: sharpAvailability.message,
+    lastUpdated: sharpAvailability.lastUpdated,
+  });
+  const displayedConflict = splitSourcesConflict(consensus, displayedSharp);
+  const conflictIsHistorical = displayedConflict && (splitSectionIsStale(consensus) || splitSectionIsStale(displayedSharp));
+  if (consensus === null && displayedSharp === null) return <Unavailable label="Consensus and sharp-book split data are unavailable for this market." />;
+  const hasSharpSource = displayedSharp !== null;
   return (
     <div className="mt-3 border-t border-white/[0.06] pt-3">
       <div className="flex flex-wrap items-center justify-between gap-2"><div><p className="text-[8px] font-black uppercase tracking-[0.15em] text-gray-300">Market splits</p><p className="mt-0.5 text-[7px] text-gray-600">{hasSharpSource ? "Public consensus and sharp-book activity remain separate signals" : "Public consensus money and ticket distribution"}</p></div>{displayedConflict ? <span className="rounded-full border border-amber-400/25 bg-amber-400/[0.08] px-2 py-0.5 text-[7px] font-black uppercase tracking-wider text-amber-200">{conflictIsHistorical ? "Historical source conflict" : "Sources conflict"}</span> : null}</div>
       <div className="mt-2 grid gap-2">
         <SplitSourcePanel source="PUBLIC CONSENSUS" section={consensus} pick={market.pick} />
-        {sharp ? <SplitSourcePanel source={sharp.label === "Sharp Book Signal" ? "SHARP BOOK SIGNAL" : "SHARP BOOK SPLITS"} section={sharp} pick={market.pick} /> : null}
+        {displayedSharp ? <SplitSourcePanel source={displayedSharp.label === "Sharp Book Signal" ? "SHARP BOOK SIGNAL" : "SHARP BOOK SPLITS"} section={displayedSharp} pick={market.pick} availabilityStatus={sharpAvailability?.status ?? (splitSectionIsStale(displayedSharp) ? "stale" : displayedSharp.rows.length > 0 ? "complete" : "provider_limited")} /> : null}
       </div>
-      {sharp?.rows.length ? <CrossSourceSplitRead consensus={consensus} sharp={sharp} /> : null}
+      {displayedSharp?.rows.length ? <CrossSourceSplitRead consensus={consensus} sharp={displayedSharp} /> : null}
     </div>
   );
 }
 
-function SplitSourcePanel({ source, section, pick }: { source: "PUBLIC CONSENSUS" | "SHARP BOOK SPLITS" | "SHARP BOOK SIGNAL"; section: MarketSplitDisplaySection | null; pick: string | null }) {
+function SplitSourcePanel({ source, section, pick, availabilityStatus = null }: { source: "PUBLIC CONSENSUS" | "SHARP BOOK SPLITS" | "SHARP BOOK SIGNAL"; section: MarketSplitDisplaySection | null; pick: string | null; availabilityStatus?: "complete" | "provider_limited" | "pending" | "stale" | "unavailable" | null }) {
   const moneyLeader = splitLeader(section, "moneyPct");
   const ticketLeader = splitLeader(section, "betsPct");
   const isSharp = source !== "PUBLIC CONSENSUS";
   const stale = splitSectionIsStale(section);
   const displayRows = canonicalSplitRows(section);
-  return <section className={`rounded-lg border p-3 ${isSharp ? "border-violet-400/20 bg-violet-500/[0.045]" : "border-white/[0.10] bg-black/20"}`}><div className="flex items-start justify-between gap-2"><div><div className="flex flex-wrap items-center gap-1.5"><p className={`text-[8px] font-black uppercase tracking-[0.14em] ${isSharp ? "text-violet-200" : "text-gray-300"}`}>{source}</p>{stale ? <span className="rounded-full border border-amber-400/20 bg-amber-400/[0.07] px-1.5 py-0.5 text-[6px] font-black uppercase tracking-wider text-amber-200">Stale snapshot</span> : null}</div><p className="mt-0.5 text-[7px] text-gray-600">{section?.lastUpdated ? formatTimestamp(section.lastUpdated) : section ? "Current snapshot" : "Unavailable"}</p></div>{moneyLeader ? <span className="rounded-full border border-white/[0.09] bg-black/20 px-2 py-0.5 text-[7px] font-black text-gray-300">Money → {moneyLeader}</span> : null}</div>{displayRows.length ? <div className="mt-3 space-y-3">{displayRows.slice(0, 2).map((row) => <SplitSideCard key={`${source}-${row.side}`} label={row.label} moneyPct={row.moneyPct} betsPct={row.betsPct} isPick={sideMatchesPick(row.label, pick)} />)}</div> : section?.signal ? <p className="mt-3 text-[9px] leading-relaxed text-gray-400">{section.signal}</p> : null}{moneyLeader && ticketLeader && moneyLeader.toLowerCase() !== ticketLeader.toLowerCase() ? <p className="mt-3 border-t border-white/[0.06] pt-2 text-[8px] leading-relaxed text-amber-200/80">Money leans {moneyLeader}; ticket count leans {ticketLeader}.</p> : null}</section>;
+  const availabilityLabel = availabilityStatus === "provider_limited" ? "Provider limited" : availabilityStatus === "pending" ? "Pending" : availabilityStatus === "complete" ? "Complete" : availabilityStatus === "unavailable" ? "Unavailable" : null;
+  return <section className={`rounded-lg border p-3 ${isSharp ? "border-violet-400/20 bg-violet-500/[0.045]" : "border-white/[0.10] bg-black/20"}`}><div className="flex items-start justify-between gap-2"><div><div className="flex flex-wrap items-center gap-1.5"><p className={`text-[8px] font-black uppercase tracking-[0.14em] ${isSharp ? "text-violet-200" : "text-gray-300"}`}>{source}</p>{stale || availabilityStatus === "stale" ? <span className="rounded-full border border-amber-400/20 bg-amber-400/[0.07] px-1.5 py-0.5 text-[6px] font-black uppercase tracking-wider text-amber-200">Stale snapshot</span> : availabilityLabel ? <span className="rounded-full border border-violet-400/20 bg-violet-400/[0.07] px-1.5 py-0.5 text-[6px] font-black uppercase tracking-wider text-violet-200">{availabilityLabel}</span> : null}</div><p className="mt-0.5 text-[7px] text-gray-600">{section?.lastUpdated ? formatTimestamp(section.lastUpdated) : availabilityStatus === "pending" ? "Awaiting provider data" : section ? "Current snapshot" : "Unavailable"}</p></div>{moneyLeader ? <span className="rounded-full border border-white/[0.09] bg-black/20 px-2 py-0.5 text-[7px] font-black text-gray-300">Money → {moneyLeader}</span> : null}</div>{displayRows.length ? <div className="mt-3 space-y-3">{displayRows.slice(0, 2).map((row) => <SplitSideCard key={`${source}-${row.side}`} label={row.label} moneyPct={row.moneyPct} betsPct={row.betsPct} isPick={sideMatchesPick(row.label, pick)} />)}</div> : section?.signal ? <p className="mt-3 text-[9px] leading-relaxed text-gray-400">{section.signal}</p> : null}{moneyLeader && ticketLeader && moneyLeader.toLowerCase() !== ticketLeader.toLowerCase() ? <p className="mt-3 border-t border-white/[0.06] pt-2 text-[8px] leading-relaxed text-amber-200/80">Money leans {moneyLeader}; ticket count leans {ticketLeader}.</p> : null}</section>;
 }
 
 function SplitSideCard({ label, moneyPct, betsPct, isPick }: { label: string; moneyPct: number | null; betsPct: number | null; isPick: boolean }) {

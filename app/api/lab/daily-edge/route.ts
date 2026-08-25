@@ -90,6 +90,7 @@ import type {
   SharpSignalDto,
   SharpStatus,
 } from "@/app/lab/lib/labTypes";
+import { finalizeDailyEdgeResponseCoherence } from "@/app/lab/lib/dailyEdgeResponseCoherence";
 import {
   marketVerdictFor,
   type SharpDirection,
@@ -200,6 +201,7 @@ function dailyEdgeWarmCacheKey(args: {
 
 function cachedDailyEdgeResponse(body: DailyEdgeResponse, cacheStatus: "hit" | "miss"): Response {
   suppressIncomparableLineMovePrices(body);
+  finalizeDailyEdgeResponseCoherence(body);
   return Response.json(body, {
     headers: {
       ...DAILY_EDGE_NO_STORE_HEADERS,
@@ -246,7 +248,9 @@ function suppressIncomparableLineMovePrices(body: DailyEdgeResponse): DailyEdgeR
   for (const game of body.games) {
     for (const market of Object.values(game.markets)) {
       const terminalOddsMove = terminalOddsMoveFromTrail(market.oddsTrail ?? []);
-      const displayedCurrent = market.priceAmerican ?? market.lockedLineAmerican ?? null;
+      const displayedCurrent = game.lockState === "locked"
+        ? market.lockedLineAmerican ?? market.priceAmerican ?? null
+        : market.currentPriceAmerican ?? market.priceAmerican ?? null;
       if (displayedCurrent !== null && terminalOddsMove.currentAmerican !== displayedCurrent) {
         // A stored snapshot may have a newer current quote whose originating
         // book was not retained. Do not attach another book's prior stop to it.
@@ -1480,6 +1484,7 @@ type SourceAwareSplitObservationRow = {
 type SourceAwareSplitLookup = Map<string, {
   consensus: MarketSplitDisplaySection | null;
   sharpBook: MarketSplitDisplaySection | null;
+  sharpAvailability: NonNullable<MarketEdgeDto["sharpBookAvailability"]>;
 }>;
 
 function readPostedLines(
@@ -1757,7 +1762,42 @@ function buildSourceAwareSplitSectionsFromRows(
       && sharpBookCandidate.rows.every((row) => row.moneyPct !== null && row.betsPct !== null)
       ? sharpBookCandidate
       : null;
-    if (consensus || sharpBook) result.set(key, { consensus, sharpBook });
+    const rawSharpRows = rows.filter((row) => row.provider === "sharpapi");
+    const sharpLastUpdated = rawSharpRows
+      .map((row) => row.fetched_at ?? row.source_observed_at)
+      .filter((value): value is string => typeof value === "string" && value.length > 0)
+      .sort()
+      .at(-1) ?? null;
+    const sharpLastUpdatedMs = sharpLastUpdated === null ? Number.NaN : Date.parse(sharpLastUpdated);
+    const sharpIsStale = Number.isFinite(sharpLastUpdatedMs)
+      ? (Date.now() - sharpLastUpdatedMs) / 60_000 > SOURCE_AWARE_SPLIT_STALE_AGE_MINUTES
+      : false;
+    const sharpAvailability: NonNullable<MarketEdgeDto["sharpBookAvailability"]> = sharpIsStale
+      ? {
+          status: "stale",
+          message: "The last SharpAPI market snapshot is stale and is retained only as historical context.",
+          lastUpdated: sharpLastUpdated,
+        }
+      : sharpBook !== null
+        ? {
+            status: "complete",
+            message: "Complete two-sided SharpAPI money and ticket percentages are available.",
+            lastUpdated: sharpBook.lastUpdated,
+          }
+        : rawSharpRows.length > 0
+          ? {
+              status: "provider_limited",
+              message: "SharpAPI currently supplies only partial fields for this market. Percentages stay hidden until a complete two-sided money-and-ticket pair is available.",
+              lastUpdated: sharpLastUpdated,
+            }
+          : {
+              status: "pending",
+              message: "Sharp-book split data has not arrived from SharpAPI for this market yet.",
+              lastUpdated: null,
+            };
+    if (consensus || sharpBook || rawSharpRows.length > 0) {
+      result.set(key, { consensus, sharpBook, sharpAvailability });
+    }
   }
   return result;
 }
@@ -2852,6 +2892,16 @@ function buildGameDto(
   ml.recommendationDecision = recommendationDecision.markets.moneyline;
   total.recommendationDecision = recommendationDecision.markets.total;
   firstInning.recommendationDecision = recommendationDecision.markets.firstInning;
+  ml.sharpBookAvailability = mlSourceAwareSplits?.sharpAvailability ?? {
+    status: mlSharpBookSplits?.rows.some((split) => split.isStale === true) ? "stale" : mlSharpBookSplits ? "provider_limited" : "pending",
+    message: mlSharpBookSplits?.signal ?? "Sharp-book split data has not arrived from SharpAPI for this market yet.",
+    lastUpdated: mlSharpBookSplits?.lastUpdated ?? null,
+  };
+  total.sharpBookAvailability = totalSourceAwareSplits?.sharpAvailability ?? {
+    status: totalSharpBookSplits?.rows.some((split) => split.isStale === true) ? "stale" : totalSharpBookSplits ? "provider_limited" : "pending",
+    message: totalSharpBookSplits?.signal ?? "Sharp-book split data has not arrived from SharpAPI for this market yet.",
+    lastUpdated: totalSharpBookSplits?.lastUpdated ?? null,
+  };
   if (renderedCopyFlagOverrides?.quickRead === true) {
     if (recommendationDecision.markets.moneyline?.renderedQuickReadCopy) {
       ml.guidedGuide = recommendationDecision.markets.moneyline.renderedQuickReadCopy;
@@ -4135,9 +4185,9 @@ function alignMarketReadV2ToVisibleOdds(opts: {
       ...aligned,
       exactLineEvidenceStatus: "display_price_trail",
       movement: {
-        firstTrackedLine: aligned.movement?.firstTrackedLine ?? null,
+        firstTrackedLine: opts.previousLine ?? opts.currentLine,
         firstTrackedPrice: opts.openAmerican,
-        currentLine: aligned.movement?.currentLine ?? null,
+        currentLine: opts.currentLine,
         currentPrice: opts.currentAmerican,
         directionRelativeToPick: "neutral",
         observedAt: aligned.movement?.observedAt ?? opts.observedAt,
@@ -4186,9 +4236,9 @@ function alignMarketReadV2ToVisibleOdds(opts: {
     generatedAt,
     validityStatus: "valid_directional",
     movement: {
-      firstTrackedLine: opts.read?.movement?.firstTrackedLine ?? null,
+      firstTrackedLine: opts.previousLine ?? opts.currentLine,
       firstTrackedPrice: opts.openAmerican,
-      currentLine: opts.read?.movement?.currentLine ?? null,
+      currentLine: opts.currentLine,
       currentPrice: opts.currentAmerican,
       directionRelativeToPick: visibleDirection,
       observedAt: opts.observedAt ?? opts.read?.movement?.observedAt ?? null,
@@ -5187,7 +5237,10 @@ function buildMarketEdge(input: BuildMarketEdgeInput): MarketEdgeDto {
           input.marketReadV2?.movement?.currentPrice ??
           null,
     previousLine: visibleLastMove?.prevLineValue ?? null,
-    currentLine: visibleLastMove?.nextLineValue ?? null,
+    currentLine:
+      input.market === "total"
+        ? totalDisplayLine
+        : visibleLastMove?.nextLineValue ?? null,
     observedAt: priceObservedAt ?? lineOpenObservedAt,
     generatedAt: new Date().toISOString(),
   });
@@ -6312,6 +6365,7 @@ export async function GET(request: Request) {
         alignMarketReadsToDisplayedPublicSplits(payload.games);
       }
       suppressIncomparableLineMovePrices(payload);
+      finalizeDailyEdgeResponseCoherence(payload);
       return Response.json(payload, {
         headers: {
           "Cache-Control": "private, max-age=30, stale-while-revalidate=300",
@@ -7732,6 +7786,7 @@ export async function GET(request: Request) {
     last_slate_update_at: lastSlateUpdateAt,
     games: dtos,
   };
+  finalizeDailyEdgeResponseCoherence(body);
   if (sport === "mlb") {
     dailyEdgeWarmCache.set(warmCacheKey, {
       body,
