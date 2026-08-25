@@ -1,0 +1,15 @@
+.reviewRoot :global(*) {
+  box-sizing: border-box;
+}
+
+.readerImage {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.imageFrame {
+  position: relative;
+  overflow: hidden;
+  border-radius: 0.75rem;
+}
