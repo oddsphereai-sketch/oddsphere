@@ -9,6 +9,7 @@ import { recentComparableEplMatches } from "../lib/services/epl/eplEvidence";
 import { eplSnapshotGamesNeedingLock, preserveLockedEplGames } from "../lib/services/epl/eplLockedSnapshot";
 import { eplEmergencySnapshotIsUsable } from "../lib/services/epl/eplMemberSnapshotContinuity";
 import { evaluateEplPublicationCoverage } from "../lib/services/epl/eplPublicationReadiness";
+import { selectEplDefaultRound } from "../lib/services/epl/eplSlateLifecycle";
 import type { DailyEdgeGameDto, DailyEdgeResponse } from "../app/lab/lib/labTypes";
 
 const completeMarket = {
@@ -55,6 +56,20 @@ assert.equal(
   eplEmergencySnapshotIsUsable(emergencySnapshot, "2026-08-10T14:30:00.000Z", new Date("2026-08-24T14:45:00.000Z")),
   false,
   "an old EPL snapshot cannot remain visible indefinitely",
+);
+const roundLifecycleMatches = [
+  { id: 1, date: "2026-08-24T19:00:00.000Z", round_number: 2, status_state: "final" },
+  { id: 2, date: "2026-08-28T19:00:00.000Z", round_number: 3, status_state: "scheduled" },
+] as never;
+assert.equal(
+  selectEplDefaultRound(roundLifecycleMatches, new Date("2026-08-24T21:00:00.000Z")),
+  2,
+  "the EPL writer keeps today's completed fixture round selected until board rollover",
+);
+assert.equal(
+  selectEplDefaultRound(roundLifecycleMatches, new Date("2026-08-25T06:00:00.000Z")),
+  3,
+  "after the 2 a.m. Eastern rollover the EPL writer advances to the next unfinished round",
 );
 
 function match(id: number, date: string, home: number, away: number, homeScore: number, awayScore: number, homeXg = homeScore, awayXg = awayScore): EplTrainingMatch {
@@ -280,6 +295,21 @@ const resultSafe = preserveLockedEplGames(responseShell([finalLockedGame]), resp
 assert.deepEqual(resultSafe.result, refreshedGame.result, "a provider regression cannot clear an already stored final result");
 const openGame = { ...refreshedGame, external_id: 2, lockState: "open", lockedAt: null } as DailyEdgeGameDto;
 assert.strictEqual(preserveLockedEplGames(responseShell([openGame]), responseShell([{ ...openGame, markets: refreshedMarkets }])).games[0]!.markets, refreshedMarkets, "unlocked games continue updating normally");
+const nextRoundGame = { ...openGame, external_id: 3, gameStartAt: "2026-08-28T19:00:00Z" } as DailyEdgeGameDto;
+const retainedSameDay = preserveLockedEplGames(
+  { ...responseShell([lockedGame]), date: "2026-08-21" },
+  { ...responseShell([nextRoundGame]), date: "2026-08-28" },
+  new Date("2026-08-21T23:30:00Z"),
+);
+assert.deepEqual(retainedSameDay.games.map((game) => game.external_id), [1, 3], "a locked EPL game remains ahead of the next round until the soccer day rolls");
+assert.equal(retainedSameDay.date, "2026-08-21", "same-day retention keeps the board anchored to today's soccer date");
+const rolledSameDay = preserveLockedEplGames(
+  { ...responseShell([lockedGame]), date: "2026-08-21" },
+  { ...responseShell([nextRoundGame]), date: "2026-08-28" },
+  new Date("2026-08-22T06:00:00Z"),
+);
+assert.deepEqual(rolledSameDay.games.map((game) => game.external_id), [3], "the retained game rolls off at the existing 2 a.m. Eastern boundary");
+assert.equal(rolledSameDay.date, "2026-08-28", "after rollover the board resumes the incoming weekly date");
 assert.deepEqual(eplSnapshotGamesNeedingLock(responseShell([openGame]), new Date("2026-08-21T18:06:00Z")), [2], "a due member snapshot remains eligible when the database writer locked first");
 assert.deepEqual(eplSnapshotGamesNeedingLock(responseShell([lockedGame]), new Date("2026-08-21T18:06:00Z")), [], "a published locked snapshot is terminal and does not trigger repeat provider calls");
 const confidenceLean = deriveEplMatchResultDecision({ model: { home: 0.54, draw: 0.27, away: 0.19 }, market: { home: 0.52, draw: 0.27, away: 0.21 }, prices: { home: -120, draw: 270, away: 340 }, promotedProxy: false });
@@ -313,6 +343,7 @@ const previewAdapter = readFileSync("lib/services/epl/buildEplDailyEdgePreview.t
 const eplLineHistoryStore = readFileSync("lib/services/epl/eplLineHistoryStore.ts", "utf8");
 const previewReader = readFileSync("app/dev/experience-preview/ActualDailyEdgePreview.tsx", "utf8");
 const slateBuilder = readFileSync("lib/services/epl/buildEplShadowSlate.ts", "utf8");
+const slateLifecycle = readFileSync("lib/services/epl/eplSlateLifecycle.ts", "utf8");
 const sharpProvider = readFileSync("lib/providers/real_api/SharpApiEplMarketProvider.ts", "utf8");
 const productionPipeline = readFileSync("lib/services/epl/eplProductionPipeline.ts", "utf8");
 const refreshRoute = readFileSync("app/api/cron/epl-daily-refresh/route.ts", "utf8");
@@ -384,7 +415,8 @@ assert.match(previewAdapter, /MAX_FIXTURE_RECOVERY_LOADS = 4/);
 assert.match(previewAdapter, /mergeRecoveredFixture/);
 assert.match(previewAdapter, /result: match\.status === "final"/, "completed EPL matches must remain on the weekly slate with a final result");
 assert.match(previewReader, /Final ·/, "completed EPL cards must be visibly distinct from upcoming betting cards");
-assert.match(slateBuilder, /match\.status_state !== "final"/, "the default round must advance only after the active gameweek is complete");
+assert.match(slateLifecycle, /match\.status_state !== "final"/, "the default round advances to the next unfinished gameweek only after the soccer-day retention check");
+assert.match(slateLifecycle, /currentSoccerBoardDate/, "provider final status cannot advance the EPL board before its member-facing day rolls");
 assert.match(previewAdapter, /complete\.size < 4/);
 assert.match(slateBuilder, /SLATE_CACHE_TTL_MS = 5 \* 60 \* 1000/);
 assert.match(slateBuilder, /completedCurrentMatches/);

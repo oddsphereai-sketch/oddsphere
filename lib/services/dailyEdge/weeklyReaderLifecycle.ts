@@ -2,7 +2,7 @@ import type { DailyEdgeGameDto, DailyEdgeResponse } from "@/app/lab/lib/labTypes
 import { computeSlateDate, currentSoccerBoardDate } from "@/lib/dates/slateDate";
 
 export const DAILY_EDGE_WEEKLY_READER_LIFECYCLE_RELEASE =
-  "daily_edge_weekly_reader_lifecycle_2026_08_21_r1" as const;
+  "daily_edge_weekly_reader_lifecycle_2026_08_24_r2" as const;
 
 export type WeeklyReaderSport = "nfl" | "soccer";
 

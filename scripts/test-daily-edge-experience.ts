@@ -285,7 +285,7 @@ const thursdayKickoff = { gameStartAt: "2026-08-21T00:00:00.000Z" };
 const fridayKickoff = { gameStartAt: "2026-08-22T00:00:00.000Z" };
 check(
   "the weekly reader lifecycle is explicitly released",
-  DAILY_EDGE_WEEKLY_READER_LIFECYCLE_RELEASE === "daily_edge_weekly_reader_lifecycle_2026_08_21_r1",
+  DAILY_EDGE_WEEKLY_READER_LIFECYCLE_RELEASE === "daily_edge_weekly_reader_lifecycle_2026_08_24_r2",
 );
 check(
   "an NFL game stays visible throughout its Eastern game date",

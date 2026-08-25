@@ -16,6 +16,7 @@ import {
 } from "./eplShadowModel";
 import { readEplHistoricalFoundation, writeEplHistoricalFoundation } from "./eplHistoricalFoundationStore";
 import { recentComparableEplMatches } from "./eplEvidence";
+import { selectEplDefaultRound } from "./eplSlateLifecycle";
 
 const CURRENT_SEASON = 2026;
 const TRAINING_SEASONS = [2022, 2023, 2024, 2025] as const;
@@ -209,13 +210,6 @@ function teamEvidence(input: {
   };
 }
 
-function defaultRound(matches: BdlEplMatch[]): number {
-  const futureRounds = matches
-    .filter((match) => match.status_state !== "final" && match.round_number !== null)
-    .map((match) => match.round_number as number);
-  return futureRounds.length > 0 ? Math.min(...futureRounds) : Math.max(1, ...matches.map((match) => match.round_number ?? 0));
-}
-
 export function buildEplShadowSlate(requestedRound?: number): Promise<EplShadowSlate> {
   const cacheKey = requestedRound === undefined ? "default" : `round:${requestedRound}`;
   const cached = slateCache.get(cacheKey);
@@ -235,7 +229,7 @@ async function buildEplShadowSlateUncached(requestedRound?: number): Promise<Epl
   const provider = new BallDontLieEplProvider(apiKey);
   const foundation = await loadFoundation(provider);
   const rounds = [...new Set(foundation.seasonMatches.map((match) => match.round_number).filter((round): round is number => round !== null))].sort((a, b) => a - b);
-  const fallbackRound = defaultRound(foundation.seasonMatches);
+  const fallbackRound = selectEplDefaultRound(foundation.seasonMatches);
   const round = requestedRound && rounds.includes(requestedRound) ? requestedRound : fallbackRound;
   const roundMatches = foundation.seasonMatches
     .filter((match) => match.round_number === round)
