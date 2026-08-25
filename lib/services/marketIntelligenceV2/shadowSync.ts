@@ -1,7 +1,11 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { PlaybookClient } from "../../providers/playbook/playbookClient";
 import type { PlaybookLineGame, PlaybookSplitGame } from "../../providers/playbook/types";
-import { SharpApiClient, SharpApiNotFoundError } from "../../providers/real_api/_sharpApiClient";
+import {
+  SharpApiClient,
+  SharpApiClientError,
+  SharpApiNotFoundError,
+} from "../../providers/real_api/_sharpApiClient";
 import { normalizeMlbTeamName } from "../../providers/real_api/_teamNameNormalizer";
 import { buildGameKey, type NormalizerSport } from "../../providers/playbook/playbookTeamNormalizer";
 import { readMarketIntelligenceV2Config } from "../../config/marketIntelligenceV2";
@@ -62,6 +66,136 @@ type SharpEventCatalogRow = {
   start_time?: string | null;
   books?: string[] | null;
 };
+
+const SHARP_HISTORY_RETRY_BUDGET_PER_CYCLE = 8;
+const SHARP_HISTORY_REQUEST_BUDGET_PER_CYCLE = 30;
+
+export type SharpHistoryFailureClass =
+  | "definitive_absence"
+  | "transient_timeout"
+  | "transient_network"
+  | "transient_rate_limit"
+  | "transient_server"
+  | "non_retryable_client"
+  | "non_retryable_response";
+
+export type SharpHistoryRequestOutcome =
+  | "rows"
+  | "definitive_empty"
+  | "definitive_absence"
+  | "failed";
+
+export type SharpHistoryRetryBudget = { remaining: number };
+
+export function classifySharpHistoryFailure(error: unknown): {
+  failureClass: SharpHistoryFailureClass;
+  retryable: boolean;
+} {
+  if (error instanceof SharpApiNotFoundError) {
+    return { failureClass: "definitive_absence", retryable: false };
+  }
+  if (error instanceof SharpApiClientError) {
+    if (error.status === 429) return { failureClass: "transient_rate_limit", retryable: true };
+    if (error.status === 408) return { failureClass: "transient_timeout", retryable: true };
+    if (error.status !== null && error.status >= 500) return { failureClass: "transient_server", retryable: true };
+    if (error.status !== null && error.status >= 400 && error.status < 500) {
+      return { failureClass: "non_retryable_client", retryable: false };
+    }
+    const message = error.message.toLowerCase();
+    if (/timeout|timed out|abort/.test(message)) {
+      return { failureClass: "transient_timeout", retryable: true };
+    }
+    if (/network error|fetch failed|socket|econn|enotfound|eai_again/.test(message)) {
+      return { failureClass: "transient_network", retryable: true };
+    }
+    return { failureClass: "non_retryable_response", retryable: false };
+  }
+  if (error instanceof Error) {
+    const message = error.message.toLowerCase();
+    if (error.name === "AbortError" || error.name === "TimeoutError" || /timeout|timed out|abort/.test(message)) {
+      return { failureClass: "transient_timeout", retryable: true };
+    }
+    if (error instanceof TypeError || /network error|fetch failed|socket|econn|enotfound|eai_again/.test(message)) {
+      return { failureClass: "transient_network", retryable: true };
+    }
+  }
+  return { failureClass: "non_retryable_response", retryable: false };
+}
+
+export async function fetchSharpHistoryWithRetry<T>(opts: {
+  fetchRows: (signal: AbortSignal) => Promise<T[]>;
+  retryBudget: SharpHistoryRetryBudget;
+  maxAttempts?: number;
+  timeoutMs?: number;
+  backoffMs?: number;
+  sleep?: (ms: number) => Promise<void>;
+}): Promise<{
+  rows: T[];
+  outcome: SharpHistoryRequestOutcome;
+  failureClass: SharpHistoryFailureClass | null;
+  error: string | null;
+  attempts: number;
+  retries: number;
+}> {
+  const maxAttempts = Math.max(1, Math.min(2, opts.maxAttempts ?? 2));
+  const timeoutMs = Math.max(1_000, Math.min(15_000, opts.timeoutMs ?? 10_000));
+  const backoffMs = Math.max(0, Math.min(1_000, opts.backoffMs ?? 250));
+  const sleep = opts.sleep ?? ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)));
+  let attempts = 0;
+  let retries = 0;
+
+  while (attempts < maxAttempts) {
+    attempts++;
+    try {
+      const rows = await opts.fetchRows(AbortSignal.timeout(timeoutMs));
+      return {
+        rows,
+        outcome: rows.length > 0 ? "rows" : "definitive_empty",
+        failureClass: null,
+        error: null,
+        attempts,
+        retries,
+      };
+    } catch (error) {
+      const classification = classifySharpHistoryFailure(error);
+      if (classification.failureClass === "definitive_absence") {
+        return {
+          rows: [],
+          outcome: "definitive_absence",
+          failureClass: classification.failureClass,
+          error: null,
+          attempts,
+          retries,
+        };
+      }
+      const mayRetry =
+        classification.retryable &&
+        attempts < maxAttempts &&
+        opts.retryBudget.remaining > 0;
+      if (!mayRetry) {
+        return {
+          rows: [],
+          outcome: "failed",
+          failureClass: classification.failureClass,
+          error: error instanceof Error ? error.message : String(error),
+          attempts,
+          retries,
+        };
+      }
+      opts.retryBudget.remaining--;
+      retries++;
+      if (backoffMs > 0) await sleep(backoffMs * retries);
+    }
+  }
+  return {
+    rows: [],
+    outcome: "failed",
+    failureClass: "non_retryable_response",
+    error: "SharpAPI history retry loop exhausted without a terminal result",
+    attempts,
+    retries,
+  };
+}
 
 export type SharpSplitSlateAlignment = {
   aligned: boolean;
@@ -721,10 +855,18 @@ async function collectSharpApiSplits(opts: {
     game: GameRef;
     rows: RawSharpApiSplitHistoryRowV2[];
     startTime: string | null;
+    outcome: SharpHistoryRequestOutcome;
+    failureClass: SharpHistoryFailureClass | null;
     error: string | null;
+    attempts: number;
+    retries: number;
   }>> = [];
   const historyRequestKeys = new Set<string>();
+  const historyRetryBudget: SharpHistoryRetryBudget = {
+    remaining: SHARP_HISTORY_RETRY_BUDGET_PER_CYCLE,
+  };
   let historyRequestsSkippedAfterStart = 0;
+  let historyRequestsSkippedAtCycleCap = 0;
   const queueHistoryRequest = (providerEventId: string, game: GameRef): void => {
     if (!opts.includeHistory) return;
     const eventStarted = game.gameDate !== null && Date.parse(game.gameDate) <= opts.now.getTime();
@@ -734,24 +876,28 @@ async function collectSharpApiSplits(opts: {
     }
     const requestKey = `${game.externalId}|${providerEventId}`;
     if (historyRequestKeys.has(requestKey)) return;
+    if (historyRequestKeys.size >= SHARP_HISTORY_REQUEST_BUDGET_PER_CYCLE) {
+      historyRequestsSkippedAtCycleCap++;
+      return;
+    }
     historyRequestKeys.add(requestKey);
     const startTime = historyStartTimeForEvent(game, existingHistory);
     historyRequests.push(
-      client.fetchAll<RawSharpApiSplitHistoryRowV2>({
-        path: "/splits/history",
-        query: startTime === null
-          ? { event_id: providerEventId }
-          : { event_id: providerEventId, start_time: startTime },
-        maxPages: 20,
-      })
-        .then((historyRows) => ({ eventId: providerEventId, game, rows: historyRows, startTime, error: null }))
-        .catch((e) => ({
-          eventId: providerEventId,
-          game,
-          rows: [],
-          startTime,
-          error: e instanceof Error ? e.message : String(e),
-        })),
+      fetchSharpHistoryWithRetry<RawSharpApiSplitHistoryRowV2>({
+        fetchRows: (signal) => client.fetchAll<RawSharpApiSplitHistoryRowV2>({
+          path: "/splits/history",
+          query: startTime === null
+            ? { event_id: providerEventId }
+            : { event_id: providerEventId, start_time: startTime },
+          maxPages: 20,
+          signal,
+          // This request owns a smaller cycle-wide retry budget. Avoid the
+          // client's general 65-second 429 wait so per-event recovery remains
+          // bounded and observable here instead of creating hidden retries.
+          retryRateLimitInternally: false,
+        }),
+        retryBudget: historyRetryBudget,
+      }).then((result) => ({ eventId: providerEventId, game, startTime, ...result })),
     );
   };
   for (const row of rowsToCollect) {
@@ -822,9 +968,25 @@ async function collectSharpApiSplits(opts: {
   let historyRowsAfterStartTime = 0;
   let historyCanonicalConstructed = 0;
   let historyCanonicalSkippedExisting = 0;
-  const historyRequestErrors = historyResults.flatMap((result) => result.error ? [result.error] : []);
-  if (historyRequestErrors.length > 0) {
-    providerErrors.push(`SharpAPI split history recovery failed for ${historyRequestErrors.length}/${historyResults.length} requests`);
+  const failedHistoryResults = historyResults.filter((result) => result.outcome === "failed");
+  const historyFailureClasses = failedHistoryResults.reduce<Record<string, number>>((counts, result) => {
+    const key = result.failureClass ?? "non_retryable_response";
+    counts[key] = (counts[key] ?? 0) + 1;
+    return counts;
+  }, {});
+  if (failedHistoryResults.length > 0) {
+    const failureSummary = Object.entries(historyFailureClasses)
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([failureClass, count]) => `${failureClass}:${count}`)
+      .join(",");
+    const eventSample = failedHistoryResults
+      .slice(0, 8)
+      .map((result) => `${result.eventId}:${result.failureClass ?? "non_retryable_response"}`)
+      .join(",");
+    providerErrors.push(
+      `SharpAPI split history recovery failed for ${failedHistoryResults.length}/${historyResults.length} requests; ` +
+      `classes=${failureSummary}; events=${eventSample}`,
+    );
   }
   for (const result of historyResults) {
     historyRowsReceived += result.rows.length;
@@ -883,7 +1045,26 @@ async function collectSharpApiSplits(opts: {
       event_catalog_games_recovered: catalogGamesRecovered.size,
       history_requests_made: historyRequests.length,
       history_requests_skipped_after_start: historyRequestsSkippedAfterStart,
-      history_request_errors: historyRequestErrors.length,
+      history_requests_skipped_at_cycle_cap: historyRequestsSkippedAtCycleCap,
+      history_request_budget: SHARP_HISTORY_REQUEST_BUDGET_PER_CYCLE,
+      history_request_errors: failedHistoryResults.length,
+      history_request_outcomes: historyResults.reduce<Record<string, number>>((counts, result) => {
+        counts[result.outcome] = (counts[result.outcome] ?? 0) + 1;
+        return counts;
+      }, {}),
+      history_failure_classes: historyFailureClasses,
+      history_retry_budget_initial: SHARP_HISTORY_RETRY_BUDGET_PER_CYCLE,
+      history_retry_budget_remaining: historyRetryBudget.remaining,
+      history_retries_used: historyResults.reduce((sum, result) => sum + result.retries, 0),
+      history_event_coverage: historyResults.map((result) => ({
+        canonical_event_id: String(result.game.externalId),
+        provider_event_id: result.eventId,
+        outcome: result.outcome,
+        failure_class: result.failureClass,
+        attempts: result.attempts,
+        retries: result.retries,
+        rows: result.rows.length,
+      })),
       history_rows_received: historyRowsReceived,
       history_rows_after_incremental_filter: historyRowsAfterStartTime,
       history_canonical_constructed: historyCanonicalConstructed,
