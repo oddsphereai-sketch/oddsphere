@@ -50,6 +50,7 @@ import { ingestEplFinalScores } from "./epl/eplScoreIngestService";
 import { buildWnbaPredictionRecords } from "./wnba/buildWnbaPredictionRecords";
 import { ingestWnbaFinalScores } from "./wnba/ingestWnbaFinalScores";
 import { ingestNflFinalScores } from "./football/nflScoreIngestService";
+import { ingestCfbFinalScores } from "./football/cfbScoreIngestService";
 import { moneyPuckSeasonStartYear } from "../providers/nhl/_moneyPuckClient";
 
 export type TrackingRefreshOptions = {
@@ -423,6 +424,25 @@ export async function runTrackingRefresh(
           for (const e of fsRes.errors) perDate.errors.push(`nfl-final-scores: ${e.reason}`);
         } catch (e) {
           perDate.errors.push(`nfl-final-scores exception: ${e instanceof Error ? e.message : String(e)}`);
+        }
+      } else if (sport === "cfb") {
+        // CFB prediction_records are owned only by the leased forward writer's
+        // immutable T-60 tuple. The shared tracking cycle performs a bounded
+        // exact-provider-id final read and settles those frozen rows.
+        const existing = await loadExistingRecordCounts(opts.supabase, sport, date);
+        perDate.records_existed_before = existing.total;
+        try {
+          const fsRes = await ingestCfbFinalScores({
+            supabase: opts.supabase,
+            slateDate: date,
+            apply: opts.apply,
+          });
+          perDate.final_scores_updated = fsRes.updatedCount;
+          perDate.final_scores_in_progress = fsRes.inProgressCount;
+          perDate.final_scores_scheduled = fsRes.scheduledCount;
+          for (const e of fsRes.errors) perDate.errors.push(`cfb-final-scores: ${e.reason}`);
+        } catch (e) {
+          perDate.errors.push(`cfb-final-scores exception: ${e instanceof Error ? e.message : String(e)}`);
         }
       } else if (sport === "soccer") {
         // Soccer records are written by their competition refresh, not here.

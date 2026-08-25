@@ -217,7 +217,7 @@ export async function gradePredictionsForSlate(args: {
   // be settled into the official member record. EPL is also competition-
   // scoped so historical World Cup rows cannot enter an active EPL cycle.
   if (sport === "mlb") recordsQuery = recordsQuery.not("locked_at", "is", null);
-  if (sport === "nfl") recordsQuery = recordsQuery.not("locked_at", "is", null);
+  if (sport === "nfl" || sport === "cfb") recordsQuery = recordsQuery.not("locked_at", "is", null);
   if (sport === "soccer" && process.env.EPL_PIPELINE_ENABLED === "true") {
     recordsQuery = recordsQuery
       .contains("snapshot_json", { competition: "english_premier_league" })

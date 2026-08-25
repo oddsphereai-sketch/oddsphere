@@ -1,0 +1,296 @@
+import { createHash } from "node:crypto";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import type { DailyEdgeGameDto, DailyEdgePredictionDto, MarketEdgeDto, OddsTrailStopDto } from "@/app/lab/lib/labTypes";
+import type { PreviewHistoryByTeam } from "@/app/dev/experience-preview/ActualDailyEdgePreview";
+import {
+  CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE,
+  CFB_FORWARD_MEMBER_RELEASE,
+  type CfbForwardEvidencePayload,
+  type CfbForwardPlaybookSplit,
+  type CfbForwardStoredEvidence,
+} from "./cfbForwardEvidence";
+import { readCfbForwardEvidence } from "./cfbForwardEvidenceStore";
+import {
+  CFB_V1_DECISION_RELEASE,
+  CFB_V1_DISTRIBUTION_RELEASE,
+  CFB_V1_MODEL_RELEASE,
+  CFB_V1_PROBABILITY_RELEASE,
+  CFB_V1_SCORE_ARTIFACT_RELEASE,
+  type CfbV1ExactPriceDecision,
+  type CfbV1Market,
+} from "./cfbV1Decision";
+
+export const CFB_MEMBER_FIXTURE_RELEASE =
+  "cfb_v1_member_fixture_2026_08_25_r1" as const;
+
+export type CfbMemberFixture = {
+  fixtureRelease: typeof CFB_MEMBER_FIXTURE_RELEASE;
+  capturedAt: string;
+  snapshot: { as_of: string; sport: "cfb"; date: string; requested_date: string; fallback_used: false; slateState: "today_draft_only"; slate_status: string; last_slate_update_at: string; games: DailyEdgeGameDto[] };
+  history: PreviewHistoryByTeam;
+  week: { label: string };
+  provenance: { sourceChecksum: string; openingCoverageGames: number; splitCoverageGames: number; quarterbackCoverageGames: number; currentOddsGames: number };
+  tracking: { trackingEligible: boolean; reason: string };
+};
+
+export async function readCurrentCfbMemberFixture(args: { client: SupabaseClient; season?: number }): Promise<CfbMemberFixture> {
+  return buildCfbMemberFixture(await readCfbForwardEvidence({ client: args.client, season: args.season ?? 2026 }));
+}
+
+export function buildCfbMemberFixture(rows: CfbForwardStoredEvidence[]): CfbMemberFixture {
+  const latest = latestCompleteRows(rows);
+  const capturedAt = latest.reduce((value, row) => Date.parse(row.capturedAt) > Date.parse(value) ? row.capturedAt : value, latest[0]!.capturedAt);
+  const games = latest.map(buildGame).sort((a, b) => Date.parse(a.gameStartAt ?? "") - Date.parse(b.gameStartAt ?? ""));
+  const date = localDate(games[0]!.gameStartAt!);
+  const sourceChecksum = createHash("sha256").update(latest.map((row) => `${row.providerGameId}:${row.payloadSha256}`).sort().join("|")).digest("hex");
+  const trackingGames = latest.filter((row) => row.payload.decisions.trackingEnabled).length;
+  return {
+    fixtureRelease: CFB_MEMBER_FIXTURE_RELEASE,
+    capturedAt,
+    snapshot: { as_of: capturedAt, sport: "cfb", date, requested_date: date, fallback_used: false, slateState: "today_draft_only", slate_status: "cfb_week_one_model_live", last_slate_update_at: capturedAt, games },
+    history: {},
+    week: { label: "Opening Week" },
+    provenance: {
+      sourceChecksum,
+      openingCoverageGames: latest.filter((row) => row.payload.market.operationalOpening !== null).length,
+      splitCoverageGames: latest.filter((row) => row.payload.market.playbookSplits !== null).length,
+      quarterbackCoverageGames: latest.filter((row) => row.payload.coverage.activeQuarterbacks).length,
+      currentOddsGames: latest.filter((row) => row.payload.market.current !== null).length,
+    },
+    tracking: { trackingEligible: trackingGames > 0, reason: trackingGames > 0 ? `${trackingGames} game${trackingGames === 1 ? " has" : "s have"} a valid immutable T-60 exact-price tuple.` : "Official CFB tracking begins game by game only after a valid T-60 lock; unlocked grades are not counted yet." },
+  };
+}
+
+function latestCompleteRows(rows: CfbForwardStoredEvidence[]): CfbForwardStoredEvidence[] {
+  if (rows.length === 0) throw new Error("CFB forward evidence is empty.");
+  const latest = new Map<string, CfbForwardStoredEvidence>();
+  for (const row of rows) {
+    if (row.payload.schemaRelease !== CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE || row.payload.memberRelease !== CFB_FORWARD_MEMBER_RELEASE) continue;
+    const current = latest.get(row.providerGameId);
+    if (!current || Date.parse(row.capturedAt) > Date.parse(current.capturedAt)) latest.set(row.providerGameId, row);
+  }
+  const values = [...latest.values()];
+  if (values.length === 0) throw new Error("CFB has no current-schema member evidence.");
+  const expected = Math.max(...values.map((row) => row.payload.slateGameCount));
+  if (values.length !== expected) throw new Error(`CFB member fixture coverage is ${values.length}/${expected} games.`);
+  if (values.some((row) => !row.payload.decisions.publicationEnabled || row.payload.decisions.decisionRelease !== CFB_V1_DECISION_RELEASE)) throw new Error("CFB member fixture refuses a stale or non-public decision release.");
+  return values;
+}
+
+function buildGame(row: CfbForwardStoredEvidence): DailyEdgeGameDto {
+  const payload = row.payload;
+  const decisions = payload.decisions.evaluatedBets;
+  const moneyline = buildMarket(payload, "moneyline", decisionFor(decisions, "moneyline"));
+  const total = buildMarket(payload, "total", decisionFor(decisions, "total"));
+  const spread = buildMarket(payload, "spread", decisionFor(decisions, "spread"));
+  const startsAt = payload.game.scheduledStart;
+  const started = Date.parse(row.capturedAt) >= Date.parse(startsAt);
+  const t60 = payload.stage === "t60";
+  const allHeld = payload.decisions.heldMarkets.length === 3;
+  const headline = [moneyline, total, spread].sort((a, b) => verdictRank(b.verdict.key) - verdictRank(a.verdict.key))[0]!;
+  return {
+    id: `cfb-${payload.game.providerGameId}`,
+    sport: "cfb",
+    external_id: Number(payload.game.providerGameId),
+    awayTeam: payload.game.away.abbreviation,
+    awayTeamLogo: null,
+    homeTeam: payload.game.home.abbreviation,
+    homeTeamLogo: null,
+    gameTime: timeEt(startsAt),
+    gameStartAt: startsAt,
+    gameStartMinutes: minutesEt(startsAt),
+    scheduledLockAt: new Date(Date.parse(startsAt) - 60 * 60_000).toISOString(),
+    lockState: started || t60 ? "locked" : Date.parse(row.capturedAt) >= Date.parse(startsAt) - 60 * 60_000 ? "locking" : "open",
+    lockedAt: t60 ? row.capturedAt : null,
+    updatedAt: row.capturedAt,
+    generatedAt: row.capturedAt,
+    holdReason: allHeld ? "cfb_exact_price_tuple_incomplete" : null,
+    homeStarter: null,
+    awayStarter: null,
+    predictions: { ml: legacyPrediction(moneyline), total: { ...legacyPrediction(total), line: total.line }, nrfi: legacyPrediction(spread) },
+    markets: { moneyline, total, first_inning: spread },
+    decisionLine: headline.verdict.key === "best_angle" ? `Best angle: ${headline.pick}` : headline.verdict.key === "lean" ? `Lean: ${headline.pick}` : headline.verdict.key === "watchlist" ? `Watchlist: ${headline.pick}` : allHeld ? "Bet grades Held · outcome forecast remains live" : "No exact-price play clears the current policy",
+    projected: { away: payload.decisions.forecast.representativeScore.away, home: payload.decisions.forecast.representativeScore.home },
+    footballProjection: { awayWinProbability: 1 - payload.decisions.forecast.homeWinProbability, homeWinProbability: payload.decisions.forecast.homeWinProbability, expectedAwayPoints: payload.decisions.forecast.expectedAwayPoints, expectedHomePoints: payload.decisions.forecast.expectedHomePoints, modelRelease: CFB_V1_MODEL_RELEASE, distributionRelease: CFB_V1_DISTRIBUTION_RELEASE, probabilityRelease: CFB_V1_PROBABILITY_RELEASE, artifactRelease: CFB_V1_SCORE_ARTIFACT_RELEASE },
+    sharpSignals: buildSignals(payload),
+    status: { lineupConfirmed: null, linesLocked: payload.market.current !== null || payload.market.playbookLine !== null, sharpSignalPending: payload.market.playbookSplits === null, marketDataLimited: payload.market.current === null && payload.market.playbookLine === null },
+    result: null,
+    breakdown: { verdict: headline.verdict, sharpRead: { key: "mixed", sentence: "The independent score distribution and exact-price market evaluation are shown separately." }, modelBreakdown: `OddSphere projects ${payload.game.away.abbreviation} ${payload.decisions.forecast.expectedAwayPoints.toFixed(1)}–${payload.decisions.forecast.expectedHomePoints.toFixed(1)} ${payload.game.home.abbreviation}; the reachable representative score is ${payload.decisions.forecast.representativeScore.away}–${payload.decisions.forecast.representativeScore.home}.` },
+  };
+}
+
+function buildMarket(payload: CfbForwardEvidencePayload, market: CfbV1Market, decision: CfbV1ExactPriceDecision | null): MarketEdgeDto {
+  const held = decision === null;
+  const slot = market === "spread" ? payload.market.current?.spread : market === "total" ? payload.market.current?.total : payload.market.current?.moneyline;
+  const split = payload.market.playbookSplits?.[market] ?? null;
+  const selectedSide = decision ? canonicalSide(payload, decision) : market === "total" ? "over" : "home";
+  const selectedSplit = splitValue(split, market, selectedSide);
+  const trails = decision ? decisionTrails(payload, decision) : { selected: [] as OddsTrailStopDto[], opposing: [] as OddsTrailStopDto[] };
+  const isBest = decision?.grade === "Best Angle";
+  const isLean = decision?.grade === "Lean";
+  const isWatch = decision?.grade === "Watchlist";
+  const actionability = isBest ? 82 : isLean ? 62 : isWatch ? 45 : decision ? 30 : null;
+  const label = market === "moneyline" ? "moneyline" : market;
+  const reason = held
+    ? `The ${label} Bet grade is Held because a named offered price or target-excluded same-line consensus is unavailable. The independent forecast remains published.`
+    : `${decision.side} is evaluated at ${formatAmerican(decision.evaluatedQuote.price)} from ${decision.evaluatedQuote.sportsbook}; the ${decision.grade} grade uses that exact quote, the independent PMF, and other-book fair consensus.`;
+  const publicSplits = buildPublicSplits(payload, market);
+  return {
+    pick: decision?.side ?? null,
+    confidence: decision?.modelProbability ?? null,
+    grade: isBest ? "best_signal" : isLean ? "model_only" : isWatch ? "market_watch" : null,
+    signalType: isBest ? "balanced" : isLean ? "model_only" : null,
+    marketSignal: "market_neutral",
+    sharpStatus: "mixed",
+    held,
+    verdict: held ? { key: "no_play", label: "Held" } : isBest ? { key: "best_angle", label: "Best Angle" } : isLean ? { key: "lean", label: "Lean" } : isWatch ? { key: "watchlist", label: "Watchlist" } : { key: "no_play", label: "No Play" },
+    rawGrade: isBest ? "best_signal" : isLean ? "model_only" : isWatch ? "market_watch" : null,
+    rawRecScore: actionability,
+    capReasons: held ? ["cfb_exact_price_tuple_incomplete"] : [`cfb_${decision.grade.toLowerCase().replace(/\s+/g, "_")}`, ...payload.coverage.availabilityWarnings],
+    finalGrade: isBest ? "best_signal" : isLean ? "model_only" : isWatch ? "market_watch" : null,
+    finalRecScore: actionability,
+    actionabilityLabel: held ? "Held" : decision!.grade,
+    displayReason: reason,
+    guidedGuide: reason,
+    guidedWatchOut: "Prices and projected quarterback context refresh until the immutable T-60 tuple. CFB injury and venue-weather feeds are not available from the current provider and are labeled honestly.",
+    whyLine: reason,
+    riskLine: "Outcome confidence and exact-price Bet grade are separate. Public splits are Playbook consensus, not a substitute for the model or SharpAPI.",
+    modelProb: decision?.modelProbability ?? null,
+    marketFairProb: decision?.marketFairProbability ?? null,
+    pinnacleEvPct: decision ? decision.expectedValue * 100 : null,
+    moneyPct: selectedSplit.money,
+    betsPct: selectedSplit.bets,
+    publicSplits,
+    sharpBookAvailability: { status: "provider_limited", message: "SharpAPI NCAAF rows are unavailable; Playbook public consensus is shown separately and is not relabeled as sharp-book money.", lastUpdated: null },
+    priceAmerican: decision?.evaluatedQuote.price ?? null,
+    currentPriceAmerican: decision?.evaluatedQuote.price ?? null,
+    currentPriceSportsbook: decision?.evaluatedQuote.sportsbook ?? null,
+    currentPriceObservedAt: decision?.evaluatedQuote.observedAt ?? null,
+    bestAvailablePriceAmerican: null,
+    bestAvailableSportsbook: null,
+    bestAvailableObservedAt: null,
+    gradePriceAmerican: decision?.evaluatedQuote.price ?? null,
+    fiMarketBoard: null,
+    lineOpenAmerican: trails.selected[0]?.american ?? null,
+    priceUnavailableAtLock: false,
+    priceObservedAt: decision?.evaluatedQuote.observedAt ?? null,
+    priceIsStale: false,
+    lineOpenObservedAt: trails.selected[0]?.observedAt ?? null,
+    lineOpenIsStale: false,
+    moneyPctObservedAt: split?.capturedAt ?? null,
+    moneyPctIsStale: false,
+    betsPctObservedAt: split?.capturedAt ?? null,
+    betsPctIsStale: false,
+    oddspherePostedAmerican: decision?.evaluatedQuote.price ?? null,
+    oddspherePostedAt: decision?.evaluatedAt ?? null,
+    oddspherePostedMatchesPick: decision !== null,
+    lockedLineAmerican: decision?.stage === "t60_locked" ? decision.evaluatedQuote.price : null,
+    lockedLineAt: decision?.lockedAt ?? null,
+    oddsTrail: trails.selected,
+    lineTrail: market === "moneyline" ? [] : trails.selected,
+    opposingOddsTrail: { side: opposingCanonicalSide(selectedSide), label: opposingLabel(payload, market, selectedSide, decision?.evaluatedQuote.line ?? lineFromSlot(slot)), stops: trails.opposing },
+    marketInterpretation: null,
+    marketReadV2: null,
+    marketReadV2Enabled: false,
+    lastMovePrevAmerican: trails.selected.length > 1 ? trails.selected.at(-2)!.american : null,
+    lastMoveNextAmerican: trails.selected.at(-1)?.american ?? null,
+    lastMoveAtIso: trails.selected.at(-1)?.observedAt ?? null,
+    lastMoveLinePrev: trails.selected.length > 1 ? trails.selected.at(-2)!.line : null,
+    lastMoveLineNext: trails.selected.at(-1)?.line ?? null,
+    modelTotal: market === "total" ? payload.decisions.forecast.expectedTotal : null,
+    marketTotal: market === "total" ? decision?.evaluatedQuote.line ?? lineFromSlot(slot) : null,
+    line: decision?.evaluatedQuote.line ?? lineFromSlot(slot),
+    keyStats: keyStats(payload, market),
+    modelTrustPct: decision ? decision.modelProbability * 100 : null,
+    marketImpliedPct: decision ? decision.marketFairProbability * 100 : null,
+    modelMarketGapPct: decision ? decision.edgePercentagePoints : null,
+    recommendationConfidence: actionability,
+    marketSource: decision?.evaluatedQuote.sportsbook ?? (payload.market.playbookLine ? "playbook" : null),
+    marketDataQuality: decision ? "two_sided_consensus" : payload.market.playbookLine ? "single_book" : "unavailable",
+    reviewFlags: [CFB_MEMBER_FIXTURE_RELEASE, CFB_V1_MODEL_RELEASE, CFB_V1_DECISION_RELEASE],
+    reviewActionSummary: held ? "hold" : "keep",
+  };
+}
+
+function decisionTrails(payload: CfbForwardEvidencePayload, decision: CfbV1ExactPriceDecision): { selected: OddsTrailStopDto[]; opposing: OddsTrailStopDto[] } {
+  const selected: OddsTrailStopDto[] = [];
+  const opposing: OddsTrailStopDto[] = [];
+  const opening = payload.market.operationalOpening;
+  const selectedSide = canonicalSide(payload, decision);
+  if (opening && normalizeBook(opening.quote.sportsbook) === normalizeBook(decision.evaluatedQuote.sportsbook)) {
+    const openingQuote = quoteFor(opening.quote, decision.market, selectedSide);
+    const openingOpposing = quoteFor(opening.quote, decision.market, opposingCanonicalSide(selectedSide));
+    if (openingQuote) selected.push({ american: openingQuote.price, line: openingQuote.line, observedAt: opening.capturedAt, sportsbook: opening.quote.sportsbook, source: opening.provenance === "provider_opening" ? "provider_opening" : "line_history", label: opening.provenance === "provider_opening" ? "open" : "first" });
+    if (openingOpposing) opposing.push({ american: openingOpposing.price, line: openingOpposing.line, observedAt: opening.capturedAt, sportsbook: opening.quote.sportsbook, source: opening.provenance === "provider_opening" ? "provider_opening" : "line_history", label: opening.provenance === "provider_opening" ? "open" : "first" });
+  }
+  selected.push({ american: decision.evaluatedQuote.price, line: decision.evaluatedQuote.line, observedAt: decision.evaluatedQuote.observedAt, sportsbook: decision.evaluatedQuote.sportsbook, source: decision.stage === "t60_locked" ? "locked_snapshot" : "current_line", label: decision.stage === "t60_locked" ? "locked" : "current" });
+  const exactBook = payload.market.currentBooks.find((book) => normalizeBook(book.sportsbook) === normalizeBook(decision.evaluatedQuote.sportsbook));
+  const opposingQuote = exactBook ? quoteFor(exactBook, decision.market, opposingCanonicalSide(selectedSide)) : null;
+  if (opposingQuote) opposing.push({ american: opposingQuote.price, line: opposingQuote.line, observedAt: exactBook!.observedAt, sportsbook: exactBook!.sportsbook, source: "current_line", label: "current" });
+  return { selected: dedupeTrail(selected), opposing: dedupeTrail(opposing) };
+}
+
+function keyStats(payload: CfbForwardEvidencePayload, market: CfbV1Market): MarketEdgeDto["keyStats"] {
+  const forecast = payload.decisions.forecast;
+  const qb = (side: "away" | "home") => payload.quarterbacks[side].expectedStartingQuarterback?.name ?? "Starter not verified";
+  if (market === "moneyline") return [
+    { label: "Projected winner probability", awayValue: `${((1 - forecast.homeWinProbability) * 100).toFixed(1)}%`, homeValue: `${(forecast.homeWinProbability * 100).toFixed(1)}%`, source: "computed" },
+    { label: "Projected quarterback", awayValue: qb("away"), homeValue: qb("home"), source: "feature_snapshot" },
+    { label: "Expected points", awayValue: forecast.expectedAwayPoints.toFixed(1), homeValue: forecast.expectedHomePoints.toFixed(1), source: "computed" },
+  ];
+  if (market === "spread") return [
+    { label: "Model scoring margin", awayValue: forecast.expectedMarginHome < 0 ? `${payload.game.away.abbreviation} by ${Math.abs(forecast.expectedMarginHome).toFixed(1)}` : null, homeValue: forecast.expectedMarginHome >= 0 ? `${payload.game.home.abbreviation} by ${forecast.expectedMarginHome.toFixed(1)}` : null, source: "computed" },
+    { label: "Projected quarterback", awayValue: qb("away"), homeValue: qb("home"), source: "feature_snapshot" },
+    { label: "80% margin range", awayValue: null, homeValue: `${forecast.interval80.marginHome[0].toFixed(0)} to ${forecast.interval80.marginHome[1].toFixed(0)}`, source: "computed" },
+  ];
+  return [
+    { label: "Model expected total", awayValue: null, homeValue: forecast.expectedTotal.toFixed(1), source: "computed" },
+    { label: "Expected points", awayValue: forecast.expectedAwayPoints.toFixed(1), homeValue: forecast.expectedHomePoints.toFixed(1), source: "computed" },
+    { label: "80% total range", awayValue: null, homeValue: `${forecast.interval80.total[0].toFixed(0)} to ${forecast.interval80.total[1].toFixed(0)}`, source: "computed" },
+  ];
+}
+
+function buildPublicSplits(payload: CfbForwardEvidencePayload, market: CfbV1Market): MarketEdgeDto["publicSplits"] {
+  const split = payload.market.playbookSplits?.[market];
+  if (!split) return [];
+  if (market === "total") return [
+    { side: "over", label: "Over", moneyPct: split.overMoneyPct, betsPct: split.overBetsPct, observedAt: split.capturedAt },
+    { side: "under", label: "Under", moneyPct: split.underMoneyPct, betsPct: split.underBetsPct, observedAt: split.capturedAt },
+  ];
+  return [
+    { side: "home", label: payload.game.home.abbreviation, moneyPct: split.homeMoneyPct, betsPct: split.homeBetsPct, observedAt: split.capturedAt },
+    { side: "away", label: payload.game.away.abbreviation, moneyPct: split.awayMoneyPct, betsPct: split.awayBetsPct, observedAt: split.capturedAt },
+  ];
+}
+
+function splitValue(split: CfbForwardPlaybookSplit | null, market: CfbV1Market, side: string): { money: number | null; bets: number | null } {
+  if (!split) return { money: null, bets: null };
+  if (market === "total") return side === "over" ? { money: split.overMoneyPct, bets: split.overBetsPct } : { money: split.underMoneyPct, bets: split.underBetsPct };
+  return side === "home" ? { money: split.homeMoneyPct, bets: split.homeBetsPct } : { money: split.awayMoneyPct, bets: split.awayBetsPct };
+}
+
+function buildSignals(payload: CfbForwardEvidencePayload): DailyEdgeGameDto["sharpSignals"] {
+  if (!payload.market.playbookSplits) return [];
+  return [
+    { market: "ML", category: "handle_gap", description: "Playbook public money and ticket consensus is available for both teams.", source: "Playbook public consensus", direction: "neutral" },
+    { market: "OU", category: "handle_gap", description: "Playbook public money and ticket consensus is available for Over and Under.", source: "Playbook public consensus", direction: "neutral" },
+    { market: "NRFI", category: "handle_gap", description: "Playbook public money and ticket consensus is available for both spread sides.", source: "Playbook public consensus", direction: "neutral" },
+  ];
+}
+
+function legacyPrediction(market: MarketEdgeDto): DailyEdgePredictionDto { return { pick: market.pick, confidence: market.confidence, grade: market.grade, signalType: market.signalType, marketSignal: market.marketSignal, sharpStatus: market.sharpStatus }; }
+function decisionFor(decisions: CfbV1ExactPriceDecision[], market: CfbV1Market): CfbV1ExactPriceDecision | null { const matches = decisions.filter((row) => row.market === market); if (matches.length > 1) throw new Error(`CFB member fixture has duplicate ${market} decisions.`); return matches[0] ?? null; }
+function canonicalSide(payload: CfbForwardEvidencePayload, decision: CfbV1ExactPriceDecision): "home" | "away" | "over" | "under" { if (decision.market === "total") return /^over\b/i.test(decision.side) ? "over" : "under"; return decision.side.startsWith(payload.game.home.abbreviation) ? "home" : "away"; }
+function opposingCanonicalSide(side: string): "home" | "away" | "over" | "under" { return side === "home" ? "away" : side === "away" ? "home" : side === "over" ? "under" : "over"; }
+function opposingLabel(payload: CfbForwardEvidencePayload, market: CfbV1Market, side: string, line: number | null): string { if (market === "moneyline") return side === "home" ? payload.game.away.abbreviation : payload.game.home.abbreviation; if (market === "spread") return `${side === "home" ? payload.game.away.abbreviation : payload.game.home.abbreviation} ${signed(line === null ? 0 : -line)}`; return `${side === "over" ? "Under" : "Over"} ${marketNumber(line ?? 0)}`; }
+function quoteFor(book: NonNullable<CfbForwardEvidencePayload["market"]["current"]>, market: CfbV1Market, side: string): { price: number; line: number | null } | null { if (market === "moneyline" && book.moneyline) return { price: side === "home" ? book.moneyline.homePrice : book.moneyline.awayPrice, line: null }; if (market === "spread" && book.spread) return { price: side === "home" ? book.spread.homePrice : book.spread.awayPrice, line: side === "home" ? book.spread.homeLine : book.spread.awayLine }; if (market === "total" && book.total) return { price: side === "over" ? book.total.overPrice : book.total.underPrice, line: book.total.line }; return null; }
+function lineFromSlot(slot: CfbForwardEvidencePayload["market"]["current"] extends never ? never : unknown): number | null { if (!slot || typeof slot !== "object") return null; const record = slot as Record<string, unknown>; return typeof record.line === "number" ? record.line : typeof record.homeLine === "number" ? record.homeLine : null; }
+function dedupeTrail(rows: OddsTrailStopDto[]): OddsTrailStopDto[] { return rows.filter((row, index) => index === 0 || row.american !== rows[index - 1]!.american || row.line !== rows[index - 1]!.line); }
+function normalizeBook(value: string): string { return value.toLowerCase().replace(/[^a-z0-9]+/g, ""); }
+function formatAmerican(value: number): string { return value > 0 ? `+${value}` : String(value); }
+function marketNumber(value: number): string { return Number.isInteger(value) ? value.toFixed(0) : value.toFixed(1); }
+function signed(value: number): string { return value > 0 ? `+${marketNumber(value)}` : marketNumber(value); }
+function verdictRank(value: string): number { return value === "best_angle" ? 3 : value === "lean" ? 2 : value === "watchlist" ? 1 : 0; }
+function localDate(value: string): string { return new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(value)); }
+function timeEt(value: string): string { return new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", hour: "numeric", minute: "2-digit" }).format(new Date(value)); }
+function minutesEt(value: string): number { const parts = new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", hour: "2-digit", minute: "2-digit", hour12: false }).formatToParts(new Date(value)); return Number(parts.find((part) => part.type === "hour")?.value ?? 0) * 60 + Number(parts.find((part) => part.type === "minute")?.value ?? 0); }
