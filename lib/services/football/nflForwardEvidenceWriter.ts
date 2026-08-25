@@ -1,5 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { IWeatherProvider } from "@/lib/providers/interfaces/IWeatherProvider";
+import { isPublicallyTracked } from "@/lib/config/officialTrackingStart";
+import { computeSlateDate } from "@/lib/dates/slateDate";
 import { PlaybookClient } from "@/lib/providers/playbook/playbookClient";
 import type { PlaybookLineGame, PlaybookSplitGame } from "@/lib/providers/playbook/types";
 import { fetchBalldontlieNflSlateAvailability } from "./balldontlieNflAvailability";
@@ -31,10 +33,15 @@ import {
 } from "./sharpApiNflSplits";
 import { NFL_T60_MAX_CAPTURE_LAG_MINUTES } from "./nflRegularDecisionEvidence";
 import { buildNflR6ShadowMoneylineDecision } from "./nflR6MoneylineShadow";
-import { buildNflV1ProductionDecisionBundle } from "./nflV1ProductionDecision";
+import { buildNflV1ActionableGradeBundle } from "./nflV1ActionableGradeCandidate";
+import { nflForwardT60TrackingEligibility } from "./nflTrackingLifecycle";
+import {
+  buildNflOfficialTrackingRecords,
+  nflProviderIntegerId,
+} from "./nflOfficialTrackingRecord";
 
 export const NFL_FORWARD_WRITER_RELEASE =
-  "nfl_forward_evidence_writer_2026_08_23_r4_member" as const;
+  "nfl_forward_evidence_writer_2026_08_25_r7_actionable_grades" as const;
 
 export type NflForwardWriterResult = {
   writerRelease: typeof NFL_FORWARD_WRITER_RELEASE;
@@ -44,20 +51,26 @@ export type NflForwardWriterResult = {
   inserted: number;
   games: number;
   stages: Record<"opening" | "unlocked" | "t60", number>;
-  shadowEvaluations: number;
-  shadowLeans: number;
-  shadowHeld: number;
-  shadowBlockingReasons: string[];
   quarterbackHealthReasons: string[];
   publishedEvaluations: number;
+  publishedBestAngles: number;
   publishedLeans: number;
+  publishedWatchlists: number;
   publishedNoPlays: number;
   publishedHeldGames: number;
   apiCallsMaximum: number;
   healthHolds: string[];
   publicationAttempted: boolean;
-  trackingAttempted: false;
+  trackingAttempted: boolean;
+  trackingRecordsProposed: number;
+  trackingRecordsInserted: number;
+  trackingRecordsExisting: number;
 };
+
+type NflTrackingWriteResult = Pick<
+  NflForwardWriterResult,
+  "trackingAttempted" | "trackingRecordsProposed" | "trackingRecordsInserted" | "trackingRecordsExisting"
+>;
 
 export async function runNflForwardEvidenceWriter(args: {
   client: SupabaseClient;
@@ -78,7 +91,14 @@ export async function runNflForwardEvidenceWriter(args: {
   ]);
   const historicalExisting = [...legacyExisting, ...previousExisting, ...existing];
   const need = determineNflForwardCollectionNeed({ existing, now: args.now });
-  if (!need.collect) return emptyResult(need.reason);
+  if (!need.collect) {
+    const tracking = await writeOfficialTrackingFromPayloads({
+      client: args.client,
+      payloads: currentT60Payloads(existing),
+      apply: args.apply,
+    });
+    return emptyResult(need.reason, tracking);
+  }
 
   const slate = await fetchBalldontlieNflRegularSlate({
     season: args.season,
@@ -91,7 +111,14 @@ export async function runNflForwardEvidenceWriter(args: {
     capturedAt: args.now,
     unlockedCadenceMinutes: need.cadenceMinutes ?? 60,
   });
-  if (plans.length === 0) return emptyResult("provider_slate_has_no_due_capture");
+  if (plans.length === 0) {
+    const tracking = await writeOfficialTrackingFromPayloads({
+      client: args.client,
+      payloads: currentT60Payloads(existing),
+      apply: args.apply,
+    });
+    return emptyResult("provider_slate_has_no_due_capture", tracking);
+  }
 
   const criticalTeamIds = new Set(plans
     .filter((plan) => plan.stage === "opening" || plan.stage === "t60")
@@ -204,13 +231,28 @@ export async function runNflForwardEvidenceWriter(args: {
       t60LagMinutes: plan.t60LagMinutes,
       coverageHealthHolds: holds,
     });
-    const production = buildNflV1ProductionDecisionBundle({
+    const production = buildNflV1ActionableGradeBundle({
       providerGameId: plan.game.providerGameId,
       awayTeam: plan.game.away.abbreviation,
       homeTeam: plan.game.home.abbreviation,
       gameStartsAt: plan.game.scheduledStart,
       current,
+      comparableCurrentBooks,
       shadowMoneyline,
+    });
+    const trackingEligibility = nflForwardT60TrackingEligibility({
+      stage: plan.stage,
+      captureTiming: plan.captureTiming,
+      t60LagMinutes: plan.t60LagMinutes,
+      capturedAt: new Date(args.now).toISOString(),
+      providerGameId: plan.game.providerGameId,
+      gameStartsAt: plan.game.scheduledStart,
+      decisions: production.evaluatedBets,
+      publicationApproved: production.publicationEnabled,
+      officialRegistryLaunched: isPublicallyTracked(
+        "nfl",
+        computeSlateDate("nfl", plan.game.scheduledStart),
+      ),
     });
     return {
       schemaRelease: NFL_FORWARD_EVIDENCE_SCHEMA_RELEASE,
@@ -243,10 +285,9 @@ export async function runNflForwardEvidenceWriter(args: {
       decisions: {
         evaluatedBets: production.evaluatedBets,
         outcomeConfidence: production.outcomeConfidence,
-        shadowEvaluatedBets: [shadowMoneyline],
         modelPromotionStatus: production.modelPromotionStatus,
         publicationEnabled: production.publicationEnabled,
-        trackingEnabled: production.trackingEnabled,
+        trackingEnabled: trackingEligibility.eligible,
       },
       coverage: {
         currentOdds: true,
@@ -266,8 +307,20 @@ export async function runNflForwardEvidenceWriter(args: {
   });
 
   const write = await appendNflForwardEvidence({ client: args.client, runId: args.runId, payloads, apply: args.apply });
-  const shadowEvaluations = payloads.flatMap((payload) => payload.decisions.shadowEvaluatedBets ?? []);
+  const tracking = await writeOfficialTrackingFromPayloads({
+    client: args.client,
+    payloads: [...currentT60Payloads(existing), ...payloads.filter((payload) => payload.stage === "t60")],
+    apply: args.apply,
+  });
   const publishedEvaluations = payloads.flatMap((payload) => payload.decisions.evaluatedBets);
+  const quarterbackHealthReasons = payloads.flatMap((payload) => {
+    const away = payload.startersAndDepth.away.starterStatus;
+    const home = payload.startersAndDepth.home.starterStatus;
+    return [
+      away !== "confirmed" ? `away_quarterback_${away}_not_confirmed` : null,
+      home !== "confirmed" ? `home_quarterback_${home}_not_confirmed` : null,
+    ].filter((reason): reason is string => reason !== null);
+  });
   return {
     writerRelease: NFL_FORWARD_WRITER_RELEASE,
     collected: true,
@@ -276,19 +329,17 @@ export async function runNflForwardEvidenceWriter(args: {
     inserted: write.inserted,
     games: new Set(payloads.map((payload) => payload.game.providerGameId)).size,
     stages: stageCounts(payloads),
-    shadowEvaluations: shadowEvaluations.length,
-    shadowLeans: shadowEvaluations.filter((decision) => decision.grade === "Lean").length,
-    shadowHeld: shadowEvaluations.filter((decision) => decision.grade === "Held").length,
-    shadowBlockingReasons: [...new Set(shadowEvaluations.flatMap((decision) => decision.health.blockingReasons))].sort(),
-    quarterbackHealthReasons: [...new Set(shadowEvaluations.flatMap((decision) => decision.health.quarterbackReasons))].sort(),
+    quarterbackHealthReasons: [...new Set(quarterbackHealthReasons)].sort(),
     publishedEvaluations: publishedEvaluations.length,
+    publishedBestAngles: publishedEvaluations.filter((decision) => decision.grade === "Best Angle").length,
     publishedLeans: publishedEvaluations.filter((decision) => decision.grade === "Lean").length,
+    publishedWatchlists: publishedEvaluations.filter((decision) => decision.grade === "Watchlist").length,
     publishedNoPlays: publishedEvaluations.filter((decision) => decision.grade === "No Play").length,
     publishedHeldGames: payloads.filter((payload) => payload.decisions.evaluatedBets.length !== 3).length,
     apiCallsMaximum,
     healthHolds: [...new Set(payloads.flatMap((payload) => payload.coverage.healthHolds))].sort(),
     publicationAttempted: args.apply,
-    trackingAttempted: false,
+    ...tracking,
   };
 }
 
@@ -426,7 +477,15 @@ function stageCounts(payloads: NflForwardEvidencePayload[]): Record<"opening" | 
   };
 }
 
-function emptyResult(reason: string): NflForwardWriterResult {
+function emptyResult(
+  reason: string,
+  tracking: NflTrackingWriteResult = {
+    trackingAttempted: false,
+    trackingRecordsProposed: 0,
+    trackingRecordsInserted: 0,
+    trackingRecordsExisting: 0,
+  },
+): NflForwardWriterResult {
   return {
     writerRelease: NFL_FORWARD_WRITER_RELEASE,
     collected: false,
@@ -435,20 +494,209 @@ function emptyResult(reason: string): NflForwardWriterResult {
     inserted: 0,
     games: 0,
     stages: { opening: 0, unlocked: 0, t60: 0 },
-    shadowEvaluations: 0,
-    shadowLeans: 0,
-    shadowHeld: 0,
-    shadowBlockingReasons: [],
     quarterbackHealthReasons: [],
     publishedEvaluations: 0,
+    publishedBestAngles: 0,
     publishedLeans: 0,
+    publishedWatchlists: 0,
     publishedNoPlays: 0,
     publishedHeldGames: 0,
     apiCallsMaximum: 0,
     healthHolds: [],
     publicationAttempted: false,
-    trackingAttempted: false,
+    ...tracking,
   };
+}
+
+function currentT60Payloads(rows: NflForwardStoredEvidence[]): NflForwardEvidencePayload[] {
+  return rows.flatMap((row) =>
+    row.stage === "t60" && row.payload.schemaRelease === NFL_FORWARD_EVIDENCE_SCHEMA_RELEASE
+      ? [row.payload]
+      : []);
+}
+
+/**
+ * Official record persistence stays inside this existing leased writer. It is
+ * append-only at the prediction boundary: teams/games are seeded idempotently,
+ * while a frozen prediction record is inserted only when its exact
+ * game/market/release key does not already exist.
+ */
+async function writeOfficialTrackingFromPayloads(args: {
+  client: SupabaseClient;
+  payloads: NflForwardEvidencePayload[];
+  apply: boolean;
+}): Promise<NflTrackingWriteResult> {
+  const eligibleByGame = new Map<string, NflForwardEvidencePayload>();
+  for (const payload of args.payloads) {
+    const boundary = nflForwardT60TrackingEligibility({
+      stage: payload.stage,
+      captureTiming: payload.captureTiming,
+      t60LagMinutes: payload.t60LagMinutes,
+      capturedAt: payload.capturedAt,
+      providerGameId: payload.game.providerGameId,
+      gameStartsAt: payload.game.scheduledStart,
+      decisions: payload.decisions.evaluatedBets,
+      publicationApproved: payload.decisions.publicationEnabled,
+      officialRegistryLaunched: isPublicallyTracked(
+        "nfl",
+        computeSlateDate("nfl", payload.game.scheduledStart),
+      ),
+    });
+    if (payload.decisions.trackingEnabled && boundary.eligible) {
+      eligibleByGame.set(payload.game.providerGameId, payload);
+    }
+  }
+  const payloads = [...eligibleByGame.values()];
+  const proposed = payloads.length * 3;
+  if (!args.apply || proposed === 0) {
+    return {
+      trackingAttempted: false,
+      trackingRecordsProposed: proposed,
+      trackingRecordsInserted: 0,
+      trackingRecordsExisting: 0,
+    };
+  }
+  const decisionReleases = new Set(payloads.flatMap((payload) =>
+    payload.decisions.evaluatedBets.map((decision) => decision.decisionRelease)));
+  if (decisionReleases.size !== 1) throw new Error("NFL T-60 tracking payloads carry incoherent decision releases.");
+  const decisionRelease = [...decisionReleases][0]!;
+  const externalIds = payloads.map((payload) => nflProviderIntegerId(payload.game.providerGameId, "game"));
+  const { data: existingRows, error: existingError } = await args.client
+    .from("prediction_records")
+    .select("id,external_id,market,locked_at")
+    .eq("sport", "nfl")
+    .eq("model_version", decisionRelease)
+    .in("external_id", externalIds);
+  if (existingError) throw new Error(`NFL tracking record read failed: ${existingError.message}`);
+  const existingKeys = new Set(((existingRows ?? []) as Array<{
+    external_id: number;
+    market: string;
+    locked_at: string | null;
+  }>).map((row) => `${row.external_id}:${row.market}`));
+  if (existingKeys.size === proposed) {
+    return {
+      trackingAttempted: true,
+      trackingRecordsProposed: proposed,
+      trackingRecordsInserted: 0,
+      trackingRecordsExisting: existingKeys.size,
+    };
+  }
+
+  const teamIdByProviderId = await upsertTrackedNflTeams(args.client, payloads);
+  const gameIdByProviderId = await upsertTrackedNflGames(args.client, payloads, teamIdByProviderId);
+  const records = payloads.flatMap((payload) => {
+    const externalId = nflProviderIntegerId(payload.game.providerGameId, "game");
+    const gameId = gameIdByProviderId.get(payload.game.providerGameId);
+    if (gameId === undefined) throw new Error(`NFL tracking game row missing for ${payload.game.providerGameId}.`);
+    return buildNflOfficialTrackingRecords({ payload, gameId })
+      .filter((record) => !existingKeys.has(`${externalId}:${record.market}`));
+  });
+  if (records.length > 0) {
+    const { data, error } = await args.client
+      .from("prediction_records")
+      .insert(records as unknown as Record<string, unknown>[])
+      .select("id");
+    if (error) throw new Error(`NFL tracking record insert failed: ${error.message}`);
+    if ((data?.length ?? records.length) !== records.length) {
+      throw new Error(`NFL tracking record insert count mismatch: expected ${records.length}.`);
+    }
+  }
+  return {
+    trackingAttempted: true,
+    trackingRecordsProposed: proposed,
+    trackingRecordsInserted: records.length,
+    trackingRecordsExisting: existingKeys.size,
+  };
+}
+
+async function upsertTrackedNflTeams(
+  client: SupabaseClient,
+  payloads: NflForwardEvidencePayload[],
+): Promise<Map<number, number>> {
+  const teams = new Map(payloads.flatMap((payload) => [
+    [payload.game.away.id, payload.game.away] as const,
+    [payload.game.home.id, payload.game.home] as const,
+  ]));
+  const rows = [...teams.values()].map((team) => ({
+    external_id: team.id,
+    sport: "nfl",
+    slug: `nfl-${team.abbreviation.toLowerCase()}`,
+    abbreviation: team.abbreviation,
+    display_name: team.name,
+    short_display_name: team.abbreviation,
+    name: team.name,
+    location: team.name.split(" ").slice(0, -1).join(" ") || team.name,
+    league: "NFL",
+    division: null,
+    logo_url: null,
+    primary_color: null,
+    provider_ids: { balldontlie_nfl: { id: String(team.id) } },
+  }));
+  const { data, error } = await client
+    .from("teams")
+    .upsert(rows, { onConflict: "sport,external_id" })
+    .select("id,external_id");
+  if (error) throw new Error(`NFL tracking team upsert failed: ${error.message}`);
+  const result = new Map(((data ?? []) as Array<{ id: number; external_id: number }>).map((row) => [row.external_id, row.id]));
+  if (result.size !== rows.length) throw new Error("NFL tracking team upsert returned incomplete identities.");
+  return result;
+}
+
+async function upsertTrackedNflGames(
+  client: SupabaseClient,
+  payloads: NflForwardEvidencePayload[],
+  teamIdByProviderId: Map<number, number>,
+): Promise<Map<string, number>> {
+  const rows = payloads.map((payload) => ({
+    external_id: nflProviderIntegerId(payload.game.providerGameId, "game"),
+    sport: "nfl",
+    home_team_id: requiredTrackedIdentity(teamIdByProviderId, payload.game.home.id, "home team"),
+    away_team_id: requiredTrackedIdentity(teamIdByProviderId, payload.game.away.id, "away team"),
+    game_date: payload.game.scheduledStart,
+    slate_date: computeSlateDate("nfl", payload.game.scheduledStart),
+    season: payload.season,
+    season_type: "regular",
+    postseason: false,
+    status: normalizeTrackedNflStatus(payload.game.status),
+    venue: payload.weather.venueName,
+    provider_ids: {
+      balldontlie_nfl: {
+        id: payload.game.providerGameId,
+        season: payload.season,
+        week: payload.week,
+      },
+    },
+  }));
+  const { data, error } = await client
+    .from("games")
+    .upsert(rows, { onConflict: "sport,external_id" })
+    .select("id,external_id");
+  if (error) throw new Error(`NFL tracking game upsert failed: ${error.message}`);
+  const providerByExternal = new Map(payloads.map((payload) => [
+    nflProviderIntegerId(payload.game.providerGameId, "game"),
+    payload.game.providerGameId,
+  ]));
+  const result = new Map<string, number>();
+  for (const row of (data ?? []) as Array<{ id: number; external_id: number }>) {
+    const providerGameId = providerByExternal.get(row.external_id);
+    if (providerGameId) result.set(providerGameId, row.id);
+  }
+  if (result.size !== rows.length) throw new Error("NFL tracking game upsert returned incomplete identities.");
+  return result;
+}
+
+function requiredTrackedIdentity(map: Map<number, number>, key: number, label: string): number {
+  const value = map.get(key);
+  if (value === undefined) throw new Error(`NFL tracking ${label} identity ${key} is missing.`);
+  return value;
+}
+
+function normalizeTrackedNflStatus(value: string): string {
+  const normalized = value.trim().toLowerCase();
+  if (normalized === "final" || normalized === "completed" || normalized === "post") return "final";
+  if (normalized === "in_progress" || normalized === "live") return "in_progress";
+  if (normalized === "postponed" || normalized === "canceled" || normalized === "cancelled") return normalized;
+  return "scheduled";
 }
 
 function normalizeTeam(value: unknown): string {

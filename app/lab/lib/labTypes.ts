@@ -894,6 +894,11 @@ export type DailyEdgeGameDto = {
   footballProjection?: {
     awayWinProbability: number;
     homeWinProbability: number;
+    /** Decimal simulation means from the exact same discrete joint PMF that
+     * supplies the reachable integer representative score and line
+     * probabilities. These are expected points, not a fabricated final. */
+    expectedAwayPoints: number;
+    expectedHomePoints: number;
     modelRelease: string;
     distributionRelease: string;
     probabilityRelease: string;

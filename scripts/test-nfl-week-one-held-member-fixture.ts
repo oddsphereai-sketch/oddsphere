@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import type { NflPreviewBookOdds } from "../lib/services/football/balldontlieNflPreviewSlate";
 import {
   NFL_FORWARD_EVIDENCE_COLLECTOR_RELEASE,
   NFL_FORWARD_EVIDENCE_SCHEMA_RELEASE,
@@ -11,10 +12,11 @@ import {
 } from "../lib/services/football/nflWeekOneHeldMemberFixture";
 import {
   getNflV1WeekOneOutcomeForecast,
+  nflV1WeekOneLineProbabilities,
   NFL_V1_OUTCOME_MODEL_RELEASE,
   NFL_V1_WEEK_ONE_OUTCOME_ARTIFACT_RELEASE,
 } from "../lib/services/football/nflV1WeekOneOutcome";
-import { buildNflV1ProductionDecisionBundle } from "../lib/services/football/nflV1ProductionDecision";
+import { buildNflV1ActionableGradeBundle } from "../lib/services/football/nflV1ActionableGradeCandidate";
 import {
   NFL_R6_MONEYLINE_CALIBRATION_RELEASE,
   NFL_R6_MONEYLINE_DECISION_RELEASE,
@@ -56,21 +58,86 @@ assert.equal(markets.length, 48);
 assert.equal(markets.every((market) => !market.held), true);
 assert.equal(markets.every((market) => market.pick !== null), true);
 assert.equal(markets.every((market) => market.modelProb !== null), true);
-assert.equal(markets.filter((market) => market.verdict.label === "Lean").length, 8);
-assert.equal(markets.filter((market) => market.verdict.label === "Watchlist").length, 8);
-assert.equal(markets.filter((market) => market.verdict.label === "No Play").length, 32);
+assert.equal(markets.filter((market) => market.verdict.label === "Best Angle").length, 7);
+assert.equal(markets.filter((market) => market.verdict.label === "Lean").length, 17);
+assert.equal(markets.filter((market) => market.verdict.label === "Watchlist").length, 10);
+assert.equal(markets.filter((market) => market.verdict.label === "No Play").length, 14);
 assert.equal(markets.every((market) => (market.oddsTrail?.length ?? 0) >= 1), true);
 assert.equal(markets.every((market) => (market.opposingOddsTrail?.stops.length ?? 0) >= 1), true);
 assert.equal(markets.every((market) => market.publicSplits.length === 2), true);
 assert.equal(fixture.snapshot.games.every((game) => game.projected.away > 0 && game.projected.home > 0), true);
 assert.equal(fixture.snapshot.games.every((game) => game.footballProjection?.modelRelease === NFL_V1_OUTCOME_MODEL_RELEASE), true);
 assert.equal(fixture.snapshot.games.every((game) => game.footballProjection?.artifactRelease === NFL_V1_WEEK_ONE_OUTCOME_ARTIFACT_RELEASE), true);
+assert.equal(fixture.snapshot.games.every((game) => {
+  const forecast = game.footballProjection!;
+  const representativeHomeWins = game.projected.home > game.projected.away;
+  const expectedHomeWins = forecast.expectedHomePoints > forecast.expectedAwayPoints;
+  const probabilityHomeWins = forecast.homeWinProbability > forecast.awayWinProbability;
+  return representativeHomeWins === expectedHomeWins && expectedHomeWins === probabilityHomeWins;
+}), true);
 const jax = fixture.snapshot.games.find((game) => game.id === "nfl-1392224");
 assert.equal(jax?.awayTeam, "CLE");
 assert.equal(jax?.homeTeam, "JAX");
 assert.equal(jax?.projected.away, 17);
 assert.equal(jax?.projected.home, 27);
+assert.equal(jax?.footballProjection?.expectedAwayPoints.toFixed(1), "17.6");
+assert.equal(jax?.footballProjection?.expectedHomePoints.toFixed(1), "27.7");
 assert.equal(jax?.footballProjection?.homeWinProbability.toFixed(3), "0.770");
+const jaxForecast = getNflV1WeekOneOutcomeForecast({ providerGameId: "1392224", awayTeam: "CLE", homeTeam: "JAX" });
+const distributionMean = (distribution: { values: number[]; probabilities: number[] }) =>
+  distribution.values.reduce((sum, value, index) => sum + value * distribution.probabilities[index]!, 0);
+const distributionSplit = (
+  distribution: { values: number[]; probabilities: number[] },
+  difference: (value: number) => number,
+) => distribution.values.reduce((summary, value, index) => {
+  const probability = distribution.probabilities[index]!;
+  const result = difference(value);
+  if (result > 0) summary.positive += probability;
+  else if (result < 0) summary.negative += probability;
+  else summary.push += probability;
+  return summary;
+}, { positive: 0, negative: 0, push: 0 });
+const expectedMargin = distributionMean(jaxForecast.marginDistribution);
+const expectedTotal = distributionMean(jaxForecast.totalDistribution);
+assert.equal(((expectedTotal - expectedMargin) / 2).toFixed(6), jaxForecast.expectedAwayScore.toFixed(6));
+assert.equal(((expectedTotal + expectedMargin) / 2).toFixed(6), jaxForecast.expectedHomeScore.toFixed(6));
+const winnerSplit = distributionSplit(jaxForecast.marginDistribution, (margin) => margin);
+assert.equal(
+  (winnerSplit.positive / (winnerSplit.positive + winnerSplit.negative)).toFixed(6),
+  jaxForecast.homeWinProbability.toFixed(6),
+);
+assert.equal(
+  (winnerSplit.negative / (winnerSplit.positive + winnerSplit.negative)).toFixed(6),
+  jaxForecast.awayWinProbability.toFixed(6),
+);
+assert.equal(winnerSplit.push.toFixed(6), jaxForecast.tieProbability.toFixed(6));
+const jaxLineProbabilities = nflV1WeekOneLineProbabilities({
+  forecast: jaxForecast,
+  homeSpread: -7.5,
+  totalLine: 40.5,
+});
+const directSpread = distributionSplit(jaxForecast.marginDistribution, (margin) => margin - 7.5);
+const directTotal = distributionSplit(jaxForecast.totalDistribution, (points) => points - 40.5);
+assert.equal(
+  jaxLineProbabilities.spread.homeCoverProbability.toFixed(6),
+  (directSpread.positive / (directSpread.positive + directSpread.negative)).toFixed(6),
+);
+assert.equal(
+  jaxLineProbabilities.spread.awayCoverProbability.toFixed(6),
+  (directSpread.negative / (directSpread.positive + directSpread.negative)).toFixed(6),
+);
+assert.equal(jaxLineProbabilities.spread.pushProbability.toFixed(6), directSpread.push.toFixed(6));
+assert.equal(
+  jaxLineProbabilities.total.overProbability.toFixed(6),
+  (directTotal.positive / (directTotal.positive + directTotal.negative)).toFixed(6),
+);
+assert.equal(
+  jaxLineProbabilities.total.underProbability.toFixed(6),
+  (directTotal.negative / (directTotal.positive + directTotal.negative)).toFixed(6),
+);
+assert.equal(jaxLineProbabilities.total.pushProbability.toFixed(6), directTotal.push.toFixed(6));
+assert.equal(jaxForecast.marginDistribution.values.includes(jaxForecast.representativeHomeScore - jaxForecast.representativeAwayScore), true);
+assert.equal(jaxForecast.totalDistribution.values.includes(jaxForecast.representativeHomeScore + jaxForecast.representativeAwayScore), true);
 assert.throws(
   () => getNflV1WeekOneOutcomeForecast({ providerGameId: "1392224", awayTeam: "JAX", homeTeam: "CLE" }),
   /identity mismatch/,
@@ -90,6 +157,7 @@ assert.equal(buildNflWeekOneHeldMemberFixture(lateT60Rows).snapshot.games.find((
 
 const candidateSource = readFileSync("app/lab/daily-edge/CandidateDailyEdgePage.tsx", "utf8");
 assert.match(candidateSource, /readCurrentNflWeekOneHeldMemberFixture/);
+assert.doesNotMatch(candidateSource, /readCurrentNflPublishedMemberSnapshot/);
 assert.doesNotMatch(candidateSource, /nflWeekOneEvidenceBoard=\{/);
 const readerSource = readFileSync("app/dev/experience-preview/ActualDailyEdgePreview.tsx", "utf8");
 const collapsedReaderSource = readerSource.slice(
@@ -110,6 +178,15 @@ assert.match(readerSource, /nflSelectedBetGrade\(market\)/);
 assert.match(readerSource, /Bet grade \{footballBetGrade\.label\}/);
 assert.match(readerSource, /Bet grade \{betGrade\.label\}/);
 assert.match(readerSource, /currently \{betGrade\.label\}/);
+assert.match(readerSource, /Expected score/);
+assert.match(readerSource, /Primary prediction · joint PMF means/);
+assert.match(readerSource, /Reachable representative final/);
+assert.match(readerSource, /Representative final/);
+assert.match(readerSource, /primaryProjectedAway\.toFixed\(1\)/);
+assert.match(readerSource, /primaryProjectedHome\.toFixed\(1\)/);
+assert.match(readerSource, /footballExpectedAway\.toFixed\(1\)/);
+assert.match(readerSource, /footballExpectedHome\.toFixed\(1\)/);
+assert.match(readerSource, /Counts show games containing at least one market with each grade/);
 assert.doesNotMatch(collapsedReaderSource, /Bet grade held/);
 assert.doesNotMatch(collapsedReaderSource, /Bet grade remains separate and Held/);
 assert.doesNotMatch(footballOutcomeForecastSource, /Held does not erase the prediction/);
@@ -160,6 +237,7 @@ function syntheticRow(index: number): NflForwardStoredEvidence {
     roster: [],
   });
   const current = quote(capturedAt, 0);
+  const currentComparableBooks = comparableBooks(current);
   const openingQuote = quote("2026-08-22T03:40:02.901Z", 2);
   const outcome = getNflV1WeekOneOutcomeForecast({ providerGameId, awayTeam: away, homeTeam: home });
   const selectHome = outcome.homeWinProbability >= outcome.awayWinProbability;
@@ -209,12 +287,13 @@ function syntheticRow(index: number): NflForwardStoredEvidence {
     decisionRelease: NFL_R6_MONEYLINE_DECISION_RELEASE,
     sourcePointModelRelease: NFL_R6_SOURCE_POINT_MODEL_RELEASE,
   };
-  const production = buildNflV1ProductionDecisionBundle({
+  const production = buildNflV1ActionableGradeBundle({
     providerGameId,
     awayTeam: away,
     homeTeam: home,
     gameStartsAt: scheduledStart,
     current,
+    comparableCurrentBooks: currentComparableBooks,
     shadowMoneyline,
   });
   return {
@@ -247,8 +326,8 @@ function syntheticRow(index: number): NflForwardStoredEvidence {
       },
       market: {
         current,
-        currentBooks: [current],
-        comparableCurrentBooks: [current],
+        currentBooks: currentComparableBooks,
+        comparableCurrentBooks: currentComparableBooks,
         providerOpening: openingQuote,
         providerOpeningBooks: [openingQuote],
         comparableProviderOpeningBooks: [openingQuote],
@@ -318,4 +397,12 @@ function syntheticRow(index: number): NflForwardStoredEvidence {
       },
     },
   };
+}
+
+function comparableBooks(current: NflPreviewBookOdds): NflPreviewBookOdds[] {
+  return [
+    current,
+    { ...structuredClone(current), sportsbook: "draftkings" },
+    { ...structuredClone(current), sportsbook: "caesars" },
+  ];
 }

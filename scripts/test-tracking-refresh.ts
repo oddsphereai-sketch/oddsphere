@@ -167,9 +167,13 @@ check(
     soccerCronSource.includes("OFF-SEASON (2026-07-20)"),
 );
 check(
-  "hourly tracking includes active EPL settlement and keeps the manual override",
-  trackingCronSource.includes('const DEFAULT_SPORTS: Sport[] = ["mlb", "nba", "nhl", "wnba", "soccer"]') &&
+  "hourly tracking includes active EPL and NFL settlement and keeps the manual override",
+  trackingCronSource.includes('const DEFAULT_SPORTS: Sport[] = ["mlb", "nba", "nhl", "wnba", "soccer", "nfl"]') &&
     trackingCronSource.includes("overrideSport") && trackingCronSource.includes("[overrideSport]"),
+);
+check(
+  "NFL grading excludes records that never reached the persisted T-60 lock boundary",
+  gradingSource.includes('if (sport === "nfl") recordsQuery = recordsQuery.not("locked_at", "is", null)'),
 );
 check(
   "hourly tracking runs outside the :05 slate-cycle and :13 lineup-watch lease windows",
@@ -185,8 +189,8 @@ check(
     healthCronSource.includes('url.searchParams.get("sports")'),
 );
 check(
-  "Daily Edge labels World Cup as offseason while keeping history accessible",
-  dailyEdgeSportsSource.includes('{ key: "soccer", label: "World Cup", memberAvailable: true, inSeason: false }') &&
+  "Daily Edge keeps the active Soccer model in the current in-season navigation contract",
+  dailyEdgeSportsSource.includes('{ key: "soccer", label: "Soccer", memberAvailable: true, inSeason: true }') &&
     dailyEdgeShellSource.includes("const isActiveInSeason = isActive && s.inSeason === true") &&
     dailyEdgeShellSource.includes('s.memberAvailable && !s.inSeason ? "offseason model"'),
 );

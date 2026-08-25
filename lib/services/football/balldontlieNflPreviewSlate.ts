@@ -2,6 +2,8 @@ export const BALLDONTLIE_NFL_PREVIEW_SLATE_RELEASE =
   "balldontlie_nfl_preview_slate_2026_08_19_r1" as const;
 export const BALLDONTLIE_NFL_REGULAR_SLATE_RELEASE =
   "balldontlie_nfl_regular_slate_2026_08_22_r2_multibook" as const;
+export const BALLDONTLIE_NFL_REGULAR_RESULTS_RELEASE =
+  "balldontlie_nfl_regular_results_2026_08_25_r1" as const;
 
 export type NflPreviewTeam = {
   id: number;
@@ -15,8 +17,19 @@ export type NflPreviewGame = {
   season: number;
   scheduledStart: string;
   status: string;
+  awayScore?: number | null;
+  homeScore?: number | null;
   away: NflPreviewTeam;
   home: NflPreviewTeam;
+};
+
+export type NflRegularProviderResults = {
+  release: typeof BALLDONTLIE_NFL_REGULAR_RESULTS_RELEASE;
+  fetchedAt: string;
+  season: number;
+  week: number;
+  games: NflPreviewGame[];
+  providerRequests: number;
 };
 
 export type NflPreviewBookOdds = {
@@ -266,6 +279,47 @@ export async function fetchBalldontlieNflRegularSlate(args: {
   };
 }
 
+/** Bounded games-only read used by tracking settlement; it never requests odds. */
+export async function fetchBalldontlieNflRegularResults(args: {
+  season: number;
+  week: number;
+  apiKey?: string;
+  fetchImpl?: typeof fetch;
+}): Promise<NflRegularProviderResults> {
+  const apiKey = args.apiKey ?? process.env.BALLDONTLIE_API_KEY;
+  const fetchImpl = args.fetchImpl ?? fetch;
+  if (!apiKey) throw new Error("BALLDONTLIE_API_KEY is required for NFL results.");
+  if (!Number.isInteger(args.week) || args.week < 1 || args.week > 18) throw new Error("NFL regular-season week must be 1 through 18.");
+  let providerRequests = 0;
+  const gamesRead = await readPages({
+    path: "/games",
+    query: {
+      "seasons[]": [args.season],
+      "weeks[]": [args.week],
+      "season_type[]": [2],
+      per_page: 100,
+    },
+    maxPages: 1,
+    apiKey,
+    fetchImpl,
+    onRequest: () => { providerRequests += 1; },
+  });
+  if (gamesRead.nextCursor !== null) throw new Error("BALLDONTLIE NFL results exceeded the one-page safety budget.");
+  const games = gamesRead.rows.map(normalizeGame).filter((game): game is NflPreviewGame => game !== null)
+    .sort((first, second) => Date.parse(first.scheduledStart) - Date.parse(second.scheduledStart));
+  if (games.length === 0 || games.some((game) => game.season !== args.season || game.providerWeek !== args.week)) {
+    throw new Error("BALLDONTLIE returned no complete verified NFL regular-season result slate.");
+  }
+  return {
+    release: BALLDONTLIE_NFL_REGULAR_RESULTS_RELEASE,
+    fetchedAt: new Date().toISOString(),
+    season: args.season,
+    week: args.week,
+    games,
+    providerRequests,
+  };
+}
+
 async function readPages(args: {
   path: string;
   query: Record<string, string | number | Array<string | number>>;
@@ -318,12 +372,16 @@ function normalizeGame(value: unknown): NflPreviewGame | null {
   const home = normalizeTeam(row.home_team);
   const away = normalizeTeam(row.visitor_team);
   if (!id || season === null || week === null || !scheduledStart || !home || !away) return null;
+  const awayScore = integer(row.visitor_team_score) ?? integer(row.away_team_score) ?? integer(row.away_score);
+  const homeScore = integer(row.home_team_score) ?? integer(row.home_score);
   return {
     providerGameId: id,
     providerWeek: week,
     season,
     scheduledStart,
     status: text(row.status_state) ?? text(row.status) ?? "scheduled",
+    ...(awayScore === null ? {} : { awayScore }),
+    ...(homeScore === null ? {} : { homeScore }),
     away,
     home,
   };

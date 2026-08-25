@@ -151,7 +151,31 @@ function validateArtifact(value: Artifact): void {
     }
     validateDistribution(game.marginDistribution, `${game.providerGameId} margin`);
     validateDistribution(game.totalDistribution, `${game.providerGameId} total`);
+    const expectedMargin = distributionMean(game.marginDistribution);
+    const expectedTotal = distributionMean(game.totalDistribution);
+    const expectedAway = (expectedTotal - expectedMargin) / 2;
+    const expectedHome = (expectedTotal + expectedMargin) / 2;
+    const winnerSplit = splitDistribution(game.marginDistribution, (margin) => margin);
+    const decidedProbability = Math.max(winnerSplit.positive + winnerSplit.negative, 1e-12);
+    const homeWinProbability = winnerSplit.positive / decidedProbability;
+    const awayWinProbability = winnerSplit.negative / decidedProbability;
+    if (Math.abs(expectedAway - game.expectedAwayScore) > 0.000002 ||
+        Math.abs(expectedHome - game.expectedHomeScore) > 0.000002 ||
+        Math.abs(homeWinProbability - game.homeWinProbability) > 0.000002 ||
+        Math.abs(awayWinProbability - game.awayWinProbability) > 0.000002 ||
+        Math.abs(winnerSplit.push - game.tieProbability) > 0.000002 ||
+        expectedHome === expectedAway ||
+        (expectedHome > expectedAway) !== (game.homeWinProbability > game.awayWinProbability)) {
+      throw new Error(`NFL v1 expected points or winner probabilities are not derived from the stored PMF for ${game.providerGameId}.`);
+    }
   }
+}
+
+function distributionMean(distribution: DiscreteDistribution): number {
+  return distribution.values.reduce(
+    (sum, value, index) => sum + value * distribution.probabilities[index]!,
+    0,
+  );
 }
 
 function validateDistribution(value: DiscreteDistribution, label: string): void {

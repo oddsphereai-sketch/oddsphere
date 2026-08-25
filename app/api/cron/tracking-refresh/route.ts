@@ -64,7 +64,7 @@ export const maxDuration = 180;
 // scoped in snapshot_json. Include soccer in the scheduled cycle so EPL
 // scores and grades settle automatically; the ingest service only touches the
 // EPL external-id namespace and cannot rewrite historical World Cup games.
-const DEFAULT_SPORTS: Sport[] = ["mlb", "nba", "nhl", "wnba", "soccer"];
+const DEFAULT_SPORTS: Sport[] = ["mlb", "nba", "nhl", "wnba", "soccer", "nfl"];
 
 export async function GET(request: Request) {
   const url = new URL(request.url);

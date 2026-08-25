@@ -2,13 +2,26 @@ import type { DailyEdgeResponse, MarketEdgeDto } from "@/app/lab/lib/labTypes";
 import { footballTrackingEligibility } from "./footballTrackingPolicy";
 import {
   assertNflT60CaptureTiming,
+  NFL_T60_MAX_CAPTURE_LAG_MINUTES,
   type NflRegularEvaluatedBetDecision,
 } from "./nflRegularDecisionEvidence";
 
 export const NFL_TRACKING_LIFECYCLE_RELEASE =
-  "nfl_tracking_lifecycle_shadow_2026_08_20_r2" as const;
+  "nfl_tracking_lifecycle_2026_08_25_r3_regular_t60" as const;
 
 export type NflTrackedMarket = "moneyline" | "spread" | "total";
+
+export type NflForwardTrackingEligibility = {
+  eligible: boolean;
+  reason:
+    | "not_t60_capture"
+    | "late_or_invalid_t60_capture"
+    | "publication_not_approved"
+    | "incomplete_decision_set"
+    | "incoherent_decision_tuple"
+    | "official_tracking_not_started"
+    | "eligible_regular_t60";
+};
 
 export type NflTrackingProposal = {
   lifecycleRelease: typeof NFL_TRACKING_LIFECYCLE_RELEASE;
@@ -39,6 +52,67 @@ export type NflTrackingProposal = {
 
 export const NFL_EVALUATED_TUPLE_TRACKING_BOUNDARY_RELEASE =
   "nfl_evaluated_tuple_tracking_boundary_2026_08_21_r2" as const;
+
+/**
+ * Fail-closed production gate used by the single NFL forward writer before it
+ * marks a payload tracking-eligible or attempts a prediction-record insert.
+ * The grade bundle cannot enable tracking by itself: the writer must also
+ * prove a regular-season, on-time, immutable T-60 capture and an officially
+ * launched registry boundary.
+ */
+export function nflForwardT60TrackingEligibility(args: {
+  stage: "opening" | "unlocked" | "t60";
+  captureTiming: "on_time" | "late_first_observation";
+  t60LagMinutes: number | null;
+  capturedAt: string;
+  providerGameId: string;
+  gameStartsAt: string;
+  decisions: NflRegularEvaluatedBetDecision[];
+  publicationApproved: boolean;
+  officialRegistryLaunched: boolean;
+}): NflForwardTrackingEligibility {
+  if (args.stage !== "t60") return { eligible: false, reason: "not_t60_capture" };
+  if (
+    args.captureTiming !== "on_time" ||
+    args.t60LagMinutes === null ||
+    args.t60LagMinutes < 0 ||
+    args.t60LagMinutes > NFL_T60_MAX_CAPTURE_LAG_MINUTES
+  ) {
+    return { eligible: false, reason: "late_or_invalid_t60_capture" };
+  }
+  if (!args.publicationApproved) return { eligible: false, reason: "publication_not_approved" };
+  const markets = new Set(args.decisions.map((decision) => decision.market));
+  if (args.decisions.length !== 3 || markets.size !== 3) {
+    return { eligible: false, reason: "incomplete_decision_set" };
+  }
+  const capturedAt = Date.parse(args.capturedAt);
+  const gameStartsAt = Date.parse(args.gameStartsAt);
+  const releasesAreCoherent =
+    new Set(args.decisions.map((decision) => decision.decisionRelease)).size === 1;
+  const tuplesAreCoherent = Number.isFinite(capturedAt) && Number.isFinite(gameStartsAt) &&
+    releasesAreCoherent && args.decisions.every((decision) =>
+      decision.providerGameId === args.providerGameId &&
+      decision.stage === "t60_locked" &&
+      decision.lockedAt !== null &&
+      Date.parse(decision.lockedAt) === capturedAt &&
+      Date.parse(decision.evaluatedAt) === capturedAt &&
+      Date.parse(decision.gameStartsAt) === gameStartsAt &&
+      Date.parse(decision.evaluatedQuote.observedAt) <= capturedAt);
+  if (!tuplesAreCoherent) return { eligible: false, reason: "incoherent_decision_tuple" };
+  try {
+    assertNflT60CaptureTiming({ lockedAt: args.capturedAt, gameStartsAt: args.gameStartsAt });
+  } catch {
+    return { eligible: false, reason: "late_or_invalid_t60_capture" };
+  }
+  const policy = footballTrackingEligibility({
+    seasonPhase: "regular",
+    modelApproved: true,
+    officialRegistryLaunched: args.officialRegistryLaunched,
+    predictionLocked: true,
+  });
+  if (!policy.eligible) return { eligible: false, reason: "official_tracking_not_started" };
+  return { eligible: true, reason: "eligible_regular_t60" };
+}
 
 export type NflEvaluatedTupleTrackingProposal = NflTrackingProposal & {
   tupleBoundaryRelease: typeof NFL_EVALUATED_TUPLE_TRACKING_BOUNDARY_RELEASE;
@@ -114,10 +188,9 @@ export function buildNflTrackingProposals(args: {
 }
 
 /**
- * Future production boundary: tracking rows must be written from the exact
- * T-60 decision tuples, never reconstructed from a later reader quote. The
- * current NFL model is not approved, so this function is intentionally not
- * called by the forward evidence writer.
+ * Production boundary: tracking rows must be written from the exact T-60
+ * decision tuples, never reconstructed from a later reader quote. The single
+ * leased NFL writer owns the call site once the Week 1 registry is launched.
  */
 export function buildNflTrackingProposalsFromEvaluatedDecisions(args: {
   snapshot: DailyEdgeResponse;

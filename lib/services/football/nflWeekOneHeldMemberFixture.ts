@@ -24,13 +24,16 @@ import {
   NFL_V1_OUTCOME_PROBABILITY_RELEASE,
   NFL_V1_WEEK_ONE_OUTCOME_ARTIFACT_RELEASE,
 } from "./nflV1WeekOneOutcome";
-import { NFL_V1_PRODUCTION_DECISION_RELEASE } from "./nflV1ProductionDecision";
+import {
+  NFL_V1_ACTIONABLE_GRADE_DECISION_RELEASE,
+  NFL_V1_ACTIONABLE_GRADE_MEMBER_RELEASE,
+} from "./nflV1ActionableGradeCandidate";
 
 export const NFL_WEEK_ONE_HELD_MEMBER_FIXTURE_RELEASE =
-  "nfl_week_one_member_fixture_2026_08_24_r4_grading_tiers" as const;
+  "nfl_week_one_member_fixture_2026_08_25_r7_actionable_grades" as const;
 
 const MODEL_RELEASE = NFL_V1_OUTCOME_MODEL_RELEASE;
-const DECISION_RELEASE = NFL_V1_PRODUCTION_DECISION_RELEASE;
+const DECISION_RELEASE = NFL_V1_ACTIONABLE_GRADE_DECISION_RELEASE;
 const HOLD_REASON = "This market is Held because its exact-price decision tuple is incomplete or its data health failed.";
 
 export type NflWeekOneHeldMemberFixture = FootballPreviewFixture & {
@@ -84,6 +87,7 @@ export function buildNflWeekOneHeldMemberFixture(
   const projectedQuarterbacks = latest.reduce((count, row) => count +
     Number(row.payload.startersAndDepth.away.starterStatus === "projected") +
     Number(row.payload.startersAndDepth.home.starterStatus === "projected"), 0);
+  const trackingEligibleGames = latest.filter((row) => row.payload.decisions.trackingEnabled).length;
   const label = `Regular Season Week ${firstPayload.week}`;
   const slateDate = localDate(games[0]!.gameStartAt!);
 
@@ -115,7 +119,7 @@ export function buildNflWeekOneHeldMemberFixture(
     provenance: {
       schedule: "BALLDONTLIE NFL games from the leased forward-evidence collector",
       odds: "BALLDONTLIE named-sportsbook two-sided current and operational Opening quotes",
-      results: "No preseason results; official regular-season tracking is not enabled in this member release",
+      results: "Preseason is excluded; official regular-season results append automatically from each valid immutable T-60 tuple",
       modelRelease: MODEL_RELEASE,
       decisionRelease: DECISION_RELEASE,
       sourceChecksum,
@@ -127,8 +131,10 @@ export function buildNflWeekOneHeldMemberFixture(
     },
     tracking: {
       seasonPhase: "regular",
-      trackingEligible: false,
-      reason: "Official NFL tracking is not enabled in this member release; forecasts and Bet grades remain separate from the public record.",
+      trackingEligible: trackingEligibleGames > 0,
+      reason: trackingEligibleGames > 0
+        ? `${trackingEligibleGames} game${trackingEligibleGames === 1 ? " has" : "s have"} reached the valid T-60 tracking boundary; unlocked games remain excluded until their own lock.`
+        : "Official NFL tracking begins separately for each game only after its valid immutable T-60 tuple; unlocked Week 1 decisions are not yet counted.",
     },
     coverage: {
       games: latest.length,
@@ -164,6 +170,12 @@ function latestCompleteRows(rows: NflForwardStoredEvidence[]): Array<NflForwardS
   }
   if (values.some((row) => !row.payload.decisions.publicationEnabled)) {
     throw new Error("NFL Week 1 member fixture requires publication-enabled evidence.");
+  }
+  if (values.some((row) =>
+    row.payload.decisions.modelPromotionStatus !== NFL_V1_ACTIONABLE_GRADE_MEMBER_RELEASE ||
+    row.payload.decisions.evaluatedBets.some((decision) =>
+      decision.decisionRelease !== NFL_V1_ACTIONABLE_GRADE_DECISION_RELEASE))) {
+    throw new Error("NFL Week 1 member fixture refuses a stale or mixed model/decision release.");
   }
   for (const row of values) {
     const { current, operationalOpening } = row.payload.market;
@@ -335,6 +347,8 @@ function buildHeldGame(row: NflForwardStoredEvidence & { payload: NflForwardEvid
     footballProjection: {
       awayWinProbability: outcome.awayWinProbability,
       homeWinProbability: outcome.homeWinProbability,
+      expectedAwayPoints: outcome.expectedAwayScore,
+      expectedHomePoints: outcome.expectedHomeScore,
       modelRelease: NFL_V1_OUTCOME_MODEL_RELEASE,
       distributionRelease: NFL_V1_OUTCOME_DISTRIBUTION_RELEASE,
       probabilityRelease: NFL_V1_OUTCOME_PROBABILITY_RELEASE,
@@ -440,15 +454,14 @@ function buildHeldMarket(input: HeldMarketInput): MarketEdgeDto {
     rawGrade: null,
     rawRecScore: null,
     capReasons: [
-      "nfl_model_writer_integration_pending",
-      "expected_quarterbacks_projected_not_confirmed",
-      "exact_price_decision_tuple_not_published",
+      "nfl_exact_price_decision_health_hold",
+      ...input.payload.coverage.healthHolds,
     ],
     finalGrade: null,
     finalRecScore: null,
     actionabilityLabel: "Held",
     displayReason: HOLD_REASON,
-    guidedGuide: `The real ${marketLabel} board is available, but OddSphere has not attached an authoritative model side or Bet grade to this exact price yet.`,
+    guidedGuide: `The real ${marketLabel} board is available, but the authoritative decision tuple is Held because required price, player, or data-health evidence is incomplete.`,
     guidedWatchOut: HOLD_REASON,
     whyLine: "The normal reader preserves verified market, split, quarterback, injury, and weather context while the model decision is held.",
     riskLine: HOLD_REASON,
@@ -492,8 +505,8 @@ function buildHeldMarket(input: HeldMarketInput): MarketEdgeDto {
     marketInterpretation: {
       chipLabel: "Bet grade held",
       chipTone: "gray",
-      flags: ["model_writer_pending", "projected_quarterbacks"],
-      detail: ["Verified two-sided prices, Opening movement, and public consensus are visible. They are not being presented as a model prediction."],
+      flags: ["decision_health_hold"],
+      detail: ["Verified two-sided prices, Opening movement, and public consensus remain visible while the affected exact-price decision fails closed."],
     },
     marketReadV2: null,
     marketReadV2Enabled: false,
@@ -599,11 +612,14 @@ function applyPublishedDecision(
     label: "current",
   }] : [];
   const selectedSplit = base.publicSplits.find((row) => row.side === selectedSide) ?? null;
+  const isBestAngle = decision.grade === "Best Angle";
   const isLean = decision.grade === "Lean";
   const isWatchlist = decision.grade === "Watchlist";
-  const actionability = isLean ? 62 : isWatchlist ? 45 : 32;
+  const actionability = isBestAngle ? 82 : isLean ? 62 : isWatchlist ? 45 : 32;
   const marketName = input.slot === "moneyline" ? "moneyline" : input.slot;
-  const copy = isLean
+  const copy = isBestAngle
+    ? `${selectedLabel} clears the validated NFL Best Angle policy at ${formatAmerican(decision.evaluatedQuote.price)} from ${decision.evaluatedQuote.sportsbook}: the exact-price value lane and independent football forecast agree at the strongest qualified tier.`
+    : isLean
     ? `${selectedLabel} clears the validated NFL market-led value policy at ${formatAmerican(decision.evaluatedQuote.price)} from ${decision.evaluatedQuote.sportsbook}, with positive expected value at the displayed value-model probability.`
     : isWatchlist
       ? `${selectedLabel} is inside the validated NFL monitoring lane at ${formatAmerican(decision.evaluatedQuote.price)} from ${decision.evaluatedQuote.sportsbook}, but it does not clear the exact-price Lean policy. Monitor only.`
@@ -612,28 +628,32 @@ function applyPublishedDecision(
     ...base,
     pick: selectedLabel,
     confidence: decision.modelProbability,
-    grade: isLean ? "model_only" : isWatchlist ? "market_watch" : null,
-    signalType: isLean ? "model_only" : null,
+    grade: isBestAngle ? "best_signal" : isLean ? "model_only" : isWatchlist ? "market_watch" : null,
+    signalType: isBestAngle ? "balanced" : isLean ? "model_only" : null,
     held: false,
-    verdict: isLean
+    verdict: isBestAngle
+      ? { key: "best_angle", label: "Best Angle" }
+      : isLean
       ? { key: "lean", label: "Lean" }
       : isWatchlist
         ? { key: "watchlist", label: "Watchlist" }
         : { key: "no_play", label: "No Play" },
-    rawGrade: isLean ? "model_only" : isWatchlist ? "market_watch" : null,
+    rawGrade: isBestAngle ? "best_signal" : isLean ? "model_only" : isWatchlist ? "market_watch" : null,
     rawRecScore: actionability,
     capReasons: [
-      isLean
-        ? "nfl_r6_exact_price_moneyline_lean"
+      isBestAngle
+        ? "nfl_r9_exact_price_moneyline_best_angle"
+        : isLean
+        ? `nfl_r9_exact_price_${marketName}_lean`
         : isWatchlist
           ? "nfl_moneyline_monitoring_lane"
           : "nfl_exact_price_policy_not_cleared",
       ...(input.payload.startersAndDepth.away.starterStatus !== "confirmed" ? ["away_expected_quarterback_projected"] : []),
       ...(input.payload.startersAndDepth.home.starterStatus !== "confirmed" ? ["home_expected_quarterback_projected"] : []),
     ],
-    finalGrade: isLean ? "model_only" : isWatchlist ? "market_watch" : null,
+    finalGrade: isBestAngle ? "best_signal" : isLean ? "model_only" : isWatchlist ? "market_watch" : null,
     finalRecScore: actionability,
-    actionabilityLabel: isLean ? "Lean" : isWatchlist ? "Watchlist" : "No Play",
+    actionabilityLabel: isBestAngle ? "Best Angle" : isLean ? "Lean" : isWatchlist ? "Watchlist" : "No Play",
     displayReason: copy,
     guidedGuide: copy,
     guidedWatchOut: "Early-week prices and expected starters continue to refresh until the immutable T-60 decision.",
@@ -641,7 +661,7 @@ function applyPublishedDecision(
     riskLine: "The outcome forecast and exact-price Bet grade are separate; projected quarterback status is visible uncertainty, not an automatic Hold.",
     modelProb: decision.modelProbability,
     marketFairProb: decision.marketFairProbability,
-    pinnacleEvPct: isLean ? decision.expectedValue * 100 : null,
+    pinnacleEvPct: isBestAngle || isLean ? decision.expectedValue * 100 : null,
     moneyPct: selectedSplit?.moneyPct ?? null,
     betsPct: selectedSplit?.betsPct ?? null,
     priceAmerican: decision.evaluatedQuote.price,

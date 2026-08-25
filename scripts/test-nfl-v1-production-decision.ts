@@ -24,11 +24,16 @@ const current = {
   spread: { awayLine: 3.5, homeLine: -3.5, awayPrice: -108, homePrice: -112 },
   total: { line: 44.5, overPrice: -115, underPrice: -105 },
 };
+const comparableCurrentBooks = [
+  current,
+  { ...structuredClone(current), sportsbook: "draftkings" },
+  { ...structuredClone(current), sportsbook: "caesars" },
+];
 const outcome = getNflV1WeekOneOutcomeForecast({ providerGameId, awayTeam, homeTeam });
 assert.ok(outcome.homeWinProbability > outcome.awayWinProbability);
 
 const aligned = buildNflV1ProductionDecisionBundle({
-  providerGameId, awayTeam, homeTeam, gameStartsAt, current,
+  providerGameId, awayTeam, homeTeam, gameStartsAt, current, comparableCurrentBooks,
   shadowMoneyline: shadow({ team: "SEA", side: "home", grade: "Lean", probability: 0.65, price: -180 }),
 });
 assert.equal(aligned.evaluatedBets.length, 3);
@@ -39,7 +44,7 @@ assert.equal(aligned.evaluatedBets.filter((decision) => decision.grade === "No P
 assert.equal(aligned.trackingEnabled, false);
 
 const opposed = buildNflV1ProductionDecisionBundle({
-  providerGameId, awayTeam, homeTeam, gameStartsAt, current,
+  providerGameId, awayTeam, homeTeam, gameStartsAt, current, comparableCurrentBooks,
   shadowMoneyline: shadow({ team: "NE", side: "away", grade: "Lean", probability: 0.55, price: 162 }),
 });
 const opposedMoneyline = opposed.evaluatedBets.find((decision) => decision.market === "moneyline")!;
@@ -49,7 +54,7 @@ assert.equal(opposedMoneyline.modelProbability, outcome.homeWinProbability);
 assert.equal(opposedMoneyline.evaluatedQuote.sportsbook, "fanduel");
 
 const nonqualifier = buildNflV1ProductionDecisionBundle({
-  providerGameId, awayTeam, homeTeam, gameStartsAt, current,
+  providerGameId, awayTeam, homeTeam, gameStartsAt, current, comparableCurrentBooks,
   shadowMoneyline: shadow({ team: "SEA", side: "home", grade: "Held", probability: 0.595, price: -180, expectedValue: -0.005, edgePp: -0.5 }),
 });
 assert.equal(nonqualifier.evaluatedBets.find((decision) => decision.market === "moneyline")?.grade, "Watchlist");
@@ -57,7 +62,7 @@ assert.equal(nonqualifier.evaluatedBets.every((decision) => decision.side.length
 assert.equal(nonqualifier.trackingEnabled, false);
 
 const outsideBoundary = buildNflV1ProductionDecisionBundle({
-  providerGameId, awayTeam, homeTeam, gameStartsAt, current,
+  providerGameId, awayTeam, homeTeam, gameStartsAt, current, comparableCurrentBooks,
   shadowMoneyline: shadow({ team: "SEA", side: "home", grade: "Held", probability: 0.57, price: -180, expectedValue: -0.03, edgePp: -3 }),
 });
 assert.equal(outsideBoundary.evaluatedBets.find((decision) => decision.market === "moneyline")?.grade, "No Play");
@@ -65,12 +70,52 @@ assert.equal(outsideBoundary.evaluatedBets.find((decision) => decision.market ==
 const unboundedPublicPrice = buildNflV1ProductionDecisionBundle({
   providerGameId, awayTeam, homeTeam, gameStartsAt,
   current: { ...current, moneyline: { awayPrice: 255, homePrice: -325 } },
+  comparableCurrentBooks,
   shadowMoneyline: shadow({ team: "NE", side: "away", grade: "Lean", probability: 0.55, price: 255 }),
 });
 assert.equal(unboundedPublicPrice.evaluatedBets.find((decision) => decision.market === "moneyline")?.grade, "No Play");
 
+const denCurrent = {
+  providerGameId: "1392231",
+  sportsbook: "fanduel",
+  observedAt: evaluatedAt,
+  moneyline: { awayPrice: 120, homePrice: -140 },
+  spread: { awayLine: 2.5, homeLine: -2.5, awayPrice: -104, homePrice: -116 },
+  total: { line: 43.5, overPrice: -102, underPrice: -118 },
+};
+const denComparable = [
+  denCurrent,
+  { ...structuredClone(denCurrent), sportsbook: "draftkings", spread: { ...denCurrent.spread, awayPrice: -110, homePrice: -110 }, total: { line: 42.5, overPrice: -113, underPrice: -107 } },
+  { ...structuredClone(denCurrent), sportsbook: "caesars", spread: { ...denCurrent.spread, awayPrice: -110, homePrice: -110 }, total: { line: 42.5, overPrice: -110, underPrice: -110 } },
+  { ...structuredClone(denCurrent), sportsbook: "betmgm", spread: { ...denCurrent.spread, awayPrice: -112, homePrice: -108 }, total: { line: 42.5, overPrice: -108, underPrice: -112 } },
+];
+const denWatchlist = buildNflV1ProductionDecisionBundle({
+  providerGameId: "1392231", awayTeam: "DEN", homeTeam: "KC", gameStartsAt, current: denCurrent,
+  comparableCurrentBooks: denComparable,
+  shadowMoneyline: { ...shadow({ team: "SEA", side: "home", grade: "Held", probability: 0.55, price: -140, expectedValue: -0.03, edgePp: -3 }), providerGameId: "1392231", team: "KC" },
+});
+const denSpread = denWatchlist.evaluatedBets.find((decision) => decision.market === "spread")!;
+const denTotal = denWatchlist.evaluatedBets.find((decision) => decision.market === "total")!;
+assert.equal(denSpread.grade, "Watchlist");
+assert.equal(denSpread.side, "DEN");
+assert.equal(denSpread.evaluatedQuote.sportsbook, "fanduel");
+assert.equal(denSpread.evaluatedQuote.line, 2.5);
+assert.equal(denSpread.evaluatedQuote.price, -104);
+assert.equal(denTotal.grade, "Watchlist");
+assert.equal(denTotal.side, "Under 42.5");
+assert.equal(denTotal.evaluatedQuote.sportsbook, "draftkings");
+assert.equal(denTotal.evaluatedQuote.price, -107);
+assert.ok(denTotal.modelProbability < 0.6533, "Under 42.5 must recompute probability instead of reusing Under 43.5");
+
+const missingSameLineConsensus = buildNflV1ProductionDecisionBundle({
+  providerGameId: "1392231", awayTeam: "DEN", homeTeam: "KC", gameStartsAt, current: denCurrent,
+  comparableCurrentBooks: denComparable.slice(0, 2),
+  shadowMoneyline: { ...shadow({ team: "SEA", side: "home", grade: "Held", probability: 0.55, price: -140, expectedValue: -0.03, edgePp: -3 }), providerGameId: "1392231", team: "KC" },
+});
+assert.equal(missingSameLineConsensus.evaluatedBets.length, 1);
+
 const trueHealthHold = buildNflV1ProductionDecisionBundle({
-  providerGameId, awayTeam, homeTeam, gameStartsAt, current,
+  providerGameId, awayTeam, homeTeam, gameStartsAt, current, comparableCurrentBooks,
   shadowMoneyline: {
     ...shadow({ team: "SEA", side: "home", grade: "Held", probability: 0.61, price: -180 }),
     health: { blockingReasons: ["injury_report_unavailable"], quarterbackReasons: [], contextReasons: [] },
