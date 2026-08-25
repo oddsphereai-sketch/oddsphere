@@ -281,6 +281,11 @@ export function planNflForwardEvidenceCaptures(args: {
 export function determineNflForwardCollectionNeed(args: {
   existing: NflForwardStoredEvidence[];
   now: string;
+  requiredPublicRelease?: {
+    memberRelease: string;
+    decisionRelease: string;
+    evaluatedBetCount: number;
+  };
 }): { collect: boolean; reason: string; cadenceMinutes: number | null } {
   const now = validTimestamp(args.now, "now");
   if (args.existing.length === 0) return { collect: true, reason: "opening_seed", cadenceMinutes: null };
@@ -289,6 +294,7 @@ export function determineNflForwardCollectionNeed(args: {
   const openings = args.existing.filter((row) => row.stage === "opening").length;
   if (openings < expected) return { collect: true, reason: "opening_incomplete", cadenceMinutes: null };
   const upcomingOutsideT60: number[] = [];
+  let publicReleaseRefreshDue = false;
   for (const rows of byGame.values()) {
     const latestRow = [...rows].sort((first, second) => Date.parse(second.capturedAt) - Date.parse(first.capturedAt))[0]!;
     const startsAt = validTimestamp(latestRow.gameStartAt, "stored gameStartAt");
@@ -297,9 +303,26 @@ export function determineNflForwardCollectionNeed(args: {
     if (now >= cutoff && !rows.some((row) => row.stage === "t60")) {
       return { collect: true, reason: "t60_due", cadenceMinutes: 15 };
     }
-    if (now < cutoff) upcomingOutsideT60.push(startsAt);
+    if (now < cutoff) {
+      upcomingOutsideT60.push(startsAt);
+      if (args.requiredPublicRelease) {
+        const decisions = latestRow.payload.decisions;
+        const evaluatedBets = decisions?.evaluatedBets ?? [];
+        if (!decisions ||
+            decisions.publicationEnabled !== true ||
+            decisions.modelPromotionStatus !== args.requiredPublicRelease.memberRelease ||
+            evaluatedBets.length !== args.requiredPublicRelease.evaluatedBetCount ||
+            evaluatedBets.some((decision) =>
+              decision.decisionRelease !== args.requiredPublicRelease!.decisionRelease)) {
+          publicReleaseRefreshDue = true;
+        }
+      }
+    }
   }
   if (upcomingOutsideT60.length === 0) return { collect: false, reason: "no_unlocked_games_due", cadenceMinutes: null };
+  if (publicReleaseRefreshDue) {
+    return { collect: true, reason: "public_release_refresh_due", cadenceMinutes: 0 };
+  }
   const nextStart = Math.min(...upcomingOutsideT60);
   const cadenceMinutes = nextStart - now <= 48 * 60 * 60_000 ? 60 : 360;
   const latest = Math.max(...args.existing.map((row) => validTimestamp(row.capturedAt, "stored capturedAt")));
