@@ -167,13 +167,17 @@ check(
     soccerCronSource.includes("OFF-SEASON (2026-07-20)"),
 );
 check(
-  "hourly tracking includes active EPL and NFL settlement and keeps the manual override",
-  trackingCronSource.includes('const DEFAULT_SPORTS: Sport[] = ["mlb", "nba", "nhl", "wnba", "soccer", "nfl"]') &&
+  "hourly tracking includes active EPL, NFL, and CFB settlement and keeps the manual override",
+  trackingCronSource.includes('const DEFAULT_SPORTS: Sport[] = ["mlb", "nba", "nhl", "wnba", "soccer", "nfl", "cfb"]') &&
     trackingCronSource.includes("overrideSport") && trackingCronSource.includes("[overrideSport]"),
 );
 check(
   "NFL grading excludes records that never reached the persisted T-60 lock boundary",
-  gradingSource.includes('if (sport === "nfl") recordsQuery = recordsQuery.not("locked_at", "is", null)'),
+  gradingSource.includes('if (sport === "nfl" || sport === "cfb") recordsQuery = recordsQuery.not("locked_at", "is", null)'),
+);
+check(
+  "CFB grading shares the persisted T-60 lock boundary",
+  gradingSource.includes('if (sport === "nfl" || sport === "cfb") recordsQuery = recordsQuery.not("locked_at", "is", null)'),
 );
 check(
   "hourly tracking runs outside the :05 slate-cycle and :13 lineup-watch lease windows",

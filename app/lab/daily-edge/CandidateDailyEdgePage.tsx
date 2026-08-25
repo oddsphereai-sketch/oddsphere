@@ -49,7 +49,9 @@ export default async function CandidateDailyEdgePage({
   const eplRequested = competition === "premier_league";
   const eplEnabled = process.env.PREMIER_LEAGUE_DAILY_EDGE_ENABLED === "true";
   const nflRequested = sport === "nfl";
+  const cfbRequested = sport === "cfb";
   const nflEnabled = nflRequested && isNflDailyEdgeEnabled();
+  const cfbEnabled = cfbRequested && process.env.CFB_DAILY_EDGE_ENABLED === "true";
   const nflWeekOneEvidenceEnabled = nflEnabled && isNflWeekOneEvidenceBoardEnabled();
   const nflWeekOneHeldFixture = !nflWeekOneEvidenceEnabled
     ? null
@@ -71,10 +73,26 @@ export default async function CandidateDailyEdgePage({
     : process.env.NODE_ENV !== "production"
       ? await (await import("@/lib/services/football/nflMemberSnapshotStore")).readCurrentNflMemberSnapshot()
       : null;
+  const cfbFixture = !cfbEnabled
+    ? null
+    : await Promise.all([
+        import("@/lib/db/supabase"),
+        import("@/lib/services/football/cfbMemberFixture"),
+      ])
+        .then(([{ supabase }, { readCurrentCfbMemberFixture }]) =>
+          readCurrentCfbMemberFixture({
+            client: supabase,
+            season: Number(process.env.CFB_FORWARD_SEASON ?? "2026"),
+          }))
+        .catch(() => null);
   let snapshot: DailyEdgeResponse;
   if (nflFixture) {
     snapshot = nflFixture.snapshot;
+  } else if (cfbFixture) {
+    snapshot = cfbFixture.snapshot;
   } else if (nflRequested) {
+    snapshot = emptyPreviewSnapshot(sport);
+  } else if (cfbRequested) {
     snapshot = emptyPreviewSnapshot(sport);
   } else if (eplRequested && eplEnabled) {
     snapshot = await (await import("@/lib/services/epl/eplMemberSnapshotStore"))
@@ -89,6 +107,8 @@ export default async function CandidateDailyEdgePage({
   const weeklySourceGameCount = snapshot.games.length;
   if (nflFixture) {
     snapshot = filterWeeklyReaderSnapshot(snapshot, "nfl");
+  } else if (cfbFixture) {
+    snapshot = filterWeeklyReaderSnapshot(snapshot, "cfb");
   } else if (eplRequested && eplEnabled) {
     snapshot = filterWeeklyReaderSnapshot(snapshot, "soccer");
   }
@@ -100,8 +120,8 @@ export default async function CandidateDailyEdgePage({
         }),
       )
     : undefined;
-  const [history, pitcherFirstInningHistory] = nflFixture
-    ? [nflFixture.history, {}]
+  const [history, pitcherFirstInningHistory] = nflFixture || cfbFixture
+    ? [(nflFixture ?? cfbFixture)!.history, {}]
     : await Promise.all([
         loadTeamHistory(snapshot, sport),
         loadPitcherFirstInningHistory(snapshot, sport),
@@ -126,8 +146,8 @@ export default async function CandidateDailyEdgePage({
             : competition === "world_cup"
               ? { active: "world_cup", label: "World Cup" }
               : undefined}
-        activePreviewSports={nflFixture || nflWeekOneEvidenceEnabled ? ["nfl"] : []}
-        sportSwitchDestinations={nflFixture || nflWeekOneEvidenceEnabled ? NFL_SPORT_SWITCH_DESTINATIONS : undefined}
+        activePreviewSports={nflFixture || nflWeekOneEvidenceEnabled ? ["nfl"] : cfbFixture || cfbEnabled ? ["cfb"] : []}
+        sportSwitchDestinations={nflFixture || nflWeekOneEvidenceEnabled || cfbFixture || cfbEnabled ? NFL_SPORT_SWITCH_DESTINATIONS : undefined}
         weeklySlate={nflFixture
           ? {
               label: `NFL · ${nflFixture.week.label} · ${snapshot.games.length} games · ${snapshot.games.length * 3} predictions · ${"heldMemberFixtureRelease" in nflFixture ? "live predictions and exact-price Bet grades" : nflFixture.tracking.seasonPhase === "preseason" ? "preseason is excluded from official tracking" : "tracking begins only with an approved pre-kickoff lock"}`,
@@ -141,6 +161,25 @@ export default async function CandidateDailyEdgePage({
             ? {
                 label: "NFL · Regular Season Week 1 · evidence temporarily unavailable · model validation hold",
                 evidence: "The stale preseason package is retired from the member reader. Week 1 evidence could not be verified for this request, so the board fails closed instead of restoring an older slate.",
+                previousHref: null,
+                nextHref: null,
+                displayGameCount: 0,
+                asOf: snapshot.as_of,
+                cadenceLabel: "six-hour early evidence · hourly inside 48h · 15-minute T-60 checks",
+              }
+          : cfbFixture
+            ? {
+                label: `CFB · ${cfbFixture.week.label} · ${snapshot.games.length} games · ${snapshot.games.length * 3} predictions · live model and exact-price Bet grades`,
+                evidence: `Captured ${new Date(cfbFixture.capturedAt).toLocaleString("en-US", { timeZone: "America/New_York" })} ET · BALLDONTLIE schedule, named-book odds and active QB rosters · ${cfbFixture.provenance.openingCoverageGames}/${weeklySourceGameCount} operational Opening trails · ${cfbFixture.provenance.splitCoverageGames}/${weeklySourceGameCount} Playbook public-consensus split sets · independent joint-score forecasts · exact-price Best Angle/Lean/Watchlist/No Play grades · immutable per-game T-60 tracking`,
+                previousHref: null,
+                nextHref: null,
+                asOf: snapshot.as_of,
+                cadenceLabel: "six-hour early evidence · hourly inside 48h · 15-minute T-60 checks",
+              }
+          : cfbEnabled
+            ? {
+                label: "CFB · Opening Week · evidence temporarily unavailable",
+                evidence: "The member board fails closed when the authoritative CFB evidence package is unavailable; no stale or fabricated slate is substituted.",
                 previousHref: null,
                 nextHref: null,
                 displayGameCount: 0,

@@ -273,18 +273,16 @@ check(
     candidateDailyEdgeSource.includes('label: "World Cup"'),
 );
 check(
-  "all active models lead the top-level pill bar and NFL is active",
-  DAILY_EDGE_TOP_LEVEL_SPORT_KEYS.slice(0, 4).join(",") === "mlb,wnba,soccer,nfl" &&
+  "all active models lead the top-level pill bar and both football models are active",
+  DAILY_EDGE_TOP_LEVEL_SPORT_KEYS.slice(0, 5).join(",") === "mlb,wnba,soccer,nfl,cfb" &&
     DAILY_EDGE_SPORT_AVAILABILITY.nfl?.isLive === true &&
-    DAILY_EDGE_SPORT_AVAILABILITY.nfl?.statusLabel === "Active",
+    DAILY_EDGE_SPORT_AVAILABILITY.nfl?.statusLabel === "Active" &&
+    DAILY_EDGE_SPORT_AVAILABILITY.cfb?.isLive === true &&
+    DAILY_EDGE_SPORT_AVAILABILITY.cfb?.statusLabel === "Active",
 );
 check(
-  "planned football and basketball models remain visible but unavailable",
-  ["cfb", "cbb"].every(
-    (key) =>
-      DAILY_EDGE_SPORTS.find((definition) => definition.key === key)
-        ?.memberAvailable === false,
-  ),
+  "planned college basketball remains visible but unavailable",
+  DAILY_EDGE_SPORTS.find((definition) => definition.key === "cbb")?.memberAvailable === false,
 );
 
 console.log("\n━━━ Weekly member-board lifecycle ━━━");
@@ -292,7 +290,7 @@ const thursdayKickoff = { gameStartAt: "2026-08-21T00:00:00.000Z" };
 const fridayKickoff = { gameStartAt: "2026-08-22T00:00:00.000Z" };
 check(
   "the weekly reader lifecycle is explicitly released",
-  DAILY_EDGE_WEEKLY_READER_LIFECYCLE_RELEASE === "daily_edge_weekly_reader_lifecycle_2026_08_24_r2",
+  DAILY_EDGE_WEEKLY_READER_LIFECYCLE_RELEASE === "daily_edge_weekly_reader_lifecycle_2026_08_25_r3_cfb",
 );
 check(
   "an NFL game stays visible throughout its Eastern game date",
@@ -301,6 +299,11 @@ check(
 check(
   "an NFL game rolls off when Friday begins in the East",
   !weeklyReaderGameIsVisible(thursdayKickoff, "nfl", new Date("2026-08-21T04:00:00.000Z")),
+);
+check(
+  "a CFB game follows the same Eastern weekly rolloff contract",
+  weeklyReaderGameIsVisible(thursdayKickoff, "cfb", new Date("2026-08-21T03:59:59.000Z")) &&
+    !weeklyReaderGameIsVisible(thursdayKickoff, "cfb", new Date("2026-08-21T04:00:00.000Z")),
 );
 check(
   "the EPL reader retains its existing 2 a.m. Eastern rollover",

@@ -90,6 +90,10 @@
       "schedule": "6,21,36,51 * * * *"
     },
     {
+      "path": "/api/cron/cfb-forward-evidence",
+      "schedule": "9,24,39,54 * * * *"
+    },
+    {
       "path": "/api/cron/tracking-refresh",
       "schedule": "33 * * * *"
     },

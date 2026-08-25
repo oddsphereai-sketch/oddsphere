@@ -59,7 +59,7 @@ import type { TrackedMarketV17 } from "../types/domain/Tracking";
  * is the intended pipeline. They show up on the public tracking page.
  *
  * Empty arrays for sports that have NOT YET been launched as tracked
- * categories (CBB, CFB, UCL). Adding a market to an empty array
+ * categories (CBB, UCL). Adding a market to an empty array
  * is a product launch decision.
  */
 export const OFFICIAL_TRACKING_MARKETS: Readonly<
@@ -73,7 +73,9 @@ export const OFFICIAL_TRACKING_MARKETS: Readonly<
   // future-dated public tracking boundary.
   nfl: ["moneyline", "total", "spread"],
   cbb: [],
-  cfb: [],
+  // CFB launches forward-only with its independent joint-score model and
+  // exact-price decision tuples across all three standard football markets.
+  cfb: ["moneyline", "total", "spread"],
   ucl: [],
   // 2026-06-11 — WC-1: soccer launches with 3-way result, total goals
   // (canonical 2.5), BTTS, and double_chance. "moneyline" deliberately

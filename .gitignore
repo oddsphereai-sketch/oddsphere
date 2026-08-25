@@ -53,3 +53,4 @@ wnba-research/*.jsonl
 wnba-research/*.log
 tmp/mlb-props/provider-samples/
 tmp/mlb-props/reports/
+scripts/operator/__pycache__/
