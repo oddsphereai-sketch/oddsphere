@@ -1,5 +1,7 @@
 import { isDisplayableAmericanOdds } from "../streaming/oddsSanity";
 
+// The audit intentionally accepts multiple sport DTOs at a read-only boundary.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Row = Record<string, any>;
 
 export type DailyEdgeAuditSeverity = "critical" | "warning";
@@ -138,7 +140,10 @@ function priceDirection(open: number | null, current: number | null): Direction 
   if (Math.abs(current - open) < 5) return "neutral";
   const a = implied(open);
   const b = implied(current);
-  if (a === null || b === null || Math.abs(b - a) < 0.01) return "neutral";
+  // Match the member reader's material-movement threshold. Smaller price
+  // changes remain visible as effectively flat and must not become a deep-
+  // audit contradiction solely because two surfaces used different cutoffs.
+  if (a === null || b === null || Math.abs(b - a) < 0.0125) return "neutral";
   return b > a ? "support" : "resistance";
 }
 
@@ -155,7 +160,7 @@ function pointDirection(slot: string, pick: string | null, prev: number | null, 
   return "neutral";
 }
 
-function visibleDirection(sport: string, slot: string, market: Row): Direction {
+function visibleDirection(sport: string, slot: string, market: Row, locked: boolean): Direction {
   const lineDir = pointDirection(
     marketLabel(sport, slot),
     market.pick ?? null,
@@ -163,23 +168,27 @@ function visibleDirection(sport: string, slot: string, market: Row): Direction {
     n(market.lastMoveLineNext),
   );
   if (lineDir !== "neutral") return lineDir;
-  return priceDirection(effectiveOpenAmerican(market), effectiveTerminalAmerican(market));
+  return priceDirection(effectiveOpenAmerican(market), effectiveTerminalAmerican(market, locked));
 }
 
-function hasVisibleMovement(sport: string, slot: string, market: Row): boolean {
-  return visibleDirection(sport, slot, market) !== "neutral" ||
+function hasVisibleMovement(sport: string, slot: string, market: Row, locked: boolean): boolean {
+  return visibleDirection(sport, slot, market, locked) !== "neutral" ||
     (n(market.lastMovePrevAmerican) !== null && n(market.lastMoveNextAmerican) !== null);
 }
 
 function effectiveOpenAmerican(market: Row): number | null {
-  return n(market.lineOpenAmerican) ??
+  const visibleTrail = Array.isArray(market.oddsTrail) ? market.oddsTrail as Row[] : [];
+  const visibleFirst = visibleTrail.find((stop) => stop.label === "open" || stop.label === "first") ?? null;
+  return n(visibleFirst?.american) ??
+    n(market.lineOpenAmerican) ??
     n(market.oddspherePostedAmerican) ??
     n(market.marketReadV2?.movement?.firstTrackedPrice);
 }
 
-function effectiveTerminalAmerican(market: Row): number | null {
-  return n(market.priceAmerican) ??
-    n(market.lockedLineAmerican) ??
+function effectiveTerminalAmerican(market: Row, locked: boolean): number | null {
+  return locked
+    ? n(market.lockedLineAmerican) ?? n(market.priceAmerican) ?? n(market.marketReadV2?.movement?.currentPrice)
+    : n(market.currentPriceAmerican) ?? n(market.priceAmerican) ??
     n(market.marketReadV2?.movement?.currentPrice);
 }
 
@@ -303,7 +312,8 @@ export function auditDailyEdgeBoards(
           }
         }
 
-        const terminalPrice = effectiveTerminalAmerican(market);
+        const locked = game.lockState === "locked";
+        const terminalPrice = effectiveTerminalAmerican(market, locked);
         const nonActionableNoPlay =
           market.verdict?.key === "no_play" &&
           (market.recommendationConfidence === null || market.pick === "Toss-Up");
@@ -324,9 +334,10 @@ export function auditDailyEdgeBoards(
           push("source_chain_previous_not_current", sport, game, slot, market, { previous: prev, moveNext, current });
         }
 
-        const readDir = readDirection(read?.label);
-        const visibleDir = visibleDirection(sport, slot, market);
-        if (readDir !== "neutral" && !hasVisibleMovement(sport, slot, market)) {
+        const evidenceLimited = market.evidenceCoherence?.status === "limited";
+        const readDir = evidenceLimited ? "neutral" : readDirection(read?.label);
+        const visibleDir = evidenceLimited ? "neutral" : visibleDirection(sport, slot, market, locked);
+        if (readDir !== "neutral" && !hasVisibleMovement(sport, slot, market, locked)) {
           push("directional_read_without_visible_move", sport, game, slot, market, {
             readLabel: read?.label ?? null,
             explanation: read?.explanation ?? null,
