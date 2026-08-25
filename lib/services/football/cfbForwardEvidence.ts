@@ -5,7 +5,7 @@ import type { CfbV1DecisionBundle, CfbV1Forecast } from "./cfbV1Decision";
 export const CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE =
   "cfb_forward_evidence_snapshot_2026_08_25_r1" as const;
 export const CFB_FORWARD_EVIDENCE_COLLECTOR_RELEASE =
-  "cfb_forward_evidence_collector_2026_08_25_r1" as const;
+  "cfb_forward_evidence_collector_2026_08_25_r2_team_scoped_qb" as const;
 export const CFB_FORWARD_MEMBER_RELEASE =
   "cfb_v1_member_release_2026_08_25_r1" as const;
 
