@@ -38,6 +38,7 @@ import {
   ML_MARKET_DIVERGENCE_LEAN_RULE_ID,
   ML_MARKET_DIVERGENCE_MIN_MODEL_PROB,
   ML_SIGNED_MARKET_RESISTANCE_RULE_ID,
+  ML_COHERENT_NEAR_EDGE_WATCHLIST_RULE_ID,
   ML_STRONG_WINNER_RESISTANCE_LEAN_RULE_ID,
   ML_SHARP_PORTFOLIO_LEAN_RULE_ID,
   ML_MARKET_LED_MOVEMENT_LEAN_RULE_ID,
@@ -50,6 +51,7 @@ import {
   resolveMlMidPriceNearMarketLean,
   resolveMlMarketDivergenceLean,
   resolveMlSignedMarketResistance,
+  resolveMlCoherentNearEdgeWatchlist,
   resolveMlTightMarketPriceBestAngle,
   resolveMlbMarketAwareSideCorrection,
   resolveMlbMoneylineMarketContextSidePolicy,
@@ -232,6 +234,56 @@ check(
     pickedBetsPct: 60,
     pickedMoneyPct: 40,
   }).standDown === false,
+);
+
+console.log("\n━━━ MLB coherent near-edge Watchlist resolver ━━━");
+const coherentWatchlistBase = {
+  blocked: false,
+  side: "home",
+  modelProbability: 0.5347,
+  oddsAmerican: -119,
+  sameSideProjectionGap: 0.4,
+  lineDirection: "neutral" as const,
+  movementMagnitudePp: 0.21,
+  publicSplitConflict: false,
+};
+const coherentWatchlist = resolveMlCoherentNearEdgeWatchlist(coherentWatchlistBase);
+check(
+  "complete near-edge signed-resistance row becomes monitor-only Watchlist",
+  coherentWatchlist.watchlist === true &&
+    coherentWatchlist.reason === ML_COHERENT_NEAR_EDGE_WATCHLIST_RULE_ID &&
+    coherentWatchlist.expectedValue !== null && coherentWatchlist.expectedValue < 0,
+);
+check(
+  "Watchlist rejects exact-price EV below the frozen -3 percent boundary",
+  resolveMlCoherentNearEdgeWatchlist({
+    ...coherentWatchlistBase,
+    modelProbability: 0.50,
+    oddsAmerican: -120,
+  }).watchlist === false,
+);
+check(
+  "Watchlist rejects adverse movement outside the perturbation-stable cushion",
+  resolveMlCoherentNearEdgeWatchlist({
+    ...coherentWatchlistBase,
+    lineDirection: "against_pick",
+    movementMagnitudePp: 0.76,
+  }).watchlist === false,
+);
+check(
+  "Watchlist cannot bypass data, side-correction, or integrity blocks",
+  resolveMlCoherentNearEdgeWatchlist({ ...coherentWatchlistBase, blocked: true }).watchlist === false,
+);
+check(
+  "Watchlist rejects projection disagreement and public conflict",
+  resolveMlCoherentNearEdgeWatchlist({
+    ...coherentWatchlistBase,
+    sameSideProjectionGap: -0.01,
+  }).watchlist === false &&
+    resolveMlCoherentNearEdgeWatchlist({
+      ...coherentWatchlistBase,
+      publicSplitConflict: true,
+    }).watchlist === false,
 );
 
 console.log("\n━━━ MLB Total split-signal correction precedence ━━━");
@@ -1207,10 +1259,27 @@ console.log("\n━━━ MLB market-divergence Lean integration ━━━");
   });
   const resistedMl = resistanceRecords.find((record) => record.market === "moneyline")!;
   const resistanceAudit = (resistedMl.snapshot_json as any)?.ml_signed_market_resistance_standdown;
-  check("signed market resistance stands down the unchanged original side", resistedMl.pick === "home" && resistedMl.no_bet === true);
+  const resistedWatchlist = (resistedMl.snapshot_json as any)?.ml_coherent_near_edge_watchlist;
+  check(
+    "bounded signed resistance keeps the unchanged original side as nonactionable Watchlist",
+    resistedMl.pick === "home"
+      && resistedMl.no_bet === false
+      && resistedMl.play_grade === "market_aligned"
+      && resistedMl.best_angle === false
+      && (resistedMl.snapshot_json as any)?.decision_pipeline?.board_action === "no_play"
+      && (resistedMl.snapshot_json as any)?.decision_pipeline?.actionable_grade === null,
+  );
   check("signed market resistance never enters a flip path", (resistedMl.snapshot_json as any)?.decision_pipeline?.final_side_changed === false);
   check("signed market resistance audit is stamped", resistanceAudit?.rule_id === ML_SIGNED_MARKET_RESISTANCE_RULE_ID);
   check("signed market resistance records its validated SharpAPI provider", resistanceAudit?.split_provider === "sharpapi");
+  check(
+    "near-edge Watchlist audit preserves the resistance reason without creating an action",
+    resistedWatchlist?.rule_id === ML_COHERENT_NEAR_EDGE_WATCHLIST_RULE_ID
+      && resistedWatchlist?.action === "monitor_only"
+      && resistedWatchlist?.actionable === false
+      && resistanceAudit?.effective_action === "monitor_as_watchlist"
+      && resistedWatchlist?.original_stand_down_reason?.includes(ML_SIGNED_MARKET_RESISTANCE_RULE_ID),
+  );
 
   const strongWinnerPred = {
     ...marketDivergencePred,

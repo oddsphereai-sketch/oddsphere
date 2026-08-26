@@ -446,6 +446,15 @@ export const ML_STRONG_WINNER_RESISTANCE_LEAN_RULE_ID =
 export const ML_STRONG_WINNER_RESISTANCE_MIN_MODEL_PROBABILITY = 0.60;
 export const ML_STRONG_WINNER_RESISTANCE_MIN_ODDS = -300;
 export const ML_STRONG_WINNER_RESISTANCE_MAX_ODDS = 200;
+export const ML_COHERENT_NEAR_EDGE_WATCHLIST_RULE_ID =
+  "ml_coherent_near_edge_watchlist_v1_2026_08_26";
+export const ML_COHERENT_NEAR_EDGE_WATCHLIST_MIN_MODEL_PROBABILITY = 0.50;
+export const ML_COHERENT_NEAR_EDGE_WATCHLIST_MIN_ODDS = -300;
+export const ML_COHERENT_NEAR_EDGE_WATCHLIST_MAX_ODDS = 200;
+export const ML_COHERENT_NEAR_EDGE_WATCHLIST_MIN_EV = -0.03;
+// The public boundary is 1.0pp. The frozen audit requires a +/-0.25pp
+// perturbation cushion, so production eligibility stops at 0.75pp.
+export const ML_COHERENT_NEAR_EDGE_WATCHLIST_MAX_ADVERSE_MOVEMENT_PP = 0.75;
 export const ML_SHARP_PORTFOLIO_LEAN_RULE_ID =
   "ml_sharp_portfolio_top1_lean_v2_selected_side_floor_2026_08_11";
 export const ML_SHARP_PORTFOLIO_MIN_MODEL_PROB = 0.50;
@@ -2216,6 +2225,61 @@ export function resolveMlStrongWinnerResistanceLean(args: {
 }
 
 /**
+ * Preserve a truthful, nonactionable monitoring rung when the complete
+ * exact-price tuple misses action only on bounded signed resistance or a
+ * small same-book adverse move. This resolver can never create a bet: the
+ * decision pipeline remains `no_play`, actionable_grade stays null, and the
+ * exact resistance/movement reason remains in the audit snapshot.
+ */
+export function resolveMlCoherentNearEdgeWatchlist(args: {
+  blocked: boolean;
+  side: string | null;
+  modelProbability: number | null;
+  oddsAmerican: number | null;
+  sameSideProjectionGap: number | null;
+  lineDirection: MlbGradeLineDirection;
+  movementMagnitudePp: number | null;
+  publicSplitConflict: boolean;
+}): {
+  watchlist: boolean;
+  expectedValue: number | null;
+  reason: string | null;
+} {
+  const payout = args.oddsAmerican === null
+    ? null
+    : args.oddsAmerican > 0
+      ? args.oddsAmerican / 100
+      : 100 / Math.abs(args.oddsAmerican);
+  const expectedValue =
+    args.modelProbability === null || payout === null
+      ? null
+      : args.modelProbability * payout - (1 - args.modelProbability);
+  const adverseMovementPp = args.lineDirection === "against_pick"
+    ? args.movementMagnitudePp
+    : 0;
+  const watchlist =
+    !args.blocked &&
+    (args.side === "home" || args.side === "away") &&
+    args.modelProbability !== null &&
+    args.modelProbability >= ML_COHERENT_NEAR_EDGE_WATCHLIST_MIN_MODEL_PROBABILITY &&
+    args.oddsAmerican !== null &&
+    args.oddsAmerican >= ML_COHERENT_NEAR_EDGE_WATCHLIST_MIN_ODDS &&
+    args.oddsAmerican <= ML_COHERENT_NEAR_EDGE_WATCHLIST_MAX_ODDS &&
+    expectedValue !== null &&
+    expectedValue >= ML_COHERENT_NEAR_EDGE_WATCHLIST_MIN_EV &&
+    args.sameSideProjectionGap !== null &&
+    args.sameSideProjectionGap >= 0 &&
+    adverseMovementPp !== null &&
+    adverseMovementPp <= ML_COHERENT_NEAR_EDGE_WATCHLIST_MAX_ADVERSE_MOVEMENT_PP &&
+    !args.publicSplitConflict;
+  return {
+    watchlist,
+    expectedValue,
+    reason: watchlist ? ML_COHERENT_NEAR_EDGE_WATCHLIST_RULE_ID : null,
+  };
+}
+
+/**
  * A public Lean is allowed when the selected Moneyline side remains a strong,
  * projection-coherent winner candidate and the exact offered price is close
  * enough to its calibrated probability. Market evidence modifies the tier:
@@ -3273,6 +3337,29 @@ function buildMlRecord(
     mlChampionCorrectionReasons.length > 0
       ? `champion_candidate_ml_stand_down: ${mlChampionCorrectionReasons.join(", ")}`
       : null;
+  const mlWatchlistCorrectionEligible =
+    mlChampionCorrectionReasons.length > 0 &&
+    mlChampionCorrectionReasons.every((reason) =>
+      reason === ML_SIGNED_MARKET_RESISTANCE_RULE_ID ||
+      reason === "line_movement_against_pick"
+    );
+  const mlCoherentNearEdgeWatchlist = resolveMlCoherentNearEdgeWatchlist({
+    blocked:
+      !mlWatchlistCorrectionEligible ||
+      !mlChampionGuardApplies ||
+      mlProjectionConflict ||
+      readBoolish(v22.ml_requires_market_confirmation) ||
+      readBoolish(v22.ml_distance_cap_applied) ||
+      readBoolish(sp.v2_provisional) ||
+      mlDataIncompleteForMoneyline,
+    side: finalMlPick,
+    modelProbability: finalMlModelProb,
+    oddsAmerican: finalMlOdds,
+    sameSideProjectionGap: mlSameSideProjectionGap,
+    lineDirection: finalMlLineDirection,
+    movementMagnitudePp: readNumberOrNull(finalMlLineMovement?.magnitude_pp),
+    publicSplitConflict: finalMlPublicSplitConflict,
+  });
   const mlNoBetReason = readStringOrNull(sp.ml_no_bet_reason);
   const mlInversionGrade = resolveMlInversionPublicGrade({
     inversionTriggered: mlFlipped,
@@ -3290,7 +3377,7 @@ function buildMlRecord(
     !mlMarketSideCorrected &&
     !mlInversionGrade.actionable;
   const mlNoBet =
-    mlChampionStandDownReason !== null ||
+    (mlChampionStandDownReason !== null && !mlCoherentNearEdgeWatchlist.watchlist) ||
     mlInversionGradeBlocked ||
     (!mlFlipped && !mlPickCalibrated && !mlMarketSideCorrected && isExplicitNoBetReason(mlNoBetReason));
   const finalMlNoBetReason = mlNoBet
@@ -3489,11 +3576,13 @@ function buildMlRecord(
     modelProbability: finalMlModelProb,
     oddsAmerican: finalMlOdds,
   });
-  const mlChampionPublicPlayGrade = mlChampionAction.promoted
-    ? "lean"
-    : mlChampionAction.demoted
-      ? null
-      : trackedMlPublicPlayGrade;
+  const mlChampionPublicPlayGrade = mlCoherentNearEdgeWatchlist.watchlist
+    ? "market_aligned"
+    : mlChampionAction.promoted
+      ? "lean"
+      : mlChampionAction.demoted
+        ? null
+        : trackedMlPublicPlayGrade;
   const mlFinalBestAngle = mlChampionAction.actionable && trackedMlBestAngle;
   const mlFinalActionRuleId = mlTrueInversionActionable
     ? ML_INVERSION_GRADE_RULE_ID
@@ -3553,6 +3642,8 @@ function buildMlRecord(
       ? "lean"
       : mlMarketSideCorrected
       ? mlMarketAwareCorrectedGrade?.playGrade ?? "market_aligned"
+      : mlCoherentNearEdgeWatchlist.watchlist
+        ? "market_aligned"
       : mlFlipped || mlPickCalibrated || mlChampionStandDownReason !== null
         ? null
         : mlChampionPublicPlayGrade,
@@ -3694,6 +3785,31 @@ function buildMlRecord(
         validation_note:
           "MLB recalibration through 2026-07-19: recently graded market-aware corrected Moneyline Best Angles went 4-4, so v4 caps every corrected Moneyline at Market Aligned. The replacement clean tight-market-price cohort replayed 31-9 across three chronological windows.",
       },
+      ml_coherent_near_edge_watchlist: mlCoherentNearEdgeWatchlist.watchlist
+        ? {
+            rule_id: ML_COHERENT_NEAR_EDGE_WATCHLIST_RULE_ID,
+            action: "monitor_only",
+            actionable: false,
+            expected_value: mlCoherentNearEdgeWatchlist.expectedValue,
+            minimum_expected_value: ML_COHERENT_NEAR_EDGE_WATCHLIST_MIN_EV,
+            model_probability: finalMlModelProb,
+            minimum_model_probability:
+              ML_COHERENT_NEAR_EDGE_WATCHLIST_MIN_MODEL_PROBABILITY,
+            odds_american: finalMlOdds,
+            price_range: [
+              ML_COHERENT_NEAR_EDGE_WATCHLIST_MIN_ODDS,
+              ML_COHERENT_NEAR_EDGE_WATCHLIST_MAX_ODDS,
+            ],
+            same_side_projection_gap: mlSameSideProjectionGap,
+            line_direction: finalMlLineDirection,
+            movement_magnitude_pp: readNumberOrNull(finalMlLineMovement?.magnitude_pp),
+            maximum_adverse_movement_pp:
+              ML_COHERENT_NEAR_EDGE_WATCHLIST_MAX_ADVERSE_MOVEMENT_PP,
+            public_split_conflict: finalMlPublicSplitConflict,
+            signed_market_resistance: mlSignedMarketResistance.standDown,
+            original_stand_down_reason: mlChampionStandDownReason,
+          }
+        : null,
       ml_confidence_value_context_lean: mlConfidenceValueContextLean.lean
         ? {
             rule_id: MLB_ML_CONFIDENCE_VALUE_CONTEXT_LEAN_RULE_ID,
@@ -3759,11 +3875,14 @@ function buildMlRecord(
             final_side: finalMlPick,
             final_side_changed: mlFinalSideChanged,
             strong_winner_exception_applied: mlStrongWinnerResistanceLean.lean,
+            coherent_near_edge_watchlist_applied: mlCoherentNearEdgeWatchlist.watchlist,
             effective_action: mlStrongWinnerResistanceLean.lean
               ? "retain_as_lean"
+              : mlCoherentNearEdgeWatchlist.watchlist
+                ? "monitor_as_watchlist"
               : "stand_down_unchanged_side",
             validation_note:
-              "The August 10 rule remains a warning. The r67 current-head exception can retain a strong, projection-coherent, non-adverse exact-price candidate as Lean without flipping the side or restoring Best Angle.",
+              "The August 10 rule remains a warning. The r67 current-head exception can retain a strong, projection-coherent, non-adverse exact-price candidate as Lean. The r70 tier ladder may display a complete bounded-friction candidate as a strictly nonactionable Watchlist. Neither path flips the side or restores Best Angle.",
           }
         : null,
       ml_strong_winner_resistance_lean: mlStrongWinnerResistanceLean.lean

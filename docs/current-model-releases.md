@@ -140,9 +140,10 @@ changed; only deterministic settlement of existing locked rows is affected.
 - Projection runtime: resolved automodel `v2_2`
 - First-inning runtime: `fi_v2` with the versioned unpublished-probable availability head below
 - Public calibration: `mlb_public_calibration_v27_strong_winner_resistance_lean_2026_08_22`
-- Decision release: `mlb_daily_edge_decision_2026_08_25_r69`
-- Rule bundle: `mlb_daily_edge_rule_bundle_v57_market_scoped_reader_completeness_2026_08_25`
-- Grade policy: `mlb_public_grade_policy_v47_market_scoped_reader_completeness_2026_08_25`
+- Decision release: `mlb_daily_edge_decision_2026_08_26_r70`
+- Rule bundle: `mlb_daily_edge_rule_bundle_v58_coherent_near_edge_watchlist_2026_08_26`
+- Grade policy: `mlb_public_grade_policy_v48_coherent_near_edge_watchlist_2026_08_26`
+- Correction policy: `mlb_prediction_corrections_v22_coherent_near_edge_watchlist_2026_08_26`
 - Tracking contract: `member_facing_lock_v8_priority_retry_minute_cadence_2026_08_11`
 - Machine registry: `lib/automodel/mlbModelLayerVersions.ts`
 - Authoritative member-facing writer: `lib/services/predictionRecordService.ts`
@@ -170,6 +171,25 @@ exceptions. Bounded starter recovery remains under the existing
 `prediction_pipeline:mlb` lease, targets at most three explicitly identified
 games, and cannot mutate locked rows. Evidence and rollback are recorded in
 `docs/model-audits/2026-08-26-daily-edge-operational-no-play-recovery.md`.
+
+The August 26 r70 tier-ladder release adds one strictly nonactionable
+Moneyline monitoring rung. A complete, unchanged-side tuple that fails action
+only on signed SharpAPI resistance or a perturbation-stable small adverse move
+may display Watchlist when model probability is at least 50%, the exact price
+is -300..+200, exact-price EV is at least -3%, the score projection agrees,
+there is no independent public conflict, and adverse movement is at most
+0.75 implied-probability points. The decision remains `board_action=no_play`,
+its actionable grade and stake remain null, and the resistance/movement reason
+is preserved in the snapshot. Operational holds, side corrections, incomplete
+tuples, projection/public conflicts, material movement, and worse exact-price
+value remain reasoned No Play. The frozen chronological audit found no
+actionable Lean candidate with sufficient validation/confirmation evidence, so
+all Lean and Best Angle thresholds remain unchanged. On the exact August 26
+same-input board, CIN-SF moves from No Play to Watchlist; board counts change
+from 1 Best Angle / 1 Lean / 1 Watchlist / 12 No Plays to 1 / 1 / 2 / 11,
+with zero actionable promotions, zero demotions, and unchanged Total and First
+Inning markets. Evidence: `docs/model-audits/2026-08-26-mlb-tier-ladder-r70.md`.
+Rollback is r69/v57/v47/correction v21.
 
 The August 25 r69 reader-integrity repair retains every r68 probability,
 projection, selected side, evaluated book/line/price/time, threshold, action
