@@ -297,6 +297,8 @@ export type RunStarterRefreshArgs = {
    * slate size so the full slate's starters can refresh.
    */
   limit?: number;
+  /** Strict game identity boundary for health recovery; never broadens scope. */
+  externalIdsFilter?: number[];
   /**
    * Called before any UPDATE. Return false to abort writes. When omitted
    * AND writeMode=true, the helper auto-confirms — the caller is expected
@@ -351,6 +353,13 @@ export type RunStarterRefreshResult = {
   unmatched_mlb_games: number;
   /** Phase 6B.31a — per-side audit trail. */
   starter_assignments: StarterAssignmentRecord[];
+  provider_outcomes?: Array<{
+    source: "mlb_stats_probable" | "bdl_games" | "espn_scoreboard";
+    status: "success" | "empty_or_unavailable" | "disabled";
+    games: number;
+    requests_made: number;
+    max_requests: number;
+  }>;
   message?: string;
 };
 
@@ -359,6 +368,8 @@ export async function runStarterRefreshCycle(
 ): Promise<RunStarterRefreshResult> {
   const { sport, date, writeMode } = args;
   const limit = args.limit;
+  const externalIdsFilter = Array.from(new Set(args.externalIdsFilter ?? [])).sort((a, b) => a - b);
+  const providerOutcomes: NonNullable<RunStarterRefreshResult["provider_outcomes"]> = [];
   const log = args.log ?? ((m: string) => console.log(m));
 
   log(
@@ -369,14 +380,15 @@ export async function runStarterRefreshCycle(
   log("");
 
   // 1. Load DB games for the slate
-  const { data: dbGamesRaw, error: gErr } = await supabase
+  let gamesQuery = supabase
     .from("games")
     .select(
       "id, external_id, game_date, home_team_id, away_team_id, home_pitcher_id, away_pitcher_id"
     )
     .eq("sport", sport)
-    .eq("slate_date", date)
-    .order("game_date");
+    .eq("slate_date", date);
+  if (externalIdsFilter.length > 0) gamesQuery = gamesQuery.in("external_id", externalIdsFilter);
+  const { data: dbGamesRaw, error: gErr } = await gamesQuery.order("game_date");
   if (gErr !== null) {
     return {
       status: "failed",
@@ -388,6 +400,7 @@ export async function runStarterRefreshCycle(
       unresolved: 0,
       unmatched_mlb_games: 0,
       starter_assignments: [],
+      provider_outcomes: providerOutcomes,
       message: `games load failed: ${gErr.message}`,
     };
   }
@@ -405,6 +418,7 @@ export async function runStarterRefreshCycle(
       unresolved: 0,
       unmatched_mlb_games: 0,
       starter_assignments: [],
+      provider_outcomes: providerOutcomes,
     };
   }
 
@@ -431,12 +445,20 @@ export async function runStarterRefreshCycle(
     );
   }
   const scheduleGames = parseMlbStatsSchedule(rawSchedule);
+  providerOutcomes.push({
+    source: "mlb_stats_probable",
+    status: scheduleGames.length > 0 ? "success" : "empty_or_unavailable",
+    games: scheduleGames.length,
+    requests_made: 1,
+    max_requests: 1,
+  });
   log(`  parsed ${scheduleGames.length} schedule game(s).`);
 
   // 4. BDL slate (uses existing provider — /games + /lineups fallback baked in)
   const bdlApiKey = process.env.BALLDONTLIE_API_KEY ?? "";
   let bdlSlate: BdlSlateRecord[] = [];
   if (bdlApiKey === "") {
+    providerOutcomes.push({ source: "bdl_games", status: "disabled", games: 0, requests_made: 0, max_requests: 0 });
     log("  WARNING: BALLDONTLIE_API_KEY not set — skipping BDL fallback.");
   } else {
     try {
@@ -448,9 +470,11 @@ export async function runStarterRefreshCycle(
         away_pitcher_external_id: r.away_pitcher_external_id,
       }));
       log(`  BDL slate fetched: ${bdlSlate.length} game(s).`);
+      providerOutcomes.push({ source: "bdl_games", status: bdlSlate.length > 0 ? "success" : "empty_or_unavailable", games: bdlSlate.length, requests_made: 1, max_requests: 1 });
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       log(`  WARNING: BDL slate fetch failed: ${msg}`);
+      providerOutcomes.push({ source: "bdl_games", status: "empty_or_unavailable", games: 0, requests_made: 1, max_requests: 1 });
     }
   }
   const bdlByExternalId = new Map<number, BdlSlateRecord>();
@@ -465,9 +489,16 @@ export async function runStarterRefreshCycle(
   let espnByGameKey: Map<string, EspnProbablesForGame> = new Map();
   if (espnEnabled) {
     log(`Fetching ESPN scoreboard (Phase 6B.31a secondary source)…`);
-    espnByGameKey = await fetchEspnProbablePitchers(date, { log });
+    let espnRequestsMade = 0;
+    const espnLog = (message: string) => {
+      if (/ESPN scoreboard host=.*(?:returned HTTP|returned non-JSON|parsed:|fetch threw:)/.test(message)) espnRequestsMade += 1;
+      log(message);
+    };
+    espnByGameKey = await fetchEspnProbablePitchers(date, { log: espnLog });
+    providerOutcomes.push({ source: "espn_scoreboard", status: espnByGameKey.size > 0 ? "success" : "empty_or_unavailable", games: espnByGameKey.size, requests_made: espnRequestsMade, max_requests: 2 });
   } else {
     log("  ESPN secondary source disabled via ESPN_SECONDARY_PROBABLE_PITCHER=false; skipping fetch.");
+    providerOutcomes.push({ source: "espn_scoreboard", status: "disabled", games: 0, requests_made: 0, max_requests: 0 });
   }
 
   // 5. Build CandidateDbGame list for matchScheduleGameToDbGame
@@ -938,6 +969,7 @@ export async function runStarterRefreshCycle(
       unresolved,
       unmatched_mlb_games: mlbUnmatched.length,
       starter_assignments: starterAssignments,
+      provider_outcomes: providerOutcomes,
     };
   }
 
@@ -953,6 +985,7 @@ export async function runStarterRefreshCycle(
       unresolved,
       unmatched_mlb_games: mlbUnmatched.length,
       starter_assignments: starterAssignments,
+      provider_outcomes: providerOutcomes,
     };
   }
 
@@ -971,6 +1004,7 @@ export async function runStarterRefreshCycle(
       unresolved,
       unmatched_mlb_games: mlbUnmatched.length,
       starter_assignments: starterAssignments,
+      provider_outcomes: providerOutcomes,
     };
   }
 
@@ -1034,6 +1068,7 @@ export async function runStarterRefreshCycle(
     unresolved,
     unmatched_mlb_games: mlbUnmatched.length,
     starter_assignments: starterAssignments,
+    provider_outcomes: providerOutcomes,
   };
 }
 

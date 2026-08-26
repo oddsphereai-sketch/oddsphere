@@ -4,6 +4,11 @@ import type {
   OddsTrailStopDto,
 } from "./labTypes";
 import type { MarketSplitDisplaySection } from "@/lib/types/domain/RecommendationDecision";
+import {
+  DAILY_EDGE_MEMBER_PRESENTATION_RELEASE_ID,
+  dailyEdgePresentationVerdict,
+  presentDailyEdgeOperationalNoPlay,
+} from "./dailyEdgeMarketPresentation";
 
 export type DailyEdgeCoherenceIssue = {
   gameId: string;
@@ -148,7 +153,43 @@ function limitMarketEvidence(opts: {
  * evidence is withheld inside the affected market; no single bad market can
  * suppress the remaining coherent slate.
  */
+export function buildDailyEdgeMemberPresentation(
+  body: Pick<DailyEdgeResponse, "games">,
+): NonNullable<DailyEdgeResponse["memberPresentation"]> {
+  const evaluatedByVerdict: NonNullable<DailyEdgeResponse["memberPresentation"]>["counts"]["evaluatedByVerdict"] = {};
+  let totalMarkets = 0;
+  let operationalExceptions = 0;
+  let publicNoPlayMarkets = 0;
+  for (const game of body.games) {
+    for (const market of Object.values(game.markets)) {
+      totalMarkets += 1;
+      if (market.held) operationalExceptions += 1;
+      else evaluatedByVerdict[market.verdict.key] = (evaluatedByVerdict[market.verdict.key] ?? 0) + 1;
+      if (dailyEdgePresentationVerdict(market).key === "no_play") publicNoPlayMarkets += 1;
+    }
+  }
+  return {
+    releaseId: DAILY_EDGE_MEMBER_PRESENTATION_RELEASE_ID,
+    counts: {
+      totalMarkets,
+      evaluatedMarkets: totalMarkets - operationalExceptions,
+      operationalExceptions,
+      publicNoPlayMarkets,
+      evaluatedByVerdict,
+    },
+  };
+}
+
 export function finalizeDailyEdgeResponseCoherence(body: DailyEdgeResponse): DailyEdgeResponse {
+  for (const game of body.games) {
+    for (const marketKey of ["moneyline", "total", "first_inning"] as const) {
+      game.markets[marketKey] = presentDailyEdgeOperationalNoPlay(
+        game.markets[marketKey],
+        game.holdReason,
+      );
+    }
+  }
+  body.memberPresentation = buildDailyEdgeMemberPresentation(body);
   if (body.sport !== "mlb") return body;
   const nowMs = Date.parse(body.as_of) || Date.now();
   for (const game of body.games) {

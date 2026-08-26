@@ -147,6 +147,26 @@ changed; only deterministic settlement of existing locked rows is affected.
 - Machine registry: `lib/automodel/mlbModelLayerVersions.ts`
 - Authoritative member-facing writer: `lib/services/predictionRecordService.ts`
 
+Shared member presentation release: `daily_edge_member_presentation_2026_08_26_r2_operational_no_play`.
+Internal operational holds remain high-severity health/recovery state, but the
+member board, filters, cards, headlines, and Bet Grade surface them as No Play
+with an explicit incomplete-evidence reason. The response reports evaluated
+markets separately from operational exceptions; exceptions are never counted
+as completed grades. Forecast-integrity exceptions (starter, lineup, identity,
+missing feature, or model integrity) withhold the affected forecast. A
+price/consensus-only exception preserves a coherent independent outcome
+forecast but withholds the exact-price fair probability, edge, EV,
+actionability, and grade tuple. This changes no MLB projection, probability, side, exact
+price, writer grade, action, stake, tracking row, lease, or lock behavior. On
+the 2026-08-26 15:00:51Z MLB snapshot, 42 evaluated markets remain 3 Best
+Angles / 12 Leans / 14 Watchlists / 13 evaluated No Plays. Three HOU-NYY
+starter exceptions move from the retired public Held label into public No
+Play, yielding 16 public No Plays while remaining 3 internal operational
+exceptions. Bounded starter recovery remains under the existing
+`prediction_pipeline:mlb` lease, targets at most three explicitly identified
+games, and cannot mutate locked rows. Evidence and rollback are recorded in
+`docs/model-audits/2026-08-26-daily-edge-operational-no-play-recovery.md`.
+
 The August 25 r69 reader-integrity repair retains every r68 probability,
 projection, selected side, evaluated book/line/price/time, threshold, action
 rule, stake rule, writer, lease, and T-60 boundary. The member reader now

@@ -54,7 +54,7 @@
       "schedule": "35 8 * * *"
     },
     {
-      "path": "/api/cron/daily-edge-data-health?repair=false",
+      "path": "/api/cron/daily-edge-data-health?repair=starter",
       "schedule": "35 0,2,10,12,14,16,18,20,22 * * *"
     },
     {

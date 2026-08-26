@@ -31,9 +31,10 @@ function buildHealthAlertSummary(args: {
   sport: Sport;
   unresolved: number;
   findings: Array<{ game: string; market: string; code: string; severity: string }>;
-  repair?: { eligibleGames: number; repairedGames: number; stillUnhealthyGames: number; errors: string[] } | null;
+  repair?: { eligibleGames: number; repairedGames: number; stillUnhealthyGames: number; errors: string[]; steps: { starterRefresh?: Record<string, unknown> } } | null;
 }): string | null {
-  if (args.unresolved <= 0 && (args.repair?.errors.length ?? 0) === 0) return null;
+  const hasStarterAudit = Boolean(args.repair?.steps.starterRefresh);
+  if (args.unresolved <= 0 && (args.repair?.errors.length ?? 0) === 0 && !hasStarterAudit) return null;
   const findingSummary = args.findings
     .filter((finding) => finding.severity === "blocking" || finding.severity === "high")
     .slice(0, 6)
@@ -45,7 +46,17 @@ function buildHealthAlertSummary(args: {
   const errorSummary = args.repair?.errors.length
     ? ` errors=${args.repair.errors.slice(0, 2).join(" | ")}`
     : "";
-  return `Daily Edge health unresolved ${args.sport}: unresolved=${args.unresolved}; ${repairSummary}; ${findingSummary}${errorSummary}`.slice(0, 1000);
+  const starter = args.repair?.steps.starterRefresh as {
+    targetedExternalIds?: number[];
+    providerOutcomes?: Array<{ source: string; status: string; games: number; requests_made: number }>;
+    assignments?: Array<{ external_id: number; side: string; action: string; source: string | null; player_id: number | null; espn_skip: string | null }>;
+  } | undefined;
+  const starterAudit = starter
+    ? ` starter_audit targets=${(starter.targetedExternalIds ?? []).join(",")}` +
+      ` providers=${(starter.providerOutcomes ?? []).map((row) => `${row.source}:${row.status}:${row.games}:${row.requests_made}`).join(",")}` +
+      ` assignments=${(starter.assignments ?? []).map((row) => `${row.external_id}/${row.side}/${row.action}/${row.source ?? "none"}/${row.player_id ?? "none"}/${row.espn_skip ?? "none"}`).join(",")}`
+    : "";
+  return `Daily Edge health unresolved ${args.sport}: unresolved=${args.unresolved}; ${repairSummary}; ${findingSummary}${errorSummary}${starterAudit}`.slice(0, 1000);
 }
 
 export async function GET(request: Request) {
@@ -75,13 +86,16 @@ export async function GET(request: Request) {
       }
 
       const report = await runDailyEdgeDataHealthMonitor({ sport, date, markets });
+      const repairParam = url.searchParams.get("repair");
       const repairEnabled =
         process.env[REPAIR_ENV] === "true" &&
-        url.searchParams.get("repair") !== "false";
+        repairParam !== "false";
+      const repairMode = repairParam === "starter" ? "starter_only" : "full";
       const repair = repairEnabled
         ? await runDailyEdgeDataHealthRepair({
             report,
             apply: true,
+            mode: repairMode,
             postRepairMonitor: () => runDailyEdgeDataHealthMonitor({ sport, date, markets }),
           })
         : null;
@@ -122,6 +136,7 @@ export async function GET(request: Request) {
           byCode: report.byCode,
           findings: report.findings.slice(0, 50),
           repairEnabled,
+          repairMode,
           repair,
           noOpenAiCalls: true,
           noPredictionChanges: !predictionOrGradeRepairRan,
@@ -134,6 +149,7 @@ export async function GET(request: Request) {
       leaseGroup: "prediction_pipeline",
       requireLease: true,
       lockMinutes: 10,
+      minIntervalMinutes: 30,
     },
   );
 }

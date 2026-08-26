@@ -30,8 +30,10 @@ flattening, and load spikes.
   into full-slate refreshes.
 - Confirm provider coverage, stored-price coverage, model version, calibration version, and
   published-reader version agree before publication.
-- Missing required evidence creates a visible hold/data-health finding, not an ordinary
-  model `NO_PLAY`.
+- Missing required evidence creates an internal hold/data-health finding. The
+  member contract may present that exception as `NO_PLAY` only with an explicit
+  incomplete-evidence reason and separate operational-exception accounting; it
+  must not fabricate or count a completed model evaluation.
 
 ## 4. Calibrate with promotion/demotion balance
 

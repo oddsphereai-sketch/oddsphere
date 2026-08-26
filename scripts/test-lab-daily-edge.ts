@@ -30,6 +30,7 @@ process.env.ODDSPHERE_DATA_MODE = "development";
 import { readFileSync } from "node:fs";
 import { GET as dailyEdge, __TEST__ as dailyEdgeTest } from "../app/api/lab/daily-edge/route";
 import { supabase } from "../lib/db/supabase";
+import { collectMemberHeldExceptionFindings } from "../lib/services/dailyEdge/dailyEdgeDataHealthMonitor";
 import type {
   DailyEdgeGameDto,
   DailyEdgeResponse,
@@ -348,6 +349,26 @@ section("Market Pulse presentation coherence");
       capReasons: [],
     } as unknown as Parameters<typeof dailyEdgeTest.forceIncompleteMlbMarketNoPlay>[0]);
     check("incomplete unlocked markets fail closed", held.held === true && held.verdict.key === "no_play" && held.actionabilityLabel === "No Play" && held.capReasons?.includes("incomplete_required_data_no_play") === true);
+    const heldHealthFindings = collectMemberHeldExceptionFindings({
+      sport: "mlb",
+      date: "2026-08-26",
+      games: [{
+        external_id: 5059773,
+        awayTeam: "HOU",
+        homeTeam: "NYY",
+        lockState: "open",
+        lockedAt: null,
+        markets: {
+          moneyline: { held: true, capReasons: ["incomplete_required_data_no_play"], reviewFlags: ["missing_starter"] },
+          total: { held: true, capReasons: ["incomplete_required_data_no_play"], reviewFlags: ["missing_starter"] },
+          first_inning: { held: true, capReasons: ["incomplete_required_data_no_play"], reviewFlags: ["missing_starter"] },
+        },
+      }],
+    } as unknown as DailyEdgeResponse);
+    check("public No Play preserves one internal high-severity recovery finding", heldHealthFindings.length === 1 && heldHealthFindings[0]?.severity === "high" && heldHealthFindings[0]?.code === "member_held_needs_attention" && heldHealthFindings[0]?.details?.externalId === 5059773);
+    check("targeted starter recovery is bounded and scoped", healthRepairSource.includes("MAX_TARGETED_STARTER_REPAIR_GAMES = 3") && healthRepairSource.includes("externalIdsFilter: uniqueEligibleExternalIds") && healthRepairSource.includes("starter_only"));
+    check("starter-only recovery cannot rewrite predictions or grades", healthRepairSource.includes('if (repairMode === "starter_only")') && healthRepairSource.includes("this recovery lane never rewrites predictions, probabilities, or grades"));
+    check("starter-only recovery cannot publish a mixed-time response snapshot", healthRepairSource.includes('if (repairMode === "full") {') && healthRepairSource.includes("the next normal leased writer cycle owns evaluation and coherent snapshot publication"));
     const incompleteAudit = (missingFields: string[], lockProtected = false) => ({
       status: "incomplete_missing_required_data" as const,
       canPublishNormal: false,
@@ -382,7 +403,7 @@ section("Market Pulse presentation coherence");
     check("FI health requires a real starter gap before reporting ingestion failure", healthMonitorSource.includes("hasActualStarterIngestionGap") && healthMonitorSource.includes('featureReasonCodes.includes("fi_starter_missing")') && healthMonitorSource.includes('return "fi_model_hold_provider_gap"') && healthMonitorSource.includes('return "fi_legit_model_toss_up"'));
     check("FI health treats mapped starters without MLB history as sparse data", healthMonitorSource.includes("hasOnlyStarterStatsGap") && healthMonitorSource.includes('return "fi_sparse_starter_history"'));
     check("FI repair reruns canonical starter reconciliation after player readiness", healthRepairSource.includes("runStarterRefreshCycle") && healthRepairSource.indexOf("const readiness = await repairMlbModelReadiness") < healthRepairSource.indexOf("const starterRefresh = await runStarterRefreshCycle"));
-    check("FI starter repair covers the complete slate instead of an unrelated finding-sized prefix", healthRepairSource.includes("limit: Math.max(1, args.report.gameCount)") && !healthRepairSource.includes("limit: Math.max(1, gamesByExternalId.size)"));
+    check("starter repair targets exact flagged game IDs instead of a full-slate prefix", healthRepairSource.includes("externalIdsFilter: uniqueEligibleExternalIds") && healthRepairSource.includes("limit: uniqueEligibleExternalIds.length") && !healthRepairSource.includes("limit: Math.max(1, args.report.gameCount)"));
     check("Daily Edge repair republishes the coherent member snapshot before post-repair health", healthRepairSource.includes("refreshDailyEdgeResponseSnapshot") && healthRepairSource.includes('source: "daily_edge_data_health_repair"') && healthRepairSource.indexOf("await refreshDailyEdgeResponseSnapshot") < healthRepairSource.indexOf("if (args.postRepairMonitor)"));
     check("Daily Edge repair targets missing ML and total market evidence", ['finding.code === "evidence_blocked"', 'finding.code === "actionable_price_missing"', 'finding.code === "actionable_edge_missing"', 'finding.code === "total_price_missing"'].every((needle) => healthRepairSource.includes(needle)));
     check("refresh pill follows each live league's actual cron", refreshStatusSource.includes('data_source: "wnba_daily_refresh"') && refreshStatusSource.includes('cadence_minutes: 30') && refreshStatusSource.includes('data_source: "soccer_daily_refresh"') && refreshStatusSource.includes('cadence_minutes: 60') && refreshStatusSource.includes("cronConfigsForSport(effectiveSport)"));
