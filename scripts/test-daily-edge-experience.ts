@@ -24,6 +24,8 @@ import {
 import { resolvePointLineMarketPulseMovement } from "../app/lab/lib/dailyEdgeMarketPulseMovement";
 import { resolveDailyEdgeCurrentOnlyMovement } from "../app/lab/lib/dailyEdgeCurrentOnlyMovement";
 import { marketSplitSectionIsStale } from "../app/lab/lib/dailyEdgeSplitFreshness";
+import { buildDailyEdgeSportSwitchDestination } from "../app/lab/lib/dailyEdgeSportSwitch";
+import { createSportTabActivationGuard } from "../app/lab/lib/sportTabActivation";
 
 const snapshotPrimerSource = readFileSync(
   "scripts/operator/prime-daily-edge-experience-snapshots.ts",
@@ -252,6 +254,42 @@ check(
   parsed.searchParams.get("market") === "first_inning",
 );
 
+const nflDestination = buildDailyEdgeSportSwitchDestination({
+  pathname: "/lab/daily-edge",
+  currentSearch: "sport=mlb&game=mlb-1&market=total&league=epl&date=2026-08-25&fresh=1",
+  nextSport: "nfl",
+  explicitDestinations: { nfl: "/lab/daily-edge?sport=nfl" },
+  slateDate: () => "2026-08-25",
+});
+check(
+  "member sport switching resolves one canonical URL with no stale reader query",
+  nflDestination === "/lab/daily-edge?sport=nfl",
+);
+
+let pointerNavigations = 0;
+let backdropClosures = 0;
+let pointerPropagationStopped = false;
+const pointerGuard = createSportTabActivationGuard<string>();
+const pointerEvent = {
+  preventDefault: () => undefined,
+  stopPropagation: () => { pointerPropagationStopped = true; },
+};
+// The pointer originates on a nested label and bubbles to its tab handler.
+pointerGuard.pointerDown(pointerEvent, "nfl", () => { pointerNavigations += 1; });
+if (!pointerPropagationStopped) backdropClosures += 1;
+pointerGuard.click(pointerEvent, "nfl", () => { pointerNavigations += 1; });
+check(
+  "nested reader-tab pointer activation navigates once and cannot fall through to the modal backdrop",
+  pointerNavigations === 1 && backdropClosures === 0,
+);
+let keyboardNavigations = 0;
+createSportTabActivationGuard<string>().click(
+  { stopPropagation: () => undefined },
+  "cfb",
+  () => { keyboardNavigations += 1; },
+);
+check("keyboard tab activation remains actionable", keyboardNavigations === 1);
+
 console.log("\n━━━ Cross-surface sport readiness registry ━━━");
 check(
   "member-available Daily Edge models retain Soccer competitions without a separate UCL top-level pill",
@@ -362,6 +400,7 @@ const candidateSource = readFileSync(
   "app/dev/experience-preview/ActualDailyEdgePreview.tsx",
   "utf8",
 );
+const sportSwitchSource = readFileSync("app/lab/lib/dailyEdgeSportSwitch.ts", "utf8");
 const candidatePageSource = readFileSync(
   "app/dev/experience-preview/page.tsx",
   "utf8",
@@ -392,11 +431,10 @@ check(
 );
 check(
   "normal sport switching requests the current slate instead of silently substituting a historical review date",
-  candidateSource.includes("A normal sport switch must show that sport's canonical current slate") &&
-    candidateSource.includes('params.set("date", currentSlateDate(next))') &&
-    !candidateSource.includes("DAILY_EDGE_REVIEW_SLATES[next]") &&
-    candidateSource.includes('params.delete("game")') &&
-    candidateSource.includes('params.delete("market")'),
+  sportSwitchSource.includes('params.set("date", slateDate(nextSport))') &&
+    !sportSwitchSource.includes("DAILY_EDGE_REVIEW_SLATES[nextSport]") &&
+    sportSwitchSource.includes('params.delete("game")') &&
+    sportSwitchSource.includes('params.delete("market")'),
 );
 check(
   "an open mobile reader keeps the shared sport tabs actionable and routes through the same cleanup path",
@@ -405,6 +443,7 @@ check(
     candidateSource.includes("onChange={onSportChange}") &&
     candidateSource.includes("sports={ACTIVE_DAILY_EDGE_TOP_LEVEL_SPORT_KEYS}") &&
     candidateSource.includes('density="compact"') &&
+    candidateSource.includes("activateOnPointerDown") &&
     candidateSource.includes('params.delete("game")') &&
     candidateSource.includes('params.delete("market")'),
 );

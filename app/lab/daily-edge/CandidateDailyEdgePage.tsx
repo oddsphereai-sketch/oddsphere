@@ -15,7 +15,7 @@ import { filterWeeklyReaderSnapshot } from "@/lib/services/dailyEdge/weeklyReade
 import type { Sport } from "@/lib/types/domain/Sport";
 import DailyEdgeLiveRefresh from "./DailyEdgeLiveRefresh";
 
-const NFL_SPORT_SWITCH_DESTINATIONS: Partial<Record<Sport, string>> = {
+const MEMBER_SPORT_SWITCH_DESTINATIONS: Partial<Record<Sport, string>> = {
   mlb: "/lab/daily-edge?sport=mlb",
   wnba: "/lab/daily-edge?sport=wnba",
   soccer: "/lab/daily-edge?sport=soccer&league=epl",
@@ -147,7 +147,7 @@ export default async function CandidateDailyEdgePage({
               ? { active: "world_cup", label: "World Cup" }
               : undefined}
         activePreviewSports={nflFixture || nflWeekOneEvidenceEnabled ? ["nfl"] : cfbFixture || cfbEnabled ? ["cfb"] : []}
-        sportSwitchDestinations={nflFixture || nflWeekOneEvidenceEnabled || cfbFixture || cfbEnabled ? NFL_SPORT_SWITCH_DESTINATIONS : undefined}
+        sportSwitchDestinations={MEMBER_SPORT_SWITCH_DESTINATIONS}
         weeklySlate={nflFixture
           ? {
               label: `NFL · ${nflFixture.week.label} · ${snapshot.games.length} games · ${snapshot.games.length * 3} predictions · ${"heldMemberFixtureRelease" in nflFixture ? "live predictions and exact-price Bet grades" : nflFixture.tracking.seasonPhase === "preseason" ? "preseason is excluded from official tracking" : "tracking begins only with an approved pre-kickoff lock"}`,

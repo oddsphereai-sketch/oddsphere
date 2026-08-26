@@ -9,6 +9,7 @@ import type { MarketSplitDisplaySection } from "@/lib/types/domain/Recommendatio
 import { marketSplitSectionIsStale } from "@/app/lab/lib/dailyEdgeSplitFreshness";
 import type { Sport } from "@/lib/types/domain/Sport";
 import { currentSlateDate } from "@/lib/dates/slateDate";
+import { buildDailyEdgeSportSwitchDestination } from "@/app/lab/lib/dailyEdgeSportSwitch";
 import { keyStatIsTwoSided } from "@/lib/services/keyStatsFormatter";
 import type {
   DailyEdgeGameAvailability,
@@ -164,31 +165,24 @@ export default function ActualDailyEdgePreview({
 
   function switchSport(next: Sport) {
     if (embeddedSample) return;
-    setReaderOpen(false);
-    setMobileSheetOpen(false);
     const explicitDestination = sportSwitchDestinations?.[next];
+    const destination = buildDailyEdgeSportSwitchDestination({
+      pathname,
+      currentSearch: searchParams.toString(),
+      nextSport: next,
+      explicitDestinations: sportSwitchDestinations,
+      slateDate: currentSlateDate,
+    });
     if (explicitDestination) {
-      router.replace(explicitDestination, { scroll: false });
+      // The member route is server-rendered and can refresh on focus between
+      // pointer-down and click. A canonical native replacement cannot be
+      // dropped by that concurrent refresh and never exposes a stale reader.
+      window.location.replace(destination);
       return;
     }
-    const params = new URLSearchParams(searchParams.toString());
-    params.set("sport", next);
-    if (next === "soccer") params.set("league", "epl");
-    else params.delete("league");
-    params.delete("game");
-    params.delete("market");
-    // A normal sport switch must show that sport's canonical current slate.
-    // Keep the date explicit for active models: the founder hub also prefetches
-    // historical representative links, and a date-less client navigation can
-    // otherwise reuse that prefetched payload until a hard reload.
-    if (next === "mlb" || next === "wnba") {
-      params.set("date", currentSlateDate(next));
-      params.set("fresh", "1");
-    } else {
-      params.delete("date");
-      params.delete("fresh");
-    }
-    router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+    setReaderOpen(false);
+    setMobileSheetOpen(false);
+    router.replace(destination, { scroll: false });
   }
 
   const game = useMemo(
@@ -472,9 +466,9 @@ function MobileReaderSheet({ onClose, onSportChange, activePreviewSports, soccer
 
   return (
     <div className="fixed inset-0 z-50 sm:hidden" role="dialog" aria-modal="true" aria-label={`${reader.game.awayTeam} at ${reader.game.homeTeam} analysis`}>
-      <div className="absolute inset-0 bg-black/75 backdrop-blur-sm" onClick={onClose} aria-hidden="true" />
+      <div className="absolute inset-0 bg-black/75 backdrop-blur-sm" onPointerDown={(event) => { if (event.target === event.currentTarget) onClose(); }} aria-hidden="true" />
       <nav aria-label="Reader sport switch" className="absolute inset-x-0 top-0 z-20 border-b border-violet-400/25 bg-[#100e18] px-4 py-2 shadow-[0_12px_35px_-24px_rgba(124,58,237,0.9)]">
-        <SportSelector active={reader.sport} onChange={onSportChange} sports={ACTIVE_DAILY_EDGE_TOP_LEVEL_SPORT_KEYS} showCounts={false} showPendingState availability={sportAvailability} labelOverrides={{ soccer: "Soccer" }} density="compact" />
+        <SportSelector active={reader.sport} onChange={onSportChange} sports={ACTIVE_DAILY_EDGE_TOP_LEVEL_SPORT_KEYS} showCounts={false} showPendingState availability={sportAvailability} labelOverrides={{ soccer: "Soccer" }} density="compact" activateOnPointerDown />
       </nav>
       <div className="absolute inset-x-0 bottom-0 top-[65px] flex flex-col overflow-hidden rounded-t-2xl border-t border-violet-400/35 bg-[#0a0910] shadow-[0_-24px_80px_-35px_rgba(124,58,237,0.85)]">
         <div className="shrink-0 border-b border-white/[0.07] bg-[#100e18] px-3 pb-2 pt-3">
