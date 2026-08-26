@@ -20,7 +20,7 @@ import Link from "next/link";
 const PHONE_TEL = "tel:1-800-426-2537"; // 1-800-GAMBLER
 
 export default function Footer() {
-  const pathname = usePathname();
+  const pathname = usePathname() ?? "";
 
   // Hide on premium + admin shells (V2.1: footer is public-pages only).
   if (
