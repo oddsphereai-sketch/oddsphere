@@ -348,7 +348,37 @@ section("Market Pulse presentation coherence");
       capReasons: [],
     } as unknown as Parameters<typeof dailyEdgeTest.forceIncompleteMlbMarketNoPlay>[0]);
     check("incomplete unlocked markets fail closed", held.held === true && held.verdict.key === "no_play" && held.actionabilityLabel === "No Play" && held.capReasons?.includes("incomplete_required_data_no_play") === true);
-    check("incomplete-market safety runs after all support promotions", dailyEdgeRouteSource.indexOf("if (forceIncompleteNoPlay)") > dailyEdgeRouteSource.indexOf("applyHighConvictionTotalPromotion") && dailyEdgeRouteSource.indexOf("if (forceIncompleteNoPlay)") < dailyEdgeRouteSource.indexOf("ml.recommendationDecision = recommendationDecision.markets.moneyline"));
+    const incompleteAudit = (missingFields: string[], lockProtected = false) => ({
+      status: "incomplete_missing_required_data" as const,
+      canPublishNormal: false,
+      bestAngleAllowed: false,
+      repairEligible: true,
+      lockProtected,
+      lastRepairAttemptAt: null,
+      missingFields,
+      degradedFields: [],
+      fallbackReasons: [],
+      repairActions: [],
+      starterPolicy: { away: "confirmed", home: "confirmed" },
+      statsPolicy: { pitcher: "complete", bullpen: "complete", offense: "complete", parkWeather: "complete" },
+    });
+    const totalOnlyGap = incompleteAudit(["over_price", "under_price"]);
+    check("Total-only gaps hold Total", dailyEdgeTest.shouldForceIncompleteMlbMarketNoPlay(totalOnlyGap, "total") === true);
+    check("Total-only gaps preserve Moneyline", dailyEdgeTest.shouldForceIncompleteMlbMarketNoPlay(totalOnlyGap, "moneyline") === false);
+    check("Total-only gaps preserve First Inning", dailyEdgeTest.shouldForceIncompleteMlbMarketNoPlay(totalOnlyGap, "first_inning") === false);
+    const moneylineOnlyGap = incompleteAudit(["home_moneyline_price"]);
+    check("Moneyline-only gaps hold Moneyline", dailyEdgeTest.shouldForceIncompleteMlbMarketNoPlay(moneylineOnlyGap, "moneyline") === true);
+    check("Moneyline-only gaps preserve Total", dailyEdgeTest.shouldForceIncompleteMlbMarketNoPlay(moneylineOnlyGap, "total") === false);
+    check("Moneyline-only gaps preserve First Inning", dailyEdgeTest.shouldForceIncompleteMlbMarketNoPlay(moneylineOnlyGap, "first_inning") === false);
+    const firstInningOnlyGap = incompleteAudit(["nrfi_price", "yrfi_price"]);
+    check("First Inning-only gaps hold First Inning", dailyEdgeTest.shouldForceIncompleteMlbMarketNoPlay(firstInningOnlyGap, "first_inning") === true);
+    check("First Inning-only gaps preserve Moneyline", dailyEdgeTest.shouldForceIncompleteMlbMarketNoPlay(firstInningOnlyGap, "moneyline") === false);
+    check("First Inning-only gaps preserve Total", dailyEdgeTest.shouldForceIncompleteMlbMarketNoPlay(firstInningOnlyGap, "total") === false);
+    const sharedGap = incompleteAudit(["away_probable_pitcher"]);
+    check("shared starter gaps hold every market", (["moneyline", "total", "first_inning"] as const).every((market) => dailyEdgeTest.shouldForceIncompleteMlbMarketNoPlay(sharedGap, market)));
+    check("unknown required gaps fail every market closed", (["moneyline", "total", "first_inning"] as const).every((market) => dailyEdgeTest.shouldForceIncompleteMlbMarketNoPlay(incompleteAudit(["future_required_field"]), market)));
+    check("lock-protected cards are never rewritten by the reader", (["moneyline", "total", "first_inning"] as const).every((market) => !dailyEdgeTest.shouldForceIncompleteMlbMarketNoPlay(incompleteAudit(["over_price"], true), market)));
+    check("incomplete-market safety runs after all support promotions", dailyEdgeRouteSource.indexOf("const forceIncompleteMoneylineNoPlay") > dailyEdgeRouteSource.indexOf("applyHighConvictionTotalPromotion") && dailyEdgeRouteSource.indexOf("const forceIncompleteMoneylineNoPlay") < dailyEdgeRouteSource.indexOf("ml.recommendationDecision = recommendationDecision.markets.moneyline"));
     check("FI health requires a real starter gap before reporting ingestion failure", healthMonitorSource.includes("hasActualStarterIngestionGap") && healthMonitorSource.includes('featureReasonCodes.includes("fi_starter_missing")') && healthMonitorSource.includes('return "fi_model_hold_provider_gap"') && healthMonitorSource.includes('return "fi_legit_model_toss_up"'));
     check("FI health treats mapped starters without MLB history as sparse data", healthMonitorSource.includes("hasOnlyStarterStatsGap") && healthMonitorSource.includes('return "fi_sparse_starter_history"'));
     check("FI repair reruns canonical starter reconciliation after player readiness", healthRepairSource.includes("runStarterRefreshCycle") && healthRepairSource.indexOf("const readiness = await repairMlbModelReadiness") < healthRepairSource.indexOf("const starterRefresh = await runStarterRefreshCycle"));
