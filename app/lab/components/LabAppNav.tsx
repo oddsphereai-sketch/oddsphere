@@ -58,7 +58,9 @@ const ALIASED_AS: Record<string, string> = {
   "/dev/experience-preview": "/lab/daily-edge",
   "/dev/football-preview": "/lab/daily-edge",
   "/lab/player-props": "/mlb/props",
+  "/player-props": "/mlb/props",
   "/dev/mlb-props-preview": "/mlb/props",
+  "/dev/nfl-props-preview": "/mlb/props",
   "/dev/tracking-preview": "/lab/tracking",
 };
 
@@ -72,10 +74,13 @@ export default function LabAppNav() {
   const { sport } = useSportSelection();
   const isPrivatePreview =
     pathname === "/dev/mlb-props-preview" ||
+    pathname === "/dev/nfl-props-preview" ||
     pathname === "/dev/experience-preview" ||
     pathname === "/dev/tracking-preview" ||
     pathname === "/dev/relaunch-review";
-  const tabs = isPrivatePreview ? PRIVATE_REVIEW_TABS : TABS;
+  const tabs = isPrivatePreview
+    ? PRIVATE_REVIEW_TABS.map((tab) => tab.activeHref === "/mlb/props" && pathname === "/dev/nfl-props-preview" ? { ...tab, href: "/dev/nfl-props-preview" } : tab)
+    : TABS;
 
   return (
     <header className="sticky top-0 z-40 bg-gray-950/85 backdrop-blur-md border-b border-gray-800">
