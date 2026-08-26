@@ -1,4 +1,4 @@
-import type { DailyEdgeGameDto } from "../app/lab/lib/labTypes";
+import type { DailyEdgeGameDto, MarketEdgeDto } from "../app/lab/lib/labTypes";
 import { readFileSync } from "node:fs";
 import {
   buildDailyEdgeReaderUrl,
@@ -26,6 +26,11 @@ import { resolveDailyEdgeCurrentOnlyMovement } from "../app/lab/lib/dailyEdgeCur
 import { marketSplitSectionIsStale } from "../app/lab/lib/dailyEdgeSplitFreshness";
 import { buildDailyEdgeSportSwitchDestination } from "../app/lab/lib/dailyEdgeSportSwitch";
 import { createSportTabActivationGuard } from "../app/lab/lib/sportTabActivation";
+import {
+  dailyEdgeHeldGuide,
+  dailyEdgeHeldRisk,
+  dailyEdgePresentationVerdict,
+} from "../app/lab/lib/dailyEdgeMarketPresentation";
 
 const snapshotPrimerSource = readFileSync(
   "scripts/operator/prime-daily-edge-experience-snapshots.ts",
@@ -69,6 +74,59 @@ function check(label: string, condition: boolean) {
   failed += 1;
   console.error(`  ✗ ${label}`);
 }
+
+const heldPresentationMarket = {
+  held: true,
+  verdict: { key: "no_play", label: "No Play" },
+  grade: null,
+  finalGrade: null,
+  rawGrade: null,
+} as Pick<MarketEdgeDto, "held" | "verdict" | "grade" | "finalGrade" | "rawGrade">;
+const heldPresentationBefore = JSON.stringify(heldPresentationMarket);
+for (const sport of ["mlb", "wnba", "nfl", "cfb", "soccer", "nba", "nhl"] as const) {
+  const presented = dailyEdgePresentationVerdict(heldPresentationMarket);
+  check(
+    `${sport.toUpperCase()} shared reader presents a true hold as Held, never No Play`,
+    presented.key === "held" && presented.label === "Held",
+  );
+}
+check(
+  "held presentation leaves writer verdict and grade fields byte-for-byte unchanged",
+  JSON.stringify(heldPresentationMarket) === heldPresentationBefore &&
+    heldPresentationMarket.verdict.key === "no_play" &&
+    heldPresentationMarket.verdict.label === "No Play",
+);
+check(
+  "held presentation uses one behavior-neutral availability vocabulary",
+  dailyEdgeHeldGuide(heldPresentationMarket) ===
+    "Evaluation held: awaiting the authoritative model and exact-price validation." &&
+    dailyEdgeHeldRisk(heldPresentationMarket) ===
+      "Required data or exact-price validation is still pending.",
+);
+const evaluatedPresentationMarket = {
+  held: false,
+  verdict: { key: "no_play", label: "No Play" },
+} as Pick<MarketEdgeDto, "held" | "verdict">;
+check(
+  "an evaluated No Play remains No Play",
+  dailyEdgePresentationVerdict(evaluatedPresentationMarket) === evaluatedPresentationMarket.verdict,
+);
+check(
+  "active member card, headline, market strip, and Bet Grade share the Held helper",
+  candidateDailyEdgeSource.includes("const headlineVerdict = dailyEdgePresentationVerdict(headline)") &&
+    candidateDailyEdgeSource.includes("const itemVerdict = dailyEdgePresentationVerdict(item)") &&
+    candidateDailyEdgeSource.includes("const verdict = dailyEdgePresentationVerdict(market)") &&
+    candidateDailyEdgeSource.includes("dailyEdgeHeldGuide") &&
+    candidateDailyEdgeSource.includes("dailyEdgeHeldRisk"),
+);
+check(
+  "member Daily Edge filter contract is owned by the active candidate renderer, not the legacy shell",
+  candidateMemberPageSource.includes(
+    'import ActualDailyEdgePreview from "@/app/dev/experience-preview/ActualDailyEdgePreview"',
+  ) &&
+    candidateDailyEdgeSource.includes('{ key: "held", label: "Held" }') &&
+    candidateDailyEdgeSource.includes('{ key: "no_play", label: "No Play" }'),
+);
 
 function game(
   id: string,
