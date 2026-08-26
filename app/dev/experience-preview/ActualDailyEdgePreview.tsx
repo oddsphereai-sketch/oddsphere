@@ -41,6 +41,11 @@ import { soccerForecastSemantics } from "@/app/lab/lib/soccerForecastSemantics";
 import { resolvePointLineMarketPulseMovement } from "@/app/lab/lib/dailyEdgeMarketPulseMovement";
 import { resolveDailyEdgeCurrentOnlyMovement } from "@/app/lab/lib/dailyEdgeCurrentOnlyMovement";
 import { nflSelectedBetGrade } from "@/app/lab/lib/nflReaderPresentation";
+import {
+  dailyEdgeHeldGuide,
+  dailyEdgeHeldRisk,
+  dailyEdgePresentationVerdict,
+} from "@/app/lab/lib/dailyEdgeMarketPresentation";
 import type { NflWeekOneEvidenceBoard } from "@/lib/services/football/nflWeekOneEvidenceBoard";
 import { exactLockedEplScoreOutlook, impliedEplMatchResultScoreOutlook } from "@/lib/services/epl/eplDerivedMarketForecast";
 
@@ -1250,7 +1255,7 @@ function sourceCoherentMarketPulse(market: MarketEdgeDto, movement: CoherentMove
     };
   }
 
-  const rawChip = market.marketReadV2?.label ?? decision?.resolvedMarketRead.label ?? market.marketInterpretation?.chipLabel ?? market.verdict.label;
+  const rawChip = market.marketReadV2?.label ?? decision?.resolvedMarketRead.label ?? market.marketInterpretation?.chipLabel ?? dailyEdgePresentationVerdict(market).label;
   const rawDetail = market.marketReadV2?.explanation ?? decision?.resolvedMarketRead.copy ?? market.marketInterpretation?.detail?.[0] ?? market.riskLine;
   if (/sharp money/i.test(rawChip)) {
     const consensusSupports = consensusLeader && market.pick ? sideMatchesPick(consensusLeader, market.pick) : null;
@@ -1268,6 +1273,8 @@ function sourceCoherentMarketPulse(market: MarketEdgeDto, movement: CoherentMove
 }
 
 function currentAwareGuidedGuide(market: MarketEdgeDto, fallback: string): string {
+  const heldGuide = dailyEdgeHeldGuide(market);
+  if (heldGuide) return heldGuide;
   const guide = market.guidedGuide || fallback;
   if (!/market support is on the same side/i.test(guide)) return guide;
   const pulse = sourceCoherentMarketPulse(market, resolveMarketPulseMovement(market));
@@ -1795,7 +1802,7 @@ function CoreDecisionSnapshot({ game, market, marketKey }: { game: DailyEdgeGame
   if (game.sport === "soccer" && game.soccerProjection) {
     const projection = game.soccerProjection;
     if (marketKey === "moneyline" && !matchResultScoreOutlook(game, market)) {
-      return <div className="mt-2 grid grid-cols-2 gap-2"><ProofCell label="Match Result score outlook" value="Refreshing" note="Legacy snapshot; conflicting goals context withheld" tone="violet" /><ProofCell label="Outcome confidence" value={formatProbability(market.modelProb)} note="Three-way Match Result head remains authoritative" tone="violet" /><ProofCell label="Bet grade" value={market.verdict.label} note="Unchanged by reader refresh" tone="gray" /><ProofCell label="Current price" value={formatAmerican(currentDisplayedPrice(market))} note={market.currentPriceSportsbook ? formatSportsbook(market.currentPriceSportsbook) : market.marketSource ?? "Source unavailable"} tone="gray" /></div>;
+      return <div className="mt-2 grid grid-cols-2 gap-2"><ProofCell label="Match Result score outlook" value="Refreshing" note="Legacy snapshot; conflicting goals context withheld" tone="violet" /><ProofCell label="Outcome confidence" value={formatProbability(market.modelProb)} note="Three-way Match Result head remains authoritative" tone="violet" /><ProofCell label="Bet grade" value={dailyEdgePresentationVerdict(market).label} note="Unchanged by reader refresh" tone="gray" /><ProofCell label="Current price" value={formatAmerican(currentDisplayedPrice(market))} note={market.currentPriceSportsbook ? formatSportsbook(market.currentPriceSportsbook) : market.marketSource ?? "Source unavailable"} tone="gray" /></div>;
     }
     const score = soccerScoreContext(game, marketKey, market);
     const marketNumber = marketKey === "moneyline" ? formatAmerican(currentDisplayedPrice(market)) : market.line === null ? "—" : formatNumber(market.line);
@@ -1906,7 +1913,7 @@ function MetricPair({ team, value }: { team: string; value: string }) {
 function ModelDeepDive({ game, market }: { game: DailyEdgeGameDto; market: MarketEdgeDto }) {
   const coverage = [{ label: "Prediction drivers", value: `${market.keyStats.length}` }, { label: "Split sources", value: `${Number(Boolean(market.recommendationDecision?.consensusSplits)) + Number(Boolean(market.recommendationDecision?.sharpBookSplits))}/2` }, { label: "Price observations", value: `${market.oddsTrail?.length ?? 0}` }, { label: "Market quality", value: market.marketDataQuality.replaceAll("_", " ") }];
   const probabilityGap = displayedProbabilityGap(market);
-  return <div><div className="border-b border-white/[0.07] pb-4"><p className="text-[8px] font-black uppercase tracking-[0.17em] text-violet-200">Model & trust</p><h3 className="mt-1 text-lg font-black tracking-tight text-white">What OddSphere measured—and how complete the read is.</h3></div><div className="mt-4 grid gap-3 lg:grid-cols-2"><AnalysisCard label="Model take" text={game.breakdown.modelBreakdown ?? "No generated model breakdown is available for this snapshot."} /><AnalysisCard label="Market interpretation" text={game.breakdown.sharpRead.sentence} /></div><div className="mt-5"><p className="text-[8px] font-black uppercase tracking-[0.16em] text-gray-400">Decision math at publication</p><div className="mt-2 grid gap-2 sm:grid-cols-2 lg:grid-cols-4"><InfoCard label="Outcome confidence" value={formatProbability(market.modelProb)} /><InfoCard label="Publish-time market" value={formatMarketProbability(market)} /><InfoCard label="Publish-time gap" value={probabilityGap === null ? "Unavailable" : `${probabilityGap > 0 ? "+" : ""}${probabilityGap.toFixed(1)} pp`} /><InfoCard label="Bet actionability" value={market.recommendationConfidence === null || market.recommendationConfidence === undefined ? "Unavailable" : `${market.recommendationConfidence.toFixed(0)}/100`} /></div><p className="mt-2 text-[8px] leading-relaxed text-gray-600">Outcome confidence is the selected-result forecast. Bet grade and actionability remain attached to the evaluated sportsbook price. The latest observed price is shown separately as Market Intelligence context.</p></div><section className="mt-5 rounded-xl border border-white/[0.08] bg-black/20 p-4"><div className="flex flex-wrap items-end justify-between gap-2"><div><p className="text-[8px] font-black uppercase tracking-[0.16em] text-sky-200">Coverage & provenance</p><p className="mt-1 text-[9px] text-gray-600">Honest visibility into what this read can actually support.</p></div><span className="text-[8px] font-bold text-gray-600">Market source · {market.marketSource ?? "Unavailable"}</span></div><div className="mt-3 grid grid-cols-2 gap-2 lg:grid-cols-4">{coverage.map((item) => <div key={item.label} className="rounded-lg border border-white/[0.06] bg-white/[0.02] p-3"><p className="text-[7px] font-black uppercase tracking-wider text-gray-600">{item.label}</p><p className="mt-1 text-xs font-black capitalize text-gray-200">{item.value}</p></div>)}</div></section>{market.reviewFlags.length > 0 ? <div className="mt-4"><p className="text-[8px] font-black uppercase tracking-wider text-amber-200">Factors that affected the final grade</p><div className="mt-2 flex flex-wrap gap-2">{market.reviewFlags.map((flag) => <span key={flag} className="rounded-full border border-amber-400/25 bg-amber-400/[0.08] px-2.5 py-1 text-[8px] font-black uppercase tracking-wider text-amber-200">{flag.replaceAll("_", " ")}</span>)}</div></div> : null}<details className="mt-5 rounded-lg border border-gray-800 bg-black/20"><summary className="cursor-pointer px-4 py-3 text-[8px] font-black uppercase tracking-[0.14em] text-gray-500">Technical review trail</summary><div className="grid gap-2 border-t border-gray-800 p-3 sm:grid-cols-3"><InfoCard label="Reviewer action" value={market.reviewActionSummary.replaceAll("_", " ")} /><InfoCard label="Raw grade" value={market.rawGrade?.replaceAll("_", " ") ?? "Unavailable"} /><InfoCard label="Final Bet grade" value={market.finalGrade?.replaceAll("_", " ") ?? market.verdict.label} /></div></details></div>;
+  return <div><div className="border-b border-white/[0.07] pb-4"><p className="text-[8px] font-black uppercase tracking-[0.17em] text-violet-200">Model & trust</p><h3 className="mt-1 text-lg font-black tracking-tight text-white">What OddSphere measured—and how complete the read is.</h3></div><div className="mt-4 grid gap-3 lg:grid-cols-2"><AnalysisCard label="Model take" text={game.breakdown.modelBreakdown ?? "No generated model breakdown is available for this snapshot."} /><AnalysisCard label="Market interpretation" text={game.breakdown.sharpRead.sentence} /></div><div className="mt-5"><p className="text-[8px] font-black uppercase tracking-[0.16em] text-gray-400">Decision math at publication</p><div className="mt-2 grid gap-2 sm:grid-cols-2 lg:grid-cols-4"><InfoCard label="Outcome confidence" value={formatProbability(market.modelProb)} /><InfoCard label="Publish-time market" value={formatMarketProbability(market)} /><InfoCard label="Publish-time gap" value={probabilityGap === null ? "Unavailable" : `${probabilityGap > 0 ? "+" : ""}${probabilityGap.toFixed(1)} pp`} /><InfoCard label="Bet actionability" value={market.recommendationConfidence === null || market.recommendationConfidence === undefined ? "Unavailable" : `${market.recommendationConfidence.toFixed(0)}/100`} /></div><p className="mt-2 text-[8px] leading-relaxed text-gray-600">Outcome confidence is the selected-result forecast. Bet grade and actionability remain attached to the evaluated sportsbook price. The latest observed price is shown separately as Market Intelligence context.</p></div><section className="mt-5 rounded-xl border border-white/[0.08] bg-black/20 p-4"><div className="flex flex-wrap items-end justify-between gap-2"><div><p className="text-[8px] font-black uppercase tracking-[0.16em] text-sky-200">Coverage & provenance</p><p className="mt-1 text-[9px] text-gray-600">Honest visibility into what this read can actually support.</p></div><span className="text-[8px] font-bold text-gray-600">Market source · {market.marketSource ?? "Unavailable"}</span></div><div className="mt-3 grid grid-cols-2 gap-2 lg:grid-cols-4">{coverage.map((item) => <div key={item.label} className="rounded-lg border border-white/[0.06] bg-white/[0.02] p-3"><p className="text-[7px] font-black uppercase tracking-wider text-gray-600">{item.label}</p><p className="mt-1 text-xs font-black capitalize text-gray-200">{item.value}</p></div>)}</div></section>{market.reviewFlags.length > 0 ? <div className="mt-4"><p className="text-[8px] font-black uppercase tracking-wider text-amber-200">Factors that affected the final grade</p><div className="mt-2 flex flex-wrap gap-2">{market.reviewFlags.map((flag) => <span key={flag} className="rounded-full border border-amber-400/25 bg-amber-400/[0.08] px-2.5 py-1 text-[8px] font-black uppercase tracking-wider text-amber-200">{flag.replaceAll("_", " ")}</span>)}</div></div> : null}<details className="mt-5 rounded-lg border border-gray-800 bg-black/20"><summary className="cursor-pointer px-4 py-3 text-[8px] font-black uppercase tracking-[0.14em] text-gray-500">Technical review trail</summary><div className="grid gap-2 border-t border-gray-800 p-3 sm:grid-cols-3"><InfoCard label="Reviewer action" value={market.reviewActionSummary.replaceAll("_", " ")} /><InfoCard label="Raw grade" value={market.rawGrade?.replaceAll("_", " ") ?? "Unavailable"} /><InfoCard label="Final Bet grade" value={market.held ? "Held" : market.finalGrade?.replaceAll("_", " ") ?? dailyEdgePresentationVerdict(market).label} /></div></details></div>;
 }
 
 function PriceStops({ market }: { market: MarketEdgeDto }) {
@@ -1982,6 +1989,7 @@ function BoardGameCard({ game, sport, headlineMarket, active, activeMarket, sele
     ...headlineMarketData,
     priceAmerican: currentDisplayedPrice(headlineMarketData),
   };
+  const headlineVerdict = dailyEdgePresentationVerdict(headline);
   const soccerMoneylineScoreRefreshing = headlineKey === "moneyline" && Boolean(game.soccerProjection && !matchResultScoreOutlook(game, headline));
   const soccerScore = game.soccerProjection && !soccerMoneylineScoreRefreshing ? soccerScoreContext(game, headlineKey, headline) : null;
   const footballOutcome = sport === "nfl" || sport === "cfb" ? footballOutcomeContext(game) : null;
@@ -2001,7 +2009,7 @@ function BoardGameCard({ game, sport, headlineMarket, active, activeMarket, sele
           selectGame(game, headlineKey);
         }
       }}
-      className={`group relative flex h-full cursor-pointer flex-col overflow-hidden rounded-xl border bg-[#0D0D14] shadow-[0_4px_16px_-6px_rgba(0,0,0,0.55),inset_0_1px_0_rgba(255,255,255,0.05)] transition ${active ? "border-white/35 outline outline-2 outline-violet-400/25 outline-offset-2" : boardCardBorder(headline.verdict.key)}`}
+      className={`group relative flex h-full cursor-pointer flex-col overflow-hidden rounded-xl border bg-[#0D0D14] shadow-[0_4px_16px_-6px_rgba(0,0,0,0.55),inset_0_1px_0_rgba(255,255,255,0.05)] transition ${active ? "border-white/35 outline outline-2 outline-violet-400/25 outline-offset-2" : boardCardBorder(headlineVerdict.key)}`}
     >
       <div className="h-[3px] w-full shrink-0" style={{ background: `linear-gradient(to right, ${teamTheme(game.awayTeam).primary} 0%, ${teamTheme(game.awayTeam).primary} 28%, rgba(255,255,255,0.06) 50%, ${teamTheme(game.homeTeam).primary} 72%, ${teamTheme(game.homeTeam).primary} 100%)` }} />
       <div className={`flex flex-1 flex-col ${compactSoccer ? "p-3.5 sm:p-4" : "p-5 sm:p-6"}`}>
@@ -2022,10 +2030,10 @@ function BoardGameCard({ game, sport, headlineMarket, active, activeMarket, sele
           <span className={compactSoccer ? "text-[22px] font-black leading-none tracking-tight text-white" : "text-[30px] font-black leading-none tracking-tight text-white sm:text-[34px]"}>{footballOutcome?.winner ?? displayPick(headline, headlineKey)}</span>
           <span className="text-[10px] font-black uppercase tracking-wider text-gray-500">{footballOutcome ? "Outcome forecast" : marketLabelFor(headlineKey, sport)}</span>
           <span className="text-[15px] font-black text-gray-200">{formatProbability(footballOutcome?.probability ?? headline.modelProb)}</span>
-          {footballOutcome ? <span className={`text-[9px] font-black uppercase tracking-wider ${headline.verdict.key === "lean" ? "text-sky-300" : headline.held ? "text-amber-200" : "text-gray-500"}`}>Bet grade {headline.verdict.label}</span> : <span className="font-mono text-[12px] font-bold text-gray-500">{formatAmerican(headline.priceAmerican)}</span>}
+          {footballOutcome ? <span className={`text-[9px] font-black uppercase tracking-wider ${headlineVerdict.key === "lean" ? "text-sky-300" : headline.held ? "text-amber-200" : "text-gray-500"}`}>Bet grade {headlineVerdict.label}</span> : <span className="font-mono text-[12px] font-bold text-gray-500">{formatAmerican(headline.priceAmerican)}</span>}
         </div>
         {sport === "soccer" && headlineKey === "moneyline" && headline.soccerMatchResultContext ? <div className="mt-2 rounded-lg border border-sky-400/12 bg-sky-400/[0.025] px-2.5 py-2"><div className="grid grid-cols-3 gap-2 text-center">{([{ key: "away", label: game.awayTeam }, { key: "draw", label: "Draw" }, { key: "home", label: game.homeTeam }] as const).map((outcome) => <div key={outcome.key}><p className="truncate text-[7px] font-black uppercase tracking-wider text-gray-600">{outcome.label}</p><p className={`font-mono text-[10px] font-black ${outcome.key === headline.soccerMatchResultContext?.displayed_side ? "text-sky-200" : "text-gray-300"}`}>{(headline.soccerMatchResultContext!.model[outcome.key] * 100).toFixed(1)}%</p></div>)}</div></div> : null}
-        <p className={`${compactSoccer ? "mt-2 text-[10px]" : "mt-3 text-[12px]"} line-clamp-2 leading-relaxed text-gray-400`}>{footballOutcome ? `The discrete football model favors ${footballOutcome.winner}; the ${headline.verdict.label} Bet grade separately evaluates the exact ${marketLabelFor(headlineKey, sport)} price.` : currentAwareGuidedGuide(headline, game.decisionLine)}</p>
+        <p className={`${compactSoccer ? "mt-2 text-[10px]" : "mt-3 text-[12px]"} line-clamp-2 leading-relaxed text-gray-400`}>{footballOutcome ? headline.held ? dailyEdgeHeldGuide(headline) : `The discrete football model favors ${footballOutcome.winner}; the ${headlineVerdict.label} Bet grade separately evaluates the exact ${marketLabelFor(headlineKey, sport)} price.` : currentAwareGuidedGuide(headline, game.decisionLine)}</p>
         <div className={`${compactSoccer ? "mt-2" : "mt-3"} flex items-baseline gap-2`}>
           <span className="text-[9px] font-black uppercase tracking-wider text-gray-600">{soccerScore ? headlineKey === "moneyline" ? "Result score outlook" : "Goal outlook" : sport === "nfl" || sport === "cfb" ? "Expected score" : "Proj"}</span>
           {projectionIsHeld(game) ? <span className="text-[12px] font-bold text-amber-200/75">Held · authoritative model output pending</span> : soccerMoneylineScoreRefreshing ? <span className="text-[12px] font-bold text-amber-200/75">Refreshing · conflicting goals context withheld</span> : <span className="text-[12px] text-gray-400">{game.awayTeam} <strong className="text-[13px] text-white">{footballExpectedAway === null ? formatNumber(soccerScore?.expectedGoals.away ?? game.projected.away) : footballExpectedAway.toFixed(1)}</strong> <span className="mx-1 text-gray-700">·</span> {game.homeTeam} <strong className="text-[13px] text-white">{footballExpectedHome === null ? formatNumber(soccerScore?.expectedGoals.home ?? game.projected.home) : footballExpectedHome.toFixed(1)}</strong>{(sport === "nfl" || sport === "cfb") && footballExpectedAway !== null && footballExpectedHome !== null ? <span className="ml-2 text-[9px] text-gray-600">Representative {game.projected.away}–{game.projected.home}</span> : soccerScore?.scenario ? <span className="ml-2 text-[9px] text-gray-600">{headlineKey === "moneyline" ? "Mode" : "Illustration"} {soccerScore.scenario.away}–{soccerScore.scenario.home}</span> : null}</span>}
@@ -2034,14 +2042,16 @@ function BoardGameCard({ game, sport, headlineMarket, active, activeMarket, sele
           <div className="flex items-center justify-between gap-1 overflow-hidden text-[9px] font-black uppercase tracking-[0.06em]">
             {marketKeys.map((key, index) => {
               const item = game.markets[key];
-              return <span key={key} className="inline-flex min-w-0 items-center gap-1">{index > 0 ? <span className="mr-1 text-gray-700">·</span> : null}<span className="text-gray-600">{marketShortLabelFor(key, sport)}</span><span className={boardVerdictText(item.verdict.key)}>{verdictSymbol(item.verdict.key)} {item.verdict.label}</span></span>;
+              const itemVerdict = dailyEdgePresentationVerdict(item);
+              return <span key={key} className="inline-flex min-w-0 items-center gap-1">{index > 0 ? <span className="mr-1 text-gray-700">·</span> : null}<span className="text-gray-600">{marketShortLabelFor(key, sport)}</span><span className={boardVerdictText(itemVerdict.key)}>{verdictSymbol(itemVerdict.key)} {itemVerdict.label}</span></span>;
             })}
           </div>
           <div className={`${compactSoccer ? "mt-2 gap-1.5" : "mt-4 gap-2"} grid grid-cols-3`}>
             {marketKeys.map((key) => {
               const item = game.markets[key];
+              const itemVerdict = dailyEdgePresentationVerdict(item);
               const selected = active && activeMarket === key;
-              return <button key={key} type="button" data-market={key} onClick={(event) => { event.stopPropagation(); selectGame(game, key); }} className={`${compactSoccer ? "min-h-[50px] px-2 py-2" : "min-h-[70px] px-3 py-3 sm:min-h-[76px] sm:px-3.5"} rounded-lg border text-left transition ${boardMarketPill(item.verdict.key)} ${selected ? "ring-2 ring-white/45 ring-offset-1 ring-offset-[#0D0D14]" : ""}`}><span className={`block text-[8.5px] font-black uppercase tracking-[0.1em] ${boardVerdictText(item.verdict.key)}`}>{marketShortLabelFor(key, sport)}</span><span className={`${compactSoccer ? "mt-1 text-[11px]" : "mt-1.5 text-[14px] sm:text-[15px]"} block truncate font-black text-gray-100`}>{displayPick(item, key)}</span></button>;
+              return <button key={key} type="button" data-market={key} onClick={(event) => { event.stopPropagation(); selectGame(game, key); }} className={`${compactSoccer ? "min-h-[50px] px-2 py-2" : "min-h-[70px] px-3 py-3 sm:min-h-[76px] sm:px-3.5"} rounded-lg border text-left transition ${boardMarketPill(itemVerdict.key)} ${selected ? "ring-2 ring-white/45 ring-offset-1 ring-offset-[#0D0D14]" : ""}`}><span className={`block text-[8.5px] font-black uppercase tracking-[0.1em] ${boardVerdictText(itemVerdict.key)}`}>{marketShortLabelFor(key, sport)}</span><span className={`${compactSoccer ? "mt-1 text-[11px]" : "mt-1.5 text-[14px] sm:text-[15px]"} block truncate font-black text-gray-100`}>{displayPick(item, key)}</span></button>;
             })}
           </div>
           <div className="mt-2 flex min-h-3 justify-end"><span className={`text-[8px] font-black uppercase tracking-[0.1em] ${active ? "text-gray-300" : "text-violet-200/60"}`}>{active ? "Open in reader ↑" : "View breakdown ↑"}</span></div>
@@ -2052,6 +2062,7 @@ function BoardGameCard({ game, sport, headlineMarket, active, activeMarket, sele
 }
 
 function boardCardBorder(verdict: string): string {
+  if (verdict === "held") return "border-amber-500/20 hover:border-amber-400/35";
   if (verdict === "best_angle") return "border-emerald-500/25 hover:border-emerald-400/45";
   if (verdict === "lean") return "border-sky-500/20 hover:border-sky-400/40";
   if (verdict === "watchlist") return "border-indigo-500/15 hover:border-indigo-400/35";
@@ -2060,6 +2071,7 @@ function boardCardBorder(verdict: string): string {
 }
 
 function boardMarketPill(verdict: string): string {
+  if (verdict === "held") return "border-amber-500/20 bg-amber-500/[0.045]";
   if (verdict === "best_angle") return "border-emerald-500/25 bg-emerald-500/[0.07]";
   if (verdict === "lean") return "border-sky-500/25 bg-sky-500/[0.06]";
   if (verdict === "watchlist") return "border-indigo-500/20 bg-indigo-500/[0.05]";
@@ -2068,6 +2080,7 @@ function boardMarketPill(verdict: string): string {
 }
 
 function boardVerdictText(verdict: string): string {
+  if (verdict === "held") return "text-amber-200";
   if (verdict === "best_angle") return "text-emerald-300";
   if (verdict === "lean") return "text-sky-300";
   if (verdict === "watchlist") return "text-indigo-300";
@@ -2261,12 +2274,14 @@ function TeamLogo({ src, label }: { src: string | null; label: string }) {
 }
 
 function VerdictBadge({ market, large = false }: { market: MarketEdgeDto; large?: boolean }) {
-  const style = verdictStyle(market.verdict.key);
-  return <span className={`inline-flex w-fit items-center gap-1.5 rounded-full border font-black uppercase tracking-[0.12em] ${style} ${large ? "px-3 py-1.5 text-[10px]" : "px-2.5 py-1 text-[8px]"}`}>{verdictSymbol(market.verdict.key)} {market.verdict.label}</span>;
+  const verdict = dailyEdgePresentationVerdict(market);
+  const style = verdictStyle(verdict.key);
+  return <span className={`inline-flex w-fit items-center gap-1.5 rounded-full border font-black uppercase tracking-[0.12em] ${style} ${large ? "px-3 py-1.5 text-[10px]" : "px-2.5 py-1 text-[8px]"}`}>{verdictSymbol(verdict.key)} {verdict.label}</span>;
 }
 
 function VerdictGlyph({ market }: { market: MarketEdgeDto }) {
-  return <span className={verdictStyle(market.verdict.key).split(" ").find((part) => part.startsWith("text-")) ?? "text-gray-500"}>{verdictSymbol(market.verdict.key)}</span>;
+  const verdict = dailyEdgePresentationVerdict(market);
+  return <span className={verdictStyle(verdict.key).split(" ").find((part) => part.startsWith("text-")) ?? "text-gray-500"}>{verdictSymbol(verdict.key)}</span>;
 }
 
 function GradeScale({ market }: { market: MarketEdgeDto }) {
@@ -2538,6 +2553,8 @@ function displayedProbabilityGap(market: MarketEdgeDto): number | null {
 }
 
 function displayRiskLine(market: MarketEdgeDto): string {
+  const heldRisk = dailyEdgeHeldRisk(market);
+  if (heldRisk) return heldRisk;
   const risk = stripRiskPrefix(market.guidedWatchOut || market.riskLine);
   if (!risk.trim()) return "No additional risk note is available for this snapshot.";
   if (/model favors .* by [-+]?\d+(?:\.\d+)?\s*pp/i.test(risk)) {
@@ -2623,6 +2640,7 @@ function pulseToneStyle(tone: "emerald" | "amber" | "gray") {
 }
 
 function verdictStyle(key: string): string {
+  if (key === "held") return "border-amber-300/25 bg-amber-400/[0.07] text-amber-200";
   if (key === "best_angle") return "border-emerald-400/30 bg-emerald-400/[0.09] text-emerald-300";
   if (key === "lean") return "border-sky-400/30 bg-sky-400/[0.09] text-sky-300";
   if (key === "watchlist") return "border-indigo-400/25 bg-indigo-400/[0.08] text-indigo-300";
@@ -2631,6 +2649,7 @@ function verdictStyle(key: string): string {
 }
 
 function verdictSymbol(key: string): string {
+  if (key === "held") return "—";
   if (key === "best_angle") return "★";
   if (key === "lean") return "↗";
   if (key === "caution") return "△";
