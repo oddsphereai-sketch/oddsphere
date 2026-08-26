@@ -6,14 +6,15 @@ This release changes shared member presentation and MLB operational recovery
 only. It does not change a probability, projection, side, evaluated quote,
 writer grade, action, stake, tracking record, or lock. Internal `held=true`
 remains the health signal; members see No Play plus the exact incomplete-data
-reason and no fabricated forecast or evaluated quote.
+reason and no fabricated evaluated quote. The model-owned outcome prediction,
+probability, and projected score remain visible and distinct from Bet Grade.
 
-The response boundary distinguishes forecast-integrity failures from
-bet-tuple availability. Starter, lineup, identity, missing-feature, and model
-integrity exceptions withhold the affected forecast. Price-, sportsbook-,
-split-, or consensus-only exceptions preserve an already coherent independent
-forecast while withholding fair probability, edge, EV, evaluated price,
-actionability, and grade. In both cases the member Bet Grade is No Play.
+The response boundary uses one universal forecast/grade separation contract.
+Starter, lineup, identity, missing-feature, model-integrity, price-, sportsbook-,
+split-, and consensus-only exceptions all preserve the already-produced model
+outcome forecast. They withhold only the evaluated bet pick, fair probability,
+edge, EV, evaluated price, actionability, and grade price. The member Bet Grade
+is No Play in every case while internal recovery remains active.
 
 At 2026-08-26T15:04:51Z, HOU@NYY (`external_id=5059773`) still had a null home
 starter after the natural 14:05 slate cycle completed successfully at

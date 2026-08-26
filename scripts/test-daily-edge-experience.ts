@@ -30,7 +30,6 @@ import {
   DAILY_EDGE_MEMBER_PRESENTATION_RELEASE_ID,
   dailyEdgeHeldGuide,
   dailyEdgeHeldRisk,
-  dailyEdgeOperationalExceptionWithholdsForecast,
   dailyEdgeOperationalNoPlayReason,
   dailyEdgePresentationVerdict,
   presentDailyEdgeOperationalNoPlay,
@@ -188,16 +187,17 @@ const presentedHeldMarket = presentDailyEdgeOperationalNoPlay(
   "missing_or_scratched_starter",
 );
 check(
-  "operational exception preserves internal held state but withholds every evaluated tuple field",
+  "starter exception preserves the outcome forecast and withholds only the evaluated bet tuple",
   presentedHeldMarket.held === true &&
     presentedHeldMarket.verdict.key === "no_play" &&
     presentedHeldMarket.verdict.label === "No Play" &&
-    presentedHeldMarket.pick === null &&
-    presentedHeldMarket.confidence === null &&
+    presentedHeldMarket.pick === "NYY" &&
+    presentedHeldMarket.confidence === 0.61 &&
     presentedHeldMarket.grade === null &&
     presentedHeldMarket.rawGrade === null &&
     presentedHeldMarket.finalGrade === null &&
-    presentedHeldMarket.modelProb === null &&
+    presentedHeldMarket.modelProb === 0.61 &&
+    presentedHeldMarket.modelTrustPct === 61 &&
     presentedHeldMarket.marketFairProb === null &&
     presentedHeldMarket.pinnacleEvPct === null &&
     presentedHeldMarket.priceAmerican === null &&
@@ -208,6 +208,8 @@ check(
     presentedHeldMarket.opposingOddsTrail === null &&
     presentedHeldMarket.recommendationDecision?.playGrade === "No Play" &&
     presentedHeldMarket.recommendationDecision.pick === null &&
+    presentedHeldMarket.recommendationDecision.modelProbability === 0.61 &&
+    presentedHeldMarket.recommendationDecision.projectedScore?.home === 4.8 &&
     presentedHeldMarket.recommendationDecision.price === null &&
     presentedHeldMarket.recommendationDecision.edgePp === null,
 );
@@ -241,18 +243,14 @@ const presentedPriceOnlyMarket = presentDailyEdgeOperationalNoPlay(
   "exact_price_consensus_unavailable",
 );
 check(
-  "price-only No Play preserves the independent outcome forecast while suppressing the evaluated bet tuple",
-  dailyEdgeOperationalExceptionWithholdsForecast(
-    priceOnlyHeldMarket,
-    "exact_price_consensus_unavailable",
-  ) === false &&
-    presentedPriceOnlyMarket.held === true &&
+  "price-only No Play follows the same forecast-preserving contract",
+  presentedPriceOnlyMarket.held === true &&
     presentedPriceOnlyMarket.verdict.key === "no_play" &&
     presentedPriceOnlyMarket.pick === "USC" &&
     presentedPriceOnlyMarket.confidence === 0.72 &&
     presentedPriceOnlyMarket.modelProb === 0.72 &&
     presentedPriceOnlyMarket.modelTrustPct === 72 &&
-    presentedPriceOnlyMarket.recommendationDecision?.pick === "USC" &&
+    presentedPriceOnlyMarket.recommendationDecision?.pick === null &&
     presentedPriceOnlyMarket.recommendationDecision.modelProbability === 0.72 &&
     presentedPriceOnlyMarket.recommendationDecision.projectedScore?.home === 34.2 &&
     presentedPriceOnlyMarket.marketFairProb === null &&
@@ -318,6 +316,7 @@ const heldResponseFixture = {
     external_id: 5059773,
     awayTeam: "HOU",
     homeTeam: "NYY",
+    projected: { away: 3.9, home: 4.8 },
     lockState: "open",
     lockedAt: null,
     holdReason: "missing_or_scratched_starter",
@@ -330,20 +329,64 @@ const heldResponseFixture = {
 } as unknown as DailyEdgeResponse;
 finalizeDailyEdgeResponseCoherence(heldResponseFixture);
 check(
-  "response finalizer maps all HOU@NYY operational markets to public No Play without suppressing the slate",
+  "response finalizer maps HOU@NYY to No Play while preserving its outcome forecast",
   Object.values(heldResponseFixture.games[0]!.markets).every((market) =>
     market.held === true &&
     market.verdict.key === "no_play" &&
     market.actionabilityLabel === "No Play" &&
-    market.pick === null &&
-    market.modelProb === null &&
+    market.pick === "NYY" &&
+    market.modelProb === 0.61 &&
+    market.recommendationDecision?.pick === null &&
+    market.recommendationDecision?.modelProbability === 0.61 &&
     market.priceAmerican === null &&
     market.displayReason === "No Play — starter unconfirmed; required evidence is incomplete."
   ) &&
+    heldResponseFixture.games[0]!.projected.away === 3.9 &&
+    heldResponseFixture.games[0]!.projected.home === 4.8 &&
     heldResponseFixture.memberPresentation?.counts.operationalExceptions === 3 &&
     heldResponseFixture.memberPresentation.counts.publicNoPlayMarkets === 3 &&
     heldResponseFixture.memberPresentation.counts.evaluatedMarkets === 0,
 );
+
+for (const sport of ["mlb", "wnba", "nfl", "cfb", "soccer", "nba", "nhl"] as const) {
+  const market = structuredClone(dangerousHeldMarket) as MarketEdgeDto;
+  const response = {
+    as_of: "2026-08-26T15:00:00Z",
+    date: "2026-08-26",
+    sport,
+    games: [{
+      id: `${sport}-forecast-grade-contract`,
+      awayTeam: "AWAY",
+      homeTeam: "HOME",
+      projected: { away: 21.4, home: 24.7 },
+      holdReason: "model_input_incomplete",
+      markets: {
+        moneyline: market,
+        total: structuredClone(market),
+        first_inning: structuredClone(market),
+      },
+    }],
+  } as unknown as DailyEdgeResponse;
+  finalizeDailyEdgeResponseCoherence(response);
+  check(
+    `${sport} operational No Play preserves prediction and strips the evaluated bet tuple`,
+    response.games[0]!.projected.away === 21.4 &&
+      response.games[0]!.projected.home === 24.7 &&
+      Object.values(response.games[0]!.markets).every((presented) =>
+        presented.held === true &&
+        presented.verdict.key === "no_play" &&
+        presented.pick === "NYY" &&
+        presented.modelProb === 0.61 &&
+        presented.recommendationDecision?.pick === null &&
+        presented.recommendationDecision?.modelProbability === 0.61 &&
+        presented.recommendationDecision?.projectedScore?.home === 4.8 &&
+        presented.priceAmerican === null &&
+        presented.marketFairProb === null &&
+        presented.pinnacleEvPct === null &&
+        presented.actionabilityLabel === "No Play"
+      ),
+  );
+}
 
 function game(
   id: string,
