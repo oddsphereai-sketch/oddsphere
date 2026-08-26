@@ -22,7 +22,7 @@ import {
 import { activeCfbWeeklyWindow, isGameInCfbWeeklyWindow } from "./cfbWeeklyWindow";
 
 export const CFB_MEMBER_FIXTURE_RELEASE =
-  "cfb_v1_member_fixture_2026_08_25_r2_weekly" as const;
+  "cfb_v1_member_fixture_2026_08_25_r3_same_book_history" as const;
 
 export type CfbMemberFixture = {
   fixtureRelease: typeof CFB_MEMBER_FIXTURE_RELEASE;
@@ -40,11 +40,23 @@ export async function readCurrentCfbMemberFixture(args: { client: SupabaseClient
 
 export function buildCfbMemberFixture(rows: CfbForwardStoredEvidence[], now = new Date().toISOString()): CfbMemberFixture {
   const window = activeCfbWeeklyWindow(now);
-  const latest = latestCompleteRows(rows.filter((row) => isGameInCfbWeeklyWindow({ scheduledStart: row.gameStartAt }, window)));
+  const windowRows = rows.filter((row) => isGameInCfbWeeklyWindow({ scheduledStart: row.gameStartAt }, window));
+  const latest = latestCompleteRows(windowRows);
+  const movementRowsByGame = new Map(latest.map((row) => [
+    row.providerGameId,
+    movementRowsForGame(windowRows, row),
+  ]));
   const capturedAt = latest.reduce((value, row) => Date.parse(row.capturedAt) > Date.parse(value) ? row.capturedAt : value, latest[0]!.capturedAt);
-  const games = latest.map(buildGame).sort((a, b) => Date.parse(a.gameStartAt ?? "") - Date.parse(b.gameStartAt ?? ""));
+  const games = latest
+    .map((row) => buildGame(row, movementRowsByGame.get(row.providerGameId)!))
+    .sort((a, b) => Date.parse(a.gameStartAt ?? "") - Date.parse(b.gameStartAt ?? ""));
   const date = localDate(games[0]!.gameStartAt!);
-  const sourceChecksum = createHash("sha256").update(latest.map((row) => `${row.providerGameId}:${row.payloadSha256}`).sort().join("|")).digest("hex");
+  const sourceChecksum = createHash("sha256")
+    .update([...movementRowsByGame.values()].flat()
+      .map((row) => `${row.providerGameId}:${row.capturedAt}:${row.payloadSha256}`)
+      .sort()
+      .join("|"))
+    .digest("hex");
   const trackingGames = latest.filter((row) => row.payload.decisions.trackingEnabled).length;
   return {
     fixtureRelease: CFB_MEMBER_FIXTURE_RELEASE,
@@ -61,6 +73,18 @@ export function buildCfbMemberFixture(rows: CfbForwardStoredEvidence[], now = ne
     },
     tracking: { trackingEligible: trackingGames > 0, reason: trackingGames > 0 ? `${trackingGames} game${trackingGames === 1 ? " has" : "s have"} a valid immutable T-60 exact-price tuple.` : "Official CFB tracking begins game by game only after a valid T-60 lock; unlocked grades are not counted yet." },
   };
+}
+
+function movementRowsForGame(
+  rows: CfbForwardStoredEvidence[],
+  latest: CfbForwardStoredEvidence,
+): CfbForwardStoredEvidence[] {
+  return rows
+    .filter((row) =>
+      row.providerGameId === latest.providerGameId &&
+      row.payload.schemaRelease === CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE &&
+      Date.parse(row.capturedAt) <= Date.parse(latest.capturedAt))
+    .sort((first, second) => Date.parse(first.capturedAt) - Date.parse(second.capturedAt));
 }
 
 function shortDate(value: string): string {
@@ -83,12 +107,12 @@ function latestCompleteRows(rows: CfbForwardStoredEvidence[]): CfbForwardStoredE
   return values;
 }
 
-function buildGame(row: CfbForwardStoredEvidence): DailyEdgeGameDto {
+function buildGame(row: CfbForwardStoredEvidence, movementRows: CfbForwardStoredEvidence[]): DailyEdgeGameDto {
   const payload = row.payload;
   const decisions = payload.decisions.evaluatedBets;
-  const moneyline = buildMarket(payload, "moneyline", decisionFor(decisions, "moneyline"));
-  const total = buildMarket(payload, "total", decisionFor(decisions, "total"));
-  const spread = buildMarket(payload, "spread", decisionFor(decisions, "spread"));
+  const moneyline = buildMarket(payload, "moneyline", decisionFor(decisions, "moneyline"), movementRows);
+  const total = buildMarket(payload, "total", decisionFor(decisions, "total"), movementRows);
+  const spread = buildMarket(payload, "spread", decisionFor(decisions, "spread"), movementRows);
   const startsAt = payload.game.scheduledStart;
   const started = Date.parse(row.capturedAt) >= Date.parse(startsAt);
   const t60 = payload.stage === "t60";
@@ -125,13 +149,20 @@ function buildGame(row: CfbForwardStoredEvidence): DailyEdgeGameDto {
   };
 }
 
-function buildMarket(payload: CfbForwardEvidencePayload, market: CfbV1Market, decision: CfbV1ExactPriceDecision | null): MarketEdgeDto {
+function buildMarket(
+  payload: CfbForwardEvidencePayload,
+  market: CfbV1Market,
+  decision: CfbV1ExactPriceDecision | null,
+  movementRows: CfbForwardStoredEvidence[],
+): MarketEdgeDto {
   const held = decision === null;
   const slot = market === "spread" ? payload.market.current?.spread : market === "total" ? payload.market.current?.total : payload.market.current?.moneyline;
   const split = payload.market.playbookSplits?.[market] ?? null;
   const selectedSide = decision ? canonicalSide(payload, decision) : market === "total" ? "over" : "home";
   const selectedSplit = splitValue(split, market, selectedSide);
-  const trails = decision ? decisionTrails(payload, decision) : { selected: [] as OddsTrailStopDto[], opposing: [] as OddsTrailStopDto[] };
+  const trails = decision
+    ? decisionTrails(payload, decision, movementRows)
+    : { selected: [] as OddsTrailStopDto[], opposing: [] as OddsTrailStopDto[] };
   const isBest = decision?.grade === "Best Angle";
   const isLean = decision?.grade === "Lean";
   const isWatch = decision?.grade === "Watchlist";
@@ -218,22 +249,138 @@ function buildMarket(payload: CfbForwardEvidencePayload, market: CfbV1Market, de
   };
 }
 
-function decisionTrails(payload: CfbForwardEvidencePayload, decision: CfbV1ExactPriceDecision): { selected: OddsTrailStopDto[]; opposing: OddsTrailStopDto[] } {
-  const selected: OddsTrailStopDto[] = [];
-  const opposing: OddsTrailStopDto[] = [];
-  const opening = payload.market.operationalOpening;
+function decisionTrails(
+  payload: CfbForwardEvidencePayload,
+  decision: CfbV1ExactPriceDecision,
+  movementRows: CfbForwardStoredEvidence[],
+): { selected: OddsTrailStopDto[]; opposing: OddsTrailStopDto[] } {
   const selectedSide = canonicalSide(payload, decision);
-  if (opening && normalizeBook(opening.quote.sportsbook) === normalizeBook(decision.evaluatedQuote.sportsbook)) {
-    const openingQuote = quoteFor(opening.quote, decision.market, selectedSide);
-    const openingOpposing = quoteFor(opening.quote, decision.market, opposingCanonicalSide(selectedSide));
-    if (openingQuote) selected.push({ american: openingQuote.price, line: openingQuote.line, observedAt: opening.capturedAt, sportsbook: opening.quote.sportsbook, source: opening.provenance === "provider_opening" ? "provider_opening" : "line_history", label: opening.provenance === "provider_opening" ? "open" : "first" });
-    if (openingOpposing) opposing.push({ american: openingOpposing.price, line: openingOpposing.line, observedAt: opening.capturedAt, sportsbook: opening.quote.sportsbook, source: opening.provenance === "provider_opening" ? "provider_opening" : "line_history", label: opening.provenance === "provider_opening" ? "open" : "first" });
-  }
-  selected.push({ american: decision.evaluatedQuote.price, line: decision.evaluatedQuote.line, observedAt: decision.evaluatedQuote.observedAt, sportsbook: decision.evaluatedQuote.sportsbook, source: decision.stage === "t60_locked" ? "locked_snapshot" : "current_line", label: decision.stage === "t60_locked" ? "locked" : "current" });
   const exactBook = payload.market.currentBooks.find((book) => normalizeBook(book.sportsbook) === normalizeBook(decision.evaluatedQuote.sportsbook));
   const opposingQuote = exactBook ? quoteFor(exactBook, decision.market, opposingCanonicalSide(selectedSide)) : null;
-  if (opposingQuote) opposing.push({ american: opposingQuote.price, line: opposingQuote.line, observedAt: exactBook!.observedAt, sportsbook: exactBook!.sportsbook, source: "current_line", label: "current" });
-  return { selected: dedupeTrail(selected), opposing: dedupeTrail(opposing) };
+  const selected = buildSameBookTrail({
+    rows: movementRows,
+    sportsbook: decision.evaluatedQuote.sportsbook,
+    market: decision.market,
+    side: selectedSide,
+    terminal: {
+      american: decision.evaluatedQuote.price,
+      line: decision.evaluatedQuote.line,
+      observedAt: decision.evaluatedQuote.observedAt,
+      locked: decision.stage === "t60_locked",
+    },
+  });
+  const opposing = opposingQuote ? buildSameBookTrail({
+    rows: movementRows,
+    sportsbook: decision.evaluatedQuote.sportsbook,
+    market: decision.market,
+    side: opposingCanonicalSide(selectedSide),
+    terminal: {
+      american: opposingQuote.price,
+      line: opposingQuote.line,
+      observedAt: exactBook!.observedAt,
+      locked: decision.stage === "t60_locked",
+    },
+  }) : [];
+  return { selected, opposing };
+}
+
+function buildSameBookTrail(args: {
+  rows: CfbForwardStoredEvidence[];
+  sportsbook: string;
+  market: CfbV1Market;
+  side: "home" | "away" | "over" | "under";
+  terminal: { american: number; line: number | null; observedAt: string; locked: boolean };
+}): OddsTrailStopDto[] {
+  const sportsbook = normalizeBook(args.sportsbook);
+  const candidates: OddsTrailStopDto[] = [];
+  const append = (stop: OddsTrailStopDto, replaceDuplicate = false) => {
+    const key = `${normalizeBook(stop.sportsbook ?? "")}:${stop.observedAt}:${stop.american}:${stop.line ?? "null"}`;
+    const duplicateIndex = candidates.findIndex((candidate) =>
+      `${normalizeBook(candidate.sportsbook ?? "")}:${candidate.observedAt}:${candidate.american}:${candidate.line ?? "null"}` === key);
+    if (duplicateIndex >= 0) {
+      if (replaceDuplicate) candidates.splice(duplicateIndex, 1);
+      else return;
+    }
+    candidates.push(stop);
+  };
+
+  for (const row of args.rows) {
+    const opening = row.payload.market.providerOpening;
+    if (!opening || normalizeBook(opening.sportsbook) !== sportsbook) continue;
+    const value = quoteFor(opening, args.market, args.side);
+    if (!value) continue;
+    append({
+      american: value.price,
+      line: value.line,
+      observedAt: opening.observedAt,
+      sportsbook: opening.sportsbook,
+      source: "provider_opening",
+      label: "open",
+    });
+  }
+
+  const operationalOpening = args.rows[0]?.payload.market.operationalOpening ?? null;
+  if (operationalOpening && normalizeBook(operationalOpening.quote.sportsbook) === sportsbook) {
+    const value = quoteFor(operationalOpening.quote, args.market, args.side);
+    if (value) append({
+      american: value.price,
+      line: value.line,
+      observedAt: operationalOpening.capturedAt,
+      sportsbook: operationalOpening.quote.sportsbook,
+      source: operationalOpening.provenance === "provider_opening" ? "provider_opening" : "line_history",
+      label: operationalOpening.provenance === "provider_opening" ? "open" : "first",
+    });
+  }
+
+  for (const row of args.rows.slice(0, -1)) {
+    const current = row.payload.market.currentBooks.find((candidate) =>
+      normalizeBook(candidate.sportsbook) === sportsbook) ??
+      (row.payload.market.current && normalizeBook(row.payload.market.current.sportsbook) === sportsbook
+        ? row.payload.market.current
+        : null);
+    if (!current) continue;
+    const value = quoteFor(current, args.market, args.side);
+    if (!value) continue;
+    append({
+      american: value.price,
+      line: value.line,
+      observedAt: current.observedAt,
+      sportsbook: current.sportsbook,
+      source: "line_history",
+      label: "move",
+    });
+  }
+
+  append({
+    american: args.terminal.american,
+    line: args.terminal.line,
+    observedAt: args.terminal.observedAt,
+    sportsbook: args.sportsbook,
+    source: args.terminal.locked ? "locked_snapshot" : "current_line",
+    label: args.terminal.locked ? "locked" : "current",
+  }, true);
+
+  candidates.sort((first, second) => Date.parse(first.observedAt ?? "") - Date.parse(second.observedAt ?? ""));
+  const materialStops = candidates.reduce<OddsTrailStopDto[]>((stops, stop, index) => {
+    if (index === 0) return [stop];
+    const previous = stops[stops.length - 1]!;
+    const changed = previous.american !== stop.american || previous.line !== stop.line;
+    const terminal = index === candidates.length - 1;
+    if (changed || terminal) stops.push(stop);
+    return stops;
+  }, []);
+
+  return materialStops.map((stop, index, stops) => ({
+    ...stop,
+    source: index === stops.length - 1
+      ? args.terminal.locked ? "locked_snapshot" : "current_line"
+      : stop.source === "provider_opening" ? "provider_opening" : "line_history",
+    label: index === stops.length - 1
+      ? args.terminal.locked ? "locked" : "current"
+      : index === 0
+        ? stop.source === "provider_opening" ? "open" : "first"
+        : "move",
+  }));
 }
 
 function keyStats(payload: CfbForwardEvidencePayload, market: CfbV1Market): MarketEdgeDto["keyStats"] {
@@ -291,7 +438,6 @@ function opposingCanonicalSide(side: string): "home" | "away" | "over" | "under"
 function opposingLabel(payload: CfbForwardEvidencePayload, market: CfbV1Market, side: string, line: number | null): string { if (market === "moneyline") return side === "home" ? payload.game.away.abbreviation : payload.game.home.abbreviation; if (market === "spread") return `${side === "home" ? payload.game.away.abbreviation : payload.game.home.abbreviation} ${signed(line === null ? 0 : -line)}`; return `${side === "over" ? "Under" : "Over"} ${marketNumber(line ?? 0)}`; }
 function quoteFor(book: NonNullable<CfbForwardEvidencePayload["market"]["current"]>, market: CfbV1Market, side: string): { price: number; line: number | null } | null { if (market === "moneyline" && book.moneyline) return { price: side === "home" ? book.moneyline.homePrice : book.moneyline.awayPrice, line: null }; if (market === "spread" && book.spread) return { price: side === "home" ? book.spread.homePrice : book.spread.awayPrice, line: side === "home" ? book.spread.homeLine : book.spread.awayLine }; if (market === "total" && book.total) return { price: side === "over" ? book.total.overPrice : book.total.underPrice, line: book.total.line }; return null; }
 function lineFromSlot(slot: CfbForwardEvidencePayload["market"]["current"] extends never ? never : unknown): number | null { if (!slot || typeof slot !== "object") return null; const record = slot as Record<string, unknown>; return typeof record.line === "number" ? record.line : typeof record.homeLine === "number" ? record.homeLine : null; }
-function dedupeTrail(rows: OddsTrailStopDto[]): OddsTrailStopDto[] { return rows.filter((row, index) => index === 0 || row.american !== rows[index - 1]!.american || row.line !== rows[index - 1]!.line); }
 function normalizeBook(value: string): string { return value.toLowerCase().replace(/[^a-z0-9]+/g, ""); }
 function formatAmerican(value: number): string { return value > 0 ? `+${value}` : String(value); }
 function marketNumber(value: number): string { return Number.isInteger(value) ? value.toFixed(0) : value.toFixed(1); }
