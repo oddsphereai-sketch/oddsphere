@@ -399,6 +399,14 @@ check(
     candidateSource.includes('params.delete("market")'),
 );
 check(
+  "an open mobile reader keeps the shared sport tabs actionable and routes through the same cleanup path",
+  candidateSource.includes('aria-label="Reader sport switch"') &&
+    candidateSource.includes("onSportChange={switchSport}") &&
+    candidateSource.includes("onChange={onSportChange}") &&
+    candidateSource.includes('params.delete("game")') &&
+    candidateSource.includes('params.delete("market")'),
+);
+check(
   "consensus-only markets do not render an empty sharp-book panel",
   candidateSource.includes("sharp ?? (sharpAvailability === null ? null") &&
     candidateSource.includes("{displayedSharp ? <SplitSourcePanel") &&

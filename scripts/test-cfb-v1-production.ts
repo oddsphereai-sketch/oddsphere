@@ -151,6 +151,115 @@ assert.equal(member.snapshot.games[0]!.markets.moneyline.held, false);
 assert.equal(member.snapshot.games[0]!.markets.total.publicSplits.length, 2);
 assert.equal(member.tracking.trackingEligible, true);
 
+const earlierAt = "2026-08-25T14:50:05.583Z";
+const unchangedMiddleAt = "2026-08-25T15:20:05.583Z";
+const decisionBooksByMarket = new Map(fullBundle.evaluatedBets.map((decision) => [decision.market, normalizeSportsbook(decision.evaluatedQuote.sportsbook)]));
+const earlierBooks = currentBooks.map((currentBook) => {
+  const normalized = normalizeSportsbook(currentBook.sportsbook);
+  return {
+    ...currentBook,
+    observedAt: earlierAt,
+    moneyline: currentBook.moneyline && decisionBooksByMarket.get("moneyline") === normalized
+      ? { homePrice: currentBook.moneyline.homePrice - 15, awayPrice: currentBook.moneyline.awayPrice - 10 }
+      : currentBook.moneyline,
+    spread: currentBook.spread && decisionBooksByMarket.get("spread") === normalized
+      ? { homeLine: currentBook.spread.homeLine + 0.5, awayLine: currentBook.spread.awayLine - 0.5, homePrice: currentBook.spread.homePrice - 5, awayPrice: currentBook.spread.awayPrice + 5 }
+      : currentBook.spread,
+    total: currentBook.total && decisionBooksByMarket.get("total") === normalized
+      ? { line: currentBook.total.line - 0.5, overPrice: currentBook.total.overPrice - 5, underPrice: currentBook.total.underPrice + 5 }
+      : currentBook.total,
+  } satisfies NcaafBookOdds;
+});
+const earlierPayload: CfbForwardEvidencePayload = {
+  ...payload,
+  memberRelease: "cfb_v1_member_release_2026_08_25_r1" as typeof CFB_FORWARD_MEMBER_RELEASE,
+  runId: "00000000-0000-4000-8000-000000000002",
+  stage: "opening",
+  captureTiming: "on_time",
+  capturedAt: earlierAt,
+  cutoffAt: earlierAt,
+  t60LagMinutes: null,
+  market: {
+    ...payload.market,
+    current: earlierBooks[0]!,
+    currentBooks: earlierBooks,
+    operationalOpening: { provenance: "first_observed", capturedAt: earlierAt, quote: earlierBooks[0]! },
+    playbookSplits: splitSetAt(earlierAt),
+  },
+  decisions: { ...payload.decisions, trackingEnabled: false },
+};
+const earlierEvidence: CfbForwardStoredEvidence = {
+  ...evidence,
+  id: "test-row-earlier",
+  stage: "opening",
+  capturedAt: earlierAt,
+  payloadSha256: hashCfbForwardEvidencePayload(earlierPayload),
+  payload: earlierPayload,
+};
+const unchangedMiddlePayload: CfbForwardEvidencePayload = {
+  ...earlierPayload,
+  runId: "00000000-0000-4000-8000-000000000003",
+  stage: "unlocked",
+  capturedAt: unchangedMiddleAt,
+  cutoffAt: unchangedMiddleAt,
+  market: {
+    ...earlierPayload.market,
+    current: { ...earlierBooks[0]!, observedAt: unchangedMiddleAt },
+    currentBooks: earlierBooks.map((historicalBook) => ({ ...historicalBook, observedAt: unchangedMiddleAt })),
+  },
+};
+const unchangedMiddleEvidence: CfbForwardStoredEvidence = {
+  ...earlierEvidence,
+  id: "test-row-unchanged-middle",
+  stage: "unlocked",
+  capturedAt: unchangedMiddleAt,
+  payloadSha256: hashCfbForwardEvidencePayload(unchangedMiddlePayload),
+  payload: unchangedMiddlePayload,
+};
+const movementMember = buildCfbMemberFixture([earlierEvidence, unchangedMiddleEvidence, evidence]);
+const movementGame = movementMember.snapshot.games[0]!;
+for (const decision of fullBundle.evaluatedBets) {
+  const market = decision.market === "spread" ? movementGame.markets.first_inning : movementGame.markets[decision.market];
+  const selectedSide = decision.market === "total"
+    ? /^over\b/i.test(decision.side) ? "over" : "under"
+    : decision.side.startsWith(game.home.abbreviation) ? "home" : "away";
+  const opposingSide = selectedSide === "home" ? "away" : selectedSide === "away" ? "home" : selectedSide === "over" ? "under" : "over";
+  const earlierBook = earlierBooks.find((candidate) => normalizeSportsbook(candidate.sportsbook) === normalizeSportsbook(decision.evaluatedQuote.sportsbook));
+  const currentBook = currentBooks.find((candidate) => normalizeSportsbook(candidate.sportsbook) === normalizeSportsbook(decision.evaluatedQuote.sportsbook));
+  assert.ok(earlierBook && currentBook, `${decision.market} must retain its exact evaluated sportsbook`);
+  const expectedFirst = selectedQuote(earlierBook, decision.market, selectedSide);
+  const expectedCurrent = selectedQuote(currentBook, decision.market, selectedSide);
+  const expectedOpposingFirst = selectedQuote(earlierBook, decision.market, opposingSide);
+  const expectedOpposingCurrent = selectedQuote(currentBook, decision.market, opposingSide);
+  const oddsTrail = market.oddsTrail;
+  const opposingTrail = market.opposingOddsTrail?.stops;
+  assert.ok(oddsTrail, `${decision.market} must expose its selected-side movement trail`);
+  assert.ok(opposingTrail, `${decision.market} must expose its opposing-side movement trail`);
+  assert.deepEqual(
+    oddsTrail.map((stop) => ({ price: stop.american, line: stop.line, at: stop.observedAt, book: normalizeSportsbook(stop.sportsbook ?? "") })),
+    [
+      { price: expectedFirst.price, line: expectedFirst.line, at: earlierAt, book: normalizeSportsbook(decision.evaluatedQuote.sportsbook) },
+      { price: expectedCurrent.price, line: expectedCurrent.line, at: decision.evaluatedQuote.observedAt, book: normalizeSportsbook(decision.evaluatedQuote.sportsbook) },
+    ],
+    `${decision.market} must compact the unchanged middle capture while preserving exact earlier and current tuples`,
+  );
+  assert.deepEqual(
+    opposingTrail.map((stop) => ({ price: stop.american, line: stop.line, at: stop.observedAt, book: normalizeSportsbook(stop.sportsbook ?? "") })),
+    [
+      { price: expectedOpposingFirst.price, line: expectedOpposingFirst.line, at: earlierAt, book: normalizeSportsbook(decision.evaluatedQuote.sportsbook) },
+      { price: expectedOpposingCurrent.price, line: expectedOpposingCurrent.line, at: decision.evaluatedQuote.observedAt, book: normalizeSportsbook(decision.evaluatedQuote.sportsbook) },
+    ],
+    `${decision.market} opposing trail must never mix sportsbooks`,
+  );
+  assert.equal(market.pick, decision.side, `${decision.market} movement display cannot alter the evaluated pick`);
+  assert.equal(market.actionabilityLabel, decision.grade, `${decision.market} movement display cannot alter the grade`);
+  assert.ok(Date.parse(oddsTrail[0]!.observedAt!) < Date.parse(oddsTrail.at(-1)!.observedAt!), `${decision.market} trail must be chronological`);
+}
+assert.notEqual(member.provenance.sourceChecksum, movementMember.provenance.sourceChecksum, "historical evidence must contribute to the member checksum");
+assert.equal(movementGame.markets.moneyline.moneyPctObservedAt, payload.market.playbookSplits?.moneyline.capturedAt, "split freshness must come from the authoritative latest row");
+assert.equal(movementGame.markets.total.moneyPctObservedAt, payload.market.playbookSplits?.total.capturedAt, "Total split freshness must remain market-specific");
+assert.equal(movementGame.markets.first_inning.moneyPctObservedAt, payload.market.playbookSplits?.spread.capturedAt, "Spread split freshness must remain market-specific");
+
 const tracking = buildCfbOfficialTrackingRecords({ payload, gameId: 9001 });
 assert.equal(tracking.length, 3);
 assert.deepEqual(tracking.map((row) => row.market), ["moneyline", "spread", "total"]);
@@ -353,6 +462,23 @@ function splitSet() {
   const result = normalizeCfbPlaybookSplits(playbookRaw(), observedAt);
   assert.ok(result);
   return result;
+}
+
+function splitSetAt(capturedAt: string) {
+  const result = normalizeCfbPlaybookSplits(playbookRaw(), capturedAt);
+  assert.ok(result);
+  return result;
+}
+
+function normalizeSportsbook(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, "");
+}
+
+function selectedQuote(book: NcaafBookOdds, market: "moneyline" | "spread" | "total", side: "home" | "away" | "over" | "under"): { price: number; line: number | null } {
+  if (market === "moneyline" && book.moneyline) return { price: side === "home" ? book.moneyline.homePrice : book.moneyline.awayPrice, line: null };
+  if (market === "spread" && book.spread) return { price: side === "home" ? book.spread.homePrice : book.spread.awayPrice, line: side === "home" ? book.spread.homeLine : book.spread.awayLine };
+  if (market === "total" && book.total) return { price: side === "over" ? book.total.overPrice : book.total.underPrice, line: book.total.line };
+  throw new Error(`Missing ${market} quote for ${book.sportsbook}.`);
 }
 
 function playbookRaw() {
