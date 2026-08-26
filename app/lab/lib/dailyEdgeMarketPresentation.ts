@@ -20,7 +20,7 @@ type OperationalReasonMarket = Pick<
 >;
 
 export const DAILY_EDGE_MEMBER_PRESENTATION_RELEASE_ID =
-  "daily_edge_member_presentation_2026_08_26_r2_operational_no_play";
+  "daily_edge_member_presentation_2026_08_26_r3_forecast_grade_separation";
 
 /**
  * Internal holds remain machine-visible health exceptions. The member
@@ -81,42 +81,13 @@ export function dailyEdgeOperationalNoPlayReason(
 }
 
 /**
- * Price/consensus availability can prevent an exact-price bet evaluation
- * without invalidating an independently produced forecast. Starter, lineup,
- * identity, feature, or model-integrity exceptions invalidate the forecast
- * itself and must withhold it. Unknown exception classes fail closed.
- */
-export function dailyEdgeOperationalExceptionWithholdsForecast(
-  market: OperationalReasonMarket,
-  holdReason?: string | null,
-): boolean {
-  if (!market.held) return false;
-  const authoritativeReasons = [
-    holdReason,
-    ...(market.reviewFlags ?? []),
-    ...(market.capReasons ?? []),
-  ]
-    .filter((reason): reason is string => Boolean(reason))
-    .map((reason) => reason.toLowerCase());
-  const reasons = authoritativeReasons.length > 0
-    ? authoritativeReasons
-    : operationalReasonText(market, holdReason);
-  const forecastIntegrityFailure = reasons.some((reason) =>
-    /starter|lineup|pitcher|quarterback|\bqb\b|roster|depth|matchup_identity|team_identity|model_(?:output|input|integrity|unavailable)|projection|probability|feature_(?:missing|invalid)|missing_(?:input|feature)/.test(reason)
-  );
-  if (forecastIntegrityFailure) return true;
-  const betTupleOnlyFailure = reasons.some((reason) =>
-    /price|odds|consensus|split|market_tuple|two_sided|sportsbook|book_quote/.test(reason)
-  );
-  return !betTupleOnlyFailure;
-}
-
-/**
  * Convert an internal operational exception into the canonical member-facing
  * No Play shape. `held` deliberately remains true so the health monitor and
- * targeted recovery job can still see the exception. Evaluated-side fields
- * are withheld; current two-sided market context and authentic split sections
- * may remain visible, but they can never masquerade as a recommendation.
+ * targeted recovery job can still see the exception. The model-owned outcome
+ * forecast is immutable presentation context and remains visible for every
+ * exception class. Only the incomplete exact-price bet-evaluation tuple is
+ * withheld; current two-sided market context and authentic split sections may
+ * remain visible, but they can never masquerade as a recommendation.
  */
 export function presentDailyEdgeOperationalNoPlay(
   market: MarketEdgeDto,
@@ -125,23 +96,13 @@ export function presentDailyEdgeOperationalNoPlay(
   if (!market.held) return market;
   const reason = dailyEdgeOperationalNoPlayReason(market, holdReason)
     ?? "No Play — required evidence is incomplete.";
-  const withholdForecast = dailyEdgeOperationalExceptionWithholdsForecast(
-    market,
-    holdReason,
-  );
   const recommendationDecision = market.recommendationDecision
     ? {
         ...market.recommendationDecision,
-        pick: withholdForecast ? null : market.recommendationDecision.pick,
-        modelProbability: withholdForecast
-          ? null
-          : market.recommendationDecision.modelProbability,
+        pick: null,
         marketImplied: null,
         edgePp: null,
         price: null,
-        projectedScore: withholdForecast
-          ? null
-          : market.recommendationDecision.projectedScore,
         lineMovement: null,
         resolvedMarketRead: {
           status: "insufficient_data" as const,
@@ -164,8 +125,6 @@ export function presentDailyEdgeOperationalNoPlay(
 
   return {
     ...market,
-    pick: withholdForecast ? null : market.pick,
-    confidence: withholdForecast ? null : market.confidence,
     grade: null,
     signalType: null,
     marketSignal: null,
@@ -180,7 +139,6 @@ export function presentDailyEdgeOperationalNoPlay(
     guidedWatchOut: "Internal recovery remains active; current market quotes are context only.",
     whyLine: reason,
     riskLine: "Required evidence is incomplete.",
-    modelProb: withholdForecast ? null : market.modelProb,
     marketFairProb: null,
     pinnacleEvPct: null,
     priceAmerican: null,
@@ -204,7 +162,6 @@ export function presentDailyEdgeOperationalNoPlay(
     lastMoveAtIso: null,
     lastMoveLinePrev: null,
     lastMoveLineNext: null,
-    modelTrustPct: withholdForecast ? null : market.modelTrustPct,
     marketImpliedPct: null,
     modelMarketGapPct: null,
     recommendationConfidence: null,

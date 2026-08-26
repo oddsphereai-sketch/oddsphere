@@ -302,7 +302,7 @@ const footballOutcomeForecastSource = readerSource.slice(
   readerSource.indexOf("function FootballOutcomeForecast"),
   readerSource.indexOf("function PredictionDriverCard"),
 );
-assert.match(readerSource, /projectionIsHeld\(game\)/);
+assert.match(readerSource, /projectionIsUnavailable\(game\)/);
 assert.match(readerSource, /footballOutcomeContext\(game\)/);
 assert.match(readerSource, /Outcome forecast/);
 assert.match(readerSource, /Win probability/);

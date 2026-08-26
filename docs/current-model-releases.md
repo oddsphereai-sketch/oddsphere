@@ -147,16 +147,17 @@ changed; only deterministic settlement of existing locked rows is affected.
 - Machine registry: `lib/automodel/mlbModelLayerVersions.ts`
 - Authoritative member-facing writer: `lib/services/predictionRecordService.ts`
 
-Shared member presentation release: `daily_edge_member_presentation_2026_08_26_r2_operational_no_play`.
+Shared member presentation release: `daily_edge_member_presentation_2026_08_26_r3_forecast_grade_separation`.
 Internal operational holds remain high-severity health/recovery state, but the
 member board, filters, cards, headlines, and Bet Grade surface them as No Play
 with an explicit incomplete-evidence reason. The response reports evaluated
 markets separately from operational exceptions; exceptions are never counted
-as completed grades. Forecast-integrity exceptions (starter, lineup, identity,
-missing feature, or model integrity) withhold the affected forecast. A
-price/consensus-only exception preserves a coherent independent outcome
-forecast but withholds the exact-price fair probability, edge, EV,
-actionability, and grade tuple. This changes no MLB projection, probability, side, exact
+as completed grades. Every operational exception preserves the model-owned
+outcome prediction, probability, and projected score. Only the incomplete
+exact-price bet tuple is withheld: evaluated bet side, sportsbook price,
+market fair probability, edge/gap, EV, actionability, and grade price. This
+universal contract applies to every Daily Edge sport and changes no projection,
+probability, forecast side, exact
 price, writer grade, action, stake, tracking row, lease, or lock behavior. On
 the 2026-08-26 15:00:51Z MLB snapshot, 42 evaluated markets remain 3 Best
 Angles / 12 Leans / 14 Watchlists / 13 evaluated No Plays. Three HOU-NYY

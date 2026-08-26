@@ -832,9 +832,9 @@ export type DailyEdgeGameDto = {
    *
    * Known values today (Phase 4D.1):
    *   • "missing_or_scratched_starter" — most common; renders as a
-   *     starter-unconfirmed No Play and withholds the affected forecast
-   *   • price/consensus-only reasons retain an independent forecast but
-   *     withhold the evaluated bet tuple
+   *     starter-unconfirmed No Play while preserving the model outcome forecast
+   *   • every exception preserves the model outcome forecast and withholds only
+   *     the incomplete evaluated bet tuple
    */
   holdReason: string | null;
   /**
