@@ -1455,6 +1455,71 @@ function readMlbDataCompletenessDto(
   };
 }
 
+type MlbCompletenessMarket = "moneyline" | "total" | "first_inning";
+
+const MLB_SHARED_REQUIRED_FIELDS = new Set([
+  "home_team_mapped",
+  "away_team_mapped",
+  "start_time",
+  "projected_home_score",
+  "projected_away_score",
+  "home_probable_pitcher",
+  "away_probable_pitcher",
+]);
+const MLB_MONEYLINE_REQUIRED_FIELDS = new Set([
+  "ml_pick",
+  "home_moneyline_price",
+  "away_moneyline_price",
+]);
+const MLB_TOTAL_REQUIRED_FIELDS = new Set([
+  "total_pick",
+  "projected_total",
+  "total_line",
+  "over_price",
+  "under_price",
+]);
+const MLB_FIRST_INNING_REQUIRED_FIELDS = new Set([
+  "first_inning_pick",
+  "first_inning_line",
+  "nrfi_price",
+  "yrfi_price",
+]);
+const MLB_KNOWN_REQUIRED_FIELDS = new Set([
+  ...MLB_SHARED_REQUIRED_FIELDS,
+  ...MLB_MONEYLINE_REQUIRED_FIELDS,
+  ...MLB_TOTAL_REQUIRED_FIELDS,
+  ...MLB_FIRST_INNING_REQUIRED_FIELDS,
+]);
+
+/**
+ * The stored completeness audit is game-wide, but its missing fields are
+ * market-specific. Fail only the affected market (plus every market for a
+ * shared or unknown required field) so a Total provider gap cannot hide a
+ * coherent Moneyline or First Inning writer decision.
+ */
+function shouldForceIncompleteMlbMarketNoPlay(
+  dataCompleteness: ReturnType<typeof readMlbDataCompletenessDto>,
+  market: MlbCompletenessMarket,
+): boolean {
+  if (
+    dataCompleteness === null ||
+    dataCompleteness.canPublishNormal !== false ||
+    dataCompleteness.lockProtected
+  ) {
+    return false;
+  }
+
+  const missing = dataCompleteness.missingFields;
+  if (missing.length === 0) return true;
+
+  return missing.some((field) => {
+    if (MLB_SHARED_REQUIRED_FIELDS.has(field) || !MLB_KNOWN_REQUIRED_FIELDS.has(field)) return true;
+    if (market === "moneyline") return MLB_MONEYLINE_REQUIRED_FIELDS.has(field);
+    if (market === "total") return MLB_TOTAL_REQUIRED_FIELDS.has(field);
+    return MLB_FIRST_INNING_REQUIRED_FIELDS.has(field);
+  });
+}
+
 /**
  * 2026-06-16 — read the per-market "First Published" lines from
  * game_predictions.sport_specific.posted_lines (set-if-null upstream). The
@@ -2705,8 +2770,6 @@ function buildGameDto(
     computedAt: pred.computed_at,
     lockedAt: pred.locked_at,
   });
-  const forceIncompleteNoPlay = dataCompleteness?.canPublishNormal === false && !dataCompleteness.lockProtected;
-
   // 4.1.10 — per-game status flags.
   const status: GameStatusDto = {
     lineupConfirmed: extractLineupConfirmed(pred.sport_specific),
@@ -2882,10 +2945,13 @@ function buildGameDto(
   // This is the final pre-lock market authority. Market-support promotions
   // above must never turn a card with missing required inputs back into an
   // actionable or Watchlist presentation.
-  if (forceIncompleteNoPlay) {
-    ml = forceIncompleteMlbMarketNoPlay(ml);
-    total = forceIncompleteMlbMarketNoPlay(total);
-    firstInning = forceIncompleteMlbMarketNoPlay(firstInning);
+  const forceIncompleteMoneylineNoPlay = shouldForceIncompleteMlbMarketNoPlay(dataCompleteness, "moneyline");
+  const forceIncompleteTotalNoPlay = shouldForceIncompleteMlbMarketNoPlay(dataCompleteness, "total");
+  const forceIncompleteFirstInningNoPlay = shouldForceIncompleteMlbMarketNoPlay(dataCompleteness, "first_inning");
+  if (forceIncompleteMoneylineNoPlay || forceIncompleteTotalNoPlay || forceIncompleteFirstInningNoPlay) {
+    if (forceIncompleteMoneylineNoPlay) ml = forceIncompleteMlbMarketNoPlay(ml);
+    if (forceIncompleteTotalNoPlay) total = forceIncompleteMlbMarketNoPlay(total);
+    if (forceIncompleteFirstInningNoPlay) firstInning = forceIncompleteMlbMarketNoPlay(firstInning);
     decisionLine = buildDecisionLine({ ml, total, firstInning, awayAbbr: away, homeAbbr: home });
     recommendationDecision = buildSourceAwareRecommendationDecision();
   }
@@ -6273,6 +6339,7 @@ export const __TEST__ = {
   shouldHonorLiveMissingPriceCap,
   currentPriceFromMarketRead,
   forceIncompleteMlbMarketNoPlay,
+  shouldForceIncompleteMlbMarketNoPlay,
   normalizeGameRow,
   extractModelBreakdown,
   deriveVerdictForRow,

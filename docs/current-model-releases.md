@@ -140,12 +140,26 @@ changed; only deterministic settlement of existing locked rows is affected.
 - Projection runtime: resolved automodel `v2_2`
 - First-inning runtime: `fi_v2` with the versioned unpublished-probable availability head below
 - Public calibration: `mlb_public_calibration_v27_strong_winner_resistance_lean_2026_08_22`
-- Decision release: `mlb_daily_edge_decision_2026_08_23_r68`
-- Rule bundle: `mlb_daily_edge_rule_bundle_v56_market_scoped_grade_integrity_2026_08_23`
-- Grade policy: `mlb_public_grade_policy_v46_market_scoped_grade_integrity_2026_08_23`
+- Decision release: `mlb_daily_edge_decision_2026_08_25_r69`
+- Rule bundle: `mlb_daily_edge_rule_bundle_v57_market_scoped_reader_completeness_2026_08_25`
+- Grade policy: `mlb_public_grade_policy_v47_market_scoped_reader_completeness_2026_08_25`
 - Tracking contract: `member_facing_lock_v8_priority_retry_minute_cadence_2026_08_11`
 - Machine registry: `lib/automodel/mlbModelLayerVersions.ts`
 - Authoritative member-facing writer: `lib/services/predictionRecordService.ts`
+
+The August 25 r69 reader-integrity repair retains every r68 probability,
+projection, selected side, evaluated book/line/price/time, threshold, action
+rule, stake rule, writer, lease, and T-60 boundary. The member reader now
+applies the game-wide completeness audit by missing-field ownership: a
+Total-only price gap continues to hold Total but cannot hide an independently
+complete Moneyline or First Inning writer decision. Shared, unknown, and
+market-owned required fields still fail the affected market closed; locked
+cards remain immutable. The frozen August 25 board comparison restores three
+reader-hidden actions (PIT-SD Moneyline Best Angle; CHC-ARI and PIT-SD First
+Inning Leans), creates no new writer action, changes no Total, and makes zero
+demotions. Full evidence is recorded in
+`docs/model-audits/2026-08-25-mlb-late-five-market-scoped-reader-completeness-r69.md`.
+Rollback is r68/v56/v46/correction v20.
 
 The August 23 r68 integrity repair retains every r67 probability, projection,
 selected side, exact evaluated price, signed-split threshold, movement
