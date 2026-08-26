@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import type { Sport } from "../data/mockData";
 import { SPORT_META } from "../data/mockData";
+import { createSportTabActivationGuard } from "../lib/sportTabActivation";
 
 // Player-Props default (4 sports). Daily Edge passes its own 7-sport list.
 const DEFAULT_SPORTS: Sport[] = ["mlb", "nba", "nfl", "nhl"];
@@ -25,6 +26,8 @@ type Props = {
   labelOverrides?: Partial<Record<Sport, string>>;
   /** Compact, all-visible tab treatment for constrained reader headers. */
   density?: "default" | "compact";
+  /** Activate before an open modal can refresh or unmount beneath the pointer. */
+  activateOnPointerDown?: boolean;
 };
 
 export default function SportSelector({
@@ -36,8 +39,10 @@ export default function SportSelector({
   availability,
   labelOverrides,
   density = "default",
+  activateOnPointerDown = false,
 }: Props) {
   const [pendingSport, setPendingSport] = useState<Sport | null>(null);
+  const activationGuard = useRef(createSportTabActivationGuard<Sport>());
   const waitingForSport = pendingSport !== active ? pendingSport : null;
 
   const compact = density === "compact";
@@ -60,6 +65,12 @@ export default function SportSelector({
           const isPending = showPendingState && sport === waitingForSport;
           const isActive = sport === (showPendingState ? (waitingForSport ?? active) : active);
 
+          const activateSport = (next: Sport) => {
+            if (next === active || (showPendingState && waitingForSport !== null)) return;
+            if (showPendingState) setPendingSport(next);
+            onChange(next);
+          };
+
           const base = compact
             ? "relative inline-flex min-h-12 min-w-0 flex-col items-center justify-center gap-0.5 overflow-hidden whitespace-nowrap rounded-lg px-1 py-2 transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-300 focus-visible:ring-offset-1 focus-visible:ring-offset-[#100e18]"
             : "relative inline-flex min-h-16 min-w-[120px] flex-shrink-0 flex-col items-center justify-center gap-1 whitespace-nowrap rounded-xl px-4 py-3 transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-300 focus-visible:ring-offset-2 focus-visible:ring-offset-[#100e18] sm:min-w-0 sm:flex-1 sm:flex-shrink sm:px-5 sm:py-4";
@@ -77,10 +88,16 @@ export default function SportSelector({
               role="tab"
               aria-selected={isActive}
               aria-busy={isPending}
-              onClick={() => {
-                if (sport === active || (showPendingState && waitingForSport !== null)) return;
-                if (showPendingState) setPendingSport(sport);
-                onChange(sport);
+              onPointerDown={(event) => {
+                if (!activateOnPointerDown || event.button !== 0 || !event.isPrimary) return;
+                activationGuard.current.pointerDown(event, sport, activateSport);
+              }}
+              onClick={(event) => {
+                if (!activateOnPointerDown) {
+                  activateSport(sport);
+                  return;
+                }
+                activationGuard.current.click(event, sport, activateSport);
               }}
               className={`${base} ${stateClasses}`}
             >
