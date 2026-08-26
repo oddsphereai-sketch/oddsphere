@@ -159,8 +159,16 @@ assert.ok(memberPage.includes("requestedReader") && memberPage.includes("initial
 const mlbPage = readFileSync("app/mlb/props/page.tsx", "utf8");
 assert.ok(mlbPage.includes('nflEnabled={process.env.NFL_PLAYER_PROPS_MEMBER_ENABLED === "true"}'), "MLB hides the NFL pill until the member flag is enabled");
 const leaguePills = readFileSync("app/player-props/components/PlayerPropsLeaguePills.tsx", "utf8");
-assert.ok(leaguePills.includes('href={reviewMode ? "/dev/mlb-props-preview" : "/mlb/props"}'));
-assert.ok(leaguePills.includes('href={reviewMode ? "/dev/nfl-props-preview" : "/player-props?league=nfl"}'));
+assert.ok(leaguePills.includes('href: reviewMode ? "/dev/mlb-props-preview" : "/mlb/props"'));
+assert.ok(leaguePills.includes('reviewMode ? "/dev/nfl-props-preview" : "/player-props?league=nfl"'));
+assert.ok(leaguePills.includes('active ? "Active" : item.href ? "View props" : "Coming soon"'));
+assert.equal((mlbPage.match(/<PlayerPropsLeaguePills/g) ?? []).length, 3, "each MLB page result renders exactly one shared league rail");
+assert.equal((mlbReader.match(/PropLeagueRail/g) ?? []).length, 0, "MLB dashboard does not render a second stale league rail");
+const productShellRoutes = readFileSync("lib/navigation/productShellRoutes.ts", "utf8");
+for (const route of ["/mlb/props", "/player-props", "/dev/mlb-props-preview", "/dev/nfl-props-preview"]) assert.ok(productShellRoutes.includes(`"${route}"`));
+const labAppNav = readFileSync("app/lab/components/LabAppNav.tsx", "utf8");
+assert.ok(labAppNav.includes('"/player-props": "/mlb/props"'));
+assert.ok(labAppNav.includes('"/dev/nfl-props-preview": "/mlb/props"'));
 const migration = readFileSync("lib/db/schema-migration-v39-nfl-player-props-tracking.sql", "utf8");
 for (const required of [
   "CREATE TABLE IF NOT EXISTS public.nfl_player_prop_records",
