@@ -14,8 +14,6 @@ import {
   useUserTimeZone,
 } from "@/app/lab/components/UserTimeZone";
 import { teamPrimaryColor } from "@/app/lab/components/daily-edge/teamColors";
-import { SportIcon } from "@/app/lab/components/SportIcon";
-import type { Sport } from "@/lib/types/domain/Sport";
 import {
   PROJECTION_SIDE_CONTRADICTION,
   checkProjectionSideIntegrity,
@@ -479,7 +477,6 @@ export function PlayerPropsDashboard({ data: initialData, mode = "preview", init
 
   return (
     <div className="w-full pb-8">
-      <PropLeagueRail />
       {mode === "preview" ? <PreviewDataNotice /> : null}
       <PropsSlateHeader data={displayData} mode={mode} matchups={matchups} selectedGame={selectedGame} onSelectGame={setSelectedGame} candidatePresentation={candidatePresentation} />
       {mode === "admin" ? <ProviderHealthStrip data={displayData} matchups={matchups} /> : null}
@@ -548,31 +545,6 @@ function PreviewDataNotice() {
     <p className="text-[10px] font-black uppercase text-amber-300">Design preview · Simulated board</p>
     <p className="mt-1 max-w-4xl text-sm leading-6 text-amber-50/80">Lines, projections, grades, prices, and results on this page are static test data. They are not live, bettable, or sourced from today&apos;s BDL response.</p>
   </aside>;
-}
-
-function PropLeagueRail() {
-  const leagues: Array<{ key: Sport; label: string }> = [
-    { key: "mlb", label: "MLB" },
-    { key: "nfl", label: "NFL" },
-    { key: "cfb", label: "CFB" },
-    { key: "nba", label: "NBA" },
-    { key: "wnba", label: "WNBA" },
-    { key: "cbb", label: "CBB" },
-    { key: "nhl", label: "NHL" },
-    { key: "soccer", label: "Soccer" },
-  ];
-
-  return <nav aria-label="Player props leagues" className="-mx-4 mb-5 border-y border-white/[0.05] bg-white/[0.015] px-4 py-2.5 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
-    <div className="flex gap-2 overflow-x-auto pb-1">
-      {leagues.map((league) => {
-        const active = league.key === "mlb";
-        return <button key={league.key} type="button" disabled={!active} aria-current={active ? "page" : undefined} aria-label={active ? "MLB player props, active" : `${league.label} player props, coming soon`} className={`inline-flex min-w-[112px] shrink-0 items-center gap-2.5 rounded-lg border px-3 py-2 text-left ${active ? "border-violet-400/55 bg-violet-500/[0.14]" : "cursor-not-allowed border-white/[0.06] bg-white/[0.02] opacity-65"}`}>
-          <span className={`inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full ${active ? "bg-violet-500/[0.22] ring-1 ring-violet-400/40" : "bg-white/[0.04] ring-1 ring-white/[0.06]"}`}><SportIcon sport={league.key} active={active} /></span>
-          <span className="min-w-0"><strong className={`block text-[11px] uppercase ${active ? "text-white" : "text-gray-300"}`}>{league.label}</strong><span className={`mt-0.5 block text-[9px] ${active ? "text-emerald-300" : "text-gray-500"}`}>{active ? "Active" : "Coming soon"}</span></span>
-        </button>;
-      })}
-    </div>
-  </nav>;
 }
 
 function PropsSlateHeader({ data, mode, matchups, selectedGame, onSelectGame, candidatePresentation = false }: { data: PlayerPropsDashboardData; mode: DashboardMode; matchups: SlateMatchup[]; selectedGame: string; onSelectGame: (value: string) => void; candidatePresentation?: boolean }) {
@@ -1345,7 +1317,7 @@ function PendingPropsState({ data, mode, matchups, candidatePresentation = false
     : matchups.some((item) => item.starterStatus !== "pending")
       ? "Partially available"
       : "Projected";
-  return <div className="w-full pb-8"><PropLeagueRail /><PropsSlateHeader data={data} mode={mode} matchups={matchups} selectedGame="all" onSelectGame={() => undefined} candidatePresentation={candidatePresentation} />{mode === "admin" ? <ProviderHealthStrip data={data} matchups={matchups} /> : null}<section className="mt-7 border-y border-gray-800 py-8 sm:py-10"><span className="inline-flex rounded border border-gray-600 px-2.5 py-1 text-[11px] font-bold text-gray-300">Markets opening soon</span><h2 className="mt-4 text-2xl font-black text-white">Player prop lines have not posted yet.</h2><p className="mt-2 max-w-2xl text-sm leading-6 text-gray-400">Today’s board will populate automatically as sportsbooks publish their first prices.</p><div className="mt-6 grid gap-px overflow-hidden rounded-lg border border-gray-800 bg-gray-800 md:grid-cols-3"><div className="bg-gray-950 p-4"><p className="text-[10px] font-bold uppercase text-gray-600">Games scheduled</p><p className="mt-2 text-lg font-black text-white">{matchups.length}</p></div><div className="bg-gray-950 p-4"><p className="text-[10px] font-bold uppercase text-gray-600">Probable pitchers</p><p className="mt-2 text-sm font-semibold text-gray-200">{probablePitcherStatus}</p></div><div className="bg-gray-950 p-4"><p className="text-[10px] font-bold uppercase text-gray-600">Next update</p><p className="mt-2 text-sm font-semibold text-gray-200">{data.slate?.nextCheckLabel ?? "When player markets open"}</p></div></div></section></div>;
+  return <div className="w-full pb-8"><PropsSlateHeader data={data} mode={mode} matchups={matchups} selectedGame="all" onSelectGame={() => undefined} candidatePresentation={candidatePresentation} />{mode === "admin" ? <ProviderHealthStrip data={data} matchups={matchups} /> : null}<section className="mt-7 border-y border-gray-800 py-8 sm:py-10"><span className="inline-flex rounded border border-gray-600 px-2.5 py-1 text-[11px] font-bold text-gray-300">Markets opening soon</span><h2 className="mt-4 text-2xl font-black text-white">Player prop lines have not posted yet.</h2><p className="mt-2 max-w-2xl text-sm leading-6 text-gray-400">Today’s board will populate automatically as sportsbooks publish their first prices.</p><div className="mt-6 grid gap-px overflow-hidden rounded-lg border border-gray-800 bg-gray-800 md:grid-cols-3"><div className="bg-gray-950 p-4"><p className="text-[10px] font-bold uppercase text-gray-600">Games scheduled</p><p className="mt-2 text-lg font-black text-white">{matchups.length}</p></div><div className="bg-gray-950 p-4"><p className="text-[10px] font-bold uppercase text-gray-600">Probable pitchers</p><p className="mt-2 text-sm font-semibold text-gray-200">{probablePitcherStatus}</p></div><div className="bg-gray-950 p-4"><p className="text-[10px] font-bold uppercase text-gray-600">Next update</p><p className="mt-2 text-sm font-semibold text-gray-200">{data.slate?.nextCheckLabel ?? "When player markets open"}</p></div></div></section></div>;
 }
 
 export function PropGradeBadge({ grade, compact = false }: { grade: PropGrade; compact?: boolean }) {
