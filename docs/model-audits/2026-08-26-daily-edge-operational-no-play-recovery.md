@@ -16,6 +16,16 @@ outcome forecast. They withhold only the evaluated bet pick, fair probability,
 edge, EV, evaluated price, actionability, and grade price. The member Bet Grade
 is No Play in every case while internal recovery remains active.
 
+The r4 presentation follow-up also prevents prediction-category, card, and
+selected-reader labels from falling back to No Play or Held when an evaluated
+market side is absent. Those surfaces show the strongest model-native output
+without deriving a bet: for example, CHC@ARI Total shows `Projected total 8.3`
+from the stored 8.3175 model total while Bet Grade remains reasoned No Play and
+the evaluated price tuple remains absent. `Forecast unavailable` is defensive
+fail-closed copy classified as a high health error, not an acceptable
+active-board prediction state. Production verification must find a resolved
+model-native label for every rendered game/market slot.
+
 At 2026-08-26T15:04:51Z, HOU@NYY (`external_id=5059773`) still had a null home
 starter after the natural 14:05 slate cycle completed successfully at
 14:08:27Z (2,307 records, 82 calls), and after later lineup cycles. The 14:35

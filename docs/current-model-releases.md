@@ -147,7 +147,7 @@ changed; only deterministic settlement of existing locked rows is affected.
 - Machine registry: `lib/automodel/mlbModelLayerVersions.ts`
 - Authoritative member-facing writer: `lib/services/predictionRecordService.ts`
 
-Shared member presentation release: `daily_edge_member_presentation_2026_08_26_r3_forecast_grade_separation`.
+Shared member presentation release: `daily_edge_member_presentation_2026_08_26_r4_prediction_label_separation`.
 Internal operational holds remain high-severity health/recovery state, but the
 member board, filters, cards, headlines, and Bet Grade surface them as No Play
 with an explicit incomplete-evidence reason. The response reports evaluated
@@ -157,9 +157,12 @@ outcome prediction, probability, and projected score. Only the incomplete
 exact-price bet tuple is withheld: evaluated bet side, sportsbook price,
 market fair probability, edge/gap, EV, actionability, and grade price. This
 universal contract applies to every Daily Edge sport and changes no projection,
-probability, forecast side, exact
-price, writer grade, action, stake, tracking row, lease, or lock behavior. On
-the 2026-08-26 15:00:51Z MLB snapshot, 42 evaluated markets remain 3 Best
+probability, forecast side, exact price, writer grade, action, stake, tracking
+row, lease, or lock behavior. On prediction surfaces, a missing directional
+market side now falls back to the
+model-native output (for example, `Projected total 8.3` or the projected score)
+rather than the Bet Grade label. No Play appears only in Bet Grade surfaces.
+On the 2026-08-26 15:00:51Z MLB snapshot, 42 evaluated markets remain 3 Best
 Angles / 12 Leans / 14 Watchlists / 13 evaluated No Plays. Three HOU-NYY
 starter exceptions move from the retired public Held label into public No
 Play, yielding 16 public No Plays while remaining 3 internal operational

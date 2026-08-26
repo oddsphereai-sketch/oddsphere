@@ -47,6 +47,7 @@ import {
   dailyEdgePresentationVerdict,
   presentDailyEdgeOperationalNoPlay,
 } from "@/app/lab/lib/dailyEdgeMarketPresentation";
+import { dailyEdgeOutcomeForecastLabel } from "@/app/lab/lib/dailyEdgeOutcomeForecast";
 import type { NflWeekOneEvidenceBoard } from "@/lib/services/football/nflWeekOneEvidenceBoard";
 import { exactLockedEplScoreOutlook, impliedEplMatchResultScoreOutlook } from "@/lib/services/epl/eplDerivedMarketForecast";
 
@@ -398,7 +399,7 @@ function CollapsedReader({ game, market, marketKey, sport, onOpen, onOpenMarket,
         <div>
           <p className="text-[7px] font-black uppercase tracking-[0.15em] text-gray-600">{footballOutcome ? "Outcome forecast" : "Pick"}</p>
           <div className="mt-1 flex items-baseline gap-2">
-            <strong className="text-base font-black text-white">{footballOutcome?.winner ?? displayPick(market, marketKey)}</strong>
+            <strong className="text-base font-black text-white">{footballOutcome?.winner ?? dailyEdgeOutcomeForecastLabel({ game, market, marketKey, sport })}</strong>
             {footballOutcome && footballBetGrade ? <span className={`text-[7px] font-bold uppercase tracking-wider ${footballBetGrade.className}`}>Bet grade {footballBetGrade.label}</span> : <><span className="font-mono text-[10px] font-black text-gray-500">{formatAmerican(currentDisplayedPrice(market))}</span>{market.currentPriceSportsbook ? <span className="text-[7px] font-bold text-gray-600">{formatSportsbook(market.currentPriceSportsbook)}</span> : null}</>}
           </div>
         </div>
@@ -443,10 +444,10 @@ function ReaderEvidence({ game, market, marketKey, sport, history, pitcherFirstI
   );
 }
 
-function SoccerDecisionSummary({ game, market }: { game: DailyEdgeGameDto; market: MarketEdgeDto }) {
+function SoccerDecisionSummary({ game, market, marketKey }: { game: DailyEdgeGameDto; market: MarketEdgeDto; marketKey: MarketKey }) {
   const probabilityGap = displayedProbabilityGap(market);
   const metric = (label: string, value: string) => <div className="min-w-0 rounded-lg border border-white/[0.07] bg-black/20 px-3 py-2.5"><p className="text-[7px] font-black uppercase tracking-wider text-gray-600">{label}</p><p className="mt-1 truncate text-sm font-black text-white">{value}</p></div>;
-  return <section className="mt-3 rounded-xl border border-violet-400/20 bg-gradient-to-br from-violet-500/[0.08] via-black/15 to-sky-500/[0.035] p-4"><div className="flex flex-wrap items-center justify-between gap-2"><div className="flex flex-wrap items-center gap-2"><VerdictBadge market={market} large /><span className="text-[8px] font-black uppercase tracking-wider text-gray-600">Bet grade · exact-price decision</span></div><span className="text-[7px] font-black uppercase tracking-wider text-violet-200">Daily Edge read</span></div><div className="mt-3 flex items-end justify-between gap-3"><div><h3 className="text-2xl font-black tracking-tight text-white">{market.pick ?? "No Play"}</h3><p className="mt-1 text-[8px] text-gray-600">{game.awayTeam} at {game.homeTeam}</p></div><span className="text-right"><span className="block font-mono text-base font-black text-violet-100">{formatAmerican(currentDisplayedPrice(market))}</span><span className="block text-[7px] font-bold text-gray-600">{market.currentPriceSportsbook ? formatSportsbook(market.currentPriceSportsbook) : "Sportsbook unavailable"}</span></span></div><div className="mt-3 grid grid-cols-2 gap-2">{metric("Outcome confidence", formatProbability(market.modelProb))}{metric("Market", formatMarketProbability(market))}{metric("Gap", probabilityGap === null ? "—" : `${probabilityGap > 0 ? "+" : ""}${probabilityGap.toFixed(1)} pp`)}{metric("Bet actionability", market.recommendationConfidence === null || market.recommendationConfidence === undefined ? "—" : `${market.recommendationConfidence.toFixed(0)}/100`)}</div><p className="mt-2 text-[8px] leading-relaxed text-gray-500">Outcome confidence estimates the selected result. Bet grade evaluates that result at the exact offered price and market evidence; neither is a guarantee or automatic parlay recommendation.</p><div className="mt-3 grid gap-2"><div className="rounded-lg border border-emerald-400/15 bg-emerald-400/[0.035] p-3"><p className="text-[7px] font-black uppercase tracking-wider text-emerald-300">Why it rates</p><p className="mt-1.5 text-[9px] leading-relaxed text-gray-400">{currentAwareGuidedGuide(market, market.whyLine)}</p></div><div className="rounded-lg border border-amber-400/15 bg-amber-400/[0.035] p-3"><p className="text-[7px] font-black uppercase tracking-wider text-amber-300">Main risk</p><p className="mt-1.5 text-[9px] leading-relaxed text-gray-400">{displayRiskLine(market)}</p></div></div></section>;
+  return <section className="mt-3 rounded-xl border border-violet-400/20 bg-gradient-to-br from-violet-500/[0.08] via-black/15 to-sky-500/[0.035] p-4"><div className="flex flex-wrap items-center justify-between gap-2"><div className="flex flex-wrap items-center gap-2"><VerdictBadge market={market} large /><span className="text-[8px] font-black uppercase tracking-wider text-gray-600">Bet grade · exact-price decision</span></div><span className="text-[7px] font-black uppercase tracking-wider text-violet-200">Daily Edge read</span></div><div className="mt-3 flex items-end justify-between gap-3"><div><h3 className="text-2xl font-black tracking-tight text-white">{dailyEdgeOutcomeForecastLabel({ game, market, marketKey, sport: "soccer" })}</h3><p className="mt-1 text-[8px] text-gray-600">{game.awayTeam} at {game.homeTeam}</p></div><span className="text-right"><span className="block font-mono text-base font-black text-violet-100">{formatAmerican(currentDisplayedPrice(market))}</span><span className="block text-[7px] font-bold text-gray-600">{market.currentPriceSportsbook ? formatSportsbook(market.currentPriceSportsbook) : "Sportsbook unavailable"}</span></span></div><div className="mt-3 grid grid-cols-2 gap-2">{metric("Outcome confidence", formatProbability(market.modelProb))}{metric("Market", formatMarketProbability(market))}{metric("Gap", probabilityGap === null ? "—" : `${probabilityGap > 0 ? "+" : ""}${probabilityGap.toFixed(1)} pp`)}{metric("Bet actionability", market.recommendationConfidence === null || market.recommendationConfidence === undefined ? "—" : `${market.recommendationConfidence.toFixed(0)}/100`)}</div><p className="mt-2 text-[8px] leading-relaxed text-gray-500">Outcome confidence estimates the selected result. Bet grade evaluates that result at the exact offered price and market evidence; neither is a guarantee or automatic parlay recommendation.</p><div className="mt-3 grid gap-2"><div className="rounded-lg border border-emerald-400/15 bg-emerald-400/[0.035] p-3"><p className="text-[7px] font-black uppercase tracking-wider text-emerald-300">Why it rates</p><p className="mt-1.5 text-[9px] leading-relaxed text-gray-400">{currentAwareGuidedGuide(market, market.whyLine)}</p></div><div className="rounded-lg border border-amber-400/15 bg-amber-400/[0.035] p-3"><p className="text-[7px] font-black uppercase tracking-wider text-amber-300">Main risk</p><p className="mt-1.5 text-[9px] leading-relaxed text-gray-400">{displayRiskLine(market)}</p></div></div></section>;
 }
 
 function MobileReaderSheet({ onClose, onSportChange, activePreviewSports, soccerCompetition, onPrev, onNext, ...reader }: ReaderSurfaceProps & { onClose: () => void; onSportChange: (sport: Sport) => void; activePreviewSports: Sport[]; soccerCompetition?: SoccerCompetitionPreview; onPrev: (() => void) | null; onNext: (() => void) | null }) {
@@ -582,7 +583,7 @@ function MarketStrip({ game, sport, active, setActive }: { game: DailyEdgeGameDt
         return (
           <button key={key} type="button" role="tab" aria-selected={selected} onClick={() => setActive(key)} className={`min-w-0 rounded-lg border px-2 py-2.5 text-left transition sm:rounded-xl sm:px-4 sm:py-3 ${selected ? "border-violet-400/55 bg-gradient-to-br from-violet-500/25 to-violet-900/10 shadow-[0_0_22px_-12px_rgba(124,58,237,0.9)]" : "border-white/[0.07] bg-white/[0.025] hover:border-violet-400/25"}`}>
             <div className="flex min-w-0 items-center justify-between gap-1"><span className={`truncate text-[7px] font-black uppercase tracking-[0.08em] sm:text-[9px] sm:tracking-[0.15em] ${selected ? "text-violet-200" : "text-gray-600"}`}>{marketLabelFor(key, sport)}</span><span className="shrink-0 text-[8px] font-black text-gray-500 sm:text-[9px]">{formatProbability(market.modelProb)}</span></div>
-            <div className="mt-1.5 flex min-w-0 items-center justify-between gap-1 sm:mt-2 sm:gap-2"><span className="truncate text-xs font-black text-white sm:text-base">{displayPick(market, key)}</span><VerdictGlyph market={market} /></div>
+            <div className="mt-1.5 flex min-w-0 items-center justify-between gap-1 sm:mt-2 sm:gap-2"><span className="truncate text-xs font-black text-white sm:text-base">{dailyEdgeOutcomeForecastLabel({ game, market, marketKey: key, sport })}</span><VerdictGlyph market={market} /></div>
             <p className={`mt-1 hidden truncate text-[9px] sm:block ${selected ? "text-violet-200/65" : "text-gray-700"}`}>{pulse.chip}</p>
           </button>
         );
@@ -681,14 +682,14 @@ function QuickRead({ game, market, marketKey, sport }: { game: DailyEdgeGameDto;
         {sport === "soccer" && marketKey === "first_inning" ? <SoccerBttsForecast market={market} projection={soccerProjection} game={game} /> : null}
         {sport !== "soccer" ? <div className="mt-4">
           <p className="text-[8px] font-black uppercase tracking-[0.16em] text-gray-600">OddSphere read</p>
-          <div className="mt-1 flex items-end justify-between gap-3"><p className="text-2xl font-black tracking-tight text-white">{market.pick ?? "No Play"}</p>{market.held ? <span className="text-right"><span className="block text-[8px] font-black uppercase tracking-wider text-amber-200">No bet evaluated</span><span className="mt-0.5 block text-[7px] font-bold text-gray-600">Current odds shown below</span></span> : <span className="text-right"><span className="block font-mono text-base font-black text-gray-200">{formatAmerican(currentDisplayedPrice(market))}</span>{market.currentPriceSportsbook ? <span className="block text-[7px] font-bold text-gray-600">{formatSportsbook(market.currentPriceSportsbook)}</span> : null}</span>}</div>
+          <div className="mt-1 flex items-end justify-between gap-3"><p className="text-2xl font-black tracking-tight text-white">{dailyEdgeOutcomeForecastLabel({ game, market, marketKey, sport })}</p>{market.held ? <span className="text-right"><span className="block text-[8px] font-black uppercase tracking-wider text-amber-200">No bet evaluated</span><span className="mt-0.5 block text-[7px] font-bold text-gray-600">Current odds shown below</span></span> : <span className="text-right"><span className="block font-mono text-base font-black text-gray-200">{formatAmerican(currentDisplayedPrice(market))}</span>{market.currentPriceSportsbook ? <span className="block text-[7px] font-bold text-gray-600">{formatSportsbook(market.currentPriceSportsbook)}</span> : null}</span>}</div>
           <p className="mt-1 text-[10px] text-gray-500">{nflValueBetProbability ? "Value-model probability" : "Outcome confidence"} <span className="font-black text-gray-200">{formatProbability(market.modelProb)}</span> · publish-time market <span className="font-black text-gray-200">{formatMarketProbability(market)}</span></p>
           {nflValueBetProbability ? <p className="mt-1 text-[8px] leading-relaxed text-violet-200/65">The exact-price value lane agrees with the discrete model&apos;s projected winner; its positive-EV evaluated quote is shown here.</p> : null}
           {(probabilityGap !== null || market.recommendationConfidence !== null) ? <p className="mt-1 text-[9px] text-gray-600">Publish-time gap <span className="font-black text-gray-300">{probabilityGap === null ? "—" : `${probabilityGap > 0 ? "+" : ""}${probabilityGap.toFixed(1)} pp`}</span> · bet actionability <span className="font-black text-gray-300">{market.recommendationConfidence === null || market.recommendationConfidence === undefined ? "—" : `${market.recommendationConfidence.toFixed(0)}/100`}</span></p> : null}
         </div> : null}
         {sport !== "soccer" ? <div className="mt-4 rounded-lg border border-violet-400/15 bg-violet-500/[0.05] p-3"><p className="text-xs leading-relaxed text-gray-300">{currentAwareGuidedGuide(market, market.whyLine)}</p><p className="mt-2 text-[10px] leading-relaxed text-amber-200/70"><span className="font-black text-amber-300">Where it gets less clean:</span> {displayRiskLine(market)}</p></div> : null}
       </div>
-      {sport === "soccer" ? <SoccerDecisionSummary game={game} market={market} /> : null}
+      {sport === "soccer" ? <SoccerDecisionSummary game={game} market={market} marketKey={marketKey} /> : null}
       {sport !== "soccer" ? <><div className="mt-4"><p className="text-[8px] font-black uppercase tracking-[0.16em] text-gray-600">Bet grade</p><div className="mt-2"><VerdictBadge market={market} large /></div><GradeScale market={market} /><p className="mt-2 text-[8px] leading-relaxed text-gray-600">{market.held ? "No Play: required evidence is incomplete, so no exact-price bet evaluation is being presented." : "Price-sensitive decision at the evaluated sportsbook quote. Outcome confidence is shown separately and does not override the Bet grade."}</p></div><DecisionMetricGrid market={market} /></> : null}
     </div>
   );
@@ -1575,7 +1576,7 @@ function HistoryStatSummary({ game, market, marketKey, history, sample, sport, w
 }
 
 function FootballRecentSummary({ game, market, marketKey, sample, comparisons }: { game: DailyEdgeGameDto; market: MarketEdgeDto; marketKey: MarketKey; sample: 5 | 10; comparisons: HistoryComparison[] }) {
-  const pick = displayPick(market, marketKey);
+  const pick = dailyEdgeOutcomeForecastLabel({ game, market, marketKey, sport: game.sport });
   const cell = (side: "away" | "home", display: string, signal: ReturnType<typeof comparisonSignal>) => {
     const supports = signal.support === side;
     const challenges = signal.risk === side;
@@ -1819,7 +1820,7 @@ function CoreDecisionSnapshot({ game, market, marketKey }: { game: DailyEdgeGame
   }
   if (projectionIsUnavailable(game)) {
     const marketNumber = marketKey === "moneyline" ? "Two-sided board" : market.line === null ? "—" : formatNumber(market.line);
-    return <div className="mt-2 grid grid-cols-2 gap-2"><ProofCell label="Score projection" value="No Play" note="Authoritative model output pending" tone="violet" /><ProofCell label="Outcome confidence" value="No Play" note="Not replaced by market odds" tone="violet" /><ProofCell label="Bet grade" value="No Play" note="Exact-price writer pending" tone="gray" /><ProofCell label={marketKey === "moneyline" ? "Current market" : "Market line"} value={marketNumber} note={market.marketSource ? formatSportsbook(market.marketSource) : "Source unavailable"} tone="gray" /></div>;
+    return <div className="mt-2 grid grid-cols-2 gap-2"><ProofCell label="Score projection" value="Forecast unavailable" note="Authoritative model output pending" tone="violet" /><ProofCell label="Outcome confidence" value="Forecast unavailable" note="Not replaced by market odds" tone="violet" /><ProofCell label="Bet grade" value="No Play" note="Exact-price writer pending" tone="gray" /><ProofCell label={marketKey === "moneyline" ? "Current market" : "Market line"} value={marketNumber} note={market.marketSource ? formatSportsbook(market.marketSource) : "Source unavailable"} tone="gray" /></div>;
   }
   const expectedAway = game.footballProjection?.expectedAwayPoints ?? game.projected.away;
   const expectedHome = game.footballProjection?.expectedHomePoints ?? game.projected.home;
@@ -2036,7 +2037,7 @@ function BoardGameCard({ game, sport, headlineMarket, active, activeMarket, sele
           </div>
         </div>
         <div className={`${compactSoccer ? "mt-3" : "mt-5"} flex flex-wrap items-baseline gap-2`}>
-          <span className={compactSoccer ? "text-[22px] font-black leading-none tracking-tight text-white" : "text-[30px] font-black leading-none tracking-tight text-white sm:text-[34px]"}>{footballOutcome?.winner ?? displayPick(headline, headlineKey)}</span>
+          <span className={compactSoccer ? "text-[22px] font-black leading-none tracking-tight text-white" : "text-[30px] font-black leading-none tracking-tight text-white sm:text-[34px]"}>{footballOutcome?.winner ?? dailyEdgeOutcomeForecastLabel({ game, market: headline, marketKey: headlineKey, sport })}</span>
           <span className="text-[10px] font-black uppercase tracking-wider text-gray-500">{footballOutcome ? "Outcome forecast" : marketLabelFor(headlineKey, sport)}</span>
           <span className="text-[15px] font-black text-gray-200">{formatProbability(footballOutcome?.probability ?? headline.modelProb)}</span>
           {footballOutcome ? <span className={`text-[9px] font-black uppercase tracking-wider ${headlineVerdict.key === "lean" ? "text-sky-300" : headline.held ? "text-amber-200" : "text-gray-500"}`}>Bet grade {headlineVerdict.label}</span> : <span className="font-mono text-[12px] font-bold text-gray-500">{formatAmerican(headline.priceAmerican)}</span>}
@@ -2060,7 +2061,7 @@ function BoardGameCard({ game, sport, headlineMarket, active, activeMarket, sele
               const item = game.markets[key];
               const itemVerdict = dailyEdgePresentationVerdict(item);
               const selected = active && activeMarket === key;
-              return <button key={key} type="button" data-market={key} onClick={(event) => { event.stopPropagation(); selectGame(game, key); }} className={`${compactSoccer ? "min-h-[50px] px-2 py-2" : "min-h-[70px] px-3 py-3 sm:min-h-[76px] sm:px-3.5"} rounded-lg border text-left transition ${boardMarketPill(itemVerdict.key)} ${selected ? "ring-2 ring-white/45 ring-offset-1 ring-offset-[#0D0D14]" : ""}`}><span className={`block text-[8.5px] font-black uppercase tracking-[0.1em] ${boardVerdictText(itemVerdict.key)}`}>{marketShortLabelFor(key, sport)}</span><span className={`${compactSoccer ? "mt-1 text-[11px]" : "mt-1.5 text-[14px] sm:text-[15px]"} block truncate font-black text-gray-100`}>{displayPick(item, key)}</span></button>;
+              return <button key={key} type="button" data-market={key} onClick={(event) => { event.stopPropagation(); selectGame(game, key); }} className={`${compactSoccer ? "min-h-[50px] px-2 py-2" : "min-h-[70px] px-3 py-3 sm:min-h-[76px] sm:px-3.5"} rounded-lg border text-left transition ${boardMarketPill(itemVerdict.key)} ${selected ? "ring-2 ring-white/45 ring-offset-1 ring-offset-[#0D0D14]" : ""}`}><span className={`block text-[8.5px] font-black uppercase tracking-[0.1em] ${boardVerdictText(itemVerdict.key)}`}>{marketShortLabelFor(key, sport)}</span><span className={`${compactSoccer ? "mt-1 text-[11px]" : "mt-1.5 text-[14px] sm:text-[15px]"} block truncate font-black text-gray-100`}>{dailyEdgeOutcomeForecastLabel({ game, market: item, marketKey: key, sport })}</span></button>;
             })}
           </div>
           <div className="mt-2 flex min-h-3 justify-end"><span className={`text-[8px] font-black uppercase tracking-[0.1em] ${active ? "text-gray-300" : "text-violet-200/60"}`}>{active ? "Open in reader ↑" : "View breakdown ↑"}</span></div>
@@ -2125,7 +2126,7 @@ function NflWeekOneEvidenceMonitor({ board }: { board: NflWeekOneEvidenceBoard }
         <EvidenceCoverage label="Confirmed QBs" value={`${coverage.confirmedQuarterbacks}/${board.games.length * 2}`} tone={coverage.confirmedQuarterbacks === board.games.length * 2 ? "emerald" : "amber"} />
         <EvidenceCoverage label="Sharp splits" value={`${coverage.sharpSplitGames}/${board.games.length}`} tone={coverage.sharpSplitGames > 0 ? "emerald" : "gray"} />
       </div>
-      <p className="mt-4 text-[9px] leading-relaxed text-gray-500">A projected depth-chart QB is not labeled confirmed. SharpAPI coverage is shown only when its NFL fixture identity matches exactly. Missing validation is a visible hold—not an ordinary No Play.</p>
+      <p className="mt-4 text-[9px] leading-relaxed text-gray-500">A projected depth-chart QB is not labeled confirmed. SharpAPI coverage is shown only when its NFL fixture identity matches exactly. Missing validation keeps the Bet grade at No Play with its reason while preserving the model forecast.</p>
     </section>
 
     <section>
@@ -2343,12 +2344,6 @@ function mergeHistory(away: PreviewHistoryPoint[], home: PreviewHistoryPoint[], 
     awayOutcome: marketKey === "moneyline" ? away[index].won ? "W" : away[index].drawn ? "D" : "L" : undefined,
     homeOutcome: marketKey === "moneyline" ? home[index].won ? "W" : home[index].drawn ? "D" : "L" : undefined,
   }));
-}
-
-function displayPick(market: MarketEdgeDto, key: MarketKey): string {
-  if (!market.pick) return market.held ? "No Play" : "—";
-  if (key === "total" && market.line !== null && !/\d/.test(market.pick)) return `${market.pick} ${market.line}`;
-  return market.pick;
 }
 
 function projectionIsUnavailable(game: DailyEdgeGameDto): boolean {
