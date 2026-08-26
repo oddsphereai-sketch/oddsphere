@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 import { PRICING_PAGE_URL } from "@/lib/marketing/trialOffer";
+import { usesProductShell } from "@/lib/navigation/productShellRoutes";
 
 export default function Navbar() {
   const pathname = usePathname();
@@ -14,18 +15,7 @@ export default function Navbar() {
   // 6.2a: hide the public marketing Navbar on premium + admin shells. /lab/*
   // gets its own LabAppNav (app-style header); /admin/* uses its scoped chrome.
   // This way the marketing chrome only ever appears on actual marketing pages.
-  if (
-    pathname.startsWith("/lab") ||
-    pathname.startsWith("/admin") ||
-    pathname === "/mlb/props" ||
-    pathname === "/dev/mlb-props-preview" ||
-    pathname === "/dev/experience-preview" ||
-    pathname === "/dev/football-preview" ||
-    pathname === "/dev/tracking-preview" ||
-    pathname === "/dev/premier-league-preview" ||
-    pathname === "/dev/relaunch-review" ||
-    pathname === "/dev/device-review"
-  ) {
+  if (usesProductShell(pathname)) {
     return null;
   }
 
