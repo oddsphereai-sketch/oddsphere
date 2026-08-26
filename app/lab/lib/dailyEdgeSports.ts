@@ -35,6 +35,13 @@ export const DAILY_EDGE_TOP_LEVEL_SPORT_KEYS: Sport[] = DAILY_EDGE_SPORT_KEYS.fi
   (sport) => sport !== "ucl",
 );
 
+/** In-season member models that must remain simultaneously reachable in a
+ * constrained reader header. Offseason and coming-soon sports stay available
+ * in the full board selector. */
+export const ACTIVE_DAILY_EDGE_TOP_LEVEL_SPORT_KEYS: Sport[] = DAILY_EDGE_SPORTS
+  .filter((definition) => definition.key !== "ucl" && definition.memberAvailable && definition.inSeason)
+  .map((definition) => definition.key);
+
 export const AVAILABLE_DAILY_EDGE_SPORTS: Sport[] = DAILY_EDGE_SPORTS
   .filter((definition) => definition.memberAvailable)
   .map((definition) => definition.key);

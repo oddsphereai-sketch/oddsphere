@@ -18,6 +18,7 @@ import SportSelector from "@/app/lab/components/SportSelector";
 import { LockBadge } from "@/app/lab/components/daily-edge/LockBadge";
 import { LocalTime } from "@/app/lab/components/UserTimeZone";
 import {
+  ACTIVE_DAILY_EDGE_TOP_LEVEL_SPORT_KEYS,
   DAILY_EDGE_SPORT_AVAILABILITY,
   DAILY_EDGE_TOP_LEVEL_SPORT_KEYS,
 } from "@/app/lab/lib/dailyEdgeSports";
@@ -473,9 +474,9 @@ function MobileReaderSheet({ onClose, onSportChange, activePreviewSports, soccer
     <div className="fixed inset-0 z-50 sm:hidden" role="dialog" aria-modal="true" aria-label={`${reader.game.awayTeam} at ${reader.game.homeTeam} analysis`}>
       <div className="absolute inset-0 bg-black/75 backdrop-blur-sm" onClick={onClose} aria-hidden="true" />
       <nav aria-label="Reader sport switch" className="absolute inset-x-0 top-0 z-20 border-b border-violet-400/25 bg-[#100e18] px-4 py-2 shadow-[0_12px_35px_-24px_rgba(124,58,237,0.9)]">
-        <SportSelector active={reader.sport} onChange={onSportChange} sports={DAILY_EDGE_TOP_LEVEL_SPORT_KEYS} showCounts={false} showPendingState availability={sportAvailability} labelOverrides={{ soccer: "Soccer" }} />
+        <SportSelector active={reader.sport} onChange={onSportChange} sports={ACTIVE_DAILY_EDGE_TOP_LEVEL_SPORT_KEYS} showCounts={false} showPendingState availability={sportAvailability} labelOverrides={{ soccer: "Soccer" }} density="compact" />
       </nav>
-      <div className="absolute inset-x-0 bottom-0 top-[88px] flex flex-col overflow-hidden rounded-t-2xl border-t border-violet-400/35 bg-[#0a0910] shadow-[0_-24px_80px_-35px_rgba(124,58,237,0.85)]">
+      <div className="absolute inset-x-0 bottom-0 top-[65px] flex flex-col overflow-hidden rounded-t-2xl border-t border-violet-400/35 bg-[#0a0910] shadow-[0_-24px_80px_-35px_rgba(124,58,237,0.85)]">
         <div className="shrink-0 border-b border-white/[0.07] bg-[#100e18] px-3 pb-2 pt-3">
           <div className="flex items-center justify-between gap-3">
             <div className="flex min-w-0 items-center gap-2"><TeamLogo src={reader.game.awayTeamLogo} label={reader.game.awayTeam} /><span className="text-sm font-black text-white">{reader.game.awayTeam}</span><span className="text-[9px] text-gray-700">@</span><span className="text-sm font-black text-white">{reader.game.homeTeam}</span><TeamLogo src={reader.game.homeTeamLogo} label={reader.game.homeTeam} /><LocalTime value={reader.game.gameStartAt} fallback={reader.game.gameTime} className="truncate text-[9px] text-gray-600" /><LockBadge lockState={reader.game.lockState} lockedAt={reader.game.lockedAt} scheduledLockAt={reader.game.scheduledLockAt} className="font-black uppercase tracking-wider text-emerald-300" /></div>

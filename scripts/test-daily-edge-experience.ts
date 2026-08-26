@@ -403,8 +403,19 @@ check(
   candidateSource.includes('aria-label="Reader sport switch"') &&
     candidateSource.includes("onSportChange={switchSport}") &&
     candidateSource.includes("onChange={onSportChange}") &&
+    candidateSource.includes("sports={ACTIVE_DAILY_EDGE_TOP_LEVEL_SPORT_KEYS}") &&
+    candidateSource.includes('density="compact"') &&
     candidateSource.includes('params.delete("game")') &&
     candidateSource.includes('params.delete("market")'),
+);
+const sportSelectorSource = readFileSync("app/lab/components/SportSelector.tsx", "utf8");
+check(
+  "the compact reader selector keeps five sports simultaneously visible with tab and keyboard semantics",
+  sportSelectorSource.includes('density?: "default" | "compact"') &&
+    sportSelectorSource.includes('"grid w-full grid-cols-5 gap-1"') &&
+    sportSelectorSource.includes('role="tab"') &&
+    sportSelectorSource.includes("aria-selected={isActive}") &&
+    sportSelectorSource.includes("focus-visible:ring-2 focus-visible:ring-violet-300"),
 );
 check(
   "consensus-only markets do not render an empty sharp-book panel",
