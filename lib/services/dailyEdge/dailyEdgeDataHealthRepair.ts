@@ -69,6 +69,8 @@ export type DailyEdgeDataHealthRepairReport = {
   >;
 };
 
+const MAX_TARGETED_STARTER_REPAIR_GAMES = 3;
+
 type GameRow = {
   id: number;
   external_id: number;
@@ -81,13 +83,33 @@ function numberFromDetails(finding: DailyEdgeDataHealthFinding, key: string): nu
   return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
+function findingHasStarterReason(finding: DailyEdgeDataHealthFinding): boolean {
+  const reasons = [
+    ...((typeof finding.details?.holdReason === "string" ? [finding.details.holdReason] : [])),
+    ...((finding.details?.reviewFlags as string[] | undefined) ?? []),
+    ...((finding.details?.capReasons as string[] | undefined) ?? []),
+  ];
+  return reasons.some((reason) => reason.toLowerCase().includes("starter"));
+}
+
 function inc(map: Record<string, number>, key: string) {
   map[key] = (map[key] ?? 0) + 1;
 }
 
-function repairableFindings(report: DailyEdgeDataHealthReport): DailyEdgeDataHealthFinding[] {
+function repairableFindings(
+  report: DailyEdgeDataHealthReport,
+  mode: "full" | "starter_only" = "full",
+): DailyEdgeDataHealthFinding[] {
   if (report.sport !== "mlb") return [];
+  if (mode === "starter_only") {
+    return report.findings
+      .filter((finding) => finding.code === "member_held_needs_attention")
+      .filter(findingHasStarterReason)
+      .sort((a, b) => (numberFromDetails(a, "externalId") ?? Number.MAX_SAFE_INTEGER) - (numberFromDetails(b, "externalId") ?? Number.MAX_SAFE_INTEGER))
+      .slice(0, MAX_TARGETED_STARTER_REPAIR_GAMES);
+  }
   return report.findings.filter((finding) =>
+    finding.code === "member_held_needs_attention" ||
     finding.code === "fi_held_no_actionable_side" ||
     finding.code === "fi_publishable_degraded_stats" ||
     finding.code === "fi_provisional_lineup_pending" ||
@@ -128,10 +150,12 @@ async function loadGamesByExternalId(
 export async function runDailyEdgeDataHealthRepair(args: {
   report: DailyEdgeDataHealthReport;
   apply?: boolean;
+  mode?: "full" | "starter_only";
   postRepairMonitor?: () => Promise<DailyEdgeDataHealthReport>;
 }): Promise<DailyEdgeDataHealthRepairReport> {
   const apply = args.apply === true;
-  const candidates = repairableFindings(args.report);
+  const repairMode = args.mode ?? "full";
+  const candidates = repairableFindings(args.report, repairMode);
   const skipped: Record<string, number> = {};
   const attempts: DailyEdgeDataHealthRepairAttempt[] = [];
   const steps: DailyEdgeDataHealthRepairReport["steps"] = {};
@@ -321,7 +345,7 @@ export async function runDailyEdgeDataHealthRepair(args: {
     };
   }
 
-  try {
+  if (repairMode === "full") try {
     const playerStatsProviderReal = process.env.PLAYER_STATS_PROVIDER === "real_api";
     const weatherProviderReal = process.env.WEATHER_PROVIDER === "real_api";
     const bdlWritesEnabled = process.env.BDL_PLAYER_BACKFILL_DB_WRITES_ENABLED === "true";
@@ -356,17 +380,20 @@ export async function runDailyEdgeDataHealthRepair(args: {
     errors.push(`model_readiness: ${message}`);
   }
 
-  if (candidates.some((finding) => finding.code === "fi_starter_ingestion_miss")) {
+  let starterRepairChanged = false;
+  const starterRecoveryRequested = candidates.some((finding) =>
+    finding.code === "fi_starter_ingestion_miss" ||
+    (finding.code === "member_held_needs_attention" && findingHasStarterReason(finding))
+  );
+  if (starterRecoveryRequested) {
     try {
       const writeMode = process.env.STARTER_DB_WRITES_ENABLED === "true";
       const starterRefresh = await runStarterRefreshCycle({
         sport: args.report.sport,
         date: args.report.date,
         writeMode,
-        // The starter refresher plans the whole slate before applying this
-        // limit. Limiting it to the number of findings can select unrelated
-        // early games and leave the flagged matchup untouched.
-        limit: Math.max(1, args.report.gameCount),
+        externalIdsFilter: uniqueEligibleExternalIds,
+        limit: uniqueEligibleExternalIds.length,
         log: () => undefined,
       });
       steps.starterRefresh = {
@@ -377,7 +404,15 @@ export async function runDailyEdgeDataHealthRepair(args: {
         sidesWritten: starterRefresh.sides_written,
         unresolved: starterRefresh.unresolved,
         errors: starterRefresh.errors,
+        targetedExternalIds: uniqueEligibleExternalIds,
+        providerOutcomes: starterRefresh.provider_outcomes ?? [],
+        assignments: starterRefresh.starter_assignments,
+        providerRequestsMade: (starterRefresh.provider_outcomes ?? []).reduce((sum, outcome) => sum + outcome.requests_made, 0),
+        maxProviderRequests: (starterRefresh.provider_outcomes ?? []).reduce((sum, outcome) => sum + outcome.max_requests, 0),
       };
+      const providerRequestsMade = (starterRefresh.provider_outcomes ?? []).reduce((sum, outcome) => sum + outcome.requests_made, 0);
+      apiCallsMade += providerRequestsMade;
+      starterRepairChanged = starterRefresh.sides_written > 0;
       recordsUpdated += starterRefresh.sides_written;
       if (starterRefresh.status === "failed") {
         errors.push(`starter_refresh: ${starterRefresh.message ?? "failed"}`);
@@ -389,7 +424,7 @@ export async function runDailyEdgeDataHealthRepair(args: {
     }
   }
 
-  if (process.env.PLAYER_STATS_PROVIDER === "real_api") {
+  if (repairMode === "full" && process.env.PLAYER_STATS_PROVIDER === "real_api") {
     try {
       const bdlWriteMode = process.env.BDL_PLAYER_BACKFILL_DB_WRITES_ENABLED === "true";
       const bdl = await runBdlPlayerBackfillCycle({
@@ -426,12 +461,12 @@ export async function runDailyEdgeDataHealthRepair(args: {
       steps.lineups = { failed: true, error: message };
       errors.push(`lineups: ${message}`);
     }
-  } else {
+  } else if (repairMode === "full") {
     steps.bdlPlayers = { skipped: true, reason: "PLAYER_STATS_PROVIDER!=real_api" };
     steps.lineups = { skipped: true, reason: "PLAYER_STATS_PROVIDER!=real_api" };
   }
 
-  if (process.env.WEATHER_PROVIDER === "real_api") {
+  if (repairMode === "full" && process.env.WEATHER_PROVIDER === "real_api") {
     try {
       const weather = await weatherService.refreshForecasts(args.report.sport, args.report.date);
       steps.weather = {
@@ -445,11 +480,11 @@ export async function runDailyEdgeDataHealthRepair(args: {
       steps.weather = { failed: true, error: message };
       errors.push(`weather: ${message}`);
     }
-  } else {
+  } else if (repairMode === "full") {
     steps.weather = { skipped: true, reason: "WEATHER_PROVIDER!=real_api" };
   }
 
-  try {
+  if (repairMode === "full") try {
     const lines = await linesService.refreshGameLinesV2(args.report.sport, args.report.date);
     steps.lines = {
       recordsUpdated: lines.records_updated ?? 0,
@@ -463,7 +498,7 @@ export async function runDailyEdgeDataHealthRepair(args: {
     errors.push(`lines: ${message}`);
   }
 
-  try {
+  if (repairMode === "full") try {
     const sharpSignals = await linesService.refreshSharpSignals(args.report.sport, args.report.date);
     steps.sharpSignals = {
       recordsUpdated: sharpSignals.records_updated ?? 0,
@@ -477,7 +512,15 @@ export async function runDailyEdgeDataHealthRepair(args: {
     errors.push(`sharp_signals: ${message}`);
   }
 
-  if (process.env.AUTOMODEL_DB_WRITES_ENABLED !== "true") {
+  if (repairMode === "starter_only") {
+    steps.automodel = {
+      skipped: true,
+      reason: starterRepairChanged
+        ? "Targeted starter evidence changed; this recovery lane never rewrites predictions, probabilities, or grades. The next normal leased writer cycle owns evaluation."
+        : "Targeted starter sources produced no mapped assignment; idempotent recovery did not rewrite predictions.",
+      targetedExternalIds: uniqueEligibleExternalIds,
+    };
+  } else if (process.env.AUTOMODEL_DB_WRITES_ENABLED !== "true") {
     steps.automodel = {
       skipped: true,
       reason: "AUTOMODEL_DB_WRITES_ENABLED!=true; refreshed source data but did not rewrite predictions.",
@@ -588,20 +631,29 @@ export async function runDailyEdgeDataHealthRepair(args: {
     }
   }
 
-  try {
-    const responseSnapshot = await refreshDailyEdgeResponseSnapshot({
-      sport: args.report.sport,
-      date: args.report.date,
-      source: "daily_edge_data_health_repair",
-    });
-    steps.responseSnapshot = responseSnapshot;
-    if (!responseSnapshot.ok) {
-      errors.push(`response_snapshot: ${responseSnapshot.error ?? "publish failed"}`);
+  if (repairMode === "full") {
+    try {
+      const responseSnapshot = await refreshDailyEdgeResponseSnapshot({
+        sport: args.report.sport,
+        date: args.report.date,
+        source: "daily_edge_data_health_repair",
+      });
+      steps.responseSnapshot = responseSnapshot;
+      if (!responseSnapshot.ok) {
+        errors.push(`response_snapshot: ${responseSnapshot.error ?? "publish failed"}`);
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      steps.responseSnapshot = { ok: false, error: message };
+      errors.push(`response_snapshot: ${message}`);
     }
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    steps.responseSnapshot = { ok: false, error: message };
-    errors.push(`response_snapshot: ${message}`);
+  } else {
+    steps.responseSnapshot = {
+      skipped: true,
+      reason: starterRepairChanged
+        ? "Targeted starter evidence changed; the next normal leased writer cycle owns evaluation and coherent snapshot publication."
+        : "Targeted starter recovery made no mapped change; no snapshot publication was needed.",
+    };
   }
 
   let postRepairHealth: DailyEdgeDataHealthRepairReport["postRepairHealth"];
@@ -615,7 +667,7 @@ export async function runDailyEdgeDataHealthRepair(args: {
       byCode: post.byCode,
       unresolvedBlockingOrHigh: post.unresolvedBlockingOrHigh,
     };
-    const postRepairableFindings = repairableFindings(post);
+    const postRepairableFindings = repairableFindings(post, repairMode);
     const postBadExternalIds = new Set(
       postRepairableFindings
         .filter((finding) => finding.severity === "blocking" || finding.severity === "high")

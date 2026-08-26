@@ -1,4 +1,4 @@
-import type { DailyEdgeGameDto, MarketEdgeDto } from "../app/lab/lib/labTypes";
+import type { DailyEdgeGameDto, DailyEdgeResponse, MarketEdgeDto } from "../app/lab/lib/labTypes";
 import { readFileSync } from "node:fs";
 import {
   buildDailyEdgeReaderUrl,
@@ -27,10 +27,18 @@ import { marketSplitSectionIsStale } from "../app/lab/lib/dailyEdgeSplitFreshnes
 import { buildDailyEdgeSportSwitchDestination } from "../app/lab/lib/dailyEdgeSportSwitch";
 import { createSportTabActivationGuard } from "../app/lab/lib/sportTabActivation";
 import {
+  DAILY_EDGE_MEMBER_PRESENTATION_RELEASE_ID,
   dailyEdgeHeldGuide,
   dailyEdgeHeldRisk,
+  dailyEdgeOperationalExceptionWithholdsForecast,
+  dailyEdgeOperationalNoPlayReason,
   dailyEdgePresentationVerdict,
+  presentDailyEdgeOperationalNoPlay,
 } from "../app/lab/lib/dailyEdgeMarketPresentation";
+import {
+  buildDailyEdgeMemberPresentation,
+  finalizeDailyEdgeResponseCoherence,
+} from "../app/lab/lib/dailyEdgeResponseCoherence";
 
 const snapshotPrimerSource = readFileSync(
   "scripts/operator/prime-daily-edge-experience-snapshots.ts",
@@ -86,8 +94,8 @@ const heldPresentationBefore = JSON.stringify(heldPresentationMarket);
 for (const sport of ["mlb", "wnba", "nfl", "cfb", "soccer", "nba", "nhl"] as const) {
   const presented = dailyEdgePresentationVerdict(heldPresentationMarket);
   check(
-    `${sport.toUpperCase()} shared reader presents a true hold as Held, never No Play`,
-    presented.key === "held" && presented.label === "Held",
+    `${sport.toUpperCase()} shared reader presents an internal hold as public No Play`,
+    presented.key === "no_play" && presented.label === "No Play",
   );
 }
 check(
@@ -97,11 +105,163 @@ check(
     heldPresentationMarket.verdict.label === "No Play",
 );
 check(
-  "held presentation uses one behavior-neutral availability vocabulary",
+  "operational No Play uses explicit incomplete-evidence vocabulary",
   dailyEdgeHeldGuide(heldPresentationMarket) ===
-    "Evaluation held: awaiting the authoritative model and exact-price validation." &&
+    "No Play: required evidence is incomplete, so no exact-price bet evaluation is being presented." &&
     dailyEdgeHeldRisk(heldPresentationMarket) ===
-      "Required data or exact-price validation is still pending.",
+      "Starter, lineup, identity, or price evidence is still unconfirmed; internal recovery remains active.",
+);
+check(
+  "starter exception gives a specific public No Play reason",
+  dailyEdgeOperationalNoPlayReason({
+    held: true,
+    reviewFlags: ["missing_starter"],
+    capReasons: [],
+    displayReason: null,
+    guidedGuide: "",
+    guidedWatchOut: "",
+    whyLine: "",
+    riskLine: "",
+  }) ===
+    "No Play — starter unconfirmed; required evidence is incomplete.",
+);
+
+const dangerousHeldMarket = {
+  held: true,
+  pick: "NYY",
+  confidence: 0.61,
+  grade: "lean",
+  signalType: "market_edge",
+  marketSignal: "positive",
+  verdict: { key: "lean", label: "Lean" },
+  rawGrade: "best_signal",
+  rawRecScore: 74,
+  finalGrade: "lean",
+  finalRecScore: 63,
+  actionabilityLabel: "Lean",
+  displayReason: null,
+  guidedGuide: "Bet NYY",
+  guidedWatchOut: "",
+  whyLine: "NYY has value",
+  riskLine: "",
+  reviewFlags: [],
+  capReasons: [],
+  modelProb: 0.61,
+  marketFairProb: 0.56,
+  pinnacleEvPct: 7.4,
+  priceAmerican: -125,
+  currentPriceAmerican: -122,
+  currentPriceSportsbook: "FanDuel",
+  currentPriceObservedAt: "2026-08-26T15:00:00Z",
+  bestAvailablePriceAmerican: -118,
+  bestAvailableSportsbook: "DraftKings",
+  bestAvailableObservedAt: "2026-08-26T15:00:00Z",
+  gradePriceAmerican: -125,
+  lineOpenAmerican: -120,
+  oddsTrail: [{ american: -125, line: null, observedAt: "2026-08-26T14:00:00Z", sportsbook: "FanDuel", source: "current_line", label: "current" }],
+  opposingOddsTrail: { side: "away", label: "HOU", stops: [] },
+  modelTrustPct: 61,
+  marketImpliedPct: 56,
+  modelMarketGapPct: 5,
+  recommendationConfidence: 63,
+  recommendationDecision: {
+    pick: "NYY",
+    modelProbability: 0.61,
+    marketImplied: 0.56,
+    edgePp: 5,
+    price: -125,
+    projectedScore: { away: 3.9, home: 4.8 },
+    consensusSplits: null,
+    sharpBookSplits: null,
+    lineMovement: "support",
+    resolvedMarketRead: { status: "aligned", label: "Market Support", copy: "Support", tone: "emerald" },
+    sourceConflict: false,
+    playGrade: "Lean",
+    quickRead: "Lean NYY",
+    supportingEvidence: [],
+    riskNote: "",
+    reasonCodes: [],
+  },
+} as unknown as MarketEdgeDto;
+const presentedHeldMarket = presentDailyEdgeOperationalNoPlay(
+  dangerousHeldMarket,
+  "missing_or_scratched_starter",
+);
+check(
+  "operational exception preserves internal held state but withholds every evaluated tuple field",
+  presentedHeldMarket.held === true &&
+    presentedHeldMarket.verdict.key === "no_play" &&
+    presentedHeldMarket.verdict.label === "No Play" &&
+    presentedHeldMarket.pick === null &&
+    presentedHeldMarket.confidence === null &&
+    presentedHeldMarket.grade === null &&
+    presentedHeldMarket.rawGrade === null &&
+    presentedHeldMarket.finalGrade === null &&
+    presentedHeldMarket.modelProb === null &&
+    presentedHeldMarket.marketFairProb === null &&
+    presentedHeldMarket.pinnacleEvPct === null &&
+    presentedHeldMarket.priceAmerican === null &&
+    presentedHeldMarket.gradePriceAmerican === null &&
+    presentedHeldMarket.bestAvailablePriceAmerican === null &&
+    presentedHeldMarket.recommendationConfidence === null &&
+    presentedHeldMarket.oddsTrail?.length === 0 &&
+    presentedHeldMarket.opposingOddsTrail === null &&
+    presentedHeldMarket.recommendationDecision?.playGrade === "No Play" &&
+    presentedHeldMarket.recommendationDecision.pick === null &&
+    presentedHeldMarket.recommendationDecision.price === null &&
+    presentedHeldMarket.recommendationDecision.edgePp === null,
+);
+check(
+  "operational exception retains only fresh current quote as non-evaluated context",
+  presentedHeldMarket.currentPriceAmerican === -122 &&
+    presentedHeldMarket.currentPriceSportsbook === "FanDuel" &&
+    presentedHeldMarket.displayReason ===
+      "No Play — starter unconfirmed; required evidence is incomplete.",
+);
+const priceOnlyHeldMarket = {
+  ...structuredClone(dangerousHeldMarket),
+  pick: "USC",
+  confidence: 0.72,
+  modelProb: 0.72,
+  modelTrustPct: 72,
+  reviewFlags: [],
+  capReasons: ["complete_exact_price_unavailable"],
+  displayReason: "",
+  guidedGuide: "",
+  whyLine: "",
+  recommendationDecision: {
+    ...structuredClone(dangerousHeldMarket.recommendationDecision!),
+    pick: "USC",
+    modelProbability: 0.72,
+    projectedScore: { away: 17.4, home: 34.2 },
+  },
+} as MarketEdgeDto;
+const presentedPriceOnlyMarket = presentDailyEdgeOperationalNoPlay(
+  priceOnlyHeldMarket,
+  "exact_price_consensus_unavailable",
+);
+check(
+  "price-only No Play preserves the independent outcome forecast while suppressing the evaluated bet tuple",
+  dailyEdgeOperationalExceptionWithholdsForecast(
+    priceOnlyHeldMarket,
+    "exact_price_consensus_unavailable",
+  ) === false &&
+    presentedPriceOnlyMarket.held === true &&
+    presentedPriceOnlyMarket.verdict.key === "no_play" &&
+    presentedPriceOnlyMarket.pick === "USC" &&
+    presentedPriceOnlyMarket.confidence === 0.72 &&
+    presentedPriceOnlyMarket.modelProb === 0.72 &&
+    presentedPriceOnlyMarket.modelTrustPct === 72 &&
+    presentedPriceOnlyMarket.recommendationDecision?.pick === "USC" &&
+    presentedPriceOnlyMarket.recommendationDecision.modelProbability === 0.72 &&
+    presentedPriceOnlyMarket.recommendationDecision.projectedScore?.home === 34.2 &&
+    presentedPriceOnlyMarket.marketFairProb === null &&
+    presentedPriceOnlyMarket.pinnacleEvPct === null &&
+    presentedPriceOnlyMarket.priceAmerican === null &&
+    presentedPriceOnlyMarket.recommendationDecision.marketImplied === null &&
+    presentedPriceOnlyMarket.recommendationDecision.edgePp === null &&
+    presentedPriceOnlyMarket.recommendationDecision.price === null &&
+    presentedPriceOnlyMarket.actionabilityLabel === "No Play",
 );
 const evaluatedPresentationMarket = {
   held: false,
@@ -112,20 +272,77 @@ check(
   dailyEdgePresentationVerdict(evaluatedPresentationMarket) === evaluatedPresentationMarket.verdict,
 );
 check(
-  "active member card, headline, market strip, and Bet Grade share the Held helper",
+  "active member card, headline, market strip, and Bet Grade share the No Play helper",
   candidateDailyEdgeSource.includes("const headlineVerdict = dailyEdgePresentationVerdict(headline)") &&
     candidateDailyEdgeSource.includes("const itemVerdict = dailyEdgePresentationVerdict(item)") &&
     candidateDailyEdgeSource.includes("const verdict = dailyEdgePresentationVerdict(market)") &&
     candidateDailyEdgeSource.includes("dailyEdgeHeldGuide") &&
-    candidateDailyEdgeSource.includes("dailyEdgeHeldRisk"),
+    candidateDailyEdgeSource.includes("dailyEdgeHeldRisk") &&
+    !candidateDailyEdgeSource.includes('{ key: "held", label: "Held" }'),
 );
 check(
   "member Daily Edge filter contract is owned by the active candidate renderer, not the legacy shell",
   candidateMemberPageSource.includes(
     'import ActualDailyEdgePreview from "@/app/dev/experience-preview/ActualDailyEdgePreview"',
   ) &&
-    candidateDailyEdgeSource.includes('{ key: "held", label: "Held" }') &&
+    !candidateDailyEdgeSource.includes('{ key: "held", label: "Held" }') &&
     candidateDailyEdgeSource.includes('{ key: "no_play", label: "No Play" }'),
+);
+
+const countFixture = {
+  as_of: "2026-08-26T15:00:00Z",
+  sport: "mlb",
+  games: [{ markets: {
+    moneyline: { held: true, verdict: { key: "no_play", label: "No Play" } },
+    total: { held: false, verdict: { key: "lean", label: "Lean" } },
+    first_inning: { held: false, verdict: { key: "no_play", label: "No Play" } },
+  } }],
+} as unknown as DailyEdgeResponse;
+countFixture.memberPresentation = buildDailyEdgeMemberPresentation(countFixture);
+check(
+  "member counts exclude operational exceptions from evaluated grades",
+  countFixture.memberPresentation?.releaseId === DAILY_EDGE_MEMBER_PRESENTATION_RELEASE_ID &&
+    countFixture.memberPresentation.counts.totalMarkets === 3 &&
+    countFixture.memberPresentation.counts.evaluatedMarkets === 2 &&
+    countFixture.memberPresentation.counts.operationalExceptions === 1 &&
+    countFixture.memberPresentation.counts.evaluatedByVerdict.no_play === 1 &&
+    countFixture.memberPresentation.counts.publicNoPlayMarkets === 2,
+);
+
+const heldResponseFixture = {
+  as_of: "2026-08-26T15:00:00Z",
+  date: "2026-08-26",
+  sport: "mlb",
+  games: [{
+    id: "mlb-5059773",
+    external_id: 5059773,
+    awayTeam: "HOU",
+    homeTeam: "NYY",
+    lockState: "open",
+    lockedAt: null,
+    holdReason: "missing_or_scratched_starter",
+    markets: {
+      moneyline: structuredClone(dangerousHeldMarket),
+      total: structuredClone(dangerousHeldMarket),
+      first_inning: structuredClone(dangerousHeldMarket),
+    },
+  }],
+} as unknown as DailyEdgeResponse;
+finalizeDailyEdgeResponseCoherence(heldResponseFixture);
+check(
+  "response finalizer maps all HOU@NYY operational markets to public No Play without suppressing the slate",
+  Object.values(heldResponseFixture.games[0]!.markets).every((market) =>
+    market.held === true &&
+    market.verdict.key === "no_play" &&
+    market.actionabilityLabel === "No Play" &&
+    market.pick === null &&
+    market.modelProb === null &&
+    market.priceAmerican === null &&
+    market.displayReason === "No Play — starter unconfirmed; required evidence is incomplete."
+  ) &&
+    heldResponseFixture.memberPresentation?.counts.operationalExceptions === 3 &&
+    heldResponseFixture.memberPresentation.counts.publicNoPlayMarkets === 3 &&
+    heldResponseFixture.memberPresentation.counts.evaluatedMarkets === 0,
 );
 
 function game(

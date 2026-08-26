@@ -15,7 +15,7 @@ assert.deepEqual(
 );
 assert.deepEqual(
   nflSelectedBetGrade({ held: true, verdict: { key: "no_play", label: "No Play" } }),
-  { label: "Held", className: "text-amber-200" },
+  { label: "No Play", className: "text-gray-400" },
 );
 
-console.log("NFL reader selected-market Bet grade presentation: Lean, Watchlist, No Play, and Held passed");
+console.log("NFL reader selected-market Bet grade presentation: Lean, Watchlist, and No Play passed");

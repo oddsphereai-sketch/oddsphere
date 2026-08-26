@@ -222,13 +222,15 @@ export type MarketEdgeDto = {
   sharpStatus: SharpStatus;
 
   /**
-   * Phase 4.2.C.2 — per-market held flag. True when the auto-model held
-   * this specific market (i.e., `sport_specific.held === true` AND this
-   * market key is in `sport_specific.hold_picks`). Held markets:
-   *   • carry pick=null, confidence=null, grade=null
-   *   • route to verdict.key="no_play" via verdictDerivation
-   *   • render as "Held" in the UI, not as a fake default pick
-   * Held is per-market: a game can have ML held while Total is playable.
+   * Internal per-market operational-exception flag. True when the writer
+   * held this market (`sport_specific.held === true` and this key is in
+   * `sport_specific.hold_picks`). Member responses always present it as a
+   * reasoned No Play while retaining this flag for health/recovery. Forecast-
+   * integrity exceptions carry null pick/confidence/grade. Price/consensus-
+   * only exceptions may retain a coherent independent pick/probability, but
+   * never an evaluated fair probability, edge, EV, price, actionability, or
+   * grade. The exception remains per-market: ML may be unavailable while
+   * Total is fully evaluated.
    * For the typical "all 3 held" case (every market in hold_picks), the
    * DailyEdgeGameDto.holdReason carries the model's reason string.
    */
@@ -823,16 +825,16 @@ export type DailyEdgeGameDto = {
   /** 4.1.10 — read from `sport_specific.breakdown_generated_at` when present. */
   generatedAt: string | null;
   /**
-   * Phase 4.2.C.2 — `sport_specific.hold_reason` from the auto-model.
-   * Surfaces in the UI under a held banner ("Held — starter data pending"
-   * / "Held — game postponed" / etc.) so members understand WHY a game
-   * has no picks rather than seeing 0% defaults. Null when the model
-   * didn't hold any market.
+   * `sport_specific.hold_reason` from the writer. Member presentation maps
+   * the internal exception to No Play with a specific reason so missing
+   * evidence never appears as a fake 0% prediction or completed Bet grade.
+   * Null when the writer did not hold any market.
    *
    * Known values today (Phase 4D.1):
-   *   • "missing_or_scratched_starter" — most common; renders as
-   *     "Held — starter data pending"
-   *   • Other values map to a generic "Held" fallback in the UI
+   *   • "missing_or_scratched_starter" — most common; renders as a
+   *     starter-unconfirmed No Play and withholds the affected forecast
+   *   • price/consensus-only reasons retain an independent forecast but
+   *     withhold the evaluated bet tuple
    */
   holdReason: string | null;
   /**
@@ -888,8 +890,8 @@ export type DailyEdgeGameDto = {
   decisionLine: string;
   projected: { away: number; home: number };
   /** NFL-only football forecast kept separate from exact-price Bet grades.
-   * A game may publish this outcome/score forecast while every market remains
-   * Held. These probabilities must never be reader-side converted into a
+   * A game may publish this outcome/score forecast while every market is an
+   * operational No Play. These probabilities must never be reader-side converted into a
    * Lean, Best Angle, stake, or tracking row. */
   footballProjection?: {
     awayWinProbability: number;
@@ -1009,6 +1011,17 @@ export type SlateState =
 
 export type DailyEdgeResponse = {
   as_of: string;
+  /** Versioned member-only mapping; internal held state remains unchanged. */
+  memberPresentation?: {
+    releaseId: string;
+    counts: {
+      totalMarkets: number;
+      evaluatedMarkets: number;
+      operationalExceptions: number;
+      publicNoPlayMarkets: number;
+      evaluatedByVerdict: Partial<Record<Verdict, number>>;
+    };
+  };
   sport: Sport;
   /**
    * The slate_date the response is for — equals `requested_date` when games

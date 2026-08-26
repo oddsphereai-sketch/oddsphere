@@ -9,6 +9,7 @@ import { sharpContextStatusForEvidence } from "@/lib/services/dailyEdge/memberFa
 import type { PredictionEvidenceObject } from "@/lib/services/dailyEdge/predictionEvidenceBuilder";
 import { supabase } from "@/lib/db/supabase";
 import type { Sport } from "@/lib/types/domain/Sport";
+import type { DailyEdgeResponse } from "@/app/lab/lib/labTypes";
 import {
   MLB_MARKET_AWARE_CORRECTED_GRADE_RULE_ID,
   MLB_MARKET_AWARE_SIDE_CORRECTION_RULE_ID,
@@ -1216,6 +1217,40 @@ function collectFindings(
   return findings;
 }
 
+/** Internal operational holds stay high-severity even though members see No Play. */
+export function collectMemberHeldExceptionFindings(
+  response: DailyEdgeResponse,
+): DailyEdgeDataHealthFinding[] {
+  const findings: DailyEdgeDataHealthFinding[] = [];
+  for (const game of response.games) {
+    const heldMarkets = Object.entries(game.markets)
+      .filter(([, market]) => market.held)
+      .map(([market]) => market);
+    if (heldMarkets.length === 0) continue;
+    const heldRows = heldMarkets.map((market) => game.markets[market as keyof typeof game.markets]);
+    findings.push({
+      severity: "high",
+      code: "member_held_needs_attention",
+      sport: response.sport,
+      date: response.date,
+      game: `${game.awayTeam} @ ${game.homeTeam}`,
+      market: heldMarkets.join(","),
+      pick: null,
+      evidenceSource: game.lockedAt ? "locked_snapshot" : "current_live",
+      message: "Public No Play is backed by an unresolved internal operational exception that needs recovery.",
+      details: {
+        externalId: game.external_id,
+        lockState: game.lockState,
+        holdReason: game.holdReason,
+        heldMarkets,
+        capReasons: Array.from(new Set(heldRows.flatMap((market) => market.capReasons ?? []))),
+        reviewFlags: Array.from(new Set(heldRows.flatMap((market) => market.reviewFlags ?? []))),
+      },
+    });
+  }
+  return findings;
+}
+
 export async function runDailyEdgeDataHealthMonitor(args: {
   sport: Sport;
   date: string;
@@ -1240,7 +1275,8 @@ export async function runDailyEdgeDataHealthMonitor(args: {
     date: args.date,
     markets,
   });
-  const findings = [...evidenceFindings, ...predictionRecordContractFindings];
+  const memberHeldExceptionFindings = collectMemberHeldExceptionFindings(response);
+  const findings = [...evidenceFindings, ...predictionRecordContractFindings, ...memberHeldExceptionFindings];
   const bySeverity = countBy(findings, (finding) => finding.severity);
   const byCode = countBy(findings, (finding) => finding.code);
   const unresolvedBlockingOrHigh = findings.filter((finding) =>
