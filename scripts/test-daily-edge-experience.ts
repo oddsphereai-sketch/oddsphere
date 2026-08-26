@@ -38,6 +38,11 @@ import {
   buildDailyEdgeMemberPresentation,
   finalizeDailyEdgeResponseCoherence,
 } from "../app/lab/lib/dailyEdgeResponseCoherence";
+import {
+  DAILY_EDGE_FORECAST_UNAVAILABLE_LABEL,
+  dailyEdgeOutcomeForecastLabel,
+  isDailyEdgeOutcomeForecastHealthError,
+} from "../app/lab/lib/dailyEdgeOutcomeForecast";
 
 const snapshotPrimerSource = readFileSync(
   "scripts/operator/prime-daily-edge-experience-snapshots.ts",
@@ -261,6 +266,54 @@ check(
     presentedPriceOnlyMarket.recommendationDecision.price === null &&
     presentedPriceOnlyMarket.actionabilityLabel === "No Play",
 );
+const chcTotalForecastGame = {
+  id: "mlb-5059766",
+  sport: "mlb",
+  awayTeam: "CHC",
+  homeTeam: "ARI",
+  projected: { away: 3.7, home: 4.6 },
+} as DailyEdgeGameDto;
+const chcTotalForecastMarket = {
+  ...structuredClone(dangerousHeldMarket),
+  pick: null,
+  modelProb: null,
+  modelTotal: 8.31750489307457,
+  line: 8.5,
+} as MarketEdgeDto;
+check(
+  "CHC@ARI Total prediction surface shows the model total rather than its No Play Bet grade",
+  dailyEdgeOutcomeForecastLabel({
+    game: chcTotalForecastGame,
+    market: chcTotalForecastMarket,
+    marketKey: "total",
+    sport: "mlb",
+  }) === "Projected total 8.3",
+);
+const crossSportForecastCases = [
+  { sport: "mlb", marketKey: "moneyline", expected: "ARI projected leader" },
+  { sport: "wnba", marketKey: "first_inning", expected: "Projected margin ARI 0.9" },
+  { sport: "nfl", marketKey: "total", expected: "Projected total 8.3" },
+  { sport: "cfb", marketKey: "first_inning", expected: "Projected margin ARI 0.9" },
+  { sport: "soccer", marketKey: "total", expected: "Projected total 8.3" },
+  { sport: "nba", marketKey: "moneyline", expected: "ARI projected leader" },
+  { sport: "nhl", marketKey: "moneyline", expected: "ARI projected leader" },
+] as const;
+for (const testCase of crossSportForecastCases) {
+  const label = dailyEdgeOutcomeForecastLabel({
+    game: { ...chcTotalForecastGame, sport: testCase.sport },
+    market: chcTotalForecastMarket,
+    marketKey: testCase.marketKey,
+    sport: testCase.sport,
+  });
+  check(
+    `${testCase.sport} prediction fallback remains model-native and grade-free`,
+    label === testCase.expected && !/no play|held/i.test(label),
+  );
+}
+check(
+  "defensive Forecast unavailable copy is classified as a high health error",
+  isDailyEdgeOutcomeForecastHealthError(DAILY_EDGE_FORECAST_UNAVAILABLE_LABEL),
+);
 const evaluatedPresentationMarket = {
   held: false,
   verdict: { key: "no_play", label: "No Play" },
@@ -277,6 +330,15 @@ check(
     candidateDailyEdgeSource.includes("dailyEdgeHeldGuide") &&
     candidateDailyEdgeSource.includes("dailyEdgeHeldRisk") &&
     !candidateDailyEdgeSource.includes('{ key: "held", label: "Held" }'),
+);
+check(
+  "prediction category and card surfaces use model-native forecast labels instead of Bet Grade fallbacks",
+  candidateDailyEdgeSource.includes("dailyEdgeOutcomeForecastLabel({ game, market, marketKey, sport })") &&
+    candidateDailyEdgeSource.includes("dailyEdgeOutcomeForecastLabel({ game, market: item, marketKey: key, sport })") &&
+    !candidateDailyEdgeSource.includes("displayPick(") &&
+    !candidateDailyEdgeSource.includes('market.pick ?? "No Play"') &&
+    !candidateDailyEdgeSource.includes('label="Score projection" value="No Play"') &&
+    !candidateDailyEdgeSource.includes('label="Outcome confidence" value="No Play"'),
 );
 check(
   "member Daily Edge filter contract is owned by the active candidate renderer, not the legacy shell",
