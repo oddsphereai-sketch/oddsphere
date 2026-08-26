@@ -16,6 +16,7 @@
 
 import { usePathname } from "next/navigation";
 import Link from "next/link";
+import { usesProductShell } from "@/lib/navigation/productShellRoutes";
 
 const PHONE_TEL = "tel:1-800-426-2537"; // 1-800-GAMBLER
 
@@ -23,14 +24,7 @@ export default function Footer() {
   const pathname = usePathname() ?? "";
 
   // Hide on premium + admin shells (V2.1: footer is public-pages only).
-  if (
-    pathname.startsWith("/lab") ||
-    pathname.startsWith("/admin") ||
-    pathname === "/mlb/props" ||
-    pathname === "/dev/mlb-props-preview" ||
-    pathname === "/dev/football-preview" ||
-    pathname === "/dev/premier-league-preview"
-  ) {
+  if (usesProductShell(pathname)) {
     return null;
   }
 
