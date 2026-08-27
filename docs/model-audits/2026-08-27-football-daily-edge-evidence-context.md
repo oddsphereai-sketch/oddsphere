@@ -24,6 +24,8 @@ College-football rows use the exact team profile in `cfbV1WeeklyRuntimeArtifact.
 
 Existing detailed availability/injury panels, same-book opening/prior/current trails, exact evaluated prices, Playbook consensus, and SharpAPI panels are unchanged and remain the authoritative surfaces for those evidence classes.
 
+The member route applies the same presentation-only enrichment to a compatible compact NFL snapshot read before falling back to a raw evidence rebuild. This prevents the normal snapshot cache from hiding new evidence cards until the next six-hour writer wave. It does not rewrite or republish the cached snapshot, call a provider, or mutate a decision tuple.
+
 ## Deliberate gaps
 
 - The NFL member DTO does not persist a public numerical copy of every r10 outcome-vector feature or a chronological game-by-game team history. The reader therefore does not claim the r6 team state is the r10 outcome vector or fabricate a recent-game log.

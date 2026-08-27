@@ -44,9 +44,20 @@ export function nflFootballEvidenceStats(args: {
     forecast: { temperature_f: number | null; wind_speed_mph: number | null; conditions: string | null } | null;
   };
 }): MarketEdgeDto["keyStats"] {
+  return [
+    ...nflFootballModelEvidenceStats(args),
+    ...currentNflContext(args),
+  ];
+}
+
+export function nflFootballModelEvidenceStats(args: {
+  awayTeam: string;
+  homeTeam: string;
+  market: FootballEvidenceMarket;
+}): MarketEdgeDto["keyStats"] {
   const away = nflArtifact.teamStates[nflArtifactTeam(args.awayTeam)];
   const home = nflArtifact.teamStates[nflArtifactTeam(args.homeTeam)];
-  if (!away || !home) return currentNflContext(args);
+  if (!away || !home) return [];
   const modelRows = args.market === "total"
     ? [
         row("Decision-model input · Offensive plays per game", fixed(away.offAdjusted.plays, 1), fixed(home.offAdjusted.plays, 1)),
@@ -70,8 +81,42 @@ export function nflFootballEvidenceStats(args: {
   return [
     ...modelRows,
     row("Decision-model input · Frozen sample", nflSampleLabel(), nflSampleLabel()),
-    ...currentNflContext(args),
   ];
+}
+
+export function enrichCachedNflFootballEvidence<T extends {
+  snapshot: {
+    games: Array<{
+      awayTeam: string;
+      homeTeam: string;
+      markets: {
+        moneyline: MarketEdgeDto;
+        total: MarketEdgeDto;
+        first_inning: MarketEdgeDto;
+      };
+    }>;
+  };
+}>(fixture: T): T {
+  if (fixture.snapshot.games.every((game) =>
+    Object.values(game.markets).every((market) =>
+      market.keyStats.some((stat) => stat.label.startsWith("Decision-model input ·"))))) {
+    return fixture;
+  }
+  return {
+    ...fixture,
+    snapshot: {
+      ...fixture.snapshot,
+      games: fixture.snapshot.games.map((game) => ({
+        ...game,
+        markets: {
+          ...game.markets,
+          moneyline: enrichCachedNflMarket(game, "moneyline", game.markets.moneyline),
+          total: enrichCachedNflMarket(game, "total", game.markets.total),
+          first_inning: enrichCachedNflMarket(game, "spread", game.markets.first_inning),
+        },
+      })),
+    },
+  };
 }
 
 export function cfbFootballEvidenceStats(args: {
@@ -116,6 +161,36 @@ function currentNflContext(args: Parameters<typeof nflFootballEvidenceStats>[0])
     quarterbackRow(args.awayQuarterback, args.homeQuarterback),
     { label: "Current context · Venue and weather", awayValue: null, homeValue: weatherLabel(args.weather), source: "feature_snapshot" },
   ];
+}
+
+function enrichCachedNflMarket(
+  game: { awayTeam: string; homeTeam: string },
+  market: FootballEvidenceMarket,
+  value: MarketEdgeDto,
+): MarketEdgeDto {
+  if (value.keyStats.some((stat) => stat.label.startsWith("Decision-model input ·"))) return value;
+  return {
+    ...value,
+    keyStats: [
+      ...nflFootballModelEvidenceStats({ awayTeam: game.awayTeam, homeTeam: game.homeTeam, market }),
+      ...cachedNflContext(value.keyStats),
+    ],
+  };
+}
+
+function cachedNflContext(stats: MarketEdgeDto["keyStats"]): MarketEdgeDto["keyStats"] {
+  return stats.flatMap((stat) => {
+    if (/expected quarterbacks?|quarterback.*depth chart/i.test(stat.label)) {
+      return [{ ...stat, label: "Current context · Expected quarterback" }];
+    }
+    if (/provider-listed injuries|injur(?:y|ies)/i.test(stat.label)) {
+      return [{ ...stat, label: "Current context · Provider-listed injuries" }];
+    }
+    if (/venue|weather|wind/i.test(stat.label)) {
+      return [{ ...stat, label: "Current context · Venue and weather" }];
+    }
+    return [];
+  });
 }
 
 function quarterbackRow(
