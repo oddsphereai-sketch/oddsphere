@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useRef, useState } from "react";
 import type { Sport } from "../data/mockData";
 import { SPORT_META } from "../data/mockData";
@@ -13,6 +14,8 @@ type Props = {
   onChange: (next: Sport) => void;
   /** Intent-only route warming; never changes selection or URL state. */
   onPrefetch?: (next: Sport) => void;
+  /** Canonical routes that should receive a full dynamic-route prefetch after explicit user intent. */
+  fullPrefetchHrefs?: Partial<Record<Sport, string>>;
   sports?: Sport[];
   /** Optional surface-specific rollout labels. Omitted callers retain SPORT_META exactly. */
   availability?: Partial<Record<Sport, { isLive: boolean; comingSoonLabel?: string; statusLabel?: string }>>;
@@ -36,6 +39,7 @@ export default function SportSelector({
   active,
   onChange,
   onPrefetch,
+  fullPrefetchHrefs,
   sports = DEFAULT_SPORTS,
   showCounts = true,
   showPendingState = false,
@@ -45,6 +49,7 @@ export default function SportSelector({
   activateOnPointerDown = false,
 }: Props) {
   const [pendingSport, setPendingSport] = useState<Sport | null>(null);
+  const [fullPrefetchSport, setFullPrefetchSport] = useState<Sport | null>(null);
   const activationGuard = useRef(createSportTabActivationGuard<Sport>());
   const waitingForSport = pendingSport !== active ? pendingSport : null;
 
@@ -67,6 +72,7 @@ export default function SportSelector({
           const statusLabel = surfaceMeta?.statusLabel;
           const isPending = showPendingState && sport === waitingForSport;
           const isActive = sport === (showPendingState ? (waitingForSport ?? active) : active);
+          const fullPrefetchHref = sport === active ? null : fullPrefetchHrefs?.[sport] ?? null;
 
           const activateSport = (next: Sport) => {
             if (next === active || (showPendingState && waitingForSport !== null)) return;
@@ -84,33 +90,8 @@ export default function SportSelector({
             ? "bg-gray-900/60 border border-gray-800 text-gray-200 hover:text-white hover:border-violet-500/40 hover:bg-gray-800/60"
             : "bg-gray-900/40 border border-gray-800/60 text-gray-300 opacity-60 hover:opacity-90 hover:border-gray-700";
 
-          return (
-            <button
-              key={sport}
-              type="button"
-              role="tab"
-              data-daily-edge-sport-tab={sport}
-              aria-selected={isActive}
-              aria-busy={isPending}
-              onPointerEnter={() => {
-                if (isLive && sport !== active) onPrefetch?.(sport);
-              }}
-              onFocus={() => {
-                if (isLive && sport !== active) onPrefetch?.(sport);
-              }}
-              onPointerDown={(event) => {
-                if (!activateOnPointerDown || event.button !== 0 || !event.isPrimary) return;
-                activationGuard.current.pointerDown(event, sport, activateSport);
-              }}
-              onClick={(event) => {
-                if (!activateOnPointerDown) {
-                  activateSport(sport);
-                  return;
-                }
-                activationGuard.current.click(event, sport, activateSport);
-              }}
-              className={`${base} ${stateClasses}`}
-            >
+          const content = (
+            <>
               <span className={compact ? "inline-flex min-w-0 items-center font-black text-[10px]" : "inline-flex items-center gap-2 text-base font-bold sm:text-lg"}>
                 {!compact ? <span className="text-xl sm:text-2xl" aria-hidden="true">
                   {meta.icon}
@@ -142,6 +123,70 @@ export default function SportSelector({
                   {comingSoonLabel}
                 </span>
               )}
+            </>
+          );
+
+          const onIntent = () => {
+            if (!isLive || sport === active) return;
+            if (fullPrefetchHref) setFullPrefetchSport(sport);
+            onPrefetch?.(sport);
+          };
+
+          if (fullPrefetchHref) {
+            return (
+              <Link
+                key={sport}
+                href={fullPrefetchHref}
+                prefetch={fullPrefetchSport === sport}
+                role="tab"
+                data-daily-edge-sport-tab={sport}
+                aria-selected={isActive}
+                aria-busy={isPending}
+                onPointerEnter={onIntent}
+                onFocus={onIntent}
+                onPointerDown={(event) => {
+                  if (!activateOnPointerDown || event.button !== 0 || !event.isPrimary) return;
+                  activationGuard.current.pointerDown(event, sport, activateSport);
+                }}
+                onClick={(event) => {
+                  event.preventDefault();
+                  if (!activateOnPointerDown) {
+                    activateSport(sport);
+                    return;
+                  }
+                  activationGuard.current.click(event, sport, activateSport);
+                }}
+                className={`${base} ${stateClasses}`}
+              >
+                {content}
+              </Link>
+            );
+          }
+
+          return (
+            <button
+              key={sport}
+              type="button"
+              role="tab"
+              data-daily-edge-sport-tab={sport}
+              aria-selected={isActive}
+              aria-busy={isPending}
+              onPointerEnter={onIntent}
+              onFocus={onIntent}
+              onPointerDown={(event) => {
+                if (!activateOnPointerDown || event.button !== 0 || !event.isPrimary) return;
+                activationGuard.current.pointerDown(event, sport, activateSport);
+              }}
+              onClick={(event) => {
+                if (!activateOnPointerDown) {
+                  activateSport(sport);
+                  return;
+                }
+                activationGuard.current.click(event, sport, activateSport);
+              }}
+              className={`${base} ${stateClasses}`}
+            >
+              {content}
             </button>
           );
         })}

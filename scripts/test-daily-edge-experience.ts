@@ -876,6 +876,14 @@ check(
     candidateSource.includes("function prefetchSport(next: Sport)"),
 );
 check(
+  "NFL sport intent upgrades the compact member route to a full dynamic-route prefetch without changing activation",
+  sportSelectorSource.includes("fullPrefetchHrefs?: Partial<Record<Sport, string>>") &&
+    sportSelectorSource.includes("prefetch={fullPrefetchSport === sport}") &&
+    sportSelectorSource.includes("event.preventDefault()") &&
+    candidateSource.includes("const nflFullPrefetchHref") &&
+    candidateSource.includes("fullPrefetchHrefs={nflFullPrefetchHref ? { nfl: nflFullPrefetchHref } : undefined}"),
+);
+check(
   "consensus-only markets do not render an empty sharp-book panel",
   candidateSource.includes("sharp ?? (sharpAvailability === null ? null") &&
     candidateSource.includes("{displayedSharp ? <SplitSourcePanel") &&
