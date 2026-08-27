@@ -1722,7 +1722,7 @@ function KeyStats({ game, market, marketKey, history, sample, sport, availabilit
       <SectionHeading tone="sky">Key Stats & Notes</SectionHeading>
       {football ? <FootballAvailabilityPanel report={availability} sport={sport} /> : null}
       <div className="mt-4">
-        <div className="flex items-center justify-between gap-2"><p className="text-[8px] font-black uppercase tracking-[0.17em] text-sky-200">{visibleStats.length > 0 ? football ? "What moves this bet" : "Prediction drivers" : "Decision snapshot"}</p><span className="text-[7px] font-semibold text-gray-600">{visibleStats.length > 0 ? football ? `${visibleStats.length} decision checks` : `${visibleStats.length} most relevant` : "Core model output"}</span></div>
+        <div className="flex items-center justify-between gap-2"><p className="text-[8px] font-black uppercase tracking-[0.17em] text-sky-200">{visibleStats.length > 0 ? football ? "Forecast & matchup evidence" : "Prediction drivers" : "Decision snapshot"}</p><span className="text-[7px] font-semibold text-gray-600">{visibleStats.length > 0 ? football ? `${visibleStats.length} verified rows` : `${visibleStats.length} most relevant` : "Core model output"}</span></div>
         {visibleStats.length > 0 ? <div className="mt-2 space-y-2">{visibleStats.map((stat) => <PredictionDriverCard key={`${stat.label}-${stat.awayValue}-${stat.homeValue}`} stat={stat} away={game.awayTeam} home={game.homeTeam} awayStarter={game.awayStarter?.name ?? null} homeStarter={game.homeStarter?.name ?? null} marketKey={marketKey} pick={market.pick} />)}</div> : <CoreDecisionSnapshot game={game} market={market} marketKey={marketKey} />}
       </div>
       {marketKey === "first_inning" && sport === "mlb" ? null : <HistoryStatSummary game={game} market={market} marketKey={marketKey} history={history} sample={sample} sport={sport} />}
@@ -1898,11 +1898,13 @@ function FootballOutcomeForecast({ game, market, marketKey }: { game: DailyEdgeG
 function PredictionDriverCard({ stat, away, home, awayStarter, homeStarter, marketKey, pick }: { stat: MarketEdgeDto["keyStats"][number]; away: string; home: string; awayStarter: string | null; homeStarter: string | null; marketKey: MarketKey; pick: string | null }) {
   const category = driverCategory(stat.label);
   const context = driverContext(stat.label, marketKey, pick);
+  const evidenceRole = driverEvidenceRole(stat.label, stat.source);
+  const displayLabel = stat.label.replace(/^(?:Outcome-model input|Decision-model input|Current context)\s*·\s*/i, "");
   const isPitching = category === "Pitching";
   const twoSided = keyStatIsTwoSided(stat.label, stat.awayValue, stat.homeValue);
   const signal = contextualDriverSignal({ label: stat.label, awayValue: stat.awayValue, homeValue: stat.homeValue, away, home, marketKey, pick });
   const teamValue = (side: "away" | "home", team: string, person: string | null, value: string | null) => { const supports = signal?.support === side; const challenges = signal?.risk === side; return <div className={`rounded-lg border px-3 py-2 ${supports ? "border-emerald-400/30 bg-emerald-400/[0.07]" : challenges ? "border-amber-400/25 bg-amber-400/[0.055]" : "border-white/[0.07] bg-black/25"}`}><div className="flex items-center gap-1.5"><span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: teamAccent(team) }} /><span className={`text-[8px] font-black ${supports ? "text-emerald-200" : challenges ? "text-amber-200" : "text-gray-400"}`}>{team}</span></div>{isPitching && person ? <p className={`mt-1 truncate text-[9px] font-black ${supports ? "text-emerald-100" : challenges ? "text-amber-100" : "text-gray-100"}`}>{person}</p> : null}<p className={`${isPitching && person ? "mt-0.5" : "mt-1"} text-sm font-black ${supports ? "text-emerald-200" : challenges ? "text-amber-200" : "text-white"}`}>{value ?? "—"}</p></div>; };
-  return <section className="rounded-xl border border-sky-400/20 bg-[#111723] p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.025)]"><div className="flex items-start justify-between gap-3"><div><span className="text-[7px] font-black uppercase tracking-[0.14em] text-sky-300">{category}</span><p className="mt-0.5 text-[10px] font-black text-gray-100">{stat.label}</p></div><div className="text-right"><span className="block text-[7px] font-bold uppercase tracking-wider text-gray-600">{driverSourceLabel(stat.source)}</span>{signal ? <span className={`mt-1 inline-flex rounded-full border px-2 py-0.5 text-[7px] font-black ${signal.support ? "border-emerald-400/25 bg-emerald-400/[0.08] text-emerald-200" : signal.risk ? "border-amber-400/25 bg-amber-400/[0.08] text-amber-200" : "border-gray-700 bg-gray-800/60 text-gray-500"}`}>{signal.label}</span> : null}</div></div>{twoSided ? <div className="mt-2 grid grid-cols-2 gap-2">{teamValue("away", away, awayStarter, stat.awayValue)}{teamValue("home", home, homeStarter, stat.homeValue)}</div> : <p className="mt-2 text-base font-black text-white">{stat.homeValue ?? stat.awayValue ?? "—"}</p>}<p className="mt-2 text-[8px] leading-relaxed text-gray-500">{context}</p></section>;
+  return <section className="rounded-xl border border-sky-400/20 bg-[#111723] p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.025)]"><div className="flex items-start justify-between gap-3"><div><span className="text-[7px] font-black uppercase tracking-[0.14em] text-sky-300">{category}</span><p className="mt-0.5 text-[10px] font-black text-gray-100">{displayLabel}</p></div><div className="text-right"><span className="block text-[7px] font-bold uppercase tracking-wider text-gray-600">{evidenceRole}</span>{signal ? <span className={`mt-1 inline-flex rounded-full border px-2 py-0.5 text-[7px] font-black ${signal.support ? "border-emerald-400/25 bg-emerald-400/[0.08] text-emerald-200" : signal.risk ? "border-amber-400/25 bg-amber-400/[0.08] text-amber-200" : "border-gray-700 bg-gray-800/60 text-gray-500"}`}>{signal.label}</span> : null}</div></div>{twoSided ? <div className="mt-2 grid grid-cols-2 gap-2">{teamValue("away", away, awayStarter, stat.awayValue)}{teamValue("home", home, homeStarter, stat.homeValue)}</div> : <p className="mt-2 text-base font-black text-white">{stat.homeValue ?? stat.awayValue ?? "—"}</p>}<p className="mt-2 text-[8px] leading-relaxed text-gray-500">{context}</p></section>;
 }
 
 function DeepResearchToggle({ open, setOpen, market, marketKey, game }: { open: boolean; setOpen: (open: boolean) => void; market: MarketEdgeDto; marketKey: MarketKey; game: DailyEdgeGameDto }) {
@@ -2464,6 +2466,7 @@ function driverContext(label: string, marketKey: MarketKey, pick: string | null)
 
 function contextualDriverSignal({ label, awayValue, homeValue, away, home, marketKey, pick }: { label: string; awayValue: string | null; homeValue: string | null; away: string; home: string; marketKey: MarketKey; pick: string | null }): { support: "away" | "home" | null; risk: "away" | "home" | null; label: string } | null {
   if (awayValue === null || homeValue === null) return null;
+  if (/^Current context\s*·/i.test(label)) return null;
   if (!pick || /toss.?up|held/i.test(pick)) return null;
   const isRunPrevention = /era|whip|fip|runs allowed/i.test(label);
   const isOffense = /ops|lineup vs starter|top.of.order/i.test(label);
@@ -2536,6 +2539,13 @@ function driverSourceLabel(source: string): string {
   if (source === "computed") return "Model output";
   if (source === "feature_snapshot") return "Team data";
   return source.replaceAll("_", " ");
+}
+
+function driverEvidenceRole(label: string, source: string): string {
+  if (/^Outcome-model input\s*·/i.test(label)) return "Outcome model input";
+  if (/^Decision-model input\s*·/i.test(label)) return "Bet model input";
+  if (/^Current context\s*·/i.test(label)) return "Current context";
+  return driverSourceLabel(source);
 }
 
 function coverageSentence(market: MarketEdgeDto): string {

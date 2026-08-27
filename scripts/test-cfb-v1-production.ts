@@ -208,6 +208,11 @@ assert.equal(member.snapshot.games[0]!.markets.moneyline.held, false);
 assert.equal(member.snapshot.games[0]!.markets.total.publicSplits.length, 2);
 assert.equal(member.snapshot.games[0]!.markets.total.publicSplits[0]!.staleAfterMinutes, 390, "early-week CFB splits must honor the six-hour writer cadence plus grace");
 assert.equal(member.tracking.trackingEligible, true);
+for (const memberMarket of Object.values(member.snapshot.games[0]!.markets)) {
+  assert.equal(memberMarket.keyStats.some((row) => row.label.startsWith("Outcome-model input ·")), true);
+  assert.equal(memberMarket.keyStats.some((row) => row.label === "Current context · Expected quarterback"), true);
+  assert.equal(memberMarket.keyStats.some((row) => row.label === "Outcome-model input · Frozen sample"), true);
+}
 
 const transitionPayload = structuredClone(payload) as unknown as Record<string, unknown>;
 transitionPayload.schemaRelease = CFB_FORWARD_PRIOR_EVIDENCE_SCHEMA_RELEASE;

@@ -28,6 +28,7 @@ import {
   NFL_V1_ACTIONABLE_GRADE_DECISION_RELEASE,
   NFL_V1_ACTIONABLE_GRADE_MEMBER_RELEASE,
 } from "./nflV1ActionableGradeCandidate";
+import { nflFootballEvidenceStats } from "./footballMemberEvidence";
 
 export const NFL_WEEK_ONE_HELD_MEMBER_FIXTURE_RELEASE =
   "nfl_week_one_member_fixture_2026_08_25_r8_same_book_history" as const;
@@ -327,6 +328,30 @@ function buildHeldGame(
     slot: "spread", payload, movementRows, primaryLabel: `${home} ${signed(current.spread!.homeLine)}`,
     opposingLabel: `${away} ${signed(current.spread!.awayLine)}`, primarySide: "home", opposingSide: "away",
   });
+  moneyline.keyStats = nflFootballEvidenceStats({
+    awayTeam: away,
+    homeTeam: home,
+    market: "moneyline",
+    awayQuarterback: quarterbackContext(payload, "away"),
+    homeQuarterback: quarterbackContext(payload, "home"),
+    weather: payload.weather,
+  });
+  total.keyStats = nflFootballEvidenceStats({
+    awayTeam: away,
+    homeTeam: home,
+    market: "total",
+    awayQuarterback: quarterbackContext(payload, "away"),
+    homeQuarterback: quarterbackContext(payload, "home"),
+    weather: payload.weather,
+  });
+  spread.keyStats = nflFootballEvidenceStats({
+    awayTeam: away,
+    homeTeam: home,
+    market: "spread",
+    awayQuarterback: quarterbackContext(payload, "away"),
+    homeQuarterback: quarterbackContext(payload, "home"),
+    weather: payload.weather,
+  });
   const locked = payload.stage === "t60" &&
     payload.t60LagMinutes !== null &&
     payload.t60LagMinutes <= NFL_T60_MAX_CAPTURE_LAG_MINUTES &&
@@ -400,6 +425,11 @@ function buildHeldGame(
       modelBreakdown: "A single discrete drive/scoring-event distribution supplies the displayed representative score and all three forecast probabilities. Exact-price Bet grades remain separate.",
     },
   };
+}
+
+function quarterbackContext(payload: NflForwardEvidencePayload, side: "away" | "home") {
+  const depth = payload.startersAndDepth[side];
+  return { name: depth.expectedStartingQuarterback?.name ?? null, status: depth.starterStatus };
 }
 
 type HeldMarketInput = {
