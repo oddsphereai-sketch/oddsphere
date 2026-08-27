@@ -24,7 +24,10 @@ import {
 import { resolvePointLineMarketPulseMovement } from "../app/lab/lib/dailyEdgeMarketPulseMovement";
 import { resolveDailyEdgeCurrentOnlyMovement } from "../app/lab/lib/dailyEdgeCurrentOnlyMovement";
 import { marketSplitSectionIsStale } from "../app/lab/lib/dailyEdgeSplitFreshness";
-import { buildDailyEdgeSportSwitchDestination } from "../app/lab/lib/dailyEdgeSportSwitch";
+import {
+  buildDailyEdgeSportSwitchDestination,
+  dailyEdgeSportDestinationIsCurrent,
+} from "../app/lab/lib/dailyEdgeSportSwitch";
 import { createSportTabActivationGuard } from "../app/lab/lib/sportTabActivation";
 import {
   DAILY_EDGE_MEMBER_PRESENTATION_RELEASE_ID,
@@ -645,6 +648,17 @@ check(
   "member sport switching resolves one canonical URL with no stale reader query",
   nflDestination === "/lab/daily-edge?sport=nfl",
 );
+check(
+  "sport transition completion ignores query ordering but rejects a stale reader URL",
+  dailyEdgeSportDestinationIsCurrent(
+    "https://www.oddsphereai.com/lab/daily-edge?sport=soccer&league=epl",
+    "/lab/daily-edge?league=epl&sport=soccer",
+  ) &&
+    !dailyEdgeSportDestinationIsCurrent(
+      "https://www.oddsphereai.com/lab/daily-edge?sport=nfl&game=nfl-1&market=total",
+      "/lab/daily-edge?sport=nfl",
+    ),
+);
 
 let pointerNavigations = 0;
 let backdropClosures = 0;
@@ -826,6 +840,20 @@ check(
     candidateSource.includes("activateOnPointerDown") &&
     candidateSource.includes('params.delete("game")') &&
     candidateSource.includes('params.delete("market")'),
+);
+check(
+  "desktop and mobile sport tabs share an in-app transition with bounded native recovery only",
+  candidateSource.includes("router.push(destination, { scroll: false })") &&
+    candidateSource.includes("DAILY_EDGE_SPORT_SWITCH_FALLBACK_MS") &&
+    candidateSource.includes("dailyEdgeSportDestinationIsCurrent(window.location.href, destination)") &&
+    candidateSource.includes('window.sessionStorage.setItem("daily-edge-sport-focus", next)') &&
+    candidateSource.includes("setReaderOpen(false)") &&
+    candidateSource.includes("setMobileSheetOpen(false)"),
+);
+check(
+  "football weekly metadata no longer inserts a custom evidence wall above the shared reader",
+  !candidateSource.includes("weeklySlate.evidence") &&
+    !readFileSync("app/lab/daily-edge/CandidateDailyEdgePage.tsx", "utf8").includes("evidence:"),
 );
 const sportSelectorSource = readFileSync("app/lab/components/SportSelector.tsx", "utf8");
 check(

@@ -1,5 +1,5 @@
 export const BALLDONTLIE_NCAAF_SLATE_RELEASE =
-  "balldontlie_ncaaf_slate_2026_08_25_r1" as const;
+  "balldontlie_ncaaf_slate_2026_08_26_r2_opened_at" as const;
 
 export const NCAAF_FBS_CONFERENCE_IDS = new Set([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]);
 export const NCAAF_COMPARABLE_SPORTSBOOKS = [
@@ -36,6 +36,12 @@ export type NcaafBookOdds = {
   providerGameId: string;
   sportsbook: string;
   observedAt: string;
+  /** Price-feed provenance. Older immutable rows omit this and are BALLDONTLIE by contract. */
+  provider?: "balldontlie" | "sharpapi";
+  /** Exact upstream event identity when a secondary named-book feed is used. */
+  providerEventId?: string;
+  /** False keeps a named book in the leave-one-out consensus without offering it as the user-facing target. */
+  targetEligible?: boolean;
   moneyline: { awayPrice: number; homePrice: number } | null;
   spread: {
     awayLine: number;
@@ -271,7 +277,7 @@ function normalizeOdds(value: unknown): NcaafBookOdds | null {
   const row = record(value);
   const providerGameId = stringOrNumber(row.game_id);
   const sportsbook = text(row.vendor);
-  const observedAt = iso(row.updated_at);
+  const observedAt = iso(row.updated_at ?? row.opened_at);
   if (!providerGameId || !sportsbook || !observedAt) return null;
   const homeMoneyline = price(row.moneyline_home_odds);
   const awayMoneyline = price(row.moneyline_away_odds);
@@ -286,6 +292,8 @@ function normalizeOdds(value: unknown): NcaafBookOdds | null {
     providerGameId,
     sportsbook,
     observedAt,
+    provider: "balldontlie",
+    targetEligible: true,
     moneyline: homeMoneyline === null || awayMoneyline === null ? null : { homePrice: homeMoneyline, awayPrice: awayMoneyline },
     spread: homeSpread === null || homeSpreadPrice === null || awaySpread === null || awaySpreadPrice === null
       ? null : { homeLine: homeSpread, homePrice: homeSpreadPrice, awayLine: awaySpread, awayPrice: awaySpreadPrice },

@@ -4,9 +4,13 @@ import {
   hashNflForwardEvidencePayload,
   type NflForwardEvidencePayload,
 } from "./nflForwardEvidence";
+import {
+  assertMarketScopedFootballDecisions,
+  FOOTBALL_MARKET_SCOPED_T60_TRACKING_RELEASE,
+} from "./footballMarketScopedTracking";
 
 export const NFL_OFFICIAL_TRACKING_RECORD_RELEASE =
-  "nfl_official_tracking_record_2026_08_25_r1_regular_t60" as const;
+  "nfl_official_tracking_record_2026_08_26_r2_market_scoped_t60" as const;
 
 export function buildNflOfficialTrackingRecords(args: {
   payload: NflForwardEvidencePayload;
@@ -16,9 +20,10 @@ export function buildNflOfficialTrackingRecords(args: {
     throw new Error("NFL tracking records require an eligible T-60 evidence payload.");
   }
   const externalId = integerId(args.payload.game.providerGameId, "game");
-  if (args.payload.decisions.evaluatedBets.length !== 3) {
-    throw new Error(`NFL tracking requires three evaluated markets for ${externalId}.`);
-  }
+  assertMarketScopedFootballDecisions(
+    args.payload.decisions.evaluatedBets,
+    `NFL tracking for ${externalId}`,
+  );
   return args.payload.decisions.evaluatedBets.map((decision): PredictionRecordRow => {
     const side = canonicalSide(args.payload, decision.market, decision.side);
     const actionable = decision.grade === "Best Angle" || decision.grade === "Lean";
@@ -61,6 +66,7 @@ export function buildNflOfficialTrackingRecords(args: {
       locked_at: decision.lockedAt,
       published_at: decision.evaluatedAt,
       snapshot_json: {
+        football_market_scoped_tracking_release: FOOTBALL_MARKET_SCOPED_T60_TRACKING_RELEASE,
         nfl_tracking_record_release: NFL_OFFICIAL_TRACKING_RECORD_RELEASE,
         evidence_release: args.payload.schemaRelease,
         evidence_payload_sha256: hashNflForwardEvidencePayload(args.payload),

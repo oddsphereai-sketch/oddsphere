@@ -3,10 +3,14 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { isPublicallyTracked } from "../lib/config/officialTrackingStart";
 import { buildCfbMemberFixture } from "../lib/services/football/cfbMemberFixture";
+import { finalizeDailyEdgeResponseCoherence } from "../app/lab/lib/dailyEdgeResponseCoherence";
+import { dailyEdgeOutcomeForecastLabel } from "../app/lab/lib/dailyEdgeOutcomeForecast";
 import {
   CFB_FORWARD_EVIDENCE_COLLECTOR_RELEASE,
   CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE,
+  CFB_FORWARD_PRIOR_EVIDENCE_SCHEMA_RELEASE,
   CFB_FORWARD_MEMBER_RELEASE,
+  buildCfbForwardMarketOutlooks,
   determineCfbForwardCollectionNeed,
   hashCfbForwardEvidencePayload,
   planCfbForwardEvidenceCaptures,
@@ -17,6 +21,7 @@ import { normalizeCfbPlaybookLine, normalizeCfbPlaybookSplits } from "../lib/ser
 import { fetchBalldontlieNcaafQuarterbacks } from "../lib/services/football/balldontlieNcaafQuarterbacks";
 import { ingestCfbFinalScores } from "../lib/services/football/cfbScoreIngestService";
 import { buildCfbOfficialTrackingRecords } from "../lib/services/football/cfbOfficialTrackingRecord";
+import { FOOTBALL_MARKET_SCOPED_T60_TRACKING_RELEASE } from "../lib/services/football/footballMarketScopedTracking";
 import {
   CFB_T60_MAX_CAPTURE_LAG_MINUTES,
   CFB_V1_DECISION_RELEASE,
@@ -25,7 +30,7 @@ import {
   getCfbV1Forecast,
   getCfbV1Forecasts,
 } from "../lib/services/football/cfbV1Decision";
-import type { NcaafBookOdds, NcaafGame } from "../lib/services/football/balldontlieNcaafSlate";
+import { __BALLDONTLIE_NCAAF_SLATE_TEST__, type NcaafBookOdds, type NcaafGame } from "../lib/services/football/balldontlieNcaafSlate";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 async function main(): Promise<void> {
@@ -50,6 +55,22 @@ const currentBooks: NcaafBookOdds[] = [
   book("caesars", -325, 255, -7.5, -114, -106, 47.5, -108, -112),
   book("betmgm", -325, 260, -7.5, -115, -105, 47.5, -110, -110),
 ];
+
+const providerOpening = __BALLDONTLIE_NCAAF_SLATE_TEST__.normalizeOdds({
+  game_id: game.providerGameId,
+  vendor: "DraftKings",
+  opened_at: "2026-08-20T12:00:00.000Z",
+  moneyline_home_odds: -300,
+  moneyline_away_odds: 240,
+  spread_home_value: -7,
+  spread_home_odds: -110,
+  spread_away_value: 7,
+  spread_away_odds: -110,
+  total_value: 47,
+  total_over_odds: -110,
+  total_under_odds: -110,
+});
+assert.equal(providerOpening?.observedAt, "2026-08-20T12:00:00.000Z", "BALLDONTLIE opening rows use opened_at when updated_at is absent");
 
 const forecasts = getCfbV1Forecasts();
 assert.equal(forecasts.length, 8, "launch artifact must contain the exact eight-game opening slate");
@@ -93,6 +114,34 @@ assert.equal(fullBundle.evaluatedBets.every((decision) => decision.decisionRelea
 assert.equal(new Set(fullBundle.evaluatedBets.map((decision) => decision.market)).size, 3);
 assert.equal(fullBundle.evaluatedBets.every((decision) => decision.consensus.books.every((bookName) => bookName !== decision.evaluatedQuote.sportsbook)), true, "consensus must exclude the evaluated sportsbook");
 
+const noMoneylineBooks = currentBooks.map((currentBook) => ({ ...currentBook, moneyline: null }));
+const marketScopedBundle = buildCfbV1DecisionBundle({
+  providerGameId: game.providerGameId,
+  awayTeam: game.away.abbreviation,
+  homeTeam: game.home.abbreviation,
+  gameStartsAt: game.scheduledStart,
+  comparableCurrentBooks: noMoneylineBooks,
+  stage: "t60_locked",
+  evaluatedAt: lockedAt,
+  lockedAt,
+});
+assert.deepEqual(marketScopedBundle.evaluatedBets.map((decision) => decision.market), ["spread", "total"]);
+assert.deepEqual(marketScopedBundle.heldMarkets.map((market) => market.market), ["moneyline"]);
+assert.equal(marketScopedBundle.trackingEnabled, true, "one Held market cannot suppress coherent sibling T-60 tuples");
+const globalHealthHold = buildCfbV1DecisionBundle({
+  providerGameId: game.providerGameId,
+  awayTeam: game.away.abbreviation,
+  homeTeam: game.home.abbreviation,
+  gameStartsAt: game.scheduledStart,
+  comparableCurrentBooks: currentBooks,
+  stage: "t60_locked",
+  evaluatedAt: lockedAt,
+  lockedAt,
+  healthHolds: ["t60_capture_late"],
+});
+assert.equal(globalHealthHold.evaluatedBets.length, 0);
+assert.equal(globalHealthHold.trackingEnabled, false, "global health failures must remain fail-closed");
+
 const { pmf: _pmf, ...publishedForecast } = fullBundle.forecast;
 const payload: CfbForwardEvidencePayload = {
   schemaRelease: CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE,
@@ -115,6 +164,7 @@ const payload: CfbForwardEvidencePayload = {
     operationalOpening: { provenance: "first_observed", capturedAt: observedAt, quote: currentBooks[0]! },
     playbookLine: { provider: "playbook", capturedAt: observedAt, sourceTier: "tier1", homeMoneyline: -330, awayMoneyline: 260, homeSpread: -7.5, awaySpread: 7.5, total: 47.5 },
     playbookSplits: splitSet(),
+    sharpApiOddsRelease: null,
     sharpApiSplits: null,
   },
   quarterbacks: {
@@ -122,9 +172,16 @@ const payload: CfbForwardEvidencePayload = {
     home: quarterback(43, "TCU", "Projected TCU QB"),
   },
   availability: { injuryStatus: "provider_unavailable", weatherStatus: "venue_weather_unavailable", note: "Unavailable and not fabricated." },
-  decisions: { ...fullBundle, forecast: publishedForecast },
-  coverage: { currentOdds: true, comparableCurrentBookCount: 4, targetExcludedConsensusReady: true, operationalOpening: true, playbookLine: true, playbookSplits: true, sharpApiSplits: false, activeQuarterbacks: true, injuries: false, weather: false, healthHolds: [], availabilityWarnings: ["quarterback_starter_projected_not_confirmed", "injury_feed_unavailable", "venue_weather_unavailable", "sharpapi_splits_unavailable"] },
-  requestBudget: { balldontlieSlate: 3, balldontlieQuarterbacks: 2, playbook: 2, totalMaximum: 7 },
+  decisions: {
+    ...fullBundle,
+    forecast: publishedForecast,
+    marketOutlooks: buildCfbForwardMarketOutlooks({
+      forecast: fullBundle.forecast,
+      playbookLine: { provider: "playbook", capturedAt: observedAt, sourceTier: "tier1", homeMoneyline: -330, awayMoneyline: 260, homeSpread: -7.5, awaySpread: 7.5, total: 47.5 },
+    }),
+  },
+  coverage: { currentOdds: true, comparableCurrentBookCount: 4, currentOddsProviders: ["balldontlie"], sharpApiOddsFallback: false, targetExcludedConsensusReady: true, operationalOpening: true, playbookLine: true, playbookSplits: true, sharpApiSplits: false, activeQuarterbacks: true, injuries: false, weather: false, healthHolds: [], availabilityWarnings: ["quarterback_starter_projected_not_confirmed", "injury_feed_unavailable", "venue_weather_unavailable", "sharpapi_splits_unavailable"] },
+  requestBudget: { balldontlieSlate: 3, balldontlieQuarterbacks: 2, playbook: 2, sharpApiOdds: 0, totalMaximum: 7 },
 };
 
 assert.equal("pmf" in payload.decisions.forecast, false, "recurring evidence rows must not duplicate the large PMF artifact");
@@ -149,7 +206,141 @@ assert.equal(member.snapshot.games[0]!.footballProjection?.expectedHomePoints, f
 assert.deepEqual(member.snapshot.games[0]!.projected, forecast.representativeScore);
 assert.equal(member.snapshot.games[0]!.markets.moneyline.held, false);
 assert.equal(member.snapshot.games[0]!.markets.total.publicSplits.length, 2);
+assert.equal(member.snapshot.games[0]!.markets.total.publicSplits[0]!.staleAfterMinutes, 390, "early-week CFB splits must honor the six-hour writer cadence plus grace");
 assert.equal(member.tracking.trackingEligible, true);
+
+const transitionPayload = structuredClone(payload) as unknown as Record<string, unknown>;
+transitionPayload.schemaRelease = CFB_FORWARD_PRIOR_EVIDENCE_SCHEMA_RELEASE;
+transitionPayload.memberRelease = "cfb_v1_member_release_2026_08_25_r2_weekly";
+const transitionDecisions = transitionPayload.decisions as Record<string, unknown>;
+transitionDecisions.decisionRelease = "cfb_v1_daily_edge_decision_2026_08_25_r5_weekly";
+transitionDecisions.evaluatedBets = (transitionDecisions.evaluatedBets as Array<Record<string, unknown>>).map((decision) => ({
+  ...decision,
+  decisionRelease: "cfb_v1_daily_edge_decision_2026_08_25_r5_weekly",
+}));
+delete transitionDecisions.marketOutlooks;
+const priorReleasePayload = transitionPayload as unknown as CfbForwardEvidencePayload;
+const priorReleaseMember = buildCfbMemberFixture([{
+  ...evidence,
+  id: "prior-release-transition-row",
+  payloadSha256: hashCfbForwardEvidencePayload(priorReleasePayload),
+  payload: priorReleasePayload,
+}]);
+assert.equal(priorReleaseMember.snapshot.games.length, 1, "the last complete prior member wave must remain visible until the natural r6 refresh arrives");
+assert.equal(priorReleaseMember.snapshot.games[0]!.markets.moneyline.verdict.label, member.snapshot.games[0]!.markets.moneyline.verdict.label);
+
+const heldBundle = buildCfbV1DecisionBundle({
+  providerGameId: game.providerGameId,
+  awayTeam: game.away.abbreviation,
+  homeTeam: game.home.abbreviation,
+  gameStartsAt: game.scheduledStart,
+  comparableCurrentBooks: [],
+  forecast,
+});
+const heldPayload: CfbForwardEvidencePayload = {
+  ...payload,
+  stage: "unlocked",
+  capturedAt: observedAt,
+  cutoffAt: "2026-08-29T15:00:00.000Z",
+  t60LagMinutes: null,
+  market: {
+    ...payload.market,
+    current: null,
+    currentBooks: [],
+    providerOpening: null,
+    operationalOpening: null,
+  },
+  decisions: {
+    ...heldBundle,
+    forecast: publishedForecast,
+    marketOutlooks: buildCfbForwardMarketOutlooks({ forecast, playbookLine: payload.market.playbookLine }),
+  },
+  coverage: {
+    ...payload.coverage,
+    currentOdds: false,
+    comparableCurrentBookCount: 0,
+    targetExcludedConsensusReady: false,
+    operationalOpening: false,
+  },
+};
+const heldMember = buildCfbMemberFixture([{
+  ...evidence,
+  id: "held-row",
+  stage: "unlocked",
+  capturedAt: observedAt,
+  payloadSha256: hashCfbForwardEvidencePayload(heldPayload),
+  payload: heldPayload,
+}]);
+const heldGame = heldMember.snapshot.games[0]!;
+const heldProbabilities = cfbV1LineProbabilities({ forecast, homeSpread: -7.5, totalLine: 47.5 });
+assert.equal(Object.values(heldGame.markets).every((market) => market.held), true, "missing named-book prices must hold exact-price grades");
+assert.ok(Math.abs((heldGame.markets.moneyline.modelProb ?? 0) - heldProbabilities.moneyline.home) < 1e-12, "Held Moneyline must retain its independent winner probability");
+assert.ok(Math.abs((heldGame.markets.first_inning.modelProb ?? 0) - heldProbabilities.spread.home) < 1e-12, "Held Spread must retain the same-PMF probability at the Playbook context line");
+assert.ok(Math.abs((heldGame.markets.total.modelProb ?? 0) - heldProbabilities.total.over) < 1e-12, "Held Total must retain the same-PMF probability at the Playbook context line");
+assert.equal(heldGame.markets.first_inning.line, -7.5);
+assert.equal(heldGame.markets.total.line, 47.5);
+assert.equal(heldGame.markets.moneyline.marketFairProb, null);
+assert.equal(heldGame.markets.moneyline.priceAmerican, null);
+assert.equal(heldGame.markets.moneyline.recommendationConfidence, null);
+assert.equal(heldGame.markets.moneyline.pick, null, "MLB-parity Held semantics cannot fabricate a CFB bet selection");
+assert.deepEqual(heldGame.markets.moneyline.verdict, { key: "no_play", label: "Held" }, "CFB Held state must use the shared Daily Edge verdict contract");
+assert.equal(heldGame.markets.moneyline.modelProb !== null, true, "Outcome confidence remains independent from an exact-price Bet-grade hold");
+assert.match(heldGame.markets.moneyline.displayReason ?? "", /forecast context, not an offered sportsbook bet/);
+assert.match(heldGame.markets.moneyline.sharpBookAvailability?.message ?? "", /betting-split rows are unavailable/, "Sharp price recovery cannot be mislabeled as Sharp betting-split coverage");
+
+const publicHeldSnapshot = structuredClone(heldMember.snapshot);
+const publicHeldResponse = finalizeDailyEdgeResponseCoherence(publicHeldSnapshot);
+const publicHeldGame = publicHeldSnapshot.games[0]!;
+const publicHeldMoneyline = publicHeldGame.markets.moneyline;
+assert.equal(publicHeldMoneyline.held, true, "public mapping must preserve the internal recovery flag");
+assert.deepEqual(publicHeldMoneyline.verdict, { key: "no_play", label: "No Play" }, "CFB exact-price exceptions must not expose a Held Bet grade");
+assert.equal(publicHeldMoneyline.actionabilityLabel, "No Play");
+assert.ok(Math.abs((publicHeldMoneyline.modelProb ?? 0) - heldProbabilities.moneyline.home) < 1e-12, "CFB public No Play must retain the independent outcome probability");
+assert.deepEqual(publicHeldGame.projected, forecast.representativeScore, "CFB public No Play must retain the same-PMF representative score");
+assert.equal(publicHeldGame.footballProjection?.expectedAwayPoints, forecast.expectedAwayPoints, "CFB public No Play must retain expected away points");
+assert.equal(publicHeldGame.footballProjection?.expectedHomePoints, forecast.expectedHomePoints, "CFB public No Play must retain expected home points");
+assert.equal(publicHeldMoneyline.pick, null, "an unavailable exact-price tuple must not fabricate a Bet pick");
+assert.equal(publicHeldMoneyline.priceAmerican, null);
+assert.equal(publicHeldMoneyline.marketFairProb, null);
+assert.equal(publicHeldMoneyline.pinnacleEvPct, null);
+assert.equal(publicHeldMoneyline.recommendationConfidence, null);
+assert.equal(publicHeldResponse.memberPresentation?.counts.operationalExceptions, 3);
+assert.equal(publicHeldResponse.memberPresentation?.counts.publicNoPlayMarkets, 3);
+for (const marketKey of ["moneyline", "total", "first_inning"] as const) {
+  const label = dailyEdgeOutcomeForecastLabel({
+    game: publicHeldGame,
+    market: publicHeldGame.markets[marketKey],
+    marketKey,
+    sport: "cfb",
+  });
+  assert.doesNotMatch(label, /No Play|Held/, `CFB ${marketKey} prediction label cannot reuse its Bet grade or internal health state`);
+}
+
+const noTotalBooks = currentBooks.map((currentBook) => ({ ...currentBook, total: null }));
+const noTotalBundle = buildCfbV1DecisionBundle({
+  providerGameId: game.providerGameId,
+  awayTeam: game.away.abbreviation,
+  homeTeam: game.home.abbreviation,
+  gameStartsAt: game.scheduledStart,
+  comparableCurrentBooks: noTotalBooks,
+  forecast,
+  contextLines: { homeSpread: -7.5, totalLine: 47.5 },
+});
+assert.deepEqual(noTotalBundle.evaluatedBets.map((decision) => decision.market), ["moneyline", "spread"], "missing Total prices cannot suppress coherent Moneyline and Spread siblings");
+assert.deepEqual(noTotalBundle.heldMarkets.map((row) => row.market), ["total"]);
+
+const noSpreadBooks = currentBooks.map((currentBook) => ({ ...currentBook, spread: null }));
+const noSpreadBundle = buildCfbV1DecisionBundle({
+  providerGameId: game.providerGameId,
+  awayTeam: game.away.abbreviation,
+  homeTeam: game.home.abbreviation,
+  gameStartsAt: game.scheduledStart,
+  comparableCurrentBooks: noSpreadBooks,
+  forecast,
+  contextLines: { homeSpread: -7.5, totalLine: 47.5 },
+});
+assert.deepEqual(noSpreadBundle.evaluatedBets.map((decision) => decision.market), ["moneyline", "total"], "missing Spread prices cannot suppress coherent Moneyline and Total siblings when contextual calibration lines exist");
+assert.deepEqual(noSpreadBundle.heldMarkets.map((row) => row.market), ["spread"]);
 
 const earlierAt = "2026-08-25T14:50:05.583Z";
 const unchangedMiddleAt = "2026-08-25T15:20:05.583Z";
@@ -266,6 +457,23 @@ assert.deepEqual(tracking.map((row) => row.market), ["moneyline", "spread", "tot
 assert.equal(tracking.every((row) => row.locked_at === lockedAt), true);
 assert.equal(tracking.every((row) => row.model_version === CFB_V1_DECISION_RELEASE), true);
 assert.equal(tracking.every((row) => row.snapshot_json && !("pmf" in (row.snapshot_json.forecast as Record<string, unknown>))), true);
+assert.equal(tracking.every((row) => row.snapshot_json?.football_market_scoped_tracking_release === FOOTBALL_MARKET_SCOPED_T60_TRACKING_RELEASE), true);
+
+const marketScopedPayload: CfbForwardEvidencePayload = {
+  ...payload,
+  decisions: { ...marketScopedBundle, forecast: publishedForecast },
+};
+const marketScopedTracking = buildCfbOfficialTrackingRecords({ payload: marketScopedPayload, gameId: 9001 });
+assert.deepEqual(marketScopedTracking.map((row) => row.market), ["spread", "total"]);
+assert.equal(marketScopedTracking.every((row) => row.locked_at === lockedAt), true);
+assert.throws(
+  () => buildCfbOfficialTrackingRecords({ payload: { ...marketScopedPayload, captureTiming: "late_first_observation" }, gameId: 9001 }),
+  /eligible on-time T-60 evidence payload/,
+);
+assert.throws(
+  () => buildCfbOfficialTrackingRecords({ payload: { ...marketScopedPayload, decisions: { ...marketScopedPayload.decisions, evaluatedBets: [] } }, gameId: 9001 }),
+  /one to three exact-price market decisions/,
+);
 
 const openingPlan = planCfbForwardEvidenceCaptures({ games: [game], existing: [], capturedAt: "2026-08-25T16:00:00.000Z", unlockedCadenceMinutes: 360 });
 assert.deepEqual(openingPlan.map((row) => row.stage), ["opening"]);
@@ -383,8 +591,10 @@ await assert.rejects(
 
 const writerSource = readFileSync(path.join(process.cwd(), "lib/services/football/cfbForwardEvidenceWriter.ts"), "utf8");
 const quarterbackCollectionIndex = writerSource.indexOf("fetchBalldontlieNcaafQuarterbacks");
+const sharpFallbackIndex = writerSource.indexOf("fetchSharpApiNcaafOddsFallback");
 const evidenceAppendIndex = writerSource.lastIndexOf("appendCfbForwardEvidence(");
 assert.ok(quarterbackCollectionIndex >= 0 && evidenceAppendIndex > quarterbackCollectionIndex, "the writer must finish bounded QB collection before its sole evidence append");
+assert.ok(sharpFallbackIndex >= 0 && evidenceAppendIndex > sharpFallbackIndex, "the writer must finish bounded SharpAPI exact-event fallback before its sole evidence append");
 assert.equal((writerSource.match(/appendCfbForwardEvidence\(/g) ?? []).length, 1, "the writer must keep one all-payload append and never insert partial game evidence inside the collection loop");
 
 const scoreReadClient = {
@@ -425,10 +635,13 @@ const route = readFileSync(path.resolve("app/api/cron/cfb-forward-evidence/route
 assert.match(route, /leaseGroup: "prediction_pipeline"/);
 assert.match(route, /requireLease: true/);
 assert.match(route, /runCfbForwardEvidenceWriter/);
+assert.match(route, /requiredEnv\("SHARPAPI_KEY"\)/);
 const writer = readFileSync(path.resolve("lib/services/football/cfbForwardEvidenceWriter.ts"), "utf8");
 assert.match(writer, /buildCfbV1DecisionBundle/);
 assert.match(writer, /compactDecisionBundle/);
 assert.match(writer, /buildCfbOfficialTrackingRecords/);
+assert.match(writer, /buildMarketScopedFootballTrackingPlan/);
+assert.doesNotMatch(writer, /eligible\.length \* 3/);
 assert.doesNotMatch(writer, /create.*writer|second.*writer/i);
 const migration = readFileSync(path.resolve("lib/db/schema-migration-v40-cfb-forward-evidence.sql"), "utf8");
 const executableMigration = migration.replace(/--.*$/gm, "");
@@ -441,6 +654,18 @@ const reader = readFileSync(path.resolve("app/dev/experience-preview/ActualDaily
 assert.match(reader, /sport === "nfl" \|\| sport === "cfb" \? "Expected score"/);
 assert.match(reader, /Reachable representative final/);
 assert.match(reader, /footballExpectedAway\.toFixed\(1\)/);
+assert.match(reader, /presentDailyEdgeOperationalNoPlay/, "CFB must pass through the shared operational-health presentation boundary");
+assert.match(reader, /dailyEdgeOutcomeForecastLabel/, "CFB prediction surfaces must use the protected-main model-native forecast helper");
+assert.doesNotMatch(reader, /market\.pick \?\? "No Play"/, "CFB prediction surfaces cannot reuse a Bet grade as the forecast label");
+const outcomeForecast = readFileSync(path.resolve("app/lab/lib/dailyEdgeOutcomeForecast.ts"), "utf8");
+assert.match(outcomeForecast, /game\.footballProjection/, "CFB unavailable Moneyline must recover its football-only winner forecast");
+assert.match(outcomeForecast, /market\.modelTotal/, "CFB unavailable Total must retain its same-PMF projected total");
+const presentation = readFileSync(path.resolve("app/lab/lib/dailyEdgeMarketPresentation.ts"), "utf8");
+assert.match(presentation, /No Play — required evidence is incomplete\./, "the public No Play must retain an explicit data-health reason");
+assert.match(presentation, /held.{0,20}deliberately remains true/, "the member mapping must preserve internal recovery state");
+const sharedTypes = readFileSync(path.resolve("app/lab/lib/labTypes.ts"), "utf8");
+assert.match(sharedTypes, /export (?:interface|type) MarketEdgeDto/, "CFB must continue to adapt into the shared Daily Edge market DTO");
+assert.match(sharedTypes, /held: boolean/, "shared Held semantics remain a DTO contract rather than a CFB presentation fork");
 const trackingRefresh = readFileSync(path.resolve("lib/services/trackingRefreshService.ts"), "utf8");
 assert.match(trackingRefresh, /sport === "cfb"/);
 assert.match(trackingRefresh, /ingestCfbFinalScores/);

@@ -1,5 +1,22 @@
 import type { Sport } from "@/lib/types/domain/Sport";
 
+export const DAILY_EDGE_SPORT_SWITCH_FALLBACK_MS = 10_000;
+
+export function dailyEdgeSportDestinationIsCurrent(currentHref: string, destination: string): boolean {
+  const current = new URL(currentHref, "http://localhost");
+  const target = new URL(destination, current.origin);
+  if (current.pathname !== target.pathname) return false;
+
+  const normalize = (params: URLSearchParams) =>
+    [...params.entries()]
+      .sort(([leftKey, leftValue], [rightKey, rightValue]) =>
+        leftKey.localeCompare(rightKey) || leftValue.localeCompare(rightValue))
+      .map(([key, value]) => `${encodeURIComponent(key)}=${encodeURIComponent(value)}`)
+      .join("&");
+
+  return normalize(current.searchParams) === normalize(target.searchParams);
+}
+
 export function buildDailyEdgeSportSwitchDestination({
   pathname,
   currentSearch,

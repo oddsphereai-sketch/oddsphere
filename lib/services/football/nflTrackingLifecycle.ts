@@ -5,9 +5,10 @@ import {
   NFL_T60_MAX_CAPTURE_LAG_MINUTES,
   type NflRegularEvaluatedBetDecision,
 } from "./nflRegularDecisionEvidence";
+import { assertMarketScopedFootballDecisions } from "./footballMarketScopedTracking";
 
 export const NFL_TRACKING_LIFECYCLE_RELEASE =
-  "nfl_tracking_lifecycle_2026_08_25_r3_regular_t60" as const;
+  "nfl_tracking_lifecycle_2026_08_26_r4_market_scoped_t60" as const;
 
 export type NflTrackedMarket = "moneyline" | "spread" | "total";
 
@@ -51,7 +52,7 @@ export type NflTrackingProposal = {
 };
 
 export const NFL_EVALUATED_TUPLE_TRACKING_BOUNDARY_RELEASE =
-  "nfl_evaluated_tuple_tracking_boundary_2026_08_21_r2" as const;
+  "nfl_evaluated_tuple_tracking_boundary_2026_08_26_r3_market_scoped" as const;
 
 /**
  * Fail-closed production gate used by the single NFL forward writer before it
@@ -81,13 +82,19 @@ export function nflForwardT60TrackingEligibility(args: {
     return { eligible: false, reason: "late_or_invalid_t60_capture" };
   }
   if (!args.publicationApproved) return { eligible: false, reason: "publication_not_approved" };
-  const markets = new Set(args.decisions.map((decision) => decision.market));
-  if (args.decisions.length !== 3 || markets.size !== 3) {
+  if (args.decisions.length === 0) {
     return { eligible: false, reason: "incomplete_decision_set" };
+  }
+  try {
+    assertMarketScopedFootballDecisions(args.decisions, "NFL T-60 tracking boundary");
+  } catch {
+    return { eligible: false, reason: "incoherent_decision_tuple" };
   }
   const capturedAt = Date.parse(args.capturedAt);
   const gameStartsAt = Date.parse(args.gameStartsAt);
   const releasesAreCoherent =
+    new Set(args.decisions.map((decision) => decision.modelRelease)).size === 1 &&
+    new Set(args.decisions.map((decision) => decision.calibrationRelease)).size === 1 &&
     new Set(args.decisions.map((decision) => decision.decisionRelease)).size === 1;
   const tuplesAreCoherent = Number.isFinite(capturedAt) && Number.isFinite(gameStartsAt) &&
     releasesAreCoherent && args.decisions.every((decision) =>
@@ -217,10 +224,8 @@ export function buildNflTrackingProposalsFromEvaluatedDecisions(args: {
   const rows = args.snapshot.games.flatMap((game) => {
     const providerGameId = String(game.external_id);
     const decisions = decisionsByGame.get(providerGameId) ?? [];
-    const markets = new Set(decisions.map((decision) => decision.market));
-    if (decisions.length !== 3 || markets.size !== 3) {
-      throw new Error(`NFL evaluated tracking requires exactly three unique T-60 market tuples for ${providerGameId}.`);
-    }
+    if (decisions.length === 0) return [];
+    assertMarketScopedFootballDecisions(decisions, `NFL evaluated tracking for ${providerGameId}`);
     if (
       new Set(decisions.map((decision) => decision.lockedAt)).size !== 1 ||
       new Set(decisions.map((decision) => decision.modelRelease)).size !== 1 ||
@@ -272,7 +277,7 @@ export function buildNflTrackingProposalsFromEvaluatedDecisions(args: {
       };
     });
   });
-  const expected = args.snapshot.games.length * 3;
+  const expected = args.decisions.length;
   if (rows.length !== expected || new Set(rows.map((row) => `${row.gameId}:${row.market}`)).size !== expected) {
     throw new Error(`NFL evaluated tracking tuple count mismatch; expected ${expected}.`);
   }

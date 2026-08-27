@@ -18,15 +18,20 @@ export const CFB_V1_REPRESENTATIVE_SCORE_RELEASE =
 export const CFB_V1_GRADE_POLICY_RELEASE =
   "cfb_v1_composite_grade_policy_2026_08_25_r1" as const;
 export const CFB_V1_DECISION_RELEASE =
-  "cfb_v1_daily_edge_decision_2026_08_25_r5_weekly" as const;
+  "cfb_v1_daily_edge_decision_2026_08_26_r7_sharpapi_price_fallback" as const;
 export const CFB_V1_DECISION_SCHEMA_RELEASE =
-  "cfb_v1_exact_price_decision_tuple_2026_08_25_r1" as const;
+  "cfb_v1_exact_price_decision_tuple_2026_08_26_r2_provider_source" as const;
 export const CFB_T60_TARGET_MINUTES = 60 as const;
 export const CFB_T60_MAX_CAPTURE_LAG_MINUTES = 20 as const;
 
 export type CfbV1Market = "moneyline" | "spread" | "total";
 export type CfbV1Grade = "Best Angle" | "Lean" | "Watchlist" | "No Play";
 export type CfbV1DecisionStage = "unlocked" | "t60_locked";
+
+export type CfbV1ContextLines = {
+  homeSpread: number | null;
+  totalLine: number | null;
+};
 
 export type CfbV1Forecast = {
   providerGameId: string;
@@ -62,6 +67,7 @@ export type CfbV1ExactPriceDecision = {
   edgePercentagePoints: number;
   expectedValue: number;
   evaluatedQuote: {
+    provider: "balldontlie" | "sharpapi";
     sportsbook: string;
     line: number | null;
     price: number;
@@ -201,6 +207,7 @@ export function buildCfbV1DecisionBundle(args: {
   lockedAt?: string | null;
   healthHolds?: string[];
   forecast?: CfbV1Forecast;
+  contextLines?: CfbV1ContextLines;
 }): CfbV1DecisionBundle {
   const forecast = args.forecast ?? getCfbV1Forecast(args.providerGameId);
   if (forecast.providerGameId !== args.providerGameId) throw new Error("CFB decision forecast/game identity mismatch.");
@@ -216,7 +223,10 @@ export function buildCfbV1DecisionBundle(args: {
     if (decision) decisions.push(decision);
     else heldMarkets.push({ market, reason: "named_two_sided_price_or_target_excluded_same_line_consensus_unavailable" });
   }
-  const trackingEnabled = stage === "t60_locked" && heldMarkets.length === 0;
+  // Official tracking is market-scoped: a missing exact-price sibling stays
+  // Held, while every coherent T-60 tuple remains eligible for its own
+  // immutable record. Global health holds still return no decisions.
+  const trackingEnabled = stage === "t60_locked" && decisions.length > 0;
   return {
     providerGameId: args.providerGameId,
     forecast,
@@ -241,9 +251,10 @@ function selectMarket(args: {
   stage: CfbV1DecisionStage;
   evaluatedAt?: string;
   lockedAt?: string | null;
+  contextLines?: CfbV1ContextLines;
 }): CfbV1ExactPriceDecision | null {
   const policy = gradeArtifact.policies[args.market];
-  const candidates = args.comparableCurrentBooks.flatMap((target) => evaluateTarget({ ...args, target, policy }));
+  const candidates = args.comparableCurrentBooks.filter((target) => target.targetEligible !== false).flatMap((target) => evaluateTarget({ ...args, target, policy }));
   return candidates.sort((first, second) =>
     gradeRank(second.grade) - gradeRank(first.grade) ||
     second.expectedValue - first.expectedValue ||
@@ -264,14 +275,19 @@ function evaluateTarget(args: {
   stage: CfbV1DecisionStage;
   evaluatedAt?: string;
   lockedAt?: string | null;
+  contextLines?: CfbV1ContextLines;
   target: NcaafBookOdds;
   policy: Policy;
 }): CfbV1ExactPriceDecision[] {
   const targetMarket = args.target[args.market];
   if (!targetMarket || Date.parse(args.target.observedAt) >= Date.parse(args.gameStartsAt)) return [];
-  const homeSpread = args.target.spread?.homeLine;
-  const totalLine = args.target.total?.line;
-  if (homeSpread === undefined || totalLine === undefined) return [];
+  const homeSpread = args.market === "spread"
+    ? args.target.spread?.homeLine
+    : args.target.spread?.homeLine ?? args.contextLines?.homeSpread ?? consensusHomeSpread(args.comparableCurrentBooks) ?? (args.market === "total" ? 0 : null);
+  const totalLine = args.market === "total"
+    ? args.target.total?.line
+    : args.target.total?.line ?? args.contextLines?.totalLine ?? args.forecast.expectedTotal;
+  if (homeSpread === undefined || homeSpread === null || totalLine === undefined || totalLine === null) return [];
   const lineProbabilities = cfbV1LineProbabilities({ forecast: args.forecast, homeSpread, totalLine });
   const sides = marketSides(args.market);
   return sides.flatMap((side) => {
@@ -316,7 +332,7 @@ function evaluateTarget(args: {
       marketFairProbability: consensus.fairProbability,
       edgePercentagePoints,
       expectedValue,
-      evaluatedQuote: { sportsbook: args.target.sportsbook, line: quote.line, price: quote.price, observedAt: quote.observedAt },
+      evaluatedQuote: { provider: args.target.provider ?? "balldontlie", sportsbook: args.target.sportsbook, line: quote.line, price: quote.price, observedAt: quote.observedAt },
       consensus,
       stage: args.stage,
       evaluatedAt,
@@ -463,6 +479,12 @@ function twoSidedFair(selected: number, opposing: number): number { const first 
 function logit(value: number): number { const bounded = Math.min(0.995, Math.max(0.005, value)); return Math.log(bounded / (1 - bounded)); }
 function sigmoid(value: number): number { return 1 / (1 + Math.exp(-value)); }
 function normalizeBook(value: string): string { return value.toLowerCase().replace(/[^a-z0-9]+/g, ""); }
+function consensusHomeSpread(books: NcaafBookOdds[]): number | null {
+  const values = books.flatMap((book) => book.spread ? [book.spread.homeLine] : []).sort((first, second) => first - second);
+  if (values.length === 0) return null;
+  const middle = Math.floor(values.length / 2);
+  return values.length % 2 === 1 ? values[middle]! : (values[middle - 1]! + values[middle]!) / 2;
+}
 function marketNumber(value: number): string { return Number.isInteger(value) ? value.toFixed(0) : value.toFixed(1); }
 function signed(value: number): string { return value > 0 ? `+${marketNumber(value)}` : marketNumber(value); }
 

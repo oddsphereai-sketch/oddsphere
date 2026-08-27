@@ -43,9 +43,10 @@ import {
   buildNflOfficialTrackingRecords,
   nflProviderIntegerId,
 } from "./nflOfficialTrackingRecord";
+import { buildMarketScopedFootballTrackingPlan } from "./footballMarketScopedTracking";
 
 export const NFL_FORWARD_WRITER_RELEASE =
-  "nfl_forward_evidence_writer_2026_08_25_r8_release_refresh" as const;
+  "nfl_forward_evidence_writer_2026_08_26_r9_market_scoped_t60" as const;
 
 export type NflForwardWriterResult = {
   writerRelease: typeof NFL_FORWARD_WRITER_RELEASE;
@@ -559,7 +560,11 @@ async function writeOfficialTrackingFromPayloads(args: {
     }
   }
   const payloads = [...eligibleByGame.values()];
-  const proposed = payloads.length * 3;
+  const trackingGames = payloads.map((payload) => ({
+    externalId: nflProviderIntegerId(payload.game.providerGameId, "game"),
+    decisions: payload.decisions.evaluatedBets,
+  }));
+  const proposed = trackingGames.length === 0 ? 0 : buildMarketScopedFootballTrackingPlan(trackingGames).proposed;
   if (!args.apply || proposed === 0) {
     return {
       trackingAttempted: false,
@@ -580,11 +585,11 @@ async function writeOfficialTrackingFromPayloads(args: {
     .eq("model_version", decisionRelease)
     .in("external_id", externalIds);
   if (existingError) throw new Error(`NFL tracking record read failed: ${existingError.message}`);
-  const existingKeys = new Set(((existingRows ?? []) as Array<{
+  const existingKeys = buildMarketScopedFootballTrackingPlan(trackingGames, (existingRows ?? []) as Array<{
     external_id: number;
     market: string;
     locked_at: string | null;
-  }>).map((row) => `${row.external_id}:${row.market}`));
+  }>).existingKeys;
   if (existingKeys.size === proposed) {
     return {
       trackingAttempted: true,

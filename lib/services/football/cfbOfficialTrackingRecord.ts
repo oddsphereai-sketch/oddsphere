@@ -1,13 +1,15 @@
 import { computeSlateDate } from "@/lib/dates/slateDate";
 import type { PredictionRecordRow } from "@/lib/types/domain/Tracking";
 import { hashCfbForwardEvidencePayload, type CfbForwardEvidencePayload } from "./cfbForwardEvidence";
+import { CFB_T60_MAX_CAPTURE_LAG_MINUTES } from "./cfbV1Decision";
+import { assertMarketScopedFootballDecisions, FOOTBALL_MARKET_SCOPED_T60_TRACKING_RELEASE } from "./footballMarketScopedTracking";
 
 export const CFB_OFFICIAL_TRACKING_RECORD_RELEASE =
-  "cfb_official_tracking_record_2026_08_25_r1_t60" as const;
+  "cfb_official_tracking_record_2026_08_26_r2_market_scoped_t60" as const;
 
 export function buildCfbOfficialTrackingRecords(args: { payload: CfbForwardEvidencePayload; gameId: number }): PredictionRecordRow[] {
-  if (!args.payload.decisions.trackingEnabled || args.payload.stage !== "t60") throw new Error("CFB tracking records require an eligible T-60 evidence payload.");
-  if (args.payload.decisions.evaluatedBets.length !== 3) throw new Error("CFB tracking requires three complete exact-price markets.");
+  assertCfbTrackingPayload(args.payload);
+  assertMarketScopedFootballDecisions(args.payload.decisions.evaluatedBets, "CFB tracking");
   const externalId = providerIntegerId(args.payload.game.providerGameId, "game");
   return args.payload.decisions.evaluatedBets.map((decision): PredictionRecordRow => {
     const actionable = decision.grade === "Best Angle" || decision.grade === "Lean";
@@ -50,6 +52,7 @@ export function buildCfbOfficialTrackingRecords(args: { payload: CfbForwardEvide
       locked_at: decision.lockedAt,
       published_at: decision.evaluatedAt,
       snapshot_json: {
+        football_market_scoped_tracking_release: FOOTBALL_MARKET_SCOPED_T60_TRACKING_RELEASE,
         cfb_tracking_record_release: CFB_OFFICIAL_TRACKING_RECORD_RELEASE,
         evidence_release: args.payload.schemaRelease,
         evidence_payload_sha256: hashCfbForwardEvidencePayload(args.payload),
@@ -68,6 +71,35 @@ export function buildCfbOfficialTrackingRecords(args: { payload: CfbForwardEvide
       calibration_version: decision.calibrationRelease,
     };
   });
+}
+
+function assertCfbTrackingPayload(payload: CfbForwardEvidencePayload): void {
+  if (
+    !payload.decisions.publicationEnabled ||
+    !payload.decisions.trackingEnabled ||
+    payload.stage !== "t60" ||
+    payload.captureTiming !== "on_time" ||
+    payload.t60LagMinutes === null ||
+    payload.t60LagMinutes < 0 ||
+    payload.t60LagMinutes > CFB_T60_MAX_CAPTURE_LAG_MINUTES
+  ) {
+    throw new Error("CFB tracking records require an eligible on-time T-60 evidence payload.");
+  }
+  const capturedAt = Date.parse(payload.capturedAt);
+  const gameStartsAt = Date.parse(payload.game.scheduledStart);
+  const coherent = Number.isFinite(capturedAt) && Number.isFinite(gameStartsAt) &&
+    payload.decisions.evaluatedBets.every((decision) =>
+      decision.providerGameId === payload.game.providerGameId &&
+      decision.stage === "t60_locked" &&
+      decision.lockedAt !== null &&
+      Date.parse(decision.lockedAt) === capturedAt &&
+      Date.parse(decision.evaluatedAt) === capturedAt &&
+      Date.parse(decision.gameStartsAt) === gameStartsAt &&
+      Date.parse(decision.evaluatedQuote.observedAt) <= capturedAt &&
+      decision.modelRelease === payload.decisions.modelRelease &&
+      decision.policyRelease === payload.decisions.policyRelease &&
+      decision.decisionRelease === payload.decisions.decisionRelease);
+  if (!coherent) throw new Error("CFB tracking decision tuple is not coherent with its frozen evidence payload.");
 }
 
 export function cfbProviderIntegerId(value: string, label: string): number { return providerIntegerId(value, label); }
