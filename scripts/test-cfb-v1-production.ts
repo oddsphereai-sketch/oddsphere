@@ -8,6 +8,7 @@ import { dailyEdgeOutcomeForecastLabel } from "../app/lab/lib/dailyEdgeOutcomeFo
 import {
   CFB_FORWARD_EVIDENCE_COLLECTOR_RELEASE,
   CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE,
+  CFB_FORWARD_LEGACY_EVIDENCE_SCHEMA_RELEASE,
   CFB_FORWARD_PRIOR_EVIDENCE_SCHEMA_RELEASE,
   CFB_FORWARD_MEMBER_RELEASE,
   buildCfbForwardMarketOutlooks,
@@ -143,6 +144,7 @@ assert.equal(globalHealthHold.evaluatedBets.length, 0);
 assert.equal(globalHealthHold.trackingEnabled, false, "global health failures must remain fail-closed");
 
 const { pmf: _pmf, ...publishedForecast } = fullBundle.forecast;
+void _pmf;
 const payload: CfbForwardEvidencePayload = {
   schemaRelease: CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE,
   collectorRelease: CFB_FORWARD_EVIDENCE_COLLECTOR_RELEASE,
@@ -216,14 +218,13 @@ for (const memberMarket of Object.values(member.snapshot.games[0]!.markets)) {
 
 const transitionPayload = structuredClone(payload) as unknown as Record<string, unknown>;
 transitionPayload.schemaRelease = CFB_FORWARD_PRIOR_EVIDENCE_SCHEMA_RELEASE;
-transitionPayload.memberRelease = "cfb_v1_member_release_2026_08_25_r2_weekly";
+transitionPayload.memberRelease = "cfb_v1_member_release_2026_08_26_r4_price_provenance";
 const transitionDecisions = transitionPayload.decisions as Record<string, unknown>;
-transitionDecisions.decisionRelease = "cfb_v1_daily_edge_decision_2026_08_25_r5_weekly";
+transitionDecisions.decisionRelease = "cfb_v1_daily_edge_decision_2026_08_26_r7_sharpapi_price_fallback";
 transitionDecisions.evaluatedBets = (transitionDecisions.evaluatedBets as Array<Record<string, unknown>>).map((decision) => ({
   ...decision,
-  decisionRelease: "cfb_v1_daily_edge_decision_2026_08_25_r5_weekly",
+  decisionRelease: "cfb_v1_daily_edge_decision_2026_08_26_r7_sharpapi_price_fallback",
 }));
-delete transitionDecisions.marketOutlooks;
 const priorReleasePayload = transitionPayload as unknown as CfbForwardEvidencePayload;
 const priorReleaseMember = buildCfbMemberFixture([{
   ...evidence,
@@ -233,6 +234,17 @@ const priorReleaseMember = buildCfbMemberFixture([{
 }]);
 assert.equal(priorReleaseMember.snapshot.games.length, 1, "the last complete prior member wave must remain visible until the natural r6 refresh arrives");
 assert.equal(priorReleaseMember.snapshot.games[0]!.markets.moneyline.verdict.label, member.snapshot.games[0]!.markets.moneyline.verdict.label);
+
+const legacyPayloadRecord = structuredClone(payload) as unknown as Record<string, unknown>;
+legacyPayloadRecord.schemaRelease = CFB_FORWARD_LEGACY_EVIDENCE_SCHEMA_RELEASE;
+legacyPayloadRecord.memberRelease = "cfb_v1_member_release_2026_08_25_r2_weekly";
+const legacyDecisions = legacyPayloadRecord.decisions as Record<string, unknown>;
+legacyDecisions.decisionRelease = "cfb_v1_daily_edge_decision_2026_08_25_r5_weekly";
+legacyDecisions.evaluatedBets = (legacyDecisions.evaluatedBets as Array<Record<string, unknown>>).map((decision) => ({ ...decision, decisionRelease: "cfb_v1_daily_edge_decision_2026_08_25_r5_weekly" }));
+delete legacyDecisions.marketOutlooks;
+const legacyPayload = legacyPayloadRecord as unknown as CfbForwardEvidencePayload;
+const legacyMember = buildCfbMemberFixture([{ ...evidence, id: "legacy-transition-row", payloadSha256: hashCfbForwardEvidencePayload(legacyPayload), payload: legacyPayload }]);
+assert.equal(legacyMember.snapshot.games.length, 1, "the actual r1 production wave must remain visible until a natural current-release refresh arrives");
 
 const heldBundle = buildCfbV1DecisionBundle({
   providerGameId: game.providerGameId,

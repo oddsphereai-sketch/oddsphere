@@ -33,6 +33,22 @@ assert.equal(bundle.policyRelease, CFB_V1_GRADE_POLICY_RELEASE);
 assert.equal(bundle.evaluatedBets.every((row) => !row.consensus.books.includes(row.evaluatedQuote.sportsbook)), true);
 assert.equal(bundle.evaluatedBets.every((row) => row.consensus.books.length >= 2), true);
 assert.equal(bundle.evaluatedBets.every((row) => row.modelProbability > 0 && row.modelProbability < 1), true);
+for (const decision of bundle.evaluatedBets) {
+  const line = cfbV1LineProbabilities({
+    forecast,
+    homeSpread: decision.market === "spread"
+      ? (decision.side.startsWith("TCU ") ? decision.evaluatedQuote.line! : -decision.evaluatedQuote.line!)
+      : 0,
+    totalLine: decision.market === "total" ? decision.evaluatedQuote.line! : 0,
+  });
+  if (decision.market === "moneyline") {
+    assert.equal(decision.side, line.moneyline.home >= line.moneyline.away ? "TCU" : "UNC", "Moneyline grade side must be selected by the joint PMF");
+  } else if (decision.market === "spread") {
+    assert.equal(decision.side.startsWith("TCU "), line.spread.home >= line.spread.away, "Spread grade side must be selected by the joint PMF at the exact line");
+  } else {
+    assert.equal(decision.side.startsWith("Over "), line.total.over >= line.total.under, "Total grade side must be selected by the joint PMF at the exact line");
+  }
+}
 
 const missing = buildCfbV1DecisionBundle({ providerGameId: "457157", awayTeam: "UNC", homeTeam: "TCU", gameStartsAt: "2026-08-29T16:00:00Z", comparableCurrentBooks: books.slice(0, 2) });
 assert.equal(missing.evaluatedBets.length, 0);

@@ -4,6 +4,7 @@ import type { DailyEdgeGameDto, DailyEdgePredictionDto, MarketEdgeDto, OddsTrail
 import type { PreviewHistoryByTeam } from "@/app/dev/experience-preview/ActualDailyEdgePreview";
 import {
   CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE,
+  CFB_FORWARD_LEGACY_EVIDENCE_SCHEMA_RELEASE,
   CFB_FORWARD_PRIOR_EVIDENCE_SCHEMA_RELEASE,
   CFB_FORWARD_MEMBER_RELEASE,
   type CfbForwardMarketOutlook,
@@ -25,9 +26,11 @@ import { activeCfbWeeklyWindow, isGameInCfbWeeklyWindow } from "./cfbWeeklyWindo
 import { cfbFootballEvidenceStats } from "./footballMemberEvidence";
 
 export const CFB_MEMBER_FIXTURE_RELEASE =
-  "cfb_v1_member_fixture_2026_08_26_r5_price_provenance" as const;
-const CFB_PRIOR_MEMBER_RELEASE = "cfb_v1_member_release_2026_08_25_r2_weekly" as const;
-const CFB_PRIOR_DECISION_RELEASE = "cfb_v1_daily_edge_decision_2026_08_25_r5_weekly" as const;
+  "cfb_v1_member_fixture_2026_08_27_r6_pmf_side_guard" as const;
+const CFB_PRIOR_MEMBER_RELEASE = "cfb_v1_member_release_2026_08_26_r4_price_provenance" as const;
+const CFB_PRIOR_DECISION_RELEASE = "cfb_v1_daily_edge_decision_2026_08_26_r7_sharpapi_price_fallback" as const;
+const CFB_LEGACY_MEMBER_RELEASE = "cfb_v1_member_release_2026_08_25_r2_weekly" as const;
+const CFB_LEGACY_DECISION_RELEASE = "cfb_v1_daily_edge_decision_2026_08_25_r5_weekly" as const;
 
 export type CfbMemberFixture = {
   fixtureRelease: typeof CFB_MEMBER_FIXTURE_RELEASE;
@@ -102,6 +105,8 @@ function latestCompleteRows(rows: CfbForwardStoredEvidence[]): CfbForwardStoredE
   if (current) return current;
   const transitionFallback = completeRowsForRelease(rows, CFB_FORWARD_PRIOR_EVIDENCE_SCHEMA_RELEASE, CFB_PRIOR_MEMBER_RELEASE, CFB_PRIOR_DECISION_RELEASE);
   if (transitionFallback) return transitionFallback;
+  const legacyFallback = completeRowsForRelease(rows, CFB_FORWARD_LEGACY_EVIDENCE_SCHEMA_RELEASE, CFB_LEGACY_MEMBER_RELEASE, CFB_LEGACY_DECISION_RELEASE);
+  if (legacyFallback) return legacyFallback;
   throw new Error("CFB has no complete current or release-transition member evidence.");
 }
 

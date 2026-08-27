@@ -18,9 +18,11 @@ export const CFB_V1_REPRESENTATIVE_SCORE_RELEASE =
 export const CFB_V1_GRADE_POLICY_RELEASE =
   "cfb_v1_composite_grade_policy_2026_08_25_r1" as const;
 export const CFB_V1_DECISION_RELEASE =
+  "cfb_v1_daily_edge_decision_2026_08_27_r9_pmf_side_guard" as const;
+const CFB_V1_POLICY_SOURCE_DECISION_RELEASE =
   "cfb_v1_daily_edge_decision_2026_08_26_r7_sharpapi_price_fallback" as const;
 export const CFB_V1_DECISION_SCHEMA_RELEASE =
-  "cfb_v1_exact_price_decision_tuple_2026_08_26_r2_provider_source" as const;
+  "cfb_v1_exact_price_decision_tuple_2026_08_27_r3_pmf_side_guard" as const;
 export const CFB_T60_TARGET_MINUTES = 60 as const;
 export const CFB_T60_MAX_CAPTURE_LAG_MINUTES = 20 as const;
 
@@ -289,7 +291,9 @@ function evaluateTarget(args: {
     : args.target.total?.line ?? args.contextLines?.totalLine ?? args.forecast.expectedTotal;
   if (homeSpread === undefined || homeSpread === null || totalLine === undefined || totalLine === null) return [];
   const lineProbabilities = cfbV1LineProbabilities({ forecast: args.forecast, homeSpread, totalLine });
-  const sides = marketSides(args.market);
+  // The independent joint PMF owns the forecast side. Calibration and exact
+  // price can change the grade, but can never silently select its opposite.
+  const sides = [pmfSelectedSide(lineProbabilities, args.market)];
   return sides.flatMap((side) => {
     const quote = targetQuote(args.target, args.market, side);
     if (!quote) return [];
@@ -463,7 +467,6 @@ function sideLabel(market: CfbV1Market, side: string, line: number | null, away:
   return `${side === "over" ? "Over" : "Under"} ${marketNumber(line ?? 0)}`;
 }
 
-function marketSides(market: CfbV1Market): Array<"home" | "away" | "over" | "under"> { return market === "total" ? ["over", "under"] : ["home", "away"]; }
 function primarySide(market: CfbV1Market): "home" | "over" { return market === "total" ? "over" : "home"; }
 function opposingSide(side: "home" | "away" | "over" | "under"): "home" | "away" | "over" | "under" { return side === "home" ? "away" : side === "away" ? "home" : side === "over" ? "under" : "over"; }
 function rMarkets(): CfbV1Market[] { return ["moneyline", "spread", "total"]; }
@@ -488,6 +491,15 @@ function consensusHomeSpread(books: NcaafBookOdds[]): number | null {
 function marketNumber(value: number): string { return Number.isInteger(value) ? value.toFixed(0) : value.toFixed(1); }
 function signed(value: number): string { return value > 0 ? `+${marketNumber(value)}` : marketNumber(value); }
 
+function pmfSelectedSide(
+  probabilities: ReturnType<typeof cfbV1LineProbabilities>,
+  market: CfbV1Market,
+): "home" | "away" | "over" | "under" {
+  if (market === "moneyline") return probabilities.moneyline.home >= probabilities.moneyline.away ? "home" : "away";
+  if (market === "spread") return probabilities.spread.home >= probabilities.spread.away ? "home" : "away";
+  return probabilities.total.over >= probabilities.total.under ? "over" : "under";
+}
+
 function assertArtifactReleases(): void {
   if (weeklyArtifact.artifactRelease !== CFB_V1_SCORE_ARTIFACT_RELEASE || weeklyArtifact.baseArtifactRelease !== CFB_V1_WEEKLY_BASE_ARTIFACT_RELEASE || weeklyArtifact.modelRelease !== CFB_V1_MODEL_RELEASE) {
     throw new Error("CFB v1 weekly runtime artifact release mismatch.");
@@ -495,7 +507,7 @@ function assertArtifactReleases(): void {
   if (scoreArtifact.artifactRelease !== CFB_V1_WEEKLY_BASE_ARTIFACT_RELEASE || scoreArtifact.modelRelease !== CFB_V1_MODEL_RELEASE || scoreArtifact.distributionRelease !== CFB_V1_DISTRIBUTION_RELEASE || scoreArtifact.probabilityRelease !== CFB_V1_PROBABILITY_RELEASE || scoreArtifact.representativeScoreRelease !== CFB_V1_REPRESENTATIVE_SCORE_RELEASE) {
     throw new Error("CFB v1 score artifact release mismatch.");
   }
-  if (gradeArtifact.policyRelease !== CFB_V1_GRADE_POLICY_RELEASE || gradeArtifact.decisionRelease !== CFB_V1_DECISION_RELEASE) {
+  if (gradeArtifact.policyRelease !== CFB_V1_GRADE_POLICY_RELEASE || gradeArtifact.decisionRelease !== CFB_V1_POLICY_SOURCE_DECISION_RELEASE) {
     throw new Error("CFB v1 grade artifact release mismatch.");
   }
 }
