@@ -1296,6 +1296,15 @@ check(
     candidateSource.includes('game.markets[key as MarketKey].keyStats'),
 );
 check(
+  "football evidence labels distinguish model inputs from explanatory current context",
+  candidateSource.includes("Forecast & matchup evidence") &&
+    candidateSource.includes("Outcome model input") &&
+    candidateSource.includes("Bet model input") &&
+    candidateSource.includes("Current context") &&
+    candidateSource.includes("driverEvidenceRole") &&
+    candidateSource.includes('if (/^Current context\\s*·/i.test(label)) return null'),
+);
+check(
   "World Cup home and away tokens become team labels only in the candidate presentation",
   candidateSource.includes("normalizeCandidatePicks") &&
     candidateSource.includes('if (normalized === "home") return game.homeTeam') &&

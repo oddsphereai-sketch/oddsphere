@@ -22,6 +22,7 @@ import {
   type CfbV1Market,
 } from "./cfbV1Decision";
 import { activeCfbWeeklyWindow, isGameInCfbWeeklyWindow } from "./cfbWeeklyWindow";
+import { cfbFootballEvidenceStats } from "./footballMemberEvidence";
 
 export const CFB_MEMBER_FIXTURE_RELEASE =
   "cfb_v1_member_fixture_2026_08_26_r5_price_provenance" as const;
@@ -419,21 +420,28 @@ function buildSameBookTrail(args: {
 
 function keyStats(payload: CfbForwardEvidencePayload, market: CfbV1Market): MarketEdgeDto["keyStats"] {
   const forecast = payload.decisions.forecast;
-  const qb = (side: "away" | "home") => payload.quarterbacks[side].expectedStartingQuarterback?.name ?? "Starter not verified";
+  const footballEvidence = cfbFootballEvidenceStats({
+    awayTeamName: payload.game.away.name,
+    homeTeamName: payload.game.home.name,
+    market,
+    awayQuarterback: { name: payload.quarterbacks.away.expectedStartingQuarterback?.name ?? null, status: payload.quarterbacks.away.starterStatus },
+    homeQuarterback: { name: payload.quarterbacks.home.expectedStartingQuarterback?.name ?? null, status: payload.quarterbacks.home.starterStatus },
+  });
   if (market === "moneyline") return [
     { label: "Projected winner probability", awayValue: `${((1 - forecast.homeWinProbability) * 100).toFixed(1)}%`, homeValue: `${(forecast.homeWinProbability * 100).toFixed(1)}%`, source: "computed" },
-    { label: "Projected quarterback", awayValue: qb("away"), homeValue: qb("home"), source: "feature_snapshot" },
     { label: "Expected points", awayValue: forecast.expectedAwayPoints.toFixed(1), homeValue: forecast.expectedHomePoints.toFixed(1), source: "computed" },
+    ...footballEvidence,
   ];
   if (market === "spread") return [
     { label: "Model scoring margin", awayValue: forecast.expectedMarginHome < 0 ? `${payload.game.away.abbreviation} by ${Math.abs(forecast.expectedMarginHome).toFixed(1)}` : null, homeValue: forecast.expectedMarginHome >= 0 ? `${payload.game.home.abbreviation} by ${forecast.expectedMarginHome.toFixed(1)}` : null, source: "computed" },
-    { label: "Projected quarterback", awayValue: qb("away"), homeValue: qb("home"), source: "feature_snapshot" },
     { label: "80% margin range", awayValue: null, homeValue: `${forecast.interval80.marginHome[0].toFixed(0)} to ${forecast.interval80.marginHome[1].toFixed(0)}`, source: "computed" },
+    ...footballEvidence,
   ];
   return [
     { label: "Model expected total", awayValue: null, homeValue: forecast.expectedTotal.toFixed(1), source: "computed" },
     { label: "Expected points", awayValue: forecast.expectedAwayPoints.toFixed(1), homeValue: forecast.expectedHomePoints.toFixed(1), source: "computed" },
     { label: "80% total range", awayValue: null, homeValue: `${forecast.interval80.total[0].toFixed(0)} to ${forecast.interval80.total[1].toFixed(0)}`, source: "computed" },
+    ...footballEvidence,
   ];
 }
 

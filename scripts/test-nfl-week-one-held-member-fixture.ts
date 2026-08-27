@@ -66,6 +66,10 @@ assert.equal(markets.filter((market) => market.verdict.label === "No Play").leng
 assert.equal(markets.every((market) => (market.oddsTrail?.length ?? 0) >= 1), true);
 assert.equal(markets.every((market) => (market.opposingOddsTrail?.stops.length ?? 0) >= 1), true);
 assert.equal(markets.every((market) => market.publicSplits.length === 2), true);
+assert.equal(markets.every((market) => market.keyStats.some((row) => row.label.startsWith("Decision-model input ·"))), true);
+assert.equal(markets.every((market) => market.keyStats.some((row) => row.label === "Current context · Expected quarterback")), true);
+assert.equal(markets.every((market) => market.keyStats.some((row) => row.label === "Current context · Venue and weather")), true);
+assert.equal(markets.every((market) => market.keyStats.some((row) => row.label === "Decision-model input · Frozen sample")), true);
 
 const laterCapture = "2026-08-22T14:50:56.934Z";
 const laterFirstGame = structuredClone(rows[0]!);
