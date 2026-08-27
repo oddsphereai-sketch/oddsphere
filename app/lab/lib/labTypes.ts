@@ -401,12 +401,16 @@ export type MarketEdgeDto = {
   /**
    * Persisted picked-side odds trail for the Odds Move module.
    *
-   * Built from append-only `line_history` rows at the same sportsbook/side as
-   * the displayed price when possible, then capped with the current/locked
-   * display price. Consecutive unchanged snapshots are deduped so the UI shows
-   * true price changes instead of repeated polling rows.
+   * Built from append-only `line_history` rows at one real sportsbook. The
+   * movement reference may differ from the current best-price book when that
+   * best book has no stored history; the exact reference tuple below keeps
+   * that distinction explicit and prevents cross-book movement fabrication.
    */
   oddsTrail?: OddsTrailStopDto[];
+  /** Reader-only same-book movement reference; never a grading/lock price. */
+  movementReferenceSportsbook?: string | null;
+  movementReferencePriceAmerican?: number | null;
+  movementReferenceObservedAt?: string | null;
   /** Same-book point-line history for totals and spreads; separate from exact-line prices. */
   lineTrail?: OddsTrailStopDto[];
   /**

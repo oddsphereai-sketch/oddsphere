@@ -149,7 +149,7 @@ changed; only deterministic settlement of existing locked rows is affected.
 - Machine registry: `lib/automodel/mlbModelLayerVersions.ts`
 - Authoritative member-facing writer: `lib/services/predictionRecordService.ts`
 
-Shared member presentation release: `daily_edge_member_presentation_2026_08_26_r4_prediction_label_separation`.
+Shared member presentation release: `daily_edge_member_presentation_2026_08_27_r5_market_evidence_preservation`.
 Internal operational holds remain high-severity health/recovery state, but the
 member board, filters, cards, headlines, and Bet Grade surface them as No Play
 with an explicit incomplete-evidence reason. The response reports evaluated
@@ -164,6 +164,16 @@ row, lease, or lock behavior. On prediction surfaces, a missing directional
 market side now falls back to the
 model-native output (for example, `Projected total 8.3` or the projected score)
 rather than the Bet Grade label. No Play appears only in Bet Grade surfaces.
+The r5 presentation contract also preserves authentic current prices, lines,
+and two-sided same-book movement when an internal operational exception makes
+the exact-price Bet grade unavailable. Operational No Play suppresses only the
+incomplete evaluated-bet tuple; it cannot erase independently ingested market
+evidence. For unlocked MLB Moneyline and Total readers, the current best quote
+remains separate from a deterministic movement-reference sportsbook. When the
+best-price book has no history, the movement panel uses the richest current
+two-sided exact-line book and labels both books explicitly; it never combines
+prices from different sportsbooks into one trail. MLB first-inning continues
+to use its named-book two-sided YRFI/NRFI 0.5 board.
 On the 2026-08-26 15:00:51Z MLB snapshot, 42 evaluated markets remain 3 Best
 Angles / 12 Leans / 14 Watchlists / 13 evaluated No Plays. Three HOU-NYY
 starter exceptions move from the retired public Held label into public No

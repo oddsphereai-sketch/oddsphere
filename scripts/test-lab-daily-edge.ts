@@ -2353,6 +2353,37 @@ section("Market Pulse presentation coherence");
       "thin selected-book history never borrows a richer trail from another book",
       noCrossBookTrail.length === 2 && noCrossBookTrail.every((stop) => stop.sportsbook === "fanduel"),
     );
+
+    const movementReference = dailyEdgeTest.selectTwoSidedMovementReference({
+      selectedSide: "over",
+      opposingSide: "under",
+      currentLine: 9.5,
+      selectedCurrentRows: [
+        { game_id: 4, market_type: "total", sportsbook: "hardrock", side: "over", line_value: 9.5, odds_american: 100, fetched_at: "2026-08-27T12:05:00Z" },
+        { game_id: 4, market_type: "total", sportsbook: "ballybet", side: "over", line_value: 9.5, odds_american: -105, fetched_at: "2026-08-27T12:05:00Z" },
+      ],
+      opposingCurrentRows: [
+        { game_id: 4, market_type: "total", sportsbook: "hardrock", side: "under", line_value: 9.5, odds_american: -110, fetched_at: "2026-08-27T12:05:00Z" },
+        { game_id: 4, market_type: "total", sportsbook: "ballybet", side: "under", line_value: 9.5, odds_american: -115, fetched_at: "2026-08-27T12:05:00Z" },
+      ],
+      selectedHistory: [
+        { id: 31, game_id: 4, market_type: "total", sportsbook: "hardrock", side: "over", line_value: 9.5, odds_american: 100, recorded_at: "2026-08-27T12:05:00Z" },
+        { id: 32, game_id: 4, market_type: "total", sportsbook: "ballybet", side: "over", line_value: 9.5, odds_american: -110, recorded_at: "2026-08-27T08:05:00Z" },
+        { id: 33, game_id: 4, market_type: "total", sportsbook: "ballybet", side: "over", line_value: 9.5, odds_american: -105, recorded_at: "2026-08-27T12:05:00Z" },
+      ],
+      opposingHistory: [
+        { id: 34, game_id: 4, market_type: "total", sportsbook: "hardrock", side: "under", line_value: 9.5, odds_american: -110, recorded_at: "2026-08-27T12:05:00Z" },
+        { id: 35, game_id: 4, market_type: "total", sportsbook: "ballybet", side: "under", line_value: 9.5, odds_american: -110, recorded_at: "2026-08-27T08:05:00Z" },
+        { id: 36, game_id: 4, market_type: "total", sportsbook: "ballybet", side: "under", line_value: 9.5, odds_american: -115, recorded_at: "2026-08-27T12:05:00Z" },
+      ],
+      preferredSportsbook: "hardrock",
+    });
+    check(
+      "movement reference prefers a current two-sided book with real history over a current-only best-price book",
+      movementReference?.sportsbook === "ballybet" &&
+        movementReference.selectedRow.odds_american === -105 &&
+        movementReference.opposingRow.odds_american === -115,
+    );
   }
 
   console.log(`\n${"━".repeat(70)}`);
