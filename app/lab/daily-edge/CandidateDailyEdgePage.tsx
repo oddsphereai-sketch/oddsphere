@@ -15,6 +15,7 @@ import { filterWeeklyReaderSnapshot } from "@/lib/services/dailyEdge/weeklyReade
 import type { Sport } from "@/lib/types/domain/Sport";
 import { unstable_cache } from "next/cache";
 import { NFL_FORWARD_MEMBER_SNAPSHOT_RELEASE } from "@/lib/services/football/nflForwardMemberSnapshotStore";
+import { enrichCachedNflFootballEvidence } from "@/lib/services/football/footballMemberEvidence";
 import DailyEdgeLiveRefresh from "./DailyEdgeLiveRefresh";
 
 const readCachedNflForwardMemberSnapshot = unstable_cache(
@@ -72,7 +73,7 @@ export default async function CandidateDailyEdgePage({
   const nflWeekOneHeldFixture = !nflWeekOneEvidenceEnabled
     ? null
     : await readCachedNflForwardMemberSnapshot(nflSeason, nflWeek)
-        .then((value) => value?.fixture ?? null)
+        .then((value) => value?.fixture ? enrichCachedNflFootballEvidence(value.fixture) : null)
         .catch(() => null)
         ?? await Promise.all([
           import("@/lib/db/supabase"),

@@ -32,6 +32,7 @@ import {
 } from "../lib/services/football/nflRegularDecision";
 
 const pageSource = readFileSync("app/dev/football-preview/page.tsx", "utf8");
+const memberPageSource = readFileSync("app/lab/daily-edge/CandidateDailyEdgePage.tsx", "utf8");
 const fixtureSource = readFileSync("app/dev/football-preview/footballPreviewFixture.ts", "utf8");
 const readerSource = readFileSync("app/dev/experience-preview/ActualDailyEdgePreview.tsx", "utf8");
 const localSlateSource = readFileSync("lib/services/football/nflLocalShadowSlate.ts", "utf8");
@@ -41,6 +42,7 @@ const trackingRegistryTest = readFileSync("scripts/test-official-tracking-market
 
 assert.match(pageSource, /process\.env\.NODE_ENV === "production"/);
 assert.match(pageSource, /readCurrentNflWeekOneHeldMemberFixture/);
+assert.match(memberPageSource, /enrichCachedNflFootballEvidence/, "cached NFL member snapshots must receive the same presentation-only evidence contract");
 assert.match(pageSource, /No fallback or fabricated slate is shown/);
 assert.match(pageSource, /activePreviewSports=\{\["nfl"\]\}/);
 assert.match(pageSource, /same append-only evidence used by the member candidate/);
