@@ -227,6 +227,18 @@ export default function ActualDailyEdgePreview({
     }
   }
 
+  function prefetchSport(next: Sport) {
+    if (embeddedSample || next === sport) return;
+    const destination = buildDailyEdgeSportSwitchDestination({
+      pathname,
+      currentSearch: searchParams.toString(),
+      nextSport: next,
+      explicitDestinations: sportSwitchDestinations,
+      slateDate: currentSlateDate,
+    });
+    router.prefetch(destination);
+  }
+
   const game = useMemo(
     () => displaySnapshot.games.find((candidate) => candidate.id === gameId) ?? displaySnapshot.games[0],
     [displaySnapshot.games, gameId],
@@ -269,7 +281,7 @@ export default function ActualDailyEdgePreview({
   }, [displaySnapshot.date, displaySnapshot.games, embeddedSample, sport]);
 
   if (!game) {
-    return <div className="space-y-5 pb-16"><SlateHeader snapshot={displaySnapshot} sport={sport} onSportChange={switchSport} soccerCompetition={soccerCompetition} weeklySlate={weeklySlate} reviewMode={reviewMode} activePreviewSports={activePreviewSports} />{nflWeekOneEvidenceBoard ? <NflWeekOneEvidenceMonitor board={nflWeekOneEvidenceBoard} /> : sport === "nfl" && weeklySlate ? <NflWeekOneEvidenceUnavailable /> : <EmptyPreview sport={sport} displayLabel={soccerCompetition?.label} />}</div>;
+    return <div className="space-y-5 pb-16"><SlateHeader snapshot={displaySnapshot} sport={sport} onSportChange={switchSport} onSportPrefetch={prefetchSport} soccerCompetition={soccerCompetition} weeklySlate={weeklySlate} reviewMode={reviewMode} activePreviewSports={activePreviewSports} />{nflWeekOneEvidenceBoard ? <NflWeekOneEvidenceMonitor board={nflWeekOneEvidenceBoard} /> : sport === "nfl" && weeklySlate ? <NflWeekOneEvidenceUnavailable /> : <EmptyPreview sport={sport} displayLabel={soccerCompetition?.label} />}</div>;
   }
 
   const market = game.markets[marketKey];
@@ -323,7 +335,7 @@ export default function ActualDailyEdgePreview({
 
   return (
     <div className="space-y-5 pb-16">
-      <SlateHeader snapshot={displaySnapshot} sport={sport} onSportChange={switchSport} sample={embeddedSample} soccerCompetition={soccerCompetition} weeklySlate={weeklySlate} reviewMode={reviewMode} activePreviewSports={activePreviewSports} />
+      <SlateHeader snapshot={displaySnapshot} sport={sport} onSportChange={switchSport} onSportPrefetch={prefetchSport} sample={embeddedSample} soccerCompetition={soccerCompetition} weeklySlate={weeklySlate} reviewMode={reviewMode} activePreviewSports={activePreviewSports} />
 
       <div ref={readerRef} className="hidden scroll-mt-4 sm:block">
         {readerOpen ? <div>
@@ -334,7 +346,7 @@ export default function ActualDailyEdgePreview({
       <EdgeBoard games={displaySnapshot.games} sport={sport} activeId={game.id} activeMarket={marketKey} selectGame={selectGame} groupByDay={Boolean(weeklySlate)} />
 
       {mobileSheetOpen ? (
-        <MobileReaderSheet game={game} market={market} marketKey={marketKey} sport={sport} history={history} pitcherFirstInningHistory={pitcherFirstInningHistory} availability={availability[game.id] ?? null} sample={sample} setSample={setSample} deepOpen={deepOpen} setDeepOpen={setDeepOpen} deepView={deepView} setDeepView={setDeepView} setMarket={selectMarket} onClose={collapseReader} onSportChange={switchSport} activePreviewSports={activePreviewSports} soccerCompetition={soccerCompetition} onPrev={displaySnapshot.games.indexOf(game) > 0 ? () => selectAdjacentGame(-1) : null} onNext={displaySnapshot.games.indexOf(game) < displaySnapshot.games.length - 1 ? () => selectAdjacentGame(1) : null} index={displaySnapshot.games.indexOf(game)} total={displaySnapshot.games.length} />
+        <MobileReaderSheet game={game} market={market} marketKey={marketKey} sport={sport} history={history} pitcherFirstInningHistory={pitcherFirstInningHistory} availability={availability[game.id] ?? null} sample={sample} setSample={setSample} deepOpen={deepOpen} setDeepOpen={setDeepOpen} deepView={deepView} setDeepView={setDeepView} setMarket={selectMarket} onClose={collapseReader} onSportChange={switchSport} onSportPrefetch={prefetchSport} activePreviewSports={activePreviewSports} soccerCompetition={soccerCompetition} onPrev={displaySnapshot.games.indexOf(game) > 0 ? () => selectAdjacentGame(-1) : null} onNext={displaySnapshot.games.indexOf(game) < displaySnapshot.games.length - 1 ? () => selectAdjacentGame(1) : null} index={displaySnapshot.games.indexOf(game)} total={displaySnapshot.games.length} />
       ) : null}
 
       {reviewMode ? <p className="text-center text-[10px] font-semibold uppercase tracking-[0.14em] text-gray-700">
@@ -485,7 +497,7 @@ function SoccerDecisionSummary({ game, market, marketKey }: { game: DailyEdgeGam
   return <section className="mt-3 rounded-xl border border-violet-400/20 bg-gradient-to-br from-violet-500/[0.08] via-black/15 to-sky-500/[0.035] p-4"><div className="flex flex-wrap items-center justify-between gap-2"><div className="flex flex-wrap items-center gap-2"><VerdictBadge market={market} large /><span className="text-[8px] font-black uppercase tracking-wider text-gray-600">Bet grade · exact-price decision</span></div><span className="text-[7px] font-black uppercase tracking-wider text-violet-200">Daily Edge read</span></div><div className="mt-3 flex items-end justify-between gap-3"><div><h3 className="text-2xl font-black tracking-tight text-white">{dailyEdgeOutcomeForecastLabel({ game, market, marketKey, sport: "soccer" })}</h3><p className="mt-1 text-[8px] text-gray-600">{game.awayTeam} at {game.homeTeam}</p></div><span className="text-right"><span className="block font-mono text-base font-black text-violet-100">{formatAmerican(currentDisplayedPrice(market))}</span><span className="block text-[7px] font-bold text-gray-600">{market.currentPriceSportsbook ? formatSportsbook(market.currentPriceSportsbook) : "Sportsbook unavailable"}</span></span></div><div className="mt-3 grid grid-cols-2 gap-2">{metric("Outcome confidence", formatProbability(market.modelProb))}{metric("Market", formatMarketProbability(market))}{metric("Gap", probabilityGap === null ? "—" : `${probabilityGap > 0 ? "+" : ""}${probabilityGap.toFixed(1)} pp`)}{metric("Bet actionability", market.recommendationConfidence === null || market.recommendationConfidence === undefined ? "—" : `${market.recommendationConfidence.toFixed(0)}/100`)}</div><p className="mt-2 text-[8px] leading-relaxed text-gray-500">Outcome confidence estimates the selected result. Bet grade evaluates that result at the exact offered price and market evidence; neither is a guarantee or automatic parlay recommendation.</p><div className="mt-3 grid gap-2"><div className="rounded-lg border border-emerald-400/15 bg-emerald-400/[0.035] p-3"><p className="text-[7px] font-black uppercase tracking-wider text-emerald-300">Why it rates</p><p className="mt-1.5 text-[9px] leading-relaxed text-gray-400">{currentAwareGuidedGuide(market, market.whyLine)}</p></div><div className="rounded-lg border border-amber-400/15 bg-amber-400/[0.035] p-3"><p className="text-[7px] font-black uppercase tracking-wider text-amber-300">Main risk</p><p className="mt-1.5 text-[9px] leading-relaxed text-gray-400">{displayRiskLine(market)}</p></div></div></section>;
 }
 
-function MobileReaderSheet({ onClose, onSportChange, activePreviewSports, soccerCompetition, onPrev, onNext, ...reader }: ReaderSurfaceProps & { onClose: () => void; onSportChange: (sport: Sport) => void; activePreviewSports: Sport[]; soccerCompetition?: SoccerCompetitionPreview; onPrev: (() => void) | null; onNext: (() => void) | null }) {
+function MobileReaderSheet({ onClose, onSportChange, onSportPrefetch, activePreviewSports, soccerCompetition, onPrev, onNext, ...reader }: ReaderSurfaceProps & { onClose: () => void; onSportChange: (sport: Sport) => void; onSportPrefetch: (sport: Sport) => void; activePreviewSports: Sport[]; soccerCompetition?: SoccerCompetitionPreview; onPrev: (() => void) | null; onNext: (() => void) | null }) {
   useEffect(() => {
     const phoneViewport = window.matchMedia("(max-width: 639px)");
     let previousOverflow: string | null = null;
@@ -518,7 +530,7 @@ function MobileReaderSheet({ onClose, onSportChange, activePreviewSports, soccer
     <div className="fixed inset-0 z-50 sm:hidden" role="dialog" aria-modal="true" aria-label={`${reader.game.awayTeam} at ${reader.game.homeTeam} analysis`}>
       <div className="absolute inset-0 bg-black/75 backdrop-blur-sm" onPointerDown={(event) => { if (event.target === event.currentTarget) onClose(); }} aria-hidden="true" />
       <nav aria-label="Reader sport switch" className="absolute inset-x-0 top-0 z-20 border-b border-violet-400/25 bg-[#100e18] px-4 py-2 shadow-[0_12px_35px_-24px_rgba(124,58,237,0.9)]">
-        <SportSelector active={reader.sport} onChange={onSportChange} sports={ACTIVE_DAILY_EDGE_TOP_LEVEL_SPORT_KEYS} showCounts={false} showPendingState availability={sportAvailability} labelOverrides={{ soccer: "Soccer" }} density="compact" activateOnPointerDown />
+        <SportSelector active={reader.sport} onChange={onSportChange} onPrefetch={onSportPrefetch} sports={ACTIVE_DAILY_EDGE_TOP_LEVEL_SPORT_KEYS} showCounts={false} showPendingState availability={sportAvailability} labelOverrides={{ soccer: "Soccer" }} density="compact" activateOnPointerDown />
       </nav>
       <div className="absolute inset-x-0 bottom-0 top-[65px] flex flex-col overflow-hidden rounded-t-2xl border-t border-violet-400/35 bg-[#0a0910] shadow-[0_-24px_80px_-35px_rgba(124,58,237,0.85)]">
         <div className="shrink-0 border-b border-white/[0.07] bg-[#100e18] px-3 pb-2 pt-3">
@@ -551,7 +563,7 @@ function replaceReaderUrl(sport: Sport, gameId: string, market: MarketKey) {
   );
 }
 
-function SlateHeader({ snapshot, sport, onSportChange, sample = false, soccerCompetition, weeklySlate, reviewMode = true, activePreviewSports = [] }: { snapshot: DailyEdgeResponse; sport: Sport; onSportChange: (sport: Sport) => void; sample?: boolean; soccerCompetition?: SoccerCompetitionPreview; weeklySlate?: WeeklySlatePreview; reviewMode?: boolean; activePreviewSports?: Sport[] }) {
+function SlateHeader({ snapshot, sport, onSportChange, onSportPrefetch, sample = false, soccerCompetition, weeklySlate, reviewMode = true, activePreviewSports = [] }: { snapshot: DailyEdgeResponse; sport: Sport; onSportChange: (sport: Sport) => void; onSportPrefetch: (sport: Sport) => void; sample?: boolean; soccerCompetition?: SoccerCompetitionPreview; weeklySlate?: WeeklySlatePreview; reviewMode?: boolean; activePreviewSports?: Sport[] }) {
   const displaySport = soccerCompetition?.label ?? sportLabel(sport);
   const displayGameCount = weeklySlate?.displayGameCount ?? snapshot.games.length;
   const displayAsOf = weeklySlate?.asOf ?? snapshot.as_of;
@@ -562,7 +574,7 @@ function SlateHeader({ snapshot, sport, onSportChange, sample = false, soccerCom
         <div><p className="text-[9px] font-black uppercase tracking-[0.2em] text-violet-300">OddSphere · {displaySport}</p><h1 className="mt-1 text-2xl font-black tracking-tight text-white sm:text-3xl">Daily Edge</h1><p className="mt-1 text-xs text-gray-500">{sample ? "Sample slate" : snapshot.date} · {displayGameCount} {displaySport} {displayGameCount === 1 ? "game" : "games"}{sample ? " · Interactive product preview" : ` · updated ${formatTimestamp(displayAsOf)}`}</p></div>
         <p className="text-[8px] font-semibold uppercase tracking-[0.12em] text-gray-600"><span className="text-gray-400">Update rhythm</span> · {weeklySlate?.cadenceLabel ?? (weeklySlate ? "30-minute board" : "hourly board")} · separate market feeds · minute lock checks</p>
       </div>
-      <div className="mt-5"><SportSelector active={sport} onChange={onSportChange} sports={DAILY_EDGE_TOP_LEVEL_SPORT_KEYS} showCounts={false} showPendingState availability={sportAvailability} labelOverrides={{ soccer: "Soccer" }} /></div>
+      <div className="mt-5"><SportSelector active={sport} onChange={onSportChange} onPrefetch={onSportPrefetch} sports={DAILY_EDGE_TOP_LEVEL_SPORT_KEYS} showCounts={false} showPendingState availability={sportAvailability} labelOverrides={{ soccer: "Soccer" }} /></div>
       {sport === "soccer" && soccerCompetition ? <SoccerCompetitionBar active={soccerCompetition.active} reviewMode={reviewMode} /> : null}
       {weeklySlate ? <div className="mt-3 flex items-center justify-between gap-3 rounded-xl border border-white/[0.07] bg-white/[0.025] px-3 py-2.5"><p className="min-w-0 text-[9px] font-black uppercase tracking-[0.15em] text-gray-400">{weeklySlate.label}</p><div className="flex shrink-0 gap-2">{weeklySlate.previousHref ? <Link href={weeklySlate.previousHref} className="rounded-md border border-white/[0.08] px-2.5 py-1.5 text-[8px] font-black uppercase tracking-wider text-gray-400 hover:text-white">← Previous</Link> : null}{weeklySlate.nextHref ? <Link href={weeklySlate.nextHref} className="rounded-md border border-white/[0.08] px-2.5 py-1.5 text-[8px] font-black uppercase tracking-wider text-gray-400 hover:text-white">Next →</Link> : null}</div></div> : null}
     </div>

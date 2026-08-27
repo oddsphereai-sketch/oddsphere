@@ -63,8 +63,8 @@ export async function GET(request: Request): Promise<Response> {
     return {
       records_updated: result.inserted + (playerProps?.memberRows ?? 0),
       api_calls_made: result.apiCallsMaximum + (playerProps?.apiCallsMaximum ?? 0),
-      partial: result.healthHolds.length > 0 || playerPropsError !== null,
-      error_message: [result.healthHolds.join(","), playerPropsError].filter(Boolean).join(",") || null,
+      partial: result.healthHolds.length > 0 || result.memberSnapshotError !== null || playerPropsError !== null,
+      error_message: [result.healthHolds.join(","), result.memberSnapshotError, playerPropsError].filter(Boolean).join(",") || null,
       details: {
         writer_release: result.writerRelease,
         collected: result.collected,
@@ -81,6 +81,10 @@ export async function GET(request: Request): Promise<Response> {
         published_held_games: result.publishedHeldGames,
         health_holds: result.healthHolds,
         publication_attempted: result.publicationAttempted,
+        member_snapshot_attempted: result.memberSnapshotAttempted,
+        member_snapshot_updated: result.memberSnapshotUpdated,
+        member_snapshot_key: result.memberSnapshotKey,
+        member_snapshot_error: result.memberSnapshotError,
         tracking_attempted: result.trackingAttempted,
         tracking_records_proposed: result.trackingRecordsProposed,
         tracking_records_inserted: result.trackingRecordsInserted,

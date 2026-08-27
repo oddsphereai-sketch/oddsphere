@@ -11,6 +11,8 @@ const DEFAULT_SPORTS: Sport[] = ["mlb", "nba", "nfl", "nhl"];
 type Props = {
   active: Sport;
   onChange: (next: Sport) => void;
+  /** Intent-only route warming; never changes selection or URL state. */
+  onPrefetch?: (next: Sport) => void;
   sports?: Sport[];
   /** Optional surface-specific rollout labels. Omitted callers retain SPORT_META exactly. */
   availability?: Partial<Record<Sport, { isLive: boolean; comingSoonLabel?: string; statusLabel?: string }>>;
@@ -33,6 +35,7 @@ type Props = {
 export default function SportSelector({
   active,
   onChange,
+  onPrefetch,
   sports = DEFAULT_SPORTS,
   showCounts = true,
   showPendingState = false,
@@ -89,6 +92,12 @@ export default function SportSelector({
               data-daily-edge-sport-tab={sport}
               aria-selected={isActive}
               aria-busy={isPending}
+              onPointerEnter={() => {
+                if (isLive && sport !== active) onPrefetch?.(sport);
+              }}
+              onFocus={() => {
+                if (isLive && sport !== active) onPrefetch?.(sport);
+              }}
               onPointerDown={(event) => {
                 if (!activateOnPointerDown || event.button !== 0 || !event.isPrimary) return;
                 activationGuard.current.pointerDown(event, sport, activateSport);

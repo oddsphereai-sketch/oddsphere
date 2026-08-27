@@ -13,7 +13,21 @@ import {
 } from "@/lib/config/nflDailyEdge";
 import { filterWeeklyReaderSnapshot } from "@/lib/services/dailyEdge/weeklyReaderLifecycle";
 import type { Sport } from "@/lib/types/domain/Sport";
+import { unstable_cache } from "next/cache";
+import { NFL_FORWARD_MEMBER_SNAPSHOT_RELEASE } from "@/lib/services/football/nflForwardMemberSnapshotStore";
 import DailyEdgeLiveRefresh from "./DailyEdgeLiveRefresh";
+
+const readCachedNflForwardMemberSnapshot = unstable_cache(
+  async (season: number, week: number) => {
+    const [{ supabase }, { readNflForwardMemberSnapshot }] = await Promise.all([
+      import("@/lib/db/supabase"),
+      import("@/lib/services/football/nflForwardMemberSnapshotStore"),
+    ]);
+    return readNflForwardMemberSnapshot({ client: supabase, season, week });
+  },
+  [NFL_FORWARD_MEMBER_SNAPSHOT_RELEASE],
+  { revalidate: 15, tags: [NFL_FORWARD_MEMBER_SNAPSHOT_RELEASE] },
+);
 
 const MEMBER_SPORT_SWITCH_DESTINATIONS: Partial<Record<Sport, string>> = {
   mlb: "/lab/daily-edge?sport=mlb",
@@ -53,19 +67,24 @@ export default async function CandidateDailyEdgePage({
   const nflEnabled = nflRequested && isNflDailyEdgeEnabled();
   const cfbEnabled = cfbRequested && process.env.CFB_DAILY_EDGE_ENABLED === "true";
   const nflWeekOneEvidenceEnabled = nflEnabled && isNflWeekOneEvidenceBoardEnabled();
+  const nflSeason = Number(process.env.NFL_FORWARD_SEASON ?? "2026");
+  const nflWeek = Number(process.env.NFL_FORWARD_WEEK ?? "1");
   const nflWeekOneHeldFixture = !nflWeekOneEvidenceEnabled
     ? null
-    : await Promise.all([
-        import("@/lib/db/supabase"),
-        import("@/lib/services/football/nflWeekOneHeldMemberFixture"),
-      ])
-        .then(([{ supabase }, { readCurrentNflWeekOneHeldMemberFixture }]) =>
-          readCurrentNflWeekOneHeldMemberFixture({
-            client: supabase,
-            season: Number(process.env.NFL_FORWARD_SEASON ?? "2026"),
-            week: Number(process.env.NFL_FORWARD_WEEK ?? "1"),
-          }))
-        .catch(() => null);
+    : await readCachedNflForwardMemberSnapshot(nflSeason, nflWeek)
+        .then((value) => value?.fixture ?? null)
+        .catch(() => null)
+        ?? await Promise.all([
+          import("@/lib/db/supabase"),
+          import("@/lib/services/football/nflWeekOneHeldMemberFixture"),
+        ])
+          .then(([{ supabase }, { readCurrentNflWeekOneHeldMemberFixture }]) =>
+            readCurrentNflWeekOneHeldMemberFixture({
+              client: supabase,
+              season: nflSeason,
+              week: nflWeek,
+            }))
+          .catch(() => null);
   const nflFixture = nflWeekOneEvidenceEnabled
     ? nflWeekOneHeldFixture
     : !nflEnabled

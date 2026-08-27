@@ -182,12 +182,14 @@ assert.equal(falsifiedLagT60.lockedAt, null);
 assert.ok(falsifiedLagT60.health.blockingReasons.includes("t60_capture_late"));
 
 const writer = readFileSync(path.resolve("lib/services/football/nflForwardEvidenceWriter.ts"), "utf8");
-assert.match(writer, /nfl_forward_evidence_writer_2026_08_26_r9_market_scoped_t60/);
+assert.match(writer, /nfl_forward_evidence_writer_2026_08_27_r10_compact_member_snapshot/);
 assert.match(writer, /buildNflR6ShadowMoneylineDecision/);
 assert.match(writer, /buildNflV1ActionableGradeBundle/);
 assert.match(writer, /evaluatedBets: production\.evaluatedBets/);
 assert.doesNotMatch(writer, /shadowEvaluatedBets: \[shadowMoneyline\]/);
 assert.match(writer, /buildNflOfficialTrackingRecords/);
+assert.match(writer, /writeNflForwardMemberSnapshot/);
+assert.match(writer, /buildNflWeekOneHeldMemberFixture/);
 assert.doesNotMatch(writer, /writeCurrentNflPublishedMemberSnapshot|buildNflTrackingProposals\(/);
 const route = readFileSync(path.resolve("app/api/cron/nfl-forward-evidence/route.ts"), "utf8");
 assert.match(route, /leaseGroup: "prediction_pipeline"/);
