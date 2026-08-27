@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import type { SharpApiRequestOptions, SharpApiResponse } from "../lib/providers/real_api/_sharpApiClient";
 import type { NcaafGame } from "../lib/services/football/balldontlieNcaafSlate";
 import {
+  CFB_SHARP_FALLBACK_MAX_PAGES_PER_EVENT,
   CFB_SHARP_FALLBACK_MAX_REQUESTS,
   cfbBooksNeedSharpFallback,
   fetchSharpApiNcaafOddsFallback,
@@ -99,6 +100,54 @@ assert.deepEqual(
   "the normal Total reader tuple must remain Under 60.5 -110 with its evidence-backed Bet grade",
 );
 assert.equal(bundle.trackingEnabled, false, "official tracking remains closed while any market lacks a coherent T-60 exact-price tuple");
+
+const pagedCalls: SharpApiRequestOptions[] = [];
+const pagedRows = sharpRows(expectedEventId);
+const paged = await fetchSharpApiNcaafOddsFallback({
+  games: [game],
+  maximumRequests: 4,
+  client: {
+    async fetch<T>(opts: SharpApiRequestOptions): Promise<SharpApiResponse<T>> {
+      pagedCalls.push(opts);
+      const offset = Number(opts.query?.offset ?? 0);
+      const data = offset === 0 ? pagedRows.slice(0, 6) : pagedRows.slice(6);
+      return {
+        data: data as T,
+        pagination: offset === 0
+          ? { limit: 200, offset: 0, count: data.length, has_more: true, next_offset: 200 }
+          : { limit: 200, offset, count: data.length, has_more: false },
+      };
+    },
+  },
+});
+assert.equal(paged.requests, 2, "an exact event larger than one page must be completed with bounded offset pagination");
+assert.deepEqual(pagedCalls.map((call) => call.query?.offset ?? 0), [0, 200], "SharpAPI pagination must use the documented forward offset");
+assert.deepEqual(paged.booksByGame[game.providerGameId], books, "pagination must preserve the exact normalized named-book tuple");
+
+await assert.rejects(
+  fetchSharpApiNcaafOddsFallback({
+    games: [game],
+    maximumRequests: CFB_SHARP_FALLBACK_MAX_PAGES_PER_EVENT,
+    client: {
+      async fetch<T>(opts: SharpApiRequestOptions): Promise<SharpApiResponse<T>> {
+        const offset = Number(opts.query?.offset ?? 0);
+        return { data: [] as T, pagination: { has_more: true, offset, next_offset: offset + 200 } };
+      },
+    },
+  }),
+  new RegExp(`bounded ${CFB_SHARP_FALLBACK_MAX_PAGES_PER_EVENT}-page safety cap`),
+  "an unbounded exact event must fail closed before any partial evidence can publish",
+);
+
+await assert.rejects(
+  fetchSharpApiNcaafOddsFallback({
+    games: [game],
+    maximumRequests: 2,
+    client: { async fetch<T>(): Promise<SharpApiResponse<T>> { return { data: [] as T, pagination: { has_more: true, next_offset: 0 } }; } },
+  }),
+  /without a valid forward offset/,
+  "pagination cannot repeat a first page or accept a missing forward cursor",
+);
 
 await assert.rejects(
   fetchSharpApiNcaafOddsFallback({ games: [game], client: { async fetch<T>(): Promise<SharpApiResponse<T>> { return { data: [] as T, pagination: { has_more: false } }; } }, maximumRequests: 1 }),

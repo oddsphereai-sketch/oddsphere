@@ -18,7 +18,7 @@ export const CFB_V1_REPRESENTATIVE_SCORE_RELEASE =
 export const CFB_V1_GRADE_POLICY_RELEASE =
   "cfb_v1_composite_grade_policy_2026_08_25_r1" as const;
 export const CFB_V1_DECISION_RELEASE =
-  "cfb_v1_daily_edge_decision_2026_08_26_r7_sharpapi_price_fallback" as const;
+  "cfb_v1_daily_edge_decision_2026_08_27_r8_bounded_sharpapi_pagination" as const;
 export const CFB_V1_DECISION_SCHEMA_RELEASE =
   "cfb_v1_exact_price_decision_tuple_2026_08_26_r2_provider_source" as const;
 export const CFB_T60_TARGET_MINUTES = 60 as const;

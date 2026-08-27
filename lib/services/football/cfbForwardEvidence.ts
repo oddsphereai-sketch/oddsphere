@@ -13,9 +13,9 @@ export const CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE =
 export const CFB_FORWARD_PRIOR_EVIDENCE_SCHEMA_RELEASE =
   "cfb_forward_evidence_snapshot_2026_08_25_r1" as const;
 export const CFB_FORWARD_EVIDENCE_COLLECTOR_RELEASE =
-  "cfb_forward_evidence_collector_2026_08_26_r5_sharpapi_price_fallback" as const;
+  "cfb_forward_evidence_collector_2026_08_27_r6_bounded_sharpapi_pagination" as const;
 export const CFB_FORWARD_MEMBER_RELEASE =
-  "cfb_v1_member_release_2026_08_26_r4_price_provenance" as const;
+  "cfb_v1_member_release_2026_08_27_r5_bounded_sharpapi_pagination" as const;
 
 export type CfbForwardEvidenceStage = "opening" | "unlocked" | "t60";
 
