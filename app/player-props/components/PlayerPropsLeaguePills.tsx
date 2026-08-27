@@ -1,6 +1,6 @@
-import Link from "next/link";
 import { SportIcon } from "@/app/lab/components/SportIcon";
 import type { Sport } from "@/lib/types/domain/Sport";
+import { PlayerPropsLeagueLink } from "./PlayerPropsLeagueLink";
 
 export function PlayerPropsLeaguePills({ league, nflEnabled = false, reviewMode = false }: { league: "mlb" | "nfl"; nflEnabled?: boolean; reviewMode?: boolean }) {
   const leagues: Array<{ key: Sport; label: string; href?: string }> = [
@@ -21,7 +21,7 @@ export function PlayerPropsLeaguePills({ league, nflEnabled = false, reviewMode 
         const contents = <><span className={`inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full ${active ? "bg-violet-500/[0.22] ring-1 ring-violet-400/40" : "bg-white/[0.04] ring-1 ring-white/[0.06]"}`}><SportIcon sport={item.key} active={active} /></span><span className="min-w-0"><strong className={`block text-[11px] uppercase ${active ? "text-white" : "text-gray-300"}`}>{item.label}</strong><span className={`mt-0.5 block text-[9px] ${active ? "text-emerald-300" : item.href ? "text-violet-300" : "text-gray-500"}`}>{active ? "Active" : item.href ? "View props" : "Coming soon"}</span></span></>;
         const className = `inline-flex min-w-[112px] shrink-0 items-center gap-2.5 rounded-lg border px-3 py-2 text-left transition-colors ${active ? "border-violet-400/55 bg-violet-500/[0.14]" : item.href ? "border-white/[0.10] bg-white/[0.025] hover:border-violet-400/40 hover:bg-violet-500/[0.08]" : "cursor-not-allowed border-white/[0.06] bg-white/[0.02] opacity-65"}`;
         return item.href
-          ? <Link key={item.key} href={item.href} aria-current={active ? "page" : undefined} aria-label={`${item.label} player props${active ? ", active" : ""}`} className={className}>{contents}</Link>
+          ? <PlayerPropsLeagueLink key={item.key} href={item.href} aria-current={active ? "page" : undefined} aria-label={`${item.label} player props${active ? ", active" : ""}`} className={className}>{contents}</PlayerPropsLeagueLink>
           : <button key={item.key} type="button" disabled aria-label={`${item.label} player props, coming soon`} className={className}>{contents}</button>;
       })}
     </div>

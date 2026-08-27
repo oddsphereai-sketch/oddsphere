@@ -627,6 +627,7 @@ async function main() {
   check("fixture non-actionable rows carry clear reasons", previewFixture.props.filter((row) => !isActionablePropGrade(row.playGrade)).every((row) => row.reasonCodes.length > 0));
   const propsUiSource = readFileSync("app/mlb/props/components/PlayerPropsDashboard.tsx", "utf8");
   const leagueRailSource = readFileSync("app/player-props/components/PlayerPropsLeaguePills.tsx", "utf8");
+  const leagueLinkSource = readFileSync("app/player-props/components/PlayerPropsLeagueLink.tsx", "utf8");
   const sharedReaderSource = readFileSync("app/player-props/components/PlayerPropReaderDialog.tsx", "utf8");
   const liveBoardSource = readFileSync("lib/mlb/props/liveBoard.ts", "utf8");
   const launchReadinessSource = readFileSync("lib/mlb/props/launchReadiness.ts", "utf8");
@@ -664,6 +665,7 @@ async function main() {
   check("price comparison uses one exclusive segmented mode", propsUiSource.includes("type PriceMode = \"best\" | \"all\"") && propsUiSource.includes("PriceModeControl") && ["Best odds", "All prices"].every((label) => propsUiSource.includes(`>${label}<`)));
   check("compact slate header has one clear contextual purpose", ["PropsSlateHeader", "SlateGameNavigator", "Board status", "Prices updated", "Today’s games"].every((label) => propsUiSource.includes(label)) && !propsUiSource.includes("Top value"));
   check("props researcher uses one shared live MLB/NFL league rail", !propsUiSource.includes("PropLeagueRail") && leagueRailSource.includes('aria-label="Player props leagues"') && ["MLB", "NFL", "CFB", "NBA", "WNBA", "CBB", "NHL", "Soccer"].every((label) => leagueRailSource.includes(`label: "${label}"`)) && leagueRailSource.includes("View props") && leagueRailSource.includes("Coming soon"));
+  check("props league links warm canonical destinations on pointer and keyboard intent", leagueRailSource.includes("PlayerPropsLeagueLink") && leagueLinkSource.includes("router.prefetch(href)") && leagueLinkSource.includes("onPointerEnter={prefetch}") && leagueLinkSource.includes("onFocus={prefetch}") && !leagueLinkSource.includes("router.push") && !leagueLinkSource.includes("preventDefault"));
   check("product zones are explicit and ordered", ["slate-intelligence", "research-entry", "today-radar", "player-directory", "board-controls", "full-board", "player-workspace"].every((zone) => propsUiSource.includes(`data-product-zone="${zone}"`)) && propsUiSource.indexOf("<PropsSlateHeader") < propsUiSource.indexOf('data-product-zone="research-entry"'));
   check("player discovery is native to the researcher", researchEntrySource.includes("Search a player, team, market, or sportsbook") && ["row.player", "row.team", "row.opponent", "row.marketLabel", "row.book"].every((label) => propsUiSource.includes(label)));
   check("props UI exposes provider health", propsUiSource.includes("Provider Health") && ["BDL odds", "Sharp audit", "Splits/context", "Probable starters"].every((label) => propsUiSource.includes(label)));

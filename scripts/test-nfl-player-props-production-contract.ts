@@ -218,9 +218,15 @@ assert.ok(memberPage.includes("buildNflPlayerPropsMemberSnapshot(snapshot)"), "t
 const mlbPage = readFileSync("app/mlb/props/page.tsx", "utf8");
 assert.ok(mlbPage.includes('nflEnabled={process.env.NFL_PLAYER_PROPS_MEMBER_ENABLED === "true"}'), "MLB hides the NFL pill until the member flag is enabled");
 const leaguePills = readFileSync("app/player-props/components/PlayerPropsLeaguePills.tsx", "utf8");
+const leagueLink = readFileSync("app/player-props/components/PlayerPropsLeagueLink.tsx", "utf8");
 assert.ok(leaguePills.includes('href: reviewMode ? "/dev/mlb-props-preview" : "/mlb/props"'));
 assert.ok(leaguePills.includes('reviewMode ? "/dev/nfl-props-preview" : "/player-props?league=nfl"'));
 assert.ok(leaguePills.includes('active ? "Active" : item.href ? "View props" : "Coming soon"'));
+assert.ok(leaguePills.includes("<PlayerPropsLeagueLink"), "both live league pills use the shared intent-prefetch link");
+assert.ok(leagueLink.includes('from "next/link"') && leagueLink.includes('from "next/navigation"'));
+assert.ok(leagueLink.includes("router.prefetch(href)"), "league intent warms the exact canonical destination");
+assert.ok(leagueLink.includes("onPointerEnter={prefetch}") && leagueLink.includes("onFocus={prefetch}"), "pointer and keyboard intent prefetch without replacing Link navigation");
+assert.ok(!leagueLink.includes("router.push") && !leagueLink.includes("preventDefault"), "prefetch does not replace native Link history behavior");
 assert.equal((mlbPage.match(/<PlayerPropsLeaguePills/g) ?? []).length, 3, "each MLB page result renders exactly one shared league rail");
 assert.equal((mlbReader.match(/PropLeagueRail/g) ?? []).length, 0, "MLB dashboard does not render a second stale league rail");
 const productShellRoutes = readFileSync("lib/navigation/productShellRoutes.ts", "utf8");
