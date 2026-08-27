@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import ProductAppFrame from "@/app/lab/components/ProductAppFrame";
 import { supabase } from "@/lib/db/supabase";
 import { readNflPlayerPropsSnapshot } from "@/lib/services/football/nflPlayerPropsSnapshotStore";
+import { buildNflPlayerPropsMemberSnapshot } from "@/lib/services/football/nflPlayerPropsProductionContract";
 import { NflPlayerPropsDashboard } from "./components/NflPlayerPropsDashboard";
 import { PlayerPropsLeaguePills } from "./components/PlayerPropsLeaguePills";
 
@@ -15,9 +16,10 @@ export default async function PlayerPropsPage({ searchParams }: { searchParams: 
   const season = bounded(process.env.NFL_FORWARD_SEASON, 2026);
   const week = bounded(process.env.NFL_FORWARD_WEEK, 1);
   const snapshot = await readNflPlayerPropsSnapshot({ client: supabase, season, week }).catch(() => null);
+  const memberSnapshot = snapshot ? buildNflPlayerPropsMemberSnapshot(snapshot) : null;
   const requestedReader = typeof query.reader === "string" ? query.reader : null;
   const initialSelectedKey = snapshot?.memberDecisions.some((row) => decisionKey(row) === requestedReader) ? requestedReader : null;
-  return <ProductAppFrame><PlayerPropsLeaguePills league="nfl" nflEnabled /><NflPlayerPropsDashboard snapshot={snapshot} initialSelectedKey={initialSelectedKey} /></ProductAppFrame>;
+  return <ProductAppFrame><PlayerPropsLeaguePills league="nfl" nflEnabled /><NflPlayerPropsDashboard snapshot={memberSnapshot} initialSelectedKey={initialSelectedKey} /></ProductAppFrame>;
 }
 
 function bounded(value: string | undefined, fallback: number): number { const parsed = Number(value ?? fallback); return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback; }

@@ -5,7 +5,7 @@ import {
 } from "./nflPlayerPropsRuntime";
 
 export const NFL_PLAYER_PROPS_PRODUCTION_CANDIDATE_RELEASE =
-  "nfl_player_props_member_2026_08_25_r4_shared_context_load_bound" as const;
+  "nfl_player_props_member_2026_08_27_r6_projection_context" as const;
 export const NFL_PLAYER_PROPS_WRITER_LEASE_GROUP = "prediction_pipeline:nfl" as const;
 
 export type NflPlayerPropsProductionSnapshot = {
@@ -19,6 +19,20 @@ export type NflPlayerPropsProductionSnapshot = {
   };
   memberDecisions: NflPlayerPropsRuntimeDecision[];
   lifecycle: { recomputedUnlocked: number; frozenAtLock: number; retainedPreviouslyLocked: number };
+};
+
+export type NflPlayerPropsMemberGrade = "Best Angle" | "Lean" | "Watchlist" | "No Play";
+export type NflPlayerPropsMemberDecision = NflPlayerPropsRuntimeDecision & { grade: NflPlayerPropsMemberGrade };
+export type NflPlayerPropsMemberSnapshot = {
+  season: number; week: number; generatedAt: string;
+  board: {
+    evaluatedAt: string;
+    counts: Record<NflPlayerPropsMemberGrade, number> & { actionable: number };
+    diagnostics: Pick<NflPlayerPropsRuntimeBoard["diagnostics"],
+      "inputOffers" | "completedEvaluations" | "completeExactOffers" | "incompleteExactOffers"
+      | "unavailableNoIndependentBenchmark" | "unavailableStaleQuotes" | "unavailableFeatureContext">;
+  };
+  memberDecisions: NflPlayerPropsMemberDecision[];
 };
 
 export type NflPlayerPropsTrackedDecision = {
@@ -72,6 +86,7 @@ export function reconcileNflPlayerPropsProductionSnapshot(args: {
     trackingEnabled: true as const,
     decisions,
     counts: recount(decisions),
+    diagnostics: recountOperationalDiagnostics(args.nextBoard.diagnostics, decisions),
   };
   return {
     release: NFL_PLAYER_PROPS_PRODUCTION_CANDIDATE_RELEASE, season: args.season, week: args.week,
@@ -98,6 +113,37 @@ export function buildNflPlayerPropsTrackingRows(snapshot: NflPlayerPropsProducti
     }));
 }
 
+export function buildNflPlayerPropsMemberSnapshot(snapshot: NflPlayerPropsProductionSnapshot): NflPlayerPropsMemberSnapshot {
+  const memberDecisions = snapshot.memberDecisions.filter(isMemberDecision);
+  const count = (grade: NflPlayerPropsMemberGrade) => memberDecisions.filter((row) => row.grade === grade).length;
+  const diagnostics = snapshot.board.diagnostics;
+  return {
+    season: snapshot.season,
+    week: snapshot.week,
+    generatedAt: snapshot.generatedAt,
+    board: {
+      evaluatedAt: snapshot.board.evaluatedAt,
+      counts: {
+        "Best Angle": count("Best Angle"),
+        Lean: count("Lean"),
+        Watchlist: count("Watchlist"),
+        "No Play": count("No Play"),
+        actionable: count("Best Angle") + count("Lean"),
+      },
+      diagnostics: {
+        inputOffers: diagnostics.inputOffers,
+        completedEvaluations: memberDecisions.length,
+        completeExactOffers: diagnostics.completeExactOffers,
+        incompleteExactOffers: diagnostics.incompleteExactOffers,
+        unavailableNoIndependentBenchmark: diagnostics.unavailableNoIndependentBenchmark,
+        unavailableStaleQuotes: diagnostics.unavailableStaleQuotes,
+        unavailableFeatureContext: diagnostics.unavailableFeatureContext,
+      },
+    },
+    memberDecisions,
+  };
+}
+
 export function attachNflPlayerPropsClosingPrice(
   tracked: NflPlayerPropsTrackedDecision,
   closingPrice: number,
@@ -113,6 +159,22 @@ export function attachNflPlayerPropsClosingPrice(
 function recount(rows: NflPlayerPropsRuntimeDecision[]): NflPlayerPropsRuntimeBoard["counts"] {
   const count = (grade: NflPlayerPropsRuntimeDecision["grade"]) => rows.filter((row) => row.grade === grade).length;
   return { "Best Angle": count("Best Angle"), Lean: count("Lean"), Watchlist: count("Watchlist"), "No Play": count("No Play"), Held: count("Held"), actionable: count("Best Angle") + count("Lean") };
+}
+function recountOperationalDiagnostics(
+  diagnostics: NflPlayerPropsRuntimeBoard["diagnostics"],
+  rows: NflPlayerPropsRuntimeDecision[],
+): NflPlayerPropsRuntimeBoard["diagnostics"] {
+  const operationalExceptions = rows.filter((row) => row.grade === "Held");
+  return {
+    ...diagnostics,
+    completedEvaluations: rows.length - operationalExceptions.length,
+    operationalExceptions: operationalExceptions.length,
+    recoveryEligibleOperationalExceptions: operationalExceptions.filter((row) => row.state === "unlocked").length,
+    roleOrIdentityHeld: operationalExceptions.length,
+  };
+}
+function isMemberDecision(row: NflPlayerPropsRuntimeDecision): row is NflPlayerPropsMemberDecision {
+  return row.grade === "Best Angle" || row.grade === "Lean" || row.grade === "Watchlist" || row.grade === "No Play";
 }
 function decisionKey(row: NflPlayerPropsRuntimeDecision): string {
   return [row.gameId, row.playerName.toLowerCase().replace(/[^a-z0-9]/g, ""), row.market, row.line, row.side].join("|");
