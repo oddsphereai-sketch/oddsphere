@@ -420,14 +420,17 @@ assert.deepEqual(comparableBooks[game.providerGameId]?.map((row: NflPreviewBookO
 const candidatePage = readFileSync(path.resolve("app/lab/daily-edge/CandidateDailyEdgePage.tsx"), "utf8");
 assert.match(candidatePage, /isNflWeekOneEvidenceBoardEnabled/);
 assert.match(candidatePage, /readCurrentNflWeekOneHeldMemberFixture/);
+assert.match(candidatePage, /readCachedNflForwardMemberSnapshot/);
+assert.match(candidatePage, /readNflForwardMemberSnapshot/);
+assert.match(candidatePage, /revalidate: 15/);
 assert.match(candidatePage, /initialAvailability=\{visibleNflAvailability\}/);
 assert.match(candidatePage, /readCurrentNflWeekOneHeldMemberFixture/);
 assert.doesNotMatch(candidatePage, /nflWeekOneEvidenceBoard=\{/);
-assert.match(candidatePage, /stale preseason package is retired/);
+assert.doesNotMatch(candidatePage, /nflPublishedMemberSnapshotStore|readCurrentNflPublishedMemberSnapshot/);
 const reader = readFileSync(path.resolve("app/dev/experience-preview/ActualDailyEdgePreview.tsx"), "utf8");
 assert.match(reader, /No score forecast is being published yet/);
 assert.match(reader, /Counts show games containing at least one market with each grade/);
-assert.match(reader, /Missing validation is a visible hold—not an ordinary No Play\./);
+assert.match(reader, /Missing validation keeps the Bet grade at No Play with its reason while preserving the model forecast\./);
 assert.doesNotMatch(reader, /Week 1 market is live[^\n]*Best Angle/);
 
 const heldFixture = readFileSync(path.resolve("lib/services/football/nflWeekOneHeldMemberFixture.ts"), "utf8");

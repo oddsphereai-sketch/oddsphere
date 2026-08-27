@@ -11,6 +11,7 @@ import {
   NFL_FORWARD_EVIDENCE_COLLECTOR_RELEASE,
   NFL_FORWARD_EVIDENCE_SCHEMA_RELEASE,
   determineNflForwardCollectionNeed,
+  hashNflForwardEvidencePayload,
   planNflForwardEvidenceCaptures,
   type NflForwardEvidencePayload,
   type NflForwardOperationalOpening,
@@ -44,9 +45,14 @@ import {
   nflProviderIntegerId,
 } from "./nflOfficialTrackingRecord";
 import { buildMarketScopedFootballTrackingPlan } from "./footballMarketScopedTracking";
+import { buildNflWeekOneHeldMemberFixture } from "./nflWeekOneHeldMemberFixture";
+import {
+  buildNflForwardMemberSnapshot,
+  writeNflForwardMemberSnapshot,
+} from "./nflForwardMemberSnapshotStore";
 
 export const NFL_FORWARD_WRITER_RELEASE =
-  "nfl_forward_evidence_writer_2026_08_26_r9_market_scoped_t60" as const;
+  "nfl_forward_evidence_writer_2026_08_27_r10_compact_member_snapshot" as const;
 
 export type NflForwardWriterResult = {
   writerRelease: typeof NFL_FORWARD_WRITER_RELEASE;
@@ -66,6 +72,10 @@ export type NflForwardWriterResult = {
   apiCallsMaximum: number;
   healthHolds: string[];
   publicationAttempted: boolean;
+  memberSnapshotAttempted: boolean;
+  memberSnapshotUpdated: boolean;
+  memberSnapshotKey: string | null;
+  memberSnapshotError: string | null;
   trackingAttempted: boolean;
   trackingRecordsProposed: number;
   trackingRecordsInserted: number;
@@ -75,6 +85,11 @@ export type NflForwardWriterResult = {
 type NflTrackingWriteResult = Pick<
   NflForwardWriterResult,
   "trackingAttempted" | "trackingRecordsProposed" | "trackingRecordsInserted" | "trackingRecordsExisting"
+>;
+
+type NflMemberSnapshotWriteResult = Pick<
+  NflForwardWriterResult,
+  "memberSnapshotAttempted" | "memberSnapshotUpdated" | "memberSnapshotKey" | "memberSnapshotError"
 >;
 
 export async function runNflForwardEvidenceWriter(args: {
@@ -110,7 +125,16 @@ export async function runNflForwardEvidenceWriter(args: {
       payloads: currentT60Payloads(existing),
       apply: args.apply,
     });
-    return emptyResult(need.reason, tracking);
+    const memberSnapshot = await refreshCompactMemberSnapshot({
+      client: args.client,
+      existing,
+      payloads: [],
+      season: args.season,
+      week: args.week,
+      now: args.now,
+      apply: args.apply,
+    });
+    return emptyResult(need.reason, tracking, memberSnapshot);
   }
 
   const slate = await fetchBalldontlieNflRegularSlate({
@@ -130,7 +154,16 @@ export async function runNflForwardEvidenceWriter(args: {
       payloads: currentT60Payloads(existing),
       apply: args.apply,
     });
-    return emptyResult("provider_slate_has_no_due_capture", tracking);
+    const memberSnapshot = await refreshCompactMemberSnapshot({
+      client: args.client,
+      existing,
+      payloads: [],
+      season: args.season,
+      week: args.week,
+      now: args.now,
+      apply: args.apply,
+    });
+    return emptyResult("provider_slate_has_no_due_capture", tracking, memberSnapshot);
   }
 
   const criticalTeamIds = new Set(plans
@@ -325,6 +358,15 @@ export async function runNflForwardEvidenceWriter(args: {
     payloads: [...currentT60Payloads(existing), ...payloads.filter((payload) => payload.stage === "t60")],
     apply: args.apply,
   });
+  const memberSnapshot = await refreshCompactMemberSnapshot({
+    client: args.client,
+    existing,
+    payloads,
+    season: args.season,
+    week: args.week,
+    now: args.now,
+    apply: args.apply,
+  });
   const publishedEvaluations = payloads.flatMap((payload) => payload.decisions.evaluatedBets);
   const quarterbackHealthReasons = payloads.flatMap((payload) => {
     const away = payload.startersAndDepth.away.starterStatus;
@@ -352,6 +394,7 @@ export async function runNflForwardEvidenceWriter(args: {
     apiCallsMaximum,
     healthHolds: [...new Set(payloads.flatMap((payload) => payload.coverage.healthHolds))].sort(),
     publicationAttempted: args.apply,
+    ...memberSnapshot,
     ...tracking,
   };
 }
@@ -498,6 +541,12 @@ function emptyResult(
     trackingRecordsInserted: 0,
     trackingRecordsExisting: 0,
   },
+  memberSnapshot: NflMemberSnapshotWriteResult = {
+    memberSnapshotAttempted: false,
+    memberSnapshotUpdated: false,
+    memberSnapshotKey: null,
+    memberSnapshotError: null,
+  },
 ): NflForwardWriterResult {
   return {
     writerRelease: NFL_FORWARD_WRITER_RELEASE,
@@ -517,7 +566,71 @@ function emptyResult(
     apiCallsMaximum: 0,
     healthHolds: [],
     publicationAttempted: false,
+    ...memberSnapshot,
     ...tracking,
+  };
+}
+
+async function refreshCompactMemberSnapshot(args: {
+  client: SupabaseClient;
+  existing: NflForwardStoredEvidence[];
+  payloads: NflForwardEvidencePayload[];
+  season: number;
+  week: number;
+  now: string;
+  apply: boolean;
+}): Promise<NflMemberSnapshotWriteResult> {
+  if (!args.apply) {
+    return {
+      memberSnapshotAttempted: false,
+      memberSnapshotUpdated: false,
+      memberSnapshotKey: null,
+      memberSnapshotError: null,
+    };
+  }
+  const rows = [...args.existing, ...args.payloads.map(storedEvidenceForPayload)];
+  if (rows.length === 0) {
+    return {
+      memberSnapshotAttempted: false,
+      memberSnapshotUpdated: false,
+      memberSnapshotKey: null,
+      memberSnapshotError: null,
+    };
+  }
+  try {
+    const fixture = buildNflWeekOneHeldMemberFixture(rows);
+    const snapshot = buildNflForwardMemberSnapshot({
+      fixture,
+      season: args.season,
+      week: args.week,
+      publishedAt: args.now,
+    });
+    const write = await writeNflForwardMemberSnapshot({ client: args.client, snapshot });
+    return {
+      memberSnapshotAttempted: true,
+      memberSnapshotUpdated: write.ok,
+      memberSnapshotKey: write.snapshotKey,
+      memberSnapshotError: write.ok ? null : write.error,
+    };
+  } catch (error) {
+    return {
+      memberSnapshotAttempted: true,
+      memberSnapshotUpdated: false,
+      memberSnapshotKey: null,
+      memberSnapshotError: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
+function storedEvidenceForPayload(payload: NflForwardEvidencePayload): NflForwardStoredEvidence {
+  return {
+    id: `pending:${payload.runId}:${payload.game.providerGameId}:${payload.stage}`,
+    providerGameId: payload.game.providerGameId,
+    stage: payload.stage,
+    capturedAt: payload.capturedAt,
+    gameStartAt: payload.game.scheduledStart,
+    payloadSha256: hashNflForwardEvidencePayload(payload),
+    payload,
   };
 }
 

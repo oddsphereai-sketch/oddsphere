@@ -867,6 +867,15 @@ check(
     sportSelectorSource.includes("focus-visible:ring-2 focus-visible:ring-violet-300"),
 );
 check(
+  "live sport tabs warm their canonical route on pointer intent or keyboard focus without selecting it",
+  sportSelectorSource.includes("onPrefetch?: (next: Sport) => void") &&
+    sportSelectorSource.includes("onPointerEnter") &&
+    sportSelectorSource.includes("onFocus") &&
+    sportSelectorSource.includes("onPrefetch?.(sport)") &&
+    candidateSource.includes("router.prefetch(destination)") &&
+    candidateSource.includes("function prefetchSport(next: Sport)"),
+);
+check(
   "consensus-only markets do not render an empty sharp-book panel",
   candidateSource.includes("sharp ?? (sharpAvailability === null ? null") &&
     candidateSource.includes("{displayedSharp ? <SplitSourcePanel") &&
