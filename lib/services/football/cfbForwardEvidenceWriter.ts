@@ -33,7 +33,7 @@ import {
 import { buildMarketScopedFootballTrackingPlan } from "./footballMarketScopedTracking";
 
 export const CFB_FORWARD_WRITER_RELEASE =
-  "cfb_forward_evidence_writer_2026_08_26_r6_sharp_prices_market_scoped_t60" as const;
+  "cfb_forward_evidence_writer_2026_08_27_r7_pagination_side_guard" as const;
 export const CFB_FORWARD_MAX_QB_TEAMS_PER_RUN = 24 as const;
 export const CFB_FORWARD_RESULTS_BATCH_SIZE = 100 as const;
 export const CFB_FORWARD_MAX_PRIOR_GAME_IDS = 1200 as const;
