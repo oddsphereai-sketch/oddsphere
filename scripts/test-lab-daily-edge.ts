@@ -2354,17 +2354,18 @@ section("Market Pulse presentation coherence");
       noCrossBookTrail.length === 2 && noCrossBookTrail.every((stop) => stop.sportsbook === "fanduel"),
     );
 
+    const movementCurrentAt = new Date(Date.now() - 60_000).toISOString();
     const movementReference = dailyEdgeTest.selectTwoSidedMovementReference({
       selectedSide: "over",
       opposingSide: "under",
       currentLine: 9.5,
       selectedCurrentRows: [
-        { game_id: 4, market_type: "total", sportsbook: "hardrock", side: "over", line_value: 9.5, odds_american: 100, fetched_at: "2026-08-27T12:05:00Z" },
-        { game_id: 4, market_type: "total", sportsbook: "ballybet", side: "over", line_value: 9.5, odds_american: -105, fetched_at: "2026-08-27T12:05:00Z" },
+        { game_id: 4, market_type: "total", sportsbook: "hardrock", side: "over", line_value: 9.5, odds_american: 100, fetched_at: movementCurrentAt },
+        { game_id: 4, market_type: "total", sportsbook: "ballybet", side: "over", line_value: 9.5, odds_american: -105, fetched_at: movementCurrentAt },
       ],
       opposingCurrentRows: [
-        { game_id: 4, market_type: "total", sportsbook: "hardrock", side: "under", line_value: 9.5, odds_american: -110, fetched_at: "2026-08-27T12:05:00Z" },
-        { game_id: 4, market_type: "total", sportsbook: "ballybet", side: "under", line_value: 9.5, odds_american: -115, fetched_at: "2026-08-27T12:05:00Z" },
+        { game_id: 4, market_type: "total", sportsbook: "hardrock", side: "under", line_value: 9.5, odds_american: -110, fetched_at: movementCurrentAt },
+        { game_id: 4, market_type: "total", sportsbook: "ballybet", side: "under", line_value: 9.5, odds_american: -115, fetched_at: movementCurrentAt },
       ],
       selectedHistory: [
         { id: 31, game_id: 4, market_type: "total", sportsbook: "hardrock", side: "over", line_value: 9.5, odds_american: 100, recorded_at: "2026-08-27T12:05:00Z" },
