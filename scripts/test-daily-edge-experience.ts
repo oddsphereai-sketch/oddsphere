@@ -43,9 +43,16 @@ import {
 } from "../app/lab/lib/dailyEdgeResponseCoherence";
 import {
   DAILY_EDGE_FORECAST_UNAVAILABLE_LABEL,
+  DAILY_EDGE_SPREAD_UNAVAILABLE_LABEL,
+  DAILY_EDGE_TOTAL_UNAVAILABLE_LABEL,
+  dailyEdgeMarketPredictionProvenanceLabel,
   dailyEdgeOutcomeForecastLabel,
   isDailyEdgeOutcomeForecastHealthError,
 } from "../app/lab/lib/dailyEdgeOutcomeForecast";
+import {
+  FOOTBALL_PRIMARY_EVIDENCE_LIMIT,
+  prioritizeFootballEvidenceStats,
+} from "../app/lab/lib/footballEvidencePresentation";
 
 const snapshotPrimerSource = readFileSync(
   "scripts/operator/prime-daily-edge-experience-snapshots.ts",
@@ -298,7 +305,8 @@ const crossSportForecastCases = [
   { sport: "mlb", marketKey: "moneyline", expected: "ARI projected leader" },
   { sport: "wnba", marketKey: "first_inning", expected: "Projected margin ARI 0.9" },
   { sport: "nfl", marketKey: "total", expected: "Projected total 8.3" },
-  { sport: "cfb", marketKey: "first_inning", expected: "Projected margin ARI 0.9" },
+  { sport: "nfl", marketKey: "first_inning", expected: DAILY_EDGE_SPREAD_UNAVAILABLE_LABEL },
+  { sport: "cfb", marketKey: "first_inning", expected: DAILY_EDGE_SPREAD_UNAVAILABLE_LABEL },
   { sport: "soccer", marketKey: "total", expected: "Projected total 8.3" },
   { sport: "nba", marketKey: "moneyline", expected: "ARI projected leader" },
   { sport: "nhl", marketKey: "moneyline", expected: "ARI projected leader" },
@@ -315,9 +323,130 @@ for (const testCase of crossSportForecastCases) {
     label === testCase.expected && !/no play|held/i.test(label),
   );
 }
+const footballSpreadMarketPrediction = {
+  ...structuredClone(chcTotalForecastMarket),
+  marketPrediction: {
+    status: "available",
+    label: "SJSU +38.5",
+    line: 38.5,
+    probability: 0.818,
+    source: "playbook_consensus",
+    sportsbook: null,
+    observedAt: "2026-08-27T19:54:15.711Z",
+    freshnessCheckedAt: "2026-08-27T19:54:15.711Z",
+    reason: null,
+  },
+} as MarketEdgeDto;
+check(
+  "football Spread prediction uses the coherent side and current market line instead of projected margin",
+  dailyEdgeOutcomeForecastLabel({
+    game: { ...chcTotalForecastGame, sport: "cfb", awayTeam: "SJSU", homeTeam: "USC" },
+    market: footballSpreadMarketPrediction,
+    marketKey: "first_inning",
+    sport: "cfb",
+  }) === "SJSU +38.5",
+);
+check(
+  "consensus prediction line is explicitly contextual rather than an available sportsbook offer",
+  dailyEdgeMarketPredictionProvenanceLabel(footballSpreadMarketPrediction) ===
+    "Consensus prediction line · context only, not an available sportsbook offer",
+);
+const unavailableFootballSpread = {
+  ...footballSpreadMarketPrediction,
+  marketPrediction: {
+    ...footballSpreadMarketPrediction.marketPrediction!,
+    status: "market_data_unavailable",
+    label: null,
+    line: null,
+  },
+} as MarketEdgeDto;
+const unavailableFootballSpreadLabel = dailyEdgeOutcomeForecastLabel({
+  game: { ...chcTotalForecastGame, sport: "cfb" },
+  market: unavailableFootballSpread,
+  marketKey: "first_inning",
+  sport: "cfb",
+});
+check(
+  "football Spread never substitutes projected margin when its current line is unavailable",
+  unavailableFootballSpreadLabel === DAILY_EDGE_SPREAD_UNAVAILABLE_LABEL &&
+    isDailyEdgeOutcomeForecastHealthError(unavailableFootballSpreadLabel),
+);
+const unavailableFootballTotalLabel = dailyEdgeOutcomeForecastLabel({
+  game: { ...chcTotalForecastGame, sport: "cfb" },
+  market: unavailableFootballSpread,
+  marketKey: "total",
+  sport: "cfb",
+});
+check(
+  "football Total never substitutes projected total when current market data is explicitly unavailable",
+  unavailableFootballTotalLabel === DAILY_EDGE_TOTAL_UNAVAILABLE_LABEL &&
+    isDailyEdgeOutcomeForecastHealthError(unavailableFootballTotalLabel),
+);
 check(
   "defensive Forecast unavailable copy is classified as a high health error",
   isDailyEdgeOutcomeForecastHealthError(DAILY_EDGE_FORECAST_UNAVAILABLE_LABEL),
+);
+check(
+  "a missing football spread prediction fails closed instead of presenting projected margin as the bettable side",
+  isDailyEdgeOutcomeForecastHealthError(DAILY_EDGE_SPREAD_UNAVAILABLE_LABEL),
+);
+const footballEvidenceRow = (label: string): MarketEdgeDto["keyStats"][number] => ({
+  label,
+  awayValue: "away",
+  homeValue: "home",
+  source: "computed",
+});
+const footballEvidenceRows = [
+  "Expected points",
+  "Current context · Expected quarterback",
+  "Outcome-model input · EPA/play",
+  "Outcome-model input · Success rate",
+  "Outcome-model input · Early-down efficiency",
+  "Outcome-model input · Team strength rating",
+  "Outcome-model input · Prior scoring margin",
+  "Outcome-model input · Line yards per carry",
+  "Outcome-model input · Offensive plays per game",
+  "Outcome-model input · Explosive-play rate",
+  "Outcome-model input · Red-zone success rate",
+  "Outcome-model input · Prior scoring profile",
+  "Model scoring margin",
+  "Model expected total",
+  "80% margin range",
+  "80% total range",
+].map(footballEvidenceRow);
+const footballPrimaryLabels = (marketKey: "moneyline" | "total" | "first_inning") =>
+  prioritizeFootballEvidenceStats(footballEvidenceRows, marketKey)
+    .slice(0, FOOTBALL_PRIMARY_EVIDENCE_LIMIT)
+    .map((row) => row.label);
+check(
+  "football Moneyline prioritizes quarterback and efficiency inputs",
+  JSON.stringify(footballPrimaryLabels("moneyline")) === JSON.stringify([
+    "Current context · Expected quarterback",
+    "Outcome-model input · EPA/play",
+    "Outcome-model input · Success rate",
+    "Outcome-model input · Early-down efficiency",
+    "Outcome-model input · Team strength rating",
+  ]),
+);
+check(
+  "football Spread prioritizes margin, efficiency, and trench inputs",
+  JSON.stringify(footballPrimaryLabels("first_inning")) === JSON.stringify([
+    "Model scoring margin",
+    "Outcome-model input · EPA/play",
+    "Outcome-model input · Line yards per carry",
+    "Outcome-model input · Prior scoring margin",
+    "Outcome-model input · Team strength rating",
+  ]),
+);
+check(
+  "football Total prioritizes projected total, pace, explosiveness, red zone, and scoring profile",
+  JSON.stringify(footballPrimaryLabels("total")) === JSON.stringify([
+    "Model expected total",
+    "Outcome-model input · Offensive plays per game",
+    "Outcome-model input · Explosive-play rate",
+    "Outcome-model input · Red-zone success rate",
+    "Outcome-model input · Prior scoring profile",
+  ]),
 );
 const evaluatedPresentationMarket = {
   held: false,
@@ -794,6 +923,10 @@ check(
 );
 const candidateSource = readFileSync(
   "app/dev/experience-preview/ActualDailyEdgePreview.tsx",
+  "utf8",
+);
+const footballEvidenceSource = readFileSync(
+  "app/lab/lib/footballEvidencePresentation.ts",
   "utf8",
 );
 const sportSwitchSource = readFileSync("app/lab/lib/dailyEdgeSportSwitch.ts", "utf8");
@@ -1290,14 +1423,20 @@ check(
     candidateSource.includes("Core snapshot available"),
 );
 check(
-  "every supplied key-stat row remains reachable in the candidate",
-  candidateSource.includes("visibleStats = market.keyStats") &&
-    candidateSource.includes("visibleStats.map((stat)") &&
+  "football readers prioritize five market-specific drivers while keeping every supplied row reachable",
+  candidateSource.includes("prioritizeFootballEvidenceStats") &&
+    candidateSource.includes("FOOTBALL_PRIMARY_EVIDENCE_LIMIT") &&
+    candidateSource.includes("const primary = orderedStats.slice(0, FOOTBALL_PRIMARY_EVIDENCE_LIMIT)") &&
+    candidateSource.includes("const supporting = orderedStats.slice(FOOTBALL_PRIMARY_EVIDENCE_LIMIT)") &&
+    candidateSource.includes("More supporting evidence") &&
+    candidateSource.includes("supporting.map(driver)") &&
     candidateSource.includes('game.markets[key as MarketKey].keyStats'),
 );
 check(
   "football evidence labels distinguish model inputs from explanatory current context",
-  candidateSource.includes("Forecast & matchup evidence") &&
+  footballEvidenceSource.includes("Win-probability evidence") &&
+    footballEvidenceSource.includes("Spread evidence") &&
+    footballEvidenceSource.includes("Total evidence") &&
     candidateSource.includes("Outcome model input") &&
     candidateSource.includes("Bet model input") &&
     candidateSource.includes("Current context") &&

@@ -4,7 +4,10 @@ import path from "node:path";
 import { isPublicallyTracked } from "../lib/config/officialTrackingStart";
 import { buildCfbMemberFixture } from "../lib/services/football/cfbMemberFixture";
 import { finalizeDailyEdgeResponseCoherence } from "../app/lab/lib/dailyEdgeResponseCoherence";
-import { dailyEdgeOutcomeForecastLabel } from "../app/lab/lib/dailyEdgeOutcomeForecast";
+import {
+  DAILY_EDGE_SPREAD_UNAVAILABLE_LABEL,
+  dailyEdgeOutcomeForecastLabel,
+} from "../app/lab/lib/dailyEdgeOutcomeForecast";
 import {
   CFB_FORWARD_EVIDENCE_COLLECTOR_RELEASE,
   CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE,
@@ -296,6 +299,22 @@ assert.ok(Math.abs((heldGame.markets.first_inning.modelProb ?? 0) - heldProbabil
 assert.ok(Math.abs((heldGame.markets.total.modelProb ?? 0) - heldProbabilities.total.over) < 1e-12, "Held Total must retain the same-PMF probability at the Playbook context line");
 assert.equal(heldGame.markets.first_inning.line, -7.5);
 assert.equal(heldGame.markets.total.line, 47.5);
+assert.deepEqual(heldGame.markets.first_inning.marketPrediction, {
+  status: "available",
+  label: heldProbabilities.spread.home >= heldProbabilities.spread.away ? "TCU -7.5" : "UNC +7.5",
+  line: heldProbabilities.spread.home >= heldProbabilities.spread.away ? -7.5 : 7.5,
+  probability: Math.max(heldProbabilities.spread.home, heldProbabilities.spread.away),
+  source: "playbook_consensus",
+  sportsbook: null,
+  observedAt,
+  freshnessCheckedAt: observedAt,
+  reason: "The prediction uses the current Playbook market line; an eligible exact sportsbook price tuple is unavailable for Bet grading.",
+});
+assert.equal(
+  dailyEdgeOutcomeForecastLabel({ game: heldGame, market: heldGame.markets.first_inning, marketKey: "first_inning", sport: "cfb" }),
+  heldGame.markets.first_inning.marketPrediction?.label,
+  "a held exact-price Spread must still publish its coherent PMF side at the current market line",
+);
 assert.equal(heldGame.markets.moneyline.marketFairProb, null);
 assert.equal(heldGame.markets.moneyline.priceAmerican, null);
 assert.equal(heldGame.markets.moneyline.recommendationConfidence, null);
@@ -332,6 +351,27 @@ for (const marketKey of ["moneyline", "total", "first_inning"] as const) {
   });
   assert.doesNotMatch(label, /No Play|Held/, `CFB ${marketKey} prediction label cannot reuse its Bet grade or internal health state`);
 }
+
+const missingLinePayload = structuredClone(heldPayload);
+missingLinePayload.market.playbookLine = null;
+missingLinePayload.decisions.marketOutlooks = buildCfbForwardMarketOutlooks({ forecast, playbookLine: null });
+const missingLineMember = buildCfbMemberFixture([{
+  id: "missing-line-row",
+  providerGameId: game.providerGameId,
+  gameStartAt,
+  stage: "unlocked",
+  capturedAt: observedAt,
+  payloadSha256: hashCfbForwardEvidencePayload(missingLinePayload),
+  payload: missingLinePayload,
+}]);
+const missingSpreadMarket = missingLineMember.snapshot.games[0]!.markets.first_inning;
+assert.equal(missingSpreadMarket.marketPrediction?.status, "market_data_unavailable");
+assert.equal(missingSpreadMarket.marketPrediction?.label, null);
+assert.equal(
+  dailyEdgeOutcomeForecastLabel({ game: missingLineMember.snapshot.games[0]!, market: missingSpreadMarket, marketKey: "first_inning", sport: "cfb" }),
+  DAILY_EDGE_SPREAD_UNAVAILABLE_LABEL,
+  "missing current Spread data must report market health instead of substituting projected margin",
+);
 
 const noTotalBooks = currentBooks.map((currentBook) => ({ ...currentBook, total: null }));
 const noTotalBundle = buildCfbV1DecisionBundle({

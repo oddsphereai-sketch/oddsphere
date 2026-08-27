@@ -205,6 +205,24 @@ export type MarketEvidenceCoherenceDto = {
   note: string | null;
 };
 
+export type MarketPredictionDto = {
+  /**
+   * Model-owned directional prediction at the stated market line. This is
+   * deliberately separate from `pick`, which is the exact-price Bet-grade
+   * selection. A prediction may therefore remain available while the Bet
+   * grade is No Play because no eligible target price/consensus tuple exists.
+   */
+  status: "available" | "market_data_unavailable";
+  label: string | null;
+  line: number | null;
+  probability: number | null;
+  source: "exact_named_book" | "playbook_consensus" | "model_outcome" | null;
+  sportsbook: string | null;
+  observedAt: string | null;
+  freshnessCheckedAt: string | null;
+  reason: string | null;
+};
+
 export type MarketEdgeDto = {
   // ── existing per-pick fields (preserved from DailyEdgePredictionDto) ──
   pick: string | null;
@@ -235,6 +253,13 @@ export type MarketEdgeDto = {
    * DailyEdgeGameDto.holdReason carries the model's reason string.
    */
   held: boolean;
+
+  /**
+   * Directional market forecast used only by prediction surfaces. It must
+   * never be inferred from a Bet grade, and it never supplies a missing
+   * sportsbook price, edge, EV, actionability score, or tracking tuple.
+   */
+  marketPrediction?: MarketPredictionDto | null;
 
   // ── 4.1.10 per-market verdict ──
   verdict: { key: Verdict; label: string };
