@@ -223,8 +223,10 @@ assert.ok(leaguePills.includes('href: reviewMode ? "/dev/mlb-props-preview" : "/
 assert.ok(leaguePills.includes('reviewMode ? "/dev/nfl-props-preview" : "/player-props?league=nfl"'));
 assert.ok(leaguePills.includes('active ? "Active" : item.href ? "View props" : "Coming soon"'));
 assert.ok(leaguePills.includes("<PlayerPropsLeagueLink"), "both live league pills use the shared intent-prefetch link");
+assert.ok(leaguePills.includes("prefetchOnMount={!active}"), "only the inactive league destination is warmed when the shared rail mounts");
 assert.ok(leagueLink.includes('from "next/link"') && leagueLink.includes('from "next/navigation"'));
 assert.ok(leagueLink.includes("router.prefetch(href)"), "league intent warms the exact canonical destination");
+assert.ok(leagueLink.includes("if (prefetchOnMount) router.prefetch(href)"), "dynamic opposite-league RSC payload warms before click intent");
 assert.ok(leagueLink.includes("onPointerEnter={prefetch}") && leagueLink.includes("onFocus={prefetch}"), "pointer and keyboard intent prefetch without replacing Link navigation");
 assert.ok(!leagueLink.includes("router.push") && !leagueLink.includes("preventDefault"), "prefetch does not replace native Link history behavior");
 assert.equal((mlbPage.match(/<PlayerPropsLeaguePills/g) ?? []).length, 3, "each MLB page result renders exactly one shared league rail");
