@@ -8,6 +8,7 @@ import { isProductExperiencePreviewAvailable } from "@/lib/config/productExperie
 import {
   NFL_PLAYER_PROPS_PRODUCTION_CANDIDATE_RELEASE,
   NFL_PLAYER_PROPS_WRITER_LEASE_GROUP,
+  buildNflPlayerPropsMemberSnapshot,
   type NflPlayerPropsProductionSnapshot,
 } from "@/lib/services/football/nflPlayerPropsProductionContract";
 import type { NflPlayerPropsRuntimeBoard, NflPlayerPropsRuntimeDecision } from "@/lib/services/football/nflPlayerPropsRuntime";
@@ -23,7 +24,7 @@ export default async function NflPropsPreviewPage({ searchParams }: { searchPara
   const query = await searchParams;
   const requestedReader = typeof query.reader === "string" ? query.reader : null;
   const initialSelectedKey = snapshot?.memberDecisions.some((row) => decisionKey(row) === requestedReader) ? requestedReader : null;
-  return <ProductAppFrame><PlayerPropsLeaguePills league="nfl" nflEnabled reviewMode /><NflPlayerPropsDashboard snapshot={snapshot} reviewMode initialSelectedKey={initialSelectedKey} /></ProductAppFrame>;
+  return <ProductAppFrame><PlayerPropsLeaguePills league="nfl" nflEnabled reviewMode /><NflPlayerPropsDashboard snapshot={snapshot ? buildNflPlayerPropsMemberSnapshot(snapshot) : null} reviewMode initialSelectedKey={initialSelectedKey} /></ProductAppFrame>;
 }
 
 async function loadLocalReviewSnapshot(): Promise<NflPlayerPropsProductionSnapshot | null> {

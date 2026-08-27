@@ -24,7 +24,7 @@ import {
 } from "./nflPlayerPropsSettlement";
 
 export const NFL_PLAYER_PROPS_WRITER_RELEASE =
-  "nfl_player_props_writer_2026_08_25_r5_bounded_settlement" as const;
+  "nfl_player_props_writer_2026_08_27_r7_projection_context" as const;
 export const NFL_PLAYER_PROPS_PRODUCTION_INCLUDE_OPENINGS = false as const;
 export const NFL_PLAYER_PROPS_PRODUCTION_COLLECTION_CALL_MAXIMUM = (
   1

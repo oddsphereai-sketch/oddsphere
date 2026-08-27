@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import {
   attachNflPlayerPropsClosingPrice,
+  buildNflPlayerPropsMemberSnapshot,
   buildNflPlayerPropsTrackingRows,
   NFL_PLAYER_PROPS_PRODUCTION_CANDIDATE_RELEASE,
   NFL_PLAYER_PROPS_WRITER_LEASE_GROUP,
@@ -19,25 +20,40 @@ import {
   NFL_PLAYER_PROPS_SETTLEMENT_RELEASE,
 } from "../lib/services/football/nflPlayerPropsSettlement";
 import { NFL_PLAYER_PROPS_TRACKING_RELEASE } from "../lib/services/football/nflPlayerPropsTrackingStore";
-import type { NflPlayerPropsRuntimeBoard, NflPlayerPropsRuntimeDecision } from "../lib/services/football/nflPlayerPropsRuntime";
+import { NFL_PLAYER_PROPS_BOARD_RELEASE, type NflPlayerPropsRuntimeBoard, type NflPlayerPropsRuntimeDecision } from "../lib/services/football/nflPlayerPropsRuntime";
 
 const decision: NflPlayerPropsRuntimeDecision = {
-  gameId: "game", providerPlayerId: "1", playerName: "Player", team: "NE", market: "receptions", line: 4.5, side: "over",
+  gameId: "game", providerPlayerId: "1", playerName: "Player", team: "NE", opponent: "NYJ",
+  scheduledStart: "2026-09-01T12:00:00.000Z", market: "receptions", line: 4.5, side: "over",
   sportsbook: "book", provider: "balldontlie", americanPrice: 110, observedAt: "2026-08-25T11:00:00.000Z",
+  bookEvidence: [{ sportsbook: "book", provider: "balldontlie", americanPrice: 110, observedAt: "2026-08-25T11:00:00.000Z", openingObservedAt: null, openingAmericanPrice: null }],
   lockAt: "2026-09-01T11:00:00.000Z", state: "unlocked", roleFingerprint: "role-a", projection: 5.2,
+  projectionRange: { lower: 2.1, upper: 8.4, centralCoverage: 0.8, source: "empirical_residual_distribution" },
+  forecastContext: {
+    featureAsOf: "2026-08-25T10:00:00.000Z", position: "WR",
+    expectedQuarterback: { name: "Quarterback", starterStatus: "projected", capturedAt: "2026-08-25T10:00:00.000Z" },
+    availability: { listed: false, status: null, detail: null, reportedAt: null, reportUpdatedAt: "2026-08-25T09:00:00.000Z", source: "BALLDONTLIE" },
+    teamImpliedPoints: 24.5, teamImpliedTouchdowns: 3.5,
+    recentProduction: { label: "Recent receptions", value: 5.1, format: "count" },
+    roleOpportunity: [{ label: "Recent targets", value: 7.4, format: "count" }],
+    opponentAllowance: { label: "Opponent targets allowed", value: 31.2, format: "count" },
+  },
   participationProbability: 0.9, rawModelProbability: 0.61, marketProbability: 0.5, finalProbability: 0.53,
   probabilityEdge: 0.03, expectedValue: 0.11, grade: "Best Angle", healthHolds: [], provisional: false,
   modelRelease: "model", calibrationRelease: "calibration", decisionRelease: "decision",
 };
 function board(row: NflPlayerPropsRuntimeDecision): NflPlayerPropsRuntimeBoard {
   return {
-    release: "nfl_player_props_board_2026_08_25_r2_shared_context", generatedAt: "2026-08-25T12:00:00.000Z",
+    release: NFL_PLAYER_PROPS_BOARD_RELEASE, generatedAt: "2026-08-25T12:00:00.000Z",
     evaluatedAt: "2026-08-25T12:00:00.000Z", provisional: false, publicationEnabled: false, trackingEnabled: false,
     decisions: [row], counts: { "Best Angle": 1, Lean: 0, Watchlist: 0, "No Play": 0, Held: 0, actionable: 1 },
     diagnostics: {
       inputOffers: 1, completeExactOffers: 1, incompleteExactOffers: 0, lockedOffers: 0,
       unavailableNoIndependentBenchmark: 0, unavailableStaleQuotes: 0, unavailableFeatureContext: 0,
-      roleOrIdentityHeld: 0,
+      completedEvaluations: row.grade === "Held" ? 0 : 1,
+      operationalExceptions: row.grade === "Held" ? 1 : 0,
+      recoveryEligibleOperationalExceptions: row.grade === "Held" && row.state === "unlocked" ? 1 : 0,
+      roleOrIdentityHeld: row.grade === "Held" ? 1 : 0,
     },
   };
 }
@@ -50,8 +66,8 @@ function emptyBoard(): NflPlayerPropsRuntimeBoard {
 }
 
 const unlocked = reconcileNflPlayerPropsProductionSnapshot({ season: 2026, week: 1, evaluatedAt: "2026-08-25T12:00:00.000Z", nextBoard: board(decision) });
-assert.equal(NFL_PLAYER_PROPS_PRODUCTION_CANDIDATE_RELEASE, "nfl_player_props_member_2026_08_25_r4_shared_context_load_bound");
-assert.equal(NFL_PLAYER_PROPS_WRITER_RELEASE, "nfl_player_props_writer_2026_08_25_r5_bounded_settlement");
+assert.equal(NFL_PLAYER_PROPS_PRODUCTION_CANDIDATE_RELEASE, "nfl_player_props_member_2026_08_27_r6_projection_context");
+assert.equal(NFL_PLAYER_PROPS_WRITER_RELEASE, "nfl_player_props_writer_2026_08_27_r7_projection_context");
 assert.equal(NFL_PLAYER_PROPS_TRACKING_RELEASE, "nfl_player_props_tracking_2026_08_25_r4_regular_t60_shared_context");
 assert.equal(NFL_PLAYER_PROPS_SETTLEMENT_RELEASE, "nfl_player_props_settlement_2026_08_25_r3_bounded_finality");
 assert.equal(NFL_PLAYER_PROPS_PRODUCTION_INCLUDE_OPENINGS, false, "recurring production does not duplicate historical-opening requests");
@@ -65,6 +81,31 @@ for (const release of [NFL_PLAYER_PROPS_PRODUCTION_CANDIDATE_RELEASE, NFL_PLAYER
 assert.equal(unlocked.writerLeaseGroup, NFL_PLAYER_PROPS_WRITER_LEASE_GROUP);
 assert.equal(unlocked.lifecycle.recomputedUnlocked, 1);
 assert.equal(buildNflPlayerPropsTrackingRows(unlocked).length, 0);
+
+const operationalHeld = reconcileNflPlayerPropsProductionSnapshot({
+  season: 2026, week: 1, evaluatedAt: "2026-08-25T12:00:00.000Z",
+  nextBoard: board({ ...decision, grade: "Held", healthHolds: ["historical_identity_ambiguous"] }),
+});
+assert.equal(operationalHeld.board.counts.Held, 1, "Held remains visible in the audit payload as an operational exception");
+assert.equal(operationalHeld.board.diagnostics.completedEvaluations, 0);
+assert.equal(operationalHeld.board.diagnostics.operationalExceptions, 1);
+assert.equal(operationalHeld.board.diagnostics.recoveryEligibleOperationalExceptions, 1);
+assert.equal(operationalHeld.memberDecisions.length, 0, "Held is excluded from member completeness rather than treated as a completed grade");
+assert.equal(buildNflPlayerPropsTrackingRows(operationalHeld).length, 0, "Held is never official tracking eligibility");
+const operationalMemberView = buildNflPlayerPropsMemberSnapshot(operationalHeld);
+assert.equal(operationalMemberView.memberDecisions.length, 0, "the public DTO excludes internal operational exceptions");
+assert.deepEqual(operationalMemberView.board.counts, { "Best Angle": 0, Lean: 0, Watchlist: 0, "No Play": 0, actionable: 0 });
+assert.equal(operationalMemberView.board.diagnostics.completedEvaluations, 0);
+assert.ok(!JSON.stringify(operationalMemberView).includes("Held"), "the public DTO serializes no Held grade, count, or diagnostic");
+assert.ok(!("operationalExceptions" in operationalMemberView.board.diagnostics));
+assert.ok(!("recoveryEligibleOperationalExceptions" in operationalMemberView.board.diagnostics));
+const recoveredIdentity = reconcileNflPlayerPropsProductionSnapshot({
+  season: 2026, week: 1, evaluatedAt: "2026-08-25T12:05:00.000Z",
+  previous: operationalHeld,
+  nextBoard: board(decision),
+});
+assert.equal(recoveredIdentity.memberDecisions.length, 1, "a later coherent unlocked identity/role evaluation may recover the row");
+assert.equal(recoveredIdentity.memberDecisions[0]?.grade, "Best Angle", "recovery uses the newly coherent scored decision, not a Held-to-No-Edge conversion");
 
 const changed = { ...decision, americanPrice: 120, roleFingerprint: "role-b" };
 const locked = reconcileNflPlayerPropsProductionSnapshot({ season: 2026, week: 1, evaluatedAt: "2026-09-01T11:00:00.000Z", previous: unlocked, nextBoard: board(changed) });
@@ -122,6 +163,23 @@ for (const productHierarchy of ["Top Rated", "Our Model Read", "Worth a Look", "
 assert.ok(memberReader.includes('data-product-zone="top-rated"'));
 assert.ok(memberReader.includes('data-product-zone="worth-a-look"'));
 assert.ok(memberReader.includes('data-product-zone="markets"'));
+for (const truthfulCoverageCopy of ["Current graded board", "Available NFL markets", "market families currently graded"]) {
+  assert.ok(memberReader.includes(truthfulCoverageCopy), `NFL board scopes coverage truthfully: ${truthfulCoverageCopy}`);
+}
+for (const overclaim of ["Every market is modeled", "All NFL props", ">All props<"]) {
+  assert.ok(!memberReader.includes(overclaim), `NFL board does not overclaim category coverage: ${overclaim}`);
+}
+for (const diagnostic of ["unavailableNoIndependentBenchmark", "incompleteExactOffers", "unavailableStaleQuotes", "unavailableFeatureContext", "completedEvaluations"]) {
+  assert.ok(memberReader.includes(diagnostic), `NFL member coverage discloses ${diagnostic}`);
+}
+for (const internalOnly of ["Held", "operationalExceptions", "recoveryEligibleOperationalExceptions", "roleOrIdentityHeld"]) {
+  assert.ok(!memberReader.includes(internalOnly), `NFL member component must not expose internal alert state: ${internalOnly}`);
+}
+for (const readerEvidence of ["Available Exact Prices", "Same-Book Movement", "row.bookEvidence", "row.opponent", "row.scheduledStart", "provider(row.provider)", "OddSphere Forecast", "Projection Context", "Empirical 80% model range"]) {
+  assert.ok(memberReader.includes(readerEvidence), `NFL reader exposes conformance evidence: ${readerEvidence}`);
+}
+assert.ok(!memberReader.includes("No Edge"), "NFL uses the current universal No Play member vocabulary");
+assert.ok(memberReader.includes("Offers without a complete public evaluation are excluded from the board; they are not relabeled as No Play."));
 assert.ok(memberReader.includes("PlayerPropReaderDialog"), "NFL uses the shared MLB/NFL reader behavior contract");
 assert.ok(memberReader.includes("initialSelectedKey"));
 assert.ok(memberReader.includes('url.searchParams.set("reader", selectedKey)'));
@@ -156,6 +214,7 @@ const memberPage = readFileSync("app/player-props/page.tsx", "utf8");
 assert.ok(memberPage.includes('process.env.NFL_PLAYER_PROPS_MEMBER_ENABLED === "true"'));
 assert.ok(memberPage.includes('if (!enabled || query.league !== "nfl") redirect("/mlb/props")'));
 assert.ok(memberPage.includes("requestedReader") && memberPage.includes("initialSelectedKey"));
+assert.ok(memberPage.includes("buildNflPlayerPropsMemberSnapshot(snapshot)"), "the live route serializes the public DTO, not the stored audit snapshot");
 const mlbPage = readFileSync("app/mlb/props/page.tsx", "utf8");
 assert.ok(mlbPage.includes('nflEnabled={process.env.NFL_PLAYER_PROPS_MEMBER_ENABLED === "true"}'), "MLB hides the NFL pill until the member flag is enabled");
 const leaguePills = readFileSync("app/player-props/components/PlayerPropsLeaguePills.tsx", "utf8");

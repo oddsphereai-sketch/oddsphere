@@ -5,6 +5,8 @@ import type { NflPlayerPropsExactOffer } from "./nflPlayerPropsMarketBoard";
 
 export const NFL_PLAYER_PROPS_RUNTIME_RELEASE =
   "nfl_player_props_runtime_2026_08_25_r2_shared_context" as const;
+export const NFL_PLAYER_PROPS_BOARD_RELEASE =
+  "nfl_player_props_board_2026_08_27_r4_projection_context" as const;
 
 type TreeNode = {
   value: number; featureIndex: number; threshold: number; missingGoToLeft: boolean;
@@ -64,6 +66,13 @@ export type NflPlayerPropsRuntimeFeatureRow = {
   gameId: string; playerName: string; team: string; opponent: string; position: string | null;
   featureAsOf: string; roleFingerprint: string; scoreEligible: boolean; healthHolds: string[];
   teamImpliedPoints: number | null; teamImpliedTouchdowns: number | null;
+  expectedQuarterback: {
+    name: string; starterStatus: "confirmed" | "projected" | "unknown"; capturedAt: string;
+  } | null;
+  availability: {
+    listed: boolean; status: string | null; detail: string | null; reportedAt: string | null;
+    reportUpdatedAt: string | null; source: "ESPN" | "Playbook" | "BALLDONTLIE";
+  };
   features: Record<string, number | null>;
 };
 
@@ -75,24 +84,48 @@ export type NflPlayerPropsRuntimeScore = {
 };
 
 export type NflPlayerPropsGrade = "Best Angle" | "Lean" | "Watchlist" | "No Play" | "Held";
+export type NflPlayerPropsBookEvidence = {
+  sportsbook: string; provider: string; americanPrice: number; observedAt: string;
+  openingObservedAt: string | null; openingAmericanPrice: number | null;
+};
+export type NflPlayerPropsProjectionRange = {
+  lower: number; upper: number; centralCoverage: 0.8; source: "empirical_residual_distribution";
+};
+export type NflPlayerPropsForecastMetric = {
+  label: string; value: number; format: "count" | "yards" | "percent";
+};
+export type NflPlayerPropsForecastContext = {
+  featureAsOf: string; position: string | null;
+  expectedQuarterback: NflPlayerPropsRuntimeFeatureRow["expectedQuarterback"];
+  availability: NflPlayerPropsRuntimeFeatureRow["availability"];
+  teamImpliedPoints: number | null; teamImpliedTouchdowns: number | null;
+  recentProduction: NflPlayerPropsForecastMetric | null;
+  roleOpportunity: NflPlayerPropsForecastMetric[];
+  opponentAllowance: NflPlayerPropsForecastMetric | null;
+};
 export type NflPlayerPropsRuntimeDecision = {
-  gameId: string; providerPlayerId: string | null; playerName: string; team: string; market: NflPlayerPropMarket; line: number;
+  gameId: string; providerPlayerId: string | null; playerName: string; team: string; opponent: string;
+  scheduledStart: string; market: NflPlayerPropMarket; line: number;
   side: "over" | "under" | "yes"; sportsbook: string; provider: string; americanPrice: number;
+  bookEvidence: NflPlayerPropsBookEvidence[];
   observedAt: string; lockAt: string; state: "unlocked" | "locked"; roleFingerprint: string;
-  projection: number | null; participationProbability: number; rawModelProbability: number;
+  projection: number | null; projectionRange: NflPlayerPropsProjectionRange | null;
+  forecastContext: NflPlayerPropsForecastContext;
+  participationProbability: number; rawModelProbability: number;
   marketProbability: number; finalProbability: number; probabilityEdge: number; expectedValue: number;
   grade: NflPlayerPropsGrade; healthHolds: string[]; provisional: false;
   modelRelease: string; calibrationRelease: string; decisionRelease: string;
 };
 
 export type NflPlayerPropsRuntimeBoard = {
-  release: "nfl_player_props_board_2026_08_25_r2_shared_context";
+  release: typeof NFL_PLAYER_PROPS_BOARD_RELEASE;
   generatedAt: string; evaluatedAt: string; provisional: false; publicationEnabled: false; trackingEnabled: false;
   decisions: NflPlayerPropsRuntimeDecision[];
   counts: Record<NflPlayerPropsGrade, number> & { actionable: number };
   diagnostics: {
     inputOffers: number; completeExactOffers: number; incompleteExactOffers: number; lockedOffers: number;
     unavailableNoIndependentBenchmark: number; unavailableStaleQuotes: number; unavailableFeatureContext: number;
+    completedEvaluations: number; operationalExceptions: number; recoveryEligibleOperationalExceptions: number;
     roleOrIdentityHeld: number;
   };
 };
@@ -116,10 +149,7 @@ export function scoreNflPlayerPropsRuntimeFeatures(features: Record<string, numb
 export function nflPlayerPropsOverProbability(market: string, projection: number, line: number): number {
   const component = artifact.markets[market];
   if (!component) throw new Error(`NFL props runtime market is unsupported: ${market}`);
-  const distribution = component.distribution;
-  let selected: EmpiricalDistribution;
-  if (distribution.family === "empirical_residual") selected = distribution;
-  else selected = distribution.buckets.find((bucket) => bucket.lower <= projection && projection <= bucket.upper)?.distribution ?? distribution.fallback;
+  const selected = selectEmpiricalDistribution(component.distribution, projection);
   const target = line - Math.max(projection, 1e-6);
   const residuals = selected.residualQuantiles;
   let low = 0; let high = residuals.length;
@@ -129,6 +159,23 @@ export function nflPlayerPropsOverProbability(market: string, projection: number
     else high = middle;
   }
   return 1 - low / residuals.length;
+}
+
+export function nflPlayerPropsProjectionRange(
+  market: string,
+  projection: number,
+): NflPlayerPropsProjectionRange {
+  const component = artifact.markets[market];
+  if (!component) throw new Error(`NFL props runtime market is unsupported: ${market}`);
+  const residuals = selectEmpiricalDistribution(component.distribution, projection).residualQuantiles;
+  const lowerResidual = empiricalQuantile(residuals, 0.1);
+  const upperResidual = empiricalQuantile(residuals, 0.9);
+  return {
+    lower: Math.max(0, projection + lowerResidual),
+    upper: Math.max(0, projection + upperResidual),
+    centralCoverage: 0.8,
+    source: "empirical_residual_distribution",
+  };
 }
 
 export function nflPlayerPropsResidualProbability(model: number, market: number, weight: number): number {
@@ -174,6 +221,7 @@ export function buildNflPlayerPropsRuntimeFeatureRows(args: {
       injury && ["out", "inactive", "injured reserve", "ir"].includes(injury.status.toLowerCase()) ? "player_listed_out" : null,
     ].filter((value): value is string => value !== null);
     const impliedPoints = impliedTeamPoints(game, team);
+    const teamDepth = team === home ? game.homeDepth : game.awayDepth;
     const features: Record<string, number | null> = {};
     for (const name of new Set([...artifact.featureNames, ...artifact.touchdown.featureNames])) features[name] = null;
     mergeNumeric(features, playerState); mergeNumeric(features, artifact.teamStates[team]); mergeNumeric(features, artifact.opponentStates[opponent]);
@@ -186,6 +234,16 @@ export function buildNflPlayerPropsRuntimeFeatureRows(args: {
       roleFingerprint: stableRoleFingerprint({ roster, injury }), scoreEligible: holds.length === 0,
       healthHolds: holds, teamImpliedPoints: impliedPoints,
       teamImpliedTouchdowns: features.team_implied_touchdowns, features,
+      expectedQuarterback: teamDepth.expectedStartingQuarterback ? {
+        name: teamDepth.expectedStartingQuarterback.name,
+        starterStatus: teamDepth.starterStatus,
+        capturedAt: teamDepth.capturedAt,
+      } : null,
+      availability: {
+        listed: Boolean(injury), status: injury?.status ?? null, detail: injury?.detail ?? null,
+        reportedAt: injury?.reportedAt ?? null, reportUpdatedAt: game.injuries.reportUpdatedAt,
+        source: game.injuries.source,
+      },
     };
   });
 }
@@ -275,15 +333,22 @@ export function buildNflPlayerPropsRuntimeBoard(args: {
     }
   }
   const bestPrice = new Map<string, NflPlayerPropsRuntimeDecision>();
+  const evidenceByOutcome = new Map<string, NflPlayerPropsBookEvidence[]>();
   for (const row of decisions) {
     const key = `${row.gameId}|${normalizeName(row.playerName)}|${row.market}|${row.line}|${row.side}`;
+    evidenceByOutcome.set(key, [...(evidenceByOutcome.get(key) ?? []), ...row.bookEvidence]);
     const previous = bestPrice.get(key);
     if (!previous || row.americanPrice > previous.americanPrice) bestPrice.set(key, row);
   }
-  const deduped = [...bestPrice.values()].sort(compareDecision);
+  const deduped = [...bestPrice.entries()].map(([key, row]) => ({
+    ...row,
+    bookEvidence: [...(evidenceByOutcome.get(key) ?? [])].sort((first, second) =>
+      second.americanPrice - first.americanPrice || first.sportsbook.localeCompare(second.sportsbook)),
+  })).sort(compareDecision);
   const count = (grade: NflPlayerPropsGrade) => deduped.filter((row) => row.grade === grade).length;
+  const operationalExceptions = deduped.filter((row) => row.grade === "Held");
   return {
-    release: "nfl_player_props_board_2026_08_25_r2_shared_context", generatedAt: new Date(evaluatedAt).toISOString(), evaluatedAt: args.evaluatedAt,
+    release: NFL_PLAYER_PROPS_BOARD_RELEASE, generatedAt: new Date(evaluatedAt).toISOString(), evaluatedAt: args.evaluatedAt,
     provisional: false, publicationEnabled: false, trackingEnabled: false, decisions: deduped,
     counts: { "Best Angle": count("Best Angle"), Lean: count("Lean"), Watchlist: count("Watchlist"), "No Play": count("No Play"), Held: count("Held"), actionable: count("Best Angle") + count("Lean") },
     diagnostics: {
@@ -293,7 +358,10 @@ export function buildNflPlayerPropsRuntimeBoard(args: {
       unavailableNoIndependentBenchmark: unavailableBenchmarkKeys.size,
       unavailableStaleQuotes: staleOutcomeKeys.size,
       unavailableFeatureContext: unavailableFeatureKeys.size,
-      roleOrIdentityHeld: deduped.filter((row) => row.grade === "Held").length,
+      completedEvaluations: deduped.length - operationalExceptions.length,
+      operationalExceptions: operationalExceptions.length,
+      recoveryEligibleOperationalExceptions: operationalExceptions.filter((row) => row.state === "unlocked").length,
+      roleOrIdentityHeld: operationalExceptions.length,
       lockedOffers: exact.filter((offer) => offer.state === "locked").length,
     },
   };
@@ -388,14 +456,107 @@ function decisionRow(
   side: "over" | "under" | "yes", price: number, projection: number | null, raw: number, market: number,
   final: number, edge: number, expectedValue: number, grade: NflPlayerPropsGrade, holds: string[], modelRelease: string, calibrationRelease: string,
 ): NflPlayerPropsRuntimeDecision {
+  const openingAmericanPrice = side === "over"
+    ? offer.openingOverPrice
+    : side === "under"
+      ? offer.openingUnderPrice
+      : offer.openingYesPrice;
   return {
-    gameId: offer.canonicalGameId, providerPlayerId: offer.providerPlayerId, playerName: offer.playerName, team: feature.team, market: offer.market,
+    gameId: offer.canonicalGameId, providerPlayerId: offer.providerPlayerId, playerName: offer.playerName,
+    team: feature.team, opponent: feature.opponent, scheduledStart: offer.scheduledStart, market: offer.market,
     line: offer.line, side, sportsbook: offer.sportsbook, provider: offer.provider, americanPrice: price,
+    bookEvidence: [{
+      sportsbook: offer.sportsbook, provider: offer.provider, americanPrice: price, observedAt: offer.observedAt,
+      openingObservedAt: offer.openingObservedAt, openingAmericanPrice,
+    }],
     observedAt: offer.observedAt, lockAt: offer.lockAt, state: offer.state, roleFingerprint: feature.roleFingerprint,
-    projection, participationProbability: score.participationProbability, rawModelProbability: raw,
+    projection,
+    projectionRange: projection === null ? null : nflPlayerPropsProjectionRange(offer.market, projection),
+    forecastContext: buildForecastContext(feature, offer.market),
+    participationProbability: score.participationProbability, rawModelProbability: raw,
     marketProbability: market, finalProbability: final, probabilityEdge: edge, expectedValue, grade,
     healthHolds: [...new Set(holds)].sort(), provisional: false, modelRelease, calibrationRelease,
     decisionRelease: artifact.decisionRelease,
+  };
+}
+
+function selectEmpiricalDistribution(distribution: Distribution, projection: number): EmpiricalDistribution {
+  if (distribution.family === "empirical_residual") return distribution;
+  return distribution.buckets.find((bucket) => bucket.lower <= projection && projection <= bucket.upper)?.distribution
+    ?? distribution.fallback;
+}
+
+function empiricalQuantile(values: number[], probability: number): number {
+  if (values.length === 0) throw new Error("NFL props empirical residual distribution is empty.");
+  const index = Math.min(values.length - 1, Math.max(0, Math.round(probability * (values.length - 1))));
+  return values[index]!;
+}
+
+function buildForecastContext(
+  feature: NflPlayerPropsRuntimeFeatureRow,
+  market: NflPlayerPropMarket,
+): NflPlayerPropsForecastContext {
+  const marketConfig: Record<string, {
+    production: [string, string, NflPlayerPropsForecastMetric["format"]];
+    opportunity: Array<[string, string, NflPlayerPropsForecastMetric["format"]]>;
+    opponent: [string, string, NflPlayerPropsForecastMetric["format"]];
+  }> = {
+    passing_attempts: {
+      production: ["Recent pass attempts", "prior_passing_attempts_ewm", "count"],
+      opportunity: [["Team pass attempts", "prior_team_pass_attempts_ewm", "count"], ["Player pass share", "prior_pass_attempt_share_ewm", "percent"]],
+      opponent: ["Opponent pass attempts allowed", "prior_opponent_allowed_pass_attempts_ewm", "count"],
+    },
+    passing_completions: {
+      production: ["Recent completions", "prior_passing_completions_ewm", "count"],
+      opportunity: [["Recent pass attempts", "prior_passing_attempts_ewm", "count"], ["Team pass attempts", "prior_team_pass_attempts_ewm", "count"]],
+      opponent: ["Opponent completions allowed", "prior_opponent_allowed_completions_ewm", "count"],
+    },
+    passing_yards: {
+      production: ["Recent passing yards", "prior_passing_yards_ewm", "yards"],
+      opportunity: [["Recent pass attempts", "prior_passing_attempts_ewm", "count"], ["Team pass attempts", "prior_team_pass_attempts_ewm", "count"]],
+      opponent: ["Opponent passing yards allowed", "prior_opponent_allowed_passing_yards_ewm", "yards"],
+    },
+    rushing_attempts: {
+      production: ["Recent carries", "prior_rushing_attempts_ewm", "count"],
+      opportunity: [["Rush-attempt share", "prior_rush_attempt_share_ewm", "percent"], ["Offensive snap share", "prior_offense_snap_pct_ewm", "percent"]],
+      opponent: ["Opponent rush attempts allowed", "prior_opponent_allowed_rush_attempts_ewm", "count"],
+    },
+    rushing_yards: {
+      production: ["Recent rushing yards", "prior_rushing_yards_ewm", "yards"],
+      opportunity: [["Recent carries", "prior_rushing_attempts_ewm", "count"], ["Rush-attempt share", "prior_rush_attempt_share_ewm", "percent"], ["Offensive snap share", "prior_offense_snap_pct_ewm", "percent"]],
+      opponent: ["Opponent rushing yards allowed", "prior_opponent_allowed_rushing_yards_ewm", "yards"],
+    },
+    receptions: {
+      production: ["Recent receptions", "prior_receptions_ewm", "count"],
+      opportunity: [["Recent targets", "prior_targets_ewm", "count"], ["Target share", "prior_target_share_ewm", "percent"], ["Offensive snap share", "prior_offense_snap_pct_ewm", "percent"]],
+      opponent: ["Opponent targets allowed", "prior_opponent_allowed_targets_ewm", "count"],
+    },
+    receiving_yards: {
+      production: ["Recent receiving yards", "prior_receiving_yards_ewm", "yards"],
+      opportunity: [["Recent targets", "prior_targets_ewm", "count"], ["Target share", "prior_target_share_ewm", "percent"], ["Offensive snap share", "prior_offense_snap_pct_ewm", "percent"]],
+      opponent: ["Opponent targets allowed", "prior_opponent_allowed_targets_ewm", "count"],
+    },
+    anytime_td: {
+      production: ["Recent touchdown rate", "prior_anytime_td_ewm", "percent"],
+      opportunity: [["Red-zone opportunities", "prior_redzone_opportunity_ewm", "count"], ["Goal-line opportunities", "prior_goal_line_opportunity_ewm", "count"], ["Offensive snap share", "prior_offense_snap_pct_ewm", "percent"]],
+      opponent: ["Opponent touchdowns allowed", "prior_opponent_td_allowed_avg5", "count"],
+    },
+  };
+  const config = marketConfig[market];
+  const metric = (definition: [string, string, NflPlayerPropsForecastMetric["format"]]): NflPlayerPropsForecastMetric | null => {
+    const value = feature.features[definition[1]];
+    return value === null || value === undefined ? null : { label: definition[0], value, format: definition[2] };
+  };
+  return {
+    featureAsOf: feature.featureAsOf,
+    position: feature.position,
+    expectedQuarterback: feature.expectedQuarterback,
+    availability: feature.availability,
+    teamImpliedPoints: feature.teamImpliedPoints,
+    teamImpliedTouchdowns: feature.teamImpliedTouchdowns,
+    recentProduction: config ? metric(config.production) : null,
+    roleOpportunity: config ? config.opportunity.map(metric).filter((value): value is NflPlayerPropsForecastMetric => value !== null) : [],
+    opponentAllowance: config ? metric(config.opponent) : null,
   };
 }
 function compareDecision(first: NflPlayerPropsRuntimeDecision, second: NflPlayerPropsRuntimeDecision): number {
