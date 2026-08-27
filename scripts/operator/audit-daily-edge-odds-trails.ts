@@ -103,6 +103,11 @@ async function main() {
           { name: "opposing", side: market.opposingOddsTrail?.side ?? null, stops: market.opposingOddsTrail?.stops ?? [] },
         ];
         for (const trail of trails) {
+          // MLB first-inning has its own mandatory two-sided board below. Its
+          // generic picked-side trail is legacy duplication and may carry a
+          // recommendation snapshot; never let that substitute for auditing
+          // both real YRFI/NRFI book prices.
+          if (sport === "mlb" && key === "first_inning") continue;
           if (trail.stops.length === 0) continue;
           verifiedTrails += 1;
           const terminal = trail.stops[trail.stops.length - 1] as TrailStop | undefined;
@@ -142,6 +147,14 @@ async function main() {
             }
           }
         }
+        if (sport === "mlb" && (key === "moneyline" || key === "total")) {
+          const selectedStops = (market.oddsTrail ?? []) as TrailStop[];
+          const opposingStops = (market.opposingOddsTrail?.stops ?? []) as TrailStop[];
+          if (selectedStops.length < 2) failures.push(`${sport}/${game.id}/${key}: selected side lacks Opening/Prior/Current evidence`);
+          if (opposingStops.length < 2) failures.push(`${sport}/${game.id}/${key}: opposing side lacks Opening/Prior/Current evidence`);
+          if (market.movementReferenceSportsbook == null) failures.push(`${sport}/${game.id}/${key}: movement reference sportsbook missing`);
+          if (market.movementReferencePriceAmerican == null) failures.push(`${sport}/${game.id}/${key}: movement reference price missing`);
+        }
         const lineTrail = marketLineTrail;
         if (lineTrail.length > 0) {
           verifiedLineTrails += 1;
@@ -155,6 +168,11 @@ async function main() {
           const sportsbook = rawSource.startsWith("fi_market_ok_")
             ? rawSource.replace(/^fi_market_ok_/, "").replaceAll(" ", "_").toLowerCase()
             : null;
+          if (!close(board.line, 0.5)) failures.push(`${sport}/${game.id}/first_inning: board line is not 0.5`);
+          if (sportsbook === null) failures.push(`${sport}/${game.id}/first_inning: named sportsbook missing`);
+          for (const field of ["nrfiAmerican", "yrfiAmerican", "nrfiOpenAmerican", "yrfiOpenAmerican", "nrfiPreviousAmerican", "yrfiPreviousAmerican"]) {
+            if (typeof board[field] !== "number") failures.push(`${sport}/${game.id}/first_inning: ${field} missing`);
+          }
           for (const [side, currentPrice, openPrice, previousPrice] of [
             ["under", board.nrfiAmerican, board.nrfiOpenAmerican, board.nrfiPreviousAmerican],
             ["over", board.yrfiAmerican, board.yrfiOpenAmerican, board.yrfiPreviousAmerican],
@@ -167,6 +185,8 @@ async function main() {
               else if (price !== null) verifiedFirstInningBoardPrices += 1;
             }
           }
+        } else if (sport === "mlb" && key === "first_inning") {
+          failures.push(`${sport}/${game.id}/first_inning: two-sided FI board missing`);
         }
       }
     }

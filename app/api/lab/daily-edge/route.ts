@@ -91,6 +91,7 @@ import type {
   SharpStatus,
 } from "@/app/lab/lib/labTypes";
 import { finalizeDailyEdgeResponseCoherence } from "@/app/lab/lib/dailyEdgeResponseCoherence";
+import { DAILY_EDGE_MEMBER_PRESENTATION_RELEASE_ID } from "@/app/lab/lib/dailyEdgeMarketPresentation";
 import {
   marketVerdictFor,
   type SharpDirection,
@@ -3483,6 +3484,96 @@ function buildPersistedOddsTrail(args: {
   return stops;
 }
 
+type TwoSidedMovementReference = {
+  sportsbook: string;
+  selectedRow: LineRow;
+  opposingRow: LineRow;
+};
+
+function distinctHistoryTimes(rows: LineHistoryRow[]): number {
+  return new Set(rows.map((row) => row.recorded_at)).size;
+}
+
+/**
+ * Pick one real sportsbook for display-only movement evidence. The evaluated
+ * or current best-price book remains untouched. When that book has only a
+ * single capture, prefer a different current two-sided book with the richest
+ * exact-line same-book history so Opening/Prior/Current can be shown without
+ * mixing books or inventing an opener.
+ */
+function selectTwoSidedMovementReference(args: {
+  selectedSide: Side | null;
+  opposingSide: Side | null;
+  currentLine: number | null;
+  selectedCurrentRows: LineRow[];
+  opposingCurrentRows: LineRow[];
+  selectedHistory: LineHistoryRow[];
+  opposingHistory: LineHistoryRow[];
+  preferredSportsbook: string | null;
+}): TwoSidedMovementReference | null {
+  if (args.selectedSide === null || args.opposingSide === null) return null;
+  const exactLine = <T extends { line_value: number | null }>(row: T) =>
+    args.currentLine === null || sameLineValue(row.line_value, args.currentLine);
+  const realCurrent = (row: LineRow) =>
+    !isBlockedSportsbook(row.sportsbook) &&
+    row.sportsbook !== "locked_snapshot" &&
+    row.sportsbook !== "recommendation_snapshot" &&
+    row.sportsbook !== "splits_consensus" &&
+    exactLine(row);
+  const selectedRows = args.selectedCurrentRows.filter(
+    (row) => row.side === args.selectedSide && realCurrent(row),
+  );
+  const opposingRows = args.opposingCurrentRows.filter(
+    (row) => row.side === args.opposingSide && realCurrent(row),
+  );
+  const books = Array.from(new Set([
+    ...selectedRows.map((row) => row.sportsbook),
+    ...opposingRows.map((row) => row.sportsbook),
+  ]));
+  const newestFreshAtBook = (rows: LineRow[], sportsbook: string): LineRow | null =>
+    rows
+      .filter((row) => row.sportsbook === sportsbook && isFreshEnoughPriceRow(row))
+      .sort((a, b) =>
+        Date.parse(lineRowObservedAt(b) ?? "") - Date.parse(lineRowObservedAt(a) ?? "")
+      )[0] ?? null;
+  const ranked = books.flatMap((sportsbook) => {
+    const selectedRow = newestFreshAtBook(selectedRows, sportsbook);
+    const opposingRow = newestFreshAtBook(opposingRows, sportsbook);
+    if (selectedRow === null || opposingRow === null) return [];
+    const selectedHistoryCount = distinctHistoryTimes(
+      args.selectedHistory.filter(
+        (row) => row.sportsbook === sportsbook && exactLine(row),
+      ),
+    );
+    const opposingHistoryCount = distinctHistoryTimes(
+      args.opposingHistory.filter(
+        (row) => row.sportsbook === sportsbook && exactLine(row),
+      ),
+    );
+    return [{
+      sportsbook,
+      selectedRow,
+      opposingRow,
+      pairedDepth: Math.min(selectedHistoryCount, opposingHistoryCount),
+      totalDepth: selectedHistoryCount + opposingHistoryCount,
+      preferred: sportsbook === args.preferredSportsbook,
+    }];
+  }).sort((a, b) =>
+    b.pairedDepth - a.pairedDepth ||
+    b.totalDepth - a.totalDepth ||
+    Number(b.preferred) - Number(a.preferred) ||
+    a.sportsbook.localeCompare(b.sportsbook)
+  );
+  const best = ranked[0];
+  return best
+    ? {
+        sportsbook: best.sportsbook,
+        selectedRow: best.selectedRow,
+        opposingRow: best.opposingRow,
+      }
+    : null;
+}
+
 function terminalOddsMoveFromTrail(trail: OddsTrailStop[]): {
   previousAmerican: number | null;
   currentAmerican: number | null;
@@ -4696,59 +4787,25 @@ function buildMarketEdge(input: BuildMarketEdgeInput): MarketEdgeDto {
       null,
     locked: input.isLockedRow === true,
   });
-  // The member card displays the validated best/current real-book quote when
-  // one is available. Build the movement trail around that same endpoint,
-  // rather than around the older recommendation price. Otherwise a perfectly
-  // valid newer quote fails the equality check below, loses its sportsbook,
-  // and collapses First/Prior/Current to a source-less Current-only stop.
-  const trailCurrentAmerican =
+  const displayedTrailAmerican =
     input.isLockedRow === true
       ? priceAmerican
       : currentMemberPriceRow?.odds_american ?? priceAmerican;
-  const trailCurrentLine =
+  const displayedTrailLine =
     input.isLockedRow === true
       ? priceRow?.line_value ?? input.totalsExtras?.sportsbookLine ?? null
       : currentMemberPriceRow?.line_value ??
         priceRow?.line_value ??
         input.totalsExtras?.sportsbookLine ??
         null;
-  const trailCurrentObservedAt =
+  const displayedTrailObservedAt =
     input.isLockedRow === true || currentMemberPriceRow === null
       ? priceObservedAt
       : lineRowObservedAt(currentMemberPriceRow);
   const coherentTrailPriceRow =
-    trailPriceRow !== null && trailPriceRow.odds_american === trailCurrentAmerican
+    trailPriceRow !== null && trailPriceRow.odds_american === displayedTrailAmerican
       ? trailPriceRow
       : null;
-  const oddsTrail = buildPersistedOddsTrail({
-    candidates: input.lineOpenCandidates,
-    priceRow: coherentTrailPriceRow,
-    currentAmerican: trailCurrentAmerican,
-    currentLine: trailCurrentLine,
-    currentObservedAt: trailCurrentObservedAt,
-    lockedAmerican: input.lockedPriceAmerican ?? null,
-    lockedAt: input.lockedPriceAt ?? null,
-    terminalSportsbook:
-      input.isLockedRow === true
-        ? input.lockedPriceSportsbook ?? coherentTrailPriceRow?.sportsbook ?? null
-        : coherentTrailPriceRow?.sportsbook ?? null,
-  });
-  const lineTrail = input.market === "total"
-    ? buildPersistedOddsTrail({
-        candidates: input.lineMovementCandidates ?? input.lineOpenCandidates,
-        priceRow: coherentTrailPriceRow,
-        currentAmerican: trailCurrentAmerican,
-        currentLine: trailCurrentLine,
-        currentObservedAt: trailCurrentObservedAt,
-        lockedAmerican: input.lockedPriceAmerican ?? null,
-        lockedAt: input.lockedPriceAt ?? null,
-        terminalSportsbook:
-          input.isLockedRow === true
-            ? input.lockedPriceSportsbook ?? coherentTrailPriceRow?.sportsbook ?? null
-            : coherentTrailPriceRow?.sportsbook ?? null,
-        allowLineChanges: true,
-      })
-    : [];
   const opposingSide =
     input.market === "first_inning" ? null : oppositeDisplaySide(input.modelSide);
   const opposingCurrentInventory = input.opposingLinesCurrent ?? [
@@ -4766,10 +4823,72 @@ function buildMarketEdge(input: BuildMarketEdgeInput): MarketEdgeDto {
           candidate.odds_american === row.odds_american,
       ) === index,
   );
+  const opposingHistoryCandidates =
+    input.isLockedRow === true && input.lockedPriceAt
+      ? (input.opposingLineOpenCandidates ?? []).filter(
+          (row) => Date.parse(row.recorded_at) <= Date.parse(input.lockedPriceAt!),
+        )
+      : input.opposingLineOpenCandidates ?? [];
+  const movementReference = input.isLockedRow === true || input.market === "first_inning"
+    ? null
+    : selectTwoSidedMovementReference({
+        selectedSide: input.modelSide,
+        opposingSide,
+        currentLine: displayedTrailLine,
+        selectedCurrentRows: [
+          ...input.bestAvailableLinesCurrent,
+          ...input.linesCurrent,
+        ],
+        opposingCurrentRows,
+        selectedHistory: input.lineOpenCandidates,
+        opposingHistory: opposingHistoryCandidates,
+        preferredSportsbook: coherentTrailPriceRow?.sportsbook ?? null,
+      });
+  const movementSelectedRow = movementReference?.selectedRow ?? coherentTrailPriceRow;
+  const trailCurrentAmerican = input.isLockedRow === true
+    ? displayedTrailAmerican
+    : movementSelectedRow?.odds_american ?? displayedTrailAmerican;
+  const trailCurrentLine = input.isLockedRow === true
+    ? displayedTrailLine
+    : movementSelectedRow?.line_value ?? displayedTrailLine;
+  const trailCurrentObservedAt = input.isLockedRow === true
+    ? displayedTrailObservedAt
+    : movementSelectedRow === null
+      ? displayedTrailObservedAt
+      : lineRowObservedAt(movementSelectedRow);
   const selectedTrailBook =
     input.isLockedRow === true
       ? input.lockedPriceSportsbook ?? coherentTrailPriceRow?.sportsbook ?? null
-      : coherentTrailPriceRow?.sportsbook ?? null;
+      : movementReference?.sportsbook ?? movementSelectedRow?.sportsbook ?? null;
+  const oddsTrail = buildPersistedOddsTrail({
+    candidates: input.lineOpenCandidates,
+    priceRow: movementSelectedRow,
+    currentAmerican: trailCurrentAmerican,
+    currentLine: trailCurrentLine,
+    currentObservedAt: trailCurrentObservedAt,
+    lockedAmerican: input.lockedPriceAmerican ?? null,
+    lockedAt: input.lockedPriceAt ?? null,
+    terminalSportsbook:
+      input.isLockedRow === true
+        ? input.lockedPriceSportsbook ?? coherentTrailPriceRow?.sportsbook ?? null
+        : selectedTrailBook,
+  });
+  const lineTrail = input.market === "total"
+    ? buildPersistedOddsTrail({
+        candidates: input.lineMovementCandidates ?? input.lineOpenCandidates,
+        priceRow: movementSelectedRow,
+        currentAmerican: trailCurrentAmerican,
+        currentLine: trailCurrentLine,
+        currentObservedAt: trailCurrentObservedAt,
+        lockedAmerican: input.lockedPriceAmerican ?? null,
+        lockedAt: input.lockedPriceAt ?? null,
+        terminalSportsbook:
+          input.isLockedRow === true
+            ? input.lockedPriceSportsbook ?? coherentTrailPriceRow?.sportsbook ?? null
+            : selectedTrailBook,
+        allowLineChanges: true,
+      })
+    : [];
   const sameBookOpposingRows = selectedTrailBook === null
     ? []
     : opposingCurrentRows.filter((row) => row.sportsbook === selectedTrailBook);
@@ -4784,12 +4903,6 @@ function buildMarketEdge(input: BuildMarketEdgeInput): MarketEdgeDto {
   // observed at or before the lock. Choosing the newest history row first and
   // filtering only inside buildPersistedOddsTrail could append a post-lock row
   // as the terminal endpoint and make an otherwise valid trail incoherent.
-  const opposingHistoryCandidates =
-    input.isLockedRow === true && input.lockedPriceAt
-      ? (input.opposingLineOpenCandidates ?? []).filter(
-          (row) => Date.parse(row.recorded_at) <= Date.parse(input.lockedPriceAt!),
-        )
-      : input.opposingLineOpenCandidates ?? [];
   const sameBookOpposingHistoryCandidates = selectedTrailBook === null
     ? []
     : opposingHistoryCandidates.filter((row) => row.sportsbook === selectedTrailBook);
@@ -4802,7 +4915,8 @@ function buildMarketEdge(input: BuildMarketEdgeInput): MarketEdgeDto {
         ) ??
         pickHistoryPriceRow(sameBookOpposingHistoryCandidates) ??
         pickHistoryPriceRow(opposingHistoryCandidates)
-      : pickPriceRow(sameBookSameLineOpposingRows, opposingSide as Side | null, {
+      : movementReference?.opposingRow ??
+        pickPriceRow(sameBookSameLineOpposingRows, opposingSide as Side | null, {
           allowStaleFallback: false,
         }) ??
         pickPriceRow(sameBookOpposingRows, opposingSide as Side | null, {
@@ -5517,6 +5631,12 @@ function buildMarketEdge(input: BuildMarketEdgeInput): MarketEdgeDto {
     lockedLineAmerican: invalidFirstInningMarket ? null : input.lockedPriceAmerican ?? null,
     lockedLineAt: input.lockedPriceAt ?? null,
     oddsTrail: invalidFirstInningMarket ? [] : oddsTrail,
+    movementReferenceSportsbook:
+      invalidFirstInningMarket ? null : selectedTrailBook,
+    movementReferencePriceAmerican:
+      invalidFirstInningMarket ? null : trailCurrentAmerican,
+    movementReferenceObservedAt:
+      invalidFirstInningMarket ? null : trailCurrentObservedAt,
     lineTrail: invalidFirstInningMarket ? [] : lineTrail,
     opposingOddsTrail: invalidFirstInningMarket ? null : opposingOddsTrail,
     // 2026-06-16 market-intelligence (derived; display/audit only).
@@ -6354,6 +6474,7 @@ export const __TEST__ = {
   enforceLockedCardCutoff,
   resolveTrailPriceRow,
   buildPersistedOddsTrail,
+  selectTwoSidedMovementReference,
   terminalOddsMoveFromTrail,
   fiBoardHistorySide,
   readLockedSnapshotSportsbook,
@@ -6417,10 +6538,13 @@ export async function GET(request: Request) {
     const staleSnapshot = freshSnapshot
       ? null
       : await readLabResponseSnapshot<DailyEdgeResponse>(snapshotKey, "stale");
-    const recoveredPayload = staleSnapshot
+    const snapshot = freshSnapshot ?? staleSnapshot;
+    const presentationOutdated =
+      snapshot?.payload.memberPresentation?.releaseId !==
+      DAILY_EDGE_MEMBER_PRESENTATION_RELEASE_ID;
+    const recoveredPayload = staleSnapshot || presentationOutdated
       ? await recoverExpiredDailyEdgeSnapshot(snapshotKey, url)
       : null;
-    const snapshot = freshSnapshot ?? staleSnapshot;
     const payload = recoveredPayload ?? snapshot?.payload ?? null;
     if (payload) {
       // Stored snapshots may predate the latest provider display overlay. Keep

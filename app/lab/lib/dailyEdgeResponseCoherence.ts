@@ -52,6 +52,20 @@ function expectedCurrentBook(market: MarketEdgeDto, locked: boolean): string | n
   return terminalStop(market.oddsTrail)?.sportsbook ?? null;
 }
 
+function expectedTrailPrice(market: MarketEdgeDto, locked: boolean): number | null {
+  if (!locked && typeof market.movementReferencePriceAmerican === "number") {
+    return market.movementReferencePriceAmerican;
+  }
+  return expectedCurrentPrice(market, locked);
+}
+
+function expectedTrailBook(market: MarketEdgeDto, locked: boolean): string | null {
+  if (!locked && market.movementReferenceSportsbook) {
+    return market.movementReferenceSportsbook;
+  }
+  return expectedCurrentBook(market, locked);
+}
+
 function sectionIsStale(section: MarketSplitDisplaySection | null, nowMs: number): boolean {
   if (!section) return false;
   if (section.rows.some((row) => row.isStale === true)) return true;
@@ -204,13 +218,14 @@ export function finalizeDailyEdgeResponseCoherence(body: DailyEdgeResponse): Dai
       const reasons: string[] = [];
       const locked = game.lockState === "locked";
       const currentPrice = expectedCurrentPrice(market, locked);
-      const currentBook = expectedCurrentBook(market, locked);
+      const trailPrice = expectedTrailPrice(market, locked);
+      const trailBook = expectedTrailBook(market, locked);
       const currentLine = marketKey === "total" ? market.line : null;
       const endpoint = terminalStop(market.oddsTrail);
       const lineEndpoint = terminalStop(market.lineTrail);
 
-      if (endpoint && currentPrice !== null && endpoint.american !== currentPrice) reasons.push("selected_trail_price_mismatch");
-      if (endpoint && currentBook && endpoint.sportsbook && endpoint.sportsbook !== currentBook) reasons.push("selected_trail_book_mismatch");
+      if (endpoint && trailPrice !== null && endpoint.american !== trailPrice) reasons.push("selected_trail_price_mismatch");
+      if (endpoint && trailBook && endpoint.sportsbook && endpoint.sportsbook !== trailBook) reasons.push("selected_trail_book_mismatch");
       if (marketKey === "total" && endpoint?.line != null && !sameNumber(endpoint.line, currentLine)) reasons.push("selected_trail_line_mismatch");
       if (marketKey === "total" && lineEndpoint?.line != null && !sameNumber(lineEndpoint.line, currentLine)) reasons.push("point_trail_terminal_mismatch");
 
@@ -254,12 +269,14 @@ export function auditDailyEdgeResponseCoherence(body: DailyEdgeResponse): DailyE
       const market = game.markets[marketKey];
       if (!market.evidenceCoherence) issues.push({ gameId: game.id, market: marketKey, code: "coherence_status_missing" });
       if (!market.sharpBookAvailability) issues.push({ gameId: game.id, market: marketKey, code: "sharp_coverage_status_missing" });
-      const currentPrice = expectedCurrentPrice(market, game.lockState === "locked");
-      const currentBook = expectedCurrentBook(market, game.lockState === "locked");
+      const locked = game.lockState === "locked";
+      const currentPrice = expectedCurrentPrice(market, locked);
+      const trailPrice = expectedTrailPrice(market, locked);
+      const trailBook = expectedTrailBook(market, locked);
       const endpoint = terminalStop(market.oddsTrail);
       const lineEndpoint = terminalStop(market.lineTrail);
-      if (endpoint && currentPrice !== null && endpoint.american !== currentPrice) issues.push({ gameId: game.id, market: marketKey, code: "selected_trail_price_mismatch" });
-      if (endpoint && currentBook && endpoint.sportsbook && endpoint.sportsbook !== currentBook) issues.push({ gameId: game.id, market: marketKey, code: "selected_trail_book_mismatch" });
+      if (endpoint && trailPrice !== null && endpoint.american !== trailPrice) issues.push({ gameId: game.id, market: marketKey, code: "selected_trail_price_mismatch" });
+      if (endpoint && trailBook && endpoint.sportsbook && endpoint.sportsbook !== trailBook) issues.push({ gameId: game.id, market: marketKey, code: "selected_trail_book_mismatch" });
       if (marketKey === "total" && endpoint?.line != null && !sameNumber(endpoint.line, market.line)) issues.push({ gameId: game.id, market: marketKey, code: "selected_trail_line_mismatch" });
       if (marketKey === "total" && lineEndpoint?.line != null && !sameNumber(lineEndpoint.line, market.line)) issues.push({ gameId: game.id, market: marketKey, code: "point_trail_terminal_mismatch" });
       const movement = market.marketReadV2?.movement;

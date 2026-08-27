@@ -212,8 +212,9 @@ check(
     presentedHeldMarket.gradePriceAmerican === null &&
     presentedHeldMarket.bestAvailablePriceAmerican === null &&
     presentedHeldMarket.recommendationConfidence === null &&
-    presentedHeldMarket.oddsTrail?.length === 0 &&
-    presentedHeldMarket.opposingOddsTrail === null &&
+    presentedHeldMarket.oddsTrail?.length === 1 &&
+    presentedHeldMarket.oddsTrail[0]?.sportsbook === "FanDuel" &&
+    presentedHeldMarket.opposingOddsTrail?.side === "away" &&
     presentedHeldMarket.recommendationDecision?.playGrade === "No Play" &&
     presentedHeldMarket.recommendationDecision.pick === null &&
     presentedHeldMarket.recommendationDecision.modelProbability === 0.61 &&
@@ -222,9 +223,10 @@ check(
     presentedHeldMarket.recommendationDecision.edgePp === null,
 );
 check(
-  "operational exception retains only fresh current quote as non-evaluated context",
+  "operational exception retains authentic current and movement evidence as non-evaluated context",
   presentedHeldMarket.currentPriceAmerican === -122 &&
     presentedHeldMarket.currentPriceSportsbook === "FanDuel" &&
+    presentedHeldMarket.lineOpenAmerican === -120 &&
     presentedHeldMarket.displayReason ===
       "No Play — starter unconfirmed; required evidence is incomplete.",
 );

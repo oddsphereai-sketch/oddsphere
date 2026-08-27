@@ -20,7 +20,7 @@ type OperationalReasonMarket = Pick<
 >;
 
 export const DAILY_EDGE_MEMBER_PRESENTATION_RELEASE_ID =
-  "daily_edge_member_presentation_2026_08_26_r4_prediction_label_separation";
+  "daily_edge_member_presentation_2026_08_27_r5_market_evidence_preservation";
 
 /**
  * Internal holds remain machine-visible health exceptions. The member
@@ -86,8 +86,9 @@ export function dailyEdgeOperationalNoPlayReason(
  * targeted recovery job can still see the exception. The model-owned outcome
  * forecast is immutable presentation context and remains visible for every
  * exception class. Only the incomplete exact-price bet-evaluation tuple is
- * withheld; current two-sided market context and authentic split sections may
- * remain visible, but they can never masquerade as a recommendation.
+ * withheld. Current two-sided prices, lines, and authentic same-book movement
+ * remain visible as market context; they can never masquerade as a completed
+ * recommendation or grading tuple.
  */
 export function presentDailyEdgeOperationalNoPlay(
   market: MarketEdgeDto,
@@ -146,22 +147,9 @@ export function presentDailyEdgeOperationalNoPlay(
     bestAvailableSportsbook: null,
     bestAvailableObservedAt: null,
     gradePriceAmerican: null,
-    lineOpenAmerican: null,
-    lineOpenObservedAt: null,
-    oddspherePostedAmerican: null,
-    oddspherePostedAt: null,
-    oddspherePostedMatchesPick: null,
-    lockedLineAmerican: null,
-    lockedLineAt: null,
-    oddsTrail: [],
-    opposingOddsTrail: null,
-    marketInterpretation: null,
-    marketReadV2: null,
-    lastMovePrevAmerican: null,
-    lastMoveNextAmerican: null,
-    lastMoveAtIso: null,
-    lastMoveLinePrev: null,
-    lastMoveLineNext: null,
+    // Authentic market context is independent of whether the exact-price bet
+    // evaluation completed. Preserve it so an operational exception never
+    // makes real sportsbook prices or movement disappear from Daily Edge.
     marketImpliedPct: null,
     modelMarketGapPct: null,
     recommendationConfidence: null,
