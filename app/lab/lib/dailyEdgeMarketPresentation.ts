@@ -20,7 +20,7 @@ type OperationalReasonMarket = Pick<
 >;
 
 export const DAILY_EDGE_MEMBER_PRESENTATION_RELEASE_ID =
-  "daily_edge_member_presentation_2026_08_27_r5_market_evidence_preservation";
+  "daily_edge_member_presentation_2026_08_27_r6_football_evidence_hierarchy";
 
 /**
  * Internal holds remain machine-visible health exceptions. The member

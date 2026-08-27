@@ -26,7 +26,8 @@ import { activeCfbWeeklyWindow, isGameInCfbWeeklyWindow } from "./cfbWeeklyWindo
 import { cfbFootballEvidenceStats } from "./footballMemberEvidence";
 
 export const CFB_MEMBER_FIXTURE_RELEASE =
-  "cfb_v1_member_fixture_2026_08_27_r6_pmf_side_guard" as const;
+  "cfb_v1_member_fixture_2026_08_27_r7_market_prediction_contract" as const;
+const CFB_MARKET_CONTEXT_MAX_CAPTURE_LAG_MINUTES = 10;
 const CFB_PRIOR_MEMBER_RELEASE = "cfb_v1_member_release_2026_08_26_r4_price_provenance" as const;
 const CFB_PRIOR_DECISION_RELEASE = "cfb_v1_daily_edge_decision_2026_08_26_r7_sharpapi_price_fallback" as const;
 const CFB_LEGACY_MEMBER_RELEASE = "cfb_v1_member_release_2026_08_25_r2_weekly" as const;
@@ -203,6 +204,7 @@ function buildMarket(
       : `The ${label} Bet grade is Held because a named offered price or target-excluded same-line consensus is unavailable. No market-specific line context is available, so only the game-level independent forecast is published.`
     : `${decision.side} is evaluated at ${formatAmerican(decision.evaluatedQuote.price)} from ${decision.evaluatedQuote.sportsbook}; the ${decision.grade} grade uses that exact quote, the independent PMF, and other-book fair consensus.`;
   const publicSplits = buildPublicSplits(payload, market);
+  const marketPrediction = buildMarketPrediction(payload, market, decision, outlook);
   return {
     pick: decision?.side ?? null,
     confidence: displayedProbability,
@@ -211,6 +213,7 @@ function buildMarket(
     marketSignal: "market_neutral",
     sharpStatus: "mixed",
     held,
+    marketPrediction,
     verdict: held ? { key: "no_play", label: "Held" } : isBest ? { key: "best_angle", label: "Best Angle" } : isLean ? { key: "lean", label: "Lean" } : isWatch ? { key: "watchlist", label: "Watchlist" } : { key: "no_play", label: "No Play" },
     rawGrade: isBest ? "best_signal" : isLean ? "model_only" : isWatch ? "market_watch" : null,
     rawRecScore: actionability,
@@ -278,6 +281,75 @@ function buildMarket(
     reviewFlags: [CFB_MEMBER_FIXTURE_RELEASE, CFB_V1_MODEL_RELEASE, CFB_V1_DECISION_RELEASE],
     reviewActionSummary: held ? "hold" : "keep",
   };
+}
+
+function buildMarketPrediction(
+  payload: CfbForwardEvidencePayload,
+  market: CfbV1Market,
+  decision: CfbV1ExactPriceDecision | null,
+  outlook: CfbForwardMarketOutlook | null,
+): NonNullable<MarketEdgeDto["marketPrediction"]> {
+  if (decision) {
+    return {
+      status: "available",
+      label: decision.side,
+      line: decision.evaluatedQuote.line,
+      probability: decision.modelProbability,
+      source: "exact_named_book",
+      sportsbook: decision.evaluatedQuote.sportsbook,
+      observedAt: decision.evaluatedQuote.observedAt,
+      freshnessCheckedAt: payload.capturedAt,
+      reason: null,
+    };
+  }
+  if (outlook && market === "moneyline") {
+    return {
+      status: "available",
+      label: outlookLabel(payload, outlook),
+      line: null,
+      probability: outlook.independentProbability,
+      source: "model_outcome",
+      sportsbook: null,
+      observedAt: null,
+      freshnessCheckedAt: payload.capturedAt,
+      reason: "An outcome forecast is available, but no eligible exact sportsbook price tuple is available for Bet grading.",
+    };
+  }
+  if (outlook && currentMarketContextIsFresh(payload, outlook)) {
+    return {
+      status: "available",
+      label: outlookLabel(payload, outlook),
+      line: outlook.line,
+      probability: outlook.independentProbability,
+      source: "playbook_consensus",
+      sportsbook: null,
+      observedAt: outlook.contextObservedAt,
+      freshnessCheckedAt: payload.capturedAt,
+      reason: "The prediction uses the current Playbook market line; an eligible exact sportsbook price tuple is unavailable for Bet grading.",
+    };
+  }
+  return {
+    status: "market_data_unavailable",
+    label: null,
+    line: null,
+    probability: null,
+    source: null,
+    sportsbook: null,
+    observedAt: outlook?.contextObservedAt ?? null,
+    freshnessCheckedAt: payload.capturedAt,
+    reason: `A fresh coherent current ${market} line is unavailable; projected score context is not substituted for a bettable market prediction.`,
+  };
+}
+
+function currentMarketContextIsFresh(
+  payload: CfbForwardEvidencePayload,
+  outlook: CfbForwardMarketOutlook,
+): boolean {
+  if (outlook.line === null || outlook.contextObservedAt === null) return false;
+  const captured = Date.parse(payload.capturedAt);
+  const observed = Date.parse(outlook.contextObservedAt);
+  if (!Number.isFinite(captured) || !Number.isFinite(observed) || observed > captured) return false;
+  return captured - observed <= CFB_MARKET_CONTEXT_MAX_CAPTURE_LAG_MINUTES * 60_000;
 }
 
 function outlookLabel(payload: CfbForwardEvidencePayload, outlook: CfbForwardMarketOutlook): string {

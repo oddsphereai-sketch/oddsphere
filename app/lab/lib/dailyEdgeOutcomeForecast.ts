@@ -3,9 +3,25 @@ import type { DailyEdgeMarketKey as MarketKey } from "./dailyEdgeReaderState";
 import type { Sport } from "@/lib/types/domain/Sport";
 
 export const DAILY_EDGE_FORECAST_UNAVAILABLE_LABEL = "Forecast unavailable";
+export const DAILY_EDGE_SPREAD_UNAVAILABLE_LABEL = "Spread prediction unavailable";
+export const DAILY_EDGE_TOTAL_UNAVAILABLE_LABEL = "Total prediction unavailable";
 
 export function isDailyEdgeOutcomeForecastHealthError(label: string): boolean {
-  return label === DAILY_EDGE_FORECAST_UNAVAILABLE_LABEL;
+  return label === DAILY_EDGE_FORECAST_UNAVAILABLE_LABEL ||
+    label === DAILY_EDGE_SPREAD_UNAVAILABLE_LABEL ||
+    label === DAILY_EDGE_TOTAL_UNAVAILABLE_LABEL;
+}
+
+export function dailyEdgeMarketPredictionProvenanceLabel(market: MarketEdgeDto): string | null {
+  const prediction = market.marketPrediction;
+  if (!prediction) return null;
+  if (prediction.status === "market_data_unavailable") return "Current market prediction unavailable";
+  if (prediction.source === "playbook_consensus") {
+    return "Consensus prediction line · context only, not an available sportsbook offer";
+  }
+  if (prediction.source === "exact_named_book") return "Exact named-book prediction line";
+  if (prediction.source === "model_outcome") return "Model outcome forecast · no sportsbook line";
+  return null;
 }
 
 function compactNumber(value: number): string {
@@ -32,6 +48,16 @@ export function dailyEdgeOutcomeForecastLabel(input: {
   sport: Sport;
 }): string {
   const { game, market, marketKey, sport } = input;
+  if (market.marketPrediction?.status === "market_data_unavailable") {
+    return marketKey === "total"
+      ? DAILY_EDGE_TOTAL_UNAVAILABLE_LABEL
+      : marketKey === "first_inning" && sport !== "mlb"
+        ? DAILY_EDGE_SPREAD_UNAVAILABLE_LABEL
+        : DAILY_EDGE_FORECAST_UNAVAILABLE_LABEL;
+  }
+  if (market.marketPrediction?.status === "available" && market.marketPrediction.label) {
+    return market.marketPrediction.label;
+  }
   if (market.pick) {
     if (marketKey === "total" && market.line !== null && !/\d/.test(market.pick)) {
       return `${market.pick} ${compactNumber(market.line)}`;
@@ -81,6 +107,10 @@ export function dailyEdgeOutcomeForecastLabel(input: {
     );
     const value = firstInning?.homeValue ?? firstInning?.awayValue ?? null;
     if (value) return `1st-inning projection ${value}`;
+  }
+
+  if (marketKey === "first_inning" && (sport === "nfl" || sport === "cfb")) {
+    return DAILY_EDGE_SPREAD_UNAVAILABLE_LABEL;
   }
 
   if (marketKey === "first_inning" && sport !== "mlb") {

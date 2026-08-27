@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { nflPlayerPropsAvailabilityAgeLabel } from "../app/player-props/lib/nflPlayerPropsPresentation";
 import {
   attachNflPlayerPropsClosingPrice,
   buildNflPlayerPropsMemberSnapshot,
@@ -181,6 +182,13 @@ for (const readerEvidence of ["Available Exact Prices", "Same-Book Movement", "r
 for (const trendEvidence of ["modelInputTrends", "Actual model inputs.", "Last game", "L3 avg", "L5 avg", "Model-weighted"]) {
   assert.ok(memberReader.includes(trendEvidence), `NFL reader exposes authentic model-input trend evidence: ${trendEvidence}`);
 }
+for (const availabilityEvidence of ["Player availability needs review", "AvailabilityBadge", "nflPlayerPropsAvailabilityAgeLabel", "Recheck availability closer to kickoff"]) {
+  assert.ok(memberReader.includes(availabilityEvidence), `NFL props foregrounds player availability without silently changing the grade: ${availabilityEvidence}`);
+}
+assert.equal(nflPlayerPropsAvailabilityAgeLabel({ reportedAt: "2026-08-27T12:45:00.000Z", reportUpdatedAt: null }, "2026-08-27T13:00:00.000Z"), "<1h old");
+assert.equal(nflPlayerPropsAvailabilityAgeLabel({ reportedAt: "2026-08-26T12:00:00.000Z", reportUpdatedAt: null }, "2026-08-27T13:00:00.000Z"), "25h old");
+assert.equal(nflPlayerPropsAvailabilityAgeLabel({ reportedAt: null, reportUpdatedAt: "2026-08-15T13:00:00.000Z" }, "2026-08-27T13:00:00.000Z"), "12d old");
+assert.equal(nflPlayerPropsAvailabilityAgeLabel({ reportedAt: "2026-08-28T13:00:00.000Z", reportUpdatedAt: null }, "2026-08-27T13:00:00.000Z"), null);
 for (const responsiveContract of ["overflow-x-auto", "hidden xl:block", "grid gap-3 xl:hidden"]) {
   assert.ok(memberReader.includes(responsiveContract), `NFL board preserves the shared responsive interaction contract: ${responsiveContract}`);
 }

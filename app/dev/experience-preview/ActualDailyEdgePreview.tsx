@@ -51,7 +51,15 @@ import {
   dailyEdgePresentationVerdict,
   presentDailyEdgeOperationalNoPlay,
 } from "@/app/lab/lib/dailyEdgeMarketPresentation";
-import { dailyEdgeOutcomeForecastLabel } from "@/app/lab/lib/dailyEdgeOutcomeForecast";
+import {
+  dailyEdgeMarketPredictionProvenanceLabel,
+  dailyEdgeOutcomeForecastLabel,
+} from "@/app/lab/lib/dailyEdgeOutcomeForecast";
+import {
+  FOOTBALL_PRIMARY_EVIDENCE_LIMIT,
+  footballEvidenceFocus,
+  prioritizeFootballEvidenceStats,
+} from "@/app/lab/lib/footballEvidencePresentation";
 import type { NflWeekOneEvidenceBoard } from "@/lib/services/football/nflWeekOneEvidenceBoard";
 import { exactLockedEplScoreOutlook, impliedEplMatchResultScoreOutlook } from "@/lib/services/epl/eplDerivedMarketForecast";
 
@@ -627,11 +635,12 @@ function MarketStrip({ game, sport, active, setActive }: { game: DailyEdgeGameDt
         const market = game.markets[key];
         const selected = active === key;
         const pulse = sourceCoherentMarketPulse(market, resolveMarketPulseMovement(market));
+        const predictionProvenance = dailyEdgeMarketPredictionProvenanceLabel(market);
         return (
           <button key={key} type="button" role="tab" aria-selected={selected} onClick={() => setActive(key)} className={`min-w-0 rounded-lg border px-2 py-2.5 text-left transition sm:rounded-xl sm:px-4 sm:py-3 ${selected ? "border-violet-400/55 bg-gradient-to-br from-violet-500/25 to-violet-900/10 shadow-[0_0_22px_-12px_rgba(124,58,237,0.9)]" : "border-white/[0.07] bg-white/[0.025] hover:border-violet-400/25"}`}>
             <div className="flex min-w-0 items-center justify-between gap-1"><span className={`truncate text-[7px] font-black uppercase tracking-[0.08em] sm:text-[9px] sm:tracking-[0.15em] ${selected ? "text-violet-200" : "text-gray-600"}`}>{marketLabelFor(key, sport)}</span><span className="shrink-0 text-[8px] font-black text-gray-500 sm:text-[9px]">{formatProbability(market.modelProb)}</span></div>
             <div className="mt-1.5 flex min-w-0 items-center justify-between gap-1 sm:mt-2 sm:gap-2"><span className="truncate text-xs font-black text-white sm:text-base">{dailyEdgeOutcomeForecastLabel({ game, market, marketKey: key, sport })}</span><VerdictGlyph market={market} /></div>
-            <p className={`mt-1 hidden truncate text-[9px] sm:block ${selected ? "text-violet-200/65" : "text-gray-700"}`}>{pulse.chip}</p>
+            <p className={`mt-1 hidden truncate text-[9px] sm:block ${selected ? "text-violet-200/65" : "text-gray-700"}`}>{predictionProvenance ?? pulse.chip}</p>
           </button>
         );
       })}
@@ -730,6 +739,7 @@ function QuickRead({ game, market, marketKey, sport }: { game: DailyEdgeGameDto;
         {sport !== "soccer" ? <div className="mt-4">
           <p className="text-[8px] font-black uppercase tracking-[0.16em] text-gray-600">OddSphere read</p>
           <div className="mt-1 flex items-end justify-between gap-3"><p className="text-2xl font-black tracking-tight text-white">{dailyEdgeOutcomeForecastLabel({ game, market, marketKey, sport })}</p>{market.held ? <span className="text-right"><span className="block text-[8px] font-black uppercase tracking-wider text-amber-200">No bet evaluated</span><span className="mt-0.5 block text-[7px] font-bold text-gray-600">Current odds shown below</span></span> : <span className="text-right"><span className="block font-mono text-base font-black text-gray-200">{formatAmerican(currentDisplayedPrice(market))}</span>{market.currentPriceSportsbook ? <span className="block text-[7px] font-bold text-gray-600">{formatSportsbook(market.currentPriceSportsbook)}</span> : null}</span>}</div>
+          {dailyEdgeMarketPredictionProvenanceLabel(market) ? <p className="mt-1 text-[8px] font-semibold leading-relaxed text-violet-200/65">{dailyEdgeMarketPredictionProvenanceLabel(market)}</p> : null}
           <p className="mt-1 text-[10px] text-gray-500">{nflValueBetProbability ? "Value-model probability" : "Outcome confidence"} <span className="font-black text-gray-200">{formatProbability(market.modelProb)}</span> · publish-time market <span className="font-black text-gray-200">{formatMarketProbability(market)}</span></p>
           {nflValueBetProbability ? <p className="mt-1 text-[8px] leading-relaxed text-violet-200/65">The exact-price value lane agrees with the discrete model&apos;s projected winner; its positive-EV evaluated quote is shown here.</p> : null}
           {(probabilityGap !== null || market.recommendationConfidence !== null) ? <p className="mt-1 text-[9px] text-gray-600">Publish-time gap <span className="font-black text-gray-300">{probabilityGap === null ? "—" : `${probabilityGap > 0 ? "+" : ""}${probabilityGap.toFixed(1)} pp`}</span> · bet actionability <span className="font-black text-gray-300">{market.recommendationConfidence === null || market.recommendationConfidence === undefined ? "—" : `${market.recommendationConfidence.toFixed(0)}/100`}</span></p> : null}
@@ -1714,21 +1724,30 @@ function SampleTally({ outcomes, color: _color, hitLabel = "Hit", missLabel = "M
 }
 
 function KeyStats({ game, market, marketKey, history, sample, sport, availability }: { game: DailyEdgeGameDto; market: MarketEdgeDto; marketKey: MarketKey; history: PreviewHistoryByTeam; sample: 5 | 10; sport: Sport; availability: DailyEdgeGameAvailability | null }) {
-  const visibleStats = market.keyStats;
   const football = sport === "nfl" || sport === "cfb";
   if (sport === "soccer") return <SoccerMarketEvidence game={game} market={market} marketKey={marketKey} />;
+  if (football) return <FootballMarketEvidence game={game} market={market} marketKey={marketKey} sport={sport} availability={availability} />;
+  const visibleStats = market.keyStats;
   return (
     <div className="h-full p-4 sm:p-5 xl:p-6">
       <SectionHeading tone="sky">Key Stats & Notes</SectionHeading>
-      {football ? <FootballAvailabilityPanel report={availability} sport={sport} /> : null}
       <div className="mt-4">
-        <div className="flex items-center justify-between gap-2"><p className="text-[8px] font-black uppercase tracking-[0.17em] text-sky-200">{visibleStats.length > 0 ? football ? "Forecast & matchup evidence" : "Prediction drivers" : "Decision snapshot"}</p><span className="text-[7px] font-semibold text-gray-600">{visibleStats.length > 0 ? football ? `${visibleStats.length} verified rows` : `${visibleStats.length} most relevant` : "Core model output"}</span></div>
+        <div className="flex items-center justify-between gap-2"><p className="text-[8px] font-black uppercase tracking-[0.17em] text-sky-200">{visibleStats.length > 0 ? "Prediction drivers" : "Decision snapshot"}</p><span className="text-[7px] font-semibold text-gray-600">{visibleStats.length > 0 ? `${visibleStats.length} most relevant` : "Core model output"}</span></div>
         {visibleStats.length > 0 ? <div className="mt-2 space-y-2">{visibleStats.map((stat) => <PredictionDriverCard key={`${stat.label}-${stat.awayValue}-${stat.homeValue}`} stat={stat} away={game.awayTeam} home={game.homeTeam} awayStarter={game.awayStarter?.name ?? null} homeStarter={game.homeStarter?.name ?? null} marketKey={marketKey} pick={market.pick} />)}</div> : <CoreDecisionSnapshot game={game} market={market} marketKey={marketKey} />}
       </div>
       {marketKey === "first_inning" && sport === "mlb" ? null : <HistoryStatSummary game={game} market={market} marketKey={marketKey} history={history} sample={sample} sport={sport} />}
-      {football ? null : <OddSphereNotes market={market} />}
+      <OddSphereNotes market={market} />
     </div>
   );
+}
+
+function FootballMarketEvidence({ game, market, marketKey, sport, availability }: { game: DailyEdgeGameDto; market: MarketEdgeDto; marketKey: MarketKey; sport: "nfl" | "cfb"; availability: DailyEdgeGameAvailability | null }) {
+  const focus = footballEvidenceFocus(marketKey);
+  const orderedStats = prioritizeFootballEvidenceStats(market.keyStats, marketKey);
+  const primary = orderedStats.slice(0, FOOTBALL_PRIMARY_EVIDENCE_LIMIT);
+  const supporting = orderedStats.slice(FOOTBALL_PRIMARY_EVIDENCE_LIMIT);
+  const driver = (stat: MarketEdgeDto["keyStats"][number]) => <PredictionDriverCard key={`${stat.label}-${stat.awayValue}-${stat.homeValue}`} stat={stat} away={game.awayTeam} home={game.homeTeam} awayStarter={game.awayStarter?.name ?? null} homeStarter={game.homeStarter?.name ?? null} marketKey={marketKey} pick={market.pick} />;
+  return <div className="h-full p-4 sm:p-5 xl:p-6"><SectionHeading tone="sky">Key Stats &amp; Notes</SectionHeading><div className="mt-4 rounded-xl border border-sky-400/15 bg-sky-400/[0.035] p-3.5"><div className="flex items-start justify-between gap-3"><div><p className="text-[8px] font-black uppercase tracking-[0.17em] text-sky-200">{focus.eyebrow}</p><h4 className="mt-1 text-sm font-black leading-tight text-white">{focus.title}</h4></div><span className="shrink-0 rounded-full border border-white/[0.08] bg-black/20 px-2 py-1 text-[7px] font-black uppercase tracking-wider text-gray-500">{orderedStats.length} verified</span></div><p className="mt-2 text-[9px] leading-relaxed text-gray-500">{focus.description} The projected score and market price remain in their dedicated panels.</p></div>{primary.length > 0 ? <div className="mt-3 space-y-2">{primary.map(driver)}</div> : <CoreDecisionSnapshot game={game} market={market} marketKey={marketKey} />}{supporting.length > 0 ? <details className="group mt-3 rounded-xl border border-white/[0.08] bg-black/20"><summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-3.5 py-3"><span><span className="block text-[8px] font-black uppercase tracking-[0.14em] text-gray-300">More supporting evidence</span><span className="mt-0.5 block text-[8px] text-gray-600">{supporting.length} additional verified inputs</span></span><span className="text-sm text-gray-600 transition group-open:rotate-180">⌄</span></summary><div className="space-y-2 border-t border-white/[0.07] p-2.5">{supporting.map(driver)}</div></details> : null}<FootballAvailabilityPanel report={availability} sport={sport} /></div>;
 }
 
 function FootballAvailabilityPanel({ report, sport }: { report: DailyEdgeGameAvailability | null; sport: Sport }) {
