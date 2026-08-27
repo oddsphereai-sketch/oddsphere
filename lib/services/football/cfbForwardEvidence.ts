@@ -1,13 +1,21 @@
 import { createHash } from "node:crypto";
 import type { NcaafBookOdds, NcaafGame } from "./balldontlieNcaafSlate";
-import type { CfbV1DecisionBundle, CfbV1Forecast } from "./cfbV1Decision";
+import type { CFB_SHARP_API_ODDS_RELEASE } from "./cfbSharpApiOdds";
+import {
+  cfbV1LineProbabilities,
+  type CfbV1DecisionBundle,
+  type CfbV1Forecast,
+  type CfbV1Market,
+} from "./cfbV1Decision";
 
 export const CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE =
+  "cfb_forward_evidence_snapshot_2026_08_26_r2_price_provenance" as const;
+export const CFB_FORWARD_PRIOR_EVIDENCE_SCHEMA_RELEASE =
   "cfb_forward_evidence_snapshot_2026_08_25_r1" as const;
 export const CFB_FORWARD_EVIDENCE_COLLECTOR_RELEASE =
-  "cfb_forward_evidence_collector_2026_08_25_r3_weekly" as const;
+  "cfb_forward_evidence_collector_2026_08_26_r5_sharpapi_price_fallback" as const;
 export const CFB_FORWARD_MEMBER_RELEASE =
-  "cfb_v1_member_release_2026_08_25_r2_weekly" as const;
+  "cfb_v1_member_release_2026_08_26_r4_price_provenance" as const;
 
 export type CfbForwardEvidenceStage = "opening" | "unlocked" | "t60";
 
@@ -66,8 +74,19 @@ export type CfbForwardOperationalOpening = {
 
 export type CfbForwardPublishedForecast = Omit<CfbV1Forecast, "pmf">;
 
+export type CfbForwardMarketOutlook = {
+  market: CfbV1Market;
+  side: "home" | "away" | "over" | "under";
+  line: number | null;
+  independentProbability: number;
+  source: "independent_pmf" | "independent_pmf_at_playbook_line";
+  contextObservedAt: string | null;
+};
+
 export type CfbForwardPublishedDecisionBundle = Omit<CfbV1DecisionBundle, "forecast"> & {
   forecast: CfbForwardPublishedForecast;
+  /** Added by member release r3; optional only while the prior r2 wave is the release-transition fallback. */
+  marketOutlooks?: Record<CfbV1Market, CfbForwardMarketOutlook | null>;
 };
 
 export type CfbForwardEvidencePayload = {
@@ -91,6 +110,7 @@ export type CfbForwardEvidencePayload = {
     operationalOpening: CfbForwardOperationalOpening | null;
     playbookLine: CfbForwardPlaybookLine | null;
     playbookSplits: CfbForwardPlaybookSplitSet | null;
+    sharpApiOddsRelease: typeof CFB_SHARP_API_ODDS_RELEASE | null;
     sharpApiSplits: null;
   };
   quarterbacks: {
@@ -106,6 +126,8 @@ export type CfbForwardEvidencePayload = {
   coverage: {
     currentOdds: boolean;
     comparableCurrentBookCount: number;
+    currentOddsProviders: Array<"balldontlie" | "sharpapi">;
+    sharpApiOddsFallback: boolean;
     targetExcludedConsensusReady: boolean;
     operationalOpening: boolean;
     playbookLine: boolean;
@@ -121,6 +143,7 @@ export type CfbForwardEvidencePayload = {
     balldontlieSlate: number;
     balldontlieQuarterbacks: number;
     playbook: number;
+    sharpApiOdds: number;
     totalMaximum: number;
   };
 };
@@ -206,6 +229,69 @@ export function determineCfbForwardCollectionNeed(args: {
 
 export function hashCfbForwardEvidencePayload(payload: CfbForwardEvidencePayload): string {
   return createHash("sha256").update(stableJson(payload)).digest("hex");
+}
+
+export function buildCfbForwardMarketOutlooks(args: {
+  forecast: CfbV1Forecast;
+  playbookLine: CfbForwardPlaybookLine | null;
+}): Record<CfbV1Market, CfbForwardMarketOutlook | null> {
+  const homeWin = args.forecast.homeWinProbability;
+  const moneyline = homeWin >= 0.5
+    ? outlook("moneyline", "home", null, homeWin, "independent_pmf", null)
+    : outlook("moneyline", "away", null, 1 - homeWin, "independent_pmf", null);
+  const playbookLine = args.playbookLine;
+  if (!playbookLine) return { moneyline, spread: null, total: null };
+  const homeSpread = playbookLine.homeSpread;
+  const totalLine = playbookLine.total;
+  if (homeSpread === null || homeSpread === undefined || totalLine === null || totalLine === undefined) {
+    return {
+      moneyline,
+      spread: homeSpread === null || homeSpread === undefined
+        ? null
+        : spreadOutlook(args.forecast, homeSpread, playbookLine.capturedAt),
+      total: totalLine === null || totalLine === undefined
+        ? null
+        : totalOutlook(args.forecast, totalLine, playbookLine.capturedAt),
+    };
+  }
+  const probabilities = cfbV1LineProbabilities({ forecast: args.forecast, homeSpread, totalLine });
+  return {
+    moneyline,
+    spread: probabilities.spread.home >= probabilities.spread.away
+      ? outlook("spread", "home", homeSpread, probabilities.spread.home, "independent_pmf_at_playbook_line", playbookLine.capturedAt)
+      : outlook("spread", "away", -homeSpread, probabilities.spread.away, "independent_pmf_at_playbook_line", playbookLine.capturedAt),
+    total: probabilities.total.over >= probabilities.total.under
+      ? outlook("total", "over", totalLine, probabilities.total.over, "independent_pmf_at_playbook_line", playbookLine.capturedAt)
+      : outlook("total", "under", totalLine, probabilities.total.under, "independent_pmf_at_playbook_line", playbookLine.capturedAt),
+  };
+}
+
+function spreadOutlook(forecast: CfbV1Forecast, homeSpread: number, observedAt: string): CfbForwardMarketOutlook {
+  const probabilities = cfbV1LineProbabilities({ forecast, homeSpread, totalLine: forecast.expectedTotal });
+  return probabilities.spread.home >= probabilities.spread.away
+    ? outlook("spread", "home", homeSpread, probabilities.spread.home, "independent_pmf_at_playbook_line", observedAt)
+    : outlook("spread", "away", -homeSpread, probabilities.spread.away, "independent_pmf_at_playbook_line", observedAt);
+}
+
+function totalOutlook(forecast: CfbV1Forecast, totalLine: number, observedAt: string): CfbForwardMarketOutlook {
+  const probabilities = cfbV1LineProbabilities({ forecast, homeSpread: 0, totalLine });
+  return probabilities.total.over >= probabilities.total.under
+    ? outlook("total", "over", totalLine, probabilities.total.over, "independent_pmf_at_playbook_line", observedAt)
+    : outlook("total", "under", totalLine, probabilities.total.under, "independent_pmf_at_playbook_line", observedAt);
+}
+
+function outlook(
+  market: CfbV1Market,
+  side: CfbForwardMarketOutlook["side"],
+  line: number | null,
+  independentProbability: number,
+  source: CfbForwardMarketOutlook["source"],
+  contextObservedAt: string | null,
+): CfbForwardMarketOutlook {
+  if (!Number.isFinite(independentProbability) || independentProbability < 0.5 || independentProbability > 1) {
+    throw new Error(`CFB ${market} independent outlook probability is invalid.`);
+  }
+  return { market, side, line, independentProbability, source, contextObservedAt };
 }
 
 function groupByGame(rows: CfbForwardStoredEvidence[]): Map<string, CfbForwardStoredEvidence[]> {

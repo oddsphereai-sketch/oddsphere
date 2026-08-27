@@ -9,7 +9,11 @@ import type { MarketSplitDisplaySection } from "@/lib/types/domain/Recommendatio
 import { marketSplitSectionIsStale } from "@/app/lab/lib/dailyEdgeSplitFreshness";
 import type { Sport } from "@/lib/types/domain/Sport";
 import { currentSlateDate } from "@/lib/dates/slateDate";
-import { buildDailyEdgeSportSwitchDestination } from "@/app/lab/lib/dailyEdgeSportSwitch";
+import {
+  buildDailyEdgeSportSwitchDestination,
+  DAILY_EDGE_SPORT_SWITCH_FALLBACK_MS,
+  dailyEdgeSportDestinationIsCurrent,
+} from "@/app/lab/lib/dailyEdgeSportSwitch";
 import { keyStatIsTwoSided } from "@/lib/services/keyStatsFormatter";
 import type {
   DailyEdgeGameAvailability,
@@ -77,7 +81,6 @@ export type SoccerCompetitionPreview = {
 };
 export type WeeklySlatePreview = {
   label: string;
-  evidence?: string;
   previousHref: string | null;
   nextHref: string | null;
   displayGameCount?: number;
@@ -169,10 +172,27 @@ export default function ActualDailyEdgePreview({
   const [mobileSheetOpen, setMobileSheetOpen] = useState(initialReaderRequested);
   const [availability, setAvailability] = useState<PreviewAvailabilityByGame>(initialAvailability);
   const readerRef = useRef<HTMLDivElement>(null);
+  const sportSwitchFallbackRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    const requestedSport = window.sessionStorage.getItem("daily-edge-sport-focus");
+    if (requestedSport !== sport) return;
+    window.sessionStorage.removeItem("daily-edge-sport-focus");
+    window.requestAnimationFrame(() => {
+      document
+        .querySelector<HTMLButtonElement>(`[data-daily-edge-sport-tab="${sport}"]`)
+        ?.focus({ preventScroll: true });
+    });
+  }, [sport]);
+
+  useEffect(() => () => {
+    if (sportSwitchFallbackRef.current !== null) {
+      window.clearTimeout(sportSwitchFallbackRef.current);
+    }
+  }, []);
 
   function switchSport(next: Sport) {
     if (embeddedSample) return;
-    const explicitDestination = sportSwitchDestinations?.[next];
     const destination = buildDailyEdgeSportSwitchDestination({
       pathname,
       currentSearch: searchParams.toString(),
@@ -180,16 +200,31 @@ export default function ActualDailyEdgePreview({
       explicitDestinations: sportSwitchDestinations,
       slateDate: currentSlateDate,
     });
-    if (explicitDestination) {
-      // The member route is server-rendered and can refresh on focus between
-      // pointer-down and click. A canonical native replacement cannot be
-      // dropped by that concurrent refresh and never exposes a stale reader.
-      window.location.replace(destination);
-      return;
-    }
+
     setReaderOpen(false);
     setMobileSheetOpen(false);
-    router.replace(destination, { scroll: false });
+    setDeepOpen(false);
+    window.sessionStorage.setItem("daily-edge-sport-focus", next);
+
+    if (sportSwitchFallbackRef.current !== null) {
+      window.clearTimeout(sportSwitchFallbackRef.current);
+    }
+
+    try {
+      // A sport change is a normal in-app history transition. The current
+      // screen remains painted until the next server payload is ready, while
+      // the canonical destination removes the prior game and market reader.
+      router.push(destination, { scroll: false });
+      sportSwitchFallbackRef.current = window.setTimeout(() => {
+        if (!dailyEdgeSportDestinationIsCurrent(window.location.href, destination)) {
+          // Only recover natively when the client router genuinely failed to
+          // reach the requested canonical URL within the bounded watchdog.
+          window.location.replace(destination);
+        }
+      }, DAILY_EDGE_SPORT_SWITCH_FALLBACK_MS);
+    } catch {
+      window.location.replace(destination);
+    }
   }
 
   const game = useMemo(
@@ -529,7 +564,7 @@ function SlateHeader({ snapshot, sport, onSportChange, sample = false, soccerCom
       </div>
       <div className="mt-5"><SportSelector active={sport} onChange={onSportChange} sports={DAILY_EDGE_TOP_LEVEL_SPORT_KEYS} showCounts={false} showPendingState availability={sportAvailability} labelOverrides={{ soccer: "Soccer" }} /></div>
       {sport === "soccer" && soccerCompetition ? <SoccerCompetitionBar active={soccerCompetition.active} reviewMode={reviewMode} /> : null}
-      {weeklySlate ? <div className="mt-3 flex items-center justify-between gap-3 rounded-xl border border-white/[0.07] bg-white/[0.025] px-3 py-2.5"><div className="min-w-0"><p className="text-[9px] font-black uppercase tracking-[0.15em] text-gray-400">{weeklySlate.label}</p>{weeklySlate.evidence ? <p className="mt-1 text-[8px] font-semibold leading-relaxed text-gray-600">{weeklySlate.evidence}</p> : null}</div><div className="flex shrink-0 gap-2">{weeklySlate.previousHref ? <Link href={weeklySlate.previousHref} className="rounded-md border border-white/[0.08] px-2.5 py-1.5 text-[8px] font-black uppercase tracking-wider text-gray-400 hover:text-white">← Previous</Link> : null}{weeklySlate.nextHref ? <Link href={weeklySlate.nextHref} className="rounded-md border border-white/[0.08] px-2.5 py-1.5 text-[8px] font-black uppercase tracking-wider text-gray-400 hover:text-white">Next →</Link> : null}</div></div> : null}
+      {weeklySlate ? <div className="mt-3 flex items-center justify-between gap-3 rounded-xl border border-white/[0.07] bg-white/[0.025] px-3 py-2.5"><p className="min-w-0 text-[9px] font-black uppercase tracking-[0.15em] text-gray-400">{weeklySlate.label}</p><div className="flex shrink-0 gap-2">{weeklySlate.previousHref ? <Link href={weeklySlate.previousHref} className="rounded-md border border-white/[0.08] px-2.5 py-1.5 text-[8px] font-black uppercase tracking-wider text-gray-400 hover:text-white">← Previous</Link> : null}{weeklySlate.nextHref ? <Link href={weeklySlate.nextHref} className="rounded-md border border-white/[0.08] px-2.5 py-1.5 text-[8px] font-black uppercase tracking-wider text-gray-400 hover:text-white">Next →</Link> : null}</div></div> : null}
     </div>
   );
 }

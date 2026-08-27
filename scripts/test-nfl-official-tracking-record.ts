@@ -9,6 +9,7 @@ import {
 import { buildNflOfficialTrackingRecords } from "../lib/services/football/nflOfficialTrackingRecord";
 import { buildNflRegularEvaluatedBetDecision } from "../lib/services/football/nflRegularDecisionEvidence";
 import { nflForwardT60TrackingEligibility } from "../lib/services/football/nflTrackingLifecycle";
+import { buildMarketScopedFootballTrackingPlan, FOOTBALL_MARKET_SCOPED_T60_TRACKING_RELEASE } from "../lib/services/football/footballMarketScopedTracking";
 
 const capturedAt = "2026-09-09T23:30:00.000Z";
 const gameStartsAt = "2026-09-10T00:20:00.000Z";
@@ -66,6 +67,39 @@ const eligible = nflForwardT60TrackingEligibility({
   officialRegistryLaunched: true,
 });
 assert.deepEqual(eligible, { eligible: true, reason: "eligible_regular_t60" });
+assert.deepEqual(nflForwardT60TrackingEligibility({
+  stage: "t60",
+  captureTiming: "on_time",
+  t60LagMinutes: 10,
+  capturedAt,
+  providerGameId: "1392216",
+  gameStartsAt,
+  decisions: decisions.slice(1),
+  publicationApproved: true,
+  officialRegistryLaunched: true,
+}), { eligible: true, reason: "eligible_regular_t60" }, "a Held Moneyline cannot suppress coherent Spread and Total tuples");
+assert.equal(nflForwardT60TrackingEligibility({
+  stage: "t60",
+  captureTiming: "on_time",
+  t60LagMinutes: 10,
+  capturedAt,
+  providerGameId: "1392216",
+  gameStartsAt,
+  decisions: [],
+  publicationApproved: true,
+  officialRegistryLaunched: true,
+}).reason, "incomplete_decision_set");
+assert.equal(nflForwardT60TrackingEligibility({
+  stage: "t60",
+  captureTiming: "on_time",
+  t60LagMinutes: 10,
+  capturedAt,
+  providerGameId: "1392216",
+  gameStartsAt,
+  decisions: [decisions[1]!, decisions[1]!],
+  publicationApproved: true,
+  officialRegistryLaunched: true,
+}).reason, "incoherent_decision_tuple");
 assert.equal(nflForwardT60TrackingEligibility({
   stage: "t60",
   captureTiming: "on_time",
@@ -142,12 +176,45 @@ assert.deepEqual(records.map((record) => record.no_bet), [false, false, true]);
 assert.equal(records.every((record) => record.locked_at === capturedAt), true);
 assert.equal(records.every((record) => record.model_version === common.decisionRelease), true);
 assert.equal(records.every((record) => record.slate_date === "2026-09-09"), true);
+assert.equal(records.every((record) => record.snapshot_json?.football_market_scoped_tracking_release === FOOTBALL_MARKET_SCOPED_T60_TRACKING_RELEASE), true);
+
+const marketScopedPayload = {
+  ...payload,
+  decisions: { ...payload.decisions, evaluatedBets: decisions.slice(1), trackingEnabled: true },
+} as NflForwardEvidencePayload;
+const marketScopedRecords = buildNflOfficialTrackingRecords({ payload: marketScopedPayload, gameId: 5001 });
+assert.deepEqual(marketScopedRecords.map((record) => record.market), ["spread", "total"]);
+assert.deepEqual(marketScopedRecords.map((record) => record.odds_american), [-105, -108]);
+assert.equal(marketScopedRecords.every((record) => record.locked_at === capturedAt), true);
+const oneMarketRecords = buildNflOfficialTrackingRecords({
+  payload: {
+    ...marketScopedPayload,
+    decisions: { ...marketScopedPayload.decisions, evaluatedBets: [decisions[2]!] },
+  },
+  gameId: 5001,
+});
+assert.deepEqual(oneMarketRecords.map((record) => record.market), ["total"]);
+assert.throws(
+  () => buildNflOfficialTrackingRecords({ payload: { ...marketScopedPayload, decisions: { ...marketScopedPayload.decisions, evaluatedBets: [] } }, gameId: 5001 }),
+  /one to three exact-price market decisions/,
+);
+const retryPlan = buildMarketScopedFootballTrackingPlan(
+  [{ externalId: 1392216, decisions: decisions.slice(1) }],
+  [
+    { external_id: 1392216, market: "moneyline" },
+    { external_id: 1392216, market: "spread" },
+  ],
+);
+assert.equal(retryPlan.proposed, 2);
+assert.deepEqual([...retryPlan.desiredKeys].sort(), ["1392216:spread", "1392216:total"]);
+assert.deepEqual([...retryPlan.existingKeys], ["1392216:spread"], "a stored Held sibling cannot inflate desired-key idempotency");
 
 const writerSource = readFileSync("lib/services/football/nflForwardEvidenceWriter.ts", "utf8");
 assert.match(writerSource, /writeOfficialTrackingFromPayloads/);
 assert.match(writerSource, /currentT60Payloads/);
 assert.match(writerSource, /\.from\("prediction_records"\)/);
 assert.match(writerSource, /\.insert\(records/);
+assert.match(writerSource, /buildMarketScopedFootballTrackingPlan/);
 const trackingSource = readFileSync("lib/services/trackingRefreshService.ts", "utf8");
 assert.match(trackingSource, /sport === "nfl"/);
 assert.match(trackingSource, /ingestNflFinalScores/);

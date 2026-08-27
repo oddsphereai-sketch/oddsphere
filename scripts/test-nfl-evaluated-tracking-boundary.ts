@@ -75,13 +75,23 @@ assert.throws(() => buildNflTrackingProposalsFromEvaluatedDecisions({
   modelApproved: true,
   officialRegistryLaunched: true,
 }), /exceeds the 20-minute maximum T-60 capture lag/);
-assert.throws(() => buildNflTrackingProposalsFromEvaluatedDecisions({
+const marketScopedRows = buildNflTrackingProposalsFromEvaluatedDecisions({
   snapshot,
   decisions: decisions.slice(0, 2),
   seasonPhase: "regular",
   week: 1,
   modelApproved: true,
   officialRegistryLaunched: true,
-}), /exactly three unique T-60 market tuples/);
+});
+assert.deepEqual(marketScopedRows.map((row) => row.market), ["moneyline", "spread"]);
+assert.equal(marketScopedRows.every((row) => row.trackingEligible), true);
+assert.throws(() => buildNflTrackingProposalsFromEvaluatedDecisions({
+  snapshot,
+  decisions: [decisions[0]!, decisions[0]!],
+  seasonPhase: "regular",
+  week: 1,
+  modelApproved: true,
+  officialRegistryLaunched: true,
+}), /duplicate football markets/);
 
-console.log("NFL tracking consumes the coherent frozen evaluated-price tuple and rejects incomplete locks.");
+console.log("NFL tracking consumes coherent frozen evaluated-price tuples per market and rejects invalid locks.");

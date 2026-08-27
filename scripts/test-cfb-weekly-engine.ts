@@ -4,6 +4,7 @@ import {
   CFB_FORWARD_EVIDENCE_COLLECTOR_RELEASE,
   CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE,
   CFB_FORWARD_MEMBER_RELEASE,
+  buildCfbForwardMarketOutlooks,
   hashCfbForwardEvidencePayload,
   type CfbForwardEvidencePayload,
   type CfbForwardStoredEvidence,
@@ -172,12 +173,16 @@ function evidenceRow(value: NcaafGame, forecast: ReturnType<typeof getCfbV1Forec
     cutoffAt: null,
     t60LagMinutes: null,
     game: value,
-    market: { current: null, currentBooks: [], providerOpening: null, operationalOpening: null, playbookLine: null, playbookSplits: null, sharpApiSplits: null },
+    market: { current: null, currentBooks: [], providerOpening: null, operationalOpening: null, playbookLine: null, playbookSplits: null, sharpApiOddsRelease: null, sharpApiSplits: null },
     quarterbacks: { away: quarterbacks(value.away), home: quarterbacks(value.home) },
     availability: { injuryStatus: "provider_unavailable", weatherStatus: "venue_weather_unavailable", note: "test" },
-    decisions: { ...bundle, forecast: publishedForecast },
-    coverage: { currentOdds: false, comparableCurrentBookCount: 0, targetExcludedConsensusReady: false, operationalOpening: false, playbookLine: false, playbookSplits: false, sharpApiSplits: false, activeQuarterbacks: true, injuries: false, weather: false, healthHolds: [], availabilityWarnings: [] },
-    requestBudget: { balldontlieSlate: 0, balldontlieQuarterbacks: 0, playbook: 0, totalMaximum: 0 },
+    decisions: {
+      ...bundle,
+      forecast: publishedForecast,
+      marketOutlooks: buildCfbForwardMarketOutlooks({ forecast, playbookLine: null }),
+    },
+    coverage: { currentOdds: false, comparableCurrentBookCount: 0, currentOddsProviders: [], sharpApiOddsFallback: false, targetExcludedConsensusReady: false, operationalOpening: false, playbookLine: false, playbookSplits: false, sharpApiSplits: false, activeQuarterbacks: true, injuries: false, weather: false, healthHolds: [], availabilityWarnings: [] },
+    requestBudget: { balldontlieSlate: 0, balldontlieQuarterbacks: 0, playbook: 0, sharpApiOdds: 0, totalMaximum: 0 },
   };
   const payloadSha256 = hashCfbForwardEvidencePayload(payload);
   return { id, providerGameId: value.providerGameId, stage: "opening", capturedAt, gameStartAt: value.scheduledStart, payloadSha256, payload };

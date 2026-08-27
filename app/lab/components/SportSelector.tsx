@@ -86,6 +86,7 @@ export default function SportSelector({
               key={sport}
               type="button"
               role="tab"
+              data-daily-edge-sport-tab={sport}
               aria-selected={isActive}
               aria-busy={isPending}
               onPointerDown={(event) => {

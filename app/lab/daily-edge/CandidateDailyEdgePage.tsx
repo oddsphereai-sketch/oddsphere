@@ -104,7 +104,6 @@ export default async function CandidateDailyEdgePage({
     snapshot = await loadDailyEdgeSnapshot(competition === "champions_league" ? "ucl" : sport)
       .catch(() => emptyPreviewSnapshot(sport));
   }
-  const weeklySourceGameCount = snapshot.games.length;
   if (nflFixture) {
     snapshot = filterWeeklyReaderSnapshot(snapshot, "nfl");
   } else if (cfbFixture) {
@@ -151,7 +150,6 @@ export default async function CandidateDailyEdgePage({
         weeklySlate={nflFixture
           ? {
               label: `NFL · ${nflFixture.week.label} · ${snapshot.games.length} games · ${snapshot.games.length * 3} predictions · ${"heldMemberFixtureRelease" in nflFixture ? "live predictions and exact-price Bet grades" : nflFixture.tracking.seasonPhase === "preseason" ? "preseason is excluded from official tracking" : "tracking begins only with an approved pre-kickoff lock"}`,
-              evidence: `${"heldMemberFixtureRelease" in nflFixture ? "Captured" : "Stored"} ${new Date("capturedAt" in nflFixture ? nflFixture.capturedAt : nflFixture.storedAt).toLocaleString("en-US", { timeZone: "America/New_York" })} ET · schedule, named-book odds, injuries and depth from BALLDONTLIE · ${nflFixture.provenance.firstObservedCoverageGames}/${weeklySourceGameCount} weekly same-book Opening trails · ${nflFixture.provenance.splitCoverageGames}/${weeklySourceGameCount} weekly Playbook public-consensus split sets${"heldMemberFixtureRelease" in nflFixture ? " · joint score/winner/spread/total forecasts · exact-price Best Angle/Lean/Watchlist/No Play grades across all three markets · immutable per-game T-60 tracking freeze" : nflFixture.tracking.seasonPhase === "preseason" ? " (unavailable for this preseason slate)" : " (context-only until chronologically validated)"} · ${snapshot.games.length} games currently displayed`,
               previousHref: null,
               nextHref: null,
               asOf: snapshot.as_of,
@@ -160,7 +158,6 @@ export default async function CandidateDailyEdgePage({
           : nflWeekOneEvidenceEnabled
             ? {
                 label: "NFL · Regular Season Week 1 · evidence temporarily unavailable · model validation hold",
-                evidence: "The stale preseason package is retired from the member reader. Week 1 evidence could not be verified for this request, so the board fails closed instead of restoring an older slate.",
                 previousHref: null,
                 nextHref: null,
                 displayGameCount: 0,
@@ -170,7 +167,6 @@ export default async function CandidateDailyEdgePage({
           : cfbFixture
             ? {
                 label: `CFB · ${cfbFixture.week.label} · ${snapshot.games.length} games · ${snapshot.games.length * 3} predictions · live model and exact-price Bet grades`,
-                evidence: `Captured ${new Date(cfbFixture.capturedAt).toLocaleString("en-US", { timeZone: "America/New_York" })} ET · BALLDONTLIE schedule, named-book odds and active QB rosters · ${cfbFixture.provenance.openingCoverageGames}/${weeklySourceGameCount} operational Opening trails · ${cfbFixture.provenance.splitCoverageGames}/${weeklySourceGameCount} Playbook public-consensus split sets · independent joint-score forecasts · exact-price Best Angle/Lean/Watchlist/No Play grades · immutable per-game T-60 tracking`,
                 previousHref: null,
                 nextHref: null,
                 asOf: snapshot.as_of,
@@ -179,7 +175,6 @@ export default async function CandidateDailyEdgePage({
           : cfbEnabled
             ? {
                 label: "CFB · Opening Week · evidence temporarily unavailable",
-                evidence: "The member board fails closed when the authoritative CFB evidence package is unavailable; no stale or fabricated slate is substituted.",
                 previousHref: null,
                 nextHref: null,
                 displayGameCount: 0,
