@@ -49,8 +49,11 @@ const feature = {
   availability: { listed: false, status: null, detail: null, reportedAt: null, reportUpdatedAt: "2026-08-25T10:00:00.000Z", source: "BALLDONTLIE" as const },
   features: {
     is_home: 1, position_wr: 1, team_implied_touchdowns: 3,
-    prior_receptions_ewm: 5.1, prior_targets_ewm: 7.4, prior_target_share_ewm: 0.22,
-    prior_offense_snap_pct_ewm: 0.78, prior_opponent_allowed_targets_ewm: 31.2,
+    prior_receptions_lag1: 6, prior_receptions_avg3: 5.3, prior_receptions_avg5: 4.8, prior_receptions_ewm: 5.1,
+    prior_targets_lag1: 9, prior_targets_avg3: 8.0, prior_targets_avg5: 7.6, prior_targets_ewm: 7.4,
+    prior_target_share_lag1: 0.25, prior_target_share_avg3: 0.23, prior_target_share_avg5: 0.21, prior_target_share_ewm: 0.22,
+    prior_offense_snap_pct_lag1: 0.81, prior_offense_snap_pct_avg3: 0.79, prior_offense_snap_pct_avg5: 0.76, prior_offense_snap_pct_ewm: 0.78,
+    prior_opponent_allowed_targets_avg3: 30.8, prior_opponent_allowed_targets_avg5: 30.5, prior_opponent_allowed_targets_ewm: 31.2,
   },
 };
 const oneBook = buildNflPlayerPropsRuntimeBoard({ offers: [baseOffer], features: [feature], evaluatedAt: "2026-08-25T12:01:00.000Z" });
@@ -70,6 +73,12 @@ assert.ok(twoBooks.decisions.every((row) => row.forecastContext.expectedQuarterb
 assert.equal(twoBooks.decisions[0]?.forecastContext.recentProduction?.label, "Recent receptions");
 assert.deepEqual(twoBooks.decisions[0]?.forecastContext.roleOpportunity.map((item) => item.label), ["Recent targets", "Target share", "Offensive snap share"]);
 assert.equal(twoBooks.decisions[0]?.forecastContext.opponentAllowance?.value, 31.2);
+assert.deepEqual(twoBooks.decisions[0]?.forecastContext.modelInputTrends?.find((trend) => trend.label === "Recent receptions")?.points, [
+  { window: "last_game", value: 6, modelInput: true },
+  { window: "last_3_average", value: 5.3, modelInput: true },
+  { window: "last_5_average", value: 4.8, modelInput: true },
+  { window: "model_weighted", value: 5.1, modelInput: true },
+], "the member context exposes the exact timestamped trend inputs without changing the score");
 const noOpening = buildNflPlayerPropsRuntimeBoard({
   offers: [baseOffer, { ...baseOffer, offerKey: "test-b", sportsbook: "book-b" }].map((offer) => ({
     ...offer, openingObservedAt: null, openingOverPrice: null, openingUnderPrice: null, openingYesPrice: null,

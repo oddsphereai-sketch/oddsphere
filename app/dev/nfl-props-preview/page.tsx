@@ -2,7 +2,7 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { notFound } from "next/navigation";
 import ProductAppFrame from "@/app/lab/components/ProductAppFrame";
-import { NflPlayerPropsDashboard } from "@/app/player-props/components/NflPlayerPropsDashboard";
+import { NflPlayerPropsProductDashboard } from "@/app/player-props/components/NflPlayerPropsProductDashboard";
 import { PlayerPropsLeaguePills } from "@/app/player-props/components/PlayerPropsLeaguePills";
 import { isProductExperiencePreviewAvailable } from "@/lib/config/productExperience";
 import {
@@ -24,7 +24,7 @@ export default async function NflPropsPreviewPage({ searchParams }: { searchPara
   const query = await searchParams;
   const requestedReader = typeof query.reader === "string" ? query.reader : null;
   const initialSelectedKey = snapshot?.memberDecisions.some((row) => decisionKey(row) === requestedReader) ? requestedReader : null;
-  return <ProductAppFrame><PlayerPropsLeaguePills league="nfl" nflEnabled reviewMode /><NflPlayerPropsDashboard snapshot={snapshot ? buildNflPlayerPropsMemberSnapshot(snapshot) : null} reviewMode initialSelectedKey={initialSelectedKey} /></ProductAppFrame>;
+  return <ProductAppFrame><PlayerPropsLeaguePills league="nfl" nflEnabled reviewMode /><NflPlayerPropsProductDashboard snapshot={snapshot ? buildNflPlayerPropsMemberSnapshot(snapshot) : null} reviewMode initialSelectedKey={initialSelectedKey} /></ProductAppFrame>;
 }
 
 async function loadLocalReviewSnapshot(): Promise<NflPlayerPropsProductionSnapshot | null> {

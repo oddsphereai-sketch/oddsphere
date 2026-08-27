@@ -6,7 +6,7 @@ import type { NflPlayerPropsExactOffer } from "./nflPlayerPropsMarketBoard";
 export const NFL_PLAYER_PROPS_RUNTIME_RELEASE =
   "nfl_player_props_runtime_2026_08_25_r2_shared_context" as const;
 export const NFL_PLAYER_PROPS_BOARD_RELEASE =
-  "nfl_player_props_board_2026_08_27_r4_projection_context" as const;
+  "nfl_player_props_board_2026_08_27_r5_research_trends" as const;
 
 type TreeNode = {
   value: number; featureIndex: number; threshold: number; missingGoToLeft: boolean;
@@ -94,6 +94,15 @@ export type NflPlayerPropsProjectionRange = {
 export type NflPlayerPropsForecastMetric = {
   label: string; value: number; format: "count" | "yards" | "percent";
 };
+export type NflPlayerPropsForecastTrendPoint = {
+  window: "last_game" | "last_3_average" | "last_5_average" | "model_weighted";
+  value: number; modelInput: true;
+};
+export type NflPlayerPropsForecastTrend = {
+  label: string; format: NflPlayerPropsForecastMetric["format"];
+  source: "timestamped_model_feature";
+  points: NflPlayerPropsForecastTrendPoint[];
+};
 export type NflPlayerPropsForecastContext = {
   featureAsOf: string; position: string | null;
   expectedQuarterback: NflPlayerPropsRuntimeFeatureRow["expectedQuarterback"];
@@ -102,6 +111,7 @@ export type NflPlayerPropsForecastContext = {
   recentProduction: NflPlayerPropsForecastMetric | null;
   roleOpportunity: NflPlayerPropsForecastMetric[];
   opponentAllowance: NflPlayerPropsForecastMetric | null;
+  modelInputTrends?: NflPlayerPropsForecastTrend[];
 };
 export type NflPlayerPropsRuntimeDecision = {
   gameId: string; providerPlayerId: string | null; playerName: string; team: string; opponent: string;
@@ -547,6 +557,20 @@ function buildForecastContext(
     const value = feature.features[definition[1]];
     return value === null || value === undefined ? null : { label: definition[0], value, format: definition[2] };
   };
+  const trend = (definition: [string, string, NflPlayerPropsForecastMetric["format"]]): NflPlayerPropsForecastTrend | null => {
+    const base = definition[1].replace(/_(?:lag1|avg3|avg5|ewm)$/, "");
+    const candidates: Array<[NflPlayerPropsForecastTrendPoint["window"], string]> = [
+      ["last_game", `${base}_lag1`],
+      ["last_3_average", `${base}_avg3`],
+      ["last_5_average", `${base}_avg5`],
+      ["model_weighted", `${base}_ewm`],
+    ];
+    const points = candidates.flatMap(([window, featureName]) => {
+      const value = feature.features[featureName];
+      return value === null || value === undefined ? [] : [{ window, value, modelInput: true as const }];
+    });
+    return points.length ? { label: definition[0], format: definition[2], source: "timestamped_model_feature", points } : null;
+  };
   return {
     featureAsOf: feature.featureAsOf,
     position: feature.position,
@@ -557,6 +581,7 @@ function buildForecastContext(
     recentProduction: config ? metric(config.production) : null,
     roleOpportunity: config ? config.opportunity.map(metric).filter((value): value is NflPlayerPropsForecastMetric => value !== null) : [],
     opponentAllowance: config ? metric(config.opponent) : null,
+    modelInputTrends: config ? [config.production, ...config.opportunity, config.opponent].map(trend).filter((value): value is NflPlayerPropsForecastTrend => value !== null) : [],
   };
 }
 function compareDecision(first: NflPlayerPropsRuntimeDecision, second: NflPlayerPropsRuntimeDecision): number {

@@ -66,8 +66,8 @@ function emptyBoard(): NflPlayerPropsRuntimeBoard {
 }
 
 const unlocked = reconcileNflPlayerPropsProductionSnapshot({ season: 2026, week: 1, evaluatedAt: "2026-08-25T12:00:00.000Z", nextBoard: board(decision) });
-assert.equal(NFL_PLAYER_PROPS_PRODUCTION_CANDIDATE_RELEASE, "nfl_player_props_member_2026_08_27_r6_projection_context");
-assert.equal(NFL_PLAYER_PROPS_WRITER_RELEASE, "nfl_player_props_writer_2026_08_27_r7_projection_context");
+assert.equal(NFL_PLAYER_PROPS_PRODUCTION_CANDIDATE_RELEASE, "nfl_player_props_member_2026_08_27_r7_research_trends");
+assert.equal(NFL_PLAYER_PROPS_WRITER_RELEASE, "nfl_player_props_writer_2026_08_27_r8_research_trends");
 assert.equal(NFL_PLAYER_PROPS_TRACKING_RELEASE, "nfl_player_props_tracking_2026_08_25_r4_regular_t60_shared_context");
 assert.equal(NFL_PLAYER_PROPS_SETTLEMENT_RELEASE, "nfl_player_props_settlement_2026_08_25_r3_bounded_finality");
 assert.equal(NFL_PLAYER_PROPS_PRODUCTION_INCLUDE_OPENINGS, false, "recurring production does not duplicate historical-opening requests");
@@ -154,16 +154,16 @@ const staleRemovedAtBoundary = reconcileNflPlayerPropsProductionSnapshot({
   nextBoard: emptyBoard(),
 });
 assert.equal(staleRemovedAtBoundary.board.decisions.length, 0, "a stale removed offer is unavailable, not frozen or held");
-const memberReader = readFileSync("app/player-props/components/NflPlayerPropsDashboard.tsx", "utf8");
+const memberReader = readFileSync("app/player-props/components/NflPlayerPropsProductDashboard.tsx", "utf8");
 assert.ok(!memberReader.includes("Provisional model"), "the live member reader must not label the production model provisional");
-assert.ok(memberReader.includes('reviewMode ? "Production candidate" : "NFL model"'));
-for (const productHierarchy of ["Top Rated", "Our Model Read", "Worth a Look", "Markets", "Build your board"]) {
+assert.ok(memberReader.includes("Private founder review · Real board"));
+for (const productHierarchy of ["Today’s Radar", "Research workspace", "Choose a matchup", "Prop Board", "Reader Summary"]) {
   assert.ok(memberReader.includes(productHierarchy), `NFL member board preserves MLB-style product hierarchy: ${productHierarchy}`);
 }
-assert.ok(memberReader.includes('data-product-zone="top-rated"'));
-assert.ok(memberReader.includes('data-product-zone="worth-a-look"'));
-assert.ok(memberReader.includes('data-product-zone="markets"'));
-for (const truthfulCoverageCopy of ["Current graded board", "Available NFL markets", "market families currently graded"]) {
+assert.ok(memberReader.includes('data-product-zone="today-radar"'));
+assert.ok(memberReader.includes('data-product-zone="research-entry"'));
+assert.ok(memberReader.includes('data-product-zone="full-board"'));
+for (const truthfulCoverageCopy of ["completed reads", "All markets", "market families currently graded"]) {
   assert.ok(memberReader.includes(truthfulCoverageCopy), `NFL board scopes coverage truthfully: ${truthfulCoverageCopy}`);
 }
 for (const overclaim of ["Every market is modeled", "All NFL props", ">All props<"]) {
@@ -175,12 +175,19 @@ for (const diagnostic of ["unavailableNoIndependentBenchmark", "incompleteExactO
 for (const internalOnly of ["Held", "operationalExceptions", "recoveryEligibleOperationalExceptions", "roleOrIdentityHeld"]) {
   assert.ok(!memberReader.includes(internalOnly), `NFL member component must not expose internal alert state: ${internalOnly}`);
 }
-for (const readerEvidence of ["Available Exact Prices", "Same-Book Movement", "row.bookEvidence", "row.opponent", "row.scheduledStart", "provider(row.provider)", "OddSphere Forecast", "Projection Context", "Empirical 80% model range"]) {
+for (const readerEvidence of ["Available Exact Prices", "Same-Book Movement", "row.bookEvidence", "row.opponent", "row.scheduledStart", "provider(row.provider)", "OddSphere Forecast", "Projection Context", "Empirical 80% model range", "Role & Matchup Context"]) {
   assert.ok(memberReader.includes(readerEvidence), `NFL reader exposes conformance evidence: ${readerEvidence}`);
+}
+for (const trendEvidence of ["modelInputTrends", "Actual model inputs.", "Last game", "L3 avg", "L5 avg", "Model-weighted"]) {
+  assert.ok(memberReader.includes(trendEvidence), `NFL reader exposes authentic model-input trend evidence: ${trendEvidence}`);
+}
+for (const responsiveContract of ["overflow-x-auto", "hidden xl:block", "grid gap-3 xl:hidden"]) {
+  assert.ok(memberReader.includes(responsiveContract), `NFL board preserves the shared responsive interaction contract: ${responsiveContract}`);
 }
 assert.ok(!memberReader.includes("No Edge"), "NFL uses the current universal No Play member vocabulary");
 assert.ok(memberReader.includes("Offers without a complete public evaluation are excluded from the board; they are not relabeled as No Play."));
 assert.ok(memberReader.includes("PlayerPropReaderDialog"), "NFL uses the shared MLB/NFL reader behavior contract");
+for (const sharedPrimitive of ["PlayerPropsSlateHero", "PlayerPropsSectionHeading", "PlayerPropsFilterButton", "PlayerPropsRadarCardFrame"]) assert.ok(memberReader.includes(sharedPrimitive), `NFL consumes shared MLB product primitive: ${sharedPrimitive}`);
 assert.ok(memberReader.includes("initialSelectedKey"));
 assert.ok(memberReader.includes('url.searchParams.set("reader", selectedKey)'));
 assert.ok(memberReader.includes("window.history.replaceState"), "reader selection remains URL-addressable like MLB");
@@ -195,6 +202,8 @@ for (const readerBehavior of [
   'sm:max-w-[980px]',
   'h-[100dvh]',
 ]) assert.ok(sharedReader.includes(readerBehavior), `shared props reader preserves: ${readerBehavior}`);
+const sharedProductUi = readFileSync("app/player-props/components/PlayerPropsProductUi.tsx", "utf8");
+assert.ok(sharedProductUi.includes("w-[min(84vw,340px)]"), "shared radar cards remain touch-scrollable within a 390px viewport");
 const mlbReader = readFileSync("app/mlb/props/components/PlayerPropsDashboard.tsx", "utf8");
 assert.ok(mlbReader.includes("PlayerPropReaderDialog"), "MLB and NFL execute the same reader shell");
 const productionWriter = readFileSync("lib/services/football/nflPlayerPropsProductionWriter.ts", "utf8");
@@ -215,6 +224,7 @@ assert.ok(memberPage.includes('process.env.NFL_PLAYER_PROPS_MEMBER_ENABLED === "
 assert.ok(memberPage.includes('if (!enabled || query.league !== "nfl") redirect("/mlb/props")'));
 assert.ok(memberPage.includes("requestedReader") && memberPage.includes("initialSelectedKey"));
 assert.ok(memberPage.includes("buildNflPlayerPropsMemberSnapshot(snapshot)"), "the live route serializes the public DTO, not the stored audit snapshot");
+assert.ok(memberPage.includes("NflPlayerPropsProductDashboard"), "the live NFL route uses the MLB-parity product dashboard");
 const mlbPage = readFileSync("app/mlb/props/page.tsx", "utf8");
 assert.ok(mlbPage.includes('nflEnabled={process.env.NFL_PLAYER_PROPS_MEMBER_ENABLED === "true"}'), "MLB hides the NFL pill until the member flag is enabled");
 const leaguePills = readFileSync("app/player-props/components/PlayerPropsLeaguePills.tsx", "utf8");

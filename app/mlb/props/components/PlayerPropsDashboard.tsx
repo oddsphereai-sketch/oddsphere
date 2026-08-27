@@ -29,6 +29,12 @@ import type {
 } from "@/lib/mlb/props/researchEvidence";
 import { assessPropPrice } from "@/lib/mlb/props/pricePolicy";
 import { PlayerPropReaderDialog } from "@/app/player-props/components/PlayerPropReaderDialog";
+import {
+  PlayerPropsFilterButton,
+  PlayerPropsRadarCardFrame,
+  PlayerPropsSectionHeading,
+  PlayerPropsSlateHero,
+} from "@/app/player-props/components/PlayerPropsProductUi";
 
 export type {
   PlayerBatterPitcherHistoryEvidence,
@@ -556,24 +562,21 @@ function PropsSlateHeader({ data, mode, matchups, selectedGame, onSelectGame, ca
     : matchups;
   const isPreview = mode === "preview";
   return <header data-product-zone="slate-intelligence" className="border-b border-gray-800 pb-6">
-    <div className="overflow-hidden rounded-xl border border-violet-400/20 bg-[radial-gradient(circle_at_top_right,rgba(139,92,246,0.14),transparent_42%),linear-gradient(145deg,#11151d,#090b10_68%)] p-5 sm:p-6">
-      <div className="flex flex-wrap items-end justify-between gap-4">
-        <div>{mode === "admin" ? <span className="mb-2 inline-flex rounded border border-violet-400/30 px-2 py-1 text-[10px] font-black uppercase text-violet-200">Admin review</span> : isPreview ? <span className="mb-2 inline-flex rounded border border-amber-400/30 px-2 py-1 text-[10px] font-black uppercase text-amber-200">Simulated data</span> : null}<p className="text-[11px] font-bold text-emerald-300">MLB · {formatSlateDate(data.date)}</p><h1 className="mt-1 text-3xl font-black text-white sm:text-4xl">{candidatePresentation ? "Player Props" : "Prop Researcher"}</h1><p className="mt-2 max-w-2xl text-sm leading-6 text-gray-400">Start with today&apos;s strongest model reads, compare the best available price, then open the full OddSphere research before making a decision.</p></div>
-        <div className="rounded-lg border border-white/[0.08] bg-black/25 px-4 py-3 text-right"><p className="text-[9px] font-black uppercase tracking-wider text-gray-600">Board status</p><p className="mt-1 text-sm font-black text-emerald-300">Prices updated <LocalTime value={data.lastUpdated} /></p><p className="mt-1 text-[10px] text-gray-600">Best available prices across {data.summary.booksCovered} books</p></div>
-      </div>
-      <div className="mt-5 grid grid-cols-3 gap-2">
-        <SlateSignalMetric label="Best angles" value={String(bestAngles)} tone="best" />
-        <SlateSignalMetric label="Model leans" value={String(leans)} tone="lean" />
-        <SlateSignalMetric label="Today’s games" value={String(navigableMatchups.length)} tone="slate" />
-      </div>
-    </div>
+    <PlayerPropsSlateHero
+      badge={mode === "admin" ? <span className="mb-2 inline-flex rounded border border-violet-400/30 px-2 py-1 text-[10px] font-black uppercase text-violet-200">Admin review</span> : isPreview ? <span className="mb-2 inline-flex rounded border border-amber-400/30 px-2 py-1 text-[10px] font-black uppercase text-amber-200">Simulated data</span> : null}
+      eyebrow={<>MLB · {formatSlateDate(data.date)}</>}
+      title={candidatePresentation ? "Player Props" : "Prop Researcher"}
+      description="Start with today’s strongest model reads, compare the best available price, then open the full OddSphere research before making a decision."
+      status={<>Prices updated <LocalTime value={data.lastUpdated} /></>}
+      statusDetail={<>Best available prices across {data.summary.booksCovered} books</>}
+      metrics={[
+        { label: "Best angles", value: String(bestAngles), tone: "best" },
+        { label: "Model leans", value: String(leans), tone: "lean" },
+        { label: "Today’s games", value: String(navigableMatchups.length), tone: "slate" },
+      ]}
+    />
     {navigableMatchups.length ? <SlateGameNavigator data={data} matchups={navigableMatchups} selectedGame={selectedGame} onSelectGame={onSelectGame} isPreview={isPreview} /> : null}
   </header>;
-}
-
-function SlateSignalMetric({ label, value, tone }: { label: string; value: string; tone: "best" | "lean" | "slate" }) {
-  const colors = tone === "best" ? "border-emerald-400/25 bg-emerald-400/[0.07] text-emerald-200" : tone === "lean" ? "border-sky-400/25 bg-sky-400/[0.07] text-sky-200" : "border-violet-400/25 bg-violet-400/[0.07] text-violet-200";
-  return <div className={`rounded-lg border px-3 py-3 sm:px-4 ${colors}`}><strong className="block text-xl font-black tabular-nums sm:text-2xl">{value}</strong><span className="mt-0.5 block text-[8px] font-black uppercase tracking-wider text-gray-500 sm:text-[9px]">{label}</span></div>;
 }
 
 function SlateGameNavigator({ data, matchups, selectedGame, onSelectGame, isPreview }: { data: PlayerPropsDashboardData; matchups: SlateMatchup[]; selectedGame: string; onSelectGame: (value: string) => void; isPreview: boolean }) {
@@ -615,7 +618,7 @@ function ProviderHealthStrip({ data, matchups }: { data: PlayerPropsDashboardDat
 }
 
 function MarketFilterButton({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
-  return <button type="button" onClick={onClick} aria-pressed={active} className={`h-8 shrink-0 rounded-md border px-3 text-xs font-bold ${active ? "border-violet-400 bg-violet-500/15 text-violet-100" : "border-gray-800 bg-gray-950 text-gray-500 hover:border-gray-700 hover:text-white"}`}>{label}</button>;
+  return <PlayerPropsFilterButton label={label} active={active} onClick={onClick} />;
 }
 
 function LineModeControl({ value, onChange }: { value: LineMode; onChange: (value: LineMode) => void }) {
@@ -635,7 +638,7 @@ function PriceModeControl({ value, onChange }: { value: PriceMode; onChange: (va
 function TodayRadar({ rows, onSelect }: { rows: PlayerPropPreviewRow[]; onSelect: (id: string) => void }) {
   const items = buildRadarItems(rows);
   return <section data-product-zone="today-radar" className="border-b border-gray-800 py-7">
-    <div className="flex items-end justify-between gap-4"><div><p className="text-[10px] font-black uppercase text-emerald-300">Today&apos;s Radar</p><h2 className="mt-1 text-2xl font-black text-white">Model reads worth a look</h2></div><span className="text-xs text-gray-500">{items.length} reads</span></div>
+    <PlayerPropsSectionHeading eyebrow="Today’s Radar" title="Model reads worth a look" count={`${items.length} reads`} />
     <div className="mt-4 flex snap-x gap-3 overflow-x-auto pb-2" aria-label="Model reads worth a look">{items.map((item) => <RadarCard key={`${item.label}-${item.row.id}`} item={item} onSelect={onSelect} />)}</div>
   </section>;
 }
@@ -644,16 +647,13 @@ function RadarCard({ item, onSelect }: { item: RadarItem; onSelect: (id: string)
   const { row } = item;
   const teamColor = teamPrimaryColor(row.team, "mlb");
   const gradeColor = getPropGradeColor(row.playGrade);
-  return <article className="relative h-full w-[min(84vw,340px)] shrink-0 snap-start overflow-hidden rounded-lg border bg-[#0e1218] lg:w-[360px]" style={{ borderColor: gradeColor.border, boxShadow: `0 0 0 1px ${gradeColor.border}22 inset`, background: `linear-gradient(180deg, ${gradeColor.background}, rgba(14, 18, 24, 0.98) 42%)` }}>
-    <div className="absolute inset-x-0 top-0 h-0.5" style={{ backgroundColor: teamColor }} />
-    <div className="absolute -right-8 top-12 opacity-[0.045]"><ProductTeamBadge abbreviation={row.team} size={150} /></div>
-    <div className="relative p-4"><div className="flex items-start justify-between gap-3"><span className="text-[10px] font-black uppercase text-violet-300">{item.label}</span><PropGradeBadge grade={row.playGrade} compact /></div>
+  return <PlayerPropsRadarCardFrame borderColor={gradeColor.border} background={`linear-gradient(180deg, ${gradeColor.background}, rgba(14, 18, 24, 0.98) 42%)`} accentColor={teamColor} watermark={<ProductTeamBadge abbreviation={row.team} size={150} />}>
+    <div className="flex items-start justify-between gap-3"><span className="text-[10px] font-black uppercase text-violet-300">{item.label}</span><PropGradeBadge grade={row.playGrade} compact /></div>
       <div className="mt-4 flex min-w-0 items-center gap-3"><PlayerAvatar player={row.player} team={row.team} headshotUrl={row.headshotUrl} /><div className="min-w-0"><h3 className="truncate text-base font-black text-white">{row.player}</h3><p className="truncate text-xs text-gray-500">{row.team} {row.homeAway === "home" ? "vs" : "@"} {row.opponent} · {row.marketLabel}</p></div></div>
       <div className="mt-5 grid grid-cols-[minmax(0,1fr)_auto] items-end gap-3"><div><p className="text-[9px] font-bold uppercase text-gray-600">Prediction</p><p className="mt-1 text-2xl font-black text-white">{marketSelectionLabel(row)}</p></div><div className="text-right"><p className="text-[9px] font-bold uppercase text-gray-600">Best price</p><p className="mt-1 text-xl font-black text-white">{signed(row.odds)}</p><p className="text-[10px] text-gray-500">{row.book}</p></div></div>
       <div className="mt-4 border-y border-gray-800 py-3"><div className="flex items-center justify-between text-xs"><span className="text-gray-500">{projectionHeadlineLabel(row)} <strong className="ml-1 text-white">{projectionHeadlineValue(row)}</strong></span><span className="text-gray-500">Edge <strong className={(row.modelEdge ?? 0) > 0 ? "ml-1 text-emerald-300" : "ml-1 text-gray-300"}>{row.modelEdge === null ? "-" : pct(row.modelEdge, true)}</strong></span></div><p className="mt-2 text-xs leading-5 text-gray-400">{item.note}</p></div>
       <button type="button" onClick={() => onSelect(row.id)} className="mt-4 h-9 w-full rounded-md border border-gray-700 text-xs font-black text-gray-100 hover:border-violet-400 hover:bg-violet-500/10">Open Reader</button>
-    </div>
-  </article>;
+  </PlayerPropsRadarCardFrame>;
 }
 
 function PlayerDirectory({ rows, onSelectPlayer }: { rows: PlayerPropPreviewRow[]; onSelectPlayer: (player: string) => void }) {
