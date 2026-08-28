@@ -52,6 +52,8 @@ import {
   presentDailyEdgeOperationalNoPlay,
 } from "@/app/lab/lib/dailyEdgeMarketPresentation";
 import {
+  dailyEdgeExactPriceSelectionLabel,
+  dailyEdgeMarketPredictionProbability,
   dailyEdgeMarketPredictionProvenanceLabel,
   dailyEdgeOutcomeForecastLabel,
 } from "@/app/lab/lib/dailyEdgeOutcomeForecast";
@@ -636,11 +638,17 @@ function MarketStrip({ game, sport, active, setActive }: { game: DailyEdgeGameDt
         const selected = active === key;
         const pulse = sourceCoherentMarketPulse(market, resolveMarketPulseMovement(market));
         const predictionProvenance = dailyEdgeMarketPredictionProvenanceLabel(market);
+        const predictionLabel = dailyEdgeOutcomeForecastLabel({ game, market, marketKey: key, sport });
+        const exactPriceSelection = dailyEdgeExactPriceSelectionLabel({ market, marketKey: key });
+        const verdict = dailyEdgePresentationVerdict(market);
+        const predictionContext = exactPriceSelection && exactPriceSelection !== predictionLabel
+          ? `${predictionProvenance ?? "Model prediction"} · exact-price ${verdict.label} on ${exactPriceSelection}`
+          : predictionProvenance ?? pulse.chip;
         return (
           <button key={key} type="button" role="tab" aria-selected={selected} onClick={() => setActive(key)} className={`min-w-0 rounded-lg border px-2 py-2.5 text-left transition sm:rounded-xl sm:px-4 sm:py-3 ${selected ? "border-violet-400/55 bg-gradient-to-br from-violet-500/25 to-violet-900/10 shadow-[0_0_22px_-12px_rgba(124,58,237,0.9)]" : "border-white/[0.07] bg-white/[0.025] hover:border-violet-400/25"}`}>
-            <div className="flex min-w-0 items-center justify-between gap-1"><span className={`truncate text-[7px] font-black uppercase tracking-[0.08em] sm:text-[9px] sm:tracking-[0.15em] ${selected ? "text-violet-200" : "text-gray-600"}`}>{marketLabelFor(key, sport)}</span><span className="shrink-0 text-[8px] font-black text-gray-500 sm:text-[9px]">{formatProbability(market.modelProb)}</span></div>
-            <div className="mt-1.5 flex min-w-0 items-center justify-between gap-1 sm:mt-2 sm:gap-2"><span className="truncate text-xs font-black text-white sm:text-base">{dailyEdgeOutcomeForecastLabel({ game, market, marketKey: key, sport })}</span><VerdictGlyph market={market} /></div>
-            <p className={`mt-1 hidden truncate text-[9px] sm:block ${selected ? "text-violet-200/65" : "text-gray-700"}`}>{predictionProvenance ?? pulse.chip}</p>
+            <div className="flex min-w-0 items-center justify-between gap-1"><span className={`truncate text-[7px] font-black uppercase tracking-[0.08em] sm:text-[9px] sm:tracking-[0.15em] ${selected ? "text-violet-200" : "text-gray-600"}`}>{marketLabelFor(key, sport)}</span><span className="shrink-0 text-[8px] font-black text-gray-500 sm:text-[9px]">{formatProbability(dailyEdgeMarketPredictionProbability(market))}</span></div>
+            <div className="mt-1.5 flex min-w-0 items-center justify-between gap-1 sm:mt-2 sm:gap-2"><span className="truncate text-xs font-black text-white sm:text-base">{predictionLabel}</span><VerdictGlyph market={market} /></div>
+            <p className={`mt-1 hidden truncate text-[9px] sm:block ${selected ? "text-violet-200/65" : "text-gray-700"}`}>{predictionContext}</p>
           </button>
         );
       })}
@@ -728,6 +736,16 @@ function QuickRead({ game, market, marketKey, sport }: { game: DailyEdgeGameDto;
     ? game.footballProjection.expectedHomePoints
     : soccerScore?.expectedGoals.home ?? game.projected.home;
   const heldCurrentPrice = currentDisplayedPrice(market);
+  const modelPredictionLabel = dailyEdgeOutcomeForecastLabel({ game, market, marketKey, sport });
+  const exactPriceSelection = dailyEdgeExactPriceSelectionLabel({ market, marketKey });
+  const evaluatedSelectionLabel = !market.held && exactPriceSelection
+    ? exactPriceSelection
+    : modelPredictionLabel;
+  const selectionAxisLabel = !market.held && exactPriceSelection
+    ? exactPriceSelection === modelPredictionLabel
+      ? "Exact-price Bet Grade selection · model prediction agrees"
+      : `Exact-price Bet Grade selection · model prediction: ${modelPredictionLabel}`
+    : dailyEdgeMarketPredictionProvenanceLabel(market);
   const consensusLineOnly = market.held && market.marketPrediction?.status === "available" &&
     market.marketPrediction.source === "playbook_consensus" && heldCurrentPrice === null;
   return (
@@ -742,8 +760,8 @@ function QuickRead({ game, market, marketKey, sport }: { game: DailyEdgeGameDto;
         {sport === "soccer" && marketKey === "first_inning" ? <SoccerBttsForecast market={market} projection={soccerProjection} game={game} /> : null}
         {sport !== "soccer" ? <div className="mt-4">
           <p className="text-[8px] font-black uppercase tracking-[0.16em] text-gray-600">OddSphere read</p>
-          <div className="mt-1 flex items-end justify-between gap-3"><p className="text-2xl font-black tracking-tight text-white">{dailyEdgeOutcomeForecastLabel({ game, market, marketKey, sport })}</p>{market.held ? <span className="text-right"><span className="block text-[8px] font-black uppercase tracking-wider text-amber-200">{heldCurrentPrice === null ? "Sportsbook odds unavailable" : "No bet evaluated"}</span><span className="mt-0.5 block text-[7px] font-bold text-gray-600">{heldCurrentPrice === null ? consensusLineOnly ? "Consensus line only" : "No eligible quote captured" : "Current odds shown below"}</span></span> : <span className="text-right"><span className="block font-mono text-base font-black text-gray-200">{formatAmerican(heldCurrentPrice)}</span>{market.currentPriceSportsbook ? <span className="block text-[7px] font-bold text-gray-600">{formatSportsbook(market.currentPriceSportsbook)}</span> : null}</span>}</div>
-          {dailyEdgeMarketPredictionProvenanceLabel(market) ? <p className="mt-1 text-[8px] font-semibold leading-relaxed text-violet-200/65">{dailyEdgeMarketPredictionProvenanceLabel(market)}</p> : null}
+          <div className="mt-1 flex items-end justify-between gap-3"><p className="text-2xl font-black tracking-tight text-white">{evaluatedSelectionLabel}</p>{market.held ? <span className="text-right"><span className="block text-[8px] font-black uppercase tracking-wider text-amber-200">{heldCurrentPrice === null ? "Sportsbook odds unavailable" : "No bet evaluated"}</span><span className="mt-0.5 block text-[7px] font-bold text-gray-600">{heldCurrentPrice === null ? consensusLineOnly ? "Consensus line only" : "No eligible quote captured" : "Current odds shown below"}</span></span> : <span className="text-right"><span className="block font-mono text-base font-black text-gray-200">{formatAmerican(heldCurrentPrice)}</span>{market.currentPriceSportsbook ? <span className="block text-[7px] font-bold text-gray-600">{formatSportsbook(market.currentPriceSportsbook)}</span> : null}</span>}</div>
+          {selectionAxisLabel ? <p className="mt-1 text-[8px] font-semibold leading-relaxed text-violet-200/65">{selectionAxisLabel}</p> : null}
           <p className="mt-1 text-[10px] text-gray-500">{priceCalibratedBetProbability ? "Price-calibrated bet probability" : "Outcome confidence"} <span className="font-black text-gray-200">{formatProbability(market.modelProb)}</span> · publish-time market <span className="font-black text-gray-200">{formatMarketProbability(market)}</span></p>
           {nflValueBetProbability ? <p className="mt-1 text-[8px] leading-relaxed text-violet-200/65">The exact-price value lane agrees with the discrete model&apos;s projected winner; its positive-EV evaluated quote is shown here.</p> : sport === "cfb" ? <p className="mt-1 text-[8px] leading-relaxed text-amber-200/65">This number is used for the exact-price Bet grade. It is not the independent win probability shown above and does not make the score projection market-implied.</p> : null}
           {(probabilityGap !== null || market.recommendationConfidence !== null) ? <p className="mt-1 text-[9px] text-gray-600">Publish-time gap <span className="font-black text-gray-300">{probabilityGap === null ? "—" : `${probabilityGap > 0 ? "+" : ""}${probabilityGap.toFixed(1)} pp`}</span> · bet actionability <span className="font-black text-gray-300">{market.recommendationConfidence === null || market.recommendationConfidence === undefined ? "—" : `${market.recommendationConfidence.toFixed(0)}/100`}</span></p> : null}

@@ -45,6 +45,8 @@ import {
   DAILY_EDGE_FORECAST_UNAVAILABLE_LABEL,
   DAILY_EDGE_SPREAD_UNAVAILABLE_LABEL,
   DAILY_EDGE_TOTAL_UNAVAILABLE_LABEL,
+  dailyEdgeExactPriceSelectionLabel,
+  dailyEdgeMarketPredictionProbability,
   dailyEdgeMarketPredictionProvenanceLabel,
   dailyEdgeOutcomeForecastLabel,
   isDailyEdgeOutcomeForecastHealthError,
@@ -352,6 +354,47 @@ check(
   dailyEdgeMarketPredictionProvenanceLabel(footballSpreadMarketPrediction) ===
     "Consensus prediction line · context only, not an available sportsbook offer",
 );
+const opposingFootballTotalAxes = {
+  ...structuredClone(chcTotalForecastMarket),
+  pick: "Under 61.5",
+  line: 61.5,
+  modelProb: 0.589,
+  marketPrediction: {
+    status: "available",
+    label: "Over 61.5",
+    line: 61.5,
+    probability: 0.525,
+    source: "model_at_context_line",
+    sportsbook: null,
+    observedAt: "2026-08-28T16:24:49.022Z",
+    freshnessCheckedAt: "2026-08-28T16:24:49.022Z",
+    reason: null,
+  },
+} as MarketEdgeDto;
+check(
+  "prediction probability stays attached to the model prediction side",
+  dailyEdgeMarketPredictionProbability(opposingFootballTotalAxes) === 0.525,
+);
+check(
+  "exact-price selection stays attached to the evaluated Bet Grade side",
+  dailyEdgeExactPriceSelectionLabel({
+    market: opposingFootballTotalAxes,
+    marketKey: "total",
+  }) === "Under 61.5" &&
+    dailyEdgeOutcomeForecastLabel({
+      game: { ...chcTotalForecastGame, sport: "cfb", awayTeam: "SJSU", homeTeam: "USC" },
+      market: opposingFootballTotalAxes,
+      marketKey: "total",
+      sport: "cfb",
+    }) === "Over 61.5",
+);
+check(
+  "shared MLB first-inning labels do not gain a synthetic point-line suffix",
+  dailyEdgeExactPriceSelectionLabel({
+    market: { ...opposingFootballTotalAxes, pick: "NRFI", line: 0.5 },
+    marketKey: "first_inning",
+  }) === "NRFI",
+);
 const unavailableFootballSpread = {
   ...footballSpreadMarketPrediction,
   marketPrediction: {
@@ -470,6 +513,8 @@ check(
   "prediction category and card surfaces use model-native forecast labels instead of Bet Grade fallbacks",
   candidateDailyEdgeSource.includes("dailyEdgeOutcomeForecastLabel({ game, market, marketKey, sport })") &&
     candidateDailyEdgeSource.includes("dailyEdgeOutcomeForecastLabel({ game, market: item, marketKey: key, sport })") &&
+    candidateDailyEdgeSource.includes("dailyEdgeMarketPredictionProbability(market)") &&
+    candidateDailyEdgeSource.includes("dailyEdgeExactPriceSelectionLabel({ market, marketKey })") &&
     !candidateDailyEdgeSource.includes("displayPick(") &&
     !candidateDailyEdgeSource.includes('market.pick ?? "No Play"') &&
     !candidateDailyEdgeSource.includes('label="Score projection" value="No Play"') &&
@@ -1441,7 +1486,7 @@ check(
 check(
   "a context-only CFB line never promises missing sportsbook odds",
   DAILY_EDGE_MEMBER_PRESENTATION_RELEASE_ID ===
-    "daily_edge_member_presentation_2026_08_28_r9_verified_mlb_split_evidence" &&
+    "daily_edge_member_presentation_2026_08_28_r10_football_prediction_bet_axis" &&
     candidateSource.includes("Sportsbook odds unavailable") &&
     candidateSource.includes("Consensus line only") &&
     candidateSource.includes("No eligible named-book American price was captured") &&
