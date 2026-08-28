@@ -320,7 +320,7 @@ export type MarketEdgeDto = {
     isStale?: boolean;
   }>;
   /**
-   * MLB-only source-health classification for the SharpAPI market panel.
+   * Source-health classification for the SharpAPI market panel.
    * This is presentation state, not a grading input. A non-complete state
    * keeps the panel visible with honest provider-availability copy instead of
    * silently omitting it or relabeling Playbook consensus as sharp data.
@@ -918,7 +918,7 @@ export type DailyEdgeGameDto = {
    */
   decisionLine: string;
   projected: { away: number; home: number };
-  /** NFL-only football forecast kept separate from exact-price Bet grades.
+  /** Football outcome/score forecast kept separate from exact-price Bet grades.
    * A game may publish this outcome/score forecast while every market is an
    * operational No Play. These probabilities must never be reader-side converted into a
    * Lean, Best Angle, stake, or tracking row. */
@@ -934,6 +934,33 @@ export type DailyEdgeGameDto = {
     distributionRelease: string;
     probabilityRelease: string;
     artifactRelease: string;
+    representativeScore?: { away: number; home: number };
+    interval80?: {
+      away: [number, number];
+      home: [number, number];
+      marginHome: [number, number];
+      total: [number, number];
+    };
+  } | null;
+  /** CFB-only independent football baseline when `footballProjection` is the
+   * separately released market-informed primary joint forecast. This is
+   * context only and cannot override a price, grade, stake, or tracking row. */
+  footballOnlyProjection?: {
+    awayWinProbability: number;
+    homeWinProbability: number;
+    expectedAwayPoints: number;
+    expectedHomePoints: number;
+    modelRelease: string;
+    distributionRelease: string;
+    probabilityRelease: string;
+    artifactRelease: string;
+    representativeScore?: { away: number; home: number };
+    interval80?: {
+      away: [number, number];
+      home: [number, number];
+      marginHome: [number, number];
+      total: [number, number];
+    };
   } | null;
   /** Soccer keeps continuous expected goals as scoring context. EPL's expected
    * goals can use a market-informed calibration head that is separate from the

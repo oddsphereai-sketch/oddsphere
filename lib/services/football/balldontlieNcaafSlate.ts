@@ -42,6 +42,10 @@ export type NcaafBookOdds = {
   providerEventId?: string;
   /** False keeps a named book in the leave-one-out consensus without offering it as the user-facing target. */
   targetEligible?: boolean;
+  /** Exact upstream market classification retained for quote provenance. */
+  marketSelection?: Partial<Record<"moneyline" | "spread" | "total", "main_line" | "coherent_paired_alternate">>;
+  /** Per-market provider timestamp; avoids assigning one sibling market's update time to another tuple. */
+  marketObservedAt?: Partial<Record<"moneyline" | "spread" | "total", string>>;
   moneyline: { awayPrice: number; homePrice: number } | null;
   spread: {
     awayLine: number;

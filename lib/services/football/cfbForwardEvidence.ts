@@ -1,6 +1,8 @@
 import { createHash } from "node:crypto";
 import type { NcaafBookOdds, NcaafGame } from "./balldontlieNcaafSlate";
 import type { CFB_SHARP_API_ODDS_RELEASE } from "./cfbSharpApiOdds";
+import type { CfbMarketInformedOutcomeForecast } from "./cfbMarketInformedOutcome";
+import type { CfbSharpApiSplitRecord } from "./cfbSharpApiSplits";
 import {
   cfbV1LineProbabilities,
   type CfbV1DecisionBundle,
@@ -9,15 +11,19 @@ import {
 } from "./cfbV1Decision";
 
 export const CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE =
-  "cfb_forward_evidence_snapshot_2026_08_27_r3_pmf_side_guard" as const;
+  "cfb_forward_evidence_snapshot_2026_08_28_r5_two_axis_outcome_sharp_splits" as const;
+export const CFB_FORWARD_PREVIOUS_EVIDENCE_SCHEMA_RELEASE =
+  "cfb_forward_evidence_snapshot_2026_08_28_r4_market_selection_provenance" as const;
 export const CFB_FORWARD_PRIOR_EVIDENCE_SCHEMA_RELEASE =
-  "cfb_forward_evidence_snapshot_2026_08_26_r2_price_provenance" as const;
+  "cfb_forward_evidence_snapshot_2026_08_27_r3_pmf_side_guard" as const;
 export const CFB_FORWARD_LEGACY_EVIDENCE_SCHEMA_RELEASE =
+  "cfb_forward_evidence_snapshot_2026_08_26_r2_price_provenance" as const;
+export const CFB_FORWARD_INITIAL_EVIDENCE_SCHEMA_RELEASE =
   "cfb_forward_evidence_snapshot_2026_08_25_r1" as const;
 export const CFB_FORWARD_EVIDENCE_COLLECTOR_RELEASE =
-  "cfb_forward_evidence_collector_2026_08_27_r6_pagination_side_guard" as const;
+  "cfb_forward_evidence_collector_2026_08_28_r8_two_axis_outcome_sharp_splits" as const;
 export const CFB_FORWARD_MEMBER_RELEASE =
-  "cfb_v1_member_release_2026_08_27_r5_pmf_side_guard" as const;
+  "cfb_v1_member_release_2026_08_28_r7_two_axis_outcome_sharp_splits" as const;
 
 export type CfbForwardEvidenceStage = "opening" | "unlocked" | "t60";
 
@@ -75,6 +81,7 @@ export type CfbForwardOperationalOpening = {
 };
 
 export type CfbForwardPublishedForecast = Omit<CfbV1Forecast, "pmf">;
+export type CfbForwardPublishedOutcomeForecast = Omit<CfbMarketInformedOutcomeForecast, "pmf">;
 
 export type CfbForwardMarketOutlook = {
   market: CfbV1Market;
@@ -113,7 +120,9 @@ export type CfbForwardEvidencePayload = {
     playbookLine: CfbForwardPlaybookLine | null;
     playbookSplits: CfbForwardPlaybookSplitSet | null;
     sharpApiOddsRelease: typeof CFB_SHARP_API_ODDS_RELEASE | null;
-    sharpApiSplits: null;
+    sharpApiSplits: CfbSharpApiSplitRecord[] | null;
+    sharpApiSplitsStatus?: "matched" | "event_not_published" | "request_failed";
+    sharpApiSplitsError?: string | null;
   };
   quarterbacks: {
     away: CfbForwardTeamQuarterbacks;
@@ -125,6 +134,12 @@ export type CfbForwardEvidencePayload = {
     note: string;
   };
   decisions: CfbForwardPublishedDecisionBundle;
+  /** Primary member score/winner axis. Exact-price decisions remain bound to
+   * `decisions.forecast`, the independently calibrated football-only PMF. */
+  outcomeForecast?: CfbForwardPublishedOutcomeForecast | null;
+  /** Per-market directional predictions from the same primary outcome PMF.
+   * They are reader context only when an exact price tuple is unavailable. */
+  outcomeMarketOutlooks?: Record<CfbV1Market, CfbForwardMarketOutlook | null>;
   coverage: {
     currentOdds: boolean;
     comparableCurrentBookCount: number;
@@ -134,7 +149,7 @@ export type CfbForwardEvidencePayload = {
     operationalOpening: boolean;
     playbookLine: boolean;
     playbookSplits: boolean;
-    sharpApiSplits: false;
+    sharpApiSplits: boolean;
     activeQuarterbacks: boolean;
     injuries: false;
     weather: false;
@@ -146,6 +161,7 @@ export type CfbForwardEvidencePayload = {
     balldontlieQuarterbacks: number;
     playbook: number;
     sharpApiOdds: number;
+    sharpApiSplits?: number;
     totalMaximum: number;
   };
 };

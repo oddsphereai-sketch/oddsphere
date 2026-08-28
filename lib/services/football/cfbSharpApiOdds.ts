@@ -2,7 +2,7 @@ import { SharpApiClient, type SharpApiRequestOptions, type SharpApiResponse } fr
 import type { NcaafBookOdds, NcaafGame } from "./balldontlieNcaafSlate";
 
 export const CFB_SHARP_API_ODDS_RELEASE =
-  "cfb_sharpapi_named_book_fallback_2026_08_27_r2_bounded_pagination" as const;
+  "cfb_sharpapi_named_book_fallback_2026_08_28_r3_exact_paired_market_evidence" as const;
 export const CFB_SHARP_FALLBACK_MAX_GAMES = 96 as const;
 export const CFB_SHARP_FALLBACK_MAX_REQUESTS = 96 as const;
 export const CFB_SHARP_FALLBACK_MAX_ROWS_PER_EVENT = 200 as const;
@@ -45,6 +45,14 @@ type Pair = {
   awayPrice?: number;
   overPrice?: number;
   underPrice?: number;
+  marketSelection: "main_line" | "coherent_paired_alternate";
+};
+
+type SideQuote = {
+  price: number;
+  line: number | null;
+  observedAt: string;
+  marketSelection: Pair["marketSelection"];
 };
 
 const TRUSTED_CONSENSUS_BOOKS = new Set([
@@ -59,6 +67,7 @@ const TRUSTED_CONSENSUS_BOOKS = new Set([
   "goldrush",
   "onexbet",
   "pinnacle",
+  "rebet",
   "sportzino",
   "thescorebet",
 ]);
@@ -204,10 +213,10 @@ export function sharpEventIdCandidates(game: NcaafGame): string[] {
 }
 
 export function normalizeSharpRows(args: { game: NcaafGame; eventId: string; rows: unknown[] }): NcaafBookOdds[] {
-  const grouped = new Map<string, Map<string, Partial<Record<"home" | "away" | "over" | "under", { price: number; line: number | null; observedAt: string }>>>>();
+  const grouped = new Map<string, Map<string, Partial<Record<"home" | "away" | "over" | "under", SideQuote>>>>();
   for (const value of args.rows) {
     const row = value as SharpRow;
-    if (text(row.event_id) !== args.eventId || row.is_live === true || row.is_active === false || row.is_stale_pregame_price === true || row.is_player_prop === true || row.is_alternate_line === true || row.is_main_line !== true) continue;
+    if (text(row.event_id) !== args.eventId || row.is_live === true || row.is_active === false || row.is_stale_pregame_price === true || row.is_player_prop === true) continue;
     const market = MARKET_TYPES.get((text(row.market_type) ?? "") as "moneyline" | "point_spread" | "total_points");
     const sportsbook = normalize(text(row.sportsbook) ?? "");
     const side = text(row.selection_type)?.toLowerCase();
@@ -215,7 +224,12 @@ export function normalizeSharpRows(args: { game: NcaafGame; eventId: string; row
     const observedAt = iso(row.timestamp);
     const startsAt = iso(row.event_start_time);
     const externalEventId = text(row.external_event_id) ?? args.eventId;
-    if (!market || !TRUSTED_CONSENSUS_BOOKS.has(sportsbook) || !side || price === null || !observedAt || !startsAt) continue;
+    const marketSelection = row.is_main_line === true && row.is_alternate_line !== true
+      ? "main_line" as const
+      : row.is_alternate_line === true && row.is_main_line !== true && market !== "moneyline"
+        ? "coherent_paired_alternate" as const
+        : null;
+    if (!market || !marketSelection || !TRUSTED_CONSENSUS_BOOKS.has(sportsbook) || !side || price === null || !observedAt || !startsAt) continue;
     if (!strictGameIdentity(args.game, row, startsAt)) continue;
     if (!validSide(market, side)) continue;
     const rawLine = market === "moneyline" ? null : finite(row.line);
@@ -226,24 +240,42 @@ export function normalizeSharpRows(args: { game: NcaafGame; eventId: string; row
     const markets = grouped.get(key) ?? new Map();
     const pair = markets.get(pairKey) ?? {};
     const current = pair[side as keyof typeof pair];
-    if (!current || Date.parse(observedAt) > Date.parse(current.observedAt)) pair[side as keyof typeof pair] = { price, line: rawLine, observedAt };
+    if (!current || pairSelectionRank(marketSelection) > pairSelectionRank(current.marketSelection) ||
+      (marketSelection === current.marketSelection && Date.parse(observedAt) > Date.parse(current.observedAt))) {
+      pair[side as keyof typeof pair] = { price, line: rawLine, observedAt, marketSelection };
+    }
     markets.set(pairKey, pair);
     grouped.set(key, markets);
   }
-  const bySportsbook = new Map<string, NcaafBookOdds[]>();
+  const allPairs: Pair[] = [];
   for (const [groupKey, markets] of grouped) {
     const [sportsbook, externalEventId] = groupKey.split("|") as [string, string];
     const pairs = [...markets.entries()].flatMap(([key, sides]): Pair[] => {
       const [marketRaw, lineRaw] = key.split("|") as [Pair["market"], string];
       const line = lineRaw === "ml" ? null : Number(lineRaw);
-      if (marketRaw === "moneyline" && sides.home && sides.away) return [{ sportsbook, externalEventId, market: marketRaw, line, observedAt: latest(sides.home.observedAt, sides.away.observedAt), homePrice: sides.home.price, awayPrice: sides.away.price }];
+      if (marketRaw === "moneyline" && sides.home && sides.away && sameMarketSelection(sides.home, sides.away, "main_line")) return [{ sportsbook, externalEventId, market: marketRaw, line, observedAt: latest(sides.home.observedAt, sides.away.observedAt), homePrice: sides.home.price, awayPrice: sides.away.price, marketSelection: "main_line" }];
       if (marketRaw === "spread" && sides.home && sides.away && sides.home.line !== null && sides.away.line !== null && Math.abs(sides.home.line + sides.away.line) < 0.001) {
-        return [{ sportsbook, externalEventId, market: marketRaw, line, homeLine: sides.home.line, awayLine: sides.away.line, observedAt: latest(sides.home.observedAt, sides.away.observedAt), homePrice: sides.home.price, awayPrice: sides.away.price }];
+        const marketSelection = pairedMarketSelection(sides.home, sides.away);
+        return marketSelection ? [{ sportsbook, externalEventId, market: marketRaw, line, homeLine: sides.home.line, awayLine: sides.away.line, observedAt: latest(sides.home.observedAt, sides.away.observedAt), homePrice: sides.home.price, awayPrice: sides.away.price, marketSelection }] : [];
       }
-      if (marketRaw === "total" && sides.over && sides.under) return [{ sportsbook, externalEventId, market: marketRaw, line, observedAt: latest(sides.over.observedAt, sides.under.observedAt), overPrice: sides.over.price, underPrice: sides.under.price }];
+      if (marketRaw === "total" && sides.over && sides.under) {
+        const marketSelection = pairedMarketSelection(sides.over, sides.under);
+        return marketSelection ? [{ sportsbook, externalEventId, market: marketRaw, line, observedAt: latest(sides.over.observedAt, sides.under.observedAt), overPrice: sides.over.price, underPrice: sides.under.price, marketSelection }] : [];
+      }
       return [];
     });
-    const selected = selectPairs(pairs);
+    allPairs.push(...pairs);
+  }
+  const bySportsbook = new Map<string, Pair[]>();
+  const selectedAlternateLines = selectQualifiedAlternateLines(allPairs);
+  for (const pair of allPairs) {
+    const values = bySportsbook.get(pair.sportsbook) ?? [];
+    values.push(pair);
+    bySportsbook.set(pair.sportsbook, values);
+  }
+  const books: NcaafBookOdds[] = [];
+  for (const [sportsbook, pairs] of bySportsbook) {
+    const selected = selectPairs(pairs, selectedAlternateLines);
     const observedAt = selected.reduce<string | null>((value, pair) => value === null ? pair.observedAt : latest(value, pair.observedAt), null);
     if (!observedAt) continue;
     const book: NcaafBookOdds = {
@@ -253,6 +285,8 @@ export function normalizeSharpRows(args: { game: NcaafGame; eventId: string; row
       provider: "sharpapi",
       providerEventId: args.eventId,
       targetEligible: USER_TARGET_BOOKS.has(sportsbook),
+      marketSelection: Object.fromEntries(selected.map((pair) => [pair.market, pair.marketSelection])),
+      marketObservedAt: Object.fromEntries(selected.map((pair) => [pair.market, pair.observedAt])),
       moneyline: selected.find((pair) => pair.market === "moneyline") ? {
         homePrice: selected.find((pair) => pair.market === "moneyline")!.homePrice!,
         awayPrice: selected.find((pair) => pair.market === "moneyline")!.awayPrice!,
@@ -269,17 +303,105 @@ export function normalizeSharpRows(args: { game: NcaafGame; eventId: string; row
         underPrice: selected.find((pair) => pair.market === "total")!.underPrice!,
       } : null,
     };
-    bySportsbook.set(sportsbook, [...(bySportsbook.get(sportsbook) ?? []), book]);
+    books.push(book);
   }
-  return [...bySportsbook.values()].map((books) => [...books].sort((first, second) => bookCompleteness(second) - bookCompleteness(first) || Date.parse(second.observedAt) - Date.parse(first.observedAt))[0]!).sort((first, second) => first.sportsbook.localeCompare(second.sportsbook));
+  return books.sort((first, second) => first.sportsbook.localeCompare(second.sportsbook));
 }
 
-function selectPairs(pairs: Pair[]): Pair[] {
+function selectPairs(
+  pairs: Pair[],
+  selectedAlternateLines: Partial<Record<"spread" | "total", number>> = {},
+): Pair[] {
   return ["moneyline", "spread", "total"].flatMap((market) => {
-    const values = pairs.filter((pair) => pair.market === market).sort((first, second) => Date.parse(second.observedAt) - Date.parse(first.observedAt) || Math.abs((second.line ?? 0)) - Math.abs((first.line ?? 0)));
+    const alternateLine = market === "spread" || market === "total" ? selectedAlternateLines[market] : undefined;
+    const alternates = alternateLine === undefined ? [] : pairs.filter((pair) =>
+      pair.market === market && pair.marketSelection === "coherent_paired_alternate" && pair.line === alternateLine
+    );
+    const pool = alternates.length > 0 ? alternates : pairs.filter((pair) => pair.market === market && pair.marketSelection === "main_line");
+    const values = pool.sort((first, second) => Date.parse(second.observedAt) - Date.parse(first.observedAt) || Math.abs((second.line ?? 0)) - Math.abs((first.line ?? 0)));
     return values[0] ? [values[0]] : [];
   });
 }
+
+function selectQualifiedAlternateLines(pairs: Pair[]): Partial<Record<"spread" | "total", number>> {
+  return Object.fromEntries((["spread", "total"] as const).flatMap((market) => {
+    const selected = selectQualifiedAlternateLine(pairs, market, market === "spread" ? 1 : 2);
+    return selected === undefined ? [] : [[market, selected]];
+  }));
+}
+
+function selectQualifiedAlternateLine(pairs: Pair[], market: "spread" | "total", maximumDistance: number): number | undefined {
+  // Keep the established main-line path unchanged whenever it can produce a
+  // target quote plus two distinct exact-line comparison books. The fallback
+  // is deliberately market-scoped: it admits only a fully paired alternate
+  // cohort near the dominant main market and never applies to Moneyline.
+  const values = pairs.filter((pair) => pair.market === market && pair.line !== null);
+  const mainValues = values.filter((pair) => pair.marketSelection === "main_line");
+  if (targetMainCohortReady(mainValues)) return undefined;
+  const referenceLine = dominantLine(mainValues);
+  if (referenceLine === undefined) return undefined;
+  const cohorts = new Map<number, Map<string, Pair>>();
+  for (const pair of values.filter((value) => value.marketSelection === "coherent_paired_alternate")) {
+    const line = pair.line!;
+    const books = cohorts.get(line) ?? new Map<string, Pair>();
+    const current = books.get(pair.sportsbook);
+    if (!current || Date.parse(pair.observedAt) > Date.parse(current.observedAt)) books.set(pair.sportsbook, pair);
+    cohorts.set(line, books);
+  }
+  const ranked = [...cohorts.entries()].map(([line, books]) => {
+    const rows = [...books.values()];
+    return {
+      line,
+      rows,
+      targetCount: rows.filter((pair) => USER_TARGET_BOOKS.has(pair.sportsbook)).length,
+      nonTargetCount: rows.filter((pair) => !USER_TARGET_BOOKS.has(pair.sportsbook)).length,
+      latestAt: Math.max(...rows.map((pair) => Date.parse(pair.observedAt))),
+    };
+  });
+  const eligible = ranked.filter((cohort) =>
+    cohort.rows.length >= 3 &&
+    cohort.targetCount >= 1 &&
+    cohort.nonTargetCount >= 2 &&
+    Math.abs(cohort.line - referenceLine) <= maximumDistance
+  ).sort((first, second) =>
+    second.targetCount - first.targetCount ||
+    second.rows.length - first.rows.length ||
+    Math.abs(first.line - referenceLine) - Math.abs(second.line - referenceLine) ||
+    second.latestAt - first.latestAt ||
+    first.line - second.line
+  )[0];
+  return eligible?.line;
+}
+
+function targetMainCohortReady(pairs: Pair[]): boolean {
+  return pairs.some((target) => USER_TARGET_BOOKS.has(target.sportsbook) && new Set(pairs.filter((candidate) =>
+    !USER_TARGET_BOOKS.has(candidate.sportsbook) && candidate.line === target.line
+  ).map((candidate) => candidate.sportsbook)).size >= 2);
+}
+
+function dominantLine(pairs: Pair[]): number | undefined {
+  const cohorts = new Map<number, { books: Set<string>; latestAt: number }>();
+  for (const pair of pairs) {
+    const line = pair.line!;
+    const cohort = cohorts.get(line) ?? { books: new Set<string>(), latestAt: 0 };
+    cohort.books.add(pair.sportsbook);
+    cohort.latestAt = Math.max(cohort.latestAt, Date.parse(pair.observedAt));
+    cohorts.set(line, cohort);
+  }
+  return [...cohorts.entries()].sort((first, second) => second[1].books.size - first[1].books.size || second[1].latestAt - first[1].latestAt || first[0] - second[0])[0]?.[0];
+}
+
+function pairedMarketSelection(first: SideQuote, second: SideQuote): Pair["marketSelection"] | null {
+  if (sameMarketSelection(first, second, "main_line")) return "main_line";
+  if (sameMarketSelection(first, second, "coherent_paired_alternate")) return "coherent_paired_alternate";
+  return null;
+}
+
+function sameMarketSelection(first: SideQuote, second: SideQuote, expected: Pair["marketSelection"]): boolean {
+  return first.marketSelection === expected && second.marketSelection === expected;
+}
+
+function pairSelectionRank(value: Pair["marketSelection"]): number { return value === "main_line" ? 2 : 1; }
 
 function strictGameIdentity(game: NcaafGame, row: SharpRow, startsAt: string): boolean {
   const expected = Date.parse(game.scheduledStart);

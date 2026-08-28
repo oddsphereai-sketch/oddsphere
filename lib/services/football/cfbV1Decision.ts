@@ -18,11 +18,11 @@ export const CFB_V1_REPRESENTATIVE_SCORE_RELEASE =
 export const CFB_V1_GRADE_POLICY_RELEASE =
   "cfb_v1_composite_grade_policy_2026_08_25_r1" as const;
 export const CFB_V1_DECISION_RELEASE =
-  "cfb_v1_daily_edge_decision_2026_08_27_r9_pmf_side_guard" as const;
+  "cfb_v1_daily_edge_decision_2026_08_28_r10_exact_paired_market_evidence" as const;
 const CFB_V1_POLICY_SOURCE_DECISION_RELEASE =
   "cfb_v1_daily_edge_decision_2026_08_26_r7_sharpapi_price_fallback" as const;
 export const CFB_V1_DECISION_SCHEMA_RELEASE =
-  "cfb_v1_exact_price_decision_tuple_2026_08_27_r3_pmf_side_guard" as const;
+  "cfb_v1_exact_price_decision_tuple_2026_08_28_r4_market_selection_provenance" as const;
 export const CFB_T60_TARGET_MINUTES = 60 as const;
 export const CFB_T60_MAX_CAPTURE_LAG_MINUTES = 20 as const;
 
@@ -74,6 +74,7 @@ export type CfbV1ExactPriceDecision = {
     line: number | null;
     price: number;
     observedAt: string;
+    marketSelection: "main_line" | "coherent_paired_alternate";
   };
   consensus: {
     source: "target_excluded_same_line_named_books";
@@ -336,7 +337,7 @@ function evaluateTarget(args: {
       marketFairProbability: consensus.fairProbability,
       edgePercentagePoints,
       expectedValue,
-      evaluatedQuote: { provider: args.target.provider ?? "balldontlie", sportsbook: args.target.sportsbook, line: quote.line, price: quote.price, observedAt: quote.observedAt },
+      evaluatedQuote: { provider: args.target.provider ?? "balldontlie", sportsbook: args.target.sportsbook, line: quote.line, price: quote.price, observedAt: quote.observedAt, marketSelection: quote.marketSelection },
       consensus,
       stage: args.stage,
       evaluatedAt,
@@ -400,15 +401,17 @@ function targetExcludedConsensus(
   };
 }
 
-function targetQuote(book: NcaafBookOdds, market: CfbV1Market, side: "home" | "away" | "over" | "under"): { line: number | null; price: number; observedAt: string } | null {
+function targetQuote(book: NcaafBookOdds, market: CfbV1Market, side: "home" | "away" | "over" | "under"): { line: number | null; price: number; observedAt: string; marketSelection: "main_line" | "coherent_paired_alternate" } | null {
+  const marketSelection = book.marketSelection?.[market] ?? "main_line";
+  const observedAt = book.marketObservedAt?.[market] ?? book.observedAt;
   if (market === "moneyline" && book.moneyline && (side === "home" || side === "away")) {
-    return { line: null, price: side === "home" ? book.moneyline.homePrice : book.moneyline.awayPrice, observedAt: book.observedAt };
+    return { line: null, price: side === "home" ? book.moneyline.homePrice : book.moneyline.awayPrice, observedAt, marketSelection };
   }
   if (market === "spread" && book.spread && (side === "home" || side === "away")) {
-    return { line: side === "home" ? book.spread.homeLine : book.spread.awayLine, price: side === "home" ? book.spread.homePrice : book.spread.awayPrice, observedAt: book.observedAt };
+    return { line: side === "home" ? book.spread.homeLine : book.spread.awayLine, price: side === "home" ? book.spread.homePrice : book.spread.awayPrice, observedAt, marketSelection };
   }
   if (market === "total" && book.total && (side === "over" || side === "under")) {
-    return { line: book.total.line, price: side === "over" ? book.total.overPrice : book.total.underPrice, observedAt: book.observedAt };
+    return { line: book.total.line, price: side === "over" ? book.total.overPrice : book.total.underPrice, observedAt, marketSelection };
   }
   return null;
 }
