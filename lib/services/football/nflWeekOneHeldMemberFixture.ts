@@ -393,7 +393,7 @@ function buildHeldGame(
       nrfi: prediction(spread),
     },
     markets,
-    decisionLine: "The discrete football forecast supplies the score and probabilities; each Bet grade separately evaluates the exact displayed sportsbook quote.",
+    decisionLine: "The discrete football forecast supplies the score and winner probability. The active Spread and Total decision heads apply separate line-specific calibration before each exact-price Bet grade.",
     projected: {
       away: outcome.representativeAwayScore,
       home: outcome.representativeHomeScore,
@@ -422,7 +422,7 @@ function buildHeldGame(
         key: "no_data",
         sentence: "Playbook public splits are displayed as market context; SharpAPI splits are not available in this capture.",
       },
-      modelBreakdown: "A single discrete drive/scoring-event distribution supplies the displayed representative score and all three forecast probabilities. Exact-price Bet grades remain separate.",
+      modelBreakdown: "The discrete drive/scoring-event distribution supplies the displayed score and winner probability. The active Spread and Total decision heads apply separate line-specific calibration; exact-price Bet grades remain separate.",
     },
   };
 }
@@ -663,7 +663,9 @@ function applyPublishedDecision(
     ? `${selectedLabel} clears the validated NFL market-led value policy at ${formatAmerican(decision.evaluatedQuote.price)} from ${decision.evaluatedQuote.sportsbook}, with positive expected value at the displayed value-model probability.`
     : isWatchlist
       ? `${selectedLabel} is inside the validated NFL monitoring lane at ${formatAmerican(decision.evaluatedQuote.price)} from ${decision.evaluatedQuote.sportsbook}, but it does not clear the exact-price Lean policy. Monitor only.`
-    : `${selectedLabel} is the discrete model forecast side, but this independent outcome probability is not authorized as an exact-price ${marketName} betting edge.`;
+    : marketName === "moneyline"
+      ? `${selectedLabel} is the football outcome forecast side, but this probability is not authorized as an exact-price moneyline betting edge.`
+      : `${selectedLabel} is the separately calibrated ${marketName} forecast side, but this probability is not authorized as an exact-price betting edge.`;
   return {
     ...base,
     pick: selectedLabel,

@@ -9,7 +9,7 @@ Last reviewed: 2026-08-27
 ## NFL Daily Edge Regular Season Week 1 production release
 
 - Active member release: `nfl_v1_member_release_2026_08_25_r6_actionable_grades`; model / calibration / decision / grade policy: `nfl_v1_daily_edge_model_2026_08_25_r3_actionable_grades` / `nfl_v1_daily_edge_calibration_2026_08_25_r3_actionable_grades` / `nfl_v1_daily_edge_decision_2026_08_25_r9_actionable_grades` / `nfl_v1_grade_policy_2026_08_25_r9_actionable_grades`.
-- Outcome artifact / model / distribution / probability / representative-score releases remain `nfl_v1_week_one_outcome_artifact_2026_08_23_r2_discrete_joint` / `nfl_v1_discrete_drive_outcome_2026_08_23_r2` / `nfl_discrete_drive_score_distribution_2026_08_23_r5` / `nfl_v1_discrete_joint_probability_2026_08_23_r2` / `nfl_v1_representative_score_2026_08_23_r2`. One joint PMF supplies the one-decimal expected team scores, reachable representative score, winner, margin/total distributions, and all ML/Spread/Total probabilities. Current Week 1 expected team scores span 17.57-27.75 (SD 2.44), margins -4.10 to +10.18 (SD 3.75), totals 38.66-48.98 (SD 2.77), and six games forecast Over versus ten Under. The independent head excludes price, line, fair, splits, and movement features.
+- Outcome artifact / model / distribution / probability / representative-score releases remain `nfl_v1_week_one_outcome_artifact_2026_08_23_r2_discrete_joint` / `nfl_v1_discrete_drive_outcome_2026_08_23_r2` / `nfl_discrete_drive_score_distribution_2026_08_23_r5` / `nfl_v1_discrete_joint_probability_2026_08_23_r2` / `nfl_v1_representative_score_2026_08_23_r2`. One joint PMF supplies the one-decimal expected team scores, reachable representative score, winner, and raw margin/total distributions. The active r9 Spread and Total decision heads subsequently apply separately qualified line-specific logit corrections, so their displayed side/probability can differ from the score-centered PMF; the r7 reader labels that boundary instead of falsely calling every probability same-PMF. The qualified coherent joint-PMF r2 candidate remains inactive pending its explicit production approval. Current Week 1 expected team scores span 17.57-27.75 (SD 2.44), margins -4.10 to +10.18 (SD 3.75), totals 38.66-48.98 (SD 2.77), and six games forecast Over versus ten Under. The independent head excludes price, line, fair, splits, and movement features.
 - Exact-price contract: every Bet grade carries one coherent model probability, evaluated named sportsbook/line/price, target-excluded same-line consensus fair probability, timestamp, and release tuple. Unlocked material price/personnel changes are recomputed by the writer. A valid T-60 capture freezes that tuple; later prices are context-only. Outcome confidence remains distinct from Bet grade.
 - Grade policy: Moneyline Best Angle requires an already-qualified direction-coherent r6 Lean plus at least 2% EV and 4pp target-excluded consensus edge. Spread Lean requires corrected probability >=51%, nonnegative EV/edge, and nonnegative expected-score cushion after key-number sensitivity. Total Lean requires probability >=53.5%, EV >=2%, edge >=1pp, and at least one point of cushion after total-zone sensitivity. Frozen lower monitoring thresholds create Watchlist; all other complete tuples are No Play. Bet count is an output with no minimum, maximum, or weekly quota. A genuine identity, quote, QB-history, injury, market-completeness, or late-lock failure remains an internal operational exception and is presented to members as No Play with its explicit reason. The outcome winner, probability, expected score, representative score, and same-PMF context remain visible; only the incomplete exact-price Bet-grade tuple is withheld. Projected-but-coherent QBs and unavailable SharpAPI splits remain labeled context, not automatic exceptions. No stake sizing is authorized.
 - Confirmation evidence: Moneyline Best Angle was +3.887u / +10.50% ROI in 2024 and +2.396u / +3.63% in 2025, positive after each season's largest win; pooled mean CLV +0.236pp. Spread Lean was +3.626u / +30.22% in 2024 and +5.146u / +18.38% in 2025, positive after each largest win; the lane is capped at Lean because 37/40 confirmation actions selected home. Total Lean was +0.160u / +0.69% in 2024 and +1.418u / +1.97% in 2025; pooled +1.578u / +1.66%, but the 2024 largest-win-independent result was negative and bootstrap uncertainty is wide, so it is capped at Lean and must remain forward-monitored. 2024/25 are repeated confirmation; immutable 2026 captures are the true forward holdout.
@@ -149,7 +149,7 @@ changed; only deterministic settlement of existing locked rows is affected.
 - Machine registry: `lib/automodel/mlbModelLayerVersions.ts`
 - Authoritative member-facing writer: `lib/services/predictionRecordService.ts`
 
-Shared member presentation release: `daily_edge_member_presentation_2026_08_27_r6_football_evidence_hierarchy`.
+Shared member presentation release: `daily_edge_member_presentation_2026_08_27_r8_truthful_football_sources`.
 Internal operational holds remain high-severity health/recovery state, but the
 member board, filters, cards, headlines, and Bet Grade surface them as No Play
 with an explicit incomplete-evidence reason. The response reports evaluated
@@ -175,6 +175,20 @@ an explicitly unavailable CFB Total similarly fails closed. These are
 presentation-only changes: model
 probabilities, projected scores, exact lines and prices, grades, stakes,
 tracking rows, writers, leases, and locks are unchanged.
+The r8 presentation contract removes three false reader implications without
+changing any forecast or decision tuple. An internal No Play with no eligible
+named-book price says sportsbook odds are unavailable and, when present, shows
+the Playbook line only as consensus context instead of promising odds below.
+For the active NFL r9 release, the score panel also distinguishes the discrete
+score/winner forecast from the separately calibrated Spread and Total heads;
+it does not claim those line-specific probabilities are same-PMF while the
+coherent r2 candidate remains inactive.
+For active CFB, the reader now labels `modelProbability` as the price-calibrated
+Bet-grade probability and distinguishes it from the independent joint-PMF score
+and winner forecast. The CFB side guard still preserves the PMF-selected side,
+but its market-informed calibration and consensus blend may materially change
+the exact-price probability; r8 no longer calls those two probability heads the
+same forecast.
 The r5 presentation contract also preserves authentic current prices, lines,
 and two-sided same-book movement when an internal operational exception makes
 the exact-price Bet grade unavailable. Operational No Play suppresses only the
