@@ -3816,7 +3816,11 @@ function fiBoardHistorySide(args: {
   const sameBookRows = args.sportsbook !== null
     ? sideRows.filter((row) => row.sportsbook === args.sportsbook)
     : [];
-  const rows = sameBookRows.length > 0 ? sameBookRows : sideRows;
+  // A named FI board must never borrow an opening from another book. When the
+  // target book has no stored history, keep Opening/Prior unavailable until a
+  // second same-book capture arrives instead of manufacturing a cross-book
+  // movement trail under the target book's label.
+  const rows = args.sportsbook !== null ? sameBookRows : sideRows;
   const openAmerican = rows[0]?.odds_american ?? null;
   const distinct = rows
     .map((row) => row.odds_american)

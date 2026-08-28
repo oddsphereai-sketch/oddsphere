@@ -42,7 +42,10 @@ import {
 } from "@/app/lab/lib/marketPulsePresentation";
 import { firstInningSupportTone } from "@/app/lab/lib/firstInningPresentation";
 import { soccerForecastSemantics } from "@/app/lab/lib/soccerForecastSemantics";
-import { resolvePointLineMarketPulseMovement } from "@/app/lab/lib/dailyEdgeMarketPulseMovement";
+import {
+  resolveFirstInningMarketPulseMovement,
+  resolvePointLineMarketPulseMovement,
+} from "@/app/lab/lib/dailyEdgeMarketPulseMovement";
 import { resolveDailyEdgeCurrentOnlyMovement } from "@/app/lab/lib/dailyEdgeCurrentOnlyMovement";
 import { nflSelectedBetGrade } from "@/app/lab/lib/nflReaderPresentation";
 import {
@@ -1191,7 +1194,9 @@ type MarketPulseTone = "emerald" | "amber" | "gray";
 type CoherentMovement = ReturnType<typeof resolveCoherentMovement>;
 
 function resolveMarketPulseMovement(market: MarketEdgeDto): CoherentMovement {
-  return resolvePointLineMarketPulseMovement(market) ?? resolveCoherentMovement(market);
+  return resolveFirstInningMarketPulseMovement(market) ??
+    resolvePointLineMarketPulseMovement(market) ??
+    resolveCoherentMovement(market);
 }
 
 function movementRowDirection(market: MarketEdgeDto, movement: CoherentMovement, selected: boolean): { label: "Toward pick" | "Against pick" | "Slight toward" | "Slight against" | "Flat" | "Unverified"; tone: "emerald" | "teal" | "red" | "amber" | "gray" } {
