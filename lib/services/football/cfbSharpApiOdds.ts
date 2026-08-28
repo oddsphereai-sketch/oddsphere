@@ -2,7 +2,7 @@ import { SharpApiClient, type SharpApiRequestOptions, type SharpApiResponse } fr
 import type { NcaafBookOdds, NcaafGame } from "./balldontlieNcaafSlate";
 
 export const CFB_SHARP_API_ODDS_RELEASE =
-  "cfb_sharpapi_named_book_fallback_2026_08_28_r5_resilient_offset_pagination" as const;
+  "cfb_sharpapi_named_book_fallback_2026_08_28_r6_provider_page_stride" as const;
 export const CFB_SHARP_FALLBACK_MAX_GAMES = 96 as const;
 export const CFB_SHARP_FALLBACK_MAX_REQUESTS = 96 as const;
 export const CFB_SHARP_FALLBACK_MAX_ROWS_PER_EVENT = 200 as const;
@@ -198,9 +198,9 @@ export function nextCfbSharpOddsOffset(args: {
   if (!Number.isInteger(args.returnedRows) || args.returnedRows < 1) return null;
   const reportedOffset = args.pagination?.offset;
   if (reportedOffset !== undefined && (!Number.isInteger(reportedOffset) || reportedOffset !== args.requestedOffset)) return null;
-  const reportedCount = args.pagination?.count;
-  const advance = typeof reportedCount === "number" && Number.isInteger(reportedCount) && reportedCount > 0 && reportedCount === args.returnedRows
-    ? reportedCount
+  const reportedLimit = args.pagination?.limit;
+  const advance = typeof reportedLimit === "number" && Number.isInteger(reportedLimit) && reportedLimit > 0
+    ? reportedLimit
     : args.returnedRows;
   const derived = args.requestedOffset + advance;
   return Number.isSafeInteger(derived) && derived > args.requestedOffset ? derived : null;
