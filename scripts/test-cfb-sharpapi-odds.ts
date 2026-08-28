@@ -7,7 +7,7 @@ import {
   cfbBooksNeedSharpFallback,
   fetchSharpApiNcaafOddsFallback,
   normalizeSharpRows,
-  sharpEventIdCandidates,
+  sharpEventDiscoveryDates,
 } from "../lib/services/football/cfbSharpApiOdds";
 import { buildCfbV1DecisionBundle, getCfbV1Forecast } from "../lib/services/football/cfbV1Decision";
 
@@ -24,13 +24,12 @@ const game: NcaafGame = {
 };
 
 const expectedEventId = "ncaaf_sanjosestatespartans_usctrojans_2026-08-29_b2";
-assert.equal(sharpEventIdCandidates(game)[0], expectedEventId, "bounded discovery must try the empirically verified main named-book bucket first");
-assert.equal(sharpEventIdCandidates(game).some((eventId) => eventId.includes("usctrojans_sanjosestatespartans")), false, "schedule-derived Sharp identities must retain the documented away-home order");
+assert.deepEqual(sharpEventDiscoveryDates(game), ["2026-08-29"], "canonical discovery must deduplicate identical Eastern and UTC dates");
 const easternEveningGame = { ...game, providerGameId: "457612-evening", scheduledStart: "2026-08-29T01:30:00.000Z" };
-assert.equal(
-  sharpEventIdCandidates(easternEveningGame)[0],
-  "ncaaf_sanjosestatespartans_usctrojans_2026-08-28_b2",
-  "an evening kickoff crossing UTC midnight must try the Eastern football date before the UTC date",
+assert.deepEqual(
+  sharpEventDiscoveryDates(easternEveningGame),
+  ["2026-08-28", "2026-08-29"],
+  "an evening kickoff crossing UTC midnight must discover both the Eastern football date and UTC date",
 );
 
 void main();
@@ -40,6 +39,10 @@ const calls: SharpApiRequestOptions[] = [];
 const client = {
   async fetch<T>(opts: SharpApiRequestOptions): Promise<SharpApiResponse<T>> {
     calls.push(opts);
+    if (opts.path === "/events") {
+      const data = [sharpEvent()] as T;
+      return { data, pagination: { limit: 200, offset: 0, count: 1, has_more: false } };
+    }
     const eventId = String(opts.query?.event_id ?? "");
     const data = eventId === expectedEventId ? sharpRows(expectedEventId) : [];
     return { data: data as T, pagination: { limit: 200, offset: 0, count: data.length, has_more: false } };
@@ -47,9 +50,13 @@ const client = {
 };
 
 const result = await fetchSharpApiNcaafOddsFallback({ games: [game], client, maximumRequests: CFB_SHARP_FALLBACK_MAX_REQUESTS });
-assert.equal(result.requests, 1, "the correct b2 exact-event candidate must not require league-wide pagination");
+assert.equal(result.requests, 2, "one canonical date discovery plus one exact-event odds request must resolve the game");
 assert.equal(result.matchedGames, 1);
-assert.equal(calls.every((call) => call.path === "/odds" && call.query?.event_id === expectedEventId), true);
+assert.deepEqual(calls.map((call) => call.path), ["/events", "/odds"]);
+assert.deepEqual(calls[0]?.query, { league: "ncaaf", date: "2026-08-29", live: false, limit: 200 });
+assert.equal(calls[1]?.query?.event_id, expectedEventId);
+assert.equal(calls[1]?.query?.market, "main");
+assert.equal(calls[1]?.query?.is_live, false);
 const books = result.booksByGame[game.providerGameId]!;
 assert.deepEqual(books.map((book) => book.sportsbook), ["betmgm", "onexbet", "pinnacle", "thescorebet"]);
 const displayBooks = result.displayBooksByGame[game.providerGameId]!;
@@ -87,7 +94,7 @@ const expandedSlateResult = await fetchSharpApiNcaafOddsFallback({
     },
   },
 });
-assert.equal(expandedSlateResult.requests, 112, "four buckets across two strict dates for fourteen unmatched games must complete within the expanded hard cap");
+assert.equal(expandedSlateResult.requests, 2, "two date-level discovery requests must replace 112 guessed event-slug requests for fourteen unmatched games");
 assert.equal(expandedSlateResult.matchedGames, 0, "a larger request budget cannot manufacture missing exact-event evidence");
 assert.equal(expandedSlateResult.attemptedGames, 14);
 assert.equal(CFB_SHARP_FALLBACK_MAX_REQUESTS, 192, "the expanded ceiling remains explicit and bounded");
@@ -211,7 +218,7 @@ const pagedRows = sharpRows(expectedEventId);
 const paged = await fetchSharpApiNcaafOddsFallback({
   games: [game],
   maximumRequests: 4,
-  client: {
+  client: withDiscoveredEvent({
     async fetch<T>(opts: SharpApiRequestOptions): Promise<SharpApiResponse<T>> {
       pagedCalls.push(opts);
       const offset = Number(opts.query?.offset ?? 0);
@@ -223,17 +230,17 @@ const paged = await fetchSharpApiNcaafOddsFallback({
           : { limit: 200, offset, count: data.length, has_more: false },
       };
     },
-  },
+  }),
 });
-assert.equal(paged.requests, 2, "an exact event larger than one page must be completed with bounded offset pagination");
+assert.equal(paged.requests, 3, "canonical discovery plus a two-page exact event must stay bounded");
 assert.deepEqual(pagedCalls.map((call) => call.query?.offset ?? 0), [0, 200]);
 assert.deepEqual(paged.booksByGame[game.providerGameId], books, "pagination must preserve the exact normalized named-book tuple");
 
 const providerStrideCalls: SharpApiRequestOptions[] = [];
 const providerStride = await fetchSharpApiNcaafOddsFallback({
   games: [game],
-  maximumRequests: 2,
-  client: {
+  maximumRequests: 3,
+  client: withDiscoveredEvent({
     async fetch<T>(opts: SharpApiRequestOptions): Promise<SharpApiResponse<T>> {
       providerStrideCalls.push(opts);
       const offset = Number(opts.query?.offset ?? 0);
@@ -245,7 +252,7 @@ const providerStride = await fetchSharpApiNcaafOddsFallback({
           : { limit: 200, offset, count: data.length, has_more: false },
       };
     },
-  },
+  }),
 });
 assert.deepEqual(providerStrideCalls.map((call) => call.query?.offset ?? 0), [0, 200], "a missing next_offset must advance by the provider-reported page limit rather than expanded row cardinality");
 assert.deepEqual(providerStride.booksByGame[game.providerGameId], books, "provider-stride pagination must preserve the same normalized exact-event books");
@@ -253,8 +260,8 @@ assert.deepEqual(providerStride.booksByGame[game.providerGameId], books, "provid
 const returnedRowFallbackCalls: SharpApiRequestOptions[] = [];
 const returnedRowFallback = await fetchSharpApiNcaafOddsFallback({
   games: [game],
-  maximumRequests: 2,
-  client: {
+  maximumRequests: 3,
+  client: withDiscoveredEvent({
     async fetch<T>(opts: SharpApiRequestOptions): Promise<SharpApiResponse<T>> {
       returnedRowFallbackCalls.push(opts);
       const offset = Number(opts.query?.offset ?? 0);
@@ -266,7 +273,7 @@ const returnedRowFallback = await fetchSharpApiNcaafOddsFallback({
           : { offset, count: data.length, has_more: false },
       };
     },
-  },
+  }),
 });
 assert.deepEqual(returnedRowFallbackCalls.map((call) => call.query?.offset ?? 0), [0, 6], "returned row count is a compatibility stride only when the provider omits a usable limit");
 assert.deepEqual(returnedRowFallback.booksByGame[game.providerGameId], books, "row-count compatibility pagination must preserve the same normalized exact-event books");
@@ -274,8 +281,8 @@ assert.deepEqual(returnedRowFallback.booksByGame[game.providerGameId], books, "r
 const oversizedExpansionCalls: SharpApiRequestOptions[] = [];
 await fetchSharpApiNcaafOddsFallback({
   games: [game],
-  maximumRequests: 2,
-  client: {
+  maximumRequests: 3,
+  client: withDiscoveredEvent({
     async fetch<T>(opts: SharpApiRequestOptions): Promise<SharpApiResponse<T>> {
       oversizedExpansionCalls.push(opts);
       const offset = Number(opts.query?.offset ?? 0);
@@ -283,20 +290,20 @@ await fetchSharpApiNcaafOddsFallback({
         ? { data: [...pagedRows, ...pagedRows] as T, pagination: { limit: 200, offset: 0, count: pagedRows.length * 2, has_more: true } }
         : { data: [] as T, pagination: { limit: 200, offset, count: 0, has_more: false } };
     },
-  },
+  }),
 });
 assert.deepEqual(oversizedExpansionCalls.map((call) => call.query?.offset ?? 0), [0, 200], "an expanded event payload must not synthesize an offset from its larger returned-row count");
 
 await assert.rejects(
   fetchSharpApiNcaafOddsFallback({
     games: [game],
-    maximumRequests: 2,
-    client: {
+    maximumRequests: 3,
+    client: withDiscoveredEvent({
       async fetch<T>(): Promise<SharpApiResponse<T>> {
         const data = pagedRows.slice(0, 6);
         return { data: data as T, pagination: { count: data.length, has_more: true } };
       },
-    },
+    }),
   }),
   /repeated a prior page instead of advancing its offset/,
   "a provider that ignores the derived offset must fail before publication",
@@ -305,13 +312,13 @@ await assert.rejects(
 await assert.rejects(
   fetchSharpApiNcaafOddsFallback({
     games: [game],
-    maximumRequests: 2,
-    client: {
+    maximumRequests: 3,
+    client: withDiscoveredEvent({
       async fetch<T>(): Promise<SharpApiResponse<T>> {
         const data = pagedRows.slice(0, 6);
         return { data: data as T, pagination: { offset: 200, count: data.length, has_more: true } };
       },
-    },
+    }),
   }),
   /without a valid forward offset/,
   "a provider offset that conflicts with the requested page must fail closed",
@@ -320,13 +327,13 @@ await assert.rejects(
 await assert.rejects(
   fetchSharpApiNcaafOddsFallback({
     games: [game],
-    maximumRequests: CFB_SHARP_FALLBACK_MAX_PAGES_PER_EVENT,
-    client: {
+    maximumRequests: CFB_SHARP_FALLBACK_MAX_PAGES_PER_EVENT + 1,
+    client: withDiscoveredEvent({
       async fetch<T>(opts: SharpApiRequestOptions): Promise<SharpApiResponse<T>> {
         const offset = Number(opts.query?.offset ?? 0);
         return { data: [] as T, pagination: { has_more: true, offset, next_offset: offset + 200 } };
       },
-    },
+    }),
   }),
   new RegExp(`bounded ${CFB_SHARP_FALLBACK_MAX_PAGES_PER_EVENT}-page safety cap`),
 );
@@ -334,19 +341,87 @@ await assert.rejects(
 await assert.rejects(
   fetchSharpApiNcaafOddsFallback({
     games: [game],
-    maximumRequests: 2,
-    client: { async fetch<T>(): Promise<SharpApiResponse<T>> { return { data: [] as T, pagination: { has_more: true, next_offset: 0 } }; } },
+    maximumRequests: 3,
+    client: withDiscoveredEvent({ async fetch<T>(): Promise<SharpApiResponse<T>> { return { data: [] as T, pagination: { has_more: true, next_offset: 0 } }; } }),
   }),
   /without a valid forward offset/,
 );
 
 await assert.rejects(
-  fetchSharpApiNcaafOddsFallback({ games: [game], client: { async fetch<T>(): Promise<SharpApiResponse<T>> { return { data: [] as T, pagination: { has_more: false } }; } }, maximumRequests: 1 }),
+  fetchSharpApiNcaafOddsFallback({
+    games: [game],
+    client: withDiscoveredEvent({ async fetch<T>(): Promise<SharpApiResponse<T>> { return { data: [] as T, pagination: { has_more: false } }; } }),
+    maximumRequests: 1,
+  }),
   /exhausted its 1-request hard cap/,
   "bounded discovery must fail before the single writer can append partial evidence",
 );
 
-console.log("CFB SharpAPI exact-event named-book fallback tests passed.");
+const absentEvent = await fetchSharpApiNcaafOddsFallback({
+  games: [game],
+  maximumRequests: 1,
+  client: { async fetch<T>(): Promise<SharpApiResponse<T>> { return { data: [] as T, pagination: { has_more: false } }; } },
+});
+assert.equal(absentEvent.requests, 1, "an unpublished canonical event must not trigger guessed event-id calls");
+assert.equal(absentEvent.eventIdsByGame[game.providerGameId], null);
+assert.deepEqual(absentEvent.booksByGame[game.providerGameId], []);
+
+await assert.rejects(
+  fetchSharpApiNcaafOddsFallback({
+    games: [game],
+    maximumRequests: 3,
+    client: {
+      async fetch<T>(opts: SharpApiRequestOptions): Promise<SharpApiResponse<T>> {
+        if (opts.path === "/events") {
+          return { data: [sharpEvent(), sharpEvent({ id: `${expectedEventId}-duplicate` })] as T, pagination: { has_more: false } };
+        }
+        return { data: [] as T, pagination: { has_more: false } };
+      },
+    },
+  }),
+  /returned 2 exact matches/,
+  "ambiguous canonical event identity must fail closed before odds normalization",
+);
+
+const wrongIdentity = await fetchSharpApiNcaafOddsFallback({
+  games: [game],
+  maximumRequests: 1,
+  client: {
+    async fetch<T>(): Promise<SharpApiResponse<T>> {
+      return { data: [sharpEvent({ home_team: "Stanford Cardinal" })] as T, pagination: { has_more: false } };
+    },
+  },
+});
+assert.equal(wrongIdentity.eventIdsByGame[game.providerGameId], null, "a same-date event with the wrong team identity cannot be attached");
+
+console.log("CFB SharpAPI canonical-event named-book fallback tests passed.");
+}
+
+function sharpEvent(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+  return {
+    id: expectedEventId,
+    start_time: game.scheduledStart,
+    away_team: { name: game.away.name },
+    home_team: { name: game.home.name },
+    book_count: 7,
+    market_count: 3,
+    ...overrides,
+  };
+}
+
+function withDiscoveredEvent(client: {
+  fetch<T>(opts: SharpApiRequestOptions): Promise<SharpApiResponse<T>>;
+}): {
+  fetch<T>(opts: SharpApiRequestOptions): Promise<SharpApiResponse<T>>;
+} {
+  return {
+    async fetch<T>(opts: SharpApiRequestOptions): Promise<SharpApiResponse<T>> {
+      if (opts.path === "/events") {
+        return { data: [sharpEvent()] as T, pagination: { limit: 200, offset: 0, count: 1, has_more: false } };
+      }
+      return client.fetch<T>(opts);
+    },
+  };
 }
 
 function sharpRows(eventId: string): unknown[] {

@@ -2,11 +2,12 @@ import { SharpApiClient, type SharpApiRequestOptions, type SharpApiResponse } fr
 import type { NcaafBookOdds, NcaafGame } from "./balldontlieNcaafSlate";
 
 export const CFB_SHARP_API_ODDS_RELEASE =
-  "cfb_sharpapi_named_book_fallback_2026_08_28_r7_expanded_slate_budget" as const;
+  "cfb_sharpapi_named_book_fallback_2026_08_28_r8_canonical_event_discovery" as const;
 export const CFB_SHARP_FALLBACK_MAX_GAMES = 96 as const;
 export const CFB_SHARP_FALLBACK_MAX_REQUESTS = 192 as const;
 export const CFB_SHARP_FALLBACK_MAX_ROWS_PER_EVENT = 200 as const;
 export const CFB_SHARP_FALLBACK_MAX_PAGES_PER_EVENT = 4 as const;
+export const CFB_SHARP_FALLBACK_MAX_EVENT_DISCOVERY_PAGES_PER_DATE = 2 as const;
 
 type Json = Record<string, unknown>;
 type SharpClient = {
@@ -31,6 +32,22 @@ type SharpRow = {
   is_active?: unknown;
   is_stale_pregame_price?: unknown;
   timestamp?: unknown;
+};
+
+type SharpEventRow = {
+  id?: unknown;
+  event_id?: unknown;
+  eventId?: unknown;
+  start_time?: unknown;
+  event_start_time?: unknown;
+  commence_time?: unknown;
+  scheduled?: unknown;
+  home_team?: unknown;
+  homeTeam?: unknown;
+  home?: unknown;
+  away_team?: unknown;
+  awayTeam?: unknown;
+  away?: unknown;
 };
 
 type Pair = {
@@ -119,11 +136,74 @@ export async function fetchSharpApiNcaafOddsFallback(args: {
   const booksByGame: Record<string, NcaafBookOdds[]> = {};
   const displayBooksByGame: Record<string, NcaafBookOdds[]> = {};
   const eventIdsByGame: Record<string, string | null> = {};
+  const discoveryDates = [...new Set(games.flatMap((game) => sharpEventDiscoveryDates(game)))].sort();
+  const discoveredEvents: SharpEventRow[] = [];
+  for (const date of discoveryDates) {
+    const rows: unknown[] = [];
+    const pageFingerprints = new Set<string>();
+    let offset = 0;
+    let complete = false;
+    for (let page = 0; page < CFB_SHARP_FALLBACK_MAX_EVENT_DISCOVERY_PAGES_PER_DATE; page += 1) {
+      if (requests >= maximumRequests) {
+        throw new Error(`CFB SharpAPI fallback exhausted its ${maximumRequests}-request hard cap during canonical event discovery.`);
+      }
+      requests += 1;
+      const response = await client.fetch<unknown[]>({
+        path: "/events",
+        query: {
+          league: "ncaaf",
+          date,
+          live: false,
+          limit: CFB_SHARP_FALLBACK_MAX_ROWS_PER_EVENT,
+          ...(offset > 0 ? { offset } : {}),
+        },
+        retryRateLimitInternally: false,
+      });
+      if (!Array.isArray(response.data)) throw new Error(`CFB SharpAPI event discovery for ${date} returned malformed data.`);
+      const fingerprint = JSON.stringify(response.data);
+      if (response.data.length > 0 && pageFingerprints.has(fingerprint)) {
+        throw new Error(`CFB SharpAPI event discovery for ${date} repeated a prior page instead of advancing its offset.`);
+      }
+      if (response.data.length > 0) pageFingerprints.add(fingerprint);
+      rows.push(...response.data);
+      if (response.pagination?.has_more !== true) {
+        complete = true;
+        break;
+      }
+      const nextOffset = nextCfbSharpOddsOffset({
+        pagination: response.pagination,
+        requestedOffset: offset,
+        returnedRows: response.data.length,
+      });
+      if (nextOffset === null) {
+        throw new Error(`CFB SharpAPI event discovery for ${date} reported more rows without a valid forward offset.`);
+      }
+      offset = nextOffset;
+    }
+    if (!complete) {
+      throw new Error(`CFB SharpAPI event discovery for ${date} exceeded the bounded ${CFB_SHARP_FALLBACK_MAX_EVENT_DISCOVERY_PAGES_PER_DATE}-page safety cap.`);
+    }
+    discoveredEvents.push(...rows.map((row) => record(row) as SharpEventRow));
+  }
+  const discoveredEventIds = new Set<string>();
   for (const game of games) {
     let accepted: NcaafBookOdds[] = [];
     let acceptedDisplay: NcaafBookOdds[] = [];
     let acceptedEventId: string | null = null;
-    for (const eventId of sharpEventIdCandidates(game)) {
+    const eventMatches = discoveredEvents.filter((event) => strictSharpEventIdentity(game, event));
+    const uniqueEventMatches = [...new Map(eventMatches.flatMap((event) => {
+      const eventId = sharpEventId(event);
+      return eventId ? [[eventId, event] as const] : [];
+    })).entries()];
+    if (uniqueEventMatches.length > 1) {
+      throw new Error(`CFB SharpAPI canonical event discovery returned ${uniqueEventMatches.length} exact matches for game ${game.providerGameId}.`);
+    }
+    const eventId = uniqueEventMatches[0]?.[0] ?? null;
+    if (eventId) {
+      if (discoveredEventIds.has(eventId)) {
+        throw new Error(`CFB SharpAPI canonical event ${eventId} matched more than one scheduled game.`);
+      }
+      discoveredEventIds.add(eventId);
       const rows: unknown[] = [];
       const pageFingerprints = new Set<string>();
       let offset = 0;
@@ -137,6 +217,8 @@ export async function fetchSharpApiNcaafOddsFallback(args: {
           path: "/odds",
           query: {
             event_id: eventId,
+            market: "main",
+            is_live: false,
             limit: CFB_SHARP_FALLBACK_MAX_ROWS_PER_EVENT,
             ...(offset > 0 ? { offset } : {}),
           },
@@ -167,11 +249,9 @@ export async function fetchSharpApiNcaafOddsFallback(args: {
         throw new Error(`CFB SharpAPI event ${eventId} exceeded the bounded ${CFB_SHARP_FALLBACK_MAX_PAGES_PER_EVENT}-page safety cap.`);
       }
       const books = normalizeSharpRows({ game, eventId, rows });
-      if (books.length === 0) continue;
       acceptedDisplay = books;
       accepted = books.filter((book) => bookCompleteness(book) > 0);
       acceptedEventId = eventId;
-      break;
     }
     booksByGame[game.providerGameId] = accepted;
     displayBooksByGame[game.providerGameId] = acceptedDisplay;
@@ -240,15 +320,8 @@ export function preferredCfbTargetBook(books: NcaafBookOdds[]): NcaafBookOdds | 
     first.sportsbook.localeCompare(second.sportsbook))[0] ?? null;
 }
 
-export function sharpEventIdCandidates(game: NcaafGame): string[] {
-  const dates = [...new Set([easternDate(game.scheduledStart), game.scheduledStart.slice(0, 10)])];
-  const away = teamSlug(game.away.name);
-  const home = teamSlug(game.home.name);
-  if (!away || !home) throw new Error(`CFB SharpAPI event candidate requires non-empty team slugs for game ${game.providerGameId}.`);
-  const buckets = ["b2", "b0", "b1", "b3"];
-  const values = new Set<string>();
-  for (const date of dates) for (const bucket of buckets) values.add(`ncaaf_${away}_${home}_${date}_${bucket}`);
-  return [...values];
+export function sharpEventDiscoveryDates(game: NcaafGame): string[] {
+  return [...new Set([easternDate(game.scheduledStart), game.scheduledStart.slice(0, 10)])];
 }
 
 export function normalizeSharpRows(args: { game: NcaafGame; eventId: string; rows: unknown[] }): NcaafBookOdds[] {
@@ -256,14 +329,14 @@ export function normalizeSharpRows(args: { game: NcaafGame; eventId: string; row
   const displayQuotes = new Map<string, NonNullable<NcaafBookOdds["marketQuotes"]>>();
   for (const value of args.rows) {
     const row = value as SharpRow;
-    if (text(row.event_id) !== args.eventId || row.is_live === true || row.is_active === false || row.is_stale_pregame_price === true || row.is_player_prop === true) continue;
+    if (identifier(row.event_id) !== args.eventId || row.is_live === true || row.is_active === false || row.is_stale_pregame_price === true || row.is_player_prop === true) continue;
     const market = MARKET_TYPES.get((text(row.market_type) ?? "") as "moneyline" | "point_spread" | "total_points");
     const sportsbook = normalize(text(row.sportsbook) ?? "");
     const side = text(row.selection_type)?.toLowerCase();
     const price = americanPrice(row.odds_american);
     const observedAt = iso(row.timestamp);
     const startsAt = iso(row.event_start_time);
-    const externalEventId = text(row.external_event_id) ?? args.eventId;
+    const externalEventId = identifier(row.external_event_id) ?? args.eventId;
     const marketSelection = row.is_main_line === true && row.is_alternate_line !== true
       ? "main_line" as const
       : row.is_alternate_line === true && row.is_main_line !== true && market !== "moneyline"
@@ -475,6 +548,29 @@ function strictGameIdentity(game: NcaafGame, row: SharpRow, startsAt: string): b
   return teamMatches(row.home_team, game.home.name, game.home.abbreviation) && teamMatches(row.away_team, game.away.name, game.away.abbreviation);
 }
 
+function strictSharpEventIdentity(game: NcaafGame, event: SharpEventRow): boolean {
+  const startsAt = iso(event.start_time ?? event.event_start_time ?? event.commence_time ?? event.scheduled);
+  if (!startsAt || !sharpEventId(event)) return false;
+  const expected = Date.parse(game.scheduledStart);
+  const actual = Date.parse(startsAt);
+  if (!Number.isFinite(expected) || !Number.isFinite(actual) || Math.abs(expected - actual) > 15 * 60_000) return false;
+  return teamMatches(eventTeam(event, "home"), game.home.name, game.home.abbreviation) &&
+    teamMatches(eventTeam(event, "away"), game.away.name, game.away.abbreviation);
+}
+
+function sharpEventId(event: SharpEventRow): string | null {
+  return identifier(event.id) ?? identifier(event.event_id) ?? identifier(event.eventId);
+}
+
+function eventTeam(event: SharpEventRow, side: "home" | "away"): unknown {
+  const direct = side === "home"
+    ? event.home_team ?? event.homeTeam ?? event.home
+    : event.away_team ?? event.awayTeam ?? event.away;
+  if (typeof direct === "string") return direct;
+  const nested = record(direct);
+  return nested.name ?? nested.full_name ?? nested.display_name ?? nested.abbreviation ?? null;
+}
+
 function teamMatches(raw: unknown, expectedName: string, abbreviation: string): boolean {
   const value = normalizeTeam(raw);
   const full = normalizeTeam(expectedName);
@@ -505,10 +601,6 @@ function bookCompleteness(book: NcaafBookOdds): number {
   return Number(Boolean(book.moneyline)) + Number(Boolean(book.spread)) + Number(Boolean(book.total));
 }
 
-function teamSlug(value: string): string {
-  return value.normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "");
-}
-
 function normalizeTeam(value: unknown): string {
   return text(value)?.replace(/^\s*\(\d+\)\s*/, "").normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "") ?? "";
 }
@@ -520,9 +612,10 @@ function easternDate(value: string): string {
 function normalize(value: string): string { return value.toLowerCase().replace(/[^a-z0-9]+/g, ""); }
 function record(value: unknown): Json { return value !== null && typeof value === "object" && !Array.isArray(value) ? value as Json : {}; }
 function text(value: unknown): string | null { return typeof value === "string" && value.trim() ? value.trim() : null; }
+function identifier(value: unknown): string | null { return text(value) ?? (typeof value === "number" && Number.isSafeInteger(value) ? String(value) : null); }
 function finite(value: unknown): number | null { const parsed = typeof value === "number" ? value : typeof value === "string" && value.trim() ? Number(value) : NaN; return Number.isFinite(parsed) ? parsed : null; }
 function americanPrice(value: unknown): number | null { const parsed = finite(value); return parsed !== null && Number.isInteger(parsed) && parsed !== 0 && Math.abs(parsed) >= 100 && Math.abs(parsed) <= 100_000 ? parsed : null; }
 function iso(value: unknown): string | null { const parsed = text(value); return parsed && Number.isFinite(Date.parse(parsed)) ? new Date(parsed).toISOString() : null; }
 function latest(first: string, second: string): string { return Date.parse(first) >= Date.parse(second) ? first : second; }
 
-export const __TEST__ = { TRUSTED_CONSENSUS_BOOKS, USER_TARGET_BOOKS, strictGameIdentity, teamMatches, marketHasThreeSameLineBooks, record };
+export const __TEST__ = { TRUSTED_CONSENSUS_BOOKS, USER_TARGET_BOOKS, strictGameIdentity, strictSharpEventIdentity, teamMatches, marketHasThreeSameLineBooks, record };
