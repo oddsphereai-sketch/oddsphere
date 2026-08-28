@@ -21,7 +21,10 @@ import type {
 } from "@/lib/types/domain/Grade";
 import type { Verdict } from "@/lib/services/verdictDerivation";
 import type { SharpReadKey } from "@/lib/services/sharpReadSelector";
-import type { RecommendationDecision } from "@/lib/types/domain/RecommendationDecision";
+import type {
+  MarketSplitDisplaySection,
+  RecommendationDecision,
+} from "@/lib/types/domain/RecommendationDecision";
 
 // ───────────────────────────────────────────────────────────────────────────
 // /api/lab/refresh-status
@@ -319,6 +322,12 @@ export type MarketEdgeDto = {
     /** Phase 7I — true when observedAt is older than the stale threshold. */
     isStale?: boolean;
   }>;
+  /**
+   * Complete two-sided percentages from a named sportsbook, shown only as a
+   * source-labeled Circa fallback. This is display-only evidence. It must not
+   * be blended into public consensus or used as a grading input.
+   */
+  sportsbookSplits?: MarketSplitDisplaySection | null;
   /**
    * Source-health classification for the SharpAPI market panel.
    * This is presentation state, not a grading input. A non-complete state

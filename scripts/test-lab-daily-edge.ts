@@ -463,6 +463,71 @@ section("Market Pulse presentation coherence");
   {
     const observedNow = new Date().toISOString();
     const common = {
+      canonical_event_id: "13579",
+      market_type: "total",
+      provider: "sharpapi",
+      source_observed_at: observedNow,
+      fetched_at: observedNow,
+    } as const;
+    const sections = dailyEdgeTest.buildSourceAwareSplitSectionsFromRows(
+      [
+        { ...common, source_book: "draftkings", source_type: "public_recreational", selection_key: "13579:total:over", bets_pct: 0.57, money_pct: 0.20 },
+        { ...common, source_book: "draftkings", source_type: "public_recreational", selection_key: "13579:total:under", bets_pct: 0.43, money_pct: 0.80 },
+        { ...common, source_book: "circa", source_type: "sharp_adjacent_book", selection_key: "13579:total:over", bets_pct: 1, money_pct: 1 },
+        { ...common, source_book: "circa", source_type: "sharp_adjacent_book", selection_key: "13579:total:under", bets_pct: 0, money_pct: 0 },
+      ],
+      [{ external_id: 13579, sport: "mlb", away_team: { abbreviation: "SD" }, home_team: { abbreviation: "TB" } }] as never,
+    );
+    const result = sections.get("13579::total");
+    check("complete DraftKings percentages render under their own fallback source label", result?.sportsbook?.label === "DraftKings Splits" && result.sportsbook.rows.length === 2);
+    check("DraftKings tickets and handle remain attached to the correct sides", result?.sportsbook?.rows[0]?.betsPct === 57 && result.sportsbook.rows[0]?.moneyPct === 20 && result.sportsbook.rows[1]?.betsPct === 43 && result.sportsbook.rows[1]?.moneyPct === 80);
+    check("valid DraftKings percentages never rehabilitate invalid Circa endpoints", result?.sharpBook === null && result.sharpAvailability.status === "provider_limited");
+  }
+  {
+    const observedNow = new Date().toISOString();
+    const common = {
+      canonical_event_id: "13580",
+      market_type: "total",
+      provider: "sharpapi",
+      source_observed_at: observedNow,
+      fetched_at: observedNow,
+    } as const;
+    const sections = dailyEdgeTest.buildSourceAwareSplitSectionsFromRows(
+      [
+        { ...common, source_book: "draftkings", source_type: "public_recreational", selection_key: "13580:total:over", bets_pct: 0.57, money_pct: 0.20 },
+        { ...common, source_book: "draftkings", source_type: "public_recreational", selection_key: "13580:total:under", bets_pct: 0.43, money_pct: 0.80 },
+        { ...common, source_book: "circa", source_type: "sharp_adjacent_book", selection_key: "13580:total:over", bets_pct: 0.55, money_pct: 0.35 },
+        { ...common, source_book: "circa", source_type: "sharp_adjacent_book", selection_key: "13580:total:under", bets_pct: 0.45, money_pct: 0.65 },
+      ],
+      [{ external_id: 13580, sport: "mlb", away_team: { abbreviation: "SD" }, home_team: { abbreviation: "TB" } }] as never,
+    );
+    const result = sections.get("13580::total");
+    check("complete Circa splits always displace the sportsbook fallback", result?.sharpBook?.rows.length === 2 && result.sportsbook === null);
+  }
+  {
+    const observedNow = new Date().toISOString();
+    const common = {
+      canonical_event_id: "13581",
+      market_type: "moneyline",
+      provider: "sharpapi",
+      source_observed_at: observedNow,
+      fetched_at: observedNow,
+    } as const;
+    const sections = dailyEdgeTest.buildSourceAwareSplitSectionsFromRows(
+      [
+        { ...common, source_book: "draftkings", source_type: "public_recreational", selection_key: "13581:moneyline:away", bets_pct: 0.54, money_pct: null },
+        { ...common, source_book: "draftkings", source_type: "public_recreational", selection_key: "13581:moneyline:home", bets_pct: 0.46, money_pct: null },
+        { ...common, source_book: "betmgm", source_type: "retail_book", selection_key: "13581:moneyline:away", bets_pct: 0.48, money_pct: 0.61 },
+        { ...common, source_book: "betmgm", source_type: "retail_book", selection_key: "13581:moneyline:home", bets_pct: 0.52, money_pct: 0.39 },
+      ],
+      [{ external_id: 13581, sport: "mlb", away_team: { abbreviation: "SD" }, home_team: { abbreviation: "TB" } }] as never,
+    );
+    const result = sections.get("13581::moneyline");
+    check("BetMGM is used only when DraftKings lacks a complete pair", result?.sportsbook?.label === "BetMGM Splits" && result.sportsbook.rows.length === 2);
+  }
+  {
+    const observedNow = new Date().toISOString();
+    const common = {
       canonical_event_id: "11111",
       market_type: "moneyline",
       provider: "sharpapi",
