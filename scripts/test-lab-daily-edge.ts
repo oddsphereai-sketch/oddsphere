@@ -429,6 +429,25 @@ section("Market Pulse presentation coherence");
         alignedFiResistance.movement.directionRelativeToPick === "resistance" &&
         alignedFiResistance.label === "Slight Market Resistance",
     );
+    const alignedFiSupport = dailyEdgeTest.alignMarketReadV2ToVisibleOdds({
+      read: null,
+      enabled: true,
+      market: "first_inning",
+      pick: "NRFI",
+      openAmerican: -135,
+      currentAmerican: -150,
+      previousLine: null,
+      currentLine: null,
+      observedAt: "2026-08-28T19:00:00Z",
+      generatedAt: "2026-08-28T19:00:00Z",
+    });
+    check(
+      "FI NRFI -135 to -150 is market support, never resistance",
+      alignedFiSupport?.movement?.firstTrackedPrice === -135 &&
+        alignedFiSupport.movement.currentPrice === -150 &&
+        alignedFiSupport.movement.directionRelativeToPick === "support" &&
+        alignedFiSupport.label === "Market Support",
+    );
   }
 
   section("Odds movement coherence");

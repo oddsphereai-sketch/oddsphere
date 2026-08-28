@@ -12,6 +12,78 @@ export type PointLineMarketPulseMovement = {
   openingLabel: "Opening";
 };
 
+export type FirstInningMarketPulseMovement = {
+  open: number;
+  previous: number | null;
+  current: number;
+  openLine: number | null;
+  previousLine: number | null;
+  currentLine: number | null;
+  sportsbook: string;
+  coherentTrail: true;
+  openingLabel: "Opening";
+};
+
+function firstInningSportsbook(source: string | null): string | null {
+  if (!source) return null;
+  const normalized = source.replace(/^fi_market_ok_/i, "").trim();
+  if (!normalized || normalized === "lines" || normalized === "unavailable") {
+    return null;
+  }
+  return normalized;
+}
+
+/**
+ * Resolve MLB first-inning Market Pulse from the exact two-sided board shown
+ * immediately below the pulse. The generic picked-side odds trail can belong
+ * to the evaluated sportsbook while the FI board belongs to a different
+ * current same-book pair. Using the generic trail for the headline makes a
+ * visible NRFI move such as -135 to -150 appear beneath a resistance label
+ * derived from another book.
+ *
+ * Fail closed unless the displayed board has a named sportsbook and complete
+ * selected-side opening/current endpoints. The route guarantees that an FI
+ * opening is retained only when it belongs to this same sportsbook.
+ */
+export function resolveFirstInningMarketPulseMovement(
+  market: MarketEdgeDto,
+): FirstInningMarketPulseMovement | null {
+  const board = market.fiMarketBoard ?? null;
+  const pick = (market.pick ?? "").trim().toUpperCase();
+  const sportsbook = firstInningSportsbook(board?.source ?? null);
+  if (!board || !sportsbook || (pick !== "NRFI" && pick !== "YRFI")) {
+    return null;
+  }
+
+  const nrfi = pick === "NRFI";
+  const open = nrfi ? board.nrfiOpenAmerican ?? null : board.yrfiOpenAmerican ?? null;
+  const previous = nrfi
+    ? board.nrfiPreviousAmerican ?? null
+    : board.yrfiPreviousAmerican ?? null;
+  const current = nrfi ? board.nrfiAmerican : board.yrfiAmerican;
+  if (
+    open === null ||
+    current === null ||
+    !Number.isFinite(open) ||
+    !Number.isFinite(current)
+  ) {
+    return null;
+  }
+
+  return {
+    open,
+    previous:
+      previous !== null && Number.isFinite(previous) ? previous : null,
+    current,
+    openLine: board.line,
+    previousLine: board.line,
+    currentLine: board.line,
+    sportsbook,
+    coherentTrail: true,
+    openingLabel: "Opening",
+  };
+}
+
 function sameTrackedLine(first: number | null, current: number | null): boolean {
   if (first === null || current === null) return first === current;
   return Math.abs(first - current) < 0.001;

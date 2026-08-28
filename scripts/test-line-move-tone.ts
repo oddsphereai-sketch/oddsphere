@@ -62,6 +62,10 @@ check(
   classifyPickRelativeLineMove(-170, -200) === "toward",
 );
 check(
+  "NRFI -135 → -150 classified as 'toward'",
+  classifyPickRelativeLineMove(-135, -150) === "toward",
+);
+check(
   "favorite -170 → -200 tone = emerald",
   lineMoveTone(classifyPickRelativeLineMove(-170, -200)) === "emerald",
 );

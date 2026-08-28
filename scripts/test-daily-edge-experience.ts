@@ -21,7 +21,10 @@ import {
   filterWeeklyReaderSnapshot,
   weeklyReaderGameIsVisible,
 } from "../lib/services/dailyEdge/weeklyReaderLifecycle";
-import { resolvePointLineMarketPulseMovement } from "../app/lab/lib/dailyEdgeMarketPulseMovement";
+import {
+  resolveFirstInningMarketPulseMovement,
+  resolvePointLineMarketPulseMovement,
+} from "../app/lab/lib/dailyEdgeMarketPulseMovement";
 import { resolveDailyEdgeCurrentOnlyMovement } from "../app/lab/lib/dailyEdgeCurrentOnlyMovement";
 import { marketSplitSectionIsStale } from "../app/lab/lib/dailyEdgeSplitFreshness";
 import {
@@ -1268,7 +1271,43 @@ check(
     wnbaSpreadPointLinePulse.currentLine === 4.5 &&
     wnbaSpreadPointLinePulse.sportsbook === "fanduel" &&
     candidateDailyEdgeSource.includes("resolveMarketPulseMovement(market)") &&
-    candidateDailyEdgeSource.includes("resolvePointLineMarketPulseMovement(market) ?? resolveCoherentMovement(market)"),
+    candidateDailyEdgeSource.includes("resolveFirstInningMarketPulseMovement(market) ??") &&
+    candidateDailyEdgeSource.includes("resolvePointLineMarketPulseMovement(market) ??"),
+);
+const nyyBosNrfiPulse = resolveFirstInningMarketPulseMovement({
+  pick: "NRFI",
+  fiMarketBoard: {
+    line: 0.5,
+    nrfiAmerican: -150,
+    yrfiAmerican: 115,
+    nrfiOpenAmerican: -135,
+    yrfiOpenAmerican: 105,
+    nrfiPreviousAmerican: -145,
+    yrfiPreviousAmerican: 110,
+    source: "fi_market_ok_hardrock",
+  },
+} as unknown as MarketEdgeDto);
+check(
+  "MLB FI Market Pulse uses the visible selected-side same-book board",
+  nyyBosNrfiPulse?.open === -135 &&
+    nyyBosNrfiPulse.previous === -145 &&
+    nyyBosNrfiPulse.current === -150 &&
+    nyyBosNrfiPulse.sportsbook === "hardrock" &&
+    nyyBosNrfiPulse.coherentTrail === true,
+);
+check(
+  "MLB FI Market Pulse fails closed without a named same-book opening",
+  resolveFirstInningMarketPulseMovement({
+    pick: "NRFI",
+    fiMarketBoard: {
+      line: 0.5,
+      nrfiAmerican: -150,
+      yrfiAmerican: 115,
+      nrfiOpenAmerican: null,
+      yrfiOpenAmerican: null,
+      source: "fi_market_ok_hardrock",
+    },
+  } as unknown as MarketEdgeDto) === null,
 );
 check(
   "Market Pulse keeps public consensus, sharp-book splits, and price movement source-coherent",
@@ -1497,7 +1536,7 @@ check(
 check(
   "a context-only CFB line never promises missing sportsbook odds",
   DAILY_EDGE_MEMBER_PRESENTATION_RELEASE_ID ===
-    "daily_edge_member_presentation_2026_08_28_r13_single_sharp_book_card" &&
+    "daily_edge_member_presentation_2026_08_28_r14_fi_same_book_pulse" &&
     candidateSource.includes("Sportsbook odds unavailable") &&
     candidateSource.includes("Consensus line only") &&
     candidateSource.includes("No eligible named-book American price was captured") &&
