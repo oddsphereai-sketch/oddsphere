@@ -6,6 +6,7 @@ import { buildRecommendationDecision } from "@/lib/services/recommendationDecisi
 import type { MarketSplitDisplaySection } from "@/lib/types/domain/RecommendationDecision";
 import {
   CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE,
+  CFB_FORWARD_CANONICAL_DISCOVERY_PREVIOUS_EVIDENCE_SCHEMA_RELEASE,
   CFB_FORWARD_DATA_QUALITY_EVIDENCE_SCHEMA_RELEASE,
   CFB_FORWARD_INITIAL_EVIDENCE_SCHEMA_RELEASE,
   CFB_FORWARD_LEGACY_EVIDENCE_SCHEMA_RELEASE,
@@ -34,7 +35,7 @@ import { activeCfbWeeklyWindow, isGameInCfbWeeklyWindow } from "./cfbWeeklyWindo
 import { cfbFootballEvidenceStats } from "./footballMemberEvidence";
 
 export const CFB_MEMBER_FIXTURE_RELEASE =
-  "cfb_v1_member_fixture_2026_08_28_r21_independent_public_prediction" as const;
+  "cfb_v1_member_fixture_2026_08_28_r22_event_discovery_pagination" as const;
 export const CFB_PUBLIC_OUTCOME_CONTRACT_RELEASE =
   "cfb_independent_public_outcome_contract_2026_08_28_r29" as const;
 export const CFB_CONTEXT_ONLY_QUOTE_CAPTURE_SKEW_MS = 5_000 as const;
@@ -45,6 +46,8 @@ const CFB_PRE_DIRECTIONAL_DECISION_RELEASE = "cfb_v1_daily_edge_decision_2026_08
 const CFB_PROVIDER_DISCOVERY_PREVIOUS_MEMBER_RELEASE = "cfb_v1_member_release_2026_08_28_r15_directional_pmf" as const;
 const CFB_PROVIDER_DISCOVERY_PREVIOUS_DECISION_RELEASE = "cfb_v1_daily_edge_decision_2026_08_28_r12_directional_pmf" as const;
 const CFB_CANONICAL_PRICE_PREVIOUS_MEMBER_RELEASE = "cfb_v1_member_release_2026_08_28_r16_canonical_price_coverage" as const;
+const CFB_INDEPENDENT_PUBLIC_PREVIOUS_MEMBER_RELEASE = "cfb_v1_member_release_2026_08_28_r17_independent_public_prediction" as const;
+const CFB_INDEPENDENT_PUBLIC_PREVIOUS_DECISION_RELEASE = "cfb_v1_daily_edge_decision_2026_08_28_r13_canonical_price_coverage" as const;
 const CFB_DATA_QUALITY_MEMBER_RELEASE = "cfb_v1_member_release_2026_08_28_r8_market_scoped_data_quality" as const;
 const CFB_DATA_QUALITY_DECISION_RELEASE = "cfb_v1_daily_edge_decision_2026_08_28_r11_market_scoped_data_quality" as const;
 const CFB_PREVIOUS_MEMBER_RELEASE = "cfb_v1_member_release_2026_08_28_r7_two_axis_outcome_sharp_splits" as const;
@@ -130,7 +133,9 @@ function latestCompleteRows(rows: CfbForwardStoredEvidence[]): CfbForwardStoredE
   if (rows.length === 0) throw new Error("CFB forward evidence is empty.");
   const current = completeRowsForRelease(rows, CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE, CFB_FORWARD_MEMBER_RELEASE, CFB_V1_DECISION_RELEASE);
   if (current) return current;
-  const canonicalPriceFallback = completeRowsForRelease(rows, CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE, CFB_CANONICAL_PRICE_PREVIOUS_MEMBER_RELEASE, CFB_V1_DECISION_RELEASE);
+  const independentPublicFallback = completeRowsForRelease(rows, CFB_FORWARD_CANONICAL_DISCOVERY_PREVIOUS_EVIDENCE_SCHEMA_RELEASE, CFB_INDEPENDENT_PUBLIC_PREVIOUS_MEMBER_RELEASE, CFB_INDEPENDENT_PUBLIC_PREVIOUS_DECISION_RELEASE);
+  if (independentPublicFallback) return independentPublicFallback;
+  const canonicalPriceFallback = completeRowsForRelease(rows, CFB_FORWARD_CANONICAL_DISCOVERY_PREVIOUS_EVIDENCE_SCHEMA_RELEASE, CFB_CANONICAL_PRICE_PREVIOUS_MEMBER_RELEASE, CFB_INDEPENDENT_PUBLIC_PREVIOUS_DECISION_RELEASE);
   if (canonicalPriceFallback) return canonicalPriceFallback;
   const providerDiscoveryPreviousFallback = completeRowsForRelease(rows, CFB_FORWARD_PROVIDER_DISCOVERY_PREVIOUS_EVIDENCE_SCHEMA_RELEASE, CFB_PROVIDER_DISCOVERY_PREVIOUS_MEMBER_RELEASE, CFB_PROVIDER_DISCOVERY_PREVIOUS_DECISION_RELEASE);
   if (providerDiscoveryPreviousFallback) return providerDiscoveryPreviousFallback;
