@@ -142,15 +142,15 @@ changed; only deterministic settlement of existing locked rows is affected.
 - Projection runtime: resolved automodel `v2_2`
 - First-inning runtime: `fi_v2` with the versioned unpublished-probable availability head below
 - Public calibration: `mlb_public_calibration_v27_strong_winner_resistance_lean_2026_08_22`
-- Decision release: `mlb_daily_edge_decision_2026_08_26_r70`
-- Rule bundle: `mlb_daily_edge_rule_bundle_v58_coherent_near_edge_watchlist_2026_08_26`
-- Grade policy: `mlb_public_grade_policy_v48_coherent_near_edge_watchlist_2026_08_26`
+- Decision release: `mlb_daily_edge_decision_2026_08_28_r71_verified_split_evidence`
+- Rule bundle: `mlb_daily_edge_rule_bundle_v59_verified_split_evidence_2026_08_28`
+- Grade policy: `mlb_public_grade_policy_v49_verified_split_evidence_2026_08_28`
 - Correction policy: `mlb_prediction_corrections_v22_coherent_near_edge_watchlist_2026_08_26`
 - Tracking contract: `member_facing_lock_v8_priority_retry_minute_cadence_2026_08_11`
 - Machine registry: `lib/automodel/mlbModelLayerVersions.ts`
 - Authoritative member-facing writer: `lib/services/predictionRecordService.ts`
 
-Shared member presentation release: `daily_edge_member_presentation_2026_08_27_r8_truthful_football_sources`.
+Shared member presentation release: `daily_edge_member_presentation_2026_08_28_r9_verified_mlb_split_evidence`.
 Internal operational holds remain high-severity health/recovery state, but the
 member board, filters, cards, headlines, and Bet Grade surface them as No Play
 with an explicit incomplete-evidence reason. The response reports evaluated
@@ -208,6 +208,27 @@ exceptions. Bounded starter recovery remains under the existing
 `prediction_pipeline:mlb` lease, targets at most three explicitly identified
 games, and cannot mutate locked rows. Evidence and rollback are recorded in
 `docs/model-audits/2026-08-26-daily-edge-operational-no-play-recovery.md`.
+
+The August 28 MLB r71 evidence-integrity release withholds exact 0% or 100%
+ticket/handle shares when the provider observation has no verifiable sample
+count. The rule is field-specific: valid non-endpoint tickets remain available
+when only money is an unsupported endpoint, and vice versa. It is enforced at
+the SharpAPI adapter, signal writer, last-known-good carry-forward, provider-
+separated mirror, authoritative decision writer, lock snapshot, and member
+reader. No replacement percentage is synthesized and Playbook is not relabeled
+as SharpAPI. Existing locked picks, exact prices, probabilities, actions,
+stakes, tracking rows, and settlement remain immutable. On the frozen August
+28 45-market replay, counts move from 2 Best Angles / 16 Leans / 12 Watchlists /
+15 No Plays to 2 / 15 / 12 / 16: zero promotions and one demotion, TEX-MIL
+Moneyline, whose market-led Lean had depended on an unverified 0/0 SharpAPI
+pair. The existing market-led promotion rule remains active and tested for
+valid non-endpoint evidence. Fifteen games retain complete named-book line
+coverage; no evaluated price is an outlier against its exact-line multi-book
+center. Raw alternate totals and first-inning ladders remain stored as provider
+observations but are excluded by the existing consensus main-total and 0.5-run
+first-inning selectors. Evidence and rollback are recorded in
+`docs/model-audits/2026-08-28-mlb-verified-split-evidence-r71.md`. Rollback is
+r70/v58/v48 with correction policy v22 and member presentation r8.
 
 The August 26 r70 tier-ladder release adds one strictly nonactionable
 Moneyline monitoring rung. A complete, unchanged-side tuple that fails action

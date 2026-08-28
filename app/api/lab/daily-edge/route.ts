@@ -116,6 +116,7 @@ import {
   loadLinesHistoryForSlate,
   isStale as isObservationStale,
 } from "@/lib/services/lastKnownGoodReader";
+import { verifiedHundredSplitPct, verifiedUnitSplitPct } from "@/lib/services/splitEvidenceQuality";
 import {
   pickFresherCurrent,
   loadStreamCurrentForSlate,
@@ -1629,11 +1630,17 @@ function pctFromFraction(value: number | null | undefined): number | null {
 function splitPairScore(
   a: { money_pct: number | null; bets_pct: number | null },
   b: { money_pct: number | null; bets_pct: number | null },
+  scrubUnsupportedEndpoints: boolean = false,
 ): number {
-  const moneyA = pctFromFraction(a.money_pct);
-  const moneyB = pctFromFraction(b.money_pct);
-  const betsA = pctFromFraction(a.bets_pct);
-  const betsB = pctFromFraction(b.bets_pct);
+  const pct = (value: number | null): number | null => {
+    if (!scrubUnsupportedEndpoints) return pctFromFraction(value);
+    const verified = verifiedUnitSplitPct(value);
+    return verified === null ? null : Math.round(verified * 100);
+  };
+  const moneyA = pct(a.money_pct);
+  const moneyB = pct(b.money_pct);
+  const betsA = pct(a.bets_pct);
+  const betsB = pct(b.bets_pct);
   let score = 0;
   let fields = 0;
   if (moneyA !== null && moneyB !== null) {
@@ -1716,6 +1723,7 @@ function buildSourceAwareSplitSectionsFromRows(
     if (!market || !game) continue;
     const home = game.home_team?.abbreviation ?? "Home";
     const away = game.away_team?.abbreviation ?? "Away";
+    const scrubUnsupportedEndpoints = game.sport === "mlb";
     const buildSection = (
       label: MarketSplitDisplaySection["label"],
       predicate: (row: SourceAwareSplitObservationRow) => boolean,
@@ -1746,7 +1754,7 @@ function buildSourceAwareSplitSectionsFromRows(
         } | null = null;
         for (const left of leftRows) {
           for (const right of rightRows) {
-            const score = splitPairScore(left.row, right.row);
+            const score = splitPairScore(left.row, right.row, scrubUnsupportedEndpoints);
             if (score > 2) continue;
             const indexGap = Math.abs(left.index - right.index);
             const leftFetchedAtMs = splitTimestampMs(left.row.fetched_at ?? left.row.source_observed_at);
@@ -1795,8 +1803,18 @@ function buildSourceAwareSplitSectionsFromRows(
         return [{
           side: side as "home" | "away" | "over" | "under",
           label: sideLabel,
-          moneyPct: pctFromFraction(row.money_pct),
-          betsPct: pctFromFraction(row.bets_pct),
+          moneyPct: scrubUnsupportedEndpoints
+            ? (() => {
+                const value = verifiedUnitSplitPct(row.money_pct);
+                return value === null ? null : Math.round(value * 100);
+              })()
+            : pctFromFraction(row.money_pct),
+          betsPct: scrubUnsupportedEndpoints
+            ? (() => {
+                const value = verifiedUnitSplitPct(row.bets_pct);
+                return value === null ? null : Math.round(value * 100);
+              })()
+            : pctFromFraction(row.bets_pct),
           observedAt: row.source_observed_at ?? row.fetched_at ?? null,
           freshnessCheckedAt: row.fetched_at ?? row.source_observed_at ?? null,
           staleAfterMinutes: SOURCE_AWARE_SPLIT_STALE_AGE_MINUTES,
@@ -1987,6 +2005,16 @@ function buildGameDto(
   sourceAwareSplits: SourceAwareSplitLookup = new Map(),
   renderedCopyFlagOverrides: DailyEdgeRenderedCopyFlagOverrides | null = null,
 ): DailyEdgeGameDto | null {
+  if (row.sport === "mlb") {
+    // Current/history/lock rows may predate r71. Remove unsupported exact
+    // endpoints before any MLB read-side verdict or member section is built;
+    // picks, prices, probabilities, locks, and tracking remain untouched.
+    signals = signals.map((signal) => ({
+      ...signal,
+      public_money_pct: verifiedHundredSplitPct(signal.public_money_pct),
+      public_betting_pct: verifiedHundredSplitPct(signal.public_betting_pct),
+    }));
+  }
   const scheduledStartMs = Date.parse(row.game_date);
   const allowLiveBestPrice = Number.isFinite(scheduledStartMs) && scheduledStartMs > Date.now();
   const liveBestPriceLines = (market: string): LineRow[] =>

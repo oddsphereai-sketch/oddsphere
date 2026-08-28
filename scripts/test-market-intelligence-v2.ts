@@ -231,6 +231,46 @@ const playbookRow: PlaybookSplitGame = {
 {
   const result = buildSharpApiSplitObservationsV2({
     row: {
+      event_id: "sharp-endpoint",
+      sportsbook: "circa",
+      fetched_at: "2026-08-28T14:00:00.000Z",
+      moneyline: {
+        bets_pct: { home: 1, away: 0 },
+        handle_pct: { home: 1, away: 0 },
+      },
+    },
+    canonicalEventId: "game-endpoint",
+    league: "mlb",
+    fetchedAt: "2026-08-28T14:00:00.000Z",
+    canonicalMarketId: marketId,
+    selectionKey,
+  });
+  check("MLB SharpAPI exact endpoint pair is not stored as verified evidence", result.observations.length === 0);
+}
+
+{
+  const result = buildSharpApiSplitObservationsV2({
+    row: {
+      event_id: "sharp-partial-endpoint",
+      sportsbook: "circa",
+      fetched_at: "2026-08-28T14:00:00.000Z",
+      total: {
+        bets_pct: { over: 0.58, under: 0.42 },
+        handle_pct: { over: 1, under: 0 },
+      },
+    },
+    canonicalEventId: "game-partial-endpoint",
+    league: "mlb",
+    fetchedAt: "2026-08-28T14:00:00.000Z",
+    canonicalMarketId: marketId,
+    selectionKey,
+  });
+  check("valid MLB tickets survive when money endpoints are withheld", result.observations.length === 2 && result.observations.every((row) => row.bets_pct !== null && row.money_pct === null));
+}
+
+{
+  const result = buildSharpApiSplitObservationsV2({
+    row: {
       event_id: "sharp-2",
       sportsbook: "circa",
       moneyline: {

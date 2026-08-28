@@ -57,6 +57,11 @@ import {
 import { didFinalSideChange } from "./finalSideDecision";
 import { selectBestCoherentPlayablePrice } from "./dailyEdge/bestPlayablePrice";
 import {
+  verifiedHundredSplitPct,
+  verifiedSourceAwareSplitPctHundred,
+  verifiedUnitSplitPct,
+} from "./splitEvidenceQuality";
+import {
   americanBreakEvenProbability,
   calibrateMlbTotalPickedProbability,
   IMMEDIATE_MARKET_CHAMPION_POLICY_VERSION,
@@ -833,8 +838,7 @@ function sourceAwareSide(row: SourceAwareSplitObservationRow): string | null {
 }
 
 function sourceAwarePct(value: number | null): number | null {
-  if (typeof value !== "number" || !Number.isFinite(value)) return null;
-  return Math.max(0, Math.min(100, Math.round(value <= 1 ? value * 100 : value)));
+  return verifiedSourceAwareSplitPctHundred(value);
 }
 
 function sourceAwarePairScore(a: SourceAwareSplitObservationRow, b: SourceAwareSplitObservationRow): number {
@@ -892,7 +896,18 @@ function compactSourceAwareRowsForLock(
         }
       }
       if (bestPair !== null && bestPair.score <= 2) {
-        out.push(bestPair.left.row, bestPair.right.row);
+        out.push(
+          {
+            ...bestPair.left.row,
+            bets_pct: verifiedUnitSplitPct(bestPair.left.row.bets_pct),
+            money_pct: verifiedUnitSplitPct(bestPair.left.row.money_pct),
+          },
+          {
+            ...bestPair.right.row,
+            bets_pct: verifiedUnitSplitPct(bestPair.right.row.bets_pct),
+            money_pct: verifiedUnitSplitPct(bestPair.right.row.money_pct),
+          },
+        );
       }
     }
   }
@@ -1328,14 +1343,14 @@ export function buildPublicSplitsSnapshot(
   // Conflict / support — derive only when BOTH halves of the comparison have
   // values. Return null otherwise so the calibration extractor reports
   // "unknown" rather than a default-false that would skew analysis.
-  const oppMoney = opposite?.public_money_pct ?? null;
-  const oppBets = opposite?.public_betting_pct ?? null;
+  const oppMoney = verifiedHundredSplitPct(opposite?.public_money_pct);
+  const oppBets = verifiedHundredSplitPct(opposite?.public_betting_pct);
   const conflict =
     oppMoney !== null && oppBets !== null
       ? oppMoney >= 60 && oppMoney - oppBets >= 15
       : null;
-  const pickedMoney = picked?.public_money_pct ?? null;
-  const pickedBets = picked?.public_betting_pct ?? null;
+  const pickedMoney = verifiedHundredSplitPct(picked?.public_money_pct);
+  const pickedBets = verifiedHundredSplitPct(picked?.public_betting_pct);
   const support =
     pickedMoney !== null && pickedBets !== null
       ? pickedMoney >= 60 && pickedMoney - pickedBets >= 15
@@ -1572,8 +1587,8 @@ function buildDailyEdgeLockSubstrate(args: {
     signal_rows_at_lock: args.signalsForGame.map((s) => ({
       market_type: s.market_type,
       side: s.side,
-      public_money_pct: s.public_money_pct,
-      public_betting_pct: s.public_betting_pct,
+      public_money_pct: verifiedHundredSplitPct(s.public_money_pct),
+      public_betting_pct: verifiedHundredSplitPct(s.public_betting_pct),
       has_steam_move: s.has_steam_move,
       has_reverse_line_movement: s.has_reverse_line_movement,
       rlm_direction: s.rlm_direction,
@@ -1601,8 +1616,8 @@ function buildDailyEdgeLockSubstrate(args: {
       provider: s.provider,
       source_book: s.source_book,
       source_type: s.source_type,
-      bets_pct: s.bets_pct,
-      money_pct: s.money_pct,
+      bets_pct: verifiedUnitSplitPct(s.bets_pct),
+      money_pct: verifiedUnitSplitPct(s.money_pct),
       source_observed_at: s.source_observed_at,
       fetched_at: s.fetched_at,
     })),
@@ -2091,8 +2106,8 @@ function hasOpposingPublicMoneyConflict(
     (s) => s.market_type === market && s.side === oppositeSide,
   );
   if (opp === undefined) return false;
-  const money = opp.public_money_pct;
-  const bets = opp.public_betting_pct;
+  const money = verifiedHundredSplitPct(opp.public_money_pct);
+  const bets = verifiedHundredSplitPct(opp.public_betting_pct);
   if (money === null || bets === null) return false;
   if (money < 60) return false;
   if (money - bets < 15) return false;
@@ -2107,8 +2122,8 @@ function hasSupportingPublicMoneyConfirmation(
   if (pickSide === null) return false;
   const picked = signals.find((s) => s.market_type === market && s.side === pickSide);
   if (picked === undefined) return false;
-  const money = picked.public_money_pct;
-  const bets = picked.public_betting_pct;
+  const money = verifiedHundredSplitPct(picked.public_money_pct);
+  const bets = verifiedHundredSplitPct(picked.public_betting_pct);
   if (money === null || bets === null) return false;
   if (money < 60) return false;
   if (money - bets < 15) return false;
@@ -2123,8 +2138,8 @@ function pickedPublicSplit(
   if (pickSide === null) return { betsPct: null, moneyPct: null };
   const picked = signals.find((s) => s.market_type === market && s.side === pickSide);
   return {
-    betsPct: picked?.public_betting_pct ?? null,
-    moneyPct: picked?.public_money_pct ?? null,
+    betsPct: verifiedHundredSplitPct(picked?.public_betting_pct),
+    moneyPct: verifiedHundredSplitPct(picked?.public_money_pct),
   };
 }
 
@@ -5708,8 +5723,8 @@ export async function createPredictionRecords(
     list.push({
       market_type: s.market_type,
       side: s.side,
-      public_money_pct: s.public_money_pct,
-      public_betting_pct: s.public_betting_pct,
+      public_money_pct: verifiedHundredSplitPct(s.public_money_pct),
+      public_betting_pct: verifiedHundredSplitPct(s.public_betting_pct),
       has_steam_move: s.has_steam_move,
       has_reverse_line_movement: s.has_reverse_line_movement,
       rlm_direction: s.rlm_direction,

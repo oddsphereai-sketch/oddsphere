@@ -461,6 +461,69 @@ section("Market Pulse presentation coherence");
 
   section("Source-aware split sections");
   {
+    const observedNow = new Date().toISOString();
+    const common = {
+      canonical_event_id: "11111",
+      market_type: "moneyline",
+      provider: "sharpapi",
+      source_book: "circa",
+      source_type: "sharp_adjacent_book",
+      source_observed_at: observedNow,
+      fetched_at: observedNow,
+    } as const;
+    const sections = dailyEdgeTest.buildSourceAwareSplitSectionsFromRows(
+      [
+        { ...common, selection_key: "11111:moneyline:away", bets_pct: 1, money_pct: 1 },
+        { ...common, selection_key: "11111:moneyline:home", bets_pct: 0, money_pct: 0 },
+      ],
+      [{ external_id: 11111, sport: "mlb", away_team: { abbreviation: "TEX" }, home_team: { abbreviation: "MIL" } }] as never,
+    );
+    const result = sections.get("11111::moneyline");
+    check("unsupported 100/100 versus 0/0 Sharp pair does not render", result?.sharpBook === null);
+    check("unsupported Sharp endpoints are provider-limited, never complete", result?.sharpAvailability.status === "provider_limited");
+  }
+  {
+    const observedNow = new Date().toISOString();
+    const common = {
+      canonical_event_id: "11113",
+      market_type: "moneyline",
+      provider: "sharpapi",
+      source_book: "circa",
+      source_type: "sharp_adjacent_book",
+      source_observed_at: observedNow,
+      fetched_at: observedNow,
+    } as const;
+    const sections = dailyEdgeTest.buildSourceAwareSplitSectionsFromRows(
+      [
+        { ...common, selection_key: "11113:moneyline:away", bets_pct: 1, money_pct: 1 },
+        { ...common, selection_key: "11113:moneyline:home", bets_pct: 0, money_pct: 0 },
+      ],
+      [{ external_id: 11113, sport: "nfl", away_team: { abbreviation: "NE" }, home_team: { abbreviation: "SEA" } }] as never,
+    );
+    check("r71 endpoint rule does not alter non-MLB source-aware rendering", sections.get("11113::moneyline")?.sharpBook?.rows.length === 2);
+  }
+  {
+    const observedNow = new Date().toISOString();
+    const common = {
+      canonical_event_id: "11112",
+      market_type: "total",
+      provider: "sharpapi",
+      source_book: "circa",
+      source_type: "sharp_adjacent_book",
+      source_observed_at: observedNow,
+      fetched_at: observedNow,
+    } as const;
+    const sections = dailyEdgeTest.buildSourceAwareSplitSectionsFromRows(
+      [
+        { ...common, selection_key: "11112:total:over", bets_pct: 0.58, money_pct: 1 },
+        { ...common, selection_key: "11112:total:under", bets_pct: 0.42, money_pct: 0 },
+      ],
+      [{ external_id: 11112, sport: "mlb", away_team: { abbreviation: "TEX" }, home_team: { abbreviation: "MIL" } }] as never,
+    );
+    const result = sections.get("11112::total");
+    check("valid tickets with unsupported money remains partial", result?.sharpBook === null && result?.sharpAvailability.status === "provider_limited");
+  }
+  {
     const sections = dailyEdgeTest.buildSourceAwareSplitSectionsFromRows(
       [
         {

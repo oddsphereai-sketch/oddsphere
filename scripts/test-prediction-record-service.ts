@@ -445,8 +445,8 @@ console.log("\n━━━ MLB sharp portfolio top-one Lean integration ━━━"
           provider: splitProvider,
           source_book: splitProvider === "sharpapi" ? "sharp_adjacent" : "consensus",
           source_type: splitProvider === "sharpapi" ? "sharp_adjacent_book" : "multi_book_consensus",
-          bets_pct: bets,
-          money_pct: money,
+          bets_pct: bets / 100,
+          money_pct: money / 100,
           source_observed_at: "2026-08-11T16:00:00Z",
           fetched_at: "2026-08-11T16:00:00Z",
         },
@@ -457,8 +457,8 @@ console.log("\n━━━ MLB sharp portfolio top-one Lean integration ━━━"
           provider: splitProvider,
           source_book: splitProvider === "sharpapi" ? "sharp_adjacent" : "consensus",
           source_type: splitProvider === "sharpapi" ? "sharp_adjacent_book" : "multi_book_consensus",
-          bets_pct: 100 - bets,
-          money_pct: 100 - money,
+          bets_pct: (100 - bets) / 100,
+          money_pct: (100 - money) / 100,
           source_observed_at: "2026-08-11T16:00:00Z",
           fetched_at: "2026-08-11T16:00:00Z",
         },
@@ -518,6 +518,7 @@ console.log("\n━━━ MLB sharp portfolio top-one Lean integration ━━━"
     portfolioRecord(7, "PILE@ON", -110, 0.60, 50, 60, "toward_pick", "sharpapi", 1.5),
     portfolioRecord(8, "NO@MOVE", 105, 0.60, 40, 45, "neutral"),
     portfolioRecord(9, "OUT@OF_SAMPLE", 105, 0.49, 40, 45, "toward_pick", "sharpapi", 1.5),
+    portfolioRecord(10, "ENDPOINT@PAIR", -110, 0.60, 0, 0, "toward_pick", "sharpapi", 1.5),
   ]);
   check(
     "market-led movement sleeve promotes a qualifying unchanged side without a 53/54/55% cutoff",
@@ -536,6 +537,10 @@ console.log("\n━━━ MLB sharp portfolio top-one Lean integration ━━━"
   check(
     "market-led movement sleeve does not extrapolate below its observed probability range",
     marketLed[3]?.play_grade === "market_aligned",
+  );
+  check(
+    "market-led movement sleeve never promotes unsupported exact endpoint splits",
+    marketLed[4]?.play_grade === "market_aligned",
   );
   const neutralConsensus = applyMlbNeutralConsensusGrades([
     portfolioRecord(10, "STRONG@CONSENSUS", -185, 0.51, 90, 97, "neutral"),

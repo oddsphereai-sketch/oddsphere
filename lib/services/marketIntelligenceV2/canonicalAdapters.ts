@@ -14,6 +14,7 @@ import type {
   MarketSplitSourceBook,
   MarketSplitSourceType,
 } from "../../types/domain/MarketIntelligenceV2";
+import { verifiedUnitSplitPct } from "../splitEvidenceQuality";
 
 export type CanonicalAdapterResult<T> = {
   observations: T[];
@@ -326,13 +327,21 @@ export function buildSharpApiSplitObservationsV2(opts: {
     if (!rawMarket) continue;
     const sideValues = MARKET_SIDES[market].map((side) => {
       const errors: string[] = [];
-      const bets = normalizePercentToUnit(rawMarket.bets_pct?.[side], `${market}.${side}.bets`, errors);
+      const normalizedBets = normalizePercentToUnit(rawMarket.bets_pct?.[side], `${market}.${side}.bets`, errors);
+      const bets = opts.league.toLowerCase() === "mlb"
+        ? verifiedUnitSplitPct(normalizedBets)
+        : normalizedBets;
       // SharpAPI now emits current BetMGM aggregate rows through /splits.
       // BetMGM is a ticket-share source: accept the provider's explicit
       // bets_pct, but never reinterpret handle_pct as verified money share.
       const money = source.source_book === "betmgm"
         ? null
-        : normalizePercentToUnit(rawMarket.handle_pct?.[side], `${market}.${side}.money`, errors);
+        : (() => {
+            const normalizedMoney = normalizePercentToUnit(rawMarket.handle_pct?.[side], `${market}.${side}.money`, errors);
+            return opts.league.toLowerCase() === "mlb"
+              ? verifiedUnitSplitPct(normalizedMoney)
+              : normalizedMoney;
+          })();
       return { side, bets, money, errors };
     });
     validateOpposingPercentages({
@@ -470,8 +479,14 @@ export function buildSharpApiSplitHistoryObservationsV2(opts: {
     if (!rawMarket) continue;
     const sideValues = MARKET_SIDES[market].map((side) => {
       const errors: string[] = [];
-      const bets = normalizePercentToUnit(rawMarket.bets_pct?.[side], `${market}.${side}.bets`, errors);
-      const money = normalizePercentToUnit(rawMarket.handle_pct?.[side], `${market}.${side}.money`, errors);
+      const normalizedBets = normalizePercentToUnit(rawMarket.bets_pct?.[side], `${market}.${side}.bets`, errors);
+      const normalizedMoney = normalizePercentToUnit(rawMarket.handle_pct?.[side], `${market}.${side}.money`, errors);
+      const bets = opts.league.toLowerCase() === "mlb"
+        ? verifiedUnitSplitPct(normalizedBets)
+        : normalizedBets;
+      const money = opts.league.toLowerCase() === "mlb"
+        ? verifiedUnitSplitPct(normalizedMoney)
+        : normalizedMoney;
       return { side, bets, money, errors };
     });
     validateOpposingPercentages({

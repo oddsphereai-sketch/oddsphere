@@ -19,6 +19,8 @@
  *   - major disagreement when max provider gap >= 20pp.
  */
 
+import { verifiedHundredSplitPct } from "./splitEvidenceQuality";
+
 export type PublicSplitsProvider = "playbook" | "sharpapi";
 
 export type PublicSplitObservation = {
@@ -62,7 +64,7 @@ export type ResolvePublicSplitOptions = {
 };
 
 function isPct(v: number | null | undefined): v is number {
-  return typeof v === "number" && Number.isFinite(v) && v >= 0 && v <= 100;
+  return verifiedHundredSplitPct(v) !== null;
 }
 
 function hasCompletePublicSplit(obs: PublicSplitObservation | null | undefined): obs is PublicSplitObservation {
@@ -147,8 +149,8 @@ export function resolvePublicSplit(opts: ResolvePublicSplitOptions): ResolvedPub
 
   return {
     displaySource: display?.provider ?? null,
-    displayBettingPct: display?.public_betting_pct ?? null,
-    displayMoneyPct: display?.public_money_pct ?? null,
+    displayBettingPct: verifiedHundredSplitPct(display?.public_betting_pct),
+    displayMoneyPct: verifiedHundredSplitPct(display?.public_money_pct),
     displayBooksUsed: display?.books_used ?? null,
     agreementState,
     modelConfidence: confidenceFromAgreement(agreementState),
