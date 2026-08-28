@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import type { SharpApiRequestOptions, SharpApiResponse } from "../lib/providers/real_api/_sharpApiClient";
 import type { NcaafGame } from "../lib/services/football/balldontlieNcaafSlate";
 import {
+  CFB_SHARP_FALLBACK_MAX_EVENT_DISCOVERY_PAGES_PER_DATE,
   CFB_SHARP_FALLBACK_MAX_PAGES_PER_EVENT,
   CFB_SHARP_FALLBACK_MAX_REQUESTS,
   cfbBooksNeedSharpFallback,
@@ -98,6 +99,60 @@ assert.equal(expandedSlateResult.requests, 2, "two date-level discovery requests
 assert.equal(expandedSlateResult.matchedGames, 0, "a larger request budget cannot manufacture missing exact-event evidence");
 assert.equal(expandedSlateResult.attemptedGames, 14);
 assert.equal(CFB_SHARP_FALLBACK_MAX_REQUESTS, 192, "the expanded ceiling remains explicit and bounded");
+
+const discoveryCalls: SharpApiRequestOptions[] = [];
+const thirdPageDiscovery = await fetchSharpApiNcaafOddsFallback({
+  games: [game],
+  maximumRequests: 4,
+  client: {
+    async fetch<T>(opts: SharpApiRequestOptions): Promise<SharpApiResponse<T>> {
+      discoveryCalls.push(opts);
+      if (opts.path === "/events") {
+        const offset = Number(opts.query?.offset ?? 0);
+        const data = offset === 400
+          ? [sharpEvent()]
+          : [sharpEvent({
+              id: `unrelated-${offset}`,
+              away_team: { name: `Unrelated Away ${offset}` },
+              home_team: { name: `Unrelated Home ${offset}` },
+            })];
+        return {
+          data: data as T,
+          pagination: offset < 400
+            ? { limit: 200, offset, count: data.length, has_more: true, next_offset: offset + 200 }
+            : { limit: 200, offset, count: data.length, has_more: false },
+        };
+      }
+      const data = sharpRows(expectedEventId);
+      return { data: data as T, pagination: { limit: 200, offset: 0, count: data.length, has_more: false } };
+    },
+  },
+});
+assert.deepEqual(
+  discoveryCalls.filter((call) => call.path === "/events").map((call) => call.query?.offset ?? 0),
+  [0, 200, 400],
+  "canonical event discovery must advance beyond the former two-page ceiling",
+);
+assert.equal(thirdPageDiscovery.matchedGames, 1, "an exact event on the third canonical page must remain recoverable");
+assert.deepEqual(thirdPageDiscovery.booksByGame[game.providerGameId], books, "deeper event discovery cannot alter the exact normalized tuple");
+
+await assert.rejects(
+  fetchSharpApiNcaafOddsFallback({
+    games: [game],
+    maximumRequests: CFB_SHARP_FALLBACK_MAX_EVENT_DISCOVERY_PAGES_PER_DATE,
+    client: {
+      async fetch<T>(opts: SharpApiRequestOptions): Promise<SharpApiResponse<T>> {
+        const offset = Number(opts.query?.offset ?? 0);
+        return {
+          data: [sharpEvent({ id: `unrelated-${offset}`, away_team: { name: `Away ${offset}` } })] as T,
+          pagination: { limit: 200, offset, count: 1, has_more: true, next_offset: offset + 200 },
+        };
+      },
+    },
+  }),
+  new RegExp(`bounded ${CFB_SHARP_FALLBACK_MAX_EVENT_DISCOVERY_PAGES_PER_DATE}-page safety cap`),
+  "canonical discovery must retain an explicit per-date stop inside the all-run request ceiling",
+);
 const underdogHome = normalizeSharpRows({
   game,
   eventId: expectedEventId,

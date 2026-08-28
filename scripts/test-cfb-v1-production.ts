@@ -8,6 +8,7 @@ import { dailyEdgeOutcomeForecastLabel } from "../app/lab/lib/dailyEdgeOutcomeFo
 import {
   CFB_FORWARD_EVIDENCE_COLLECTOR_RELEASE,
   CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE,
+  CFB_FORWARD_CANONICAL_DISCOVERY_PREVIOUS_EVIDENCE_SCHEMA_RELEASE,
   CFB_FORWARD_INITIAL_EVIDENCE_SCHEMA_RELEASE,
   CFB_FORWARD_LEGACY_EVIDENCE_SCHEMA_RELEASE,
   CFB_FORWARD_PROVIDER_DISCOVERY_PREVIOUS_EVIDENCE_SCHEMA_RELEASE,
@@ -283,8 +284,26 @@ for (const memberMarket of Object.values(member.snapshot.games[0]!.markets)) {
   assert.equal(memberMarket.keyStats.some((row) => row.label === "Outcome-model input · Frozen sample"), true);
 }
 
+const independentPublicPreviousPayloadRecord = structuredClone(payload) as unknown as Record<string, unknown>;
+independentPublicPreviousPayloadRecord.schemaRelease = CFB_FORWARD_CANONICAL_DISCOVERY_PREVIOUS_EVIDENCE_SCHEMA_RELEASE;
+independentPublicPreviousPayloadRecord.memberRelease = "cfb_v1_member_release_2026_08_28_r17_independent_public_prediction";
+const independentPublicPreviousDecisions = independentPublicPreviousPayloadRecord.decisions as Record<string, unknown>;
+independentPublicPreviousDecisions.decisionRelease = "cfb_v1_daily_edge_decision_2026_08_28_r13_canonical_price_coverage";
+independentPublicPreviousDecisions.evaluatedBets = (independentPublicPreviousDecisions.evaluatedBets as Array<Record<string, unknown>>).map((decision) => ({
+  ...decision,
+  decisionRelease: "cfb_v1_daily_edge_decision_2026_08_28_r13_canonical_price_coverage",
+}));
+const independentPublicPreviousPayload = independentPublicPreviousPayloadRecord as unknown as CfbForwardEvidencePayload;
+const independentPublicPreviousMember = buildCfbMemberFixture([{
+  ...evidence,
+  id: "independent-public-previous-row",
+  payloadSha256: hashCfbForwardEvidencePayload(independentPublicPreviousPayload),
+  payload: independentPublicPreviousPayload,
+}]);
+assert.equal(independentPublicPreviousMember.snapshot.games.length, 1, "the complete r29 member wave remains the atomic fallback until one complete pagination-repair wave exists");
+
 const canonicalPricePreviousPayload = {
-  ...payload,
+  ...independentPublicPreviousPayload,
   memberRelease: "cfb_v1_member_release_2026_08_28_r16_canonical_price_coverage",
 } as unknown as CfbForwardEvidencePayload;
 const canonicalPricePreviousMember = buildCfbMemberFixture([{
@@ -293,7 +312,7 @@ const canonicalPricePreviousMember = buildCfbMemberFixture([{
   payloadSha256: hashCfbForwardEvidencePayload(canonicalPricePreviousPayload),
   payload: canonicalPricePreviousPayload,
 }]);
-assert.equal(canonicalPricePreviousMember.snapshot.games.length, 1, "the complete r16 member wave remains the atomic fallback until one complete r17 wave exists");
+assert.equal(canonicalPricePreviousMember.snapshot.games.length, 1, "the complete r16 member wave remains an older atomic fallback");
 assert.equal(canonicalPricePreviousMember.snapshot.games[0]!.footballOnlyProjection, null, "the r29 adapter applies one independent public forecast to the atomic fallback wave");
 
 const providerDiscoveryPreviousPayloadRecord = structuredClone(payload) as unknown as Record<string, unknown>;
