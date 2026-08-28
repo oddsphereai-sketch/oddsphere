@@ -32,7 +32,7 @@ import { activeCfbWeeklyWindow, isGameInCfbWeeklyWindow } from "./cfbWeeklyWindo
 import { cfbFootballEvidenceStats } from "./footballMemberEvidence";
 
 export const CFB_MEMBER_FIXTURE_RELEASE =
-  "cfb_v1_member_fixture_2026_08_28_r16_resilient_sharp_pagination" as const;
+  "cfb_v1_member_fixture_2026_08_28_r17_sharp_page_stride" as const;
 export const CFB_CONTEXT_ONLY_QUOTE_CAPTURE_SKEW_MS = 5_000 as const;
 const CFB_MARKET_CONTEXT_MAX_CAPTURE_LAG_MINUTES = 10;
 const CFB_DATA_QUALITY_MEMBER_RELEASE = "cfb_v1_member_release_2026_08_28_r8_market_scoped_data_quality" as const;

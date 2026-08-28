@@ -206,13 +206,13 @@ assert.equal(paged.requests, 2, "an exact event larger than one page must be com
 assert.deepEqual(pagedCalls.map((call) => call.query?.offset ?? 0), [0, 200]);
 assert.deepEqual(paged.booksByGame[game.providerGameId], books, "pagination must preserve the exact normalized named-book tuple");
 
-const derivedOffsetCalls: SharpApiRequestOptions[] = [];
-const derivedOffset = await fetchSharpApiNcaafOddsFallback({
+const providerStrideCalls: SharpApiRequestOptions[] = [];
+const providerStride = await fetchSharpApiNcaafOddsFallback({
   games: [game],
   maximumRequests: 2,
   client: {
     async fetch<T>(opts: SharpApiRequestOptions): Promise<SharpApiResponse<T>> {
-      derivedOffsetCalls.push(opts);
+      providerStrideCalls.push(opts);
       const offset = Number(opts.query?.offset ?? 0);
       const data = offset === 0 ? pagedRows.slice(0, 6) : pagedRows.slice(6);
       return {
@@ -224,8 +224,45 @@ const derivedOffset = await fetchSharpApiNcaafOddsFallback({
     },
   },
 });
-assert.deepEqual(derivedOffsetCalls.map((call) => call.query?.offset ?? 0), [0, 6], "a missing next_offset must derive one bounded forward offset from the exact returned page");
-assert.deepEqual(derivedOffset.booksByGame[game.providerGameId], books, "derived offset pagination must preserve the same normalized exact-event books");
+assert.deepEqual(providerStrideCalls.map((call) => call.query?.offset ?? 0), [0, 200], "a missing next_offset must advance by the provider-reported page limit rather than expanded row cardinality");
+assert.deepEqual(providerStride.booksByGame[game.providerGameId], books, "provider-stride pagination must preserve the same normalized exact-event books");
+
+const returnedRowFallbackCalls: SharpApiRequestOptions[] = [];
+const returnedRowFallback = await fetchSharpApiNcaafOddsFallback({
+  games: [game],
+  maximumRequests: 2,
+  client: {
+    async fetch<T>(opts: SharpApiRequestOptions): Promise<SharpApiResponse<T>> {
+      returnedRowFallbackCalls.push(opts);
+      const offset = Number(opts.query?.offset ?? 0);
+      const data = offset === 0 ? pagedRows.slice(0, 6) : pagedRows.slice(6);
+      return {
+        data: data as T,
+        pagination: offset === 0
+          ? { offset: 0, count: data.length, has_more: true }
+          : { offset, count: data.length, has_more: false },
+      };
+    },
+  },
+});
+assert.deepEqual(returnedRowFallbackCalls.map((call) => call.query?.offset ?? 0), [0, 6], "returned row count is a compatibility stride only when the provider omits a usable limit");
+assert.deepEqual(returnedRowFallback.booksByGame[game.providerGameId], books, "row-count compatibility pagination must preserve the same normalized exact-event books");
+
+const oversizedExpansionCalls: SharpApiRequestOptions[] = [];
+await fetchSharpApiNcaafOddsFallback({
+  games: [game],
+  maximumRequests: 2,
+  client: {
+    async fetch<T>(opts: SharpApiRequestOptions): Promise<SharpApiResponse<T>> {
+      oversizedExpansionCalls.push(opts);
+      const offset = Number(opts.query?.offset ?? 0);
+      return offset === 0
+        ? { data: [...pagedRows, ...pagedRows] as T, pagination: { limit: 200, offset: 0, count: pagedRows.length * 2, has_more: true } }
+        : { data: [] as T, pagination: { limit: 200, offset, count: 0, has_more: false } };
+    },
+  },
+});
+assert.deepEqual(oversizedExpansionCalls.map((call) => call.query?.offset ?? 0), [0, 200], "an expanded event payload must not synthesize an offset from its larger returned-row count");
 
 await assert.rejects(
   fetchSharpApiNcaafOddsFallback({
