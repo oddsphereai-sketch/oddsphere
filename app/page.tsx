@@ -3,6 +3,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { HomepageDashboardPrototype } from "@/app/components/HomepageDashboardPrototype";
 import { MarketingDailyEdgePreviewSurface } from "@/app/lab/components/daily-edge/DailyEdgeShell";
+import { ACTIVE_DAILY_EDGE_TOP_LEVEL_SPORT_LABELS } from "@/app/lab/lib/dailyEdgeSports";
 import { isHomepageExperienceCandidateEnabled } from "@/lib/config/productExperience";
 import {
   getPublicTrackRecordSummary,
@@ -14,6 +15,10 @@ import {
 } from "@/lib/marketing/trialOffer";
 
 const SITE_URL = "https://www.oddsphereai.com";
+const ACTIVE_DAILY_EDGE_SPORT_COPY = new Intl.ListFormat("en-US", {
+  style: "long",
+  type: "conjunction",
+}).format(ACTIVE_DAILY_EDGE_TOP_LEVEL_SPORT_LABELS);
 
 export const revalidate = 300;
 
@@ -125,7 +130,7 @@ const faq: FaqItem[] = [
   },
   {
     q: "What sports are currently supported?",
-    a: "Daily Edge currently supports active MLB, WNBA, and World Cup/Soccer slates when schedules and data are available. The public lifetime tracking archive also includes NFL, CFB, NBA, CBB, MLB, UCL/Soccer, and NHL model families, with seasonal Daily Edge surfaces returning as supported leagues are active.",
+    a: `Daily Edge currently supports ${ACTIVE_DAILY_EDGE_SPORT_COPY} when schedules and verified data are available. The dated legacy archive covers additional historical model families and is labeled separately from current official tracking.`,
   },
   {
     q: "Is this financial or wagering advice?",
@@ -236,15 +241,14 @@ function TrackingPreview({ summary }: { summary: PublicTrackRecordSummary }) {
         <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <p className="text-xs font-black uppercase tracking-[0.18em] text-emerald-300">Public accountability</p>
-            <h3 className="mt-2 text-2xl font-black tracking-tight text-white">Historical Tracking, Not Cherry-Picked Screenshots</h3>
+            <h3 className="mt-2 text-2xl font-black tracking-tight text-white">Current official results, separated from the legacy archive</h3>
           </div>
           <p className="text-xs text-gray-500">
-            Lifetime archive snapshot · {summary.lastUpdatedLabel}
+            Legacy archive snapshot · {summary.lastUpdatedLabel}
           </p>
         </div>
         <p className="mt-3 max-w-3xl text-sm leading-relaxed text-gray-300">
-          OddSphere maintains a public lifetime model archive for accountability.
-          Current Daily Edge results continue inside the member dashboard.
+          The dated legacy summaries and the current official since-launch ledger use different sources and denominators. They are never presented as one record.
         </p>
       </div>
 
@@ -265,9 +269,9 @@ function TrackingPreview({ summary }: { summary: PublicTrackRecordSummary }) {
             </div>
           ) : null}
           <div className="grid gap-3 sm:grid-cols-3">
-            <MetricTile label="Lifetime record" value={`${summary.overall.wins.toLocaleString()}-${summary.overall.losses.toLocaleString()}`} />
-            <MetricTile label="Win rate" value={pct} />
-            <MetricTile label="Tracked picks" value={summary.overall.picks.toLocaleString()} />
+            <MetricTile label="Legacy archive record" value={`${summary.overall.wins.toLocaleString()}-${summary.overall.losses.toLocaleString()}`} />
+            <MetricTile label="Legacy win rate" value={pct} />
+            <MetricTile label="Legacy archive picks" value={summary.overall.picks.toLocaleString()} />
           </div>
           <div className="mt-5 grid gap-3 md:grid-cols-4">
             {markets.map((row) => (
@@ -283,7 +287,7 @@ function TrackingPreview({ summary }: { summary: PublicTrackRecordSummary }) {
             ))}
           </div>
           <p className="mt-4 text-xs leading-relaxed text-gray-500">
-            Past performance does not guarantee future results.
+            Legacy archive only, last updated {summary.lastUpdatedLabel}. Standardized historical prices and stakes are unavailable, so units and ROI are not claimed. Past performance does not guarantee future results.
           </p>
         </div>
       )}
@@ -468,7 +472,7 @@ export async function HomePageContent({ presentation = "current" }: { presentati
           ))}
         </div>
         <p className="mx-auto mt-6 max-w-3xl text-center text-sm leading-relaxed text-gray-400">
-          Daily Edge currently supports active MLB, WNBA, and World Cup/Soccer slates. The public archive also tracks NFL, CFB, NBA, CBB, MLB, UCL/Soccer, and NHL model families, with seasonal member surfaces returning as leagues and data pipelines are active.
+          Daily Edge currently supports {ACTIVE_DAILY_EDGE_SPORT_COPY} when schedules and verified data are available. The dated legacy archive is labeled separately from current official tracking.
         </p>
       </section>
 

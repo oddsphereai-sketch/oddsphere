@@ -36,7 +36,7 @@ import { buildMarketScopedFootballTrackingPlan } from "./footballMarketScopedTra
 import { assertFootballCrossMarketCoherence } from "./footballCrossMarketCoherence";
 
 export const CFB_FORWARD_WRITER_RELEASE =
-  "cfb_forward_evidence_writer_2026_08_28_r10_cross_market_coherence" as const;
+  "cfb_forward_evidence_writer_2026_08_28_r12_display_quote_coverage" as const;
 export const CFB_FORWARD_MAX_QB_TEAMS_PER_RUN = 24 as const;
 export const CFB_FORWARD_RESULTS_BATCH_SIZE = 100 as const;
 export const CFB_FORWARD_MAX_PRIOR_GAME_IDS = 1200 as const;
@@ -110,7 +110,9 @@ export async function runCfbForwardEvidenceWriter(args: {
   const priorOpening = firstOpenings(existing);
   const payloads = plans.map((plan): CfbForwardEvidencePayload => {
     const sharpBooks = sharpFallback.booksByGame[plan.game.providerGameId] ?? [];
+    const sharpDisplayBooks = sharpFallback.displayBooksByGame[plan.game.providerGameId] ?? [];
     const currentBooks = mergeCfbNamedBooks(slate.currentOddsComparableBooksByGame[plan.game.providerGameId] ?? [], sharpBooks);
+    const displayBooks = mergeCfbNamedBooks(slate.currentOddsAllBooksByGame[plan.game.providerGameId] ?? [], sharpDisplayBooks);
     const current = preferredCfbTargetBook(currentBooks);
     const providerOpening = slate.openingOddsByGame[plan.game.providerGameId] ?? null;
     const operationalOpening = providerOpening
@@ -204,6 +206,7 @@ export async function runCfbForwardEvidenceWriter(args: {
       market: {
         current,
         currentBooks,
+        displayBooks,
         providerOpening,
         operationalOpening,
         playbookLine,

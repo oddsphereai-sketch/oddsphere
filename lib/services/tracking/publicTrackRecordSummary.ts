@@ -1,4 +1,4 @@
-import { LAST_UPDATED, TRACK_RECORD } from "@/app/data/trackRecord";
+import { LAST_UPDATED, TRACK_RECORD, TRACK_RECORD_ARCHIVE_PROVENANCE } from "@/app/data/trackRecord";
 import type {
   TrackedMarketV17,
   TrackedSport,
@@ -51,6 +51,7 @@ export type PublicTrackRecordSummary = {
   sports: PublicTrackRecordSport[];
   markets: PublicTrackRecordMarket[];
   lastUpdatedLabel: string;
+  archiveProvenance: typeof TRACK_RECORD_ARCHIVE_PROVENANCE;
   currentOfficial?: {
     asOf: string;
     latestActivityDate: string;
@@ -211,6 +212,7 @@ export async function getPublicTrackRecordSummary(): Promise<PublicTrackRecordSu
     sports,
     markets,
     lastUpdatedLabel: LAST_UPDATED,
+    archiveProvenance: TRACK_RECORD_ARCHIVE_PROVENANCE,
     currentOfficial: currentSnapshot ? {
       asOf: currentSnapshot.payload.as_of,
       latestActivityDate: currentSnapshot.payload.yesterdayRecap.date,

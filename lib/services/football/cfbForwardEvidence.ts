@@ -11,19 +11,23 @@ import {
 } from "./cfbV1Decision";
 
 export const CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE =
-  "cfb_forward_evidence_snapshot_2026_08_28_r5_two_axis_outcome_sharp_splits" as const;
+  "cfb_forward_evidence_snapshot_2026_08_28_r7_display_quote_coverage" as const;
+export const CFB_FORWARD_DATA_QUALITY_EVIDENCE_SCHEMA_RELEASE =
+  "cfb_forward_evidence_snapshot_2026_08_28_r6_market_scoped_data_quality" as const;
 export const CFB_FORWARD_PREVIOUS_EVIDENCE_SCHEMA_RELEASE =
-  "cfb_forward_evidence_snapshot_2026_08_28_r4_market_selection_provenance" as const;
+  "cfb_forward_evidence_snapshot_2026_08_28_r5_two_axis_outcome_sharp_splits" as const;
 export const CFB_FORWARD_PRIOR_EVIDENCE_SCHEMA_RELEASE =
+  "cfb_forward_evidence_snapshot_2026_08_28_r4_market_selection_provenance" as const;
+export const CFB_FORWARD_TRANSITION_EVIDENCE_SCHEMA_RELEASE =
   "cfb_forward_evidence_snapshot_2026_08_27_r3_pmf_side_guard" as const;
 export const CFB_FORWARD_LEGACY_EVIDENCE_SCHEMA_RELEASE =
   "cfb_forward_evidence_snapshot_2026_08_26_r2_price_provenance" as const;
 export const CFB_FORWARD_INITIAL_EVIDENCE_SCHEMA_RELEASE =
   "cfb_forward_evidence_snapshot_2026_08_25_r1" as const;
 export const CFB_FORWARD_EVIDENCE_COLLECTOR_RELEASE =
-  "cfb_forward_evidence_collector_2026_08_28_r8_two_axis_outcome_sharp_splits" as const;
+  "cfb_forward_evidence_collector_2026_08_28_r10_display_quote_coverage" as const;
 export const CFB_FORWARD_MEMBER_RELEASE =
-  "cfb_v1_member_release_2026_08_28_r7_two_axis_outcome_sharp_splits" as const;
+  "cfb_v1_member_release_2026_08_28_r10_representative_market_quotes" as const;
 
 export type CfbForwardEvidenceStage = "opening" | "unlocked" | "t60";
 
@@ -115,6 +119,8 @@ export type CfbForwardEvidencePayload = {
   market: {
     current: NcaafBookOdds | null;
     currentBooks: NcaafBookOdds[];
+    /** All verified named-book display observations, including one-sided offers excluded from grading. */
+    displayBooks?: NcaafBookOdds[];
     providerOpening: NcaafBookOdds | null;
     operationalOpening: CfbForwardOperationalOpening | null;
     playbookLine: CfbForwardPlaybookLine | null;

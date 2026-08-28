@@ -1,5 +1,5 @@
 export const BALLDONTLIE_NCAAF_SLATE_RELEASE =
-  "balldontlie_ncaaf_slate_2026_08_26_r2_opened_at" as const;
+  "balldontlie_ncaaf_slate_2026_08_28_r3_display_quote_coverage" as const;
 
 export const NCAAF_FBS_CONFERENCE_IDS = new Set([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]);
 export const NCAAF_COMPARABLE_SPORTSBOOKS = [
@@ -46,6 +46,20 @@ export type NcaafBookOdds = {
   marketSelection?: Partial<Record<"moneyline" | "spread" | "total", "main_line" | "coherent_paired_alternate">>;
   /** Per-market provider timestamp; avoids assigning one sibling market's update time to another tuple. */
   marketObservedAt?: Partial<Record<"moneyline" | "spread" | "total", string>>;
+  /**
+   * Verified named-book offers retained for member display even when the
+   * provider does not publish the opposing side needed for a fair-price pair.
+   * These rows are context only: the decision engine continues to grade from
+   * the complete paired fields below.
+   */
+  marketQuotes?: Array<{
+    market: "moneyline" | "spread" | "total";
+    side: "home" | "away" | "over" | "under";
+    line: number | null;
+    price: number;
+    observedAt: string;
+    marketSelection: "main_line" | "coherent_paired_alternate";
+  }>;
   moneyline: { awayPrice: number; homePrice: number } | null;
   spread: {
     awayLine: number;
@@ -297,7 +311,15 @@ function normalizeOdds(value: unknown): NcaafBookOdds | null {
     sportsbook,
     observedAt,
     provider: "balldontlie",
-    targetEligible: true,
+    targetEligible: isComparableNcaafSportsbook(sportsbook),
+    marketQuotes: [
+      ...(homeMoneyline === null ? [] : [{ market: "moneyline" as const, side: "home" as const, line: null, price: homeMoneyline, observedAt, marketSelection: "main_line" as const }]),
+      ...(awayMoneyline === null ? [] : [{ market: "moneyline" as const, side: "away" as const, line: null, price: awayMoneyline, observedAt, marketSelection: "main_line" as const }]),
+      ...(homeSpread === null || homeSpreadPrice === null ? [] : [{ market: "spread" as const, side: "home" as const, line: homeSpread, price: homeSpreadPrice, observedAt, marketSelection: "main_line" as const }]),
+      ...(awaySpread === null || awaySpreadPrice === null ? [] : [{ market: "spread" as const, side: "away" as const, line: awaySpread, price: awaySpreadPrice, observedAt, marketSelection: "main_line" as const }]),
+      ...(total === null || overPrice === null ? [] : [{ market: "total" as const, side: "over" as const, line: total, price: overPrice, observedAt, marketSelection: "main_line" as const }]),
+      ...(total === null || underPrice === null ? [] : [{ market: "total" as const, side: "under" as const, line: total, price: underPrice, observedAt, marketSelection: "main_line" as const }]),
+    ],
     moneyline: homeMoneyline === null || awayMoneyline === null ? null : { homePrice: homeMoneyline, awayPrice: awayMoneyline },
     spread: homeSpread === null || homeSpreadPrice === null || awaySpread === null || awaySpreadPrice === null
       ? null : { homeLine: homeSpread, homePrice: homeSpreadPrice, awayLine: awaySpread, awayPrice: awaySpreadPrice },

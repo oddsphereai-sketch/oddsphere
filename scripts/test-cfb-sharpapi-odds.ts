@@ -46,6 +46,20 @@ assert.equal(result.matchedGames, 1);
 assert.equal(calls.every((call) => call.path === "/odds" && call.query?.event_id === expectedEventId), true);
 const books = result.booksByGame[game.providerGameId]!;
 assert.deepEqual(books.map((book) => book.sportsbook), ["betmgm", "onexbet", "pinnacle", "thescorebet"]);
+const displayBooks = result.displayBooksByGame[game.providerGameId]!;
+const oneSidedSportzino = displayBooks.find((book) => book.sportsbook === "sportzino");
+const oneSidedBetMgm = displayBooks.find((book) => book.sportsbook === "betmgm");
+assert.equal(oneSidedBetMgm?.moneyline, null, "a target book's one-sided Moneyline cannot become a grading pair");
+assert.equal(oneSidedBetMgm?.marketQuotes?.some((quote) => quote.market === "moneyline" && quote.side === "away" && quote.price === 6600), true, "the paid feed's target-book side must survive for member display");
+assert.equal(oneSidedSportzino?.moneyline, null, "one-sided Moneyline evidence cannot become a grading pair");
+assert.deepEqual(oneSidedSportzino?.marketQuotes, [{
+  market: "moneyline",
+  side: "away",
+  line: null,
+  price: 2000,
+  observedAt: "2026-08-26T12:11:41.525Z",
+  marketSelection: "main_line",
+}], "the paid odds fallback must preserve a verified one-sided sportsbook quote for member display");
 assert.equal(books.find((book) => book.sportsbook === "betmgm")?.targetEligible, true, "BetMGM may be the displayed exact target");
 assert.equal(books.find((book) => book.sportsbook === "pinnacle")?.targetEligible, false, "Pinnacle remains consensus/reference context, not a displayed US target");
 assert.equal(books.every((book) => book.provider === "sharpapi" && book.providerEventId === expectedEventId), true);
@@ -75,7 +89,11 @@ const bundle = buildCfbV1DecisionBundle({
   contextLines: { homeSpread: -38.5, totalLine: 60.5 },
 });
 assert.deepEqual(bundle.evaluatedBets.map((decision) => decision.market), ["spread", "total"], "a missing extreme Moneyline cannot suppress complete Spread and Total tuples");
-assert.deepEqual(bundle.heldMarkets, [{ market: "moneyline", reason: "named_two_sided_price_or_target_excluded_same_line_consensus_unavailable" }]);
+assert.deepEqual(bundle.heldMarkets, [{
+  market: "moneyline",
+  reason: "named_target_quote_unavailable",
+  reasonCodes: ["named_target_quote_unavailable"],
+}]);
 assert.equal(bundle.evaluatedBets.every((decision) => decision.evaluatedQuote.provider === "sharpapi"), true);
 assert.equal(bundle.evaluatedBets.every((decision) => decision.evaluatedQuote.sportsbook === "betmgm"), true);
 const spreadDecision = bundle.evaluatedBets.find((decision) => decision.market === "spread");
@@ -239,6 +257,7 @@ function sharpRows(eventId: string): unknown[] {
     { ...row(eventId, "betmgm", "total_points", "under", 59.5, -115, at), is_alternate_line: true },
     { ...row(eventId, "betmgm", "point_spread", "home", -38.5, 125, at), home_team: "San Jose State Spartans", away_team: "USC Trojans" },
     { ...row(eventId, "betmgm", "point_spread", "away", 38.5, 125, at), home_team: "San Jose State Spartans", away_team: "USC Trojans" },
+    row(eventId, "betmgm", "moneyline", "away", null, 6600, at),
     row(eventId, "sportzino", "moneyline", "away", null, 2000, at),
   ];
   return rows;

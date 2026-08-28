@@ -96,12 +96,12 @@ export default async function PublicTrackRecordPage() {
           Historical Tracking, Not Cherry-Picked Screenshots
         </h1>
         <p className="mx-auto mt-4 max-w-2xl text-base leading-relaxed text-gray-200 sm:text-lg">
-          OddSphere maintains a public lifetime model archive for accountability.
-          This page shows settled historical summaries only; pending Daily Edge
-          results continue inside the member dashboard until graded.
+          OddSphere separates the dated legacy model archive from the current
+          official since-launch ledger. Their records and denominators are never
+          combined into one performance claim.
         </p>
         <p className="mt-3 text-xs text-gray-400">
-          Lifetime archive · Settled results only · Last updated {summary.lastUpdatedLabel}
+          Legacy archive · Settled summaries · Last updated {summary.lastUpdatedLabel}
         </p>
       </header>
 
@@ -117,14 +117,14 @@ export default async function PublicTrackRecordPage() {
         <>
           <section className="mb-12 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <MetricCard
-              label="Lifetime record"
+              label="Legacy archive record"
               value={record(summary.overall)}
               sub={`${pct(summary.overall)} win rate · ${compact(summary.overall.picks)} historical picks`}
             />
             <MetricCard
-              label="Tracked Picks"
+              label="Legacy Archive Picks"
               value={compact(summary.overall.picks)}
-              sub="Historical archive only; no pending rows are mixed into this view"
+              sub="Dated manual archive; not current-release official tracking"
               tone="emerald"
             />
             <MetricCard
@@ -139,6 +139,23 @@ export default async function PublicTrackRecordPage() {
               tone="amber"
             />
           </section>
+
+          {summary.currentOfficial ? (
+            <section className="mb-12 rounded-2xl border border-emerald-400/20 bg-emerald-400/[0.055] p-5 sm:p-6">
+              <p className="text-xs font-black uppercase tracking-[0.16em] text-emerald-300">Current official since-launch ledger</p>
+              <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+                <p className="text-3xl font-black tabular-nums text-white">
+                  {summary.currentOfficial.wins}-{summary.currentOfficial.losses}{summary.currentOfficial.pushes ? `-${summary.currentOfficial.pushes}` : ""}
+                </p>
+                <p className="text-sm text-gray-300">
+                  {summary.currentOfficial.totalPredictions.toLocaleString()} official predictions · {summary.currentOfficial.hitRate.toFixed(1)}% · latest settled activity {summary.currentOfficial.latestActivityDate}
+                </p>
+              </div>
+              <p className="mt-3 text-xs leading-relaxed text-gray-400">
+                This ledger is separate from the {summary.overall.picks.toLocaleString()}-pick legacy archive below. The legacy source lacks standardized price and stake history, so units and ROI are not claimed for it.
+              </p>
+            </section>
+          ) : null}
 
           <section className="mb-12 rounded-2xl border border-white/10 bg-white/[0.035] p-5 sm:p-6">
             <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">

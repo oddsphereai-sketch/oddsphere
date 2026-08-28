@@ -1,10 +1,12 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE,
+  CFB_FORWARD_DATA_QUALITY_EVIDENCE_SCHEMA_RELEASE,
   CFB_FORWARD_INITIAL_EVIDENCE_SCHEMA_RELEASE,
   CFB_FORWARD_LEGACY_EVIDENCE_SCHEMA_RELEASE,
   CFB_FORWARD_PREVIOUS_EVIDENCE_SCHEMA_RELEASE,
   CFB_FORWARD_PRIOR_EVIDENCE_SCHEMA_RELEASE,
+  CFB_FORWARD_TRANSITION_EVIDENCE_SCHEMA_RELEASE,
   hashCfbForwardEvidencePayload,
   type CfbForwardEvidencePayload,
   type CfbForwardStoredEvidence,
@@ -24,7 +26,7 @@ export async function readCfbForwardEvidence(args: { client: SupabaseClient; sea
   const { data, error } = await args.client
     .from("cfb_forward_evidence_snapshots")
     .select("id,provider_game_id,stage,captured_at,game_start_at,payload_sha256,payload")
-    .in("evidence_release", [CFB_FORWARD_INITIAL_EVIDENCE_SCHEMA_RELEASE, CFB_FORWARD_LEGACY_EVIDENCE_SCHEMA_RELEASE, CFB_FORWARD_PRIOR_EVIDENCE_SCHEMA_RELEASE, CFB_FORWARD_PREVIOUS_EVIDENCE_SCHEMA_RELEASE, CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE])
+    .in("evidence_release", [CFB_FORWARD_INITIAL_EVIDENCE_SCHEMA_RELEASE, CFB_FORWARD_LEGACY_EVIDENCE_SCHEMA_RELEASE, CFB_FORWARD_TRANSITION_EVIDENCE_SCHEMA_RELEASE, CFB_FORWARD_PRIOR_EVIDENCE_SCHEMA_RELEASE, CFB_FORWARD_PREVIOUS_EVIDENCE_SCHEMA_RELEASE, CFB_FORWARD_DATA_QUALITY_EVIDENCE_SCHEMA_RELEASE, CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE])
     .eq("season", args.season)
     .order("captured_at", { ascending: true });
   if (error) throw new Error(`CFB forward evidence read failed: ${error.message}`);
@@ -67,7 +69,7 @@ export async function appendCfbForwardEvidence(args: {
 function normalizeStoredRow(row: StoredRow): CfbForwardStoredEvidence {
   if (row.payload === null || typeof row.payload !== "object") throw new Error(`CFB evidence ${row.id} has no payload.`);
   const payload = row.payload as CfbForwardEvidencePayload;
-  if (![CFB_FORWARD_INITIAL_EVIDENCE_SCHEMA_RELEASE, CFB_FORWARD_LEGACY_EVIDENCE_SCHEMA_RELEASE, CFB_FORWARD_PRIOR_EVIDENCE_SCHEMA_RELEASE, CFB_FORWARD_PREVIOUS_EVIDENCE_SCHEMA_RELEASE, CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE].includes(payload.schemaRelease as typeof CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE) || payload.game.providerGameId !== row.provider_game_id || payload.stage !== row.stage || payload.capturedAt !== new Date(row.captured_at).toISOString()) {
+  if (![CFB_FORWARD_INITIAL_EVIDENCE_SCHEMA_RELEASE, CFB_FORWARD_LEGACY_EVIDENCE_SCHEMA_RELEASE, CFB_FORWARD_TRANSITION_EVIDENCE_SCHEMA_RELEASE, CFB_FORWARD_PRIOR_EVIDENCE_SCHEMA_RELEASE, CFB_FORWARD_PREVIOUS_EVIDENCE_SCHEMA_RELEASE, CFB_FORWARD_DATA_QUALITY_EVIDENCE_SCHEMA_RELEASE, CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE].includes(payload.schemaRelease as typeof CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE) || payload.game.providerGameId !== row.provider_game_id || payload.stage !== row.stage || payload.capturedAt !== new Date(row.captured_at).toISOString()) {
     throw new Error(`CFB evidence ${row.id} violates the immutable payload contract.`);
   }
   if (hashCfbForwardEvidencePayload(payload) !== row.payload_sha256) throw new Error(`CFB evidence ${row.id} checksum mismatch.`);

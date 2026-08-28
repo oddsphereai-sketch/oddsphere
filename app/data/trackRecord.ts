@@ -33,6 +33,13 @@ export const TRACK_RECORD: TrackRecordRow[] = [
 
 export const LAST_UPDATED = "May 18, 2026";
 
+export const TRACK_RECORD_ARCHIVE_PROVENANCE = {
+  sourceType: "legacy_manual_archive",
+  asOf: LAST_UPDATED,
+  currentReleaseTracking: false,
+  standardizedPriceAndStakeHistory: false,
+} as const;
+
 export const WHOP_URL = "https://whop.com/oddsphereai";
 export const X_HANDLE = "OddSphereAI";
 export const X_URL = "https://x.com/OddSphereAI";

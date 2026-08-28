@@ -70,6 +70,27 @@ assert.equal(markets.every((market) => market.keyStats.some((row) => row.label.s
 assert.equal(markets.every((market) => market.keyStats.some((row) => row.label === "Current context · Expected quarterback")), true);
 assert.equal(markets.every((market) => market.keyStats.some((row) => row.label === "Current context · Venue and weather")), true);
 assert.equal(markets.every((market) => market.keyStats.some((row) => row.label === "Decision-model input · Frozen sample")), true);
+assert.equal(markets.every((market) => market.marketPrediction?.status === "available"), true);
+for (const game of fixture.snapshot.games) {
+  const forecast = getNflV1WeekOneOutcomeForecast({
+    providerGameId: game.id.replace(/^nfl-/, ""),
+    awayTeam: game.awayTeam,
+    homeTeam: game.homeTeam,
+  });
+  const moneylinePrediction = game.markets.moneyline.marketPrediction!;
+  assert.equal(
+    moneylinePrediction.label,
+    forecast.homeWinProbability >= forecast.awayWinProbability ? game.homeTeam : game.awayTeam,
+    `${game.id} Moneyline prediction must follow the joint PMF winner`,
+  );
+  assert.equal(
+    moneylinePrediction.probability?.toFixed(9),
+    Math.max(forecast.homeWinProbability, forecast.awayWinProbability).toFixed(9),
+    `${game.id} Moneyline prediction probability must follow the joint PMF`,
+  );
+  assert.equal(game.markets.first_inning.marketPrediction?.source, "model_at_exact_book_line");
+  assert.equal(game.markets.total.marketPrediction?.source, "model_at_exact_book_line");
+}
 
 const laterCapture = "2026-08-22T14:50:56.934Z";
 const laterFirstGame = structuredClone(rows[0]!);
@@ -311,11 +332,10 @@ assert.match(readerSource, /footballOutcomeContext\(game\)/);
 assert.match(readerSource, /Outcome forecast/);
 assert.match(readerSource, /Win probability/);
 assert.match(readerSource, /The discrete football model favors/);
-assert.match(readerSource, /Value-model probability/);
+assert.match(readerSource, /Price-calibrated bet probability/);
 assert.match(readerSource, /nflSelectedBetGrade\(market\)/);
 assert.match(readerSource, /Bet grade \{footballBetGrade\.label\}/);
 assert.match(readerSource, /Bet grade \{betGrade\.label\}/);
-assert.match(readerSource, /currently \{betGrade\.label\}/);
 assert.match(readerSource, /Expected score/);
 assert.match(readerSource, /Primary prediction · joint PMF means/);
 assert.match(readerSource, /Reachable representative final/);

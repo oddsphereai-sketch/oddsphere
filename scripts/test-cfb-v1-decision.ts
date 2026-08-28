@@ -53,10 +53,32 @@ for (const decision of bundle.evaluatedBets) {
 const missing = buildCfbV1DecisionBundle({ providerGameId: "457157", awayTeam: "UNC", homeTeam: "TCU", gameStartsAt: "2026-08-29T16:00:00Z", comparableCurrentBooks: books.slice(0, 2) });
 assert.equal(missing.evaluatedBets.length, 0);
 assert.equal(missing.heldMarkets.length, 3);
+assert.equal(missing.heldMarkets.every((market) => market.reasonCodes?.includes("target_excluded_same_line_consensus_insufficient")), true);
+
+const futureMoneylineBooks = books.map((value) => ({
+  ...value,
+  marketObservedAt: {
+    moneyline: "2026-08-25T16:00:01.000Z",
+    spread: observedAt,
+    total: observedAt,
+  },
+}));
+const marketScopedClockSkew = buildCfbV1DecisionBundle({
+  providerGameId: "457157",
+  awayTeam: "UNC",
+  homeTeam: "TCU",
+  gameStartsAt: "2026-08-29T16:00:00Z",
+  comparableCurrentBooks: futureMoneylineBooks,
+  evaluatedAt: "2026-08-25T16:00:00.000Z",
+});
+assert.deepEqual(marketScopedClockSkew.evaluatedBets.map((decision) => decision.market), ["spread", "total"]);
+assert.deepEqual(marketScopedClockSkew.heldMarkets.map((market) => market.market), ["moneyline"]);
+assert.deepEqual(marketScopedClockSkew.heldMarkets[0]?.reasonCodes, ["quote_observed_after_evaluation"]);
 
 const held = buildCfbV1DecisionBundle({ providerGameId: "457157", awayTeam: "UNC", homeTeam: "TCU", gameStartsAt: "2026-08-29T16:00:00Z", comparableCurrentBooks: books, healthHolds: ["quarterback_status_unverified"] });
 assert.equal(held.evaluatedBets.length, 0);
 assert.equal(held.heldMarkets.length, 3);
+assert.equal(held.heldMarkets.every((market) => market.reasonCodes?.includes("global_health_hold")), true);
 
 assert.equal(CFB_T60_MAX_CAPTURE_LAG_MINUTES, 20);
 assert.throws(() => buildCfbV1DecisionBundle({ providerGameId: "457157", awayTeam: "UNC", homeTeam: "TCU", gameStartsAt: "2026-08-29T16:00:00Z", comparableCurrentBooks: books, stage: "t60_locked", evaluatedAt: "2026-08-29T15:30:01Z", lockedAt: "2026-08-29T15:30:01Z" }), /outside the 0-20 minute/);

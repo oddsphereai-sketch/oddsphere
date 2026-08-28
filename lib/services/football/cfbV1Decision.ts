@@ -18,17 +18,25 @@ export const CFB_V1_REPRESENTATIVE_SCORE_RELEASE =
 export const CFB_V1_GRADE_POLICY_RELEASE =
   "cfb_v1_composite_grade_policy_2026_08_25_r1" as const;
 export const CFB_V1_DECISION_RELEASE =
-  "cfb_v1_daily_edge_decision_2026_08_28_r10_exact_paired_market_evidence" as const;
+  "cfb_v1_daily_edge_decision_2026_08_28_r11_market_scoped_data_quality" as const;
 const CFB_V1_POLICY_SOURCE_DECISION_RELEASE =
   "cfb_v1_daily_edge_decision_2026_08_26_r7_sharpapi_price_fallback" as const;
 export const CFB_V1_DECISION_SCHEMA_RELEASE =
-  "cfb_v1_exact_price_decision_tuple_2026_08_28_r4_market_selection_provenance" as const;
+  "cfb_v1_exact_price_decision_tuple_2026_08_28_r5_structured_unavailable_reasons" as const;
 export const CFB_T60_TARGET_MINUTES = 60 as const;
 export const CFB_T60_MAX_CAPTURE_LAG_MINUTES = 20 as const;
 
 export type CfbV1Market = "moneyline" | "spread" | "total";
 export type CfbV1Grade = "Best Angle" | "Lean" | "Watchlist" | "No Play";
 export type CfbV1DecisionStage = "unlocked" | "t60_locked";
+export type CfbV1UnavailableReasonCode =
+  | "named_target_quote_unavailable"
+  | "market_context_line_unavailable"
+  | "target_excluded_same_line_consensus_insufficient"
+  | "quote_timestamp_invalid"
+  | "quote_observed_after_evaluation"
+  | "evaluation_not_pregame"
+  | "global_health_hold";
 
 export type CfbV1ContextLines = {
   homeSpread: number | null;
@@ -97,7 +105,11 @@ export type CfbV1DecisionBundle = {
   providerGameId: string;
   forecast: CfbV1Forecast;
   evaluatedBets: CfbV1ExactPriceDecision[];
-  heldMarkets: Array<{ market: CfbV1Market; reason: string }>;
+  heldMarkets: Array<{
+    market: CfbV1Market;
+    reason: string;
+    reasonCodes?: CfbV1UnavailableReasonCode[];
+  }>;
   publicationEnabled: boolean;
   trackingEnabled: boolean;
   modelRelease: typeof CFB_V1_MODEL_RELEASE;
@@ -217,14 +229,21 @@ export function buildCfbV1DecisionBundle(args: {
   const stage = args.stage ?? "unlocked";
   const healthHolds = args.healthHolds ?? [];
   if (healthHolds.length > 0) {
-    return heldBundle(forecast, rMarkets().map((market) => ({ market, reason: healthHolds.join(";") })));
+    return heldBundle(forecast, rMarkets().map((market) => ({
+      market,
+      reason: healthHolds.join(";"),
+      reasonCodes: ["global_health_hold"],
+    })));
   }
   const decisions: CfbV1ExactPriceDecision[] = [];
   const heldMarkets: CfbV1DecisionBundle["heldMarkets"] = [];
   for (const market of rMarkets()) {
     const decision = selectMarket({ ...args, forecast, market, stage });
     if (decision) decisions.push(decision);
-    else heldMarkets.push({ market, reason: "named_two_sided_price_or_target_excluded_same_line_consensus_unavailable" });
+    else {
+      const reasonCodes = unavailableReasonCodes({ ...args, forecast, market, stage });
+      heldMarkets.push({ market, reason: reasonCodes.join(";"), reasonCodes });
+    }
   }
   // Official tracking is market-scoped: a missing exact-price sibling stays
   // Held, while every coherent T-60 tuple remains eligible for its own
@@ -323,7 +342,14 @@ function evaluateTarget(args: {
     const grade: CfbV1Grade = best ? "Best Angle" : lean ? "Lean" : positive ? "Watchlist" : "No Play";
     const evaluatedAt = args.evaluatedAt ?? quote.observedAt;
     const lockedAt = args.stage === "t60_locked" ? args.lockedAt ?? evaluatedAt : null;
-    assertDecisionTiming({ evaluatedAt, quoteAt: quote.observedAt, gameStartsAt: args.gameStartsAt, stage: args.stage, lockedAt });
+    const timingIssue = decisionTimingIssue({
+      evaluatedAt,
+      quoteAt: quote.observedAt,
+      gameStartsAt: args.gameStartsAt,
+      stage: args.stage,
+      lockedAt,
+    });
+    if (timingIssue !== null) return [];
     return [{
       schemaRelease: CFB_V1_DECISION_SCHEMA_RELEASE,
       providerGameId: args.providerGameId,
@@ -445,19 +471,82 @@ function abstentionAllows(abstention: string, market: CfbV1Market, side: string,
   return side === abstention;
 }
 
-function assertDecisionTiming(args: { evaluatedAt: string; quoteAt: string; gameStartsAt: string; stage: CfbV1DecisionStage; lockedAt: string | null }): void {
+function decisionTimingIssue(args: {
+  evaluatedAt: string;
+  quoteAt: string;
+  gameStartsAt: string;
+  stage: CfbV1DecisionStage;
+  lockedAt: string | null;
+}): Extract<CfbV1UnavailableReasonCode, "quote_timestamp_invalid" | "quote_observed_after_evaluation" | "evaluation_not_pregame"> | null {
   const evaluated = Date.parse(args.evaluatedAt);
   const quote = Date.parse(args.quoteAt);
   const starts = Date.parse(args.gameStartsAt);
-  if (![evaluated, quote, starts].every(Number.isFinite)) throw new Error("CFB decision timestamps must be valid ISO values.");
-  if (quote > evaluated || evaluated >= starts) throw new Error("CFB exact-price decision must use a synchronized pregame quote.");
+  if (![evaluated, quote, starts].every(Number.isFinite)) return "quote_timestamp_invalid";
+  if (quote > evaluated) return "quote_observed_after_evaluation";
+  if (evaluated >= starts) return "evaluation_not_pregame";
   if (args.stage === "unlocked") {
     if (args.lockedAt !== null) throw new Error("Unlocked CFB decision cannot carry lockedAt.");
-    return;
+    return null;
   }
   if (!args.lockedAt || Date.parse(args.lockedAt) !== evaluated) throw new Error("CFB T-60 decision must freeze at evaluatedAt.");
   const lag = (evaluated - (starts - CFB_T60_TARGET_MINUTES * 60_000)) / 60_000;
   if (lag < 0 || lag > CFB_T60_MAX_CAPTURE_LAG_MINUTES) throw new Error("CFB T-60 capture is outside the 0-20 minute lag boundary.");
+  return null;
+}
+
+function unavailableReasonCodes(args: {
+  comparableCurrentBooks: NcaafBookOdds[];
+  forecast: CfbV1Forecast;
+  market: CfbV1Market;
+  gameStartsAt: string;
+  stage: CfbV1DecisionStage;
+  evaluatedAt?: string;
+  lockedAt?: string | null;
+  contextLines?: CfbV1ContextLines;
+}): CfbV1UnavailableReasonCode[] {
+  const reasons = new Set<CfbV1UnavailableReasonCode>();
+  const targets = args.comparableCurrentBooks.filter((book) => book.targetEligible !== false);
+  const targetMarkets = targets.filter((book) => book[args.market] !== null);
+  if (targetMarkets.length === 0) reasons.add("named_target_quote_unavailable");
+
+  for (const target of targetMarkets) {
+    const homeSpread = args.market === "spread"
+      ? target.spread?.homeLine
+      : target.spread?.homeLine ?? args.contextLines?.homeSpread ?? consensusHomeSpread(args.comparableCurrentBooks) ?? (args.market === "total" ? 0 : null);
+    const totalLine = args.market === "total"
+      ? target.total?.line
+      : target.total?.line ?? args.contextLines?.totalLine ?? args.forecast.expectedTotal;
+    if (homeSpread === undefined || homeSpread === null || totalLine === undefined || totalLine === null) {
+      reasons.add("market_context_line_unavailable");
+      continue;
+    }
+    const probabilities = cfbV1LineProbabilities({ forecast: args.forecast, homeSpread, totalLine });
+    const side = pmfSelectedSide(probabilities, args.market);
+    const quote = targetQuote(target, args.market, side);
+    if (!quote) {
+      reasons.add("named_target_quote_unavailable");
+      continue;
+    }
+    const evaluatedAt = args.evaluatedAt ?? quote.observedAt;
+    const lockedAt = args.stage === "t60_locked" ? args.lockedAt ?? evaluatedAt : null;
+    const timing = decisionTimingIssue({
+      evaluatedAt,
+      quoteAt: quote.observedAt,
+      gameStartsAt: args.gameStartsAt,
+      stage: args.stage,
+      lockedAt,
+    });
+    if (timing !== null) {
+      reasons.add(timing);
+      continue;
+    }
+    if (!targetExcludedConsensus(args.comparableCurrentBooks, target, args.market, side, quote.line)) {
+      reasons.add("target_excluded_same_line_consensus_insufficient");
+    }
+  }
+
+  if (reasons.size === 0) reasons.add("named_target_quote_unavailable");
+  return [...reasons].sort();
 }
 
 function heldBundle(forecast: CfbV1Forecast, heldMarkets: CfbV1DecisionBundle["heldMarkets"]): CfbV1DecisionBundle {

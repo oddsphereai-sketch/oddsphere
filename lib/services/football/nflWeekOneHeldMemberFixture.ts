@@ -19,6 +19,7 @@ import { NFL_T60_MAX_CAPTURE_LAG_MINUTES } from "./nflRegularDecisionEvidence";
 import type { NflRegularEvaluatedBetDecision } from "./nflRegularDecisionEvidence";
 import {
   getNflV1WeekOneOutcomeForecast,
+  nflV1WeekOneLineProbabilities,
   NFL_V1_OUTCOME_DISTRIBUTION_RELEASE,
   NFL_V1_OUTCOME_MODEL_RELEASE,
   NFL_V1_OUTCOME_PROBABILITY_RELEASE,
@@ -31,11 +32,11 @@ import {
 import { nflFootballEvidenceStats } from "./footballMemberEvidence";
 
 export const NFL_WEEK_ONE_HELD_MEMBER_FIXTURE_RELEASE =
-  "nfl_week_one_member_fixture_2026_08_25_r8_same_book_history" as const;
+  "nfl_week_one_member_fixture_2026_08_28_r9_primary_prediction_authority" as const;
 
 const MODEL_RELEASE = NFL_V1_OUTCOME_MODEL_RELEASE;
 const DECISION_RELEASE = NFL_V1_ACTIONABLE_GRADE_DECISION_RELEASE;
-const HOLD_REASON = "This market is Held because its exact-price decision tuple is incomplete or its data health failed.";
+const HOLD_REASON = "The prediction remains live. The Bet grade is No Play while the exact-price writer repairs incomplete sportsbook or data-health evidence.";
 
 export type NflWeekOneHeldMemberFixture = FootballPreviewFixture & {
   heldMemberFixtureRelease: typeof NFL_WEEK_ONE_HELD_MEMBER_FIXTURE_RELEASE;
@@ -316,18 +317,21 @@ function buildHeldGame(
     movementRows,
   });
   const decisions = payload.decisions.evaluatedBets;
-  const moneyline = applyPublishedDecision(moneylineBase, decisionFor(decisions, "moneyline"), {
+  const moneylineDecision = decisionFor(decisions, "moneyline");
+  const totalDecision = decisionFor(decisions, "total");
+  const spreadDecision = decisionFor(decisions, "spread");
+  const moneyline = withPrimaryPrediction(applyPublishedDecision(moneylineBase, moneylineDecision, {
     slot: "moneyline", payload, movementRows, primaryLabel: home, opposingLabel: away, primarySide: "home", opposingSide: "away",
-  });
-  const total = applyPublishedDecision(totalBase, decisionFor(decisions, "total"), {
+  }), { slot: "moneyline", away, home, outcome, decision: moneylineDecision, current });
+  const total = withPrimaryPrediction(applyPublishedDecision(totalBase, totalDecision, {
     slot: "total", payload, movementRows, primaryLabel: `Over ${marketNumber(current.total!.line)}`,
     opposingLabel: `Under ${marketNumber(current.total!.line)}`, primarySide: "over", opposingSide: "under",
     expectedTotal: outcome.expectedAwayScore + outcome.expectedHomeScore,
-  });
-  const spread = applyPublishedDecision(spreadBase, decisionFor(decisions, "spread"), {
+  }), { slot: "total", away, home, outcome, decision: totalDecision, current });
+  const spread = withPrimaryPrediction(applyPublishedDecision(spreadBase, spreadDecision, {
     slot: "spread", payload, movementRows, primaryLabel: `${home} ${signed(current.spread!.homeLine)}`,
     opposingLabel: `${away} ${signed(current.spread!.awayLine)}`, primarySide: "home", opposingSide: "away",
-  });
+  }), { slot: "spread", away, home, outcome, decision: spreadDecision, current });
   moneyline.keyStats = nflFootballEvidenceStats({
     awayTeam: away,
     homeTeam: home,
@@ -427,6 +431,72 @@ function buildHeldGame(
   };
 }
 
+function withPrimaryPrediction(
+  market: MarketEdgeDto,
+  input: {
+    slot: "moneyline" | "spread" | "total";
+    away: string;
+    home: string;
+    outcome: ReturnType<typeof getNflV1WeekOneOutcomeForecast>;
+    decision: NflRegularEvaluatedBetDecision | null;
+    current: NflForwardEvidencePayload["market"]["current"];
+  },
+): MarketEdgeDto {
+  if (input.slot === "moneyline") {
+    const home = input.outcome.homeWinProbability >= input.outcome.awayWinProbability;
+    return {
+      ...market,
+      marketPrediction: {
+        status: "available",
+        label: home ? input.home : input.away,
+        line: null,
+        probability: home ? input.outcome.homeWinProbability : input.outcome.awayWinProbability,
+        source: "model_outcome",
+        sportsbook: null,
+        observedAt: null,
+        freshnessCheckedAt: input.current.observedAt,
+        reason: "The joint score distribution owns the winner prediction; the exact-price Moneyline selection and Bet grade remain separate.",
+      },
+    };
+  }
+  const decisionLine = input.decision?.evaluatedQuote.line;
+  const line = decisionLine ?? (input.slot === "spread" ? input.current.spread?.homeLine : input.current.total?.line) ?? null;
+  if (line === null) return market;
+  const homeSpread = input.slot === "spread"
+    ? input.decision
+      ? input.decision.side.startsWith(input.home) ? line : -line
+      : input.current.spread!.homeLine
+    : 0;
+  const probabilities = nflV1WeekOneLineProbabilities({
+    forecast: input.outcome,
+    homeSpread,
+    totalLine: input.slot === "total" ? line : 0,
+  });
+  const primary = input.slot === "spread"
+    ? probabilities.spread.homeCoverProbability >= probabilities.spread.awayCoverProbability
+    : probabilities.total.overProbability >= probabilities.total.underProbability;
+  const label = input.slot === "spread"
+    ? primary ? `${input.home} ${signed(homeSpread)}` : `${input.away} ${signed(-homeSpread)}`
+    : `${primary ? "Over" : "Under"} ${marketNumber(line)}`;
+  const probability = input.slot === "spread"
+    ? primary ? probabilities.spread.homeCoverProbability : probabilities.spread.awayCoverProbability
+    : primary ? probabilities.total.overProbability : probabilities.total.underProbability;
+  return {
+    ...market,
+    marketPrediction: {
+      status: "available",
+      label,
+      line: input.slot === "spread" ? primary ? homeSpread : -homeSpread : line,
+      probability,
+      source: "model_at_exact_book_line",
+      sportsbook: input.decision?.evaluatedQuote.sportsbook ?? input.current.sportsbook,
+      observedAt: input.decision?.evaluatedQuote.observedAt ?? input.current.observedAt,
+      freshnessCheckedAt: input.current.observedAt,
+      reason: "The joint score distribution owns this line-specific prediction; the separately calibrated exact-price selection and Bet grade remain separate.",
+    },
+  };
+}
+
 function quarterbackContext(payload: NflForwardEvidencePayload, side: "away" | "home") {
   const depth = payload.startersAndDepth[side];
   return { name: depth.expectedStartingQuarterback?.name ?? null, status: depth.starterStatus };
@@ -494,7 +564,7 @@ function buildHeldMarket(input: HeldMarketInput): MarketEdgeDto {
     marketSignal: "market_neutral",
     sharpStatus: "mixed",
     held: true,
-    verdict: { key: "no_play", label: "Held" },
+    verdict: { key: "no_play", label: "No Play" },
     rawGrade: null,
     rawRecScore: null,
     capReasons: [
@@ -503,11 +573,11 @@ function buildHeldMarket(input: HeldMarketInput): MarketEdgeDto {
     ],
     finalGrade: null,
     finalRecScore: null,
-    actionabilityLabel: "Held",
+    actionabilityLabel: "No Play",
     displayReason: HOLD_REASON,
-    guidedGuide: `The real ${marketLabel} board is available, but the authoritative decision tuple is Held because required price, player, or data-health evidence is incomplete.`,
+    guidedGuide: `The ${marketLabel} prediction remains live. The exact-price Bet grade is No Play while required sportsbook or data-health evidence is repaired.`,
     guidedWatchOut: HOLD_REASON,
-    whyLine: "The normal reader preserves verified market, split, quarterback, injury, and weather context while the model decision is held.",
+    whyLine: "The reader preserves the live model prediction plus verified market, split, quarterback, injury, and weather context while the price defect is repaired.",
     riskLine: HOLD_REASON,
     modelProb: null,
     marketFairProb: null,
@@ -547,7 +617,7 @@ function buildHeldMarket(input: HeldMarketInput): MarketEdgeDto {
       stops: opposingTrail,
     },
     marketInterpretation: {
-      chipLabel: "Bet grade held",
+      chipLabel: "Bet grade No Play",
       chipTone: "gray",
       flags: ["decision_health_hold"],
       detail: ["Verified two-sided prices, Opening movement, and public consensus remain visible while the affected exact-price decision fails closed."],
@@ -589,7 +659,7 @@ function buildHeldMarket(input: HeldMarketInput): MarketEdgeDto {
     marketSource: input.current.sportsbook,
     marketDataQuality: "two_sided_consensus",
     reviewFlags: [NFL_WEEK_ONE_HELD_MEMBER_FIXTURE_RELEASE, MODEL_RELEASE, DECISION_RELEASE],
-    reviewActionSummary: "hold",
+    reviewActionSummary: "repair_price_coverage",
   };
 }
 
