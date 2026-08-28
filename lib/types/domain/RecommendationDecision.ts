@@ -23,7 +23,7 @@ export type SplitSideDisplay = {
 };
 
 export type MarketSplitDisplaySection = {
-  label: "Consensus Splits" | "Sharp Book Splits" | "Sharp Book Signal";
+  label: "Consensus Splits" | "DraftKings Splits" | "BetMGM Splits" | "Sharp Book Splits" | "Sharp Book Signal";
   rows: SplitSideDisplay[];
   signal: string | null;
   lastUpdated: string | null;

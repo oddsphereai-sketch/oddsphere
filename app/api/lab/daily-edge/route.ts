@@ -1550,6 +1550,7 @@ type SourceAwareSplitObservationRow = {
 };
 type SourceAwareSplitLookup = Map<string, {
   consensus: MarketSplitDisplaySection | null;
+  sportsbook: MarketSplitDisplaySection | null;
   sharpBook: MarketSplitDisplaySection | null;
   sharpAvailability: NonNullable<MarketEdgeDto["sharpBookAvailability"]>;
 }>;
@@ -1836,6 +1837,14 @@ function buildSourceAwareSplitSectionsFromRows(
       return { label, rows: sectionRows, signal: null, lastUpdated };
     };
     const consensus = buildSection("Consensus Splits", (row) => row.provider === "playbook" || row.source_type === "multi_book_consensus");
+    const draftKingsCandidate = buildSection(
+      "DraftKings Splits",
+      (row) => row.provider === "sharpapi" && row.source_book === "draftkings",
+    );
+    const betMgmCandidate = buildSection(
+      "BetMGM Splits",
+      (row) => row.provider === "sharpapi" && row.source_book === "betmgm",
+    );
     const sharpBookCandidate = buildSection(
       "Sharp Book Splits",
       (row) =>
@@ -1846,7 +1855,22 @@ function buildSourceAwareSplitSectionsFromRows(
       && sharpBookCandidate.rows.every((row) => row.moneyPct !== null && row.betsPct !== null)
       ? sharpBookCandidate
       : null;
-    const rawSharpRows = rows.filter((row) => row.provider === "sharpapi");
+    const completeFallback = (section: MarketSplitDisplaySection | null): MarketSplitDisplaySection | null =>
+      section?.rows.length === 2
+        && section.rows.every((row) => row.moneyPct !== null && row.betsPct !== null && row.isStale !== true)
+        ? section
+        : null;
+    // Circa is always the primary source. DraftKings is the first fallback
+    // because SharpAPI currently supplies both ticket and handle shares there;
+    // BetMGM is eligible only if it independently supplies the same complete
+    // two-sided pair. Neither fallback is passed into recommendationDecision.
+    const sportsbook = sharpBook === null || sharpBook.rows.some((row) => row.isStale === true)
+      ? completeFallback(draftKingsCandidate) ?? completeFallback(betMgmCandidate)
+      : null;
+    const rawSharpRows = rows.filter(
+      (row) => row.provider === "sharpapi"
+        && (row.source_book === "circa" || row.source_type === "sharp_adjacent_book"),
+    );
     const sharpLastUpdated = rawSharpRows
       .map((row) => row.fetched_at ?? row.source_observed_at)
       .filter((value): value is string => typeof value === "string" && value.length > 0)
@@ -1865,22 +1889,22 @@ function buildSourceAwareSplitSectionsFromRows(
       : sharpBook !== null
         ? {
             status: "complete",
-            message: "Complete two-sided SharpAPI money and ticket percentages are available.",
+            message: "Complete two-sided Circa money and ticket percentages are available.",
             lastUpdated: sharpBook.lastUpdated,
           }
         : rawSharpRows.length > 0
           ? {
               status: "provider_limited",
-              message: "SharpAPI currently supplies only partial fields for this market. Percentages stay hidden until a complete two-sided money-and-ticket pair is available.",
+              message: "Circa currently supplies only partial fields for this market. Percentages stay hidden until a complete two-sided money-and-ticket pair is available.",
               lastUpdated: sharpLastUpdated,
             }
           : {
               status: "pending",
-              message: "Sharp-book split data has not arrived from SharpAPI for this market yet.",
+              message: "Circa split data has not arrived from SharpAPI for this market yet.",
               lastUpdated: null,
             };
-    if (consensus || sharpBook || rawSharpRows.length > 0) {
-      result.set(key, { consensus, sharpBook, sharpAvailability });
+    if (consensus || sportsbook || sharpBook || rawSharpRows.length > 0) {
+      result.set(key, { consensus, sportsbook, sharpBook, sharpAvailability });
     }
   }
   return result;
@@ -2987,6 +3011,8 @@ function buildGameDto(
   ml.recommendationDecision = recommendationDecision.markets.moneyline;
   total.recommendationDecision = recommendationDecision.markets.total;
   firstInning.recommendationDecision = recommendationDecision.markets.firstInning;
+  ml.sportsbookSplits = mlSourceAwareSplits?.sportsbook ?? null;
+  total.sportsbookSplits = totalSourceAwareSplits?.sportsbook ?? null;
   ml.sharpBookAvailability = mlSourceAwareSplits?.sharpAvailability ?? {
     status: mlSharpBookSplits?.rows.some((split) => split.isStale === true) ? "stale" : mlSharpBookSplits ? "provider_limited" : "pending",
     message: mlSharpBookSplits?.signal ?? "Sharp-book split data has not arrived from SharpAPI for this market yet.",
