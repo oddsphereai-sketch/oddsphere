@@ -32,7 +32,7 @@ import { activeCfbWeeklyWindow, isGameInCfbWeeklyWindow } from "./cfbWeeklyWindo
 import { cfbFootballEvidenceStats } from "./footballMemberEvidence";
 
 export const CFB_MEMBER_FIXTURE_RELEASE =
-  "cfb_v1_member_fixture_2026_08_28_r13_bounded_context_quote_capture" as const;
+  "cfb_v1_member_fixture_2026_08_28_r15_model_covered_division_i" as const;
 export const CFB_CONTEXT_ONLY_QUOTE_CAPTURE_SKEW_MS = 5_000 as const;
 const CFB_MARKET_CONTEXT_MAX_CAPTURE_LAG_MINUTES = 10;
 const CFB_DATA_QUALITY_MEMBER_RELEASE = "cfb_v1_member_release_2026_08_28_r8_market_scoped_data_quality" as const;
@@ -186,6 +186,12 @@ function buildGame(row: CfbForwardStoredEvidence, movementRows: CfbForwardStored
   moneyline.recommendationDecision = recommendationDecision.markets.moneyline;
   total.recommendationDecision = recommendationDecision.markets.total;
   spread.recommendationDecision = recommendationDecision.markets.firstInning;
+  moneyline.sportsbookSplits = buildSportsbookSplitSection(payload, "moneyline");
+  total.sportsbookSplits = buildSportsbookSplitSection(payload, "total");
+  spread.sportsbookSplits = buildSportsbookSplitSection(payload, "spread");
+  if (moneyline.sportsbookSplits) moneyline.sharpBookAvailability = null;
+  if (total.sportsbookSplits) total.sharpBookAvailability = null;
+  if (spread.sportsbookSplits) spread.sharpBookAvailability = null;
   return {
     id: `cfb-${payload.game.providerGameId}`,
     sport: "cfb",
@@ -317,6 +323,27 @@ function buildSharpBookSplitSection(
     .filter((candidate) => candidate.sourceSemantics === "sharp_adjacent" && sharpMarketAvailable(candidate, market))
     .sort((first, second) => Date.parse(second.capturedAt) - Date.parse(first.capturedAt))[0];
   if (!record) return null;
+  return cfbSplitSection(payload, market, record, "Sharp Book Splits");
+}
+
+function buildSportsbookSplitSection(
+  payload: CfbForwardEvidencePayload,
+  market: CfbV1Market,
+): MarketSplitDisplaySection | null {
+  if (buildSharpBookSplitSection(payload, market)) return null;
+  const record = [...(payload.market.sharpApiSplits ?? [])]
+    .filter((candidate) => candidate.sourceSemantics === "public_recreational" && sharpMarketAvailable(candidate, market))
+    .sort((first, second) => Date.parse(second.capturedAt) - Date.parse(first.capturedAt))[0];
+  if (!record) return null;
+  return cfbSplitSection(payload, market, record, record.sportsbook === "draftkings" ? "DraftKings Splits" : "BetMGM Splits");
+}
+
+function cfbSplitSection(
+  payload: CfbForwardEvidencePayload,
+  market: CfbV1Market,
+  record: NonNullable<CfbForwardEvidencePayload["market"]["sharpApiSplits"]>[number],
+  label: MarketSplitDisplaySection["label"],
+): MarketSplitDisplaySection | null {
   const staleAfterMinutes = cfbSplitStaleAfterMinutes(payload.game.scheduledStart, record.capturedAt);
   const isStale = Date.parse(payload.capturedAt) - Date.parse(record.capturedAt) > staleAfterMinutes * 60_000;
   const stamp = { observedAt: record.capturedAt, freshnessCheckedAt: record.capturedAt, staleAfterMinutes, isStale };
@@ -337,7 +364,7 @@ function buildSharpBookSplitSection(
           ]
         : [];
   if (rows.length === 0) return null;
-  return { label: "Sharp Book Splits", rows, signal: null, lastUpdated: record.capturedAt };
+  return { label, rows, signal: null, lastUpdated: record.capturedAt };
 }
 
 function sharpMarketAvailable(

@@ -36,6 +36,8 @@ export type SharpApiNflSplitRow = {
   fetched_at?: string | null;
 };
 
+const SOURCE_BOOK_PRIORITY = ["circa", "draftkings", "betmgm"] as const;
+
 type SharpApiNflSplitMarket = {
   bets_pct?: Record<string, number | string | null> | null;
   handle_pct?: Record<string, number | string | null> | null;
@@ -82,7 +84,7 @@ export async function fetchSharpApiNflSplits(args: {
   // This prevents four duplicate calls for the Thursday/Sunday/Monday dates.
   const rows = await client.fetchAll<SharpApiNflSplitRow>({
     path: "/splits",
-    query: { sport: "nfl", limit: 200 },
+    query: { sport: "nfl", sportsbook: "circa,draftkings,betmgm", limit: 200 },
     // One 200-row page safely exceeds a complete football-family slate and
     // keeps the provider budget deterministic.
     maxPages: 1,
@@ -111,10 +113,14 @@ export function matchSharpApiNflSplitRows(
       sameNflTeam(row.away_team, game.away.abbreviation, game.away.name) &&
       rowDateMatches(row, date)
     );
-    const consensus = candidates.filter((row) => normalize(row.sportsbook ?? "") === "consensus");
-    const selected = consensus.length === 1 ? consensus[0] : candidates.length === 1 ? candidates[0] : null;
+    const selected = SOURCE_BOOK_PRIORITY.flatMap((sportsbook) => {
+      const rows = candidates.filter((row) => normalize(row.sportsbook ?? "") === sportsbook);
+      if (rows.length !== 1) return [];
+      const normalized = normalizeSharpApiNflSplit(game.providerGameId, capturedAt, rows[0]!);
+      return completeSharpApiNflSplitSet(normalized) ? [normalized] : [];
+    })[0] ?? null;
     if (selected === null) continue;
-    matched[game.providerGameId] = normalizeSharpApiNflSplit(game.providerGameId, capturedAt, selected);
+    matched[game.providerGameId] = selected;
   }
   return matched;
 }

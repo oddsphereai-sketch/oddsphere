@@ -21,9 +21,10 @@ import {
 } from "./cfbForwardEvidence";
 import { appendCfbForwardEvidence, readCfbForwardEvidence } from "./cfbForwardEvidenceStore";
 import { buildCfbV1DecisionBundle, CFB_T60_MAX_CAPTURE_LAG_MINUTES, CFB_V1_DECISION_RELEASE, getCfbV1ForecastForGame } from "./cfbV1Decision";
+import { cfbV1WeeklyGameProfileCoverage } from "./cfbV1WeeklyForecast";
 import { buildCfbMarketInformedOutcomeForecast, resolveCfbCanonicalMarketAnchor } from "./cfbMarketInformedOutcome";
 import { buildCfbOfficialTrackingRecords, cfbProviderIntegerId } from "./cfbOfficialTrackingRecord";
-import { activeCfbWeeklyWindow, eligibleCfbWeeklyGames, isGameInCfbWeeklyWindow } from "./cfbWeeklyWindow";
+import { activeCfbWeeklyWindow, eligibleCfbWeeklyGames, isGameInCfbWeeklyWindow, type CfbWeeklyWindow } from "./cfbWeeklyWindow";
 import {
   CFB_SHARP_API_ODDS_RELEASE,
   cfbBooksNeedSharpFallback,
@@ -36,7 +37,7 @@ import { buildMarketScopedFootballTrackingPlan } from "./footballMarketScopedTra
 import { assertFootballCrossMarketCoherence } from "./footballCrossMarketCoherence";
 
 export const CFB_FORWARD_WRITER_RELEASE =
-  "cfb_forward_evidence_writer_2026_08_28_r12_display_quote_coverage" as const;
+  "cfb_forward_evidence_writer_2026_08_28_r13_model_covered_division_i" as const;
 export const CFB_FORWARD_MAX_QB_TEAMS_PER_RUN = 24 as const;
 export const CFB_FORWARD_RESULTS_BATCH_SIZE = 100 as const;
 export const CFB_FORWARD_MAX_PRIOR_GAME_IDS = 1200 as const;
@@ -84,8 +85,8 @@ export async function runCfbForwardEvidenceWriter(args: {
     return emptyResult(need.reason, tracking);
   }
   const slate = await fetchBalldontlieNcaafSlate({ season: args.season, startDate: window.providerQueryStartDate, endDate: window.providerQueryEndDate, apiKey: args.balldontlieApiKey });
-  const games = eligibleCfbWeeklyGames(slate.games, window);
-  if (games.length === 0) throw new Error(`CFB authoritative weekly window ${window.boardStartDate}..${window.boardEndDate} has no eligible FBS games.`);
+  const games = selectCfbModelCoveredWeeklyGames({ games: slate.games, existing, now: args.now, window });
+  if (games.length === 0) throw new Error(`CFB authoritative weekly window ${window.boardStartDate}..${window.boardEndDate} has no eligible model-covered games.`);
   const plans = planCfbForwardEvidenceCaptures({ games, existing, capturedAt: args.now, unlockedCadenceMinutes: need.cadenceMinutes ?? 360 });
   if (plans.length === 0) return emptyResult("capture_plan_empty", { trackingAttempted: false, trackingRecordsProposed: 0, trackingRecordsInserted: 0, trackingRecordsExisting: 0 });
   const playbook = new PlaybookClient(args.playbookApiKey);
@@ -275,6 +276,21 @@ export async function runCfbForwardEvidenceWriter(args: {
     publicationAttempted: true,
     ...tracking,
   };
+}
+
+export function selectCfbModelCoveredWeeklyGames(args: {
+  games: NcaafGame[];
+  existing: CfbForwardStoredEvidence[];
+  now: string;
+  window: CfbWeeklyWindow;
+}): NcaafGame[] {
+  const existingIds = new Set(args.existing.map((row) => row.providerGameId));
+  const nowMs = Date.parse(args.now);
+  if (!Number.isFinite(nowMs)) throw new Error("CFB model-covered weekly selection requires a valid timestamp.");
+  return eligibleCfbWeeklyGames(args.games, args.window).filter((game) =>
+    (Date.parse(game.scheduledStart) > nowMs || existingIds.has(game.providerGameId)) &&
+    cfbV1WeeklyGameProfileCoverage(game).supported
+  );
 }
 
 async function fetchPriorCompletedGames(args: { rows: CfbForwardStoredEvidence[]; before: string; apiKey: string }): Promise<{ games: NcaafGame[]; providerRequests: number }> {

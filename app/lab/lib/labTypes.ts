@@ -323,9 +323,9 @@ export type MarketEdgeDto = {
     isStale?: boolean;
   }>;
   /**
-   * Complete two-sided percentages from a named sportsbook, shown only as a
-   * source-labeled Circa fallback. This is display-only evidence. It must not
-   * be blended into public consensus or used as a grading input.
+   * Complete two-sided percentages from an exact-match named sportsbook.
+   * This is display-only evidence. The typed section retains the source name,
+   * and it must not be blended into public consensus or used as a grading input.
    */
   sportsbookSplits?: MarketSplitDisplaySection | null;
   /**

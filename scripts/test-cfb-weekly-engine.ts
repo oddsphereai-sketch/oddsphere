@@ -10,7 +10,7 @@ import {
   type CfbForwardStoredEvidence,
   type CfbForwardTeamQuarterbacks,
 } from "../lib/services/football/cfbForwardEvidence";
-import { CFB_FORWARD_MAX_QB_TEAMS_PER_RUN, selectQuarterbackTeams } from "../lib/services/football/cfbForwardEvidenceWriter";
+import { CFB_FORWARD_MAX_QB_TEAMS_PER_RUN, selectCfbModelCoveredWeeklyGames, selectQuarterbackTeams } from "../lib/services/football/cfbForwardEvidenceWriter";
 import { buildCfbMemberFixture } from "../lib/services/football/cfbMemberFixture";
 import {
   buildCfbV1DecisionBundle,
@@ -18,6 +18,7 @@ import {
   getCfbV1ForecastForGame,
   getCfbV1Forecasts,
 } from "../lib/services/football/cfbV1Decision";
+import { cfbV1WeeklyGameProfileCoverage } from "../lib/services/football/cfbV1WeeklyForecast";
 import { activeCfbWeeklyWindow, eligibleCfbWeeklyGames } from "../lib/services/football/cfbWeeklyWindow";
 import type { NcaafGame, NcaafTeam } from "../lib/services/football/balldontlieNcaafSlate";
 
@@ -91,8 +92,28 @@ fcs.away.fbs = false;
 const bothFcs = game({ id: "both-fcs", start: "2026-09-05T18:00:00.000Z", awayName: "FCS One", homeName: "FCS Two", week: 2 });
 bothFcs.away.fbs = false;
 bothFcs.home.fbs = false;
+const supportedFcs = game({ id: "supported-fcs", start: "2026-09-05T18:30:00.000Z", awayName: "Colgate Raiders", homeName: "Fordham Rams", week: 2 });
+supportedFcs.away.fbs = false;
+supportedFcs.home.fbs = false;
 const outside = game({ id: "outside", start: "2026-09-09T18:00:00.000Z", awayName: "Alabama Crimson Tide", homeName: "Clemson Tigers", week: 2 });
-assert.deepEqual(eligibleCfbWeeklyGames([weekOneGame, fcs, bothFcs, outside], weekOneWindow).map((row) => row.providerGameId), ["fcs-at-fbs", "week-one-new-id"]);
+assert.deepEqual(eligibleCfbWeeklyGames([weekOneGame, fcs, bothFcs, supportedFcs, outside], weekOneWindow).map((row) => row.providerGameId), ["fcs-at-fbs", "both-fcs", "supported-fcs", "week-one-new-id"]);
+assert.equal(cfbV1WeeklyGameProfileCoverage(supportedFcs).supported, true, "a pure-FCS matchup with two qualified artifact profiles must be model-covered");
+assert.equal(cfbV1WeeklyGameProfileCoverage(bothFcs).supported, false, "unknown teams cannot enter the betting board through neutral imputation");
+assert.deepEqual(
+  selectCfbModelCoveredWeeklyGames({ games: [weekOneGame, bothFcs, supportedFcs, outside], existing: [], now: "2026-09-01T12:00:00.000Z", window: weekOneWindow }).map((row) => row.providerGameId),
+  ["supported-fcs", "week-one-new-id"],
+);
+assert.deepEqual(
+  selectCfbModelCoveredWeeklyGames({ games: [supportedFcs], existing: [], now: "2026-09-05T19:00:00.000Z", window: weekOneWindow }),
+  [],
+  "a game first discovered after kickoff cannot be backfilled",
+);
+const supportedFcsForecast = getCfbV1ForecastForGame({ game: supportedFcs }).forecast;
+assert.deepEqual(
+  selectCfbModelCoveredWeeklyGames({ games: [supportedFcs], existing: [evidenceRow(supportedFcs, supportedFcsForecast, 1, "supported-fcs-opening")], now: "2026-09-05T19:00:00.000Z", window: weekOneWindow }).map((row) => row.providerGameId),
+  ["supported-fcs"],
+  "an already captured game remains inside immutable lifecycle handling",
+);
 
 const qbPlans = Array.from({ length: 20 }, (_, index) => {
   const value = game({ id: `qb-${index}`, start: `2026-09-05T${String(10 + Math.floor(index / 2)).padStart(2, "0")}:00:00.000Z`, awayName: `Away ${index}`, homeName: `Home ${index}`, week: 2, awayId: 1000 + index * 2, homeId: 1001 + index * 2 });

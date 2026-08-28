@@ -92,6 +92,40 @@ for (const game of fixture.snapshot.games) {
   assert.equal(game.markets.total.marketPrediction?.source, "model_at_exact_book_line");
 }
 
+const splitRows = structuredClone(rows);
+const splitPayload = splitRows[0]!.payload as NflForwardEvidencePayload;
+const splitBase = {
+  provider: "sharpapi" as const,
+  providerGameId: splitPayload.game.providerGameId,
+  sourceEventId: "nfl_patriots_seahawks_2026-09-09",
+  sourceSportsbook: "draftkings",
+  capturedAt,
+  providerFetchedAt: capturedAt,
+};
+splitPayload.market.sharpApiSplits = {
+  moneyline: { ...splitBase, homeMoneyPct: 62, awayMoneyPct: 38, homeBetsPct: 45, awayBetsPct: 55, overMoneyPct: null, underMoneyPct: null, overBetsPct: null, underBetsPct: null },
+  spread: { ...splitBase, homeMoneyPct: 58, awayMoneyPct: 42, homeBetsPct: 48, awayBetsPct: 52, overMoneyPct: null, underMoneyPct: null, overBetsPct: null, underBetsPct: null },
+  total: { ...splitBase, homeMoneyPct: null, awayMoneyPct: null, homeBetsPct: null, awayBetsPct: null, overMoneyPct: 63, underMoneyPct: 37, overBetsPct: 57, underBetsPct: 43 },
+};
+splitPayload.coverage.sharpApiSplits = true;
+const draftKingsFixture = buildNflWeekOneHeldMemberFixture(splitRows);
+const draftKingsGame = draftKingsFixture.snapshot.games.find((game) => game.id === `nfl-${splitPayload.game.providerGameId}`)!;
+for (const market of [draftKingsGame.markets.moneyline, draftKingsGame.markets.total, draftKingsGame.markets.first_inning]) {
+  assert.equal(market.sportsbookSplits?.label, "DraftKings Splits");
+  assert.equal(market.sportsbookSplits?.rows.length, 2);
+  assert.equal(market.recommendationDecision?.sharpBookSplits, null);
+  assert.equal(market.publicSplits.length, 2);
+}
+
+for (const market of Object.values(splitPayload.market.sharpApiSplits)) market.sourceSportsbook = "circa";
+const circaFixture = buildNflWeekOneHeldMemberFixture(splitRows);
+const circaGame = circaFixture.snapshot.games.find((game) => game.id === `nfl-${splitPayload.game.providerGameId}`)!;
+for (const market of [circaGame.markets.moneyline, circaGame.markets.total, circaGame.markets.first_inning]) {
+  assert.equal(market.sportsbookSplits, null);
+  assert.equal(market.recommendationDecision?.sharpBookSplits?.label, "Sharp Book Splits");
+  assert.equal(market.recommendationDecision?.sharpBookSplits?.rows.length, 2);
+}
+
 const laterCapture = "2026-08-22T14:50:56.934Z";
 const laterFirstGame = structuredClone(rows[0]!);
 laterFirstGame.id = "row-1392216-later";

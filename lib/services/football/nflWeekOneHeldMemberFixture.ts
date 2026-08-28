@@ -6,6 +6,8 @@ import type {
   MarketEdgeDto,
   OddsTrailStopDto,
 } from "@/app/lab/lib/labTypes";
+import { buildRecommendationDecision } from "@/lib/services/recommendationDecision";
+import type { MarketSplitDisplaySection } from "@/lib/types/domain/RecommendationDecision";
 import type { FootballPreviewFixture } from "@/app/dev/football-preview/footballPreviewFixture";
 import type { PreviewAvailabilityByGame } from "@/app/dev/experience-preview/ActualDailyEdgePreview";
 import {
@@ -30,9 +32,10 @@ import {
   NFL_V1_ACTIONABLE_GRADE_MEMBER_RELEASE,
 } from "./nflV1ActionableGradeCandidate";
 import { nflFootballEvidenceStats } from "./footballMemberEvidence";
+import type { NflRegularSharpMarket, NflRegularSharpSplit } from "./sharpApiNflSplits";
 
 export const NFL_WEEK_ONE_HELD_MEMBER_FIXTURE_RELEASE =
-  "nfl_week_one_member_fixture_2026_08_28_r9_primary_prediction_authority" as const;
+  "nfl_week_one_member_fixture_2026_08_28_r10_source_specific_sportsbook_splits" as const;
 
 const MODEL_RELEASE = NFL_V1_OUTCOME_MODEL_RELEASE;
 const DECISION_RELEASE = NFL_V1_ACTIONABLE_GRADE_DECISION_RELEASE;
@@ -356,6 +359,27 @@ function buildHeldGame(
     homeQuarterback: quarterbackContext(payload, "home"),
     weather: payload.weather,
   });
+  const sourceSplits = {
+    moneyline: nflSourceSplitEvidence(payload, "moneyline"),
+    total: nflSourceSplitEvidence(payload, "total"),
+    spread: nflSourceSplitEvidence(payload, "spread"),
+  };
+  const recommendationDecision = buildNflRecommendationDecision({
+    payload,
+    projected: { away: outcome.representativeAwayScore, home: outcome.representativeHomeScore },
+    moneyline: { market: moneyline, decision: moneylineDecision, split: sourceSplits.moneyline },
+    total: { market: total, decision: totalDecision, split: sourceSplits.total },
+    spread: { market: spread, decision: spreadDecision, split: sourceSplits.spread },
+  });
+  moneyline.recommendationDecision = recommendationDecision.markets.moneyline;
+  total.recommendationDecision = recommendationDecision.markets.total;
+  spread.recommendationDecision = recommendationDecision.markets.firstInning;
+  moneyline.sportsbookSplits = sourceSplits.moneyline.sportsbook;
+  total.sportsbookSplits = sourceSplits.total.sportsbook;
+  spread.sportsbookSplits = sourceSplits.spread.sportsbook;
+  moneyline.sharpBookAvailability = sourceSplits.moneyline.availability;
+  total.sharpBookAvailability = sourceSplits.total.availability;
+  spread.sharpBookAvailability = sourceSplits.spread.availability;
   const locked = payload.stage === "t60" &&
     payload.t60LagMinutes !== null &&
     payload.t60LagMinutes <= NFL_T60_MAX_CAPTURE_LAG_MINUTES &&
@@ -416,7 +440,7 @@ function buildHeldGame(
     status: {
       lineupConfirmed: payload.startersAndDepth.away.starterStatus === "confirmed" && payload.startersAndDepth.home.starterStatus === "confirmed",
       linesLocked: locked,
-      sharpSignalPending: payload.market.sharpApiSplits === null,
+      sharpSignalPending: !Object.values(sourceSplits).some((value) => value.sharp !== null),
       marketDataLimited: false,
     },
     result: null,
@@ -424,11 +448,145 @@ function buildHeldGame(
       verdict: moneyline.verdict,
       sharpRead: {
         key: "no_data",
-        sentence: "Playbook public splits are displayed as market context; SharpAPI splits are not available in this capture.",
+        sentence: Object.values(sourceSplits).some((value) => value.sharp !== null)
+          ? "Strictly matched Circa sportsbook splits are available beside separate Playbook public consensus."
+          : Object.values(sourceSplits).some((value) => value.sportsbook !== null)
+            ? "Strictly matched sportsbook splits are available beside separate Playbook public consensus."
+            : "Playbook public splits are displayed as market context; no exact named-book split row is available in this capture.",
       },
       modelBreakdown: "The discrete drive/scoring-event distribution supplies the displayed score and winner probability. The active Spread and Total decision heads apply separate line-specific calibration; exact-price Bet grades remain separate.",
     },
+    recommendationDecision,
   };
+}
+
+type NflSourceSplitEvidence = {
+  sharp: MarketSplitDisplaySection | null;
+  sportsbook: MarketSplitDisplaySection | null;
+  availability: MarketEdgeDto["sharpBookAvailability"];
+};
+
+function buildNflRecommendationDecision(args: {
+  payload: NflForwardEvidencePayload;
+  projected: { away: number; home: number };
+  moneyline: { market: MarketEdgeDto; decision: NflRegularEvaluatedBetDecision | null; split: NflSourceSplitEvidence };
+  total: { market: MarketEdgeDto; decision: NflRegularEvaluatedBetDecision | null; split: NflSourceSplitEvidence };
+  spread: { market: MarketEdgeDto; decision: NflRegularEvaluatedBetDecision | null; split: NflSourceSplitEvidence };
+}) {
+  const marketInput = (
+    key: "moneyline" | "total" | "firstInning",
+    value: { market: MarketEdgeDto; decision: NflRegularEvaluatedBetDecision | null; split: NflSourceSplitEvidence },
+  ) => ({
+    key,
+    pick: value.market.pick,
+    selectedSide: selectedDecisionSide(args.payload, value.decision),
+    modelProbability: value.market.modelProb,
+    marketImplied: value.market.marketFairProb,
+    edgePp: value.decision ? (value.decision.modelProbability - value.decision.marketFairProbability) * 100 : null,
+    price: value.market.priceAmerican,
+    playGrade: value.decision?.grade ?? "No Play",
+    quickRead: value.market.displayReason ?? "The outcome forecast and exact-price Bet grade remain separate.",
+    riskNote: "Outcome forecast, public consensus, source-specific sportsbook splits, and exact-price Bet grade are separate evidence layers.",
+    publicSplits: value.market.publicSplits,
+    marketReadV2: null,
+    marketReadV2Enabled: false,
+    sharpBookSplitsOverride: value.split.sharp,
+    lineMovementOverride: null,
+    allowBestAngleMarketConflict: value.decision !== null,
+  });
+  return buildRecommendationDecision({
+    sport: "nfl",
+    slateDate: localDate(args.payload.game.scheduledStart),
+    gameId: `nfl-${args.payload.game.providerGameId}`,
+    homeTeam: args.payload.game.home.abbreviation,
+    awayTeam: args.payload.game.away.abbreviation,
+    projectedScore: args.projected,
+    markets: [
+      marketInput("moneyline", args.moneyline),
+      marketInput("total", args.total),
+      marketInput("firstInning", args.spread),
+    ],
+  });
+}
+
+function selectedDecisionSide(
+  payload: NflForwardEvidencePayload,
+  decision: NflRegularEvaluatedBetDecision | null,
+): "home" | "away" | "over" | "under" | null {
+  if (!decision) return null;
+  if (decision.market === "total") return decision.side.startsWith("Over ") ? "over" : "under";
+  return decision.side === payload.game.home.abbreviation ? "home" : "away";
+}
+
+function nflSourceSplitEvidence(
+  payload: NflForwardEvidencePayload,
+  market: NflRegularSharpMarket,
+): NflSourceSplitEvidence {
+  const split = payload.market.sharpApiSplits?.[market] ?? null;
+  if (!split || !completeNflMarketSplit(split, market)) {
+    return {
+      sharp: null,
+      sportsbook: null,
+      availability: {
+        status: "pending",
+        message: "No complete exact-match named-book split row is available for this market yet.",
+        lastUpdated: split?.providerFetchedAt ?? split?.capturedAt ?? null,
+      },
+    };
+  }
+  const book = normalizeBookName(split.sourceSportsbook ?? "");
+  if (book !== "circa" && book !== "draftkings" && book !== "betmgm") {
+    return {
+      sharp: null,
+      sportsbook: null,
+      availability: {
+        status: "provider_limited",
+        message: "The matched split row is not from an approved source-specific sportsbook.",
+        lastUpdated: split.providerFetchedAt ?? split.capturedAt,
+      },
+    };
+  }
+  const observedAt = split.providerFetchedAt ?? split.capturedAt;
+  const staleAfterMinutes = 390;
+  const isStale = Date.parse(payload.capturedAt) - Date.parse(observedAt) > staleAfterMinutes * 60_000;
+  const stamp = { observedAt, freshnessCheckedAt: split.capturedAt, staleAfterMinutes, isStale };
+  const rows = market === "total"
+    ? [
+        { side: "over" as const, label: "Over", moneyPct: split.overMoneyPct, betsPct: split.overBetsPct, ...stamp },
+        { side: "under" as const, label: "Under", moneyPct: split.underMoneyPct, betsPct: split.underBetsPct, ...stamp },
+      ]
+    : [
+        { side: "home" as const, label: payload.game.home.abbreviation, moneyPct: split.homeMoneyPct, betsPct: split.homeBetsPct, ...stamp },
+        { side: "away" as const, label: payload.game.away.abbreviation, moneyPct: split.awayMoneyPct, betsPct: split.awayBetsPct, ...stamp },
+      ];
+  const section: MarketSplitDisplaySection = {
+    label: book === "circa" ? "Sharp Book Splits" : book === "draftkings" ? "DraftKings Splits" : "BetMGM Splits",
+    rows,
+    signal: null,
+    lastUpdated: observedAt,
+  };
+  if (book === "circa") {
+    return {
+      sharp: section,
+      sportsbook: null,
+      availability: {
+        status: isStale ? "stale" : "complete",
+        message: "Strictly matched Circa split evidence is available for this game and market.",
+        lastUpdated: observedAt,
+      },
+    };
+  }
+  return { sharp: null, sportsbook: section, availability: null };
+}
+
+function completeNflMarketSplit(split: NflRegularSharpSplit, market: NflRegularSharpMarket): boolean {
+  return market === "total"
+    ? complementarySplit(split.overMoneyPct, split.underMoneyPct) && complementarySplit(split.overBetsPct, split.underBetsPct)
+    : complementarySplit(split.homeMoneyPct, split.awayMoneyPct) && complementarySplit(split.homeBetsPct, split.awayBetsPct);
+}
+
+function complementarySplit(first: number | null, second: number | null): boolean {
+  return first !== null && second !== null && Math.abs(first + second - 100) <= 1;
 }
 
 function withPrimaryPrediction(
