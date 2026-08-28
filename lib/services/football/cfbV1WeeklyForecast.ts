@@ -4,9 +4,11 @@ import type { NcaafGame } from "./balldontlieNcaafSlate";
 import type { CfbV1Forecast } from "./cfbV1Decision";
 
 export const CFB_V1_WEEKLY_RUNTIME_RELEASE =
-  "cfb_v1_joint_score_artifact_2026_08_25_r3_weekly" as const;
+  "cfb_v1_joint_score_artifact_2026_08_28_r4_directional_pmf" as const;
 export const CFB_V1_WEEKLY_BASE_ARTIFACT_RELEASE =
-  "cfb_v1_joint_score_artifact_2026_08_25_r2" as const;
+  "cfb_v1_joint_score_artifact_2026_08_28_r3_directional_pmf" as const;
+export const CFB_V1_DIRECTIONAL_ALIGNMENT_RELEASE =
+  "cfb_v1_directional_joint_pmf_alignment_2026_08_28_r1" as const;
 
 type NullableNumber = number | null;
 type TeamProfile = {
@@ -250,14 +252,57 @@ function predict(pipeline: LinearPipeline, features: Record<string, NullableNumb
 }
 
 function distributionForecast(game: NcaafGame, rawHome: number, rawAway: number): CfbV1Forecast {
+  const initial = quantizedDistribution(rawHome, rawAway);
+  const initialExpectedMargin = mean(initial.homes.map((home, index) => home - initial.aways[index]!));
+  const initialHomeWinProbability = winProbability(initial.homes, initial.aways);
+  const targetDirection =
+    direction(initialHomeWinProbability - 0.5) ||
+    direction(initialExpectedMargin) ||
+    direction(rawHome - rawAway) ||
+    1;
+  const initialMeanDirection = direction(initialExpectedMargin);
+  const initialWinDirection = direction(initialHomeWinProbability - 0.5);
+  let distribution = initial;
+  let alignment: CfbV1Forecast["directionalAlignment"];
+
+  if (initialMeanDirection !== targetDirection || initialWinDirection !== targetDirection) {
+    const step = 0.025;
+    const maximum = 1;
+    let resolved: { distribution: ReturnType<typeof quantizedDistribution>; points: number } | null = null;
+    for (let points = step; points <= maximum + 1e-12; points += step) {
+      const candidate = quantizedDistribution(
+        rawHome + targetDirection * points,
+        rawAway - targetDirection * points,
+      );
+      const candidateMargins = candidate.homes.map((home, index) => home - candidate.aways[index]!);
+      if (
+        direction(mean(candidateMargins)) === targetDirection &&
+        direction(winProbability(candidate.homes, candidate.aways) - 0.5) === targetDirection
+      ) {
+        resolved = { distribution: candidate, points: +points.toFixed(3) };
+        break;
+      }
+    }
+    if (!resolved) {
+      throw new Error("CFB dynamic joint PMF cannot align score and winner direction inside the one-point symmetric correction bound.");
+    }
+    distribution = resolved.distribution;
+    alignment = {
+      release: CFB_V1_DIRECTIONAL_ALIGNMENT_RELEASE,
+      target: targetDirection > 0 ? "home" : "away",
+      symmetricPoints: resolved.points,
+      reason: initialMeanDirection === 0 || initialWinDirection === 0
+        ? "exact_direction_tie"
+        : "mean_probability_direction_cross",
+    };
+  }
+
   const counts = new Map<string, { home: number; away: number; count: number }>();
-  const homes: number[] = [];
-  const aways: number[] = [];
-  for (const [homeResidual, awayResidual] of baseArtifact.residualSample) {
-    const home = nearestScore(clamp(rawHome + homeResidual, 0, 90));
-    const away = nearestScore(clamp(rawAway + awayResidual, 0, 90));
-    homes.push(home);
-    aways.push(away);
+  const homes = distribution.homes;
+  const aways = distribution.aways;
+  for (let index = 0; index < homes.length; index += 1) {
+    const home = homes[index]!;
+    const away = aways[index]!;
     const key = `${home}:${away}`;
     const current = counts.get(key);
     counts.set(key, current ? { ...current, count: current.count + 1 } : { home, away, count: 1 });
@@ -269,7 +314,7 @@ function distributionForecast(game: NcaafGame, rawHome: number, rawAway: number)
   const totals = homes.map((home, index) => home + aways[index]!);
   const expectedMargin = mean(margins);
   const expectedTotal = mean(totals);
-  const homeWinProbability = (margins.filter((value) => value > 0).length + 0.5 * margins.filter((value) => value === 0).length) / margins.length;
+  const homeWinProbability = winProbability(homes, aways);
   const pmf = [...counts.values()].sort((a, b) => a.home - b.home || a.away - b.away).map((cell) => ({ home: cell.home, away: cell.away, probability: cell.count / homes.length }));
   const representativePool = [...counts.values()].filter((cell) => homeWinProbability > 0.5 ? cell.home > cell.away : homeWinProbability < 0.5 ? cell.home < cell.away : true);
   const representative = representativePool.sort((first, second) => representativeDistance(first, expectedHome, expectedAway, expectedMargin, expectedTotal) - representativeDistance(second, expectedHome, expectedAway, expectedMargin, expectedTotal) || second.count - first.count)[0]!;
@@ -291,7 +336,34 @@ function distributionForecast(game: NcaafGame, rawHome: number, rawAway: number)
       total: [quantile(totals, 0.1), quantile(totals, 0.9)],
     },
     pmf,
+    ...(alignment ? { directionalAlignment: alignment } : {}),
   };
+}
+
+function quantizedDistribution(rawHome: number, rawAway: number): { homes: number[]; aways: number[] } {
+  const homes: number[] = [];
+  const aways: number[] = [];
+  for (const [homeResidual, awayResidual] of baseArtifact.residualSample) {
+    homes.push(nearestScore(clamp(rawHome + homeResidual, 0, 90)));
+    aways.push(nearestScore(clamp(rawAway + awayResidual, 0, 90)));
+  }
+  return { homes, aways };
+}
+
+function winProbability(homes: number[], aways: number[]): number {
+  if (homes.length === 0 || homes.length !== aways.length) {
+    throw new Error("CFB empirical residual distribution is empty or misaligned.");
+  }
+  const margins = homes.map((home, index) => home - aways[index]!);
+  return (
+    margins.filter((value) => value > 0).length +
+    0.5 * margins.filter((value) => value === 0).length
+  ) / margins.length;
+}
+
+function direction(value: number): -1 | 0 | 1 {
+  if (Math.abs(value) <= 1e-12) return 0;
+  return value > 0 ? 1 : -1;
 }
 
 function representativeDistance(cell: { home: number; away: number }, expectedHome: number, expectedAway: number, expectedMargin: number, expectedTotal: number): number {
@@ -317,7 +389,7 @@ function restDays(lastPlayedAt: string | null, startsAt: string): number {
 }
 
 function cloneForecast(forecast: CfbV1Forecast): CfbV1Forecast {
-  return { ...forecast, representativeScore: { ...forecast.representativeScore }, interval80: { away: [...forecast.interval80.away], home: [...forecast.interval80.home], marginHome: [...forecast.interval80.marginHome], total: [...forecast.interval80.total] }, pmf: forecast.pmf.map((cell) => ({ ...cell })) };
+  return { ...forecast, representativeScore: { ...forecast.representativeScore }, interval80: { away: [...forecast.interval80.away], home: [...forecast.interval80.home], marginHome: [...forecast.interval80.marginHome], total: [...forecast.interval80.total] }, pmf: forecast.pmf.map((cell) => ({ ...cell })), ...(forecast.directionalAlignment ? { directionalAlignment: { ...forecast.directionalAlignment } } : {}) };
 }
 
 function normalizeName(value: string): string {

@@ -1,10 +1,8 @@
 export const FOOTBALL_CROSS_MARKET_COHERENCE_RELEASE =
-  "football_cross_market_coherence_2026_08_28_r2_distribution_tossup" as const;
+  "football_cross_market_coherence_2026_08_28_r3_strict_directional_pmf" as const;
 
 const EPSILON = 1e-9;
 const EV_TOLERANCE = 1e-8;
-const DISTRIBUTION_TOSSUP_MAX_EXPECTED_MARGIN = 0.5;
-const DISTRIBUTION_TOSSUP_MAX_WIN_PROBABILITY_GAP = 0.02;
 
 export type FootballCoherenceSport = "nfl" | "cfb";
 export type FootballCoherenceMarket = "moneyline" | "spread" | "total";
@@ -206,12 +204,7 @@ function auditForecast(
   }
   const expectedMargin = forecast.expectedHomePoints - forecast.expectedAwayPoints;
   const forecastDirection = direction(forecast.homeWinProbability - forecast.awayWinProbability);
-  const hasDistributionIdentity = forecast.pmf !== undefined ||
-    (forecast.marginDistribution !== undefined && forecast.totalDistribution !== undefined);
-  const distributionTossup = hasDistributionIdentity &&
-    Math.abs(expectedMargin) <= DISTRIBUTION_TOSSUP_MAX_EXPECTED_MARGIN &&
-    Math.abs(forecast.homeWinProbability - forecast.awayWinProbability) <= DISTRIBUTION_TOSSUP_MAX_WIN_PROBABILITY_GAP;
-  if (direction(expectedMargin) !== forecastDirection && !distributionTossup) {
+  if (direction(expectedMargin) !== forecastDirection) {
     issues.push({ code: "forecast_winner_score_disagreement", detail: `Expected margin ${expectedMargin}, home win ${forecast.homeWinProbability}.` });
   }
   const representativeMargin = forecast.representativeScore.home - forecast.representativeScore.away;

@@ -6,23 +6,23 @@ import { CFB_V1_WEEKLY_BASE_ARTIFACT_RELEASE, getCfbV1WeeklyForecast } from "./c
 import type { NcaafGame } from "./balldontlieNcaafSlate";
 
 export const CFB_V1_SCORE_ARTIFACT_RELEASE =
-  "cfb_v1_joint_score_artifact_2026_08_25_r3_weekly" as const;
+  "cfb_v1_joint_score_artifact_2026_08_28_r4_directional_pmf" as const;
 export const CFB_V1_MODEL_RELEASE =
-  "cfb_v1_independent_score_model_2026_08_25_r1" as const;
+  "cfb_v1_independent_score_model_2026_08_28_r2_directional_pmf" as const;
 export const CFB_V1_DISTRIBUTION_RELEASE =
-  "cfb_v1_empirical_joint_score_distribution_2026_08_25_r1" as const;
+  "cfb_v1_empirical_joint_score_distribution_2026_08_28_r2_directional_pmf" as const;
 export const CFB_V1_PROBABILITY_RELEASE =
-  "cfb_v1_joint_market_probability_2026_08_25_r1" as const;
+  "cfb_v1_joint_market_probability_2026_08_28_r2_directional_pmf" as const;
 export const CFB_V1_REPRESENTATIVE_SCORE_RELEASE =
-  "cfb_v1_central_reachable_score_2026_08_25_r1" as const;
+  "cfb_v1_central_reachable_score_2026_08_28_r2_directional_pmf" as const;
 export const CFB_V1_GRADE_POLICY_RELEASE =
   "cfb_v1_composite_grade_policy_2026_08_25_r1" as const;
 export const CFB_V1_DECISION_RELEASE =
-  "cfb_v1_daily_edge_decision_2026_08_28_r11_market_scoped_data_quality" as const;
+  "cfb_v1_daily_edge_decision_2026_08_28_r12_directional_pmf" as const;
 const CFB_V1_POLICY_SOURCE_DECISION_RELEASE =
   "cfb_v1_daily_edge_decision_2026_08_26_r7_sharpapi_price_fallback" as const;
 export const CFB_V1_DECISION_SCHEMA_RELEASE =
-  "cfb_v1_exact_price_decision_tuple_2026_08_28_r5_structured_unavailable_reasons" as const;
+  "cfb_v1_exact_price_decision_tuple_2026_08_28_r6_directional_pmf" as const;
 export const CFB_T60_TARGET_MINUTES = 60 as const;
 export const CFB_T60_MAX_CAPTURE_LAG_MINUTES = 20 as const;
 
@@ -61,6 +61,12 @@ export type CfbV1Forecast = {
     total: [number, number];
   };
   pmf: Array<{ home: number; away: number; probability: number }>;
+  directionalAlignment?: {
+    release: string;
+    target: "home" | "away";
+    symmetricPoints: number;
+    reason: "mean_probability_direction_cross" | "exact_direction_tie";
+  };
 };
 
 export type CfbV1ExactPriceDecision = {

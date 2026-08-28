@@ -17,6 +17,7 @@ import {
   buildCfbForwardMarketOutlooks,
   determineCfbForwardCollectionNeed,
   hashCfbForwardEvidencePayload,
+  matchesCfbForwardEvidencePayloadHash,
   planCfbForwardEvidenceCaptures,
   type CfbForwardEvidencePayload,
   type CfbForwardStoredEvidence,
@@ -203,6 +204,11 @@ const payload: CfbForwardEvidencePayload = {
 
 assert.equal("pmf" in payload.decisions.forecast, false, "recurring evidence rows must not duplicate the large PMF artifact");
 assert.equal(hashCfbForwardEvidencePayload(payload).length, 64);
+const optionalFieldPayload = { ...payload, outcomeMarketOutlooks: undefined };
+const jsonRoundTrippedPayload = JSON.parse(JSON.stringify(optionalFieldPayload)) as CfbForwardEvidencePayload;
+const optionalFieldHash = hashCfbForwardEvidencePayload(optionalFieldPayload);
+assert.equal(hashCfbForwardEvidencePayload(jsonRoundTrippedPayload), optionalFieldHash, "the evidence hash must match the exact JSON-serializable payload shape");
+assert.equal(matchesCfbForwardEvidencePayloadHash(jsonRoundTrippedPayload, optionalFieldHash), true);
 assert.equal(CFB_T60_MAX_CAPTURE_LAG_MINUTES, 20);
 assert.equal(isPublicallyTracked("cfb", "2026-08-28"), false);
 assert.equal(isPublicallyTracked("cfb", "2026-08-29"), true);
