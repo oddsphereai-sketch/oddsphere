@@ -9,6 +9,7 @@ import {
   CFB_FORWARD_DATA_QUALITY_EVIDENCE_SCHEMA_RELEASE,
   CFB_FORWARD_INITIAL_EVIDENCE_SCHEMA_RELEASE,
   CFB_FORWARD_LEGACY_EVIDENCE_SCHEMA_RELEASE,
+  CFB_FORWARD_PRE_DIRECTIONAL_EVIDENCE_SCHEMA_RELEASE,
   CFB_FORWARD_PREVIOUS_EVIDENCE_SCHEMA_RELEASE,
   CFB_FORWARD_PRIOR_EVIDENCE_SCHEMA_RELEASE,
   CFB_FORWARD_TRANSITION_EVIDENCE_SCHEMA_RELEASE,
@@ -32,9 +33,11 @@ import { activeCfbWeeklyWindow, isGameInCfbWeeklyWindow } from "./cfbWeeklyWindo
 import { cfbFootballEvidenceStats } from "./footballMemberEvidence";
 
 export const CFB_MEMBER_FIXTURE_RELEASE =
-  "cfb_v1_member_fixture_2026_08_28_r18_expanded_sharp_budget" as const;
+  "cfb_v1_member_fixture_2026_08_28_r19_directional_pmf" as const;
 export const CFB_CONTEXT_ONLY_QUOTE_CAPTURE_SKEW_MS = 5_000 as const;
 const CFB_MARKET_CONTEXT_MAX_CAPTURE_LAG_MINUTES = 10;
+const CFB_PRE_DIRECTIONAL_MEMBER_RELEASE = "cfb_v1_member_release_2026_08_28_r14_expanded_sharp_budget" as const;
+const CFB_PRE_DIRECTIONAL_DECISION_RELEASE = "cfb_v1_daily_edge_decision_2026_08_28_r11_market_scoped_data_quality" as const;
 const CFB_DATA_QUALITY_MEMBER_RELEASE = "cfb_v1_member_release_2026_08_28_r8_market_scoped_data_quality" as const;
 const CFB_DATA_QUALITY_DECISION_RELEASE = "cfb_v1_daily_edge_decision_2026_08_28_r11_market_scoped_data_quality" as const;
 const CFB_PREVIOUS_MEMBER_RELEASE = "cfb_v1_member_release_2026_08_28_r7_two_axis_outcome_sharp_splits" as const;
@@ -120,6 +123,8 @@ function latestCompleteRows(rows: CfbForwardStoredEvidence[]): CfbForwardStoredE
   if (rows.length === 0) throw new Error("CFB forward evidence is empty.");
   const current = completeRowsForRelease(rows, CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE, CFB_FORWARD_MEMBER_RELEASE, CFB_V1_DECISION_RELEASE);
   if (current) return current;
+  const preDirectionalFallback = completeRowsForRelease(rows, CFB_FORWARD_PRE_DIRECTIONAL_EVIDENCE_SCHEMA_RELEASE, CFB_PRE_DIRECTIONAL_MEMBER_RELEASE, CFB_PRE_DIRECTIONAL_DECISION_RELEASE);
+  if (preDirectionalFallback) return preDirectionalFallback;
   const dataQualityFallback = completeRowsForRelease(rows, CFB_FORWARD_DATA_QUALITY_EVIDENCE_SCHEMA_RELEASE, CFB_DATA_QUALITY_MEMBER_RELEASE, CFB_DATA_QUALITY_DECISION_RELEASE);
   if (dataQualityFallback) return dataQualityFallback;
   const previousFallback = completeRowsForRelease(rows, CFB_FORWARD_PREVIOUS_EVIDENCE_SCHEMA_RELEASE, CFB_PREVIOUS_MEMBER_RELEASE, CFB_PREVIOUS_DECISION_RELEASE);

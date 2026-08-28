@@ -37,7 +37,7 @@ import { buildMarketScopedFootballTrackingPlan } from "./footballMarketScopedTra
 import { assertFootballCrossMarketCoherence } from "./footballCrossMarketCoherence";
 
 export const CFB_FORWARD_WRITER_RELEASE =
-  "cfb_forward_evidence_writer_2026_08_28_r17_distribution_tossup" as const;
+  "cfb_forward_evidence_writer_2026_08_28_r18_directional_pmf" as const;
 export const CFB_FORWARD_MAX_QB_TEAMS_PER_RUN = 24 as const;
 export const CFB_FORWARD_RESULTS_BATCH_SIZE = 100 as const;
 export const CFB_FORWARD_MAX_PRIOR_GAME_IDS = 1200 as const;
@@ -118,7 +118,7 @@ export async function runCfbForwardEvidenceWriter(args: {
     const providerOpening = slate.openingOddsByGame[plan.game.providerGameId] ?? null;
     const operationalOpening = providerOpening
       ? { provenance: "provider_opening" as const, capturedAt: providerOpening.observedAt, quote: providerOpening }
-      : priorOpening.get(plan.game.providerGameId) ?? (current ? { provenance: "first_observed" as const, capturedAt: args.now, quote: current } : null);
+      : priorOpening.get(plan.game.providerGameId) ?? (current ? { provenance: "first_observed" as const, capturedAt: current.observedAt, quote: current } : null);
     const awayQuarterbacks = requiredQuarterbacks(quarterbackContext, plan.game.away.id, plan.game.away.abbreviation, args.now);
     const homeQuarterbacks = requiredQuarterbacks(quarterbackContext, plan.game.home.id, plan.game.home.abbreviation, args.now);
     const playbookLineRow = lines.find((row) => matchCfbPlaybookRow(plan.game, row));
@@ -131,9 +131,17 @@ export async function runCfbForwardEvidenceWriter(args: {
       : sharpApiSplits.length > 0
         ? "matched" as const
         : "event_not_published" as const;
+    const capturedAt = latestCfbPayloadTimestamp({
+      runStartedAt: args.now,
+      books: [...currentBooks, ...displayBooks],
+      sharpApiSplits,
+    });
+    const effectiveT60LagMinutes = plan.stage === "t60" && plan.cutoffAt
+      ? Math.max(0, (Date.parse(capturedAt) - Date.parse(plan.cutoffAt)) / 60_000)
+      : plan.t60LagMinutes;
     const weeklyForecast = getCfbV1ForecastForGame({ game: plan.game, completedGames: priorResults.games });
     const healthHolds = [
-      ...(plan.stage === "t60" && (plan.t60LagMinutes ?? Infinity) > CFB_T60_MAX_CAPTURE_LAG_MINUTES ? ["t60_capture_late"] : []),
+      ...(plan.stage === "t60" && (effectiveT60LagMinutes ?? Infinity) > CFB_T60_MAX_CAPTURE_LAG_MINUTES ? ["t60_capture_late"] : []),
       ...(plan.stage === "t60" && awayQuarterbacks.expectedStartingQuarterback === null ? ["away_quarterback_roster_unavailable"] : []),
       ...(plan.stage === "t60" && homeQuarterbacks.expectedStartingQuarterback === null ? ["home_quarterback_roster_unavailable"] : []),
       ...(weeklyForecast.featureHealth.awayProfile === "neutral_imputation" ? ["away_model_team_profile_unavailable"] : []),
@@ -146,8 +154,8 @@ export async function runCfbForwardEvidenceWriter(args: {
       gameStartsAt: plan.game.scheduledStart,
       comparableCurrentBooks: currentBooks,
       stage: plan.stage === "t60" && healthHolds.length === 0 ? "t60_locked" : "unlocked",
-      evaluatedAt: args.now,
-      lockedAt: plan.stage === "t60" && healthHolds.length === 0 ? args.now : null,
+      evaluatedAt: capturedAt,
+      lockedAt: plan.stage === "t60" && healthHolds.length === 0 ? capturedAt : null,
       healthHolds,
       forecast: weeklyForecast.forecast,
       contextLines: {
@@ -200,9 +208,9 @@ export async function runCfbForwardEvidenceWriter(args: {
       slateGameCount: games.length,
       stage: plan.stage,
       captureTiming: plan.captureTiming,
-      capturedAt: args.now,
+      capturedAt,
       cutoffAt: plan.cutoffAt,
-      t60LagMinutes: plan.t60LagMinutes,
+      t60LagMinutes: effectiveT60LagMinutes,
       game: plan.game,
       market: {
         current,
@@ -276,6 +284,23 @@ export async function runCfbForwardEvidenceWriter(args: {
     publicationAttempted: true,
     ...tracking,
   };
+}
+
+export function latestCfbPayloadTimestamp(args: {
+  runStartedAt: string;
+  books: Array<{ observedAt: string }>;
+  sharpApiSplits: Array<{ capturedAt: string }>;
+}): string {
+  const timestamps = [
+    args.runStartedAt,
+    ...args.books.map((book) => book.observedAt),
+    ...args.sharpApiSplits.map((split) => split.capturedAt),
+  ].map((value) => {
+    const parsed = Date.parse(value);
+    if (!Number.isFinite(parsed)) throw new Error(`CFB payload timestamp is invalid: ${value}.`);
+    return parsed;
+  });
+  return new Date(Math.max(...timestamps)).toISOString();
 }
 
 export function selectCfbModelCoveredWeeklyGames(args: {

@@ -93,34 +93,35 @@ const scoreMismatch = auditFootballCrossMarketCoherence({
 assert.equal(scoreMismatch.fatalIssues.some((row) => row.code === "forecast_winner_score_disagreement"), true);
 assert.equal(scoreMismatch.fatalIssues.some((row) => row.code === "forecast_expected_score_identity"), true);
 
-const nearTossupHomeWinProbability = 0.49448767833981844;
-const nearTossupExpectedMargin = 0.1757457846952022;
-const nearTossupTieMass = 2 * (3 * nearTossupHomeWinProbability - 1 - nearTossupExpectedMargin);
-const nearTossupHomeWinMass = nearTossupHomeWinProbability - 0.5 * nearTossupTieMass;
-const nearTossupAwayWinMass = 1 - nearTossupHomeWinMass - nearTossupTieMass;
-const nearTossup = auditFootballCrossMarketCoherence({
+const directionCrossHomeWinProbability = 0.49448767833981844;
+const directionCrossExpectedMargin = 0.1757457846952022;
+const directionCrossTieMass = 2 * (3 * directionCrossHomeWinProbability - 1 - directionCrossExpectedMargin);
+const directionCrossHomeWinMass = directionCrossHomeWinProbability - 0.5 * directionCrossTieMass;
+const directionCrossAwayWinMass = 1 - directionCrossHomeWinMass - directionCrossTieMass;
+const directionCross = auditFootballCrossMarketCoherence({
   sport: "cfb",
   providerGameId: "458220",
   awayTeam: "AWY",
   homeTeam: "HME",
   forecast: {
-    expectedAwayPoints: 20 + nearTossupAwayWinMass,
-    expectedHomePoints: 20 + 2 * nearTossupHomeWinMass,
+    expectedAwayPoints: 20 + directionCrossAwayWinMass,
+    expectedHomePoints: 20 + 2 * directionCrossHomeWinMass,
     representativeScore: { away: 21, home: 20 },
-    awayWinProbability: 1 - nearTossupHomeWinProbability,
-    homeWinProbability: nearTossupHomeWinProbability,
+    awayWinProbability: 1 - directionCrossHomeWinProbability,
+    homeWinProbability: directionCrossHomeWinProbability,
     pmf: [
-      { away: 20, home: 22, probability: nearTossupHomeWinMass },
-      { away: 20, home: 20, probability: nearTossupTieMass },
-      { away: 21, home: 20, probability: nearTossupAwayWinMass },
+      { away: 20, home: 22, probability: directionCrossHomeWinMass },
+      { away: 20, home: 20, probability: directionCrossTieMass },
+      { away: 21, home: 20, probability: directionCrossAwayWinMass },
     ],
   },
   decisions: [],
   allowWholeGameOperationalHold: true,
 });
-assert.equal(nearTossup.passed, true, "a PMF-verified sub-half-point/sub-one-percentage-point toss-up cannot block the entire slate");
+assert.equal(directionCross.passed, false, "football never accepts a score/winner direction cross, even near an even game");
+assert.equal(directionCross.fatalIssues.some((row) => row.code === "forecast_winner_score_disagreement"), true);
 
-const unverifiedNearTossup = auditFootballCrossMarketCoherence({
+const unverifiedDirectionCross = auditFootballCrossMarketCoherence({
   sport: "cfb",
   providerGameId: "unverified-near-tossup",
   awayTeam: "AWY",
@@ -135,7 +136,7 @@ const unverifiedNearTossup = auditFootballCrossMarketCoherence({
   decisions: [],
   allowWholeGameOperationalHold: true,
 });
-assert.equal(unverifiedNearTossup.fatalIssues.some((row) => row.code === "forecast_winner_score_disagreement"), true, "the toss-up exception requires a checkable distribution identity");
+assert.equal(unverifiedDirectionCross.fatalIssues.some((row) => row.code === "forecast_winner_score_disagreement"), true, "an unverified direction cross remains fatal");
 
 const badAction = auditFootballCrossMarketCoherence({
   sport: "nfl",

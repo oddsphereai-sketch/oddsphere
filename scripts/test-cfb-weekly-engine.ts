@@ -10,7 +10,7 @@ import {
   type CfbForwardStoredEvidence,
   type CfbForwardTeamQuarterbacks,
 } from "../lib/services/football/cfbForwardEvidence";
-import { CFB_FORWARD_MAX_QB_TEAMS_PER_RUN, selectCfbModelCoveredWeeklyGames, selectQuarterbackTeams } from "../lib/services/football/cfbForwardEvidenceWriter";
+import { CFB_FORWARD_MAX_QB_TEAMS_PER_RUN, latestCfbPayloadTimestamp, selectCfbModelCoveredWeeklyGames, selectQuarterbackTeams } from "../lib/services/football/cfbForwardEvidenceWriter";
 import { buildCfbMemberFixture } from "../lib/services/football/cfbMemberFixture";
 import {
   buildCfbV1DecisionBundle,
@@ -23,6 +23,11 @@ import { activeCfbWeeklyWindow, eligibleCfbWeeklyGames } from "../lib/services/f
 import type { NcaafGame, NcaafTeam } from "../lib/services/football/balldontlieNcaafSlate";
 
 const openingWindow = activeCfbWeeklyWindow("2026-08-25T16:00:00.000Z");
+assert.equal(latestCfbPayloadTimestamp({
+  runStartedAt: "2026-08-28T20:09:48.647Z",
+  books: [{ observedAt: "2026-08-28T20:10:09.511Z" }],
+  sharpApiSplits: [{ capturedAt: "2026-08-28T20:09:55.000Z" }],
+}), "2026-08-28T20:10:09.511Z", "the immutable capture/evaluation time must include provider observations received after run start");
 assert.deepEqual(
   { start: openingWindow.boardStartDate, end: openingWindow.boardEndDate, queryEnd: openingWindow.providerQueryEndDate },
   { start: "2026-08-27", end: "2026-08-31", queryEnd: "2026-09-01" },

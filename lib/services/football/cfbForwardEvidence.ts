@@ -11,6 +11,8 @@ import {
 } from "./cfbV1Decision";
 
 export const CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE =
+  "cfb_forward_evidence_snapshot_2026_08_28_r8_directional_pmf" as const;
+export const CFB_FORWARD_PRE_DIRECTIONAL_EVIDENCE_SCHEMA_RELEASE =
   "cfb_forward_evidence_snapshot_2026_08_28_r7_display_quote_coverage" as const;
 export const CFB_FORWARD_DATA_QUALITY_EVIDENCE_SCHEMA_RELEASE =
   "cfb_forward_evidence_snapshot_2026_08_28_r6_market_scoped_data_quality" as const;
@@ -27,7 +29,7 @@ export const CFB_FORWARD_INITIAL_EVIDENCE_SCHEMA_RELEASE =
 export const CFB_FORWARD_EVIDENCE_COLLECTOR_RELEASE =
   "cfb_forward_evidence_collector_2026_08_28_r14_expanded_sharp_budget" as const;
 export const CFB_FORWARD_MEMBER_RELEASE =
-  "cfb_v1_member_release_2026_08_28_r14_expanded_sharp_budget" as const;
+  "cfb_v1_member_release_2026_08_28_r15_directional_pmf" as const;
 
 export type CfbForwardEvidenceStage = "opening" | "unlocked" | "t60";
 
@@ -255,6 +257,24 @@ export function hashCfbForwardEvidencePayload(payload: CfbForwardEvidencePayload
   return createHash("sha256").update(stableJson(payload)).digest("hex");
 }
 
+/**
+ * The r7 writer hashed optional object properties with an `undefined` value as
+ * JSON `null`, while Postgres JSONB correctly omitted those properties. Keep a
+ * narrowly release-scoped verifier so the immutable r7 transition wave remains
+ * readable; r8 hashes the exact JSON-serializable shape.
+ */
+export function matchesCfbForwardEvidencePayloadHash(
+  payload: CfbForwardEvidencePayload,
+  expected: string,
+): boolean {
+  if (hashCfbForwardEvidencePayload(payload) === expected) return true;
+  if (String(payload.schemaRelease) !== CFB_FORWARD_PRE_DIRECTIONAL_EVIDENCE_SCHEMA_RELEASE) return false;
+  const legacyPayload = Object.hasOwn(payload, "outcomeMarketOutlooks")
+    ? payload
+    : { ...payload, outcomeMarketOutlooks: undefined };
+  return createHash("sha256").update(legacyStableJson(legacyPayload)).digest("hex") === expected;
+}
+
 export function buildCfbForwardMarketOutlooks(args: {
   forecast: CfbV1Forecast;
   playbookLine: CfbForwardPlaybookLine | null;
@@ -326,7 +346,13 @@ function groupByGame(rows: CfbForwardStoredEvidence[]): Map<string, CfbForwardSt
 
 function stableJson(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(stableJson).join(",")}]`;
-  if (value !== null && typeof value === "object") return `{${Object.entries(value as Record<string, unknown>).sort(([a], [b]) => a.localeCompare(b)).map(([key, item]) => `${JSON.stringify(key)}:${stableJson(item)}`).join(",")}}`;
+  if (value !== null && typeof value === "object") return `{${Object.entries(value as Record<string, unknown>).filter(([, item]) => item !== undefined).sort(([a], [b]) => a.localeCompare(b)).map(([key, item]) => `${JSON.stringify(key)}:${stableJson(item)}`).join(",")}}`;
+  return JSON.stringify(value) ?? "null";
+}
+
+function legacyStableJson(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(legacyStableJson).join(",")}]`;
+  if (value !== null && typeof value === "object") return `{${Object.entries(value as Record<string, unknown>).sort(([a], [b]) => a.localeCompare(b)).map(([key, item]) => `${JSON.stringify(key)}:${legacyStableJson(item)}`).join(",")}}`;
   return JSON.stringify(value) ?? "null";
 }
 

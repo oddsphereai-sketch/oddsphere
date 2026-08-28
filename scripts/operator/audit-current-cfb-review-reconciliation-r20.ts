@@ -13,8 +13,9 @@ import {
   type CfbForwardStoredEvidence,
 } from "../../lib/services/football/cfbForwardEvidence";
 import { activeCfbWeeklyWindow, isGameInCfbWeeklyWindow } from "../../lib/services/football/cfbWeeklyWindow";
-import { buildCfbV1DecisionBundle, getCfbV1Forecast, type CfbV1ExactPriceDecision } from "../../lib/services/football/cfbV1Decision";
+import { buildCfbV1DecisionBundle, getCfbV1ForecastForGame, type CfbV1ExactPriceDecision } from "../../lib/services/football/cfbV1Decision";
 import { auditFootballCrossMarketCoherence } from "../../lib/services/football/footballCrossMarketCoherence";
+import { latestCfbPayloadTimestamp } from "../../lib/services/football/cfbForwardEvidenceWriter";
 
 loadEnvConfig(process.cwd());
 
@@ -38,6 +39,12 @@ async function main(): Promise<void> {
   const candidateFixtureRows: CfbForwardStoredEvidence[] = [];
   const games = [...latest.values()].sort((first, second) => first.gameStartAt.localeCompare(second.gameStartAt)).map((row) => {
     const payload = row.payload;
+    const candidateForecast = getCfbV1ForecastForGame({ game: payload.game }).forecast;
+    const candidateCapturedAt = latestCfbPayloadTimestamp({
+      runStartedAt: payload.capturedAt,
+      books: [...payload.market.currentBooks, ...(payload.market.displayBooks ?? [])],
+      sharpApiSplits: payload.market.sharpApiSplits ?? [],
+    });
     const candidate = buildCfbV1DecisionBundle({
       providerGameId: payload.game.providerGameId,
       awayTeam: payload.game.away.abbreviation,
@@ -45,10 +52,10 @@ async function main(): Promise<void> {
       gameStartsAt: payload.game.scheduledStart,
       comparableCurrentBooks: payload.market.currentBooks,
       stage: payload.stage === "t60" && payload.coverage.healthHolds.length === 0 ? "t60_locked" : "unlocked",
-      evaluatedAt: payload.capturedAt,
-      lockedAt: payload.stage === "t60" && payload.coverage.healthHolds.length === 0 ? payload.capturedAt : null,
+      evaluatedAt: candidateCapturedAt,
+      lockedAt: payload.stage === "t60" && payload.coverage.healthHolds.length === 0 ? candidateCapturedAt : null,
       healthHolds: payload.coverage.healthHolds,
-      forecast: { ...payload.decisions.forecast, pmf: getCfbV1Forecast(payload.game.providerGameId).pmf },
+      forecast: candidateForecast,
       contextLines: {
         homeSpread: payload.market.playbookLine?.homeSpread ?? null,
         totalLine: payload.market.playbookLine?.total ?? null,
@@ -58,13 +65,15 @@ async function main(): Promise<void> {
     const current = new Map(candidate.evaluatedBets.map((decision) => [decision.market, decision]));
     const markets = ["moneyline", "spread", "total"] as const;
     const comparisons = markets.map((market) => compareDecision(market, previous.get(market), current.get(market)));
-    const primary = payload.outcomeForecast ?? payload.decisions.forecast;
+    const primary = payload.outcomeForecast ?? candidate.forecast;
     const { pmf: _pmf, ...publishedForecast } = candidate.forecast;
     void _pmf;
     candidateFixtureRows.push({
       ...row,
+      capturedAt: candidateCapturedAt,
       payload: {
         ...payload,
+        capturedAt: candidateCapturedAt,
         schemaRelease: CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE,
         collectorRelease: CFB_FORWARD_EVIDENCE_COLLECTOR_RELEASE,
         memberRelease: CFB_FORWARD_MEMBER_RELEASE,
@@ -92,6 +101,10 @@ async function main(): Promise<void> {
     });
     return {
       game: `${payload.game.away.abbreviation}@${payload.game.home.abbreviation}`,
+      providerGameId: payload.game.providerGameId,
+      forecastBefore: payload.decisions.forecast,
+      forecastAfter: candidate.forecast,
+      sharpSplitMatched: (payload.market.sharpApiSplits?.length ?? 0) > 0,
       comparisons,
       previousHeld: payload.decisions.heldMarkets,
       candidateHeld: candidate.heldMarkets,
@@ -120,10 +133,31 @@ async function main(): Promise<void> {
     candidateExactPriceDecisions: candidateDecisions.length,
     previousGradeCounts: gradeCounts(previousDecisions.map((row) => row.previous!)),
     candidateGradeCounts: gradeCounts(candidateDecisions.map((row) => row.candidate!)),
+    candidateUnavailableMarkets: comparisons.length - candidateDecisions.length,
     tupleChanges: tupleChanges.length,
     promotions: promotions.length,
     demotions: demotions.length,
     coherencePassedGames: games.filter((game) => game.coherence.passed).length,
+    coherenceFailures: games.filter((game) => !game.coherence.passed).map((game) => ({ game: game.game, issues: game.coherence.fatalIssues })),
+    scoreDispersion: forecastDispersion(games.map((game) => game.forecastAfter)),
+    sharpSplitMatchedGames: games.filter((game) => game.sharpSplitMatched).length,
+    directionalCorrections: games.filter((game) => game.forecastAfter.directionalAlignment).map((game) => ({
+      providerGameId: game.providerGameId,
+      game: game.game,
+      before: {
+        expectedAwayPoints: game.forecastBefore.expectedAwayPoints,
+        expectedHomePoints: game.forecastBefore.expectedHomePoints,
+        homeWinProbability: game.forecastBefore.homeWinProbability,
+        representativeScore: game.forecastBefore.representativeScore,
+      },
+      after: {
+        expectedAwayPoints: game.forecastAfter.expectedAwayPoints,
+        expectedHomePoints: game.forecastAfter.expectedHomePoints,
+        homeWinProbability: game.forecastAfter.homeWinProbability,
+        representativeScore: game.forecastAfter.representativeScore,
+        alignment: game.forecastAfter.directionalAlignment,
+      },
+    })),
     memberExplanationChecks: {
       hawaiiPredictionFollowsPrimaryPmf: hawaii?.markets.moneyline.marketPrediction?.label === "STAN" &&
         Math.abs((hawaii.markets.moneyline.marketPrediction.probability ?? 0) - 0.605) < 0.001,
@@ -182,6 +216,19 @@ function gradeCounts(decisions: Array<{ grade: string }>): Record<string, number
 
 function gradeRank(grade: string | undefined): number {
   return grade === "Best Angle" ? 4 : grade === "Lean" ? 3 : grade === "Watchlist" ? 2 : grade === "No Play" ? 1 : 0;
+}
+
+function forecastDispersion(forecasts: Array<{ expectedAwayPoints: number; expectedHomePoints: number }>) {
+  const teamScores = forecasts.flatMap((forecast) => [forecast.expectedAwayPoints, forecast.expectedHomePoints]);
+  const margins = forecasts.map((forecast) => forecast.expectedHomePoints - forecast.expectedAwayPoints);
+  const totals = forecasts.map((forecast) => forecast.expectedHomePoints + forecast.expectedAwayPoints);
+  return { teamScores: stats(teamScores), margins: stats(margins), totals: stats(totals) };
+}
+
+function stats(values: number[]) {
+  const average = values.reduce((sum, value) => sum + value, 0) / values.length;
+  const standardDeviation = Math.sqrt(values.reduce((sum, value) => sum + (value - average) ** 2, 0) / values.length);
+  return { minimum: Math.min(...values), maximum: Math.max(...values), average, standardDeviation };
 }
 
 main().catch((error) => {

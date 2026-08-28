@@ -54,7 +54,7 @@ import {
 } from "./nflForwardMemberSnapshotStore";
 
 export const NFL_FORWARD_WRITER_RELEASE =
-  "nfl_forward_evidence_writer_2026_08_28_r13_distribution_tossup" as const;
+  "nfl_forward_evidence_writer_2026_08_28_r14_strict_directional_pmf" as const;
 
 export type NflForwardWriterResult = {
   writerRelease: typeof NFL_FORWARD_WRITER_RELEASE;
