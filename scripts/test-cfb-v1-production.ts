@@ -284,6 +284,23 @@ for (const memberMarket of Object.values(member.snapshot.games[0]!.markets)) {
   assert.equal(memberMarket.keyStats.some((row) => row.label === "Outcome-model input · Frozen sample"), true);
 }
 
+const eventPaginationPreviousPayloadRecord = structuredClone(payload) as unknown as Record<string, unknown>;
+eventPaginationPreviousPayloadRecord.memberRelease = "cfb_v1_member_release_2026_08_28_r18_event_discovery_pagination";
+const eventPaginationPreviousDecisions = eventPaginationPreviousPayloadRecord.decisions as Record<string, unknown>;
+eventPaginationPreviousDecisions.decisionRelease = "cfb_v1_daily_edge_decision_2026_08_28_r14_event_discovery_pagination";
+eventPaginationPreviousDecisions.evaluatedBets = (eventPaginationPreviousDecisions.evaluatedBets as Array<Record<string, unknown>>).map((decision) => ({
+  ...decision,
+  decisionRelease: "cfb_v1_daily_edge_decision_2026_08_28_r14_event_discovery_pagination",
+}));
+const eventPaginationPreviousPayload = eventPaginationPreviousPayloadRecord as unknown as CfbForwardEvidencePayload;
+const eventPaginationPreviousMember = buildCfbMemberFixture([{
+  ...evidence,
+  id: "event-pagination-previous-row",
+  payloadSha256: hashCfbForwardEvidencePayload(eventPaginationPreviousPayload),
+  payload: eventPaginationPreviousPayload,
+}]);
+assert.equal(eventPaginationPreviousMember.snapshot.games.length, 1, "the complete r31 wave remains the first atomic fallback during r32 rollout");
+
 const independentPublicPreviousPayloadRecord = structuredClone(payload) as unknown as Record<string, unknown>;
 independentPublicPreviousPayloadRecord.schemaRelease = CFB_FORWARD_CANONICAL_DISCOVERY_PREVIOUS_EVIDENCE_SCHEMA_RELEASE;
 independentPublicPreviousPayloadRecord.memberRelease = "cfb_v1_member_release_2026_08_28_r17_independent_public_prediction";
@@ -834,10 +851,13 @@ assert.throws(
 const openingPlan = planCfbForwardEvidenceCaptures({ games: [game], existing: [], capturedAt: "2026-08-25T16:00:00.000Z", unlockedCadenceMinutes: 360 });
 assert.deepEqual(openingPlan.map((row) => row.stage), ["opening"]);
 assert.equal(determineCfbForwardCollectionNeed({ existing: [], now: observedAt }).reason, "opening_seed");
+const farFutureHourlyNeed = determineCfbForwardCollectionNeed({ existing: [evidenceAt("opening", "2026-08-25T16:00:00.000Z")], now: "2026-08-25T17:00:00.000Z" });
+assert.deepEqual(farFutureHourlyNeed, { collect: true, reason: "unlocked_refresh_due", cadenceMinutes: 60 }, "every upcoming CFB game refreshes hourly even when kickoff is more than 48 hours away");
 const lateT60 = planCfbForwardEvidenceCaptures({ games: [game], existing: [evidenceAt("opening", "2026-08-25T16:00:00.000Z")], capturedAt: "2026-08-29T15:21:00.000Z", unlockedCadenceMinutes: 60 });
 assert.equal(lateT60[0]?.stage, "t60");
 assert.equal(lateT60[0]?.t60LagMinutes, 21);
 assert.ok((lateT60[0]?.t60LagMinutes ?? 0) > CFB_T60_MAX_CAPTURE_LAG_MINUTES);
+assert.deepEqual(determineCfbForwardCollectionNeed({ existing: [evidenceAt("opening", "2026-08-29T14:00:00.000Z")], now: "2026-08-29T15:00:00.000Z" }), { collect: true, reason: "t60_due", cadenceMinutes: null }, "T-60 is an event-triggered lock, not a 15-minute collection cadence");
 
 const playbookLine = normalizeCfbPlaybookLine({ lineSourceTier: "tier1", lines: { spread: { home: -7.5, away: 7.5 }, total: 47.5, moneyline: { home: -330, away: 260 } } }, observedAt);
 assert.deepEqual(playbookLine && { home: playbookLine.homeSpread, away: playbookLine.awaySpread, total: playbookLine.total }, { home: -7.5, away: 7.5, total: 47.5 });

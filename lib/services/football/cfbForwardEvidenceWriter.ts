@@ -37,7 +37,7 @@ import { buildMarketScopedFootballTrackingPlan } from "./footballMarketScopedTra
 import { assertFootballCrossMarketCoherence } from "./footballCrossMarketCoherence";
 
 export const CFB_FORWARD_WRITER_RELEASE =
-  "cfb_forward_evidence_writer_2026_08_28_r21_event_discovery_pagination" as const;
+  "cfb_forward_evidence_writer_2026_08_28_r22_ambiguous_event_scope" as const;
 export const CFB_FORWARD_MAX_QB_TEAMS_PER_RUN = 24 as const;
 export const CFB_FORWARD_RESULTS_BATCH_SIZE = 100 as const;
 export const CFB_FORWARD_MAX_PRIOR_GAME_IDS = 1200 as const;
@@ -245,6 +245,7 @@ export async function runCfbForwardEvidenceWriter(args: {
         weather: false,
         healthHolds,
         availabilityWarnings: [
+          ...(sharpFallback.eventDiscoveryStatusByGame[plan.game.providerGameId] === "ambiguous" ? ["sharpapi_canonical_event_ambiguous"] : []),
           "quarterback_starter_projected_not_confirmed",
           "injury_feed_unavailable",
           "venue_weather_unavailable",
