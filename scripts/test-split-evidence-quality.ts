@@ -1,4 +1,5 @@
 import {
+  shouldPersistSplitMirrorObservation,
   verifiedHundredSplitPct,
   verifiedSourceAwareSplitPctHundred,
   verifiedUnitSplitPct,
@@ -23,6 +24,21 @@ check("source-aware fraction converts for display", verifiedSourceAwareSplitPctH
 check("legacy source-aware hundred value remains compatible", verifiedSourceAwareSplitPctHundred(67) === 67);
 check("source-aware endpoint stays unavailable", verifiedSourceAwareSplitPctHundred(1) === null);
 check("malformed values stay unavailable", verifiedHundredSplitPct(Number.NaN) === null);
+check("MLB empty matched mirror cells persist to clear old endpoints", shouldPersistSplitMirrorObservation({
+  sport: "mlb",
+  bettingPct: null,
+  moneyPct: null,
+}));
+check("non-MLB empty mirror cells retain sparse-row behavior", !shouldPersistSplitMirrorObservation({
+  sport: "cfb",
+  bettingPct: null,
+  moneyPct: null,
+}));
+check("non-MLB partial evidence still persists", shouldPersistSplitMirrorObservation({
+  sport: "cfb",
+  bettingPct: 61,
+  moneyPct: null,
+}));
 
 if (failures.length > 0) process.exitCode = 1;
 else console.log("\nSplit evidence quality tests passed.");

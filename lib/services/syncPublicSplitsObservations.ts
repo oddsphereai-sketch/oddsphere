@@ -21,7 +21,10 @@
  */
 
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { verifiedHundredSplitPct } from "./splitEvidenceQuality";
+import {
+  shouldPersistSplitMirrorObservation,
+  verifiedHundredSplitPct,
+} from "./splitEvidenceQuality";
 import { PlaybookClient } from "../providers/playbook/playbookClient";
 import type { PlaybookSplitGame } from "../providers/playbook/types";
 import { normalizeMlbTeamName } from "../providers/real_api/_teamNameNormalizer";
@@ -204,7 +207,7 @@ export async function syncPublicSplitsObservations(opts: {
       const rawMoney = r.public_money_pct as number | null;
       const bet = sport === "mlb" ? verifiedHundredSplitPct(rawBet) : rawBet;
       const money = sport === "mlb" ? verifiedHundredSplitPct(rawMoney) : rawMoney;
-      if (bet === null && money === null) continue;
+      if (!shouldPersistSplitMirrorObservation({ sport, bettingPct: bet, moneyPct: money })) continue;
       rows.push({
         provider: "sharpapi", sport, game_id: r.game_id as number,
         market_type: r.market_type as Market, side: r.side as Side,
@@ -234,7 +237,7 @@ export async function syncPublicSplitsObservations(opts: {
           const c = pbCells(pb, market, side);
           const bet = sport === "mlb" ? verifiedHundredSplitPct(c.bet) : c.bet;
           const money = sport === "mlb" ? verifiedHundredSplitPct(c.money) : c.money;
-          if (bet === null && money === null) continue;
+          if (!shouldPersistSplitMirrorObservation({ sport, bettingPct: bet, moneyPct: money })) continue;
           rows.push({ provider: "playbook", sport, game_id: gid, market_type: market, side, public_betting_pct: bet, public_money_pct: money, books_used: c.books, observed_at: observedAt });
           res.playbookRows++;
         }

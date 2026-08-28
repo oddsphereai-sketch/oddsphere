@@ -142,9 +142,9 @@ changed; only deterministic settlement of existing locked rows is affected.
 - Projection runtime: resolved automodel `v2_2`
 - First-inning runtime: `fi_v2` with the versioned unpublished-probable availability head below
 - Public calibration: `mlb_public_calibration_v27_strong_winner_resistance_lean_2026_08_22`
-- Decision release: `mlb_daily_edge_decision_2026_08_28_r71_verified_split_evidence`
-- Rule bundle: `mlb_daily_edge_rule_bundle_v59_verified_split_evidence_2026_08_28`
-- Grade policy: `mlb_public_grade_policy_v49_verified_split_evidence_2026_08_28`
+- Decision release: `mlb_daily_edge_decision_2026_08_28_r72_persisted_split_clear`
+- Rule bundle: `mlb_daily_edge_rule_bundle_v60_persisted_split_clear_2026_08_28`
+- Grade policy: `mlb_public_grade_policy_v50_persisted_split_clear_2026_08_28`
 - Correction policy: `mlb_prediction_corrections_v22_coherent_near_edge_watchlist_2026_08_26`
 - Tracking contract: `member_facing_lock_v8_priority_retry_minute_cadence_2026_08_11`
 - Machine registry: `lib/automodel/mlbModelLayerVersions.ts`
@@ -229,6 +229,18 @@ observations but are excluded by the existing consensus main-total and 0.5-run
 first-inning selectors. Evidence and rollback are recorded in
 `docs/model-audits/2026-08-28-mlb-verified-split-evidence-r71.md`. Rollback is
 r70/v58/v48 with correction policy v22 and member presentation r8.
+
+The August 28 MLB r72 persisted-mirror cleanup retains every r71 decision,
+grade, price, reader, lock, and tracking rule. The first normal r71 cycle
+proved that new canonical split rows were sanitized, but a provider-separated
+mirror skipped a matched observation when both verified fields became null;
+that left 16 older endpoint rows persisted. r72 makes MLB's normal upsert write
+that explicit null/null cell so older unsupported values are cleared. Other
+sports keep their sparse empty-row behavior. No provider request, percentage,
+projection, probability, side, quote, grade, stake, or immutable record is
+created or changed. Evidence and rollback are recorded in
+`docs/model-audits/2026-08-28-mlb-persisted-split-clear-r72.md`. Rollback is
+r71/v59/v49 while retaining the r71 member endpoint guard.
 
 The August 26 r70 tier-ladder release adds one strictly nonactionable
 Moneyline monitoring rung. A complete, unchanged-side tuple that fails action

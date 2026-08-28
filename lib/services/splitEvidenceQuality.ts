@@ -28,3 +28,16 @@ export function verifiedSourceAwareSplitPctHundred(value: number | null | undefi
   if (value > 1 && value < 100) return Math.round(value);
   return null;
 }
+
+/**
+ * MLB must persist an explicitly empty matched mirror cell so its normal
+ * upsert clears unsupported endpoint values left by an older release. Other
+ * sports retain the existing sparse-row behavior.
+ */
+export function shouldPersistSplitMirrorObservation(args: {
+  sport: string;
+  bettingPct: number | null;
+  moneyPct: number | null;
+}): boolean {
+  return args.sport === "mlb" || args.bettingPct !== null || args.moneyPct !== null;
+}
