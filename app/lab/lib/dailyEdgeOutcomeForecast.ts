@@ -30,6 +30,39 @@ export function dailyEdgeMarketPredictionProvenanceLabel(market: MarketEdgeDto):
   return null;
 }
 
+/**
+ * Probability for model-prediction surfaces. Exact-price Bet Grade panels use
+ * `market.modelProb`; prediction cards must use the released model prediction
+ * probability when one is present so opposing model and value sides are never
+ * combined into one apparent forecast.
+ */
+export function dailyEdgeMarketPredictionProbability(market: MarketEdgeDto): number | null {
+  const probability = market.marketPrediction?.status === "available"
+    ? market.marketPrediction.probability
+    : null;
+  return probability !== null && probability !== undefined && Number.isFinite(probability)
+    ? probability
+    : market.modelProb;
+}
+
+/** Exact selection attached to the evaluated sportsbook tuple and Bet Grade. */
+export function dailyEdgeExactPriceSelectionLabel(input: {
+  market: MarketEdgeDto;
+  marketKey: MarketKey;
+}): string | null {
+  const pick = input.market.pick?.trim() ?? "";
+  if (!pick) return null;
+  if (
+    input.marketKey === "total" &&
+    input.market.line !== null &&
+    Number.isFinite(input.market.line) &&
+    !/\d/.test(pick)
+  ) {
+    return `${pick} ${compactNumber(input.market.line)}`;
+  }
+  return pick;
+}
+
 function compactNumber(value: number): string {
   return Number.isInteger(value) ? value.toFixed(0) : value.toFixed(1);
 }
