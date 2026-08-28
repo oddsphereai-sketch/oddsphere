@@ -26,6 +26,12 @@ const game: NcaafGame = {
 const expectedEventId = "ncaaf_sanjosestatespartans_usctrojans_2026-08-29_b2";
 assert.equal(sharpEventIdCandidates(game)[0], expectedEventId, "bounded discovery must try the empirically verified main named-book bucket first");
 assert.equal(sharpEventIdCandidates(game).some((eventId) => eventId.includes("usctrojans_sanjosestatespartans")), false, "schedule-derived Sharp identities must retain the documented away-home order");
+const easternEveningGame = { ...game, providerGameId: "457612-evening", scheduledStart: "2026-08-29T01:30:00.000Z" };
+assert.equal(
+  sharpEventIdCandidates(easternEveningGame)[0],
+  "ncaaf_sanjosestatespartans_usctrojans_2026-08-28_b2",
+  "an evening kickoff crossing UTC midnight must try the Eastern football date before the UTC date",
+);
 
 void main();
 
@@ -68,6 +74,23 @@ assert.equal(books.find((book) => book.sportsbook === "betmgm")?.total?.line, 60
 assert.equal(books.find((book) => book.sportsbook === "betmgm")?.marketSelection?.spread, "main_line");
 assert.equal(books.some((book) => book.total?.line === 59.5), false, "alternate totals cannot enter the exact-price tuple");
 assert.equal(cfbBooksNeedSharpFallback(books), true, "the missing two-sided Moneyline remains a genuine per-market deficiency");
+
+const expandedSlate = Array.from({ length: 14 }, (_, index): NcaafGame => ({
+  ...easternEveningGame,
+  providerGameId: `expanded-slate-${index + 1}`,
+}));
+const expandedSlateResult = await fetchSharpApiNcaafOddsFallback({
+  games: expandedSlate,
+  client: {
+    async fetch<T>(): Promise<SharpApiResponse<T>> {
+      return { data: [] as T, pagination: { limit: 200, offset: 0, count: 0, has_more: false } };
+    },
+  },
+});
+assert.equal(expandedSlateResult.requests, 112, "four buckets across two strict dates for fourteen unmatched games must complete within the expanded hard cap");
+assert.equal(expandedSlateResult.matchedGames, 0, "a larger request budget cannot manufacture missing exact-event evidence");
+assert.equal(expandedSlateResult.attemptedGames, 14);
+assert.equal(CFB_SHARP_FALLBACK_MAX_REQUESTS, 192, "the expanded ceiling remains explicit and bounded");
 const underdogHome = normalizeSharpRows({
   game,
   eventId: expectedEventId,
