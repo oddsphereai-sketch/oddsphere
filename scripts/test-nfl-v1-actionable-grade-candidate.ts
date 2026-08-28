@@ -13,12 +13,12 @@ import {
   applyNflV1LogitCorrection,
   getNflV1ActionableGradeCorrection,
   nflV1ActionableGradeArtifactMetadata,
-  NFL_V1_SPREAD_HEAD_RELEASE,
   NFL_V1_TOTAL_HEAD_RELEASE,
 } from "../lib/services/football/nflV1ActionableGradeCorrections";
 import {
   buildNflV1ActionableGradeBundle,
   NFL_V1_ACTIONABLE_GRADE_DECISION_RELEASE,
+  NFL_V1_EVENT_CONTAINED_SPREAD_MODEL_RELEASE,
 } from "../lib/services/football/nflV1ActionableGradeCandidate";
 import {
   getNflV1WeekOneOutcomeForecast,
@@ -77,7 +77,7 @@ const spread = candidate.evaluatedBets.find((decision) => decision.market === "s
 const total = candidate.evaluatedBets.find((decision) => decision.market === "total")!;
 assert.equal(moneyline.grade, "Best Angle");
 assert.equal(moneyline.side, "SEA");
-assert.equal(spread.modelRelease, NFL_V1_SPREAD_HEAD_RELEASE);
+assert.equal(spread.modelRelease, NFL_V1_EVENT_CONTAINED_SPREAD_MODEL_RELEASE);
 assert.equal(spread.grade, "No Play");
 assert.equal(total.modelRelease, NFL_V1_TOTAL_HEAD_RELEASE);
 assert.equal(total.grade, "Lean");

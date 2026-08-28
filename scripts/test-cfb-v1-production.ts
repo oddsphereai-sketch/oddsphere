@@ -727,10 +727,13 @@ const writerSource = readFileSync(path.join(process.cwd(), "lib/services/footbal
 const quarterbackCollectionIndex = writerSource.indexOf("fetchBalldontlieNcaafQuarterbacks");
 const sharpFallbackIndex = writerSource.indexOf("fetchSharpApiNcaafOddsFallback");
 const sharpSplitsIndex = writerSource.indexOf("fetchCfbSharpApiSplits({ games, apiKey");
+const coherenceIndex = writerSource.indexOf("assertFootballCrossMarketCoherence({");
 const evidenceAppendIndex = writerSource.lastIndexOf("appendCfbForwardEvidence(");
 assert.ok(quarterbackCollectionIndex >= 0 && evidenceAppendIndex > quarterbackCollectionIndex, "the writer must finish bounded QB collection before its sole evidence append");
 assert.ok(sharpFallbackIndex >= 0 && evidenceAppendIndex > sharpFallbackIndex, "the writer must finish bounded SharpAPI exact-event fallback before its sole evidence append");
 assert.ok(sharpSplitsIndex >= 0 && evidenceAppendIndex > sharpSplitsIndex, "the sole writer must finish its one league-level strict split read before the all-game append");
+assert.ok(coherenceIndex >= 0 && evidenceAppendIndex > coherenceIndex, "the sole CFB writer must pass coherence before its append boundary");
+assert.equal((writerSource.match(/assertFootballCrossMarketCoherence\(\{/g) ?? []).length, 1, "the CFB writer must use one shared per-payload coherence gate");
 assert.equal((writerSource.match(/fetchCfbSharpApiSplits\(\{ games, apiKey/g) ?? []).length, 1, "SharpAPI splits must remain one bounded slate request rather than a per-game loop");
 assert.match(writerSource, /buildCfbMarketInformedOutcomeForecast/, "the sole writer must persist the r18 primary outcome axis");
 assert.equal((writerSource.match(/appendCfbForwardEvidence\(/g) ?? []).length, 1, "the writer must keep one all-payload append and never insert partial game evidence inside the collection loop");

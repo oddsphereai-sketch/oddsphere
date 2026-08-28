@@ -33,9 +33,10 @@ import {
 } from "./cfbSharpApiOdds";
 import { fetchCfbSharpApiSplits } from "./cfbSharpApiSplits";
 import { buildMarketScopedFootballTrackingPlan } from "./footballMarketScopedTracking";
+import { assertFootballCrossMarketCoherence } from "./footballCrossMarketCoherence";
 
 export const CFB_FORWARD_WRITER_RELEASE =
-  "cfb_forward_evidence_writer_2026_08_28_r9_two_axis_outcome_sharp_splits" as const;
+  "cfb_forward_evidence_writer_2026_08_28_r10_cross_market_coherence" as const;
 export const CFB_FORWARD_MAX_QB_TEAMS_PER_RUN = 24 as const;
 export const CFB_FORWARD_RESULTS_BATCH_SIZE = 100 as const;
 export const CFB_FORWARD_MAX_PRIOR_GAME_IDS = 1200 as const;
@@ -168,6 +169,23 @@ export async function runCfbForwardEvidenceWriter(args: {
     const outcomeMarketOutlooks = marketInformedForecast
       ? buildCfbForwardMarketOutlooks({ forecast: marketInformedForecast, playbookLine })
       : undefined;
+    const coherenceForecast = marketInformedForecast ?? weeklyForecast.forecast;
+    assertFootballCrossMarketCoherence({
+      sport: "cfb",
+      providerGameId: plan.game.providerGameId,
+      awayTeam: plan.game.away.abbreviation,
+      homeTeam: plan.game.home.abbreviation,
+      forecast: {
+        expectedAwayPoints: coherenceForecast.expectedAwayPoints,
+        expectedHomePoints: coherenceForecast.expectedHomePoints,
+        representativeScore: coherenceForecast.representativeScore,
+        awayWinProbability: 1 - coherenceForecast.homeWinProbability,
+        homeWinProbability: coherenceForecast.homeWinProbability,
+        pmf: coherenceForecast.pmf,
+      },
+      decisions: decisions.evaluatedBets,
+      unavailableMarkets: decisions.heldMarkets.map((market) => market.market),
+    });
     const targetExcludedConsensusReady = decisions.evaluatedBets.length === 3;
     return {
       schemaRelease: CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE,

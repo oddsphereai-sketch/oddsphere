@@ -11,6 +11,7 @@ import {
   buildCfbMarketInformedOutcomeForecast,
   resolveCfbCanonicalMarketAnchor,
 } from "../../lib/services/football/cfbMarketInformedOutcome";
+import { auditFootballCrossMarketCoherence } from "../../lib/services/football/footballCrossMarketCoherence";
 
 const GRADES: CfbV1Grade[] = ["Best Angle", "Lean", "Watchlist", "No Play"];
 
@@ -62,6 +63,25 @@ async function main(): Promise<void> {
           totalLine: payload.market.playbookLine?.total ?? null,
         },
       });
+      const coherence = auditFootballCrossMarketCoherence({
+        sport: "cfb",
+        providerGameId: payload.game.providerGameId,
+        awayTeam: payload.game.away.abbreviation,
+        homeTeam: payload.game.home.abbreviation,
+        forecast: {
+          expectedAwayPoints: primary.expectedAwayPoints,
+          expectedHomePoints: primary.expectedHomePoints,
+          representativeScore: primary.representativeScore,
+          awayWinProbability: 1 - primary.homeWinProbability,
+          homeWinProbability: primary.homeWinProbability,
+          pmf: primary.pmf,
+        },
+        decisions: decisionBundle.evaluatedBets,
+        unavailableMarkets: decisionBundle.heldMarkets.map((market) => market.market),
+      });
+      if (!coherence.passed) {
+        throw new Error(`${payload.game.away.abbreviation}@${payload.game.home.abbreviation} failed shared coherence: ${JSON.stringify(coherence.fatalIssues)}`);
+      }
       return {
         providerGameId: payload.game.providerGameId,
         matchup: `${payload.game.away.abbreviation}@${payload.game.home.abbreviation}`,
@@ -69,6 +89,7 @@ async function main(): Promise<void> {
         anchor,
         independent: summaryForecast(independent),
         primaryMarketInformed: summaryForecast(primary),
+        coherence,
         decisions: decisionBundle.evaluatedBets.map((decision) => ({
           market: decision.market,
           side: decision.side,
@@ -98,6 +119,8 @@ async function main(): Promise<void> {
     markets: games.length * 3,
     exactPriceDecisions: decisions.length,
     unavailableMarkets: games.length * 3 - decisions.length,
+    coherencePassedGames: games.filter((game) => game.coherence.passed).length,
+    gradeDivergenceExplanations: games.flatMap((game) => game.coherence.explanations).length,
     gradeCounts: Object.fromEntries(GRADES.map((grade) => [grade, decisions.filter((decision) => decision.grade === grade).length])),
     actionablePromotions: 0,
     actionableDemotions: 0,

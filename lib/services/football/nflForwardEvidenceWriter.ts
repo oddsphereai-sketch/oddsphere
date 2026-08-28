@@ -34,11 +34,13 @@ import {
 } from "./sharpApiNflSplits";
 import { NFL_T60_MAX_CAPTURE_LAG_MINUTES } from "./nflRegularDecisionEvidence";
 import { buildNflR6ShadowMoneylineDecision } from "./nflR6MoneylineShadow";
+import { assertFootballCrossMarketCoherence } from "./footballCrossMarketCoherence";
 import {
   buildNflV1ActionableGradeBundle,
   NFL_V1_ACTIONABLE_GRADE_DECISION_RELEASE,
   NFL_V1_ACTIONABLE_GRADE_MEMBER_RELEASE,
 } from "./nflV1ActionableGradeCandidate";
+import { getNflV1WeekOneOutcomeForecast } from "./nflV1WeekOneOutcome";
 import { nflForwardT60TrackingEligibility } from "./nflTrackingLifecycle";
 import {
   buildNflOfficialTrackingRecords,
@@ -52,7 +54,7 @@ import {
 } from "./nflForwardMemberSnapshotStore";
 
 export const NFL_FORWARD_WRITER_RELEASE =
-  "nfl_forward_evidence_writer_2026_08_27_r10_compact_member_snapshot" as const;
+  "nfl_forward_evidence_writer_2026_08_28_r11_cross_market_coherence" as const;
 
 export type NflForwardWriterResult = {
   writerRelease: typeof NFL_FORWARD_WRITER_RELEASE;
@@ -285,6 +287,31 @@ export async function runNflForwardEvidenceWriter(args: {
       current,
       comparableCurrentBooks,
       shadowMoneyline,
+    });
+    const outcome = getNflV1WeekOneOutcomeForecast({
+      providerGameId: plan.game.providerGameId,
+      awayTeam: plan.game.away.abbreviation,
+      homeTeam: plan.game.home.abbreviation,
+    });
+    assertFootballCrossMarketCoherence({
+      sport: "nfl",
+      providerGameId: plan.game.providerGameId,
+      awayTeam: plan.game.away.abbreviation,
+      homeTeam: plan.game.home.abbreviation,
+      forecast: {
+        expectedAwayPoints: outcome.expectedAwayScore,
+        expectedHomePoints: outcome.expectedHomeScore,
+        representativeScore: {
+          away: outcome.representativeAwayScore,
+          home: outcome.representativeHomeScore,
+        },
+        awayWinProbability: outcome.awayWinProbability,
+        homeWinProbability: outcome.homeWinProbability,
+        marginDistribution: outcome.marginDistribution,
+        totalDistribution: outcome.totalDistribution,
+      },
+      decisions: production.evaluatedBets,
+      allowWholeGameOperationalHold: holds.length > 0 && production.evaluatedBets.length === 0,
     });
     const trackingEligibility = nflForwardT60TrackingEligibility({
       stage: plan.stage,
