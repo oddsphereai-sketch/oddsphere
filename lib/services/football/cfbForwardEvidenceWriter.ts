@@ -37,7 +37,7 @@ import { buildMarketScopedFootballTrackingPlan } from "./footballMarketScopedTra
 import { assertFootballCrossMarketCoherence } from "./footballCrossMarketCoherence";
 
 export const CFB_FORWARD_WRITER_RELEASE =
-  "cfb_forward_evidence_writer_2026_08_28_r22_ambiguous_event_scope" as const;
+  "cfb_forward_evidence_writer_2026_08_28_r23_release_refresh_priority" as const;
 export const CFB_FORWARD_MAX_QB_TEAMS_PER_RUN = 24 as const;
 export const CFB_FORWARD_RESULTS_BATCH_SIZE = 100 as const;
 export const CFB_FORWARD_MAX_PRIOR_GAME_IDS = 1200 as const;
@@ -79,7 +79,7 @@ export async function runCfbForwardEvidenceWriter(args: {
   const allExisting = await readCfbForwardEvidence({ client: args.client, season: args.season });
   const existing = allExisting.filter((row) => isGameInCfbWeeklyWindow({ scheduledStart: row.gameStartAt }, window));
   const ordinaryNeed = determineCfbForwardCollectionNeed({ existing, now: args.now });
-  const need = ordinaryNeed.collect ? ordinaryNeed : releaseRefreshNeed(existing, args.now) ?? ordinaryNeed;
+  const need = releaseRefreshNeed(existing, args.now) ?? ordinaryNeed;
   if (!need.collect) {
     const tracking = await writeOfficialTracking({ client: args.client, payloads: currentT60Payloads(existing), apply: args.apply });
     return emptyResult(need.reason, tracking);
