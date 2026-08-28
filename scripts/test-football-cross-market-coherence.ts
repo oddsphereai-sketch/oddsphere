@@ -93,6 +93,50 @@ const scoreMismatch = auditFootballCrossMarketCoherence({
 assert.equal(scoreMismatch.fatalIssues.some((row) => row.code === "forecast_winner_score_disagreement"), true);
 assert.equal(scoreMismatch.fatalIssues.some((row) => row.code === "forecast_expected_score_identity"), true);
 
+const nearTossupHomeWinProbability = 0.49448767833981844;
+const nearTossupExpectedMargin = 0.1757457846952022;
+const nearTossupTieMass = 2 * (3 * nearTossupHomeWinProbability - 1 - nearTossupExpectedMargin);
+const nearTossupHomeWinMass = nearTossupHomeWinProbability - 0.5 * nearTossupTieMass;
+const nearTossupAwayWinMass = 1 - nearTossupHomeWinMass - nearTossupTieMass;
+const nearTossup = auditFootballCrossMarketCoherence({
+  sport: "cfb",
+  providerGameId: "458220",
+  awayTeam: "AWY",
+  homeTeam: "HME",
+  forecast: {
+    expectedAwayPoints: 20 + nearTossupAwayWinMass,
+    expectedHomePoints: 20 + 2 * nearTossupHomeWinMass,
+    representativeScore: { away: 21, home: 20 },
+    awayWinProbability: 1 - nearTossupHomeWinProbability,
+    homeWinProbability: nearTossupHomeWinProbability,
+    pmf: [
+      { away: 20, home: 22, probability: nearTossupHomeWinMass },
+      { away: 20, home: 20, probability: nearTossupTieMass },
+      { away: 21, home: 20, probability: nearTossupAwayWinMass },
+    ],
+  },
+  decisions: [],
+  allowWholeGameOperationalHold: true,
+});
+assert.equal(nearTossup.passed, true, "a PMF-verified sub-half-point/sub-one-percentage-point toss-up cannot block the entire slate");
+
+const unverifiedNearTossup = auditFootballCrossMarketCoherence({
+  sport: "cfb",
+  providerGameId: "unverified-near-tossup",
+  awayTeam: "AWY",
+  homeTeam: "HME",
+  forecast: {
+    expectedAwayPoints: 20,
+    expectedHomePoints: 20.2,
+    representativeScore: { away: 21, home: 20 },
+    awayWinProbability: 0.505,
+    homeWinProbability: 0.495,
+  },
+  decisions: [],
+  allowWholeGameOperationalHold: true,
+});
+assert.equal(unverifiedNearTossup.fatalIssues.some((row) => row.code === "forecast_winner_score_disagreement"), true, "the toss-up exception requires a checkable distribution identity");
+
 const badAction = auditFootballCrossMarketCoherence({
   sport: "nfl",
   providerGameId: "bad-action",
