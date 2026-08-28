@@ -2,9 +2,9 @@ import { SharpApiClient, type SharpApiRequestOptions, type SharpApiResponse } fr
 import type { NcaafBookOdds, NcaafGame } from "./balldontlieNcaafSlate";
 
 export const CFB_SHARP_API_ODDS_RELEASE =
-  "cfb_sharpapi_named_book_fallback_2026_08_28_r6_provider_page_stride" as const;
+  "cfb_sharpapi_named_book_fallback_2026_08_28_r7_expanded_slate_budget" as const;
 export const CFB_SHARP_FALLBACK_MAX_GAMES = 96 as const;
-export const CFB_SHARP_FALLBACK_MAX_REQUESTS = 96 as const;
+export const CFB_SHARP_FALLBACK_MAX_REQUESTS = 192 as const;
 export const CFB_SHARP_FALLBACK_MAX_ROWS_PER_EVENT = 200 as const;
 export const CFB_SHARP_FALLBACK_MAX_PAGES_PER_EVENT = 4 as const;
 
@@ -241,7 +241,7 @@ export function preferredCfbTargetBook(books: NcaafBookOdds[]): NcaafBookOdds | 
 }
 
 export function sharpEventIdCandidates(game: NcaafGame): string[] {
-  const dates = [...new Set([game.scheduledStart.slice(0, 10), easternDate(game.scheduledStart)])];
+  const dates = [...new Set([easternDate(game.scheduledStart), game.scheduledStart.slice(0, 10)])];
   const away = teamSlug(game.away.name);
   const home = teamSlug(game.home.name);
   if (!away || !home) throw new Error(`CFB SharpAPI event candidate requires non-empty team slugs for game ${game.providerGameId}.`);
