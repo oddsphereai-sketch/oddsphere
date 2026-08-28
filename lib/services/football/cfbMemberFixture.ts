@@ -32,7 +32,8 @@ import { activeCfbWeeklyWindow, isGameInCfbWeeklyWindow } from "./cfbWeeklyWindo
 import { cfbFootballEvidenceStats } from "./footballMemberEvidence";
 
 export const CFB_MEMBER_FIXTURE_RELEASE =
-  "cfb_v1_member_fixture_2026_08_28_r12_representative_market_quotes" as const;
+  "cfb_v1_member_fixture_2026_08_28_r13_bounded_context_quote_capture" as const;
+export const CFB_CONTEXT_ONLY_QUOTE_CAPTURE_SKEW_MS = 5_000 as const;
 const CFB_MARKET_CONTEXT_MAX_CAPTURE_LAG_MINUTES = 10;
 const CFB_DATA_QUALITY_MEMBER_RELEASE = "cfb_v1_member_release_2026_08_28_r8_market_scoped_data_quality" as const;
 const CFB_DATA_QUALITY_DECISION_RELEASE = "cfb_v1_daily_edge_decision_2026_08_28_r11_market_scoped_data_quality" as const;
@@ -534,7 +535,12 @@ function currentDisplayQuote(
       const quote = displayQuote ? { price: displayQuote.price, line: displayQuote.line } : null;
       const observedAt = displayQuote?.observedAt ?? book.marketObservedAt?.[market] ?? book.observedAt;
       const observed = Date.parse(observedAt);
-      if (!quote || !Number.isFinite(observed) || observed > capturedAt || observed >= startsAt) return [];
+      if (
+        !quote ||
+        !Number.isFinite(observed) ||
+        observed > capturedAt + CFB_CONTEXT_ONLY_QUOTE_CAPTURE_SKEW_MS ||
+        observed >= startsAt
+      ) return [];
       return [{ book, quote, observedAt, paired: displayQuote?.paired ?? false }];
     });
   return representativeDisplayQuotes(payload, market, side, candidates)

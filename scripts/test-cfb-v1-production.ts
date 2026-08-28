@@ -488,6 +488,40 @@ assert.equal(oneSidedMoneylineMember.currentPriceAmerican, null, "an opposing on
 assert.equal(oneSidedMoneylineMember.marketSource, "sportzino", "a target-book outlier cannot outrank a corroborated representative sportsbook quote");
 assert.equal(oneSidedMoneylineMember.opposingOddsTrail?.stops.at(-1)?.american, 2000, "the non-outlier opposing sportsbook quote must remain visible");
 assert.match(oneSidedMoneylineMember.displayReason ?? "", /verified one-sided .*\+2000 at sportzino/i);
+const contextQuoteSkewedAt = new Date(Date.parse(observedAt) + 2_000).toISOString();
+const contextQuoteTooLateAt = new Date(Date.parse(observedAt) + 6_000).toISOString();
+const skewedContextPayload = (quoteObservedAt: string): CfbForwardEvidencePayload => ({
+  ...oneSidedMoneylinePayload,
+  market: {
+    ...oneSidedMoneylinePayload.market,
+    displayBooks: oneSidedMoneylinePayload.market.displayBooks!.map((book) => ({
+      ...book,
+      observedAt: quoteObservedAt,
+      marketQuotes: book.marketQuotes?.map((quote) => ({ ...quote, observedAt: quoteObservedAt })),
+    })),
+  },
+});
+const boundedSkewContextMember = buildCfbMemberFixture([{
+  ...evidence,
+  id: "bounded-skew-context-row",
+  stage: "unlocked",
+  capturedAt: observedAt,
+  payloadSha256: hashCfbForwardEvidencePayload(skewedContextPayload(contextQuoteSkewedAt)),
+  payload: skewedContextPayload(contextQuoteSkewedAt),
+}]).snapshot.games[0]!.markets.moneyline;
+assert.equal(boundedSkewContextMember.marketSource, "sportzino", "a same-response one-sided quote within five seconds of run start remains visible as context");
+assert.equal(boundedSkewContextMember.opposingOddsTrail?.stops.at(-1)?.american, 2000);
+assert.equal(boundedSkewContextMember.currentPriceAmerican, null, "bounded timestamp tolerance cannot turn opposing context into a bet price");
+const lateContextMember = buildCfbMemberFixture([{
+  ...evidence,
+  id: "late-context-row",
+  stage: "unlocked",
+  capturedAt: observedAt,
+  payloadSha256: hashCfbForwardEvidencePayload(skewedContextPayload(contextQuoteTooLateAt)),
+  payload: skewedContextPayload(contextQuoteTooLateAt),
+}]).snapshot.games[0]!.markets.moneyline;
+assert.equal(lateContextMember.marketSource, null, "a one-sided quote more than five seconds after run start still fails closed");
+assert.equal(lateContextMember.opposingOddsTrail?.stops.length, 0);
 const outlierSpreadMember = buildCfbMemberFixture([{
   ...evidence,
   id: "outlier-spread-row",

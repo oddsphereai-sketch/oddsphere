@@ -14,6 +14,7 @@ Signed-in production QA after the r18/r20 football release found that the shared
 - The Quick Read exact-price panel uses `pick`, the evaluated book/line/price, `modelProb`, fair probability, edge, EV, and Bet Grade.
 - When the two qualified heads select different sides, the reader names both sides explicitly.
 - A missing exact tuple retains the model prediction and presents a reasoned public No Play; it never presents Held as the prediction.
+- A one-sided provider quote stamped within five seconds after writer run start may be shown only as opposing sportsbook context from that bounded response. It cannot populate the selected price, fair probability, EV, grade, or tracking tuple; rows outside that bound still fail closed.
 
 ## Model impact
 
