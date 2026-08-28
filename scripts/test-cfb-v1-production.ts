@@ -851,8 +851,10 @@ assert.throws(
 const openingPlan = planCfbForwardEvidenceCaptures({ games: [game], existing: [], capturedAt: "2026-08-25T16:00:00.000Z", unlockedCadenceMinutes: 360 });
 assert.deepEqual(openingPlan.map((row) => row.stage), ["opening"]);
 assert.equal(determineCfbForwardCollectionNeed({ existing: [], now: observedAt }).reason, "opening_seed");
-const farFutureHourlyNeed = determineCfbForwardCollectionNeed({ existing: [evidenceAt("opening", "2026-08-25T16:00:00.000Z")], now: "2026-08-25T17:00:00.000Z" });
-assert.deepEqual(farFutureHourlyNeed, { collect: true, reason: "unlocked_refresh_due", cadenceMinutes: 60 }, "every upcoming CFB game refreshes hourly even when kickoff is more than 48 hours away");
+const farFutureNeed = determineCfbForwardCollectionNeed({ existing: [evidenceAt("opening", "2026-08-25T16:00:00.000Z")], now: "2026-08-25T17:00:00.000Z" });
+assert.deepEqual(farFutureNeed, { collect: false, reason: "cadence_not_due", cadenceMinutes: 360 }, "distant CFB games retain the six-hour refresh cadence");
+const within24HourlyNeed = determineCfbForwardCollectionNeed({ existing: [evidenceAt("opening", "2026-08-28T19:00:00.000Z")], now: "2026-08-28T20:00:00.000Z" });
+assert.deepEqual(within24HourlyNeed, { collect: true, reason: "unlocked_refresh_due", cadenceMinutes: 60 }, "CFB refreshes hourly once kickoff is within 24 hours");
 const lateT60 = planCfbForwardEvidenceCaptures({ games: [game], existing: [evidenceAt("opening", "2026-08-25T16:00:00.000Z")], capturedAt: "2026-08-29T15:21:00.000Z", unlockedCadenceMinutes: 60 });
 assert.equal(lateT60[0]?.stage, "t60");
 assert.equal(lateT60[0]?.t60LagMinutes, 21);

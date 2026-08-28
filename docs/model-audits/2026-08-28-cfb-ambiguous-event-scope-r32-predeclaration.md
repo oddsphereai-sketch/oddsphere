@@ -12,7 +12,7 @@ The first untouched natural cycle after r31 reached the deeper SharpAPI event pa
 - Return a structured `ambiguous` discovery status to the sole writer and stamp `sharpapi_canonical_event_ambiguous` in that game's availability warnings.
 - Continue processing every unambiguous game and preserve the one all-game append after every forecast/coherence check passes.
 - Preserve the 8-page per-date and 192-request all-run caps, repeated/non-advancing page guards, hourly active-slate collection cadence, T-60 capture, sole `prediction_pipeline:cfb` lease, and strict split matching.
-- Apply the owner's collection contract uniformly to every upcoming game: one unlocked refresh per hour regardless of distance from kickoff, plus the event-triggered T-60 capture. The scheduled 15-minute heartbeat may notice T-60 eligibility but is not a provider/write cadence.
+- Apply the owner's collection contract: six-hour unlocked refreshes while a game is more than 24 hours away, hourly refreshes inside 24 hours, plus the event-triggered T-60 capture/lock. The scheduled 15-minute heartbeat may notice T-60 eligibility but is not a provider/write cadence.
 
 Provider/decision/tuple/collector/member/writer/fixture releases advance to r10/r15/r9/r17/r19/r22/r23 respectively. PMF, calibration, thresholds, grade policy, public outcome contract, stakes, and tracking rules are unchanged. The complete r29 member wave remains the atomic fallback until one complete r32 wave exists.
 

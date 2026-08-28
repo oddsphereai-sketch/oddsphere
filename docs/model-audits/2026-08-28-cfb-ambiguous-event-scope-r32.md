@@ -9,7 +9,7 @@ The untouched 2026-08-28 18:24 ET writer reached SharpAPI's deeper canonical-eve
 - Multiple exact canonical IDs for one scheduled game are now a market-evidence availability state for that game. Neither ID is queried for odds, no ID/line/price/EV is synthesized, and the writer records `sharpapi_canonical_event_ambiguous`.
 - Every other uniquely matched game continues through real named-book collection and the sole all-game append.
 - Reuse of one canonical event ID across different scheduled games, malformed pagination, repeated/non-advancing pages, and request-cap exhaustion remain fatal.
-- Upcoming games refresh once per hour at every horizon. T-60 is a separate event-triggered capture/lock; the 15-minute schedule is only a no-op eligibility heartbeat between due captures.
+- Distant games refresh every six hours, games inside 24 hours refresh hourly, and T-60 is a separate event-triggered capture/lock. The 15-minute schedule is only a no-op eligibility heartbeat between due captures.
 - The football-only PMF, public predictions, calibration, thresholds, grade policy, tracking boundaries, and reader presentation are unchanged.
 
 ## Release impact

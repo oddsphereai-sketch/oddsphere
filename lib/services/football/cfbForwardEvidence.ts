@@ -248,7 +248,8 @@ export function determineCfbForwardCollectionNeed(args: {
     if (now < cutoff) upcoming.push(startsAt);
   }
   if (upcoming.length === 0) return { collect: false, reason: "no_unlocked_games_due", cadenceMinutes: null };
-  const cadenceMinutes = 60;
+  const nextStart = Math.min(...upcoming);
+  const cadenceMinutes = nextStart - now <= 24 * 60 * 60_000 ? 60 : 360;
   const latest = Math.max(...args.existing.map((row) => timestamp(row.capturedAt, "stored capturedAt")));
   return now - latest >= cadenceMinutes * 60_000
     ? { collect: true, reason: "unlocked_refresh_due", cadenceMinutes }
