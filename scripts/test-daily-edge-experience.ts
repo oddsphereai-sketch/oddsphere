@@ -531,6 +531,11 @@ check(
     !candidateDailyEdgeSource.includes('{ key: "held", label: "Held" }') &&
     candidateDailyEdgeSource.includes('{ key: "no_play", label: "No Play" }'),
 );
+check(
+  "CFB member cadence copy matches six-hour distant, hourly inside 24 hours, and event-triggered T-60 behavior",
+  (candidateMemberPageSource.match(/six-hour distant evidence · hourly inside 24h · T-60 lock/g) ?? []).length === 2 &&
+    !candidateMemberPageSource.includes("CFB · Opening Week · evidence temporarily unavailable\",\n                previousHref: null,\n                nextHref: null,\n                displayGameCount: 0,\n                asOf: snapshot.as_of,\n                cadenceLabel: \"six-hour early evidence · hourly inside 48h · 15-minute T-60 checks"),
+);
 
 const countFixture = {
   as_of: "2026-08-26T15:00:00Z",
