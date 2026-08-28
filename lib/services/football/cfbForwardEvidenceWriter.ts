@@ -37,7 +37,7 @@ import { buildMarketScopedFootballTrackingPlan } from "./footballMarketScopedTra
 import { assertFootballCrossMarketCoherence } from "./footballCrossMarketCoherence";
 
 export const CFB_FORWARD_WRITER_RELEASE =
-  "cfb_forward_evidence_writer_2026_08_28_r18_directional_pmf" as const;
+  "cfb_forward_evidence_writer_2026_08_28_r19_canonical_event_discovery" as const;
 export const CFB_FORWARD_MAX_QB_TEAMS_PER_RUN = 24 as const;
 export const CFB_FORWARD_RESULTS_BATCH_SIZE = 100 as const;
 export const CFB_FORWARD_MAX_PRIOR_GAME_IDS = 1200 as const;

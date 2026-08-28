@@ -41,7 +41,7 @@ assert.equal(CFB_V1_SCORE_ARTIFACT_RELEASE, CFB_V1_WEEKLY_RUNTIME_RELEASE);
 assert.match(CFB_V1_MODEL_RELEASE, /directional_pmf$/);
 assert.match(CFB_V1_DISTRIBUTION_RELEASE, /directional_pmf$/);
 assert.match(CFB_V1_PROBABILITY_RELEASE, /directional_pmf$/);
-assert.match(CFB_V1_DECISION_RELEASE, /directional_pmf$/);
+assert.match(CFB_V1_DECISION_RELEASE, /canonical_price_coverage$/, "the decision release must version the new exact-price discovery boundary without changing the directional PMF releases");
 assert.deepEqual(featureHealth, {
   awayProfile: "matched",
   homeProfile: "matched",

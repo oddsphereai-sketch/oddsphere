@@ -414,9 +414,9 @@ const unavailableFootballSpreadLabel = dailyEdgeOutcomeForecastLabel({
   sport: "cfb",
 });
 check(
-  "football Spread keeps its model projection visible when no bettable line is available",
-  unavailableFootballSpreadLabel === "Projected margin ARI 0.9" &&
-    !isDailyEdgeOutcomeForecastHealthError(unavailableFootballSpreadLabel),
+  "football Spread with no current market line does not present projected margin as a line-specific prediction",
+  unavailableFootballSpreadLabel === DAILY_EDGE_SPREAD_UNAVAILABLE_LABEL &&
+    isDailyEdgeOutcomeForecastHealthError(unavailableFootballSpreadLabel),
 );
 const unavailableFootballTotalLabel = dailyEdgeOutcomeForecastLabel({
   game: { ...chcTotalForecastGame, sport: "cfb" },
@@ -425,9 +425,9 @@ const unavailableFootballTotalLabel = dailyEdgeOutcomeForecastLabel({
   sport: "cfb",
 });
 check(
-  "football Total keeps its model projection visible when no bettable line is available",
-  unavailableFootballTotalLabel === "Projected total 8.3" &&
-    !isDailyEdgeOutcomeForecastHealthError(unavailableFootballTotalLabel),
+  "football Total with no current market line does not present projected total as a line-specific prediction",
+  unavailableFootballTotalLabel === DAILY_EDGE_TOTAL_UNAVAILABLE_LABEL &&
+    isDailyEdgeOutcomeForecastHealthError(unavailableFootballTotalLabel),
 );
 check(
   "defensive Forecast unavailable copy is classified as a high health error",
@@ -1536,7 +1536,7 @@ check(
 check(
   "a context-only CFB line never promises missing sportsbook odds",
   DAILY_EDGE_MEMBER_PRESENTATION_RELEASE_ID ===
-    "daily_edge_member_presentation_2026_08_28_r14_fi_same_book_pulse" &&
+    "daily_edge_member_presentation_2026_08_28_r15_football_unavailable_prediction_copy" &&
     candidateSource.includes("Sportsbook odds unavailable") &&
     candidateSource.includes("Consensus line only") &&
     candidateSource.includes("No eligible named-book American price was captured") &&

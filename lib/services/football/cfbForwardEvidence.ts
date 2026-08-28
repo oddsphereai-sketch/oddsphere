@@ -11,6 +11,8 @@ import {
 } from "./cfbV1Decision";
 
 export const CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE =
+  "cfb_forward_evidence_snapshot_2026_08_28_r9_canonical_price_coverage" as const;
+export const CFB_FORWARD_PROVIDER_DISCOVERY_PREVIOUS_EVIDENCE_SCHEMA_RELEASE =
   "cfb_forward_evidence_snapshot_2026_08_28_r8_directional_pmf" as const;
 export const CFB_FORWARD_PRE_DIRECTIONAL_EVIDENCE_SCHEMA_RELEASE =
   "cfb_forward_evidence_snapshot_2026_08_28_r7_display_quote_coverage" as const;
@@ -27,9 +29,9 @@ export const CFB_FORWARD_LEGACY_EVIDENCE_SCHEMA_RELEASE =
 export const CFB_FORWARD_INITIAL_EVIDENCE_SCHEMA_RELEASE =
   "cfb_forward_evidence_snapshot_2026_08_25_r1" as const;
 export const CFB_FORWARD_EVIDENCE_COLLECTOR_RELEASE =
-  "cfb_forward_evidence_collector_2026_08_28_r14_expanded_sharp_budget" as const;
+  "cfb_forward_evidence_collector_2026_08_28_r15_canonical_event_discovery" as const;
 export const CFB_FORWARD_MEMBER_RELEASE =
-  "cfb_v1_member_release_2026_08_28_r15_directional_pmf" as const;
+  "cfb_v1_member_release_2026_08_28_r16_canonical_price_coverage" as const;
 
 export type CfbForwardEvidenceStage = "opening" | "unlocked" | "t60";
 

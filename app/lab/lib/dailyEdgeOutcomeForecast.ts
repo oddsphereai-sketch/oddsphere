@@ -90,6 +90,10 @@ export function dailyEdgeOutcomeForecastLabel(input: {
   if (market.marketPrediction?.status === "available" && market.marketPrediction.label) {
     return market.marketPrediction.label;
   }
+  if (market.marketPrediction?.status === "market_data_unavailable" && (sport === "nfl" || sport === "cfb")) {
+    if (marketKey === "total") return DAILY_EDGE_TOTAL_UNAVAILABLE_LABEL;
+    if (marketKey === "first_inning") return DAILY_EDGE_SPREAD_UNAVAILABLE_LABEL;
+  }
   if (market.pick) {
     if (marketKey === "total" && market.line !== null && !/\d/.test(market.pick)) {
       return `${market.pick} ${compactNumber(market.line)}`;

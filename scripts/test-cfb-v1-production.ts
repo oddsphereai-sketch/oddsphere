@@ -10,6 +10,7 @@ import {
   CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE,
   CFB_FORWARD_INITIAL_EVIDENCE_SCHEMA_RELEASE,
   CFB_FORWARD_LEGACY_EVIDENCE_SCHEMA_RELEASE,
+  CFB_FORWARD_PROVIDER_DISCOVERY_PREVIOUS_EVIDENCE_SCHEMA_RELEASE,
   CFB_FORWARD_PREVIOUS_EVIDENCE_SCHEMA_RELEASE,
   CFB_FORWARD_PRIOR_EVIDENCE_SCHEMA_RELEASE,
   CFB_FORWARD_TRANSITION_EVIDENCE_SCHEMA_RELEASE,
@@ -282,6 +283,24 @@ for (const memberMarket of Object.values(member.snapshot.games[0]!.markets)) {
   assert.equal(memberMarket.keyStats.some((row) => row.label === "Current context · Expected quarterback"), true);
   assert.equal(memberMarket.keyStats.some((row) => row.label === "Outcome-model input · Frozen sample"), true);
 }
+
+const providerDiscoveryPreviousPayloadRecord = structuredClone(payload) as unknown as Record<string, unknown>;
+providerDiscoveryPreviousPayloadRecord.schemaRelease = CFB_FORWARD_PROVIDER_DISCOVERY_PREVIOUS_EVIDENCE_SCHEMA_RELEASE;
+providerDiscoveryPreviousPayloadRecord.memberRelease = "cfb_v1_member_release_2026_08_28_r15_directional_pmf";
+const providerDiscoveryPreviousDecisions = providerDiscoveryPreviousPayloadRecord.decisions as Record<string, unknown>;
+providerDiscoveryPreviousDecisions.decisionRelease = "cfb_v1_daily_edge_decision_2026_08_28_r12_directional_pmf";
+providerDiscoveryPreviousDecisions.evaluatedBets = (providerDiscoveryPreviousDecisions.evaluatedBets as Array<Record<string, unknown>>).map((decision) => ({
+  ...decision,
+  decisionRelease: "cfb_v1_daily_edge_decision_2026_08_28_r12_directional_pmf",
+}));
+const providerDiscoveryPreviousPayload = providerDiscoveryPreviousPayloadRecord as unknown as CfbForwardEvidencePayload;
+const providerDiscoveryPreviousMember = buildCfbMemberFixture([{
+  ...evidence,
+  id: "provider-discovery-previous-row",
+  payloadSha256: hashCfbForwardEvidencePayload(providerDiscoveryPreviousPayload),
+  payload: providerDiscoveryPreviousPayload,
+}]);
+assert.equal(providerDiscoveryPreviousMember.snapshot.games.length, 1, "the complete r8 wave must remain the atomic member fallback until one complete r9 wave exists");
 
 const exactPricePayloadRecord = structuredClone(payload) as unknown as Record<string, unknown>;
 exactPricePayloadRecord.schemaRelease = CFB_FORWARD_PRIOR_EVIDENCE_SCHEMA_RELEASE;
@@ -618,8 +637,8 @@ assert.equal(missingSpreadMarket.marketPrediction?.status, "market_data_unavaila
 assert.equal(missingSpreadMarket.marketPrediction?.label, null);
 assert.equal(
   dailyEdgeOutcomeForecastLabel({ game: missingLineMember.snapshot.games[0]!, market: missingSpreadMarket, marketKey: "first_inning", sport: "cfb" }),
-  `Projected margin ${outcomeFull.expectedMarginHome >= 0 ? game.home.abbreviation : game.away.abbreviation} ${Math.abs(outcomeFull.representativeScore.home - outcomeFull.representativeScore.away).toFixed(0)}`,
-  "missing current Spread data must preserve the model-native projected margin without presenting it as a bettable line",
+  "Spread prediction unavailable",
+  "missing current Spread data must not present projected margin as a line-specific prediction",
 );
 
 const noTotalBooks = currentBooks.map((currentBook) => ({ ...currentBook, total: null }));
@@ -896,6 +915,7 @@ await assert.rejects(
 );
 
 const writerSource = readFileSync(path.join(process.cwd(), "lib/services/football/cfbForwardEvidenceWriter.ts"), "utf8");
+const sharpOddsSource = readFileSync(path.join(process.cwd(), "lib/services/football/cfbSharpApiOdds.ts"), "utf8");
 const quarterbackCollectionIndex = writerSource.indexOf("fetchBalldontlieNcaafQuarterbacks");
 const sharpFallbackIndex = writerSource.indexOf("fetchSharpApiNcaafOddsFallback");
 const sharpSplitsIndex = writerSource.indexOf("fetchCfbSharpApiSplits({ games, apiKey");
@@ -908,6 +928,10 @@ assert.ok(coherenceIndex >= 0 && evidenceAppendIndex > coherenceIndex, "the sole
 assert.equal((writerSource.match(/assertFootballCrossMarketCoherence\(\{/g) ?? []).length, 1, "the CFB writer must use one shared per-payload coherence gate");
 assert.equal((writerSource.match(/fetchCfbSharpApiSplits\(\{ games, apiKey/g) ?? []).length, 1, "SharpAPI splits must remain one bounded slate request rather than a per-game loop");
 assert.match(writerSource, /buildCfbMarketInformedOutcomeForecast/, "the sole writer must persist the r18 primary outcome axis");
+assert.match(sharpOddsSource, /path: "\/events"/, "CFB named-book recovery must discover SharpAPI's canonical events before requesting odds");
+assert.match(sharpOddsSource, /league: "ncaaf"/, "canonical event discovery must stay league-scoped");
+assert.match(sharpOddsSource, /path: "\/odds"[\s\S]*event_id: eventId[\s\S]*market: "main"/, "canonical event odds must stay exact-event and main-market scoped");
+assert.doesNotMatch(sharpOddsSource, /sharpEventIdCandidates|teamSlug\(/, "the writer path must not reconstruct or guess provider event bucket IDs");
 assert.equal((writerSource.match(/appendCfbForwardEvidence\(/g) ?? []).length, 1, "the writer must keep one all-payload append and never insert partial game evidence inside the collection loop");
 const evidenceStoreSource = readFileSync(path.join(process.cwd(), "lib/services/football/cfbForwardEvidenceStore.ts"), "utf8");
 assert.match(evidenceStoreSource, /CFB_FORWARD_PREVIOUS_EVIDENCE_SCHEMA_RELEASE/, "the reader must retain the complete r4 exact-price wave during the natural r5 transition");
