@@ -13,6 +13,7 @@ import {
   NFL_V1_ACTIONABLE_GRADE_POLICY_RELEASE,
 } from "../../lib/services/football/nflV1ActionableGradeCandidate";
 import { buildNflR6ShadowMoneylineDecision } from "../../lib/services/football/nflR6MoneylineShadow";
+import { buildNflWeekOneHeldMemberFixture } from "../../lib/services/football/nflWeekOneHeldMemberFixture";
 
 async function main() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -23,6 +24,7 @@ async function main() {
   const latest = latestRows(stored);
   if (latest.length !== 16) throw new Error(`Expected 16 Week 1 games; received ${latest.length}.`);
 
+  const candidateFixtureRows: NflForwardStoredEvidence[] = [];
   const rows = latest.flatMap((row) => {
     if (row.payload.schemaRelease !== NFL_FORWARD_EVIDENCE_SCHEMA_RELEASE) {
       throw new Error(`Latest NFL row ${row.id} is not the current evidence schema.`);
@@ -52,6 +54,16 @@ async function main() {
         candidate.evaluatedBets.length !== 3) {
       throw new Error(`NFL production bundle boundary failed for ${row.providerGameId}.`);
     }
+    candidateFixtureRows.push({
+      ...row,
+      payload: {
+        ...payload,
+        decisions: {
+          ...candidate,
+          shadowEvaluatedBets: shadow ? [shadow] : [],
+        },
+      },
+    });
     const baseline = new Map(payload.decisions.evaluatedBets.map((decision) => [decision.market, decision]));
     return candidate.evaluatedBets.map((decision) => {
       const previous = baseline.get(decision.market);
@@ -100,6 +112,25 @@ async function main() {
   ]));
   const promotions = rows.filter((row) => rank(row.grade) > rank(row.previousGrade));
   const demotions = rows.filter((row) => rank(row.grade) < rank(row.previousGrade));
+  const fixture = buildNflWeekOneHeldMemberFixture(candidateFixtureRows);
+  const primaryPredictionChecks = fixture.snapshot.games.map((game) => {
+    const predictedWinner = game.footballProjection!.homeWinProbability >= game.footballProjection!.awayWinProbability
+      ? game.homeTeam
+      : game.awayTeam;
+    return {
+      game: `${game.awayTeam}@${game.homeTeam}`,
+      scoreWinner: game.projected.home > game.projected.away ? game.homeTeam : game.awayTeam,
+      predictedWinner,
+      moneylinePrediction: game.markets.moneyline.marketPrediction?.label ?? null,
+    };
+  });
+  const predictionBetSelectionDifferences = fixture.snapshot.games.flatMap((game) => ([
+    ["moneyline", game.markets.moneyline] as const,
+    ["spread", game.markets.first_inning] as const,
+    ["total", game.markets.total] as const,
+  ]).flatMap(([market, value]) => value.marketPrediction?.label && value.marketPrediction.label !== value.pick
+    ? [{ game: `${game.awayTeam}@${game.homeTeam}`, market, prediction: value.marketPrediction.label, evaluatedBetSide: value.pick, grade: value.verdict.label }]
+    : []));
   console.log(JSON.stringify({
     readOnly: true,
     productionRelease: true,
@@ -121,6 +152,12 @@ async function main() {
     fairProbabilityChanges: rows.filter((row) => row.marketFairProbabilityChanged).length,
     expectedValueChanges: rows.filter((row) => row.expectedValueChanged).length,
     quoteChanges: rows.filter((row) => row.quoteChanged).length,
+    primaryPredictionCoherenceGames: primaryPredictionChecks.filter((row) =>
+      row.scoreWinner === row.predictedWinner && row.predictedWinner === row.moneylinePrediction).length,
+    predictionMarkets: fixture.snapshot.games.reduce((sum, game) => sum +
+      [game.markets.moneyline, game.markets.first_inning, game.markets.total]
+        .filter((market) => market.marketPrediction?.status === "available").length, 0),
+    predictionBetSelectionDifferences,
     changedRows: [...promotions, ...demotions],
     tupleChangedRows: rows.filter((row) => row.sideChanged || row.probabilityChanged ||
       row.marketFairProbabilityChanged || row.expectedValueChanged || row.quoteChanged),

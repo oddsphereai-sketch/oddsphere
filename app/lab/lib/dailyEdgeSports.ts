@@ -42,6 +42,10 @@ export const ACTIVE_DAILY_EDGE_TOP_LEVEL_SPORT_KEYS: Sport[] = DAILY_EDGE_SPORTS
   .filter((definition) => definition.key !== "ucl" && definition.memberAvailable && definition.inSeason)
   .map((definition) => definition.key);
 
+export const ACTIVE_DAILY_EDGE_TOP_LEVEL_SPORT_LABELS: string[] = DAILY_EDGE_SPORTS
+  .filter((definition) => definition.key !== "ucl" && definition.memberAvailable && definition.inSeason)
+  .map((definition) => definition.label);
+
 export const AVAILABLE_DAILY_EDGE_SPORTS: Sport[] = DAILY_EDGE_SPORTS
   .filter((definition) => definition.memberAvailable)
   .map((definition) => definition.key);

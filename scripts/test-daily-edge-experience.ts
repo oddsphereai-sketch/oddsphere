@@ -306,8 +306,8 @@ const crossSportForecastCases = [
   { sport: "mlb", marketKey: "moneyline", expected: "ARI projected leader" },
   { sport: "wnba", marketKey: "first_inning", expected: "Projected margin ARI 0.9" },
   { sport: "nfl", marketKey: "total", expected: "Projected total 8.3" },
-  { sport: "nfl", marketKey: "first_inning", expected: DAILY_EDGE_SPREAD_UNAVAILABLE_LABEL },
-  { sport: "cfb", marketKey: "first_inning", expected: DAILY_EDGE_SPREAD_UNAVAILABLE_LABEL },
+  { sport: "nfl", marketKey: "first_inning", expected: "Projected margin ARI 0.9" },
+  { sport: "cfb", marketKey: "first_inning", expected: "Projected margin ARI 0.9" },
   { sport: "soccer", marketKey: "total", expected: "Projected total 8.3" },
   { sport: "nba", marketKey: "moneyline", expected: "ARI projected leader" },
   { sport: "nhl", marketKey: "moneyline", expected: "ARI projected leader" },
@@ -368,9 +368,9 @@ const unavailableFootballSpreadLabel = dailyEdgeOutcomeForecastLabel({
   sport: "cfb",
 });
 check(
-  "football Spread never substitutes projected margin when its current line is unavailable",
-  unavailableFootballSpreadLabel === DAILY_EDGE_SPREAD_UNAVAILABLE_LABEL &&
-    isDailyEdgeOutcomeForecastHealthError(unavailableFootballSpreadLabel),
+  "football Spread keeps its model projection visible when no bettable line is available",
+  unavailableFootballSpreadLabel === "Projected margin ARI 0.9" &&
+    !isDailyEdgeOutcomeForecastHealthError(unavailableFootballSpreadLabel),
 );
 const unavailableFootballTotalLabel = dailyEdgeOutcomeForecastLabel({
   game: { ...chcTotalForecastGame, sport: "cfb" },
@@ -379,9 +379,9 @@ const unavailableFootballTotalLabel = dailyEdgeOutcomeForecastLabel({
   sport: "cfb",
 });
 check(
-  "football Total never substitutes projected total when current market data is explicitly unavailable",
-  unavailableFootballTotalLabel === DAILY_EDGE_TOTAL_UNAVAILABLE_LABEL &&
-    isDailyEdgeOutcomeForecastHealthError(unavailableFootballTotalLabel),
+  "football Total keeps its model projection visible when no bettable line is available",
+  unavailableFootballTotalLabel === "Projected total 8.3" &&
+    !isDailyEdgeOutcomeForecastHealthError(unavailableFootballTotalLabel),
 );
 check(
   "defensive Forecast unavailable copy is classified as a high health error",

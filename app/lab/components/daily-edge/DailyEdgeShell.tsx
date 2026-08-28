@@ -61,6 +61,7 @@ import { teamPrimaryColor } from "./teamColors";
 import { LockBadge } from "./LockBadge";
 import { DAILY_EDGE_SPORTS } from "../../lib/dailyEdgeSports";
 import { primaryDailyEdgeMarket } from "../../lib/dailyEdgeReaderState";
+import { dailyEdgeOutcomeForecastLabel } from "../../lib/dailyEdgeOutcomeForecast";
 import {
   DEFAULT_DISPLAY_TIME_ZONE,
   LocalTime,
@@ -839,7 +840,9 @@ export function formatPickWithLine(
 }
 
 function displayPctForMarket(m: MarketEdgeDto): number | null {
-  return m.modelProb ?? m.confidence;
+  return m.marketPrediction?.status === "available"
+    ? m.marketPrediction.probability ?? m.modelProb ?? m.confidence
+    : m.modelProb ?? m.confidence;
 }
 
 function totalProjectionSupportsPick(m: MarketEdgeDto): boolean | null {
@@ -1448,6 +1451,13 @@ function ModelTake({ game }: { game: DailyEdgeGameDto }) {
 function QuickRead({ game, market, marketData }: { game: DailyEdgeGameDto; market: MarketKey; marketData: MarketEdgeDto }) {
   const verdict = marketVerdictKey(marketData);
   const shellSport = useShellSport();
+  const forecastLabel = dailyEdgeOutcomeForecastLabel({ game, market: marketData, marketKey: market, sport: shellSport });
+  const priceValueUnderdog = market === "moneyline" &&
+    marketData.pick !== null &&
+    marketData.modelProb !== null &&
+    marketData.modelProb < 0.5 &&
+    (marketData.pinnacleEvPct ?? 0) > 0;
+  const selectionLabel = "Prediction";
   return (
     <div className="bg-white/[0.015] border border-white/[0.04] rounded-xl px-3.5 py-2.5 space-y-2 min-w-0">
       <div className="flex items-center gap-2 pb-1 border-b border-white/[0.06]">
@@ -1490,8 +1500,11 @@ function QuickRead({ game, market, marketData }: { game: DailyEdgeGameDto; marke
       {/* Selected pick */}
       <div className="grid grid-cols-[1fr_auto] items-center gap-3">
         <div className="min-w-0">
+          <p className="mb-1 text-[9.5px] font-bold uppercase tracking-[0.14em] text-gray-500">
+            {selectionLabel}
+          </p>
           <h2 className="text-[24px] font-black tabular-nums text-white leading-none" style={{ letterSpacing: "-0.04em" }}>
-            {formatPickWithLine(market, marketData.pick, marketData.line, shellSport, game.awayTeam, game.homeTeam)}
+            {forecastLabel}
           </h2>
           <div className="mt-1.5 flex items-baseline gap-1.5 flex-wrap">
             {/* Phase 6B.1.6L — pivot from a single "confidence" number to
@@ -1588,6 +1601,12 @@ function QuickRead({ game, market, marketData }: { game: DailyEdgeGameDto; marke
         </div>
         <ConfidenceRing value={(displayPctForMarket(marketData) ?? 0) * 100} size={48} stroke={4} />
       </div>
+
+      {priceValueUnderdog ? (
+        <p className="rounded-md border border-sky-400/15 bg-sky-400/[0.055] px-2 py-1.5 text-[10.5px] leading-relaxed text-sky-100/85">
+          Value at this price, not the predicted winner. The game-level winner forecast remains separate.
+        </p>
+      ) : null}
 
       {/* Guided read */}
       <div className="bg-white/[0.02] border border-white/[0.04] rounded-lg px-3 py-2 space-y-1.5">
@@ -3216,7 +3235,7 @@ function SlateCard({
             className="text-[29px] sm:text-[31px] font-black tabular-nums leading-none text-white"
             style={{ letterSpacing: "-0.03em" }}
           >
-            {formatPickWithLine(headlineMarket, headlineMarketData.pick, headlineMarketData.line, shellSport, game.awayTeam, game.homeTeam)}
+            {dailyEdgeOutcomeForecastLabel({ game, market: headlineMarketData, marketKey: headlineMarket, sport: shellSport })}
           </span>
           <span className="text-[11px] uppercase tracking-[0.14em] text-gray-500 font-bold">
             {marketShortLabelFor(headlineMarket, shellSport)}
@@ -3348,7 +3367,7 @@ function SlateCard({
                   {marketShortLabelFor(m, shellSport)}
                 </span>
                 <span className="block text-[14px] font-black tabular-nums text-gray-100 truncate">
-                  {formatPickWithLine(m, md.pick, md.line, shellSport, game.awayTeam, game.homeTeam)}
+                  {dailyEdgeOutcomeForecastLabel({ game, market: md, marketKey: m, sport: shellSport })}
                 </span>
               </button>
             );
@@ -3536,8 +3555,8 @@ function SelectedEdgeReader({
             <ReaderMarketSegment
               key={m}
               market={m}
-              pick={game.markets[m].pick}
-              line={game.markets[m].line}
+              pick={dailyEdgeOutcomeForecastLabel({ game, market: game.markets[m], marketKey: m, sport: shellSport })}
+              line={null}
               displayPct={displayPctForMarket(game.markets[m])}
               verdict={marketVerdictKey(game.markets[m])}
               selected={market === m}
@@ -3568,7 +3587,7 @@ function SelectedEdgeReader({
                 </div>
                 <div className="flex flex-col min-w-0 leading-tight">
                   <span className="text-[18px] font-black tabular-nums text-white truncate" style={{ letterSpacing: "-0.02em" }}>
-                    {formatPickWithLine(market, marketData.pick, marketData.line, shellSport, game.awayTeam, game.homeTeam)}
+                    {dailyEdgeOutcomeForecastLabel({ game, market: marketData, marketKey: market, sport: shellSport })}
                   </span>
                   <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
                     <span className="text-[9.5px] uppercase tracking-[0.14em] text-violet-200/75 font-bold">
@@ -3784,8 +3803,8 @@ function MobileDetailSheet({
             <MarketPill
               key={m}
               market={m}
-              pick={game.markets[m].pick}
-              line={game.markets[m].line}
+              pick={dailyEdgeOutcomeForecastLabel({ game, market: game.markets[m], marketKey: m, sport: game.sport })}
+              line={null}
               displayPct={displayPctForMarket(game.markets[m])}
               verdict={marketVerdictKey(game.markets[m])}
               selected={selectedMarket === m}

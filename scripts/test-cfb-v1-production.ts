@@ -4,10 +4,7 @@ import path from "node:path";
 import { isPublicallyTracked } from "../lib/config/officialTrackingStart";
 import { buildCfbMemberFixture } from "../lib/services/football/cfbMemberFixture";
 import { finalizeDailyEdgeResponseCoherence } from "../app/lab/lib/dailyEdgeResponseCoherence";
-import {
-  DAILY_EDGE_SPREAD_UNAVAILABLE_LABEL,
-  dailyEdgeOutcomeForecastLabel,
-} from "../app/lab/lib/dailyEdgeOutcomeForecast";
+import { dailyEdgeOutcomeForecastLabel } from "../app/lab/lib/dailyEdgeOutcomeForecast";
 import {
   CFB_FORWARD_EVIDENCE_COLLECTOR_RELEASE,
   CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE,
@@ -15,6 +12,7 @@ import {
   CFB_FORWARD_LEGACY_EVIDENCE_SCHEMA_RELEASE,
   CFB_FORWARD_PREVIOUS_EVIDENCE_SCHEMA_RELEASE,
   CFB_FORWARD_PRIOR_EVIDENCE_SCHEMA_RELEASE,
+  CFB_FORWARD_TRANSITION_EVIDENCE_SCHEMA_RELEASE,
   CFB_FORWARD_MEMBER_RELEASE,
   buildCfbForwardMarketOutlooks,
   determineCfbForwardCollectionNeed,
@@ -266,17 +264,23 @@ for (const memberMarket of Object.values(member.snapshot.games[0]!.markets)) {
 }
 
 const exactPricePayloadRecord = structuredClone(payload) as unknown as Record<string, unknown>;
-exactPricePayloadRecord.schemaRelease = CFB_FORWARD_PREVIOUS_EVIDENCE_SCHEMA_RELEASE;
+exactPricePayloadRecord.schemaRelease = CFB_FORWARD_PRIOR_EVIDENCE_SCHEMA_RELEASE;
 exactPricePayloadRecord.memberRelease = "cfb_v1_member_release_2026_08_28_r6_exact_paired_market_evidence";
 delete exactPricePayloadRecord.outcomeForecast;
 delete exactPricePayloadRecord.outcomeMarketOutlooks;
+const exactPriceDecisions = exactPricePayloadRecord.decisions as Record<string, unknown>;
+exactPriceDecisions.decisionRelease = "cfb_v1_daily_edge_decision_2026_08_28_r10_exact_paired_market_evidence";
+exactPriceDecisions.evaluatedBets = (exactPriceDecisions.evaluatedBets as Array<Record<string, unknown>>).map((decision) => ({
+  ...decision,
+  decisionRelease: "cfb_v1_daily_edge_decision_2026_08_28_r10_exact_paired_market_evidence",
+}));
 const exactPricePayload = exactPricePayloadRecord as unknown as CfbForwardEvidencePayload;
 const exactPriceMember = buildCfbMemberFixture([{ ...evidence, id: "exact-price-transition-row", payloadSha256: hashCfbForwardEvidencePayload(exactPricePayload), payload: exactPricePayload }]);
-assert.equal(exactPriceMember.snapshot.games.length, 1, "the r4 exact-price wave remains visible until the natural r5 refresh arrives");
+assert.equal(exactPriceMember.snapshot.games.length, 1, "the r4 exact-price wave remains visible through the bounded release fallbacks");
 assert.equal(exactPriceMember.snapshot.games[0]!.footballOnlyProjection, null, "the bounded fallback keeps its original single-axis forecast contract");
 
 const transitionPayload = structuredClone(payload) as unknown as Record<string, unknown>;
-transitionPayload.schemaRelease = CFB_FORWARD_PRIOR_EVIDENCE_SCHEMA_RELEASE;
+transitionPayload.schemaRelease = CFB_FORWARD_TRANSITION_EVIDENCE_SCHEMA_RELEASE;
 transitionPayload.memberRelease = "cfb_v1_member_release_2026_08_27_r5_pmf_side_guard";
 delete transitionPayload.outcomeForecast;
 delete transitionPayload.outcomeMarketOutlooks;
@@ -379,11 +383,11 @@ assert.deepEqual(heldGame.markets.first_inning.marketPrediction, {
   label: heldProbabilities.spread.home >= heldProbabilities.spread.away ? "TCU -7.5" : "UNC +7.5",
   line: heldProbabilities.spread.home >= heldProbabilities.spread.away ? -7.5 : 7.5,
   probability: Math.max(heldProbabilities.spread.home, heldProbabilities.spread.away),
-  source: "playbook_consensus",
+  source: "model_at_context_line",
   sportsbook: null,
   observedAt,
   freshnessCheckedAt: observedAt,
-  reason: "The prediction uses the current Playbook market line; an eligible exact sportsbook price tuple is unavailable for Bet grading.",
+  reason: "The primary joint-score model is evaluated at the current context line without turning that context into a sportsbook offer.",
 });
 assert.equal(
   dailyEdgeOutcomeForecastLabel({ game: heldGame, market: heldGame.markets.first_inning, marketKey: "first_inning", sport: "cfb" }),
@@ -394,9 +398,9 @@ assert.equal(heldGame.markets.moneyline.marketFairProb, null);
 assert.equal(heldGame.markets.moneyline.priceAmerican, null);
 assert.equal(heldGame.markets.moneyline.recommendationConfidence, null);
 assert.equal(heldGame.markets.moneyline.pick, null, "MLB-parity Held semantics cannot fabricate a CFB bet selection");
-assert.deepEqual(heldGame.markets.moneyline.verdict, { key: "no_play", label: "Held" }, "CFB Held state must use the shared Daily Edge verdict contract");
+assert.deepEqual(heldGame.markets.moneyline.verdict, { key: "no_play", label: "No Play" }, "CFB member markets must never expose the internal recovery state as a prediction or Bet grade");
 assert.equal(heldGame.markets.moneyline.modelProb !== null, true, "Outcome confidence remains independent from an exact-price Bet-grade hold");
-assert.match(heldGame.markets.moneyline.displayReason ?? "", /forecast context, not an offered sportsbook bet/);
+assert.match(heldGame.markets.moneyline.displayReason ?? "", /prediction is .* primary outcome PMF.*Bet grade is No Play/);
 assert.match(heldGame.markets.moneyline.sharpBookAvailability?.message ?? "", /no exact team\/date match is published/, "Sharp price recovery cannot be mislabeled as Sharp betting-split coverage");
 
 const publicHeldSnapshot = structuredClone(heldMember.snapshot);
@@ -428,6 +432,120 @@ for (const marketKey of ["moneyline", "total", "first_inning"] as const) {
   assert.doesNotMatch(label, /No Play|Held/, `CFB ${marketKey} prediction label cannot reuse its Bet grade or internal health state`);
 }
 
+const oneSidedMoneylinePayload: CfbForwardEvidencePayload = {
+  ...heldPayload,
+  market: {
+    ...heldPayload.market,
+    playbookLine: {
+      ...heldPayload.market.playbookLine!,
+      homeMoneyline: -50000,
+      awayMoneyline: 1825,
+    },
+    displayBooks: [
+      {
+        providerGameId: game.providerGameId,
+        sportsbook: "betmgm",
+        observedAt,
+        provider: "sharpapi",
+        providerEventId: "ncaaf_unc_tcu_2026-08-29_b2",
+        targetEligible: true,
+        marketQuotes: [
+          { market: "moneyline", side: "away", line: null, price: 6600, observedAt, marketSelection: "main_line" },
+          { market: "spread", side: "home", line: -24.5, price: -110, observedAt, marketSelection: "main_line" },
+        ],
+        moneyline: null,
+        spread: null,
+        total: null,
+      },
+      {
+        providerGameId: game.providerGameId,
+        sportsbook: "sportzino",
+        observedAt,
+        provider: "sharpapi",
+        providerEventId: "ncaaf_unc_tcu_2026-08-29_b2",
+        targetEligible: false,
+        marketQuotes: [{ market: "moneyline", side: "away", line: null, price: 2000, observedAt, marketSelection: "main_line" }],
+        moneyline: null,
+        spread: null,
+        total: null,
+      },
+    ],
+  },
+};
+const oneSidedMoneylineMember = buildCfbMemberFixture([{
+  ...evidence,
+  id: "one-sided-moneyline-row",
+  stage: "unlocked",
+  capturedAt: observedAt,
+  payloadSha256: hashCfbForwardEvidencePayload(oneSidedMoneylinePayload),
+  payload: oneSidedMoneylinePayload,
+}]).snapshot.games[0]!.markets.moneyline;
+assert.equal(oneSidedMoneylineMember.held, true, "one-sided odds cannot clear the internal exact-price grading safeguard");
+assert.deepEqual(oneSidedMoneylineMember.verdict, { key: "no_play", label: "No Play" });
+assert.equal(oneSidedMoneylineMember.pick, null, "one-sided context cannot become a Bet selection");
+assert.equal(oneSidedMoneylineMember.priceAmerican, null, "one-sided context cannot become a grade price");
+assert.equal(oneSidedMoneylineMember.currentPriceAmerican, null, "an opposing one-sided quote cannot be mislabeled as the predicted side's current price");
+assert.equal(oneSidedMoneylineMember.marketSource, "sportzino", "a target-book outlier cannot outrank a corroborated representative sportsbook quote");
+assert.equal(oneSidedMoneylineMember.opposingOddsTrail?.stops.at(-1)?.american, 2000, "the non-outlier opposing sportsbook quote must remain visible");
+assert.match(oneSidedMoneylineMember.displayReason ?? "", /verified one-sided .*\+2000 at sportzino/i);
+const outlierSpreadMember = buildCfbMemberFixture([{
+  ...evidence,
+  id: "outlier-spread-row",
+  stage: "unlocked",
+  capturedAt: observedAt,
+  payloadSha256: hashCfbForwardEvidencePayload(oneSidedMoneylinePayload),
+  payload: oneSidedMoneylinePayload,
+}]).snapshot.games[0]!.markets.first_inning;
+assert.equal(outlierSpreadMember.currentPriceAmerican, null, "a -24.5 display line cannot represent a market centered at -7.5");
+assert.equal(outlierSpreadMember.oddsTrail?.length, 0, "an outlier display line must not enter the movement panel");
+
+const thinBookBundle = buildCfbV1DecisionBundle({
+  providerGameId: game.providerGameId,
+  awayTeam: game.away.abbreviation,
+  homeTeam: game.home.abbreviation,
+  gameStartsAt: game.scheduledStart,
+  comparableCurrentBooks: [currentBooks[0]!],
+  forecast,
+  contextLines: { homeSpread: -7.5, totalLine: 47.5 },
+  evaluatedAt: observedAt,
+});
+assert.equal(thinBookBundle.evaluatedBets.length, 0, "one target book cannot become its own grading benchmark");
+const thinBookPayload: CfbForwardEvidencePayload = {
+  ...heldPayload,
+  market: {
+    ...heldPayload.market,
+    current: currentBooks[0]!,
+    currentBooks: [currentBooks[0]!],
+  },
+  decisions: {
+    ...thinBookBundle,
+    forecast: publishedForecast,
+    marketOutlooks: buildCfbForwardMarketOutlooks({ forecast, playbookLine: payload.market.playbookLine }),
+  },
+  coverage: {
+    ...heldPayload.coverage,
+    currentOdds: true,
+    comparableCurrentBookCount: 1,
+  },
+};
+const thinBookMember = buildCfbMemberFixture([{
+  ...evidence,
+  id: "thin-book-row",
+  stage: "unlocked",
+  capturedAt: observedAt,
+  payloadSha256: hashCfbForwardEvidencePayload(thinBookPayload),
+  payload: thinBookPayload,
+}]);
+for (const marketKey of ["moneyline", "total", "first_inning"] as const) {
+  const market = thinBookMember.snapshot.games[0]!.markets[marketKey];
+  assert.equal(market.held, true, `${marketKey} remains unavailable for exact-price grading`);
+  assert.equal(market.pick, null, `${marketKey} cannot turn a context quote into a Bet selection`);
+  assert.equal(market.priceAmerican, null, `${marketKey} cannot turn a context quote into a grade price`);
+  assert.notEqual(market.currentPriceAmerican, null, `${marketKey} must still surface the real current target-book quote`);
+  assert.equal(market.currentPriceSportsbook, "fanduel", `${marketKey} must identify the real current sportsbook`);
+  assert.equal(market.oddsTrail?.at(-1)?.sportsbook, "fanduel", `${marketKey} current context trail must stay same-book`);
+}
+
 const missingLinePayload = structuredClone(heldPayload);
 missingLinePayload.market.playbookLine = null;
 missingLinePayload.decisions.marketOutlooks = buildCfbForwardMarketOutlooks({ forecast, playbookLine: null });
@@ -446,8 +564,8 @@ assert.equal(missingSpreadMarket.marketPrediction?.status, "market_data_unavaila
 assert.equal(missingSpreadMarket.marketPrediction?.label, null);
 assert.equal(
   dailyEdgeOutcomeForecastLabel({ game: missingLineMember.snapshot.games[0]!, market: missingSpreadMarket, marketKey: "first_inning", sport: "cfb" }),
-  DAILY_EDGE_SPREAD_UNAVAILABLE_LABEL,
-  "missing current Spread data must report market health instead of substituting projected margin",
+  `Projected margin ${outcomeFull.expectedMarginHome >= 0 ? game.home.abbreviation : game.away.abbreviation} ${Math.abs(outcomeFull.representativeScore.home - outcomeFull.representativeScore.away).toFixed(0)}`,
+  "missing current Spread data must preserve the model-native projected margin without presenting it as a bettable line",
 );
 
 const noTotalBooks = currentBooks.map((currentBook) => ({ ...currentBook, total: null }));

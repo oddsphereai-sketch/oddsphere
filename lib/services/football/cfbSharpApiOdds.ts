@@ -2,7 +2,7 @@ import { SharpApiClient, type SharpApiRequestOptions, type SharpApiResponse } fr
 import type { NcaafBookOdds, NcaafGame } from "./balldontlieNcaafSlate";
 
 export const CFB_SHARP_API_ODDS_RELEASE =
-  "cfb_sharpapi_named_book_fallback_2026_08_28_r3_exact_paired_market_evidence" as const;
+  "cfb_sharpapi_named_book_fallback_2026_08_28_r4_display_quote_coverage" as const;
 export const CFB_SHARP_FALLBACK_MAX_GAMES = 96 as const;
 export const CFB_SHARP_FALLBACK_MAX_REQUESTS = 96 as const;
 export const CFB_SHARP_FALLBACK_MAX_ROWS_PER_EVENT = 200 as const;
@@ -93,6 +93,8 @@ export type CfbSharpApiOddsResult = {
   attemptedGames: number;
   matchedGames: number;
   booksByGame: Record<string, NcaafBookOdds[]>;
+  /** Includes verified one-sided named-book offers for display-only context. */
+  displayBooksByGame: Record<string, NcaafBookOdds[]>;
   eventIdsByGame: Record<string, string | null>;
 };
 
@@ -115,9 +117,11 @@ export async function fetchSharpApiNcaafOddsFallback(args: {
   }
   let requests = 0;
   const booksByGame: Record<string, NcaafBookOdds[]> = {};
+  const displayBooksByGame: Record<string, NcaafBookOdds[]> = {};
   const eventIdsByGame: Record<string, string | null> = {};
   for (const game of games) {
     let accepted: NcaafBookOdds[] = [];
+    let acceptedDisplay: NcaafBookOdds[] = [];
     let acceptedEventId: string | null = null;
     for (const eventId of sharpEventIdCandidates(game)) {
       const rows: unknown[] = [];
@@ -154,11 +158,13 @@ export async function fetchSharpApiNcaafOddsFallback(args: {
       }
       const books = normalizeSharpRows({ game, eventId, rows });
       if (books.length === 0) continue;
-      accepted = books;
+      acceptedDisplay = books;
+      accepted = books.filter((book) => bookCompleteness(book) > 0);
       acceptedEventId = eventId;
       break;
     }
     booksByGame[game.providerGameId] = accepted;
+    displayBooksByGame[game.providerGameId] = acceptedDisplay;
     eventIdsByGame[game.providerGameId] = acceptedEventId;
   }
   return {
@@ -167,6 +173,7 @@ export async function fetchSharpApiNcaafOddsFallback(args: {
     attemptedGames: games.length,
     matchedGames: Object.values(booksByGame).filter((books) => books.length > 0).length,
     booksByGame,
+    displayBooksByGame,
     eventIdsByGame,
   };
 }
@@ -182,10 +189,14 @@ export function mergeCfbNamedBooks(primary: NcaafBookOdds[], fallback: NcaafBook
   for (const book of [...primary, ...fallback]) {
     const key = normalize(book.sportsbook);
     const current = merged.get(key);
-    if (!current || bookCompleteness(book) > bookCompleteness(current) ||
-      (bookCompleteness(book) === bookCompleteness(current) && Date.parse(book.observedAt) > Date.parse(current.observedAt))) {
-      merged.set(key, book);
-    }
+    const selected = !current || bookCompleteness(book) > bookCompleteness(current) ||
+      (bookCompleteness(book) === bookCompleteness(current) && Date.parse(book.observedAt) > Date.parse(current.observedAt))
+      ? book
+      : current;
+    merged.set(key, {
+      ...selected,
+      marketQuotes: mergeMarketQuotes(current?.marketQuotes ?? [], book.marketQuotes ?? []),
+    });
   }
   return [...merged.values()].sort((first, second) =>
     Number(second.targetEligible !== false) - Number(first.targetEligible !== false) ||
@@ -214,6 +225,7 @@ export function sharpEventIdCandidates(game: NcaafGame): string[] {
 
 export function normalizeSharpRows(args: { game: NcaafGame; eventId: string; rows: unknown[] }): NcaafBookOdds[] {
   const grouped = new Map<string, Map<string, Partial<Record<"home" | "away" | "over" | "under", SideQuote>>>>();
+  const displayQuotes = new Map<string, NonNullable<NcaafBookOdds["marketQuotes"]>>();
   for (const value of args.rows) {
     const row = value as SharpRow;
     if (text(row.event_id) !== args.eventId || row.is_live === true || row.is_active === false || row.is_stale_pregame_price === true || row.is_player_prop === true) continue;
@@ -234,6 +246,11 @@ export function normalizeSharpRows(args: { game: NcaafGame; eventId: string; row
     if (!validSide(market, side)) continue;
     const rawLine = market === "moneyline" ? null : finite(row.line);
     if (market !== "moneyline" && rawLine === null) continue;
+    if (marketSelection === "main_line") {
+      const quotes = displayQuotes.get(sportsbook) ?? [];
+      quotes.push({ market, side: side as "home" | "away" | "over" | "under", line: rawLine, price, observedAt, marketSelection });
+      displayQuotes.set(sportsbook, quotes);
+    }
     const normalizedLine = market === "spread" ? Math.abs(rawLine!) : rawLine;
     const key = `${sportsbook}|${externalEventId}`;
     const pairKey = `${market}|${normalizedLine ?? "ml"}`;
@@ -274,9 +291,13 @@ export function normalizeSharpRows(args: { game: NcaafGame; eventId: string; row
     bySportsbook.set(pair.sportsbook, values);
   }
   const books: NcaafBookOdds[] = [];
-  for (const [sportsbook, pairs] of bySportsbook) {
+  const sportsbooks = new Set([...bySportsbook.keys(), ...displayQuotes.keys()]);
+  for (const sportsbook of sportsbooks) {
+    const pairs = bySportsbook.get(sportsbook) ?? [];
     const selected = selectPairs(pairs, selectedAlternateLines);
-    const observedAt = selected.reduce<string | null>((value, pair) => value === null ? pair.observedAt : latest(value, pair.observedAt), null);
+    const quotes = mergeMarketQuotes([], displayQuotes.get(sportsbook) ?? []);
+    const observedAt = [...selected.map((pair) => pair.observedAt), ...quotes.map((quote) => quote.observedAt)]
+      .reduce<string | null>((value, timestamp) => value === null ? timestamp : latest(value, timestamp), null);
     if (!observedAt) continue;
     const book: NcaafBookOdds = {
       providerGameId: args.game.providerGameId,
@@ -287,6 +308,7 @@ export function normalizeSharpRows(args: { game: NcaafGame; eventId: string; row
       targetEligible: USER_TARGET_BOOKS.has(sportsbook),
       marketSelection: Object.fromEntries(selected.map((pair) => [pair.market, pair.marketSelection])),
       marketObservedAt: Object.fromEntries(selected.map((pair) => [pair.market, pair.observedAt])),
+      marketQuotes: quotes,
       moneyline: selected.find((pair) => pair.market === "moneyline") ? {
         homePrice: selected.find((pair) => pair.market === "moneyline")!.homePrice!,
         awayPrice: selected.find((pair) => pair.market === "moneyline")!.awayPrice!,
@@ -306,6 +328,21 @@ export function normalizeSharpRows(args: { game: NcaafGame; eventId: string; row
     books.push(book);
   }
   return books.sort((first, second) => first.sportsbook.localeCompare(second.sportsbook));
+}
+
+function mergeMarketQuotes(
+  first: NonNullable<NcaafBookOdds["marketQuotes"]>,
+  second: NonNullable<NcaafBookOdds["marketQuotes"]>,
+): NonNullable<NcaafBookOdds["marketQuotes"]> {
+  const values = new Map<string, NonNullable<NcaafBookOdds["marketQuotes"]>[number]>();
+  for (const quote of [...first, ...second]) {
+    const key = `${quote.market}|${quote.side}|${quote.line ?? "null"}`;
+    const current = values.get(key);
+    if (!current || Date.parse(quote.observedAt) > Date.parse(current.observedAt)) values.set(key, quote);
+  }
+  return [...values.values()].sort((a, b) =>
+    a.market.localeCompare(b.market) || a.side.localeCompare(b.side) ||
+    Date.parse(b.observedAt) - Date.parse(a.observedAt));
 }
 
 function selectPairs(

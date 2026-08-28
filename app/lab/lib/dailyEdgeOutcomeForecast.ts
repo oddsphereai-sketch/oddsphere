@@ -19,6 +19,12 @@ export function dailyEdgeMarketPredictionProvenanceLabel(market: MarketEdgeDto):
   if (prediction.source === "playbook_consensus") {
     return "Consensus prediction line · context only, not an available sportsbook offer";
   }
+  if (prediction.source === "model_at_context_line") {
+    return "Model prediction at the current context line · not an available sportsbook offer";
+  }
+  if (prediction.source === "model_at_exact_book_line") {
+    return "Model prediction at the displayed exact sportsbook line";
+  }
   if (prediction.source === "exact_named_book") return "Exact named-book prediction line";
   if (prediction.source === "model_outcome") return "Model outcome forecast · no sportsbook line";
   return null;
@@ -48,13 +54,6 @@ export function dailyEdgeOutcomeForecastLabel(input: {
   sport: Sport;
 }): string {
   const { game, market, marketKey, sport } = input;
-  if (market.marketPrediction?.status === "market_data_unavailable") {
-    return marketKey === "total"
-      ? DAILY_EDGE_TOTAL_UNAVAILABLE_LABEL
-      : marketKey === "first_inning" && sport !== "mlb"
-        ? DAILY_EDGE_SPREAD_UNAVAILABLE_LABEL
-        : DAILY_EDGE_FORECAST_UNAVAILABLE_LABEL;
-  }
   if (market.marketPrediction?.status === "available" && market.marketPrediction.label) {
     return market.marketPrediction.label;
   }
@@ -107,10 +106,6 @@ export function dailyEdgeOutcomeForecastLabel(input: {
     );
     const value = firstInning?.homeValue ?? firstInning?.awayValue ?? null;
     if (value) return `1st-inning projection ${value}`;
-  }
-
-  if (marketKey === "first_inning" && (sport === "nfl" || sport === "cfb")) {
-    return DAILY_EDGE_SPREAD_UNAVAILABLE_LABEL;
   }
 
   if (marketKey === "first_inning" && sport !== "mlb") {

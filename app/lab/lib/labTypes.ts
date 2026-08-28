@@ -216,7 +216,7 @@ export type MarketPredictionDto = {
   label: string | null;
   line: number | null;
   probability: number | null;
-  source: "exact_named_book" | "playbook_consensus" | "model_outcome" | null;
+  source: "exact_named_book" | "playbook_consensus" | "model_outcome" | "model_at_context_line" | "model_at_exact_book_line" | null;
   sportsbook: string | null;
   observedAt: string | null;
   freshnessCheckedAt: string | null;
@@ -570,6 +570,7 @@ export type MarketEdgeDto = {
    *   • `"keep"` — no reviewer change (default)
    *   • `"cap_confidence"` — reviewer dampened confidence
    *   • `"hold"` — reviewer forced a hold
+   *   • `"repair_price_coverage"` — prediction remains live while the writer repairs missing sportsbook evidence
    *   • `"adjust_score_toward_market"` — score projection was adjusted
    * Members see "Reviewer caution" + flags when the action ≠ "keep".
    */
@@ -577,6 +578,7 @@ export type MarketEdgeDto = {
     | "keep"
     | "cap_confidence"
     | "hold"
+    | "repair_price_coverage"
     | "adjust_score_toward_market"
     | "flip_side"
     | "dampen_confidence"
