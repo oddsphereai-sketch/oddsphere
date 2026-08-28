@@ -31,9 +31,9 @@ export const CFB_FORWARD_LEGACY_EVIDENCE_SCHEMA_RELEASE =
 export const CFB_FORWARD_INITIAL_EVIDENCE_SCHEMA_RELEASE =
   "cfb_forward_evidence_snapshot_2026_08_25_r1" as const;
 export const CFB_FORWARD_EVIDENCE_COLLECTOR_RELEASE =
-  "cfb_forward_evidence_collector_2026_08_28_r16_event_discovery_pagination" as const;
+  "cfb_forward_evidence_collector_2026_08_28_r17_ambiguous_event_scope" as const;
 export const CFB_FORWARD_MEMBER_RELEASE =
-  "cfb_v1_member_release_2026_08_28_r18_event_discovery_pagination" as const;
+  "cfb_v1_member_release_2026_08_28_r19_ambiguous_event_scope" as const;
 
 export type CfbForwardEvidenceStage = "opening" | "unlocked" | "t60";
 
@@ -244,12 +244,12 @@ export function determineCfbForwardCollectionNeed(args: {
     const startsAt = timestamp(latest.gameStartAt, "stored gameStartAt");
     if (startsAt <= now) continue;
     const cutoff = startsAt - T60_MS;
-    if (now >= cutoff && !rows.some((row) => row.stage === "t60")) return { collect: true, reason: "t60_due", cadenceMinutes: 15 };
+    if (now >= cutoff && !rows.some((row) => row.stage === "t60")) return { collect: true, reason: "t60_due", cadenceMinutes: null };
     if (now < cutoff) upcoming.push(startsAt);
   }
   if (upcoming.length === 0) return { collect: false, reason: "no_unlocked_games_due", cadenceMinutes: null };
   const nextStart = Math.min(...upcoming);
-  const cadenceMinutes = nextStart - now <= 48 * 60 * 60_000 ? 60 : 360;
+  const cadenceMinutes = nextStart - now <= 24 * 60 * 60_000 ? 60 : 360;
   const latest = Math.max(...args.existing.map((row) => timestamp(row.capturedAt, "stored capturedAt")));
   return now - latest >= cadenceMinutes * 60_000
     ? { collect: true, reason: "unlocked_refresh_due", cadenceMinutes }

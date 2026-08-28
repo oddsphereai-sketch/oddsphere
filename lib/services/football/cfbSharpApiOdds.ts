@@ -2,7 +2,7 @@ import { SharpApiClient, type SharpApiRequestOptions, type SharpApiResponse } fr
 import type { NcaafBookOdds, NcaafGame } from "./balldontlieNcaafSlate";
 
 export const CFB_SHARP_API_ODDS_RELEASE =
-  "cfb_sharpapi_named_book_fallback_2026_08_28_r9_event_discovery_pagination" as const;
+  "cfb_sharpapi_named_book_fallback_2026_08_28_r10_ambiguous_event_scope" as const;
 export const CFB_SHARP_FALLBACK_MAX_GAMES = 96 as const;
 export const CFB_SHARP_FALLBACK_MAX_REQUESTS = 192 as const;
 export const CFB_SHARP_FALLBACK_MAX_ROWS_PER_EVENT = 200 as const;
@@ -113,6 +113,7 @@ export type CfbSharpApiOddsResult = {
   /** Includes verified one-sided named-book offers for display-only context. */
   displayBooksByGame: Record<string, NcaafBookOdds[]>;
   eventIdsByGame: Record<string, string | null>;
+  eventDiscoveryStatusByGame: Record<string, "matched" | "unpublished" | "ambiguous">;
 };
 
 export async function fetchSharpApiNcaafOddsFallback(args: {
@@ -136,6 +137,7 @@ export async function fetchSharpApiNcaafOddsFallback(args: {
   const booksByGame: Record<string, NcaafBookOdds[]> = {};
   const displayBooksByGame: Record<string, NcaafBookOdds[]> = {};
   const eventIdsByGame: Record<string, string | null> = {};
+  const eventDiscoveryStatusByGame: CfbSharpApiOddsResult["eventDiscoveryStatusByGame"] = {};
   const discoveryDates = [...new Set(games.flatMap((game) => sharpEventDiscoveryDates(game)))].sort();
   const discoveredEvents: SharpEventRow[] = [];
   for (const date of discoveryDates) {
@@ -196,7 +198,11 @@ export async function fetchSharpApiNcaafOddsFallback(args: {
       return eventId ? [[eventId, event] as const] : [];
     })).entries()];
     if (uniqueEventMatches.length > 1) {
-      throw new Error(`CFB SharpAPI canonical event discovery returned ${uniqueEventMatches.length} exact matches for game ${game.providerGameId}.`);
+      booksByGame[game.providerGameId] = [];
+      displayBooksByGame[game.providerGameId] = [];
+      eventIdsByGame[game.providerGameId] = null;
+      eventDiscoveryStatusByGame[game.providerGameId] = "ambiguous";
+      continue;
     }
     const eventId = uniqueEventMatches[0]?.[0] ?? null;
     if (eventId) {
@@ -256,6 +262,7 @@ export async function fetchSharpApiNcaafOddsFallback(args: {
     booksByGame[game.providerGameId] = accepted;
     displayBooksByGame[game.providerGameId] = acceptedDisplay;
     eventIdsByGame[game.providerGameId] = acceptedEventId;
+    eventDiscoveryStatusByGame[game.providerGameId] = acceptedEventId ? "matched" : "unpublished";
   }
   return {
     release: CFB_SHARP_API_ODDS_RELEASE,
@@ -265,6 +272,7 @@ export async function fetchSharpApiNcaafOddsFallback(args: {
     booksByGame,
     displayBooksByGame,
     eventIdsByGame,
+    eventDiscoveryStatusByGame,
   };
 }
 

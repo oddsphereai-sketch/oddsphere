@@ -53,6 +53,7 @@ const client = {
 const result = await fetchSharpApiNcaafOddsFallback({ games: [game], client, maximumRequests: CFB_SHARP_FALLBACK_MAX_REQUESTS });
 assert.equal(result.requests, 2, "one canonical date discovery plus one exact-event odds request must resolve the game");
 assert.equal(result.matchedGames, 1);
+assert.equal(result.eventDiscoveryStatusByGame[game.providerGameId], "matched");
 assert.deepEqual(calls.map((call) => call.path), ["/events", "/odds"]);
 assert.deepEqual(calls[0]?.query, { league: "ncaaf", date: "2026-08-29", live: false, limit: 200 });
 assert.equal(calls[1]?.query?.event_id, expectedEventId);
@@ -420,9 +421,10 @@ const absentEvent = await fetchSharpApiNcaafOddsFallback({
 assert.equal(absentEvent.requests, 1, "an unpublished canonical event must not trigger guessed event-id calls");
 assert.equal(absentEvent.eventIdsByGame[game.providerGameId], null);
 assert.deepEqual(absentEvent.booksByGame[game.providerGameId], []);
+assert.equal(absentEvent.eventDiscoveryStatusByGame[game.providerGameId], "unpublished");
 
-await assert.rejects(
-  fetchSharpApiNcaafOddsFallback({
+let ambiguousOddsCalls = 0;
+const ambiguousEvent = await fetchSharpApiNcaafOddsFallback({
     games: [game],
     maximumRequests: 3,
     client: {
@@ -430,12 +432,31 @@ await assert.rejects(
         if (opts.path === "/events") {
           return { data: [sharpEvent(), sharpEvent({ id: `${expectedEventId}-duplicate` })] as T, pagination: { has_more: false } };
         }
+        ambiguousOddsCalls += 1;
+        return { data: [] as T, pagination: { has_more: false } };
+      },
+    },
+  });
+assert.equal(ambiguousEvent.requests, 1);
+assert.equal(ambiguousOddsCalls, 0, "ambiguous event IDs must never be probed for odds");
+assert.equal(ambiguousEvent.matchedGames, 0);
+assert.equal(ambiguousEvent.eventIdsByGame[game.providerGameId], null);
+assert.equal(ambiguousEvent.eventDiscoveryStatusByGame[game.providerGameId], "ambiguous");
+assert.deepEqual(ambiguousEvent.booksByGame[game.providerGameId], []);
+
+await assert.rejects(
+  fetchSharpApiNcaafOddsFallback({
+    games: [game, { ...game, providerGameId: `${game.providerGameId}-reused` }],
+    maximumRequests: 3,
+    client: {
+      async fetch<T>(opts: SharpApiRequestOptions): Promise<SharpApiResponse<T>> {
+        if (opts.path === "/events") return { data: [sharpEvent()] as T, pagination: { has_more: false } };
         return { data: [] as T, pagination: { has_more: false } };
       },
     },
   }),
-  /returned 2 exact matches/,
-  "ambiguous canonical event identity must fail closed before odds normalization",
+  new RegExp(`canonical event ${expectedEventId} matched more than one scheduled game`),
+  "one canonical provider event reused across different scheduled games remains fatal",
 );
 
 const wrongIdentity = await fetchSharpApiNcaafOddsFallback({
