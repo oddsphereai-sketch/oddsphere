@@ -1061,17 +1061,19 @@ check(
 );
 check(
   "consensus-only markets do not render an empty sharp-book panel",
-  candidateSource.includes("sharp ?? (sharpAvailability === null ? null") &&
+  candidateSource.includes("selectedSharp ?? (sharpAvailability === null ? null") &&
     candidateSource.includes("{displayedSharp ? <SplitSourcePanel") &&
     !candidateSource.includes('<SplitSourcePanel source="SHARP BOOK SPLITS" section={sharp}'),
 );
 check(
   "public consensus and sharp book split cards retain their established presentation while Circa-priority fill-ins remain display-only",
   candidateSource.includes("const sportsbook = market.sportsbookSplits ?? null") &&
+    candidateSource.includes("const selectedSharp = currentSharp ?? (sportsbook?.rows.length ? sportsbook : sharp)") &&
+    candidateSource.includes("const selectedSharpIsSportsbook = selectedSharp !== null && selectedSharp === sportsbook") &&
     candidateSource.includes('source="PUBLIC CONSENSUS"') &&
-    candidateSource.includes('source="SHARP BOOK SPLITS"') &&
     candidateSource.includes('displayedSharp.label === "Sharp Book Signal" ? "SHARP BOOK SIGNAL" : "SHARP BOOK SPLITS"') &&
     candidateSource.includes("Public consensus and source-specific sportsbook evidence remain separate signals") &&
+    !candidateSource.includes('{sportsbook ? <SplitSourcePanel source="SHARP BOOK SPLITS"') &&
     !candidateSource.includes("sharpBookSplits = market.sportsbookSplits"),
 );
 check(
@@ -1495,7 +1497,7 @@ check(
 check(
   "a context-only CFB line never promises missing sportsbook odds",
   DAILY_EDGE_MEMBER_PRESENTATION_RELEASE_ID ===
-    "daily_edge_member_presentation_2026_08_28_r12_sharp_book_split_priority" &&
+    "daily_edge_member_presentation_2026_08_28_r13_single_sharp_book_card" &&
     candidateSource.includes("Sportsbook odds unavailable") &&
     candidateSource.includes("Consensus line only") &&
     candidateSource.includes("No eligible named-book American price was captured") &&
