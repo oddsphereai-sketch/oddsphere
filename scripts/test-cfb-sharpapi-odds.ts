@@ -206,6 +206,57 @@ assert.equal(paged.requests, 2, "an exact event larger than one page must be com
 assert.deepEqual(pagedCalls.map((call) => call.query?.offset ?? 0), [0, 200]);
 assert.deepEqual(paged.booksByGame[game.providerGameId], books, "pagination must preserve the exact normalized named-book tuple");
 
+const derivedOffsetCalls: SharpApiRequestOptions[] = [];
+const derivedOffset = await fetchSharpApiNcaafOddsFallback({
+  games: [game],
+  maximumRequests: 2,
+  client: {
+    async fetch<T>(opts: SharpApiRequestOptions): Promise<SharpApiResponse<T>> {
+      derivedOffsetCalls.push(opts);
+      const offset = Number(opts.query?.offset ?? 0);
+      const data = offset === 0 ? pagedRows.slice(0, 6) : pagedRows.slice(6);
+      return {
+        data: data as T,
+        pagination: offset === 0
+          ? { limit: 200, offset: 0, count: data.length, has_more: true }
+          : { limit: 200, offset, count: data.length, has_more: false },
+      };
+    },
+  },
+});
+assert.deepEqual(derivedOffsetCalls.map((call) => call.query?.offset ?? 0), [0, 6], "a missing next_offset must derive one bounded forward offset from the exact returned page");
+assert.deepEqual(derivedOffset.booksByGame[game.providerGameId], books, "derived offset pagination must preserve the same normalized exact-event books");
+
+await assert.rejects(
+  fetchSharpApiNcaafOddsFallback({
+    games: [game],
+    maximumRequests: 2,
+    client: {
+      async fetch<T>(): Promise<SharpApiResponse<T>> {
+        const data = pagedRows.slice(0, 6);
+        return { data: data as T, pagination: { count: data.length, has_more: true } };
+      },
+    },
+  }),
+  /repeated a prior page instead of advancing its offset/,
+  "a provider that ignores the derived offset must fail before publication",
+);
+
+await assert.rejects(
+  fetchSharpApiNcaafOddsFallback({
+    games: [game],
+    maximumRequests: 2,
+    client: {
+      async fetch<T>(): Promise<SharpApiResponse<T>> {
+        const data = pagedRows.slice(0, 6);
+        return { data: data as T, pagination: { offset: 200, count: data.length, has_more: true } };
+      },
+    },
+  }),
+  /without a valid forward offset/,
+  "a provider offset that conflicts with the requested page must fail closed",
+);
+
 await assert.rejects(
   fetchSharpApiNcaafOddsFallback({
     games: [game],

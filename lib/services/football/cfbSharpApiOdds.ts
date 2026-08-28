@@ -2,7 +2,7 @@ import { SharpApiClient, type SharpApiRequestOptions, type SharpApiResponse } fr
 import type { NcaafBookOdds, NcaafGame } from "./balldontlieNcaafSlate";
 
 export const CFB_SHARP_API_ODDS_RELEASE =
-  "cfb_sharpapi_named_book_fallback_2026_08_28_r4_display_quote_coverage" as const;
+  "cfb_sharpapi_named_book_fallback_2026_08_28_r5_resilient_offset_pagination" as const;
 export const CFB_SHARP_FALLBACK_MAX_GAMES = 96 as const;
 export const CFB_SHARP_FALLBACK_MAX_REQUESTS = 96 as const;
 export const CFB_SHARP_FALLBACK_MAX_ROWS_PER_EVENT = 200 as const;
@@ -125,6 +125,7 @@ export async function fetchSharpApiNcaafOddsFallback(args: {
     let acceptedEventId: string | null = null;
     for (const eventId of sharpEventIdCandidates(game)) {
       const rows: unknown[] = [];
+      const pageFingerprints = new Set<string>();
       let offset = 0;
       let complete = false;
       for (let page = 0; page < CFB_SHARP_FALLBACK_MAX_PAGES_PER_EVENT; page += 1) {
@@ -142,13 +143,22 @@ export async function fetchSharpApiNcaafOddsFallback(args: {
           retryRateLimitInternally: false,
         });
         if (!Array.isArray(response.data)) throw new Error(`CFB SharpAPI event ${eventId} returned malformed odds data.`);
+        const fingerprint = JSON.stringify(response.data);
+        if (response.data.length > 0 && pageFingerprints.has(fingerprint)) {
+          throw new Error(`CFB SharpAPI event ${eventId} repeated a prior page instead of advancing its offset.`);
+        }
+        if (response.data.length > 0) pageFingerprints.add(fingerprint);
         rows.push(...response.data);
         if (response.pagination?.has_more !== true) {
           complete = true;
           break;
         }
-        const nextOffset = response.pagination.next_offset;
-        if (typeof nextOffset !== "number" || !Number.isInteger(nextOffset) || nextOffset <= offset) {
+        const nextOffset = nextCfbSharpOddsOffset({
+          pagination: response.pagination,
+          requestedOffset: offset,
+          returnedRows: response.data.length,
+        });
+        if (nextOffset === null) {
           throw new Error(`CFB SharpAPI event ${eventId} reported more rows without a valid forward offset.`);
         }
         offset = nextOffset;
@@ -176,6 +186,24 @@ export async function fetchSharpApiNcaafOddsFallback(args: {
     displayBooksByGame,
     eventIdsByGame,
   };
+}
+
+export function nextCfbSharpOddsOffset(args: {
+  pagination: SharpApiResponse<unknown>["pagination"];
+  requestedOffset: number;
+  returnedRows: number;
+}): number | null {
+  const direct = args.pagination?.next_offset;
+  if (typeof direct === "number" && Number.isInteger(direct) && direct > args.requestedOffset) return direct;
+  if (!Number.isInteger(args.returnedRows) || args.returnedRows < 1) return null;
+  const reportedOffset = args.pagination?.offset;
+  if (reportedOffset !== undefined && (!Number.isInteger(reportedOffset) || reportedOffset !== args.requestedOffset)) return null;
+  const reportedCount = args.pagination?.count;
+  const advance = typeof reportedCount === "number" && Number.isInteger(reportedCount) && reportedCount > 0 && reportedCount === args.returnedRows
+    ? reportedCount
+    : args.returnedRows;
+  const derived = args.requestedOffset + advance;
+  return Number.isSafeInteger(derived) && derived > args.requestedOffset ? derived : null;
 }
 
 export function cfbBooksNeedSharpFallback(books: NcaafBookOdds[]): boolean {
