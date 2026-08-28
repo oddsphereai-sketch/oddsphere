@@ -26,7 +26,7 @@ export function dailyEdgeMarketPredictionProvenanceLabel(market: MarketEdgeDto):
     return "Model prediction at the displayed exact sportsbook line";
   }
   if (prediction.source === "exact_named_book") return "Exact named-book prediction line";
-  if (prediction.source === "model_outcome") return "Model outcome forecast · no sportsbook line";
+  if (prediction.source === "model_outcome") return "Model outcome forecast · exact-price grade separate";
   return null;
 }
 

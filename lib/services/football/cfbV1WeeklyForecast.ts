@@ -60,6 +60,12 @@ export type CfbV1WeeklyForecastResult = {
   };
 };
 
+export type CfbV1WeeklyProfileCoverage = {
+  awayProfile: "matched" | "neutral_imputation";
+  homeProfile: "matched" | "neutral_imputation";
+  supported: boolean;
+};
+
 const baseArtifact = baseArtifactJson as unknown as BaseArtifact;
 const weeklyArtifact = weeklyArtifactJson as unknown as WeeklyArtifact;
 const FOOTBALL_SCORE_SUPPORT = [
@@ -110,6 +116,12 @@ export function getFrozenCfbV1Forecasts(): CfbV1Forecast[] {
   return baseArtifact.forecasts.map(cloneForecast);
 }
 
+export function cfbV1WeeklyGameProfileCoverage(game: NcaafGame): CfbV1WeeklyProfileCoverage {
+  const awayProfile = profileForName(game.away.name) === null ? "neutral_imputation" : "matched";
+  const homeProfile = profileForName(game.home.name) === null ? "neutral_imputation" : "matched";
+  return { awayProfile, homeProfile, supported: awayProfile === "matched" && homeProfile === "matched" };
+}
+
 function initialStates(): Map<string, MutableTeamState> {
   return new Map(Object.entries(weeklyArtifact.teamProfiles).map(([name, profile]) => [name, {
     profile,
@@ -140,6 +152,16 @@ function resolveState(states: Map<string, MutableTeamState>, name: string): { st
   const state = { profile: neutral, sourceMatched: false, elo: 1500, lastPlayedAt: null, currentGames: 0, sums: {}, counts: {} };
   states.set(normalizeName(name), state);
   return { state, matched: false };
+}
+
+function profileForName(name: string): TeamProfile | null {
+  const exact = weeklyArtifact.teamProfiles[normalizeName(name)];
+  if (exact) return exact;
+  const folded = foldName(name);
+  const matches = Object.entries(weeklyArtifact.teamProfiles).filter(([candidate]) => foldName(candidate) === folded);
+  if (matches.length === 1) return matches[0]![1];
+  if (matches.length > 1) throw new Error(`CFB team identity is ambiguous for ${name}.`);
+  return null;
 }
 
 function matchupFeatures(args: { game: NcaafGame; away: MutableTeamState; home: MutableTeamState }): Record<string, NullableNumber> {

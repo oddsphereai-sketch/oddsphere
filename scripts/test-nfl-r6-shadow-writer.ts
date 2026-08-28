@@ -182,7 +182,7 @@ assert.equal(falsifiedLagT60.lockedAt, null);
 assert.ok(falsifiedLagT60.health.blockingReasons.includes("t60_capture_late"));
 
 const writer = readFileSync(path.resolve("lib/services/football/nflForwardEvidenceWriter.ts"), "utf8");
-assert.match(writer, /nfl_forward_evidence_writer_2026_08_28_r11_cross_market_coherence/);
+assert.match(writer, /nfl_forward_evidence_writer_2026_08_28_r12_named_book_split_priority/);
 assert.match(writer, /buildNflR6ShadowMoneylineDecision/);
 assert.match(writer, /buildNflV1ActionableGradeBundle/);
 assert.match(writer, /evaluatedBets: production\.evaluatedBets/);

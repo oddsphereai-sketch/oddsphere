@@ -249,6 +249,20 @@ assert.equal(sharpMember.snapshot.games[0]!.markets.total.sharpBookAvailability?
 assert.equal(sharpMember.snapshot.games[0]!.markets.total.recommendationDecision?.sharpBookSplits?.label, "Sharp Book Splits");
 assert.equal(sharpMember.snapshot.games[0]!.markets.total.recommendationDecision?.sharpBookSplits?.rows[0]?.moneyPct, 41);
 assert.equal(sharpMember.snapshot.games[0]!.markets.total.publicSplits[0]?.moneyPct, 27, "Playbook public consensus remains a separate display authority");
+const draftKingsSplitPayload = structuredClone(sharpPayload);
+draftKingsSplitPayload.market.sharpApiSplits![0]!.sportsbook = "draftkings";
+draftKingsSplitPayload.market.sharpApiSplits![0]!.sourceSemantics = "public_recreational";
+const draftKingsSplitMember = buildCfbMemberFixture([{
+  ...evidence,
+  id: "draftkings-split-row",
+  payloadSha256: hashCfbForwardEvidencePayload(draftKingsSplitPayload),
+  payload: draftKingsSplitPayload,
+}]);
+assert.equal(draftKingsSplitMember.snapshot.games[0]!.markets.total.sportsbookSplits?.label, "DraftKings Splits");
+assert.equal(draftKingsSplitMember.snapshot.games[0]!.markets.total.sportsbookSplits?.rows[0]?.moneyPct, 41);
+assert.equal(draftKingsSplitMember.snapshot.games[0]!.markets.total.recommendationDecision?.sharpBookSplits, null);
+assert.equal(draftKingsSplitMember.snapshot.games[0]!.markets.total.sharpBookAvailability, null);
+assert.equal(draftKingsSplitMember.snapshot.games[0]!.markets.total.publicSplits[0]?.moneyPct, 27, "DraftKings fallback cannot replace Playbook public consensus");
 assert.equal(member.snapshot.games[0]!.markets.moneyline.held, false);
 assert.equal(member.snapshot.games[0]!.markets.total.publicSplits.length, 2);
 assert.equal(member.snapshot.games[0]!.markets.total.publicSplits[0]!.staleAfterMinutes, 390, "early-week CFB splits must honor the six-hour writer cadence plus grace");

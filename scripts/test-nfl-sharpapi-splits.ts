@@ -23,7 +23,7 @@ const row: SharpApiNflSplitRow = {
   league: "nfl",
   away_team: "New England Patriots",
   home_team: "Seattle Seahawks",
-  sportsbook: "consensus",
+  sportsbook: "circa",
   fetched_at: "2026-08-21T17:00:00Z",
   moneyline: { bets_pct: { home: 0.42, away: 0.58 }, handle_pct: { home: 0.61, away: 0.39 } },
   spread: { bets_pct: { home: 48, away: 52 }, handle_pct: { home: 55, away: 45 } },
@@ -39,6 +39,53 @@ assert.equal(completeSharpApiNflSplitSet(normalized), true);
 
 const matched = matchSharpApiNflSplitRows([game], [{ date: "2026-09-09", rows: [row] }], "2026-08-21T17:01:00Z");
 assert.equal(matched[game.providerGameId]?.total.underBetsPct, 43);
+assert.equal(matched[game.providerGameId]?.moneyline.sourceSportsbook, "circa");
+
+const draftKings = { ...row, sportsbook: "draftkings", fetched_at: "2026-08-21T17:02:00Z" };
+const betMgm = { ...row, sportsbook: "betmgm", fetched_at: "2026-08-21T17:03:00Z" };
+assert.equal(
+  matchSharpApiNflSplitRows(
+    [game],
+    [{ date: "2026-09-09", rows: [betMgm, draftKings, row] }],
+    "2026-08-21T17:04:00Z",
+  )[game.providerGameId]?.moneyline.sourceSportsbook,
+  "circa",
+);
+
+const incompleteCirca = {
+  ...row,
+  total: { bets_pct: { over: 0.57, under: 0.43 }, handle_pct: null },
+};
+assert.equal(
+  matchSharpApiNflSplitRows(
+    [game],
+    [{ date: "2026-09-09", rows: [betMgm, draftKings, incompleteCirca] }],
+    "2026-08-21T17:04:00Z",
+  )[game.providerGameId]?.moneyline.sourceSportsbook,
+  "draftkings",
+);
+assert.equal(
+  matchSharpApiNflSplitRows(
+    [game],
+    [{ date: "2026-09-09", rows: [betMgm, incompleteCirca] }],
+    "2026-08-21T17:04:00Z",
+  )[game.providerGameId]?.moneyline.sourceSportsbook,
+  "betmgm",
+);
+
+const consensus = { ...row, sportsbook: "consensus" };
+assert.deepEqual(
+  matchSharpApiNflSplitRows([game], [{ date: "2026-09-09", rows: [consensus] }], "2026-08-21T17:01:00Z"),
+  {},
+);
+assert.equal(
+  matchSharpApiNflSplitRows(
+    [game],
+    [{ date: "2026-09-09", rows: [row, { ...row }] }],
+    "2026-08-21T17:01:00Z",
+  )[game.providerGameId],
+  undefined,
+);
 
 const stale = { ...row, event_start_time: "2026-09-11T00:20:00.000Z" };
 assert.deepEqual(

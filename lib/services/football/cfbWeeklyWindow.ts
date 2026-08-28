@@ -1,7 +1,7 @@
 import type { NcaafGame } from "./balldontlieNcaafSlate";
 
 export const CFB_WEEKLY_WINDOW_RELEASE =
-  "cfb_weekly_window_2026_08_25_r1" as const;
+  "cfb_weekly_window_2026_08_28_r2_model_covered_division_i" as const;
 
 export type CfbWeeklyWindow = {
   release: typeof CFB_WEEKLY_WINDOW_RELEASE;
@@ -43,7 +43,7 @@ export function isGameInCfbWeeklyWindow(game: Pick<NcaafGame, "scheduledStart">,
 }
 
 export function eligibleCfbWeeklyGames(games: NcaafGame[], window: CfbWeeklyWindow): NcaafGame[] {
-  const output = games.filter((game) => (game.home.fbs || game.away.fbs) && isGameInCfbWeeklyWindow(game, window));
+  const output = games.filter((game) => isGameInCfbWeeklyWindow(game, window));
   const ids = new Set(output.map((game) => game.providerGameId));
   if (ids.size !== output.length) throw new Error("CFB weekly slate contains duplicate provider game IDs.");
   return output.sort((first, second) => Date.parse(first.scheduledStart) - Date.parse(second.scheduledStart) || first.providerGameId.localeCompare(second.providerGameId));

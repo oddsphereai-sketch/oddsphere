@@ -1066,11 +1066,11 @@ check(
     !candidateSource.includes('<SplitSourcePanel source="SHARP BOOK SPLITS" section={sharp}'),
 );
 check(
-  "Circa stays primary while complete named-book fallback splits remain source-labeled and display-only",
+  "public consensus and sharp book split cards retain their established presentation while Circa-priority fill-ins remain display-only",
   candidateSource.includes("const sportsbook = market.sportsbookSplits ?? null") &&
-    candidateSource.includes("DRAFTKINGS SPLITS · CIRCA FALLBACK") &&
-    candidateSource.includes("BETMGM SPLITS · CIRCA FALLBACK") &&
-    candidateSource.includes('sport === "mlb" ? "CIRCA SPLITS" : "SHARP BOOK SPLITS"') &&
+    candidateSource.includes('source="PUBLIC CONSENSUS"') &&
+    candidateSource.includes('source="SHARP BOOK SPLITS"') &&
+    candidateSource.includes('displayedSharp.label === "Sharp Book Signal" ? "SHARP BOOK SIGNAL" : "SHARP BOOK SPLITS"') &&
     candidateSource.includes("Public consensus and source-specific sportsbook evidence remain separate signals") &&
     !candidateSource.includes("sharpBookSplits = market.sportsbookSplits"),
 );
@@ -1495,7 +1495,7 @@ check(
 check(
   "a context-only CFB line never promises missing sportsbook odds",
   DAILY_EDGE_MEMBER_PRESENTATION_RELEASE_ID ===
-    "daily_edge_member_presentation_2026_08_28_r11_source_specific_sportsbook_splits" &&
+    "daily_edge_member_presentation_2026_08_28_r12_sharp_book_split_priority" &&
     candidateSource.includes("Sportsbook odds unavailable") &&
     candidateSource.includes("Consensus line only") &&
     candidateSource.includes("No eligible named-book American price was captured") &&

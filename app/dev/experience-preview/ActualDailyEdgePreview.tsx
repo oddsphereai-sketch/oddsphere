@@ -1473,18 +1473,18 @@ function DefaultSplitSummary({ market, sport = null }: { market: MarketEdgeDto; 
       <div className="flex flex-wrap items-center justify-between gap-2"><div><p className="text-[8px] font-black uppercase tracking-[0.15em] text-gray-300">Market splits</p><p className="mt-0.5 text-[7px] text-gray-600">{hasSourceSpecificEvidence ? "Public consensus and source-specific sportsbook evidence remain separate signals" : "Public consensus money and ticket distribution"}</p></div>{displayedConflict ? <span className="rounded-full border border-amber-400/25 bg-amber-400/[0.08] px-2 py-0.5 text-[7px] font-black uppercase tracking-wider text-amber-200">{conflictIsHistorical ? "Historical source conflict" : "Sources conflict"}</span> : null}</div>
       <div className="mt-2 grid gap-2">
         <SplitSourcePanel source="PUBLIC CONSENSUS" section={consensus} pick={market.pick} />
-        {sportsbook ? <SplitSourcePanel source={sportsbook.label === "BetMGM Splits" ? "BETMGM SPLITS · CIRCA FALLBACK" : "DRAFTKINGS SPLITS · CIRCA FALLBACK"} section={sportsbook} pick={market.pick} availabilityStatus={splitSectionIsStale(sportsbook) ? "stale" : "complete"} /> : null}
-        {displayedSharp ? <SplitSourcePanel source={displayedSharp.label === "Sharp Book Signal" ? "SHARP BOOK SIGNAL" : sport === "mlb" ? "CIRCA SPLITS" : "SHARP BOOK SPLITS"} section={displayedSharp} pick={market.pick} availabilityStatus={sharpAvailability?.status ?? (splitSectionIsStale(displayedSharp) ? "stale" : displayedSharp.rows.length > 0 ? "complete" : "provider_limited")} /> : null}
+        {sportsbook ? <SplitSourcePanel source="SHARP BOOK SPLITS" section={sportsbook} pick={market.pick} availabilityStatus={splitSectionIsStale(sportsbook) ? "stale" : "complete"} /> : null}
+        {displayedSharp ? <SplitSourcePanel source={displayedSharp.label === "Sharp Book Signal" ? "SHARP BOOK SIGNAL" : "SHARP BOOK SPLITS"} section={displayedSharp} pick={market.pick} availabilityStatus={sharpAvailability?.status ?? (splitSectionIsStale(displayedSharp) ? "stale" : displayedSharp.rows.length > 0 ? "complete" : "provider_limited")} /> : null}
       </div>
       {displayedSharp?.rows.length ? <CrossSourceSplitRead consensus={consensus} sharp={displayedSharp} /> : null}
     </div>
   );
 }
 
-function SplitSourcePanel({ source, section, pick, availabilityStatus = null }: { source: "PUBLIC CONSENSUS" | "DRAFTKINGS SPLITS · CIRCA FALLBACK" | "BETMGM SPLITS · CIRCA FALLBACK" | "CIRCA SPLITS" | "SHARP BOOK SPLITS" | "SHARP BOOK SIGNAL"; section: MarketSplitDisplaySection | null; pick: string | null; availabilityStatus?: "complete" | "provider_limited" | "pending" | "stale" | "unavailable" | null }) {
+function SplitSourcePanel({ source, section, pick, availabilityStatus = null }: { source: "PUBLIC CONSENSUS" | "SHARP BOOK SPLITS" | "SHARP BOOK SIGNAL"; section: MarketSplitDisplaySection | null; pick: string | null; availabilityStatus?: "complete" | "provider_limited" | "pending" | "stale" | "unavailable" | null }) {
   const moneyLeader = splitLeader(section, "moneyPct");
   const ticketLeader = splitLeader(section, "betsPct");
-  const isSharp = source === "CIRCA SPLITS" || source === "SHARP BOOK SPLITS" || source === "SHARP BOOK SIGNAL";
+  const isSharp = source === "SHARP BOOK SPLITS" || source === "SHARP BOOK SIGNAL";
   const stale = splitSectionIsStale(section);
   const displayRows = canonicalSplitRows(section);
   const availabilityLabel = availabilityStatus === "provider_limited" ? "Provider limited" : availabilityStatus === "pending" ? "Pending" : availabilityStatus === "complete" ? "Complete" : availabilityStatus === "unavailable" ? "Unavailable" : null;
