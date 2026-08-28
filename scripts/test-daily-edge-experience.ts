@@ -1536,7 +1536,7 @@ check(
 check(
   "a context-only CFB line never promises missing sportsbook odds",
   DAILY_EDGE_MEMBER_PRESENTATION_RELEASE_ID ===
-    "daily_edge_member_presentation_2026_08_28_r15_football_unavailable_prediction_copy" &&
+    "daily_edge_member_presentation_2026_08_28_r16_cfb_independent_public_prediction" &&
     candidateSource.includes("Sportsbook odds unavailable") &&
     candidateSource.includes("Consensus line only") &&
     candidateSource.includes("No eligible named-book American price was captured") &&
@@ -1556,12 +1556,12 @@ check(
     !candidateSource.includes("winner, spread and total probabilities all come from the same discrete score distribution"),
 );
 check(
-  "the CFB reader can present a market-informed primary forecast without erasing the football-only baseline",
-  candidateSource.includes("Market-informed outcome forecast") &&
-    candidateSource.includes("Football-only baseline") &&
+  "the CFB reader presents the independent PMF as the public prediction and keeps price calibration separate",
+  candidateSource.includes("Independent outcome forecast") &&
+    candidateSource.includes("This is OddSphere's football-only winner forecast") &&
     candidateSource.includes("game.footballOnlyProjection") &&
     candidateSource.includes("the exact-price") &&
-    candidateSource.includes("Bet grade is separately evaluated at the displayed sportsbook quote") &&
+    candidateSource.includes("Bet grade is separately evaluated") &&
     labTypesSource.includes("footballOnlyProjection?:"),
 );
 check(

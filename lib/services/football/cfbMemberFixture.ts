@@ -34,13 +34,17 @@ import { activeCfbWeeklyWindow, isGameInCfbWeeklyWindow } from "./cfbWeeklyWindo
 import { cfbFootballEvidenceStats } from "./footballMemberEvidence";
 
 export const CFB_MEMBER_FIXTURE_RELEASE =
-  "cfb_v1_member_fixture_2026_08_28_r20_canonical_price_coverage" as const;
+  "cfb_v1_member_fixture_2026_08_28_r21_independent_public_prediction" as const;
+export const CFB_PUBLIC_OUTCOME_CONTRACT_RELEASE =
+  "cfb_independent_public_outcome_contract_2026_08_28_r29" as const;
 export const CFB_CONTEXT_ONLY_QUOTE_CAPTURE_SKEW_MS = 5_000 as const;
 const CFB_MARKET_CONTEXT_MAX_CAPTURE_LAG_MINUTES = 10;
+const CFB_PUBLIC_SCORE_DIRECTION_TOLERANCE_POINTS = 0.25;
 const CFB_PRE_DIRECTIONAL_MEMBER_RELEASE = "cfb_v1_member_release_2026_08_28_r14_expanded_sharp_budget" as const;
 const CFB_PRE_DIRECTIONAL_DECISION_RELEASE = "cfb_v1_daily_edge_decision_2026_08_28_r11_market_scoped_data_quality" as const;
 const CFB_PROVIDER_DISCOVERY_PREVIOUS_MEMBER_RELEASE = "cfb_v1_member_release_2026_08_28_r15_directional_pmf" as const;
 const CFB_PROVIDER_DISCOVERY_PREVIOUS_DECISION_RELEASE = "cfb_v1_daily_edge_decision_2026_08_28_r12_directional_pmf" as const;
+const CFB_CANONICAL_PRICE_PREVIOUS_MEMBER_RELEASE = "cfb_v1_member_release_2026_08_28_r16_canonical_price_coverage" as const;
 const CFB_DATA_QUALITY_MEMBER_RELEASE = "cfb_v1_member_release_2026_08_28_r8_market_scoped_data_quality" as const;
 const CFB_DATA_QUALITY_DECISION_RELEASE = "cfb_v1_daily_edge_decision_2026_08_28_r11_market_scoped_data_quality" as const;
 const CFB_PREVIOUS_MEMBER_RELEASE = "cfb_v1_member_release_2026_08_28_r7_two_axis_outcome_sharp_splits" as const;
@@ -126,6 +130,8 @@ function latestCompleteRows(rows: CfbForwardStoredEvidence[]): CfbForwardStoredE
   if (rows.length === 0) throw new Error("CFB forward evidence is empty.");
   const current = completeRowsForRelease(rows, CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE, CFB_FORWARD_MEMBER_RELEASE, CFB_V1_DECISION_RELEASE);
   if (current) return current;
+  const canonicalPriceFallback = completeRowsForRelease(rows, CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE, CFB_CANONICAL_PRICE_PREVIOUS_MEMBER_RELEASE, CFB_V1_DECISION_RELEASE);
+  if (canonicalPriceFallback) return canonicalPriceFallback;
   const providerDiscoveryPreviousFallback = completeRowsForRelease(rows, CFB_FORWARD_PROVIDER_DISCOVERY_PREVIOUS_EVIDENCE_SCHEMA_RELEASE, CFB_PROVIDER_DISCOVERY_PREVIOUS_MEMBER_RELEASE, CFB_PROVIDER_DISCOVERY_PREVIOUS_DECISION_RELEASE);
   if (providerDiscoveryPreviousFallback) return providerDiscoveryPreviousFallback;
   const preDirectionalFallback = completeRowsForRelease(rows, CFB_FORWARD_PRE_DIRECTIONAL_EVIDENCE_SCHEMA_RELEASE, CFB_PRE_DIRECTIONAL_MEMBER_RELEASE, CFB_PRE_DIRECTIONAL_DECISION_RELEASE);
@@ -184,7 +190,7 @@ function buildGame(row: CfbForwardStoredEvidence, movementRows: CfbForwardStored
   const t60 = payload.stage === "t60";
   const allHeld = payload.decisions.heldMarkets.length === 3;
   const headline = [moneyline, total, spread].sort((a, b) => verdictRank(b.verdict.key) - verdictRank(a.verdict.key))[0]!;
-  const primaryForecast = payload.outcomeForecast ?? payload.decisions.forecast;
+  const primaryForecast = payload.decisions.forecast;
   const projected = primaryForecast.representativeScore;
   const recommendationDecision = buildCfbRecommendationDecision({
     payload,
@@ -202,7 +208,7 @@ function buildGame(row: CfbForwardStoredEvidence, movementRows: CfbForwardStored
   if (moneyline.sportsbookSplits) moneyline.sharpBookAvailability = null;
   if (total.sportsbookSplits) total.sharpBookAvailability = null;
   if (spread.sportsbookSplits) spread.sharpBookAvailability = null;
-  return {
+  const game: DailyEdgeGameDto = {
     id: `cfb-${payload.game.providerGameId}`,
     sport: "cfb",
     external_id: Number(payload.game.providerGameId),
@@ -225,51 +231,89 @@ function buildGame(row: CfbForwardStoredEvidence, movementRows: CfbForwardStored
     markets: { moneyline, total, first_inning: spread },
     decisionLine: headline.verdict.key === "best_angle" ? `Best angle: ${headline.pick}` : headline.verdict.key === "lean" ? `Lean: ${headline.pick}` : headline.verdict.key === "watchlist" ? `Watchlist: ${headline.pick}` : allHeld ? "Predictions are live · exact-price Bet grades are No Play until sportsbook evidence is complete" : "No exact-price play clears the current policy",
     projected,
-    footballProjection: payload.outcomeForecast
-      ? {
-          awayWinProbability: 1 - primaryForecast.homeWinProbability,
-          homeWinProbability: primaryForecast.homeWinProbability,
-          expectedAwayPoints: primaryForecast.expectedAwayPoints,
-          expectedHomePoints: primaryForecast.expectedHomePoints,
-          representativeScore: primaryForecast.representativeScore,
-          interval80: primaryForecast.interval80,
-          modelRelease: payload.outcomeForecast.modelRelease,
-          distributionRelease: payload.outcomeForecast.distributionRelease,
-          probabilityRelease: payload.outcomeForecast.probabilityRelease,
-          artifactRelease: payload.outcomeForecast.artifactRelease,
-        }
-      : {
-          awayWinProbability: 1 - primaryForecast.homeWinProbability,
-          homeWinProbability: primaryForecast.homeWinProbability,
-          expectedAwayPoints: primaryForecast.expectedAwayPoints,
-          expectedHomePoints: primaryForecast.expectedHomePoints,
-          representativeScore: primaryForecast.representativeScore,
-          interval80: primaryForecast.interval80,
-          modelRelease: CFB_V1_MODEL_RELEASE,
-          distributionRelease: CFB_V1_DISTRIBUTION_RELEASE,
-          probabilityRelease: CFB_V1_PROBABILITY_RELEASE,
-          artifactRelease: CFB_V1_SCORE_ARTIFACT_RELEASE,
-        },
-    footballOnlyProjection: payload.outcomeForecast
-      ? {
-          awayWinProbability: 1 - payload.decisions.forecast.homeWinProbability,
-          homeWinProbability: payload.decisions.forecast.homeWinProbability,
-          expectedAwayPoints: payload.decisions.forecast.expectedAwayPoints,
-          expectedHomePoints: payload.decisions.forecast.expectedHomePoints,
-          representativeScore: payload.decisions.forecast.representativeScore,
-          interval80: payload.decisions.forecast.interval80,
-          modelRelease: CFB_V1_MODEL_RELEASE,
-          distributionRelease: CFB_V1_DISTRIBUTION_RELEASE,
-          probabilityRelease: CFB_V1_PROBABILITY_RELEASE,
-          artifactRelease: CFB_V1_SCORE_ARTIFACT_RELEASE,
-        }
-      : null,
+    footballProjection: {
+      awayWinProbability: 1 - primaryForecast.homeWinProbability,
+      homeWinProbability: primaryForecast.homeWinProbability,
+      expectedAwayPoints: primaryForecast.expectedAwayPoints,
+      expectedHomePoints: primaryForecast.expectedHomePoints,
+      representativeScore: primaryForecast.representativeScore,
+      interval80: primaryForecast.interval80,
+      modelRelease: CFB_V1_MODEL_RELEASE,
+      distributionRelease: CFB_V1_DISTRIBUTION_RELEASE,
+      probabilityRelease: CFB_V1_PROBABILITY_RELEASE,
+      artifactRelease: CFB_V1_SCORE_ARTIFACT_RELEASE,
+    },
+    footballOnlyProjection: null,
     sharpSignals: buildSignals(payload),
     status: { lineupConfirmed: null, linesLocked: payload.market.current !== null || payload.market.playbookLine !== null, sharpSignalPending: !payload.market.sharpApiSplits?.some((record) => record.sourceSemantics === "sharp_adjacent"), marketDataLimited: payload.market.current === null && payload.market.playbookLine === null },
     result: null,
-    breakdown: { verdict: headline.verdict, sharpRead: { key: "mixed", sentence: "The outcome forecast and exact-price market evaluation are shown separately." }, modelBreakdown: `OddSphere projects ${payload.game.away.abbreviation} ${primaryForecast.expectedAwayPoints.toFixed(1)}–${primaryForecast.expectedHomePoints.toFixed(1)} ${payload.game.home.abbreviation}; the reachable representative score is ${primaryForecast.representativeScore.away}–${primaryForecast.representativeScore.home}.${payload.outcomeForecast ? ` The football-only baseline is ${payload.decisions.forecast.expectedAwayPoints.toFixed(1)}–${payload.decisions.forecast.expectedHomePoints.toFixed(1)}.` : ""}` },
+    breakdown: { verdict: headline.verdict, sharpRead: { key: "mixed", sentence: "The independent outcome forecast and exact-price market evaluation are shown separately." }, modelBreakdown: `OddSphere's football-only joint PMF projects ${payload.game.away.abbreviation} ${primaryForecast.expectedAwayPoints.toFixed(1)}–${primaryForecast.expectedHomePoints.toFixed(1)} ${payload.game.home.abbreviation}; the reachable representative score is ${primaryForecast.representativeScore.away}–${primaryForecast.representativeScore.home}.` },
     recommendationDecision,
   };
+  assertCfbPublicPredictionCoherence({ payload, game });
+  return game;
+}
+
+function assertCfbPublicPredictionCoherence(args: {
+  payload: CfbForwardEvidencePayload;
+  game: DailyEdgeGameDto;
+}): void {
+  const forecast = args.payload.decisions.forecast;
+  const football = args.game.footballProjection;
+  if (!football || args.game.footballOnlyProjection) {
+    throw new Error(`${CFB_PUBLIC_OUTCOME_CONTRACT_RELEASE}: CFB must publish exactly one independent football prediction.`);
+  }
+  if (
+    Math.abs(football.expectedAwayPoints - forecast.expectedAwayPoints) > 1e-9 ||
+    Math.abs(football.expectedHomePoints - forecast.expectedHomePoints) > 1e-9 ||
+    Math.abs(football.homeWinProbability - forecast.homeWinProbability) > 1e-9 ||
+    args.game.projected.away !== forecast.representativeScore.away ||
+    args.game.projected.home !== forecast.representativeScore.home
+  ) {
+    throw new Error(`${CFB_PUBLIC_OUTCOME_CONTRACT_RELEASE}: public score/winner fields do not match the independent PMF.`);
+  }
+  const expectedMarginHome = forecast.expectedHomePoints - forecast.expectedAwayPoints;
+  const expectedTotal = forecast.expectedHomePoints + forecast.expectedAwayPoints;
+  const markets: Array<{
+    market: CfbV1Market;
+    dto: MarketEdgeDto;
+    decision: CfbV1ExactPriceDecision | null;
+  }> = [
+    { market: "moneyline", dto: args.game.markets.moneyline, decision: decisionFor(args.payload.decisions.evaluatedBets, "moneyline") },
+    { market: "spread", dto: args.game.markets.first_inning, decision: decisionFor(args.payload.decisions.evaluatedBets, "spread") },
+    { market: "total", dto: args.game.markets.total, decision: decisionFor(args.payload.decisions.evaluatedBets, "total") },
+  ];
+  for (const { market, dto, decision } of markets) {
+    const prediction = dto.marketPrediction;
+    if (!decision) continue;
+    if (
+      !prediction || prediction.status !== "available" ||
+      prediction.label !== decision.side ||
+      prediction.line !== decision.evaluatedQuote.line ||
+      Math.abs((prediction.probability ?? -1) - decision.independentProbability) > 1e-9
+    ) {
+      throw new Error(`${CFB_PUBLIC_OUTCOME_CONTRACT_RELEASE}: ${market} prediction does not match the independent PMF at the evaluated line.`);
+    }
+    const selected = canonicalSide(args.payload, decision);
+    let scoreSide: "home" | "away" | "over" | "under" | null = null;
+    if (market === "moneyline" && Math.abs(expectedMarginHome) > CFB_PUBLIC_SCORE_DIRECTION_TOLERANCE_POINTS) {
+      scoreSide = expectedMarginHome > 0 ? "home" : "away";
+    } else if (market === "spread" && decision.evaluatedQuote.line !== null) {
+      const homeSpread = selected === "home" ? decision.evaluatedQuote.line : -decision.evaluatedQuote.line;
+      const scoreCoverMargin = expectedMarginHome + homeSpread;
+      if (Math.abs(scoreCoverMargin) > CFB_PUBLIC_SCORE_DIRECTION_TOLERANCE_POINTS) scoreSide = scoreCoverMargin > 0 ? "home" : "away";
+    } else if (market === "total" && decision.evaluatedQuote.line !== null) {
+      const scoreTotalMargin = expectedTotal - decision.evaluatedQuote.line;
+      if (Math.abs(scoreTotalMargin) > CFB_PUBLIC_SCORE_DIRECTION_TOLERANCE_POINTS) scoreSide = scoreTotalMargin > 0 ? "over" : "under";
+    }
+    if (scoreSide && scoreSide !== selected) {
+      throw new Error(
+        `${CFB_PUBLIC_OUTCOME_CONTRACT_RELEASE}: ${args.payload.game.away.abbreviation}@${args.payload.game.home.abbreviation} ` +
+        `${market} score direction ${scoreSide} conflicts with ${selected} at line ${decision.evaluatedQuote.line}; ` +
+        `expected margin ${expectedMarginHome.toFixed(4)}, expected total ${expectedTotal.toFixed(4)}.`,
+      );
+    }
+  }
 }
 
 function buildCfbRecommendationDecision(args: {
@@ -322,7 +366,7 @@ function selectedMarketSide(
   decision: CfbV1ExactPriceDecision | null,
 ): "home" | "away" | "over" | "under" | null {
   if (decision) return canonicalSide(payload, decision);
-  return payload.outcomeMarketOutlooks?.[market]?.side ?? payload.decisions.marketOutlooks?.[market]?.side ?? null;
+  return payload.decisions.marketOutlooks?.[market]?.side ?? null;
 }
 
 function buildSharpBookSplitSection(
@@ -408,7 +452,7 @@ function buildMarket(
   movementRows: CfbForwardStoredEvidence[],
 ): MarketEdgeDto {
   const held = decision === null;
-  const outlook = payload.outcomeMarketOutlooks?.[market] ?? payload.decisions.marketOutlooks?.[market] ?? null;
+  const outlook = payload.decisions.marketOutlooks?.[market] ?? null;
   const displayedProbability = decision?.modelProbability ?? outlook?.independentProbability ?? null;
   const slot = market === "spread" ? payload.market.current?.spread : market === "total" ? payload.market.current?.total : payload.market.current?.moneyline;
   const split = payload.market.playbookSplits?.[market] ?? null;
@@ -520,7 +564,7 @@ function buildMarket(
     lastMoveAtIso: trails.selected.at(-1)?.observedAt ?? null,
     lastMoveLinePrev: trails.selected.length > 1 ? trails.selected.at(-2)!.line : null,
     lastMoveLineNext: trails.selected.at(-1)?.line ?? null,
-    modelTotal: market === "total" ? (payload.outcomeForecast ?? payload.decisions.forecast).expectedTotal : null,
+    modelTotal: market === "total" ? payload.decisions.forecast.expectedTotal : null,
     marketTotal: market === "total" ? decision?.evaluatedQuote.line ?? outlook?.line ?? lineFromSlot(slot) : null,
     line: decision?.evaluatedQuote.line ?? currentQuote?.quote.line ?? outlook?.line ?? lineFromSlot(slot),
     keyStats: keyStats(payload, market),
@@ -530,7 +574,7 @@ function buildMarket(
     recommendationConfidence: actionability,
     marketSource: decision?.evaluatedQuote.sportsbook ?? currentQuote?.book.sportsbook ?? contextOnlyQuote?.book.sportsbook ?? null,
     marketDataQuality: decision ? "two_sided_consensus" : currentQuote || contextOnlyQuote ? "single_book" : payload.market.playbookLine ? "single_book" : "unavailable",
-    reviewFlags: [CFB_MEMBER_FIXTURE_RELEASE, payload.outcomeForecast?.contractRelease ?? CFB_V1_MODEL_RELEASE, CFB_V1_DECISION_RELEASE],
+    reviewFlags: [CFB_MEMBER_FIXTURE_RELEASE, CFB_PUBLIC_OUTCOME_CONTRACT_RELEASE, CFB_V1_DECISION_RELEASE],
     reviewActionSummary: held ? "repair_price_coverage" : "keep",
   };
 }
@@ -692,7 +736,7 @@ function crossMarketExplanation(
   decision: CfbV1ExactPriceDecision,
 ): string {
   const notes: string[] = [];
-  const primary = payload.outcomeForecast ?? payload.decisions.forecast;
+  const primary = payload.decisions.forecast;
   if (market === "moneyline") {
     const selected = canonicalSide(payload, decision);
     const predictedWinner = primary.homeWinProbability >= 0.5 ? "home" : "away";
@@ -721,6 +765,21 @@ function buildMarketPrediction(
   decision: CfbV1ExactPriceDecision | null,
   outlook: CfbForwardMarketOutlook | null,
 ): NonNullable<MarketEdgeDto["marketPrediction"]> {
+  if (decision) {
+    return {
+      status: "available",
+      label: decision.side,
+      line: decision.evaluatedQuote.line,
+      probability: decision.independentProbability,
+      source: market === "moneyline" ? "model_outcome" : "model_at_context_line",
+      sportsbook: decision.evaluatedQuote.sportsbook,
+      observedAt: decision.evaluatedQuote.observedAt,
+      freshnessCheckedAt: payload.capturedAt,
+      reason: market === "moneyline"
+        ? "The independent joint PMF supplies the winner prediction; the exact-price Bet probability and grade remain separate."
+        : "The independent joint PMF is evaluated at the identical sportsbook line; the exact-price Bet probability and grade remain separate.",
+    };
+  }
   if (outlook && market === "moneyline") {
     return {
       status: "available",
@@ -731,9 +790,7 @@ function buildMarketPrediction(
       sportsbook: null,
       observedAt: null,
       freshnessCheckedAt: payload.capturedAt,
-      reason: decision
-        ? "The primary game forecast is shown here; the exact-price Bet selection and grade remain separate."
-        : "The primary game forecast remains available without an offered Moneyline price.",
+      reason: "The independent game forecast remains available without an offered Moneyline price.",
     };
   }
   if (outlook && currentMarketContextIsFresh(payload, outlook)) {
@@ -746,22 +803,7 @@ function buildMarketPrediction(
       sportsbook: null,
       observedAt: outlook.contextObservedAt,
       freshnessCheckedAt: payload.capturedAt,
-      reason: decision
-        ? "The primary joint-score model is evaluated at the current context line; the exact-price Bet selection and grade remain separate."
-        : "The primary joint-score model is evaluated at the current context line without turning that context into a sportsbook offer.",
-    };
-  }
-  if (decision) {
-    return {
-      status: "available",
-      label: decision.side,
-      line: decision.evaluatedQuote.line,
-      probability: decision.modelProbability,
-      source: "exact_named_book",
-      sportsbook: decision.evaluatedQuote.sportsbook,
-      observedAt: decision.evaluatedQuote.observedAt,
-      freshnessCheckedAt: payload.capturedAt,
-      reason: "No separate primary market outlook is stored on this legacy evidence row.",
+      reason: "The independent joint-score PMF is evaluated at the current context line without turning that context into a sportsbook offer.",
     };
   }
   return {
@@ -932,7 +974,7 @@ function buildSameBookTrail(args: {
 }
 
 function keyStats(payload: CfbForwardEvidencePayload, market: CfbV1Market): MarketEdgeDto["keyStats"] {
-  const forecast = payload.outcomeForecast ?? payload.decisions.forecast;
+  const forecast = payload.decisions.forecast;
   const footballEvidence = cfbFootballEvidenceStats({
     awayTeamName: payload.game.away.name,
     homeTeamName: payload.game.home.name,

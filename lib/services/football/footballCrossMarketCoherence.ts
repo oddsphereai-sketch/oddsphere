@@ -1,8 +1,9 @@
 export const FOOTBALL_CROSS_MARKET_COHERENCE_RELEASE =
-  "football_cross_market_coherence_2026_08_28_r3_strict_directional_pmf" as const;
+  "football_cross_market_coherence_2026_08_28_r4_public_prediction_side" as const;
 
 const EPSILON = 1e-9;
 const EV_TOLERANCE = 1e-8;
+const PUBLIC_SCORE_DIRECTION_TOLERANCE_POINTS = 0.25;
 
 export type FootballCoherenceSport = "nfl" | "cfb";
 export type FootballCoherenceMarket = "moneyline" | "spread" | "total";
@@ -46,6 +47,7 @@ export type FootballCoherenceIssueCode =
   | "decision_probability"
   | "decision_fair_probability"
   | "decision_side_identity"
+  | "decision_forecast_side_disagreement"
   | "decision_quote"
   | "decision_ev_mismatch"
   | "actionable_nonpositive_value"
@@ -111,6 +113,7 @@ export function auditFootballCrossMarketCoherence(args: {
   decisions: FootballCoherenceDecision[];
   unavailableMarkets?: FootballCoherenceMarket[];
   allowWholeGameOperationalHold?: boolean;
+  requireDecisionSideFromForecast?: boolean;
 }): FootballCoherenceReport {
   const fatalIssues: FootballCoherenceIssue[] = [];
   const explanations: FootballCoherenceExplanation[] = [];
@@ -135,6 +138,26 @@ export function auditFootballCrossMarketCoherence(args: {
     fatalIssues,
   }));
   const byMarket = new Map(normalized.map((decision) => [decision.market, decision]));
+  if (args.requireDecisionSideFromForecast) {
+    for (const decision of normalized) {
+      if (!decision.selectedSide || decision.market !== "moneyline" && decision.line === null) continue;
+      const forecastSide = selectedForecastSideAtDecision(args.forecast, decision);
+      if (forecastSide === null) {
+        fatalIssues.push({
+          code: "decision_forecast_side_disagreement",
+          detail: `${decision.market} cannot be verified against the released joint PMF.`,
+        });
+      } else if (
+        forecastSide.pmf !== decision.selectedSide ||
+        forecastSide.meanDistance > PUBLIC_SCORE_DIRECTION_TOLERANCE_POINTS && forecastSide.mean !== decision.selectedSide
+      ) {
+        fatalIssues.push({
+          code: "decision_forecast_side_disagreement",
+          detail: `${decision.market} decision ${decision.selectedSide}; PMF ${forecastSide.pmf}; expected-score direction ${forecastSide.mean}; distance ${forecastSide.meanDistance}; line ${decision.line}.`,
+        });
+      }
+    }
+  }
   const moneyline = byMarket.get("moneyline");
   const spread = byMarket.get("spread");
   if (moneyline && spread && moneyline.selectedSide && spread.selectedSide && spread.line !== null) {
@@ -177,6 +200,46 @@ export function auditFootballCrossMarketCoherence(args: {
     fatalIssues,
     explanations,
     checkedMarkets: [...uniqueMarkets].sort(),
+  };
+}
+
+function selectedForecastSideAtDecision(
+  forecast: FootballCoherenceForecast,
+  decision: ReturnType<typeof normalizeDecision>,
+): { pmf: FootballCoherenceSide; mean: FootballCoherenceSide; meanDistance: number } | null {
+  if (!forecast.pmf || forecast.pmf.length === 0 || !decision.selectedSide) return null;
+  const expectedMarginHome = forecast.expectedHomePoints - forecast.expectedAwayPoints;
+  const expectedTotal = forecast.expectedHomePoints + forecast.expectedAwayPoints;
+  if (decision.market === "moneyline") {
+    const home = forecast.pmf.reduce((sum, cell) => sum + (cell.home > cell.away ? 1 : cell.home === cell.away ? 0.5 : 0) * cell.probability, 0);
+    return {
+      pmf: home >= 0.5 ? "home" : "away",
+      mean: expectedMarginHome >= 0 ? "home" : "away",
+      meanDistance: Math.abs(expectedMarginHome),
+    };
+  }
+  if (decision.line === null) return null;
+  if (decision.market === "total") {
+    const over = forecast.pmf.reduce((sum, cell) => {
+      const total = cell.home + cell.away;
+      return sum + (total > decision.line! ? 1 : total === decision.line ? 0.5 : 0) * cell.probability;
+    }, 0);
+    return {
+      pmf: over >= 0.5 ? "over" : "under",
+      mean: expectedTotal >= decision.line ? "over" : "under",
+      meanDistance: Math.abs(expectedTotal - decision.line),
+    };
+  }
+  if (decision.selectedSide !== "home" && decision.selectedSide !== "away") return null;
+  const homeSpread = decision.selectedSide === "home" ? decision.line : -decision.line;
+  const homeCover = forecast.pmf.reduce((sum, cell) => {
+    const result = cell.home - cell.away + homeSpread;
+    return sum + (result > 0 ? 1 : result === 0 ? 0.5 : 0) * cell.probability;
+  }, 0);
+  return {
+    pmf: homeCover >= 0.5 ? "home" : "away",
+    mean: expectedMarginHome + homeSpread >= 0 ? "home" : "away",
+    meanDistance: Math.abs(expectedMarginHome + homeSpread),
   };
 }
 

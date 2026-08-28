@@ -225,11 +225,10 @@ const evidence: CfbForwardStoredEvidence = {
 };
 const member = buildCfbMemberFixture([evidence]);
 assert.equal(member.snapshot.games.length, 1);
-assert.equal(member.snapshot.games[0]!.footballProjection?.expectedAwayPoints, outcomeFull.expectedAwayPoints);
-assert.equal(member.snapshot.games[0]!.footballProjection?.expectedHomePoints, outcomeFull.expectedHomePoints);
-assert.deepEqual(member.snapshot.games[0]!.projected, outcomeFull.representativeScore);
-assert.equal(member.snapshot.games[0]!.footballOnlyProjection?.expectedAwayPoints, forecast.expectedAwayPoints);
-assert.equal(member.snapshot.games[0]!.footballOnlyProjection?.expectedHomePoints, forecast.expectedHomePoints);
+assert.equal(member.snapshot.games[0]!.footballProjection?.expectedAwayPoints, forecast.expectedAwayPoints);
+assert.equal(member.snapshot.games[0]!.footballProjection?.expectedHomePoints, forecast.expectedHomePoints);
+assert.deepEqual(member.snapshot.games[0]!.projected, forecast.representativeScore);
+assert.equal(member.snapshot.games[0]!.footballOnlyProjection, null, "the independent PMF is the sole public prediction rather than a secondary baseline");
 assert.equal(member.snapshot.games[0]!.recommendationDecision?.audit.canPublish, true);
 const sharpPayload: CfbForwardEvidencePayload = {
   ...payload,
@@ -283,6 +282,19 @@ for (const memberMarket of Object.values(member.snapshot.games[0]!.markets)) {
   assert.equal(memberMarket.keyStats.some((row) => row.label === "Current context · Expected quarterback"), true);
   assert.equal(memberMarket.keyStats.some((row) => row.label === "Outcome-model input · Frozen sample"), true);
 }
+
+const canonicalPricePreviousPayload = {
+  ...payload,
+  memberRelease: "cfb_v1_member_release_2026_08_28_r16_canonical_price_coverage",
+} as unknown as CfbForwardEvidencePayload;
+const canonicalPricePreviousMember = buildCfbMemberFixture([{
+  ...evidence,
+  id: "canonical-price-previous-row",
+  payloadSha256: hashCfbForwardEvidencePayload(canonicalPricePreviousPayload),
+  payload: canonicalPricePreviousPayload,
+}]);
+assert.equal(canonicalPricePreviousMember.snapshot.games.length, 1, "the complete r16 member wave remains the atomic fallback until one complete r17 wave exists");
+assert.equal(canonicalPricePreviousMember.snapshot.games[0]!.footballOnlyProjection, null, "the r29 adapter applies one independent public forecast to the atomic fallback wave");
 
 const providerDiscoveryPreviousPayloadRecord = structuredClone(payload) as unknown as Record<string, unknown>;
 providerDiscoveryPreviousPayloadRecord.schemaRelease = CFB_FORWARD_PROVIDER_DISCOVERY_PREVIOUS_EVIDENCE_SCHEMA_RELEASE;
@@ -410,7 +422,7 @@ const heldMember = buildCfbMemberFixture([{
   payload: heldPayload,
 }]);
 const heldGame = heldMember.snapshot.games[0]!;
-const heldProbabilities = cfbV1LineProbabilities({ forecast: outcomeFull, homeSpread: -7.5, totalLine: 47.5 });
+const heldProbabilities = cfbV1LineProbabilities({ forecast, homeSpread: -7.5, totalLine: 47.5 });
 assert.equal(Object.values(heldGame.markets).every((market) => market.held), true, "missing named-book prices must hold exact-price grades");
 assert.ok(Math.abs((heldGame.markets.moneyline.modelProb ?? 0) - heldProbabilities.moneyline.home) < 1e-12, "Held Moneyline must retain its independent winner probability");
 assert.ok(Math.abs((heldGame.markets.first_inning.modelProb ?? 0) - heldProbabilities.spread.home) < 1e-12, "Held Spread must retain the same-PMF probability at the Playbook context line");
@@ -426,7 +438,7 @@ assert.deepEqual(heldGame.markets.first_inning.marketPrediction, {
   sportsbook: null,
   observedAt,
   freshnessCheckedAt: observedAt,
-  reason: "The primary joint-score model is evaluated at the current context line without turning that context into a sportsbook offer.",
+  reason: "The independent joint-score PMF is evaluated at the current context line without turning that context into a sportsbook offer.",
 });
 assert.equal(
   dailyEdgeOutcomeForecastLabel({ game: heldGame, market: heldGame.markets.first_inning, marketKey: "first_inning", sport: "cfb" }),
@@ -450,10 +462,10 @@ assert.equal(publicHeldMoneyline.held, true, "public mapping must preserve the i
 assert.deepEqual(publicHeldMoneyline.verdict, { key: "no_play", label: "No Play" }, "CFB exact-price exceptions must not expose a Held Bet grade");
 assert.equal(publicHeldMoneyline.actionabilityLabel, "No Play");
 assert.ok(Math.abs((publicHeldMoneyline.modelProb ?? 0) - heldProbabilities.moneyline.home) < 1e-12, "CFB public No Play must retain the independent outcome probability");
-assert.deepEqual(publicHeldGame.projected, outcomeFull.representativeScore, "CFB public No Play must retain the primary same-PMF representative score");
-assert.equal(publicHeldGame.footballProjection?.expectedAwayPoints, outcomeFull.expectedAwayPoints, "CFB public No Play must retain primary expected away points");
-assert.equal(publicHeldGame.footballProjection?.expectedHomePoints, outcomeFull.expectedHomePoints, "CFB public No Play must retain primary expected home points");
-assert.equal(publicHeldGame.footballOnlyProjection?.expectedAwayPoints, forecast.expectedAwayPoints, "CFB public No Play must keep the football-only baseline visible");
+assert.deepEqual(publicHeldGame.projected, forecast.representativeScore, "CFB public No Play must retain the independent same-PMF representative score");
+assert.equal(publicHeldGame.footballProjection?.expectedAwayPoints, forecast.expectedAwayPoints, "CFB public No Play must retain independent expected away points");
+assert.equal(publicHeldGame.footballProjection?.expectedHomePoints, forecast.expectedHomePoints, "CFB public No Play must retain independent expected home points");
+assert.equal(publicHeldGame.footballOnlyProjection, null, "CFB must not publish a market-anchor score as a second prediction");
 assert.equal(publicHeldMoneyline.pick, null, "an unavailable exact-price tuple must not fabricate a Bet pick");
 assert.equal(publicHeldMoneyline.priceAmerican, null);
 assert.equal(publicHeldMoneyline.marketFairProb, null);
@@ -926,8 +938,9 @@ assert.ok(sharpFallbackIndex >= 0 && evidenceAppendIndex > sharpFallbackIndex, "
 assert.ok(sharpSplitsIndex >= 0 && evidenceAppendIndex > sharpSplitsIndex, "the sole writer must finish its one league-level strict split read before the all-game append");
 assert.ok(coherenceIndex >= 0 && evidenceAppendIndex > coherenceIndex, "the sole CFB writer must pass coherence before its append boundary");
 assert.equal((writerSource.match(/assertFootballCrossMarketCoherence\(\{/g) ?? []).length, 1, "the CFB writer must use one shared per-payload coherence gate");
+assert.match(writerSource, /requireDecisionSideFromForecast: true/, "the CFB writer must fail closed on an exact-line PMF/decision-side contradiction");
 assert.equal((writerSource.match(/fetchCfbSharpApiSplits\(\{ games, apiKey/g) ?? []).length, 1, "SharpAPI splits must remain one bounded slate request rather than a per-game loop");
-assert.match(writerSource, /buildCfbMarketInformedOutcomeForecast/, "the sole writer must persist the r18 primary outcome axis");
+assert.match(writerSource, /buildCfbMarketInformedOutcomeForecast/, "the sole writer may retain the market-informed outcome only as shadow market context");
 assert.match(sharpOddsSource, /path: "\/events"/, "CFB named-book recovery must discover SharpAPI's canonical events before requesting odds");
 assert.match(sharpOddsSource, /league: "ncaaf"/, "canonical event discovery must stay league-scoped");
 assert.match(sharpOddsSource, /path: "\/odds"[\s\S]*event_id: eventId[\s\S]*market: "main"/, "canonical event odds must stay exact-event and main-market scoped");
@@ -1005,7 +1018,7 @@ assert.match(presentation, /held.{0,20}deliberately remains true/, "the member m
 const sharedTypes = readFileSync(path.resolve("app/lab/lib/labTypes.ts"), "utf8");
 assert.match(sharedTypes, /export (?:interface|type) MarketEdgeDto/, "CFB must continue to adapt into the shared Daily Edge market DTO");
 assert.match(sharedTypes, /held: boolean/, "shared Held semantics remain a DTO contract rather than a CFB presentation fork");
-assert.match(sharedTypes, /footballOnlyProjection\?:/, "CFB primary market-informed outcome and secondary football-only baseline require distinct DTO fields");
+assert.match(sharedTypes, /footballOnlyProjection\?:/, "the legacy secondary forecast field remains readable while the active CFB contract leaves it null");
 const trackingRefresh = readFileSync(path.resolve("lib/services/trackingRefreshService.ts"), "utf8");
 assert.match(trackingRefresh, /sport === "cfb"/);
 assert.match(trackingRefresh, /ingestCfbFinalScores/);
