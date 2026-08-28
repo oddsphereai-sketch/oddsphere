@@ -646,7 +646,8 @@ check(
   candidateDailyEdgeSource.includes("Outcome confidence") &&
     candidateDailyEdgeSource.includes(">Bet grade</p>") &&
     candidateDailyEdgeSource.includes("Bet grade · exact-price decision") &&
-    candidateDailyEdgeSource.includes("Selected-outcome probability") &&
+    candidateDailyEdgeSource.includes("Exact-price selected-side probability") &&
+    candidateDailyEdgeSource.includes("Price-calibrated bet probability") &&
     !candidateDailyEdgeSource.includes(">Play grade</p>"),
 );
 check(
@@ -923,6 +924,10 @@ check(
 );
 const candidateSource = readFileSync(
   "app/dev/experience-preview/ActualDailyEdgePreview.tsx",
+  "utf8",
+);
+const nflMemberFixtureSource = readFileSync(
+  "lib/services/football/nflWeekOneHeldMemberFixture.ts",
   "utf8",
 );
 const footballEvidenceSource = readFileSync(
@@ -1431,6 +1436,28 @@ check(
     candidateSource.includes("More supporting evidence") &&
     candidateSource.includes("supporting.map(driver)") &&
     candidateSource.includes('game.markets[key as MarketKey].keyStats'),
+);
+check(
+  "a context-only CFB line never promises missing sportsbook odds",
+  DAILY_EDGE_MEMBER_PRESENTATION_RELEASE_ID ===
+    "daily_edge_member_presentation_2026_08_27_r8_truthful_football_sources" &&
+    candidateSource.includes("Sportsbook odds unavailable") &&
+    candidateSource.includes("Consensus line only") &&
+    candidateSource.includes("No eligible named-book American price was captured") &&
+    !candidateSource.includes(">Current odds shown below</span></span> :"),
+);
+check(
+  "the active NFL reader discloses its line-specific calibration boundary",
+  candidateSource.includes("separate line-specific calibration to Spread and Total probabilities") &&
+    candidateSource.includes("so those market sides can differ from the score-centered view") &&
+    nflMemberFixtureSource.includes("separately calibrated ${marketName} forecast side"),
+);
+check(
+  "the active CFB reader separates its independent forecast from Bet-grade calibration",
+  candidateSource.includes("The exact-price bet probability then applies market-informed calibration and a consensus blend") &&
+    candidateSource.includes("Price-calibrated bet probability") &&
+    candidateSource.includes("It is not the independent win probability shown above") &&
+    !candidateSource.includes("winner, spread and total probabilities all come from the same discrete score distribution"),
 );
 check(
   "football evidence labels distinguish model inputs from explanatory current context",
