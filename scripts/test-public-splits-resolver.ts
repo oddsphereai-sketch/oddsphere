@@ -103,6 +103,15 @@ check("no usable data has no display source", noData.displaySource === null);
 check("no usable data has no model confidence", noData.modelConfidence === "none");
 check("no usable data state", noData.agreementState === "no_data");
 
+const unsupportedEndpoints = resolvePublicSplit({
+  now,
+  playbook: obs("playbook", 100, 100),
+  sharpapi: obs("sharpapi", 0, 0),
+});
+check("unsupported endpoint shares have no display source", unsupportedEndpoints.displaySource === null);
+check("unsupported endpoint shares have no model confidence", unsupportedEndpoints.modelConfidence === "none");
+check("unsupported endpoint shares never leak a percentage", unsupportedEndpoints.displayBettingPct === null && unsupportedEndpoints.displayMoneyPct === null);
+
 console.log(`\npublic-splits-resolver: ${pass} passed, ${fail} failed`);
 if (fail > 0) {
   console.error("\nFailures:");

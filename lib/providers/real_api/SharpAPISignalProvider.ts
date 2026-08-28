@@ -65,6 +65,7 @@ import {
 } from "./_teamNameNormalizer";
 import type { SharpApiGameResolver } from "./SharpAPIOddsProvider";
 import { extractDoubleheaderGameNumberFromEventId } from "./_opportunitiesDiscovery";
+import { verifiedUnitSplitPct } from "../../services/splitEvidenceQuality";
 
 /**
  * Hard cap on SharpAPI calls per getSharpSignals invocation.
@@ -451,8 +452,8 @@ function publicPctsFromSplits(
 
   const betsRaw = marketObj.bets_pct?.[side];
   const handleRaw = marketObj.handle_pct?.[side];
-  const betsFraction = asNumberOrNull(betsRaw);
-  const handleFraction = asNumberOrNull(handleRaw);
+  const betsFraction = verifiedUnitSplitPct(asNumberOrNull(betsRaw));
+  const handleFraction = verifiedUnitSplitPct(asNumberOrNull(handleRaw));
 
   return {
     betting: betsFraction === null ? null : betsFraction * 100,

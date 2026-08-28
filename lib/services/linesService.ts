@@ -28,6 +28,7 @@ import type { MlbTeamAbbrev } from "../providers/real_api/_teamNameNormalizer";
 import { flagOpenersInHistoryPayload } from "./_lineHistoryOpenerHelper";
 import { insertLineHistoryResilient, logLineHistoryInsertFailure } from "./lineHistoryWriter";
 import type { LineHistoryInsertResult } from "./lineHistoryWriter";
+import { verifiedHundredSplitPct } from "./splitEvidenceQuality";
 
 /**
  * 2026-06-10 phantom-thinning fix — per-(game, market_type, sportsbook)
@@ -1062,9 +1063,15 @@ export const linesService = {
         public_money_pct: number | null;
         public_betting_pct: number | null;
       }>) {
+        const priorBetting = sport === "mlb"
+          ? verifiedHundredSplitPct(r.public_betting_pct)
+          : r.public_betting_pct;
+        const priorMoney = sport === "mlb"
+          ? verifiedHundredSplitPct(r.public_money_pct)
+          : r.public_money_pct;
         priorPublicSplits.set(`${r.game_id}::${r.market_type}::${r.side}`, {
-          public_money_pct: r.public_money_pct,
-          public_betting_pct: r.public_betting_pct,
+          public_money_pct: priorMoney,
+          public_betting_pct: priorBetting,
         });
       }
     }
@@ -1094,8 +1101,8 @@ export const linesService = {
       //   • neither side is FABRICATED — when both new and prior are
       //     null, the persisted column stays null.
       const merged = mergePublicSplitsCarryForward(
-        s.public_betting_pct,
-        s.public_money_pct,
+        sport === "mlb" ? verifiedHundredSplitPct(s.public_betting_pct) : s.public_betting_pct,
+        sport === "mlb" ? verifiedHundredSplitPct(s.public_money_pct) : s.public_money_pct,
         priorPublicSplits.get(`${gameId}::${s.market_type}::${s.side}`),
       );
       const publicBetting = merged.betting;

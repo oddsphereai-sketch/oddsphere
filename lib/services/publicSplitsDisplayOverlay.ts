@@ -23,6 +23,7 @@ import type { MarketEdgeDto, DailyEdgeGameDto } from "../../app/lab/lib/labTypes
 import type { MarketReadV2Dto } from "../types/domain/MarketIntelligenceV2";
 import type { MarketDecision, ResolvedMarketRead } from "../types/domain/RecommendationDecision";
 import { STALE_AGE_MINUTES } from "./lastKnownGoodReader";
+import { verifiedHundredSplitPct } from "./splitEvidenceQuality";
 
 type Market = "moneyline" | "total";
 type Side = "home" | "away" | "over" | "under";
@@ -38,7 +39,7 @@ type ObsRow = {
 const SIDES: Record<Market, Side[]> = { moneyline: ["home", "away"], total: ["over", "under"] };
 
 function isPct(v: number | null | undefined): v is number {
-  return typeof v === "number" && Number.isFinite(v) && v >= 0 && v <= 100;
+  return verifiedHundredSplitPct(v) !== null;
 }
 function complete(o: ObsRow | undefined): o is ObsRow {
   return Boolean(o && (isPct(o.public_betting_pct) || isPct(o.public_money_pct)));
@@ -65,8 +66,8 @@ function observationIsStale(
 function pickDisplay(playbook: ObsRow | undefined, sharpapi: ObsRow | undefined, now: number):
   { betsPct: number | null; moneyPct: number | null; booksUsed?: number | null; observedAt: string | null; isStale: boolean } | null {
   const mk = (o: ObsRow, stale: boolean) => ({
-    betsPct: o.public_betting_pct,
-    moneyPct: o.public_money_pct,
+    betsPct: verifiedHundredSplitPct(o.public_betting_pct),
+    moneyPct: verifiedHundredSplitPct(o.public_money_pct),
     booksUsed: o.books_used,
     observedAt: o.observed_at,
     isStale: stale,

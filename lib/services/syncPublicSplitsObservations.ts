@@ -21,6 +21,7 @@
  */
 
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { verifiedHundredSplitPct } from "./splitEvidenceQuality";
 import { PlaybookClient } from "../providers/playbook/playbookClient";
 import type { PlaybookSplitGame } from "../providers/playbook/types";
 import { normalizeMlbTeamName } from "../providers/real_api/_teamNameNormalizer";
@@ -199,7 +200,10 @@ export async function syncPublicSplitsObservations(opts: {
       .select("game_id, market_type, side, public_betting_pct, public_money_pct, computed_at")
       .in("game_id", ids).in("market_type", ["moneyline", "total", "spread"]);
     for (const r of ss ?? []) {
-      const bet = r.public_betting_pct as number | null, money = r.public_money_pct as number | null;
+      const rawBet = r.public_betting_pct as number | null;
+      const rawMoney = r.public_money_pct as number | null;
+      const bet = sport === "mlb" ? verifiedHundredSplitPct(rawBet) : rawBet;
+      const money = sport === "mlb" ? verifiedHundredSplitPct(rawMoney) : rawMoney;
       if (bet === null && money === null) continue;
       rows.push({
         provider: "sharpapi", sport, game_id: r.game_id as number,
@@ -228,8 +232,10 @@ export async function syncPublicSplitsObservations(opts: {
       for (const market of ["moneyline", "total", "spread"] as Market[]) {
         for (const side of SIDES[market]) {
           const c = pbCells(pb, market, side);
-          if (c.bet === null && c.money === null) continue;
-          rows.push({ provider: "playbook", sport, game_id: gid, market_type: market, side, public_betting_pct: c.bet, public_money_pct: c.money, books_used: c.books, observed_at: observedAt });
+          const bet = sport === "mlb" ? verifiedHundredSplitPct(c.bet) : c.bet;
+          const money = sport === "mlb" ? verifiedHundredSplitPct(c.money) : c.money;
+          if (bet === null && money === null) continue;
+          rows.push({ provider: "playbook", sport, game_id: gid, market_type: market, side, public_betting_pct: bet, public_money_pct: money, books_used: c.books, observed_at: observedAt });
           res.playbookRows++;
         }
       }
