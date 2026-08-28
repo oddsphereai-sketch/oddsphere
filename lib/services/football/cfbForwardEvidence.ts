@@ -31,7 +31,7 @@ export const CFB_FORWARD_INITIAL_EVIDENCE_SCHEMA_RELEASE =
 export const CFB_FORWARD_EVIDENCE_COLLECTOR_RELEASE =
   "cfb_forward_evidence_collector_2026_08_28_r15_canonical_event_discovery" as const;
 export const CFB_FORWARD_MEMBER_RELEASE =
-  "cfb_v1_member_release_2026_08_28_r16_canonical_price_coverage" as const;
+  "cfb_v1_member_release_2026_08_28_r17_independent_public_prediction" as const;
 
 export type CfbForwardEvidenceStage = "opening" | "unlocked" | "t60";
 
@@ -144,11 +144,10 @@ export type CfbForwardEvidencePayload = {
     note: string;
   };
   decisions: CfbForwardPublishedDecisionBundle;
-  /** Primary member score/winner axis. Exact-price decisions remain bound to
-   * `decisions.forecast`, the independently calibrated football-only PMF. */
+  /** Shadow market-context score distribution retained for audit only. The
+   * public score/winner/market predictions are always `decisions.forecast`. */
   outcomeForecast?: CfbForwardPublishedOutcomeForecast | null;
-  /** Per-market directional predictions from the same primary outcome PMF.
-   * They are reader context only when an exact price tuple is unavailable. */
+  /** Shadow market-context directions retained for audit only. */
   outcomeMarketOutlooks?: Record<CfbV1Market, CfbForwardMarketOutlook | null>;
   coverage: {
     currentOdds: boolean;

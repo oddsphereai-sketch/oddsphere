@@ -65,7 +65,7 @@ async function main(): Promise<void> {
     const current = new Map(candidate.evaluatedBets.map((decision) => [decision.market, decision]));
     const markets = ["moneyline", "spread", "total"] as const;
     const comparisons = markets.map((market) => compareDecision(market, previous.get(market), current.get(market)));
-    const primary = payload.outcomeForecast ?? candidate.forecast;
+    const primary = candidate.forecast;
     const { pmf: _pmf, ...publishedForecast } = candidate.forecast;
     void _pmf;
     candidateFixtureRows.push({
@@ -95,9 +95,11 @@ async function main(): Promise<void> {
         representativeScore: primary.representativeScore,
         awayWinProbability: 1 - primary.homeWinProbability,
         homeWinProbability: primary.homeWinProbability,
+        pmf: candidate.forecast.pmf,
       },
       decisions: candidate.evaluatedBets,
       unavailableMarkets: candidate.heldMarkets.map((held) => held.market),
+      requireDecisionSideFromForecast: true,
     });
     return {
       game: `${payload.game.away.abbreviation}@${payload.game.home.abbreviation}`,
@@ -113,6 +115,40 @@ async function main(): Promise<void> {
   });
 
   const comparisons = games.flatMap((game) => game.comparisons);
+  const sameLineDirectionConflicts = games.flatMap((game) => game.comparisons.flatMap((comparison) => {
+    const decision = comparison.candidate;
+    if (!decision) return [];
+    const expectedMarginHome = game.forecastAfter.expectedHomePoints - game.forecastAfter.expectedAwayPoints;
+    const expectedTotal = game.forecastAfter.expectedHomePoints + game.forecastAfter.expectedAwayPoints;
+    const selected = decisionSideKey(decision.market, decision.side, game.game.split("@")[0]!, game.game.split("@")[1]!);
+    const line = decision.quote.line;
+    const scoreSide = decision.market === "moneyline"
+      ? expectedMarginHome >= 0 ? "home" : "away"
+      : decision.market === "total" && line !== null
+        ? expectedTotal >= line ? "over" : "under"
+        : decision.market === "spread" && line !== null && (selected === "home" || selected === "away")
+          ? expectedMarginHome + (selected === "home" ? line : -line) >= 0 ? "home" : "away"
+          : null;
+    return scoreSide !== null && selected !== scoreSide ? [{
+      game: game.game,
+      market: decision.market,
+      side: decision.side,
+      line,
+      selected,
+      scoreSide,
+      expectedMarginHome,
+      expectedTotal,
+      distance: decision.market === "total" && line !== null
+        ? Math.abs(expectedTotal - line)
+        : decision.market === "spread" && line !== null && (selected === "home" || selected === "away")
+          ? Math.abs(expectedMarginHome + (selected === "home" ? line : -line))
+          : Math.abs(expectedMarginHome),
+    }] : [];
+  }));
+  if (process.argv.includes("--diagnose-directions")) {
+    console.log(JSON.stringify({ games: games.length, markets: comparisons.length, sameLineDirectionConflicts }, null, 2));
+    return;
+  }
   const fixture = buildCfbMemberFixture(candidateFixtureRows, now);
   const hawaii = fixture.snapshot.games.find((game) => game.awayTeam === "HAW" && game.homeTeam === "STAN");
   const sjsu = fixture.snapshot.games.find((game) => game.awayTeam === "SJSU" && game.homeTeam === "USC");
@@ -122,7 +158,7 @@ async function main(): Promise<void> {
   const promotions = comparisons.filter((row) => gradeRank(row.candidate?.grade) > gradeRank(row.previous?.grade));
   const demotions = comparisons.filter((row) => gradeRank(row.candidate?.grade) < gradeRank(row.previous?.grade));
   console.log(JSON.stringify({
-    release: "cfb_review_reconciliation_2026_08_28_r20",
+    release: "cfb_independent_public_prediction_audit_2026_08_28_r29",
     readOnly: true,
     providerCalls: 0,
     writes: 0,
@@ -139,6 +175,9 @@ async function main(): Promise<void> {
     demotions: demotions.length,
     coherencePassedGames: games.filter((game) => game.coherence.passed).length,
     coherenceFailures: games.filter((game) => !game.coherence.passed).map((game) => ({ game: game.game, issues: game.coherence.fatalIssues })),
+    sameLineDirectionConflicts,
+    fatalSameLineDirectionConflicts: sameLineDirectionConflicts.filter((row) => row.distance > 0.25),
+    nearLineQuantizationRows: sameLineDirectionConflicts.filter((row) => row.distance <= 0.25),
     scoreDispersion: forecastDispersion(games.map((game) => game.forecastAfter)),
     sharpSplitMatchedGames: games.filter((game) => game.sharpSplitMatched).length,
     directionalCorrections: games.filter((game) => game.forecastAfter.directionalAlignment).map((game) => ({
@@ -159,13 +198,15 @@ async function main(): Promise<void> {
       },
     })),
     memberExplanationChecks: {
-      hawaiiPredictionFollowsPrimaryPmf: hawaii?.markets.moneyline.marketPrediction?.label === "STAN" &&
-        Math.abs((hawaii.markets.moneyline.marketPrediction.probability ?? 0) - 0.605) < 0.001,
-      hawaiiBetSelectionRemainsSeparate: hawaii?.markets.moneyline.pick === "HAW" &&
-        (hawaii.markets.moneyline.modelProb ?? 1) < 0.5,
-      hawaiiValueNotWinner: hawaii?.markets.moneyline.displayReason?.includes("price-value evaluation, not the predicted winner") ?? false,
+      hawaiiPredictionFollowsIndependentPmf: hawaii?.markets.moneyline.marketPrediction?.label === "HAW" &&
+        Math.abs((hawaii.markets.moneyline.marketPrediction.probability ?? 0) - 0.673) < 0.001,
+      hawaiiSinglePublicForecast: hawaii?.footballOnlyProjection === null,
+      hawaiiBetSelectionMatchesPredictionSide: hawaii?.markets.moneyline.pick === "HAW",
       hawaiiCrossMarketExactPriceReason: hawaii?.markets.moneyline.displayReason?.includes("Moneyline and Spread grade differently because they are separate exact-price contracts") ?? false,
       sjsuMoneylineSpecificUnavailableReason: sjsu?.markets.moneyline.displayReason?.includes("no complete target-book quote pair is currently available") ?? false,
+      sjsuTotalSameLinePredictionGrade: sjsu?.markets.total.marketPrediction?.label === sjsu?.markets.total.pick &&
+        sjsu?.markets.total.marketPrediction?.line === sjsu?.markets.total.line,
+      sjsuSinglePublicForecast: sjsu?.footballOnlyProjection === null,
     },
     changedRows: tupleChanges,
     heldReasonChanges: games.filter((game) => JSON.stringify(game.previousHeld) !== JSON.stringify(game.candidateHeld)).map((game) => ({
@@ -174,6 +215,17 @@ async function main(): Promise<void> {
       candidate: game.candidateHeld,
     })),
   }, null, 2));
+}
+
+function decisionSideKey(
+  market: "moneyline" | "spread" | "total",
+  side: string,
+  awayTeam: string,
+  homeTeam: string,
+): "home" | "away" | "over" | "under" | null {
+  if (market === "total") return side.startsWith("Over ") ? "over" : side.startsWith("Under ") ? "under" : null;
+  if (market === "moneyline") return side === homeTeam ? "home" : side === awayTeam ? "away" : null;
+  return side.startsWith(`${homeTeam} `) ? "home" : side.startsWith(`${awayTeam} `) ? "away" : null;
 }
 
 function compareDecision(

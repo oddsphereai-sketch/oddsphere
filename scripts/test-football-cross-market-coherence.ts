@@ -182,6 +182,47 @@ const tiedForecast = auditFootballCrossMarketCoherence({
 });
 assert.equal(tiedForecast.passed, true, "an exactly tied score and winner forecast is coherent");
 
+const alignedPublicForecast: FootballCoherenceForecast = {
+  expectedAwayPoints: 18.88,
+  expectedHomePoints: 22.7,
+  representativeScore: { away: 20, home: 24 },
+  awayWinProbability: 0.01,
+  homeWinProbability: 0.99,
+  pmf: [
+    { away: 20, home: 24, probability: 0.59 },
+    { away: 17, home: 21, probability: 0.4 },
+    { away: 28, home: 14, probability: 0.01 },
+  ],
+};
+const alignedPublicDecision = auditFootballCrossMarketCoherence({
+  sport: "cfb",
+  providerGameId: "public-side-aligned",
+  awayTeam: "AWY",
+  homeTeam: "HME",
+  forecast: alignedPublicForecast,
+  decisions: [
+    decision({ market: "moneyline", side: "HME", probability: 0.7, fair: 0.55, price: -120, grade: "Lean" }),
+    decision({ market: "spread", side: "HME -3.5", probability: 0.7, fair: 0.55, price: -110, line: -3.5, grade: "Lean" }),
+    decision({ market: "total", side: "Under 44.5", probability: 0.7, fair: 0.55, price: -110, line: 44.5, grade: "Lean" }),
+  ],
+  requireDecisionSideFromForecast: true,
+});
+assert.equal(alignedPublicDecision.fatalIssues.some((row) => row.code === "decision_forecast_side_disagreement"), false);
+const contradictoryPublicDecision = auditFootballCrossMarketCoherence({
+  sport: "cfb",
+  providerGameId: "public-side-conflict",
+  awayTeam: "AWY",
+  homeTeam: "HME",
+  forecast: alignedPublicForecast,
+  decisions: [
+    decision({ market: "moneyline", side: "HME", probability: 0.7, fair: 0.55, price: -120, grade: "Lean" }),
+    decision({ market: "spread", side: "HME -3.5", probability: 0.7, fair: 0.55, price: -110, line: -3.5, grade: "Lean" }),
+    decision({ market: "total", side: "Over 44.5", probability: 0.7, fair: 0.55, price: -110, line: 44.5, grade: "Lean" }),
+  ],
+  requireDecisionSideFromForecast: true,
+});
+assert.equal(contradictoryPublicDecision.fatalIssues.some((row) => row.code === "decision_forecast_side_disagreement"), true, "the release gate must fail closed on a same-line score/PMF/decision contradiction");
+
 console.log("Football cross-market coherence: score identity, event containment, price divergence, and actionable-value gates passed.");
 
 function decision(args: {
