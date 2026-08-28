@@ -975,6 +975,7 @@ const sharpSplitsIndex = writerSource.indexOf("fetchCfbSharpApiSplits({ games, a
 const coherenceIndex = writerSource.indexOf("assertFootballCrossMarketCoherence({");
 const evidenceAppendIndex = writerSource.lastIndexOf("appendCfbForwardEvidence(");
 assert.ok(quarterbackCollectionIndex >= 0 && evidenceAppendIndex > quarterbackCollectionIndex, "the writer must finish bounded QB collection before its sole evidence append");
+assert.match(writerSource, /const need = releaseRefreshNeed\(existing, args\.now\) \?\? ordinaryNeed;/, "an incomplete current release must take planning priority over ordinary cadence and T-60 reasons");
 assert.ok(sharpFallbackIndex >= 0 && evidenceAppendIndex > sharpFallbackIndex, "the writer must finish bounded SharpAPI exact-event fallback before its sole evidence append");
 assert.ok(sharpSplitsIndex >= 0 && evidenceAppendIndex > sharpSplitsIndex, "the sole writer must finish its one league-level strict split read before the all-game append");
 assert.ok(coherenceIndex >= 0 && evidenceAppendIndex > coherenceIndex, "the sole CFB writer must pass coherence before its append boundary");
