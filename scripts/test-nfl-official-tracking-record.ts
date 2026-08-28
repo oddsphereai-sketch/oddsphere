@@ -10,6 +10,10 @@ import { buildNflOfficialTrackingRecords } from "../lib/services/football/nflOff
 import { buildNflRegularEvaluatedBetDecision } from "../lib/services/football/nflRegularDecisionEvidence";
 import { nflForwardT60TrackingEligibility } from "../lib/services/football/nflTrackingLifecycle";
 import { buildMarketScopedFootballTrackingPlan, FOOTBALL_MARKET_SCOPED_T60_TRACKING_RELEASE } from "../lib/services/football/footballMarketScopedTracking";
+import {
+  NFL_V1_ACTIONABLE_GRADE_DECISION_RELEASE,
+  NFL_V1_ACTIONABLE_GRADE_MEMBER_RELEASE,
+} from "../lib/services/football/nflV1ActionableGradeCandidate";
 
 const capturedAt = "2026-09-09T23:30:00.000Z";
 const gameStartsAt = "2026-09-10T00:20:00.000Z";
@@ -18,7 +22,7 @@ const common = {
   stage: "t60_locked" as const,
   evaluatedAt: capturedAt,
   gameStartsAt,
-  decisionRelease: "nfl_v1_daily_edge_decision_2026_08_25_r9_actionable_grades",
+  decisionRelease: NFL_V1_ACTIONABLE_GRADE_DECISION_RELEASE,
   lockedAt: capturedAt,
   modelRelease: "nfl_test_model",
   calibrationRelease: "nfl_test_calibration",
@@ -159,7 +163,7 @@ const payload = {
   decisions: {
     evaluatedBets: decisions,
     outcomeConfidence: [],
-    modelPromotionStatus: "nfl_v1_member_release_2026_08_25_r6_actionable_grades",
+    modelPromotionStatus: NFL_V1_ACTIONABLE_GRADE_MEMBER_RELEASE,
     publicationEnabled: true,
     trackingEnabled: true,
   },

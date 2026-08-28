@@ -134,7 +134,8 @@ export type NflForwardEvidencePayload = {
       | "nfl_v1_member_release_2026_08_24_r3_grading_tiers"
       | "nfl_v1_member_release_2026_08_24_r4_spread_total_watchlist"
       | "nfl_v1_member_release_2026_08_24_r5_expected_points_primary"
-      | "nfl_v1_member_release_2026_08_25_r6_actionable_grades";
+      | "nfl_v1_member_release_2026_08_25_r6_actionable_grades"
+      | "nfl_v1_member_release_2026_08_28_r7_event_containment";
     publicationEnabled: true;
     /** True only after the authoritative regular/postseason T-60 boundary validates the complete tuple. */
     trackingEnabled: boolean;

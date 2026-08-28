@@ -12,6 +12,7 @@ import {
   NFL_V1_ACTIONABLE_GRADE_DECISION_RELEASE,
   NFL_V1_ACTIONABLE_GRADE_POLICY_RELEASE,
 } from "../../lib/services/football/nflV1ActionableGradeCandidate";
+import { buildNflR6ShadowMoneylineDecision } from "../../lib/services/football/nflR6MoneylineShadow";
 
 async function main() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -27,8 +28,17 @@ async function main() {
       throw new Error(`Latest NFL row ${row.id} is not the current evidence schema.`);
     }
     const payload = row.payload as NflForwardEvidencePayload;
-    const shadow = payload.decisions.shadowEvaluatedBets?.[0];
-    if (!shadow) throw new Error(`NFL r6 tuple missing for ${row.providerGameId}.`);
+    const shadow = payload.decisions.shadowEvaluatedBets?.[0] ?? buildNflR6ShadowMoneylineDecision({
+      game: payload.game,
+      opening: payload.market.operationalOpening,
+      comparableCurrentBooks: payload.market.comparableCurrentBooks,
+      startersAndDepth: payload.startersAndDepth,
+      injuries: payload.injuries,
+      stage: payload.stage,
+      capturedAt: payload.capturedAt,
+      t60LagMinutes: payload.t60LagMinutes,
+      coverageHealthHolds: payload.coverage.healthHolds,
+    });
     const candidate = buildNflV1ActionableGradeBundle({
       providerGameId: payload.game.providerGameId,
       awayTeam: payload.game.away.abbreviation,
@@ -42,8 +52,10 @@ async function main() {
         candidate.evaluatedBets.length !== 3) {
       throw new Error(`NFL production bundle boundary failed for ${row.providerGameId}.`);
     }
-    const baseline = new Map(payload.decisions.evaluatedBets.map((decision) => [decision.market, decision.grade]));
-    return candidate.evaluatedBets.map((decision) => ({
+    const baseline = new Map(payload.decisions.evaluatedBets.map((decision) => [decision.market, decision]));
+    return candidate.evaluatedBets.map((decision) => {
+      const previous = baseline.get(decision.market);
+      return {
       game: `${payload.game.away.abbreviation}@${payload.game.home.abbreviation}`,
       providerGameId: row.providerGameId,
       market: decision.market,
@@ -56,13 +68,32 @@ async function main() {
       line: decision.evaluatedQuote.line,
       price: decision.evaluatedQuote.price,
       grade: decision.grade,
-      previousGrade: baseline.get(decision.market) ?? "Held",
-      changed: decision.grade !== baseline.get(decision.market),
+      previousGrade: previous?.grade ?? "Held",
+      previousSide: previous?.side ?? null,
+      previousProbability: previous?.modelProbability ?? null,
+      previousMarketFairProbability: previous?.marketFairProbability ?? null,
+      previousExpectedValue: previous?.expectedValue ?? null,
+      previousQuote: previous?.evaluatedQuote ?? null,
+      gradeChanged: decision.grade !== previous?.grade,
+      sideChanged: decision.side !== previous?.side,
+      probabilityChanged: Math.abs(decision.modelProbability - (previous?.modelProbability ?? decision.modelProbability)) > 1e-12,
+      marketFairProbabilityChanged: Math.abs(decision.marketFairProbability - (previous?.marketFairProbability ?? decision.marketFairProbability)) > 1e-12,
+      expectedValueChanged: Math.abs(decision.expectedValue - (previous?.expectedValue ?? decision.expectedValue)) > 1e-12,
+      quoteChanged: !previous || decision.evaluatedQuote.sportsbook !== previous.evaluatedQuote.sportsbook ||
+        decision.evaluatedQuote.line !== previous.evaluatedQuote.line ||
+        decision.evaluatedQuote.price !== previous.evaluatedQuote.price ||
+        decision.evaluatedQuote.observedAt !== previous.evaluatedQuote.observedAt,
       evaluatedAt: decision.evaluatedAt,
-    }));
+    };
+    });
   });
   if (rows.length !== 48) throw new Error(`NFL candidate produced ${rows.length}/48 decisions.`);
+  const previousGrades = count(rows.map((row) => row.previousGrade));
   const grades = count(rows.map((row) => row.grade));
+  const previousByMarket = Object.fromEntries(["moneyline", "spread", "total"].map((market) => [
+    market,
+    count(rows.filter((row) => row.market === market).map((row) => row.previousGrade)),
+  ]));
   const byMarket = Object.fromEntries(["moneyline", "spread", "total"].map((market) => [
     market,
     count(rows.filter((row) => row.market === market).map((row) => row.grade)),
@@ -77,14 +108,25 @@ async function main() {
     sourceCapturedAt: latest[0]!.capturedAt,
     decisionRelease: NFL_V1_ACTIONABLE_GRADE_DECISION_RELEASE,
     policyRelease: NFL_V1_ACTIONABLE_GRADE_POLICY_RELEASE,
+    previousGrades,
     grades,
+    previousByMarket,
     byMarket,
     promotions: promotions.length,
     demotions: demotions.length,
     netActionableChange: rows.filter((row) => rank(row.grade) >= rank("Lean")).length -
       rows.filter((row) => rank(row.previousGrade) >= rank("Lean")).length,
+    sideChanges: rows.filter((row) => row.sideChanged).length,
+    probabilityChanges: rows.filter((row) => row.probabilityChanged).length,
+    fairProbabilityChanges: rows.filter((row) => row.marketFairProbabilityChanged).length,
+    expectedValueChanges: rows.filter((row) => row.expectedValueChanged).length,
+    quoteChanges: rows.filter((row) => row.quoteChanged).length,
     changedRows: [...promotions, ...demotions],
-    rows,
+    tupleChangedRows: rows.filter((row) => row.sideChanged || row.probabilityChanged ||
+      row.marketFairProbabilityChanged || row.expectedValueChanged || row.quoteChanged),
+    sideChangedRows: rows.filter((row) => row.sideChanged),
+    probabilityChangedRows: rows.filter((row) => row.probabilityChanged),
+    ...(process.argv.includes("--summary") ? {} : { rows }),
   }, null, 2));
 }
 

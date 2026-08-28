@@ -83,6 +83,7 @@ const candidateDailyEdgeSource = readFileSync(
   "app/dev/experience-preview/ActualDailyEdgePreview.tsx",
   "utf8",
 );
+const labTypesSource = readFileSync("app/lab/lib/labTypes.ts", "utf8");
 
 let passed = 0;
 let failed = 0;
@@ -1458,6 +1459,15 @@ check(
     candidateSource.includes("Price-calibrated bet probability") &&
     candidateSource.includes("It is not the independent win probability shown above") &&
     !candidateSource.includes("winner, spread and total probabilities all come from the same discrete score distribution"),
+);
+check(
+  "the CFB reader can present a market-informed primary forecast without erasing the football-only baseline",
+  candidateSource.includes("Market-informed outcome forecast") &&
+    candidateSource.includes("Football-only baseline") &&
+    candidateSource.includes("game.footballOnlyProjection") &&
+    candidateSource.includes("the exact-price") &&
+    candidateSource.includes("Bet grade is separately evaluated at the displayed sportsbook quote") &&
+    labTypesSource.includes("footballOnlyProjection?:"),
 );
 check(
   "football evidence labels distinguish model inputs from explanatory current context",

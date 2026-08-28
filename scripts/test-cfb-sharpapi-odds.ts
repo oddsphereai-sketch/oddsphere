@@ -51,6 +51,7 @@ assert.equal(books.find((book) => book.sportsbook === "pinnacle")?.targetEligibl
 assert.equal(books.every((book) => book.provider === "sharpapi" && book.providerEventId === expectedEventId), true);
 assert.equal(books.find((book) => book.sportsbook === "betmgm")?.spread?.homeLine, -38.5);
 assert.equal(books.find((book) => book.sportsbook === "betmgm")?.total?.line, 60.5);
+assert.equal(books.find((book) => book.sportsbook === "betmgm")?.marketSelection?.spread, "main_line");
 assert.equal(books.some((book) => book.total?.line === 59.5), false, "alternate totals cannot enter the exact-price tuple");
 assert.equal(cfbBooksNeedSharpFallback(books), true, "the missing two-sided Moneyline remains a genuine per-market deficiency");
 const underdogHome = normalizeSharpRows({
@@ -100,6 +101,69 @@ assert.deepEqual(
   "the normal Total reader tuple must remain Under 60.5 -110 with its evidence-backed Bet grade",
 );
 assert.equal(bundle.trackingEnabled, false, "official tracking remains closed while any market lacks a coherent T-60 exact-price tuple");
+
+const coherentAlternateRows = [
+  alternate(row(expectedEventId, "betmgm", "point_spread", "home", -39, -110, "2026-08-28T11:30:00.000Z")),
+  alternate(row(expectedEventId, "betmgm", "point_spread", "away", 39, -108, "2026-08-28T11:30:00.000Z")),
+  alternate(row(expectedEventId, "goldrush", "point_spread", "home", -39, -112, "2026-08-28T11:31:00.000Z")),
+  alternate(row(expectedEventId, "goldrush", "point_spread", "away", 39, -108, "2026-08-28T11:31:00.000Z")),
+  alternate(row(expectedEventId, "pinnacle", "point_spread", "home", -39, -105, "2026-08-28T11:31:00.000Z")),
+  alternate(row(expectedEventId, "pinnacle", "point_spread", "away", 39, -115, "2026-08-28T11:31:00.000Z")),
+  alternate(row(expectedEventId, "betmgm", "total_points", "over", 60.5, -108, "2026-08-28T11:31:00.000Z")),
+  alternate(row(expectedEventId, "betmgm", "total_points", "under", 60.5, -110, "2026-08-28T11:31:00.000Z")),
+  alternate(row(expectedEventId, "ballybet", "total_points", "over", 60.5, -107, "2026-08-28T11:31:00.000Z")),
+  alternate(row(expectedEventId, "ballybet", "total_points", "under", 60.5, -113, "2026-08-28T11:31:00.000Z")),
+  alternate(row(expectedEventId, "rebet", "total_points", "over", 60.5, -114, "2026-08-28T11:31:00.000Z")),
+  alternate(row(expectedEventId, "rebet", "total_points", "under", 60.5, -114, "2026-08-28T11:31:00.000Z")),
+  row(expectedEventId, "betonline", "point_spread", "home", -38.5, -110, "2026-08-28T11:31:00.000Z"),
+  row(expectedEventId, "betonline", "point_spread", "away", 38.5, -110, "2026-08-28T11:31:00.000Z"),
+  row(expectedEventId, "onexbet", "point_spread", "home", -38.5, -115, "2026-08-28T11:31:00.000Z"),
+  row(expectedEventId, "onexbet", "point_spread", "away", 38.5, -105, "2026-08-28T11:31:00.000Z"),
+  row(expectedEventId, "rebet", "point_spread", "home", -38.5, -111, "2026-08-28T11:31:00.000Z"),
+  row(expectedEventId, "rebet", "point_spread", "away", 38.5, -109, "2026-08-28T11:31:00.000Z"),
+  row(expectedEventId, "betonline", "total_points", "over", 61.5, -116, "2026-08-28T11:31:00.000Z"),
+  row(expectedEventId, "betonline", "total_points", "under", 61.5, -104, "2026-08-28T11:31:00.000Z"),
+  row(expectedEventId, "onexbet", "total_points", "over", 61.5, -110, "2026-08-28T11:31:00.000Z"),
+  row(expectedEventId, "onexbet", "total_points", "under", 61.5, -110, "2026-08-28T11:31:00.000Z"),
+  row(expectedEventId, "pinnacle", "total_points", "over", 61.5, -112, "2026-08-28T11:31:00.000Z"),
+  row(expectedEventId, "pinnacle", "total_points", "under", 61.5, -104, "2026-08-28T11:31:00.000Z"),
+];
+const coherentAlternateBooks = normalizeSharpRows({ game, eventId: expectedEventId, rows: coherentAlternateRows });
+const alternateBetMgm = coherentAlternateBooks.find((book) => book.sportsbook === "betmgm");
+assert.equal(alternateBetMgm?.spread?.homeLine, -39, "the nearest exact three-book target cohort may recover a paired alternate Spread");
+assert.equal(alternateBetMgm?.total?.line, 60.5, "the nearest exact three-book target cohort may recover a paired alternate Total");
+assert.equal(alternateBetMgm?.marketSelection?.spread, "coherent_paired_alternate");
+assert.equal(alternateBetMgm?.marketSelection?.total, "coherent_paired_alternate");
+assert.equal(alternateBetMgm?.observedAt, "2026-08-28T11:31:00.000Z");
+assert.equal(alternateBetMgm?.marketObservedAt?.spread, "2026-08-28T11:30:00.000Z", "the Spread tuple retains its own provider time instead of inheriting the later Total update");
+assert.equal(alternateBetMgm?.marketObservedAt?.total, "2026-08-28T11:31:00.000Z");
+assert.equal(coherentAlternateBooks.find((book) => book.sportsbook === "betonline")?.spread?.homeLine, -38.5, "unrelated main-line context must survive the scoped recovery");
+assert.equal(coherentAlternateBooks.find((book) => book.sportsbook === "onexbet")?.total?.line, 61.5, "the fallback cannot collapse the surrounding main-line market");
+const coherentAlternateBundle = buildCfbV1DecisionBundle({
+  providerGameId: game.providerGameId,
+  awayTeam: game.away.abbreviation,
+  homeTeam: game.home.abbreviation,
+  gameStartsAt: game.scheduledStart,
+  comparableCurrentBooks: coherentAlternateBooks,
+  forecast: getCfbV1Forecast(game.providerGameId),
+  contextLines: { homeSpread: -38.5, totalLine: 61.5 },
+});
+assert.deepEqual(coherentAlternateBundle.evaluatedBets.map((decision) => decision.market), ["spread", "total"]);
+assert.equal(coherentAlternateBundle.evaluatedBets.every((decision) => decision.evaluatedQuote.sportsbook === "betmgm"), true);
+assert.equal(coherentAlternateBundle.evaluatedBets.every((decision) => decision.evaluatedQuote.marketSelection === "coherent_paired_alternate"), true);
+assert.equal(coherentAlternateBundle.evaluatedBets.find((decision) => decision.market === "spread")?.evaluatedQuote.observedAt, "2026-08-28T11:30:00.000Z");
+assert.equal(coherentAlternateBundle.evaluatedBets.find((decision) => decision.market === "total")?.evaluatedQuote.observedAt, "2026-08-28T11:31:00.000Z");
+
+const mainPreferredBooks = normalizeSharpRows({ game, eventId: expectedEventId, rows: [...sharpRows(expectedEventId), ...coherentAlternateRows] });
+assert.equal(mainPreferredBooks.find((book) => book.sportsbook === "betmgm")?.spread?.homeLine, -38.5, "a complete target main-line cohort always outranks alternate recovery");
+assert.equal(mainPreferredBooks.find((book) => book.sportsbook === "betmgm")?.total?.line, 60.5);
+assert.equal(mainPreferredBooks.find((book) => book.sportsbook === "betmgm")?.marketSelection?.spread, "main_line");
+const insufficientAlternateBooks = normalizeSharpRows({
+  game,
+  eventId: expectedEventId,
+  rows: coherentAlternateRows.filter((value) => !(value.sportsbook === "pinnacle" && value.market_type === "point_spread")),
+});
+assert.equal(insufficientAlternateBooks.find((book) => book.sportsbook === "betmgm")?.spread, null, "one target plus only one non-target exact alternate book must fail closed");
 
 const pagedCalls: SharpApiRequestOptions[] = [];
 const pagedRows = sharpRows(expectedEventId);
@@ -200,4 +264,8 @@ function row(eventId: string, sportsbook: string, marketType: string, side: stri
     is_stale_pregame_price: false,
     timestamp: at,
   };
+}
+
+function alternate(value: Record<string, unknown>): Record<string, unknown> {
+  return { ...value, is_main_line: false, is_alternate_line: true };
 }
