@@ -58,6 +58,11 @@ import {
   FOOTBALL_PRIMARY_EVIDENCE_LIMIT,
   prioritizeFootballEvidenceStats,
 } from "../app/lab/lib/footballEvidencePresentation";
+import {
+  CFB_MEMBER_BOARD_SCOPE_RELEASE,
+  resolveInitialCfbBoardScope,
+  selectCfbBoardGames,
+} from "../app/lab/lib/cfbBoardScope";
 
 const snapshotPrimerSource = readFileSync(
   "scripts/operator/prime-daily-edge-experience-snapshots.ts",
@@ -1541,11 +1546,25 @@ check(
 check(
   "a context-only CFB line never promises missing sportsbook odds",
   DAILY_EDGE_MEMBER_PRESENTATION_RELEASE_ID ===
-    "daily_edge_member_presentation_2026_08_28_r16_cfb_independent_public_prediction" &&
+    "daily_edge_member_presentation_2026_08_29_r17_cfb_fbs_default_board" &&
     candidateSource.includes("Sportsbook odds unavailable") &&
     candidateSource.includes("Consensus line only") &&
     candidateSource.includes("No eligible named-book American price was captured") &&
     !candidateSource.includes(">Current odds shown below</span></span> :"),
+);
+const cfbScopeFixture = [
+  { id: "cfb-fbs", collegeFootballScope: "fbs_involved" },
+  { id: "cfb-fcs", collegeFootballScope: "fcs_only" },
+] as DailyEdgeGameDto[];
+check(
+  "CFB defaults to the FBS-involved member board without deleting Division I forecasts",
+  CFB_MEMBER_BOARD_SCOPE_RELEASE === "cfb_member_board_scope_2026_08_29_r1_fbs_default" &&
+    selectCfbBoardGames(cfbScopeFixture, "cfb", "fbs").map((game) => game.id).join(",") === "cfb-fbs" &&
+    selectCfbBoardGames(cfbScopeFixture, "cfb", "division_i").length === 2 &&
+    resolveInitialCfbBoardScope({ sport: "cfb", games: cfbScopeFixture, requestedGameId: null }) === "fbs" &&
+    resolveInitialCfbBoardScope({ sport: "cfb", games: cfbScopeFixture, requestedGameId: "cfb-fcs" }) === "division_i" &&
+    candidateDailyEdgeSource.includes("FBS-involved games are the member default") &&
+    candidateDailyEdgeSource.includes("All Division I"),
 );
 check(
   "the active NFL reader discloses its line-specific calibration boundary",

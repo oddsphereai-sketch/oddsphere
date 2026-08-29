@@ -145,6 +145,9 @@ export default async function CandidateDailyEdgePage({
         loadTeamHistory(snapshot, sport),
         loadPitcherFirstInningHistory(snapshot, sport),
       ]);
+  const cfbFbsGameCount = cfbFixture
+    ? snapshot.games.filter((game) => game.collegeFootballScope === "fbs_involved").length
+    : 0;
 
   return (
     <>
@@ -186,7 +189,7 @@ export default async function CandidateDailyEdgePage({
               }
           : cfbFixture
             ? {
-                label: `CFB · ${cfbFixture.week.label} · ${snapshot.games.length} games · ${snapshot.games.length * 3} predictions · live model and exact-price Bet grades`,
+                label: `CFB · ${cfbFixture.week.label} · ${cfbFbsGameCount} FBS-involved games by default · ${snapshot.games.length} model-covered Division I forecasts · live model and exact-price Bet grades`,
                 previousHref: null,
                 nextHref: null,
                 asOf: snapshot.as_of,
