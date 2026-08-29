@@ -7,6 +7,7 @@ import { ACTIVE_DAILY_EDGE_TOP_LEVEL_SPORT_LABELS } from "@/app/lab/lib/dailyEdg
 import { isHomepageExperienceCandidateEnabled } from "@/lib/config/productExperience";
 import {
   getPublicTrackRecordSummary,
+  type PublicOfficialTrackingWindow,
   type PublicTrackRecordSummary,
 } from "@/lib/services/tracking/publicTrackRecordSummary";
 import {
@@ -130,7 +131,7 @@ const faq: FaqItem[] = [
   },
   {
     q: "What sports are currently supported?",
-    a: `Daily Edge currently supports ${ACTIVE_DAILY_EDGE_SPORT_COPY} when schedules and verified data are available. The dated legacy archive covers additional historical model families and is labeled separately from current official tracking.`,
+    a: `Daily Edge currently supports ${ACTIVE_DAILY_EDGE_SPORT_COPY} when schedules and verified data are available. Availability follows each sport's active schedule.`,
   },
   {
     q: "Is this financial or wagering advice?",
@@ -221,76 +222,104 @@ function SectionHeader({ eyebrow, title, body }: { eyebrow: string; title: strin
   );
 }
 
-function MetricTile({ label, value, detail }: { label: string; value: string; detail?: string }) {
+function TrackingWindowCard({
+  window,
+  featured = false,
+}: {
+  window: PublicOfficialTrackingWindow;
+  featured?: boolean;
+}) {
+  const record = `${window.wins}-${window.losses}${window.pushes ? `-${window.pushes}` : ""}`;
+
   return (
-    <div className="rounded-lg border border-white/10 bg-white/[0.045] p-3">
-      <p className="text-[10px] font-black uppercase tracking-[0.14em] text-gray-400">{label}</p>
-      <p className="mt-1 text-xl font-black tabular-nums text-white">{value}</p>
-      {detail ? <p className="mt-1 text-xs leading-relaxed text-gray-400">{detail}</p> : null}
-    </div>
+    <article className={`relative overflow-hidden rounded-2xl border p-5 sm:p-6 ${featured ? "border-emerald-300/30 bg-emerald-300/[0.08]" : "border-white/10 bg-white/[0.035]"}`}>
+      {featured ? <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-emerald-200/80 to-transparent" /> : null}
+      <div className="flex items-center justify-between gap-3">
+        <p className={`text-xs font-black uppercase tracking-[0.16em] ${featured ? "text-emerald-200" : "text-gray-400"}`}>{window.label}</p>
+        {featured ? <span className="rounded-full border border-emerald-300/25 bg-emerald-300/10 px-2.5 py-1 text-[9px] font-black uppercase tracking-[0.12em] text-emerald-100">Official</span> : null}
+      </div>
+      <p className={`mt-5 text-4xl font-black tabular-nums tracking-tight sm:text-5xl ${featured ? "text-emerald-200" : "text-white"}`}>
+        {window.hitRate === null ? "—" : `${window.hitRate.toFixed(1)}%`}
+      </p>
+      <p className="mt-1 text-xs font-bold uppercase tracking-[0.12em] text-gray-500">Hit rate</p>
+      <div className="mt-5 border-t border-white/10 pt-4">
+        <p className="text-lg font-black tabular-nums text-white">{record}</p>
+        <p className="mt-1 text-xs text-gray-400">{window.rangeLabel}</p>
+      </div>
+    </article>
   );
 }
 
+function TrackingWindowPlaceholder({ label }: { label: PublicOfficialTrackingWindow["label"] }) {
+  return (
+    <article className="rounded-2xl border border-white/10 bg-white/[0.035] p-5 sm:p-6">
+      <p className="text-xs font-black uppercase tracking-[0.16em] text-gray-400">{label}</p>
+      <p className="mt-5 text-4xl font-black tracking-tight text-gray-600 sm:text-5xl">—</p>
+      <p className="mt-1 text-xs font-bold uppercase tracking-[0.12em] text-gray-600">Updating</p>
+      <div className="mt-5 border-t border-white/10 pt-4">
+        <p className="text-sm font-bold text-gray-400">Results refresh after settlement</p>
+      </div>
+    </article>
+  );
+}
+
+function formatTrackingDate(yyyyMmDd: string): string {
+  const [year, month, day] = yyyyMmDd.split("-").map(Number);
+  return new Date(Date.UTC(year, month - 1, day)).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    timeZone: "UTC",
+  });
+}
+
 function TrackingPreview({ summary }: { summary: PublicTrackRecordSummary }) {
-  const markets = summary.markets.slice(0, 4);
-  const pct = summary.overall.winPct === null ? "—" : `${summary.overall.winPct.toFixed(1)}%`;
+  const official = summary.currentOfficial;
 
   return (
-    <div className="overflow-hidden rounded-2xl border border-white/10 bg-gray-950/75">
-      <div className="border-b border-white/10 bg-white/[0.035] p-5 sm:p-6">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-          <div>
-            <p className="text-xs font-black uppercase tracking-[0.18em] text-emerald-300">Public accountability</p>
-            <h3 className="mt-2 text-2xl font-black tracking-tight text-white">Current official results, separated from the legacy archive</h3>
+    <div className="relative overflow-hidden rounded-3xl border border-emerald-300/15 bg-[radial-gradient(circle_at_top_right,rgba(52,211,153,0.12),transparent_38%),rgba(3,7,18,0.82)] p-5 shadow-[0_32px_90px_rgba(0,0,0,0.28)] sm:p-8">
+      <div className="pointer-events-none absolute -right-20 -top-24 h-64 w-64 rounded-full bg-emerald-400/10 blur-3xl" />
+      <div className="relative">
+        <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
+          <div className="max-w-3xl">
+            <p className="text-xs font-black uppercase tracking-[0.18em] text-emerald-300">Tracked performance</p>
+            <h2 className="mt-3 text-3xl font-black tracking-tight text-white sm:text-4xl">See the record. Then see the reasoning.</h2>
+            <p className="mt-4 text-sm leading-relaxed text-gray-300 sm:text-base">
+              Every official Daily Edge result is tracked after settlement. Check weekly, monthly, and lifetime performance at a glance, with the full breakdown by sport and market inside the product.
+            </p>
           </div>
-          <p className="text-xs text-gray-500">
-            Legacy archive snapshot · {summary.lastUpdatedLabel}
-          </p>
+          <Link
+            href="/lab/tracking"
+            className="inline-flex shrink-0 items-center text-sm font-black text-emerald-200 transition hover:text-emerald-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-200"
+          >
+            Open the full tracker <span className="ml-2" aria-hidden="true">→</span>
+          </Link>
         </div>
-        <p className="mt-3 max-w-3xl text-sm leading-relaxed text-gray-300">
-          The dated legacy summaries and the current official since-launch ledger use different sources and denominators. They are never presented as one record.
-        </p>
-      </div>
 
-      {!summary.tablesInitialized ? (
-        <p className="m-5 rounded-xl border border-amber-400/25 bg-amber-400/[0.06] p-4 text-sm leading-relaxed text-amber-50">
-          Tracking summary is temporarily unavailable, so this preview is not showing stale manual numbers.
-        </p>
-      ) : (
-        <div className="p-5 sm:p-6">
-          {summary.currentOfficial ? (
-            <div className="mb-5 grid gap-3 rounded-xl border border-emerald-400/20 bg-emerald-400/[0.055] p-4 sm:grid-cols-[minmax(0,1fr)_auto_auto] sm:items-center">
-              <div>
-                <p className="text-[10px] font-black uppercase tracking-[0.14em] text-emerald-300">Current verified tracking</p>
-                <p className="mt-1 text-xs leading-relaxed text-gray-400">Latest settled activity · {summary.currentOfficial.latestActivityDate}</p>
-              </div>
-              <p className="text-sm tabular-nums text-gray-300"><strong className="text-lg text-white">{summary.currentOfficial.wins}-{summary.currentOfficial.losses}{summary.currentOfficial.pushes ? `-${summary.currentOfficial.pushes}` : ""}</strong><span className="ml-2 text-gray-500">official model results</span></p>
-              <p className="text-lg font-black tabular-nums text-emerald-200">{summary.currentOfficial.hitRate.toFixed(1)}%</p>
-            </div>
-          ) : null}
-          <div className="grid gap-3 sm:grid-cols-3">
-            <MetricTile label="Legacy archive record" value={`${summary.overall.wins.toLocaleString()}-${summary.overall.losses.toLocaleString()}`} />
-            <MetricTile label="Legacy win rate" value={pct} />
-            <MetricTile label="Legacy archive picks" value={summary.overall.picks.toLocaleString()} />
-          </div>
-          <div className="mt-5 grid gap-3 md:grid-cols-4">
-            {markets.map((row) => (
-              <div key={`${row.sport}-${row.market}`} className="rounded-xl border border-white/10 bg-white/[0.035] p-4">
-                <p className="text-[10px] font-black uppercase tracking-[0.14em] text-gray-500">{row.sportLabel}</p>
-                <p className="mt-1 font-bold text-white">{row.marketLabel}</p>
-                <p className="mt-2 text-sm tabular-nums text-gray-300">
-                  {row.metrics.wins}-{row.metrics.losses}
-                  <span className="text-gray-500"> · </span>
-                  {row.metrics.winPct === null ? "—" : `${row.metrics.winPct.toFixed(1)}%`}
-                </p>
-              </div>
+      {!official ? (
+        <>
+          <div className="mt-8 grid gap-3 md:grid-cols-3">
+            {(["Weekly", "Monthly", "Lifetime"] as const).map((label) => (
+              <TrackingWindowPlaceholder key={label} label={label} />
             ))}
           </div>
-          <p className="mt-4 text-xs leading-relaxed text-gray-500">
-            Legacy archive only, last updated {summary.lastUpdatedLabel}. Standardized historical prices and stakes are unavailable, so units and ROI are not claimed. Past performance does not guarantee future results.
+          <p className="mt-5 text-xs leading-relaxed text-gray-500">
+            The live track record is updating. Full results remain available in the member tracker.
           </p>
-        </div>
+        </>
+      ) : (
+        <>
+          <div className="mt-8 grid gap-3 md:grid-cols-3">
+            {official.windows.map((window) => (
+              <TrackingWindowCard key={window.label} window={window} featured={window.label === "Lifetime"} />
+            ))}
+          </div>
+          <p className="mt-5 text-xs leading-relaxed text-gray-500">
+            Results updated through {formatTrackingDate(official.latestActivityDate)}. Pushes are shown in the record and excluded from hit rate. Past performance does not guarantee future results.
+          </p>
+        </>
       )}
+      </div>
     </div>
   );
 }
@@ -472,7 +501,7 @@ export async function HomePageContent({ presentation = "current" }: { presentati
           ))}
         </div>
         <p className="mx-auto mt-6 max-w-3xl text-center text-sm leading-relaxed text-gray-400">
-          Daily Edge currently supports {ACTIVE_DAILY_EDGE_SPORT_COPY} when schedules and verified data are available. The dated legacy archive is labeled separately from current official tracking.
+          Daily Edge currently supports {ACTIVE_DAILY_EDGE_SPORT_COPY} when schedules and verified data are available.
         </p>
       </section>
 

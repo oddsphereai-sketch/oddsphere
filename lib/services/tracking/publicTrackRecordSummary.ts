@@ -37,6 +37,17 @@ export type PublicTrackRecordMarket = {
   leans: PublicTrackRecordMetric;
 };
 
+export type PublicOfficialTrackingWindow = {
+  label: "Weekly" | "Monthly" | "Lifetime";
+  rangeLabel: string;
+  wins: number;
+  losses: number;
+  pushes: number;
+  totalPredictions: number;
+  /** Percentage on a 0..100 scale for direct public presentation. */
+  hitRate: number | null;
+};
+
 export type PublicTrackRecordSummary = {
   asOf: string;
   tablesInitialized: boolean;
@@ -61,6 +72,7 @@ export type PublicTrackRecordSummary = {
     totalPredictions: number;
     /** Percentage on a 0..100 scale for direct public presentation. */
     hitRate: number;
+    windows: PublicOfficialTrackingWindow[];
   };
   unavailableReason?: string;
 };
@@ -162,6 +174,10 @@ function compareSport(a: TrackedSport, b: TrackedSport): number {
   return a.localeCompare(b);
 }
 
+function displayHitRate(hitRate: number, wins: number, losses: number): number | null {
+  return wins + losses > 0 ? Math.round(hitRate * 1_000) / 10 : null;
+}
+
 export async function getPublicTrackRecordSummary(): Promise<PublicTrackRecordSummary> {
   const asOf = new Date().toISOString();
   const currentSnapshot = await readLabResponseSnapshot<TrackingResponse>(trackingSnapshotKey(), "fresh")
@@ -221,6 +237,52 @@ export async function getPublicTrackRecordSummary(): Promise<PublicTrackRecordSu
       pushes: currentSnapshot.payload.allTimeAggregate.pushes,
       totalPredictions: currentSnapshot.payload.allTimeAggregate.totalPredictions,
       hitRate: Math.round(currentSnapshot.payload.allTimeAggregate.hitRate * 1_000) / 10,
+      windows: [
+        {
+          label: "Weekly",
+          rangeLabel: `${currentSnapshot.payload.weeklyAggregate.weekStartLabel} – ${currentSnapshot.payload.weeklyAggregate.weekEndLabel}`,
+          wins: currentSnapshot.payload.weeklyAggregate.wins,
+          losses: currentSnapshot.payload.weeklyAggregate.losses,
+          pushes: currentSnapshot.payload.weeklyAggregate.pushes,
+          totalPredictions: currentSnapshot.payload.weeklyAggregate.totalPicks,
+          hitRate: displayHitRate(
+            currentSnapshot.payload.weeklyAggregate.hitRate,
+            currentSnapshot.payload.weeklyAggregate.wins,
+            currentSnapshot.payload.weeklyAggregate.losses,
+          ),
+        },
+        {
+          label: "Monthly",
+          rangeLabel: "Last 30 days",
+          wins: currentSnapshot.payload.last30Days.aggregate.wins,
+          losses: currentSnapshot.payload.last30Days.aggregate.losses,
+          pushes: Math.max(
+            0,
+            currentSnapshot.payload.last30Days.aggregate.picks
+              - currentSnapshot.payload.last30Days.aggregate.wins
+              - currentSnapshot.payload.last30Days.aggregate.losses,
+          ),
+          totalPredictions: currentSnapshot.payload.last30Days.aggregate.picks,
+          hitRate: displayHitRate(
+            currentSnapshot.payload.last30Days.aggregate.hitRate,
+            currentSnapshot.payload.last30Days.aggregate.wins,
+            currentSnapshot.payload.last30Days.aggregate.losses,
+          ),
+        },
+        {
+          label: "Lifetime",
+          rangeLabel: "Since official tracking began",
+          wins: currentSnapshot.payload.allTimeAggregate.wins,
+          losses: currentSnapshot.payload.allTimeAggregate.losses,
+          pushes: currentSnapshot.payload.allTimeAggregate.pushes,
+          totalPredictions: currentSnapshot.payload.allTimeAggregate.totalPredictions,
+          hitRate: displayHitRate(
+            currentSnapshot.payload.allTimeAggregate.hitRate,
+            currentSnapshot.payload.allTimeAggregate.wins,
+            currentSnapshot.payload.allTimeAggregate.losses,
+          ),
+        },
+      ],
     } : undefined,
   };
 }

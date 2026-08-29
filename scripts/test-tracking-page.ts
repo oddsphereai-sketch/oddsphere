@@ -34,6 +34,7 @@ const SERVICE = readFileSync("lib/services/trackingAggregateService.ts", "utf8")
 const TRACKING_LOADING = readFileSync("app/lab/tracking/loading.tsx", "utf8");
 const PROPS_LOADING = readFileSync("app/mlb/props/loading.tsx", "utf8");
 const PUBLIC_TRACKING_SUMMARY = readFileSync("lib/services/tracking/publicTrackRecordSummary.ts", "utf8");
+const HOMEPAGE = readFileSync("app/page.tsx", "utf8");
 
 let pass = 0, fail = 0;
 function check(name: string, cond: boolean, msg?: string) {
@@ -46,6 +47,18 @@ console.log(`\n━━━ tracking page tests (6B.2e — design reset) ━━━\
 check(
   "Homepage current tracking converts the canonical 0..1 hit rate to a display percentage",
   PUBLIC_TRACKING_SUMMARY.includes("currentSnapshot.payload.allTimeAggregate.hitRate * 1_000) / 10"),
+);
+check(
+  "Homepage promotes weekly, monthly, and lifetime official tracking windows",
+  PUBLIC_TRACKING_SUMMARY.includes('label: "Weekly"') &&
+    PUBLIC_TRACKING_SUMMARY.includes('label: "Monthly"') &&
+    PUBLIC_TRACKING_SUMMARY.includes('label: "Lifetime"') &&
+    HOMEPAGE.includes("official.windows.map"),
+);
+check(
+  "Homepage tracking section does not market the legacy archive",
+  HOMEPAGE.includes("See the record. Then see the reasoning.") &&
+    !/function TrackingPreview[\s\S]{0,7000}Legacy archive/.test(HOMEPAGE),
 );
 
 // ── Page no longer leads with hero metric cards ─────────────────────
