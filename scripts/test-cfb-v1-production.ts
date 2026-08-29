@@ -2,12 +2,13 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { isPublicallyTracked } from "../lib/config/officialTrackingStart";
-import { buildCfbMemberFixture } from "../lib/services/football/cfbMemberFixture";
+import { buildCfbMemberFixture, selectLatestCfbMemberEvidenceRows } from "../lib/services/football/cfbMemberFixture";
 import { finalizeDailyEdgeResponseCoherence } from "../app/lab/lib/dailyEdgeResponseCoherence";
 import { dailyEdgeOutcomeForecastLabel } from "../app/lab/lib/dailyEdgeOutcomeForecast";
 import {
   CFB_FORWARD_EVIDENCE_COLLECTOR_RELEASE,
   CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE,
+  CFB_FORWARD_AMBIGUOUS_SCOPE_PREVIOUS_EVIDENCE_SCHEMA_RELEASE,
   CFB_FORWARD_CANONICAL_DISCOVERY_PREVIOUS_EVIDENCE_SCHEMA_RELEASE,
   CFB_FORWARD_INITIAL_EVIDENCE_SCHEMA_RELEASE,
   CFB_FORWARD_LEGACY_EVIDENCE_SCHEMA_RELEASE,
@@ -25,6 +26,7 @@ import {
   type CfbForwardStoredEvidence,
 } from "../lib/services/football/cfbForwardEvidence";
 import { normalizeCfbPlaybookLine, normalizeCfbPlaybookSplits } from "../lib/services/football/cfbPlaybookEvidence";
+import { trustedCfbSharpEventIdsByGame } from "../lib/services/football/cfbForwardEvidenceWriter";
 import { buildCfbMarketInformedOutcomeForecast, resolveCfbCanonicalMarketAnchor } from "../lib/services/football/cfbMarketInformedOutcome";
 import { CFB_SHARP_API_SPLITS_RELEASE } from "../lib/services/football/cfbSharpApiSplits";
 import { fetchBalldontlieNcaafQuarterbacks } from "../lib/services/football/balldontlieNcaafQuarterbacks";
@@ -224,6 +226,28 @@ const evidence: CfbForwardStoredEvidence = {
   payloadSha256: hashCfbForwardEvidencePayload(payload),
   payload,
 };
+const trustedSharpEventId = "ncaaf_northcarolinatarheels_tcuhornedfrogs_2026-08-29_b2";
+const trustedSharpPayload = structuredClone(payload);
+trustedSharpPayload.market.currentBooks = [{
+  ...trustedSharpPayload.market.currentBooks[0]!,
+  provider: "sharpapi",
+  providerEventId: trustedSharpEventId,
+}];
+const trustedSharpRow: CfbForwardStoredEvidence = {
+  ...evidence,
+  id: "trusted-sharp-event-row",
+  payloadSha256: hashCfbForwardEvidencePayload(trustedSharpPayload),
+  payload: trustedSharpPayload,
+};
+assert.deepEqual(trustedCfbSharpEventIdsByGame([trustedSharpRow]), { [game.providerGameId]: trustedSharpEventId });
+const conflictingTrustedSharpPayload = structuredClone(trustedSharpPayload);
+conflictingTrustedSharpPayload.market.currentBooks[0]!.providerEventId = `${trustedSharpEventId}-conflict`;
+assert.deepEqual(trustedCfbSharpEventIdsByGame([trustedSharpRow, {
+  ...trustedSharpRow,
+  id: "conflicting-trusted-sharp-event-row",
+  payloadSha256: hashCfbForwardEvidencePayload(conflictingTrustedSharpPayload),
+  payload: conflictingTrustedSharpPayload,
+}]), {}, "conflicting immutable provider IDs must disable prior-event disambiguation");
 const member = buildCfbMemberFixture([evidence]);
 assert.equal(member.snapshot.games.length, 1);
 assert.equal(member.snapshot.games[0]!.footballProjection?.expectedAwayPoints, forecast.expectedAwayPoints);
@@ -285,6 +309,7 @@ for (const memberMarket of Object.values(member.snapshot.games[0]!.markets)) {
 }
 
 const eventPaginationPreviousPayloadRecord = structuredClone(payload) as unknown as Record<string, unknown>;
+eventPaginationPreviousPayloadRecord.schemaRelease = CFB_FORWARD_AMBIGUOUS_SCOPE_PREVIOUS_EVIDENCE_SCHEMA_RELEASE;
 eventPaginationPreviousPayloadRecord.memberRelease = "cfb_v1_member_release_2026_08_28_r18_event_discovery_pagination";
 const eventPaginationPreviousDecisions = eventPaginationPreviousPayloadRecord.decisions as Record<string, unknown>;
 eventPaginationPreviousDecisions.decisionRelease = "cfb_v1_daily_edge_decision_2026_08_28_r14_event_discovery_pagination";
@@ -349,6 +374,54 @@ const providerDiscoveryPreviousMember = buildCfbMemberFixture([{
   payload: providerDiscoveryPreviousPayload,
 }]);
 assert.equal(providerDiscoveryPreviousMember.snapshot.games.length, 1, "the complete r8 wave must remain the atomic member fallback until one complete r9 wave exists");
+
+const currentTransitionPayload = { ...payload, slateGameCount: 2 };
+const previousTransitionPayload = { ...providerDiscoveryPreviousPayload, slateGameCount: 2 };
+const currentTransitionRow: CfbForwardStoredEvidence = {
+  ...evidence,
+  id: "started-game-transition-current-a",
+  providerGameId: "future-current-game",
+  gameStartAt: "2026-08-29T17:00:00.000Z",
+  payloadSha256: hashCfbForwardEvidencePayload(currentTransitionPayload),
+  payload: currentTransitionPayload,
+};
+const previousTransitionRows: CfbForwardStoredEvidence[] = [{
+  ...evidence,
+  id: "started-game-transition-previous-a",
+  providerGameId: "future-current-game",
+  gameStartAt: "2026-08-29T17:00:00.000Z",
+  payloadSha256: hashCfbForwardEvidencePayload(previousTransitionPayload),
+  payload: previousTransitionPayload,
+}, {
+  ...evidence,
+  id: "started-game-transition-previous-b",
+  providerGameId: "started-missing-game",
+  gameStartAt: "2026-08-29T16:00:00.000Z",
+  payloadSha256: hashCfbForwardEvidencePayload(previousTransitionPayload),
+  payload: previousTransitionPayload,
+}];
+const beforeStartedGame = selectLatestCfbMemberEvidenceRows(
+  [currentTransitionRow, ...previousTransitionRows],
+  "2026-08-29T15:59:59.000Z",
+);
+assert.equal(beforeStartedGame.length, 2);
+assert.equal(
+  beforeStartedGame.every((row) => String(row.payload.memberRelease) === "cfb_v1_member_release_2026_08_28_r15_directional_pmf"),
+  true,
+  "an upcoming game missing from the current release must keep the complete prior wave",
+);
+const afterStartedGame = selectLatestCfbMemberEvidenceRows(
+  [currentTransitionRow, ...previousTransitionRows],
+  "2026-08-29T16:00:00.000Z",
+);
+assert.equal(afterStartedGame.length, 2);
+assert.equal(afterStartedGame.find((row) => row.providerGameId === "future-current-game")?.payload.memberRelease, CFB_FORWARD_MEMBER_RELEASE);
+assert.equal(afterStartedGame.find((row) => row.providerGameId === "started-missing-game")?.payload.memberRelease, "cfb_v1_member_release_2026_08_28_r15_directional_pmf");
+assert.equal(
+  afterStartedGame.find((row) => row.providerGameId === "started-missing-game")?.id,
+  "started-game-transition-previous-b",
+  "the transition must preserve the missing game's exact immutable pregame row",
+);
 
 const exactPricePayloadRecord = structuredClone(payload) as unknown as Record<string, unknown>;
 exactPricePayloadRecord.schemaRelease = CFB_FORWARD_PRIOR_EVIDENCE_SCHEMA_RELEASE;
