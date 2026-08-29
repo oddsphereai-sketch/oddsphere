@@ -37,7 +37,7 @@ import { buildMarketScopedFootballTrackingPlan } from "./footballMarketScopedTra
 import { assertFootballCrossMarketCoherence } from "./footballCrossMarketCoherence";
 
 export const CFB_FORWARD_WRITER_RELEASE =
-  "cfb_forward_evidence_writer_2026_08_28_r23_release_refresh_priority" as const;
+  "cfb_forward_evidence_writer_2026_08_28_r24_prior_event_disambiguation" as const;
 export const CFB_FORWARD_MAX_QB_TEAMS_PER_RUN = 24 as const;
 export const CFB_FORWARD_RESULTS_BATCH_SIZE = 100 as const;
 export const CFB_FORWARD_MAX_PRIOR_GAME_IDS = 1200 as const;
@@ -96,11 +96,12 @@ export async function runCfbForwardEvidenceWriter(args: {
   const quarterbackTeams = selectQuarterbackTeams({ plans, teams, priorQuarterbacks, maximum: CFB_FORWARD_MAX_QB_TEAMS_PER_RUN });
   const plannedGames = [...new Map(plans.map((plan) => [plan.game.providerGameId, plan.game])).values()];
   const sharpFallbackGames = plannedGames.filter((game) => cfbBooksNeedSharpFallback(slate.currentOddsComparableBooksByGame[game.providerGameId] ?? []));
+  const trustedSharpEventIdsByGame = trustedCfbSharpEventIdsByGame(existing);
   const [linesResult, splitsResult, quarterbacks, sharpFallback, sharpSplitsAttempt] = await Promise.all([
     playbook.lines("ncaaf"),
     playbook.splits("ncaaf"),
     fetchBalldontlieNcaafQuarterbacks({ teams: quarterbackTeams.map((team) => ({ id: team.id, abbreviation: team.abbreviation })), previousSeason: args.season - 1, capturedAt: args.now, apiKey: args.balldontlieApiKey }),
-    fetchSharpApiNcaafOddsFallback({ games: sharpFallbackGames, apiKey: args.sharpApiKey }),
+    fetchSharpApiNcaafOddsFallback({ games: sharpFallbackGames, apiKey: args.sharpApiKey, trustedEventIdsByGame: trustedSharpEventIdsByGame }),
     fetchCfbSharpApiSplits({ games, apiKey: args.sharpApiKey })
       .then((result) => ({ result, error: null }))
       .catch((error: unknown) => ({ result: null, error: splitRequestError(error) })),
@@ -285,6 +286,22 @@ export async function runCfbForwardEvidenceWriter(args: {
     publicationAttempted: true,
     ...tracking,
   };
+}
+
+export function trustedCfbSharpEventIdsByGame(rows: CfbForwardStoredEvidence[]): Record<string, string> {
+  const observed = new Map<string, Set<string>>();
+  for (const row of rows) {
+    const ids = observed.get(row.providerGameId) ?? new Set<string>();
+    for (const book of [...row.payload.market.currentBooks, ...(row.payload.market.displayBooks ?? [])]) {
+      if (book.provider === "sharpapi" && typeof book.providerEventId === "string" && book.providerEventId.length > 0) {
+        ids.add(book.providerEventId);
+      }
+    }
+    observed.set(row.providerGameId, ids);
+  }
+  return Object.fromEntries([...observed.entries()].flatMap(([providerGameId, ids]) =>
+    ids.size === 1 ? [[providerGameId, [...ids][0]!] as const] : []
+  ));
 }
 
 export function latestCfbPayloadTimestamp(args: {
