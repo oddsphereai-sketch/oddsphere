@@ -59,6 +59,59 @@ rewriting them. Live success requires production database and member-site proof 
 release set, one leased writer, coherent board and T-60 locks, current price coverage, reader
 freshness, tracking separation, and site responsiveness.
 
+### Owner-approved stabilization amendment: actionable CFB grade ladder
+
+On 2026-08-29, after inspecting the first production r12 forward wave, Daniel Mengel explicitly
+approved one additional provisional grade-ladder amendment for this same identified PR #265 CFB
+candidate. This amendment does not authorize different PMF math, another sport, later threshold
+tuning, outcome-informed recalibration, a stake, or a second writer. The 75% independent / 25%
+market PMF and maximum one-point sharp anchor adjustments remain unchanged. It exists only to
+repair the release-transition failures and allow a usable, still bounded actionable board from
+complete exact-price evidence while a later normally validated recalibration is prepared.
+
+The owner explicitly rejected limiting promotion eligibility to American prices from -125
+through +125 as too narrow. The sole CFB writer may apply these three additional actionable-tier
+rules after the already authorized market/sharp PMF, probability grade, strict-evidence resistance
+checks, and existing balanced promotion/demotion rules:
+
+1. An existing `Lean` may become `Best Angle` only when its exact-price tuple has model
+   probability at least 55%, target-excluded edge at least 5 percentage points, exact-price EV at
+   least 6%, American price from -500 through +500, and neither strictly matched sharp evidence nor
+   same-book movement resists the selected side.
+2. A complete Spread `Watchlist` may become `Lean` only when its exact-price tuple has model
+   probability at least 53%, target-excluded edge at least 2.5 percentage points, exact-price EV
+   at least 2%, absolute spread no larger than 10 points, American price from -500 through +500,
+   and neither strictly matched sharp evidence nor same-book movement resists the selected side.
+3. A complete Total `Watchlist` may become `Lean` only when its exact-price tuple has model
+   probability at least 52%, target-excluded edge at least 2.5 percentage points, exact-price EV
+   at least 1.5%, American price from -500 through +500, and neither strictly matched sharp
+   evidence nor same-book movement resists the selected side.
+
+The frozen 2026-08-29 15:56:08Z r12 FBS wave contains 20 evaluated tuples after the failed legacy
+TCU lock is excluded from recomputation. Before this amendment it is 0 Best Angles / 2 Leans / 12
+Watchlists / 6 No Plays. Applying the thresholds above with explicit home/away abbreviation
+identity and without using game outcomes yields 2 Best Angles / 2 Leans / 10 Watchlists / 6 No
+Plays under the first two rules. The owner-approved Total rule yields the final 2 Best Angles / 4
+Leans / 8 Watchlists / 6 No Plays: two existing Leans advance one tier, two Spread Watchlists and
+two Total Watchlists become Leans, and two stored Watchlists correctly become No Play when the
+selected team is mapped to resisting sharp evidence.
+That is six tier promotions, two demotions, and four additional actionable tuples. Existing
+resistance demotions remain active and can reduce live counts as prices or evidence move. No rule
+can create or increase a stake. These frozen counts are an audit result, not a target, quota, or
+required live distribution; every live grade must arise naturally from its own complete tuple and
+evidence gates.
+
+The production implementation requires another complete immutable release/version set and the
+same protected-PR, integration-safety, focused/full testing, normal deployment, single leased
+writer, release-separated tracking, and live database/member proof required above. A held legacy
+T-60 row may not satisfy a new release's lock requirement; a genuinely valid immutable prior lock
+must remain frozen. Historical same-book price observations may be used across release boundaries
+for reader-only movement provenance, but model outputs, decisions, locks, and performance remain
+release-separated. No missed or started game may be retroactively represented as an on-time lock.
+Roll back or hold on mixed releases, value/reader incoherence, missing price coverage presented as
+normal No Play, a writer/reader crash, lease failure, stale snapshot resurfacing, failed future
+T-60 creation, or another unexpected actionable-board collapse.
+
 ## 1. Declare scope before editing
 
 - Name every affected sport, market, model family, calibration layer, writer, reader, and cron.
