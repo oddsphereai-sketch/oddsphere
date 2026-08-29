@@ -44,6 +44,224 @@ const HISTORY_PAGE_SIZE = 1000;
 const LOCK_WINDOW_MS = 60 * 60 * 1000;
 export const WNBA_PREDICTION_RECORD_CONTRACT_VERSION =
   "wnba_prediction_record_contract_v3_exact_decision_tuple_2026_08_21";
+export const WNBA_ACTION_PROMOTION_EVIDENCE_CONTRACT_VERSION =
+  "wnba_action_promotion_evidence_v1_forward_only_2026_08_29" as const;
+export const WNBA_ACTION_PROMOTION_EVIDENCE_KEY = "wnba_action_promotion_evidence_v1" as const;
+export const WNBA_ACTION_PROMOTION_EVIDENCE_MAX_OBSERVATIONS = 32;
+export const WNBA_ACTION_PROMOTION_EVIDENCE_MAX_BYTES = 32 * 1024;
+export const WNBA_ACTION_PROMOTION_EVIDENCE_CADENCE_MINUTES = 30;
+export const WNBA_ACTION_PROMOTION_EVIDENCE_ANCHOR_MINUTE_UTC = 23;
+
+type WnbaActionPromotionObservation = {
+  cycle_id: string;
+  source_computed_at: string;
+  captured_at: string;
+  game_id: number;
+  external_id: string | number | null;
+  market: string;
+  side: string;
+  normalized_line: number | null;
+  grade: string | null;
+  actionable: boolean;
+  evaluated_sportsbook: string | null;
+  evaluated_price_american: number | null;
+  evaluated_at: string | null;
+  model_probability: number | null;
+  market_fair_probability: number | null;
+  outcome_confidence: number | null;
+  edge_pp: number | null;
+  offered_price_ev: number | null;
+  model_version: string | null;
+  distribution_version: string | null;
+  grade_policy_version: string | null;
+  decision_tuple_contract_version: string | null;
+  prediction_record_contract_version: string | null;
+  economic_equivalence_key: string;
+  evidence_identity: string;
+};
+
+type WnbaActionPromotionEvidence = {
+  contract_version: typeof WNBA_ACTION_PROMOTION_EVIDENCE_CONTRACT_VERSION;
+  mode: "shadow_only";
+  production_gate_enabled: false;
+  canonical_cycle_source: "game_predictions.computed_at";
+  cadence_interval_minutes: typeof WNBA_ACTION_PROMOTION_EVIDENCE_CADENCE_MINUTES;
+  cadence_anchor_minute_utc: typeof WNBA_ACTION_PROMOTION_EVIDENCE_ANCHOR_MINUTE_UTC;
+  observations: WnbaActionPromotionObservation[];
+};
+
+function record(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {};
+}
+
+function finiteNumber(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function boundedText(value: unknown): string | null {
+  return typeof value === "string" && value.length > 0 ? value.slice(0, 160) : null;
+}
+
+function externalIdentity(value: unknown): string | number | null {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  return boundedText(value);
+}
+
+export function normalizeWnbaActionPromotionCycle(sourceComputedAt: string): string | null {
+  const computedMs = Date.parse(sourceComputedAt);
+  if (!Number.isFinite(computedMs)) return null;
+  const intervalMs = WNBA_ACTION_PROMOTION_EVIDENCE_CADENCE_MINUTES * 60 * 1000;
+  const anchorMs = WNBA_ACTION_PROMOTION_EVIDENCE_ANCHOR_MINUTE_UTC * 60 * 1000;
+  return new Date(Math.floor((computedMs - anchorMs) / intervalMs) * intervalMs + anchorMs).toISOString();
+}
+
+function normalizedLine(value: unknown): number | null {
+  const line = finiteNumber(value);
+  return line === null ? null : Math.round(line * 100) / 100;
+}
+
+function americanDecimal(price: number | null): number | null {
+  if (price === null || price === 0) return null;
+  return price > 0 ? price / 100 + 1 : 100 / Math.abs(price) + 1;
+}
+
+function isActionableGrade(grade: string | null): boolean {
+  return grade === "Best Angle" || grade === "Lean" || grade === "best_angle" || grade === "lean";
+}
+
+function makeWnbaActionPromotionObservation(args: {
+  candidateRecord: Record<string, unknown>;
+  sourceComputedAt: string;
+  capturedAt: string;
+}): WnbaActionPromotionObservation | null {
+  const cycleId = normalizeWnbaActionPromotionCycle(args.sourceComputedAt);
+  if (cycleId === null || !Number.isFinite(Date.parse(args.capturedAt))) return null;
+  const candidate = args.candidateRecord;
+  const snapshot = record(candidate.snapshot_json);
+  const tuple = record(snapshot.decision_tuple);
+  const gameId = finiteNumber(candidate.game_id);
+  const market = boundedText(candidate.market);
+  const side = boundedText(candidate.side);
+  if (gameId === null || market === null || side === null) return null;
+  const line = normalizedLine(tuple.line ?? candidate.line_value);
+  const grade = boundedText(tuple.bet_grade ?? snapshot.grade ?? candidate.play_grade);
+  const price = finiteNumber(tuple.evaluated_price_american ?? candidate.odds_american);
+  const modelProbability = finiteNumber(tuple.model_probability ?? candidate.model_probability);
+  const marketProbability = finiteNumber(tuple.market_fair_probability ?? candidate.market_probability);
+  const outcomeConfidence = finiteNumber(tuple.outcome_confidence ?? candidate.confidence);
+  const edgePp = finiteNumber(candidate.edge);
+  const decimal = americanDecimal(price);
+  const offeredPriceEv = modelProbability !== null && decimal !== null
+    ? Math.round((modelProbability * decimal - 1) * 1_000_000) / 1_000_000
+    : null;
+  const modelVersion = boundedText(tuple.model_version ?? snapshot.model_version ?? candidate.model_version);
+  const distributionVersion = boundedText(tuple.distribution_version ?? snapshot.distribution_version);
+  const gradePolicyVersion = boundedText(tuple.grade_policy_version ?? snapshot.grade_policy_version);
+  const tupleContractVersion = boundedText(tuple.contract_version ?? snapshot.decision_tuple_contract_version);
+  const recordContractVersion = boundedText(snapshot.prediction_record_contract_version);
+  const sportsbook = boundedText(tuple.evaluated_sportsbook);
+  const evaluatedAt = boundedText(tuple.evaluated_at);
+  const economicEquivalenceKey = JSON.stringify([
+    gameId, market, side, line, price, modelProbability, marketProbability,
+    outcomeConfidence, edgePp, offeredPriceEv, modelVersion, distributionVersion, gradePolicyVersion,
+    tupleContractVersion, recordContractVersion,
+  ]);
+  return {
+    cycle_id: cycleId,
+    source_computed_at: args.sourceComputedAt,
+    captured_at: args.capturedAt,
+    game_id: gameId,
+    external_id: externalIdentity(candidate.external_id),
+    market,
+    side,
+    normalized_line: line,
+    grade,
+    actionable: isActionableGrade(grade),
+    evaluated_sportsbook: sportsbook,
+    evaluated_price_american: price,
+    evaluated_at: evaluatedAt,
+    model_probability: modelProbability,
+    market_fair_probability: marketProbability,
+    outcome_confidence: outcomeConfidence,
+    edge_pp: edgePp,
+    offered_price_ev: offeredPriceEv,
+    model_version: modelVersion,
+    distribution_version: distributionVersion,
+    grade_policy_version: gradePolicyVersion,
+    decision_tuple_contract_version: tupleContractVersion,
+    prediction_record_contract_version: recordContractVersion,
+    economic_equivalence_key: economicEquivalenceKey,
+    evidence_identity: JSON.stringify([
+      cycleId, args.sourceComputedAt, grade, isActionableGrade(grade), sportsbook, evaluatedAt,
+      economicEquivalenceKey,
+    ]),
+  };
+}
+
+function readWnbaActionPromotionEvidence(snapshot: Record<string, unknown>): WnbaActionPromotionEvidence | null {
+  const raw = record(snapshot[WNBA_ACTION_PROMOTION_EVIDENCE_KEY]);
+  if (
+    raw.contract_version !== WNBA_ACTION_PROMOTION_EVIDENCE_CONTRACT_VERSION ||
+    raw.mode !== "shadow_only" ||
+    raw.production_gate_enabled !== false ||
+    raw.canonical_cycle_source !== "game_predictions.computed_at" ||
+    raw.cadence_interval_minutes !== WNBA_ACTION_PROMOTION_EVIDENCE_CADENCE_MINUTES ||
+    raw.cadence_anchor_minute_utc !== WNBA_ACTION_PROMOTION_EVIDENCE_ANCHOR_MINUTE_UTC ||
+    !Array.isArray(raw.observations)
+  ) return null;
+  return raw as WnbaActionPromotionEvidence;
+}
+
+function boundedEvidence(observations: WnbaActionPromotionObservation[]): WnbaActionPromotionEvidence {
+  const kept = observations.slice(-WNBA_ACTION_PROMOTION_EVIDENCE_MAX_OBSERVATIONS);
+  const evidence: WnbaActionPromotionEvidence = {
+    contract_version: WNBA_ACTION_PROMOTION_EVIDENCE_CONTRACT_VERSION,
+    mode: "shadow_only",
+    production_gate_enabled: false,
+    canonical_cycle_source: "game_predictions.computed_at",
+    cadence_interval_minutes: WNBA_ACTION_PROMOTION_EVIDENCE_CADENCE_MINUTES,
+    cadence_anchor_minute_utc: WNBA_ACTION_PROMOTION_EVIDENCE_ANCHOR_MINUTE_UTC,
+    observations: kept,
+  };
+  while (
+    evidence.observations.length > 1 &&
+    Buffer.byteLength(JSON.stringify(evidence), "utf8") > WNBA_ACTION_PROMOTION_EVIDENCE_MAX_BYTES
+  ) evidence.observations.shift();
+  return evidence;
+}
+
+export function appendWnbaActionPromotionEvidence(args: {
+  existingSnapshot: Record<string, unknown>;
+  candidateRecord: Record<string, unknown>;
+  sourceComputedAt: string;
+  capturedAt: string;
+}): Record<string, unknown> {
+  const candidateSnapshot = record(args.candidateRecord.snapshot_json);
+  const prior = readWnbaActionPromotionEvidence(args.existingSnapshot);
+  const observations = prior?.observations ?? [];
+  const newest = observations.at(-1);
+  const cycleId = normalizeWnbaActionPromotionCycle(args.sourceComputedAt);
+  const cycleMs = cycleId === null ? Number.NaN : Date.parse(cycleId);
+  const newestCycleMs = newest ? Date.parse(newest.cycle_id) : Number.NEGATIVE_INFINITY;
+  const isDuplicateOrOutOfOrder =
+    observations.some((observation) => observation.cycle_id === cycleId) ||
+    !Number.isFinite(cycleMs) ||
+    cycleMs <= newestCycleMs;
+  const observation = isDuplicateOrOutOfOrder ? null : makeWnbaActionPromotionObservation(args);
+  const evidence = observation ? boundedEvidence([...observations, observation]) : prior;
+  return {
+    ...args.existingSnapshot,
+    ...candidateSnapshot,
+    ...(evidence ? { [WNBA_ACTION_PROMOTION_EVIDENCE_KEY]: evidence } : {}),
+  };
+}
+
+export const __WNBA_ACTION_PROMOTION_EVIDENCE_TEST__ = {
+  readWnbaActionPromotionEvidence,
+  makeWnbaActionPromotionObservation,
+};
 
 export function resolveWnbaPickedMoneylineProbabilities(input: {
   pickedHome: boolean;
@@ -116,7 +334,7 @@ export async function buildWnbaPredictionRecords(opts: {
   const ab = (id: number) => (tById.get(id)?.abbreviation as string) ?? "?";
 
   const ids = allGames.map((g) => g.id as number);
-  const { data: gps } = ids.length ? await supabase.from("game_predictions").select("id, game_id, locked_at, sport_specific").in("game_id", ids) : { data: [] as Record<string, unknown>[] };
+  const { data: gps } = ids.length ? await supabase.from("game_predictions").select("id, game_id, locked_at, computed_at, sport_specific").in("game_id", ids) : { data: [] as Record<string, unknown>[] };
   const gpByGame = new Map((gps ?? []).map((r) => [r.game_id as number, r]));
   const { data: lineRows } = ids.length ? await supabase.from("lines").select("game_id, market_type, side, line_value, odds_american").in("game_id", ids).is("player_id", null) : { data: [] as Record<string, unknown>[] };
   const historyRows: Record<string, unknown>[] = [];
@@ -194,7 +412,7 @@ export async function buildWnbaPredictionRecords(opts: {
 
   for (const g of allGames) {
     const matchup = `${ab(g.away_team_id as number)}@${ab(g.home_team_id as number)}`;
-    const gp = gpByGame.get(g.id as number) as { id: number; locked_at: string | null; sport_specific?: Record<string, unknown> } | undefined;
+    const gp = gpByGame.get(g.id as number) as { id: number; locked_at: string | null; computed_at?: string | null; sport_specific?: Record<string, unknown> } | undefined;
     const slate = g.slate_date as string;
 
     // ── eligibility (WITHHOLD, not skip) ──
@@ -425,7 +643,7 @@ export async function buildWnbaPredictionRecords(opts: {
   // overwrite a locked record (locked_at != null), and do not create duplicate
   // rows if model_version changes.
   const { data: existing } = ids.length
-    ? await supabase.from("prediction_records").select("id, game_id, market, locked_at").eq("sport", "wnba").in("game_id", ids)
+    ? await supabase.from("prediction_records").select("id, game_id, market, locked_at, snapshot_json").eq("sport", "wnba").in("game_id", ids)
     : { data: [] as Record<string, unknown>[] };
   const lockedRec = new Set((existing ?? []).filter((r) => r.locked_at != null).map((r) => `${r.game_id}::${r.market}`));
   const unlockedIdByKey = new Map(
@@ -433,10 +651,30 @@ export async function buildWnbaPredictionRecords(opts: {
       .filter((r) => r.locked_at == null)
       .map((r) => [`${r.game_id}::${r.market}`, r.id as number]),
   );
+  const unlockedSnapshotByKey = new Map(
+    (existing ?? [])
+      .filter((r) => r.locked_at == null)
+      .map((r) => [`${r.game_id}::${r.market}`, record(r.snapshot_json)]),
+  );
+  const cycleIdByGame = new Map(
+    (gps ?? [])
+      .filter((r) => typeof r.computed_at === "string" && Number.isFinite(Date.parse(r.computed_at as string)))
+      .map((r) => [r.game_id as number, r.computed_at as string]),
+  );
   const toWrite = result.records.filter((r) => !lockedRec.has(`${r.game_id}::${r.market}`));
   result.lockedSkipped = result.records.length - toWrite.length;
   for (const rec of toWrite) {
-    const existingId = unlockedIdByKey.get(`${rec.game_id}::${rec.market}`);
+    const key = `${rec.game_id}::${rec.market}`;
+    const existingId = unlockedIdByKey.get(key);
+    const cycleId = cycleIdByGame.get(rec.game_id as number);
+    if (cycleId) {
+      rec.snapshot_json = appendWnbaActionPromotionEvidence({
+        existingSnapshot: unlockedSnapshotByKey.get(key) ?? {},
+        candidateRecord: rec,
+        sourceComputedAt: cycleId,
+        capturedAt: nowIso,
+      });
+    }
     if (existingId !== undefined) {
       const { error } = await supabase.from("prediction_records").update(rec).eq("id", existingId);
       if (error) errors.push(`prediction_records update ${rec.game_id}/${rec.market}: ${error.message}`);
