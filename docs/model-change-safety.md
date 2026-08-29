@@ -97,7 +97,9 @@ two Total Watchlists become Leans, and two stored Watchlists correctly become No
 selected team is mapped to resisting sharp evidence.
 That is six tier promotions, two demotions, and four additional actionable tuples. Existing
 resistance demotions remain active and can reduce live counts as prices or evidence move. No rule
-can create or increase a stake.
+can create or increase a stake. These frozen counts are an audit result, not a target, quota, or
+required live distribution; every live grade must arise naturally from its own complete tuple and
+evidence gates.
 
 The production implementation requires another complete immutable release/version set and the
 same protected-PR, integration-safety, focused/full testing, normal deployment, single leased
