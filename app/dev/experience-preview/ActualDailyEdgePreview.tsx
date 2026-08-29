@@ -65,6 +65,11 @@ import {
   footballEvidenceFocus,
   prioritizeFootballEvidenceStats,
 } from "@/app/lab/lib/footballEvidencePresentation";
+import {
+  resolveInitialCfbBoardScope,
+  selectCfbBoardGames,
+  type CfbBoardScope,
+} from "@/app/lab/lib/cfbBoardScope";
 import type { NflWeekOneEvidenceBoard } from "@/lib/services/football/nflWeekOneEvidenceBoard";
 import { exactLockedEplScoreOutlook, impliedEplMatchResultScoreOutlook } from "@/lib/services/epl/eplDerivedMarketForecast";
 
@@ -168,7 +173,14 @@ export default function ActualDailyEdgePreview({
   const displaySnapshot = useMemo(() => normalizeCandidatePicks(snapshot, sport), [snapshot, sport]);
   const requestedGameId = searchParams.get("game");
   const requestedMarket = searchParams.get("market");
-  const initialSelection = resolveInitialReaderSelection(displaySnapshot.games, requestedGameId, requestedMarket);
+  const [cfbBoardScope, setCfbBoardScope] = useState<CfbBoardScope>(() =>
+    resolveInitialCfbBoardScope({ sport, games: displaySnapshot.games, requestedGameId }),
+  );
+  const scopedGames = useMemo(
+    () => selectCfbBoardGames(displaySnapshot.games, sport, cfbBoardScope),
+    [cfbBoardScope, displaySnapshot.games, sport],
+  );
+  const initialSelection = resolveInitialReaderSelection(scopedGames, requestedGameId, requestedMarket);
   const initialReaderRequested = Boolean(
     requestedGameId &&
     displaySnapshot.games.some((candidate) => candidate.id === requestedGameId) &&
@@ -253,8 +265,8 @@ export default function ActualDailyEdgePreview({
   }
 
   const game = useMemo(
-    () => displaySnapshot.games.find((candidate) => candidate.id === gameId) ?? displaySnapshot.games[0],
-    [displaySnapshot.games, gameId],
+    () => displaySnapshot.games.find((candidate) => candidate.id === gameId) ?? scopedGames[0],
+    [displaySnapshot.games, gameId, scopedGames],
   );
 
   useEffect(() => {
@@ -327,8 +339,8 @@ export default function ActualDailyEdgePreview({
   }
 
   function selectAdjacentGame(direction: -1 | 1) {
-    const index = displaySnapshot.games.findIndex((candidate) => candidate.id === game.id);
-    const next = displaySnapshot.games[index + direction];
+    const index = scopedGames.findIndex((candidate) => candidate.id === game.id);
+    const next = scopedGames[index + direction];
     if (!next) return;
     setGameId(next.id);
     setDeepOpen(false);
@@ -346,20 +358,42 @@ export default function ActualDailyEdgePreview({
     if (!embeddedSample) window.history.replaceState(null, "", `${window.location.pathname}?${params.toString()}`);
   }
 
+  function changeCfbBoardScope(next: CfbBoardScope) {
+    setCfbBoardScope(next);
+    const nextGames = selectCfbBoardGames(displaySnapshot.games, sport, next);
+    if (nextGames.length === 0 || nextGames.some((candidate) => candidate.id === game.id)) return;
+    const first = nextGames[0]!;
+    setGameId(first.id);
+    setMarketKey(primaryMarket(first));
+    setReaderOpen(false);
+    setMobileSheetOpen(false);
+    setDeepOpen(false);
+  }
+
+  const scopedGameIndex = scopedGames.findIndex((candidate) => candidate.id === game.id);
+  const cfbScopeControl = sport === "cfb"
+    ? {
+        active: cfbBoardScope,
+        fbsCount: selectCfbBoardGames(displaySnapshot.games, sport, "fbs").length,
+        divisionICount: displaySnapshot.games.length,
+        onChange: changeCfbBoardScope,
+      }
+    : undefined;
+
   return (
     <div className="space-y-5 pb-16">
       <SlateHeader snapshot={displaySnapshot} sport={sport} onSportChange={switchSport} onSportPrefetch={prefetchSport} sample={embeddedSample} soccerCompetition={soccerCompetition} weeklySlate={weeklySlate} reviewMode={reviewMode} activePreviewSports={activePreviewSports} />
 
       <div ref={readerRef} className="hidden scroll-mt-4 sm:block">
         {readerOpen ? <div>
-          <ReaderSurface game={game} market={market} marketKey={marketKey} sport={sport} history={history} pitcherFirstInningHistory={pitcherFirstInningHistory} availability={availability[game.id] ?? null} sample={sample} setSample={setSample} deepOpen={deepOpen} setDeepOpen={setDeepOpen} deepView={deepView} setDeepView={setDeepView} setMarket={selectMarket} onCollapse={collapseReader} index={displaySnapshot.games.indexOf(game)} total={displaySnapshot.games.length} />
-        </div> : <CollapsedReader game={game} market={market} marketKey={marketKey} sport={sport} onOpen={() => selectGame(game, marketKey)} onOpenMarket={(nextMarket) => selectGame(game, nextMarket)} index={displaySnapshot.games.indexOf(game)} total={displaySnapshot.games.length} />}
+          <ReaderSurface game={game} market={market} marketKey={marketKey} sport={sport} history={history} pitcherFirstInningHistory={pitcherFirstInningHistory} availability={availability[game.id] ?? null} sample={sample} setSample={setSample} deepOpen={deepOpen} setDeepOpen={setDeepOpen} deepView={deepView} setDeepView={setDeepView} setMarket={selectMarket} onCollapse={collapseReader} index={scopedGameIndex} total={scopedGames.length} />
+        </div> : <CollapsedReader game={game} market={market} marketKey={marketKey} sport={sport} onOpen={() => selectGame(game, marketKey)} onOpenMarket={(nextMarket) => selectGame(game, nextMarket)} index={scopedGameIndex} total={scopedGames.length} />}
       </div>
 
-      <EdgeBoard games={displaySnapshot.games} sport={sport} activeId={game.id} activeMarket={marketKey} selectGame={selectGame} groupByDay={Boolean(weeklySlate)} />
+      <EdgeBoard games={scopedGames} sport={sport} activeId={game.id} activeMarket={marketKey} selectGame={selectGame} groupByDay={Boolean(weeklySlate)} cfbScopeControl={cfbScopeControl} />
 
       {mobileSheetOpen ? (
-        <MobileReaderSheet game={game} market={market} marketKey={marketKey} sport={sport} history={history} pitcherFirstInningHistory={pitcherFirstInningHistory} availability={availability[game.id] ?? null} sample={sample} setSample={setSample} deepOpen={deepOpen} setDeepOpen={setDeepOpen} deepView={deepView} setDeepView={setDeepView} setMarket={selectMarket} onClose={collapseReader} onSportChange={switchSport} onSportPrefetch={prefetchSport} activePreviewSports={activePreviewSports} soccerCompetition={soccerCompetition} onPrev={displaySnapshot.games.indexOf(game) > 0 ? () => selectAdjacentGame(-1) : null} onNext={displaySnapshot.games.indexOf(game) < displaySnapshot.games.length - 1 ? () => selectAdjacentGame(1) : null} index={displaySnapshot.games.indexOf(game)} total={displaySnapshot.games.length} />
+        <MobileReaderSheet game={game} market={market} marketKey={marketKey} sport={sport} history={history} pitcherFirstInningHistory={pitcherFirstInningHistory} availability={availability[game.id] ?? null} sample={sample} setSample={setSample} deepOpen={deepOpen} setDeepOpen={setDeepOpen} deepView={deepView} setDeepView={setDeepView} setMarket={selectMarket} onClose={collapseReader} onSportChange={switchSport} onSportPrefetch={prefetchSport} activePreviewSports={activePreviewSports} soccerCompetition={soccerCompetition} onPrev={scopedGameIndex > 0 ? () => selectAdjacentGame(-1) : null} onNext={scopedGameIndex < scopedGames.length - 1 ? () => selectAdjacentGame(1) : null} index={scopedGameIndex} total={scopedGames.length} />
       ) : null}
 
       {reviewMode ? <p className="text-center text-[10px] font-semibold uppercase tracking-[0.14em] text-gray-700">
@@ -2073,7 +2107,7 @@ function AnalysisCard({ label, text }: { label: string; text: string }) {
 
 type BoardFilter = "all" | "best_angle" | "lean" | "watchlist" | "caution" | "no_play";
 
-function EdgeBoard({ games, sport, activeId, activeMarket, selectGame, groupByDay = false }: { games: DailyEdgeGameDto[]; sport: Sport; activeId: string; activeMarket: MarketKey; selectGame: (game: DailyEdgeGameDto, market?: MarketKey) => void; groupByDay?: boolean }) {
+function EdgeBoard({ games, sport, activeId, activeMarket, selectGame, groupByDay = false, cfbScopeControl }: { games: DailyEdgeGameDto[]; sport: Sport; activeId: string; activeMarket: MarketKey; selectGame: (game: DailyEdgeGameDto, market?: MarketKey) => void; groupByDay?: boolean; cfbScopeControl?: { active: CfbBoardScope; fbsCount: number; divisionICount: number; onChange: (scope: CfbBoardScope) => void } }) {
   const [filter, setFilter] = useState<BoardFilter>("all");
   const [focus, setFocus] = useState<MarketKey | null>(null);
   const filters: Array<{ key: BoardFilter; label: string }> = [{ key: "all", label: "All" }, { key: "best_angle", label: "Best Angle" }, { key: "lean", label: "Lean" }, { key: "watchlist", label: "Watchlist" }, { key: "caution", label: "Caution" }, { key: "no_play", label: "No Play" }];
@@ -2097,7 +2131,11 @@ function EdgeBoard({ games, sport, activeId, activeMarket, selectGame, groupByDa
   const countNote = focus === null
     ? "Counts show games containing at least one market with each grade; a game can appear in more than one grade."
     : `Counts show games by their ${marketLabelFor(focus, sport).toLowerCase()} grade.`;
-  return <section><div className="mb-3 rounded-xl border border-white/[0.07] bg-white/[0.02] p-3"><div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div className="flex items-baseline gap-2"><span className="h-3.5 w-1 rounded-full bg-violet-400/65" /><h2 className="text-[10px] font-black uppercase tracking-[0.18em] text-violet-200">{groupByDay ? "Weekly Slate" : "Slate Board"}</h2><span className="text-[11px] text-gray-600">·</span><span className="text-[11px] text-gray-400">{games.length} {games.length === 1 ? "game" : "games"}{footballBoard ? ` · ${predictionCount} predictions` : ""}</span></div><div className="flex gap-1.5 overflow-x-auto pb-1">{marketFilters.map((item) => <button key={item.key ?? "best"} type="button" onClick={() => setFocus(item.key)} aria-pressed={focus === item.key} className={`whitespace-nowrap rounded-md border px-2.5 py-1.5 text-[8px] font-black uppercase tracking-wider ${focus === item.key ? "border-white/20 bg-white/[0.09] text-white" : "border-white/[0.06] text-gray-500"}`}>{item.label}</button>)}</div></div><div className="mt-3 flex flex-col gap-2 border-t border-white/[0.05] pt-3 sm:flex-row sm:items-center sm:justify-between"><div className="flex gap-1.5 overflow-x-auto">{filters.map((item) => { const total = count(item.key); const active = filter === item.key; const disabled = item.key !== "all" && total === 0; return <button key={item.key} type="button" disabled={disabled} onClick={() => setFilter(item.key)} className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border px-2.5 py-1 text-[9px] font-black uppercase tracking-wider ${active ? "border-violet-400/55 bg-violet-500/[0.18] text-white" : disabled ? "border-white/[0.04] text-gray-800" : "border-white/[0.08] bg-white/[0.03] text-gray-400 hover:border-white/[0.16]"}`}>{item.label}<span className={active ? "text-violet-200" : "text-gray-600"}>{total}</span></button>; })}</div>{footballBoard ? <p className="max-w-xl text-[8px] font-semibold leading-relaxed text-gray-600">{countNote}</p> : null}</div></div><div className="space-y-6">{groupedGames.map(([date, dayGames]) => { const rows = dayGames ?? []; return <section key={date || "slate"}>{date ? <div className="mb-3 flex items-center gap-3 border-b border-white/[0.07] pb-2"><span className="rounded-lg border border-violet-400/25 bg-violet-500/[0.08] px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.16em] text-violet-100">{new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", weekday: "long", month: "short", day: "numeric" }).format(new Date(`${date}T12:00:00Z`))}</span><span className="text-[9px] font-bold text-gray-600">{rows.length} {rows.length === 1 ? "match" : "matches"}</span></div> : null}<div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{rows.map((game) => <BoardGameCard key={game.id} game={game} sport={sport} headlineMarket={focus ?? primaryMarket(game)} active={activeId === game.id} activeMarket={activeId === game.id ? activeMarket : null} selectGame={selectGame} />)}</div></section>; })}</div></section>;
+  const changeScope = (scope: CfbBoardScope) => {
+    setFilter("all");
+    cfbScopeControl?.onChange(scope);
+  };
+  return <section><div className="mb-3 rounded-xl border border-white/[0.07] bg-white/[0.02] p-3">{cfbScopeControl ? <div className="mb-3 flex flex-col gap-2 rounded-lg border border-violet-400/15 bg-violet-500/[0.04] px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between"><div><p className="text-[8px] font-black uppercase tracking-[0.16em] text-violet-200">College football board</p><p className="mt-1 text-[8px] font-semibold text-gray-500">FBS-involved games are the member default. Every model-covered Division I forecast remains available.</p></div><div className="flex gap-1.5" role="group" aria-label="College football board scope"><button type="button" onClick={() => changeScope("fbs")} aria-pressed={cfbScopeControl.active === "fbs"} className={`rounded-md border px-2.5 py-1.5 text-[8px] font-black uppercase tracking-wider ${cfbScopeControl.active === "fbs" ? "border-violet-400/55 bg-violet-500/[0.18] text-white" : "border-white/[0.06] text-gray-500"}`}>FBS {cfbScopeControl.fbsCount}</button><button type="button" onClick={() => changeScope("division_i")} aria-pressed={cfbScopeControl.active === "division_i"} className={`rounded-md border px-2.5 py-1.5 text-[8px] font-black uppercase tracking-wider ${cfbScopeControl.active === "division_i" ? "border-violet-400/55 bg-violet-500/[0.18] text-white" : "border-white/[0.06] text-gray-500"}`}>All Division I {cfbScopeControl.divisionICount}</button></div></div> : null}<div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div className="flex items-baseline gap-2"><span className="h-3.5 w-1 rounded-full bg-violet-400/65" /><h2 className="text-[10px] font-black uppercase tracking-[0.18em] text-violet-200">{groupByDay ? "Weekly Slate" : "Slate Board"}</h2><span className="text-[11px] text-gray-600">·</span><span className="text-[11px] text-gray-400">{games.length} {games.length === 1 ? "game" : "games"}{footballBoard ? ` · ${predictionCount} predictions` : ""}</span></div><div className="flex gap-1.5 overflow-x-auto pb-1">{marketFilters.map((item) => <button key={item.key ?? "best"} type="button" onClick={() => setFocus(item.key)} aria-pressed={focus === item.key} className={`whitespace-nowrap rounded-md border px-2.5 py-1.5 text-[8px] font-black uppercase tracking-wider ${focus === item.key ? "border-white/20 bg-white/[0.09] text-white" : "border-white/[0.06] text-gray-500"}`}>{item.label}</button>)}</div></div><div className="mt-3 flex flex-col gap-2 border-t border-white/[0.05] pt-3 sm:flex-row sm:items-center sm:justify-between"><div className="flex gap-1.5 overflow-x-auto">{filters.map((item) => { const total = count(item.key); const active = filter === item.key; const disabled = item.key !== "all" && total === 0; return <button key={item.key} type="button" disabled={disabled} onClick={() => setFilter(item.key)} className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border px-2.5 py-1 text-[9px] font-black uppercase tracking-wider ${active ? "border-violet-400/55 bg-violet-500/[0.18] text-white" : disabled ? "border-white/[0.04] text-gray-800" : "border-white/[0.08] bg-white/[0.03] text-gray-400 hover:border-white/[0.16]"}`}>{item.label}<span className={active ? "text-violet-200" : "text-gray-600"}>{total}</span></button>; })}</div>{footballBoard ? <p className="max-w-xl text-[8px] font-semibold leading-relaxed text-gray-600">{countNote}</p> : null}</div></div><div className="space-y-6">{groupedGames.map(([date, dayGames]) => { const rows = dayGames ?? []; return <section key={date || "slate"}>{date ? <div className="mb-3 flex items-center gap-3 border-b border-white/[0.07] pb-2"><span className="rounded-lg border border-violet-400/25 bg-violet-500/[0.08] px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.16em] text-violet-100">{new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", weekday: "long", month: "short", day: "numeric" }).format(new Date(`${date}T12:00:00Z`))}</span><span className="text-[9px] font-bold text-gray-600">{rows.length} {rows.length === 1 ? "match" : "matches"}</span></div> : null}<div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{rows.map((game) => <BoardGameCard key={game.id} game={game} sport={sport} headlineMarket={focus ?? primaryMarket(game)} active={activeId === game.id} activeMarket={activeId === game.id ? activeMarket : null} selectGame={selectGame} />)}</div></section>; })}</div></section>;
 }
 
 function easternDateKey(timestamp: string): string {

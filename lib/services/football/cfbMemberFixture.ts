@@ -36,7 +36,7 @@ import { activeCfbWeeklyWindow, isGameInCfbWeeklyWindow } from "./cfbWeeklyWindo
 import { cfbFootballEvidenceStats } from "./footballMemberEvidence";
 
 export const CFB_MEMBER_FIXTURE_RELEASE =
-  "cfb_v1_member_fixture_2026_08_28_r25_immutable_boundary_transition" as const;
+  "cfb_v1_member_fixture_2026_08_29_r26_fbs_board_scope" as const;
 export const CFB_PUBLIC_OUTCOME_CONTRACT_RELEASE =
   "cfb_independent_public_outcome_contract_2026_08_28_r29" as const;
 export const CFB_CONTEXT_ONLY_QUOTE_CAPTURE_SKEW_MS = 5_000 as const;
@@ -302,6 +302,9 @@ function buildGame(row: CfbForwardStoredEvidence, movementRows: CfbForwardStored
   const game: DailyEdgeGameDto = {
     id: `cfb-${payload.game.providerGameId}`,
     sport: "cfb",
+    collegeFootballScope: payload.game.away.fbs || payload.game.home.fbs
+      ? "fbs_involved"
+      : "fcs_only",
     external_id: Number(payload.game.providerGameId),
     awayTeam: payload.game.away.abbreviation,
     awayTeamLogo: null,

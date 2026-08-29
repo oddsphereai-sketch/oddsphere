@@ -816,6 +816,13 @@ export type DailyEdgeGameDto = {
   /** Stable ID for React keys: `${sport}-${external_id}`. */
   id: string;
   sport: Sport;
+  /**
+   * CFB-only member-board classification. The evidence writer may retain
+   * every model-covered Division I game, while the reader defaults to the
+   * FBS-involved board and keeps FCS-only forecasts behind an explicit scope
+   * control. Absent on legacy snapshots and every non-CFB sport.
+   */
+  collegeFootballScope?: "fbs_involved" | "fcs_only";
   external_id: number;
   awayTeam: string;
   /** CDN URL for the away team logo (5F.3). Null for sports without logos populated yet. */
