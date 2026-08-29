@@ -22,7 +22,14 @@ import {
 import { appendCfbForwardEvidence, readCfbForwardEvidence } from "./cfbForwardEvidenceStore";
 import { buildCfbV1DecisionBundle, CFB_T60_MAX_CAPTURE_LAG_MINUTES, CFB_V1_DECISION_RELEASE, getCfbV1ForecastForGame } from "./cfbV1Decision";
 import { cfbV1WeeklyGameProfileCoverage } from "./cfbV1WeeklyForecast";
-import { buildCfbMarketInformedOutcomeForecast, resolveCfbCanonicalMarketAnchor } from "./cfbMarketInformedOutcome";
+import { resolveCfbCanonicalMarketAnchor } from "./cfbMarketInformedOutcome";
+import {
+  applyCfbMarketSharpAwareGrades,
+  buildCfbMarketSharpAwareForecast,
+  CFB_MARKET_SHADOW_WEIGHT,
+  CFB_MARKET_SHARP_AWARE_CANDIDATE_RELEASE,
+  CFB_MARKET_SHARP_AWARE_PRODUCTION_RELEASE,
+} from "./cfbMarketSharpAwareShadow";
 import { buildCfbOfficialTrackingRecords, cfbProviderIntegerId } from "./cfbOfficialTrackingRecord";
 import { activeCfbWeeklyWindow, eligibleCfbWeeklyGames, isGameInCfbWeeklyWindow, type CfbWeeklyWindow } from "./cfbWeeklyWindow";
 import {
@@ -37,7 +44,7 @@ import { buildMarketScopedFootballTrackingPlan } from "./footballMarketScopedTra
 import { assertFootballCrossMarketCoherence } from "./footballCrossMarketCoherence";
 
 export const CFB_FORWARD_WRITER_RELEASE =
-  "cfb_forward_evidence_writer_2026_08_28_r25_owner_cadence" as const;
+  "cfb_forward_evidence_writer_2026_08_29_r26_market_sharp_authoritative" as const;
 export const CFB_FORWARD_MAX_QB_TEAMS_PER_RUN = 24 as const;
 export const CFB_FORWARD_RESULTS_BATCH_SIZE = 100 as const;
 export const CFB_FORWARD_MAX_PRIOR_GAME_IDS = 1200 as const;
@@ -146,14 +153,35 @@ export async function runCfbForwardEvidenceWriter(args: {
       ? Math.max(0, (Date.parse(capturedAt) - Date.parse(plan.cutoffAt)) / 60_000)
       : plan.t60LagMinutes;
     const weeklyForecast = getCfbV1ForecastForGame({ game: plan.game, completedGames: priorResults.games });
+    const outcomeAnchor = resolveCfbCanonicalMarketAnchor({
+      books: currentBooks,
+      contextLines: {
+        homeSpread: playbookLine?.homeSpread ?? null,
+        totalLine: playbookLine?.total ?? null,
+      },
+    });
+    const provisionalBoardGame = plan.game.away.fbs || plan.game.home.fbs;
+    if (!outcomeAnchor && provisionalBoardGame) {
+      throw new Error(
+        `CFB market/sharp release requires a canonical price anchor for ${plan.game.away.abbreviation}@${plan.game.home.abbreviation}; preserving the preceding coherent snapshot.`,
+      );
+    }
+    const forecast = outcomeAnchor
+      ? buildCfbMarketSharpAwareForecast({
+          independentForecast: weeklyForecast.forecast,
+          anchor: outcomeAnchor,
+          sharpSplits: sharpApiSplits,
+        })
+      : weeklyForecast.forecast;
     const healthHolds = [
       ...(plan.stage === "t60" && (effectiveT60LagMinutes ?? Infinity) > CFB_T60_MAX_CAPTURE_LAG_MINUTES ? ["t60_capture_late"] : []),
       ...(plan.stage === "t60" && awayQuarterbacks.expectedStartingQuarterback === null ? ["away_quarterback_roster_unavailable"] : []),
       ...(plan.stage === "t60" && homeQuarterbacks.expectedStartingQuarterback === null ? ["home_quarterback_roster_unavailable"] : []),
       ...(weeklyForecast.featureHealth.awayProfile === "neutral_imputation" ? ["away_model_team_profile_unavailable"] : []),
       ...(weeklyForecast.featureHealth.homeProfile === "neutral_imputation" ? ["home_model_team_profile_unavailable"] : []),
+      ...(!outcomeAnchor ? ["authoritative_market_anchor_unavailable_outside_provisional_board"] : []),
     ];
-    const decisions = compactDecisionBundle(buildCfbV1DecisionBundle({
+    const decisionBundle = buildCfbV1DecisionBundle({
       providerGameId: plan.game.providerGameId,
       awayTeam: plan.game.away.abbreviation,
       homeTeam: plan.game.home.abbreviation,
@@ -163,41 +191,31 @@ export async function runCfbForwardEvidenceWriter(args: {
       evaluatedAt: capturedAt,
       lockedAt: plan.stage === "t60" && healthHolds.length === 0 ? capturedAt : null,
       healthHolds,
-      forecast: weeklyForecast.forecast,
-      contextLines: {
-        homeSpread: playbookLine?.homeSpread ?? null,
-        totalLine: playbookLine?.total ?? null,
-      },
-    }), playbookLine);
-    const outcomeAnchor = resolveCfbCanonicalMarketAnchor({
-      books: currentBooks,
+      forecast,
       contextLines: {
         homeSpread: playbookLine?.homeSpread ?? null,
         totalLine: playbookLine?.total ?? null,
       },
     });
-    const marketInformedForecast = outcomeAnchor
-      ? buildCfbMarketInformedOutcomeForecast({
-          independentForecast: weeklyForecast.forecast,
-          anchor: outcomeAnchor,
+    const decisions = compactDecisionBundle(outcomeAnchor
+      ? applyCfbMarketSharpAwareGrades({
+          bundle: decisionBundle,
+          sharpSplits: sharpApiSplits,
+          operationalOpening,
         })
-      : null;
-    const outcomeForecast = marketInformedForecast ? compactOutcomeForecast(marketInformedForecast) : null;
-    const outcomeMarketOutlooks = marketInformedForecast
-      ? buildCfbForwardMarketOutlooks({ forecast: marketInformedForecast, playbookLine })
-      : undefined;
+      : decisionBundle, playbookLine);
     assertFootballCrossMarketCoherence({
       sport: "cfb",
       providerGameId: plan.game.providerGameId,
       awayTeam: plan.game.away.abbreviation,
       homeTeam: plan.game.home.abbreviation,
       forecast: {
-        expectedAwayPoints: weeklyForecast.forecast.expectedAwayPoints,
-        expectedHomePoints: weeklyForecast.forecast.expectedHomePoints,
-        representativeScore: weeklyForecast.forecast.representativeScore,
-        awayWinProbability: 1 - weeklyForecast.forecast.homeWinProbability,
-        homeWinProbability: weeklyForecast.forecast.homeWinProbability,
-        pmf: weeklyForecast.forecast.pmf,
+        expectedAwayPoints: forecast.expectedAwayPoints,
+        expectedHomePoints: forecast.expectedHomePoints,
+        representativeScore: forecast.representativeScore,
+        awayWinProbability: 1 - forecast.homeWinProbability,
+        homeWinProbability: forecast.homeWinProbability,
+        pmf: forecast.pmf,
       },
       decisions: decisions.evaluatedBets,
       unavailableMarkets: decisions.heldMarkets.map((market) => market.market),
@@ -234,8 +252,13 @@ export async function runCfbForwardEvidenceWriter(args: {
       quarterbacks: { away: awayQuarterbacks, home: homeQuarterbacks },
       availability: { injuryStatus: "provider_unavailable", weatherStatus: "venue_weather_unavailable", note: "BALLDONTLIE NCAAF supplies active rosters but no timestamped injury/depth or venue-weather endpoint; those contexts are labeled unavailable and are never fabricated." },
       decisions,
-      outcomeForecast,
-      outcomeMarketOutlooks,
+      independentForecast: compactForecast(weeklyForecast.forecast),
+      authoritativeForecast: {
+        status: outcomeAnchor ? "market_sharp_applied" : "market_anchor_unavailable_hold",
+        release: CFB_MARKET_SHARP_AWARE_PRODUCTION_RELEASE,
+        candidateRelease: CFB_MARKET_SHARP_AWARE_CANDIDATE_RELEASE,
+        marketWeight: outcomeAnchor ? CFB_MARKET_SHADOW_WEIGHT : 0,
+      },
       coverage: {
         currentOdds: current !== null,
         comparableCurrentBookCount: currentBooks.length,
@@ -405,6 +428,7 @@ function releaseRefreshNeed(rows: CfbForwardStoredEvidence[], now: string): { co
     (row.payload.schemaRelease !== CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE ||
       row.payload.memberRelease !== CFB_FORWARD_MEMBER_RELEASE ||
       row.payload.decisions.decisionRelease !== CFB_V1_DECISION_RELEASE ||
+      row.payload.authoritativeForecast?.release !== CFB_MARKET_SHARP_AWARE_PRODUCTION_RELEASE ||
       row.payload.decisions.evaluatedBets.length + row.payload.decisions.heldMarkets.length !== 3)
   );
   return staleUpcoming ? { collect: true, reason: "release_refresh_due", cadenceMinutes: 0 } : null;
@@ -423,9 +447,9 @@ function compactDecisionBundle(
   };
 }
 
-function compactOutcomeForecast(
-  forecast: ReturnType<typeof buildCfbMarketInformedOutcomeForecast>,
-): NonNullable<CfbForwardEvidencePayload["outcomeForecast"]> {
+function compactForecast(
+  forecast: ReturnType<typeof getCfbV1ForecastForGame>["forecast"],
+): CfbForwardEvidencePayload["decisions"]["forecast"] {
   const { pmf: _pmf, ...published } = forecast;
   void _pmf;
   return published;
@@ -449,7 +473,18 @@ function currentT60Payloads(rows: CfbForwardStoredEvidence[]): CfbForwardEvidenc
 type TrackingResult = { trackingAttempted: boolean; trackingRecordsProposed: number; trackingRecordsInserted: number; trackingRecordsExisting: number };
 
 async function writeOfficialTracking(args: { client: SupabaseClient; payloads: CfbForwardEvidencePayload[]; apply: boolean }): Promise<TrackingResult> {
-  const eligible = args.payloads.filter((payload) => payload.decisions.trackingEnabled && payload.stage === "t60" && payload.captureTiming === "on_time" && (payload.t60LagMinutes ?? Infinity) >= 0 && (payload.t60LagMinutes ?? Infinity) <= CFB_T60_MAX_CAPTURE_LAG_MINUTES && isPublicallyTracked("cfb", computeSlateDate("cfb", payload.game.scheduledStart)));
+  const eligible = args.payloads.filter((payload) =>
+    payload.schemaRelease === CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE &&
+    payload.memberRelease === CFB_FORWARD_MEMBER_RELEASE &&
+    payload.decisions.decisionRelease === CFB_V1_DECISION_RELEASE &&
+    payload.authoritativeForecast?.release === CFB_MARKET_SHARP_AWARE_PRODUCTION_RELEASE &&
+    payload.decisions.trackingEnabled &&
+    payload.stage === "t60" &&
+    payload.captureTiming === "on_time" &&
+    (payload.t60LagMinutes ?? Infinity) >= 0 &&
+    (payload.t60LagMinutes ?? Infinity) <= CFB_T60_MAX_CAPTURE_LAG_MINUTES &&
+    isPublicallyTracked("cfb", computeSlateDate("cfb", payload.game.scheduledStart))
+  );
   const trackingGames = eligible.map((payload) => ({ externalId: cfbProviderIntegerId(payload.game.providerGameId, "game"), decisions: payload.decisions.evaluatedBets }));
   const proposed = trackingGames.length === 0 ? 0 : buildMarketScopedFootballTrackingPlan(trackingGames).proposed;
   if (!args.apply || proposed === 0) return { trackingAttempted: false, trackingRecordsProposed: proposed, trackingRecordsInserted: 0, trackingRecordsExisting: 0 };

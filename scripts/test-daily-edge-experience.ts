@@ -1546,7 +1546,7 @@ check(
 check(
   "a context-only CFB line never promises missing sportsbook odds",
   DAILY_EDGE_MEMBER_PRESENTATION_RELEASE_ID ===
-    "daily_edge_member_presentation_2026_08_29_r17_cfb_fbs_default_board" &&
+    "daily_edge_member_presentation_2026_08_29_r18_cfb_market_sharp_authoritative" &&
     candidateSource.includes("Sportsbook odds unavailable") &&
     candidateSource.includes("Consensus line only") &&
     candidateSource.includes("No eligible named-book American price was captured") &&
@@ -1573,19 +1573,18 @@ check(
     nflMemberFixtureSource.includes("separately calibrated ${marketName} forecast side"),
 );
 check(
-  "the active CFB reader separates its independent forecast from Bet-grade calibration",
-  candidateSource.includes("The exact-price bet probability then applies market-informed calibration and a consensus blend") &&
-    candidateSource.includes("Price-calibrated bet probability") &&
-    candidateSource.includes("It is not the independent win probability shown above") &&
-    !candidateSource.includes("winner, spread and total probabilities all come from the same discrete score distribution"),
+  "the active CFB reader presents one writer-owned market/sharp-aware forecast and never overrides its grade",
+  candidateSource.includes("market/sharp-aware PMF shown above") &&
+    candidateSource.includes("same authoritative market/sharp-aware PMF") &&
+    candidateSource.includes("the reader never overrides the stored grade") &&
+    candidateSource.includes("Price-calibrated bet probability"),
 );
 check(
-  "the CFB reader presents the independent PMF as the public prediction and keeps price calibration separate",
-  candidateSource.includes("Independent outcome forecast") &&
-    candidateSource.includes("This is OddSphere's football-only winner forecast") &&
+  "the CFB reader keeps the independent PMF as release-separated baseline context",
+  candidateSource.includes("Market/sharp-aware outcome forecast") &&
+    candidateSource.includes("Football-only baseline") &&
     candidateSource.includes("game.footballOnlyProjection") &&
-    candidateSource.includes("the exact-price") &&
-    candidateSource.includes("Bet grade is separately evaluated") &&
+    candidateSource.includes("75% independent football mass with 25% bounded market/sharp mass") &&
     labTypesSource.includes("footballOnlyProjection?:"),
 );
 check(

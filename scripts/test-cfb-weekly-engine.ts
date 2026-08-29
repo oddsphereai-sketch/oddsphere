@@ -13,6 +13,10 @@ import {
 import { CFB_FORWARD_MAX_QB_TEAMS_PER_RUN, latestCfbPayloadTimestamp, selectCfbModelCoveredWeeklyGames, selectQuarterbackTeams } from "../lib/services/football/cfbForwardEvidenceWriter";
 import { buildCfbMemberFixture } from "../lib/services/football/cfbMemberFixture";
 import {
+  CFB_MARKET_SHARP_AWARE_CANDIDATE_RELEASE,
+  CFB_MARKET_SHARP_AWARE_PRODUCTION_RELEASE,
+} from "../lib/services/football/cfbMarketSharpAwareShadow";
+import {
   buildCfbV1DecisionBundle,
   cfbV1LineProbabilities,
   getCfbV1ForecastForGame,
@@ -206,6 +210,13 @@ function evidenceRow(value: NcaafGame, forecast: ReturnType<typeof getCfbV1Forec
       ...bundle,
       forecast: publishedForecast,
       marketOutlooks: buildCfbForwardMarketOutlooks({ forecast, playbookLine: null }),
+    },
+    independentForecast: publishedForecast,
+    authoritativeForecast: {
+      status: "market_anchor_unavailable_hold",
+      release: CFB_MARKET_SHARP_AWARE_PRODUCTION_RELEASE,
+      candidateRelease: CFB_MARKET_SHARP_AWARE_CANDIDATE_RELEASE,
+      marketWeight: 0,
     },
     coverage: { currentOdds: false, comparableCurrentBookCount: 0, currentOddsProviders: [], sharpApiOddsFallback: false, targetExcludedConsensusReady: false, operationalOpening: false, playbookLine: false, playbookSplits: false, sharpApiSplits: false, activeQuarterbacks: true, injuries: false, weather: false, healthHolds: [], availabilityWarnings: [] },
     requestBudget: { balldontlieSlate: 0, balldontlieQuarterbacks: 0, playbook: 0, sharpApiOdds: 0, totalMaximum: 0 },

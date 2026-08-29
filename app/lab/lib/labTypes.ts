@@ -960,8 +960,9 @@ export type DailyEdgeGameDto = {
       total: [number, number];
     };
   } | null;
-  /** Legacy CFB secondary forecast field. The active CFB public contract leaves
-   * this null because `footballProjection` itself is the independent PMF. */
+  /** Immutable football-only CFB baseline. When present, `footballProjection`
+   * is the authoritative bounded market/sharp-aware PMF and this field is
+   * release-separated diagnostic context only. */
   footballOnlyProjection?: {
     awayWinProbability: number;
     homeWinProbability: number;

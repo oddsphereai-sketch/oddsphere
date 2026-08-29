@@ -11,6 +11,8 @@ import {
   CFB_FORWARD_DATA_QUALITY_EVIDENCE_SCHEMA_RELEASE,
   CFB_FORWARD_INITIAL_EVIDENCE_SCHEMA_RELEASE,
   CFB_FORWARD_LEGACY_EVIDENCE_SCHEMA_RELEASE,
+  CFB_FORWARD_MARKET_SHARP_PREVIOUS_EVIDENCE_SCHEMA_RELEASE,
+  CFB_FORWARD_MARKET_SHARP_PREVIOUS_MEMBER_RELEASE,
   CFB_FORWARD_PROVIDER_DISCOVERY_PREVIOUS_EVIDENCE_SCHEMA_RELEASE,
   CFB_FORWARD_PRE_DIRECTIONAL_EVIDENCE_SCHEMA_RELEASE,
   CFB_FORWARD_PREVIOUS_EVIDENCE_SCHEMA_RELEASE,
@@ -24,8 +26,14 @@ import {
 } from "./cfbForwardEvidence";
 import { readCfbForwardEvidence } from "./cfbForwardEvidenceStore";
 import {
+  CFB_V1_CALIBRATION_RELEASE,
+  CFB_V1_BASE_DISTRIBUTION_RELEASE,
+  CFB_V1_BASE_MODEL_RELEASE,
+  CFB_V1_BASE_PROBABILITY_RELEASE,
+  CFB_V1_BASE_SCORE_ARTIFACT_RELEASE,
   CFB_V1_DECISION_RELEASE,
   CFB_V1_DISTRIBUTION_RELEASE,
+  CFB_V1_GRADE_POLICY_RELEASE,
   CFB_V1_MODEL_RELEASE,
   CFB_V1_PROBABILITY_RELEASE,
   CFB_V1_SCORE_ARTIFACT_RELEASE,
@@ -34,11 +42,12 @@ import {
 } from "./cfbV1Decision";
 import { activeCfbWeeklyWindow, isGameInCfbWeeklyWindow } from "./cfbWeeklyWindow";
 import { cfbFootballEvidenceStats } from "./footballMemberEvidence";
+import { CFB_MARKET_SHARP_AWARE_PRODUCTION_RELEASE } from "./cfbMarketSharpAwareShadow";
 
 export const CFB_MEMBER_FIXTURE_RELEASE =
-  "cfb_v1_member_fixture_2026_08_29_r26_fbs_board_scope" as const;
+  "cfb_v1_member_fixture_2026_08_29_r27_market_sharp_authoritative" as const;
 export const CFB_PUBLIC_OUTCOME_CONTRACT_RELEASE =
-  "cfb_independent_public_outcome_contract_2026_08_28_r29" as const;
+  "cfb_market_sharp_public_outcome_contract_2026_08_29_r30_provisional" as const;
 export const CFB_CONTEXT_ONLY_QUOTE_CAPTURE_SKEW_MS = 5_000 as const;
 const CFB_MARKET_CONTEXT_MAX_CAPTURE_LAG_MINUTES = 10;
 const CFB_PUBLIC_SCORE_DIRECTION_TOLERANCE_POINTS = 0.25;
@@ -46,6 +55,7 @@ const CFB_PRE_DIRECTIONAL_MEMBER_RELEASE = "cfb_v1_member_release_2026_08_28_r14
 const CFB_PRE_DIRECTIONAL_DECISION_RELEASE = "cfb_v1_daily_edge_decision_2026_08_28_r11_market_scoped_data_quality" as const;
 const CFB_AMBIGUOUS_SCOPE_PREVIOUS_MEMBER_RELEASE = "cfb_v1_member_release_2026_08_28_r19_ambiguous_event_scope" as const;
 const CFB_AMBIGUOUS_SCOPE_PREVIOUS_DECISION_RELEASE = "cfb_v1_daily_edge_decision_2026_08_28_r15_ambiguous_event_scope" as const;
+const CFB_MARKET_SHARP_PREVIOUS_DECISION_RELEASE = "cfb_v1_daily_edge_decision_2026_08_28_r15_ambiguous_event_scope" as const;
 const CFB_PROVIDER_DISCOVERY_PREVIOUS_MEMBER_RELEASE = "cfb_v1_member_release_2026_08_28_r15_directional_pmf" as const;
 const CFB_PROVIDER_DISCOVERY_PREVIOUS_DECISION_RELEASE = "cfb_v1_daily_edge_decision_2026_08_28_r12_directional_pmf" as const;
 const CFB_CANONICAL_PRICE_PREVIOUS_MEMBER_RELEASE = "cfb_v1_member_release_2026_08_28_r16_canonical_price_coverage" as const;
@@ -157,20 +167,39 @@ export function selectLatestCfbMemberEvidenceRows(
       )
     : null;
   const precedingRelease = ambiguousScopePrevious ?? ambiguousScopeBoundaryTransition;
-  const currentTransitionBase = precedingRelease ?? providerDiscoveryPrevious;
+  const marketSharpPreviousTransitionBase = precedingRelease ?? providerDiscoveryPrevious;
+  const marketSharpPrevious = completeRowsForRelease(
+    rows,
+    CFB_FORWARD_MARKET_SHARP_PREVIOUS_EVIDENCE_SCHEMA_RELEASE,
+    CFB_FORWARD_MARKET_SHARP_PREVIOUS_MEMBER_RELEASE,
+    CFB_MARKET_SHARP_PREVIOUS_DECISION_RELEASE,
+  );
+  const marketSharpPreviousBoundary = marketSharpPreviousTransitionBase
+    ? immutableBoundaryTransitionRows(
+        rows,
+        now,
+        CFB_FORWARD_MARKET_SHARP_PREVIOUS_EVIDENCE_SCHEMA_RELEASE,
+        CFB_FORWARD_MARKET_SHARP_PREVIOUS_MEMBER_RELEASE,
+        CFB_MARKET_SHARP_PREVIOUS_DECISION_RELEASE,
+        marketSharpPreviousTransitionBase,
+      )
+    : null;
+  const marketSharpPreviousAuthority = marketSharpPrevious ?? marketSharpPreviousBoundary ?? marketSharpPreviousTransitionBase;
   const current = completeRowsForRelease(rows, CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE, CFB_FORWARD_MEMBER_RELEASE, CFB_V1_DECISION_RELEASE);
   if (current) return current;
-  const immutableBoundaryTransition = currentTransitionBase
+  const immutableBoundaryTransition = marketSharpPreviousAuthority
     ? immutableBoundaryTransitionRows(
         rows,
         now,
         CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE,
         CFB_FORWARD_MEMBER_RELEASE,
         CFB_V1_DECISION_RELEASE,
-        currentTransitionBase,
+        marketSharpPreviousAuthority,
       )
     : null;
   if (immutableBoundaryTransition) return immutableBoundaryTransition;
+  if (marketSharpPrevious) return marketSharpPrevious;
+  if (marketSharpPreviousBoundary) return marketSharpPreviousBoundary;
   if (ambiguousScopePrevious) return ambiguousScopePrevious;
   if (ambiguousScopeBoundaryTransition) return ambiguousScopeBoundaryTransition;
   const eventPaginationFallback = completeRowsForRelease(rows, CFB_FORWARD_AMBIGUOUS_SCOPE_PREVIOUS_EVIDENCE_SCHEMA_RELEASE, CFB_EVENT_PAGINATION_PREVIOUS_MEMBER_RELEASE, CFB_EVENT_PAGINATION_PREVIOUS_DECISION_RELEASE);
@@ -249,7 +278,21 @@ function latestValidRowsForRelease(
     row.payload.slateGameCount !== expected ||
     !row.payload.decisions.publicationEnabled ||
     row.payload.decisions.decisionRelease !== decisionRelease ||
-    row.payload.decisions.evaluatedBets.some((decision) => decision.decisionRelease !== decisionRelease)
+    row.payload.decisions.evaluatedBets.some((decision) => decision.decisionRelease !== decisionRelease) ||
+    (schemaRelease === CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE && (
+      row.payload.authoritativeForecast?.release !== CFB_MARKET_SHARP_AWARE_PRODUCTION_RELEASE ||
+      !row.payload.independentForecast ||
+      row.payload.decisions.modelRelease !== CFB_V1_MODEL_RELEASE ||
+      row.payload.decisions.policyRelease !== CFB_V1_GRADE_POLICY_RELEASE ||
+      row.payload.decisions.evaluatedBets.some((decision) =>
+        decision.modelRelease !== CFB_V1_MODEL_RELEASE ||
+        decision.distributionRelease !== CFB_V1_DISTRIBUTION_RELEASE ||
+        decision.probabilityRelease !== CFB_V1_PROBABILITY_RELEASE ||
+        decision.calibrationRelease !== CFB_V1_CALIBRATION_RELEASE ||
+        decision.policyRelease !== CFB_V1_GRADE_POLICY_RELEASE ||
+        decision.gradeAdjustment?.release !== CFB_MARKET_SHARP_AWARE_PRODUCTION_RELEASE
+      )
+    ))
   )) return null;
   return { values, expected };
 }
@@ -282,6 +325,10 @@ function buildGame(row: CfbForwardStoredEvidence, movementRows: CfbForwardStored
   const allHeld = payload.decisions.heldMarkets.length === 3;
   const headline = [moneyline, total, spread].sort((a, b) => verdictRank(b.verdict.key) - verdictRank(a.verdict.key))[0]!;
   const primaryForecast = payload.decisions.forecast;
+  const independentForecast = payload.schemaRelease === CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE &&
+    payload.authoritativeForecast?.status === "market_sharp_applied"
+    ? payload.independentForecast ?? null
+    : null;
   const projected = primaryForecast.representativeScore;
   const recommendationDecision = buildCfbRecommendationDecision({
     payload,
@@ -337,11 +384,22 @@ function buildGame(row: CfbForwardStoredEvidence, movementRows: CfbForwardStored
       probabilityRelease: CFB_V1_PROBABILITY_RELEASE,
       artifactRelease: CFB_V1_SCORE_ARTIFACT_RELEASE,
     },
-    footballOnlyProjection: null,
+    footballOnlyProjection: independentForecast ? {
+      awayWinProbability: 1 - independentForecast.homeWinProbability,
+      homeWinProbability: independentForecast.homeWinProbability,
+      expectedAwayPoints: independentForecast.expectedAwayPoints,
+      expectedHomePoints: independentForecast.expectedHomePoints,
+      representativeScore: independentForecast.representativeScore,
+      interval80: independentForecast.interval80,
+      modelRelease: CFB_V1_BASE_MODEL_RELEASE,
+      distributionRelease: CFB_V1_BASE_DISTRIBUTION_RELEASE,
+      probabilityRelease: CFB_V1_BASE_PROBABILITY_RELEASE,
+      artifactRelease: CFB_V1_BASE_SCORE_ARTIFACT_RELEASE,
+    } : null,
     sharpSignals: buildSignals(payload),
     status: { lineupConfirmed: null, linesLocked: payload.market.current !== null || payload.market.playbookLine !== null, sharpSignalPending: !payload.market.sharpApiSplits?.some((record) => record.sourceSemantics === "sharp_adjacent"), marketDataLimited: payload.market.current === null && payload.market.playbookLine === null },
     result: null,
-    breakdown: { verdict: headline.verdict, sharpRead: { key: "mixed", sentence: "The independent outcome forecast and exact-price market evaluation are shown separately." }, modelBreakdown: `OddSphere's football-only joint PMF projects ${payload.game.away.abbreviation} ${primaryForecast.expectedAwayPoints.toFixed(1)}–${primaryForecast.expectedHomePoints.toFixed(1)} ${payload.game.home.abbreviation}; the reachable representative score is ${primaryForecast.representativeScore.away}–${primaryForecast.representativeScore.home}.` },
+    breakdown: { verdict: headline.verdict, sharpRead: { key: "mixed", sentence: "The authoritative CFB forecast coherently combines football, bounded market state, and strictly matched sharp evidence before exact-price grading." }, modelBreakdown: `OddSphere's authoritative joint PMF projects ${payload.game.away.abbreviation} ${primaryForecast.expectedAwayPoints.toFixed(1)}–${primaryForecast.expectedHomePoints.toFixed(1)} ${payload.game.home.abbreviation}; the reachable representative score is ${primaryForecast.representativeScore.away}–${primaryForecast.representativeScore.home}.` },
     recommendationDecision,
   };
   assertCfbPublicPredictionCoherence({ payload, game });
@@ -354,8 +412,15 @@ function assertCfbPublicPredictionCoherence(args: {
 }): void {
   const forecast = args.payload.decisions.forecast;
   const football = args.game.footballProjection;
-  if (!football || args.game.footballOnlyProjection) {
-    throw new Error(`${CFB_PUBLIC_OUTCOME_CONTRACT_RELEASE}: CFB must publish exactly one independent football prediction.`);
+  if (!football) {
+    throw new Error(`${CFB_PUBLIC_OUTCOME_CONTRACT_RELEASE}: CFB must publish exactly one authoritative prediction.`);
+  }
+  if (
+    args.payload.schemaRelease === CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE &&
+    args.payload.authoritativeForecast?.status === "market_sharp_applied" &&
+    !args.game.footballOnlyProjection
+  ) {
+    throw new Error(`${CFB_PUBLIC_OUTCOME_CONTRACT_RELEASE}: the market/sharp release must retain its immutable football-only baseline.`);
   }
   if (
     Math.abs(football.expectedAwayPoints - forecast.expectedAwayPoints) > 1e-9 ||
@@ -364,7 +429,7 @@ function assertCfbPublicPredictionCoherence(args: {
     args.game.projected.away !== forecast.representativeScore.away ||
     args.game.projected.home !== forecast.representativeScore.home
   ) {
-    throw new Error(`${CFB_PUBLIC_OUTCOME_CONTRACT_RELEASE}: public score/winner fields do not match the independent PMF.`);
+    throw new Error(`${CFB_PUBLIC_OUTCOME_CONTRACT_RELEASE}: public score/winner fields do not match the authoritative PMF.`);
   }
   const expectedMarginHome = forecast.expectedHomePoints - forecast.expectedAwayPoints;
   const expectedTotal = forecast.expectedHomePoints + forecast.expectedAwayPoints;
@@ -384,9 +449,9 @@ function assertCfbPublicPredictionCoherence(args: {
       !prediction || prediction.status !== "available" ||
       prediction.label !== decision.side ||
       prediction.line !== decision.evaluatedQuote.line ||
-      Math.abs((prediction.probability ?? -1) - decision.independentProbability) > 1e-9
+      Math.abs((prediction.probability ?? -1) - decisionForecastProbability(decision)) > 1e-9
     ) {
-      throw new Error(`${CFB_PUBLIC_OUTCOME_CONTRACT_RELEASE}: ${market} prediction does not match the independent PMF at the evaluated line.`);
+      throw new Error(`${CFB_PUBLIC_OUTCOME_CONTRACT_RELEASE}: ${market} prediction does not match the authoritative PMF at the evaluated line.`);
     }
     const selected = canonicalSide(args.payload, decision);
     let scoreSide: "home" | "away" | "over" | "under" | null = null;
@@ -590,7 +655,7 @@ function buildMarket(
     ? outlook
       ? `The ${label} prediction is ${outlookLabel(payload, outlook)} at ${(100 * outlook.independentProbability).toFixed(1)}% from the primary outcome PMF. The exact-price Bet grade is No Play because ${unavailableReason ?? "the exact-price evidence is incomplete"}.${oneSidedContext}`
       : `The ${label} Bet grade is No Play because ${unavailableReason ?? "the exact-price evidence is incomplete"}. The game-level prediction remains live.${oneSidedContext}`
-    : `${decision.side} is evaluated at ${formatAmerican(decision.evaluatedQuote.price)} from ${decision.evaluatedQuote.sportsbook}; the ${decision.grade} grade uses that exact ${decision.evaluatedQuote.marketSelection === "coherent_paired_alternate" ? "paired alternate offer" : "main-line quote"}, the football-only grade probability, and other-book fair consensus.${crossMarketExplanation(payload, market, decision)}`;
+    : `${decision.side} is evaluated at ${formatAmerican(decision.evaluatedQuote.price)} from ${decision.evaluatedQuote.sportsbook}; the ${decision.grade} grade uses that exact ${decision.evaluatedQuote.marketSelection === "coherent_paired_alternate" ? "paired alternate offer" : "main-line quote"}, the authoritative PMF and calibrated probability, strictly matched market/sharp evidence when available, and other-book fair consensus.${crossMarketExplanation(payload, market, decision)}`;
   const publicSplits = buildPublicSplits(payload, market);
   const marketPrediction = buildMarketPrediction(payload, market, decision, outlook);
   return {
@@ -615,7 +680,7 @@ function buildMarket(
     whyLine: reason,
     riskLine: decision?.evaluatedQuote.marketSelection === "coherent_paired_alternate"
       ? "The sportsbook labels this as an alternate offer. It is evaluated only because at least two other trusted named books carry the identical line; no line interpolation or consensus price is used."
-      : "Outcome confidence and exact-price Bet grade are separate. Public splits are Playbook consensus, not a substitute for the model or SharpAPI.",
+      : "The authoritative forecast and exact-price Bet grade share one coherent PMF. Playbook public splits remain display context and are never relabeled as strictly matched sharp evidence.",
     modelProb: displayedProbability,
     marketFairProb: decision?.marketFairProbability ?? null,
     pinnacleEvPct: decision ? decision.expectedValue * 100 : null,
@@ -668,7 +733,7 @@ function buildMarket(
     recommendationConfidence: actionability,
     marketSource: decision?.evaluatedQuote.sportsbook ?? currentQuote?.book.sportsbook ?? contextOnlyQuote?.book.sportsbook ?? null,
     marketDataQuality: decision ? "two_sided_consensus" : currentQuote || contextOnlyQuote ? "single_book" : payload.market.playbookLine ? "single_book" : "unavailable",
-    reviewFlags: [CFB_MEMBER_FIXTURE_RELEASE, CFB_PUBLIC_OUTCOME_CONTRACT_RELEASE, CFB_V1_DECISION_RELEASE],
+    reviewFlags: [CFB_MEMBER_FIXTURE_RELEASE, CFB_PUBLIC_OUTCOME_CONTRACT_RELEASE, CFB_V1_DECISION_RELEASE, CFB_MARKET_SHARP_AWARE_PRODUCTION_RELEASE],
     reviewActionSummary: held ? "repair_price_coverage" : "keep",
   };
 }
@@ -864,14 +929,14 @@ function buildMarketPrediction(
       status: "available",
       label: decision.side,
       line: decision.evaluatedQuote.line,
-      probability: decision.independentProbability,
+      probability: decisionForecastProbability(decision),
       source: market === "moneyline" ? "model_outcome" : "model_at_context_line",
       sportsbook: decision.evaluatedQuote.sportsbook,
       observedAt: decision.evaluatedQuote.observedAt,
       freshnessCheckedAt: payload.capturedAt,
       reason: market === "moneyline"
-        ? "The independent joint PMF supplies the winner prediction; the exact-price Bet probability and grade remain separate."
-        : "The independent joint PMF is evaluated at the identical sportsbook line; the exact-price Bet probability and grade remain separate.",
+        ? "The authoritative market/sharp-aware joint PMF supplies the winner prediction and the exact-price decision is derived from that same forecast."
+        : "The authoritative market/sharp-aware joint PMF is evaluated at the identical sportsbook line used by the exact-price decision.",
     };
   }
   if (outlook && market === "moneyline") {
@@ -884,7 +949,7 @@ function buildMarketPrediction(
       sportsbook: null,
       observedAt: null,
       freshnessCheckedAt: payload.capturedAt,
-      reason: "The independent game forecast remains available without an offered Moneyline price.",
+      reason: "The authoritative game forecast remains available without an offered Moneyline price; no price or grade is fabricated.",
     };
   }
   if (outlook && currentMarketContextIsFresh(payload, outlook)) {
@@ -897,7 +962,7 @@ function buildMarketPrediction(
       sportsbook: null,
       observedAt: outlook.contextObservedAt,
       freshnessCheckedAt: payload.capturedAt,
-      reason: "The independent joint-score PMF is evaluated at the current context line without turning that context into a sportsbook offer.",
+      reason: "The authoritative joint-score PMF is evaluated at the current context line without turning that context into a sportsbook offer.",
     };
   }
   return {
@@ -1135,6 +1200,9 @@ function buildSignals(payload: CfbForwardEvidencePayload): DailyEdgeGameDto["sha
 
 function legacyPrediction(market: MarketEdgeDto): DailyEdgePredictionDto { return { pick: market.pick, confidence: market.confidence, grade: market.grade, signalType: market.signalType, marketSignal: market.marketSignal, sharpStatus: market.sharpStatus }; }
 function decisionFor(decisions: CfbV1ExactPriceDecision[], market: CfbV1Market): CfbV1ExactPriceDecision | null { const matches = decisions.filter((row) => row.market === market); if (matches.length > 1) throw new Error(`CFB member fixture has duplicate ${market} decisions.`); return matches[0] ?? null; }
+function decisionForecastProbability(decision: CfbV1ExactPriceDecision): number {
+  return decision.forecastProbability ?? decision.independentProbability;
+}
 function canonicalSide(payload: CfbForwardEvidencePayload, decision: CfbV1ExactPriceDecision): "home" | "away" | "over" | "under" { if (decision.market === "total") return /^over\b/i.test(decision.side) ? "over" : "under"; return decision.side.startsWith(payload.game.home.abbreviation) ? "home" : "away"; }
 function opposingCanonicalSide(side: string): "home" | "away" | "over" | "under" { return side === "home" ? "away" : side === "away" ? "home" : side === "over" ? "under" : "over"; }
 function opposingLabel(payload: CfbForwardEvidencePayload, market: CfbV1Market, side: string, line: number | null): string { if (market === "moneyline") return side === "home" ? payload.game.away.abbreviation : payload.game.home.abbreviation; if (market === "spread") return `${side === "home" ? payload.game.away.abbreviation : payload.game.home.abbreviation} ${signed(line === null ? 0 : -line)}`; return `${side === "over" ? "Under" : "Over"} ${marketNumber(line ?? 0)}`; }

@@ -1,11 +1,17 @@
 import { computeSlateDate } from "@/lib/dates/slateDate";
 import type { PredictionRecordRow } from "@/lib/types/domain/Tracking";
-import { hashCfbForwardEvidencePayload, type CfbForwardEvidencePayload } from "./cfbForwardEvidence";
-import { CFB_T60_MAX_CAPTURE_LAG_MINUTES } from "./cfbV1Decision";
+import {
+  CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE,
+  CFB_FORWARD_MEMBER_RELEASE,
+  hashCfbForwardEvidencePayload,
+  type CfbForwardEvidencePayload,
+} from "./cfbForwardEvidence";
+import { CFB_T60_MAX_CAPTURE_LAG_MINUTES, CFB_V1_DECISION_RELEASE } from "./cfbV1Decision";
+import { CFB_MARKET_SHARP_AWARE_PRODUCTION_RELEASE } from "./cfbMarketSharpAwareShadow";
 import { assertMarketScopedFootballDecisions, FOOTBALL_MARKET_SCOPED_T60_TRACKING_RELEASE } from "./footballMarketScopedTracking";
 
 export const CFB_OFFICIAL_TRACKING_RECORD_RELEASE =
-  "cfb_official_tracking_record_2026_08_26_r2_market_scoped_t60" as const;
+  "cfb_official_tracking_record_2026_08_29_r3_market_sharp_authoritative" as const;
 
 export function buildCfbOfficialTrackingRecords(args: { payload: CfbForwardEvidencePayload; gameId: number }): PredictionRecordRow[] {
   assertCfbTrackingPayload(args.payload);
@@ -63,6 +69,8 @@ export function buildCfbOfficialTrackingRecords(args: { payload: CfbForwardEvide
         t60_lag_minutes: args.payload.t60LagMinutes,
         decision_tuple: decision,
         forecast: args.payload.decisions.forecast,
+        independent_forecast: args.payload.independentForecast,
+        authoritative_forecast: args.payload.authoritativeForecast,
         operational_opening: args.payload.market.operationalOpening,
         current_books_at_lock: args.payload.market.currentBooks,
         quarterback_context_at_lock: args.payload.quarterbacks,
@@ -75,6 +83,11 @@ export function buildCfbOfficialTrackingRecords(args: { payload: CfbForwardEvide
 
 function assertCfbTrackingPayload(payload: CfbForwardEvidencePayload): void {
   if (
+    payload.schemaRelease !== CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE ||
+    payload.memberRelease !== CFB_FORWARD_MEMBER_RELEASE ||
+    payload.decisions.decisionRelease !== CFB_V1_DECISION_RELEASE ||
+    payload.authoritativeForecast?.release !== CFB_MARKET_SHARP_AWARE_PRODUCTION_RELEASE ||
+    payload.authoritativeForecast.status !== "market_sharp_applied" ||
     !payload.decisions.publicationEnabled ||
     !payload.decisions.trackingEnabled ||
     payload.stage !== "t60" ||

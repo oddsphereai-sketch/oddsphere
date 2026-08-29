@@ -11,6 +11,8 @@ import {
 } from "./cfbV1Decision";
 
 export const CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE =
+  "cfb_forward_evidence_snapshot_2026_08_29_r12_market_sharp_authoritative" as const;
+export const CFB_FORWARD_MARKET_SHARP_PREVIOUS_EVIDENCE_SCHEMA_RELEASE =
   "cfb_forward_evidence_snapshot_2026_08_28_r11_prior_event_disambiguation" as const;
 export const CFB_FORWARD_AMBIGUOUS_SCOPE_PREVIOUS_EVIDENCE_SCHEMA_RELEASE =
   "cfb_forward_evidence_snapshot_2026_08_28_r10_event_discovery_pagination" as const;
@@ -33,8 +35,10 @@ export const CFB_FORWARD_LEGACY_EVIDENCE_SCHEMA_RELEASE =
 export const CFB_FORWARD_INITIAL_EVIDENCE_SCHEMA_RELEASE =
   "cfb_forward_evidence_snapshot_2026_08_25_r1" as const;
 export const CFB_FORWARD_EVIDENCE_COLLECTOR_RELEASE =
-  "cfb_forward_evidence_collector_2026_08_28_r18_prior_event_disambiguation" as const;
+  "cfb_forward_evidence_collector_2026_08_29_r19_market_sharp_authoritative" as const;
 export const CFB_FORWARD_MEMBER_RELEASE =
+  "cfb_v1_member_release_2026_08_29_r21_market_sharp_authoritative" as const;
+export const CFB_FORWARD_MARKET_SHARP_PREVIOUS_MEMBER_RELEASE =
   "cfb_v1_member_release_2026_08_28_r20_prior_event_disambiguation" as const;
 
 export type CfbForwardEvidenceStage = "opening" | "unlocked" | "t60";
@@ -100,7 +104,7 @@ export type CfbForwardMarketOutlook = {
   side: "home" | "away" | "over" | "under";
   line: number | null;
   independentProbability: number;
-  source: "independent_pmf" | "independent_pmf_at_playbook_line";
+  source: "authoritative_pmf" | "authoritative_pmf_at_playbook_line" | "independent_pmf" | "independent_pmf_at_playbook_line";
   contextObservedAt: string | null;
 };
 
@@ -148,10 +152,18 @@ export type CfbForwardEvidencePayload = {
     note: string;
   };
   decisions: CfbForwardPublishedDecisionBundle;
-  /** Shadow market-context score distribution retained for audit only. The
-   * public score/winner/market predictions are always `decisions.forecast`. */
+  /** Immutable football-only baseline retained for release-separated diagnostics.
+   * It never overrides the authoritative `decisions.forecast`. */
+  independentForecast?: CfbForwardPublishedForecast | null;
+  authoritativeForecast?: {
+    status: "market_sharp_applied" | "market_anchor_unavailable_hold";
+    release: string;
+    candidateRelease: string;
+    marketWeight: number;
+  };
+  /** Legacy shadow market-context score distribution retained only on old rows. */
   outcomeForecast?: CfbForwardPublishedOutcomeForecast | null;
-  /** Shadow market-context directions retained for audit only. */
+  /** Legacy shadow market-context directions retained only on old rows. */
   outcomeMarketOutlooks?: Record<CfbV1Market, CfbForwardMarketOutlook | null>;
   coverage: {
     currentOdds: boolean;
@@ -294,8 +306,8 @@ export function buildCfbForwardMarketOutlooks(args: {
 }): Record<CfbV1Market, CfbForwardMarketOutlook | null> {
   const homeWin = args.forecast.homeWinProbability;
   const moneyline = homeWin >= 0.5
-    ? outlook("moneyline", "home", null, homeWin, "independent_pmf", null)
-    : outlook("moneyline", "away", null, 1 - homeWin, "independent_pmf", null);
+    ? outlook("moneyline", "home", null, homeWin, "authoritative_pmf", null)
+    : outlook("moneyline", "away", null, 1 - homeWin, "authoritative_pmf", null);
   const playbookLine = args.playbookLine;
   if (!playbookLine) return { moneyline, spread: null, total: null };
   const homeSpread = playbookLine.homeSpread;
@@ -315,26 +327,26 @@ export function buildCfbForwardMarketOutlooks(args: {
   return {
     moneyline,
     spread: probabilities.spread.home >= probabilities.spread.away
-      ? outlook("spread", "home", homeSpread, probabilities.spread.home, "independent_pmf_at_playbook_line", playbookLine.capturedAt)
-      : outlook("spread", "away", -homeSpread, probabilities.spread.away, "independent_pmf_at_playbook_line", playbookLine.capturedAt),
+      ? outlook("spread", "home", homeSpread, probabilities.spread.home, "authoritative_pmf_at_playbook_line", playbookLine.capturedAt)
+      : outlook("spread", "away", -homeSpread, probabilities.spread.away, "authoritative_pmf_at_playbook_line", playbookLine.capturedAt),
     total: probabilities.total.over >= probabilities.total.under
-      ? outlook("total", "over", totalLine, probabilities.total.over, "independent_pmf_at_playbook_line", playbookLine.capturedAt)
-      : outlook("total", "under", totalLine, probabilities.total.under, "independent_pmf_at_playbook_line", playbookLine.capturedAt),
+      ? outlook("total", "over", totalLine, probabilities.total.over, "authoritative_pmf_at_playbook_line", playbookLine.capturedAt)
+      : outlook("total", "under", totalLine, probabilities.total.under, "authoritative_pmf_at_playbook_line", playbookLine.capturedAt),
   };
 }
 
 function spreadOutlook(forecast: CfbV1Forecast, homeSpread: number, observedAt: string): CfbForwardMarketOutlook {
   const probabilities = cfbV1LineProbabilities({ forecast, homeSpread, totalLine: forecast.expectedTotal });
   return probabilities.spread.home >= probabilities.spread.away
-    ? outlook("spread", "home", homeSpread, probabilities.spread.home, "independent_pmf_at_playbook_line", observedAt)
-    : outlook("spread", "away", -homeSpread, probabilities.spread.away, "independent_pmf_at_playbook_line", observedAt);
+    ? outlook("spread", "home", homeSpread, probabilities.spread.home, "authoritative_pmf_at_playbook_line", observedAt)
+    : outlook("spread", "away", -homeSpread, probabilities.spread.away, "authoritative_pmf_at_playbook_line", observedAt);
 }
 
 function totalOutlook(forecast: CfbV1Forecast, totalLine: number, observedAt: string): CfbForwardMarketOutlook {
   const probabilities = cfbV1LineProbabilities({ forecast, homeSpread: 0, totalLine });
   return probabilities.total.over >= probabilities.total.under
-    ? outlook("total", "over", totalLine, probabilities.total.over, "independent_pmf_at_playbook_line", observedAt)
-    : outlook("total", "under", totalLine, probabilities.total.under, "independent_pmf_at_playbook_line", observedAt);
+    ? outlook("total", "over", totalLine, probabilities.total.over, "authoritative_pmf_at_playbook_line", observedAt)
+    : outlook("total", "under", totalLine, probabilities.total.under, "authoritative_pmf_at_playbook_line", observedAt);
 }
 
 function outlook(
