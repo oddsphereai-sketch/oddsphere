@@ -156,9 +156,9 @@ changed; only deterministic settlement of existing locked rows is affected.
 - Projection runtime: resolved automodel `v2_2`
 - First-inning runtime: `fi_v2` with the versioned unpublished-probable availability head below
 - Public calibration: `mlb_public_calibration_v27_strong_winner_resistance_lean_2026_08_22`
-- Decision release: `mlb_daily_edge_decision_2026_08_28_r72_persisted_split_clear`
-- Rule bundle: `mlb_daily_edge_rule_bundle_v60_persisted_split_clear_2026_08_28`
-- Grade policy: `mlb_public_grade_policy_v50_persisted_split_clear_2026_08_28`
+- Decision release: `mlb_daily_edge_decision_2026_08_29_r73_action_promotion_stability`
+- Rule bundle: `mlb_daily_edge_rule_bundle_v61_action_promotion_stability_2026_08_29`
+- Grade policy: `mlb_public_grade_policy_v51_action_promotion_stability_2026_08_29`
 - Correction policy: `mlb_prediction_corrections_v22_coherent_near_edge_watchlist_2026_08_26`
 - Tracking contract: `member_facing_lock_v8_priority_retry_minute_cadence_2026_08_11`
 - Machine registry: `lib/automodel/mlbModelLayerVersions.ts`
@@ -255,6 +255,26 @@ projection, probability, side, quote, grade, stake, or immutable record is
 created or changed. Evidence and rollback are recorded in
 `docs/model-audits/2026-08-28-mlb-persisted-split-clear-r72.md`. Rollback is
 r71/v59/v49 while retaining the r71 member endpoint guard.
+
+The August 29 MLB r73 transition-integrity release prevents a single unlocked
+writer cycle, retry, or sportsbook freshness rotation from creating a public
+Moneyline action. An upward transition must retain the same game, market,
+selected side, normalized line, and probability head across at least two
+distinct natural `game_predictions.computed_at` cycles and twenty elapsed
+minutes. Sportsbook is excluded from that canonical identity only because each
+exact current book/price/time tuple independently passes the existing coherent
+price selector and MLB's validated rule-specific economics. While pending, the
+last coherent lower grade/reason remains public; adverse safety, health,
+identity, and coherence demotions remain immediate. Locked rows are immutable.
+The shared pure contract is
+`daily_edge_action_promotion_stability_2026_08_29_r1`; MLB stamps model-layer
+schema v6, evaluation-price policy v3, decision r73, rule bundle v61, and grade
+policy v51. Projection, probability, calibration v27, correction v22, stake,
+writer, lease, provider load, and tracking math are unchanged. The rejected
+universal nonnegative-EV alternative and chronological duration evidence are
+recorded in
+`docs/model-audits/2026-08-29-mlb-action-promotion-stability-validation.md`.
+Rollback is r72/v60/v50/schema v5/evaluation-price v2.
 
 The August 28 MLB source-split recovery r73 changes only the member evidence
 boundary under shared presentation r11. Circa remains the first-priority

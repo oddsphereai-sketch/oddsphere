@@ -57,6 +57,11 @@ import {
 import { didFinalSideChange } from "./finalSideDecision";
 import { selectBestCoherentPlayablePrice } from "./dailyEdge/bestPlayablePrice";
 import {
+  readPersistedActionPromotionState,
+  resolveActionPromotionStability,
+  type StableActionGrade,
+} from "./dailyEdge/actionPromotionStability";
+import {
   verifiedHundredSplitPct,
   verifiedSourceAwareSplitPctHundred,
   verifiedUnitSplitPct,
@@ -169,7 +174,7 @@ export function preserveTrackingDisplayGradeOverride(
   };
 }
 
-type ExistingPredictionRecordState = Pick<
+export type ExistingPredictionRecordState = Pick<
   PredictionRecordRow,
   | "game_id"
   | "market"
@@ -179,13 +184,28 @@ type ExistingPredictionRecordState = Pick<
   | "side"
   | "line_value"
   | "odds_american"
+  | "odds_decimal"
+  | "model_used"
+  | "prediction_source"
   | "confidence"
   | "model_probability"
   | "market_probability"
   | "edge"
+  | "expected_value"
   | "play_grade"
+  | "prediction_type"
   | "best_angle"
   | "no_bet"
+  | "no_bet_reason"
+  | "market_aligned"
+  | "data_quality_tier"
+  | "source_quality"
+  | "provisional"
+  | "held"
+  | "hold_reason"
+  | "launch_day"
+  | "manual_outcome_expected"
+  | "published_at"
   | "calibration_version"
   | "snapshot_json"
 >;
@@ -245,6 +265,205 @@ export function withPredictionGradeHistory(
     snapshot_json: {
       ...proposedSnapshot,
       prediction_grade_history_v1: history,
+    },
+  };
+}
+
+const MLB_ACTION_PROMOTION_REQUIRED_DISTINCT_CYCLES = 2;
+const MLB_ACTION_PROMOTION_MINIMUM_ELAPSED_MS = 20 * 60_000;
+// The frozen nonnegative-EV replacement failed MLB holdout evidence. MLB keeps
+// its existing validated rule-specific economics; r73 changes transition
+// persistence only. Other sports may configure a numeric floor independently.
+const MLB_ACTION_PROMOTION_MINIMUM_EXPECTED_VALUE: number | null = null;
+
+function stableActionGrade(record: {
+  play_grade: string | null;
+  best_angle: boolean | null;
+  no_bet: boolean | null;
+} | null | undefined): StableActionGrade {
+  if (!record || record.no_bet === true) return "no_play";
+  if (record.best_angle === true || record.play_grade === "best_angle") return "best_angle";
+  if (record.play_grade === "lean") return "lean";
+  if (record.play_grade === "market_aligned" || record.play_grade === "watchlist") return "watchlist";
+  return "no_play";
+}
+
+function coherentMlbMoneylineEvaluationPrice(record: PredictionRecordRow): boolean {
+  const snapshot = readRecordOrNull(record.snapshot_json);
+  const audit = readRecordOrNull(snapshot?.ml_evaluation_price);
+  const evaluatedBook = readStringOrNull(audit?.evaluated_book);
+  const evaluatedObservedAt = readStringOrNull(audit?.evaluated_observed_at);
+  const evaluatedOdds = readNumberOrNull(audit?.evaluated_odds);
+  return evaluatedBook !== null &&
+    evaluatedObservedAt !== null &&
+    Number.isFinite(Date.parse(evaluatedObservedAt)) &&
+    evaluatedOdds !== null &&
+    record.odds_american !== null &&
+    evaluatedOdds === record.odds_american;
+}
+
+/**
+ * MLB-owned integration of the shared writer-side transition contract.
+ * It runs only for unlocked Moneyline upserts. A pending promotion retains the
+ * last coherent lower grade while storing the candidate/cycle evidence in the
+ * same atomic prediction_records snapshot.
+ */
+export function applyMlbMoneylineActionPromotionStability(
+  proposed: PredictionRecordRow,
+  existing: ExistingPredictionRecordState | null | undefined,
+): PredictionRecordRow {
+  if (proposed.sport !== "mlb" || proposed.market !== "moneyline") return proposed;
+  const snapshot = readRecordOrNull(proposed.snapshot_json) ?? {};
+  const existingSnapshot = readRecordOrNull(existing?.snapshot_json) ?? {};
+  const layers = readRecordOrNull(snapshot.model_layer_versions) ?? {};
+  const forecastRelease =
+    readStringOrNull(layers.active_probability_head) ??
+    readStringOrNull(layers.moneyline_probability_head) ??
+    proposed.model_version ?? "unknown";
+  const selectedSide = proposed.side ?? proposed.pick ?? "unknown";
+  const cycleCapturedAt = proposed.published_at;
+  const candidateGrade = stableActionGrade(proposed);
+  const currentlyPublishedGrade = stableActionGrade(existing);
+  const transition = resolveActionPromotionStability({
+    identity: {
+      sport: "mlb",
+      gameId: proposed.game_id,
+      market: "moneyline",
+      selectedSide,
+      evaluatedLine: null,
+      forecastRelease,
+    },
+    cycle: cycleCapturedAt === null
+      ? null
+      : {
+          id: `mlb:${proposed.slate_date}:${cycleCapturedAt}`,
+          capturedAt: cycleCapturedAt,
+        },
+    candidateGrade,
+    currentlyPublishedGrade,
+    currentModelProbability: proposed.model_probability,
+    currentAmericanOdds: proposed.odds_american,
+    exactPriceCoherent: coherentMlbMoneylineEvaluationPrice(proposed),
+    previousState: readPersistedActionPromotionState(existingSnapshot.action_promotion_stability_v1),
+    requiredDistinctCycles: MLB_ACTION_PROMOTION_REQUIRED_DISTINCT_CYCLES,
+    minimumElapsedMs: MLB_ACTION_PROMOTION_MINIMUM_ELAPSED_MS,
+    minimumExpectedValue: MLB_ACTION_PROMOTION_MINIMUM_EXPECTED_VALUE,
+  });
+
+  let publicFields: Pick<PredictionRecordRow, "play_grade" | "best_angle" | "no_bet" | "no_bet_reason">;
+  if (transition.promotionPending) {
+    publicFields = existing
+      ? {
+          play_grade: existing.play_grade,
+          best_angle: existing.best_angle ?? false,
+          no_bet: existing.no_bet,
+          no_bet_reason: existing.no_bet_reason,
+        }
+      : {
+          play_grade: null,
+          best_angle: false,
+          no_bet: true,
+          no_bet_reason: "action_promotion_pending_distinct_writer_cycle_confirmation",
+        };
+  } else if (
+    transition.reason === "exact_price_economics_failed" ||
+    transition.reason === "incoherent_exact_price"
+  ) {
+    publicFields = {
+      play_grade: null,
+      best_angle: false,
+      no_bet: true,
+      no_bet_reason: transition.reason,
+    };
+  } else {
+    publicFields = {
+      play_grade: proposed.play_grade,
+      best_angle: proposed.best_angle,
+      no_bet: proposed.no_bet,
+      no_bet_reason: proposed.no_bet_reason,
+    };
+  }
+
+  const candidateDecision = readRecordOrNull(snapshot.decision_pipeline) ?? {};
+  const existingDecision = readRecordOrNull(existingSnapshot.decision_pipeline) ?? {};
+  const memberFacing = readRecordOrNull(snapshot.member_facing_at_lock) ?? {};
+  const finalGrade = stableActionGrade(publicFields);
+  const actionable = finalGrade === "best_angle" || finalGrade === "lean";
+  const retainedPublicationFields = transition.promotionPending && existing
+    ? {
+        pick: existing.pick,
+        side: existing.side,
+        line_value: existing.line_value,
+        odds_american: existing.odds_american,
+        odds_decimal: existing.odds_decimal,
+        model_used: existing.model_used,
+        prediction_source: existing.prediction_source,
+        confidence: existing.confidence,
+        model_probability: existing.model_probability,
+        market_probability: existing.market_probability,
+        edge: existing.edge,
+        expected_value: existing.expected_value,
+        prediction_type: existing.prediction_type,
+        market_aligned: existing.market_aligned,
+        data_quality_tier: existing.data_quality_tier,
+        source_quality: existing.source_quality,
+        provisional: existing.provisional,
+        held: existing.held,
+        hold_reason: existing.hold_reason,
+        launch_day: existing.launch_day,
+        manual_outcome_expected: existing.manual_outcome_expected,
+        published_at: existing.published_at,
+        calibration_version: existing.calibration_version,
+      }
+    : {};
+  const publicSnapshot = transition.promotionPending && existing
+    ? existingSnapshot
+    : snapshot;
+  const publicDecision = transition.promotionPending
+    ? existingDecision
+    : candidateDecision;
+  const publicMemberFacing = transition.promotionPending
+    ? readRecordOrNull(existingSnapshot.member_facing_at_lock) ?? {}
+    : memberFacing;
+  return {
+    ...proposed,
+    ...retainedPublicationFields,
+    ...publicFields,
+    snapshot_json: {
+      ...publicSnapshot,
+      action_promotion_stability_v1: transition.state,
+      action_promotion_candidate_v1: transition.promotionPending
+        ? {
+            candidate_grade: candidateGrade,
+            model_probability: proposed.model_probability,
+            market_probability: proposed.market_probability,
+            edge: proposed.edge,
+            selected_side: selectedSide,
+            line_value: proposed.line_value,
+            odds_american: proposed.odds_american,
+            published_at: proposed.published_at,
+            evaluation_price: snapshot.ml_evaluation_price ?? null,
+            action_rule_id: candidateDecision.action_rule_id ?? null,
+          }
+        : null,
+      decision_pipeline: {
+        ...publicDecision,
+        board_action: actionable ? "bet" : "no_play",
+        actionable_grade: actionable ? finalGrade : null,
+        action_rule_id: transition.promotionPending
+          ? existingDecision.action_rule_id ?? null
+          : candidateDecision.action_rule_id ?? null,
+        grade_source: transition.promotionPending
+          ? existingDecision.grade_source ?? null
+          : candidateDecision.grade_source ?? null,
+        transition_candidate_grade: candidateGrade,
+        transition_final_grade: finalGrade,
+        transition_reason: transition.reason,
+      },
+      member_facing_at_lock: {
+        ...publicMemberFacing,
+        ...publicFields,
+      },
     },
   };
 }
@@ -5985,7 +6204,7 @@ export async function createPredictionRecords(
   // first, then skip the upsert for any locked match.
   const { data: existingLocks } = await supabase
     .from("prediction_records")
-    .select("id, game_id, market, model_version, slate_date, locked_at, pick, side, line_value, odds_american, confidence, model_probability, market_probability, edge, play_grade, prediction_type, best_angle, no_bet, calibration_version, snapshot_json")
+    .select("id, game_id, market, model_version, slate_date, locked_at, pick, side, line_value, odds_american, odds_decimal, model_used, prediction_source, confidence, model_probability, market_probability, edge, expected_value, play_grade, prediction_type, best_angle, no_bet, no_bet_reason, market_aligned, data_quality_tier, source_quality, provisional, held, hold_reason, launch_day, manual_outcome_expected, published_at, calibration_version, snapshot_json")
     .in("game_id", proposed.map((r) => r.game_id))
     .eq("slate_date", slateDate);
   const lockedKeys = new Set<string>();
@@ -6015,14 +6234,28 @@ export async function createPredictionRecords(
     side: string | null;
     line_value: number | null;
     odds_american: number | null;
+    odds_decimal: number | null;
+    model_used: string | null;
+    prediction_source: string | null;
     confidence: number | null;
     model_probability: number | null;
     market_probability: number | null;
     edge: number | null;
+    expected_value: number | null;
     play_grade: string | null;
     prediction_type: string | null;
     best_angle: boolean;
     no_bet: boolean | null;
+    no_bet_reason: string | null;
+    market_aligned: boolean;
+    data_quality_tier: string | null;
+    source_quality: string | null;
+    provisional: boolean;
+    held: boolean;
+    hold_reason: string | null;
+    launch_day: boolean;
+    manual_outcome_expected: boolean;
+    published_at: string | null;
     calibration_version: string | null;
     snapshot_json: Record<string, unknown> | null;
   }>) {
@@ -6170,12 +6403,16 @@ export async function createPredictionRecords(
       });
       continue;
     }
+    const existingRecord = existingRecordByKey.get(proposedKey);
     const rec = withPredictionGradeHistory(
-      preserveTrackingDisplayGradeOverride(
-        proposedRecord,
-        existingSnapshotByKey.get(proposedKey),
+      applyMlbMoneylineActionPromotionStability(
+        preserveTrackingDisplayGradeOverride(
+          proposedRecord,
+          existingSnapshotByKey.get(proposedKey),
+        ),
+        existingRecord,
       ),
-      existingRecordByKey.get(proposedKey),
+      existingRecord,
     );
     const key = `${rec.game_id}::${rec.market}::${rec.model_version ?? ""}::${rec.slate_date}`;
     if (shouldPreserveLastCompleteMarketRecord({
