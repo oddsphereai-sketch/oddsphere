@@ -2,7 +2,7 @@ import { SharpApiClient, type SharpApiRequestOptions, type SharpApiResponse } fr
 import type { NcaafBookOdds, NcaafGame } from "./balldontlieNcaafSlate";
 
 export const CFB_SHARP_API_ODDS_RELEASE =
-  "cfb_sharpapi_named_book_fallback_2026_08_28_r10_ambiguous_event_scope" as const;
+  "cfb_sharpapi_named_book_fallback_2026_08_28_r11_prior_event_disambiguation" as const;
 export const CFB_SHARP_FALLBACK_MAX_GAMES = 96 as const;
 export const CFB_SHARP_FALLBACK_MAX_REQUESTS = 192 as const;
 export const CFB_SHARP_FALLBACK_MAX_ROWS_PER_EVENT = 200 as const;
@@ -121,6 +121,7 @@ export async function fetchSharpApiNcaafOddsFallback(args: {
   apiKey?: string;
   client?: SharpClient;
   maximumRequests?: number;
+  trustedEventIdsByGame?: Readonly<Record<string, string>>;
 }): Promise<CfbSharpApiOddsResult> {
   const games = [...new Map(args.games.map((game) => [game.providerGameId, game])).values()];
   if (games.length > CFB_SHARP_FALLBACK_MAX_GAMES) {
@@ -197,14 +198,18 @@ export async function fetchSharpApiNcaafOddsFallback(args: {
       const eventId = sharpEventId(event);
       return eventId ? [[eventId, event] as const] : [];
     })).entries()];
-    if (uniqueEventMatches.length > 1) {
+    const trustedEventId = args.trustedEventIdsByGame?.[game.providerGameId] ?? null;
+    const trustedCurrentMatch = trustedEventId !== null && uniqueEventMatches.some(([eventId]) => eventId === trustedEventId)
+      ? trustedEventId
+      : null;
+    if (uniqueEventMatches.length > 1 && trustedCurrentMatch === null) {
       booksByGame[game.providerGameId] = [];
       displayBooksByGame[game.providerGameId] = [];
       eventIdsByGame[game.providerGameId] = null;
       eventDiscoveryStatusByGame[game.providerGameId] = "ambiguous";
       continue;
     }
-    const eventId = uniqueEventMatches[0]?.[0] ?? null;
+    const eventId = trustedCurrentMatch ?? uniqueEventMatches[0]?.[0] ?? null;
     if (eventId) {
       if (discoveredEventIds.has(eventId)) {
         throw new Error(`CFB SharpAPI canonical event ${eventId} matched more than one scheduled game.`);
