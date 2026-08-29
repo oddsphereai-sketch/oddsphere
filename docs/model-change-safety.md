@@ -84,11 +84,13 @@ balanced promotion/demotion rules:
 
 The frozen 2026-08-29 15:56:08Z r12 FBS wave contains 20 evaluated tuples after the failed legacy
 TCU lock is excluded from recomputation. Before this amendment it is 0 Best Angles / 2 Leans / 12
-Watchlists / 6 No Plays. Applying the thresholds above without using game outcomes yields 2 Best
-Angles / 3 Leans / 9 Watchlists / 6 No Plays: two existing Leans advance one tier and three Spread
-Watchlists become Leans, for five tier promotions, zero demotions, and three additional actionable
-tuples. Existing resistance demotions remain active and can reduce those live counts as prices or
-evidence move. No rule can create or increase a stake.
+Watchlists / 6 No Plays. Applying the thresholds above with explicit home/away abbreviation
+identity and without using game outcomes yields 2 Best Angles / 2 Leans / 10 Watchlists / 6 No
+Plays: two existing Leans advance one tier, two Spread Watchlists become Leans, and two stored
+Watchlists correctly become No Play when the selected team is mapped to resisting sharp evidence.
+That is four tier promotions, two demotions, and two additional actionable tuples. Existing
+resistance demotions remain active and can reduce live counts as prices or evidence move. No rule
+can create or increase a stake.
 
 The production implementation requires another complete immutable release/version set and the
 same protected-PR, integration-safety, focused/full testing, normal deployment, single leased
