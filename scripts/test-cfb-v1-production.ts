@@ -964,14 +964,38 @@ assert.throws(
   /one to three exact-price market decisions/,
 );
 
-const openingPlan = planCfbForwardEvidenceCaptures({ games: [game], existing: [], capturedAt: "2026-08-25T16:00:00.000Z", unlockedCadenceMinutes: 360 });
+const openingPlan = planCfbForwardEvidenceCaptures({ games: [game], existing: [], capturedAt: "2026-08-25T16:00:00.000Z" });
 assert.deepEqual(openingPlan.map((row) => row.stage), ["opening"]);
 assert.equal(determineCfbForwardCollectionNeed({ existing: [], now: observedAt }).reason, "opening_seed");
 const farFutureNeed = determineCfbForwardCollectionNeed({ existing: [evidenceAt("opening", "2026-08-25T16:00:00.000Z")], now: "2026-08-25T17:00:00.000Z" });
-assert.deepEqual(farFutureNeed, { collect: false, reason: "cadence_not_due", cadenceMinutes: 360 }, "distant CFB games retain the six-hour refresh cadence");
+assert.deepEqual(farFutureNeed, { collect: false, reason: "cadence_not_due", cadenceMinutes: 360 }, "CFB games beyond 48 hours retain the six-hour refresh cadence");
+const within48HourlyNeed = determineCfbForwardCollectionNeed({ existing: [evidenceAt("opening", "2026-08-27T19:00:00.000Z")], now: "2026-08-27T20:00:00.000Z" });
+assert.deepEqual(within48HourlyNeed, { collect: true, reason: "unlocked_refresh_due", cadenceMinutes: 60 }, "CFB refreshes hourly once kickoff is within 48 hours");
+const exact48HourlyNeed = determineCfbForwardCollectionNeed({ existing: [evidenceAt("opening", "2026-08-27T15:00:00.000Z")], now: "2026-08-27T16:00:00.000Z" });
+assert.deepEqual(exact48HourlyNeed, { collect: true, reason: "unlocked_refresh_due", cadenceMinutes: 60 }, "the exact 48-hour boundary uses the hourly cadence");
 const within24HourlyNeed = determineCfbForwardCollectionNeed({ existing: [evidenceAt("opening", "2026-08-28T19:00:00.000Z")], now: "2026-08-28T20:00:00.000Z" });
 assert.deepEqual(within24HourlyNeed, { collect: true, reason: "unlocked_refresh_due", cadenceMinutes: 60 }, "CFB refreshes hourly once kickoff is within 24 hours");
-const lateT60 = planCfbForwardEvidenceCaptures({ games: [game], existing: [evidenceAt("opening", "2026-08-25T16:00:00.000Z")], capturedAt: "2026-08-29T15:21:00.000Z", unlockedCadenceMinutes: 60 });
+const farGame: NcaafGame = { ...game, providerGameId: "far-game", scheduledStart: "2026-08-31T20:00:00.000Z" };
+const farEvidenceBase = evidenceAt("opening", "2026-08-28T19:00:00.000Z");
+const farEvidence: CfbForwardStoredEvidence = {
+  ...farEvidenceBase,
+  id: "far-game-opening",
+  providerGameId: farGame.providerGameId,
+  gameStartAt: farGame.scheduledStart,
+  payload: { ...farEvidenceBase.payload, game: farGame },
+};
+const mixedCadencePlans = planCfbForwardEvidenceCaptures({
+  games: [game, farGame],
+  existing: [evidenceAt("opening", "2026-08-28T19:00:00.000Z"), farEvidence],
+  capturedAt: "2026-08-28T20:00:00.000Z",
+});
+assert.deepEqual(mixedCadencePlans.map((plan) => plan.game.providerGameId), [game.providerGameId], "an hourly near game cannot force a game beyond 48 hours onto the hourly provider cadence");
+const mixedCollectionNeed = determineCfbForwardCollectionNeed({
+  existing: [evidenceAt("opening", "2026-08-28T19:30:00.000Z"), { ...farEvidence, capturedAt: "2026-08-28T13:00:00.000Z", payload: { ...farEvidence.payload, capturedAt: "2026-08-28T13:00:00.000Z" } }],
+  now: "2026-08-28T20:00:00.000Z",
+});
+assert.deepEqual(mixedCollectionNeed, { collect: true, reason: "unlocked_refresh_due", cadenceMinutes: 360 }, "a due distant game cannot be masked by a newer near-game observation");
+const lateT60 = planCfbForwardEvidenceCaptures({ games: [game], existing: [evidenceAt("opening", "2026-08-25T16:00:00.000Z")], capturedAt: "2026-08-29T15:21:00.000Z" });
 assert.equal(lateT60[0]?.stage, "t60");
 assert.equal(lateT60[0]?.t60LagMinutes, 21);
 assert.ok((lateT60[0]?.t60LagMinutes ?? 0) > CFB_T60_MAX_CAPTURE_LAG_MINUTES);

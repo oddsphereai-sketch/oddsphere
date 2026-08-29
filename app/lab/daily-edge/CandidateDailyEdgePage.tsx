@@ -190,7 +190,7 @@ export default async function CandidateDailyEdgePage({
                 previousHref: null,
                 nextHref: null,
                 asOf: snapshot.as_of,
-                cadenceLabel: "six-hour distant evidence · hourly inside 24h · T-60 lock",
+                cadenceLabel: "six-hour beyond 48h · hourly inside 48h · T-60 lock",
               }
           : cfbEnabled
             ? {
@@ -199,7 +199,7 @@ export default async function CandidateDailyEdgePage({
                 nextHref: null,
                 displayGameCount: 0,
                 asOf: snapshot.as_of,
-                cadenceLabel: "six-hour distant evidence · hourly inside 24h · T-60 lock",
+                cadenceLabel: "six-hour beyond 48h · hourly inside 48h · T-60 lock",
               }
           : eplRequested && eplEnabled
             ? { label: `Weekly Premier League slate · ${snapshot.games.length} matches`, previousHref: null, nextHref: null }
