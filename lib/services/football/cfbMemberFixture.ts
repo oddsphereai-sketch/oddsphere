@@ -48,7 +48,7 @@ import { cfbFootballEvidenceStats } from "./footballMemberEvidence";
 import { CFB_MARKET_SHARP_AWARE_PRODUCTION_RELEASE } from "./cfbMarketSharpAwareShadow";
 
 export const CFB_MEMBER_FIXTURE_RELEASE =
-  "cfb_v1_member_fixture_2026_08_29_r28_transition_coherent" as const;
+  "cfb_v1_member_fixture_2026_08_29_r29_concise_member_read" as const;
 export const CFB_PUBLIC_OUTCOME_CONTRACT_RELEASE =
   "cfb_market_sharp_public_outcome_contract_2026_08_29_r31_transition_coherent" as const;
 export const CFB_CONTEXT_ONLY_QUOTE_CAPTURE_SKEW_MS = 5_000 as const;
@@ -633,16 +633,16 @@ function sharpBookAvailability(
   market: CfbV1Market,
 ): NonNullable<MarketEdgeDto["sharpBookAvailability"]> {
   const sharp = buildSharpBookSplitSection(payload, market);
-  if (sharp) return { status: sharp.rows.some((row) => row.isStale) ? "stale" : "complete", message: "Strictly matched Circa split evidence is available for this game and market.", lastUpdated: sharp.lastUpdated };
+  if (sharp) return { status: sharp.rows.some((row) => row.isStale) ? "stale" : "complete", message: "Verified sharp splits are available for this game and market.", lastUpdated: sharp.lastUpdated };
   const records = payload.market.sharpApiSplits ?? [];
   const latest = records.reduce<string | null>((value, record) => value === null || record.capturedAt > value ? record.capturedAt : value, null);
   if (payload.market.sharpApiSplitsStatus === "request_failed") {
-    return { status: "unavailable", message: "The bounded NCAAF split request failed for this capture. Public consensus remains separate and is not relabeled as SharpAPI.", lastUpdated: null };
+    return { status: "unavailable", message: "Verified sharp splits are unavailable for this capture. Public consensus remains separate.", lastUpdated: null };
   }
   if (records.some((record) => record.sourceSemantics === "public_recreational" && sharpMarketAvailable(record, market))) {
-    return { status: "provider_limited", message: "SharpAPI matched a DraftKings public split for this market, but no Circa sharp-adjacent row. It is not labeled as Sharp Book Splits.", lastUpdated: latest };
+    return { status: "provider_limited", message: "A public split is available, but no verified sharp split is available for this market yet.", lastUpdated: latest };
   }
-  return { status: "pending", message: "SharpAPI supports NCAAF splits, but no exact team/date match is published for this game and market yet.", lastUpdated: latest };
+  return { status: "pending", message: "No verified sharp split is available for this market yet.", lastUpdated: latest };
 }
 
 function buildMarket(
@@ -717,7 +717,7 @@ function buildMarket(
     actionabilityLabel: held ? "No Play" : decision!.grade,
     displayReason: reason,
     guidedGuide: reason,
-    guidedWatchOut: "Prices and projected quarterback context refresh until the immutable T-60 tuple. CFB injury and venue-weather feeds are not available from the current provider and are labeled honestly.",
+    guidedWatchOut: "Prices and projected quarterback context refresh until T-60. Injury and venue-weather context are not available for this slate.",
     whyLine: reason,
     riskLine: decision?.evaluatedQuote.marketSelection === "coherent_paired_alternate"
       ? "The sportsbook labels this as an alternate offer. It is evaluated only because at least two other trusted named books carry the identical line; no line interpolation or consensus price is used."

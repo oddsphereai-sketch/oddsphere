@@ -1084,8 +1084,8 @@ check(
     candidateSource.includes("const selectedSharp = currentSharp ?? (sportsbook?.rows.length ? sportsbook : sharp)") &&
     candidateSource.includes("const selectedSharpIsSportsbook = selectedSharp !== null && selectedSharp === sportsbook") &&
     candidateSource.includes('source="PUBLIC CONSENSUS"') &&
-    candidateSource.includes('displayedSharp.label === "Sharp Book Signal" ? "SHARP BOOK SIGNAL" : "SHARP BOOK SPLITS"') &&
-    candidateSource.includes("Public consensus and source-specific sportsbook evidence remain separate signals") &&
+    candidateSource.includes('displayedSharp.label === "Sharp Book Signal" ? "SHARP SPLITS" : "SHARP BOOK SPLITS"') &&
+    candidateSource.includes("Public and sharp splits remain separate signals") &&
     !candidateSource.includes('{sportsbook ? <SplitSourcePanel source="SHARP BOOK SPLITS"') &&
     !candidateSource.includes("sharpBookSplits = market.sportsbookSplits"),
 );
@@ -1382,8 +1382,9 @@ check(
     dailyEdgeApiSource.includes('status: "provider_limited"') &&
     dailyEdgeApiSource.includes('status: "pending"') &&
     dailyEdgeApiSource.includes('status: "stale"') &&
-    candidateDailyEdgeSource.includes("Provider limited") &&
-    candidateDailyEdgeSource.includes("Awaiting provider data"),
+    candidateDailyEdgeSource.includes('availabilityStatus === "provider_limited" ? "Limited"') &&
+    candidateDailyEdgeSource.includes("No verified split yet") &&
+    !candidateDailyEdgeSource.includes('availabilityStatus === "pending" ? "Awaiting provider data"'),
 );
 check(
   "first-inning reader distinguishes team results from starter-game context",
@@ -1546,7 +1547,7 @@ check(
 check(
   "a context-only CFB line never promises missing sportsbook odds",
   DAILY_EDGE_MEMBER_PRESENTATION_RELEASE_ID ===
-    "daily_edge_member_presentation_2026_08_29_r19_cfb_transition_coherent" &&
+    "daily_edge_member_presentation_2026_08_29_r20_cfb_concise_member_read" &&
     candidateSource.includes("Sportsbook odds unavailable") &&
     candidateSource.includes("Consensus line only") &&
     candidateSource.includes("No eligible named-book American price was captured") &&
@@ -1573,18 +1574,19 @@ check(
     nflMemberFixtureSource.includes("separately calibrated ${marketName} forecast side"),
 );
 check(
-  "the active CFB reader presents one writer-owned market/sharp-aware forecast and never overrides its grade",
-  candidateSource.includes("market/sharp-aware PMF shown above") &&
-    candidateSource.includes("same authoritative market/sharp-aware PMF") &&
-    candidateSource.includes("the reader never overrides the stored grade") &&
-    candidateSource.includes("Price-calibrated bet probability"),
+  "the active CFB reader presents one concise writer-owned forecast and exact-price decision",
+  candidateSource.includes('game.sport === "cfb" ? "Outcome forecast"') &&
+    candidateSource.includes('sport === "cfb" ? "Model"') &&
+    candidateSource.includes("displayedExpectedValuePct") &&
+    candidateSource.includes('sport === "cfb" ? <div className="mt-3"><VerdictBadge') &&
+    !candidateSource.includes("This exact-price probability is calibrated from the same authoritative") &&
+    !candidateSource.includes("the reader never overrides the stored grade"),
 );
 check(
-  "the CFB reader keeps the independent PMF as release-separated baseline context",
-  candidateSource.includes("Market/sharp-aware outcome forecast") &&
-    candidateSource.includes("Football-only baseline") &&
+  "the CFB reader keeps release-separated baseline context without exposing audit methodology",
+  candidateSource.includes("Football baseline ·") &&
     candidateSource.includes("game.footballOnlyProjection") &&
-    candidateSource.includes("75% independent football mass with 25% bounded market/sharp mass") &&
+    !candidateSource.includes("75% independent football mass with 25% bounded market/sharp mass") &&
     labTypesSource.includes("footballOnlyProjection?:"),
 );
 check(

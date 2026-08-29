@@ -279,7 +279,7 @@ assert.deepEqual(trustedCfbSharpEventIdsByGame([trustedSharpRow, {
 }]), {}, "conflicting immutable provider IDs must disable prior-event disambiguation");
 const member = buildCfbMemberFixture([evidence]);
 assert.equal(member.snapshot.games.length, 1);
-assert.equal(member.fixtureRelease, "cfb_v1_member_fixture_2026_08_29_r28_transition_coherent");
+assert.equal(member.fixtureRelease, "cfb_v1_member_fixture_2026_08_29_r29_concise_member_read");
 assert.equal(member.snapshot.games[0]!.collegeFootballScope, "fbs_involved", "the CFB reader must classify every member game for the FBS-first board without changing writer scope");
 assert.equal(member.snapshot.games[0]!.footballProjection?.expectedAwayPoints, authoritativeForecast.expectedAwayPoints);
 assert.equal(member.snapshot.games[0]!.footballProjection?.expectedHomePoints, authoritativeForecast.expectedHomePoints);
@@ -662,7 +662,7 @@ assert.equal(heldGame.markets.moneyline.pick, null, "MLB-parity Held semantics c
 assert.deepEqual(heldGame.markets.moneyline.verdict, { key: "no_play", label: "No Play" }, "CFB member markets must never expose the internal recovery state as a prediction or Bet grade");
 assert.equal(heldGame.markets.moneyline.modelProb !== null, true, "Outcome confidence remains independent from an exact-price Bet-grade hold");
 assert.match(heldGame.markets.moneyline.displayReason ?? "", /prediction is .* primary outcome PMF.*Bet grade is No Play/);
-assert.match(heldGame.markets.moneyline.sharpBookAvailability?.message ?? "", /no exact team\/date match is published/, "Sharp price recovery cannot be mislabeled as Sharp betting-split coverage");
+assert.equal(heldGame.markets.moneyline.sharpBookAvailability?.message, "No verified sharp split is available for this market yet.", "Sharp price recovery cannot be mislabeled as betting-split coverage or expose the upstream source");
 
 const publicHeldSnapshot = structuredClone(heldMember.snapshot);
 const publicHeldResponse = finalizeDailyEdgeResponseCoherence(publicHeldSnapshot);
@@ -1293,7 +1293,7 @@ const vercel = JSON.parse(readFileSync(path.resolve("vercel.json"), "utf8")) as 
 assert.equal(vercel.crons.filter((cron) => cron.path === "/api/cron/cfb-forward-evidence").length, 1);
 const reader = readFileSync(path.resolve("app/dev/experience-preview/ActualDailyEdgePreview.tsx"), "utf8");
 assert.match(reader, /sport === "nfl" \|\| sport === "cfb" \? "Expected score"/);
-assert.match(reader, /Reachable representative final/);
+assert.match(reader, /Representative final/);
 assert.match(reader, /footballExpectedAway\.toFixed\(1\)/);
 assert.match(reader, /presentDailyEdgeOperationalNoPlay/, "CFB must pass through the shared operational-health presentation boundary");
 assert.match(reader, /dailyEdgeOutcomeForecastLabel/, "CFB prediction surfaces must use the protected-main model-native forecast helper");
