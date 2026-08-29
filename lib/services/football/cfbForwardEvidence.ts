@@ -11,6 +11,8 @@ import {
 } from "./cfbV1Decision";
 
 export const CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE =
+  "cfb_forward_evidence_snapshot_2026_08_28_r11_prior_event_disambiguation" as const;
+export const CFB_FORWARD_AMBIGUOUS_SCOPE_PREVIOUS_EVIDENCE_SCHEMA_RELEASE =
   "cfb_forward_evidence_snapshot_2026_08_28_r10_event_discovery_pagination" as const;
 export const CFB_FORWARD_CANONICAL_DISCOVERY_PREVIOUS_EVIDENCE_SCHEMA_RELEASE =
   "cfb_forward_evidence_snapshot_2026_08_28_r9_canonical_price_coverage" as const;
@@ -31,9 +33,9 @@ export const CFB_FORWARD_LEGACY_EVIDENCE_SCHEMA_RELEASE =
 export const CFB_FORWARD_INITIAL_EVIDENCE_SCHEMA_RELEASE =
   "cfb_forward_evidence_snapshot_2026_08_25_r1" as const;
 export const CFB_FORWARD_EVIDENCE_COLLECTOR_RELEASE =
-  "cfb_forward_evidence_collector_2026_08_28_r17_ambiguous_event_scope" as const;
+  "cfb_forward_evidence_collector_2026_08_28_r18_prior_event_disambiguation" as const;
 export const CFB_FORWARD_MEMBER_RELEASE =
-  "cfb_v1_member_release_2026_08_28_r19_ambiguous_event_scope" as const;
+  "cfb_v1_member_release_2026_08_28_r20_prior_event_disambiguation" as const;
 
 export type CfbForwardEvidenceStage = "opening" | "unlocked" | "t60";
 

@@ -444,6 +444,47 @@ assert.equal(ambiguousEvent.eventIdsByGame[game.providerGameId], null);
 assert.equal(ambiguousEvent.eventDiscoveryStatusByGame[game.providerGameId], "ambiguous");
 assert.deepEqual(ambiguousEvent.booksByGame[game.providerGameId], []);
 
+let trustedAmbiguousOddsCalls = 0;
+const trustedAmbiguousEvent = await fetchSharpApiNcaafOddsFallback({
+  games: [game],
+  maximumRequests: 3,
+  trustedEventIdsByGame: { [game.providerGameId]: expectedEventId },
+  client: {
+    async fetch<T>(opts: SharpApiRequestOptions): Promise<SharpApiResponse<T>> {
+      if (opts.path === "/events") {
+        return { data: [sharpEvent(), sharpEvent({ id: `${expectedEventId}-duplicate` })] as T, pagination: { has_more: false } };
+      }
+      trustedAmbiguousOddsCalls += 1;
+      assert.equal(opts.query?.event_id, expectedEventId);
+      const data = sharpRows(expectedEventId);
+      return { data: data as T, pagination: { has_more: false } };
+    },
+  },
+});
+assert.equal(trustedAmbiguousEvent.requests, 2);
+assert.equal(trustedAmbiguousOddsCalls, 1, "one immutable prior event ID that is still an exact current catalog match may resolve duplicate catalog rows");
+assert.equal(trustedAmbiguousEvent.eventIdsByGame[game.providerGameId], expectedEventId);
+assert.equal(trustedAmbiguousEvent.eventDiscoveryStatusByGame[game.providerGameId], "matched");
+assert.equal(trustedAmbiguousEvent.matchedGames, 1);
+
+let staleTrustOddsCalls = 0;
+const staleTrustedAmbiguousEvent = await fetchSharpApiNcaafOddsFallback({
+  games: [game],
+  maximumRequests: 3,
+  trustedEventIdsByGame: { [game.providerGameId]: `${expectedEventId}-not-current` },
+  client: {
+    async fetch<T>(opts: SharpApiRequestOptions): Promise<SharpApiResponse<T>> {
+      if (opts.path === "/events") {
+        return { data: [sharpEvent(), sharpEvent({ id: `${expectedEventId}-duplicate` })] as T, pagination: { has_more: false } };
+      }
+      staleTrustOddsCalls += 1;
+      return { data: [] as T, pagination: { has_more: false } };
+    },
+  },
+});
+assert.equal(staleTrustOddsCalls, 0, "a prior ID absent from the current exact-identity catalog cannot disambiguate or trigger an odds call");
+assert.equal(staleTrustedAmbiguousEvent.eventDiscoveryStatusByGame[game.providerGameId], "ambiguous");
+
 await assert.rejects(
   fetchSharpApiNcaafOddsFallback({
     games: [game, { ...game, providerGameId: `${game.providerGameId}-reused` }],
