@@ -6,6 +6,7 @@ import { buildRecommendationDecision } from "@/lib/services/recommendationDecisi
 import type { MarketSplitDisplaySection } from "@/lib/types/domain/RecommendationDecision";
 import {
   CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE,
+  CFB_FORWARD_AMBIGUOUS_SCOPE_PREVIOUS_EVIDENCE_SCHEMA_RELEASE,
   CFB_FORWARD_CANONICAL_DISCOVERY_PREVIOUS_EVIDENCE_SCHEMA_RELEASE,
   CFB_FORWARD_DATA_QUALITY_EVIDENCE_SCHEMA_RELEASE,
   CFB_FORWARD_INITIAL_EVIDENCE_SCHEMA_RELEASE,
@@ -35,7 +36,7 @@ import { activeCfbWeeklyWindow, isGameInCfbWeeklyWindow } from "./cfbWeeklyWindo
 import { cfbFootballEvidenceStats } from "./footballMemberEvidence";
 
 export const CFB_MEMBER_FIXTURE_RELEASE =
-  "cfb_v1_member_fixture_2026_08_28_r23_ambiguous_event_scope" as const;
+  "cfb_v1_member_fixture_2026_08_28_r24_started_game_transition" as const;
 export const CFB_PUBLIC_OUTCOME_CONTRACT_RELEASE =
   "cfb_independent_public_outcome_contract_2026_08_28_r29" as const;
 export const CFB_CONTEXT_ONLY_QUOTE_CAPTURE_SKEW_MS = 5_000 as const;
@@ -43,6 +44,8 @@ const CFB_MARKET_CONTEXT_MAX_CAPTURE_LAG_MINUTES = 10;
 const CFB_PUBLIC_SCORE_DIRECTION_TOLERANCE_POINTS = 0.25;
 const CFB_PRE_DIRECTIONAL_MEMBER_RELEASE = "cfb_v1_member_release_2026_08_28_r14_expanded_sharp_budget" as const;
 const CFB_PRE_DIRECTIONAL_DECISION_RELEASE = "cfb_v1_daily_edge_decision_2026_08_28_r11_market_scoped_data_quality" as const;
+const CFB_AMBIGUOUS_SCOPE_PREVIOUS_MEMBER_RELEASE = "cfb_v1_member_release_2026_08_28_r19_ambiguous_event_scope" as const;
+const CFB_AMBIGUOUS_SCOPE_PREVIOUS_DECISION_RELEASE = "cfb_v1_daily_edge_decision_2026_08_28_r15_ambiguous_event_scope" as const;
 const CFB_PROVIDER_DISCOVERY_PREVIOUS_MEMBER_RELEASE = "cfb_v1_member_release_2026_08_28_r15_directional_pmf" as const;
 const CFB_PROVIDER_DISCOVERY_PREVIOUS_DECISION_RELEASE = "cfb_v1_daily_edge_decision_2026_08_28_r12_directional_pmf" as const;
 const CFB_CANONICAL_PRICE_PREVIOUS_MEMBER_RELEASE = "cfb_v1_member_release_2026_08_28_r16_canonical_price_coverage" as const;
@@ -80,7 +83,7 @@ export async function readCurrentCfbMemberFixture(args: { client: SupabaseClient
 export function buildCfbMemberFixture(rows: CfbForwardStoredEvidence[], now = new Date().toISOString()): CfbMemberFixture {
   const window = activeCfbWeeklyWindow(now);
   const windowRows = rows.filter((row) => isGameInCfbWeeklyWindow({ scheduledStart: row.gameStartAt }, window));
-  const latest = latestCompleteRows(windowRows);
+  const latest = selectLatestCfbMemberEvidenceRows(windowRows, now);
   const movementRowsByGame = new Map(latest.map((row) => [
     row.providerGameId,
     movementRowsForGame(windowRows, row),
@@ -131,11 +134,32 @@ function shortDate(value: string): string {
   return new Intl.DateTimeFormat("en-US", { timeZone: "UTC", month: "short", day: "numeric" }).format(new Date(`${value}T12:00:00.000Z`));
 }
 
-function latestCompleteRows(rows: CfbForwardStoredEvidence[]): CfbForwardStoredEvidence[] {
+export function selectLatestCfbMemberEvidenceRows(
+  rows: CfbForwardStoredEvidence[],
+  now = new Date().toISOString(),
+): CfbForwardStoredEvidence[] {
   if (rows.length === 0) throw new Error("CFB forward evidence is empty.");
   const current = completeRowsForRelease(rows, CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE, CFB_FORWARD_MEMBER_RELEASE, CFB_V1_DECISION_RELEASE);
   if (current) return current;
-  const eventPaginationFallback = completeRowsForRelease(rows, CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE, CFB_EVENT_PAGINATION_PREVIOUS_MEMBER_RELEASE, CFB_EVENT_PAGINATION_PREVIOUS_DECISION_RELEASE);
+  const startedGameTransition = startedGameTransitionRows(
+    rows,
+    now,
+    CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE,
+    CFB_FORWARD_MEMBER_RELEASE,
+    CFB_V1_DECISION_RELEASE,
+  );
+  if (startedGameTransition) return startedGameTransition;
+  const ambiguousScopePrevious = completeRowsForRelease(rows, CFB_FORWARD_AMBIGUOUS_SCOPE_PREVIOUS_EVIDENCE_SCHEMA_RELEASE, CFB_AMBIGUOUS_SCOPE_PREVIOUS_MEMBER_RELEASE, CFB_AMBIGUOUS_SCOPE_PREVIOUS_DECISION_RELEASE);
+  if (ambiguousScopePrevious) return ambiguousScopePrevious;
+  const ambiguousScopeStartedGameTransition = startedGameTransitionRows(
+    rows,
+    now,
+    CFB_FORWARD_AMBIGUOUS_SCOPE_PREVIOUS_EVIDENCE_SCHEMA_RELEASE,
+    CFB_AMBIGUOUS_SCOPE_PREVIOUS_MEMBER_RELEASE,
+    CFB_AMBIGUOUS_SCOPE_PREVIOUS_DECISION_RELEASE,
+  );
+  if (ambiguousScopeStartedGameTransition) return ambiguousScopeStartedGameTransition;
+  const eventPaginationFallback = completeRowsForRelease(rows, CFB_FORWARD_AMBIGUOUS_SCOPE_PREVIOUS_EVIDENCE_SCHEMA_RELEASE, CFB_EVENT_PAGINATION_PREVIOUS_MEMBER_RELEASE, CFB_EVENT_PAGINATION_PREVIOUS_DECISION_RELEASE);
   if (eventPaginationFallback) return eventPaginationFallback;
   const independentPublicFallback = completeRowsForRelease(rows, CFB_FORWARD_CANONICAL_DISCOVERY_PREVIOUS_EVIDENCE_SCHEMA_RELEASE, CFB_INDEPENDENT_PUBLIC_PREVIOUS_MEMBER_RELEASE, CFB_INDEPENDENT_PUBLIC_PREVIOUS_DECISION_RELEASE);
   if (independentPublicFallback) return independentPublicFallback;
@@ -161,12 +185,46 @@ function latestCompleteRows(rows: CfbForwardStoredEvidence[]): CfbForwardStoredE
   throw new Error(`CFB has no complete current or release-transition member evidence (observed=${observed}).`);
 }
 
-function completeRowsForRelease(
+function startedGameTransitionRows(
   rows: CfbForwardStoredEvidence[],
+  now: string,
   schemaRelease: string,
   memberRelease: string,
   decisionRelease: string,
 ): CfbForwardStoredEvidence[] | null {
+  const current = latestValidRowsForRelease(
+    rows,
+    schemaRelease,
+    memberRelease,
+    decisionRelease,
+  );
+  if (!current || current.values.length >= current.expected) return null;
+
+  const previous = completeRowsForRelease(
+    rows,
+    CFB_FORWARD_PROVIDER_DISCOVERY_PREVIOUS_EVIDENCE_SCHEMA_RELEASE,
+    CFB_PROVIDER_DISCOVERY_PREVIOUS_MEMBER_RELEASE,
+    CFB_PROVIDER_DISCOVERY_PREVIOUS_DECISION_RELEASE,
+  );
+  if (!previous || previous.length !== current.expected) return null;
+
+  const previousByGame = new Map(previous.map((row) => [row.providerGameId, row]));
+  if (current.values.some((row) => !previousByGame.has(row.providerGameId))) return null;
+  const currentByGame = new Map(current.values.map((row) => [row.providerGameId, row]));
+  const missing = previous.filter((row) => !currentByGame.has(row.providerGameId));
+  if (missing.length !== current.expected - current.values.length) return null;
+
+  const responseTime = Date.parse(now);
+  if (!Number.isFinite(responseTime) || missing.some((row) => Date.parse(row.gameStartAt) > responseTime)) return null;
+  return previous.map((row) => currentByGame.get(row.providerGameId) ?? row);
+}
+
+function latestValidRowsForRelease(
+  rows: CfbForwardStoredEvidence[],
+  schemaRelease: string,
+  memberRelease: string,
+  decisionRelease: string,
+): { values: CfbForwardStoredEvidence[]; expected: number } | null {
   const latest = new Map<string, CfbForwardStoredEvidence>();
   for (const row of rows) {
     if (row.payload.schemaRelease !== schemaRelease || row.payload.memberRelease !== memberRelease) continue;
@@ -176,12 +234,25 @@ function completeRowsForRelease(
   const values = [...latest.values()];
   if (values.length === 0) return null;
   const expected = Math.max(...values.map((row) => row.payload.slateGameCount));
-  if (values.length !== expected) return null;
   if (values.some((row) =>
+    row.payload.slateGameCount !== expected ||
     !row.payload.decisions.publicationEnabled ||
     row.payload.decisions.decisionRelease !== decisionRelease ||
     row.payload.decisions.evaluatedBets.some((decision) => decision.decisionRelease !== decisionRelease)
   )) return null;
+  return { values, expected };
+}
+
+function completeRowsForRelease(
+  rows: CfbForwardStoredEvidence[],
+  schemaRelease: string,
+  memberRelease: string,
+  decisionRelease: string,
+): CfbForwardStoredEvidence[] | null {
+  const release = latestValidRowsForRelease(rows, schemaRelease, memberRelease, decisionRelease);
+  if (!release) return null;
+  const { values, expected } = release;
+  if (values.length !== expected) return null;
   return values;
 }
 
