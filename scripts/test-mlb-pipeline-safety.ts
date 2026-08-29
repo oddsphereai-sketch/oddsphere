@@ -74,8 +74,8 @@ const layers = buildMlbModelLayerVersions("total", {});
 check("missing model env stamps resolved v2_2", layers.runtime_env.automodel_version === "v2_2");
 check("missing FI env stamps resolved fi_v2", layers.runtime_env.first_inning_model_version === "fi_v2");
 check(
-  "grade policy carries the r72 persisted split-clear hierarchy",
-  layers.grade_policy === "mlb_public_grade_policy_v50_persisted_split_clear_2026_08_28",
+  "grade policy carries the r73 action-promotion stability hierarchy",
+  layers.grade_policy === "mlb_public_grade_policy_v51_action_promotion_stability_2026_08_29",
 );
 check(
   "tracking contract carries the priority-retry minute-lock release",
@@ -87,11 +87,12 @@ check(
     layers.calibration_version === MLB_PUBLIC_CALIBRATION_VERSION,
 );
 check(
-  "MLB r72 versions persisted split clearing without changing champion heads or correction policy",
-  MLB_DAILY_EDGE_DECISION_RELEASE_ID === "mlb_daily_edge_decision_2026_08_28_r72_persisted_split_clear" &&
-    MLB_MODEL_LAYER_VERSION_SCHEMA === "mlb_model_layer_versions_v5" &&
-    layers.rule_bundle_version === "mlb_daily_edge_rule_bundle_v60_persisted_split_clear_2026_08_28" &&
-    layers.moneyline_evaluation_price_policy === "mlb_ml_fresh_coherent_best_playable_price_same_book_movement_v2_2026_08_22" &&
+  "MLB r73 versions action-promotion stability without changing champion heads or correction policy",
+  MLB_DAILY_EDGE_DECISION_RELEASE_ID === "mlb_daily_edge_decision_2026_08_29_r73_action_promotion_stability" &&
+    MLB_MODEL_LAYER_VERSION_SCHEMA === "mlb_model_layer_versions_v6_action_promotion_stability" &&
+    layers.rule_bundle_version === "mlb_daily_edge_rule_bundle_v61_action_promotion_stability_2026_08_29" &&
+    layers.moneyline_action_promotion_stability === "daily_edge_action_promotion_stability_2026_08_29_r1" &&
+    layers.moneyline_evaluation_price_policy === "mlb_ml_fresh_coherent_best_playable_price_same_book_movement_v3_promotion_stability_2026_08_29" &&
     layers.correction_policy === "mlb_prediction_corrections_v22_coherent_near_edge_watchlist_2026_08_26" &&
     layers.first_inning_probability_head === "mlb_first_inning_fi_v4_market_backed_weight25_2026_08_20" &&
     layers.schedule_time_policy === "mlb_official_schedule_time_v1_2026_07_30",
