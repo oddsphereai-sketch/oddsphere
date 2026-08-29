@@ -5,24 +5,38 @@ import type { NcaafBookOdds } from "./balldontlieNcaafSlate";
 import { CFB_V1_WEEKLY_BASE_ARTIFACT_RELEASE, getCfbV1WeeklyForecast } from "./cfbV1WeeklyForecast";
 import type { NcaafGame } from "./balldontlieNcaafSlate";
 
-export const CFB_V1_SCORE_ARTIFACT_RELEASE =
+export const CFB_V1_BASE_SCORE_ARTIFACT_RELEASE =
   "cfb_v1_joint_score_artifact_2026_08_28_r4_directional_pmf" as const;
-export const CFB_V1_MODEL_RELEASE =
+export const CFB_V1_BASE_MODEL_RELEASE =
   "cfb_v1_independent_score_model_2026_08_28_r2_directional_pmf" as const;
-export const CFB_V1_DISTRIBUTION_RELEASE =
+export const CFB_V1_BASE_DISTRIBUTION_RELEASE =
   "cfb_v1_empirical_joint_score_distribution_2026_08_28_r2_directional_pmf" as const;
-export const CFB_V1_PROBABILITY_RELEASE =
+export const CFB_V1_BASE_PROBABILITY_RELEASE =
   "cfb_v1_joint_market_probability_2026_08_28_r2_directional_pmf" as const;
-export const CFB_V1_REPRESENTATIVE_SCORE_RELEASE =
+export const CFB_V1_BASE_REPRESENTATIVE_SCORE_RELEASE =
   "cfb_v1_central_reachable_score_2026_08_28_r2_directional_pmf" as const;
-export const CFB_V1_GRADE_POLICY_RELEASE =
+const CFB_V1_BASE_GRADE_POLICY_RELEASE =
   "cfb_v1_composite_grade_policy_2026_08_25_r1" as const;
+export const CFB_V1_SCORE_ARTIFACT_RELEASE =
+  "cfb_v1_joint_score_runtime_2026_08_29_r5_market_sharp_authoritative" as const;
+export const CFB_V1_MODEL_RELEASE =
+  "cfb_v1_market_sharp_score_model_2026_08_29_r3_provisional" as const;
+export const CFB_V1_DISTRIBUTION_RELEASE =
+  "cfb_v1_market_sharp_joint_distribution_2026_08_29_r3_provisional" as const;
+export const CFB_V1_PROBABILITY_RELEASE =
+  "cfb_v1_market_sharp_joint_probability_2026_08_29_r3_provisional" as const;
+export const CFB_V1_REPRESENTATIVE_SCORE_RELEASE =
+  "cfb_v1_market_sharp_reachable_score_2026_08_29_r3_provisional" as const;
+export const CFB_V1_CALIBRATION_RELEASE =
+  "cfb_v1_market_sharp_exact_price_calibration_2026_08_29_r2_provisional" as const;
+export const CFB_V1_GRADE_POLICY_RELEASE =
+  "cfb_v1_composite_grade_policy_2026_08_29_r2_market_sharp_balanced" as const;
 export const CFB_V1_DECISION_RELEASE =
-  "cfb_v1_daily_edge_decision_2026_08_28_r15_ambiguous_event_scope" as const;
+  "cfb_v1_daily_edge_decision_2026_08_29_r16_market_sharp_authoritative" as const;
 const CFB_V1_POLICY_SOURCE_DECISION_RELEASE =
   "cfb_v1_daily_edge_decision_2026_08_26_r7_sharpapi_price_fallback" as const;
 export const CFB_V1_DECISION_SCHEMA_RELEASE =
-  "cfb_v1_exact_price_decision_tuple_2026_08_28_r9_ambiguous_event_scope" as const;
+  "cfb_v1_exact_price_decision_tuple_2026_08_29_r10_market_sharp_authoritative" as const;
 export const CFB_T60_TARGET_MINUTES = 60 as const;
 export const CFB_T60_MAX_CAPTURE_LAG_MINUTES = 20 as const;
 
@@ -75,7 +89,9 @@ export type CfbV1ExactPriceDecision = {
   market: CfbV1Market;
   side: string;
   grade: CfbV1Grade;
+  probabilityGrade: CfbV1Grade;
   independentProbability: number;
+  forecastProbability: number;
   calibratedProbability: number;
   modelProbability: number;
   pushProbability: number;
@@ -102,9 +118,17 @@ export type CfbV1ExactPriceDecision = {
   modelRelease: typeof CFB_V1_MODEL_RELEASE;
   distributionRelease: typeof CFB_V1_DISTRIBUTION_RELEASE;
   probabilityRelease: typeof CFB_V1_PROBABILITY_RELEASE;
-  calibrationRelease: string;
+  calibrationRelease: typeof CFB_V1_CALIBRATION_RELEASE;
+  calibrationFamily: string;
   policyRelease: typeof CFB_V1_GRADE_POLICY_RELEASE;
   decisionRelease: typeof CFB_V1_DECISION_RELEASE;
+  gradeAdjustment: {
+    release: string;
+    candidateRelease: string;
+    sharpDirection: "support" | "resistance" | "neutral" | "unknown";
+    movementDirection: "support" | "resistance" | "neutral" | "unknown";
+    reasonCodes: string[];
+  } | null;
 };
 
 export type CfbV1DecisionBundle = {
@@ -317,7 +341,7 @@ function evaluateTarget(args: {
     : args.target.total?.line ?? args.contextLines?.totalLine ?? args.forecast.expectedTotal;
   if (homeSpread === undefined || homeSpread === null || totalLine === undefined || totalLine === null) return [];
   const lineProbabilities = cfbV1LineProbabilities({ forecast: args.forecast, homeSpread, totalLine });
-  // The independent joint PMF owns the forecast side. Calibration and exact
+  // The supplied authoritative joint PMF owns the forecast side. Calibration and exact
   // price can change the grade, but can never silently select its opposite.
   const sides = [pmfSelectedSide(lineProbabilities, args.market)];
   return sides.flatMap((side) => {
@@ -362,7 +386,9 @@ function evaluateTarget(args: {
       market: args.market,
       side: sideLabel(args.market, side, quote.line, args.awayTeam, args.homeTeam),
       grade,
+      probabilityGrade: grade,
       independentProbability,
+      forecastProbability: independentProbability,
       calibratedProbability,
       modelProbability,
       pushProbability,
@@ -378,9 +404,11 @@ function evaluateTarget(args: {
       modelRelease: CFB_V1_MODEL_RELEASE,
       distributionRelease: CFB_V1_DISTRIBUTION_RELEASE,
       probabilityRelease: CFB_V1_PROBABILITY_RELEASE,
-      calibrationRelease: `${CFB_V1_GRADE_POLICY_RELEASE}:${args.policy.family}`,
+      calibrationRelease: CFB_V1_CALIBRATION_RELEASE,
+      calibrationFamily: args.policy.family,
       policyRelease: CFB_V1_GRADE_POLICY_RELEASE,
       decisionRelease: CFB_V1_DECISION_RELEASE,
+      gradeAdjustment: null,
     }];
   });
 }
@@ -599,13 +627,19 @@ function pmfSelectedSide(
 }
 
 function assertArtifactReleases(): void {
-  if (weeklyArtifact.artifactRelease !== CFB_V1_SCORE_ARTIFACT_RELEASE || weeklyArtifact.baseArtifactRelease !== CFB_V1_WEEKLY_BASE_ARTIFACT_RELEASE || weeklyArtifact.modelRelease !== CFB_V1_MODEL_RELEASE) {
+  if (weeklyArtifact.artifactRelease !== CFB_V1_BASE_SCORE_ARTIFACT_RELEASE || weeklyArtifact.baseArtifactRelease !== CFB_V1_WEEKLY_BASE_ARTIFACT_RELEASE || weeklyArtifact.modelRelease !== CFB_V1_BASE_MODEL_RELEASE) {
     throw new Error("CFB v1 weekly runtime artifact release mismatch.");
   }
-  if (scoreArtifact.artifactRelease !== CFB_V1_WEEKLY_BASE_ARTIFACT_RELEASE || scoreArtifact.modelRelease !== CFB_V1_MODEL_RELEASE || scoreArtifact.distributionRelease !== CFB_V1_DISTRIBUTION_RELEASE || scoreArtifact.probabilityRelease !== CFB_V1_PROBABILITY_RELEASE || scoreArtifact.representativeScoreRelease !== CFB_V1_REPRESENTATIVE_SCORE_RELEASE) {
+  if (
+    scoreArtifact.artifactRelease !== CFB_V1_WEEKLY_BASE_ARTIFACT_RELEASE ||
+    scoreArtifact.modelRelease !== CFB_V1_BASE_MODEL_RELEASE ||
+    scoreArtifact.distributionRelease !== CFB_V1_BASE_DISTRIBUTION_RELEASE ||
+    scoreArtifact.probabilityRelease !== CFB_V1_BASE_PROBABILITY_RELEASE ||
+    scoreArtifact.representativeScoreRelease !== CFB_V1_BASE_REPRESENTATIVE_SCORE_RELEASE
+  ) {
     throw new Error("CFB v1 score artifact release mismatch.");
   }
-  if (gradeArtifact.policyRelease !== CFB_V1_GRADE_POLICY_RELEASE || gradeArtifact.decisionRelease !== CFB_V1_POLICY_SOURCE_DECISION_RELEASE) {
+  if (gradeArtifact.policyRelease !== CFB_V1_BASE_GRADE_POLICY_RELEASE || gradeArtifact.decisionRelease !== CFB_V1_POLICY_SOURCE_DECISION_RELEASE) {
     throw new Error("CFB v1 grade artifact release mismatch.");
   }
 }

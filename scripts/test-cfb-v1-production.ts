@@ -27,7 +27,14 @@ import {
 } from "../lib/services/football/cfbForwardEvidence";
 import { normalizeCfbPlaybookLine, normalizeCfbPlaybookSplits } from "../lib/services/football/cfbPlaybookEvidence";
 import { trustedCfbSharpEventIdsByGame } from "../lib/services/football/cfbForwardEvidenceWriter";
-import { buildCfbMarketInformedOutcomeForecast, resolveCfbCanonicalMarketAnchor } from "../lib/services/football/cfbMarketInformedOutcome";
+import { resolveCfbCanonicalMarketAnchor } from "../lib/services/football/cfbMarketInformedOutcome";
+import {
+  CFB_MARKET_SHADOW_WEIGHT,
+  CFB_MARKET_SHARP_AWARE_CANDIDATE_RELEASE,
+  CFB_MARKET_SHARP_AWARE_PRODUCTION_RELEASE,
+  applyCfbMarketSharpAwareGrades,
+  buildCfbMarketSharpAwareForecast,
+} from "../lib/services/football/cfbMarketSharpAwareShadow";
 import { CFB_SHARP_API_SPLITS_RELEASE } from "../lib/services/football/cfbSharpApiSplits";
 import { fetchBalldontlieNcaafQuarterbacks } from "../lib/services/football/balldontlieNcaafQuarterbacks";
 import { ingestCfbFinalScores } from "../lib/services/football/cfbScoreIngestService";
@@ -157,9 +164,28 @@ const { pmf: _pmf, ...publishedForecast } = fullBundle.forecast;
 void _pmf;
 const outcomeAnchor = resolveCfbCanonicalMarketAnchor({ books: currentBooks });
 assert.ok(outcomeAnchor);
-const outcomeFull = buildCfbMarketInformedOutcomeForecast({ independentForecast: fullBundle.forecast, anchor: outcomeAnchor });
-const { pmf: _outcomePmf, ...publishedOutcomeForecast } = outcomeFull;
-void _outcomePmf;
+const authoritativeForecast = buildCfbMarketSharpAwareForecast({
+  independentForecast: fullBundle.forecast,
+  anchor: outcomeAnchor,
+  sharpSplits: [],
+});
+const productionBundle = applyCfbMarketSharpAwareGrades({
+  bundle: buildCfbV1DecisionBundle({
+    providerGameId: game.providerGameId,
+    awayTeam: game.away.abbreviation,
+    homeTeam: game.home.abbreviation,
+    gameStartsAt: game.scheduledStart,
+    comparableCurrentBooks: currentBooks,
+    stage: "t60_locked",
+    evaluatedAt: lockedAt,
+    lockedAt,
+    forecast: authoritativeForecast,
+  }),
+  sharpSplits: [],
+  operationalOpening: { quote: currentBooks[0]! },
+});
+const { pmf: _authoritativePmf, ...publishedAuthoritativeForecast } = authoritativeForecast;
+void _authoritativePmf;
 const payload: CfbForwardEvidencePayload = {
   schemaRelease: CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE,
   collectorRelease: CFB_FORWARD_EVIDENCE_COLLECTOR_RELEASE,
@@ -190,18 +216,20 @@ const payload: CfbForwardEvidencePayload = {
   },
   availability: { injuryStatus: "provider_unavailable", weatherStatus: "venue_weather_unavailable", note: "Unavailable and not fabricated." },
   decisions: {
-    ...fullBundle,
-    forecast: publishedForecast,
+    ...productionBundle,
+    forecast: publishedAuthoritativeForecast,
     marketOutlooks: buildCfbForwardMarketOutlooks({
-      forecast: fullBundle.forecast,
+      forecast: authoritativeForecast,
       playbookLine: { provider: "playbook", capturedAt: observedAt, sourceTier: "tier1", homeMoneyline: -330, awayMoneyline: 260, homeSpread: -7.5, awaySpread: 7.5, total: 47.5 },
     }),
   },
-  outcomeForecast: publishedOutcomeForecast,
-  outcomeMarketOutlooks: buildCfbForwardMarketOutlooks({
-    forecast: outcomeFull,
-    playbookLine: { provider: "playbook", capturedAt: observedAt, sourceTier: "tier1", homeMoneyline: -330, awayMoneyline: 260, homeSpread: -7.5, awaySpread: 7.5, total: 47.5 },
-  }),
+  independentForecast: publishedForecast,
+  authoritativeForecast: {
+    status: "market_sharp_applied",
+    release: CFB_MARKET_SHARP_AWARE_PRODUCTION_RELEASE,
+    candidateRelease: CFB_MARKET_SHARP_AWARE_CANDIDATE_RELEASE,
+    marketWeight: CFB_MARKET_SHADOW_WEIGHT,
+  },
   coverage: { currentOdds: true, comparableCurrentBookCount: 4, currentOddsProviders: ["balldontlie"], sharpApiOddsFallback: false, targetExcludedConsensusReady: true, operationalOpening: true, playbookLine: true, playbookSplits: true, sharpApiSplits: false, activeQuarterbacks: true, injuries: false, weather: false, healthHolds: [], availabilityWarnings: ["quarterback_starter_projected_not_confirmed", "injury_feed_unavailable", "venue_weather_unavailable", "sharpapi_splits_unavailable"] },
   requestBudget: { balldontlieSlate: 3, balldontlieQuarterbacks: 2, playbook: 2, sharpApiOdds: 0, totalMaximum: 7 },
 };
@@ -250,12 +278,13 @@ assert.deepEqual(trustedCfbSharpEventIdsByGame([trustedSharpRow, {
 }]), {}, "conflicting immutable provider IDs must disable prior-event disambiguation");
 const member = buildCfbMemberFixture([evidence]);
 assert.equal(member.snapshot.games.length, 1);
-assert.equal(member.fixtureRelease, "cfb_v1_member_fixture_2026_08_29_r26_fbs_board_scope");
+assert.equal(member.fixtureRelease, "cfb_v1_member_fixture_2026_08_29_r27_market_sharp_authoritative");
 assert.equal(member.snapshot.games[0]!.collegeFootballScope, "fbs_involved", "the CFB reader must classify every member game for the FBS-first board without changing writer scope");
-assert.equal(member.snapshot.games[0]!.footballProjection?.expectedAwayPoints, forecast.expectedAwayPoints);
-assert.equal(member.snapshot.games[0]!.footballProjection?.expectedHomePoints, forecast.expectedHomePoints);
-assert.deepEqual(member.snapshot.games[0]!.projected, forecast.representativeScore);
-assert.equal(member.snapshot.games[0]!.footballOnlyProjection, null, "the independent PMF is the sole public prediction rather than a secondary baseline");
+assert.equal(member.snapshot.games[0]!.footballProjection?.expectedAwayPoints, authoritativeForecast.expectedAwayPoints);
+assert.equal(member.snapshot.games[0]!.footballProjection?.expectedHomePoints, authoritativeForecast.expectedHomePoints);
+assert.deepEqual(member.snapshot.games[0]!.projected, authoritativeForecast.representativeScore);
+assert.equal(member.snapshot.games[0]!.footballOnlyProjection?.expectedAwayPoints, forecast.expectedAwayPoints, "the immutable independent PMF remains a diagnostic baseline");
+assert.equal(member.snapshot.games[0]!.footballOnlyProjection?.expectedHomePoints, forecast.expectedHomePoints);
 assert.equal(member.snapshot.games[0]!.recommendationDecision?.audit.canPublish, true);
 const sharpPayload: CfbForwardEvidencePayload = {
   ...payload,
@@ -543,6 +572,12 @@ const heldBundle = buildCfbV1DecisionBundle({
 });
 const heldPayload: CfbForwardEvidencePayload = {
   ...payload,
+  authoritativeForecast: {
+    status: "market_anchor_unavailable_hold",
+    release: CFB_MARKET_SHARP_AWARE_PRODUCTION_RELEASE,
+    candidateRelease: CFB_MARKET_SHARP_AWARE_CANDIDATE_RELEASE,
+    marketWeight: 0,
+  },
   stage: "unlocked",
   capturedAt: observedAt,
   cutoffAt: "2026-08-29T15:00:00.000Z",
@@ -592,7 +627,7 @@ assert.deepEqual(heldGame.markets.first_inning.marketPrediction, {
   sportsbook: null,
   observedAt,
   freshnessCheckedAt: observedAt,
-  reason: "The independent joint-score PMF is evaluated at the current context line without turning that context into a sportsbook offer.",
+  reason: "The authoritative joint-score PMF is evaluated at the current context line without turning that context into a sportsbook offer.",
 });
 assert.equal(
   dailyEdgeOutcomeForecastLabel({ game: heldGame, market: heldGame.markets.first_inning, marketKey: "first_inning", sport: "cfb" }),
@@ -788,7 +823,6 @@ for (const marketKey of ["moneyline", "total", "first_inning"] as const) {
 const missingLinePayload = structuredClone(heldPayload);
 missingLinePayload.market.playbookLine = null;
 missingLinePayload.decisions.marketOutlooks = buildCfbForwardMarketOutlooks({ forecast, playbookLine: null });
-missingLinePayload.outcomeMarketOutlooks = buildCfbForwardMarketOutlooks({ forecast: outcomeFull, playbookLine: null });
 const missingLineMember = buildCfbMemberFixture([{
   id: "missing-line-row",
   providerGameId: game.providerGameId,
@@ -835,7 +869,7 @@ assert.deepEqual(noSpreadBundle.heldMarkets.map((row) => row.market), ["spread"]
 
 const earlierAt = "2026-08-25T14:50:05.583Z";
 const unchangedMiddleAt = "2026-08-25T15:20:05.583Z";
-const decisionBooksByMarket = new Map(fullBundle.evaluatedBets.map((decision) => [decision.market, normalizeSportsbook(decision.evaluatedQuote.sportsbook)]));
+const decisionBooksByMarket = new Map(productionBundle.evaluatedBets.map((decision) => [decision.market, normalizeSportsbook(decision.evaluatedQuote.sportsbook)]));
 const earlierBooks = currentBooks.map((currentBook) => {
   const normalized = normalizeSportsbook(currentBook.sportsbook);
   return {
@@ -900,7 +934,7 @@ const unchangedMiddleEvidence: CfbForwardStoredEvidence = {
 };
 const movementMember = buildCfbMemberFixture([earlierEvidence, unchangedMiddleEvidence, evidence]);
 const movementGame = movementMember.snapshot.games[0]!;
-for (const decision of fullBundle.evaluatedBets) {
+for (const decision of productionBundle.evaluatedBets) {
   const market = decision.market === "spread" ? movementGame.markets.first_inning : movementGame.markets[decision.market];
   const selectedSide = decision.market === "total"
     ? /^over\b/i.test(decision.side) ? "over" : "under"
@@ -952,7 +986,24 @@ assert.equal(tracking.every((row) => row.snapshot_json?.football_market_scoped_t
 
 const marketScopedPayload: CfbForwardEvidencePayload = {
   ...payload,
-  decisions: { ...marketScopedBundle, forecast: publishedForecast },
+  decisions: {
+    ...applyCfbMarketSharpAwareGrades({
+      bundle: buildCfbV1DecisionBundle({
+        providerGameId: game.providerGameId,
+        awayTeam: game.away.abbreviation,
+        homeTeam: game.home.abbreviation,
+        gameStartsAt: game.scheduledStart,
+        comparableCurrentBooks: noMoneylineBooks,
+        stage: "t60_locked",
+        evaluatedAt: lockedAt,
+        lockedAt,
+        forecast: authoritativeForecast,
+      }),
+      sharpSplits: [],
+      operationalOpening: { quote: currentBooks[0]! },
+    }),
+    forecast: publishedAuthoritativeForecast,
+  },
 };
 const marketScopedTracking = buildCfbOfficialTrackingRecords({ payload: marketScopedPayload, gameId: 9001 });
 assert.deepEqual(marketScopedTracking.map((row) => row.market), ["spread", "total"]);
@@ -1124,7 +1175,8 @@ assert.ok(coherenceIndex >= 0 && evidenceAppendIndex > coherenceIndex, "the sole
 assert.equal((writerSource.match(/assertFootballCrossMarketCoherence\(\{/g) ?? []).length, 1, "the CFB writer must use one shared per-payload coherence gate");
 assert.match(writerSource, /requireDecisionSideFromForecast: true/, "the CFB writer must fail closed on an exact-line PMF/decision-side contradiction");
 assert.equal((writerSource.match(/fetchCfbSharpApiSplits\(\{ games, apiKey/g) ?? []).length, 1, "SharpAPI splits must remain one bounded slate request rather than a per-game loop");
-assert.match(writerSource, /buildCfbMarketInformedOutcomeForecast/, "the sole writer may retain the market-informed outcome only as shadow market context");
+assert.match(writerSource, /buildCfbMarketSharpAwareForecast/, "the sole writer must build the bounded market\/sharp-aware authoritative PMF");
+assert.match(writerSource, /applyCfbMarketSharpAwareGrades/, "the sole writer must own balanced market\/sharp-aware grade promotion and demotion");
 assert.match(sharpOddsSource, /path: "\/events"/, "CFB named-book recovery must discover SharpAPI's canonical events before requesting odds");
 assert.match(sharpOddsSource, /league: "ncaaf"/, "canonical event discovery must stay league-scoped");
 assert.match(sharpOddsSource, /path: "\/odds"[\s\S]*event_id: eventId[\s\S]*market: "main"/, "canonical event odds must stay exact-event and main-market scoped");
