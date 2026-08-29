@@ -5,6 +5,60 @@ inputs, probabilities, projections, grades, promotions/demotions, calibration, p
 or stakes. It exists to prevent mixed model eras, competing writers, accidental board
 flattening, and load spikes.
 
+## Owner-approved emergency exception: CFB PR #265 provisional release
+
+Approval and scope: Daniel Mengel, owner/operator of OddsphereAI, approved this exception on
+2026-08-29. It becomes effective only when this governance change lands on protected `main` and
+applies only to the CFB market/sharp-aware candidate reviewed in PR #265 at commit
+`0e86abf4b02e55b26af0516e6c5a1eecc1403bcb`, whose candidate identifier is
+`cfb_market_sharp_aware_shadow_2026_08_29_r3_borderline_spread`. It does not authorize later
+changes to that candidate, any other sport or market, or any reusable relaxation of this
+protocol. PR #265 remains a zero-write candidate and is not, by itself, a production cutover.
+
+The owner acknowledges that chronological, source-specific historical CFB split validation is
+unavailable for this provisional release. As a narrow exception to the shadow-only requirement
+in section 4, the identified candidate may advance after all gates below pass. Current canonical
+market movement and strictly matched sharp evidence may influence the single authoritative joint
+PMF and every value derived from it: expected scores, representative score, winner probability,
+same-line Moneyline/Spread/Total probabilities, predicted sides, exact-price EV, predictions,
+and play grades. Sharp evidence must retain the candidate's exact league/team/date/market identity
+rules, including exact-line identity for Spread and Total; missing or mismatched evidence is
+unavailable, never neutral, inferred, relabeled, or fabricated. Movement evidence must remain the
+same evaluated sportsbook's exact operational opening-to-current comparison.
+
+The authorized math is bounded to the reviewed candidate: exactly 25% market/sharp PMF weight and
+75% independent-football PMF weight, with sharp anchor adjustments capped at one point of home
+margin and one point of game total. The reviewed balanced promotion/demotion and bounded spread
+recalibration rules may affect grades, including the tested TCU-UNC case, but cannot create or
+increase a stake. This exception forbids stake inflation, fabricated or loosely matched evidence,
+rewriting locked or settled records, historical backfill presented as forward evidence, parallel
+prediction writers, a second refresh path, or bypass of the sport-scoped `prediction_pipeline:cfb`
+lease. The sole existing CFB writer remains authoritative.
+
+Production activation requires a new immutable and internally coherent set of every affected
+model, distribution, probability, calibration, public-outcome, decision, grade, schema, collector,
+member, writer, fixture, tracking, and presentation release/version identifier. Generated
+snapshots and tracking evidence must stamp that set. Old rows remain immutable, and evaluation
+must separate forward results by exact release set and locked timestamp; mixed-era aggregates may
+not be reported as current-release performance.
+
+Before merge, the production cutover must pass focused CFB tests, TypeScript, lint,
+`npm run verify:model-change`, `npm run verify`, build, and integration safety against the latest
+remote `main`. It must report before/after promotion, demotion, actionable, No Play, and coverage
+counts for the same eligible board. It must use a clean, up-to-date protected PR and retain every
+testing, current-main-ancestor, no-overlap, deployment, and live-proof requirement in this file
+and `AGENTS.md`; this exception authorizes no bypass of branch protection or integration safety.
+
+Prepare the preceding coherent release and reader snapshot before activation. Roll back or hold
+the provisional release upon any mixed current-slate release identifiers, reader/writer release
+or value incoherence, missing required price coverage presented as a normal model No Play,
+writer/reader crash, overlapping writer or lease failure, stale pre-release snapshots resurfacing
+during refresh, or unexpected actionable-board collapse relative to the preceding release on the
+same covered cohort. After rollback, preserve all new rows as release-stamped evidence rather than
+rewriting them. Live success requires production database and member-site proof of the expected
+release set, one leased writer, coherent board and T-60 locks, current price coverage, reader
+freshness, tracking separation, and site responsiveness.
+
 ## 1. Declare scope before editing
 
 - Name every affected sport, market, model family, calibration layer, writer, reader, and cron.
