@@ -377,6 +377,17 @@ assert.equal(providerDiscoveryPreviousMember.snapshot.games.length, 1, "the comp
 
 const currentTransitionPayload = { ...payload, slateGameCount: 2 };
 const previousTransitionPayload = { ...providerDiscoveryPreviousPayload, slateGameCount: 2 };
+const ambiguousScopeTransitionPayloadRecord = structuredClone(payload) as unknown as Record<string, unknown>;
+ambiguousScopeTransitionPayloadRecord.schemaRelease = CFB_FORWARD_AMBIGUOUS_SCOPE_PREVIOUS_EVIDENCE_SCHEMA_RELEASE;
+ambiguousScopeTransitionPayloadRecord.memberRelease = "cfb_v1_member_release_2026_08_28_r19_ambiguous_event_scope";
+ambiguousScopeTransitionPayloadRecord.slateGameCount = 2;
+const ambiguousScopeTransitionDecisions = ambiguousScopeTransitionPayloadRecord.decisions as Record<string, unknown>;
+ambiguousScopeTransitionDecisions.decisionRelease = "cfb_v1_daily_edge_decision_2026_08_28_r15_ambiguous_event_scope";
+ambiguousScopeTransitionDecisions.evaluatedBets = (ambiguousScopeTransitionDecisions.evaluatedBets as Array<Record<string, unknown>>).map((decision) => ({
+  ...decision,
+  decisionRelease: "cfb_v1_daily_edge_decision_2026_08_28_r15_ambiguous_event_scope",
+}));
+const ambiguousScopeTransitionPayload = ambiguousScopeTransitionPayloadRecord as unknown as CfbForwardEvidencePayload;
 const currentTransitionRow: CfbForwardStoredEvidence = {
   ...evidence,
   id: "started-game-transition-current-a",
@@ -401,7 +412,11 @@ const previousTransitionRows: CfbForwardStoredEvidence[] = [{
   payload: previousTransitionPayload,
 }];
 const beforeStartedGame = selectLatestCfbMemberEvidenceRows(
-  [currentTransitionRow, ...previousTransitionRows],
+  [currentTransitionRow, ...previousTransitionRows.map((row) => ({
+    ...row,
+    stage: "unlocked" as const,
+    payload: { ...row.payload, stage: "unlocked" as const },
+  }))],
   "2026-08-29T15:59:59.000Z",
 );
 assert.equal(beforeStartedGame.length, 2);
@@ -411,7 +426,11 @@ assert.equal(
   "an upcoming game missing from the current release must keep the complete prior wave",
 );
 const afterStartedGame = selectLatestCfbMemberEvidenceRows(
-  [currentTransitionRow, ...previousTransitionRows],
+  [currentTransitionRow, ...previousTransitionRows.map((row) => ({
+    ...row,
+    stage: "unlocked" as const,
+    payload: { ...row.payload, stage: "unlocked" as const },
+  }))],
   "2026-08-29T16:00:00.000Z",
 );
 assert.equal(afterStartedGame.length, 2);
@@ -421,6 +440,30 @@ assert.equal(
   afterStartedGame.find((row) => row.providerGameId === "started-missing-game")?.id,
   "started-game-transition-previous-b",
   "the transition must preserve the missing game's exact immutable pregame row",
+);
+const precedingReleaseRows: CfbForwardStoredEvidence[] = previousTransitionRows.map((row, index) => ({
+  ...row,
+  id: `immutable-boundary-previous-${index}`,
+  stage: index === 1 ? "t60" : "unlocked",
+  payloadSha256: hashCfbForwardEvidencePayload({
+    ...ambiguousScopeTransitionPayload,
+    stage: index === 1 ? "t60" : "unlocked",
+  }),
+  payload: {
+    ...ambiguousScopeTransitionPayload,
+    stage: index === 1 ? "t60" : "unlocked",
+  },
+}));
+const immutableBoundarySelection = selectLatestCfbMemberEvidenceRows(
+  [currentTransitionRow, ...previousTransitionRows, ...precedingReleaseRows],
+  "2026-08-29T15:59:59.000Z",
+);
+assert.equal(immutableBoundarySelection.length, 2);
+assert.equal(immutableBoundarySelection.find((row) => row.providerGameId === "future-current-game")?.payload.memberRelease, CFB_FORWARD_MEMBER_RELEASE);
+assert.equal(
+  immutableBoundarySelection.find((row) => row.providerGameId === "started-missing-game")?.id,
+  "immutable-boundary-previous-1",
+  "a future game already frozen at T-60 must retain its exact prior locked row while the new release publishes",
 );
 
 const exactPricePayloadRecord = structuredClone(payload) as unknown as Record<string, unknown>;
