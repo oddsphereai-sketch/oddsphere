@@ -11,8 +11,10 @@ import {
 } from "./cfbV1Decision";
 
 export const CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE =
-  "cfb_forward_evidence_snapshot_2026_08_29_r12_market_sharp_authoritative" as const;
+  "cfb_forward_evidence_snapshot_2026_08_29_r13_transition_coherent" as const;
 export const CFB_FORWARD_MARKET_SHARP_PREVIOUS_EVIDENCE_SCHEMA_RELEASE =
+  "cfb_forward_evidence_snapshot_2026_08_29_r12_market_sharp_authoritative" as const;
+export const CFB_FORWARD_MARKET_SHARP_PRIOR_EVIDENCE_SCHEMA_RELEASE =
   "cfb_forward_evidence_snapshot_2026_08_28_r11_prior_event_disambiguation" as const;
 export const CFB_FORWARD_AMBIGUOUS_SCOPE_PREVIOUS_EVIDENCE_SCHEMA_RELEASE =
   "cfb_forward_evidence_snapshot_2026_08_28_r10_event_discovery_pagination" as const;
@@ -35,10 +37,12 @@ export const CFB_FORWARD_LEGACY_EVIDENCE_SCHEMA_RELEASE =
 export const CFB_FORWARD_INITIAL_EVIDENCE_SCHEMA_RELEASE =
   "cfb_forward_evidence_snapshot_2026_08_25_r1" as const;
 export const CFB_FORWARD_EVIDENCE_COLLECTOR_RELEASE =
-  "cfb_forward_evidence_collector_2026_08_29_r19_market_sharp_authoritative" as const;
+  "cfb_forward_evidence_collector_2026_08_29_r20_transition_coherent" as const;
 export const CFB_FORWARD_MEMBER_RELEASE =
-  "cfb_v1_member_release_2026_08_29_r21_market_sharp_authoritative" as const;
+  "cfb_v1_member_release_2026_08_29_r22_transition_coherent" as const;
 export const CFB_FORWARD_MARKET_SHARP_PREVIOUS_MEMBER_RELEASE =
+  "cfb_v1_member_release_2026_08_29_r21_market_sharp_authoritative" as const;
+export const CFB_FORWARD_MARKET_SHARP_PRIOR_MEMBER_RELEASE =
   "cfb_v1_member_release_2026_08_28_r20_prior_event_disambiguation" as const;
 
 export type CfbForwardEvidenceStage = "opening" | "unlocked" | "t60";

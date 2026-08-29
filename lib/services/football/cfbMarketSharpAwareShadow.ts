@@ -17,7 +17,7 @@ export const CFB_MARKET_SHARP_AWARE_CANDIDATE_RELEASE =
 export const CFB_MARKET_SHARP_AWARE_SHADOW_RELEASE =
   CFB_MARKET_SHARP_AWARE_CANDIDATE_RELEASE;
 export const CFB_MARKET_SHARP_AWARE_PRODUCTION_RELEASE =
-  "cfb_market_sharp_aware_provisional_2026_08_29_r4_authoritative" as const;
+  "cfb_market_sharp_aware_provisional_2026_08_29_r5_transition_coherent" as const;
 export const CFB_MARKET_SHADOW_WEIGHT = 0.25 as const;
 export const CFB_SHARP_SIGNED_GAP_THRESHOLD_PP = 10 as const;
 export const CFB_SHARP_FULL_STRENGTH_GAP_PP = 20 as const;
@@ -29,8 +29,20 @@ export const CFB_WATCHLIST_EVIDENCE_CONFLICT_MIN_EDGE_PP = -3 as const;
 export const CFB_WATCHLIST_EVIDENCE_CONFLICT_MIN_EV = -0.1 as const;
 export const CFB_RECALIBRATED_SPREAD_LEAN_MIN_EDGE_PP = 4.99 as const;
 export const CFB_RECALIBRATED_SPREAD_LEAN_MAX_ABS_LINE = 10 as const;
-export const CFB_RECALIBRATED_SPREAD_LEAN_MIN_PRICE = -125 as const;
-export const CFB_RECALIBRATED_SPREAD_LEAN_MAX_PRICE = 125 as const;
+export const CFB_RECALIBRATED_SPREAD_LEAN_MIN_PRICE = -500 as const;
+export const CFB_RECALIBRATED_SPREAD_LEAN_MAX_PRICE = 500 as const;
+export const CFB_PROVISIONAL_ACTIONABLE_MIN_PRICE = -500 as const;
+export const CFB_PROVISIONAL_ACTIONABLE_MAX_PRICE = 500 as const;
+export const CFB_PROVISIONAL_BEST_ANGLE_MIN_PROBABILITY = 0.55 as const;
+export const CFB_PROVISIONAL_BEST_ANGLE_MIN_EDGE_PP = 5 as const;
+export const CFB_PROVISIONAL_BEST_ANGLE_MIN_EV = 0.06 as const;
+export const CFB_PROVISIONAL_SPREAD_LEAN_MIN_PROBABILITY = 0.53 as const;
+export const CFB_PROVISIONAL_SPREAD_LEAN_MIN_EDGE_PP = 2.5 as const;
+export const CFB_PROVISIONAL_SPREAD_LEAN_MIN_EV = 0.02 as const;
+export const CFB_PROVISIONAL_SPREAD_LEAN_MAX_ABS_LINE = 10 as const;
+export const CFB_PROVISIONAL_TOTAL_LEAN_MIN_PROBABILITY = 0.52 as const;
+export const CFB_PROVISIONAL_TOTAL_LEAN_MIN_EDGE_PP = 2.5 as const;
+export const CFB_PROVISIONAL_TOTAL_LEAN_MIN_EV = 0.015 as const;
 
 type CanonicalSide = "home" | "away" | "over" | "under";
 export type CfbMarketEvidenceDirection = "support" | "resistance" | "neutral" | "unknown";
@@ -175,6 +187,42 @@ export function buildCfbMarketEvidenceGradeShadow(args: {
     finalGrade = "Watchlist";
     reasonCodes.push("market_evidence_resistance");
   } else if (
+    args.decision.grade === "Lean" &&
+    args.decision.modelProbability >= CFB_PROVISIONAL_BEST_ANGLE_MIN_PROBABILITY &&
+    args.decision.edgePercentagePoints >= CFB_PROVISIONAL_BEST_ANGLE_MIN_EDGE_PP &&
+    args.decision.expectedValue >= CFB_PROVISIONAL_BEST_ANGLE_MIN_EV &&
+    args.decision.evaluatedQuote.price >= CFB_PROVISIONAL_ACTIONABLE_MIN_PRICE &&
+    args.decision.evaluatedQuote.price <= CFB_PROVISIONAL_ACTIONABLE_MAX_PRICE
+  ) {
+    finalGrade = "Best Angle";
+    reasonCodes.push("provisional_complete_tuple_best_angle");
+  } else if (
+    args.decision.grade === "Watchlist" &&
+    args.decision.market === "spread" &&
+    !anyResistance &&
+    args.decision.modelProbability >= CFB_PROVISIONAL_SPREAD_LEAN_MIN_PROBABILITY &&
+    args.decision.edgePercentagePoints >= CFB_PROVISIONAL_SPREAD_LEAN_MIN_EDGE_PP &&
+    args.decision.expectedValue >= CFB_PROVISIONAL_SPREAD_LEAN_MIN_EV &&
+    args.decision.evaluatedQuote.line !== null &&
+    Math.abs(args.decision.evaluatedQuote.line) <= CFB_PROVISIONAL_SPREAD_LEAN_MAX_ABS_LINE &&
+    args.decision.evaluatedQuote.price >= CFB_PROVISIONAL_ACTIONABLE_MIN_PRICE &&
+    args.decision.evaluatedQuote.price <= CFB_PROVISIONAL_ACTIONABLE_MAX_PRICE
+  ) {
+    finalGrade = "Lean";
+    reasonCodes.push("provisional_complete_tuple_spread_lean");
+  } else if (
+    args.decision.grade === "Watchlist" &&
+    args.decision.market === "total" &&
+    !anyResistance &&
+    args.decision.modelProbability >= CFB_PROVISIONAL_TOTAL_LEAN_MIN_PROBABILITY &&
+    args.decision.edgePercentagePoints >= CFB_PROVISIONAL_TOTAL_LEAN_MIN_EDGE_PP &&
+    args.decision.expectedValue >= CFB_PROVISIONAL_TOTAL_LEAN_MIN_EV &&
+    args.decision.evaluatedQuote.price >= CFB_PROVISIONAL_ACTIONABLE_MIN_PRICE &&
+    args.decision.evaluatedQuote.price <= CFB_PROVISIONAL_ACTIONABLE_MAX_PRICE
+  ) {
+    finalGrade = "Lean";
+    reasonCodes.push("provisional_complete_tuple_total_lean");
+  } else if (
     args.decision.grade === "Watchlist" &&
     promotableSupport &&
     nearLeanThreshold(args.decision)
@@ -246,13 +294,14 @@ export function buildCfbMarketEvidenceGrade(args: {
 
 export function applyCfbMarketSharpAwareGrades(args: {
   bundle: CfbV1DecisionBundle;
+  homeTeam: string;
   sharpSplits: CfbSharpApiSplitRecord[];
   operationalOpening: { quote: NcaafBookOdds } | null;
 }): CfbV1DecisionBundle {
   const adjustments = new Map(annotateCfbCrossMarketGradeCoherence(
     args.bundle.evaluatedBets.map((decision) => buildCfbMarketEvidenceGrade({
       decision,
-      selectedSide: selectedSide(args.bundle.forecast.homeTeam, decision),
+      selectedSide: selectedSide(args.homeTeam, decision),
       sharpSplits: args.sharpSplits,
       operationalOpening: args.operationalOpening,
     })),
