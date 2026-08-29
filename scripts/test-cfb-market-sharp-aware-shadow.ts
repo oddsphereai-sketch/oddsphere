@@ -155,6 +155,7 @@ assert.equal(borderlineLargerSpread.finalGrade, "Lean", "a positive-EV spread th
 assert.deepEqual(borderlineLargerSpread.reasonCodes, ["recalibrated_borderline_spread_lean"]);
 
 const productionAdjusted = applyCfbMarketSharpAwareGrades({
+  homeTeam: "TCU",
   bundle: {
     ...baseBundle,
     evaluatedBets: [{
@@ -174,6 +175,106 @@ const productionAdjusted = applyCfbMarketSharpAwareGrades({
 assert.equal(productionAdjusted.evaluatedBets[0]?.grade, "Lean", "TCU -8.5 must be promoted in the writer-owned production decision tuple");
 assert.equal(productionAdjusted.evaluatedBets[0]?.gradeAdjustment?.release, CFB_MARKET_SHARP_AWARE_PRODUCTION_RELEASE);
 assert.deepEqual(productionAdjusted.evaluatedBets[0]?.gradeAdjustment?.reasonCodes, ["recalibrated_borderline_spread_lean"]);
+
+const abbreviationMapped = applyCfbMarketSharpAwareGrades({
+  homeTeam: "UVA",
+  bundle: {
+    ...baseBundle,
+    forecast: { ...baseBundle.forecast, homeTeam: "Virginia Cavaliers" },
+    evaluatedBets: [{ ...moneyline, side: "UVA", grade: "Watchlist" }],
+  },
+  sharpSplits: [sharpHomeOver],
+  operationalOpening: null,
+});
+assert.equal(abbreviationMapped.evaluatedBets[0]?.gradeAdjustment?.sharpDirection, "support", "the writer must map an abbreviated home decision to the home split rather than the away split");
+
+const provisionalBestAngle = buildCfbMarketEvidenceGradeShadow({
+  decision: {
+    ...moneyline,
+    market: "total",
+    grade: "Lean",
+    side: "Under 60.5",
+    modelProbability: 0.56,
+    edgePercentagePoints: 5.2,
+    expectedValue: 0.07,
+    evaluatedQuote: { ...moneyline.evaluatedQuote, line: 60.5, price: -110 },
+  },
+  selectedSide: "under",
+  sharpSplits: [],
+  operationalOpening: null,
+});
+assert.equal(provisionalBestAngle.finalGrade, "Best Angle", "a complete high-probability, high-edge, high-EV Lean advances to Best Angle");
+assert.deepEqual(provisionalBestAngle.reasonCodes, ["provisional_complete_tuple_best_angle"]);
+
+const provisionalSpreadLean = buildCfbMarketEvidenceGradeShadow({
+  decision: {
+    ...moneyline,
+    market: "spread",
+    grade: "Watchlist",
+    side: "TCU -4",
+    modelProbability: 0.54,
+    edgePercentagePoints: 3,
+    expectedValue: 0.03,
+    evaluatedQuote: { ...moneyline.evaluatedQuote, line: -4, price: -200 },
+  },
+  selectedSide: "home",
+  sharpSplits: [],
+  operationalOpening: null,
+});
+assert.equal(provisionalSpreadLean.finalGrade, "Lean", "the provisional playable-price band permits a qualified exact-price Spread favorite");
+assert.deepEqual(provisionalSpreadLean.reasonCodes, ["provisional_complete_tuple_spread_lean"]);
+
+const provisionalTotalLean = buildCfbMarketEvidenceGradeShadow({
+  decision: {
+    ...moneyline,
+    market: "total",
+    grade: "Watchlist",
+    side: "Under 53.5",
+    modelProbability: 0.53,
+    edgePercentagePoints: 3,
+    expectedValue: 0.02,
+    evaluatedQuote: { ...moneyline.evaluatedQuote, line: 53.5, price: 260 },
+  },
+  selectedSide: "under",
+  sharpSplits: [],
+  operationalOpening: null,
+});
+assert.equal(provisionalTotalLean.finalGrade, "Lean", "the owner-approved exact-price band permits a qualified plus-money Total");
+assert.deepEqual(provisionalTotalLean.reasonCodes, ["provisional_complete_tuple_total_lean"]);
+
+const widenedRecalibratedSpread = buildCfbMarketEvidenceGradeShadow({
+  decision: {
+    ...moneyline,
+    market: "spread",
+    grade: "Watchlist",
+    side: "TCU -4",
+    modelProbability: 0.52,
+    edgePercentagePoints: 5,
+    expectedValue: 0.01,
+    evaluatedQuote: { ...moneyline.evaluatedQuote, line: -4, price: 260 },
+  },
+  selectedSide: "home",
+  sharpSplits: [],
+  operationalOpening: null,
+});
+assert.equal(widenedRecalibratedSpread.finalGrade, "Lean", "the bounded spread recalibration is not restricted to -125 through +125");
+
+const pathologicalPrice = buildCfbMarketEvidenceGradeShadow({
+  decision: {
+    ...moneyline,
+    market: "spread",
+    grade: "Watchlist",
+    side: "TCU -4",
+    modelProbability: 0.54,
+    edgePercentagePoints: 3,
+    expectedValue: 0.03,
+    evaluatedQuote: { ...moneyline.evaluatedQuote, line: -4, price: -600 },
+  },
+  selectedSide: "home",
+  sharpSplits: [],
+  operationalOpening: null,
+});
+assert.equal(pathologicalPrice.finalGrade, "Watchlist", "pathological prices remain outside the provisional actionable ladder");
 
 const excessiveSpread = buildCfbMarketEvidenceGradeShadow({
   decision: {

@@ -12,8 +12,8 @@ import {
   CFB_FORWARD_CANONICAL_DISCOVERY_PREVIOUS_EVIDENCE_SCHEMA_RELEASE,
   CFB_FORWARD_INITIAL_EVIDENCE_SCHEMA_RELEASE,
   CFB_FORWARD_LEGACY_EVIDENCE_SCHEMA_RELEASE,
+  CFB_FORWARD_MARKET_SHARP_PREVIOUS_EVIDENCE_SCHEMA_RELEASE,
   CFB_FORWARD_PROVIDER_DISCOVERY_PREVIOUS_EVIDENCE_SCHEMA_RELEASE,
-  CFB_FORWARD_PREVIOUS_EVIDENCE_SCHEMA_RELEASE,
   CFB_FORWARD_PRIOR_EVIDENCE_SCHEMA_RELEASE,
   CFB_FORWARD_TRANSITION_EVIDENCE_SCHEMA_RELEASE,
   CFB_FORWARD_MEMBER_RELEASE,
@@ -26,7 +26,7 @@ import {
   type CfbForwardStoredEvidence,
 } from "../lib/services/football/cfbForwardEvidence";
 import { normalizeCfbPlaybookLine, normalizeCfbPlaybookSplits } from "../lib/services/football/cfbPlaybookEvidence";
-import { trustedCfbSharpEventIdsByGame } from "../lib/services/football/cfbForwardEvidenceWriter";
+import { cfbLockPlanningEvidence, trustedCfbSharpEventIdsByGame } from "../lib/services/football/cfbForwardEvidenceWriter";
 import { resolveCfbCanonicalMarketAnchor } from "../lib/services/football/cfbMarketInformedOutcome";
 import {
   CFB_MARKET_SHADOW_WEIGHT,
@@ -170,6 +170,7 @@ const authoritativeForecast = buildCfbMarketSharpAwareForecast({
   sharpSplits: [],
 });
 const productionBundle = applyCfbMarketSharpAwareGrades({
+  homeTeam: game.home.abbreviation,
   bundle: buildCfbV1DecisionBundle({
     providerGameId: game.providerGameId,
     awayTeam: game.away.abbreviation,
@@ -278,7 +279,7 @@ assert.deepEqual(trustedCfbSharpEventIdsByGame([trustedSharpRow, {
 }]), {}, "conflicting immutable provider IDs must disable prior-event disambiguation");
 const member = buildCfbMemberFixture([evidence]);
 assert.equal(member.snapshot.games.length, 1);
-assert.equal(member.fixtureRelease, "cfb_v1_member_fixture_2026_08_29_r27_market_sharp_authoritative");
+assert.equal(member.fixtureRelease, "cfb_v1_member_fixture_2026_08_29_r28_transition_coherent");
 assert.equal(member.snapshot.games[0]!.collegeFootballScope, "fbs_involved", "the CFB reader must classify every member game for the FBS-first board without changing writer scope");
 assert.equal(member.snapshot.games[0]!.footballProjection?.expectedAwayPoints, authoritativeForecast.expectedAwayPoints);
 assert.equal(member.snapshot.games[0]!.footballProjection?.expectedHomePoints, authoritativeForecast.expectedHomePoints);
@@ -495,6 +496,26 @@ assert.equal(
   immutableBoundarySelection.find((row) => row.providerGameId === "started-missing-game")?.id,
   "immutable-boundary-previous-1",
   "a future game already frozen at T-60 must retain its exact prior locked row while the new release publishes",
+);
+const heldBoundaryRows = precedingReleaseRows.map((row, index) => index !== 1 ? row : ({
+  ...row,
+  id: "held-boundary-previous-1",
+  payload: {
+    ...row.payload,
+    captureTiming: "late_first_observation" as const,
+    t60LagMinutes: 54,
+    coverage: { ...row.payload.coverage, healthHolds: ["t60_capture_late"] },
+    decisions: { ...row.payload.decisions, evaluatedBets: [], trackingEnabled: false },
+  },
+}));
+const heldBoundarySelection = selectLatestCfbMemberEvidenceRows(
+  [currentTransitionRow, ...previousTransitionRows, ...heldBoundaryRows],
+  "2026-08-29T15:59:59.000Z",
+);
+assert.equal(
+  heldBoundarySelection.some((row) => row.payload.memberRelease === CFB_FORWARD_MEMBER_RELEASE),
+  false,
+  "a held future T-60 cannot make a partial current wave readable as an immutable boundary transition",
 );
 
 const exactPricePayloadRecord = structuredClone(payload) as unknown as Record<string, unknown>;
@@ -888,6 +909,7 @@ const earlierBooks = currentBooks.map((currentBook) => {
 });
 const earlierPayload: CfbForwardEvidencePayload = {
   ...payload,
+  schemaRelease: CFB_FORWARD_MARKET_SHARP_PREVIOUS_EVIDENCE_SCHEMA_RELEASE as typeof CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE,
   memberRelease: "cfb_v1_member_release_2026_08_25_r1" as typeof CFB_FORWARD_MEMBER_RELEASE,
   runId: "00000000-0000-4000-8000-000000000002",
   stage: "opening",
@@ -957,7 +979,7 @@ for (const decision of productionBundle.evaluatedBets) {
       { price: expectedFirst.price, line: expectedFirst.line, at: earlierAt, book: normalizeSportsbook(decision.evaluatedQuote.sportsbook) },
       { price: expectedCurrent.price, line: expectedCurrent.line, at: decision.evaluatedQuote.observedAt, book: normalizeSportsbook(decision.evaluatedQuote.sportsbook) },
     ],
-    `${decision.market} must compact the unchanged middle capture while preserving exact earlier and current tuples`,
+    `${decision.market} must compact the unchanged prior-release capture while preserving exact earlier and current tuples`,
   );
   assert.deepEqual(
     opposingTrail.map((stop) => ({ price: stop.american, line: stop.line, at: stop.observedAt, book: normalizeSportsbook(stop.sportsbook ?? "") })),
@@ -988,6 +1010,7 @@ const marketScopedPayload: CfbForwardEvidencePayload = {
   ...payload,
   decisions: {
     ...applyCfbMarketSharpAwareGrades({
+      homeTeam: game.home.abbreviation,
       bundle: buildCfbV1DecisionBundle({
         providerGameId: game.providerGameId,
         awayTeam: game.away.abbreviation,
@@ -1053,6 +1076,36 @@ assert.equal(lateT60[0]?.stage, "t60");
 assert.equal(lateT60[0]?.t60LagMinutes, 21);
 assert.ok((lateT60[0]?.t60LagMinutes ?? 0) > CFB_T60_MAX_CAPTURE_LAG_MINUTES);
 assert.deepEqual(determineCfbForwardCollectionNeed({ existing: [evidenceAt("opening", "2026-08-29T14:00:00.000Z")], now: "2026-08-29T15:00:00.000Z" }), { collect: true, reason: "t60_due", cadenceMinutes: null }, "T-60 is an event-triggered lock, not a 15-minute collection cadence");
+
+const legacyHeldT60Base = evidenceAt("t60", "2026-08-29T15:54:00.000Z");
+const legacyHeldT60: CfbForwardStoredEvidence = {
+  ...legacyHeldT60Base,
+  payload: {
+    ...legacyHeldT60Base.payload,
+    schemaRelease: CFB_FORWARD_AMBIGUOUS_SCOPE_PREVIOUS_EVIDENCE_SCHEMA_RELEASE as typeof CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE,
+    stage: "t60",
+    t60LagMinutes: 54,
+    coverage: { ...legacyHeldT60Base.payload.coverage, healthHolds: ["t60_capture_late"] },
+    decisions: { ...legacyHeldT60Base.payload.decisions, evaluatedBets: [], trackingEnabled: false },
+  },
+};
+const planningWithoutLegacyHold = cfbLockPlanningEvidence([evidenceAt("opening", "2026-08-28T20:00:00.000Z"), legacyHeldT60]);
+assert.equal(planningWithoutLegacyHold.some((row) => row.stage === "t60"), false, "a held prior-release T-60 cannot satisfy the active release lock boundary");
+assert.equal(planCfbForwardEvidenceCaptures({ games: [game], existing: planningWithoutLegacyHold, capturedAt: "2026-08-29T15:55:00.000Z" })[0]?.stage, "t60");
+const validPriorT60: CfbForwardStoredEvidence = {
+  ...legacyHeldT60,
+  capturedAt: lockedAt,
+  payload: {
+    ...payload,
+    schemaRelease: CFB_FORWARD_AMBIGUOUS_SCOPE_PREVIOUS_EVIDENCE_SCHEMA_RELEASE as typeof CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE,
+  },
+};
+assert.equal(cfbLockPlanningEvidence([validPriorT60]).length, 1, "a genuinely valid immutable prior-release T-60 remains frozen and blocks a replacement lock");
+const currentHeldT60: CfbForwardStoredEvidence = {
+  ...legacyHeldT60,
+  payload: { ...legacyHeldT60.payload, schemaRelease: CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE },
+};
+assert.equal(cfbLockPlanningEvidence([currentHeldT60]).length, 1, "an active-release held T-60 remains terminal for that release and cannot be appended twice");
 
 const playbookLine = normalizeCfbPlaybookLine({ lineSourceTier: "tier1", lines: { spread: { home: -7.5, away: 7.5 }, total: 47.5, moneyline: { home: -330, away: 260 } } }, observedAt);
 assert.deepEqual(playbookLine && { home: playbookLine.homeSpread, away: playbookLine.awaySpread, total: playbookLine.total }, { home: -7.5, away: 7.5, total: 47.5 });

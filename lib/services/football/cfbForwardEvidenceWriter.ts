@@ -44,7 +44,7 @@ import { buildMarketScopedFootballTrackingPlan } from "./footballMarketScopedTra
 import { assertFootballCrossMarketCoherence } from "./footballCrossMarketCoherence";
 
 export const CFB_FORWARD_WRITER_RELEASE =
-  "cfb_forward_evidence_writer_2026_08_29_r26_market_sharp_authoritative" as const;
+  "cfb_forward_evidence_writer_2026_08_29_r27_transition_coherent" as const;
 export const CFB_FORWARD_MAX_QB_TEAMS_PER_RUN = 24 as const;
 export const CFB_FORWARD_RESULTS_BATCH_SIZE = 100 as const;
 export const CFB_FORWARD_MAX_PRIOR_GAME_IDS = 1200 as const;
@@ -85,7 +85,8 @@ export async function runCfbForwardEvidenceWriter(args: {
   const window = activeCfbWeeklyWindow(args.now);
   const allExisting = await readCfbForwardEvidence({ client: args.client, season: args.season });
   const existing = allExisting.filter((row) => isGameInCfbWeeklyWindow({ scheduledStart: row.gameStartAt }, window));
-  const ordinaryNeed = determineCfbForwardCollectionNeed({ existing, now: args.now });
+  const lockPlanningExisting = cfbLockPlanningEvidence(existing);
+  const ordinaryNeed = determineCfbForwardCollectionNeed({ existing: lockPlanningExisting, now: args.now });
   const need = releaseRefreshNeed(existing, args.now) ?? ordinaryNeed;
   if (!need.collect) {
     const tracking = await writeOfficialTracking({ client: args.client, payloads: currentT60Payloads(existing), apply: args.apply });
@@ -96,7 +97,7 @@ export async function runCfbForwardEvidenceWriter(args: {
   if (games.length === 0) throw new Error(`CFB authoritative weekly window ${window.boardStartDate}..${window.boardEndDate} has no eligible model-covered games.`);
   const plans = planCfbForwardEvidenceCaptures({
     games,
-    existing,
+    existing: lockPlanningExisting,
     capturedAt: args.now,
     ...(need.reason === "release_refresh_due" ? { unlockedCadenceMinutesOverride: 0 } : {}),
   });
@@ -200,6 +201,7 @@ export async function runCfbForwardEvidenceWriter(args: {
     const decisions = compactDecisionBundle(outcomeAnchor
       ? applyCfbMarketSharpAwareGrades({
           bundle: decisionBundle,
+          homeTeam: plan.game.home.abbreviation,
           sharpSplits: sharpApiSplits,
           operationalOpening,
         })
@@ -469,6 +471,32 @@ function stageCounts(payloads: CfbForwardEvidencePayload[]): Record<"opening" | 
 }
 
 function currentT60Payloads(rows: CfbForwardStoredEvidence[]): CfbForwardEvidencePayload[] { return rows.filter((row) => row.stage === "t60").map((row) => row.payload); }
+
+export function cfbLockPlanningEvidence(rows: CfbForwardStoredEvidence[]): CfbForwardStoredEvidence[] {
+  const currentReleaseT60Games = new Set(rows
+    .filter((row) => row.stage === "t60" && row.payload.schemaRelease === CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE)
+    .map((row) => row.providerGameId));
+  return rows.filter((row) =>
+    row.stage !== "t60" ||
+    currentReleaseT60Games.has(row.providerGameId) ||
+    isValidImmutableT60(row.payload)
+  );
+}
+
+export function isValidImmutableT60(payload: CfbForwardEvidencePayload): boolean {
+  const lag = payload.t60LagMinutes ?? Infinity;
+  return payload.stage === "t60" &&
+    payload.captureTiming === "on_time" &&
+    lag >= 0 &&
+    lag <= CFB_T60_MAX_CAPTURE_LAG_MINUTES &&
+    payload.coverage.healthHolds.length === 0 &&
+    payload.decisions.trackingEnabled &&
+    payload.decisions.evaluatedBets.length > 0 &&
+    payload.decisions.evaluatedBets.every((decision) =>
+      decision.stage === "t60_locked" &&
+      decision.lockedAt === payload.capturedAt
+    );
+}
 
 type TrackingResult = { trackingAttempted: boolean; trackingRecordsProposed: number; trackingRecordsInserted: number; trackingRecordsExisting: number };
 
