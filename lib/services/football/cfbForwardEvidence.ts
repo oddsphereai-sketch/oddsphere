@@ -198,12 +198,17 @@ export type CfbForwardCapturePlan = {
 };
 
 const T60_MS = 60 * 60_000;
+const HOURLY_CADENCE_HORIZON_MS = 48 * 60 * 60_000;
+
+function unlockedCadenceMinutes(startsAt: number, now: number): 60 | 360 {
+  return startsAt - now <= HOURLY_CADENCE_HORIZON_MS ? 60 : 360;
+}
 
 export function planCfbForwardEvidenceCaptures(args: {
   games: NcaafGame[];
   existing: CfbForwardStoredEvidence[];
   capturedAt: string;
-  unlockedCadenceMinutes: number;
+  unlockedCadenceMinutesOverride?: number;
 }): CfbForwardCapturePlan[] {
   const now = timestamp(args.capturedAt, "capturedAt");
   const byGame = groupByGame(args.existing);
@@ -222,7 +227,8 @@ export function planCfbForwardEvidenceCaptures(args: {
     }
     if (!hasOpening || now >= cutoff) continue;
     const latest = Math.max(...existing.map((row) => timestamp(row.capturedAt, "stored capturedAt")));
-    if (now - latest >= args.unlockedCadenceMinutes * 60_000) {
+    const cadenceMinutes = args.unlockedCadenceMinutesOverride ?? unlockedCadenceMinutes(startsAt, now);
+    if (now - latest >= cadenceMinutes * 60_000) {
       plans.push({ game, stage: "unlocked", captureTiming: "on_time", cutoffAt: new Date(cutoff).toISOString(), t60LagMinutes: null });
     }
   }
@@ -240,22 +246,24 @@ export function determineCfbForwardCollectionNeed(args: {
   if (new Set(args.existing.filter((row) => row.stage === "opening").map((row) => row.providerGameId)).size < expected) {
     return { collect: true, reason: "opening_incomplete", cadenceMinutes: null };
   }
-  const upcoming: number[] = [];
+  const upcoming: Array<{ startsAt: number; latest: number; cadenceMinutes: 60 | 360 }> = [];
   for (const rows of byGame.values()) {
     const latest = [...rows].sort((a, b) => Date.parse(b.capturedAt) - Date.parse(a.capturedAt))[0]!;
     const startsAt = timestamp(latest.gameStartAt, "stored gameStartAt");
     if (startsAt <= now) continue;
     const cutoff = startsAt - T60_MS;
     if (now >= cutoff && !rows.some((row) => row.stage === "t60")) return { collect: true, reason: "t60_due", cadenceMinutes: null };
-    if (now < cutoff) upcoming.push(startsAt);
+    if (now < cutoff) upcoming.push({
+      startsAt,
+      latest: timestamp(latest.capturedAt, "stored capturedAt"),
+      cadenceMinutes: unlockedCadenceMinutes(startsAt, now),
+    });
   }
   if (upcoming.length === 0) return { collect: false, reason: "no_unlocked_games_due", cadenceMinutes: null };
-  const nextStart = Math.min(...upcoming);
-  const cadenceMinutes = nextStart - now <= 24 * 60 * 60_000 ? 60 : 360;
-  const latest = Math.max(...args.existing.map((row) => timestamp(row.capturedAt, "stored capturedAt")));
-  return now - latest >= cadenceMinutes * 60_000
-    ? { collect: true, reason: "unlocked_refresh_due", cadenceMinutes }
-    : { collect: false, reason: "cadence_not_due", cadenceMinutes };
+  const due = upcoming.filter((row) => now - row.latest >= row.cadenceMinutes * 60_000);
+  if (due.length > 0) return { collect: true, reason: "unlocked_refresh_due", cadenceMinutes: Math.min(...due.map((row) => row.cadenceMinutes)) };
+  const next = [...upcoming].sort((first, second) => first.startsAt - second.startsAt)[0]!;
+  return { collect: false, reason: "cadence_not_due", cadenceMinutes: next.cadenceMinutes };
 }
 
 export function hashCfbForwardEvidencePayload(payload: CfbForwardEvidencePayload): string {
