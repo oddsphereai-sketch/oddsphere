@@ -10,7 +10,7 @@ import {
   type CfbForwardStoredEvidence,
   type CfbForwardTeamQuarterbacks,
 } from "../lib/services/football/cfbForwardEvidence";
-import { CFB_FORWARD_MAX_QB_TEAMS_PER_RUN, latestCfbPayloadTimestamp, selectCfbModelCoveredWeeklyGames, selectQuarterbackTeams } from "../lib/services/football/cfbForwardEvidenceWriter";
+import { CFB_FORWARD_MAX_QB_TEAMS_PER_RUN, latestCfbPayloadTimestamp, planCfbPriorResultReads, selectCfbModelCoveredWeeklyGames, selectQuarterbackTeams } from "../lib/services/football/cfbForwardEvidenceWriter";
 import { buildCfbMemberFixture } from "../lib/services/football/cfbMemberFixture";
 import {
   CFB_MARKET_SHARP_AWARE_CANDIDATE_RELEASE,
@@ -138,6 +138,14 @@ assert.equal(selectQuarterbackTeams({ plans: qbPlans, teams: qbTeams, priorQuart
 
 const openingRows = frozen.slice(0, 2).map((forecast, index) => evidenceRow(game({ id: forecast.providerGameId, start: forecast.gameStartsAt, awayName: forecast.awayTeam, homeName: forecast.homeTeam }), forecast, 2, `opening-${index}`));
 const weekOneRows = [weekOneGame, fcs].map((value, index) => evidenceRow(value, getCfbV1ForecastForGame({ game: value }).forecast, 2, `week-one-${index}`));
+assert.deepEqual(
+  planCfbPriorResultReads({ rows: [...openingRows, ...weekOneRows], before: "2026-09-03" }),
+  [{
+    gameIds: openingRows.map((row) => row.providerGameId).sort(),
+    dates: [...new Set(openingRows.map((row) => row.gameStartAt.slice(0, 10)))].sort(),
+  }],
+  "prior results must use the provider-supported persisted-date filter and retain exact game IDs",
+);
 assert.equal(
   resolveCfbForwardWindow({ now: "2026-08-30T15:30:00.000Z", evidence: openingRows, advanceWithoutNextEvidence: true }).boardStartDate,
   "2026-09-03",
@@ -170,6 +178,8 @@ const writerSource = readFileSync("lib/services/football/cfbForwardEvidenceWrite
 assert.doesNotMatch(writerSource, /requiredIds|getCfbV1Forecasts\(/, "the production writer cannot retain a static launch-artifact allowlist");
 assert.match(writerSource, /eligibleCfbWeeklyGames/);
 assert.match(writerSource, /CFB_FORWARD_MAX_QB_TEAMS_PER_RUN/);
+assert.match(writerSource, /fetchBalldontlieNcaafResultsForDates/);
+assert.doesNotMatch(writerSource, /fetchBalldontlieNcaafResults\(/, "the provider ignores game_ids[] on the games collection");
 
 console.log("CFB generalized weekly-engine tests passed.");
 

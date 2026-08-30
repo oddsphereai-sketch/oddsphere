@@ -3,7 +3,7 @@ import { computeSlateDate } from "@/lib/dates/slateDate";
 import { isPublicallyTracked } from "@/lib/config/officialTrackingStart";
 import { assertOfficialTrackingMarket } from "@/lib/config/officialTrackingMarkets";
 import { PlaybookClient } from "@/lib/providers/playbook/playbookClient";
-import { fetchBalldontlieNcaafResults, fetchBalldontlieNcaafSlate, type NcaafGame } from "./balldontlieNcaafSlate";
+import { fetchBalldontlieNcaafResultsForDates, fetchBalldontlieNcaafSlate, type NcaafGame } from "./balldontlieNcaafSlate";
 import { fetchBalldontlieNcaafQuarterbacks } from "./balldontlieNcaafQuarterbacks";
 import { matchCfbPlaybookRow, normalizeCfbPlaybookLine, normalizeCfbPlaybookSplits } from "./cfbPlaybookEvidence";
 import {
@@ -44,7 +44,7 @@ import { buildMarketScopedFootballTrackingPlan } from "./footballMarketScopedTra
 import { assertFootballCrossMarketCoherence } from "./footballCrossMarketCoherence";
 
 export const CFB_FORWARD_WRITER_RELEASE =
-  "cfb_forward_evidence_writer_2026_08_30_r29_completed_slate_roll_forward" as const;
+  "cfb_forward_evidence_writer_2026_08_30_r30_dated_prior_results" as const;
 export const CFB_FORWARD_MAX_QB_TEAMS_PER_RUN = 24 as const;
 export const CFB_FORWARD_RESULTS_BATCH_SIZE = 100 as const;
 export const CFB_FORWARD_MAX_PRIOR_GAME_IDS = 1200 as const;
@@ -367,13 +367,42 @@ export function selectCfbModelCoveredWeeklyGames(args: {
   );
 }
 
+export function planCfbPriorResultReads(args: {
+  rows: Array<Pick<CfbForwardStoredEvidence, "providerGameId" | "gameStartAt">>;
+  before: string;
+}): Array<{ gameIds: string[]; dates: string[] }> {
+  const dateById = new Map<string, string>();
+  for (const row of args.rows.filter((value) => value.gameStartAt.slice(0, 10) < args.before)) {
+    const date = row.gameStartAt.slice(0, 10);
+    const existing = dateById.get(row.providerGameId);
+    if (existing && existing !== date) throw new Error(`CFB prior game ${row.providerGameId} has conflicting persisted dates.`);
+    dateById.set(row.providerGameId, date);
+  }
+  if (dateById.size > CFB_FORWARD_MAX_PRIOR_GAME_IDS) throw new Error(`CFB prior-game result coverage exceeds its ${CFB_FORWARD_MAX_PRIOR_GAME_IDS}-ID season budget.`);
+  const idsByDate = new Map<string, string[]>();
+  for (const [id, date] of dateById) idsByDate.set(date, [...(idsByDate.get(date) ?? []), id]);
+  const dates = [...idsByDate.keys()].sort();
+  const reads: Array<{ gameIds: string[]; dates: string[] }> = [];
+  for (let dateIndex = 0; dateIndex < dates.length; dateIndex += 3) {
+    const dateBatch = dates.slice(dateIndex, dateIndex + 3);
+    const ids = dateBatch.flatMap((date) => idsByDate.get(date) ?? []).sort();
+    for (let idIndex = 0; idIndex < ids.length; idIndex += CFB_FORWARD_RESULTS_BATCH_SIZE) {
+      reads.push({ gameIds: ids.slice(idIndex, idIndex + CFB_FORWARD_RESULTS_BATCH_SIZE), dates: dateBatch });
+    }
+  }
+  return reads;
+}
+
 async function fetchPriorCompletedGames(args: { rows: CfbForwardStoredEvidence[]; before: string; apiKey: string }): Promise<{ games: NcaafGame[]; providerRequests: number }> {
-  const ids = [...new Set(args.rows.filter((row) => row.gameStartAt.slice(0, 10) < args.before).map((row) => row.providerGameId))].sort();
-  if (ids.length > CFB_FORWARD_MAX_PRIOR_GAME_IDS) throw new Error(`CFB prior-game result coverage exceeds its ${CFB_FORWARD_MAX_PRIOR_GAME_IDS}-ID season budget.`);
   const games: NcaafGame[] = [];
   let providerRequests = 0;
-  for (let index = 0; index < ids.length; index += CFB_FORWARD_RESULTS_BATCH_SIZE) {
-    const result = await fetchBalldontlieNcaafResults({ gameIds: ids.slice(index, index + CFB_FORWARD_RESULTS_BATCH_SIZE), apiKey: args.apiKey, pageBudget: 2 });
+  for (const read of planCfbPriorResultReads(args)) {
+    const result = await fetchBalldontlieNcaafResultsForDates({
+      gameIds: read.gameIds,
+      dates: read.dates,
+      apiKey: args.apiKey,
+      pageBudget: 4,
+    });
     providerRequests += result.providerRequests;
     games.push(...result.games.filter((game) => game.awayScore !== null && game.homeScore !== null));
   }
