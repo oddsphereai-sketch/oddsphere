@@ -1,8 +1,8 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { fetchBalldontlieNcaafResults } from "./balldontlieNcaafSlate";
+import { fetchBalldontlieNcaafResultsForDates } from "./balldontlieNcaafSlate";
 
 export const CFB_SCORE_INGEST_RELEASE =
-  "cfb_score_ingest_2026_08_25_r1_exact_id" as const;
+  "cfb_score_ingest_2026_08_30_r2_supported_date_filter" as const;
 
 export type CfbScoreIngestResult = {
   release: typeof CFB_SCORE_INGEST_RELEASE;
@@ -17,6 +17,7 @@ export type CfbScoreIngestResult = {
 type TrackedCfbGame = {
   id: number;
   external_id: number;
+  game_date: string | null;
   status: string | null;
   home_score: number | null;
   away_score: number | null;
@@ -41,14 +42,20 @@ export async function ingestCfbFinalScores(args: {
   };
   const { data, error } = await args.supabase
     .from("games")
-    .select("id,external_id,status,home_score,away_score")
+    .select("id,external_id,game_date,status,home_score,away_score")
     .eq("sport", "cfb")
     .eq("slate_date", args.slateDate);
   if (error) throw new Error(`CFB score ingest game read failed: ${error.message}`);
   const dbGames = (data ?? []) as TrackedCfbGame[];
   if (dbGames.length === 0) return result;
-  const provider = await fetchBalldontlieNcaafResults({
+  const providerDates = [...new Set(dbGames.map((game) => {
+    const parsed = Date.parse(game.game_date ?? "");
+    if (!Number.isFinite(parsed)) throw new Error(`CFB score ingest game ${game.external_id} has an invalid game_date.`);
+    return new Date(parsed).toISOString().slice(0, 10);
+  }))];
+  const provider = await fetchBalldontlieNcaafResultsForDates({
     gameIds: dbGames.map((game) => String(game.external_id)),
+    dates: providerDates,
     apiKey: args.apiKey,
     fetchImpl: args.fetchImpl,
   });

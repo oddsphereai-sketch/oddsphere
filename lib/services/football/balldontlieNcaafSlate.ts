@@ -211,6 +211,46 @@ export async function fetchBalldontlieNcaafResults(args: {
   return { release: BALLDONTLIE_NCAAF_SLATE_RELEASE, games, providerRequests };
 }
 
+/**
+ * Bounded results read for tracking settlement.
+ *
+ * The NCAAF games collection does not support `game_ids[]`; it silently
+ * ignores that parameter. Settlement already owns the persisted game start
+ * times, so it queries the supported UTC `dates[]` filter and then keeps only
+ * the exact requested provider IDs before any database write.
+ */
+export async function fetchBalldontlieNcaafResultsForDates(args: {
+  gameIds: string[];
+  dates: string[];
+  apiKey?: string;
+  fetchImpl?: typeof fetch;
+  pageBudget?: number;
+}): Promise<NcaafProviderResults> {
+  const ids = [...new Set(args.gameIds.map((value) => value.trim()).filter(Boolean))];
+  if (ids.length === 0) return { release: BALLDONTLIE_NCAAF_SLATE_RELEASE, games: [], providerRequests: 0 };
+  if (ids.length > 200) throw new Error("BALLDONTLIE NCAAF result lookup is capped at 200 exact game IDs.");
+  const dates = [...new Set(args.dates.map((value) => value.trim()).filter(Boolean))].sort();
+  if (dates.length === 0 || dates.length > 3 || dates.some((value) => !validDate(value))) {
+    throw new Error("BALLDONTLIE NCAAF settlement requires one to three valid UTC game dates.");
+  }
+  const apiKey = args.apiKey ?? process.env.BALLDONTLIE_API_KEY;
+  if (!apiKey) throw new Error("BALLDONTLIE_API_KEY is required for NCAAF results.");
+  let providerRequests = 0;
+  const read = await readPages({
+    path: "/games",
+    query: { "dates[]": dates, per_page: 100 },
+    maxPages: args.pageBudget ?? 4,
+    apiKey,
+    fetchImpl: args.fetchImpl ?? fetch,
+    onRequest: () => { providerRequests += 1; },
+  });
+  if (read.nextCursor !== null) throw new Error("BALLDONTLIE NCAAF dated results exceeded the pagination safety budget.");
+  const requested = new Set(ids);
+  const games = read.rows.map(normalizeGame).filter((game): game is NcaafGame => game !== null && requested.has(game.providerGameId));
+  if (new Set(games.map((game) => game.providerGameId)).size !== games.length) throw new Error("BALLDONTLIE NCAAF dated results returned duplicate exact game IDs.");
+  return { release: BALLDONTLIE_NCAAF_SLATE_RELEASE, games, providerRequests };
+}
+
 function completeMainMarkets(value: NcaafBookOdds | undefined): boolean {
   return Boolean(value?.moneyline && value.spread && value.total);
 }

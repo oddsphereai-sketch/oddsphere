@@ -1245,18 +1245,21 @@ const scoreReadClient = {
       select() { return query; },
       eq() { return query; },
       then(resolve: (value: unknown) => unknown) {
-        return Promise.resolve(resolve({ data: [{ id: 9001, external_id: 457157, status: "scheduled", home_score: null, away_score: null }], error: null }));
+        return Promise.resolve(resolve({ data: [{ id: 9001, external_id: 457157, game_date: gameStartAt, status: "scheduled", home_score: null, away_score: null }], error: null }));
       },
     };
     return query;
   },
 } as unknown as SupabaseClient;
+const scoreProviderUrls: string[] = [];
 const scoreIngest = await ingestCfbFinalScores({
   supabase: scoreReadClient,
   slateDate: "2026-08-29",
   apply: false,
   apiKey: "test",
-  fetchImpl: (async () => Response.json({ data: [{
+  fetchImpl: (async (input) => {
+    scoreProviderUrls.push(input instanceof Request ? input.url : String(input));
+    return Response.json({ data: [{
     id: 457157,
     season: 2026,
     week: 1,
@@ -1266,11 +1269,27 @@ const scoreIngest = await ingestCfbFinalScores({
     visitor_team_score: 17,
     home_team: { id: 43, conference: 3, abbreviation: "TCU", full_name: "TCU Horned Frogs" },
     visitor_team: { id: 10, conference: 1, abbreviation: "UNC", full_name: "North Carolina Tar Heels" },
-  }], meta: { next_cursor: null } })) as typeof fetch,
+    // Same-date rows that were not requested must never reach settlement.
+  }, {
+    id: 999999,
+    season: 2026,
+    week: 1,
+    date: gameStartAt,
+    status_state: "final",
+    home_score: 21,
+    away_score: 20,
+    home_team: { id: 1, conference: 1, abbreviation: "AAA", full_name: "AAA" },
+    visitor_team: { id: 2, conference: 1, abbreviation: "BBB", full_name: "BBB" },
+  }], meta: { next_cursor: null } });
+  }) as typeof fetch,
 });
 assert.equal(scoreIngest.providerRequests, 1);
 assert.equal(scoreIngest.updatedCount, 1);
 assert.equal(scoreIngest.errors.length, 0);
+assert.equal(scoreProviderUrls.length, 1);
+const scoreProviderUrl = new URL(scoreProviderUrls[0]!);
+assert.deepEqual(scoreProviderUrl.searchParams.getAll("dates[]"), ["2026-08-29"], "CFB settlement must use the supported UTC dates filter");
+assert.equal(scoreProviderUrl.searchParams.has("game_ids[]"), false, "the NCAAF games collection does not support game_ids[]");
 
 const route = readFileSync(path.resolve("app/api/cron/cfb-forward-evidence/route.ts"), "utf8");
 assert.match(route, /leaseGroup: "prediction_pipeline"/);
