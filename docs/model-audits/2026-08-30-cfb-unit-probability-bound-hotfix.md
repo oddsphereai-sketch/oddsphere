@@ -41,3 +41,17 @@ their math or contract does not change.
   integration safety pass from a clean current-main branch;
 - the next natural leased writer emits one complete Sept. 3–7 wave with the new release set;
 - the signed-in CFB Daily Edge reader shows the week-ahead slate and MLB remains current.
+
+## Downstream coherence recovery
+
+The first post-r44 natural run at `2026-08-30T18:54:48.589Z` passed the endpoint normalization
+but failed atomically because the shared cross-market forecast guard still required both winner
+probabilities to be strictly inside `(0, 1)`. It reported the same UAPB–Missouri forecast as
+`Away/home win probabilities are 0/1` and again wrote zero rows.
+
+Writer r32 opts CFB into exact endpoints only when a joint PMF is present. The shared r5 guard
+then still verifies finite closed-interval probabilities, complementary mass, PMF mass, expected
+scores, and PMF-derived winner probability. Missing or malformed PMF proof remains fatal. The
+option defaults off, so NFL and every other existing caller retain the prior open-interval rule.
+This is a publication-validation correction only; the r44 PMF, projections, decisions, grades,
+stakes, locks, and provider load do not change.
