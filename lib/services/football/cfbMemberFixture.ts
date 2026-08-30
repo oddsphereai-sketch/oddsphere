@@ -50,9 +50,9 @@ import { cfbFootballEvidenceStats } from "./footballMemberEvidence";
 import { CFB_MARKET_SHARP_AWARE_PRODUCTION_RELEASE } from "./cfbMarketSharpAwareShadow";
 
 export const CFB_MEMBER_FIXTURE_RELEASE =
-  "cfb_v1_member_fixture_2026_08_30_r32_unit_probability_bound" as const;
+  "cfb_v1_member_fixture_2026_08_30_r33_near_tossup_total_hold" as const;
 export const CFB_PUBLIC_OUTCOME_CONTRACT_RELEASE =
-  "cfb_market_sharp_public_outcome_contract_2026_08_30_r33_unit_probability_bound" as const;
+  "cfb_market_sharp_public_outcome_contract_2026_08_30_r34_near_tossup_total_hold" as const;
 export const CFB_CONTEXT_ONLY_QUOTE_CAPTURE_SKEW_MS = 5_000 as const;
 const CFB_MARKET_CONTEXT_MAX_CAPTURE_LAG_MINUTES = 10;
 const CFB_PUBLIC_SCORE_DIRECTION_TOLERANCE_POINTS = 0.25;
@@ -810,6 +810,7 @@ function unavailableReasonSentence(codes: string[]): string {
     quote_observed_after_evaluation: "the provider quote is timestamped after this evaluation",
     evaluation_not_pregame: "the evaluation timestamp is not pregame",
     global_health_hold: "a game-level health requirement is incomplete",
+    mean_pmf_near_tossup_conflict: "the PMF is effectively tied at this Total while its mean falls narrowly on the other side",
   };
   const values = [...new Set(codes.map((code) => descriptions[code] ?? code.replaceAll("_", " ")))].filter(Boolean);
   return values.length > 1
