@@ -6,8 +6,14 @@ import type {
 import type { TrackingResponse } from "@/app/lab/lib/labTypes";
 import {
   readLabResponseSnapshot,
+  trackingFoundationSnapshotKey,
   trackingSnapshotKey,
 } from "@/lib/services/labResponseSnapshots";
+import {
+  buildPublicTrackingCategoryWindows,
+  type PublicTrackingCategoryWindow,
+  type PublicTrackingFoundationSnapshot,
+} from "@/lib/services/tracking/publicTrackingCategoryWindows";
 
 export type PublicTrackRecordMetric = {
   picks: number;
@@ -63,6 +69,11 @@ export type PublicTrackRecordSummary = {
   markets: PublicTrackRecordMarket[];
   lastUpdatedLabel: string;
   archiveProvenance: typeof TRACK_RECORD_ARCHIVE_PROVENANCE;
+  categoryTracking: {
+    available: boolean;
+    asOf: string;
+    windows: PublicTrackingCategoryWindow[];
+  };
   currentOfficial?: {
     asOf: string;
     latestActivityDate: string;
@@ -180,8 +191,18 @@ function displayHitRate(hitRate: number, wins: number, losses: number): number |
 
 export async function getPublicTrackRecordSummary(): Promise<PublicTrackRecordSummary> {
   const asOf = new Date().toISOString();
-  const currentSnapshot = await readLabResponseSnapshot<TrackingResponse>(trackingSnapshotKey(), "fresh")
-    ?? await readLabResponseSnapshot<TrackingResponse>(trackingSnapshotKey(), "stale");
+  const todayEt = new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" });
+  const [currentSnapshot, categorySnapshot] = await Promise.all([
+    readLabResponseSnapshot<TrackingResponse>(trackingSnapshotKey(), "fresh")
+      .then(async (snapshot) => snapshot ?? readLabResponseSnapshot<TrackingResponse>(trackingSnapshotKey(), "stale")),
+    readLabResponseSnapshot<PublicTrackingFoundationSnapshot>(
+      trackingFoundationSnapshotKey({ date: todayEt }),
+      "fresh",
+    ).then(async (snapshot) => snapshot ?? readLabResponseSnapshot<PublicTrackingFoundationSnapshot>(
+      trackingFoundationSnapshotKey({ date: todayEt }),
+      "stale",
+    )),
+  ]);
   let overall = ZERO_METRIC;
   const sportMap = new Map<TrackedSport, PublicTrackRecordMetric>();
 
@@ -229,6 +250,11 @@ export async function getPublicTrackRecordSummary(): Promise<PublicTrackRecordSu
     markets,
     lastUpdatedLabel: LAST_UPDATED,
     archiveProvenance: TRACK_RECORD_ARCHIVE_PROVENANCE,
+    categoryTracking: {
+      available: categorySnapshot !== null,
+      asOf: categorySnapshot?.payload.generatedAt ?? categorySnapshot?.generatedAt ?? asOf,
+      windows: buildPublicTrackingCategoryWindows(categorySnapshot?.payload ?? null),
+    },
     currentOfficial: currentSnapshot ? {
       asOf: currentSnapshot.payload.as_of,
       latestActivityDate: currentSnapshot.payload.yesterdayRecap.date,

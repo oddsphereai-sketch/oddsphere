@@ -34,7 +34,9 @@ const SERVICE = readFileSync("lib/services/trackingAggregateService.ts", "utf8")
 const TRACKING_LOADING = readFileSync("app/lab/tracking/loading.tsx", "utf8");
 const PROPS_LOADING = readFileSync("app/mlb/props/loading.tsx", "utf8");
 const PUBLIC_TRACKING_SUMMARY = readFileSync("lib/services/tracking/publicTrackRecordSummary.ts", "utf8");
+const PUBLIC_CATEGORY_WINDOWS = readFileSync("lib/services/tracking/publicTrackingCategoryWindows.ts", "utf8");
 const HOMEPAGE = readFileSync("app/page.tsx", "utf8");
+const HOMEPAGE_CATEGORY_TRACKER = readFileSync("app/components/HomepageTrackingCategoryBoard.tsx", "utf8");
 
 let pass = 0, fail = 0;
 function check(name: string, cond: boolean, msg?: string) {
@@ -49,11 +51,22 @@ check(
   PUBLIC_TRACKING_SUMMARY.includes("currentSnapshot.payload.allTimeAggregate.hitRate * 1_000) / 10"),
 );
 check(
-  "Homepage promotes weekly, monthly, and lifetime official tracking windows",
-  PUBLIC_TRACKING_SUMMARY.includes('label: "Weekly"') &&
-    PUBLIC_TRACKING_SUMMARY.includes('label: "Monthly"') &&
-    PUBLIC_TRACKING_SUMMARY.includes('label: "Lifetime"') &&
-    HOMEPAGE.includes("official.windows.map"),
+  "Homepage uses the same public-safe category snapshot as member Tracking",
+  PUBLIC_TRACKING_SUMMARY.includes("trackingFoundationSnapshotKey") &&
+    PUBLIC_TRACKING_SUMMARY.includes("buildPublicTrackingCategoryWindows") &&
+    HOMEPAGE.includes("HomepageTrackingCategoryBoard"),
+);
+check(
+  "Homepage exposes clickable Weekly, Monthly, and Lifetime category windows",
+  PUBLIC_CATEGORY_WINDOWS.includes('key: "weekly"') &&
+    PUBLIC_CATEGORY_WINDOWS.includes('key: "monthly"') &&
+    PUBLIC_CATEGORY_WINDOWS.includes('key: "lifetime"') &&
+    /windows\.map[\s\S]{0,900}<button[\s\S]{0,500}setActiveKey/.test(HOMEPAGE_CATEGORY_TRACKER),
+);
+check(
+  "Homepage category tracker shares the member CategoryBars visual",
+  HOMEPAGE_CATEGORY_TRACKER.includes('from "@/app/lab/tracking/components/TrackingCharts"') &&
+    HOMEPAGE_CATEGORY_TRACKER.includes("<CategoryBars"),
 );
 check(
   "Homepage tracking section does not market the legacy archive",
