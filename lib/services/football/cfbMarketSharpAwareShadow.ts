@@ -13,11 +13,11 @@ import type {
 } from "./cfbV1Decision";
 
 export const CFB_MARKET_SHARP_AWARE_CANDIDATE_RELEASE =
-  "cfb_market_sharp_aware_candidate_2026_08_30_r4_market_dominant_fresh_sharp" as const;
+  "cfb_market_sharp_aware_candidate_2026_08_30_r5_unit_probability_bound" as const;
 export const CFB_MARKET_SHARP_AWARE_SHADOW_RELEASE =
   CFB_MARKET_SHARP_AWARE_CANDIDATE_RELEASE;
 export const CFB_MARKET_SHARP_AWARE_PRODUCTION_RELEASE =
-  "cfb_market_sharp_aware_production_2026_08_30_r6_market_dominant_fresh_sharp" as const;
+  "cfb_market_sharp_aware_production_2026_08_30_r7_unit_probability_bound" as const;
 export const CFB_MARKET_SHADOW_WEIGHT = 0.75 as const;
 export const CFB_SHARP_SIGNED_GAP_THRESHOLD_PP = 10 as const;
 export const CFB_SHARP_FULL_STRENGTH_GAP_PP = 20 as const;
@@ -499,8 +499,8 @@ function summarizePmf(pmf: CfbV1Forecast["pmf"]): Pick<CfbV1Forecast,
   const expectedAwayPoints = pmf.reduce((sum, cell) => sum + cell.away * cell.probability, 0);
   const expectedMarginHome = expectedHomePoints - expectedAwayPoints;
   const expectedTotal = expectedHomePoints + expectedAwayPoints;
-  const homeWinProbability = pmf.reduce((sum, cell) =>
-    sum + (cell.home > cell.away ? cell.probability : cell.home === cell.away ? 0.5 * cell.probability : 0), 0);
+  const homeWinProbability = unitProbability(pmf.reduce((sum, cell) =>
+    sum + (cell.home > cell.away ? cell.probability : cell.home === cell.away ? 0.5 * cell.probability : 0), 0));
   const representativePool = pmf.filter((cell) =>
     homeWinProbability > 0.5 ? cell.home > cell.away : homeWinProbability < 0.5 ? cell.home < cell.away : true);
   const representative = [...(representativePool.length > 0 ? representativePool : pmf)].sort((first, second) =>
@@ -522,6 +522,15 @@ function summarizePmf(pmf: CfbV1Forecast["pmf"]): Pick<CfbV1Forecast,
       total: [weightedQuantile(pmf, (cell) => cell.home + cell.away, 0.1), weightedQuantile(pmf, (cell) => cell.home + cell.away, 0.9)],
     },
   };
+}
+
+function unitProbability(value: number): number {
+  if (!Number.isFinite(value) || value < -1e-12 || value > 1 + 1e-12) {
+    throw new Error(`CFB market/sharp PMF produced an invalid winner probability: ${value}.`);
+  }
+  if (value <= 1e-12) return 0;
+  if (value >= 1 - 1e-12) return 1;
+  return value;
 }
 
 function weightedQuantile(
