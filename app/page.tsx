@@ -2,12 +2,12 @@ import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
 import { HomepageDashboardPrototype } from "@/app/components/HomepageDashboardPrototype";
+import { HomepageTrackingCategoryBoard } from "@/app/components/HomepageTrackingCategoryBoard";
 import { MarketingDailyEdgePreviewSurface } from "@/app/lab/components/daily-edge/DailyEdgeShell";
 import { ACTIVE_DAILY_EDGE_TOP_LEVEL_SPORT_LABELS } from "@/app/lab/lib/dailyEdgeSports";
 import { isHomepageExperienceCandidateEnabled } from "@/lib/config/productExperience";
 import {
   getPublicTrackRecordSummary,
-  type PublicOfficialTrackingWindow,
   type PublicTrackRecordSummary,
 } from "@/lib/services/tracking/publicTrackRecordSummary";
 import {
@@ -222,47 +222,6 @@ function SectionHeader({ eyebrow, title, body }: { eyebrow: string; title: strin
   );
 }
 
-function TrackingWindowCard({
-  window,
-  featured = false,
-}: {
-  window: PublicOfficialTrackingWindow;
-  featured?: boolean;
-}) {
-  const record = `${window.wins}-${window.losses}${window.pushes ? `-${window.pushes}` : ""}`;
-
-  return (
-    <article className={`relative overflow-hidden rounded-2xl border p-5 sm:p-6 ${featured ? "border-emerald-300/30 bg-emerald-300/[0.08]" : "border-white/10 bg-white/[0.035]"}`}>
-      {featured ? <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-emerald-200/80 to-transparent" /> : null}
-      <div className="flex items-center justify-between gap-3">
-        <p className={`text-xs font-black uppercase tracking-[0.16em] ${featured ? "text-emerald-200" : "text-gray-400"}`}>{window.label}</p>
-        {featured ? <span className="rounded-full border border-emerald-300/25 bg-emerald-300/10 px-2.5 py-1 text-[9px] font-black uppercase tracking-[0.12em] text-emerald-100">Official</span> : null}
-      </div>
-      <p className={`mt-5 text-4xl font-black tabular-nums tracking-tight sm:text-5xl ${featured ? "text-emerald-200" : "text-white"}`}>
-        {window.hitRate === null ? "—" : `${window.hitRate.toFixed(1)}%`}
-      </p>
-      <p className="mt-1 text-xs font-bold uppercase tracking-[0.12em] text-gray-500">Hit rate</p>
-      <div className="mt-5 border-t border-white/10 pt-4">
-        <p className="text-lg font-black tabular-nums text-white">{record}</p>
-        <p className="mt-1 text-xs text-gray-400">{window.rangeLabel}</p>
-      </div>
-    </article>
-  );
-}
-
-function TrackingWindowPlaceholder({ label }: { label: PublicOfficialTrackingWindow["label"] }) {
-  return (
-    <article className="rounded-2xl border border-white/10 bg-white/[0.035] p-5 sm:p-6">
-      <p className="text-xs font-black uppercase tracking-[0.16em] text-gray-400">{label}</p>
-      <p className="mt-5 text-4xl font-black tracking-tight text-gray-600 sm:text-5xl">—</p>
-      <p className="mt-1 text-xs font-bold uppercase tracking-[0.12em] text-gray-600">Updating</p>
-      <div className="mt-5 border-t border-white/10 pt-4">
-        <p className="text-sm font-bold text-gray-400">Results refresh after settlement</p>
-      </div>
-    </article>
-  );
-}
-
 function formatTrackingDate(yyyyMmDd: string): string {
   const [year, month, day] = yyyyMmDd.split("-").map(Number);
   return new Date(Date.UTC(year, month - 1, day)).toLocaleDateString("en-US", {
@@ -295,30 +254,20 @@ function TrackingPreview({ summary }: { summary: PublicTrackRecordSummary }) {
             Open the full tracker <span className="ml-2" aria-hidden="true">→</span>
           </Link>
         </div>
-
-      {!official ? (
-        <>
-          <div className="mt-8 grid gap-3 md:grid-cols-3">
-            {(["Weekly", "Monthly", "Lifetime"] as const).map((label) => (
-              <TrackingWindowPlaceholder key={label} label={label} />
-            ))}
-          </div>
-          <p className="mt-5 text-xs leading-relaxed text-gray-500">
-            The live track record is updating. Full results remain available in the member tracker.
-          </p>
-        </>
-      ) : (
-        <>
-          <div className="mt-8 grid gap-3 md:grid-cols-3">
-            {official.windows.map((window) => (
-              <TrackingWindowCard key={window.label} window={window} featured={window.label === "Lifetime"} />
-            ))}
-          </div>
-          <p className="mt-5 text-xs leading-relaxed text-gray-500">
-            Results updated through {formatTrackingDate(official.latestActivityDate)}. Pushes are shown in the record and excluded from hit rate. Past performance does not guarantee future results.
-          </p>
-        </>
-      )}
+        <div className="mt-8 flex flex-wrap items-baseline justify-between gap-3">
+          <h3 className="text-lg font-black text-white sm:text-xl">Tracking by category</h3>
+          <p className="text-xs font-semibold text-gray-500">Sport and market records</p>
+        </div>
+        <HomepageTrackingCategoryBoard
+          windows={summary.categoryTracking.windows}
+          available={summary.categoryTracking.available}
+        />
+        <p className="mt-5 text-xs leading-relaxed text-gray-500">
+          {official
+            ? `Results updated through ${formatTrackingDate(official.latestActivityDate)}. `
+            : "Results update after settlement. "}
+          Pushes are shown in the record and excluded from hit rate. Past performance does not guarantee future results.
+        </p>
       </div>
     </div>
   );
