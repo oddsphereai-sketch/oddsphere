@@ -24,13 +24,12 @@ const independent = getCfbV1Forecast("457159");
 const anchor = resolveCfbCanonicalMarketAnchor({ books });
 assert.ok(anchor);
 
-const noSharp = buildCfbMarketSharpAwareShadowForecast({ independentForecast: independent, anchor, sharpSplits: [] });
+const noSharp = buildCfbMarketSharpAwareShadowForecast({ independentForecast: independent, anchor, sharpSplits: [], evaluatedAt: observedAt });
 assert.equal(noSharp.marketWeight, CFB_MARKET_SHADOW_WEIGHT);
 assert.equal(noSharp.sharpAdjustment.source, null);
 assert.equal(noSharp.sharpAdjustment.homeMarginShiftPoints, 0);
 assert.equal(noSharp.sharpAdjustment.totalShiftPoints, 0);
-assert.ok(noSharp.expectedMarginHome > independent.expectedMarginHome, "the frozen 25% market rung moves the Hawaii margin toward Stanford");
-assert.ok(noSharp.expectedMarginHome < 0, "the conservative market rung does not manufacture a current Hawaii side flip");
+assert.ok(noSharp.expectedMarginHome > independent.expectedMarginHome, "the market-dominant forecast moves the Hawaii margin toward Stanford");
 
 const sharpHomeOver = sharpRecord({
   homeTickets: 40,
@@ -38,10 +37,10 @@ const sharpHomeOver = sharpRecord({
   overTickets: 42,
   overMoney: 62,
 });
-const withSharp = buildCfbMarketSharpAwareShadowForecast({ independentForecast: independent, anchor, sharpSplits: [sharpHomeOver] });
+const withSharp = buildCfbMarketSharpAwareShadowForecast({ independentForecast: independent, anchor, sharpSplits: [sharpHomeOver], evaluatedAt: observedAt });
 assert.equal(withSharp.sharpAdjustment.source, "circa");
-assert.equal(withSharp.sharpAdjustment.homeMarginShiftPoints, 1);
-assert.equal(withSharp.sharpAdjustment.totalShiftPoints, 1);
+assert.equal(withSharp.sharpAdjustment.homeMarginShiftPoints, 1.5);
+assert.equal(withSharp.sharpAdjustment.totalShiftPoints, 1.5);
 assert.ok(withSharp.expectedMarginHome > noSharp.expectedMarginHome, "strict home sharp support moves the coherent margin toward Stanford");
 assert.ok(withSharp.expectedTotal > noSharp.expectedTotal, "strict Over sharp support moves the coherent total upward");
 
@@ -53,10 +52,25 @@ assert.ok(Math.abs(expectedHome - withSharp.expectedHomePoints) < 1e-12);
 assert.ok(Math.abs(expectedAway - withSharp.expectedAwayPoints) < 1e-12);
 assert.ok(Math.abs(expectedHome - expectedAway - withSharp.expectedMarginHome) < 1e-12);
 assert.ok(Math.abs(expectedHome + expectedAway - withSharp.expectedTotal) < 1e-12);
-const authoritative = buildCfbMarketSharpAwareForecast({ independentForecast: independent, anchor, sharpSplits: [sharpHomeOver] });
+const authoritative = buildCfbMarketSharpAwareForecast({ independentForecast: independent, anchor, sharpSplits: [sharpHomeOver], evaluatedAt: observedAt });
 assert.equal(authoritative.release, CFB_MARKET_SHARP_AWARE_PRODUCTION_RELEASE);
 assert.equal(authoritative.candidateRelease, CFB_MARKET_SHARP_AWARE_CANDIDATE_RELEASE);
-assert.equal(authoritative.marketWeight, 0.25);
+assert.equal(authoritative.marketWeight, 0.75);
+
+const staleSharp = buildCfbMarketSharpAwareForecast({
+  independentForecast: independent,
+  anchor,
+  sharpSplits: [{ ...sharpHomeOver, capturedAt: "2026-08-28T09:59:59.000Z" }],
+  evaluatedAt: observedAt,
+});
+assert.equal(staleSharp.sharpAdjustment.source, null, "a Circa split older than 120 minutes cannot move the forecast");
+const futureSharp = buildCfbMarketSharpAwareForecast({
+  independentForecast: independent,
+  anchor,
+  sharpSplits: [{ ...sharpHomeOver, capturedAt: "2026-08-28T12:00:00.001Z" }],
+  evaluatedAt: observedAt,
+});
+assert.equal(futureSharp.sharpAdjustment.source, null, "future-dated Circa evidence cannot move the forecast");
 
 const baseBundle = buildCfbV1DecisionBundle({
   providerGameId: "457159",

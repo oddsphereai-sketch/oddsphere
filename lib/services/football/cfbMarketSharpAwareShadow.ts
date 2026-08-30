@@ -13,16 +13,18 @@ import type {
 } from "./cfbV1Decision";
 
 export const CFB_MARKET_SHARP_AWARE_CANDIDATE_RELEASE =
-  "cfb_market_sharp_aware_shadow_2026_08_29_r3_borderline_spread" as const;
+  "cfb_market_sharp_aware_candidate_2026_08_30_r4_market_dominant_fresh_sharp" as const;
 export const CFB_MARKET_SHARP_AWARE_SHADOW_RELEASE =
   CFB_MARKET_SHARP_AWARE_CANDIDATE_RELEASE;
 export const CFB_MARKET_SHARP_AWARE_PRODUCTION_RELEASE =
-  "cfb_market_sharp_aware_provisional_2026_08_29_r5_transition_coherent" as const;
-export const CFB_MARKET_SHADOW_WEIGHT = 0.25 as const;
+  "cfb_market_sharp_aware_production_2026_08_30_r6_market_dominant_fresh_sharp" as const;
+export const CFB_MARKET_SHADOW_WEIGHT = 0.75 as const;
 export const CFB_SHARP_SIGNED_GAP_THRESHOLD_PP = 10 as const;
 export const CFB_SHARP_FULL_STRENGTH_GAP_PP = 20 as const;
-export const CFB_SHARP_MAX_MARGIN_SHIFT_POINTS = 1 as const;
-export const CFB_SHARP_MAX_TOTAL_SHIFT_POINTS = 1 as const;
+export const CFB_SHARP_MAX_MARGIN_SHIFT_POINTS = 1.5 as const;
+export const CFB_SHARP_MAX_TOTAL_SHIFT_POINTS = 1.5 as const;
+export const CFB_SHARP_MAX_AGE_MINUTES = 120 as const;
+export const CFB_SHARP_LINE_MATCH_TOLERANCE_POINTS = 0.5 as const;
 export const CFB_WATCHLIST_NEAR_NEUTRAL_MIN_EDGE_PP = 0 as const;
 export const CFB_WATCHLIST_NEAR_NEUTRAL_MIN_EV = -0.03 as const;
 export const CFB_WATCHLIST_EVIDENCE_CONFLICT_MIN_EDGE_PP = -3 as const;
@@ -94,18 +96,19 @@ export function buildCfbMarketSharpAwareShadowForecast(args: {
   independentForecast: CfbV1Forecast;
   anchor: CfbCanonicalMarketAnchor;
   sharpSplits: CfbSharpApiSplitRecord[];
+  evaluatedAt: string;
 }): CfbMarketSharpAwareShadowForecast {
-  const sharp = latestCirca(args.sharpSplits);
+  const sharp = latestEligibleCirca(args.sharpSplits, args.evaluatedAt);
   const marginGaps = sharp
     ? [
         sharp.moneyline ? signedGap(sharp.moneyline.home) : null,
-        sharp.spread && Math.abs(sharp.spread.homeLine - args.anchor.homeSpread) <= 1
+        sharp.spread && Math.abs(sharp.spread.homeLine - args.anchor.homeSpread) <= CFB_SHARP_LINE_MATCH_TOLERANCE_POINTS
           ? signedGap(sharp.spread.home)
           : null,
       ].filter((value): value is number => value !== null)
     : [];
   const homeMarginGapPp = marginGaps.length > 0 ? mean(marginGaps) : null;
-  const overTotalGapPp = sharp?.total && Math.abs(sharp.total.line - args.anchor.totalLine) <= 2
+  const overTotalGapPp = sharp?.total && Math.abs(sharp.total.line - args.anchor.totalLine) <= CFB_SHARP_LINE_MATCH_TOLERANCE_POINTS
     ? signedGap(sharp.total.over)
     : null;
   const homeMarginShiftPoints = signedPointShift(homeMarginGapPp, CFB_SHARP_MAX_MARGIN_SHIFT_POINTS);
@@ -147,6 +150,7 @@ export function buildCfbMarketSharpAwareForecast(args: {
   independentForecast: CfbV1Forecast;
   anchor: CfbCanonicalMarketAnchor;
   sharpSplits: CfbSharpApiSplitRecord[];
+  evaluatedAt: string;
 }): CfbMarketSharpAwareForecast {
   const { shadowRelease, ...forecast } = buildCfbMarketSharpAwareShadowForecast(args);
   return {
@@ -370,7 +374,7 @@ function strictSharpRead(args: {
   selectedSide: CanonicalSide;
   sharpSplits: CfbSharpApiSplitRecord[];
 }): { direction: CfbMarketEvidenceDirection; gapPp: number | null; observedAt: string | null } {
-  const record = latestCirca(args.sharpSplits);
+  const record = latestEligibleCirca(args.sharpSplits, args.decision.evaluatedAt);
   if (!record) return { direction: "unknown", gapPp: null, observedAt: null };
   let gapPp: number | null = null;
   if (args.decision.market === "moneyline" && record.moneyline && (args.selectedSide === "home" || args.selectedSide === "away")) {
@@ -441,9 +445,16 @@ function quoteFor(book: NcaafBookOdds, market: CfbV1Market, side: CanonicalSide)
   return null;
 }
 
-function latestCirca(records: CfbSharpApiSplitRecord[]): CfbSharpApiSplitRecord | null {
+function latestEligibleCirca(records: CfbSharpApiSplitRecord[], evaluatedAt: string): CfbSharpApiSplitRecord | null {
+  const evaluationMs = Date.parse(evaluatedAt);
+  if (!Number.isFinite(evaluationMs)) throw new Error(`Invalid CFB market/sharp evaluation timestamp: ${evaluatedAt}.`);
   return records
-    .filter((record) => record.sportsbook === "circa" && record.sourceSemantics === "sharp_adjacent")
+    .filter((record) => {
+      if (record.sportsbook !== "circa" || record.sourceSemantics !== "sharp_adjacent") return false;
+      const capturedMs = Date.parse(record.capturedAt);
+      const ageMinutes = (evaluationMs - capturedMs) / 60_000;
+      return Number.isFinite(capturedMs) && ageMinutes >= 0 && ageMinutes <= CFB_SHARP_MAX_AGE_MINUTES;
+    })
     .sort((first, second) => Date.parse(second.capturedAt) - Date.parse(first.capturedAt))[0] ?? null;
 }
 

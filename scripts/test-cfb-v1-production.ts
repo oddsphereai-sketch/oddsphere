@@ -168,6 +168,7 @@ const authoritativeForecast = buildCfbMarketSharpAwareForecast({
   independentForecast: fullBundle.forecast,
   anchor: outcomeAnchor,
   sharpSplits: [],
+  evaluatedAt: lockedAt,
 });
 const productionBundle = applyCfbMarketSharpAwareGrades({
   homeTeam: game.home.abbreviation,
@@ -279,7 +280,7 @@ assert.deepEqual(trustedCfbSharpEventIdsByGame([trustedSharpRow, {
 }]), {}, "conflicting immutable provider IDs must disable prior-event disambiguation");
 const member = buildCfbMemberFixture([evidence]);
 assert.equal(member.snapshot.games.length, 1);
-assert.equal(member.fixtureRelease, "cfb_v1_member_fixture_2026_08_29_r29_concise_member_read");
+assert.equal(member.fixtureRelease, "cfb_v1_member_fixture_2026_08_30_r30_market_dominant_fresh_sharp");
 assert.equal(member.snapshot.games[0]!.collegeFootballScope, "fbs_involved", "the CFB reader must classify every member game for the FBS-first board without changing writer scope");
 assert.equal(member.snapshot.games[0]!.footballProjection?.expectedAwayPoints, authoritativeForecast.expectedAwayPoints);
 assert.equal(member.snapshot.games[0]!.footballProjection?.expectedHomePoints, authoritativeForecast.expectedHomePoints);
