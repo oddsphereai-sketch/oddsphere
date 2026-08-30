@@ -32,11 +32,11 @@ export const CFB_V1_CALIBRATION_RELEASE =
 export const CFB_V1_GRADE_POLICY_RELEASE =
   "cfb_v1_composite_grade_policy_2026_08_29_r3_transition_coherent" as const;
 export const CFB_V1_DECISION_RELEASE =
-  "cfb_v1_daily_edge_decision_2026_08_30_r19_unit_probability_bound" as const;
+  "cfb_v1_daily_edge_decision_2026_08_30_r20_near_tossup_total_hold" as const;
 const CFB_V1_POLICY_SOURCE_DECISION_RELEASE =
   "cfb_v1_daily_edge_decision_2026_08_26_r7_sharpapi_price_fallback" as const;
 export const CFB_V1_DECISION_SCHEMA_RELEASE =
-  "cfb_v1_exact_price_decision_tuple_2026_08_30_r12_market_dominant_fresh_sharp" as const;
+  "cfb_v1_exact_price_decision_tuple_2026_08_30_r13_near_tossup_total_hold" as const;
 export const CFB_T60_TARGET_MINUTES = 60 as const;
 export const CFB_T60_MAX_CAPTURE_LAG_MINUTES = 20 as const;
 
@@ -50,7 +50,8 @@ export type CfbV1UnavailableReasonCode =
   | "quote_timestamp_invalid"
   | "quote_observed_after_evaluation"
   | "evaluation_not_pregame"
-  | "global_health_hold";
+  | "global_health_hold"
+  | "mean_pmf_near_tossup_conflict";
 
 export type CfbV1ContextLines = {
   homeSpread: number | null;

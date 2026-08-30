@@ -26,7 +26,13 @@ import {
   type CfbForwardStoredEvidence,
 } from "../lib/services/football/cfbForwardEvidence";
 import { normalizeCfbPlaybookLine, normalizeCfbPlaybookSplits } from "../lib/services/football/cfbPlaybookEvidence";
-import { cfbLockPlanningEvidence, trustedCfbSharpEventIdsByGame } from "../lib/services/football/cfbForwardEvidenceWriter";
+import {
+  CFB_TOTAL_MEAN_PMF_TOSSUP_MAX_MEAN_DISTANCE_POINTS,
+  CFB_TOTAL_MEAN_PMF_TOSSUP_MAX_PROBABILITY_GAP,
+  cfbLockPlanningEvidence,
+  shouldHoldCfbNearTossupTotalConflict,
+  trustedCfbSharpEventIdsByGame,
+} from "../lib/services/football/cfbForwardEvidenceWriter";
 import { resolveCfbCanonicalMarketAnchor } from "../lib/services/football/cfbMarketInformedOutcome";
 import {
   CFB_MARKET_SHADOW_WEIGHT,
@@ -131,6 +137,29 @@ assert.equal(fullBundle.trackingEnabled, true);
 assert.equal(fullBundle.evaluatedBets.every((decision) => decision.decisionRelease === CFB_V1_DECISION_RELEASE), true);
 assert.equal(new Set(fullBundle.evaluatedBets.map((decision) => decision.market)).size, 3);
 assert.equal(fullBundle.evaluatedBets.every((decision) => decision.consensus.books.every((bookName) => bookName !== decision.evaluatedQuote.sportsbook)), true, "consensus must exclude the evaluated sportsbook");
+const totalDecision = fullBundle.evaluatedBets.find((decision) => decision.market === "total");
+assert.ok(totalDecision);
+const nearTossupTotal = {
+  ...totalDecision,
+  side: "Under 57.5",
+  grade: "No Play" as const,
+  forecastProbability: 0.5020019998108759,
+  modelProbability: 0.5010009999054379,
+  expectedValue: -0.0435,
+  evaluatedQuote: { ...totalDecision.evaluatedQuote, line: 57.5 },
+};
+assert.equal(CFB_TOTAL_MEAN_PMF_TOSSUP_MAX_PROBABILITY_GAP, 0.01);
+assert.equal(CFB_TOTAL_MEAN_PMF_TOSSUP_MAX_MEAN_DISTANCE_POINTS, 0.5);
+assert.equal(shouldHoldCfbNearTossupTotalConflict({ decision: nearTossupTotal, forecast: { expectedTotal: 57.831332938741404 } }), true,
+  "a negative-EV No Play with an effectively tied PMF and narrowly opposing mean becomes an explicit Total hold");
+assert.equal(shouldHoldCfbNearTossupTotalConflict({ decision: { ...nearTossupTotal, grade: "Lean" }, forecast: { expectedTotal: 57.831332938741404 } }), false,
+  "the near-tossup hold cannot silently remove an actionable Total");
+assert.equal(shouldHoldCfbNearTossupTotalConflict({ decision: { ...nearTossupTotal, forecastProbability: 0.511 }, forecast: { expectedTotal: 57.831332938741404 } }), false,
+  "a PMF advantage beyond one percentage point remains subject to the strict coherence gate");
+assert.equal(shouldHoldCfbNearTossupTotalConflict({ decision: nearTossupTotal, forecast: { expectedTotal: 58.01 } }), false,
+  "a mean disagreement beyond half a point remains subject to the strict coherence gate");
+assert.equal(shouldHoldCfbNearTossupTotalConflict({ decision: { ...nearTossupTotal, expectedValue: 0.001 }, forecast: { expectedTotal: 57.831332938741404 } }), false,
+  "positive-EV tuples cannot be converted into an operational hold");
 
 const noMoneylineBooks = currentBooks.map((currentBook) => ({ ...currentBook, moneyline: null }));
 const marketScopedBundle = buildCfbV1DecisionBundle({
@@ -280,7 +309,7 @@ assert.deepEqual(trustedCfbSharpEventIdsByGame([trustedSharpRow, {
 }]), {}, "conflicting immutable provider IDs must disable prior-event disambiguation");
 const member = buildCfbMemberFixture([evidence]);
 assert.equal(member.snapshot.games.length, 1);
-assert.equal(member.fixtureRelease, "cfb_v1_member_fixture_2026_08_30_r32_unit_probability_bound");
+assert.equal(member.fixtureRelease, "cfb_v1_member_fixture_2026_08_30_r33_near_tossup_total_hold");
 assert.equal(member.snapshot.games[0]!.collegeFootballScope, "fbs_involved", "the CFB reader must classify every member game for the FBS-first board without changing writer scope");
 assert.equal(member.snapshot.games[0]!.footballProjection?.expectedAwayPoints, authoritativeForecast.expectedAwayPoints);
 assert.equal(member.snapshot.games[0]!.footballProjection?.expectedHomePoints, authoritativeForecast.expectedHomePoints);

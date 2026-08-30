@@ -55,3 +55,20 @@ scores, and PMF-derived winner probability. Missing or malformed PMF proof remai
 option defaults off, so NFL and every other existing caller retain the prior open-interval rule.
 This is a publication-validation correction only; the r44 PMF, projections, decisions, grades,
 stakes, locks, and provider load do not change.
+
+## Near-toss-up Total disposition
+
+The first natural r32 run at `2026-08-30T19:54:48.422Z` passed the endpoint guard and then failed
+atomically on Indiana State–Purdue (`457616`). Four named books centered the Total at 57.5. The
+authoritative PMF assigned Under 50.20% and Over 49.80%, while its mean was 57.8313 and its
+reachable representative score totaled 58. The exact Under -110 tuple was already `No Play` at
+50.10% calibrated probability, 0.10pp edge, and -4.35% EV. This is a distribution-shape toss-up,
+not support for a public Under prediction and not grounds to weaken the cross-market guard.
+
+Writer r33 moves only a negative-EV Total `No Play` into an explicit operational hold when all of
+these are true: PMF advantage from 50% is no more than one percentage point, PMF and mean select
+opposite sides, and the mean is no more than 0.5 points from the exact line. It also removes that
+market's outlook so the reader cannot publish a prediction that conflicts with the score summary.
+Actionable grades, nonnegative-EV tuples, gaps over one percentage point, and mean distances over
+0.5 points remain subject to the unchanged fatal coherence gate. Moneyline, Spread, other games,
+stakes, provider load, and the r44 forecast PMF are unchanged.

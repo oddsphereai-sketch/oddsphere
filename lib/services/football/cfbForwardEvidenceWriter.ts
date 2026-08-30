@@ -20,7 +20,7 @@ import {
   type CfbForwardTeamQuarterbacks,
 } from "./cfbForwardEvidence";
 import { appendCfbForwardEvidence, readCfbForwardEvidence } from "./cfbForwardEvidenceStore";
-import { buildCfbV1DecisionBundle, CFB_T60_MAX_CAPTURE_LAG_MINUTES, CFB_V1_DECISION_RELEASE, getCfbV1ForecastForGame } from "./cfbV1Decision";
+import { buildCfbV1DecisionBundle, CFB_T60_MAX_CAPTURE_LAG_MINUTES, CFB_V1_DECISION_RELEASE, getCfbV1ForecastForGame, type CfbV1ExactPriceDecision, type CfbV1Forecast } from "./cfbV1Decision";
 import { cfbV1WeeklyGameProfileCoverage } from "./cfbV1WeeklyForecast";
 import { resolveCfbCanonicalMarketAnchor } from "./cfbMarketInformedOutcome";
 import {
@@ -44,7 +44,9 @@ import { buildMarketScopedFootballTrackingPlan } from "./footballMarketScopedTra
 import { assertFootballCrossMarketCoherence } from "./footballCrossMarketCoherence";
 
 export const CFB_FORWARD_WRITER_RELEASE =
-  "cfb_forward_evidence_writer_2026_08_30_r32_verified_pmf_endpoints" as const;
+  "cfb_forward_evidence_writer_2026_08_30_r33_near_tossup_total_hold" as const;
+export const CFB_TOTAL_MEAN_PMF_TOSSUP_MAX_PROBABILITY_GAP = 0.01 as const;
+export const CFB_TOTAL_MEAN_PMF_TOSSUP_MAX_MEAN_DISTANCE_POINTS = 0.5 as const;
 export const CFB_FORWARD_MAX_QB_TEAMS_PER_RUN = 24 as const;
 export const CFB_FORWARD_RESULTS_BATCH_SIZE = 100 as const;
 export const CFB_FORWARD_MAX_PRIOR_GAME_IDS = 1200 as const;
@@ -199,14 +201,14 @@ export async function runCfbForwardEvidenceWriter(args: {
         totalLine: playbookLine?.total ?? null,
       },
     });
-    const decisions = compactDecisionBundle(outcomeAnchor
+    const decisions = holdCfbNearTossupTotalConflict({ forecast, bundle: compactDecisionBundle(outcomeAnchor
       ? applyCfbMarketSharpAwareGrades({
           bundle: decisionBundle,
           homeTeam: plan.game.home.abbreviation,
           sharpSplits: sharpApiSplits,
           operationalOpening,
         })
-      : decisionBundle, playbookLine);
+      : decisionBundle, playbookLine) });
     assertFootballCrossMarketCoherence({
       sport: "cfb",
       providerGameId: plan.game.providerGameId,
@@ -477,6 +479,50 @@ function compactDecisionBundle(
     ...bundle,
     forecast,
     marketOutlooks: buildCfbForwardMarketOutlooks({ forecast: bundle.forecast, playbookLine }),
+  };
+}
+
+export function shouldHoldCfbNearTossupTotalConflict(args: {
+  decision: CfbV1ExactPriceDecision;
+  forecast: Pick<CfbV1Forecast, "expectedTotal">;
+}): boolean {
+  const { decision } = args;
+  if (
+    decision.market !== "total" ||
+    decision.grade !== "No Play" ||
+    decision.expectedValue >= 0 ||
+    decision.evaluatedQuote.line === null
+  ) return false;
+  const selectedSide = /^under\b/i.test(decision.side) ? "under" : /^over\b/i.test(decision.side) ? "over" : null;
+  if (!selectedSide) return false;
+  const meanDelta = args.forecast.expectedTotal - decision.evaluatedQuote.line;
+  if (Math.abs(meanDelta) <= 1e-12) return false;
+  const meanSide = meanDelta > 0 ? "over" : "under";
+  return selectedSide !== meanSide &&
+    Math.abs(decision.forecastProbability - 0.5) <= CFB_TOTAL_MEAN_PMF_TOSSUP_MAX_PROBABILITY_GAP &&
+    Math.abs(meanDelta) <= CFB_TOTAL_MEAN_PMF_TOSSUP_MAX_MEAN_DISTANCE_POINTS;
+}
+
+function holdCfbNearTossupTotalConflict(args: {
+  bundle: CfbForwardPublishedDecisionBundle;
+  forecast: CfbV1Forecast;
+}): CfbForwardPublishedDecisionBundle {
+  const held = args.bundle.evaluatedBets.find((decision) =>
+    shouldHoldCfbNearTossupTotalConflict({ decision, forecast: args.forecast })
+  );
+  if (!held) return args.bundle;
+  return {
+    ...args.bundle,
+    evaluatedBets: args.bundle.evaluatedBets.filter((decision) => decision !== held),
+    heldMarkets: [
+      ...args.bundle.heldMarkets,
+      { market: "total", reason: "mean_pmf_near_tossup_conflict", reasonCodes: ["mean_pmf_near_tossup_conflict"] },
+    ],
+    marketOutlooks: {
+      moneyline: args.bundle.marketOutlooks?.moneyline ?? null,
+      spread: args.bundle.marketOutlooks?.spread ?? null,
+      total: null,
+    },
   };
 }
 
