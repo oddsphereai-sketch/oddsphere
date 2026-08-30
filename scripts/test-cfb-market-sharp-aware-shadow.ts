@@ -57,6 +57,29 @@ assert.equal(authoritative.release, CFB_MARKET_SHARP_AWARE_PRODUCTION_RELEASE);
 assert.equal(authoritative.candidateRelease, CFB_MARKET_SHARP_AWARE_CANDIDATE_RELEASE);
 assert.equal(authoritative.marketWeight, 0.75);
 
+const dominantFavorite = buildCfbMarketSharpAwareForecast({
+  independentForecast: {
+    ...independent,
+    providerGameId: "unit-probability-bound",
+    homeWinProbability: 1,
+    pmf: [{ home: 70, away: 0, probability: 1 }],
+  },
+  anchor: { homeSpread: -54, totalLine: 61.75, namedBookCount: 4, source: "named_book_median" },
+  sharpSplits: [],
+  evaluatedAt: observedAt,
+});
+assert.equal(dominantFavorite.homeWinProbability, 1, "floating PMF mass within 1e-12 of unity is published as an exact unit probability");
+assert.throws(() => buildCfbMarketSharpAwareForecast({
+  independentForecast: {
+    ...independent,
+    providerGameId: "invalid-probability",
+    pmf: [{ home: 70, away: 0, probability: Number.NaN }],
+  },
+  anchor: { homeSpread: -54, totalLine: 61.75, namedBookCount: 4, source: "named_book_median" },
+  sharpSplits: [],
+  evaluatedAt: observedAt,
+}), /invalid winner probability/, "materially invalid PMF probability remains fail-closed");
+
 const staleSharp = buildCfbMarketSharpAwareForecast({
   independentForecast: independent,
   anchor,

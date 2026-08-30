@@ -11,7 +11,7 @@ import { CFB_MARKET_SHARP_AWARE_PRODUCTION_RELEASE } from "./cfbMarketSharpAware
 import { assertMarketScopedFootballDecisions, FOOTBALL_MARKET_SCOPED_T60_TRACKING_RELEASE } from "./footballMarketScopedTracking";
 
 export const CFB_OFFICIAL_TRACKING_RECORD_RELEASE =
-  "cfb_official_tracking_record_2026_08_30_r5_market_dominant_fresh_sharp" as const;
+  "cfb_official_tracking_record_2026_08_30_r6_unit_probability_bound" as const;
 
 export function buildCfbOfficialTrackingRecords(args: { payload: CfbForwardEvidencePayload; gameId: number }): PredictionRecordRow[] {
   assertCfbTrackingPayload(args.payload);
