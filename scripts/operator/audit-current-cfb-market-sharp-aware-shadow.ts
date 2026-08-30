@@ -52,6 +52,7 @@ const games = latest.map((row) => {
     independentForecast: independent,
     anchor,
     sharpSplits: payload.market.sharpApiSplits ?? [],
+    evaluatedAt: row.capturedAt,
   });
   assertPmf(forecast);
   const candidateBundle = buildCfbV1DecisionBundle({

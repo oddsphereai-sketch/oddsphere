@@ -20,6 +20,8 @@ import {
   CFB_FORWARD_PREVIOUS_EVIDENCE_SCHEMA_RELEASE,
   CFB_FORWARD_PRIOR_EVIDENCE_SCHEMA_RELEASE,
   CFB_FORWARD_TRANSITION_EVIDENCE_SCHEMA_RELEASE,
+  CFB_FORWARD_TRANSITION_PREVIOUS_EVIDENCE_SCHEMA_RELEASE,
+  CFB_FORWARD_TRANSITION_PREVIOUS_MEMBER_RELEASE,
   CFB_FORWARD_MEMBER_RELEASE,
   type CfbForwardMarketOutlook,
   type CfbForwardEvidencePayload,
@@ -48,9 +50,9 @@ import { cfbFootballEvidenceStats } from "./footballMemberEvidence";
 import { CFB_MARKET_SHARP_AWARE_PRODUCTION_RELEASE } from "./cfbMarketSharpAwareShadow";
 
 export const CFB_MEMBER_FIXTURE_RELEASE =
-  "cfb_v1_member_fixture_2026_08_29_r29_concise_member_read" as const;
+  "cfb_v1_member_fixture_2026_08_30_r30_market_dominant_fresh_sharp" as const;
 export const CFB_PUBLIC_OUTCOME_CONTRACT_RELEASE =
-  "cfb_market_sharp_public_outcome_contract_2026_08_29_r31_transition_coherent" as const;
+  "cfb_market_sharp_public_outcome_contract_2026_08_30_r32_market_dominant_fresh_sharp" as const;
 export const CFB_CONTEXT_ONLY_QUOTE_CAPTURE_SKEW_MS = 5_000 as const;
 const CFB_MARKET_CONTEXT_MAX_CAPTURE_LAG_MINUTES = 10;
 const CFB_PUBLIC_SCORE_DIRECTION_TOLERANCE_POINTS = 0.25;
@@ -60,6 +62,7 @@ const CFB_AMBIGUOUS_SCOPE_PREVIOUS_MEMBER_RELEASE = "cfb_v1_member_release_2026_
 const CFB_AMBIGUOUS_SCOPE_PREVIOUS_DECISION_RELEASE = "cfb_v1_daily_edge_decision_2026_08_28_r15_ambiguous_event_scope" as const;
 const CFB_MARKET_SHARP_PRIOR_DECISION_RELEASE = "cfb_v1_daily_edge_decision_2026_08_28_r15_ambiguous_event_scope" as const;
 const CFB_MARKET_SHARP_PREVIOUS_DECISION_RELEASE = "cfb_v1_daily_edge_decision_2026_08_29_r16_market_sharp_authoritative" as const;
+const CFB_TRANSITION_PREVIOUS_DECISION_RELEASE = "cfb_v1_daily_edge_decision_2026_08_29_r17_transition_coherent" as const;
 const CFB_PROVIDER_DISCOVERY_PREVIOUS_MEMBER_RELEASE = "cfb_v1_member_release_2026_08_28_r15_directional_pmf" as const;
 const CFB_PROVIDER_DISCOVERY_PREVIOUS_DECISION_RELEASE = "cfb_v1_daily_edge_decision_2026_08_28_r12_directional_pmf" as const;
 const CFB_CANONICAL_PRICE_PREVIOUS_MEMBER_RELEASE = "cfb_v1_member_release_2026_08_28_r16_canonical_price_coverage" as const;
@@ -205,19 +208,38 @@ export function selectLatestCfbMemberEvidenceRows(
       )
     : null;
   const marketSharpPreviousAuthority = marketSharpPrevious ?? marketSharpPreviousBoundary ?? marketSharpPriorAuthority;
+  const transitionPrevious = completeRowsForRelease(
+    rows,
+    CFB_FORWARD_TRANSITION_PREVIOUS_EVIDENCE_SCHEMA_RELEASE,
+    CFB_FORWARD_TRANSITION_PREVIOUS_MEMBER_RELEASE,
+    CFB_TRANSITION_PREVIOUS_DECISION_RELEASE,
+  );
+  const transitionPreviousBoundary = marketSharpPreviousAuthority
+    ? immutableBoundaryTransitionRows(
+        rows,
+        now,
+        CFB_FORWARD_TRANSITION_PREVIOUS_EVIDENCE_SCHEMA_RELEASE,
+        CFB_FORWARD_TRANSITION_PREVIOUS_MEMBER_RELEASE,
+        CFB_TRANSITION_PREVIOUS_DECISION_RELEASE,
+        marketSharpPreviousAuthority,
+      )
+    : null;
+  const transitionPreviousAuthority = transitionPrevious ?? transitionPreviousBoundary ?? marketSharpPreviousAuthority;
   const current = completeRowsForRelease(rows, CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE, CFB_FORWARD_MEMBER_RELEASE, CFB_V1_DECISION_RELEASE);
   if (current) return current;
-  const immutableBoundaryTransition = marketSharpPreviousAuthority
+  const immutableBoundaryTransition = transitionPreviousAuthority
     ? immutableBoundaryTransitionRows(
         rows,
         now,
         CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE,
         CFB_FORWARD_MEMBER_RELEASE,
         CFB_V1_DECISION_RELEASE,
-        marketSharpPreviousAuthority,
+        transitionPreviousAuthority,
       )
     : null;
   if (immutableBoundaryTransition) return immutableBoundaryTransition;
+  if (transitionPrevious) return transitionPrevious;
+  if (transitionPreviousBoundary) return transitionPreviousBoundary;
   if (marketSharpPrevious) return marketSharpPrevious;
   if (marketSharpPreviousBoundary) return marketSharpPreviousBoundary;
   if (marketSharpPrior) return marketSharpPrior;
