@@ -44,7 +44,7 @@ import { buildMarketScopedFootballTrackingPlan } from "./footballMarketScopedTra
 import { assertFootballCrossMarketCoherence } from "./footballCrossMarketCoherence";
 
 export const CFB_FORWARD_WRITER_RELEASE =
-  "cfb_forward_evidence_writer_2026_08_30_r33_near_tossup_total_hold" as const;
+  "cfb_forward_evidence_writer_2026_08_30_r34_missing_anchor_game_hold" as const;
 export const CFB_TOTAL_MEAN_PMF_TOSSUP_MAX_PROBABILITY_GAP = 0.01 as const;
 export const CFB_TOTAL_MEAN_PMF_TOSSUP_MAX_MEAN_DISTANCE_POINTS = 0.5 as const;
 export const CFB_FORWARD_MAX_QB_TEAMS_PER_RUN = 24 as const;
@@ -163,12 +163,6 @@ export async function runCfbForwardEvidenceWriter(args: {
         totalLine: playbookLine?.total ?? null,
       },
     });
-    const provisionalBoardGame = plan.game.away.fbs || plan.game.home.fbs;
-    if (!outcomeAnchor && provisionalBoardGame) {
-      throw new Error(
-        `CFB market/sharp release requires a canonical price anchor for ${plan.game.away.abbreviation}@${plan.game.home.abbreviation}; preserving the preceding coherent snapshot.`,
-      );
-    }
     const forecast = outcomeAnchor
       ? buildCfbMarketSharpAwareForecast({
           independentForecast: weeklyForecast.forecast,
@@ -183,7 +177,7 @@ export async function runCfbForwardEvidenceWriter(args: {
       ...(plan.stage === "t60" && homeQuarterbacks.expectedStartingQuarterback === null ? ["home_quarterback_roster_unavailable"] : []),
       ...(weeklyForecast.featureHealth.awayProfile === "neutral_imputation" ? ["away_model_team_profile_unavailable"] : []),
       ...(weeklyForecast.featureHealth.homeProfile === "neutral_imputation" ? ["home_model_team_profile_unavailable"] : []),
-      ...(!outcomeAnchor ? ["authoritative_market_anchor_unavailable_outside_provisional_board"] : []),
+      ...cfbMarketAnchorHealthHolds(outcomeAnchor),
     ];
     const decisionBundle = buildCfbV1DecisionBundle({
       providerGameId: plan.game.providerGameId,
@@ -467,6 +461,12 @@ function releaseRefreshNeed(rows: CfbForwardStoredEvidence[], now: string): { co
       row.payload.decisions.evaluatedBets.length + row.payload.decisions.heldMarkets.length !== 3)
   );
   return staleUpcoming ? { collect: true, reason: "release_refresh_due", cadenceMinutes: 0 } : null;
+}
+
+export function cfbMarketAnchorHealthHolds(
+  outcomeAnchor: ReturnType<typeof resolveCfbCanonicalMarketAnchor>,
+): string[] {
+  return outcomeAnchor ? [] : ["authoritative_market_anchor_unavailable"];
 }
 
 function compactDecisionBundle(

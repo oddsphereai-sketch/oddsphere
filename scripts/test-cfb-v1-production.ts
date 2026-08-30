@@ -29,6 +29,7 @@ import { normalizeCfbPlaybookLine, normalizeCfbPlaybookSplits } from "../lib/ser
 import {
   CFB_TOTAL_MEAN_PMF_TOSSUP_MAX_MEAN_DISTANCE_POINTS,
   CFB_TOTAL_MEAN_PMF_TOSSUP_MAX_PROBABILITY_GAP,
+  cfbMarketAnchorHealthHolds,
   cfbLockPlanningEvidence,
   shouldHoldCfbNearTossupTotalConflict,
   trustedCfbSharpEventIdsByGame,
@@ -309,7 +310,7 @@ assert.deepEqual(trustedCfbSharpEventIdsByGame([trustedSharpRow, {
 }]), {}, "conflicting immutable provider IDs must disable prior-event disambiguation");
 const member = buildCfbMemberFixture([evidence]);
 assert.equal(member.snapshot.games.length, 1);
-assert.equal(member.fixtureRelease, "cfb_v1_member_fixture_2026_08_30_r33_near_tossup_total_hold");
+assert.equal(member.fixtureRelease, "cfb_v1_member_fixture_2026_08_30_r34_missing_anchor_game_hold");
 assert.equal(member.snapshot.games[0]!.collegeFootballScope, "fbs_involved", "the CFB reader must classify every member game for the FBS-first board without changing writer scope");
 assert.equal(member.snapshot.games[0]!.footballProjection?.expectedAwayPoints, authoritativeForecast.expectedAwayPoints);
 assert.equal(member.snapshot.games[0]!.footballProjection?.expectedHomePoints, authoritativeForecast.expectedHomePoints);
@@ -621,6 +622,8 @@ const heldBundle = buildCfbV1DecisionBundle({
   comparableCurrentBooks: [],
   forecast,
 });
+assert.deepEqual(cfbMarketAnchorHealthHolds(null), ["authoritative_market_anchor_unavailable"], "a missing canonical anchor must hold only that game's exact-price markets instead of aborting the weekly wave");
+assert.deepEqual(cfbMarketAnchorHealthHolds(resolveCfbCanonicalMarketAnchor({ books: currentBooks })), [], "a coherent canonical anchor must not add an availability hold");
 const heldPayload: CfbForwardEvidencePayload = {
   ...payload,
   authoritativeForecast: {
