@@ -45,12 +45,12 @@ import {
   type CfbV1ExactPriceDecision,
   type CfbV1Market,
 } from "./cfbV1Decision";
-import { activeCfbWeeklyWindow, isGameInCfbWeeklyWindow } from "./cfbWeeklyWindow";
+import { isGameInCfbWeeklyWindow, resolveCfbForwardWindow } from "./cfbWeeklyWindow";
 import { cfbFootballEvidenceStats } from "./footballMemberEvidence";
 import { CFB_MARKET_SHARP_AWARE_PRODUCTION_RELEASE } from "./cfbMarketSharpAwareShadow";
 
 export const CFB_MEMBER_FIXTURE_RELEASE =
-  "cfb_v1_member_fixture_2026_08_30_r30_market_dominant_fresh_sharp" as const;
+  "cfb_v1_member_fixture_2026_08_30_r31_completed_slate_roll_forward" as const;
 export const CFB_PUBLIC_OUTCOME_CONTRACT_RELEASE =
   "cfb_market_sharp_public_outcome_contract_2026_08_30_r32_market_dominant_fresh_sharp" as const;
 export const CFB_CONTEXT_ONLY_QUOTE_CAPTURE_SKEW_MS = 5_000 as const;
@@ -98,7 +98,7 @@ export async function readCurrentCfbMemberFixture(args: { client: SupabaseClient
 }
 
 export function buildCfbMemberFixture(rows: CfbForwardStoredEvidence[], now = new Date().toISOString()): CfbMemberFixture {
-  const window = activeCfbWeeklyWindow(now);
+  const window = resolveCfbForwardWindow({ now, evidence: rows });
   const windowRows = rows.filter((row) => isGameInCfbWeeklyWindow({ scheduledStart: row.gameStartAt }, window));
   const latest = selectLatestCfbMemberEvidenceRows(windowRows, now);
   const movementRowsByGame = new Map(latest.map((row) => [

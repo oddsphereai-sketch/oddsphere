@@ -2,8 +2,8 @@ import { SharpApiClient, type SharpApiRequestOptions, type SharpApiResponse } fr
 import type { NcaafGame } from "./balldontlieNcaafSlate";
 
 export const CFB_SHARP_API_SPLITS_RELEASE =
-  "cfb_sharpapi_splits_2026_08_28_r1_strict_identity" as const;
-export const CFB_SHARP_API_SPLITS_MAX_GAMES = 96 as const;
+  "cfb_sharpapi_splits_2026_08_30_r2_full_week_capacity" as const;
+export const CFB_SHARP_API_SPLITS_MAX_GAMES = 128 as const;
 export const CFB_SHARP_API_SPLITS_MAX_ROWS = 200 as const;
 
 type Json = Record<string, unknown>;

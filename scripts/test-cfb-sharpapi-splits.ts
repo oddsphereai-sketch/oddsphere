@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import type { SharpApiRequestOptions, SharpApiResponse } from "../lib/providers/real_api/_sharpApiClient";
 import type { NcaafGame } from "../lib/services/football/balldontlieNcaafSlate";
-import { fetchCfbSharpApiSplits } from "../lib/services/football/cfbSharpApiSplits";
+import { CFB_SHARP_API_SPLITS_MAX_GAMES, fetchCfbSharpApiSplits } from "../lib/services/football/cfbSharpApiSplits";
 
 const game: NcaafGame = {
   providerGameId: "457159",
@@ -58,6 +58,22 @@ async function main(): Promise<void> {
     client: new StubClient([row({ total: { line: 48.5, bets_pct: { over: 0.55, under: 0.4 }, handle_pct: { over: 0.51, under: 0.49 } } })]),
   });
   assert.equal(incomplete.recordsByGame[game.providerGameId]?.[0]?.total, null, "non-complementary market fails closed without suppressing the record");
+
+  const fullWeek = Array.from({ length: 106 }, (_, index) => ({
+    ...game,
+    providerGameId: `full-week-${index}`,
+  }));
+  const fullWeekResult = await fetchCfbSharpApiSplits({ games: fullWeek, client: new StubClient([]) });
+  assert.equal(CFB_SHARP_API_SPLITS_MAX_GAMES, 128);
+  assert.equal(fullWeekResult.attemptedGames, 106);
+  assert.equal(fullWeekResult.requests, 1, "full-week identity matching must retain one provider request");
+  await assert.rejects(
+    fetchCfbSharpApiSplits({
+      games: Array.from({ length: 129 }, (_, index) => ({ ...game, providerGameId: `overflow-${index}` })),
+      client: new StubClient([]),
+    }),
+    /cannot exceed 128 exact games/,
+  );
 
   console.log("CFB SharpAPI strict split matching tests passed.");
 }

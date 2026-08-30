@@ -31,7 +31,7 @@ import {
   CFB_MARKET_SHARP_AWARE_PRODUCTION_RELEASE,
 } from "./cfbMarketSharpAwareShadow";
 import { buildCfbOfficialTrackingRecords, cfbProviderIntegerId } from "./cfbOfficialTrackingRecord";
-import { activeCfbWeeklyWindow, eligibleCfbWeeklyGames, isGameInCfbWeeklyWindow, type CfbWeeklyWindow } from "./cfbWeeklyWindow";
+import { eligibleCfbWeeklyGames, isGameInCfbWeeklyWindow, resolveCfbForwardWindow, type CfbWeeklyWindow } from "./cfbWeeklyWindow";
 import {
   CFB_SHARP_API_ODDS_RELEASE,
   cfbBooksNeedSharpFallback,
@@ -44,7 +44,7 @@ import { buildMarketScopedFootballTrackingPlan } from "./footballMarketScopedTra
 import { assertFootballCrossMarketCoherence } from "./footballCrossMarketCoherence";
 
 export const CFB_FORWARD_WRITER_RELEASE =
-  "cfb_forward_evidence_writer_2026_08_30_r28_market_dominant_fresh_sharp" as const;
+  "cfb_forward_evidence_writer_2026_08_30_r29_completed_slate_roll_forward" as const;
 export const CFB_FORWARD_MAX_QB_TEAMS_PER_RUN = 24 as const;
 export const CFB_FORWARD_RESULTS_BATCH_SIZE = 100 as const;
 export const CFB_FORWARD_MAX_PRIOR_GAME_IDS = 1200 as const;
@@ -82,8 +82,8 @@ export async function runCfbForwardEvidenceWriter(args: {
   playbookApiKey: string;
   sharpApiKey: string;
 }): Promise<CfbForwardWriterResult> {
-  const window = activeCfbWeeklyWindow(args.now);
   const allExisting = await readCfbForwardEvidence({ client: args.client, season: args.season });
+  const window = resolveCfbForwardWindow({ now: args.now, evidence: allExisting, advanceWithoutNextEvidence: true });
   const existing = allExisting.filter((row) => isGameInCfbWeeklyWindow({ scheduledStart: row.gameStartAt }, window));
   const lockPlanningExisting = cfbLockPlanningEvidence(existing);
   const ordinaryNeed = determineCfbForwardCollectionNeed({ existing: lockPlanningExisting, now: args.now });
