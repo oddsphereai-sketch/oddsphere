@@ -1,7 +1,7 @@
 import type { NcaafGame } from "./balldontlieNcaafSlate";
 
 export const CFB_WEEKLY_WINDOW_RELEASE =
-  "cfb_weekly_window_2026_08_28_r2_model_covered_division_i" as const;
+  "cfb_weekly_window_2026_08_30_r3_completed_slate_roll_forward" as const;
 
 export type CfbWeeklyWindow = {
   release: typeof CFB_WEEKLY_WINDOW_RELEASE;
@@ -35,6 +35,62 @@ export function activeCfbWeeklyWindow(now: string | Date): CfbWeeklyWindow {
     providerQueryStartDate: isoDate(thursday),
     providerQueryEndDate: isoDate(addDays(monday, 1)),
   };
+}
+
+export function nextCfbWeeklyWindow(window: CfbWeeklyWindow): CfbWeeklyWindow {
+  const thursday = addDays(dateAtUtcNoon(window.boardStartDate), 7);
+  const monday = addDays(dateAtUtcNoon(window.boardEndDate), 7);
+  return {
+    release: CFB_WEEKLY_WINDOW_RELEASE,
+    easternWeekStartsOn: "tuesday",
+    boardStartDate: isoDate(thursday),
+    boardEndDate: isoDate(monday),
+    providerQueryStartDate: isoDate(thursday),
+    providerQueryEndDate: isoDate(addDays(monday, 1)),
+  };
+}
+
+type CfbWeeklyEvidenceRow = {
+  providerGameId: string;
+  gameStartAt: string;
+  payload: { slateGameCount: number };
+};
+
+/**
+ * Keep the Tuesday-anchored window while any captured game can still play.
+ * Once the authoritative opening wave is complete and every captured kickoff
+ * has passed, expose the next Thursday-through-Monday window immediately.
+ * Requiring complete evidence prevents a missing Monday game from being
+ * mistaken for a finished slate.
+ */
+export function resolveCfbForwardWindow(args: {
+  now: string | Date;
+  evidence: CfbWeeklyEvidenceRow[];
+  /** The sole writer may advance before rows for the next window exist. */
+  advanceWithoutNextEvidence?: boolean;
+}): CfbWeeklyWindow {
+  const current = activeCfbWeeklyWindow(args.now);
+  const nowMs = typeof args.now === "string" ? Date.parse(args.now) : args.now.getTime();
+  if (!Number.isFinite(nowMs)) throw new Error("CFB forward window requires a valid timestamp.");
+  const currentRows = args.evidence.filter((row) =>
+    isGameInCfbWeeklyWindow({ scheduledStart: row.gameStartAt }, current)
+  );
+  if (currentRows.length === 0) return current;
+
+  const expectedGames = Math.max(...currentRows.map((row) => row.payload.slateGameCount));
+  const capturedGames = new Set(currentRows.map((row) => row.providerGameId)).size;
+  const completeOpeningWave = Number.isInteger(expectedGames) && expectedGames > 0 && capturedGames >= expectedGames;
+  const hasFutureKickoff = currentRows.some((row) => {
+    const startsAt = Date.parse(row.gameStartAt);
+    return !Number.isFinite(startsAt) || startsAt > nowMs;
+  });
+  const next = nextCfbWeeklyWindow(current);
+  const nextEvidenceExists = args.evidence.some((row) =>
+    isGameInCfbWeeklyWindow({ scheduledStart: row.gameStartAt }, next)
+  );
+  return completeOpeningWave && !hasFutureKickoff && (args.advanceWithoutNextEvidence === true || nextEvidenceExists)
+    ? next
+    : current;
 }
 
 export function isGameInCfbWeeklyWindow(game: Pick<NcaafGame, "scheduledStart">, window: CfbWeeklyWindow): boolean {

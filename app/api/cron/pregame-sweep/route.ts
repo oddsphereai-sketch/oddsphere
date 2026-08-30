@@ -50,7 +50,7 @@ import { generatePredictionsForSlate } from "@/lib/services/automodelService";
 import { assertMlbChampionRuntime } from "@/lib/automodel/mlbChampionRuntime";
 import { assertWnbaChampionRuntime } from "@/lib/automodel/wnbaChampionRuntime";
 import { createPredictionRecords } from "@/lib/services/predictionRecordService";
-import { assessMlbLockCoherence } from "@/lib/services/mlbLockCoherence";
+import { assessMlbLockCoherence, MLB_LOCK_COHERENCE_RELEASE } from "@/lib/services/mlbLockCoherence";
 import { updateMarketSignalsForSlate } from "@/lib/services/marketSignalDerivationService";
 import { updateGradesForSlate } from "@/lib/services/gradeDerivationService";
 import { detectSnapshotStaleness } from "@/lib/services/snapshotStalenessDetector";
@@ -515,11 +515,13 @@ export async function GET(request: Request) {
       );
       let gamesReadyForLock = modelEligibleGames;
       let lockCoherence: {
+        release: typeof MLB_LOCK_COHERENCE_RELEASE;
         checked: number;
         coherent: number;
         blocked_game_ids: number[];
         errors: string[];
       } = {
+        release: MLB_LOCK_COHERENCE_RELEASE,
         checked: 0,
         coherent: 0,
         blocked_game_ids: modelDeferredGames.map((game) => game.game_id),
@@ -540,7 +542,7 @@ export async function GET(request: Request) {
           const expectedRows = expectedResult.proposed.filter((row) => enteringGameIds.has(row.game_id));
           const { data: storedRows, error: storedError } = await supabase
             .from("prediction_records")
-            .select("game_id, market, pick, side, odds_american, confidence, play_grade, best_angle, no_bet")
+            .select("game_id, market, pick, side, odds_american, confidence, play_grade, best_angle, no_bet, line_value, model_probability, market_probability, edge, published_at, snapshot_json")
             .in("game_id", [...enteringGameIds])
             .eq("sport", "mlb")
             .eq("slate_date", date)
@@ -552,6 +554,7 @@ export async function GET(request: Request) {
             storedRows: storedRows ?? [],
           });
           lockCoherence = {
+            release: MLB_LOCK_COHERENCE_RELEASE,
             checked: assessment.checked,
             coherent: assessment.coherentGameIds.length,
             blocked_game_ids: [
@@ -570,6 +573,7 @@ export async function GET(request: Request) {
         } catch (error) {
           gamesReadyForLock = [];
           lockCoherence = {
+            release: MLB_LOCK_COHERENCE_RELEASE,
             checked: modelEligibleGames.length,
             coherent: 0,
             blocked_game_ids: partition.entering_lock.map((game) => game.game_id),

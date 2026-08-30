@@ -23,7 +23,7 @@ import {
   getCfbV1Forecasts,
 } from "../lib/services/football/cfbV1Decision";
 import { cfbV1WeeklyGameProfileCoverage } from "../lib/services/football/cfbV1WeeklyForecast";
-import { activeCfbWeeklyWindow, eligibleCfbWeeklyGames } from "../lib/services/football/cfbWeeklyWindow";
+import { activeCfbWeeklyWindow, eligibleCfbWeeklyGames, resolveCfbForwardWindow } from "../lib/services/football/cfbWeeklyWindow";
 import type { NcaafGame, NcaafTeam } from "../lib/services/football/balldontlieNcaafSlate";
 
 const openingWindow = activeCfbWeeklyWindow("2026-08-25T16:00:00.000Z");
@@ -138,6 +138,30 @@ assert.equal(selectQuarterbackTeams({ plans: qbPlans, teams: qbTeams, priorQuart
 
 const openingRows = frozen.slice(0, 2).map((forecast, index) => evidenceRow(game({ id: forecast.providerGameId, start: forecast.gameStartsAt, awayName: forecast.awayTeam, homeName: forecast.homeTeam }), forecast, 2, `opening-${index}`));
 const weekOneRows = [weekOneGame, fcs].map((value, index) => evidenceRow(value, getCfbV1ForecastForGame({ game: value }).forecast, 2, `week-one-${index}`));
+assert.equal(
+  resolveCfbForwardWindow({ now: "2026-08-30T15:30:00.000Z", evidence: openingRows, advanceWithoutNextEvidence: true }).boardStartDate,
+  "2026-09-03",
+  "a complete captured slate with no future kickoff must reveal the week-ahead board before Tuesday",
+);
+assert.equal(
+  resolveCfbForwardWindow({ now: "2026-08-30T15:30:00.000Z", evidence: [
+    ...openingRows,
+    (() => {
+      const monday = game({ id: "monday-future", start: "2026-08-31T23:30:00.000Z", awayName: "Alabama Crimson Tide", homeName: "Clemson Tigers" });
+      return evidenceRow(monday, getCfbV1ForecastForGame({ game: monday }).forecast, 3, "monday-future");
+    })(),
+  ] }).boardStartDate,
+  "2026-08-27",
+  "a captured future Monday game must keep the current board active",
+);
+assert.equal(
+  resolveCfbForwardWindow({ now: "2026-08-30T15:30:00.000Z", evidence: [openingRows[0]!] }).boardStartDate,
+  "2026-08-27",
+  "an incomplete opening wave cannot trigger an early rollover",
+);
+const earlyWeekOneMember = buildCfbMemberFixture([...openingRows, ...weekOneRows], "2026-08-30T15:30:00.000Z");
+assert.deepEqual(earlyWeekOneMember.snapshot.games.map((value) => value.id).sort(), ["cfb-fcs-at-fbs", "cfb-week-one-new-id"]);
+assert.equal(earlyWeekOneMember.week.label, "Week of Sep 3");
 const weekOneMember = buildCfbMemberFixture([...openingRows, ...weekOneRows], "2026-09-01T16:00:00.000Z");
 assert.deepEqual(weekOneMember.snapshot.games.map((value) => value.id).sort(), ["cfb-fcs-at-fbs", "cfb-week-one-new-id"]);
 assert.equal(weekOneMember.week.label, "Week of Sep 3");
