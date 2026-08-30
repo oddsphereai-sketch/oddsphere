@@ -1,5 +1,5 @@
 export const FOOTBALL_CROSS_MARKET_COHERENCE_RELEASE =
-  "football_cross_market_coherence_2026_08_28_r4_public_prediction_side" as const;
+  "football_cross_market_coherence_2026_08_30_r5_verified_pmf_endpoints" as const;
 
 const EPSILON = 1e-9;
 const EV_TOLERANCE = 1e-8;
@@ -114,10 +114,11 @@ export function auditFootballCrossMarketCoherence(args: {
   unavailableMarkets?: FootballCoherenceMarket[];
   allowWholeGameOperationalHold?: boolean;
   requireDecisionSideFromForecast?: boolean;
+  allowPmfVerifiedProbabilityEndpoints?: boolean;
 }): FootballCoherenceReport {
   const fatalIssues: FootballCoherenceIssue[] = [];
   const explanations: FootballCoherenceExplanation[] = [];
-  auditForecast(args.forecast, fatalIssues);
+  auditForecast(args.forecast, fatalIssues, args.allowPmfVerifiedProbabilityEndpoints === true);
 
   const unavailable = args.unavailableMarkets ?? [];
   const markets = [...args.decisions.map((decision) => decision.market), ...unavailable];
@@ -259,9 +260,11 @@ export function assertFootballCrossMarketCoherence(
 function auditForecast(
   forecast: FootballCoherenceForecast,
   issues: FootballCoherenceIssue[],
+  allowPmfVerifiedProbabilityEndpoints: boolean,
 ): void {
   const probabilities = [forecast.awayWinProbability, forecast.homeWinProbability];
-  if (probabilities.some((value) => !Number.isFinite(value) || value <= 0 || value >= 1) ||
+  const endpointsAllowed = allowPmfVerifiedProbabilityEndpoints && Boolean(forecast.pmf);
+  if (probabilities.some((value) => !Number.isFinite(value) || value < 0 || value > 1 || (!endpointsAllowed && (value === 0 || value === 1))) ||
       Math.abs(probabilities[0]! + probabilities[1]! - 1) > 0.000002) {
     issues.push({ code: "forecast_probability_mass", detail: `Away/home win probabilities are ${probabilities.join("/")}.` });
   }

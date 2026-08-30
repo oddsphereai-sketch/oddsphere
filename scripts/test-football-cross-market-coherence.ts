@@ -182,6 +182,49 @@ const tiedForecast = auditFootballCrossMarketCoherence({
 });
 assert.equal(tiedForecast.passed, true, "an exactly tied score and winner forecast is coherent");
 
+const extremePmfForecast: FootballCoherenceForecast = {
+  expectedAwayPoints: 7,
+  expectedHomePoints: 63,
+  representativeScore: { away: 7, home: 63 },
+  awayWinProbability: 0,
+  homeWinProbability: 1,
+  pmf: [{ away: 7, home: 63, probability: 1 }],
+};
+const unqualifiedEndpoint = auditFootballCrossMarketCoherence({
+  sport: "cfb",
+  providerGameId: "extreme-without-proof-opt-in",
+  awayTeam: "AWY",
+  homeTeam: "HME",
+  forecast: extremePmfForecast,
+  decisions: [],
+  allowWholeGameOperationalHold: true,
+});
+assert.equal(unqualifiedEndpoint.fatalIssues.some((row) => row.code === "forecast_probability_mass"), true,
+  "the shared default continues rejecting exact endpoints");
+const verifiedEndpoint = auditFootballCrossMarketCoherence({
+  sport: "cfb",
+  providerGameId: "extreme-with-pmf-proof",
+  awayTeam: "AWY",
+  homeTeam: "HME",
+  forecast: extremePmfForecast,
+  decisions: [],
+  allowWholeGameOperationalHold: true,
+  allowPmfVerifiedProbabilityEndpoints: true,
+});
+assert.equal(verifiedEndpoint.passed, true, "an exact endpoint is coherent only when its normalized PMF proves it");
+const invalidEndpointPmf = auditFootballCrossMarketCoherence({
+  sport: "cfb",
+  providerGameId: "extreme-with-invalid-pmf",
+  awayTeam: "AWY",
+  homeTeam: "HME",
+  forecast: { ...extremePmfForecast, pmf: [{ away: 7, home: 63, probability: 0.9 }] },
+  decisions: [],
+  allowWholeGameOperationalHold: true,
+  allowPmfVerifiedProbabilityEndpoints: true,
+});
+assert.equal(invalidEndpointPmf.fatalIssues.some((row) => row.code === "forecast_distribution_mass"), true,
+  "endpoint opt-in cannot bypass malformed PMF mass");
+
 const alignedPublicForecast: FootballCoherenceForecast = {
   expectedAwayPoints: 18.88,
   expectedHomePoints: 22.7,
