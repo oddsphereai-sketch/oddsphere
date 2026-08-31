@@ -1,5 +1,6 @@
 import {
   SharpApiClient,
+  SharpApiRateLimitError,
   type SharpApiResponse,
 } from "@/lib/providers/real_api/_sharpApiClient";
 import {
@@ -144,17 +145,25 @@ export async function collectNflPlayerPropsObservations(args: {
     let offset = 0;
     let cursor: string | null = null;
     for (let page = 0; page < MAX_SHARP_PAGES; page += 1) {
-      const response: SharpApiResponse<unknown[]> = await sharp.fetch<unknown[]>({
-        path: "/odds",
-        query: {
-          league: "nfl",
-          market: "props",
-          is_live: false,
-          limit: SHARP_PAGE_SIZE,
-          ...(cursor ? { cursor } : { offset }),
-        },
-        signal: AbortSignal.timeout(20_000),
-      });
+      let response: SharpApiResponse<unknown[]>;
+      try {
+        response = await sharp.fetch<unknown[]>({
+          path: "/odds",
+          query: {
+            league: "nfl",
+            market: "props",
+            is_live: false,
+            limit: SHARP_PAGE_SIZE,
+            ...(cursor ? { cursor } : { offset }),
+          },
+          signal: AbortSignal.timeout(20_000),
+          retryRateLimitInternally: false,
+        });
+      } catch (error) {
+        if (!shouldStopSharpPropsPagination(error)) throw error;
+        healthFindings.push("SHARPAPI_PROPS_RATE_LIMITED");
+        break;
+      }
       sharpRequests += 1;
       if (!Array.isArray(response.data)) throw new Error("SharpAPI NFL props returned malformed data.");
       sharpRaw.push(...response.data);
@@ -228,6 +237,10 @@ function nextSharpPropsPage(
   return typeof nextOffset === "number" && nextOffset > currentOffset
     ? { offset: nextOffset, cursor: null }
     : { offset: currentOffset + SHARP_PAGE_SIZE, cursor: null };
+}
+
+function shouldStopSharpPropsPagination(error: unknown): boolean {
+  return error instanceof SharpApiRateLimitError;
 }
 
 function validateRequest(season: number, week: number, phase: NflPlayerPropPhase): void {
@@ -398,4 +411,5 @@ export const __NFL_PLAYER_PROPS_COLLECTOR_TEST__ = {
   normalizePlayerIdentity,
   reconcileSharpRowsToSlate,
   nextSharpPropsPage,
+  shouldStopSharpPropsPagination,
 };
