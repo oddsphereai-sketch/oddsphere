@@ -25,6 +25,7 @@ import {
   type CfbForwardEvidencePayload,
   type CfbForwardStoredEvidence,
 } from "../lib/services/football/cfbForwardEvidence";
+import { CFB_FORWARD_EVIDENCE_MAX_ROWS, CFB_FORWARD_EVIDENCE_PAGE_SIZE, readCfbForwardEvidence } from "../lib/services/football/cfbForwardEvidenceStore";
 import { normalizeCfbPlaybookLine, normalizeCfbPlaybookSplits } from "../lib/services/football/cfbPlaybookEvidence";
 import {
   CFB_TOTAL_MEAN_PMF_TOSSUP_MAX_MEAN_DISTANCE_POINTS,
@@ -310,7 +311,7 @@ assert.deepEqual(trustedCfbSharpEventIdsByGame([trustedSharpRow, {
 }]), {}, "conflicting immutable provider IDs must disable prior-event disambiguation");
 const member = buildCfbMemberFixture([evidence]);
 assert.equal(member.snapshot.games.length, 1);
-assert.equal(member.fixtureRelease, "cfb_v1_member_fixture_2026_08_30_r34_missing_anchor_game_hold");
+assert.equal(member.fixtureRelease, "cfb_v1_member_fixture_2026_08_30_r35_paged_evidence_read");
 assert.equal(member.snapshot.games[0]!.collegeFootballScope, "fbs_involved", "the CFB reader must classify every member game for the FBS-first board without changing writer scope");
 assert.equal(member.snapshot.games[0]!.footballProjection?.expectedAwayPoints, authoritativeForecast.expectedAwayPoints);
 assert.equal(member.snapshot.games[0]!.footballProjection?.expectedHomePoints, authoritativeForecast.expectedHomePoints);
@@ -1270,6 +1271,38 @@ assert.doesNotMatch(sharpOddsSource, /sharpEventIdCandidates|teamSlug\(/, "the w
 assert.equal((writerSource.match(/appendCfbForwardEvidence\(/g) ?? []).length, 1, "the writer must keep one all-payload append and never insert partial game evidence inside the collection loop");
 const evidenceStoreSource = readFileSync(path.join(process.cwd(), "lib/services/football/cfbForwardEvidenceStore.ts"), "utf8");
 assert.match(evidenceStoreSource, /CFB_FORWARD_PREVIOUS_EVIDENCE_SCHEMA_RELEASE/, "the reader must retain the complete r4 exact-price wave during the natural r5 transition");
+assert.equal(CFB_FORWARD_EVIDENCE_PAGE_SIZE, 1_000);
+assert.equal(CFB_FORWARD_EVIDENCE_MAX_ROWS, 50_000);
+assert.match(evidenceStoreSource, /\.order\("captured_at", \{ ascending: true \}\)\s*\.order\("id", \{ ascending: true \}\)\s*\.range\(from, from \+ CFB_FORWARD_EVIDENCE_PAGE_SIZE - 1\)/, "the CFB evidence reader must paginate with a stable timestamp-and-ID order");
+assert.match(evidenceStoreSource, /exceeded its bounded.*row season limit/, "the CFB evidence reader must fail explicitly at its hard cap instead of silently truncating a release wave");
+const evidenceRanges: Array<[number, number]> = [];
+const storedEvidenceRow = {
+  id: evidence.id,
+  provider_game_id: evidence.providerGameId,
+  stage: evidence.stage,
+  captured_at: evidence.capturedAt,
+  game_start_at: evidence.gameStartAt,
+  payload_sha256: evidence.payloadSha256,
+  payload: evidence.payload,
+};
+const pagedEvidenceClient = {
+  from() {
+    const query = {
+      select() { return query; },
+      in() { return query; },
+      eq() { return query; },
+      order() { return query; },
+      range(from: number, to: number) {
+        evidenceRanges.push([from, to]);
+        return Promise.resolve({ data: from === 0 ? Array.from({ length: 1_000 }, () => storedEvidenceRow) : [{ ...storedEvidenceRow, id: "second-page-row" }], error: null });
+      },
+    };
+    return query;
+  },
+} as unknown as SupabaseClient;
+const pagedEvidence = await readCfbForwardEvidence({ client: pagedEvidenceClient, season: 2026 });
+assert.equal(pagedEvidence.length, 1_001, "a complete evidence read must include the second Supabase page");
+assert.deepEqual(evidenceRanges, [[0, 999], [1_000, 1_999]], "the reader must advance in exact non-overlapping 1,000-row pages");
 
 const scoreReadClient = {
   from(table: string) {
