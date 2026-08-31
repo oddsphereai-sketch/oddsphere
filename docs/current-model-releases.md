@@ -193,10 +193,10 @@ changed; only deterministic settlement of existing locked rows is affected.
 - Projection runtime: resolved automodel `v2_2`
 - First-inning runtime: `fi_v2` with the versioned unpublished-probable availability head below
 - Public calibration: `mlb_public_calibration_v27_strong_winner_resistance_lean_2026_08_22`
-- Decision release: `mlb_daily_edge_decision_2026_08_29_r73_action_promotion_stability`
-- Rule bundle: `mlb_daily_edge_rule_bundle_v61_action_promotion_stability_2026_08_29`
-- Grade policy: `mlb_public_grade_policy_v51_action_promotion_stability_2026_08_29`
-- Correction policy: `mlb_prediction_corrections_v22_coherent_near_edge_watchlist_2026_08_26`
+- Decision release: `mlb_daily_edge_decision_2026_08_31_r74_split_pair_recency`
+- Rule bundle: `mlb_daily_edge_rule_bundle_v62_split_pair_recency_2026_08_31`
+- Grade policy: `mlb_public_grade_policy_v52_split_pair_recency_2026_08_31`
+- Correction policy: `mlb_prediction_corrections_v23_split_pair_recency_2026_08_31`
 - Tracking contract: `member_facing_lock_v8_priority_retry_minute_cadence_2026_08_11`
 - Lock coherence: `mlb_lock_coherence_2026_08_30_r2_pending_promotion_tuple`
 - Machine registry: `lib/automodel/mlbModelLayerVersions.ts`
@@ -326,6 +326,25 @@ universal nonnegative-EV alternative and chronological duration evidence are
 recorded in
 `docs/model-audits/2026-08-29-mlb-action-promotion-stability-validation.md`.
 Rollback is r72/v60/v50/schema v5/evaluation-price v2.
+
+The August 31 MLB r74 evidence-recency correction makes the source-aware split
+pair frozen by the authoritative writer the newest internally coherent pair,
+not merely the most complementary pair whose rows happen to be adjacent in a
+provider-history response. Both sides must have the same provider, source
+book, source type, and exact verified provider observation timestamp (or the
+same ingestion timestamp when the provider supplies no observation time).
+Among valid pairs whose ticket and money complements remain within the
+existing two-point tolerance, the newest observation wins; an invalid newest
+pair falls back only to the newest earlier coherent pair. This prevents an
+older favorable Sharp pair from briefly restoring an MLB action before a later
+refresh selects newer resistance. Probability heads, calibration v27,
+selected-side logic, prices, split thresholds, action-promotion timing, stakes,
+writer, lease, providers, and locks are unchanged. The release stamps schema
+v7, selector v2, decision r74, rule bundle v62, grade policy v52, and
+correction policy v23. Frozen evidence and rollback are recorded in
+`docs/model-audits/2026-08-31-mlb-source-aware-split-pair-recency.md`.
+Rollback is r73/v61/v51/correction v22/schema v6 with the r73 promotion policy
+and evaluation-price v3 retained.
 
 The August 30 MLB T-60 lifecycle patch makes the lock gate understand r73's
 already-persisted pending-promotion shape. A fresh raw candidate may differ
