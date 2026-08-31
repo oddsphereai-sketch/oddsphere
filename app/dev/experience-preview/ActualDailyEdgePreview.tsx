@@ -460,6 +460,32 @@ type ReaderSurfaceProps = {
   total: number;
 };
 
+function memberTeamName(game: DailyEdgeGameDto, side: "away" | "home", sport: Sport): string {
+  const abbreviation = side === "away" ? game.awayTeam : game.homeTeam;
+  if (sport !== "cfb") return abbreviation;
+  return (side === "away" ? game.awayTeamDisplayName : game.homeTeamDisplayName) ?? abbreviation;
+}
+
+function memberTeamColor(game: DailyEdgeGameDto, side: "away" | "home", sport: Sport): string {
+  const abbreviation = side === "away" ? game.awayTeam : game.homeTeam;
+  if (sport === "cfb") {
+    return (side === "away" ? game.awayTeamPrimaryColor : game.homeTeamPrimaryColor) ?? "#6D28D9";
+  }
+  return teamTheme(abbreviation).primary;
+}
+
+function CompactMatchupIdentity({ game, sport }: { game: DailyEdgeGameDto; sport: Sport }) {
+  if (sport !== "cfb") {
+    return <div className="flex items-center gap-2"><TeamLogo src={game.awayTeamLogo} label={game.awayTeam} sport={sport} /><strong className="text-sm text-white">{game.awayTeam}</strong><span className="text-[9px] text-gray-700">@</span><strong className="text-sm text-white">{game.homeTeam}</strong><TeamLogo src={game.homeTeamLogo} label={game.homeTeam} sport={sport} /></div>;
+  }
+  const side = (role: "away" | "home") => {
+    const abbreviation = role === "away" ? game.awayTeam : game.homeTeam;
+    const logo = role === "away" ? game.awayTeamLogo : game.homeTeamLogo;
+    return <div className="flex min-w-0 items-center gap-2"><TeamLogo src={logo} label={abbreviation} sport={sport} primaryColor={memberTeamColor(game, role, sport)} /><span className="min-w-0"><strong className="block break-words text-[12px] leading-4 text-white">{memberTeamName(game, role, sport)}</strong><span className="block text-[7px] font-black uppercase tracking-[0.13em] text-gray-500">{abbreviation} · {role}</span></span></div>;
+  };
+  return <div className="grid min-w-0 gap-1.5" aria-label={`${memberTeamName(game, "away", sport)} at ${memberTeamName(game, "home", sport)}`}>{side("away")}{side("home")}</div>;
+}
+
 function CollapsedReader({ game, market, marketKey, sport, onOpen, onOpenMarket, index, total }: { game: DailyEdgeGameDto; market: MarketEdgeDto; marketKey: MarketKey; sport: Sport; onOpen: () => void; onOpenMarket: (market: MarketKey) => void; index: number; total: number }) {
   const footballOutcome = sport === "nfl" || sport === "cfb" ? footballOutcomeContext(game) : null;
   const footballBetGrade = footballOutcome ? nflSelectedBetGrade(market) : null;
@@ -475,13 +501,7 @@ function CollapsedReader({ game, market, marketKey, sport, onOpen, onOpenMarket,
           <button type="button" onClick={onOpen} aria-label="Expand full read" className="shrink-0 rounded-full border border-violet-400/45 bg-violet-500/[0.15] px-3 py-1.5 text-[8px] font-black uppercase tracking-[0.13em] text-violet-100 transition hover:border-violet-300/70 hover:bg-violet-500/[0.25]">Expand full read ↓</button>
         </div>
         <div className="mt-3 flex flex-wrap items-center gap-2">
-          <div className="flex items-center gap-2">
-            <TeamLogo src={game.awayTeamLogo} label={game.awayTeam} sport={sport} />
-            <strong className="text-sm text-white">{game.awayTeam}</strong>
-            <span className="text-[9px] text-gray-700">@</span>
-            <strong className="text-sm text-white">{game.homeTeam}</strong>
-            <TeamLogo src={game.homeTeamLogo} label={game.homeTeam} sport={sport} />
-          </div>
+          <CompactMatchupIdentity game={game} sport={sport} />
           <VerdictBadge market={market} />
           <LocalTime value={game.gameStartAt} fallback={game.gameTime} className="text-[9px] text-gray-600" />
           <LockBadge lockState={game.lockState} lockedAt={game.lockedAt} scheduledLockAt={game.scheduledLockAt} className="font-black uppercase tracking-wider text-emerald-300" />
@@ -582,7 +602,7 @@ function MobileReaderSheet({ onClose, onSportChange, onSportPrefetch, activePrev
       <div className="absolute inset-x-0 bottom-0 top-[65px] flex flex-col overflow-hidden rounded-t-2xl border-t border-violet-400/35 bg-[#0a0910] shadow-[0_-24px_80px_-35px_rgba(124,58,237,0.85)]">
         <div className="shrink-0 border-b border-white/[0.07] bg-[#100e18] px-3 pb-2 pt-3">
           <div className="flex items-center justify-between gap-3">
-            <div className="flex min-w-0 items-center gap-2"><TeamLogo src={reader.game.awayTeamLogo} label={reader.game.awayTeam} sport={reader.sport} /><span className="text-sm font-black text-white">{reader.game.awayTeam}</span><span className="text-[9px] text-gray-700">@</span><span className="text-sm font-black text-white">{reader.game.homeTeam}</span><TeamLogo src={reader.game.homeTeamLogo} label={reader.game.homeTeam} sport={reader.sport} /><LocalTime value={reader.game.gameStartAt} fallback={reader.game.gameTime} className="truncate text-[9px] text-gray-600" /><LockBadge lockState={reader.game.lockState} lockedAt={reader.game.lockedAt} scheduledLockAt={reader.game.scheduledLockAt} className="font-black uppercase tracking-wider text-emerald-300" /></div>
+            <div className="flex min-w-0 items-center gap-2"><CompactMatchupIdentity game={reader.game} sport={reader.sport} /><LocalTime value={reader.game.gameStartAt} fallback={reader.game.gameTime} className="truncate text-[9px] text-gray-600" /><LockBadge lockState={reader.game.lockState} lockedAt={reader.game.lockedAt} scheduledLockAt={reader.game.scheduledLockAt} className="font-black uppercase tracking-wider text-emerald-300" /></div>
             <button type="button" onClick={onClose} aria-label="Close reader" className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-white/[0.08] bg-white/[0.035] text-xl text-gray-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-300">×</button>
           </div>
           <div className="mt-2 flex items-center justify-between gap-2">
@@ -862,8 +882,12 @@ function SoccerDoubleChancePanel({ game }: { game: DailyEdgeGameDto }) {
 }
 
 function QuickMatchupIdentity({ game, sport }: { game: DailyEdgeGameDto; sport: Sport }) {
-  const side = (team: string, logo: string | null, starter: DailyEdgeGameDto["awayStarter"]) => <div className="min-w-0 rounded-lg border border-white/[0.08] bg-black/25 p-3"><div className="flex items-center gap-2"><TeamLogo key={team} src={logo} label={team} sport={sport} /><p className="text-base font-black tracking-tight text-white">{team}</p></div>{sport === "mlb" ? <div className="mt-3 border-t border-white/[0.07] pt-2"><p className="text-[7px] font-black uppercase tracking-[0.15em] text-gray-600">Probable starter</p><p className="mt-1 truncate text-[12px] font-black text-gray-100">{starter?.name ?? "Starter TBD"}</p><span className="mt-1 inline-flex rounded border border-gray-700 bg-gray-800/60 px-1.5 py-0.5 text-[7px] font-black uppercase tracking-wider text-gray-400">{starter?.throws ? `${starter.throws}HP` : "Hand unknown"}</span></div> : <p className="mt-3 border-t border-white/[0.07] pt-2 text-[8px] font-bold uppercase tracking-[0.14em] text-gray-600">{sportLabel(sport)} matchup</p>}</div>;
-  return <div><div className="mb-2 flex items-center justify-between"><p className="text-[8px] font-black uppercase tracking-[0.16em] text-emerald-200">Matchup</p><span className="text-[8px] font-black text-gray-600">{game.awayTeam} @ {game.homeTeam}</span></div><div className="grid grid-cols-[1fr_auto_1fr] items-stretch gap-2">{side(game.awayTeam, game.awayTeamLogo, game.awayStarter)}<span className="self-center text-[9px] font-black text-gray-700">AT</span>{side(game.homeTeam, game.homeTeamLogo, game.homeStarter)}</div></div>;
+  const side = (role: "away" | "home", starter: DailyEdgeGameDto["awayStarter"]) => {
+    const team = role === "away" ? game.awayTeam : game.homeTeam;
+    const logo = role === "away" ? game.awayTeamLogo : game.homeTeamLogo;
+    return <div className="min-w-0 rounded-lg border border-white/[0.08] bg-black/25 p-3"><div className="flex items-center gap-2"><TeamLogo key={team} src={logo} label={team} sport={sport} primaryColor={memberTeamColor(game, role, sport)} /><p className="break-words text-base font-black leading-5 tracking-tight text-white">{memberTeamName(game, role, sport)}</p></div>{sport === "mlb" ? <div className="mt-3 border-t border-white/[0.07] pt-2"><p className="text-[7px] font-black uppercase tracking-[0.15em] text-gray-600">Probable starter</p><p className="mt-1 truncate text-[12px] font-black text-gray-100">{starter?.name ?? "Starter TBD"}</p><span className="mt-1 inline-flex rounded border border-gray-700 bg-gray-800/60 px-1.5 py-0.5 text-[7px] font-black uppercase tracking-wider text-gray-400">{starter?.throws ? `${starter.throws}HP` : "Hand unknown"}</span></div> : <p className="mt-3 border-t border-white/[0.07] pt-2 text-[8px] font-bold uppercase tracking-[0.14em] text-gray-600">{team} · {sportLabel(sport)} matchup</p>}</div>;
+  };
+  return <div><div className="mb-2 flex items-center justify-between"><p className="text-[8px] font-black uppercase tracking-[0.16em] text-emerald-200">Matchup</p><span className="text-[8px] font-black text-gray-600">{game.awayTeam} @ {game.homeTeam}</span></div><div className="grid grid-cols-[1fr_auto_1fr] items-stretch gap-2">{side("away", game.awayStarter)}<span className="self-center text-[9px] font-black text-gray-700">AT</span>{side("home", game.homeStarter)}</div></div>;
 }
 
 function IntegratedEvidence({ game, market, marketKey, sport, availability }: { game: DailyEdgeGameDto; market: MarketEdgeDto; marketKey: MarketKey; sport: Sport; availability: DailyEdgeGameAvailability | null }) {
@@ -2184,16 +2208,10 @@ function BoardGameCard({ game, sport, headlineMarket, active, activeMarket, sele
       }}
       className={`group relative flex h-full cursor-pointer flex-col overflow-hidden rounded-xl border bg-[#0D0D14] shadow-[0_4px_16px_-6px_rgba(0,0,0,0.55),inset_0_1px_0_rgba(255,255,255,0.05)] transition ${active ? "border-white/35 outline outline-2 outline-violet-400/25 outline-offset-2" : boardCardBorder(headlineVerdict.key)}`}
     >
-      <div className="h-[3px] w-full shrink-0" style={{ background: `linear-gradient(to right, ${teamTheme(game.awayTeam).primary} 0%, ${teamTheme(game.awayTeam).primary} 28%, rgba(255,255,255,0.06) 50%, ${teamTheme(game.homeTeam).primary} 72%, ${teamTheme(game.homeTeam).primary} 100%)` }} />
+      <div className="h-[3px] w-full shrink-0" style={{ background: `linear-gradient(to right, ${memberTeamColor(game, "away", sport)} 0%, ${memberTeamColor(game, "away", sport)} 28%, rgba(255,255,255,0.06) 50%, ${memberTeamColor(game, "home", sport)} 72%, ${memberTeamColor(game, "home", sport)} 100%)` }} />
       <div className={`flex flex-1 flex-col ${compactSoccer ? "p-3.5 sm:p-4" : "p-5 sm:p-6"}`}>
         <div className={compactSoccer ? "grid gap-2" : "grid gap-3"}>
-          <div className="flex min-w-0 items-center gap-2.5">
-            <TeamLogo src={game.awayTeamLogo} label={game.awayTeam} sport={sport} />
-            <span className={compactSoccer ? "truncate text-[13px] font-black text-white" : "text-base font-black text-white"}>{game.awayTeam}</span>
-            <span className="text-[11px] text-gray-700">@</span>
-            <span className={compactSoccer ? "truncate text-[13px] font-black text-white" : "text-base font-black text-white"}>{game.homeTeam}</span>
-            <TeamLogo src={game.homeTeamLogo} label={game.homeTeam} sport={sport} />
-          </div>
+          <CompactMatchupIdentity game={game} sport={sport} />
           <div className={`flex items-center gap-2 ${compactSoccer ? "min-h-6" : "min-h-8"}`}>
             <VerdictBadge market={headline} large={!compactSoccer} />
             {finalScore ? <span className="rounded-full border border-white/[0.10] bg-white/[0.05] px-2 py-1 text-[9px] font-black uppercase tracking-wider text-gray-300">Final · {game.awayTeam} {finalScore.away}–{finalScore.home} {game.homeTeam}</span> : <><LocalTime value={game.gameStartAt} fallback={game.gameTime} className="text-[10px] text-gray-500" /><LockBadge lockState={game.lockState} lockedAt={game.lockedAt} scheduledLockAt={game.scheduledLockAt} className="font-black uppercase tracking-wider text-emerald-300" /></>}
@@ -2412,7 +2430,7 @@ function CoverageGap({ text }: { text: string }) {
   return <div className="mt-4 rounded-lg border border-amber-400/15 bg-amber-400/[0.04] p-3 text-[9px] leading-relaxed text-amber-200/55"><span className="font-black text-amber-300">Coverage gap:</span> {text}</div>;
 }
 
-function TeamLogo({ src, label, sport }: { src: string | null; label: string; sport?: Sport }) {
+function TeamLogo({ src, label, sport, primaryColor }: { src: string | null; label: string; sport?: Sport; primaryColor?: string | null }) {
   // The response owns team identity. Several WNBA abbreviations overlap MLB
   // (ATL, CHI, SEA, TOR), so an MLB-first fallback silently replaced correct
   // WNBA assets in the candidate reader. Legacy MLB rows still contain the
@@ -2426,9 +2444,9 @@ function TeamLogo({ src, label, sport }: { src: string | null; label: string; sp
     : suppliedIsMlbStatic ? null : suppliedSrc;
   const [imageFailed, setImageFailed] = useState(!resolvedSrc);
   const theme = teamTheme(label);
-  const accent = teamAccent(label);
+  const accent = primaryColor ?? teamAccent(label);
   return (
-    <span className="relative inline-flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-lg border bg-[#f7f8fb] text-[7px] font-black shadow-[0_4px_14px_rgba(0,0,0,0.28)]" style={{ borderColor: `${accent}99`, color: theme.primary }}>
+    <span className="relative inline-flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-lg border bg-[#f7f8fb] text-[7px] font-black shadow-[0_4px_14px_rgba(0,0,0,0.28)]" style={{ borderColor: `${accent}99`, color: primaryColor ?? theme.primary }}>
       <span className="relative z-10 tracking-tight">{label.slice(0, 3)}</span>
       {resolvedSrc && !imageFailed ? (
         // eslint-disable-next-line @next/next/no-img-element
