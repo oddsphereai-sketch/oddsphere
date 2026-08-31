@@ -8,6 +8,8 @@ import { dailyEdgeOutcomeForecastLabel } from "../app/lab/lib/dailyEdgeOutcomeFo
 import {
   CFB_FORWARD_EVIDENCE_COLLECTOR_RELEASE,
   CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE,
+  CFB_FORWARD_IDENTITY_PREVIOUS_EVIDENCE_SCHEMA_RELEASE,
+  CFB_FORWARD_IDENTITY_PREVIOUS_MEMBER_RELEASE,
   CFB_FORWARD_AMBIGUOUS_SCOPE_PREVIOUS_EVIDENCE_SCHEMA_RELEASE,
   CFB_FORWARD_CANONICAL_DISCOVERY_PREVIOUS_EVIDENCE_SCHEMA_RELEASE,
   CFB_FORWARD_INITIAL_EVIDENCE_SCHEMA_RELEASE,
@@ -315,7 +317,7 @@ assert.deepEqual(trustedCfbSharpEventIdsByGame([trustedSharpRow, {
 }]), {}, "conflicting immutable provider IDs must disable prior-event disambiguation");
 const member = buildCfbMemberFixture([evidence]);
 assert.equal(member.snapshot.games.length, 1);
-assert.equal(member.fixtureRelease, "cfb_v1_member_fixture_2026_08_31_r37_authoritative_pmf_calibration");
+assert.equal(member.fixtureRelease, "cfb_v1_member_fixture_2026_08_31_r38_playbook_event_identity");
 assert.equal(member.snapshot.games[0]!.collegeFootballScope, "fbs_involved", "the CFB reader must classify every member game for the FBS-first board without changing writer scope");
 assert.equal(member.snapshot.games[0]!.footballProjection?.expectedAwayPoints, authoritativeForecast.expectedAwayPoints);
 assert.equal(member.snapshot.games[0]!.footballProjection?.expectedHomePoints, authoritativeForecast.expectedHomePoints);
@@ -370,6 +372,25 @@ for (const decision of payload.decisions.evaluatedBets) {
   const memberMarket = decision.market === "spread" ? "first_inning" : decision.market;
   assert.equal(member.snapshot.games[0]!.markets[memberMarket].currentPriceObservedAt, decision.evaluatedQuote.observedAt, `${decision.market} member DTO must preserve its exact evaluated tuple timestamp`);
 }
+
+const identityPreviousPayloadRecord = structuredClone(payload) as unknown as Record<string, unknown>;
+identityPreviousPayloadRecord.schemaRelease = CFB_FORWARD_IDENTITY_PREVIOUS_EVIDENCE_SCHEMA_RELEASE;
+identityPreviousPayloadRecord.memberRelease = CFB_FORWARD_IDENTITY_PREVIOUS_MEMBER_RELEASE;
+const identityPreviousDecisions = identityPreviousPayloadRecord.decisions as Record<string, unknown>;
+identityPreviousDecisions.decisionRelease = "cfb_v1_daily_edge_decision_2026_08_31_r23_authoritative_pmf_calibration";
+identityPreviousDecisions.evaluatedBets = (identityPreviousDecisions.evaluatedBets as Array<Record<string, unknown>>).map((decision) => ({
+  ...decision,
+  decisionRelease: "cfb_v1_daily_edge_decision_2026_08_31_r23_authoritative_pmf_calibration",
+}));
+const identityPreviousPayload = identityPreviousPayloadRecord as unknown as CfbForwardEvidencePayload;
+const identityPreviousMember = buildCfbMemberFixture([{
+  ...evidence,
+  id: "identity-previous-row",
+  payloadSha256: hashCfbForwardEvidencePayload(identityPreviousPayload),
+  payload: identityPreviousPayload,
+}]);
+assert.equal(identityPreviousMember.snapshot.games.length, 1, "the complete r46 wave remains the atomic member fallback during the identity repair rollout");
+assert.notEqual(identityPreviousMember.snapshot.games[0]!.footballOnlyProjection, null, "the r46 transition fallback retains the release-separated football baseline");
 for (const memberMarket of Object.values(member.snapshot.games[0]!.markets)) {
   assert.equal(memberMarket.keyStats.some((row) => row.label.startsWith("Outcome-model input ·")), true);
   assert.equal(memberMarket.keyStats.some((row) => row.label === "Current context · Expected quarterback"), true);
@@ -1277,6 +1298,7 @@ assert.doesNotMatch(sharpOddsSource, /sharpEventIdCandidates|teamSlug\(/, "the w
 assert.equal((writerSource.match(/appendCfbForwardEvidence\(/g) ?? []).length, 1, "the writer must keep one all-payload append and never insert partial game evidence inside the collection loop");
 const evidenceStoreSource = readFileSync(path.join(process.cwd(), "lib/services/football/cfbForwardEvidenceStore.ts"), "utf8");
 assert.match(evidenceStoreSource, /CFB_FORWARD_PREVIOUS_EVIDENCE_SCHEMA_RELEASE/, "the reader must retain the complete r4 exact-price wave during the natural r5 transition");
+assert.match(evidenceStoreSource, /CFB_FORWARD_IDENTITY_PREVIOUS_EVIDENCE_SCHEMA_RELEASE/, "the reader must retain the complete r46 wave during the natural r47 transition");
 assert.equal(CFB_FORWARD_EVIDENCE_PAGE_SIZE, 1_000);
 assert.equal(CFB_FORWARD_EVIDENCE_MAX_ROWS, 50_000);
 assert.match(evidenceStoreSource, /\.order\("captured_at", \{ ascending: true \}\)\s*\.order\("id", \{ ascending: true \}\)\s*\.range\(from, from \+ CFB_FORWARD_EVIDENCE_PAGE_SIZE - 1\)/, "the CFB evidence reader must paginate with a stable timestamp-and-ID order");

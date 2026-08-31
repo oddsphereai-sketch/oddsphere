@@ -5,7 +5,7 @@ import { assertOfficialTrackingMarket } from "@/lib/config/officialTrackingMarke
 import { PlaybookClient } from "@/lib/providers/playbook/playbookClient";
 import { fetchBalldontlieNcaafResultsForDates, fetchBalldontlieNcaafSlate, type NcaafGame } from "./balldontlieNcaafSlate";
 import { fetchBalldontlieNcaafQuarterbacks } from "./balldontlieNcaafQuarterbacks";
-import { matchCfbPlaybookRow, normalizeCfbPlaybookLine, normalizeCfbPlaybookSplits } from "./cfbPlaybookEvidence";
+import { normalizeCfbPlaybookLine, normalizeCfbPlaybookSplits, resolveCfbPlaybookEvidence } from "./cfbPlaybookEvidence";
 import {
   CFB_FORWARD_EVIDENCE_COLLECTOR_RELEASE,
   CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE,
@@ -44,7 +44,7 @@ import { buildMarketScopedFootballTrackingPlan } from "./footballMarketScopedTra
 import { assertFootballCrossMarketCoherence } from "./footballCrossMarketCoherence";
 
 export const CFB_FORWARD_WRITER_RELEASE =
-  "cfb_forward_evidence_writer_2026_08_31_r36_authoritative_pmf_calibration" as const;
+  "cfb_forward_evidence_writer_2026_08_31_r37_playbook_event_identity" as const;
 export const CFB_TOTAL_MEAN_PMF_TOSSUP_MAX_PROBABILITY_GAP = 0.01 as const;
 export const CFB_TOTAL_MEAN_PMF_TOSSUP_MAX_MEAN_DISTANCE_POINTS = 0.5 as const;
 export const CFB_FORWARD_MAX_QB_TEAMS_PER_RUN = 24 as const;
@@ -137,10 +137,9 @@ export async function runCfbForwardEvidenceWriter(args: {
       : priorOpening.get(plan.game.providerGameId) ?? (current ? { provenance: "first_observed" as const, capturedAt: current.observedAt, quote: current } : null);
     const awayQuarterbacks = requiredQuarterbacks(quarterbackContext, plan.game.away.id, plan.game.away.abbreviation, args.now);
     const homeQuarterbacks = requiredQuarterbacks(quarterbackContext, plan.game.home.id, plan.game.home.abbreviation, args.now);
-    const playbookLineRow = lines.find((row) => matchCfbPlaybookRow(plan.game, row));
-    const playbookSplitRow = splits.find((row) => matchCfbPlaybookRow(plan.game, row));
-    const playbookLine = playbookLineRow ? normalizeCfbPlaybookLine(playbookLineRow, args.now) : null;
-    const playbookSplits = playbookSplitRow ? normalizeCfbPlaybookSplits(playbookSplitRow, args.now) : null;
+    const playbookEvidence = resolveCfbPlaybookEvidence({ game: plan.game, lines, splits });
+    const playbookLine = playbookEvidence ? normalizeCfbPlaybookLine(playbookEvidence.lineRow, args.now) : null;
+    const playbookSplits = playbookEvidence ? normalizeCfbPlaybookSplits(playbookEvidence.splitRow, args.now) : null;
     const sharpApiSplits = sharpSplitsAttempt.result?.recordsByGame[plan.game.providerGameId] ?? [];
     const sharpApiSplitsStatus = sharpSplitsAttempt.result === null
       ? "request_failed" as const
