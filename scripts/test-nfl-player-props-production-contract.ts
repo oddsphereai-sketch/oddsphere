@@ -67,8 +67,8 @@ function emptyBoard(): NflPlayerPropsRuntimeBoard {
 }
 
 const unlocked = reconcileNflPlayerPropsProductionSnapshot({ season: 2026, week: 1, evaluatedAt: "2026-08-25T12:00:00.000Z", nextBoard: board(decision) });
-assert.equal(NFL_PLAYER_PROPS_PRODUCTION_CANDIDATE_RELEASE, "nfl_player_props_member_2026_08_31_r9_partial_snapshot_retention");
-assert.equal(NFL_PLAYER_PROPS_WRITER_RELEASE, "nfl_player_props_writer_2026_08_31_r10_partial_snapshot_retention");
+assert.equal(NFL_PLAYER_PROPS_PRODUCTION_CANDIDATE_RELEASE, "nfl_player_props_member_2026_08_31_r10_complete_exact_board");
+assert.equal(NFL_PLAYER_PROPS_WRITER_RELEASE, "nfl_player_props_writer_2026_08_31_r11_complete_exact_board");
 assert.equal(NFL_PLAYER_PROPS_TRACKING_RELEASE, "nfl_player_props_tracking_2026_08_31_r5_closing_before_settlement");
 assert.equal(NFL_PLAYER_PROPS_SETTLEMENT_RELEASE, "nfl_player_props_settlement_2026_08_25_r3_bounded_finality");
 assert.equal(NFL_PLAYER_PROPS_PRODUCTION_INCLUDE_OPENINGS, true, "production records same-book opening context for movement and CLV interpretation");
@@ -247,7 +247,8 @@ for (const responsiveContract of ["overflow-x-auto", "hidden xl:block", "grid ga
   assert.ok(memberReader.includes(responsiveContract), `NFL board preserves the shared responsive interaction contract: ${responsiveContract}`);
 }
 assert.ok(!memberReader.includes("No Edge"), "NFL uses the current universal No Play member vocabulary");
-assert.ok(memberReader.includes("Offers without a complete public evaluation are excluded from the board; they are not relabeled as No Play."));
+assert.ok(memberReader.includes("Complete exact-price reads remain visible as No Play when independent same-line confirmation is still missing."));
+assert.ok(memberReader.includes("independent_same_line_confirmation_missing"));
 assert.ok(memberReader.includes("PlayerPropReaderDialog"), "NFL uses the shared MLB/NFL reader behavior contract");
 for (const sharedPrimitive of ["PlayerPropsSlateHero", "PlayerPropsSectionHeading", "PlayerPropsFilterButton", "PlayerPropsRadarCardFrame"]) assert.ok(memberReader.includes(sharedPrimitive), `NFL consumes shared MLB product primitive: ${sharedPrimitive}`);
 assert.ok(memberReader.includes("initialSelectedKey"));

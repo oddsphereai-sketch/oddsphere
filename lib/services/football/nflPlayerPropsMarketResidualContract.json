@@ -2,7 +2,7 @@
   "marketResidualRelease": "nfl_player_props_market_residual_calibration_2026_08_25_r3_shared_context",
   "baseModelRelease": "nfl_player_props_distribution_model_2026_08_25_r2_shared_context",
   "baseCalibrationRelease": "nfl_player_props_distribution_calibration_2026_08_25_r2_shared_context",
-  "decisionRelease": "nfl_player_props_decision_2026_08_31_r3_monotonic_divergence",
+  "decisionRelease": "nfl_player_props_decision_2026_08_31_r4_complete_exact_board",
   "marketBenchmark": "independent_book_consensus_excluding_target_book",
   "selectionEnd": "2025-10-31",
   "confirmationStart": "2025-11-01",

@@ -180,6 +180,11 @@ assert.deepEqual(
   __NFL_PLAYER_PROPS_COLLECTOR_TEST__.nextSharpPropsPage({ has_more: true, next_offset: undefined, next_cursor: "cursor-400" } as never, 400),
   { offset: 400, cursor: "cursor-400" },
 );
+assert.deepEqual(
+  __NFL_PLAYER_PROPS_COLLECTOR_TEST__.nextSharpPropsPage({ has_more: true, next_offset: undefined } as never, 400),
+  { offset: 600, cursor: null },
+  "a provider response with has_more but no continuation token advances by the bounded requested page size",
+);
 assert.equal(__NFL_PLAYER_PROPS_COLLECTOR_TEST__.nextSharpPropsPage({ has_more: false }, 400), null);
 assert.throws(() => __NFL_PLAYER_PROPS_COLLECTOR_TEST__.validateRequest(2026, 4, "preseason"), /1 through 3/);
 assert.equal(

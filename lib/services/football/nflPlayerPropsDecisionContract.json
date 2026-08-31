@@ -1,5 +1,5 @@
 {
-  "decisionRelease": "nfl_player_props_decision_2026_08_31_r3_monotonic_divergence",
+  "decisionRelease": "nfl_player_props_decision_2026_08_31_r4_complete_exact_board",
   "modelRelease": "nfl_player_props_distribution_model_2026_08_25_r2_shared_context",
   "calibrationRelease": "nfl_player_props_distribution_calibration_2026_08_25_r2_shared_context",
   "touchdownModelRelease": "nfl_player_props_anytime_td_model_2026_08_25_r3_shared_context",

@@ -15,7 +15,7 @@ import {
 } from "../lib/services/football/nflPlayerPropsRuntime";
 import type { NflPlayerPropsExactOffer } from "../lib/services/football/nflPlayerPropsMarketBoard";
 
-assert.equal(NFL_PLAYER_PROPS_RUNTIME_RELEASE, "nfl_player_props_runtime_2026_08_31_r3_monotonic_divergence");
+assert.equal(NFL_PLAYER_PROPS_RUNTIME_RELEASE, "nfl_player_props_runtime_2026_08_31_r4_complete_exact_board");
 verifyNflPlayerPropsRuntimeParity(1e-9);
 
 const receiving = nflPlayerPropsRuntimeMarketPolicy("receiving_yards");
@@ -63,8 +63,11 @@ const feature = {
   },
 };
 const oneBook = buildNflPlayerPropsRuntimeBoard({ offers: [baseOffer], features: [feature], evaluatedAt: "2026-08-25T12:01:00.000Z" });
-assert.equal(oneBook.decisions.length, 0, "one-book outcomes are unavailable, not graded");
-assert.equal(oneBook.counts.Held, 0, "market-data availability is not a role hold");
+assert.equal(oneBook.decisions.length, 2, "complete one-book outcomes remain visible as evaluated reads");
+assert.equal(oneBook.counts["No Play"], 2, "one-book outcomes cannot become actionable without independent same-line confirmation");
+assert.equal(oneBook.counts.Held, 0, "missing market confirmation is not a role hold");
+assert.equal(oneBook.diagnostics.completedEvaluations, 2);
+assert.ok(oneBook.decisions.every((row) => row.healthHolds.includes("independent_same_line_confirmation_missing")));
 assert.equal(oneBook.diagnostics.unavailableNoIndependentBenchmark, 2);
 const twoBooks = buildNflPlayerPropsRuntimeBoard({ offers: [baseOffer, { ...baseOffer, offerKey: "test-b", sportsbook: "book-b" }], features: [feature], evaluatedAt: "2026-08-25T12:01:00.000Z" });
 assert.equal(twoBooks.release, NFL_PLAYER_PROPS_BOARD_RELEASE);
@@ -96,7 +99,8 @@ assert.deepEqual(
   noOpening.decisions.map(withoutBookEvidence),
   "opening presentation evidence changes zero decisions, probabilities, projections, or grades",
 );
-assert.ok(twoBooks.decisions.every((row) => row.decisionRelease === "nfl_player_props_decision_2026_08_31_r3_monotonic_divergence"), "tracking provenance uses the current production exact-price lane release, not the residual calibration release");
+assert.ok(twoBooks.decisions.every((row) => row.decisionRelease === "nfl_player_props_decision_2026_08_31_r4_complete_exact_board"), "tracking provenance uses the current production exact-price lane release, not the residual calibration release");
+assert.ok(twoBooks.decisions.every((row) => !row.healthHolds.includes("independent_same_line_confirmation_missing")));
 assert.ok(twoBooks.decisions.every((row) => row.modelRelease === "nfl_player_props_distribution_model_2026_08_25_r2_shared_context"));
 assert.ok(twoBooks.decisions.every((row) => row.calibrationRelease === "nfl_player_props_distribution_calibration_2026_08_25_r2_shared_context"));
 assert.ok(twoBooks.decisions.every((row) => !row.modelRelease.includes("shadow") && !row.decisionRelease.includes("provisional")));
