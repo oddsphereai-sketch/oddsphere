@@ -3,6 +3,7 @@ import type { NcaafBookOdds, NcaafGame } from "./balldontlieNcaafSlate";
 import type { CFB_SHARP_API_ODDS_RELEASE } from "./cfbSharpApiOdds";
 import type { CfbMarketInformedOutcomeForecast } from "./cfbMarketInformedOutcome";
 import type { CfbSharpApiSplitRecord } from "./cfbSharpApiSplits";
+import type { CfbKickoffWeatherSnapshot } from "./cfbKickoffWeather";
 import {
   cfbV1LineProbabilities,
   type CfbV1DecisionBundle,
@@ -11,6 +12,8 @@ import {
 } from "./cfbV1Decision";
 
 export const CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE =
+  "cfb_forward_evidence_snapshot_2026_08_31_r18_kickoff_weather" as const;
+export const CFB_FORWARD_WEATHER_PREVIOUS_EVIDENCE_SCHEMA_RELEASE =
   "cfb_forward_evidence_snapshot_2026_08_31_r17_playbook_event_identity" as const;
 export const CFB_FORWARD_IDENTITY_PREVIOUS_EVIDENCE_SCHEMA_RELEASE =
   "cfb_forward_evidence_snapshot_2026_08_31_r16_authoritative_pmf_calibration" as const;
@@ -45,8 +48,10 @@ export const CFB_FORWARD_LEGACY_EVIDENCE_SCHEMA_RELEASE =
 export const CFB_FORWARD_INITIAL_EVIDENCE_SCHEMA_RELEASE =
   "cfb_forward_evidence_snapshot_2026_08_25_r1" as const;
 export const CFB_FORWARD_EVIDENCE_COLLECTOR_RELEASE =
-  "cfb_forward_evidence_collector_2026_08_31_r24_playbook_event_identity" as const;
+  "cfb_forward_evidence_collector_2026_08_31_r25_kickoff_weather" as const;
 export const CFB_FORWARD_MEMBER_RELEASE =
+  "cfb_v1_member_release_2026_08_31_r27_kickoff_weather" as const;
+export const CFB_FORWARD_WEATHER_PREVIOUS_MEMBER_RELEASE =
   "cfb_v1_member_release_2026_08_31_r26_playbook_event_identity" as const;
 export const CFB_FORWARD_IDENTITY_PREVIOUS_MEMBER_RELEASE =
   "cfb_v1_member_release_2026_08_31_r25_authoritative_pmf_calibration" as const;
@@ -168,7 +173,9 @@ export type CfbForwardEvidencePayload = {
   };
   availability: {
     injuryStatus: "provider_unavailable";
-    weatherStatus: "venue_weather_unavailable";
+    weatherStatus: CfbKickoffWeatherSnapshot["status"] | "venue_weather_unavailable";
+    /** Required on the current weather-aware schema; absent only on immutable prior releases. */
+    weather?: CfbKickoffWeatherSnapshot;
     note: string;
   };
   decisions: CfbForwardPublishedDecisionBundle;
@@ -180,6 +187,8 @@ export type CfbForwardEvidencePayload = {
     release: string;
     candidateRelease: string;
     marketWeight: number;
+    weatherIndependentTotalAdjustmentPoints?: number;
+    weatherAuthoritativeTotalAdjustmentPoints?: number;
   };
   /** Legacy shadow market-context score distribution retained only on old rows. */
   outcomeForecast?: CfbForwardPublishedOutcomeForecast | null;
@@ -197,7 +206,7 @@ export type CfbForwardEvidencePayload = {
     sharpApiSplits: boolean;
     activeQuarterbacks: boolean;
     injuries: false;
-    weather: false;
+    weather: boolean;
     healthHolds: string[];
     availabilityWarnings: string[];
   };
@@ -207,6 +216,7 @@ export type CfbForwardEvidencePayload = {
     playbook: number;
     sharpApiOdds: number;
     sharpApiSplits?: number;
+    weather?: number;
     totalMaximum: number;
   };
 };
