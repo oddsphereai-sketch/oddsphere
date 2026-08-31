@@ -243,6 +243,19 @@ exceptions. Bounded starter recovery remains under the existing
 games, and cannot mutate locked rows. Evidence and rollback are recorded in
 `docs/model-audits/2026-08-26-daily-edge-operational-no-play-recovery.md`.
 
+The August 31 MLB provider-gap cadence hardening keeps every model and release
+identifier above unchanged. The existing starter-only health repair now runs
+hourly at :35 during the active MLB ingestion window instead of every two
+hours. It remains capped at three explicitly flagged games, uses the shared
+`prediction_pipeline` lease, excludes locked/started games, and cannot rewrite
+predictions, grades, tracking, or the member response. Newly resolved starter
+evidence is incorporated only by the next normal authoritative slate writer.
+No Sharp decision-input substitution is added: source-specific history still
+recovers every 15 minutes, and absent Circa inventory remains explicit rather
+than being fabricated or replaced by a presentation fallback. Evidence and
+rollback are recorded in
+`docs/model-audits/2026-08-31-mlb-provider-gap-recovery-cadence.md`.
+
 The August 28 MLB r71 evidence-integrity release withholds exact 0% or 100%
 ticket/handle shares when the provider observation has no verifiable sample
 count. The rule is field-specific: valid non-endpoint tickets remain available
