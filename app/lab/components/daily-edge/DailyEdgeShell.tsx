@@ -634,17 +634,19 @@ const LOGO_FILTER: Record<string, string> = {
 
 function TeamBadge({ abbr, logo, size }: { abbr: string; logo: string | null; size: number }) {
   // For MLB/NBA/NHL the DB's `teams.logo_url` column is unreliable, so
-  // ESPN is the primary CDN. For soccer/ucl, ESPN has no country logos
-  // — the `logo` prop carries the FlagCDN URL written by the soccer
-  // adapter, so trust it. Both branches share the abbr-disc fallback
-  // on image error so a broken request never leaves an empty circle.
+  // ESPN is the primary CDN. Soccer/UCL and CFB must use only a supplied
+  // sport-owned logo: a CFB abbreviation such as MIA is not an MLB team
+  // identity and must never fall through to the Marlins CDN asset.
+  // Both branches share the abbr-disc fallback so missing or broken
+  // sport-owned assets never leave an empty circle.
   const shellSport = useShellSport();
   const [errored, setErrored] = useState(false);
   const isSoccer = shellSport === "soccer" || shellSport === "ucl";
-  const src = isSoccer ? (logo ?? "") : espnLogoUrl(abbr, shellSport);
+  const usesSportOwnedLogo = isSoccer || shellSport === "cfb";
+  const src = usesSportOwnedLogo ? (logo ?? "") : espnLogoUrl(abbr, shellSport);
   const filter = LOGO_FILTER[abbr];
 
-  if (isSoccer && !logo) {
+  if (usesSportOwnedLogo && !logo) {
     return (
       <div
         className="inline-flex items-center justify-center rounded-full bg-violet-500/[0.12] border border-violet-400/30 text-violet-100 font-bold tracking-tight shrink-0 shadow-[inset_0_0_0_1px_rgba(167,139,250,0.10)]"
