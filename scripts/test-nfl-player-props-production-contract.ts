@@ -165,6 +165,7 @@ assert.ok(memberReader.includes('data-product-zone="today-radar"'));
 assert.ok(memberReader.includes('data-product-zone="research-entry"'));
 assert.ok(memberReader.includes('data-product-zone="full-board"'));
 assert.ok(memberReader.includes("getPropGradeColor"), "NFL prop grade badges must use the shared MLB prop-grade palette");
+assert.ok(memberReader.includes("https://a.espncdn.com/i/teamlogos/nfl/500/"), "NFL prop team badges must render the established ESPN NFL team marks");
 for (const truthfulCoverageCopy of ["completed reads", "All markets", "market families currently graded"]) {
   assert.ok(memberReader.includes(truthfulCoverageCopy), `NFL board scopes coverage truthfully: ${truthfulCoverageCopy}`);
 }

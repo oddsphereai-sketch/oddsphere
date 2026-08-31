@@ -1568,6 +1568,15 @@ check(
     candidateDailyEdgeSource.includes("All Division I"),
 );
 check(
+  "the live CFB reader uses fixture-owned full names, NCAA logos, and team colors",
+  candidateDailyEdgeSource.includes("game.awayTeamDisplayName") &&
+    candidateDailyEdgeSource.includes("game.homeTeamDisplayName") &&
+    candidateDailyEdgeSource.includes("game.awayTeamPrimaryColor") &&
+    candidateDailyEdgeSource.includes("game.homeTeamPrimaryColor") &&
+    candidateDailyEdgeSource.includes("<CompactMatchupIdentity game={game} sport={sport} />") &&
+    candidateDailyEdgeSource.includes("primaryColor={memberTeamColor(game, role, sport)}"),
+);
+check(
   "the active NFL reader discloses its line-specific calibration boundary",
   candidateSource.includes("separate line-specific calibration to Spread and Total probabilities") &&
     candidateSource.includes("so those market sides can differ from the score-centered view") &&
