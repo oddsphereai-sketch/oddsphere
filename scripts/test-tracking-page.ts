@@ -69,6 +69,11 @@ check(
     HOMEPAGE_CATEGORY_TRACKER.includes("<CategoryBars"),
 );
 check(
+  "Homepage full public tracker does not link visitors into the member portal",
+  !/function TrackingPreview[\s\S]{0,7000}href="\/lab\/tracking"/.test(HOMEPAGE) &&
+    !HOMEPAGE.includes("Open the full tracker"),
+);
+check(
   "Homepage tracking section does not market the legacy archive",
   HOMEPAGE.includes("See the record. Then see the reasoning.") &&
     !/function TrackingPreview[\s\S]{0,7000}Legacy archive/.test(HOMEPAGE),
