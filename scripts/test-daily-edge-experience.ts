@@ -1577,6 +1577,15 @@ check(
     candidateDailyEdgeSource.includes("primaryColor={memberTeamColor(game, role, sport)}"),
 );
 check(
+  "the CFB board balances abbreviations with full names and supports instant game finding",
+  candidateDailyEdgeSource.includes('grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)]') &&
+    candidateDailyEdgeSource.includes('placeholder="Find a school or abbreviation"') &&
+    candidateDailyEdgeSource.includes("cfbGameMatchesSearch") &&
+    candidateDailyEdgeSource.includes("game.awayTeamDisplayName") &&
+    candidateDailyEdgeSource.includes("game.homeTeamDisplayName") &&
+    candidateDailyEdgeSource.includes("No college football games match these filters."),
+);
+check(
   "the active NFL reader discloses its line-specific calibration boundary",
   candidateSource.includes("separate line-specific calibration to Spread and Total probabilities") &&
     candidateSource.includes("so those market sides can differ from the score-centered view") &&
