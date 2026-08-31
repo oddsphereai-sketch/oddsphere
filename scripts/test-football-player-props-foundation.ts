@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { SharpApiRateLimitError } from "../lib/providers/real_api/_sharpApiClient";
 import {
   NFL_PLAYER_PROPS_DECISION_RELEASE,
   NFL_PLAYER_PROPS_PHASE_ONE_MARKETS,
@@ -186,6 +187,16 @@ assert.deepEqual(
   "a provider response with has_more but no continuation token advances by the bounded requested page size",
 );
 assert.equal(__NFL_PLAYER_PROPS_COLLECTOR_TEST__.nextSharpPropsPage({ has_more: false }, 400), null);
+assert.equal(
+  __NFL_PLAYER_PROPS_COLLECTOR_TEST__.shouldStopSharpPropsPagination(new SharpApiRateLimitError({ endpoint: "/odds" })),
+  true,
+  "Sharp rate limiting stops optional pagination without waiting inside the five-minute writer",
+);
+assert.equal(
+  __NFL_PLAYER_PROPS_COLLECTOR_TEST__.shouldStopSharpPropsPagination(new Error("network failure")),
+  false,
+  "unrelated provider failures still fail closed instead of masquerading as bounded rate limiting",
+);
 assert.throws(() => __NFL_PLAYER_PROPS_COLLECTOR_TEST__.validateRequest(2026, 4, "preseason"), /1 through 3/);
 assert.equal(
   __NFL_PLAYER_PROPS_COLLECTOR_TEST__.inSlateWindow("2026-09-10T01:00:00Z", games),
