@@ -18,25 +18,25 @@ export const CFB_V1_BASE_REPRESENTATIVE_SCORE_RELEASE =
 const CFB_V1_BASE_GRADE_POLICY_RELEASE =
   "cfb_v1_composite_grade_policy_2026_08_25_r1" as const;
 export const CFB_V1_SCORE_ARTIFACT_RELEASE =
-  "cfb_v1_joint_score_runtime_2026_08_30_r8_unit_probability_bound" as const;
+  "cfb_v1_joint_score_runtime_2026_08_31_r9_public_consensus_market_input" as const;
 export const CFB_V1_MODEL_RELEASE =
-  "cfb_v1_market_sharp_score_model_2026_08_30_r7_missing_anchor_game_hold" as const;
+  "cfb_v1_market_sharp_score_model_2026_08_31_r8_public_consensus_market_input" as const;
 export const CFB_V1_DISTRIBUTION_RELEASE =
-  "cfb_v1_market_sharp_joint_distribution_2026_08_30_r5_market_dominant_fresh_sharp" as const;
+  "cfb_v1_market_sharp_joint_distribution_2026_08_31_r6_public_consensus_market_input" as const;
 export const CFB_V1_PROBABILITY_RELEASE =
-  "cfb_v1_market_sharp_joint_probability_2026_08_30_r6_unit_probability_bound" as const;
+  "cfb_v1_market_sharp_joint_probability_2026_08_31_r7_public_consensus_market_input" as const;
 export const CFB_V1_REPRESENTATIVE_SCORE_RELEASE =
-  "cfb_v1_market_sharp_reachable_score_2026_08_30_r5_market_dominant_fresh_sharp" as const;
+  "cfb_v1_market_sharp_reachable_score_2026_08_31_r6_public_consensus_market_input" as const;
 export const CFB_V1_CALIBRATION_RELEASE =
-  "cfb_v1_market_sharp_exact_price_calibration_2026_08_30_r4_market_dominant_fresh_sharp" as const;
+  "cfb_v1_market_sharp_exact_price_calibration_2026_08_31_r5_public_consensus_market_input" as const;
 export const CFB_V1_GRADE_POLICY_RELEASE =
-  "cfb_v1_composite_grade_policy_2026_08_29_r3_transition_coherent" as const;
+  "cfb_v1_composite_grade_policy_2026_08_31_r4_public_consensus_market_input" as const;
 export const CFB_V1_DECISION_RELEASE =
-  "cfb_v1_daily_edge_decision_2026_08_30_r21_missing_anchor_game_hold" as const;
+  "cfb_v1_daily_edge_decision_2026_08_31_r22_public_consensus_market_input" as const;
 const CFB_V1_POLICY_SOURCE_DECISION_RELEASE =
   "cfb_v1_daily_edge_decision_2026_08_26_r7_sharpapi_price_fallback" as const;
 export const CFB_V1_DECISION_SCHEMA_RELEASE =
-  "cfb_v1_exact_price_decision_tuple_2026_08_30_r14_missing_anchor_game_hold" as const;
+  "cfb_v1_exact_price_decision_tuple_2026_08_31_r15_public_consensus_market_input" as const;
 export const CFB_T60_TARGET_MINUTES = 60 as const;
 export const CFB_T60_MAX_CAPTURE_LAG_MINUTES = 20 as const;
 
@@ -127,6 +127,7 @@ export type CfbV1ExactPriceDecision = {
     release: string;
     candidateRelease: string;
     sharpDirection: "support" | "resistance" | "neutral" | "unknown";
+    publicDirection: "support" | "resistance" | "neutral" | "unknown";
     movementDirection: "support" | "resistance" | "neutral" | "unknown";
     reasonCodes: string[];
   } | null;

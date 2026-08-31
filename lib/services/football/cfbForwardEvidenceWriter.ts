@@ -44,7 +44,7 @@ import { buildMarketScopedFootballTrackingPlan } from "./footballMarketScopedTra
 import { assertFootballCrossMarketCoherence } from "./footballCrossMarketCoherence";
 
 export const CFB_FORWARD_WRITER_RELEASE =
-  "cfb_forward_evidence_writer_2026_08_30_r34_missing_anchor_game_hold" as const;
+  "cfb_forward_evidence_writer_2026_08_31_r35_public_consensus_market_input" as const;
 export const CFB_TOTAL_MEAN_PMF_TOSSUP_MAX_PROBABILITY_GAP = 0.01 as const;
 export const CFB_TOTAL_MEAN_PMF_TOSSUP_MAX_MEAN_DISTANCE_POINTS = 0.5 as const;
 export const CFB_FORWARD_MAX_QB_TEAMS_PER_RUN = 24 as const;
@@ -168,6 +168,8 @@ export async function runCfbForwardEvidenceWriter(args: {
           independentForecast: weeklyForecast.forecast,
           anchor: outcomeAnchor,
           sharpSplits: sharpApiSplits,
+          playbookLine,
+          publicSplits: playbookSplits,
           evaluatedAt: capturedAt,
         })
       : weeklyForecast.forecast;
@@ -200,6 +202,8 @@ export async function runCfbForwardEvidenceWriter(args: {
           bundle: decisionBundle,
           homeTeam: plan.game.home.abbreviation,
           sharpSplits: sharpApiSplits,
+          playbookLine,
+          publicSplits: playbookSplits,
           operationalOpening,
         })
       : decisionBundle, playbookLine) });
