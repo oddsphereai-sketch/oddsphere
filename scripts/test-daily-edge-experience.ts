@@ -108,6 +108,8 @@ function check(label: string, condition: boolean) {
   console.error(`  ✗ ${label}`);
 }
 
+check("CFB board cards leave repeated explanatory copy to the reader", candidateDailyEdgeSource.includes('sport !== "cfb" ? <p'));
+
 const heldPresentationMarket = {
   held: true,
   verdict: { key: "no_play", label: "No Play" },
