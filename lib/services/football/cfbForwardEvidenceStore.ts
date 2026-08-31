@@ -30,15 +30,26 @@ type StoredRow = {
   payload: unknown;
 };
 
+export const CFB_FORWARD_EVIDENCE_PAGE_SIZE = 1_000 as const;
+export const CFB_FORWARD_EVIDENCE_MAX_ROWS = 50_000 as const;
+
 export async function readCfbForwardEvidence(args: { client: SupabaseClient; season: number }): Promise<CfbForwardStoredEvidence[]> {
-  const { data, error } = await args.client
-    .from("cfb_forward_evidence_snapshots")
-    .select("id,provider_game_id,stage,captured_at,game_start_at,payload_sha256,payload")
-    .in("evidence_release", [CFB_FORWARD_INITIAL_EVIDENCE_SCHEMA_RELEASE, CFB_FORWARD_LEGACY_EVIDENCE_SCHEMA_RELEASE, CFB_FORWARD_TRANSITION_EVIDENCE_SCHEMA_RELEASE, CFB_FORWARD_PRIOR_EVIDENCE_SCHEMA_RELEASE, CFB_FORWARD_PREVIOUS_EVIDENCE_SCHEMA_RELEASE, CFB_FORWARD_DATA_QUALITY_EVIDENCE_SCHEMA_RELEASE, CFB_FORWARD_PRE_DIRECTIONAL_EVIDENCE_SCHEMA_RELEASE, CFB_FORWARD_PROVIDER_DISCOVERY_PREVIOUS_EVIDENCE_SCHEMA_RELEASE, CFB_FORWARD_CANONICAL_DISCOVERY_PREVIOUS_EVIDENCE_SCHEMA_RELEASE, CFB_FORWARD_AMBIGUOUS_SCOPE_PREVIOUS_EVIDENCE_SCHEMA_RELEASE, CFB_FORWARD_MARKET_SHARP_PRIOR_EVIDENCE_SCHEMA_RELEASE, CFB_FORWARD_MARKET_SHARP_PREVIOUS_EVIDENCE_SCHEMA_RELEASE, CFB_FORWARD_TRANSITION_PREVIOUS_EVIDENCE_SCHEMA_RELEASE, CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE])
-    .eq("season", args.season)
-    .order("captured_at", { ascending: true });
-  if (error) throw new Error(`CFB forward evidence read failed: ${error.message}`);
-  return ((data ?? []) as StoredRow[]).map(normalizeStoredRow);
+  const rows: StoredRow[] = [];
+  for (let from = 0; from < CFB_FORWARD_EVIDENCE_MAX_ROWS; from += CFB_FORWARD_EVIDENCE_PAGE_SIZE) {
+    const { data, error } = await args.client
+      .from("cfb_forward_evidence_snapshots")
+      .select("id,provider_game_id,stage,captured_at,game_start_at,payload_sha256,payload")
+      .in("evidence_release", [CFB_FORWARD_INITIAL_EVIDENCE_SCHEMA_RELEASE, CFB_FORWARD_LEGACY_EVIDENCE_SCHEMA_RELEASE, CFB_FORWARD_TRANSITION_EVIDENCE_SCHEMA_RELEASE, CFB_FORWARD_PRIOR_EVIDENCE_SCHEMA_RELEASE, CFB_FORWARD_PREVIOUS_EVIDENCE_SCHEMA_RELEASE, CFB_FORWARD_DATA_QUALITY_EVIDENCE_SCHEMA_RELEASE, CFB_FORWARD_PRE_DIRECTIONAL_EVIDENCE_SCHEMA_RELEASE, CFB_FORWARD_PROVIDER_DISCOVERY_PREVIOUS_EVIDENCE_SCHEMA_RELEASE, CFB_FORWARD_CANONICAL_DISCOVERY_PREVIOUS_EVIDENCE_SCHEMA_RELEASE, CFB_FORWARD_AMBIGUOUS_SCOPE_PREVIOUS_EVIDENCE_SCHEMA_RELEASE, CFB_FORWARD_MARKET_SHARP_PRIOR_EVIDENCE_SCHEMA_RELEASE, CFB_FORWARD_MARKET_SHARP_PREVIOUS_EVIDENCE_SCHEMA_RELEASE, CFB_FORWARD_TRANSITION_PREVIOUS_EVIDENCE_SCHEMA_RELEASE, CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE])
+      .eq("season", args.season)
+      .order("captured_at", { ascending: true })
+      .order("id", { ascending: true })
+      .range(from, from + CFB_FORWARD_EVIDENCE_PAGE_SIZE - 1);
+    if (error) throw new Error(`CFB forward evidence read failed: ${error.message}`);
+    const page = (data ?? []) as StoredRow[];
+    rows.push(...page);
+    if (page.length < CFB_FORWARD_EVIDENCE_PAGE_SIZE) return rows.map(normalizeStoredRow);
+  }
+  throw new Error(`CFB forward evidence read exceeded its bounded ${CFB_FORWARD_EVIDENCE_MAX_ROWS}-row season limit.`);
 }
 
 export async function appendCfbForwardEvidence(args: {
