@@ -6,6 +6,8 @@ import { buildRecommendationDecision } from "@/lib/services/recommendationDecisi
 import type { MarketSplitDisplaySection } from "@/lib/types/domain/RecommendationDecision";
 import {
   CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE,
+  CFB_FORWARD_IDENTITY_PREVIOUS_EVIDENCE_SCHEMA_RELEASE,
+  CFB_FORWARD_IDENTITY_PREVIOUS_MEMBER_RELEASE,
   CFB_FORWARD_CALIBRATION_PREVIOUS_EVIDENCE_SCHEMA_RELEASE,
   CFB_FORWARD_CALIBRATION_PREVIOUS_MEMBER_RELEASE,
   CFB_FORWARD_AMBIGUOUS_SCOPE_PREVIOUS_EVIDENCE_SCHEMA_RELEASE,
@@ -54,9 +56,9 @@ import { cfbFootballEvidenceStats } from "./footballMemberEvidence";
 import { CFB_MARKET_SHARP_AWARE_PRODUCTION_RELEASE } from "./cfbMarketSharpAwareShadow";
 
 export const CFB_MEMBER_FIXTURE_RELEASE =
-  "cfb_v1_member_fixture_2026_08_31_r37_authoritative_pmf_calibration" as const;
+  "cfb_v1_member_fixture_2026_08_31_r38_playbook_event_identity" as const;
 export const CFB_PUBLIC_OUTCOME_CONTRACT_RELEASE =
-  "cfb_market_sharp_public_outcome_contract_2026_08_31_r37_authoritative_pmf_calibration" as const;
+  "cfb_market_sharp_public_outcome_contract_2026_08_31_r38_playbook_event_identity" as const;
 export const CFB_CONTEXT_ONLY_QUOTE_CAPTURE_SKEW_MS = 5_000 as const;
 const CFB_MARKET_CONTEXT_MAX_CAPTURE_LAG_MINUTES = 10;
 const CFB_PUBLIC_SCORE_DIRECTION_TOLERANCE_POINTS = 0.25;
@@ -69,6 +71,7 @@ const CFB_MARKET_SHARP_PREVIOUS_DECISION_RELEASE = "cfb_v1_daily_edge_decision_2
 const CFB_TRANSITION_PREVIOUS_DECISION_RELEASE = "cfb_v1_daily_edge_decision_2026_08_29_r17_transition_coherent" as const;
 const CFB_PUBLIC_SPLITS_PREVIOUS_DECISION_RELEASE = "cfb_v1_daily_edge_decision_2026_08_30_r21_missing_anchor_game_hold" as const;
 const CFB_CALIBRATION_PREVIOUS_DECISION_RELEASE = "cfb_v1_daily_edge_decision_2026_08_31_r22_public_consensus_market_input" as const;
+const CFB_IDENTITY_PREVIOUS_DECISION_RELEASE = "cfb_v1_daily_edge_decision_2026_08_31_r23_authoritative_pmf_calibration" as const;
 const CFB_PROVIDER_DISCOVERY_PREVIOUS_MEMBER_RELEASE = "cfb_v1_member_release_2026_08_28_r15_directional_pmf" as const;
 const CFB_PROVIDER_DISCOVERY_PREVIOUS_DECISION_RELEASE = "cfb_v1_daily_edge_decision_2026_08_28_r12_directional_pmf" as const;
 const CFB_CANONICAL_PRICE_PREVIOUS_MEMBER_RELEASE = "cfb_v1_member_release_2026_08_28_r16_canonical_price_coverage" as const;
@@ -265,19 +268,38 @@ export function selectLatestCfbMemberEvidenceRows(
       )
     : null;
   const calibrationPreviousAuthority = calibrationPrevious ?? calibrationPreviousBoundary ?? publicSplitsPreviousAuthority;
+  const identityPrevious = completeRowsForRelease(
+    rows,
+    CFB_FORWARD_IDENTITY_PREVIOUS_EVIDENCE_SCHEMA_RELEASE,
+    CFB_FORWARD_IDENTITY_PREVIOUS_MEMBER_RELEASE,
+    CFB_IDENTITY_PREVIOUS_DECISION_RELEASE,
+  );
+  const identityPreviousBoundary = calibrationPreviousAuthority
+    ? immutableBoundaryTransitionRows(
+        rows,
+        now,
+        CFB_FORWARD_IDENTITY_PREVIOUS_EVIDENCE_SCHEMA_RELEASE,
+        CFB_FORWARD_IDENTITY_PREVIOUS_MEMBER_RELEASE,
+        CFB_IDENTITY_PREVIOUS_DECISION_RELEASE,
+        calibrationPreviousAuthority,
+      )
+    : null;
+  const identityPreviousAuthority = identityPrevious ?? identityPreviousBoundary ?? calibrationPreviousAuthority;
   const current = completeRowsForRelease(rows, CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE, CFB_FORWARD_MEMBER_RELEASE, CFB_V1_DECISION_RELEASE);
   if (current) return current;
-  const immutableBoundaryTransition = calibrationPreviousAuthority
+  const immutableBoundaryTransition = identityPreviousAuthority
     ? immutableBoundaryTransitionRows(
         rows,
         now,
         CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE,
         CFB_FORWARD_MEMBER_RELEASE,
         CFB_V1_DECISION_RELEASE,
-        calibrationPreviousAuthority,
+        identityPreviousAuthority,
       )
     : null;
   if (immutableBoundaryTransition) return immutableBoundaryTransition;
+  if (identityPrevious) return identityPrevious;
+  if (identityPreviousBoundary) return identityPreviousBoundary;
   if (calibrationPrevious) return calibrationPrevious;
   if (calibrationPreviousBoundary) return calibrationPreviousBoundary;
   if (publicSplitsPrevious) return publicSplitsPrevious;
@@ -432,7 +454,8 @@ function buildGame(row: CfbForwardStoredEvidence, movementRows: CfbForwardStored
   const allHeld = payload.decisions.heldMarkets.length === 3;
   const headline = [moneyline, total, spread].sort((a, b) => verdictRank(b.verdict.key) - verdictRank(a.verdict.key))[0]!;
   const primaryForecast = payload.decisions.forecast;
-  const independentForecast = payload.schemaRelease === CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE &&
+  const independentForecast = (payload.schemaRelease === CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE ||
+    payload.schemaRelease === CFB_FORWARD_IDENTITY_PREVIOUS_EVIDENCE_SCHEMA_RELEASE) &&
     payload.authoritativeForecast?.status === "market_sharp_applied"
     ? payload.independentForecast ?? null
     : null;
@@ -523,7 +546,8 @@ function assertCfbPublicPredictionCoherence(args: {
     throw new Error(`${CFB_PUBLIC_OUTCOME_CONTRACT_RELEASE}: CFB must publish exactly one authoritative prediction.`);
   }
   if (
-    args.payload.schemaRelease === CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE &&
+    (args.payload.schemaRelease === CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE ||
+      args.payload.schemaRelease === CFB_FORWARD_IDENTITY_PREVIOUS_EVIDENCE_SCHEMA_RELEASE) &&
     args.payload.authoritativeForecast?.status === "market_sharp_applied" &&
     !args.game.footballOnlyProjection
   ) {
