@@ -244,15 +244,9 @@ function TrackingPreview({ summary }: { summary: PublicTrackRecordSummary }) {
             <p className="text-xs font-black uppercase tracking-[0.18em] text-emerald-300">Tracked performance</p>
             <h2 className="mt-3 text-3xl font-black tracking-tight text-white sm:text-4xl">See the record. Then see the reasoning.</h2>
             <p className="mt-4 text-sm leading-relaxed text-gray-300 sm:text-base">
-              Every official Daily Edge result is tracked after settlement. Check weekly, monthly, and lifetime performance at a glance, with the full breakdown by sport and market inside the product.
+              Every official Daily Edge result is tracked after settlement. Check weekly, monthly, and lifetime performance here, with the full public breakdown by sport and market below.
             </p>
           </div>
-          <Link
-            href="/lab/tracking"
-            className="inline-flex shrink-0 items-center text-sm font-black text-emerald-200 transition hover:text-emerald-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-200"
-          >
-            Open the full tracker <span className="ml-2" aria-hidden="true">→</span>
-          </Link>
         </div>
         <div className="mt-8 flex flex-wrap items-baseline justify-between gap-3">
           <h3 className="text-lg font-black text-white sm:text-xl">Tracking by category</h3>
