@@ -201,8 +201,6 @@ const DIVISIONS: readonly (readonly string[])[] = [
 ];
 const BLOCKING_COVERAGE_REASONS = new Set([
   "roster_depth_unavailable",
-  "expected_quarterback_unavailable",
-  "injury_report_unavailable",
   "multibook_consensus_unavailable",
   "r6_leave_one_out_consensus_unavailable",
   "t60_capture_late",
@@ -229,8 +227,10 @@ export function buildNflR6ShadowMoneylineDecision(args: {
     capturedAt: evaluatedAt,
     gameStartsAt: args.game.scheduledStart,
   });
-  const awayQb = quarterbackContext(args.startersAndDepth.away, normalizeTeam(args.game.away.abbreviation));
-  const homeQb = quarterbackContext(args.startersAndDepth.home, normalizeTeam(args.game.home.abbreviation));
+  const adjustedAwayDepth = availabilityAdjustedQuarterbackDepth(args.startersAndDepth.away, args.injuries);
+  const adjustedHomeDepth = availabilityAdjustedQuarterbackDepth(args.startersAndDepth.home, args.injuries);
+  const awayQb = quarterbackContext(adjustedAwayDepth, normalizeTeam(args.game.away.abbreviation));
+  const homeQb = quarterbackContext(adjustedHomeDepth, normalizeTeam(args.game.home.abbreviation));
   const qbContext = {
     away: { name: awayQb.name, historyMatched: awayQb.matched, status: awayQb.status },
     home: { name: homeQb.name, historyMatched: homeQb.matched, status: homeQb.status },
@@ -243,14 +243,13 @@ export function buildNflR6ShadowMoneylineDecision(args: {
   ]);
   const blockingReasons = uniqueSorted([
     ...args.coverageHealthHolds.filter((reason) => BLOCKING_COVERAGE_REASONS.has(reason)),
-    args.game.season !== 2026 || args.game.providerWeek !== 1 ? "r6_runtime_outside_2026_week1" : null,
     !Number.isFinite(startsAt) || evaluatedTime >= startsAt ? "decision_not_pregame" : null,
     args.stage === "t60" && !t60Valid ? "t60_capture_late" : null,
-    !awayQb.matched ? "away_quarterback_history_unmatched" : null,
-    !homeQb.matched ? "home_quarterback_history_unmatched" : null,
+  ]);
+  const contextReasons = uniqueSorted([
+    ...args.coverageHealthHolds.filter((reason) => !BLOCKING_COVERAGE_REASONS.has(reason)),
     args.injuries === null ? "injury_report_unavailable" : null,
   ]);
-  const contextReasons = uniqueSorted(args.coverageHealthHolds.filter((reason) => !BLOCKING_COVERAGE_REASONS.has(reason)));
   const stage = decisionStage(args.stage, t60Valid);
 
   try {
@@ -353,6 +352,33 @@ export function buildNflR6ShadowMoneylineDecision(args: {
       footballProjection: null,
     };
   }
+}
+
+function availabilityAdjustedQuarterbackDepth(
+  depth: NflForwardTeamDepthSnapshot,
+  injuries: DailyEdgeGameAvailability | null,
+): NflForwardTeamDepthSnapshot {
+  const starter = depth.expectedStartingQuarterback?.name?.trim();
+  if (!starter || !injuries) return depth;
+  const team = injuries.teams.find((entry) => normalizeTeam(entry.abbreviation) === normalizeTeam(depth.team));
+  const report = team?.players.find((player) => playerKey(player.name) === playerKey(starter));
+  const status = report ? injuryStatus(report.status) : "";
+  if (status !== "out" && status !== "doubtful") return depth;
+  const unavailable = new Set((team?.players ?? [])
+    .filter((player) => {
+      const value = injuryStatus(player.status);
+      return value === "out" || value === "doubtful";
+    })
+    .map((player) => playerKey(player.name)));
+  const replacement = depth.quarterbackDepth
+    .filter((player) => playerKey(player.name) !== playerKey(starter))
+    .filter((player) => !unavailable.has(playerKey(player.name)))
+    .sort((first, second) => (first.depthRank ?? 99) - (second.depthRank ?? 99))[0] ?? null;
+  return {
+    ...depth,
+    expectedStartingQuarterback: replacement,
+    starterStatus: replacement ? "projected" : "unknown",
+  };
 }
 
 function baseDecision(

@@ -10,6 +10,17 @@ export const NFL_V1_OUTCOME_PROBABILITY_RELEASE =
   "nfl_v1_discrete_joint_probability_2026_08_23_r2" as const;
 export const NFL_V1_REPRESENTATIVE_SCORE_POLICY_RELEASE =
   "nfl_v1_representative_score_2026_08_23_r2" as const;
+export const NFL_V1_WEEKLY_OUTCOME_MODEL_RELEASE =
+  "nfl_v1_weekly_market_anchored_outcome_2026_08_31_r1" as const;
+export const NFL_V1_WEEKLY_OUTCOME_DISTRIBUTION_RELEASE =
+  "nfl_pooled_discrete_residual_distribution_2026_08_31_r1" as const;
+export const NFL_V1_WEEKLY_OUTCOME_PROBABILITY_RELEASE =
+  "nfl_v1_weekly_pooled_discrete_probability_2026_08_31_r1" as const;
+export const NFL_V1_MARKET_EVIDENCE_OUTCOME_RELEASE =
+  "nfl_v1_market_evidence_outcome_2026_08_31_r1_circa_public_bounded" as const;
+export const NFL_V1_MARKET_WEIGHT = 0.75 as const;
+export const NFL_V1_SHARP_SPLIT_MAX_SHIFT_POINTS = 1.5 as const;
+export const NFL_V1_PUBLIC_SPLIT_MAX_SHIFT_POINTS = 0.75 as const;
 
 type DiscreteDistribution = {
   values: number[];
@@ -62,9 +73,18 @@ export function getNflV1WeekOneOutcomeForecast(args: {
   providerGameId: string;
   awayTeam: string;
   homeTeam: string;
+  /**
+   * Later-week runtime fallback. The current market-led Moneyline model owns
+   * the home-margin anchor and the coherent current Total owns the points
+   * anchor; the frozen Week 1 PMFs supply only centered residual shape.
+   */
+  weeklyFallback?: { projectedHomeMargin: number; marketTotal: number };
 }): NflV1WeekOneOutcomeForecast {
   const forecast = forecasts.get(args.providerGameId);
-  if (!forecast) throw new Error(`NFL v1 outcome forecast is missing game ${args.providerGameId}.`);
+  if (!forecast) {
+    if (!args.weeklyFallback) throw new Error(`NFL v1 outcome forecast is missing game ${args.providerGameId}.`);
+    return buildWeeklyOutcomeForecast({ ...args, ...args.weeklyFallback });
+  }
   if (forecast.awayTeam !== normalizeTeam(args.awayTeam) || forecast.homeTeam !== normalizeTeam(args.homeTeam)) {
     throw new Error(
       `NFL v1 outcome identity mismatch for ${args.providerGameId}: ` +
@@ -72,6 +92,62 @@ export function getNflV1WeekOneOutcomeForecast(args: {
     );
   }
   return forecast;
+}
+
+export function hasNflV1WeekOneOutcomeForecast(providerGameId: string): boolean {
+  return forecasts.has(providerGameId);
+}
+
+type SplitPercentages = {
+  capturedAt: string;
+  homeMoneyPct: number | null; homeBetsPct: number | null;
+  overMoneyPct: number | null; overBetsPct: number | null;
+};
+type SharpSplitPercentages = SplitPercentages & {
+  sourceSportsbook: string | null;
+  providerFetchedAt: string | null;
+};
+
+export function buildNflMarketEvidenceOutcomeForecast(args: {
+  baseForecast: NflV1WeekOneOutcomeForecast;
+  footballHomeMargin: number;
+  current: { observedAt: string; spread: { homeLine: number } | null; total: { line: number } | null };
+  playbookLine: { capturedAt: string; homeSpread: number | null; total: number | null } | null;
+  playbookSplits: { spread: SplitPercentages; moneyline: SplitPercentages; total: SplitPercentages } | null;
+  sharpSplits: { spread: SharpSplitPercentages; moneyline: SharpSplitPercentages; total: SharpSplitPercentages } | null;
+  evaluatedAt: string;
+}): NflV1WeekOneOutcomeForecast {
+  if (!args.current.spread || !args.current.total) return args.baseForecast;
+  const evaluatedAt = Date.parse(args.evaluatedAt);
+  if (!Number.isFinite(evaluatedAt)) throw new Error("NFL market-evidence evaluatedAt is invalid.");
+  const baseTotal = args.baseForecast.expectedAwayScore + args.baseForecast.expectedHomeScore;
+  let targetMargin = (1 - NFL_V1_MARKET_WEIGHT) * args.footballHomeMargin
+    + NFL_V1_MARKET_WEIGHT * -args.current.spread.homeLine;
+  let targetTotal = (1 - NFL_V1_MARKET_WEIGHT) * baseTotal
+    + NFL_V1_MARKET_WEIGHT * args.current.total.line;
+  const sharpMarginGap = firstFinite(
+    freshCircaGap(args.sharpSplits?.spread, "home", evaluatedAt),
+    freshCircaGap(args.sharpSplits?.moneyline, "home", evaluatedAt),
+  );
+  const sharpTotalGap = freshCircaGap(args.sharpSplits?.total, "over", evaluatedAt);
+  const publicMarginGap = playbookLineMatches(args.playbookLine?.homeSpread, args.current.spread.homeLine)
+    ? firstFinite(
+        freshPublicGap(args.playbookSplits?.spread, "home", evaluatedAt),
+        freshPublicGap(args.playbookSplits?.moneyline, "home", evaluatedAt),
+      )
+    : null;
+  const publicTotalGap = playbookLineMatches(args.playbookLine?.total, args.current.total.line)
+    ? freshPublicGap(args.playbookSplits?.total, "over", evaluatedAt)
+    : null;
+  targetMargin += combinedEvidenceShift(sharpMarginGap, publicMarginGap);
+  targetTotal += combinedEvidenceShift(sharpTotalGap, publicTotalGap);
+  return outcomeFromDistributions({
+    providerGameId: args.baseForecast.providerGameId,
+    awayTeam: args.baseForecast.awayTeam,
+    homeTeam: args.baseForecast.homeTeam,
+    marginDistribution: shiftedDistribution(args.baseForecast.marginDistribution, targetMargin, false),
+    totalDistribution: shiftedDistribution(args.baseForecast.totalDistribution, targetTotal, true),
+  });
 }
 
 export function nflV1WeekOneOutcomeArtifactMetadata() {
@@ -176,6 +252,171 @@ function distributionMean(distribution: DiscreteDistribution): number {
     (sum, value, index) => sum + value * distribution.probabilities[index]!,
     0,
   );
+}
+
+function buildWeeklyOutcomeForecast(args: {
+  providerGameId: string;
+  awayTeam: string;
+  homeTeam: string;
+  projectedHomeMargin: number;
+  marketTotal: number;
+}): NflV1WeekOneOutcomeForecast {
+  if (!Number.isFinite(args.projectedHomeMargin) || !Number.isFinite(args.marketTotal) || args.marketTotal <= 0) {
+    throw new Error(`NFL weekly outcome anchors are invalid for ${args.providerGameId}.`);
+  }
+  const marginDistribution = pooledShiftedDistribution(
+    artifact.games.map((game) => game.marginDistribution),
+    args.projectedHomeMargin,
+    false,
+  );
+  const totalDistribution = pooledShiftedDistribution(
+    artifact.games.map((game) => game.totalDistribution),
+    args.marketTotal,
+    true,
+  );
+  return outcomeFromDistributions({
+    providerGameId: args.providerGameId,
+    awayTeam: args.awayTeam,
+    homeTeam: args.homeTeam,
+    marginDistribution,
+    totalDistribution,
+  });
+}
+
+function outcomeFromDistributions(args: {
+  providerGameId: string;
+  awayTeam: string;
+  homeTeam: string;
+  marginDistribution: DiscreteDistribution;
+  totalDistribution: DiscreteDistribution;
+}): NflV1WeekOneOutcomeForecast {
+  const expectedMargin = distributionMean(args.marginDistribution);
+  const expectedTotal = distributionMean(args.totalDistribution);
+  const expectedAwayScore = Math.max(0, (expectedTotal - expectedMargin) / 2);
+  const expectedHomeScore = Math.max(0, (expectedTotal + expectedMargin) / 2);
+  const winner = splitDistribution(args.marginDistribution, (margin) => margin);
+  const decided = Math.max(winner.positive + winner.negative, 1e-12);
+  const homeWinProbability = winner.positive / decided;
+  const awayWinProbability = winner.negative / decided;
+  const representative = representativeScore({
+    expectedAwayScore,
+    expectedHomeScore,
+    homeFavored: homeWinProbability > awayWinProbability,
+  });
+  return {
+    providerGameId: args.providerGameId,
+    awayTeam: normalizeTeam(args.awayTeam),
+    homeTeam: normalizeTeam(args.homeTeam),
+    expectedAwayScore,
+    expectedHomeScore,
+    representativeAwayScore: representative.away,
+    representativeHomeScore: representative.home,
+    representativeScoreProbability: representative.probability,
+    awayWinProbability,
+    homeWinProbability,
+    tieProbability: winner.push,
+    marginDistribution: args.marginDistribution,
+    totalDistribution: args.totalDistribution,
+    sourceExpectedAwayScore: expectedAwayScore,
+    sourceExpectedHomeScore: expectedHomeScore,
+  };
+}
+
+function freshCircaGap(value: SharpSplitPercentages | undefined, side: "home" | "over", evaluatedAt: number): number | null {
+  if (!value || normalizeBook(value.sourceSportsbook) !== "circa") return null;
+  const observedAt = Date.parse(value.providerFetchedAt ?? "");
+  if (!Number.isFinite(observedAt) || observedAt > evaluatedAt || evaluatedAt - observedAt > 120 * 60_000) return null;
+  return signedGap(value, side);
+}
+
+function freshPublicGap(value: SplitPercentages | undefined, side: "home" | "over", evaluatedAt: number): number | null {
+  if (!value) return null;
+  const observedAt = Date.parse(value.capturedAt);
+  if (!Number.isFinite(observedAt) || observedAt > evaluatedAt || evaluatedAt - observedAt > 120 * 60_000) return null;
+  return signedGap(value, side);
+}
+
+function signedGap(value: SplitPercentages, side: "home" | "over"): number | null {
+  const money = side === "home" ? value.homeMoneyPct : value.overMoneyPct;
+  const bets = side === "home" ? value.homeBetsPct : value.overBetsPct;
+  return money === null || bets === null ? null : money - bets;
+}
+
+function combinedEvidenceShift(sharpGap: number | null, publicGap: number | null): number {
+  const sharp = splitShift(sharpGap, 10, 20, NFL_V1_SHARP_SPLIT_MAX_SHIFT_POINTS);
+  const publicShift = splitShift(publicGap, 8, 20, NFL_V1_PUBLIC_SPLIT_MAX_SHIFT_POINTS);
+  if (sharp === 0) return publicShift;
+  const combined = sharp + 0.5 * publicShift;
+  if (Math.sign(combined) !== Math.sign(sharp)) return 0;
+  return Math.sign(sharp) * Math.min(NFL_V1_SHARP_SPLIT_MAX_SHIFT_POINTS, Math.abs(combined));
+}
+
+function splitShift(gap: number | null, threshold: number, fullStrength: number, cap: number): number {
+  if (gap === null || Math.abs(gap) < threshold) return 0;
+  const strength = Math.min(1, (Math.abs(gap) - threshold) / (fullStrength - threshold));
+  return Math.sign(gap) * cap * strength;
+}
+
+function shiftedDistribution(source: DiscreteDistribution, targetMean: number, nonNegative: boolean): DiscreteDistribution {
+  const sourceMean = distributionMean(source);
+  const weights = new Map<number, number>();
+  source.values.forEach((value, index) => {
+    const shifted = Math.round(value - sourceMean + targetMean);
+    const bucket = nonNegative ? Math.max(0, shifted) : shifted;
+    weights.set(bucket, (weights.get(bucket) ?? 0) + source.probabilities[index]!);
+  });
+  const values = [...weights.keys()].sort((first, second) => first - second);
+  const probabilities = values.map((value) => weights.get(value)!);
+  const total = probabilities.reduce((sum, value) => sum + value, 0);
+  return { values, probabilities: probabilities.map((value) => value / total) };
+}
+
+function playbookLineMatches(value: number | null | undefined, current: number): boolean {
+  return value !== null && value !== undefined && Math.abs(value - current) <= 0.5;
+}
+
+function firstFinite(...values: Array<number | null>): number | null {
+  return values.find((value): value is number => value !== null && Number.isFinite(value)) ?? null;
+}
+
+function normalizeBook(value: string | null): string {
+  return (value ?? "").toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+function pooledShiftedDistribution(
+  sources: DiscreteDistribution[],
+  targetMean: number,
+  nonNegative: boolean,
+): DiscreteDistribution {
+  const weights = new Map<number, number>();
+  for (const source of sources) {
+    const sourceMean = distributionMean(source);
+    source.values.forEach((value, index) => {
+      const shifted = Math.round(value - sourceMean + targetMean);
+      const bucket = nonNegative ? Math.max(0, shifted) : shifted;
+      weights.set(bucket, (weights.get(bucket) ?? 0) + source.probabilities[index]! / sources.length);
+    });
+  }
+  const values = [...weights.keys()].sort((a, b) => a - b);
+  const raw = values.map((value) => weights.get(value)!);
+  const total = raw.reduce((sum, value) => sum + value, 0);
+  return { values, probabilities: raw.map((value) => value / total) };
+}
+
+function representativeScore(args: {
+  expectedAwayScore: number;
+  expectedHomeScore: number;
+  homeFavored: boolean;
+}): { away: number; home: number; probability: number } {
+  let best = { away: 0, home: 1, distance: Number.POSITIVE_INFINITY };
+  for (let away = 0; away <= 70; away += 1) {
+    for (let home = 0; home <= 70; home += 1) {
+      if (away === home || (home > away) !== args.homeFavored) continue;
+      const distance = Math.abs(away - args.expectedAwayScore) + Math.abs(home - args.expectedHomeScore);
+      if (distance < best.distance) best = { away, home, distance };
+    }
+  }
+  return { away: best.away, home: best.home, probability: 1 / (1 + best.distance + 100) };
 }
 
 function validateDistribution(value: DiscreteDistribution, label: string): void {

@@ -7,7 +7,7 @@ import type { NflR6ShadowMoneylineDecision } from "./nflR6MoneylineShadow";
 import {
   applyNflV1LogitCorrection,
   getNflV1ActionableGradeCorrection,
-  NFL_V1_TOTAL_HEAD_RELEASE,
+  hasNflV1ActionableGradeCorrection,
 } from "./nflV1ActionableGradeCorrections";
 import {
   buildNflV1ProductionDecisionBundle,
@@ -15,21 +15,24 @@ import {
 import {
   getNflV1WeekOneOutcomeForecast,
   nflV1WeekOneLineProbabilities,
+  type NflV1WeekOneOutcomeForecast,
 } from "./nflV1WeekOneOutcome";
 import { constrainHomeCoverProbability } from "./footballCrossMarketCoherence";
 
 export const NFL_V1_ACTIONABLE_GRADE_MODEL_RELEASE =
-  "nfl_v1_daily_edge_model_2026_08_28_r4_event_containment" as const;
+  "nfl_v1_daily_edge_model_2026_08_31_r6_market_split_injury" as const;
 export const NFL_V1_ACTIONABLE_GRADE_CALIBRATION_RELEASE =
-  "nfl_v1_daily_edge_calibration_2026_08_28_r4_event_containment" as const;
+  "nfl_v1_daily_edge_calibration_2026_08_31_r6_market_split_residual" as const;
 export const NFL_V1_ACTIONABLE_GRADE_DECISION_RELEASE =
-  "nfl_v1_daily_edge_decision_2026_08_28_r10_event_containment" as const;
+  "nfl_v1_daily_edge_decision_2026_08_31_r12_market_split_injury" as const;
 export const NFL_V1_ACTIONABLE_GRADE_POLICY_RELEASE =
-  "nfl_v1_grade_policy_2026_08_28_r10_event_containment" as const;
+  "nfl_v1_grade_policy_2026_08_31_r12_market_split_injury" as const;
 export const NFL_V1_ACTIONABLE_GRADE_MEMBER_RELEASE =
-  "nfl_v1_member_release_2026_08_28_r7_event_containment" as const;
+  "nfl_v1_member_release_2026_08_31_r9_market_split_injury" as const;
 export const NFL_V1_EVENT_CONTAINED_SPREAD_MODEL_RELEASE =
-  "nfl_v1_spread_event_contained_2026_08_28_r2" as const;
+  "nfl_v1_spread_event_contained_2026_08_31_r3_market_split" as const;
+export const NFL_V1_MARKET_EVIDENCE_TOTAL_MODEL_RELEASE =
+  "nfl_v1_total_market_evidence_2026_08_31_r2_circa_public_bounded" as const;
 
 export const NFL_V1_MONEYLINE_BEST_ANGLE_MINIMUM_EXPECTED_VALUE = 0.02 as const;
 export const NFL_V1_MONEYLINE_BEST_ANGLE_MINIMUM_EDGE_PERCENTAGE_POINTS = 4.0 as const;
@@ -86,13 +89,24 @@ export function buildNflV1ActionableGradeBundle(args: {
   current: NflPreviewBookOdds;
   comparableCurrentBooks: NflPreviewBookOdds[];
   shadowMoneyline: NflR6ShadowMoneylineDecision;
+  outcomeForecast?: NflV1WeekOneOutcomeForecast;
 }): NflV1ActionableGradeBundle {
   const currentBundle = buildNflV1ProductionDecisionBundle(args);
-  if (currentBundle.evaluatedBets.length !== 3) return emptyBundle(currentBundle.outcomeConfidence);
   const currentMoneyline = currentBundle.evaluatedBets.find((decision) => decision.market === "moneyline");
   if (!currentMoneyline) return emptyBundle(currentBundle.outcomeConfidence);
-  const correction = getNflV1ActionableGradeCorrection(args);
-  const outcome = getNflV1WeekOneOutcomeForecast(args);
+  const correction = hasNflV1ActionableGradeCorrection(args.providerGameId)
+    ? getNflV1ActionableGradeCorrection(args)
+    : { spreadHomeLogitCorrection: 0, totalOverLogitCorrection: 0 };
+  const currentTotal = args.current.total?.line;
+  const outcome = args.outcomeForecast ?? getNflV1WeekOneOutcomeForecast({
+    ...args,
+    weeklyFallback: args.shadowMoneyline.footballProjection && currentTotal !== undefined
+      ? {
+          projectedHomeMargin: args.shadowMoneyline.footballProjection.projectedHomeMargin,
+          marketTotal: currentTotal,
+        }
+      : undefined,
+  });
   const stage = args.shadowMoneyline.decisionStage === "t60_locked" ? "t60_locked" as const : "unlocked" as const;
   const lockedAt = stage === "t60_locked" ? args.shadowMoneyline.lockedAt : null;
   const common = {
@@ -249,14 +263,14 @@ function selectMarket(args: {
           first ? other.total.underPrice : other.total.overPrice,
         )];
       });
-      if (otherFairs.length < 2) return null;
+      if (otherFairs.length < 1) return null;
       const looFairProbability = otherFairs.reduce((sum, value) => sum + value, 0) / otherFairs.length;
       const expectedValue = (1 - pushProbability) * (probability * profitOne(selectedPrice) - (1 - probability));
       const edgePercentagePoints = (probability - looFairProbability) * 100;
       const cushion = args.market === "spread"
         ? first ? expectedMargin + line : -(expectedMargin + line)
         : first ? expectedTotal - line : line - expectedTotal;
-      const grade = marketGrade({
+      const qualifiedGrade = marketGrade({
         market: args.market,
         probability,
         expectedValue,
@@ -264,6 +278,11 @@ function selectMarket(args: {
         cushion,
         penalty,
       });
+      // A fragmented board can still publish a coherent prediction with one
+      // target-excluded same-line comparator. Action requires at least two.
+      const grade = otherFairs.length >= 2 || gradeRank(qualifiedGrade) < gradeRank("Lean")
+        ? qualifiedGrade
+        : "Watchlist";
       return {
         market: args.market,
         side: args.market === "spread"
@@ -282,7 +301,9 @@ function selectMarket(args: {
           observedAt: target.observedAt,
         },
         grade,
-        modelRelease: args.market === "spread" ? NFL_V1_EVENT_CONTAINED_SPREAD_MODEL_RELEASE : NFL_V1_TOTAL_HEAD_RELEASE,
+        modelRelease: args.market === "spread"
+          ? NFL_V1_EVENT_CONTAINED_SPREAD_MODEL_RELEASE
+          : NFL_V1_MARKET_EVIDENCE_TOTAL_MODEL_RELEASE,
       };
     };
     const corrected = evaluate(correctedFirst);

@@ -135,6 +135,54 @@ assert.ok(unlocked.health.quarterbackReasons.includes("away_quarterback_projecte
 assert.ok(unlocked.health.quarterbackReasons.includes("home_quarterback_projected_not_confirmed"));
 assert.ok(unlocked.health.contextReasons.includes("sharpapi_splits_unavailable"));
 
+const injuredQuarterback = buildNflR6ShadowMoneylineDecision({
+  game: { ...game, providerWeek: 2 },
+  opening,
+  comparableCurrentBooks: books,
+  startersAndDepth: {
+    away: {
+      ...depth("BUF", "Josh Allen"),
+      quarterbackDepth: [player("Josh Allen", "BUF", 1), player("Mitchell Trubisky", "BUF", 2)],
+      roster: [player("Josh Allen", "BUF", 1), player("Mitchell Trubisky", "BUF", 2)],
+    },
+    home: depth("KC", "Patrick Mahomes"),
+  },
+  injuries: {
+    ...availability,
+    teams: [
+      {
+        abbreviation: "BUF",
+        teamName: "Buffalo Bills",
+        players: [{ name: "Josh Allen", status: "Out", detail: null, position: "QB", reportedAt: availability.reportUpdatedAt }],
+      },
+      availability.teams[1]!,
+    ],
+  },
+  stage: "unlocked",
+  capturedAt: "2026-09-01T12:00:00.000Z",
+  t60LagMinutes: null,
+  coverageHealthHolds: [],
+});
+assert.equal(injuredQuarterback.health.blockingReasons.length, 0);
+assert.equal(injuredQuarterback.quarterbackContext.away.name, "Mitchell Trubisky");
+assert.ok(injuredQuarterback.modelProbability !== null);
+assert.equal(injuredQuarterback.health.blockingReasons.includes("r6_runtime_outside_2026_week1"), false);
+
+const missingInjuryReport = buildNflR6ShadowMoneylineDecision({
+  game: { ...game, providerWeek: 2 },
+  opening,
+  comparableCurrentBooks: books,
+  startersAndDepth: { away: depth("BUF", "Josh Allen"), home: depth("KC", "Patrick Mahomes") },
+  injuries: null,
+  stage: "unlocked",
+  capturedAt: "2026-09-01T12:00:00.000Z",
+  t60LagMinutes: null,
+  coverageHealthHolds: ["injury_report_unavailable"],
+});
+assert.equal(missingInjuryReport.health.blockingReasons.length, 0, "missing injury context preserves the football projection");
+assert.ok(missingInjuryReport.health.contextReasons.includes("injury_report_unavailable"));
+assert.ok(missingInjuryReport.modelProbability !== null);
+
 const onTimeT60 = buildNflR6ShadowMoneylineDecision({
   game,
   opening,
@@ -182,7 +230,7 @@ assert.equal(falsifiedLagT60.lockedAt, null);
 assert.ok(falsifiedLagT60.health.blockingReasons.includes("t60_capture_late"));
 
 const writer = readFileSync(path.resolve("lib/services/football/nflForwardEvidenceWriter.ts"), "utf8");
-assert.match(writer, /nfl_forward_evidence_writer_2026_08_28_r14_strict_directional_pmf/);
+assert.match(writer, /nfl_forward_evidence_writer_2026_08_31_r16_market_split_injury/);
 assert.match(writer, /buildNflR6ShadowMoneylineDecision/);
 assert.match(writer, /buildNflV1ActionableGradeBundle/);
 assert.match(writer, /evaluatedBets: production\.evaluatedBets/);

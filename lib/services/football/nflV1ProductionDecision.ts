@@ -13,12 +13,13 @@ import {
 import {
   getNflV1WeekOneOutcomeForecast,
   nflV1WeekOneLineProbabilities,
+  type NflV1WeekOneOutcomeForecast,
 } from "./nflV1WeekOneOutcome";
 
 export const NFL_V1_PRODUCTION_MODEL_RELEASE =
-  "nfl_v1_daily_edge_model_2026_08_23_r2" as const;
+  "nfl_v1_daily_edge_model_2026_08_31_r6_market_split_injury" as const;
 export const NFL_V1_PRODUCTION_CALIBRATION_RELEASE =
-  "nfl_v1_daily_edge_calibration_2026_08_23_r2" as const;
+  "nfl_v1_daily_edge_calibration_2026_08_31_r6_market_split_residual" as const;
 export const NFL_V1_PRODUCTION_DECISION_RELEASE =
   "nfl_v1_daily_edge_decision_2026_08_24_r4_spread_total_watchlist" as const;
 export const NFL_V1_GRADE_POLICY_RELEASE =
@@ -51,15 +52,22 @@ export function buildNflV1ProductionDecisionBundle(args: {
   current: NflPreviewBookOdds;
   comparableCurrentBooks: NflPreviewBookOdds[];
   shadowMoneyline: NflR6ShadowMoneylineDecision;
+  outcomeForecast?: NflV1WeekOneOutcomeForecast;
 }): NflV1ProductionDecisionBundle {
-  const outcome = getNflV1WeekOneOutcomeForecast({
-    providerGameId: args.providerGameId,
-    awayTeam: args.awayTeam,
-    homeTeam: args.homeTeam,
-  });
   const spread = args.current.spread;
   const total = args.current.total;
   if (!spread || !total) throw new Error(`NFL v1 current spread/total is incomplete for ${args.providerGameId}.`);
+  const outcome = args.outcomeForecast ?? getNflV1WeekOneOutcomeForecast({
+    providerGameId: args.providerGameId,
+    awayTeam: args.awayTeam,
+    homeTeam: args.homeTeam,
+    weeklyFallback: args.shadowMoneyline.footballProjection
+      ? {
+          projectedHomeMargin: args.shadowMoneyline.footballProjection.projectedHomeMargin,
+          marketTotal: total.line,
+        }
+      : undefined,
+  });
   const lineProbabilities = nflV1WeekOneLineProbabilities({
     forecast: outcome,
     homeSpread: spread.homeLine,

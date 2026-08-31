@@ -56,6 +56,10 @@ export function getNflV1ActionableGradeCorrection(args: {
   return correction;
 }
 
+export function hasNflV1ActionableGradeCorrection(providerGameId: string): boolean {
+  return corrections.has(providerGameId);
+}
+
 export function nflV1ActionableGradeArtifactMetadata() {
   return {
     artifactRelease: artifact.artifactRelease,

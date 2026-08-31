@@ -476,11 +476,11 @@ function CollapsedReader({ game, market, marketKey, sport, onOpen, onOpenMarket,
         </div>
         <div className="mt-3 flex flex-wrap items-center gap-2">
           <div className="flex items-center gap-2">
-            <TeamLogo src={game.awayTeamLogo} label={game.awayTeam} />
+            <TeamLogo src={game.awayTeamLogo} label={game.awayTeam} sport={sport} />
             <strong className="text-sm text-white">{game.awayTeam}</strong>
             <span className="text-[9px] text-gray-700">@</span>
             <strong className="text-sm text-white">{game.homeTeam}</strong>
-            <TeamLogo src={game.homeTeamLogo} label={game.homeTeam} />
+            <TeamLogo src={game.homeTeamLogo} label={game.homeTeam} sport={sport} />
           </div>
           <VerdictBadge market={market} />
           <LocalTime value={game.gameStartAt} fallback={game.gameTime} className="text-[9px] text-gray-600" />
@@ -582,7 +582,7 @@ function MobileReaderSheet({ onClose, onSportChange, onSportPrefetch, activePrev
       <div className="absolute inset-x-0 bottom-0 top-[65px] flex flex-col overflow-hidden rounded-t-2xl border-t border-violet-400/35 bg-[#0a0910] shadow-[0_-24px_80px_-35px_rgba(124,58,237,0.85)]">
         <div className="shrink-0 border-b border-white/[0.07] bg-[#100e18] px-3 pb-2 pt-3">
           <div className="flex items-center justify-between gap-3">
-            <div className="flex min-w-0 items-center gap-2"><TeamLogo src={reader.game.awayTeamLogo} label={reader.game.awayTeam} /><span className="text-sm font-black text-white">{reader.game.awayTeam}</span><span className="text-[9px] text-gray-700">@</span><span className="text-sm font-black text-white">{reader.game.homeTeam}</span><TeamLogo src={reader.game.homeTeamLogo} label={reader.game.homeTeam} /><LocalTime value={reader.game.gameStartAt} fallback={reader.game.gameTime} className="truncate text-[9px] text-gray-600" /><LockBadge lockState={reader.game.lockState} lockedAt={reader.game.lockedAt} scheduledLockAt={reader.game.scheduledLockAt} className="font-black uppercase tracking-wider text-emerald-300" /></div>
+            <div className="flex min-w-0 items-center gap-2"><TeamLogo src={reader.game.awayTeamLogo} label={reader.game.awayTeam} sport={reader.sport} /><span className="text-sm font-black text-white">{reader.game.awayTeam}</span><span className="text-[9px] text-gray-700">@</span><span className="text-sm font-black text-white">{reader.game.homeTeam}</span><TeamLogo src={reader.game.homeTeamLogo} label={reader.game.homeTeam} sport={reader.sport} /><LocalTime value={reader.game.gameStartAt} fallback={reader.game.gameTime} className="truncate text-[9px] text-gray-600" /><LockBadge lockState={reader.game.lockState} lockedAt={reader.game.lockedAt} scheduledLockAt={reader.game.scheduledLockAt} className="font-black uppercase tracking-wider text-emerald-300" /></div>
             <button type="button" onClick={onClose} aria-label="Close reader" className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-white/[0.08] bg-white/[0.035] text-xl text-gray-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-300">×</button>
           </div>
           <div className="mt-2 flex items-center justify-between gap-2">
@@ -862,7 +862,7 @@ function SoccerDoubleChancePanel({ game }: { game: DailyEdgeGameDto }) {
 }
 
 function QuickMatchupIdentity({ game, sport }: { game: DailyEdgeGameDto; sport: Sport }) {
-  const side = (team: string, logo: string | null, starter: DailyEdgeGameDto["awayStarter"]) => <div className="min-w-0 rounded-lg border border-white/[0.08] bg-black/25 p-3"><div className="flex items-center gap-2"><TeamLogo key={team} src={logo} label={team} /><p className="text-base font-black tracking-tight text-white">{team}</p></div>{sport === "mlb" ? <div className="mt-3 border-t border-white/[0.07] pt-2"><p className="text-[7px] font-black uppercase tracking-[0.15em] text-gray-600">Probable starter</p><p className="mt-1 truncate text-[12px] font-black text-gray-100">{starter?.name ?? "Starter TBD"}</p><span className="mt-1 inline-flex rounded border border-gray-700 bg-gray-800/60 px-1.5 py-0.5 text-[7px] font-black uppercase tracking-wider text-gray-400">{starter?.throws ? `${starter.throws}HP` : "Hand unknown"}</span></div> : <p className="mt-3 border-t border-white/[0.07] pt-2 text-[8px] font-bold uppercase tracking-[0.14em] text-gray-600">{sportLabel(sport)} matchup</p>}</div>;
+  const side = (team: string, logo: string | null, starter: DailyEdgeGameDto["awayStarter"]) => <div className="min-w-0 rounded-lg border border-white/[0.08] bg-black/25 p-3"><div className="flex items-center gap-2"><TeamLogo key={team} src={logo} label={team} sport={sport} /><p className="text-base font-black tracking-tight text-white">{team}</p></div>{sport === "mlb" ? <div className="mt-3 border-t border-white/[0.07] pt-2"><p className="text-[7px] font-black uppercase tracking-[0.15em] text-gray-600">Probable starter</p><p className="mt-1 truncate text-[12px] font-black text-gray-100">{starter?.name ?? "Starter TBD"}</p><span className="mt-1 inline-flex rounded border border-gray-700 bg-gray-800/60 px-1.5 py-0.5 text-[7px] font-black uppercase tracking-wider text-gray-400">{starter?.throws ? `${starter.throws}HP` : "Hand unknown"}</span></div> : <p className="mt-3 border-t border-white/[0.07] pt-2 text-[8px] font-bold uppercase tracking-[0.14em] text-gray-600">{sportLabel(sport)} matchup</p>}</div>;
   return <div><div className="mb-2 flex items-center justify-between"><p className="text-[8px] font-black uppercase tracking-[0.16em] text-emerald-200">Matchup</p><span className="text-[8px] font-black text-gray-600">{game.awayTeam} @ {game.homeTeam}</span></div><div className="grid grid-cols-[1fr_auto_1fr] items-stretch gap-2">{side(game.awayTeam, game.awayTeamLogo, game.awayStarter)}<span className="self-center text-[9px] font-black text-gray-700">AT</span>{side(game.homeTeam, game.homeTeamLogo, game.homeStarter)}</div></div>;
 }
 
@@ -1429,6 +1429,7 @@ function currentAwareGuidedGuide(market: MarketEdgeDto, fallback: string): strin
 
 function coherentMovementDirection(market: MarketEdgeDto, movement: CoherentMovement): "support" | "resistance" | "neutral" {
   if (!movement.coherentTrail || movement.open === null || movement.current === null) return "neutral";
+  if (market.writerMovementDirection) return market.writerMovementDirection;
   const canonical = market.marketReadV2?.movement;
   const canonicalDirection = canonical?.directionRelativeToPick;
   const isVerifiedFirstInningPriceBoard =
@@ -2096,7 +2097,7 @@ function PriceStops({ market }: { market: MarketEdgeDto }) {
 }
 
 function StarterDetailCard({ team, logo, starter, stats, side }: { team: string; logo: string | null; starter: DailyEdgeGameDto["awayStarter"]; stats: MarketEdgeDto["keyStats"]; side: "away" | "home" }) {
-  return <section className="rounded-xl border border-white/[0.10] bg-[#12111b] p-4"><div className="flex items-center gap-3"><TeamLogo src={logo} label={team} /><div><p className="text-[8px] font-black uppercase tracking-[0.14em] text-gray-500">{team} probable starter</p><p className="mt-0.5 text-sm font-black text-white">{starter?.name ?? "Starter TBD"}</p><p className="text-[9px] font-semibold text-gray-500">{starter?.throws ? `${starter.throws}HP` : "Handedness unavailable"}</p></div></div><div className="mt-4 border-t border-white/[0.07] pt-3">{stats.length > 0 ? <div className="grid gap-2">{stats.map((stat) => <div key={stat.label} className="flex items-center justify-between gap-3"><span className="text-[8px] font-bold uppercase tracking-wider text-gray-500">{stat.label}</span><span className="text-xs font-black text-gray-200">{side === "away" ? stat.awayValue ?? "—" : stat.homeValue ?? "—"}</span></div>)}</div> : <p className="text-[9px] text-gray-600">No pitcher-stat row is available for this selected market.</p>}</div></section>;
+  return <section className="rounded-xl border border-white/[0.10] bg-[#12111b] p-4"><div className="flex items-center gap-3"><TeamLogo src={logo} label={team} sport="mlb" /><div><p className="text-[8px] font-black uppercase tracking-[0.14em] text-gray-500">{team} probable starter</p><p className="mt-0.5 text-sm font-black text-white">{starter?.name ?? "Starter TBD"}</p><p className="text-[9px] font-semibold text-gray-500">{starter?.throws ? `${starter.throws}HP` : "Handedness unavailable"}</p></div></div><div className="mt-4 border-t border-white/[0.07] pt-3">{stats.length > 0 ? <div className="grid gap-2">{stats.map((stat) => <div key={stat.label} className="flex items-center justify-between gap-3"><span className="text-[8px] font-bold uppercase tracking-wider text-gray-500">{stat.label}</span><span className="text-xs font-black text-gray-200">{side === "away" ? stat.awayValue ?? "—" : stat.homeValue ?? "—"}</span></div>)}</div> : <p className="text-[9px] text-gray-600">No pitcher-stat row is available for this selected market.</p>}</div></section>;
 }
 
 function DetailedStatCard({ stat, away, home }: { stat: MarketEdgeDto["keyStats"][number]; away: string; home: string }) {
@@ -2187,11 +2188,11 @@ function BoardGameCard({ game, sport, headlineMarket, active, activeMarket, sele
       <div className={`flex flex-1 flex-col ${compactSoccer ? "p-3.5 sm:p-4" : "p-5 sm:p-6"}`}>
         <div className={compactSoccer ? "grid gap-2" : "grid gap-3"}>
           <div className="flex min-w-0 items-center gap-2.5">
-            <TeamLogo src={game.awayTeamLogo} label={game.awayTeam} />
+            <TeamLogo src={game.awayTeamLogo} label={game.awayTeam} sport={sport} />
             <span className={compactSoccer ? "truncate text-[13px] font-black text-white" : "text-base font-black text-white"}>{game.awayTeam}</span>
             <span className="text-[11px] text-gray-700">@</span>
             <span className={compactSoccer ? "truncate text-[13px] font-black text-white" : "text-base font-black text-white"}>{game.homeTeam}</span>
-            <TeamLogo src={game.homeTeamLogo} label={game.homeTeam} />
+            <TeamLogo src={game.homeTeamLogo} label={game.homeTeam} sport={sport} />
           </div>
           <div className={`flex items-center gap-2 ${compactSoccer ? "min-h-6" : "min-h-8"}`}>
             <VerdictBadge market={headline} large={!compactSoccer} />
@@ -2259,7 +2260,7 @@ function boardVerdictText(verdict: string): string {
 
 function EmptyPreview({ sport, displayLabel }: { sport: Sport; displayLabel?: string }) {
   const label = displayLabel ?? sportLabel(sport);
-  return <section className="rounded-2xl border border-violet-400/15 bg-gradient-to-br from-violet-500/[0.05] to-gray-950/60 p-10 text-center"><span className="inline-flex rounded-full border border-violet-400/20 bg-violet-400/[0.06] px-3 py-1 text-[8px] font-black uppercase tracking-wider text-violet-200">Model available</span><p className="mt-4 text-[9px] font-black uppercase tracking-wider text-gray-500">Soccer · {label} · Daily Edge</p><h2 className="mt-2 text-2xl font-black text-white">No {label} games today</h2><p className="mx-auto mt-2 max-w-xl text-sm leading-relaxed text-gray-500">The {label} model remains part of OddSphere. There is no current slate to analyze, so the board correctly stays empty instead of showing games from an older date.</p></section>;
+  return <section className="rounded-2xl border border-violet-400/15 bg-gradient-to-br from-violet-500/[0.05] to-gray-950/60 p-10 text-center"><span className="inline-flex rounded-full border border-violet-400/20 bg-violet-400/[0.06] px-3 py-1 text-[8px] font-black uppercase tracking-wider text-violet-200">Model available</span><p className="mt-4 text-[9px] font-black uppercase tracking-wider text-gray-500">{label} · Daily Edge</p><h2 className="mt-2 text-2xl font-black text-white">No {label} games today</h2><p className="mx-auto mt-2 max-w-xl text-sm leading-relaxed text-gray-500">The {label} model remains part of OddSphere. There is no current slate to analyze, so the board correctly stays empty instead of showing games from an older date.</p></section>;
 }
 
 function NflWeekOneEvidenceMonitor({ board }: { board: NflWeekOneEvidenceBoard }) {
@@ -2411,7 +2412,7 @@ function CoverageGap({ text }: { text: string }) {
   return <div className="mt-4 rounded-lg border border-amber-400/15 bg-amber-400/[0.04] p-3 text-[9px] leading-relaxed text-amber-200/55"><span className="font-black text-amber-300">Coverage gap:</span> {text}</div>;
 }
 
-function TeamLogo({ src, label }: { src: string | null; label: string }) {
+function TeamLogo({ src, label, sport }: { src: string | null; label: string; sport?: Sport }) {
   // The response owns team identity. Several WNBA abbreviations overlap MLB
   // (ATL, CHI, SEA, TOR), so an MLB-first fallback silently replaced correct
   // WNBA assets in the candidate reader. Legacy MLB rows still contain the
@@ -2419,9 +2420,10 @@ function TeamLogo({ src, label }: { src: string | null; label: string }) {
   // that known MLB format (or a blank value) with the working ESPN team mark
   // used by the previous product surface; valid league-owned assets stay put.
   const suppliedSrc = src?.trim() || null;
-  const resolvedSrc = !suppliedSrc || suppliedSrc.includes("mlbstatic.com/team-logos/")
-    ? mlbLogoUrl(label)
-    : suppliedSrc;
+  const suppliedIsMlbStatic = suppliedSrc ? suppliedSrc.includes("mlbstatic.com/team-logos/") : false;
+  const resolvedSrc = sport === "mlb"
+    ? (!suppliedSrc || suppliedIsMlbStatic ? mlbLogoUrl(label) : suppliedSrc)
+    : suppliedIsMlbStatic ? null : suppliedSrc;
   const [imageFailed, setImageFailed] = useState(!resolvedSrc);
   const theme = teamTheme(label);
   const accent = teamAccent(label);

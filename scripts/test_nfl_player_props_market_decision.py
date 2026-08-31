@@ -39,12 +39,13 @@ assert contract["marketBenchmark"] == "independent_book_consensus_excluding_targ
 assert contract["promotionPolicy"]["receiving_yards"]["bestAngle"] is True
 assert contract["promotionPolicy"]["rushing_attempts"] == {"bestAngle": False, "lean": True, "watchlist": True}
 assert lanes.RELEASE == "nfl_player_props_actionable_lane_evidence_2026_08_25_r3_production_release"
-assert decision["decisionRelease"] == "nfl_player_props_decision_2026_08_25_r2_exact_price_shared_context"
+assert decision["decisionRelease"] == "nfl_player_props_decision_2026_08_31_r3_monotonic_divergence"
 assert decision["modelRelease"] == "nfl_player_props_distribution_model_2026_08_25_r2_shared_context"
 assert decision["calibrationRelease"] == "nfl_player_props_distribution_calibration_2026_08_25_r2_shared_context"
 assert decision["volumeAndYardage"]["bestAngle"]["minimumIndependentBooks"] == 1
-assert decision["marketLanes"]["receiving_yards"] == {"eligibleSides": ["under"], "bestAngle": True, "lean": False, "watchlist": True}
-assert decision["marketLanes"]["receptions"] == {"eligibleSides": ["under"], "bestAngle": True, "lean": False, "watchlist": True}
+assert decision["maximumRawMarketDivergence"] == 0.48
+assert decision["marketLanes"]["receiving_yards"] == {"eligibleSides": ["under"], "bestAngle": True, "lean": True, "watchlist": True}
+assert decision["marketLanes"]["receptions"] == {"eligibleSides": ["under"], "bestAngle": True, "lean": True, "watchlist": True}
 assert decision["marketLanes"]["passing_yards"]["eligibleSides"] == []
 assert decision["marketLanes"]["rushing_yards"]["eligibleSides"] == []
 assert td_contract["requiredOpportunityFeatures"] == ["participation", "red_zone", "goal_line", "team_implied_touchdowns", "opponent_touchdown_allowance"]

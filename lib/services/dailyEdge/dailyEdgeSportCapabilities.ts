@@ -51,12 +51,15 @@ export function dailyEdgeMarketCapabilities(
   }
 
   return {
-    expectsConsensusSplits: key === "moneyline" || key === "total" || key === "spread",
+    // Football stores its spread market in the legacy firstInning slot.
+    // Treat both keys as spread so the normalized recommendation layer does
+    // not silently discard the splits that the football writer published.
+    expectsConsensusSplits: key === "moneyline" || key === "total" || key === "spread" || key === "firstInning",
     expectsSharpBookContext: false,
     isFirstInning: false,
-    isSpreadLike: key === "spread",
+    isSpreadLike: key === "spread" || key === "firstInning",
     isSoccerLike: false,
-    marketContextName: key === "total" ? "total" : key === "spread" ? "spread" : "market",
+    marketContextName: key === "total" ? "total" : key === "spread" || key === "firstInning" ? "spread" : "market",
   };
 }
 

@@ -14,11 +14,11 @@ import type {
 } from "./cfbV1Decision";
 
 export const CFB_MARKET_SHARP_AWARE_CANDIDATE_RELEASE =
-  "cfb_market_sharp_aware_candidate_2026_08_31_r7_public_consensus_market_input" as const;
+  "cfb_market_sharp_aware_candidate_2026_08_31_r8_authoritative_pmf_calibration" as const;
 export const CFB_MARKET_SHARP_AWARE_SHADOW_RELEASE =
   CFB_MARKET_SHARP_AWARE_CANDIDATE_RELEASE;
 export const CFB_MARKET_SHARP_AWARE_PRODUCTION_RELEASE =
-  "cfb_market_sharp_aware_production_2026_08_31_r9_public_consensus_market_input" as const;
+  "cfb_market_sharp_aware_production_2026_08_31_r10_authoritative_pmf_calibration" as const;
 export const CFB_MARKET_SHADOW_WEIGHT = 0.75 as const;
 export const CFB_SHARP_SIGNED_GAP_THRESHOLD_PP = 10 as const;
 export const CFB_SHARP_FULL_STRENGTH_GAP_PP = 20 as const;

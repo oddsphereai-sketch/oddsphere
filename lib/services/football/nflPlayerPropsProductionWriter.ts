@@ -24,18 +24,18 @@ import {
 } from "./nflPlayerPropsSettlement";
 
 export const NFL_PLAYER_PROPS_WRITER_RELEASE =
-  "nfl_player_props_writer_2026_08_27_r8_research_trends" as const;
-export const NFL_PLAYER_PROPS_PRODUCTION_INCLUDE_OPENINGS = false as const;
+  "nfl_player_props_writer_2026_08_31_r9_opening_closing_order" as const;
+export const NFL_PLAYER_PROPS_PRODUCTION_INCLUDE_OPENINGS = true as const;
 export const NFL_PLAYER_PROPS_PRODUCTION_COLLECTION_CALL_MAXIMUM = (
   1
-  + NFL_PLAYER_PROPS_COLLECTION_LIMITS.maxGames
+  + 2 * NFL_PLAYER_PROPS_COLLECTION_LIMITS.maxGames
   + Math.ceil(NFL_PLAYER_PROPS_COLLECTION_LIMITS.maxPlayerIdentities / NFL_PLAYER_PROPS_COLLECTION_LIMITS.playerIdentityBatchSize)
   + NFL_PLAYER_PROPS_COLLECTION_LIMITS.maxSharpPages
-) as 30;
+) as 48;
 export const NFL_PLAYER_PROPS_PRODUCTION_INCREMENTAL_CALL_MAXIMUM = (
   NFL_PLAYER_PROPS_PRODUCTION_COLLECTION_CALL_MAXIMUM
   + NFL_PLAYER_PROPS_SETTLEMENT_MAX_GAMES_PER_CYCLE
-) as 48;
+) as 66;
 
 export type NflPlayerPropsWriterResult = {
   writerRelease: typeof NFL_PLAYER_PROPS_WRITER_RELEASE;
@@ -70,9 +70,6 @@ export async function runNflPlayerPropsProductionWriter(args: {
   fetchImpl?: typeof fetch;
 }): Promise<NflPlayerPropsWriterResult> {
   verifyNflPlayerPropsRuntimeParity();
-  const settlement = args.apply
-    ? await settleNflPlayerPropsRecords({ client: args.client, apiKey: args.ballDontLieApiKey, now: args.now, fetchImpl: args.fetchImpl })
-    : { pending: 0, eligible: 0, eligibleGames: 0, processedGames: 0, deferredGames: 0, recordReadLimitReached: false, settled: 0, apiCalls: 0 };
   const collection = await collectNflPlayerPropsObservations({
     season: args.season,
     week: args.week,
@@ -105,6 +102,12 @@ export async function runNflPlayerPropsProductionWriter(args: {
     await writeLockedNflPlayerPropsTracking({ client: args.client, snapshot });
     closingPricesUpdated = await updateNflPlayerPropsClosingPrices({ client: args.client, production: snapshot, observations: collection.snapshot });
   }
+  // Closing price must attach while a locked record is still pending. Running
+  // settlement first made same-cycle finals permanently miss CLV because the
+  // closing update intentionally refuses to rewrite a settled result.
+  const settlement = args.apply
+    ? await settleNflPlayerPropsRecords({ client: args.client, apiKey: args.ballDontLieApiKey, now: args.now, fetchImpl: args.fetchImpl })
+    : { pending: 0, eligible: 0, eligibleGames: 0, processedGames: 0, deferredGames: 0, recordReadLimitReached: false, settled: 0, apiCalls: 0 };
   const providerRequests = Object.values(collection.snapshot.providerRequests).reduce((sum, value) => sum + (value ?? 0), 0);
   if (providerRequests > NFL_PLAYER_PROPS_PRODUCTION_COLLECTION_CALL_MAXIMUM) {
     throw new Error(`NFL player props collection exceeded its ${NFL_PLAYER_PROPS_PRODUCTION_COLLECTION_CALL_MAXIMUM}-call production budget.`);

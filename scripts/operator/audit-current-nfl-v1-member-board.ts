@@ -9,6 +9,7 @@ import {
 } from "../../lib/services/football/nflForwardEvidence";
 import { buildNflV1ProductionDecisionBundle } from "../../lib/services/football/nflV1ProductionDecision";
 import { buildNflWeekOneHeldMemberFixture } from "../../lib/services/football/nflWeekOneHeldMemberFixture";
+import { getNflV1WeekOneOutcomeForecast } from "../../lib/services/football/nflV1WeekOneOutcome";
 
 type ExportFile = {
   readOnly: true;
@@ -47,6 +48,11 @@ const rows: NflForwardStoredEvidence[] = source.latestRows.map((row) => {
     ...previous,
     schemaRelease: NFL_FORWARD_EVIDENCE_SCHEMA_RELEASE,
     collectorRelease: NFL_FORWARD_EVIDENCE_COLLECTOR_RELEASE,
+    outcomeForecast: getNflV1WeekOneOutcomeForecast({
+      providerGameId: previous.game.providerGameId,
+      awayTeam: previous.game.away.abbreviation,
+      homeTeam: previous.game.home.abbreviation,
+    }),
     decisions: {
       ...production,
       shadowEvaluatedBets: [shadow],

@@ -11,15 +11,18 @@ import type {
 } from "./nflRegularDecisionEvidence";
 import type { NflR6ShadowMoneylineDecision } from "./nflR6MoneylineShadow";
 import type { NflRegularSharpSplitSet } from "./sharpApiNflSplits";
+import type { NflV1WeekOneOutcomeForecast } from "./nflV1WeekOneOutcome";
 
 export const NFL_FORWARD_EVIDENCE_SCHEMA_RELEASE =
-  "nfl_forward_evidence_snapshot_2026_08_23_r3_member" as const;
+  "nfl_forward_evidence_snapshot_2026_08_31_r4_weekly_market_injury" as const;
 export const NFL_FORWARD_EVIDENCE_PREVIOUS_SCHEMA_RELEASE =
+  "nfl_forward_evidence_snapshot_2026_08_23_r3_member" as const;
+export const NFL_FORWARD_EVIDENCE_PRIOR_SCHEMA_RELEASE =
   "nfl_forward_evidence_snapshot_2026_08_22_r2_multibook" as const;
 export const NFL_FORWARD_EVIDENCE_LEGACY_SCHEMA_RELEASE =
   "nfl_forward_evidence_snapshot_2026_08_21_r1" as const;
 export const NFL_FORWARD_EVIDENCE_COLLECTOR_RELEASE =
-  "nfl_forward_evidence_collector_2026_08_23_r3_member" as const;
+  "nfl_forward_evidence_collector_2026_08_31_r4_weekly_market_injury" as const;
 
 export type NflForwardEvidenceStage = "opening" | "unlocked" | "t60";
 
@@ -125,6 +128,7 @@ export type NflForwardEvidencePayload = {
   };
   injuries: DailyEdgeGameAvailability | null;
   weather: NflForwardWeatherSnapshot;
+  outcomeForecast: NflV1WeekOneOutcomeForecast;
   decisions: {
     evaluatedBets: NflRegularEvaluatedBetDecision[];
     outcomeConfidence: NflRegularOutcomeConfidence[];
@@ -135,7 +139,9 @@ export type NflForwardEvidencePayload = {
       | "nfl_v1_member_release_2026_08_24_r4_spread_total_watchlist"
       | "nfl_v1_member_release_2026_08_24_r5_expected_points_primary"
       | "nfl_v1_member_release_2026_08_25_r6_actionable_grades"
-      | "nfl_v1_member_release_2026_08_28_r7_event_containment";
+      | "nfl_v1_member_release_2026_08_28_r7_event_containment"
+      | "nfl_v1_member_release_2026_08_31_r8_weekly_market_injury"
+      | "nfl_v1_member_release_2026_08_31_r9_market_split_injury";
     publicationEnabled: true;
     /** True only after the authoritative regular/postseason T-60 boundary validates the complete tuple. */
     trackingEnabled: boolean;
@@ -167,9 +173,20 @@ export type NflForwardEvidencePayload = {
 
 export type NflForwardPreviousEvidencePayload = Omit<
   NflForwardEvidencePayload,
-  "schemaRelease" | "collectorRelease" | "decisions"
+  "schemaRelease" | "collectorRelease" | "outcomeForecast" | "decisions"
 > & {
   schemaRelease: typeof NFL_FORWARD_EVIDENCE_PREVIOUS_SCHEMA_RELEASE;
+  collectorRelease: "nfl_forward_evidence_collector_2026_08_23_r3_member";
+  decisions: Omit<NflForwardEvidencePayload["decisions"], "modelPromotionStatus"> & {
+    modelPromotionStatus: "nfl_v1_member_release_2026_08_28_r7_event_containment";
+  };
+};
+
+export type NflForwardPriorEvidencePayload = Omit<
+  NflForwardEvidencePayload,
+  "schemaRelease" | "collectorRelease" | "outcomeForecast" | "decisions"
+> & {
+  schemaRelease: typeof NFL_FORWARD_EVIDENCE_PRIOR_SCHEMA_RELEASE;
   collectorRelease: "nfl_forward_evidence_collector_2026_08_22_r2_multibook";
   decisions: {
     evaluatedBets: NflRegularEvaluatedBetDecision[];
@@ -183,7 +200,7 @@ export type NflForwardPreviousEvidencePayload = Omit<
 
 export type NflForwardLegacyEvidencePayload = Omit<
   NflForwardEvidencePayload,
-  "schemaRelease" | "collectorRelease" | "market" | "coverage" | "decisions"
+  "schemaRelease" | "collectorRelease" | "outcomeForecast" | "market" | "coverage" | "decisions"
 > & {
   schemaRelease: typeof NFL_FORWARD_EVIDENCE_LEGACY_SCHEMA_RELEASE;
   collectorRelease: "nfl_forward_evidence_collector_2026_08_21_r1";
@@ -207,6 +224,7 @@ export type NflForwardLegacyEvidencePayload = Omit<
 export type NflForwardAnyEvidencePayload =
   | NflForwardEvidencePayload
   | NflForwardPreviousEvidencePayload
+  | NflForwardPriorEvidencePayload
   | NflForwardLegacyEvidencePayload;
 
 export type NflForwardStoredEvidence = {

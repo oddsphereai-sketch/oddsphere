@@ -1,5 +1,5 @@
 {
-  "decisionRelease": "nfl_player_props_decision_2026_08_25_r2_exact_price_shared_context",
+  "decisionRelease": "nfl_player_props_decision_2026_08_31_r3_monotonic_divergence",
   "modelRelease": "nfl_player_props_distribution_model_2026_08_25_r2_shared_context",
   "calibrationRelease": "nfl_player_props_distribution_calibration_2026_08_25_r2_shared_context",
   "touchdownModelRelease": "nfl_player_props_anytime_td_model_2026_08_25_r3_shared_context",
@@ -9,6 +9,7 @@
   "noQuotas": true,
   "lockLeadMinutes": 60,
   "maximumQuoteAgeHours": 6,
+  "maximumRawMarketDivergence": 0.48,
   "volumeAndYardage": {
     "watchlist": {"minimumEv": 0.0, "minimumProbabilityEdge": 0.0},
     "lean": {"minimumEv": 0.04, "minimumProbabilityEdge": 0.02, "minimumParticipationProbability": 0.70, "minimumIndependentBooks": 1},
@@ -19,9 +20,9 @@
     "passing_completions": {"eligibleSides": [], "bestAngle": false, "lean": false, "watchlist": false},
     "passing_yards": {"eligibleSides": [], "bestAngle": false, "lean": false, "watchlist": false},
     "receiving_yards": {
-      "eligibleSides": ["under"], "bestAngle": true, "lean": false, "watchlist": true
+      "eligibleSides": ["under"], "bestAngle": true, "lean": true, "watchlist": true
     },
-    "receptions": {"eligibleSides": ["under"], "bestAngle": true, "lean": false, "watchlist": true},
+    "receptions": {"eligibleSides": ["under"], "bestAngle": true, "lean": true, "watchlist": true},
     "rushing_attempts": {
       "eligibleSides": ["over", "under"], "bestAngle": false, "lean": true, "watchlist": true,
       "leanThresholds": {"minimumEv": 0.02, "minimumProbabilityEdge": 0.01, "minimumParticipationProbability": 0.70, "minimumIndependentBooks": 1}

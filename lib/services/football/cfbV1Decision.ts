@@ -1,4 +1,4 @@
-import gradeArtifactJson from "./modelArtifacts/cfbV1GradePolicy.json";
+import gradeArtifactJson from "./modelArtifacts/cfbV1MarketSharpGradePolicy.json";
 import scoreArtifactJson from "./modelArtifacts/cfbV1JointScoreArtifact.json";
 import weeklyArtifactJson from "./modelArtifacts/cfbV1WeeklyRuntimeArtifact.json";
 import type { NcaafBookOdds } from "./balldontlieNcaafSlate";
@@ -16,7 +16,7 @@ export const CFB_V1_BASE_PROBABILITY_RELEASE =
 export const CFB_V1_BASE_REPRESENTATIVE_SCORE_RELEASE =
   "cfb_v1_central_reachable_score_2026_08_28_r2_directional_pmf" as const;
 const CFB_V1_BASE_GRADE_POLICY_RELEASE =
-  "cfb_v1_composite_grade_policy_2026_08_25_r1" as const;
+  "cfb_v1_composite_grade_policy_2026_08_31_r5_authoritative_pmf_calibration" as const;
 export const CFB_V1_SCORE_ARTIFACT_RELEASE =
   "cfb_v1_joint_score_runtime_2026_08_31_r9_public_consensus_market_input" as const;
 export const CFB_V1_MODEL_RELEASE =
@@ -28,21 +28,22 @@ export const CFB_V1_PROBABILITY_RELEASE =
 export const CFB_V1_REPRESENTATIVE_SCORE_RELEASE =
   "cfb_v1_market_sharp_reachable_score_2026_08_31_r6_public_consensus_market_input" as const;
 export const CFB_V1_CALIBRATION_RELEASE =
-  "cfb_v1_market_sharp_exact_price_calibration_2026_08_31_r5_public_consensus_market_input" as const;
+  "cfb_v1_market_sharp_exact_price_calibration_2026_08_31_r6_authoritative_pmf_identity" as const;
 export const CFB_V1_GRADE_POLICY_RELEASE =
-  "cfb_v1_composite_grade_policy_2026_08_31_r4_public_consensus_market_input" as const;
+  "cfb_v1_composite_grade_policy_2026_08_31_r5_authoritative_pmf_calibration" as const;
 export const CFB_V1_DECISION_RELEASE =
-  "cfb_v1_daily_edge_decision_2026_08_31_r22_public_consensus_market_input" as const;
+  "cfb_v1_daily_edge_decision_2026_08_31_r23_authoritative_pmf_calibration" as const;
 const CFB_V1_POLICY_SOURCE_DECISION_RELEASE =
-  "cfb_v1_daily_edge_decision_2026_08_26_r7_sharpapi_price_fallback" as const;
+  "cfb_v1_daily_edge_decision_2026_08_31_r23_authoritative_pmf_calibration" as const;
 export const CFB_V1_DECISION_SCHEMA_RELEASE =
-  "cfb_v1_exact_price_decision_tuple_2026_08_31_r15_public_consensus_market_input" as const;
+  "cfb_v1_exact_price_decision_tuple_2026_08_31_r16_authoritative_pmf_calibration" as const;
 export const CFB_T60_TARGET_MINUTES = 60 as const;
 export const CFB_T60_MAX_CAPTURE_LAG_MINUTES = 20 as const;
 
 export type CfbV1Market = "moneyline" | "spread" | "total";
 export type CfbV1Grade = "Best Angle" | "Lean" | "Watchlist" | "No Play";
 export type CfbV1DecisionStage = "unlocked" | "t60_locked";
+export type CfbV1CalibrationContract = "legacy_independent_artifact" | "authoritative_pmf_identity";
 export type CfbV1UnavailableReasonCode =
   | "named_target_quote_unavailable"
   | "market_context_line_unavailable"
@@ -255,6 +256,7 @@ export function buildCfbV1DecisionBundle(args: {
   healthHolds?: string[];
   forecast?: CfbV1Forecast;
   contextLines?: CfbV1ContextLines;
+  calibrationContract?: CfbV1CalibrationContract;
 }): CfbV1DecisionBundle {
   const forecast = args.forecast ?? getCfbV1Forecast(args.providerGameId);
   if (forecast.providerGameId !== args.providerGameId) throw new Error("CFB decision forecast/game identity mismatch.");
@@ -306,6 +308,7 @@ function selectMarket(args: {
   evaluatedAt?: string;
   lockedAt?: string | null;
   contextLines?: CfbV1ContextLines;
+  calibrationContract?: CfbV1CalibrationContract;
 }): CfbV1ExactPriceDecision | null {
   const policy = gradeArtifact.policies[args.market];
   const candidates = args.comparableCurrentBooks.filter((target) => target.targetEligible !== false).flatMap((target) => evaluateTarget({ ...args, target, policy }));
@@ -330,6 +333,7 @@ function evaluateTarget(args: {
   evaluatedAt?: string;
   lockedAt?: string | null;
   contextLines?: CfbV1ContextLines;
+  calibrationContract?: CfbV1CalibrationContract;
   target: NcaafBookOdds;
   policy: Policy;
 }): CfbV1ExactPriceDecision[] {
@@ -353,7 +357,10 @@ function evaluateTarget(args: {
     if (!consensus) return [];
     const independentProbability = independentSideProbability(lineProbabilities, args.market, side);
     const pushProbability = args.market === "spread" ? lineProbabilities.spread.push : args.market === "total" ? lineProbabilities.total.push : 0;
-    const calibratedProbability = calibratePrimaryThenSide({
+    const calibrationContract = args.calibrationContract ?? "authoritative_pmf_identity";
+    const calibratedProbability = calibrationContract === "authoritative_pmf_identity"
+      ? independentProbability
+      : calibratePrimaryThenSide({
       market: args.market,
       side,
       independentProbability,
@@ -363,8 +370,10 @@ function evaluateTarget(args: {
       homeSpread,
       totalLine,
       policy: args.policy,
-    });
-    const modelProbability = args.policy.weight * calibratedProbability + (1 - args.policy.weight) * consensus.fairProbability;
+      });
+    const modelProbability = calibrationContract === "authoritative_pmf_identity"
+      ? calibratedProbability
+      : args.policy.weight * calibratedProbability + (1 - args.policy.weight) * consensus.fairProbability;
     const expectedValue = expectedValueWithPush(modelProbability, pushProbability, quote.price);
     const edgePercentagePoints = 100 * (modelProbability - consensus.fairProbability);
     const eligible = abstentionAllows(args.policy.abstention, args.market, side, quote.price, homeSpread, totalLine);
@@ -407,7 +416,9 @@ function evaluateTarget(args: {
       distributionRelease: CFB_V1_DISTRIBUTION_RELEASE,
       probabilityRelease: CFB_V1_PROBABILITY_RELEASE,
       calibrationRelease: CFB_V1_CALIBRATION_RELEASE,
-      calibrationFamily: args.policy.family,
+      calibrationFamily: calibrationContract === "authoritative_pmf_identity"
+        ? "authoritative_market_sharp_pmf_identity"
+        : args.policy.family,
       policyRelease: CFB_V1_GRADE_POLICY_RELEASE,
       decisionRelease: CFB_V1_DECISION_RELEASE,
       gradeAdjustment: null,
@@ -426,6 +437,7 @@ function calibratePrimaryThenSide(args: {
   totalLine: number;
   policy: Policy;
 }): number {
+  if (args.policy.calibration.family === "authoritative_pmf_identity") return args.independentProbability;
   if (args.policy.calibration.family === "raw_independent_probability") return args.independentProbability;
   const coefficients = args.policy.calibration.coefficients;
   const intercept = args.policy.calibration.intercept;

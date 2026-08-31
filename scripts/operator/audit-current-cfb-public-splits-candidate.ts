@@ -77,6 +77,7 @@ async function main(): Promise<void> {
           homeSpread: row.payload.market.playbookLine?.homeSpread ?? null,
           totalLine: row.payload.market.playbookLine?.total ?? null,
         },
+        calibrationContract: "authoritative_pmf_identity",
       }),
       sharpSplits: row.payload.market.sharpApiSplits ?? [],
       playbookLine: row.payload.market.playbookLine,
@@ -111,6 +112,10 @@ async function main(): Promise<void> {
     immutableGames: reports.filter((row) => row.status === "immutable").length,
     anchorUnavailableGames: reports.filter((row) => row.status === "anchor_unavailable").length,
     comparableMarkets: comparable.length,
+    comparableByMarket: countByMarket(comparable),
+    gradesByMarket: gradesByMarket(comparable, "candidateGrade"),
+    probabilityRangeByMarket: probabilityRangeByMarket(comparable),
+    selectedDirectionByMarket: selectedDirectionByMarket(comparable, selected),
     baseGrades: gradeCounts(comparable.map((row) => row.baseGrade)),
     candidateGrades: gradeCounts(comparable.map((row) => row.candidateGrade)),
     baseActionable: actionable(comparable.map((row) => row.baseGrade)),
@@ -191,6 +196,52 @@ function actionable(grades: CfbV1Grade[]): number { return grades.filter((grade)
 function actionableByMarket(rows: Array<{ market: CfbV1Market; baseGrade: CfbV1Grade; candidateGrade: CfbV1Grade }>, field: "baseGrade" | "candidateGrade"): Record<CfbV1Market, number> {
   const counts: Record<CfbV1Market, number> = { moneyline: 0, spread: 0, total: 0 };
   for (const row of rows) if (row[field] === "Best Angle" || row[field] === "Lean") counts[row.market]++;
+  return counts;
+}
+
+function countByMarket(rows: Array<{ market: CfbV1Market }>): Record<CfbV1Market, number> {
+  return rows.reduce<Record<CfbV1Market, number>>((counts, row) => {
+    counts[row.market] += 1;
+    return counts;
+  }, { moneyline: 0, spread: 0, total: 0 });
+}
+
+function gradesByMarket(
+  rows: Array<{ market: CfbV1Market; baseGrade: CfbV1Grade; candidateGrade: CfbV1Grade }>,
+  field: "baseGrade" | "candidateGrade",
+): Record<CfbV1Market, Record<CfbV1Grade, number>> {
+  const counts = {
+    moneyline: gradeCounts([]), spread: gradeCounts([]), total: gradeCounts([]),
+  };
+  for (const row of rows) counts[row.market][row[field]] += 1;
+  return counts;
+}
+
+function probabilityRangeByMarket(
+  rows: Array<{ market: CfbV1Market; candidateProbability: number }>,
+): Record<CfbV1Market, { minimum: number | null; maximum: number | null; spanPp: number | null }> {
+  return Object.fromEntries((["moneyline", "spread", "total"] as const).map((market) => {
+    const values = rows.filter((row) => row.market === market).map((row) => row.candidateProbability);
+    const minimum = values.length > 0 ? Math.min(...values) : null;
+    const maximum = values.length > 0 ? Math.max(...values) : null;
+    return [market, { minimum, maximum, spanPp: minimum === null || maximum === null ? null : round(100 * (maximum - minimum)) }];
+  })) as Record<CfbV1Market, { minimum: number | null; maximum: number | null; spanPp: number | null }>;
+}
+
+function selectedDirectionByMarket(
+  rows: Array<{ market: CfbV1Market; candidateSide: string }>,
+  selected: Array<{ payload: { game: NcaafGame } }>,
+): Record<CfbV1Market, Record<string, number>> {
+  const homeTeams = new Set(selected.map((row) => row.payload.game.home.abbreviation));
+  const awayTeams = new Set(selected.map((row) => row.payload.game.away.abbreviation));
+  const counts: Record<CfbV1Market, Record<string, number>> = {
+    moneyline: { home: 0, away: 0 }, spread: { home: 0, away: 0 }, total: { over: 0, under: 0 },
+  };
+  for (const row of rows) {
+    if (row.market === "total") counts.total[row.candidateSide.startsWith("Over") ? "over" : "under"] += 1;
+    else if (homeTeams.has(row.candidateSide.split(" ")[0]!)) counts[row.market].home += 1;
+    else if (awayTeams.has(row.candidateSide.split(" ")[0]!)) counts[row.market].away += 1;
+  }
   return counts;
 }
 
