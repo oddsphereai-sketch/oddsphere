@@ -831,11 +831,19 @@ export type DailyEdgeGameDto = {
   collegeFootballScope?: "fbs_involved" | "fcs_only";
   external_id: number;
   awayTeam: string;
+  /** Full member-facing team name when a sport provides one. */
+  awayTeamDisplayName?: string | null;
   /** CDN URL for the away team logo (5F.3). Null for sports without logos populated yet. */
   awayTeamLogo: string | null;
+  /** Sport-owned presentation color. Does not affect any prediction or grade. */
+  awayTeamPrimaryColor?: string | null;
   homeTeam: string;
+  /** Full member-facing team name when a sport provides one. */
+  homeTeamDisplayName?: string | null;
   /** CDN URL for the home team logo. Null when unavailable — UI falls back to abbreviation alone. */
   homeTeamLogo: string | null;
+  /** Sport-owned presentation color. Does not affect any prediction or grade. */
+  homeTeamPrimaryColor?: string | null;
   /** Display string in ET (e.g., "7:10 PM"). */
   gameTime: string;
   /**

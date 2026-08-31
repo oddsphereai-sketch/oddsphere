@@ -3,8 +3,10 @@ import { readFileSync } from "node:fs";
 import type { NflPreviewBookOdds } from "../lib/services/football/balldontlieNflPreviewSlate";
 import {
   NFL_FORWARD_EVIDENCE_COLLECTOR_RELEASE,
+  NFL_FORWARD_EVIDENCE_PREVIOUS_SCHEMA_RELEASE,
   NFL_FORWARD_EVIDENCE_SCHEMA_RELEASE,
   type NflForwardEvidencePayload,
+  type NflForwardPreviousEvidencePayload,
   type NflForwardStoredEvidence,
 } from "../lib/services/football/nflForwardEvidence";
 import {
@@ -217,6 +219,46 @@ for (const [marketName, market] of multiWaveMarkets) {
   assert.equal(market.opposingOddsTrail?.stops.every((stop) => stop.sportsbook === current.sportsbook), true);
 }
 assert.notEqual(multiWaveFixture.provenance.sourceChecksum, fixture.provenance.sourceChecksum);
+
+const currentFirstPayload = rows[0]!.payload as NflForwardEvidencePayload;
+const currentMoneylineDecision = currentFirstPayload.decisions.evaluatedBets.find((decision) => decision.market === "moneyline")!;
+const crossReleaseCapturedAt = "2026-08-21T13:50:56.934Z";
+const { outcomeForecast: _removedOutcomeForecast, ...previousPayloadBase } = structuredClone(currentFirstPayload);
+void _removedOutcomeForecast;
+const previousBook = previousPayloadBase.market.currentBooks.find((quote) => quote.sportsbook === currentMoneylineDecision.evaluatedQuote.sportsbook)!;
+previousBook.observedAt = crossReleaseCapturedAt;
+previousBook.moneyline = {
+  ...previousBook.moneyline!,
+  homePrice: previousBook.moneyline!.homePrice - 15,
+  awayPrice: previousBook.moneyline!.awayPrice + 15,
+};
+const previousPayload: NflForwardPreviousEvidencePayload = {
+  ...previousPayloadBase,
+  schemaRelease: NFL_FORWARD_EVIDENCE_PREVIOUS_SCHEMA_RELEASE,
+  collectorRelease: "nfl_forward_evidence_collector_2026_08_23_r3_member",
+  capturedAt: crossReleaseCapturedAt,
+  runId: "cross-release-history",
+  decisions: {
+    ...previousPayloadBase.decisions,
+    modelPromotionStatus: "nfl_v1_member_release_2026_08_28_r7_event_containment",
+  },
+};
+const crossReleaseHistory: NflForwardStoredEvidence = {
+  ...rows[0]!,
+  id: "cross-release-history",
+  capturedAt: crossReleaseCapturedAt,
+  payloadSha256: "c".repeat(64),
+  payload: previousPayload,
+};
+const crossReleaseFixture = buildNflWeekOneHeldMemberFixture([crossReleaseHistory, ...rows]);
+const crossReleaseMoneyline = crossReleaseFixture.snapshot.games.find((game) => game.id === "nfl-1392216")!.markets.moneyline;
+assert.equal(
+  crossReleaseMoneyline.oddsTrail?.some((stop) => stop.observedAt === crossReleaseCapturedAt),
+  true,
+  "compatible prior-schema observations must survive a current release bump in the movement trail",
+);
+assert.equal(crossReleaseMoneyline.pick, fixture.snapshot.games.find((game) => game.id === "nfl-1392216")!.markets.moneyline.pick);
+assert.equal(crossReleaseMoneyline.verdict.label, fixture.snapshot.games.find((game) => game.id === "nfl-1392216")!.markets.moneyline.verdict.label);
 
 const flatCapture = (source: NflForwardStoredEvidence, nextCapture: string, suffix: string) => {
   const row = structuredClone(source);

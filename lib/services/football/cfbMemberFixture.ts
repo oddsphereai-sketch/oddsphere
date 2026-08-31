@@ -56,11 +56,12 @@ import {
 import { isGameInCfbWeeklyWindow, resolveCfbForwardWindow } from "./cfbWeeklyWindow";
 import { cfbFootballEvidenceStats } from "./footballMemberEvidence";
 import { CFB_MARKET_SHARP_AWARE_PRODUCTION_RELEASE } from "./cfbMarketSharpAwareShadow";
+import { cfbTeamIdentity } from "./cfbTeamIdentity";
 
 export const CFB_MEMBER_FIXTURE_RELEASE =
-  "cfb_v1_member_fixture_2026_08_31_r39_kickoff_weather" as const;
+  "cfb_v1_member_fixture_2026_08_31_r40_team_identity" as const;
 export const CFB_PUBLIC_OUTCOME_CONTRACT_RELEASE =
-  "cfb_market_sharp_public_outcome_contract_2026_08_31_r39_kickoff_weather" as const;
+  "cfb_market_sharp_public_outcome_contract_2026_08_31_r40_team_identity" as const;
 export const CFB_CONTEXT_ONLY_QUOTE_CAPTURE_SKEW_MS = 5_000 as const;
 const CFB_MARKET_CONTEXT_MAX_CAPTURE_LAG_MINUTES = 10;
 const CFB_PUBLIC_SCORE_DIRECTION_TOLERANCE_POINTS = 0.25;
@@ -463,6 +464,8 @@ function completeRowsForRelease(
 
 function buildGame(row: CfbForwardStoredEvidence, movementRows: CfbForwardStoredEvidence[]): DailyEdgeGameDto {
   const payload = row.payload;
+  const awayIdentity = cfbTeamIdentity(payload.game.away.abbreviation);
+  const homeIdentity = cfbTeamIdentity(payload.game.home.abbreviation);
   const decisions = payload.decisions.evaluatedBets;
   const moneylineDecision = decisionFor(decisions, "moneyline");
   const totalDecision = decisionFor(decisions, "total");
@@ -507,9 +510,13 @@ function buildGame(row: CfbForwardStoredEvidence, movementRows: CfbForwardStored
       : "fcs_only",
     external_id: Number(payload.game.providerGameId),
     awayTeam: payload.game.away.abbreviation,
-    awayTeamLogo: null,
+    awayTeamDisplayName: payload.game.away.name,
+    awayTeamLogo: awayIdentity?.logoUrl ?? null,
+    awayTeamPrimaryColor: awayIdentity?.primaryColor ?? null,
     homeTeam: payload.game.home.abbreviation,
-    homeTeamLogo: null,
+    homeTeamDisplayName: payload.game.home.name,
+    homeTeamLogo: homeIdentity?.logoUrl ?? null,
+    homeTeamPrimaryColor: homeIdentity?.primaryColor ?? null,
     gameTime: timeEt(startsAt),
     gameStartAt: startsAt,
     gameStartMinutes: minutesEt(startsAt),

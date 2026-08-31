@@ -58,7 +58,7 @@ import {
 } from "./nflForwardMemberSnapshotStore";
 
 export const NFL_FORWARD_WRITER_RELEASE =
-  "nfl_forward_evidence_writer_2026_08_31_r16_market_split_injury" as const;
+  "nfl_forward_evidence_writer_2026_08_31_r17_cross_release_odds_history" as const;
 
 export type NflForwardWriterResult = {
   writerRelease: typeof NFL_FORWARD_WRITER_RELEASE;
@@ -134,7 +134,7 @@ export async function runNflForwardEvidenceWriter(args: {
     });
     const memberSnapshot = await refreshCompactMemberSnapshot({
       client: args.client,
-      existing,
+      existing: historicalExisting,
       payloads: [],
       season: args.season,
       week: args.week,
@@ -163,7 +163,7 @@ export async function runNflForwardEvidenceWriter(args: {
     });
     const memberSnapshot = await refreshCompactMemberSnapshot({
       client: args.client,
-      existing,
+      existing: historicalExisting,
       payloads: [],
       season: args.season,
       week: args.week,
@@ -418,7 +418,7 @@ export async function runNflForwardEvidenceWriter(args: {
   });
   const memberSnapshot = await refreshCompactMemberSnapshot({
     client: args.client,
-    existing,
+    existing: historicalExisting,
     payloads,
     season: args.season,
     week: args.week,

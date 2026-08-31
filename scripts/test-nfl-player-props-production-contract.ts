@@ -164,6 +164,7 @@ for (const productHierarchy of ["Today’s Radar", "Research workspace", "Choose
 assert.ok(memberReader.includes('data-product-zone="today-radar"'));
 assert.ok(memberReader.includes('data-product-zone="research-entry"'));
 assert.ok(memberReader.includes('data-product-zone="full-board"'));
+assert.ok(memberReader.includes("getPropGradeColor"), "NFL prop grade badges must use the shared MLB prop-grade palette");
 for (const truthfulCoverageCopy of ["completed reads", "All markets", "market families currently graded"]) {
   assert.ok(memberReader.includes(truthfulCoverageCopy), `NFL board scopes coverage truthfully: ${truthfulCoverageCopy}`);
 }
