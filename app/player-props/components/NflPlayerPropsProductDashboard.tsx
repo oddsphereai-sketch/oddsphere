@@ -5,6 +5,7 @@ import type { NflPlayerPropsMemberDecision as Row, NflPlayerPropsMemberGrade, Nf
 import type { NflPlayerPropsForecastTrend } from "@/lib/services/football/nflPlayerPropsRuntime";
 import { PlayerPropReaderDialog } from "./PlayerPropReaderDialog";
 import { nflPlayerPropsAvailabilityAgeLabel } from "../lib/nflPlayerPropsPresentation";
+import { getPropGradeColor, type PropGrade } from "@/lib/mlb/props/propGrades";
 import {
   PlayerPropsFilterButton,
   PlayerPropsRadarCardFrame,
@@ -201,7 +202,10 @@ function matchup(row: Row): string { return row.opponent ? `${row.team} · ${row
 function gameLabel(game: GameSummary): string { return game.teams.length > 1 ? `${game.teams[0]} · ${game.teams[1]}` : game.opponent ? `${game.teams[0] ?? "NFL"} · ${game.opponent}` : game.teams[0] ?? "NFL matchup"; }
 function shortModelRead(row: Row): string { if (row.projection === null) return `${pct(row.rawModelProbability)} touchdown forecast from role, team, and opponent context.`; return `${row.projection.toFixed(1)} projected against ${row.line}, with an empirical range retained in the reader.`; }
 function modelRead(row: Row): string { const priceCase = `OddSphere gives it a ${pct(row.finalProbability)} calibrated chance versus ${pct(row.marketProbability)} from the independent market, producing ${signedPct(row.expectedValue)} expected value at ${price(row.americanPrice)}.`; if (row.projection === null) return `The model forecasts a ${pct(row.rawModelProbability)} touchdown probability from participation, role opportunity, team environment, and opponent context. ${priceCase}`; const relation = row.projection >= row.line ? "above" : "below"; const range = row.projectionRange ? ` Its empirical 80% range is ${row.projectionRange.lower.toFixed(1)}–${row.projectionRange.upper.toFixed(1)}.` : ""; return `The model projects ${row.projection.toFixed(1)}, ${Math.abs(row.projection - row.line).toFixed(1)} ${relation} the ${row.line} line.${range} ${priceCase}`; }
-function gradeColors(grade: Row["grade"]): { border: string; background: string; text: string } { if (grade === "Best Angle") return { border: "#34d39966", background: "rgba(52,211,153,0.10)", text: "#6ee7b7" }; if (grade === "Lean") return { border: "#38bdf866", background: "rgba(56,189,248,0.10)", text: "#7dd3fc" }; if (grade === "Watchlist") return { border: "#fbbf2466", background: "rgba(251,191,36,0.10)", text: "#fcd34d" }; return { border: "#374151", background: "rgba(17,24,39,0.9)", text: "#9ca3af" }; }
+function gradeColors(grade: Row["grade"]): { border: string; background: string; text: string } {
+  const sharedGrade: PropGrade = grade === "Best Angle" ? "BEST_ANGLE" : grade === "Lean" ? "LEAN" : grade === "Watchlist" ? "WATCHLIST" : "NO_PLAY";
+  return getPropGradeColor(sharedGrade);
+}
 function nflTeamColor(team: string): string { return NFL_TEAM_COLORS[team] ?? "#4B5563"; }
 const NFL_TEAM_COLORS: Record<string, string> = { ARI: "#97233F", ATL: "#A71930", BAL: "#241773", BUF: "#00338D", CAR: "#0085CA", CHI: "#0B162A", CIN: "#FB4F14", CLE: "#311D00", DAL: "#003594", DEN: "#FB4F14", DET: "#0076B6", GB: "#203731", HOU: "#03202F", IND: "#002C5F", JAX: "#006778", KC: "#E31837", LV: "#000000", LAC: "#0080C6", LAR: "#003594", MIA: "#008E97", MIN: "#4F2683", NE: "#002244", NO: "#D3BC8D", NYG: "#0B2265", NYJ: "#125740", PHI: "#004C54", PIT: "#FFB612", SEA: "#002244", SF: "#AA0000", TB: "#D50A0A", TEN: "#0C2340", WSH: "#5A1414" };
 function forecastMetric(metric: NonNullable<Row["forecastContext"]>["roleOpportunity"][number]): string { if (metric.format === "percent") return pct(metric.value); return metric.format === "yards" ? `${metric.value.toFixed(1)} yd` : metric.value.toFixed(1); }

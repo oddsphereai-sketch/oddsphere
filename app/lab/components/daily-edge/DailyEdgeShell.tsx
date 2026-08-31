@@ -702,6 +702,45 @@ function TeamBadge({ abbr, logo, size }: { abbr: string; logo: string | null; si
   );
 }
 
+function MatchupIdentity({
+  game,
+  size,
+  className = "",
+}: {
+  game: DailyEdgeGameDto;
+  size: number;
+  className?: string;
+}) {
+  const shellSport = useShellSport();
+  if (shellSport !== "cfb") {
+    return (
+      <div className={`flex min-w-0 items-center gap-2 ${className}`}>
+        <TeamBadge abbr={game.awayTeam} logo={game.awayTeamLogo} size={size} />
+        <span className="text-[14px] font-bold text-gray-100">{game.awayTeam}</span>
+        <span className="text-[12px] text-gray-700">{matchupSepFor(shellSport)}</span>
+        <span className="text-[14px] font-bold text-gray-100">{game.homeTeam}</span>
+        <TeamBadge abbr={game.homeTeam} logo={game.homeTeamLogo} size={size} />
+      </div>
+    );
+  }
+  return (
+    <div className={`grid min-w-0 gap-1.5 ${className}`} aria-label={`${game.awayTeamDisplayName ?? game.awayTeam} at ${game.homeTeamDisplayName ?? game.homeTeam}`}>
+      {([
+        [game.awayTeam, game.awayTeamDisplayName, game.awayTeamLogo, "at"],
+        [game.homeTeam, game.homeTeamDisplayName, game.homeTeamLogo, "home"],
+      ] as const).map(([abbreviation, displayName, logo, role]) => (
+        <div key={role} className="flex min-w-0 items-center gap-2">
+          <TeamBadge abbr={abbreviation} logo={logo} size={size} />
+          <span className="min-w-0">
+            <span className="block break-words text-[13px] font-bold leading-4 text-gray-100" title={displayName ?? abbreviation}>{displayName ?? abbreviation}</span>
+            <span className="block text-[9px] font-black uppercase tracking-[0.13em] text-gray-500">{abbreviation}{role === "at" ? " · Away" : " · Home"}</span>
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function VerdictChip({
   verdict,
   selected = false,
@@ -1468,15 +1507,7 @@ function QuickRead({ game, market, marketData }: { game: DailyEdgeGameDto; marke
       </div>
 
       {/* Matchup */}
-      <div className="flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2 min-w-0">
-          <TeamBadge abbr={game.awayTeam} logo={game.awayTeamLogo} size={32} />
-          <span className="text-[14px] font-bold text-gray-100" style={{ letterSpacing: "-0.02em" }}>{game.awayTeam}</span>
-          <span className="text-gray-700 text-[12px]">{matchupSepFor(shellSport)}</span>
-          <span className="text-[14px] font-bold text-gray-100" style={{ letterSpacing: "-0.02em" }}>{game.homeTeam}</span>
-          <TeamBadge abbr={game.homeTeam} logo={game.homeTeamLogo} size={32} />
-        </div>
-      </div>
+      <MatchupIdentity game={game} size={32} />
 
       {/* Starters (R-10) — surfaced only in the reader, never on the
           slate card. Renders "TBD" when MLB hasn't posted a probable
@@ -3180,7 +3211,7 @@ function SlateCard({
         className="h-[3px] w-full"
         aria-hidden="true"
         style={{
-          background: `linear-gradient(to right, ${teamPrimaryColor(game.awayTeam, shellSport)} 0%, ${teamPrimaryColor(game.awayTeam, shellSport)} 28%, rgba(255,255,255,0.06) 50%, ${teamPrimaryColor(game.homeTeam, shellSport)} 72%, ${teamPrimaryColor(game.homeTeam, shellSport)} 100%)`,
+          background: `linear-gradient(to right, ${game.awayTeamPrimaryColor ?? teamPrimaryColor(game.awayTeam, shellSport)} 0%, ${game.awayTeamPrimaryColor ?? teamPrimaryColor(game.awayTeam, shellSport)} 28%, rgba(255,255,255,0.06) 50%, ${game.homeTeamPrimaryColor ?? teamPrimaryColor(game.homeTeam, shellSport)} 72%, ${game.homeTeamPrimaryColor ?? teamPrimaryColor(game.homeTeam, shellSport)} 100%)`,
         }}
       />
 
@@ -3190,17 +3221,7 @@ function SlateCard({
             (or a longer verdict label) from moving the Play Grade between
             the right side and a wrapped second line from card to card. */}
         <div className="mb-3.5 grid gap-y-2">
-          <div className="flex items-center gap-2.5 min-w-0">
-            <TeamBadge abbr={game.awayTeam} logo={game.awayTeamLogo} size={38} />
-            <span className="text-[16px] sm:text-[17px] font-bold text-gray-100 tabular-nums" style={{ letterSpacing: "-0.01em" }}>
-              {game.awayTeam}
-            </span>
-            <span className="text-gray-700 text-[13px]">@</span>
-            <span className="text-[16px] sm:text-[17px] font-bold text-gray-100 tabular-nums" style={{ letterSpacing: "-0.01em" }}>
-              {game.homeTeam}
-            </span>
-            <TeamBadge abbr={game.homeTeam} logo={game.homeTeamLogo} size={38} />
-          </div>
+          <MatchupIdentity game={game} size={38} />
           <div className="flex min-h-7 items-center gap-2">
             <VerdictChip verdict={headlineVerdict} />
             <span className="text-[11px] text-gray-500 tabular-nums">{game.gameTime}</span>
@@ -3737,12 +3758,8 @@ function MobileDetailSheet({
         {/* Header — top row: matchup + close. Second row: prev/next nav. */}
         <div className="px-4 pt-3 pb-2 border-b border-white/[0.06]">
           <div className="flex items-center justify-between gap-3">
-            <div className="flex items-center gap-2 min-w-0">
-              <TeamBadge abbr={game.awayTeam} logo={game.awayTeamLogo} size={26} />
-              <span className="text-[15px] font-bold text-gray-100">{game.awayTeam}</span>
-              <span className="text-gray-700 text-[12px]">@</span>
-              <span className="text-[15px] font-bold text-gray-100">{game.homeTeam}</span>
-              <TeamBadge abbr={game.homeTeam} logo={game.homeTeamLogo} size={26} />
+            <div className="flex min-w-0 items-center gap-2">
+              <MatchupIdentity game={game} size={26} className="max-w-[220px]" />
               <span className="text-gray-700 ml-1">·</span>
               <span className="text-[12px] text-gray-400 tabular-nums">{game.gameTime}</span>
               <LockBadge

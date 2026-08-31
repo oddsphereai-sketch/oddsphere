@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { isPublicallyTracked } from "../lib/config/officialTrackingStart";
 import { buildCfbMemberFixture, selectLatestCfbMemberEvidenceRows } from "../lib/services/football/cfbMemberFixture";
+import { cfbTeamIdentity } from "../lib/services/football/cfbTeamIdentity";
 import { finalizeDailyEdgeResponseCoherence } from "../app/lab/lib/dailyEdgeResponseCoherence";
 import { dailyEdgeOutcomeForecastLabel } from "../app/lab/lib/dailyEdgeOutcomeForecast";
 import {
@@ -317,8 +318,18 @@ assert.deepEqual(trustedCfbSharpEventIdsByGame([trustedSharpRow, {
 }]), {}, "conflicting immutable provider IDs must disable prior-event disambiguation");
 const member = buildCfbMemberFixture([evidence]);
 assert.equal(member.snapshot.games.length, 1);
-assert.equal(member.fixtureRelease, "cfb_v1_member_fixture_2026_08_31_r39_kickoff_weather");
+assert.equal(member.fixtureRelease, "cfb_v1_member_fixture_2026_08_31_r40_team_identity");
 assert.equal(member.snapshot.games[0]!.collegeFootballScope, "fbs_involved", "the CFB reader must classify every member game for the FBS-first board without changing writer scope");
+assert.equal(member.snapshot.games[0]!.awayTeamDisplayName, game.away.name);
+assert.equal(member.snapshot.games[0]!.homeTeamDisplayName, game.home.name);
+const miamiIdentity = cfbTeamIdentity("MIA");
+const houstonIdentity = cfbTeamIdentity("HOU");
+assert.equal(miamiIdentity?.displayName, "Miami Hurricanes");
+assert.equal(houstonIdentity?.displayName, "Houston Cougars");
+assert.match(miamiIdentity?.logoUrl ?? "", /^https:\/\/a\.espncdn\.com\/i\/teamlogos\/ncaa\/500\//);
+assert.match(houstonIdentity?.logoUrl ?? "", /^https:\/\/a\.espncdn\.com\/i\/teamlogos\/ncaa\/500\//);
+assert.match(miamiIdentity?.primaryColor ?? "", /^#[0-9A-F]{6}$/);
+assert.match(houstonIdentity?.primaryColor ?? "", /^#[0-9A-F]{6}$/);
 assert.equal(member.snapshot.games[0]!.footballProjection?.expectedAwayPoints, authoritativeForecast.expectedAwayPoints);
 assert.equal(member.snapshot.games[0]!.footballProjection?.expectedHomePoints, authoritativeForecast.expectedHomePoints);
 assert.deepEqual(member.snapshot.games[0]!.projected, authoritativeForecast.representativeScore);

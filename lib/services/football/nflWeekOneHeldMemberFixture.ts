@@ -16,7 +16,12 @@ import {
   type NflForwardPlaybookSplit,
   type NflForwardStoredEvidence,
 } from "./nflForwardEvidence";
-import { readNflForwardEvidence } from "./nflForwardEvidenceStore";
+import {
+  readLegacyNflForwardEvidence,
+  readNflForwardEvidence,
+  readPriorNflForwardEvidence,
+  readPreviousNflForwardEvidence,
+} from "./nflForwardEvidenceStore";
 import { NFL_T60_MAX_CAPTURE_LAG_MINUTES } from "./nflRegularDecisionEvidence";
 import type { NflRegularEvaluatedBetDecision } from "./nflRegularDecisionEvidence";
 import {
@@ -35,7 +40,7 @@ import { nflFootballEvidenceStats } from "./footballMemberEvidence";
 import type { NflRegularSharpMarket, NflRegularSharpSplit } from "./sharpApiNflSplits";
 
 export const NFL_WEEK_ONE_HELD_MEMBER_FIXTURE_RELEASE =
-  "nfl_weekly_member_fixture_2026_08_31_r12_market_split_injury" as const;
+  "nfl_weekly_member_fixture_2026_08_31_r13_cross_release_odds_history" as const;
 
 const MODEL_RELEASE = NFL_V1_OUTCOME_MODEL_RELEASE;
 const DECISION_RELEASE = NFL_V1_ACTIONABLE_GRADE_DECISION_RELEASE;
@@ -62,8 +67,13 @@ export async function readCurrentNflWeekOneHeldMemberFixture(args: {
 }): Promise<NflWeekOneHeldMemberFixture> {
   const season = args.season ?? 2026;
   const week = args.week ?? 1;
-  const rows = await readNflForwardEvidence({ client: args.client, season, week });
-  return buildNflWeekOneHeldMemberFixture(rows);
+  const releases = await Promise.all([
+    readLegacyNflForwardEvidence({ client: args.client, season, week }),
+    readPriorNflForwardEvidence({ client: args.client, season, week }),
+    readPreviousNflForwardEvidence({ client: args.client, season, week }),
+    readNflForwardEvidence({ client: args.client, season, week }),
+  ]);
+  return buildNflWeekOneHeldMemberFixture(releases.flat());
 }
 
 export function buildNflWeekOneHeldMemberFixture(
@@ -208,18 +218,17 @@ function latestCompleteRows(rows: NflForwardStoredEvidence[]): Array<NflForwardS
 function movementRowsForGame(
   rows: NflForwardStoredEvidence[],
   latest: NflForwardStoredEvidence & { payload: NflForwardEvidencePayload },
-): Array<NflForwardStoredEvidence & { payload: NflForwardEvidencePayload }> {
+): NflForwardStoredEvidence[] {
   return rows
-    .filter((row): row is NflForwardStoredEvidence & { payload: NflForwardEvidencePayload } =>
+    .filter((row) =>
       row.providerGameId === latest.providerGameId &&
-      row.payload.schemaRelease === NFL_FORWARD_EVIDENCE_SCHEMA_RELEASE &&
       Date.parse(row.capturedAt) <= Date.parse(latest.capturedAt))
     .sort((first, second) => Date.parse(first.capturedAt) - Date.parse(second.capturedAt));
 }
 
 function buildHeldGame(
   row: NflForwardStoredEvidence & { payload: NflForwardEvidencePayload },
-  movementRows: Array<NflForwardStoredEvidence & { payload: NflForwardEvidencePayload }>,
+  movementRows: NflForwardStoredEvidence[],
 ): DailyEdgeGameDto {
   const payload = row.payload;
   const game = payload.game;
@@ -668,7 +677,7 @@ type HeldMarketInput = {
   primarySide: "home" | "over";
   opposingSide: "away" | "under";
   payload: NflForwardEvidencePayload;
-  movementRows: Array<NflForwardStoredEvidence & { payload: NflForwardEvidencePayload }>;
+  movementRows: NflForwardStoredEvidence[];
 };
 
 type MarketQuoteSide = {
@@ -832,7 +841,7 @@ function applyPublishedDecision(
   input: {
     slot: "moneyline" | "spread" | "total";
     payload: NflForwardEvidencePayload;
-    movementRows: Array<NflForwardStoredEvidence & { payload: NflForwardEvidencePayload }>;
+    movementRows: NflForwardStoredEvidence[];
     primaryLabel: string;
     opposingLabel: string;
     primarySide: "home" | "over";
@@ -996,7 +1005,7 @@ function oppositeQuote(
 }
 
 function buildSameBookTrail(args: {
-  rows: Array<NflForwardStoredEvidence & { payload: NflForwardEvidencePayload }>;
+  rows: NflForwardStoredEvidence[];
   sportsbook: string;
   slot: "moneyline" | "spread" | "total";
   selectedPrimary: boolean;
@@ -1021,9 +1030,10 @@ function buildSameBookTrail(args: {
   };
 
   for (const row of args.rows) {
+    const market = row.payload.market;
     const openingBooks = [
-      ...row.payload.market.providerOpeningBooks,
-      ...(row.payload.market.providerOpening ? [row.payload.market.providerOpening] : []),
+      ...("providerOpeningBooks" in market ? market.providerOpeningBooks : []),
+      ...(market.providerOpening ? [market.providerOpening] : []),
     ];
     for (const quote of openingBooks) {
       if (normalizeBookName(quote.sportsbook) !== book) continue;
@@ -1056,10 +1066,12 @@ function buildSameBookTrail(args: {
   }
 
   for (const row of args.rows.slice(0, -1)) {
-    const quote = row.payload.market.currentBooks.find((candidate) =>
+    const market = row.payload.market;
+    const currentBooks = "currentBooks" in market ? market.currentBooks : [market.current];
+    const quote = currentBooks.find((candidate) =>
       normalizeBookName(candidate.sportsbook) === book) ??
-      (normalizeBookName(row.payload.market.current.sportsbook) === book
-        ? row.payload.market.current
+      (normalizeBookName(market.current.sportsbook) === book
+        ? market.current
         : null);
     if (!quote) continue;
     const side = quoteSide(quote, args.slot, args.selectedPrimary);
@@ -1067,7 +1079,7 @@ function buildSameBookTrail(args: {
     append({
       american: side.american,
       line: side.line,
-      observedAt: row.capturedAt,
+      observedAt: quote.observedAt,
       sportsbook: quote.sportsbook,
       source: "line_history",
       label: "move",
