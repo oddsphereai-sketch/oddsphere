@@ -740,7 +740,10 @@ async function main() {
   check("pre-lineup props use projected member wording", propsUiSource.includes("function lineupDisplayStatus") && propsUiSource.includes('return "Projected"') && propsUiSource.includes('LINEUP_CONTEXT_INSUFFICIENT: "Projected lineup context"') && !propsUiSource.includes("Waiting for lineup confirmation"));
   check("launch readiness treats posted lineups as non-critical refresh context", launchReadinessSource.includes("posted lineups refresh the board and are not required to open it") && marketCatalogSource.includes("projected_or_confirmed_lineup") && !marketCatalogSource.includes('"confirmed_lineup"'));
   check("bounded full props refresh runs four times daily", vercelConfigSource.includes('"schedule": "27 9,13,17,21 * * *"'));
-  check("Daily Edge follow-up health sweeps allow only bounded starter recovery", vercelConfigSource.includes('"/api/cron/daily-edge-data-health?repair=starter"'));
+  check(
+    "Daily Edge follow-up health sweeps run hourly during the active MLB ingestion window",
+    vercelConfigSource.includes('"path": "/api/cron/daily-edge-data-health?repair=starter",\n      "schedule": "35 0-3,10-23 * * *"'),
+  );
   const readinessTracking = {
     enabled: true,
     settlementEnabled: true,
