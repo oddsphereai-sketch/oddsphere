@@ -17,6 +17,7 @@ import { unstable_cache } from "next/cache";
 import { NFL_FORWARD_MEMBER_SNAPSHOT_RELEASE } from "@/lib/services/football/nflForwardMemberSnapshotStore";
 import { enrichCachedNflFootballEvidence } from "@/lib/services/football/footballMemberEvidence";
 import DailyEdgeLiveRefresh from "./DailyEdgeLiveRefresh";
+import { readMemberDataWithDeadline } from "@/lib/services/memberDataAvailability";
 
 const readCachedNflForwardMemberSnapshot = unstable_cache(
   async (season: number, week: number) => {
@@ -70,12 +71,17 @@ export default async function CandidateDailyEdgePage({
   const nflWeekOneEvidenceEnabled = nflEnabled && isNflWeekOneEvidenceBoardEnabled();
   const nflSeason = Number(process.env.NFL_FORWARD_SEASON ?? "2026");
   const nflWeek = Number(process.env.NFL_FORWARD_WEEK ?? "1");
-  const nflWeekOneHeldFixture = !nflWeekOneEvidenceEnabled
-    ? null
-    : await readCachedNflForwardMemberSnapshot(nflSeason, nflWeek)
-        .then((value) => value?.fixture ? enrichCachedNflFootballEvidence(value.fixture) : null)
-        .catch(() => null)
-        ?? await Promise.all([
+  const nflFixtureRead = !nflWeekOneEvidenceEnabled
+    ? { value: null, unavailable: false, reason: "ok" as const }
+    : await readMemberDataWithDeadline({
+      label: "nfl-daily-edge-fixture",
+      fallback: null,
+      read: async () => {
+        const fixture = await readCachedNflForwardMemberSnapshot(nflSeason, nflWeek)
+          .then((value) => value?.fixture ? enrichCachedNflFootballEvidence(value.fixture) : null)
+          .catch(() => null);
+        if (fixture) return fixture;
+        return Promise.all([
           import("@/lib/db/supabase"),
           import("@/lib/services/football/nflWeekOneHeldMemberFixture"),
         ])
@@ -84,8 +90,10 @@ export default async function CandidateDailyEdgePage({
               client: supabase,
               season: nflSeason,
               week: nflWeek,
-            }))
-          .catch(() => null);
+            }));
+      },
+    });
+  const nflWeekOneHeldFixture = nflFixtureRead.value;
   const nflFixture = nflWeekOneEvidenceEnabled
     ? nflWeekOneHeldFixture
     : !nflEnabled
@@ -93,9 +101,12 @@ export default async function CandidateDailyEdgePage({
     : process.env.NODE_ENV !== "production"
       ? await (await import("@/lib/services/football/nflMemberSnapshotStore")).readCurrentNflMemberSnapshot()
       : null;
-  const cfbFixture = !cfbEnabled
-    ? null
-    : await Promise.all([
+  const cfbFixtureRead = !cfbEnabled
+    ? { value: null, unavailable: false, reason: "ok" as const }
+    : await readMemberDataWithDeadline({
+      label: "cfb-daily-edge-fixture",
+      fallback: null,
+      read: () => Promise.all([
         import("@/lib/db/supabase"),
         import("@/lib/services/football/cfbMemberFixture"),
       ])
@@ -103,9 +114,11 @@ export default async function CandidateDailyEdgePage({
           readCurrentCfbMemberFixture({
             client: supabase,
             season: Number(process.env.CFB_FORWARD_SEASON ?? "2026"),
-          }))
-        .catch(() => null);
+          })),
+    });
+  const cfbFixture = cfbFixtureRead.value;
   let snapshot: DailyEdgeResponse;
+  let snapshotUnavailable = nflFixtureRead.unavailable || cfbFixtureRead.unavailable;
   if (nflFixture) {
     snapshot = nflFixture.snapshot;
   } else if (cfbFixture) {
@@ -115,14 +128,28 @@ export default async function CandidateDailyEdgePage({
   } else if (cfbRequested) {
     snapshot = emptyPreviewSnapshot(sport);
   } else if (eplRequested && eplEnabled) {
-    snapshot = await (await import("@/lib/services/epl/eplMemberSnapshotStore"))
-      .readCurrentEplMemberSnapshot()
-      .then((value) => value ?? emptyPreviewSnapshot(sport));
+    const result = await readMemberDataWithDeadline({
+      label: "epl-daily-edge-snapshot",
+      fallback: emptyPreviewSnapshot(sport, "temporarily_unavailable"),
+      read: async () => (await import("@/lib/services/epl/eplMemberSnapshotStore"))
+        .readCurrentEplMemberSnapshot()
+        .then((value) => value ?? emptyPreviewSnapshot(sport)),
+    });
+    snapshot = result.value;
+    snapshotUnavailable = result.unavailable;
   } else if (eplRequested) {
     snapshot = emptyPreviewSnapshot(sport);
   } else {
-    snapshot = await loadDailyEdgeSnapshot(competition === "champions_league" ? "ucl" : sport)
-      .catch(() => emptyPreviewSnapshot(sport));
+    const result = await readMemberDataWithDeadline({
+      label: `${sport}-daily-edge-snapshot`,
+      fallback: emptyPreviewSnapshot(sport, "temporarily_unavailable"),
+      read: () => loadDailyEdgeSnapshot(competition === "champions_league" ? "ucl" : sport),
+    });
+    snapshot = result.value;
+    snapshotUnavailable = result.unavailable;
+  }
+  if (snapshotUnavailable && snapshot.games.length === 0) {
+    snapshot = emptyPreviewSnapshot(sport, "temporarily_unavailable");
   }
   if (nflFixture) {
     snapshot = filterWeeklyReaderSnapshot(snapshot, "nfl");
@@ -139,12 +166,23 @@ export default async function CandidateDailyEdgePage({
         }),
       )
     : undefined;
-  const [history, pitcherFirstInningHistory] = nflFixture || cfbFixture
+  const historyRead: [
+    Awaited<ReturnType<typeof loadTeamHistory>>,
+    Awaited<ReturnType<typeof loadPitcherFirstInningHistory>>,
+  ] = nflFixture || cfbFixture
     ? [(nflFixture ?? cfbFixture)!.history, {}]
-    : await Promise.all([
-        loadTeamHistory(snapshot, sport),
-        loadPitcherFirstInningHistory(snapshot, sport),
-      ]);
+    : (await readMemberDataWithDeadline({
+        label: `${sport}-daily-edge-history`,
+        fallback: [{}, {}] as [
+          Awaited<ReturnType<typeof loadTeamHistory>>,
+          Awaited<ReturnType<typeof loadPitcherFirstInningHistory>>,
+        ],
+        read: () => Promise.all([
+          loadTeamHistory(snapshot, sport),
+          loadPitcherFirstInningHistory(snapshot, sport),
+        ]),
+      })).value;
+  const [history, pitcherFirstInningHistory] = historyRead;
   const cfbFbsGameCount = cfbFixture
     ? snapshot.games.filter((game) => game.collegeFootballScope === "fbs_involved").length
     : 0;

@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 import { unstable_cache } from "next/cache";
 import ProductAppFrame from "@/app/lab/components/ProductAppFrame";
 import { GET as getDailyEdge } from "@/app/api/lab/daily-edge/route";
-import type { DailyEdgeResponse } from "@/app/lab/lib/labTypes";
+import type { DailyEdgeResponse, SlateState } from "@/app/lab/lib/labTypes";
 import type { Sport } from "@/lib/types/domain/Sport";
 import { supabase } from "@/lib/db/supabase";
 import { isDailyEdgeExperiencePreviewAvailable } from "@/lib/config/dailyEdgeExperience";
@@ -103,7 +103,10 @@ const loadCachedFreshContractSnapshot = unstable_cache(
   { revalidate: 60, tags: ["daily-edge-experience-fresh-contract"] },
 );
 
-export function emptyPreviewSnapshot(sport: Sport): DailyEdgeResponse {
+export function emptyPreviewSnapshot(
+  sport: Sport,
+  slateState: SlateState = "no_data",
+): DailyEdgeResponse {
   const asOf = new Date().toISOString();
   return {
     as_of: asOf,
@@ -111,7 +114,7 @@ export function emptyPreviewSnapshot(sport: Sport): DailyEdgeResponse {
     date: asOf.slice(0, 10),
     requested_date: asOf.slice(0, 10),
     fallback_used: false,
-    slateState: "no_data",
+    slateState,
     slate_status: null,
     last_slate_update_at: null,
     games: [],
