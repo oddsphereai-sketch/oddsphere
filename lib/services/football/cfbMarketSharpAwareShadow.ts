@@ -4,6 +4,7 @@ import {
   type CfbCanonicalMarketAnchor,
 } from "./cfbMarketInformedOutcome";
 import type { CfbSharpApiSplitRecord } from "./cfbSharpApiSplits";
+import type { CfbKickoffWeatherSnapshot } from "./cfbKickoffWeather";
 import type { CfbForwardPlaybookLine, CfbForwardPlaybookSplit, CfbForwardPlaybookSplitSet } from "./cfbForwardEvidence";
 import type {
   CfbV1ExactPriceDecision,
@@ -14,11 +15,11 @@ import type {
 } from "./cfbV1Decision";
 
 export const CFB_MARKET_SHARP_AWARE_CANDIDATE_RELEASE =
-  "cfb_market_sharp_aware_candidate_2026_08_31_r9_playbook_event_identity" as const;
+  "cfb_market_sharp_aware_candidate_2026_08_31_r10_kickoff_weather" as const;
 export const CFB_MARKET_SHARP_AWARE_SHADOW_RELEASE =
   CFB_MARKET_SHARP_AWARE_CANDIDATE_RELEASE;
 export const CFB_MARKET_SHARP_AWARE_PRODUCTION_RELEASE =
-  "cfb_market_sharp_aware_production_2026_08_31_r11_playbook_event_identity" as const;
+  "cfb_market_sharp_aware_production_2026_08_31_r12_kickoff_weather" as const;
 export const CFB_MARKET_SHADOW_WEIGHT = 0.75 as const;
 export const CFB_SHARP_SIGNED_GAP_THRESHOLD_PP = 10 as const;
 export const CFB_SHARP_FULL_STRENGTH_GAP_PP = 20 as const;
@@ -87,6 +88,14 @@ export type CfbMarketSharpAwareShadowForecast = CfbV1Forecast & {
     homeMarginShiftPoints: number;
     totalShiftPoints: number;
   };
+  weatherAdjustment: {
+    source: "openweather" | null;
+    forecastFor: string | null;
+    prescribedIndependentTotalShiftPoints: number;
+    appliedIndependentTotalShiftPoints: number;
+    authoritativeExpectedTotalShiftPoints: number;
+    reasons: string[];
+  };
 };
 
 export type CfbMarketSharpAwareForecast = Omit<CfbMarketSharpAwareShadowForecast, "shadowRelease"> & {
@@ -126,8 +135,13 @@ export function buildCfbMarketSharpAwareShadowForecast(args: {
   sharpSplits: CfbSharpApiSplitRecord[];
   playbookLine?: CfbForwardPlaybookLine | null;
   publicSplits?: CfbForwardPlaybookSplitSet | null;
+  kickoffWeather?: CfbKickoffWeatherSnapshot | null;
   evaluatedAt: string;
 }): CfbMarketSharpAwareShadowForecast {
+  const independentForecast = applyCfbKickoffWeatherToIndependentForecast(
+    args.independentForecast,
+    args.kickoffWeather ?? null,
+  );
   const sharp = latestEligibleCirca(args.sharpSplits, args.evaluatedAt);
   const marginGaps = sharp
     ? [
@@ -154,11 +168,13 @@ export function buildCfbMarketSharpAwareShadowForecast(args: {
     totalLine: args.anchor.totalLine + totalShiftPoints,
   };
   const marketForecast = buildCfbMarketInformedOutcomeForecast({
-    independentForecast: args.independentForecast,
+    independentForecast,
     anchor: adjustedAnchor,
   });
-  const pmf = mixPmfs(args.independentForecast.pmf, marketForecast.pmf, CFB_MARKET_SHADOW_WEIGHT);
+  const pmfWithoutWeather = mixPmfs(args.independentForecast.pmf, marketForecast.pmf, CFB_MARKET_SHADOW_WEIGHT);
+  const pmf = mixPmfs(independentForecast.pmf, marketForecast.pmf, CFB_MARKET_SHADOW_WEIGHT);
   const summary = summarizePmf(pmf);
+  const summaryWithoutWeather = summarizePmf(pmfWithoutWeather);
   return {
     providerGameId: args.independentForecast.providerGameId,
     awayTeam: args.independentForecast.awayTeam,
@@ -186,6 +202,14 @@ export function buildCfbMarketSharpAwareShadowForecast(args: {
       homeMarginShiftPoints: publicHomeMarginShiftPoints,
       totalShiftPoints: publicTotalShiftPoints,
     },
+    weatherAdjustment: {
+      source: args.kickoffWeather?.status === "forecast_available" ? "openweather" : null,
+      forecastFor: args.kickoffWeather?.forecast?.forecast_for ?? null,
+      prescribedIndependentTotalShiftPoints: args.kickoffWeather?.independentTotalAdjustmentPoints ?? 0,
+      appliedIndependentTotalShiftPoints: independentForecast.expectedTotal - args.independentForecast.expectedTotal,
+      authoritativeExpectedTotalShiftPoints: summary.expectedTotal - summaryWithoutWeather.expectedTotal,
+      reasons: [...(args.kickoffWeather?.adjustmentReasons ?? [])],
+    },
   };
 }
 
@@ -195,6 +219,7 @@ export function buildCfbMarketSharpAwareForecast(args: {
   sharpSplits: CfbSharpApiSplitRecord[];
   playbookLine?: CfbForwardPlaybookLine | null;
   publicSplits?: CfbForwardPlaybookSplitSet | null;
+  kickoffWeather?: CfbKickoffWeatherSnapshot | null;
   evaluatedAt: string;
 }): CfbMarketSharpAwareForecast {
   const { shadowRelease, ...forecast } = buildCfbMarketSharpAwareShadowForecast(args);
@@ -203,6 +228,19 @@ export function buildCfbMarketSharpAwareForecast(args: {
     candidateRelease: shadowRelease,
     release: CFB_MARKET_SHARP_AWARE_PRODUCTION_RELEASE,
   };
+}
+
+export function applyCfbKickoffWeatherToIndependentForecast(
+  forecast: CfbV1Forecast,
+  weather: CfbKickoffWeatherSnapshot | null,
+): CfbV1Forecast {
+  const adjustment = weather?.status === "forecast_available"
+    ? weather.independentTotalAdjustmentPoints
+    : 0;
+  if (!Number.isFinite(adjustment) || adjustment >= 0) return forecast;
+  const pmf = tiltCfbTotalWithinMargins(forecast.pmf, Math.max(-3, adjustment));
+  const summary = summarizePmf(pmf);
+  return { ...forecast, ...summary, pmf };
 }
 
 export function buildCfbMarketEvidenceGradeShadow(args: {
@@ -647,6 +685,67 @@ function publicSelectedGap(split: CfbForwardPlaybookSplit, side: CanonicalSide):
   if (side === "away") return split.awayMoneyPct !== null && split.awayBetsPct !== null ? split.awayMoneyPct - split.awayBetsPct : null;
   if (side === "over") return split.overMoneyPct !== null && split.overBetsPct !== null ? split.overMoneyPct - split.overBetsPct : null;
   return split.underMoneyPct !== null && split.underBetsPct !== null ? split.underMoneyPct - split.underBetsPct : null;
+}
+
+function tiltCfbTotalWithinMargins(
+  pmf: CfbV1Forecast["pmf"],
+  totalShiftPoints: number,
+): CfbV1Forecast["pmf"] {
+  const groups = new Map<number, CfbV1Forecast["pmf"]>();
+  for (const cell of pmf) {
+    const margin = cell.home - cell.away;
+    groups.set(margin, [...(groups.get(margin) ?? []), cell]);
+  }
+  const output: CfbV1Forecast["pmf"] = [];
+  for (const cells of groups.values()) {
+    const mass = cells.reduce((sum, cell) => sum + cell.probability, 0);
+    if (!(mass > 0)) continue;
+    const originalMean = cells.reduce((sum, cell) => sum + (cell.home + cell.away) * cell.probability, 0) / mass;
+    const totals = cells.map((cell) => cell.home + cell.away);
+    const target = Math.max(Math.min(...totals), Math.min(Math.max(...totals), originalMean + totalShiftPoints));
+    if (Math.abs(target - originalMean) <= 1e-12 || new Set(totals).size === 1) {
+      output.push(...cells.map((cell) => ({ ...cell })));
+      continue;
+    }
+    let low = -8;
+    let high = 8;
+    for (let iteration = 0; iteration < 80; iteration += 1) {
+      const middle = (low + high) / 2;
+      const mean = exponentiallyTiltedMean(cells, middle);
+      if (mean < target) low = middle;
+      else high = middle;
+    }
+    const lambda = (low + high) / 2;
+    const weights = cells.map((cell) => cell.probability * boundedExponential(lambda * (cell.home + cell.away - originalMean)));
+    const weightTotal = weights.reduce((sum, value) => sum + value, 0);
+    output.push(...cells.map((cell, index) => ({
+      ...cell,
+      probability: weightTotal > 0 ? mass * weights[index]! / weightTotal : cell.probability,
+    })));
+  }
+  const total = output.reduce((sum, cell) => sum + cell.probability, 0);
+  if (!(total > 0)) throw new Error("CFB weather PMF adjustment removed all probability mass.");
+  return output
+    .map((cell) => ({ ...cell, probability: cell.probability / total }))
+    .sort((first, second) => first.home - second.home || first.away - second.away);
+}
+
+function exponentiallyTiltedMean(cells: CfbV1Forecast["pmf"], lambda: number): number {
+  const reference = cells.reduce((sum, cell) => sum + (cell.home + cell.away) * cell.probability, 0) /
+    cells.reduce((sum, cell) => sum + cell.probability, 0);
+  let weightedTotal = 0;
+  let weight = 0;
+  for (const cell of cells) {
+    const value = cell.home + cell.away;
+    const cellWeight = cell.probability * boundedExponential(lambda * (value - reference));
+    weight += cellWeight;
+    weightedTotal += value * cellWeight;
+  }
+  return weightedTotal / weight;
+}
+
+function boundedExponential(value: number): number {
+  return Math.exp(Math.max(-700, Math.min(700, value)));
 }
 
 function mixPmfs(

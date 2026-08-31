@@ -124,7 +124,7 @@ export interface PlaybookSplitsHistoryResponse {
   [k: string]: unknown;
 }
 
-// ── MLB venue/weather context ─────────────────────────────────────────────
+// ── Venue/weather context ─────────────────────────────────────────────────
 export interface PlaybookVenueWeatherRow {
   teamId?: string;
   teamName?: string;
@@ -136,6 +136,14 @@ export interface PlaybookVenueWeatherRow {
     park?: string;
     parkProfile?: string;
     roof?: string;
+    roofStatusConfidence?: string | null;
+    location?: {
+      lat?: number | null;
+      lon?: number | null;
+      city?: string | null;
+      country?: string | null;
+      timezone?: string | null;
+    };
     roofStatus?: {
       type?: string;
       status?: string;
