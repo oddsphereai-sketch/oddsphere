@@ -5,7 +5,7 @@ import {
 } from "./nflPlayerPropsRuntime";
 
 export const NFL_PLAYER_PROPS_PRODUCTION_CANDIDATE_RELEASE =
-  "nfl_player_props_member_2026_08_31_r8_monotonic_divergence" as const;
+  "nfl_player_props_member_2026_08_31_r9_partial_snapshot_retention" as const;
 export const NFL_PLAYER_PROPS_WRITER_LEASE_GROUP = "prediction_pipeline:nfl" as const;
 
 export type NflPlayerPropsProductionSnapshot = {
@@ -18,7 +18,12 @@ export type NflPlayerPropsProductionSnapshot = {
     trackingEnabled: true;
   };
   memberDecisions: NflPlayerPropsRuntimeDecision[];
-  lifecycle: { recomputedUnlocked: number; frozenAtLock: number; retainedPreviouslyLocked: number };
+  lifecycle: {
+    recomputedUnlocked: number;
+    retainedStillFreshUnlocked: number;
+    frozenAtLock: number;
+    retainedPreviouslyLocked: number;
+  };
 };
 
 export type NflPlayerPropsMemberGrade = "Best Angle" | "Lean" | "Watchlist" | "No Play";
@@ -52,7 +57,10 @@ export function reconcileNflPlayerPropsProductionSnapshot(args: {
   const evaluatedAt = Date.parse(args.evaluatedAt);
   if (!Number.isFinite(evaluatedAt)) throw new Error("NFL props production evaluatedAt is invalid.");
   const previous = new Map((args.previous?.board.decisions ?? []).map((row) => [decisionKey(row), row]));
-  let frozenAtLock = 0; let retainedPreviouslyLocked = 0; let recomputedUnlocked = 0;
+  let frozenAtLock = 0;
+  let retainedPreviouslyLocked = 0;
+  let retainedStillFreshUnlocked = 0;
+  let recomputedUnlocked = 0;
   const decisions = args.nextBoard.decisions.map((next) => {
     const prior = previous.get(decisionKey(next));
     if (prior?.state === "locked") { retainedPreviouslyLocked += 1; return prior; }
@@ -67,6 +75,7 @@ export function reconcileNflPlayerPropsProductionSnapshot(args: {
     return next;
   });
   const nextKeys = new Set(decisions.map(decisionKey));
+  const nextOutcomeScopes = new Set(args.nextBoard.decisions.map(outcomeScopeKey));
   for (const prior of args.previous?.board.decisions ?? []) {
     if (prior.state === "locked" && !nextKeys.has(decisionKey(prior))) {
       decisions.push(prior);
@@ -78,6 +87,18 @@ export function reconcileNflPlayerPropsProductionSnapshot(args: {
       // still-fresh pre-lock tuple retained in the prior coherent snapshot.
       decisions.push({ ...prior, state: "locked" as const });
       frozenAtLock += 1;
+    } else if (!nextKeys.has(decisionKey(prior))
+      && !nextOutcomeScopes.has(outcomeScopeKey(prior))
+      && prior.state === "unlocked"
+      && evaluatedAt < Date.parse(prior.lockAt)
+      && evaluatedAt < Date.parse(prior.scheduledStart)
+      && isFreshAt(prior, evaluatedAt)) {
+      // A provider request can succeed with only part of the scheduled slate.
+      // Preserve a missing outcome only while its exact quote remains inside
+      // the existing production freshness window. A current row in the same
+      // game/player/market/side scope always wins, including a changed line.
+      decisions.push(prior);
+      retainedStillFreshUnlocked += 1;
     }
   }
   const board = {
@@ -96,7 +117,7 @@ export function reconcileNflPlayerPropsProductionSnapshot(args: {
     // Held rows remain in the audit payload, but genuine role/identity
     // ambiguity is not useful as a default member recommendation list.
     memberDecisions: decisions.filter((row) => row.grade !== "Held"),
-    lifecycle: { recomputedUnlocked, frozenAtLock, retainedPreviouslyLocked },
+    lifecycle: { recomputedUnlocked, retainedStillFreshUnlocked, frozenAtLock, retainedPreviouslyLocked },
   };
 }
 
@@ -178,6 +199,14 @@ function isMemberDecision(row: NflPlayerPropsRuntimeDecision): row is NflPlayerP
 }
 function decisionKey(row: NflPlayerPropsRuntimeDecision): string {
   return [row.gameId, row.playerName.toLowerCase().replace(/[^a-z0-9]/g, ""), row.market, row.line, row.side].join("|");
+}
+function outcomeScopeKey(row: NflPlayerPropsRuntimeDecision): string {
+  return [row.gameId, row.playerName.toLowerCase().replace(/[^a-z0-9]/g, ""), row.market, row.side].join("|");
+}
+function isFreshAt(row: NflPlayerPropsRuntimeDecision, evaluatedAt: number): boolean {
+  const age = evaluatedAt - Date.parse(row.observedAt);
+  return Number.isFinite(age) && age >= 0
+    && age <= nflPlayerPropsRuntimePolicy().maximumQuoteAgeHours * 3_600_000;
 }
 function isFreshAtLock(row: NflPlayerPropsRuntimeDecision): boolean {
   const age = Date.parse(row.lockAt) - Date.parse(row.observedAt);

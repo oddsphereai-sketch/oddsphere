@@ -43,7 +43,12 @@ async function loadLocalReviewSnapshot(): Promise<NflPlayerPropsProductionSnapsh
       riskLabel: "forward_monitoring_2025_exact_price_confirmation",
       board,
       memberDecisions: decisions.filter((row) => row.grade !== "Held"),
-      lifecycle: { recomputedUnlocked: decisions.filter((row) => row.state === "unlocked").length, frozenAtLock: 0, retainedPreviouslyLocked: 0 },
+      lifecycle: {
+        recomputedUnlocked: decisions.filter((row) => row.state === "unlocked").length,
+        retainedStillFreshUnlocked: 0,
+        frozenAtLock: 0,
+        retainedPreviouslyLocked: 0,
+      },
     };
   } catch {
     return null;

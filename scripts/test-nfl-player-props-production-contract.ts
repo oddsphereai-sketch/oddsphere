@@ -67,8 +67,8 @@ function emptyBoard(): NflPlayerPropsRuntimeBoard {
 }
 
 const unlocked = reconcileNflPlayerPropsProductionSnapshot({ season: 2026, week: 1, evaluatedAt: "2026-08-25T12:00:00.000Z", nextBoard: board(decision) });
-assert.equal(NFL_PLAYER_PROPS_PRODUCTION_CANDIDATE_RELEASE, "nfl_player_props_member_2026_08_31_r8_monotonic_divergence");
-assert.equal(NFL_PLAYER_PROPS_WRITER_RELEASE, "nfl_player_props_writer_2026_08_31_r9_opening_closing_order");
+assert.equal(NFL_PLAYER_PROPS_PRODUCTION_CANDIDATE_RELEASE, "nfl_player_props_member_2026_08_31_r9_partial_snapshot_retention");
+assert.equal(NFL_PLAYER_PROPS_WRITER_RELEASE, "nfl_player_props_writer_2026_08_31_r10_partial_snapshot_retention");
 assert.equal(NFL_PLAYER_PROPS_TRACKING_RELEASE, "nfl_player_props_tracking_2026_08_31_r5_closing_before_settlement");
 assert.equal(NFL_PLAYER_PROPS_SETTLEMENT_RELEASE, "nfl_player_props_settlement_2026_08_25_r3_bounded_finality");
 assert.equal(NFL_PLAYER_PROPS_PRODUCTION_INCLUDE_OPENINGS, true, "production records same-book opening context for movement and CLV interpretation");
@@ -81,7 +81,59 @@ for (const release of [NFL_PLAYER_PROPS_PRODUCTION_CANDIDATE_RELEASE, NFL_PLAYER
 }
 assert.equal(unlocked.writerLeaseGroup, NFL_PLAYER_PROPS_WRITER_LEASE_GROUP);
 assert.equal(unlocked.lifecycle.recomputedUnlocked, 1);
+assert.equal(unlocked.lifecycle.retainedStillFreshUnlocked, 0);
 assert.equal(buildNflPlayerPropsTrackingRows(unlocked).length, 0);
+
+const omittedGame = {
+  ...decision,
+  gameId: "game-omitted",
+  playerName: "Missing Quarterback",
+  providerPlayerId: "2",
+  market: "passing_yards" as const,
+  scheduledStart: "2026-08-26T00:00:00.000Z",
+  lockAt: "2026-08-25T23:00:00.000Z",
+  observedAt: "2026-08-25T11:30:00.000Z",
+};
+const broadPrevious = reconcileNflPlayerPropsProductionSnapshot({
+  season: 2026,
+  week: 1,
+  evaluatedAt: "2026-08-25T12:00:00.000Z",
+  nextBoard: { ...board(decision), decisions: [decision, omittedGame] },
+});
+const partialProviderCycle = reconcileNflPlayerPropsProductionSnapshot({
+  season: 2026,
+  week: 1,
+  evaluatedAt: "2026-08-25T12:30:00.000Z",
+  previous: broadPrevious,
+  nextBoard: board({ ...decision, observedAt: "2026-08-25T12:25:00.000Z" }),
+});
+assert.equal(partialProviderCycle.memberDecisions.length, 2, "a partial successful provider cycle retains an omitted still-fresh outcome");
+assert.equal(partialProviderCycle.lifecycle.retainedStillFreshUnlocked, 1);
+assert.equal(partialProviderCycle.memberDecisions.find((row) => row.gameId === "game-omitted")?.observedAt, omittedGame.observedAt);
+
+const replacementLineCycle = reconcileNflPlayerPropsProductionSnapshot({
+  season: 2026,
+  week: 1,
+  evaluatedAt: "2026-08-25T12:35:00.000Z",
+  previous: broadPrevious,
+  nextBoard: board({ ...omittedGame, line: 251.5, observedAt: "2026-08-25T12:34:00.000Z" }),
+});
+assert.deepEqual(
+  replacementLineCycle.memberDecisions.filter((row) => row.gameId === omittedGame.gameId).map((row) => row.line),
+  [251.5],
+  "a current moved line replaces the prior line instead of being duplicated",
+);
+assert.equal(replacementLineCycle.lifecycle.retainedStillFreshUnlocked, 1, "an unrelated omitted game remains protected independently");
+
+const stalePartialProviderCycle = reconcileNflPlayerPropsProductionSnapshot({
+  season: 2026,
+  week: 1,
+  evaluatedAt: "2026-08-25T18:30:00.001Z",
+  previous: broadPrevious,
+  nextBoard: emptyBoard(),
+});
+assert.equal(stalePartialProviderCycle.memberDecisions.length, 0, "missing unlocked outcomes expire at the existing six-hour quote freshness boundary");
+assert.equal(stalePartialProviderCycle.lifecycle.retainedStillFreshUnlocked, 0);
 
 const operationalHeld = reconcileNflPlayerPropsProductionSnapshot({
   season: 2026, week: 1, evaluatedAt: "2026-08-25T12:00:00.000Z",
