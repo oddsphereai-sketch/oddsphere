@@ -137,7 +137,7 @@ export async function collectNflPlayerPropsObservations(args: {
   bdlOpenings = { ...bdlOpenings, rows: enrichPlayerIdentities(bdlOpenings.rows, identities) };
   if (bdlPlayerIds.some((id) => !identities.has(id))) healthFindings.push("BALLDONTLIE_PLAYER_IDENTITY_INCOMPLETE");
 
-  let sharpRaw: unknown[] = [];
+  const sharpRaw: unknown[] = [];
   let sharpComplete = false;
   if (sharpKey) {
     const sharp = new SharpApiClient(sharpKey);
@@ -227,7 +227,7 @@ function nextSharpPropsPage(
   const nextOffset = pagination?.next_offset;
   return typeof nextOffset === "number" && nextOffset > currentOffset
     ? { offset: nextOffset, cursor: null }
-    : null;
+    : { offset: currentOffset + SHARP_PAGE_SIZE, cursor: null };
 }
 
 function validateRequest(season: number, week: number, phase: NflPlayerPropPhase): void {

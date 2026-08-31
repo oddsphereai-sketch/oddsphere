@@ -6,11 +6,11 @@ import type { NflPlayerPropsExactOffer } from "./nflPlayerPropsMarketBoard";
 export const NFL_PLAYER_PROPS_RUNTIME_ARTIFACT_RELEASE =
   "nfl_player_props_runtime_2026_08_25_r2_shared_context" as const;
 export const NFL_PLAYER_PROPS_RUNTIME_RELEASE =
-  "nfl_player_props_runtime_2026_08_31_r3_monotonic_divergence" as const;
+  "nfl_player_props_runtime_2026_08_31_r4_complete_exact_board" as const;
 export const NFL_PLAYER_PROPS_BOARD_RELEASE =
-  "nfl_player_props_board_2026_08_31_r6_monotonic_divergence" as const;
+  "nfl_player_props_board_2026_08_31_r7_complete_exact_board" as const;
 export const NFL_PLAYER_PROPS_DECISION_RELEASE =
-  "nfl_player_props_decision_2026_08_31_r3_monotonic_divergence" as const;
+  "nfl_player_props_decision_2026_08_31_r4_complete_exact_board" as const;
 export const NFL_PLAYER_PROPS_MAXIMUM_RAW_MARKET_DIVERGENCE = 0.48 as const;
 
 type TreeNode = {
@@ -305,18 +305,26 @@ export function buildNflPlayerPropsRuntimeBoard(args: {
     const independentBooks = others.length;
     if (independentBooks === 0) {
       for (const key of outcomeKeys(offer)) unavailableBenchmarkKeys.add(key);
-      continue;
     }
     const scored = scoreNflPlayerPropsRuntimeFeatures(feature.features);
     const commonHolds = [...offer.healthHolds, ...feature.healthHolds];
+    const decisionReasons = independentBooks === 0
+      ? [...commonHolds, "independent_same_line_confirmation_missing"]
+      : commonHolds;
     if (offer.market === "anytime_td") {
       if (offer.yesPrice === null) continue;
       const raw = scored.touchdownProbability;
       const market = averagePresent(others.map((value) => value.yes)) ?? impliedProbability(offer.yesPrice);
       const final = nflPlayerPropsResidualProbability(raw, market, artifact.touchdown.marketResidualWeight);
       const edge = final - market; const ev = nflPlayerPropsExpectedValue(final, offer.yesPrice);
-      const grade: NflPlayerPropsGrade = commonHolds.length ? "Held" : offer.yesPrice >= 100 && edge >= 0 && ev >= 0 ? "Watchlist" : "No Play";
-      decisions.push(decisionRow(offer, feature, scored, "yes", offer.yesPrice, null, raw, market, final, edge, ev, grade, commonHolds, artifact.touchdownModelRelease, artifact.touchdownCalibrationRelease));
+      const grade: NflPlayerPropsGrade = commonHolds.length
+        ? "Held"
+        : independentBooks === 0
+          ? "No Play"
+          : offer.yesPrice >= 100 && edge >= 0 && ev >= 0
+            ? "Watchlist"
+            : "No Play";
+      decisions.push(decisionRow(offer, feature, scored, "yes", offer.yesPrice, null, raw, market, final, edge, ev, grade, decisionReasons, artifact.touchdownModelRelease, artifact.touchdownCalibrationRelease));
       continue;
     }
     const policy = artifact.markets[offer.market];
@@ -335,6 +343,7 @@ export function buildNflPlayerPropsRuntimeBoard(args: {
       const leanThresholds = lane?.leanThresholds ?? artifact.decision.volumeAndYardage.lean;
       let grade: NflPlayerPropsGrade = "No Play";
       if (commonHolds.length) grade = "Held";
+      else if (independentBooks === 0) grade = "No Play";
       else if (divergenceImplausible) grade = "No Play";
       else if (eligibleSide && policy.marketResidualQualified && lane?.bestAngle && ev >= artifact.decision.volumeAndYardage.bestAngle.minimumEv
         && edge >= artifact.decision.volumeAndYardage.bestAngle.minimumProbabilityEdge
@@ -348,7 +357,7 @@ export function buildNflPlayerPropsRuntimeBoard(args: {
       else if (eligibleSide && policy.marketResidualQualified && lane?.watchlist && ev >= 0 && edge >= 0) grade = "Watchlist";
       decisions.push(decisionRow(
         offer, feature, scored, side, price, projection, raw, market, final, edge, ev, grade,
-        divergenceImplausible ? [...commonHolds, "model_market_divergence_implausible"] : commonHolds,
+        divergenceImplausible ? [...decisionReasons, "model_market_divergence_implausible"] : decisionReasons,
         artifact.modelRelease, artifact.calibrationRelease,
       ));
     }
