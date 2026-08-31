@@ -1087,6 +1087,7 @@ export type SlateState =
   | "today_hidden_only"
   | "today_pending_ingest"
   | "stale_fallback"
+  | "temporarily_unavailable"
   | "no_data";
 
 export type DailyEdgeResponse = {

@@ -3891,6 +3891,8 @@ function emptyStateMessageFor(
       return "Tonight's slate isn't visible yet.";
     case "stale_fallback":
       return "Live slate isn't published yet. Showing the most recent available slate.";
+    case "temporarily_unavailable":
+      return "Daily Edge data is temporarily unavailable while the data service recovers. Please refresh in a moment.";
     case "no_data":
       // Sport-specific copy. NBA's offseason / non-game days are common;
       // the honest line is "no games today", not "being ingested".

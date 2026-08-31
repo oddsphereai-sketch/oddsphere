@@ -5,6 +5,7 @@ import { readNflPlayerPropsSnapshot } from "@/lib/services/football/nflPlayerPro
 import { buildNflPlayerPropsMemberSnapshot } from "@/lib/services/football/nflPlayerPropsProductionContract";
 import { NflPlayerPropsProductDashboard } from "./components/NflPlayerPropsProductDashboard";
 import { PlayerPropsLeaguePills } from "./components/PlayerPropsLeaguePills";
+import { readMemberDataWithDeadline } from "@/lib/services/memberDataAvailability";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "NFL Player Props | Oddsphere", robots: { index: false, follow: false } };
@@ -15,11 +16,16 @@ export default async function PlayerPropsPage({ searchParams }: { searchParams: 
   if (!enabled || query.league !== "nfl") redirect("/mlb/props");
   const season = bounded(process.env.NFL_FORWARD_SEASON, 2026);
   const week = bounded(process.env.NFL_FORWARD_WEEK, 1);
-  const snapshot = await readNflPlayerPropsSnapshot({ client: supabase, season, week }).catch(() => null);
+  const snapshotResult = await readMemberDataWithDeadline({
+    label: "nfl-player-props-snapshot",
+    fallback: null,
+    read: () => readNflPlayerPropsSnapshot({ client: supabase, season, week }),
+  });
+  const snapshot = snapshotResult.value;
   const memberSnapshot = snapshot ? buildNflPlayerPropsMemberSnapshot(snapshot) : null;
   const requestedReader = typeof query.reader === "string" ? query.reader : null;
   const initialSelectedKey = snapshot?.memberDecisions.some((row) => decisionKey(row) === requestedReader) ? requestedReader : null;
-  return <ProductAppFrame><PlayerPropsLeaguePills league="nfl" nflEnabled /><NflPlayerPropsProductDashboard snapshot={memberSnapshot} initialSelectedKey={initialSelectedKey} /></ProductAppFrame>;
+  return <ProductAppFrame><PlayerPropsLeaguePills league="nfl" nflEnabled /><NflPlayerPropsProductDashboard snapshot={memberSnapshot} initialSelectedKey={initialSelectedKey} dataUnavailable={snapshotResult.unavailable} /></ProductAppFrame>;
 }
 
 function bounded(value: string | undefined, fallback: number): number { const parsed = Number(value ?? fallback); return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback; }
