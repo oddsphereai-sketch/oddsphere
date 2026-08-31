@@ -200,7 +200,11 @@ export class PlaybookClient {
   }
 
   mlbVenueWeather(): Promise<PlaybookResult<PlaybookVenueWeatherResponse>> {
-    return this.get<PlaybookVenueWeatherResponse>("/v1/venue-weather", { league: "mlb" });
+    return this.venueWeather("mlb");
+  }
+
+  venueWeather(league: PlaybookLeague | string): Promise<PlaybookResult<PlaybookVenueWeatherResponse>> {
+    return this.get<PlaybookVenueWeatherResponse>("/v1/venue-weather", { league });
   }
 
   mlbStartingPitchers(): Promise<PlaybookResult<PlaybookStartingPitchersResponse>> {

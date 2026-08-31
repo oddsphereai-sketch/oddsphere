@@ -18,25 +18,25 @@ export const CFB_V1_BASE_REPRESENTATIVE_SCORE_RELEASE =
 const CFB_V1_BASE_GRADE_POLICY_RELEASE =
   "cfb_v1_composite_grade_policy_2026_08_31_r6_playbook_event_identity" as const;
 export const CFB_V1_SCORE_ARTIFACT_RELEASE =
-  "cfb_v1_joint_score_runtime_2026_08_31_r10_playbook_event_identity" as const;
+  "cfb_v1_joint_score_runtime_2026_08_31_r11_kickoff_weather" as const;
 export const CFB_V1_MODEL_RELEASE =
-  "cfb_v1_market_sharp_score_model_2026_08_31_r9_playbook_event_identity" as const;
+  "cfb_v1_market_sharp_score_model_2026_08_31_r10_kickoff_weather" as const;
 export const CFB_V1_DISTRIBUTION_RELEASE =
-  "cfb_v1_market_sharp_joint_distribution_2026_08_31_r7_playbook_event_identity" as const;
+  "cfb_v1_market_sharp_joint_distribution_2026_08_31_r8_kickoff_weather" as const;
 export const CFB_V1_PROBABILITY_RELEASE =
-  "cfb_v1_market_sharp_joint_probability_2026_08_31_r8_playbook_event_identity" as const;
+  "cfb_v1_market_sharp_joint_probability_2026_08_31_r9_kickoff_weather" as const;
 export const CFB_V1_REPRESENTATIVE_SCORE_RELEASE =
-  "cfb_v1_market_sharp_reachable_score_2026_08_31_r7_playbook_event_identity" as const;
+  "cfb_v1_market_sharp_reachable_score_2026_08_31_r8_kickoff_weather" as const;
 export const CFB_V1_CALIBRATION_RELEASE =
   "cfb_v1_market_sharp_exact_price_calibration_2026_08_31_r7_playbook_event_identity" as const;
 export const CFB_V1_GRADE_POLICY_RELEASE =
   "cfb_v1_composite_grade_policy_2026_08_31_r6_playbook_event_identity" as const;
 export const CFB_V1_DECISION_RELEASE =
-  "cfb_v1_daily_edge_decision_2026_08_31_r24_playbook_event_identity" as const;
+  "cfb_v1_daily_edge_decision_2026_08_31_r25_kickoff_weather" as const;
 const CFB_V1_POLICY_SOURCE_DECISION_RELEASE =
-  "cfb_v1_daily_edge_decision_2026_08_31_r24_playbook_event_identity" as const;
+  "cfb_v1_daily_edge_decision_2026_08_31_r25_kickoff_weather" as const;
 export const CFB_V1_DECISION_SCHEMA_RELEASE =
-  "cfb_v1_exact_price_decision_tuple_2026_08_31_r17_playbook_event_identity" as const;
+  "cfb_v1_exact_price_decision_tuple_2026_08_31_r18_kickoff_weather" as const;
 export const CFB_T60_TARGET_MINUTES = 60 as const;
 export const CFB_T60_MAX_CAPTURE_LAG_MINUTES = 20 as const;
 
@@ -257,6 +257,7 @@ export function buildCfbV1DecisionBundle(args: {
   forecast?: CfbV1Forecast;
   contextLines?: CfbV1ContextLines;
   calibrationContract?: CfbV1CalibrationContract;
+  fixedEvaluatedSportsbookByMarket?: Partial<Record<CfbV1Market, string>>;
 }): CfbV1DecisionBundle {
   const forecast = args.forecast ?? getCfbV1Forecast(args.providerGameId);
   if (forecast.providerGameId !== args.providerGameId) throw new Error("CFB decision forecast/game identity mismatch.");
@@ -309,9 +310,14 @@ function selectMarket(args: {
   lockedAt?: string | null;
   contextLines?: CfbV1ContextLines;
   calibrationContract?: CfbV1CalibrationContract;
+  fixedEvaluatedSportsbookByMarket?: Partial<Record<CfbV1Market, string>>;
 }): CfbV1ExactPriceDecision | null {
   const policy = gradeArtifact.policies[args.market];
-  const candidates = args.comparableCurrentBooks.filter((target) => target.targetEligible !== false).flatMap((target) => evaluateTarget({ ...args, target, policy }));
+  const fixedSportsbook = args.fixedEvaluatedSportsbookByMarket?.[args.market];
+  const candidates = args.comparableCurrentBooks
+    .filter((target) => target.targetEligible !== false)
+    .filter((target) => !fixedSportsbook || normalizeBook(target.sportsbook) === normalizeBook(fixedSportsbook))
+    .flatMap((target) => evaluateTarget({ ...args, target, policy }));
   return candidates.sort((first, second) =>
     gradeRank(second.grade) - gradeRank(first.grade) ||
     second.expectedValue - first.expectedValue ||

@@ -1,6 +1,6 @@
 {
   "policyRelease": "cfb_v1_composite_grade_policy_2026_08_31_r6_playbook_event_identity",
-  "decisionRelease": "cfb_v1_daily_edge_decision_2026_08_31_r24_playbook_event_identity",
+  "decisionRelease": "cfb_v1_daily_edge_decision_2026_08_31_r25_kickoff_weather",
   "sourceRelease": "cfb_v1_composite_grade_policy_2026_08_25_r1",
   "calibrationContract": "authoritative_market_sharp_pmf_identity",
   "policies": {
