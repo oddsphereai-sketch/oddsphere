@@ -191,8 +191,8 @@ assert.deepEqual(
     price: spreadDecision.evaluatedQuote.price,
     grade: spreadDecision.grade,
   },
-  { side: "SJSU +38.5", line: 38.5, price: -110, grade: "No Play" },
-  "the Spread evaluation must use the independent PMF cover side at the exact BetMGM line",
+  { side: "SJSU +38.5", line: 38.5, price: -110, grade: "Watchlist" },
+  "the Spread evaluation must use the authoritative PMF cover side and calibrated grade at the exact BetMGM line",
 );
 assert.deepEqual(
   totalDecision && {

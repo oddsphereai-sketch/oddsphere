@@ -557,6 +557,7 @@ function syntheticRow(index: number): NflForwardStoredEvidence {
         capturedAt,
         forecast: null,
       },
+      outcomeForecast: outcome,
       decisions: {
         evaluatedBets: production.evaluatedBets,
         outcomeConfidence: production.outcomeConfidence,

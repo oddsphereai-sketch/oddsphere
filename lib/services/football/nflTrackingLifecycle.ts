@@ -6,9 +6,37 @@ import {
   type NflRegularEvaluatedBetDecision,
 } from "./nflRegularDecisionEvidence";
 import { assertMarketScopedFootballDecisions } from "./footballMarketScopedTracking";
+import {
+  NFL_V1_ACTIONABLE_GRADE_CALIBRATION_RELEASE,
+  NFL_V1_ACTIONABLE_GRADE_DECISION_RELEASE,
+  NFL_V1_EVENT_CONTAINED_SPREAD_MODEL_RELEASE,
+  NFL_V1_MARKET_EVIDENCE_TOTAL_MODEL_RELEASE,
+} from "./nflV1ActionableGradeCandidate";
+import {
+  NFL_R6_MONEYLINE_CALIBRATION_RELEASE,
+  NFL_R6_MONEYLINE_MODEL_RELEASE,
+} from "./nflR6MoneylineShadow";
 
 export const NFL_TRACKING_LIFECYCLE_RELEASE =
-  "nfl_tracking_lifecycle_2026_08_26_r4_market_scoped_t60" as const;
+  "nfl_tracking_lifecycle_2026_08_31_r6_market_split_heads" as const;
+
+export const NFL_TRACKING_COMPOSITE_RELEASE_BUNDLE =
+  "nfl_tracking_composite_release_bundle_2026_08_31_r2" as const;
+
+const NFL_TRACKING_MARKET_RELEASES = {
+  moneyline: {
+    modelRelease: NFL_R6_MONEYLINE_MODEL_RELEASE,
+    calibrationRelease: NFL_R6_MONEYLINE_CALIBRATION_RELEASE,
+  },
+  spread: {
+    modelRelease: NFL_V1_EVENT_CONTAINED_SPREAD_MODEL_RELEASE,
+    calibrationRelease: NFL_V1_ACTIONABLE_GRADE_CALIBRATION_RELEASE,
+  },
+  total: {
+    modelRelease: NFL_V1_MARKET_EVIDENCE_TOTAL_MODEL_RELEASE,
+    calibrationRelease: NFL_V1_ACTIONABLE_GRADE_CALIBRATION_RELEASE,
+  },
+} as const;
 
 export type NflTrackedMarket = "moneyline" | "spread" | "total";
 
@@ -92,10 +120,12 @@ export function nflForwardT60TrackingEligibility(args: {
   }
   const capturedAt = Date.parse(args.capturedAt);
   const gameStartsAt = Date.parse(args.gameStartsAt);
-  const releasesAreCoherent =
-    new Set(args.decisions.map((decision) => decision.modelRelease)).size === 1 &&
-    new Set(args.decisions.map((decision) => decision.calibrationRelease)).size === 1 &&
-    new Set(args.decisions.map((decision) => decision.decisionRelease)).size === 1;
+  const releasesAreCoherent = args.decisions.every((decision) => {
+    const expected = NFL_TRACKING_MARKET_RELEASES[decision.market];
+    return decision.modelRelease === expected.modelRelease &&
+      decision.calibrationRelease === expected.calibrationRelease &&
+      decision.decisionRelease === NFL_V1_ACTIONABLE_GRADE_DECISION_RELEASE;
+  });
   const tuplesAreCoherent = Number.isFinite(capturedAt) && Number.isFinite(gameStartsAt) &&
     releasesAreCoherent && args.decisions.every((decision) =>
       decision.providerGameId === args.providerGameId &&

@@ -6,7 +6,7 @@ import {
   determineNflForwardCollectionNeed,
   planNflForwardEvidenceCaptures,
   type NflForwardEvidencePayload,
-  type NflForwardPreviousEvidencePayload,
+  type NflForwardPriorEvidencePayload,
   type NflForwardStoredEvidence,
 } from "../lib/services/football/nflForwardEvidence";
 import { buildTeamDepthSnapshot } from "../lib/services/football/balldontlieNflRoster";
@@ -243,6 +243,8 @@ assert.ok(coherenceIndex >= 0 && appendIndex > coherenceIndex, "the sole NFL wri
 assert.equal((writer.match(/assertFootballCrossMarketCoherence\(\{/g) ?? []).length, 1, "the NFL writer must use one shared per-payload coherence gate");
 assert.doesNotMatch(writer, /writeCurrentNflPublishedMemberSnapshot|buildNflTrackingProposals\(/);
 assert.match(writer, /buildNflV1ActionableGradeBundle/);
+assert.match(writer, /buildNflMarketEvidenceOutcomeForecast/);
+assert.match(writer, /outcomeForecast: outcome/);
 assert.match(writer, /evaluatedBets: production\.evaluatedBets/);
 assert.match(writer, /writeOfficialTrackingFromPayloads/);
 assert.match(writer, /buildNflOfficialTrackingRecords/);
@@ -267,7 +269,7 @@ assert.doesNotMatch(executableMigration, /GRANT[^;]*(UPDATE|DELETE)[^;]*nfl_forw
 const vercel = JSON.parse(readFileSync(path.resolve("vercel.json"), "utf8")) as { crons: Array<{ path: string }> };
 assert.equal(vercel.crons.filter((cron) => cron.path === "/api/cron/nfl-forward-evidence").length, 1);
 
-const completePayload = (capturedAt: string, homePrice: number): NflForwardPreviousEvidencePayload => ({
+const completePayload = (capturedAt: string, homePrice: number): NflForwardPriorEvidencePayload => ({
   schemaRelease: "nfl_forward_evidence_snapshot_2026_08_22_r2_multibook",
   collectorRelease: "nfl_forward_evidence_collector_2026_08_22_r2_multibook",
   runId: `run-${capturedAt}`,

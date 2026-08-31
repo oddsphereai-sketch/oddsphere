@@ -6,7 +6,10 @@ import {
   type NflForwardEvidencePayload,
   type NflForwardStoredEvidence,
 } from "../../lib/services/football/nflForwardEvidence";
-import { readNflForwardEvidence } from "../../lib/services/football/nflForwardEvidenceStore";
+import {
+  readNflForwardEvidence,
+  readPreviousNflForwardEvidence,
+} from "../../lib/services/football/nflForwardEvidenceStore";
 import {
   buildNflV1ActionableGradeBundle,
   NFL_V1_ACTIONABLE_GRADE_DECISION_RELEASE,
@@ -14,21 +17,25 @@ import {
 } from "../../lib/services/football/nflV1ActionableGradeCandidate";
 import { buildNflR6ShadowMoneylineDecision } from "../../lib/services/football/nflR6MoneylineShadow";
 import { buildNflWeekOneHeldMemberFixture } from "../../lib/services/football/nflWeekOneHeldMemberFixture";
+import {
+  buildNflMarketEvidenceOutcomeForecast,
+  getNflV1WeekOneOutcomeForecast,
+} from "../../lib/services/football/nflV1WeekOneOutcome";
 
 async function main() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!url || !serviceKey) throw new Error("Supabase read credentials are required.");
   const client = createClient(url, serviceKey, { auth: { persistSession: false } });
-  const stored = await readNflForwardEvidence({ client, season: 2026, week: 1 });
+  const stored = [
+    ...await readPreviousNflForwardEvidence({ client, season: 2026, week: 1 }),
+    ...await readNflForwardEvidence({ client, season: 2026, week: 1 }),
+  ];
   const latest = latestRows(stored);
   if (latest.length !== 16) throw new Error(`Expected 16 Week 1 games; received ${latest.length}.`);
 
   const candidateFixtureRows: NflForwardStoredEvidence[] = [];
   const rows = latest.flatMap((row) => {
-    if (row.payload.schemaRelease !== NFL_FORWARD_EVIDENCE_SCHEMA_RELEASE) {
-      throw new Error(`Latest NFL row ${row.id} is not the current evidence schema.`);
-    }
     const payload = row.payload as NflForwardEvidencePayload;
     const shadow = payload.decisions.shadowEvaluatedBets?.[0] ?? buildNflR6ShadowMoneylineDecision({
       game: payload.game,
@@ -41,6 +48,28 @@ async function main() {
       t60LagMinutes: payload.t60LagMinutes,
       coverageHealthHolds: payload.coverage.healthHolds,
     });
+    const baseOutcome = getNflV1WeekOneOutcomeForecast({
+      providerGameId: payload.game.providerGameId,
+      awayTeam: payload.game.away.abbreviation,
+      homeTeam: payload.game.home.abbreviation,
+      weeklyFallback: shadow.footballProjection && payload.market.current.total
+        ? {
+            projectedHomeMargin: shadow.footballProjection.projectedHomeMargin,
+            marketTotal: payload.market.current.total.line,
+          }
+        : undefined,
+    });
+    const outcome = shadow.footballProjection
+      ? buildNflMarketEvidenceOutcomeForecast({
+          baseForecast: baseOutcome,
+          footballHomeMargin: shadow.footballProjection.projectedHomeMargin,
+          current: payload.market.current,
+          playbookLine: payload.market.playbookLine,
+          playbookSplits: payload.market.playbookSplits,
+          sharpSplits: payload.market.sharpApiSplits,
+          evaluatedAt: payload.capturedAt,
+        })
+      : baseOutcome;
     const candidate = buildNflV1ActionableGradeBundle({
       providerGameId: payload.game.providerGameId,
       awayTeam: payload.game.away.abbreviation,
@@ -49,20 +78,40 @@ async function main() {
       current: payload.market.current,
       comparableCurrentBooks: payload.market.comparableCurrentBooks,
       shadowMoneyline: shadow,
+      outcomeForecast: outcome,
     });
     if (!candidate.publicationEnabled || candidate.trackingEnabled ||
         candidate.evaluatedBets.length !== 3) {
-      throw new Error(`NFL production bundle boundary failed for ${row.providerGameId}.`);
+      throw new Error(
+        `NFL production bundle boundary failed for ${row.providerGameId}: ` +
+        `${JSON.stringify({
+          stage: payload.stage,
+          capturedAt: payload.capturedAt,
+          health: shadow.health,
+          shadowGrade: shadow.grade,
+          shadowTeam: shadow.team,
+          shadowProbability: shadow.modelProbability,
+          shadowQuote: shadow.evaluatedQuote,
+          candidateDecisions: candidate.evaluatedBets.length,
+          books: payload.market.comparableCurrentBooks.map((book) => ({
+            sportsbook: book.sportsbook,
+            spread: book.spread,
+            total: book.total,
+          })),
+        })}.`,
+      );
     }
     candidateFixtureRows.push({
       ...row,
       payload: {
         ...payload,
+        schemaRelease: NFL_FORWARD_EVIDENCE_SCHEMA_RELEASE,
+        outcomeForecast: outcome,
         decisions: {
           ...candidate,
           shadowEvaluatedBets: shadow ? [shadow] : [],
         },
-      },
+      } as NflForwardEvidencePayload,
     });
     const baseline = new Map(payload.decisions.evaluatedBets.map((decision) => [decision.market, decision]));
     return candidate.evaluatedBets.map((decision) => {

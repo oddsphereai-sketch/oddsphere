@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   NFL_FORWARD_EVIDENCE_LEGACY_SCHEMA_RELEASE,
+  NFL_FORWARD_EVIDENCE_PRIOR_SCHEMA_RELEASE,
   NFL_FORWARD_EVIDENCE_PREVIOUS_SCHEMA_RELEASE,
   NFL_FORWARD_EVIDENCE_SCHEMA_RELEASE,
   hashNflForwardEvidencePayload,
@@ -19,6 +20,9 @@ type StoredRow = {
   payload: unknown;
 };
 
+export const NFL_FORWARD_EVIDENCE_PAGE_SIZE = 1_000 as const;
+export const NFL_FORWARD_EVIDENCE_MAX_ROWS_PER_RELEASE = 5_000 as const;
+
 export async function readNflForwardEvidence(args: {
   client: SupabaseClient;
   season: number;
@@ -33,6 +37,14 @@ export async function readLegacyNflForwardEvidence(args: {
   week: number;
 }): Promise<NflForwardStoredEvidence[]> {
   return readNflForwardEvidenceRelease({ ...args, evidenceRelease: NFL_FORWARD_EVIDENCE_LEGACY_SCHEMA_RELEASE });
+}
+
+export async function readPriorNflForwardEvidence(args: {
+  client: SupabaseClient;
+  season: number;
+  week: number;
+}): Promise<NflForwardStoredEvidence[]> {
+  return readNflForwardEvidenceRelease({ ...args, evidenceRelease: NFL_FORWARD_EVIDENCE_PRIOR_SCHEMA_RELEASE });
 }
 
 export async function readPreviousNflForwardEvidence(args: {
@@ -50,17 +62,30 @@ async function readNflForwardEvidenceRelease(args: {
   evidenceRelease:
     | typeof NFL_FORWARD_EVIDENCE_SCHEMA_RELEASE
     | typeof NFL_FORWARD_EVIDENCE_PREVIOUS_SCHEMA_RELEASE
+    | typeof NFL_FORWARD_EVIDENCE_PRIOR_SCHEMA_RELEASE
     | typeof NFL_FORWARD_EVIDENCE_LEGACY_SCHEMA_RELEASE;
 }): Promise<NflForwardStoredEvidence[]> {
-  const { data, error } = await args.client
-    .from("nfl_forward_evidence_snapshots")
-    .select("id,provider_game_id,stage,captured_at,game_start_at,payload_sha256,payload")
-    .eq("evidence_release", args.evidenceRelease)
-    .eq("season", args.season)
-    .eq("week", args.week)
-    .order("captured_at", { ascending: true });
-  if (error) throw new Error(`NFL forward evidence read failed: ${error.message}`);
-  return ((data ?? []) as StoredRow[]).map((row) => normalizeStoredRow(row, args.evidenceRelease));
+  const rows: StoredRow[] = [];
+  for (let from = 0; from < NFL_FORWARD_EVIDENCE_MAX_ROWS_PER_RELEASE; from += NFL_FORWARD_EVIDENCE_PAGE_SIZE) {
+    const { data, error } = await args.client
+      .from("nfl_forward_evidence_snapshots")
+      .select("id,provider_game_id,stage,captured_at,game_start_at,payload_sha256,payload")
+      .eq("evidence_release", args.evidenceRelease)
+      .eq("season", args.season)
+      .eq("week", args.week)
+      .order("captured_at", { ascending: true })
+      .order("id", { ascending: true })
+      .range(from, from + NFL_FORWARD_EVIDENCE_PAGE_SIZE - 1);
+    if (error) throw new Error(`NFL forward evidence read failed: ${error.message}`);
+    const page = (data ?? []) as StoredRow[];
+    rows.push(...page);
+    if (page.length < NFL_FORWARD_EVIDENCE_PAGE_SIZE) {
+      return rows.map((row) => normalizeStoredRow(row, args.evidenceRelease));
+    }
+  }
+  throw new Error(
+    `NFL forward evidence read exceeded its bounded ${NFL_FORWARD_EVIDENCE_MAX_ROWS_PER_RELEASE}-row release limit.`,
+  );
 }
 
 export async function appendNflForwardEvidence(args: {
@@ -104,6 +129,7 @@ function normalizeStoredRow(
   expectedRelease:
     | typeof NFL_FORWARD_EVIDENCE_SCHEMA_RELEASE
     | typeof NFL_FORWARD_EVIDENCE_PREVIOUS_SCHEMA_RELEASE
+    | typeof NFL_FORWARD_EVIDENCE_PRIOR_SCHEMA_RELEASE
     | typeof NFL_FORWARD_EVIDENCE_LEGACY_SCHEMA_RELEASE,
 ): NflForwardStoredEvidence {
   if (row.payload === null || typeof row.payload !== "object") throw new Error(`NFL evidence ${row.id} has no payload.`);

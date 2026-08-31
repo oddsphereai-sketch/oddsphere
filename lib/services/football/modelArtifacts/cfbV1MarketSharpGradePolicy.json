@@ -1,0 +1,35 @@
+{
+  "policyRelease": "cfb_v1_composite_grade_policy_2026_08_31_r5_authoritative_pmf_calibration",
+  "decisionRelease": "cfb_v1_daily_edge_decision_2026_08_31_r23_authoritative_pmf_calibration",
+  "sourceRelease": "cfb_v1_composite_grade_policy_2026_08_25_r1",
+  "calibrationContract": "authoritative_market_sharp_pmf_identity",
+  "policies": {
+    "moneyline": {
+      "family": "authoritative_pmf_identity",
+      "weight": 1,
+      "abstention": "price_200_200",
+      "minEdge": 0.03,
+      "minEv": 0,
+      "bestAngle": { "minEdge": 0.05, "minEv": 0.02, "qualified": true },
+      "calibration": { "family": "authoritative_pmf_identity" }
+    },
+    "spread": {
+      "family": "authoritative_pmf_identity",
+      "weight": 1,
+      "abstention": "line_7",
+      "minEdge": 0.05,
+      "minEv": 0,
+      "bestAngle": { "minEdge": 0.07, "minEv": 0.02, "qualified": false },
+      "calibration": { "family": "authoritative_pmf_identity" }
+    },
+    "total": {
+      "family": "authoritative_pmf_identity",
+      "weight": 1,
+      "abstention": "all",
+      "minEdge": 0.05,
+      "minEv": 0,
+      "bestAngle": { "minEdge": 0.07, "minEv": 0.02, "qualified": true },
+      "calibration": { "family": "authoritative_pmf_identity" }
+    }
+  }
+}

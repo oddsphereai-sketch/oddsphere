@@ -13,15 +13,20 @@ import {
   applyNflV1LogitCorrection,
   getNflV1ActionableGradeCorrection,
   nflV1ActionableGradeArtifactMetadata,
-  NFL_V1_TOTAL_HEAD_RELEASE,
 } from "../lib/services/football/nflV1ActionableGradeCorrections";
 import {
   buildNflV1ActionableGradeBundle,
   NFL_V1_ACTIONABLE_GRADE_DECISION_RELEASE,
   NFL_V1_EVENT_CONTAINED_SPREAD_MODEL_RELEASE,
+  NFL_V1_MARKET_EVIDENCE_TOTAL_MODEL_RELEASE,
 } from "../lib/services/football/nflV1ActionableGradeCandidate";
 import {
+  buildNflMarketEvidenceOutcomeForecast,
   getNflV1WeekOneOutcomeForecast,
+  NFL_V1_MARKET_EVIDENCE_OUTCOME_RELEASE,
+  NFL_V1_MARKET_WEIGHT,
+  NFL_V1_PUBLIC_SPLIT_MAX_SHIFT_POINTS,
+  NFL_V1_SHARP_SPLIT_MAX_SHIFT_POINTS,
   nflV1WeekOneLineProbabilities,
 } from "../lib/services/football/nflV1WeekOneOutcome";
 
@@ -79,7 +84,7 @@ assert.equal(moneyline.grade, "Best Angle");
 assert.equal(moneyline.side, "SEA");
 assert.equal(spread.modelRelease, NFL_V1_EVENT_CONTAINED_SPREAD_MODEL_RELEASE);
 assert.equal(spread.grade, "No Play");
-assert.equal(total.modelRelease, NFL_V1_TOTAL_HEAD_RELEASE);
+assert.equal(total.modelRelease, NFL_V1_MARKET_EVIDENCE_TOTAL_MODEL_RELEASE);
 assert.equal(total.grade, "Lean");
 assert.equal(total.side, "Over 44.5");
 assert.equal(total.evaluatedQuote.sportsbook, "fanatics");
@@ -109,7 +114,136 @@ assert.equal(held.evaluatedBets.length, 0);
 assert.equal(held.publicationEnabled, true);
 assert.equal(held.trackingEnabled, false);
 
-console.log("NFL actionable grade release: correction parity, exact-price grades, Best Angle, and publication boundaries passed");
+const weekly = buildNflV1ActionableGradeBundle({
+  providerGameId: "week-two-runtime-test",
+  awayTeam,
+  homeTeam,
+  gameStartsAt,
+  current,
+  comparableCurrentBooks,
+  shadowMoneyline: {
+    ...shadow(),
+    providerGameId: "week-two-runtime-test",
+    footballProjection: { openingHomeMargin: 3.5, independentCorrection: 0.75, projectedHomeMargin: 4.25 },
+  },
+});
+assert.equal(weekly.evaluatedBets.length, 3);
+assert.equal(weekly.outcomeConfidence.length, 3);
+assert.equal(weekly.evaluatedBets.every((decision) => decision.providerGameId === "week-two-runtime-test"), true);
+
+const flipBooks = comparableCurrentBooks.map((book) => ({
+  ...book,
+  spread: book.spread ? { ...book.spread, awayLine: -0.5, homeLine: 0.5 } : null,
+}));
+const weeklyBase = getNflV1WeekOneOutcomeForecast({
+  providerGameId: "market-side-reselection-test",
+  awayTeam,
+  homeTeam,
+  weeklyFallback: { projectedHomeMargin: 4.25, marketTotal: 44.5 },
+});
+const marketOnly = buildNflMarketEvidenceOutcomeForecast({
+  baseForecast: weeklyBase,
+  footballHomeMargin: 4.25,
+  current: flipBooks[0]!,
+  playbookLine: null,
+  playbookSplits: null,
+  sharpSplits: null,
+  evaluatedAt,
+});
+const circaAway = buildNflMarketEvidenceOutcomeForecast({
+  baseForecast: weeklyBase,
+  footballHomeMargin: 4.25,
+  current: flipBooks[0]!,
+  playbookLine: {
+    capturedAt: evaluatedAt,
+    homeSpread: 0.5,
+    total: 44.5,
+  },
+  playbookSplits: splitSet({ homeMoneyPct: 80, homeBetsPct: 30 }),
+  sharpSplits: sharpSplitSet({ homeMoneyPct: 20, homeBetsPct: 70 }),
+  evaluatedAt,
+});
+assert.equal(NFL_V1_MARKET_EVIDENCE_OUTCOME_RELEASE, "nfl_v1_market_evidence_outcome_2026_08_31_r1_circa_public_bounded");
+assert.equal(NFL_V1_MARKET_WEIGHT, 0.75);
+assert.equal(NFL_V1_SHARP_SPLIT_MAX_SHIFT_POINTS, 1.5);
+assert.equal(NFL_V1_PUBLIC_SPLIT_MAX_SHIFT_POINTS, 0.75);
+assert.ok(marketOnly.homeWinProbability > marketOnly.awayWinProbability);
+assert.ok(circaAway.awayWinProbability > circaAway.homeWinProbability);
+assert.ok(
+  circaAway.expectedHomeScore - circaAway.expectedAwayScore <
+  marketOnly.expectedHomeScore - marketOnly.expectedAwayScore,
+  "fresh Circa money-over-bets resistance must move the forecast toward the away side",
+);
+assert.ok(
+  circaAway.expectedHomeScore - circaAway.expectedAwayScore < 0,
+  "opposing lower-strength public evidence must not reverse a qualifying Circa direction",
+);
+const marketOnlyBundle = buildNflV1ActionableGradeBundle({
+  providerGameId: "market-side-reselection-test",
+  awayTeam,
+  homeTeam,
+  gameStartsAt,
+  current: flipBooks[0]!,
+  comparableCurrentBooks: flipBooks,
+  shadowMoneyline: { ...shadow(), providerGameId: "market-side-reselection-test" },
+  outcomeForecast: marketOnly,
+});
+const circaAwayBundle = buildNflV1ActionableGradeBundle({
+  providerGameId: "market-side-reselection-test",
+  awayTeam,
+  homeTeam,
+  gameStartsAt,
+  current: flipBooks[0]!,
+  comparableCurrentBooks: flipBooks,
+  shadowMoneyline: { ...shadow(), providerGameId: "market-side-reselection-test" },
+  outcomeForecast: circaAway,
+});
+assert.equal(marketOnlyBundle.evaluatedBets.find((decision) => decision.market === "spread")?.side, homeTeam);
+assert.equal(circaAwayBundle.evaluatedBets.find((decision) => decision.market === "spread")?.side, awayTeam);
+assert.ok(["Best Angle", "Lean", "Watchlist", "No Play"].includes(
+  circaAwayBundle.evaluatedBets.find((decision) => decision.market === "spread")!.grade,
+));
+const staleCirca = buildNflMarketEvidenceOutcomeForecast({
+  baseForecast: weeklyBase,
+  footballHomeMargin: 4.25,
+  current: flipBooks[0]!,
+  playbookLine: null,
+  playbookSplits: null,
+  sharpSplits: sharpSplitSet({
+    homeMoneyPct: 20,
+    homeBetsPct: 70,
+    capturedAt: "2026-08-25T08:00:00.000Z",
+    providerFetchedAt: "2026-08-25T08:00:00.000Z",
+  }),
+  evaluatedAt,
+});
+assert.equal(staleCirca.expectedHomeScore.toFixed(9), marketOnly.expectedHomeScore.toFixed(9));
+assert.equal(staleCirca.expectedAwayScore.toFixed(9), marketOnly.expectedAwayScore.toFixed(9));
+const fragmentedBooks = flipBooks.map((book, index) => ({
+  ...book,
+  spread: book.spread ? {
+    ...book.spread,
+    awayLine: -(0.5 + Math.floor(index / 2)),
+    homeLine: 0.5 + Math.floor(index / 2),
+  } : null,
+  total: book.total ? { ...book.total, line: 44.5 + Math.floor(index / 2) } : null,
+}));
+const fragmented = buildNflV1ActionableGradeBundle({
+  providerGameId: "market-side-reselection-test",
+  awayTeam,
+  homeTeam,
+  gameStartsAt,
+  current: fragmentedBooks[0]!,
+  comparableCurrentBooks: fragmentedBooks,
+  shadowMoneyline: { ...shadow(), providerGameId: "market-side-reselection-test" },
+  outcomeForecast: marketOnly,
+});
+assert.equal(fragmented.evaluatedBets.length, 3, "two-book exact-line cohorts must not blank a game");
+assert.equal(fragmented.evaluatedBets.some((decision) => decision.market !== "moneyline" &&
+  ["Best Angle", "Lean"].includes(decision.grade)), false,
+"one target-excluded same-line comparator cannot authorize an actionable spread/total grade");
+
+console.log("NFL actionable grade release: correction parity, exact-price grades, market-led side reselection, weekly runtime, Best Angle, and publication boundaries passed");
 
 function quote(
   sportsbook: string,
@@ -168,4 +302,33 @@ function shadow(): NflR6ShadowMoneylineDecision {
     decisionRelease: NFL_R6_MONEYLINE_DECISION_RELEASE,
     sourcePointModelRelease: NFL_R6_SOURCE_POINT_MODEL_RELEASE,
   };
+}
+
+function splitSet(args: {
+  homeMoneyPct: number;
+  homeBetsPct: number;
+  capturedAt?: string;
+}) {
+  const market = {
+    capturedAt: args.capturedAt ?? evaluatedAt,
+    homeMoneyPct: args.homeMoneyPct,
+    homeBetsPct: args.homeBetsPct,
+    overMoneyPct: 50,
+    overBetsPct: 50,
+  };
+  return { moneyline: market, spread: market, total: market };
+}
+
+function sharpSplitSet(args: {
+  homeMoneyPct: number;
+  homeBetsPct: number;
+  capturedAt?: string;
+  providerFetchedAt?: string;
+}) {
+  const market = {
+    ...splitSet(args).spread,
+    sourceSportsbook: "Circa",
+    providerFetchedAt: args.providerFetchedAt ?? evaluatedAt,
+  };
+  return { moneyline: market, spread: market, total: market };
 }

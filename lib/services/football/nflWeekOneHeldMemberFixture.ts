@@ -35,7 +35,7 @@ import { nflFootballEvidenceStats } from "./footballMemberEvidence";
 import type { NflRegularSharpMarket, NflRegularSharpSplit } from "./sharpApiNflSplits";
 
 export const NFL_WEEK_ONE_HELD_MEMBER_FIXTURE_RELEASE =
-  "nfl_week_one_member_fixture_2026_08_28_r10_source_specific_sportsbook_splits" as const;
+  "nfl_weekly_member_fixture_2026_08_31_r12_market_split_injury" as const;
 
 const MODEL_RELEASE = NFL_V1_OUTCOME_MODEL_RELEASE;
 const DECISION_RELEASE = NFL_V1_ACTIONABLE_GRADE_DECISION_RELEASE;
@@ -227,11 +227,7 @@ function buildHeldGame(
   const opening = payload.market.operationalOpening;
   const away = game.away.abbreviation;
   const home = game.home.abbreviation;
-  const outcome = getNflV1WeekOneOutcomeForecast({
-    providerGameId: game.providerGameId,
-    awayTeam: away,
-    homeTeam: home,
-  });
+  const outcome = payload.outcomeForecast;
   const moneylineBase = buildHeldMarket({
     slot: "moneyline",
     away,
@@ -752,7 +748,7 @@ function buildHeldMarket(input: HeldMarketInput): MarketEdgeDto {
     bestAvailableObservedAt: null,
     gradePriceAmerican: null,
     fiMarketBoard: null,
-    lineOpenAmerican: null,
+    lineOpenAmerican: input.opening.primaryPrice,
     priceUnavailableAtLock: false,
     priceObservedAt: input.current.observedAt,
     priceIsStale: false,
@@ -816,7 +812,7 @@ function buildHeldMarket(input: HeldMarketInput): MarketEdgeDto {
     recommendationConfidence: null,
     marketSource: input.current.sportsbook,
     marketDataQuality: "two_sided_consensus",
-    reviewFlags: [NFL_WEEK_ONE_HELD_MEMBER_FIXTURE_RELEASE, MODEL_RELEASE, DECISION_RELEASE],
+    reviewFlags: [...new Set(["nfl_exact_price_decision_health_hold", ...input.payload.coverage.healthHolds])],
     reviewActionSummary: "repair_price_coverage",
   };
 }
@@ -967,7 +963,11 @@ function applyPublishedDecision(
     modelMarketGapPct: (decision.modelProbability - decision.marketFairProbability) * 100,
     recommendationConfidence: actionability,
     marketSource: decision.evaluatedQuote.sportsbook,
-    reviewFlags: [NFL_WEEK_ONE_HELD_MEMBER_FIXTURE_RELEASE, decision.modelRelease, decision.decisionRelease],
+    reviewFlags: [...new Set([
+      ...input.payload.coverage.healthHolds,
+      ...(input.payload.startersAndDepth.away.starterStatus !== "confirmed" ? ["away_expected_quarterback_projected"] : []),
+      ...(input.payload.startersAndDepth.home.starterStatus !== "confirmed" ? ["home_expected_quarterback_projected"] : []),
+    ])],
     reviewActionSummary: "keep",
   };
 }

@@ -3,7 +3,10 @@ import {
   buildNflPlayerPropsInferenceContextFromForwardEvidence,
   NFL_PLAYER_PROPS_INFERENCE_CONTEXT_RELEASE,
 } from "../lib/services/football/nflPlayerPropsInferenceContext";
-import type { NflForwardStoredEvidence } from "../lib/services/football/nflForwardEvidence";
+import {
+  NFL_FORWARD_EVIDENCE_SCHEMA_RELEASE,
+  type NflForwardStoredEvidence,
+} from "../lib/services/football/nflForwardEvidence";
 import type { NflPlayerPropsObservationSnapshot } from "../lib/services/football/nflPlayerPropsContract";
 
 const snapshot = {
@@ -48,7 +51,7 @@ function evidence(capturedAt: string, stage: "opening" | "unlocked" | "t60", qua
     gameStartAt: "2026-09-10T20:00:00.000Z",
     payloadSha256: `${stage}-sha`,
     payload: {
-      schemaRelease: "nfl_forward_evidence_snapshot_2026_08_23_r3_member",
+      schemaRelease: NFL_FORWARD_EVIDENCE_SCHEMA_RELEASE,
       collectorRelease: "nfl_forward_evidence_collector_2026_08_23_r3_member",
       runId: "run",
       season: 2026,

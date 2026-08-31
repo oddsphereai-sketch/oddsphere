@@ -24,6 +24,7 @@ import {
   appendNflForwardEvidence,
   readLegacyNflForwardEvidence,
   readNflForwardEvidence,
+  readPriorNflForwardEvidence,
   readPreviousNflForwardEvidence,
 } from "./nflForwardEvidenceStore";
 import { collectNflForwardWeather } from "./nflVenueWeather";
@@ -40,7 +41,10 @@ import {
   NFL_V1_ACTIONABLE_GRADE_DECISION_RELEASE,
   NFL_V1_ACTIONABLE_GRADE_MEMBER_RELEASE,
 } from "./nflV1ActionableGradeCandidate";
-import { getNflV1WeekOneOutcomeForecast } from "./nflV1WeekOneOutcome";
+import {
+  buildNflMarketEvidenceOutcomeForecast,
+  getNflV1WeekOneOutcomeForecast,
+} from "./nflV1WeekOneOutcome";
 import { nflForwardT60TrackingEligibility } from "./nflTrackingLifecycle";
 import {
   buildNflOfficialTrackingRecords,
@@ -54,7 +58,7 @@ import {
 } from "./nflForwardMemberSnapshotStore";
 
 export const NFL_FORWARD_WRITER_RELEASE =
-  "nfl_forward_evidence_writer_2026_08_28_r14_strict_directional_pmf" as const;
+  "nfl_forward_evidence_writer_2026_08_31_r16_market_split_injury" as const;
 
 export type NflForwardWriterResult = {
   writerRelease: typeof NFL_FORWARD_WRITER_RELEASE;
@@ -106,12 +110,13 @@ export async function runNflForwardEvidenceWriter(args: {
   sharpApiKey: string;
   weatherProvider: IWeatherProvider | null;
 }): Promise<NflForwardWriterResult> {
-  const [existing, previousExisting, legacyExisting] = await Promise.all([
+  const [existing, previousExisting, priorExisting, legacyExisting] = await Promise.all([
     readNflForwardEvidence({ client: args.client, season: args.season, week: args.week }),
     readPreviousNflForwardEvidence({ client: args.client, season: args.season, week: args.week }),
+    readPriorNflForwardEvidence({ client: args.client, season: args.season, week: args.week }),
     readLegacyNflForwardEvidence({ client: args.client, season: args.season, week: args.week }),
   ]);
-  const historicalExisting = [...legacyExisting, ...previousExisting, ...existing];
+  const historicalExisting = [...legacyExisting, ...priorExisting, ...previousExisting, ...existing];
   const need = determineNflForwardCollectionNeed({
     existing,
     now: args.now,
@@ -218,7 +223,9 @@ export async function runNflForwardEvidenceWriter(args: {
   const weatherRequests = [...weatherByGame.values()].reduce((sum, value) => sum + value.requests, 0);
   const apiCallsMaximum = slate.providerRequests + rosters.requests + 4 + 2 + sharpResult.requests + weatherRequests;
 
-  const payloads = plans.map((plan): NflForwardEvidencePayload => {
+  const payloadBuildHolds: string[] = [];
+  const payloads = plans.flatMap((plan): NflForwardEvidencePayload[] => {
+    try {
     const current = requiredCurrentOdds(slate.currentOddsByGame[plan.game.providerGameId], plan.game.providerGameId);
     const currentBooks = requiredCurrentBooks(
       slate.currentOddsAllBooksByGame[plan.game.providerGameId],
@@ -279,6 +286,28 @@ export async function runNflForwardEvidenceWriter(args: {
       t60LagMinutes: plan.t60LagMinutes,
       coverageHealthHolds: holds,
     });
+    const baseOutcome = getNflV1WeekOneOutcomeForecast({
+      providerGameId: plan.game.providerGameId,
+      awayTeam: plan.game.away.abbreviation,
+      homeTeam: plan.game.home.abbreviation,
+      weeklyFallback: shadowMoneyline.footballProjection && current.total
+        ? {
+            projectedHomeMargin: shadowMoneyline.footballProjection.projectedHomeMargin,
+            marketTotal: current.total.line,
+          }
+        : undefined,
+    });
+    const outcome = shadowMoneyline.footballProjection
+      ? buildNflMarketEvidenceOutcomeForecast({
+          baseForecast: baseOutcome,
+          footballHomeMargin: shadowMoneyline.footballProjection.projectedHomeMargin,
+          current,
+          playbookLine,
+          playbookSplits,
+          sharpSplits,
+          evaluatedAt: args.now,
+        })
+      : baseOutcome;
     const production = buildNflV1ActionableGradeBundle({
       providerGameId: plan.game.providerGameId,
       awayTeam: plan.game.away.abbreviation,
@@ -287,11 +316,7 @@ export async function runNflForwardEvidenceWriter(args: {
       current,
       comparableCurrentBooks,
       shadowMoneyline,
-    });
-    const outcome = getNflV1WeekOneOutcomeForecast({
-      providerGameId: plan.game.providerGameId,
-      awayTeam: plan.game.away.abbreviation,
-      homeTeam: plan.game.home.abbreviation,
+      outcomeForecast: outcome,
     });
     assertFootballCrossMarketCoherence({
       sport: "nfl",
@@ -327,7 +352,7 @@ export async function runNflForwardEvidenceWriter(args: {
         computeSlateDate("nfl", plan.game.scheduledStart),
       ),
     });
-    return {
+    return [{
       schemaRelease: NFL_FORWARD_EVIDENCE_SCHEMA_RELEASE,
       collectorRelease: NFL_FORWARD_EVIDENCE_COLLECTOR_RELEASE,
       runId: args.runId,
@@ -355,6 +380,7 @@ export async function runNflForwardEvidenceWriter(args: {
       startersAndDepth: { away: awayDepth, home: homeDepth },
       injuries,
       weather,
+      outcomeForecast: outcome,
       decisions: {
         evaluatedBets: production.evaluatedBets,
         outcomeConfidence: production.outcomeConfidence,
@@ -376,7 +402,12 @@ export async function runNflForwardEvidenceWriter(args: {
         balldontlieInjuriesMaximum: 4, playbook: 2, sharpApi: sharpResult.requests,
         weather: weatherRequests, totalMaximum: apiCallsMaximum,
       },
-    };
+    }];
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : "unknown_payload_failure";
+      payloadBuildHolds.push(`game_${plan.game.providerGameId}_held_${reason}`);
+      return [];
+    }
   });
 
   const write = await appendNflForwardEvidence({ client: args.client, runId: args.runId, payloads, apply: args.apply });
@@ -419,7 +450,10 @@ export async function runNflForwardEvidenceWriter(args: {
     publishedNoPlays: publishedEvaluations.filter((decision) => decision.grade === "No Play").length,
     publishedHeldGames: payloads.filter((payload) => payload.decisions.evaluatedBets.length !== 3).length,
     apiCallsMaximum,
-    healthHolds: [...new Set(payloads.flatMap((payload) => payload.coverage.healthHolds))].sort(),
+    healthHolds: [...new Set([
+      ...payloads.flatMap((payload) => payload.coverage.healthHolds),
+      ...payloadBuildHolds,
+    ])].sort(),
     publicationAttempted: args.apply,
     ...memberSnapshot,
     ...tracking,

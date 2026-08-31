@@ -479,6 +479,12 @@ export type MarketEdgeDto = {
    */
   marketReadV2?: MarketReadV2Dto | null;
   marketReadV2Enabled?: boolean;
+  /**
+   * Writer-owned movement classification for sports whose authoritative
+   * decision already evaluated a coherent odds trail. Display-only: the
+   * reader may explain the stored grade with it, but may not re-grade.
+   */
+  writerMovementDirection?: "support" | "resistance" | "neutral" | null;
   lastMovePrevAmerican?: number | null;
   lastMoveNextAmerican?: number | null;
   lastMoveAtIso?: string | null;

@@ -159,7 +159,7 @@ assert.equal(resisted.finalGrade, "Watchlist", "joint strict-sharp and same-book
 
 const sharpAwaySupport = sharpRecord({ homeTickets: 60, homeMoney: 40, overTickets: 50, overMoney: 50 });
 const promoted = buildCfbMarketEvidenceGradeShadow({
-  decision: { ...moneyline, grade: "Watchlist", edgePercentagePoints: 2.5, expectedValue: 0.01, evaluatedQuote: { ...moneyline.evaluatedQuote, price: 155 } },
+  decision: { ...moneyline, grade: "Watchlist", probabilityGrade: "Watchlist", modelProbability: 0.54, edgePercentagePoints: 2.5, expectedValue: 0.01, evaluatedQuote: { ...moneyline.evaluatedQuote, price: 155 } },
   selectedSide: "away",
   sharpSplits: [sharpAwaySupport],
   operationalOpening: null,
@@ -168,7 +168,7 @@ assert.equal(promoted.sharpDirection, "support");
 assert.equal(promoted.finalGrade, "Lean", "strict sharp support promotes a positive near-threshold Watchlist");
 
 const publicPromoted = buildCfbMarketEvidenceGradeShadow({
-  decision: { ...moneyline, grade: "Watchlist", edgePercentagePoints: 2.5, expectedValue: 0.01, evaluatedQuote: { ...moneyline.evaluatedQuote, price: 155 } },
+  decision: { ...moneyline, grade: "Watchlist", probabilityGrade: "Watchlist", modelProbability: 0.54, edgePercentagePoints: 2.5, expectedValue: 0.01, evaluatedQuote: { ...moneyline.evaluatedQuote, price: 155 } },
   selectedSide: "away",
   sharpSplits: [],
   playbookLine,
@@ -180,7 +180,7 @@ assert.equal(publicPromoted.finalGrade, "Lean", "positive-EV near-threshold publ
 assert.deepEqual(publicPromoted.reasonCodes, ["public_consensus_near_threshold_promotion"]);
 
 const circaPriorityPromotion = buildCfbMarketEvidenceGradeShadow({
-  decision: { ...moneyline, grade: "Watchlist", edgePercentagePoints: 2.5, expectedValue: 0.01, evaluatedQuote: { ...moneyline.evaluatedQuote, price: 155 } },
+  decision: { ...moneyline, grade: "Watchlist", probabilityGrade: "Watchlist", modelProbability: 0.54, edgePercentagePoints: 2.5, expectedValue: 0.01, evaluatedQuote: { ...moneyline.evaluatedQuote, price: 155 } },
   selectedSide: "away",
   sharpSplits: [sharpAwaySupport],
   playbookLine,
@@ -237,7 +237,7 @@ const resistedNearNeutral = buildCfbMarketEvidenceGradeShadow({
 assert.equal(resistedNearNeutral.finalGrade, "No Play", "sharp resistance blocks a cosmetic Watchlist promotion");
 
 const spreadLean = buildCfbMarketEvidenceGradeShadow({
-  decision: { ...moneyline, market: "spread", grade: "Lean", side: "HAW +4", evaluatedQuote: { ...moneyline.evaluatedQuote, line: 4 } },
+  decision: { ...moneyline, market: "spread", grade: "Lean", probabilityGrade: "Lean", side: "HAW +4", modelProbability: 0.54, edgePercentagePoints: 3, expectedValue: 0.03, evaluatedQuote: { ...moneyline.evaluatedQuote, line: 4 } },
   selectedSide: "away",
   sharpSplits: [],
   operationalOpening: null,
@@ -253,7 +253,9 @@ const borderlineLargerSpread = buildCfbMarketEvidenceGradeShadow({
     ...moneyline,
     market: "spread",
     grade: "Watchlist",
+    probabilityGrade: "Watchlist",
     side: "TCU -8.5",
+    modelProbability: 0.52,
     edgePercentagePoints: 4.9939,
     expectedValue: 0.062,
     evaluatedQuote: { ...moneyline.evaluatedQuote, line: -8.5, price: -105 },
@@ -275,6 +277,7 @@ const productionAdjusted = applyCfbMarketSharpAwareGrades({
       grade: "Watchlist",
       probabilityGrade: "Watchlist",
       side: "TCU -8.5",
+      modelProbability: 0.52,
       edgePercentagePoints: 4.9939,
       expectedValue: 0.06205,
       evaluatedQuote: { ...moneyline.evaluatedQuote, line: -8.5, price: -105 },

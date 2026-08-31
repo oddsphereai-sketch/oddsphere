@@ -44,7 +44,7 @@ import { buildMarketScopedFootballTrackingPlan } from "./footballMarketScopedTra
 import { assertFootballCrossMarketCoherence } from "./footballCrossMarketCoherence";
 
 export const CFB_FORWARD_WRITER_RELEASE =
-  "cfb_forward_evidence_writer_2026_08_31_r35_public_consensus_market_input" as const;
+  "cfb_forward_evidence_writer_2026_08_31_r36_authoritative_pmf_calibration" as const;
 export const CFB_TOTAL_MEAN_PMF_TOSSUP_MAX_PROBABILITY_GAP = 0.01 as const;
 export const CFB_TOTAL_MEAN_PMF_TOSSUP_MAX_MEAN_DISTANCE_POINTS = 0.5 as const;
 export const CFB_FORWARD_MAX_QB_TEAMS_PER_RUN = 24 as const;
@@ -175,8 +175,6 @@ export async function runCfbForwardEvidenceWriter(args: {
       : weeklyForecast.forecast;
     const healthHolds = [
       ...(plan.stage === "t60" && (effectiveT60LagMinutes ?? Infinity) > CFB_T60_MAX_CAPTURE_LAG_MINUTES ? ["t60_capture_late"] : []),
-      ...(plan.stage === "t60" && awayQuarterbacks.expectedStartingQuarterback === null ? ["away_quarterback_roster_unavailable"] : []),
-      ...(plan.stage === "t60" && homeQuarterbacks.expectedStartingQuarterback === null ? ["home_quarterback_roster_unavailable"] : []),
       ...(weeklyForecast.featureHealth.awayProfile === "neutral_imputation" ? ["away_model_team_profile_unavailable"] : []),
       ...(weeklyForecast.featureHealth.homeProfile === "neutral_imputation" ? ["home_model_team_profile_unavailable"] : []),
       ...cfbMarketAnchorHealthHolds(outcomeAnchor),

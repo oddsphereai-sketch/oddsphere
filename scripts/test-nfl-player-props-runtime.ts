@@ -9,17 +9,23 @@ import {
   nflPlayerPropsTouchdownPolicy,
   buildNflPlayerPropsRuntimeBoard,
   nflPlayerPropsProjectionRange,
+  nflPlayerPropsProductionMarketLane,
+  nflPlayerPropsRawMarketDivergenceImplausible,
   verifyNflPlayerPropsRuntimeParity,
 } from "../lib/services/football/nflPlayerPropsRuntime";
 import type { NflPlayerPropsExactOffer } from "../lib/services/football/nflPlayerPropsMarketBoard";
 
-assert.equal(NFL_PLAYER_PROPS_RUNTIME_RELEASE, "nfl_player_props_runtime_2026_08_25_r2_shared_context");
+assert.equal(NFL_PLAYER_PROPS_RUNTIME_RELEASE, "nfl_player_props_runtime_2026_08_31_r3_monotonic_divergence");
 verifyNflPlayerPropsRuntimeParity(1e-9);
 
 const receiving = nflPlayerPropsRuntimeMarketPolicy("receiving_yards");
 assert.deepEqual(receiving, { weight: 0.2, qualified: true });
 assert.equal(nflPlayerPropsRuntimeMarketPolicy("passing_yards")?.qualified, false);
 assert.deepEqual(nflPlayerPropsTouchdownPolicy(), { weight: 0.2, actionable: false });
+assert.equal(nflPlayerPropsProductionMarketLane("receiving_yards")?.lean, true);
+assert.equal(nflPlayerPropsProductionMarketLane("receptions")?.lean, true);
+assert.equal(nflPlayerPropsRawMarketDivergenceImplausible(0.98, 0.50), false, "the frozen p99 boundary itself remains eligible");
+assert.equal(nflPlayerPropsRawMarketDivergenceImplausible(0.981, 0.50), true, "only grossly implausible divergence is rejected");
 
 const over = nflPlayerPropsOverProbability("receiving_yards", 75, 70.5);
 assert.ok(over > 0 && over < 1);
@@ -90,7 +96,7 @@ assert.deepEqual(
   noOpening.decisions.map(withoutBookEvidence),
   "opening presentation evidence changes zero decisions, probabilities, projections, or grades",
 );
-assert.ok(twoBooks.decisions.every((row) => row.decisionRelease === "nfl_player_props_decision_2026_08_25_r2_exact_price_shared_context"), "tracking provenance uses the production exact-price lane release, not the residual calibration release");
+assert.ok(twoBooks.decisions.every((row) => row.decisionRelease === "nfl_player_props_decision_2026_08_31_r3_monotonic_divergence"), "tracking provenance uses the current production exact-price lane release, not the residual calibration release");
 assert.ok(twoBooks.decisions.every((row) => row.modelRelease === "nfl_player_props_distribution_model_2026_08_25_r2_shared_context"));
 assert.ok(twoBooks.decisions.every((row) => row.calibrationRelease === "nfl_player_props_distribution_calibration_2026_08_25_r2_shared_context"));
 assert.ok(twoBooks.decisions.every((row) => !row.modelRelease.includes("shadow") && !row.decisionRelease.includes("provisional")));
@@ -104,6 +110,20 @@ assert.equal(roleHeld.diagnostics.recoveryEligibleOperationalExceptions, 2, "unl
 const stale = buildNflPlayerPropsRuntimeBoard({ offers: [baseOffer, { ...baseOffer, offerKey: "test-b", sportsbook: "book-b" }], features: [feature], evaluatedAt: "2026-08-26T12:01:00.000Z" });
 assert.equal(stale.decisions.length, 0, "stale outcomes are excluded from the graded board");
 assert.equal(stale.diagnostics.unavailableStaleQuotes, 2);
+const divergent = buildNflPlayerPropsRuntimeBoard({
+  offers: [baseOffer, { ...baseOffer, offerKey: "test-b", sportsbook: "book-b" }].map((offer) => ({
+    ...offer,
+    line: 100,
+    overNoVigProbability: 0.999,
+    underNoVigProbability: 0.001,
+  })),
+  features: [feature],
+  evaluatedAt: "2026-08-25T12:01:00.000Z",
+});
+assert.ok(divergent.decisions.length > 0);
+assert.ok(divergent.decisions.every((row) => row.grade === "No Play"), "gross model/market disagreement cannot become actionable");
+assert.ok(divergent.decisions.every((row) => row.healthHolds.includes("model_market_divergence_implausible")));
+assert.equal(divergent.counts.Held, 0, "gross divergence remains a completed No Play prediction rather than suppressing the row");
 
 function withoutBookEvidence<T extends { bookEvidence: unknown }>(row: T): Omit<T, "bookEvidence"> {
   return Object.fromEntries(Object.entries(row).filter(([key]) => key !== "bookEvidence")) as Omit<T, "bookEvidence">;
