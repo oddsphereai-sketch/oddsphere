@@ -16,6 +16,7 @@ import {
   americanToImpliedProb,
   buildPublicSplitsSnapshot,
   buildLineMovementSnapshot,
+  compactSourceAwareRowsForLock,
   buildDataIntegritySnapshot,
   applyPlayGradeGate,
   GATE_TOTAL_LEAN_MARKET_FRICTION_MAX_EDGE_PCT,
@@ -56,6 +57,7 @@ import {
   resolveMlbMarketAwareSideCorrection,
   resolveMlbMoneylineMarketContextSidePolicy,
 } from "../lib/services/predictionRecordService";
+import type { SourceAwareSplitObservationRow } from "../lib/services/predictionRecordService";
 import type { PredictionRecordRow } from "../lib/types/domain/Tracking";
 import {
   MLB_DAILY_EDGE_DECISION_RELEASE_ID,
@@ -126,6 +128,86 @@ const singleBookPriceSnapshot = buildGameOddsSnapshot([
 check(
   "one book cannot establish its own best-playable truth",
   singleBookPriceSnapshot.bestPlayableMl?.away.source === "unavailable",
+);
+
+console.log("\n━━━ MLB source-aware split pair recency ━━━");
+const sourceAwareRows = [
+  // Newest rows are deliberately not adjacent. The legacy selector chose the
+  // older adjacent pair even though the newer pair was complete and coherent.
+  {
+    canonical_event_id: "5059839", market_type: "moneyline", selection_key: "5059839:moneyline:away",
+    provider: "sharpapi", source_book: "circa", source_type: "sharp_adjacent_book",
+    bets_pct: 0.69, money_pct: 0.79, source_observed_at: "2026-08-31T17:26:10.531757Z",
+    fetched_at: "2026-08-31T17:30:26.100Z",
+  },
+  {
+    canonical_event_id: "5059839", market_type: "moneyline", selection_key: "5059839:moneyline:away",
+    provider: "sharpapi", source_book: "circa", source_type: "sharp_adjacent_book",
+    bets_pct: 0.58, money_pct: 0.59, source_observed_at: "2026-08-31T17:05:44.996005Z",
+    fetched_at: "2026-08-31T17:07:12.046Z",
+  },
+  {
+    canonical_event_id: "5059839", market_type: "moneyline", selection_key: "5059839:moneyline:home",
+    provider: "sharpapi", source_book: "circa", source_type: "sharp_adjacent_book",
+    bets_pct: 0.42, money_pct: 0.41, source_observed_at: "2026-08-31T17:05:44.996005Z",
+    fetched_at: "2026-08-31T17:07:12.046Z",
+  },
+  {
+    canonical_event_id: "5059839", market_type: "moneyline", selection_key: "5059839:moneyline:home",
+    provider: "sharpapi", source_book: "circa", source_type: "sharp_adjacent_book",
+    bets_pct: 0.31, money_pct: 0.21, source_observed_at: "2026-08-31T17:26:10.531757Z",
+    fetched_at: "2026-08-31T17:30:26.100Z",
+  },
+  // These two rows complement one another, but their provider observation
+  // timestamps differ. They must never be synthesized into a false pair.
+  {
+    canonical_event_id: "5059839", market_type: "total", selection_key: "5059839:total:over",
+    provider: "sharpapi", source_book: "circa", source_type: "sharp_adjacent_book",
+    bets_pct: 0.60, money_pct: 0.70, source_observed_at: "2026-08-31T17:51:00Z",
+    fetched_at: "2026-08-31T18:00:27.464Z",
+  },
+  {
+    canonical_event_id: "5059839", market_type: "total", selection_key: "5059839:total:under",
+    provider: "sharpapi", source_book: "circa", source_type: "sharp_adjacent_book",
+    bets_pct: 0.40, money_pct: 0.30, source_observed_at: "2026-08-31T17:56:00Z",
+    fetched_at: "2026-08-31T18:00:27.464Z",
+  },
+] satisfies SourceAwareSplitObservationRow[];
+const compactSourceAwareRows = compactSourceAwareRowsForLock(sourceAwareRows);
+const compactMlRows = compactSourceAwareRows.filter((row) => row.market_type === "moneyline");
+check(
+  "writer chooses the newest coherent Sharp pair even when an older pair is adjacent",
+  compactMlRows.length === 2 &&
+    compactMlRows.every((row) => row.source_observed_at === "2026-08-31T17:26:10.531757Z"),
+);
+check(
+  "newest Houston pair preserves its actual signed resistance",
+  compactMlRows.find((row) => row.selection_key?.endsWith(":home"))?.bets_pct === 0.31 &&
+    compactMlRows.find((row) => row.selection_key?.endsWith(":home"))?.money_pct === 0.21,
+);
+check(
+  "rows from different provider observation times cannot form a synthetic pair",
+  compactSourceAwareRows.every((row) => row.market_type !== "total"),
+);
+const latestInvalidPairRows = compactSourceAwareRowsForLock([
+  ...sourceAwareRows.filter((row) => row.market_type === "moneyline"),
+  {
+    canonical_event_id: "5059839", market_type: "moneyline", selection_key: "5059839:moneyline:away",
+    provider: "sharpapi", source_book: "circa", source_type: "sharp_adjacent_book",
+    bets_pct: 0.80, money_pct: 0.80, source_observed_at: "2026-08-31T17:40:00Z",
+    fetched_at: "2026-08-31T17:41:00Z",
+  },
+  {
+    canonical_event_id: "5059839", market_type: "moneyline", selection_key: "5059839:moneyline:home",
+    provider: "sharpapi", source_book: "circa", source_type: "sharp_adjacent_book",
+    bets_pct: 0.30, money_pct: 0.30, source_observed_at: "2026-08-31T17:40:00Z",
+    fetched_at: "2026-08-31T17:41:00Z",
+  },
+]);
+check(
+  "newest invalid pair fails closed to the newest earlier coherent pair",
+  latestInvalidPairRows.length === 2 &&
+    latestInvalidPairRows.every((row) => row.source_observed_at === "2026-08-31T17:26:10.531757Z"),
 );
 
 console.log("━━━ MLB tight market-price Best Angle resolver ━━━");

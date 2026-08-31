@@ -1038,7 +1038,7 @@ type PublicSplitsRow = {
   steam_books_count: number | null;
 };
 
-type SourceAwareSplitObservationRow = {
+export type SourceAwareSplitObservationRow = {
   canonical_event_id: string;
   market_type: string;
   selection_key: string | null;
@@ -1078,7 +1078,38 @@ function sourceAwarePairScore(a: SourceAwareSplitObservationRow, b: SourceAwareS
   return fields === 0 ? Number.POSITIVE_INFINITY : score;
 }
 
-function compactSourceAwareRowsForLock(
+function sourceAwarePairEvidenceIdentity(row: SourceAwareSplitObservationRow): string | null {
+  const provider = (row.provider ?? "").trim().toLowerCase();
+  const sourceBook = (row.source_book ?? "").trim().toLowerCase();
+  const sourceType = (row.source_type ?? "").trim().toLowerCase();
+  const observedAt = row.source_observed_at ?? row.fetched_at;
+  if (
+    provider.length === 0 ||
+    sourceBook.length === 0 ||
+    sourceType.length === 0 ||
+    observedAt === null ||
+    !Number.isFinite(Date.parse(observedAt))
+  ) return null;
+  return [provider, sourceBook, sourceType, observedAt].join("::");
+}
+
+function sourceAwarePairEvidenceMs(row: SourceAwareSplitObservationRow): number {
+  const observedAt = row.source_observed_at ?? row.fetched_at;
+  return observedAt === null ? Number.NEGATIVE_INFINITY : Date.parse(observedAt);
+}
+
+function sourceAwarePairFetchedMs(row: SourceAwareSplitObservationRow): number {
+  return row.fetched_at === null ? Number.NEGATIVE_INFINITY : Date.parse(row.fetched_at);
+}
+
+/**
+ * Select one internally coherent pair per market/source for the writer and
+ * frozen lock snapshot. Provider history arrives newest-first but contains
+ * many observations from the same fetch. Recency must therefore be compared
+ * explicitly: array adjacency is not evidence that two rows are current or
+ * contemporaneous.
+ */
+export function compactSourceAwareRowsForLock(
   rows: ReadonlyArray<SourceAwareSplitObservationRow>,
 ): SourceAwareSplitObservationRow[] {
   const out: SourceAwareSplitObservationRow[] = [];
@@ -1100,21 +1131,54 @@ function compactSourceAwareRowsForLock(
       const leftRows = candidates.filter((candidate) => candidate.side === leftSide);
       const rightRows = candidates.filter((candidate) => candidate.side === rightSide);
       if (leftRows.length === 0 || rightRows.length === 0) continue;
-      let bestPair: { left: (typeof candidates)[number]; right: (typeof candidates)[number]; score: number; indexGap: number } | null = null;
+      let bestPair: {
+        left: (typeof candidates)[number];
+        right: (typeof candidates)[number];
+        score: number;
+        indexGap: number;
+        evidenceMs: number;
+        fetchedMs: number;
+      } | null = null;
       for (const left of leftRows) {
         for (const right of rightRows) {
+          const leftIdentity = sourceAwarePairEvidenceIdentity(left.row);
+          const rightIdentity = sourceAwarePairEvidenceIdentity(right.row);
+          if (leftIdentity === null || leftIdentity !== rightIdentity) continue;
           const score = sourceAwarePairScore(left.row, right.row);
+          if (!Number.isFinite(score) || score > 2) continue;
           const indexGap = Math.abs(left.index - right.index);
+          const evidenceMs = Math.max(
+            sourceAwarePairEvidenceMs(left.row),
+            sourceAwarePairEvidenceMs(right.row),
+          );
+          const fetchedMs = Math.max(
+            sourceAwarePairFetchedMs(left.row),
+            sourceAwarePairFetchedMs(right.row),
+          );
           if (
             bestPair === null ||
-            score < bestPair.score ||
-            (score === bestPair.score && indexGap < bestPair.indexGap)
+            evidenceMs > bestPair.evidenceMs ||
+            (evidenceMs === bestPair.evidenceMs && fetchedMs > bestPair.fetchedMs) ||
+            (evidenceMs === bestPair.evidenceMs && fetchedMs === bestPair.fetchedMs && score < bestPair.score) ||
+            (
+              evidenceMs === bestPair.evidenceMs &&
+              fetchedMs === bestPair.fetchedMs &&
+              score === bestPair.score &&
+              indexGap < bestPair.indexGap
+            )
           ) {
-            bestPair = { left, right, score, indexGap };
+            bestPair = {
+              left,
+              right,
+              score,
+              indexGap,
+              evidenceMs,
+              fetchedMs,
+            };
           }
         }
       }
-      if (bestPair !== null && bestPair.score <= 2) {
+      if (bestPair !== null) {
         out.push(
           {
             ...bestPair.left.row,
