@@ -199,6 +199,8 @@ const authoritativeForecast = buildCfbMarketSharpAwareForecast({
   independentForecast: fullBundle.forecast,
   anchor: outcomeAnchor,
   sharpSplits: [],
+  playbookLine: { provider: "playbook", capturedAt: observedAt, sourceTier: "tier1", homeMoneyline: -330, awayMoneyline: 260, homeSpread: -7.5, awaySpread: 7.5, total: 47.5 },
+  publicSplits: splitSet(),
   evaluatedAt: lockedAt,
 });
 const productionBundle = applyCfbMarketSharpAwareGrades({
@@ -215,6 +217,8 @@ const productionBundle = applyCfbMarketSharpAwareGrades({
     forecast: authoritativeForecast,
   }),
   sharpSplits: [],
+  playbookLine: { provider: "playbook", capturedAt: observedAt, sourceTier: "tier1", homeMoneyline: -330, awayMoneyline: 260, homeSpread: -7.5, awaySpread: 7.5, total: 47.5 },
+  publicSplits: splitSet(),
   operationalOpening: { quote: currentBooks[0]! },
 });
 const { pmf: _authoritativePmf, ...publishedAuthoritativeForecast } = authoritativeForecast;
@@ -311,7 +315,7 @@ assert.deepEqual(trustedCfbSharpEventIdsByGame([trustedSharpRow, {
 }]), {}, "conflicting immutable provider IDs must disable prior-event disambiguation");
 const member = buildCfbMemberFixture([evidence]);
 assert.equal(member.snapshot.games.length, 1);
-assert.equal(member.fixtureRelease, "cfb_v1_member_fixture_2026_08_30_r35_paged_evidence_read");
+assert.equal(member.fixtureRelease, "cfb_v1_member_fixture_2026_08_31_r36_public_consensus_market_input");
 assert.equal(member.snapshot.games[0]!.collegeFootballScope, "fbs_involved", "the CFB reader must classify every member game for the FBS-first board without changing writer scope");
 assert.equal(member.snapshot.games[0]!.footballProjection?.expectedAwayPoints, authoritativeForecast.expectedAwayPoints);
 assert.equal(member.snapshot.games[0]!.footballProjection?.expectedHomePoints, authoritativeForecast.expectedHomePoints);
@@ -1057,6 +1061,8 @@ const marketScopedPayload: CfbForwardEvidencePayload = {
         forecast: authoritativeForecast,
       }),
       sharpSplits: [],
+      playbookLine: payload.market.playbookLine,
+      publicSplits: payload.market.playbookSplits,
       operationalOpening: { quote: currentBooks[0]! },
     }),
     forecast: publishedAuthoritativeForecast,

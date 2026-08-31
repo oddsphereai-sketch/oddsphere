@@ -52,6 +52,8 @@ const games = latest.map((row) => {
     independentForecast: independent,
     anchor,
     sharpSplits: payload.market.sharpApiSplits ?? [],
+    playbookLine: payload.market.playbookLine,
+    publicSplits: payload.market.playbookSplits,
     evaluatedAt: row.capturedAt,
   });
   assertPmf(forecast);
@@ -77,6 +79,8 @@ const games = latest.map((row) => {
       decision,
       selectedSide: canonicalSide(payload.game.home.abbreviation, decision),
       sharpSplits: payload.market.sharpApiSplits ?? [],
+      playbookLine: payload.market.playbookLine,
+      publicSplits: payload.market.playbookSplits,
       operationalOpening: payload.market.operationalOpening,
     }))).map((row) => [row.market, row] as const));
   const marketRows = (["moneyline", "spread", "total"] as const).map((market) => {

@@ -4,6 +4,7 @@ import {
   type CfbCanonicalMarketAnchor,
 } from "./cfbMarketInformedOutcome";
 import type { CfbSharpApiSplitRecord } from "./cfbSharpApiSplits";
+import type { CfbForwardPlaybookLine, CfbForwardPlaybookSplit, CfbForwardPlaybookSplitSet } from "./cfbForwardEvidence";
 import type {
   CfbV1ExactPriceDecision,
   CfbV1DecisionBundle,
@@ -13,11 +14,11 @@ import type {
 } from "./cfbV1Decision";
 
 export const CFB_MARKET_SHARP_AWARE_CANDIDATE_RELEASE =
-  "cfb_market_sharp_aware_candidate_2026_08_30_r6_missing_anchor_game_hold" as const;
+  "cfb_market_sharp_aware_candidate_2026_08_31_r7_public_consensus_market_input" as const;
 export const CFB_MARKET_SHARP_AWARE_SHADOW_RELEASE =
   CFB_MARKET_SHARP_AWARE_CANDIDATE_RELEASE;
 export const CFB_MARKET_SHARP_AWARE_PRODUCTION_RELEASE =
-  "cfb_market_sharp_aware_production_2026_08_30_r8_missing_anchor_game_hold" as const;
+  "cfb_market_sharp_aware_production_2026_08_31_r9_public_consensus_market_input" as const;
 export const CFB_MARKET_SHADOW_WEIGHT = 0.75 as const;
 export const CFB_SHARP_SIGNED_GAP_THRESHOLD_PP = 10 as const;
 export const CFB_SHARP_FULL_STRENGTH_GAP_PP = 20 as const;
@@ -25,6 +26,13 @@ export const CFB_SHARP_MAX_MARGIN_SHIFT_POINTS = 1.5 as const;
 export const CFB_SHARP_MAX_TOTAL_SHIFT_POINTS = 1.5 as const;
 export const CFB_SHARP_MAX_AGE_MINUTES = 120 as const;
 export const CFB_SHARP_LINE_MATCH_TOLERANCE_POINTS = 0.5 as const;
+export const CFB_PUBLIC_SIGNED_GAP_SUPPORT_THRESHOLD_PP = 8 as const;
+export const CFB_PUBLIC_SIGNED_GAP_RESISTANCE_THRESHOLD_PP = 12 as const;
+export const CFB_PUBLIC_FULL_STRENGTH_GAP_PP = 20 as const;
+export const CFB_PUBLIC_MAX_MARGIN_SHIFT_POINTS = 0.75 as const;
+export const CFB_PUBLIC_MAX_TOTAL_SHIFT_POINTS = 0.75 as const;
+export const CFB_PUBLIC_WITH_CIRCA_WEIGHT = 0.5 as const;
+export const CFB_PUBLIC_LINE_MATCH_TOLERANCE_POINTS = 0.5 as const;
 export const CFB_WATCHLIST_NEAR_NEUTRAL_MIN_EDGE_PP = 0 as const;
 export const CFB_WATCHLIST_NEAR_NEUTRAL_MIN_EV = -0.03 as const;
 export const CFB_WATCHLIST_EVIDENCE_CONFLICT_MIN_EDGE_PP = -3 as const;
@@ -42,8 +50,17 @@ export const CFB_PROVISIONAL_SPREAD_LEAN_MIN_PROBABILITY = 0.53 as const;
 export const CFB_PROVISIONAL_SPREAD_LEAN_MIN_EDGE_PP = 2.5 as const;
 export const CFB_PROVISIONAL_SPREAD_LEAN_MIN_EV = 0.02 as const;
 export const CFB_PROVISIONAL_SPREAD_LEAN_MAX_ABS_LINE = 10 as const;
+export const CFB_PROVISIONAL_MONEYLINE_LEAN_MIN_PROBABILITY = 0.55 as const;
+export const CFB_PROVISIONAL_MONEYLINE_LEAN_MIN_EDGE_PP = 2 as const;
+export const CFB_PROVISIONAL_MONEYLINE_LEAN_MIN_EV = 0.01 as const;
+export const CFB_PROVISIONAL_MONEYLINE_LEAN_MIN_PRICE = -300 as const;
+export const CFB_PROVISIONAL_MONEYLINE_LEAN_MAX_PRICE = 300 as const;
+export const CFB_PROVISIONAL_LARGE_SPREAD_LEAN_MIN_PROBABILITY = 0.54 as const;
+export const CFB_PROVISIONAL_LARGE_SPREAD_LEAN_MIN_EDGE_PP = 3 as const;
+export const CFB_PROVISIONAL_LARGE_SPREAD_LEAN_MIN_EV = 0.03 as const;
+export const CFB_PROVISIONAL_LARGE_SPREAD_LEAN_MAX_ABS_LINE = 24 as const;
 export const CFB_PROVISIONAL_TOTAL_LEAN_MIN_PROBABILITY = 0.52 as const;
-export const CFB_PROVISIONAL_TOTAL_LEAN_MIN_EDGE_PP = 2.5 as const;
+export const CFB_PROVISIONAL_TOTAL_LEAN_MIN_EDGE_PP = 2 as const;
 export const CFB_PROVISIONAL_TOTAL_LEAN_MIN_EV = 0.015 as const;
 
 type CanonicalSide = "home" | "away" | "over" | "under";
@@ -51,7 +68,7 @@ export type CfbMarketEvidenceDirection = "support" | "resistance" | "neutral" | 
 
 export type CfbMarketSharpAwareShadowForecast = CfbV1Forecast & {
   shadowRelease: typeof CFB_MARKET_SHARP_AWARE_SHADOW_RELEASE;
-  forecastBasis: "independent_market_sharp_joint_pmf_mixture";
+  forecastBasis: "independent_market_sharp_public_joint_pmf_mixture";
   marketWeight: typeof CFB_MARKET_SHADOW_WEIGHT;
   sharpAdjustment: {
     source: "circa" | null;
@@ -61,6 +78,14 @@ export type CfbMarketSharpAwareShadowForecast = CfbV1Forecast & {
     homeMarginShiftPoints: number;
     totalShiftPoints: number;
     adjustedAnchor: CfbCanonicalMarketAnchor;
+  };
+  publicConsensusAdjustment: {
+    source: "playbook_public_consensus" | null;
+    observedAt: string | null;
+    homeMarginGapPp: number | null;
+    overTotalGapPp: number | null;
+    homeMarginShiftPoints: number;
+    totalShiftPoints: number;
   };
 };
 
@@ -77,6 +102,9 @@ type CfbMarketEvidenceGradeBase = {
   sharpDirection: CfbMarketEvidenceDirection;
   sharpGapPp: number | null;
   sharpObservedAt: string | null;
+  publicDirection: CfbMarketEvidenceDirection;
+  publicGapPp: number | null;
+  publicObservedAt: string | null;
   movementDirection: CfbMarketEvidenceDirection;
   movementImpliedProbabilityDeltaPp: number | null;
   movementLineDelta: number | null;
@@ -96,6 +124,8 @@ export function buildCfbMarketSharpAwareShadowForecast(args: {
   independentForecast: CfbV1Forecast;
   anchor: CfbCanonicalMarketAnchor;
   sharpSplits: CfbSharpApiSplitRecord[];
+  playbookLine?: CfbForwardPlaybookLine | null;
+  publicSplits?: CfbForwardPlaybookSplitSet | null;
   evaluatedAt: string;
 }): CfbMarketSharpAwareShadowForecast {
   const sharp = latestEligibleCirca(args.sharpSplits, args.evaluatedAt);
@@ -111,8 +141,13 @@ export function buildCfbMarketSharpAwareShadowForecast(args: {
   const overTotalGapPp = sharp?.total && Math.abs(sharp.total.line - args.anchor.totalLine) <= CFB_SHARP_LINE_MATCH_TOLERANCE_POINTS
     ? signedGap(sharp.total.over)
     : null;
-  const homeMarginShiftPoints = signedPointShift(homeMarginGapPp, CFB_SHARP_MAX_MARGIN_SHIFT_POINTS);
-  const totalShiftPoints = signedPointShift(overTotalGapPp, CFB_SHARP_MAX_TOTAL_SHIFT_POINTS);
+  const publicRead = publicForecastRead({ ...args, playbookLine: args.playbookLine ?? null, publicSplits: args.publicSplits ?? null });
+  const sharpHomeMarginShiftPoints = signedPointShift(homeMarginGapPp, CFB_SHARP_MAX_MARGIN_SHIFT_POINTS, CFB_SHARP_SIGNED_GAP_THRESHOLD_PP, CFB_SHARP_FULL_STRENGTH_GAP_PP);
+  const sharpTotalShiftPoints = signedPointShift(overTotalGapPp, CFB_SHARP_MAX_TOTAL_SHIFT_POINTS, CFB_SHARP_SIGNED_GAP_THRESHOLD_PP, CFB_SHARP_FULL_STRENGTH_GAP_PP);
+  const publicHomeMarginShiftPoints = signedPointShift(publicRead.homeMarginGapPp, CFB_PUBLIC_MAX_MARGIN_SHIFT_POINTS, CFB_PUBLIC_SIGNED_GAP_SUPPORT_THRESHOLD_PP, CFB_PUBLIC_FULL_STRENGTH_GAP_PP);
+  const publicTotalShiftPoints = signedPointShift(publicRead.overTotalGapPp, CFB_PUBLIC_MAX_TOTAL_SHIFT_POINTS, CFB_PUBLIC_SIGNED_GAP_SUPPORT_THRESHOLD_PP, CFB_PUBLIC_FULL_STRENGTH_GAP_PP);
+  const homeMarginShiftPoints = combinedPointShift(sharpHomeMarginShiftPoints, publicHomeMarginShiftPoints, CFB_SHARP_MAX_MARGIN_SHIFT_POINTS);
+  const totalShiftPoints = combinedPointShift(sharpTotalShiftPoints, publicTotalShiftPoints, CFB_SHARP_MAX_TOTAL_SHIFT_POINTS);
   const adjustedAnchor: CfbCanonicalMarketAnchor = {
     ...args.anchor,
     homeSpread: -( -args.anchor.homeSpread + homeMarginShiftPoints),
@@ -132,16 +167,24 @@ export function buildCfbMarketSharpAwareShadowForecast(args: {
     ...summary,
     pmf,
     shadowRelease: CFB_MARKET_SHARP_AWARE_SHADOW_RELEASE,
-    forecastBasis: "independent_market_sharp_joint_pmf_mixture",
+    forecastBasis: "independent_market_sharp_public_joint_pmf_mixture",
     marketWeight: CFB_MARKET_SHADOW_WEIGHT,
     sharpAdjustment: {
       source: sharp ? "circa" : null,
       observedAt: sharp?.capturedAt ?? null,
       homeMarginGapPp,
       overTotalGapPp,
-      homeMarginShiftPoints,
-      totalShiftPoints,
+      homeMarginShiftPoints: sharpHomeMarginShiftPoints,
+      totalShiftPoints: sharpTotalShiftPoints,
       adjustedAnchor,
+    },
+    publicConsensusAdjustment: {
+      source: publicRead.observedAt ? "playbook_public_consensus" : null,
+      observedAt: publicRead.observedAt,
+      homeMarginGapPp: publicRead.homeMarginGapPp,
+      overTotalGapPp: publicRead.overTotalGapPp,
+      homeMarginShiftPoints: publicHomeMarginShiftPoints,
+      totalShiftPoints: publicTotalShiftPoints,
     },
   };
 }
@@ -150,6 +193,8 @@ export function buildCfbMarketSharpAwareForecast(args: {
   independentForecast: CfbV1Forecast;
   anchor: CfbCanonicalMarketAnchor;
   sharpSplits: CfbSharpApiSplitRecord[];
+  playbookLine?: CfbForwardPlaybookLine | null;
+  publicSplits?: CfbForwardPlaybookSplitSet | null;
   evaluatedAt: string;
 }): CfbMarketSharpAwareForecast {
   const { shadowRelease, ...forecast } = buildCfbMarketSharpAwareShadowForecast(args);
@@ -164,6 +209,8 @@ export function buildCfbMarketEvidenceGradeShadow(args: {
   decision: CfbV1ExactPriceDecision;
   selectedSide: CanonicalSide;
   sharpSplits: CfbSharpApiSplitRecord[];
+  playbookLine?: CfbForwardPlaybookLine | null;
+  publicSplits?: CfbForwardPlaybookSplitSet | null;
   operationalOpening: { quote: NcaafBookOdds } | null;
 }): CfbMarketEvidenceGradeShadow {
   const sharpRead = strictSharpRead({
@@ -176,17 +223,24 @@ export function buildCfbMarketEvidenceGradeShadow(args: {
     selectedSide: args.selectedSide,
     operationalOpening: args.operationalOpening,
   });
+  const publicRead = publicConsensusRead({
+    decision: args.decision,
+    selectedSide: args.selectedSide,
+    playbookLine: args.playbookLine ?? null,
+    publicSplits: args.publicSplits ?? null,
+  });
   const sharpResistance = sharpRead.direction === "resistance";
+  const publicResistance = publicRead.direction === "resistance" && sharpRead.direction !== "support";
   const movementResistance = movementRead.direction === "resistance";
-  const anyResistance = sharpResistance || movementResistance;
-  const jointResistance = sharpResistance && movementResistance;
-  const promotableSupport = sharpRead.direction === "support" && !movementResistance;
+  const anyResistance = sharpResistance || publicResistance || movementResistance;
+  const resistanceCount = Number(sharpResistance) + Number(publicResistance) + Number(movementResistance);
+  const promotableSupport = (sharpRead.direction === "support" || (publicRead.direction === "support" && sharpRead.direction !== "resistance")) && !anyResistance;
   let finalGrade = args.decision.grade;
   const reasonCodes: string[] = [];
 
   if (args.decision.grade === "Best Angle" && anyResistance) {
-    finalGrade = jointResistance ? "Watchlist" : "Lean";
-    reasonCodes.push(jointResistance ? "joint_sharp_movement_resistance" : "market_evidence_resistance");
+    finalGrade = resistanceCount >= 2 ? "Watchlist" : "Lean";
+    reasonCodes.push(resistanceCount >= 2 ? "joint_market_evidence_resistance" : "market_evidence_resistance");
   } else if (args.decision.grade === "Lean" && anyResistance) {
     finalGrade = "Watchlist";
     reasonCodes.push("market_evidence_resistance");
@@ -202,6 +256,18 @@ export function buildCfbMarketEvidenceGradeShadow(args: {
     reasonCodes.push("provisional_complete_tuple_best_angle");
   } else if (
     args.decision.grade === "Watchlist" &&
+    args.decision.market === "moneyline" &&
+    !anyResistance &&
+    args.decision.modelProbability >= CFB_PROVISIONAL_MONEYLINE_LEAN_MIN_PROBABILITY &&
+    args.decision.edgePercentagePoints >= CFB_PROVISIONAL_MONEYLINE_LEAN_MIN_EDGE_PP &&
+    args.decision.expectedValue >= CFB_PROVISIONAL_MONEYLINE_LEAN_MIN_EV &&
+    args.decision.evaluatedQuote.price >= CFB_PROVISIONAL_MONEYLINE_LEAN_MIN_PRICE &&
+    args.decision.evaluatedQuote.price <= CFB_PROVISIONAL_MONEYLINE_LEAN_MAX_PRICE
+  ) {
+    finalGrade = "Lean";
+    reasonCodes.push("provisional_complete_tuple_moneyline_lean");
+  } else if (
+    args.decision.grade === "Watchlist" &&
     args.decision.market === "spread" &&
     !anyResistance &&
     args.decision.modelProbability >= CFB_PROVISIONAL_SPREAD_LEAN_MIN_PROBABILITY &&
@@ -214,6 +280,21 @@ export function buildCfbMarketEvidenceGradeShadow(args: {
   ) {
     finalGrade = "Lean";
     reasonCodes.push("provisional_complete_tuple_spread_lean");
+  } else if (
+    args.decision.grade === "Watchlist" &&
+    args.decision.market === "spread" &&
+    !anyResistance &&
+    args.decision.modelProbability >= CFB_PROVISIONAL_LARGE_SPREAD_LEAN_MIN_PROBABILITY &&
+    args.decision.edgePercentagePoints >= CFB_PROVISIONAL_LARGE_SPREAD_LEAN_MIN_EDGE_PP &&
+    args.decision.expectedValue >= CFB_PROVISIONAL_LARGE_SPREAD_LEAN_MIN_EV &&
+    args.decision.evaluatedQuote.line !== null &&
+    Math.abs(args.decision.evaluatedQuote.line) > CFB_PROVISIONAL_SPREAD_LEAN_MAX_ABS_LINE &&
+    Math.abs(args.decision.evaluatedQuote.line) <= CFB_PROVISIONAL_LARGE_SPREAD_LEAN_MAX_ABS_LINE &&
+    args.decision.evaluatedQuote.price >= CFB_PROVISIONAL_ACTIONABLE_MIN_PRICE &&
+    args.decision.evaluatedQuote.price <= CFB_PROVISIONAL_ACTIONABLE_MAX_PRICE
+  ) {
+    finalGrade = "Lean";
+    reasonCodes.push("provisional_complete_tuple_large_spread_lean");
   } else if (
     args.decision.grade === "Watchlist" &&
     args.decision.market === "total" &&
@@ -232,7 +313,7 @@ export function buildCfbMarketEvidenceGradeShadow(args: {
     nearLeanThreshold(args.decision)
   ) {
     finalGrade = "Lean";
-    reasonCodes.push("strict_sharp_near_threshold_promotion");
+    reasonCodes.push(sharpRead.direction === "support" ? "strict_sharp_near_threshold_promotion" : "public_consensus_near_threshold_promotion");
   } else if (
     args.decision.grade === "Watchlist" &&
     args.decision.market === "spread" &&
@@ -257,7 +338,7 @@ export function buildCfbMarketEvidenceGradeShadow(args: {
   } else if (
     args.decision.grade === "No Play" &&
     !anyResistance &&
-    (sharpRead.direction === "support" || movementRead.direction === "support") &&
+    (sharpRead.direction === "support" || publicRead.direction === "support" || movementRead.direction === "support") &&
     args.decision.edgePercentagePoints >= CFB_WATCHLIST_EVIDENCE_CONFLICT_MIN_EDGE_PP &&
     args.decision.expectedValue >= CFB_WATCHLIST_EVIDENCE_CONFLICT_MIN_EV
   ) {
@@ -275,6 +356,9 @@ export function buildCfbMarketEvidenceGradeShadow(args: {
     sharpDirection: sharpRead.direction,
     sharpGapPp: sharpRead.gapPp,
     sharpObservedAt: sharpRead.observedAt,
+    publicDirection: publicRead.direction,
+    publicGapPp: publicRead.gapPp,
+    publicObservedAt: publicRead.observedAt,
     movementDirection: movementRead.direction,
     movementImpliedProbabilityDeltaPp: movementRead.impliedProbabilityDeltaPp,
     movementLineDelta: movementRead.lineDelta,
@@ -286,6 +370,8 @@ export function buildCfbMarketEvidenceGrade(args: {
   decision: CfbV1ExactPriceDecision;
   selectedSide: CanonicalSide;
   sharpSplits: CfbSharpApiSplitRecord[];
+  playbookLine?: CfbForwardPlaybookLine | null;
+  publicSplits?: CfbForwardPlaybookSplitSet | null;
   operationalOpening: { quote: NcaafBookOdds } | null;
 }): CfbMarketEvidenceGrade {
   const { shadowRelease, ...grade } = buildCfbMarketEvidenceGradeShadow(args);
@@ -300,6 +386,8 @@ export function applyCfbMarketSharpAwareGrades(args: {
   bundle: CfbV1DecisionBundle;
   homeTeam: string;
   sharpSplits: CfbSharpApiSplitRecord[];
+  playbookLine?: CfbForwardPlaybookLine | null;
+  publicSplits?: CfbForwardPlaybookSplitSet | null;
   operationalOpening: { quote: NcaafBookOdds } | null;
 }): CfbV1DecisionBundle {
   const adjustments = new Map(annotateCfbCrossMarketGradeCoherence(
@@ -307,6 +395,8 @@ export function applyCfbMarketSharpAwareGrades(args: {
       decision,
       selectedSide: selectedSide(args.homeTeam, decision),
       sharpSplits: args.sharpSplits,
+      playbookLine: args.playbookLine,
+      publicSplits: args.publicSplits,
       operationalOpening: args.operationalOpening,
     })),
   ).map((adjustment) => [adjustment.market, adjustment] as const));
@@ -323,6 +413,7 @@ export function applyCfbMarketSharpAwareGrades(args: {
           release: adjustment.release,
           candidateRelease: adjustment.candidateRelease,
           sharpDirection: adjustment.sharpDirection,
+          publicDirection: adjustment.publicDirection,
           movementDirection: adjustment.movementDirection,
           reasonCodes: adjustment.reasonCodes,
         },
@@ -462,11 +553,100 @@ function signedGap(side: { ticketsPct: number; moneyPct: number }): number {
   return side.moneyPct - side.ticketsPct;
 }
 
-function signedPointShift(gapPp: number | null, maximum: number): number {
-  if (gapPp === null || Math.abs(gapPp) <= CFB_SHARP_SIGNED_GAP_THRESHOLD_PP) return 0;
-  const strength = Math.min(1, (Math.abs(gapPp) - CFB_SHARP_SIGNED_GAP_THRESHOLD_PP) /
-    (CFB_SHARP_FULL_STRENGTH_GAP_PP - CFB_SHARP_SIGNED_GAP_THRESHOLD_PP));
+function signedPointShift(gapPp: number | null, maximum: number, threshold: number, fullStrength: number): number {
+  if (gapPp === null || Math.abs(gapPp) <= threshold) return 0;
+  const strength = Math.min(1, (Math.abs(gapPp) - threshold) / (fullStrength - threshold));
   return Math.sign(gapPp) * maximum * strength;
+}
+
+function combinedPointShift(sharpShift: number, publicShift: number, maximum: number): number {
+  const publicWeight = Math.abs(sharpShift) > 0 ? CFB_PUBLIC_WITH_CIRCA_WEIGHT : 1;
+  const combined = Math.max(-maximum, Math.min(maximum, sharpShift + publicWeight * publicShift));
+  if (sharpShift > 0) return Math.max(0, combined);
+  if (sharpShift < 0) return Math.min(0, combined);
+  return combined;
+}
+
+function publicForecastRead(args: {
+  independentForecast: CfbV1Forecast;
+  anchor: CfbCanonicalMarketAnchor;
+  playbookLine: CfbForwardPlaybookLine | null;
+  publicSplits: CfbForwardPlaybookSplitSet | null;
+  evaluatedAt: string;
+}): { observedAt: string | null; homeMarginGapPp: number | null; overTotalGapPp: number | null } {
+  if (!args.publicSplits) return { observedAt: null, homeMarginGapPp: null, overTotalGapPp: null };
+  const moneyline = eligiblePublicSplit(args.publicSplits.moneyline, args.evaluatedAt, args.independentForecast.gameStartsAt);
+  const spread = args.playbookLine?.homeSpread !== null && args.playbookLine?.homeSpread !== undefined &&
+    Math.abs(args.playbookLine.homeSpread - args.anchor.homeSpread) <= CFB_PUBLIC_LINE_MATCH_TOLERANCE_POINTS
+    ? eligiblePublicSplit(args.publicSplits.spread, args.evaluatedAt, args.independentForecast.gameStartsAt)
+    : null;
+  const total = args.playbookLine?.total !== null && args.playbookLine?.total !== undefined &&
+    Math.abs(args.playbookLine.total - args.anchor.totalLine) <= CFB_PUBLIC_LINE_MATCH_TOLERANCE_POINTS
+    ? eligiblePublicSplit(args.publicSplits.total, args.evaluatedAt, args.independentForecast.gameStartsAt)
+    : null;
+  const marginGaps = [publicHomeGap(moneyline), publicHomeGap(spread)].filter((value): value is number => value !== null);
+  const observed = [moneyline, spread, total].filter((value): value is CfbForwardPlaybookSplit => value !== null)
+    .map((value) => value.capturedAt).sort().at(-1) ?? null;
+  return {
+    observedAt: observed,
+    homeMarginGapPp: marginGaps.length > 0 ? mean(marginGaps) : null,
+    overTotalGapPp: publicOverGap(total),
+  };
+}
+
+function publicConsensusRead(args: {
+  decision: CfbV1ExactPriceDecision;
+  selectedSide: CanonicalSide;
+  playbookLine: CfbForwardPlaybookLine | null;
+  publicSplits: CfbForwardPlaybookSplitSet | null;
+}): { direction: CfbMarketEvidenceDirection; gapPp: number | null; observedAt: string | null } {
+  const split = args.publicSplits?.[args.decision.market] ?? null;
+  const eligible = split ? eligiblePublicSplit(split, args.decision.evaluatedAt, args.decision.gameStartsAt) : null;
+  if (!eligible) return { direction: "unknown", gapPp: null, observedAt: null };
+  if (args.decision.market === "spread" && (args.decision.evaluatedQuote.line === null || args.playbookLine?.homeSpread === null || args.playbookLine?.homeSpread === undefined)) {
+    return { direction: "unknown", gapPp: null, observedAt: eligible.capturedAt };
+  }
+  if (args.decision.market === "spread") {
+    const publicLine = args.selectedSide === "home" ? args.playbookLine!.homeSpread : args.playbookLine!.awaySpread;
+    if (publicLine === null || args.decision.evaluatedQuote.line === null || Math.abs(publicLine - args.decision.evaluatedQuote.line) > CFB_PUBLIC_LINE_MATCH_TOLERANCE_POINTS) {
+      return { direction: "unknown", gapPp: null, observedAt: eligible.capturedAt };
+    }
+  }
+  if (args.decision.market === "total" && (args.decision.evaluatedQuote.line === null || args.playbookLine?.total === null || args.playbookLine?.total === undefined || Math.abs(args.playbookLine.total - args.decision.evaluatedQuote.line) > CFB_PUBLIC_LINE_MATCH_TOLERANCE_POINTS)) {
+    return { direction: "unknown", gapPp: null, observedAt: eligible.capturedAt };
+  }
+  const gapPp = publicSelectedGap(eligible, args.selectedSide);
+  if (gapPp === null) return { direction: "unknown", gapPp: null, observedAt: eligible.capturedAt };
+  return {
+    direction: gapPp >= CFB_PUBLIC_SIGNED_GAP_SUPPORT_THRESHOLD_PP ? "support" : gapPp <= -CFB_PUBLIC_SIGNED_GAP_RESISTANCE_THRESHOLD_PP ? "resistance" : "neutral",
+    gapPp,
+    observedAt: eligible.capturedAt,
+  };
+}
+
+function eligiblePublicSplit(split: CfbForwardPlaybookSplit, evaluatedAt: string, gameStartsAt: string): CfbForwardPlaybookSplit | null {
+  const evaluatedMs = Date.parse(evaluatedAt);
+  const capturedMs = Date.parse(split.capturedAt);
+  const gameMs = Date.parse(gameStartsAt);
+  if (![evaluatedMs, capturedMs, gameMs].every(Number.isFinite)) return null;
+  const freshnessMinutes = gameMs - capturedMs <= 48 * 60 * 60_000 ? 90 : 390;
+  const ageMinutes = (evaluatedMs - capturedMs) / 60_000;
+  return ageMinutes >= 0 && ageMinutes <= freshnessMinutes ? split : null;
+}
+
+function publicHomeGap(split: CfbForwardPlaybookSplit | null): number | null {
+  return split && split.homeMoneyPct !== null && split.homeBetsPct !== null ? split.homeMoneyPct - split.homeBetsPct : null;
+}
+
+function publicOverGap(split: CfbForwardPlaybookSplit | null): number | null {
+  return split && split.overMoneyPct !== null && split.overBetsPct !== null ? split.overMoneyPct - split.overBetsPct : null;
+}
+
+function publicSelectedGap(split: CfbForwardPlaybookSplit, side: CanonicalSide): number | null {
+  if (side === "home") return split.homeMoneyPct !== null && split.homeBetsPct !== null ? split.homeMoneyPct - split.homeBetsPct : null;
+  if (side === "away") return split.awayMoneyPct !== null && split.awayBetsPct !== null ? split.awayMoneyPct - split.awayBetsPct : null;
+  if (side === "over") return split.overMoneyPct !== null && split.overBetsPct !== null ? split.overMoneyPct - split.overBetsPct : null;
+  return split.underMoneyPct !== null && split.underBetsPct !== null ? split.underMoneyPct - split.underBetsPct : null;
 }
 
 function mixPmfs(

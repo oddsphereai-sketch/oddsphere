@@ -16,6 +16,8 @@ import {
   CFB_FORWARD_MARKET_SHARP_PRIOR_EVIDENCE_SCHEMA_RELEASE,
   CFB_FORWARD_MARKET_SHARP_PRIOR_MEMBER_RELEASE,
   CFB_FORWARD_PROVIDER_DISCOVERY_PREVIOUS_EVIDENCE_SCHEMA_RELEASE,
+  CFB_FORWARD_PUBLIC_SPLITS_PREVIOUS_EVIDENCE_SCHEMA_RELEASE,
+  CFB_FORWARD_PUBLIC_SPLITS_PREVIOUS_MEMBER_RELEASE,
   CFB_FORWARD_PRE_DIRECTIONAL_EVIDENCE_SCHEMA_RELEASE,
   CFB_FORWARD_PREVIOUS_EVIDENCE_SCHEMA_RELEASE,
   CFB_FORWARD_PRIOR_EVIDENCE_SCHEMA_RELEASE,
@@ -50,9 +52,9 @@ import { cfbFootballEvidenceStats } from "./footballMemberEvidence";
 import { CFB_MARKET_SHARP_AWARE_PRODUCTION_RELEASE } from "./cfbMarketSharpAwareShadow";
 
 export const CFB_MEMBER_FIXTURE_RELEASE =
-  "cfb_v1_member_fixture_2026_08_30_r35_paged_evidence_read" as const;
+  "cfb_v1_member_fixture_2026_08_31_r36_public_consensus_market_input" as const;
 export const CFB_PUBLIC_OUTCOME_CONTRACT_RELEASE =
-  "cfb_market_sharp_public_outcome_contract_2026_08_30_r35_missing_anchor_game_hold" as const;
+  "cfb_market_sharp_public_outcome_contract_2026_08_31_r36_public_consensus_market_input" as const;
 export const CFB_CONTEXT_ONLY_QUOTE_CAPTURE_SKEW_MS = 5_000 as const;
 const CFB_MARKET_CONTEXT_MAX_CAPTURE_LAG_MINUTES = 10;
 const CFB_PUBLIC_SCORE_DIRECTION_TOLERANCE_POINTS = 0.25;
@@ -63,6 +65,7 @@ const CFB_AMBIGUOUS_SCOPE_PREVIOUS_DECISION_RELEASE = "cfb_v1_daily_edge_decisio
 const CFB_MARKET_SHARP_PRIOR_DECISION_RELEASE = "cfb_v1_daily_edge_decision_2026_08_28_r15_ambiguous_event_scope" as const;
 const CFB_MARKET_SHARP_PREVIOUS_DECISION_RELEASE = "cfb_v1_daily_edge_decision_2026_08_29_r16_market_sharp_authoritative" as const;
 const CFB_TRANSITION_PREVIOUS_DECISION_RELEASE = "cfb_v1_daily_edge_decision_2026_08_29_r17_transition_coherent" as const;
+const CFB_PUBLIC_SPLITS_PREVIOUS_DECISION_RELEASE = "cfb_v1_daily_edge_decision_2026_08_30_r21_missing_anchor_game_hold" as const;
 const CFB_PROVIDER_DISCOVERY_PREVIOUS_MEMBER_RELEASE = "cfb_v1_member_release_2026_08_28_r15_directional_pmf" as const;
 const CFB_PROVIDER_DISCOVERY_PREVIOUS_DECISION_RELEASE = "cfb_v1_daily_edge_decision_2026_08_28_r12_directional_pmf" as const;
 const CFB_CANONICAL_PRICE_PREVIOUS_MEMBER_RELEASE = "cfb_v1_member_release_2026_08_28_r16_canonical_price_coverage" as const;
@@ -225,19 +228,38 @@ export function selectLatestCfbMemberEvidenceRows(
       )
     : null;
   const transitionPreviousAuthority = transitionPrevious ?? transitionPreviousBoundary ?? marketSharpPreviousAuthority;
+  const publicSplitsPrevious = completeRowsForRelease(
+    rows,
+    CFB_FORWARD_PUBLIC_SPLITS_PREVIOUS_EVIDENCE_SCHEMA_RELEASE,
+    CFB_FORWARD_PUBLIC_SPLITS_PREVIOUS_MEMBER_RELEASE,
+    CFB_PUBLIC_SPLITS_PREVIOUS_DECISION_RELEASE,
+  );
+  const publicSplitsPreviousBoundary = transitionPreviousAuthority
+    ? immutableBoundaryTransitionRows(
+        rows,
+        now,
+        CFB_FORWARD_PUBLIC_SPLITS_PREVIOUS_EVIDENCE_SCHEMA_RELEASE,
+        CFB_FORWARD_PUBLIC_SPLITS_PREVIOUS_MEMBER_RELEASE,
+        CFB_PUBLIC_SPLITS_PREVIOUS_DECISION_RELEASE,
+        transitionPreviousAuthority,
+      )
+    : null;
+  const publicSplitsPreviousAuthority = publicSplitsPrevious ?? publicSplitsPreviousBoundary ?? transitionPreviousAuthority;
   const current = completeRowsForRelease(rows, CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE, CFB_FORWARD_MEMBER_RELEASE, CFB_V1_DECISION_RELEASE);
   if (current) return current;
-  const immutableBoundaryTransition = transitionPreviousAuthority
+  const immutableBoundaryTransition = publicSplitsPreviousAuthority
     ? immutableBoundaryTransitionRows(
         rows,
         now,
         CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE,
         CFB_FORWARD_MEMBER_RELEASE,
         CFB_V1_DECISION_RELEASE,
-        transitionPreviousAuthority,
+        publicSplitsPreviousAuthority,
       )
     : null;
   if (immutableBoundaryTransition) return immutableBoundaryTransition;
+  if (publicSplitsPrevious) return publicSplitsPrevious;
+  if (publicSplitsPreviousBoundary) return publicSplitsPreviousBoundary;
   if (transitionPrevious) return transitionPrevious;
   if (transitionPreviousBoundary) return transitionPreviousBoundary;
   if (marketSharpPrevious) return marketSharpPrevious;
@@ -718,7 +740,7 @@ function buildMarket(
     ? outlook
       ? `The ${label} prediction is ${outlookLabel(payload, outlook)} at ${(100 * outlook.independentProbability).toFixed(1)}% from the primary outcome PMF. The exact-price Bet grade is No Play because ${unavailableReason ?? "the exact-price evidence is incomplete"}.${oneSidedContext}`
       : `The ${label} Bet grade is No Play because ${unavailableReason ?? "the exact-price evidence is incomplete"}. The game-level prediction remains live.${oneSidedContext}`
-    : `${decision.side} is evaluated at ${formatAmerican(decision.evaluatedQuote.price)} from ${decision.evaluatedQuote.sportsbook}; the ${decision.grade} grade uses that exact ${decision.evaluatedQuote.marketSelection === "coherent_paired_alternate" ? "paired alternate offer" : "main-line quote"}, the authoritative PMF and calibrated probability, strictly matched market/sharp evidence when available, and other-book fair consensus.${crossMarketExplanation(payload, market, decision)}`;
+    : `${decision.side} is evaluated at ${formatAmerican(decision.evaluatedQuote.price)} from ${decision.evaluatedQuote.sportsbook}; the ${decision.grade} grade uses that exact ${decision.evaluatedQuote.marketSelection === "coherent_paired_alternate" ? "paired alternate offer" : "main-line quote"}, the authoritative PMF and calibrated probability, public money-versus-ticket divergence, stronger strictly matched sharp-book evidence when available, same-book movement, and other-book fair consensus.${crossMarketExplanation(payload, market, decision)}`;
   const publicSplits = buildPublicSplits(payload, market);
   const marketPrediction = buildMarketPrediction(payload, market, decision, outlook);
   return {
@@ -743,7 +765,7 @@ function buildMarket(
     whyLine: reason,
     riskLine: decision?.evaluatedQuote.marketSelection === "coherent_paired_alternate"
       ? "The sportsbook labels this as an alternate offer. It is evaluated only because at least two other trusted named books carry the identical line; no line interpolation or consensus price is used."
-      : "The authoritative forecast and exact-price Bet grade share one coherent PMF. Playbook public splits remain display context and are never relabeled as strictly matched sharp evidence.",
+      : "The authoritative forecast and exact-price Bet grade share one coherent PMF. Playbook public money-versus-ticket divergence is a bounded lower-strength model input; it remains separately labeled and is never relabeled as strictly matched Circa sharp evidence.",
     modelProb: displayedProbability,
     marketFairProb: decision?.marketFairProbability ?? null,
     pinnacleEvPct: decision ? decision.expectedValue * 100 : null,
@@ -1256,9 +1278,9 @@ function splitValue(split: CfbForwardPlaybookSplit | null, market: CfbV1Market, 
 function buildSignals(payload: CfbForwardEvidencePayload): DailyEdgeGameDto["sharpSignals"] {
   if (!payload.market.playbookSplits) return [];
   return [
-    { market: "ML", category: "handle_gap", description: "Playbook public money and ticket consensus is available for both teams.", source: "Playbook public consensus", direction: "neutral" },
-    { market: "OU", category: "handle_gap", description: "Playbook public money and ticket consensus is available for Over and Under.", source: "Playbook public consensus", direction: "neutral" },
-    { market: "NRFI", category: "handle_gap", description: "Playbook public money and ticket consensus is available for both spread sides.", source: "Playbook public consensus", direction: "neutral" },
+    { market: "ML", category: "handle_gap", description: "Playbook public money-versus-ticket divergence is available as a bounded market input for both teams.", source: "Playbook public consensus", direction: "neutral" },
+    { market: "OU", category: "handle_gap", description: "Playbook public money-versus-ticket divergence is available as a bounded market input for Over and Under.", source: "Playbook public consensus", direction: "neutral" },
+    { market: "NRFI", category: "handle_gap", description: "Playbook public money-versus-ticket divergence is available as a bounded market input for both spread sides.", source: "Playbook public consensus", direction: "neutral" },
   ];
 }
 

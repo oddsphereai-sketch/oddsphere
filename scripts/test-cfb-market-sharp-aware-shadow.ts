@@ -23,6 +23,7 @@ const books = [
 const independent = getCfbV1Forecast("457159");
 const anchor = resolveCfbCanonicalMarketAnchor({ books });
 assert.ok(anchor);
+const playbookLine = { provider: "playbook" as const, capturedAt: observedAt, sourceTier: "consensus", homeMoneyline: -180, awayMoneyline: 155, homeSpread: -4, awaySpread: 4, total: 48.5 };
 
 const noSharp = buildCfbMarketSharpAwareShadowForecast({ independentForecast: independent, anchor, sharpSplits: [], evaluatedAt: observedAt });
 assert.equal(noSharp.marketWeight, CFB_MARKET_SHADOW_WEIGHT);
@@ -30,6 +31,34 @@ assert.equal(noSharp.sharpAdjustment.source, null);
 assert.equal(noSharp.sharpAdjustment.homeMarginShiftPoints, 0);
 assert.equal(noSharp.sharpAdjustment.totalShiftPoints, 0);
 assert.ok(noSharp.expectedMarginHome > independent.expectedMarginHome, "the market-dominant forecast moves the Hawaii margin toward Stanford");
+
+const publicHomeOver = publicSplitSet({ homeTickets: 40, homeMoney: 60, overTickets: 40, overMoney: 60 });
+const withPublic = buildCfbMarketSharpAwareShadowForecast({ independentForecast: independent, anchor, sharpSplits: [], playbookLine, publicSplits: publicHomeOver, evaluatedAt: observedAt });
+assert.equal(withPublic.publicConsensusAdjustment.source, "playbook_public_consensus");
+assert.equal(withPublic.publicConsensusAdjustment.homeMarginShiftPoints, 0.75);
+assert.equal(withPublic.publicConsensusAdjustment.totalShiftPoints, 0.75);
+assert.ok(withPublic.expectedMarginHome > noSharp.expectedMarginHome, "public home money-versus-ticket divergence must move the coherent margin at bounded lower strength");
+assert.ok(withPublic.expectedTotal > noSharp.expectedTotal, "public Over money-versus-ticket divergence must move the coherent total at bounded lower strength");
+const stalePublic = Object.fromEntries(Object.entries(publicHomeOver).map(([market, split]) => [market, { ...split, capturedAt: "2026-08-28T05:29:59.000Z" }])) as typeof publicHomeOver;
+const stalePublicForecast = buildCfbMarketSharpAwareShadowForecast({ independentForecast: independent, anchor, sharpSplits: [], playbookLine, publicSplits: stalePublic, evaluatedAt: observedAt });
+assert.equal(stalePublicForecast.publicConsensusAdjustment.source, null, "public evidence older than the far-game cadence is unavailable");
+const futurePublic = Object.fromEntries(Object.entries(publicHomeOver).map(([market, split]) => [market, { ...split, capturedAt: "2026-08-28T12:00:00.001Z" }])) as typeof publicHomeOver;
+const futurePublicForecast = buildCfbMarketSharpAwareShadowForecast({ independentForecast: independent, anchor, sharpSplits: [], playbookLine, publicSplits: futurePublic, evaluatedAt: observedAt });
+assert.equal(futurePublicForecast.publicConsensusAdjustment.source, null, "future public evidence cannot move the forecast");
+const lineOnlyPublic = {
+  ...publicHomeOver,
+  moneyline: { ...publicHomeOver.moneyline, homeMoneyPct: null, awayMoneyPct: null, homeBetsPct: null, awayBetsPct: null },
+};
+const mismatchedPublicForecast = buildCfbMarketSharpAwareShadowForecast({
+  independentForecast: independent,
+  anchor,
+  sharpSplits: [],
+  playbookLine: { ...playbookLine, homeSpread: -6, awaySpread: 6, total: 51 },
+  publicSplits: lineOnlyPublic,
+  evaluatedAt: observedAt,
+});
+assert.equal(mismatchedPublicForecast.publicConsensusAdjustment.homeMarginShiftPoints, 0, "mismatched public Spread evidence cannot move the margin anchor");
+assert.equal(mismatchedPublicForecast.publicConsensusAdjustment.totalShiftPoints, 0, "mismatched public Total evidence cannot move the total anchor");
 
 const sharpHomeOver = sharpRecord({
   homeTickets: 40,
@@ -43,6 +72,16 @@ assert.equal(withSharp.sharpAdjustment.homeMarginShiftPoints, 1.5);
 assert.equal(withSharp.sharpAdjustment.totalShiftPoints, 1.5);
 assert.ok(withSharp.expectedMarginHome > noSharp.expectedMarginHome, "strict home sharp support moves the coherent margin toward Stanford");
 assert.ok(withSharp.expectedTotal > noSharp.expectedTotal, "strict Over sharp support moves the coherent total upward");
+
+const publicAwayUnder = publicSplitSet({ homeTickets: 60, homeMoney: 40, overTickets: 60, overMoney: 40 });
+const opposingInputs = buildCfbMarketSharpAwareShadowForecast({ independentForecast: independent, anchor, sharpSplits: [sharpHomeOver], playbookLine, publicSplits: publicAwayUnder, evaluatedAt: observedAt });
+assert.equal(opposingInputs.sharpAdjustment.homeMarginShiftPoints, 1.5);
+assert.equal(opposingInputs.publicConsensusAdjustment.homeMarginShiftPoints, -0.75);
+assert.ok(opposingInputs.expectedMarginHome > noSharp.expectedMarginHome, "full-strength Circa support must remain stronger than opposing public consensus");
+const weakSharpHomeOver = sharpRecord({ homeTickets: 44, homeMoney: 56, overTickets: 44, overMoney: 56 });
+const weakSharpOpposed = buildCfbMarketSharpAwareShadowForecast({ independentForecast: independent, anchor, sharpSplits: [weakSharpHomeOver], playbookLine, publicSplits: publicAwayUnder, evaluatedAt: observedAt });
+assert.ok(weakSharpOpposed.sharpAdjustment.homeMarginShiftPoints > 0);
+assert.ok(weakSharpOpposed.sharpAdjustment.adjustedAnchor.homeSpread <= anchor.homeSpread, "opposing public consensus cannot reverse a qualifying Circa anchor direction");
 
 const mass = withSharp.pmf.reduce((sum, cell) => sum + cell.probability, 0);
 const expectedHome = withSharp.pmf.reduce((sum, cell) => sum + cell.home * cell.probability, 0);
@@ -127,6 +166,41 @@ const promoted = buildCfbMarketEvidenceGradeShadow({
 });
 assert.equal(promoted.sharpDirection, "support");
 assert.equal(promoted.finalGrade, "Lean", "strict sharp support promotes a positive near-threshold Watchlist");
+
+const publicPromoted = buildCfbMarketEvidenceGradeShadow({
+  decision: { ...moneyline, grade: "Watchlist", edgePercentagePoints: 2.5, expectedValue: 0.01, evaluatedQuote: { ...moneyline.evaluatedQuote, price: 155 } },
+  selectedSide: "away",
+  sharpSplits: [],
+  playbookLine,
+  publicSplits: publicAwayUnder,
+  operationalOpening: null,
+});
+assert.equal(publicPromoted.publicDirection, "support");
+assert.equal(publicPromoted.finalGrade, "Lean", "positive-EV near-threshold public money support promotes a complete Watchlist");
+assert.deepEqual(publicPromoted.reasonCodes, ["public_consensus_near_threshold_promotion"]);
+
+const circaPriorityPromotion = buildCfbMarketEvidenceGradeShadow({
+  decision: { ...moneyline, grade: "Watchlist", edgePercentagePoints: 2.5, expectedValue: 0.01, evaluatedQuote: { ...moneyline.evaluatedQuote, price: 155 } },
+  selectedSide: "away",
+  sharpSplits: [sharpAwaySupport],
+  playbookLine,
+  publicSplits: publicHomeOver,
+  operationalOpening: null,
+});
+assert.equal(circaPriorityPromotion.sharpDirection, "support");
+assert.equal(circaPriorityPromotion.publicDirection, "resistance");
+assert.equal(circaPriorityPromotion.finalGrade, "Lean", "qualifying Circa support takes priority over opposing public consensus");
+
+const publicResisted = buildCfbMarketEvidenceGradeShadow({
+  decision: { ...moneyline, grade: "Lean" },
+  selectedSide: "away",
+  sharpSplits: [],
+  playbookLine,
+  publicSplits: publicHomeOver,
+  operationalOpening: null,
+});
+assert.equal(publicResisted.publicDirection, "resistance");
+assert.equal(publicResisted.finalGrade, "Watchlist", "strong public money resistance must remain the paired adverse safety path");
 
 const negative = buildCfbMarketEvidenceGradeShadow({
   decision: { ...moneyline, grade: "No Play", edgePercentagePoints: -3.1, expectedValue: -0.11 },
@@ -261,6 +335,24 @@ const provisionalSpreadLean = buildCfbMarketEvidenceGradeShadow({
 assert.equal(provisionalSpreadLean.finalGrade, "Lean", "the provisional playable-price band permits a qualified exact-price Spread favorite");
 assert.deepEqual(provisionalSpreadLean.reasonCodes, ["provisional_complete_tuple_spread_lean"]);
 
+const provisionalMoneylineLean = buildCfbMarketEvidenceGradeShadow({
+  decision: { ...moneyline, grade: "Watchlist", modelProbability: 0.56, edgePercentagePoints: 2.2, expectedValue: 0.015, evaluatedQuote: { ...moneyline.evaluatedQuote, price: 155 } },
+  selectedSide: "away",
+  sharpSplits: [],
+  operationalOpening: null,
+});
+assert.equal(provisionalMoneylineLean.finalGrade, "Lean", "a complete positive-EV playable Moneyline Watchlist has a bounded Lean lane");
+assert.deepEqual(provisionalMoneylineLean.reasonCodes, ["provisional_complete_tuple_moneyline_lean"]);
+
+const provisionalLargeSpreadLean = buildCfbMarketEvidenceGradeShadow({
+  decision: { ...moneyline, market: "spread", grade: "Watchlist", side: "STAN -20.5", modelProbability: 0.55, edgePercentagePoints: 3.2, expectedValue: 0.035, evaluatedQuote: { ...moneyline.evaluatedQuote, line: -20.5, price: -110 } },
+  selectedSide: "home",
+  sharpSplits: [],
+  operationalOpening: null,
+});
+assert.equal(provisionalLargeSpreadLean.finalGrade, "Lean", "a stronger exact-economics lane supports spreads from 10.5 through 24 points");
+assert.deepEqual(provisionalLargeSpreadLean.reasonCodes, ["provisional_complete_tuple_large_spread_lean"]);
+
 const provisionalTotalLean = buildCfbMarketEvidenceGradeShadow({
   decision: {
     ...moneyline,
@@ -318,16 +410,16 @@ const excessiveSpread = buildCfbMarketEvidenceGradeShadow({
     ...moneyline,
     market: "spread",
     grade: "Watchlist",
-    side: "STAN -10.5",
+    side: "STAN -24.5",
     edgePercentagePoints: 5.5,
     expectedValue: 0.07,
-    evaluatedQuote: { ...moneyline.evaluatedQuote, line: -10.5, price: -105 },
+    evaluatedQuote: { ...moneyline.evaluatedQuote, line: -24.5, price: -105 },
   },
   selectedSide: "home",
   sharpSplits: [],
   operationalOpening: null,
 });
-assert.equal(excessiveSpread.finalGrade, "Watchlist", "the larger-spread recalibration stays capped at ten points");
+assert.equal(excessiveSpread.finalGrade, "Watchlist", "the larger-spread recalibration stays capped at 24 points");
 
 console.log("CFB market/sharp-aware shadow coherence and balanced grade tests passed.");
 
@@ -372,5 +464,19 @@ function sharpRecord(args: {
       over: { ticketsPct: args.overTickets, moneyPct: args.overMoney },
       under: { ticketsPct: 100 - args.overTickets, moneyPct: 100 - args.overMoney },
     },
+  };
+}
+
+function publicSplitSet(args: {
+  homeTickets: number;
+  homeMoney: number;
+  overTickets: number;
+  overMoney: number;
+}) {
+  const common = { provider: "playbook" as const, capturedAt: observedAt, booksUsed: 11 };
+  return {
+    moneyline: { ...common, homeMoneyPct: args.homeMoney, awayMoneyPct: 100 - args.homeMoney, homeBetsPct: args.homeTickets, awayBetsPct: 100 - args.homeTickets, overMoneyPct: null, underMoneyPct: null, overBetsPct: null, underBetsPct: null },
+    spread: { ...common, homeMoneyPct: args.homeMoney, awayMoneyPct: 100 - args.homeMoney, homeBetsPct: args.homeTickets, awayBetsPct: 100 - args.homeTickets, overMoneyPct: null, underMoneyPct: null, overBetsPct: null, underBetsPct: null },
+    total: { ...common, homeMoneyPct: null, awayMoneyPct: null, homeBetsPct: null, awayBetsPct: null, overMoneyPct: args.overMoney, underMoneyPct: 100 - args.overMoney, overBetsPct: args.overTickets, underBetsPct: 100 - args.overTickets },
   };
 }
