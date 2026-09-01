@@ -1,11 +1,11 @@
 {
-  "decisionRelease": "nfl_player_props_decision_2026_08_31_r4_complete_exact_board",
-  "modelRelease": "nfl_player_props_distribution_model_2026_08_25_r2_shared_context",
-  "calibrationRelease": "nfl_player_props_distribution_calibration_2026_08_25_r2_shared_context",
+  "decisionRelease": "nfl_player_props_decision_2026_09_01_r6_cross_market_movement",
+  "modelRelease": "nfl_player_props_distribution_model_2026_09_01_r3_active_role",
+  "calibrationRelease": "nfl_player_props_distribution_calibration_2026_09_01_r3_active_role",
   "touchdownModelRelease": "nfl_player_props_anytime_td_model_2026_08_25_r3_shared_context",
   "touchdownCalibrationRelease": "nfl_player_props_anytime_td_calibration_2026_08_25_r3_shared_context",
-  "marketBoardRelease": "nfl_player_props_exact_market_board_2026_08_25_r1",
-  "mode": "production_qualified_unpublished",
+  "marketBoardRelease": "nfl_player_props_exact_market_board_2026_09_01_r2_cross_line_opening",
+  "mode": "production_owner_approved_forward_monitoring",
   "noQuotas": true,
   "lockLeadMinutes": 60,
   "maximumQuoteAgeHours": 6,
@@ -13,21 +13,18 @@
   "volumeAndYardage": {
     "watchlist": {"minimumEv": 0.0, "minimumProbabilityEdge": 0.0},
     "lean": {"minimumEv": 0.04, "minimumProbabilityEdge": 0.02, "minimumParticipationProbability": 0.70, "minimumIndependentBooks": 1},
-    "bestAngle": {"minimumEv": 0.08, "minimumProbabilityEdge": 0.035, "minimumParticipationProbability": 0.85, "minimumIndependentBooks": 1}
+    "bestAngle": {"minimumEv": 0.08, "minimumProbabilityEdge": 0.035, "minimumParticipationProbability": 0.85, "minimumIndependentBooks": 1},
+    "movementSupportedLean": {"minimumEv": 0.03, "minimumProbabilityEdge": 0.015, "minimumParticipationProbability": 0.70, "minimumIndependentBooks": 1},
+    "movementSupportedBestAngle": {"minimumEv": 0.07, "minimumProbabilityEdge": 0.03, "minimumParticipationProbability": 0.85, "minimumIndependentBooks": 1}
   },
   "marketLanes": {
-    "passing_attempts": {"eligibleSides": [], "bestAngle": false, "lean": false, "watchlist": false},
-    "passing_completions": {"eligibleSides": [], "bestAngle": false, "lean": false, "watchlist": false},
-    "passing_yards": {"eligibleSides": [], "bestAngle": false, "lean": false, "watchlist": false},
-    "receiving_yards": {
-      "eligibleSides": ["under"], "bestAngle": true, "lean": true, "watchlist": true
-    },
-    "receptions": {"eligibleSides": ["under"], "bestAngle": true, "lean": true, "watchlist": true},
-    "rushing_attempts": {
-      "eligibleSides": ["over", "under"], "bestAngle": false, "lean": true, "watchlist": true,
-      "leanThresholds": {"minimumEv": 0.02, "minimumProbabilityEdge": 0.01, "minimumParticipationProbability": 0.70, "minimumIndependentBooks": 1}
-    },
-    "rushing_yards": {"eligibleSides": [], "bestAngle": false, "lean": false, "watchlist": false}
+    "passing_attempts": {"eligibleSides": ["over", "under"], "bestAngle": true, "lean": true, "watchlist": true},
+    "passing_completions": {"eligibleSides": ["over", "under"], "bestAngle": true, "lean": true, "watchlist": true},
+    "passing_yards": {"eligibleSides": ["over", "under"], "bestAngle": true, "lean": true, "watchlist": true},
+    "receiving_yards": {"eligibleSides": ["over", "under"], "bestAngle": true, "lean": true, "watchlist": true},
+    "receptions": {"eligibleSides": ["over", "under"], "bestAngle": true, "lean": true, "watchlist": true},
+    "rushing_attempts": {"eligibleSides": ["over", "under"], "bestAngle": true, "lean": true, "watchlist": true},
+    "rushing_yards": {"eligibleSides": ["over", "under"], "bestAngle": true, "lean": true, "watchlist": true}
   },
   "touchdown": {
     "watchlist": {"minimumEv": 0.0, "minimumProbabilityEdge": 0.0},
@@ -45,7 +42,8 @@
     "requirePositiveSecondHalfRoi": true,
     "requirePositiveMarketFamilyRoi": true,
     "requireExactPrice": true,
-    "requireRoleCoherence": true
+    "requireRoleCoherence": true,
+    "ownerApprovedForwardException": true
   },
   "heldReasons": [
     "identity_ambiguous",

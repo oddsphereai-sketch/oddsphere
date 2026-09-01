@@ -1,20 +1,20 @@
 {
-  "recalibrationRelease": "nfl_player_props_recalibration_tournament_2026_08_25_r2",
-  "shadowModelRelease": "nfl_player_props_distribution_shadow_2026_08_25_r1",
-  "calibrationRelease": "nfl_player_props_distribution_calibration_shadow_2026_08_25_r2",
-  "evaluationRelease": "nfl_player_props_chronological_evaluation_2026_08_25_r2",
-  "historicalDatasetRelease": "nfl_player_props_historical_features_2016_2025_2026_08_20_r1",
+  "recalibrationRelease": "nfl_player_props_recalibration_tournament_2026_09_01_r3_active_role",
+  "shadowModelRelease": "nfl_player_props_distribution_shadow_2026_09_01_r2_active_role",
+  "calibrationRelease": "nfl_player_props_distribution_calibration_shadow_2026_09_01_r3_active_role",
+  "evaluationRelease": "nfl_player_props_chronological_evaluation_2026_09_01_r3_active_role",
+  "historicalDatasetRelease": "nfl_player_props_historical_features_2016_2025_2026_09_01_r2_active_role",
   "mode": "local_shadow_only",
   "actionable": false,
   "lineProbabilityReady": false,
   "projectionChampions": {
     "passing_attempts": "hgb",
-    "passing_completions": "ridge",
-    "passing_yards": "ridge",
+    "passing_completions": "hgb",
+    "passing_yards": "hgb",
     "rushing_attempts": "hgb",
-    "rushing_yards": "ridge",
-    "receptions": "ridge",
-    "receiving_yards": "ridge"
+    "rushing_yards": "hgb",
+    "receptions": "hgb",
+    "receiving_yards": "hgb"
   },
   "chronology": {
     "projectionTrainingEnd": 2022,

@@ -110,10 +110,11 @@ def main() -> None:
     frame, manifest = baseline.load_verified_dataset(HISTORY_MANIFEST, baseline_contract)
     frame, features = baseline.prepare_features(frame, manifest)
     r2_artifact = joblib.load(R2_ARTIFACT)
-    if r2_artifact["calibrationRelease"] != decision["calibrationRelease"]:
+    calibration_contract = json.loads(recalibration.CONTRACT_PATH.read_text(encoding="utf-8"))
+    if r2_artifact["calibrationRelease"] != calibration_contract["calibrationRelease"]:
         raise RuntimeError("NFL props price backtest calibration release mismatch")
     opening = json.loads(args.openings.read_text(encoding="utf-8"))
-    if opening["release"] != "nfl_player_props_2025_opening_prices_2026_08_25_r1":
+    if opening["release"] != "nfl_player_props_2025_opening_prices_2026_09_01_r2_provider_recovery":
         raise RuntimeError("NFL props opening-price release mismatch")
 
     holdout = frame[frame["season"].eq(2025)].copy()

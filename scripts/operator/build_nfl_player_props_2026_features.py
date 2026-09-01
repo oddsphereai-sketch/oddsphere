@@ -62,7 +62,8 @@ def player_features(rows: pd.DataFrame) -> dict[str, float]:
         "prior_participations": float(pd.to_numeric(rows["participated"], errors="coerce").fillna(0).sum()),
     }
     for metric in PLAYER_METRICS:
-        values = pd.to_numeric(rows[metric], errors="coerce").fillna(0.0)
+        source = rows if metric == "participated" else rows[pd.to_numeric(rows["participated"], errors="coerce").fillna(0).gt(0)]
+        values = pd.to_numeric(source[metric], errors="coerce").fillna(0.0)
         result[f"prior_{metric}_lag1"] = float(values.iloc[-1]) if len(values) else np.nan
         result[f"prior_{metric}_avg3"] = float(values.tail(3).mean()) if len(values) else np.nan
         result[f"prior_{metric}_avg5"] = float(values.tail(5).mean()) if len(values) else np.nan
