@@ -957,11 +957,42 @@ in `docs/model-audits/2026-08-21-wnba-incoherent-total-tuple-fallback.md`.
 
 ## MLB Player Props candidate
 
-- Release: `mlb_props_2026_08_19_r37`
+- Release: `mlb_props_2026_09_01_r38`
 - Machine registry: `lib/mlb/props/marketModelVersions.ts`
 - Authoritative writer: `/api/cron/mlb-player-props-refresh` through
   `refreshMlbPropsBoard`
 - Status: private launch candidate; not publicly enabled
+
+The September 1 r38 market-aware forecast release moves genuine exact-line
+market context ahead of side, probability, projection, and grade finalization
+inside the sole existing writer. The authoritative probability now combines
+the sport-specific independent model with an all-book current exact-line
+anchor, bounded same-book opening/current line and price movement, and bounded
+coherent related-player-market movement. Exact fresh public/sharp split fields
+may contribute only when supplied on the matching prop row; the current live
+feed supplies none, so missing evidence is neutral. Grade economics use the
+evaluated named-book quote and a target-book-excluded same-line reference.
+Generic evidence can add only a zero-stake Watchlist with at least one point of
+reference edge, at least 2% exact-price EV, and no materially adverse context;
+Lean and Best Angle remain restricted to the already validated market sleeves.
+The model projection moves monotonically with the same final probability and
+retains natural internal precision; existing member formatting alone controls
+display precision.
+
+The no-write production replay at `2026-09-01T21:46:39.849Z` was publishable
+and compared 5,630 identical offer IDs from the 5,683-row r37 board with the
+5,690-row r38 candidate. It changed 5,169 final probabilities and 4,825
+projections, with target-book-excluded references on 4,709 rows, exact opening
+movement on 1,168, coherent cross-market movement on 2,553, and zero split
+adjustments because no exact fresh split payload was available. Actionables
+moved from 142 to 166 through 33 promotions and 9 demotions; 75 No Play rows
+moved to exact-value Watchlist. No action quota or broad action head was added.
+Every currently populated supported category retained a positive-grade path;
+Batter Triples remained unpromoted because the current posted longshot
+economics did not clear the frozen edge/EV gate, while the all-category fixture
+proves a coherent qualifying triples offer reaches Watchlist. Rollback is r37.
+Evidence is in
+`docs/model-audits/2026-09-01-mlb-props-market-aware-forecast-r38.md`.
 
 The August 19 r37 projection-accuracy release adds a post-decision affine
 expected-count calibration for Batter Hits + Runs + RBI, Batter Strikeouts,
