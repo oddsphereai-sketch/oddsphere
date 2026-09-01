@@ -30,6 +30,23 @@ export type NflForwardMemberSnapshot = {
   fixture: NflWeekOneHeldMemberFixture;
 };
 
+export type NflForwardMemberSnapshotAudit = {
+  healthy: boolean;
+  critical: string[];
+  warnings: string[];
+  metrics: {
+    games: number;
+    predictions: number;
+    pricedMarkets: number;
+    openingTrailGames: number;
+    minimumPriceObservations: number;
+    sourceAgeMinutes: number | null;
+    publishedAgeMinutes: number | null;
+    maximumSourceAgeMinutes: number;
+    grades: Record<string, number>;
+  };
+};
+
 type SnapshotRow = {
   payload: unknown;
   generated_at: string;
@@ -137,6 +154,79 @@ export async function readNflForwardMemberSnapshot(input: {
   }
   if (!data) return null;
   return validateNflForwardMemberSnapshot((data as SnapshotRow).payload, input);
+}
+
+export function auditNflForwardMemberSnapshot(input: {
+  snapshot: NflForwardMemberSnapshot;
+  now?: Date;
+}): NflForwardMemberSnapshotAudit {
+  const now = input.now ?? new Date();
+  const nowMs = now.getTime();
+  const games = input.snapshot.fixture.snapshot.games;
+  const markets = games.flatMap((game) => [
+    game.markets.moneyline,
+    game.markets.total,
+    game.markets.first_inning,
+  ]);
+  const soonestStart = Math.min(...games.map((game) => Date.parse(game.gameStartAt ?? game.scheduledLockAt)));
+  const maximumSourceAgeMinutes = Number.isFinite(soonestStart) && soonestStart - nowMs <= 48 * 60 * 60 * 1000
+    ? 90
+    : 390;
+  const ageMinutes = (value: string): number | null => {
+    const parsed = Date.parse(value);
+    return Number.isFinite(parsed) ? Math.max(0, (nowMs - parsed) / 60_000) : null;
+  };
+  const sourceAgeMinutes = ageMinutes(input.snapshot.sourceCapturedAt);
+  const publishedAgeMinutes = ageMinutes(input.snapshot.publishedAt);
+  const pricedMarkets = markets.filter((market) => Number.isFinite(market.currentPriceAmerican)).length;
+  const openingTrailGames = games.filter((game) => [
+    game.markets.moneyline,
+    game.markets.total,
+    game.markets.first_inning,
+  ].every((market) => Array.isArray(market.oddsTrail)
+    && market.oddsTrail.some((point) => point.label === "open" || point.label === "first")
+    && market.oddsTrail.some((point) => point.label === "current"))).length;
+  const minimumPriceObservations = markets.length
+    ? Math.min(...markets.map((market) => market.oddsTrail?.length ?? 0))
+    : 0;
+  const grades = markets.reduce<Record<string, number>>((counts, market) => {
+    const grade = market.verdict?.label ?? "Missing";
+    counts[grade] = (counts[grade] ?? 0) + 1;
+    return counts;
+  }, {});
+  const critical = [
+    games.length === 0 ? "weekly slate is empty" : null,
+    markets.length !== games.length * 3 ? `market contract is ${markets.length}/${games.length * 3}` : null,
+    pricedMarkets !== markets.length ? `current-price coverage is ${pricedMarkets}/${markets.length}` : null,
+    openingTrailGames !== games.length ? `Opening/current trail coverage is ${openingTrailGames}/${games.length}` : null,
+    minimumPriceObservations < 2 ? `minimum same-book price observations is ${minimumPriceObservations}/2` : null,
+    sourceAgeMinutes === null || sourceAgeMinutes > maximumSourceAgeMinutes
+      ? `provider snapshot age is ${sourceAgeMinutes === null ? "invalid" : `${sourceAgeMinutes.toFixed(1)}m`}`
+      : null,
+    publishedAgeMinutes === null || publishedAgeMinutes > 60
+      ? `compact member snapshot age is ${publishedAgeMinutes === null ? "invalid" : `${publishedAgeMinutes.toFixed(1)}m`}`
+      : null,
+    (grades.Missing ?? 0) > 0 ? `${grades.Missing} markets are missing a play grade` : null,
+  ].filter((value): value is string => value !== null);
+  const warnings = (grades.Lean ?? 0) + (grades["Best Angle"] ?? 0) === 0
+    ? ["the current weekly slate contains no actionable play grades"]
+    : [];
+  return {
+    healthy: critical.length === 0,
+    critical,
+    warnings,
+    metrics: {
+      games: games.length,
+      predictions: markets.length,
+      pricedMarkets,
+      openingTrailGames,
+      minimumPriceObservations,
+      sourceAgeMinutes,
+      publishedAgeMinutes,
+      maximumSourceAgeMinutes,
+      grades,
+    },
+  };
 }
 
 function validateNflForwardMemberSnapshot(

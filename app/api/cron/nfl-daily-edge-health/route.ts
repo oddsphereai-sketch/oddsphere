@@ -1,9 +1,10 @@
 import { isNflDailyEdgeEnabled } from "@/lib/config/nflDailyEdge";
 import { cronHandler } from "@/lib/cron/runCron";
+import { supabase } from "@/lib/db/supabase";
 import {
-  auditNflMemberSnapshot,
-  readCurrentNflPublishedMemberSnapshot,
-} from "@/lib/services/football/nflPublishedMemberSnapshotStore";
+  auditNflForwardMemberSnapshot,
+  readNflForwardMemberSnapshot,
+} from "@/lib/services/football/nflForwardMemberSnapshotStore";
 
 export const maxDuration = 60;
 
@@ -15,7 +16,9 @@ export async function GET(request: Request): Promise<Response> {
         details: { disabled: true, reason: "NFL_DAILY_EDGE_ENABLED!=true" },
       };
     }
-    const published = await readCurrentNflPublishedMemberSnapshot();
+    const season = boundedInteger(process.env.NFL_FORWARD_SEASON ?? "2026", 2026, 2100, "NFL_FORWARD_SEASON");
+    const week = boundedInteger(process.env.NFL_FORWARD_WEEK ?? "1", 1, 18, "NFL_FORWARD_WEEK");
+    const published = await readNflForwardMemberSnapshot({ client: supabase, season, week });
     if (!published) {
       return {
         records_updated: 0,
@@ -24,11 +27,7 @@ export async function GET(request: Request): Promise<Response> {
         details: { healthy: false, published: false },
       };
     }
-    const audit = auditNflMemberSnapshot({
-      fixture: published.fixture,
-      maxSourceAgeMinutes: 120,
-      maxStoredAgeMinutes: 120,
-    });
+    const audit = auditNflForwardMemberSnapshot({ snapshot: published });
     return {
       records_updated: 0,
       partial: !audit.healthy,
@@ -36,11 +35,10 @@ export async function GET(request: Request): Promise<Response> {
       details: {
         healthy: audit.healthy,
         published: true,
-        publication_release: published.publicationRelease,
-        member_snapshot_release: published.fixture.memberSnapshotRelease,
-        source_snapshot_sha256: published.sourceSnapshotSha256,
+        publication_release: published.snapshotRelease,
+        member_snapshot_release: published.fixture.heldMemberFixtureRelease,
+        source_snapshot_sha256: published.sourceChecksum,
         published_at: published.publishedAt,
-        locked_games: published.lockedGameIds.length,
         tracking_eligible: published.fixture.tracking.trackingEligible,
         metrics: audit.metrics,
         warnings: audit.warnings,
@@ -54,3 +52,11 @@ export async function GET(request: Request): Promise<Response> {
 }
 
 export const POST = GET;
+
+function boundedInteger(value: string, minimum: number, maximum: number, label: string): number {
+  const parsed = Number(value);
+  if (!Number.isInteger(parsed) || parsed < minimum || parsed > maximum) {
+    throw new Error(`${label} must be an integer from ${minimum} through ${maximum}.`);
+  }
+  return parsed;
+}
