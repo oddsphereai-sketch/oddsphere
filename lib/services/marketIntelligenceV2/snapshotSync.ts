@@ -9,7 +9,7 @@ import {
   type SplitObservationForResolver,
 } from "./resolver";
 
-export const MARKET_INTELLIGENCE_V2_RESOLVER_VERSION = "market-intelligence-v2.2-ui-movement-0.4.2-blocked-book-filter";
+export const MARKET_INTELLIGENCE_V2_RESOLVER_VERSION = "market-intelligence-v2.3-unified-price-map-0.5.0";
 const OBSERVATION_PAGE_SIZE = 1000;
 
 type GameRow = {
@@ -130,7 +130,7 @@ async function loadPriceObservations(opts: {
     const to = from + OBSERVATION_PAGE_SIZE - 1;
     const page = await opts.supabase
       .from("market_price_observations_v2")
-      .select("sportsbook, sharp_book, market_type, selection_key, american_price, line, provider_timestamp, fetched_at")
+      .select("sportsbook, sharp_book, market_type, selection_key, american_price, no_vig_probability, line, provider_timestamp, fetched_at")
       .in("canonical_event_id", opts.eventIds)
       .order("fetched_at", { ascending: false })
       .range(from, to);

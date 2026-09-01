@@ -76,10 +76,33 @@ export type SharpRetailPriceFeatures = {
   currentFreshnessMinutes: number | null;
   sharpBookCount: number;
   retailBookCount: number;
+  primaryRetailBookCount: number;
+  secondaryRetailBookCount: number;
+  retailProbabilityRange: number | null;
+  retailConsensusQuality: "strong" | "standard" | "thin" | "unavailable";
 };
 
 export const SHARP_PRICE_BOOKS = new Set(["pinnacle", "circa", "bookmaker"]);
-export const RETAIL_PRICE_BOOKS = new Set(["draftkings", "fanduel", "betmgm", "caesars"]);
+export const PRIMARY_RETAIL_PRICE_BOOKS = new Set([
+  "draftkings",
+  "fanduel",
+  "betmgm",
+  "caesars",
+  "bet365",
+]);
+export const SECONDARY_RETAIL_PRICE_BOOKS = new Set([
+  "hardrock",
+  "betrivers",
+  "ballybet",
+  "betparx",
+  "betway",
+  "rebet",
+  "fliff",
+]);
+export const RETAIL_PRICE_BOOKS = new Set([
+  ...PRIMARY_RETAIL_PRICE_BOOKS,
+  ...SECONDARY_RETAIL_PRICE_BOOKS,
+]);
 
 function finite(v: number | null | undefined): number | null {
   return typeof v === "number" && Number.isFinite(v) ? v : null;
@@ -100,6 +123,18 @@ function median(values: Array<number | null | undefined>): number | null {
   if (xs.length === 0) return null;
   const mid = Math.floor(xs.length / 2);
   return xs.length % 2 === 1 ? xs[mid] : (xs[mid - 1] + xs[mid]) / 2;
+}
+
+function weightedMedian(values: Array<{ value: number; weight: number }>): number | null {
+  if (values.length === 0) return null;
+  const ordered = [...values].sort((a, b) => a.value - b.value);
+  const totalWeight = ordered.reduce((sum, row) => sum + row.weight, 0);
+  let cumulative = 0;
+  for (const row of ordered) {
+    cumulative += row.weight;
+    if (cumulative >= totalWeight / 2) return row.value;
+  }
+  return ordered.at(-1)?.value ?? null;
 }
 
 function latestAtOrBefore<T extends { fetchedAt: string | null }>(
@@ -215,6 +250,13 @@ function groupForBook(row: MarketPriceFeatureRow): "sharp" | "retail" | null {
   return null;
 }
 
+function retailTier(row: MarketPriceFeatureRow): "primary" | "secondary" | null {
+  const book = (row.sportsbook ?? "").toLowerCase();
+  if (PRIMARY_RETAIL_PRICE_BOOKS.has(book)) return "primary";
+  if (SECONDARY_RETAIL_PRICE_BOOKS.has(book)) return "secondary";
+  return null;
+}
+
 function latestByBook(rows: MarketPriceFeatureRow[], asOfMs: number): MarketPriceFeatureRow[] {
   const byBook = new Map<string, MarketPriceFeatureRow>();
   for (const row of rows) {
@@ -230,7 +272,15 @@ function latestByBook(rows: MarketPriceFeatureRow[], asOfMs: number): MarketPric
 }
 
 function medianGroupProbability(rows: MarketPriceFeatureRow[], group: "sharp" | "retail"): number | null {
-  return median(rows.filter((row) => groupForBook(row) === group).map((row) => row.noVigProbability ?? americanToImplied(row.americanPrice)));
+  const grouped = rows.filter((row) => groupForBook(row) === group);
+  if (group === "sharp") {
+    return median(grouped.map((row) => row.noVigProbability ?? americanToImplied(row.americanPrice)));
+  }
+  return weightedMedian(grouped.flatMap((row) => {
+    const value = row.noVigProbability ?? americanToImplied(row.americanPrice);
+    if (value === null) return [];
+    return [{ value, weight: retailTier(row) === "primary" ? 1 : 0.65 }];
+  }));
 }
 
 function medianGroupPrice(rows: MarketPriceFeatureRow[], group: "sharp" | "retail"): number | null {
@@ -281,6 +331,21 @@ export function deriveSharpRetailPriceFeatures(
   const current = latestByBook(rows, asOfMs);
   const sharp = current.filter((row) => groupForBook(row) === "sharp");
   const retail = current.filter((row) => groupForBook(row) === "retail");
+  const primaryRetail = retail.filter((row) => retailTier(row) === "primary");
+  const secondaryRetail = retail.filter((row) => retailTier(row) === "secondary");
+  const retailProbabilities = retail
+    .map((row) => row.noVigProbability ?? americanToImplied(row.americanPrice))
+    .filter((value): value is number => value !== null);
+  const retailProbabilityRange = retailProbabilities.length === 0
+    ? null
+    : Math.max(...retailProbabilities) - Math.min(...retailProbabilities);
+  const retailConsensusQuality: SharpRetailPriceFeatures["retailConsensusQuality"] = retail.length === 0
+    ? "unavailable"
+    : retail.length >= 3 && primaryRetail.length >= 2 && (retailProbabilityRange ?? Infinity) <= 0.02
+      ? "strong"
+      : retail.length >= 2 && (retailProbabilityRange ?? Infinity) <= 0.04
+        ? "standard"
+        : "thin";
   const medianSharp = medianGroupProbability(current, "sharp");
   const medianRetail = medianGroupProbability(current, "retail");
   const currentLine = median(current.map((row) => row.line));
@@ -317,5 +382,9 @@ export function deriveSharpRetailPriceFeatures(
     currentFreshnessMinutes: latestTs === null || !Number.isFinite(asOfMs) ? null : Math.max(0, (asOfMs - latestTs) / 60_000),
     sharpBookCount: sharp.length,
     retailBookCount: retail.length,
+    primaryRetailBookCount: primaryRetail.length,
+    secondaryRetailBookCount: secondaryRetail.length,
+    retailProbabilityRange,
+    retailConsensusQuality,
   };
 }
