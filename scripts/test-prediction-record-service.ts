@@ -56,6 +56,7 @@ import {
   resolveMlTightMarketPriceBestAngle,
   resolveMlbMarketAwareSideCorrection,
   resolveMlbMoneylineMarketContextSidePolicy,
+  shouldApplyAuthoritativeFiPrediction,
 } from "../lib/services/predictionRecordService";
 import type { SourceAwareSplitObservationRow } from "../lib/services/predictionRecordService";
 import type { PredictionRecordRow } from "../lib/types/domain/Tracking";
@@ -3972,6 +3973,78 @@ console.log("\n━━━ P7-Commit-B — FI v2 play_grade persistence ━━━"
         ml.play_grade === "market_aligned" /* FI persistence change must not alter champion ML grade calibration */);
   check("Total play_grade reflects the total quality gate",
         ou.play_grade !== "best_angle" /* base fixture is below the 70% total BA floor */);
+}
+
+// ── r78 FI member-coherence contract ───────────────────────────────
+console.log("\n━━━ r78 FI member-coherence contract ━━━");
+{
+  const freshR77NoBet = {
+    ...basePrediction,
+    predicted_nrfi: false,
+    nrfi_confidence: 55,
+    sport_specific: {
+      ...v21SportSpecific,
+      hold_picks: [],
+      nrfi_decision_kind: "yrfi",
+      auto_factors: {
+        nrfi_expected_runs: 0.757223179001908,
+        nrfi_probability: 0.46896685766049534,
+        yrfi_probability: 0.5310331423395047,
+      },
+      fi_v2_audit: {
+        fi_pick: "YRFI",
+        fi_play_grade: "no_bet",
+        fi_no_bet_reason: "Edge too thin; no bet.",
+        fresh_data_ready: true,
+        fresh_data_blockers: [],
+        generated_at: "2026-09-01T23:13:35.489Z",
+        posterior_p_nrfi: 0.46896685766049534,
+        posterior_p_yrfi: 0.5310331423395047,
+        posterior_expected_first_inning_runs: 0.757223179001908,
+        market_projection_book_count: 1,
+        market_evaluation_sportsbook: "ballybet",
+        market_nrfi_odds_american: 105,
+        market_yrfi_odds_american: -137,
+        market_evaluation_nrfi_no_vig: 0.465,
+        market_evaluation_yrfi_no_vig: 0.535,
+      },
+    },
+  };
+  const recs = buildPredictionRecordsFromSlate({
+    sport: "mlb", slateDate: "2026-09-01", launchDay: false, games: [baseGame],
+    predictionByGameId: new Map([[14771, freshR77NoBet]]), abbrevByTeamId,
+    // Deliberately empty: the record must use the writer's exact current
+    // r77 audited pair rather than re-shopping an unrelated mutable board.
+    currentLinesByGameId: new Map(),
+  });
+  const fi = recs.find((r) => r.market === "first_inning");
+  check("fresh directional FI no-bet still publishes a YRFI prediction", fi?.pick === "YRFI" && fi.side === "over");
+  check("fresh directional FI no-bet keeps No Play instead of held Toss-Up", fi?.no_bet === true && fi.play_grade === "no_bet" && fi.held === false);
+  check("fresh directional FI no-bet carries exact posterior and expected runs", fi?.model_probability === 0.5310331423395047 && (fi?.snapshot_json as any)?.auto_factors?.nrfi_expected_runs === 0.757223179001908);
+  check("fresh directional FI no-bet carries the exact audited Bally pair", fi?.odds_american === -137 && (fi?.snapshot_json as any)?.odds_source_at_lock_fi?.picked?.book === "ballybet" && (fi?.snapshot_json as any)?.odds_source_at_lock_fi?.opposite?.odds === 105);
+
+  const missingExactPair = {
+    ...freshR77NoBet,
+    sport_specific: {
+      ...freshR77NoBet.sport_specific,
+      fi_v2_audit: {
+        ...(freshR77NoBet.sport_specific.fi_v2_audit as Record<string, unknown>),
+        market_evaluation_sportsbook: null,
+        market_nrfi_odds_american: null,
+        market_yrfi_odds_american: null,
+      },
+    },
+  };
+  const incomplete = buildPredictionRecordsFromSlate({
+    sport: "mlb", slateDate: "2026-09-01", launchDay: false, games: [baseGame],
+    predictionByGameId: new Map([[14771, missingExactPair]]), abbrevByTeamId,
+    currentLinesByGameId: freshFiLinesByGameId,
+  }).find((r) => r.market === "first_inning");
+  check("genuine r77 FI pair incompleteness stays safely unproposed", incomplete === undefined);
+  check("out-of-order FI result cannot replace a newer writer cycle", !shouldApplyAuthoritativeFiPrediction("2026-09-01T23:16:26.000Z", "2026-09-01T23:13:35.489Z"));
+  check("same-cycle FI handoff is accepted", shouldApplyAuthoritativeFiPrediction("2026-09-01T23:13:35.489Z", "2026-09-01T23:13:35.489Z"));
+  const source = readFileSync("lib/services/predictionRecordService.ts", "utf8");
+  check("FI handoff cannot mutate locked records", source.includes("lockedKeys.has(proposedKey)") && source.includes("r.locked_at === null"));
 }
 
 // ── Stale unlocked FI cleanup guard ────────────────────────────────

@@ -107,7 +107,36 @@ export type CreateRecordsOptions = {
    * with a last-second model recompute.
    */
   preserveExistingUnlocked?: boolean;
+  /**
+   * The just-completed authoritative MLB writer result, passed only through
+   * the existing prediction-record sync. This closes the read-after-write
+   * visibility window without introducing another writer or data path.
+   *
+   * A row is used only when it is at least as new as the persisted source
+   * row for the same game; an older result can therefore never overwrite a
+   * newer natural writer cycle.
+   */
+  authoritativeFiPredictions?: ReadonlyArray<AuthoritativeFiPredictionInput>;
 };
+
+export type AuthoritativeFiPredictionInput = {
+  game_external_id: number;
+  computed_at: string;
+  predicted_nrfi: boolean | null;
+  nrfi_confidence: number | null;
+  prediction_source: string | null;
+  sport_specific: Record<string, unknown>;
+};
+
+export function shouldApplyAuthoritativeFiPrediction(
+  persistedComputedAt: string | null,
+  authoritativeComputedAt: string,
+): boolean {
+  const authoritativeMs = Date.parse(authoritativeComputedAt);
+  if (!Number.isFinite(authoritativeMs)) return false;
+  const persistedMs = persistedComputedAt === null ? Number.NEGATIVE_INFINITY : Date.parse(persistedComputedAt);
+  return !Number.isFinite(persistedMs) || authoritativeMs >= persistedMs;
+}
 
 export type CreateRecordsResult = {
   scanned: number;
@@ -1229,7 +1258,7 @@ type LineHistoryOpenerRow = {
  * only a no-vig line value, so it can never serve as a "real-book"
  * price source even when present.
  */
-export type OddsSource = "lines" | "line_history_fallback" | "unavailable";
+export type OddsSource = "lines" | "line_history_fallback" | "fi_v2_audit" | "unavailable";
 export type OddsSourceDetail = {
   source: OddsSource;
   /** Sportsbook name when source is "lines" or "line_history_fallback"; null when "unavailable". */
@@ -1505,6 +1534,47 @@ function fiAuditFreshDataReady(sp: Record<string, unknown>): {
     return { ready: false, blockers, sparseNamedStarterTossUp };
   }
   return { ready: true, blockers, sparseNamedStarterTossUp: false };
+}
+
+/**
+ * FI V2 freezes one exact named-book pair in its authoritative audit. The
+ * prediction-record writer must carry that tuple through unchanged instead of
+ * independently re-shopping the mutable `lines` board after the model run.
+ */
+function fiAuditExactEvaluationPair(audit: Record<string, unknown> | null): {
+  under: OddsSourceDetail;
+  over: OddsSourceDetail;
+} | null {
+  if (audit === null) return null;
+  const book = readStringOrNull(audit.market_evaluation_sportsbook);
+  const underOdds = readNumberOrNull(audit.market_nrfi_odds_american);
+  const overOdds = readNumberOrNull(audit.market_yrfi_odds_american);
+  const observedAt = readStringOrNull(audit.generated_at);
+  if (book === null || isBlockedSportsbook(book) || underOdds === null || overOdds === null) {
+    return null;
+  }
+  return {
+    under: {
+      source: "fi_v2_audit",
+      book,
+      odds: underOdds,
+      line: 0.5,
+      observedAt,
+    },
+    over: {
+      source: "fi_v2_audit",
+      book,
+      odds: overOdds,
+      line: 0.5,
+      observedAt,
+    },
+  };
+}
+
+function fiAuditUsesNamedBookEvaluationContract(audit: Record<string, unknown> | null): boolean {
+  return audit !== null &&
+    (typeof audit.market_projection_book_count === "number" ||
+      typeof audit.market_movement_book_count === "number");
 }
 
 /**
@@ -5499,13 +5569,19 @@ function buildFiRecord(
   const sideValue = isTossUp ? null : internalSide;
   const predictionTypeValue = isTossUp ? "toss_up" : null;
 
-  // FI fresh-data-only policy: first-inning plays require current two-sided
-  // first_inning_total prices. Unlike ML/totals, FI does not use line_history
-  // fallback for actionable tracking because stale FI prices can create a play
-  // users should never have seen.
+  // FI V2 owns the exact evaluated pair. A fresh audit must reach members
+  // with that same current named-book tuple even when it is No Play; do not
+  // re-select a later mutable board and accidentally turn a valid forecast
+  // into a stale-data hold. Legacy FI rows retain the bounded live-board
+  // fallback. A current FI V2 audit with no exact pair is genuinely
+  // incomplete and therefore remains safely unproposed.
+  const fiAuditPair = fiAuditExactEvaluationPair(fiAudit);
+  const fiUsesNamedBookEvaluationContract = fiAuditUsesNamedBookEvaluationContract(fiAudit);
   const fiPair = sideValue === null
     ? null
-    : pickFreshHalfRunFiPair(currentLines, freshnessReferenceMs);
+    : fiUsesNamedBookEvaluationContract
+      ? fiAuditPair
+      : pickFreshHalfRunFiPair(currentLines, freshnessReferenceMs);
   const fiPicked = fiPair === null ? null : fiPair[internalSide];
   const fiOpposite = fiPair === null
     ? null
@@ -5513,8 +5589,8 @@ function buildFiRecord(
   if (
     sideValue !== null &&
     (
-      fiPicked?.source !== "lines" ||
-      fiOpposite?.source !== "lines" ||
+      (fiPicked?.source !== "lines" && fiPicked?.source !== "fi_v2_audit") ||
+      (fiOpposite?.source !== "lines" && fiOpposite?.source !== "fi_v2_audit") ||
       fiPicked.book === null ||
       fiPicked.book !== fiOpposite.book ||
       fiPicked.line === null ||
@@ -5529,11 +5605,19 @@ function buildFiRecord(
   // De-vig market probability for the picked side when both sides priced.
   const impPicked = americanToImpliedProb(fiPicked?.odds ?? null);
   const impOpp = americanToImpliedProb(fiOpposite?.odds ?? null);
-  const fiMarketProb =
+  const fiAuditSelectedModelProbability = !fiUsesNamedBookEvaluationContract ? null : internalSide === "under"
+    ? readNumberOrNull(fiAudit?.posterior_p_nrfi)
+    : readNumberOrNull(fiAudit?.posterior_p_yrfi);
+  const fiAuditSelectedMarketProbability = !fiUsesNamedBookEvaluationContract ? null : internalSide === "under"
+    ? readNumberOrNull(fiAudit?.market_evaluation_nrfi_no_vig)
+    : readNumberOrNull(fiAudit?.market_evaluation_yrfi_no_vig);
+  const fiModelProb = fiAuditSelectedModelProbability ??
+    (pred.nrfi_confidence !== null ? pred.nrfi_confidence / 100 : null);
+  const fiMarketProb = fiAuditSelectedMarketProbability ?? (
     impPicked !== null && impOpp !== null && impPicked + impOpp > 0
       ? impPicked / (impPicked + impOpp)
-      : null;
-  const fiModelProb = pred.nrfi_confidence !== null ? pred.nrfi_confidence / 100 : null;
+      : null
+  );
   const fiEdge = fiModelProb !== null && fiMarketProb !== null ? fiModelProb - fiMarketProb : null;
   const fiWriterNoBetReason = readStringOrNull(fiAudit?.fi_no_bet_reason);
   const fiAuditProvisional = readBoolish(fiAudit?.provisional);
@@ -5972,6 +6056,33 @@ export async function createPredictionRecords(
   const predictionByGameId = new Map<number, PredictionRow>(
     preds.map((p) => [p.game_id, p]),
   );
+  const authoritativeFiByExternalId = new Map(
+    (opts.authoritativeFiPredictions ?? []).map((prediction) => [
+      prediction.game_external_id,
+      prediction,
+    ]),
+  );
+  // A completed writer result is authoritative only for its FI tuple and
+  // only if it is not older than the row we just read. This keeps the single
+  // prediction_records writer on its existing path while eliminating the
+  // immediate read-after-write race; a delayed/out-of-order result cannot
+  // regress a newer natural cycle.
+  for (const game of games) {
+    const persisted = predictionByGameId.get(game.id);
+    const authoritativeFi = authoritativeFiByExternalId.get(game.external_id);
+    if (persisted === undefined || authoritativeFi === undefined) continue;
+    if (!shouldApplyAuthoritativeFiPrediction(persisted.computed_at, authoritativeFi.computed_at)) {
+      continue;
+    }
+    predictionByGameId.set(game.id, {
+      ...persisted,
+      predicted_nrfi: authoritativeFi.predicted_nrfi,
+      nrfi_confidence: authoritativeFi.nrfi_confidence,
+      prediction_source: authoritativeFi.prediction_source,
+      computed_at: authoritativeFi.computed_at,
+      sport_specific: authoritativeFi.sport_specific,
+    });
+  }
 
   // Load team abbreviations
   const teamIds = Array.from(

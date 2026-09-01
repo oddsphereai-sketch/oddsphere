@@ -105,6 +105,7 @@ export async function GET(request: Request) {
             launchDay: false,
             apply: true,
             supabase,
+            authoritativeFiPredictions: modelRun.authoritative_fi_predictions,
           });
           records += sync.insertedCount;
           memberRecords = {

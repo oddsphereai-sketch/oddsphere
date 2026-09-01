@@ -98,7 +98,10 @@ import {
   fetchReviewerSlateContext,
   type ReviewerSlateContext,
 } from "./aiReviewerWiring";
-import { createPredictionRecords } from "./predictionRecordService";
+import {
+  createPredictionRecords,
+  type AuthoritativeFiPredictionInput,
+} from "./predictionRecordService";
 import { recordFirstPublishedLines } from "./postedLinesWriter";
 import { PlaybookClient } from "../providers/playbook/playbookClient";
 import { applyMlbDataCompletenessGate } from "./mlbDataCompletenessGate";
@@ -283,7 +286,37 @@ export type AutoModelRunResult = {
    * thrown.
    */
   db_writes: AutoModelDbWriteOutcome | null;
+  /**
+   * FI-only tuples from the writer run that successfully reached
+   * game_predictions. The existing member-record sync uses them solely to
+   * avoid a read-after-write visibility race for first-inning records.
+   */
+  authoritative_fi_predictions: AuthoritativeFiPredictionInput[];
 };
+
+function completedAuthoritativeFiPredictions(
+  predictions: ReadonlyArray<AutoModelOutput>,
+  dbWrites: AutoModelDbWriteOutcome | null,
+): AuthoritativeFiPredictionInput[] {
+  if (dbWrites === null || dbWrites.ingest.inserted + dbWrites.ingest.updated === 0) return [];
+  const failedExternalIds = new Set(dbWrites.ingest.errors.map((failure) => failure.game_external_id));
+  return predictions.flatMap((prediction) => {
+    if (failedExternalIds.has(prediction.game_external_id)) return [];
+    const sportSpecific = prediction.sport_specific as Record<string, unknown>;
+    const audit = sportSpecific.fi_v2_audit;
+    if (audit === null || typeof audit !== "object" || Array.isArray(audit)) return [];
+    const computedAt = (audit as Record<string, unknown>).generated_at;
+    if (typeof computedAt !== "string" || computedAt.length === 0) return [];
+    return [{
+      game_external_id: prediction.game_external_id,
+      computed_at: computedAt,
+      predicted_nrfi: prediction.predicted_nrfi,
+      nrfi_confidence: prediction.nrfi_confidence,
+      prediction_source: prediction.prediction_source,
+      sport_specific: sportSpecific,
+    }];
+  });
+}
 
 // ─────────────────────────────────────────────────────────────
 // Internal — map AutoModelOutput → ingester input row
@@ -531,6 +564,7 @@ export async function generatePredictionsForSlate(
       errors: [],
       duration_ms: Date.now() - t0,
       db_writes: null,
+      authoritative_fi_predictions: [],
     };
   }
 
@@ -977,6 +1011,7 @@ export async function generatePredictionsForSlate(
   if (wantWrite) {
     db_writes = await runDbWrites(sport, slate_date, predictions);
   }
+  const authoritativeFiPredictions = completedAuthoritativeFiPredictions(predictions, db_writes);
 
   // ─── Step 3.5 — Atomic prediction_records sync (2026-06-10 v15.3) ──
   //
@@ -1031,6 +1066,7 @@ export async function generatePredictionsForSlate(
         launchDay: false, // cron/automodel-created records are always fresh-tracking
         apply: true,
         supabase,
+        authoritativeFiPredictions,
       });
       if (syncRes.errors.length > 0) {
         const summary = `${syncRes.errors.length} error(s): ${JSON.stringify(syncRes.errors).slice(0, 500)}`;
@@ -1141,6 +1177,7 @@ export async function generatePredictionsForSlate(
     errors,
     duration_ms: Date.now() - t0,
     db_writes,
+    authoritative_fi_predictions: authoritativeFiPredictions,
   };
 }
 
