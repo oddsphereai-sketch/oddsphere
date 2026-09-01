@@ -114,6 +114,13 @@ import {
 } from "./actionabilityPolicy";
 import { assertMlbPropsReleaseDoesNotRegress } from "./releaseOrdering";
 import { resolveMlbPropsProbablePitchers } from "./probablePitcherResolution";
+import {
+  applyMlbPropMarketAwareForecast,
+  buildMlbPropMarketContexts,
+  marketContextQuoteKey,
+  qualifiesMlbPropMarketAwareWatchlist,
+  type MlbPropMarketContext,
+} from "./marketAwareContext";
 
 type RefreshArgs = {
   slateDate: string;
@@ -242,6 +249,10 @@ export async function refreshMlbPropsBoard(args: RefreshArgs): Promise<MlbPropsB
     asOfTimestamp,
     refreshMode,
   });
+  const marketContexts = buildMlbPropMarketContexts({
+    currentOdds: boardSourceOdds,
+    openingOdds,
+  });
 
   const identities = new Map(previousIdentities);
   const identityIdsToLoad = needsFullResearch
@@ -334,6 +345,7 @@ export async function refreshMlbPropsBoard(args: RefreshArgs): Promise<MlbPropsB
     lineupRows,
     researchByKey,
     scoringCandidates: scoring?.summary.sampleCandidates ?? [],
+    marketContexts,
     asOfTimestamp,
   }), openingOdds, previous), asOfTimestamp)));
   // Expected-count calibration is intentionally applied only after every
@@ -1098,6 +1110,7 @@ function buildDashboardRows(args: {
   lineupRows: Map<string, Awaited<ReturnType<BallDontLieProvider["getLineups"]>>>;
   researchByKey: Map<string, PlayerPropResearchEnrichment>;
   scoringCandidates: RealPropsCandidateSummary[];
+  marketContexts: Map<string, MlbPropMarketContext>;
   asOfTimestamp: string;
 }): PlayerPropPreviewRow[] {
   const pairs = twoWayMarketProbabilities(args.mappedOdds);
@@ -1130,7 +1143,14 @@ function buildDashboardRows(args: {
     const scored = findScoringCandidate(args.scoringCandidates, mapped, identity.player.fullName);
     const scoredPitcherSignal = definition.family === "pitcher" && definition.recommendationEligibility !== "research_only" ? scored : null;
     const pairedMarketProbability = pairs.get(oddsPairKey(mapped))?.[mapped.odds.side] ?? null;
-    const marketProbability = pairedMarketProbability ?? (
+    const marketContext = args.marketContexts.get(marketContextQuoteKey(mapped.odds)) ?? null;
+    const allBookMarketProbability = marketContext?.currentOverProbability === null
+      || marketContext?.currentOverProbability === undefined
+      ? consensus.get(marketConsensusKey(mapped)) ?? pairedMarketProbability
+      : mapped.odds.side === "over"
+        ? marketContext.currentOverProbability
+        : 1 - marketContext.currentOverProbability;
+    const marketProbability = allBookMarketProbability ?? (
       mapped.odds.marketKey === "batter_home_runs"
         ? consensus.get(marketConsensusKey(mapped)) ?? null
         : null
@@ -1140,7 +1160,7 @@ function buildDashboardRows(args: {
     const memberReady = Boolean(research?.memberReady);
     const hitterSignal = buildIntegratedHitterSignal({ mapped, definition, research, lineupStatus, marketProbability, currentOdds: mapped.odds.americanOdds, projection, homeAway });
     const pitcherModelProjection = scoredPitcherSignal?.modelProjection ?? projection;
-    const signal: IntegratedPropSignal | null = scoredPitcherSignal ? {
+    let signal: IntegratedPropSignal | null = scoredPitcherSignal ? {
       side: scoredPitcherSignal.side,
       modelProbability: scoredPitcherSignal.modelProbability,
       finalProbability: scoredPitcherSignal.finalProbability,
@@ -1161,6 +1181,44 @@ function buildDashboardRows(args: {
       projection: pitcherModelProjection,
       modelFamily: definition.modelFamily,
     } : hitterSignal;
+    if (signal) {
+      const marketAware = applyMlbPropMarketAwareForecast({
+        marketKey: mapped.odds.marketKey,
+        line: mapped.odds.line,
+        independentOverProbability: signal.overModelProbability,
+        independentProjection: signal.projection,
+        modelWeight: signal.shrinkageWeight,
+        context: marketContext,
+      });
+      const finalProbability = signal.side === "over"
+        ? marketAware.overProbability
+        : marketAware.underProbability;
+      signal = {
+        ...signal,
+        finalProbability,
+        overFinalProbability: marketAware.overProbability,
+        underFinalProbability: marketAware.underProbability,
+        projection: marketAware.projection,
+        reasonCodes: uniqueStrings([
+          ...signal.reasonCodes,
+          ...(marketContext?.currentOverProbability !== null && marketContext?.currentOverProbability !== undefined
+            ? ["MARKET_PRIOR_SHRINKAGE"]
+            : []),
+          ...(marketContext?.targetExcludedOverProbability !== null && marketContext?.targetExcludedOverProbability !== undefined
+            ? ["TARGET_EXCLUDED_MARKET_REFERENCE"]
+            : []),
+          ...(Math.abs(marketContext?.movementAdjustmentOver ?? 0) > 0
+            ? ["MARKET_MOVEMENT_CONTEXT"]
+            : []),
+          ...(Math.abs(marketContext?.relatedMovementAdjustmentOver ?? 0) > 0
+            ? ["CROSS_MARKET_MOVEMENT_CONTEXT"]
+            : []),
+          ...(Math.abs(marketContext?.splitAdjustmentOver ?? 0) > 0
+            ? ["VERIFIED_SPLIT_CONTEXT"]
+            : []),
+        ]),
+      };
+    }
     const selectedProbability = signal
       ? mapped.odds.side === signal.side ? signal.finalProbability : 1 - signal.finalProbability
       : null;
@@ -1171,13 +1229,8 @@ function buildDashboardRows(args: {
     const blockingModelWarnings = (scoredPitcherSignal?.featureWarnings ?? []).filter(isBlockingModelContextWarning);
     const modelContextIntegrated = blockingModelWarnings.length === 0;
     const isSelectedModelSide = Boolean(signal && mapped.odds.side === signal.side);
-    const canSignal = Boolean(eligibleModel && modelContextIntegrated && isSelectedModelSide && memberReady && price.signalEligible && (scoredPitcherSignal ? scoredPitcherSignal.status === "recommended" : true) && !isOddsStale(mapped.odds.asOfTimestamp, args.asOfTimestamp));
-    const playGrade = canSignal && signal
-      ? signal.playGrade
-      : definition.recommendationEligibility === "research_only" || !eligibleModel ? "RESEARCH"
-        : !memberReady ? "PENDING_DATA"
-          : !price.signalEligible ? "RESEARCH"
-          : isSelectedModelSide ? "WATCHLIST" : "NO_PLAY";
+    const quoteIsFresh = !isOddsStale(mapped.odds.asOfTimestamp, args.asOfTimestamp);
+    const canSignal = Boolean(eligibleModel && modelContextIntegrated && isSelectedModelSide && memberReady && price.signalEligible && (scoredPitcherSignal ? scoredPitcherSignal.status === "recommended" : true) && quoteIsFresh);
     const reasonCodes = uniqueStrings([
       ...(signal?.reasonCodes ?? []),
       ...(research?.missingModules.map((module) => `MISSING_${module.toUpperCase()}`) ?? []),
@@ -1194,7 +1247,13 @@ function buildDashboardRows(args: {
     // calibrates the final probability; carry that same market reference into
     // the member row so a legitimately promoted one-sided play has a
     // verifiable, non-null model edge at the publication data gate.
-    const effectiveMarketProbability = marketProbability ?? (
+    const targetExcludedProbability = marketContext?.targetExcludedOverProbability === null
+      || marketContext?.targetExcludedOverProbability === undefined
+      ? null
+      : mapped.odds.side === "over"
+        ? marketContext.targetExcludedOverProbability
+        : 1 - marketContext.targetExcludedOverProbability;
+    const effectiveMarketProbability = targetExcludedProbability ?? marketProbability ?? (
       signal && mapped.odds.side === signal.side ? price.impliedProbability : null
     );
     const edge = finalProbability !== null && effectiveMarketProbability !== null
@@ -1202,6 +1261,31 @@ function buildDashboardRows(args: {
       : null;
     const expectedValue = finalProbability !== null ? safeExpectedValue(finalProbability, mapped.odds.americanOdds) : null;
     const fairOdds = finalProbability !== null ? safeFairOdds(finalProbability) : null;
+    const genericValueWatchlist = Boolean(
+      signal
+      && memberReady
+      && modelContextIntegrated
+      && price.signalEligible
+      && quoteIsFresh
+      && qualifiesMlbPropMarketAwareWatchlist({
+        side: mapped.odds.side,
+        americanOdds: mapped.odds.americanOdds,
+        overProbability: signal.overFinalProbability,
+        context: marketContext,
+      })
+    );
+    const actionEconomicsRemainPositive = edge !== null && edge >= 0 && expectedValue !== null && expectedValue >= 0;
+    const signalGrade = canSignal && signal
+      ? (signal.playGrade === "BEST_ANGLE" || signal.playGrade === "LEAN") && !actionEconomicsRemainPositive
+        ? "WATCHLIST"
+        : signal.playGrade
+      : null;
+    const playGrade = signalGrade
+      ?? (genericValueWatchlist ? "WATCHLIST"
+        : definition.recommendationEligibility === "research_only" || !eligibleModel ? "RESEARCH"
+          : !memberReady ? "PENDING_DATA"
+            : !price.signalEligible ? "RESEARCH"
+            : isSelectedModelSide ? "WATCHLIST" : "NO_PLAY");
     const bdlPlayerTeamId = bdlTeamIdFor(mapped, identity);
     rows.push({
       id: rowId(mapped),
@@ -1268,7 +1352,10 @@ function buildDashboardRows(args: {
       pitchMatchup: research?.evidence.pitchMatchup ?? null,
       matchupHistory: research?.evidence.matchupHistory ?? null,
       environment: research?.evidence.environment ?? null,
-      reasonCodes,
+      reasonCodes: uniqueStrings([
+        ...reasonCodes,
+        ...(genericValueWatchlist ? ["MARKET_AWARE_VALUE_WATCHLIST"] : []),
+      ]),
       oddsSanity: isOddsStale(mapped.odds.asOfTimestamp, args.asOfTimestamp) ? ["STALE_ODDS"] : [],
       settlementStatus: "pending",
       clvStatus: "pending",

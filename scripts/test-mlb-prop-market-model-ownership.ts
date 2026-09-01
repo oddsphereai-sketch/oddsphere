@@ -9,6 +9,7 @@ import {
   activeMlbPropMarketModelVersions,
   MLB_PROPS_MODEL_RELEASE_ID,
 } from "../lib/mlb/props/marketModelVersions";
+import { MLB_PROPS_MARKET_AWARE_CONTEXT_RELEASE } from "../lib/mlb/props/marketAwareContext";
 import { modelForRealPitcherMarket } from "../lib/mlb/props/models";
 import {
   MLB_PROPS_SHADOW_PITCHER_FEATURE_VERSION,
@@ -22,22 +23,26 @@ import {
 } from "../lib/mlb/props/lockPolicy";
 
 const versions = activeMlbPropMarketModelVersions();
+const withMarketContext = (version: string) => `${version}__${MLB_PROPS_MARKET_AWARE_CONTEXT_RELEASE}`;
 assert.deepEqual(Object.keys(versions).sort(), [...MLB_PROP_MARKET_KEYS].sort());
-assert.equal(versions.batter_hits, `${BATTER_HITS_PA_MODEL_VERSION}_actionability_v6_uncapped_validated_under_best_angle`);
-assert.equal(versions.batter_hits_runs_rbis, `${BATTER_HRR_MODEL_VERSION}_actionability_v6_empirical_market_anchored_under_accuracy_display_projection_calibration_r1`);
-assert.equal(versions.pitcher_strikeouts, "pitcher_strikeouts_distribution_v6_weak_baseline_market_control_display_projection_calibration_r1");
-assert.equal(versions.pitcher_outs, "pitcher_outs_peer_consensus_compact_core_v6_mixed_role_workload_guard");
-assert.equal(versions.pitcher_walks, "pitcher_walks_distribution_v1_conservative_over_market_only_calibrated");
-assert.equal(versions.pitcher_earned_runs, "pitcher_earned_runs_distribution_v2_watchlist_only_display_projection_calibration_r1");
-assert.equal(versions.pitcher_hits_allowed, "pitcher_hits_allowed_distribution_v1_conservative_display_projection_calibration_r1");
-assert.equal(versions.batter_total_bases, "batter_total_bases_event_distribution_integrated_read_v3_watchlist_only_display_projection_calibration_r1");
-assert.equal(versions.batter_runs_scored, "batter_runs_context_opportunity_integrated_read_v4_unvalidated_special_promotion_removed");
-assert.equal(versions.batter_rbis, "batter_rbi_context_opportunity_integrated_read_v3_value_portfolio");
-assert.equal(versions.batter_home_runs, `${BATTER_HOME_RUNS_RESIDUAL_MODEL_VERSION}_actionability_v4_three_play_plus_medium_price_complement`);
-assert.equal(versions.batter_singles, "batter_singles_event_distribution_integrated_read_v5_under_lean_only");
-assert.equal(versions.batter_doubles, "batter_doubles_market_residual_v1_actionability_v2_empirical_market_under_accuracy");
-assert.equal(versions.batter_strikeouts, "batter_strikeouts_event_distribution_integrated_read_v2_empirical_market_over_accuracy_display_projection_calibration_r1");
-assert.equal(MLB_PROPS_MODEL_RELEASE_ID, "mlb_props_2026_08_19_r37");
+assert.equal(versions.batter_hits, withMarketContext(`${BATTER_HITS_PA_MODEL_VERSION}_actionability_v6_uncapped_validated_under_best_angle`));
+assert.equal(versions.batter_hits_runs_rbis, withMarketContext(`${BATTER_HRR_MODEL_VERSION}_actionability_v6_empirical_market_anchored_under_accuracy_display_projection_calibration_r1`));
+assert.equal(versions.pitcher_strikeouts, withMarketContext("pitcher_strikeouts_distribution_v6_weak_baseline_market_control_display_projection_calibration_r1"));
+assert.equal(versions.pitcher_outs, withMarketContext("pitcher_outs_peer_consensus_compact_core_v6_mixed_role_workload_guard"));
+assert.equal(versions.pitcher_walks, withMarketContext("pitcher_walks_distribution_v1_conservative_over_market_only_calibrated"));
+assert.equal(versions.pitcher_earned_runs, withMarketContext("pitcher_earned_runs_distribution_v2_watchlist_only_display_projection_calibration_r1"));
+assert.equal(versions.pitcher_hits_allowed, withMarketContext("pitcher_hits_allowed_distribution_v1_conservative_display_projection_calibration_r1"));
+assert.equal(versions.batter_total_bases, withMarketContext("batter_total_bases_event_distribution_integrated_read_v3_watchlist_only_display_projection_calibration_r1"));
+assert.equal(versions.batter_runs_scored, withMarketContext("batter_runs_context_opportunity_integrated_read_v4_unvalidated_special_promotion_removed"));
+assert.equal(versions.batter_rbis, withMarketContext("batter_rbi_context_opportunity_integrated_read_v3_value_portfolio"));
+assert.equal(versions.batter_home_runs, withMarketContext(`${BATTER_HOME_RUNS_RESIDUAL_MODEL_VERSION}_actionability_v4_three_play_plus_medium_price_complement`));
+assert.equal(versions.batter_singles, withMarketContext("batter_singles_event_distribution_integrated_read_v5_under_lean_only"));
+assert.equal(versions.batter_doubles, withMarketContext("batter_doubles_market_residual_v1_actionability_v2_empirical_market_under_accuracy"));
+assert.equal(versions.batter_strikeouts, withMarketContext("batter_strikeouts_event_distribution_integrated_read_v2_empirical_market_over_accuracy_display_projection_calibration_r1"));
+assert.equal(
+  MLB_PROPS_MODEL_RELEASE_ID,
+  "mlb_props_2026_09_01_r38",
+);
 assert.equal(MLB_PROPS_SHADOW_PITCHER_RELEASE_ID, "mlb_props_shadow_pitcher_2026_08_12_r1");
 assert.equal(MLB_PROPS_SHADOW_PITCHER_FEATURE_VERSION, "mlb_props_shared_pitcher_features_v1_2026_08_12");
 assert.match(MLB_PROPS_MODEL_RELEASE_ID, /^mlb_props_\d{4}_\d{2}_\d{2}_r\d+$/);
