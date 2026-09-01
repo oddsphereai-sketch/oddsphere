@@ -203,8 +203,8 @@ changed; only deterministic settlement of existing locked rows is affected.
 - Projection runtime: resolved automodel `v2_2`
 - First-inning runtime: `fi_v2` with probability head `mlb_first_inning_fi_v5_named_book_consensus_weight25_2026_09_01`
 - Public calibration: `mlb_public_calibration_v29_first_inning_named_book_consensus_2026_09_01`
-- Decision release: `mlb_daily_edge_decision_2026_09_01_r77_first_inning_named_book_consensus`
-- Rule bundle: `mlb_daily_edge_rule_bundle_v65_first_inning_named_book_consensus_2026_09_01`
+- Decision release: `mlb_daily_edge_decision_2026_09_01_r78_first_inning_member_tuple_coherence`
+- Rule bundle: `mlb_daily_edge_rule_bundle_v66_first_inning_member_tuple_coherence_2026_09_01`
 - Grade policy: `mlb_public_grade_policy_v55_first_inning_named_book_consensus_2026_09_01`
 - Correction policy: `mlb_prediction_corrections_v23_split_pair_recency_2026_08_31`
 - Tracking contract: `member_facing_lock_v8_priority_retry_minute_cadence_2026_08_11`
@@ -463,6 +463,31 @@ unchanged. The release stamps schema v10, calibration v29, decision r77, rule
 bundle v65, grade policy v55, FI probability head v5, FI named-book price-map
 v1, and FI market-calibration v2. Evidence and rollback are recorded in
 `docs/model-audits/2026-09-01-mlb-first-inning-named-book-consensus.md`.
+
+The September 1 MLB r78 first-inning member-tuple coherence repair keeps r77's
+forecast, natural-decimal posterior, expected-runs calculation, exact-price
+economics, sides, grades, stakes, promotion policy, writer, provider reads,
+and shared `prediction_pipeline:mlb` lease unchanged. It repairs only the
+unlocked handoff from the just-completed authoritative writer into the existing
+prediction-record sync: a current directional FI `no_bet` now publishes its
+current side, exact selected-side posterior, expected runs, named-book
+evaluation pair, writer cycle provenance, and No Play grade instead of being
+mistaken for an absent actionable proposal and converted to a stale held
+Toss-Up. The sync uses an FI-only successful writer tuple only when it is at
+least as new as the persisted source row, so a delayed/out-of-order result
+cannot regress a newer natural cycle. A genuinely missing or incoherent r77
+evaluation pair still fails closed into the existing hold path. There is no
+reader override and no new cron, provider, database, writer, or lease path;
+locked records remain byte-immutable. The narrow live reproduction is BAL@COL
+and STL@LAD: r77 source rows were current YRFI No Plays with Bally evaluation
+quotes while their unlocked member rows had been stale held Toss-Ups. The
+paired fixture repairs both to the source tuple, changes no model forecast or
+actionable grade, and therefore has zero promotions and zero demotions. The
+release stamps schema v11, decision r78, rule bundle v66, and FI
+member-tuple contract v1; r77 probability head v5, calibration v29,
+price-map v1, market-calibration v2, grade policy v55, and all full-game r76
+heads remain unchanged. Evidence and rollback are recorded in
+`docs/model-audits/2026-09-01-mlb-first-inning-member-tuple-coherence-r78.md`.
 
 The August 30 MLB T-60 lifecycle patch makes the lock gate understand r73's
 already-persisted pending-promotion shape. A fresh raw candidate may differ

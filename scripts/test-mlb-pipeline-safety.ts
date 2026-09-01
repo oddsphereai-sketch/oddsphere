@@ -87,10 +87,10 @@ check(
     layers.calibration_version === MLB_PUBLIC_CALIBRATION_VERSION,
 );
 check(
-  "MLB r77 versions FI named-book consensus while preserving r76 full-game heads and promotion timing",
-  MLB_DAILY_EDGE_DECISION_RELEASE_ID === "mlb_daily_edge_decision_2026_09_01_r77_first_inning_named_book_consensus" &&
-    MLB_MODEL_LAYER_VERSION_SCHEMA === "mlb_model_layer_versions_v10_first_inning_named_book_consensus" &&
-    layers.rule_bundle_version === "mlb_daily_edge_rule_bundle_v65_first_inning_named_book_consensus_2026_09_01" &&
+  "MLB r78 versions FI member tuple coherence while preserving r77 forecast heads and promotion timing",
+  MLB_DAILY_EDGE_DECISION_RELEASE_ID === "mlb_daily_edge_decision_2026_09_01_r78_first_inning_member_tuple_coherence" &&
+    MLB_MODEL_LAYER_VERSION_SCHEMA === "mlb_model_layer_versions_v11_first_inning_member_tuple_coherence" &&
+    layers.rule_bundle_version === "mlb_daily_edge_rule_bundle_v66_first_inning_member_tuple_coherence_2026_09_01" &&
     layers.calibration_version === "mlb_public_calibration_v29_first_inning_named_book_consensus_2026_09_01" &&
     layers.projection_core === "mlb_projection_core_v2_3_coherent_sharp_retail_joint_forecast_2026_09_01" &&
     layers.moneyline_probability_head === "mlb_moneyline_coherent_sharp_retail_probability_v2_2026_09_01" &&
@@ -105,6 +105,7 @@ check(
     layers.first_inning_probability_head === "mlb_first_inning_fi_v5_named_book_consensus_weight25_2026_09_01" &&
     layers.first_inning_market_price_map === "mlb_first_inning_named_book_price_map_v1_2026_09_01" &&
     layers.first_inning_market_calibration_policy === "mlb_first_inning_market_calibration_v2_named_book_consensus_2026_09_01" &&
+    layers.first_inning_member_tuple_contract === "mlb_first_inning_member_tuple_contract_v1_current_authoritative_r78_2026_09_01" &&
     layers.schedule_time_policy === "mlb_official_schedule_time_v1_2026_07_30",
 );
 const strongWinnerResistanceLean = resolveMlStrongWinnerResistanceLean({
