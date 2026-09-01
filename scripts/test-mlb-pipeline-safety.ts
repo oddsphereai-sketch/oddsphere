@@ -74,8 +74,8 @@ const layers = buildMlbModelLayerVersions("total", {});
 check("missing model env stamps resolved v2_2", layers.runtime_env.automodel_version === "v2_2");
 check("missing FI env stamps resolved fi_v2", layers.runtime_env.first_inning_model_version === "fi_v2");
 check(
-  "grade policy carries the r74 recency-coherent split hierarchy",
-  layers.grade_policy === "mlb_public_grade_policy_v52_split_pair_recency_2026_08_31",
+  "grade policy carries r75 sharp Moneyline source recovery",
+  layers.grade_policy === "mlb_public_grade_policy_v53_sharp_moneyline_source_recovery_2026_09_01",
 );
 check(
   "tracking contract carries the priority-retry minute-lock release",
@@ -87,13 +87,14 @@ check(
     layers.calibration_version === MLB_PUBLIC_CALIBRATION_VERSION,
 );
 check(
-  "MLB r74 versions split-pair recency without changing probability heads or promotion timing",
-  MLB_DAILY_EDGE_DECISION_RELEASE_ID === "mlb_daily_edge_decision_2026_08_31_r74_split_pair_recency" &&
-    MLB_MODEL_LAYER_VERSION_SCHEMA === "mlb_model_layer_versions_v7_split_pair_recency" &&
-    layers.rule_bundle_version === "mlb_daily_edge_rule_bundle_v62_split_pair_recency_2026_08_31" &&
+  "MLB r75 versions sharp Moneyline source recovery without changing probability heads or promotion timing",
+  MLB_DAILY_EDGE_DECISION_RELEASE_ID === "mlb_daily_edge_decision_2026_09_01_r75_sharp_moneyline_source_recovery" &&
+    MLB_MODEL_LAYER_VERSION_SCHEMA === "mlb_model_layer_versions_v8_sharp_moneyline_source_recovery" &&
+    layers.rule_bundle_version === "mlb_daily_edge_rule_bundle_v63_sharp_moneyline_source_recovery_2026_09_01" &&
     layers.moneyline_action_promotion_stability === "daily_edge_action_promotion_stability_2026_08_29_r1" &&
     layers.source_aware_split_pair_selector === "mlb_source_aware_split_pair_selector_v2_recency_coherent_2026_08_31" &&
-    layers.moneyline_evaluation_price_policy === "mlb_ml_fresh_coherent_best_playable_price_same_book_movement_v3_promotion_stability_2026_08_29" &&
+    layers.moneyline_evaluation_price_policy === "mlb_ml_fresh_coherent_best_playable_price_same_book_movement_v4_sharp_source_recovery_2026_09_01" &&
+    layers.moneyline_sharp_price_source === "mlb_sharp_moneyline_source_v2_targeted_complete_pair_recovery_2026_09_01" &&
     layers.correction_policy === "mlb_prediction_corrections_v23_split_pair_recency_2026_08_31" &&
     layers.first_inning_probability_head === "mlb_first_inning_fi_v4_market_backed_weight25_2026_08_20" &&
     layers.schedule_time_policy === "mlb_official_schedule_time_v1_2026_07_30",

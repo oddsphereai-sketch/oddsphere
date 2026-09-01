@@ -348,6 +348,26 @@ correction policy v23. Frozen evidence and rollback are recorded in
 Rollback is r73/v61/v51/correction v22/schema v6 with the r73 promotion policy
 and evaluation-price v3 retained.
 
+The September 1 MLB r75 sharp-Moneyline source recovery repairs a provider
+pagination asymmetry without inventing market evidence. When an event bucket
+already proves Pinnacle, Circa, or Bookmaker main-Total inventory but its
+generic paginated payload lacks a complete two-sided sharp Moneyline, the
+existing bounded line collector makes one market-scoped Moneyline request and
+merges the exact named-book rows through the same identity, alternate-line,
+dedupe, and database-bound validation. The 100-call cap, sole collector,
+shared `prediction_pipeline:mlb` writer lease, storage paths, side/probability
+heads, calibration v27, thresholds, stakes, locks, and r73 two-cycle public
+promotion contract remain unchanged. A frozen September 1 read-only pass
+recovered 23 complete Circa/Pinnacle book-game pairs across 12 of 15 games,
+with two raw promotions and one raw demotion, zero side/probability changes,
+and 93 calls under the existing cap. First-inning remained complete across all
+15 games from retail books but contained no supported sharp-book pair, so no
+sharp first-inning evidence is inferred. The release stamps schema v8,
+decision r75, rule bundle v63, grade policy v53, Moneyline price-source v2,
+and evaluation-price policy v4. Split selector v2 and correction policy v23
+remain unchanged. Evidence and rollback are recorded in
+`docs/model-audits/2026-09-01-mlb-sharp-moneyline-source-recovery.md`.
+
 The August 30 MLB T-60 lifecycle patch makes the lock gate understand r73's
 already-persisted pending-promotion shape. A fresh raw candidate may differ
 from the intentionally retained lower public tuple while confirmation is
