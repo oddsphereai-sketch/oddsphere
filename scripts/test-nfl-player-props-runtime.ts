@@ -4,12 +4,15 @@ import {
   NFL_PLAYER_PROPS_CALIBRATION_RELEASE,
   NFL_PLAYER_PROPS_DECISION_RELEASE,
   NFL_PLAYER_PROPS_MODEL_RELEASE,
+  NFL_PLAYER_PROPS_MARKET_COHERENT_PROJECTION_RELEASE,
   NFL_PLAYER_PROPS_QB_ROLE_FLOORS,
   NFL_PLAYER_PROPS_RUNTIME_RELEASE,
   nflPlayerPropsExpectedValue,
   nflPlayerPropsExpectedStarterPassingProjection,
+  gradeNflPlayerPropsTouchdownCandidate,
   nflPlayerPropsMarketImpliedCenter,
   nflPlayerPropsOverProbability,
+  nflPlayerPropsProbabilityCoherentProjection,
   nflPlayerPropsPassingYardsWatchlistEligible,
   nflPlayerPropsResidualProbability,
   nflPlayerPropsRuntimeMarketPolicy,
@@ -25,7 +28,7 @@ import {
 } from "../lib/services/football/nflPlayerPropsRuntime";
 import type { NflPlayerPropsExactOffer } from "../lib/services/football/nflPlayerPropsMarketBoard";
 
-assert.equal(NFL_PLAYER_PROPS_RUNTIME_RELEASE, "nfl_player_props_runtime_2026_09_01_r7_qb_passing_projection");
+assert.equal(NFL_PLAYER_PROPS_RUNTIME_RELEASE, "nfl_player_props_runtime_2026_09_01_r8_market_coherent_projection");
 assert.deepEqual(NFL_PLAYER_PROPS_QB_ROLE_FLOORS, { confirmedStarter: 0.9, projectedStarter: 0.75 });
 verifyNflPlayerPropsRuntimeParity(1e-9);
 
@@ -33,7 +36,7 @@ const receiving = nflPlayerPropsRuntimeMarketPolicy("receiving_yards");
 assert.deepEqual(receiving, { weight: 0.2, qualified: false }, "historical lane qualification remains truthful under the owner-approved forward exception");
 assert.equal(nflPlayerPropsRuntimeMarketPolicy("receptions")?.qualified, true);
 assert.equal(nflPlayerPropsRuntimeMarketPolicy("passing_yards")?.qualified, false);
-assert.deepEqual(nflPlayerPropsTouchdownPolicy(), { weight: 0.2, actionable: false });
+assert.deepEqual(nflPlayerPropsTouchdownPolicy(), { weight: 0.2, actionable: true, requiresSharpReference: true });
 assert.equal(nflPlayerPropsProductionMarketLane("receiving_yards")?.lean, true);
 assert.equal(nflPlayerPropsProductionMarketLane("receptions")?.lean, true);
 assert.deepEqual(nflPlayerPropsProductionMarketLane("passing_yards")?.eligibleSides, ["over", "under"]);
@@ -46,6 +49,14 @@ const range = nflPlayerPropsProjectionRange("receiving_yards", 75);
 assert.ok(range.lower < 75 && range.upper > 75);
 assert.equal(range.centralCoverage, 0.8);
 assert.throws(() => nflPlayerPropsOverProbability("touchdowns", 1, 0.5), /unsupported/);
+const coherentProjection = nflPlayerPropsProbabilityCoherentProjection({
+  market: "receiving_yards", line: 70.5, calibratedOverProbability: 0.55, independentProjection: 35,
+});
+assert.ok(coherentProjection > 55, "market-calibrated probability repairs an implausibly low independent display projection");
+assert.ok(Math.abs(nflPlayerPropsOverProbability("receiving_yards", coherentProjection, 70.5) - 0.55) <= 0.02,
+  "published projection inverts back to the calibrated probability within empirical resolution");
+assert.equal(NFL_PLAYER_PROPS_MARKET_COHERENT_PROJECTION_RELEASE,
+  "nfl_player_props_market_coherent_projection_2026_09_01_r1_probability_inverse");
 
 const residual = nflPlayerPropsResidualProbability(0.7, 0.5, 0.2);
 assert.ok(residual > 0.5 && residual < 0.7);
@@ -113,10 +124,15 @@ assert.deepEqual(
   noOpening.decisions.map(withoutBookEvidence),
   "opening presentation evidence changes zero decisions, probabilities, projections, or grades",
 );
-assert.ok(twoBooks.decisions.every((row) => row.decisionRelease === "nfl_player_props_decision_2026_09_01_r6_cross_market_movement"), "unchanged non-passing markets retain their prior decision release");
+assert.ok(twoBooks.decisions.every((row) => row.decisionRelease === NFL_PLAYER_PROPS_DECISION_RELEASE));
 assert.ok(twoBooks.decisions.every((row) => !row.healthHolds.includes("independent_same_line_confirmation_missing")));
-assert.ok(twoBooks.decisions.every((row) => row.modelRelease === "nfl_player_props_distribution_model_2026_09_01_r3_active_role"));
-assert.ok(twoBooks.decisions.every((row) => row.calibrationRelease === "nfl_player_props_distribution_calibration_2026_09_01_r3_active_role"));
+assert.ok(twoBooks.decisions.every((row) => row.modelRelease === NFL_PLAYER_PROPS_MODEL_RELEASE));
+assert.ok(twoBooks.decisions.every((row) => row.calibrationRelease === NFL_PLAYER_PROPS_CALIBRATION_RELEASE));
+assert.ok(twoBooks.decisions.every((row) => row.projectionEvidence?.source === "probability_inverse_market_calibrated"));
+assert.ok(twoBooks.decisions.every((row) => Math.abs(
+  nflPlayerPropsOverProbability(row.market, row.projection!, row.line)
+    - (row.side === "over" ? row.finalProbability : 1 - row.finalProbability),
+) <= 0.02), "every ordinary published projection agrees with its market-calibrated probability");
 assert.ok(twoBooks.decisions.every((row) => !row.modelRelease.includes("shadow") && !row.decisionRelease.includes("provisional")));
 assert.ok(twoBooks.decisions.every((row) => row.provisional === false));
 const quarterbackFeature = {
@@ -157,8 +173,10 @@ const expectedStarterProjection = nflPlayerPropsExpectedStarterPassingProjection
   offers: [passingOffer, { ...passingOffer, offerKey: "qb-book-b", sportsbook: "book-b", line: 226.5 }],
 });
 assert.ok(expectedStarterProjection, "a matching expected starter receives the market-dominant passing projection");
-assert.equal(expectedStarterProjection?.evidence.books, 2);
-assert.equal(expectedStarterProjection?.evidence.roleProjection, 235);
+assert.equal(expectedStarterProjection?.evidence.source, "market_dominant_expected_starter");
+if (expectedStarterProjection?.evidence.source !== "market_dominant_expected_starter") throw new Error("passing projection evidence narrowed incorrectly");
+assert.equal(expectedStarterProjection.evidence.books, 2);
+assert.equal(expectedStarterProjection.evidence.roleProjection, 235);
 assert.ok((expectedStarterProjection?.projection ?? 0) > 215 && (expectedStarterProjection?.projection ?? 999) < 240,
   "the repaired projection is market-realistic while retaining bounded recent-role context");
 assert.equal(nflPlayerPropsExpectedStarterPassingProjection({
@@ -212,6 +230,36 @@ assert.equal(targetOver?.calibrationRelease, NFL_PLAYER_PROPS_CALIBRATION_RELEAS
 assert.equal(targetOver?.decisionRelease, NFL_PLAYER_PROPS_DECISION_RELEASE);
 assert.ok(crossLinePassing.decisions.every((row) => !["Lean", "Best Angle"].includes(row.grade)),
   "different-line confirmation alone cannot authorize a passing-yards action grade");
+const touchdownOffer: NflPlayerPropsExactOffer = {
+  ...baseOffer,
+  offerKey: "td-dk",
+  sportsbook: "draftkings",
+  market: "anytime_td",
+  offerType: "milestone",
+  line: 0.5,
+  overPrice: null,
+  underPrice: null,
+  yesPrice: 1000,
+  overNoVigProbability: null,
+  underNoVigProbability: null,
+  openingOverPrice: null,
+  openingUnderPrice: null,
+  openingYesPrice: 900,
+};
+const retailOnlyTouchdown = buildNflPlayerPropsRuntimeBoard({
+  offers: [touchdownOffer, { ...touchdownOffer, offerKey: "td-fd", sportsbook: "fanduel", yesPrice: 900 }],
+  features: [feature], evaluatedAt: "2026-08-25T12:01:00.000Z",
+});
+assert.ok(retailOnlyTouchdown.decisions.every((row) => !["Lean", "Best Angle"].includes(row.grade)),
+  "two retail touchdown prices cannot impersonate a sharp reference or authorize an action");
+assert.equal(gradeNflPlayerPropsTouchdownCandidate({
+  commonHolds: [], independentBooks: 2, sharpReferenceBooks: 1, americanPrice: 425,
+  expectedValue: 0.13, probabilityEdge: 0.04, participationProbability: 0.9,
+}), "Best Angle", "a real sharp-reference touchdown quote can unlock the existing value ladder when all gates pass");
+assert.equal(gradeNflPlayerPropsTouchdownCandidate({
+  commonHolds: [], independentBooks: 2, sharpReferenceBooks: 0, americanPrice: 425,
+  expectedValue: 0.13, probabilityEdge: 0.04, participationProbability: 0.9,
+}), "Watchlist", "the same touchdown economics stay nonactionable when every observed book is retail");
 const roleHeld = buildNflPlayerPropsRuntimeBoard({ offers: [baseOffer, { ...baseOffer, offerKey: "test-b", sportsbook: "book-b" }], features: [{ ...feature, healthHolds: ["role_ambiguous"] }], evaluatedAt: "2026-08-25T12:01:00.000Z" });
 assert.equal(roleHeld.counts.Held, 2, "genuine role ambiguity remains a Held decision");
 assert.equal(roleHeld.diagnostics.roleOrIdentityHeld, 2);

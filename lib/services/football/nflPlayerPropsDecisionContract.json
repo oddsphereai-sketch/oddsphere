@@ -1,7 +1,7 @@
 {
-  "decisionRelease": "nfl_player_props_decision_2026_09_01_r7_qb_passing_projection",
-  "modelRelease": "nfl_player_props_distribution_model_2026_09_01_r4_qb_passing_projection",
-  "calibrationRelease": "nfl_player_props_distribution_calibration_2026_09_01_r4_qb_passing_projection",
+  "decisionRelease": "nfl_player_props_decision_2026_09_01_r8_market_coherent_projection",
+  "modelRelease": "nfl_player_props_distribution_model_2026_09_01_r5_market_coherent_projection",
+  "calibrationRelease": "nfl_player_props_distribution_calibration_2026_09_01_r5_market_coherent_projection",
   "touchdownModelRelease": "nfl_player_props_anytime_td_model_2026_08_25_r3_shared_context",
   "touchdownCalibrationRelease": "nfl_player_props_anytime_td_calibration_2026_08_25_r3_shared_context",
   "marketBoardRelease": "nfl_player_props_exact_market_board_2026_09_01_r2_cross_line_opening",
@@ -32,6 +32,13 @@
     "requiresNonAdverseMovement": true,
     "maximumGradeWithoutSameLineIndependentActionConfirmation": "Watchlist"
   },
+  "marketCoherentProjection": {
+    "release": "nfl_player_props_market_coherent_projection_2026_09_01_r1_probability_inverse",
+    "eligibleMarkets": ["passing_attempts", "passing_completions", "passing_yards", "receiving_yards", "receptions", "rushing_attempts", "rushing_yards"],
+    "probabilitySource": "final_market_residual_probability",
+    "preservesIndependentProjectionAsEvidence": true,
+    "changesProbabilityOrGrade": false
+  },
   "volumeAndYardage": {
     "watchlist": {"minimumEv": 0.0, "minimumProbabilityEdge": 0.0},
     "lean": {"minimumEv": 0.04, "minimumProbabilityEdge": 0.02, "minimumParticipationProbability": 0.70, "minimumIndependentBooks": 1},
@@ -50,10 +57,12 @@
   },
   "touchdown": {
     "watchlist": {"minimumEv": 0.0, "minimumProbabilityEdge": 0.0},
-    "lean": {"minimumEv": 0.07, "minimumProbabilityEdge": 0.02, "minimumParticipationProbability": 0.75},
+    "lean": {"minimumEv": 0.07, "minimumProbabilityEdge": 0.02, "minimumParticipationProbability": 0.75, "minimumIndependentBooks": 1},
     "bestAngle": {"minimumEv": 0.12, "minimumProbabilityEdge": 0.035, "minimumParticipationProbability": 0.85, "minimumIndependentBooks": 2},
     "minimumAmericanPrice": 100,
-    "eligibleLine": 0.5
+    "eligibleLine": 0.5,
+    "actionGradesRequireSharpReference": true,
+    "sharpReferenceBooks": ["pinnacle", "circa", "bookmaker"]
   },
   "releaseEvidence": {
     "minimumBestAngleBets": 30,
