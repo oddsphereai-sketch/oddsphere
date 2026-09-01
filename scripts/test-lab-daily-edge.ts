@@ -2527,10 +2527,39 @@ section("Market Pulse presentation coherence");
       preferredSportsbook: "hardrock",
     });
     check(
-      "movement reference prefers a current two-sided book with real history over a current-only best-price book",
+      "movement reference keeps the earliest complete same-book opening anchor",
       movementReference?.sportsbook === "ballybet" &&
         movementReference.selectedRow.odds_american === -105 &&
         movementReference.opposingRow.odds_american === -115,
+    );
+
+    const stableOpeningReference = dailyEdgeTest.selectTwoSidedMovementReference({
+      selectedSide: "home",
+      opposingSide: "away",
+      currentLine: null,
+      selectedCurrentRows: [
+        { game_id: 5, market_type: "moneyline", sportsbook: "fanduel", side: "home", line_value: null, odds_american: -120, fetched_at: movementCurrentAt },
+        { game_id: 5, market_type: "moneyline", sportsbook: "pinnacle", side: "home", line_value: null, odds_american: -125, fetched_at: movementCurrentAt },
+      ],
+      opposingCurrentRows: [
+        { game_id: 5, market_type: "moneyline", sportsbook: "fanduel", side: "away", line_value: null, odds_american: 108, fetched_at: movementCurrentAt },
+        { game_id: 5, market_type: "moneyline", sportsbook: "pinnacle", side: "away", line_value: null, odds_american: 112, fetched_at: movementCurrentAt },
+      ],
+      selectedHistory: [
+        { id: 41, game_id: 5, market_type: "moneyline", sportsbook: "fanduel", side: "home", line_value: null, odds_american: -118, recorded_at: "2026-08-27T08:00:00Z" },
+        { id: 42, game_id: 5, market_type: "moneyline", sportsbook: "pinnacle", side: "home", line_value: null, odds_american: -121, recorded_at: "2026-08-27T09:00:00Z" },
+        { id: 43, game_id: 5, market_type: "moneyline", sportsbook: "pinnacle", side: "home", line_value: null, odds_american: -123, recorded_at: "2026-08-27T10:00:00Z" },
+      ],
+      opposingHistory: [
+        { id: 44, game_id: 5, market_type: "moneyline", sportsbook: "fanduel", side: "away", line_value: null, odds_american: 106, recorded_at: "2026-08-27T08:00:00Z" },
+        { id: 45, game_id: 5, market_type: "moneyline", sportsbook: "pinnacle", side: "away", line_value: null, odds_american: 109, recorded_at: "2026-08-27T09:00:00Z" },
+        { id: 46, game_id: 5, market_type: "moneyline", sportsbook: "pinnacle", side: "away", line_value: null, odds_american: 111, recorded_at: "2026-08-27T10:00:00Z" },
+      ],
+      preferredSportsbook: "pinnacle",
+    });
+    check(
+      "later richer history cannot replace the immutable operational opening book",
+      stableOpeningReference?.sportsbook === "fanduel",
     );
   }
 

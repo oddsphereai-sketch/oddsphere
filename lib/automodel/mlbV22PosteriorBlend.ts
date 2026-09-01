@@ -148,7 +148,7 @@ export function blendPosterior(
   if (hasMarket && market !== null) {
     marketAwayImplied = market.awayImpliedTotal;
     marketHomeImplied = market.homeImpliedTotal;
-    marketTotal = market.listedTotal;
+    marketTotal = market.marketExpectedTotal ?? market.listedTotal;
     marketDiff =
       marketHomeImplied !== null && marketAwayImplied !== null
         ? marketHomeImplied - marketAwayImplied

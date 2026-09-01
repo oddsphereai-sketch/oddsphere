@@ -4,7 +4,7 @@ This file is the human-readable production handoff registry. Runtime constants a
 prediction snapshots remain the machine authority. Future model work must start here, verify the
 constants, and preserve the precedence and writer ownership below.
 
-Last reviewed: 2026-08-31
+Last reviewed: 2026-09-01
 
 ## NFL Daily Edge generalized weekly production release
 
@@ -194,10 +194,10 @@ changed; only deterministic settlement of existing locked rows is affected.
 
 - Projection runtime: resolved automodel `v2_2`
 - First-inning runtime: `fi_v2` with the versioned unpublished-probable availability head below
-- Public calibration: `mlb_public_calibration_v27_strong_winner_resistance_lean_2026_08_22`
-- Decision release: `mlb_daily_edge_decision_2026_08_31_r74_split_pair_recency`
-- Rule bundle: `mlb_daily_edge_rule_bundle_v62_split_pair_recency_2026_08_31`
-- Grade policy: `mlb_public_grade_policy_v52_split_pair_recency_2026_08_31`
+- Public calibration: `mlb_public_calibration_v28_coherent_sharp_retail_joint_forecast_2026_09_01`
+- Decision release: `mlb_daily_edge_decision_2026_09_01_r76_coherent_sharp_retail_joint_forecast`
+- Rule bundle: `mlb_daily_edge_rule_bundle_v64_coherent_sharp_retail_joint_forecast_2026_09_01`
+- Grade policy: `mlb_public_grade_policy_v54_coherent_sharp_retail_joint_forecast_2026_09_01`
 - Correction policy: `mlb_prediction_corrections_v23_split_pair_recency_2026_08_31`
 - Tracking contract: `member_facing_lock_v8_priority_retry_minute_cadence_2026_08_11`
 - Lock coherence: `mlb_lock_coherence_2026_08_30_r2_pending_promotion_tuple`
@@ -367,6 +367,48 @@ decision r75, rule bundle v63, grade policy v53, Moneyline price-source v2,
 and evaluation-price policy v4. Split selector v2 and correction policy v23
 remain unchanged. Evidence and rollback are recorded in
 `docs/model-audits/2026-09-01-mlb-sharp-moneyline-source-recovery.md`.
+
+The September 1 MLB r76 coherent sharp-retail joint forecast makes the
+already-authoritative V2.2 posterior consume one complete market read rather
+than applying a late grade-only nudge. For Moneyline and the exact listed
+Total, the snapshot forms complete two-sided no-vig prices per sportsbook,
+requires at least two supported sharp books and two supported retail books,
+and gives the median sharp cohort and median retail cohort equal group weight.
+The Moneyline consensus supplies the market run-share prior; the Total price
+supplies the market-implied scoring mean. Those priors enter the existing
+data-quality-weighted baseball/market posterior before decimal team scores,
+probabilities, sides, exact-price economics, and grades are derived. Circa,
+Pinnacle, and Bookmaker prices contribute to the sharp cohort when present;
+DraftKings, FanDuel, BetMGM, Caesars, and other supported books contribute to
+the retail cohort. Fresh public ticket/handle evidence remains an independent
+context check: a material opposite split can reject the enhanced map, while
+missing splits are neutral and never hold or flatten the board. The feature
+uses the established 90-minute snapshot freshness window and performs no new
+provider call or database query.
+
+The frozen current-slate audit applied Moneyline evidence to 11 of 15 games
+and Total evidence to six, changed six decimal score projections, changed one
+raw Total direction, and produced no Moneyline direction change; raw V2.2
+grades moved once and never expanded indiscriminately. A release-separated
+August 25–31 chronology found the new Total probability modestly better in
+both partitions, while Moneyline Brier and score-error movements were small
+and mixed. This release therefore claims coherent market interpretation and
+broader live evidence use, not guaranteed accuracy or retrospective profit.
+First-inning keeps its existing market-backed head until a complete paired
+price history supports the same integration. The sole writer, shared
+`prediction_pipeline:mlb` lease, promotion persistence, exact-price grade
+economics, stakes, locks, and tracking contract are unchanged. The release
+stamps schema v9, calibration v28, projection core v2.3, decision r76, rule
+bundle v64, grade policy v54, coherent price-map v1, and market-calibration
+policy v2. Evidence and rollback are recorded in
+`docs/model-audits/2026-09-01-mlb-coherent-sharp-retail-joint-forecast.md`.
+
+The September 1 stable-opening reader repair keeps one operational opening
+book/value throughout an unlocked MLB game's displayed movement trail. The
+earliest complete same-line two-sided sportsbook wins; later history depth
+cannot rotate `Opening` to another book. Current/evaluated price shopping and
+all writer/model behavior remain unchanged. Evidence is recorded in
+`docs/model-audits/2026-09-01-mlb-stable-opening-display.md`.
 
 The August 30 MLB T-60 lifecycle patch makes the lock gate understand r73's
 already-persisted pending-promotion shape. A fresh raw candidate may differ

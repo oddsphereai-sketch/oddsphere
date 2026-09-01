@@ -57,6 +57,7 @@ import type {
   WeatherSnapshot,
 } from "./types";
 import { shrinkBullpenEra } from "./types";
+import { buildMlbCoherentMarketPriceMap } from "./mlbCoherentMarketPriceMap";
 
 /**
  * Fallback when slate_date can't yield a season number cleanly.
@@ -850,6 +851,9 @@ export async function buildFeatureSnapshots(
   if (sport !== "mlb") return [];
 
   const season = deriveSeason(slate_date);
+  // Freeze one timestamp for the whole authoritative wave so sibling games
+  // cannot cross a freshness boundary while this batch is being assembled.
+  const featureSnapshotAsOf = new Date().toISOString();
 
   // Phase 4C: empty-array filter is treated as "explicit no games" —
   // short-circuit before any DB I/O. Distinct from `undefined` (no filter).
@@ -1405,6 +1409,11 @@ export async function buildFeatureSnapshots(
       total_line_book: linesTotal.book,
       total_line_agreement_count: linesTotal.agreement_count,
       total_line_consensus_at_same_line: linesTotal.consensus_at_same_line,
+      coherent_price_map: buildMlbCoherentMarketPriceMap({
+        rows: linesForGame,
+        listedTotal: finalListedTotal,
+        asOf: featureSnapshotAsOf,
+      }),
     };
 
     const sharp = buildSharpSnapshot(signalsByGame.get(g.id) ?? []);

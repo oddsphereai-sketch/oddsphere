@@ -74,8 +74,8 @@ const layers = buildMlbModelLayerVersions("total", {});
 check("missing model env stamps resolved v2_2", layers.runtime_env.automodel_version === "v2_2");
 check("missing FI env stamps resolved fi_v2", layers.runtime_env.first_inning_model_version === "fi_v2");
 check(
-  "grade policy carries r75 sharp Moneyline source recovery",
-  layers.grade_policy === "mlb_public_grade_policy_v53_sharp_moneyline_source_recovery_2026_09_01",
+  "grade policy carries r76 coherent sharp-retail joint forecast",
+  layers.grade_policy === "mlb_public_grade_policy_v54_coherent_sharp_retail_joint_forecast_2026_09_01",
 );
 check(
   "tracking contract carries the priority-retry minute-lock release",
@@ -87,10 +87,16 @@ check(
     layers.calibration_version === MLB_PUBLIC_CALIBRATION_VERSION,
 );
 check(
-  "MLB r75 versions sharp Moneyline source recovery without changing probability heads or promotion timing",
-  MLB_DAILY_EDGE_DECISION_RELEASE_ID === "mlb_daily_edge_decision_2026_09_01_r75_sharp_moneyline_source_recovery" &&
-    MLB_MODEL_LAYER_VERSION_SCHEMA === "mlb_model_layer_versions_v8_sharp_moneyline_source_recovery" &&
-    layers.rule_bundle_version === "mlb_daily_edge_rule_bundle_v63_sharp_moneyline_source_recovery_2026_09_01" &&
+  "MLB r76 versions the coherent group-consensus forecast while preserving promotion timing",
+  MLB_DAILY_EDGE_DECISION_RELEASE_ID === "mlb_daily_edge_decision_2026_09_01_r76_coherent_sharp_retail_joint_forecast" &&
+    MLB_MODEL_LAYER_VERSION_SCHEMA === "mlb_model_layer_versions_v9_coherent_sharp_retail_joint_forecast" &&
+    layers.rule_bundle_version === "mlb_daily_edge_rule_bundle_v64_coherent_sharp_retail_joint_forecast_2026_09_01" &&
+    layers.calibration_version === "mlb_public_calibration_v28_coherent_sharp_retail_joint_forecast_2026_09_01" &&
+    layers.projection_core === "mlb_projection_core_v2_3_coherent_sharp_retail_joint_forecast_2026_09_01" &&
+    layers.moneyline_probability_head === "mlb_moneyline_coherent_sharp_retail_probability_v2_2026_09_01" &&
+    layers.total_probability_head === "mlb_total_coherent_sharp_retail_probability_v2_2026_09_01" &&
+    layers.coherent_market_price_map === "mlb_coherent_market_price_map_v1_2026_09_01" &&
+    layers.market_calibration_policy === "mlb_model_market_calibration_v2_coherent_group_consensus_2026_09_01" &&
     layers.moneyline_action_promotion_stability === "daily_edge_action_promotion_stability_2026_08_29_r1" &&
     layers.source_aware_split_pair_selector === "mlb_source_aware_split_pair_selector_v2_recency_coherent_2026_08_31" &&
     layers.moneyline_evaluation_price_policy === "mlb_ml_fresh_coherent_best_playable_price_same_book_movement_v4_sharp_source_recovery_2026_09_01" &&

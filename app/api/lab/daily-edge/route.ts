@@ -72,7 +72,7 @@ import type {
   SignalType,
 } from "@/lib/types/domain/Grade";
 import { currentSlateDate, currentSoccerBoardDate, isSlateDate } from "@/lib/dates/slateDate";
-import { BOOK_PRIORITY } from "@/lib/config/bookPriority";
+import { BOOK_PRIORITY, bookPriorityRank } from "@/lib/config/bookPriority";
 import { selectBestCoherentPlayablePrice } from "@/lib/services/dailyEdge/bestPlayablePrice";
 import { determineSlateState } from "@/lib/services/dailyEdgeSlateResolution";
 import { isVoidStatus } from "@/lib/services/gameLifecycle";
@@ -3551,9 +3551,10 @@ function distinctHistoryTimes(rows: LineHistoryRow[]): number {
 /**
  * Pick one real sportsbook for display-only movement evidence. The evaluated
  * or current best-price book remains untouched. When that book has only a
- * single capture, prefer a different current two-sided book with the richest
- * exact-line same-book history so Opening/Prior/Current can be shown without
- * mixing books or inventing an opener.
+ * single capture, use a current two-sided book with the earliest complete
+ * same-line observation. That sportsbook is the operational opening anchor:
+ * later history depth cannot rotate the displayed Opening between books.
+ * All stops still stay on that one book.
  */
 function selectTwoSidedMovementReference(args: {
   selectedSide: Side | null;
@@ -3594,25 +3595,29 @@ function selectTwoSidedMovementReference(args: {
     const selectedRow = newestFreshAtBook(selectedRows, sportsbook);
     const opposingRow = newestFreshAtBook(opposingRows, sportsbook);
     if (selectedRow === null || opposingRow === null) return [];
-    const selectedHistoryCount = distinctHistoryTimes(
-      args.selectedHistory.filter(
-        (row) => row.sportsbook === sportsbook && exactLine(row),
-      ),
+    const selectedBookHistory = args.selectedHistory.filter(
+      (row) => row.sportsbook === sportsbook && exactLine(row),
     );
-    const opposingHistoryCount = distinctHistoryTimes(
-      args.opposingHistory.filter(
-        (row) => row.sportsbook === sportsbook && exactLine(row),
-      ),
+    const opposingBookHistory = args.opposingHistory.filter(
+      (row) => row.sportsbook === sportsbook && exactLine(row),
     );
+    const selectedHistoryCount = distinctHistoryTimes(selectedBookHistory);
+    const opposingHistoryCount = distinctHistoryTimes(opposingBookHistory);
+    const selectedOpeningMs = Math.min(...selectedBookHistory.map((row) => Date.parse(row.recorded_at)));
+    const opposingOpeningMs = Math.min(...opposingBookHistory.map((row) => Date.parse(row.recorded_at)));
+    const openingObservedAtMs = Math.max(selectedOpeningMs, opposingOpeningMs);
     return [{
       sportsbook,
       selectedRow,
       opposingRow,
+      openingObservedAtMs,
       pairedDepth: Math.min(selectedHistoryCount, opposingHistoryCount),
       totalDepth: selectedHistoryCount + opposingHistoryCount,
       preferred: sportsbook === args.preferredSportsbook,
     }];
   }).sort((a, b) =>
+    a.openingObservedAtMs - b.openingObservedAtMs ||
+    bookPriorityRank(a.sportsbook) - bookPriorityRank(b.sportsbook) ||
     b.pairedDepth - a.pairedDepth ||
     b.totalDepth - a.totalDepth ||
     Number(b.preferred) - Number(a.preferred) ||
