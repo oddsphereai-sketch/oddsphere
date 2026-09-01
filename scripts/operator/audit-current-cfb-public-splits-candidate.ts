@@ -56,6 +56,8 @@ async function main(): Promise<void> {
     const forecast = buildCfbMarketSharpAwareForecast({
       independentForecast: independent,
       anchor,
+      current: row.payload.market.current,
+      operationalOpening: row.payload.market.operationalOpening,
       sharpSplits: row.payload.market.sharpApiSplits ?? [],
       playbookLine: row.payload.market.playbookLine,
       publicSplits: row.payload.market.playbookSplits,

@@ -16,27 +16,27 @@ export const CFB_V1_BASE_PROBABILITY_RELEASE =
 export const CFB_V1_BASE_REPRESENTATIVE_SCORE_RELEASE =
   "cfb_v1_central_reachable_score_2026_08_28_r2_directional_pmf" as const;
 const CFB_V1_BASE_GRADE_POLICY_RELEASE =
-  "cfb_v1_composite_grade_policy_2026_08_31_r6_playbook_event_identity" as const;
+  "cfb_v1_composite_grade_policy_2026_09_01_r7_coherent_pmf_economics" as const;
 export const CFB_V1_SCORE_ARTIFACT_RELEASE =
-  "cfb_v1_joint_score_runtime_2026_08_31_r11_kickoff_weather" as const;
+  "cfb_v1_joint_score_runtime_2026_09_01_r12_coherent_movement_evidence" as const;
 export const CFB_V1_MODEL_RELEASE =
-  "cfb_v1_market_sharp_score_model_2026_08_31_r10_kickoff_weather" as const;
+  "cfb_v1_market_sharp_score_model_2026_09_01_r11_coherent_movement_evidence" as const;
 export const CFB_V1_DISTRIBUTION_RELEASE =
-  "cfb_v1_market_sharp_joint_distribution_2026_08_31_r8_kickoff_weather" as const;
+  "cfb_v1_market_sharp_joint_distribution_2026_09_01_r9_coherent_movement_evidence" as const;
 export const CFB_V1_PROBABILITY_RELEASE =
-  "cfb_v1_market_sharp_joint_probability_2026_08_31_r9_kickoff_weather" as const;
+  "cfb_v1_market_sharp_joint_probability_2026_09_01_r10_coherent_movement_evidence" as const;
 export const CFB_V1_REPRESENTATIVE_SCORE_RELEASE =
-  "cfb_v1_market_sharp_reachable_score_2026_08_31_r8_kickoff_weather" as const;
+  "cfb_v1_market_sharp_reachable_score_2026_09_01_r9_coherent_movement_evidence" as const;
 export const CFB_V1_CALIBRATION_RELEASE =
-  "cfb_v1_market_sharp_exact_price_calibration_2026_08_31_r7_playbook_event_identity" as const;
+  "cfb_v1_market_sharp_exact_price_calibration_2026_09_01_r8_coherent_pmf_identity" as const;
 export const CFB_V1_GRADE_POLICY_RELEASE =
-  "cfb_v1_composite_grade_policy_2026_08_31_r6_playbook_event_identity" as const;
+  "cfb_v1_composite_grade_policy_2026_09_01_r7_coherent_pmf_economics" as const;
 export const CFB_V1_DECISION_RELEASE =
-  "cfb_v1_daily_edge_decision_2026_08_31_r25_kickoff_weather" as const;
+  "cfb_v1_daily_edge_decision_2026_09_01_r26_coherent_movement_evidence" as const;
 const CFB_V1_POLICY_SOURCE_DECISION_RELEASE =
-  "cfb_v1_daily_edge_decision_2026_08_31_r25_kickoff_weather" as const;
+  "cfb_v1_daily_edge_decision_2026_09_01_r26_coherent_movement_evidence" as const;
 export const CFB_V1_DECISION_SCHEMA_RELEASE =
-  "cfb_v1_exact_price_decision_tuple_2026_08_31_r18_kickoff_weather" as const;
+  "cfb_v1_exact_price_decision_tuple_2026_09_01_r19_coherent_movement_evidence" as const;
 export const CFB_T60_TARGET_MINUTES = 60 as const;
 export const CFB_T60_MAX_CAPTURE_LAG_MINUTES = 20 as const;
 

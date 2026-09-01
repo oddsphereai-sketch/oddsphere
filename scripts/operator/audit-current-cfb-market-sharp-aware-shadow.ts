@@ -51,6 +51,8 @@ const games = latest.map((row) => {
   const forecast = buildCfbMarketSharpAwareShadowForecast({
     independentForecast: independent,
     anchor,
+    current: payload.market.current,
+    operationalOpening: payload.market.operationalOpening,
     sharpSplits: payload.market.sharpApiSplits ?? [],
     playbookLine: payload.market.playbookLine,
     publicSplits: payload.market.playbookSplits,

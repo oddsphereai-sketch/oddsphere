@@ -31,6 +31,36 @@ assert.equal(noSharp.sharpAdjustment.source, null);
 assert.equal(noSharp.sharpAdjustment.homeMarginShiftPoints, 0);
 assert.equal(noSharp.sharpAdjustment.totalShiftPoints, 0);
 assert.ok(noSharp.expectedMarginHome > independent.expectedMarginHome, "the market-dominant forecast moves the Hawaii margin toward Stanford");
+const openingDraftKings: NcaafBookOdds = {
+  ...books[0]!,
+  observedAt: "2026-08-28T10:00:00.000Z",
+  spread: { ...books[0]!.spread!, homeLine: -1, awayLine: 1 },
+  total: { ...books[0]!.total!, line: 45 },
+};
+const withMovement = buildCfbMarketSharpAwareShadowForecast({
+  independentForecast: independent,
+  anchor,
+  current: books[0]!,
+  operationalOpening: { quote: openingDraftKings },
+  sharpSplits: [],
+  evaluatedAt: observedAt,
+});
+assert.equal(withMovement.marketMovementAdjustment.status, "available");
+assert.ok(withMovement.marketMovementAdjustment.homeMarginShiftPoints > 0);
+assert.ok(withMovement.marketMovementAdjustment.totalShiftPoints > 0);
+assert.ok(withMovement.expectedMarginHome > noSharp.expectedMarginHome);
+assert.ok(withMovement.expectedTotal > noSharp.expectedTotal);
+const mismatchedMovement = buildCfbMarketSharpAwareShadowForecast({
+  independentForecast: independent,
+  anchor,
+  current: books[0]!,
+  operationalOpening: { quote: { ...openingDraftKings, sportsbook: "fanduel" } },
+  sharpSplits: [],
+  evaluatedAt: observedAt,
+});
+assert.equal(mismatchedMovement.marketMovementAdjustment.status, "unavailable");
+assert.equal(mismatchedMovement.expectedMarginHome.toFixed(9), noSharp.expectedMarginHome.toFixed(9));
+assert.equal(mismatchedMovement.expectedTotal.toFixed(9), noSharp.expectedTotal.toFixed(9));
 
 const publicHomeOver = publicSplitSet({ homeTickets: 40, homeMoney: 60, overTickets: 40, overMoney: 60 });
 const withPublic = buildCfbMarketSharpAwareShadowForecast({ independentForecast: independent, anchor, sharpSplits: [], playbookLine, publicSplits: publicHomeOver, evaluatedAt: observedAt });

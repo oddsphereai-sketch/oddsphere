@@ -47,7 +47,7 @@ import { buildMarketScopedFootballTrackingPlan } from "./footballMarketScopedTra
 import { assertFootballCrossMarketCoherence } from "./footballCrossMarketCoherence";
 
 export const CFB_FORWARD_WRITER_RELEASE =
-  "cfb_forward_evidence_writer_2026_08_31_r38_kickoff_weather" as const;
+  "cfb_forward_evidence_writer_2026_09_01_r39_coherent_movement_evidence" as const;
 export const CFB_TOTAL_MEAN_PMF_TOSSUP_MAX_PROBABILITY_GAP = 0.01 as const;
 export const CFB_TOTAL_MEAN_PMF_TOSSUP_MAX_MEAN_DISTANCE_POINTS = 0.5 as const;
 export const CFB_FORWARD_MAX_QB_TEAMS_PER_RUN = 24 as const;
@@ -192,6 +192,8 @@ export async function runCfbForwardEvidenceWriter(args: {
       ? buildCfbMarketSharpAwareForecast({
           independentForecast: weeklyForecast.forecast,
           anchor: outcomeAnchor,
+          current,
+          operationalOpening,
           sharpSplits: sharpApiSplits,
           playbookLine,
           publicSplits: playbookSplits,
@@ -202,6 +204,8 @@ export async function runCfbForwardEvidenceWriter(args: {
       ? buildCfbMarketSharpAwareForecast({
           independentForecast: weeklyForecast.forecast,
           anchor: outcomeAnchor,
+          current,
+          operationalOpening,
           sharpSplits: sharpApiSplits,
           playbookLine,
           publicSplits: playbookSplits,

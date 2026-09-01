@@ -130,6 +130,8 @@ async function replayGame(args: {
   const common = {
     independentForecast: independent,
     anchor,
+    current: args.payload.market.current,
+    operationalOpening: args.payload.market.operationalOpening,
     sharpSplits: args.payload.market.sharpApiSplits ?? [],
     playbookLine,
     publicSplits,

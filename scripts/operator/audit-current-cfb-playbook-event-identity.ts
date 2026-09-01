@@ -86,6 +86,8 @@ function compareRow(
   const forecast = buildCfbMarketSharpAwareForecast({
     independentForecast,
     anchor,
+    current: payload.market.current,
+    operationalOpening: payload.market.operationalOpening,
     sharpSplits: payload.market.sharpApiSplits ?? [],
     playbookLine,
     publicSplits,
