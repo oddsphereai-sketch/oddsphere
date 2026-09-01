@@ -16,6 +16,7 @@ import {
   FI_LEAGUE_AVG_TOP3_OPS,
 } from "../lib/automodel/mlbFirstInningFeatureBuilder";
 import { computeFiMarketBaseline } from "../lib/automodel/mlbFirstInningMarketBaseline";
+import { noVigPair } from "../lib/automodel/marketPrior";
 import type {
   GameSnapshot,
   StarterSnapshot,
@@ -354,7 +355,7 @@ async function main() {
     check("ballybet (not in priority chain) accepted via fall-through",
       r.data_quality === "ok");
     check("reason indicates the chosen book",
-      r.reason.startsWith("fi_market_ok"));
+      r.reason.includes("evaluation_ballybet"));
   }
 
   section("FI market baseline rejects non-NRFI 1.5-run prices");
@@ -368,7 +369,7 @@ async function main() {
     check("1.5-run Bally Bet price cannot become an NRFI price",
       r.listed_fi_total === 0.5 && r.nrfi_odds_american === -107 && r.yrfi_odds_american === -109);
     check("exact half-run two-sided book remains the source",
-      r.reason === "fi_market_ok_pinnacle");
+      r.evaluation_sportsbook === "pinnacle");
   }
 
   section("Push 3B-2 — Over=YRFI / Under=NRFI side mapping");
@@ -402,7 +403,7 @@ async function main() {
       balanced.yrfi_no_vig_prob !== null && balanced.nrfi_no_vig_prob !== null &&
       near(balanced.yrfi_no_vig_prob + balanced.nrfi_no_vig_prob, 1.0, 0.001));
     check("data_quality=ok", balanced.data_quality === "ok");
-    check("reason includes fi_market_ok", balanced.reason.startsWith("fi_market_ok"));
+    check("reason includes named-book consensus", balanced.reason.startsWith("fi_named_book_consensus"));
   }
   {
     const empty = computeFiMarketBaseline([]);
@@ -415,6 +416,125 @@ async function main() {
     ];
     const r = computeFiMarketBaseline(oneSided);
     check("one-sided line → data_quality missing", r.data_quality === "missing");
+  }
+
+  section("FI named-book consensus — retail-only projection and exact-price separation");
+  {
+    const asOf = "2026-09-01T17:00:00.000Z";
+    const rows: FiLineRow[] = [
+      { market_type: "first_inning_total", sportsbook: "fanduel", side: "over", line_value: 0.5, odds_american: -105, fetched_at: asOf },
+      { market_type: "first_inning_total", sportsbook: "fanduel", side: "under", line_value: 0.5, odds_american: -115, fetched_at: asOf },
+      { market_type: "first_inning_total", sportsbook: "ballybet", side: "over", line_value: 0.5, odds_american: 120, fetched_at: asOf },
+      { market_type: "first_inning_total", sportsbook: "ballybet", side: "under", line_value: 0.5, odds_american: -145, fetched_at: asOf },
+      { market_type: "first_inning_total", sportsbook: "betway", side: "over", line_value: 0.5, odds_american: 140, fetched_at: asOf },
+      { market_type: "first_inning_total", sportsbook: "betway", side: "under", line_value: 0.5, odds_american: -165, fetched_at: asOf },
+      // A partial sharp quote is not a pair and cannot block complete retail.
+      { market_type: "first_inning_total", sportsbook: "pinnacle", side: "over", line_value: 0.5, odds_american: -110, fetched_at: asOf },
+    ];
+    const baseline = computeFiMarketBaseline(rows, asOf);
+    const expectedRetailMedian = [
+      noVigPair(-105, -115).away,
+      noVigPair(120, -145).away,
+      noVigPair(140, -165).away,
+    ].sort((left, right) => left - right)[1]!;
+    check("retail-only complete pairs are projection-eligible without a sharp pair",
+      baseline.data_quality === "ok" && baseline.projection_book_count === 3);
+    check("all complete retail books contribute to the FI probability consensus",
+      near(baseline.nrfi_no_vig_prob ?? 0, expectedRetailMedian, 0.000001));
+    check("partial sharp inventory is ignored rather than treated as a hold",
+      !baseline.projection_sportsbooks.includes("pinnacle"));
+    check("evaluation economics remain on one exact priority book",
+      baseline.evaluation_sportsbook === "fanduel" &&
+      near(baseline.evaluation_nrfi_no_vig_prob ?? 0, noVigPair(-105, -115).away, 0.000001));
+    check("projection consensus does not overwrite the exact-price fair probability",
+      !near(baseline.nrfi_no_vig_prob ?? 0, baseline.evaluation_nrfi_no_vig_prob ?? 0, 0.000001));
+    const model = runMlbFirstInningModelV2(buildSnapshot(), rows, asOf);
+    const selectedPosterior = model.fiV2Audit.fi_pick === "NRFI"
+      ? model.fiV2Audit.posterior_p_nrfi
+      : 1 - model.fiV2Audit.posterior_p_nrfi;
+    const selectedEvaluationFair = model.fiV2Audit.fi_pick === "NRFI"
+      ? model.fiV2Audit.market_evaluation_nrfi_no_vig
+      : model.fiV2Audit.market_evaluation_yrfi_no_vig;
+    check("consensus enters the authoritative posterior before side classification",
+      model.fiV2Audit.market_projection_book_count === 3 &&
+      near(model.fiV2Audit.market_nrfi_no_vig ?? 0, expectedRetailMedian, 0.000001));
+    check("FI grade edge remains attached to the exact evaluation pair",
+      selectedEvaluationFair !== null && model.fiV2Audit.fi_edge_pct !== null &&
+      near(model.fiV2Audit.fi_edge_pct, (selectedPosterior - selectedEvaluationFair) * 100, 0.000001));
+  }
+  {
+    const asOf = "2026-09-01T17:00:00.000Z";
+    const oneRetailPair: FiLineRow[] = [
+      { market_type: "first_inning_total", sportsbook: "betrivers", side: "over", line_value: 0.5, odds_american: 105, fetched_at: asOf },
+      { market_type: "first_inning_total", sportsbook: "betrivers", side: "under", line_value: 0.5, odds_american: -125, fetched_at: asOf },
+      // Synthetic split consensus is not a named-book price source.
+      { market_type: "first_inning_total", sportsbook: "splits_consensus", side: "over", line_value: 0.5, odds_american: -400, fetched_at: asOf },
+      { market_type: "first_inning_total", sportsbook: "splits_consensus", side: "under", line_value: 0.5, odds_american: 300, fetched_at: asOf },
+    ];
+    const baseline = computeFiMarketBaseline(oneRetailPair, asOf);
+    check("one complete supported named book is sufficient",
+      baseline.data_quality === "ok" && baseline.projection_book_count === 1);
+    check("synthetic consensus never masquerades as price or ticket/handle evidence",
+      baseline.projection_sportsbooks.length === 1 && baseline.projection_sportsbooks[0] === "betrivers");
+  }
+  {
+    const asOf = "2026-09-01T17:00:00.000Z";
+    const skewed: FiLineRow[] = [
+      { market_type: "first_inning_total", sportsbook: "fanduel", side: "over", line_value: 0.5, odds_american: -105, fetched_at: "2026-09-01T16:50:00.000Z" },
+      { market_type: "first_inning_total", sportsbook: "fanduel", side: "under", line_value: 0.5, odds_american: -115, fetched_at: "2026-09-01T16:53:01.000Z" },
+    ];
+    check("side timestamps wider than two minutes cannot form a coherent pair",
+      computeFiMarketBaseline(skewed, asOf).data_quality === "missing");
+  }
+
+  section("FI opening/current movement — bounded upstream synthesis");
+  {
+    const asOf = "2026-09-01T17:00:00.000Z";
+    const current: FiLineRow[] = [
+      { market_type: "first_inning_total", sportsbook: "fanduel", side: "over", line_value: 0.5, odds_american: 120, fetched_at: asOf, observation_type: "current" },
+      { market_type: "first_inning_total", sportsbook: "fanduel", side: "under", line_value: 0.5, odds_american: -145, fetched_at: asOf, observation_type: "current" },
+      { market_type: "first_inning_total", sportsbook: "ballybet", side: "over", line_value: 0.5, odds_american: 110, fetched_at: asOf, observation_type: "current" },
+      { market_type: "first_inning_total", sportsbook: "ballybet", side: "under", line_value: 0.5, odds_american: -135, fetched_at: asOf, observation_type: "current" },
+    ];
+    const opening: FiLineRow[] = [
+      { market_type: "first_inning_total", sportsbook: "fanduel", side: "over", line_value: 0.5, odds_american: -130, fetched_at: "2026-09-01T12:00:00.000Z", observation_type: "opening" },
+      { market_type: "first_inning_total", sportsbook: "fanduel", side: "under", line_value: 0.5, odds_american: 110, fetched_at: "2026-09-01T12:00:00.000Z", observation_type: "opening" },
+      { market_type: "first_inning_total", sportsbook: "ballybet", side: "over", line_value: 0.5, odds_american: -125, fetched_at: "2026-09-01T12:00:00.000Z", observation_type: "opening" },
+      { market_type: "first_inning_total", sportsbook: "ballybet", side: "under", line_value: 0.5, odds_american: 105, fetched_at: "2026-09-01T12:00:00.000Z", observation_type: "opening" },
+    ];
+    const noMovement = computeFiMarketBaseline(current, asOf);
+    const withMovement = computeFiMarketBaseline([...current, ...opening], asOf);
+    check("missing FI opening history is neutral rather than a hold",
+      noMovement.data_quality === "ok" && noMovement.movement_adjustment_pp === 0 &&
+      near(noMovement.nrfi_no_vig_prob ?? 0, noMovement.current_nrfi_no_vig_prob ?? 1, 0.000001));
+    check("movement uses only same-book opening/current pairs",
+      withMovement.movement_book_count === 2 &&
+      withMovement.movement_sportsbooks.join(",") === "ballybet,fanduel");
+    check("NRFI-supportive movement contributes upstream in the same direction",
+      (withMovement.movement_nrfi_pp ?? 0) > 0 &&
+      (withMovement.nrfi_no_vig_prob ?? 0) > (withMovement.current_nrfi_no_vig_prob ?? 1));
+    check("movement residual is capped at one probability point",
+      near(withMovement.movement_adjustment_pp, 1, 0.000001));
+    check("opening context cannot replace the exact current evaluation quote",
+      withMovement.evaluation_sportsbook === "fanduel" &&
+      withMovement.yrfi_odds_american === 120 && withMovement.nrfi_odds_american === -145);
+    const incumbent = runMlbFirstInningModelV2(buildSnapshot(), current, asOf);
+    const candidate = runMlbFirstInningModelV2(buildSnapshot(), [...current, ...opening], asOf);
+    check("movement changes the authoritative posterior before classification",
+      candidate.fiV2Audit.posterior_p_nrfi > incumbent.fiV2Audit.posterior_p_nrfi &&
+      candidate.fiV2Audit.market_movement_adjustment_pp === 1);
+    check("natural decimal expected runs invert the same final posterior",
+      near(candidate.fiV2Audit.posterior_expected_first_inning_runs,
+        -Math.log(candidate.fiV2Audit.posterior_p_nrfi), 0.000000001));
+  }
+  {
+    const asOf = "2026-09-01T17:00:00.000Z";
+    const openingOnly: FiLineRow[] = [
+      { market_type: "first_inning_total", sportsbook: "fanduel", side: "over", line_value: 0.5, odds_american: -110, fetched_at: "2026-09-01T12:00:00.000Z", observation_type: "opening" },
+      { market_type: "first_inning_total", sportsbook: "fanduel", side: "under", line_value: 0.5, odds_american: -110, fetched_at: "2026-09-01T12:00:00.000Z", observation_type: "opening" },
+    ];
+    check("opening history alone cannot manufacture a current FI forecast",
+      computeFiMarketBaseline(openingOnly, asOf).data_quality === "missing");
   }
 
   // ──────────────────────────────────────────────────────────────────

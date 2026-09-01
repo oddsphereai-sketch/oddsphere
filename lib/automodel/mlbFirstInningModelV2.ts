@@ -118,6 +118,17 @@ export type FiV2Audit = {
   market_nrfi_odds_american: number | null;
   market_yrfi_no_vig: number | null;
   market_nrfi_no_vig: number | null;
+  market_current_nrfi_no_vig: number | null;
+  market_opening_nrfi_no_vig: number | null;
+  market_movement_nrfi_pp: number | null;
+  market_movement_adjustment_pp: number;
+  market_movement_sportsbooks: string[];
+  market_movement_book_count: number;
+  market_evaluation_yrfi_no_vig: number | null;
+  market_evaluation_nrfi_no_vig: number | null;
+  market_evaluation_sportsbook: string | null;
+  market_projection_sportsbooks: string[];
+  market_projection_book_count: number;
   market_data_quality: "ok" | "stale" | "missing";
   market_freshness: string | null;
   market_reason: string;
@@ -125,6 +136,7 @@ export type FiV2Audit = {
   trust_independent: number;
   posterior_p_nrfi: number;
   posterior_p_yrfi: number;
+  posterior_expected_first_inning_runs: number;
   posterior_capped: boolean;
   posterior_moved_from_market: number; // |posterior_nrfi - market_nrfi|, or 0 if no market
   // Layer 4
@@ -284,6 +296,7 @@ function applyFiMarginalPricePolicy(args: {
 export function runMlbFirstInningModelV2(
   snap: GameSnapshot,
   fiLineRows: FiLineRow[],
+  asOfIso: string = new Date().toISOString(),
 ): FiV2Output {
   const integrityNotes: string[] = [];
 
@@ -291,7 +304,7 @@ export function runMlbFirstInningModelV2(
   const indep: FiIndependentProjection = projectFiIndependent(snap);
 
   // Layer 2
-  const market: FiMarketBaseline = computeFiMarketBaseline(fiLineRows);
+  const market: FiMarketBaseline = computeFiMarketBaseline(fiLineRows, asOfIso);
   const hasMarket =
     market.data_quality === "ok" &&
     market.nrfi_no_vig_prob !== null &&
@@ -319,6 +332,10 @@ export function runMlbFirstInningModelV2(
   }
   posteriorNrfi = clamp(posteriorNrfi, 0.02, 0.98);
   const posteriorYrfi = 1 - posteriorNrfi;
+  // P(no first-inning run) = exp(-lambda). Persist the inverse at full
+  // precision so the visible decimal FI projection, probabilities, and side
+  // all come from the same market-informed posterior.
+  const posteriorExpectedFirstInningRuns = -Math.log(posteriorNrfi);
 
   const awayStarterFiPreferred = indep.feature_audit.away_starter_fi.source === "preferred";
   const homeStarterFiPreferred = indep.feature_audit.home_starter_fi.source === "preferred";
@@ -430,9 +447,12 @@ export function runMlbFirstInningModelV2(
   let fi_edge_pct: number | null = null;
   if (hasMarket && (fi_pick === "NRFI" || fi_pick === "YRFI")) {
     const pickSidePosterior = fi_pick === "NRFI" ? posteriorNrfi : posteriorYrfi;
+    // The projection uses the complete named-book consensus above, while
+    // action economics remain attached to one exact same-book pair. This
+    // prevents consensus evidence from silently replacing the offered quote.
     const pickSideMarket = fi_pick === "NRFI"
-      ? (market.nrfi_no_vig_prob ?? 0.5)
-      : (market.yrfi_no_vig_prob ?? 0.5);
+      ? (market.evaluation_nrfi_no_vig_prob ?? 0.5)
+      : (market.evaluation_yrfi_no_vig_prob ?? 0.5);
     fi_edge_pct = (pickSidePosterior - pickSideMarket) * 100;
   }
 
@@ -532,12 +552,24 @@ export function runMlbFirstInningModelV2(
     market_nrfi_odds_american: market.nrfi_odds_american,
     market_yrfi_no_vig: market.yrfi_no_vig_prob,
     market_nrfi_no_vig: market.nrfi_no_vig_prob,
+    market_current_nrfi_no_vig: market.current_nrfi_no_vig_prob,
+    market_opening_nrfi_no_vig: market.opening_nrfi_no_vig_prob,
+    market_movement_nrfi_pp: market.movement_nrfi_pp,
+    market_movement_adjustment_pp: market.movement_adjustment_pp,
+    market_movement_sportsbooks: market.movement_sportsbooks,
+    market_movement_book_count: market.movement_book_count,
+    market_evaluation_yrfi_no_vig: market.evaluation_yrfi_no_vig_prob,
+    market_evaluation_nrfi_no_vig: market.evaluation_nrfi_no_vig_prob,
+    market_evaluation_sportsbook: market.evaluation_sportsbook,
+    market_projection_sportsbooks: market.projection_sportsbooks,
+    market_projection_book_count: market.projection_book_count,
     market_data_quality: market.data_quality,
     market_freshness: market.freshness,
     market_reason: market.reason,
     trust_independent: trustIndep,
     posterior_p_nrfi: posteriorNrfi,
     posterior_p_yrfi: posteriorYrfi,
+    posterior_expected_first_inning_runs: posteriorExpectedFirstInningRuns,
     posterior_capped: posteriorCapped,
     posterior_moved_from_market: posteriorMovedFromMarket,
     fi_pick,
