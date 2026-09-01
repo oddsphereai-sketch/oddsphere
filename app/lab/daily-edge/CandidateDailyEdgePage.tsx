@@ -14,6 +14,7 @@ import {
 import { filterWeeklyReaderSnapshot } from "@/lib/services/dailyEdge/weeklyReaderLifecycle";
 import type { Sport } from "@/lib/types/domain/Sport";
 import { unstable_cache } from "next/cache";
+import { CFB_MEMBER_FIXTURE_RELEASE } from "@/lib/services/football/cfbMemberFixture";
 import { NFL_FORWARD_MEMBER_SNAPSHOT_RELEASE } from "@/lib/services/football/nflForwardMemberSnapshotStore";
 import { enrichCachedNflFootballEvidence } from "@/lib/services/football/footballMemberEvidence";
 import DailyEdgeLiveRefresh from "./DailyEdgeLiveRefresh";
@@ -29,6 +30,18 @@ const readCachedNflForwardMemberSnapshot = unstable_cache(
   },
   [NFL_FORWARD_MEMBER_SNAPSHOT_RELEASE],
   { revalidate: 15, tags: [NFL_FORWARD_MEMBER_SNAPSHOT_RELEASE] },
+);
+
+const readCachedCfbMemberFixture = unstable_cache(
+  async (season: number) => {
+    const [{ supabase }, { readCurrentCfbMemberFixture }] = await Promise.all([
+      import("@/lib/db/supabase"),
+      import("@/lib/services/football/cfbMemberFixture"),
+    ]);
+    return readCurrentCfbMemberFixture({ client: supabase, season });
+  },
+  ["cfb-current-member-fixture", CFB_MEMBER_FIXTURE_RELEASE],
+  { revalidate: 60, tags: [CFB_MEMBER_FIXTURE_RELEASE] },
 );
 
 const MEMBER_SPORT_SWITCH_DESTINATIONS: Partial<Record<Sport, string>> = {
@@ -106,15 +119,9 @@ export default async function CandidateDailyEdgePage({
     : await readMemberDataWithDeadline({
       label: "cfb-daily-edge-fixture",
       fallback: null,
-      read: () => Promise.all([
-        import("@/lib/db/supabase"),
-        import("@/lib/services/football/cfbMemberFixture"),
-      ])
-        .then(([{ supabase }, { readCurrentCfbMemberFixture }]) =>
-          readCurrentCfbMemberFixture({
-            client: supabase,
-            season: Number(process.env.CFB_FORWARD_SEASON ?? "2026"),
-          })),
+      read: () => readCachedCfbMemberFixture(
+        Number(process.env.CFB_FORWARD_SEASON ?? "2026"),
+      ),
     });
   const cfbFixture = cfbFixtureRead.value;
   let snapshot: DailyEdgeResponse;
@@ -235,10 +242,11 @@ export default async function CandidateDailyEdgePage({
               }
           : cfbEnabled
             ? {
-                label: "CFB · Opening Week · evidence temporarily unavailable",
+                label: "CFB · Weekly slate · evidence temporarily unavailable",
                 previousHref: null,
                 nextHref: null,
                 displayGameCount: 0,
+                unavailable: true,
                 asOf: snapshot.as_of,
                 cadenceLabel: "six-hour beyond 48h · hourly inside 48h · T-60 lock",
               }
