@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
+  auditNflForwardMemberSnapshot,
   buildNflForwardMemberSnapshot,
   NFL_FORWARD_MEMBER_SNAPSHOT_RELEASE,
   nflForwardMemberSnapshotKey,
@@ -41,6 +44,49 @@ assert.equal(snapshot.sourceChecksum, checksum);
 assert.equal(snapshot.fixture, fixture);
 assert.match(nflForwardMemberSnapshotKey({ season: 2026, week: 1 }), /2026::1/);
 assert.match(nflForwardMemberSnapshotKey({ season: 2026, week: 1 }), new RegExp(NFL_FORWARD_MEMBER_SNAPSHOT_RELEASE));
+
+const auditedFixture = {
+  ...fixture,
+  capturedAt: "2026-09-01T13:00:00.000Z",
+  snapshot: {
+    ...fixture.snapshot,
+    games: [{
+      id: "nfl-test",
+      gameStartAt: "2026-09-10T00:20:00.000Z",
+      scheduledLockAt: "2026-09-09T23:20:00.000Z",
+      markets: Object.fromEntries(["moneyline", "total", "first_inning"].map((market) => [market, {
+        currentPriceAmerican: -110,
+        oddsTrail: [
+          { label: "open", capturedAt: "2026-09-01T12:00:00.000Z" },
+          { label: "current", capturedAt: "2026-09-01T13:00:00.000Z" },
+        ],
+        verdict: { label: market === "moneyline" ? "Lean" : "No Play" },
+      }])),
+    }],
+  },
+} as unknown as NflWeekOneHeldMemberFixture;
+const auditedSnapshot = buildNflForwardMemberSnapshot({
+  fixture: auditedFixture,
+  season: 2026,
+  week: 1,
+  publishedAt: "2026-09-01T13:20:00.000Z",
+});
+const audit = auditNflForwardMemberSnapshot({ snapshot: auditedSnapshot, now: new Date("2026-09-01T13:30:00.000Z") });
+assert.equal(audit.healthy, true);
+assert.equal(audit.metrics.games, 1);
+assert.equal(audit.metrics.predictions, 3);
+assert.equal(audit.metrics.maximumSourceAgeMinutes, 390, "far-window evidence follows the six-hour cadence");
+assert.equal(audit.metrics.grades.Lean, 1);
+const brokenAudit = auditNflForwardMemberSnapshot({
+  snapshot: { ...auditedSnapshot, publishedAt: "2026-09-01T11:00:00.000Z" },
+  now: new Date("2026-09-01T13:30:00.000Z"),
+});
+assert.equal(brokenAudit.healthy, false);
+assert.match(brokenAudit.critical.join(";"), /compact member snapshot age/);
+const healthRoute = readFileSync(path.resolve("app/api/cron/nfl-daily-edge-health/route.ts"), "utf8");
+assert.match(healthRoute, /readNflForwardMemberSnapshot/);
+assert.match(healthRoute, /auditNflForwardMemberSnapshot/);
+assert.doesNotMatch(healthRoute, /readCurrentNflPublishedMemberSnapshot/);
 
 let storedPayload: unknown = null;
 let storedKey: string | null = null;

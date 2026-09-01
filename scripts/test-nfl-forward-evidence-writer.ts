@@ -254,6 +254,13 @@ assert.match(writer, /currentBooks/);
 assert.match(writer, /comparableCurrentBooks/);
 assert.match(writer, /multibook_consensus_unavailable/);
 assert.match(writer, /readLegacyNflForwardEvidence/);
+assert.match(writer, /nfl_forward_evidence_writer_2026_09_01_r18_serialized_history_reads/);
+assert.doesNotMatch(
+  writer,
+  /const \[existing, previousExisting, priorExisting, legacyExisting\] = await Promise\.all/,
+  "large cross-release evidence reads must remain serialized to avoid self-induced statement timeouts",
+);
+assert.match(writer, /const existing = await readNflForwardEvidence[\s\S]*const previousExisting = await readPreviousNflForwardEvidence[\s\S]*const priorExisting = await readPriorNflForwardEvidence[\s\S]*const legacyExisting = await readLegacyNflForwardEvidence/);
 assert.match(evidenceRuntime, /public_release_refresh_due/);
 assert.equal(NFL_T60_MAX_CAPTURE_LAG_MINUTES, 20);
 assert.match(writer, /NFL_T60_MAX_CAPTURE_LAG_MINUTES/);
