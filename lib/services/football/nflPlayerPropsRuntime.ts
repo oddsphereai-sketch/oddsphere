@@ -15,14 +15,30 @@ import type { NflPlayerPropMarket, NflPlayerPropsObservationSnapshot } from "./n
 import type { NflPlayerPropsInferenceContext } from "./nflPlayerPropsInferenceContext";
 import type { NflPlayerPropsExactOffer } from "./nflPlayerPropsMarketBoard";
 
-export const NFL_PLAYER_PROPS_RUNTIME_ARTIFACT_RELEASE =
+export const NFL_PLAYER_PROPS_PORTABLE_ARTIFACT_RELEASE =
   "nfl_player_props_runtime_2026_09_01_r4_cross_market_movement" as const;
 export const NFL_PLAYER_PROPS_RUNTIME_RELEASE =
-  "nfl_player_props_runtime_2026_09_01_r6_cross_market_movement" as const;
+  "nfl_player_props_runtime_2026_09_01_r7_qb_passing_projection" as const;
 export const NFL_PLAYER_PROPS_BOARD_RELEASE =
-  "nfl_player_props_board_2026_09_01_r9_cross_market_movement" as const;
+  "nfl_player_props_board_2026_09_01_r10_qb_passing_projection" as const;
 export const NFL_PLAYER_PROPS_DECISION_RELEASE =
-  "nfl_player_props_decision_2026_09_01_r6_cross_market_movement" as const;
+  "nfl_player_props_decision_2026_09_01_r7_qb_passing_projection" as const;
+export const NFL_PLAYER_PROPS_MODEL_RELEASE =
+  "nfl_player_props_distribution_model_2026_09_01_r4_qb_passing_projection" as const;
+export const NFL_PLAYER_PROPS_CALIBRATION_RELEASE =
+  "nfl_player_props_distribution_calibration_2026_09_01_r4_qb_passing_projection" as const;
+export const NFL_PLAYER_PROPS_PASSING_MARKET_RELEASE =
+  "nfl_player_props_market_residual_calibration_2026_09_01_r6_qb_passing_projection" as const;
+export const NFL_PLAYER_PROPS_QB_PASSING_PROJECTION = {
+  release: "nfl_player_props_qb_passing_projection_2026_09_01_r1_market_dominant_role_context",
+  minimumBooks: 1,
+  marketWeight: 0.9,
+  roleWeight: 0.1,
+} as const;
+export const NFL_PLAYER_PROPS_QB_ROLE_FLOORS = {
+  confirmedStarter: 0.9,
+  projectedStarter: 0.75,
+} as const;
 export const NFL_PLAYER_PROPS_MAXIMUM_RAW_MARKET_DIVERGENCE = 0.48 as const;
 export const NFL_PLAYER_PROPS_MATERIAL_PRICE_MOVEMENT_PP = 0.025 as const;
 
@@ -40,7 +56,7 @@ type Distribution = EmpiricalDistribution | {
   fallback: EmpiricalDistribution;
 };
 type RuntimeArtifact = {
-  runtimeRelease: typeof NFL_PLAYER_PROPS_RUNTIME_ARTIFACT_RELEASE;
+  runtimeRelease: typeof NFL_PLAYER_PROPS_PORTABLE_ARTIFACT_RELEASE;
   modelRelease: string; calibrationRelease: string; touchdownModelRelease: string;
   touchdownCalibrationRelease: string; decisionRelease: string; marketResidualRelease: string;
   featureNames: string[];
@@ -92,7 +108,7 @@ const artifact = {
   touchdown: touchdownJson,
   playerStates: { ...playerStates0Json, ...playerStates1Json, ...playerStates2Json, ...playerStates3Json },
 } as unknown as RuntimeArtifact;
-if (artifact.runtimeRelease !== NFL_PLAYER_PROPS_RUNTIME_ARTIFACT_RELEASE) {
+if (artifact.runtimeRelease !== NFL_PLAYER_PROPS_PORTABLE_ARTIFACT_RELEASE) {
   throw new Error("NFL player props runtime artifact release mismatch.");
 }
 
@@ -160,6 +176,21 @@ export type NflPlayerPropsRuntimeDecision = {
   marketProbability: number; finalProbability: number; probabilityEdge: number; expectedValue: number;
   grade: NflPlayerPropsGrade; marketMovement: NflPlayerPropsMarketMovement; healthHolds: string[]; provisional: false;
   modelRelease: string; calibrationRelease: string; decisionRelease: string;
+  projectionEvidence?: {
+    release: typeof NFL_PLAYER_PROPS_QB_PASSING_PROJECTION.release;
+    source: "market_dominant_expected_starter";
+    marketWeight: typeof NFL_PLAYER_PROPS_QB_PASSING_PROJECTION.marketWeight;
+    roleWeight: typeof NFL_PLAYER_PROPS_QB_PASSING_PROJECTION.roleWeight;
+    books: number;
+    marketConsensus: number;
+    roleProjection: number;
+  };
+  passingMarketEvidence?: {
+    release: typeof NFL_PLAYER_PROPS_PASSING_MARKET_RELEASE;
+    source: "target_book_excluded_cross_line_transport";
+    books: number;
+    benchmarkProbability: number;
+  };
 };
 
 export type NflPlayerPropsRuntimeBoard = {
@@ -322,6 +353,13 @@ export function buildNflPlayerPropsRuntimeBoard(args: {
     } : probability);
     benchmarkGroups.set(key, books);
   }
+  const passingPrimaryKeys = primaryNflPlayerPropsOfferKeys(freshExact.filter((offer) => offer.market === "passing_yards"));
+  const passingMarketGroups = new Map<string, NflPlayerPropsExactOffer[]>();
+  for (const offer of freshExact) {
+    if (offer.market !== "passing_yards" || offer.offerType !== "over_under" || !passingPrimaryKeys.has(offer.offerKey)) continue;
+    const key = crossLineMarketKey(offer);
+    passingMarketGroups.set(key, [...(passingMarketGroups.get(key) ?? []), offer]);
+  }
   const decisions: NflPlayerPropsRuntimeDecision[] = [];
   for (const offer of freshExact) {
     const feature = featureByKey.get(`${offer.canonicalGameId}|${normalizeName(offer.playerName)}`);
@@ -354,17 +392,40 @@ export function buildNflPlayerPropsRuntimeBoard(args: {
           : offer.yesPrice >= 100 && edge >= 0 && ev >= 0
             ? "Watchlist"
             : "No Play";
-      decisions.push(decisionRow(offer, feature, scored, "yes", offer.yesPrice, null, raw, market, final, edge, ev, grade, "neutral", decisionReasons, artifact.touchdownModelRelease, artifact.touchdownCalibrationRelease));
+      decisions.push(decisionRow(offer, feature, scored, "yes", offer.yesPrice, null, raw, market, final, edge, ev, grade, "neutral", decisionReasons, artifact.touchdownModelRelease, artifact.touchdownCalibrationRelease, artifact.decisionRelease));
       continue;
     }
     const policy = artifact.markets[offer.market];
     const lane = nflPlayerPropsProductionMarketLane(offer.market);
     if (!policy || offer.overPrice === null || offer.underPrice === null || offer.overNoVigProbability === null || offer.underNoVigProbability === null) continue;
-    const projection = scored.projections[offer.market]!;
+    const passingProjection = offer.market === "passing_yards"
+      ? nflPlayerPropsExpectedStarterPassingProjection({
+          feature,
+          modeledProjection: scored.projections.passing_yards!,
+          offers: passingMarketGroups.get(crossLineMarketKey(offer)) ?? [],
+        })
+      : null;
+    const projection = passingProjection?.projection ?? scored.projections[offer.market]!;
+    const decisionScore = passingProjection ? {
+      ...scored,
+      participationProbability: nflPlayerPropsStarterAdjustedParticipationProbability(feature, scored.participationProbability),
+    } : scored;
     const rawOver = nflPlayerPropsOverProbability(offer.market, projection, offer.line);
+    const independentPassingOffers = offer.market === "passing_yards"
+      ? (passingMarketGroups.get(crossLineMarketKey(offer)) ?? [])
+          .filter((candidate) => normalizeBook(candidate.sportsbook) !== normalizeBook(offer.sportsbook))
+      : [];
     for (const [side, price, raw, market] of [
-      ["over", offer.overPrice, rawOver, averagePresent(others.map((value) => value.over)) ?? offer.overNoVigProbability],
-      ["under", offer.underPrice, 1 - rawOver, averagePresent(others.map((value) => value.under)) ?? offer.underNoVigProbability],
+      ["over", offer.overPrice, rawOver, offer.market === "passing_yards" && independentPassingOffers.length
+        ? averagePresent(independentPassingOffers.map((candidate) => candidate.overNoVigProbability === null ? null : nflPlayerPropsTransportedMarketProbability({
+            projection, sourceLine: candidate.line, sourceOverProbability: candidate.overNoVigProbability, targetLine: offer.line,
+          })))!
+        : averagePresent(others.map((value) => value.over)) ?? offer.overNoVigProbability],
+      ["under", offer.underPrice, 1 - rawOver, offer.market === "passing_yards" && independentPassingOffers.length
+        ? 1 - averagePresent(independentPassingOffers.map((candidate) => candidate.overNoVigProbability === null ? null : nflPlayerPropsTransportedMarketProbability({
+            projection, sourceLine: candidate.line, sourceOverProbability: candidate.overNoVigProbability, targetLine: offer.line,
+          })))!
+        : averagePresent(others.map((value) => value.under)) ?? offer.underNoVigProbability],
     ] as const) {
       const final = nflPlayerPropsResidualProbability(raw, market, policy.marketResidualWeight);
       const edge = final - market; const ev = nflPlayerPropsExpectedValue(final, price);
@@ -377,7 +438,7 @@ export function buildNflPlayerPropsRuntimeBoard(args: {
       const bestAngleThresholds = movement === "support"
         ? artifact.decision.volumeAndYardage.movementSupportedBestAngle
         : artifact.decision.volumeAndYardage.bestAngle;
-      const grade = gradeNflPlayerPropsCrossMarketCandidate({
+      const baseGrade = gradeNflPlayerPropsCrossMarketCandidate({
         commonHolds,
         independentBooks,
         divergenceImplausible,
@@ -388,16 +449,40 @@ export function buildNflPlayerPropsRuntimeBoard(args: {
         watchlistEnabled: lane?.watchlist === true,
         expectedValue: ev,
         probabilityEdge: edge,
-        participationProbability: scored.participationProbability,
+        participationProbability: decisionScore.participationProbability,
         movement,
         leanThresholds,
         bestAngleThresholds,
       });
+      const crossLineIndependentBooks = (passingMarketGroups.get(crossLineMarketKey(offer)) ?? [])
+        .filter((candidate) => normalizeBook(candidate.sportsbook) !== normalizeBook(offer.sportsbook)).length;
+      const grade: NflPlayerPropsGrade = passingProjection && baseGrade === "No Play"
+        && nflPlayerPropsPassingYardsWatchlistEligible({
+          market: offer.market,
+          commonHolds,
+          primaryTarget: passingPrimaryKeys.has(offer.offerKey),
+          independentMarketBooks: crossLineIndependentBooks,
+          divergenceImplausible,
+          movement,
+          expectedValue: ev,
+          probabilityEdge: edge,
+        })
+          ? "Watchlist"
+          : baseGrade;
       decisions.push(decisionRow(
-        offer, feature, scored, side, price, projection, raw, market, final, edge, ev, grade,
+        offer, feature, decisionScore, side, price, projection, raw, market, final, edge, ev, grade,
         movement,
         divergenceImplausible ? [...decisionReasons, "model_market_divergence_implausible"] : decisionReasons,
-        artifact.modelRelease, artifact.calibrationRelease,
+        offer.market === "passing_yards" ? NFL_PLAYER_PROPS_MODEL_RELEASE : artifact.modelRelease,
+        offer.market === "passing_yards" ? NFL_PLAYER_PROPS_CALIBRATION_RELEASE : artifact.calibrationRelease,
+        offer.market === "passing_yards" ? NFL_PLAYER_PROPS_DECISION_RELEASE : artifact.decisionRelease,
+        passingProjection?.evidence,
+        passingProjection && independentPassingOffers.length ? {
+          release: NFL_PLAYER_PROPS_PASSING_MARKET_RELEASE,
+          source: "target_book_excluded_cross_line_transport",
+          books: independentPassingOffers.length,
+          benchmarkProbability: market,
+        } : undefined,
       ));
     }
   }
@@ -439,6 +524,29 @@ export function buildNflPlayerPropsRuntimeBoard(args: {
 function outcomeKeys(offer: NflPlayerPropsExactOffer): string[] {
   const base = `${offer.canonicalGameId}|${normalizeName(offer.playerName)}|${offer.market}|${offer.line}`;
   return offer.market === "anytime_td" ? [`${base}|yes`] : [`${base}|over`, `${base}|under`];
+}
+
+function crossLineMarketKey(offer: NflPlayerPropsExactOffer): string {
+  return `${offer.canonicalGameId}|${normalizeName(offer.playerName)}|${offer.market}|${offer.offerType}`;
+}
+
+export function primaryNflPlayerPropsOfferKeys(offers: NflPlayerPropsExactOffer[]): Set<string> {
+  const selected = new Map<string, NflPlayerPropsExactOffer>();
+  for (const offer of offers) {
+    const key = `${crossLineMarketKey(offer)}|${normalizeBook(offer.sportsbook)}`;
+    const previous = selected.get(key);
+    if (!previous || comparePrimaryOffer(offer, previous) < 0) selected.set(key, offer);
+  }
+  return new Set([...selected.values()].map((offer) => offer.offerKey));
+}
+
+function comparePrimaryOffer(first: NflPlayerPropsExactOffer, second: NflPlayerPropsExactOffer): number {
+  const firstBalance = first.overNoVigProbability === null ? 1 : Math.abs(first.overNoVigProbability - 0.5);
+  const secondBalance = second.overNoVigProbability === null ? 1 : Math.abs(second.overNoVigProbability - 0.5);
+  return firstBalance - secondBalance
+    || Date.parse(second.observedAt) - Date.parse(first.observedAt)
+    || first.line - second.line
+    || first.offerKey.localeCompare(second.offerKey);
 }
 
 export function verifyNflPlayerPropsRuntimeParity(tolerance = 1e-9): void {
@@ -525,6 +633,9 @@ function decisionRow(
   side: "over" | "under" | "yes", price: number, projection: number | null, raw: number, market: number,
   final: number, edge: number, expectedValue: number, grade: NflPlayerPropsGrade,
   marketMovement: NflPlayerPropsMarketMovement, holds: string[], modelRelease: string, calibrationRelease: string,
+  decisionRelease: string,
+  projectionEvidence?: NflPlayerPropsRuntimeDecision["projectionEvidence"],
+  passingMarketEvidence?: NflPlayerPropsRuntimeDecision["passingMarketEvidence"],
 ): NflPlayerPropsRuntimeDecision {
   const openingAmericanPrice = side === "over"
     ? offer.openingOverPrice
@@ -546,8 +657,121 @@ function decisionRow(
     participationProbability: score.participationProbability, rawModelProbability: raw,
     marketProbability: market, finalProbability: final, probabilityEdge: edge, expectedValue, grade, marketMovement,
     healthHolds: [...new Set(holds)].sort(), provisional: false, modelRelease, calibrationRelease,
-    decisionRelease: NFL_PLAYER_PROPS_DECISION_RELEASE,
+    decisionRelease,
+    ...(projectionEvidence ? { projectionEvidence } : {}),
+    ...(passingMarketEvidence ? { passingMarketEvidence } : {}),
   };
+}
+
+export function nflPlayerPropsStarterAdjustedParticipationProbability(
+  feature: NflPlayerPropsRuntimeFeatureRow,
+  modeledProbability: number,
+): number {
+  if (feature.position?.trim().toLowerCase() !== "qb") return modeledProbability;
+  const quarterback = feature.expectedQuarterback;
+  if (!quarterback || normalizeName(quarterback.name) !== normalizeName(feature.playerName)) return modeledProbability;
+  const status = feature.availability.status?.trim().toLowerCase() ?? "";
+  if (["out", "inactive", "injured reserve", "ir", "doubtful"].includes(status)) return modeledProbability;
+  const floor = quarterback.starterStatus === "confirmed"
+    ? NFL_PLAYER_PROPS_QB_ROLE_FLOORS.confirmedStarter
+    : quarterback.starterStatus === "projected"
+      ? NFL_PLAYER_PROPS_QB_ROLE_FLOORS.projectedStarter
+      : 0;
+  return Math.max(modeledProbability, floor);
+}
+
+export function nflPlayerPropsExpectedStarterPassingProjection(args: {
+  feature: NflPlayerPropsRuntimeFeatureRow;
+  modeledProjection: number;
+  offers: NflPlayerPropsExactOffer[];
+}): { projection: number; evidence: NonNullable<NflPlayerPropsRuntimeDecision["projectionEvidence"]> } | null {
+  if (args.feature.position?.trim().toLowerCase() !== "qb") return null;
+  const quarterback = args.feature.expectedQuarterback;
+  if (!quarterback || quarterback.starterStatus === "unknown"
+    || normalizeName(quarterback.name) !== normalizeName(args.feature.playerName)) return null;
+  const status = args.feature.availability.status?.trim().toLowerCase() ?? "";
+  if (["out", "inactive", "injured reserve", "ir", "doubtful"].includes(status)) return null;
+  const uniqueBooks = new Map<string, NflPlayerPropsExactOffer>();
+  for (const offer of args.offers) {
+    if (offer.market !== "passing_yards" || offer.offerType !== "over_under" || offer.overNoVigProbability === null) continue;
+    uniqueBooks.set(normalizeBook(offer.sportsbook), offer);
+  }
+  if (uniqueBooks.size < NFL_PLAYER_PROPS_QB_PASSING_PROJECTION.minimumBooks) return null;
+  const roleValues = [
+    args.feature.features.prior_passing_yards_avg3,
+    args.feature.features.prior_passing_yards_avg5,
+    args.feature.features.prior_passing_yards_ewm,
+  ].filter((value): value is number => typeof value === "number" && Number.isFinite(value) && value >= 0);
+  const roleProjection = roleValues.length ? median(roleValues) : args.modeledProjection;
+  const marketConsensus = median([...uniqueBooks.values()].map((offer) =>
+    nflPlayerPropsMarketImpliedCenter({
+      referenceProjection: roleProjection,
+      line: offer.line,
+      overProbability: offer.overNoVigProbability!,
+    })));
+  const projection = NFL_PLAYER_PROPS_QB_PASSING_PROJECTION.marketWeight * marketConsensus
+    + NFL_PLAYER_PROPS_QB_PASSING_PROJECTION.roleWeight * roleProjection;
+  return {
+    projection,
+    evidence: {
+      release: NFL_PLAYER_PROPS_QB_PASSING_PROJECTION.release,
+      source: "market_dominant_expected_starter",
+      marketWeight: NFL_PLAYER_PROPS_QB_PASSING_PROJECTION.marketWeight,
+      roleWeight: NFL_PLAYER_PROPS_QB_PASSING_PROJECTION.roleWeight,
+      books: uniqueBooks.size,
+      marketConsensus,
+      roleProjection,
+    },
+  };
+}
+
+export function nflPlayerPropsMarketImpliedCenter(args: {
+  referenceProjection: number;
+  line: number;
+  overProbability: number;
+}): number {
+  if (!Number.isFinite(args.referenceProjection) || !Number.isFinite(args.line)
+    || !Number.isFinite(args.overProbability) || args.overProbability <= 0 || args.overProbability >= 1) {
+    throw new Error("NFL props passing market-implied projection input is invalid.");
+  }
+  const residuals = selectEmpiricalDistribution(artifact.markets.passing_yards!.distribution, args.referenceProjection).residualQuantiles;
+  return args.line - empiricalInterpolatedQuantile(residuals, 1 - args.overProbability);
+}
+
+export function nflPlayerPropsTransportedMarketProbability(args: {
+  projection: number;
+  sourceLine: number;
+  sourceOverProbability: number;
+  targetLine: number;
+}): number {
+  if (!Number.isFinite(args.projection) || !Number.isFinite(args.sourceLine) || !Number.isFinite(args.targetLine)
+    || !Number.isFinite(args.sourceOverProbability) || args.sourceOverProbability <= 0 || args.sourceOverProbability >= 1) {
+    throw new Error("NFL props passing cross-line market input is invalid.");
+  }
+  const residuals = selectEmpiricalDistribution(artifact.markets.passing_yards!.distribution, args.projection).residualQuantiles;
+  const sourceResidual = empiricalInterpolatedQuantile(residuals, 1 - args.sourceOverProbability);
+  const impliedCenter = args.sourceLine - sourceResidual;
+  return clamp(empiricalOverProbability(residuals, args.targetLine - impliedCenter), 0.001, 0.999);
+}
+
+export function nflPlayerPropsPassingYardsWatchlistEligible(args: {
+  market: string;
+  commonHolds: string[];
+  primaryTarget: boolean;
+  independentMarketBooks: number;
+  divergenceImplausible: boolean;
+  movement: NflPlayerPropsMarketMovement;
+  expectedValue: number;
+  probabilityEdge: number;
+}): boolean {
+  return args.market === "passing_yards"
+    && args.commonHolds.length === 0
+    && args.primaryTarget
+    && args.independentMarketBooks > 0
+    && !args.divergenceImplausible
+    && args.movement !== "adverse"
+    && args.expectedValue >= 0
+    && args.probabilityEdge >= 0;
 }
 
 export function nflPlayerPropsProductionMarketLane(market: string): RuntimeArtifact["decision"]["marketLanes"][string] | undefined {
@@ -633,6 +857,29 @@ function empiricalQuantile(values: number[], probability: number): number {
   if (values.length === 0) throw new Error("NFL props empirical residual distribution is empty.");
   const index = Math.min(values.length - 1, Math.max(0, Math.round(probability * (values.length - 1))));
   return values[index]!;
+}
+
+function empiricalInterpolatedQuantile(values: number[], probability: number): number {
+  if (values.length === 0) throw new Error("NFL props empirical residual distribution is empty.");
+  const clipped = clamp(probability, 0, 1);
+  const position = clipped * (values.length - 1);
+  const lower = Math.floor(position);
+  const upper = Math.ceil(position);
+  if (lower === upper) return values[lower]!;
+  const weight = position - lower;
+  return values[lower]! * (1 - weight) + values[upper]! * weight;
+}
+
+function empiricalOverProbability(values: number[], targetResidual: number): number {
+  if (values.length === 0) throw new Error("NFL props empirical residual distribution is empty.");
+  let low = 0;
+  let high = values.length;
+  while (low < high) {
+    const middle = (low + high) >>> 1;
+    if (values[middle]! <= targetResidual) low = middle + 1;
+    else high = middle;
+  }
+  return 1 - low / values.length;
 }
 
 function buildForecastContext(
