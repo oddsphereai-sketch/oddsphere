@@ -638,11 +638,12 @@ export async function generatePredictionsForSlate(
     snapshots = opts.auditSnapshotTransform(snapshots);
   }
 
-  // Phase 6B.1.7 — load FI line rows once per slate so the FI V2 writer
-  // doesn't re-query per game. Only loaded when FI V2 is enabled — when
-  // legacy mode is active there's nothing to compute and we skip the
-  // round-trip entirely.
+  // Phase 6B.1.7 / r77 — load current FI prices plus bounded FI-specific
+  // opening rows once per slate so the same FI V2 writer can resolve current
+  // consensus and movement coherently. No full-game split/movement source is
+  // mapped into FI. Missing opening history is neutral.
   const fiLinesByExternalId = new Map<number, FiLineRow[]>();
+  let fiOpeningRowsLoaded = 0;
   if (firstInningVersion === "fi_v2" && snapshots.length > 0) {
     try {
       const extIds = snapshots.map((s) => s.game_external_id);
@@ -668,6 +669,36 @@ export async function generatePredictionsForSlate(
             line_value: (r.line_value as number | null) ?? null,
             odds_american: (r.odds_american as number | null) ?? null,
             fetched_at: (r.fetched_at as string | null) ?? null,
+            observation_type: "current",
+          });
+          byGame.set(r.game_id as number, list);
+        }
+        const { data: openingRows, error: openingRowsError } = await supabase
+          .from("line_history")
+          .select("game_id, sportsbook, side, line_value, odds_american, recorded_at")
+          .in("game_id", gameIds)
+          .eq("market_type", "first_inning_total")
+          .is("player_id", null)
+          .eq("is_opener", true)
+          .order("recorded_at", { ascending: true })
+          .limit(1000);
+        if (openingRowsError) {
+          console.warn(
+            `[automodelService] FI opening history unavailable: ${openingRowsError.message}. ` +
+              `Continuing with neutral FI movement.`,
+          );
+        }
+        fiOpeningRowsLoaded = openingRows?.length ?? 0;
+        for (const r of openingRows ?? []) {
+          const list = byGame.get(r.game_id as number) ?? [];
+          list.push({
+            market_type: "first_inning_total",
+            sportsbook: r.sportsbook as string,
+            side: (r.side as string | null) ?? null,
+            line_value: (r.line_value as number | null) ?? null,
+            odds_american: (r.odds_american as number | null) ?? null,
+            fetched_at: (r.recorded_at as string | null) ?? null,
+            observation_type: "opening",
           });
           byGame.set(r.game_id as number, list);
         }
@@ -678,7 +709,8 @@ export async function generatePredictionsForSlate(
       }
       console.log(
         `[automodelService] fi_writer_mode_resolved=fi_v2 ` +
-        `fi_lines_loaded=${fiLinesByExternalId.size}/${snapshots.length}`,
+        `fi_lines_loaded=${fiLinesByExternalId.size}/${snapshots.length} ` +
+        `fi_openings_loaded=${fiOpeningRowsLoaded}`,
       );
     } catch (e) {
       console.warn(

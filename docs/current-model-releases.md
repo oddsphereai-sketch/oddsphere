@@ -193,11 +193,11 @@ changed; only deterministic settlement of existing locked rows is affected.
 ## MLB champion
 
 - Projection runtime: resolved automodel `v2_2`
-- First-inning runtime: `fi_v2` with the versioned unpublished-probable availability head below
-- Public calibration: `mlb_public_calibration_v28_coherent_sharp_retail_joint_forecast_2026_09_01`
-- Decision release: `mlb_daily_edge_decision_2026_09_01_r76_coherent_sharp_retail_joint_forecast`
-- Rule bundle: `mlb_daily_edge_rule_bundle_v64_coherent_sharp_retail_joint_forecast_2026_09_01`
-- Grade policy: `mlb_public_grade_policy_v54_coherent_sharp_retail_joint_forecast_2026_09_01`
+- First-inning runtime: `fi_v2` with probability head `mlb_first_inning_fi_v5_named_book_consensus_weight25_2026_09_01`
+- Public calibration: `mlb_public_calibration_v29_first_inning_named_book_consensus_2026_09_01`
+- Decision release: `mlb_daily_edge_decision_2026_09_01_r77_first_inning_named_book_consensus`
+- Rule bundle: `mlb_daily_edge_rule_bundle_v65_first_inning_named_book_consensus_2026_09_01`
+- Grade policy: `mlb_public_grade_policy_v55_first_inning_named_book_consensus_2026_09_01`
 - Correction policy: `mlb_prediction_corrections_v23_split_pair_recency_2026_08_31`
 - Tracking contract: `member_facing_lock_v8_priority_retry_minute_cadence_2026_08_11`
 - Lock coherence: `mlb_lock_coherence_2026_08_30_r2_pending_promotion_tuple`
@@ -409,6 +409,52 @@ earliest complete same-line two-sided sportsbook wins; later history depth
 cannot rotate `Opening` to another book. Current/evaluated price shopping and
 all writer/model behavior remain unchanged. Evidence is recorded in
 `docs/model-audits/2026-09-01-mlb-stable-opening-display.md`.
+
+The September 1 MLB r77 first-inning named-book consensus makes FI V2 consume
+every fresh, complete, coherent two-sided 0.5-run NRFI/YRFI pair from the
+supported named-book board. A supported sharp pair is not required: when the
+FI board is retail-only, the median of its complete named-book no-vig
+probabilities is still authoritative market evidence. When sharp and retail
+cohorts are both present, their medians receive equal cohort weight. One
+complete named book remains sufficient. When a coherent same-book 0.5-run
+opening is retained, current-minus-opening movement contributes a fixed 20%
+residual capped at one probability point; changing book composition cannot
+masquerade as movement. Partial or missing books, openings, or FI-specific
+splits contribute no adjustment and never create a hold; `splits_consensus` is
+excluded and no retail price is relabeled as ticket/handle or sharp-split
+evidence. The current consensus and bounded movement residual enter the 25%
+independent / 75% market posterior before FI expected runs, side, and
+model-owned grade classification. Exact-price economics remain attached to
+the same priority-selected complete named-book pair used by the tracking
+writer, so consensus or movement evidence cannot substitute a synthetic
+offer.
+
+At `2026-09-01T21:42:43.702Z`, the read-only same-input 15-game replay found
+complete named-book coverage on 15/15 games and supported sharp-pair coverage
+on 0/15. The candidate consumed one to seven complete books per game, used
+coherent opening movement on 13/15, retained the exact evaluation book and
+both exact prices on all 15, and held board counts at 1 NRFI / 6 YRFI / 8
+Toss-Up and 2 Leans / 5 No Bets / 8 Toss-Ups: zero actionable promotions,
+zero actionable demotions, and zero side changes. Thirteen probabilities and
+their natural-decimal expected-run projections changed together; mean absolute
+expected-run movement was 0.00315512 and maximum movement was 0.01280974.
+The retained FI-v4 chronology had 153 finalized locked rows from August 20–31,
+but complete replayable named-book line history existed for only 56, all from
+August 28–31. On that limited, non-selection sample, all 56 had replayable
+movement, r77 moved mean absolute probability by 0.4046pp (maximum 4.3761pp),
+produced two promotions and three demotions, and was modestly worse than FI v4
+on Brier (0.244244 vs 0.243037), log loss (0.681629 vs 0.679216), and
+exact-price action return (15-9, +2.593u on 24 actions vs 17-8, +4.845u on 25).
+R77 therefore claims coherent use of the complete price
+board, not retrospective accuracy or profit improvement; immutable v4 locks
+remain unchanged and future r77 rows are tracked separately by release and
+lock time. Projection core v2.3, full-game heads, decimal score output,
+promotion persistence, correction policy v23, stakes, sole writer, the shared
+`prediction_pipeline:mlb` lease, locks, tracking, and member presentation stay
+unchanged. The release stamps schema v10, calibration v29, decision r77, rule
+bundle v65, grade policy v55, FI probability head v5, FI named-book price-map
+v1, and FI market-calibration v2. Evidence and rollback are recorded in
+`docs/model-audits/2026-09-01-mlb-first-inning-named-book-consensus.md`.
 
 The August 30 MLB T-60 lifecycle patch makes the lock gate understand r73's
 already-persisted pending-promotion shape. A fresh raw candidate may differ

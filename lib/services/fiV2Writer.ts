@@ -10,6 +10,8 @@
  *       - fi_model_used = "fi_v2"
  *       - nrfi_decision_kind = "nrfi" | "yrfi" | "toss_up" | "held"
  *       - hold_picks (FI-scoped — "nrfi" added/removed)
+ *       - auto_factors FI expected runs + NRFI/YRFI probabilities aligned to
+ *         the authoritative FI V2 posterior
  *       - fi_v2_audit (full FiV2Audit + generated_at + model_version)
  *
  * Pure overlay — the caller merges these into the existing prediction
@@ -45,13 +47,17 @@ export function applyFiV2WriterOverride(
   existingSportSpecific: Record<string, unknown>,
   generatedAtIso: string = new Date().toISOString(),
 ): FiV2WriterOverride {
-  const out = runMlbFirstInningModelV2(snap, fiLineRows);
+  const out = runMlbFirstInningModelV2(snap, fiLineRows, generatedAtIso);
   const a = out.fiV2Audit;
 
   const existingHoldPicksRaw = existingSportSpecific.hold_picks;
   const existingHoldPicks = Array.isArray(existingHoldPicksRaw)
     ? (existingHoldPicksRaw as unknown[]).filter((x): x is string => typeof x === "string")
     : [];
+  const existingAutoFactors =
+    existingSportSpecific.auto_factors && typeof existingSportSpecific.auto_factors === "object"
+      ? existingSportSpecific.auto_factors as Record<string, unknown>
+      : {};
 
   let predictedNrfi: boolean | null;
   let nrfiConfidence: number | null;
@@ -85,6 +91,12 @@ export function applyFiV2WriterOverride(
       fi_model_used: "fi_v2",
       nrfi_decision_kind: decisionKind,
       hold_picks: newHoldPicks,
+      auto_factors: {
+        ...existingAutoFactors,
+        nrfi_expected_runs: a.posterior_expected_first_inning_runs,
+        nrfi_probability: a.posterior_p_nrfi,
+        yrfi_probability: a.posterior_p_yrfi,
+      },
       fi_v2_audit: {
         ...a,
         model_version: "fi_v2",

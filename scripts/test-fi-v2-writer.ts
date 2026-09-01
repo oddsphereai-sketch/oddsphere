@@ -8,8 +8,8 @@
  *   • Held adds "nrfi" to hold_picks and predicted_nrfi=null
  *   • automodelService grep guards: imports resolver, applies overlay,
  *     loads FI lines only when fi_v2 mode
- *   • No edits to model math files (lib/automodel/mlbAutoModel*.ts /
- *     mlbFirstInningModelV2.ts) in this push
+ *   • Full-game model math remains untouched while FI V2 carries r77
+ *     consensus/movement and coherent decimal-projection fields
  */
 
 import { readFileSync } from "node:fs";
@@ -45,6 +45,11 @@ check(
   "T2 FI lines loaded ONLY when fi_v2 mode (legacy mode skips DB call)",
   /firstInningVersion === "fi_v2" && snapshots\.length > 0[\s\S]*?\.from\("lines"\)/.test(SERVICE),
 );
+check("T2 r77 loads only FI-specific opening history", SERVICE.includes('.from("line_history")') &&
+  SERVICE.includes('.eq("market_type", "first_inning_total")') &&
+  SERVICE.includes('.eq("is_opener", true)'));
+check("T2 r77 opening-history read is bounded", SERVICE.includes('.limit(1000)'));
+check("T2 r77 marks retained history as opening context", SERVICE.includes('observation_type: "opening"'));
 check(
   "T2 overlay applied per-game when fi_v2",
   /firstInningVersion === "fi_v2"[\s\S]{0,400}?applyFiV2WriterOverride/.test(SERVICE),
@@ -62,14 +67,14 @@ check(
   /applyFiV2WriterOverride[\s\S]*?catch \(fiErr\)/.test(SERVICE),
 );
 
-// ── T3. No edits to model math files in this push.
-// (Model math files were already present; the new code touches only
-// lib/automodel/firstInningModelVersion.ts and lib/services/fiV2Writer.ts +
-// the automodelService overlay site. The model itself wasn't changed.)
+// ── T3. R77 remains FI-scoped.
 const V22 = readFileSync("lib/automodel/mlbAutoModelV2_2.ts", "utf8");
 const FIV2 = readFileSync("lib/automodel/mlbFirstInningModelV2.ts", "utf8");
 check("T3 no 'Phase 6B.1.7' marker in V2.2 model", !V22.includes("Phase 6B.1.7"));
-check("T3 no 'Phase 6B.1.7' marker in FI V2 model", !FIV2.includes("Phase 6B.1.7"));
+check("T3 FI V2 carries the coherent posterior expected-runs field",
+  FIV2.includes("posterior_expected_first_inning_runs"));
+check("T3 FI V2 audits bounded FI-specific movement",
+  FIV2.includes("market_movement_adjustment_pp"));
 
 // ── T4. applyFiV2WriterOverride — NRFI mapping.
 // Use `unknown` cast so this test file isn't bound to the precise
@@ -106,7 +111,9 @@ const fiLinesNrfi = [
   { market_type: "first_inning_total", sportsbook: "DK", side: "under", line_value: 0.5, odds_american: -250, fetched_at: "2026-06-06T19:00:00Z" },
 ] as unknown as Parameters<typeof applyFiV2WriterOverride>[1];
 
-const r = applyFiV2WriterOverride(buildSnap(), fiLinesNrfi, {});
+const r = applyFiV2WriterOverride(buildSnap(), fiLinesNrfi, {
+  auto_factors: { nrfi_lambda_raw: 1.23456789 },
+});
 check("T4 overlay returns sport_specific_overrides", typeof r.sport_specific_overrides === "object");
 check("T4 overlay sets fi_model_used='fi_v2'", r.sport_specific_overrides.fi_model_used === "fi_v2");
 check("T4 overlay attaches fi_v2_audit with model_version", (r.sport_specific_overrides.fi_v2_audit as Record<string, unknown>).model_version === "fi_v2");
@@ -115,6 +122,15 @@ check(
   "T4 overlay sets nrfi_decision_kind to NRFI/YRFI/Toss-Up/held",
   ["nrfi", "yrfi", "toss_up", "held"].includes(r.sport_specific_overrides.nrfi_decision_kind as string),
 );
+const rAutoFactors = r.sport_specific_overrides.auto_factors as Record<string, unknown>;
+const rAudit = r.sport_specific_overrides.fi_v2_audit as Record<string, unknown>;
+check("T4 writer preserves existing FI auto-factor provenance", rAutoFactors.nrfi_lambda_raw === 1.23456789);
+check("T4 writer aligns decimal FI expected runs to the authoritative posterior",
+  typeof rAutoFactors.nrfi_expected_runs === "number" &&
+  Math.abs((rAutoFactors.nrfi_expected_runs as number) + Math.log(rAudit.posterior_p_nrfi as number)) < 1e-12);
+check("T4 writer aligns NRFI/YRFI probability fields to the authoritative posterior",
+  rAutoFactors.nrfi_probability === rAudit.posterior_p_nrfi &&
+  rAutoFactors.yrfi_probability === rAudit.posterior_p_yrfi);
 
 // ── T5. Held mapping — when key features missing, overlay should
 // produce a Held pick with predicted_nrfi=null + nrfi in hold_picks.
