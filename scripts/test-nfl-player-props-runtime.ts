@@ -1,9 +1,16 @@
 import assert from "node:assert/strict";
 import {
   NFL_PLAYER_PROPS_BOARD_RELEASE,
+  NFL_PLAYER_PROPS_CALIBRATION_RELEASE,
+  NFL_PLAYER_PROPS_DECISION_RELEASE,
+  NFL_PLAYER_PROPS_MODEL_RELEASE,
+  NFL_PLAYER_PROPS_QB_ROLE_FLOORS,
   NFL_PLAYER_PROPS_RUNTIME_RELEASE,
   nflPlayerPropsExpectedValue,
+  nflPlayerPropsExpectedStarterPassingProjection,
+  nflPlayerPropsMarketImpliedCenter,
   nflPlayerPropsOverProbability,
+  nflPlayerPropsPassingYardsWatchlistEligible,
   nflPlayerPropsResidualProbability,
   nflPlayerPropsRuntimeMarketPolicy,
   nflPlayerPropsTouchdownPolicy,
@@ -11,11 +18,15 @@ import {
   nflPlayerPropsProjectionRange,
   nflPlayerPropsProductionMarketLane,
   nflPlayerPropsRawMarketDivergenceImplausible,
+  nflPlayerPropsStarterAdjustedParticipationProbability,
+  nflPlayerPropsTransportedMarketProbability,
+  primaryNflPlayerPropsOfferKeys,
   verifyNflPlayerPropsRuntimeParity,
 } from "../lib/services/football/nflPlayerPropsRuntime";
 import type { NflPlayerPropsExactOffer } from "../lib/services/football/nflPlayerPropsMarketBoard";
 
-assert.equal(NFL_PLAYER_PROPS_RUNTIME_RELEASE, "nfl_player_props_runtime_2026_09_01_r6_cross_market_movement");
+assert.equal(NFL_PLAYER_PROPS_RUNTIME_RELEASE, "nfl_player_props_runtime_2026_09_01_r7_qb_passing_projection");
+assert.deepEqual(NFL_PLAYER_PROPS_QB_ROLE_FLOORS, { confirmedStarter: 0.9, projectedStarter: 0.75 });
 verifyNflPlayerPropsRuntimeParity(1e-9);
 
 const receiving = nflPlayerPropsRuntimeMarketPolicy("receiving_yards");
@@ -102,12 +113,105 @@ assert.deepEqual(
   noOpening.decisions.map(withoutBookEvidence),
   "opening presentation evidence changes zero decisions, probabilities, projections, or grades",
 );
-assert.ok(twoBooks.decisions.every((row) => row.decisionRelease === "nfl_player_props_decision_2026_09_01_r6_cross_market_movement"), "tracking provenance uses the current production cross-market decision release");
+assert.ok(twoBooks.decisions.every((row) => row.decisionRelease === "nfl_player_props_decision_2026_09_01_r6_cross_market_movement"), "unchanged non-passing markets retain their prior decision release");
 assert.ok(twoBooks.decisions.every((row) => !row.healthHolds.includes("independent_same_line_confirmation_missing")));
 assert.ok(twoBooks.decisions.every((row) => row.modelRelease === "nfl_player_props_distribution_model_2026_09_01_r3_active_role"));
 assert.ok(twoBooks.decisions.every((row) => row.calibrationRelease === "nfl_player_props_distribution_calibration_2026_09_01_r3_active_role"));
 assert.ok(twoBooks.decisions.every((row) => !row.modelRelease.includes("shadow") && !row.decisionRelease.includes("provisional")));
 assert.ok(twoBooks.decisions.every((row) => row.provisional === false));
+const quarterbackFeature = {
+  ...feature,
+  playerName: "Test Quarterback",
+  position: "QB",
+  expectedQuarterback: { name: "Test Quarterback", starterStatus: "projected" as const, capturedAt: feature.featureAsOf },
+  features: {
+    ...feature.features,
+    position_qb: 1,
+    position_wr: 0,
+    prior_passing_yards_avg3: 240,
+    prior_passing_yards_avg5: 230,
+    prior_passing_yards_ewm: 235,
+  },
+};
+assert.equal(nflPlayerPropsStarterAdjustedParticipationProbability(quarterbackFeature, 0.42), 0.75, "a matching projected starter receives the bounded starter floor");
+assert.equal(nflPlayerPropsStarterAdjustedParticipationProbability({
+  ...quarterbackFeature,
+  expectedQuarterback: { ...quarterbackFeature.expectedQuarterback, starterStatus: "confirmed" as const },
+}, 0.42), 0.9, "a matching confirmed starter receives the bounded starter floor");
+assert.equal(nflPlayerPropsStarterAdjustedParticipationProbability({
+  ...quarterbackFeature,
+  availability: { ...quarterbackFeature.availability, status: "Doubtful" },
+}, 0.42), 0.42, "an unavailable starter receives no participation floor");
+const passingOffer: NflPlayerPropsExactOffer = {
+  ...baseOffer,
+  offerKey: "qb-book-a",
+  playerName: "Test Quarterback",
+  market: "passing_yards",
+  line: 224.5,
+  overNoVigProbability: 0.5,
+  underNoVigProbability: 0.5,
+};
+const expectedStarterProjection = nflPlayerPropsExpectedStarterPassingProjection({
+  feature: quarterbackFeature,
+  modeledProjection: 110,
+  offers: [passingOffer, { ...passingOffer, offerKey: "qb-book-b", sportsbook: "book-b", line: 226.5 }],
+});
+assert.ok(expectedStarterProjection, "a matching expected starter receives the market-dominant passing projection");
+assert.equal(expectedStarterProjection?.evidence.books, 2);
+assert.equal(expectedStarterProjection?.evidence.roleProjection, 235);
+assert.ok((expectedStarterProjection?.projection ?? 0) > 215 && (expectedStarterProjection?.projection ?? 999) < 240,
+  "the repaired projection is market-realistic while retaining bounded recent-role context");
+assert.equal(nflPlayerPropsExpectedStarterPassingProjection({
+  feature: { ...quarterbackFeature, expectedQuarterback: { ...quarterbackFeature.expectedQuarterback, name: "Other Quarterback" } },
+  modeledProjection: 110,
+  offers: [passingOffer],
+}), null, "the projection never transfers across quarterback identities");
+const oneBookStarterProjection = nflPlayerPropsExpectedStarterPassingProjection({ feature: quarterbackFeature, modeledProjection: 110, offers: [passingOffer] });
+assert.ok(oneBookStarterProjection && oneBookStarterProjection.projection > 200,
+  "one complete book may correct the displayed projection without authorizing a Lean or Best Angle");
+const primaryKeys = primaryNflPlayerPropsOfferKeys([
+  passingOffer,
+  { ...passingOffer, offerKey: "book-a-alternate", line: 230.5 },
+  { ...passingOffer, offerKey: "book-b-primary", sportsbook: "book-b", line: 226.5 },
+]);
+assert.deepEqual([...primaryKeys].sort(), ["book-b-primary", "qb-book-a"], "one canonical line is selected per sportsbook for passing-market inference");
+const sameLine = nflPlayerPropsTransportedMarketProbability({ projection: 225, sourceLine: 224.5, sourceOverProbability: 0.55, targetLine: 224.5 });
+const higherLine = nflPlayerPropsTransportedMarketProbability({ projection: 225, sourceLine: 224.5, sourceOverProbability: 0.55, targetLine: 230.5 });
+assert.ok(Math.abs(sameLine - 0.55) <= 0.03, "same-line transport preserves the independent no-vig probability within empirical resolution");
+assert.ok(higherLine < sameLine, "a higher target line lowers the transported Over probability");
+assert.ok(Math.abs(nflPlayerPropsMarketImpliedCenter({ referenceProjection: 225, line: 225.5, overProbability: 0.5 }) - 225.5) <= 8);
+assert.equal(nflPlayerPropsPassingYardsWatchlistEligible({
+  market: "passing_yards", commonHolds: [], primaryTarget: true, independentMarketBooks: 1,
+  divergenceImplausible: false, movement: "support", expectedValue: 0.02, probabilityEdge: 0.005,
+}), true);
+assert.equal(nflPlayerPropsPassingYardsWatchlistEligible({
+  market: "passing_yards", commonHolds: [], primaryTarget: true, independentMarketBooks: 1,
+  divergenceImplausible: false, movement: "adverse", expectedValue: 0.20, probabilityEdge: 0.10,
+}), false, "adverse movement cannot use the passing-yards Watchlist bridge");
+const crossLinePassing = buildNflPlayerPropsRuntimeBoard({
+  offers: [
+    { ...passingOffer, offerKey: "qb-target", line: 200.5, overPrice: 100, underPrice: -120 },
+    { ...passingOffer, offerKey: "qb-independent", sportsbook: "book-b", line: 210.5 },
+  ],
+  features: [{
+    ...quarterbackFeature,
+    features: {
+      ...quarterbackFeature.features,
+      prior_passing_yards_avg3: 300,
+      prior_passing_yards_avg5: 300,
+      prior_passing_yards_ewm: 300,
+    },
+  }],
+  evaluatedAt: "2026-08-25T12:01:00.000Z",
+});
+const targetOver = crossLinePassing.decisions.find((row) => row.sportsbook === "book-a" && row.side === "over");
+assert.equal(targetOver?.grade, "Watchlist", "positive target-book economics supported by another book at a different line are visible as Watchlist");
+assert.equal(targetOver?.passingMarketEvidence?.source, "target_book_excluded_cross_line_transport");
+assert.equal(targetOver?.modelRelease, NFL_PLAYER_PROPS_MODEL_RELEASE);
+assert.equal(targetOver?.calibrationRelease, NFL_PLAYER_PROPS_CALIBRATION_RELEASE);
+assert.equal(targetOver?.decisionRelease, NFL_PLAYER_PROPS_DECISION_RELEASE);
+assert.ok(crossLinePassing.decisions.every((row) => !["Lean", "Best Angle"].includes(row.grade)),
+  "different-line confirmation alone cannot authorize a passing-yards action grade");
 const roleHeld = buildNflPlayerPropsRuntimeBoard({ offers: [baseOffer, { ...baseOffer, offerKey: "test-b", sportsbook: "book-b" }], features: [{ ...feature, healthHolds: ["role_ambiguous"] }], evaluatedAt: "2026-08-25T12:01:00.000Z" });
 assert.equal(roleHeld.counts.Held, 2, "genuine role ambiguity remains a Held decision");
 assert.equal(roleHeld.diagnostics.roleOrIdentityHeld, 2);

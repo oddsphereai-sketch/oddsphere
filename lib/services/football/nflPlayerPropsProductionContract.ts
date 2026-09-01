@@ -5,7 +5,7 @@ import {
 } from "./nflPlayerPropsRuntime";
 
 export const NFL_PLAYER_PROPS_PRODUCTION_CANDIDATE_RELEASE =
-  "nfl_player_props_member_2026_09_01_r12_cross_market_movement" as const;
+  "nfl_player_props_member_2026_09_01_r13_qb_passing_projection" as const;
 export const NFL_PLAYER_PROPS_WRITER_LEASE_GROUP = "prediction_pipeline:nfl" as const;
 
 export type NflPlayerPropsProductionSnapshot = {

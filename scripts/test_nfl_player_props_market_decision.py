@@ -35,15 +35,21 @@ assert market[0] < blended[0] < model[0]
 assert model[1] < blended[1] < market[1]
 assert pd.Timestamp(contract["selectionEnd"]) < pd.Timestamp(contract["confirmationStart"])
 assert min(contract["lambdaCandidates"]) == contract["minimumModelWeight"] > 0
-assert contract["marketBenchmark"] == "independent_book_consensus_excluding_target_book"
+assert contract["marketBenchmark"] == "independent_book_consensus_excluding_target_book_with_qb_passing_cross_line_transport"
 assert contract["promotionPolicy"]["receiving_yards"] == {"bestAngle": True, "lean": True, "watchlist": True}
 assert contract["promotionPolicy"]["receptions"] == {"bestAngle": True, "lean": True, "watchlist": True}
 assert all(policy == {"bestAngle": True, "lean": True, "watchlist": True} for policy in contract["promotionPolicy"].values())
 assert contract["ownerApprovedForwardException"] is True
 assert lanes.RELEASE == "nfl_player_props_actionable_lane_evidence_2026_08_25_r3_production_release"
-assert decision["decisionRelease"] == "nfl_player_props_decision_2026_09_01_r6_cross_market_movement"
-assert decision["modelRelease"] == "nfl_player_props_distribution_model_2026_09_01_r3_active_role"
-assert decision["calibrationRelease"] == "nfl_player_props_distribution_calibration_2026_09_01_r3_active_role"
+assert decision["decisionRelease"] == "nfl_player_props_decision_2026_09_01_r7_qb_passing_projection"
+assert decision["modelRelease"] == "nfl_player_props_distribution_model_2026_09_01_r4_qb_passing_projection"
+assert decision["calibrationRelease"] == "nfl_player_props_distribution_calibration_2026_09_01_r4_qb_passing_projection"
+assert decision["quarterbackPassingProjection"]["marketWeight"] == 0.9
+assert decision["quarterbackPassingProjection"]["recentRoleWeight"] == 0.1
+assert decision["quarterbackPassingProjection"]["singleBookMayAuthorizeAction"] is False
+assert decision["quarterbackRole"]["confirmedStarterParticipationFloor"] == 0.9
+assert decision["quarterbackRole"]["projectedStarterParticipationFloor"] == 0.75
+assert decision["passingYardsWatchlist"]["maximumGradeWithoutSameLineIndependentActionConfirmation"] == "Watchlist"
 assert decision["volumeAndYardage"]["bestAngle"]["minimumIndependentBooks"] == 1
 assert decision["maximumRawMarketDivergence"] == 0.48
 assert all(lane == {"eligibleSides": ["over", "under"], "bestAngle": True, "lean": True, "watchlist": True} for lane in decision["marketLanes"].values())

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { isPublicallyTracked } from "../lib/config/officialTrackingStart";
-import { buildCfbMemberFixture, selectLatestCfbMemberEvidenceRows } from "../lib/services/football/cfbMemberFixture";
+import { buildCfbMemberFixture as buildCfbMemberFixtureAtTime, selectLatestCfbMemberEvidenceRows } from "../lib/services/football/cfbMemberFixture";
 import { cfbTeamIdentity } from "../lib/services/football/cfbTeamIdentity";
 import { finalizeDailyEdgeResponseCoherence } from "../app/lab/lib/dailyEdgeResponseCoherence";
 import { dailyEdgeOutcomeForecastLabel } from "../app/lab/lib/dailyEdgeOutcomeForecast";
@@ -61,6 +61,11 @@ import {
 } from "../lib/services/football/cfbV1Decision";
 import { __BALLDONTLIE_NCAAF_SLATE_TEST__, type NcaafBookOdds, type NcaafGame } from "../lib/services/football/balldontlieNcaafSlate";
 import type { SupabaseClient } from "@supabase/supabase-js";
+
+const buildCfbMemberFixture = (
+  rows: Parameters<typeof buildCfbMemberFixtureAtTime>[0],
+  now = "2026-08-29T15:10:00.000Z",
+) => buildCfbMemberFixtureAtTime(rows, now);
 
 async function main(): Promise<void> {
 const observedAt = "2026-08-25T15:50:05.583Z";
