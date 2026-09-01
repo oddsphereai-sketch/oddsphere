@@ -403,6 +403,13 @@ bundle v64, grade policy v54, coherent price-map v1, and market-calibration
 policy v2. Evidence and rollback are recorded in
 `docs/model-audits/2026-09-01-mlb-coherent-sharp-retail-joint-forecast.md`.
 
+The September 1 stable-opening reader repair keeps one operational opening
+book/value throughout an unlocked MLB game's displayed movement trail. The
+earliest complete same-line two-sided sportsbook wins; later history depth
+cannot rotate `Opening` to another book. Current/evaluated price shopping and
+all writer/model behavior remain unchanged. Evidence is recorded in
+`docs/model-audits/2026-09-01-mlb-stable-opening-display.md`.
+
 The August 30 MLB T-60 lifecycle patch makes the lock gate understand r73's
 already-persisted pending-promotion shape. A fresh raw candidate may differ
 from the intentionally retained lower public tuple while confirmation is
