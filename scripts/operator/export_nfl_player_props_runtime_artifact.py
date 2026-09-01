@@ -18,15 +18,56 @@ from sklearn.ensemble import HistGradientBoostingClassifier, HistGradientBoostin
 from sklearn.pipeline import Pipeline
 
 
-RUNTIME_RELEASE = "nfl_player_props_runtime_2026_08_25_r2_shared_context"
-MARKET_RESIDUAL_RELEASE = "nfl_player_props_market_residual_calibration_2026_08_25_r3_shared_context"
+RUNTIME_RELEASE = "nfl_player_props_runtime_2026_09_01_r4_cross_market_movement"
+MARKET_RESIDUAL_RELEASE = "nfl_player_props_market_residual_calibration_2026_09_01_r5_cross_market_movement"
 SCORER_PATH = pathlib.Path("lib/services/football/nfl_player_props_shadow_model.py")
 FEATURE_BUILDER_PATH = pathlib.Path("scripts/operator/build_nfl_player_props_2026_features.py")
 VOLUME_ARTIFACT = pathlib.Path("football-research/cache/nfl-player-props-calibration/nfl_player_props_distribution_shadow_2026_08_25_r2.joblib")
-TD_ARTIFACT = pathlib.Path("football-research/cache/nfl-player-props-touchdowns/nfl_player_props_anytime_td_r2.joblib")
 MARKET_REPORT = pathlib.Path("football-research/cache/nfl-player-props-market-residual/nfl_player_props_market_residual_r1.json")
-TD_REPORT = pathlib.Path("football-research/cache/nfl-player-props-touchdowns/nfl_player_props_anytime_td_tournament_r2.json")
 DECISION_CONTRACT = pathlib.Path("lib/services/football/nflPlayerPropsDecisionContract.json")
+MARKET_RESIDUAL_CONTRACT = pathlib.Path("lib/services/football/nflPlayerPropsMarketResidualContract.json")
+EXISTING_RUNTIME = pathlib.Path("lib/services/football/modelArtifacts/nflPlayerPropsRuntime.json")
+
+
+def shard_path(output: pathlib.Path, suffix: str) -> pathlib.Path:
+    return output.with_name(f"{output.stem}{suffix}.json")
+
+
+def read_existing_runtime() -> dict[str, Any]:
+    core = json.loads(EXISTING_RUNTIME.read_text(encoding="utf-8"))
+    if "markets" in core:
+        return core
+    markets = {
+        market: json.loads(shard_path(EXISTING_RUNTIME, f"Market{''.join(part.title() for part in market.split('_'))}").read_text(encoding="utf-8"))
+        for market in ("passing_attempts", "passing_completions", "passing_yards", "rushing_attempts", "rushing_yards", "receptions", "receiving_yards")
+    }
+    player_states: dict[str, Any] = {}
+    for bucket in range(4):
+        player_states.update(json.loads(shard_path(EXISTING_RUNTIME, f"Players{bucket}").read_text(encoding="utf-8")))
+    return {
+        **core,
+        "markets": markets,
+        "touchdown": json.loads(shard_path(EXISTING_RUNTIME, "Touchdown").read_text(encoding="utf-8")),
+        "playerStates": player_states,
+    }
+
+
+def write_runtime_shards(output: pathlib.Path, payload: dict[str, Any]) -> int:
+    core = {key: value for key, value in payload.items() if key not in {"markets", "touchdown", "playerStates"}}
+    output.write_text(json.dumps(core, separators=(",", ":"), allow_nan=False) + "\n", encoding="utf-8")
+    for market, value in payload["markets"].items():
+        suffix = f"Market{''.join(part.title() for part in market.split('_'))}"
+        shard_path(output, suffix).write_text(json.dumps(value, separators=(",", ":"), allow_nan=False) + "\n", encoding="utf-8")
+    shard_path(output, "Touchdown").write_text(json.dumps(payload["touchdown"], separators=(",", ":"), allow_nan=False) + "\n", encoding="utf-8")
+    player_buckets: list[dict[str, Any]] = [{}, {}, {}, {}]
+    for name, value in payload["playerStates"].items():
+        player_buckets[ord(name[0]) % len(player_buckets)][name] = value
+    for index, bucket in enumerate(player_buckets):
+        shard_path(output, f"Players{index}").write_text(json.dumps(bucket, separators=(",", ":"), allow_nan=False) + "\n", encoding="utf-8")
+    paths = [output, shard_path(output, "Touchdown")]
+    paths.extend(shard_path(output, f"Market{''.join(part.title() for part in market.split('_'))}") for market in payload["markets"])
+    paths.extend(shard_path(output, f"Players{index}") for index in range(len(player_buckets)))
+    return sum(path.stat().st_size for path in paths)
 
 
 def load_module(name: str, path: pathlib.Path) -> Any:
@@ -56,10 +97,11 @@ def export_trees(model: HistGradientBoostingClassifier | HistGradientBoostingReg
             for node in predictor.nodes:
                 if bool(node["is_categorical"]):
                     raise RuntimeError("categorical HGB nodes are unsupported")
+                threshold = float(node["num_threshold"])
                 nodes.append({
                     "value": float(node["value"]),
                     "featureIndex": int(node["feature_idx"]),
-                    "threshold": float(node["num_threshold"]),
+                    "threshold": threshold if np.isfinite(threshold) else (1e308 if threshold > 0 else -1e308),
                     "missingGoToLeft": bool(node["missing_go_to_left"]),
                     "left": int(node["left"]),
                     "right": int(node["right"]),
@@ -122,7 +164,7 @@ def portable_distribution(value: dict[str, Any]) -> dict[str, Any]:
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--history-manifest", type=pathlib.Path, required=True)
-    parser.add_argument("--parity-features", type=pathlib.Path, required=True)
+    parser.add_argument("--parity-features", type=pathlib.Path)
     parser.add_argument("--output", type=pathlib.Path, required=True)
     args = parser.parse_args()
 
@@ -134,12 +176,16 @@ def main() -> None:
         raise RuntimeError("NFL props runtime history checksum mismatch")
     history = pd.read_parquet(history_path)
     history = builder.load_touchdown_history(history)
-    current_feature_names = set(pd.read_parquet(args.parity_features, columns=["player_name"])["player_name"].astype(str).map(builder.normalized_name))
+    existing = read_existing_runtime()
+    current_feature_names = (
+        set(pd.read_parquet(args.parity_features, columns=["player_name"])["player_name"].astype(str).map(builder.normalized_name))
+        if args.parity_features
+        else set(existing["playerStates"])
+    )
     volume = joblib.load(VOLUME_ARTIFACT)
-    touchdown = joblib.load(TD_ARTIFACT)
     market_report = json.loads(MARKET_REPORT.read_text(encoding="utf-8"))
-    td_report = json.loads(TD_REPORT.read_text(encoding="utf-8"))
     decision = json.loads(DECISION_CONTRACT.read_text(encoding="utf-8"))
+    market_residual_contract = json.loads(MARKET_RESIDUAL_CONTRACT.read_text(encoding="utf-8"))
 
     player_states: dict[str, Any] = {}
     ambiguous_names: list[str] = []
@@ -181,26 +227,19 @@ def main() -> None:
             "eligibility": value["eligibility"],
             "marketResidualWeight": float(market_report["selectedWeights"][market]),
             "marketResidualQualified": bool(market_report["qualifiedMarkets"][market]),
-            "promotionPolicy": market_report["promotionPolicy"][market],
+            "promotionPolicy": market_residual_contract["promotionPolicy"][market],
         }
     participation = volume["participationModel"]
-    td_features = list(touchdown["features"])
-    td_calibrator = touchdown["calibrator"]
-
-    parity_frame = pd.read_parquet(args.parity_features)
-    parity_frame = parity_frame[parity_frame["score_eligible"]].head(4).copy()
+    parity_frame = pd.DataFrame([row["inputs"] for row in existing["parity"][:4]])
     volume_parity = scorer.score_shadow_rows(volume, parity_frame)
-    td_raw = touchdown["model"].predict_proba(parity_frame[td_features])[:, 1]
-    td_logits = np.log(np.clip(td_raw, 0.005, 0.995) / (1 - np.clip(td_raw, 0.005, 0.995))).reshape(-1, 1)
-    td_probability = td_calibrator.predict_proba(td_logits)[:, 1]
     parity: list[dict[str, Any]] = []
     for index, (_, row) in enumerate(parity_frame.iterrows()):
-        inputs = {name: (None if pd.isna(row[name]) else float(row[name])) for name in set(feature_names + td_features)}
+        inputs = {name: (None if pd.isna(row[name]) else float(row[name])) for name in row.index}
         parity.append({
             "inputs": inputs,
             "participationProbability": float(volume_parity.iloc[index]["participation_probability"]),
             "projections": {market: float(volume_parity.iloc[index][f"{market}_projection"]) for market in markets},
-            "touchdownProbability": float(td_probability[index]),
+            "touchdownProbability": float(existing["parity"][index]["touchdownProbability"]),
         })
 
     output = {
@@ -214,29 +253,19 @@ def main() -> None:
         "sourceChecksums": {
             "history": manifest["featureFileSha256"],
             "volumeArtifact": sha256_file(VOLUME_ARTIFACT),
-            "touchdownArtifact": sha256_file(TD_ARTIFACT),
+            "touchdownArtifact": existing["sourceChecksums"]["touchdownArtifact"],
             "marketReport": sha256_file(MARKET_REPORT),
-            "touchdownReport": sha256_file(TD_REPORT),
+            "touchdownReport": existing["sourceChecksums"]["touchdownReport"],
             "sourceVolumeModelRelease": volume["shadowModelRelease"],
             "sourceVolumeCalibrationRelease": volume["calibrationRelease"],
-            "sourceTouchdownModelRelease": touchdown["modelRelease"],
-            "sourceTouchdownCalibrationRelease": touchdown["calibrationRelease"],
+            "sourceTouchdownModelRelease": existing["sourceChecksums"]["sourceTouchdownModelRelease"],
+            "sourceTouchdownCalibrationRelease": existing["sourceChecksums"]["sourceTouchdownCalibrationRelease"],
             "sourceMarketResidualRelease": market_report["marketResidualRelease"],
         },
         "featureNames": feature_names,
         "participationModel": export_model(participation["model"], feature_names, classifier=True),
         "markets": markets,
-        "touchdown": {
-            "featureNames": td_features,
-            "model": export_model(touchdown["model"], td_features, classifier=True),
-            "calibrator": {
-                "intercept": float(td_calibrator.intercept_[0]),
-                "coefficient": float(td_calibrator.coef_[0][0]),
-            },
-            "marketResidualWeight": float(touchdown["marketResidualWeight"]),
-            "actionable": bool(touchdown["actionable"]),
-            "confirmationGrades": td_report["confirmationGrades"],
-        },
+        "touchdown": existing["touchdown"],
         "decision": decision,
         "playerStates": player_states,
         "ambiguousPlayerNames": sorted(ambiguous_names),
@@ -246,7 +275,7 @@ def main() -> None:
         "trainingThrough": int(volume["trainingThrough"]),
     }
     args.output.parent.mkdir(parents=True, exist_ok=True)
-    args.output.write_text(json.dumps(output, separators=(",", ":"), allow_nan=False) + "\n", encoding="utf-8")
+    total_bytes = write_runtime_shards(args.output, output)
     print(json.dumps({
         "output": str(args.output),
         "sha256": sha256_file(args.output),
@@ -254,7 +283,7 @@ def main() -> None:
         "players": len(player_states),
         "ambiguousPlayers": len(ambiguous_names),
         "teams": len(team_states),
-        "bytes": args.output.stat().st_size,
+        "bytes": total_bytes,
     }, indent=2))
 
 

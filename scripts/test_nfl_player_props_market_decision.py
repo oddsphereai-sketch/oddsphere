@@ -36,18 +36,20 @@ assert model[1] < blended[1] < market[1]
 assert pd.Timestamp(contract["selectionEnd"]) < pd.Timestamp(contract["confirmationStart"])
 assert min(contract["lambdaCandidates"]) == contract["minimumModelWeight"] > 0
 assert contract["marketBenchmark"] == "independent_book_consensus_excluding_target_book"
-assert contract["promotionPolicy"]["receiving_yards"]["bestAngle"] is True
-assert contract["promotionPolicy"]["rushing_attempts"] == {"bestAngle": False, "lean": True, "watchlist": True}
+assert contract["promotionPolicy"]["receiving_yards"] == {"bestAngle": True, "lean": True, "watchlist": True}
+assert contract["promotionPolicy"]["receptions"] == {"bestAngle": True, "lean": True, "watchlist": True}
+assert all(policy == {"bestAngle": True, "lean": True, "watchlist": True} for policy in contract["promotionPolicy"].values())
+assert contract["ownerApprovedForwardException"] is True
 assert lanes.RELEASE == "nfl_player_props_actionable_lane_evidence_2026_08_25_r3_production_release"
-assert decision["decisionRelease"] == "nfl_player_props_decision_2026_08_31_r4_complete_exact_board"
-assert decision["modelRelease"] == "nfl_player_props_distribution_model_2026_08_25_r2_shared_context"
-assert decision["calibrationRelease"] == "nfl_player_props_distribution_calibration_2026_08_25_r2_shared_context"
+assert decision["decisionRelease"] == "nfl_player_props_decision_2026_09_01_r6_cross_market_movement"
+assert decision["modelRelease"] == "nfl_player_props_distribution_model_2026_09_01_r3_active_role"
+assert decision["calibrationRelease"] == "nfl_player_props_distribution_calibration_2026_09_01_r3_active_role"
 assert decision["volumeAndYardage"]["bestAngle"]["minimumIndependentBooks"] == 1
 assert decision["maximumRawMarketDivergence"] == 0.48
-assert decision["marketLanes"]["receiving_yards"] == {"eligibleSides": ["under"], "bestAngle": True, "lean": True, "watchlist": True}
-assert decision["marketLanes"]["receptions"] == {"eligibleSides": ["under"], "bestAngle": True, "lean": True, "watchlist": True}
-assert decision["marketLanes"]["passing_yards"]["eligibleSides"] == []
-assert decision["marketLanes"]["rushing_yards"]["eligibleSides"] == []
+assert all(lane == {"eligibleSides": ["over", "under"], "bestAngle": True, "lean": True, "watchlist": True} for lane in decision["marketLanes"].values())
+assert decision["volumeAndYardage"]["movementSupportedLean"]["minimumEv"] == 0.03
+assert decision["volumeAndYardage"]["movementSupportedBestAngle"]["minimumProbabilityEdge"] == 0.03
+assert decision["releaseEvidence"]["ownerApprovedForwardException"] is True
 assert td_contract["requiredOpportunityFeatures"] == ["participation", "red_zone", "goal_line", "team_implied_touchdowns", "opponent_touchdown_allowance"]
 
 rows = pd.DataFrame([

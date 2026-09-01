@@ -38,8 +38,8 @@ const base: NflPlayerPropPriceObservation = {
   scheduledStart: null,
 };
 const observations: NflPlayerPropPriceObservation[] = [
-  { ...base, providerObservationId: "open:over", observedAt: "2026-09-08T12:00:00Z", isOpening: true, americanPrice: -105 },
-  { ...base, providerObservationId: "open:under", observedAt: "2026-09-08T12:00:00Z", isOpening: true, side: "under", americanPrice: -115 },
+  { ...base, providerObservationId: "open:over", observedAt: "2026-09-08T12:00:00Z", isOpening: true, line: 59.5, americanPrice: -105 },
+  { ...base, providerObservationId: "open:under", observedAt: "2026-09-08T12:00:00Z", isOpening: true, line: 59.5, side: "under", americanPrice: -115 },
   base,
   { ...base, providerObservationId: "one:under", side: "under", americanPrice: -110 },
 ];
@@ -71,6 +71,7 @@ assert.equal(offer.state, "unlocked");
 assert.equal(offer.exactPriceComplete, true);
 assert.equal(offer.gradeEligibleMarket, true);
 assert.equal(offer.openingOverPrice, -105);
+assert.equal(offer.openingLine, 59.5, "the earliest complete same-book opening survives a later line move");
 assert.equal(offer.overNoVigProbability, 0.5);
 assert.equal(offer.lockAt, "2026-09-09T23:20:00.000Z");
 assert.ok(Math.abs(americanImpliedProbability(150) - 0.4) < 1e-12);

@@ -27,7 +27,7 @@ const decision: NflPlayerPropsRuntimeDecision = {
   gameId: "game", providerPlayerId: "1", playerName: "Player", team: "NE", opponent: "NYJ",
   scheduledStart: "2026-09-01T12:00:00.000Z", market: "receptions", line: 4.5, side: "over",
   sportsbook: "book", provider: "balldontlie", americanPrice: 110, observedAt: "2026-08-25T11:00:00.000Z",
-  bookEvidence: [{ sportsbook: "book", provider: "balldontlie", americanPrice: 110, observedAt: "2026-08-25T11:00:00.000Z", openingObservedAt: null, openingAmericanPrice: null }],
+  bookEvidence: [{ sportsbook: "book", provider: "balldontlie", americanPrice: 110, observedAt: "2026-08-25T11:00:00.000Z", openingObservedAt: null, openingLine: null, openingAmericanPrice: null }],
   lockAt: "2026-09-01T11:00:00.000Z", state: "unlocked", roleFingerprint: "role-a", projection: 5.2,
   projectionRange: { lower: 2.1, upper: 8.4, centralCoverage: 0.8, source: "empirical_residual_distribution" },
   forecastContext: {
@@ -40,7 +40,7 @@ const decision: NflPlayerPropsRuntimeDecision = {
     opponentAllowance: { label: "Opponent targets allowed", value: 31.2, format: "count" },
   },
   participationProbability: 0.9, rawModelProbability: 0.61, marketProbability: 0.5, finalProbability: 0.53,
-  probabilityEdge: 0.03, expectedValue: 0.11, grade: "Best Angle", healthHolds: [], provisional: false,
+  probabilityEdge: 0.03, expectedValue: 0.11, grade: "Best Angle", marketMovement: "neutral", healthHolds: [], provisional: false,
   modelRelease: "model", calibrationRelease: "calibration", decisionRelease: "decision",
 };
 function board(row: NflPlayerPropsRuntimeDecision): NflPlayerPropsRuntimeBoard {
@@ -67,9 +67,9 @@ function emptyBoard(): NflPlayerPropsRuntimeBoard {
 }
 
 const unlocked = reconcileNflPlayerPropsProductionSnapshot({ season: 2026, week: 1, evaluatedAt: "2026-08-25T12:00:00.000Z", nextBoard: board(decision) });
-assert.equal(NFL_PLAYER_PROPS_PRODUCTION_CANDIDATE_RELEASE, "nfl_player_props_member_2026_08_31_r10_complete_exact_board");
-assert.equal(NFL_PLAYER_PROPS_WRITER_RELEASE, "nfl_player_props_writer_2026_08_31_r12_rate_limit_bounded");
-assert.equal(NFL_PLAYER_PROPS_TRACKING_RELEASE, "nfl_player_props_tracking_2026_08_31_r5_closing_before_settlement");
+assert.equal(NFL_PLAYER_PROPS_PRODUCTION_CANDIDATE_RELEASE, "nfl_player_props_member_2026_09_01_r12_cross_market_movement");
+assert.equal(NFL_PLAYER_PROPS_WRITER_RELEASE, "nfl_player_props_writer_2026_09_01_r14_cross_market_movement");
+assert.equal(NFL_PLAYER_PROPS_TRACKING_RELEASE, "nfl_player_props_tracking_2026_09_01_r6_cross_market_movement");
 assert.equal(NFL_PLAYER_PROPS_SETTLEMENT_RELEASE, "nfl_player_props_settlement_2026_08_25_r3_bounded_finality");
 assert.equal(NFL_PLAYER_PROPS_PRODUCTION_INCLUDE_OPENINGS, true, "production records same-book opening context for movement and CLV interpretation");
 assert.equal(NFL_PLAYER_PROPS_PRODUCTION_COLLECTION_CALL_MAXIMUM, 48, "slate/current+opening props/player identity/Sharp pagination is explicitly bounded");

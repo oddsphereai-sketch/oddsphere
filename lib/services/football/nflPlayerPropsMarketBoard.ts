@@ -6,7 +6,7 @@ import {
 } from "./nflPlayerPropsContract";
 
 export const NFL_PLAYER_PROPS_MARKET_BOARD_RELEASE =
-  "nfl_player_props_exact_market_board_2026_08_25_r1" as const;
+  "nfl_player_props_exact_market_board_2026_09_01_r2_cross_line_opening" as const;
 export const NFL_PLAYER_PROPS_LOCK_LEAD_MINUTES = 60 as const;
 const MAX_PROVIDER_CLOCK_SKEW_MS = 60_000;
 
@@ -31,6 +31,7 @@ export type NflPlayerPropsExactOffer = {
   observedAt: string;
   fetchedAt: string;
   openingObservedAt: string | null;
+  openingLine: number | null;
   openingOverPrice: number | null;
   openingUnderPrice: number | null;
   openingYesPrice: number | null;
@@ -61,10 +62,15 @@ export function buildNflPlayerPropsExactBoard(args: {
   const games = new Map(args.snapshots.flatMap((snapshot) => snapshot.games)
     .map((game) => [game.providerGameId, game] as const));
   const groups = new Map<string, NflPlayerPropPriceObservation[]>();
+  const openingGroups = new Map<string, NflPlayerPropPriceObservation[]>();
   for (const row of args.snapshots.flatMap((snapshot) => snapshot.observations)) {
     if (row.isLive || !row.canonicalGameId || !row.playerName) continue;
     const key = logicalOfferKey(row);
     groups.set(key, [...(groups.get(key) ?? []), row]);
+    if (row.isOpening) {
+      const openingKey = crossLineOfferKey(row);
+      openingGroups.set(openingKey, [...(openingGroups.get(openingKey) ?? []), row]);
+    }
   }
   const offers: NflPlayerPropsExactOffer[] = [];
   for (const [offerKey, rows] of groups) {
@@ -75,8 +81,13 @@ export function buildNflPlayerPropsExactBoard(args: {
     const cutoff = Math.min(evaluatedAt, lockAt);
     const current = latestCapture(rows.filter((row) => !row.isOpening), cutoff);
     if (!current) continue;
-    const opening = earliestCapture(rows.filter((row) => row.isOpening), cutoff);
     const first = current.rows[0]!;
+    const opening = earliestCompleteOpeningCapture({
+      rows: openingGroups.get(crossLineOfferKey(first)) ?? [],
+      cutoff,
+      offerType: first.offerType,
+      currentLine: first.line,
+    });
     const overPrice = sidePrice(current.rows, "over");
     const underPrice = sidePrice(current.rows, "under");
     const yesPrice = sidePrice(current.rows, "yes");
@@ -109,6 +120,7 @@ export function buildNflPlayerPropsExactBoard(args: {
       observedAt: current.observedAt,
       fetchedAt: current.fetchedAt,
       openingObservedAt: opening?.observedAt ?? null,
+      openingLine: opening?.rows[0]?.line ?? null,
       openingOverPrice: opening ? sidePrice(opening.rows, "over") : null,
       openingUnderPrice: opening ? sidePrice(opening.rows, "under") : null,
       openingYesPrice: opening ? sidePrice(opening.rows, "yes") : null,
@@ -161,6 +173,10 @@ function logicalOfferKey(row: NflPlayerPropPriceObservation): string {
   return [row.provider, row.canonicalGameId, row.providerPlayerId ?? row.playerName?.toLowerCase(), row.sportsbook, row.market, row.offerType, row.line].join("|");
 }
 
+function crossLineOfferKey(row: NflPlayerPropPriceObservation): string {
+  return [row.provider, row.canonicalGameId, row.providerPlayerId ?? row.playerName?.toLowerCase(), row.sportsbook, row.market, row.offerType].join("|");
+}
+
 function captures(rows: NflPlayerPropPriceObservation[]): Capture[] {
   const byTime = new Map<string, NflPlayerPropPriceObservation[]>();
   for (const row of rows) byTime.set(row.observedAt, [...(byTime.get(row.observedAt) ?? []), row]);
@@ -176,9 +192,25 @@ function latestCapture(rows: NflPlayerPropPriceObservation[], cutoff: number): C
     .sort((first, second) => Date.parse(second.observedAt) - Date.parse(first.observedAt))[0] ?? null;
 }
 
-function earliestCapture(rows: NflPlayerPropPriceObservation[], cutoff: number): Capture | null {
-  return captures(rows).filter((capture) => Date.parse(capture.observedAt) <= cutoff)
-    .sort((first, second) => Date.parse(first.observedAt) - Date.parse(second.observedAt))[0] ?? null;
+function earliestCompleteOpeningCapture(args: {
+  rows: NflPlayerPropPriceObservation[];
+  cutoff: number;
+  offerType: NflPlayerPropPriceObservation["offerType"];
+  currentLine: number;
+}): Capture | null {
+  const candidates = captures(args.rows)
+    .filter((capture) => Date.parse(capture.observedAt) <= args.cutoff)
+    .flatMap((capture) => {
+      const byLine = new Map<number, NflPlayerPropPriceObservation[]>();
+      for (const row of capture.rows) byLine.set(row.line, [...(byLine.get(row.line) ?? []), row]);
+      return [...byLine.entries()].map(([line, rows]) => ({ ...capture, rows, line }));
+    })
+    .filter((capture) => args.offerType === "milestone"
+      ? sidePrice(capture.rows, "yes") !== null
+      : sidePrice(capture.rows, "over") !== null && sidePrice(capture.rows, "under") !== null)
+    .sort((first, second) => Date.parse(first.observedAt) - Date.parse(second.observedAt)
+      || Math.abs(first.line - args.currentLine) - Math.abs(second.line - args.currentLine));
+  return candidates[0] ?? null;
 }
 
 function sidePrice(rows: NflPlayerPropPriceObservation[], side: NflPlayerPropPriceObservation["side"]): number | null {

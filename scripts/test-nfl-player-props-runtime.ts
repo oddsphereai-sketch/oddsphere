@@ -15,15 +15,17 @@ import {
 } from "../lib/services/football/nflPlayerPropsRuntime";
 import type { NflPlayerPropsExactOffer } from "../lib/services/football/nflPlayerPropsMarketBoard";
 
-assert.equal(NFL_PLAYER_PROPS_RUNTIME_RELEASE, "nfl_player_props_runtime_2026_08_31_r4_complete_exact_board");
+assert.equal(NFL_PLAYER_PROPS_RUNTIME_RELEASE, "nfl_player_props_runtime_2026_09_01_r6_cross_market_movement");
 verifyNflPlayerPropsRuntimeParity(1e-9);
 
 const receiving = nflPlayerPropsRuntimeMarketPolicy("receiving_yards");
-assert.deepEqual(receiving, { weight: 0.2, qualified: true });
+assert.deepEqual(receiving, { weight: 0.2, qualified: false }, "historical lane qualification remains truthful under the owner-approved forward exception");
+assert.equal(nflPlayerPropsRuntimeMarketPolicy("receptions")?.qualified, true);
 assert.equal(nflPlayerPropsRuntimeMarketPolicy("passing_yards")?.qualified, false);
 assert.deepEqual(nflPlayerPropsTouchdownPolicy(), { weight: 0.2, actionable: false });
 assert.equal(nflPlayerPropsProductionMarketLane("receiving_yards")?.lean, true);
 assert.equal(nflPlayerPropsProductionMarketLane("receptions")?.lean, true);
+assert.deepEqual(nflPlayerPropsProductionMarketLane("passing_yards")?.eligibleSides, ["over", "under"]);
 assert.equal(nflPlayerPropsRawMarketDivergenceImplausible(0.98, 0.50), false, "the frozen p99 boundary itself remains eligible");
 assert.equal(nflPlayerPropsRawMarketDivergenceImplausible(0.981, 0.50), true, "only grossly implausible divergence is rejected");
 
@@ -40,12 +42,12 @@ assert.ok(nflPlayerPropsExpectedValue(0.55, -110) > 0);
 assert.ok(nflPlayerPropsExpectedValue(0.45, -110) < 0);
 
 const baseOffer: NflPlayerPropsExactOffer = {
-  release: "nfl_player_props_exact_market_board_2026_08_25_r1", offerKey: "test", canonicalGameId: "game",
+  release: "nfl_player_props_exact_market_board_2026_09_01_r2_cross_line_opening", offerKey: "test", canonicalGameId: "game",
   provider: "balldontlie", providerEventId: "game", providerPlayerId: "player", playerName: "Test Player", playerTeam: "NE",
   sportsbook: "book-a", market: "receptions", offerType: "over_under", line: 4.5,
   overPrice: -110, underPrice: -110, yesPrice: null, overNoVigProbability: 0.5, underNoVigProbability: 0.5,
   observedAt: "2026-08-25T12:00:00.000Z", fetchedAt: "2026-08-25T12:00:01.000Z", openingObservedAt: "2026-08-25T08:00:00.000Z",
-  openingOverPrice: -115, openingUnderPrice: -105, openingYesPrice: null, scheduledStart: "2026-09-01T00:00:00.000Z",
+  openingLine: 4.5, openingOverPrice: -115, openingUnderPrice: -105, openingYesPrice: null, scheduledStart: "2026-09-01T00:00:00.000Z",
   lockAt: "2026-08-31T23:00:00.000Z", state: "unlocked", exactPriceComplete: true, gradeEligibleMarket: true, healthHolds: [],
 };
 const feature = {
@@ -77,6 +79,7 @@ assert.ok(twoBooks.decisions.every((row) => row.opponent === "NYJ" && row.schedu
 assert.ok(twoBooks.decisions.every((row) => row.bookEvidence.length === 2), "winning outcomes retain all competing exact-book evidence");
 assert.deepEqual(twoBooks.decisions[0]?.bookEvidence.map((row) => row.sportsbook), ["book-a", "book-b"]);
 assert.equal(twoBooks.decisions.find((row) => row.side === "over")?.bookEvidence[0]?.openingAmericanPrice, -115, "same-book opening evidence survives best-price selection");
+assert.equal(twoBooks.decisions.find((row) => row.side === "over")?.bookEvidence[0]?.openingLine, 4.5, "cross-line opening context survives best-price selection");
 assert.ok(twoBooks.decisions.every((row) => row.projectionRange?.centralCoverage === 0.8), "volume decisions retain empirical forecast uncertainty");
 assert.ok(twoBooks.decisions.every((row) => row.forecastContext.expectedQuarterback?.name === "Test Quarterback"));
 assert.equal(twoBooks.decisions[0]?.forecastContext.recentProduction?.label, "Recent receptions");
@@ -90,7 +93,7 @@ assert.deepEqual(twoBooks.decisions[0]?.forecastContext.modelInputTrends?.find((
 ], "the member context exposes the exact timestamped trend inputs without changing the score");
 const noOpening = buildNflPlayerPropsRuntimeBoard({
   offers: [baseOffer, { ...baseOffer, offerKey: "test-b", sportsbook: "book-b" }].map((offer) => ({
-    ...offer, openingObservedAt: null, openingOverPrice: null, openingUnderPrice: null, openingYesPrice: null,
+    ...offer, openingObservedAt: null, openingLine: null, openingOverPrice: null, openingUnderPrice: null, openingYesPrice: null,
   })),
   features: [feature], evaluatedAt: "2026-08-25T12:01:00.000Z",
 });
@@ -99,10 +102,10 @@ assert.deepEqual(
   noOpening.decisions.map(withoutBookEvidence),
   "opening presentation evidence changes zero decisions, probabilities, projections, or grades",
 );
-assert.ok(twoBooks.decisions.every((row) => row.decisionRelease === "nfl_player_props_decision_2026_08_31_r4_complete_exact_board"), "tracking provenance uses the current production exact-price lane release, not the residual calibration release");
+assert.ok(twoBooks.decisions.every((row) => row.decisionRelease === "nfl_player_props_decision_2026_09_01_r6_cross_market_movement"), "tracking provenance uses the current production cross-market decision release");
 assert.ok(twoBooks.decisions.every((row) => !row.healthHolds.includes("independent_same_line_confirmation_missing")));
-assert.ok(twoBooks.decisions.every((row) => row.modelRelease === "nfl_player_props_distribution_model_2026_08_25_r2_shared_context"));
-assert.ok(twoBooks.decisions.every((row) => row.calibrationRelease === "nfl_player_props_distribution_calibration_2026_08_25_r2_shared_context"));
+assert.ok(twoBooks.decisions.every((row) => row.modelRelease === "nfl_player_props_distribution_model_2026_09_01_r3_active_role"));
+assert.ok(twoBooks.decisions.every((row) => row.calibrationRelease === "nfl_player_props_distribution_calibration_2026_09_01_r3_active_role"));
 assert.ok(twoBooks.decisions.every((row) => !row.modelRelease.includes("shadow") && !row.decisionRelease.includes("provisional")));
 assert.ok(twoBooks.decisions.every((row) => row.provisional === false));
 const roleHeld = buildNflPlayerPropsRuntimeBoard({ offers: [baseOffer, { ...baseOffer, offerKey: "test-b", sportsbook: "book-b" }], features: [{ ...feature, healthHolds: ["role_ambiguous"] }], evaluatedAt: "2026-08-25T12:01:00.000Z" });

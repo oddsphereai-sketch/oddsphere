@@ -210,16 +210,40 @@ def add_player_prior_features(rows: pd.DataFrame, metrics: list[str]) -> tuple[p
     result = rows.sort_values(["player_id", "season", "week", "game_id"]).copy()
     group = result.groupby("player_id", sort=False, observed=True)
     result["prior_roster_game_rows"] = group.cumcount().astype(float)
-    result["prior_participations"] = group["participated"].transform(lambda values: values.shift(1).fillna(0).cumsum())
+    result["prior_participations"] = group["participated"].transform(lambda values: values.shift(1).fillna(0).cumsum()).astype(float)
+    result["_prior_active_count"] = result["prior_participations"].astype(int)
+    result["_prior_season_active_count"] = result.groupby(["player_id", "season"], sort=False, observed=True)["participated"].transform(
+        lambda values: values.shift(1).fillna(0).cumsum(),
+    ).astype(int)
+    active = result[result["participated"].gt(0)].copy()
+    active["_active_count_after"] = active.groupby("player_id", sort=False, observed=True).cumcount() + 1
+    active["_season_active_count_after"] = active.groupby(["player_id", "season"], sort=False, observed=True).cumcount() + 1
+    target_overall_index = pd.MultiIndex.from_frame(result[["player_id", "_prior_active_count"]])
+    target_season_index = pd.MultiIndex.from_frame(result[["player_id", "season", "_prior_season_active_count"]])
     feature_columns = ["prior_roster_game_rows", "prior_participations"]
     for metric in metrics:
-        result[f"prior_{metric}_lag1"] = group[metric].shift(1)
-        result[f"prior_{metric}_avg3"] = group[metric].transform(lambda values: shifted_rolling(values, 3))
-        result[f"prior_{metric}_avg5"] = group[metric].transform(lambda values: shifted_rolling(values, 5))
-        result[f"prior_{metric}_ewm"] = group[metric].transform(lambda values: values.shift(1).ewm(alpha=EWM_ALPHA, adjust=False).mean())
-        result[f"prior_{metric}_season_avg"] = result.groupby(["player_id", "season"], sort=False, observed=True)[metric].transform(lambda values: values.shift(1).expanding(min_periods=1).mean())
+        if metric == "participated":
+            result[f"prior_{metric}_lag1"] = group[metric].shift(1)
+            result[f"prior_{metric}_avg3"] = group[metric].transform(lambda values: shifted_rolling(values, 3))
+            result[f"prior_{metric}_avg5"] = group[metric].transform(lambda values: shifted_rolling(values, 5))
+            result[f"prior_{metric}_ewm"] = group[metric].transform(lambda values: values.shift(1).ewm(alpha=EWM_ALPHA, adjust=False).mean())
+            result[f"prior_{metric}_season_avg"] = result.groupby(["player_id", "season"], sort=False, observed=True)[metric].transform(lambda values: values.shift(1).expanding(min_periods=1).mean())
+        else:
+            active_group = active.groupby("player_id", sort=False, observed=True)[metric]
+            active[f"_{metric}_lag1_state"] = active[metric]
+            active[f"_{metric}_avg3_state"] = active_group.transform(lambda values: values.rolling(3, min_periods=1).mean())
+            active[f"_{metric}_avg5_state"] = active_group.transform(lambda values: values.rolling(5, min_periods=1).mean())
+            active[f"_{metric}_ewm_state"] = active_group.transform(lambda values: values.ewm(alpha=EWM_ALPHA, adjust=False).mean())
+            active[f"_{metric}_season_avg_state"] = active.groupby(["player_id", "season"], sort=False, observed=True)[metric].transform(
+                lambda values: values.expanding(min_periods=1).mean(),
+            )
+            overall_state = active.set_index(["player_id", "_active_count_after"])
+            season_state = active.set_index(["player_id", "season", "_season_active_count_after"])
+            for suffix in ("lag1", "avg3", "avg5", "ewm"):
+                result[f"prior_{metric}_{suffix}"] = overall_state[f"_{metric}_{suffix}_state"].reindex(target_overall_index).to_numpy()
+            result[f"prior_{metric}_season_avg"] = season_state[f"_{metric}_season_avg_state"].reindex(target_season_index).to_numpy()
         feature_columns.extend([f"prior_{metric}_lag1", f"prior_{metric}_avg3", f"prior_{metric}_avg5", f"prior_{metric}_ewm", f"prior_{metric}_season_avg"])
-    return result, feature_columns
+    return result.drop(columns=["_prior_active_count", "_prior_season_active_count"]), feature_columns
 
 
 def add_team_prior_features(team: pd.DataFrame) -> tuple[pd.DataFrame, list[str]]:

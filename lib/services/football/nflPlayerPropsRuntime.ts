@@ -1,17 +1,30 @@
-import artifactJson from "./modelArtifacts/nflPlayerPropsRuntime.json";
+import artifactCoreJson from "./modelArtifacts/nflPlayerPropsRuntime.json";
+import passingAttemptsJson from "./modelArtifacts/nflPlayerPropsRuntimeMarketPassingAttempts.json";
+import passingCompletionsJson from "./modelArtifacts/nflPlayerPropsRuntimeMarketPassingCompletions.json";
+import passingYardsJson from "./modelArtifacts/nflPlayerPropsRuntimeMarketPassingYards.json";
+import receptionsJson from "./modelArtifacts/nflPlayerPropsRuntimeMarketReceptions.json";
+import receivingYardsJson from "./modelArtifacts/nflPlayerPropsRuntimeMarketReceivingYards.json";
+import rushingAttemptsJson from "./modelArtifacts/nflPlayerPropsRuntimeMarketRushingAttempts.json";
+import rushingYardsJson from "./modelArtifacts/nflPlayerPropsRuntimeMarketRushingYards.json";
+import playerStates0Json from "./modelArtifacts/nflPlayerPropsRuntimePlayers0.json";
+import playerStates1Json from "./modelArtifacts/nflPlayerPropsRuntimePlayers1.json";
+import playerStates2Json from "./modelArtifacts/nflPlayerPropsRuntimePlayers2.json";
+import playerStates3Json from "./modelArtifacts/nflPlayerPropsRuntimePlayers3.json";
+import touchdownJson from "./modelArtifacts/nflPlayerPropsRuntimeTouchdown.json";
 import type { NflPlayerPropMarket, NflPlayerPropsObservationSnapshot } from "./nflPlayerPropsContract";
 import type { NflPlayerPropsInferenceContext } from "./nflPlayerPropsInferenceContext";
 import type { NflPlayerPropsExactOffer } from "./nflPlayerPropsMarketBoard";
 
 export const NFL_PLAYER_PROPS_RUNTIME_ARTIFACT_RELEASE =
-  "nfl_player_props_runtime_2026_08_25_r2_shared_context" as const;
+  "nfl_player_props_runtime_2026_09_01_r4_cross_market_movement" as const;
 export const NFL_PLAYER_PROPS_RUNTIME_RELEASE =
-  "nfl_player_props_runtime_2026_08_31_r4_complete_exact_board" as const;
+  "nfl_player_props_runtime_2026_09_01_r6_cross_market_movement" as const;
 export const NFL_PLAYER_PROPS_BOARD_RELEASE =
-  "nfl_player_props_board_2026_08_31_r7_complete_exact_board" as const;
+  "nfl_player_props_board_2026_09_01_r9_cross_market_movement" as const;
 export const NFL_PLAYER_PROPS_DECISION_RELEASE =
-  "nfl_player_props_decision_2026_08_31_r4_complete_exact_board" as const;
+  "nfl_player_props_decision_2026_09_01_r6_cross_market_movement" as const;
 export const NFL_PLAYER_PROPS_MAXIMUM_RAW_MARKET_DIVERGENCE = 0.48 as const;
+export const NFL_PLAYER_PROPS_MATERIAL_PRICE_MOVEMENT_PP = 0.025 as const;
 
 type TreeNode = {
   value: number; featureIndex: number; threshold: number; missingGoToLeft: boolean;
@@ -43,9 +56,12 @@ type RuntimeArtifact = {
   };
   decision: {
     maximumQuoteAgeHours: number;
+    releaseEvidence: { ownerApprovedForwardException?: boolean };
     volumeAndYardage: {
       lean: GradeThresholds;
       bestAngle: { minimumEv: number; minimumProbabilityEdge: number; minimumParticipationProbability: number; minimumIndependentBooks: number };
+      movementSupportedLean: GradeThresholds;
+      movementSupportedBestAngle: GradeThresholds;
     };
     marketLanes: Record<string, {
       eligibleSides: Array<"over" | "under">; bestAngle: boolean; lean: boolean; watchlist: boolean;
@@ -62,7 +78,20 @@ type GradeThresholds = {
   minimumEv: number; minimumProbabilityEdge: number; minimumParticipationProbability: number; minimumIndependentBooks: number;
 };
 
-const artifact = artifactJson as unknown as RuntimeArtifact;
+const artifact = {
+  ...artifactCoreJson,
+  markets: {
+    passing_attempts: passingAttemptsJson,
+    passing_completions: passingCompletionsJson,
+    passing_yards: passingYardsJson,
+    rushing_attempts: rushingAttemptsJson,
+    rushing_yards: rushingYardsJson,
+    receptions: receptionsJson,
+    receiving_yards: receivingYardsJson,
+  },
+  touchdown: touchdownJson,
+  playerStates: { ...playerStates0Json, ...playerStates1Json, ...playerStates2Json, ...playerStates3Json },
+} as unknown as RuntimeArtifact;
 if (artifact.runtimeRelease !== NFL_PLAYER_PROPS_RUNTIME_ARTIFACT_RELEASE) {
   throw new Error("NFL player props runtime artifact release mismatch.");
 }
@@ -91,8 +120,9 @@ export type NflPlayerPropsRuntimeScore = {
 export type NflPlayerPropsGrade = "Best Angle" | "Lean" | "Watchlist" | "No Play" | "Held";
 export type NflPlayerPropsBookEvidence = {
   sportsbook: string; provider: string; americanPrice: number; observedAt: string;
-  openingObservedAt: string | null; openingAmericanPrice: number | null;
+  openingObservedAt: string | null; openingLine: number | null; openingAmericanPrice: number | null;
 };
+export type NflPlayerPropsMarketMovement = "support" | "adverse" | "neutral";
 export type NflPlayerPropsProjectionRange = {
   lower: number; upper: number; centralCoverage: 0.8; source: "empirical_residual_distribution";
 };
@@ -128,7 +158,7 @@ export type NflPlayerPropsRuntimeDecision = {
   forecastContext: NflPlayerPropsForecastContext;
   participationProbability: number; rawModelProbability: number;
   marketProbability: number; finalProbability: number; probabilityEdge: number; expectedValue: number;
-  grade: NflPlayerPropsGrade; healthHolds: string[]; provisional: false;
+  grade: NflPlayerPropsGrade; marketMovement: NflPlayerPropsMarketMovement; healthHolds: string[]; provisional: false;
   modelRelease: string; calibrationRelease: string; decisionRelease: string;
 };
 
@@ -324,7 +354,7 @@ export function buildNflPlayerPropsRuntimeBoard(args: {
           : offer.yesPrice >= 100 && edge >= 0 && ev >= 0
             ? "Watchlist"
             : "No Play";
-      decisions.push(decisionRow(offer, feature, scored, "yes", offer.yesPrice, null, raw, market, final, edge, ev, grade, decisionReasons, artifact.touchdownModelRelease, artifact.touchdownCalibrationRelease));
+      decisions.push(decisionRow(offer, feature, scored, "yes", offer.yesPrice, null, raw, market, final, edge, ev, grade, "neutral", decisionReasons, artifact.touchdownModelRelease, artifact.touchdownCalibrationRelease));
       continue;
     }
     const policy = artifact.markets[offer.market];
@@ -340,23 +370,32 @@ export function buildNflPlayerPropsRuntimeBoard(args: {
       const edge = final - market; const ev = nflPlayerPropsExpectedValue(final, price);
       const divergenceImplausible = nflPlayerPropsRawMarketDivergenceImplausible(raw, market);
       const eligibleSide = lane?.eligibleSides.includes(side) ?? false;
-      const leanThresholds = lane?.leanThresholds ?? artifact.decision.volumeAndYardage.lean;
-      let grade: NflPlayerPropsGrade = "No Play";
-      if (commonHolds.length) grade = "Held";
-      else if (independentBooks === 0) grade = "No Play";
-      else if (divergenceImplausible) grade = "No Play";
-      else if (eligibleSide && policy.marketResidualQualified && lane?.bestAngle && ev >= artifact.decision.volumeAndYardage.bestAngle.minimumEv
-        && edge >= artifact.decision.volumeAndYardage.bestAngle.minimumProbabilityEdge
-        && scored.participationProbability >= artifact.decision.volumeAndYardage.bestAngle.minimumParticipationProbability
-        && independentBooks >= artifact.decision.volumeAndYardage.bestAngle.minimumIndependentBooks) grade = "Best Angle";
-      else if (eligibleSide && policy.marketResidualQualified && lane?.lean
-        && ev >= leanThresholds.minimumEv
-        && edge >= leanThresholds.minimumProbabilityEdge
-        && scored.participationProbability >= leanThresholds.minimumParticipationProbability
-        && independentBooks >= leanThresholds.minimumIndependentBooks) grade = "Lean";
-      else if (eligibleSide && policy.marketResidualQualified && lane?.watchlist && ev >= 0 && edge >= 0) grade = "Watchlist";
+      const movement = nflPlayerPropsSameBookMovement(offer, side);
+      const leanThresholds = movement === "support"
+        ? artifact.decision.volumeAndYardage.movementSupportedLean
+        : lane?.leanThresholds ?? artifact.decision.volumeAndYardage.lean;
+      const bestAngleThresholds = movement === "support"
+        ? artifact.decision.volumeAndYardage.movementSupportedBestAngle
+        : artifact.decision.volumeAndYardage.bestAngle;
+      const grade = gradeNflPlayerPropsCrossMarketCandidate({
+        commonHolds,
+        independentBooks,
+        divergenceImplausible,
+        eligibleSide,
+        marketResidualQualified: policy.marketResidualQualified || artifact.decision.releaseEvidence.ownerApprovedForwardException === true,
+        bestAngleEnabled: lane?.bestAngle === true,
+        leanEnabled: lane?.lean === true,
+        watchlistEnabled: lane?.watchlist === true,
+        expectedValue: ev,
+        probabilityEdge: edge,
+        participationProbability: scored.participationProbability,
+        movement,
+        leanThresholds,
+        bestAngleThresholds,
+      });
       decisions.push(decisionRow(
         offer, feature, scored, side, price, projection, raw, market, final, edge, ev, grade,
+        movement,
         divergenceImplausible ? [...decisionReasons, "model_market_divergence_implausible"] : decisionReasons,
         artifact.modelRelease, artifact.calibrationRelease,
       ));
@@ -484,7 +523,8 @@ function normalizeBook(value: string): string { return value.toLowerCase().repla
 function decisionRow(
   offer: NflPlayerPropsExactOffer, feature: NflPlayerPropsRuntimeFeatureRow, score: NflPlayerPropsRuntimeScore,
   side: "over" | "under" | "yes", price: number, projection: number | null, raw: number, market: number,
-  final: number, edge: number, expectedValue: number, grade: NflPlayerPropsGrade, holds: string[], modelRelease: string, calibrationRelease: string,
+  final: number, edge: number, expectedValue: number, grade: NflPlayerPropsGrade,
+  marketMovement: NflPlayerPropsMarketMovement, holds: string[], modelRelease: string, calibrationRelease: string,
 ): NflPlayerPropsRuntimeDecision {
   const openingAmericanPrice = side === "over"
     ? offer.openingOverPrice
@@ -497,28 +537,86 @@ function decisionRow(
     line: offer.line, side, sportsbook: offer.sportsbook, provider: offer.provider, americanPrice: price,
     bookEvidence: [{
       sportsbook: offer.sportsbook, provider: offer.provider, americanPrice: price, observedAt: offer.observedAt,
-      openingObservedAt: offer.openingObservedAt, openingAmericanPrice,
+      openingObservedAt: offer.openingObservedAt, openingLine: offer.openingLine, openingAmericanPrice,
     }],
     observedAt: offer.observedAt, lockAt: offer.lockAt, state: offer.state, roleFingerprint: feature.roleFingerprint,
     projection,
     projectionRange: projection === null ? null : nflPlayerPropsProjectionRange(offer.market, projection),
     forecastContext: buildForecastContext(feature, offer.market),
     participationProbability: score.participationProbability, rawModelProbability: raw,
-    marketProbability: market, finalProbability: final, probabilityEdge: edge, expectedValue, grade,
+    marketProbability: market, finalProbability: final, probabilityEdge: edge, expectedValue, grade, marketMovement,
     healthHolds: [...new Set(holds)].sort(), provisional: false, modelRelease, calibrationRelease,
     decisionRelease: NFL_PLAYER_PROPS_DECISION_RELEASE,
   };
 }
 
 export function nflPlayerPropsProductionMarketLane(market: string): RuntimeArtifact["decision"]["marketLanes"][string] | undefined {
-  const lane = artifact.decision.marketLanes[market];
-  if (!lane) return undefined;
-  // These two under-only lanes were already qualified for Best Angle but
-  // skipped Lean entirely. Use the existing universal Lean economics between
-  // Best Angle and Watchlist so stronger evidence cannot fall two tiers.
-  return market === "receiving_yards" || market === "receptions"
-    ? { ...lane, lean: true }
-    : lane;
+  return artifact.decision.marketLanes[market];
+}
+
+export function nflPlayerPropsSameBookMovement(
+  offer: NflPlayerPropsExactOffer,
+  side: "over" | "under",
+): NflPlayerPropsMarketMovement {
+  if (offer.openingLine === null || offer.openingObservedAt === null) return "neutral";
+  const openingPrice = side === "over" ? offer.openingOverPrice : offer.openingUnderPrice;
+  const currentPrice = side === "over" ? offer.overPrice : offer.underPrice;
+  const lineDirection = side === "over"
+    ? Math.sign(offer.line - offer.openingLine)
+    : Math.sign(offer.openingLine - offer.line);
+  const priceDelta = openingPrice !== null && currentPrice !== null
+    ? impliedProbability(currentPrice) - impliedProbability(openingPrice)
+    : 0;
+  // A price-only twitch is not a sharp signal. Require 2.5 implied-probability
+  // points before price movement alone can lower a threshold or cap a play.
+  const priceDirection = priceDelta >= NFL_PLAYER_PROPS_MATERIAL_PRICE_MOVEMENT_PP
+    ? 1
+    : priceDelta <= -NFL_PLAYER_PROPS_MATERIAL_PRICE_MOVEMENT_PP
+      ? -1
+      : 0;
+  if (lineDirection > 0) return priceDirection < 0 ? "neutral" : "support";
+  if (lineDirection < 0) return "adverse";
+  if (priceDirection > 0) return "support";
+  if (priceDirection < 0) return "adverse";
+  return "neutral";
+}
+
+export function gradeNflPlayerPropsCrossMarketCandidate(args: {
+  commonHolds: string[];
+  independentBooks: number;
+  divergenceImplausible: boolean;
+  eligibleSide: boolean;
+  marketResidualQualified: boolean;
+  bestAngleEnabled: boolean;
+  leanEnabled: boolean;
+  watchlistEnabled: boolean;
+  expectedValue: number;
+  probabilityEdge: number;
+  participationProbability: number;
+  movement: NflPlayerPropsMarketMovement;
+  leanThresholds: GradeThresholds;
+  bestAngleThresholds: GradeThresholds;
+}): NflPlayerPropsGrade {
+  if (args.commonHolds.length) return "Held";
+  if (args.independentBooks === 0 || args.divergenceImplausible) return "No Play";
+  const coherent = args.eligibleSide && args.marketResidualQualified;
+  if (args.movement !== "adverse" && coherent && args.bestAngleEnabled
+    && meetsGradeThresholds(args, args.bestAngleThresholds)) return "Best Angle";
+  if (args.movement !== "adverse" && coherent && args.leanEnabled
+    && meetsGradeThresholds(args, args.leanThresholds)) return "Lean";
+  if (coherent && args.watchlistEnabled && args.expectedValue >= 0 && args.probabilityEdge >= 0) return "Watchlist";
+  return "No Play";
+}
+
+function meetsGradeThresholds(
+  values: Pick<Parameters<typeof gradeNflPlayerPropsCrossMarketCandidate>[0],
+    "expectedValue" | "probabilityEdge" | "participationProbability" | "independentBooks">,
+  thresholds: GradeThresholds,
+): boolean {
+  return values.expectedValue >= thresholds.minimumEv
+    && values.probabilityEdge >= thresholds.minimumProbabilityEdge
+    && values.participationProbability >= thresholds.minimumParticipationProbability
+    && values.independentBooks >= thresholds.minimumIndependentBooks;
 }
 
 export function nflPlayerPropsRawMarketDivergenceImplausible(raw: number, market: number): boolean {
