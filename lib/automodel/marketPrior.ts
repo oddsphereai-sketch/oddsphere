@@ -4,8 +4,9 @@
  * Pure functions. No DB, no env reads, no I/O. Inputs are typed; outputs
  * are deterministic. Designed to be unit-tested in isolation.
  *
- * Architectural role: turn the market's signals (listed_total + ML odds +
- * Pinnacle fair probs) into a per-team "baseline" run expectation that
+ * Architectural role: turn the market's signals (listed total, complete
+ * sharp/retail price groups, ML odds, and Pinnacle fair probabilities) into
+ * a per-team "baseline" run expectation that
  * mlbAutoModelV2 anchors on. The model's independent baseball factors
  * (V1's layered output) are then applied as residuals on top, capped to
  * prevent runaway moves from weak signal.
@@ -22,6 +23,10 @@
  */
 
 import type { MarketSnapshot, SharpSnapshot } from "./types";
+import {
+  inferPoissonMeanFromNoVigTotalPrice,
+  splitConflictsWithPriceMap,
+} from "./mlbCoherentMarketPriceMap";
 
 /**
  * Convert American odds to raw implied probability (with vig).
@@ -116,7 +121,7 @@ export interface MarketBaseline {
   homeRunShare: number | null;
   homeImpliedTotal: number | null;
   awayImpliedTotal: number | null;
-  source: "pinnacle_fair" | "american_devig" | "fallback_default" | null;
+  source: "coherent_sharp_retail_price_map" | "pinnacle_fair" | "american_devig" | "fallback_default" | null;
   dataQuality: "ok" | "degraded" | "missing";
   reason: string;
   /**
@@ -130,7 +135,13 @@ export interface MarketBaseline {
   overNoVigProb: number | null;
   underNoVigProb: number | null;
   /** Source label for the O/U pair, separate from the ML source above. */
-  ouSource: "american_devig" | null;
+  ouSource: "coherent_sharp_retail_price_map" | "american_devig" | null;
+  /** Expected scoring mean inferred from the exact total price when eligible. */
+  marketExpectedTotal?: number | null;
+  coherentMoneylinePriceMapApplied?: boolean;
+  coherentTotalPriceMapApplied?: boolean;
+  coherentMoneylineSplitConflict?: boolean;
+  coherentTotalSplitConflict?: boolean;
 }
 
 /**
@@ -138,11 +149,12 @@ export interface MarketBaseline {
  * Pure: no I/O, deterministic.
  *
  * Priority order for win probabilities:
- *   1. Pinnacle fair-prob fields (sharp.pinnacle_ml_fair_prob_*) if both
+ *   1. Eligible coherent sharp/retail group consensus.
+ *   2. Pinnacle fair-prob fields (sharp.pinnacle_ml_fair_prob_*) if both
  *      sides present and consistent (sum ≈ 1 within 2%).
- *   2. American odds de-vig (market.home_ml_odds_american +
+ *   3. American odds de-vig (market.home_ml_odds_american +
  *      market.away_ml_odds_american) — falls back when sharp.* is null.
- *   3. Fallback default 0.51 home edge if listed_total exists but no
+ *   4. Fallback default 0.51 home edge if listed_total exists but no
  *      ML odds anywhere — annotated as "degraded".
  *
  * Missing-baseline returns:
@@ -155,6 +167,37 @@ export function computeMarketBaseline(
   sharp: SharpSnapshot | null,
 ): MarketBaseline {
   const listedTotal = market.listed_total;
+  const coherentMap = market.coherent_price_map ?? null;
+  const coherentMlSplitConflict = coherentMap === null
+    ? false
+    : splitConflictsWithPriceMap({
+        priceMap: coherentMap.moneyline_home,
+        publicBettingPct: sharp?.public_betting_pct_home ?? null,
+        publicMoneyPct: sharp?.public_money_pct_home ?? null,
+      });
+  const coherentTotalSplitConflict = coherentMap === null
+    ? false
+    : splitConflictsWithPriceMap({
+        priceMap: coherentMap.total_over,
+        publicBettingPct: sharp?.public_betting_pct_over ?? null,
+        publicMoneyPct: sharp?.public_money_pct_over ?? null,
+      });
+  const coherentMlHomeProb =
+    coherentMap?.moneyline_home.eligible === true && !coherentMlSplitConflict
+      ? groupConsensusProbability(coherentMap.moneyline_home)
+      : null;
+  const coherentTotalOverProb =
+    coherentMap?.total_over.eligible === true && !coherentTotalSplitConflict
+      ? groupConsensusProbability(coherentMap.total_over)
+      : null;
+  const inferredMarketExpectedTotal =
+    listedTotal !== null && coherentTotalOverProb !== null
+      ? inferPoissonMeanFromNoVigTotalPrice({
+          listedTotal,
+          overNoVigProbability: coherentTotalOverProb,
+        })
+      : null;
+  const marketExpectedTotal = inferredMarketExpectedTotal ?? listedTotal;
 
   // Phase 6B.8 — resolve the no-vig O/U pair once. Used in every return
   // path below. Null when either side's price is missing or the pair
@@ -166,24 +209,32 @@ export function computeMarketBaseline(
     market.over_odds_american,
     market.under_odds_american,
   );
-  const overNoVigProb = ouPair?.over ?? null;
-  const underNoVigProb = ouPair?.under ?? null;
-  const ouSource: "american_devig" | null = ouPair !== null ? "american_devig" : null;
+  const overNoVigProb = coherentTotalOverProb ?? ouPair?.over ?? null;
+  const underNoVigProb = overNoVigProb === null ? null : 1 - overNoVigProb;
+  const ouSource: MarketBaseline["ouSource"] = coherentTotalOverProb !== null
+    ? "coherent_sharp_retail_price_map"
+    : ouPair !== null
+      ? "american_devig"
+      : null;
 
-  // 1. Try Pinnacle fair probabilities first (most-accurate source).
-  if (
-    sharp !== null &&
-    sharp.pinnacle_ml_fair_prob_home !== null &&
-    sharp.pinnacle_ml_fair_prob_away !== null
-  ) {
-    const homeProb = sharp.pinnacle_ml_fair_prob_home;
-    const awayProb = sharp.pinnacle_ml_fair_prob_away;
+  // 1. Prefer an eligible multi-book sharp price map; otherwise retain the
+  // existing Pinnacle fair-probability path.
+  const preferredHomeProb = coherentMlHomeProb ?? sharp?.pinnacle_ml_fair_prob_home ?? null;
+  const preferredAwayProb = coherentMlHomeProb !== null
+    ? 1 - coherentMlHomeProb
+    : sharp?.pinnacle_ml_fair_prob_away ?? null;
+  const preferredSource = coherentMlHomeProb !== null
+    ? "coherent_sharp_retail_price_map" as const
+    : "pinnacle_fair" as const;
+  if (preferredHomeProb !== null && preferredAwayProb !== null) {
+    const homeProb = preferredHomeProb;
+    const awayProb = preferredAwayProb;
     const sum = homeProb + awayProb;
     if (Math.abs(sum - 1) > 0.02) {
       // Inconsistent Pinnacle probs — fall through to American de-vig.
     } else if (homeProb > 0 && homeProb < 1) {
       const share = probToRunShare(homeProb);
-      if (listedTotal === null) {
+      if (marketExpectedTotal === null) {
         return {
           homeNoVigProb: homeProb,
           awayNoVigProb: awayProb,
@@ -191,13 +242,18 @@ export function computeMarketBaseline(
           homeRunShare: share,
           homeImpliedTotal: null,
           awayImpliedTotal: null,
-          source: "pinnacle_fair",
+          source: preferredSource,
           dataQuality: "degraded",
           reason:
             "Pinnacle fair probs present but listed_total is null; baseline cannot anchor team totals.",
           overNoVigProb,
           underNoVigProb,
           ouSource,
+          marketExpectedTotal,
+          coherentMoneylinePriceMapApplied: coherentMlHomeProb !== null,
+          coherentTotalPriceMapApplied: inferredMarketExpectedTotal !== null,
+          coherentMoneylineSplitConflict: coherentMlSplitConflict,
+          coherentTotalSplitConflict,
         };
       }
       return {
@@ -205,14 +261,19 @@ export function computeMarketBaseline(
         awayNoVigProb: awayProb,
         listedTotal,
         homeRunShare: share,
-        homeImpliedTotal: round1(listedTotal * share),
-        awayImpliedTotal: round1(listedTotal * (1 - share)),
-        source: "pinnacle_fair",
+        homeImpliedTotal: round1(marketExpectedTotal * share),
+        awayImpliedTotal: round1(marketExpectedTotal * (1 - share)),
+        source: preferredSource,
         dataQuality: "ok",
-        reason: `Pinnacle fair probs (home=${homeProb.toFixed(3)}); run share=${share.toFixed(3)}; total=${listedTotal}.`,
+        reason: `${preferredSource} (home=${homeProb.toFixed(3)}); run share=${share.toFixed(3)}; listed total=${listedTotal}; expected total=${marketExpectedTotal.toFixed(3)}.`,
         overNoVigProb,
         underNoVigProb,
         ouSource,
+        marketExpectedTotal,
+        coherentMoneylinePriceMapApplied: coherentMlHomeProb !== null,
+        coherentTotalPriceMapApplied: inferredMarketExpectedTotal !== null,
+        coherentMoneylineSplitConflict: coherentMlSplitConflict,
+        coherentTotalSplitConflict,
       };
     }
   }
@@ -231,7 +292,7 @@ export function computeMarketBaseline(
     try {
       const pair = noVigPair(homeAm, awayAm);
       const share = probToRunShare(pair.home);
-      if (listedTotal === null) {
+      if (marketExpectedTotal === null) {
         return {
           homeNoVigProb: pair.home,
           awayNoVigProb: pair.away,
@@ -246,6 +307,11 @@ export function computeMarketBaseline(
           overNoVigProb,
           underNoVigProb,
           ouSource,
+          marketExpectedTotal,
+          coherentMoneylinePriceMapApplied: false,
+          coherentTotalPriceMapApplied: inferredMarketExpectedTotal !== null,
+          coherentMoneylineSplitConflict: coherentMlSplitConflict,
+          coherentTotalSplitConflict,
         };
       }
       return {
@@ -253,16 +319,21 @@ export function computeMarketBaseline(
         awayNoVigProb: pair.away,
         listedTotal,
         homeRunShare: share,
-        homeImpliedTotal: round1(listedTotal * share),
-        awayImpliedTotal: round1(listedTotal * (1 - share)),
+        homeImpliedTotal: round1(marketExpectedTotal * share),
+        awayImpliedTotal: round1(marketExpectedTotal * (1 - share)),
         source: "american_devig",
         dataQuality: "ok",
         reason: `American de-vig (home=${pair.home.toFixed(3)}); run share=${share.toFixed(3)}; total=${listedTotal}.`,
         overNoVigProb,
         underNoVigProb,
         ouSource,
+        marketExpectedTotal,
+        coherentMoneylinePriceMapApplied: false,
+        coherentTotalPriceMapApplied: inferredMarketExpectedTotal !== null,
+        coherentMoneylineSplitConflict: coherentMlSplitConflict,
+        coherentTotalSplitConflict,
       };
-    } catch (e) {
+    } catch {
       // Fall through; produce a missing/degraded baseline below.
     }
   }
@@ -270,15 +341,15 @@ export function computeMarketBaseline(
   // 3. Last-resort fallback: listed_total present but no ML signal —
   //    use a mild home-field default share so V2 still has a baseline
   //    to anchor on, but mark degraded so the caller can adjust drag.
-  if (listedTotal !== null) {
+  if (marketExpectedTotal !== null) {
     const share = 0.51; // mild home edge default for MLB
     return {
       homeNoVigProb: 0.51,
       awayNoVigProb: 0.49,
       listedTotal,
       homeRunShare: share,
-      homeImpliedTotal: round1(listedTotal * share),
-      awayImpliedTotal: round1(listedTotal * (1 - share)),
+      homeImpliedTotal: round1(marketExpectedTotal * share),
+      awayImpliedTotal: round1(marketExpectedTotal * (1 - share)),
       source: "fallback_default",
       dataQuality: "degraded",
       reason:
@@ -286,6 +357,11 @@ export function computeMarketBaseline(
       overNoVigProb,
       underNoVigProb,
       ouSource,
+      marketExpectedTotal,
+      coherentMoneylinePriceMapApplied: false,
+      coherentTotalPriceMapApplied: inferredMarketExpectedTotal !== null,
+      coherentMoneylineSplitConflict: coherentMlSplitConflict,
+      coherentTotalSplitConflict,
     };
   }
 
@@ -303,7 +379,19 @@ export function computeMarketBaseline(
     overNoVigProb,
     underNoVigProb,
     ouSource,
+    marketExpectedTotal,
+    coherentMoneylinePriceMapApplied: false,
+    coherentTotalPriceMapApplied: false,
+    coherentMoneylineSplitConflict: coherentMlSplitConflict,
+    coherentTotalSplitConflict,
   };
+}
+
+function groupConsensusProbability(side: NonNullable<MarketSnapshot["coherent_price_map"]>["moneyline_home"]): number | null {
+  if (side.sharp_no_vig_probability === null || side.retail_no_vig_probability === null) return null;
+  // Equal group weight deliberately gives the smaller sharp cohort equal
+  // standing without allowing either source class to dictate the forecast.
+  return (side.sharp_no_vig_probability + side.retail_no_vig_probability) / 2;
 }
 
 function round1(n: number): number {

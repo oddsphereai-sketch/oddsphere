@@ -205,6 +205,31 @@ export type MarketSnapshot = {
   total_line_book?: string | null;
   total_line_agreement_count?: number;
   total_line_consensus_at_same_line?: boolean;
+  /**
+   * Versioned, exact-line multi-book price evidence used by the MLB joint
+   * forecast. This is probability evidence, never synthetic ticket/handle
+   * share. Missing or ineligible evidence leaves the existing market prior
+   * unchanged.
+   */
+  coherent_price_map?: MlbCoherentMarketPriceMapSnapshot | null;
+};
+
+export type MlbCoherentMarketPriceMapSide = {
+  sharp_no_vig_probability: number | null;
+  retail_no_vig_probability: number | null;
+  sharp_book_count: number;
+  retail_book_count: number;
+  sharp_retail_gap: number | null;
+  freshness_minutes: number | null;
+  eligible: boolean;
+  ineligible_reason: string | null;
+};
+
+export type MlbCoherentMarketPriceMapSnapshot = {
+  release_id: "mlb_coherent_market_price_map_v1_2026_09_01";
+  as_of: string;
+  moneyline_home: MlbCoherentMarketPriceMapSide;
+  total_over: MlbCoherentMarketPriceMapSide;
 };
 
 export type SharpSnapshot = {

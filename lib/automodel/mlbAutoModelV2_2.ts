@@ -73,6 +73,21 @@ export type V22Audit = {
   total_line_book?: string | null;
   total_line_agreement_count?: number;
   total_line_consensus_at_same_line?: boolean;
+  coherent_market_price_map?: {
+    release_id: string;
+    moneyline_applied: boolean;
+    total_applied: boolean;
+    moneyline_split_conflict: boolean;
+    total_split_conflict: boolean;
+    listed_total: number | null;
+    inferred_market_expected_total: number | null;
+    moneyline_home: GameSnapshot["market"]["coherent_price_map"] extends infer T
+      ? T extends { moneyline_home: infer M } ? M : null
+      : null;
+    total_over: GameSnapshot["market"]["coherent_price_map"] extends infer T
+      ? T extends { total_over: infer O } ? O : null
+      : null;
+  } | null;
   // Layer 2
   independent_away_runs: number;
   independent_home_runs: number;
@@ -652,6 +667,19 @@ export function runMlbAutoModelV2_2(
     total_line_book: snap.market.total_line_book,
     total_line_agreement_count: snap.market.total_line_agreement_count,
     total_line_consensus_at_same_line: snap.market.total_line_consensus_at_same_line,
+    coherent_market_price_map: snap.market.coherent_price_map
+      ? {
+          release_id: snap.market.coherent_price_map.release_id,
+          moneyline_applied: market.coherentMoneylinePriceMapApplied === true,
+          total_applied: market.coherentTotalPriceMapApplied === true,
+          moneyline_split_conflict: market.coherentMoneylineSplitConflict === true,
+          total_split_conflict: market.coherentTotalSplitConflict === true,
+          listed_total: market.listedTotal,
+          inferred_market_expected_total: market.marketExpectedTotal ?? market.listedTotal,
+          moneyline_home: snap.market.coherent_price_map.moneyline_home,
+          total_over: snap.market.coherent_price_map.total_over,
+        }
+      : null,
     independent_away_runs: indep.away_expected_runs,
     independent_home_runs: indep.home_expected_runs,
     independent_total: indep.total_expected_runs,
