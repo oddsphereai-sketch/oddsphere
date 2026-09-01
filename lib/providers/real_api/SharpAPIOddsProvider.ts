@@ -140,6 +140,35 @@ const MAX_CALLS_PER_INVOCATION = 100;
 // that the same (game, market, sportsbook, side, line) row written
 // from one bucket is NOT re-written from another.
 const SPECULATIVE_PROBE_SUFFIXES = ["_b0", "_b1", "_b2", "_b3"] as const;
+const SHARP_REFERENCE_BOOKS = new Set(["pinnacle", "circa", "bookmaker"]);
+
+function hasSharpMainTotal(rows: readonly RawOddsRow[]): boolean {
+  return rows.some((row) =>
+    mapMarketType(asStringOrNull(row.market_type)) === "total" &&
+    row.is_alternate_line !== true &&
+    SHARP_REFERENCE_BOOKS.has(String(row.sportsbook ?? "").toLowerCase())
+  );
+}
+
+function hasCompleteSharpMoneyline(rows: readonly RawOddsRow[]): boolean {
+  const sidesByBook = new Map<string, Set<string>>();
+  for (const row of rows) {
+    if (
+      mapMarketType(asStringOrNull(row.market_type)) !== "moneyline" ||
+      row.is_alternate_line === true
+    ) {
+      continue;
+    }
+    const book = String(row.sportsbook ?? "").toLowerCase();
+    if (!SHARP_REFERENCE_BOOKS.has(book)) continue;
+    const side = mapSide(row.selection_type);
+    if (side !== "home" && side !== "away") continue;
+    const sides = sidesByBook.get(book) ?? new Set<string>();
+    sides.add(side);
+    sidesByBook.set(book, sides);
+  }
+  return [...sidesByBook.values()].some((sides) => sides.has("home") && sides.has("away"));
+}
 
 // ─────────────────────────────────────────────────────────────
 // Raw shapes
@@ -810,6 +839,24 @@ export class SharpAPIOddsProvider implements IOddsProvider {
             });
             oddsRows = mergeRawOddsRows(oddsRows, targetedTotals);
           }
+          // The generic payload can exhaust its first pages before reaching
+          // Moneyline even while the same bucket exposes Pinnacle/Circa
+          // Totals. Recover the corresponding two-sided sharp Moneyline from
+          // the provider's market-scoped endpoint instead of treating that
+          // pagination artifact as real missing sharp-book inventory.
+          if (
+            hasSharpMainTotal(oddsRows) &&
+            !hasCompleteSharpMoneyline(oddsRows) &&
+            callsUsed < MAX_CALLS_PER_INVOCATION
+          ) {
+            callsUsed++;
+            const targetedMoneyline = await this.client.fetchAll<RawOddsRow>({
+              path: "/odds",
+              query: { event_id: effectiveEventId, market_type: "moneyline" },
+              maxPages: 10,
+            });
+            oddsRows = mergeRawOddsRows(oddsRows, targetedMoneyline);
+          }
           const hasFirstInningTotal = oddsRows.some((row) =>
             mapMarketType(asStringOrNull(row.market_type)) === "first_inning_total" &&
             row.is_alternate_line !== true
@@ -998,6 +1045,19 @@ export class SharpAPIOddsProvider implements IOddsProvider {
               maxPages: 10,
             });
             probeRows = mergeRawOddsRows(probeRows, targetedTotals);
+          }
+          if (
+            hasSharpMainTotal(probeRows) &&
+            !hasCompleteSharpMoneyline(probeRows) &&
+            callsUsed < MAX_CALLS_PER_INVOCATION
+          ) {
+            callsUsed++;
+            const targetedMoneyline = await this.client.fetchAll<RawOddsRow>({
+              path: "/odds",
+              query: { event_id: probe.fullId, market_type: "moneyline" },
+              maxPages: 10,
+            });
+            probeRows = mergeRawOddsRows(probeRows, targetedMoneyline);
           }
           const hasFirstInningTotal = probeRows.some((row) =>
             mapMarketType(asStringOrNull(row.market_type)) === "first_inning_total" &&

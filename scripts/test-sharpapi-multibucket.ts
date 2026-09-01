@@ -45,6 +45,7 @@ class StubClient extends SharpApiClient {
     private readonly oddsByEventId: Map<string, Array<Record<string, unknown>>>,
     private readonly targetedTotalsByEventId: Map<string, Array<Record<string, unknown>>> = new Map(),
     private readonly targetedFirstInningTotalsByEventId: Map<string, Array<Record<string, unknown>>> = new Map(),
+    private readonly targetedMoneylineByEventId: Map<string, Array<Record<string, unknown>>> = new Map(),
   ) {
     super("stub-key");
   }
@@ -64,6 +65,9 @@ class StubClient extends SharpApiClient {
       }
       if (opts.query?.market_type === "1st_inning_total_runs") {
         return (this.targetedFirstInningTotalsByEventId.get(evId) ?? []) as unknown as T[];
+      }
+      if (opts.query?.market_type === "moneyline") {
+        return (this.targetedMoneylineByEventId.get(evId) ?? []) as unknown as T[];
       }
       const rows = this.oddsByEventId.get(evId) ?? [];
       return rows as unknown as T[];
@@ -308,6 +312,39 @@ async function main() {
       "both recovered first-inning sides survive",
       result.records.filter((row) => row.market_type === "first_inning_total").length === 2,
     );
+  }
+
+  section("Sharp Total inventory recovers the matching sharp Moneyline");
+  {
+    const eventId = "mlb_royals_twins_2026-06-05_b3";
+    const oppRows = [oppRow({ eventId, away: "Kansas City Royals", home: "Minnesota Twins" })];
+    const genericRows = new Map<string, Array<Record<string, unknown>>>([[eventId, [
+      oddsRow({ market_type: "moneyline", sportsbook: "draftkings", selection_type: "home", odds_american: -108 }),
+      oddsRow({ market_type: "moneyline", sportsbook: "draftkings", selection_type: "away", odds_american: -102 }),
+      oddsRow({ market_type: "total_runs", sportsbook: "pinnacle", selection_type: "over", line: 9.5, odds_american: -104 }),
+      oddsRow({ market_type: "total_runs", sportsbook: "pinnacle", selection_type: "under", line: 9.5, odds_american: -116 }),
+    ]]]);
+    const targetedMoneyline = new Map<string, Array<Record<string, unknown>>>([[eventId, [
+      oddsRow({ market_type: "moneyline", sportsbook: "pinnacle", selection_type: "home", odds_american: -112 }),
+      oddsRow({ market_type: "moneyline", sportsbook: "pinnacle", selection_type: "away", odds_american: 102 }),
+    ]]]);
+    const stub = new StubClient(
+      oppRows,
+      genericRows,
+      new Map(),
+      new Map(),
+      targetedMoneyline,
+    );
+    const provider = new SharpAPIOddsProvider("stub-key", mockResolver, { client: stub });
+    const result = await provider.getGameLinesV2(SLATE, "mlb");
+    check(
+      "targeted Moneyline query fires when a sharp Total exists but sharp Moneyline is absent",
+      stub.calls.some((call) => call.path === "/odds" && call.query.event_id === eventId && call.query.market_type === "moneyline"),
+    );
+    const recovered = result.records.filter((row) =>
+      row.market_type === "moneyline" && row.sportsbook === "pinnacle",
+    );
+    check("both recovered Pinnacle Moneyline sides survive", recovered.length === 2);
   }
 
   // ── [2E.1-C] Multi-bucket — duplicate (book, market, side, line) deduped
