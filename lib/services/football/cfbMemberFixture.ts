@@ -6,6 +6,8 @@ import { buildRecommendationDecision } from "@/lib/services/recommendationDecisi
 import type { MarketSplitDisplaySection } from "@/lib/types/domain/RecommendationDecision";
 import {
   CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE,
+  CFB_FORWARD_COHERENT_PREVIOUS_EVIDENCE_SCHEMA_RELEASE,
+  CFB_FORWARD_COHERENT_PREVIOUS_MEMBER_RELEASE,
   CFB_FORWARD_WEATHER_PREVIOUS_EVIDENCE_SCHEMA_RELEASE,
   CFB_FORWARD_WEATHER_PREVIOUS_MEMBER_RELEASE,
   CFB_FORWARD_IDENTITY_PREVIOUS_EVIDENCE_SCHEMA_RELEASE,
@@ -59,9 +61,9 @@ import { CFB_MARKET_SHARP_AWARE_PRODUCTION_RELEASE } from "./cfbMarketSharpAware
 import { cfbTeamIdentity } from "./cfbTeamIdentity";
 
 export const CFB_MEMBER_FIXTURE_RELEASE =
-  "cfb_v1_member_fixture_2026_08_31_r40_team_identity" as const;
+  "cfb_v1_member_fixture_2026_09_01_r41_coherent_movement_evidence" as const;
 export const CFB_PUBLIC_OUTCOME_CONTRACT_RELEASE =
-  "cfb_market_sharp_public_outcome_contract_2026_08_31_r40_team_identity" as const;
+  "cfb_market_sharp_public_outcome_contract_2026_09_01_r41_coherent_movement_evidence" as const;
 export const CFB_CONTEXT_ONLY_QUOTE_CAPTURE_SKEW_MS = 5_000 as const;
 const CFB_MARKET_CONTEXT_MAX_CAPTURE_LAG_MINUTES = 10;
 const CFB_PUBLIC_SCORE_DIRECTION_TOLERANCE_POINTS = 0.25;
@@ -76,6 +78,7 @@ const CFB_PUBLIC_SPLITS_PREVIOUS_DECISION_RELEASE = "cfb_v1_daily_edge_decision_
 const CFB_CALIBRATION_PREVIOUS_DECISION_RELEASE = "cfb_v1_daily_edge_decision_2026_08_31_r22_public_consensus_market_input" as const;
 const CFB_IDENTITY_PREVIOUS_DECISION_RELEASE = "cfb_v1_daily_edge_decision_2026_08_31_r23_authoritative_pmf_calibration" as const;
 const CFB_WEATHER_PREVIOUS_DECISION_RELEASE = "cfb_v1_daily_edge_decision_2026_08_31_r24_playbook_event_identity" as const;
+const CFB_COHERENT_PREVIOUS_DECISION_RELEASE = "cfb_v1_daily_edge_decision_2026_08_31_r25_kickoff_weather" as const;
 const CFB_PROVIDER_DISCOVERY_PREVIOUS_MEMBER_RELEASE = "cfb_v1_member_release_2026_08_28_r15_directional_pmf" as const;
 const CFB_PROVIDER_DISCOVERY_PREVIOUS_DECISION_RELEASE = "cfb_v1_daily_edge_decision_2026_08_28_r12_directional_pmf" as const;
 const CFB_CANONICAL_PRICE_PREVIOUS_MEMBER_RELEASE = "cfb_v1_member_release_2026_08_28_r16_canonical_price_coverage" as const;
@@ -306,19 +309,38 @@ export function selectLatestCfbMemberEvidenceRows(
       )
     : null;
   const weatherPreviousAuthority = weatherPrevious ?? weatherPreviousBoundary ?? identityPreviousAuthority;
+  const coherentPrevious = completeRowsForRelease(
+    rows,
+    CFB_FORWARD_COHERENT_PREVIOUS_EVIDENCE_SCHEMA_RELEASE,
+    CFB_FORWARD_COHERENT_PREVIOUS_MEMBER_RELEASE,
+    CFB_COHERENT_PREVIOUS_DECISION_RELEASE,
+  );
+  const coherentPreviousBoundary = weatherPreviousAuthority
+    ? immutableBoundaryTransitionRows(
+        rows,
+        now,
+        CFB_FORWARD_COHERENT_PREVIOUS_EVIDENCE_SCHEMA_RELEASE,
+        CFB_FORWARD_COHERENT_PREVIOUS_MEMBER_RELEASE,
+        CFB_COHERENT_PREVIOUS_DECISION_RELEASE,
+        weatherPreviousAuthority,
+      )
+    : null;
+  const coherentPreviousAuthority = coherentPrevious ?? coherentPreviousBoundary ?? weatherPreviousAuthority;
   const current = completeRowsForRelease(rows, CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE, CFB_FORWARD_MEMBER_RELEASE, CFB_V1_DECISION_RELEASE);
   if (current) return current;
-  const immutableBoundaryTransition = weatherPreviousAuthority
+  const immutableBoundaryTransition = coherentPreviousAuthority
     ? immutableBoundaryTransitionRows(
         rows,
         now,
         CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE,
         CFB_FORWARD_MEMBER_RELEASE,
         CFB_V1_DECISION_RELEASE,
-        weatherPreviousAuthority,
+        coherentPreviousAuthority,
       )
     : null;
   if (immutableBoundaryTransition) return immutableBoundaryTransition;
+  if (coherentPrevious) return coherentPrevious;
+  if (coherentPreviousBoundary) return coherentPreviousBoundary;
   if (weatherPrevious) return weatherPrevious;
   if (weatherPreviousBoundary) return weatherPreviousBoundary;
   if (identityPrevious) return identityPrevious;

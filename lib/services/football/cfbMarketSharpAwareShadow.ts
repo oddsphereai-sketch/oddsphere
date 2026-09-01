@@ -13,13 +13,18 @@ import type {
   CfbV1Grade,
   CfbV1Market,
 } from "./cfbV1Decision";
+import {
+  combineFootballOutcomeEvidenceShift,
+  readFootballOutcomeMarketMovement,
+  type FootballOutcomeMarketMovement,
+} from "./footballOutcomeMarketMovement";
 
 export const CFB_MARKET_SHARP_AWARE_CANDIDATE_RELEASE =
-  "cfb_market_sharp_aware_candidate_2026_08_31_r10_kickoff_weather" as const;
+  "cfb_market_sharp_aware_candidate_2026_09_01_r11_coherent_movement" as const;
 export const CFB_MARKET_SHARP_AWARE_SHADOW_RELEASE =
   CFB_MARKET_SHARP_AWARE_CANDIDATE_RELEASE;
 export const CFB_MARKET_SHARP_AWARE_PRODUCTION_RELEASE =
-  "cfb_market_sharp_aware_production_2026_08_31_r12_kickoff_weather" as const;
+  "cfb_market_sharp_aware_production_2026_09_01_r13_coherent_movement" as const;
 export const CFB_MARKET_SHADOW_WEIGHT = 0.75 as const;
 export const CFB_SHARP_SIGNED_GAP_THRESHOLD_PP = 10 as const;
 export const CFB_SHARP_FULL_STRENGTH_GAP_PP = 20 as const;
@@ -88,6 +93,7 @@ export type CfbMarketSharpAwareShadowForecast = CfbV1Forecast & {
     homeMarginShiftPoints: number;
     totalShiftPoints: number;
   };
+  marketMovementAdjustment: FootballOutcomeMarketMovement;
   weatherAdjustment: {
     source: "openweather" | null;
     forecastFor: string | null;
@@ -132,6 +138,8 @@ export type CfbMarketEvidenceGrade = CfbMarketEvidenceGradeBase & {
 export function buildCfbMarketSharpAwareShadowForecast(args: {
   independentForecast: CfbV1Forecast;
   anchor: CfbCanonicalMarketAnchor;
+  current?: NcaafBookOdds | null;
+  operationalOpening?: { quote: NcaafBookOdds } | null;
   sharpSplits: CfbSharpApiSplitRecord[];
   playbookLine?: CfbForwardPlaybookLine | null;
   publicSplits?: CfbForwardPlaybookSplitSet | null;
@@ -160,8 +168,23 @@ export function buildCfbMarketSharpAwareShadowForecast(args: {
   const sharpTotalShiftPoints = signedPointShift(overTotalGapPp, CFB_SHARP_MAX_TOTAL_SHIFT_POINTS, CFB_SHARP_SIGNED_GAP_THRESHOLD_PP, CFB_SHARP_FULL_STRENGTH_GAP_PP);
   const publicHomeMarginShiftPoints = signedPointShift(publicRead.homeMarginGapPp, CFB_PUBLIC_MAX_MARGIN_SHIFT_POINTS, CFB_PUBLIC_SIGNED_GAP_SUPPORT_THRESHOLD_PP, CFB_PUBLIC_FULL_STRENGTH_GAP_PP);
   const publicTotalShiftPoints = signedPointShift(publicRead.overTotalGapPp, CFB_PUBLIC_MAX_TOTAL_SHIFT_POINTS, CFB_PUBLIC_SIGNED_GAP_SUPPORT_THRESHOLD_PP, CFB_PUBLIC_FULL_STRENGTH_GAP_PP);
-  const homeMarginShiftPoints = combinedPointShift(sharpHomeMarginShiftPoints, publicHomeMarginShiftPoints, CFB_SHARP_MAX_MARGIN_SHIFT_POINTS);
-  const totalShiftPoints = combinedPointShift(sharpTotalShiftPoints, publicTotalShiftPoints, CFB_SHARP_MAX_TOTAL_SHIFT_POINTS);
+  const movement = readFootballOutcomeMarketMovement({
+    opening: args.operationalOpening?.quote ?? null,
+    current: args.current ?? null,
+    evaluatedAt: args.evaluatedAt,
+  });
+  const homeMarginShiftPoints = combineFootballOutcomeEvidenceShift({
+    sharpShift: sharpHomeMarginShiftPoints,
+    movementShift: movement.homeMarginShiftPoints,
+    publicShift: publicHomeMarginShiftPoints,
+    maximum: CFB_SHARP_MAX_MARGIN_SHIFT_POINTS,
+  });
+  const totalShiftPoints = combineFootballOutcomeEvidenceShift({
+    sharpShift: sharpTotalShiftPoints,
+    movementShift: movement.totalShiftPoints,
+    publicShift: publicTotalShiftPoints,
+    maximum: CFB_SHARP_MAX_TOTAL_SHIFT_POINTS,
+  });
   const adjustedAnchor: CfbCanonicalMarketAnchor = {
     ...args.anchor,
     homeSpread: -( -args.anchor.homeSpread + homeMarginShiftPoints),
@@ -202,6 +225,7 @@ export function buildCfbMarketSharpAwareShadowForecast(args: {
       homeMarginShiftPoints: publicHomeMarginShiftPoints,
       totalShiftPoints: publicTotalShiftPoints,
     },
+    marketMovementAdjustment: movement,
     weatherAdjustment: {
       source: args.kickoffWeather?.status === "forecast_available" ? "openweather" : null,
       forecastFor: args.kickoffWeather?.forecast?.forecast_for ?? null,
@@ -216,6 +240,8 @@ export function buildCfbMarketSharpAwareShadowForecast(args: {
 export function buildCfbMarketSharpAwareForecast(args: {
   independentForecast: CfbV1Forecast;
   anchor: CfbCanonicalMarketAnchor;
+  current?: NcaafBookOdds | null;
+  operationalOpening?: { quote: NcaafBookOdds } | null;
   sharpSplits: CfbSharpApiSplitRecord[];
   playbookLine?: CfbForwardPlaybookLine | null;
   publicSplits?: CfbForwardPlaybookSplitSet | null;
@@ -272,7 +298,11 @@ export function buildCfbMarketEvidenceGradeShadow(args: {
   const movementResistance = movementRead.direction === "resistance";
   const anyResistance = sharpResistance || publicResistance || movementResistance;
   const resistanceCount = Number(sharpResistance) + Number(publicResistance) + Number(movementResistance);
-  const promotableSupport = (sharpRead.direction === "support" || (publicRead.direction === "support" && sharpRead.direction !== "resistance")) && !anyResistance;
+  const promotableSupport = (
+    sharpRead.direction === "support" ||
+    (publicRead.direction === "support" && sharpRead.direction !== "resistance") ||
+    (movementRead.direction === "support" && sharpRead.direction !== "resistance")
+  ) && !anyResistance;
   let finalGrade = args.decision.grade;
   const reasonCodes: string[] = [];
 
@@ -351,7 +381,11 @@ export function buildCfbMarketEvidenceGradeShadow(args: {
     nearLeanThreshold(args.decision)
   ) {
     finalGrade = "Lean";
-    reasonCodes.push(sharpRead.direction === "support" ? "strict_sharp_near_threshold_promotion" : "public_consensus_near_threshold_promotion");
+    reasonCodes.push(sharpRead.direction === "support"
+      ? "strict_sharp_near_threshold_promotion"
+      : movementRead.direction === "support"
+        ? "same_book_movement_near_threshold_promotion"
+        : "public_consensus_near_threshold_promotion");
   } else if (
     args.decision.grade === "Watchlist" &&
     args.decision.market === "spread" &&
@@ -384,7 +418,7 @@ export function buildCfbMarketEvidenceGradeShadow(args: {
     reasonCodes.push("supportive_market_evidence_disagreement_monitoring");
   }
 
-  if (reasonCodes.length === 0) reasonCodes.push("market_evidence_no_grade_change");
+  if (reasonCodes.length === 0) reasonCodes.push("coherent_pmf_market_evidence_no_grade_change");
   return {
     shadowRelease: CFB_MARKET_SHARP_AWARE_SHADOW_RELEASE,
     market: args.decision.market,
@@ -595,14 +629,6 @@ function signedPointShift(gapPp: number | null, maximum: number, threshold: numb
   if (gapPp === null || Math.abs(gapPp) <= threshold) return 0;
   const strength = Math.min(1, (Math.abs(gapPp) - threshold) / (fullStrength - threshold));
   return Math.sign(gapPp) * maximum * strength;
-}
-
-function combinedPointShift(sharpShift: number, publicShift: number, maximum: number): number {
-  const publicWeight = Math.abs(sharpShift) > 0 ? CFB_PUBLIC_WITH_CIRCA_WEIGHT : 1;
-  const combined = Math.max(-maximum, Math.min(maximum, sharpShift + publicWeight * publicShift));
-  if (sharpShift > 0) return Math.max(0, combined);
-  if (sharpShift < 0) return Math.min(0, combined);
-  return combined;
 }
 
 function publicForecastRead(args: {

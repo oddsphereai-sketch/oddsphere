@@ -12,6 +12,8 @@ import {
 } from "./cfbV1Decision";
 
 export const CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE =
+  "cfb_forward_evidence_snapshot_2026_09_01_r19_coherent_movement_evidence" as const;
+export const CFB_FORWARD_COHERENT_PREVIOUS_EVIDENCE_SCHEMA_RELEASE =
   "cfb_forward_evidence_snapshot_2026_08_31_r18_kickoff_weather" as const;
 export const CFB_FORWARD_WEATHER_PREVIOUS_EVIDENCE_SCHEMA_RELEASE =
   "cfb_forward_evidence_snapshot_2026_08_31_r17_playbook_event_identity" as const;
@@ -48,8 +50,10 @@ export const CFB_FORWARD_LEGACY_EVIDENCE_SCHEMA_RELEASE =
 export const CFB_FORWARD_INITIAL_EVIDENCE_SCHEMA_RELEASE =
   "cfb_forward_evidence_snapshot_2026_08_25_r1" as const;
 export const CFB_FORWARD_EVIDENCE_COLLECTOR_RELEASE =
-  "cfb_forward_evidence_collector_2026_08_31_r25_kickoff_weather" as const;
+  "cfb_forward_evidence_collector_2026_09_01_r26_coherent_movement_evidence" as const;
 export const CFB_FORWARD_MEMBER_RELEASE =
+  "cfb_v1_member_release_2026_09_01_r28_coherent_movement_evidence" as const;
+export const CFB_FORWARD_COHERENT_PREVIOUS_MEMBER_RELEASE =
   "cfb_v1_member_release_2026_08_31_r27_kickoff_weather" as const;
 export const CFB_FORWARD_WEATHER_PREVIOUS_MEMBER_RELEASE =
   "cfb_v1_member_release_2026_08_31_r26_playbook_event_identity" as const;
