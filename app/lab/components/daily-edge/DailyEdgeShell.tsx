@@ -2469,7 +2469,7 @@ function MarketPulse({
   // older cached DTOs).
   const splits = marketData.publicSplits;
   const decision = marketData.recommendationDecision;
-  if (decision?.consensusSplits || decision?.sharpBookSplits) {
+  if (decision) {
     return <SourceAwareMarketPulse decision={decision} />;
   }
   if (splits.length === 0) {
@@ -2505,14 +2505,58 @@ function MarketPulse({
 function SourceAwareMarketPulse({ decision }: { decision: MarketDecision }) {
   return (
     <div className="space-y-2.5">
-      <p className="text-[9.5px] uppercase tracking-[0.12em] font-semibold text-gray-300">Market Pulse · Splits</p>
+      <p className="text-[9.5px] uppercase tracking-[0.12em] font-semibold text-gray-300">Market Pulse</p>
       {decision.consensusSplits !== null && (
         <SplitSection section={decision.consensusSplits} />
       )}
       {decision.sharpBookSplits !== null && (
         <SplitSection section={decision.sharpBookSplits} />
       )}
+      {decision.sharpBookSplits === null ? (
+        <MarketDirectionMeter decision={decision} />
+      ) : null}
     </div>
+  );
+}
+
+function MarketDirectionMeter({ decision }: { decision: MarketDecision }) {
+  const status = decision.resolvedMarketRead.status;
+  if (status === "insufficient_data") {
+    return (
+      <p className="text-[11.5px] leading-snug text-gray-500">
+        Market direction is building as current prices arrive.
+      </p>
+    );
+  }
+  const state = status === "aligned" || status === "consensus_support"
+    ? "with"
+    : status === "resistance" || status === "consensus_resistance"
+      ? "against"
+      : "mixed";
+  const activeClass = state === "with"
+    ? "border-emerald-400/35 bg-emerald-400/15 text-emerald-200"
+    : state === "against"
+      ? "border-amber-400/35 bg-amber-400/15 text-amber-200"
+      : "border-violet-400/35 bg-violet-400/15 text-violet-200";
+  const label = state === "with" ? "With prediction" : state === "against" ? "Against prediction" : "Mixed";
+
+  return (
+    <section className="rounded-lg border border-white/[0.07] bg-white/[0.02] px-3 py-2.5" aria-label={`Market direction: ${label}`}>
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-gray-300">Market direction</p>
+        <span className={`rounded-full border px-2 py-0.5 text-[9px] font-bold ${activeClass}`}>{label}</span>
+      </div>
+      <div className="mt-2 grid grid-cols-3 gap-1" aria-hidden="true">
+        <span className={`h-1.5 rounded-full ${state === "against" ? "bg-amber-300/85" : "bg-white/[0.08]"}`} />
+        <span className={`h-1.5 rounded-full ${state === "mixed" ? "bg-violet-300/80" : "bg-white/[0.08]"}`} />
+        <span className={`h-1.5 rounded-full ${state === "with" ? "bg-emerald-300/85" : "bg-white/[0.08]"}`} />
+      </div>
+      <div className="mt-1.5 flex justify-between text-[8px] font-semibold uppercase tracking-[0.1em] text-gray-600" aria-hidden="true">
+        <span>Against</span>
+        <span>Mixed</span>
+        <span>With</span>
+      </div>
+    </section>
   );
 }
 

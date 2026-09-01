@@ -4,6 +4,10 @@ import type {
   MarketReadValidityStatus,
   MarketSplitObservationV2,
 } from "../../types/domain/MarketIntelligenceV2";
+import {
+  deriveSharpRetailPriceFeatures,
+  type MarketPriceFeatureRow,
+} from "../marketAwareEngine/marketIntelligenceFeatures";
 
 export type MarketReadLabel =
   | "Strong Market Support"
@@ -20,6 +24,7 @@ export type PriceObservationForResolver = {
   market_type: MarketIntelligenceMarketType;
   selection_key: string;
   american_price: number | null;
+  no_vig_probability?: number | null;
   line: number | null;
   provider_timestamp: string | null;
   fetched_at: string;
@@ -120,6 +125,27 @@ export type ResolverEvidence = {
       marketPrice: number | null;
     }>;
     normalizationStatus: "unavailable" | "available";
+    note: string;
+  };
+  sharpRetailPriceMap: {
+    status: "available" | "missing_sharp" | "missing_retail" | "unavailable";
+    sharpProbability: number | null;
+    retailProbability: number | null;
+    probabilityGap: number | null;
+    sharpBookCount: number;
+    retailBookCount: number;
+    primaryRetailBookCount: number;
+    secondaryRetailBookCount: number;
+    retailConsensusQuality: "strong" | "standard" | "thin" | "unavailable";
+    retailProbabilityRange: number | null;
+    firstGroupToMove: "sharp" | "retail" | "simultaneous" | "none" | "unknown";
+    sharpMove60m: number | null;
+    retailMove60m: number | null;
+    movementBreadth: number;
+    freshnessMinutes: number | null;
+    observedAt: string | null;
+    signalRelativeToPick: "support" | "resistance" | "aligned" | "unavailable";
+    reverseLineMovement: "support" | "resistance" | "none";
     note: string;
   };
   trace: {
@@ -590,6 +616,86 @@ function resolveSharpApiSourceEvidence(rows: readonly SplitObservationForResolve
   };
 }
 
+function resolveSharpRetailPriceMap(args: {
+  rows: readonly PriceObservationForResolver[];
+  market: MarketIntelligenceMarketType;
+  selectedLine?: number | null;
+  asOf?: string;
+  consensus: ResolverEvidence["playbookConsensus"];
+  movement: ResolverEvidence["marketMovementEvidence"];
+}): ResolverEvidence["sharpRetailPriceMap"] {
+  const comparable = args.rows.filter((row) =>
+    typeof row.no_vig_probability === "number" && Number.isFinite(row.no_vig_probability) && (
+      args.market === "moneyline" || sameLine(row.line, args.selectedLine)
+    ));
+  const toFeature = (row: PriceObservationForResolver): MarketPriceFeatureRow => ({
+    sportsbook: row.sportsbook,
+    sharpBook: row.sharp_book,
+    marketType: row.market_type,
+    selectionKey: row.selection_key,
+    line: row.line,
+    americanPrice: row.american_price,
+    noVigProbability: row.no_vig_probability ?? null,
+    providerTimestamp: row.provider_timestamp,
+    fetchedAt: row.fetched_at,
+  });
+  const current = deriveSharpRetailPriceFeatures(comparable.map(toFeature), args.asOf ?? null);
+  const movement = deriveSharpRetailPriceFeatures(args.rows.map(toFeature), args.asOf ?? null);
+  const status = current.sharpBookCount < 1
+    ? "missing_sharp"
+    : current.retailBookCount < 1
+      ? "missing_retail"
+      : current.sharpRetailProbabilityGap === null
+        ? "unavailable"
+        : "available";
+  const observedAt = comparable
+    .map(obsIso)
+    .sort((a, b) => Date.parse(b) - Date.parse(a))[0] ?? null;
+  const probabilityGap = current.sharpRetailProbabilityGap;
+  const signalRelativeToPick = status !== "available" || probabilityGap === null
+    ? "unavailable"
+    : probabilityGap >= 0.005
+      ? "support"
+      : probabilityGap <= -0.005
+        ? "resistance"
+        : "aligned";
+  const tickets = args.consensus.betsPct;
+  const sharpMovementSupports = args.movement.sharpBooksMovingWithPick > args.movement.sharpBooksMovingAgainstPick
+    && args.movement.sharpBooksMovingWithPick > 0;
+  const sharpMovementResists = args.movement.sharpBooksMovingAgainstPick > args.movement.sharpBooksMovingWithPick
+    && args.movement.sharpBooksMovingAgainstPick > 0;
+  const reverseLineMovement = typeof tickets !== "number"
+    ? "none"
+    : tickets <= 0.4 && args.movement.directionRelativeToPick === "support" && sharpMovementSupports
+      ? "support"
+      : tickets >= 0.6 && args.movement.directionRelativeToPick === "resistance" && sharpMovementResists
+        ? "resistance"
+        : "none";
+  return {
+    status,
+    sharpProbability: current.medianSharpNoVigProbability,
+    retailProbability: current.medianRetailNoVigProbability,
+    probabilityGap,
+    sharpBookCount: current.sharpBookCount,
+    retailBookCount: current.retailBookCount,
+    primaryRetailBookCount: current.primaryRetailBookCount,
+    secondaryRetailBookCount: current.secondaryRetailBookCount,
+    retailConsensusQuality: current.retailConsensusQuality,
+    retailProbabilityRange: current.retailProbabilityRange,
+    firstGroupToMove: movement.firstGroupToMove,
+    sharpMove60m: movement.sharpMove60m,
+    retailMove60m: movement.retailMove60m,
+    movementBreadth: movement.bookMovementBreadth,
+    freshnessMinutes: current.currentFreshnessMinutes,
+    observedAt,
+    signalRelativeToPick,
+    reverseLineMovement,
+    note: status === "available"
+      ? "Exact-line sharp and retail price context is available."
+      : "A comparable exact-line price pair is unavailable.",
+  };
+}
+
 function explanationFor(score: number): { text: string; codes: string[] } {
   if (score >= 2) return { text: "Market-maker pricing has moved toward our projection.", codes: ["price_support"] };
   if (score === 1) return { text: "Market-maker pricing is showing slight support for our projection.", codes: ["price_slight_support"] };
@@ -649,12 +755,21 @@ export function resolveMarketReadV2(input: MarketReadResolverInput): MarketReadR
   const price = legacyPriceEvidenceFromMovement(marketMovementEvidence);
   const playbookConsensus = resolvePlaybookEvidence(splitRows);
   const sharpApiSourceSpecific = resolveSharpApiSourceEvidence(splitRows);
+  const sharpRetailPriceMap = resolveSharpRetailPriceMap({
+    rows: sameSelectionPriceRows,
+    market: input.marketType,
+    selectedLine: input.selectedLine,
+    asOf: input.asOf,
+    consensus: playbookConsensus,
+    movement: marketMovementEvidence,
+  });
   const score = clampScore(marketMovementEvidence.score + playbookConsensus.score + sharpApiSourceSpecific.score);
   const evidenceUsed: string[] = [];
   if (exactLinePriceEvidence.available) evidenceUsed.push("exact_line_price_context");
   if (marketMovementEvidence.trackedBooks > 0) evidenceUsed.push("sharpapi_price_movement");
   if (playbookConsensus.betsPct !== null || playbookConsensus.moneyPct !== null) evidenceUsed.push("playbook_consensus_context");
   if (sharpApiSourceSpecific.sources.length > 0) evidenceUsed.push("sharpapi_source_specific_context");
+  if (sharpRetailPriceMap.status === "available") evidenceUsed.push("sharp_retail_exact_line_price_map_context");
   const hasDirectionalMovement =
     marketMovementEvidence.trackedBooks > 0 && marketMovementEvidence.directionRelativeToPick !== "neutral";
 
@@ -686,6 +801,7 @@ export function resolveMarketReadV2(input: MarketReadResolverInput): MarketReadR
     price,
     playbookConsensus,
     sharpApiSourceSpecific,
+    sharpRetailPriceMap,
     trace: {
       priceScore: marketMovementEvidence.score,
       playbookScore: playbookConsensus.score,

@@ -28,6 +28,79 @@ check("score -5 label", labelForMarketReadScore(-5) === "Strong Market Resistanc
     selectionKey,
     selectedLine: null,
     selectedPrice: -118,
+    splitObservations: [],
+    priceObservations: [
+      {
+        sportsbook: "pinnacle",
+        sharp_book: true,
+        market_type: "moneyline",
+        selection_key: selectionKey,
+        american_price: -118,
+        no_vig_probability: 0.55,
+        line: null,
+        provider_timestamp: "2026-06-25T14:00:00Z",
+        fetched_at: "2026-06-25T14:00:00Z",
+      },
+      {
+        sportsbook: "draftkings",
+        sharp_book: false,
+        market_type: "moneyline",
+        selection_key: selectionKey,
+        american_price: -110,
+        no_vig_probability: 0.52,
+        line: null,
+        provider_timestamp: "2026-06-25T14:00:00Z",
+        fetched_at: "2026-06-25T14:00:00Z",
+      },
+    ],
+    asOf: "2026-06-25T14:00:00Z",
+  });
+  check("unified exact-line price map is available", out.evidence.sharpRetailPriceMap.status === "available");
+  check("unified price gap preserves selected-side direction", Math.abs((out.evidence.sharpRetailPriceMap.probabilityGap ?? 0) - 0.03) < 1e-9);
+  check("price-map evidence is behavior-neutral until a sport model consumes it", out.score === 0 && out.label === "Model-Led");
+}
+
+{
+  const out = resolveMarketReadV2({
+    marketType: "total",
+    selectionKey: "game-1:total:over",
+    selectedLine: 47.5,
+    selectedPrice: -110,
+    splitObservations: [],
+    priceObservations: [
+      {
+        sportsbook: "circa",
+        sharp_book: true,
+        market_type: "total",
+        selection_key: "game-1:total:over",
+        american_price: -110,
+        no_vig_probability: 0.51,
+        line: 47.5,
+        provider_timestamp: "2026-06-25T14:00:00Z",
+        fetched_at: "2026-06-25T14:00:00Z",
+      },
+      {
+        sportsbook: "fanduel",
+        sharp_book: false,
+        market_type: "total",
+        selection_key: "game-1:total:over",
+        american_price: -110,
+        no_vig_probability: 0.53,
+        line: 48.5,
+        provider_timestamp: "2026-06-25T14:00:00Z",
+        fetched_at: "2026-06-25T14:00:00Z",
+      },
+    ],
+  });
+  check("different point lines cannot form a unified price comparison", out.evidence.sharpRetailPriceMap.status === "missing_retail");
+}
+
+{
+  const out = resolveMarketReadV2({
+    marketType: "moneyline",
+    selectionKey,
+    selectedLine: null,
+    selectedPrice: -118,
     splitObservations: [
       {
         provider: "playbook",
