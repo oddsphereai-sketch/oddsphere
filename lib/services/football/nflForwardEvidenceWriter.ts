@@ -44,7 +44,11 @@ import {
 import {
   buildNflMarketEvidenceOutcomeForecast,
   getNflV1WeekOneOutcomeForecast,
+  hasNflV1WeekOneOutcomeForecast,
+  NFL_V1_WEEKLY_OUTCOME_MODEL_RELEASE,
+  NFL_V1_WEEK_ONE_OUTCOME_ARTIFACT_RELEASE,
 } from "./nflV1WeekOneOutcome";
+import { buildNflForwardContextCapture } from "./nflForwardEvidenceCapture";
 import { nflForwardT60TrackingEligibility } from "./nflTrackingLifecycle";
 import {
   buildNflOfficialTrackingRecords,
@@ -356,7 +360,7 @@ export async function runNflForwardEvidenceWriter(args: {
         computeSlateDate("nfl", plan.game.scheduledStart),
       ),
     });
-    return [{
+    const payload: NflForwardEvidencePayload = {
       schemaRelease: NFL_FORWARD_EVIDENCE_SCHEMA_RELEASE,
       collectorRelease: NFL_FORWARD_EVIDENCE_COLLECTOR_RELEASE,
       runId: args.runId,
@@ -406,6 +410,20 @@ export async function runNflForwardEvidenceWriter(args: {
         balldontlieInjuriesMaximum: 4, playbook: 2, sharpApi: sharpResult.requests,
         weather: weatherRequests, totalMaximum: apiCallsMaximum,
       },
+    };
+    const hasTargetFreePrior = hasNflV1WeekOneOutcomeForecast(plan.game.providerGameId);
+    const contextualEvidenceCapture = buildNflForwardContextCapture({
+      payload,
+      independentForecast: baseOutcome,
+      independentTargetFree: hasTargetFreePrior,
+      independentRelease: hasTargetFreePrior
+        ? NFL_V1_WEEK_ONE_OUTCOME_ARTIFACT_RELEASE
+        : NFL_V1_WEEKLY_OUTCOME_MODEL_RELEASE,
+      authoritativeForecast: outcome,
+    });
+    return [{
+      ...payload,
+      ...(contextualEvidenceCapture ? { contextualEvidenceCapture } : {}),
     }];
     } catch (error) {
       const reason = error instanceof Error ? error.message : "unknown_payload_failure";
