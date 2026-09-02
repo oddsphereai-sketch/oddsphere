@@ -43,10 +43,18 @@ import { runScheduledMarketIntelligenceV2Collection } from "@/lib/services/marke
 import type { Sport } from "@/lib/types/domain/Sport";
 import { refreshDailyEdgeResponseSnapshot } from "@/lib/services/labResponseSnapshotWriter";
 import { assertMlbChampionRuntime } from "@/lib/automodel/mlbChampionRuntime";
+import {
+  assessSlateCyclePostludeBudget,
+  buildSlateCyclePostludeTiming,
+  SLATE_CYCLE_MARKET_INTELLIGENCE_BUDGET_MS,
+  SLATE_CYCLE_RESPONSE_SNAPSHOT_BUDGET_MS,
+  type SlateCyclePostludeStageTelemetry,
+} from "@/lib/cron/slateCyclePostludeBudget";
 
 export const maxDuration = 300; // Vercel Pro — full slate cycle can take ~3-5 min
 
 export async function GET(request: Request) {
+  const routeStartedAtMs = Date.now();
   const date = parseDateFromUrl(request);
   // R-19 Phase 5d — resolve intraday-mode flag from query OR env.
   // Morning cron entries omit ?intraday; afternoon/evening entries
@@ -80,12 +88,72 @@ export async function GET(request: Request) {
       }
 
       const report = await runSlateCycleAutomated({ sport, date, intradayMode });
-      const marketIntelligenceV2 = await runScheduledMarketIntelligenceV2Collection({
-        supabase,
-        sport,
-        slateDate: date,
-        phase: "slate_cycle",
+      const budgetAfterCore = assessSlateCyclePostludeBudget({
+        routeStartedAtMs,
+        nowMs: Date.now(),
+        requiredWorkMs:
+          SLATE_CYCLE_MARKET_INTELLIGENCE_BUDGET_MS +
+          SLATE_CYCLE_RESPONSE_SNAPSHOT_BUDGET_MS,
       });
+      let marketIntelligenceV2:
+        | Awaited<ReturnType<typeof runScheduledMarketIntelligenceV2Collection>>
+        | null = null;
+      let responseSnapshot:
+        | Awaited<ReturnType<typeof refreshDailyEdgeResponseSnapshot>>
+        | null = null;
+      let marketIntelligenceTelemetry: SlateCyclePostludeStageTelemetry;
+      let responseSnapshotTelemetry: SlateCyclePostludeStageTelemetry;
+
+      if (budgetAfterCore.canRun) {
+        const marketIntelligenceStartedAtMs = Date.now();
+        marketIntelligenceV2 = await runScheduledMarketIntelligenceV2Collection({
+          supabase,
+          sport,
+          slateDate: date,
+          phase: "slate_cycle",
+        });
+        marketIntelligenceTelemetry = {
+          status: "completed",
+          elapsed_ms: Date.now() - marketIntelligenceStartedAtMs,
+          deferred_reason: null,
+        };
+
+        const budgetBeforeSnapshot = assessSlateCyclePostludeBudget({
+          routeStartedAtMs,
+          nowMs: Date.now(),
+          requiredWorkMs: SLATE_CYCLE_RESPONSE_SNAPSHOT_BUDGET_MS,
+        });
+        if (budgetBeforeSnapshot.canRun) {
+          const responseSnapshotStartedAtMs = Date.now();
+          responseSnapshot = await refreshDailyEdgeResponseSnapshot({
+            sport,
+            date,
+            source: "slate_cycle",
+          });
+          responseSnapshotTelemetry = {
+            status: "completed",
+            elapsed_ms: Date.now() - responseSnapshotStartedAtMs,
+            deferred_reason: null,
+          };
+        } else {
+          responseSnapshotTelemetry = {
+            status: "deferred",
+            elapsed_ms: 0,
+            deferred_reason: "insufficient_time_after_market_intelligence",
+          };
+        }
+      } else {
+        marketIntelligenceTelemetry = {
+          status: "deferred",
+          elapsed_ms: 0,
+          deferred_reason: "insufficient_time_after_core_orchestrator",
+        };
+        responseSnapshotTelemetry = {
+          status: "deferred",
+          elapsed_ms: 0,
+          deferred_reason: "insufficient_time_after_core_orchestrator",
+        };
+      }
 
       // Aggregate write counts from per-step details for the
       // cron-handler return shape. `records_updated` is the sum across
@@ -103,18 +171,13 @@ export async function GET(request: Request) {
         if (s.mode === "wrote") recordsWritten += r;
         apiCalls += a;
       }
-      recordsWritten += marketIntelligenceV2.recordsUpdated;
-      apiCalls += marketIntelligenceV2.apiCallsMade;
-      const responseSnapshot = await refreshDailyEdgeResponseSnapshot({
-        sport,
-        date,
-        source: "slate_cycle",
-      });
+      recordsWritten += marketIntelligenceV2?.recordsUpdated ?? 0;
+      apiCalls += marketIntelligenceV2?.apiCallsMade ?? 0;
 
       const incomplete =
         report.overall_status === "blocked" ||
         report.overall_status === "failed" ||
-        marketIntelligenceV2.errors.length > 0;
+        (marketIntelligenceV2?.errors.length ?? 0) > 0;
       return {
         records_updated: recordsWritten,
         api_calls_made: apiCalls,
@@ -125,10 +188,21 @@ export async function GET(request: Request) {
           ? [
               ...report.blocking_reasons,
               ...report.steps.filter((step) => step.mode === "failed").map((step) => step.reason),
-              ...marketIntelligenceV2.errors,
+              ...(marketIntelligenceV2?.errors ?? []),
             ].slice(0, 5).join(" | ").slice(0, 1500)
           : null,
-        details: { ...report, market_intelligence_v2: marketIntelligenceV2, response_snapshot: responseSnapshot },
+        details: {
+          ...report,
+          market_intelligence_v2: marketIntelligenceV2,
+          response_snapshot: responseSnapshot,
+          postlude_timing: buildSlateCyclePostludeTiming({
+            routeStartedAtMs,
+            nowMs: Date.now(),
+            budgetAfterCore,
+            marketIntelligenceV2: marketIntelligenceTelemetry,
+            responseSnapshot: responseSnapshotTelemetry,
+          }),
+        },
       };
     },
     {
