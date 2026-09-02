@@ -14,6 +14,11 @@ import touchdownJson from "./modelArtifacts/nflPlayerPropsRuntimeTouchdown.json"
 import type { NflPlayerPropMarket, NflPlayerPropsObservationSnapshot } from "./nflPlayerPropsContract";
 import type { NflPlayerPropsInferenceContext } from "./nflPlayerPropsInferenceContext";
 import type { NflPlayerPropsExactOffer } from "./nflPlayerPropsMarketBoard";
+import {
+  buildNflPlayerPropsMarketEvidenceCapture,
+  nflPlayerPropsMarketEvidenceId,
+  type NflPlayerPropsMarketEvidenceCapture,
+} from "./nflPlayerPropsMarketEvidenceCapture";
 
 export const NFL_PLAYER_PROPS_PORTABLE_ARTIFACT_RELEASE =
   "nfl_player_props_runtime_2026_09_01_r4_cross_market_movement" as const;
@@ -205,6 +210,7 @@ export type NflPlayerPropsRuntimeDecision = {
     books: number;
     benchmarkProbability: number;
   };
+  marketEvidenceId?: string;
 };
 
 export type NflPlayerPropsRuntimeBoard = {
@@ -212,6 +218,7 @@ export type NflPlayerPropsRuntimeBoard = {
   generatedAt: string; evaluatedAt: string; provisional: false; publicationEnabled: false; trackingEnabled: false;
   decisions: NflPlayerPropsRuntimeDecision[];
   counts: Record<NflPlayerPropsGrade, number> & { actionable: number };
+  marketEvidence?: NflPlayerPropsMarketEvidenceCapture;
   diagnostics: {
     inputOffers: number; completeExactOffers: number; incompleteExactOffers: number; lockedOffers: number;
     unavailableNoIndependentBenchmark: number; unavailableStaleQuotes: number; unavailableFeatureContext: number;
@@ -342,6 +349,7 @@ export function buildNflPlayerPropsRuntimeBoard(args: {
   offers: NflPlayerPropsExactOffer[];
   features: NflPlayerPropsRuntimeFeatureRow[];
   evaluatedAt: string;
+  captureMarketEvidence?: boolean;
 }): NflPlayerPropsRuntimeBoard {
   const evaluatedAt = Date.parse(args.evaluatedAt);
   if (!Number.isFinite(evaluatedAt)) throw new Error("NFL props runtime board evaluatedAt is invalid.");
@@ -525,12 +533,30 @@ export function buildNflPlayerPropsRuntimeBoard(args: {
     bookEvidence: [...(evidenceByOutcome.get(key) ?? [])].sort((first, second) =>
       second.americanPrice - first.americanPrice || first.sportsbook.localeCompare(second.sportsbook)),
   })).sort(compareDecision);
-  const count = (grade: NflPlayerPropsGrade) => deduped.filter((row) => row.grade === grade).length;
-  const operationalExceptions = deduped.filter((row) => row.grade === "Held");
+  const marketEvidence = args.captureMarketEvidence === false ? null : buildNflPlayerPropsMarketEvidenceCapture({
+    offers: args.offers,
+    decisions: deduped,
+    evaluatedAt: args.evaluatedAt,
+    maximumQuoteAgeHours: artifact.decision.maximumQuoteAgeHours,
+    incumbentCoefficientByMarket: {
+      ...Object.fromEntries(Object.entries(artifact.markets).map(([market, policy]) => [market, policy.marketResidualWeight])),
+      anytime_td: artifact.touchdown.marketResidualWeight,
+    },
+    // The full production payload serializes non-Held decisions in both the
+    // canonical board and member decision list. Reserve both references here.
+    referenceCopies: 2,
+  });
+  const capturedDecisions = marketEvidence ? deduped.map((row) => {
+    const marketEvidenceId = nflPlayerPropsMarketEvidenceId(row);
+    return marketEvidence.retainedIds.has(marketEvidenceId) ? { ...row, marketEvidenceId } : row;
+  }) : deduped;
+  const count = (grade: NflPlayerPropsGrade) => capturedDecisions.filter((row) => row.grade === grade).length;
+  const operationalExceptions = capturedDecisions.filter((row) => row.grade === "Held");
   return {
     release: NFL_PLAYER_PROPS_BOARD_RELEASE, generatedAt: new Date(evaluatedAt).toISOString(), evaluatedAt: args.evaluatedAt,
-    provisional: false, publicationEnabled: false, trackingEnabled: false, decisions: deduped,
+    provisional: false, publicationEnabled: false, trackingEnabled: false, decisions: capturedDecisions,
     counts: { "Best Angle": count("Best Angle"), Lean: count("Lean"), Watchlist: count("Watchlist"), "No Play": count("No Play"), Held: count("Held"), actionable: count("Best Angle") + count("Lean") },
+    ...(marketEvidence ? { marketEvidence: marketEvidence.capture } : {}),
     diagnostics: {
       inputOffers: args.offers.length,
       completeExactOffers: exact.length,

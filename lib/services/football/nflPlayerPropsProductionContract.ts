@@ -3,6 +3,12 @@ import {
   type NflPlayerPropsRuntimeBoard,
   type NflPlayerPropsRuntimeDecision,
 } from "./nflPlayerPropsRuntime";
+import {
+  mergeNflPlayerPropsMarketEvidenceCaptures,
+  subsetNflPlayerPropsMarketEvidenceCapture,
+  withoutUnretainedNflPlayerPropsEvidenceReference,
+  type NflPlayerPropsMarketEvidenceCapture,
+} from "./nflPlayerPropsMarketEvidenceCapture";
 
 export const NFL_PLAYER_PROPS_PRODUCTION_CANDIDATE_RELEASE =
   "nfl_player_props_member_2026_09_01_r14_market_coherent_projection" as const;
@@ -33,6 +39,7 @@ export type NflPlayerPropsMemberSnapshot = {
   board: {
     evaluatedAt: string;
     counts: Record<NflPlayerPropsMemberGrade, number> & { actionable: number };
+    marketEvidence?: NflPlayerPropsMarketEvidenceCapture;
     diagnostics: Pick<NflPlayerPropsRuntimeBoard["diagnostics"],
       "inputOffers" | "completedEvaluations" | "completeExactOffers" | "incompleteExactOffers"
       | "unavailableNoIndependentBenchmark" | "unavailableStaleQuotes" | "unavailableFeatureContext">;
@@ -101,13 +108,22 @@ export function reconcileNflPlayerPropsProductionSnapshot(args: {
       retainedStillFreshUnlocked += 1;
     }
   }
+  const mergedEvidence = mergeNflPlayerPropsMarketEvidenceCaptures({
+    current: args.nextBoard.marketEvidence,
+    previous: args.previous?.board.marketEvidence,
+    decisions,
+  });
+  const capturedDecisions = mergedEvidence.capture
+    ? decisions.map((row) => withoutUnretainedNflPlayerPropsEvidenceReference(row, mergedEvidence.retainedIds))
+    : decisions;
   const board = {
     ...args.nextBoard,
     publicationEnabled: true as const,
     trackingEnabled: true as const,
-    decisions,
-    counts: recount(decisions),
-    diagnostics: recountOperationalDiagnostics(args.nextBoard.diagnostics, decisions),
+    decisions: capturedDecisions,
+    counts: recount(capturedDecisions),
+    diagnostics: recountOperationalDiagnostics(args.nextBoard.diagnostics, capturedDecisions),
+    ...(mergedEvidence.capture ? { marketEvidence: mergedEvidence.capture } : {}),
   };
   return {
     release: NFL_PLAYER_PROPS_PRODUCTION_CANDIDATE_RELEASE, season: args.season, week: args.week,
@@ -116,7 +132,7 @@ export function reconcileNflPlayerPropsProductionSnapshot(args: {
     board,
     // Held rows remain in the audit payload, but genuine role/identity
     // ambiguity is not useful as a default member recommendation list.
-    memberDecisions: decisions.filter((row) => row.grade !== "Held"),
+    memberDecisions: capturedDecisions.filter((row) => row.grade !== "Held"),
     lifecycle: { recomputedUnlocked, retainedStillFreshUnlocked, frozenAtLock, retainedPreviouslyLocked },
   };
 }
@@ -135,7 +151,14 @@ export function buildNflPlayerPropsTrackingRows(snapshot: NflPlayerPropsProducti
 }
 
 export function buildNflPlayerPropsMemberSnapshot(snapshot: NflPlayerPropsProductionSnapshot): NflPlayerPropsMemberSnapshot {
-  const memberDecisions = snapshot.memberDecisions.filter(isMemberDecision);
+  const eligibleMemberDecisions = snapshot.memberDecisions.filter(isMemberDecision);
+  const memberEvidence = subsetNflPlayerPropsMarketEvidenceCapture({
+    capture: snapshot.board.marketEvidence,
+    decisions: eligibleMemberDecisions,
+  });
+  const memberDecisions = memberEvidence.capture
+    ? eligibleMemberDecisions.map((row) => withoutUnretainedNflPlayerPropsEvidenceReference(row, memberEvidence.retainedIds))
+    : eligibleMemberDecisions;
   const count = (grade: NflPlayerPropsMemberGrade) => memberDecisions.filter((row) => row.grade === grade).length;
   const diagnostics = snapshot.board.diagnostics;
   return {
@@ -151,6 +174,7 @@ export function buildNflPlayerPropsMemberSnapshot(snapshot: NflPlayerPropsProduc
         "No Play": count("No Play"),
         actionable: count("Best Angle") + count("Lean"),
       },
+      ...(memberEvidence.capture ? { marketEvidence: memberEvidence.capture } : {}),
       diagnostics: {
         inputOffers: diagnostics.inputOffers,
         completedEvaluations: memberDecisions.length,
