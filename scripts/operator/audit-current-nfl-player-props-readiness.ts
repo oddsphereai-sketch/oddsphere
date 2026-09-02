@@ -1,7 +1,6 @@
 import { loadEnvConfig } from "@next/env";
 import { createClient } from "@supabase/supabase-js";
-import type { NflPlayerPropsProductionSnapshot } from "../../lib/services/football/nflPlayerPropsProductionContract";
-import { nflPlayerPropsSnapshotKey } from "../../lib/services/football/nflPlayerPropsSnapshotStore";
+import { readNflPlayerPropsSnapshotRecord } from "../../lib/services/football/nflPlayerPropsSnapshotStore";
 
 loadEnvConfig(process.cwd());
 
@@ -15,15 +14,9 @@ const supabaseKey = key;
 
 async function main(): Promise<void> {
 const client = createClient(supabaseUrl, supabaseKey, { auth: { persistSession: false } });
-const { data, error } = await client
-  .from("lab_response_snapshots")
-  .select("payload,generated_at")
-  .eq("snapshot_key", nflPlayerPropsSnapshotKey(season, week))
-  .maybeSingle();
-if (error) throw new Error(`NFL props snapshot read failed: ${error.message}`);
-if (!data?.payload) throw new Error(`NFL props snapshot is unavailable for ${season} Week ${week}.`);
-
-const snapshot = data.payload as NflPlayerPropsProductionSnapshot;
+const record = await readNflPlayerPropsSnapshotRecord({ client, season, week });
+if (!record) throw new Error(`NFL props snapshot is unavailable for ${season} Week ${week}.`);
+const snapshot = record.snapshot;
 const rows = snapshot.board.decisions.map((row) => ({
   market: row.market,
   grade: row.grade,
@@ -62,7 +55,7 @@ const report = {
   readOnly: true,
   season,
   week,
-  generatedAt: data.generated_at,
+  generatedAt: record.generatedAt,
   release: snapshot.release,
   rows: rows.length,
   grades: counts(rows),

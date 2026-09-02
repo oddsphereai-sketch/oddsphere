@@ -47,6 +47,12 @@ export type NflPlayerPropsMemberSnapshot = {
   memberDecisions: NflPlayerPropsMemberDecision[];
 };
 
+export function deriveNflPlayerPropsMemberDecisions(
+  board: Pick<NflPlayerPropsRuntimeBoard, "decisions">,
+): NflPlayerPropsMemberDecision[] {
+  return board.decisions.filter(isMemberDecision);
+}
+
 export type NflPlayerPropsTrackedDecision = {
   trackingKey: string; gameId: string; providerPlayerId: string | null; playerName: string; market: string; line: number;
   side: NflPlayerPropsRuntimeDecision["side"]; sportsbook: string; lockedPrice: number;
@@ -132,7 +138,7 @@ export function reconcileNflPlayerPropsProductionSnapshot(args: {
     board,
     // Held rows remain in the audit payload, but genuine role/identity
     // ambiguity is not useful as a default member recommendation list.
-    memberDecisions: capturedDecisions.filter((row) => row.grade !== "Held"),
+    memberDecisions: deriveNflPlayerPropsMemberDecisions(board),
     lifecycle: { recomputedUnlocked, retainedStillFreshUnlocked, frozenAtLock, retainedPreviouslyLocked },
   };
 }
