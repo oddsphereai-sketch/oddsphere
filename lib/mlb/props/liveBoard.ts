@@ -121,6 +121,11 @@ import {
   qualifiesMlbPropMarketAwareWatchlist,
   type MlbPropMarketContext,
 } from "./marketAwareContext";
+import {
+  attachMlbPropsMarketEvidenceReferences,
+  buildMlbPropsMarketEvidenceCapture,
+  mlbPropsMarketEvidenceInput,
+} from "./marketEvidenceCapture";
 
 type RefreshArgs = {
   slateDate: string;
@@ -350,7 +355,21 @@ export async function refreshMlbPropsBoard(args: RefreshArgs): Promise<MlbPropsB
   }), openingOdds, previous), asOfTimestamp)));
   // Expected-count calibration is intentionally applied only after every
   // probability, side, grade, actionability, and stake decision is complete.
-  const props = applyMlbPropsDisplayProjectionCalibration(decisionProps);
+  const calibratedProps = applyMlbPropsDisplayProjectionCalibration(decisionProps);
+  const marketEvidence = buildMlbPropsMarketEvidenceCapture({
+    currentOdds: boardSourceOdds,
+    openingOdds,
+    contexts: marketContexts,
+    rows: calibratedProps,
+    evaluatedAt: asOfTimestamp,
+    maximumQuoteAgeMinutes: Number(
+      process.env.ODDSPHERE_PROPS_MAX_ODDS_AGE_MINUTES ?? DEFAULT_MAX_ODDS_AGE_MINUTES,
+    ),
+  });
+  const props = attachMlbPropsMarketEvidenceReferences(
+    calibratedProps,
+    marketEvidence.retainedIds,
+  );
   const data = buildDashboardData({
     slateDate: args.slateDate,
     asOfTimestamp,
@@ -382,6 +401,7 @@ export async function refreshMlbPropsBoard(args: RefreshArgs): Promise<MlbPropsB
     data,
     validation,
     movement,
+    marketEvidence: marketEvidence.capture,
     modelContext: {
       modelReleaseId: MLB_PROPS_MODEL_RELEASE_ID,
       probablePitcherSeasonStats: [...seasonStats.entries()],
@@ -1181,6 +1201,7 @@ function buildDashboardRows(args: {
       projection: pitcherModelProjection,
       modelFamily: definition.modelFamily,
     } : hitterSignal;
+    const independentProjection = signal?.projection ?? null;
     if (signal) {
       const marketAware = applyMlbPropMarketAwareForecast({
         marketKey: mapped.odds.marketKey,
@@ -1359,6 +1380,10 @@ function buildDashboardRows(args: {
       oddsSanity: isOddsStale(mapped.odds.asOfTimestamp, args.asOfTimestamp) ? ["STALE_ODDS"] : [],
       settlementStatus: "pending",
       clvStatus: "pending",
+      ...mlbPropsMarketEvidenceInput({
+        independentProjection,
+        context: marketContext,
+      }),
     });
   }
   const deduped = dedupeRows(rows);

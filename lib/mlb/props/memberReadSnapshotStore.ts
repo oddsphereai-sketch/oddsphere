@@ -16,6 +16,12 @@ import {
   compareMlbPropsReleaseIds,
   mlbPropsReleaseIsCurrentOrNewer,
 } from "./releaseOrdering";
+import {
+  subsetMlbPropsMarketEvidenceCapture,
+  withoutUnretainedMlbPropsEvidenceReference,
+  type MlbPropsMarketEvidenceCapture,
+  type MlbPropsMarketEvidenceRow,
+} from "./marketEvidenceCapture";
 
 const BOARD_TTL_MS = 40 * 60 * 1000;
 const STALE_TTL_MS = 24 * 60 * 60 * 1000;
@@ -33,6 +39,7 @@ type BoardPayload = {
   asOfTimestamp: string;
   modelReleaseId?: string;
   data: PlayerPropsDashboardData;
+  marketEvidence?: MlbPropsMarketEvidenceCapture;
   shardKeys?: string[];
 };
 
@@ -44,6 +51,7 @@ type PlayerPayload = {
   playerId: string;
   props?: PlayerPropsDashboardData["props"];
   research: NonNullable<PlayerPropsDashboardData["research"]>;
+  marketEvidence?: MlbPropsMarketEvidenceCapture;
 };
 
 function boardKey(date: string): string {
@@ -92,12 +100,14 @@ export async function publishMlbPropsMemberReadSnapshots(
     updated_at: new Date(now).toISOString(),
   };
   const boundedBoard = buildMlbPropsInitialMemberBoardData(displaySnapshot.data);
+  const boundedEvidence = buildMlbPropsMemberEvidencePayload(displaySnapshot, boundedBoard);
   const boardPayload: BoardPayload = {
     schemaVersion: 1,
     snapshotId: displaySnapshot.snapshotId,
     asOfTimestamp: displaySnapshot.asOfTimestamp,
     modelReleaseId: displaySnapshot.modelContext?.modelReleaseId,
-    data: boundedBoard,
+    data: boundedEvidence.data,
+    ...(boundedEvidence.marketEvidence ? { marketEvidence: boundedEvidence.marketEvidence } : {}),
   };
   const fullBoardPayload: BoardPayload = {
     schemaVersion: 1,
@@ -141,6 +151,11 @@ export async function publishMlbPropsMemberReadSnapshots(
     });
   }
   for (const [gameId, props] of publishFull ? fullPropsByGame : []) {
+    const gameEvidence = buildMlbPropsMemberEvidencePayload(displaySnapshot, {
+      ...displaySnapshot.data,
+      research: undefined,
+      props,
+    });
     boardRows.push({
       ...common,
       snapshot_key: `${fullBoardKey(displaySnapshot.slateDate)}::${gameId}`,
@@ -150,20 +165,27 @@ export async function publishMlbPropsMemberReadSnapshots(
         snapshotId: displaySnapshot.snapshotId,
         asOfTimestamp: displaySnapshot.asOfTimestamp,
         modelReleaseId: displaySnapshot.modelContext?.modelReleaseId,
-        data: { ...displaySnapshot.data, research: undefined, props },
+        data: gameEvidence.data,
+        ...(gameEvidence.marketEvidence ? { marketEvidence: gameEvidence.marketEvidence } : {}),
       } satisfies BoardPayload,
     });
   }
   const playerSnapshotRows: Record<string, unknown>[] = [];
   for (const [playerId, props] of publishFull ? playerRows : []) {
+    const playerEvidence = buildMlbPropsMemberEvidencePayload(displaySnapshot, {
+      ...displaySnapshot.data,
+      research: undefined,
+      props,
+    });
     const payload: PlayerPayload = {
       schemaVersion: 1,
       snapshotId: displaySnapshot.snapshotId,
       asOfTimestamp: displaySnapshot.asOfTimestamp,
       modelReleaseId: displaySnapshot.modelContext?.modelReleaseId,
       playerId,
-      props,
+      props: playerEvidence.data.props,
       research: selectMlbPropsResearchForRows(displaySnapshot.data, props),
+      ...(playerEvidence.marketEvidence ? { marketEvidence: playerEvidence.marketEvidence } : {}),
     };
     playerSnapshotRows.push({
       ...common,
@@ -188,6 +210,26 @@ export async function publishMlbPropsMemberReadSnapshots(
       .upsert(playerSnapshotRows.slice(index, index + 10), { onConflict: "snapshot_key" });
     if (error) throw error;
   }
+}
+
+export function buildMlbPropsMemberEvidencePayload(
+  snapshot: Pick<MlbPropsBoardSnapshot, "marketEvidence">,
+  data: PlayerPropsDashboardData,
+): { data: PlayerPropsDashboardData; marketEvidence: MlbPropsMarketEvidenceCapture | null; addedBytes: number } {
+  const subset = subsetMlbPropsMarketEvidenceCapture({
+    capture: snapshot.marketEvidence,
+    rows: data.props as MlbPropsMarketEvidenceRow[],
+  });
+  if (!subset.capture) return { data, marketEvidence: null, addedBytes: 0 };
+  return {
+    data: {
+      ...data,
+      props: (data.props as MlbPropsMarketEvidenceRow[]).map((row) =>
+        withoutUnretainedMlbPropsEvidenceReference(row, subset.retainedIds)),
+    },
+    marketEvidence: subset.capture,
+    addedBytes: subset.addedBytes,
+  };
 }
 
 function assertLockedGamesUseAuthoritativeRows(

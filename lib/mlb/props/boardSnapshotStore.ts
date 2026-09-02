@@ -6,6 +6,12 @@ import type { RealPitcherSeasonStat } from "./realScoring";
 import type { MlbPropsShadowPitcherPrediction } from "./shadowPitcherModel";
 import type { PropOddsSnapshot } from "./providers";
 import {
+  mergeMlbPropsMarketEvidenceCaptures,
+  withoutUnretainedMlbPropsEvidenceReference,
+  type MlbPropsMarketEvidenceCapture,
+  type MlbPropsMarketEvidenceRow,
+} from "./marketEvidenceCapture";
+import {
   assertMlbPropsReleaseDoesNotRegress,
   compareMlbPropsReleaseIds,
   parseMlbPropsReleaseOrder,
@@ -59,6 +65,7 @@ export type MlbPropsBoardSnapshot = {
   data: PlayerPropsDashboardData;
   validation: MlbPropsBoardValidation;
   movement: MlbPropsBoardMovement;
+  marketEvidence?: MlbPropsMarketEvidenceCapture;
   modelContext?: {
     modelReleaseId?: string;
     probablePitcherSeasonStats: Array<[string, RealPitcherSeasonStat]>;
@@ -412,10 +419,21 @@ export async function applyMlbPropsDisplayLocks(latest: MlbPropsBoardSnapshot): 
   const allDisplayGames = new Set(props.map((row) => row.providerIds?.gameId).filter(Boolean) as string[]);
   const allGamesLocked = allDisplayGames.size > 0 && [...allDisplayGames].every((gameId) => lockedRowsByGame.has(gameId));
   const lockedLastUpdated = [...lockedUpdatedByGame.values()].sort().at(-1) ?? safeLatest.data.lastUpdated;
+  const mergedEvidence = mergeMlbPropsMarketEvidenceCaptures({
+    captures: [
+      safeLatest.marketEvidence,
+      ...[...lockedSnapshots.values()].map((snapshot) => snapshot.marketEvidence),
+    ],
+    rows: props as MlbPropsMarketEvidenceRow[],
+  });
+  const capturedProps = mergedEvidence.capture
+    ? (props as MlbPropsMarketEvidenceRow[]).map((row) =>
+      withoutUnretainedMlbPropsEvidenceReference(row, mergedEvidence.retainedIds))
+    : props;
   const data: PlayerPropsDashboardData = {
     ...safeLatest.data,
     lastUpdated: allGamesLocked ? lockedLastUpdated : safeLatest.data.lastUpdated,
-    props,
+    props: capturedProps,
     research: {
       ...(safeLatest.data.research ?? {}),
       ...lockedResearch,
@@ -423,7 +441,11 @@ export async function applyMlbPropsDisplayLocks(latest: MlbPropsBoardSnapshot): 
     summary: summarizeDisplayProps(safeLatest.data, props),
   };
 
-  return { ...safeLatest, data };
+  return {
+    ...safeLatest,
+    data,
+    ...(mergedEvidence.capture ? { marketEvidence: mergedEvidence.capture } : {}),
+  };
 }
 
 function suppressOfficialPitcherTeamConflicts(snapshot: MlbPropsBoardSnapshot): MlbPropsBoardSnapshot {
