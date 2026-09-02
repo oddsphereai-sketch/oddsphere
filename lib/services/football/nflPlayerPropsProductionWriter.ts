@@ -9,11 +9,17 @@ import { buildNflPlayerPropsExactBoard } from "./nflPlayerPropsMarketBoard";
 import {
   buildNflPlayerPropsRuntimeBoard,
   buildNflPlayerPropsRuntimeFeatureRows,
+  NFL_PLAYER_PROPS_BOARD_RELEASE,
+  NFL_PLAYER_PROPS_CALIBRATION_RELEASE,
+  NFL_PLAYER_PROPS_DECISION_RELEASE,
+  NFL_PLAYER_PROPS_MODEL_RELEASE,
   verifyNflPlayerPropsRuntimeParity,
 } from "./nflPlayerPropsRuntime";
 import {
   buildNflPlayerPropsTrackingRows,
+  NFL_PLAYER_PROPS_PRODUCTION_CANDIDATE_RELEASE,
   reconcileNflPlayerPropsProductionSnapshot,
+  type NflPlayerPropsProductionSnapshot,
 } from "./nflPlayerPropsProductionContract";
 import { readNflPlayerPropsSnapshot, writeNflPlayerPropsSnapshot } from "./nflPlayerPropsSnapshotStore";
 import { updateNflPlayerPropsClosingPrices, writeLockedNflPlayerPropsTracking } from "./nflPlayerPropsTrackingStore";
@@ -24,7 +30,7 @@ import {
 } from "./nflPlayerPropsSettlement";
 
 export const NFL_PLAYER_PROPS_WRITER_RELEASE =
-  "nfl_player_props_writer_2026_09_01_r16_market_coherent_projection" as const;
+  "nfl_player_props_writer_2026_09_02_r17_qb_target_exclusion" as const;
 export const NFL_PLAYER_PROPS_PRODUCTION_INCLUDE_OPENINGS = true as const;
 export const NFL_PLAYER_PROPS_PRODUCTION_COLLECTION_CALL_MAXIMUM = (
   1
@@ -36,6 +42,20 @@ export const NFL_PLAYER_PROPS_PRODUCTION_INCREMENTAL_CALL_MAXIMUM = (
   NFL_PLAYER_PROPS_PRODUCTION_COLLECTION_CALL_MAXIMUM
   + NFL_PLAYER_PROPS_SETTLEMENT_MAX_GAMES_PER_CYCLE
 ) as 66;
+
+export type NflPlayerPropsForecastTelemetry = {
+  forecastPolicy: "evaluated_sportsbook_excluded_from_qb_point_and_residual_consensus";
+  lastKnownGoodPolicy: "write_only_after_complete_cycle_and_reconcile_locked_rows";
+  boardRelease: typeof NFL_PLAYER_PROPS_BOARD_RELEASE;
+  memberRelease: typeof NFL_PLAYER_PROPS_PRODUCTION_CANDIDATE_RELEASE;
+  passingYardsRows: number;
+  targetExcludedPointConsensusRows: number;
+  passingRowsWithoutTargetExcludedPointConsensus: number;
+  targetExcludedResidualRows: number;
+  unlockedPassingReleaseMismatches: number;
+  lockedRows: number;
+  actionableRows: number;
+};
 
 export type NflPlayerPropsWriterResult = {
   writerRelease: typeof NFL_PLAYER_PROPS_WRITER_RELEASE;
@@ -57,7 +77,36 @@ export type NflPlayerPropsWriterResult = {
   settledRecords: number;
   apiCallsMaximum: number;
   healthFindings: string[];
+  forecastTelemetry: NflPlayerPropsForecastTelemetry;
 };
+
+export function summarizeNflPlayerPropsForecastTelemetry(
+  snapshot: NflPlayerPropsProductionSnapshot,
+): NflPlayerPropsForecastTelemetry {
+  const rows = snapshot.memberDecisions;
+  const passingRows = rows.filter((row) => row.market === "passing_yards");
+  const unlockedPassingReleaseMismatches = passingRows.filter((row) => row.state === "unlocked" && (
+    row.modelRelease !== NFL_PLAYER_PROPS_MODEL_RELEASE
+    || row.calibrationRelease !== NFL_PLAYER_PROPS_CALIBRATION_RELEASE
+    || row.decisionRelease !== NFL_PLAYER_PROPS_DECISION_RELEASE
+  )).length;
+  return {
+    forecastPolicy: "evaluated_sportsbook_excluded_from_qb_point_and_residual_consensus",
+    lastKnownGoodPolicy: "write_only_after_complete_cycle_and_reconcile_locked_rows",
+    boardRelease: snapshot.board.release,
+    memberRelease: snapshot.release,
+    passingYardsRows: passingRows.length,
+    targetExcludedPointConsensusRows: passingRows.filter((row) =>
+      row.projectionEvidence?.source === "market_dominant_expected_starter").length,
+    passingRowsWithoutTargetExcludedPointConsensus: passingRows.filter((row) =>
+      row.projectionEvidence?.source !== "market_dominant_expected_starter").length,
+    targetExcludedResidualRows: passingRows.filter((row) => row.passingMarketEvidence?.source
+      === "target_book_excluded_cross_line_transport").length,
+    unlockedPassingReleaseMismatches,
+    lockedRows: rows.filter((row) => row.state === "locked").length,
+    actionableRows: rows.filter((row) => row.grade === "Best Angle" || row.grade === "Lean").length,
+  };
+}
 
 export async function runNflPlayerPropsProductionWriter(args: {
   client: SupabaseClient;
@@ -135,6 +184,7 @@ export async function runNflPlayerPropsProductionWriter(args: {
     settlementDeferredGames: settlement.deferredGames,
     settledRecords: settlement.settled,
     apiCallsMaximum,
+    forecastTelemetry: summarizeNflPlayerPropsForecastTelemetry(snapshot),
     healthFindings: [...new Set([
       ...collection.snapshot.healthFindings,
       ...context.healthHolds,

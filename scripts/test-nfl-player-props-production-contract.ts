@@ -14,6 +14,7 @@ import {
   NFL_PLAYER_PROPS_PRODUCTION_INCLUDE_OPENINGS,
   NFL_PLAYER_PROPS_PRODUCTION_INCREMENTAL_CALL_MAXIMUM,
   NFL_PLAYER_PROPS_WRITER_RELEASE,
+  summarizeNflPlayerPropsForecastTelemetry,
 } from "../lib/services/football/nflPlayerPropsProductionWriter";
 import {
   NFL_PLAYER_PROPS_SETTLEMENT_MAX_GAMES_PER_CYCLE,
@@ -21,7 +22,17 @@ import {
   NFL_PLAYER_PROPS_SETTLEMENT_RELEASE,
 } from "../lib/services/football/nflPlayerPropsSettlement";
 import { NFL_PLAYER_PROPS_TRACKING_RELEASE } from "../lib/services/football/nflPlayerPropsTrackingStore";
-import { NFL_PLAYER_PROPS_BOARD_RELEASE, type NflPlayerPropsRuntimeBoard, type NflPlayerPropsRuntimeDecision } from "../lib/services/football/nflPlayerPropsRuntime";
+import {
+  NFL_PLAYER_PROPS_BOARD_RELEASE,
+  NFL_PLAYER_PROPS_CALIBRATION_RELEASE,
+  NFL_PLAYER_PROPS_DECISION_RELEASE,
+  NFL_PLAYER_PROPS_MODEL_RELEASE,
+  NFL_PLAYER_PROPS_MARKET_COHERENT_PROJECTION_RELEASE,
+  NFL_PLAYER_PROPS_QB_PASSING_PROJECTION,
+  NFL_PLAYER_PROPS_PASSING_MARKET_RELEASE,
+  type NflPlayerPropsRuntimeBoard,
+  type NflPlayerPropsRuntimeDecision,
+} from "../lib/services/football/nflPlayerPropsRuntime";
 
 const decision: NflPlayerPropsRuntimeDecision = {
   gameId: "game", providerPlayerId: "1", playerName: "Player", team: "NE", opponent: "NYJ",
@@ -67,9 +78,9 @@ function emptyBoard(): NflPlayerPropsRuntimeBoard {
 }
 
 const unlocked = reconcileNflPlayerPropsProductionSnapshot({ season: 2026, week: 1, evaluatedAt: "2026-08-25T12:00:00.000Z", nextBoard: board(decision) });
-assert.equal(NFL_PLAYER_PROPS_PRODUCTION_CANDIDATE_RELEASE, "nfl_player_props_member_2026_09_01_r14_market_coherent_projection");
-assert.equal(NFL_PLAYER_PROPS_WRITER_RELEASE, "nfl_player_props_writer_2026_09_01_r16_market_coherent_projection");
-assert.equal(NFL_PLAYER_PROPS_TRACKING_RELEASE, "nfl_player_props_tracking_2026_09_01_r8_market_coherent_projection");
+assert.equal(NFL_PLAYER_PROPS_PRODUCTION_CANDIDATE_RELEASE, "nfl_player_props_member_2026_09_02_r15_qb_target_exclusion");
+assert.equal(NFL_PLAYER_PROPS_WRITER_RELEASE, "nfl_player_props_writer_2026_09_02_r17_qb_target_exclusion");
+assert.equal(NFL_PLAYER_PROPS_TRACKING_RELEASE, "nfl_player_props_tracking_2026_09_02_r9_qb_target_exclusion");
 assert.equal(NFL_PLAYER_PROPS_SETTLEMENT_RELEASE, "nfl_player_props_settlement_2026_08_25_r3_bounded_finality");
 assert.equal(NFL_PLAYER_PROPS_PRODUCTION_INCLUDE_OPENINGS, true, "production records same-book opening context for movement and CLV interpretation");
 assert.equal(NFL_PLAYER_PROPS_PRODUCTION_COLLECTION_CALL_MAXIMUM, 48, "slate/current+opening props/player identity/Sharp pagination is explicitly bounded");
@@ -83,6 +94,63 @@ assert.equal(unlocked.writerLeaseGroup, NFL_PLAYER_PROPS_WRITER_LEASE_GROUP);
 assert.equal(unlocked.lifecycle.recomputedUnlocked, 1);
 assert.equal(unlocked.lifecycle.retainedStillFreshUnlocked, 0);
 assert.equal(buildNflPlayerPropsTrackingRows(unlocked).length, 0);
+
+const passingConsensus: NflPlayerPropsRuntimeDecision = {
+  ...decision,
+  playerName: "Consensus Quarterback",
+  market: "passing_yards",
+  line: 225.5,
+  grade: "Lean",
+  modelRelease: NFL_PLAYER_PROPS_MODEL_RELEASE,
+  calibrationRelease: NFL_PLAYER_PROPS_CALIBRATION_RELEASE,
+  decisionRelease: NFL_PLAYER_PROPS_DECISION_RELEASE,
+  projectionEvidence: {
+    release: NFL_PLAYER_PROPS_QB_PASSING_PROJECTION.release,
+    source: "market_dominant_expected_starter",
+    marketWeight: NFL_PLAYER_PROPS_QB_PASSING_PROJECTION.marketWeight,
+    roleWeight: NFL_PLAYER_PROPS_QB_PASSING_PROJECTION.roleWeight,
+    books: 2,
+    marketConsensus: 231.2,
+    roleProjection: 228.4,
+  },
+  passingMarketEvidence: {
+    release: NFL_PLAYER_PROPS_PASSING_MARKET_RELEASE,
+    source: "target_book_excluded_cross_line_transport",
+    books: 2,
+    benchmarkProbability: 0.51,
+  },
+};
+const passingFallback: NflPlayerPropsRuntimeDecision = {
+  ...decision,
+  playerName: "Fallback Quarterback",
+  market: "passing_yards",
+  line: 225.5,
+  state: "locked",
+  grade: "No Play",
+  projectionEvidence: {
+    release: NFL_PLAYER_PROPS_MARKET_COHERENT_PROJECTION_RELEASE,
+    source: "probability_inverse_market_calibrated",
+    independentProjection: 219.7,
+    calibratedOverProbability: 0.51,
+  },
+  modelRelease: "locked_legacy_model",
+};
+assert.deepEqual(summarizeNflPlayerPropsForecastTelemetry({
+  ...unlocked,
+  memberDecisions: [passingConsensus, passingFallback],
+}), {
+  forecastPolicy: "evaluated_sportsbook_excluded_from_qb_point_and_residual_consensus",
+  lastKnownGoodPolicy: "write_only_after_complete_cycle_and_reconcile_locked_rows",
+  boardRelease: NFL_PLAYER_PROPS_BOARD_RELEASE,
+  memberRelease: NFL_PLAYER_PROPS_PRODUCTION_CANDIDATE_RELEASE,
+  passingYardsRows: 2,
+  targetExcludedPointConsensusRows: 1,
+  passingRowsWithoutTargetExcludedPointConsensus: 1,
+  targetExcludedResidualRows: 1,
+  unlockedPassingReleaseMismatches: 0,
+  lockedRows: 1,
+  actionableRows: 1,
+}, "writer telemetry is release-pure, distinguishes automatic fallback, and preserves locked legacy rows");
 
 const omittedGame = {
   ...decision,
