@@ -129,6 +129,11 @@ export type FiV2Audit = {
   market_evaluation_sportsbook: string | null;
   market_projection_sportsbooks: string[];
   market_projection_book_count: number;
+  /** Forward-only named-book provenance; does not alter v5 posterior math. */
+  market_evidence_capture_version: FiMarketBaseline["market_evidence_capture_version"];
+  market_evidence_supported_book_cap: number;
+  market_evidence_books: FiMarketBaseline["market_evidence_books"];
+  market_evidence_exclusions: FiMarketBaseline["market_evidence_exclusions"];
   market_data_quality: "ok" | "stale" | "missing";
   market_freshness: string | null;
   market_reason: string;
@@ -563,6 +568,10 @@ export function runMlbFirstInningModelV2(
     market_evaluation_sportsbook: market.evaluation_sportsbook,
     market_projection_sportsbooks: market.projection_sportsbooks,
     market_projection_book_count: market.projection_book_count,
+    market_evidence_capture_version: market.market_evidence_capture_version,
+    market_evidence_supported_book_cap: market.market_evidence_supported_book_cap,
+    market_evidence_books: market.market_evidence_books,
+    market_evidence_exclusions: market.market_evidence_exclusions,
     market_data_quality: market.data_quality,
     market_freshness: market.freshness,
     market_reason: market.reason,
