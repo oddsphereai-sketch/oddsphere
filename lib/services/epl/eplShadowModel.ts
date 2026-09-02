@@ -6,8 +6,8 @@ import {
 import { deriveSoccerMarketProbabilities } from "@/lib/services/soccer/soccerMarketProbabilities";
 import type { BdlEplMatch, BdlEplTeamMatchStats } from "@/lib/providers/real_api/BallDontLieEplProvider";
 
-export const EPL_SHADOW_MODEL_RELEASE = "epl_goals_coherent_2026_08_20_r16" as const;
-export const EPL_SHADOW_CALIBRATION_RELEASE = "epl_grade_policy_2026_08_20_v21" as const;
+export const EPL_SHADOW_MODEL_RELEASE = "epl_goals_coherent_2026_09_02_r18_structural_target_exclusion" as const;
+export const EPL_SHADOW_CALIBRATION_RELEASE = "epl_grade_policy_2026_09_02_v23_positive_forecast_ev" as const;
 
 export type EplModelConfig = {
   halfLifeDays: number;

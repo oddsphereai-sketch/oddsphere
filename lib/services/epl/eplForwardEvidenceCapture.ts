@@ -265,6 +265,23 @@ function sharpVectors(fixture: EplSharpFixtureMarket, market: EplForwardMarket, 
     });
 }
 
+/**
+ * Reuse the exact current-vector construction from the bounded capture in the
+ * authoritative forecast. This is pure over an already-fetched fixture result
+ * and therefore adds no provider or persistence work.
+ */
+export function eplCurrentBookVectors(
+  fixture: EplSharpFixtureMarket,
+  market: EplForwardMarket,
+  capturedAt: string,
+): EplForwardBookVector[] {
+  return sharpVectors(fixture, market, capturedAt);
+}
+
+export function canonicalEplBook(value: string | null): string {
+  return canonicalBook(value);
+}
+
 function bdlEvaluatedVector(match: EplShadowSlateMatch, market: MarketEdgeDto, capturedAt: string): EplForwardBookVector | null {
   const board = market.soccerPriceBoard;
   const book = canonicalBook(board?.sportsbook ?? market.currentPriceSportsbook ?? null);
