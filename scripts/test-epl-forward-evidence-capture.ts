@@ -251,7 +251,7 @@ assert.equal(directSplit.fetched_at_source, "provider");
 
 const writer = readFileSync("lib/services/epl/eplProductionPipeline.ts", "utf8");
 const captureSource = readFileSync("lib/services/epl/eplForwardEvidenceCapture.ts", "utf8");
-assert.ok(writer.indexOf("if (prior?.locked_at)") < writer.indexOf("attachCapture(row, prior?.snapshot_json"), "locked snapshot precedence must occur before capture merge");
+assert.ok(writer.indexOf("eplPriorRowsBlockWrite(priorRows)") < writer.indexOf("attachCapture(row, prior?.snapshot_json"), "locked snapshot precedence across releases must occur before capture merge");
 assert.equal((writer.match(/\.upsert\(/g) ?? []).length, 3, "capture must not add a writer/upsert");
 assert.match(writer, /if \(row\.market !== "match_result"\) return/);
 assert.doesNotMatch(captureSource, /supabase|SharpApiClient|fetch\(/, "capture serializer must consume only incumbent cached inputs");

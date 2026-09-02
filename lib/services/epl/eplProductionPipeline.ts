@@ -13,6 +13,17 @@ const providerExternalId = (id: number) => EPL_EXTERNAL_ID_OFFSET + id;
 
 export type EplLockCandidate = { gameId: number; externalId: number; kickoff: string; unlockedMarkets: number };
 
+type EplPriorPredictionRecord = {
+  model_version: string;
+  locked_at: string | null;
+  held: boolean | null;
+  snapshot_json: Record<string, unknown> | null;
+};
+
+export function eplPriorRowsBlockWrite(rows: EplPriorPredictionRecord[]): boolean {
+  return rows.some((prior) => prior.locked_at !== null);
+}
+
 /**
  * Cheap minute-sweep classification. Paid providers are called only when a
  * game has actually crossed T-60 and still needs its immutable final capture.
@@ -222,9 +233,15 @@ export async function writeEplPredictionRecords(input: { slate: EplShadowSlate; 
   };
   if (input.apply) {
     for (const row of proposed) {
-      const { data: existing } = await supabase.from("prediction_records").select("locked_at,held,snapshot_json").eq("game_id", row.game_id).eq("market", row.market).eq("model_version", row.model_version).eq("slate_date", row.slate_date).maybeSingle();
-      const prior = existing as { locked_at: string | null; held: boolean | null; snapshot_json: Record<string, unknown> | null } | null;
-      if (prior?.locked_at) { lockedPreserved++; continue; }
+      const { data: existing, error: existingError } = await supabase.from("prediction_records")
+        .select("model_version,locked_at,held,snapshot_json")
+        .eq("game_id", row.game_id)
+        .eq("market", row.market)
+        .eq("slate_date", row.slate_date);
+      if (existingError) { errors.push(`${row.matchup} ${row.market}: ${existingError.message}`); continue; }
+      const priorRows = (existing ?? []) as EplPriorPredictionRecord[];
+      if (eplPriorRowsBlockWrite(priorRows)) { lockedPreserved++; continue; }
+      const prior = priorRows.find((candidate) => candidate.model_version === row.model_version) ?? null;
       if (row.held && prior?.held === false) continue;
       attachCapture(row, prior?.snapshot_json ?? null);
       const { error } = await supabase.from("prediction_records").upsert(row as unknown as Record<string, unknown>, { onConflict: "game_id,market,model_version,slate_date" });

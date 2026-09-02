@@ -1,6 +1,6 @@
 import type { Grade } from "@/lib/types/domain/Grade";
 
-export const EPL_PREVIEW_GRADE_RELEASE = "epl_grade_policy_2026_08_20_v21" as const;
+export const EPL_PREVIEW_GRADE_RELEASE = "epl_grade_policy_2026_09_02_v23_positive_forecast_ev" as const;
 
 export type EplPreviewMarket = "match_result" | "double_chance" | "total" | "btts";
 export type EplPreviewGrade = {
@@ -14,6 +14,11 @@ export type EplPreviewGrade = {
 
 const WATCH_FLOOR: Record<EplPreviewMarket, number> = { match_result: 2, double_chance: 4, total: 2.5, btts: 3 };
 const LEAN_CANDIDATE_FLOOR: Record<EplPreviewMarket, number> = { match_result: 4, double_chance: 6, total: 4.5, btts: 5 };
+
+function exactPriceExpectedValue(probability: number, american: number): number {
+  const decimal = american > 0 ? 1 + american / 100 : 1 + 100 / Math.abs(american);
+  return probability * decimal - 1;
+}
 
 /**
  * EPL-only market grading for totals/BTTS and compatibility callers. Match
@@ -36,10 +41,15 @@ export function deriveEplPreviewGrade(input: {
   if (input.market !== "match_result") {
     if (input.market === "total" || input.market === "btts") {
       const marketLabel = input.market === "total" ? "Total" : "BTTS";
-      if ((input.modelProbability ?? 0) >= 0.55) {
-        return { ...base, verdict: { key: "lean", label: "Lean" }, grade: "model_only", recommendationScore: Math.round(45 + (input.modelProbability! - 0.5) * 200), candidateTier: "lean", reasons: [`${marketLabel} clears the chronologically validated 55% winner-confidence floor. Price affects bet quality, not the forecast side.`] };
+      const modelProbability = input.modelProbability ?? 0;
+      const forecastSideEv = exactPriceExpectedValue(modelProbability, input.priceAmerican);
+      if (modelProbability >= 0.55 && forecastSideEv > 0) {
+        return { ...base, verdict: { key: "lean", label: "Lean" }, grade: "model_only", recommendationScore: Math.round(45 + (input.modelProbability! - 0.5) * 200), candidateTier: "lean", reasons: [`${marketLabel} clears the chronologically validated 55% winner-confidence floor and has positive exact forecast-side expected value.`] };
       }
-      if ((input.modelProbability ?? 0) >= 0.53) {
+      if (modelProbability >= 0.55) {
+        return { ...base, verdict: { key: "watchlist", label: "Watchlist" }, grade: "market_watch", recommendationScore: 40, candidateTier: "watchlist", reasons: [`${marketLabel} clears the 55% forecast floor, but the exact forecast-side price does not have positive expected value.`] };
+      }
+      if (modelProbability >= 0.53) {
         return { ...base, verdict: { key: "watchlist", label: "Watchlist" }, grade: "market_watch", recommendationScore: 40, candidateTier: "watchlist", reasons: [`${marketLabel} clears the validated monitoring band but not the 55% Lean floor.`] };
       }
       return { ...base, verdict: { key: "no_play", label: "No Play" }, grade: null, recommendationScore: 25, candidateTier: "research_only", reasons: [`${marketLabel} does not clear the validated 53% monitoring floor.`] };
@@ -103,6 +113,7 @@ export function deriveEplMatchResultDecision(input: {
   const forecastEdge = edges[forecastSide];
   const valuePrice = input.prices[valueSide];
   const forecastPrice = input.prices[forecastSide];
+  const forecastExpectedValue = exactPriceExpectedValue(input.model[forecastSide], forecastPrice);
   const maxAbsoluteGap = Math.max(...Object.values(edges).map(Math.abs));
   const base = { release: EPL_PREVIEW_GRADE_RELEASE } as const;
 
@@ -112,17 +123,22 @@ export function deriveEplMatchResultDecision(input: {
   if (maxAbsoluteGap > 20) {
     return { selectedSide: forecastSide, forecastSide, valueSide, grade: { ...base, verdict: { key: "no_play", label: "No Play" }, grade: null, recommendationScore: 18, candidateTier: "data_hold", reasons: ["No Play: the model and market differ by more than 20 percentage points, so the forecast is held for calibration review."] } };
   }
-  if (!input.promotedProxy && valueSide === forecastSide && forecastEdge >= 5 && forecastPrice > -300) {
-    return { selectedSide: forecastSide, forecastSide, valueSide, grade: { ...base, verdict: { key: "best_angle", label: "Best Angle" }, grade: "best_signal", recommendationScore: 82, candidateTier: "best_angle", reasons: ["The most likely result also clears the validated 5-point de-vigged value floor at a playable price."] } };
+  if (!input.promotedProxy && valueSide === forecastSide && forecastEdge >= 5 && forecastPrice > -300 && forecastExpectedValue > 0) {
+    return { selectedSide: forecastSide, forecastSide, valueSide, grade: { ...base, verdict: { key: "best_angle", label: "Best Angle" }, grade: "best_signal", recommendationScore: 82, candidateTier: "best_angle", reasons: ["The most likely result clears the validated 5-point de-vigged value floor and has positive exact forecast-side expected value."] } };
   }
-  if (!input.promotedProxy && input.model[forecastSide] >= 0.5 && marketFavorite === forecastSide && forecastPrice > -300) {
-    return { selectedSide: forecastSide, forecastSide, valueSide, grade: { ...base, verdict: { key: "lean", label: "Lean" }, grade: "model_only", recommendationScore: 62, candidateTier: "lean", reasons: ["The model assigns at least 50% to the same regulation winner favored by the market, and the price is not heavier than -300. This is a winner-confidence Lean, not a Best Angle value claim."] } };
+  if (!input.promotedProxy && input.model[forecastSide] >= 0.5 && marketFavorite === forecastSide && forecastPrice > -300 && forecastExpectedValue > 0) {
+    return { selectedSide: forecastSide, forecastSide, valueSide, grade: { ...base, verdict: { key: "lean", label: "Lean" }, grade: "model_only", recommendationScore: 62, candidateTier: "lean", reasons: ["The model assigns at least 50% to the same regulation winner favored by the market, and the exact forecast-side price has positive expected value. This is a winner-confidence Lean, not a Best Angle value claim."] } };
   }
-  if ((input.model[forecastSide] >= 0.7 || !input.promotedProxy && input.model[forecastSide] >= 0.65) && marketFavorite === forecastSide && forecastPrice <= -300) {
+  if ((input.model[forecastSide] >= 0.7 || !input.promotedProxy && input.model[forecastSide] >= 0.65) && marketFavorite === forecastSide && forecastPrice <= -300 && forecastExpectedValue > 0) {
     const reason = input.promotedProxy
-      ? "High-confidence winner; one club uses a promoted-team proxy. Parlay/coverage context—not standalone value."
-      : "High-confidence winner at a short price. Parlay/coverage context—not standalone value.";
+      ? "High-confidence winner with positive exact-price expected value; one club uses a promoted-team proxy."
+      : "High-confidence winner at a short price with positive exact-price expected value.";
     return { selectedSide: forecastSide, forecastSide, valueSide, grade: { ...base, verdict: { key: "lean", label: "Lean" }, grade: "model_only", recommendationScore: input.promotedProxy ? 54 : 58, candidateTier: "lean", reasons: [reason] } };
+  }
+  if ((!input.promotedProxy && valueSide === forecastSide && forecastEdge >= 5 && forecastPrice > -300)
+    || (!input.promotedProxy && input.model[forecastSide] >= 0.5 && marketFavorite === forecastSide && forecastPrice > -300)
+    || ((input.model[forecastSide] >= 0.7 || !input.promotedProxy && input.model[forecastSide] >= 0.65) && marketFavorite === forecastSide && forecastPrice <= -300)) {
+    return { selectedSide: forecastSide, forecastSide, valueSide, grade: { ...base, verdict: { key: "watchlist", label: "Watchlist" }, grade: "market_watch", recommendationScore: 42, candidateTier: "watchlist", reasons: ["The forecast clears an existing EPL confidence or gap threshold, but the exact forecast-side price does not have positive expected value."] } };
   }
   if (input.model[forecastSide] >= 0.55 && marketFavorite === forecastSide && forecastPrice <= -300) {
     return { selectedSide: forecastSide, forecastSide, valueSide, grade: { ...base, verdict: { key: "watchlist", label: "Watchlist" }, grade: "market_watch", recommendationScore: 42, candidateTier: "watchlist", reasons: ["The model and market agree on the likely regulation winner, but the expensive quote and sub-65% model probability keep it at Watchlist."] } };

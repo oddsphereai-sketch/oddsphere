@@ -6,10 +6,13 @@ import type { BdlEplOdds } from "@/lib/providers/real_api/BallDontLieEplProvider
 import type { EplShadowSlate, EplShadowSlateMatch } from "./buildEplShadowSlate";
 import { eplTeamLogo } from "./eplTeamAssets";
 import { deriveEplMatchResultDecision, deriveEplPreviewGrade, EPL_PREVIEW_GRADE_RELEASE, type EplPreviewGrade } from "./eplPreviewGrade";
-import { calibratedEplGoalProjection, calibratedEplTotalOverProbability, impliedEplGoalsMarketDistribution } from "./eplDerivedMarketForecast";
-import { bivariatePoissonScoreDistribution } from "@/lib/services/soccer/dixonColes";
-import { deriveSoccerMarketProbabilities } from "@/lib/services/soccer/soccerMarketProbabilities";
-import { buildEplForwardEvidenceCaptures, type EplForwardEvidenceCapture } from "./eplForwardEvidenceCapture";
+import {
+  buildEplForwardEvidenceCaptures,
+  canonicalEplBook,
+  eplCurrentBookVectors,
+  type EplForwardEvidenceCapture,
+} from "./eplForwardEvidenceCapture";
+import { deriveEplCoherentMarketOutcome } from "./eplCoherentMarketOutcome";
 
 const BOOK_PRIORITY = ["pinnacle", "circa", "draftkings", "fanduel", "betmgm", "caesars"];
 const MAX_FIXTURE_RECOVERY_LOADS = 4;
@@ -534,38 +537,6 @@ function bestMatchResultSide(match: EplShadowSlateMatch): "home" | "draw" | "awa
   return sides.sort((a, b) => p[b] - p[a])[0];
 }
 
-function coherentRepresentativeScore(input: { lambdaHome: number; lambdaAway: number; result: "home" | "draw" | "away"; total: "over" | "under"; btts: "yes" | "no" }) {
-  const joint = bivariatePoissonScoreDistribution(input.lambdaHome, input.lambdaAway, -0.1);
-  let best: { home: number; away: number; probability: number } | null = null;
-  for (let home = 0; home < joint.length; home++) for (let away = 0; away < joint[home]!.length; away++) {
-    const resultMatches = input.result === "home" ? home > away : input.result === "away" ? away > home : home === away;
-    const totalMatches = input.total === "over" ? home + away > 2.5 : home + away < 2.5;
-    const bttsMatches = input.btts === "yes" ? home > 0 && away > 0 : home === 0 || away === 0;
-    const probability = joint[home]![away]!;
-    if (resultMatches && totalMatches && bttsMatches && (!best || probability > best.probability)) best = { home, away, probability };
-  }
-  return best;
-}
-
-function projectedScoreSummary(lambdaHome: number, lambdaAway: number) {
-  const joint = bivariatePoissonScoreDistribution(lambdaHome, lambdaAway, -0.1);
-  let likely = { home: 0, away: 0, probability: 0 };
-  const totals: number[] = [];
-  for (let home = 0; home < joint.length; home++) for (let away = 0; away < joint[home]!.length; away++) {
-    const probability = joint[home]![away]!;
-    totals[home + away] = (totals[home + away] ?? 0) + probability;
-    if (probability > likely.probability) likely = { home, away, probability };
-  }
-  let cumulative = 0;
-  let medianTotal = 0;
-  for (let total = 0; total < totals.length; total++) {
-    cumulative += totals[total] ?? 0;
-    if (cumulative >= 0.5) { medianTotal = total; break; }
-  }
-  const mostLikelyTotal = totals.reduce((best, probability, total) => probability > (totals[best] ?? 0) ? total : best, 0);
-  return { likely, medianTotal, mostLikelyTotal };
-}
-
 function gameDto(match: EplShadowSlateMatch, sharp: EplSharpFixtureMarket, capturedAt: string): DailyEdgeGameDto {
   const clubP = match.prediction.probabilities;
   const mr = coherentRead(sharp.odds, "match_result", ["home", "draw", "away"])
@@ -573,25 +544,28 @@ function gameDto(match: EplShadowSlateMatch, sharp: EplSharpFixtureMarket, captu
   const dc = coherentRead(sharp.odds, "double_chance", ["home_or_draw", "away_or_draw", "home_or_away"], null, 2);
   const total = totalRead(sharp.odds);
   const btts = coherentRead(sharp.odds, "btts", ["yes", "no"]);
-  const calibratedOver = calibratedEplTotalOverProbability(match.prediction.rawDerivedProbabilities.over25, total?.probabilities.over ?? null);
-  const goalsMarketDistribution = impliedEplGoalsMarketDistribution(mr && total ? {
-    home: mr.probabilities.home!, draw: mr.probabilities.draw!, away: mr.probabilities.away!, over: total.probabilities.over!,
-  } : null);
-  const publishedGoals = calibratedEplGoalProjection(match.prediction.lambdaHome, match.prediction.lambdaAway, goalsMarketDistribution);
-  const publishedTotal = publishedGoals.home + publishedGoals.away;
-  const matchResultScoreSummary = projectedScoreSummary(match.prediction.lambdaHome, match.prediction.lambdaAway);
-  const publishedScoreSummary = projectedScoreSummary(publishedGoals.home, publishedGoals.away);
-  const goalOutlookProbabilities = deriveSoccerMarketProbabilities({
-    joint: bivariatePoissonScoreDistribution(publishedGoals.home, publishedGoals.away, -0.1),
-    totalLine: 2.5,
+  const currentTotalVectors = eplCurrentBookVectors(sharp, "total", capturedAt);
+  const evaluatedTotalCanonicalBook = canonicalEplBook(total?.sportsbook ?? null);
+  const coherentOutcome = deriveEplCoherentMarketOutcome({
+    independentLambdaHome: match.prediction.lambdaHome,
+    independentLambdaAway: match.prediction.lambdaAway,
+    totalVectors: currentTotalVectors,
+    evaluatedMatchResultCanonicalBook: canonicalEplBook(mr?.sportsbook ?? null),
+    evaluatedTotalCanonicalBook,
+    evaluatedBttsCanonicalBook: canonicalEplBook(btts?.sportsbook ?? null),
+    providerEventId: sharp.eventId,
+    decisionAt: capturedAt,
+    kickoff: match.kickoff,
   });
-  const impliedBtts = goalsMarketDistribution?.bttsYes ?? null;
+  const publishedGoals = coherentOutcome.expectedGoals;
+  const publishedTotal = publishedGoals.home + publishedGoals.away;
+  const goalOutlookProbabilities = coherentOutcome.markets;
   const p = {
     ...clubP,
-    over25: calibratedOver,
-    under25: 1 - calibratedOver,
-    bttsYes: impliedBtts ?? clubP.bttsYes,
-    bttsNo: 1 - (impliedBtts ?? clubP.bttsYes),
+    over25: coherentOutcome.markets.total.over,
+    under25: coherentOutcome.markets.total.under,
+    bttsYes: coherentOutcome.markets.btts.yes,
+    bttsNo: coherentOutcome.markets.btts.no,
   };
   const forecastSide = bestMatchResultSide(match);
   const mrDecision = deriveEplMatchResultDecision({
@@ -607,13 +581,7 @@ function gameDto(match: EplShadowSlateMatch, sharp: EplSharpFixtureMarket, captu
   const totalSide = totalForecastSide;
   const bttsForecastSide = p.bttsYes >= p.bttsNo ? "yes" : "no";
   const bttsSide = bttsForecastSide;
-  const representativeScore = coherentRepresentativeScore({
-    lambdaHome: publishedGoals.home,
-    lambdaAway: publishedGoals.away,
-    result: forecastSide,
-    total: totalSide,
-    btts: bttsSide,
-  });
+  const representativeScore = coherentOutcome.representativeScore;
   const split = bestSplits(sharp.splits);
   const matchResultSplits = publicSplits({ market: "moneyline", split, home: match.homeTeam.abbreviation, away: match.awayTeam.abbreviation, pick: resultSide });
   const totalSplits = publicSplits({ market: "total", split, home: match.homeTeam.abbreviation, away: match.awayTeam.abbreviation, pick: totalSide });
@@ -758,7 +726,7 @@ function gameDto(match: EplShadowSlateMatch, sharp: EplSharpFixtureMarket, captu
     observedAt: total?.observedAt ?? null,
     line: total?.line ?? 2.5,
     modelTotal: publishedTotal,
-    guide: `The validated Total forecast blends the club score distribution with the de-vigged two-sided market. It favors ${totalSide === "over" ? "Over" : "Under"}; projected mean ${publishedTotal.toFixed(2)}.`,
+    guide: `The coherent Total forecast uses eligible target-excluded books or the exact club PMF. It favors ${totalSide === "over" ? "Over" : "Under"}; projected mean ${publishedTotal.toFixed(2)}.`,
     risk: totalGrade.reasons.join(" "),
     publicSplits: totalSplits,
     gradeDecision: totalGrade,
@@ -784,7 +752,7 @@ function gameDto(match: EplShadowSlateMatch, sharp: EplSharpFixtureMarket, captu
         displayed_side: totalSide,
         mean_direction_side: meanDirection,
         mean_vs_probability_disagree: meanDirection !== totalSide,
-        note: "The probability is a validated 25% club / 75% de-vigged Total-market forecast. The displayed scoring mean is the validation-selected 30% club / 70% goals-market projection.",
+        note: "The probability, scoring mean, BTTS, and score outlook come from one target-excluded or exact club fallback PMF.",
         provider_divergence: false,
       },
       soccerPriceBoard: total ? {
@@ -815,7 +783,7 @@ function gameDto(match: EplShadowSlateMatch, sharp: EplSharpFixtureMarket, captu
     price: btts?.prices[bttsSide] ?? null,
     sportsbook: btts?.sportsbook ?? null,
     observedAt: btts?.observedAt ?? null,
-    guide: `A coherent 1X2 + Total market is fit to a regulation score distribution, which favors BTTS ${bttsSide === "yes" ? "Yes" : "No"}. The offered BTTS price is evaluated separately.`,
+    guide: `The coherent score PMF favors BTTS ${bttsSide === "yes" ? "Yes" : "No"}. The offered BTTS price is evaluated separately and never enters the forecast.`,
     risk: bttsGrade.reasons.join(" "),
     publicSplits: bttsSplits,
     gradeDecision: bttsGrade,
@@ -838,7 +806,7 @@ function gameDto(match: EplShadowSlateMatch, sharp: EplSharpFixtureMarket, captu
         edge_pp: bttsEdge,
         displayed_side: bttsSide,
         scoring_context: `${match.awayTeam.abbreviation} ${publishedGoals.away.toFixed(2)} · ${match.homeTeam.abbreviation} ${publishedGoals.home.toFixed(2)} expected goals`,
-        note: "Derived from a historically validated 1X2 + Total-implied regulation score distribution; the BTTS quote is not used to choose the side.",
+        note: "Derived from the same target-excluded or exact club fallback regulation PMF; the BTTS quote is economics only.",
       },
       soccerPriceBoard: btts ? {
         sportsbook: btts.sportsbook,
@@ -895,11 +863,11 @@ function gameDto(match: EplShadowSlateMatch, sharp: EplSharpFixtureMarket, captu
     projected: { away: publishedGoals.away, home: publishedGoals.home },
     soccerProjection: {
       matchResultOutlook: {
-        expectedGoals: { away: match.prediction.lambdaAway, home: match.prediction.lambdaHome },
-        likelyScore: { away: matchResultScoreSummary.likely.away, home: matchResultScoreSummary.likely.home },
-        likelyScoreProbability: matchResultScoreSummary.likely.probability,
-        medianTotal: matchResultScoreSummary.medianTotal,
-        mostLikelyTotal: matchResultScoreSummary.mostLikelyTotal,
+        expectedGoals: { away: publishedGoals.away, home: publishedGoals.home },
+        likelyScore: { away: coherentOutcome.likelyScore.away, home: coherentOutcome.likelyScore.home },
+        likelyScoreProbability: coherentOutcome.likelyScore.probability,
+        medianTotal: coherentOutcome.medianTotal,
+        mostLikelyTotal: coherentOutcome.mostLikelyTotal,
       },
       expectedGoals: { away: publishedGoals.away, home: publishedGoals.home },
       goalOutlookProbabilities: {
@@ -911,14 +879,14 @@ function gameDto(match: EplShadowSlateMatch, sharp: EplSharpFixtureMarket, captu
         bttsYes: goalOutlookProbabilities.btts.yes,
         bttsNo: goalOutlookProbabilities.btts.no,
       },
-      likelyScore: { away: publishedScoreSummary.likely.away, home: publishedScoreSummary.likely.home },
-      likelyScoreProbability: publishedScoreSummary.likely.probability,
+      likelyScore: { away: coherentOutcome.likelyScore.away, home: coherentOutcome.likelyScore.home },
+      likelyScoreProbability: coherentOutcome.likelyScore.probability,
       representativeScore: representativeScore
         ? { away: representativeScore.away, home: representativeScore.home }
         : null,
       representativeScoreProbability: representativeScore?.probability ?? null,
-      medianTotal: publishedScoreSummary.medianTotal,
-      mostLikelyTotal: publishedScoreSummary.mostLikelyTotal,
+      medianTotal: coherentOutcome.medianTotal,
+      mostLikelyTotal: coherentOutcome.mostLikelyTotal,
     },
     sharpSignals: [],
     status: { lineupConfirmed: match.evidence.home.startersPosted >= 11 && match.evidence.away.startersPosted >= 11 ? true : null, linesLocked: Boolean(mr || dc || total || btts), sharpSignalPending: sharp.splitsState !== "present", marketDataLimited: !mr && !dc && !total && !btts },
