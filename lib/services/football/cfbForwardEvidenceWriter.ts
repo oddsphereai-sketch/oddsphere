@@ -4,7 +4,7 @@ import { computeSlateDate } from "@/lib/dates/slateDate";
 import { isPublicallyTracked } from "@/lib/config/officialTrackingStart";
 import { assertOfficialTrackingMarket } from "@/lib/config/officialTrackingMarkets";
 import { PlaybookClient } from "@/lib/providers/playbook/playbookClient";
-import { fetchBalldontlieNcaafResultsForDates, fetchBalldontlieNcaafSlate, type NcaafGame } from "./balldontlieNcaafSlate";
+import { fetchBalldontlieNcaafResultsForDates, fetchBalldontlieNcaafSlate, type NcaafBookOdds, type NcaafGame } from "./balldontlieNcaafSlate";
 import { fetchBalldontlieNcaafQuarterbacks } from "./balldontlieNcaafQuarterbacks";
 import { normalizeCfbPlaybookLine, normalizeCfbPlaybookSplits, resolveCfbPlaybookEvidence } from "./cfbPlaybookEvidence";
 import {
@@ -22,7 +22,7 @@ import {
 } from "./cfbForwardEvidence";
 import { appendCfbForwardEvidence, readCfbForwardEvidence } from "./cfbForwardEvidenceStore";
 import { buildCfbV1DecisionBundle, CFB_T60_MAX_CAPTURE_LAG_MINUTES, CFB_V1_DECISION_RELEASE, getCfbV1ForecastForGame } from "./cfbV1Decision";
-import { cfbV1WeeklyGameProfileCoverage } from "./cfbV1WeeklyForecast";
+import { CFB_V1_WEEKLY_RUNTIME_RELEASE, cfbV1WeeklyGameProfileCoverage } from "./cfbV1WeeklyForecast";
 import { resolveCfbCanonicalMarketAnchor } from "./cfbMarketInformedOutcome";
 import {
   applyCfbMarketSharpAwareGrades,
@@ -45,6 +45,7 @@ import { fetchCfbSharpApiSplits } from "./cfbSharpApiSplits";
 import { collectCfbKickoffWeather, type CfbKickoffWeatherSnapshot } from "./cfbKickoffWeather";
 import { buildMarketScopedFootballTrackingPlan } from "./footballMarketScopedTracking";
 import { assertFootballCrossMarketCoherence } from "./footballCrossMarketCoherence";
+import { buildCfbForwardContextCapture } from "./cfbForwardEvidenceCapture";
 
 export const CFB_FORWARD_WRITER_RELEASE =
   "cfb_forward_evidence_writer_2026_09_02_r40_total_publication_coherence" as const;
@@ -148,6 +149,12 @@ export async function runCfbForwardEvidenceWriter(args: {
   });
   const weatherRequests = [...weatherByGame.values()].reduce((sum, value) => sum + value.requests, 0);
   const priorOpening = firstOpenings(existing);
+  const captureHistoryBooksByGame = new Map<string, NcaafBookOdds[]>();
+  for (const row of existing) {
+    const books = captureHistoryBooksByGame.get(row.providerGameId) ?? [];
+    books.push(...row.payload.market.currentBooks);
+    captureHistoryBooksByGame.set(row.providerGameId, books);
+  }
   const payloads = plans.map((plan): CfbForwardEvidencePayload => {
     const sharpBooks = sharpFallback.booksByGame[plan.game.providerGameId] ?? [];
     const sharpDisplayBooks = sharpFallback.displayBooksByGame[plan.game.providerGameId] ?? [];
@@ -288,7 +295,7 @@ export async function runCfbForwardEvidenceWriter(args: {
       allowPmfVerifiedProbabilityEndpoints: true,
     });
     const targetExcludedConsensusReady = decisions.evaluatedBets.length === 3;
-    return {
+    const payload: CfbForwardEvidencePayload = {
       schemaRelease: CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE,
       collectorRelease: CFB_FORWARD_EVIDENCE_COLLECTOR_RELEASE,
       memberRelease: CFB_FORWARD_MEMBER_RELEASE,
@@ -366,6 +373,20 @@ export async function runCfbForwardEvidenceWriter(args: {
         weather: weatherRequests,
         totalMaximum: slate.providerRequests + priorResults.providerRequests + quarterbacks.providerRequests + sharpFallback.requests + weatherRequests + 4,
       },
+    };
+    const contextualEvidenceCapture = buildCfbForwardContextCapture({
+      payload,
+      independentForecast: weeklyForecast.forecast,
+      independentRelease: CFB_V1_WEEKLY_RUNTIME_RELEASE,
+      authoritativeForecast: forecast,
+      openingBooks: [
+        ...(slate.openingOddsComparableBooksByGame[plan.game.providerGameId] ?? []),
+        ...(captureHistoryBooksByGame.get(plan.game.providerGameId) ?? []),
+      ],
+    });
+    return {
+      ...payload,
+      ...(contextualEvidenceCapture ? { contextualEvidenceCapture } : {}),
     };
   });
   const write = await appendCfbForwardEvidence({ client: args.client, runId: args.runId, payloads, apply: args.apply });
