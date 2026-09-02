@@ -31,11 +31,30 @@ async function main() {
     ...await readPreviousNflForwardEvidence({ client, season: 2026, week: 1 }),
     ...await readNflForwardEvidence({ client, season: 2026, week: 1 }),
   ];
-  const latest = latestRows(stored);
-  if (latest.length !== 16) throw new Error(`Expected 16 Week 1 games; received ${latest.length}.`);
+  const capturedAt = argumentValue("--captured-at");
+  if (capturedAt && !Number.isFinite(Date.parse(capturedAt))) {
+    throw new Error(`Invalid --captured-at value: ${capturedAt}.`);
+  }
+  const selected = capturedAt
+    ? stored.filter((row) => row.capturedAt === capturedAt)
+      .sort((first, second) => first.payload.game.scheduledStart.localeCompare(second.payload.game.scheduledStart))
+    : latestRows(stored);
+  if (selected.length !== 16) {
+    throw new Error(`Expected 16 Week 1 games${capturedAt ? ` at ${capturedAt}` : ""}; received ${selected.length}.`);
+  }
 
   const candidateFixtureRows: NflForwardStoredEvidence[] = [];
-  const rows = latest.flatMap((row) => {
+  const projectionChanges: Array<{
+    game: string;
+    previousAway: number;
+    previousHome: number;
+    candidateAway: number;
+    candidateHome: number;
+    awayChange: number;
+    homeChange: number;
+    movementStatus: string;
+  }> = [];
+  const rows = selected.flatMap((row) => {
     const payload = row.payload as NflForwardEvidencePayload;
     const shadow = payload.decisions.shadowEvaluatedBets?.[0] ?? buildNflR6ShadowMoneylineDecision({
       game: payload.game,
@@ -64,6 +83,31 @@ async function main() {
           baseForecast: baseOutcome,
           footballHomeMargin: shadow.footballProjection.projectedHomeMargin,
           current: payload.market.current,
+          operationalOpening: payload.market.operationalOpening,
+          playbookLine: payload.market.playbookLine,
+          playbookSplits: payload.market.playbookSplits,
+          sharpSplits: payload.market.sharpApiSplits,
+          evaluatedAt: payload.capturedAt,
+        })
+      : baseOutcome;
+    const marketOnlyOutcome = shadow.footballProjection
+      ? buildNflMarketEvidenceOutcomeForecast({
+          baseForecast: baseOutcome,
+          footballHomeMargin: shadow.footballProjection.projectedHomeMargin,
+          current: payload.market.current,
+          operationalOpening: null,
+          playbookLine: null,
+          playbookSplits: null,
+          sharpSplits: null,
+          evaluatedAt: payload.capturedAt,
+        })
+      : baseOutcome;
+    const splitOutcome = shadow.footballProjection
+      ? buildNflMarketEvidenceOutcomeForecast({
+          baseForecast: baseOutcome,
+          footballHomeMargin: shadow.footballProjection.projectedHomeMargin,
+          current: payload.market.current,
+          operationalOpening: null,
           playbookLine: payload.market.playbookLine,
           playbookSplits: payload.market.playbookSplits,
           sharpSplits: payload.market.sharpApiSplits,
@@ -79,6 +123,29 @@ async function main() {
       comparableCurrentBooks: payload.market.comparableCurrentBooks,
       shadowMoneyline: shadow,
       outcomeForecast: outcome,
+    });
+    const stagedBundle = (forecast: typeof outcome) => buildNflV1ActionableGradeBundle({
+      providerGameId: payload.game.providerGameId,
+      awayTeam: payload.game.away.abbreviation,
+      homeTeam: payload.game.home.abbreviation,
+      gameStartsAt: payload.game.scheduledStart,
+      current: payload.market.current,
+      comparableCurrentBooks: payload.market.comparableCurrentBooks,
+      shadowMoneyline: shadow,
+      outcomeForecast: forecast,
+    });
+    const structuralByMarket = new Map(stagedBundle(baseOutcome).evaluatedBets.map((decision) => [decision.market, decision]));
+    const marketOnlyByMarket = new Map(stagedBundle(marketOnlyOutcome).evaluatedBets.map((decision) => [decision.market, decision]));
+    const splitByMarket = new Map(stagedBundle(splitOutcome).evaluatedBets.map((decision) => [decision.market, decision]));
+    projectionChanges.push({
+      game: `${payload.game.away.abbreviation}@${payload.game.home.abbreviation}`,
+      previousAway: payload.outcomeForecast.expectedAwayScore,
+      previousHome: payload.outcomeForecast.expectedHomeScore,
+      candidateAway: outcome.expectedAwayScore,
+      candidateHome: outcome.expectedHomeScore,
+      awayChange: outcome.expectedAwayScore - payload.outcomeForecast.expectedAwayScore,
+      homeChange: outcome.expectedHomeScore - payload.outcomeForecast.expectedHomeScore,
+      movementStatus: outcome.marketEvidence?.movement.status ?? "unavailable",
     });
     if (!candidate.publicationEnabled || candidate.trackingEnabled ||
         candidate.evaluatedBets.length !== 3) {
@@ -116,6 +183,11 @@ async function main() {
     const baseline = new Map(payload.decisions.evaluatedBets.map((decision) => [decision.market, decision]));
     return candidate.evaluatedBets.map((decision) => {
       const previous = baseline.get(decision.market);
+      const structural = structuralByMarket.get(decision.market);
+      const marketOnly = marketOnlyByMarket.get(decision.market);
+      const split = splitByMarket.get(decision.market);
+      const marginMarket = decision.market !== "total";
+      const evidence = outcome.marketEvidence;
       return {
       game: `${payload.game.away.abbreviation}@${payload.game.home.abbreviation}`,
       providerGameId: row.providerGameId,
@@ -135,6 +207,43 @@ async function main() {
       previousMarketFairProbability: previous?.marketFairProbability ?? null,
       previousExpectedValue: previous?.expectedValue ?? null,
       previousQuote: previous?.evaluatedQuote ?? null,
+      predictionSide: decision.market === "moneyline"
+        ? outcome.homeWinProbability >= outcome.awayWinProbability
+          ? payload.game.home.abbreviation
+          : payload.game.away.abbreviation
+        : null,
+      previousPredictionSide: decision.market === "moneyline"
+        ? payload.outcomeForecast.homeWinProbability >= payload.outcomeForecast.awayWinProbability
+          ? payload.game.home.abbreviation
+          : payload.game.away.abbreviation
+        : null,
+      structuralSide: structural?.side ?? null,
+      structuralProbability: structural?.modelProbability ?? null,
+      marketOnlySide: marketOnly?.side ?? null,
+      sharpPublicSide: split?.side ?? null,
+      sharpState: evidence
+        ? (marginMarket ? evidence.sharp.homeMarginGapPp : evidence.sharp.overTotalGapPp) === null ? "missing_or_stale" : "available"
+        : "missing_or_stale",
+      publicState: evidence
+        ? (marginMarket ? evidence.publicConsensus.homeMarginGapPp : evidence.publicConsensus.overTotalGapPp) === null ? "missing_or_stale" : "available"
+        : "missing_or_stale",
+      movementState: evidence?.movement.status ?? "unavailable",
+      sharpShiftPoints: evidence
+        ? marginMarket ? evidence.sharp.homeMarginShiftPoints : evidence.sharp.totalShiftPoints
+        : 0,
+      publicShiftPoints: evidence
+        ? marginMarket ? evidence.publicConsensus.homeMarginShiftPoints : evidence.publicConsensus.totalShiftPoints
+        : 0,
+      movementShiftPoints: evidence
+        ? marginMarket ? evidence.movement.homeMarginShiftPoints : evidence.movement.totalShiftPoints
+        : 0,
+      appliedEvidenceShiftPoints: evidence
+        ? marginMarket ? evidence.appliedHomeMarginShiftPoints : evidence.appliedTotalShiftPoints
+        : 0,
+      weakEvidenceReversalRejected: evidence
+        ? marginMarket ? evidence.weakHomeMarginReversalRejected : evidence.weakTotalReversalRejected
+        : false,
+      calibratedCoreState: evidence?.calibratedCore.source ?? "unavailable",
       gradeChanged: decision.grade !== previous?.grade,
       sideChanged: decision.side !== previous?.side,
       probabilityChanged: Math.abs(decision.modelProbability - (previous?.modelProbability ?? decision.modelProbability)) > 1e-12,
@@ -161,6 +270,19 @@ async function main() {
   ]));
   const promotions = rows.filter((row) => rank(row.grade) > rank(row.previousGrade));
   const demotions = rows.filter((row) => rank(row.grade) < rank(row.previousGrade));
+  const sideChangesByMarket = Object.fromEntries(["moneyline", "spread", "total"].map((market) => [
+    market,
+    rows.filter((row) => row.market === market && row.sideChanged).length,
+  ]));
+  const sideTransitionCounts = {
+    previousToStructural: rows.filter((row) => row.previousSide !== row.structuralSide).length,
+    structuralToMarketOnly: rows.filter((row) => row.structuralSide !== row.marketOnlySide).length,
+    previousToMarketOnly: rows.filter((row) => row.previousSide !== row.marketOnlySide).length,
+    marketOnlyToSharpPublic: rows.filter((row) => row.marketOnlySide !== row.sharpPublicSide).length,
+    sharpPublicToMovement: rows.filter((row) => row.sharpPublicSide !== row.side).length,
+  };
+  const sideChangesByEvidenceState = count(rows.filter((row) => row.sideChanged).map((row) =>
+    `${row.market}:${row.sharpState}:${row.publicState}:${row.movementState}`));
   const fixture = buildNflWeekOneHeldMemberFixture(candidateFixtureRows);
   const primaryPredictionChecks = fixture.snapshot.games.map((game) => {
     const predictedWinner = game.footballProjection!.homeWinProbability >= game.footballProjection!.awayWinProbability
@@ -184,8 +306,8 @@ async function main() {
     readOnly: true,
     productionRelease: true,
     sourceRowsRead: stored.length,
-    latestGames: latest.length,
-    sourceCapturedAt: latest[0]!.capturedAt,
+    latestGames: selected.length,
+    sourceCapturedAt: selected[0]!.capturedAt,
     decisionRelease: NFL_V1_ACTIONABLE_GRADE_DECISION_RELEASE,
     policyRelease: NFL_V1_ACTIONABLE_GRADE_POLICY_RELEASE,
     previousGrades,
@@ -194,25 +316,80 @@ async function main() {
     byMarket,
     promotions: promotions.length,
     demotions: demotions.length,
+    promotionsByMarket: Object.fromEntries(["moneyline", "spread", "total"].map((market) => [
+      market,
+      promotions.filter((row) => row.market === market).length,
+    ])),
+    demotionsByMarket: Object.fromEntries(["moneyline", "spread", "total"].map((market) => [
+      market,
+      demotions.filter((row) => row.market === market).length,
+    ])),
     netActionableChange: rows.filter((row) => rank(row.grade) >= rank("Lean")).length -
       rows.filter((row) => rank(row.previousGrade) >= rank("Lean")).length,
     sideChanges: rows.filter((row) => row.sideChanged).length,
+    sideChangesByMarket,
+    moneylineForecastSideChanges: rows.filter((row) => row.market === "moneyline" &&
+      row.predictionSide !== row.previousPredictionSide).length,
+    actionableMoneylineValuesOpposingPrediction: rows.filter((row) => row.market === "moneyline" &&
+      row.side !== row.predictionSide && rank(row.grade) >= rank("Lean")).length,
+    nonactionableMoneylineValuesOpposingPrediction: rows.filter((row) => row.market === "moneyline" &&
+      row.side !== row.predictionSide && rank(row.grade) < rank("Lean")).length,
+    actionableMoneylineValueRows: rows.filter((row) => row.market === "moneyline" &&
+      row.side !== row.predictionSide && rank(row.grade) >= rank("Lean")).map((row) => ({
+      game: row.game,
+      predictedWinner: row.predictionSide,
+      valueSide: row.side,
+      probability: row.probability,
+      marketFairProbability: row.marketFairProbability,
+      edgePercentagePoints: row.edgePercentagePoints,
+      expectedValue: row.expectedValue,
+      price: row.price,
+      grade: row.grade,
+      sharpState: row.sharpState,
+      publicState: row.publicState,
+      movementState: row.movementState,
+      appliedEvidenceShiftPoints: row.appliedEvidenceShiftPoints,
+    })),
+    sideTransitionCounts,
+    sideChangesByEvidenceState,
+    evidenceStateCounts: count(rows.map((row) =>
+      `${row.market}:${row.sharpState}:${row.publicState}:${row.movementState}`)),
+    nonzeroEvidenceShiftMarkets: {
+      sharp: rows.filter((row) => Math.abs(row.sharpShiftPoints) > 1e-12).length,
+      public: rows.filter((row) => Math.abs(row.publicShiftPoints) > 1e-12).length,
+      movement: rows.filter((row) => Math.abs(row.movementShiftPoints) > 1e-12).length,
+      applied: rows.filter((row) => Math.abs(row.appliedEvidenceShiftPoints) > 1e-12).length,
+    },
+    calibratedCoreMarkets: rows.filter((row) => row.calibratedCoreState !== "unavailable").length,
+    weakEvidenceReversalsRejected: rows.filter((row) => row.weakEvidenceReversalRejected).length,
+    weakEvidenceReversalsRejectedByMarket: Object.fromEntries(["moneyline", "spread", "total"].map((market) => [
+      market,
+      rows.filter((row) => row.market === market && row.weakEvidenceReversalRejected).length,
+    ])),
     probabilityChanges: rows.filter((row) => row.probabilityChanged).length,
     fairProbabilityChanges: rows.filter((row) => row.marketFairProbabilityChanged).length,
     expectedValueChanges: rows.filter((row) => row.expectedValueChanged).length,
     quoteChanges: rows.filter((row) => row.quoteChanged).length,
+    projectionChangedGames: projectionChanges.filter((row) =>
+      Math.abs(row.awayChange) > 1e-12 || Math.abs(row.homeChange) > 1e-12).length,
+    maximumAbsoluteTeamScoreChange: Math.max(...projectionChanges.flatMap((row) =>
+      [Math.abs(row.awayChange), Math.abs(row.homeChange)])),
+    movementAvailableGames: projectionChanges.filter((row) => row.movementStatus === "available").length,
     primaryPredictionCoherenceGames: primaryPredictionChecks.filter((row) =>
       row.scoreWinner === row.predictedWinner && row.predictedWinner === row.moneylinePrediction).length,
     predictionMarkets: fixture.snapshot.games.reduce((sum, game) => sum +
       [game.markets.moneyline, game.markets.first_inning, game.markets.total]
         .filter((market) => market.marketPrediction?.status === "available").length, 0),
     predictionBetSelectionDifferences,
-    changedRows: [...promotions, ...demotions],
-    tupleChangedRows: rows.filter((row) => row.sideChanged || row.probabilityChanged ||
-      row.marketFairProbabilityChanged || row.expectedValueChanged || row.quoteChanged),
-    sideChangedRows: rows.filter((row) => row.sideChanged),
-    probabilityChangedRows: rows.filter((row) => row.probabilityChanged),
-    ...(process.argv.includes("--summary") ? {} : { rows }),
+    ...(process.argv.includes("--summary") ? {} : {
+      projectionChanges,
+      changedRows: [...promotions, ...demotions],
+      tupleChangedRows: rows.filter((row) => row.sideChanged || row.probabilityChanged ||
+        row.marketFairProbabilityChanged || row.expectedValueChanged || row.quoteChanged),
+      sideChangedRows: rows.filter((row) => row.sideChanged),
+      probabilityChangedRows: rows.filter((row) => row.probabilityChanged),
+      rows,
+    }),
   }, null, 2));
 }
 
@@ -238,6 +415,11 @@ function latestRows(rows: NflForwardStoredEvidence[]): NflForwardStoredEvidence[
   }
   return [...latest.values()].sort((first, second) =>
     first.payload.game.scheduledStart.localeCompare(second.payload.game.scheduledStart));
+}
+
+function argumentValue(name: string): string | null {
+  const prefix = `${name}=`;
+  return process.argv.find((argument) => argument.startsWith(prefix))?.slice(prefix.length) ?? null;
 }
 
 main().catch((error) => {

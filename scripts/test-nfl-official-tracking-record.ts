@@ -13,14 +13,11 @@ import { buildMarketScopedFootballTrackingPlan, FOOTBALL_MARKET_SCOPED_T60_TRACK
 import {
   NFL_V1_ACTIONABLE_GRADE_CALIBRATION_RELEASE,
   NFL_V1_ACTIONABLE_GRADE_DECISION_RELEASE,
+  NFL_V1_ACTIONABLE_GRADE_MODEL_RELEASE,
   NFL_V1_EVENT_CONTAINED_SPREAD_MODEL_RELEASE,
   NFL_V1_ACTIONABLE_GRADE_MEMBER_RELEASE,
   NFL_V1_MARKET_EVIDENCE_TOTAL_MODEL_RELEASE,
 } from "../lib/services/football/nflV1ActionableGradeCandidate";
-import {
-  NFL_R6_MONEYLINE_CALIBRATION_RELEASE,
-  NFL_R6_MONEYLINE_MODEL_RELEASE,
-} from "../lib/services/football/nflR6MoneylineShadow";
 
 const capturedAt = "2026-09-09T23:30:00.000Z";
 const gameStartsAt = "2026-09-10T00:20:00.000Z";
@@ -36,8 +33,8 @@ const decisions = [
   buildNflRegularEvaluatedBetDecision({
     ...common,
     market: "moneyline",
-    modelRelease: NFL_R6_MONEYLINE_MODEL_RELEASE,
-    calibrationRelease: NFL_R6_MONEYLINE_CALIBRATION_RELEASE,
+    modelRelease: NFL_V1_ACTIONABLE_GRADE_MODEL_RELEASE,
+    calibrationRelease: NFL_V1_ACTIONABLE_GRADE_CALIBRATION_RELEASE,
     side: "SEA",
     modelProbability: 0.57,
     marketFairProbability: 0.52,

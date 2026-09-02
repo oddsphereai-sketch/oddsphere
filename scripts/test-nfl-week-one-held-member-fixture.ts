@@ -3,10 +3,10 @@ import { readFileSync } from "node:fs";
 import type { NflPreviewBookOdds } from "../lib/services/football/balldontlieNflPreviewSlate";
 import {
   NFL_FORWARD_EVIDENCE_COLLECTOR_RELEASE,
-  NFL_FORWARD_EVIDENCE_PREVIOUS_SCHEMA_RELEASE,
+  NFL_FORWARD_EVIDENCE_PRIOR_SCHEMA_RELEASE,
   NFL_FORWARD_EVIDENCE_SCHEMA_RELEASE,
   type NflForwardEvidencePayload,
-  type NflForwardPreviousEvidencePayload,
+  type NflForwardPriorEvidencePayload,
   type NflForwardStoredEvidence,
 } from "../lib/services/football/nflForwardEvidence";
 import {
@@ -61,10 +61,10 @@ assert.equal(markets.length, 48);
 assert.equal(markets.every((market) => !market.held), true);
 assert.equal(markets.every((market) => market.pick !== null), true);
 assert.equal(markets.every((market) => market.modelProb !== null), true);
-assert.equal(markets.filter((market) => market.verdict.label === "Best Angle").length, 7);
-assert.equal(markets.filter((market) => market.verdict.label === "Lean").length, 17);
-assert.equal(markets.filter((market) => market.verdict.label === "Watchlist").length, 10);
-assert.equal(markets.filter((market) => market.verdict.label === "No Play").length, 14);
+assert.equal(markets.filter((market) => market.verdict.label === "Best Angle").length, 30);
+assert.equal(markets.filter((market) => market.verdict.label === "Lean").length, 8);
+assert.equal(markets.filter((market) => market.verdict.label === "Watchlist").length, 1);
+assert.equal(markets.filter((market) => market.verdict.label === "No Play").length, 9);
 assert.equal(markets.every((market) => (market.oddsTrail?.length ?? 0) >= 1), true);
 assert.equal(markets.every((market) => (market.opposingOddsTrail?.stops.length ?? 0) >= 1), true);
 assert.equal(markets.every((market) => market.publicSplits.length === 2), true);
@@ -232,9 +232,9 @@ previousBook.moneyline = {
   homePrice: previousBook.moneyline!.homePrice - 15,
   awayPrice: previousBook.moneyline!.awayPrice + 15,
 };
-const previousPayload: NflForwardPreviousEvidencePayload = {
+const previousPayload: NflForwardPriorEvidencePayload = {
   ...previousPayloadBase,
-  schemaRelease: NFL_FORWARD_EVIDENCE_PREVIOUS_SCHEMA_RELEASE,
+  schemaRelease: NFL_FORWARD_EVIDENCE_PRIOR_SCHEMA_RELEASE,
   collectorRelease: "nfl_forward_evidence_collector_2026_08_23_r3_member",
   capturedAt: crossReleaseCapturedAt,
   runId: "cross-release-history",

@@ -58,7 +58,7 @@ import {
 } from "./nflForwardMemberSnapshotStore";
 
 export const NFL_FORWARD_WRITER_RELEASE =
-  "nfl_forward_evidence_writer_2026_09_01_r18_serialized_history_reads" as const;
+  "nfl_forward_evidence_writer_2026_09_01_r20_forecast_value_separation" as const;
 
 export type NflForwardWriterResult = {
   writerRelease: typeof NFL_FORWARD_WRITER_RELEASE;
@@ -305,6 +305,7 @@ export async function runNflForwardEvidenceWriter(args: {
           baseForecast: baseOutcome,
           footballHomeMargin: shadowMoneyline.footballProjection.projectedHomeMargin,
           current,
+          operationalOpening: opening,
           playbookLine,
           playbookSplits,
           sharpSplits,

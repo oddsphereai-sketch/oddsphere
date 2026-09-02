@@ -6,7 +6,7 @@ import {
   determineNflForwardCollectionNeed,
   planNflForwardEvidenceCaptures,
   type NflForwardEvidencePayload,
-  type NflForwardPriorEvidencePayload,
+  type NflForwardLegacyEvidencePayload,
   type NflForwardStoredEvidence,
 } from "../lib/services/football/nflForwardEvidence";
 import { buildTeamDepthSnapshot } from "../lib/services/football/balldontlieNflRoster";
@@ -254,7 +254,7 @@ assert.match(writer, /currentBooks/);
 assert.match(writer, /comparableCurrentBooks/);
 assert.match(writer, /multibook_consensus_unavailable/);
 assert.match(writer, /readLegacyNflForwardEvidence/);
-assert.match(writer, /nfl_forward_evidence_writer_2026_09_01_r18_serialized_history_reads/);
+assert.match(writer, /nfl_forward_evidence_writer_2026_09_01_r20_forecast_value_separation/);
 assert.doesNotMatch(
   writer,
   /const \[existing, previousExisting, priorExisting, legacyExisting\] = await Promise\.all/,
@@ -276,7 +276,7 @@ assert.doesNotMatch(executableMigration, /GRANT[^;]*(UPDATE|DELETE)[^;]*nfl_forw
 const vercel = JSON.parse(readFileSync(path.resolve("vercel.json"), "utf8")) as { crons: Array<{ path: string }> };
 assert.equal(vercel.crons.filter((cron) => cron.path === "/api/cron/nfl-forward-evidence").length, 1);
 
-const completePayload = (capturedAt: string, homePrice: number): NflForwardPriorEvidencePayload => ({
+const completePayload = (capturedAt: string, homePrice: number): NflForwardLegacyEvidencePayload => ({
   schemaRelease: "nfl_forward_evidence_snapshot_2026_08_22_r2_multibook",
   collectorRelease: "nfl_forward_evidence_collector_2026_08_22_r2_multibook",
   runId: `run-${capturedAt}`,
