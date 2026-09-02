@@ -36,6 +36,10 @@ import {
   WNBA_DECISION_TUPLE_CONTRACT_VERSION,
   type WnbaDecisionTuple,
 } from "./wnbaDecisionTuple";
+import {
+  WNBA_FORWARD_EVIDENCE_CAPTURE_KEY,
+  wnbaForwardEvidenceMarketSlice,
+} from "./wnbaForwardEvidenceCapture";
 
 const PLAY_GRADE: Record<string, string> = { "Best Angle": "best_angle", "Lean": "lean", "Watchlist": "watchlist", "Caution": "caution" };
 const median = (a: number[]) => (a.length ? [...a].sort((x, y) => x - y)[Math.floor(a.length / 2)]! : null);
@@ -536,39 +540,48 @@ export async function buildWnbaPredictionRecords(opts: {
       ...readWnbaCoreModelCalibrationFlagsFromEnv(),
     });
 
-    const baseRec = (market_type: string, side: string, pick: string, line_value: number | null, odds: number | null, confidence: number | null, gradeStr: string | null, modelProb: number | null, mktProb: number | null, decisionTuple: WnbaDecisionTuple | null) => ({
-      game_prediction_id: gp.id, game_id: g.id, external_id: g.external_id, sport: "wnba",
-      slate_date: slate, game_date: g.game_date, matchup, market: market_type, pick, side,
-      line_value, odds_american: odds, odds_decimal: toDecimal(odds),
-      model_used: EXPECTED_WNBA_MODEL_VERSION, model_version: EXPECTED_WNBA_MODEL_VERSION, prediction_source: "auto_v1_wnba",
-      confidence, model_probability: modelProb, market_probability: mktProb,
-      edge: modelProb != null && mktProb != null ? Math.round((modelProb - mktProb) * 1000) / 10 : null,
-      play_grade: gradeStr ? PLAY_GRADE[gradeStr] ?? "watchlist" : null,
-      best_angle: gradeStr === "Best Angle", no_bet: false,
-      market_aligned: gradeStr === "Watchlist" || gradeStr === "Caution",
-      data_quality_tier: (dq.flags ?? []).length === 0 ? "high" : "standard", source_quality: null,
-      provisional: false, held: false, launch_day: false, locked_at: null, published_at: nowIso,
-      snapshot_json: {
-        market: market_type, side, line: line_value, price: odds, confidence, grade: gradeStr,
-        projected_score: ss.projected_score, model, market_consensus: market, trusted_consensus: trusted,
-        model_version: EXPECTED_WNBA_MODEL_VERSION,
-        distribution_version: EXPECTED_WNBA_DISTRIBUTION_VERSION,
-        grade_policy_version: EXPECTED_WNBA_GRADE_POLICY_VERSION,
-        spread_grade_policy: ss.spread_grade_policy ?? null,
-        prediction_record_contract_version: WNBA_PREDICTION_RECORD_CONTRACT_VERSION,
-        decision_tuple_contract_version: decisionTuple?.contract_version ?? null,
-        decision_tuple: decisionTuple,
-        moneyline_probability_contract: null as null | {
-          published_picked_probability: number;
-          independent_picked_probability: number;
-          final_picked_probability: number;
+    const baseRec = (market_type: string, side: string, pick: string, line_value: number | null, odds: number | null, confidence: number | null, gradeStr: string | null, modelProb: number | null, mktProb: number | null, decisionTuple: WnbaDecisionTuple | null) => {
+      const forwardEvidence = wnbaForwardEvidenceMarketSlice(
+        ss[WNBA_FORWARD_EVIDENCE_CAPTURE_KEY],
+        market_type,
+      );
+      return {
+        game_prediction_id: gp.id, game_id: g.id, external_id: g.external_id, sport: "wnba",
+        slate_date: slate, game_date: g.game_date, matchup, market: market_type, pick, side,
+        line_value, odds_american: odds, odds_decimal: toDecimal(odds),
+        model_used: EXPECTED_WNBA_MODEL_VERSION, model_version: EXPECTED_WNBA_MODEL_VERSION, prediction_source: "auto_v1_wnba",
+        confidence, model_probability: modelProb, market_probability: mktProb,
+        edge: modelProb != null && mktProb != null ? Math.round((modelProb - mktProb) * 1000) / 10 : null,
+        play_grade: gradeStr ? PLAY_GRADE[gradeStr] ?? "watchlist" : null,
+        best_angle: gradeStr === "Best Angle", no_bet: false,
+        market_aligned: gradeStr === "Watchlist" || gradeStr === "Caution",
+        data_quality_tier: (dq.flags ?? []).length === 0 ? "high" : "standard", source_quality: null,
+        provisional: false, held: false, launch_day: false, locked_at: null, published_at: nowIso,
+        snapshot_json: {
+          market: market_type, side, line: line_value, price: odds, confidence, grade: gradeStr,
+          projected_score: ss.projected_score, model, market_consensus: market, trusted_consensus: trusted,
+          model_version: EXPECTED_WNBA_MODEL_VERSION,
+          distribution_version: EXPECTED_WNBA_DISTRIBUTION_VERSION,
+          grade_policy_version: EXPECTED_WNBA_GRADE_POLICY_VERSION,
+          spread_grade_policy: ss.spread_grade_policy ?? null,
+          prediction_record_contract_version: WNBA_PREDICTION_RECORD_CONTRACT_VERSION,
+          decision_tuple_contract_version: decisionTuple?.contract_version ?? null,
+          decision_tuple: decisionTuple,
+          moneyline_probability_contract: null as null | {
+            published_picked_probability: number;
+            independent_picked_probability: number;
+            final_picked_probability: number;
+          },
+          sharp_consensus: ss.sharp, consensus_source: ss.consensus_source, dynamic_market_weight: ss.dynamic_market_weight,
+          public_market_context: ss.public_market_context ?? null,
+          data_quality: ss.data_quality, cold_start: ss.cold_start,
+          wnba_core_model_calibration: wnbaCalibrationAudit,
+          ...(forwardEvidence === null
+            ? {}
+            : { [WNBA_FORWARD_EVIDENCE_CAPTURE_KEY]: forwardEvidence }),
         },
-        sharp_consensus: ss.sharp, consensus_source: ss.consensus_source, dynamic_market_weight: ss.dynamic_market_weight,
-        public_market_context: ss.public_market_context ?? null,
-        data_quality: ss.data_quality, cold_start: ss.cold_start,
-        wnba_core_model_calibration: wnbaCalibrationAudit,
-      },
-    });
+      };
+    };
 
     // ── ML record ──
     const mlProbabilities = resolveWnbaPickedMoneylineProbabilities({

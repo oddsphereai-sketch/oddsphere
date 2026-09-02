@@ -16,8 +16,10 @@ import { resolveWnbaMoneylineSide } from "./wnbaTeams";
 import {
   assertWnbaChampionRuntime,
   EXPECTED_WNBA_DISTRIBUTION_VERSION,
+  EXPECTED_WNBA_GRADE_POLICY_VERSION,
   EXPECTED_WNBA_MODEL_VERSION,
 } from "../../automodel/wnbaChampionRuntime";
+import { WNBA_PREDICTION_RECORD_CONTRACT_VERSION } from "./buildWnbaPredictionRecords";
 import {
   buildWnbaDecisionTuple,
   retainCompatibleWnbaDecisionTuple,
@@ -25,6 +27,13 @@ import {
   type WnbaDecisionPriceRow,
   type WnbaDecisionTuple,
 } from "./wnbaDecisionTuple";
+import {
+  buildWnbaForwardEvidenceCapture,
+  WNBA_FORWARD_EVIDENCE_CAPTURE_KEY,
+  type WnbaForwardEvidenceLineRow,
+  type WnbaForwardEvidencePublicSignalRow,
+  type WnbaIndependentModelEvidence,
+} from "./wnbaForwardEvidenceCapture";
 
 // DB market_type → the SharpAPI-style key computeWnbaPrediction expects.
 const MKT_TO_MODEL: Record<string, string> = { moneyline: "moneyline", spread: "point_spread", total: "total_points" };
@@ -96,16 +105,24 @@ export async function runWnbaModel(opts: {
         .in("game_id", gameIds)
         .in("market_type", ["moneyline", "total", "spread"])
     : { data: [] as Record<string, unknown>[] };
+
   const linesByGame = new Map<number, Record<string, unknown>[]>();
   for (const l of lineRows ?? []) {
     const gid = l.game_id as number;
     if (!linesByGame.has(gid)) linesByGame.set(gid, []);
     linesByGame.get(gid)!.push(l);
   }
+  // Reuse the incumbent history result set verbatim. Capture never expands the
+  // query/load surface; if the server-capped result is incomplete, opener and
+  // movement fields stay absent rather than being reconstructed.
   const historyByGame = new Map<number, Record<string, unknown>[]>();
+  const captureHistoryByGame = new Map<number, WnbaForwardEvidenceLineRow[]>();
   const seenHistory = new Set<string>();
   for (const h of historyRows ?? []) {
     const gid = h.game_id as number;
+    const captureRows = captureHistoryByGame.get(gid) ?? [];
+    captureRows.push(h as WnbaForwardEvidenceLineRow);
+    captureHistoryByGame.set(gid, captureRows);
     const key = `${gid}::${h.market_type}::${h.side}::${h.line_value ?? ""}::${h.sportsbook ?? ""}`;
     if (seenHistory.has(key)) continue;
     seenHistory.add(key);
@@ -134,6 +151,7 @@ export async function runWnbaModel(opts: {
   };
 
   const publicByGame = new Map<number, WnbaPublicMarketSignals>();
+  const publicSignalRowsByGame = new Map<number, WnbaForwardEvidencePublicSignalRow[]>();
   for (const s of publicSignalRows ?? []) {
     const gid = s.game_id as number;
     const market = s.market_type as "moneyline" | "total" | "spread";
@@ -147,8 +165,10 @@ export async function runWnbaModel(opts: {
         public_money_pct: s.public_money_pct as number | null,
       },
     };
+    const auditRows = publicSignalRowsByGame.get(gid) ?? [];
+    auditRows.push(s as WnbaForwardEvidencePublicSignalRow);
+    publicSignalRowsByGame.set(gid, auditRows);
   }
-
   // Locked-row guard: never overwrite a game_predictions row that's already locked.
   const { data: lockedRows } = gameIds.length
     ? await supabase.from("game_predictions").select("game_id, locked_at, sport_specific").in("game_id", gameIds)
@@ -180,7 +200,15 @@ export async function runWnbaModel(opts: {
       observedAt: (l.fetched_at ?? l.recorded_at ?? null) as string | null,
       h: homeBdl, a: awayBdl,
     }));
-    const p = computeWnbaPrediction(M, { id: g.id as number, date: g.slate_date as string, h: homeBdl, a: awayBdl }, oddRows, publicByGame.get(g.id as number) ?? {});
+    const independentEvidence: { value: WnbaIndependentModelEvidence | null } = { value: null };
+    const p = computeWnbaPrediction(
+      M,
+      { id: g.id as number, date: g.slate_date as string, h: homeBdl, a: awayBdl },
+      oddRows,
+      publicByGame.get(g.id as number) ?? {},
+      undefined,
+      (evidence) => { independentEvidence.value = evidence; },
+    );
     result.gamesPredicted++;
     const matchup = `${p.away_abbr}@${p.home_abbr}`;
     const mlSide = p.home_abbr && p.away_abbr
@@ -324,6 +352,69 @@ export async function runWnbaModel(opts: {
       if (retainedSpreadTuple) decisionTuples.spread = retainedSpreadTuple;
     }
 
+    const forwardEvidenceCapture = independentEvidence.value === null
+      ? null
+      : buildWnbaForwardEvidenceCapture({
+          game: {
+            gameId: g.id as number,
+            externalId:
+              typeof g.external_id === "string" || typeof g.external_id === "number"
+                ? g.external_id
+                : null,
+            slateDate: g.slate_date as string,
+            startsAt: typeof g.game_date === "string" ? g.game_date : null,
+          },
+          capturedAt: computedAt,
+          decisionAt: computedAt,
+          releases: {
+            model_version: EXPECTED_WNBA_MODEL_VERSION,
+            distribution_version: EXPECTED_WNBA_DISTRIBUTION_VERSION,
+            grade_policy_version: EXPECTED_WNBA_GRADE_POLICY_VERSION,
+            decision_tuple_contract_version: WNBA_DECISION_TUPLE_CONTRACT_VERSION,
+            prediction_record_contract_version: WNBA_PREDICTION_RECORD_CONTRACT_VERSION,
+          },
+          trustedBooks: SHARP_BOOKS,
+          currentRows: (linesByGame.get(g.id as number) ?? []) as WnbaForwardEvidenceLineRow[],
+          historyRows: captureHistoryByGame.get(g.id as number) ?? [],
+          historyRowsTruncated: (historyRows ?? []).length >= 1000,
+          publicSignalRows: publicSignalRowsByGame.get(g.id as number) ?? [],
+          sourceAwareSplitRows: [],
+          sourceAwareRowsTruncated: false,
+          sourceAwareUnavailableReason: "not_present_in_incumbent_wnba_writer_result_sets",
+          decisionTuples,
+          independentModel: independentEvidence.value,
+          championOutput: {
+            projected_score: p.projected_score,
+            model: p.model,
+            market: p.market,
+            trusted: p.trusted,
+            sharp: p.sharp,
+            consensus_source: p.consensus_source,
+            dynamic_market_weight: p.dynamic_market_weight,
+            outcomes: {
+              moneyline: {
+                side: mlSide,
+                line: null,
+                confidence: p.moneyline.confidence,
+                grade: p.moneyline.grade,
+                price: p.moneyline.price,
+              },
+              total: {
+                side: totalSide,
+                line: p.total.line,
+                confidence: p.total.confidence,
+                grade: p.total.grade,
+              },
+              spread: {
+                side: spreadSide,
+                line: spreadLine,
+                confidence: p.spread.confidence,
+                grade: p.spread.grade,
+              },
+            },
+          },
+        });
+
     payloads.push({
       game_id: g.id, prediction_source: "auto_v1_wnba", source_type: "real_api", is_override: false,
       model_version: EXPECTED_WNBA_MODEL_VERSION, computed_at: computedAt,
@@ -349,6 +440,9 @@ export async function runWnbaModel(opts: {
         total: { side: p.total.side, line: p.total.line, confidence: p.total.confidence, grade: p.total.grade },
         spread: { side: p.spread.side, line: p.spread.line, confidence: p.spread.confidence, grade: p.spread.grade },
         projected_score: p.projected_score,
+        ...(forwardEvidenceCapture === null
+          ? {}
+          : { [WNBA_FORWARD_EVIDENCE_CAPTURE_KEY]: forwardEvidenceCapture }),
       },
     });
   }
