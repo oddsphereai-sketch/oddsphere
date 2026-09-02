@@ -12,6 +12,7 @@ import type {
 import type { NflR6ShadowMoneylineDecision } from "./nflR6MoneylineShadow";
 import type { NflRegularSharpSplitSet } from "./sharpApiNflSplits";
 import type { NflV1WeekOneOutcomeForecast } from "./nflV1WeekOneOutcome";
+import type { NflForwardContextCapture } from "./nflForwardEvidenceCapture";
 
 export const NFL_FORWARD_EVIDENCE_SCHEMA_RELEASE =
   "nfl_forward_evidence_snapshot_2026_09_01_r6_forecast_value_separation" as const;
@@ -129,6 +130,7 @@ export type NflForwardEvidencePayload = {
   injuries: DailyEdgeGameAvailability | null;
   weather: NflForwardWeatherSnapshot;
   outcomeForecast: NflV1WeekOneOutcomeForecast;
+  contextualEvidenceCapture?: NflForwardContextCapture;
   decisions: {
     evaluatedBets: NflRegularEvaluatedBetDecision[];
     outcomeConfidence: NflRegularOutcomeConfidence[];
