@@ -51,12 +51,81 @@ export type FiMarketBaseline = {
   projection_sportsbooks: string[];
   /** Number of complete named-book pairs contributing to the consensus. */
   projection_book_count: number;
+  /**
+   * Forward-only evidence capture for every incumbent-accepted named-book pair.
+   * This is diagnostic provenance, not a second market calculation: v5 still
+   * uses every listed pair in its incumbent consensus. Persisting the actual
+   * per-book inputs lets a later release compare target-excluded adaptive
+   * trust honestly instead of reconstructing a board from later prices.
+   */
+  market_evidence_capture_version: "fi_named_book_evidence_capture_v2";
+  /** Fixed maximum number of supported named FI books, recorded for audits. */
+  market_evidence_supported_book_cap: number;
+  market_evidence_books: FiMarketEvidenceBook[];
+  /** Supported named books with no incumbent-accepted current pair. */
+  market_evidence_exclusions: FiMarketEvidenceExclusion[];
   /** Source quality: "ok" | "stale" | "missing". */
   data_quality: "ok" | "stale" | "missing";
   /** Most-recent line freshness, ISO timestamp or null. */
   freshness: string | null;
   /** Source / reason code. */
   reason: string;
+};
+
+export type FiMarketEvidenceSourceClass = "sharp" | "retail";
+
+export type FiMarketEvidenceFreshnessStatus =
+  | "timestamped_fresh"
+  | "accepted_missing_timestamp"
+  | "stale_timestamp"
+  | "future_timestamp"
+  | "invalid_timestamp"
+  | "not_available";
+
+export type FiMarketEvidenceExclusionReason =
+  | "fi_excluded_stale_timestamp"
+  | "fi_excluded_future_timestamp"
+  | "fi_excluded_invalid_timestamp"
+  | "fi_excluded_pair_skew_exceeds_2m"
+  | "fi_excluded_one_sided_or_invalid_price";
+
+export type FiMarketEvidenceBook = {
+  sportsbook: string;
+  source_class: FiMarketEvidenceSourceClass;
+  current_nrfi_no_vig: number;
+  current_yrfi_no_vig: number;
+  /** Timestamp provenance of the incumbent-accepted current pair. */
+  current_freshness_status: Extract<FiMarketEvidenceFreshnessStatus, "timestamped_fresh" | "accepted_missing_timestamp">;
+  current_freshness_reason: "fi_timestamp_within_90m" | "fi_accepted_missing_timestamp";
+  /** Age of the older current side when both timestamps are valid, otherwise null. */
+  current_age_minutes: number | null;
+  current_observed_at: string | null;
+  current_pair_skew_ms: number | null;
+  /** Why this pair passed the incumbent v5 current-pair eligibility. */
+  current_pair_eligibility_reason: "fi_complete_pair_timestamped_fresh" | "fi_complete_pair_accepted_missing_timestamp";
+  /** True only for the exact pair used to evaluate price and EV. */
+  is_evaluation_book: boolean;
+  /** Existing v5 consensus eligibility; retained so audits describe reality. */
+  included_in_v5_forecast_consensus: true;
+  consensus_eligibility_reason: "fi_v5_complete_supported_named_pair";
+  /** A later adaptive posterior may use only these independently priced rows. */
+  target_excluded_from_evaluation: boolean;
+  /** Same-book opening is retained only when a coherent comparable pair exists. */
+  opening_nrfi_no_vig: number | null;
+  opening_observed_at: string | null;
+  same_book_movement_nrfi_pp: number | null;
+};
+
+export type FiMarketEvidenceExclusion = {
+  sportsbook: string;
+  source_class: FiMarketEvidenceSourceClass;
+  current_freshness_status: Exclude<FiMarketEvidenceFreshnessStatus, "timestamped_fresh" | "accepted_missing_timestamp">;
+  current_observed_at: string | null;
+  current_age_minutes: number | null;
+  current_pair_skew_ms: number | null;
+  current_pair_eligibility_reason: FiMarketEvidenceExclusionReason;
+  included_in_v5_forecast_consensus: false;
+  consensus_eligibility_reason: "fi_not_in_v5_forecast_consensus";
 };
 
 export type FiLineRow = {
@@ -101,6 +170,7 @@ const FI_MAX_PAIR_SKEW_MS = 2 * 60 * 1000;
 const FI_MOVEMENT_RESIDUAL_WEIGHT = 0.20;
 const FI_MOVEMENT_MAX_ADJUSTMENT = 0.01;
 const NRFI_YRFI_LINE_VALUE = 0.5;
+const FI_SUPPORTED_NAMED_BOOK_CAP = FI_SHARP_BOOKS.size + FI_RETAIL_BOOKS.size;
 
 function normalizedSportsbook(sportsbook: string): string {
   const normalized = sportsbook.trim().toLowerCase();
@@ -127,6 +197,146 @@ type CompleteFiPair = {
   nrfiNoVig: number;
 };
 
+function sourceClassForBook(book: string): FiMarketEvidenceSourceClass {
+  return FI_SHARP_BOOKS.has(book) ? "sharp" : "retail";
+}
+
+function pairObservedAt(pair: CompleteFiPair): string | null {
+  const overMs = pair.over.fetched_at ? Date.parse(pair.over.fetched_at) : Number.NaN;
+  const underMs = pair.under.fetched_at ? Date.parse(pair.under.fetched_at) : Number.NaN;
+  if (Number.isFinite(overMs) && Number.isFinite(underMs)) {
+    return new Date(Math.max(overMs, underMs)).toISOString();
+  }
+  return pair.over.fetched_at ?? pair.under.fetched_at ?? null;
+}
+
+function currentPairTimestampCapture(pair: CompleteFiPair, nowMs: number): Pick<
+  FiMarketEvidenceBook,
+  "current_freshness_status" | "current_freshness_reason" | "current_age_minutes" | "current_observed_at" | "current_pair_skew_ms" | "current_pair_eligibility_reason"
+> {
+  const overObservedAt = pair.over.fetched_at ?? null;
+  const underObservedAt = pair.under.fetched_at ?? null;
+  const overMs = overObservedAt === null ? null : Date.parse(overObservedAt);
+  const underMs = underObservedAt === null ? null : Date.parse(underObservedAt);
+  const timestamped = overMs !== null && underMs !== null && Number.isFinite(overMs) && Number.isFinite(underMs);
+  if (!timestamped) {
+    return {
+      current_freshness_status: "accepted_missing_timestamp",
+      current_freshness_reason: "fi_accepted_missing_timestamp",
+      current_age_minutes: null,
+      current_observed_at: null,
+      current_pair_skew_ms: null,
+      current_pair_eligibility_reason: "fi_complete_pair_accepted_missing_timestamp",
+    };
+  }
+  const pairSkew = Math.abs(overMs - underMs);
+  return {
+    current_freshness_status: "timestamped_fresh",
+    current_freshness_reason: "fi_timestamp_within_90m",
+    current_age_minutes: Math.max(nowMs - overMs, nowMs - underMs) / 60_000,
+    current_observed_at: new Date(Math.max(overMs, underMs)).toISOString(),
+    current_pair_skew_ms: pairSkew,
+    current_pair_eligibility_reason: "fi_complete_pair_timestamped_fresh",
+  };
+}
+
+function latestSide(rows: FiLineRow[], side: "over" | "under"): FiLineRow | undefined {
+  return rows
+    .filter((line) => (line.side ?? "").toLowerCase() === side)
+    .sort((left, right) => {
+      const leftMs = left.fetched_at ? Date.parse(left.fetched_at) : -Infinity;
+      const rightMs = right.fetched_at ? Date.parse(right.fetched_at) : -Infinity;
+      return rightMs - leftMs;
+    })[0];
+}
+
+function captureMarketEvidenceExclusions(
+  currentRows: FiLineRow[],
+  pairs: CompleteFiPair[],
+  nowMs: number,
+): FiMarketEvidenceExclusion[] {
+  // One diagnostic record per supported named book that has no
+  // incumbent-accepted current pair. It is intentionally not a per-row trail:
+  // an older/alternate excluded row is not emitted when the book still has an
+  // accepted pair, preserving the bounded, deterministic <=18-book payload.
+  const includedBooks = new Set(pairs.map((pair) => pair.book));
+  const books = Array.from(new Set(currentRows.map((line) => normalizedSportsbook(line.sportsbook))));
+  return books
+    .filter((book) => !includedBooks.has(book))
+    .map((book) => {
+      const bookRows = currentRows.filter((line) => normalizedSportsbook(line.sportsbook) === book);
+      const over = latestSide(bookRows, "over");
+      const under = latestSide(bookRows, "under");
+      const observed = over?.fetched_at ?? under?.fetched_at ?? null;
+      const timestampValues = [over?.fetched_at, under?.fetched_at]
+        .filter((value): value is string => value !== null && value !== undefined)
+        .map((value) => Date.parse(value));
+      const hasInvalidTimestamp = timestampValues.some((value) => !Number.isFinite(value));
+      const hasFutureTimestamp = timestampValues.some((value) => Number.isFinite(value) && value > nowMs);
+      const hasStaleTimestamp = timestampValues.some(
+        (value) => Number.isFinite(value) && value <= nowMs && nowMs - value > FI_PRICE_MAX_SOURCE_AGE_MS,
+      );
+      const bothTimestamped = timestampValues.length === 2 && timestampValues.every(Number.isFinite);
+      const skew = bothTimestamped ? Math.abs(timestampValues[0]! - timestampValues[1]!) : null;
+      const hasCompletePricePair = over?.odds_american !== null && over?.odds_american !== undefined && over.odds_american !== 0 &&
+        under?.odds_american !== null && under?.odds_american !== undefined && under.odds_american !== 0;
+      const [current_freshness_status, current_pair_eligibility_reason]: [
+        FiMarketEvidenceExclusion["current_freshness_status"],
+        FiMarketEvidenceExclusionReason,
+      ] = hasInvalidTimestamp
+        ? ["invalid_timestamp", "fi_excluded_invalid_timestamp"]
+        : hasFutureTimestamp
+          ? ["future_timestamp", "fi_excluded_future_timestamp"]
+          : hasStaleTimestamp
+            ? ["stale_timestamp", "fi_excluded_stale_timestamp"]
+            : hasCompletePricePair && skew !== null && skew > FI_MAX_PAIR_SKEW_MS
+              ? ["not_available", "fi_excluded_pair_skew_exceeds_2m"]
+              : ["not_available", "fi_excluded_one_sided_or_invalid_price"];
+      return {
+        sportsbook: book,
+        source_class: sourceClassForBook(book),
+        current_freshness_status,
+        current_observed_at: bothTimestamped ? new Date(Math.max(...timestampValues)).toISOString() : observed,
+        current_age_minutes: bothTimestamped ? Math.max(...timestampValues.map((value) => nowMs - value)) / 60_000 : null,
+        current_pair_skew_ms: skew,
+        current_pair_eligibility_reason,
+        included_in_v5_forecast_consensus: false,
+        consensus_eligibility_reason: "fi_not_in_v5_forecast_consensus",
+      } satisfies FiMarketEvidenceExclusion;
+    })
+    .sort((left, right) => left.sportsbook.localeCompare(right.sportsbook));
+}
+
+function captureMarketEvidence(
+  pairs: CompleteFiPair[],
+  openingPairs: CompleteFiPair[],
+  evaluation: CompleteFiPair,
+  nowMs: number,
+): FiMarketEvidenceBook[] {
+  const openingByBook = new Map(openingPairs.map((pair) => [pair.book, pair]));
+  return pairs
+    .map((pair) => {
+      const opening = openingByBook.get(pair.book) ?? null;
+      return {
+        sportsbook: pair.book,
+        source_class: sourceClassForBook(pair.book),
+        current_nrfi_no_vig: pair.nrfiNoVig,
+        current_yrfi_no_vig: pair.yrfiNoVig,
+        ...currentPairTimestampCapture(pair, nowMs),
+        is_evaluation_book: pair.book === evaluation.book,
+        included_in_v5_forecast_consensus: true,
+        consensus_eligibility_reason: "fi_v5_complete_supported_named_pair",
+        target_excluded_from_evaluation: pair.book !== evaluation.book,
+        opening_nrfi_no_vig: opening?.nrfiNoVig ?? null,
+        opening_observed_at: opening === null ? null : pairObservedAt(opening),
+        same_book_movement_nrfi_pp: opening === null
+          ? null
+          : (pair.nrfiNoVig - opening.nrfiNoVig) * 100,
+      } satisfies FiMarketEvidenceBook;
+    })
+    .sort((left, right) => left.sportsbook.localeCompare(right.sportsbook));
+}
+
 function median(values: number[]): number | null {
   if (values.length === 0) return null;
   const sorted = [...values].sort((left, right) => left - right);
@@ -141,15 +351,8 @@ function completeNamedBookPairs(candidates: FiLineRow[]): CompleteFiPair[] {
   const books = Array.from(new Set(candidates.map((line) => normalizedSportsbook(line.sportsbook))));
   for (const book of books) {
     const bookRows = candidates.filter((line) => normalizedSportsbook(line.sportsbook) === book);
-    const latestSide = (side: "over" | "under") => bookRows
-      .filter((line) => (line.side ?? "").toLowerCase() === side)
-      .sort((left, right) => {
-        const leftMs = left.fetched_at ? Date.parse(left.fetched_at) : -Infinity;
-        const rightMs = right.fetched_at ? Date.parse(right.fetched_at) : -Infinity;
-        return rightMs - leftMs;
-      })[0];
-    const over = latestSide("over");
-    const under = latestSide("under");
+    const over = latestSide(bookRows, "over");
+    const under = latestSide(bookRows, "under");
     if (over?.odds_american === null || over?.odds_american === undefined) continue;
     if (under?.odds_american === null || under?.odds_american === undefined) continue;
     if (over.odds_american === 0 || under.odds_american === 0) continue;
@@ -215,6 +418,10 @@ export function computeFiMarketBaseline(
     evaluation_sportsbook: null,
     projection_sportsbooks: [],
     projection_book_count: 0,
+    market_evidence_capture_version: "fi_named_book_evidence_capture_v2",
+    market_evidence_supported_book_cap: FI_SUPPORTED_NAMED_BOOK_CAP,
+    market_evidence_books: [],
+    market_evidence_exclusions: [],
     data_quality: "missing",
     freshness: null,
     reason: "fi_market_missing",
@@ -223,7 +430,9 @@ export function computeFiMarketBaseline(
   const asOfMs = Date.parse(asOfIso);
   if (!Number.isFinite(asOfMs)) return { ...empty, reason: "fi_market_invalid_as_of" };
 
-  // Projection evidence is every fresh, complete, supported named-book pair.
+  // Projection evidence is every incumbent-accepted, complete, supported
+  // named-book pair. Null fetched_at remains backward-compatible eligibility;
+  // the evidence capture records that status rather than relabeling it fresh.
   // FI does not require a supported sharp book because the live market is
   // commonly retail-only. Public ticket/handle splits are a different source
   // and are deliberately absent from this price-derived probability map.
@@ -233,15 +442,28 @@ export function computeFiMarketBaseline(
     Math.abs(line.line_value - NRFI_YRFI_LINE_VALUE) < 0.001 &&
     !isBlockedSportsbook(line.sportsbook) &&
     isSupportedNamedSportsbook(line.sportsbook);
-  const candidates = linesForGame.filter(
+  const currentRows = linesForGame.filter(
+    (line) => line.observation_type !== "opening" && matchesFiPrice(line),
+  );
+  const candidates = currentRows.filter(
     (l) =>
-      l.observation_type !== "opening" &&
-      matchesFiPrice(l) &&
       isFreshFiMarketPriceSource(l.fetched_at, asOfMs),
   );
-  if (candidates.length === 0) return empty;
+  if (candidates.length === 0) {
+    return {
+      ...empty,
+      market_evidence_exclusions: captureMarketEvidenceExclusions(currentRows, [], asOfMs),
+    };
+  }
   const pairs = completeNamedBookPairs(candidates);
-  if (pairs.length === 0) return { ...empty, reason: "fi_market_one_sided_or_incoherent" };
+  const marketEvidenceExclusions = captureMarketEvidenceExclusions(currentRows, pairs, asOfMs);
+  if (pairs.length === 0) {
+    return {
+      ...empty,
+      market_evidence_exclusions: marketEvidenceExclusions,
+      reason: "fi_market_one_sided_or_incoherent",
+    };
+  }
   const evaluation = selectEvaluationPair(pairs);
   const currentNrfiConsensus = projectionConsensus(pairs);
   if (evaluation === null || currentNrfiConsensus === null) return empty;
@@ -277,6 +499,7 @@ export function computeFiMarketBaseline(
   const yrfiConsensus = 1 - nrfiConsensus;
   const freshness = evaluation.over.fetched_at ?? evaluation.under.fetched_at ?? null;
   const movementSportsbooks = comparableCurrentPairs.map((pair) => pair.book).sort();
+  const marketEvidenceBooks = captureMarketEvidence(pairs, comparableOpeningPairs, evaluation, asOfMs);
   return {
     listed_fi_total: NRFI_YRFI_LINE_VALUE,
     yrfi_odds_american: evaluation.over.odds_american,
@@ -294,6 +517,10 @@ export function computeFiMarketBaseline(
     evaluation_sportsbook: evaluation.book,
     projection_sportsbooks: pairs.map((pair) => pair.book).sort(),
     projection_book_count: pairs.length,
+    market_evidence_capture_version: "fi_named_book_evidence_capture_v2",
+    market_evidence_supported_book_cap: FI_SUPPORTED_NAMED_BOOK_CAP,
+    market_evidence_books: marketEvidenceBooks,
+    market_evidence_exclusions: marketEvidenceExclusions,
     data_quality: "ok",
     freshness,
     reason: `fi_named_book_consensus_${pairs.length}_movement_${movementSportsbooks.length}_evaluation_${evaluation.book}`,
@@ -302,6 +529,7 @@ export function computeFiMarketBaseline(
 
 export const __TEST__ = {
   FI_MAX_PAIR_SKEW_MS,
+  FI_SUPPORTED_NAMED_BOOK_CAP,
   FI_MOVEMENT_RESIDUAL_WEIGHT,
   FI_MOVEMENT_MAX_ADJUSTMENT,
   projectionConsensus,

@@ -448,6 +448,14 @@ async function main() {
       near(baseline.evaluation_nrfi_no_vig_prob ?? 0, noVigPair(-105, -115).away, 0.000001));
     check("projection consensus does not overwrite the exact-price fair probability",
       !near(baseline.nrfi_no_vig_prob ?? 0, baseline.evaluation_nrfi_no_vig_prob ?? 0, 0.000001));
+    check("forward capture records every complete book with retail provenance",
+      baseline.market_evidence_capture_version === "fi_named_book_evidence_capture_v2" &&
+      baseline.market_evidence_supported_book_cap >= baseline.market_evidence_books.length &&
+      baseline.market_evidence_books.length === 3 &&
+      baseline.market_evidence_books.every((book) => book.source_class === "retail" && book.included_in_v5_forecast_consensus));
+    check("forward capture identifies the exact evaluation book and target-excluded alternatives",
+      baseline.market_evidence_books.filter((book) => book.is_evaluation_book).map((book) => book.sportsbook).join(",") === "fanduel" &&
+      baseline.market_evidence_books.filter((book) => book.target_excluded_from_evaluation).map((book) => book.sportsbook).join(",") === "ballybet,betway");
     const model = runMlbFirstInningModelV2(buildSnapshot(), rows, asOf);
     const selectedPosterior = model.fiV2Audit.fi_pick === "NRFI"
       ? model.fiV2Audit.posterior_p_nrfi
@@ -476,6 +484,11 @@ async function main() {
       baseline.data_quality === "ok" && baseline.projection_book_count === 1);
     check("synthetic consensus never masquerades as price or ticket/handle evidence",
       baseline.projection_sportsbooks.length === 1 && baseline.projection_sportsbooks[0] === "betrivers");
+    check("singleton retail capture is price-identifiable but has no target-excluded alternative",
+      baseline.market_evidence_books.length === 1 &&
+      baseline.market_evidence_books[0]?.source_class === "retail" &&
+      baseline.market_evidence_books[0]?.is_evaluation_book === true &&
+      baseline.market_evidence_books[0]?.target_excluded_from_evaluation === false);
   }
   {
     const asOf = "2026-09-01T17:00:00.000Z";
@@ -485,6 +498,90 @@ async function main() {
     ];
     check("side timestamps wider than two minutes cannot form a coherent pair",
       computeFiMarketBaseline(skewed, asOf).data_quality === "missing");
+  }
+  {
+    const asOf = "2026-09-01T17:00:00.000Z";
+    const freshRows: FiLineRow[] = [
+      { market_type: "first_inning_total", sportsbook: "ballybet", side: "over", line_value: 0.5, odds_american: 105, fetched_at: "2026-09-01T16:59:00.000Z" },
+      { market_type: "first_inning_total", sportsbook: "ballybet", side: "under", line_value: 0.5, odds_american: -125, fetched_at: "2026-09-01T16:58:00.000Z" },
+    ];
+    const missingTimestampRows = freshRows.map((row) => ({ ...row, fetched_at: null }));
+    const fresh = computeFiMarketBaseline(freshRows, asOf);
+    const missingTimestamp = computeFiMarketBaseline(missingTimestampRows, asOf);
+    check("timestamped current pair records fresh status, age, skew, and eligibility",
+      fresh.market_evidence_books[0]?.current_freshness_status === "timestamped_fresh" &&
+      fresh.market_evidence_books[0]?.current_freshness_reason === "fi_timestamp_within_90m" &&
+      near(fresh.market_evidence_books[0]?.current_age_minutes ?? -1, 2, 0.000001) &&
+      fresh.market_evidence_books[0]?.current_pair_skew_ms === 60_000 &&
+      fresh.market_evidence_books[0]?.current_pair_eligibility_reason === "fi_complete_pair_timestamped_fresh" &&
+      fresh.market_evidence_books[0]?.consensus_eligibility_reason === "fi_v5_complete_supported_named_pair");
+    check("incumbent missing timestamps remain eligible but are explicitly labeled",
+      missingTimestamp.market_evidence_books[0]?.current_freshness_status === "accepted_missing_timestamp" &&
+      missingTimestamp.market_evidence_books[0]?.current_freshness_reason === "fi_accepted_missing_timestamp" &&
+      missingTimestamp.market_evidence_books[0]?.current_age_minutes === null &&
+      missingTimestamp.market_evidence_books[0]?.current_observed_at === null &&
+      missingTimestamp.market_evidence_books[0]?.current_pair_eligibility_reason === "fi_complete_pair_accepted_missing_timestamp");
+    const freshOut = runMlbFirstInningModelV2(buildSnapshot(), freshRows, asOf);
+    const missingTimestampOut = runMlbFirstInningModelV2(buildSnapshot(), missingTimestampRows, asOf);
+    check("capture-only timestamp status preserves incumbent directional probability, projection, and grade",
+      freshOut.predicted_nrfi === missingTimestampOut.predicted_nrfi &&
+      near(freshOut.fiV2Audit.posterior_p_nrfi, missingTimestampOut.fiV2Audit.posterior_p_nrfi, 0.000000001) &&
+      near(freshOut.fiV2Audit.posterior_expected_first_inning_runs, missingTimestampOut.fiV2Audit.posterior_expected_first_inning_runs, 0.000000001) &&
+      freshOut.fiV2Audit.fi_pick === missingTimestampOut.fiV2Audit.fi_pick &&
+      freshOut.fiV2Audit.fi_play_grade === missingTimestampOut.fiV2Audit.fi_play_grade);
+
+    const exclusionFixtures: Array<{
+      label: string;
+      rows: FiLineRow[];
+      status: string;
+      reason: string;
+    }> = [
+      {
+        label: "stale",
+        rows: freshRows.map((row) => ({ ...row, fetched_at: "2026-09-01T15:29:59.999Z" })),
+        status: "stale_timestamp",
+        reason: "fi_excluded_stale_timestamp",
+      },
+      {
+        label: "future",
+        rows: freshRows.map((row) => ({ ...row, fetched_at: "2026-09-01T17:00:00.001Z" })),
+        status: "future_timestamp",
+        reason: "fi_excluded_future_timestamp",
+      },
+      {
+        label: "invalid",
+        rows: freshRows.map((row) => ({ ...row, fetched_at: "not-a-timestamp" })),
+        status: "invalid_timestamp",
+        reason: "fi_excluded_invalid_timestamp",
+      },
+      {
+        label: "skewed",
+        rows: [
+          { ...freshRows[0]!, fetched_at: "2026-09-01T16:50:00.000Z" },
+          { ...freshRows[1]!, fetched_at: "2026-09-01T16:52:01.000Z" },
+        ],
+        status: "not_available",
+        reason: "fi_excluded_pair_skew_exceeds_2m",
+      },
+    ];
+    const absentOut = runMlbFirstInningModelV2(buildSnapshot(), [], asOf);
+    for (const fixture of exclusionFixtures) {
+      const baseline = computeFiMarketBaseline(fixture.rows, asOf);
+      const exclusion = baseline.market_evidence_exclusions[0];
+      const out = runMlbFirstInningModelV2(buildSnapshot(), fixture.rows, asOf);
+      check(`${fixture.label} timestamp/pair exclusion truthfully records incumbent exclusion`,
+        baseline.data_quality === "missing" &&
+        exclusion?.current_freshness_status === fixture.status &&
+        exclusion?.current_pair_eligibility_reason === fixture.reason &&
+        exclusion?.included_in_v5_forecast_consensus === false &&
+        exclusion?.consensus_eligibility_reason === "fi_not_in_v5_forecast_consensus");
+      check(`${fixture.label} exclusion preserves incumbent no-market prediction and grade`,
+        out.predicted_nrfi === absentOut.predicted_nrfi &&
+        near(out.fiV2Audit.posterior_p_nrfi, absentOut.fiV2Audit.posterior_p_nrfi, 0.000000001) &&
+        near(out.fiV2Audit.posterior_expected_first_inning_runs, absentOut.fiV2Audit.posterior_expected_first_inning_runs, 0.000000001) &&
+        out.fiV2Audit.fi_pick === absentOut.fiV2Audit.fi_pick &&
+        out.fiV2Audit.fi_play_grade === absentOut.fiV2Audit.fi_play_grade);
+    }
   }
 
   section("FI opening/current movement — bounded upstream synthesis");
