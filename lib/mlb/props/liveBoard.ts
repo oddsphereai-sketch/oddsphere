@@ -199,6 +199,8 @@ export type MlbPropsForecastTelemetry = {
   targetExcludedMarketReferenceRows: number;
   independentFallbackRows: number;
   actionableRows: number;
+  actionableWithoutTargetExcludedMarketReferenceRows: number;
+  actionableDataGateFailureRows: number;
   actionableProjectionSideContradictionRows: number;
   lockedRows: number;
 };
@@ -230,6 +232,9 @@ export function summarizeMlbPropsForecastTelemetry(args: {
     targetExcludedMarketReferenceRows: forecastRows.filter((row) => row.marketProbability !== null).length,
     independentFallbackRows: forecastRows.filter((row) => row.marketProbability === null).length,
     actionableRows: rows.filter((row) => ACTIONABLE_GRADES.has(row.playGrade)).length,
+    actionableWithoutTargetExcludedMarketReferenceRows: rows.filter((row) =>
+      ACTIONABLE_GRADES.has(row.playGrade) && row.marketProbability === null).length,
+    actionableDataGateFailureRows: rows.filter(actionableRowFailsDataGate).length,
     actionableProjectionSideContradictionRows: forecastRows.filter((row) =>
       ACTIONABLE_GRADES.has(row.playGrade)
       && checkProjectionSideIntegrity({
@@ -242,6 +247,18 @@ export function summarizeMlbPropsForecastTelemetry(args: {
 }
 
 const ACTIONABLE_GRADES = new Set(["BEST_ANGLE", "LEAN"]);
+
+function actionableRowFailsDataGate(row: PlayerPropPreviewRow): boolean {
+  if (!ACTIONABLE_GRADES.has(row.playGrade)) return false;
+  return row.finalProbability === null
+    // A missing target-excluded comparator is neutral. It cannot supply an
+    // edge, but it also cannot invalidate an independent forecast whose
+    // exact evaluated quote has already passed the downstream grade policy.
+    || (row.marketProbability !== null && row.modelEdge === null)
+    || row.oddsSanity.length > 0
+    || row.missingFeatures.some((feature) => !isSignalOptionalMemberFeature(feature))
+    || !assessPropPrice(row.odds).signalEligible;
+}
 const DEFAULT_MAX_ODDS_AGE_MINUTES = 45;
 // BDL expands each posted offer into side/price rows, so a healthy full slate
 // can exceed 25k normalized source rows even while the compact member board
@@ -2775,13 +2792,7 @@ export function validateMlbPropsBoardData(args: {
   const pendingLineups = args.data.props.filter((row) => row.marketFamily !== "pitcher" && row.lineupStatus?.status === "pending").length;
   if (pendingLineups > 0) warnings.push(`${pendingLineups}_HITTER_ROWS_PROJECTED_LINEUP`);
   const actionableRows = args.data.props.filter((row) => ACTIONABLE_GRADES.has(row.playGrade)).length;
-  const invalidActionable = args.data.props.filter((row) => ACTIONABLE_GRADES.has(row.playGrade) && (
-    row.finalProbability === null
-    || row.modelEdge === null
-    || row.oddsSanity.length > 0
-    || row.missingFeatures.some((feature) => !isSignalOptionalMemberFeature(feature))
-    || !assessPropPrice(row.odds).signalEligible
-  ));
+  const invalidActionable = args.data.props.filter(actionableRowFailsDataGate);
   if (invalidActionable.length) errors.push("ACTIONABLE_ROWS_FAILED_DATA_GATE");
   const previous = args.previousSnapshot;
   if (previous && previous.validation.sourceRows > 0 && args.sourceRows >= previous.validation.sourceRows * 0.9) {
