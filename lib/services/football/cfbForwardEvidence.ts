@@ -4,6 +4,7 @@ import type { CFB_SHARP_API_ODDS_RELEASE } from "./cfbSharpApiOdds";
 import type { CfbMarketInformedOutcomeForecast } from "./cfbMarketInformedOutcome";
 import type { CfbSharpApiSplitRecord } from "./cfbSharpApiSplits";
 import type { CfbKickoffWeatherSnapshot } from "./cfbKickoffWeather";
+import type { CfbForwardContextCapture } from "./cfbForwardEvidenceCapture";
 import {
   cfbV1LineProbabilities,
   type CfbV1DecisionBundle,
@@ -185,6 +186,7 @@ export type CfbForwardEvidencePayload = {
     note: string;
   };
   decisions: CfbForwardPublishedDecisionBundle;
+  contextualEvidenceCapture?: CfbForwardContextCapture;
   /** Immutable football-only baseline retained for release-separated diagnostics.
    * It never overrides the authoritative `decisions.forecast`. */
   independentForecast?: CfbForwardPublishedForecast | null;
