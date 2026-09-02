@@ -87,14 +87,20 @@ async function main(): Promise<void> {
     movements: number;
     targetExcludedAlternatives: number;
     circaPricePairs: number;
+    nonzeroSkewPairs: number;
+    freshCurrentBooks: number;
+    staleCurrentBooks: number;
+    beyondSkewOmissions: number;
+    missingTimestampRows: number;
+    futureRows: number;
     embeddedPublicPairs: number;
     missingPublicProvenance: number;
     truncated: number;
     overMarketByteBound: number;
   }> = {
-    moneyline: { records: 0, captures: 0, locked: 0, currentBookPairs: 0, openingBookPairs: 0, movements: 0, targetExcludedAlternatives: 0, circaPricePairs: 0, embeddedPublicPairs: 0, missingPublicProvenance: 0, truncated: 0, overMarketByteBound: 0 },
-    spread: { records: 0, captures: 0, locked: 0, currentBookPairs: 0, openingBookPairs: 0, movements: 0, targetExcludedAlternatives: 0, circaPricePairs: 0, embeddedPublicPairs: 0, missingPublicProvenance: 0, truncated: 0, overMarketByteBound: 0 },
-    total: { records: 0, captures: 0, locked: 0, currentBookPairs: 0, openingBookPairs: 0, movements: 0, targetExcludedAlternatives: 0, circaPricePairs: 0, embeddedPublicPairs: 0, missingPublicProvenance: 0, truncated: 0, overMarketByteBound: 0 },
+    moneyline: { records: 0, captures: 0, locked: 0, currentBookPairs: 0, openingBookPairs: 0, movements: 0, targetExcludedAlternatives: 0, circaPricePairs: 0, nonzeroSkewPairs: 0, freshCurrentBooks: 0, staleCurrentBooks: 0, beyondSkewOmissions: 0, missingTimestampRows: 0, futureRows: 0, embeddedPublicPairs: 0, missingPublicProvenance: 0, truncated: 0, overMarketByteBound: 0 },
+    spread: { records: 0, captures: 0, locked: 0, currentBookPairs: 0, openingBookPairs: 0, movements: 0, targetExcludedAlternatives: 0, circaPricePairs: 0, nonzeroSkewPairs: 0, freshCurrentBooks: 0, staleCurrentBooks: 0, beyondSkewOmissions: 0, missingTimestampRows: 0, futureRows: 0, embeddedPublicPairs: 0, missingPublicProvenance: 0, truncated: 0, overMarketByteBound: 0 },
+    total: { records: 0, captures: 0, locked: 0, currentBookPairs: 0, openingBookPairs: 0, movements: 0, targetExcludedAlternatives: 0, circaPricePairs: 0, nonzeroSkewPairs: 0, freshCurrentBooks: 0, staleCurrentBooks: 0, beyondSkewOmissions: 0, missingTimestampRows: 0, futureRows: 0, embeddedPublicPairs: 0, missingPublicProvenance: 0, truncated: 0, overMarketByteBound: 0 },
   };
 
   let overGameByteBound = 0;
@@ -115,6 +121,12 @@ async function main(): Promise<void> {
     summary.movements += marketCapture.same_book_movement.length;
     summary.targetExcludedAlternatives += marketCapture.evaluation.target_excluded_complete_pair_count;
     summary.circaPricePairs += marketCapture.current_book_pairs.filter((pair) => pair.source_class === "circa").length;
+    summary.nonzeroSkewPairs += marketCapture.current_book_pairs.filter((pair) => pair.pair_skew_ms > 0).length;
+    summary.freshCurrentBooks += marketCapture.coverage.fresh_current_books;
+    summary.staleCurrentBooks += marketCapture.coverage.stale_current_books;
+    summary.beyondSkewOmissions += marketCapture.coverage.current_pair_candidates.first_side_rows_beyond_max_skew;
+    summary.missingTimestampRows += marketCapture.coverage.current_line_rows.rows_missing_timestamp;
+    summary.futureRows += marketCapture.coverage.current_line_rows.rows_future_to_decision;
     summary.embeddedPublicPairs += marketCapture.source_aware_public_pairs.length;
     if (marketCapture.coverage.source_aware_unavailable_reason !== null) summary.missingPublicProvenance += 1;
     if (marketCapture.coverage.payload_truncated) summary.truncated += 1;

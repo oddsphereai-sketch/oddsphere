@@ -22,8 +22,10 @@ import {
   buildWnbaForwardEvidenceCapture,
   readWnbaForwardEvidenceCapture,
   WNBA_FORWARD_EVIDENCE_MAX_BOOKS_PER_MARKET,
+  WNBA_FORWARD_EVIDENCE_CURRENT_FRESH_MS,
   WNBA_FORWARD_EVIDENCE_MAX_GAME_BYTES,
   WNBA_FORWARD_EVIDENCE_MAX_MARKET_BYTES,
+  WNBA_FORWARD_EVIDENCE_MAX_PAIR_SKEW_MS,
   wnbaForwardEvidenceMarketSlice,
   type WnbaForwardChampionOutput,
   type WnbaForwardEvidenceLineRow,
@@ -235,6 +237,7 @@ assert.ok(capture.markets.moneyline.current_book_pairs.every((pair) =>
   Math.abs(pair.quotes[0].fair_probability + pair.quotes[1].fair_probability - 1) < 1e-12
 ));
 assert.ok(capture.markets.moneyline.current_book_pairs.every((pair) => pair.pair_skew_ms === 0));
+assert.ok(capture.markets.moneyline.current_book_pairs.every((pair) => pair.freshness_status === "fresh"));
 assert.equal(capture.markets.spread.same_book_movement.find((row) => row.sportsbook === "draftkings")?.line_delta, -1);
 assert.equal(capture.markets.total.same_book_movement.find((row) => row.sportsbook === "draftkings")?.line_delta, 1);
 assert.ok(capture.markets.moneyline.opening_book_pairs.every((pair) => pair.opening_provenance === "first_observed"));
@@ -256,6 +259,11 @@ assert.equal(
 assert.equal(capture.unavailable_independent_inputs.injury_news, null, "unavailable injury/news input is not fabricated");
 assert.ok(JSON.stringify(capture).length > 0);
 assert.ok(new TextEncoder().encode(JSON.stringify(capture)).byteLength <= WNBA_FORWARD_EVIDENCE_MAX_GAME_BYTES);
+assert.equal(
+  capture.coverage.payload_bytes,
+  new TextEncoder().encode(JSON.stringify(capture)).byteLength,
+  "game payload reports its exact self-inclusive byte length",
+);
 
 for (const market of ["moneyline", "spread", "total"] as const) {
   const slice = wnbaForwardEvidenceMarketSlice(capture, market);
@@ -311,8 +319,81 @@ assert.equal(
 );
 assert.ok(new TextEncoder().encode(JSON.stringify(bounded)).byteLength <= WNBA_FORWARD_EVIDENCE_MAX_GAME_BYTES);
 
+const withinHomeAt = "2026-09-02T17:59:40.000Z";
+const withinAwayAt = "2026-09-02T17:59:50.000Z";
+const staleHomeAt = "2026-09-02T17:30:00.000Z";
+const staleAwayAt = "2026-09-02T17:30:05.000Z";
+const beyondHomeAt = "2026-09-02T17:58:00.000Z";
+const beyondAwayAt = new Date(Date.parse(beyondHomeAt) + WNBA_FORWARD_EVIDENCE_MAX_PAIR_SKEW_MS + 1).toISOString();
+const temporal = buildWnbaForwardEvidenceCapture({
+  game: { gameId: 79, externalId: 987656, slateDate: "2026-09-02", startsAt },
+  capturedAt,
+  decisionAt: capturedAt,
+  releases: capture.releases,
+  trustedBooks: SHARP_BOOKS,
+  currentRows: [
+    { market_type: "moneyline", side: "home", sportsbook: "within-skew", line_value: null, odds_american: -115, recorded_at: withinHomeAt, fetched_at: "2026-09-02T17:59:52.000Z" },
+    { market_type: "moneyline", side: "away", sportsbook: "within-skew", line_value: null, odds_american: 105, recorded_at: withinAwayAt, fetched_at: "2026-09-02T17:59:55.000Z" },
+    { market_type: "moneyline", side: "home", sportsbook: "stale-pair", line_value: null, odds_american: -110, fetched_at: staleHomeAt },
+    { market_type: "moneyline", side: "away", sportsbook: "stale-pair", line_value: null, odds_american: -110, fetched_at: staleAwayAt },
+    { market_type: "moneyline", side: "home", sportsbook: "beyond-skew", line_value: null, odds_american: -110, fetched_at: beyondHomeAt },
+    { market_type: "moneyline", side: "away", sportsbook: "beyond-skew", line_value: null, odds_american: -110, fetched_at: beyondAwayAt },
+    { market_type: "moneyline", side: "home", sportsbook: "future", line_value: null, odds_american: -110, fetched_at: "2026-09-02T18:00:01.000Z" },
+    { market_type: "moneyline", side: "away", sportsbook: "future", line_value: null, odds_american: -110, fetched_at: "2026-09-02T18:00:02.000Z" },
+    { market_type: "moneyline", side: "home", sportsbook: "missing-time", line_value: null, odds_american: -110 },
+    { market_type: "moneyline", side: "away", sportsbook: "missing-time", line_value: null, odds_american: -110 },
+    { market_type: "moneyline", side: "home", sportsbook: "invalid-price", line_value: null, odds_american: 0, fetched_at: withinHomeAt },
+    { market_type: "moneyline", side: "away", sportsbook: "invalid-price", line_value: null, odds_american: 0, fetched_at: withinAwayAt },
+    { market_type: "total", side: "over", sportsbook: "total-beyond", line_value: 168.5, odds_american: -110, fetched_at: beyondHomeAt },
+    { market_type: "total", side: "under", sportsbook: "total-beyond", line_value: 168.5, odds_american: -110, fetched_at: beyondAwayAt },
+    { market_type: "spread", side: "home", sportsbook: "line-mismatch", line_value: -3.5, odds_american: -110, fetched_at: withinHomeAt },
+    { market_type: "spread", side: "away", sportsbook: "line-mismatch", line_value: 4.5, odds_american: -110, fetched_at: withinAwayAt },
+  ],
+  historyRows: [],
+  historyRowsTruncated: false,
+  publicSignalRows: [],
+  sourceAwareSplitRows: [],
+  sourceAwareRowsTruncated: false,
+  sourceAwareUnavailableReason: "not present in incumbent result sets",
+  decisionTuples: {},
+  independentModel: independent,
+  championOutput,
+});
+const withinPair = temporal.markets.moneyline.current_book_pairs.find((pair) => pair.sportsbook === "within-skew");
+assert.ok(withinPair, "complementary same-book sides inside the explicit skew window pair");
+assert.equal(withinPair.pair_skew_ms, 10_000);
+assert.equal(withinPair.pair_observed_at, withinAwayAt);
+assert.equal(withinPair.pair_captured_at, "2026-09-02T17:59:55.000Z");
+assert.deepEqual(withinPair.quotes.map((quote) => quote.observed_at), [withinHomeAt, withinAwayAt]);
+assert.deepEqual(
+  withinPair.quotes.map((quote) => quote.fetched_at),
+  ["2026-09-02T17:59:52.000Z", "2026-09-02T17:59:55.000Z"],
+);
+assert.equal(withinPair.decision_age_ms, 10_000);
+assert.equal(withinPair.freshness_status, "fresh");
+assert.equal(withinPair.freshness_reason, "within_current_freshness_window");
+const stalePair = temporal.markets.moneyline.current_book_pairs.find((pair) => pair.sportsbook === "stale-pair");
+assert.ok(stalePair);
+assert.ok(stalePair.decision_age_ms > WNBA_FORWARD_EVIDENCE_CURRENT_FRESH_MS);
+assert.equal(stalePair.freshness_status, "stale");
+assert.equal(stalePair.freshness_reason, "older_than_current_freshness_window");
+assert.ok(!temporal.markets.moneyline.current_book_pairs.some((pair) => pair.sportsbook === "beyond-skew"));
+assert.ok(!temporal.markets.moneyline.current_book_pairs.some((pair) => pair.sportsbook === "future"));
+assert.ok(!temporal.markets.moneyline.current_book_pairs.some((pair) => pair.sportsbook === "missing-time"));
+assert.equal(temporal.markets.moneyline.coverage.current_pair_candidates.first_side_rows_beyond_max_skew, 1);
+assert.equal(temporal.markets.moneyline.coverage.current_line_rows.rows_future_to_decision, 2);
+assert.equal(temporal.markets.moneyline.coverage.current_line_rows.rows_missing_timestamp, 2);
+assert.equal(temporal.markets.moneyline.coverage.current_line_rows.rows_invalid, 2);
+assert.equal(temporal.markets.moneyline.coverage.fresh_current_books, 1);
+assert.equal(temporal.markets.moneyline.coverage.stale_current_books, 1);
+assert.equal(temporal.markets.total.current_book_pairs.length, 0);
+assert.equal(temporal.markets.total.coverage.current_pair_unavailable_reason, "no_complete_current_pair_within_max_skew");
+assert.equal(temporal.markets.spread.current_book_pairs.length, 0, "same-book spread sides at unlike lines cannot pair");
+assert.equal(temporal.markets.spread.coverage.current_pair_candidates.first_side_rows_without_complement, 1);
+
 const writerSource = readFileSync("lib/services/wnba/runWnbaModel.ts", "utf8");
 const recordSource = readFileSync("lib/services/wnba/buildWnbaPredictionRecords.ts", "utf8");
+const captureSource = readFileSync("lib/services/wnba/wnbaForwardEvidenceCapture.ts", "utf8");
 assert.match(writerSource, /if \(lockedSet\.has\(g\.id as number\)\) \{ result\.skippedLocked\+\+; continue; \}/);
 assert.ok(
   writerSource.indexOf("lockedSet.has") < writerSource.indexOf("buildWnbaForwardEvidenceCapture({"),
@@ -350,6 +431,11 @@ assert.doesNotMatch(
   writerSource,
   /\.from\("market_split_observations_v2"\)/,
   "natural capture adds no source-aware database query",
+);
+assert.doesNotMatch(
+  captureSource,
+  /payload_bytes = byteLength\([^\n]+\);\s*\n\s*[^\n]*payload_bytes = byteLength/,
+  "payload-byte accounting does not use duplicate corrective assignments",
 );
 
 console.log("WNBA forward evidence capture tests: PASS");

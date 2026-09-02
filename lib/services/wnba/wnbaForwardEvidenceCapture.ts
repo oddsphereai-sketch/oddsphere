@@ -12,6 +12,8 @@ export const WNBA_FORWARD_EVIDENCE_MAX_BOOKS_PER_MARKET = 24;
 export const WNBA_FORWARD_EVIDENCE_MAX_PUBLIC_SOURCES = 24;
 export const WNBA_FORWARD_EVIDENCE_MAX_GAME_BYTES = 64 * 1024;
 export const WNBA_FORWARD_EVIDENCE_MAX_MARKET_BYTES = 24 * 1024;
+export const WNBA_FORWARD_EVIDENCE_MAX_PAIR_SKEW_MS = 30 * 1000;
+export const WNBA_FORWARD_EVIDENCE_CURRENT_FRESH_MS = 15 * 60 * 1000;
 
 type EvidenceMarket = WnbaDecisionMarket;
 type EvidenceSide = WnbaDecisionSide;
@@ -88,10 +90,27 @@ export type WnbaForwardBookPair = {
   champion_trusted_book: boolean;
   opening_provenance: "provider_opener" | "first_observed" | null;
   pair_capture_identity: string;
-  observed_at: string;
-  fetched_at: string;
+  pair_observed_at: string;
+  pair_captured_at: string;
   pair_skew_ms: number;
+  decision_age_ms: number;
+  freshness_status: "fresh" | "stale";
+  freshness_reason: "within_current_freshness_window" | "older_than_current_freshness_window";
   quotes: [SideQuote, SideQuote];
+};
+
+type LineRowCoverage = {
+  rows_received: number;
+  rows_eligible: number;
+  rows_invalid: number;
+  rows_missing_timestamp: number;
+  rows_future_to_decision: number;
+  rows_at_or_after_start: number;
+};
+
+type PairCandidateCoverage = {
+  first_side_rows_without_complement: number;
+  first_side_rows_beyond_max_skew: number;
 };
 
 type WnbaForwardMovement = {
@@ -180,7 +199,16 @@ type MarketCapture = {
     circa_current_pair: boolean;
     circa_public_pair: boolean;
     history_rows_truncated: boolean;
+    current_line_rows: LineRowCoverage;
+    history_line_rows: LineRowCoverage;
+    current_pair_candidates: PairCandidateCoverage;
+    opening_pair_candidates: PairCandidateCoverage;
+    max_pair_skew_ms: number;
+    current_freshness_max_age_ms: number;
+    fresh_current_books: number;
+    stale_current_books: number;
     current_pair_unavailable_reason: string | null;
+    current_freshness_unavailable_reason: string | null;
     opening_unavailable_reason: string | null;
     same_book_movement_unavailable_reason: string | null;
     champion_public_input_unavailable_reason: string | null;
@@ -243,10 +271,30 @@ type NormalizedLine = {
   isOpener: boolean;
 };
 
+type NormalizedLineSet = {
+  rows: NormalizedLine[];
+  coverage: Record<EvidenceMarket, LineRowCoverage>;
+};
+
+type PairCandidateSet = {
+  pairs: WnbaForwardBookPair[];
+  coverage: PairCandidateCoverage;
+};
+
 const MARKETS: EvidenceMarket[] = ["moneyline", "spread", "total"];
 
 function byteLength(value: unknown): number {
   return new TextEncoder().encode(JSON.stringify(value)).byteLength;
+}
+
+function selfReportedByteLengthWithZeroPlaceholder(value: unknown): number {
+  const zeroLength = byteLength(value);
+  let reported = zeroLength;
+  for (;;) {
+    const next = zeroLength - 1 + String(reported).length;
+    if (next === reported) return reported;
+    reported = next;
+  }
 }
 
 function finite(value: unknown): number | null {
@@ -318,25 +366,49 @@ function normalizedLines(
   rows: readonly WnbaForwardEvidenceLineRow[],
   decisionAt: string,
   startsAt: string | null,
-): NormalizedLine[] {
+): NormalizedLineSet {
   const decisionMs = Date.parse(decisionAt);
   const startMs = startsAt === null ? Number.POSITIVE_INFINITY : Date.parse(startsAt);
-  return rows.flatMap((row) => {
-    if (!isMarket(row.market_type) || !isSide(row.side)) return [];
+  const coverage = Object.fromEntries(MARKETS.map((market) => [market, {
+    rows_received: 0,
+    rows_eligible: 0,
+    rows_invalid: 0,
+    rows_missing_timestamp: 0,
+    rows_future_to_decision: 0,
+    rows_at_or_after_start: 0,
+  }])) as Record<EvidenceMarket, LineRowCoverage>;
+  const normalized: NormalizedLine[] = [];
+  for (const row of rows) {
+    if (!isMarket(row.market_type)) continue;
+    const counts = coverage[row.market_type];
+    counts.rows_received += 1;
+    if (!isSide(row.side)) {
+      counts.rows_invalid += 1;
+      continue;
+    }
     const sportsbook = normalizeBook(row.sportsbook);
     const price = finite(row.odds_american);
     const line = row.line_value === null ? null : finite(row.line_value);
     const observedAt = timestamp(row.recorded_at ?? row.fetched_at);
     const fetchedAt = timestamp(row.fetched_at ?? row.recorded_at);
-    if (
-      sportsbook === null ||
-      price === null || price === 0 ||
-      (row.line_value !== null && line === null) ||
-      observedAt === null || fetchedAt === null ||
-      Date.parse(observedAt) > decisionMs ||
-      Date.parse(observedAt) >= startMs
-    ) return [];
-    return [{
+    if (sportsbook === null || price === null || price === 0 || (row.line_value !== null && line === null)) {
+      counts.rows_invalid += 1;
+      continue;
+    }
+    if (observedAt === null || fetchedAt === null) {
+      counts.rows_missing_timestamp += 1;
+      continue;
+    }
+    if (Date.parse(observedAt) > decisionMs || Date.parse(fetchedAt) > decisionMs) {
+      counts.rows_future_to_decision += 1;
+      continue;
+    }
+    if (Date.parse(observedAt) >= startMs || Date.parse(fetchedAt) >= startMs) {
+      counts.rows_at_or_after_start += 1;
+      continue;
+    }
+    counts.rows_eligible += 1;
+    normalized.push({
       market: row.market_type,
       side: row.side,
       sportsbook,
@@ -345,36 +417,58 @@ function normalizedLines(
       observedAt,
       fetchedAt,
       isOpener: row.is_opener === true,
-    }];
-  });
+    });
+  }
+  return { rows: normalized, coverage };
 }
 
 function pairCandidates(
   rows: readonly NormalizedLine[],
   market: EvidenceMarket,
   trustedBooks: ReadonlySet<string>,
-): WnbaForwardBookPair[] {
+  decisionAt: string,
+): PairCandidateSet {
   const [firstSide, secondSide] = sidesForMarket(market);
   const groups = new Map<string, NormalizedLine[]>();
   for (const row of rows.filter((candidate) => candidate.market === market)) {
-    const key = `${row.sportsbook}\u0000${row.observedAt}`;
-    const list = groups.get(key) ?? [];
+    const list = groups.get(row.sportsbook) ?? [];
     list.push(row);
-    groups.set(key, list);
+    groups.set(row.sportsbook, list);
   }
 
   const pairs: WnbaForwardBookPair[] = [];
+  const coverage: PairCandidateCoverage = {
+    first_side_rows_without_complement: 0,
+    first_side_rows_beyond_max_skew: 0,
+  };
+  const decisionMs = Date.parse(decisionAt);
   for (const group of groups.values()) {
     const firstRows = group.filter((row) => row.side === firstSide);
     const secondRows = group.filter((row) => row.side === secondSide);
     for (const first of firstRows) {
-      const second = secondRows
+      const compatible = secondRows
         .filter((candidate) => linesPair(market, first.line, candidate.line))
-        .sort((left, right) =>
-          left.price - right.price ||
-          (left.line ?? 0) - (right.line ?? 0)
-        )[0];
-      if (!second) continue;
+        .sort((left, right) => {
+          const leftSkew = Math.abs(Date.parse(first.observedAt) - Date.parse(left.observedAt));
+          const rightSkew = Math.abs(Date.parse(first.observedAt) - Date.parse(right.observedAt));
+          const leftCapture = first.observedAt > left.observedAt ? first.observedAt : left.observedAt;
+          const rightCapture = first.observedAt > right.observedAt ? first.observedAt : right.observedAt;
+          return leftSkew - rightSkew ||
+            rightCapture.localeCompare(leftCapture) ||
+            right.fetchedAt.localeCompare(left.fetchedAt) ||
+            left.price - right.price ||
+            (left.line ?? 0) - (right.line ?? 0);
+        });
+      const second = compatible[0];
+      if (!second) {
+        coverage.first_side_rows_without_complement += 1;
+        continue;
+      }
+      const pairSkewMs = Math.abs(Date.parse(first.observedAt) - Date.parse(second.observedAt));
+      if (pairSkewMs > WNBA_FORWARD_EVIDENCE_MAX_PAIR_SKEW_MS) {
+        coverage.first_side_rows_beyond_max_skew += 1;
+        continue;
+      }
       const firstImplied = impliedProbability(first.price);
       const secondImplied = impliedProbability(second.price);
       const total = firstImplied + secondImplied;
@@ -397,16 +491,24 @@ function pairCandidates(
         observed_at: second.observedAt,
         fetched_at: second.fetchedAt,
       };
+      const pairObservedAt = first.observedAt > second.observedAt ? first.observedAt : second.observedAt;
+      const pairCapturedAt = first.fetchedAt > second.fetchedAt ? first.fetchedAt : second.fetchedAt;
+      const decisionAgeMs = Math.max(0, decisionMs - Date.parse(pairObservedAt));
+      const freshnessStatus = decisionAgeMs <= WNBA_FORWARD_EVIDENCE_CURRENT_FRESH_MS ? "fresh" : "stale";
       const pairCaptureIdentity = JSON.stringify([
         market,
         first.sportsbook,
-        first.observedAt,
+        pairObservedAt,
         quoteA.side,
         quoteA.line,
         quoteA.american_price,
+        quoteA.observed_at,
+        quoteA.fetched_at,
         quoteB.side,
         quoteB.line,
         quoteB.american_price,
+        quoteB.observed_at,
+        quoteB.fetched_at,
       ]);
       pairs.push({
         sportsbook: first.sportsbook,
@@ -414,15 +516,19 @@ function pairCandidates(
         champion_trusted_book: trustedBooks.has(first.sportsbook),
         opening_provenance: first.isOpener && second.isOpener ? "provider_opener" : null,
         pair_capture_identity: pairCaptureIdentity,
-        observed_at: first.observedAt,
-        fetched_at: first.fetchedAt > second.fetchedAt ? first.fetchedAt : second.fetchedAt,
-        pair_skew_ms: Math.abs(Date.parse(first.observedAt) - Date.parse(second.observedAt)),
+        pair_observed_at: pairObservedAt,
+        pair_captured_at: pairCapturedAt,
+        pair_skew_ms: pairSkewMs,
+        decision_age_ms: decisionAgeMs,
+        freshness_status: freshnessStatus,
+        freshness_reason: freshnessStatus === "fresh"
+          ? "within_current_freshness_window"
+          : "older_than_current_freshness_window",
         quotes: [quoteA, quoteB],
       });
-      break;
     }
   }
-  return pairs;
+  return { pairs, coverage };
 }
 
 function selectedPairPerBook(
@@ -432,10 +538,12 @@ function selectedPairPerBook(
   const byBook = new Map<string, WnbaForwardBookPair>();
   for (const pair of [...pairs].sort((left, right) =>
     (newest
-      ? right.observed_at.localeCompare(left.observed_at)
-      : left.observed_at.localeCompare(right.observed_at)) ||
+      ? right.pair_observed_at.localeCompare(left.pair_observed_at)
+      : left.pair_observed_at.localeCompare(right.pair_observed_at)) ||
+    left.pair_skew_ms - right.pair_skew_ms ||
     left.sportsbook.localeCompare(right.sportsbook) ||
-    (left.quotes[0].line ?? 0) - (right.quotes[0].line ?? 0)
+    (left.quotes[0].line ?? 0) - (right.quotes[0].line ?? 0) ||
+    left.pair_capture_identity.localeCompare(right.pair_capture_identity)
   )) {
     if (!byBook.has(pair.sportsbook)) byBook.set(pair.sportsbook, pair);
   }
@@ -458,7 +566,7 @@ function movement(
   current: WnbaForwardBookPair,
   market: EvidenceMarket,
 ): WnbaForwardMovement | null {
-  const elapsedMs = Date.parse(current.observed_at) - Date.parse(opening.observed_at);
+  const elapsedMs = Date.parse(current.pair_observed_at) - Date.parse(opening.pair_observed_at);
   if (elapsedMs < 0 || opening.sportsbook !== current.sportsbook) return null;
   const openingQuote = opening.quotes[0];
   const currentQuote = current.quotes[0];
@@ -466,8 +574,8 @@ function movement(
     sportsbook: current.sportsbook,
     opening_capture_identity: opening.pair_capture_identity,
     current_capture_identity: current.pair_capture_identity,
-    opening_observed_at: opening.observed_at,
-    current_observed_at: current.observed_at,
+    opening_observed_at: opening.pair_observed_at,
+    current_observed_at: current.pair_observed_at,
     elapsed_ms: elapsedMs,
     canonical_side: market === "total" ? "over" : "home",
     opening_line: openingQuote.line,
@@ -652,14 +760,20 @@ function refreshMarketCoverage(market: MarketCapture): void {
   market.coverage.retained_source_aware_public_pairs = market.source_aware_public_pairs.length;
   market.coverage.circa_current_pair = market.current_book_pairs.some((pair) => pair.source_class === "circa");
   market.coverage.circa_public_pair = market.source_aware_public_pairs.some((pair) => pair.source_book === "circa");
+  market.coverage.fresh_current_books = market.current_book_pairs
+    .filter((pair) => pair.freshness_status === "fresh").length;
+  market.coverage.stale_current_books = market.current_book_pairs.length - market.coverage.fresh_current_books;
+  market.coverage.current_freshness_unavailable_reason =
+    market.current_book_pairs.length > 0 && market.coverage.fresh_current_books === 0
+      ? "all_retained_current_pairs_stale"
+      : null;
   market.evaluation.complete_pair_books = market.current_book_pairs.map((pair) => pair.sportsbook);
   const evaluatedBook = normalizeBook(market.evaluation.evaluated_sportsbook);
   market.evaluation.target_excluded_complete_pair_books = market.evaluation.complete_pair_books
     .filter((book) => book !== evaluatedBook);
   market.evaluation.target_excluded_complete_pair_count = market.evaluation.target_excluded_complete_pair_books.length;
   market.coverage.payload_bytes = 0;
-  market.coverage.payload_bytes = byteLength(market);
-  market.coverage.payload_bytes = byteLength(market);
+  market.coverage.payload_bytes = selfReportedByteLengthWithZeroPlaceholder(market);
 }
 
 function trimGameToBytes(capture: WnbaForwardEvidenceCapture): void {
@@ -686,8 +800,7 @@ function trimGameToBytes(capture: WnbaForwardEvidenceCapture): void {
   capture.coverage.payload_truncated =
     capture.coverage.payload_truncated || MARKETS.some((market) => capture.markets[market].coverage.payload_truncated);
   capture.coverage.payload_bytes = 0;
-  capture.coverage.payload_bytes = byteLength(capture);
-  capture.coverage.payload_bytes = byteLength(capture);
+  capture.coverage.payload_bytes = selfReportedByteLengthWithZeroPlaceholder(capture);
 }
 
 export function buildWnbaForwardEvidenceCapture(args: {
@@ -721,13 +834,21 @@ export function buildWnbaForwardEvidenceCapture(args: {
   for (const market of MARKETS) {
     const tuple = args.decisionTuples[market] ?? null;
     const evaluatedBook = normalizeBook(tuple?.evaluated_sportsbook);
-    const allCurrent = selectedPairPerBook(pairCandidates(current, market, trustedBooks), true);
+    const currentCandidates = pairCandidates(current.rows, market, trustedBooks, args.decisionAt);
+    const allCurrent = selectedPairPerBook(currentCandidates.pairs, true);
     const retainedCurrent = prioritizedPairs(allCurrent, evaluatedBook)
       .slice(0, WNBA_FORWARD_EVIDENCE_MAX_BOOKS_PER_MARKET);
     const retainedBooks = new Set(retainedCurrent.map((pair) => pair.sportsbook));
-    const openingCandidates = (args.historyRowsTruncated
-      ? []
-      : selectedPairPerBook(pairCandidates(history, market, trustedBooks), false))
+    const openingCandidateSet = args.historyRowsTruncated
+      ? {
+          pairs: [],
+          coverage: {
+            first_side_rows_without_complement: 0,
+            first_side_rows_beyond_max_skew: 0,
+          },
+        }
+      : pairCandidates(history.rows, market, trustedBooks, args.decisionAt);
+    const openingCandidates = selectedPairPerBook(openingCandidateSet.pairs, false)
       .filter((pair) => retainedBooks.has(pair.sportsbook))
       .map((pair) => ({
         ...pair,
@@ -749,6 +870,17 @@ export function buildWnbaForwardEvidenceCapture(args: {
       args.decisionAt,
       startsAt,
     );
+    const freshCurrentBooks = retainedCurrent.filter((pair) => pair.freshness_status === "fresh").length;
+    const staleCurrentBooks = retainedCurrent.length - freshCurrentBooks;
+    const noCurrentReason = allCurrent.length > 0
+      ? null
+      : current.coverage[market].rows_missing_timestamp > 0
+        ? "current_rows_missing_timestamp"
+        : current.coverage[market].rows_future_to_decision > 0
+          ? "current_rows_future_to_decision"
+          : currentCandidates.coverage.first_side_rows_beyond_max_skew > 0
+            ? "no_complete_current_pair_within_max_skew"
+            : "no_complete_same_book_current_pair_in_incumbent_result_set";
     markets[market] = {
       market,
       champion_target: { side: targetSide, line: targetLine },
@@ -775,14 +907,30 @@ export function buildWnbaForwardEvidenceCapture(args: {
         circa_current_pair: false,
         circa_public_pair: false,
         history_rows_truncated: args.historyRowsTruncated,
-        current_pair_unavailable_reason: allCurrent.length === 0
-          ? "no_complete_same_book_current_pair_in_incumbent_result_set"
-          : null,
+        current_line_rows: current.coverage[market],
+        history_line_rows: history.coverage[market],
+        current_pair_candidates: currentCandidates.coverage,
+        opening_pair_candidates: openingCandidateSet.coverage,
+        max_pair_skew_ms: WNBA_FORWARD_EVIDENCE_MAX_PAIR_SKEW_MS,
+        current_freshness_max_age_ms: WNBA_FORWARD_EVIDENCE_CURRENT_FRESH_MS,
+        fresh_current_books: freshCurrentBooks,
+        stale_current_books: staleCurrentBooks,
+        current_pair_unavailable_reason: noCurrentReason,
+        current_freshness_unavailable_reason:
+          retainedCurrent.length > 0 && freshCurrentBooks === 0
+            ? "all_retained_current_pairs_stale"
+            : null,
         opening_unavailable_reason: args.historyRowsTruncated
           ? "incumbent_history_result_set_truncated"
-          : openingCandidates.length === 0
-            ? "no_complete_same_book_history_pair_in_incumbent_result_set"
-            : null,
+          : openingCandidates.length > 0
+            ? null
+            : history.coverage[market].rows_missing_timestamp > 0
+              ? "history_rows_missing_timestamp"
+              : history.coverage[market].rows_future_to_decision > 0
+                ? "history_rows_future_to_decision"
+                : openingCandidateSet.coverage.first_side_rows_beyond_max_skew > 0
+                  ? "no_complete_opening_pair_within_max_skew"
+                  : "no_complete_same_book_history_pair_in_incumbent_result_set",
         same_book_movement_unavailable_reason: args.historyRowsTruncated
           ? "incumbent_history_result_set_truncated"
           : movements.length === 0
