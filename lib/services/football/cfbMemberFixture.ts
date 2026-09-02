@@ -33,6 +33,7 @@ import {
   CFB_FORWARD_TRANSITION_PREVIOUS_EVIDENCE_SCHEMA_RELEASE,
   CFB_FORWARD_TRANSITION_PREVIOUS_MEMBER_RELEASE,
   CFB_FORWARD_MEMBER_RELEASE,
+  CFB_FORWARD_PUBLICATION_PREVIOUS_MEMBER_RELEASE,
   type CfbForwardMarketOutlook,
   type CfbForwardEvidencePayload,
   type CfbForwardPlaybookSplit,
@@ -61,9 +62,9 @@ import { CFB_MARKET_SHARP_AWARE_PRODUCTION_RELEASE } from "./cfbMarketSharpAware
 import { cfbTeamIdentity } from "./cfbTeamIdentity";
 
 export const CFB_MEMBER_FIXTURE_RELEASE =
-  "cfb_v1_member_fixture_2026_09_01_r41_coherent_movement_evidence" as const;
+  "cfb_v1_member_fixture_2026_09_02_r42_total_publication_coherence" as const;
 export const CFB_PUBLIC_OUTCOME_CONTRACT_RELEASE =
-  "cfb_market_sharp_public_outcome_contract_2026_09_01_r41_coherent_movement_evidence" as const;
+  "cfb_market_sharp_public_outcome_contract_2026_09_02_r42_total_publication_coherence" as const;
 export const CFB_CONTEXT_ONLY_QUOTE_CAPTURE_SKEW_MS = 5_000 as const;
 const CFB_MARKET_CONTEXT_MAX_CAPTURE_LAG_MINUTES = 10;
 const CFB_PUBLIC_SCORE_DIRECTION_TOLERANCE_POINTS = 0.25;
@@ -326,19 +327,38 @@ export function selectLatestCfbMemberEvidenceRows(
       )
     : null;
   const coherentPreviousAuthority = coherentPrevious ?? coherentPreviousBoundary ?? weatherPreviousAuthority;
+  const publicationPrevious = completeRowsForRelease(
+    rows,
+    CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE,
+    CFB_FORWARD_PUBLICATION_PREVIOUS_MEMBER_RELEASE,
+    CFB_V1_DECISION_RELEASE,
+  );
+  const publicationPreviousBoundary = coherentPreviousAuthority
+    ? immutableBoundaryTransitionRows(
+        rows,
+        now,
+        CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE,
+        CFB_FORWARD_PUBLICATION_PREVIOUS_MEMBER_RELEASE,
+        CFB_V1_DECISION_RELEASE,
+        coherentPreviousAuthority,
+      )
+    : null;
+  const publicationPreviousAuthority = publicationPrevious ?? publicationPreviousBoundary ?? coherentPreviousAuthority;
   const current = completeRowsForRelease(rows, CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE, CFB_FORWARD_MEMBER_RELEASE, CFB_V1_DECISION_RELEASE);
   if (current) return current;
-  const immutableBoundaryTransition = coherentPreviousAuthority
+  const immutableBoundaryTransition = publicationPreviousAuthority
     ? immutableBoundaryTransitionRows(
         rows,
         now,
         CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE,
         CFB_FORWARD_MEMBER_RELEASE,
         CFB_V1_DECISION_RELEASE,
-        coherentPreviousAuthority,
+        publicationPreviousAuthority,
       )
     : null;
   if (immutableBoundaryTransition) return immutableBoundaryTransition;
+  if (publicationPrevious) return publicationPrevious;
+  if (publicationPreviousBoundary) return publicationPreviousBoundary;
   if (coherentPrevious) return coherentPrevious;
   if (coherentPreviousBoundary) return coherentPreviousBoundary;
   if (weatherPrevious) return weatherPrevious;

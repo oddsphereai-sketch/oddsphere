@@ -52,6 +52,8 @@ export const CFB_FORWARD_INITIAL_EVIDENCE_SCHEMA_RELEASE =
 export const CFB_FORWARD_EVIDENCE_COLLECTOR_RELEASE =
   "cfb_forward_evidence_collector_2026_09_01_r26_coherent_movement_evidence" as const;
 export const CFB_FORWARD_MEMBER_RELEASE =
+  "cfb_v1_member_release_2026_09_02_r29_total_publication_coherence" as const;
+export const CFB_FORWARD_PUBLICATION_PREVIOUS_MEMBER_RELEASE =
   "cfb_v1_member_release_2026_09_01_r28_coherent_movement_evidence" as const;
 export const CFB_FORWARD_COHERENT_PREVIOUS_MEMBER_RELEASE =
   "cfb_v1_member_release_2026_08_31_r27_kickoff_weather" as const;
