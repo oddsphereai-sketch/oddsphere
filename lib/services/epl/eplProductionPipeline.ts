@@ -3,6 +3,7 @@ import { supabase } from "@/lib/db/supabase";
 import type { PredictionRecordRow, TrackedMarketV17 } from "@/lib/types/domain/Tracking";
 import type { EplShadowSlate } from "./buildEplShadowSlate";
 import { EPL_SHADOW_MODEL_RELEASE } from "./eplShadowModel";
+import { mergeEplForwardEvidenceHistory, type EplForwardEvidenceCapture } from "./eplForwardEvidenceCapture";
 
 export const EPL_COMPETITION = "english_premier_league" as const;
 export const EPL_LOCK_MINUTES = 60;
@@ -175,7 +176,7 @@ export async function seedEplSlate(input: { slate: EplShadowSlate; apply: boolea
   return { mode: input.apply ? "write" as const : "dry-run" as const, teamsProposed: uniqueTeams.size, teamsWritten, gamesProposed: input.slate.matches.length, gamesWritten, errors };
 }
 
-export async function writeEplPredictionRecords(input: { slate: EplShadowSlate; response: DailyEdgeResponse; apply: boolean; now?: Date }) {
+export async function writeEplPredictionRecords(input: { slate: EplShadowSlate; response: DailyEdgeResponse; forwardEvidence?: EplForwardEvidenceCapture[]; apply: boolean; now?: Date }) {
   const now = input.now ?? new Date();
   const externalIds = input.slate.matches.map((match) => providerExternalId(match.id));
   const gameIdByExternal = new Map<number, number>();
@@ -201,15 +202,36 @@ export async function writeEplPredictionRecords(input: { slate: EplShadowSlate; 
   let written = 0;
   let lockedPreserved = 0;
   const errors: string[] = [];
+  const captureWarnings: string[] = [];
+  const captureByProviderId = new Map((input.forwardEvidence ?? []).map((capture) => [capture.providerFixtureId, capture]));
+  const attachCapture = (row: PredictionRecordRow, priorSnapshot: Record<string, unknown> | null) => {
+    if (row.market !== "match_result") return;
+    const providerId = Number(row.external_id) - EPL_EXTERNAL_ID_OFFSET;
+    const capture = captureByProviderId.get(providerId);
+    if (!capture) return;
+    try {
+      row.snapshot_json = {
+        ...(row.snapshot_json ?? {}),
+        epl_forward_evidence_history: mergeEplForwardEvidenceHistory(priorSnapshot, capture),
+      };
+    } catch (error) {
+      const priorHistory = priorSnapshot?.epl_forward_evidence_history;
+      if (priorHistory !== undefined) row.snapshot_json = { ...(row.snapshot_json ?? {}), epl_forward_evidence_history: priorHistory };
+      captureWarnings.push(`${row.matchup}: ${error instanceof Error ? error.message : "forward evidence capture omitted"}`);
+    }
+  };
   if (input.apply) {
     for (const row of proposed) {
-      const { data: existing } = await supabase.from("prediction_records").select("locked_at,held").eq("game_id", row.game_id).eq("market", row.market).eq("model_version", row.model_version).eq("slate_date", row.slate_date).maybeSingle();
-      const prior = existing as { locked_at: string | null; held: boolean | null } | null;
+      const { data: existing } = await supabase.from("prediction_records").select("locked_at,held,snapshot_json").eq("game_id", row.game_id).eq("market", row.market).eq("model_version", row.model_version).eq("slate_date", row.slate_date).maybeSingle();
+      const prior = existing as { locked_at: string | null; held: boolean | null; snapshot_json: Record<string, unknown> | null } | null;
       if (prior?.locked_at) { lockedPreserved++; continue; }
       if (row.held && prior?.held === false) continue;
+      attachCapture(row, prior?.snapshot_json ?? null);
       const { error } = await supabase.from("prediction_records").upsert(row as unknown as Record<string, unknown>, { onConflict: "game_id,market,model_version,slate_date" });
       if (error) errors.push(`${row.matchup} ${row.market}: ${error.message}`); else written++;
     }
+  } else {
+    for (const row of proposed) attachCapture(row, null);
   }
-  return { mode: input.apply ? "write" as const : "dry-run" as const, proposed, written, lockedPreserved, errors };
+  return { mode: input.apply ? "write" as const : "dry-run" as const, proposed, written, lockedPreserved, errors, captureWarnings };
 }

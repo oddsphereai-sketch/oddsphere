@@ -9,6 +9,7 @@ import { deriveEplMatchResultDecision, deriveEplPreviewGrade, EPL_PREVIEW_GRADE_
 import { calibratedEplGoalProjection, calibratedEplTotalOverProbability, impliedEplGoalsMarketDistribution } from "./eplDerivedMarketForecast";
 import { bivariatePoissonScoreDistribution } from "@/lib/services/soccer/dixonColes";
 import { deriveSoccerMarketProbabilities } from "@/lib/services/soccer/soccerMarketProbabilities";
+import { buildEplForwardEvidenceCaptures, type EplForwardEvidenceCapture } from "./eplForwardEvidenceCapture";
 
 const BOOK_PRIORITY = ["pinnacle", "circa", "draftkings", "fanduel", "betmgm", "caesars"];
 const MAX_FIXTURE_RECOVERY_LOADS = 4;
@@ -17,7 +18,7 @@ type Selection = "home" | "draw" | "away" | "over" | "under" | "yes" | "no" | "h
 type MarketRead = { probabilities: Partial<Record<Selection, number>>; prices: Partial<Record<Selection, number>>; sportsbook: string | null; observedAt: string | null; line: number | null; provider: "sharpapi" | "balldontlie" };
 const priceHistory = new Map<string, NonNullable<MarketEdgeDto["oddsTrail"]>>();
 const earliestMarketQuotes = new Map<string, NonNullable<NonNullable<MarketEdgeDto["soccerPriceBoard"]>["rows"][number]["earliest_market_quote"]>>();
-const previewCache = new Map<string, { expiresAt: number; response: DailyEdgeResponse; allBookPrices: EplStoredPriceObservation[] }>();
+const previewCache = new Map<string, { expiresAt: number; response: DailyEdgeResponse; allBookPrices: EplStoredPriceObservation[]; forwardEvidence: EplForwardEvidenceCapture[] }>();
 
 type OpeningPrice = { price: number; sportsbook: string | null; observedAt: string | null };
 
@@ -51,6 +52,8 @@ export type EplStoredPriceObservation = {
 
 export type EplPreviewBuildOptions = {
   captureAllBookPrices?: (rows: EplStoredPriceObservation[]) => void;
+  storedPriceHistory?: EplStoredPriceObservation[];
+  captureForwardEvidence?: (captures: EplForwardEvidenceCapture[]) => void;
 };
 
 function boundedTrail(trail: NonNullable<MarketEdgeDto["oddsTrail"]>): NonNullable<MarketEdgeDto["oddsTrail"]> {
@@ -942,6 +945,7 @@ export async function buildEplDailyEdgePreview(slate: EplShadowSlate, options: E
   const cached = previewCache.get(cacheKey);
   if (cached && cached.expiresAt > Date.now()) {
     options.captureAllBookPrices?.(cached.allBookPrices);
+    options.captureForwardEvidence?.(cached.forwardEvidence);
     return cached.response;
   }
   const key = process.env.SHARPAPI_KEY;
@@ -989,6 +993,21 @@ export async function buildEplDailyEdgePreview(slate: EplShadowSlate, options: E
   };
   const allBookPrices = allBookPriceObservations(slate, markets, capturedAt);
   options.captureAllBookPrices?.(allBookPrices);
-  previewCache.set(cacheKey, { expiresAt: Date.now() + 5 * 60_000, response, allBookPrices });
+  let forwardEvidence: EplForwardEvidenceCapture[] = [];
+  try {
+    forwardEvidence = buildEplForwardEvidenceCaptures({
+      slate,
+      response,
+      fixtureMarkets: markets,
+      storedPriceHistory: options.storedPriceHistory ?? [],
+      capturedAt,
+    });
+  } catch {
+    // Evidence capture is observational. A serialization/provenance failure
+    // must never change or suppress the coherent prediction/member response.
+    forwardEvidence = [];
+  }
+  options.captureForwardEvidence?.(forwardEvidence);
+  previewCache.set(cacheKey, { expiresAt: Date.now() + 5 * 60_000, response, allBookPrices, forwardEvidence });
   return response;
 }

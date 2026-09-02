@@ -35,6 +35,7 @@ export type EplShadowSlateMatch = {
   prediction: EplShadowPrediction;
   currentMoneylineOdds: BdlEplOdds[];
   openingOdds: BdlEplOdds[];
+  modelUncertainty: { homeEffectiveMatches: number; awayEffectiveMatches: number };
   evidence: { home: EplTeamEvidence; away: EplTeamEvidence; lineupsPosted: boolean };
 };
 
@@ -281,6 +282,10 @@ async function buildEplShadowSlateUncached(requestedRound?: number): Promise<Epl
       prediction: predictEplMatch(fit, match.home_team_id, match.away_team_id),
       currentMoneylineOdds: currentMoneylineOddsByMatch.get(match.id) ?? [],
       openingOdds: openingOddsByMatch.get(match.id) ?? [],
+      modelUncertainty: {
+        homeEffectiveMatches: fit.strengths.get(match.home_team_id)?.effectiveMatches ?? 0,
+        awayEffectiveMatches: fit.strengths.get(match.away_team_id)?.effectiveMatches ?? 0,
+      },
       evidence: {
         home: teamEvidence({ teamId: match.home_team_id, matches: foundation.trainingMatches, stats: foundation.teamStats, standing: standingByTeam.get(match.home_team_id) ?? null, providerForm: formByMatchTeam.get(`${match.id}:${match.home_team_id}`) ?? null, injuries: injuriesByTeam.get(match.home_team_id) ?? [], startersPosted: startersByMatchTeam.get(`${match.id}:${match.home_team_id}`) ?? 0 }),
         away: teamEvidence({ teamId: match.away_team_id, matches: foundation.trainingMatches, stats: foundation.teamStats, standing: standingByTeam.get(match.away_team_id) ?? null, providerForm: formByMatchTeam.get(`${match.id}:${match.away_team_id}`) ?? null, injuries: injuriesByTeam.get(match.away_team_id) ?? [], startersPosted: startersByMatchTeam.get(`${match.id}:${match.away_team_id}`) ?? 0 }),

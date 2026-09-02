@@ -5,6 +5,7 @@ import { persistEplLineHistory, readEplStoredPriceHistory } from "@/lib/services
 import { EPL_EXTERNAL_ID_OFFSET, findEplGamesEnteringLock, writeEplPredictionRecords } from "@/lib/services/epl/eplProductionPipeline";
 import { eplSnapshotGamesNeedingLock } from "@/lib/services/epl/eplLockedSnapshot";
 import { readCurrentEplMemberSnapshot, writeCurrentEplMemberSnapshot } from "@/lib/services/epl/eplMemberSnapshotStore";
+import type { EplForwardEvidenceCapture } from "@/lib/services/epl/eplForwardEvidenceCapture";
 
 export const maxDuration = 300;
 
@@ -21,12 +22,18 @@ export async function GET(request: Request): Promise<Response> {
     }
     const apply = process.env.EPL_DB_WRITES_ENABLED === "true";
     const slate = await buildEplShadowSlate();
-    hydrateEplStoredPriceHistory(await readEplStoredPriceHistory(slate.matches.map((match) => match.id)));
+    const storedPriceHistory = await readEplStoredPriceHistory(slate.matches.map((match) => match.id));
+    hydrateEplStoredPriceHistory(storedPriceHistory);
     hydrateEplPriceHistory(currentSnapshot);
     let allBookPrices: Parameters<typeof persistEplLineHistory>[0]["allBookPrices"] = [];
-    const response = await buildEplDailyEdgePreview(slate, { captureAllBookPrices: (rows) => { allBookPrices = rows; } });
+    let forwardEvidence: EplForwardEvidenceCapture[] = [];
+    const response = await buildEplDailyEdgePreview(slate, {
+      storedPriceHistory,
+      captureAllBookPrices: (rows) => { allBookPrices = rows; },
+      captureForwardEvidence: (captures) => { forwardEvidence = captures; },
+    });
     const lineHistory = await persistEplLineHistory({ response, allBookPrices, apply });
-    const predictions = await writeEplPredictionRecords({ slate, response, apply });
+    const predictions = await writeEplPredictionRecords({ slate, response, forwardEvidence, apply });
     const lockedProviderIds = new Set([
       ...candidates.map((row) => row.externalId - EPL_EXTERNAL_ID_OFFSET),
       ...snapshotLockIds,
@@ -56,6 +63,7 @@ export async function GET(request: Request): Promise<Response> {
         proposed: predictions.proposed.length,
         written: predictions.written,
         locked_preserved: predictions.lockedPreserved,
+        forward_evidence: { proposed: forwardEvidence.length, warnings: predictions.captureWarnings },
         publication,
       },
     };
