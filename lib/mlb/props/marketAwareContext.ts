@@ -1,9 +1,10 @@
 import type { MlbPropMarketKey } from "./config";
+import { poissonProbabilityOver } from "@/lib/models/props/distributions/poisson";
 import { american_to_implied_probability, expected_value, remove_vig_two_way } from "./oddsMath";
 import type { PropOddsSnapshot } from "./providers";
 
 export const MLB_PROPS_MARKET_AWARE_CONTEXT_RELEASE =
-  "mlb_props_market_aware_context_2026_09_01_r1";
+  "mlb_props_market_aware_context_2026_09_02_r2_target_excluded_forecast";
 
 const MAX_MOVEMENT_ADJUSTMENT = 0.015;
 const MAX_RELATED_MOVEMENT_ADJUSTMENT = 0.0075;
@@ -30,6 +31,23 @@ export type MlbPropMarketAwareForecast = Readonly<{
   marketAdjustment: number;
 }>;
 
+/**
+ * A milestone is a one-sided event contract, not a two-way choice offered at
+ * the same line. Its forecast remains the priced event with its calibrated
+ * probability; majority-side selection is reserved for true two-way offers.
+ */
+export function resolveMlbPropForecastSide(args: {
+  marketKey: MlbPropMarketKey;
+  offerContract: "two_way" | "milestone";
+  offeredSide: "over" | "under";
+  overProbability: number;
+  underProbability: number;
+}): "over" | "under" {
+  return args.marketKey === "batter_home_runs" && args.offerContract === "milestone"
+    ? args.offeredSide
+    : args.overProbability >= args.underProbability ? "over" : "under";
+}
+
 export function buildMlbPropMarketContexts(args: {
   currentOdds: readonly PropOddsSnapshot[];
   openingOdds: readonly PropOddsSnapshot[];
@@ -53,48 +71,32 @@ export function buildMlbPropMarketContexts(args: {
       .filter((value): value is number => value !== null);
     const currentOverProbability = median(pairProbabilities.length ? pairProbabilities : oneSidedOver);
     const movementByBook = new Map<string, number>();
-    let openingBooks = 0;
     for (const [book, bookRows] of groupBy(rows, (row) => normalizeBook(row.sportsbook))) {
       const adjustment = sameBookMovementAdjustment(bookRows, openingsByBase);
       if (adjustment !== null) {
         movementByBook.set(book, adjustment);
-        openingBooks++;
       }
     }
-    const splitRows = rows.flatMap((row) => {
+    const splitByBook = new Map<string, number[]>();
+    for (const row of rows) {
       const adjustment = strictSplitAdjustmentOver(row);
-      return adjustment === null ? [] : [adjustment];
-    });
+      if (adjustment === null) continue;
+      const book = normalizeBook(row.sportsbook);
+      splitByBook.set(book, [...(splitByBook.get(book) ?? []), adjustment]);
+    }
     groupSummaries.set(groupKey, {
       rows,
       pairs,
       currentOverProbability,
-      movementAdjustmentOver: clamp(median([...movementByBook.values()]) ?? 0, MAX_MOVEMENT_ADJUSTMENT),
-      openingBooks,
-      splitAdjustmentOver: clamp(median(splitRows) ?? 0, MAX_SPLIT_ADJUSTMENT),
-      splitEvidenceRows: splitRows.length,
+      movementByBook,
+      splitByBook,
     });
-  }
-
-  const relatedByPlayer = new Map<string, Array<{ market: MlbPropMarketKey; adjustment: number }>>();
-  for (const summary of groupSummaries.values()) {
-    const first = summary.rows[0];
-    if (!first || Math.abs(summary.movementAdjustmentOver) < 1e-9) continue;
-    const key = `${first.gameId}|${first.playerId}|${relatedCluster(first.marketKey)}`;
-    const rows = relatedByPlayer.get(key) ?? [];
-    if (!rows.some((row) => row.market === first.marketKey)) {
-      rows.push({ market: first.marketKey, adjustment: summary.movementAdjustmentOver });
-      relatedByPlayer.set(key, rows);
-    }
   }
 
   const contexts = new Map<string, MlbPropMarketContext>();
   for (const summary of groupSummaries.values()) {
     const first = summary.rows[0];
     if (!first) continue;
-    const related = (relatedByPlayer.get(`${first.gameId}|${first.playerId}|${relatedCluster(first.marketKey)}`) ?? [])
-      .filter((row) => row.market !== first.marketKey);
-    const relatedAdjustment = coherentRelatedAdjustment(related.map((row) => row.adjustment));
     for (const row of summary.rows) {
       const targetBook = normalizeBook(row.sportsbook);
       const excludedPairProbabilities = [...summary.pairs.entries()].flatMap(([book, pair]) => {
@@ -112,17 +114,26 @@ export function buildMlbPropMarketContexts(args: {
       const targetExcludedOverProbability = median(
         excludedPairProbabilities.length ? excludedPairProbabilities : excludedOneSided,
       );
+      const movementAdjustmentOver = targetExcludedMedian(summary.movementByBook, targetBook);
+      const splitRows = [...summary.splitByBook.entries()]
+        .filter(([book]) => book !== targetBook)
+        .flatMap(([, values]) => values);
+      const related = targetExcludedRelatedAdjustments({
+        summaries: groupSummaries,
+        row,
+        targetBook,
+      });
       contexts.set(marketContextQuoteKey(row), {
         currentOverProbability: summary.currentOverProbability,
         targetExcludedOverProbability,
         completePairBooks: summary.pairs.size,
         targetExcludedBooks: excludedPairProbabilities.length || excludedOneSided.length,
-        movementAdjustmentOver: summary.movementAdjustmentOver,
-        relatedMovementAdjustmentOver: relatedAdjustment,
-        splitAdjustmentOver: summary.splitAdjustmentOver,
-        openingBooks: summary.openingBooks,
+        movementAdjustmentOver,
+        relatedMovementAdjustmentOver: coherentRelatedAdjustment(related.map((value) => value.adjustment)),
+        splitAdjustmentOver: clamp(median(splitRows) ?? 0, MAX_SPLIT_ADJUSTMENT),
+        openingBooks: [...summary.movementByBook.keys()].filter((book) => book !== targetBook).length,
         relatedMarkets: related.length,
-        splitEvidenceRows: summary.splitEvidenceRows,
+        splitEvidenceRows: splitRows.length,
       });
     }
   }
@@ -138,17 +149,18 @@ export function applyMlbPropMarketAwareForecast(args: {
   context: MlbPropMarketContext | null;
 }): MlbPropMarketAwareForecast {
   const independentOver = clampProbability(args.independentOverProbability);
-  const marketOver = args.context?.currentOverProbability;
+  const marketOver = args.context?.targetExcludedOverProbability;
   const modelWeight = Math.max(0, Math.min(1, args.modelWeight));
   const anchored = marketOver === null || marketOver === undefined
     ? independentOver
     : independentOver * modelWeight + marketOver * (1 - modelWeight);
-  const contextualAdjustment =
-    (args.context?.movementAdjustmentOver ?? 0)
-    + (args.context?.relatedMovementAdjustmentOver ?? 0)
-    + (args.context?.splitAdjustmentOver ?? 0);
+  const contextualAdjustment = marketOver === null || marketOver === undefined
+    ? 0
+    : (args.context?.movementAdjustmentOver ?? 0)
+      + (args.context?.relatedMovementAdjustmentOver ?? 0)
+      + (args.context?.splitAdjustmentOver ?? 0);
   const overProbability = clampProbability(anchored + contextualAdjustment);
-  const projection = marketAwareProjection({
+  const projection = mlbPropProjectionForPosterior({
     marketKey: args.marketKey,
     line: args.line,
     independentProjection: args.independentProjection,
@@ -197,11 +209,38 @@ type GroupSummary = {
   rows: PropOddsSnapshot[];
   pairs: Map<string, BookPair>;
   currentOverProbability: number | null;
-  movementAdjustmentOver: number;
-  openingBooks: number;
-  splitAdjustmentOver: number;
-  splitEvidenceRows: number;
+  movementByBook: Map<string, number>;
+  splitByBook: Map<string, number[]>;
 };
+
+function targetExcludedMedian(values: Map<string, number>, targetBook: string): number {
+  return clamp(median([...values.entries()]
+    .filter(([book]) => book !== targetBook)
+    .map(([, value]) => value)) ?? 0, MAX_MOVEMENT_ADJUSTMENT);
+}
+
+function targetExcludedRelatedAdjustments(args: {
+  summaries: Map<string, GroupSummary>;
+  row: PropOddsSnapshot;
+  targetBook: string;
+}): Array<{ market: MlbPropMarketKey; adjustment: number }> {
+  const byMarket = new Map<MlbPropMarketKey, number[]>();
+  for (const summary of args.summaries.values()) {
+    const related = summary.rows[0];
+    if (!related
+      || related.gameId !== args.row.gameId
+      || related.playerId !== args.row.playerId
+      || related.marketKey === args.row.marketKey
+      || relatedCluster(related.marketKey) !== relatedCluster(args.row.marketKey)) continue;
+    const adjustment = targetExcludedMedian(summary.movementByBook, args.targetBook);
+    if (Math.abs(adjustment) < 1e-9) continue;
+    byMarket.set(related.marketKey, [...(byMarket.get(related.marketKey) ?? []), adjustment]);
+  }
+  return [...byMarket.entries()].flatMap(([market, adjustments]) => {
+    const adjustment = median(adjustments);
+    return adjustment === null ? [] : [{ market, adjustment }];
+  });
+}
 
 function completeBookPairs(rows: readonly PropOddsSnapshot[]): Map<string, BookPair> {
   const grouped = groupBy(rows, (row) => normalizeBook(row.sportsbook));
@@ -285,7 +324,7 @@ function coherentRelatedAdjustment(values: readonly number[]): number {
   return clamp((median(material) ?? 0) * 0.5, MAX_RELATED_MOVEMENT_ADJUSTMENT);
 }
 
-function marketAwareProjection(args: {
+export function mlbPropProjectionForPosterior(args: {
   marketKey: MlbPropMarketKey;
   line: number;
   independentProjection: number;
@@ -293,26 +332,29 @@ function marketAwareProjection(args: {
   authoritativeOverProbability: number;
 }): number {
   if (![args.line, args.independentProjection].every(Number.isFinite)) return args.independentProjection;
-  const probabilityDistance = Math.max(0.08, Math.abs(args.independentOverProbability - 0.5));
-  const observedScale = Math.abs(args.independentProjection - args.line) / probabilityDistance;
-  const scale = clamp(observedScale || fallbackProjectionScale(args.marketKey), fallbackProjectionScale(args.marketKey) * 2);
-  const shift = clamp(
-    (args.authoritativeOverProbability - args.independentOverProbability) * scale,
-    projectionShiftCap(args.marketKey),
-  );
-  return Math.max(0, args.independentProjection + shift);
+  if (Math.abs(args.authoritativeOverProbability - args.independentOverProbability) < 1e-12) {
+    return args.independentProjection;
+  }
+  const threshold = Math.floor(args.line) + 1;
+  const authoritativeMean = inversePoissonOverProbability(args.authoritativeOverProbability, threshold);
+  // Probability influence is already bounded upstream by the established
+  // category priors and context caps. The projected count is the inverse of
+  // that one final count distribution; applying a second shift cap here would
+  // describe a different forecast.
+  return authoritativeMean;
 }
 
-function projectionShiftCap(market: MlbPropMarketKey): number {
-  if (market === "pitcher_outs") return 1.5;
-  if (["pitcher_strikeouts", "pitcher_hits_allowed", "pitcher_walks", "pitcher_earned_runs"].includes(market)) return 0.75;
-  if (["batter_total_bases", "batter_hits_runs_rbis"].includes(market)) return 0.75;
-  if (["batter_home_runs", "batter_doubles", "batter_triples", "batter_stolen_bases"].includes(market)) return 0.12;
-  return 0.35;
-}
-
-function fallbackProjectionScale(market: MlbPropMarketKey): number {
-  return projectionShiftCap(market) * 4;
+function inversePoissonOverProbability(probability: number, threshold: number): number {
+  const target = clampProbability(probability);
+  let lower = 0;
+  let upper = Math.max(4, threshold + 4);
+  while (poissonProbabilityOver(upper, threshold) < target && upper < 512) upper *= 2;
+  for (let iteration = 0; iteration < 80; iteration++) {
+    const midpoint = (lower + upper) / 2;
+    if (poissonProbabilityOver(midpoint, threshold) < target) lower = midpoint;
+    else upper = midpoint;
+  }
+  return (lower + upper) / 2;
 }
 
 function relatedCluster(market: MlbPropMarketKey): string {

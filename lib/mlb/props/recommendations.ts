@@ -53,12 +53,56 @@ export function recommendPropBet(args: {
   dataConfidence?: number;
   modelVersionActive?: boolean;
   forceNoPlayReasonCodes?: PropReasonCode[];
+  /** Undefined preserves legacy callers; null explicitly means no target-excluded alternative. */
+  forecastMarketOverProbability?: number | null;
   config?: Partial<typeof DEFAULT_PROP_RECOMMENDATION_CONFIG>;
 }): PropRecommendation {
   const config = { ...DEFAULT_PROP_RECOMMENDATION_CONFIG, ...args.config };
   const reasonCodes: PropReasonCode[] = [];
-
-  const selectedOdds = args.prediction.side === "over" ? args.overOdds : args.underOdds;
+  const evaluatedMarketOverProbability = args.overOdds && args.underOdds
+    ? remove_vig_two_way(args.overOdds.americanOdds, args.underOdds.americanOdds).over
+    : null;
+  const forecastMarketOverProbability = Object.prototype.hasOwnProperty.call(args, "forecastMarketOverProbability")
+    ? args.forecastMarketOverProbability ?? null
+    : evaluatedMarketOverProbability;
+  const independentOverProbability = args.prediction.side === "over"
+    ? args.prediction.modelProbability
+    : 1 - args.prediction.modelProbability;
+  const probabilityAlreadyMarketAnchored =
+    args.prediction.explanation.probabilityAlreadyMarketAnchored === true;
+  const shrinkageWeight = probabilityAlreadyMarketAnchored
+    ? 1
+    : calibratedPropModelWeight({
+        marketKey: args.prediction.marketKey,
+        side: args.prediction.side,
+        baseWeight: modelWeightForConfidence(args.dataConfidence ?? 0.8),
+      });
+  const finalOverProbability = forecastMarketOverProbability === null
+    ? independentOverProbability
+    : clampProbability(
+      independentOverProbability * shrinkageWeight
+      + forecastMarketOverProbability * (1 - shrinkageWeight),
+    );
+  const side = finalOverProbability >= 0.5 ? "over" : "under";
+  const modelProbability = side === "over" ? independentOverProbability : 1 - independentOverProbability;
+  const finalProbability = side === "over" ? finalOverProbability : 1 - finalOverProbability;
+  const selectedOdds = side === "over" ? args.overOdds : args.underOdds;
+  const prediction: PropModelPrediction = {
+    ...args.prediction,
+    side,
+    modelProbability,
+    fairDecimalOdds: 1 / modelProbability,
+    fairAmericanOdds: decimal_to_american(1 / modelProbability),
+  };
+  const crossedSideHasExactCycle = side === args.prediction.side
+    || Boolean(
+      args.overOdds
+      && args.underOdds
+      && args.overOdds.line === args.underOdds.line
+      && args.overOdds.line === args.prediction.line
+      && args.overOdds.sportsbook === args.underOdds.sportsbook
+      && args.overOdds.asOfTimestamp === args.underOdds.asOfTimestamp,
+    );
   if (args.modelVersionActive === false) reasonCodes.push("NO_PLAY");
   if ((args.mappingConfidence ?? 1) < config.minMappingConfidence) reasonCodes.push("MAPPING_RISK");
   if (args.lineupRisk) reasonCodes.push("LINEUP_RISK");
@@ -68,6 +112,7 @@ export function recommendPropBet(args: {
     reasonCodes.push(PROJECTION_SIDE_CONTRADICTION);
   }
   if (args.forceNoPlayReasonCodes?.length) reasonCodes.push(...args.forceNoPlayReasonCodes);
+  if (!crossedSideHasExactCycle) reasonCodes.push("NO_PLAY");
   if (args.overOdds === null || args.underOdds === null) reasonCodes.push("NO_PLAY");
   if (selectedOdds === null) reasonCodes.push("NO_PLAY");
   if (selectedOdds && isStale(selectedOdds.asOfTimestamp, args.asOfTimestamp, config.maxOddsAgeSeconds)) {
@@ -81,39 +126,24 @@ export function recommendPropBet(args: {
     if (price.reasonCode) reasonCodes.push(price.reasonCode);
   }
 
-  const marketProbability = args.overOdds && args.underOdds
-    ? (() => {
-      const devig = remove_vig_two_way(args.overOdds.americanOdds, args.underOdds.americanOdds);
-      return args.prediction.side === "over" ? devig.over : devig.under;
-    })()
-    : null;
-  const probabilityAlreadyMarketAnchored =
-    args.prediction.explanation.probabilityAlreadyMarketAnchored === true;
-  const shrinkageWeight = probabilityAlreadyMarketAnchored
-    ? 1
-    : calibratedPropModelWeight({
-        marketKey: args.prediction.marketKey,
-        side: args.prediction.side,
-        baseWeight: modelWeightForConfidence(args.dataConfidence ?? 0.8),
-      });
-  const finalProbability = marketProbability === null
-    ? args.prediction.modelProbability
-    : clampProbability(args.prediction.modelProbability * shrinkageWeight + marketProbability * (1 - shrinkageWeight));
+  const marketProbability = evaluatedMarketOverProbability === null
+    ? null
+    : side === "over" ? evaluatedMarketOverProbability : 1 - evaluatedMarketOverProbability;
 
   if (reasonCodes.some((code) => ["NO_PLAY", "MAPPING_RISK", "LINEUP_RISK", "INJURY_RISK", "LOW_DATA_CONFIDENCE", "STALE_ODDS", "NO_VIG_SUM_ANOMALY", "SIDE_ODDS_MISMATCH", "LINE_MISMATCH", "DUPLICATE_VENDOR_LINE", "CONFLICTING_SIDE_RECOMMENDATION", "PROJECTION_SIDE_CONTRADICTION", "UNUSUALLY_HIGH_EV", "STALE_BDL_ODDS", "MISSING_UPDATED_AT", "EXTREME_PRICE_RESEARCH_ONLY", "INVALID_PRICE_FORMAT"].includes(code))) {
-    return noPlay(args.prediction, reasonCodes, { marketProbability, finalProbability, shrinkageWeight });
+    return noPlay(prediction, reasonCodes, { marketProbability, finalProbability, shrinkageWeight });
   }
 
   const edge = finalProbability - marketProbability!;
   const ev = expected_value(finalProbability, selectedOdds!.americanOdds);
   if (edge < config.minEdge || ev < config.minEv) {
-    return noPlay(args.prediction, ["NO_PLAY"], { marketProbability, finalProbability, shrinkageWeight });
+    return noPlay(prediction, ["NO_PLAY"], { marketProbability, finalProbability, shrinkageWeight });
   }
 
   reasonCodes.push("HIGH_EV", "LINE_VALUE");
   if (edge >= 0.08) reasonCodes.push("MATCHUP_EDGE");
   const stake = recommended_fractional_kelly_stake({
-    modelProbability: args.prediction.modelProbability,
+    modelProbability,
     americanOdds: selectedOdds!.americanOdds,
     bankroll: config.bankrollDefault,
     fractionalKelly: config.fractionalKelly,
@@ -125,11 +155,11 @@ export function recommendPropBet(args: {
     status: "recommended",
     playGrade: mapLegacyPropStatusToGrade("recommended", { confidenceTier, reasonCodes }),
     confidenceTier,
-    side: args.prediction.side,
-    line: args.prediction.line,
+    side,
+    line: prediction.line,
     sportsbook: selectedOdds!.sportsbook,
     americanOdds: selectedOdds!.americanOdds,
-    modelProbability: args.prediction.modelProbability,
+    modelProbability,
     finalProbability,
     shrinkageWeight,
     fairDecimalOdds: 1 / finalProbability,

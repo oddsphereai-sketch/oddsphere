@@ -41,7 +41,7 @@ assert.equal(versions.batter_doubles, withMarketContext("batter_doubles_market_r
 assert.equal(versions.batter_strikeouts, withMarketContext("batter_strikeouts_event_distribution_integrated_read_v2_empirical_market_over_accuracy_display_projection_calibration_r1"));
 assert.equal(
   MLB_PROPS_MODEL_RELEASE_ID,
-  "mlb_props_2026_09_01_r38",
+  "mlb_props_2026_09_02_r39",
 );
 assert.equal(MLB_PROPS_SHADOW_PITCHER_RELEASE_ID, "mlb_props_shadow_pitcher_2026_08_12_r1");
 assert.equal(MLB_PROPS_SHADOW_PITCHER_FEATURE_VERSION, "mlb_props_shared_pitcher_features_v1_2026_08_12");
@@ -87,7 +87,8 @@ assert.ok(!liveBoard.includes("applyValidatedHomeRunActionablePromotions"));
 assert.ok(!liveBoard.includes("VALIDATED_HOME_RUN_CONSENSUS_BEST_PRICE_PROMOTION"));
 assert.ok(liveBoard.includes("scoreBatterDoublesUnderAccuracyCandidate"));
 assert.ok(liveBoard.includes("scoreBatterStrikeoutsOverAccuracyCandidate"));
-assert.ok(liveBoard.includes("applyMlbPropsDisplayProjectionCalibration(decisionProps)"));
+assert.ok(liveBoard.includes("calibrateMlbPropsDisplayProjection({"));
+assert.ok(liveBoard.includes("side: forecastSide"));
 assert.ok(realScoring.includes("if (!isPitcherMarket(row.odds.marketKey)) continue;"));
 assert.ok(realScoring.includes("modelForRealPitcherMarket"));
 

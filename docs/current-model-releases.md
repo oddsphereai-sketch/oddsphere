@@ -4,7 +4,7 @@ This file is the human-readable production handoff registry. Runtime constants a
 prediction snapshots remain the machine authority. Future model work must start here, verify the
 constants, and preserve the precedence and writer ownership below.
 
-Last reviewed: 2026-09-01
+Last reviewed: 2026-09-02
 
 ## NFL Daily Edge generalized weekly production release
 
@@ -1085,13 +1085,42 @@ another line remain separate context and cannot replace or regrade the evaluated
 tuples still win unconditionally. The live GS@CHI reproduction and focused regression are recorded
 in `docs/model-audits/2026-08-21-wnba-incoherent-total-tuple-fallback.md`.
 
-## MLB Player Props candidate
+## MLB Player Props production release
 
-- Release: `mlb_props_2026_09_01_r38`
+- Release: `mlb_props_2026_09_02_r39`
 - Machine registry: `lib/mlb/props/marketModelVersions.ts`
 - Authoritative writer: `/api/cron/mlb-player-props-refresh` through
   `refreshMlbPropsBoard`
-- Status: private launch candidate; not publicly enabled
+- Status: authoritative signed-in member release
+
+The September 2 r39 target-excluded forecast release removes the evaluated
+sportsbook from every actual forecast anchor. Pitcher recommendation consensus,
+hitter exact-line synthesis, cross-market movement, opening/current movement,
+and verified split adjustments use only other books; when no eligible
+alternative exists, the existing independent player distribution remains the
+authoritative forecast automatically. One complementary posterior determines
+the side and calibrated decimal projection. The evaluated named-book quote is
+then used only for exact-price EV and grade. A side crossing can grade only from
+the exact complementary offer for the same book, line, and cycle; otherwise the
+new prediction remains visible and non-actionable. Existing category priors,
+caps, thresholds, health handling, locks, stakes, provider budgets, sole writer,
+and `prediction_pipeline` lease are unchanged.
+
+The frozen 5,962-row r38 replay changes 5,374 probabilities and 5,128 decimal
+projections across 5,493 measurable rows, with 205 posterior side crossings.
+Actionables move 172→137 through seven promotions and 42 demotions; the candidate
+retains 45 Best Angles, 92 Leans, 1,880 Watchlists, 2,242 No Plays, 1,382 Research,
+and 321 Pending Data rows. No previously actionable category becomes flat. All
+90 crossings without an exact same-cycle complementary quote remain
+non-actionable; actionable quote mismatches and actionable projection/side
+contradictions are both zero. Health rows and locked tuples are unchanged.
+Target-excluded comparator breadth is 2,011 / 2,480 / 807 / 244 for zero / one /
+two / three-plus alternatives, with zero evaluated-offer forecast references
+and zero verified split adjustments. Natural refreshes emit release-pure
+target-excluded/fallback/action/lock/coherence telemetry; invalid refreshes keep
+the prior canonical/member snapshot and retry through the ordinary writer.
+Rollback is the complete r38 runtime set below. Evidence is in
+`docs/model-audits/2026-09-02-mlb-props-target-excluded-forecast.md`.
 
 The September 1 r38 market-aware forecast release moves genuine exact-line
 market context ahead of side, probability, projection, and grade finalization
