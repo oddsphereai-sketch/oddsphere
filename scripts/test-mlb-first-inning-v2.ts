@@ -469,6 +469,21 @@ async function main() {
     check("FI grade edge remains attached to the exact evaluation pair",
       selectedEvaluationFair !== null && model.fiV2Audit.fi_edge_pct !== null &&
       near(model.fiV2Audit.fi_edge_pct, (selectedPosterior - selectedEvaluationFair) * 100, 0.000001));
+
+    const v5ExpectedPosterior = FI_TEST.selectTrustIndependent({
+      tier: projectFiIndependent(buildSnapshot()).data_quality_tier,
+      missingCount: projectFiIndependent(buildSnapshot()).feature_audit.missing_count,
+      hasMarket: true,
+    }) * projectFiIndependent(buildSnapshot()).p_nrfi +
+      (1 - FI_TEST.selectTrustIndependent({
+        tier: projectFiIndependent(buildSnapshot()).data_quality_tier,
+        missingCount: projectFiIndependent(buildSnapshot()).feature_audit.missing_count,
+        hasMarket: true,
+      })) * (baseline.nrfi_no_vig_prob ?? 0);
+    check("target-excluded multi-book v5 posterior remains byte-for-byte on incumbent math",
+      near(model.fiV2Audit.posterior_p_nrfi, v5ExpectedPosterior, 0.000000000001) &&
+      model.fiV2Audit.trust_independent === 0.25 &&
+      !model.fiV2Audit.integrity_notes.some((note) => note.includes("Evaluation-only")));
   }
   {
     const asOf = "2026-09-01T17:00:00.000Z";
@@ -489,6 +504,21 @@ async function main() {
       baseline.market_evidence_books[0]?.source_class === "retail" &&
       baseline.market_evidence_books[0]?.is_evaluation_book === true &&
       baseline.market_evidence_books[0]?.target_excluded_from_evaluation === false);
+    const snap = buildSnapshot({
+      homeStarter: { season_era: 2.30, first_inning_era: 1.50, first_inning_starts: 12 },
+      awayStarter: { season_era: 2.30, first_inning_era: 1.50, first_inning_starts: 12 },
+    });
+    const independent = projectFiIndependent(snap);
+    const candidate = runMlbFirstInningModelV2(snap, oneRetailPair, asOf);
+    check("singleton evaluation quote leaves authoritative posterior and decimal projection independent-only",
+      near(candidate.fiV2Audit.posterior_p_nrfi, independent.p_nrfi, 0.000000000001) &&
+      near(candidate.fiV2Audit.posterior_expected_first_inning_runs, -Math.log(independent.p_nrfi), 0.000000000001) &&
+      candidate.fiV2Audit.trust_independent === 1 &&
+      candidate.fiV2Audit.integrity_notes.some((note) => note.includes("Evaluation-only FI quote excluded")));
+    check("singleton evaluated pair remains the exact downstream grade price",
+      candidate.fiV2Audit.market_evaluation_sportsbook === baseline.evaluation_sportsbook &&
+      candidate.fiV2Audit.market_evaluation_nrfi_no_vig === baseline.evaluation_nrfi_no_vig_prob &&
+      candidate.fiV2Audit.market_evaluation_yrfi_no_vig === baseline.evaluation_yrfi_no_vig_prob);
   }
   {
     const asOf = "2026-09-01T17:00:00.000Z";
@@ -739,7 +769,11 @@ async function main() {
       awayStarter: { season_era: 7.50, first_inning_era: 7.50, first_inning_starts: 10 },
       homeStarter: { season_era: 7.50, first_inning_era: 7.50, first_inning_starts: 10 },
     });
-    const out = runMlbFirstInningModelV2(snap, buildFiLines(140, -160)); // YRFI line
+    const out = runMlbFirstInningModelV2(snap, [
+      ...buildFiLines(140, -160), // YRFI line
+      { market_type: "first_inning_total", sportsbook: "ballybet", side: "over", line_value: 0.5, odds_american: 140 },
+      { market_type: "first_inning_total", sportsbook: "ballybet", side: "under", line_value: 0.5, odds_american: -160 },
+    ]);
     const rawPosterior =
       (out.fiV2Audit.independent_p_nrfi ?? 0) * out.fiV2Audit.trust_independent +
       (out.fiV2Audit.market_nrfi_no_vig ?? 0) * (1 - out.fiV2Audit.trust_independent);

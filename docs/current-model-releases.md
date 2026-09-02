@@ -217,10 +217,10 @@ changed; only deterministic settlement of existing locked rows is affected.
 ## MLB champion
 
 - Projection runtime: resolved automodel `v2_2`
-- First-inning runtime: `fi_v2` with probability head `mlb_first_inning_fi_v5_named_book_consensus_weight25_2026_09_01`
-- Public calibration: `mlb_public_calibration_v29_first_inning_named_book_consensus_2026_09_01`
-- Decision release: `mlb_daily_edge_decision_2026_09_01_r78_first_inning_member_tuple_coherence`
-- Rule bundle: `mlb_daily_edge_rule_bundle_v66_first_inning_member_tuple_coherence_2026_09_01`
+- First-inning runtime: `fi_v2` with probability head `mlb_first_inning_fi_v6_evaluated_quote_exclusion_2026_09_02`
+- Public calibration: `mlb_public_calibration_v30_first_inning_evaluated_quote_exclusion_2026_09_02`
+- Decision release: `mlb_daily_edge_decision_2026_09_02_r79_first_inning_evaluated_quote_exclusion`
+- Rule bundle: `mlb_daily_edge_rule_bundle_v67_first_inning_evaluated_quote_exclusion_2026_09_02`
 - Grade policy: `mlb_public_grade_policy_v55_first_inning_named_book_consensus_2026_09_01`
 - Correction policy: `mlb_prediction_corrections_v23_split_pair_recency_2026_08_31`
 - Tracking contract: `member_facing_lock_v8_priority_retry_minute_cadence_2026_08_11`
@@ -504,6 +504,41 @@ member-tuple contract v1; r77 probability head v5, calibration v29,
 price-map v1, market-calibration v2, grade policy v55, and all full-game r76
 heads remain unchanged. Evidence and rollback are recorded in
 `docs/model-audits/2026-09-01-mlb-first-inning-member-tuple-coherence-r78.md`.
+
+The September 2 MLB r79 first-inning evaluated-quote exclusion corrects one
+structural forecast defect without introducing a new market-interpreter
+ladder: when the exact FI evaluation sportsbook is the only incumbent-accepted
+complete current pair, it remains available only for the exact selected-side
+price, fair probability, EV, and downstream grade economics. The authoritative
+FI posterior, natural-decimal expected runs, and side instead remain the
+existing independent FI output. A target-excluded complete named-book pair
+keeps the complete r77/v5 current-consensus and bounded FI-movement posterior
+path byte-for-byte; no-current, stale, one-sided, and missing-data behavior is
+unchanged. This is not a broad single-book ban, a split mapping, a qualitative
+market override, or a calibrated multi-book trust claim.
+
+The paired read-only September 2 current-board comparison ran the unmodified
+v5 base and r79 candidate against the same 15 current snapshots and FI lines:
+eight evaluation-only singleton rows changed only because they had no
+target-excluded accepted pair; four target-excluded multi-book rows and three
+no-current rows were exactly unchanged. The singleton rows were STL@LAD
+(+2.813pp NRFI, still Toss-Up), ATH@TEX (+3.191pp, Toss-Up to NRFI Lean),
+SEA@BOS (+10.099pp, retained NRFI Lean), TOR@CLE (+12.764pp, retained NRFI
+Lean), SD@CIN (+7.652pp, YRFI Lean to NRFI Lean), SF@PIT (+12.107pp,
+retained NRFI Lean), MIA@KC (+15.862pp, retained NRFI Lean), and MIL@CHC
+(+11.642pp, retained NRFI Lean). Their exact Bally evaluation prices were
+preserved. The board moves from 5 NRFI / 2 YRFI / 5 Toss-Ups / 3 Held and 6
+actionable Leans to 7 NRFI / 1 YRFI / 4 Toss-Ups / 3 Held and 7 actionable
+Leans: one tested promotion (ATH@TEX), zero demotions, and one forecast side
+change (SD@CIN). This reports forecast and grade effects separately; it makes
+no retrospective accuracy or profitability claim. Existing locks, r78
+unlocked member-tuple coherence, sole writer, provider/query paths, and the
+shared `prediction_pipeline:mlb` lease remain unchanged. The release stamps
+schema v12, calibration v30, decision r79, rule bundle v67, FI probability
+head v6, and FI market-calibration v3; price-map v1, member-tuple contract
+v1, grade policy v55, all full-game heads, and locked rows remain unchanged.
+Evidence and rollback are recorded in
+`docs/model-audits/2026-09-02-mlb-fi-evaluated-quote-exclusion-r79.md`.
 
 The August 30 MLB T-60 lifecycle patch makes the lock gate understand r73's
 already-persisted pending-promotion shape. A fresh raw candidate may differ
