@@ -75,6 +75,7 @@ import {
   resolveMlbMoneylineRawSideChampion,
   resolveMlbTotalRuntimeResidualChampion,
 } from "../automodel/immediateMarketChampion";
+import { attachMlbFullGameForwardEvidence } from "./mlb/mlbFullGameForwardEvidenceCapture";
 
 const SYNTHETIC_PRICE_BOOKS = new Set(["locked_snapshot", "recommendation_snapshot", "splits_consensus"]);
 const BOOK_PRIORITY: readonly string[] = SHARED_BOOK_PRIORITY.filter(
@@ -6007,7 +6008,36 @@ export function buildPredictionRecordsFromSlate(args: {
         applyMlbMarketLedMovementLean(applyMlbSharpPortfolioLean(proposed)),
       )
     : proposed;
-  return ranked.map(withMemberFacingAtLock);
+  if (args.sport !== "mlb") return ranked.map(withMemberFacingAtLock);
+
+  const capturedByKey = new Map<string, PredictionRecordRow>();
+  for (const game of args.games) {
+    const prediction = args.predictionByGameId.get(game.id);
+    if (!prediction) continue;
+    const gameRecords = ranked.filter((record) => record.game_id === game.id);
+    if (gameRecords.length === 0) continue;
+    const historyRows = [
+      "moneyline::home",
+      "moneyline::away",
+      "total::over",
+      "total::under",
+    ].flatMap((suffix) => args.historyByKey?.get(`${game.id}::${suffix}`) ?? []);
+    const captured = attachMlbFullGameForwardEvidence({
+      records: gameRecords,
+      prediction,
+      currentLines: args.currentLinesByGameId?.get(game.id) ?? [],
+      historyRows,
+      openerRows: args.openersByGameId?.get(game.id) ?? [],
+      signals: args.signalsByGameId?.get(game.id) ?? [],
+      splitRows: args.sourceAwareSplitsByGameId?.get(game.id) ?? [],
+    });
+    for (const record of captured) {
+      capturedByKey.set(`${record.game_id}::${record.market}`, record);
+    }
+  }
+  return ranked.map((record) =>
+    withMemberFacingAtLock(capturedByKey.get(`${record.game_id}::${record.market}`) ?? record),
+  );
 }
 
 /**
