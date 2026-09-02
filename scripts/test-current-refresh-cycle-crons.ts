@@ -1,5 +1,12 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import {
+  assessSlateCyclePostludeBudget,
+  buildSlateCyclePostludeTiming,
+  SLATE_CYCLE_MARKET_INTELLIGENCE_BUDGET_MS,
+  SLATE_CYCLE_RESPONSE_SNAPSHOT_BUDGET_MS,
+  SLATE_CYCLE_TIMEOUT_SAFETY_RESERVE_MS,
+} from "../lib/cron/slateCyclePostludeBudget";
 
 const vercel = JSON.parse(readFileSync("vercel.json", "utf8")) as {
   crons?: Array<{ path?: string; schedule?: string }>;
@@ -34,7 +41,80 @@ for (const path of [
   assert.match(body, /requireLease:\s*true/, `${path} requires the shared prediction lease`);
 }
 
-assert.match(source("app/api/cron/slate-cycle/route.ts"), /refreshDailyEdgeResponseSnapshot/, "slate cycle republishes Daily Edge");
+const slateCycleSource = source("app/api/cron/slate-cycle/route.ts");
+assert.match(slateCycleSource, /export const maxDuration = 300/, "slate-cycle retains its five-minute platform duration");
+assert.match(slateCycleSource, /SLATE_CYCLE_MARKET_INTELLIGENCE_BUDGET_MS \+\s*SLATE_CYCLE_RESPONSE_SNAPSHOT_BUDGET_MS/, "the first boundary budgets both postlude stages");
+assert.match(slateCycleSource, /requiredWorkMs: SLATE_CYCLE_RESPONSE_SNAPSHOT_BUDGET_MS/, "the route recomputes its budget before snapshot publication");
+assert.match(slateCycleSource, /refreshDailyEdgeResponseSnapshot/, "slate cycle republishes Daily Edge when budget remains");
+assert.match(slateCycleSource, /insufficient_time_after_core_orchestrator/, "slow core deferral is explicit");
+assert.match(slateCycleSource, /insufficient_time_after_market_intelligence/, "snapshot budget is rechecked after MI-v2");
+assert.match(slateCycleSource, /postlude_timing/, "postlude elapsed and deferred telemetry is returned");
+
+const fullPostludeWorkMs =
+  SLATE_CYCLE_MARKET_INTELLIGENCE_BUDGET_MS +
+  SLATE_CYCLE_RESPONSE_SNAPSHOT_BUDGET_MS;
+const exactFullBudget = assessSlateCyclePostludeBudget({
+  routeStartedAtMs: 0,
+  nowMs: 210_000,
+  requiredWorkMs: fullPostludeWorkMs,
+});
+assert.equal(exactFullBudget.remainingMs, 90_000, "full postlude exact boundary retains 90 seconds");
+assert.equal(exactFullBudget.canRun, true, "full postlude runs at the exact 90-second boundary");
+assert.equal(
+  assessSlateCyclePostludeBudget({
+    routeStartedAtMs: 0,
+    nowMs: 210_001,
+    requiredWorkMs: fullPostludeWorkMs,
+  }).canRun,
+  false,
+  "full postlude defers one millisecond below the 90-second boundary",
+);
+
+const exactSnapshotBudget = assessSlateCyclePostludeBudget({
+  routeStartedAtMs: 0,
+  nowMs: 255_000,
+  requiredWorkMs: SLATE_CYCLE_RESPONSE_SNAPSHOT_BUDGET_MS,
+});
+assert.equal(exactSnapshotBudget.remainingMs, 45_000, "post-MI snapshot exact boundary retains 45 seconds");
+assert.equal(exactSnapshotBudget.canRun, true, "post-MI snapshot runs at the exact 45-second boundary");
+assert.equal(
+  assessSlateCyclePostludeBudget({
+    routeStartedAtMs: 5_000,
+    nowMs: 4_000,
+    requiredWorkMs: fullPostludeWorkMs,
+  }).elapsedMs,
+  0,
+  "backward wall-clock skew cannot create negative elapsed time",
+);
+
+const completedStage = { status: "completed" as const, elapsed_ms: 22_000, deferred_reason: null };
+const deferredStage = {
+  status: "deferred" as const,
+  elapsed_ms: 0,
+  deferred_reason: "insufficient_time_after_market_intelligence",
+};
+const timing = buildSlateCyclePostludeTiming({
+  routeStartedAtMs: 0,
+  nowMs: 270_000,
+  budgetAfterCore: exactFullBudget,
+  marketIntelligenceV2: completedStage,
+  responseSnapshot: deferredStage,
+});
+assert.deepEqual(
+  timing,
+  {
+    max_duration_ms: 300_000,
+    core_elapsed_ms: 210_000,
+    remaining_after_core_ms: 90_000,
+    required_remaining_after_core_ms: 90_000,
+    safety_reserve_ms: SLATE_CYCLE_TIMEOUT_SAFETY_RESERVE_MS,
+    market_intelligence_v2: completedStage,
+    response_snapshot: deferredStage,
+    total_elapsed_ms: 270_000,
+    remaining_at_return_ms: 30_000,
+  },
+  "postlude telemetry derives exact core, stage, total, and remaining timing",
+);
 assert.match(source("app/api/cron/lineup-watch/route.ts"), /refreshDailyEdgeResponseSnapshot/, "lineup changes republish Daily Edge");
 assert.match(source("app/api/cron/pregame-sweep/route.ts"), /refreshDailyEdgeResponseSnapshot/, "locks republish Daily Edge");
 assert.match(source("app/api/cron/public-splits-observations-refresh/route.ts"), /refreshDailyEdgeResponseSnapshot/, "split changes republish Daily Edge");
