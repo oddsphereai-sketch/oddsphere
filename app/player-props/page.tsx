@@ -1,8 +1,7 @@
 import { redirect } from "next/navigation";
 import ProductAppFrame from "@/app/lab/components/ProductAppFrame";
 import { supabase } from "@/lib/db/supabase";
-import { readNflPlayerPropsSnapshot } from "@/lib/services/football/nflPlayerPropsSnapshotStore";
-import { buildNflPlayerPropsMemberSnapshot } from "@/lib/services/football/nflPlayerPropsProductionContract";
+import { readNflPlayerPropsMemberSnapshot } from "@/lib/services/football/nflPlayerPropsSnapshotStore";
 import { NflPlayerPropsProductDashboard } from "./components/NflPlayerPropsProductDashboard";
 import { PlayerPropsLeaguePills } from "./components/PlayerPropsLeaguePills";
 import { readMemberDataWithDeadline } from "@/lib/services/memberDataAvailability";
@@ -19,12 +18,12 @@ export default async function PlayerPropsPage({ searchParams }: { searchParams: 
   const snapshotResult = await readMemberDataWithDeadline({
     label: "nfl-player-props-snapshot",
     fallback: null,
-    read: () => readNflPlayerPropsSnapshot({ client: supabase, season, week }),
+    read: () => readNflPlayerPropsMemberSnapshot({ client: supabase, season, week }),
   });
-  const snapshot = snapshotResult.value;
-  const memberSnapshot = snapshot ? buildNflPlayerPropsMemberSnapshot(snapshot) : null;
+  // The member-only store now performs buildNflPlayerPropsMemberSnapshot(snapshot) before caching.
+  const memberSnapshot = snapshotResult.value;
   const requestedReader = typeof query.reader === "string" ? query.reader : null;
-  const initialSelectedKey = snapshot?.memberDecisions.some((row) => decisionKey(row) === requestedReader) ? requestedReader : null;
+  const initialSelectedKey = memberSnapshot?.memberDecisions.some((row) => decisionKey(row) === requestedReader) ? requestedReader : null;
   return <ProductAppFrame><PlayerPropsLeaguePills league="nfl" nflEnabled /><NflPlayerPropsProductDashboard snapshot={memberSnapshot} initialSelectedKey={initialSelectedKey} dataUnavailable={snapshotResult.unavailable} /></ProductAppFrame>;
 }
 
