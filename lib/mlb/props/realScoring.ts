@@ -7,6 +7,7 @@ import {
   type PropModelPrediction,
 } from "./models";
 import { recommendPropBet, type PropRecommendation } from "./recommendations";
+import { mlbPropProjectionForPosterior } from "./marketAwareContext";
 import { expected_value, fair_american_odds, remove_vig_two_way } from "./oddsMath";
 import type { MlbGameEntity, MlbProbablePitcher, PropOddsSnapshot } from "./providers";
 import { resolveMlbStatsTeamId, resolveMlbTeamAlias } from "./mlbTeamAliases";
@@ -457,7 +458,7 @@ export async function scoreRealMlbPropsForPaper(args: {
   }
 
   const groups = groupTwoWayPitcherMarkets(resolved, rejected);
-  const peerConsensusByGroupKey = buildPitcherOutsPeerConsensus(groups);
+  const targetExcludedConsensusByGroupKey = buildTargetExcludedPitcherConsensus(groups);
   const sampleCandidates: RealPropsCandidateSummary[] = [];
   const bdlCandidateTrace: BdlScoringCandidateTrace[] = [];
   const modelComparisonCandidates: ModelComparisonCandidate[] = [];
@@ -477,17 +478,20 @@ export async function scoreRealMlbPropsForPaper(args: {
       asOfTimestamp: args.asOfTimestamp,
       seasonStat: args.seasonStatsByPlayerId?.get(group.playerId) ?? null,
       modelContext: args.modelContextByGameAndPlayer?.get(realPitcherModelContextKey(group.game.id, group.playerId)) ?? null,
-      peerConsensus: peerConsensusByGroupKey.get(group.key) ?? null,
+      peerConsensus: group.marketKey === "pitcher_outs"
+        ? targetExcludedConsensusByGroupKey.get(group.key) ?? null
+        : null,
     });
     const warnings = featureWarningCodes(feature, group);
     for (const warning of warnings) inc(featureWarnings, warning);
     const [independentPrediction] = await model.predict_proba([feature]);
+    const targetExcludedConsensus = targetExcludedConsensusByGroupKey.get(group.key) ?? null;
     const prediction = group.marketKey === "pitcher_strikeouts"
       && warnings.includes("weak_pitcher_baseline")
-      ? weakPitcherStrikeoutMarketControl(independentPrediction, group)
+      ? weakPitcherStrikeoutMarketControl(independentPrediction, targetExcludedConsensus)
       : independentPrediction;
     const shadowPrediction = scoreShadowPitcherProp(feature);
-    const modelProjection = modelProjectionFromExplanation(group.marketKey, prediction.explanation);
+    const independentModelProjection = modelProjectionFromExplanation(group.marketKey, prediction.explanation);
     candidatesScored++;
     const featureConfidence = featureConfidenceScore(feature, group);
     const diagnostic = diagnosticMarketMath({ prediction, over: group.over, under: group.under });
@@ -512,11 +516,27 @@ export async function scoreRealMlbPropsForPaper(args: {
       dataConfidence: featureConfidence,
       modelVersionActive: true,
       forceNoPlayReasonCodes: [...sanityFlags, ...marketNoPlayCodes],
+      forecastMarketOverProbability: targetExcludedConsensus?.overProbability ?? null,
       config: {
         ...DEFAULT_PROP_RECOMMENDATION_CONFIG,
         maxOddsAgeSeconds: 10_000,
       },
     });
+    const independentOverProbability = prediction.side === "over"
+      ? prediction.modelProbability
+      : 1 - prediction.modelProbability;
+    const finalOverProbability = recommendation.side === "over"
+      ? recommendation.finalProbability
+      : 1 - recommendation.finalProbability;
+    const modelProjection = independentModelProjection === null
+      ? null
+      : mlbPropProjectionForPosterior({
+        marketKey: group.marketKey,
+        line: group.line,
+        independentProjection: independentModelProjection,
+        independentOverProbability,
+        authoritativeOverProbability: finalOverProbability,
+      });
     if (recommendation.status === "recommended") recommendationsPassingEvEdge++;
     if (recommendation.status !== "recommended") {
       for (const code of recommendation.reasonCodes) inc(rejected, code);
@@ -1025,12 +1045,11 @@ export function groupTwoWayPitcherMarkets(rows: ResolvedPropRow[], rejected: Rec
   return out;
 }
 
-function buildPitcherOutsPeerConsensus(
+function buildTargetExcludedPitcherConsensus(
   groups: GroupedTwoWay[],
 ): Map<string, { overProbability: number; books: number }> {
   const byMarket = new Map<string, GroupedTwoWay[]>();
   for (const group of groups) {
-    if (group.marketKey !== "pitcher_outs") continue;
     const key = [group.game.id, group.playerId, group.marketKey, group.line].join("|");
     const peers = byMarket.get(key) ?? [];
     peers.push(group);
@@ -1123,11 +1142,26 @@ export function resolvePitcherStarterWorkload(args: {
 
 function weakPitcherStrikeoutMarketControl(
   prediction: PropModelPrediction,
-  group: GroupedTwoWay,
+  targetExcludedConsensus: { overProbability: number; books: number } | null,
 ): PropModelPrediction {
-  const market = remove_vig_two_way(group.over.americanOdds, group.under.americanOdds);
-  const side = market.over >= market.under ? "over" : "under";
-  const probability = side === "over" ? market.over : market.under;
+  if (!targetExcludedConsensus) return prediction;
+  const overProbability = targetExcludedConsensus.overProbability;
+  const side = overProbability >= 0.5 ? "over" : "under";
+  const probability = side === "over" ? overProbability : 1 - overProbability;
+  const independentOverProbability = prediction.side === "over"
+    ? prediction.modelProbability
+    : 1 - prediction.modelProbability;
+  const independentProjection = modelProjectionFromExplanation(prediction.marketKey, prediction.explanation);
+  const projection = independentProjection === null
+    ? null
+    : mlbPropProjectionForPosterior({
+      marketKey: prediction.marketKey,
+      line: prediction.line,
+      independentProjection,
+      independentOverProbability,
+      authoritativeOverProbability: overProbability,
+    });
+  const distribution = rawObj(prediction.explanation.distribution);
   return {
     ...prediction,
     side,
@@ -1140,8 +1174,14 @@ function weakPitcherStrikeoutMarketControl(
       weakPitcherBaselineMarketControl: true,
       independentSide: prediction.side,
       independentProbability: prediction.modelProbability,
-      marketOverProbability: market.over,
-      marketUnderProbability: market.under,
+      independentProjection,
+      marketOverProbability: overProbability,
+      marketUnderProbability: 1 - overProbability,
+      targetExcludedBooks: targetExcludedConsensus.books,
+      ...(projection === null ? {} : {
+        projectedStrikeouts: projection,
+        distribution: { ...distribution, projectedStrikeouts: projection },
+      }),
     },
   };
 }

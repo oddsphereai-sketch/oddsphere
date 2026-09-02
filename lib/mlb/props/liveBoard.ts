@@ -13,6 +13,7 @@ import {
   type MlbRosterEntry,
 } from "@/lib/providers/real_api/_mlbStatsApiClient";
 import { normalizePlayerName } from "./entityResolution";
+import type { MlbPropMarketKey } from "./config";
 import { loadSlateEnvironmentResearch } from "./environmentResearch";
 import { allMlbPropMarketDefinitions, getMlbPropMarketDefinition } from "./marketCatalog";
 import { resolveMlbStatsTeamId, resolveMlbTeamAlias } from "./mlbTeamAliases";
@@ -22,7 +23,6 @@ import {
   american_to_implied_probability,
   expected_value,
   fair_american_odds,
-  remove_vig_two_way,
 } from "./oddsMath";
 import {
   BallDontLieMlbPropsClient,
@@ -69,10 +69,14 @@ import {
 import { publishMlbPropsMemberReadSnapshots } from "./memberReadSnapshotStore";
 import { assessPropPrice } from "./pricePolicy";
 import {
+  checkProjectionSideIntegrity,
+  PROJECTION_SIDE_CONTRADICTION,
+} from "./projectionSideIntegrity";
+import {
   activeMlbPropMarketModelVersions,
   MLB_PROPS_MODEL_RELEASE_ID,
 } from "./marketModelVersions";
-import { applyMlbPropsDisplayProjectionCalibration } from "./displayProjectionCalibration";
+import { calibrateMlbPropsDisplayProjection } from "./displayProjectionCalibration";
 import {
   compareMlbPropsMatchupHistoryCandidates,
   selectMlbPropsMatchupHistoryCandidates,
@@ -118,7 +122,9 @@ import {
   applyMlbPropMarketAwareForecast,
   buildMlbPropMarketContexts,
   marketContextQuoteKey,
+  mlbPropProjectionForPosterior,
   qualifiesMlbPropMarketAwareWatchlist,
+  resolveMlbPropForecastSide,
   type MlbPropMarketContext,
 } from "./marketAwareContext";
 import {
@@ -170,6 +176,7 @@ export type MlbPropsBoardRefreshResult = {
   scoringRunId: string | null;
   usedPreviousSnapshot: boolean;
   snapshot: MlbPropsBoardSnapshot;
+  forecastTelemetry: MlbPropsForecastTelemetry;
   tracking: MlbPropsTrackingSyncResult;
   providerCalls: {
     balldontlie: number;
@@ -178,6 +185,61 @@ export type MlbPropsBoardRefreshResult = {
     balldontlieLineups: number;
   };
 };
+
+export type MlbPropsForecastTelemetry = {
+  forecastPolicy: "target_excluded_alternatives_or_independent_player_distribution";
+  evaluatedOfferRole: "exact_price_ev_and_grade_only";
+  lastKnownGoodPolicy: "publish_only_validated_snapshot_else_preserve_previous";
+  runtimeReleaseId: typeof MLB_PROPS_MODEL_RELEASE_ID;
+  snapshotReleaseId: string | null;
+  snapshotReleaseMatchesRuntime: boolean;
+  publicationDisposition: "publish_authoritative" | "dry_run" | "preserve_last_known_good" | "no_publishable_snapshot";
+  rows: number;
+  forecastRows: number;
+  targetExcludedMarketReferenceRows: number;
+  independentFallbackRows: number;
+  actionableRows: number;
+  actionableProjectionSideContradictionRows: number;
+  lockedRows: number;
+};
+
+export function summarizeMlbPropsForecastTelemetry(args: {
+  snapshot: MlbPropsBoardSnapshot;
+  previousSnapshotAvailable: boolean;
+  persist: boolean;
+}): MlbPropsForecastTelemetry {
+  const rows = args.snapshot.data.props;
+  const forecastRows = rows.filter((row) => row.finalProbability !== null);
+  const publicationDisposition = args.persist && args.snapshot.validation.publishable
+    ? "publish_authoritative"
+    : !args.persist
+      ? "dry_run"
+      : args.previousSnapshotAvailable
+        ? "preserve_last_known_good"
+        : "no_publishable_snapshot";
+  return {
+    forecastPolicy: "target_excluded_alternatives_or_independent_player_distribution",
+    evaluatedOfferRole: "exact_price_ev_and_grade_only",
+    lastKnownGoodPolicy: "publish_only_validated_snapshot_else_preserve_previous",
+    runtimeReleaseId: MLB_PROPS_MODEL_RELEASE_ID,
+    snapshotReleaseId: args.snapshot.modelContext?.modelReleaseId ?? null,
+    snapshotReleaseMatchesRuntime: args.snapshot.modelContext?.modelReleaseId === MLB_PROPS_MODEL_RELEASE_ID,
+    publicationDisposition,
+    rows: rows.length,
+    forecastRows: forecastRows.length,
+    targetExcludedMarketReferenceRows: forecastRows.filter((row) => row.marketProbability !== null).length,
+    independentFallbackRows: forecastRows.filter((row) => row.marketProbability === null).length,
+    actionableRows: rows.filter((row) => ACTIONABLE_GRADES.has(row.playGrade)).length,
+    actionableProjectionSideContradictionRows: forecastRows.filter((row) =>
+      ACTIONABLE_GRADES.has(row.playGrade)
+      && checkProjectionSideIntegrity({
+        side: row.side,
+        line: row.line,
+        projection: row.projection,
+      }).status === "contradiction").length,
+    lockedRows: rows.filter((row) => row.lockStatus?.status === "locked").length,
+  };
+}
 
 const ACTIONABLE_GRADES = new Set(["BEST_ANGLE", "LEAN"]);
 const DEFAULT_MAX_ODDS_AGE_MINUTES = 45;
@@ -355,7 +417,18 @@ export async function refreshMlbPropsBoard(args: RefreshArgs): Promise<MlbPropsB
   }), openingOdds, previous), asOfTimestamp)));
   // Expected-count calibration is intentionally applied only after every
   // probability, side, grade, actionability, and stake decision is complete.
-  const calibratedProps = applyMlbPropsDisplayProjectionCalibration(decisionProps);
+  const calibratedProps = decisionProps.map((row) => {
+    const forecastSide = (row.overProbability ?? 0.5) >= (row.underProbability ?? 0.5)
+      ? "over"
+      : "under";
+    const projection = calibrateMlbPropsDisplayProjection({
+      market: row.market,
+      side: forecastSide,
+      line: row.line,
+      projection: row.projection,
+    });
+    return Object.is(projection, row.projection) ? row : { ...row, projection };
+  });
   const marketEvidence = buildMlbPropsMarketEvidenceCapture({
     currentOdds: boardSourceOdds,
     openingOdds,
@@ -418,6 +491,12 @@ export async function refreshMlbPropsBoard(args: RefreshArgs): Promise<MlbPropsB
     },
   };
   enforceSnapshotPayloadLimits(snapshot);
+  const forecastTelemetry = summarizeMlbPropsForecastTelemetry({
+    snapshot,
+    previousSnapshotAvailable: Boolean(previous),
+    persist: args.persist !== false,
+  });
+  console.info(`MLB_PROPS_FORECAST_TELEMETRY ${JSON.stringify(forecastTelemetry)}`);
 
   const providerCalls = {
     balldontlieOdds: oddsClient.getClient().getRequestCount(),
@@ -436,6 +515,7 @@ export async function refreshMlbPropsBoard(args: RefreshArgs): Promise<MlbPropsB
       scoringRunId: null,
       usedPreviousSnapshot: Boolean(previous),
       snapshot,
+      forecastTelemetry,
       tracking: disabledTrackingResult(),
       providerCalls: {
         balldontlie: balldontlieCalls,
@@ -478,6 +558,7 @@ export async function refreshMlbPropsBoard(args: RefreshArgs): Promise<MlbPropsB
     scoringRunId,
     usedPreviousSnapshot: false,
     snapshot,
+    forecastTelemetry,
     tracking,
     providerCalls: {
       balldontlie: balldontlieCalls,
@@ -1133,8 +1214,6 @@ function buildDashboardRows(args: {
   marketContexts: Map<string, MlbPropMarketContext>;
   asOfTimestamp: string;
 }): PlayerPropPreviewRow[] {
-  const pairs = twoWayMarketProbabilities(args.mappedOdds);
-  const consensus = marketConsensusProbabilities(args.mappedOdds, pairs);
   const rows: PlayerPropPreviewRow[] = [];
   for (const mapped of args.mappedOdds) {
     const identity = args.identities.get(mapped.bdlPlayerId);
@@ -1162,19 +1241,14 @@ function buildDashboardRows(args: {
     const lineupStatus = lineupStatusFor(mapped, identity, args.lineupRows.get(mapped.bdlGameId) ?? [], args.asOfTimestamp);
     const scored = findScoringCandidate(args.scoringCandidates, mapped, identity.player.fullName);
     const scoredPitcherSignal = definition.family === "pitcher" && definition.recommendationEligibility !== "research_only" ? scored : null;
-    const pairedMarketProbability = pairs.get(oddsPairKey(mapped))?.[mapped.odds.side] ?? null;
     const marketContext = args.marketContexts.get(marketContextQuoteKey(mapped.odds)) ?? null;
-    const allBookMarketProbability = marketContext?.currentOverProbability === null
-      || marketContext?.currentOverProbability === undefined
-      ? consensus.get(marketConsensusKey(mapped)) ?? pairedMarketProbability
+    const offerContract = stringValue(mapped.raw.market_kind) === "milestone" ? "milestone" : "two_way";
+    const marketProbability = marketContext?.targetExcludedOverProbability === null
+      || marketContext?.targetExcludedOverProbability === undefined
+      ? null
       : mapped.odds.side === "over"
-        ? marketContext.currentOverProbability
-        : 1 - marketContext.currentOverProbability;
-    const marketProbability = allBookMarketProbability ?? (
-      mapped.odds.marketKey === "batter_home_runs"
-        ? consensus.get(marketConsensusKey(mapped)) ?? null
-        : null
-    );
+        ? marketContext.targetExcludedOverProbability
+        : 1 - marketContext.targetExcludedOverProbability;
     const price = assessPropPrice(mapped.odds.americanOdds);
     if (!price.displayEligible) continue;
     const memberReady = Boolean(research?.memberReady);
@@ -1202,7 +1276,10 @@ function buildDashboardRows(args: {
       modelFamily: definition.modelFamily,
     } : hitterSignal;
     const independentProjection = signal?.projection ?? null;
-    if (signal) {
+    // Pitcher scoring already resolves one target-excluded posterior in
+    // recommendPropBet. Hitter signals still need the shared outer synthesis;
+    // applying this block to pitchers would count the same evidence twice.
+    if (signal && !scoredPitcherSignal) {
       const marketAware = applyMlbPropMarketAwareForecast({
         marketKey: mapped.odds.marketKey,
         line: mapped.odds.line,
@@ -1211,18 +1288,24 @@ function buildDashboardRows(args: {
         modelWeight: signal.shrinkageWeight,
         context: marketContext,
       });
-      const finalProbability = signal.side === "over"
-        ? marketAware.overProbability
-        : marketAware.underProbability;
+      const finalSide = resolveMlbPropForecastSide({
+        marketKey: mapped.odds.marketKey,
+        offerContract,
+        offeredSide: mapped.odds.side,
+        overProbability: marketAware.overProbability,
+        underProbability: marketAware.underProbability,
+      });
+      const finalProbability = finalSide === "over" ? marketAware.overProbability : marketAware.underProbability;
       signal = {
         ...signal,
+        side: finalSide,
         finalProbability,
         overFinalProbability: marketAware.overProbability,
         underFinalProbability: marketAware.underProbability,
         projection: marketAware.projection,
         reasonCodes: uniqueStrings([
           ...signal.reasonCodes,
-          ...(marketContext?.currentOverProbability !== null && marketContext?.currentOverProbability !== undefined
+          ...(marketContext?.targetExcludedOverProbability !== null && marketContext?.targetExcludedOverProbability !== undefined
             ? ["MARKET_PRIOR_SHRINKAGE"]
             : []),
           ...(marketContext?.targetExcludedOverProbability !== null && marketContext?.targetExcludedOverProbability !== undefined
@@ -1250,33 +1333,38 @@ function buildDashboardRows(args: {
     const blockingModelWarnings = (scoredPitcherSignal?.featureWarnings ?? []).filter(isBlockingModelContextWarning);
     const modelContextIntegrated = blockingModelWarnings.length === 0;
     const isSelectedModelSide = Boolean(signal && mapped.odds.side === signal.side);
+    const projectionSideContradiction = Boolean(
+      signal
+      && !(mapped.odds.marketKey === "batter_home_runs" && offerContract === "milestone")
+      && checkProjectionSideIntegrity({
+        side: signal.side,
+        line: mapped.odds.line,
+        projection: signal.projection,
+      }).status === "contradiction",
+    );
     const quoteIsFresh = !isOddsStale(mapped.odds.asOfTimestamp, args.asOfTimestamp);
-    const canSignal = Boolean(eligibleModel && modelContextIntegrated && isSelectedModelSide && memberReady && price.signalEligible && (scoredPitcherSignal ? scoredPitcherSignal.status === "recommended" : true) && quoteIsFresh);
+    const canSignal = Boolean(eligibleModel && modelContextIntegrated && !projectionSideContradiction && isSelectedModelSide && memberReady && price.signalEligible && (scoredPitcherSignal ? scoredPitcherSignal.status === "recommended" : true) && quoteIsFresh);
     const reasonCodes = uniqueStrings([
       ...(signal?.reasonCodes ?? []),
       ...(research?.missingModules.map((module) => `MISSING_${module.toUpperCase()}`) ?? []),
       ...(lineupStatus.status === "not_in_lineup" ? ["PLAYER_NOT_IN_POSTED_LINEUP"] : []),
       ...(isOddsStale(mapped.odds.asOfTimestamp, args.asOfTimestamp) ? ["STALE_ODDS"] : []),
       ...(!modelContextIntegrated && eligibleModel ? ["MODEL_CONTEXT_NOT_INTEGRATED"] : []),
+      ...(projectionSideContradiction ? [PROJECTION_SIDE_CONTRADICTION] : []),
       ...(!eligibleModel ? ["MARKET_RESEARCH_ONLY"] : []),
       ...(price.reasonCode ? [price.reasonCode] : []),
     ]);
     const finalProbability = eligibleModel ? selectedProbability : null;
     // Milestone markets such as home runs are commonly posted as one-sided
-    // offers, so there is no paired no-vig probability. The integrated model
-    // already falls back to this offer's price-implied probability when it
-    // calibrates the final probability; carry that same market reference into
-    // the member row so a legitimately promoted one-sided play has a
-    // verifiable, non-null model edge at the publication data gate.
+    // offers. The evaluated price may still define downstream EV/grade
+    // economics, but it never re-enters the target-excluded forecast.
     const targetExcludedProbability = marketContext?.targetExcludedOverProbability === null
       || marketContext?.targetExcludedOverProbability === undefined
       ? null
       : mapped.odds.side === "over"
         ? marketContext.targetExcludedOverProbability
         : 1 - marketContext.targetExcludedOverProbability;
-    const effectiveMarketProbability = targetExcludedProbability ?? marketProbability ?? (
-      signal && mapped.odds.side === signal.side ? price.impliedProbability : null
-    );
+    const effectiveMarketProbability = targetExcludedProbability;
     const edge = finalProbability !== null && effectiveMarketProbability !== null
       ? finalProbability - effectiveMarketProbability
       : null;
@@ -1295,7 +1383,12 @@ function buildDashboardRows(args: {
         context: marketContext,
       })
     );
-    const actionEconomicsRemainPositive = edge !== null && edge >= 0 && expectedValue !== null && expectedValue >= 0;
+    // The target-excluded reference is corroborating evidence, not a required
+    // price surrogate. When it is missing, exact-offer EV remains authoritative
+    // for downstream economics and the missing comparator stays neutral.
+    const actionEconomicsRemainPositive = (edge === null || edge >= 0)
+      && expectedValue !== null
+      && expectedValue >= 0;
     const signalGrade = canSignal && signal
       ? (signal.playGrade === "BEST_ANGLE" || signal.playGrade === "LEAN") && !actionEconomicsRemainPositive
         ? "WATCHLIST"
@@ -1391,7 +1484,30 @@ function buildDashboardRows(args: {
   const concentrationDisciplined = applyHitterSignalDiscipline(priceDisciplined);
   const evidenceGraded = applyEvidenceGradeCorrections(concentrationDisciplined);
   const underPromoted = applyValidatedUnderActionablePromotions(evidenceGraded);
-  return applyValidatedBatterStrikeoutsAccuracyPromotions(underPromoted);
+  return applyProjectionSideActionability(
+    applyValidatedBatterStrikeoutsAccuracyPromotions(underPromoted),
+  );
+}
+
+function applyProjectionSideActionability(rows: PlayerPropPreviewRow[]): PlayerPropPreviewRow[] {
+  return rows.map((row) => {
+    const oneSidedHomeRun = row.market === "batter_home_runs"
+      && row.side === "over"
+      && row.line === 0.5;
+    if (!ACTIONABLE_GRADES.has(row.playGrade) || oneSidedHomeRun) return row;
+    const integrity = checkProjectionSideIntegrity({
+      side: row.side,
+      line: row.line,
+      projection: row.projection,
+    });
+    if (integrity.status !== "contradiction") return row;
+    return {
+      ...row,
+      playGrade: "WATCHLIST",
+      units: 0,
+      reasonCodes: uniqueStrings([...row.reasonCodes, PROJECTION_SIDE_CONTRADICTION]),
+    };
+  });
 }
 
 const HITTER_LEAN_ELIGIBLE_MARKETS = new Set([
@@ -1557,6 +1673,7 @@ function applyValidatedUnderActionablePromotions(
     if (
       row.side !== "under"
       || (row.playGrade !== "WATCHLIST" && row.playGrade !== "LEAN")
+      || row.reasonCodes.includes(PROJECTION_SIDE_CONTRADICTION)
     ) return false;
     if (
       row.modelProbability === null
@@ -1633,6 +1750,13 @@ function applyValidatedUnderActionablePromotions(
     return {
       ...row,
       ...(accuracyScore ? {
+        projection: mlbPropProjectionForPosterior({
+          marketKey: row.market as MlbPropMarketKey,
+          line: row.line,
+          independentProjection: row.projection,
+          independentOverProbability: row.overProbability ?? (1 - accuracyScore.independentProbability),
+          authoritativeOverProbability: 1 - accuracyScore.finalProbability,
+        }),
         modelProbability: accuracyScore.independentProbability,
         independentProbability: accuracyScore.independentProbability,
         finalProbability: accuracyScore.finalProbability,
@@ -1673,6 +1797,7 @@ function applyValidatedBatterStrikeoutsAccuracyPromotions(
       || row.reasonCodes.includes("STALE_ODDS")
       || row.reasonCodes.includes("MODEL_CONTEXT_NOT_INTEGRATED")
       || row.reasonCodes.includes("INVALID_PRICE_FORMAT")
+      || row.reasonCodes.includes(PROJECTION_SIDE_CONTRADICTION)
     ) return false;
     const score = scoreBatterStrikeoutsOverAccuracyCandidate({
       line: row.line,
@@ -1693,6 +1818,13 @@ function applyValidatedBatterStrikeoutsAccuracyPromotions(
     const score = scores.get(row.id)!;
     return {
       ...row,
+      projection: mlbPropProjectionForPosterior({
+        marketKey: row.market as MlbPropMarketKey,
+        line: row.line,
+        independentProjection: row.projection,
+        independentOverProbability: row.overProbability ?? score.independentProbability,
+        authoritativeOverProbability: score.finalProbability,
+      }),
       modelProbability: score.independentProbability,
       independentProbability: score.independentProbability,
       finalProbability: score.finalProbability,
@@ -1719,7 +1851,8 @@ function applyValidatedValuePortfolioPromotions(
   const blocked = (row: PlayerPropPreviewRow) =>
     row.reasonCodes.includes("STALE_ODDS")
     || row.reasonCodes.includes("MODEL_CONTEXT_NOT_INTEGRATED")
-    || row.reasonCodes.includes("INVALID_PRICE_FORMAT");
+    || row.reasonCodes.includes("INVALID_PRICE_FORMAT")
+    || row.reasonCodes.includes(PROJECTION_SIDE_CONTRADICTION);
   const rbiEligible = rows.filter((row) =>
     row.market === "batter_rbis"
     && row.playGrade === "WATCHLIST"
@@ -1772,9 +1905,7 @@ function applyValidatedHomeRunPortfolioPromotions(
     && row.odds >= BATTER_HOME_RUNS_PORTFOLIO_POLICY.minimumAmericanOdds
     && row.odds <= BATTER_HOME_RUNS_PORTFOLIO_POLICY.maximumAmericanOdds
     && row.modelProbability !== null
-    && row.marketProbability !== null
-    && row.modelEdge !== null
-    && row.modelEdge >= 0
+    && (row.modelEdge === null || row.modelEdge >= 0)
     && row.expectedValue !== null
     && row.expectedValue >= 0
     && !row.reasonCodes.includes("STALE_ODDS")
@@ -1943,8 +2074,6 @@ function buildIntegratedHitterSignal(args: {
   const pitchMix = args.research?.evidence.pitchMatchup ?? null;
   const history = args.research?.evidence.matchupHistory ?? null;
   const environment = args.research?.evidence.environment ?? null;
-  const movement = movementAdjustment(args.mapped.odds.side, record(args.mapped.odds.rawPayload));
-
   let projection = Math.max(0.02, season * 0.45 + l10 * 0.35 + l5 * 0.2);
   let confidence = 0.46;
   const reasons = ["HITTER_INTEGRATED_MODEL_READ", "RECENT_FORM_EDGE"];
@@ -1982,11 +2111,7 @@ function buildIntegratedHitterSignal(args: {
 
   confidence = round(Math.min(0.88, confidence), 3);
   projection = round(Math.max(0.02, projection), 2);
-  let overModelProbability = poissonProbabilityOver(projection, Math.floor(args.mapped.odds.line) + 1);
-  if (movement !== 0) {
-    overModelProbability = clampProbability(overModelProbability + movement);
-    reasons.push("MARKET_MOVEMENT_CONTEXT");
-  }
+  const overModelProbability = poissonProbabilityOver(projection, Math.floor(args.mapped.odds.line) + 1);
   const underModelProbability = round(1 - overModelProbability, 4);
   const longshotValueRead = HITTER_LONGSHOT_VALUE_MARKETS.has(market) && args.mapped.odds.side === "over";
   const side = longshotValueRead ? "over" : overModelProbability >= underModelProbability ? "over" : "under";
@@ -2047,15 +2172,14 @@ function buildDedicatedBatterHomeRunsResidualSignal(
   args: Parameters<typeof buildIntegratedHitterSignal>[0],
 ): IntegratedPropSignal | null {
   const recentLogs = args.research?.evidence.recentForm?.logs ?? [];
-  const priceProbability = assessPropPrice(args.currentOdds).impliedProbability;
   const marketOverProbability = args.marketProbability === null
-    ? priceProbability
+    ? null
     : args.mapped.odds.side === "over"
       ? args.marketProbability
       : 1 - args.marketProbability;
-  if (marketOverProbability === null || args.mapped.odds.line !== 0.5) return null;
+  if (args.mapped.odds.line !== 0.5) return null;
   const residual = projectBatterHomeRunsPortfolio({
-    marketOverProbability,
+    marketOverProbability: marketOverProbability ?? 0.5,
     battingOrder: args.lineupStatus.battingOrder,
     recentLogs: recentLogs.map((row) => ({
       homeRuns: row.value,
@@ -2070,21 +2194,24 @@ function buildDedicatedBatterHomeRunsResidualSignal(
     outdoor: args.research?.evidence.environment?.roofStatus === "outdoor",
   });
   if (!residual) return null;
+  const overProbability = marketOverProbability === null
+    ? residual.independentOverProbability
+    : residual.overProbability;
   return {
     side: "over",
-    modelProbability: residual.overProbability,
-    finalProbability: residual.overProbability,
+    modelProbability: overProbability,
+    finalProbability: overProbability,
     shrinkageWeight: 1,
-    overModelProbability: residual.overProbability,
-    underModelProbability: residual.underProbability,
-    overFinalProbability: residual.overProbability,
-    underFinalProbability: residual.underProbability,
+    overModelProbability: overProbability,
+    underModelProbability: 1 - overProbability,
+    overFinalProbability: overProbability,
+    underFinalProbability: 1 - overProbability,
     playGrade: "WATCHLIST",
     confidence: 0.74,
     reasonCodes: [
       "HITTER_INTEGRATED_MODEL_READ",
       "RECENT_FORM_EDGE",
-      "MARKET_PRIOR_SHRINKAGE",
+      ...(marketOverProbability === null ? [] : ["MARKET_PRIOR_SHRINKAGE"]),
       "HOME_RUN_PA_PORTFOLIO_READ",
       "RARE_OR_CONTEXT_HEAVY_MARKET_CAPPED",
     ],
@@ -2097,8 +2224,34 @@ function buildDedicatedBatterDoublesResidualSignal(
   args: Parameters<typeof buildIntegratedHitterSignal>[0],
 ): IntegratedPropSignal | null {
   const features = args.research?.evidence.recentForm?.doublesResidualFeatures;
-  if (!features || features.doublesLast20.length < 10 || args.marketProbability === null) {
+  if (!features || features.doublesLast20.length < 10) {
     return null;
+  }
+  if (args.marketProbability === null) {
+    const overProbability = poissonProbabilityOver(args.projection, Math.floor(args.mapped.odds.line) + 1);
+    const underProbability = 1 - overProbability;
+    const side = overProbability >= underProbability ? "over" : "under";
+    const modelProbability = side === "over" ? overProbability : underProbability;
+    return {
+      side,
+      modelProbability,
+      finalProbability: modelProbability,
+      shrinkageWeight: 1,
+      overModelProbability: overProbability,
+      underModelProbability: underProbability,
+      overFinalProbability: overProbability,
+      underFinalProbability: underProbability,
+      playGrade: "WATCHLIST",
+      confidence: 0.72,
+      reasonCodes: [
+        "HITTER_INTEGRATED_MODEL_READ",
+        "RECENT_FORM_EDGE",
+        "DOUBLES_MARKET_RESIDUAL_READ",
+        "RARE_OR_CONTEXT_HEAVY_MARKET_CAPPED",
+      ],
+      projection: args.projection,
+      modelFamily: BATTER_DOUBLES_RESIDUAL_MODEL_VERSION,
+    };
   }
   const marketOverProbability = args.mapped.odds.side === "over"
     ? args.marketProbability
@@ -2335,14 +2488,6 @@ function hitterEnvironmentAdjustment(market: string, environment: PlayerPropRese
     return Math.max(-0.04, Math.min(0.05, (runFactor - 100) / 100 * 0.35));
   }
   return 0;
-}
-
-function movementAdjustment(side: "over" | "under", rawPayload: Record<string, unknown>): number {
-  const movement = record(rawPayload.oddsMovement);
-  const delta = numberValue(movement.impliedProbabilityDelta);
-  if (delta === null) return 0;
-  const sideDelta = side === "over" ? delta : -delta;
-  return Math.max(-0.025, Math.min(0.025, sideDelta * 0.35));
 }
 
 function lineGapThreshold(market: string): number {
@@ -2967,50 +3112,6 @@ function lineupContextLabel(status: NonNullable<PlayerPropPreviewRow["lineupStat
   if (status === "pending") return "projected";
   if (status === "not_in_lineup") return "not listed";
   return status;
-}
-
-function twoWayMarketProbabilities(rows: MappedOddsRow[]): Map<string, { over: number; under: number }> {
-  const groups = new Map<string, Partial<Record<"over" | "under", MappedOddsRow>>>();
-  for (const row of rows) {
-    const key = oddsPairKey(row);
-    groups.set(key, { ...(groups.get(key) ?? {}), [row.odds.side]: row });
-  }
-  const out = new Map<string, { over: number; under: number }>();
-  for (const [key, pair] of groups) {
-    if (!pair.over || !pair.under) continue;
-    try {
-      out.set(key, remove_vig_two_way(pair.over.odds.americanOdds, pair.under.odds.americanOdds));
-    } catch {
-      continue;
-    }
-  }
-  return out;
-}
-
-function marketConsensusProbabilities(
-  rows: MappedOddsRow[],
-  pairs: Map<string, { over: number; under: number }>,
-): Map<string, number> {
-  const groups = new Map<string, number[]>();
-  for (const row of rows) {
-    const probability = pairs.get(oddsPairKey(row))?.[row.odds.side]
-      ?? assessPropPrice(row.odds.americanOdds).impliedProbability;
-    if (probability === null) continue;
-    const key = marketConsensusKey(row);
-    groups.set(key, [...(groups.get(key) ?? []), probability]);
-  }
-  return new Map([...groups.entries()].map(([key, probabilities]) => [
-    key,
-    probabilities.reduce((sum, probability) => sum + probability, 0) / probabilities.length,
-  ]));
-}
-
-function marketConsensusKey(row: MappedOddsRow): string {
-  return `${row.game.id}|${row.bdlPlayerId}|${row.odds.marketKey}|${row.odds.side}|${row.odds.line}`;
-}
-
-function oddsPairKey(row: MappedOddsRow): string {
-  return `${row.game.id}|${row.bdlPlayerId}|${row.odds.marketKey}|${row.odds.line}|${row.odds.sportsbook}`;
 }
 
 function findScoringCandidate(candidates: RealPropsCandidateSummary[], row: MappedOddsRow, playerName: string): RealPropsCandidateSummary | null {

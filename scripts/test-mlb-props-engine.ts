@@ -715,8 +715,33 @@ async function main() {
   check("fast refreshes converge missing research and rebuild changed-starter rows", liveBoardSource.includes("async function refreshFastResearch") && liveBoardSource.includes("loadBatterPitcherHistories") && liveBoardSource.includes("starterContextChangedGameIds.has(row.game.id)") && liveBoardSource.includes("attachFastMatchupHistories"));
   check("hitter market tiers allow volume leans while capping rare events", liveBoardSource.includes("HITTER_LEAN_ELIGIBLE_MARKETS") && liveBoardSource.includes('"batter_hits"') && liveBoardSource.includes('"batter_total_bases"') && liveBoardSource.includes("HITTER_WATCHLIST_ONLY_MARKETS") && liveBoardSource.includes("HITTER_LONGSHOT_VALUE_MARKETS") && liveBoardSource.includes('"batter_home_runs"') && liveBoardSource.includes("LONGSHOT_VALUE_CONTEXT") && liveBoardSource.includes("RARE_OR_CONTEXT_HEAVY_MARKET_CAPPED"));
   check("home-run model uses the validated diversified PA portfolio and incremental complement", liveBoardSource.includes("HITTER_WATCHLIST_ONLY_MARKETS") && liveBoardSource.includes('"batter_home_runs"') && liveBoardSource.includes("applyValidatedHomeRunPortfolioPromotions") && liveBoardSource.includes("VALIDATED_HOME_RUN_PA_PORTFOLIO_LEAN") && liveBoardSource.includes("VALIDATED_HOME_RUN_MEDIUM_PRICE_COMPLEMENT_LEAN") && liveBoardSource.includes("BATTER_HOME_RUNS_COMPLEMENT_POLICY"));
+  check("missing target-excluded Home Run comparators remain neutral to exact-price portfolio eligibility",
+    liveBoardSource.includes("&& (row.modelEdge === null || row.modelEdge >= 0)"));
   check("RBI uses a validated capped value portfolio", liveBoardSource.includes("applyValidatedValuePortfolioPromotions") && liveBoardSource.includes("BATTER_RBI_VALUE_PORTFOLIO_POLICY") && liveBoardSource.includes("VALIDATED_RBI_VALUE_PORTFOLIO_LEAN"));
-  check("target-excluded consensus and one-sided price fallback reach the publication gate", liveBoardSource.includes("const targetExcludedProbability = marketContext?.targetExcludedOverProbability") && liveBoardSource.includes("targetExcludedProbability ?? marketProbability") && liveBoardSource.includes("price.impliedProbability") && liveBoardSource.includes("marketProbability: effectiveMarketProbability"));
+  check("target-excluded consensus reaches the publication gate without evaluated-price forecast fallback",
+    liveBoardSource.includes("const targetExcludedProbability = marketContext?.targetExcludedOverProbability")
+      && liveBoardSource.includes("const effectiveMarketProbability = targetExcludedProbability")
+      && liveBoardSource.includes("marketProbability: effectiveMarketProbability"));
+  check("authoritative refresh emits release-pure target-excluded/fallback/LKG telemetry automatically",
+    liveBoardSource.includes("export function summarizeMlbPropsForecastTelemetry")
+      && liveBoardSource.includes('forecastPolicy: "target_excluded_alternatives_or_independent_player_distribution"')
+      && liveBoardSource.includes('evaluatedOfferRole: "exact_price_ev_and_grade_only"')
+      && liveBoardSource.includes('lastKnownGoodPolicy: "publish_only_validated_snapshot_else_preserve_previous"')
+      && liveBoardSource.includes("snapshotReleaseMatchesRuntime")
+      && liveBoardSource.includes("targetExcludedMarketReferenceRows")
+      && liveBoardSource.includes("independentFallbackRows")
+      && liveBoardSource.includes("actionableProjectionSideContradictionRows")
+      && liveBoardSource.includes("MLB_PROPS_FORECAST_TELEMETRY")
+      && (liveBoardSource.match(/forecastTelemetry,/g) ?? []).length === 2);
+  check("final target-excluded actions enforce projection-side integrity after every promotion",
+    liveBoardSource.includes("function applyProjectionSideActionability")
+      && liveBoardSource.includes("applyProjectionSideActionability(")
+      && liveBoardSource.includes("row.reasonCodes.includes(PROJECTION_SIDE_CONTRADICTION)")
+      && liveBoardSource.includes("reasonCodes: uniqueStrings([...row.reasonCodes, PROJECTION_SIDE_CONTRADICTION])"));
+  check("pitcher target-excluded evidence resolves one posterior without a duplicate board anchor",
+    realScoringSource.includes("buildTargetExcludedPitcherConsensus")
+      && realScoringSource.includes("forecastMarketOverProbability: targetExcludedConsensus?.overProbability ?? null")
+      && liveBoardSource.includes("if (signal && !scoredPitcherSignal)"));
   check("generic pitcher scorer warnings cannot suppress integrated hitter reads", liveBoardSource.includes('const scoredPitcherSignal = definition.family === "pitcher"') && liveBoardSource.includes("let signal: IntegratedPropSignal | null = scoredPitcherSignal ?") && liveBoardSource.includes("const blockingModelWarnings = (scoredPitcherSignal?.featureWarnings ?? [])"));
   check("positive prop signals collapse duplicate sportsbook rows to the best price", liveBoardSource.includes("applyBestPriceSignalDiscipline(deduped)") && liveBoardSource.includes("applyHitterSignalDiscipline(priceDisciplined)") && liveBoardSource.includes("signalOfferKey") && liveBoardSource.includes("BETTER_PRICE_AVAILABLE"));
   check("validated Hits and H+R+RBI Under promotions use shared uncapped Best Angle rules", liveBoardSource.includes("applyValidatedUnderActionablePromotions") && liveBoardSource.includes("qualifiesValidatedUnderPromotion") && liveBoardSource.includes("qualifiesHitsUnderPriceEdge") && liveBoardSource.includes("for (const row of bestOffers) promotedIds.add(row.id)") && liveBoardSource.includes('playGrade: "BEST_ANGLE"') && liveBoardSource.includes("VALIDATED_UNDER_BEST_ANGLE") && propsConfigSource.includes("VALIDATED_UNDER_BEST_ANGLE"));
@@ -1131,6 +1156,45 @@ async function main() {
   check("positive EV candidate accepted", positiveEv.status === "recommended");
   check("market-prior shrinkage creates bounded final probability", positiveEv.finalProbability > 0 && positiveEv.finalProbability < 1 && positiveEv.finalProbability < positiveEv.modelProbability && positiveEv.finalProbability > (positiveEv.marketProbability ?? 0));
   check("recommendation separates model edge and grade", positiveEv.modelEdge === positiveEv.edge && ["BEST_ANGLE", "LEAN"].includes(positiveEv.playGrade));
+  const targetExcludedFlip = recommendPropBet({
+    prediction: { ...prediction, side: "over", modelProbability: 0.51 },
+    overOdds: over ? { ...over, americanOdds: -200 } : null,
+    underOdds: under ? { ...under, americanOdds: 170 } : null,
+    forecastMarketOverProbability: 0.2,
+    asOfTimestamp: "2026-07-07T15:00:00.000Z",
+    config: { maxOddsAgeSeconds: 10_000 },
+  });
+  check("target-excluded posterior can select the complementary side", targetExcludedFlip.side === "under");
+  check("a crossed side uses that side's exact same-book quote", targetExcludedFlip.status === "recommended" && targetExcludedFlip.americanOdds === 170);
+  const targetExcludedNoAlternative = recommendPropBet({
+    prediction: { ...prediction, side: "over", modelProbability: 0.68 },
+    overOdds: over,
+    underOdds: under,
+    forecastMarketOverProbability: null,
+    asOfTimestamp: "2026-07-07T15:00:00.000Z",
+    config: { maxOddsAgeSeconds: 10_000 },
+  });
+  check("zero target-excluded alternatives preserve the independent probability", targetExcludedNoAlternative.finalProbability === 0.68);
+  const missingCrossedQuote = recommendPropBet({
+    prediction: { ...prediction, side: "over", modelProbability: 0.51 },
+    overOdds: over,
+    underOdds: null,
+    forecastMarketOverProbability: 0.2,
+    asOfTimestamp: "2026-07-07T15:00:00.000Z",
+    config: { maxOddsAgeSeconds: 10_000 },
+  });
+  check("a crossed forecast remains predicted but non-actionable without its exact complementary quote",
+    missingCrossedQuote.side === "under" && missingCrossedQuote.status === "no_play" && missingCrossedQuote.americanOdds === null);
+  const mismatchedCycleCrossedQuote = recommendPropBet({
+    prediction: { ...prediction, side: "over", modelProbability: 0.51 },
+    overOdds: over,
+    underOdds: under ? { ...under, asOfTimestamp: "2026-07-07T14:59:59.000Z" } : null,
+    forecastMarketOverProbability: 0.2,
+    asOfTimestamp: "2026-07-07T15:00:00.000Z",
+    config: { maxOddsAgeSeconds: 10_000 },
+  });
+  check("a crossed forecast cannot grade from a complementary quote in another cycle",
+    mismatchedCycleCrossedQuote.side === "under" && mismatchedCycleCrossedQuote.status === "no_play");
   const anchoredPitcherOuts = recommendPropBet({
     prediction: {
       ...outsPrediction,
@@ -1408,7 +1472,9 @@ async function main() {
   });
   const mixedRoleStrikeouts = mixedRoleDryRun.sampleCandidates.find((row) => row.marketKey === "pitcher_strikeouts");
   check("weak mixed-role strikeout baseline uses recent-start workload", (mixedRoleStrikeouts?.modelProjection ?? 99) < 8);
-  check("weak mixed-role strikeout baseline uses market probability control", mixedRoleStrikeouts?.shrinkageWeight === 1 && mixedRoleStrikeouts.modelProbability === mixedRoleStrikeouts.marketProbability);
+  check("weak mixed-role strikeout baseline falls back to its independent distribution without target-excluded control",
+    mixedRoleStrikeouts?.finalProbability === mixedRoleStrikeouts?.modelProbability
+      && mixedRoleStrikeouts?.modelProbability !== mixedRoleStrikeouts?.marketProbability);
   check("weak mixed-role market control cannot become actionable", mixedRoleStrikeouts?.status === "no_play" && mixedRoleStrikeouts.featureWarnings.includes("weak_pitcher_baseline"));
   const realPaperScore = await scoreRealMlbPropsForPaper({
     games: realGames,
