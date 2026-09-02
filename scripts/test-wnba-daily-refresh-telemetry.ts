@@ -1,13 +1,29 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 
 async function main(): Promise<void> {
-  process.env.NEXT_PUBLIC_SUPABASE_URL = "https://example.supabase.co";
-  process.env.SUPABASE_SERVICE_ROLE_KEY = "test-service-role-key";
-
   const {
     summarizeWnbaDailyRefreshErrors,
     WNBA_DAILY_REFRESH_ERROR_MESSAGE_MAX_LENGTH,
-  } = await import("../app/api/cron/wnba-daily-refresh/route");
+  } = await import("../lib/cron/wnbaDailyRefreshTelemetry");
+
+  const routeSource = readFileSync(
+    new URL("../app/api/cron/wnba-daily-refresh/route.ts", import.meta.url),
+    "utf8",
+  );
+  assert.match(
+    routeSource,
+    /from "@\/lib\/cron\/wnbaDailyRefreshTelemetry";/,
+    "the route must import telemetry helpers from a non-route module",
+  );
+  assert.doesNotMatch(
+    routeSource,
+    /export (?:const|function|type) (?:WNBA_DAILY_REFRESH_ERROR_MESSAGE_MAX_LENGTH|summarizeWnbaDailyRefreshErrors|WnbaDailyRefreshStageError)/,
+    "Next route modules must not export telemetry helpers or types",
+  );
+  assert.match(routeSource, /export async function GET\(/, "the route must retain GET");
+  assert.match(routeSource, /export const POST = GET;/, "the route must retain the POST alias");
+  assert.match(routeSource, /export const maxDuration = 300;/, "the route must retain its duration config");
 
   assert.equal(
     summarizeWnbaDailyRefreshErrors([]),
