@@ -16,6 +16,7 @@
  */
 
 import { supabase } from "../db/supabase";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { getOddsProvider, getSharpSignalProvider } from "../providers/factory";
 import { mergePublicSplitsCarryForward } from "./publicSplitsCarryForward";
 import type { Sport } from "../types/domain/Sport";
@@ -29,6 +30,10 @@ import { flagOpenersInHistoryPayload } from "./_lineHistoryOpenerHelper";
 import { insertLineHistoryResilient, logLineHistoryInsertFailure } from "./lineHistoryWriter";
 import type { LineHistoryInsertResult } from "./lineHistoryWriter";
 import { verifiedHundredSplitPct } from "./splitEvidenceQuality";
+import {
+  replaceCurrentGameLinesBatched,
+  type CurrentLinesReplaceResult,
+} from "./currentGameLinesBatchWriter";
 
 /**
  * 2026-06-10 phantom-thinning fix — per-(game, market_type, sportsbook)
@@ -186,102 +191,104 @@ function currentLineGroupKey(row: Readonly<Record<string, unknown>>): string | n
     : null;
 }
 
-type CurrentLinesReplaceResult = {
-  attemptedRows: number;
-  insertedRows: number;
-  failedRows: number;
-  failedGroups: number;
-  firstError: string | null;
-  failedSample: Array<Record<string, unknown>>;
-};
-
-/**
- * Replace one sportsbook's complete game-market group without clearing its
- * last-known-good rows first. A failed insert leaves the old group untouched;
- * a successful insert deletes only the IDs observed before that insert.
- */
-async function replaceCurrentGameLinesSafely(
-  rows: ReadonlyArray<Record<string, unknown>>,
-  context: string,
-): Promise<CurrentLinesReplaceResult> {
-  const groups = new Map<string, Array<Record<string, unknown>>>();
-  for (const row of rows) {
-    const gameId = row.game_id;
-    const marketType = row.market_type;
-    const sportsbook = row.sportsbook;
-    if (typeof gameId !== "number" || typeof marketType !== "string" || typeof sportsbook !== "string") continue;
-    const key = `${gameId}::${marketType}::${sportsbook}`;
-    const group = groups.get(key) ?? [];
-    group.push(row);
-    groups.set(key, group);
-  }
-
-  const result: CurrentLinesReplaceResult = {
-    attemptedRows: rows.length,
-    insertedRows: 0,
-    failedRows: 0,
-    failedGroups: 0,
-    firstError: null,
-    failedSample: [],
-  };
-  for (const group of groups.values()) {
-    const first = group[0];
-    const gameId = first.game_id as number;
-    const marketType = first.market_type as string;
-    const sportsbook = first.sportsbook as string;
-    const { data: prior, error: priorError } = await supabase
-      .from("lines")
-      .select("id")
-      .eq("game_id", gameId)
-      .eq("market_type", marketType)
-      .eq("sportsbook", sportsbook)
-      .is("player_id", null);
-    if (priorError) {
-      const message = `${context} prior-row lookup failed for game_id=${gameId} market=${marketType} sportsbook=${sportsbook}: ${priorError.message}`;
-      result.failedGroups++;
-      result.failedRows += group.length;
-      result.firstError ??= message;
-      if (result.failedSample.length < 5) result.failedSample.push({ game_id: gameId, market_type: marketType, sportsbook });
-      continue;
-    }
-
-    const { error: insertError } = await supabase.from("lines").insert(group);
-    if (insertError) {
-      const message = `${context} insert failed for game_id=${gameId} market=${marketType} sportsbook=${sportsbook}: ${insertError.message}`;
-      result.failedGroups++;
-      result.failedRows += group.length;
-      result.firstError ??= message;
-      if (result.failedSample.length < 5) result.failedSample.push({ game_id: gameId, market_type: marketType, sportsbook });
-      continue;
-    }
-    result.insertedRows += group.length;
-
-    const priorIds = (prior ?? [])
-      .map((row) => row.id)
-      .filter((id): id is number | string => typeof id === "number" || typeof id === "string");
-    if (priorIds.length > 0) {
-      const { error: deleteError } = await supabase.from("lines").delete().in("id", priorIds);
-      if (deleteError) {
-        // Both generations remain readable; newest fetched_at wins. Surface
-        // the cleanup failure without destroying either coherent generation.
-        const message = `${context} prior-row cleanup failed for game_id=${gameId} market=${marketType} sportsbook=${sportsbook}: ${deleteError.message}`;
-        result.failedGroups++;
-        result.firstError ??= message;
-        if (result.failedSample.length < 5) result.failedSample.push({ game_id: gameId, market_type: marketType, sportsbook });
-      }
-    }
-  }
-  return result;
-}
-
 type BaselineHistoryResult = LineHistoryInsertResult & {
   missingMarketPairs: number;
+  baselineRowsRead: number;
+  baselineReadQueries: number;
+};
+
+export const LINE_HISTORY_BASELINE_PAGE_SIZE = 1_000;
+export const LINE_HISTORY_BASELINE_MAX_ROWS = 10_000;
+
+export type LineHistoryBaselineIdentity = {
+  gameId: number;
+  marketType: string;
+};
+
+export type LineHistoryBaselineReadResult = {
+  existingKeys: Set<string>;
+  rowsRead: number;
+  queries: number;
+  error: string | null;
 };
 
 function historyMarketKey(gameId: unknown, marketType: unknown): string | null {
   if (typeof gameId !== "number") return null;
   if (typeof marketType !== "string") return null;
   return `${gameId}::${marketType}`;
+}
+
+/**
+ * Read only explicit game-level opener rows with bounded, deterministic
+ * pagination. The database filters use compact IN lists; the exact requested
+ * game/market pairs are restored client-side so cross-product rows cannot
+ * satisfy an unrelated baseline.
+ */
+export async function readExistingLineHistoryBaselineKeys(
+  client: SupabaseClient,
+  identities: ReadonlyArray<LineHistoryBaselineIdentity>,
+  options: { pageSize?: number; maxRows?: number } = {},
+): Promise<LineHistoryBaselineReadResult> {
+  const wantedKeys = new Set(identities.map((identity) => historyMarketKey(identity.gameId, identity.marketType)).filter((key): key is string => key !== null));
+  const gameIds = [...new Set(identities.map((identity) => identity.gameId))].sort((a, b) => a - b);
+  const markets = [...new Set(identities.map((identity) => identity.marketType))].sort();
+  const pageSize = typeof options.pageSize === "number" && Number.isInteger(options.pageSize) && options.pageSize > 0
+    ? options.pageSize
+    : LINE_HISTORY_BASELINE_PAGE_SIZE;
+  const maxRows = typeof options.maxRows === "number" && Number.isInteger(options.maxRows) && options.maxRows > 0
+    ? options.maxRows
+    : LINE_HISTORY_BASELINE_MAX_ROWS;
+  const result: LineHistoryBaselineReadResult = {
+    existingKeys: new Set<string>(),
+    rowsRead: 0,
+    queries: 0,
+    error: null,
+  };
+  if (wantedKeys.size === 0) return result;
+  const fail = (message: string): LineHistoryBaselineReadResult => {
+    result.existingKeys.clear();
+    result.error = message;
+    return result;
+  };
+
+  let expectedRows: number | null = null;
+  for (let from = 0; expectedRows === null || from < expectedRows; from += pageSize) {
+    result.queries += 1;
+    const query = await client
+      .from("line_history")
+      .select("id,game_id,market_type,player_id,is_opener", { count: "exact" })
+      .in("game_id", gameIds)
+      .in("market_type", markets)
+      .is("player_id", null)
+      .eq("is_opener", true)
+      .order("id", { ascending: true })
+      .range(from, from + pageSize - 1);
+    if (query.error) {
+      return fail(`line-history baseline read failed: ${query.error.message}`);
+    }
+    if (typeof query.count !== "number") {
+      return fail("line-history baseline read returned no exact count; truncation cannot be excluded");
+    }
+    if (query.count > maxRows) {
+      return fail(`line-history baseline read cap exceeded: count=${query.count} cap=${maxRows}`);
+    }
+    expectedRows ??= query.count;
+    if (query.count !== expectedRows) {
+      return fail(`line-history baseline row count changed during pagination: initial=${expectedRows} current=${query.count}`);
+    }
+    const page = query.data ?? [];
+    const expectedPageRows = Math.min(pageSize, expectedRows - from);
+    if (page.length !== expectedPageRows) {
+      return fail(`line-history baseline pagination truncated: offset=${from} expected=${expectedPageRows} received=${page.length}`);
+    }
+    result.rowsRead += page.length;
+    for (const row of page) {
+      if (row.player_id !== null || row.is_opener !== true) continue;
+      const key = historyMarketKey(row.game_id, row.market_type);
+      if (key !== null && wantedKeys.has(key)) result.existingKeys.add(key);
+    }
+  }
+  return result;
 }
 
 async function ensureLineHistoryBaselinesForPayload(
@@ -296,49 +303,50 @@ async function ensureLineHistoryBaselinesForPayload(
     firstError: null,
     failedSample: null,
     missingMarketPairs: 0,
+    baselineRowsRead: 0,
+    baselineReadQueries: 0,
   };
   if (rows.length === 0) return empty;
 
-  const wanted = new Set<string>();
-  const gameIds = new Set<number>();
-  const markets = new Set<string>();
+  const wanted = new Map<string, LineHistoryBaselineIdentity>();
   for (const row of rows) {
     const key = historyMarketKey(row.game_id, row.market_type);
     if (key === null) continue;
-    wanted.add(key);
-    gameIds.add(row.game_id as number);
-    markets.add(row.market_type as string);
+    wanted.set(key, {
+      gameId: row.game_id as number,
+      marketType: row.market_type as string,
+    });
   }
   if (wanted.size === 0) return empty;
 
-  const { data, error } = await supabase
-    .from("line_history")
-    .select("game_id, market_type")
-    .in("game_id", [...gameIds])
-    .in("market_type", [...markets])
-    .is("player_id", null);
+  const baselineRead = await readExistingLineHistoryBaselineKeys(
+    supabase,
+    [...wanted.values()],
+  );
 
-  if (error !== null) {
+  if (baselineRead.error !== null) {
     const result: BaselineHistoryResult = {
       attempted: rows.length,
       inserted: 0,
       failed: rows.length,
-      firstError: error.message,
+      firstError: baselineRead.error,
       failedSample: rows[0] ?? null,
-      missingMarketPairs: wanted.size,
+      missingMarketPairs: 0,
+      baselineRowsRead: baselineRead.rowsRead,
+      baselineReadQueries: baselineRead.queries,
     };
     await logLineHistoryInsertFailure(supabase, `${source}:baseline_check`, sport, result);
     return result;
   }
 
-  const existing = new Set<string>();
-  for (const row of data ?? []) {
-    const key = historyMarketKey(row.game_id, row.market_type);
-    if (key !== null) existing.add(key);
+  const missing = new Set([...wanted.keys()].filter((key) => !baselineRead.existingKeys.has(key)));
+  if (missing.size === 0) {
+    return {
+      ...empty,
+      baselineRowsRead: baselineRead.rowsRead,
+      baselineReadQueries: baselineRead.queries,
+    };
   }
-
-  const missing = new Set([...wanted].filter((key) => !existing.has(key)));
-  if (missing.size === 0) return empty;
 
   const seenRows = new Set<string>();
   const baselineRows: Record<string, unknown>[] = [];
@@ -363,6 +371,8 @@ async function ensureLineHistoryBaselinesForPayload(
   const baselineResult: BaselineHistoryResult = {
     ...result,
     missingMarketPairs: missing.size,
+    baselineRowsRead: baselineRead.rowsRead,
+    baselineReadQueries: baselineRead.queries,
   };
   if (baselineResult.failed > 0) {
     await logLineHistoryInsertFailure(supabase, `${source}:baseline_insert`, sport, baselineResult);
@@ -452,9 +462,20 @@ export const linesService = {
     const rejectedRows = partitionedLines.rejected;
 
     let currentInsert: CurrentLinesReplaceResult | null = null;
+    let historyInsertFailed = 0;
+    let historyFirstError: string | null = null;
+    let historyBaselineInserted = 0;
+    let historyBaselineFailed = 0;
+    let historyBaselineMissingMarketPairs = 0;
+    let historyBaselineRowsRead = 0;
+    let historyBaselineReadQueries = 0;
     if (!dryRun) {
       if (linesPayload.length > 0) {
-        currentInsert = await replaceCurrentGameLinesSafely(linesPayload, "linesService.refreshGameLines");
+        currentInsert = await replaceCurrentGameLinesBatched(
+          supabase,
+          linesPayload,
+          "linesService.refreshGameLines",
+        );
       }
       if (historyPayload.length > 0) {
         const flagged = await flagOpenersInHistoryPayload(
@@ -464,24 +485,46 @@ export const linesService = {
           supabase,
           flagged as unknown as Array<Record<string, unknown>>,
         );
+        historyInsertFailed = histResult.failed;
+        historyFirstError = histResult.firstError;
         if (histResult.failed > 0) {
           await logLineHistoryInsertFailure(supabase, "refreshGameLines", sport, histResult);
         }
-        await ensureLineHistoryBaselinesForPayload(
+        const baselineResult = await ensureLineHistoryBaselinesForPayload(
           flagged as unknown as Array<Record<string, unknown>>,
           "refreshGameLines",
           sport,
         );
+        historyBaselineInserted = baselineResult.inserted;
+        historyBaselineFailed = baselineResult.failed;
+        historyBaselineMissingMarketPairs = baselineResult.missingMarketPairs;
+        historyBaselineRowsRead = baselineResult.baselineRowsRead;
+        historyBaselineReadQueries = baselineResult.baselineReadQueries;
+        if (historyFirstError === null && baselineResult.firstError !== null) {
+          historyFirstError = baselineResult.firstError;
+        }
       }
     }
 
     return {
       records_updated: dryRun ? linesPayload.length : (currentInsert?.insertedRows ?? 0),
       api_calls_made: apiCalls,
-      partial: rejectedRows.length > 0 || (currentInsert?.failedGroups ?? 0) > 0,
-      error_message: currentInsert?.firstError ?? (rejectedRows.length > 0 ? "Provider game-line rows failed database-bound validation." : null),
+      partial: rejectedRows.length > 0
+        || (currentInsert?.failedGroups ?? 0) > 0
+        || historyInsertFailed > 0
+        || historyBaselineFailed > 0,
+      error_message: currentInsert?.firstError
+        ?? historyFirstError
+        ?? (rejectedRows.length > 0 ? "Provider game-line rows failed database-bound validation." : null),
       details: {
         skipped_game_external_ids: skipped,
+        history_insert_failed: historyInsertFailed,
+        history_first_error: historyFirstError,
+        history_baseline_inserted: historyBaselineInserted,
+        history_baseline_failed: historyBaselineFailed,
+        history_baseline_missing_market_pairs: historyBaselineMissingMarketPairs,
+        history_baseline_rows_read: historyBaselineRowsRead,
+        history_baseline_read_queries: historyBaselineReadQueries,
         rejected_rows: rejectedRows.length,
         rejected_sample: rejectedRows.slice(0, 5),
         current_insert: currentInsert,
@@ -813,6 +856,8 @@ export const linesService = {
     let historyBaselineInserted = 0;
     let historyBaselineFailed = 0;
     let historyBaselineMissingMarketPairs = 0;
+    let historyBaselineRowsRead = 0;
+    let historyBaselineReadQueries = 0;
     let currentInsert: CurrentLinesReplaceResult | null = null;
 
     if (!dryRun && linesPayload.length > 0) {
@@ -828,7 +873,11 @@ export const linesService = {
       // splits_consensus is a sportsbook like any other under this scope:
       // it can only delete prior splits_consensus rows, never real books.
       // The R-16E /splits fallback therefore augments instead of replaces.
-      currentInsert = await replaceCurrentGameLinesSafely(linesPayload, "linesService.refreshGameLinesV2");
+      currentInsert = await replaceCurrentGameLinesBatched(
+        supabase,
+        linesPayload,
+        "linesService.refreshGameLinesV2",
+      );
       if (historyPayload.length > 0) {
         const flagged = await flagOpenersInHistoryPayload(
           historyPayload as unknown as Parameters<typeof flagOpenersInHistoryPayload>[0],
@@ -863,6 +912,8 @@ export const linesService = {
         historyBaselineInserted = baselineResult.inserted;
         historyBaselineFailed = baselineResult.failed;
         historyBaselineMissingMarketPairs = baselineResult.missingMarketPairs;
+        historyBaselineRowsRead = baselineResult.baselineRowsRead;
+        historyBaselineReadQueries = baselineResult.baselineReadQueries;
         if (historyFirstError === null && baselineResult.firstError !== null) {
           historyFirstError = baselineResult.firstError;
         }
@@ -906,6 +957,8 @@ export const linesService = {
       history_baseline_inserted: historyBaselineInserted,
       history_baseline_failed: historyBaselineFailed,
       history_baseline_missing_market_pairs: historyBaselineMissingMarketPairs,
+      history_baseline_rows_read: historyBaselineRowsRead,
+      history_baseline_read_queries: historyBaselineReadQueries,
       rejected_rows: rejectedRows.length,
       rejected_sample: rejectedRows.slice(0, 5),
       current_insert: currentInsert,
@@ -1277,8 +1330,12 @@ export type V2RefreshDetails = {
   history_baseline_inserted: number;
   /** Rows rejected by the post-insert baseline safety net. */
   history_baseline_failed: number;
-  /** (game, market) pairs that had current lines but no history before the safety net ran. */
+  /** (game, market) pairs that had current lines but no explicit opener before the safety net ran. */
   history_baseline_missing_market_pairs: number;
+  /** Explicit game-level opener rows scanned by the bounded baseline read. */
+  history_baseline_rows_read: number;
+  /** Deterministic pages used by the bounded baseline read. */
+  history_baseline_read_queries: number;
   /** Provider rows rejected before Postgres because they exceed schema/semantic bounds. */
   rejected_rows: number;
   rejected_sample: Array<Record<string, unknown>>;
