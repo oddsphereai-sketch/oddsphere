@@ -198,7 +198,10 @@ type BaselineHistoryResult = LineHistoryInsertResult & {
 };
 
 export const LINE_HISTORY_BASELINE_PAGE_SIZE = 1_000;
-export const LINE_HISTORY_BASELINE_MAX_ROWS = 10_000;
+// Existing explicit opener pollution from the former unbounded opener helper
+// exceeded 23k rows on one MLB slate. Keep this read bounded, but large enough
+// to verify that legacy state without cleanup/backfill or false missing keys.
+export const LINE_HISTORY_BASELINE_MAX_ROWS = 50_000;
 
 export type LineHistoryBaselineIdentity = {
   gameId: number;

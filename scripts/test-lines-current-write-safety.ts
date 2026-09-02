@@ -6,6 +6,7 @@ import {
   replaceCurrentGameLinesBatched,
 } from "../lib/services/currentGameLinesBatchWriter";
 import {
+  LINE_HISTORY_BASELINE_MAX_ROWS,
   readExistingLineHistoryBaselineKeys,
   partitionValidGameLineGroups,
   validateGameLineDatabaseRow,
@@ -129,7 +130,9 @@ class FakeHistorySelectQuery {
       for (const [column, value] of this.equalFilters) if (row[column as keyof StoredHistory] !== value) return false;
       return true;
     }).sort((a, b) => a.id - b.id);
-    const count = this.db.countsByQuery[this.db.queries - 1] ?? matches.length;
+    const count = this.db.returnNullCount
+      ? null
+      : this.db.countsByQuery[this.db.queries - 1] ?? matches.length;
     let page = matches.slice(from, to + 1);
     if (this.db.truncatePage && page.length > 0) page = page.slice(0, -1);
     return { data: structuredClone(page), error: null, count };
@@ -145,6 +148,7 @@ class FakeHistoryDb {
   queries = 0;
   failSelect = false;
   truncatePage = false;
+  returnNullCount = false;
   countsByQuery: number[] = [];
   sawPlayerNull = false;
   sawExplicitOpener = false;
@@ -248,14 +252,37 @@ assert.deepEqual(chunks.map((chunk) => chunk.map((group) => group.rows.length)),
   assert.equal(db.sawExplicitOpener, true);
 }
 
+// The bounded default verifies today's already-polluted explicit opener set
+// (>23,556 rows) rather than failing or silently treating keys as missing.
+{
+  const rows = Array.from({ length: 23_557 }, (_, index): StoredHistory => ({
+    id: index + 1,
+    game_id: 1,
+    market_type: "moneyline",
+    player_id: null,
+    is_opener: true,
+  }));
+  const db = new FakeHistoryDb(rows);
+  const result = await readExistingLineHistoryBaselineKeys(
+    db.asClient(),
+    [{ gameId: 1, marketType: "moneyline" }],
+  );
+  assert.equal(LINE_HISTORY_BASELINE_MAX_ROWS, 50_000);
+  assert.equal(result.error, null);
+  assert.equal(result.rowsRead, 23_557);
+  assert.equal(result.queries, 24);
+  assert.deepEqual([...result.existingKeys], ["1::moneyline"]);
+}
+
 // Truncation, count drift, and caps fail closed before baseline insertion.
-for (const mode of ["truncated", "count_changed", "cap"] as const) {
+for (const mode of ["truncated", "missing_count", "count_changed", "cap"] as const) {
   const db = new FakeHistoryDb([
     { id: 1, game_id: 1, market_type: "moneyline", player_id: null, is_opener: true },
     { id: 2, game_id: 1, market_type: "moneyline", player_id: null, is_opener: true },
   ]);
   const options = mode === "count_changed" ? { pageSize: 1 } : mode === "cap" ? { maxRows: 1 } : {};
   if (mode === "truncated") db.truncatePage = true;
+  if (mode === "missing_count") db.returnNullCount = true;
   if (mode === "count_changed") db.countsByQuery = [2, 3];
   const result = await readExistingLineHistoryBaselineKeys(
     db.asClient(),
