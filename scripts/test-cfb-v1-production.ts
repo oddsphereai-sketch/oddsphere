@@ -20,6 +20,7 @@ import {
   CFB_FORWARD_PRIOR_EVIDENCE_SCHEMA_RELEASE,
   CFB_FORWARD_TRANSITION_EVIDENCE_SCHEMA_RELEASE,
   CFB_FORWARD_MEMBER_RELEASE,
+  CFB_FORWARD_PUBLICATION_PREVIOUS_MEMBER_RELEASE,
   buildCfbForwardMarketOutlooks,
   determineCfbForwardCollectionNeed,
   hashCfbForwardEvidencePayload,
@@ -31,11 +32,9 @@ import {
 import { CFB_FORWARD_EVIDENCE_MAX_ROWS, CFB_FORWARD_EVIDENCE_PAGE_SIZE, readCfbForwardEvidence } from "../lib/services/football/cfbForwardEvidenceStore";
 import { normalizeCfbPlaybookLine, normalizeCfbPlaybookSplits } from "../lib/services/football/cfbPlaybookEvidence";
 import {
-  CFB_TOTAL_MEAN_PMF_TOSSUP_MAX_MEAN_DISTANCE_POINTS,
-  CFB_TOTAL_MEAN_PMF_TOSSUP_MAX_PROBABILITY_GAP,
   cfbMarketAnchorHealthHolds,
   cfbLockPlanningEvidence,
-  shouldHoldCfbNearTossupTotalConflict,
+  publishCfbForwardDecisionBundle,
   trustedCfbSharpEventIdsByGame,
 } from "../lib/services/football/cfbForwardEvidenceWriter";
 import { resolveCfbCanonicalMarketAnchor } from "../lib/services/football/cfbMarketInformedOutcome";
@@ -158,18 +157,23 @@ const nearTossupTotal = {
   expectedValue: -0.0435,
   evaluatedQuote: { ...totalDecision.evaluatedQuote, line: 57.5 },
 };
-assert.equal(CFB_TOTAL_MEAN_PMF_TOSSUP_MAX_PROBABILITY_GAP, 0.01);
-assert.equal(CFB_TOTAL_MEAN_PMF_TOSSUP_MAX_MEAN_DISTANCE_POINTS, 0.5);
-assert.equal(shouldHoldCfbNearTossupTotalConflict({ decision: nearTossupTotal, forecast: { expectedTotal: 57.831332938741404 } }), true,
-  "a negative-EV No Play with an effectively tied PMF and narrowly opposing mean becomes an explicit Total hold");
-assert.equal(shouldHoldCfbNearTossupTotalConflict({ decision: { ...nearTossupTotal, grade: "Lean" }, forecast: { expectedTotal: 57.831332938741404 } }), false,
-  "the near-tossup hold cannot silently remove an actionable Total");
-assert.equal(shouldHoldCfbNearTossupTotalConflict({ decision: { ...nearTossupTotal, forecastProbability: 0.511 }, forecast: { expectedTotal: 57.831332938741404 } }), false,
-  "a PMF advantage beyond one percentage point remains subject to the strict coherence gate");
-assert.equal(shouldHoldCfbNearTossupTotalConflict({ decision: nearTossupTotal, forecast: { expectedTotal: 58.01 } }), false,
-  "a mean disagreement beyond half a point remains subject to the strict coherence gate");
-assert.equal(shouldHoldCfbNearTossupTotalConflict({ decision: { ...nearTossupTotal, expectedValue: 0.001 }, forecast: { expectedTotal: 57.831332938741404 } }), false,
-  "positive-EV tuples cannot be converted into an operational hold");
+const publishedNearTossupBundle = publishCfbForwardDecisionBundle(
+  {
+    ...fullBundle,
+    evaluatedBets: fullBundle.evaluatedBets.map((decision) => decision.market === "total" ? nearTossupTotal : decision),
+  },
+  { provider: "playbook", capturedAt: observedAt, sourceTier: "tier1", homeMoneyline: -330, awayMoneyline: 260, homeSpread: -7.5, awaySpread: 7.5, total: 57.5 },
+);
+assert.deepEqual(
+  publishedNearTossupBundle.evaluatedBets.find((decision) => decision.market === "total"),
+  nearTossupTotal,
+  "publication must preserve the authoritative near-tossup Total tuple, including its PMF side, probability, exact quote, negative EV, and No Play grade",
+);
+assert.equal(
+  publishedNearTossupBundle.heldMarkets.some((held) => held.market === "total"),
+  false,
+  "a complete two-sided near-tossup Total cannot be converted into missing evidence",
+);
 
 const noMoneylineBooks = currentBooks.map((currentBook) => ({ ...currentBook, moneyline: null }));
 const marketScopedBundle = buildCfbV1DecisionBundle({
@@ -323,7 +327,7 @@ assert.deepEqual(trustedCfbSharpEventIdsByGame([trustedSharpRow, {
 }]), {}, "conflicting immutable provider IDs must disable prior-event disambiguation");
 const member = buildCfbMemberFixture([evidence]);
 assert.equal(member.snapshot.games.length, 1);
-assert.equal(member.fixtureRelease, "cfb_v1_member_fixture_2026_09_01_r41_coherent_movement_evidence");
+assert.equal(member.fixtureRelease, "cfb_v1_member_fixture_2026_09_02_r42_total_publication_coherence");
 assert.equal(member.snapshot.games[0]!.collegeFootballScope, "fbs_involved", "the CFB reader must classify every member game for the FBS-first board without changing writer scope");
 assert.equal(member.snapshot.games[0]!.awayTeamDisplayName, game.away.name);
 assert.equal(member.snapshot.games[0]!.homeTeamDisplayName, game.home.name);
@@ -341,6 +345,230 @@ assert.deepEqual(member.snapshot.games[0]!.projected, authoritativeForecast.repr
 assert.equal(member.snapshot.games[0]!.footballOnlyProjection?.expectedAwayPoints, forecast.expectedAwayPoints, "the immutable independent PMF remains a diagnostic baseline");
 assert.equal(member.snapshot.games[0]!.footballOnlyProjection?.expectedHomePoints, forecast.expectedHomePoints);
 assert.equal(member.snapshot.games[0]!.recommendationDecision?.audit.canPublish, true);
+
+const ualbLikeCapturedAt = "2026-09-02T10:39:48.862Z";
+const ualbLikeGameStartAt = "2026-09-05T23:30:00.000Z";
+const ualbLikeBooks: NcaafBookOdds[] = [
+  ["betmgm", 48.5, -102, -118],
+  ["betrivers", 48, -113, -110],
+  ["caesars", 48.5, -105, -118],
+  ["draftkings", 48.5, -108, -112],
+  ["fanatics", 48, -110, -110],
+  ["fanduel", 48.5, -110, -110],
+].map(([sportsbook, line, overPrice, underPrice]) => ({
+  providerGameId: "ualb-buf-publication-regression",
+  sportsbook: String(sportsbook),
+  observedAt: ualbLikeCapturedAt,
+  moneyline: null,
+  spread: null,
+  total: { line: Number(line), overPrice: Number(overPrice), underPrice: Number(underPrice) },
+}));
+const publishedProductionTotal = payload.decisions.evaluatedBets.find((decision) => decision.market === "total");
+assert.ok(publishedProductionTotal);
+const ualbLikeDecision = {
+  ...publishedProductionTotal,
+  providerGameId: "ualb-buf-publication-regression",
+  awayTeam: "UALB",
+  homeTeam: "BUF",
+  gameStartsAt: ualbLikeGameStartAt,
+  side: "Under 48.5",
+  grade: "No Play" as const,
+  forecastProbability: 0.5020019998108759,
+  modelProbability: 0.5020019998108759,
+  marketFairProbability: 0.5363636363636364,
+  edgePercentagePoints: -0.0343616365527605,
+  expectedValue: -0.04345181836221879,
+  stage: "unlocked" as const,
+  evaluatedAt: ualbLikeCapturedAt,
+  lockedAt: null,
+  evaluatedQuote: {
+    ...publishedProductionTotal.evaluatedQuote,
+    sportsbook: "betmgm",
+    side: "under" as const,
+    line: 48.5,
+    price: -118,
+    observedAt: ualbLikeCapturedAt,
+  },
+};
+const ualbLikeForecast = {
+  ...payload.decisions.forecast,
+  expectedAwayPoints: 14.5,
+  expectedHomePoints: 34.2,
+  expectedTotal: 48.7,
+  representativeScore: { away: 14.5, home: 34.2 },
+};
+const ualbLikeSplits = structuredClone(payload.market.playbookSplits!);
+ualbLikeSplits.total = {
+  ...ualbLikeSplits.total,
+  capturedAt: ualbLikeCapturedAt,
+  booksUsed: 7,
+  overMoneyPct: 53,
+  underMoneyPct: 47,
+  overBetsPct: 43,
+  underBetsPct: 57,
+};
+const ualbLikePayload = {
+  ...payload,
+  runId: "00000000-0000-4000-8000-000000000029",
+  stage: "unlocked" as const,
+  capturedAt: ualbLikeCapturedAt,
+  cutoffAt: null,
+  t60LagMinutes: null,
+  game: {
+    ...payload.game,
+    providerGameId: "ualb-buf-publication-regression",
+    scheduledStart: ualbLikeGameStartAt,
+    away: { ...payload.game.away, abbreviation: "UALB", name: "Albany Great Danes", fbs: false },
+    home: { ...payload.game.home, abbreviation: "BUF", name: "Buffalo Bulls", fbs: true },
+  },
+  market: {
+    ...payload.market,
+    current: ualbLikeBooks[0]!,
+    currentBooks: ualbLikeBooks,
+    displayBooks: ualbLikeBooks,
+    providerOpening: null,
+    operationalOpening: { provenance: "first_observed" as const, capturedAt: ualbLikeCapturedAt, quote: ualbLikeBooks[0]! },
+    playbookLine: { provider: "playbook" as const, capturedAt: ualbLikeCapturedAt, sourceTier: "tier1", homeMoneyline: null, awayMoneyline: null, homeSpread: null, awaySpread: null, total: 48.5 },
+    playbookSplits: ualbLikeSplits,
+    sharpApiSplits: null,
+    sharpApiSplitsStatus: "event_not_published" as const,
+    sharpApiSplitsError: null,
+  },
+  decisions: {
+    ...payload.decisions,
+    forecast: ualbLikeForecast,
+    evaluatedBets: [ualbLikeDecision],
+    heldMarkets: [],
+    marketOutlooks: {
+      moneyline: null,
+      spread: null,
+      total: { market: "total" as const, side: "under" as const, line: 48.5, independentProbability: ualbLikeDecision.forecastProbability, source: "authoritative_pmf_at_playbook_line" as const, contextObservedAt: ualbLikeCapturedAt },
+    },
+    trackingEnabled: false,
+  },
+  independentForecast: { ...payload.independentForecast!, expectedAwayPoints: 14.5, expectedHomePoints: 34.2, expectedTotal: 48.7, representativeScore: { away: 14.5, home: 34.2 } },
+  coverage: { ...payload.coverage, comparableCurrentBookCount: 6, sharpApiSplits: false, healthHolds: [], availabilityWarnings: ["injury_feed_unavailable", "sharpapi_splits_unavailable"] },
+} as unknown as CfbForwardEvidencePayload;
+const ualbLikeRow: CfbForwardStoredEvidence = {
+  ...evidence,
+  id: "ualb-buf-publication-regression-row",
+  providerGameId: ualbLikePayload.game.providerGameId,
+  stage: "unlocked",
+  capturedAt: ualbLikeCapturedAt,
+  gameStartAt: ualbLikeGameStartAt,
+  payloadSha256: hashCfbForwardEvidencePayload(ualbLikePayload),
+  payload: ualbLikePayload,
+};
+const ualbLikeMember = buildCfbMemberFixture([ualbLikeRow], ualbLikeCapturedAt);
+const ualbLikeTotal = ualbLikeMember.snapshot.games[0]!.markets.total;
+assert.equal(ualbLikeTotal.held, false, "complete UALB-like two-sided Total evidence must remain evaluated when sharp splits are unavailable");
+assert.equal(ualbLikeTotal.marketPrediction?.status, "available");
+assert.equal(ualbLikeTotal.marketPrediction?.label, "Under 48.5");
+assert.equal(ualbLikeTotal.marketPrediction?.probability, ualbLikeDecision.forecastProbability);
+assert.equal(ualbLikeTotal.marketPrediction?.line, 48.5);
+assert.equal(ualbLikeTotal.pick, "Under 48.5");
+assert.equal(ualbLikeTotal.currentPriceSportsbook, "betmgm");
+assert.equal(ualbLikeTotal.currentPriceAmerican, -118);
+assert.equal(ualbLikeTotal.pinnacleEvPct, ualbLikeDecision.expectedValue * 100);
+assert.equal(ualbLikeTotal.verdict.label, "No Play");
+assert.equal(ualbLikeTotal.actionabilityLabel, "No Play");
+assert.equal(ualbLikeTotal.publicSplits[0]?.moneyPct, 53);
+assert.equal(ualbLikeTotal.publicSplits[0]?.betsPct, 43);
+assert.equal(ualbLikeTotal.sharpBookAvailability?.status, "pending");
+assert.equal(ualbLikeMember.snapshot.games[0]!.footballProjection?.expectedAwayPoints, 14.5);
+assert.equal(ualbLikeMember.snapshot.games[0]!.footballProjection?.expectedHomePoints, 34.2);
+
+const publicationTransitionCapturedAt = "2026-09-02T12:00:00.000Z";
+const publicationTransitionStartAt = "2026-09-06T17:00:00.000Z";
+const r28UnlockedPayloadRecord = structuredClone(payload) as unknown as Record<string, unknown>;
+r28UnlockedPayloadRecord.memberRelease = CFB_FORWARD_PUBLICATION_PREVIOUS_MEMBER_RELEASE;
+r28UnlockedPayloadRecord.slateGameCount = 2;
+r28UnlockedPayloadRecord.stage = "unlocked";
+r28UnlockedPayloadRecord.capturedAt = publicationTransitionCapturedAt;
+r28UnlockedPayloadRecord.cutoffAt = null;
+r28UnlockedPayloadRecord.t60LagMinutes = null;
+const r28UnlockedDecisions = r28UnlockedPayloadRecord.decisions as Record<string, unknown>;
+r28UnlockedDecisions.trackingEnabled = false;
+r28UnlockedDecisions.evaluatedBets = (r28UnlockedDecisions.evaluatedBets as Array<Record<string, unknown>>).map((decision) => ({
+  ...decision,
+  stage: "unlocked",
+  evaluatedAt: publicationTransitionCapturedAt,
+  lockedAt: null,
+}));
+const r28UnlockedPayload = r28UnlockedPayloadRecord as unknown as CfbForwardEvidencePayload;
+const r29PartialPayload = {
+  ...payload,
+  slateGameCount: 2,
+  stage: "unlocked" as const,
+  capturedAt: publicationTransitionCapturedAt,
+  cutoffAt: null,
+  t60LagMinutes: null,
+  decisions: {
+    ...payload.decisions,
+    trackingEnabled: false,
+    evaluatedBets: payload.decisions.evaluatedBets.map((decision) => ({
+      ...decision,
+      stage: "unlocked" as const,
+      evaluatedAt: publicationTransitionCapturedAt,
+      lockedAt: null,
+    })),
+  },
+};
+const r29PartialRow: CfbForwardStoredEvidence = {
+  ...evidence,
+  id: "r29-first-wave-current",
+  providerGameId: "r29-current-game",
+  stage: "unlocked",
+  capturedAt: publicationTransitionCapturedAt,
+  gameStartAt: publicationTransitionStartAt,
+  payloadSha256: hashCfbForwardEvidencePayload(r29PartialPayload),
+  payload: r29PartialPayload,
+};
+const r28UnlockedRows: CfbForwardStoredEvidence[] = ["r29-current-game", "r29-missing-game"].map((providerGameId) => ({
+  ...evidence,
+  id: `r28-unlocked-${providerGameId}`,
+  providerGameId,
+  stage: "unlocked" as const,
+  capturedAt: publicationTransitionCapturedAt,
+  gameStartAt: publicationTransitionStartAt,
+  payloadSha256: hashCfbForwardEvidencePayload(r28UnlockedPayload),
+  payload: r28UnlockedPayload,
+}));
+const firstR29WaveFallback = selectLatestCfbMemberEvidenceRows(
+  [r29PartialRow, ...r28UnlockedRows],
+  publicationTransitionCapturedAt,
+);
+assert.equal(firstR29WaveFallback.length, 2);
+assert.equal(
+  firstR29WaveFallback.every((row) => String(row.payload.memberRelease) === CFB_FORWARD_PUBLICATION_PREVIOUS_MEMBER_RELEASE),
+  true,
+  "an incomplete first r29 wave must retain the complete same-schema r28 member wave",
+);
+
+const r28LockedPayload = {
+  ...payload,
+  memberRelease: CFB_FORWARD_PUBLICATION_PREVIOUS_MEMBER_RELEASE,
+  slateGameCount: 2,
+} as unknown as CfbForwardEvidencePayload;
+const r28LockedRow: CfbForwardStoredEvidence = {
+  ...evidence,
+  id: "r28-immutable-t60",
+  providerGameId: "r29-missing-game",
+  gameStartAt: publicationTransitionStartAt,
+  payloadSha256: hashCfbForwardEvidencePayload(r28LockedPayload),
+  payload: r28LockedPayload,
+};
+const r29ImmutableBoundary = selectLatestCfbMemberEvidenceRows(
+  [r29PartialRow, r28UnlockedRows[0]!, r28LockedRow],
+  publicationTransitionCapturedAt,
+);
+assert.equal(r29ImmutableBoundary.length, 2);
+assert.equal(r29ImmutableBoundary.find((row) => row.providerGameId === "r29-current-game")?.payload.memberRelease, CFB_FORWARD_MEMBER_RELEASE);
+assert.deepEqual(
+  r29ImmutableBoundary.find((row) => row.providerGameId === "r29-missing-game"),
+  r28LockedRow,
+  "the r28 T-60 row must remain byte-for-byte authoritative while the first r29 wave refreshes only unlocked games",
+);
 const sharpPayload: CfbForwardEvidencePayload = {
   ...payload,
   market: {
@@ -1408,7 +1636,8 @@ assert.match(route, /runCfbForwardEvidenceWriter/);
 assert.match(route, /requiredEnv\("SHARPAPI_KEY"\)/);
 const writer = readFileSync(path.resolve("lib/services/football/cfbForwardEvidenceWriter.ts"), "utf8");
 assert.match(writer, /buildCfbV1DecisionBundle/);
-assert.match(writer, /compactDecisionBundle/);
+assert.match(writer, /publishCfbForwardDecisionBundle/);
+assert.doesNotMatch(writer, /mean_pmf_near_tossup_conflict|shouldHoldCfbNearTossupTotalConflict/, "the writer cannot delete a complete authoritative Total as a near-tossup publication hold");
 assert.match(writer, /buildCfbOfficialTrackingRecords/);
 assert.match(writer, /buildMarketScopedFootballTrackingPlan/);
 assert.doesNotMatch(writer, /eligible\.length \* 3/);
