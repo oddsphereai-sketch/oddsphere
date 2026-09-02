@@ -4,7 +4,7 @@
  * Layered architecture (mirrors full-game V2.2 conventions):
  *   Layer 1 — Independent FI probability (projectFiIndependent)
  *   Layer 2 — Market baseline                (computeFiMarketBaseline)
- *   Layer 3 — Adaptive posterior blend
+ *   Layer 3 — Market-aware posterior (requires an independently priced pair)
  *   Layer 4 — Classification (NRFI / YRFI / Toss-Up / Held)
  *   Layer 5 — Play grade
  *
@@ -315,17 +315,27 @@ export function runMlbFirstInningModelV2(
     market.nrfi_no_vig_prob !== null &&
     market.yrfi_no_vig_prob !== null;
 
-  // Layer 3 — adaptive blend
-  const trustIndep = selectTrustIndependent({
-    tier: indep.data_quality_tier,
-    missingCount: indep.feature_audit.missing_count,
-    hasMarket,
-  });
+  // Layer 3 — evaluated price never validates itself as forecast evidence.
+  // The exact evaluation pair remains usable for grade economics, but a
+  // market posterior requires at least one separately priced, incumbent-
+  // accepted current pair. This deliberately leaves all multi-book v5 math
+  // unchanged while the singleton path stays on the independent forecast.
+  const hasTargetExcludedForecastPair = market.market_evidence_books.some(
+    (book) => book.target_excluded_from_evaluation,
+  );
+  const evaluatedQuoteOnly = hasMarket && !hasTargetExcludedForecastPair;
+  const trustIndep = evaluatedQuoteOnly
+    ? FI_TRUST_INDEPENDENT_NO_MARKET
+    : selectTrustIndependent({
+        tier: indep.data_quality_tier,
+        missingCount: indep.feature_audit.missing_count,
+        hasMarket,
+      });
   const trustMarket = 1 - trustIndep;
   let posteriorNrfi = indep.p_nrfi;
   let posteriorCapped = false;
   let posteriorMovedFromMarket = 0;
-  if (hasMarket && market.nrfi_no_vig_prob !== null) {
+  if (hasMarket && market.nrfi_no_vig_prob !== null && !evaluatedQuoteOnly) {
     posteriorNrfi = trustIndep * indep.p_nrfi + trustMarket * market.nrfi_no_vig_prob;
     posteriorMovedFromMarket = Math.abs(posteriorNrfi - market.nrfi_no_vig_prob);
     if (posteriorMovedFromMarket > FI_POSTERIOR_NRFI_CAP) {
@@ -334,6 +344,9 @@ export function runMlbFirstInningModelV2(
       posteriorCapped = true;
       integrityNotes.push("Posterior NRFI prob capped at ±10pts from market.");
     }
+  } else if (evaluatedQuoteOnly && market.nrfi_no_vig_prob !== null) {
+    posteriorMovedFromMarket = Math.abs(indep.p_nrfi - market.nrfi_no_vig_prob);
+    integrityNotes.push("Evaluation-only FI quote excluded from forecast posterior; retained for exact-price economics.");
   }
   posteriorNrfi = clamp(posteriorNrfi, 0.02, 0.98);
   const posteriorYrfi = 1 - posteriorNrfi;
