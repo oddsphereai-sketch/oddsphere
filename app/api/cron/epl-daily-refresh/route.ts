@@ -5,6 +5,7 @@ import { persistEplLineHistory, readEplStoredPriceHistory } from "@/lib/services
 import { seedEplSlate, writeEplPredictionRecords } from "@/lib/services/epl/eplProductionPipeline";
 import { readCurrentEplMemberSnapshot, writeCurrentEplMemberSnapshot } from "@/lib/services/epl/eplMemberSnapshotStore";
 import { evaluateEplPublicationCoverage } from "@/lib/services/epl/eplPublicationReadiness";
+import type { EplForwardEvidenceCapture } from "@/lib/services/epl/eplForwardEvidenceCapture";
 
 export const maxDuration = 300;
 
@@ -19,15 +20,21 @@ export async function GET(request: Request): Promise<Response> {
     // restores the latest published trail; durable history then fills any
     // observations that were captured between publications.
     hydrateEplPriceHistory(await readCurrentEplMemberSnapshot());
-    hydrateEplStoredPriceHistory(await readEplStoredPriceHistory(slate.matches.map((match) => match.id)));
+    const storedPriceHistory = await readEplStoredPriceHistory(slate.matches.map((match) => match.id));
+    hydrateEplStoredPriceHistory(storedPriceHistory);
     let allBookPrices: Parameters<typeof persistEplLineHistory>[0]["allBookPrices"] = [];
-    const response = await buildEplDailyEdgePreview(slate, { captureAllBookPrices: (rows) => { allBookPrices = rows; } });
+    let forwardEvidence: EplForwardEvidenceCapture[] = [];
+    const response = await buildEplDailyEdgePreview(slate, {
+      storedPriceHistory,
+      captureAllBookPrices: (rows) => { allBookPrices = rows; },
+      captureForwardEvidence: (captures) => { forwardEvidence = captures; },
+    });
     const coverage = evaluateEplPublicationCoverage(slate, response);
     const seeded = await seedEplSlate({ slate, apply });
     const lineHistory = seeded.errors.length === 0
       ? await persistEplLineHistory({ response, allBookPrices, apply })
       : { proposed: 0, written: 0, errors: ["line history skipped because slate seeding failed"] };
-    const predictions = await writeEplPredictionRecords({ slate, response, apply });
+    const predictions = await writeEplPredictionRecords({ slate, response, forwardEvidence, apply });
     const errors = [...coverage.errors, ...seeded.errors, ...lineHistory.errors, ...predictions.errors];
     const publicationEnabled = process.env.EPL_PUBLICATION_ENABLED === "true";
     const publication = apply && publicationEnabled && errors.length === 0
@@ -53,6 +60,7 @@ export async function GET(request: Request): Promise<Response> {
         seed: seeded,
         line_history: lineHistory,
         predictions: { mode: predictions.mode, proposed: predictions.proposed.length, written: predictions.written, lockedPreserved: predictions.lockedPreserved, errors: predictions.errors },
+        forward_evidence: { proposed: forwardEvidence.length, warnings: predictions.captureWarnings },
         publication,
       },
     };

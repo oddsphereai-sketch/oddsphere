@@ -29,9 +29,13 @@ type SharpEvent = {
   external_ids?: Record<string, string>;
 };
 
+export type EplSharpOddsRecord = NormalizedSoccerOddsRecord & {
+  fetched_at_source: "provider" | "oddsphere_capture";
+};
+
 export type EplSharpFixtureMarket = {
   eventId: string | null;
-  odds: NormalizedSoccerOddsRecord[];
+  odds: EplSharpOddsRecord[];
   splits: EplSharpSplitsEvent[];
   splitsState: "present" | "unavailable" | "error";
 };
@@ -50,6 +54,10 @@ export type EplSharpSplitsEvent = {
     handle_pct?: { yes?: number | null; no?: number | null };
   } | null;
   fetched_at?: string | null;
+  fetched_at_source?: "provider" | null;
+  provider_event_id?: string | null;
+  provider_endpoint?: "/splits";
+  sportsbook?: string | null;
 };
 
 type RawEplSharpSplitsEvent = EplSharpSplitsEvent & {
@@ -176,7 +184,7 @@ export class SharpApiEplMarketProvider {
       .map((row) => row.candidate);
     if (candidates.length === 0) return { eventId: null, odds: [], splits: [], splitsState: "unavailable" };
 
-    const bestByMarket = new Map<NormalizedSoccerOddsRecord["market"], { event: SharpEvent; rows: NormalizedSoccerOddsRecord[]; score: number }>();
+    const bestByMarket = new Map<NormalizedSoccerOddsRecord["market"], { event: SharpEvent; rows: EplSharpOddsRecord[]; score: number }>();
     let fallbackOddsBudget = MAX_FALLBACK_MARKET_CALLS_PER_FIXTURE;
     for (let index = 0; index < candidates.length; index++) {
       const candidate = candidates[index];
@@ -254,8 +262,17 @@ function splitNumber(value: number | null | undefined): number | null {
 
 export function normalizeEplSplits(rows: RawEplSharpSplitsEvent[], fixture: { home: string; away: string }): EplSharpSplitsEvent[] {
   return rows.flatMap((row) => {
-    if (row.moneyline || row.total || row.btts) return [row];
-    const result: EplSharpSplitsEvent = { fetched_at: row.fetched_at ?? row.timestamp ?? null };
+    const result: EplSharpSplitsEvent = {
+      fetched_at: row.fetched_at ?? row.timestamp ?? null,
+      fetched_at_source: row.fetched_at || row.timestamp ? "provider" : null,
+      provider_event_id: row.event_id ?? null,
+      provider_endpoint: "/splits",
+      sportsbook: row.sportsbook ?? null,
+      moneyline: row.moneyline ?? null,
+      total: row.total ?? null,
+      btts: row.btts ?? null,
+    };
+    if (row.moneyline || row.total || row.btts) return [result];
     for (const market of row.markets ?? []) {
       const key = String(market.key ?? market.market_type ?? "").toLowerCase();
       if (key === "h2h" || key === "moneyline" || key === "match_result") {
@@ -296,8 +313,8 @@ export function normalizeEplSplits(rows: RawEplSharpSplitsEvent[], fixture: { ho
   });
 }
 
-function normalizeOdds(rows: SharpApiOddsRow[], eventId: string, fixture: { home: string; away: string }): NormalizedSoccerOddsRecord[] {
-  const out: NormalizedSoccerOddsRecord[] = [];
+function normalizeOdds(rows: SharpApiOddsRow[], eventId: string, fixture: { home: string; away: string }): EplSharpOddsRecord[] {
+  const out: EplSharpOddsRecord[] = [];
   for (const row of rows) {
     const market = normalizeSharpApiMarketType(String(row.market_type ?? ""));
     if (market !== "match_result" && market !== "double_chance" && market !== "total" && market !== "btts") continue;
@@ -313,6 +330,7 @@ function normalizeOdds(rows: SharpApiOddsRow[], eventId: string, fixture: { home
         ? normalizeTotalSelection(rawSelection)
         : normalizeBttsSelection(rawSelection);
     if (!selection) continue;
+    const providerTimestamp = row.timestamp ?? null;
     const record = validateNormalizedRecord({
       market,
       selection,
@@ -322,10 +340,10 @@ function normalizeOdds(rows: SharpApiOddsRow[], eventId: string, fixture: { home
       sportsbook: row.sportsbook ?? null,
       provider: "sharpapi",
       provider_endpoint: `/odds?event_id=${eventId}`,
-      fetched_at: row.timestamp ?? new Date().toISOString(),
+      fetched_at: providerTimestamp ?? new Date().toISOString(),
       provider_event_id: eventId,
     });
-    if (record) out.push(record);
+    if (record) out.push({ ...record, fetched_at_source: providerTimestamp ? "provider" : "oddsphere_capture" });
   }
   return out;
 }

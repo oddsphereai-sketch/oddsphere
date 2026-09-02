@@ -413,6 +413,8 @@ assert.match(previewAdapter, /Math\.min\(3, slate\.matches\.length\)/);
 assert.match(previewAdapter, /5 \* 60_000/);
 assert.match(previewAdapter, /MAX_FIXTURE_RECOVERY_LOADS = 4/);
 assert.match(previewAdapter, /mergeRecoveredFixture/);
+assert.match(previewAdapter, /captureForwardEvidence\?\./, "cached EPL previews must replay the same evidence artifact without another provider call");
+assert.match(previewAdapter, /buildEplForwardEvidenceCaptures/);
 assert.match(previewAdapter, /result: match\.status === "final"/, "completed EPL matches must remain on the weekly slate with a final result");
 assert.match(previewReader, /Final ·/, "completed EPL cards must be visibly distinct from upcoming betting cards");
 assert.match(slateLifecycle, /match\.status_state !== "final"/, "the default round advances to the next unfinished gameweek only after the soccer-day retention check");
@@ -431,9 +433,13 @@ assert.match(productionPipeline, /trackedMarket: "match_result"/);
 assert.match(productionPipeline, /trackedMarket: "double_chance"/);
 assert.match(productionPipeline, /trackedMarket: "total"/);
 assert.match(productionPipeline, /trackedMarket: "btts"/);
+assert.ok(productionPipeline.indexOf("if (prior?.locked_at)") < productionPipeline.indexOf("attachCapture(row, prior?.snapshot_json"), "locked rows must be rejected before evidence-history merge");
+assert.match(productionPipeline, /if \(row\.market !== "match_result"\) return/, "one game-level artifact must be stored only on Match Result");
 for (const route of [refreshRoute, lockRoute]) {
   assert.match(route, /leaseGroup: "prediction_pipeline"/);
   assert.match(route, /requireLease: true/);
+  assert.equal((route.match(/readEplStoredPriceHistory\(/g) ?? []).length, 1, "evidence capture must reuse the existing history read");
+  assert.match(route, /captureForwardEvidence/);
 }
 assert.match(refreshRoute, /EPL_PUBLICATION_ENABLED/);
 assert.match(refreshRoute, /evaluateEplPublicationCoverage/);
