@@ -23,6 +23,11 @@ import {
   ORCHESTRATOR_GATE_ENV,
   SLATE_CYCLE_INTRADAY_MODE_ENV,
 } from "../lib/services/automationOrchestratorGates";
+import {
+  buildCompletedAutomationStepReport,
+  summarizeSlateCycleCoreLifecycle,
+  type AutomationStepReport,
+} from "../lib/services/automationOrchestrator";
 
 let pass = 0;
 let fail = 0;
@@ -374,6 +379,60 @@ async function main() {
       "exactly one (intradayMode, alignmentStatus) combination demotes (intraday + fail_closed)",
       truthyCases === 1
     );
+  }
+
+  // ── [L] S7 partial lifecycle ─────────────────────────────────────────
+  section("S7 partial lifecycle — committed work remains counted and truthful");
+  {
+    const partial = buildCompletedAutomationStepReport({
+      name: "s7_lines_v2_refresh",
+      effectiveWriteMode: true,
+      perStepKey: "lines",
+      durationMs: 1_234,
+      completed: {
+        details: {
+          records_updated: 1_071,
+          api_calls: 98,
+          history_baseline_failed: 1_071,
+        },
+        reason: "partially wrote 1071 line rows; baseline verification failed",
+        partial: true,
+        error_message: "line-history baseline read cap exceeded",
+      },
+    });
+    check("partial completion is not mislabeled wrote or failed", partial.mode === "partial");
+    check("partial completion preserves exact error", partial.error_message === "line-history baseline read cap exceeded");
+    check("partial completion preserves detailed telemetry", partial.details?.history_baseline_failed === 1_071);
+
+    const downstream = buildCompletedAutomationStepReport({
+      name: "s8_sharp_signals_refresh",
+      effectiveWriteMode: true,
+      perStepKey: "signals",
+      durationMs: 100,
+      completed: {
+        details: { records_updated: 5, api_calls: 2 },
+        reason: "wrote downstream signals",
+      },
+    });
+    check("ordinary completion remains wrote", downstream.mode === "wrote");
+
+    const summary = summarizeSlateCycleCoreLifecycle({
+      overall_status: "degraded",
+      blocking_reasons: [],
+      steps: [partial, downstream] as AutomationStepReport[],
+    });
+    check("partial committed records are counted", summary.recordsWritten === 1_076);
+    check("all API calls are counted", summary.apiCalls === 100);
+    check("partial core marks lifecycle incomplete", summary.incomplete === true);
+    check("partial lifecycle surfaces the exact error", summary.errorMessage === "line-history baseline read cap exceeded");
+
+    const warningOnly = summarizeSlateCycleCoreLifecycle({
+      overall_status: "degraded",
+      blocking_reasons: [],
+      steps: [downstream] as AutomationStepReport[],
+    });
+    check("warning-only degraded core is not fabricated as partial", warningOnly.incomplete === false);
+    check("warning-only degraded core has no lifecycle error", warningOnly.errorMessage === null);
   }
 
   // ── Summary ──────────────────────────────────────────────────────────

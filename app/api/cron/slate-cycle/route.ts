@@ -36,6 +36,7 @@ import {
   runSlateCycleAutomated,
   isOrchestratorGateEnabled,
   buildOrchestratorBlockedReport,
+  summarizeSlateCycleCoreLifecycle,
 } from "@/lib/services/automationOrchestrator";
 import { isIntradayMode } from "@/lib/services/automationOrchestratorGates";
 import { supabase } from "@/lib/db/supabase";
@@ -157,27 +158,15 @@ export async function GET(request: Request) {
 
       // Aggregate write counts from per-step details for the
       // cron-handler return shape. `records_updated` is the sum across
-      // every step that wrote, mirroring morning-slate's accounting.
-      let recordsWritten = 0;
-      let apiCalls = 0;
-      for (const s of report.steps) {
-        const d = s.details ?? {};
-        const r = typeof (d as Record<string, unknown>).records_updated === "number"
-          ? ((d as Record<string, unknown>).records_updated as number)
-          : 0;
-        const a = typeof (d as Record<string, unknown>).api_calls === "number"
-          ? ((d as Record<string, unknown>).api_calls as number)
-          : 0;
-        if (s.mode === "wrote") recordsWritten += r;
-        apiCalls += a;
-      }
+      // every step that wrote, including committed work from a truthful
+      // partial step, mirroring morning-slate's accounting.
+      const coreLifecycle = summarizeSlateCycleCoreLifecycle(report);
+      let recordsWritten = coreLifecycle.recordsWritten;
+      let apiCalls = coreLifecycle.apiCalls;
       recordsWritten += marketIntelligenceV2?.recordsUpdated ?? 0;
       apiCalls += marketIntelligenceV2?.apiCallsMade ?? 0;
 
-      const incomplete =
-        report.overall_status === "blocked" ||
-        report.overall_status === "failed" ||
-        (marketIntelligenceV2?.errors.length ?? 0) > 0;
+      const incomplete = coreLifecycle.incomplete || (marketIntelligenceV2?.errors.length ?? 0) > 0;
       return {
         records_updated: recordsWritten,
         api_calls_made: apiCalls,
@@ -186,8 +175,7 @@ export async function GET(request: Request) {
         partial: incomplete,
         error_message: incomplete
           ? [
-              ...report.blocking_reasons,
-              ...report.steps.filter((step) => step.mode === "failed").map((step) => step.reason),
+              ...(coreLifecycle.errorMessage ? [coreLifecycle.errorMessage] : []),
               ...(marketIntelligenceV2?.errors ?? []),
             ].slice(0, 5).join(" | ").slice(0, 1500)
           : null,

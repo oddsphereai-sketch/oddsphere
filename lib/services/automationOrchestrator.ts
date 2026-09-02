@@ -183,6 +183,7 @@ export type AutomationStepName =
 export type StepMode =
   | "dry_run"        // ran in dry-run mode (no write)
   | "wrote"          // ran and wrote to DB
+  | "partial"        // ran, committed bounded work, and reported incomplete work
   | "skipped"        // step had no work (empty slate, no candidates)
   | "blocked"        // upstream gate prevented the step
   | "failed";        // step ran but errored
@@ -195,6 +196,79 @@ export type AutomationStepReport = {
   details?: Record<string, unknown>;
   error_message?: string;
 };
+
+type CompletedAutomationStep = {
+  details: Record<string, unknown>;
+  reason: string;
+  partial?: boolean;
+  error_message?: string | null;
+};
+
+/** Pure completion mapping used by runStep and executable cron tests. */
+export function buildCompletedAutomationStepReport(args: {
+  name: AutomationStepName;
+  effectiveWriteMode: boolean;
+  perStepKey: PerStepKey;
+  durationMs: number;
+  completed: CompletedAutomationStep;
+}): AutomationStepReport {
+  return {
+    name: args.name,
+    mode: args.completed.partial
+      ? "partial"
+      : args.effectiveWriteMode
+        ? "wrote"
+        : "dry_run",
+    duration_ms: args.durationMs,
+    reason: args.completed.reason,
+    details: {
+      ...args.completed.details,
+      per_step_env_var: PER_STEP_ENV_VARS[args.perStepKey],
+    },
+    ...(args.completed.error_message
+      ? { error_message: args.completed.error_message }
+      : {}),
+  };
+}
+
+export type SlateCycleCoreLifecycleSummary = {
+  recordsWritten: number;
+  apiCalls: number;
+  incomplete: boolean;
+  errorMessage: string | null;
+};
+
+/**
+ * Preserve committed counts while turning partial/failed core work into a
+ * truthful cron lifecycle. A partial stage is not relabeled as failed.
+ */
+export function summarizeSlateCycleCoreLifecycle(
+  report: Pick<AutomationRunReport, "overall_status" | "blocking_reasons" | "steps">,
+): SlateCycleCoreLifecycleSummary {
+  let recordsWritten = 0;
+  let apiCalls = 0;
+  for (const step of report.steps) {
+    const records = typeof step.details?.records_updated === "number"
+      ? step.details.records_updated
+      : 0;
+    const calls = typeof step.details?.api_calls === "number"
+      ? step.details.api_calls
+      : 0;
+    if (step.mode === "wrote" || step.mode === "partial") recordsWritten += records;
+    apiCalls += calls;
+  }
+  const incompleteSteps = report.steps.filter((step) => step.mode === "partial" || step.mode === "failed");
+  const incomplete = report.overall_status === "blocked"
+    || report.overall_status === "failed"
+    || incompleteSteps.length > 0;
+  const errorMessage = incomplete
+    ? [
+        ...report.blocking_reasons,
+        ...incompleteSteps.map((step) => step.error_message ?? step.reason),
+      ].filter(Boolean).slice(0, 5).join(" | ").slice(0, 1500) || null
+    : null;
+  return { recordsWritten, apiCalls, incomplete, errorMessage };
+}
 
 export type AutomationRunReport = {
   requested_date: string;
@@ -955,10 +1029,20 @@ export async function runSlateCycleAutomated(opts: {
       dryRun: !writeMode,
     });
     return {
-      details: { records_updated: res.records_updated, api_calls: res.api_calls_made },
-      reason: writeMode
-        ? `wrote ${res.records_updated} line row(s); api_calls=${res.api_calls_made}`
-        : `dry-run; would write ${res.records_updated} line row(s)`,
+      details: {
+        ...(res.details ?? {}),
+        records_updated: res.records_updated,
+        api_calls: res.api_calls_made,
+        partial: res.partial ?? false,
+        error_message: res.error_message ?? null,
+      },
+      partial: res.partial ?? false,
+      error_message: res.error_message ?? null,
+      reason: res.partial
+        ? `partially wrote ${res.records_updated} line row(s); api_calls=${res.api_calls_made}; ${res.error_message ?? "line refresh reported incomplete work"}`
+        : writeMode
+          ? `wrote ${res.records_updated} line row(s); api_calls=${res.api_calls_made}`
+          : `dry-run; would write ${res.records_updated} line row(s)`,
     };
   }));
 
@@ -1664,9 +1748,10 @@ export async function runSlateCycleAutomated(opts: {
   // ── Overall status ───────────────────────────────────────────────────
   let overall: AutomationRunReport["overall_status"];
   const anyStepFailed = steps.some((s) => s.mode === "failed");
+  const anyStepPartial = steps.some((s) => s.mode === "partial");
   if (blockingReasons.length > 0) overall = "blocked";
   else if (anyStepFailed) overall = "failed";
-  else if (warnings.length > 0) overall = "degraded";
+  else if (anyStepPartial || warnings.length > 0) overall = "degraded";
   else overall = "ok";
 
   const finishedAt = new Date();
@@ -1735,7 +1820,7 @@ async function runStep(
   name: AutomationStepName,
   effectiveWriteMode: boolean,
   perStepKey: PerStepKey,
-  inner: (writeMode: boolean) => Promise<{ details: Record<string, unknown>; reason: string }>,
+  inner: (writeMode: boolean) => Promise<CompletedAutomationStep>,
   blockedReason?: string
 ): Promise<AutomationStepReport> {
   const t0 = Date.now();
@@ -1749,14 +1834,14 @@ async function runStep(
     };
   }
   try {
-    const { details, reason } = await inner(effectiveWriteMode);
-    return {
+    const completed = await inner(effectiveWriteMode);
+    return buildCompletedAutomationStepReport({
       name,
-      mode: effectiveWriteMode ? "wrote" : "dry_run",
-      duration_ms: Date.now() - t0,
-      reason,
-      details: { ...details, per_step_env_var: PER_STEP_ENV_VARS[perStepKey] },
-    };
+      effectiveWriteMode,
+      perStepKey,
+      durationMs: Date.now() - t0,
+      completed,
+    });
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     return {

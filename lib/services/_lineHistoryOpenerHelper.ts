@@ -20,6 +20,7 @@
  */
 
 import { supabase } from "../db/supabase";
+import type { SupabaseClient } from "@supabase/supabase-js";
 
 export type HistoryRowLike = {
   game_id: number;
@@ -32,6 +33,99 @@ export type HistoryRowLike = {
 
 function keyOf(r: { game_id: number; market_type: string; side: string; sportsbook: string; player_id: number | null }): string {
   return `${r.game_id}|${r.market_type}|${r.side}|${r.sportsbook}|${r.player_id ?? "null"}`;
+}
+
+export const LINE_HISTORY_OPENER_PAGE_SIZE = 1_000;
+export const LINE_HISTORY_OPENER_MAX_ROWS = 50_000;
+
+export type LineHistoryOpenerReadResult = {
+  existingKeys: Set<string>;
+  rowsRead: number;
+  queries: number;
+  error: string | null;
+};
+
+/**
+ * Read the complete bounded history for the exact incoming identities.
+ *
+ * PostgREST may cap an un-ranged select at 1,000 rows. The old helper used
+ * such a select and therefore mistook every identity outside the first page
+ * for a never-seen identity. This reader requests an exact count, pages in a
+ * deterministic id order, rejects truncation/count drift/duplicate ids, and
+ * restores the full tuple match client-side after the compact database IN
+ * filters. On an unverifiable read it returns no keys plus an error so the
+ * caller can safely avoid stamping any new opener.
+ */
+export async function readExistingLineHistoryIdentityKeys(
+  client: SupabaseClient,
+  payload: ReadonlyArray<HistoryRowLike>,
+  options: { pageSize?: number; maxRows?: number } = {},
+): Promise<LineHistoryOpenerReadResult> {
+  const wantedKeys = new Set(payload.map(keyOf));
+  const gameIds = [...new Set(payload.map((row) => row.game_id))].sort((a, b) => a - b);
+  const marketTypes = [...new Set(payload.map((row) => row.market_type))].sort();
+  const pageSize = Number.isInteger(options.pageSize) && (options.pageSize ?? 0) > 0
+    ? options.pageSize!
+    : LINE_HISTORY_OPENER_PAGE_SIZE;
+  const maxRows = Number.isInteger(options.maxRows) && (options.maxRows ?? 0) > 0
+    ? options.maxRows!
+    : LINE_HISTORY_OPENER_MAX_ROWS;
+  const result: LineHistoryOpenerReadResult = {
+    existingKeys: new Set<string>(),
+    rowsRead: 0,
+    queries: 0,
+    error: null,
+  };
+  if (wantedKeys.size === 0) return result;
+  const fail = (message: string): LineHistoryOpenerReadResult => {
+    result.existingKeys.clear();
+    result.error = message;
+    return result;
+  };
+
+  let expectedRows: number | null = null;
+  const seenIds = new Set<number>();
+  for (let from = 0; expectedRows === null || from < expectedRows; from += pageSize) {
+    result.queries += 1;
+    const query = await client
+      .from("line_history")
+      .select("id,game_id,market_type,side,sportsbook,player_id", { count: "exact" })
+      .in("game_id", gameIds)
+      .in("market_type", marketTypes)
+      .order("id", { ascending: true })
+      .range(from, from + pageSize - 1);
+    if (query.error) {
+      return fail(`line-history opener read failed: ${query.error.message}`);
+    }
+    if (typeof query.count !== "number") {
+      return fail("line-history opener read returned no exact count; truncation cannot be excluded");
+    }
+    if (query.count > maxRows) {
+      return fail(`line-history opener read cap exceeded: count=${query.count} cap=${maxRows}`);
+    }
+    expectedRows ??= query.count;
+    if (query.count !== expectedRows) {
+      return fail(`line-history opener row count changed during pagination: initial=${expectedRows} current=${query.count}`);
+    }
+    const page = query.data ?? [];
+    const expectedPageRows = Math.min(pageSize, expectedRows - from);
+    if (page.length !== expectedPageRows) {
+      return fail(`line-history opener pagination truncated: offset=${from} expected=${expectedPageRows} received=${page.length}`);
+    }
+    result.rowsRead += page.length;
+    for (const row of page) {
+      if (typeof row.id !== "number") {
+        return fail("line-history opener row has no numeric id; deterministic pagination cannot be verified");
+      }
+      if (seenIds.has(row.id)) {
+        return fail(`line-history opener pagination returned duplicate id=${row.id}`);
+      }
+      seenIds.add(row.id);
+      const key = keyOf(row as HistoryRowLike);
+      if (wantedKeys.has(key)) result.existingKeys.add(key);
+    }
+  }
+  return result;
 }
 
 /**
@@ -47,42 +141,32 @@ function keyOf(r: { game_id: number; market_type: string; side: string; sportsbo
  */
 export async function flagOpenersInHistoryPayload<T extends HistoryRowLike>(
   payload: T[],
+  options: {
+    client?: SupabaseClient;
+    pageSize?: number;
+    maxRows?: number;
+  } = {},
 ): Promise<T[]> {
   if (payload.length === 0) return payload;
 
-  // Build distinct keys in payload.
-  const keys = new Set<string>();
-  for (const r of payload) keys.add(keyOf(r));
-
-  // Pre-fetch which of those keys already exist in line_history.
-  // The query is on indexed columns (game_id) so a few hundred rows
-  // returns fast; we narrow further client-side.
-  const gameIds = Array.from(new Set(payload.map((r) => r.game_id)));
-  const marketTypes = Array.from(new Set(payload.map((r) => r.market_type)));
-  const { data, error } = await supabase
-    .from("line_history")
-    .select("game_id, market_type, side, sportsbook, player_id")
-    .in("game_id", gameIds)
-    .in("market_type", marketTypes);
-  if (error !== null) {
+  const read = await readExistingLineHistoryIdentityKeys(
+    options.client ?? supabase,
+    payload,
+    { pageSize: options.pageSize, maxRows: options.maxRows },
+  );
+  if (read.error !== null) {
     // Safest fallback: keep is_opener=false. Surface via console so
     // the next operator probe can spot the issue.
-    console.warn(`[lineHistoryOpenerHelper] pre-fetch failed: ${error.message}; keeping is_opener=false for ${payload.length} row(s)`);
+    console.warn(`[lineHistoryOpenerHelper] pre-fetch failed: ${read.error}; keeping is_opener=false for ${payload.length} row(s)`);
     return payload.map((r) => ({ ...r, is_opener: false }));
   }
-
-  const existingKeys = new Set<string>(
-    (data ?? []).map((r) =>
-      keyOf(r as { game_id: number; market_type: string; side: string; sportsbook: string; player_id: number | null }),
-    ),
-  );
 
   // Walk payload in array order — first row per never-seen key becomes
   // the opener; everything else stays false.
   const flaggedKeysFromPayload = new Set<string>();
   return payload.map((r) => {
     const k = keyOf(r);
-    if (!existingKeys.has(k) && !flaggedKeysFromPayload.has(k)) {
+    if (!read.existingKeys.has(k) && !flaggedKeysFromPayload.has(k)) {
       flaggedKeysFromPayload.add(k);
       return { ...r, is_opener: true };
     }
