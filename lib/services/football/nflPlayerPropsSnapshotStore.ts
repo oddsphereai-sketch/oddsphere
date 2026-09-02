@@ -2,7 +2,9 @@ import { createHash } from "node:crypto";
 import { gunzipSync, gzipSync } from "node:zlib";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
+  buildNflPlayerPropsMemberSnapshot,
   deriveNflPlayerPropsMemberDecisions,
+  type NflPlayerPropsMemberSnapshot,
   type NflPlayerPropsProductionSnapshot,
 } from "./nflPlayerPropsProductionContract";
 
@@ -11,6 +13,8 @@ export const NFL_PLAYER_PROPS_SNAPSHOT_ENVELOPE_RELEASE =
   "nfl_player_props_snapshot_envelope_2026_09_02_r1_gzip_deduplicated_member" as const;
 export const NFL_PLAYER_PROPS_SNAPSHOT_MAX_JSON_BYTES = 12_000_000;
 export const NFL_PLAYER_PROPS_SNAPSHOT_MAX_GZIP_BYTES = 1_000_000;
+export const NFL_PLAYER_PROPS_MEMBER_CACHE_TTL_MS = 60_000;
+export const NFL_PLAYER_PROPS_MEMBER_READ_TIMEOUT_MS = 6_000;
 const NFL_PLAYER_PROPS_SNAPSHOT_MAX_BASE64_CHARACTERS =
   4 * Math.ceil(NFL_PLAYER_PROPS_SNAPSHOT_MAX_GZIP_BYTES / 3);
 const TABLE_MISSING_RE = /relation .*lab_response_snapshots.* does not exist|schema cache/i;
@@ -44,6 +48,19 @@ export type NflPlayerPropsSnapshotSize = {
 export type NflPlayerPropsSnapshotRecord = {
   snapshot: NflPlayerPropsProductionSnapshot;
   generatedAt: string;
+};
+
+type NflPlayerPropsMemberCacheEntry =
+  | { value: NflPlayerPropsMemberSnapshot; expiresAt: number; inFlight?: never }
+  | { value?: never; expiresAt?: never; inFlight: Promise<NflPlayerPropsMemberSnapshot | null> };
+
+export type NflPlayerPropsMemberSnapshotReader = {
+  read(args: {
+    client: SupabaseClient;
+    season: number;
+    week: number;
+  }): Promise<NflPlayerPropsMemberSnapshot | null>;
+  invalidate(args: { season: number; week: number }): void;
 };
 
 export function nflPlayerPropsSnapshotKey(season: number, week: number): string {
@@ -81,6 +98,72 @@ export async function readNflPlayerPropsSnapshotRecord(args: {
   };
 }
 
+/**
+ * Constructs a member-only reader. Its DTO return type deliberately cannot be
+ * substituted for the canonical production snapshot consumed by the writer.
+ * Cache keys contain only the public season/week identity; no auth or user
+ * state is retained.
+ */
+export function createNflPlayerPropsMemberSnapshotReader(options: {
+  cacheTtlMs?: number;
+  readTimeoutMs?: number;
+  now?: () => number;
+} = {}): NflPlayerPropsMemberSnapshotReader {
+  const cacheTtlMs = options.cacheTtlMs ?? NFL_PLAYER_PROPS_MEMBER_CACHE_TTL_MS;
+  const readTimeoutMs = options.readTimeoutMs ?? NFL_PLAYER_PROPS_MEMBER_READ_TIMEOUT_MS;
+  const now = options.now ?? Date.now;
+  if (!Number.isFinite(cacheTtlMs) || cacheTtlMs <= 0) throw new Error("NFL props member cache TTL must be positive.");
+  if (!Number.isFinite(readTimeoutMs) || readTimeoutMs <= 0) throw new Error("NFL props member read timeout must be positive.");
+  const cache = new Map<string, NflPlayerPropsMemberCacheEntry>();
+
+  const read: NflPlayerPropsMemberSnapshotReader["read"] = (args) => {
+    const key = nflPlayerPropsSnapshotKey(args.season, args.week);
+    const existing = cache.get(key);
+    if (existing?.value && now() < existing.expiresAt) return Promise.resolve(existing.value);
+    if (existing?.inFlight) return existing.inFlight;
+    if (existing) cache.delete(key);
+
+    const inFlight = readNflPlayerPropsMemberSnapshotUncached({ ...args, timeoutMs: readTimeoutMs })
+      .then((snapshot) => {
+        if (snapshot === null) {
+          if (cache.get(key)?.inFlight === inFlight) cache.delete(key);
+          return null;
+        }
+        const memberSnapshot = buildNflPlayerPropsMemberSnapshot(snapshot);
+        if (cache.get(key)?.inFlight === inFlight) {
+          cache.set(key, { value: memberSnapshot, expiresAt: now() + cacheTtlMs });
+        }
+        return memberSnapshot;
+      })
+      .catch((error: unknown) => {
+        if (cache.get(key)?.inFlight === inFlight) cache.delete(key);
+        throw error;
+      });
+    cache.set(key, { inFlight });
+    return inFlight;
+  };
+
+  return {
+    read,
+    invalidate: ({ season, week }) => cache.delete(nflPlayerPropsSnapshotKey(season, week)),
+  };
+}
+
+const memberSnapshotReader = createNflPlayerPropsMemberSnapshotReader();
+
+/** Member-route API only. Writer and readiness paths must use uncached readers. */
+export function readNflPlayerPropsMemberSnapshot(args: {
+  client: SupabaseClient;
+  season: number;
+  week: number;
+}): Promise<NflPlayerPropsMemberSnapshot | null> {
+  return memberSnapshotReader.read(args);
+}
+
+function invalidateNflPlayerPropsMemberSnapshot(args: { season: number; week: number }): void {
+  memberSnapshotReader.invalidate(args);
+}
+
 export async function writeNflPlayerPropsSnapshot(args: {
   client: SupabaseClient;
   snapshot: NflPlayerPropsProductionSnapshot;
@@ -104,6 +187,42 @@ export async function writeNflPlayerPropsSnapshot(args: {
     updated_at: generatedAt,
   }, { onConflict: "snapshot_key" });
   if (error) throw new Error(`NFL player props snapshot write failed: ${error.message}`);
+  invalidateNflPlayerPropsMemberSnapshot({ season: args.snapshot.season, week: args.snapshot.week });
+}
+
+async function readNflPlayerPropsMemberSnapshotUncached(args: {
+  client: SupabaseClient;
+  season: number;
+  week: number;
+  timeoutMs: number;
+}): Promise<NflPlayerPropsProductionSnapshot | null> {
+  const controller = new AbortController();
+  let timeout: ReturnType<typeof setTimeout> | null = null;
+  const timedOut = new Promise<never>((_resolve, reject) => {
+    timeout = setTimeout(() => {
+      controller.abort();
+      reject(new Error(`NFL player props member snapshot read timed out after ${args.timeoutMs}ms.`));
+    }, args.timeoutMs);
+  });
+  const query = args.client
+    .from("lab_response_snapshots")
+    .select("payload,generated_at")
+    .eq("snapshot_key", nflPlayerPropsSnapshotKey(args.season, args.week))
+    .abortSignal(controller.signal)
+    .maybeSingle();
+  try {
+    const { data, error } = await Promise.race([query, timedOut]);
+    if (error) {
+      if (TABLE_MISSING_RE.test(error.message)) return null;
+      throw new Error(`NFL player props member snapshot read failed: ${error.message}`);
+    }
+    if (data?.payload === null || data?.payload === undefined) return null;
+    const snapshot = decodeNflPlayerPropsSnapshotPayload(data.payload);
+    if (!snapshot) throw new Error("NFL player props member snapshot payload is corrupt or unsupported.");
+    return snapshot;
+  } finally {
+    if (timeout !== null) clearTimeout(timeout);
+  }
 }
 
 export function encodeNflPlayerPropsSnapshotPayload(

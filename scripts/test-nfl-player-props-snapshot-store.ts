@@ -11,11 +11,15 @@ import {
   type NflPlayerPropsProductionSnapshot,
 } from "../lib/services/football/nflPlayerPropsProductionContract";
 import {
+  createNflPlayerPropsMemberSnapshotReader,
   decodeNflPlayerPropsSnapshotPayload,
   encodeNflPlayerPropsSnapshotPayload,
   measureNflPlayerPropsSnapshotPayload,
+  NFL_PLAYER_PROPS_MEMBER_CACHE_TTL_MS,
+  NFL_PLAYER_PROPS_MEMBER_READ_TIMEOUT_MS,
   NFL_PLAYER_PROPS_SNAPSHOT_ENVELOPE_RELEASE,
   NFL_PLAYER_PROPS_SNAPSHOT_MAX_JSON_BYTES,
+  readNflPlayerPropsMemberSnapshot,
   readNflPlayerPropsSnapshot,
   readNflPlayerPropsSnapshotRecord,
   writeNflPlayerPropsSnapshot,
@@ -124,6 +128,118 @@ async function main(): Promise<void> {
   assert.equal(record?.generatedAt, "2026-09-02T12:00:00.000+00:00",
     "the operator-compatible store retains database timestamp formatting");
 
+  assert.equal(NFL_PLAYER_PROPS_MEMBER_CACHE_TTL_MS, 60_000);
+  assert.ok(NFL_PLAYER_PROPS_MEMBER_READ_TIMEOUT_MS < 8_000,
+    "the underlying abort fires before the page-level member deadline");
+
+  let clock = 0;
+  let resolveCold!: (value: unknown) => void;
+  let cachedReads = 0;
+  let pendingPayload: Promise<unknown> | null = new Promise((resolve) => { resolveCold = resolve; });
+  const cachedClient = clientFixture({
+    read: () => pendingPayload ?? encoded,
+    onRead: () => { cachedReads += 1; },
+  });
+  const cachedReader = createNflPlayerPropsMemberSnapshotReader({ now: () => clock });
+  const cold = cachedReader.read({ client: cachedClient, season: 2026, week: 1 });
+  const coalesced = cachedReader.read({ client: cachedClient, season: 2026, week: 1 });
+  assert.strictEqual(cold, coalesced, "concurrent member reads share exactly one in-flight promise");
+  clock = 30_000;
+  resolveCold(encoded);
+  const [coldValue, coalescedValue] = await Promise.all([cold, coalesced]);
+  assert.equal(cachedReads, 1, "cold and coalesced reads use one query");
+  assert.deepEqual(coldValue, memberBefore);
+  assert.strictEqual(coldValue, coalescedValue);
+  pendingPayload = null;
+  clock = 89_999;
+  assert.strictEqual(await cachedReader.read({ client: cachedClient, season: 2026, week: 1 }), coldValue);
+  assert.equal(cachedReads, 1, "warm reads use no query before the resolution-based TTL expires");
+  clock = 90_000;
+  assert.deepEqual(await cachedReader.read({ client: cachedClient, season: 2026, week: 1 }), memberBefore);
+  assert.equal(cachedReads, 2, "the first read at expiry performs one fresh query");
+  let secondWeekReads = 0;
+  const secondWeekClient = clientFixture({
+    read: () => encoded,
+    expectedSnapshotKey: "nfl::player-props::2026::2",
+    onRead: () => { secondWeekReads += 1; },
+  });
+  await cachedReader.read({ client: secondWeekClient, season: 2026, week: 2 });
+  await cachedReader.read({ client: secondWeekClient, season: 2026, week: 2 });
+  assert.equal(secondWeekReads, 1, "season/week identities have independent cache entries");
+  await cachedReader.read({ client: cachedClient, season: 2026, week: 1 });
+  assert.equal(cachedReads, 2, "reading another week does not evict or replace the first week");
+
+  let nullReads = 0;
+  const nullReader = createNflPlayerPropsMemberSnapshotReader();
+  const nullClient = clientFixture({ read: () => null, onRead: () => { nullReads += 1; } });
+  assert.equal(await nullReader.read({ client: nullClient, season: 2026, week: 1 }), null);
+  assert.equal(await nullReader.read({ client: nullClient, season: 2026, week: 1 }), null);
+  assert.equal(nullReads, 2, "null results are never cached");
+
+  let transientError: string | undefined = "temporary read failure";
+  let errorReads = 0;
+  const errorReader = createNflPlayerPropsMemberSnapshotReader();
+  const errorClient = clientFixture({
+    read: () => encoded,
+    readError: () => transientError,
+    onRead: () => { errorReads += 1; },
+  });
+  await assert.rejects(errorReader.read({ client: errorClient, season: 2026, week: 1 }), /temporary read failure/);
+  transientError = undefined;
+  assert.deepEqual(await errorReader.read({ client: errorClient, season: 2026, week: 1 }), memberBefore);
+  assert.equal(errorReads, 2, "failed in-flight state is evicted for recovery");
+
+  let corruptPayload: unknown = { ...encoded, checksum: "bad" };
+  let corruptReads = 0;
+  const corruptReader = createNflPlayerPropsMemberSnapshotReader();
+  const corruptClient = clientFixture({ read: () => corruptPayload, onRead: () => { corruptReads += 1; } });
+  await assert.rejects(corruptReader.read({ client: corruptClient, season: 2026, week: 1 }), /corrupt or unsupported/);
+  corruptPayload = encoded;
+  assert.deepEqual(await corruptReader.read({ client: corruptClient, season: 2026, week: 1 }), memberBefore);
+  assert.equal(corruptReads, 2, "corrupt results are never cached and can recover");
+
+  let abortReads = 0;
+  let observedSignal: AbortSignal | undefined;
+  let abortMode = true;
+  const abortReader = createNflPlayerPropsMemberSnapshotReader({ readTimeoutMs: 5 });
+  const abortClient = clientFixture({
+    onRead: () => { abortReads += 1; },
+    read: (signal) => {
+      observedSignal = signal;
+      if (!abortMode) return encoded;
+      return new Promise((_resolve, reject) => signal?.addEventListener("abort", () => {
+        const error = new Error("aborted");
+        error.name = "AbortError";
+        reject(error);
+      }, { once: true }));
+    },
+  });
+  await assert.rejects(abortReader.read({ client: abortClient, season: 2026, week: 1 }), /timed out/);
+  assert.equal(observedSignal?.aborted, true, "the member timeout aborts the underlying Supabase query");
+  abortMode = false;
+  assert.deepEqual(await abortReader.read({ client: abortClient, season: 2026, week: 1 }), memberBefore);
+  assert.equal(abortReads, 2, "timed-out state is evicted and the next request recovers");
+
+  let invalidationReads = 0;
+  const invalidationWrite = { error: undefined as string | undefined };
+  const invalidationClient = clientFixture({
+    read: () => encoded,
+    write: () => undefined,
+    readError: () => undefined,
+    writeError: () => invalidationWrite.error,
+    onRead: () => { invalidationReads += 1; },
+  });
+  await readNflPlayerPropsMemberSnapshot({ client: invalidationClient, season: 2026, week: 1 });
+  await readNflPlayerPropsMemberSnapshot({ client: invalidationClient, season: 2026, week: 1 });
+  assert.equal(invalidationReads, 1, "the production member reader caches a successful DTO");
+  await writeNflPlayerPropsSnapshot({ client: invalidationClient, snapshot, source: "test-writer" });
+  await readNflPlayerPropsMemberSnapshot({ client: invalidationClient, season: 2026, week: 1 });
+  assert.equal(invalidationReads, 2, "a successful same-process write invalidates the season/week member cache");
+  invalidationWrite.error = "write rejected";
+  await assert.rejects(writeNflPlayerPropsSnapshot({ client: invalidationClient, snapshot, source: "test-writer" }), /write rejected/);
+  await readNflPlayerPropsMemberSnapshot({ client: invalidationClient, season: 2026, week: 1 });
+  assert.equal(invalidationReads, 2, "a failed write does not invalidate a successful member cache entry");
+
   storedPayload = { ...encoded, checksum: "bad" };
   await assert.rejects(
     readNflPlayerPropsSnapshot({ client, season: 2026, week: 1 }),
@@ -133,10 +249,11 @@ async function main(): Promise<void> {
   const originalConsoleError = console.error;
   console.error = () => undefined;
   try {
+    const fallbackReader = createNflPlayerPropsMemberSnapshotReader();
     const memberFallback = await readMemberDataWithDeadline({
       label: "nfl-player-props-snapshot-test",
       fallback: null,
-      read: () => readNflPlayerPropsSnapshot({ client, season: 2026, week: 1 }),
+      read: () => fallbackReader.read({ client, season: 2026, week: 1 }),
     });
     assert.deepEqual(memberFallback, { value: null, unavailable: true, reason: "error" },
       "corruption uses the existing member unavailable fallback without reconstructing data");
@@ -153,9 +270,13 @@ async function main(): Promise<void> {
   const memberPage = readFileSync("app/player-props/page.tsx", "utf8");
   const writer = readFileSync("lib/services/football/nflPlayerPropsProductionWriter.ts", "utf8");
   const readiness = readFileSync("scripts/operator/audit-current-nfl-player-props-readiness.ts", "utf8");
-  assert.match(memberPage, /readNflPlayerPropsSnapshot/);
+  assert.match(memberPage, /readNflPlayerPropsMemberSnapshot/);
   assert.match(writer, /readNflPlayerPropsSnapshot/);
   assert.match(readiness, /readNflPlayerPropsSnapshotRecord/);
+  assert.doesNotMatch(writer, /readNflPlayerPropsMemberSnapshot/,
+    "the writer cannot accidentally consume the member-only cached DTO");
+  assert.doesNotMatch(readiness, /readNflPlayerPropsMemberSnapshot/,
+    "readiness must keep its uncached timestamp-aware record read");
   for (const readerSource of [memberPage, writer, readiness]) {
     assert.doesNotMatch(readerSource, /\.select\(["']payload/,
       "every current NFL props payload reader must use the dual-schema store");
@@ -242,11 +363,13 @@ function productionSnapshot(rows: NflPlayerPropsRuntimeDecision[]): NflPlayerPro
 }
 
 function clientFixture(args: {
-  read: () => unknown;
+  read: (signal?: AbortSignal) => unknown | Promise<unknown>;
   write?: (payload: unknown) => void;
   onRead?: () => void;
   onWrite?: () => void;
-  readError?: string;
+  readError?: string | (() => string | undefined);
+  writeError?: string | (() => string | undefined);
+  expectedSnapshotKey?: string;
 }): SupabaseClient {
   return {
     from(table: string) {
@@ -256,6 +379,8 @@ function clientFixture(args: {
           args.onWrite?.();
           assert.equal(options.onConflict, "snapshot_key");
           assert.equal(row.payload_version, NFL_PLAYER_PROPS_PRODUCTION_CANDIDATE_RELEASE);
+          const writeError = typeof args.writeError === "function" ? args.writeError() : args.writeError;
+          if (writeError) return { error: { message: writeError } };
           args.write?.(row.payload);
           return { error: null };
         },
@@ -264,15 +389,22 @@ function clientFixture(args: {
           return {
             eq(column: string, value: string) {
               assert.equal(column, "snapshot_key");
-              assert.equal(value, "nfl::player-props::2026::1");
-              return {
+              assert.equal(value, args.expectedSnapshotKey ?? "nfl::player-props::2026::1");
+              let signal: AbortSignal | undefined;
+              const query = {
+                abortSignal(nextSignal: AbortSignal) {
+                  signal = nextSignal;
+                  return query;
+                },
                 async maybeSingle() {
                   args.onRead?.();
-                  return args.readError
-                    ? { data: null, error: { message: args.readError } }
-                    : { data: { payload: args.read(), generated_at: "2026-09-02T12:00:00.000+00:00" }, error: null };
+                  const readError = typeof args.readError === "function" ? args.readError() : args.readError;
+                  return readError
+                    ? { data: null, error: { message: readError } }
+                    : { data: { payload: await args.read(signal), generated_at: "2026-09-02T12:00:00.000+00:00" }, error: null };
                 },
               };
+              return query;
             },
           };
         },
