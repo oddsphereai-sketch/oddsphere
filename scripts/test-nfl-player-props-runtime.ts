@@ -28,7 +28,7 @@ import {
 } from "../lib/services/football/nflPlayerPropsRuntime";
 import type { NflPlayerPropsExactOffer } from "../lib/services/football/nflPlayerPropsMarketBoard";
 
-assert.equal(NFL_PLAYER_PROPS_RUNTIME_RELEASE, "nfl_player_props_runtime_2026_09_01_r8_market_coherent_projection");
+assert.equal(NFL_PLAYER_PROPS_RUNTIME_RELEASE, "nfl_player_props_runtime_2026_09_02_r9_qb_target_exclusion");
 assert.deepEqual(NFL_PLAYER_PROPS_QB_ROLE_FLOORS, { confirmedStarter: 0.9, projectedStarter: 0.75 });
 verifyNflPlayerPropsRuntimeParity(1e-9);
 
@@ -171,22 +171,61 @@ const expectedStarterProjection = nflPlayerPropsExpectedStarterPassingProjection
   feature: quarterbackFeature,
   modeledProjection: 110,
   offers: [passingOffer, { ...passingOffer, offerKey: "qb-book-b", sportsbook: "book-b", line: 226.5 }],
+  evaluatedSportsbook: "book-a",
 });
 assert.ok(expectedStarterProjection, "a matching expected starter receives the market-dominant passing projection");
-assert.equal(expectedStarterProjection?.evidence.source, "market_dominant_expected_starter");
+assert.equal(expectedStarterProjection?.evidence?.source, "market_dominant_expected_starter");
 if (expectedStarterProjection?.evidence.source !== "market_dominant_expected_starter") throw new Error("passing projection evidence narrowed incorrectly");
-assert.equal(expectedStarterProjection.evidence.books, 2);
-assert.equal(expectedStarterProjection.evidence.roleProjection, 235);
+const expectedStarterEvidence = expectedStarterProjection.evidence;
+assert.equal(expectedStarterEvidence.books, 1);
+assert.equal(expectedStarterEvidence.roleProjection, 235);
 assert.ok((expectedStarterProjection?.projection ?? 0) > 215 && (expectedStarterProjection?.projection ?? 999) < 240,
   "the repaired projection is market-realistic while retaining bounded recent-role context");
 assert.equal(nflPlayerPropsExpectedStarterPassingProjection({
   feature: { ...quarterbackFeature, expectedQuarterback: { ...quarterbackFeature.expectedQuarterback, name: "Other Quarterback" } },
   modeledProjection: 110,
   offers: [passingOffer],
+  evaluatedSportsbook: "book-a",
 }), null, "the projection never transfers across quarterback identities");
-const oneBookStarterProjection = nflPlayerPropsExpectedStarterPassingProjection({ feature: quarterbackFeature, modeledProjection: 110, offers: [passingOffer] });
-assert.ok(oneBookStarterProjection && oneBookStarterProjection.projection > 200,
-  "one complete book may correct the displayed projection without authorizing a Lean or Best Angle");
+const oneBookStarterProjection = nflPlayerPropsExpectedStarterPassingProjection({
+  feature: quarterbackFeature,
+  modeledProjection: 110,
+  offers: [passingOffer],
+  evaluatedSportsbook: "book-a",
+});
+assert.equal(oneBookStarterProjection?.projection, 235,
+  "an evaluation-only passing market falls back to the existing independent role projection");
+assert.equal(oneBookStarterProjection?.evidence, undefined,
+  "an evaluation-only quote cannot describe itself as point-consensus evidence");
+const evaluationOnlyPassing = buildNflPlayerPropsRuntimeBoard({
+  offers: [passingOffer],
+  features: [quarterbackFeature],
+  evaluatedAt: "2026-08-25T12:01:00.000Z",
+});
+assert.ok(evaluationOnlyPassing.decisions.length === 2);
+assert.ok(evaluationOnlyPassing.decisions.every((row) => row.projection === 235),
+  "an evaluation-only board publishes the existing independent role projection");
+assert.ok(evaluationOnlyPassing.decisions.every((row) => row.marketProbability === row.rawModelProbability),
+  "an evaluation-only quote cannot validate its own passing probability");
+assert.ok(evaluationOnlyPassing.decisions.every((row) => row.grade === "No Play"),
+  "the existing independent-book gate remains authoritative");
+const targetExcludedProjection = nflPlayerPropsExpectedStarterPassingProjection({
+  feature: quarterbackFeature,
+  modeledProjection: 110,
+  offers: [
+    { ...passingOffer, line: 150.5, overNoVigProbability: 0.9 },
+    { ...passingOffer, offerKey: "qb-independent", sportsbook: "book-b", line: 226.5 },
+  ],
+  evaluatedSportsbook: "book-a",
+});
+const independentOnlyProjection = nflPlayerPropsExpectedStarterPassingProjection({
+  feature: quarterbackFeature,
+  modeledProjection: 110,
+  offers: [{ ...passingOffer, offerKey: "qb-independent", sportsbook: "book-b", line: 226.5 }],
+  evaluatedSportsbook: "book-a",
+});
+assert.equal(targetExcludedProjection?.projection, independentOnlyProjection?.projection,
+  "changing the evaluated offer cannot change its target-excluded QB point projection");
 const primaryKeys = primaryNflPlayerPropsOfferKeys([
   passingOffer,
   { ...passingOffer, offerKey: "book-a-alternate", line: 230.5 },
