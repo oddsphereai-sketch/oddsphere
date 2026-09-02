@@ -10,7 +10,7 @@ import {
 } from "./footballMarketScopedTracking";
 
 export const NFL_OFFICIAL_TRACKING_RECORD_RELEASE =
-  "nfl_official_tracking_record_2026_08_26_r2_market_scoped_t60" as const;
+  "nfl_official_tracking_record_2026_09_01_r4_forecast_value_separation" as const;
 
 export function buildNflOfficialTrackingRecords(args: {
   payload: NflForwardEvidencePayload;

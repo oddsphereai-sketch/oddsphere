@@ -5,37 +5,41 @@ import {
 } from "./nflRegularDecisionEvidence";
 import type { NflR6ShadowMoneylineDecision } from "./nflR6MoneylineShadow";
 import {
-  applyNflV1LogitCorrection,
-  getNflV1ActionableGradeCorrection,
-  hasNflV1ActionableGradeCorrection,
-} from "./nflV1ActionableGradeCorrections";
-import {
   buildNflV1ProductionDecisionBundle,
+  NFL_V1_GRADE_POLICY_RELEASE,
+  NFL_V1_MEMBER_RELEASE,
+  NFL_V1_PRODUCTION_CALIBRATION_RELEASE,
+  NFL_V1_PRODUCTION_DECISION_RELEASE,
+  NFL_V1_PRODUCTION_MODEL_RELEASE,
 } from "./nflV1ProductionDecision";
 import {
   getNflV1WeekOneOutcomeForecast,
   nflV1WeekOneLineProbabilities,
   type NflV1WeekOneOutcomeForecast,
 } from "./nflV1WeekOneOutcome";
-import { constrainHomeCoverProbability } from "./footballCrossMarketCoherence";
 
 export const NFL_V1_ACTIONABLE_GRADE_MODEL_RELEASE =
-  "nfl_v1_daily_edge_model_2026_08_31_r6_market_split_injury" as const;
+  NFL_V1_PRODUCTION_MODEL_RELEASE;
 export const NFL_V1_ACTIONABLE_GRADE_CALIBRATION_RELEASE =
-  "nfl_v1_daily_edge_calibration_2026_08_31_r6_market_split_residual" as const;
+  NFL_V1_PRODUCTION_CALIBRATION_RELEASE;
 export const NFL_V1_ACTIONABLE_GRADE_DECISION_RELEASE =
-  "nfl_v1_daily_edge_decision_2026_08_31_r12_market_split_injury" as const;
+  NFL_V1_PRODUCTION_DECISION_RELEASE;
 export const NFL_V1_ACTIONABLE_GRADE_POLICY_RELEASE =
-  "nfl_v1_grade_policy_2026_08_31_r12_market_split_injury" as const;
+  NFL_V1_GRADE_POLICY_RELEASE;
 export const NFL_V1_ACTIONABLE_GRADE_MEMBER_RELEASE =
-  "nfl_v1_member_release_2026_08_31_r9_market_split_injury" as const;
+  NFL_V1_MEMBER_RELEASE;
 export const NFL_V1_EVENT_CONTAINED_SPREAD_MODEL_RELEASE =
-  "nfl_v1_spread_event_contained_2026_08_31_r3_market_split" as const;
+  "nfl_v1_spread_event_contained_2026_09_01_r4_coherent_movement_evidence" as const;
 export const NFL_V1_MARKET_EVIDENCE_TOTAL_MODEL_RELEASE =
-  "nfl_v1_total_market_evidence_2026_08_31_r2_circa_public_bounded" as const;
+  "nfl_v1_total_market_evidence_2026_09_01_r3_coherent_movement_evidence" as const;
 
 export const NFL_V1_MONEYLINE_BEST_ANGLE_MINIMUM_EXPECTED_VALUE = 0.02 as const;
 export const NFL_V1_MONEYLINE_BEST_ANGLE_MINIMUM_EDGE_PERCENTAGE_POINTS = 4.0 as const;
+export const NFL_V1_SPREAD_BEST_ANGLE_MINIMUM_PROBABILITY = 0.55 as const;
+export const NFL_V1_SPREAD_BEST_ANGLE_MINIMUM_EXPECTED_VALUE = 0.04 as const;
+export const NFL_V1_TOTAL_BEST_ANGLE_MINIMUM_PROBABILITY = 0.535 as const;
+export const NFL_V1_TOTAL_BEST_ANGLE_MINIMUM_EXPECTED_VALUE = 0.035 as const;
+export const NFL_V1_SPREAD_TOTAL_BEST_ANGLE_MINIMUM_EDGE_PERCENTAGE_POINTS = 4.0 as const;
 export const NFL_V1_SPREAD_LEAN_MINIMUM_PROBABILITY = 0.51 as const;
 export const NFL_V1_SPREAD_LEAN_MINIMUM_EXPECTED_VALUE = 0.0 as const;
 export const NFL_V1_SPREAD_LEAN_MINIMUM_EDGE_PERCENTAGE_POINTS = 0.0 as const;
@@ -43,7 +47,7 @@ export const NFL_V1_SPREAD_LEAN_MINIMUM_CUSHION = 0.0 as const;
 export const NFL_V1_TOTAL_LEAN_MINIMUM_PROBABILITY = 0.535 as const;
 export const NFL_V1_TOTAL_LEAN_MINIMUM_EXPECTED_VALUE = 0.02 as const;
 export const NFL_V1_TOTAL_LEAN_MINIMUM_EDGE_PERCENTAGE_POINTS = 1.0 as const;
-export const NFL_V1_TOTAL_LEAN_MINIMUM_CUSHION = 1.0 as const;
+export const NFL_V1_TOTAL_LEAN_MINIMUM_CUSHION = 0.0 as const;
 export const NFL_V1_SPREAD_WATCHLIST_MINIMUM_PROBABILITY = 0.50 as const;
 export const NFL_V1_SPREAD_WATCHLIST_MINIMUM_EXPECTED_VALUE = -0.02 as const;
 export const NFL_V1_SPREAD_WATCHLIST_MINIMUM_EDGE_PERCENTAGE_POINTS = -1.0 as const;
@@ -94,9 +98,6 @@ export function buildNflV1ActionableGradeBundle(args: {
   const currentBundle = buildNflV1ProductionDecisionBundle(args);
   const currentMoneyline = currentBundle.evaluatedBets.find((decision) => decision.market === "moneyline");
   if (!currentMoneyline) return emptyBundle(currentBundle.outcomeConfidence);
-  const correction = hasNflV1ActionableGradeCorrection(args.providerGameId)
-    ? getNflV1ActionableGradeCorrection(args)
-    : { spreadHomeLogitCorrection: 0, totalOverLogitCorrection: 0 };
   const currentTotal = args.current.total?.line;
   const outcome = args.outcomeForecast ?? getNflV1WeekOneOutcomeForecast({
     ...args,
@@ -117,7 +118,7 @@ export function buildNflV1ActionableGradeBundle(args: {
     decisionRelease: NFL_V1_ACTIONABLE_GRADE_DECISION_RELEASE,
     lockedAt,
   };
-  const moneylineGrade = bestAngleEligible(args.shadowMoneyline, currentMoneyline)
+  const moneylineGrade = bestAngleEligible(currentMoneyline)
     ? "Best Angle"
     : currentMoneyline.grade;
   const moneyline = buildNflRegularEvaluatedBetDecision({
@@ -125,9 +126,6 @@ export function buildNflV1ActionableGradeBundle(args: {
     ...common,
     grade: moneylineGrade,
   });
-  const homeWinProbability = moneyline.side === args.homeTeam
-    ? moneyline.modelProbability
-    : 1 - moneyline.modelProbability;
   const spread = selectMarket({
     market: "spread",
     forecast: outcome,
@@ -135,8 +133,6 @@ export function buildNflV1ActionableGradeBundle(args: {
     awayTeam: args.awayTeam,
     homeTeam: args.homeTeam,
     gameStartsAt: args.gameStartsAt,
-    logitCorrection: correction.spreadHomeLogitCorrection,
-    homeWinProbability,
   });
   const total = selectMarket({
     market: "total",
@@ -145,7 +141,6 @@ export function buildNflV1ActionableGradeBundle(args: {
     awayTeam: args.awayTeam,
     homeTeam: args.homeTeam,
     gameStartsAt: args.gameStartsAt,
-    logitCorrection: correction.totalOverLogitCorrection,
   });
   if (!spread || !total) return emptyBundle(currentBundle.outcomeConfidence);
   const evaluatedBets = [moneyline, spread, total].map((decision) => "decisionKind" in decision
@@ -190,15 +185,11 @@ function emptyBundle(
   };
 }
 
-function bestAngleEligible(
-  shadow: NflR6ShadowMoneylineDecision,
-  current: NflRegularEvaluatedBetDecision,
-): boolean {
-  return current.grade === "Lean" && shadow.grade === "Lean" &&
-    shadow.expectedValuePerUnit !== null &&
-    shadow.edgePercentagePoints !== null &&
-    shadow.expectedValuePerUnit >= NFL_V1_MONEYLINE_BEST_ANGLE_MINIMUM_EXPECTED_VALUE &&
-    shadow.edgePercentagePoints >= NFL_V1_MONEYLINE_BEST_ANGLE_MINIMUM_EDGE_PERCENTAGE_POINTS;
+function bestAngleEligible(current: NflRegularEvaluatedBetDecision): boolean {
+  return current.grade === "Lean" &&
+    current.expectedValue >= NFL_V1_MONEYLINE_BEST_ANGLE_MINIMUM_EXPECTED_VALUE &&
+    100 * (current.modelProbability - current.marketFairProbability) >=
+      NFL_V1_MONEYLINE_BEST_ANGLE_MINIMUM_EDGE_PERCENTAGE_POINTS;
 }
 
 function selectMarket(args: {
@@ -208,8 +199,6 @@ function selectMarket(args: {
   awayTeam: string;
   homeTeam: string;
   gameStartsAt: string;
-  logitCorrection: number;
-  homeWinProbability?: number;
 }): MarketEvaluation | null {
   const candidates = args.books.flatMap((target): MarketEvaluation[] => {
     const board = args.market === "spread" ? target.spread : target.total;
@@ -220,18 +209,9 @@ function selectMarket(args: {
       homeSpread: args.market === "spread" ? target.spread!.homeLine : 0,
       totalLine: args.market === "total" ? target.total!.line : 0,
     });
-    const rawFirst = args.market === "spread"
+    const primaryProbability = args.market === "spread"
       ? raw.spread.homeCoverProbability
       : raw.total.overProbability;
-    const unconstrainedFirst = applyNflV1LogitCorrection(rawFirst, args.logitCorrection);
-    const correctedFirst = args.market === "spread"
-      ? constrainHomeCoverProbability({
-          homeWinProbability: requiredHomeWinProbability(args.homeWinProbability),
-          homeCoverProbability: unconstrainedFirst,
-          homeSpread: line,
-          pushProbability: raw.spread.pushProbability,
-        })
-      : unconstrainedFirst;
     const pushProbability = args.market === "spread" ? raw.spread.pushProbability : raw.total.pushProbability;
     const expectedMargin = args.forecast.expectedHomeScore - args.forecast.expectedAwayScore;
     const expectedTotal = args.forecast.expectedHomeScore + args.forecast.expectedAwayScore;
@@ -306,16 +286,8 @@ function selectMarket(args: {
           : NFL_V1_MARKET_EVIDENCE_TOTAL_MODEL_RELEASE,
       };
     };
-    const corrected = evaluate(correctedFirst);
-    if (!corrected) return [];
-    if (args.market !== "spread" || Math.abs(correctedFirst - unconstrainedFirst) <= EPSILON) return [corrected];
-    const unconstrained = evaluate(unconstrainedFirst);
-    const grade = !unconstrained || corrected.side !== unconstrained.side
-      ? "No Play" as const
-      : gradeRank(corrected.grade) > gradeRank(unconstrained.grade)
-        ? unconstrained.grade
-        : corrected.grade;
-    return [{ ...corrected, grade }];
+    const evaluation = evaluate(primaryProbability);
+    return evaluation ? [evaluation] : [];
   });
   return candidates.sort((first, second) =>
     gradeRank(second.grade) - gradeRank(first.grade) ||
@@ -324,8 +296,6 @@ function selectMarket(args: {
     second.quote.price - first.quote.price ||
     first.quote.sportsbook.localeCompare(second.quote.sportsbook))[0] ?? null;
 }
-
-const EPSILON = 1e-12;
 
 function marketGrade(args: {
   market: "spread" | "total";
@@ -344,6 +314,16 @@ function marketGrade(args: {
       args.expectedValue >= NFL_V1_TOTAL_LEAN_MINIMUM_EXPECTED_VALUE &&
       args.edgePercentagePoints >= NFL_V1_TOTAL_LEAN_MINIMUM_EDGE_PERCENTAGE_POINTS &&
       args.cushion >= NFL_V1_TOTAL_LEAN_MINIMUM_CUSHION + args.penalty;
+  const bestAngle = lean && args.edgePercentagePoints >=
+      NFL_V1_SPREAD_TOTAL_BEST_ANGLE_MINIMUM_EDGE_PERCENTAGE_POINTS &&
+    (args.market === "spread"
+      ? args.probability >= NFL_V1_SPREAD_BEST_ANGLE_MINIMUM_PROBABILITY &&
+        args.expectedValue >= NFL_V1_SPREAD_BEST_ANGLE_MINIMUM_EXPECTED_VALUE
+      : args.probability >= NFL_V1_TOTAL_BEST_ANGLE_MINIMUM_PROBABILITY &&
+        args.expectedValue >= NFL_V1_TOTAL_BEST_ANGLE_MINIMUM_EXPECTED_VALUE);
+  if (bestAngle) {
+    return "Best Angle";
+  }
   if (lean) return "Lean";
   const watchlist = args.market === "spread"
     ? args.probability >= NFL_V1_SPREAD_WATCHLIST_MINIMUM_PROBABILITY &&
@@ -355,11 +335,6 @@ function marketGrade(args: {
       args.edgePercentagePoints >= NFL_V1_TOTAL_WATCHLIST_MINIMUM_EDGE_PERCENTAGE_POINTS &&
       args.cushion >= NFL_V1_TOTAL_WATCHLIST_MINIMUM_CUSHION + args.penalty;
   return watchlist ? "Watchlist" : "No Play";
-}
-
-function requiredHomeWinProbability(value: number | undefined): number {
-  if (value === undefined) throw new Error("NFL Spread containment requires the published home-win probability.");
-  return value;
 }
 
 function gradeRank(grade: CandidateGrade): number {

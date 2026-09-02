@@ -40,7 +40,7 @@ import { nflFootballEvidenceStats } from "./footballMemberEvidence";
 import type { NflRegularSharpMarket, NflRegularSharpSplit } from "./sharpApiNflSplits";
 
 export const NFL_WEEK_ONE_HELD_MEMBER_FIXTURE_RELEASE =
-  "nfl_weekly_member_fixture_2026_08_31_r13_cross_release_odds_history" as const;
+  "nfl_weekly_member_fixture_2026_09_01_r15_forecast_value_separation" as const;
 
 const MODEL_RELEASE = NFL_V1_OUTCOME_MODEL_RELEASE;
 const DECISION_RELEASE = NFL_V1_ACTIONABLE_GRADE_DECISION_RELEASE;
@@ -1032,7 +1032,7 @@ function buildSameBookTrail(args: {
   for (const row of args.rows) {
     const market = row.payload.market;
     const openingBooks = [
-      ...("providerOpeningBooks" in market ? market.providerOpeningBooks : []),
+      ...market.providerOpeningBooks,
       ...(market.providerOpening ? [market.providerOpening] : []),
     ];
     for (const quote of openingBooks) {
@@ -1067,7 +1067,7 @@ function buildSameBookTrail(args: {
 
   for (const row of args.rows.slice(0, -1)) {
     const market = row.payload.market;
-    const currentBooks = "currentBooks" in market ? market.currentBooks : [market.current];
+    const currentBooks = market.currentBooks;
     const quote = currentBooks.find((candidate) =>
       normalizeBookName(candidate.sportsbook) === book) ??
       (normalizeBookName(market.current.sportsbook) === book

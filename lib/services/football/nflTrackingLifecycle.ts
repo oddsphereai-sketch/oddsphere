@@ -9,24 +9,20 @@ import { assertMarketScopedFootballDecisions } from "./footballMarketScopedTrack
 import {
   NFL_V1_ACTIONABLE_GRADE_CALIBRATION_RELEASE,
   NFL_V1_ACTIONABLE_GRADE_DECISION_RELEASE,
+  NFL_V1_ACTIONABLE_GRADE_MODEL_RELEASE,
   NFL_V1_EVENT_CONTAINED_SPREAD_MODEL_RELEASE,
   NFL_V1_MARKET_EVIDENCE_TOTAL_MODEL_RELEASE,
 } from "./nflV1ActionableGradeCandidate";
-import {
-  NFL_R6_MONEYLINE_CALIBRATION_RELEASE,
-  NFL_R6_MONEYLINE_MODEL_RELEASE,
-} from "./nflR6MoneylineShadow";
-
 export const NFL_TRACKING_LIFECYCLE_RELEASE =
-  "nfl_tracking_lifecycle_2026_08_31_r6_market_split_heads" as const;
+  "nfl_tracking_lifecycle_2026_09_01_r8_forecast_value_separation" as const;
 
 export const NFL_TRACKING_COMPOSITE_RELEASE_BUNDLE =
-  "nfl_tracking_composite_release_bundle_2026_08_31_r2" as const;
+  "nfl_tracking_composite_release_bundle_2026_09_01_r4_forecast_value_separation" as const;
 
 const NFL_TRACKING_MARKET_RELEASES = {
   moneyline: {
-    modelRelease: NFL_R6_MONEYLINE_MODEL_RELEASE,
-    calibrationRelease: NFL_R6_MONEYLINE_CALIBRATION_RELEASE,
+    modelRelease: NFL_V1_ACTIONABLE_GRADE_MODEL_RELEASE,
+    calibrationRelease: NFL_V1_ACTIONABLE_GRADE_CALIBRATION_RELEASE,
   },
   spread: {
     modelRelease: NFL_V1_EVENT_CONTAINED_SPREAD_MODEL_RELEASE,
@@ -80,7 +76,7 @@ export type NflTrackingProposal = {
 };
 
 export const NFL_EVALUATED_TUPLE_TRACKING_BOUNDARY_RELEASE =
-  "nfl_evaluated_tuple_tracking_boundary_2026_08_26_r3_market_scoped" as const;
+  "nfl_evaluated_tuple_tracking_boundary_2026_09_01_r5_forecast_value_separation" as const;
 
 /**
  * Fail-closed production gate used by the single NFL forward writer before it

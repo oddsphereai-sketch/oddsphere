@@ -5,11 +5,7 @@ import {
   type NflRegularEvaluatedBetDecision,
   type NflRegularOutcomeConfidence,
 } from "./nflRegularDecisionEvidence";
-import {
-  NFL_R6_MONEYLINE_CALIBRATION_RELEASE,
-  NFL_R6_MONEYLINE_MODEL_RELEASE,
-  type NflR6ShadowMoneylineDecision,
-} from "./nflR6MoneylineShadow";
+import type { NflR6ShadowMoneylineDecision } from "./nflR6MoneylineShadow";
 import {
   getNflV1WeekOneOutcomeForecast,
   nflV1WeekOneLineProbabilities,
@@ -17,20 +13,22 @@ import {
 } from "./nflV1WeekOneOutcome";
 
 export const NFL_V1_PRODUCTION_MODEL_RELEASE =
-  "nfl_v1_daily_edge_model_2026_08_31_r6_market_split_injury" as const;
+  "nfl_v1_daily_edge_model_2026_09_01_r8_coherent_underdog_value" as const;
 export const NFL_V1_PRODUCTION_CALIBRATION_RELEASE =
-  "nfl_v1_daily_edge_calibration_2026_08_31_r6_market_split_residual" as const;
+  "nfl_v1_daily_edge_calibration_2026_09_01_r8_coherent_value_identity" as const;
 export const NFL_V1_PRODUCTION_DECISION_RELEASE =
-  "nfl_v1_daily_edge_decision_2026_08_24_r4_spread_total_watchlist" as const;
+  "nfl_v1_daily_edge_decision_2026_09_01_r14_forecast_value_separation" as const;
 export const NFL_V1_GRADE_POLICY_RELEASE =
-  "nfl_v1_grade_policy_2026_08_24_r4_spread_total_watchlist" as const;
+  "nfl_v1_grade_policy_2026_09_01_r14_qualified_underdog_value" as const;
 export const NFL_V1_MEMBER_RELEASE =
-  "nfl_v1_member_release_2026_08_24_r5_expected_points_primary" as const;
+  "nfl_v1_member_release_2026_09_01_r11_forecast_value_separation" as const;
 
 export const NFL_V1_WATCHLIST_MINIMUM_EXPECTED_VALUE = -0.01 as const;
 export const NFL_V1_WATCHLIST_MINIMUM_EDGE_PERCENTAGE_POINTS = -1.0 as const;
 export const NFL_V1_GRADE_MINIMUM_AMERICAN_PRICE = -300 as const;
 export const NFL_V1_GRADE_MAXIMUM_AMERICAN_PRICE = 300 as const;
+export const NFL_V1_UNDERDOG_VALUE_MINIMUM_EXPECTED_VALUE = 0.02 as const;
+export const NFL_V1_UNDERDOG_VALUE_MINIMUM_EDGE_PERCENTAGE_POINTS = 2.0 as const;
 export const NFL_V1_SPREAD_TOTAL_WATCHLIST_MINIMUM_PROBABILITY = 0.60 as const;
 export const NFL_V1_SPREAD_TOTAL_WATCHLIST_MINIMUM_EXPECTED_VALUE = 0.0 as const;
 export const NFL_V1_SPREAD_TOTAL_WATCHLIST_MINIMUM_EDGE_PERCENTAGE_POINTS = 3.0 as const;
@@ -114,15 +112,6 @@ export function buildNflV1ProductionDecisionBundle(args: {
       trackingEnabled: false,
     };
   }
-  const r6Team = args.shadowMoneyline.team;
-  const r6Probability = args.shadowMoneyline.modelProbability;
-  const r6ConsensusFairProbability = args.shadowMoneyline.otherBooksConsensusFairProbability;
-  const r6EvaluatedQuote = args.shadowMoneyline.evaluatedQuote;
-  if (!r6Team || r6Probability === null || r6ConsensusFairProbability === null || !r6EvaluatedQuote) {
-    throw new Error(`NFL v1 moneyline tuple unexpectedly became incomplete for ${args.providerGameId}.`);
-  }
-  const moneylineBoard = args.current.moneyline;
-  if (!moneylineBoard) throw new Error(`NFL v1 current moneyline is incomplete for ${args.providerGameId}.`);
   const stage = args.shadowMoneyline.decisionStage === "t60_locked" ? "t60_locked" as const : "unlocked" as const;
   const lockedAt = stage === "t60_locked" ? args.shadowMoneyline.lockedAt : null;
   const common = {
@@ -134,39 +123,38 @@ export function buildNflV1ProductionDecisionBundle(args: {
     lockedAt,
   };
   const outcomeWinner = homeWinner ? args.homeTeam : args.awayTeam;
-  const r6Lean = args.shadowMoneyline.grade === "Lean" && r6Team === outcomeWinner;
-  const moneylinePublicPrice = homeWinner ? moneylineBoard.homePrice : moneylineBoard.awayPrice;
-  const watchlistReason = !r6Lean && boundedGradePrice(moneylinePublicPrice)
-    ? nflV1WatchlistReason({ shadowMoneyline: args.shadowMoneyline, outcomeWinner })
-    : null;
-  const r6NearBoundary = watchlistReason === "near_exact_price_boundary";
-  const useR6Tuple = r6Lean || r6NearBoundary;
-  const moneylineTeam = useR6Tuple ? r6Team : homeWinner ? args.homeTeam : args.awayTeam;
-  const moneylineModelProbability = useR6Tuple
-    ? r6Probability
-    : homeWinner ? outcome.homeWinProbability : outcome.awayWinProbability;
-  const moneylineQuote = useR6Tuple ? r6EvaluatedQuote : {
-    sportsbook: args.current.sportsbook,
-    line: null,
-    price: moneylinePublicPrice,
-    observedAt: args.current.observedAt,
-  };
-  const moneylineFairProbability = useR6Tuple
-    ? r6ConsensusFairProbability
-    : twoSidedFair(
-        homeWinner ? moneylineBoard.homePrice : moneylineBoard.awayPrice,
-        homeWinner ? moneylineBoard.awayPrice : moneylineBoard.homePrice,
-      );
+  const coherentMoneyline = selectMoneylineTuple({
+    books: args.comparableCurrentBooks,
+    home: homeWinner,
+    modelProbability: homeWinner ? outcome.homeWinProbability : outcome.awayWinProbability,
+    gameStartsAt: args.gameStartsAt,
+  });
+  if (!coherentMoneyline) throw new Error(`NFL v1 target-excluded moneyline tuple is incomplete for ${args.providerGameId}.`);
+  const underdogMoneyline = selectMoneylineTuple({
+    books: args.comparableCurrentBooks,
+    home: !homeWinner,
+    modelProbability: homeWinner ? outcome.awayWinProbability : outcome.homeWinProbability,
+    gameStartsAt: args.gameStartsAt,
+  });
+  const winnerGrade = moneylineGrade(coherentMoneyline);
+  const underdogGrade = underdogMoneyline && isQualifiedUnderdogValue(underdogMoneyline)
+    ? moneylineGrade(underdogMoneyline)
+    : "No Play";
+  const selectUnderdogValue = underdogMoneyline !== null && underdogGrade === "Lean";
+  const selectedMoneyline = selectUnderdogValue ? underdogMoneyline : coherentMoneyline;
+  const selectedMoneylineSide = selectUnderdogValue
+    ? (homeWinner ? args.awayTeam : args.homeTeam)
+    : outcomeWinner;
   const moneyline = buildNflRegularEvaluatedBetDecision({
     ...common,
     market: "moneyline",
-    side: moneylineTeam,
-    modelProbability: moneylineModelProbability,
-    marketFairProbability: moneylineFairProbability,
-    evaluatedQuote: moneylineQuote,
-    grade: r6Lean ? "Lean" : watchlistReason ? "Watchlist" : "No Play",
-    modelRelease: useR6Tuple ? NFL_R6_MONEYLINE_MODEL_RELEASE : NFL_V1_PRODUCTION_MODEL_RELEASE,
-    calibrationRelease: useR6Tuple ? NFL_R6_MONEYLINE_CALIBRATION_RELEASE : NFL_V1_PRODUCTION_CALIBRATION_RELEASE,
+    side: selectedMoneylineSide,
+    modelProbability: selectedMoneyline.modelProbability,
+    marketFairProbability: selectedMoneyline.looFairProbability,
+    evaluatedQuote: selectedMoneyline.quote,
+    grade: selectUnderdogValue ? underdogGrade : winnerGrade,
+    modelRelease: NFL_V1_PRODUCTION_MODEL_RELEASE,
+    calibrationRelease: NFL_V1_PRODUCTION_CALIBRATION_RELEASE,
   });
   const spreadEvaluation = selectSpreadTotalEvaluation({
     market: "spread", forecast: outcome, books: args.comparableCurrentBooks,
@@ -220,6 +208,70 @@ type SpreadTotalEvaluation = {
   quote: { sportsbook: string; line: number; price: number; observedAt: string };
   watchlist: boolean;
 };
+
+type MoneylineEvaluation = {
+  modelProbability: number;
+  looFairProbability: number;
+  expectedValue: number;
+  edgePercentagePoints: number;
+  otherBookCount: number;
+  quote: { sportsbook: string; line: null; price: number; observedAt: string };
+};
+
+function selectMoneylineTuple(args: {
+  books: NflPreviewBookOdds[];
+  home: boolean;
+  modelProbability: number;
+  gameStartsAt: string;
+}): MoneylineEvaluation | null {
+  return args.books.flatMap((target): MoneylineEvaluation[] => {
+    if (!target.moneyline || Date.parse(target.observedAt) >= Date.parse(args.gameStartsAt)) return [];
+    const price = args.home ? target.moneyline.homePrice : target.moneyline.awayPrice;
+    const otherFairs = args.books
+      .filter((other) => other.sportsbook !== target.sportsbook && other.moneyline !== null)
+      .map((other) => twoSidedFair(
+        args.home ? other.moneyline!.homePrice : other.moneyline!.awayPrice,
+        args.home ? other.moneyline!.awayPrice : other.moneyline!.homePrice,
+      ));
+    if (otherFairs.length < 1 || !Number.isFinite(price) || price === 0) return [];
+    const looFairProbability = otherFairs.reduce((sum, value) => sum + value, 0) / otherFairs.length;
+    const expectedValue = args.modelProbability * profitOne(price) - (1 - args.modelProbability);
+    return [{
+      modelProbability: args.modelProbability,
+      looFairProbability,
+      expectedValue,
+      edgePercentagePoints: 100 * (args.modelProbability - looFairProbability),
+      otherBookCount: otherFairs.length,
+      quote: { sportsbook: target.sportsbook, line: null, price, observedAt: target.observedAt },
+    }];
+  }).sort((first, second) =>
+    second.expectedValue - first.expectedValue ||
+    second.edgePercentagePoints - first.edgePercentagePoints ||
+    second.quote.price - first.quote.price ||
+    first.quote.sportsbook.localeCompare(second.quote.sportsbook))[0] ?? null;
+}
+
+function moneylineGrade(evaluation: MoneylineEvaluation): "Lean" | "Watchlist" | "No Play" {
+  const lean = boundedGradePrice(evaluation.quote.price) &&
+    evaluation.otherBookCount >= 2 &&
+    evaluation.expectedValue >= 0 &&
+    evaluation.edgePercentagePoints >= 0;
+  if (lean) return "Lean";
+  const watchlist = boundedGradePrice(evaluation.quote.price) &&
+    evaluation.expectedValue >= NFL_V1_WATCHLIST_MINIMUM_EXPECTED_VALUE &&
+    evaluation.edgePercentagePoints >= NFL_V1_WATCHLIST_MINIMUM_EDGE_PERCENTAGE_POINTS;
+  return watchlist ? "Watchlist" : "No Play";
+}
+
+function isQualifiedUnderdogValue(evaluation: MoneylineEvaluation): boolean {
+  return evaluation.modelProbability < 0.5 &&
+    evaluation.looFairProbability < 0.5 &&
+    evaluation.quote.price > 0 &&
+    boundedGradePrice(evaluation.quote.price) &&
+    evaluation.otherBookCount >= 2 &&
+    evaluation.expectedValue >= NFL_V1_UNDERDOG_VALUE_MINIMUM_EXPECTED_VALUE &&
+    evaluation.edgePercentagePoints >= NFL_V1_UNDERDOG_VALUE_MINIMUM_EDGE_PERCENTAGE_POINTS;
+}
 
 function selectSpreadTotalEvaluation(args: {
   market: "spread" | "total";

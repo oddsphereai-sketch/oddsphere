@@ -1,4 +1,15 @@
 import artifactJson from "./modelArtifacts/nflV1WeekOneOutcome.json";
+import type { NflPreviewBookOdds } from "./balldontlieNflPreviewSlate";
+import {
+  applyNflV1LogitCorrection,
+  getNflV1ActionableGradeCorrection,
+  hasNflV1ActionableGradeCorrection,
+} from "./nflV1ActionableGradeCorrections";
+import {
+  combineFootballOutcomeEvidenceShift,
+  readFootballOutcomeMarketMovement,
+  type FootballOutcomeMarketMovement,
+} from "./footballOutcomeMarketMovement";
 
 export const NFL_V1_WEEK_ONE_OUTCOME_ARTIFACT_RELEASE =
   "nfl_v1_week_one_outcome_artifact_2026_08_23_r2_discrete_joint" as const;
@@ -11,16 +22,20 @@ export const NFL_V1_OUTCOME_PROBABILITY_RELEASE =
 export const NFL_V1_REPRESENTATIVE_SCORE_POLICY_RELEASE =
   "nfl_v1_representative_score_2026_08_23_r2" as const;
 export const NFL_V1_WEEKLY_OUTCOME_MODEL_RELEASE =
-  "nfl_v1_weekly_market_anchored_outcome_2026_08_31_r1" as const;
+  "nfl_v1_weekly_market_anchored_outcome_2026_09_01_r2_coherent_movement" as const;
 export const NFL_V1_WEEKLY_OUTCOME_DISTRIBUTION_RELEASE =
-  "nfl_pooled_discrete_residual_distribution_2026_08_31_r1" as const;
+  "nfl_pooled_discrete_residual_distribution_2026_09_01_r2_coherent_movement" as const;
 export const NFL_V1_WEEKLY_OUTCOME_PROBABILITY_RELEASE =
-  "nfl_v1_weekly_pooled_discrete_probability_2026_08_31_r1" as const;
+  "nfl_v1_weekly_pooled_discrete_probability_2026_09_01_r2_coherent_movement" as const;
 export const NFL_V1_MARKET_EVIDENCE_OUTCOME_RELEASE =
-  "nfl_v1_market_evidence_outcome_2026_08_31_r1_circa_public_bounded" as const;
+  "nfl_v1_market_evidence_outcome_2026_09_01_r2_coherent_movement_circa_public" as const;
+export const NFL_V1_MARKET_EVIDENCE_REPRESENTATIVE_SCORE_RELEASE =
+  "nfl_v1_market_evidence_representative_score_2026_09_01_r1_coherent_movement" as const;
 export const NFL_V1_MARKET_WEIGHT = 0.75 as const;
 export const NFL_V1_SHARP_SPLIT_MAX_SHIFT_POINTS = 1.5 as const;
 export const NFL_V1_PUBLIC_SPLIT_MAX_SHIFT_POINTS = 0.75 as const;
+export const NFL_V1_RESIDUAL_HEAD_LOGIT_WEIGHT = 0.5 as const;
+export const NFL_V1_WEAK_EVIDENCE_REVERSAL_MINIMUM_ADVANTAGE = 0.025 as const;
 
 type DiscreteDistribution = {
   values: number[];
@@ -43,6 +58,29 @@ export type NflV1WeekOneOutcomeForecast = {
   totalDistribution: DiscreteDistribution;
   sourceExpectedAwayScore: number;
   sourceExpectedHomeScore: number;
+  marketEvidence?: {
+    release: typeof NFL_V1_MARKET_EVIDENCE_OUTCOME_RELEASE;
+    representativeScoreRelease: typeof NFL_V1_MARKET_EVIDENCE_REPRESENTATIVE_SCORE_RELEASE;
+    marketWeight: typeof NFL_V1_MARKET_WEIGHT;
+    sharp: { homeMarginGapPp: number | null; overTotalGapPp: number | null; homeMarginShiftPoints: number; totalShiftPoints: number };
+    publicConsensus: { homeMarginGapPp: number | null; overTotalGapPp: number | null; homeMarginShiftPoints: number; totalShiftPoints: number };
+    movement: FootballOutcomeMarketMovement;
+    calibratedCore: {
+      source: "week_one_spread_total_residual_heads" | null;
+      rawHomeCoverProbability: number;
+      calibratedHomeCoverProbability: number;
+      rawOverProbability: number;
+      calibratedOverProbability: number;
+      calibratedHomeMargin: number;
+      calibratedTotal: number;
+    };
+    combinedHomeMarginShiftPoints: number;
+    combinedTotalShiftPoints: number;
+    appliedHomeMarginShiftPoints: number;
+    appliedTotalShiftPoints: number;
+    weakHomeMarginReversalRejected: boolean;
+    weakTotalReversalRejected: boolean;
+  };
 };
 
 type Artifact = {
@@ -111,7 +149,8 @@ type SharpSplitPercentages = SplitPercentages & {
 export function buildNflMarketEvidenceOutcomeForecast(args: {
   baseForecast: NflV1WeekOneOutcomeForecast;
   footballHomeMargin: number;
-  current: { observedAt: string; spread: { homeLine: number } | null; total: { line: number } | null };
+  current: NflPreviewBookOdds;
+  operationalOpening?: { quote: NflPreviewBookOdds } | null;
   playbookLine: { capturedAt: string; homeSpread: number | null; total: number | null } | null;
   playbookSplits: { spread: SplitPercentages; moneyline: SplitPercentages; total: SplitPercentages } | null;
   sharpSplits: { spread: SharpSplitPercentages; moneyline: SharpSplitPercentages; total: SharpSplitPercentages } | null;
@@ -121,9 +160,9 @@ export function buildNflMarketEvidenceOutcomeForecast(args: {
   const evaluatedAt = Date.parse(args.evaluatedAt);
   if (!Number.isFinite(evaluatedAt)) throw new Error("NFL market-evidence evaluatedAt is invalid.");
   const baseTotal = args.baseForecast.expectedAwayScore + args.baseForecast.expectedHomeScore;
-  let targetMargin = (1 - NFL_V1_MARKET_WEIGHT) * args.footballHomeMargin
+  const rawTargetMargin = (1 - NFL_V1_MARKET_WEIGHT) * args.footballHomeMargin
     + NFL_V1_MARKET_WEIGHT * -args.current.spread.homeLine;
-  let targetTotal = (1 - NFL_V1_MARKET_WEIGHT) * baseTotal
+  const rawTargetTotal = (1 - NFL_V1_MARKET_WEIGHT) * baseTotal
     + NFL_V1_MARKET_WEIGHT * args.current.total.line;
   const sharpMarginGap = firstFinite(
     freshCircaGap(args.sharpSplits?.spread, "home", evaluatedAt),
@@ -139,15 +178,194 @@ export function buildNflMarketEvidenceOutcomeForecast(args: {
   const publicTotalGap = playbookLineMatches(args.playbookLine?.total, args.current.total.line)
     ? freshPublicGap(args.playbookSplits?.total, "over", evaluatedAt)
     : null;
-  targetMargin += combinedEvidenceShift(sharpMarginGap, publicMarginGap);
-  targetTotal += combinedEvidenceShift(sharpTotalGap, publicTotalGap);
-  return outcomeFromDistributions({
+  const movement = readFootballOutcomeMarketMovement({
+    opening: args.operationalOpening?.quote ?? null,
+    current: args.current,
+    evaluatedAt: args.evaluatedAt,
+  });
+  const sharpHomeMarginShiftPoints = splitShift(sharpMarginGap, 10, 20, NFL_V1_SHARP_SPLIT_MAX_SHIFT_POINTS);
+  const sharpTotalShiftPoints = splitShift(sharpTotalGap, 10, 20, NFL_V1_SHARP_SPLIT_MAX_SHIFT_POINTS);
+  const publicHomeMarginShiftPoints = splitShift(publicMarginGap, 8, 20, NFL_V1_PUBLIC_SPLIT_MAX_SHIFT_POINTS);
+  const publicTotalShiftPoints = splitShift(publicTotalGap, 8, 20, NFL_V1_PUBLIC_SPLIT_MAX_SHIFT_POINTS);
+  const combinedHomeMarginShiftPoints = combineFootballOutcomeEvidenceShift({
+    sharpShift: sharpHomeMarginShiftPoints,
+    movementShift: movement.homeMarginShiftPoints,
+    publicShift: publicHomeMarginShiftPoints,
+    maximum: NFL_V1_SHARP_SPLIT_MAX_SHIFT_POINTS,
+  });
+  const combinedTotalShiftPoints = combineFootballOutcomeEvidenceShift({
+    sharpShift: sharpTotalShiftPoints,
+    movementShift: movement.totalShiftPoints,
+    publicShift: publicTotalShiftPoints,
+    maximum: NFL_V1_SHARP_SPLIT_MAX_SHIFT_POINTS,
+  });
+  const rawMarginDistribution = shiftedDistribution(args.baseForecast.marginDistribution, rawTargetMargin, false);
+  const rawTotalDistribution = shiftedDistribution(args.baseForecast.totalDistribution, rawTargetTotal, true);
+  const rawHomeCoverProbability = distributionSideProbability(
+    rawMarginDistribution,
+    (margin) => margin + args.current.spread!.homeLine,
+  );
+  const rawOverProbability = distributionSideProbability(
+    rawTotalDistribution,
+    (points) => points - args.current.total!.line,
+  );
+  const correction = hasNflV1ActionableGradeCorrection(args.baseForecast.providerGameId)
+    ? getNflV1ActionableGradeCorrection({
+        providerGameId: args.baseForecast.providerGameId,
+        awayTeam: args.baseForecast.awayTeam,
+        homeTeam: args.baseForecast.homeTeam,
+      })
+    : null;
+  const calibratedHomeCoverProbability = correction
+    ? applyNflV1LogitCorrection(
+        rawHomeCoverProbability,
+        NFL_V1_RESIDUAL_HEAD_LOGIT_WEIGHT * correction.spreadHomeLogitCorrection,
+      )
+    : rawHomeCoverProbability;
+  const calibratedOverProbability = correction
+    ? applyNflV1LogitCorrection(
+        rawOverProbability,
+        NFL_V1_RESIDUAL_HEAD_LOGIT_WEIGHT * correction.totalOverLogitCorrection,
+      )
+    : rawOverProbability;
+  const calibratedHomeMargin = correction
+    ? meanForSideProbability({
+        source: args.baseForecast.marginDistribution,
+        initialMean: rawTargetMargin,
+        targetProbability: calibratedHomeCoverProbability,
+        score: (margin) => margin + args.current.spread!.homeLine,
+        nonNegative: false,
+      })
+    : rawTargetMargin;
+  const calibratedTotal = correction
+    ? meanForSideProbability({
+        source: args.baseForecast.totalDistribution,
+        initialMean: rawTargetTotal,
+        targetProbability: calibratedOverProbability,
+        score: (points) => points - args.current.total!.line,
+        nonNegative: true,
+      })
+    : rawTargetTotal;
+  const guardedMargin = guardWeakEvidenceReversal({
+    source: args.baseForecast.marginDistribution,
+    calibratedMean: calibratedHomeMargin,
+    proposedMean: calibratedHomeMargin + combinedHomeMarginShiftPoints,
+    score: (margin) => margin + args.current.spread!.homeLine,
+    nonNegative: false,
+    sharpShift: sharpHomeMarginShiftPoints,
+    movementShift: movement.homeMarginShiftPoints,
+    publicShift: publicHomeMarginShiftPoints,
+  });
+  const guardedTotal = guardWeakEvidenceReversal({
+    source: args.baseForecast.totalDistribution,
+    calibratedMean: calibratedTotal,
+    proposedMean: calibratedTotal + combinedTotalShiftPoints,
+    score: (points) => points - args.current.total!.line,
+    nonNegative: true,
+    sharpShift: sharpTotalShiftPoints,
+    movementShift: movement.totalShiftPoints,
+    publicShift: publicTotalShiftPoints,
+  });
+  return {
+    ...outcomeFromDistributions({
     providerGameId: args.baseForecast.providerGameId,
     awayTeam: args.baseForecast.awayTeam,
     homeTeam: args.baseForecast.homeTeam,
-    marginDistribution: shiftedDistribution(args.baseForecast.marginDistribution, targetMargin, false),
-    totalDistribution: shiftedDistribution(args.baseForecast.totalDistribution, targetTotal, true),
-  });
+    marginDistribution: shiftedDistribution(args.baseForecast.marginDistribution, guardedMargin.mean, false),
+    totalDistribution: shiftedDistribution(args.baseForecast.totalDistribution, guardedTotal.mean, true),
+    }),
+    marketEvidence: {
+      release: NFL_V1_MARKET_EVIDENCE_OUTCOME_RELEASE,
+      representativeScoreRelease: NFL_V1_MARKET_EVIDENCE_REPRESENTATIVE_SCORE_RELEASE,
+      marketWeight: NFL_V1_MARKET_WEIGHT,
+      sharp: {
+        homeMarginGapPp: sharpMarginGap,
+        overTotalGapPp: sharpTotalGap,
+        homeMarginShiftPoints: sharpHomeMarginShiftPoints,
+        totalShiftPoints: sharpTotalShiftPoints,
+      },
+      publicConsensus: {
+        homeMarginGapPp: publicMarginGap,
+        overTotalGapPp: publicTotalGap,
+        homeMarginShiftPoints: publicHomeMarginShiftPoints,
+        totalShiftPoints: publicTotalShiftPoints,
+      },
+      movement,
+      calibratedCore: {
+        source: correction ? "week_one_spread_total_residual_heads" : null,
+        rawHomeCoverProbability,
+        calibratedHomeCoverProbability,
+        rawOverProbability,
+        calibratedOverProbability,
+        calibratedHomeMargin,
+        calibratedTotal,
+      },
+      combinedHomeMarginShiftPoints,
+      combinedTotalShiftPoints,
+      appliedHomeMarginShiftPoints: guardedMargin.mean - calibratedHomeMargin,
+      appliedTotalShiftPoints: guardedTotal.mean - calibratedTotal,
+      weakHomeMarginReversalRejected: guardedMargin.reversalRejected,
+      weakTotalReversalRejected: guardedTotal.reversalRejected,
+    },
+  };
+}
+
+function meanForSideProbability(args: {
+  source: DiscreteDistribution;
+  initialMean: number;
+  targetProbability: number;
+  score: (value: number) => number;
+  nonNegative: boolean;
+}): number {
+  let low = args.initialMean - 24;
+  let high = args.initialMean + 24;
+  for (let iteration = 0; iteration < 70; iteration++) {
+    const middle = (low + high) / 2;
+    const probability = distributionSideProbability(
+      shiftedDistribution(args.source, middle, args.nonNegative),
+      args.score,
+    );
+    if (probability < args.targetProbability) low = middle;
+    else high = middle;
+  }
+  return (low + high) / 2;
+}
+
+function guardWeakEvidenceReversal(args: {
+  source: DiscreteDistribution;
+  calibratedMean: number;
+  proposedMean: number;
+  score: (value: number) => number;
+  nonNegative: boolean;
+  sharpShift: number;
+  movementShift: number;
+  publicShift: number;
+}): { mean: number; reversalRejected: boolean } {
+  const calibratedProbability = distributionSideProbability(
+    shiftedDistribution(args.source, args.calibratedMean, args.nonNegative),
+    args.score,
+  );
+  const proposedProbability = distributionSideProbability(
+    shiftedDistribution(args.source, args.proposedMean, args.nonNegative),
+    args.score,
+  );
+  const reversed = (calibratedProbability >= 0.5) !== (proposedProbability >= 0.5);
+  const proposedAdvantage = Math.abs(proposedProbability - 0.5);
+  const secondaryCorroborated = args.publicShift !== 0 && args.movementShift !== 0 &&
+    Math.sign(args.publicShift) === Math.sign(args.movementShift);
+  const strongEvidence = args.sharpShift !== 0 || secondaryCorroborated ||
+    proposedAdvantage >= NFL_V1_WEAK_EVIDENCE_REVERSAL_MINIMUM_ADVANTAGE;
+  return reversed && !strongEvidence
+    ? { mean: args.calibratedMean, reversalRejected: true }
+    : { mean: args.proposedMean, reversalRejected: false };
+}
+
+function distributionSideProbability(
+  distribution: DiscreteDistribution,
+  score: (value: number) => number,
+): number {
+  const split = splitDistribution(distribution, score);
+  return split.positive / Math.max(split.positive + split.negative, 1e-12);
 }
 
 export function nflV1WeekOneOutcomeArtifactMetadata() {
@@ -342,15 +560,6 @@ function signedGap(value: SplitPercentages, side: "home" | "over"): number | nul
   return money === null || bets === null ? null : money - bets;
 }
 
-function combinedEvidenceShift(sharpGap: number | null, publicGap: number | null): number {
-  const sharp = splitShift(sharpGap, 10, 20, NFL_V1_SHARP_SPLIT_MAX_SHIFT_POINTS);
-  const publicShift = splitShift(publicGap, 8, 20, NFL_V1_PUBLIC_SPLIT_MAX_SHIFT_POINTS);
-  if (sharp === 0) return publicShift;
-  const combined = sharp + 0.5 * publicShift;
-  if (Math.sign(combined) !== Math.sign(sharp)) return 0;
-  return Math.sign(sharp) * Math.min(NFL_V1_SHARP_SPLIT_MAX_SHIFT_POINTS, Math.abs(combined));
-}
-
 function splitShift(gap: number | null, threshold: number, fullStrength: number, cap: number): number {
   if (gap === null || Math.abs(gap) < threshold) return 0;
   const strength = Math.min(1, (Math.abs(gap) - threshold) / (fullStrength - threshold));
@@ -361,9 +570,7 @@ function shiftedDistribution(source: DiscreteDistribution, targetMean: number, n
   const sourceMean = distributionMean(source);
   const weights = new Map<number, number>();
   source.values.forEach((value, index) => {
-    const shifted = Math.round(value - sourceMean + targetMean);
-    const bucket = nonNegative ? Math.max(0, shifted) : shifted;
-    weights.set(bucket, (weights.get(bucket) ?? 0) + source.probabilities[index]!);
+    appendFractionalShift(weights, value - sourceMean + targetMean, source.probabilities[index]!, nonNegative);
   });
   const values = [...weights.keys()].sort((first, second) => first - second);
   const probabilities = values.map((value) => weights.get(value)!);
@@ -392,15 +599,40 @@ function pooledShiftedDistribution(
   for (const source of sources) {
     const sourceMean = distributionMean(source);
     source.values.forEach((value, index) => {
-      const shifted = Math.round(value - sourceMean + targetMean);
-      const bucket = nonNegative ? Math.max(0, shifted) : shifted;
-      weights.set(bucket, (weights.get(bucket) ?? 0) + source.probabilities[index]! / sources.length);
+      appendFractionalShift(
+        weights,
+        value - sourceMean + targetMean,
+        source.probabilities[index]! / sources.length,
+        nonNegative,
+      );
     });
   }
   const values = [...weights.keys()].sort((a, b) => a - b);
   const raw = values.map((value) => weights.get(value)!);
   const total = raw.reduce((sum, value) => sum + value, 0);
   return { values, probabilities: raw.map((value) => value / total) };
+}
+
+function appendFractionalShift(
+  weights: Map<number, number>,
+  shiftedValue: number,
+  probability: number,
+  nonNegative: boolean,
+): void {
+  const lower = Math.floor(shiftedValue);
+  const upper = Math.ceil(shiftedValue);
+  const upperWeight = shiftedValue - lower;
+  const append = (rawBucket: number, weight: number) => {
+    if (weight <= 0) return;
+    const bucket = nonNegative ? Math.max(0, rawBucket) : rawBucket;
+    weights.set(bucket, (weights.get(bucket) ?? 0) + probability * weight);
+  };
+  if (lower === upper) {
+    append(lower, 1);
+    return;
+  }
+  append(lower, 1 - upperWeight);
+  append(upper, upperWeight);
 }
 
 function representativeScore(args: {
