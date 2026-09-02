@@ -33,6 +33,38 @@ import { refreshDailyEdgeResponseSnapshot } from "@/lib/services/labResponseSnap
 import { assertWnbaChampionRuntime } from "@/lib/automodel/wnbaChampionRuntime";
 
 const WNBA_CRON_ENV = "WNBA_CRON_ENABLED";
+export const WNBA_DAILY_REFRESH_ERROR_MESSAGE_MAX_LENGTH = 1500;
+const WNBA_DAILY_REFRESH_ERROR_MESSAGE_MAX_ITEMS = 5;
+
+type WnbaDailyRefreshStageError = {
+  stage: string;
+  message: string;
+};
+
+function sanitizeWnbaDailyRefreshError(value: string): string {
+  const sanitized = value
+    .replace(
+      /((?:api[-_ ]?key|authorization|token|secret|password)\s*[:=]\s*)(?:"[^"]*"|'[^']*'|bearer\s+[^\s,;|]+|[^\s,;|]+)/gi,
+      "$1[REDACTED]",
+    )
+    .replace(/\bbearer\s+[^\s,;|]+/gi, "Bearer [REDACTED]")
+    .replace(/([?&](?:api[-_]?key|token|secret|password)=)[^&\s,;|]+/gi, "$1[REDACTED]")
+    .replace(/[\r\n\t\u0000-\u001f\u007f]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  return sanitized || "error";
+}
+
+export function summarizeWnbaDailyRefreshErrors(
+  errors: readonly WnbaDailyRefreshStageError[],
+): string | null {
+  if (errors.length === 0) return null;
+  const visible = errors.slice(0, WNBA_DAILY_REFRESH_ERROR_MESSAGE_MAX_ITEMS).map(({ stage, message }) =>
+    `[${stage}] ${sanitizeWnbaDailyRefreshError(message)}`,
+  );
+  if (errors.length > visible.length) visible.push(`[summary] ${errors.length - visible.length} more error(s)`);
+  return visible.join(" | ").slice(0, WNBA_DAILY_REFRESH_ERROR_MESSAGE_MAX_LENGTH) || "[unknown] error";
+}
 
 function slateDateOffset(days: number): string {
   return addDaysToSlate(currentSlateDate("wnba"), days);
@@ -54,7 +86,17 @@ export async function GET(request: Request): Promise<Response> {
 
       const log = (label: string) => (msg: string) => console.log(`[wnba-daily-refresh:${label}] ${msg}`);
       const errors: string[] = [];
+      const stageErrors: WnbaDailyRefreshStageError[] = [];
       const details: Record<string, unknown> = {};
+      const addStageErrors = (stage: string, messages: readonly string[]): void => {
+        errors.push(...messages);
+        stageErrors.push(...messages.map((message) => ({ stage, message })));
+      };
+      const addStageException = (stage: string, detailMessage: string, error: unknown): void => {
+        const message = error instanceof Error ? error.message : String(error);
+        errors.push(`${detailMessage}: ${message}`);
+        stageErrors.push({ stage, message });
+      };
 
       // ─── Step 1: seed the upcoming slate window (today..+2) ─────────
       let teamsUpserted = 0, gamesUpserted = 0;
@@ -64,9 +106,9 @@ export async function GET(request: Request): Promise<Response> {
           const s = await seedWnbaGames({ supabase, slateDate: slate, apply: true, logger: log("seed") });
           teamsUpserted = Math.max(teamsUpserted, s.teamsUpserted);
           gamesUpserted += s.gamesUpserted;
-          errors.push(...s.errors);
+          addStageErrors(`seed:${slate}`, s.errors);
         } catch (e) {
-          errors.push(`seed ${slate}: ${e instanceof Error ? e.message : String(e)}`);
+          addStageException(`seed:${slate}`, `seed ${slate}`, e);
         }
       }
       details.seed = { teamsUpserted, gamesUpserted };
@@ -77,10 +119,10 @@ export async function GET(request: Request): Promise<Response> {
         const l = await refreshWnbaLines({ supabase, apply: true, logger: log("lines") });
         linesWritten = l.linesWritten; lineHistoryWritten = l.lineHistoryWritten;
         sharpSignalsWritten = l.sharpSignalsWritten; tipTimesUpdated = l.tipTimesUpdated;
-        errors.push(...l.errors);
+        addStageErrors("lines", l.errors);
         details.lines = { gamesMatched: l.gamesMatched, linesWritten, lineHistoryWritten, sharpSignalsWritten, tipTimesUpdated, unmatched: l.unmatchedOddsRows, missingTips: l.missingTipTimes };
       } catch (e) {
-        errors.push(`lines: ${e instanceof Error ? e.message : String(e)}`);
+        addStageException("lines", "lines", e);
       }
 
       // ─── Step 2b: Playbook public splits (pregame, display context only) ──
@@ -95,9 +137,9 @@ export async function GET(request: Request): Promise<Response> {
           try {
             const p = await refreshWnbaPlaybookSplits({ supabase, slateDate: slate, apply: true, logger: log("splits") });
             publicSplitsUpdated += p.rowsUpdated; publicSplitsInserted += p.rowsInserted;
-            errors.push(...p.errors);
+            addStageErrors(`playbook-splits:${slate}`, p.errors);
           } catch (e) {
-            errors.push(`playbook-splits ${slate}: ${e instanceof Error ? e.message : String(e)}`);
+            addStageException(`playbook-splits:${slate}`, `playbook-splits ${slate}`, e);
           }
         }
         details.playbookSplits = { updated: publicSplitsUpdated, inserted: publicSplitsInserted };
@@ -110,10 +152,10 @@ export async function GET(request: Request): Promise<Response> {
       try {
         const m = await runWnbaModel({ supabase, apply: true, logger: log("model") });
         predictionsWritten = m.written; skippedLocked = m.skippedLocked;
-        errors.push(...m.errors);
+        addStageErrors("model", m.errors);
         details.model = { gamesPredicted: m.gamesPredicted, predictionsWritten, skippedLocked, missingMarkets: m.missingMarkets };
       } catch (e) {
-        errors.push(`model: ${e instanceof Error ? e.message : String(e)}`);
+        addStageException("model", "model", e);
       }
 
       // ─── Step 4: prediction_records for WNBA public tracking/audit ──
@@ -134,7 +176,7 @@ export async function GET(request: Request): Promise<Response> {
           });
           predictionRecordsWritten += r.written;
           predictionRecordsLockedSkipped += r.lockedSkipped;
-          errors.push(...r.errors);
+          addStageErrors(`records:${slate}`, r.errors);
           recordDetails.push({
             slate,
             eligibleGames: r.eligibleGames,
@@ -145,7 +187,7 @@ export async function GET(request: Request): Promise<Response> {
             missingLinePrice: r.missingLinePrice,
           });
         } catch (e) {
-          errors.push(`records ${slate}: ${e instanceof Error ? e.message : String(e)}`);
+          addStageException(`records:${slate}`, `records ${slate}`, e);
         }
       }
       details.records = recordDetails;
@@ -163,7 +205,9 @@ export async function GET(request: Request): Promise<Response> {
           phase: "wnba_daily_refresh",
         });
         marketIntelligenceRuns.push(run);
-        errors.push(...run.errors.map((err) => `market intelligence ${slate}: ${err}`));
+        const marketIntelligenceErrors = run.errors.map((err) => `market intelligence ${slate}: ${err}`);
+        errors.push(...marketIntelligenceErrors);
+        stageErrors.push(...run.errors.map((message) => ({ stage: `market-intelligence:${slate}`, message })));
       }
       const marketIntelligenceV2 = {
         enabled: marketIntelligenceRuns.some((run) => run.enabled),
@@ -191,6 +235,9 @@ export async function GET(request: Request): Promise<Response> {
         records_updated: recordsUpdated,
         api_calls_made: marketIntelligenceV2.apiCallsMade,
         partial: errors.length > 0,
+        error_message: errors.length > 0
+          ? summarizeWnbaDailyRefreshErrors(stageErrors) ?? "[unknown] error"
+          : null,
         details,
       };
     },
