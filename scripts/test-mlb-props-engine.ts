@@ -730,6 +730,8 @@ async function main() {
       && liveBoardSource.includes("snapshotReleaseMatchesRuntime")
       && liveBoardSource.includes("targetExcludedMarketReferenceRows")
       && liveBoardSource.includes("independentFallbackRows")
+      && liveBoardSource.includes("actionableWithoutTargetExcludedMarketReferenceRows")
+      && liveBoardSource.includes("actionableDataGateFailureRows")
       && liveBoardSource.includes("actionableProjectionSideContradictionRows")
       && liveBoardSource.includes("MLB_PROPS_FORECAST_TELEMETRY")
       && (liveBoardSource.match(/forecastTelemetry,/g) ?? []).length === 2);

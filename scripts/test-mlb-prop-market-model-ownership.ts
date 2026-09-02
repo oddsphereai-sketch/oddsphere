@@ -41,7 +41,7 @@ assert.equal(versions.batter_doubles, withMarketContext("batter_doubles_market_r
 assert.equal(versions.batter_strikeouts, withMarketContext("batter_strikeouts_event_distribution_integrated_read_v2_empirical_market_over_accuracy_display_projection_calibration_r1"));
 assert.equal(
   MLB_PROPS_MODEL_RELEASE_ID,
-  "mlb_props_2026_09_02_r39",
+  "mlb_props_2026_09_02_r40",
 );
 assert.equal(MLB_PROPS_SHADOW_PITCHER_RELEASE_ID, "mlb_props_shadow_pitcher_2026_08_12_r1");
 assert.equal(MLB_PROPS_SHADOW_PITCHER_FEATURE_VERSION, "mlb_props_shared_pitcher_features_v1_2026_08_12");

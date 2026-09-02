@@ -444,6 +444,47 @@ const blocked = validateMlbPropsBoardData({ data: data([staleAction]), sourceRow
 assert.equal(blocked.publishable, false, "an actionable stale row must fail the snapshot gate");
 assert.ok(blocked.errors.includes("ACTIONABLE_ROWS_FAILED_DATA_GATE"));
 
+const independentNoComparatorAction = row({
+  playGrade: "LEAN",
+  finalProbability: 0.6,
+  modelProbability: 0.6,
+  independentProbability: 0.6,
+  marketProbability: null,
+  modelEdge: null,
+  expectedValue: 0.08,
+  fairOdds: -150,
+  units: 1,
+});
+const independentNoComparator = validateMlbPropsBoardData({
+  data: data([independentNoComparatorAction]),
+  sourceRows: 1,
+  mappedRows: 1,
+  asOfTimestamp: asOf,
+});
+assert.equal(
+  independentNoComparator.publishable,
+  true,
+  "missing target-excluded comparator is neutral for an otherwise valid independent exact-price action",
+);
+
+const incompleteComparatorAction = row({
+  ...independentNoComparatorAction,
+  marketProbability: 0.52,
+  modelEdge: null,
+});
+const incompleteComparator = validateMlbPropsBoardData({
+  data: data([incompleteComparatorAction]),
+  sourceRows: 1,
+  mappedRows: 1,
+  asOfTimestamp: asOf,
+});
+assert.equal(
+  incompleteComparator.publishable,
+  false,
+  "a present target-excluded comparator still requires a coherent model edge",
+);
+assert.ok(incompleteComparator.errors.includes("ACTIONABLE_ROWS_FAILED_DATA_GATE"));
+
 const extremePrice = assessPropPrice(-3000);
 assert.equal(extremePrice.displayEligible, true, "a conventional extreme price remains available for research");
 assert.equal(extremePrice.signalEligible, false, "an extreme price cannot become a positive signal");

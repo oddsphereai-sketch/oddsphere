@@ -1088,13 +1088,13 @@ in `docs/model-audits/2026-08-21-wnba-incoherent-total-tuple-fallback.md`.
 
 ## MLB Player Props production release
 
-- Release: `mlb_props_2026_09_02_r39`
+- Release: `mlb_props_2026_09_02_r40`
 - Machine registry: `lib/mlb/props/marketModelVersions.ts`
 - Authoritative writer: `/api/cron/mlb-player-props-refresh` through
   `refreshMlbPropsBoard`
 - Status: authoritative signed-in member release
 
-The September 2 r39 target-excluded forecast release removes the evaluated
+The September 2 r40 target-excluded forecast release removes the evaluated
 sportsbook from every actual forecast anchor. Pitcher recommendation consensus,
 hitter exact-line synthesis, cross-market movement, opening/current movement,
 and verified split adjustments use only other books; when no eligible
@@ -1117,11 +1117,24 @@ non-actionable; actionable quote mismatches and actionable projection/side
 contradictions are both zero. Health rows and locked tuples are unchanged.
 Target-excluded comparator breadth is 2,011 / 2,480 / 807 / 244 for zero / one /
 two / three-plus alternatives, with zero evaluated-offer forecast references
-and zero verified split adjustments. Natural refreshes emit release-pure
-target-excluded/fallback/action/lock/coherence telemetry; invalid refreshes keep
-the prior canonical/member snapshot and retry through the ordinary writer.
-Rollback is the complete r38 runtime set below. Evidence is in
-`docs/model-audits/2026-09-02-mlb-props-target-excluded-forecast.md`.
+and zero verified split adjustments. Natural refreshes emit release-pure target-excluded/fallback/
+action/lock/coherence telemetry; invalid refreshes keep the prior canonical/member snapshot and retry
+through the ordinary writer. The first natural r39 cycle at `2026-09-02T21:17:20.939Z` made the
+unchanged 28 provider calls, wrote zero rows, and retained r38 because the legacy publication
+validator required a comparator-derived `modelEdge` even when the target-excluded comparator was
+truthfully absent. R40 leaves every r39 forecast, projection, side, probability, grade, price, and
+stake unchanged, but makes that absent comparator neutral at the publication gate. A present
+comparator still requires a coherent edge, while stale or invalid prices, missing required research,
+non-finite values, and projection-side action conflicts still fail closed. The refreshed 5,269-row
+replay moves r38's 32 Best Angles / 94 Leans / 1,556 Watchlists / 1,796 No Plays / 1,468 Research /
+323 Pending Data to 23 / 82 / 1,450 / 1,923 / 1,468 / 323, with 105 actionables, four promotions,
+25 demotions, zero actionable quote mismatches, and zero actionable projection/side contradictions.
+R40 adds no action relative to the already-reviewed r39 row policy; it permits the complete r39/r40
+snapshot to pass the same truthful missing-data contract. Telemetry now separately reports
+actionables without a target-excluded comparator and actionable data-gate failures. Rollback is the
+complete r38 runtime set below. Evidence is in
+`docs/model-audits/2026-09-02-mlb-props-target-excluded-forecast.md` and
+`docs/model-audits/2026-09-02-mlb-props-r40-missing-comparator-gate.md`.
 
 The September 1 r38 market-aware forecast release moves genuine exact-line
 market context ahead of side, probability, projection, and grade finalization

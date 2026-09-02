@@ -1,6 +1,6 @@
 # MLB props r39 target-excluded forecast candidate
 
-Status: **GREEN local source-review candidate; not approved for publication.**
+Status: **r39 source candidate merged, but superseded before its first published snapshot by the r40 publication-gate repair.**
 
 ## Scope and release
 
@@ -137,3 +137,16 @@ actionable projection/side contradiction count. An invalid refresh is not publis
 member snapshots remain last-known-good and the ordinary next cycle retries. Member-snapshot
 publication failure likewise preserves the prior member snapshot and retries naturally. No extra
 provider call, table, writer, cron, lease, or snapshot payload is introduced.
+
+## Natural-cycle disposition
+
+Protected production deployed r39, but the first natural writer at
+`2026-09-02T21:17:20.939Z` correctly failed closed with
+`ACTIONABLE_ROWS_FAILED_DATA_GATE`. It completed in 21.275 seconds, made the unchanged 28 provider
+calls, wrote zero rows, and preserved the r38 last-known-good board. The forecast itself had removed
+the target quote, but the legacy publication validator still required a non-null comparator-derived
+`modelEdge` from every actionable row. That contradicted the release's explicit missing-comparator
+neutrality and made an independent-distribution plus exact-price action impossible to publish. No r39
+snapshot became authoritative. The versioned r40 follow-up changes only that publication predicate;
+its evidence and verification are recorded in
+`docs/model-audits/2026-09-02-mlb-props-r40-missing-comparator-gate.md`.
