@@ -26,6 +26,7 @@ import {
   EXPECTED_WNBA_CALIBRATION_FLAGS,
   EXPECTED_WNBA_GRADE_POLICY_VERSION,
 } from "@/lib/automodel/wnbaChampionRuntime";
+import type { WnbaIndependentModelEvidence } from "./wnbaForwardEvidenceCapture";
 
 const BDL = "https://api.balldontlie.io/wnba/v1";
 const SHARP = "https://api.sharpapi.io/api/v1";
@@ -324,6 +325,7 @@ export function computeWnbaPrediction(
     | "spreadRecommendationUsesCalibratedMargin"
     | "gradeCalibrationEnabled"
   > = EXPECTED_WNBA_CALIBRATION_FLAGS,
+  evidenceObserver?: (evidence: WnbaIndependentModelEvidence) => void,
 ) {
   const E = (t: number) => M.elo.get(t) ?? 1500;
   const hN = M.nameById.get(g.h) ?? wnbaAbbr(g.h) ?? String(g.h);
@@ -581,6 +583,28 @@ export function computeWnbaPrediction(
   if (outlierTotal) flags.push("total_line_outlier");
   if (outlierSpread) flags.push("spread_line_outlier");
   if (marginMlWinnerConflict) flags.push("spread_ml_winner_coherence_override");
+
+  // Capture-only observer: all recommendation math above is already complete,
+  // and failures here are deliberately identity-neutral. Keeping this outside
+  // the returned prediction object preserves every existing JSON field/value.
+  try {
+    evidenceObserver?.({
+      home_win_probability: modelP,
+      projected_home_margin: rawModelMargin,
+      projected_total: projTotal,
+      margin_sigma: sigM,
+      total_sigma: sigT,
+      rating_uncertainty: unc,
+      model_stability: modelStab,
+      home_games: gpH,
+      away_games: gpA,
+      cold_start: coldStart,
+      home_cold_start_weight: csH.w,
+      away_cold_start_weight: csA.w,
+    });
+  } catch {
+    // Optional evidence cannot hold, flatten, or otherwise alter the champion.
+  }
 
   return {
     game_id: g.id, date: g.date, start_time: r.find((x) => x)?.date ?? g.date,
