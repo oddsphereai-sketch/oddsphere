@@ -17,6 +17,7 @@ import {
   resolveFirstInningModelVersion,
 } from "../lib/automodel/firstInningModelVersion";
 import { applyFiV2WriterOverride } from "../lib/services/fiV2Writer";
+import { autoModelOutputToScoresRow } from "../lib/services/automodelService";
 import type { GameSnapshot } from "../lib/automodel/types";
 
 let pass = 0, fail = 0;
@@ -159,6 +160,34 @@ check("T6 Toss-Up sets nrfi_confidence=52 (legacy sentinel)", /Toss-Up"[\s\S]{0,
 check("T6 Toss-Up sets nrfi_decision_kind='toss_up'", /Toss-Up"[\s\S]{0,250}?decisionKind\s*=\s*"toss_up"/.test(WRITER));
 check("T6 Toss-Up has no hidden directional predicted_nrfi", /Toss-Up"[\s\S]{0,120}?predictedNrfi\s*=\s*null/.test(WRITER));
 check("T6 Held branch sets predicted_nrfi=null (no fake NRFI)", /Held[\s\S]{0,400}?predictedNrfi\s*=\s*null/.test(WRITER));
+
+// ── T6.1. Sole-writer tuple persistence — FI Toss-Up must intentionally
+// clear an incumbent game_predictions boolean, while directional FI keeps its
+// boolean. The ingester lock-guard suite verifies the subsequent DB payload.
+const fiTossOutput = {
+  game_external_id: 999,
+  prediction_source: "auto_v1_mlb_rules",
+  predicted_home_score: 4.2,
+  predicted_away_score: 3.8,
+  predicted_total: 8,
+  predicted_ml_winner: "home",
+  ml_confidence: 55,
+  predicted_ou_side: "over",
+  ou_confidence: 53,
+  predicted_nrfi: null,
+  nrfi_confidence: 52,
+  sport_specific: { fi_model_used: "fi_v2", nrfi_decision_kind: "toss_up" },
+} as unknown as Parameters<typeof autoModelOutputToScoresRow>[0];
+const fiDirectionalOutput = {
+  ...fiTossOutput,
+  predicted_nrfi: true,
+  nrfi_confidence: 56,
+  sport_specific: { fi_model_used: "fi_v2", nrfi_decision_kind: "nrfi" },
+} as unknown as Parameters<typeof autoModelOutputToScoresRow>[0];
+const fiTossRow = autoModelOutputToScoresRow(fiTossOutput, "2026-09-03T16:00:00.000Z");
+const fiDirectionalRow = autoModelOutputToScoresRow(fiDirectionalOutput, "2026-09-03T16:00:00.000Z");
+check("T6.1 Toss-Up explicitly carries null predicted_nrfi to the sole writer", Object.hasOwn(fiTossRow, "predicted_nrfi") && fiTossRow.predicted_nrfi === null);
+check("T6.1 directional FI retains its authoritative predicted_nrfi side", fiDirectionalRow.predicted_nrfi === true);
 
 // ── T7. Writer never CALLS anything that writes
 // game_predictions / slate_status / locked_at / tracking.
