@@ -136,7 +136,7 @@ type CaptureDecision = Readonly<{
     marketWeight: number;
     roleProjection: number;
   } | {
-    source: "probability_inverse_market_calibrated";
+    source: "probability_inverse_market_calibrated" | "single_posterior_distribution";
     independentProjection: number;
   };
   marketEvidenceId?: string;
@@ -332,7 +332,8 @@ function buildCandidate(args: {
   const projectionDecision = over ?? under ?? yes;
   const independentProjection = projectionDecision?.projectionEvidence?.source === "market_dominant_expected_starter"
     ? projectionDecision.projectionEvidence.roleProjection
-    : projectionDecision?.projectionEvidence?.source === "probability_inverse_market_calibrated"
+    : (projectionDecision?.projectionEvidence?.source === "probability_inverse_market_calibrated"
+      || projectionDecision?.projectionEvidence?.source === "single_posterior_distribution")
       ? projectionDecision.projectionEvidence.independentProjection
       : projectionDecision?.projection ?? null;
   const qbMarketWeight = projectionDecision?.projectionEvidence?.source === "market_dominant_expected_starter"

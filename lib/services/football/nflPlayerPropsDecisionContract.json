@@ -1,7 +1,7 @@
 {
-  "decisionRelease": "nfl_player_props_decision_2026_09_01_r8_market_coherent_projection",
-  "modelRelease": "nfl_player_props_distribution_model_2026_09_01_r5_market_coherent_projection",
-  "calibrationRelease": "nfl_player_props_distribution_calibration_2026_09_01_r5_market_coherent_projection",
+  "decisionRelease": "nfl_player_props_decision_2026_09_03_r10_forecast_authority",
+  "modelRelease": "nfl_player_props_distribution_model_2026_09_03_r7_forecast_authority",
+  "calibrationRelease": "nfl_player_props_distribution_calibration_2026_09_03_r7_forecast_authority",
   "touchdownModelRelease": "nfl_player_props_anytime_td_model_2026_08_25_r3_shared_context",
   "touchdownCalibrationRelease": "nfl_player_props_anytime_td_calibration_2026_08_25_r3_shared_context",
   "marketBoardRelease": "nfl_player_props_exact_market_board_2026_09_01_r2_cross_line_opening",
@@ -11,13 +11,15 @@
   "maximumQuoteAgeHours": 6,
   "maximumRawMarketDivergence": 0.48,
   "quarterbackPassingProjection": {
-    "release": "nfl_player_props_qb_passing_projection_2026_09_01_r1_market_dominant_role_context",
+    "release": "nfl_player_props_qb_passing_projection_2026_09_02_r2_target_excluded_consensus",
     "eligibleMarket": "passing_yards",
     "requiresExpectedStarterIdentity": true,
     "minimumBooksForProjection": 1,
     "marketWeight": 0.9,
     "recentRoleWeight": 0.1,
-    "singleBookMaySetProjection": true,
+    "singleBookMaySetProjection": false,
+    "evaluatedBookExcluded": true,
+    "residualMarketAnchorAppliedAfterPointHead": false,
     "singleBookMayAuthorizeAction": false
   },
   "quarterbackRole": {
@@ -33,11 +35,12 @@
     "maximumGradeWithoutSameLineIndependentActionConfirmation": "Watchlist"
   },
   "marketCoherentProjection": {
-    "release": "nfl_player_props_market_coherent_projection_2026_09_01_r1_probability_inverse",
+    "release": "nfl_player_props_market_coherent_projection_2026_09_03_r2_single_distribution",
     "eligibleMarkets": ["passing_attempts", "passing_completions", "passing_yards", "receiving_yards", "receptions", "rushing_attempts", "rushing_yards"],
-    "probabilitySource": "final_market_residual_probability",
+    "probabilitySource": "target_excluded_single_posterior_distribution",
     "preservesIndependentProjectionAsEvidence": true,
-    "changesProbabilityOrGrade": false
+    "evaluatedQuoteIsEconomicsOnly": true,
+    "actionableSideMustMatchPosterior": true
   },
   "volumeAndYardage": {
     "watchlist": {"minimumEv": 0.0, "minimumProbabilityEdge": 0.0},
