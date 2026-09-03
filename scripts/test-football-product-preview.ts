@@ -40,6 +40,11 @@ const regularSlateSource = readFileSync("lib/services/football/nflRegularLocalSl
 const regularScorerSource = readFileSync("scripts/operator/score_current_nfl_regular.py", "utf8");
 const trackingRegistryTest = readFileSync("scripts/test-official-tracking-markets.ts", "utf8");
 
+assert.match(readerSource, /className="min-w-0 break-words text-base font-black leading-5 tracking-tight text-white"/, "full football names must wrap within their reader column");
+assert.match(readerSource, /grid-cols-\[minmax\(0,1fr\)_auto_minmax\(0,1fr\)\] items-stretch gap-2/, "football reader columns must be allowed to shrink without overflowing");
+assert.match(readerSource, /incomingFootballReadUnavailable[\s\S]*snapshot\.games\.length === 0[\s\S]*weeklySlate\?\.unavailable === true/, "a failed resolved football refresh must be identified separately from a valid empty slate");
+assert.match(readerSource, /retainedFootballReader\?\.snapshot \?\? snapshot/, "mounted football readers must retain the last-known-good snapshot across a failed refresh");
+
 assert.match(pageSource, /process\.env\.NODE_ENV === "production"/);
 assert.match(pageSource, /readCurrentNflWeekOneHeldMemberFixture/);
 assert.match(memberPageSource, /enrichCachedNflFootballEvidence/, "cached NFL member snapshots must receive the same presentation-only evidence contract");
