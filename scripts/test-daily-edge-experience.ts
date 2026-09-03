@@ -697,10 +697,24 @@ check(
   }),
 );
 check(
-  "candidate slate cards reserve a consistent row for Play Grade and time",
-  candidateDailyEdgeSource.includes('compactSoccer ? "grid gap-2" : "grid gap-3"') &&
-    candidateDailyEdgeSource.includes('compactSoccer ? "min-h-6" : "min-h-8"') &&
+  "candidate slate cards reserve a consistent row for Bet grade and time",
+  candidateDailyEdgeSource.includes('className="grid gap-3"') &&
+    candidateDailyEdgeSource.includes('className="flex min-h-8 items-center gap-2"') &&
     !candidateDailyEdgeSource.includes('className="flex flex-wrap items-center justify-between gap-3">\n          <div className="flex min-w-0 items-center gap-2.5"'),
+);
+check(
+  "Soccer board cards keep the approved shared desktop and mobile scale",
+  candidateDailyEdgeSource.includes('className="flex flex-1 flex-col p-5 sm:p-6"') &&
+    candidateDailyEdgeSource.includes('className="text-[30px] font-black leading-none tracking-tight text-white sm:text-[34px]"') &&
+    candidateDailyEdgeSource.includes('className="mt-4 grid grid-cols-3 gap-2"') &&
+    candidateDailyEdgeSource.includes('min-h-[70px] rounded-lg border px-3 py-3 text-left transition sm:min-h-[76px] sm:px-3.5') &&
+    !candidateDailyEdgeSource.includes("compactSoccer"),
+);
+check(
+  "Soccer reader cards keep the approved wide-screen padding",
+  candidateDailyEdgeSource.includes('bg-[#11131a] p-4 sm:p-5 xl:p-6') &&
+    candidateDailyEdgeSource.includes('bg-[#121019] p-4 sm:p-5 xl:p-6') &&
+    candidateDailyEdgeSource.includes('bg-[#0f141c] p-4 sm:p-5 xl:p-6'),
 );
 check(
   "Daily Edge labels outcome confidence separately from the exact-price Bet grade",
@@ -1043,10 +1057,12 @@ check(
     candidateSource.includes('params.delete("market")'),
 );
 check(
-  "desktop and mobile sport tabs share an in-app transition with bounded native recovery only",
+  "desktop and mobile sport tabs keep same-route transitions in-app without watchdog document reloads",
   candidateSource.includes("router.push(destination, { scroll: false })") &&
     candidateSource.includes("DAILY_EDGE_SPORT_SWITCH_FALLBACK_MS") &&
     candidateSource.includes("dailyEdgeSportDestinationIsCurrent(window.location.href, destination)") &&
+    candidateSource.includes("current.pathname !== target.pathname") &&
+    candidateSource.includes("A same-route server transition can take") &&
     candidateSource.includes('window.sessionStorage.setItem("daily-edge-sport-focus", next)') &&
     candidateSource.includes("setReaderOpen(false)") &&
     candidateSource.includes("setMobileSheetOpen(false)"),
@@ -1075,6 +1091,12 @@ check(
     candidateSource.includes("function prefetchSport(next: Sport)"),
 );
 check(
+  "the larger weekly CFB payload is proactively prefetched before sport-tab intent",
+  candidateSource.includes('nextSport: "cfb"') &&
+    candidateSource.includes("router.prefetch(cfbDestination)") &&
+    candidateSource.includes('sport === "cfb"'),
+);
+check(
   "consensus-only markets do not render an empty sharp-book panel",
   candidateSource.includes("selectedSharp ?? (sharpAvailability === null ? null") &&
     candidateSource.includes("{displayedSharp ? <SplitSourcePanel") &&
@@ -1094,6 +1116,14 @@ check(
 check(
   "cross-source split language is rendered only when sharp rows exist",
   candidateSource.includes("{displayedSharp?.rows.length ? <CrossSourceSplitRead"),
+);
+check(
+  "NFL and CFB split sources, sides, and labeled bars retain the shared full-width vertical hierarchy",
+  candidateSource.includes('<div className="mt-2 space-y-2">') &&
+    candidateSource.includes('<div className="mt-3 space-y-3">') &&
+    candidateSource.includes('className="grid grid-cols-[48px_1fr_38px] items-center gap-2.5"') &&
+    candidateSource.includes('<DefaultSplitSummary market={market} sport={sport} />') &&
+    !candidateSource.includes('<DefaultSplitSummary market={market} sport={sport} compact={football} />'),
 );
 check(
   "Daily Edge preserves the live product hierarchy with a compact selected reader by default",
