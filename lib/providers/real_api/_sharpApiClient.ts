@@ -101,6 +101,26 @@ export class SharpApiRateLimitError extends SharpApiClientError {
   }
 }
 
+/**
+ * A caller-owned deadline canceled a SharpAPI request. Keeping this distinct
+ * from ordinary provider/network failures lets latency-sensitive lock routes
+ * defer safely and retry on their next scheduled invocation.
+ */
+export class SharpApiAbortError extends SharpApiClientError {
+  constructor(opts: { endpoint: string; reason?: unknown }) {
+    const reason = opts.reason instanceof Error
+      ? opts.reason.message
+      : typeof opts.reason === "string"
+        ? opts.reason
+        : "request deadline reached";
+    super(`SharpAPI request aborted on ${opts.endpoint}: ${reason}`, {
+      endpoint: opts.endpoint,
+      status: null,
+    });
+    this.name = "SharpApiAbortError";
+  }
+}
+
 function buildUrl(path: string, query?: QueryParams): string {
   if (!query) return `${SHARP_API_BASE_URL}${path}`;
   const params = new URLSearchParams();
@@ -119,8 +139,22 @@ function buildUrl(path: string, query?: QueryParams): string {
     : `${SHARP_API_BASE_URL}${path}`;
 }
 
-function sleep(ms: number): Promise<void> {
-  return new Promise((r) => setTimeout(r, ms));
+function sleep(ms: number, signal?: AbortSignal, endpoint = "unknown"): Promise<void> {
+  if (signal?.aborted) {
+    return Promise.reject(new SharpApiAbortError({ endpoint, reason: signal.reason }));
+  }
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      signal?.removeEventListener("abort", onAbort);
+      resolve();
+    }, ms);
+    const onAbort = () => {
+      clearTimeout(timer);
+      signal?.removeEventListener("abort", onAbort);
+      reject(new SharpApiAbortError({ endpoint, reason: signal?.reason }));
+    };
+    signal?.addEventListener("abort", onAbort, { once: true });
+  });
 }
 
 function numOrNull(s: string | null): number | null {
@@ -169,11 +203,14 @@ export class SharpApiClient {
   }
 
   async fetch<T>(opts: SharpApiRequestOptions): Promise<SharpApiResponse<T>> {
+    if (opts.signal?.aborted) {
+      throw new SharpApiAbortError({ endpoint: opts.path, reason: opts.signal.reason });
+    }
     if (this.quota.remaining === 0) {
       if (opts.retryRateLimitInternally === false) {
         throw new SharpApiRateLimitError({ endpoint: opts.path });
       }
-      await this.waitUntilReset();
+      await this.waitUntilReset(opts.signal, opts.path);
     }
 
     const url = buildUrl(opts.path, opts.query);
@@ -187,6 +224,9 @@ export class SharpApiClient {
         signal: opts.signal,
       });
     } catch (e) {
+      if (opts.signal?.aborted) {
+        throw new SharpApiAbortError({ endpoint: opts.path, reason: opts.signal.reason });
+      }
       throw new SharpApiClientError(
         `SharpAPI network error on ${opts.path}: ${
           e instanceof Error ? e.message : String(e)
@@ -199,7 +239,7 @@ export class SharpApiClient {
 
     if (res.status === 429 && opts.retryRateLimitInternally !== false) {
       const waitSec = (quota.retryAfter ?? 65) + 2;
-      await sleep(waitSec * 1000);
+      await sleep(waitSec * 1000, opts.signal, opts.path);
       this.quota.remaining = null;
       this.quota.resetEpoch = null;
       try {
@@ -211,6 +251,9 @@ export class SharpApiClient {
           signal: opts.signal,
         });
       } catch (e) {
+        if (opts.signal?.aborted) {
+          throw new SharpApiAbortError({ endpoint: opts.path, reason: opts.signal.reason });
+        }
         throw new SharpApiClientError(
           `SharpAPI network error on retry of ${opts.path}: ${
             e instanceof Error ? e.message : String(e)
@@ -333,11 +376,11 @@ export class SharpApiClient {
     return out;
   }
 
-  private async waitUntilReset(): Promise<void> {
+  private async waitUntilReset(signal?: AbortSignal, endpoint = "unknown"): Promise<void> {
     if (this.quota.resetEpoch === null) return;
     const nowSec = Math.floor(Date.now() / 1000);
     const waitSec = Math.max(0, this.quota.resetEpoch - nowSec) + 2;
-    await sleep(waitSec * 1000);
+    await sleep(waitSec * 1000, signal, endpoint);
     this.quota.remaining = null;
     this.quota.resetEpoch = null;
   }

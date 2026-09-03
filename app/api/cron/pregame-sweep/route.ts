@@ -45,7 +45,10 @@ import { cronHandlerPerSport } from "@/lib/cron/runCron";
 import { parseDateFromUrl } from "@/lib/cron/dates";
 import { sportsInSeasonToday } from "@/lib/cron/seasons";
 import { supabase } from "@/lib/db/supabase";
-import { linesService } from "@/lib/services/linesService";
+import {
+  GameLinesDeadlineError,
+  linesService,
+} from "@/lib/services/linesService";
 import { generatePredictionsForSlate } from "@/lib/services/automodelService";
 import { assertMlbChampionRuntime } from "@/lib/automodel/mlbChampionRuntime";
 import { assertWnbaChampionRuntime } from "@/lib/automodel/wnbaChampionRuntime";
@@ -80,6 +83,7 @@ import {
 } from "@/lib/cron/pregameSweepSafety";
 
 export const maxDuration = 90;
+const PREGAME_SWEEP_SOFT_DEADLINE_MS = 55_000;
 
 // ─────────────────────────────────────────────────────────────
 // R-19 Phase 5a — Launch-safety controls
@@ -287,6 +291,11 @@ async function applyLocks(
 // ─────────────────────────────────────────────────────────────
 
 export async function GET(request: Request) {
+  const requestStartedAtMs = Date.now();
+  // Finish well ahead of the platform's hard termination so the shared cron
+  // wrapper can close data_refresh_log and release prediction_pipeline:mlb.
+  // A timed-out T-60 price refresh is fail-closed and retries next minute.
+  const softDeadlineAtMs = requestStartedAtMs + PREGAME_SWEEP_SOFT_DEADLINE_MS;
   const date = parseDateFromUrl(request);
   // R-19 Phase 5a — resolve safety controls BEFORE entering the
   // per-sport handler. Both flags are process-wide, not per-sport,
@@ -418,9 +427,46 @@ export async function GET(request: Request) {
       // sweep light while still making the lock snapshot market-current.
       if (partition.entering_lock.length > 0 && sport === "mlb") {
         const enteringExternalIds = partition.entering_lock.map((g) => g.external_id);
-        preLockGameLines = await linesService.refreshGameLinesV2(sport, date, {
-          externalIdsFilter: enteringExternalIds,
-        });
+        try {
+          preLockGameLines = await linesService.refreshGameLinesV2(sport, date, {
+            externalIdsFilter: enteringExternalIds,
+            deadlineAtMs: softDeadlineAtMs,
+          });
+        } catch (error) {
+          if (!(error instanceof GameLinesDeadlineError)) throw error;
+          const elapsedMs = Date.now() - requestStartedAtMs;
+          return {
+            records_updated: records,
+            api_calls_made: apiCalls,
+            partial: true,
+            error_message: `${error.message}; lock deferred for automatic next-minute retry`,
+            details: {
+              dry_run: false,
+              pregame_sweep_active: true,
+              lock_only: lockOnly,
+              sport,
+              date,
+              mlb_props_lock_sweep: propsLockSweep,
+              partition: {
+                locked: partition.locked.length,
+                entering_lock: partition.entering_lock.length,
+                still_unlocked: partition.still_unlocked.length,
+                already_started: partition.already_started.length,
+              },
+              deadline: {
+                triggered: true,
+                stage: error.stage,
+                request_started_at: new Date(requestStartedAtMs).toISOString(),
+                soft_deadline_at: new Date(softDeadlineAtMs).toISOString(),
+                elapsed_ms: elapsedMs,
+                remaining_ms: Math.max(0, softDeadlineAtMs - Date.now()),
+                current_line_replacement_started: false,
+                authoritative_lock_applied: false,
+                retry: "next_scheduled_pregame_sweep",
+              },
+            },
+          };
+        }
         records += preLockGameLines.records_updated ?? 0;
         apiCalls += preLockGameLines.api_calls_made ?? 0;
 
