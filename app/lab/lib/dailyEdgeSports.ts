@@ -21,7 +21,7 @@ export const DAILY_EDGE_SPORTS: readonly DailyEdgeSportDefinition[] = [
   { key: "nba", label: "NBA", memberAvailable: true, inSeason: false },
   { key: "nhl", label: "NHL", memberAvailable: true, inSeason: false },
   { key: "cbb", label: "CBB", memberAvailable: false },
-  { key: "ucl", label: "UCL", memberAvailable: true, inSeason: false },
+  { key: "ucl", label: "UCL", memberAvailable: false, inSeason: false },
 ] as const;
 
 export const DAILY_EDGE_SPORT_KEYS: Sport[] = DAILY_EDGE_SPORTS.map(

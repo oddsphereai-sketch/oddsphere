@@ -47,6 +47,8 @@ import { writeNhlPredictionRecords } from "./nhl/buildNhlPredictionRecords";
 import { ingestNhlFinalScores } from "./nhl/nhlScoreIngestService";
 import { ingestSoccerFinalScores } from "./soccer/soccerScoreIngestService";
 import { ingestEplFinalScores } from "./epl/eplScoreIngestService";
+import { ingestUclFinalScores } from "./ucl/uclScoreIngestService";
+import { resolveUclFeatureFlags, resolveUclSettlementGradingPlan } from "./ucl/uclFeatureFlags";
 import { buildWnbaPredictionRecords } from "./wnba/buildWnbaPredictionRecords";
 import { ingestWnbaFinalScores } from "./wnba/ingestWnbaFinalScores";
 import { ingestNflFinalScores } from "./football/nflScoreIngestService";
@@ -463,6 +465,19 @@ export async function runTrackingRefresh(
         } catch (e) {
           perDate.errors.push(`soccer-final-scores exception: ${e instanceof Error ? e.message : String(e)}`);
         }
+        // UCL is an additive exact namespace. Do not widen or replace the
+        // established World Cup/EPL settlement branch above.
+        if ((await import("./ucl/uclFeatureFlags")).resolveUclFeatureFlags().settlement) {
+          try {
+            const ucl = await ingestUclFinalScores({ slateDate: date, apply: opts.apply });
+            perDate.final_scores_updated += ucl.updated;
+            perDate.final_scores_scheduled += Math.max(0, ucl.apiEventsFetched - ucl.finalizedCount);
+            for (const error of ucl.errors) perDate.errors.push(`ucl-final-scores: ${error}`);
+            if (ucl.heldSpecialFinals > 0) perDate.errors.push(`ucl-final-scores: ${ucl.heldSpecialFinals} special finals held pending regulation-period scores`);
+          } catch (e) {
+            perDate.errors.push(`ucl-final-scores exception: ${e instanceof Error ? e.message : String(e)}`);
+          }
+        }
       } else if (sport === "wnba") {
         // WNBA launch tracking (2026-06-24). The WNBA daily refresh already
         // writes records after running the model; this branch makes tracking-
@@ -508,18 +523,36 @@ export async function runTrackingRefresh(
 
       // 4. Grade predictions (shared sport-generic grader)
       try {
+        const uclGrading = resolveUclSettlementGradingPlan(sport, resolveUclFeatureFlags().settlement);
         const gradeRes = await gradePredictionsForSlate({
           sport,
           slateDate: date,
           apply: opts.apply,
           supabase: opts.supabase,
           source: "auto_score_ingest",
+          // UCL is always excluded from the generic soccer pass. Its exact
+          // pass below is the sole grading authority and is master-gated.
+          excludeCompetition: uclGrading.excludeFromGeneric,
         });
         perDate.grades_upserted = gradeRes.upsertedCount;
         perDate.grades_skipped_pending_downgrade = gradeRes.skippedPendingDowngrade;
         perDate.grades_pending_after = gradeRes.computed.pending;
         for (const e of gradeRes.errors) {
           perDate.errors.push(`grade: ${e.reason}`);
+        }
+        if (uclGrading.runExactUclPass) {
+          const uclGrade = await gradePredictionsForSlate({
+            sport,
+            slateDate: date,
+            apply: opts.apply,
+            supabase: opts.supabase,
+            source: "auto_score_ingest",
+            competition: "uefa_champions_league",
+          });
+          perDate.grades_upserted += uclGrade.upsertedCount;
+          perDate.grades_skipped_pending_downgrade += uclGrade.skippedPendingDowngrade;
+          perDate.grades_pending_after += uclGrade.computed.pending;
+          for (const e of uclGrade.errors) perDate.errors.push(`ucl-grade: ${e.reason}`);
         }
       } catch (e) {
         perDate.errors.push(`grade exception: ${e instanceof Error ? e.message : String(e)}`);

@@ -20,6 +20,7 @@ import { NFL_FORWARD_MEMBER_SNAPSHOT_RELEASE } from "@/lib/services/football/nfl
 import { enrichCachedNflFootballEvidence } from "@/lib/services/football/footballMemberEvidence";
 import DailyEdgeLiveRefresh from "./DailyEdgeLiveRefresh";
 import { readMemberDataWithDeadline } from "@/lib/services/memberDataAvailability";
+import { resolveUclFeatureFlags } from "@/lib/services/ucl/uclFeatureFlags";
 
 const CFB_MEMBER_DATA_READ_TIMEOUT_MS = 15_000;
 
@@ -54,7 +55,6 @@ const readCachedCfbMemberFixture = unstable_cache(
 const MEMBER_SPORT_SWITCH_DESTINATIONS: Partial<Record<Sport, string>> = {
   mlb: "/lab/daily-edge?sport=mlb",
   wnba: "/lab/daily-edge?sport=wnba",
-  soccer: "/lab/daily-edge?sport=soccer&league=epl",
   nba: "/lab/daily-edge?sport=nba",
   nhl: "/lab/daily-edge?sport=nhl",
   cbb: "/lab/daily-edge?sport=cbb",
@@ -84,6 +84,16 @@ export default async function CandidateDailyEdgePage({
   const sport: Sport = soccerRequested ? "soccer" : sourceSport;
   const eplRequested = competition === "premier_league";
   const eplEnabled = process.env.PREMIER_LEAGUE_DAILY_EDGE_ENABLED === "true";
+  const uclRequested = competition === "champions_league";
+  const uclEnabled = resolveUclFeatureFlags().member;
+  const sportSwitchDestinations: Partial<Record<Sport, string>> = {
+    ...MEMBER_SPORT_SWITCH_DESTINATIONS,
+    soccer: eplEnabled
+      ? "/lab/daily-edge?sport=soccer&league=epl"
+      : uclEnabled
+        ? "/lab/daily-edge?sport=soccer&league=ucl"
+        : "/lab/daily-edge?sport=soccer&league=world-cup",
+  };
   const nflRequested = sport === "nfl";
   const cfbRequested = sport === "cfb";
   const nflEnabled = nflRequested && isNflDailyEdgeEnabled();
@@ -142,6 +152,16 @@ export default async function CandidateDailyEdgePage({
     snapshot = emptyPreviewSnapshot(sport);
   } else if (cfbRequested) {
     snapshot = emptyPreviewSnapshot(sport);
+  } else if (uclRequested && uclEnabled) {
+    const result = await readMemberDataWithDeadline({
+      label: "ucl-daily-edge-snapshot",
+      fallback: emptyPreviewSnapshot(sport, "temporarily_unavailable"),
+      read: async () => (await import("@/lib/services/ucl/uclMemberSnapshotStore"))
+        .readCurrentUclMemberSnapshot()
+        .then((value) => value ?? emptyPreviewSnapshot(sport)),
+    });
+    snapshot = result.value;
+    snapshotUnavailable = result.unavailable;
   } else if (eplRequested && eplEnabled) {
     const result = await readMemberDataWithDeadline({
       label: "epl-daily-edge-snapshot",
@@ -152,13 +172,13 @@ export default async function CandidateDailyEdgePage({
     });
     snapshot = result.value;
     snapshotUnavailable = result.unavailable;
-  } else if (eplRequested) {
+  } else if (eplRequested || uclRequested) {
     snapshot = emptyPreviewSnapshot(sport);
   } else {
     const result = await readMemberDataWithDeadline({
       label: `${sport}-daily-edge-snapshot`,
       fallback: emptyPreviewSnapshot(sport, "temporarily_unavailable"),
-      read: () => loadDailyEdgeSnapshot(competition === "champions_league" ? "ucl" : sport),
+      read: () => loadDailyEdgeSnapshot(sport),
     });
     snapshot = result.value;
     snapshotUnavailable = result.unavailable;
@@ -170,7 +190,7 @@ export default async function CandidateDailyEdgePage({
     snapshot = filterWeeklyReaderSnapshot(snapshot, "nfl");
   } else if (cfbFixture) {
     snapshot = filterWeeklyReaderSnapshot(snapshot, "cfb");
-  } else if (eplRequested && eplEnabled) {
+  } else if ((eplRequested && eplEnabled) || (uclRequested && uclEnabled)) {
     snapshot = filterWeeklyReaderSnapshot(snapshot, "soccer");
   }
   const visibleNflAvailability = nflFixture
@@ -193,7 +213,11 @@ export default async function CandidateDailyEdgePage({
           Awaited<ReturnType<typeof loadPitcherFirstInningHistory>>,
         ],
         read: () => Promise.all([
-          loadTeamHistory(snapshot, sport),
+          loadTeamHistory(
+            snapshot,
+            sport,
+            uclRequested ? "uefa_champions_league" : eplRequested ? "english_premier_league" : sport === "soccer" ? "fifa_world_cup" : undefined,
+          ),
           loadPitcherFirstInningHistory(snapshot, sport),
         ]),
       })).value;
@@ -215,14 +239,14 @@ export default async function CandidateDailyEdgePage({
         freshContractRead={false}
         reviewMode={false}
         soccerCompetition={competition === "premier_league" && eplEnabled
-          ? { active: "premier_league", label: "Premier League" }
-          : competition === "champions_league"
-            ? { active: "champions_league", label: "Champions League" }
-            : competition === "world_cup"
-              ? { active: "world_cup", label: "World Cup" }
+          ? { active: "premier_league", label: "Premier League", eplAvailable: true, uclAvailable: uclEnabled }
+          : competition === "champions_league" && uclEnabled
+            ? { active: "champions_league", label: "Champions League", eplAvailable: eplEnabled, uclAvailable: true }
+          : sport === "soccer"
+              ? { active: "world_cup", label: "World Cup", eplAvailable: eplEnabled, uclAvailable: uclEnabled }
               : undefined}
         activePreviewSports={nflFixture || nflWeekOneEvidenceEnabled ? ["nfl"] : cfbFixture || cfbEnabled ? ["cfb"] : []}
-        sportSwitchDestinations={MEMBER_SPORT_SWITCH_DESTINATIONS}
+        sportSwitchDestinations={sportSwitchDestinations}
         weeklySlate={nflFixture
           ? {
               label: `NFL · ${nflFixture.week.label} · ${snapshot.games.length} games · ${snapshot.games.length * 3} predictions · ${"heldMemberFixtureRelease" in nflFixture ? "live predictions and exact-price Bet grades" : nflFixture.tracking.seasonPhase === "preseason" ? "preseason is excluded from official tracking" : "tracking begins only with an approved pre-kickoff lock"}`,

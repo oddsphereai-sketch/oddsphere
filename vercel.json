@@ -82,6 +82,14 @@
       "schedule": "*/5 10-22 * * *"
     },
     {
+      "path": "/api/cron/ucl-daily-refresh",
+      "schedule": "17,47 * * * *"
+    },
+    {
+      "path": "/api/cron/ucl-pregame-lock",
+      "schedule": "4,9,14,19,24,29,34,39,44,49,54,59 10-22 * * *"
+    },
+    {
       "path": "/api/cron/nfl-daily-edge-health",
       "schedule": "11,41 * * * *"
     },

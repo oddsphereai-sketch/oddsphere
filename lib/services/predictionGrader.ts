@@ -285,6 +285,16 @@ export function gradePrediction(inputs: GradeInputs): PredictionGradeRow {
     return emptyGrade(record, "void", source, `game status=${game.status}`);
   }
 
+  // A UCL Held row is an atomic-lock manifest entry, not a scored forecast.
+  // It remains immutable/auditable but can never become a synthetic W/L when
+  // an exact price (and therefore canonical evaluated side) was unavailable.
+  if (
+    record.held === true
+    && (record.competition ?? record.snapshot_json?.competition) === "uefa_champions_league"
+  ) {
+    return emptyGrade(record, "void", source, "UCL market held at lock: excluded from accuracy and ROI");
+  }
+
   // Phase 6B.20 — non-actionable rows (no_bet=true) never count as
   // win/loss. Returns void with a clear note so the row is auditable
   // but excluded from public W/L tallies. Covers Toss-Up FI rows

@@ -54,8 +54,8 @@ export type EplShadowFit = {
 };
 
 export type EplShadowPrediction = {
-  release: typeof EPL_SHADOW_MODEL_RELEASE;
-  calibrationRelease: typeof EPL_SHADOW_CALIBRATION_RELEASE;
+  release: string;
+  calibrationRelease: string;
   lambdaHome: number;
   lambdaAway: number;
   expectedTotal: number;

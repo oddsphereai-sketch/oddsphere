@@ -909,11 +909,12 @@ check("keyboard tab activation remains actionable", keyboardNavigations === 1);
 
 console.log("\n━━━ Cross-surface sport readiness registry ━━━");
 check(
-  "member-available Daily Edge models retain Soccer competitions without a separate UCL top-level pill",
+  "Soccer retains one top-level pill while UCL availability is runtime-gated",
   AVAILABLE_DAILY_EDGE_SPORTS.includes("soccer") &&
-    AVAILABLE_DAILY_EDGE_SPORTS.includes("ucl") &&
+    !AVAILABLE_DAILY_EDGE_SPORTS.includes("ucl") &&
     DAILY_EDGE_TOP_LEVEL_SPORT_KEYS.includes("soccer") &&
-    !DAILY_EDGE_TOP_LEVEL_SPORT_KEYS.includes("ucl"),
+    !DAILY_EDGE_TOP_LEVEL_SPORT_KEYS.includes("ucl") &&
+    candidateDailyEdgeSource.includes("uclAvailable"),
 );
 check(
   "the top-level Soccer model is labeled and presented as active while EPL has a live slate",
@@ -983,11 +984,13 @@ check(
     weeklySnapshot.games.length === 3,
 );
 check(
-  "an explicit EPL request can never fall through to the World Cup snapshot",
+  "an explicit EPL or UCL request can never fall through to another soccer snapshot",
   candidateMemberPageSource.includes("else if (eplRequested && eplEnabled)") &&
-    candidateMemberPageSource.includes("else if (eplRequested)") &&
+    candidateMemberPageSource.includes("else if (uclRequested && uclEnabled)") &&
+    candidateMemberPageSource.includes("else if (eplRequested || uclRequested)") &&
     candidateMemberPageSource.includes("snapshot = emptyPreviewSnapshot(sport)") &&
-    candidateMemberPageSource.includes('competition === "premier_league" && eplEnabled'),
+    candidateMemberPageSource.includes('const eplRequested = competition === "premier_league"') &&
+    candidateMemberPageSource.includes('const uclRequested = competition === "champions_league"'),
 );
 
 console.log("\n━━━ Candidate presentation truthfulness ━━━");
@@ -1181,7 +1184,7 @@ check(
 );
 check(
   "available offseason models remain selectable but are not presented as active today",
-  ["nba", "nhl", "ucl"].every(
+  ["nba", "nhl"].every(
     (sport) =>
       DAILY_EDGE_SPORT_AVAILABILITY[sport as keyof typeof DAILY_EDGE_SPORT_AVAILABILITY]
         ?.statusLabel === "No games today",

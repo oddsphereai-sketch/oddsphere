@@ -57,6 +57,17 @@ export type EplPreviewBuildOptions = {
   captureAllBookPrices?: (rows: EplStoredPriceObservation[]) => void;
   storedPriceHistory?: EplStoredPriceObservation[];
   captureForwardEvidence?: (captures: EplForwardEvidenceCapture[]) => void;
+  marketProvider?: Pick<SharpApiEplMarketProvider, "loadFixture"> | null;
+  cacheNamespace?: string;
+  skipForwardEvidence?: boolean;
+  maxFixtureRecoveryLoads?: number;
+  competitionLabel?: string;
+  authorities?: {
+    gradeRelease: string;
+    deriveCoherentOutcome: typeof deriveEplCoherentMarketOutcome;
+    deriveMatchResultDecision: typeof deriveEplMatchResultDecision;
+    derivePreviewGrade: typeof deriveEplPreviewGrade;
+  };
 };
 
 function boundedTrail(trail: NonNullable<MarketEdgeDto["oddsTrail"]>): NonNullable<MarketEdgeDto["oddsTrail"]> {
@@ -258,8 +269,8 @@ function display(value: number | null, digits = 1, suffix = ""): string {
   return value === null ? "Not reported" : `${value.toFixed(digits)}${suffix}`;
 }
 
-function formString(form: Array<"W" | "D" | "L">, source: "club_history" | "promoted_proxy"): string {
-  return form.length ? form.join(" · ") : source === "promoted_proxy" ? "Promoted-team proxy" : "No recent EPL sample";
+function formString(form: Array<"W" | "D" | "L">, source: "club_history" | "promoted_proxy", competitionLabel: string): string {
+  return form.length ? form.join(" · ") : source === "promoted_proxy" ? "Promoted-team proxy" : `No recent ${competitionLabel} sample`;
 }
 
 function pctTo100(value: number | null | undefined): number | null {
@@ -474,6 +485,7 @@ function marketBase(input: {
   trailKey: string;
   capturedAt: string;
   opening?: OpeningPrice | null;
+  gradeRelease?: string;
   context?: Partial<Pick<MarketEdgeDto, "matchResultThreeWayProbs" | "soccerMatchResultContext" | "soccerDoubleChanceContext" | "soccerPriceBoard" | "soccerTotalContext" | "soccerBttsContext" | "soccerGradeContext">>;
 }): MarketEdgeDto {
   const gap = input.marketProb === null ? null : (input.modelProb - input.marketProb) * 100;
@@ -525,7 +537,7 @@ function marketBase(input: {
     recommendationConfidence: input.gradeDecision.recommendationScore,
     marketSource: input.sportsbook,
     marketDataQuality: input.marketProb === null ? "unavailable" : "two_sided_consensus",
-    reviewFlags: [EPL_PREVIEW_GRADE_RELEASE, "chronological_tournament_r2"],
+    reviewFlags: [input.gradeRelease ?? EPL_PREVIEW_GRADE_RELEASE, "chronological_tournament_r2"],
     reviewActionSummary: "keep",
     ...input.context,
   };
@@ -537,7 +549,12 @@ function bestMatchResultSide(match: EplShadowSlateMatch): "home" | "draw" | "awa
   return sides.sort((a, b) => p[b] - p[a])[0];
 }
 
-function gameDto(match: EplShadowSlateMatch, sharp: EplSharpFixtureMarket, capturedAt: string): DailyEdgeGameDto {
+function gameDto(match: EplShadowSlateMatch, sharp: EplSharpFixtureMarket, capturedAt: string, authorities: NonNullable<EplPreviewBuildOptions["authorities"]> = {
+  gradeRelease: EPL_PREVIEW_GRADE_RELEASE,
+  deriveCoherentOutcome: deriveEplCoherentMarketOutcome,
+  deriveMatchResultDecision: deriveEplMatchResultDecision,
+  derivePreviewGrade: deriveEplPreviewGrade,
+}, competitionLabel = "EPL"): DailyEdgeGameDto {
   const clubP = match.prediction.probabilities;
   const mr = coherentRead(sharp.odds, "match_result", ["home", "draw", "away"])
     ?? bdlMoneylineRead(match.currentMoneylineOdds);
@@ -546,7 +563,7 @@ function gameDto(match: EplShadowSlateMatch, sharp: EplSharpFixtureMarket, captu
   const btts = coherentRead(sharp.odds, "btts", ["yes", "no"]);
   const currentTotalVectors = eplCurrentBookVectors(sharp, "total", capturedAt);
   const evaluatedTotalCanonicalBook = canonicalEplBook(total?.sportsbook ?? null);
-  const coherentOutcome = deriveEplCoherentMarketOutcome({
+  const coherentOutcome = authorities.deriveCoherentOutcome({
     independentLambdaHome: match.prediction.lambdaHome,
     independentLambdaAway: match.prediction.lambdaAway,
     totalVectors: currentTotalVectors,
@@ -568,7 +585,7 @@ function gameDto(match: EplShadowSlateMatch, sharp: EplSharpFixtureMarket, captu
     bttsNo: coherentOutcome.markets.btts.no,
   };
   const forecastSide = bestMatchResultSide(match);
-  const mrDecision = deriveEplMatchResultDecision({
+  const mrDecision = authorities.deriveMatchResultDecision({
     model: { home: p.home, draw: p.draw, away: p.away },
     market: mr ? { home: mr.probabilities.home!, draw: mr.probabilities.draw!, away: mr.probabilities.away! } : null,
     prices: mr ? { home: mr.prices.home!, draw: mr.prices.draw!, away: mr.prices.away! } : null,
@@ -591,7 +608,7 @@ function gameDto(match: EplShadowSlateMatch, sharp: EplSharpFixtureMarket, captu
     ? "Current consensus split rows are available as secondary context."
     : sharp.splitsState === "error"
       ? "Consensus betting splits could not be checked on this refresh."
-      : "The splits endpoint is connected, but no EPL split rows are currently reported for this fixture.";
+      : `The splits endpoint is connected, but no ${competitionLabel} split rows are currently reported for this fixture.`;
   const mrEdge = mr ? (p[resultSide] - mr.probabilities[resultSide]!) * 100 : null;
   const mrGrade = mrDecision.grade;
   const mrOpening = openingMoneylinePrice(match.openingOdds, resultSide, mr?.sportsbook ?? null);
@@ -611,9 +628,10 @@ function gameDto(match: EplShadowSlateMatch, sharp: EplSharpFixtureMarket, captu
     trailKey: `${match.id}:match_result:${resultSide}`,
     capturedAt,
     opening: mrOpening,
+    gradeRelease: authorities.gradeRelease,
     keyStats: [
       { label: "Expected goals", awayValue: publishedGoals.away.toFixed(2), homeValue: publishedGoals.home.toFixed(2), source: "computed" },
-      { label: "Recent form", awayValue: formString(match.evidence.away.recentForm, match.prediction.awayStrengthSource), homeValue: formString(match.evidence.home.recentForm, match.prediction.homeStrengthSource), source: "feature_snapshot" },
+      { label: "Recent form", awayValue: formString(match.evidence.away.recentForm, match.prediction.awayStrengthSource, competitionLabel), homeValue: formString(match.evidence.home.recentForm, match.prediction.homeStrengthSource, competitionLabel), source: "feature_snapshot" },
       { label: "Goals for / against · recent", awayValue: `${display(match.evidence.away.avgGoalsFor, 2)} / ${display(match.evidence.away.avgGoalsAgainst, 2)}`, homeValue: `${display(match.evidence.home.avgGoalsFor, 2)} / ${display(match.evidence.home.avgGoalsAgainst, 2)}`, source: "feature_snapshot" },
       { label: "Recent xG created", awayValue: display(match.evidence.away.avgXgFor, 2), homeValue: display(match.evidence.home.avgXgFor, 2), source: "feature_snapshot" },
       { label: "Recent xG allowed", awayValue: display(match.evidence.away.avgXgAgainst, 2), homeValue: display(match.evidence.home.avgXgAgainst, 2), source: "feature_snapshot" },
@@ -662,7 +680,7 @@ function gameDto(match: EplShadowSlateMatch, sharp: EplSharpFixtureMarket, captu
       ? `${match.awayTeam.abbreviation} or Draw`
       : `${match.homeTeam.abbreviation} or ${match.awayTeam.abbreviation}`;
   const dcEdge = dc ? (dcProbabilities[dcSide] - dc.probabilities[dcSide]!) * 100 : null;
-  const dcGrade = deriveEplPreviewGrade({ market: "double_chance", modelProbability: dcProbabilities[dcSide], edgePp: dcEdge, priceAmerican: dc?.prices[dcSide] ?? null, coherentMarket: dc !== null, promotedProxy });
+  const dcGrade = authorities.derivePreviewGrade({ market: "double_chance", modelProbability: dcProbabilities[dcSide], edgePp: dcEdge, priceAmerican: dc?.prices[dcSide] ?? null, coherentMarket: dc !== null, promotedProxy });
   const dcMarket = marketBase({
     pick: dcLabel(dcSide),
     modelProb: dcProbabilities[dcSide],
@@ -675,12 +693,13 @@ function gameDto(match: EplShadowSlateMatch, sharp: EplSharpFixtureMarket, captu
     gradeDecision: dcGrade,
     trailKey: `${match.id}:double_chance:${dcSide}`,
     capturedAt,
+    gradeRelease: authorities.gradeRelease,
     keyStats: [
       { label: "Double Chance coverage", awayValue: `${match.awayTeam.abbreviation}/Draw ${Math.round(dcProbabilities.away_or_draw * 100)}%`, homeValue: `${match.homeTeam.abbreviation}/Draw ${Math.round(dcProbabilities.home_or_draw * 100)}%`, source: "computed" },
       { label: "No-draw coverage", awayValue: null, homeValue: `${Math.round(dcProbabilities.home_or_away * 100)}%`, source: "computed" },
       { label: "Draw probability", awayValue: null, homeValue: `${Math.round(p.draw * 100)}%`, source: "computed" },
       { label: "Expected goals", awayValue: publishedGoals.away.toFixed(2), homeValue: publishedGoals.home.toFixed(2), source: "computed" },
-      { label: "Recent form", awayValue: formString(match.evidence.away.recentForm, match.prediction.awayStrengthSource), homeValue: formString(match.evidence.home.recentForm, match.prediction.homeStrengthSource), source: "feature_snapshot" },
+      { label: "Recent form", awayValue: formString(match.evidence.away.recentForm, match.prediction.awayStrengthSource, competitionLabel), homeValue: formString(match.evidence.home.recentForm, match.prediction.homeStrengthSource, competitionLabel), source: "feature_snapshot" },
       { label: "Recent xG created", awayValue: display(match.evidence.away.avgXgFor, 2), homeValue: display(match.evidence.home.avgXgFor, 2), source: "feature_snapshot" },
     ],
     context: {
@@ -716,7 +735,7 @@ function gameDto(match: EplShadowSlateMatch, sharp: EplSharpFixtureMarket, captu
   const totalModelProb = totalSide === "over" ? p.over25 : p.under25;
   const totalEdge = total ? (totalModelProb - total.probabilities[totalSide]!) * 100 : null;
   const meanDirection = publishedTotal >= (total?.line ?? 2.5) ? "over" : "under";
-  const totalGrade = deriveEplPreviewGrade({ market: "total", modelProbability: totalModelProb, edgePp: totalEdge, priceAmerican: total?.prices[totalSide] ?? null, coherentMarket: total !== null, promotedProxy, meanProbabilityDisagree: meanDirection !== totalSide });
+  const totalGrade = authorities.derivePreviewGrade({ market: "total", modelProbability: totalModelProb, edgePp: totalEdge, priceAmerican: total?.prices[totalSide] ?? null, coherentMarket: total !== null, promotedProxy, meanProbabilityDisagree: meanDirection !== totalSide });
   const totalMarket = marketBase({
     pick: totalSide === "over" ? "Over" : "Under",
     modelProb: totalModelProb,
@@ -732,6 +751,7 @@ function gameDto(match: EplShadowSlateMatch, sharp: EplSharpFixtureMarket, captu
     gradeDecision: totalGrade,
     trailKey: `${match.id}:total:${totalSide}:${total?.line ?? 2.5}`,
     capturedAt,
+    gradeRelease: authorities.gradeRelease,
     keyStats: [
       { label: "Projected total goals", awayValue: null, homeValue: publishedTotal.toFixed(2), source: "computed" },
       { label: "Goals for / against · recent", awayValue: `${display(match.evidence.away.avgGoalsFor, 2)} / ${display(match.evidence.away.avgGoalsAgainst, 2)}`, homeValue: `${display(match.evidence.home.avgGoalsFor, 2)} / ${display(match.evidence.home.avgGoalsAgainst, 2)}`, source: "feature_snapshot" },
@@ -775,7 +795,7 @@ function gameDto(match: EplShadowSlateMatch, sharp: EplSharpFixtureMarket, captu
   });
   const bttsModelProb = bttsSide === "yes" ? p.bttsYes : p.bttsNo;
   const bttsEdge = btts ? (bttsModelProb - btts.probabilities[bttsSide]!) * 100 : null;
-  const bttsGrade = deriveEplPreviewGrade({ market: "btts", modelProbability: bttsModelProb, edgePp: bttsEdge, priceAmerican: btts?.prices[bttsSide] ?? null, coherentMarket: btts !== null, promotedProxy });
+  const bttsGrade = authorities.derivePreviewGrade({ market: "btts", modelProbability: bttsModelProb, edgePp: bttsEdge, priceAmerican: btts?.prices[bttsSide] ?? null, coherentMarket: btts !== null, promotedProxy });
   const bttsMarket = marketBase({
     pick: bttsSide === "yes" ? "Yes" : "No",
     modelProb: bttsModelProb,
@@ -789,6 +809,7 @@ function gameDto(match: EplShadowSlateMatch, sharp: EplSharpFixtureMarket, captu
     gradeDecision: bttsGrade,
     trailKey: `${match.id}:btts:${bttsSide}`,
     capturedAt,
+    gradeRelease: authorities.gradeRelease,
     keyStats: [
       { label: "Expected goals by side", awayValue: publishedGoals.away.toFixed(2), homeValue: publishedGoals.home.toFixed(2), source: "computed" },
       { label: "Goals for / against · recent", awayValue: `${display(match.evidence.away.avgGoalsFor, 2)} / ${display(match.evidence.away.avgGoalsAgainst, 2)}`, homeValue: `${display(match.evidence.home.avgGoalsFor, 2)} / ${display(match.evidence.home.avgGoalsAgainst, 2)}`, source: "feature_snapshot" },
@@ -859,6 +880,14 @@ function gameDto(match: EplShadowSlateMatch, sharp: EplSharpFixtureMarket, captu
       away: { startersPosted: match.evidence.away.startersPosted, listedPlayerCount: match.evidence.away.injuryCount, injuries: match.evidence.away.injuries },
       home: { startersPosted: match.evidence.home.startersPosted, listedPlayerCount: match.evidence.home.injuryCount, injuries: match.evidence.home.injuries },
     },
+    soccerModelProvenance: {
+      coherentOutcomeRelease: coherentOutcome.release,
+      source: coherentOutcome.source,
+      evaluatedQuoteRole: "economics_and_grade_only",
+      targetExcludedBooks: coherentOutcome.audit.evaluatedCanonicalBooksExcluded,
+      eligibleAlternativeBooks: coherentOutcome.audit.eligibleAlternativeBooks,
+      regulationTime: true,
+    },
     decisionLine: `${mrGrade.verdict.label}: ${resultPick}${resultSide === forecastSide ? " is also the most likely result" : ` is the value side; ${forecastPick} remains the most likely result`}.`,
     projected: { away: publishedGoals.away, home: publishedGoals.home },
     soccerProjection: {
@@ -909,7 +938,7 @@ function gameDto(match: EplShadowSlateMatch, sharp: EplSharpFixtureMarket, captu
 }
 
 export async function buildEplDailyEdgePreview(slate: EplShadowSlate, options: EplPreviewBuildOptions = {}): Promise<DailyEdgeResponse> {
-  const cacheKey = `${slate.round}:${slate.modelRelease}:${EPL_PREVIEW_GRADE_RELEASE}`;
+  const cacheKey = `${options.cacheNamespace ?? "epl"}:${slate.round}:${slate.modelRelease}:${EPL_PREVIEW_GRADE_RELEASE}`;
   const cached = previewCache.get(cacheKey);
   if (cached && cached.expiresAt > Date.now()) {
     options.captureAllBookPrices?.(cached.allBookPrices);
@@ -917,7 +946,9 @@ export async function buildEplDailyEdgePreview(slate: EplShadowSlate, options: E
     return cached.response;
   }
   const key = process.env.SHARPAPI_KEY;
-  const provider = key ? new SharpApiEplMarketProvider(new SharpApiClient(key)) : null;
+  const provider = options.marketProvider !== undefined
+    ? options.marketProvider
+    : key ? new SharpApiEplMarketProvider(new SharpApiClient(key)) : null;
   const markets: EplSharpFixtureMarket[] = new Array(slate.matches.length);
   let nextIndex = 0;
   async function worker() {
@@ -938,7 +969,7 @@ export async function buildEplDailyEdgePreview(slate: EplShadowSlate, options: E
     const incomplete = markets
       .map((market, index) => ({ index, complete: completeSharpMarkets(market.odds) }))
       .filter(({ complete }) => complete.size < 4)
-      .slice(0, MAX_FIXTURE_RECOVERY_LOADS);
+      .slice(0, options.maxFixtureRecoveryLoads ?? MAX_FIXTURE_RECOVERY_LOADS);
     for (const { index } of incomplete) {
       const match = slate.matches[index];
       const recovery = await provider.loadFixture({ home: match.homeTeam.short_name, away: match.awayTeam.short_name, kickoff: match.kickoff })
@@ -957,23 +988,25 @@ export async function buildEplDailyEdgePreview(slate: EplShadowSlate, options: E
     slateState: "today_draft_only",
     slate_status: "draft",
     last_slate_update_at: slate.generatedAt,
-    games: slate.matches.map((match, index) => gameDto(match, markets[index], capturedAt)),
+    games: slate.matches.map((match, index) => gameDto(match, markets[index], capturedAt, options.authorities, options.competitionLabel ?? "EPL")),
   };
   const allBookPrices = allBookPriceObservations(slate, markets, capturedAt);
   options.captureAllBookPrices?.(allBookPrices);
   let forwardEvidence: EplForwardEvidenceCapture[] = [];
-  try {
-    forwardEvidence = buildEplForwardEvidenceCaptures({
-      slate,
-      response,
-      fixtureMarkets: markets,
-      storedPriceHistory: options.storedPriceHistory ?? [],
-      capturedAt,
-    });
-  } catch {
-    // Evidence capture is observational. A serialization/provenance failure
-    // must never change or suppress the coherent prediction/member response.
-    forwardEvidence = [];
+  if (!options.skipForwardEvidence) {
+    try {
+      forwardEvidence = buildEplForwardEvidenceCaptures({
+        slate,
+        response,
+        fixtureMarkets: markets,
+        storedPriceHistory: options.storedPriceHistory ?? [],
+        capturedAt,
+      });
+    } catch {
+      // Evidence capture is observational. A serialization/provenance failure
+      // must never change or suppress the coherent prediction/member response.
+      forwardEvidence = [];
+    }
   }
   options.captureForwardEvidence?.(forwardEvidence);
   previewCache.set(cacheKey, { expiresAt: Date.now() + 5 * 60_000, response, allBookPrices, forwardEvidence });

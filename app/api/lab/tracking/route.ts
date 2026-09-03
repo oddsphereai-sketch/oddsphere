@@ -144,10 +144,6 @@ type ResultRow = {
   prediction_type: string;
 };
 
-function emptyTally(): WindowTally {
-  return { wins: 0, losses: 0, pushes: 0, total: 0, hitRate: 0 };
-}
-
 function buildTally(rows: ResultRow[]): WindowTally {
   let wins = 0;
   let losses = 0;
@@ -483,7 +479,7 @@ async function loadSoccerGradeRows(): Promise<ResultRow[]> {
     // The historical World Cup row on the public tracker remains a World Cup
     // record. EPL has its own competition-scoped operator view and must never
     // be silently blended into that lifetime number.
-    if (r.snapshot_json?.competition === "english_premier_league") continue;
+    if (r.snapshot_json?.competition === "english_premier_league" || r.snapshot_json?.competition === "uefa_champions_league") continue;
     byId.set(String(r.id), { market: r.market, slate_date: String(r.slate_date).slice(0, 10) });
   }
 

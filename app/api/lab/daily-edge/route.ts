@@ -6589,6 +6589,41 @@ export async function GET(request: Request) {
       ? currentSoccerBoardDate()
       : currentSlateDate(sport);
 
+  // Champions League reads are snapshot-only. Persisted rows stay
+  // sport="soccer" for the shared writer/grader, while this legacy URL key
+  // selects the exact competition-scoped member snapshot.
+  if (sport === "ucl") {
+    const { resolveUclFeatureFlags } = await import("@/lib/services/ucl/uclFeatureFlags");
+    if (!resolveUclFeatureFlags().member) {
+      return Response.json({
+        as_of: new Date().toISOString(), sport: "soccer", date: requestedDate,
+        requested_date: requestedDate, fallback_used: false, slateState: "no_data",
+        slate_status: null, last_slate_update_at: null, games: [],
+      } satisfies DailyEdgeResponse, { headers: DAILY_EDGE_NO_STORE_HEADERS });
+    }
+    const { readCurrentUclMemberSnapshot } = await import("@/lib/services/ucl/uclMemberSnapshotStore");
+    const payload = await readCurrentUclMemberSnapshot();
+    if (payload) {
+      return Response.json(payload, {
+        headers: {
+          "Cache-Control": "private, max-age=30, stale-while-revalidate=300",
+          "X-Oddsphere-Response-Source": "UCL_MEMBER_SNAPSHOT",
+        },
+      });
+    }
+    return Response.json({
+      as_of: new Date().toISOString(),
+      sport: "soccer",
+      date: requestedDate,
+      requested_date: requestedDate,
+      fallback_used: false,
+      slateState: "no_data",
+      slate_status: null,
+      last_slate_update_at: null,
+      games: [],
+    } satisfies DailyEdgeResponse, { headers: DAILY_EDGE_NO_STORE_HEADERS });
+  }
+
   // Member reads must never rebuild the full Daily Edge response. Cron jobs
   // publish an indexed, last-known-good response snapshot after model/market
   // refreshes. The explicit bypass is reserved for those writers.

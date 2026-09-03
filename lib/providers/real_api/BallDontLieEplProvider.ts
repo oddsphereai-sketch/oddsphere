@@ -5,7 +5,7 @@
  * the data boundary for the local EPL shadow model and founder preview.
  */
 
-const EPL_API_BASE_URL = "https://api.balldontlie.io/epl/v2";
+export const BALLDONTLIE_EPL_API_BASE_URL = "https://api.balldontlie.io/epl/v2";
 
 type EplEnvelope<T> = {
   data?: T[];
@@ -37,6 +37,12 @@ export type BdlEplMatch = {
   venue_name: string | null;
   venue_city: string | null;
   round_number: number | null;
+  first_half_home_score?: number | null;
+  first_half_away_score?: number | null;
+  second_half_home_score?: number | null;
+  second_half_away_score?: number | null;
+  venue_latitude?: number | null;
+  venue_longitude?: number | null;
 };
 
 export type BdlEplTeamMatchStats = {
@@ -115,8 +121,8 @@ export type BdlEplOdds = {
 
 type QueryValue = string | number | ReadonlyArray<string | number> | null | undefined;
 
-function buildUrl(path: string, query: Record<string, QueryValue>): string {
-  const url = new URL(`${EPL_API_BASE_URL}${path}`);
+function buildUrl(path: string, query: Record<string, QueryValue>, baseUrl = BALLDONTLIE_EPL_API_BASE_URL): string {
+  const url = new URL(`${baseUrl}${path}`);
   for (const [key, value] of Object.entries(query)) {
     if (value === null || value === undefined) continue;
     if (Array.isArray(value)) {
@@ -133,18 +139,20 @@ export class BallDontLieEplProvider {
   constructor(
     private readonly apiKey: string,
     private readonly fetchImpl: typeof fetch = globalThis.fetch,
+    private readonly apiBaseUrl: string = BALLDONTLIE_EPL_API_BASE_URL,
+    private readonly providerLabel: string = "EPL",
   ) {
     if (!apiKey) throw new Error("BallDontLieEplProvider requires an API key");
   }
 
   private async page<T>(path: string, query: Record<string, QueryValue>): Promise<EplEnvelope<T>> {
-    const response = await this.fetchImpl(buildUrl(path, query), {
+    const response = await this.fetchImpl(buildUrl(path, query, this.apiBaseUrl), {
       headers: { Authorization: this.apiKey, Accept: "application/json" },
       cache: "no-store",
     });
     const body = (await response.json().catch(() => null)) as EplEnvelope<T> | null;
     if (!response.ok) {
-      throw new Error(`BALLDONTLIE EPL ${path} failed with HTTP ${response.status}${body?.error ? `: ${body.error}` : ""}`);
+      throw new Error(`BALLDONTLIE ${this.providerLabel} ${path} failed with HTTP ${response.status}${body?.error ? `: ${body.error}` : ""}`);
     }
     return body ?? { data: [] };
   }
@@ -168,9 +176,10 @@ export class BallDontLieEplProvider {
     return this.all<BdlEplTeam>("/teams", { season });
   }
 
-  listMatches(options: { season?: number; dates?: string[]; teamIds?: number[] }): Promise<BdlEplMatch[]> {
+  listMatches(options: { season?: number; seasons?: number[]; dates?: string[]; teamIds?: number[] }): Promise<BdlEplMatch[]> {
     return this.all<BdlEplMatch>("/matches", {
       season: options.season,
+      "seasons[]": options.seasons,
       "dates[]": options.dates,
       "team_ids[]": options.teamIds,
     });

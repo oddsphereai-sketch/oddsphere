@@ -12,7 +12,8 @@ import {
   type PredictionRecordRow,
 } from "../lib/types/domain/Tracking";
 import { readFileSync } from "node:fs";
-import { dedupePredictionRecordsForTracking, isTrackingRecordEligible, TRACKING_AGGREGATE_CONTRACT_VERSION, trackingDisplaySport } from "../lib/services/trackingAggregateService";
+import { dedupePredictionRecordsForTracking, filterCompleteUclTrackingCohorts, isCurrentUclTrackingRelease, isTrackingRecordEligible, TRACKING_AGGREGATE_CONTRACT_VERSION, trackingDisplaySport } from "../lib/services/trackingAggregateService";
+import { UCL_CALIBRATION_RELEASE, UCL_MODEL_RELEASE } from "../lib/services/ucl/uclModel";
 
 let pass = 0;
 let fail = 0;
@@ -61,12 +62,25 @@ const eplRecord = (locked_at: string | null, id = 1, created_at = "2026-08-19T12
   competition: "english_premier_league",
   snapshot_json: null,
 } as PredictionRecordRow);
-check("EPL aggregate classification contract is versioned", TRACKING_AGGREGATE_CONTRACT_VERSION === "tracking_aggregate_v2_epl_projected_competition_2026_08_20");
+check("tracking aggregate contract is master-gated and requires complete UCL lock manifests", TRACKING_AGGREGATE_CONTRACT_VERSION === "tracking_aggregate_v7_ucl_complete_manifest_every_reader_2026_09_03");
 check("unlocked EPL row is excluded from official tracking", !isTrackingRecordEligible(eplRecord(null)));
 check("locked EPL row is officially tracking-eligible", isTrackingRecordEligible(eplRecord("2026-08-21T18:00:00Z")));
 check("EPL receives a separate member-facing competition key", trackingDisplaySport(eplRecord("2026-08-21T18:00:00Z")) === "epl");
 check("World Cup soccer keeps its own member-facing key", trackingDisplaySport({ ...eplRecord("2026-08-21T18:00:00Z"), competition: "world_cup" }) === "soccer");
 check("full snapshot callers retain EPL classification compatibility", trackingDisplaySport({ ...eplRecord("2026-08-21T18:00:00Z"), competition: null, snapshot_json: { competition: "english_premier_league" } }) === "epl");
+const uclRecord = { ...eplRecord("2026-09-08T16:45:00Z"), held: false, model_version: UCL_MODEL_RELEASE, calibration_version: UCL_CALIBRATION_RELEASE, competition: "uefa_champions_league", snapshot_json: { competition: "uefa_champions_league" } };
+check("UCL receives its own competition display bucket", trackingDisplaySport(uclRecord) === "ucl");
+check("locked UCL records are eligible", isTrackingRecordEligible(uclRecord));
+check("unlocked UCL records are excluded", !isTrackingRecordEligible({ ...uclRecord, locked_at: null }));
+check("held UCL records are excluded from W/L", !isTrackingRecordEligible({ ...uclRecord, held: true }));
+check("current UCL model+calibration release is admitted", isCurrentUclTrackingRelease(uclRecord));
+check("older UCL model release remains outside Current release", !isCurrentUclTrackingRelease({ ...uclRecord, model_version: "ucl_prior" }));
+check("older UCL calibration release remains outside Current release", !isCurrentUclTrackingRelease({ ...uclRecord, calibration_version: "ucl_prior" }));
+const uclMarkets = ["match_result", "double_chance", "total", "btts"] as const;
+const completeUcl = uclMarkets.map((market, index) => ({ ...uclRecord, id: 500 + index, market } as PredictionRecordRow));
+check("partial UCL DB lock cannot enter tracking", filterCompleteUclTrackingCohorts(completeUcl.slice(0, 3)).length === 0);
+check("complete four-market UCL DB lock enters tracking", filterCompleteUclTrackingCohorts(completeUcl).length === 4);
+check("one held manifest row still proves atomic completeness before held-row exclusion", filterCompleteUclTrackingCohorts(completeUcl.map((row) => row.market === "total" ? { ...row, held: true } : row)).length === 4);
 const canonicalEpl = dedupePredictionRecordsForTracking([
   eplRecord(null, 10, "2026-08-19T11:00:00Z"),
   eplRecord("2026-08-21T18:00:00Z", 11, "2026-08-19T12:00:00Z"),

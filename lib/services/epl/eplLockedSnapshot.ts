@@ -30,11 +30,15 @@ export function preserveLockedEplGames(
   previous: DailyEdgeResponse | null,
   incoming: DailyEdgeResponse,
   now: Date = new Date(),
+  options: { boardDate?: string } = {},
 ): DailyEdgeResponse {
   if (!previous) return incoming;
   const previousByExternalId = new Map(previous.games.map((game) => [game.external_id, game]));
   const incomingExternalIds = new Set(incoming.games.map((game) => game.external_id));
-  const currentBoardDate = currentSoccerBoardDate(now);
+  // EPL/WC retain their established 2 a.m. board rollover by default. A
+  // competition with a different published lifecycle may supply the exact
+  // board day frozen when its slate was selected.
+  const currentBoardDate = options.boardDate ?? currentSoccerBoardDate(now);
   const sameDayLockedCarryovers = previous.games.filter((game) => {
     if (incomingExternalIds.has(game.external_id)) return false;
     if (game.lockState !== "locked" || !game.lockedAt || !game.gameStartAt) return false;
