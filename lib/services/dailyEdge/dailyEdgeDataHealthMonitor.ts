@@ -587,10 +587,6 @@ function modelLayerVersionsFromSnapshot(snapshot: unknown): Record<string, unkno
   return snapshotRecord(memberFacing, "model_layer_versions");
 }
 
-function modelLayerFindingSeverity(row: PredictionRecordContractRow): DailyEdgeDataHealthSeverity {
-  return row.no_bet === true && row.best_angle !== true ? "medium" : "high";
-}
-
 const MLB_IMMUTABLE_MODEL_LAYER_FIELDS = [
   "schema_version",
   "projection_core",
@@ -613,12 +609,101 @@ type MlbComparableModelLayerField =
   | (typeof MLB_IMMUTABLE_MODEL_LAYER_FIELDS)[number]
   | (typeof MLB_CURRENT_POLICY_LAYER_FIELDS)[number];
 
+type MlbModelLayerMismatch = {
+  field: MlbComparableModelLayerField;
+  expected: unknown;
+  actual: unknown;
+};
+
+export type MlbModelLayerStampAssessment = {
+  classification: "current_contract" | "locked_historical_release" | "incoherent";
+  mismatches: MlbModelLayerMismatch[];
+};
+
 export function mlbModelLayerFieldsToCompare(
   locked: boolean,
 ): readonly MlbComparableModelLayerField[] {
   return locked
     ? MLB_IMMUTABLE_MODEL_LAYER_FIELDS
     : [...MLB_IMMUTABLE_MODEL_LAYER_FIELDS, ...MLB_CURRENT_POLICY_LAYER_FIELDS];
+}
+
+function expectedMlbModelLayerStamp(market: MlbModelLayerMarket): Record<MlbComparableModelLayerField, unknown> {
+  return {
+    schema_version: MLB_MODEL_LAYER_VERSION_SCHEMA,
+    projection_core: MLB_MODEL_LAYER_VERSION_IDS.projection_core,
+    score_distribution: MLB_MODEL_LAYER_VERSION_IDS.score_distribution,
+    moneyline_probability_head: MLB_MODEL_LAYER_VERSION_IDS.moneyline_probability_head,
+    total_probability_head: MLB_MODEL_LAYER_VERSION_IDS.total_probability_head,
+    first_inning_probability_head: MLB_MODEL_LAYER_VERSION_IDS.first_inning_probability_head,
+    market_calibration_policy: MLB_MODEL_LAYER_VERSION_IDS.market_calibration_policy,
+    grade_policy: MLB_MODEL_LAYER_VERSION_IDS.grade_policy,
+    correction_policy: MLB_MODEL_LAYER_VERSION_IDS.correction_policy,
+    tracking_contract: MLB_MODEL_LAYER_VERSION_IDS.tracking_contract,
+    market,
+    active_probability_head: expectedMlbActiveProbabilityHead(market),
+  };
+}
+
+function nonEmptyModelLayerId(value: unknown): string | null {
+  return typeof value === "string" && value.trim().length > 0 ? value : null;
+}
+
+/**
+ * Locked rows are immutable release evidence. A current-schema lock can be
+ * checked against the current immutable contract, but an older schema cannot:
+ * the runtime intentionally does not carry a mutable lookup table that
+ * redefines every historical release. Older locks are therefore accepted only
+ * when their stamped identity is complete and internally coherent.
+ */
+export function assessMlbModelLayerStamp(args: {
+  actual: Record<string, unknown>;
+  market: MlbModelLayerMarket;
+  locked: boolean;
+}): MlbModelLayerStampAssessment {
+  const expected = expectedMlbModelLayerStamp(args.market);
+  const actualSchema = nonEmptyModelLayerId(args.actual.schema_version);
+  const historicalLocked = args.locked && actualSchema !== null && actualSchema !== MLB_MODEL_LAYER_VERSION_SCHEMA;
+
+  if (!historicalLocked) {
+    const mismatches = mlbModelLayerFieldsToCompare(args.locked)
+      .map((field) => ({ field, expected: expected[field], actual: args.actual[field] }))
+      .filter((mismatch) => mismatch.actual !== mismatch.expected);
+    return {
+      classification: mismatches.length === 0 ? "current_contract" : "incoherent",
+      mismatches,
+    };
+  }
+
+  const mismatches: MlbModelLayerMismatch[] = [];
+  for (const field of MLB_IMMUTABLE_MODEL_LAYER_FIELDS) {
+    if (nonEmptyModelLayerId(args.actual[field]) === null) {
+      mismatches.push({
+        field,
+        expected: "non-empty immutable historical release identifier",
+        actual: args.actual[field],
+      });
+    }
+  }
+  if (args.actual.market !== args.market) {
+    mismatches.push({ field: "market", expected: args.market, actual: args.actual.market });
+  }
+  const marketProbabilityHeadField = args.market === "moneyline"
+    ? "moneyline_probability_head"
+    : args.market === "total"
+      ? "total_probability_head"
+      : "first_inning_probability_head";
+  if (args.actual.active_probability_head !== args.actual[marketProbabilityHeadField]) {
+    mismatches.push({
+      field: "active_probability_head",
+      expected: args.actual[marketProbabilityHeadField],
+      actual: args.actual.active_probability_head,
+    });
+  }
+  return {
+    classification: mismatches.length === 0 ? "locked_historical_release" : "incoherent",
+    mismatches,
+  };
 }
 
 function pushMlbModelLayerContractFinding(
@@ -631,21 +716,9 @@ function pushMlbModelLayerContractFinding(
   if (expectedMarket === null) return;
 
   const actual = modelLayerVersionsFromSnapshot(row.snapshot_json);
-  const severity = modelLayerFindingSeverity(row);
   const expected = {
     publicName: MLB_MODEL_LAYER_PUBLIC_NAME,
-    schema_version: MLB_MODEL_LAYER_VERSION_SCHEMA,
-    projection_core: MLB_MODEL_LAYER_VERSION_IDS.projection_core,
-    score_distribution: MLB_MODEL_LAYER_VERSION_IDS.score_distribution,
-    moneyline_probability_head: MLB_MODEL_LAYER_VERSION_IDS.moneyline_probability_head,
-    total_probability_head: MLB_MODEL_LAYER_VERSION_IDS.total_probability_head,
-    first_inning_probability_head: MLB_MODEL_LAYER_VERSION_IDS.first_inning_probability_head,
-    market_calibration_policy: MLB_MODEL_LAYER_VERSION_IDS.market_calibration_policy,
-    grade_policy: MLB_MODEL_LAYER_VERSION_IDS.grade_policy,
-    correction_policy: MLB_MODEL_LAYER_VERSION_IDS.correction_policy,
-    tracking_contract: MLB_MODEL_LAYER_VERSION_IDS.tracking_contract,
-    market: expectedMarket,
-    active_probability_head: expectedMlbActiveProbabilityHead(expectedMarket),
+    ...expectedMlbModelLayerStamp(expectedMarket),
   };
 
   if (actual === null) {
@@ -653,7 +726,7 @@ function pushMlbModelLayerContractFinding(
       findings,
       row,
       "mlb_model_layer_stamp_missing",
-      severity,
+      "high",
       "MLB prediction row is not stamped with the active MLB Market-Aware Champion v2 model layer contract.",
       {
         expected,
@@ -663,30 +736,41 @@ function pushMlbModelLayerContractFinding(
     return;
   }
 
-  // Locked rows are immutable release evidence. Their grade/correction/tracking
-  // policy stamps must remain the policy that actually produced the member
-  // pick, so only model identity is compared to the active contract. Unlocked
-  // rows must carry the complete current policy contract.
-  const fieldsToCompare = mlbModelLayerFieldsToCompare(row.locked_at !== null);
-  const mismatches = fieldsToCompare
-    .map((field) => ({
-      field,
-      expected: expected[field],
-      actual: actual[field],
-    }))
-    .filter((mismatch) => mismatch.actual !== mismatch.expected);
-
-  if (mismatches.length === 0) return;
+  const assessment = assessMlbModelLayerStamp({
+    actual,
+    market: expectedMarket,
+    locked: row.locked_at !== null,
+  });
+  if (assessment.classification === "current_contract") return;
+  if (assessment.classification === "locked_historical_release") {
+    pushPredictionRecordFinding(
+      findings,
+      row,
+      "mlb_model_layer_locked_historical_release",
+      "info",
+      "Locked MLB prediction preserves a complete, internally coherent historical model-layer release.",
+      {
+        stampedSchemaVersion: actual.schema_version,
+        currentSchemaVersion: MLB_MODEL_LAYER_VERSION_SCHEMA,
+        validationMode: "immutable_historical_stamp_structural_identity",
+        actualRuntimeEnv: recordAt(actual, "runtime_env"),
+        effectiveDate: MLB_MODEL_LAYER_CONTRACT_EFFECTIVE_DATE,
+      },
+    );
+    return;
+  }
 
   pushPredictionRecordFinding(
     findings,
     row,
-    "mlb_model_layer_stamp_mismatch",
-    severity,
-    "MLB prediction row is stamped with a model layer contract that does not match MLB Market-Aware Champion v2.",
+    "mlb_model_layer_stamp_incoherent",
+    "high",
+    row.locked_at === null
+      ? "Unlocked MLB prediction is not stamped with the complete current MLB Market-Aware Champion v2 contract."
+      : "Locked MLB prediction has an incomplete or internally incoherent model-layer release stamp.",
     {
       publicName: MLB_MODEL_LAYER_PUBLIC_NAME,
-      mismatches,
+      mismatches: assessment.mismatches,
       actualRuntimeEnv: recordAt(actual, "runtime_env"),
       effectiveDate: MLB_MODEL_LAYER_CONTRACT_EFFECTIVE_DATE,
     },
