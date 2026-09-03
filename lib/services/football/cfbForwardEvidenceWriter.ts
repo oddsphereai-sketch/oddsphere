@@ -11,6 +11,7 @@ import {
   CFB_FORWARD_EVIDENCE_COLLECTOR_RELEASE,
   CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE,
   CFB_FORWARD_MEMBER_RELEASE,
+  hashCfbForwardEvidencePayload,
   buildCfbForwardMarketOutlooks,
   determineCfbForwardCollectionNeed,
   planCfbForwardEvidenceCaptures,
@@ -49,9 +50,14 @@ import {
   CFB_PUBLIC_SCORE_DIRECTION_TOLERANCE_POINTS,
 } from "./footballCrossMarketCoherence";
 import { buildCfbForwardContextCapture } from "./cfbForwardEvidenceCapture";
+import { buildCfbMemberFixture } from "./cfbMemberFixture";
+import {
+  buildCfbForwardMemberSnapshot,
+  writeCfbForwardMemberSnapshot,
+} from "./cfbForwardMemberSnapshotStore";
 
 export const CFB_FORWARD_WRITER_RELEASE =
-  "cfb_forward_evidence_writer_2026_09_03_r41_narrow_mean_median_publication" as const;
+  "cfb_forward_evidence_writer_2026_09_03_r42_fast_member_snapshot" as const;
 export const CFB_FORWARD_MAX_QB_TEAMS_PER_RUN = 24 as const;
 export const CFB_FORWARD_RESULTS_BATCH_SIZE = 100 as const;
 export const CFB_FORWARD_MAX_PRIOR_GAME_IDS = 1200 as const;
@@ -73,6 +79,10 @@ export type CfbForwardWriterResult = {
   apiCallsMaximum: number;
   healthHolds: string[];
   publicationAttempted: boolean;
+  memberSnapshotAttempted: boolean;
+  memberSnapshotUpdated: boolean;
+  memberSnapshotKey: string | null;
+  memberSnapshotError: string | null;
   trackingAttempted: boolean;
   trackingRecordsProposed: number;
   trackingRecordsInserted: number;
@@ -98,7 +108,8 @@ export async function runCfbForwardEvidenceWriter(args: {
   const need = releaseRefreshNeed(existing, args.now) ?? ordinaryNeed;
   if (!need.collect) {
     const tracking = await writeOfficialTracking({ client: args.client, payloads: currentT60Payloads(existing), apply: args.apply });
-    return emptyResult(need.reason, tracking);
+    const memberSnapshot = await refreshCompactMemberSnapshot({ client: args.client, existing: allExisting, payloads: [], season: args.season, now: args.now, apply: args.apply });
+    return emptyResult(need.reason, tracking, memberSnapshot);
   }
   const slate = await fetchBalldontlieNcaafSlate({ season: args.season, startDate: window.providerQueryStartDate, endDate: window.providerQueryEndDate, apiKey: args.balldontlieApiKey });
   const games = selectCfbModelCoveredWeeklyGames({ games: slate.games, existing, now: args.now, window });
@@ -109,7 +120,10 @@ export async function runCfbForwardEvidenceWriter(args: {
     capturedAt: args.now,
     ...(need.reason === "release_refresh_due" ? { unlockedCadenceMinutesOverride: 0 } : {}),
   });
-  if (plans.length === 0) return emptyResult("capture_plan_empty", { trackingAttempted: false, trackingRecordsProposed: 0, trackingRecordsInserted: 0, trackingRecordsExisting: 0 });
+  if (plans.length === 0) {
+    const memberSnapshot = await refreshCompactMemberSnapshot({ client: args.client, existing: allExisting, payloads: [], season: args.season, now: args.now, apply: args.apply });
+    return emptyResult("capture_plan_empty", { trackingAttempted: false, trackingRecordsProposed: 0, trackingRecordsInserted: 0, trackingRecordsExisting: 0 }, memberSnapshot);
+  }
   const playbook = new PlaybookClient(args.playbookApiKey);
   const priorResults = await fetchPriorCompletedGames({ rows: allExisting, before: window.boardStartDate, apiKey: args.balldontlieApiKey });
   const teams = [...new Map(games.flatMap((game) => [[game.away.id, game.away] as const, [game.home.id, game.home] as const])).values()];
@@ -395,6 +409,7 @@ export async function runCfbForwardEvidenceWriter(args: {
   });
   const write = await appendCfbForwardEvidence({ client: args.client, runId: args.runId, payloads, apply: args.apply });
   const tracking = await writeOfficialTracking({ client: args.client, payloads: payloads.filter((payload) => payload.stage === "t60"), apply: args.apply });
+  const memberSnapshot = await refreshCompactMemberSnapshot({ client: args.client, existing: allExisting, payloads, season: args.season, now: args.now, apply: args.apply });
   const decisions = payloads.flatMap((payload) => payload.decisions.evaluatedBets);
   return {
     writerRelease: CFB_FORWARD_WRITER_RELEASE,
@@ -413,6 +428,7 @@ export async function runCfbForwardEvidenceWriter(args: {
     apiCallsMaximum: slate.providerRequests + priorResults.providerRequests + quarterbacks.providerRequests + sharpFallback.requests + weatherRequests + 4,
     healthHolds: [...new Set(payloads.flatMap((payload) => payload.coverage.healthHolds))],
     publicationAttempted: true,
+    ...memberSnapshot,
     ...tracking,
   };
 }
@@ -657,6 +673,40 @@ export function isValidImmutableT60(payload: CfbForwardEvidencePayload): boolean
 }
 
 type TrackingResult = { trackingAttempted: boolean; trackingRecordsProposed: number; trackingRecordsInserted: number; trackingRecordsExisting: number };
+type MemberSnapshotResult = Pick<CfbForwardWriterResult, "memberSnapshotAttempted" | "memberSnapshotUpdated" | "memberSnapshotKey" | "memberSnapshotError">;
+
+async function refreshCompactMemberSnapshot(args: {
+  client: SupabaseClient;
+  existing: CfbForwardStoredEvidence[];
+  payloads: CfbForwardEvidencePayload[];
+  season: number;
+  now: string;
+  apply: boolean;
+}): Promise<MemberSnapshotResult> {
+  if (!args.apply) return { memberSnapshotAttempted: false, memberSnapshotUpdated: false, memberSnapshotKey: null, memberSnapshotError: null };
+  const rows = [...args.existing, ...args.payloads.map(storedEvidenceForPayload)];
+  if (rows.length === 0) return { memberSnapshotAttempted: false, memberSnapshotUpdated: false, memberSnapshotKey: null, memberSnapshotError: null };
+  try {
+    const fixture = buildCfbMemberFixture(rows, args.now);
+    const snapshot = buildCfbForwardMemberSnapshot({ fixture, season: args.season, publishedAt: args.now });
+    const write = await writeCfbForwardMemberSnapshot({ client: args.client, snapshot });
+    return { memberSnapshotAttempted: true, memberSnapshotUpdated: write.ok, memberSnapshotKey: write.snapshotKey, memberSnapshotError: write.ok ? null : write.error };
+  } catch (error) {
+    return { memberSnapshotAttempted: true, memberSnapshotUpdated: false, memberSnapshotKey: null, memberSnapshotError: error instanceof Error ? error.message : String(error) };
+  }
+}
+
+function storedEvidenceForPayload(payload: CfbForwardEvidencePayload): CfbForwardStoredEvidence {
+  return {
+    id: `pending:${payload.runId}:${payload.game.providerGameId}:${payload.stage}`,
+    providerGameId: payload.game.providerGameId,
+    stage: payload.stage,
+    capturedAt: payload.capturedAt,
+    gameStartAt: payload.game.scheduledStart,
+    payloadSha256: hashCfbForwardEvidencePayload(payload),
+    payload,
+  };
+}
 
 async function writeOfficialTracking(args: { client: SupabaseClient; payloads: CfbForwardEvidencePayload[]; apply: boolean }): Promise<TrackingResult> {
   const eligible = args.payloads.filter((payload) =>
@@ -709,6 +759,6 @@ async function upsertGames(client: SupabaseClient, payloads: CfbForwardEvidenceP
 
 function normalizeStatus(value: string): string { const normalized = value.toLowerCase(); return normalized === "final" ? "final" : normalized === "in_progress" ? "in_progress" : normalized === "postponed" || normalized === "canceled" ? normalized : "scheduled"; }
 
-function emptyResult(reason: string, tracking: TrackingResult): CfbForwardWriterResult {
-  return { writerRelease: CFB_FORWARD_WRITER_RELEASE, collected: false, collectionReason: reason, proposed: 0, inserted: 0, games: 0, stages: { opening: 0, unlocked: 0, t60: 0 }, publishedEvaluations: 0, publishedBestAngles: 0, publishedLeans: 0, publishedWatchlists: 0, publishedNoPlays: 0, heldMarkets: 0, apiCallsMaximum: 0, healthHolds: [], publicationAttempted: false, ...tracking };
+function emptyResult(reason: string, tracking: TrackingResult, memberSnapshot: MemberSnapshotResult): CfbForwardWriterResult {
+  return { writerRelease: CFB_FORWARD_WRITER_RELEASE, collected: false, collectionReason: reason, proposed: 0, inserted: 0, games: 0, stages: { opening: 0, unlocked: 0, t60: 0 }, publishedEvaluations: 0, publishedBestAngles: 0, publishedLeans: 0, publishedWatchlists: 0, publishedNoPlays: 0, heldMarkets: 0, apiCallsMaximum: 0, healthHolds: [], publicationAttempted: false, ...memberSnapshot, ...tracking };
 }

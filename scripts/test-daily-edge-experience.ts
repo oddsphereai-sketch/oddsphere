@@ -779,6 +779,13 @@ check(
     liveRefreshSource.includes("window.clearInterval(interval)"),
 );
 check(
+  "periodic refresh preserves the mounted last-known-good board while a request is pending or rejects",
+  liveRefreshSource.includes("router.refresh()") &&
+    !liveRefreshSource.includes("setSnapshot(") &&
+    !liveRefreshSource.includes("window.location.reload") &&
+    !liveRefreshSource.includes("window.location.replace"),
+);
+check(
   "member Daily Edge is request-rendered so refreshes cannot reuse a deployment-time slate",
   dailyEdgeRouteSource.includes('import { connection } from "next/server"') &&
     dailyEdgeRouteSource.includes("await connection()") &&
@@ -1261,9 +1268,17 @@ check(
   candidateSource.includes("function CompactPointLineMovement") &&
     candidateSource.includes('const isSpread = !isTotal && market.line !== null') &&
     candidateSource.includes('/(?:^|\\s)[+-]\\d+(?:\\.\\d+)?(?:\\s|$)/.test(market.pick ?? "")') &&
-    candidateSource.includes('const marketLabel = isTotal ? "Total" : "Spread"') &&
+    candidateSource.includes('const marketLabel = isTotal ? "Total" : `${spreadSide} spread`') &&
     candidateSource.indexOf("<CompactOddsMovement market={market}") < candidateSource.indexOf("<CompactPointLineMovement market={market}") &&
     candidateSource.indexOf("<CompactPointLineMovement market={market}") < candidateSource.indexOf("<DefaultSplitSummary market={market}"),
+);
+check(
+  "NFL and CFB render explicit same-book Spread and Total line movement without a synthetic claim",
+  candidateSource.includes("{showSplits ? <CompactPointLineMovement market={market} /> : null}") &&
+    candidateSource.includes('const marketLabel = isTotal ? "Total" : `${spreadSide} spread`') &&
+    candidateSource.includes("A coherent same-book opener is unavailable. The current line is shown without a movement claim.") &&
+    candidateSource.includes('current < first ? `${spreadSide} strengthened` : `${spreadSide} eased`') &&
+    !candidateSource.includes("showSplits && !football ? <CompactPointLineMovement"),
 );
 const wnbaSpreadPointLinePulse = resolvePointLineMarketPulseMovement({
   pick: "POR +4.5",
