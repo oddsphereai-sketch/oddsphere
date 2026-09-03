@@ -16,7 +16,7 @@ import {
   FI_LEAGUE_AVG_TOP3_OPS,
 } from "../lib/automodel/mlbFirstInningFeatureBuilder";
 import { computeFiMarketBaseline } from "../lib/automodel/mlbFirstInningMarketBaseline";
-import { noVigPair } from "../lib/automodel/marketPrior";
+import { americanToImpliedProb, noVigPair } from "../lib/automodel/marketPrior";
 import type {
   GameSnapshot,
   StarterSnapshot,
@@ -380,30 +380,30 @@ async function main() {
       { market_type: "first_inning_total", sportsbook: "pinnacle", side: "under", line_value: 0.5, odds_american: 130, fetched_at: null },
     ]);
     check("over -150 → YRFI no-vig > 0.55",
-      yrfiHeavy.yrfi_no_vig_prob !== null && yrfiHeavy.yrfi_no_vig_prob > 0.55,
-      `yrfi=${yrfiHeavy.yrfi_no_vig_prob}`);
+      yrfiHeavy.evaluation_yrfi_no_vig_prob !== null && yrfiHeavy.evaluation_yrfi_no_vig_prob > 0.55,
+      `yrfi=${yrfiHeavy.evaluation_yrfi_no_vig_prob}`);
     check("NRFI no-vig = 1 - YRFI no-vig",
-      yrfiHeavy.nrfi_no_vig_prob !== null && yrfiHeavy.yrfi_no_vig_prob !== null &&
-      near(yrfiHeavy.nrfi_no_vig_prob + yrfiHeavy.yrfi_no_vig_prob, 1.0, 0.001));
+      yrfiHeavy.evaluation_nrfi_no_vig_prob !== null && yrfiHeavy.evaluation_yrfi_no_vig_prob !== null &&
+      near(yrfiHeavy.evaluation_nrfi_no_vig_prob + yrfiHeavy.evaluation_yrfi_no_vig_prob, 1.0, 0.001));
     // NRFI heavy line: over +130 / under -150
     const nrfiHeavy = computeFiMarketBaseline([
       { market_type: "first_inning_total", sportsbook: "pinnacle", side: "over", line_value: 0.5, odds_american: 130, fetched_at: null },
       { market_type: "first_inning_total", sportsbook: "pinnacle", side: "under", line_value: 0.5, odds_american: -150, fetched_at: null },
     ]);
     check("under -150 → NRFI no-vig > 0.55",
-      nrfiHeavy.nrfi_no_vig_prob !== null && nrfiHeavy.nrfi_no_vig_prob > 0.55,
-      `nrfi=${nrfiHeavy.nrfi_no_vig_prob}`);
+      nrfiHeavy.evaluation_nrfi_no_vig_prob !== null && nrfiHeavy.evaluation_nrfi_no_vig_prob > 0.55,
+      `nrfi=${nrfiHeavy.evaluation_nrfi_no_vig_prob}`);
   }
 
   // ──────────────────────────────────────────────────────────────────
   section("Layer 2 — market baseline");
   {
     const balanced = computeFiMarketBaseline(buildFiLines(110, -130));
-    check("balanced YRFI/NRFI line returns no-vig probs that sum to 1",
-      balanced.yrfi_no_vig_prob !== null && balanced.nrfi_no_vig_prob !== null &&
-      near(balanced.yrfi_no_vig_prob + balanced.nrfi_no_vig_prob, 1.0, 0.001));
+    check("singleton preserves exact evaluation no-vig pair for economics",
+      balanced.evaluation_yrfi_no_vig_prob !== null && balanced.evaluation_nrfi_no_vig_prob !== null &&
+      near(balanced.evaluation_yrfi_no_vig_prob + balanced.evaluation_nrfi_no_vig_prob, 1.0, 0.001));
     check("data_quality=ok", balanced.data_quality === "ok");
-    check("reason includes named-book consensus", balanced.reason.startsWith("fi_named_book_consensus"));
+    check("reason identifies target-excluded consensus", balanced.reason.startsWith("fi_target_excluded_consensus"));
   }
   {
     const empty = computeFiMarketBaseline([]);
@@ -432,14 +432,12 @@ async function main() {
       { market_type: "first_inning_total", sportsbook: "pinnacle", side: "over", line_value: 0.5, odds_american: -110, fetched_at: asOf },
     ];
     const baseline = computeFiMarketBaseline(rows, asOf);
-    const expectedRetailMedian = [
-      noVigPair(-105, -115).away,
-      noVigPair(120, -145).away,
-      noVigPair(140, -165).away,
-    ].sort((left, right) => left - right)[1]!;
+    const expectedRetailMedian = (
+      noVigPair(120, -145).away + noVigPair(140, -165).away
+    ) / 2;
     check("retail-only complete pairs are projection-eligible without a sharp pair",
-      baseline.data_quality === "ok" && baseline.projection_book_count === 3);
-    check("all complete retail books contribute to the FI probability consensus",
+      baseline.data_quality === "ok" && baseline.projection_book_count === 2);
+    check("only independently priced retail books contribute to the FI probability consensus",
       near(baseline.nrfi_no_vig_prob ?? 0, expectedRetailMedian, 0.000001));
     check("partial sharp inventory is ignored rather than treated as a hold",
       !baseline.projection_sportsbooks.includes("pinnacle"));
@@ -460,15 +458,14 @@ async function main() {
     const selectedPosterior = model.fiV2Audit.fi_pick === "NRFI"
       ? model.fiV2Audit.posterior_p_nrfi
       : 1 - model.fiV2Audit.posterior_p_nrfi;
-    const selectedEvaluationFair = model.fiV2Audit.fi_pick === "NRFI"
-      ? model.fiV2Audit.market_evaluation_nrfi_no_vig
-      : model.fiV2Audit.market_evaluation_yrfi_no_vig;
     check("consensus enters the authoritative posterior before side classification",
-      model.fiV2Audit.market_projection_book_count === 3 &&
+      model.fiV2Audit.market_projection_book_count === 2 &&
       near(model.fiV2Audit.market_nrfi_no_vig ?? 0, expectedRetailMedian, 0.000001));
-    check("FI grade edge remains attached to the exact evaluation pair",
-      selectedEvaluationFair !== null && model.fiV2Audit.fi_edge_pct !== null &&
-      near(model.fiV2Audit.fi_edge_pct, (selectedPosterior - selectedEvaluationFair) * 100, 0.000001));
+    const selectedExactOdds = model.fiV2Audit.fi_pick === "NRFI" ? baseline.nrfi_odds_american : baseline.yrfi_odds_american;
+    const selectedExactBreakEven = selectedExactOdds === null ? null : americanToImpliedProb(selectedExactOdds);
+    check("FI grade edge uses the exact offered evaluation price, not no-vig fair probability",
+      selectedExactBreakEven !== null && model.fiV2Audit.fi_edge_pct !== null &&
+      near(model.fiV2Audit.fi_edge_pct, (selectedPosterior - selectedExactBreakEven) * 100, 0.000001));
 
     const v5ExpectedPosterior = FI_TEST.selectTrustIndependent({
       tier: projectFiIndependent(buildSnapshot()).data_quality_tier,
@@ -480,7 +477,7 @@ async function main() {
         missingCount: projectFiIndependent(buildSnapshot()).feature_audit.missing_count,
         hasMarket: true,
       })) * (baseline.nrfi_no_vig_prob ?? 0);
-    check("target-excluded multi-book v5 posterior remains byte-for-byte on incumbent math",
+    check("target-excluded multi-book posterior uses only independent book context",
       near(model.fiV2Audit.posterior_p_nrfi, v5ExpectedPosterior, 0.000000000001) &&
       model.fiV2Audit.trust_independent === 0.25 &&
       !model.fiV2Audit.integrity_notes.some((note) => note.includes("Evaluation-only")));
@@ -496,9 +493,9 @@ async function main() {
     ];
     const baseline = computeFiMarketBaseline(oneRetailPair, asOf);
     check("one complete supported named book is sufficient",
-      baseline.data_quality === "ok" && baseline.projection_book_count === 1);
+      baseline.data_quality === "ok" && baseline.projection_book_count === 0);
     check("synthetic consensus never masquerades as price or ticket/handle evidence",
-      baseline.projection_sportsbooks.length === 1 && baseline.projection_sportsbooks[0] === "betrivers");
+      baseline.projection_sportsbooks.length === 0);
     check("singleton retail capture is price-identifiable but has no target-excluded alternative",
       baseline.market_evidence_books.length === 1 &&
       baseline.market_evidence_books[0]?.source_class === "retail" &&
@@ -519,6 +516,23 @@ async function main() {
       candidate.fiV2Audit.market_evaluation_sportsbook === baseline.evaluation_sportsbook &&
       candidate.fiV2Audit.market_evaluation_nrfi_no_vig === baseline.evaluation_nrfi_no_vig_prob &&
       candidate.fiV2Audit.market_evaluation_yrfi_no_vig === baseline.evaluation_yrfi_no_vig_prob);
+    const repriced = runMlbFirstInningModelV2(snap, oneRetailPair.map((row) => ({
+      ...row,
+      odds_american: row.side === "over" ? -160 : 135,
+    })), asOf);
+    check("evaluation price changes grade economics but cannot change singleton forecast authority",
+      near(repriced.fiV2Audit.posterior_p_nrfi, candidate.fiV2Audit.posterior_p_nrfi, 0.000000000001) &&
+      near(repriced.fiV2Audit.posterior_expected_first_inning_runs, candidate.fiV2Audit.posterior_expected_first_inning_runs, 0.000000000001) &&
+      repriced.fiV2Audit.fi_pick === candidate.fiV2Audit.fi_pick &&
+      repriced.fiV2Audit.market_evaluation_nrfi_no_vig !== candidate.fiV2Audit.market_evaluation_nrfi_no_vig);
+    const prohibitivelyPriced = runMlbFirstInningModelV2(snap, oneRetailPair.map((row) => ({
+      ...row,
+      odds_american: row.side === "under" ? -1000 : 500,
+    })), asOf);
+    check("negative exact-price EV makes a directional FI forecast No Play without changing its side",
+      prohibitivelyPriced.fiV2Audit.fi_pick === candidate.fiV2Audit.fi_pick &&
+      prohibitivelyPriced.fiV2Audit.fi_play_grade === "no_bet" &&
+      prohibitivelyPriced.fiV2Audit.fi_edge_pct !== null && prohibitivelyPriced.fiV2Audit.fi_edge_pct < 0);
   }
   {
     const asOf = "2026-09-01T17:00:00.000Z";
@@ -635,8 +649,8 @@ async function main() {
       noMovement.data_quality === "ok" && noMovement.movement_adjustment_pp === 0 &&
       near(noMovement.nrfi_no_vig_prob ?? 0, noMovement.current_nrfi_no_vig_prob ?? 1, 0.000001));
     check("movement uses only same-book opening/current pairs",
-      withMovement.movement_book_count === 2 &&
-      withMovement.movement_sportsbooks.join(",") === "ballybet,fanduel");
+      withMovement.movement_book_count === 1 &&
+      withMovement.movement_sportsbooks.join(",") === "ballybet");
     check("NRFI-supportive movement contributes upstream in the same direction",
       (withMovement.movement_nrfi_pp ?? 0) > 0 &&
       (withMovement.nrfi_no_vig_prob ?? 0) > (withMovement.current_nrfi_no_vig_prob ?? 1));
@@ -795,7 +809,7 @@ async function main() {
     } else if (out.fiV2Audit.fi_pick === "YRFI") {
       check("legacy predicted_nrfi=false on YRFI pick", out.predicted_nrfi === false);
     } else {
-      check("legacy predicted_nrfi=true on Toss-Up (lean-NRFI collapse)", out.predicted_nrfi === true);
+      check("Toss-Up has no hidden legacy directional side", out.predicted_nrfi === null);
     }
   }
   {
@@ -844,50 +858,9 @@ async function main() {
     // selectTrustIndependent direct
     check("high + market → 0.25", FI_TEST.selectTrustIndependent({ tier: "high", missingCount: 0, hasMarket: true }) === 0.25);
     check("market-backed Lean floor = nonnegative no-vig edge", FI_TEST.FI_LEAN_MIN_EDGE_PCT === 0);
-    check("r64 marginal NRFI price gate is capped below 54%", FI_TEST.FI_MARGINAL_NRFI_PRICE_GATE_MAX === 0.54);
     check("medium + market → 0.45", FI_TEST.selectTrustIndependent({ tier: "medium", missingCount: 2, hasMarket: true }) === 0.45);
     check("no market → 1.0", FI_TEST.selectTrustIndependent({ tier: "high", missingCount: 0, hasMarket: false }) === 1.0);
     check("severe missing → 0.05", FI_TEST.selectTrustIndependent({ tier: "high", missingCount: 7, hasMarket: true }) === 0.05);
-  }
-  {
-    const demoted = FI_TEST.applyFiMarginalPricePolicy({
-      pick: "NRFI", pickReason: "fi_p_nrfi_above_threshold", posteriorNrfi: 0.535,
-      nrfiOdds: -120,
-    });
-    check("r64 marginal NRFI below offered break-even becomes Toss-Up",
-      demoted.pick === "Toss-Up" && demoted.pickReason === "fi_toss_up_marginal_nrfi_below_offered_break_even");
-    const retained = FI_TEST.applyFiMarginalPricePolicy({
-      pick: "NRFI", pickReason: "fi_p_nrfi_above_threshold", posteriorNrfi: 0.535,
-      nrfiOdds: -105,
-    });
-    check("r64 marginal NRFI that clears offered break-even remains NRFI", retained.pick === "NRFI");
-    const nrfiPromotion = FI_TEST.applyFiMarginalPricePolicy({
-      pick: "Toss-Up", pickReason: "fi_toss_up_probability", posteriorNrfi: 0.515,
-      nrfiOdds: 105,
-    });
-    check("r64 paired route promotes a price-qualified Toss-Up to NRFI",
-      nrfiPromotion.pick === "NRFI" && nrfiPromotion.pickReason === "fi_marginal_nrfi_clears_offered_break_even");
-    const yrfiPromotion = FI_TEST.applyFiMarginalPricePolicy({
-      pick: "Toss-Up", pickReason: "fi_toss_up_probability", posteriorNrfi: 0.49,
-      nrfiOdds: -130,
-    });
-    check("r64 sparse YRFI exception fails closed to the incumbent Toss-Up",
-      yrfiPromotion.pick === "Toss-Up" && yrfiPromotion.pickReason === "fi_toss_up_probability");
-    const neutral = FI_TEST.applyFiMarginalPricePolicy({
-      pick: "Toss-Up", pickReason: "fi_toss_up_probability", posteriorNrfi: 0.51,
-      nrfiOdds: -110,
-    });
-    check("r64 Toss-Up stays neutral when neither offered price is cleared", neutral.pick === "Toss-Up");
-    const tied = FI_TEST.applyFiMarginalPricePolicy({
-      pick: "Toss-Up", pickReason: "fi_toss_up_probability", posteriorNrfi: 0.5,
-      nrfiOdds: 105,
-    });
-    check("r64 exact 50/50 forecast cannot acquire an arbitrary side", tied.pick === "Toss-Up");
-    const sparse = FI_TEST.applyFiMarginalPricePolicy({
-      pick: "Toss-Up", pickReason: "fi_toss_up_sparse_named_starter_history", posteriorNrfi: 0.515,
-      nrfiOdds: 105,
-    });
-    check("r64 price route cannot override a data-quality Toss-Up", sparse.pick === "Toss-Up");
   }
   {
     // Toss-Up display: the pick string is literally "Toss-Up", not "-"

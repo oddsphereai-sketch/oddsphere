@@ -227,7 +227,7 @@ changed; only deterministic settlement of existing locked rows is affected.
 ## MLB champion
 
 - Projection runtime: resolved automodel `v2_2`
-- First-inning runtime: `fi_v2` with probability head `mlb_first_inning_fi_v6_evaluated_quote_exclusion_2026_09_02`
+- First-inning runtime: `fi_v2` with FI-scoped release `mlb_first_inning_release_2026_09_03_r80_forecast_authority` and probability head `mlb_first_inning_fi_v7_target_excluded_forecast_authority_2026_09_03`
 - Public calibration: `mlb_public_calibration_v30_first_inning_evaluated_quote_exclusion_2026_09_02`
 - Decision release: `mlb_daily_edge_decision_2026_09_02_r79_first_inning_evaluated_quote_exclusion`
 - Rule bundle: `mlb_daily_edge_rule_bundle_v67_first_inning_evaluated_quote_exclusion_2026_09_02`
@@ -549,6 +549,23 @@ head v6, and FI market-calibration v3; price-map v1, member-tuple contract
 v1, grade policy v55, all full-game heads, and locked rows remain unchanged.
 Evidence and rollback are recorded in
 `docs/model-audits/2026-09-02-mlb-fi-evaluated-quote-exclusion-r79.md`.
+
+The September 3 MLB first-inning r80 forecast-authority release extends the
+evaluation-book exclusion to every forecast input: the exact evaluated book is
+excluded from current consensus, comparable opening/current movement, and the
+authoritative posterior. It remains solely the exact fair-price and EV/grade
+pair. When no target-excluded complete pair exists, the independent FI
+distribution supplies the posterior and natural decimal expected runs; valid
+price availability remains neutral to freshness/hold handling. Classification
+is posterior-only, so the retired price bridge cannot promote, demote, or flip
+NRFI/YRFI. Toss-Up is an explicit null-side, non-actionable FI result rather
+than a hidden directional boolean. This FI-scoped release stamps probability
+head v7, market-calibration v4, member-tuple contract v2, and dedicated FI
+release ID r80 only on first-inning snapshots; MLB-wide schema, calibration,
+decision/rule, grade IDs, and ML/total tuples remain unchanged. Locks, the
+sole writer/lease, provider/query budgets, and no-current behavior remain
+unchanged. Evidence, frozen evaluation plan, and rollback are recorded in
+`docs/model-audits/2026-09-03-mlb-fi-forecast-authority-r80-predeclaration.md`.
 
 The September 3 MLB r81 first-slate publication-cycle release closes the
 draft-to-published sequencing gap without changing forecast or grade math.
