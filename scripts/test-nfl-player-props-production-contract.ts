@@ -79,14 +79,14 @@ function emptyBoard(): NflPlayerPropsRuntimeBoard {
 
 const unlocked = reconcileNflPlayerPropsProductionSnapshot({ season: 2026, week: 1, evaluatedAt: "2026-08-25T12:00:00.000Z", nextBoard: board(decision) });
 assert.equal(NFL_PLAYER_PROPS_PRODUCTION_CANDIDATE_RELEASE, "nfl_player_props_member_2026_09_02_r15_qb_target_exclusion");
-assert.equal(NFL_PLAYER_PROPS_WRITER_RELEASE, "nfl_player_props_writer_2026_09_02_r17_qb_target_exclusion");
+assert.equal(NFL_PLAYER_PROPS_WRITER_RELEASE, "nfl_player_props_writer_2026_09_03_r18_week_one_identity_capacity");
 assert.equal(NFL_PLAYER_PROPS_TRACKING_RELEASE, "nfl_player_props_tracking_2026_09_02_r9_qb_target_exclusion");
 assert.equal(NFL_PLAYER_PROPS_SETTLEMENT_RELEASE, "nfl_player_props_settlement_2026_08_25_r3_bounded_finality");
 assert.equal(NFL_PLAYER_PROPS_PRODUCTION_INCLUDE_OPENINGS, true, "production records same-book opening context for movement and CLV interpretation");
-assert.equal(NFL_PLAYER_PROPS_PRODUCTION_COLLECTION_CALL_MAXIMUM, 48, "slate/current+opening props/player identity/Sharp pagination is explicitly bounded");
+assert.equal(NFL_PLAYER_PROPS_PRODUCTION_COLLECTION_CALL_MAXIMUM, 49, "slate/current+opening props/player identity/Sharp pagination is explicitly bounded");
 assert.equal(NFL_PLAYER_PROPS_SETTLEMENT_MAX_GAMES_PER_CYCLE, 18);
 assert.equal(NFL_PLAYER_PROPS_SETTLEMENT_MAX_RECORDS_PER_CYCLE, 1_000);
-assert.equal(NFL_PLAYER_PROPS_PRODUCTION_INCREMENTAL_CALL_MAXIMUM, 66, "collection plus settlement has one declared incremental-call ceiling");
+assert.equal(NFL_PLAYER_PROPS_PRODUCTION_INCREMENTAL_CALL_MAXIMUM, 67, "collection plus settlement has one declared incremental-call ceiling");
 for (const release of [NFL_PLAYER_PROPS_PRODUCTION_CANDIDATE_RELEASE, NFL_PLAYER_PROPS_WRITER_RELEASE, NFL_PLAYER_PROPS_TRACKING_RELEASE, NFL_PLAYER_PROPS_SETTLEMENT_RELEASE]) {
   assert.ok(!/(shadow|provisional|review)/i.test(release), `production release must not carry non-production semantics: ${release}`);
 }
