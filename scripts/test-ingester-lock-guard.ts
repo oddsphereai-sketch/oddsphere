@@ -188,6 +188,35 @@ async function testLockedRowSkipped() {
   check("NO upsert against game_predictions", gpUpserts.length === 0);
 }
 
+async function testFiTossUpClearsPersistedDirectionalSide() {
+  section("FI V2 Toss-Up → explicit null-side persists through the sole writer");
+
+  const { client, upserts } = createFakeClient({
+    existingByGameId: new Map([
+      [1001, { game_id: 1001, locked_at: null, is_override: false }],
+    ]),
+  });
+  const result = await ingestScoresModel(
+    client,
+    "mlb",
+    [makeRow(100, {
+      predicted_nrfi: null,
+      nrfi_confidence: 52,
+      sport_specific: {
+        fi_model_used: "fi_v2",
+        nrfi_decision_kind: "toss_up",
+        hold_picks: [],
+      },
+    })],
+    gameIdByExternal,
+    { source: "auto_v1_mlb_rules", validationMode: "auto_model" },
+  );
+  const gamePrediction = upserts.find((upsert) => upsert.table === "game_predictions")?.payload[0];
+  check("Toss-Up input validates and writes", result.failed.length === 0 && result.updated === 1);
+  check("Toss-Up explicitly clears game_predictions.predicted_nrfi", gamePrediction?.predicted_nrfi === null);
+  check("Toss-Up mirrors the null side in sport_specific", (gamePrediction?.sport_specific as Record<string, unknown>)?.predicted_nrfi === null);
+}
+
 async function testManualOverrideBypassesLock() {
   section("Locked row + incoming is_override=true → bypass guard, write");
 
@@ -390,6 +419,7 @@ async function main() {
   console.log("===============================================");
 
   await testLockedRowSkipped();
+  await testFiTossUpClearsPersistedDirectionalSide();
   await testManualOverrideBypassesLock();
   await testUnlockedRowPassesThrough();
   await testNewRowInsertsCleanly();

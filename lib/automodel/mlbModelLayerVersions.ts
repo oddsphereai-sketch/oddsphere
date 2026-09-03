@@ -18,7 +18,7 @@ export const MLB_PUBLIC_CALIBRATION_VERSION = "mlb_public_calibration_v31_full_g
 export const MLB_DAILY_EDGE_DECISION_RELEASE_ID = "mlb_daily_edge_decision_2026_09_03_r81_first_slate_publication_cycle";
 export const MLB_DAILY_EDGE_RULE_BUNDLE_VERSION = "mlb_daily_edge_rule_bundle_v69_first_slate_publication_cycle_2026_09_03";
 /** FI-only release identity. It is absent from ML/total snapshots. */
-export const MLB_FIRST_INNING_RELEASE_ID = "mlb_first_inning_release_2026_09_03_r80_forecast_authority";
+export const MLB_FIRST_INNING_RELEASE_ID = "mlb_first_inning_release_2026_09_03_r81_authoritative_toss_null_persistence";
 
 export const MLB_MODEL_LAYER_VERSION_IDS = {
   projection_core: "mlb_projection_core_v2_4_evaluation_only_price_exclusion_2026_09_02",
@@ -49,9 +49,9 @@ export const MLB_MODEL_LAYER_VERSION_IDS = {
 } as const;
 
 const MLB_FIRST_INNING_SCOPED_VERSION_IDS = {
-  first_inning_probability_head: "mlb_first_inning_fi_v7_target_excluded_forecast_authority_2026_09_03",
-  first_inning_market_calibration_policy: "mlb_first_inning_market_calibration_v4_target_excluded_forecast_authority_2026_09_03",
-  first_inning_member_tuple_contract: "mlb_first_inning_member_tuple_contract_v2_null_side_toss_up_2026_09_03",
+  first_inning_probability_head: "mlb_first_inning_fi_v8_authoritative_toss_null_persistence_2026_09_03",
+  first_inning_market_calibration_policy: "mlb_first_inning_market_calibration_v5_authoritative_toss_null_persistence_2026_09_03",
+  first_inning_member_tuple_contract: "mlb_first_inning_member_tuple_contract_v3_authoritative_toss_null_persistence_2026_09_03",
 } as const;
 
 const ACTIVE_PROBABILITY_HEAD_BY_MARKET: Record<MlbModelLayerMarket, string> = {

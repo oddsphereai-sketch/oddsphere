@@ -227,7 +227,7 @@ changed; only deterministic settlement of existing locked rows is affected.
 ## MLB champion
 
 - Projection runtime: resolved automodel `v2_2`
-- First-inning runtime: `fi_v2` with FI-scoped release `mlb_first_inning_release_2026_09_03_r80_forecast_authority` and probability head `mlb_first_inning_fi_v7_target_excluded_forecast_authority_2026_09_03`
+- First-inning runtime: `fi_v2` with FI-scoped release `mlb_first_inning_release_2026_09_03_r81_authoritative_toss_null_persistence` and probability head `mlb_first_inning_fi_v8_authoritative_toss_null_persistence_2026_09_03`. r81 repairs the existing sole writer so a valid FI V2 Toss-Up explicitly persists `predicted_nrfi:null` into `game_predictions`; it changes no posterior, directional classification, grade, exact price, stake, lock, lease, provider, or full-game behavior.
 - Public calibration: `mlb_public_calibration_v30_first_inning_evaluated_quote_exclusion_2026_09_02`
 - Decision release: `mlb_daily_edge_decision_2026_09_02_r79_first_inning_evaluated_quote_exclusion`
 - Rule bundle: `mlb_daily_edge_rule_bundle_v67_first_inning_evaluated_quote_exclusion_2026_09_02`
