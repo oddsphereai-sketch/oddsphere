@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import type {
   PlayerPropPreviewRow,
@@ -13,6 +14,7 @@ import {
   MLB_PROPS_MARKET_EVIDENCE_CANONICAL_TARGET_BYTES,
   MLB_PROPS_MARKET_EVIDENCE_MAX_BOOKS_PER_IDENTITY,
   MLB_PROPS_MARKET_EVIDENCE_MAX_CANONICAL_ADDED_BYTES,
+  MLB_PROPS_MARKET_EVIDENCE_MAX_TRANSIENT_LOCK_MERGE_BYTES,
   MLB_PROPS_MARKET_EVIDENCE_MAX_MEMBER_ADDED_BYTES,
   MLB_PROPS_MARKET_EVIDENCE_MEMBER_TARGET_BYTES,
   subsetMlbPropsMarketEvidenceCapture,
@@ -308,6 +310,53 @@ assert.equal(JSON.stringify(stripAuditMetadata(capturedMember)),
   "member output values/counts/order are byte-identical apart from additive audit metadata");
 assert.ok(member.addedBytes < MLB_PROPS_MARKET_EVIDENCE_MAX_MEMBER_ADDED_BYTES);
 
+const clonedIdentities = retained.capture.i.map((identity, index) => {
+  const id = createHash("sha256").update(`locked-clone-${index}`).digest("hex").slice(0, 16);
+  return [id, identity[1], identity[2], identity[3], identity[4], identity[5]] as const;
+});
+const clonedCapture = { ...retained.capture, i: clonedIdentities };
+const lockedUnionRows = [
+  ...retained.capture.i.map((identity, index) => ({
+    ...baseRow,
+    id: `locked-original-${index}`,
+    marketEvidenceId: identity[0],
+    lockStatus: { status: "locked" as const, lockedAt: "2026-09-02T11:00:00.000Z" },
+  })),
+  ...clonedIdentities.map((identity, index) => ({
+    ...baseRow,
+    id: `locked-clone-${index}`,
+    marketEvidenceId: identity[0],
+    lockStatus: { status: "locked" as const, lockedAt: "2026-09-02T11:00:00.000Z" },
+  })),
+];
+assert.throws(() => mergeMlbPropsMarketEvidenceCaptures({
+  captures: [retained.capture, clonedCapture],
+  rows: lockedUnionRows,
+}), /required identities exceed 1048576 bytes/,
+"stored-capture merge retains the canonical 1 MiB hard cap");
+const transientLockedUnion = mergeMlbPropsMarketEvidenceCaptures({
+  captures: [retained.capture, clonedCapture],
+  rows: lockedUnionRows,
+  allowTransientLockedOverflow: true,
+});
+assert.ok(transientLockedUnion.capture);
+assert.ok(transientLockedUnion.addedBytes > MLB_PROPS_MARKET_EVIDENCE_MAX_CANONICAL_ADDED_BYTES,
+  "the fixture proves lock reconciliation can require more than the stored canonical cap");
+assert.ok(transientLockedUnion.addedBytes < MLB_PROPS_MARKET_EVIDENCE_MAX_TRANSIENT_LOCK_MERGE_BYTES);
+const boundedLockedRows = lockedUnionRows.slice(0, 200);
+const boundedLockedMember = subsetMlbPropsMarketEvidenceCapture({
+  capture: transientLockedUnion.capture,
+  rows: boundedLockedRows,
+});
+assert.ok(boundedLockedMember.capture);
+assert.ok(boundedLockedMember.addedBytes < MLB_PROPS_MARKET_EVIDENCE_MAX_MEMBER_ADDED_BYTES,
+  "the transient union is subset back under the unchanged member hard cap before persistence");
+assert.deepEqual(
+  boundedLockedRows.map((row) => withoutUnretainedMlbPropsEvidenceReference(row, boundedLockedMember.retainedIds)),
+  boundedLockedRows,
+  "member subsetting preserves every selected immutable locked evidence reference",
+);
+
 const priorOdds = currentOdds.map((row) => ({ ...row, americanOdds: row.americanOdds - 7 }));
 const prior = buildMlbPropsMarketEvidenceCapture({
   currentOdds: priorOdds,
@@ -341,6 +390,11 @@ assert.equal(liveBoardSource.match(/oddsClient\.getOpeningPropOdds\s*\(/g)?.leng
 const memberWriterSource = readFileSync("lib/mlb/props/memberReadSnapshotStore.ts", "utf8");
 assert.equal(memberWriterSource.match(/\.upsert\s*\(/g)?.length, 2,
   "member snapshot database write statements are unchanged");
+const boardSnapshotStoreSource = readFileSync("lib/mlb/props/boardSnapshotStore.ts", "utf8");
+assert.equal(boardSnapshotStoreSource.match(/allowTransientLockedOverflow: true/g)?.length, 1,
+  "only display-lock reconciliation opts into the bounded transient union");
+assert.ok(!memberWriterSource.includes("allowTransientLockedOverflow"),
+  "persisted member writers cannot opt out of their existing per-payload evidence cap");
 
 console.log(JSON.stringify({
   release: MLB_PROPS_MARKET_EVIDENCE_CAPTURE_RELEASE,

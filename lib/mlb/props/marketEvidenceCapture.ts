@@ -12,6 +12,11 @@ export const MLB_PROPS_MARKET_EVIDENCE_MAX_CANONICAL_ADDED_BYTES = 1024 * 1024;
 export const MLB_PROPS_MARKET_EVIDENCE_CANONICAL_TARGET_BYTES = 960 * 1024;
 export const MLB_PROPS_MARKET_EVIDENCE_MAX_MEMBER_ADDED_BYTES = 256 * 1024;
 export const MLB_PROPS_MARKET_EVIDENCE_MEMBER_TARGET_BYTES = 240 * 1024;
+// Display-lock reconciliation is an in-memory intermediate. It may need the
+// union of several independently bounded historical captures before the
+// member publisher subsets that union back to the existing per-payload cap.
+// Never use this allowance for a stored canonical or member capture.
+export const MLB_PROPS_MARKET_EVIDENCE_MAX_TRANSIENT_LOCK_MERGE_BYTES = 8 * 1024 * 1024;
 export const MLB_PROPS_MARKET_EVIDENCE_RETENTION = "category_hash_round_robin_v1" as const;
 
 export const MLB_PROPS_MARKET_EVIDENCE_INPUT = Symbol.for(
@@ -269,6 +274,7 @@ export function subsetMlbPropsMarketEvidenceCapture(args: {
 export function mergeMlbPropsMarketEvidenceCaptures(args: {
   captures: readonly (MlbPropsMarketEvidenceCapture | null | undefined)[];
   rows: readonly MlbPropsMarketEvidenceRow[];
+  allowTransientLockedOverflow?: true;
 }): { capture: MlbPropsMarketEvidenceCapture | null; retainedIds: ReadonlySet<string>; addedBytes: number } {
   const tuples = new Map<string, MlbPropsMarketEvidenceIdentity>();
   for (const capture of args.captures) {
@@ -286,7 +292,9 @@ export function mergeMlbPropsMarketEvidenceCaptures(args: {
     rows: args.rows,
     maximumQuoteAgeMinutes: args.captures.find(Boolean)?.fm ?? 45,
     budgetBytes: MLB_PROPS_MARKET_EVIDENCE_CANONICAL_TARGET_BYTES,
-    hardBytes: MLB_PROPS_MARKET_EVIDENCE_MAX_CANONICAL_ADDED_BYTES,
+    hardBytes: args.allowTransientLockedOverflow
+      ? MLB_PROPS_MARKET_EVIDENCE_MAX_TRANSIENT_LOCK_MERGE_BYTES
+      : MLB_PROPS_MARKET_EVIDENCE_MAX_CANONICAL_ADDED_BYTES,
     requiredIds,
   });
 }

@@ -425,6 +425,11 @@ export async function applyMlbPropsDisplayLocks(latest: MlbPropsBoardSnapshot): 
       ...[...lockedSnapshots.values()].map((snapshot) => snapshot.marketEvidence),
     ],
     rows: props as MlbPropsMarketEvidenceRow[],
+    // This union exists only long enough for each member board/game/player
+    // payload to select its own referenced identities under the unchanged
+    // 256 KiB persisted-member cap. The canonical snapshot remains capped at
+    // 1 MiB and no combined lock union is written as a standalone payload.
+    allowTransientLockedOverflow: true,
   });
   const capturedProps = mergedEvidence.capture
     ? (props as MlbPropsMarketEvidenceRow[]).map((row) =>
