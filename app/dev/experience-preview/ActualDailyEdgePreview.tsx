@@ -218,6 +218,20 @@ export default function ActualDailyEdgePreview({
     }
   }, []);
 
+  useEffect(() => {
+    if (embeddedSample || sport === "cfb") return;
+    const cfbDestination = buildDailyEdgeSportSwitchDestination({
+      pathname,
+      currentSearch: searchParams.toString(),
+      nextSport: "cfb",
+      explicitDestinations: sportSwitchDestinations,
+      slateDate: currentSlateDate,
+    });
+    // CFB carries a weekly server payload. Warm it before intent so selecting
+    // the tab behaves like the smaller same-route sport transitions.
+    router.prefetch(cfbDestination);
+  }, [embeddedSample, pathname, router, searchParams, sport, sportSwitchDestinations]);
+
   function switchSport(next: Sport) {
     if (embeddedSample) return;
     const destination = buildDailyEdgeSportSwitchDestination({
@@ -243,14 +257,22 @@ export default function ActualDailyEdgePreview({
       // the canonical destination removes the prior game and market reader.
       router.push(destination, { scroll: false });
       sportSwitchFallbackRef.current = window.setTimeout(() => {
-        if (!dailyEdgeSportDestinationIsCurrent(window.location.href, destination)) {
+        const current = new URL(window.location.href);
+        const target = new URL(destination, current.origin);
+        if (
+          current.pathname !== target.pathname &&
+          !dailyEdgeSportDestinationIsCurrent(window.location.href, destination)
+        ) {
           // Only recover natively when the client router genuinely failed to
-          // reach the requested canonical URL within the bounded watchdog.
+          // reach a different route. A same-route server transition can take
+          // longer than the watchdog without warranting a document reload.
           window.location.replace(destination);
         }
       }, DAILY_EDGE_SPORT_SWITCH_FALLBACK_MS);
     } catch {
-      window.location.replace(destination);
+      const current = new URL(window.location.href);
+      const target = new URL(destination, current.origin);
+      if (current.pathname !== target.pathname) window.location.replace(destination);
     }
   }
 
@@ -809,7 +831,7 @@ function QuickRead({ game, market, marketKey, sport }: { game: DailyEdgeGameDto;
   const consensusLineOnly = market.held && market.marketPrediction?.status === "available" &&
     market.marketPrediction.source === "playbook_consensus" && heldCurrentPrice === null;
   return (
-    <div className={sport === "soccer" ? "rounded-xl border border-emerald-400/15 bg-[#11131a] p-4 sm:p-5" : "h-full border-b border-white/[0.07] p-4 sm:p-5 lg:border-b-0 lg:border-r xl:p-6"}>
+    <div className={sport === "soccer" ? "rounded-xl border border-emerald-400/15 bg-[#11131a] p-4 sm:p-5 xl:p-6" : "h-full border-b border-white/[0.07] p-4 sm:p-5 lg:border-b-0 lg:border-r xl:p-6"}>
       <SectionHeading tone="emerald">{sport === "soccer" ? "Forecast" : "Quick Read"}</SectionHeading>
       <div className="mt-4 rounded-xl border border-white/[0.07] bg-white/[0.025] p-4">
         <QuickMatchupIdentity game={game} sport={sport} />
@@ -893,7 +915,7 @@ function QuickMatchupIdentity({ game, sport }: { game: DailyEdgeGameDto; sport: 
 function IntegratedEvidence({ game, market, marketKey, sport, availability }: { game: DailyEdgeGameDto; market: MarketEdgeDto; marketKey: MarketKey; sport: Sport; availability: DailyEdgeGameAvailability | null }) {
   const football = sport === "nfl" || sport === "cfb";
   return (
-    <div className={sport === "soccer" ? "rounded-xl border border-violet-400/15 bg-[#121019] p-4 sm:p-5" : "border-b border-white/[0.07] p-4 sm:p-5 lg:border-b-0 lg:border-r"}>
+    <div className={sport === "soccer" ? "rounded-xl border border-violet-400/15 bg-[#121019] p-4 sm:p-5 xl:p-6" : "border-b border-white/[0.07] p-4 sm:p-5 lg:border-b-0 lg:border-r"}>
       <SectionHeading tone="violet">Market & Price</SectionHeading>
       <div className="mt-4 space-y-3">
         {sport === "soccer" && marketKey === "moneyline" ? <SoccerDoubleChancePanel game={game} /> : null}
@@ -1011,7 +1033,7 @@ function CompactMarketPulse({ market, showSplits = false, sport = null }: { mark
         ? <CompactOddsMovement market={market} tone={tone} lineClass={style.line} compact={football} />
         : <CompactFirstInningOddsMovement market={market} tone={tone} lineClass={style.line} />}
       {showSplits && !football ? <CompactPointLineMovement market={market} /> : null}
-      {showSplits ? <DefaultSplitSummary market={market} sport={sport} compact={football} /> : null}
+      {showSplits ? <DefaultSplitSummary market={market} sport={sport} /> : null}
     </div>
   );
 }
@@ -1644,7 +1666,7 @@ function resolveDisplayedSharpSplit(market: MarketEdgeDto, sport: Sport | null):
   return { section: displayedSharp, availabilityStatus, selectedSharpIsSportsbook };
 }
 
-function DefaultSplitSummary({ market, sport = null, compact = false }: { market: MarketEdgeDto; sport?: Sport | null; compact?: boolean }) {
+function DefaultSplitSummary({ market, sport = null }: { market: MarketEdgeDto; sport?: Sport | null }) {
   const consensus = displayedConsensusSection(market);
   const sharpDisplay = resolveDisplayedSharpSplit(market, sport);
   const displayedSharp = sharpDisplay.section;
@@ -1655,16 +1677,16 @@ function DefaultSplitSummary({ market, sport = null, compact = false }: { market
   return (
     <div className="mt-3 border-t border-white/[0.06] pt-3">
       <div className="flex flex-wrap items-center justify-between gap-2"><div><p className="text-[8px] font-black uppercase tracking-[0.15em] text-gray-300">Market splits</p><p className="mt-0.5 text-[7px] text-gray-600">{hasSourceSpecificEvidence ? "Public and sharp splits remain separate signals" : "Public money and ticket distribution"}</p></div>{displayedConflict ? <span className="rounded-full border border-amber-400/25 bg-amber-400/[0.08] px-2 py-0.5 text-[7px] font-black uppercase tracking-wider text-amber-200">{conflictIsHistorical ? "Historical source conflict" : "Sources conflict"}</span> : null}</div>
-      <div className={`mt-2 grid items-start gap-2 ${compact && !displayedSharp?.rows.length ? "sm:grid-cols-[minmax(0,1fr)_8.5rem]" : compact ? "sm:grid-cols-2" : ""}`}>
-        <SplitSourcePanel source="PUBLIC CONSENSUS" section={consensus} pick={market.pick} compact={compact} />
-        {displayedSharp ? <SplitSourcePanel source={displayedSharp.label === "Sharp Book Signal" ? "SHARP SPLITS" : "SHARP BOOK SPLITS"} section={displayedSharp} pick={market.pick} availabilityStatus={sharpDisplay.availabilityStatus} compact={compact} /> : null}
+      <div className="mt-2 space-y-2">
+        <SplitSourcePanel source="PUBLIC CONSENSUS" section={consensus} pick={market.pick} />
+        {displayedSharp ? <SplitSourcePanel source={displayedSharp.label === "Sharp Book Signal" ? "SHARP SPLITS" : "SHARP BOOK SPLITS"} section={displayedSharp} pick={market.pick} availabilityStatus={sharpDisplay.availabilityStatus} /> : null}
       </div>
       {displayedSharp?.rows.length ? <CrossSourceSplitRead consensus={consensus} sharp={displayedSharp} /> : null}
     </div>
   );
 }
 
-function SplitSourcePanel({ source, section, pick, availabilityStatus = null, compact = false }: { source: "PUBLIC CONSENSUS" | "SHARP BOOK SPLITS" | "SHARP SPLITS"; section: MarketSplitDisplaySection | null; pick: string | null; availabilityStatus?: SharpAvailabilityStatus; compact?: boolean }) {
+function SplitSourcePanel({ source, section, pick, availabilityStatus = null }: { source: "PUBLIC CONSENSUS" | "SHARP BOOK SPLITS" | "SHARP SPLITS"; section: MarketSplitDisplaySection | null; pick: string | null; availabilityStatus?: SharpAvailabilityStatus }) {
   const moneyLeader = splitLeader(section, "moneyPct");
   const ticketLeader = splitLeader(section, "betsPct");
   const isSharp = source === "SHARP BOOK SPLITS" || source === "SHARP SPLITS";
@@ -1672,17 +1694,17 @@ function SplitSourcePanel({ source, section, pick, availabilityStatus = null, co
   const displayRows = canonicalSplitRows(section);
   const availabilityLabel = availabilityStatus === "provider_limited" ? "Limited" : availabilityStatus === "pending" ? "Pending" : availabilityStatus === "complete" ? "Complete" : availabilityStatus === "unavailable" ? "Unavailable" : null;
   const splitPending = availabilityStatus === "pending" || availabilityStatus === "provider_limited";
-  return <section className={`rounded-lg border p-3 ${isSharp ? "border-violet-400/20 bg-violet-500/[0.045]" : "border-white/[0.10] bg-black/20"}`}><div className="flex items-start justify-between gap-2"><div><div className="flex flex-wrap items-center gap-1.5"><p className={`text-[8px] font-black uppercase tracking-[0.14em] ${isSharp ? "text-violet-200" : "text-gray-300"}`}>{source}</p>{stale || availabilityStatus === "stale" ? <span className="rounded-full border border-amber-400/20 bg-amber-400/[0.07] px-1.5 py-0.5 text-[6px] font-black uppercase tracking-wider text-amber-200">Stale snapshot</span> : availabilityLabel ? <span className="rounded-full border border-violet-400/20 bg-violet-400/[0.07] px-1.5 py-0.5 text-[6px] font-black uppercase tracking-wider text-violet-200">{availabilityLabel}</span> : null}</div><p className="mt-0.5 text-[7px] text-gray-600">{section?.lastUpdated ? formatTimestamp(section.lastUpdated) : splitPending ? "No verified split yet" : section ? "Current snapshot" : "Unavailable"}</p></div>{moneyLeader ? <span className="rounded-full border border-white/[0.09] bg-black/20 px-2 py-0.5 text-[7px] font-black text-gray-300">Money → {moneyLeader}</span> : null}</div>{displayRows.length ? <div className={`mt-3 ${compact ? "grid grid-cols-2 gap-2" : "space-y-3"}`}>{displayRows.slice(0, 2).map((row) => <SplitSideCard key={`${source}-${row.side}`} label={row.label} moneyPct={row.moneyPct} betsPct={row.betsPct} isPick={sideMatchesPick(row.label, pick)} compact={compact} />)}</div> : splitPending ? null : section?.signal ? <p className="mt-3 text-[9px] leading-relaxed text-gray-400">{section.signal}</p> : null}{moneyLeader && ticketLeader && moneyLeader.toLowerCase() !== ticketLeader.toLowerCase() ? <p className="mt-3 border-t border-white/[0.06] pt-2 text-[8px] leading-relaxed text-amber-200/80">Money leans {moneyLeader}; ticket count leans {ticketLeader}.</p> : null}</section>;
+  return <section className={`rounded-lg border p-3 ${isSharp ? "border-violet-400/20 bg-violet-500/[0.045]" : "border-white/[0.10] bg-black/20"}`}><div className="flex items-start justify-between gap-2"><div><div className="flex flex-wrap items-center gap-1.5"><p className={`text-[8px] font-black uppercase tracking-[0.14em] ${isSharp ? "text-violet-200" : "text-gray-300"}`}>{source}</p>{stale || availabilityStatus === "stale" ? <span className="rounded-full border border-amber-400/20 bg-amber-400/[0.07] px-1.5 py-0.5 text-[6px] font-black uppercase tracking-wider text-amber-200">Stale snapshot</span> : availabilityLabel ? <span className="rounded-full border border-violet-400/20 bg-violet-400/[0.07] px-1.5 py-0.5 text-[6px] font-black uppercase tracking-wider text-violet-200">{availabilityLabel}</span> : null}</div><p className="mt-0.5 text-[7px] text-gray-600">{section?.lastUpdated ? formatTimestamp(section.lastUpdated) : splitPending ? "No verified split yet" : section ? "Current snapshot" : "Unavailable"}</p></div>{moneyLeader ? <span className="rounded-full border border-white/[0.09] bg-black/20 px-2 py-0.5 text-[7px] font-black text-gray-300">Money → {moneyLeader}</span> : null}</div>{displayRows.length ? <div className="mt-3 space-y-3">{displayRows.slice(0, 2).map((row) => <SplitSideCard key={`${source}-${row.side}`} label={row.label} moneyPct={row.moneyPct} betsPct={row.betsPct} isPick={sideMatchesPick(row.label, pick)} />)}</div> : splitPending ? null : section?.signal ? <p className="mt-3 text-[9px] leading-relaxed text-gray-400">{section.signal}</p> : null}{moneyLeader && ticketLeader && moneyLeader.toLowerCase() !== ticketLeader.toLowerCase() ? <p className="mt-3 border-t border-white/[0.06] pt-2 text-[8px] leading-relaxed text-amber-200/80">Money leans {moneyLeader}; ticket count leans {ticketLeader}.</p> : null}</section>;
 }
 
-function SplitSideCard({ label, moneyPct, betsPct, isPick, compact = false }: { label: string; moneyPct: number | null; betsPct: number | null; isPick: boolean; compact?: boolean }) {
-  return <div><div className="mb-1.5 flex items-center gap-1.5"><p className="text-[9px] font-black text-gray-200">{label}</p>{isPick ? <span className="rounded border border-violet-400/20 bg-violet-400/[0.07] px-1.5 py-0.5 text-[6px] font-black uppercase tracking-wider text-violet-200">Our read</span> : null}</div><div className="space-y-1.5"><SingleSplitBar label="Money" value={moneyPct} compact={compact} /><SingleSplitBar label="Tickets" value={betsPct} compact={compact} /></div></div>;
+function SplitSideCard({ label, moneyPct, betsPct, isPick }: { label: string; moneyPct: number | null; betsPct: number | null; isPick: boolean }) {
+  return <div><div className="mb-1.5 flex items-center gap-1.5"><p className="text-[9px] font-black text-gray-200">{label}</p>{isPick ? <span className="rounded border border-violet-400/20 bg-violet-400/[0.07] px-1.5 py-0.5 text-[6px] font-black uppercase tracking-wider text-violet-200">Our read</span> : null}</div><div className="space-y-1.5"><SingleSplitBar label="Money" value={moneyPct} /><SingleSplitBar label="Tickets" value={betsPct} /></div></div>;
 }
 
-function SingleSplitBar({ label, value, compact = false }: { label: "Money" | "Tickets"; value: number | null; compact?: boolean }) {
+function SingleSplitBar({ label, value }: { label: "Money" | "Tickets"; value: number | null }) {
   const width = value === null ? 0 : Math.max(0, Math.min(100, value));
   const fill = label === "Money" ? "from-violet-700 to-violet-300" : "from-violet-900 to-violet-500";
-  return <div className={`grid items-center ${compact ? "grid-cols-[1fr_30px] gap-1.5" : "grid-cols-[48px_1fr_38px] gap-2.5"}`}><span className={compact ? "sr-only" : "text-[8px] font-black uppercase tracking-wider text-gray-400"}>{label}</span><div className="relative h-4 overflow-hidden rounded-md border border-white/[0.08] bg-white/[0.07] shadow-inner" aria-label={`${label} ${value === null ? "unavailable" : `${Math.round(value)} percent`}`}><span className={`absolute inset-y-0 left-0 rounded-[3px] bg-gradient-to-r ${fill} shadow-[0_0_12px_rgba(167,139,250,0.35)] transition-[width] duration-300`} style={{ width: `${width}%` }} /><span className="absolute inset-y-0 left-1/2 w-px bg-white/25" /><span className="absolute inset-y-0 left-1/4 w-px bg-white/[0.07]" /><span className="absolute inset-y-0 left-3/4 w-px bg-white/[0.07]" />{compact ? <span className="absolute inset-0 flex items-center px-1 text-[6px] font-black uppercase tracking-wider text-white/75">{label}</span> : null}</div><span className="text-right font-mono text-[10px] font-black text-white">{value === null ? "—" : `${Math.round(value)}%`}</span></div>;
+  return <div className="grid grid-cols-[48px_1fr_38px] items-center gap-2.5"><span className="text-[8px] font-black uppercase tracking-wider text-gray-400">{label}</span><div className="relative h-4 overflow-hidden rounded-md border border-white/[0.08] bg-white/[0.07] shadow-inner" aria-label={`${label} ${value === null ? "unavailable" : `${Math.round(value)} percent`}`}><span className={`absolute inset-y-0 left-0 rounded-[3px] bg-gradient-to-r ${fill} shadow-[0_0_12px_rgba(167,139,250,0.35)] transition-[width] duration-300`} style={{ width: `${width}%` }} /><span className="absolute inset-y-0 left-1/2 w-px bg-white/25" /><span className="absolute inset-y-0 left-1/4 w-px bg-white/[0.07]" /><span className="absolute inset-y-0 left-3/4 w-px bg-white/[0.07]" /></div><span className="text-right font-mono text-[10px] font-black text-white">{value === null ? "—" : `${Math.round(value)}%`}</span></div>;
 }
 
 function CrossSourceSplitRead({ consensus, sharp }: { consensus: MarketSplitDisplaySection | null; sharp: MarketSplitDisplaySection | null }) {
@@ -2031,7 +2053,7 @@ function SoccerMarketEvidence({ game, market, marketKey }: { game: DailyEdgeGame
     .map(({ stat }) => stat);
   const primary = orderedStats.slice(0, 4);
   const supporting = orderedStats.slice(4);
-  return <div className="rounded-xl border border-sky-400/15 bg-[#0f141c] p-4 sm:p-5"><SectionHeading tone="sky">Market Evidence</SectionHeading><div className="mt-4 rounded-xl border border-sky-400/15 bg-sky-400/[0.035] p-3.5"><div className="flex items-start justify-between gap-3"><div><p className="text-[8px] font-black uppercase tracking-[0.17em] text-sky-200">{focus.eyebrow}</p><h4 className="mt-1 text-sm font-black leading-tight text-white">{focus.title}</h4></div><span className="shrink-0 rounded-full border border-white/[0.08] bg-black/20 px-2 py-1 text-[7px] font-black uppercase tracking-wider text-gray-500">{orderedStats.length} verified</span></div><p className="mt-2 text-[9px] leading-relaxed text-gray-500">{focus.description} Forecast probabilities remain in the Forecast panel above.</p></div>{primary.length > 0 ? <div className="mt-3 space-y-2">{primary.map((stat, index) => <SoccerEvidenceRow key={`${stat.label}-${stat.awayValue}-${stat.homeValue}`} stat={stat} game={game} market={market} marketKey={marketKey} rank={index + 1} />)}</div> : <CoreDecisionSnapshot game={game} market={market} marketKey={marketKey} />}{supporting.length > 0 ? <details className="group mt-3 rounded-xl border border-white/[0.08] bg-black/20"><summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-3.5 py-3"><span><span className="block text-[8px] font-black uppercase tracking-[0.14em] text-gray-300">More supporting stats</span><span className="mt-0.5 block text-[8px] text-gray-600">{supporting.length} additional verified inputs</span></span><span className="text-sm text-gray-600 transition group-open:rotate-180">⌄</span></summary><div className="space-y-2 border-t border-white/[0.07] p-2.5">{supporting.map((stat, index) => <SoccerEvidenceRow key={`${stat.label}-${stat.awayValue}-${stat.homeValue}`} stat={stat} game={game} market={market} marketKey={marketKey} rank={primary.length + index + 1} compact />)}</div></details> : null}<SoccerAvailabilityPanel game={game} /></div>;
+  return <div className="rounded-xl border border-sky-400/15 bg-[#0f141c] p-4 sm:p-5 xl:p-6"><SectionHeading tone="sky">Market Evidence</SectionHeading><div className="mt-4 rounded-xl border border-sky-400/15 bg-sky-400/[0.035] p-3.5"><div className="flex items-start justify-between gap-3"><div><p className="text-[8px] font-black uppercase tracking-[0.17em] text-sky-200">{focus.eyebrow}</p><h4 className="mt-1 text-sm font-black leading-tight text-white">{focus.title}</h4></div><span className="shrink-0 rounded-full border border-white/[0.08] bg-black/20 px-2 py-1 text-[7px] font-black uppercase tracking-wider text-gray-500">{orderedStats.length} verified</span></div><p className="mt-2 text-[9px] leading-relaxed text-gray-500">{focus.description} Forecast probabilities remain in the Forecast panel above.</p></div>{primary.length > 0 ? <div className="mt-3 space-y-2">{primary.map((stat, index) => <SoccerEvidenceRow key={`${stat.label}-${stat.awayValue}-${stat.homeValue}`} stat={stat} game={game} market={market} marketKey={marketKey} rank={index + 1} />)}</div> : <CoreDecisionSnapshot game={game} market={market} marketKey={marketKey} />}{supporting.length > 0 ? <details className="group mt-3 rounded-xl border border-white/[0.08] bg-black/20"><summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-3.5 py-3"><span><span className="block text-[8px] font-black uppercase tracking-[0.14em] text-gray-300">More supporting stats</span><span className="mt-0.5 block text-[8px] text-gray-600">{supporting.length} additional verified inputs</span></span><span className="text-sm text-gray-600 transition group-open:rotate-180">⌄</span></summary><div className="space-y-2 border-t border-white/[0.07] p-2.5">{supporting.map((stat, index) => <SoccerEvidenceRow key={`${stat.label}-${stat.awayValue}-${stat.homeValue}`} stat={stat} game={game} market={market} marketKey={marketKey} rank={primary.length + index + 1} compact />)}</div></details> : null}<SoccerAvailabilityPanel game={game} /></div>;
 }
 
 function SoccerFormSequence({ value, team }: { value: string | null; team: string }) {
@@ -2312,7 +2334,6 @@ function easternDateKey(timestamp: string): string {
 }
 
 function BoardGameCard({ game, sport, headlineMarket, active, activeMarket, selectGame }: { game: DailyEdgeGameDto; sport: Sport; headlineMarket: MarketKey; active: boolean; activeMarket: MarketKey | null; selectGame: (game: DailyEdgeGameDto, market?: MarketKey) => void }) {
-  const compactSoccer = sport === "soccer";
   const finalScore = game.result?.finalScore ?? null;
   const headlineKey = headlineMarket;
   const headlineMarketData = game.markets[headlineKey];
@@ -2343,27 +2364,27 @@ function BoardGameCard({ game, sport, headlineMarket, active, activeMarket, sele
       className={`group relative flex h-full cursor-pointer flex-col overflow-hidden rounded-xl border bg-[#0D0D14] shadow-[0_4px_16px_-6px_rgba(0,0,0,0.55),inset_0_1px_0_rgba(255,255,255,0.05)] transition ${active ? "border-white/35 outline outline-2 outline-violet-400/25 outline-offset-2" : boardCardBorder(headlineVerdict.key)}`}
     >
       <div className="h-[3px] w-full shrink-0" style={{ background: `linear-gradient(to right, ${memberTeamColor(game, "away", sport)} 0%, ${memberTeamColor(game, "away", sport)} 28%, rgba(255,255,255,0.06) 50%, ${memberTeamColor(game, "home", sport)} 72%, ${memberTeamColor(game, "home", sport)} 100%)` }} />
-      <div className={`flex flex-1 flex-col ${compactSoccer ? "p-3.5 sm:p-4" : "p-5 sm:p-6"}`}>
-        <div className={compactSoccer ? "grid gap-2" : "grid gap-3"}>
+      <div className="flex flex-1 flex-col p-5 sm:p-6">
+        <div className="grid gap-3">
           <CompactMatchupIdentity game={game} sport={sport} />
-          <div className={`flex items-center gap-2 ${compactSoccer ? "min-h-6" : "min-h-8"}`}>
-            <VerdictBadge market={headline} large={!compactSoccer} />
+          <div className="flex min-h-8 items-center gap-2">
+            <VerdictBadge market={headline} large />
             {finalScore ? <span className="rounded-full border border-white/[0.10] bg-white/[0.05] px-2 py-1 text-[9px] font-black uppercase tracking-wider text-gray-300">Final · {game.awayTeam} {finalScore.away}–{finalScore.home} {game.homeTeam}</span> : <><LocalTime value={game.gameStartAt} fallback={game.gameTime} className="text-[10px] text-gray-500" /><LockBadge lockState={game.lockState} lockedAt={game.lockedAt} scheduledLockAt={game.scheduledLockAt} className="font-black uppercase tracking-wider text-emerald-300" /></>}
           </div>
         </div>
-        <div className={`${compactSoccer ? "mt-3" : "mt-5"} flex flex-wrap items-baseline gap-2`}>
-          <span className={compactSoccer ? "text-[22px] font-black leading-none tracking-tight text-white" : "text-[30px] font-black leading-none tracking-tight text-white sm:text-[34px]"}>{footballOutcome?.winner ?? dailyEdgeOutcomeForecastLabel({ game, market: headline, marketKey: headlineKey, sport })}</span>
+        <div className="mt-5 flex flex-wrap items-baseline gap-2">
+          <span className="text-[30px] font-black leading-none tracking-tight text-white sm:text-[34px]">{footballOutcome?.winner ?? dailyEdgeOutcomeForecastLabel({ game, market: headline, marketKey: headlineKey, sport })}</span>
           <span className="text-[10px] font-black uppercase tracking-wider text-gray-500">{footballOutcome ? "Outcome forecast" : marketLabelFor(headlineKey, sport)}</span>
           <span className="text-[15px] font-black text-gray-200">{formatProbability(footballOutcome?.probability ?? headline.modelProb)}</span>
           {footballOutcome ? <span className={`text-[9px] font-black uppercase tracking-wider ${headlineVerdict.key === "lean" ? "text-sky-300" : headline.held ? "text-amber-200" : "text-gray-500"}`}>Bet grade {headlineVerdict.label}</span> : <span className="font-mono text-[12px] font-bold text-gray-500">{formatAmerican(headline.priceAmerican)}</span>}
         </div>
         {sport === "soccer" && headlineKey === "moneyline" && headline.soccerMatchResultContext ? <div className="mt-2 rounded-lg border border-sky-400/12 bg-sky-400/[0.025] px-2.5 py-2"><div className="grid grid-cols-3 gap-2 text-center">{([{ key: "away", label: game.awayTeam }, { key: "draw", label: "Draw" }, { key: "home", label: game.homeTeam }] as const).map((outcome) => <div key={outcome.key}><p className="truncate text-[7px] font-black uppercase tracking-wider text-gray-600">{outcome.label}</p><p className={`font-mono text-[10px] font-black ${outcome.key === headline.soccerMatchResultContext?.displayed_side ? "text-sky-200" : "text-gray-300"}`}>{(headline.soccerMatchResultContext!.model[outcome.key] * 100).toFixed(1)}%</p></div>)}</div></div> : null}
-        {sport !== "cfb" ? <p className={`${compactSoccer ? "mt-2 text-[10px]" : "mt-3 text-[12px]"} line-clamp-2 leading-relaxed text-gray-400`}>{footballOutcome ? headline.held ? dailyEdgeHeldGuide(headline) : `The ${game.footballOnlyProjection ? "primary market-informed outcome forecast" : "discrete football model"} favors ${footballOutcome.winner}; the ${headlineVerdict.label} Bet grade separately evaluates the exact ${marketLabelFor(headlineKey, sport)} price.` : currentAwareGuidedGuide(headline, game.decisionLine)}</p> : null}
-        <div className={`${compactSoccer ? "mt-2" : "mt-3"} flex items-baseline gap-2`}>
+        {sport !== "cfb" ? <p className="mt-3 line-clamp-2 text-[12px] leading-relaxed text-gray-400">{footballOutcome ? headline.held ? dailyEdgeHeldGuide(headline) : `The ${game.footballOnlyProjection ? "primary market-informed outcome forecast" : "discrete football model"} favors ${footballOutcome.winner}; the ${headlineVerdict.label} Bet grade separately evaluates the exact ${marketLabelFor(headlineKey, sport)} price.` : currentAwareGuidedGuide(headline, game.decisionLine)}</p> : null}
+        <div className="mt-3 flex items-baseline gap-2">
           <span className="text-[9px] font-black uppercase tracking-wider text-gray-600">{soccerScore ? headlineKey === "moneyline" ? "Result score outlook" : "Goal outlook" : sport === "nfl" || sport === "cfb" ? "Expected score" : "Proj"}</span>
           {projectionIsUnavailable(game) ? <span className="text-[12px] font-bold text-amber-200/75">No model score available</span> : soccerMoneylineScoreRefreshing ? <span className="text-[12px] font-bold text-amber-200/75">Refreshing · conflicting goals context withheld</span> : <span className="text-[12px] text-gray-400">{game.awayTeam} <strong className="text-[13px] text-white">{footballExpectedAway === null ? formatNumber(soccerScore?.expectedGoals.away ?? game.projected.away) : footballExpectedAway.toFixed(1)}</strong> <span className="mx-1 text-gray-700">·</span> {game.homeTeam} <strong className="text-[13px] text-white">{footballExpectedHome === null ? formatNumber(soccerScore?.expectedGoals.home ?? game.projected.home) : footballExpectedHome.toFixed(1)}</strong>{(sport === "nfl" || sport === "cfb") && footballExpectedAway !== null && footballExpectedHome !== null ? <span className="ml-2 text-[9px] text-gray-600">Representative {game.projected.away}–{game.projected.home}</span> : soccerScore?.scenario ? <span className="ml-2 text-[9px] text-gray-600">{headlineKey === "moneyline" ? "Mode" : "Illustration"} {soccerScore.scenario.away}–{soccerScore.scenario.home}</span> : null}</span>}
         </div>
-        <div className={`mt-auto ${compactSoccer ? "pt-2" : "pt-3"}`}>
+        <div className="mt-auto pt-3">
           <div className="flex items-center justify-between gap-1 overflow-hidden text-[9px] font-black uppercase tracking-[0.06em]">
             {marketKeys.map((key, index) => {
               const item = game.markets[key];
@@ -2371,12 +2392,12 @@ function BoardGameCard({ game, sport, headlineMarket, active, activeMarket, sele
               return <span key={key} className="inline-flex min-w-0 items-center gap-1">{index > 0 ? <span className="mr-1 text-gray-700">·</span> : null}<span className="text-gray-600">{marketShortLabelFor(key, sport)}</span><span className={boardVerdictText(itemVerdict.key)}>{verdictSymbol(itemVerdict.key)} {itemVerdict.label}</span></span>;
             })}
           </div>
-          <div className={`${compactSoccer ? "mt-2 gap-1.5" : "mt-4 gap-2"} grid grid-cols-3`}>
+          <div className="mt-4 grid grid-cols-3 gap-2">
             {marketKeys.map((key) => {
               const item = game.markets[key];
               const itemVerdict = dailyEdgePresentationVerdict(item);
               const selected = active && activeMarket === key;
-              return <button key={key} type="button" data-market={key} onClick={(event) => { event.stopPropagation(); selectGame(game, key); }} className={`${compactSoccer ? "min-h-[50px] px-2 py-2" : "min-h-[70px] px-3 py-3 sm:min-h-[76px] sm:px-3.5"} rounded-lg border text-left transition ${boardMarketPill(itemVerdict.key)} ${selected ? "ring-2 ring-white/45 ring-offset-1 ring-offset-[#0D0D14]" : ""}`}><span className={`block text-[8.5px] font-black uppercase tracking-[0.1em] ${boardVerdictText(itemVerdict.key)}`}>{marketShortLabelFor(key, sport)}</span><span className={`${compactSoccer ? "mt-1 text-[11px]" : "mt-1.5 text-[14px] sm:text-[15px]"} block truncate font-black text-gray-100`}>{dailyEdgeOutcomeForecastLabel({ game, market: item, marketKey: key, sport })}</span></button>;
+              return <button key={key} type="button" data-market={key} onClick={(event) => { event.stopPropagation(); selectGame(game, key); }} className={`min-h-[70px] rounded-lg border px-3 py-3 text-left transition sm:min-h-[76px] sm:px-3.5 ${boardMarketPill(itemVerdict.key)} ${selected ? "ring-2 ring-white/45 ring-offset-1 ring-offset-[#0D0D14]" : ""}`}><span className={`block text-[8.5px] font-black uppercase tracking-[0.1em] ${boardVerdictText(itemVerdict.key)}`}>{marketShortLabelFor(key, sport)}</span><span className="mt-1.5 block truncate text-[14px] font-black text-gray-100 sm:text-[15px]">{dailyEdgeOutcomeForecastLabel({ game, market: item, marketKey: key, sport })}</span></button>;
             })}
           </div>
           <div className="mt-2 flex min-h-3 justify-end"><span className={`text-[8px] font-black uppercase tracking-[0.1em] ${active ? "text-gray-300" : "text-violet-200/60"}`}>{active ? "Open in reader ↑" : "View breakdown ↑"}</span></div>
