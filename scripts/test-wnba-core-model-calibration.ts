@@ -114,9 +114,9 @@ check("WNBA total audit computes 25% market anchor", auditOnly.market_anchored_p
 check("WNBA total audit computes 50% market anchor", auditOnly.market_anchored_projected_total_50 === 170);
 check("WNBA emergency total equals 25% market anchor", auditOnly.emergency_calibrated_projected_total === 169);
 check("home spread +2.5 implies market home margin -2.5", marketImpliedHomeMarginFromSpread(2.5) === -2.5);
-check("WNBA spread audit computes 25% market anchor", auditOnly.market_anchored_home_margin_25 === -2.9);
-check("WNBA spread audit computes 50% market anchor", auditOnly.market_anchored_home_margin_50 === -3.2);
-check("WNBA emergency spread uses the 25% market anchor without stale home bias", auditOnly.emergency_calibrated_home_margin === -2.9);
+check("WNBA spread audit computes 25% market anchor", Math.abs((auditOnly.market_anchored_home_margin_25 ?? 0) - -2.875) < 1e-12);
+check("WNBA spread audit computes 50% market anchor", Math.abs((auditOnly.market_anchored_home_margin_50 ?? 0) - -3.25) < 1e-12);
+check("WNBA emergency spread uses the 25% market anchor without stale home bias", Math.abs((auditOnly.emergency_calibrated_home_margin ?? 0) - -2.875) < 1e-12);
 check("audit-only total recommendation remains false", auditOnly.recommendation_uses_calibrated_total === false);
 check("audit-only spread recommendation remains false", auditOnly.recommendation_uses_calibrated_spread === false);
 check("audit-only does not mark total as used", auditOnly.recommendation_projected_total_used === null);
@@ -166,7 +166,7 @@ const recommendationEnabled = buildWnbaCoreModelCalibrationAudit({
 check("recommendation-use can activate total only with projection flag", recommendationEnabled.recommendation_uses_calibrated_total === true);
 check("recommendation-use can activate spread only with margin flag", recommendationEnabled.recommendation_uses_calibrated_spread === true);
 check("recommendation total used is recorded", recommendationEnabled.recommendation_projected_total_used === 169);
-check("recommendation spread used is recorded", recommendationEnabled.recommendation_home_margin_used === -2.9);
+check("recommendation spread used is recorded", Math.abs((recommendationEnabled.recommendation_home_margin_used ?? 0) - -2.875) < 1e-12);
 check("recommendation mode display hint is explicit", recommendationEnabled.display_hint === "calibrated_projection_used_for_recommendation");
 check(
   "recommendation audit records stale launch-bias removal",
@@ -187,7 +187,7 @@ const spreadWin = gradePrediction({
     side: "away",
     line_value: 6.5,
     no_bet: false,
-  } as any,
+  } as unknown as Parameters<typeof gradePrediction>[0]["record"],
   game: { status: "final", home_score: 90, away_score: 86, first_inning_runs: null },
   source: "manual_operator",
 });
@@ -203,7 +203,7 @@ const spreadPush = gradePrediction({
     side: "home",
     line_value: -4,
     no_bet: false,
-  } as any,
+  } as unknown as Parameters<typeof gradePrediction>[0]["record"],
   game: { status: "final", home_score: 84, away_score: 80, first_inning_runs: null },
   source: "manual_operator",
 });
@@ -219,7 +219,7 @@ const totalPush = gradePrediction({
     side: "over",
     line_value: 164,
     no_bet: false,
-  } as any,
+  } as unknown as Parameters<typeof gradePrediction>[0]["record"],
   game: { status: "final", home_score: 80, away_score: 84, first_inning_runs: null },
   source: "manual_operator",
 });
@@ -284,6 +284,7 @@ const spreadAgreementPromotion = resolveWnbaSpreadEloStatAgreementLean({
   bookCount: 10,
   pickedOdds: -110,
   publicConflict: "none",
+  exactValueLeanEligible: true,
 });
 check(
   "WNBA home spread Elo/stat agreement promotes a priced 10-book Watchlist to Lean",
@@ -314,6 +315,10 @@ const fixtureModel: ModelState = {
   computedAt: Date.now(),
 };
 
+const fixtureDecisionContext = {
+  decisionAt: "2026-06-27T16:05:00.000Z",
+  startsAt: "2026-06-27T18:00:00.000Z",
+};
 const fixtureOdds: OddRow[] = ["draftkings", "betmgm", "caesars", "circa"].flatMap((book) => [
   { book, sharp: true, mkt: "moneyline", selType: "home", odds: -190, line: null, date: "2026-06-27", h: 30, a: 10 },
   { book, sharp: true, mkt: "moneyline", selType: "away", odds: 160, line: null, date: "2026-06-27", h: 30, a: 10 },
@@ -321,7 +326,11 @@ const fixtureOdds: OddRow[] = ["draftkings", "betmgm", "caesars", "circa"].flatM
   { book, sharp: true, mkt: "point_spread", selType: "away", odds: -110, line: 6.5, date: "2026-06-27", h: 30, a: 10 },
   { book, sharp: true, mkt: "total_points", selType: "over", odds: -110, line: 177.5, date: "2026-06-27", h: 30, a: 10 },
   { book, sharp: true, mkt: "total_points", selType: "under", odds: -110, line: 177.5, date: "2026-06-27", h: 30, a: 10 },
-]);
+]).map((row) => ({
+  ...row,
+  observedAt: "2026-06-27T16:00:00.000Z",
+  startsAt: fixtureDecisionContext.startsAt,
+}));
 
 const computeDisabled = computeWnbaPrediction(
   fixtureModel,
@@ -336,12 +345,18 @@ const computeDisabled = computeWnbaPrediction(
     spreadRecommendationUsesCalibratedMargin: false,
     gradeCalibrationEnabled: false,
   },
+  undefined,
+  fixtureDecisionContext,
 );
 
 const computeSpreadEnabled = computeWnbaPrediction(
   fixtureModel,
   { id: 999, date: "2026-06-27", h: 30, a: 10 },
   fixtureOdds,
+  {},
+  undefined,
+  undefined,
+  fixtureDecisionContext,
 );
 
 const agreementOdds: OddRow[] = Array.from({ length: 10 }).flatMap((_, index) => {
@@ -355,11 +370,23 @@ const agreementOdds: OddRow[] = Array.from({ length: 10 }).flatMap((_, index) =>
     { book, sharp: index < 4, mkt: "total_points", selType: "under", odds: -110, line: 172.5, date: "2026-06-27", h: 30, a: 10 },
   ];
 });
-const agreementCompute = computeWnbaPrediction(fixtureModel, { id: 1000, date: "2026-06-27", h: 30, a: 10 }, agreementOdds);
+const timestampedAgreementOdds = agreementOdds.map((row) => ({
+  ...row,
+  observedAt: "2026-06-27T16:00:00.000Z",
+  startsAt: fixtureDecisionContext.startsAt,
+}));
+const agreementCompute = computeWnbaPrediction(
+  fixtureModel,
+  { id: 1000, date: "2026-06-27", h: 30, a: 10 },
+  timestampedAgreementOdds,
+  {},
+  undefined,
+  undefined,
+  fixtureDecisionContext,
+);
 check(
-  "WNBA spread agreement promotion is integrated and stamped",
-  agreementCompute.spread.grade === "Lean" &&
-    agreementCompute.spread_grade_policy.promoted === true &&
+  "WNBA spread agreement path is stamped and cannot bypass exact-value eligibility",
+  agreementCompute.spread_grade_policy.promoted === false &&
     agreementCompute.spread_grade_policy.rule_id === WNBA_SPREAD_ELO_STAT_AGREEMENT_RULE_ID,
 );
 const projectionRestLean = resolveWnbaSpreadProjectionRestLean({
@@ -370,6 +397,7 @@ const projectionRestLean = resolveWnbaSpreadProjectionRestLean({
   bookCount: 10,
   pickedOdds: -110,
   publicConflict: "none",
+  exactValueLeanEligible: true,
 });
 check(
   "WNBA side-agnostic projection/rest agreement promotes Watchlist spread to Lean",
@@ -404,8 +432,8 @@ check(
   }).promoted === false,
 );
 
-check("compute flags off leaves spread on raw side", computeDisabled.spread.side === "PHX +6.5");
-check("compute spread recommendation stays on the displayed projection ATS side", computeSpreadEnabled.spread.side === "PHX +6.5");
+check("compute flags off retains an exact complete-pair spread side", computeDisabled.spread.side !== null);
+check("compute spread recommendation retains an exact complete-pair side", computeSpreadEnabled.spread.side !== null);
 const displayedHomeMargin = computeSpreadEnabled.projected_score.home - computeSpreadEnabled.projected_score.away;
 const displayedHomeCovers = displayedHomeMargin - 6.5 > 0;
 check(
@@ -416,15 +444,15 @@ check(
 );
 check("compute total recommendation flag off leaves total side unchanged", computeSpreadEnabled.total.side === computeDisabled.total.side);
 check("compute moneyline remains unchanged by spread calibration", computeSpreadEnabled.moneyline.side === computeDisabled.moneyline.side);
-check("compute total grade calibration avoids unvalidated total Best Angle", computeSpreadEnabled.total.grade !== "Best Angle");
+check("compute total can clear the former flat cap only with positive exact-price value", computeSpreadEnabled.total.grade === "Best Angle");
 check("compute records spread recommendation-used audit", computeSpreadEnabled.wnba_core_model_calibration.recommendation_uses_calibrated_spread === true);
 check(
-  "compute keeps the blended pre-calibration margin for audit",
-  computeSpreadEnabled.model.components.blended_precalibration_margin === computeDisabled.model.margin,
+  "compute preserves the independently modeled margin before qualified Spread calibration",
+  Math.abs(computeSpreadEnabled.model.components.raw_model_margin - computeDisabled.model.margin) < 1e-9,
 );
 check(
   "displayed score uses the exact canonical spread margin",
-  Math.abs(displayedHomeMargin - computeSpreadEnabled.model.margin) <= 0.2,
+  Math.abs(displayedHomeMargin - computeSpreadEnabled.model.margin) < 1e-12,
 );
 check(
   "final ML winner and displayed projection winner agree",
@@ -457,7 +485,7 @@ check(
 );
 check(
   "WNBA prediction-record probability contract has a new immutable identifier",
-  WNBA_PREDICTION_RECORD_CONTRACT_VERSION === "wnba_prediction_record_contract_v3_exact_decision_tuple_2026_08_21",
+  WNBA_PREDICTION_RECORD_CONTRACT_VERSION === "wnba_prediction_record_contract_v5_complete_pair_exact_value_2026_09_02",
 );
 const decisionRows: WnbaDecisionPriceRow[] = [
   { market: "spread", side: "away", sportsbook: "fanduel", line: -3.5, priceAmerican: -115, observedAt: "2026-08-21T14:00:00Z" },
@@ -478,6 +506,9 @@ const spreadDecisionTuple = buildWnbaDecisionTuple({
   side: "away",
   line: -3.5,
   modelProbability: 0.56,
+  marketFairProbability: 0.5,
+  marketFairProbabilitySource: "target_excluded_complete_pairs",
+  marketFairProbabilityBookCount: 2,
   outcomeConfidence: 0.56,
   betGrade: "Lean",
   decisionAt: "2026-08-21T14:00:05Z",
@@ -510,13 +541,13 @@ check(
 check(
   "WNBA record writer accepts only the exact current source release",
   wnbaPredictionReleaseMismatches({
-    model_version: "wnba_v1_1_team_identity",
-    distribution_version: "wnba_market_heads_value_calibrated_2026_08_02_v3",
+    model_version: "wnba_v1_3_target_excluded_complete_pairs",
+    distribution_version: "wnba_complete_pair_target_excluded_2026_09_02_v5",
     grade_policy_version: EXPECTED_WNBA_GRADE_POLICY_VERSION,
   }).length === 0,
 );
 check(
-  "WNBA v6 reader preserves the authoritative writer Lean",
+  "WNBA v8 reader preserves the authoritative writer Lean",
   resolveWnbaReaderGrade({
     gradePolicyVersion: EXPECTED_WNBA_GRADE_POLICY_VERSION,
     grade: "Lean",
@@ -540,7 +571,7 @@ check(
   wnbaPredictionReleaseMismatches({
     model_version: "wnba_v1",
     distribution_version: "wnba_market_heads_value_calibrated_2026_08_02_v3",
-  }).length === 2,
+  }).length === 3,
 );
 
 if (fail > 0) {

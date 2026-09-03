@@ -47,10 +47,10 @@ const toDecimal = (o: number | null) => (o == null ? null : o > 0 ? o / 100 + 1 
 const HISTORY_PAGE_SIZE = 1000;
 const LOCK_WINDOW_MS = 60 * 60 * 1000;
 export const WNBA_PREDICTION_RECORD_CONTRACT_VERSION =
-  "wnba_prediction_record_contract_v3_exact_decision_tuple_2026_08_21";
+  "wnba_prediction_record_contract_v5_complete_pair_exact_value_2026_09_02";
 export const WNBA_ACTION_PROMOTION_EVIDENCE_CONTRACT_VERSION =
-  "wnba_action_promotion_evidence_v1_forward_only_2026_08_29" as const;
-export const WNBA_ACTION_PROMOTION_EVIDENCE_KEY = "wnba_action_promotion_evidence_v1" as const;
+  "wnba_action_promotion_evidence_v2_release_pure_2026_09_02" as const;
+export const WNBA_ACTION_PROMOTION_EVIDENCE_KEY = "wnba_action_promotion_evidence_v2" as const;
 export const WNBA_ACTION_PROMOTION_EVIDENCE_MAX_OBSERVATIONS = 32;
 export const WNBA_ACTION_PROMOTION_EVIDENCE_MAX_BYTES = 32 * 1024;
 export const WNBA_ACTION_PROMOTION_EVIDENCE_CADENCE_MINUTES = 30;
@@ -574,6 +574,7 @@ export async function buildWnbaPredictionRecords(opts: {
           },
           sharp_consensus: ss.sharp, consensus_source: ss.consensus_source, dynamic_market_weight: ss.dynamic_market_weight,
           public_market_context: ss.public_market_context ?? null,
+          target_excluded_market_decision: ss.target_excluded_market_decision ?? null,
           data_quality: ss.data_quality, cold_start: ss.cold_start,
           wnba_core_model_calibration: wnbaCalibrationAudit,
           ...(forwardEvidence === null
