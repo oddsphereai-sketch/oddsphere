@@ -242,7 +242,11 @@ const appendIndex = writer.lastIndexOf("appendNflForwardEvidence({");
 assert.ok(coherenceIndex >= 0 && appendIndex > coherenceIndex, "the sole NFL writer must pass coherence before its append boundary");
 assert.equal((writer.match(/assertFootballCrossMarketCoherence\(\{/g) ?? []).length, 1, "the NFL writer must use one shared per-payload coherence gate");
 assert.doesNotMatch(writer, /writeCurrentNflPublishedMemberSnapshot|buildNflTrackingProposals\(/);
-assert.match(writer, /buildNflV1ActionableGradeBundle/);
+assert.doesNotMatch(
+  writer,
+  /buildNflV1ActionableGradeBundle/,
+  "the sole writer must not bypass target-excluded outcome resolution with the legacy direct grade builder",
+);
 assert.match(writer, /resolveNflTargetExcludedProduction/);
 assert.match(writer, /forecastTargetExclusion: resolved\.targetExclusion/);
 assert.match(writer, /outcomeForecast: outcome/);
