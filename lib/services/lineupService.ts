@@ -16,6 +16,10 @@ import type { CronHandlerResult } from "../cron/runCron";
 import { loadGameIdMap, loadPlayerBdlIdMap, loadTeamIdMap } from "./_idMaps";
 import { refreshMlbOfficialLineups } from "./mlbOfficialLineupService";
 
+export type LineupRefreshOptions = {
+  deadlineAtMs?: number;
+};
+
 type SkipReason =
   | "lineup_player_map_missing"
   | "lineup_team_map_missing"
@@ -42,7 +46,13 @@ export const lineupService = {
    * Returns total lineup rows written + provider call count + a
    * per-reason skip breakdown for operator visibility.
    */
-  async refreshLineups(sport: Sport, date: string): Promise<CronHandlerResult> {
+  async refreshLineups(
+    sport: Sport,
+    date: string,
+    options: LineupRefreshOptions = {},
+  ): Promise<CronHandlerResult> {
+    const deadlineReached = () =>
+      options.deadlineAtMs !== undefined && Date.now() >= options.deadlineAtMs;
     const stats = getPlayerStatsProvider();
     const gameIdByExternal = await loadGameIdMap(sport, date);
     const teamIdByExternal = await loadTeamIdMap(sport);
@@ -71,10 +81,17 @@ export const lineupService = {
     const allRows: Array<Record<string, unknown>> = [];
     let apiCalls = 0;
     const skipped: SkipEntry[] = [];
+    const refreshedGameIds: number[] = [];
+    let deadlineStage: string | null = null;
 
     for (const [extGameId, dbGameId] of gameIdByExternal) {
+      if (deadlineReached()) {
+        deadlineStage = "projected_lineup_provider_loop";
+        break;
+      }
       const lineupRecs = await stats.getLineups(extGameId);
       apiCalls++;
+      refreshedGameIds.push(dbGameId);
       const expectedTeams = teamsByGame.get(dbGameId) ?? new Set<number>();
       for (const l of lineupRecs) {
         const teamId = teamIdByExternal.get(l.team_external_id);
@@ -108,24 +125,31 @@ export const lineupService = {
       }
     }
 
-    const { error: delErr } = await supabase
-      .from("lineups")
-      .delete()
-      .in("game_id", gameIds);
-    if (delErr) {
-      throw new Error(`lineupService.refreshLineups delete failed: ${delErr.message}`);
-    }
+    if (refreshedGameIds.length > 0) {
+      const { error: delErr } = await supabase
+        .from("lineups")
+        .delete()
+        .in("game_id", refreshedGameIds);
+      if (delErr) {
+        throw new Error(`lineupService.refreshLineups delete failed: ${delErr.message}`);
+      }
 
-    if (allRows.length > 0) {
-      const { error } = await supabase.from("lineups").insert(allRows);
-      if (error) {
-        throw new Error(`lineupService.refreshLineups insert failed: ${error.message}`);
+      if (allRows.length > 0) {
+        const { error } = await supabase.from("lineups").insert(allRows);
+        if (error) {
+          throw new Error(`lineupService.refreshLineups insert failed: ${error.message}`);
+        }
       }
     }
 
     let officialMlb: Awaited<ReturnType<typeof refreshMlbOfficialLineups>> | null = null;
-    if (sport === "mlb") {
-      officialMlb = await refreshMlbOfficialLineups(date);
+    if (sport === "mlb" && !deadlineReached()) {
+      officialMlb = await refreshMlbOfficialLineups(date, options);
+      if (officialMlb.details.deadline_reached) {
+        deadlineStage = officialMlb.details.deadline_stage ?? "official_lineups";
+      }
+    } else if (sport === "mlb" && deadlineStage === null) {
+      deadlineStage = "before_official_lineups";
     }
 
     const skipByReason: Record<string, number> = {};
@@ -142,8 +166,18 @@ export const lineupService = {
               skipped_by_reason: skipByReason,
               sample_skipped: skipped.slice(0, 10),
               official_mlb_lineups: officialMlb?.details ?? null,
+              deadline_reached: deadlineStage !== null,
+              deadline_stage: deadlineStage,
+              deferred_games: Math.max(0, gameIds.length - refreshedGameIds.length),
             }
-          : undefined,
+          : deadlineStage === null
+            ? undefined
+            : {
+                deadline_reached: true,
+                deadline_stage: deadlineStage,
+                deferred_games: Math.max(0, gameIds.length - refreshedGameIds.length),
+                official_mlb_lineups: null,
+              },
     };
   },
 };

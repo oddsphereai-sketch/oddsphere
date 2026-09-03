@@ -48,6 +48,13 @@ import type { Sport } from "@/lib/types/domain/Sport";
 
 export const maxDuration = 120;
 
+// Leave a wide reserve for the cron wrapper to persist the terminal lifecycle
+// row and release the shared prediction-pipeline lease. Provider/DB work must
+// stop before Vercel's hard function limit; otherwise data_refresh_log remains
+// permanently in_progress and the lease only clears by expiry.
+const FEATURE_COVERAGE_WORK_BUDGET_MS = 80_000;
+const FEATURE_COVERAGE_MIN_STAGE_BUDGET_MS = 12_000;
+
 type FeatureRefreshDetails = {
   // Push 3B-5: BDL player backfill runs BEFORE the lineup refresh so
   // any new BDL player IDs the provider returns today already have
@@ -97,6 +104,9 @@ export async function GET(request: Request) {
     "feature_coverage_refresh",
     sports,
     async ({ sport }) => {
+      const deadlineAtMs = Date.now() + FEATURE_COVERAGE_WORK_BUDGET_MS;
+      const hasStageBudget = () =>
+        deadlineAtMs - Date.now() >= FEATURE_COVERAGE_MIN_STAGE_BUDGET_MS;
       // Hard gate — explicit env opt-in. Missing → blocked report,
       // 200 to prevent scheduler retries, partial:true for monitoring.
       if (process.env.FEATURE_COVERAGE_AUTO_REFRESH_ENABLED !== "true") {
@@ -153,7 +163,7 @@ export async function GET(request: Request) {
         details.bdl_players.reason = "PLAYER_STATS_PROVIDER!=real_api; BDL player backfill skipped.";
       }
 
-      if (weatherProviderReal) {
+      if (weatherProviderReal && hasStageBudget()) {
         try {
           const r = await weatherService.refreshForecasts(sport, date);
           details.weather.records_updated = r.records_updated ?? 0;
@@ -164,26 +174,50 @@ export async function GET(request: Request) {
           details.weather.reason = (e as Error).message;
           partial = true;
         }
-      } else {
+      } else if (!weatherProviderReal) {
         details.weather.reason = "WEATHER_PROVIDER!=real_api; weather refresh skipped to avoid mock writes.";
+        partial = true;
+      } else {
+        details.weather.reason = "deadline_reserve: weather refresh deferred to the next natural cycle.";
         partial = true;
       }
 
-      if (playerStatsProviderReal) {
+      if (playerStatsProviderReal && hasStageBudget()) {
         try {
-          const r = await lineupService.refreshLineups(sport, date);
+          const r = await lineupService.refreshLineups(sport, date, { deadlineAtMs });
           details.lineup.records_updated = r.records_updated ?? 0;
           details.lineup.api_calls_made = r.api_calls_made ?? 0;
-          const d = (r.details ?? {}) as { skipped_by_reason?: Record<string, number> };
+          const d = (r.details ?? {}) as {
+            skipped_by_reason?: Record<string, number>;
+            deadline_reached?: boolean;
+            deadline_stage?: string | null;
+            deferred_games?: number;
+            official_mlb_lineups?: {
+              games_deferred?: number;
+              teams_deferred?: number;
+            } | null;
+          };
           if (d.skipped_by_reason) details.lineup.skipped_by_reason = d.skipped_by_reason;
+          if (d.deadline_reached) {
+            const officialDeferred = d.official_mlb_lineups;
+            details.lineup.reason =
+              `deadline_reserve: ${d.deadline_stage ?? "lineup"}; ` +
+              `deferred_games=${d.deferred_games ?? 0}; ` +
+              `official_games_deferred=${officialDeferred?.games_deferred ?? 0}; ` +
+              `official_teams_deferred=${officialDeferred?.teams_deferred ?? 0}`;
+            partial = true;
+          }
           totalRecords += r.records_updated ?? 0;
           totalApiCalls += r.api_calls_made ?? 0;
         } catch (e) {
           details.lineup.reason = (e as Error).message;
           partial = true;
         }
-      } else {
+      } else if (!playerStatsProviderReal) {
         details.lineup.reason = "PLAYER_STATS_PROVIDER!=real_api; lineup refresh skipped to avoid mock writes.";
+        partial = true;
+      } else {
+        details.lineup.reason = "deadline_reserve: lineup refresh deferred to the next natural cycle.";
         partial = true;
       }
 

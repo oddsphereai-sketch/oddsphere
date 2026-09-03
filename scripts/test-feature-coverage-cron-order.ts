@@ -131,7 +131,23 @@ async function main() {
   }
   ok("T9 feature refresh shares the required MLB prediction writer lease");
 
-  console.log(`\n  result: 9/9 pass\n`);
+  // T10 — feature work stops well before the 120-second Vercel hard limit,
+  // and the remaining deadline is threaded into lineup persistence rather
+  // than implemented as Promise.race (which would leave writes running).
+  const workBudget = src.match(/FEATURE_COVERAGE_WORK_BUDGET_MS\s*=\s*([\d_]+)/)?.[1];
+  const workBudgetMs = Number(workBudget?.replaceAll("_", ""));
+  if (!Number.isFinite(workBudgetMs) || workBudgetMs > 80_000) {
+    fail("T10 lifecycle reserve", `unexpected work budget: ${workBudget ?? "missing"}`);
+  }
+  if (!src.includes("refreshLineups(sport, date, { deadlineAtMs })")) {
+    fail("T10 lifecycle reserve", "lineup refresh must receive the route deadline");
+  }
+  if (!src.includes("deadline_reserve") || src.includes("Promise.race")) {
+    fail("T10 lifecycle reserve", "deadline must return truthful partial telemetry without detached work");
+  }
+  ok("T10 bounded work budget preserves lifecycle/lease close reserve");
+
+  console.log(`\n  result: 10/10 pass\n`);
 }
 
 main().catch((e) => { console.error("FATAL:", e); process.exit(1); });

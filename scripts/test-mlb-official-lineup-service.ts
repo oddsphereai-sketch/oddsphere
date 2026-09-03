@@ -1,4 +1,9 @@
-import { parseMlbStatsOfficialLineups } from "../lib/services/mlbOfficialLineupService";
+import { readFileSync } from "node:fs";
+import {
+  MLB_OFFICIAL_LINEUP_TEAM_START_RESERVE_MS,
+  canStartMlbOfficialLineupTeamUnit,
+  parseMlbStatsOfficialLineups,
+} from "../lib/services/mlbOfficialLineupService";
 
 let pass = 0;
 let fail = 0;
@@ -127,6 +132,27 @@ check(
   !pendingSpots.some(
     (spot) => spot.dbTeamId === 1 && spot.isStartingPitcher,
   ),
+);
+
+check(
+  "a complete team unit starts only with the full reserve available",
+  canStartMlbOfficialLineupTeamUnit(112_000, 100_000) === true &&
+    canStartMlbOfficialLineupTeamUnit(111_999, 100_000) === false &&
+    MLB_OFFICIAL_LINEUP_TEAM_START_RESERVE_MS === 12_000,
+);
+
+const serviceSource = readFileSync("lib/services/mlbOfficialLineupService.ts", "utf8");
+const teamUpsertIndex = serviceSource.indexOf('.upsert(rows, { onConflict: "game_id,team_id,player_id" })');
+const staleDeleteIndex = serviceSource.indexOf('.not("player_id", "in"');
+check(
+  "official team replacement publishes the complete unit before stale-row cleanup",
+  teamUpsertIndex >= 0 && staleDeleteIndex > teamUpsertIndex,
+);
+check(
+  "official provider and database operations share the bounded deadline signal",
+  serviceSource.includes("signal: deadlineSignal(options)") &&
+    serviceSource.includes(".abortSignal(deadlineSignal(options))") &&
+    serviceSource.includes('deadline_stage = "official_team_persistence"'),
 );
 
 console.log(`\n━━━ Results ━━━\n  ✓ ${pass}    ✗ ${fail}`);
