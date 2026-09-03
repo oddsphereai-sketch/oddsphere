@@ -69,6 +69,7 @@ import {
 import { publishMlbPropsMemberReadSnapshots } from "./memberReadSnapshotStore";
 import { assessPropPrice } from "./pricePolicy";
 import {
+  applyMlbPropsProjectionSideActionability,
   checkProjectionSideIntegrity,
   PROJECTION_SIDE_CONTRADICTION,
 } from "./projectionSideIntegrity";
@@ -446,18 +447,23 @@ export async function refreshMlbPropsBoard(args: RefreshArgs): Promise<MlbPropsB
     });
     return Object.is(projection, row.projection) ? row : { ...row, projection };
   });
+  // Grade policy runs before display calibration so its probability and exact-
+  // price economics remain unchanged. Revalidate actionability on the final
+  // member projection so a later display transform cannot leave an ordinary
+  // two-way Lean/Best Angle pointing through the line in the opposite direction.
+  const coherentProps = applyMlbPropsProjectionSideActionability(calibratedProps);
   const marketEvidence = buildMlbPropsMarketEvidenceCapture({
     currentOdds: boardSourceOdds,
     openingOdds,
     contexts: marketContexts,
-    rows: calibratedProps,
+    rows: coherentProps,
     evaluatedAt: asOfTimestamp,
     maximumQuoteAgeMinutes: Number(
       process.env.ODDSPHERE_PROPS_MAX_ODDS_AGE_MINUTES ?? DEFAULT_MAX_ODDS_AGE_MINUTES,
     ),
   });
   const props = attachMlbPropsMarketEvidenceReferences(
-    calibratedProps,
+    coherentProps,
     marketEvidence.retainedIds,
   );
   const data = buildDashboardData({
@@ -1501,30 +1507,9 @@ function buildDashboardRows(args: {
   const concentrationDisciplined = applyHitterSignalDiscipline(priceDisciplined);
   const evidenceGraded = applyEvidenceGradeCorrections(concentrationDisciplined);
   const underPromoted = applyValidatedUnderActionablePromotions(evidenceGraded);
-  return applyProjectionSideActionability(
+  return applyMlbPropsProjectionSideActionability(
     applyValidatedBatterStrikeoutsAccuracyPromotions(underPromoted),
   );
-}
-
-function applyProjectionSideActionability(rows: PlayerPropPreviewRow[]): PlayerPropPreviewRow[] {
-  return rows.map((row) => {
-    const oneSidedHomeRun = row.market === "batter_home_runs"
-      && row.side === "over"
-      && row.line === 0.5;
-    if (!ACTIONABLE_GRADES.has(row.playGrade) || oneSidedHomeRun) return row;
-    const integrity = checkProjectionSideIntegrity({
-      side: row.side,
-      line: row.line,
-      projection: row.projection,
-    });
-    if (integrity.status !== "contradiction") return row;
-    return {
-      ...row,
-      playGrade: "WATCHLIST",
-      units: 0,
-      reasonCodes: uniqueStrings([...row.reasonCodes, PROJECTION_SIDE_CONTRADICTION]),
-    };
-  });
 }
 
 const HITTER_LEAN_ELIGIBLE_MARKETS = new Set([

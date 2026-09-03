@@ -1,5 +1,5 @@
 /**
- * SELECT-only replay of the MLB props r40 target-excluded forecast release.
+ * SELECT-only replay of the MLB props r41 target-excluded forecast release.
  * It uses the immutable r38 board plus its retained forward-evidence tuples.
  */
 import { createHash } from "node:crypto";
@@ -89,7 +89,7 @@ type CandidateRow = {
 };
 
 async function main(): Promise<void> {
-  if (MLB_PROPS_MODEL_RELEASE_ID !== "mlb_props_2026_09_02_r40") {
+  if (MLB_PROPS_MODEL_RELEASE_ID !== "mlb_props_2026_09_02_r41") {
     throw new Error(`Candidate runtime moved to ${MLB_PROPS_MODEL_RELEASE_ID}.`);
   }
   const date = option("date") ?? easternDate();
@@ -227,7 +227,7 @@ async function main(): Promise<void> {
     return;
   }
   const report = {
-    auditRelease: "mlb_props_target_excluded_forecast_audit_2026_09_02_r2",
+    auditRelease: "mlb_props_target_excluded_forecast_audit_2026_09_02_r3_post_calibration_coherence",
     candidateRelease: MLB_PROPS_MODEL_RELEASE_ID,
     readOnly: true,
     databaseSelects: 2,
@@ -304,7 +304,7 @@ async function main(): Promise<void> {
       unretainedRowsReplayedFromCanonicalEmbeddedEvidence: candidateRows.filter((row) => row.measurable && !row.row.marketEvidenceId).length,
       unmeasuredRows: candidateRows.filter((row) => !row.measurable).length,
       deterministicProjectionReconstructionIsNotExactForEveryRetainedIdentity: deterministicReconstruction.some((value) => value.error > 1e-9),
-      exactProductionImpactRequiresNaturalR40Writer: true,
+      exactProductionImpactRequiresNaturalR41Writer: true,
       outcomesJoined: false,
     },
   };
