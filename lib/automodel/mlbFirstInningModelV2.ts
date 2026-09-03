@@ -176,7 +176,7 @@ export type FiFeatureCapture = {
   starter: { home: FiStarterCapture | null; away: FiStarterCapture | null };
   top3_ops: { home: number | null; away: number | null };
   park: { park_factor_runs: number | null; is_dome: boolean } | null;
-  weather: { temperature_f: number | null; wind_speed_mph: number | null; wind_direction_degrees: number | null; is_notable: boolean } | null;
+  weather: { temperature_f: number | null; wind_speed_mph: number | null; wind_direction_degrees: number | null; is_notable: boolean; standard_source: "weather_forecasts" | null; standard_fetched_at: string | null } | null;
   lambdas: { home: number; away: number };
   /** indep.per_team_factors — FI lambda component multipliers. */
   factors: unknown;
@@ -193,12 +193,12 @@ function top3Ops(lineup: GameSnapshot["home_lineup_top8"]): number | null {
 }
 function buildFiFeatureCapture(snap: GameSnapshot, factors: unknown, tier: string, homeLambda: number, awayLambda: number): FiFeatureCapture {
   return {
-    schema_version: "fi_fc_v1",
+    schema_version: "fi_fc_v2",
     data_quality_tier: tier,
     starter: { home: captureFiStarter(snap.home_starter), away: captureFiStarter(snap.away_starter) },
     top3_ops: { home: top3Ops(snap.home_lineup_top8), away: top3Ops(snap.away_lineup_top8) },
     park: snap.ballpark ? { park_factor_runs: snap.ballpark.park_factor_runs, is_dome: snap.ballpark.is_dome } : null,
-    weather: snap.weather ? { temperature_f: snap.weather.temperature_f, wind_speed_mph: snap.weather.wind_speed_mph, wind_direction_degrees: snap.weather.wind_direction_degrees, is_notable: snap.weather.is_notable } : null,
+    weather: snap.weather ? { temperature_f: snap.weather.temperature_f, wind_speed_mph: snap.weather.wind_speed_mph, wind_direction_degrees: snap.weather.wind_direction_degrees, is_notable: snap.weather.is_notable, standard_source: snap.weather.standard_source ?? null, standard_fetched_at: snap.weather.standard_fetched_at ?? null } : null,
     lambdas: { home: homeLambda, away: awayLambda },
     factors: factors ?? null,
   };

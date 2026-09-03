@@ -1,4 +1,9 @@
-import { applyMlbPlaybookVenueWeatherOverlay } from "../lib/services/mlbPlaybookVenueWeatherOverlay";
+import {
+  applyMlbPlaybookVenueWeatherOverlay,
+  buildMlbPlaybookVenueWeatherFailureAudits,
+} from "../lib/services/mlbPlaybookVenueWeatherOverlay";
+import type { GameSnapshot } from "../lib/automodel/types";
+import type { PlaybookVenueWeatherRow } from "../lib/providers/playbook/types";
 
 let pass = 0;
 let fail = 0;
@@ -43,7 +48,7 @@ function snap(overrides: Record<string, unknown> = {}) {
       season_stats_present: false,
     },
     ...overrides,
-  } as any;
+  } as unknown as GameSnapshot;
 }
 
 function row(overrides: Record<string, unknown> = {}) {
@@ -63,7 +68,7 @@ function row(overrides: Record<string, unknown> = {}) {
     },
     impact: {},
     ...overrides,
-  } as any;
+  } as unknown as PlaybookVenueWeatherRow;
 }
 
 console.log("━━━ MLB Playbook venue/weather overlay ━━━");
@@ -79,6 +84,8 @@ console.log("━━━ MLB Playbook venue/weather overlay ━━━");
   check("closed roof weather is not notable", out.weather?.is_notable === false);
   check("closed roof sets weather_available=true", out.data_quality.weather_available === true);
   check("closed roof audit reason", audit?.reason === "closed_roof_weather_neutralized");
+  check("fresh closed-roof row is classified fresh", audit?.provider_status === "fresh");
+  check("applied fresh row has no fallback", audit?.fallback_source === null);
 }
 
 {
@@ -100,6 +107,7 @@ console.log("━━━ MLB Playbook venue/weather overlay ━━━");
   check("open roof applies Playbook wind", out.weather?.wind_speed_mph === 14);
   check("open roof notable weather is preserved", out.weather?.is_notable === true);
   check("open roof audit applied", audit?.applied === true && audit.reason === "playbook_weather_overlay_applied");
+  check("fresh open-roof row is classified fresh", audit?.provider_status === "fresh");
 }
 
 {
@@ -109,6 +117,72 @@ console.log("━━━ MLB Playbook venue/weather overlay ━━━");
 
   check("missing row leaves snapshot unchanged", out.weather === null);
   check("missing row audit not applied", audit?.applied === false && audit.reason === "missing_playbook_home_team_row");
+  check("missing row is classified missing", audit?.provider_status === "missing");
+  check("missing standard fallback is explicit", audit?.fallback_source === "unavailable");
+}
+
+{
+  const weather = {
+    temperature_f: 78,
+    humidity_pct: 54,
+    wind_speed_mph: 7,
+    wind_direction_degrees: 180,
+    is_notable: false,
+    notable_reason: null,
+    standard_source: "weather_forecasts" as const,
+    standard_fetched_at: "2026-06-24T11:55:00Z",
+  };
+  const input = snap({ game_external_id: 1004, weather });
+  const result = applyMlbPlaybookVenueWeatherOverlay(
+    [input],
+    [
+      row({
+        stale: true,
+        staleReason:
+          "OpenWeather onecall error (429): account temporarily blocked by requests limitation",
+      }),
+    ],
+  );
+  const audit = result.auditByExternalId.get(1004);
+
+  check("stale embedded OpenWeather 429 leaves snapshot identity", result.snapshots[0] === input);
+  check("embedded OpenWeather 429 is classified rate_limited", audit?.provider_status === "rate_limited");
+  check("embedded 429 records standard fallback", audit?.fallback_source === "weather_forecasts");
+}
+
+{
+  const weather = {
+    temperature_f: 78,
+    humidity_pct: 54,
+    wind_speed_mph: 7,
+    wind_direction_degrees: 180,
+    is_notable: false,
+    notable_reason: null,
+    standard_source: "weather_forecasts" as const,
+    standard_fetched_at: "2026-06-24T11:55:00Z",
+  };
+  const inputs = [
+    snap({ game_external_id: 1005, weather }),
+    snap({ game_external_id: 1006, weather: null }),
+  ];
+  const audits = buildMlbPlaybookVenueWeatherFailureAudits(
+    inputs,
+    new Error("Playbook request failed with status 429"),
+  );
+
+  check("call-level 429 creates one bounded audit per game", audits.size === 2);
+  check("call-level 429 is classified rate_limited", audits.get(1005)?.provider_status === "rate_limited");
+  check("call-level 429 records weather_forecasts fallback", audits.get(1005)?.fallback_source === "weather_forecasts");
+  check("call-level 429 records unavailable fallback when absent", audits.get(1006)?.fallback_source === "unavailable");
+  check("call-level failure does not persist raw error", !JSON.stringify([...audits.values()]).includes("status 429"));
+}
+
+{
+  const audits = buildMlbPlaybookVenueWeatherFailureAudits(
+    [snap({ game_external_id: 1007 })],
+    new Error("fetch failed: provider unavailable"),
+  );
+  check("call-level unavailable is classified", audits.get(1007)?.provider_status === "unavailable");
 }
 
 console.log(`\n${pass} passed · ${fail} failed`);

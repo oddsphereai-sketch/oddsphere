@@ -27,7 +27,7 @@ function snapshot(): GameSnapshot {
     home_starter: starter(100), away_starter: starter(200),
     home_lineup_top8: [], away_lineup_top8: [],
     ballpark: { park_factor_runs: 1.04, is_dome: false },
-    weather: { temperature_f: 78, humidity_pct: 55, wind_speed_mph: 8, wind_direction_degrees: 180, is_notable: false, notable_reason: null },
+    weather: { temperature_f: 78, humidity_pct: 55, wind_speed_mph: 8, wind_direction_degrees: 180, is_notable: false, notable_reason: null, standard_source: "weather_forecasts", standard_fetched_at: "2026-06-15T17:55:00.000Z" },
     market: { listed_total: 8.5, home_ml_odds_american: -120, away_ml_odds_american: 110, over_odds_american: -110, under_odds_american: -110, has_pinnacle_total: true },
     sharp: null,
     active_injuries: { home_starter_out: false, away_starter_out: false, home_top3_hitters_injured_count: 0, away_top3_hitters_injured_count: 0 },
@@ -54,7 +54,7 @@ check("ou_play_grade still present in audit", typeof a.ou_play_grade === "string
 
 // feature_capture exists + structured
 check("feature_capture exists", fc != null);
-check("schema_version = fc_v1", fc?.schema_version === "fc_v1");
+check("schema_version = fc_v2", fc?.schema_version === "fc_v2");
 check("starter.home.season_era captured", fc?.starter.home?.season_era === 3.9);
 check("starter.home.first_inning_era captured", fc?.starter.home?.first_inning_era === 3.2);
 check("starter.away.season_k_per_9 captured", fc?.starter.away?.season_k_per_9 === 9.0);
@@ -63,12 +63,39 @@ check("team.away.team_avg_batter_ops captured", fc?.team.away.team_avg_batter_op
 check("park.park_factor_runs captured", fc?.park?.park_factor_runs === 1.04);
 check("weather.temperature_f captured", fc?.weather?.temperature_f === 78);
 check("weather.wind_speed_mph captured", fc?.weather?.wind_speed_mph === 8);
+check("weather standard source captured", fc?.weather?.standard_source === "weather_forecasts");
+check("weather standard fetched_at captured", fc?.weather?.standard_fetched_at === "2026-06-15T17:55:00.000Z");
 check("lineup counts present", fc?.lineup.home != null && fc?.lineup.away != null);
 check("factors (audit_per_team) present", "factors" in (fc ?? {}));
 
 // null-starter safety
 const out2 = runMlbAutoModelV2_2({ ...snapshot(), home_starter: null }, v1out(), "t60_locked");
 check("null starter → feature_capture.starter.home = null (no crash)", out2.v22Audit.feature_capture?.starter.home === null);
+
+// Provenance-only fields may alter only their additive capture values. They
+// cannot alter the authoritative forecast or any other audit field.
+const withoutProvenanceSnapshot = snapshot();
+if (withoutProvenanceSnapshot.weather) {
+  delete withoutProvenanceSnapshot.weather.standard_source;
+  delete withoutProvenanceSnapshot.weather.standard_fetched_at;
+}
+const withoutProvenance = runMlbAutoModelV2_2(withoutProvenanceSnapshot, v1out(), "t60_locked");
+function stripWeatherProvenance<T>(value: T): T {
+  const copy = JSON.parse(JSON.stringify(value)) as T & {
+    v22Audit?: { feature_capture?: { weather?: Record<string, unknown> | null } | null };
+  };
+  const weather = copy.v22Audit?.feature_capture?.weather;
+  if (weather) {
+    delete weather.standard_source;
+    delete weather.standard_fetched_at;
+  }
+  return copy;
+}
+check(
+  "standard weather provenance is model-output strip-identical",
+  JSON.stringify(stripWeatherProvenance(out)) ===
+    JSON.stringify(stripWeatherProvenance(withoutProvenance)),
+);
 
 // backward-compat: old snapshot lacking feature_capture reads fine (optional)
 const legacy = { ...a } as V22Audit; delete (legacy as { feature_capture?: unknown }).feature_capture;
