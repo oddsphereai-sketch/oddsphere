@@ -1674,9 +1674,12 @@ check(
     candidateDailyEdgeSource.includes("primaryColor={memberTeamColor(game, role, sport)}"),
 );
 check(
-  "long football names wrap inside fixed reader cards without shrinking the shared surface",
+  "expanded football reader renders MASS for Massachusetts Minutemen while preserving the accessible full name",
   candidateDailyEdgeSource.includes('className="flex min-w-0 items-center gap-2"') &&
-    candidateDailyEdgeSource.includes('className="min-w-0 break-words text-base font-black leading-5 tracking-tight text-white"') &&
+    candidateDailyEdgeSource.includes('if (sport !== "nfl" && sport !== "cfb") return abbreviation') &&
+    candidateDailyEdgeSource.includes('const readerTeam = sport === "nfl" || sport === "cfb" ? team : fullName') &&
+    candidateDailyEdgeSource.includes('aria-label={fullName} title={fullName}>{readerTeam}</p>') &&
+    candidateDailyEdgeSource.includes('<span className="truncate text-[8px] font-semibold text-gray-500">{memberTeamName(game, role, sport)}</span>') &&
     candidateDailyEdgeSource.includes('grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-stretch gap-2') &&
     !candidateDailyEdgeSource.includes('grid-cols-[1fr_auto_1fr] items-stretch gap-2'),
 );
