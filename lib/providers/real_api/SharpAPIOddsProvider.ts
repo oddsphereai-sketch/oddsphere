@@ -38,7 +38,11 @@ import type {
   IOddsProvider,
   LineRecord,
 } from "../interfaces/IOddsProvider";
-import { SharpApiClient, SharpApiNotFoundError } from "./_sharpApiClient";
+import {
+  SharpApiAbortError,
+  SharpApiClient,
+  SharpApiNotFoundError,
+} from "./_sharpApiClient";
 import {
   normalizeMlbTeamName,
   type MlbTeamAbbrev,
@@ -516,6 +520,7 @@ export class SharpAPIOddsProvider implements IOddsProvider {
     opts?: {
       externalIdsFilter?: readonly number[];
       slateGames?: readonly SharpApiSlateGame[];
+      signal?: AbortSignal;
     }
   ): Promise<{ records: LineRecord[]; discovery: V2DiscoveryReport }> {
     const sportKey = sport ?? "mlb";
@@ -541,7 +546,8 @@ export class SharpAPIOddsProvider implements IOddsProvider {
     const evResult = await discoverEventsFromOpportunities(
       this.client,
       sportKey,
-      date
+      date,
+      { signal: opts?.signal },
     );
     // Discovery unions /opportunities/ev and /opportunities/low_hold so a
     // game with no current +EV offer does not lose its provider event id.
@@ -576,7 +582,8 @@ export class SharpAPIOddsProvider implements IOddsProvider {
       const splitsResult = await discoverEventsFromSplits(
         this.client,
         sportKey,
-        date
+        date,
+        { signal: opts?.signal },
       );
       callsUsed += 1;
       splitsLookupEvents = splitsResult.events.map((e) => ({
@@ -586,6 +593,7 @@ export class SharpAPIOddsProvider implements IOddsProvider {
         splitsEventId: e.splitsEventId,
       }));
     } catch (e) {
+      if (e instanceof SharpApiAbortError) throw e;
       console.warn(
         `[SharpAPIOddsProvider V2] /splits enrichment unavailable; R-16E fallback disabled this run: ${
           e instanceof Error ? e.message : String(e)
@@ -825,6 +833,7 @@ export class SharpAPIOddsProvider implements IOddsProvider {
             path: "/odds",
             query: { event_id: effectiveEventId },
             maxPages: 3,
+            signal: opts?.signal,
           });
           const hasMainTotal = oddsRows.some((row) =>
             mapMarketType(asStringOrNull(row.market_type)) === "total" &&
@@ -836,6 +845,7 @@ export class SharpAPIOddsProvider implements IOddsProvider {
               path: "/odds",
               query: { event_id: effectiveEventId, market_type: "total_runs" },
               maxPages: 10,
+              signal: opts?.signal,
             });
             oddsRows = mergeRawOddsRows(oddsRows, targetedTotals);
           }
@@ -854,6 +864,7 @@ export class SharpAPIOddsProvider implements IOddsProvider {
               path: "/odds",
               query: { event_id: effectiveEventId, market_type: "moneyline" },
               maxPages: 10,
+              signal: opts?.signal,
             });
             oddsRows = mergeRawOddsRows(oddsRows, targetedMoneyline);
           }
@@ -867,6 +878,7 @@ export class SharpAPIOddsProvider implements IOddsProvider {
               path: "/odds",
               query: { event_id: effectiveEventId, market_type: "1st_inning_total_runs" },
               maxPages: 10,
+              signal: opts?.signal,
             });
             oddsRows = mergeRawOddsRows(oddsRows, targetedFirstInningTotals);
           }
@@ -1032,6 +1044,7 @@ export class SharpAPIOddsProvider implements IOddsProvider {
             path: "/odds",
             query: { event_id: probe.fullId },
             maxPages: 3,
+            signal: opts?.signal,
           });
           const hasMainTotal = probeRows.some((row) =>
             mapMarketType(asStringOrNull(row.market_type)) === "total" &&
@@ -1043,6 +1056,7 @@ export class SharpAPIOddsProvider implements IOddsProvider {
               path: "/odds",
               query: { event_id: probe.fullId, market_type: "total_runs" },
               maxPages: 10,
+              signal: opts?.signal,
             });
             probeRows = mergeRawOddsRows(probeRows, targetedTotals);
           }
@@ -1056,6 +1070,7 @@ export class SharpAPIOddsProvider implements IOddsProvider {
               path: "/odds",
               query: { event_id: probe.fullId, market_type: "moneyline" },
               maxPages: 10,
+              signal: opts?.signal,
             });
             probeRows = mergeRawOddsRows(probeRows, targetedMoneyline);
           }
@@ -1069,6 +1084,7 @@ export class SharpAPIOddsProvider implements IOddsProvider {
               path: "/odds",
               query: { event_id: probe.fullId, market_type: "1st_inning_total_runs" },
               maxPages: 10,
+              signal: opts?.signal,
             });
             probeRows = mergeRawOddsRows(probeRows, targetedFirstInningTotals);
           }

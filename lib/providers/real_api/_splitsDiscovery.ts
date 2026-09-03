@@ -189,7 +189,8 @@ export function buildDiscoveryFromSplitsRows(
 export async function discoverEventsFromSplits(
   client: SharpApiClient,
   sport: Sport,
-  date: string
+  date: string,
+  opts?: { signal?: AbortSignal },
 ): Promise<{ events: DiscoveredEvent[]; stats: DiscoveryStats; rows: RawSplitsRow[] }> {
   if (sport !== "mlb") {
     return {
@@ -213,6 +214,7 @@ export async function discoverEventsFromSplits(
       path: SPLITS_PATH,
       query: { sport: "mlb" },
       maxPages: 3,
+      signal: opts?.signal,
     });
   } catch (e) {
     if (e instanceof SharpApiNotFoundError) rows = [];

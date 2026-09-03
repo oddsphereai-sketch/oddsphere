@@ -416,7 +416,8 @@ export function buildDiscoveryFromOpportunitiesRows(
 export async function discoverEventsFromOpportunities(
   client: SharpApiClient,
   sport: Sport,
-  date: string
+  date: string,
+  opts?: { signal?: AbortSignal },
 ): Promise<{
   events: CanonicalEvent[];
   stats: DiscoveryStats;
@@ -449,6 +450,7 @@ export async function discoverEventsFromOpportunities(
           path,
           query: { sport: "mlb" },
           maxPages: 5,
+          signal: opts?.signal,
         });
       } catch (e) {
         if (e instanceof SharpApiNotFoundError) return [];

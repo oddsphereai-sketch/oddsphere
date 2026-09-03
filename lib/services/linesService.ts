@@ -23,6 +23,7 @@ import type { Sport } from "../types/domain/Sport";
 import type { CronHandlerResult } from "../cron/runCron";
 import { loadGameIdMap, loadPlayerIdMap } from "./_idMaps";
 import { SharpAPIOddsProvider } from "../providers/real_api/SharpAPIOddsProvider";
+import { SharpApiAbortError } from "../providers/real_api/_sharpApiClient";
 import type { V2DiscoveryReport } from "../providers/real_api/SharpAPIOddsProvider";
 import type { SharpApiSlateGame } from "../providers/real_api/SharpAPIOddsProvider";
 import type { MlbTeamAbbrev } from "../providers/real_api/_teamNameNormalizer";
@@ -34,6 +35,44 @@ import {
   replaceCurrentGameLinesBatched,
   type CurrentLinesReplaceResult,
 } from "./currentGameLinesBatchWriter";
+
+export const GAME_LINES_COMMIT_RESERVE_MS = 12_000;
+
+export class GameLinesDeadlineError extends Error {
+  constructor(
+    public readonly stage: "before_provider" | "provider_fetch" | "before_current_line_commit",
+    public readonly deadlineAtMs: number,
+    public readonly remainingMs: number,
+  ) {
+    super(
+      `pregame line refresh deadline reached at ${stage}; ` +
+      `remaining_ms=${Math.max(0, Math.round(remainingMs))}`,
+    );
+    this.name = "GameLinesDeadlineError";
+  }
+}
+
+export function assertGameLinesDeadlineBudget(
+  deadlineAtMs: number | undefined,
+  stage: GameLinesDeadlineError["stage"],
+  requiredRemainingMs = 1,
+  nowMs = Date.now(),
+): void {
+  if (deadlineAtMs === undefined) return;
+  const remainingMs = deadlineAtMs - nowMs;
+  if (remainingMs < requiredRemainingMs) {
+    throw new GameLinesDeadlineError(stage, deadlineAtMs, remainingMs);
+  }
+}
+
+function signalUntil(deadlineAtMs: number | undefined): AbortSignal | undefined {
+  if (deadlineAtMs === undefined) return undefined;
+  const remainingMs = deadlineAtMs - Date.now();
+  if (remainingMs <= 0) {
+    return AbortSignal.abort(new Error("pregame line refresh soft deadline reached"));
+  }
+  return AbortSignal.timeout(remainingMs);
+}
 
 /**
  * 2026-06-10 phantom-thinning fix — per-(game, market_type, sportsbook)
@@ -572,9 +611,23 @@ export const linesService = {
   async refreshGameLinesV2(
     sport: Sport,
     date: string,
-    opts?: { dryRun?: boolean; externalIdsFilter?: readonly number[] }
+    opts?: {
+      dryRun?: boolean;
+      externalIdsFilter?: readonly number[];
+      deadlineAtMs?: number;
+    }
   ): Promise<CronHandlerResult> {
     const dryRun = opts?.dryRun === true;
+    assertGameLinesDeadlineBudget(
+      opts?.deadlineAtMs,
+      "before_provider",
+      GAME_LINES_COMMIT_RESERVE_MS + 1,
+    );
+    const providerSignal = signalUntil(
+      opts?.deadlineAtMs === undefined
+        ? undefined
+        : opts.deadlineAtMs - GAME_LINES_COMMIT_RESERVE_MS,
+    );
     const odds = getOddsProvider();
     if (!(odds instanceof SharpAPIOddsProvider)) {
       throw new Error(
@@ -649,10 +702,24 @@ export const linesService = {
       });
     }
 
-    const { records, discovery } = await odds.getGameLinesV2(date, sport, {
-      externalIdsFilter: opts?.externalIdsFilter,
-      slateGames,
-    });
+    let providerResult: Awaited<ReturnType<SharpAPIOddsProvider["getGameLinesV2"]>>;
+    try {
+      providerResult = await odds.getGameLinesV2(date, sport, {
+        externalIdsFilter: opts?.externalIdsFilter,
+        slateGames,
+        signal: providerSignal,
+      });
+    } catch (error) {
+      if (error instanceof SharpApiAbortError || providerSignal?.aborted) {
+        throw new GameLinesDeadlineError(
+          "provider_fetch",
+          opts?.deadlineAtMs ?? Date.now(),
+          (opts?.deadlineAtMs ?? Date.now()) - Date.now(),
+        );
+      }
+      throw error;
+    }
+    const { records, discovery } = providerResult;
 
     // Partition provider rows by (game_id, market_type). This is the
     // unit of preservation: a market the provider didn't return for a
@@ -864,6 +931,14 @@ export const linesService = {
     let currentInsert: CurrentLinesReplaceResult | null = null;
 
     if (!dryRun && linesPayload.length > 0) {
+      // The current-line replacement is an atomic RPC. Never enter it when
+      // the route lacks enough soft-deadline reserve to finish the commit and
+      // lifecycle close; preserve the complete prior line set for retry.
+      assertGameLinesDeadlineBudget(
+        opts?.deadlineAtMs,
+        "before_current_line_commit",
+        GAME_LINES_COMMIT_RESERVE_MS,
+      );
       // Per-(game, market_type, sportsbook) replacement scope, derived from
       // the actual rows being inserted. A book present in this payload gets
       // its prior rows removed only after the new group succeeds; a book
