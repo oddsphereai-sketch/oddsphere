@@ -4,6 +4,10 @@ import {
   calibrateMlbPropsDisplayProjection,
   MLB_PROPS_DISPLAY_PROJECTION_CALIBRATION_VERSION,
 } from "../lib/mlb/props/displayProjectionCalibration";
+import {
+  applyMlbPropsProjectionSideActionability,
+  PROJECTION_SIDE_CONTRADICTION,
+} from "../lib/mlb/props/projectionSideIntegrity";
 
 const untouched = {
   id: "unselected",
@@ -75,5 +79,57 @@ assert.equal(
   "a display correction must not introduce a projection/side contradiction",
 );
 assert.match(MLB_PROPS_DISPLAY_PROJECTION_CALIBRATION_VERSION, /2026_08_19_r1$/);
+
+const baezLikeRbi = {
+  id: "baez-rbi-over",
+  market: "batter_rbis",
+  offerContract: "two_way",
+  side: "over" as const,
+  line: 0.5,
+  projection: 0.42369049,
+  finalProbability: 0.345374,
+  odds: 281,
+  playGrade: "LEAN",
+  units: 1,
+  reasonCodes: ["VALIDATED_RBI_VALUE_PORTFOLIO_LEAN"],
+};
+const [blockedRbi] = applyMlbPropsProjectionSideActionability([baezLikeRbi]);
+assert.equal(blockedRbi.playGrade, "WATCHLIST", "post-calibration RBI contradiction must be non-actionable");
+assert.equal(blockedRbi.units, 0);
+assert.ok(blockedRbi.reasonCodes.includes(PROJECTION_SIDE_CONTRADICTION));
+assert.equal(blockedRbi.projection, baezLikeRbi.projection, "the final calibrated projection remains authoritative");
+assert.equal(blockedRbi.finalProbability, baezLikeRbi.finalProbability, "the coherence gate cannot rewrite probability");
+assert.equal(blockedRbi.odds, baezLikeRbi.odds, "the exact evaluated quote remains unchanged");
+
+const coherentRbi = { ...baezLikeRbi, id: "coherent-rbi-over", projection: 0.63 };
+assert.strictEqual(
+  applyMlbPropsProjectionSideActionability([coherentRbi])[0],
+  coherentRbi,
+  "a coherent exact-price RBI Lean path must remain actionable",
+);
+
+const homeRunMilestone = {
+  ...baezLikeRbi,
+  id: "one-sided-home-run",
+  market: "batter_home_runs",
+  offerContract: "milestone",
+  projection: 0.22,
+};
+assert.strictEqual(
+  applyMlbPropsProjectionSideActionability([homeRunMilestone])[0],
+  homeRunMilestone,
+  "one-sided 1+ Home Run value semantics remain exempt",
+);
+
+const lockedContradiction = {
+  ...baezLikeRbi,
+  id: "locked-rbi-over",
+  lockStatus: { status: "locked" },
+};
+assert.strictEqual(
+  applyMlbPropsProjectionSideActionability([lockedContradiction])[0],
+  lockedContradiction,
+  "locked rows remain byte-precedent and are never reinterpreted",
+);
 
 console.log("MLB props display-projection calibration tests passed.");

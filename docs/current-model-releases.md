@@ -1130,11 +1130,31 @@ in `docs/model-audits/2026-08-21-wnba-incoherent-total-tuple-fallback.md`.
 
 ## MLB Player Props production release
 
-- Release: `mlb_props_2026_09_02_r40`
+- Release: `mlb_props_2026_09_02_r41`
 - Machine registry: `lib/mlb/props/marketModelVersions.ts`
 - Authoritative writer: `/api/cron/mlb-player-props-refresh` through
   `refreshMlbPropsBoard`
 - Status: authoritative signed-in member release
+
+The September 2 r41 post-calibration coherence release leaves the r40 target-excluded posterior,
+forecast side, decimal projection calibration, exact-price economics, category policies, and
+missing-comparator neutrality unchanged. After every display projection calibration and portfolio
+promotion has completed, an unlocked ordinary two-way Best Angle or Lean whose final displayed
+projection opposes its evaluated side is downgraded to Watchlist with zero units and the existing
+`PROJECTION_SIDE_CONTRADICTION` reason. Coherent actions remain eligible, and intentional one-sided
+1+ Home Run milestone value offers remain exempt. The repair was prompted by Joshua Baez Over 0.5
+RBIs at +281 retaining a Lean after its final projection calibrated to 0.42369049. Locked rows,
+provider/query/write budgets, writer, lease, member UI, and every forecast/economic value remain
+unchanged. Equal-input replay changes exactly that contradictory row from Lean to Watchlist
+(`71 -> 70` actions; zero promotions/one safety demotion), removes the only ordinary actionable
+projection contradiction, preserves all four Home Run milestone actions, and changes zero
+probability/projection/side/price/economics tuples or locked rows. RBI remains populated with 395
+rows; its sole prior action was the contradictory row, so actionability becomes zero without a
+fabricated replacement. A second 3,534-row natural r40 snapshot reproduces the same one-row
+correction (`53 -> 52` actions), preserves five milestone actions, and leaves every other category
+unchanged. Equal-input replay and live proof are recorded in
+`docs/model-audits/2026-09-02-mlb-props-r41-post-calibration-coherence.md`. Rollback is r40 without
+rewriting any r41 lock or tracking record.
 
 The September 2 r40 target-excluded forecast release removes the evaluated
 sportsbook from every actual forecast anchor. Pitcher recommendation consensus,
