@@ -22,6 +22,18 @@ import {
 
 export type DailyEdgeDataHealthSeverity = "info" | "medium" | "high" | "blocking";
 
+/**
+ * A currently unavailable Sharp source is an availability warning unless the
+ * evidence contract itself marks the absence as high-materiality. Mapping,
+ * persistence, price, and same-release coherence failures use separate health
+ * findings and are deliberately not downgraded here.
+ */
+export function currentSourceSharpContextSeverity(
+  sourceMissingMateriality: PredictionEvidenceObject["marketEvidence"]["sourceMissingMateriality"],
+): DailyEdgeDataHealthSeverity {
+  return sourceMissingMateriality === "high" ? "high" : "medium";
+}
+
 export type DailyEdgeDataHealthFinding = {
   severity: DailyEdgeDataHealthSeverity;
   code: string;
@@ -1281,8 +1293,13 @@ function collectFindings(
       pushFinding(findings, row, "actionable_edge_missing", "high", "Actionable prediction is missing model-vs-market edge.");
     }
     if (row.identity.marketType !== "FI" && sharpStatus === "sharp_context_unavailable_current_source") {
-      const severity: DailyEdgeDataHealthSeverity = row.identity.sport === "mlb" ? "high" : "medium";
-      pushFinding(findings, row, "ml_total_sharp_context_missing", severity, "ML/Total row is missing Sharp Book context.");
+      pushFinding(
+        findings,
+        row,
+        "ml_total_sharp_context_missing",
+        currentSourceSharpContextSeverity(row.marketEvidence.sourceMissingMateriality),
+        "ML/Total row is missing Sharp Book context.",
+      );
     }
     if (
       row.identity.marketType !== "FI" &&
