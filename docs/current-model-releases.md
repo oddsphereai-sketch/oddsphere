@@ -226,7 +226,7 @@ changed; only deterministic settlement of existing locked rows is affected.
 - Grade policy: `mlb_public_grade_policy_v55_first_inning_named_book_consensus_2026_09_01`
 - Correction policy: `mlb_prediction_corrections_v23_split_pair_recency_2026_08_31`
 - Tracking contract: `member_facing_lock_v8_priority_retry_minute_cadence_2026_08_11`
-- Lock coherence: `mlb_lock_coherence_2026_08_30_r2_pending_promotion_tuple`
+- Lock coherence: `mlb_lock_coherence_2026_09_02_r3_failed_economics_tuple`
 - Machine registry: `lib/automodel/mlbModelLayerVersions.ts`
 - Authoritative member-facing writer: `lib/services/predictionRecordService.ts`
 
@@ -582,6 +582,22 @@ exact-price grade results are reported separately in
 `docs/model-audits/2026-09-02-mlb-fullgame-structural-coherence-r80.md`.
 Rollback is the complete r79/r76 release set above; immutable prior locks are
 never recomputed.
+
+The September 2 MLB T-60 lifecycle correction extends lock coherence r3 only
+for an exact, already-finalized Moneyline failed-economics No Play. The lock
+gate may freeze that public No Play when the raw actionable candidate and
+stored row match on pick, side, line, price, confidence, probabilities, edge,
+publication time, evaluated-book identity, stability identity/status, candidate
+grade, and terminal decision provenance. The exact-price quote must either be
+provably incoherent or fall below the stored sport-owned economics floor. It
+cannot freeze a different side, price, book, quote time, probability, status,
+reason, grade, or non-No-Play row. This repairs the fail-closed loop in which a
+correct exact-price stand-down could never satisfy the final T-60 comparison
+and therefore remained unlocked through first pitch. It changes no projection,
+probability, grade, promotion rule, stake, provider/query load, writer, lease,
+lock timing, tracking formula, or member reader. Evidence:
+`docs/model-audits/2026-09-02-mlb-lock-failed-economics-coherence-r3.md`.
+Rollback is lock coherence r2; existing locked rows remain immutable.
 
 The August 30 MLB T-60 lifecycle patch makes the lock gate understand r73's
 already-persisted pending-promotion shape. A fresh raw candidate may differ
