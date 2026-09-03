@@ -255,7 +255,7 @@ function visibleBuckets(buckets: SportMarketBucket[]): SportMarketBucket[] {
 type LifetimeRecord = {
   sport: string;
   market: string;
-  source_type: "lifetime_merged" | "lifetime_baseline" | "since_launch";
+  source_type: "lifetime_merged" | "lifetime_baseline" | "since_launch" | "release_separated";
   /** Display text for the record column. e.g. "1719/3043" or "5-2". */
   display_record: string;
   /** Display text for the win-rate column. e.g. "56.5%" or null. */
@@ -272,6 +272,9 @@ type LifetimeRecord = {
   metrics: Metrics;
   bestAngles?: Metrics;
   leans?: Metrics;
+  /** UCL's row-level forward release cannot be blended with its aggregate-only
+   * legacy import. Both remain visible on one category row. */
+  historical_archive?: string;
 };
 
 function buildLifetimeRecords(
@@ -293,7 +296,23 @@ function buildLifetimeRecords(
     const liveWins = live?.metrics.wins ?? 0;
     const livePending = live?.metrics.pending ?? 0;
 
-    if (base !== undefined && liveDecided > 0) {
+    if (base !== undefined && liveDecided > 0 && sport === "ucl") {
+      records.push({
+        sport, market,
+        source_type: "release_separated",
+        display_record: fmtRecord(live!.metrics),
+        display_pct: fmtPct(live!.metrics),
+        display_total: live!.metrics.picks,
+        pending: livePending,
+        pushes: live!.metrics.pushes,
+        voids: live!.metrics.voids,
+        live_decided_contribution: liveDecided,
+        metrics: live!.metrics,
+        bestAngles: live!.bestAngles,
+        leans: live!.leans,
+        historical_archive: `${base.lifetime_wins.toLocaleString()}/${base.lifetime_total.toLocaleString()} (${base.lifetime_pct.toFixed(1)}%)`,
+      });
+    } else if (base !== undefined && liveDecided > 0) {
       // MERGED — baseline + live decided picks combined.
       const mergedWins = base.lifetime_wins + liveWins;
       const mergedTotal = base.lifetime_total + liveDecided;
@@ -745,10 +764,14 @@ function Empty({ body }: { body: string }) {
 // ─── Lifetime tracking board — shared visual, honest merged source ─────
 
 function lifetimeSourceLabel(record: LifetimeRecord): string {
+  if (record.source_type === "release_separated") {
+    return `Current release · historical archive ${record.historical_archive}`;
+  }
   if (record.source_type === "lifetime_merged") {
     return `Lifetime · live +${record.live_decided_contribution}`;
   }
-  return record.source_type === "since_launch" ? "Since launch" : "Lifetime";
+  if (record.source_type === "since_launch") return "Since launch";
+  return record.sport === "ucl" ? "Historical archive · aggregate-only legacy import" : "Lifetime";
 }
 
 function LifetimeTrackingBoard({ records }: { records: LifetimeRecord[] }) {
@@ -764,7 +787,7 @@ function LifetimeTrackingBoard({ records }: { records: LifetimeRecord[] }) {
         emptyBody="Lifetime records appear here as predictions settle and sport tracking comes online."
       />
       <p className="mt-3 text-[11px] leading-relaxed text-gray-500">
-        Active models update automatically as games grade. Premier League results are tracked separately from World Cup history.
+        Active models update automatically as games grade. Premier League, Champions League, and World Cup releases remain separate; the UCL aggregate-only historical archive is never blended into current-release accuracy.
       </p>
     </>
   );

@@ -34,6 +34,8 @@ import {
   type TrackingBaselineRow,
 } from "../types/domain/Tracking";
 import { isPublicallyTracked } from "../config/officialTrackingStart";
+import { UCL_CALIBRATION_RELEASE, UCL_MODEL_RELEASE } from "./ucl/uclModel";
+import { filterCompleteUclLockManifestCohorts } from "./ucl/uclLockManifest";
 
 export type AggregateKey =
   | "all"
@@ -71,7 +73,7 @@ export type DimensionRow<K extends string = string> = {
 export type TrackingDisplaySport = TrackedSport | "epl";
 
 export const TRACKING_AGGREGATE_CONTRACT_VERSION =
-  "tracking_aggregate_v2_epl_projected_competition_2026_08_20" as const;
+  "tracking_aggregate_v7_ucl_complete_manifest_every_reader_2026_09_03" as const;
 
 /**
  * Sport+market joint split with the Best Angle / Lean cuts most members
@@ -225,7 +227,21 @@ function isTossUp(r: PredictionRecordRow): boolean {
 export function isTrackingRecordEligible(record: PredictionRecordRow): boolean {
   if (record.sport === "mlb") return record.locked_at !== null;
   if (isEplTrackingRecord(record)) return record.locked_at !== null;
+  if (isUclTrackingRecord(record)) return record.locked_at !== null && record.held !== true;
   return true;
+}
+
+export function isCurrentUclTrackingRelease(record: PredictionRecordRow): boolean {
+  return !isUclTrackingRecord(record) || (
+    record.model_version === UCL_MODEL_RELEASE
+    && record.calibration_version === UCL_CALIBRATION_RELEASE
+  );
+}
+
+/** A member card is one four-market immutable record. A partial DB write must
+ * not leak individual rows into accuracy while snapshot publication is held. */
+export function filterCompleteUclTrackingCohorts(records: PredictionRecordRow[]): PredictionRecordRow[] {
+  return filterCompleteUclLockManifestCohorts(records);
 }
 
 export function isEplTrackingRecord(record: PredictionRecordRow): boolean {
@@ -233,8 +249,13 @@ export function isEplTrackingRecord(record: PredictionRecordRow): boolean {
     && (record.competition ?? record.snapshot_json?.competition) === "english_premier_league";
 }
 
+export function isUclTrackingRecord(record: PredictionRecordRow): boolean {
+  return record.sport === "soccer"
+    && (record.competition ?? record.snapshot_json?.competition) === "uefa_champions_league";
+}
+
 export function trackingDisplaySport(record: PredictionRecordRow): TrackingDisplaySport {
-  return isEplTrackingRecord(record) ? "epl" : record.sport;
+  return isEplTrackingRecord(record) ? "epl" : isUclTrackingRecord(record) ? "ucl" : record.sport;
 }
 
 type Row = {
@@ -601,6 +622,7 @@ export async function computeTrackingAggregate(opts: {
   to?: string;   // YYYY-MM-DD inclusive
   includeLaunchDay?: boolean;
   competition?: string;
+  excludeCompetition?: string;
 }): Promise<TrackingAggregateResult> {
   const result: TrackingAggregateResult = {
     rowsConsidered: 0,
@@ -643,15 +665,17 @@ export async function computeTrackingAggregate(opts: {
 
   // Baselines
   let baselinesQuery = opts.supabase.from("tracking_baselines").select("*");
-  if (opts.sport !== undefined) baselinesQuery = baselinesQuery.eq("sport", opts.sport);
+  const baselineSport = opts.competition === "uefa_champions_league" ? "ucl" : opts.sport;
+  if (baselineSport !== undefined) baselinesQuery = baselinesQuery.eq("sport", baselineSport);
   const { data: baselineRows } = await baselinesQuery;
-  result.baselines = (baselineRows ?? []) as TrackingBaselineRow[];
+  result.baselines = ((baselineRows ?? []) as TrackingBaselineRow[])
+    .filter((row) => opts.excludeCompetition !== "uefa_champions_league" || row.sport !== "ucl");
 
   // Records. Supabase/PostgREST caps un-ranged selects (commonly 1,000 rows).
   // Tracking is an all-time surface, so a plain `.select("*")` silently drops
   // newer slates once history grows. Page explicitly to keep Yesterday / Week /
   // Lifetime based on the full prediction_records table.
-  const { rows: recordsRaw, error: recErr } = await fetchAllPredictionRecords(opts.supabase, {
+  const { rows: fetchedRecords, error: recErr } = await fetchAllPredictionRecords(opts.supabase, {
     sport: opts.sport,
     from: opts.from,
     to: opts.to,
@@ -665,6 +689,9 @@ export async function computeTrackingAggregate(opts: {
         : String(recErr);
     throw new Error(`tracking records read failed: ${message}`);
   }
+  const recordsRaw = opts.excludeCompetition === undefined
+    ? fetchedRecords
+    : fetchedRecords.filter((record) => (record.competition ?? record.snapshot_json?.competition) !== opts.excludeCompetition);
   result.rowsConsidered = recordsRaw.length;
 
   // Filter launch-day if requested
@@ -672,7 +699,7 @@ export async function computeTrackingAggregate(opts: {
     ? recordsRaw
     : recordsRaw.filter((r) => !r.launch_day);
   const publicStartFiltered = launchFiltered.filter((r) =>
-    isPublicallyTracked(r.sport, r.slate_date),
+    isPublicallyTracked(r.sport, r.slate_date) && isCurrentUclTrackingRelease(r),
   );
 
   // W-L accuracy counts EVERY prediction that has a side. `no_bet` is a GUIDANCE
@@ -685,7 +712,7 @@ export async function computeTrackingAggregate(opts: {
   //
   // ROI is a SEPARATE (HQ-only) metric and is where null-odds rows get dropped —
   // never conflate "ROI-ineligible" with "doesn't count for accuracy".
-  const trackingEligible = publicStartFiltered.filter(isTrackingRecordEligible);
+  const trackingEligible = filterCompleteUclTrackingCohorts(publicStartFiltered).filter(isTrackingRecordEligible);
   const records = dedupePredictionRecordsForTracking(trackingEligible).filter((r) => !isTossUp(r));
   result.rowsCounted = records.length;
   if (records.length === 0) return result;

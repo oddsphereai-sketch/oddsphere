@@ -14,6 +14,7 @@ import {
   type PublicTrackingCategoryWindow,
   type PublicTrackingFoundationSnapshot,
 } from "@/lib/services/tracking/publicTrackingCategoryWindows";
+import { resolveUclFeatureFlags } from "@/lib/services/ucl/uclFeatureFlags";
 
 export type PublicTrackRecordMetric = {
   picks: number;
@@ -189,6 +190,69 @@ function displayHitRate(hitRate: number, wins: number, losses: number): number |
   return wins + losses > 0 ? Math.round(hitRate * 1_000) / 10 : null;
 }
 
+function withoutUcl<T extends { sport: string }>(rows: T[] | undefined): T[] {
+  return (rows ?? []).filter((row) => row.sport !== "ucl");
+}
+
+/** Public pages use shared all-sport snapshots. On UCL rollback, remove only
+ * current UCL rows from those payloads; the separately rendered static legacy
+ * archive remains intact. If the category substrate is unavailable, hide the
+ * current composite because its UCL contribution cannot be proven absent. */
+export function applyPublicUclTrackingVisibility(input: {
+  current: TrackingResponse | null;
+  foundation: PublicTrackingFoundationSnapshot | null;
+  includeUcl: boolean;
+}): { current: TrackingResponse | null; foundation: PublicTrackingFoundationSnapshot | null } {
+  if (input.includeUcl) return { current: input.current, foundation: input.foundation };
+  const foundation = input.foundation === null ? null : {
+    ...input.foundation,
+    baselines: withoutUcl(input.foundation.baselines),
+    bySportMarket: withoutUcl(input.foundation.bySportMarket),
+    thisWeek: input.foundation.thisWeek ? {
+      ...input.foundation.thisWeek,
+      bySportMarket: withoutUcl(input.foundation.thisWeek.bySportMarket),
+    } : undefined,
+    thisMonth: input.foundation.thisMonth ? {
+      ...input.foundation.thisMonth,
+      bySportMarket: withoutUcl(input.foundation.thisMonth.bySportMarket),
+    } : undefined,
+  };
+  if (input.current === null) return { current: null, foundation };
+
+  const currentUclTallies = input.current.tallies.filter((row) => row.sport === "ucl");
+  const currentContainsUcl = currentUclTallies.some((row) => (
+    row.lifetime.total > 0
+    || (row.currentSeason?.total ?? 0) > 0
+    || (row.weekly?.total ?? 0) > 0
+  ))
+    || input.current.yesterdayRecap.results.some((row) => row.sport === "ucl");
+  // The legacy composite and foundation snapshots are written independently.
+  // Never subtract one snapshot from the other: if the current composite
+  // contains UCL, its month/lifetime totals are inseparable and must be hidden.
+  if (currentContainsUcl) return { current: null, foundation };
+  const yesterdayResults = withoutUcl(input.current.yesterdayRecap.results);
+  const yesterdayWins = yesterdayResults.reduce((sum, row) => sum + row.wins, 0);
+  const yesterdayLosses = yesterdayResults.reduce((sum, row) => sum + row.losses, 0);
+  const yesterdayPushes = yesterdayResults.reduce((sum, row) => sum + row.pushes, 0);
+
+  return {
+    foundation,
+    current: {
+      ...input.current,
+      sportOrder: input.current.sportOrder.filter((sport) => sport !== "ucl"),
+      tallies: withoutUcl(input.current.tallies),
+      yesterdayRecap: {
+        ...input.current.yesterdayRecap,
+        results: yesterdayResults,
+        totalPicks: yesterdayWins + yesterdayLosses + yesterdayPushes,
+        totalWins: yesterdayWins,
+        totalLosses: yesterdayLosses,
+        hitRate: yesterdayWins + yesterdayLosses > 0 ? yesterdayWins / (yesterdayWins + yesterdayLosses) : 0,
+      },
+    },
+  };
+}
+
 export async function getPublicTrackRecordSummary(): Promise<PublicTrackRecordSummary> {
   const asOf = new Date().toISOString();
   const todayEt = new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" });
@@ -203,6 +267,11 @@ export async function getPublicTrackRecordSummary(): Promise<PublicTrackRecordSu
       "stale",
     )),
   ]);
+  const visible = applyPublicUclTrackingVisibility({
+    current: currentSnapshot?.payload ?? null,
+    foundation: categorySnapshot?.payload ?? null,
+    includeUcl: resolveUclFeatureFlags().member,
+  });
   let overall = ZERO_METRIC;
   const sportMap = new Map<TrackedSport, PublicTrackRecordMetric>();
 
@@ -251,61 +320,61 @@ export async function getPublicTrackRecordSummary(): Promise<PublicTrackRecordSu
     lastUpdatedLabel: LAST_UPDATED,
     archiveProvenance: TRACK_RECORD_ARCHIVE_PROVENANCE,
     categoryTracking: {
-      available: categorySnapshot !== null,
-      asOf: categorySnapshot?.payload.generatedAt ?? categorySnapshot?.generatedAt ?? asOf,
-      windows: buildPublicTrackingCategoryWindows(categorySnapshot?.payload ?? null),
+      available: visible.foundation !== null,
+      asOf: visible.foundation?.generatedAt ?? categorySnapshot?.generatedAt ?? asOf,
+      windows: buildPublicTrackingCategoryWindows(visible.foundation),
     },
-    currentOfficial: currentSnapshot ? {
-      asOf: currentSnapshot.payload.as_of,
-      latestActivityDate: currentSnapshot.payload.yesterdayRecap.date,
-      wins: currentSnapshot.payload.allTimeAggregate.wins,
-      losses: currentSnapshot.payload.allTimeAggregate.losses,
-      pushes: currentSnapshot.payload.allTimeAggregate.pushes,
-      totalPredictions: currentSnapshot.payload.allTimeAggregate.totalPredictions,
-      hitRate: Math.round(currentSnapshot.payload.allTimeAggregate.hitRate * 1_000) / 10,
+    currentOfficial: visible.current ? {
+      asOf: visible.current.as_of,
+      latestActivityDate: visible.current.yesterdayRecap.date,
+      wins: visible.current.allTimeAggregate.wins,
+      losses: visible.current.allTimeAggregate.losses,
+      pushes: visible.current.allTimeAggregate.pushes,
+      totalPredictions: visible.current.allTimeAggregate.totalPredictions,
+      hitRate: Math.round(visible.current.allTimeAggregate.hitRate * 1_000) / 10,
       windows: [
         {
           label: "Weekly",
-          rangeLabel: `${currentSnapshot.payload.weeklyAggregate.weekStartLabel} – ${currentSnapshot.payload.weeklyAggregate.weekEndLabel}`,
-          wins: currentSnapshot.payload.weeklyAggregate.wins,
-          losses: currentSnapshot.payload.weeklyAggregate.losses,
-          pushes: currentSnapshot.payload.weeklyAggregate.pushes,
-          totalPredictions: currentSnapshot.payload.weeklyAggregate.totalPicks,
+          rangeLabel: `${visible.current.weeklyAggregate.weekStartLabel} – ${visible.current.weeklyAggregate.weekEndLabel}`,
+          wins: visible.current.weeklyAggregate.wins,
+          losses: visible.current.weeklyAggregate.losses,
+          pushes: visible.current.weeklyAggregate.pushes,
+          totalPredictions: visible.current.weeklyAggregate.totalPicks,
           hitRate: displayHitRate(
-            currentSnapshot.payload.weeklyAggregate.hitRate,
-            currentSnapshot.payload.weeklyAggregate.wins,
-            currentSnapshot.payload.weeklyAggregate.losses,
+            visible.current.weeklyAggregate.hitRate,
+            visible.current.weeklyAggregate.wins,
+            visible.current.weeklyAggregate.losses,
           ),
         },
         {
           label: "Monthly",
           rangeLabel: "Last 30 days",
-          wins: currentSnapshot.payload.last30Days.aggregate.wins,
-          losses: currentSnapshot.payload.last30Days.aggregate.losses,
+          wins: visible.current.last30Days.aggregate.wins,
+          losses: visible.current.last30Days.aggregate.losses,
           pushes: Math.max(
             0,
-            currentSnapshot.payload.last30Days.aggregate.picks
-              - currentSnapshot.payload.last30Days.aggregate.wins
-              - currentSnapshot.payload.last30Days.aggregate.losses,
+            visible.current.last30Days.aggregate.picks
+              - visible.current.last30Days.aggregate.wins
+              - visible.current.last30Days.aggregate.losses,
           ),
-          totalPredictions: currentSnapshot.payload.last30Days.aggregate.picks,
+          totalPredictions: visible.current.last30Days.aggregate.picks,
           hitRate: displayHitRate(
-            currentSnapshot.payload.last30Days.aggregate.hitRate,
-            currentSnapshot.payload.last30Days.aggregate.wins,
-            currentSnapshot.payload.last30Days.aggregate.losses,
+            visible.current.last30Days.aggregate.hitRate,
+            visible.current.last30Days.aggregate.wins,
+            visible.current.last30Days.aggregate.losses,
           ),
         },
         {
           label: "Lifetime",
           rangeLabel: "Since official tracking began",
-          wins: currentSnapshot.payload.allTimeAggregate.wins,
-          losses: currentSnapshot.payload.allTimeAggregate.losses,
-          pushes: currentSnapshot.payload.allTimeAggregate.pushes,
-          totalPredictions: currentSnapshot.payload.allTimeAggregate.totalPredictions,
+          wins: visible.current.allTimeAggregate.wins,
+          losses: visible.current.allTimeAggregate.losses,
+          pushes: visible.current.allTimeAggregate.pushes,
+          totalPredictions: visible.current.allTimeAggregate.totalPredictions,
           hitRate: displayHitRate(
-            currentSnapshot.payload.allTimeAggregate.hitRate,
-            currentSnapshot.payload.allTimeAggregate.wins,
-            currentSnapshot.payload.allTimeAggregate.losses,
+            visible.current.allTimeAggregate.hitRate,
+            visible.current.allTimeAggregate.wins,
+            visible.current.allTimeAggregate.losses,
           ),
         },
       ],

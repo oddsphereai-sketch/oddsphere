@@ -71,7 +71,7 @@ check("CFB has empty context-only registry", getContextOnlyDisplayMarkets("cfb")
 check("CFB moneyline officially tracked", isOfficiallyTrackedMarket("cfb", "moneyline") === true);
 check("CFB total officially tracked", isOfficiallyTrackedMarket("cfb", "total") === true);
 check("CFB spread officially tracked", isOfficiallyTrackedMarket("cfb", "spread") === true);
-check("UCL has empty official tracking registry", getOfficialTrackingMarkets("ucl").length === 0);
+check("UCL tracks the four regulation soccer markets", JSON.stringify(getOfficialTrackingMarkets("ucl")) === JSON.stringify(["match_result", "total", "btts", "double_chance"]));
 check("CBB has empty official tracking registry", getOfficialTrackingMarkets("cbb").length === 0);
 
 // Soccer (WC-1) — match_result/total/btts officially tracked; moneyline
@@ -180,7 +180,7 @@ check("Unknown market error mentions deliberate product launch",
 for (const sport of ["mlb", "nba", "nhl", "nfl", "cbb", "cfb", "ucl", "soccer", "wnba"] as const) {
   const official = new Set(getOfficialTrackingMarkets(sport) as ReadonlyArray<string>);
   const context = new Set(getContextOnlyDisplayMarkets(sport));
-  let intersect: string[] = [];
+  const intersect: string[] = [];
   for (const m of official) if (context.has(m)) intersect.push(m);
   check(`${sport.toUpperCase()} official and context-only are disjoint`,
     intersect.length === 0,

@@ -4,7 +4,7 @@ export const EPL_PREVIEW_GRADE_RELEASE = "epl_grade_policy_2026_09_02_v23_positi
 
 export type EplPreviewMarket = "match_result" | "double_chance" | "total" | "btts";
 export type EplPreviewGrade = {
-  release: typeof EPL_PREVIEW_GRADE_RELEASE;
+  release: string;
   verdict: { key: "no_play" | "caution" | "watchlist" | "lean" | "best_angle"; label: string };
   grade: Grade | null;
   recommendationScore: number | null;

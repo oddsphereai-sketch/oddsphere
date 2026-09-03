@@ -28,6 +28,7 @@ import {
   trackingFoundationSnapshotKey,
 } from "@/lib/services/labResponseSnapshots";
 import { trackingFoundationResponseBody } from "@/lib/services/trackingFoundationSnapshot";
+import { resolveUclFeatureFlags, resolveUclTrackingVisibility } from "@/lib/services/ucl/uclFeatureFlags";
 
 export const maxDuration = 60;
 
@@ -51,14 +52,19 @@ type TrackingResponseCacheEntry = {
 const trackingResponseCache = new Map<string, TrackingResponseCacheEntry>();
 
 const loadSharedTrackingAggregate = unstable_cache(
-  async (sportKey: TrackedSport | "all", today: string) => computeTrackingAggregate({
-    supabase,
-    sport: sportKey === "all" ? undefined : sportKey,
-    from: MEMBER_TRACKING_FROM,
-    to: today,
-    includeLaunchDay: false,
-  }),
-  ["member-tracking-aggregate-v1"],
+  async (sportKey: TrackedSport | "all", today: string, includeUcl: boolean) => {
+    const ucl = sportKey === "ucl";
+    return computeTrackingAggregate({
+      supabase,
+      sport: sportKey === "all" ? undefined : ucl ? "soccer" : sportKey,
+      competition: ucl ? "uefa_champions_league" : undefined,
+      excludeCompetition: !includeUcl && (sportKey === "all" || sportKey === "soccer") ? "uefa_champions_league" : undefined,
+      from: MEMBER_TRACKING_FROM,
+      to: today,
+      includeLaunchDay: false,
+    });
+  },
+  ["member-tracking-aggregate-v4-ucl-master-gated"],
   { revalidate: TRACKING_RESPONSE_CACHE_TTL_MS / 1000, tags: ["member-tracking-aggregate"] },
 );
 
@@ -82,8 +88,8 @@ function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise
   });
 }
 
-function cacheKeyFor(sport: TrackedSport | undefined, today: string): string {
-  return `${sport ?? "all"}::${today}`;
+function cacheKeyFor(sport: TrackedSport | undefined, today: string, includeUcl: boolean): string {
+  return `${sport ?? "all"}::${today}::ucl-${includeUcl ? "on" : "off"}`;
 }
 
 function trackingJson(
@@ -122,9 +128,13 @@ export async function GET(request: Request) {
     sportRaw === "soccer"
       ? (sportRaw as TrackedSport)
       : undefined;
+  const visibility = resolveUclTrackingVisibility(sport, resolveUclFeatureFlags().member);
+  if (visibility.directUclDenied) {
+    return trackingJson({ error: "competition_not_available" }, { status: 404, cacheStatus: "error" });
+  }
 
   const today = todayEt();
-  if (url.searchParams.get("snapshotBypass") !== "true") {
+  if (visibility.mayReadStoredSnapshot && url.searchParams.get("snapshotBypass") !== "true") {
     const snapshotKey = trackingFoundationSnapshotKey({ sport, date: today });
     const snapshot = await readLabResponseSnapshot<Record<string, unknown>>(snapshotKey, "fresh")
       ?? await readLabResponseSnapshot<Record<string, unknown>>(snapshotKey, "stale");
@@ -134,13 +144,13 @@ export async function GET(request: Request) {
       });
     }
   }
-  const cacheKey = cacheKeyFor(sport, today);
+  const cacheKey = cacheKeyFor(sport, today, visibility.includeUcl);
   const nowMs = Date.now();
   const cached = trackingResponseCache.get(cacheKey);
   let result;
   try {
     result = await withTimeout(
-      loadSharedTrackingAggregate(sport ?? "all", today),
+      loadSharedTrackingAggregate(sport ?? "all", today, visibility.includeUcl),
       TRACKING_AGGREGATE_TIMEOUT_MS,
       "tracking aggregate",
     );

@@ -6,13 +6,20 @@ process.env.SUPABASE_SERVICE_ROLE_KEY ??= "test-service-role-key";
 
 type Operation = { table: string; method: string; args: unknown[] };
 
-function fakeClient(recordRows: Array<Record<string, unknown>>, gradeRows: Array<Record<string, unknown>>) {
+function fakeClient(
+  recordRows: Array<Record<string, unknown>>,
+  gradeRows: Array<Record<string, unknown>>,
+  uclManifestRows: Array<Record<string, unknown>> = recordRows,
+) {
   const operations: Operation[] = [];
   class Query {
+    private selection = "";
     constructor(private readonly table: string) {}
-    select(...args: unknown[]) { operations.push({ table: this.table, method: "select", args }); return this; }
+    select(...args: unknown[]) { this.selection = String(args[0] ?? ""); operations.push({ table: this.table, method: "select", args }); return this; }
     in(...args: unknown[]) { operations.push({ table: this.table, method: "in", args }); return this; }
     not(...args: unknown[]) { operations.push({ table: this.table, method: "not", args }); return this; }
+    eq(...args: unknown[]) { operations.push({ table: this.table, method: "eq", args }); return this; }
+    contains(...args: unknown[]) { operations.push({ table: this.table, method: "contains", args }); return this; }
     gte(...args: unknown[]) { operations.push({ table: this.table, method: "gte", args }); return this; }
     lt(...args: unknown[]) { operations.push({ table: this.table, method: "lt", args }); return this; }
     order(...args: unknown[]) { operations.push({ table: this.table, method: "order", args }); return this; }
@@ -24,7 +31,8 @@ function fakeClient(recordRows: Array<Record<string, unknown>>, gradeRows: Array
       onfulfilled?: ((value: { data: Array<Record<string, unknown>>; error: null }) => TResult1 | PromiseLike<TResult1>) | null,
       onrejected?: ((reason: unknown) => TResult2 | PromiseLike<TResult2>) | null,
     ) {
-      const value = { data: this.table === "prediction_grades" ? gradeRows : recordRows, error: null as null };
+      const manifestRead = this.table === "prediction_records" && !this.selection.includes("matchup");
+      const value = { data: this.table === "prediction_grades" ? gradeRows : manifestRead ? uclManifestRows : recordRows, error: null as null };
       return Promise.resolve(value).then(onfulfilled, onrejected);
     }
   }
@@ -102,6 +110,36 @@ async function main() {
   assert.ok(fake.operations.some((entry) => entry.table === "prediction_records" && entry.method === "gte"));
   assert.ok(fake.operations.some((entry) => entry.table === "prediction_records" && entry.method === "lt"));
   assert.equal(query.WINNER_ACCURACY_RECORD_SELECT.split(",").includes("snapshot_json"), false, "raw snapshot_json must never be selected");
+
+  const uclWinner = {
+    ...records[0], id: 31, game_id: 41, external_id: 51, sport: "soccer",
+    market: "match_result", pick: "HOME", side: "home",
+    model_used: "ucl", model_version: "ucl-model-r1", calibration_version: "ucl-cal-r1",
+    competition: "uefa_champions_league",
+    epl_forecast: {
+      displayed_side: "home",
+      model: { home: 0.6, draw: 0.22, away: 0.18 },
+      market: { home: 0.55, draw: 0.25, away: 0.2 },
+    },
+  };
+  const uclGrade = { ...grades[0], prediction_record_id: 31 };
+  const uclManifest = ["match_result", "double_chance", "total", "btts"].map((market, index) => ({
+    game_id: 41, external_id: 51, sport: "soccer", slate_date: "2026-09-01", market,
+    model_version: "ucl-model-r1", calibration_version: "ucl-cal-r1",
+    locked_at: "2026-09-01T18:00:00.000Z", competition: "uefa_champions_league", id: 31 + index,
+  }));
+  const partialUcl = await query.loadWinnerAccuracyScorecards(
+    { window: "morning", lockedDate: "2026-09-01" },
+    fakeClient([uclWinner], [uclGrade], uclManifest.slice(0, 3)).client as never,
+  );
+  assert.equal(partialUcl.settledRows, 0, "partial UCL locks cannot enter the release-pure winner scorecard");
+  assert.equal(partialUcl.scorecards.length, 0);
+  const completeUcl = await query.loadWinnerAccuracyScorecards(
+    { window: "morning", lockedDate: "2026-09-01" },
+    fakeClient([uclWinner], [uclGrade], uclManifest).client as never,
+  );
+  assert.equal(completeUcl.settledRows, 1, "the fourth exact UCL market makes its Match Result scorecard-eligible");
+  assert.equal(completeUcl.scorecards[0]?.sport, "ucl");
 
   const empty = fakeClient([], []);
   const emptyResult = await query.loadWinnerAccuracyScorecards(

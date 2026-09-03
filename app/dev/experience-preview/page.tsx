@@ -121,18 +121,30 @@ export function emptyPreviewSnapshot(
   };
 }
 
-export async function loadTeamHistory(snapshot: DailyEdgeResponse, sport: Sport): Promise<PreviewHistoryByTeam> {
+type SoccerHistoryCompetition = "english_premier_league" | "uefa_champions_league" | "fifa_world_cup";
+
+export function dailyEdgeTeamHistoryScope(sport: Sport, competition: SoccerHistoryCompetition | null) {
+  return { storedSport: sport === "ucl" ? "soccer" as const : sport, competition };
+}
+
+export async function loadTeamHistory(
+  snapshot: DailyEdgeResponse,
+  sport: Sport,
+  requestedCompetition?: SoccerHistoryCompetition,
+): Promise<PreviewHistoryByTeam> {
   const abbreviations = Array.from(
     new Set(snapshot.games.flatMap((game) => [game.awayTeam, game.homeTeam])),
   ).sort();
   if (abbreviations.length === 0) return {};
 
-  return loadCachedTeamHistory(sport, snapshot.date, abbreviations);
+  const snapshotCompetition = snapshot.games.find((game) => game.soccerCompetitionContext)?.soccerCompetitionContext?.competition;
+  const competition = requestedCompetition ?? snapshotCompetition ?? (sport === "ucl" ? "uefa_champions_league" : undefined);
+  return loadCachedTeamHistory(sport, snapshot.date, abbreviations, competition ?? null);
 }
 
 const loadCachedTeamHistory = unstable_cache(
   queryTeamHistory,
-  ["daily-edge-experience-team-history-v3"],
+  ["daily-edge-experience-team-history-v4-competition-scoped"],
   { revalidate: 5 * 60, tags: ["daily-edge-experience-team-history"] },
 );
 
@@ -140,13 +152,16 @@ async function queryTeamHistory(
   sport: Sport,
   slateDate: string,
   abbreviations: string[],
+  competition: SoccerHistoryCompetition | null,
 ): Promise<PreviewHistoryByTeam> {
-
-  const { data: teams, error: teamError } = await supabase
+  const { storedSport } = dailyEdgeTeamHistoryScope(sport, competition);
+  let teamsQuery = supabase
     .from("teams")
     .select("id, abbreviation")
-    .eq("sport", sport)
+    .eq("sport", storedSport)
     .in("abbreviation", abbreviations);
+  if (competition) teamsQuery = teamsQuery.eq("league", competition);
+  const { data: teams, error: teamError } = await teamsQuery;
   if (teamError || !teams) return {};
 
   const abbreviationById = new Map<number, string>();
@@ -162,7 +177,7 @@ async function queryTeamHistory(
   const { data: rows, error: gamesError } = await supabase
     .from("games")
     .select("game_date, home_team_id, away_team_id, home_score, away_score, total_runs, first_inning_runs")
-    .eq("sport", sport)
+    .eq("sport", storedSport)
     // Recent form is pre-slate context. Excluding the current slate keeps a
     // completed game from entering its own L10 reader after the card locks.
     .lt("slate_date", slateDate)

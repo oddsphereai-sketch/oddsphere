@@ -25,7 +25,7 @@ type GateReason =
   | "tilted_pmf_invalid";
 
 export type EplCoherentMarketOutcome = {
-  release: typeof EPL_COHERENT_MARKET_OUTCOME_RELEASE;
+  release: string;
   source: "independent_club_pmf" | "target_excluded_total_tilt";
   joint: ScoreDistribution;
   markets: ReturnType<typeof deriveSoccerMarketProbabilities>;

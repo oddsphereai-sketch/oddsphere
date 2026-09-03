@@ -1,0 +1,10 @@
+# UCL chronological r2 predeclaration
+
+Recorded before the first corrected `seasons[]` replay. The prior singular-query rehearsal is coverage-only and is not training or validation evidence.
+
+- Fixed model: `ucl_goals_coherent_2026_09_03_r4_singular_history_cohorts`; half-life 365 days, four-match venue shrinkage, xG weight 0.35 when supplied, Dixon–Coles tau -0.1, and the already-declared rest/congestion/travel/neutral adjustments. No coefficient or threshold will be selected from the reported results.
+- Provider boundary: request Ball Don't Lie UCL v1 with `seasons[]=2024&seasons[]=2025`; reject the entire response if any row reports another season. That documented filter returned only 2026 rows, and a subsequently reviewed documented date-range transport returned 2011 rows. Both were rejected. The owner then authorized one empirically verified singular `season=` request for each cohort. Before its replay, the implementation required pagination, ID deduplication, exact returned-season validation, and a nonzero regulation-final for each requested season. The production path does not retry the two known-bad transports and exposes the deviation in telemetry.
+- Time boundary: season 2024 is training foundation. Season 2025 is sorted by kickoff; the first 75% by count, with equal timestamps kept on the later side, is calibration/diagnostic and the final block is the untouched holdout. Every forecast is fitted only from matches strictly before its kickoff.
+- Outcomes: regulation-time score only. AET/penalty finals without period components are excluded rather than using the provider final score.
+- Metrics: three-way Match Result accuracy, multiclass Brier and log loss; Total 2.5 and BTTS Brier/log loss; per-team expected-score MAE.
+- Grade replay: every complete or incomplete UCL market remains No Play. No historical UCL exact-price threshold is being selected; the current board cannot serve as its own validation set. Actionability can be promoted only in a later version from a separately frozen, untouched, market-complete UCL dataset.

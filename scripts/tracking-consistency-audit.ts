@@ -3,6 +3,7 @@ import {
   computeTrackingAggregate,
   dedupePredictionRecordsForTracking,
   effectiveTrackingPlayGrade,
+  filterCompleteUclTrackingCohorts,
   isTrackingRecordEligible,
   trackingDisplaySport,
   type AggregateMetrics,
@@ -264,17 +265,18 @@ async function main() {
     .select("*")
     .eq("slate_date", args.date)
     .order("id", { ascending: true });
-  if (args.sport !== "all") query = query.eq("sport", args.sport);
+  if (args.sport !== "all") query = query.eq("sport", args.sport === "ucl" ? "soccer" : args.sport);
   const { data, error } = await query;
   if (error) throw new Error(`prediction_records query failed: ${error.message}`);
 
-  const sourceRecords = ((data ?? []) as PredictionRecordRow[]).filter(
+  const candidateRecords = ((data ?? []) as PredictionRecordRow[]).filter(
     (record) =>
       !record.launch_day &&
       isPublicallyTracked(record.sport, record.slate_date) &&
-      isTrackingRecordEligible(record) &&
-      !isTossUp(record),
+      (args.sport !== "ucl" || (record.competition ?? record.snapshot_json?.competition) === "uefa_champions_league"),
   );
+  const sourceRecords = filterCompleteUclTrackingCohorts(candidateRecords)
+    .filter((record) => isTrackingRecordEligible(record) && !isTossUp(record));
   const records = dedupePredictionRecordsForTracking(sourceRecords);
   const recordIds = records.map((r) => r.id).filter((id): id is number => id !== undefined);
   const gradeByRecordId = await fetchGrades(recordIds);
@@ -291,7 +293,8 @@ async function main() {
   const nextDate = shiftDate(args.date, 1);
   const aggregate = await computeTrackingAggregate({
     supabase,
-    sport: args.sport === "all" ? undefined : args.sport,
+    sport: args.sport === "all" ? undefined : args.sport === "ucl" ? "soccer" : args.sport,
+    competition: args.sport === "ucl" ? "uefa_champions_league" : undefined,
     to: nextDate,
     includeLaunchDay: false,
   });

@@ -9,6 +9,12 @@ import {
   type WinnerOutcome,
   type WinnerScorecardSport,
 } from "./winnerAccuracyScorecard";
+import {
+  filterCompleteUclLockManifestCohorts,
+  isUclLockManifestRow,
+  uclLockManifestCohortKey,
+  type UclLockManifestRow,
+} from "../ucl/uclLockManifest";
 
 export const WINNER_ACCURACY_QUERY_PAGE_SIZE = 1_000;
 export const WINNER_ACCURACY_DAILY_RECORD_CAP = 2_000;
@@ -115,6 +121,11 @@ type QueryOptions = {
 };
 
 type ReadClient = Pick<SupabaseClient, "from">;
+
+const UCL_LOCK_MANIFEST_SELECT = [
+  "game_id", "external_id", "sport", "slate_date", "market", "model_version",
+  "calibration_version", "locked_at", "competition:snapshot_json->>competition",
+].join(",");
 
 function localParts(instant: Date): Record<string, string> {
   return Object.fromEntries(new Intl.DateTimeFormat("en-US", {
@@ -225,7 +236,7 @@ function releaseKey(row: RecordRow, sport: WinnerScorecardSport): string {
       scalar(row.nfl_tracking_record_release),
     ].join(" :: ");
   }
-  if (sport === "epl") {
+  if (sport === "epl" || sport === "ucl") {
     return [
       scalar(row.epl_model_release ?? row.model_version),
       scalar(row.epl_calibration_release ?? row.calibration_version),
@@ -245,13 +256,15 @@ function complement(value: WinnerOutcome): WinnerOutcome | null {
 
 function observation(row: RecordRow, grade: GradeRow): WinnerAccuracyObservation | null {
   if ((!grade.win && !grade.loss) || grade.graded_at === null) return null;
-  const sport: WinnerScorecardSport = row.sport === "soccer" ? "epl" : row.sport as WinnerScorecardSport;
-  const modelPick = side(sport === "epl" ? row.epl_forecast?.displayed_side ?? row.side ?? row.pick : row.side);
+  const sport: WinnerScorecardSport = row.sport === "soccer"
+    ? row.competition === "uefa_champions_league" ? "ucl" : "epl"
+    : row.sport as WinnerScorecardSport;
+  const modelPick = side(sport === "epl" || sport === "ucl" ? row.epl_forecast?.displayed_side ?? row.side ?? row.pick : row.side);
   if (modelPick === null) return null;
   let actualOutcome: WinnerOutcome;
   let modelProbabilities: Partial<Record<WinnerOutcome, number>>;
   let marketProbabilities: Partial<Record<WinnerOutcome, number>> | null;
-  if (sport === "epl") {
+  if (sport === "epl" || sport === "ucl") {
     if (grade.actual_home_score === null || grade.actual_away_score === null) return null;
     actualOutcome = grade.actual_home_score > grade.actual_away_score
       ? "home" : grade.actual_home_score < grade.actual_away_score ? "away" : "draw";
@@ -338,7 +351,7 @@ async function fetchRecords(
       throw new Error(`Winner-accuracy record cap reached (${recordCap}); refusing a partial scorecard.`);
     }
   }
-  return rows.filter((row) => row.sport !== "soccer" || row.competition === "english_premier_league");
+  return rows.filter((row) => row.sport !== "soccer" || row.competition === "english_premier_league" || row.competition === "uefa_champions_league");
 }
 
 async function fetchGrades(client: ReadClient, recordIds: number[]): Promise<GradeRow[]> {
@@ -353,6 +366,36 @@ async function fetchGrades(client: ReadClient, recordIds: number[]): Promise<Gra
   return rows;
 }
 
+async function excludePartialUclWinnerCohorts(
+  client: ReadClient,
+  records: RecordRow[],
+): Promise<RecordRow[]> {
+  const uclWinners = records.filter(isUclLockManifestRow);
+  if (uclWinners.length === 0) return records;
+
+  const gameIds = [...new Set(uclWinners.map((row) => row.game_id).filter((id): id is number => id !== null))];
+  const manifestRows: UclLockManifestRow[] = [];
+  for (let index = 0; index < gameIds.length; index += WINNER_ACCURACY_GRADE_CHUNK_SIZE) {
+    const { data, error } = await client.from("prediction_records")
+      .select(UCL_LOCK_MANIFEST_SELECT)
+      .eq("sport", "soccer")
+      .contains("snapshot_json", { competition: "uefa_champions_league" })
+      .not("locked_at", "is", null)
+      .in("game_id", gameIds.slice(index, index + WINNER_ACCURACY_GRADE_CHUNK_SIZE));
+    if (error) throw new Error(`UCL lock-manifest read failed: ${error.message}`);
+    manifestRows.push(...((data ?? []) as unknown as UclLockManifestRow[]));
+  }
+
+  const completeKeys = new Set(filterCompleteUclLockManifestCohorts(manifestRows)
+    .map(uclLockManifestCohortKey)
+    .filter((key): key is string => key !== null));
+  return records.filter((row) => {
+    if (!isUclLockManifestRow(row)) return true;
+    const key = uclLockManifestCohortKey(row);
+    return key !== null && completeKeys.has(key);
+  });
+}
+
 export async function loadWinnerAccuracyScorecards(
   options: QueryOptions,
   client: ReadClient = supabase,
@@ -361,7 +404,10 @@ export async function loadWinnerAccuracyScorecards(
   const recordCap = options.recordCap ?? WINNER_ACCURACY_DAILY_RECORD_CAP;
   if (!Number.isInteger(recordCap) || recordCap < 1 || recordCap > 10_000) throw new Error("Invalid record cap.");
   const bounds = options.lockedDate === null ? null : utcBoundsForEtDate(options.lockedDate);
-  const records = await fetchRecords(client, bounds, recordCap);
+  const records = await excludePartialUclWinnerCohorts(
+    client,
+    await fetchRecords(client, bounds, recordCap),
+  );
   const grades = await fetchGrades(client, records.map((row) => row.id));
   const gradeById = new Map(grades.map((grade) => [grade.prediction_record_id, grade]));
   const settled = records.filter((row) => {

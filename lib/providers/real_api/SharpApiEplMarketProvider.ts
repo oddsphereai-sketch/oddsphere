@@ -11,6 +11,7 @@ import {
 import type { SharpApiOddsRow } from "./SharpApiSoccerOddsProvider";
 
 export const SHARP_EPL_LEAGUE = "england_-_premier_league" as const;
+export const SHARP_UCL_LEAGUE = "uefa_-_champions_league" as const;
 const SHARP_MARKET_TYPE = {
   match_result: "moneyline",
   double_chance: "double_chance",
@@ -94,6 +95,31 @@ const TEAM_ALIASES: Record<string, string[]> = {
   spurs: ["tottenhamhotspur", "tottenham"],
 };
 
+const UCL_TEAM_ALIASES: Record<string, string[]> = {
+  internazionalemilano: ["inter", "intermilan", "internazionale"],
+  internazionale: ["inter", "intermilan", "internazionalemilano"],
+  intermilan: ["inter", "internazionale", "internazionalemilano"],
+  inter: ["intermilan", "internazionale", "internazionalemilano"],
+  parisstgermain: ["psg", "parissaintgermain"],
+  parissaintgermain: ["psg", "parisstgermain"],
+  psg: ["parissaintgermain", "parisstgermain"],
+  sportingclubedeportugal: ["sportingcp", "sportinglisbon", "sporting"],
+  sportingcp: ["sportingclubedeportugal", "sportinglisbon", "sporting"],
+  sportinglisbon: ["sportingclubedeportugal", "sportingcp", "sporting"],
+  slaviapraha: ["slaviaprague"],
+  slaviaprague: ["slaviapraha"],
+  bayer04leverkusen: ["bayerleverkusen", "leverkusen"],
+  bayerleverkusen: ["bayer04leverkusen", "leverkusen"],
+  bayernmunchen: ["bayernmunich", "bayern"],
+  bayernmunich: ["bayernmunchen", "bayern"],
+  atletico: ["atleticomadrid", "atleticodemadrid"],
+  atleticomadrid: ["atletico", "atleticodemadrid"],
+  olympiquedemarseille: ["marseille"],
+  olympiacosfc: ["olympiacos"],
+  borussiadortmund: ["dortmund"],
+  borussiamonchengladbach: ["monchengladbach"],
+};
+
 function key(value: string): string {
   return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]/g, "");
 }
@@ -105,8 +131,17 @@ export function eplTeamsMatch(left: string, right: string): boolean {
   return (TEAM_ALIASES[a] ?? []).includes(b) || (TEAM_ALIASES[b] ?? []).includes(a);
 }
 
-function eventScore(event: SharpEvent, fixture: { home: string; away: string; kickoff: string }): number {
-  if (!eplTeamsMatch(event.home_team ?? "", fixture.home) || !eplTeamsMatch(event.away_team ?? "", fixture.away)) return -1;
+export function uclTeamsMatch(left: string, right: string): boolean {
+  const a = key(left);
+  const b = key(right);
+  if (!a || !b) return false;
+  if (a === b) return true;
+  return (UCL_TEAM_ALIASES[a] ?? []).includes(b) || (UCL_TEAM_ALIASES[b] ?? []).includes(a);
+}
+
+function eventScore(event: SharpEvent, fixture: { home: string; away: string; kickoff: string }, teamsMatch: (left: string, right: string) => boolean): number {
+  if (!event.home_team?.trim() || !event.away_team?.trim()) return -1;
+  if (!teamsMatch(event.home_team, fixture.home) || !teamsMatch(event.away_team, fixture.away)) return -1;
   const deltaMinutes = Math.abs(Date.parse(event.start_time ?? "") - Date.parse(fixture.kickoff)) / 60_000;
   if (!Number.isFinite(deltaMinutes) || deltaMinutes > 90) return -1;
   // Sharp can expose sportsbook-specific duplicates and proposition shells
@@ -124,15 +159,23 @@ function eventScore(event: SharpEvent, fixture: { home: string; away: string; ki
 export class SharpApiEplMarketProvider {
   private readonly eventsByDate = new Map<string, Promise<SharpEvent[]>>();
   private leagueSplitsPromise: Promise<RawEplSharpSplitsEvent[]> | null = null;
+  private remainingFallbackMarketCalls: number;
 
-  constructor(private readonly client: SharpApiClient) {}
+  constructor(
+    private readonly client: SharpApiClient,
+    private readonly league: string = SHARP_EPL_LEAGUE,
+    private readonly teamsMatch: (left: string, right: string) => boolean = eplTeamsMatch,
+    totalFallbackMarketCalls = Number.POSITIVE_INFINITY,
+  ) {
+    this.remainingFallbackMarketCalls = totalFallbackMarketCalls;
+  }
 
   private events(date: string): Promise<SharpEvent[]> {
     const cached = this.eventsByDate.get(date);
     if (cached) return cached;
     const request = this.client.fetchAll<SharpEvent>({
       path: "/events",
-      query: { sport: "soccer", league: SHARP_EPL_LEAGUE, date, limit: 100 },
+      query: { sport: "soccer", league: this.league, date, limit: 100 },
       maxPages: 8,
     });
     this.eventsByDate.set(date, request);
@@ -148,7 +191,7 @@ export class SharpApiEplMarketProvider {
       path: "/splits",
       // Sharp's public examples key splits by sport. Keep the canonical league
       // filter as well so a future non-empty response stays EPL-scoped.
-      query: { sport: "soccer", league: SHARP_EPL_LEAGUE, limit: 200 },
+      query: { sport: "soccer", league: this.league, limit: 200 },
       maxPages: 3,
     });
     return this.leagueSplitsPromise;
@@ -177,7 +220,7 @@ export class SharpApiEplMarketProvider {
     const date = fixture.kickoff.slice(0, 10);
     const events = await this.events(date);
     const candidates = events
-      .map((candidate) => ({ candidate, score: eventScore(candidate, fixture) }))
+      .map((candidate) => ({ candidate, score: eventScore(candidate, fixture, this.teamsMatch) }))
       .filter((candidate) => candidate.score >= 0 && typeof candidate.candidate.id === "string")
       .sort((a, b) => b.score - a.score)
       .slice(0, 4)
@@ -194,9 +237,12 @@ export class SharpApiEplMarketProvider {
       if (marketsToFetch.length === 0) break;
       const permitted = index === 0
         ? marketsToFetch
-        : marketsToFetch.slice(0, Math.max(0, fallbackOddsBudget));
+        : marketsToFetch.slice(0, Math.max(0, Math.min(fallbackOddsBudget, this.remainingFallbackMarketCalls)));
       if (permitted.length === 0) break;
-      if (index > 0) fallbackOddsBudget -= permitted.length;
+      if (index > 0) {
+        fallbackOddsBudget -= permitted.length;
+        this.remainingFallbackMarketCalls -= permitted.length;
+      }
       const fetched = await Promise.all(permitted.map(async (market) => ({
         market,
         raw: await this.marketOdds(candidate.id!, market),
@@ -227,7 +273,7 @@ export class SharpApiEplMarketProvider {
       const current = await this.leagueSplits();
       const matched = current.filter((row) =>
         row.event_id && splitEventIds.has(row.event_id) ||
-        eplTeamsMatch(row.home_team ?? "", fixture.home) && eplTeamsMatch(row.away_team ?? "", fixture.away)
+        this.teamsMatch(row.home_team ?? "", fixture.home) && this.teamsMatch(row.away_team ?? "", fixture.away)
       );
       splitRows = normalizeEplSplits(matched, fixture);
     } catch {

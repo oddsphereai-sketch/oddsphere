@@ -97,6 +97,8 @@ export type PreviewAvailabilityByGame = Record<string, DailyEdgeGameAvailability
 export type SoccerCompetitionPreview = {
   active: "premier_league" | "world_cup" | "champions_league";
   label: string;
+  eplAvailable?: boolean;
+  uclAvailable?: boolean;
 };
 export type WeeklySlatePreview = {
   label: string;
@@ -687,7 +689,7 @@ function SlateHeader({ snapshot, sport, onSportChange, onSportPrefetch, sample =
         <p className="text-[8px] font-semibold uppercase tracking-[0.12em] text-gray-600"><span className="text-gray-400">Update rhythm</span> · {weeklySlate?.cadenceLabel ?? (weeklySlate ? "30-minute board" : "hourly board")} · separate market feeds · minute lock checks</p>
       </div>
       <div className="mt-5"><SportSelector active={sport} onChange={onSportChange} onPrefetch={onSportPrefetch} sports={DAILY_EDGE_TOP_LEVEL_SPORT_KEYS} showCounts={false} showPendingState availability={sportAvailability} labelOverrides={{ soccer: "Soccer" }} /></div>
-      {sport === "soccer" && soccerCompetition ? <SoccerCompetitionBar active={soccerCompetition.active} reviewMode={reviewMode} /> : null}
+      {sport === "soccer" && soccerCompetition ? <SoccerCompetitionBar active={soccerCompetition.active} reviewMode={reviewMode} hasGames={snapshot.games.length > 0} eplAvailable={soccerCompetition.eplAvailable !== false} uclAvailable={soccerCompetition.uclAvailable === true} /> : null}
       {weeklySlate ? <div className="mt-3 flex items-center justify-between gap-3 rounded-xl border border-white/[0.07] bg-white/[0.025] px-3 py-2.5"><p className="min-w-0 text-[9px] font-black uppercase tracking-[0.15em] text-gray-400">{weeklySlate.label}</p><div className="flex shrink-0 gap-2">{weeklySlate.previousHref ? <Link href={weeklySlate.previousHref} className="rounded-md border border-white/[0.08] px-2.5 py-1.5 text-[8px] font-black uppercase tracking-wider text-gray-400 hover:text-white">← Previous</Link> : null}{weeklySlate.nextHref ? <Link href={weeklySlate.nextHref} className="rounded-md border border-white/[0.08] px-2.5 py-1.5 text-[8px] font-black uppercase tracking-wider text-gray-400 hover:text-white">Next →</Link> : null}</div></div> : null}
     </div>
   );
@@ -699,18 +701,18 @@ function previewSportAvailability(activePreviewSports: Sport[], soccerCompetitio
       ...availability,
       [activeSport]: { isLive: true, statusLabel: "Active" },
     }),
-    soccerCompetition?.active === "premier_league"
+    soccerCompetition?.active === "premier_league" || soccerCompetition?.active === "champions_league"
       ? { ...DAILY_EDGE_SPORT_AVAILABILITY, soccer: { isLive: true, statusLabel: "Active" } }
       : DAILY_EDGE_SPORT_AVAILABILITY,
   );
 }
 
-function SoccerCompetitionBar({ active, reviewMode }: { active: SoccerCompetitionPreview["active"]; reviewMode: boolean }) {
+function SoccerCompetitionBar({ active, reviewMode, hasGames, eplAvailable, uclAvailable }: { active: SoccerCompetitionPreview["active"]; reviewMode: boolean; hasGames: boolean; eplAvailable: boolean; uclAvailable: boolean }) {
   const items = [
     { key: "premier_league", label: "Premier League", logo: "/league-logos/premier-league.svg", href: reviewMode ? "/dev/premier-league-preview" : "/lab/daily-edge?sport=soccer&league=epl", status: "Live board", dot: "bg-emerald-400" },
-    { key: "champions_league", label: "Champions League", logo: "/league-logos/champions-league.svg", href: reviewMode ? "/dev/experience-preview?sport=soccer&league=ucl" : "/lab/daily-edge?sport=soccer&league=ucl", status: "No games today", dot: "bg-gray-500" },
+    { key: "champions_league", label: "Champions League", logo: "/league-logos/champions-league.svg", href: reviewMode ? "/dev/experience-preview?sport=ucl" : "/lab/daily-edge?sport=soccer&league=ucl", status: active === "champions_league" && !hasGames ? "No games today" : "Live board", dot: active === "champions_league" && !hasGames ? "bg-gray-500" : "bg-emerald-400" },
     { key: "world_cup", label: "World Cup", logo: "/league-logos/world-cup.svg", href: reviewMode ? "/dev/experience-preview?sport=soccer&league=world-cup" : "/lab/daily-edge?sport=soccer&league=world-cup", status: "Offseason", dot: "bg-gray-600" },
-  ] as const;
+  ].filter((item) => (item.key !== "premier_league" || eplAvailable) && (item.key !== "champions_league" || uclAvailable));
   return <nav aria-label="Soccer competitions" className="relative mt-3 rounded-2xl border border-violet-300/35 bg-gradient-to-br from-violet-500/[0.14] via-[#11101a] to-sky-500/[0.06] p-3 shadow-[0_18px_50px_-38px_rgba(167,139,250,0.9)] sm:p-4"><span className="absolute -top-2 left-6 h-3 w-3 rotate-45 border-l border-t border-violet-300/35 bg-[#161321]" /><div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between"><div className="flex items-center gap-2.5"><span className="flex h-7 w-7 items-center justify-center rounded-full border border-violet-300/30 bg-violet-400/15 text-[10px] font-black text-violet-100">2</span><div><p className="text-[10px] font-black uppercase tracking-[0.18em] text-white">Choose a soccer competition</p><p className="mt-0.5 text-[9px] text-gray-400">Soccer is selected above. Pick the league or tournament you want to view.</p></div></div><span className="rounded-full border border-violet-300/20 bg-violet-400/[0.08] px-3 py-1 text-[8px] font-black uppercase tracking-wider text-violet-100">Viewing · {items.find((item) => item.key === active)?.label}</span></div><div role="tablist" aria-label="Soccer competition" className="grid gap-2 sm:grid-cols-3">{items.map((item) => { const selected = active === item.key; return <Link key={item.key} role="tab" href={item.href} aria-selected={selected} aria-current={selected ? "page" : undefined} className={`group rounded-xl border p-3.5 transition ${selected ? "border-violet-300 bg-violet-500/25 text-white shadow-[inset_0_0_0_1px_rgba(196,181,253,0.18),0_8px_24px_-16px_rgba(167,139,250,1)]" : "border-white/[0.10] bg-black/30 text-gray-300 hover:border-violet-300/40 hover:bg-violet-400/[0.08] hover:text-white"}`}><div className="flex items-center gap-3"><span className={`flex h-11 w-14 shrink-0 items-center justify-center overflow-hidden rounded-lg border px-1.5 ${selected ? "border-violet-200/40 bg-violet-100/10" : "border-white/[0.08] bg-white/[0.04]"}`}><Image src={item.logo} alt={`${item.label} logo`} width={48} height={34} unoptimized className={`object-contain ${item.key === "premier_league" ? "h-auto w-full" : "h-8 w-8 brightness-0 invert"}`} /></span><div className="min-w-0 flex-1"><div className="flex items-center justify-between gap-2"><span className="truncate text-[11px] font-black uppercase tracking-[0.08em]">{item.label}</span><span className={`text-[9px] font-black ${selected ? "text-violet-100" : "text-gray-700 group-hover:text-gray-400"}`}>{selected ? "✓" : "→"}</span></div><span className={`mt-1 flex items-center gap-1.5 text-[8px] font-bold uppercase tracking-wider ${selected ? "text-violet-100" : "text-gray-600"}`}><i className={`h-1.5 w-1.5 rounded-full ${item.dot}`} />{selected ? `Selected · ${item.status}` : item.status}</span></div></div></Link>; })}</div></nav>;
 }
 
@@ -720,15 +722,24 @@ function ReaderHeader({ game, market, onCollapse, index, total }: { game: DailyE
       <div>
         <div className="flex items-center gap-2"><span className="h-4 w-1 rounded-full bg-violet-400" /><p className="text-[9px] font-black uppercase tracking-[0.2em] text-gray-300">Selected Edge</p><span className="hidden text-[10px] text-gray-600 sm:inline">One read first. Complete evidence when you ask for it.</span></div>
         <div className="mt-3 flex flex-wrap items-center gap-2">
-          <h2 className="text-lg font-black tracking-tight text-white sm:text-xl">{game.awayTeam} <span className="text-gray-600">@</span> {game.homeTeam}</h2>
+          <h2 className="text-lg font-black tracking-tight text-white sm:text-xl">{game.awayTeam} <span className="text-gray-600">{game.sport === "soccer" ? "vs" : "@"}</span> {game.homeTeam}</h2>
           <VerdictBadge market={market} />
           <LocalTime value={game.gameStartAt} fallback={game.gameTime} className="text-[10px] text-gray-600" />
           <LockBadge lockState={game.lockState} lockedAt={game.lockedAt} scheduledLockAt={game.scheduledLockAt} className="font-black uppercase tracking-wider text-emerald-300" />
         </div>
+        {game.soccerCompetitionContext ? <p className="mt-1 text-[9px] font-semibold text-gray-500">{soccerCompetitionContextLabel(game.soccerCompetitionContext)} · Regulation time</p> : null}
       </div>
       <div className="flex items-center gap-3"><span className="text-[9px] font-black uppercase tracking-wider text-gray-700">{index + 1} / {total}</span>{onCollapse ? <button type="button" onClick={onCollapse} aria-label="Collapse reader" className="rounded-full border border-violet-400/45 bg-violet-500/[0.14] px-3 py-1.5 text-[8px] font-black uppercase tracking-[0.13em] text-violet-100 transition hover:border-violet-300/70 hover:bg-violet-500/[0.24]">Collapse read ↑</button> : null}</div>
     </div>
   );
+}
+
+function soccerCompetitionContextLabel(context: NonNullable<DailyEdgeGameDto["soccerCompetitionContext"]>): string {
+  const stage = context.stage ? context.stage.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase()) : "Stage pending";
+  const leg = context.leg ? ` · Leg ${context.leg}` : "";
+  const aggregate = context.aggregateBefore ? ` · Aggregate ${context.aggregateBefore.away}-${context.aggregateBefore.home}` : "";
+  const neutral = context.neutralVenue ? " · Neutral venue" : "";
+  return `${stage}${leg}${aggregate}${neutral}`;
 }
 
 function MarketStrip({ game, sport, active, setActive }: { game: DailyEdgeGameDto; sport: Sport; active: MarketKey; setActive: (key: MarketKey) => void }) {
@@ -1844,7 +1855,12 @@ function HistoryStatSummary({ game, market, marketKey, history, sample, sport, w
   const away = (history[game.awayTeam] ?? []).slice(0, sample);
   const home = (history[game.homeTeam] ?? []).slice(0, sample);
   if (away.length === 0 || home.length === 0) {
-    const competition = sport === "soccer" ? "EPL matches" : sport === "nfl" || sport === "cfb" ? "football games" : "games";
+    const soccerCompetition = game.soccerCompetitionContext?.competition === "uefa_champions_league"
+      ? "Champions League"
+      : game.soccerCompetitionContext?.competition === "fifa_world_cup"
+        ? "World Cup"
+        : "EPL";
+    const competition = sport === "soccer" ? `${soccerCompetition} matches` : sport === "nfl" || sport === "cfb" ? "football games" : "games";
     return <div className="mt-4 rounded-xl border border-amber-400/15 bg-amber-400/[0.035] p-4"><div className="flex items-center justify-between gap-2"><p className="text-[9px] font-black uppercase tracking-[0.15em] text-amber-200">Recent team context</p><span className="text-[8px] font-semibold text-gray-500">Comparable completed games only</span></div><div className="mt-3 grid gap-2 sm:grid-cols-2"><InfoCard label={game.awayTeam} value={away.length ? `${away.length} completed ${competition}` : "No prior sample"} /><InfoCard label={game.homeTeam} value={home.length ? `${home.length} completed ${competition}` : "No prior sample"} /></div><p className="mt-3 text-[9px] leading-relaxed text-gray-500">The comparison is withheld when either team lacks a comparable completed-game sample. Results from a different competition or level are not silently mixed into the reader.</p></div>;
   }
   const average = (rows: PreviewHistoryPoint[], select: (row: PreviewHistoryPoint) => number) => rows.reduce((sum, row) => sum + select(row), 0) / rows.length;
@@ -1997,7 +2013,7 @@ function KeyStats({ game, market, marketKey, history, sample, sport, availabilit
       <SectionHeading tone="sky">Key Stats & Notes</SectionHeading>
       <div className="mt-4">
         <div className="flex items-center justify-between gap-2"><p className="text-[8px] font-black uppercase tracking-[0.17em] text-sky-200">{visibleStats.length > 0 ? "Prediction drivers" : "Decision snapshot"}</p><span className="text-[7px] font-semibold text-gray-600">{visibleStats.length > 0 ? `${visibleStats.length} most relevant` : "Core model output"}</span></div>
-        {visibleStats.length > 0 ? <div className="mt-2 space-y-2">{visibleStats.map((stat) => <PredictionDriverCard key={`${stat.label}-${stat.awayValue}-${stat.homeValue}`} stat={stat} away={game.awayTeam} home={game.homeTeam} awayStarter={game.awayStarter?.name ?? null} homeStarter={game.homeStarter?.name ?? null} marketKey={marketKey} pick={market.pick} />)}</div> : <CoreDecisionSnapshot game={game} market={market} marketKey={marketKey} />}
+        {visibleStats.length > 0 ? <div className="mt-2 space-y-2">{visibleStats.map((stat) => <PredictionDriverCard key={`${stat.label}-${stat.awayValue}-${stat.homeValue}`} stat={stat} away={game.awayTeam} home={game.homeTeam} awayStarter={game.awayStarter?.name ?? null} homeStarter={game.homeStarter?.name ?? null} marketKey={marketKey} pick={market.pick} competitionLabel={soccerCompetitionLabel(game)} />)}</div> : <CoreDecisionSnapshot game={game} market={market} marketKey={marketKey} />}
       </div>
       {marketKey === "first_inning" && sport === "mlb" ? null : <HistoryStatSummary game={game} market={market} marketKey={marketKey} history={history} sample={sample} sport={sport} />}
       <OddSphereNotes market={market} />
@@ -2010,7 +2026,7 @@ function FootballMarketEvidence({ game, market, marketKey, sport, availability }
   const orderedStats = prioritizeFootballEvidenceStats(market.keyStats, marketKey);
   const primary = orderedStats.slice(0, FOOTBALL_READER_PRIMARY_EVIDENCE_LIMIT);
   const supporting = orderedStats.slice(FOOTBALL_READER_PRIMARY_EVIDENCE_LIMIT);
-  const driver = (stat: MarketEdgeDto["keyStats"][number]) => <PredictionDriverCard key={`${stat.label}-${stat.awayValue}-${stat.homeValue}`} stat={stat} away={game.awayTeam} home={game.homeTeam} awayStarter={game.awayStarter?.name ?? null} homeStarter={game.homeStarter?.name ?? null} marketKey={marketKey} pick={market.pick} compact />;
+  const driver = (stat: MarketEdgeDto["keyStats"][number]) => <PredictionDriverCard key={`${stat.label}-${stat.awayValue}-${stat.homeValue}`} stat={stat} away={game.awayTeam} home={game.homeTeam} awayStarter={game.awayStarter?.name ?? null} homeStarter={game.homeStarter?.name ?? null} marketKey={marketKey} pick={market.pick} competitionLabel={soccerCompetitionLabel(game)} compact />;
   return <div className="h-full p-4 sm:p-5 xl:p-6"><SectionHeading tone="sky">Key Stats &amp; Notes</SectionHeading><div className="mt-4 rounded-xl border border-sky-400/15 bg-sky-400/[0.035] p-3.5"><div className="flex items-start justify-between gap-3"><div><p className="text-[8px] font-black uppercase tracking-[0.17em] text-sky-200">{focus.eyebrow}</p><h4 className="mt-1 text-sm font-black leading-tight text-white">{focus.title}</h4></div><span className="shrink-0 rounded-full border border-white/[0.08] bg-black/20 px-2 py-1 text-[7px] font-black uppercase tracking-wider text-gray-500">{orderedStats.length} verified</span></div><p className="mt-2 text-[9px] leading-relaxed text-gray-500">{focus.description} The projected score and market price remain in their dedicated panels.</p></div>{primary.length > 0 ? <div className="mt-3 space-y-2">{primary.map(driver)}</div> : <CoreDecisionSnapshot game={game} market={market} marketKey={marketKey} />}{primary.length > 0 ? <p className="mt-2 text-[7px] leading-relaxed text-gray-600">Verified inputs and context from the stored Daily Edge snapshot.</p> : null}{supporting.length > 0 ? <details className="group mt-3 rounded-xl border border-white/[0.08] bg-black/20"><summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-3.5 py-3"><span><span className="block text-[8px] font-black uppercase tracking-[0.14em] text-gray-300">More supporting evidence</span><span className="mt-0.5 block text-[8px] text-gray-600">{supporting.length} additional verified inputs</span></span><span className="text-sm text-gray-600 transition group-open:rotate-180">⌄</span></summary><div className="space-y-2 border-t border-white/[0.07] p-2.5">{supporting.map(driver)}</div></details> : null}<FootballAvailabilityPanel report={availability} sport={sport} /></div>;
 }
 
@@ -2124,7 +2140,7 @@ function SoccerAvailabilityPanel({ game }: { game: DailyEdgeGameDto }) {
 
 function SoccerEvidenceRow({ stat, game, market, marketKey, rank, compact = false }: { stat: MarketEdgeDto["keyStats"][number]; game: DailyEdgeGameDto; market: MarketEdgeDto; marketKey: MarketKey; rank: number; compact?: boolean }) {
   const category = driverCategory(stat.label);
-  const context = driverContext(stat.label, marketKey, market.pick);
+  const context = driverContext(stat.label, marketKey, market.pick, soccerCompetitionLabel(game));
   const signal = contextualDriverSignal({ label: stat.label, awayValue: stat.awayValue, homeValue: stat.homeValue, away: game.awayTeam, home: game.homeTeam, marketKey, pick: market.pick });
   const twoSided = keyStatIsTwoSided(stat.label, stat.awayValue, stat.homeValue);
   const cellLabels = /btts yes \/ no/i.test(stat.label)
@@ -2195,9 +2211,9 @@ function FootballDecisionSummary({ game, market, marketKey, sport }: { game: Dai
   return <section className="mt-4 rounded-lg border border-violet-400/15 bg-violet-400/[0.035] p-3" aria-label="Football decision summary"><div className="flex items-start justify-between gap-3"><div><p className="text-[8px] font-black uppercase tracking-[0.15em] text-violet-200">Outcome forecast</p><p className="mt-1 text-lg font-black text-white">{winner} · {(probability * 100).toFixed(1)}%</p><p className="mt-1 text-[7px] font-semibold text-gray-600">{game.awayTeam} {(forecast.awayWinProbability * 100).toFixed(1)}% · {game.homeTeam} {(forecast.homeWinProbability * 100).toFixed(1)}%</p></div>{sport === "nfl" ? <span className={`rounded-full border border-gray-700 px-2 py-1 text-[7px] font-black uppercase tracking-wider ${betGrade.className}`}>Bet grade {betGrade.label}</span> : <VerdictBadge market={market} />}</div>{footballOnly && baselineWinner && baselineProbability !== null ? <p className="mt-2 text-[8px] text-gray-600">Football baseline · <span className="font-black text-gray-400">{baselineWinner} {(baselineProbability * 100).toFixed(1)}%</span></p> : sport === "cfb" ? <p className="mt-2 text-[8px] text-gray-600">Pre-release football-only snapshot</p> : null}<div className="mt-3 flex items-end justify-between gap-3 border-t border-white/[0.07] pt-3"><div className="min-w-0"><p className="text-[7px] font-black uppercase tracking-[0.15em] text-gray-600">Exact-price decision</p><p className="mt-1 break-words text-xl font-black leading-tight text-white">{evaluatedSelection}</p><p className="mt-1 text-[8px] font-semibold leading-relaxed text-violet-200/65">{selectionDiffers ? `Forecast · ${modelPredictionLabel}` : "Forecast and evaluated side agree"}</p></div>{market.held ? <span className="shrink-0 text-right"><span className="block text-[8px] font-black uppercase tracking-wider text-amber-200">No bet evaluated</span><span className="mt-0.5 block text-[7px] text-gray-600">Current context remains below</span></span> : <span className="shrink-0 text-right"><span className="block font-mono text-base font-black text-gray-100">{formatAmerican(evaluatedPrice)}</span><span className="mt-0.5 block text-[7px] font-bold text-gray-600">{evaluatedBook ?? "Sportsbook unavailable"}</span></span>}</div><DecisionMetricGrid market={market} probabilityLabel={selectedProbabilityLabel} compact /></section>;
 }
 
-function PredictionDriverCard({ stat, away, home, awayStarter, homeStarter, marketKey, pick, compact = false }: { stat: MarketEdgeDto["keyStats"][number]; away: string; home: string; awayStarter: string | null; homeStarter: string | null; marketKey: MarketKey; pick: string | null; compact?: boolean }) {
+function PredictionDriverCard({ stat, away, home, awayStarter, homeStarter, marketKey, pick, competitionLabel, compact = false }: { stat: MarketEdgeDto["keyStats"][number]; away: string; home: string; awayStarter: string | null; homeStarter: string | null; marketKey: MarketKey; pick: string | null; competitionLabel?: string; compact?: boolean }) {
   const category = driverCategory(stat.label);
-  const context = driverContext(stat.label, marketKey, pick);
+  const context = driverContext(stat.label, marketKey, pick, competitionLabel);
   const evidenceRole = driverEvidenceRole(stat.label, stat.source);
   const displayLabel = stat.label.replace(/^(?:Outcome-model input|Decision-model input|Current context)\s*·\s*/i, "");
   const isPitching = category === "Pitching";
@@ -2235,7 +2251,7 @@ function CaseDeepDive({ game, market, marketKey }: { game: DailyEdgeGameDto; mar
   const decisionCopy = pulse.detail || "Market confirmation is unavailable.";
   const primaryFactor = stripReasonPrefix(market.whyLine);
   const topDrivers = market.keyStats.slice(0, 3);
-  return <div><div className="flex flex-col gap-3 border-b border-white/[0.07] pb-4 sm:flex-row sm:items-start sm:justify-between"><div><p className="text-[8px] font-black uppercase tracking-[0.17em] text-violet-200">The case for {market.pick ?? "this read"}</p><h3 className="mt-1 text-lg font-black tracking-tight text-white">Why it rates—and what could break it.</h3></div><VerdictBadge market={market} large /></div><div className="mt-4 grid gap-3 lg:grid-cols-2"><AnalysisCard label="Primary model factor" text={primaryFactor} /><section className="rounded-xl border border-amber-400/20 bg-amber-400/[0.045] p-4"><p className="text-[8px] font-black uppercase tracking-[0.15em] text-amber-200">Biggest watch-out</p><p className="mt-2 text-[11px] leading-relaxed text-gray-300">{stripRiskPrefix(market.riskLine)}</p></section></div><section className="mt-4 rounded-xl border border-violet-400/15 bg-violet-500/[0.035] p-4"><div className="flex flex-wrap items-center justify-between gap-2"><p className="text-[8px] font-black uppercase tracking-[0.15em] text-violet-200">Market verdict</p><span className={`rounded-full border px-2 py-0.5 text-[7px] font-black uppercase tracking-wider ${pulse.tone === "emerald" ? "border-emerald-400/20 bg-emerald-400/[0.07] text-emerald-200" : pulse.tone === "amber" ? "border-amber-400/20 bg-amber-400/[0.07] text-amber-200" : "border-gray-700 bg-gray-800/60 text-gray-400"}`}>{pulse.chip}</span></div><p className="mt-2 text-[11px] leading-relaxed text-gray-300">{decisionCopy}</p></section><div className="mt-5"><div className="flex items-end justify-between gap-2"><div><p className="text-[8px] font-black uppercase tracking-[0.16em] text-sky-200">Verified evidence</p><p className="mt-1 text-[9px] text-gray-600">The most relevant formatted rows supplied with this market snapshot.</p></div><span className="text-[8px] font-black text-gray-600">{topDrivers.length} shown</span></div>{topDrivers.length > 0 ? <div className="mt-3 grid gap-2 lg:grid-cols-3">{topDrivers.map((stat) => <PredictionDriverCard key={`${stat.label}-${stat.awayValue}-${stat.homeValue}`} stat={stat} away={game.awayTeam} home={game.homeTeam} awayStarter={game.awayStarter?.name ?? null} homeStarter={game.homeStarter?.name ?? null} marketKey={marketKey} pick={market.pick} />)}</div> : <Unavailable label="No formatted evidence rows are available for this market snapshot." />}</div></div>;
+  return <div><div className="flex flex-col gap-3 border-b border-white/[0.07] pb-4 sm:flex-row sm:items-start sm:justify-between"><div><p className="text-[8px] font-black uppercase tracking-[0.17em] text-violet-200">The case for {market.pick ?? "this read"}</p><h3 className="mt-1 text-lg font-black tracking-tight text-white">Why it rates—and what could break it.</h3></div><VerdictBadge market={market} large /></div><div className="mt-4 grid gap-3 lg:grid-cols-2"><AnalysisCard label="Primary model factor" text={primaryFactor} /><section className="rounded-xl border border-amber-400/20 bg-amber-400/[0.045] p-4"><p className="text-[8px] font-black uppercase tracking-[0.15em] text-amber-200">Biggest watch-out</p><p className="mt-2 text-[11px] leading-relaxed text-gray-300">{stripRiskPrefix(market.riskLine)}</p></section></div><section className="mt-4 rounded-xl border border-violet-400/15 bg-violet-500/[0.035] p-4"><div className="flex flex-wrap items-center justify-between gap-2"><p className="text-[8px] font-black uppercase tracking-[0.15em] text-violet-200">Market verdict</p><span className={`rounded-full border px-2 py-0.5 text-[7px] font-black uppercase tracking-wider ${pulse.tone === "emerald" ? "border-emerald-400/20 bg-emerald-400/[0.07] text-emerald-200" : pulse.tone === "amber" ? "border-amber-400/20 bg-amber-400/[0.07] text-amber-200" : "border-gray-700 bg-gray-800/60 text-gray-400"}`}>{pulse.chip}</span></div><p className="mt-2 text-[11px] leading-relaxed text-gray-300">{decisionCopy}</p></section><div className="mt-5"><div className="flex items-end justify-between gap-2"><div><p className="text-[8px] font-black uppercase tracking-[0.16em] text-sky-200">Verified evidence</p><p className="mt-1 text-[9px] text-gray-600">The most relevant formatted rows supplied with this market snapshot.</p></div><span className="text-[8px] font-black text-gray-600">{topDrivers.length} shown</span></div>{topDrivers.length > 0 ? <div className="mt-3 grid gap-2 lg:grid-cols-3">{topDrivers.map((stat) => <PredictionDriverCard key={`${stat.label}-${stat.awayValue}-${stat.homeValue}`} stat={stat} away={game.awayTeam} home={game.homeTeam} awayStarter={game.awayStarter?.name ?? null} homeStarter={game.homeStarter?.name ?? null} marketKey={marketKey} pick={market.pick} competitionLabel={soccerCompetitionLabel(game)} />)}</div> : <Unavailable label="No formatted evidence rows are available for this market snapshot." />}</div></div>;
 }
 
 function MarketDeepDive({ market }: { market: MarketEdgeDto }) {
@@ -2740,7 +2756,15 @@ function driverCategory(label: string): string {
   return "Team comparison";
 }
 
-function driverContext(label: string, marketKey: MarketKey, pick: string | null): string {
+function soccerCompetitionLabel(game: DailyEdgeGameDto): string {
+  return game.soccerCompetitionContext?.competition === "uefa_champions_league"
+    ? "Champions League"
+    : game.soccerCompetitionContext?.competition === "fifa_world_cup"
+      ? "World Cup"
+      : "EPL";
+}
+
+function driverContext(label: string, marketKey: MarketKey, pick: string | null, competitionLabel = "EPL"): string {
   const normalizedPick = pick?.toLowerCase() ?? "";
   if (/projected result|projected scoring margin/i.test(label)) return "The model’s expected winner and final margin. This is the simplest view of which team the model rates higher.";
   if (/quarterback passer rating/i.test(label)) return "A familiar summary of passing production. Higher is better, but the expected quarterback rotation still needs to be confirmed before kickoff.";
@@ -2758,9 +2782,9 @@ function driverContext(label: string, marketKey: MarketKey, pick: string | null)
   if (/opponent-adjusted success rate/i.test(label)) return "Share of plays that keep the offense on schedule after adjusting for opponent strength. Higher is better; small differences should not decide a bet alone.";
   if (/xg created/i.test(label)) return marketKey === "moneyline" ? `Higher recent xG creation supports ${pick ?? "the selected side"} when it belongs to that club.` : `Recent attacking chance quality, interpreted specifically against the ${pick ?? "displayed"} market.`;
   if (/xg allowed/i.test(label)) return marketKey === "moneyline" ? `Lower recent xG allowed supports ${pick ?? "the selected side"}.` : `Recent defensive chance quality, interpreted specifically against the ${pick ?? "displayed"} market.`;
-  if (/points from recent form|recent form/i.test(label)) return "Completed EPL form only; newest result is shown first.";
-  if (/prior-season finish/i.test(label)) return "Final prior-season EPL table position and W-D-L record; promoted clubs are explicitly marked unavailable.";
-  if (/shots|big chances|possession/i.test(label)) return `Recent EPL team-performance sample used as matchup context for ${pick ?? "this read"}.`;
+  if (/points from recent form|recent form/i.test(label)) return `Completed ${competitionLabel} form only; newest result is shown first.`;
+  if (/prior-season finish/i.test(label)) return `Final prior-season ${competitionLabel} table position and W-D-L record; promoted clubs are explicitly marked unavailable.`;
+  if (/shots|big chances|possession/i.test(label)) return `Recent ${competitionLabel} team-performance sample used as matchup context for ${pick ?? "this read"}.`;
   if (/injury|availability|lineup/i.test(label)) return "Current provider-listed availability; lineup counts appear only after starters are posted.";
   if (/era|whip|fip/i.test(label)) {
     if (marketKey === "first_inning") return normalizedPick.includes("yrfi") ? "Higher opening-frame run-allowed values support YRFI; lower values support NRFI." : normalizedPick.includes("nrfi") ? "Lower opening-frame run-allowed values support NRFI; higher values support YRFI." : "Opening-frame run-prevention comparison; no side is highlighted for a neutral read.";
