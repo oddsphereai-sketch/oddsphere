@@ -707,8 +707,8 @@ check(
   candidateDailyEdgeSource.includes("Outcome confidence") &&
     candidateDailyEdgeSource.includes(">Bet grade</p>") &&
     candidateDailyEdgeSource.includes("Bet grade · exact-price decision") &&
-    candidateDailyEdgeSource.includes("Exact-price selected-side probability") &&
-    candidateDailyEdgeSource.includes("Price-calibrated bet probability") &&
+    candidateDailyEdgeSource.includes("Exact-price decision") &&
+    candidateDailyEdgeSource.includes("Exact-price strength") &&
     !candidateDailyEdgeSource.includes(">Play grade</p>"),
 );
 check(
@@ -1537,14 +1537,55 @@ check(
     candidateSource.includes("Core snapshot available"),
 );
 check(
-  "football readers prioritize five market-specific drivers while keeping every supplied row reachable",
+  "football readers show three priority drivers while keeping every supplied row reachable",
   candidateSource.includes("prioritizeFootballEvidenceStats") &&
-    candidateSource.includes("FOOTBALL_PRIMARY_EVIDENCE_LIMIT") &&
-    candidateSource.includes("const primary = orderedStats.slice(0, FOOTBALL_PRIMARY_EVIDENCE_LIMIT)") &&
-    candidateSource.includes("const supporting = orderedStats.slice(FOOTBALL_PRIMARY_EVIDENCE_LIMIT)") &&
+    candidateSource.includes("const FOOTBALL_READER_PRIMARY_EVIDENCE_LIMIT = 3") &&
+    candidateSource.includes("const primary = orderedStats.slice(0, FOOTBALL_READER_PRIMARY_EVIDENCE_LIMIT)") &&
+    candidateSource.includes("const supporting = orderedStats.slice(FOOTBALL_READER_PRIMARY_EVIDENCE_LIMIT)") &&
     candidateSource.includes("More supporting evidence") &&
     candidateSource.includes("supporting.map(driver)") &&
     candidateSource.includes('game.markets[key as MarketKey].keyStats'),
+);
+check(
+  "NFL and CFB share one compact decision summary without changing other sports",
+  candidateSource.includes('const football = sport === "nfl" || sport === "cfb"') &&
+    candidateSource.includes("function FootballDecisionSummary") &&
+    candidateSource.includes('aria-label="Football decision summary"') &&
+    candidateSource.includes("dailyEdgeExactPriceSelectionLabel({ market, marketKey })") &&
+    candidateSource.includes("market.gradePriceAmerican ?? market.priceAmerican") &&
+    candidateSource.includes("selectionDiffers ? `Forecast · ${modelPredictionLabel}`") &&
+    candidateSource.includes("<DecisionMetricGrid market={market}") &&
+    candidateSource.includes("compact />") &&
+    candidateSource.includes('sport !== "soccer" && !football'),
+);
+check(
+  "football Market Pulse uses a compact authentic four-signal hierarchy",
+  candidateSource.includes("function FootballMarketSignalRail") &&
+    candidateSource.includes('label: "Model vs market"') &&
+    candidateSource.includes('label: "Same-book move"') &&
+    candidateSource.includes('label: "Public vs price"') &&
+    candidateSource.includes('label: "Verified sharp"') &&
+    candidateSource.includes("Conviction ${convictionRose ? \"rose\" : \"eased\"}") &&
+    candidateSource.includes("Entry ${formatAmerican(movement.open)} → ${formatAmerican(movement.current)} ${entryImproved ? \"improved\" : \"worsened\"}") &&
+    candidateSource.includes('note: "Public split · not sharp"') &&
+    !/\bRLM\b|reverse line movement/i.test(candidateSource),
+);
+check(
+  "football sharp state and missing evidence remain truthful and neutral",
+  candidateSource.includes("resolveDisplayedSharpSplit") &&
+    candidateSource.includes('value: "Historical only"') &&
+    candidateSource.includes('value: status') &&
+    candidateSource.includes('"No verified split yet"') &&
+    candidateSource.includes('"Missing stays neutral"') &&
+    candidateSource.includes("displayedSharp?.rows.length"),
+);
+check(
+  "compact football movement omits Prior only when it duplicates the stored endpoints",
+  candidateSource.includes("const previousMatchesOpening = value.previous === value.open") &&
+    candidateSource.includes("const previousMatchesCurrent = value.previous === value.current") &&
+    candidateSource.includes("value.previous !== null && !previousMatchesOpening && !previousMatchesCurrent") &&
+    candidateSource.includes('compact && !previousAddsInformation ? "grid-cols-[auto_1fr_auto]"') &&
+    candidateSource.includes('<PricePoint label="Prior"'),
 );
 check(
   "a context-only CFB line never promises missing sportsbook odds",
@@ -1589,16 +1630,17 @@ check(
 );
 check(
   "the active NFL reader discloses its line-specific calibration boundary",
-  candidateSource.includes("separate line-specific calibration to Spread and Total probabilities") &&
-    candidateSource.includes("so those market sides can differ from the score-centered view") &&
+  candidateSource.includes("Spread and Total probabilities are line-specific") &&
+    candidateSource.includes("and can differ from the score-centered winner view") &&
     nflMemberFixtureSource.includes("separately calibrated ${marketName} forecast side"),
 );
 check(
   "the active CFB reader presents one concise writer-owned forecast and exact-price decision",
-  candidateSource.includes('game.sport === "cfb" ? "Outcome forecast"') &&
-    candidateSource.includes('sport === "cfb" ? "Model"') &&
-    candidateSource.includes("displayedExpectedValuePct") &&
-    candidateSource.includes('sport === "cfb" ? <div className="mt-3"><VerdictBadge') &&
+  candidateSource.includes(">Outcome forecast</p>") &&
+    candidateSource.includes('? "Model probability"') &&
+    candidateSource.includes("probabilityLabel={selectedProbabilityLabel}") &&
+    candidateSource.includes(">Exact-price decision</p>") &&
+    candidateSource.includes("<VerdictBadge market={market} />") &&
     !candidateSource.includes("This exact-price probability is calibrated from the same authoritative") &&
     !candidateSource.includes("the reader never overrides the stored grade"),
 );

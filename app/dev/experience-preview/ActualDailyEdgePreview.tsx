@@ -61,7 +61,6 @@ import {
   dailyEdgeOutcomeForecastLabel,
 } from "@/app/lab/lib/dailyEdgeOutcomeForecast";
 import {
-  FOOTBALL_PRIMARY_EVIDENCE_LIMIT,
   footballEvidenceFocus,
   prioritizeFootballEvidenceStats,
 } from "@/app/lab/lib/footballEvidencePresentation";
@@ -74,6 +73,8 @@ import type { NflWeekOneEvidenceBoard } from "@/lib/services/football/nflWeekOne
 import { exactLockedEplScoreOutlook, impliedEplMatchResultScoreOutlook } from "@/lib/services/epl/eplDerivedMarketForecast";
 
 type DeepView = "case" | "market" | "matchup" | "trend" | "model";
+
+const FOOTBALL_READER_PRIMARY_EVIDENCE_LIMIT = 3;
 
 export type PreviewHistoryPoint = {
   date: string | null;
@@ -780,21 +781,18 @@ function footballOutcomeContext(game: DailyEdgeGameDto): { winner: string; proba
 }
 
 function QuickRead({ game, market, marketKey, sport }: { game: DailyEdgeGameDto; market: MarketEdgeDto; marketKey: MarketKey; sport: Sport }) {
+  const football = sport === "nfl" || sport === "cfb";
   const fiProjection = market.keyStats.find((stat) => /projected.*(?:first|1st).*inning/i.test(stat.label));
   const fiProjectionValue = fiProjection?.homeValue ?? fiProjection?.awayValue ?? "Unavailable";
   const probabilityGap = displayedProbabilityGap(market);
-  const expectedValuePct = displayedExpectedValuePct(market);
   const soccerProjection = sport === "soccer" ? game.soccerProjection ?? null : null;
-  const nflValueBetProbability = (sport === "nfl" || sport === "cfb") && marketKey === "moneyline" &&
-    (market.capReasons ?? []).includes("nfl_r6_exact_price_moneyline_lean");
-  const priceCalibratedBetProbability = sport === "cfb" || nflValueBetProbability;
   const matchResultScoreRefreshing = marketKey === "moneyline" && Boolean(soccerProjection && !matchResultScoreOutlook(game, market));
   const soccerScore = soccerProjection ? soccerScoreContext(game, marketKey, market) : null;
   const soccerSemantics = soccerProjection ? soccerForecastSemantics(game, market, marketKey) : null;
-  const primaryProjectedAway = (sport === "nfl" || sport === "cfb") && game.footballProjection
+  const primaryProjectedAway = football && game.footballProjection
     ? game.footballProjection.expectedAwayPoints
     : soccerScore?.expectedGoals.away ?? game.projected.away;
-  const primaryProjectedHome = (sport === "nfl" || sport === "cfb") && game.footballProjection
+  const primaryProjectedHome = football && game.footballProjection
     ? game.footballProjection.expectedHomePoints
     : soccerScore?.expectedGoals.home ?? game.projected.home;
   const heldCurrentPrice = currentDisplayedPrice(market);
@@ -815,24 +813,22 @@ function QuickRead({ game, market, marketKey, sport }: { game: DailyEdgeGameDto;
       <SectionHeading tone="emerald">{sport === "soccer" ? "Forecast" : "Quick Read"}</SectionHeading>
       <div className="mt-4 rounded-xl border border-white/[0.07] bg-white/[0.025] p-4">
         <QuickMatchupIdentity game={game} sport={sport} />
-        {projectionIsUnavailable(game) ? <div className="mt-4 rounded-lg border border-amber-300/20 bg-amber-400/[0.045] p-3"><div className="flex items-center justify-between gap-3"><div><p className="text-[8px] font-black uppercase tracking-[0.15em] text-amber-200">Projection unavailable</p><p className="mt-1 text-sm font-black text-white">No score forecast is being published yet</p></div><span className="rounded-full border border-amber-300/20 px-2 py-1 text-[7px] font-black uppercase tracking-wider text-amber-200">Required evidence</span></div><p className="mt-2 text-[9px] leading-relaxed text-gray-500">The real matchup and market are visible below. OddSphere will add the score projection only when the authoritative model writer supplies it; a 0–0 placeholder is never shown as a forecast.</p></div> : marketKey === "first_inning" && sport === "mlb" ? <div className="mt-4 rounded-lg border border-sky-400/15 bg-sky-400/[0.04] p-3"><div className="flex items-center justify-between gap-3"><div><p className="text-[8px] font-black uppercase tracking-[0.15em] text-sky-200">First-inning projection</p><p className="mt-1 text-xl font-black text-white">{fiProjectionValue}</p></div><div className="text-right"><p className="text-[7px] font-black uppercase tracking-wider text-gray-600">Decision line</p><p className="mt-1 font-mono text-sm font-black text-gray-300">0.5 runs</p></div></div><p className="mt-2 text-[9px] leading-relaxed text-gray-500">Opening-frame projection replaces the less relevant full-game score in this market view.</p></div> : matchResultScoreRefreshing ? <div className="mt-4 rounded-lg border border-amber-300/15 bg-amber-400/[0.035] p-3"><div className="flex items-center justify-between gap-3"><p className="text-[8px] font-black uppercase tracking-[0.15em] text-amber-200">Match Result score outlook</p><span className="text-[7px] font-black uppercase tracking-wider text-gray-600">Snapshot refreshing</span></div><p className="mt-2 text-sm font-black text-white">Score context temporarily withheld</p><p className="mt-1 text-[8px] leading-relaxed text-gray-500">This stored snapshot predates the same-head score field. The separate market-informed goals outlook is intentionally hidden here; the three-way Match Result probabilities below remain authoritative.</p></div> : <div className="mt-4 rounded-lg border border-white/[0.06] bg-black/25 p-3"><div className="flex items-center justify-between gap-3"><p className="text-[8px] font-black uppercase tracking-[0.15em] text-gray-600">{soccerScore?.heading ?? (sport === "nfl" || sport === "cfb" ? "Expected score" : "Projected score")}</p>{soccerScore ? <span className="text-[7px] font-black uppercase tracking-wider text-gray-600">{soccerScore.badge}</span> : null}</div><div className="mt-2 flex items-center justify-between text-sm font-black text-white"><span>{game.awayTeam} <strong className="ml-1 text-xl">{sport === "nfl" || sport === "cfb" ? primaryProjectedAway.toFixed(1) : formatNumber(primaryProjectedAway)}</strong></span><span className="text-gray-700">—</span><span><strong className="mr-1 text-xl">{sport === "nfl" || sport === "cfb" ? primaryProjectedHome.toFixed(1) : formatNumber(primaryProjectedHome)}</strong> {game.homeTeam}</span></div>{sport === "cfb" && game.footballProjection ? <p className="mt-2 text-[8px] text-amber-200/70">Representative final · {game.awayTeam} {game.projected.away}–{game.projected.home} {game.homeTeam}</p> : sport === "nfl" && game.footballProjection ? <p className="mt-2 text-[8px] leading-relaxed text-amber-200/70">Reachable representative final · {game.awayTeam} {game.projected.away}–{game.projected.home} {game.homeTeam}. Expected points and the winner forecast come from the discrete score distribution. This active release applies separate line-specific calibration to Spread and Total probabilities, so those market sides can differ from the score-centered view.</p> : null}{soccerScore ? <><p className="mt-2 text-[8px] text-gray-500">Median total {soccerScore.medianTotal} · most likely total {soccerScore.mostLikelyTotal}{soccerScore.scenario ? ` · ${soccerScore.scenarioLabel} ${game.awayTeam} ${soccerScore.scenario.away}–${soccerScore.scenario.home} ${game.homeTeam}` : ""}</p>{marketKey === "moneyline" ? <p className="mt-2 text-[8px] leading-relaxed text-emerald-200/70">{soccerScore.exactLegacyLock ? "This is the exact score projection stored in the immutable member snapshot at lock. It is not recomputed after lock." : "This score distribution is the same club model that supplies the Match Result probabilities, pick, and Bet grade."}</p> : soccerSemantics ? <SoccerForecastSemanticsNote semantics={soccerSemantics} /> : null}</> : null}</div>}
-        {(sport === "nfl" || sport === "cfb") && game.footballProjection ? <FootballOutcomeForecast game={game} market={market} /> : null}
+        {projectionIsUnavailable(game) ? <div className="mt-4 rounded-lg border border-amber-300/20 bg-amber-400/[0.045] p-3"><div className="flex items-center justify-between gap-3"><div><p className="text-[8px] font-black uppercase tracking-[0.15em] text-amber-200">Projection unavailable</p><p className="mt-1 text-sm font-black text-white">No score forecast is being published yet</p></div><span className="rounded-full border border-amber-300/20 px-2 py-1 text-[7px] font-black uppercase tracking-wider text-amber-200">Required evidence</span></div><p className="mt-2 text-[9px] leading-relaxed text-gray-500">The real matchup and market are visible below. OddSphere will add the score projection only when the authoritative model writer supplies it; a 0–0 placeholder is never shown as a forecast.</p></div> : marketKey === "first_inning" && sport === "mlb" ? <div className="mt-4 rounded-lg border border-sky-400/15 bg-sky-400/[0.04] p-3"><div className="flex items-center justify-between gap-3"><div><p className="text-[8px] font-black uppercase tracking-[0.15em] text-sky-200">First-inning projection</p><p className="mt-1 text-xl font-black text-white">{fiProjectionValue}</p></div><div className="text-right"><p className="text-[7px] font-black uppercase tracking-wider text-gray-600">Decision line</p><p className="mt-1 font-mono text-sm font-black text-gray-300">0.5 runs</p></div></div><p className="mt-2 text-[9px] leading-relaxed text-gray-500">Opening-frame projection replaces the less relevant full-game score in this market view.</p></div> : matchResultScoreRefreshing ? <div className="mt-4 rounded-lg border border-amber-300/15 bg-amber-400/[0.035] p-3"><div className="flex items-center justify-between gap-3"><p className="text-[8px] font-black uppercase tracking-[0.15em] text-amber-200">Match Result score outlook</p><span className="text-[7px] font-black uppercase tracking-wider text-gray-600">Snapshot refreshing</span></div><p className="mt-2 text-sm font-black text-white">Score context temporarily withheld</p><p className="mt-1 text-[8px] leading-relaxed text-gray-500">This stored snapshot predates the same-head score field. The separate market-informed goals outlook is intentionally hidden here; the three-way Match Result probabilities below remain authoritative.</p></div> : <div className="mt-4 rounded-lg border border-white/[0.06] bg-black/25 p-3"><div className="flex items-center justify-between gap-3"><p className="text-[8px] font-black uppercase tracking-[0.15em] text-gray-600">{soccerScore?.heading ?? (football ? "Expected score" : "Projected score")}</p>{soccerScore ? <span className="text-[7px] font-black uppercase tracking-wider text-gray-600">{soccerScore.badge}</span> : null}</div><div className="mt-2 flex items-center justify-between text-sm font-black text-white"><span>{game.awayTeam} <strong className="ml-1 text-xl">{football ? primaryProjectedAway.toFixed(1) : formatNumber(primaryProjectedAway)}</strong></span><span className="text-gray-700">—</span><span><strong className="mr-1 text-xl">{football ? primaryProjectedHome.toFixed(1) : formatNumber(primaryProjectedHome)}</strong> {game.homeTeam}</span></div>{football && game.footballProjection ? <p className="mt-2 text-[8px] leading-relaxed text-amber-200/70">{sport === "nfl" ? "Reachable representative final" : "Representative final"} · {game.awayTeam} {game.projected.away}–{game.projected.home} {game.homeTeam}. Spread and Total probabilities are line-specific and can differ from the score-centered winner view.</p> : null}{soccerScore ? <><p className="mt-2 text-[8px] text-gray-500">Median total {soccerScore.medianTotal} · most likely total {soccerScore.mostLikelyTotal}{soccerScore.scenario ? ` · ${soccerScore.scenarioLabel} ${game.awayTeam} ${soccerScore.scenario.away}–${soccerScore.scenario.home} ${game.homeTeam}` : ""}</p>{marketKey === "moneyline" ? <p className="mt-2 text-[8px] leading-relaxed text-emerald-200/70">{soccerScore.exactLegacyLock ? "This is the exact score projection stored in the immutable member snapshot at lock. It is not recomputed after lock." : "This score distribution is the same club model that supplies the Match Result probabilities, pick, and Bet grade."}</p> : soccerSemantics ? <SoccerForecastSemanticsNote semantics={soccerSemantics} /> : null}</> : null}</div>}
+        {football && game.footballProjection ? <FootballDecisionSummary game={game} market={market} marketKey={marketKey} sport={sport} /> : null}
         {sport === "soccer" && marketKey === "moneyline" ? <SoccerThreeWayForecast game={game} market={market} /> : null}
         {sport === "soccer" && marketKey === "total" ? <SoccerTotalForecast market={market} projection={soccerProjection} /> : null}
         {sport === "soccer" && marketKey === "first_inning" ? <SoccerBttsForecast market={market} projection={soccerProjection} game={game} /> : null}
-        {sport !== "soccer" ? <div className="mt-4">
+        {sport !== "soccer" && !football ? <div className="mt-4">
           <p className="text-[8px] font-black uppercase tracking-[0.16em] text-gray-600">OddSphere read</p>
           <div className="mt-1 flex items-end justify-between gap-3"><p className="text-2xl font-black tracking-tight text-white">{evaluatedSelectionLabel}</p>{market.held ? <span className="text-right"><span className="block text-[8px] font-black uppercase tracking-wider text-amber-200">{heldCurrentPrice === null ? "Sportsbook odds unavailable" : "No bet evaluated"}</span><span className="mt-0.5 block text-[7px] font-bold text-gray-600">{heldCurrentPrice === null ? consensusLineOnly ? "Consensus line only" : "No eligible quote captured" : "Current odds shown below"}</span></span> : <span className="text-right"><span className="block font-mono text-base font-black text-gray-200">{formatAmerican(heldCurrentPrice)}</span>{market.currentPriceSportsbook ? <span className="block text-[7px] font-bold text-gray-600">{formatSportsbook(market.currentPriceSportsbook)}</span> : null}</span>}</div>
           {selectionAxisLabel ? <p className="mt-1 text-[8px] font-semibold leading-relaxed text-violet-200/65">{selectionAxisLabel}</p> : null}
-          <p className="mt-1 text-[10px] text-gray-500">{sport === "cfb" ? "Model" : priceCalibratedBetProbability ? "Price-calibrated bet probability" : "Outcome confidence"} <span className="font-black text-gray-200">{formatProbability(market.modelProb)}</span> · {sport === "cfb" ? "market" : "publish-time market"} <span className="font-black text-gray-200">{formatMarketProbability(market)}</span></p>
-          {nflValueBetProbability ? <p className="mt-1 text-[8px] leading-relaxed text-violet-200/65">The exact-price value lane agrees with the discrete model&apos;s projected winner; its positive-EV evaluated quote is shown here.</p> : null}
-          {(probabilityGap !== null || expectedValuePct !== null || market.recommendationConfidence !== null) ? <p className="mt-1 text-[9px] text-gray-600">Edge <span className="font-black text-gray-300">{probabilityGap === null ? "—" : `${probabilityGap > 0 ? "+" : ""}${probabilityGap.toFixed(1)} pp`}</span>{sport === "cfb" ? <> · EV <span className="font-black text-gray-300">{expectedValuePct === null ? "—" : `${expectedValuePct > 0 ? "+" : ""}${expectedValuePct.toFixed(1)}%`}</span></> : null} · actionability <span className="font-black text-gray-300">{market.recommendationConfidence === null || market.recommendationConfidence === undefined ? "—" : `${market.recommendationConfidence.toFixed(0)}/100`}</span></p> : null}
-          {sport === "cfb" ? <div className="mt-3"><VerdictBadge market={market} large /><GradeScale market={market} /></div> : null}
+          <p className="mt-1 text-[10px] text-gray-500">Outcome confidence <span className="font-black text-gray-200">{formatProbability(market.modelProb)}</span> · publish-time market <span className="font-black text-gray-200">{formatMarketProbability(market)}</span></p>
+          {(probabilityGap !== null || market.recommendationConfidence !== null) ? <p className="mt-1 text-[9px] text-gray-600">Edge <span className="font-black text-gray-300">{probabilityGap === null ? "—" : `${probabilityGap > 0 ? "+" : ""}${probabilityGap.toFixed(1)} pp`}</span> · actionability <span className="font-black text-gray-300">{market.recommendationConfidence === null || market.recommendationConfidence === undefined ? "—" : `${market.recommendationConfidence.toFixed(0)}/100`}</span></p> : null}
         </div> : null}
-        {sport !== "soccer" && sport !== "cfb" ? <div className="mt-4 rounded-lg border border-violet-400/15 bg-violet-500/[0.05] p-3"><p className="text-xs leading-relaxed text-gray-300">{currentAwareGuidedGuide(market, market.whyLine)}</p><p className="mt-2 text-[10px] leading-relaxed text-amber-200/70"><span className="font-black text-amber-300">Where it gets less clean:</span> {displayRiskLine(market)}</p></div> : null}
+        {sport !== "soccer" && !football ? <div className="mt-4 rounded-lg border border-violet-400/15 bg-violet-500/[0.05] p-3"><p className="text-xs leading-relaxed text-gray-300">{currentAwareGuidedGuide(market, market.whyLine)}</p><p className="mt-2 text-[10px] leading-relaxed text-amber-200/70"><span className="font-black text-amber-300">Where it gets less clean:</span> {displayRiskLine(market)}</p></div> : null}
       </div>
       {sport === "soccer" ? <SoccerDecisionSummary game={game} market={market} marketKey={marketKey} /> : null}
-      {sport !== "soccer" && sport !== "cfb" ? <><div className="mt-4"><p className="text-[8px] font-black uppercase tracking-[0.16em] text-gray-600">Bet grade</p><div className="mt-2"><VerdictBadge market={market} large /></div><GradeScale market={market} /><p className="mt-2 text-[8px] leading-relaxed text-gray-600">{market.held ? "No Play: required evidence is incomplete, so no exact-price bet evaluation is being presented." : "Price-sensitive decision at the evaluated sportsbook quote. Outcome confidence is shown separately and does not override the Bet grade."}</p></div><DecisionMetricGrid market={market} probabilityLabel={priceCalibratedBetProbability ? "Price-calibrated bet probability" : "Outcome confidence"} /></> : null}
+      {sport !== "soccer" && !football ? <><div className="mt-4"><p className="text-[8px] font-black uppercase tracking-[0.16em] text-gray-600">Bet grade</p><div className="mt-2"><VerdictBadge market={market} large /></div><GradeScale market={market} /><p className="mt-2 text-[8px] leading-relaxed text-gray-600">{market.held ? "No Play: required evidence is incomplete, so no exact-price bet evaluation is being presented." : "Price-sensitive decision at the evaluated sportsbook quote. Outcome confidence is shown separately and does not override the Bet grade."}</p></div><DecisionMetricGrid market={market} probabilityLabel="Outcome confidence" /></> : null}
     </div>
   );
 }
@@ -989,12 +985,13 @@ function PitcherFirstInningRate({ starter, sample, pick }: { starter: PreviewPit
   return <div className={`rounded-lg border p-4 ${toneClass}`}><div className="flex items-start justify-between gap-2"><div><p className="text-[8px] font-black uppercase tracking-[0.14em] text-sky-300">Starter opening frames</p><p className="mt-1 text-sm font-black text-white">{starter?.name ?? "Starter unavailable"}</p></div>{hasDirectionalPick && tone !== "neutral" ? <span className={`rounded-full border px-2 py-0.5 text-[7px] font-black uppercase tracking-wider ${tone === "support" ? "border-emerald-400/25 bg-emerald-400/[0.08] text-emerald-200" : "border-rose-400/20 bg-rose-400/[0.07] text-rose-200"}`}>{tone === "support" ? `Recent context aligns with ${pick}` : `Recent context opposes ${pick}`}</span> : null}</div><div className="mt-3 flex items-end justify-between gap-3"><div><p className={`font-mono text-xl font-black ${tone === "support" ? "text-emerald-300" : tone === "challenge" ? "text-rose-300" : "text-white"}`}>{primaryCount}/{points.length}</p><p className="mt-0.5 text-[8px] text-gray-500">{primaryLabel}</p></div><div className="text-right"><p className="font-mono text-sm font-black text-gray-200">{average === null ? "—" : average.toFixed(2)}</p><p className="mt-0.5 text-[8px] text-gray-500">Avg FI runs allowed</p></div></div><p className="mt-3 border-t border-white/[0.07] pt-3 text-[9px] leading-relaxed text-gray-500">{primaryCount} of {points.length} recent starts aligned with {pick ?? "the displayed FI read"}. This is recent-result context, not the model grade itself, and each starter is evaluated against the prediction independently.</p></div>;
 }
 
-function DecisionMetricGrid({ market, probabilityLabel }: { market: MarketEdgeDto; probabilityLabel: string }) {
+function DecisionMetricGrid({ market, probabilityLabel, compact = false }: { market: MarketEdgeDto; probabilityLabel: string; compact?: boolean }) {
   const probabilityGap = displayedProbabilityGap(market);
-  return <div className="mt-4"><p className="text-[8px] font-black uppercase tracking-[0.16em] text-gray-600">Decision metrics</p><div className="mt-2 grid grid-cols-2 gap-2"><ProofCell label={probabilityLabel} value={formatProbability(market.modelProb)} note="Exact-price selected-side probability" tone="violet" /><ProofCell label="Market at publish" value={formatMarketProbability(market)} note={market.marketSource ? `${market.marketSource} · no-vig` : "Unavailable"} tone="gray" /><ProofCell label="Publish-time gap" value={probabilityGap === null ? "—" : `${probabilityGap > 0 ? "+" : ""}${probabilityGap.toFixed(1)} pp`} note="Displayed probability gap" tone={probabilityGap !== null && probabilityGap >= 1 ? "emerald" : "gray"} /><ProofCell label="Bet actionability" value={market.recommendationConfidence === null || market.recommendationConfidence === undefined ? "—" : `${market.recommendationConfidence.toFixed(0)}/100`} note="Exact-price grade strength" tone="violet" /></div></div>;
+  return <div className="mt-4"><p className="text-[8px] font-black uppercase tracking-[0.16em] text-gray-600">Decision metrics</p><div className="mt-2 grid grid-cols-2 gap-2"><ProofCell label={probabilityLabel} value={formatProbability(market.modelProb)} note={compact ? "Selected side" : "Exact-price selected-side probability"} tone="violet" /><ProofCell label="Market at publish" value={formatMarketProbability(market)} note={market.marketSource ? `${formatSportsbook(market.marketSource)} · no-vig` : "Unavailable"} tone="gray" /><ProofCell label="Publish-time gap" value={probabilityGap === null ? "—" : `${probabilityGap > 0 ? "+" : ""}${probabilityGap.toFixed(1)} pp`} note={compact ? "Model minus market" : "Displayed probability gap"} tone={probabilityGap !== null && probabilityGap >= 1 ? "emerald" : "gray"} /><ProofCell label="Bet actionability" value={market.recommendationConfidence === null || market.recommendationConfidence === undefined ? "—" : `${market.recommendationConfidence.toFixed(0)}/100`} note={compact ? "Exact-price strength" : "Exact-price grade strength"} tone="violet" /></div></div>;
 }
 
 function CompactMarketPulse({ market, showSplits = false, sport = null }: { market: MarketEdgeDto; showSplits?: boolean; sport?: Sport | null }) {
+  const football = sport === "nfl" || sport === "cfb";
   const movement = resolveMarketPulseMovement(market);
   const claimsDirectionalMove = market.marketReadV2?.movement?.directionRelativeToPick === "support" || market.marketReadV2?.movement?.directionRelativeToPick === "resistance";
   const movementClaimIsUnverified = claimsDirectionalMove && !movement.coherentTrail;
@@ -1006,17 +1003,108 @@ function CompactMarketPulse({ market, showSplits = false, sport = null }: { mark
   return (
     <div className={`rounded-xl border bg-gradient-to-r to-transparent p-4 ${style.container}`}>
       <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-        <div><div className="flex flex-wrap items-center gap-2"><p className={`text-[8px] font-black uppercase tracking-[0.18em] ${style.title}`}>OddSphere Market Pulse</p><span className={`rounded-full border px-2 py-0.5 text-[7px] font-black uppercase tracking-wider ${style.badge}`}>{style.label}</span></div><p className="mt-1 text-sm font-black text-white">{chip}</p></div>
-        <span className="text-[8px] font-bold text-gray-600">Real market snapshot</span>
+        <div><div className="flex flex-wrap items-center gap-2"><p className={`text-[8px] font-black uppercase tracking-[0.18em] ${style.title}`}>OddSphere Market Pulse</p><span className={`rounded-full border px-2 py-0.5 text-[7px] font-black uppercase tracking-wider ${style.badge}`}>{style.label}</span></div>{football ? null : <p className="mt-1 text-sm font-black text-white">{chip}</p>}</div>
+        <span className="text-[8px] font-bold text-gray-600">{football ? "Stored market evidence" : "Real market snapshot"}</span>
       </div>
-      <p className="mt-3 text-[10px] leading-relaxed text-gray-400">{detail || "No additional market interpretation is available for this snapshot."}</p>
+      {football ? <FootballMarketSignalRail market={market} movement={movement} sport={sport === "cfb" ? "cfb" : "nfl"} /> : <p className="mt-3 text-[10px] leading-relaxed text-gray-400">{detail || "No additional market interpretation is available for this snapshot."}</p>}
       {showSplits
-        ? <CompactOddsMovement market={market} tone={tone} lineClass={style.line} />
+        ? <CompactOddsMovement market={market} tone={tone} lineClass={style.line} compact={football} />
         : <CompactFirstInningOddsMovement market={market} tone={tone} lineClass={style.line} />}
-      {showSplits ? <CompactPointLineMovement market={market} /> : null}
-      {showSplits ? <DefaultSplitSummary market={market} sport={sport} /> : null}
+      {showSplits && !football ? <CompactPointLineMovement market={market} /> : null}
+      {showSplits ? <DefaultSplitSummary market={market} sport={sport} compact={football} /> : null}
     </div>
   );
+}
+
+type FootballMarketSignal = {
+  label: string;
+  value: string;
+  note: string;
+  tone: "emerald" | "amber" | "violet" | "gray";
+};
+
+function FootballMarketSignalRail({ market, movement, sport }: { market: MarketEdgeDto; movement: CoherentMovement; sport: "nfl" | "cfb" }) {
+  const probabilityGap = displayedProbabilityGap(market);
+  const movementSignal = footballMovementSignal(market, movement);
+  const publicSignal = footballPublicPriceSignal(market, movement);
+  const sharpSignal = footballSharpSignal(market, sport);
+  const gapSignal: FootballMarketSignal = {
+    label: "Model vs market",
+    value: probabilityGap === null ? "Unavailable" : `${probabilityGap > 0 ? "+" : ""}${probabilityGap.toFixed(1)} pp`,
+    note: probabilityGap === null ? "Missing stays neutral" : "Selected-side gap",
+    tone: probabilityGap !== null && probabilityGap >= 1 ? "emerald" : probabilityGap !== null && probabilityGap < 0 ? "amber" : "gray",
+  };
+  return <div className="mt-3 grid grid-cols-2 gap-2" aria-label="Football market signal summary">{[gapSignal, movementSignal, publicSignal, sharpSignal].map((signal) => <FootballMarketSignalCell key={signal.label} signal={signal} />)}</div>;
+}
+
+function FootballMarketSignalCell({ signal }: { signal: FootballMarketSignal }) {
+  const tone = signal.tone === "emerald" ? "border-emerald-400/20 bg-emerald-400/[0.045] text-emerald-200" : signal.tone === "amber" ? "border-amber-400/20 bg-amber-400/[0.045] text-amber-200" : signal.tone === "violet" ? "border-violet-400/20 bg-violet-400/[0.045] text-violet-200" : "border-white/[0.07] bg-black/20 text-gray-300";
+  return <div className={`min-w-0 rounded-lg border px-2.5 py-2 ${tone}`}><p className="text-[6px] font-black uppercase tracking-[0.14em] text-gray-600">{signal.label}</p><p className="mt-1 break-words text-[9px] font-black leading-tight">{signal.value}</p><p className="mt-0.5 break-words text-[7px] leading-tight text-gray-600">{signal.note}</p></div>;
+}
+
+function footballMovementSignal(market: MarketEdgeDto, movement: CoherentMovement): FootballMarketSignal {
+  const sportsbook = movement.sportsbook ? formatSportsbook(movement.sportsbook) : "Book unavailable";
+  if (!movement.coherentTrail || movement.open === null || movement.current === null) {
+    return { label: "Same-book move", value: "Unverified", note: "No continuous trail", tone: "gray" };
+  }
+  const lineChanged = !sameTrackedLine(movement.openLine, movement.currentLine);
+  if (lineChanged) {
+    const direction = movementRowDirection(market, movement, true);
+    return {
+      label: "Same-book move",
+      value: `${formatNumber(movement.openLine!)} → ${formatNumber(movement.currentLine!)}`,
+      note: `${direction.label} · ${sportsbook}`,
+      tone: direction.tone === "emerald" || direction.tone === "teal" ? "emerald" : direction.tone === "red" || direction.tone === "amber" ? "amber" : "gray",
+    };
+  }
+  const impliedDelta = americanImpliedPct(movement.current) - americanImpliedPct(movement.open);
+  const magnitude = Math.abs(impliedDelta);
+  if (magnitude < 0.1) {
+    return { label: "Same-book move", value: "Market flat", note: `${formatAmerican(movement.open)} → ${formatAmerican(movement.current)} · ${sportsbook}`, tone: "gray" };
+  }
+  const convictionRose = impliedDelta > 0;
+  const entryImproved = movement.current > movement.open;
+  return {
+    label: "Same-book move",
+    value: `Conviction ${convictionRose ? "rose" : "eased"} ${magnitude.toFixed(1)} pp`,
+    note: `Entry ${formatAmerican(movement.open)} → ${formatAmerican(movement.current)} ${entryImproved ? "improved" : "worsened"}`,
+    tone: convictionRose ? "emerald" : "amber",
+  };
+}
+
+function footballPublicPriceSignal(market: MarketEdgeDto, movement: CoherentMovement): FootballMarketSignal {
+  const consensus = displayedConsensusSection(market);
+  const publicRead = splitSectionSignal(consensus);
+  const moneyLeader = publicRead.moneyLeader;
+  const ticketLeader = publicRead.ticketLeader;
+  if (!moneyLeader && !ticketLeader) {
+    return { label: "Public vs price", value: "Unavailable", note: "Missing stays neutral", tone: "gray" };
+  }
+  if (publicRead.internallySplit && moneyLeader && ticketLeader) {
+    return { label: "Public vs price", value: `Money ${moneyLeader} · tickets ${ticketLeader}`, note: "Public split · not sharp", tone: "gray" };
+  }
+  const publicLeader = moneyLeader ?? ticketLeader!;
+  const movementDirection = coherentMovementDirection(market, movement);
+  if (movementDirection === "neutral" || !market.pick) {
+    return { label: "Public vs price", value: `Public leans ${publicLeader}`, note: "Price direction neutral", tone: "gray" };
+  }
+  const publicSupportsPick = sideMatchesPick(publicLeader, market.pick);
+  const priceSupportsPick = movementDirection === "support";
+  const agrees = publicSupportsPick === priceSupportsPick;
+  return { label: "Public vs price", value: agrees ? "Signals agree" : "Signals diverge", note: `Money → ${publicLeader} · retail context`, tone: agrees ? "emerald" : "amber" };
+}
+
+function footballSharpSignal(market: MarketEdgeDto, sport: "nfl" | "cfb"): FootballMarketSignal {
+  const sharp = resolveDisplayedSharpSplit(market, sport);
+  const leader = splitLeader(sharp.section, "moneyPct");
+  if (sharp.section?.rows.length && sharp.availabilityStatus !== "stale" && !splitSectionIsStale(sharp.section)) {
+    return { label: "Verified sharp", value: leader ? `Verified · ${leader}` : "Verified", note: sharp.section.label, tone: "violet" };
+  }
+  if (sharp.section && (sharp.availabilityStatus === "stale" || splitSectionIsStale(sharp.section))) {
+    return { label: "Verified sharp", value: "Historical only", note: sharp.section.lastUpdated ? formatTimestamp(sharp.section.lastUpdated) : sharp.section.label, tone: "amber" };
+  }
+  const status = sharp.availabilityStatus === "pending" || sharp.availabilityStatus === "provider_limited" ? "Pending" : "Unavailable";
+  return { label: "Verified sharp", value: status, note: status === "Pending" ? "No verified split yet" : "Missing stays neutral", tone: "gray" };
 }
 
 function CompactFirstInningOddsMovement({ market, tone, lineClass }: { market: MarketEdgeDto; tone: "emerald" | "amber" | "gray"; lineClass: string }) {
@@ -1032,7 +1120,7 @@ function CompactFirstInningOddsMovement({ market, tone, lineClass }: { market: M
   return <section className="mt-3 rounded-lg border border-white/[0.09] bg-black/20 p-3"><div className="flex items-center justify-between gap-2"><div><p className="text-[8px] font-black uppercase tracking-[0.15em] text-gray-300">First-inning odds movement</p><p className="mt-0.5 text-[7px] font-semibold text-gray-600">NRFI and YRFI · {formatFiSource(board.source)} · {board.line === null ? "line unavailable" : `line ${formatNumber(board.line)}`}</p></div><span className="text-[7px] font-black uppercase tracking-wider text-gray-500">Two-sided market</span></div><div className="mt-3 flex flex-col gap-2">{row("NRFI", board.nrfiOpenAmerican ?? null, board.nrfiPreviousAmerican ?? null, board.nrfiAmerican)}{row("YRFI", board.yrfiOpenAmerican ?? null, board.yrfiPreviousAmerican ?? null, board.yrfiAmerican)}</div><p className="mt-2 text-[7px] leading-relaxed text-gray-600">{directionalPick ? `Both outcomes are shown for context. Directional support for ${market.pick} is only claimed when its same-book price trail is verified.` : "Both outcomes are shown because a Toss-Up has no selected side. No directional movement claim is made without a verified selected-side trail."}</p></section>;
 }
 
-function CompactOddsMovement({ market, tone, lineClass }: { market: MarketEdgeDto; tone: "emerald" | "amber" | "gray"; lineClass: string }) {
+function CompactOddsMovement({ market, tone, lineClass, compact = false }: { market: MarketEdgeDto; tone: "emerald" | "amber" | "gray"; lineClass: string; compact?: boolean }) {
   const movement = resolveCoherentMovement(market);
   const opposingMovement = resolveOpposingMovement(market);
   const soccerBoard = market.soccerPriceBoard;
@@ -1062,7 +1150,13 @@ function CompactOddsMovement({ market, tone, lineClass }: { market: MarketEdgeDt
     const directionClass = direction.tone === "emerald" ? "text-emerald-300" : direction.tone === "teal" ? "text-teal-300" : direction.tone === "red" ? "text-red-300" : direction.tone === "amber" ? "text-amber-300" : "text-gray-600";
     const connectorClass = direction.tone === "emerald" ? "from-gray-700 via-emerald-500/50 to-emerald-400/50" : direction.tone === "teal" ? "from-gray-700 via-teal-500/40 to-teal-400/40" : direction.tone === "red" ? "from-gray-700 via-red-500/55 to-red-400/55" : direction.tone === "amber" ? "from-gray-700 via-amber-500/45 to-amber-400/45" : selected ? lineClass : "from-gray-700 via-violet-500/40 to-gray-600";
     const openingPoint = <PricePoint label={value.openingLabel} value={formatAmerican(value.open)} line={value.openLine} />;
-    return <div className="rounded-lg border border-white/[0.08] bg-black/20 p-3"><div className="flex items-center justify-between gap-2"><p className="text-[9px] font-black text-gray-200">{label}</p><div className="flex items-center gap-2"><span className={`text-[7px] font-black uppercase tracking-wider ${directionClass}`}>{direction.label}</span><p className="text-[7px] font-semibold text-gray-600">{value.sportsbook ? formatSportsbook(value.sportsbook) : "book unavailable"}</p></div></div>{value.coherentTrail ? <div className="mt-3 grid grid-cols-[auto_1fr_auto_1fr_auto] items-center gap-2">{openingPoint}<div className={`h-px bg-gradient-to-r ${connectorClass}`} /><PricePoint label="Prior" value={formatAmerican(value.previous)} line={value.previousLine} /><div className={`h-px bg-gradient-to-r ${connectorClass}`} /><PricePoint label="Current" value={formatAmerican(value.current)} line={value.currentLine} tone={direction.tone} /></div> : <div className="mt-3 flex items-end justify-between gap-3"><div><p className="text-[6px] font-black uppercase tracking-wider text-gray-600">Current quote</p><p className="mt-0.5 font-mono text-sm font-black text-gray-200">{formatAmerican(value.current)}</p></div><p className="max-w-[13rem] text-right text-[7px] leading-relaxed text-gray-600">No earlier different same-book quote is stored.</p></div>}</div>;
+    const previousMatchesOpening = value.previous === value.open && sameTrackedLine(value.previousLine, value.openLine);
+    const previousMatchesCurrent = value.previous === value.current && sameTrackedLine(value.previousLine, value.currentLine);
+    const previousAddsInformation = value.previous !== null && !previousMatchesOpening && !previousMatchesCurrent;
+    const compactDirection = compact && selected && value.coherentTrail && value.open !== null && value.current !== null
+      ? footballMovementSignal(market, value).value
+      : direction.label;
+    return <div className="rounded-lg border border-white/[0.08] bg-black/20 p-3"><div className="flex items-center justify-between gap-2"><p className="text-[9px] font-black text-gray-200">{label}</p><div className="flex items-center gap-2"><span className={`text-[7px] font-black uppercase tracking-wider ${directionClass}`}>{compactDirection}</span><p className="text-[7px] font-semibold text-gray-600">{value.sportsbook ? formatSportsbook(value.sportsbook) : "book unavailable"}</p></div></div>{value.coherentTrail ? <div className={`mt-3 grid items-center gap-2 ${compact && !previousAddsInformation ? "grid-cols-[auto_1fr_auto]" : "grid-cols-[auto_1fr_auto_1fr_auto]"}`}>{openingPoint}<div className={`h-px bg-gradient-to-r ${connectorClass}`} />{compact && !previousAddsInformation ? null : <><PricePoint label="Prior" value={formatAmerican(value.previous)} line={value.previousLine} /><div className={`h-px bg-gradient-to-r ${connectorClass}`} /></>}<PricePoint label="Current" value={formatAmerican(value.current)} line={value.currentLine} tone={direction.tone} /></div> : <div className="mt-3 flex items-end justify-between gap-3"><div><p className="text-[6px] font-black uppercase tracking-wider text-gray-600">Current quote</p><p className="mt-0.5 font-mono text-sm font-black text-gray-200">{formatAmerican(value.current)}</p></div><p className="max-w-[13rem] text-right text-[7px] leading-relaxed text-gray-600">No earlier different same-book quote is stored.</p></div>}</div>;
   };
   const rows = soccerBoard?.rows.length
     ? [...soccerBoard.rows]
@@ -1087,7 +1181,7 @@ function CompactOddsMovement({ market, tone, lineClass }: { market: MarketEdgeDt
     opposingRow?.movement.currentLine !== null &&
     opposingRow?.movement.currentLine !== undefined &&
     !sameTrackedLine(selectedRow.movement.currentLine, opposingRow.movement.currentLine);
-  return <section className="mt-3 rounded-lg border border-white/[0.09] bg-black/25 p-3"><div className="flex items-center justify-between gap-2"><div><p className="text-[8px] font-black uppercase tracking-[0.15em] text-gray-300">Odds movement</p>{context ? <p className="mt-0.5 text-[7px] font-semibold text-gray-600">{context}</p> : null}</div><span className={`text-[7px] font-black uppercase tracking-wider ${tone === "emerald" ? "text-emerald-300" : tone === "amber" ? "text-amber-300" : "text-gray-500"}`}>{tone === "emerald" ? "Supporting" : tone === "amber" ? "Resisting" : "Neutral"}</span></div><div className="mt-3 grid gap-2">{rows.map((row) => <div key={row.key}>{movementRow(row.label, row.movement, row.selected)}</div>)}</div>{opposingUsesDifferentLine ? <p className="mt-2 text-[7px] leading-relaxed text-gray-600">The available opposing outcome is shown at its own verified book and line because no trusted matching pair was available. It is market context only—not a two-sided fair-price pair or a grading input.</p> : null}{movementReferenceDiffers ? <p className="mt-2 text-[7px] leading-relaxed text-gray-600">Movement uses the richest verified two-sided same-book history at {formatSportsbook(movement.sportsbook!)}. The current best quote remains {formatAmerican(currentPrice)} at {formatSportsbook(market.currentPriceSportsbook!)}; the books are never mixed into one trail.</p> : null}{soccerBoard ? <p className="mt-2 text-[7px] leading-relaxed text-gray-600">All outcomes use the same Daily Edge movement timeline. The highlighted row is the graded side; the other rows are market context only.</p> : null}{evaluationDiffers ? <p className="mt-2 text-[7px] leading-relaxed text-gray-600">Current quote {formatAmerican(currentPrice)}{market.currentPriceSportsbook ? ` at ${formatSportsbook(market.currentPriceSportsbook)}` : ""}; recommendation evaluated at {formatAmerican(evaluatedPrice)}. Live movement does not silently re-grade the pick.</p> : null}{market.oddspherePostedAmerican != null && !publishedIsVerified ? <p className="mt-1 text-[7px] leading-relaxed text-gray-600">Published price omitted because its selected side was not explicitly verified.</p> : null}</section>;
+  return <section className="mt-3 rounded-lg border border-white/[0.09] bg-black/25 p-3"><div className="flex items-center justify-between gap-2"><div><p className="text-[8px] font-black uppercase tracking-[0.15em] text-gray-300">{compact ? "Exact price map" : "Odds movement"}</p>{context ? <p className="mt-0.5 text-[7px] font-semibold text-gray-600">{context}</p> : null}</div><span className={`text-[7px] font-black uppercase tracking-wider ${tone === "emerald" ? "text-emerald-300" : tone === "amber" ? "text-amber-300" : "text-gray-500"}`}>{tone === "emerald" ? "Supporting" : tone === "amber" ? "Resisting" : "Neutral"}</span></div><div className="mt-3 grid gap-2">{rows.map((row) => <div key={row.key}>{movementRow(row.label, row.movement, row.selected)}</div>)}</div>{opposingUsesDifferentLine ? <p className="mt-2 text-[7px] leading-relaxed text-gray-600">The available opposing outcome is shown at its own verified book and line because no trusted matching pair was available. It is market context only—not a two-sided fair-price pair or a grading input.</p> : null}{movementReferenceDiffers ? <p className="mt-2 text-[7px] leading-relaxed text-gray-600">Movement uses the richest verified two-sided same-book history at {formatSportsbook(movement.sportsbook!)}. The current best quote remains {formatAmerican(currentPrice)} at {formatSportsbook(market.currentPriceSportsbook!)}; the books are never mixed into one trail.</p> : null}{soccerBoard ? <p className="mt-2 text-[7px] leading-relaxed text-gray-600">All outcomes use the same Daily Edge movement timeline. The highlighted row is the graded side; the other rows are market context only.</p> : null}{evaluationDiffers ? <p className="mt-2 text-[7px] leading-relaxed text-gray-600">Current quote {formatAmerican(currentPrice)}{market.currentPriceSportsbook ? ` at ${formatSportsbook(market.currentPriceSportsbook)}` : ""}; recommendation evaluated at {formatAmerican(evaluatedPrice)}. Live movement does not silently re-grade the pick.</p> : null}{market.oddspherePostedAmerican != null && !publishedIsVerified ? <p className="mt-1 text-[7px] leading-relaxed text-gray-600">Published price omitted because its selected side was not explicitly verified.</p> : null}</section>;
 }
 
 function CompactPointLineMovement({ market }: { market: MarketEdgeDto }) {
@@ -1515,9 +1609,10 @@ function americanImpliedPct(value: number): number {
   return value < 0 ? (-value / (-value + 100)) * 100 : (100 / (value + 100)) * 100;
 }
 
-function DefaultSplitSummary({ market, sport = null }: { market: MarketEdgeDto; sport?: Sport | null }) {
+type SharpAvailabilityStatus = "complete" | "provider_limited" | "pending" | "stale" | "unavailable" | null;
+
+function resolveDisplayedSharpSplit(market: MarketEdgeDto, sport: Sport | null): { section: MarketSplitDisplaySection | null; availabilityStatus: SharpAvailabilityStatus; selectedSharpIsSportsbook: boolean } {
   const decision = market.recommendationDecision;
-  const consensus = displayedConsensusSection(market);
   const sportsbook = market.sportsbookSplits ?? null;
   const sharp = decision?.sharpBookSplits ?? null;
   // Old cached MLB responses may predate the explicit availability field.
@@ -1543,6 +1638,16 @@ function DefaultSplitSummary({ market, sport = null }: { market: MarketEdgeDto; 
     signal: sharpAvailability.message,
     lastUpdated: sharpAvailability.lastUpdated,
   });
+  const availabilityStatus = selectedSharpIsSportsbook
+    ? (splitSectionIsStale(displayedSharp) ? "stale" : "complete")
+    : sharpAvailability?.status ?? (splitSectionIsStale(displayedSharp) ? "stale" : displayedSharp?.rows.length ? "complete" : displayedSharp ? "provider_limited" : null);
+  return { section: displayedSharp, availabilityStatus, selectedSharpIsSportsbook };
+}
+
+function DefaultSplitSummary({ market, sport = null, compact = false }: { market: MarketEdgeDto; sport?: Sport | null; compact?: boolean }) {
+  const consensus = displayedConsensusSection(market);
+  const sharpDisplay = resolveDisplayedSharpSplit(market, sport);
+  const displayedSharp = sharpDisplay.section;
   const displayedConflict = splitSourcesConflict(consensus, displayedSharp);
   const conflictIsHistorical = displayedConflict && (splitSectionIsStale(consensus) || splitSectionIsStale(displayedSharp));
   if (consensus === null && displayedSharp === null) return <Unavailable label="Consensus and sharp-book split data are unavailable for this market." />;
@@ -1550,16 +1655,16 @@ function DefaultSplitSummary({ market, sport = null }: { market: MarketEdgeDto; 
   return (
     <div className="mt-3 border-t border-white/[0.06] pt-3">
       <div className="flex flex-wrap items-center justify-between gap-2"><div><p className="text-[8px] font-black uppercase tracking-[0.15em] text-gray-300">Market splits</p><p className="mt-0.5 text-[7px] text-gray-600">{hasSourceSpecificEvidence ? "Public and sharp splits remain separate signals" : "Public money and ticket distribution"}</p></div>{displayedConflict ? <span className="rounded-full border border-amber-400/25 bg-amber-400/[0.08] px-2 py-0.5 text-[7px] font-black uppercase tracking-wider text-amber-200">{conflictIsHistorical ? "Historical source conflict" : "Sources conflict"}</span> : null}</div>
-      <div className="mt-2 grid gap-2">
-        <SplitSourcePanel source="PUBLIC CONSENSUS" section={consensus} pick={market.pick} />
-        {displayedSharp ? <SplitSourcePanel source={displayedSharp.label === "Sharp Book Signal" ? "SHARP SPLITS" : "SHARP BOOK SPLITS"} section={displayedSharp} pick={market.pick} availabilityStatus={selectedSharpIsSportsbook ? (splitSectionIsStale(displayedSharp) ? "stale" : "complete") : sharpAvailability?.status ?? (splitSectionIsStale(displayedSharp) ? "stale" : displayedSharp.rows.length > 0 ? "complete" : "provider_limited")} /> : null}
+      <div className={`mt-2 grid items-start gap-2 ${compact && !displayedSharp?.rows.length ? "sm:grid-cols-[minmax(0,1fr)_8.5rem]" : compact ? "sm:grid-cols-2" : ""}`}>
+        <SplitSourcePanel source="PUBLIC CONSENSUS" section={consensus} pick={market.pick} compact={compact} />
+        {displayedSharp ? <SplitSourcePanel source={displayedSharp.label === "Sharp Book Signal" ? "SHARP SPLITS" : "SHARP BOOK SPLITS"} section={displayedSharp} pick={market.pick} availabilityStatus={sharpDisplay.availabilityStatus} compact={compact} /> : null}
       </div>
       {displayedSharp?.rows.length ? <CrossSourceSplitRead consensus={consensus} sharp={displayedSharp} /> : null}
     </div>
   );
 }
 
-function SplitSourcePanel({ source, section, pick, availabilityStatus = null }: { source: "PUBLIC CONSENSUS" | "SHARP BOOK SPLITS" | "SHARP SPLITS"; section: MarketSplitDisplaySection | null; pick: string | null; availabilityStatus?: "complete" | "provider_limited" | "pending" | "stale" | "unavailable" | null }) {
+function SplitSourcePanel({ source, section, pick, availabilityStatus = null, compact = false }: { source: "PUBLIC CONSENSUS" | "SHARP BOOK SPLITS" | "SHARP SPLITS"; section: MarketSplitDisplaySection | null; pick: string | null; availabilityStatus?: SharpAvailabilityStatus; compact?: boolean }) {
   const moneyLeader = splitLeader(section, "moneyPct");
   const ticketLeader = splitLeader(section, "betsPct");
   const isSharp = source === "SHARP BOOK SPLITS" || source === "SHARP SPLITS";
@@ -1567,17 +1672,17 @@ function SplitSourcePanel({ source, section, pick, availabilityStatus = null }: 
   const displayRows = canonicalSplitRows(section);
   const availabilityLabel = availabilityStatus === "provider_limited" ? "Limited" : availabilityStatus === "pending" ? "Pending" : availabilityStatus === "complete" ? "Complete" : availabilityStatus === "unavailable" ? "Unavailable" : null;
   const splitPending = availabilityStatus === "pending" || availabilityStatus === "provider_limited";
-  return <section className={`rounded-lg border p-3 ${isSharp ? "border-violet-400/20 bg-violet-500/[0.045]" : "border-white/[0.10] bg-black/20"}`}><div className="flex items-start justify-between gap-2"><div><div className="flex flex-wrap items-center gap-1.5"><p className={`text-[8px] font-black uppercase tracking-[0.14em] ${isSharp ? "text-violet-200" : "text-gray-300"}`}>{source}</p>{stale || availabilityStatus === "stale" ? <span className="rounded-full border border-amber-400/20 bg-amber-400/[0.07] px-1.5 py-0.5 text-[6px] font-black uppercase tracking-wider text-amber-200">Stale snapshot</span> : availabilityLabel ? <span className="rounded-full border border-violet-400/20 bg-violet-400/[0.07] px-1.5 py-0.5 text-[6px] font-black uppercase tracking-wider text-violet-200">{availabilityLabel}</span> : null}</div><p className="mt-0.5 text-[7px] text-gray-600">{section?.lastUpdated ? formatTimestamp(section.lastUpdated) : splitPending ? "No verified split yet" : section ? "Current snapshot" : "Unavailable"}</p></div>{moneyLeader ? <span className="rounded-full border border-white/[0.09] bg-black/20 px-2 py-0.5 text-[7px] font-black text-gray-300">Money → {moneyLeader}</span> : null}</div>{displayRows.length ? <div className="mt-3 space-y-3">{displayRows.slice(0, 2).map((row) => <SplitSideCard key={`${source}-${row.side}`} label={row.label} moneyPct={row.moneyPct} betsPct={row.betsPct} isPick={sideMatchesPick(row.label, pick)} />)}</div> : splitPending ? null : section?.signal ? <p className="mt-3 text-[9px] leading-relaxed text-gray-400">{section.signal}</p> : null}{moneyLeader && ticketLeader && moneyLeader.toLowerCase() !== ticketLeader.toLowerCase() ? <p className="mt-3 border-t border-white/[0.06] pt-2 text-[8px] leading-relaxed text-amber-200/80">Money leans {moneyLeader}; ticket count leans {ticketLeader}.</p> : null}</section>;
+  return <section className={`rounded-lg border p-3 ${isSharp ? "border-violet-400/20 bg-violet-500/[0.045]" : "border-white/[0.10] bg-black/20"}`}><div className="flex items-start justify-between gap-2"><div><div className="flex flex-wrap items-center gap-1.5"><p className={`text-[8px] font-black uppercase tracking-[0.14em] ${isSharp ? "text-violet-200" : "text-gray-300"}`}>{source}</p>{stale || availabilityStatus === "stale" ? <span className="rounded-full border border-amber-400/20 bg-amber-400/[0.07] px-1.5 py-0.5 text-[6px] font-black uppercase tracking-wider text-amber-200">Stale snapshot</span> : availabilityLabel ? <span className="rounded-full border border-violet-400/20 bg-violet-400/[0.07] px-1.5 py-0.5 text-[6px] font-black uppercase tracking-wider text-violet-200">{availabilityLabel}</span> : null}</div><p className="mt-0.5 text-[7px] text-gray-600">{section?.lastUpdated ? formatTimestamp(section.lastUpdated) : splitPending ? "No verified split yet" : section ? "Current snapshot" : "Unavailable"}</p></div>{moneyLeader ? <span className="rounded-full border border-white/[0.09] bg-black/20 px-2 py-0.5 text-[7px] font-black text-gray-300">Money → {moneyLeader}</span> : null}</div>{displayRows.length ? <div className={`mt-3 ${compact ? "grid grid-cols-2 gap-2" : "space-y-3"}`}>{displayRows.slice(0, 2).map((row) => <SplitSideCard key={`${source}-${row.side}`} label={row.label} moneyPct={row.moneyPct} betsPct={row.betsPct} isPick={sideMatchesPick(row.label, pick)} compact={compact} />)}</div> : splitPending ? null : section?.signal ? <p className="mt-3 text-[9px] leading-relaxed text-gray-400">{section.signal}</p> : null}{moneyLeader && ticketLeader && moneyLeader.toLowerCase() !== ticketLeader.toLowerCase() ? <p className="mt-3 border-t border-white/[0.06] pt-2 text-[8px] leading-relaxed text-amber-200/80">Money leans {moneyLeader}; ticket count leans {ticketLeader}.</p> : null}</section>;
 }
 
-function SplitSideCard({ label, moneyPct, betsPct, isPick }: { label: string; moneyPct: number | null; betsPct: number | null; isPick: boolean }) {
-  return <div><div className="mb-1.5 flex items-center gap-1.5"><p className="text-[9px] font-black text-gray-200">{label}</p>{isPick ? <span className="rounded border border-violet-400/20 bg-violet-400/[0.07] px-1.5 py-0.5 text-[6px] font-black uppercase tracking-wider text-violet-200">Our read</span> : null}</div><div className="space-y-1.5"><SingleSplitBar label="Money" value={moneyPct} /><SingleSplitBar label="Tickets" value={betsPct} /></div></div>;
+function SplitSideCard({ label, moneyPct, betsPct, isPick, compact = false }: { label: string; moneyPct: number | null; betsPct: number | null; isPick: boolean; compact?: boolean }) {
+  return <div><div className="mb-1.5 flex items-center gap-1.5"><p className="text-[9px] font-black text-gray-200">{label}</p>{isPick ? <span className="rounded border border-violet-400/20 bg-violet-400/[0.07] px-1.5 py-0.5 text-[6px] font-black uppercase tracking-wider text-violet-200">Our read</span> : null}</div><div className="space-y-1.5"><SingleSplitBar label="Money" value={moneyPct} compact={compact} /><SingleSplitBar label="Tickets" value={betsPct} compact={compact} /></div></div>;
 }
 
-function SingleSplitBar({ label, value }: { label: "Money" | "Tickets"; value: number | null }) {
+function SingleSplitBar({ label, value, compact = false }: { label: "Money" | "Tickets"; value: number | null; compact?: boolean }) {
   const width = value === null ? 0 : Math.max(0, Math.min(100, value));
   const fill = label === "Money" ? "from-violet-700 to-violet-300" : "from-violet-900 to-violet-500";
-  return <div className="grid grid-cols-[48px_1fr_38px] items-center gap-2.5"><span className="text-[8px] font-black uppercase tracking-wider text-gray-400">{label}</span><div className="relative h-4 overflow-hidden rounded-md border border-white/[0.08] bg-white/[0.07] shadow-inner"><span className={`absolute inset-y-0 left-0 rounded-[3px] bg-gradient-to-r ${fill} shadow-[0_0_12px_rgba(167,139,250,0.35)] transition-[width] duration-300`} style={{ width: `${width}%` }} /><span className="absolute inset-y-0 left-1/2 w-px bg-white/25" /><span className="absolute inset-y-0 left-1/4 w-px bg-white/[0.07]" /><span className="absolute inset-y-0 left-3/4 w-px bg-white/[0.07]" /></div><span className="text-right font-mono text-[10px] font-black text-white">{value === null ? "—" : `${Math.round(value)}%`}</span></div>;
+  return <div className={`grid items-center ${compact ? "grid-cols-[1fr_30px] gap-1.5" : "grid-cols-[48px_1fr_38px] gap-2.5"}`}><span className={compact ? "sr-only" : "text-[8px] font-black uppercase tracking-wider text-gray-400"}>{label}</span><div className="relative h-4 overflow-hidden rounded-md border border-white/[0.08] bg-white/[0.07] shadow-inner" aria-label={`${label} ${value === null ? "unavailable" : `${Math.round(value)} percent`}`}><span className={`absolute inset-y-0 left-0 rounded-[3px] bg-gradient-to-r ${fill} shadow-[0_0_12px_rgba(167,139,250,0.35)] transition-[width] duration-300`} style={{ width: `${width}%` }} /><span className="absolute inset-y-0 left-1/2 w-px bg-white/25" /><span className="absolute inset-y-0 left-1/4 w-px bg-white/[0.07]" /><span className="absolute inset-y-0 left-3/4 w-px bg-white/[0.07]" />{compact ? <span className="absolute inset-0 flex items-center px-1 text-[6px] font-black uppercase tracking-wider text-white/75">{label}</span> : null}</div><span className="text-right font-mono text-[10px] font-black text-white">{value === null ? "—" : `${Math.round(value)}%`}</span></div>;
 }
 
 function CrossSourceSplitRead({ consensus, sharp }: { consensus: MarketSplitDisplaySection | null; sharp: MarketSplitDisplaySection | null }) {
@@ -1854,10 +1959,10 @@ function KeyStats({ game, market, marketKey, history, sample, sport, availabilit
 function FootballMarketEvidence({ game, market, marketKey, sport, availability }: { game: DailyEdgeGameDto; market: MarketEdgeDto; marketKey: MarketKey; sport: "nfl" | "cfb"; availability: DailyEdgeGameAvailability | null }) {
   const focus = footballEvidenceFocus(marketKey);
   const orderedStats = prioritizeFootballEvidenceStats(market.keyStats, marketKey);
-  const primary = orderedStats.slice(0, FOOTBALL_PRIMARY_EVIDENCE_LIMIT);
-  const supporting = orderedStats.slice(FOOTBALL_PRIMARY_EVIDENCE_LIMIT);
-  const driver = (stat: MarketEdgeDto["keyStats"][number]) => <PredictionDriverCard key={`${stat.label}-${stat.awayValue}-${stat.homeValue}`} stat={stat} away={game.awayTeam} home={game.homeTeam} awayStarter={game.awayStarter?.name ?? null} homeStarter={game.homeStarter?.name ?? null} marketKey={marketKey} pick={market.pick} />;
-  return <div className="h-full p-4 sm:p-5 xl:p-6"><SectionHeading tone="sky">Key Stats &amp; Notes</SectionHeading><div className="mt-4 rounded-xl border border-sky-400/15 bg-sky-400/[0.035] p-3.5"><div className="flex items-start justify-between gap-3"><div><p className="text-[8px] font-black uppercase tracking-[0.17em] text-sky-200">{focus.eyebrow}</p><h4 className="mt-1 text-sm font-black leading-tight text-white">{focus.title}</h4></div><span className="shrink-0 rounded-full border border-white/[0.08] bg-black/20 px-2 py-1 text-[7px] font-black uppercase tracking-wider text-gray-500">{orderedStats.length} verified</span></div><p className="mt-2 text-[9px] leading-relaxed text-gray-500">{focus.description} The projected score and market price remain in their dedicated panels.</p></div>{primary.length > 0 ? <div className="mt-3 space-y-2">{primary.map(driver)}</div> : <CoreDecisionSnapshot game={game} market={market} marketKey={marketKey} />}{supporting.length > 0 ? <details className="group mt-3 rounded-xl border border-white/[0.08] bg-black/20"><summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-3.5 py-3"><span><span className="block text-[8px] font-black uppercase tracking-[0.14em] text-gray-300">More supporting evidence</span><span className="mt-0.5 block text-[8px] text-gray-600">{supporting.length} additional verified inputs</span></span><span className="text-sm text-gray-600 transition group-open:rotate-180">⌄</span></summary><div className="space-y-2 border-t border-white/[0.07] p-2.5">{supporting.map(driver)}</div></details> : null}<FootballAvailabilityPanel report={availability} sport={sport} /></div>;
+  const primary = orderedStats.slice(0, FOOTBALL_READER_PRIMARY_EVIDENCE_LIMIT);
+  const supporting = orderedStats.slice(FOOTBALL_READER_PRIMARY_EVIDENCE_LIMIT);
+  const driver = (stat: MarketEdgeDto["keyStats"][number]) => <PredictionDriverCard key={`${stat.label}-${stat.awayValue}-${stat.homeValue}`} stat={stat} away={game.awayTeam} home={game.homeTeam} awayStarter={game.awayStarter?.name ?? null} homeStarter={game.homeStarter?.name ?? null} marketKey={marketKey} pick={market.pick} compact />;
+  return <div className="h-full p-4 sm:p-5 xl:p-6"><SectionHeading tone="sky">Key Stats &amp; Notes</SectionHeading><div className="mt-4 rounded-xl border border-sky-400/15 bg-sky-400/[0.035] p-3.5"><div className="flex items-start justify-between gap-3"><div><p className="text-[8px] font-black uppercase tracking-[0.17em] text-sky-200">{focus.eyebrow}</p><h4 className="mt-1 text-sm font-black leading-tight text-white">{focus.title}</h4></div><span className="shrink-0 rounded-full border border-white/[0.08] bg-black/20 px-2 py-1 text-[7px] font-black uppercase tracking-wider text-gray-500">{orderedStats.length} verified</span></div><p className="mt-2 text-[9px] leading-relaxed text-gray-500">{focus.description} The projected score and market price remain in their dedicated panels.</p></div>{primary.length > 0 ? <div className="mt-3 space-y-2">{primary.map(driver)}</div> : <CoreDecisionSnapshot game={game} market={market} marketKey={marketKey} />}{primary.length > 0 ? <p className="mt-2 text-[7px] leading-relaxed text-gray-600">Verified inputs and context from the stored Daily Edge snapshot.</p> : null}{supporting.length > 0 ? <details className="group mt-3 rounded-xl border border-white/[0.08] bg-black/20"><summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-3.5 py-3"><span><span className="block text-[8px] font-black uppercase tracking-[0.14em] text-gray-300">More supporting evidence</span><span className="mt-0.5 block text-[8px] text-gray-600">{supporting.length} additional verified inputs</span></span><span className="text-sm text-gray-600 transition group-open:rotate-180">⌄</span></summary><div className="space-y-2 border-t border-white/[0.07] p-2.5">{supporting.map(driver)}</div></details> : null}<FootballAvailabilityPanel report={availability} sport={sport} /></div>;
 }
 
 function FootballAvailabilityPanel({ report, sport }: { report: DailyEdgeGameAvailability | null; sport: Sport }) {
@@ -2014,21 +2119,34 @@ function CoreDecisionSnapshot({ game, market, marketKey }: { game: DailyEdgeGame
   return <div className="mt-2 grid grid-cols-2 gap-2"><ProofCell label="Expected score" value={`${game.awayTeam} ${expectedAway.toFixed(1)} · ${game.homeTeam} ${expectedHome.toFixed(1)}`} note="Primary prediction · joint PMF means" tone="violet" /><ProofCell label="Representative final" value={`${game.awayTeam} ${formatNumber(game.projected.away)} · ${game.homeTeam} ${formatNumber(game.projected.home)}`} note="Reachable secondary outcome · same PMF" tone="violet" /><ProofCell label="Expected margin" value={expectedLeader === "Even" ? "Even" : `${expectedLeader} by ${expectedMargin.toFixed(1)}`} note={`Expected total ${expectedTotal.toFixed(1)} · same PMF`} tone="gray" /><ProofCell label={marketKey === "moneyline" ? "Current price" : "Market line"} value={marketNumber} note={marketKey === "moneyline" && market.currentPriceSportsbook ? formatSportsbook(market.currentPriceSportsbook) : market.marketSource ?? "Source unavailable"} tone="gray" /></div>;
 }
 
-function FootballOutcomeForecast({ game, market }: { game: DailyEdgeGameDto; market: MarketEdgeDto }) {
+function FootballDecisionSummary({ game, market, marketKey, sport }: { game: DailyEdgeGameDto; market: MarketEdgeDto; marketKey: MarketKey; sport: "nfl" | "cfb" }) {
   const forecast = game.footballProjection;
   if (!forecast) return null;
   const footballOnly = game.sport === "cfb" ? game.footballOnlyProjection ?? null : null;
   const homeWins = forecast.homeWinProbability >= forecast.awayWinProbability;
   const winner = homeWins ? game.homeTeam : game.awayTeam;
   const probability = homeWins ? forecast.homeWinProbability : forecast.awayWinProbability;
-  const betGrade = nflSelectedBetGrade(market);
   const baselineHomeWins = footballOnly ? footballOnly.homeWinProbability >= footballOnly.awayWinProbability : false;
   const baselineWinner = footballOnly ? baselineHomeWins ? game.homeTeam : game.awayTeam : null;
   const baselineProbability = footballOnly ? baselineHomeWins ? footballOnly.homeWinProbability : footballOnly.awayWinProbability : null;
-  return <section className="mt-4 rounded-lg border border-violet-400/15 bg-violet-400/[0.035] p-3"><div className="flex items-start justify-between gap-3"><div><p className="text-[8px] font-black uppercase tracking-[0.15em] text-violet-200">{game.sport === "cfb" ? "Outcome forecast" : "Independent outcome forecast"}</p><p className="mt-1 text-lg font-black text-white">{winner} · {(probability * 100).toFixed(1)}%</p></div>{game.sport === "cfb" ? null : <span className={`rounded-full border border-gray-700 px-2 py-1 text-[7px] font-black uppercase tracking-wider ${betGrade.className}`}>Bet grade {betGrade.label}</span>}</div><div className="mt-3 grid grid-cols-2 gap-2 text-center"><div className={`rounded-md border px-2 py-2 ${!homeWins ? "border-violet-400/25 bg-violet-400/[0.06]" : "border-white/[0.06] bg-black/20"}`}><p className="text-[7px] font-black uppercase tracking-wider text-gray-600">{game.awayTeam}</p><p className="mt-1 font-mono text-sm font-black text-gray-100">{(forecast.awayWinProbability * 100).toFixed(1)}%</p></div><div className={`rounded-md border px-2 py-2 ${homeWins ? "border-violet-400/25 bg-violet-400/[0.06]" : "border-white/[0.06] bg-black/20"}`}><p className="text-[7px] font-black uppercase tracking-wider text-gray-600">{game.homeTeam}</p><p className="mt-1 font-mono text-sm font-black text-gray-100">{(forecast.homeWinProbability * 100).toFixed(1)}%</p></div></div>{footballOnly && baselineWinner && baselineProbability !== null ? <p className="mt-2 text-[8px] text-gray-600">Football baseline · <span className="font-black text-gray-400">{baselineWinner} {(baselineProbability * 100).toFixed(1)}%</span></p> : game.sport === "cfb" ? <p className="mt-2 text-[8px] text-gray-600">Pre-release football-only snapshot</p> : null}</section>;
+  const modelPredictionLabel = dailyEdgeOutcomeForecastLabel({ game, market, marketKey, sport });
+  const exactPriceSelection = dailyEdgeExactPriceSelectionLabel({ market, marketKey });
+  const evaluatedSelection = !market.held && exactPriceSelection ? exactPriceSelection : modelPredictionLabel;
+  const evaluatedPrice = market.gradePriceAmerican ?? market.priceAmerican;
+  const evaluatedBook = market.marketSource ? formatSportsbook(market.marketSource) : null;
+  const selectionDiffers = Boolean(exactPriceSelection && exactPriceSelection !== modelPredictionLabel);
+  const betGrade = nflSelectedBetGrade(market);
+  const priceCalibratedValueLane = sport === "nfl" && marketKey === "moneyline" &&
+    (market.capReasons ?? []).includes("nfl_r6_exact_price_moneyline_lean");
+  const selectedProbabilityLabel = sport === "cfb"
+    ? "Model probability"
+    : priceCalibratedValueLane
+      ? "Price-calibrated bet probability"
+      : "Selected-side probability";
+  return <section className="mt-4 rounded-lg border border-violet-400/15 bg-violet-400/[0.035] p-3" aria-label="Football decision summary"><div className="flex items-start justify-between gap-3"><div><p className="text-[8px] font-black uppercase tracking-[0.15em] text-violet-200">Outcome forecast</p><p className="mt-1 text-lg font-black text-white">{winner} · {(probability * 100).toFixed(1)}%</p><p className="mt-1 text-[7px] font-semibold text-gray-600">{game.awayTeam} {(forecast.awayWinProbability * 100).toFixed(1)}% · {game.homeTeam} {(forecast.homeWinProbability * 100).toFixed(1)}%</p></div>{sport === "nfl" ? <span className={`rounded-full border border-gray-700 px-2 py-1 text-[7px] font-black uppercase tracking-wider ${betGrade.className}`}>Bet grade {betGrade.label}</span> : <VerdictBadge market={market} />}</div>{footballOnly && baselineWinner && baselineProbability !== null ? <p className="mt-2 text-[8px] text-gray-600">Football baseline · <span className="font-black text-gray-400">{baselineWinner} {(baselineProbability * 100).toFixed(1)}%</span></p> : sport === "cfb" ? <p className="mt-2 text-[8px] text-gray-600">Pre-release football-only snapshot</p> : null}<div className="mt-3 flex items-end justify-between gap-3 border-t border-white/[0.07] pt-3"><div className="min-w-0"><p className="text-[7px] font-black uppercase tracking-[0.15em] text-gray-600">Exact-price decision</p><p className="mt-1 break-words text-xl font-black leading-tight text-white">{evaluatedSelection}</p><p className="mt-1 text-[8px] font-semibold leading-relaxed text-violet-200/65">{selectionDiffers ? `Forecast · ${modelPredictionLabel}` : "Forecast and evaluated side agree"}</p></div>{market.held ? <span className="shrink-0 text-right"><span className="block text-[8px] font-black uppercase tracking-wider text-amber-200">No bet evaluated</span><span className="mt-0.5 block text-[7px] text-gray-600">Current context remains below</span></span> : <span className="shrink-0 text-right"><span className="block font-mono text-base font-black text-gray-100">{formatAmerican(evaluatedPrice)}</span><span className="mt-0.5 block text-[7px] font-bold text-gray-600">{evaluatedBook ?? "Sportsbook unavailable"}</span></span>}</div><DecisionMetricGrid market={market} probabilityLabel={selectedProbabilityLabel} compact /></section>;
 }
 
-function PredictionDriverCard({ stat, away, home, awayStarter, homeStarter, marketKey, pick }: { stat: MarketEdgeDto["keyStats"][number]; away: string; home: string; awayStarter: string | null; homeStarter: string | null; marketKey: MarketKey; pick: string | null }) {
+function PredictionDriverCard({ stat, away, home, awayStarter, homeStarter, marketKey, pick, compact = false }: { stat: MarketEdgeDto["keyStats"][number]; away: string; home: string; awayStarter: string | null; homeStarter: string | null; marketKey: MarketKey; pick: string | null; compact?: boolean }) {
   const category = driverCategory(stat.label);
   const context = driverContext(stat.label, marketKey, pick);
   const evidenceRole = driverEvidenceRole(stat.label, stat.source);
@@ -2037,7 +2155,8 @@ function PredictionDriverCard({ stat, away, home, awayStarter, homeStarter, mark
   const twoSided = keyStatIsTwoSided(stat.label, stat.awayValue, stat.homeValue);
   const signal = contextualDriverSignal({ label: stat.label, awayValue: stat.awayValue, homeValue: stat.homeValue, away, home, marketKey, pick });
   const teamValue = (side: "away" | "home", team: string, person: string | null, value: string | null) => { const supports = signal?.support === side; const challenges = signal?.risk === side; return <div className={`rounded-lg border px-3 py-2 ${supports ? "border-emerald-400/30 bg-emerald-400/[0.07]" : challenges ? "border-amber-400/25 bg-amber-400/[0.055]" : "border-white/[0.07] bg-black/25"}`}><div className="flex items-center gap-1.5"><span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: teamAccent(team) }} /><span className={`text-[8px] font-black ${supports ? "text-emerald-200" : challenges ? "text-amber-200" : "text-gray-400"}`}>{team}</span></div>{isPitching && person ? <p className={`mt-1 truncate text-[9px] font-black ${supports ? "text-emerald-100" : challenges ? "text-amber-100" : "text-gray-100"}`}>{person}</p> : null}<p className={`${isPitching && person ? "mt-0.5" : "mt-1"} text-sm font-black ${supports ? "text-emerald-200" : challenges ? "text-amber-200" : "text-white"}`}>{value ?? "—"}</p></div>; };
-  return <section className="rounded-xl border border-sky-400/20 bg-[#111723] p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.025)]"><div className="flex items-start justify-between gap-3"><div><span className="text-[7px] font-black uppercase tracking-[0.14em] text-sky-300">{category}</span><p className="mt-0.5 text-[10px] font-black text-gray-100">{displayLabel}</p></div><div className="text-right"><span className="block text-[7px] font-bold uppercase tracking-wider text-gray-600">{evidenceRole}</span>{signal ? <span className={`mt-1 inline-flex rounded-full border px-2 py-0.5 text-[7px] font-black ${signal.support ? "border-emerald-400/25 bg-emerald-400/[0.08] text-emerald-200" : signal.risk ? "border-amber-400/25 bg-amber-400/[0.08] text-amber-200" : "border-gray-700 bg-gray-800/60 text-gray-500"}`}>{signal.label}</span> : null}</div></div>{twoSided ? <div className="mt-2 grid grid-cols-2 gap-2">{teamValue("away", away, awayStarter, stat.awayValue)}{teamValue("home", home, homeStarter, stat.homeValue)}</div> : <p className="mt-2 text-base font-black text-white">{stat.homeValue ?? stat.awayValue ?? "—"}</p>}<p className="mt-2 text-[8px] leading-relaxed text-gray-500">{context}</p></section>;
+  const genericContext = context === "Verified input or context surfaced by the Daily Edge snapshot.";
+  return <section className={`rounded-xl border border-sky-400/20 bg-[#111723] shadow-[inset_0_1px_0_rgba(255,255,255,0.025)] ${compact ? "p-2.5" : "p-3"}`}><div className="flex items-start justify-between gap-3"><div><span className="text-[7px] font-black uppercase tracking-[0.14em] text-sky-300">{category}</span><p className="mt-0.5 text-[10px] font-black text-gray-100">{displayLabel}</p></div><div className="text-right"><span className="block text-[7px] font-bold uppercase tracking-wider text-gray-600">{evidenceRole}</span>{signal ? <span className={`mt-1 inline-flex rounded-full border px-2 py-0.5 text-[7px] font-black ${signal.support ? "border-emerald-400/25 bg-emerald-400/[0.08] text-emerald-200" : signal.risk ? "border-amber-400/25 bg-amber-400/[0.08] text-amber-200" : "border-gray-700 bg-gray-800/60 text-gray-500"}`}>{signal.label}</span> : null}</div></div>{twoSided ? <div className="mt-2 grid grid-cols-2 gap-2">{teamValue("away", away, awayStarter, stat.awayValue)}{teamValue("home", home, homeStarter, stat.homeValue)}</div> : <p className="mt-2 text-base font-black text-white">{stat.homeValue ?? stat.awayValue ?? "—"}</p>}{compact && genericContext ? null : <p className="mt-2 text-[8px] leading-relaxed text-gray-500">{context}</p>}</section>;
 }
 
 function DeepResearchToggle({ open, setOpen, market, marketKey, game }: { open: boolean; setOpen: (open: boolean) => void; market: MarketEdgeDto; marketKey: MarketKey; game: DailyEdgeGameDto }) {
@@ -2762,15 +2881,6 @@ function displayedProbabilityGap(market: MarketEdgeDto): number | null {
   if (market.modelProb === null || market.marketImpliedPct === null) return null;
   const modelPct = market.modelProb <= 1 ? market.modelProb * 100 : market.modelProb;
   return +(modelPct - market.marketImpliedPct).toFixed(1);
-}
-
-function displayedExpectedValuePct(market: MarketEdgeDto): number | null {
-  const price = currentDisplayedPrice(market);
-  if (market.held || market.modelProb === null || price === null || price === 0) return null;
-  const probability = market.modelProb <= 1 ? market.modelProb : market.modelProb / 100;
-  if (probability < 0 || probability > 1) return null;
-  const profitPerUnit = price > 0 ? price / 100 : 100 / Math.abs(price);
-  return +((probability * profitPerUnit - (1 - probability)) * 100).toFixed(1);
 }
 
 function displayRiskLine(market: MarketEdgeDto): string {
