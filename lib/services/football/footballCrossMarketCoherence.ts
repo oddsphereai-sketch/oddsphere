@@ -1,9 +1,10 @@
 export const FOOTBALL_CROSS_MARKET_COHERENCE_RELEASE =
-  "football_cross_market_coherence_2026_08_30_r5_verified_pmf_endpoints" as const;
+  "football_cross_market_coherence_2026_09_03_r6_cfb_narrow_mean_median_tolerance" as const;
 
 const EPSILON = 1e-9;
 const EV_TOLERANCE = 1e-8;
-const PUBLIC_SCORE_DIRECTION_TOLERANCE_POINTS = 0.25;
+const DEFAULT_PUBLIC_SCORE_DIRECTION_TOLERANCE_POINTS = 0.25;
+export const CFB_PUBLIC_SCORE_DIRECTION_TOLERANCE_POINTS = 0.5;
 
 export type FootballCoherenceSport = "nfl" | "cfb";
 export type FootballCoherenceMarket = "moneyline" | "spread" | "total";
@@ -115,6 +116,7 @@ export function auditFootballCrossMarketCoherence(args: {
   allowWholeGameOperationalHold?: boolean;
   requireDecisionSideFromForecast?: boolean;
   allowPmfVerifiedProbabilityEndpoints?: boolean;
+  publicScoreDirectionTolerancePoints?: number;
 }): FootballCoherenceReport {
   const fatalIssues: FootballCoherenceIssue[] = [];
   const explanations: FootballCoherenceExplanation[] = [];
@@ -140,6 +142,11 @@ export function auditFootballCrossMarketCoherence(args: {
   }));
   const byMarket = new Map(normalized.map((decision) => [decision.market, decision]));
   if (args.requireDecisionSideFromForecast) {
+    const scoreDirectionTolerance =
+      args.publicScoreDirectionTolerancePoints ?? DEFAULT_PUBLIC_SCORE_DIRECTION_TOLERANCE_POINTS;
+    if (!Number.isFinite(scoreDirectionTolerance) || scoreDirectionTolerance < 0) {
+      throw new Error("publicScoreDirectionTolerancePoints must be finite and nonnegative.");
+    }
     for (const decision of normalized) {
       if (!decision.selectedSide || decision.market !== "moneyline" && decision.line === null) continue;
       const forecastSide = selectedForecastSideAtDecision(args.forecast, decision);
@@ -150,7 +157,7 @@ export function auditFootballCrossMarketCoherence(args: {
         });
       } else if (
         forecastSide.pmf !== decision.selectedSide ||
-        forecastSide.meanDistance > PUBLIC_SCORE_DIRECTION_TOLERANCE_POINTS && forecastSide.mean !== decision.selectedSide
+        forecastSide.meanDistance > scoreDirectionTolerance && forecastSide.mean !== decision.selectedSide
       ) {
         fatalIssues.push({
           code: "decision_forecast_side_disagreement",
