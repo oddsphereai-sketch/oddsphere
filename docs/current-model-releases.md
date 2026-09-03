@@ -1086,11 +1086,12 @@ The paired live-slate replay is recorded in
 
 ## WNBA champion
 
-- Model: `wnba_v1_1_team_identity`
-- Distribution: `wnba_market_heads_value_calibrated_2026_08_02_v3`
-- Calibration schema: `wnba_core_calibration_v1`
-- Grade policy: `wnba_grade_policy_v6_authoritative_reader_grade_2026_08_13`
-- Prediction-record contract: `wnba_prediction_record_contract_v3_exact_decision_tuple_2026_08_21`
+- Model: `wnba_v1_3_target_excluded_complete_pairs`
+- Distribution: `wnba_complete_pair_target_excluded_2026_09_02_v5`
+- Calibration schema: `wnba_core_calibration_v3_complete_pair_target_exclusion`
+- Grade policy: `wnba_grade_policy_v8_complete_pair_exact_value_2026_09_02`
+- Decision-tuple contract: `wnba_decision_tuple_v3_complete_pair_exact_value_2026_09_02`
+- Prediction-record contract: `wnba_prediction_record_contract_v5_complete_pair_exact_value_2026_09_02`
 - Machine registry: `lib/automodel/wnbaChampionRuntime.ts`
 - Authoritative model writer: `lib/services/wnba/runWnbaModel.ts`
 - Tracking writer: `lib/services/wnba/buildWnbaPredictionRecords.ts`
@@ -1098,12 +1099,39 @@ The paired live-slate replay is recorded in
 - Scheduled owner: `/api/cron/wnba-daily-refresh` under the WNBA-scoped shared
   `prediction_pipeline` lease
 
-WNBA moneyline selection and its established public-support grade behavior are preserved.
-Public support cannot promote total or spread Watchlists. Public resistance remains active in all
-markets. A spread Watchlist can promote to Lean only for the home side when Elo and statistical
-home margins differ by less than three points, at least ten books quote the spread, an exact
-picked-side price exists, and public conflict is absent. The rule never changes a side, projection,
-probability, or stake.
+The September 2 v1.3/v5/v8 release removes evaluated-book self-validation from Moneyline,
+Spread, and Total. Complete paired evidence must be fresh, predecision, prestart, same-book,
+same-line, and no more than 30 seconds skewed. The evaluated book and line are fixed from the
+independent forecast before inference and that book is then excluded. Market authority requires
+at least two remaining books from two conservatively independent source families. Circa,
+Pinnacle, and Bookmaker retain distinct originator identities; every non-originator SharpAPI
+label shares one unverified-lineage family. Missing, tied, stale, incomplete, singleton, or
+correlated evidence returns the exact independent sport-model forecast. A posterior side change
+is repriced from the complementary side of the same fixed evaluated pair, so price drives EV and
+grade only and cannot select the forecast.
+
+One versioned margin distribution preserves the final Moneyline win probability, expected
+margin, and incumbent variance; Spread probabilities come from that same CDF, the independent
+Total distribution supplies the total head, and decimal team scores are the algebraic
+total/margin decomposition. Spread retains the established 25/75 center only when qualified
+target-excluded line evidence exists. Spread and Total can clear the former Watchlist caps only
+when the established strength rules agree with a final-model probability edge over the evaluated
+quote's break-even probability and at least 2% exact-price EV. Qualified target-excluded evidence
+may move or corroborate the forecast, but a missing alternative set cannot suppress an
+independently strong forecast at a genuine exact quote. Nonpositive economics demote without
+changing the forecast. Public resistance remains active, while public support alone cannot
+manufacture a Spread or Total action.
+
+Structural fixtures prove both promotion and demotion paths, price-perturbation forecast
+identity, correlated-retail fallback, newest coherent-pair selection, and singleton
+non-flattening. The natural September 2 production board was empty: repeated leased refreshes
+succeeded with zero provider calls and no capture rows. That is zero-slate operational health,
+not a board-count or forecast-quality claim. The first real release-pure slate is scored
+automatically. Evidence and rollback details are recorded in
+`docs/model-audits/2026-09-02-wnba-authoritative-structural-market-result.md`.
+
+The earlier v4/v5 spread promotion rules remain historical inputs to the current exact-value
+intersection. They cannot bypass target exclusion or the positive-EV gate.
 
 Exact current-release attribution removed five total/spread public promotions that went 0-5 and
 added six spread agreement promotions that went 5-1 (+3.421 units), for a +1 board delta. The

@@ -32,6 +32,7 @@ import { buildWnbaDailyEdgePreview } from "./buildWnbaDailyEdgePreview";
 import { selectWnbaSameBookTrail } from "./wnbaPriceTrail";
 import { resolveWnbaMoneylineSide, wnbaLogoUrl } from "./wnbaTeams";
 import {
+  isLegacyWnbaDecisionTuple,
   isWnbaDecisionTuple,
   retainCompatibleWnbaDecisionTuple,
   type WnbaDecisionTuple,
@@ -591,8 +592,8 @@ function previewGradeFromPlayGrade(value: string | null): PreviewModelGrade | nu
   }
 }
 
-const WNBA_V3_RECORD_CONTRACT_VERSION =
-  "wnba_prediction_record_contract_v3_exact_decision_tuple_2026_08_21";
+const WNBA_V5_RECORD_CONTRACT_VERSION =
+  "wnba_prediction_record_contract_v5_complete_pair_exact_value_2026_09_02";
 
 export function selectWnbaDecisionTupleForReader(input: {
   lockedRecord: WnbaLockedRecord | null;
@@ -611,6 +612,7 @@ export function selectWnbaDecisionTupleForReader(input: {
 }): WnbaDecisionTuple | null {
   const lockedTuple = input.lockedRecord?.snapshot_json?.decision_tuple;
   if (isWnbaDecisionTuple(lockedTuple)) return lockedTuple;
+  if (isLegacyWnbaDecisionTuple(lockedTuple)) return lockedTuple as WnbaDecisionTuple;
   if (input.currentDecision) {
     const currentTuple = retainCompatibleWnbaDecisionTuple(input.currentTuple, input.currentDecision);
     if (currentTuple) return currentTuple;
@@ -622,7 +624,7 @@ export function selectWnbaDecisionTupleForReader(input: {
     !record ||
     record.locked_at !== null ||
     !input.currentDecision ||
-    record.snapshot_json?.prediction_record_contract_version !== WNBA_V3_RECORD_CONTRACT_VERSION ||
+    record.snapshot_json?.prediction_record_contract_version !== WNBA_V5_RECORD_CONTRACT_VERSION ||
     !isWnbaDecisionTuple(candidate) ||
     record.pick !== input.currentDecision.pick ||
     record.market !== candidate.market ||

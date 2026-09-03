@@ -2,8 +2,10 @@ export const WNBA_TOTAL_MARKET_ANCHOR_25 = 0.25;
 export const WNBA_TOTAL_MARKET_ANCHOR_50 = 0.5;
 export const WNBA_SPREAD_MARKET_ANCHOR_25 = 0.25;
 export const WNBA_SPREAD_MARKET_ANCHOR_50 = 0.5;
-export const WNBA_EMERGENCY_TOTAL_FORMULA_VERSION = "wnba_total_market_anchor_25_v1";
-export const WNBA_EMERGENCY_SPREAD_FORMULA_VERSION = "wnba_spread_market25_zero_homebias_2026_07_22";
+export const WNBA_EMERGENCY_TOTAL_FORMULA_VERSION =
+  "wnba_total_independent_complete_pair_target_excluded_value_2026_09_02_v3";
+export const WNBA_EMERGENCY_SPREAD_FORMULA_VERSION =
+  "wnba_spread_ml_coherent_target_excluded_evaluation_2026_09_02_v3";
 
 export type WnbaCoreModelCalibrationInput = {
   rawProjectedAwayScore: number | null;
@@ -21,7 +23,7 @@ export type WnbaCoreModelCalibrationInput = {
 };
 
 export type WnbaCoreModelCalibrationAudit = {
-  schema_version: "wnba_core_calibration_v1";
+  schema_version: "wnba_core_calibration_v3_complete_pair_target_exclusion";
   recommendation_safe: true;
   formulas: {
     total_25: "market_total + 0.25 * (raw_projected_total - market_total)";
@@ -80,12 +82,8 @@ function finite(value: number | null | undefined): value is number {
   return typeof value === "number" && Number.isFinite(value);
 }
 
-function round1(value: number): number {
-  return Math.round(value * 10) / 10;
-}
-
-function roundNullable(value: number | null): number | null {
-  return finite(value) ? round1(value) : null;
+function preserveFinite(value: number | null): number | null {
+  return finite(value) ? value : null;
 }
 
 export function readWnbaCoreModelCalibrationFlagsFromEnv(
@@ -110,7 +108,7 @@ export function marketImpliedHomeMarginFromSpread(
   marketSpreadForHome: number | null,
 ): number | null {
   if (!finite(marketSpreadForHome)) return null;
-  return round1(-marketSpreadForHome);
+  return -marketSpreadForHome;
 }
 
 export function buildWnbaCoreModelCalibrationAudit(
@@ -177,7 +175,7 @@ export function buildWnbaCoreModelCalibrationAudit(
   ];
 
   return {
-    schema_version: "wnba_core_calibration_v1",
+    schema_version: "wnba_core_calibration_v3_complete_pair_target_exclusion",
     recommendation_safe: true,
     formulas: {
       total_25: "market_total + 0.25 * (raw_projected_total - market_total)",
@@ -189,24 +187,24 @@ export function buildWnbaCoreModelCalibrationAudit(
       total_recommendation: WNBA_EMERGENCY_TOTAL_FORMULA_VERSION,
       spread_recommendation: WNBA_EMERGENCY_SPREAD_FORMULA_VERSION,
     },
-    raw_projected_total: roundNullable(rawProjectedTotal),
-    raw_projected_away_score: roundNullable(input.rawProjectedAwayScore),
-    raw_projected_home_score: roundNullable(input.rawProjectedHomeScore),
-    raw_projected_home_margin: roundNullable(rawProjectedHomeMargin),
-    market_total: roundNullable(input.marketTotal),
-    market_implied_home_margin: roundNullable(marketImpliedHomeMargin),
-    total_model_edge_points: roundNullable(totalEdge),
-    spread_model_edge_points: roundNullable(spreadEdge),
-    market_anchored_projected_total_25: totalEnabled ? roundNullable(total25) : null,
-    market_anchored_projected_total_50: totalEnabled ? roundNullable(total50) : null,
+    raw_projected_total: preserveFinite(rawProjectedTotal),
+    raw_projected_away_score: preserveFinite(input.rawProjectedAwayScore),
+    raw_projected_home_score: preserveFinite(input.rawProjectedHomeScore),
+    raw_projected_home_margin: preserveFinite(rawProjectedHomeMargin),
+    market_total: preserveFinite(input.marketTotal),
+    market_implied_home_margin: preserveFinite(marketImpliedHomeMargin),
+    total_model_edge_points: preserveFinite(totalEdge),
+    spread_model_edge_points: preserveFinite(spreadEdge),
+    market_anchored_projected_total_25: totalEnabled ? preserveFinite(total25) : null,
+    market_anchored_projected_total_50: totalEnabled ? preserveFinite(total50) : null,
     learned_calibrated_projected_total: null,
-    market_anchored_home_margin_25: spreadEnabled ? roundNullable(spread25) : null,
-    market_anchored_home_margin_50: spreadEnabled ? roundNullable(spread50) : null,
+    market_anchored_home_margin_25: spreadEnabled ? preserveFinite(spread25) : null,
+    market_anchored_home_margin_50: spreadEnabled ? preserveFinite(spread50) : null,
     learned_calibrated_home_margin: null,
-    emergency_calibrated_projected_total: totalEnabled ? roundNullable(emergencyTotal) : null,
-    emergency_calibrated_home_margin: spreadEnabled ? roundNullable(emergencySpread) : null,
-    recommendation_projected_total_used: totalRecommendationUse ? roundNullable(emergencyTotal) : null,
-    recommendation_home_margin_used: spreadRecommendationUse ? roundNullable(emergencySpread) : null,
+    emergency_calibrated_projected_total: totalEnabled ? preserveFinite(emergencyTotal) : null,
+    emergency_calibrated_home_margin: spreadEnabled ? preserveFinite(emergencySpread) : null,
+    recommendation_projected_total_used: totalRecommendationUse ? preserveFinite(emergencyTotal) : null,
+    recommendation_home_margin_used: spreadRecommendationUse ? preserveFinite(emergencySpread) : null,
     recommendation_reason_codes: {
       total: totalReasonCodes,
       spread: spreadReasonCodes,

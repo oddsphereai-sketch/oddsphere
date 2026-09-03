@@ -94,10 +94,10 @@ assert.equal(
 );
 assert.ok(independentBox.value, "the synchronous observer receives independent-model evidence");
 const independent = independentBox.value as WnbaIndependentModelEvidence;
-assert.notEqual(
+assert.equal(
   independent.home_win_probability,
   championObserved.model.home_win_prob,
-  "capture retains the full-precision independent probability separately from the legacy rounded output",
+  "capture and champion retain the same full-precision independent probability without quantization",
 );
 
 const currentRows: WnbaForwardEvidenceLineRow[] = [
@@ -140,6 +140,8 @@ function tuple(
     line,
     model_probability: 0.6123456789,
     market_fair_probability: 0.5912345678,
+    market_fair_probability_source: "target_excluded_complete_pairs",
+    market_fair_probability_book_count: 4,
     outcome_confidence: 0.61,
     bet_grade: "Lean",
     evaluated_price_american: market === "moneyline" ? -145 : -110,

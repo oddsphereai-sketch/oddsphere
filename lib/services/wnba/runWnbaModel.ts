@@ -198,6 +198,7 @@ export async function runWnbaModel(opts: {
       odds: l.odds_american as number | null, line: l.line_value as number | null,
       date: g.slate_date as string,
       observedAt: (l.fetched_at ?? l.recorded_at ?? null) as string | null,
+      startsAt: typeof g.game_date === "string" ? g.game_date : null,
       h: homeBdl, a: awayBdl,
     }));
     const independentEvidence: { value: WnbaIndependentModelEvidence | null } = { value: null };
@@ -208,6 +209,11 @@ export async function runWnbaModel(opts: {
       publicByGame.get(g.id as number) ?? {},
       undefined,
       (evidence) => { independentEvidence.value = evidence; },
+      {
+        decisionAt: computedAt,
+        startsAt: g.game_date as string,
+        marketRows: oddRows,
+      },
     );
     result.gamesPredicted++;
     const matchup = `${p.away_abbr}@${p.home_abbr}`;
@@ -245,9 +251,14 @@ export async function runWnbaModel(opts: {
           : row.mkt === "point_spread"
             ? "spread"
             : null;
-      const side = row.selType === "home" || row.selType === "away" || row.selType === "over" || row.selType === "under"
+      const rawSide = row.selType === "home" || row.selType === "away" || row.selType === "over" || row.selType === "under"
         ? row.selType
         : null;
+      const side = rawSide === "over" || rawSide === "under"
+        ? rawSide
+        : rawSide === "home" || rawSide === "away"
+          ? ((rawSide === "home") === (row.h === homeBdl) ? "home" : "away")
+          : null;
       if (market === null || side === null || row.odds === null) return [];
       return [{
         market,
@@ -263,6 +274,21 @@ export async function runWnbaModel(opts: {
       moneyline_market_picked_probability?: number | null;
       total_picked_probability?: number | null;
       spread_picked_probability?: number | null;
+    };
+    const targetExcluded = p.target_excluded_market_decision;
+    const explicitEvaluatedRow = (
+      market: "moneyline" | "total" | "spread",
+    ): WnbaDecisionPriceRow | null => {
+      const row = targetExcluded[market].evaluated;
+      if (!row) return null;
+      return {
+        market,
+        side: row.side,
+        sportsbook: row.sportsbook,
+        line: row.line,
+        priceAmerican: row.priceAmerican,
+        observedAt: row.observedAt,
+      };
     };
     const totalSide = p.total.side?.startsWith("Over") ? "over" : p.total.side?.startsWith("Under") ? "under" : null;
     const spreadSide = p.spread.side?.startsWith(p.home_abbr ?? "") ? "home" : p.spread.side?.startsWith(p.away_abbr ?? "") ? "away" : null;
@@ -284,7 +310,14 @@ export async function runWnbaModel(opts: {
       line: null,
       modelProbability: probabilityComponents.moneyline_picked_probability ?? p.moneyline.confidence / 100,
       marketFairProbability: probabilityComponents.moneyline_market_picked_probability ?? null,
-      outcomeConfidence: p.moneyline.confidence / 100,
+      marketFairProbabilitySource: probabilityComponents.moneyline_market_picked_probability == null
+        ? null
+        : "target_excluded_complete_pairs",
+      marketFairProbabilityBookCount: probabilityComponents.moneyline_market_picked_probability == null
+        ? 0
+        : targetExcluded.moneyline.target_excluded_book_count,
+      evaluatedPriceRow: explicitEvaluatedRow("moneyline"),
+      outcomeConfidence: probabilityComponents.moneyline_picked_probability ?? p.moneyline.confidence / 100,
       betGrade: p.moneyline.grade,
       decisionAt: computedAt,
     });
@@ -295,7 +328,7 @@ export async function runWnbaModel(opts: {
         side: mlSide,
         line: null,
         modelProbability: probabilityComponents.moneyline_picked_probability ?? p.moneyline.confidence / 100,
-        outcomeConfidence: p.moneyline.confidence / 100,
+        outcomeConfidence: probabilityComponents.moneyline_picked_probability ?? p.moneyline.confidence / 100,
         betGrade: p.moneyline.grade,
         decisionAt: computedAt,
       },
@@ -308,7 +341,15 @@ export async function runWnbaModel(opts: {
         side: totalSide,
         line: p.total.line,
         modelProbability: probabilityComponents.total_picked_probability ?? p.total.confidence / 100,
-        outcomeConfidence: p.total.confidence / 100,
+        marketFairProbability: targetExcluded.total.target_excluded_fair_probability,
+        marketFairProbabilitySource: targetExcluded.total.target_excluded_fair_probability === null
+          ? null
+          : "target_excluded_complete_pairs",
+        marketFairProbabilityBookCount: targetExcluded.total.target_excluded_fair_probability === null
+          ? 0
+          : targetExcluded.total.target_excluded_book_count,
+        evaluatedPriceRow: explicitEvaluatedRow("total"),
+        outcomeConfidence: probabilityComponents.total_picked_probability ?? p.total.confidence / 100,
         betGrade: p.total.grade,
         decisionAt: computedAt,
       });
@@ -319,7 +360,7 @@ export async function runWnbaModel(opts: {
           side: totalSide,
           line: p.total.line,
           modelProbability: probabilityComponents.total_picked_probability ?? p.total.confidence / 100,
-          outcomeConfidence: p.total.confidence / 100,
+          outcomeConfidence: probabilityComponents.total_picked_probability ?? p.total.confidence / 100,
           betGrade: p.total.grade,
           decisionAt: computedAt,
         },
@@ -333,7 +374,15 @@ export async function runWnbaModel(opts: {
         side: spreadSide,
         line: spreadLine,
         modelProbability: probabilityComponents.spread_picked_probability ?? p.spread.confidence / 100,
-        outcomeConfidence: p.spread.confidence / 100,
+        marketFairProbability: targetExcluded.spread.target_excluded_fair_probability,
+        marketFairProbabilitySource: targetExcluded.spread.target_excluded_fair_probability === null
+          ? null
+          : "target_excluded_complete_pairs",
+        marketFairProbabilityBookCount: targetExcluded.spread.target_excluded_fair_probability === null
+          ? 0
+          : targetExcluded.spread.target_excluded_book_count,
+        evaluatedPriceRow: explicitEvaluatedRow("spread"),
+        outcomeConfidence: probabilityComponents.spread_picked_probability ?? p.spread.confidence / 100,
         betGrade: p.spread.grade,
         decisionAt: computedAt,
       });
@@ -344,7 +393,7 @@ export async function runWnbaModel(opts: {
           side: spreadSide,
           line: spreadLine,
           modelProbability: probabilityComponents.spread_picked_probability ?? p.spread.confidence / 100,
-          outcomeConfidence: p.spread.confidence / 100,
+          outcomeConfidence: probabilityComponents.spread_picked_probability ?? p.spread.confidence / 100,
           betGrade: p.spread.grade,
           decisionAt: computedAt,
         },
@@ -422,7 +471,7 @@ export async function runWnbaModel(opts: {
       ml_confidence: p.moneyline.confidence,
       predicted_ou_side: p.total.side ? (p.total.side.startsWith("Over") ? "over" : "under") : null,
       ou_confidence: p.total.confidence,
-      predicted_home_score: p.projected_score.home, predicted_away_score: p.projected_score.away, predicted_total: Math.round((p.projected_score.home + p.projected_score.away) * 10) / 10,
+      predicted_home_score: p.projected_score.home, predicted_away_score: p.projected_score.away, predicted_total: p.projected_score.home + p.projected_score.away,
       // Grades live in sport_specific (avoid any CHECK constraint on the MLB-shaped grade columns).
       sport_specific: {
         model_version: EXPECTED_WNBA_MODEL_VERSION,
@@ -434,6 +483,7 @@ export async function runWnbaModel(opts: {
         cold_start: p.cold_start, data_quality: p.data_quality,
         wnba_core_model_calibration: p.wnba_core_model_calibration,
         public_market_context: p.public_market_context,
+        target_excluded_market_decision: p.target_excluded_market_decision,
         decision_tuple_contract_version: WNBA_DECISION_TUPLE_CONTRACT_VERSION,
         decision_tuples: decisionTuples,
         moneyline: { side: p.moneyline.side, confidence: p.moneyline.confidence, grade: p.moneyline.grade, price: p.moneyline.price },
