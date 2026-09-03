@@ -647,7 +647,7 @@ function SlateHeader({ snapshot, sport, onSportChange, onSportPrefetch, sample =
         <p className="text-[8px] font-semibold uppercase tracking-[0.12em] text-gray-600"><span className="text-gray-400">Update rhythm</span> · {weeklySlate?.cadenceLabel ?? (weeklySlate ? "30-minute board" : "hourly board")} · separate market feeds · minute lock checks</p>
       </div>
       <div className="mt-5"><SportSelector active={sport} onChange={onSportChange} onPrefetch={onSportPrefetch} sports={DAILY_EDGE_TOP_LEVEL_SPORT_KEYS} showCounts={false} showPendingState availability={sportAvailability} labelOverrides={{ soccer: "Soccer" }} /></div>
-      {sport === "soccer" && soccerCompetition ? <SoccerCompetitionBar active={soccerCompetition.active} reviewMode={reviewMode} /> : null}
+      {sport === "soccer" && soccerCompetition ? <SoccerCompetitionBar active={soccerCompetition.active} reviewMode={reviewMode} hasGames={snapshot.games.length > 0} /> : null}
       {weeklySlate ? <div className="mt-3 flex items-center justify-between gap-3 rounded-xl border border-white/[0.07] bg-white/[0.025] px-3 py-2.5"><p className="min-w-0 text-[9px] font-black uppercase tracking-[0.15em] text-gray-400">{weeklySlate.label}</p><div className="flex shrink-0 gap-2">{weeklySlate.previousHref ? <Link href={weeklySlate.previousHref} className="rounded-md border border-white/[0.08] px-2.5 py-1.5 text-[8px] font-black uppercase tracking-wider text-gray-400 hover:text-white">← Previous</Link> : null}{weeklySlate.nextHref ? <Link href={weeklySlate.nextHref} className="rounded-md border border-white/[0.08] px-2.5 py-1.5 text-[8px] font-black uppercase tracking-wider text-gray-400 hover:text-white">Next →</Link> : null}</div></div> : null}
     </div>
   );
@@ -659,16 +659,16 @@ function previewSportAvailability(activePreviewSports: Sport[], soccerCompetitio
       ...availability,
       [activeSport]: { isLive: true, statusLabel: "Active" },
     }),
-    soccerCompetition?.active === "premier_league"
+    soccerCompetition?.active === "premier_league" || soccerCompetition?.active === "champions_league"
       ? { ...DAILY_EDGE_SPORT_AVAILABILITY, soccer: { isLive: true, statusLabel: "Active" } }
       : DAILY_EDGE_SPORT_AVAILABILITY,
   );
 }
 
-function SoccerCompetitionBar({ active, reviewMode }: { active: SoccerCompetitionPreview["active"]; reviewMode: boolean }) {
+function SoccerCompetitionBar({ active, reviewMode, hasGames }: { active: SoccerCompetitionPreview["active"]; reviewMode: boolean; hasGames: boolean }) {
   const items = [
     { key: "premier_league", label: "Premier League", logo: "/league-logos/premier-league.svg", href: reviewMode ? "/dev/premier-league-preview" : "/lab/daily-edge?sport=soccer&league=epl", status: "Live board", dot: "bg-emerald-400" },
-    { key: "champions_league", label: "Champions League", logo: "/league-logos/champions-league.svg", href: reviewMode ? "/dev/experience-preview?sport=soccer&league=ucl" : "/lab/daily-edge?sport=soccer&league=ucl", status: "No games today", dot: "bg-gray-500" },
+    { key: "champions_league", label: "Champions League", logo: "/league-logos/champions-league.svg", href: reviewMode ? "/dev/experience-preview?sport=ucl" : "/lab/daily-edge?sport=soccer&league=ucl", status: active === "champions_league" && !hasGames ? "No games today" : "Live board", dot: active === "champions_league" && !hasGames ? "bg-gray-500" : "bg-emerald-400" },
     { key: "world_cup", label: "World Cup", logo: "/league-logos/world-cup.svg", href: reviewMode ? "/dev/experience-preview?sport=soccer&league=world-cup" : "/lab/daily-edge?sport=soccer&league=world-cup", status: "Offseason", dot: "bg-gray-600" },
   ] as const;
   return <nav aria-label="Soccer competitions" className="relative mt-3 rounded-2xl border border-violet-300/35 bg-gradient-to-br from-violet-500/[0.14] via-[#11101a] to-sky-500/[0.06] p-3 shadow-[0_18px_50px_-38px_rgba(167,139,250,0.9)] sm:p-4"><span className="absolute -top-2 left-6 h-3 w-3 rotate-45 border-l border-t border-violet-300/35 bg-[#161321]" /><div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between"><div className="flex items-center gap-2.5"><span className="flex h-7 w-7 items-center justify-center rounded-full border border-violet-300/30 bg-violet-400/15 text-[10px] font-black text-violet-100">2</span><div><p className="text-[10px] font-black uppercase tracking-[0.18em] text-white">Choose a soccer competition</p><p className="mt-0.5 text-[9px] text-gray-400">Soccer is selected above. Pick the league or tournament you want to view.</p></div></div><span className="rounded-full border border-violet-300/20 bg-violet-400/[0.08] px-3 py-1 text-[8px] font-black uppercase tracking-wider text-violet-100">Viewing · {items.find((item) => item.key === active)?.label}</span></div><div role="tablist" aria-label="Soccer competition" className="grid gap-2 sm:grid-cols-3">{items.map((item) => { const selected = active === item.key; return <Link key={item.key} role="tab" href={item.href} aria-selected={selected} aria-current={selected ? "page" : undefined} className={`group rounded-xl border p-3.5 transition ${selected ? "border-violet-300 bg-violet-500/25 text-white shadow-[inset_0_0_0_1px_rgba(196,181,253,0.18),0_8px_24px_-16px_rgba(167,139,250,1)]" : "border-white/[0.10] bg-black/30 text-gray-300 hover:border-violet-300/40 hover:bg-violet-400/[0.08] hover:text-white"}`}><div className="flex items-center gap-3"><span className={`flex h-11 w-14 shrink-0 items-center justify-center overflow-hidden rounded-lg border px-1.5 ${selected ? "border-violet-200/40 bg-violet-100/10" : "border-white/[0.08] bg-white/[0.04]"}`}><Image src={item.logo} alt={`${item.label} logo`} width={48} height={34} unoptimized className={`object-contain ${item.key === "premier_league" ? "h-auto w-full" : "h-8 w-8 brightness-0 invert"}`} /></span><div className="min-w-0 flex-1"><div className="flex items-center justify-between gap-2"><span className="truncate text-[11px] font-black uppercase tracking-[0.08em]">{item.label}</span><span className={`text-[9px] font-black ${selected ? "text-violet-100" : "text-gray-700 group-hover:text-gray-400"}`}>{selected ? "✓" : "→"}</span></div><span className={`mt-1 flex items-center gap-1.5 text-[8px] font-bold uppercase tracking-wider ${selected ? "text-violet-100" : "text-gray-600"}`}><i className={`h-1.5 w-1.5 rounded-full ${item.dot}`} />{selected ? `Selected · ${item.status}` : item.status}</span></div></div></Link>; })}</div></nav>;
@@ -680,15 +680,24 @@ function ReaderHeader({ game, market, onCollapse, index, total }: { game: DailyE
       <div>
         <div className="flex items-center gap-2"><span className="h-4 w-1 rounded-full bg-violet-400" /><p className="text-[9px] font-black uppercase tracking-[0.2em] text-gray-300">Selected Edge</p><span className="hidden text-[10px] text-gray-600 sm:inline">One read first. Complete evidence when you ask for it.</span></div>
         <div className="mt-3 flex flex-wrap items-center gap-2">
-          <h2 className="text-lg font-black tracking-tight text-white sm:text-xl">{game.awayTeam} <span className="text-gray-600">@</span> {game.homeTeam}</h2>
+          <h2 className="text-lg font-black tracking-tight text-white sm:text-xl">{game.awayTeam} <span className="text-gray-600">{game.sport === "soccer" ? "vs" : "@"}</span> {game.homeTeam}</h2>
           <VerdictBadge market={market} />
           <LocalTime value={game.gameStartAt} fallback={game.gameTime} className="text-[10px] text-gray-600" />
           <LockBadge lockState={game.lockState} lockedAt={game.lockedAt} scheduledLockAt={game.scheduledLockAt} className="font-black uppercase tracking-wider text-emerald-300" />
         </div>
+        {game.soccerCompetitionContext ? <p className="mt-1 text-[9px] font-semibold text-gray-500">{soccerCompetitionContextLabel(game.soccerCompetitionContext)} · Regulation time</p> : null}
       </div>
       <div className="flex items-center gap-3"><span className="text-[9px] font-black uppercase tracking-wider text-gray-700">{index + 1} / {total}</span>{onCollapse ? <button type="button" onClick={onCollapse} aria-label="Collapse reader" className="rounded-full border border-violet-400/45 bg-violet-500/[0.14] px-3 py-1.5 text-[8px] font-black uppercase tracking-[0.13em] text-violet-100 transition hover:border-violet-300/70 hover:bg-violet-500/[0.24]">Collapse read ↑</button> : null}</div>
     </div>
   );
+}
+
+function soccerCompetitionContextLabel(context: NonNullable<DailyEdgeGameDto["soccerCompetitionContext"]>): string {
+  const stage = context.stage ? context.stage.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase()) : "Stage pending";
+  const leg = context.leg ? ` · Leg ${context.leg}` : "";
+  const aggregate = context.aggregateBefore ? ` · Aggregate ${context.aggregateBefore.away}-${context.aggregateBefore.home}` : "";
+  const neutral = context.neutralVenue ? " · Neutral venue" : "";
+  return `${stage}${leg}${aggregate}${neutral}`;
 }
 
 function MarketStrip({ game, sport, active, setActive }: { game: DailyEdgeGameDto; sport: Sport; active: MarketKey; setActive: (key: MarketKey) => void }) {

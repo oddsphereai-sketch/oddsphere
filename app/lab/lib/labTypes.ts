@@ -943,6 +943,27 @@ export type DailyEdgeGameDto = {
     away: SoccerTeamAvailabilityDto;
     home: SoccerTeamAvailabilityDto;
   } | null;
+  /** Competition provenance for club/tournament soccer. Core Daily Edge
+   * markets remain regulation-time unless an explicit market says otherwise. */
+  soccerCompetitionContext?: {
+    competition: "english_premier_league" | "uefa_champions_league" | "fifa_world_cup";
+    stage: string | null;
+    leg: 1 | 2 | null;
+    aggregateBefore: { away: number; home: number } | null;
+    neutralVenue: boolean | null;
+    regulationTime: true;
+    advancementMarket: boolean;
+    provenance: string;
+  } | null;
+  /** Locked audit provenance for the single coherent soccer score PMF. */
+  soccerModelProvenance?: {
+    coherentOutcomeRelease: string;
+    source: "independent_club_pmf" | "target_excluded_total_tilt";
+    evaluatedQuoteRole: "economics_and_grade_only";
+    targetExcludedBooks: string[];
+    eligibleAlternativeBooks: string[];
+    regulationTime: true;
+  } | null;
   recommendationDecision?: RecommendationDecision;
   /**
    * 4.1.10 — short directive sentence for the v13.1 Edge Board card.

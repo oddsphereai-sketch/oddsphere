@@ -193,6 +193,12 @@ export async function gradePredictionsForSlate(args: {
   apply: boolean;
   supabase: SupabaseClient;
   source: PredictionGradeRow["grade_source"];
+  /** Exact soccer competition scope. Additive callers use this rather than
+   * changing the legacy World Cup/EPL selection contract. */
+  competition?: "english_premier_league" | "uefa_champions_league";
+  /** Legacy generic soccer can exclude a launched competition whose exact
+   * pass enforces locked-only eligibility. */
+  excludeCompetition?: "english_premier_league" | "uefa_champions_league";
 }): Promise<GradingResult> {
   const { sport, slateDate, apply, supabase, source } = args;
   const result: GradingResult = {
@@ -218,7 +224,11 @@ export async function gradePredictionsForSlate(args: {
   // scoped so historical World Cup rows cannot enter an active EPL cycle.
   if (sport === "mlb") recordsQuery = recordsQuery.not("locked_at", "is", null);
   if (sport === "nfl" || sport === "cfb") recordsQuery = recordsQuery.not("locked_at", "is", null);
-  if (sport === "soccer" && process.env.EPL_PIPELINE_ENABLED === "true") {
+  if (sport === "soccer" && args.competition) {
+    recordsQuery = recordsQuery
+      .contains("snapshot_json", { competition: args.competition })
+      .not("locked_at", "is", null);
+  } else if (sport === "soccer" && process.env.EPL_PIPELINE_ENABLED === "true") {
     recordsQuery = recordsQuery
       .contains("snapshot_json", { competition: "english_premier_league" })
       .not("locked_at", "is", null);
@@ -228,7 +238,10 @@ export async function gradePredictionsForSlate(args: {
     result.errors.push({ prediction_record_id: undefined, reason: `records fetch: ${recErr.message}` });
     return result;
   }
-  const records = (recRows ?? []) as PredictionRecordRow[];
+  const records = ((recRows ?? []) as PredictionRecordRow[]).filter((record) =>
+    args.excludeCompetition === undefined
+      || (record.competition ?? record.snapshot_json?.competition) !== args.excludeCompetition
+  );
   result.recordsLoaded = records.length;
   if (records.length === 0) return result;
 

@@ -71,7 +71,7 @@ export type DimensionRow<K extends string = string> = {
 export type TrackingDisplaySport = TrackedSport | "epl";
 
 export const TRACKING_AGGREGATE_CONTRACT_VERSION =
-  "tracking_aggregate_v2_epl_projected_competition_2026_08_20" as const;
+  "tracking_aggregate_v3_ucl_release_separated_competition_2026_09_03" as const;
 
 /**
  * Sport+market joint split with the Best Angle / Lean cuts most members
@@ -225,6 +225,7 @@ function isTossUp(r: PredictionRecordRow): boolean {
 export function isTrackingRecordEligible(record: PredictionRecordRow): boolean {
   if (record.sport === "mlb") return record.locked_at !== null;
   if (isEplTrackingRecord(record)) return record.locked_at !== null;
+  if (isUclTrackingRecord(record)) return record.locked_at !== null;
   return true;
 }
 
@@ -233,8 +234,13 @@ export function isEplTrackingRecord(record: PredictionRecordRow): boolean {
     && (record.competition ?? record.snapshot_json?.competition) === "english_premier_league";
 }
 
+export function isUclTrackingRecord(record: PredictionRecordRow): boolean {
+  return record.sport === "soccer"
+    && (record.competition ?? record.snapshot_json?.competition) === "uefa_champions_league";
+}
+
 export function trackingDisplaySport(record: PredictionRecordRow): TrackingDisplaySport {
-  return isEplTrackingRecord(record) ? "epl" : record.sport;
+  return isEplTrackingRecord(record) ? "epl" : isUclTrackingRecord(record) ? "ucl" : record.sport;
 }
 
 type Row = {

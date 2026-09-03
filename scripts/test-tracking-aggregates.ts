@@ -61,12 +61,16 @@ const eplRecord = (locked_at: string | null, id = 1, created_at = "2026-08-19T12
   competition: "english_premier_league",
   snapshot_json: null,
 } as PredictionRecordRow);
-check("EPL aggregate classification contract is versioned", TRACKING_AGGREGATE_CONTRACT_VERSION === "tracking_aggregate_v2_epl_projected_competition_2026_08_20");
+check("tracking aggregate contract includes UCL competition separation", TRACKING_AGGREGATE_CONTRACT_VERSION === "tracking_aggregate_v3_ucl_release_separated_competition_2026_09_03");
 check("unlocked EPL row is excluded from official tracking", !isTrackingRecordEligible(eplRecord(null)));
 check("locked EPL row is officially tracking-eligible", isTrackingRecordEligible(eplRecord("2026-08-21T18:00:00Z")));
 check("EPL receives a separate member-facing competition key", trackingDisplaySport(eplRecord("2026-08-21T18:00:00Z")) === "epl");
 check("World Cup soccer keeps its own member-facing key", trackingDisplaySport({ ...eplRecord("2026-08-21T18:00:00Z"), competition: "world_cup" }) === "soccer");
 check("full snapshot callers retain EPL classification compatibility", trackingDisplaySport({ ...eplRecord("2026-08-21T18:00:00Z"), competition: null, snapshot_json: { competition: "english_premier_league" } }) === "epl");
+const uclRecord = { ...eplRecord("2026-09-08T16:45:00Z"), competition: "uefa_champions_league", snapshot_json: { competition: "uefa_champions_league" } };
+check("UCL receives its own competition display bucket", trackingDisplaySport(uclRecord) === "ucl");
+check("locked UCL records are eligible", isTrackingRecordEligible(uclRecord));
+check("unlocked UCL records are excluded", !isTrackingRecordEligible({ ...uclRecord, locked_at: null }));
 const canonicalEpl = dedupePredictionRecordsForTracking([
   eplRecord(null, 10, "2026-08-19T11:00:00Z"),
   eplRecord("2026-08-21T18:00:00Z", 11, "2026-08-19T12:00:00Z"),

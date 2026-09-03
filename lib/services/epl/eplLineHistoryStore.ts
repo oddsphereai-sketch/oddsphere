@@ -24,27 +24,27 @@ function exactIdentity(row: CurrentObservation): string {
   return `${identity(row)}:${canonicalEplLineHistoryTimestamp(row.recordedAt)}:${row.american}:${row.line ?? "null"}:${row.sportsbook ?? "unknown"}`;
 }
 
-async function gameMaps(providerIds: number[]) {
-  const externalIds = providerIds.map((id) => EPL_EXTERNAL_ID_OFFSET + id);
+async function gameMaps(providerIds: number[], externalIdOffset = EPL_EXTERNAL_ID_OFFSET, label = "EPL") {
+  const externalIds = providerIds.map((id) => externalIdOffset + id);
   const { data, error } = await supabase
     .from("games")
     .select("id,external_id")
     .eq("sport", "soccer")
     .in("external_id", externalIds);
-  if (error) throw new Error(`load EPL games for line history: ${error.message}`);
+  if (error) throw new Error(`load ${label} games for line history: ${error.message}`);
   const gameIdByProvider = new Map<number, number>();
   const providerByGameId = new Map<number, number>();
   for (const row of (data ?? []) as Array<{ id: number; external_id: number }>) {
-    const providerId = row.external_id - EPL_EXTERNAL_ID_OFFSET;
+    const providerId = row.external_id - externalIdOffset;
     gameIdByProvider.set(providerId, row.id);
     providerByGameId.set(row.id, providerId);
   }
   return { gameIdByProvider, providerByGameId };
 }
 
-export async function readEplStoredPriceHistory(providerIds: number[]): Promise<EplStoredPriceObservation[]> {
+export async function readEplStoredPriceHistory(providerIds: number[], externalIdOffset = EPL_EXTERNAL_ID_OFFSET, label = "EPL"): Promise<EplStoredPriceObservation[]> {
   if (providerIds.length === 0) return [];
-  const { providerByGameId } = await gameMaps(providerIds);
+  const { providerByGameId } = await gameMaps(providerIds, externalIdOffset, label);
   const gameIds = [...providerByGameId.keys()];
   if (gameIds.length === 0) return [];
   // Match the established WNBA Daily Edge contract: immutable history is
@@ -59,7 +59,7 @@ export async function readEplStoredPriceHistory(providerIds: number[]): Promise<
       .in("market_type", ["match_result", "double_chance", "total", "btts"])
       .order("recorded_at", { ascending: true })
       .range(from, from + HISTORY_PAGE_SIZE - 1);
-    if (error) throw new Error(`read EPL line history: ${error.message}`);
+    if (error) throw new Error(`read ${label} line history: ${error.message}`);
     const page = (data ?? []) as Array<Record<string, unknown>>;
     storedRows.push(...page);
     if (page.length < HISTORY_PAGE_SIZE) break;
@@ -82,11 +82,13 @@ export async function readEplStoredPriceHistory(providerIds: number[]): Promise<
   return compactEplStoredPriceHistory(parsed);
 }
 
-export async function persistEplLineHistory(input: { response: DailyEdgeResponse; allBookPrices?: EplStoredPriceObservation[]; apply: boolean }) {
+export async function persistEplLineHistory(input: { response: DailyEdgeResponse; allBookPrices?: EplStoredPriceObservation[]; apply: boolean; externalIdOffset?: number; label?: string }) {
   const providerIds = input.response.games.map((game) => Number(game.external_id)).filter(Number.isFinite);
   if (!input.apply || providerIds.length === 0) return { proposed: 0, written: 0, errors: [] as string[] };
-  const { gameIdByProvider } = await gameMaps(providerIds);
-  const existing = await readEplStoredPriceHistory(providerIds);
+  const externalIdOffset = input.externalIdOffset ?? EPL_EXTERNAL_ID_OFFSET;
+  const label = input.label ?? "EPL";
+  const { gameIdByProvider } = await gameMaps(providerIds, externalIdOffset, label);
+  const existing = await readEplStoredPriceHistory(providerIds, externalIdOffset, label);
   const exactExisting = new Set<string>();
   const earliestBySide = new Map<string, number>();
   const latestByTrail = new Map<string, { american: number; line: number | null; recordedAt: number }>();

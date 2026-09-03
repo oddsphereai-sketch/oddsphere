@@ -9,7 +9,28 @@ export const EPL_COMPETITION = "english_premier_league" as const;
 export const EPL_LOCK_MINUTES = 60;
 export const EPL_EXTERNAL_ID_OFFSET = 20_000_000;
 
-const providerExternalId = (id: number) => EPL_EXTERNAL_ID_OFFSET + id;
+const providerExternalId = (id: number, offset = EPL_EXTERNAL_ID_OFFSET) => offset + id;
+
+export type ClubSoccerPipelineConfig = {
+  competition: string;
+  externalIdOffset: number;
+  externalIdUpperBound?: number;
+  slugPrefix: string;
+  providerIdKey: string;
+  predictionSource: string;
+  lockMinutes?: number;
+  contextForGame?: (providerId: number) => Record<string, unknown> | null;
+};
+
+export const EPL_PIPELINE_CONFIG: ClubSoccerPipelineConfig = {
+  competition: EPL_COMPETITION,
+  externalIdOffset: EPL_EXTERNAL_ID_OFFSET,
+  externalIdUpperBound: 30_000_000,
+  slugPrefix: "epl",
+  providerIdKey: "balldontlie_epl",
+  predictionSource: "epl_club_model",
+  lockMinutes: EPL_LOCK_MINUTES,
+};
 
 export type EplLockCandidate = { gameId: number; externalId: number; kickoff: string; unlockedMarkets: number };
 
@@ -28,12 +49,16 @@ export function eplPriorRowsBlockWrite(rows: EplPriorPredictionRecord[]): boolea
  * Cheap minute-sweep classification. Paid providers are called only when a
  * game has actually crossed T-60 and still needs its immutable final capture.
  */
-export async function findEplGamesEnteringLock(now: Date = new Date()): Promise<EplLockCandidate[]> {
-  const lockWindowEnd = new Date(now.getTime() + EPL_LOCK_MINUTES * 60_000).toISOString();
+export async function findEplGamesEnteringLock(
+  now: Date = new Date(),
+  options: { modelRelease?: string; lockMinutes?: number; externalIdOffset?: number; externalIdUpperBound?: number } = {},
+): Promise<EplLockCandidate[]> {
+  const lockMinutes = options.lockMinutes ?? EPL_LOCK_MINUTES;
+  const lockWindowEnd = new Date(now.getTime() + lockMinutes * 60_000).toISOString();
   const { data: records, error: recordError } = await supabase
     .from("prediction_records")
     .select("game_id,market,locked_at")
-    .eq("model_version", EPL_SHADOW_MODEL_RELEASE)
+    .eq("model_version", options.modelRelease ?? EPL_SHADOW_MODEL_RELEASE)
     .is("locked_at", null);
   if (recordError) throw new Error(`load EPL prediction locks: ${recordError.message}`);
   const unlockedByGame = new Map<number, number>();
@@ -52,6 +77,8 @@ export async function findEplGamesEnteringLock(now: Date = new Date()): Promise<
   if (error) throw new Error(`load EPL lock candidates: ${error.message}`);
   const rows = (games ?? []) as Array<{ id: number; external_id: number; game_date: string | null; status: string | null }>;
   return rows
+    .filter((row) => row.external_id >= (options.externalIdOffset ?? EPL_EXTERNAL_ID_OFFSET))
+    .filter((row) => options.externalIdUpperBound === undefined || row.external_id < options.externalIdUpperBound)
     .filter((row) => !["final", "completed", "canceled", "cancelled", "postponed"].includes((row.status ?? "").toLowerCase()))
     .map((row) => ({ gameId: row.id, externalId: row.external_id, kickoff: row.game_date!, unlockedMarkets: unlockedByGame.get(row.id) ?? 0 }))
     .filter((row) => row.unlockedMarkets > 0);
@@ -86,10 +113,11 @@ function recordFromMarket(input: {
   modelRelease: string;
   calibrationRelease: string;
   now: Date;
+  config: ClubSoccerPipelineConfig;
 }): PredictionRecordRow {
   const side = canonicalSide(input.market, input.trackedMarket);
   const kickoffMs = Date.parse(input.game.gameStartAt ?? "");
-  const lockAt = Number.isFinite(kickoffMs) ? new Date(kickoffMs - EPL_LOCK_MINUTES * 60_000).toISOString() : null;
+  const lockAt = Number.isFinite(kickoffMs) ? new Date(kickoffMs - (input.config.lockMinutes ?? EPL_LOCK_MINUTES) * 60_000).toISOString() : null;
   const shouldLock = lockAt !== null && input.now.getTime() >= Date.parse(lockAt);
   const verdict = input.market.verdict?.key ?? "no_play";
   const actionable = verdict === "best_angle" || verdict === "lean";
@@ -110,7 +138,7 @@ function recordFromMarket(input: {
     odds_decimal: null,
     model_used: input.modelRelease,
     model_version: input.modelRelease,
-    prediction_source: "epl_club_model",
+    prediction_source: input.config.predictionSource,
     confidence: input.market.modelProb == null ? null : input.market.modelProb * 100,
     model_probability: input.market.modelProb ?? null,
     market_probability: input.market.marketFairProb ?? null,
@@ -134,7 +162,7 @@ function recordFromMarket(input: {
     locked_at: shouldLock ? input.now.toISOString() : null,
     published_at: null,
     snapshot_json: {
-      competition: EPL_COMPETITION,
+      competition: input.config.competition,
       model_release: input.modelRelease,
       calibration_release: input.calibrationRelease,
       captured_at: input.now.toISOString(),
@@ -149,12 +177,21 @@ function recordFromMarket(input: {
       splits: input.market.publicSplits ?? [],
       grade_reason: input.market.riskLine ?? input.market.displayReason ?? null,
       lineup_confirmed: input.game.status.lineupConfirmed,
+      regulation_time: true,
+      competition_context: input.config.contextForGame?.(Number(input.game.external_id)) ?? null,
+      model_provenance: input.game.soccerModelProvenance ?? null,
     },
     calibration_version: input.calibrationRelease,
   };
 }
 
-export async function seedEplSlate(input: { slate: EplShadowSlate; apply: boolean }) {
+export async function seedEplSlate(input: { slate: EplShadowSlate; apply: boolean; config?: ClubSoccerPipelineConfig }) {
+  const config = input.config ?? EPL_PIPELINE_CONFIG;
+  const providerIds = input.slate.matches.flatMap((match) => [match.id, match.homeTeam.id, match.awayTeam.id]);
+  const externalIdUpperBound = config.externalIdUpperBound;
+  if (externalIdUpperBound !== undefined && providerIds.some((id) => providerExternalId(id, config.externalIdOffset) >= externalIdUpperBound)) {
+    throw new Error(`${config.competition} provider ID exceeds reserved external-id namespace`);
+  }
   const teamMap = new Map<number, number>();
   const uniqueTeams = new Map(input.slate.matches.flatMap((match) => [[match.homeTeam.id, match.homeTeam], [match.awayTeam.id, match.awayTeam]]));
   let teamsWritten = 0;
@@ -162,10 +199,10 @@ export async function seedEplSlate(input: { slate: EplShadowSlate; apply: boolea
   const errors: string[] = [];
   for (const team of uniqueTeams.values()) {
     const payload = {
-      external_id: providerExternalId(team.id), sport: "soccer", slug: `epl-${team.abbreviation.toLowerCase()}`,
+      external_id: providerExternalId(team.id, config.externalIdOffset), sport: "soccer", slug: `${config.slugPrefix}-${team.abbreviation.toLowerCase()}`,
       abbreviation: team.abbreviation, display_name: team.name, short_display_name: team.short_name,
-      name: team.name, location: team.location, league: EPL_COMPETITION, division: null,
-      logo_url: null, primary_color: null, provider_ids: { balldontlie_epl: { id: String(team.id) } },
+      name: team.name, location: team.location, league: config.competition, division: null,
+      logo_url: null, primary_color: null, provider_ids: { [config.providerIdKey]: { id: String(team.id) } },
     };
     if (!input.apply) continue;
     const { data, error } = await supabase.from("teams").upsert(payload, { onConflict: "sport,external_id" }).select("id").single();
@@ -174,10 +211,13 @@ export async function seedEplSlate(input: { slate: EplShadowSlate; apply: boolea
   }
   if (input.apply) {
     for (const match of input.slate.matches) {
+      const competitionContext = config.contextForGame?.(match.id) ?? null;
+      const stage = typeof competitionContext?.stage === "string" ? competitionContext.stage : null;
+      const postseason = stage !== null && !["league_phase", "group_stage", "unknown"].includes(stage);
       const payload = {
-        external_id: providerExternalId(match.id), sport: "soccer", home_team_id: teamMap.get(match.homeTeam.id) ?? null,
+        external_id: providerExternalId(match.id, config.externalIdOffset), sport: "soccer", home_team_id: teamMap.get(match.homeTeam.id) ?? null,
         away_team_id: teamMap.get(match.awayTeam.id) ?? null, game_date: match.kickoff, slate_date: etDate(match.kickoff),
-        season: input.slate.season, season_type: "regular", postseason: false, status: match.status,
+        season: input.slate.season, season_type: postseason ? "postseason" : "regular", postseason, status: match.status,
         home_score: match.homeScore, away_score: match.awayScore, venue: match.venue,
       };
       const { error } = await supabase.from("games").upsert(payload, { onConflict: "sport,external_id" });
@@ -187,9 +227,14 @@ export async function seedEplSlate(input: { slate: EplShadowSlate; apply: boolea
   return { mode: input.apply ? "write" as const : "dry-run" as const, teamsProposed: uniqueTeams.size, teamsWritten, gamesProposed: input.slate.matches.length, gamesWritten, errors };
 }
 
-export async function writeEplPredictionRecords(input: { slate: EplShadowSlate; response: DailyEdgeResponse; forwardEvidence?: EplForwardEvidenceCapture[]; apply: boolean; now?: Date }) {
+export async function writeEplPredictionRecords(input: { slate: EplShadowSlate; response: DailyEdgeResponse; forwardEvidence?: EplForwardEvidenceCapture[]; apply: boolean; now?: Date; config?: ClubSoccerPipelineConfig }) {
   const now = input.now ?? new Date();
-  const externalIds = input.slate.matches.map((match) => providerExternalId(match.id));
+  const config = input.config ?? EPL_PIPELINE_CONFIG;
+  const externalIds = input.slate.matches.map((match) => providerExternalId(match.id, config.externalIdOffset));
+  const externalIdUpperBound = config.externalIdUpperBound;
+  if (externalIdUpperBound !== undefined && externalIds.some((id) => id >= externalIdUpperBound)) {
+    throw new Error(`${config.competition} provider ID exceeds reserved external-id namespace`);
+  }
   const gameIdByExternal = new Map<number, number>();
   if (input.apply) {
     const { data, error } = await supabase.from("games").select("id,external_id").eq("sport", "soccer").in("external_id", externalIds);
@@ -200,14 +245,14 @@ export async function writeEplPredictionRecords(input: { slate: EplShadowSlate; 
   for (const game of input.response.games) {
     const providerId = Number(game.external_id);
     if (!Number.isFinite(providerId)) continue;
-    const externalId = providerExternalId(providerId);
+    const externalId = providerExternalId(providerId, config.externalIdOffset);
     const internalGameId = gameIdByExternal.get(externalId) ?? externalId;
     if (Date.parse(game.gameStartAt ?? "") <= now.getTime()) continue;
     proposed.push(
-      recordFromMarket({ game, internalGameId, externalId, market: game.markets.moneyline, trackedMarket: "match_result", modelRelease: input.slate.modelRelease, calibrationRelease: input.slate.calibrationRelease, now }),
-      ...(game.soccerDoubleChanceMarket ? [recordFromMarket({ game, internalGameId, externalId, market: game.soccerDoubleChanceMarket, trackedMarket: "double_chance", modelRelease: input.slate.modelRelease, calibrationRelease: input.slate.calibrationRelease, now })] : []),
-      recordFromMarket({ game, internalGameId, externalId, market: game.markets.total, trackedMarket: "total", modelRelease: input.slate.modelRelease, calibrationRelease: input.slate.calibrationRelease, now }),
-      recordFromMarket({ game, internalGameId, externalId, market: game.markets.first_inning, trackedMarket: "btts", modelRelease: input.slate.modelRelease, calibrationRelease: input.slate.calibrationRelease, now }),
+      recordFromMarket({ game, internalGameId, externalId, market: game.markets.moneyline, trackedMarket: "match_result", modelRelease: input.slate.modelRelease, calibrationRelease: input.slate.calibrationRelease, now, config }),
+      ...(game.soccerDoubleChanceMarket ? [recordFromMarket({ game, internalGameId, externalId, market: game.soccerDoubleChanceMarket, trackedMarket: "double_chance", modelRelease: input.slate.modelRelease, calibrationRelease: input.slate.calibrationRelease, now, config })] : []),
+      recordFromMarket({ game, internalGameId, externalId, market: game.markets.total, trackedMarket: "total", modelRelease: input.slate.modelRelease, calibrationRelease: input.slate.calibrationRelease, now, config }),
+      recordFromMarket({ game, internalGameId, externalId, market: game.markets.first_inning, trackedMarket: "btts", modelRelease: input.slate.modelRelease, calibrationRelease: input.slate.calibrationRelease, now, config }),
     );
   }
   let written = 0;
@@ -217,7 +262,8 @@ export async function writeEplPredictionRecords(input: { slate: EplShadowSlate; 
   const captureByProviderId = new Map((input.forwardEvidence ?? []).map((capture) => [capture.providerFixtureId, capture]));
   const attachCapture = (row: PredictionRecordRow, priorSnapshot: Record<string, unknown> | null) => {
     if (row.market !== "match_result") return;
-    const providerId = Number(row.external_id) - EPL_EXTERNAL_ID_OFFSET;
+    if (config.competition !== EPL_COMPETITION) return;
+    const providerId = Number(row.external_id) - config.externalIdOffset;
     const capture = captureByProviderId.get(providerId);
     if (!capture) return;
     try {

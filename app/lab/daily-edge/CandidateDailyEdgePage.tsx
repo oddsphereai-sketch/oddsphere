@@ -77,6 +77,8 @@ export default async function CandidateDailyEdgePage({
   const sport: Sport = soccerRequested ? "soccer" : sourceSport;
   const eplRequested = competition === "premier_league";
   const eplEnabled = process.env.PREMIER_LEAGUE_DAILY_EDGE_ENABLED === "true";
+  const uclRequested = competition === "champions_league";
+  const uclEnabled = process.env.CHAMPIONS_LEAGUE_DAILY_EDGE_ENABLED === "true";
   const nflRequested = sport === "nfl";
   const cfbRequested = sport === "cfb";
   const nflEnabled = nflRequested && isNflDailyEdgeEnabled();
@@ -134,6 +136,16 @@ export default async function CandidateDailyEdgePage({
     snapshot = emptyPreviewSnapshot(sport);
   } else if (cfbRequested) {
     snapshot = emptyPreviewSnapshot(sport);
+  } else if (uclRequested && uclEnabled) {
+    const result = await readMemberDataWithDeadline({
+      label: "ucl-daily-edge-snapshot",
+      fallback: emptyPreviewSnapshot(sport, "temporarily_unavailable"),
+      read: async () => (await import("@/lib/services/ucl/uclMemberSnapshotStore"))
+        .readCurrentUclMemberSnapshot()
+        .then((value) => value ?? emptyPreviewSnapshot(sport)),
+    });
+    snapshot = result.value;
+    snapshotUnavailable = result.unavailable;
   } else if (eplRequested && eplEnabled) {
     const result = await readMemberDataWithDeadline({
       label: "epl-daily-edge-snapshot",
@@ -144,13 +156,13 @@ export default async function CandidateDailyEdgePage({
     });
     snapshot = result.value;
     snapshotUnavailable = result.unavailable;
-  } else if (eplRequested) {
+  } else if (eplRequested || uclRequested) {
     snapshot = emptyPreviewSnapshot(sport);
   } else {
     const result = await readMemberDataWithDeadline({
       label: `${sport}-daily-edge-snapshot`,
       fallback: emptyPreviewSnapshot(sport, "temporarily_unavailable"),
-      read: () => loadDailyEdgeSnapshot(competition === "champions_league" ? "ucl" : sport),
+      read: () => loadDailyEdgeSnapshot(sport),
     });
     snapshot = result.value;
     snapshotUnavailable = result.unavailable;
@@ -162,7 +174,7 @@ export default async function CandidateDailyEdgePage({
     snapshot = filterWeeklyReaderSnapshot(snapshot, "nfl");
   } else if (cfbFixture) {
     snapshot = filterWeeklyReaderSnapshot(snapshot, "cfb");
-  } else if (eplRequested && eplEnabled) {
+  } else if ((eplRequested && eplEnabled) || (uclRequested && uclEnabled)) {
     snapshot = filterWeeklyReaderSnapshot(snapshot, "soccer");
   }
   const visibleNflAvailability = nflFixture

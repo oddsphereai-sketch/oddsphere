@@ -115,6 +115,8 @@
     "test:lean-confidence-floor": "tsx --env-file=.env.local scripts/test-lean-confidence-floor.ts",
     "test:soccer-total-actionability-gate": "tsx --env-file=.env.local scripts/test-soccer-total-actionability-gate.ts",
     "test:epl-shadow-model": "tsx scripts/test-epl-shadow-model.ts",
+    "test:ucl-production": "NEXT_PUBLIC_SUPABASE_URL=http://127.0.0.1 SUPABASE_SERVICE_ROLE_KEY=test tsx scripts/test-ucl-production.ts",
+    "audit:ucl-readiness": "tsx --env-file=.env.local scripts/operator/audit-ucl-readiness.ts",
     "test:football-shadow-foundation": "tsx scripts/test-football-shadow-foundation.ts",
     "test:football-model-research": "tsx scripts/test-football-model-research.ts",
     "test:football-player-value-shadow": "tsx scripts/test-football-player-value-shadow.ts",

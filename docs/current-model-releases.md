@@ -196,6 +196,21 @@ r16/v21 retains every r15 probability, projection, side, grade, provider budget,
 
 The four-season chronological tournament selected the runtime configuration on 2024–25, selected the xG blend on the first 285 matches of 2025–26, and reserved the final 95 matches for evaluation. Full 2025–26 accuracy was 48.68%, Brier 0.61610, log loss 1.02615, and team-score MAE 0.89956. Final-quarter accuracy was 43.16%, Brier 0.63409, log loss 1.05313, and MAE 0.91928; that deterioration is a declared limitation. Per-team goal projections ranged from 0.56 to 3.01 across the full untouched season, but their actual-score correlation was only 0.274 overall and 0.188 in the final quarter. The projections are therefore useful differentiated inputs, not a finished high-confidence score predictor. The price-eligible winner-confidence Lean rule was 56-41 on calibration and 11-8 on the untouched final period. Heavy favorites at a 65% model floor were 14-2 in calibration but only 1-3 in the small untouched final sample; v10 exposes them only as likely-winner context, never value or positive expected return. The 5pp value Best Angle rule was +2.924u over 127 calibration plays and +6.502u over 26 final plays. Full evidence and caveats are in `docs/model-audits/2026-08-18-epl-shadow-foundation-r1.md`.
 
+## UEFA Champions League production release (active)
+
+- Runtime/model release: `ucl_goals_coherent_2026_09_03_r1_cross_league_regulation`
+- Coherent outcome contract: `ucl_coherent_market_outcome_2026_09_03_r1_target_excluded`
+- Display-grade/calibration release: `ucl_grade_policy_2026_09_03_r1_positive_forecast_ev`
+- Competition context: `ucl_competition_context_2026_09_03_r1`; settlement: `ucl_regulation_settlement_2026_09_03_r1`
+- Member lifecycle: `ucl_member_snapshot_lifecycle_2026_09_03_r1`
+- Runtime constants: `lib/services/ucl/uclModel.ts` and `lib/services/ucl/uclCompetitionContext.ts`
+- Provider boundary: the dedicated Ball Don't Lie UCL v1 product owns fixtures, history, stats, availability, 1X2 fallback, and provider opening odds. SharpAPI league `uefa_-_champions_league` owns the primary exact-book Match Result, Double Chance, Total, and BTTS board plus its truthful splits availability state.
+- Model/grade boundary: UCL uses the EPL family one-PMF and structural target-exclusion rules with a common cross-league UCL club scale and bounded, provider-evidenced travel/rest/congestion adjustments. All default markets, scores, and tracking settle after regulation time. The evaluated quote remains economics/grade only; all actionables require positive exact-quote EV; Double Chance is non-actionable; there are no outcome quotas.
+- Competition boundary: reciprocal schedule topology supplies leg and aggregate context. Provider gaps remain unknown. Qualification/advancement is not inferred from Match Result.
+- Writer/member boundary: `ucl-daily-refresh` and `ucl-pregame-lock` use the existing `prediction_pipeline:soccer` lease and shared soccer writer implementation. Member reads use only the stored `soccer::uefa_champions_league::current-week` snapshot and the existing Soccer page/components.
+- Tracking boundary: UCL records stay `sport=soccer` with exact competition identity and T-60 lock eligibility, then display under `ucl`. The two aggregate-only legacy UCL baselines remain labeled archive data and are never blended with current-release accuracy.
+- Evidence, provider budgets, tested semantics, rollback, and known risks: `docs/model-audits/2026-09-03-ucl-production-launch-r1.md`.
+
 ## Shared tracking settlement
 
 - Settlement contract: `tracking_settlement_v4_epl_completed_status_2026_08_22`

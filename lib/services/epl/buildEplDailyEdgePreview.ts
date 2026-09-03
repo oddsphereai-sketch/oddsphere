@@ -57,6 +57,10 @@ export type EplPreviewBuildOptions = {
   captureAllBookPrices?: (rows: EplStoredPriceObservation[]) => void;
   storedPriceHistory?: EplStoredPriceObservation[];
   captureForwardEvidence?: (captures: EplForwardEvidenceCapture[]) => void;
+  marketProvider?: Pick<SharpApiEplMarketProvider, "loadFixture"> | null;
+  cacheNamespace?: string;
+  skipForwardEvidence?: boolean;
+  maxFixtureRecoveryLoads?: number;
 };
 
 function boundedTrail(trail: NonNullable<MarketEdgeDto["oddsTrail"]>): NonNullable<MarketEdgeDto["oddsTrail"]> {
@@ -859,6 +863,14 @@ function gameDto(match: EplShadowSlateMatch, sharp: EplSharpFixtureMarket, captu
       away: { startersPosted: match.evidence.away.startersPosted, listedPlayerCount: match.evidence.away.injuryCount, injuries: match.evidence.away.injuries },
       home: { startersPosted: match.evidence.home.startersPosted, listedPlayerCount: match.evidence.home.injuryCount, injuries: match.evidence.home.injuries },
     },
+    soccerModelProvenance: {
+      coherentOutcomeRelease: coherentOutcome.release,
+      source: coherentOutcome.source,
+      evaluatedQuoteRole: "economics_and_grade_only",
+      targetExcludedBooks: coherentOutcome.audit.evaluatedCanonicalBooksExcluded,
+      eligibleAlternativeBooks: coherentOutcome.audit.eligibleAlternativeBooks,
+      regulationTime: true,
+    },
     decisionLine: `${mrGrade.verdict.label}: ${resultPick}${resultSide === forecastSide ? " is also the most likely result" : ` is the value side; ${forecastPick} remains the most likely result`}.`,
     projected: { away: publishedGoals.away, home: publishedGoals.home },
     soccerProjection: {
@@ -909,7 +921,7 @@ function gameDto(match: EplShadowSlateMatch, sharp: EplSharpFixtureMarket, captu
 }
 
 export async function buildEplDailyEdgePreview(slate: EplShadowSlate, options: EplPreviewBuildOptions = {}): Promise<DailyEdgeResponse> {
-  const cacheKey = `${slate.round}:${slate.modelRelease}:${EPL_PREVIEW_GRADE_RELEASE}`;
+  const cacheKey = `${options.cacheNamespace ?? "epl"}:${slate.round}:${slate.modelRelease}:${EPL_PREVIEW_GRADE_RELEASE}`;
   const cached = previewCache.get(cacheKey);
   if (cached && cached.expiresAt > Date.now()) {
     options.captureAllBookPrices?.(cached.allBookPrices);
@@ -917,7 +929,9 @@ export async function buildEplDailyEdgePreview(slate: EplShadowSlate, options: E
     return cached.response;
   }
   const key = process.env.SHARPAPI_KEY;
-  const provider = key ? new SharpApiEplMarketProvider(new SharpApiClient(key)) : null;
+  const provider = options.marketProvider !== undefined
+    ? options.marketProvider
+    : key ? new SharpApiEplMarketProvider(new SharpApiClient(key)) : null;
   const markets: EplSharpFixtureMarket[] = new Array(slate.matches.length);
   let nextIndex = 0;
   async function worker() {
@@ -938,7 +952,7 @@ export async function buildEplDailyEdgePreview(slate: EplShadowSlate, options: E
     const incomplete = markets
       .map((market, index) => ({ index, complete: completeSharpMarkets(market.odds) }))
       .filter(({ complete }) => complete.size < 4)
-      .slice(0, MAX_FIXTURE_RECOVERY_LOADS);
+      .slice(0, options.maxFixtureRecoveryLoads ?? MAX_FIXTURE_RECOVERY_LOADS);
     for (const { index } of incomplete) {
       const match = slate.matches[index];
       const recovery = await provider.loadFixture({ home: match.homeTeam.short_name, away: match.awayTeam.short_name, kickoff: match.kickoff })
@@ -962,18 +976,20 @@ export async function buildEplDailyEdgePreview(slate: EplShadowSlate, options: E
   const allBookPrices = allBookPriceObservations(slate, markets, capturedAt);
   options.captureAllBookPrices?.(allBookPrices);
   let forwardEvidence: EplForwardEvidenceCapture[] = [];
-  try {
-    forwardEvidence = buildEplForwardEvidenceCaptures({
-      slate,
-      response,
-      fixtureMarkets: markets,
-      storedPriceHistory: options.storedPriceHistory ?? [],
-      capturedAt,
-    });
-  } catch {
-    // Evidence capture is observational. A serialization/provenance failure
-    // must never change or suppress the coherent prediction/member response.
-    forwardEvidence = [];
+  if (!options.skipForwardEvidence) {
+    try {
+      forwardEvidence = buildEplForwardEvidenceCaptures({
+        slate,
+        response,
+        fixtureMarkets: markets,
+        storedPriceHistory: options.storedPriceHistory ?? [],
+        capturedAt,
+      });
+    } catch {
+      // Evidence capture is observational. A serialization/provenance failure
+      // must never change or suppress the coherent prediction/member response.
+      forwardEvidence = [];
+    }
   }
   options.captureForwardEvidence?.(forwardEvidence);
   previewCache.set(cacheKey, { expiresAt: Date.now() + 5 * 60_000, response, allBookPrices, forwardEvidence });

@@ -3,6 +3,7 @@ import { BallDontLieEplProvider, type BdlEplMatch } from "@/lib/providers/real_a
 import { EPL_EXTERNAL_ID_OFFSET } from "./eplProductionPipeline";
 
 export function eplProviderIdFromExternal(externalId: number): number | null {
+  if (externalId >= 30_000_000) return null;
   const id = externalId - EPL_EXTERNAL_ID_OFFSET;
   return Number.isInteger(id) && id > 0 ? id : null;
 }
@@ -34,7 +35,7 @@ export async function ingestEplFinalScores(input: { slateDate: string; apply: bo
     fixtureCache = { key, expiresAt: Date.now() + 5 * 60_000, promise: provider.listMatches({ dates: [input.slateDate, addDay(input.slateDate)] }) };
   }
   const fixtures = (await fixtureCache.promise).filter((match) => etDate(match.date) === input.slateDate);
-  const { data, error } = await supabase.from("games").select("id,external_id,status,home_score,away_score").eq("sport", "soccer").eq("slate_date", input.slateDate).gte("external_id", EPL_EXTERNAL_ID_OFFSET);
+  const { data, error } = await supabase.from("games").select("id,external_id,status,home_score,away_score").eq("sport", "soccer").eq("slate_date", input.slateDate).gte("external_id", EPL_EXTERNAL_ID_OFFSET).lt("external_id", 30_000_000);
   if (error) throw new Error(`load EPL games for settlement: ${error.message}`);
   const fixtureById = new Map(fixtures.map((match) => [match.id, match]));
   let updated = 0;

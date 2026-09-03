@@ -225,7 +225,7 @@ function releaseKey(row: RecordRow, sport: WinnerScorecardSport): string {
       scalar(row.nfl_tracking_record_release),
     ].join(" :: ");
   }
-  if (sport === "epl") {
+  if (sport === "epl" || sport === "ucl") {
     return [
       scalar(row.epl_model_release ?? row.model_version),
       scalar(row.epl_calibration_release ?? row.calibration_version),
@@ -245,13 +245,15 @@ function complement(value: WinnerOutcome): WinnerOutcome | null {
 
 function observation(row: RecordRow, grade: GradeRow): WinnerAccuracyObservation | null {
   if ((!grade.win && !grade.loss) || grade.graded_at === null) return null;
-  const sport: WinnerScorecardSport = row.sport === "soccer" ? "epl" : row.sport as WinnerScorecardSport;
-  const modelPick = side(sport === "epl" ? row.epl_forecast?.displayed_side ?? row.side ?? row.pick : row.side);
+  const sport: WinnerScorecardSport = row.sport === "soccer"
+    ? row.competition === "uefa_champions_league" ? "ucl" : "epl"
+    : row.sport as WinnerScorecardSport;
+  const modelPick = side(sport === "epl" || sport === "ucl" ? row.epl_forecast?.displayed_side ?? row.side ?? row.pick : row.side);
   if (modelPick === null) return null;
   let actualOutcome: WinnerOutcome;
   let modelProbabilities: Partial<Record<WinnerOutcome, number>>;
   let marketProbabilities: Partial<Record<WinnerOutcome, number>> | null;
-  if (sport === "epl") {
+  if (sport === "epl" || sport === "ucl") {
     if (grade.actual_home_score === null || grade.actual_away_score === null) return null;
     actualOutcome = grade.actual_home_score > grade.actual_away_score
       ? "home" : grade.actual_home_score < grade.actual_away_score ? "away" : "draw";
@@ -338,7 +340,7 @@ async function fetchRecords(
       throw new Error(`Winner-accuracy record cap reached (${recordCap}); refusing a partial scorecard.`);
     }
   }
-  return rows.filter((row) => row.sport !== "soccer" || row.competition === "english_premier_league");
+  return rows.filter((row) => row.sport !== "soccer" || row.competition === "english_premier_league" || row.competition === "uefa_champions_league");
 }
 
 async function fetchGrades(client: ReadClient, recordIds: number[]): Promise<GradeRow[]> {
