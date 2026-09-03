@@ -902,6 +902,53 @@ async function main() {
       check("Toss-Up is NOT held", out.fiV2Audit.fi_pick !== ("Held" as unknown));
     }
   }
+  {
+    section("Additive standard-weather provenance");
+    const withProvenance = buildSnapshot();
+    if (!withProvenance.weather) throw new Error("weather fixture missing");
+    withProvenance.weather.standard_source = "weather_forecasts";
+    withProvenance.weather.standard_fetched_at = "2026-06-06T17:55:00.000Z";
+    const withoutProvenance = buildSnapshot();
+    const asOf = "2026-06-06T18:00:00.000Z";
+    const withOutput = runMlbFirstInningModelV2(
+      withProvenance,
+      buildFiLines(120, -140),
+      asOf,
+    );
+    const withoutOutput = runMlbFirstInningModelV2(
+      withoutProvenance,
+      buildFiLines(120, -140),
+      asOf,
+    );
+    check(
+      "FI feature capture schema is fi_fc_v2",
+      withOutput.fiV2Audit.feature_capture?.schema_version === "fi_fc_v2",
+    );
+    check(
+      "FI captures standard weather source",
+      withOutput.fiV2Audit.feature_capture?.weather?.standard_source ===
+        "weather_forecasts",
+    );
+    check(
+      "FI captures standard weather fetched_at",
+      withOutput.fiV2Audit.feature_capture?.weather?.standard_fetched_at ===
+        "2026-06-06T17:55:00.000Z",
+    );
+    function stripWeatherProvenance(value: typeof withOutput) {
+      const copy = JSON.parse(JSON.stringify(value)) as typeof withOutput;
+      const weather = copy.fiV2Audit.feature_capture?.weather;
+      if (weather) {
+        delete (weather as { standard_source?: unknown }).standard_source;
+        delete (weather as { standard_fetched_at?: unknown }).standard_fetched_at;
+      }
+      return copy;
+    }
+    check(
+      "standard weather provenance is FI model-output strip-identical",
+      JSON.stringify(stripWeatherProvenance(withOutput)) ===
+        JSON.stringify(stripWeatherProvenance(withoutOutput)),
+    );
+  }
 
   // ──────────────────────────────────────────────────────────────────
   console.log(`\n━━━ Results ━━━\n  ✓ ${pass}    ✗ ${fail}`);

@@ -241,7 +241,7 @@ export type V22FeatureCapture = {
   /** indep.audit_per_team — the computed multipliers (offense/pitcher/bullpen/park/weather). */
   factors: unknown;
 };
-type WeatherCapture = { temperature_f: number | null; humidity_pct: number | null; wind_speed_mph: number | null; wind_direction_degrees: number | null; is_notable: boolean; notable_reason: string | null };
+type WeatherCapture = { temperature_f: number | null; humidity_pct: number | null; wind_speed_mph: number | null; wind_direction_degrees: number | null; is_notable: boolean; notable_reason: string | null; standard_source: "weather_forecasts" | null; standard_fetched_at: string | null };
 
 function captureStarter(s: StarterSnapshot | null) {
   if (!s) return null;
@@ -269,12 +269,12 @@ function lineupCounts(b: BatterSnapshot[]) {
 /** Pure, additive. Reads only `snap` (model inputs) + `indep.audit_per_team`. */
 function buildV22FeatureCapture(snap: GameSnapshot, factors: unknown, tier: string): V22FeatureCapture {
   return {
-    schema_version: "fc_v1",
+    schema_version: "fc_v2",
     data_quality_tier: tier,
     starter: { home: captureStarter(snap.home_starter), away: captureStarter(snap.away_starter) },
     team: { home: captureTeam(snap.home_team), away: captureTeam(snap.away_team) },
     park: snap.ballpark ? { park_factor_runs: snap.ballpark.park_factor_runs, is_dome: snap.ballpark.is_dome } : null,
-    weather: snap.weather ? { temperature_f: snap.weather.temperature_f, humidity_pct: snap.weather.humidity_pct, wind_speed_mph: snap.weather.wind_speed_mph, wind_direction_degrees: snap.weather.wind_direction_degrees, is_notable: snap.weather.is_notable, notable_reason: snap.weather.notable_reason } : null,
+    weather: snap.weather ? { temperature_f: snap.weather.temperature_f, humidity_pct: snap.weather.humidity_pct, wind_speed_mph: snap.weather.wind_speed_mph, wind_direction_degrees: snap.weather.wind_direction_degrees, is_notable: snap.weather.is_notable, notable_reason: snap.weather.notable_reason, standard_source: snap.weather.standard_source ?? null, standard_fetched_at: snap.weather.standard_fetched_at ?? null } : null,
     lineup: { home: lineupCounts(snap.home_lineup_top8), away: lineupCounts(snap.away_lineup_top8) },
     factors: factors ?? null,
   };

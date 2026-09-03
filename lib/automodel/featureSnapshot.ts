@@ -310,6 +310,7 @@ type BallparkRow = {
 
 type WeatherRow = {
   game_id: number | null;
+  fetched_at: string | null;
   temperature_f: number | null;
   humidity_pct: number | null;
   wind_speed_mph: number | null;
@@ -516,6 +517,8 @@ function buildWeatherSnapshot(
     wind_direction_degrees: weather.wind_direction_degrees,
     is_notable: weather.is_notable === true,
     notable_reason: weather.notable_reason,
+    standard_source: "weather_forecasts",
+    standard_fetched_at: weather.fetched_at,
   };
 }
 
@@ -1122,7 +1125,7 @@ export async function buildFeatureSnapshots(
   const { data: weatherRaw, error: weatherErr } = await supabase
     .from("weather_forecasts")
     .select(
-      "game_id, temperature_f, humidity_pct, wind_speed_mph, wind_direction_degrees, is_notable, notable_reason"
+      "game_id, fetched_at, temperature_f, humidity_pct, wind_speed_mph, wind_direction_degrees, is_notable, notable_reason"
     )
     .in("game_id", Array.from(gameIds));
   if (weatherErr) {

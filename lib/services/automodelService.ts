@@ -91,6 +91,7 @@ import { updateGradesForSlate } from "./gradeDerivationService";
 import { generatePickBreakdown } from "./pickBreakdownGenerator";
 import {
   applyMlbPlaybookVenueWeatherOverlay,
+  buildMlbPlaybookVenueWeatherFailureAudits,
   type MlbPlaybookVenueWeatherAudit,
 } from "./mlbPlaybookVenueWeatherOverlay";
 import {
@@ -660,6 +661,8 @@ export async function generatePredictionsForSlate(
           `${venueWeather.body.data?.length ?? 0} applied=${applied}/${snapshots.length}`,
       );
     } catch (e) {
+      playbookVenueWeatherAuditByExternalId =
+        buildMlbPlaybookVenueWeatherFailureAudits(snapshots, e);
       console.warn(
         `[automodelService] Playbook venue/weather overlay failed: ${
           e instanceof Error ? e.message : String(e)
