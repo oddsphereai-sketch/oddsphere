@@ -11,6 +11,7 @@ import {
   nflPlayerPropsExpectedStarterPassingProjection,
   gradeNflPlayerPropsTouchdownCandidate,
   nflPlayerPropsMarketImpliedCenter,
+  nflPlayerPropsCoherentPosteriorDistribution,
   nflPlayerPropsOverProbability,
   nflPlayerPropsProbabilityCoherentProjection,
   nflPlayerPropsPassingYardsWatchlistEligible,
@@ -28,7 +29,7 @@ import {
 } from "../lib/services/football/nflPlayerPropsRuntime";
 import type { NflPlayerPropsExactOffer } from "../lib/services/football/nflPlayerPropsMarketBoard";
 
-assert.equal(NFL_PLAYER_PROPS_RUNTIME_RELEASE, "nfl_player_props_runtime_2026_09_02_r9_qb_target_exclusion");
+assert.equal(NFL_PLAYER_PROPS_RUNTIME_RELEASE, "nfl_player_props_runtime_2026_09_03_r10_forecast_authority");
 assert.deepEqual(NFL_PLAYER_PROPS_QB_ROLE_FLOORS, { confirmedStarter: 0.9, projectedStarter: 0.75 });
 verifyNflPlayerPropsRuntimeParity(1e-9);
 
@@ -53,10 +54,10 @@ const coherentProjection = nflPlayerPropsProbabilityCoherentProjection({
   market: "receiving_yards", line: 70.5, calibratedOverProbability: 0.55, independentProjection: 35,
 });
 assert.ok(coherentProjection > 55, "market-calibrated probability repairs an implausibly low independent display projection");
-assert.ok(Math.abs(nflPlayerPropsOverProbability("receiving_yards", coherentProjection, 70.5) - 0.55) <= 0.02,
-  "published projection inverts back to the calibrated probability within empirical resolution");
+assert.ok(coherentProjection > 70.5,
+  "the single posterior median stays on the Over side of its calibrated probability");
 assert.equal(NFL_PLAYER_PROPS_MARKET_COHERENT_PROJECTION_RELEASE,
-  "nfl_player_props_market_coherent_projection_2026_09_01_r1_probability_inverse");
+  "nfl_player_props_market_coherent_projection_2026_09_03_r2_single_distribution");
 
 const residual = nflPlayerPropsResidualProbability(0.7, 0.5, 0.2);
 assert.ok(residual > 0.5 && residual < 0.7);
@@ -92,6 +93,9 @@ assert.equal(oneBook.counts["No Play"], 2, "one-book outcomes cannot become acti
 assert.equal(oneBook.counts.Held, 0, "missing market confirmation is not a role hold");
 assert.equal(oneBook.diagnostics.completedEvaluations, 2);
 assert.ok(oneBook.decisions.every((row) => row.healthHolds.includes("independent_same_line_confirmation_missing")));
+assert.ok(oneBook.decisions.every((row) => row.marketProbability === row.rawModelProbability
+  && row.finalProbability === row.rawModelProbability),
+"an evaluation-only ordinary quote falls back to the independent player distribution");
 assert.equal(oneBook.diagnostics.unavailableNoIndependentBenchmark, 2);
 const twoBooks = buildNflPlayerPropsRuntimeBoard({ offers: [baseOffer, { ...baseOffer, offerKey: "test-b", sportsbook: "book-b" }], features: [feature], evaluatedAt: "2026-08-25T12:01:00.000Z" });
 assert.equal(twoBooks.release, NFL_PLAYER_PROPS_BOARD_RELEASE);
@@ -128,11 +132,16 @@ assert.ok(twoBooks.decisions.every((row) => row.decisionRelease === NFL_PLAYER_P
 assert.ok(twoBooks.decisions.every((row) => !row.healthHolds.includes("independent_same_line_confirmation_missing")));
 assert.ok(twoBooks.decisions.every((row) => row.modelRelease === NFL_PLAYER_PROPS_MODEL_RELEASE));
 assert.ok(twoBooks.decisions.every((row) => row.calibrationRelease === NFL_PLAYER_PROPS_CALIBRATION_RELEASE));
-assert.ok(twoBooks.decisions.every((row) => row.projectionEvidence?.source === "probability_inverse_market_calibrated"));
-assert.ok(twoBooks.decisions.every((row) => Math.abs(
-  nflPlayerPropsOverProbability(row.market, row.projection!, row.line)
-    - (row.side === "over" ? row.finalProbability : 1 - row.finalProbability),
-) <= 0.02), "every ordinary published projection agrees with its market-calibrated probability");
+assert.ok(twoBooks.decisions.every((row) => row.projectionEvidence?.source === "single_posterior_distribution"));
+assert.ok(twoBooks.decisions.every((row) => row.finalProbability < 0.5
+  || (row.side === "over" ? row.projection! > row.line : row.projection! < row.line)),
+"every actionable direction agrees with the single posterior median");
+const posterior = nflPlayerPropsCoherentPosteriorDistribution({
+  market: "receiving_yards", line: 70.5, calibratedOverProbability: 0.45, independentProjection: 75,
+});
+assert.ok(posterior.projection < 70.5, "the posterior median stays on the same side as its probability");
+assert.ok(posterior.range.lower <= posterior.projection && posterior.projection <= posterior.range.upper,
+  "the point and interval come from the same frozen residual family");
 assert.ok(twoBooks.decisions.every((row) => !row.modelRelease.includes("shadow") && !row.decisionRelease.includes("provisional")));
 assert.ok(twoBooks.decisions.every((row) => row.provisional === false));
 const quarterbackFeature = {
@@ -269,6 +278,8 @@ assert.equal(targetOver?.calibrationRelease, NFL_PLAYER_PROPS_CALIBRATION_RELEAS
 assert.equal(targetOver?.decisionRelease, NFL_PLAYER_PROPS_DECISION_RELEASE);
 assert.ok(crossLinePassing.decisions.every((row) => !["Lean", "Best Angle"].includes(row.grade)),
   "different-line confirmation alone cannot authorize a passing-yards action grade");
+assert.ok(crossLinePassing.decisions.every((row) => row.finalProbability === row.rawModelProbability),
+  "the target-excluded QB point head is not anchored to the same market evidence a second time");
 const touchdownOffer: NflPlayerPropsExactOffer = {
   ...baseOffer,
   offerKey: "td-dk",
@@ -291,6 +302,16 @@ const retailOnlyTouchdown = buildNflPlayerPropsRuntimeBoard({
 });
 assert.ok(retailOnlyTouchdown.decisions.every((row) => !["Lean", "Best Angle"].includes(row.grade)),
   "two retail touchdown prices cannot impersonate a sharp reference or authorize an action");
+const evaluatedSharpTouchdown = buildNflPlayerPropsRuntimeBoard({
+  offers: [
+    { ...touchdownOffer, offerKey: "td-pin", sportsbook: "pinnacle" },
+    { ...touchdownOffer, offerKey: "td-retail", sportsbook: "draftkings" },
+  ],
+  features: [feature], evaluatedAt: "2026-08-25T12:01:00.000Z",
+});
+assert.ok(!["Lean", "Best Angle"].includes(
+  evaluatedSharpTouchdown.decisions.find((row) => row.sportsbook === "pinnacle")?.grade ?? "No Play",
+), "the evaluated sharp sportsbook cannot serve as its own independent sharp reference");
 assert.equal(gradeNflPlayerPropsTouchdownCandidate({
   commonHolds: [], independentBooks: 2, sharpReferenceBooks: 1, americanPrice: 425,
   expectedValue: 0.13, probabilityEdge: 0.04, participationProbability: 0.9,
@@ -320,6 +341,13 @@ const divergent = buildNflPlayerPropsRuntimeBoard({
 });
 assert.ok(divergent.decisions.length > 0);
 assert.ok(divergent.decisions.every((row) => row.grade === "No Play"), "gross model/market disagreement cannot become actionable");
+
+for (const board of [oneBook, twoBooks, evaluationOnlyPassing, crossLinePassing, retailOnlyTouchdown, roleHeld, divergent]) {
+  assert.ok(board.decisions.every((row) => row.market === "anytime_td"
+    || !["Best Angle", "Lean"].includes(row.grade)
+    || (row.projection !== null && (row.side === "over" ? row.projection > row.line : row.projection < row.line))),
+  "every ordinary actionable row agrees with the side of its single posterior projection");
+}
 assert.ok(divergent.decisions.every((row) => row.healthHolds.includes("model_market_divergence_implausible")));
 assert.equal(divergent.counts.Held, 0, "gross divergence remains a completed No Play prediction rather than suppressing the row");
 

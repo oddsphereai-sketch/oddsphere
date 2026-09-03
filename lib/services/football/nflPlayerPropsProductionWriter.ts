@@ -30,7 +30,7 @@ import {
 } from "./nflPlayerPropsSettlement";
 
 export const NFL_PLAYER_PROPS_WRITER_RELEASE =
-  "nfl_player_props_writer_2026_09_03_r18_week_one_identity_capacity" as const;
+  "nfl_player_props_writer_2026_09_03_r19_forecast_authority" as const;
 export const NFL_PLAYER_PROPS_PRODUCTION_INCLUDE_OPENINGS = true as const;
 export const NFL_PLAYER_PROPS_PRODUCTION_COLLECTION_CALL_MAXIMUM = (
   1
@@ -44,7 +44,7 @@ export const NFL_PLAYER_PROPS_PRODUCTION_INCREMENTAL_CALL_MAXIMUM = (
 ) as 67;
 
 export type NflPlayerPropsForecastTelemetry = {
-  forecastPolicy: "evaluated_sportsbook_excluded_from_qb_point_and_residual_consensus";
+  forecastPolicy: "target_excluded_single_posterior_exact_price_downstream";
   lastKnownGoodPolicy: "write_only_after_complete_cycle_and_reconcile_locked_rows";
   boardRelease: typeof NFL_PLAYER_PROPS_BOARD_RELEASE;
   memberRelease: typeof NFL_PLAYER_PROPS_PRODUCTION_CANDIDATE_RELEASE;
@@ -91,7 +91,7 @@ export function summarizeNflPlayerPropsForecastTelemetry(
     || row.decisionRelease !== NFL_PLAYER_PROPS_DECISION_RELEASE
   )).length;
   return {
-    forecastPolicy: "evaluated_sportsbook_excluded_from_qb_point_and_residual_consensus",
+    forecastPolicy: "target_excluded_single_posterior_exact_price_downstream",
     lastKnownGoodPolicy: "write_only_after_complete_cycle_and_reconcile_locked_rows",
     boardRelease: snapshot.board.release,
     memberRelease: snapshot.release,

@@ -78,9 +78,9 @@ function emptyBoard(): NflPlayerPropsRuntimeBoard {
 }
 
 const unlocked = reconcileNflPlayerPropsProductionSnapshot({ season: 2026, week: 1, evaluatedAt: "2026-08-25T12:00:00.000Z", nextBoard: board(decision) });
-assert.equal(NFL_PLAYER_PROPS_PRODUCTION_CANDIDATE_RELEASE, "nfl_player_props_member_2026_09_02_r15_qb_target_exclusion");
-assert.equal(NFL_PLAYER_PROPS_WRITER_RELEASE, "nfl_player_props_writer_2026_09_03_r18_week_one_identity_capacity");
-assert.equal(NFL_PLAYER_PROPS_TRACKING_RELEASE, "nfl_player_props_tracking_2026_09_02_r9_qb_target_exclusion");
+assert.equal(NFL_PLAYER_PROPS_PRODUCTION_CANDIDATE_RELEASE, "nfl_player_props_member_2026_09_03_r16_forecast_authority");
+assert.equal(NFL_PLAYER_PROPS_WRITER_RELEASE, "nfl_player_props_writer_2026_09_03_r19_forecast_authority");
+assert.equal(NFL_PLAYER_PROPS_TRACKING_RELEASE, "nfl_player_props_tracking_2026_09_03_r10_forecast_authority");
 assert.equal(NFL_PLAYER_PROPS_SETTLEMENT_RELEASE, "nfl_player_props_settlement_2026_08_25_r3_bounded_finality");
 assert.equal(NFL_PLAYER_PROPS_PRODUCTION_INCLUDE_OPENINGS, true, "production records same-book opening context for movement and CLV interpretation");
 assert.equal(NFL_PLAYER_PROPS_PRODUCTION_COLLECTION_CALL_MAXIMUM, 49, "slate/current+opening props/player identity/Sharp pagination is explicitly bounded");
@@ -129,7 +129,7 @@ const passingFallback: NflPlayerPropsRuntimeDecision = {
   grade: "No Play",
   projectionEvidence: {
     release: NFL_PLAYER_PROPS_MARKET_COHERENT_PROJECTION_RELEASE,
-    source: "probability_inverse_market_calibrated",
+    source: "single_posterior_distribution",
     independentProjection: 219.7,
     calibratedOverProbability: 0.51,
   },
@@ -139,7 +139,7 @@ assert.deepEqual(summarizeNflPlayerPropsForecastTelemetry({
   ...unlocked,
   memberDecisions: [passingConsensus, passingFallback],
 }), {
-  forecastPolicy: "evaluated_sportsbook_excluded_from_qb_point_and_residual_consensus",
+  forecastPolicy: "target_excluded_single_posterior_exact_price_downstream",
   lastKnownGoodPolicy: "write_only_after_complete_cycle_and_reconcile_locked_rows",
   boardRelease: NFL_PLAYER_PROPS_BOARD_RELEASE,
   memberRelease: NFL_PLAYER_PROPS_PRODUCTION_CANDIDATE_RELEASE,

@@ -23,19 +23,19 @@ import {
 export const NFL_PLAYER_PROPS_PORTABLE_ARTIFACT_RELEASE =
   "nfl_player_props_runtime_2026_09_01_r4_cross_market_movement" as const;
 export const NFL_PLAYER_PROPS_RUNTIME_RELEASE =
-  "nfl_player_props_runtime_2026_09_02_r9_qb_target_exclusion" as const;
+  "nfl_player_props_runtime_2026_09_03_r10_forecast_authority" as const;
 export const NFL_PLAYER_PROPS_BOARD_RELEASE =
-  "nfl_player_props_board_2026_09_02_r12_qb_target_exclusion" as const;
+  "nfl_player_props_board_2026_09_03_r13_forecast_authority" as const;
 export const NFL_PLAYER_PROPS_DECISION_RELEASE =
-  "nfl_player_props_decision_2026_09_02_r9_qb_target_exclusion" as const;
+  "nfl_player_props_decision_2026_09_03_r10_forecast_authority" as const;
 export const NFL_PLAYER_PROPS_MODEL_RELEASE =
-  "nfl_player_props_distribution_model_2026_09_02_r6_qb_target_exclusion" as const;
+  "nfl_player_props_distribution_model_2026_09_03_r7_forecast_authority" as const;
 export const NFL_PLAYER_PROPS_CALIBRATION_RELEASE =
-  "nfl_player_props_distribution_calibration_2026_09_02_r6_qb_target_exclusion" as const;
+  "nfl_player_props_distribution_calibration_2026_09_03_r7_forecast_authority" as const;
 export const NFL_PLAYER_PROPS_PASSING_MARKET_RELEASE =
-  "nfl_player_props_market_residual_calibration_2026_09_01_r7_market_coherent_projection" as const;
+  "nfl_player_props_market_residual_calibration_2026_09_03_r8_single_application" as const;
 export const NFL_PLAYER_PROPS_MARKET_COHERENT_PROJECTION_RELEASE =
-  "nfl_player_props_market_coherent_projection_2026_09_01_r1_probability_inverse" as const;
+  "nfl_player_props_market_coherent_projection_2026_09_03_r2_single_distribution" as const;
 export const NFL_PLAYER_PROPS_TOUCHDOWN_SHARP_REFERENCE_ACTIONABLE = true as const;
 export const NFL_PLAYER_PROPS_QB_PASSING_PROJECTION = {
   release: "nfl_player_props_qb_passing_projection_2026_09_02_r2_target_excluded_consensus",
@@ -200,7 +200,7 @@ export type NflPlayerPropsRuntimeDecision = {
     roleProjection: number;
   } | {
     release: typeof NFL_PLAYER_PROPS_MARKET_COHERENT_PROJECTION_RELEASE;
-    source: "probability_inverse_market_calibrated";
+    source: "single_posterior_distribution";
     independentProjection: number;
     calibratedOverProbability: number;
   };
@@ -404,10 +404,13 @@ export function buildNflPlayerPropsRuntimeBoard(args: {
     if (offer.market === "anytime_td") {
       if (offer.yesPrice === null) continue;
       const raw = scored.touchdownProbability;
-      const market = averagePresent(others.map((value) => value.yes)) ?? impliedProbability(offer.yesPrice);
-      const final = nflPlayerPropsResidualProbability(raw, market, artifact.touchdown.marketResidualWeight);
+      const market = averagePresent(others.map((value) => value.yes)) ?? raw;
+      const final = independentBooks > 0
+        ? nflPlayerPropsResidualProbability(raw, market, artifact.touchdown.marketResidualWeight)
+        : raw;
       const edge = final - market; const ev = nflPlayerPropsExpectedValue(final, offer.yesPrice);
-      const sharpReferenceBooks = [...books.keys()].filter(isSharpReferenceBook).length;
+      const sharpReferenceBooks = [...books.keys()]
+        .filter((book) => book !== normalizeBook(offer.sportsbook) && isSharpReferenceBook(book)).length;
       const grade = gradeNflPlayerPropsTouchdownCandidate({
         commonHolds,
         independentBooks,
@@ -447,17 +450,26 @@ export function buildNflPlayerPropsRuntimeBoard(args: {
             projection, sourceLine: candidate.line, sourceOverProbability: candidate.overNoVigProbability, targetLine: offer.line,
           })))!
         : rawOver
-        : averagePresent(others.map((value) => value.over)) ?? offer.overNoVigProbability;
-    const finalOver = nflPlayerPropsResidualProbability(rawOver, marketOver, policy.marketResidualWeight);
-    const publishedProjection = passingProjection?.projection ?? nflPlayerPropsProbabilityCoherentProjection({
+        : averagePresent(others.map((value) => value.over)) ?? rawOver;
+    // The QB point head already incorporates this target-excluded market set.
+    // Applying the residual head again would grant the same evidence two votes.
+    const finalOver = passingProjection?.evidence
+      ? rawOver
+      : independentBooks > 0
+        ? nflPlayerPropsResidualProbability(rawOver, marketOver, policy.marketResidualWeight)
+        : rawOver;
+    const posterior = nflPlayerPropsCoherentPosteriorDistribution({
       market: offer.market,
       line: offer.line,
       calibratedOverProbability: finalOver,
       independentProjection: projection,
     });
+    const publishedProjection = independentBooks === 0 && !passingProjection?.evidence
+      ? projection
+      : posterior.projection;
     const projectionEvidence = passingProjection?.evidence ?? {
       release: NFL_PLAYER_PROPS_MARKET_COHERENT_PROJECTION_RELEASE,
-      source: "probability_inverse_market_calibrated" as const,
+      source: "single_posterior_distribution" as const,
       independentProjection: projection,
       calibratedOverProbability: finalOver,
     };
@@ -493,7 +505,7 @@ export function buildNflPlayerPropsRuntimeBoard(args: {
       });
       const crossLineIndependentBooks = (passingMarketGroups.get(crossLineMarketKey(offer)) ?? [])
         .filter((candidate) => normalizeBook(candidate.sportsbook) !== normalizeBook(offer.sportsbook)).length;
-      const grade: NflPlayerPropsGrade = passingProjection && baseGrade === "No Play"
+      const bridgedGrade: NflPlayerPropsGrade = passingProjection && baseGrade === "No Play"
         && nflPlayerPropsPassingYardsWatchlistEligible({
           market: offer.market,
           commonHolds,
@@ -506,6 +518,11 @@ export function buildNflPlayerPropsRuntimeBoard(args: {
         })
           ? "Watchlist"
           : baseGrade;
+      const forecastSide = finalOver >= 0.5 ? "over" : "under";
+      const grade: NflPlayerPropsGrade = (bridgedGrade === "Best Angle" || bridgedGrade === "Lean")
+        && side !== forecastSide
+          ? "Watchlist"
+          : bridgedGrade;
       decisions.push(decisionRow(
         offer, feature, decisionScore, side, price, publishedProjection, raw, market, final, edge, ev, grade,
         movement,
@@ -520,6 +537,7 @@ export function buildNflPlayerPropsRuntimeBoard(args: {
           books: independentPassingOffers.length,
           benchmarkProbability: market,
         } : undefined,
+        independentBooks === 0 && !passingProjection?.evidence ? undefined : posterior.range,
       ));
     }
   }
@@ -696,6 +714,7 @@ function decisionRow(
   decisionRelease: string,
   projectionEvidence?: NflPlayerPropsRuntimeDecision["projectionEvidence"],
   passingMarketEvidence?: NflPlayerPropsRuntimeDecision["passingMarketEvidence"],
+  projectionRange?: NflPlayerPropsProjectionRange,
 ): NflPlayerPropsRuntimeDecision {
   const openingAmericanPrice = side === "over"
     ? offer.openingOverPrice
@@ -712,7 +731,7 @@ function decisionRow(
     }],
     observedAt: offer.observedAt, lockAt: offer.lockAt, state: offer.state, roleFingerprint: feature.roleFingerprint,
     projection,
-    projectionRange: projection === null ? null : nflPlayerPropsProjectionRange(offer.market, projection),
+    projectionRange: projection === null ? null : projectionRange ?? nflPlayerPropsProjectionRange(offer.market, projection),
     forecastContext: buildForecastContext(feature, offer.market),
     participationProbability: score.participationProbability, rawModelProbability: raw,
     marketProbability: market, finalProbability: final, probabilityEdge: edge, expectedValue, grade, marketMovement,
@@ -824,20 +843,41 @@ export function nflPlayerPropsProbabilityCoherentProjection(args: {
   calibratedOverProbability: number;
   independentProjection: number;
 }): number {
+  return nflPlayerPropsCoherentPosteriorDistribution(args).projection;
+}
+
+export function nflPlayerPropsCoherentPosteriorDistribution(args: {
+  market: string;
+  line: number;
+  calibratedOverProbability: number;
+  independentProjection: number;
+}): { projection: number; range: NflPlayerPropsProjectionRange } {
   if (!artifact.markets[args.market] || !Number.isFinite(args.line)
     || !Number.isFinite(args.independentProjection)
     || !Number.isFinite(args.calibratedOverProbability)
     || args.calibratedOverProbability <= 0 || args.calibratedOverProbability >= 1) {
     throw new Error("NFL props market-coherent projection input is invalid.");
   }
-  let lower = 0;
-  let upper = Math.max(25, args.line * 2 + 100, args.independentProjection * 2 + 100);
-  for (let iteration = 0; iteration < 80; iteration += 1) {
-    const middle = (lower + upper) / 2;
-    if (nflPlayerPropsOverProbability(args.market, middle, args.line) < args.calibratedOverProbability) lower = middle;
-    else upper = middle;
-  }
-  return (lower + upper) / 2;
+  // Select the empirically calibrated residual family once from the independent
+  // sports-model point. Re-selecting a mean bucket while inverse-solving can
+  // splice different distributions and make the displayed point oppose the
+  // probability that was graded.
+  const residuals = selectEmpiricalDistribution(
+    artifact.markets[args.market]!.distribution,
+    args.independentProjection,
+  ).residualQuantiles;
+  const location = args.line
+    - empiricalInterpolatedQuantile(residuals, 1 - args.calibratedOverProbability);
+  const projection = Math.max(0, location + empiricalInterpolatedQuantile(residuals, 0.5));
+  return {
+    projection,
+    range: {
+      lower: Math.max(0, location + empiricalInterpolatedQuantile(residuals, 0.1)),
+      upper: Math.max(0, location + empiricalInterpolatedQuantile(residuals, 0.9)),
+      centralCoverage: 0.8,
+      source: "empirical_residual_distribution",
+    },
+  };
 }
 
 export function nflPlayerPropsPassingYardsWatchlistEligible(args: {
