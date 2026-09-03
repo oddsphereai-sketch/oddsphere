@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import {
+  CFB_PUBLIC_SCORE_DIRECTION_TOLERANCE_POINTS,
   FOOTBALL_CROSS_MARKET_COHERENCE_RELEASE,
   auditFootballCrossMarketCoherence,
   constrainHomeCoverProbability,
@@ -265,6 +266,67 @@ const contradictoryPublicDecision = auditFootballCrossMarketCoherence({
   requireDecisionSideFromForecast: true,
 });
 assert.equal(contradictoryPublicDecision.fatalIssues.some((row) => row.code === "decision_forecast_side_disagreement"), true, "the release gate must fail closed on a same-line score/PMF/decision contradiction");
+
+const narrowMeanMedianForecast: FootballCoherenceForecast = {
+  expectedAwayPoints: 20,
+  expectedHomePoints: 28.827706749274213,
+  representativeScore: { away: 20, home: 28 },
+  awayWinProbability: 0,
+  homeWinProbability: 1,
+  pmf: [
+    { away: 20, home: 28, probability: 0.5861466253628935 },
+    { away: 20, home: 30, probability: 0.4138533746371065 },
+  ],
+};
+const narrowMeanMedianDecisions = [
+  decision({ market: "moneyline", side: "HME", probability: 1, fair: 0.9, price: -900, grade: "No Play" }),
+  decision({ market: "spread", side: "HME -7.5", probability: 0.6, fair: 0.55, price: -110, line: -7.5, grade: "No Play" }),
+  decision({ market: "total", side: "Under 48.5", probability: 0.5861466253628935, fair: 0.55, price: -110, line: 48.5, grade: "No Play" }),
+];
+const defaultNarrowMeanMedian = auditFootballCrossMarketCoherence({
+  sport: "cfb",
+  providerGameId: "narrow-mean-median-default",
+  awayTeam: "AWY",
+  homeTeam: "HME",
+  forecast: narrowMeanMedianForecast,
+  decisions: narrowMeanMedianDecisions,
+  requireDecisionSideFromForecast: true,
+  allowPmfVerifiedProbabilityEndpoints: true,
+});
+assert.equal(
+  defaultNarrowMeanMedian.fatalIssues.some((row) => row.code === "decision_forecast_side_disagreement"),
+  true,
+  "the shared default must retain the existing 0.25-point score-direction guard",
+);
+const cfbNarrowMeanMedian = auditFootballCrossMarketCoherence({
+  sport: "cfb",
+  providerGameId: "narrow-mean-median-cfb",
+  awayTeam: "AWY",
+  homeTeam: "HME",
+  forecast: narrowMeanMedianForecast,
+  decisions: narrowMeanMedianDecisions,
+  requireDecisionSideFromForecast: true,
+  allowPmfVerifiedProbabilityEndpoints: true,
+  publicScoreDirectionTolerancePoints: CFB_PUBLIC_SCORE_DIRECTION_TOLERANCE_POINTS,
+});
+assert.equal(
+  cfbNarrowMeanMedian.fatalIssues.some((row) => row.code === "decision_forecast_side_disagreement"),
+  false,
+  "CFB must publish a PMF-selected side when its same-PMF mean differs by only 0.3277 points",
+);
+assert.throws(
+  () => auditFootballCrossMarketCoherence({
+    sport: "cfb",
+    providerGameId: "invalid-score-tolerance",
+    awayTeam: "AWY",
+    homeTeam: "HME",
+    forecast: narrowMeanMedianForecast,
+    decisions: narrowMeanMedianDecisions,
+    requireDecisionSideFromForecast: true,
+    publicScoreDirectionTolerancePoints: Number.NaN,
+  }),
+  /must be finite and nonnegative/,
+);
 
 console.log("Football cross-market coherence: score identity, event containment, price divergence, and actionable-value gates passed.");
 
