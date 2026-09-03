@@ -15,10 +15,13 @@ import { filterWeeklyReaderSnapshot } from "@/lib/services/dailyEdge/weeklyReade
 import type { Sport } from "@/lib/types/domain/Sport";
 import { unstable_cache } from "next/cache";
 import { CFB_MEMBER_FIXTURE_RELEASE } from "@/lib/services/football/cfbMemberFixture";
+import { CFB_FORWARD_MEMBER_SNAPSHOT_RELEASE } from "@/lib/services/football/cfbForwardMemberSnapshotStore";
 import { NFL_FORWARD_MEMBER_SNAPSHOT_RELEASE } from "@/lib/services/football/nflForwardMemberSnapshotStore";
 import { enrichCachedNflFootballEvidence } from "@/lib/services/football/footballMemberEvidence";
 import DailyEdgeLiveRefresh from "./DailyEdgeLiveRefresh";
 import { readMemberDataWithDeadline } from "@/lib/services/memberDataAvailability";
+
+const CFB_MEMBER_DATA_READ_TIMEOUT_MS = 15_000;
 
 const readCachedNflForwardMemberSnapshot = unstable_cache(
   async (season: number, week: number) => {
@@ -34,13 +37,17 @@ const readCachedNflForwardMemberSnapshot = unstable_cache(
 
 const readCachedCfbMemberFixture = unstable_cache(
   async (season: number) => {
-    const [{ supabase }, { readCurrentCfbMemberFixture }] = await Promise.all([
+    const [{ supabase }, { readCurrentCfbMemberFixture }, { readCfbForwardMemberSnapshot }] = await Promise.all([
       import("@/lib/db/supabase"),
       import("@/lib/services/football/cfbMemberFixture"),
+      import("@/lib/services/football/cfbForwardMemberSnapshotStore"),
     ]);
+    const published = await readCfbForwardMemberSnapshot({ client: supabase, season })
+      .catch(() => null);
+    if (published) return published.fixture;
     return readCurrentCfbMemberFixture({ client: supabase, season });
   },
-  ["cfb-current-member-fixture", CFB_MEMBER_FIXTURE_RELEASE],
+  ["cfb-current-member-fixture", CFB_MEMBER_FIXTURE_RELEASE, CFB_FORWARD_MEMBER_SNAPSHOT_RELEASE],
   { revalidate: 60, tags: [CFB_MEMBER_FIXTURE_RELEASE] },
 );
 
@@ -119,6 +126,7 @@ export default async function CandidateDailyEdgePage({
     : await readMemberDataWithDeadline({
       label: "cfb-daily-edge-fixture",
       fallback: null,
+      timeoutMs: CFB_MEMBER_DATA_READ_TIMEOUT_MS,
       read: () => readCachedCfbMemberFixture(
         Number(process.env.CFB_FORWARD_SEASON ?? "2026"),
       ),

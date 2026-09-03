@@ -60,6 +60,10 @@ import {
 } from "../lib/services/football/cfbV1Decision";
 import { __BALLDONTLIE_NCAAF_SLATE_TEST__, type NcaafBookOdds, type NcaafGame } from "../lib/services/football/balldontlieNcaafSlate";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import {
+  buildCfbForwardMemberSnapshot,
+  CFB_FORWARD_MEMBER_SNAPSHOT_RELEASE,
+} from "../lib/services/football/cfbForwardMemberSnapshotStore";
 
 const buildCfbMemberFixture = (
   rows: Parameters<typeof buildCfbMemberFixtureAtTime>[0],
@@ -326,6 +330,14 @@ assert.deepEqual(trustedCfbSharpEventIdsByGame([trustedSharpRow, {
   payload: conflictingTrustedSharpPayload,
 }]), {}, "conflicting immutable provider IDs must disable prior-event disambiguation");
 const member = buildCfbMemberFixture([evidence]);
+const compactMemberSnapshot = buildCfbForwardMemberSnapshot({
+  fixture: member,
+  season: 2026,
+  publishedAt: lockedAt,
+});
+assert.equal(compactMemberSnapshot.snapshotRelease, CFB_FORWARD_MEMBER_SNAPSHOT_RELEASE);
+assert.equal(compactMemberSnapshot.fixture, member, "the fast snapshot preserves the authoritative fixture byte-for-byte");
+assert.equal(compactMemberSnapshot.sourceChecksum, member.provenance.sourceChecksum);
 assert.equal(member.snapshot.games.length, 1);
 assert.equal(member.fixtureRelease, "cfb_v1_member_fixture_2026_09_03_r43_narrow_mean_median_publication");
 assert.equal(member.snapshot.games[0]!.collegeFootballScope, "fbs_involved", "the CFB reader must classify every member game for the FBS-first board without changing writer scope");
@@ -1519,6 +1531,7 @@ await assert.rejects(
 );
 
 const writerSource = readFileSync(path.join(process.cwd(), "lib/services/football/cfbForwardEvidenceWriter.ts"), "utf8");
+const memberSnapshotStoreSource = readFileSync(path.join(process.cwd(), "lib/services/football/cfbForwardMemberSnapshotStore.ts"), "utf8");
 const sharpOddsSource = readFileSync(path.join(process.cwd(), "lib/services/football/cfbSharpApiOdds.ts"), "utf8");
 const quarterbackCollectionIndex = writerSource.indexOf("fetchBalldontlieNcaafQuarterbacks");
 const sharpFallbackIndex = writerSource.indexOf("fetchSharpApiNcaafOddsFallback");
@@ -1541,6 +1554,10 @@ assert.match(sharpOddsSource, /league: "ncaaf"/, "canonical event discovery must
 assert.match(sharpOddsSource, /path: "\/odds"[\s\S]*event_id: eventId[\s\S]*market: "main"/, "canonical event odds must stay exact-event and main-market scoped");
 assert.doesNotMatch(sharpOddsSource, /sharpEventIdCandidates|teamSlug\(/, "the writer path must not reconstruct or guess provider event bucket IDs");
 assert.equal((writerSource.match(/appendCfbForwardEvidence\(/g) ?? []).length, 1, "the writer must keep one all-payload append and never insert partial game evidence inside the collection loop");
+assert.match(writerSource, /refreshCompactMemberSnapshot\(\{ client: args\.client, existing: allExisting, payloads/, "the sole writer must publish the compact member snapshot from the same authoritative evidence rows");
+assert.match(writerSource, /memberSnapshotError: error instanceof Error/, "member snapshot publication failure must be isolated from authoritative evidence and tracking writes");
+assert.match(memberSnapshotStoreSource, /\.from\("lab_response_snapshots"\)\.upsert/, "CFB must reuse the existing response snapshot table rather than add a writer or table");
+assert.match(memberSnapshotStoreSource, /const SNAPSHOT_STALE_MS = 8 \* 60 \* 60 \* 1000/, "the published fixture must retain a bounded eight-hour last-known-good window");
 const evidenceStoreSource = readFileSync(path.join(process.cwd(), "lib/services/football/cfbForwardEvidenceStore.ts"), "utf8");
 assert.match(evidenceStoreSource, /CFB_FORWARD_PREVIOUS_EVIDENCE_SCHEMA_RELEASE/, "the reader must retain the complete r4 exact-price wave during the natural r5 transition");
 assert.match(evidenceStoreSource, /CFB_FORWARD_IDENTITY_PREVIOUS_EVIDENCE_SCHEMA_RELEASE/, "the reader must retain the complete r46 wave during the natural r47 transition");
@@ -1631,6 +1648,8 @@ assert.deepEqual(scoreProviderUrl.searchParams.getAll("dates[]"), ["2026-08-29"]
 assert.equal(scoreProviderUrl.searchParams.has("game_ids[]"), false, "the NCAAF games collection does not support game_ids[]");
 
 const route = readFileSync(path.resolve("app/api/cron/cfb-forward-evidence/route.ts"), "utf8");
+assert.match(route, /member_snapshot_updated: result\.memberSnapshotUpdated/, "the existing CFB cron must report compact snapshot health truthfully");
+assert.match(route, /member_snapshot_error: result\.memberSnapshotError/, "the existing CFB cron must expose isolated snapshot publication failures");
 assert.match(route, /leaseGroup: "prediction_pipeline"/);
 assert.match(route, /requireLease: true/);
 assert.match(route, /runCfbForwardEvidenceWriter/);

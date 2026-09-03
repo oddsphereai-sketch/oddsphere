@@ -1032,7 +1032,7 @@ function CompactMarketPulse({ market, showSplits = false, sport = null }: { mark
       {showSplits
         ? <CompactOddsMovement market={market} tone={tone} lineClass={style.line} compact={football} />
         : <CompactFirstInningOddsMovement market={market} tone={tone} lineClass={style.line} />}
-      {showSplits && !football ? <CompactPointLineMovement market={market} /> : null}
+      {showSplits ? <CompactPointLineMovement market={market} /> : null}
       {showSplits ? <DefaultSplitSummary market={market} sport={sport} /> : null}
     </div>
   );
@@ -1230,10 +1230,17 @@ function CompactPointLineMovement({ market }: { market: MarketEdgeDto }) {
     }
     if (previous === null && sameBook.length >= 2) previous = sameBook[sameBook.length - 2]?.line ?? null;
   }
-  const direction = first === null || sameTrackedLine(first, current) ? "Unchanged" : current > first ? "Moved up" : "Moved down";
+  const spreadSide = !isTotal ? (market.pick ?? "Spread").replace(/\s+[+-]?\d+(?:\.\d+)?(?:\s|$).*/, "").trim() || "Selected side" : null;
+  const direction = !coherent || first === null
+    ? "Pending"
+    : sameTrackedLine(first, current)
+      ? "Unchanged"
+      : isTotal
+        ? current > first ? "Total rose" : "Total fell"
+        : current < first ? `${spreadSide} strengthened` : `${spreadSide} eased`;
   const point = (label: string, value: number | null, currentPoint = false) => <div className="min-w-0"><p className="text-[6px] font-black uppercase tracking-wider text-gray-600">{label}</p><p className={`mt-0.5 font-mono text-sm font-black ${currentPoint ? "text-violet-200" : "text-gray-200"}`}>{value === null ? "—" : formatNumber(value)}</p></div>;
-  const marketLabel = isTotal ? "Total" : "Spread";
-  return <section className="mt-3 rounded-lg border border-white/[0.09] bg-black/25 p-3"><div className="flex items-center justify-between gap-2"><div><p className="text-[8px] font-black uppercase tracking-[0.15em] text-gray-300">{marketLabel} line movement</p><p className="mt-0.5 text-[7px] font-semibold text-gray-600">{terminal?.sportsbook ? `${formatSportsbook(terminal.sportsbook)} · same-book line` : `Current ${marketLabel.toLowerCase()} line`}</p></div><span className="text-[7px] font-black uppercase tracking-wider text-violet-300">{direction}</span></div><div className="mt-3 grid grid-cols-[auto_1fr_auto_1fr_auto] items-center gap-2">{point("Opening", first)}<div className="h-px bg-gradient-to-r from-gray-700 via-violet-500/50 to-violet-400/50" />{point("Prior", previous)}<div className="h-px bg-gradient-to-r from-gray-700 via-violet-500/50 to-violet-400/50" />{point("Current", current, true)}</div>{coherent ? null : <p className="mt-2 text-[7px] leading-relaxed text-gray-600">No later same-book move captured yet.</p>}</section>;
+  const marketLabel = isTotal ? "Total" : `${spreadSide} spread`;
+  return <section className="mt-3 rounded-lg border border-white/[0.09] bg-black/25 p-3"><div className="flex items-center justify-between gap-2"><div><p className="text-[8px] font-black uppercase tracking-[0.15em] text-gray-300">{marketLabel} line movement</p><p className="mt-0.5 text-[7px] font-semibold text-gray-600">{terminal?.sportsbook ? `${formatSportsbook(terminal.sportsbook)} · same-book line` : `Current ${isTotal ? "total" : "spread"} line`}</p></div><span className={`text-[7px] font-black uppercase tracking-wider ${coherent ? "text-violet-300" : "text-gray-500"}`}>{direction}</span></div><div className="mt-3 grid grid-cols-[auto_1fr_auto_1fr_auto] items-center gap-2">{point("Opening", first)}<div className="h-px bg-gradient-to-r from-gray-700 via-violet-500/50 to-violet-400/50" />{point("Prior", previous)}<div className="h-px bg-gradient-to-r from-gray-700 via-violet-500/50 to-violet-400/50" />{point("Current", current, true)}</div>{coherent ? null : <p className="mt-2 text-[7px] leading-relaxed text-gray-600">A coherent same-book opener is unavailable. The current line is shown without a movement claim.</p>}</section>;
 }
 
 function AvailabilityContext({ report, market }: { report: DailyEdgeGameAvailability; market: MarketEdgeDto }) {
