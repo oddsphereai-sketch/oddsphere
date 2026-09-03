@@ -17,6 +17,8 @@
 
 import { useCallback, useEffect, useState } from "react";
 
+import WinnerAccuracyPanel from "./WinnerAccuracyPanel";
+
 type AggregateMetrics = {
   picks: number;
   wins: number;
@@ -290,6 +292,8 @@ function TrackingView({ email, token, onSignOut }: { email: string; token: strin
           </div>
         </div>
       )}
+
+      <WinnerAccuracyPanel email={email} token={token} />
 
       <h2 style={{ fontSize: 16, marginTop: 24, marginBottom: 8 }}>Historical Baselines</h2>
       <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12, color: "#cbd5e1", marginBottom: 24 }}>
