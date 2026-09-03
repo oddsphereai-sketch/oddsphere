@@ -243,7 +243,8 @@ assert.ok(coherenceIndex >= 0 && appendIndex > coherenceIndex, "the sole NFL wri
 assert.equal((writer.match(/assertFootballCrossMarketCoherence\(\{/g) ?? []).length, 1, "the NFL writer must use one shared per-payload coherence gate");
 assert.doesNotMatch(writer, /writeCurrentNflPublishedMemberSnapshot|buildNflTrackingProposals\(/);
 assert.match(writer, /buildNflV1ActionableGradeBundle/);
-assert.match(writer, /buildNflMarketEvidenceOutcomeForecast/);
+assert.match(writer, /resolveNflTargetExcludedProduction/);
+assert.match(writer, /forecastTargetExclusion: resolved\.targetExclusion/);
 assert.match(writer, /outcomeForecast: outcome/);
 assert.match(writer, /evaluatedBets: production\.evaluatedBets/);
 assert.match(writer, /writeOfficialTrackingFromPayloads/);
@@ -254,7 +255,7 @@ assert.match(writer, /currentBooks/);
 assert.match(writer, /comparableCurrentBooks/);
 assert.match(writer, /multibook_consensus_unavailable/);
 assert.match(writer, /readLegacyNflForwardEvidence/);
-assert.match(writer, /nfl_forward_evidence_writer_2026_09_01_r20_forecast_value_separation/);
+assert.match(writer, /nfl_forward_evidence_writer_2026_09_03_r21_target_excluded_forecast/);
 assert.doesNotMatch(
   writer,
   /const \[existing, previousExisting, priorExisting, legacyExisting\] = await Promise\.all/,

@@ -10,7 +10,7 @@ import {
 } from "./nflV1ActionableGradeCandidate";
 
 export const NFL_FORWARD_MEMBER_SNAPSHOT_RELEASE =
-  "nfl_forward_member_snapshot_2026_09_01_r6_forecast_value_separation" as const;
+  "nfl_forward_member_snapshot_2026_09_03_r7_target_excluded_forecast" as const;
 
 const SNAPSHOT_TTL_MS = 30 * 60 * 1000;
 const SNAPSHOT_STALE_MS = 8 * 60 * 60 * 1000;
