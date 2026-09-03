@@ -18,7 +18,11 @@ import {
   WNBA_PREDICTION_RECORD_CONTRACT_VERSION,
 } from "../lib/services/wnba/buildWnbaPredictionRecords";
 import {
+  EXPECTED_WNBA_CALIBRATION_FLAGS,
+  EXPECTED_WNBA_CALIBRATION_SCHEMA_VERSION,
+  EXPECTED_WNBA_DISTRIBUTION_VERSION,
   EXPECTED_WNBA_GRADE_POLICY_VERSION,
+  EXPECTED_WNBA_MODEL_VERSION,
   wnbaPredictionReleaseMismatches,
 } from "../lib/automodel/wnbaChampionRuntime";
 import { gradePrediction } from "../lib/services/predictionGrader";
@@ -165,6 +169,34 @@ const recommendationEnabled = buildWnbaCoreModelCalibrationAudit({
 
 check("recommendation-use can activate total only with projection flag", recommendationEnabled.recommendation_uses_calibrated_total === true);
 check("recommendation-use can activate spread only with margin flag", recommendationEnabled.recommendation_uses_calibrated_spread === true);
+check("calibration schema records the v1.4 probability era", recommendationEnabled.schema_version === EXPECTED_WNBA_CALIBRATION_SCHEMA_VERSION);
+check(
+  "calibration formulas remain byte-identical across the schema-only bump",
+  JSON.stringify(recommendationEnabled.formulas) === JSON.stringify({
+    total_25: "market_total + 0.25 * (raw_projected_total - market_total)",
+    total_50: "market_total + 0.50 * (raw_projected_total - market_total)",
+    spread_25: "market_implied_home_margin + 0.25 * (raw_projected_home_margin - market_implied_home_margin)",
+    spread_50: "market_implied_home_margin + 0.50 * (raw_projected_home_margin - market_implied_home_margin)",
+  }),
+);
+check(
+  "calibration flags remain identical across the schema-only bump",
+  JSON.stringify(EXPECTED_WNBA_CALIBRATION_FLAGS) === JSON.stringify({
+    coreModelEnabled: true,
+    totalProjectionCalibrationEnabled: true,
+    spreadMarginCalibrationEnabled: true,
+    totalRecommendationUsesCalibratedProjection: false,
+    spreadRecommendationUsesCalibratedMargin: true,
+    gradeCalibrationEnabled: true,
+  }) && JSON.stringify(recommendationEnabled.feature_flags) === JSON.stringify({
+    WNBA_CORE_MODEL_CALIBRATION_ENABLED: true,
+    WNBA_TOTAL_PROJECTION_CALIBRATION_ENABLED: true,
+    WNBA_SPREAD_MARGIN_CALIBRATION_ENABLED: true,
+    WNBA_TOTAL_RECOMMENDATION_USES_CALIBRATED_PROJECTION_ENABLED: true,
+    WNBA_SPREAD_RECOMMENDATION_USES_CALIBRATED_MARGIN_ENABLED: true,
+    WNBA_GRADE_CALIBRATION_ENABLED: true,
+  }),
+);
 check("recommendation total used is recorded", recommendationEnabled.recommendation_projected_total_used === 169);
 check("recommendation spread used is recorded", Math.abs((recommendationEnabled.recommendation_home_margin_used ?? 0) - -2.875) < 1e-12);
 check("recommendation mode display hint is explicit", recommendationEnabled.display_hint === "calibrated_projection_used_for_recommendation");
@@ -485,7 +517,7 @@ check(
 );
 check(
   "WNBA prediction-record probability contract has a new immutable identifier",
-  WNBA_PREDICTION_RECORD_CONTRACT_VERSION === "wnba_prediction_record_contract_v5_complete_pair_exact_value_2026_09_02",
+  WNBA_PREDICTION_RECORD_CONTRACT_VERSION === "wnba_prediction_record_contract_v6_single_market_entry_2026_09_03",
 );
 const decisionRows: WnbaDecisionPriceRow[] = [
   { market: "spread", side: "away", sportsbook: "fanduel", line: -3.5, priceAmerican: -115, observedAt: "2026-08-21T14:00:00Z" },
@@ -541,13 +573,13 @@ check(
 check(
   "WNBA record writer accepts only the exact current source release",
   wnbaPredictionReleaseMismatches({
-    model_version: "wnba_v1_3_target_excluded_complete_pairs",
-    distribution_version: "wnba_complete_pair_target_excluded_2026_09_02_v5",
+    model_version: EXPECTED_WNBA_MODEL_VERSION,
+    distribution_version: EXPECTED_WNBA_DISTRIBUTION_VERSION,
     grade_policy_version: EXPECTED_WNBA_GRADE_POLICY_VERSION,
   }).length === 0,
 );
 check(
-  "WNBA v8 reader preserves the authoritative writer Lean",
+  "WNBA v9 reader preserves the authoritative writer Lean",
   resolveWnbaReaderGrade({
     gradePolicyVersion: EXPECTED_WNBA_GRADE_POLICY_VERSION,
     grade: "Lean",

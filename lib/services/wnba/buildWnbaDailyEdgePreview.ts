@@ -39,7 +39,6 @@ import {
   wnbaMarginProbabilityAbove,
   wnbaPairRowForSide,
   type WnbaCompleteMarketPair,
-  type WnbaMarginDistribution,
   type WnbaTargetExcludedPriceRow,
 } from "./wnbaTargetExcludedMarketDecision";
 
@@ -365,6 +364,7 @@ function computeWnbaPredictionIncumbent(
     | "gradeCalibrationEnabled"
   > = EXPECTED_WNBA_CALIBRATION_FLAGS,
   evidenceObserver?: (evidence: WnbaIndependentModelEvidence) => void,
+  inferenceOptions: { applyColdStartMarketPrior?: boolean } = {},
 ) {
   const E = (t: number) => M.elo.get(t) ?? 1500;
   const hN = M.nameById.get(g.h) ?? wnbaAbbr(g.h) ?? String(g.h);
@@ -393,7 +393,9 @@ function computeWnbaPredictionIncumbent(
 
   // independent model + cold-start prior
   const ehN = E(g.h), eaN = E(g.a), naiveP = platt(dexp(-(ehN + HFA - eaN)));
-  const lm = mktPDec != null ? 400 * Math.log10(mktPDec / (1 - mktPDec)) : null;
+  const lm = inferenceOptions.applyColdStartMarketPrior === false || mktPDec === null
+    ? null
+    : 400 * Math.log10(mktPDec / (1 - mktPDec));
   const coldAdj = (gms: number, isHome: boolean, own: number, opp: number) => {
     if (gms >= COLD || lm == null) return { rating: own, w: 0, mi: null as number | null };
     const w = clamp(Math.exp(-gms / 8), 0.1, 0.7); const mi = isHome ? opp - HFA + lm : opp + HFA - lm; return { rating: w * mi + (1 - w) * own, w, mi };
@@ -666,6 +668,7 @@ function computeWnbaPredictionIncumbent(
       marketRel,
       modelStab,
       wMkt,
+      coldStartMarketPriorApplied: csH.mi !== null || csA.mi !== null,
       coldStart,
       csH,
       csA,
@@ -708,6 +711,7 @@ function computeWnbaPredictionIncumbent(
         home_rest_days: restH,
         away_rest_days: restA,
         market_weight: r1(wMkt),
+        cold_start_market_prior_applied: csH.mi !== null || csA.mi !== null,
         moneyline_final_picked_probability: r1(finalPickedProbability * 100) / 100,
         moneyline_market_picked_probability:
           marketPickedProbability === null ? null : r1(marketPickedProbability * 100) / 100,
@@ -753,8 +757,6 @@ function computeWnbaPredictionIncumbent(
     data_quality: { ml_books: mlBooks, trusted_books: trustedBooks, sharp_books: trustedBooks, spread_books: spVals.length, total_books: toVals.length, dispersion: { spread: spDisp, total: toDisp }, outlier_total: outlierTotal, outlier_spread: outlierSpread, flags },
   };
 }
-
-type IncumbentWnbaPrediction = ReturnType<typeof computeWnbaPredictionIncumbent>;
 
 function oddRowsFromCompletePairs(
   pairs: readonly WnbaCompleteMarketPair[],
@@ -880,77 +882,106 @@ export function computeWnbaPrediction(
         ),
       ]
     : [];
-  const core = mlAlternativesQualified
-    ? computeWnbaPredictionIncumbent(M, g, targetExcludedRows, {}, calibrationFlags)
+  const marketCore = mlAlternativesQualified
+    ? computeWnbaPredictionIncumbent(
+        M,
+        g,
+        targetExcludedRows,
+        {},
+        calibrationFlags,
+        undefined,
+        { applyColdStartMarketPrior: false },
+      )
     : independent;
 
-  const resolveSpread = (core: IncumbentWnbaPrediction): {
-    distribution: WnbaMarginDistribution;
-    decision: ReturnType<typeof buildWnbaResolvedMarketDecision>;
-    forecastMarketLine: number | null;
-  } => {
-    const inputs = core._distribution_inputs;
-    const selectionModal = uniqueWnbaModalLine(spreadPairs);
-    const fixedLine = selectionModal?.line ?? spreadPairs[0]?.canonicalLine ?? null;
-    const independentCover = fixedLine === null
-      ? null
-      : wnbaMarginProbabilityAbove(independentDistribution, -fixedLine);
-    const initialSide = independentCover === null ? null : independentCover >= 0.5 ? "home" : "away";
-    const initialEvaluated = initialSide === null
-      ? null
-      : selectWnbaUpperMedianEvaluatedRow(spreadPairs, initialSide, fixedLine);
-    const fixedPair = initialEvaluated === null
-      ? null
-      : spreadPairs.find((pair) => pair.sportsbook === initialEvaluated.sportsbook) ?? null;
-    const alternatives = fixedPair === null
-      ? []
-      : spreadPairs.filter((pair) => pair.sportsbook !== fixedPair.sportsbook);
-    const consensus = uniqueWnbaModalLine(alternatives, 2, 2);
-    const spreadAnchorEnabled =
-      calibrationFlags.coreModelEnabled === true &&
-      calibrationFlags.spreadMarginCalibrationEnabled === true &&
-      calibrationFlags.spreadRecommendationUsesCalibratedMargin === true;
-    const marketAuthorityQualified =
-      spreadAnchorEnabled &&
-      fixedPair !== null &&
-      fixedLine !== null &&
-      consensus !== null &&
-      Math.abs(consensus.line - fixedLine) < 0.01;
-    const desiredMean = marketAuthorityQualified && consensus !== null
-      ? (() => {
-        const marketImpliedMargin = -consensus.line;
-        return marketImpliedMargin + 0.25 * (inputs.rawModelMargin - marketImpliedMargin);
+  const spreadSelectionModal = uniqueWnbaModalLine(spreadPairs);
+  const fixedSpreadLine = spreadSelectionModal?.line ?? spreadPairs[0]?.canonicalLine ?? null;
+  const independentSpreadCover = fixedSpreadLine === null
+    ? null
+    : wnbaMarginProbabilityAbove(independentDistribution, -fixedSpreadLine);
+  const initialSpreadSide = independentSpreadCover === null
+    ? null
+    : independentSpreadCover >= 0.5 ? "home" : "away";
+  const initialSpreadEvaluated = initialSpreadSide === null
+    ? null
+    : selectWnbaUpperMedianEvaluatedRow(spreadPairs, initialSpreadSide, fixedSpreadLine);
+  const fixedSpreadPair = initialSpreadEvaluated === null
+    ? null
+    : spreadPairs.find((pair) => pair.sportsbook === initialSpreadEvaluated.sportsbook) ?? null;
+  const spreadAlternatives = fixedSpreadPair === null
+    ? []
+    : spreadPairs.filter((pair) => pair.sportsbook !== fixedSpreadPair.sportsbook);
+  const spreadConsensus = uniqueWnbaModalLine(spreadAlternatives, 2, 2);
+  const spreadAnchorEnabled =
+    calibrationFlags.coreModelEnabled === true &&
+    calibrationFlags.spreadMarginCalibrationEnabled === true &&
+    calibrationFlags.spreadRecommendationUsesCalibratedMargin === true;
+  const spreadMarketAuthorityQualified =
+    spreadAnchorEnabled &&
+    fixedSpreadPair !== null &&
+    fixedSpreadLine !== null &&
+    spreadConsensus !== null &&
+    Math.abs(spreadConsensus.line - fixedSpreadLine) < 0.01;
+  const marketInputs = marketCore._distribution_inputs;
+  const spreadDesiredMean = spreadMarketAuthorityQualified && spreadConsensus !== null
+    ? (() => {
+        const marketImpliedMargin = -spreadConsensus.line;
+        return marketImpliedMargin + 0.25 * (marketInputs.rawModelMargin - marketImpliedMargin);
       })()
-      : inputs.rawModelMargin;
-    const distribution = buildWnbaMaximumEntropyMarginDistribution({
-      desiredMean,
-      independentMean: independentInputs.rawModelMargin,
-      standardDeviation: inputs.sigM,
-      positiveProbability: inputs.finalP,
-    });
-    const side = fixedLine === null
-      ? null
-      : wnbaMarginProbabilityAbove(distribution, -fixedLine) >= 0.5 ? "home" : "away";
-    const evaluated = side === null || fixedPair === null ? null : wnbaPairRowForSide(fixedPair, side);
-    const forecastUsed = marketAuthorityQualified && distribution.kind === "maximum_entropy_sign_tilt";
-    return {
-      distribution,
-      decision: buildWnbaResolvedMarketDecision({
-        market: "spread",
-        pairs: spreadPairs,
-        line: fixedLine,
-        evaluated,
-      }),
-      forecastMarketLine: forecastUsed ? fixedLine : null,
-    };
-  };
-  const spreadResolution = resolveSpread(core);
-  const distribution = spreadResolution.distribution;
+    : marketInputs.rawModelMargin;
+  const candidateMlMarketHomeProbability = mlAlternativesQualified
+    ? marketInputs.sharpMktP ?? marketInputs.mktP
+    : null;
+  const mlMarketWinnerSign = candidateMlMarketHomeProbability === null
+    ? 0
+    : Math.sign(candidateMlMarketHomeProbability - 0.5);
+  const spreadMarketWinnerSign = spreadConsensus === null ? 0 : Math.sign(-spreadConsensus.line);
+  const spreadDesiredMeanSign = Math.sign(spreadDesiredMean);
+  const crossMarketContradiction =
+    mlAlternativesQualified &&
+    spreadMarketAuthorityQualified &&
+    mlMarketWinnerSign !== 0 &&
+    (
+      spreadMarketWinnerSign !== 0 && spreadMarketWinnerSign !== mlMarketWinnerSign ||
+      spreadDesiredMeanSign !== 0 && spreadDesiredMeanSign !== mlMarketWinnerSign
+    );
+  const core = crossMarketContradiction ? independent : marketCore;
   const inputs = core._distribution_inputs;
+  const distribution = crossMarketContradiction
+    ? independentDistribution
+    : buildWnbaMaximumEntropyMarginDistribution({
+        desiredMean: spreadDesiredMean,
+        independentMean: independentInputs.rawModelMargin,
+        standardDeviation: inputs.sigM,
+        positiveProbability: inputs.finalP,
+      });
+  const spreadSideForPrice = fixedSpreadLine === null
+    ? null
+    : wnbaMarginProbabilityAbove(distribution, -fixedSpreadLine) >= 0.5 ? "home" : "away";
+  const spreadEvaluated = spreadSideForPrice === null || fixedSpreadPair === null
+    ? null
+    : wnbaPairRowForSide(fixedSpreadPair, spreadSideForPrice);
+  const spreadDecision = buildWnbaResolvedMarketDecision({
+    market: "spread",
+    pairs: spreadPairs,
+    line: fixedSpreadLine,
+    evaluated: spreadEvaluated,
+  });
+  const spreadResolution = {
+    distribution,
+    decision: spreadDecision,
+    forecastMarketLine:
+      !crossMarketContradiction &&
+      spreadMarketAuthorityQualified &&
+      distribution.kind === "maximum_entropy_sign_tilt"
+        ? fixedSpreadLine
+        : null,
+  };
   const mlSideKey = distribution.positiveProbability >= 0.5 ? "home" : "away";
   const mlEvaluated = fixedMlPair === null ? null : wnbaPairRowForSide(fixedMlPair, mlSideKey);
-  const mlMarketHomeProbability = mlAlternativesQualified
-    ? core._distribution_inputs.sharpMktP ?? core._distribution_inputs.mktP
+  const mlMarketAuthorityQualified = mlAlternativesQualified && !crossMarketContradiction;
+  const mlMarketHomeProbability = mlMarketAuthorityQualified
+    ? candidateMlMarketHomeProbability
     : null;
   const mlPickedProbability = mlSideKey === "home"
     ? distribution.positiveProbability
@@ -978,7 +1009,6 @@ export function computeWnbaPrediction(
     : rawMlPublicContext.gradeAfter;
   const mlPublicContext = { ...rawMlPublicContext, gradeAfter: mlGrade };
 
-  const spreadDecision = spreadResolution.decision;
   const spreadLine = spreadDecision.line;
   const pCoverHome = spreadLine === null
     ? null
@@ -998,7 +1028,9 @@ export function computeWnbaPrediction(
     minGradeForBoost: "Best Angle",
     maxBoostGrade: "Best Angle",
   });
-  const spreadEvidenceBookCount = spreadDecision.target_excluded_book_count;
+  const spreadEvidenceBookCount = crossMarketContradiction
+    ? 0
+    : spreadDecision.target_excluded_book_count;
   const spreadAgreement = resolveWnbaSpreadEloStatAgreementLean({
     grade: spreadPublicContext?.gradeAfter ?? (spreadLine === null ? null : spreadValue.grade),
     selectedSide: spreadSideKey,
@@ -1091,6 +1123,7 @@ export function computeWnbaPrediction(
   if (spreadLine === null) flags.push("no_fresh_complete_spread_pair");
   if (totalLine === null) flags.push("no_fresh_complete_total_pair");
   if (!mlAlternativesQualified) flags.push("moneyline_independent_fallback");
+  if (crossMarketContradiction) flags.push("cross_market_contradiction_independent_fallback");
   if (distribution.kind === "independent_normal_fallback") flags.push(`margin_distribution_${distribution.fallbackReason}`);
 
   try {
@@ -1157,6 +1190,13 @@ export function computeWnbaPrediction(
         margin_form_adjustment: inputs.marginForm,
         rest_adjustment: inputs.restAdj,
         market_weight: inputs.wMkt,
+        pre_market_home_win_probability: independentInputs.modelP,
+        post_cold_anchor_home_win_probability: inputs.modelP,
+        cold_start_market_prior_applied: inputs.coldStartMarketPriorApplied,
+        moneyline_market_interpretation_count: mlMarketAuthorityQualified ? 1 : 0,
+        cross_market_context_regime: crossMarketContradiction
+          ? "cross_market_contradictory_independent_fallback"
+          : "compatible_or_insufficient",
         moneyline_final_picked_probability: mlPickedProbability,
         moneyline_market_picked_probability: mlMarketPickedProbability,
         moneyline_final_edge_pp: mlMarketPickedProbability === null
@@ -1224,28 +1264,32 @@ export function computeWnbaPrediction(
       moneyline: {
         evaluated: mlEvaluated,
         target_excluded_home_probability: mlMarketHomeProbability,
-        target_excluded_book_count: inputs.mlBooks,
-        target_excluded_sharp_book_count: inputs.trustedBooks,
+        target_excluded_book_count: marketInputs.mlBooks,
+        target_excluded_sharp_book_count: marketInputs.trustedBooks,
         target_excluded_independent_family_count: wnbaIndependentSourceFamilyCount(mlAlternatives),
         target_excluded_sources: mlAlternatives.slice(0, 24).map((pair) => ({
           sportsbook: pair.sportsbook,
           source_class: pair.sourceClass,
           source_family: pair.sourceFamily,
         })),
-        market_authority_qualified: mlAlternativesQualified,
-        unavailable_reason: fixedMlPair === null
+        market_authority_qualified: mlMarketAuthorityQualified,
+        unavailable_reason: crossMarketContradiction
+          ? "cross_market_contradiction"
+          : fixedMlPair === null
           ? "no_fresh_complete_pair"
           : mlAlternatives.length < 2
             ? "insufficient_target_excluded_books"
             : wnbaIndependentSourceFamilyCount(mlAlternatives) < 2
               ? "insufficient_independent_source_families"
               : null,
-        independent_fallback: !mlAlternativesQualified,
+        independent_fallback: !mlMarketAuthorityQualified,
+        cross_market_contradiction: crossMarketContradiction,
       },
       spread: {
         ...spreadDecision,
         forecast_market_line: spreadResolution.forecastMarketLine,
         forecast_used_target_excluded_market: spreadResolution.forecastMarketLine !== null,
+        cross_market_contradiction: crossMarketContradiction,
         desired_home_margin: distribution.mean,
         raw_strength_grade: spreadValue.grade,
         exact_price_value: spreadValue,

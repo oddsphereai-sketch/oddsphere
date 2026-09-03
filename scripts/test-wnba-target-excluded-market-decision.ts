@@ -384,6 +384,190 @@ assert.equal(
 assert.notEqual(singleton.spread.side, null, "an exact singleton pair still supplies a downstream evaluated Spread quote");
 assert.notEqual(singleton.total.side, null, "an exact singleton pair still supplies a downstream evaluated Total quote");
 
+const coldStartModel: ModelState = {
+  ...model,
+  games: new Map([[30, 2], [10, 3]]),
+};
+const coldStartIndependent = computeWnbaPrediction(
+  coldStartModel,
+  { id: 90, date: "2026-09-02", h: 30, a: 10 },
+  [],
+  {},
+  undefined,
+  undefined,
+  { ...context, marketRows: [] },
+);
+const compatibleColdStartRows = integratedRows.map((row) => ({
+  ...row,
+  line: row.mkt === "point_spread"
+    ? row.selType === "home" ? -8.5 : 8.5
+    : row.line,
+}));
+const coldStartQualified = computeWnbaPrediction(
+  coldStartModel,
+  { id: 90, date: "2026-09-02", h: 30, a: 10 },
+  compatibleColdStartRows,
+  {},
+  undefined,
+  undefined,
+  { ...context, marketRows: compatibleColdStartRows },
+);
+assert.deepEqual(
+  computeWnbaPrediction(
+    coldStartModel,
+    { id: 90, date: "2026-09-02", h: 30, a: 10 },
+    compatibleColdStartRows,
+    {},
+    undefined,
+    undefined,
+    { ...context, marketRows: compatibleColdStartRows },
+  ),
+  coldStartQualified,
+  "the frozen target selection, source arbitration and posterior replay deterministically",
+);
+assert.equal(
+  coldStartQualified.model.components.cold_start_market_prior_applied,
+  false,
+  "qualified target-excluded Moneyline evidence cannot enter through the cold-start anchor",
+);
+assert.equal(
+  coldStartQualified.model.components.post_cold_anchor_home_win_probability,
+  coldStartQualified.model.components.pre_market_home_win_probability,
+  "the post-sport-model probability remains exact independent identity before the one dynamic market interpretation",
+);
+assert.equal(
+  coldStartQualified.model.components.pre_market_home_win_probability,
+  coldStartIndependent.model.final_home_win_prob,
+  "cold-start sport evidence is identical to the no-market independent forecast",
+);
+assert.equal(
+  coldStartQualified.model.components.moneyline_market_interpretation_count,
+  1,
+  "qualified target-excluded Moneyline evidence enters exactly once",
+);
+assert.notEqual(
+  coldStartQualified.model.final_home_win_prob,
+  coldStartIndependent.model.final_home_win_prob,
+  "the retained dynamic Moneyline interpretation can still change the final posterior",
+);
+assert.equal(
+  coldStartQualified.model.total,
+  coldStartIndependent.model.total,
+  "qualified market evidence leaves the independently modeled Total head byte/number-identical",
+);
+assert.ok(
+  Math.abs(
+    coldStartQualified.model.final_home_win_prob -
+    coldStartQualified.target_excluded_market_decision.spread.margin_distribution.positiveProbability,
+  ) < 1e-12 &&
+    Math.abs(
+      coldStartQualified.projected_score.home - coldStartQualified.projected_score.away -
+      coldStartQualified.model.margin,
+    ) < 1e-12,
+  "the single-entry posterior still drives one coherent ML/Spread/score margin distribution",
+);
+assert.equal(
+  Math.sign(coldStartQualified.model.final_home_win_prob - 0.5),
+  Math.sign(coldStartQualified.model.margin),
+  "a non-conflicting qualified favorite regime retains one publication-side winner",
+);
+
+const contradictoryColdStart = computeWnbaPrediction(
+  coldStartModel,
+  { id: 91, date: "2026-09-02", h: 30, a: 10 },
+  integratedRows,
+  {},
+  undefined,
+  undefined,
+  context,
+);
+assert.equal(
+  contradictoryColdStart.model.components.cross_market_context_regime,
+  "cross_market_contradictory_independent_fallback",
+  "opposing qualified Moneyline and Spread regimes reject market authority as a whole",
+);
+assert.equal(
+  contradictoryColdStart.model.components.moneyline_market_interpretation_count,
+  0,
+  "a rejected cross-market story cannot enter the posterior",
+);
+assert.equal(
+  contradictoryColdStart.target_excluded_market_decision.moneyline.market_authority_qualified,
+  false,
+  "cross-market contradiction rejects Moneyline authority while retaining its provenance",
+);
+assert.equal(
+  contradictoryColdStart.target_excluded_market_decision.spread.forecast_used_target_excluded_market,
+  false,
+  "cross-market contradiction rejects the qualified Spread center as forecast authority",
+);
+assert.equal(
+  contradictoryColdStart.model.final_home_win_prob,
+  coldStartIndependent.model.final_home_win_prob,
+  "cross-market contradiction returns the exact independent Moneyline probability",
+);
+assert.equal(
+  contradictoryColdStart.model.margin,
+  coldStartIndependent.model.margin,
+  "cross-market contradiction returns the exact independent margin",
+);
+assert.equal(
+  contradictoryColdStart.model.total,
+  coldStartIndependent.model.total,
+  "cross-market contradiction retains the exact independent Total",
+);
+assert.deepEqual(
+  contradictoryColdStart.projected_score,
+  coldStartIndependent.projected_score,
+  "cross-market contradiction returns the exact independent decimal score decomposition",
+);
+assert.notEqual(
+  contradictoryColdStart.target_excluded_market_decision.moneyline.evaluated,
+  null,
+  "fallback retains a genuine evaluated pair for downstream exact-price economics",
+);
+assert.notEqual(
+  contradictoryColdStart.model.final_home_win_prob,
+  0.5,
+  "cross-market fallback never flattens the sport forecast to 0.5",
+);
+
+const compatibleFlipRows = integratedRows.map((row) => ({
+  ...row,
+  odds: row.mkt === "moneyline"
+    ? row.selType === "home" ? 300 : -400
+    : row.odds,
+}));
+const compatibleFlip = computeWnbaPrediction(
+  coldStartModel,
+  { id: 92, date: "2026-09-02", h: 30, a: 10 },
+  compatibleFlipRows,
+  {},
+  undefined,
+  undefined,
+  { ...context, marketRows: compatibleFlipRows },
+);
+assert.ok(
+  coldStartIndependent.model.final_home_win_prob > 0.5 &&
+    compatibleFlip.model.final_home_win_prob < 0.5,
+  "a non-conflicting qualified regime may legitimately flip the independent side",
+);
+assert.equal(
+  compatibleFlip.model.components.moneyline_market_interpretation_count,
+  1,
+  "the legitimate side flip still uses exactly one dynamic market interpretation",
+);
+assert.equal(
+  compatibleFlip.target_excluded_market_decision.moneyline.evaluated?.side,
+  "away",
+  "a posterior side flip reprices the complementary side from the fixed complete pair",
+);
+assert.equal(
+  Math.sign(compatibleFlip.model.final_home_win_prob - 0.5),
+  Math.sign(compatibleFlip.model.margin),
+  "the non-conflicting flip preserves one publication-side winner",
+);
+
 const writerSource = readFileSync(new URL("../lib/services/wnba/runWnbaModel.ts", import.meta.url), "utf8");
 const trackingSource = readFileSync(new URL("../lib/services/wnba/buildWnbaPredictionRecords.ts", import.meta.url), "utf8");
 const cronSource = readFileSync(new URL("../app/api/cron/wnba-daily-refresh/route.ts", import.meta.url), "utf8");
@@ -400,4 +584,22 @@ assert.ok(
   "the sole scheduled writer retains the shared WNBA prediction lease",
 );
 
-console.log("WNBA target-excluded market decision tests passed");
+const gradeCounts = (prediction: typeof promoted) =>
+  [prediction.moneyline.grade, prediction.spread.grade, prediction.total.grade]
+    .reduce<Record<string, number>>((counts, grade) => {
+      const key = grade ?? "No Pick";
+      counts[key] = (counts[key] ?? 0) + 1;
+      return counts;
+    }, {});
+console.log("WNBA target-excluded market decision tests passed", JSON.stringify({
+  cold_start_independent_home_probability: coldStartIndependent.model.final_home_win_prob,
+  cold_start_independent_margin: coldStartIndependent.model.margin,
+  cold_start_independent_scores: coldStartIndependent.projected_score,
+  cold_start_candidate_home_probability: coldStartQualified.model.final_home_win_prob,
+  cold_start_candidate_margin: coldStartQualified.model.margin,
+  cold_start_candidate_total: coldStartQualified.model.total,
+  contradiction_fallback_home_probability: contradictoryColdStart.model.final_home_win_prob,
+  legitimate_flip_home_probability: compatibleFlip.model.final_home_win_prob,
+  promoted_grade_counts: gradeCounts(promoted),
+  exact_price_demoted_grade_counts: gradeCounts(demoted),
+}));

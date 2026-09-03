@@ -5,11 +5,18 @@ import {
 } from "../lib/services/wnba/buildWnbaDailyEdgeAdapted";
 import {
   retainCompatibleWnbaDecisionTuple,
+  WNBA_DECISION_TUPLE_CONTRACT_VERSION,
   type WnbaDecisionTuple,
 } from "../lib/services/wnba/wnbaDecisionTuple";
+import {
+  EXPECTED_WNBA_DISTRIBUTION_VERSION,
+  EXPECTED_WNBA_GRADE_POLICY_VERSION,
+  EXPECTED_WNBA_MODEL_VERSION,
+} from "../lib/automodel/wnbaChampionRuntime";
+import { WNBA_PREDICTION_RECORD_CONTRACT_VERSION } from "../lib/services/wnba/buildWnbaPredictionRecords";
 
 const tuple: WnbaDecisionTuple = {
-  contract_version: "wnba_decision_tuple_v3_complete_pair_exact_value_2026_09_02",
+  contract_version: WNBA_DECISION_TUPLE_CONTRACT_VERSION,
   market: "total",
   side: "over",
   line: 163.5,
@@ -23,9 +30,9 @@ const tuple: WnbaDecisionTuple = {
   evaluated_sportsbook: "fanduel",
   evaluated_at: "2026-08-21T20:34:18.970Z",
   decision_at: "2026-08-21T20:34:23.398Z",
-  model_version: "wnba_v1_3_target_excluded_complete_pairs",
-  distribution_version: "wnba_complete_pair_target_excluded_2026_09_02_v5",
-  grade_policy_version: "wnba_grade_policy_v8_complete_pair_exact_value_2026_09_02",
+  model_version: EXPECTED_WNBA_MODEL_VERSION,
+  distribution_version: EXPECTED_WNBA_DISTRIBUTION_VERSION,
+  grade_policy_version: EXPECTED_WNBA_GRADE_POLICY_VERSION,
 };
 
 const currentDecision = {
@@ -50,7 +57,7 @@ const record = {
   play_grade: "watchlist",
   locked_at: null,
   snapshot_json: {
-    prediction_record_contract_version: "wnba_prediction_record_contract_v5_complete_pair_exact_value_2026_09_02",
+    prediction_record_contract_version: WNBA_PREDICTION_RECORD_CONTRACT_VERSION,
     decision_tuple: tuple,
   },
 };
@@ -61,7 +68,7 @@ const retained = selectWnbaDecisionTupleForReader({
   lastKnownGoodRecord: record,
   currentDecision,
 });
-assert.strictEqual(retained, tuple, "reader reuses the complete last-known-good v5 tuple without cloning or synthesizing it");
+assert.strictEqual(retained, tuple, "reader reuses the complete last-known-good v6 tuple without cloning or synthesizing it");
 assert.deepEqual(retained, tuple, "pick-side, line, price, book, probabilities, grade, time, and release remain exact");
 
 assert.strictEqual(
@@ -112,7 +119,7 @@ assert.equal(
     currentDecision,
   }),
   null,
-  "reader rejects non-v5 fallback records",
+  "reader rejects non-v6 fallback records",
 );
 
 const legacyTuple = {
@@ -149,6 +156,32 @@ assert.strictEqual(
   }),
   legacyTuple,
   "a legacy T-60 tuple remains immutable even when later line, price, grade, and releases differ",
+);
+
+const legacyV3Tuple = {
+  ...tuple,
+  contract_version: "wnba_decision_tuple_v3_complete_pair_exact_value_2026_09_02",
+  model_version: "wnba_v1_3_target_excluded_complete_pairs",
+  distribution_version: "wnba_complete_pair_target_excluded_2026_09_02_v5",
+  grade_policy_version: "wnba_grade_policy_v8_complete_pair_exact_value_2026_09_02",
+} as const;
+const lockedV3Record = {
+  ...record,
+  locked_at: "2026-09-02T22:30:00.000Z",
+  snapshot_json: {
+    prediction_record_contract_version: "wnba_prediction_record_contract_v5_complete_pair_exact_value_2026_09_02",
+    decision_tuple: legacyV3Tuple,
+  },
+};
+assert.strictEqual(
+  selectWnbaDecisionTupleForReader({
+    lockedRecord: lockedV3Record,
+    currentTuple: { ...tuple, evaluated_price_american: -126 },
+    lastKnownGoodRecord: lockedV3Record,
+    currentDecision: { ...currentDecision, line: 162.5, betGrade: "Lean" },
+  }),
+  legacyV3Tuple,
+  "a locked v1.3 tuple remains the exact immutable public record after the v1.4 release bump",
 );
 
 const liveRows = [
