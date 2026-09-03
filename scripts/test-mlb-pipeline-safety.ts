@@ -87,10 +87,10 @@ check(
     layers.calibration_version === MLB_PUBLIC_CALIBRATION_VERSION,
 );
 check(
-  "MLB r80 excludes evaluation-only full-game quotes and enforces publication coherence while preserving FI r79",
-  MLB_DAILY_EDGE_DECISION_RELEASE_ID === "mlb_daily_edge_decision_2026_09_02_r80_full_game_structural_coherence" &&
+  "MLB r81 preserves r80 forecast behavior and synchronizes first-slate publication by model-cycle identity",
+  MLB_DAILY_EDGE_DECISION_RELEASE_ID === "mlb_daily_edge_decision_2026_09_03_r81_first_slate_publication_cycle" &&
     MLB_MODEL_LAYER_VERSION_SCHEMA === "mlb_model_layer_versions_v13_full_game_structural_coherence" &&
-    layers.rule_bundle_version === "mlb_daily_edge_rule_bundle_v68_full_game_structural_coherence_2026_09_02" &&
+    layers.rule_bundle_version === "mlb_daily_edge_rule_bundle_v69_first_slate_publication_cycle_2026_09_03" &&
     layers.calibration_version === "mlb_public_calibration_v31_full_game_structural_coherence_2026_09_02" &&
     layers.projection_core === "mlb_projection_core_v2_4_evaluation_only_price_exclusion_2026_09_02" &&
     layers.moneyline_probability_head === "mlb_moneyline_structural_coherence_probability_v3_2026_09_02" &&

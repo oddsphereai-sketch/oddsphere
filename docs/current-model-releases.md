@@ -548,6 +548,23 @@ v1, grade policy v55, all full-game heads, and locked rows remain unchanged.
 Evidence and rollback are recorded in
 `docs/model-audits/2026-09-02-mlb-fi-evaluated-quote-exclusion-r79.md`.
 
+The September 3 MLB r81 first-slate publication-cycle release closes the
+draft-to-published sequencing gap without changing forecast or grade math.
+When the existing publish gate promotes at least one MLB game, the orchestrator
+runs the existing prediction-record synchronization once more after publication.
+The promotion-stability cycle identity now comes from the authoritative model
+`computed_at`, so the pre-publish and post-publish synchronizations from one
+model run count as one observation, never two. A pending public tuple preserves
+every non-null historical publication timestamp; only a null timestamp may be
+initialized by the post-publish pass. This can allow an otherwise-qualified
+Moneyline promotion after the intended two distinct natural writer cycles and
+20 elapsed minutes. Probabilities, projected scores, sides, thresholds, stakes,
+locks, providers, writers, cron schedules, and the shared lease are unchanged.
+The release stamps decision r81 and rule bundle v69 while retaining every r80
+model, calibration, probability-head, grade-policy, and correction identifier.
+Evidence and rollback are recorded in
+`docs/model-audits/2026-09-03-mlb-first-slate-publication-sync.md`.
+
 The September 2 MLB r80 full-game structural-coherence release removes two
 publication defects without introducing an uncalibrated market-reversal
 formula. When a full-game Moneyline or Total has exactly one accepted complete

@@ -341,6 +341,7 @@ function coherentMlbMoneylineEvaluationPrice(record: PredictionRecordRow): boole
 export function applyMlbMoneylineActionPromotionStability(
   proposed: PredictionRecordRow,
   existing: ExistingPredictionRecordState | null | undefined,
+  modelCycleAt?: string | null,
 ): PredictionRecordRow {
   if (proposed.sport !== "mlb" || proposed.market !== "moneyline") return proposed;
   const snapshot = readRecordOrNull(proposed.snapshot_json) ?? {};
@@ -351,7 +352,7 @@ export function applyMlbMoneylineActionPromotionStability(
     readStringOrNull(layers.moneyline_probability_head) ??
     proposed.model_version ?? "unknown";
   const selectedSide = proposed.side ?? proposed.pick ?? "unknown";
-  const cycleCapturedAt = proposed.published_at;
+  const cycleCapturedAt = modelCycleAt ?? proposed.published_at;
   const candidateGrade = stableActionGrade(proposed);
   const currentlyPublishedGrade = stableActionGrade(existing);
   const transition = resolveActionPromotionStability({
@@ -442,7 +443,7 @@ export function applyMlbMoneylineActionPromotionStability(
         hold_reason: existing.hold_reason,
         launch_day: existing.launch_day,
         manual_outcome_expected: existing.manual_outcome_expected,
-        published_at: existing.published_at,
+        published_at: existing.published_at ?? proposed.published_at,
         calibration_version: existing.calibration_version,
       }
     : {};
@@ -6744,6 +6745,7 @@ export async function createPredictionRecords(
           existingSnapshotByKey.get(proposedKey),
         ),
         existingRecord,
+        predictionByGameId.get(proposedRecord.game_id)?.computed_at ?? null,
       ),
       existingRecord,
     );
