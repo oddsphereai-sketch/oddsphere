@@ -404,10 +404,15 @@ export function runMlbFirstInningModelV2(
     const pickSidePosterior = fi_pick === "NRFI" ? posteriorNrfi : posteriorYrfi;
     // Forecast authority and actionability are separate: use the exact
     // evaluated offered price for EV, never the de-vig consensus/fair price.
-    const exactBreakEven = americanToImpliedProb(
-      fi_pick === "NRFI" ? market.nrfi_odds_american : market.yrfi_odds_american,
-    );
-    if (exactBreakEven !== null) fi_edge_pct = (pickSidePosterior - exactBreakEven) * 100;
+    const exactOdds = fi_pick === "NRFI"
+      ? market.nrfi_odds_american
+      : market.yrfi_odds_american;
+    // A directional forecast remains valid without an exact quote, but no
+    // price means no downstream EV/actionability calculation.
+    if (exactOdds !== null) {
+      const exactBreakEven = americanToImpliedProb(exactOdds);
+      if (exactBreakEven !== null) fi_edge_pct = (pickSidePosterior - exactBreakEven) * 100;
+    }
   }
 
   // Confidence

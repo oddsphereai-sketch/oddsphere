@@ -462,9 +462,10 @@ async function main() {
       model.fiV2Audit.market_projection_book_count === 2 &&
       near(model.fiV2Audit.market_nrfi_no_vig ?? 0, expectedRetailMedian, 0.000001));
     const selectedExactOdds = model.fiV2Audit.fi_pick === "NRFI" ? baseline.nrfi_odds_american : baseline.yrfi_odds_american;
+    const selectedExactBreakEven = selectedExactOdds === null ? null : americanToImpliedProb(selectedExactOdds);
     check("FI grade edge uses the exact offered evaluation price, not no-vig fair probability",
-      americanToImpliedProb(selectedExactOdds) !== null && model.fiV2Audit.fi_edge_pct !== null &&
-      near(model.fiV2Audit.fi_edge_pct, (selectedPosterior - americanToImpliedProb(selectedExactOdds)!) * 100, 0.000001));
+      selectedExactBreakEven !== null && model.fiV2Audit.fi_edge_pct !== null &&
+      near(model.fiV2Audit.fi_edge_pct, (selectedPosterior - selectedExactBreakEven) * 100, 0.000001));
 
     const v5ExpectedPosterior = FI_TEST.selectTrustIndependent({
       tier: projectFiIndependent(buildSnapshot()).data_quality_tier,

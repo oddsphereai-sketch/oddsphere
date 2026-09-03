@@ -39,7 +39,7 @@ async function main() {
     rows.push({ market_type: "first_inning_total", sportsbook: row.sportsbook as string, side: row.side as string | null, line_value: row.line_value as number | null, odds_american: row.odds_american as number | null, fetched_at: row.fetched_at as string | null });
     linesByGame.set(row.game_id as number, rows);
   }
-  const snapshots = await buildFeatureSnapshots("mlb", date);
+  const snapshots = await buildFeatureSnapshots("mlb", date!);
   const snapByExternal = new Map(snapshots.map((s) => [s.game_external_id, s]));
   let promotions = 0, demotions = 0, changed = 0, candidateActionable = 0, candidateToss = 0;
   console.log(`FI r80 writer-shaped SELECT-only comparator | ${date} | ${MLB_FIRST_INNING_RELEASE_ID}`);
