@@ -8,7 +8,8 @@ import { DAILY_EDGE_ACTION_PROMOTION_STABILITY_CONTRACT_RELEASE } from "../lib/s
 import { MLB_MODEL_LAYER_VERSION_IDS } from "../lib/automodel/mlbModelLayerVersions";
 
 function candidate(args: {
-  publishedAt: string;
+  publishedAt: string | null;
+  evaluatedAt?: string;
   probability?: number;
   price?: number;
 }): PredictionRecordRow {
@@ -38,7 +39,7 @@ function candidate(args: {
       ml_evaluation_price: {
         evaluated_book: "saba",
         evaluated_odds: price,
-        evaluated_observed_at: args.publishedAt,
+        evaluated_observed_at: args.evaluatedAt ?? args.publishedAt ?? "2026-08-29T17:15:00.000Z",
       },
       decision_pipeline: {
         board_action: "bet",
@@ -179,6 +180,37 @@ assert.equal(firstDecision.transition_candidate_grade, "best_angle");
 assert.equal(firstDecision.transition_final_grade, "no_play");
 assert.equal(firstCandidate.published_at, "2026-08-29T17:15:00.000Z");
 assert.equal(firstCandidate.odds_american, -140);
+
+const draftCycleAt = "2026-08-29T18:15:00.000Z";
+const firstDraftPass = applyMlbMoneylineActionPromotionStability(
+  candidate({ publishedAt: null, evaluatedAt: draftCycleAt }),
+  priorNoPlay,
+  draftCycleAt,
+);
+const firstDraftState = (firstDraftPass.snapshot_json as Record<string, unknown>)
+  .action_promotion_stability_v1 as Record<string, unknown>;
+assert.deepEqual(firstDraftState.qualifyingCycleIds, [`mlb:2026-08-29:${draftCycleAt}`]);
+assert.equal(firstDraftPass.published_at, "2026-08-29T17:00:00.000Z");
+
+const unpublishedPrior = existingFrom(firstDraftPass, { published_at: null });
+const postPublishSameCycle = applyMlbMoneylineActionPromotionStability(
+  candidate({ publishedAt: draftCycleAt }),
+  unpublishedPrior,
+  draftCycleAt,
+);
+const postPublishState = (postPublishSameCycle.snapshot_json as Record<string, unknown>)
+  .action_promotion_stability_v1 as Record<string, unknown>;
+assert.deepEqual(
+  postPublishState.qualifyingCycleIds,
+  [`mlb:2026-08-29:${draftCycleAt}`],
+  "post-publish synchronization cannot count the same model cycle twice",
+);
+assert.equal(postPublishState.status, "pending");
+assert.equal(
+  postPublishSameCycle.published_at,
+  draftCycleAt,
+  "post-publish synchronization initializes only a previously null publication time",
+);
 
 const retry = applyMlbMoneylineActionPromotionStability(
   candidate({ publishedAt: "2026-08-29T17:15:00.000Z", price: -139 }),

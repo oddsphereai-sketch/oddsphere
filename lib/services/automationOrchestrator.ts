@@ -178,7 +178,8 @@ export type AutomationStepName =
   | "g2_starter_coverage"
   | "m2_automodel"
   | "m3_prediction_records_sync"
-  | "s11_publish_gate";
+  | "s11_publish_gate"
+  | "m4_post_publish_prediction_records_sync";
 
 export type StepMode =
   | "dry_run"        // ran in dry-run mode (no write)
@@ -187,6 +188,14 @@ export type StepMode =
   | "skipped"        // step had no work (empty slate, no candidates)
   | "blocked"        // upstream gate prevented the step
   | "failed";        // step ran but errored
+
+export function shouldRunPostPublishPredictionRecordSync(args: {
+  sport: Sport;
+  publishMode: StepMode;
+  promotedGames: number;
+}): boolean {
+  return args.sport === "mlb" && args.publishMode === "wrote" && args.promotedGames > 0;
+}
 
 export type AutomationStepReport = {
   name: AutomationStepName;
@@ -1655,6 +1664,7 @@ export async function runSlateCycleAutomated(opts: {
   let publishDecision: AutomationRunReport["publish_decision"];
   let publishMode: StepMode;
   let publishReason: string;
+  let promotedGames = 0;
   if (
     dataLayerBlocked ||
     gateBlocking ||
@@ -1691,6 +1701,7 @@ export async function runSlateCycleAutomated(opts: {
     publishDecision = "auto_publish_enabled";
     try {
       const publishRes = await publishSlate(opts.sport, opts.date);
+      promotedGames = publishRes.promoted;
       publishMode = "wrote";
       publishReason = `auto-publish: promoted ${publishRes.promoted} game(s); ${publishDecisionLabel(true)}`;
       steps.push({
@@ -1724,6 +1735,53 @@ export async function runSlateCycleAutomated(opts: {
       reason: publishReason,
       details: { decision: publishDecisionLabel(false) },
     });
+  }
+
+  // The first writable cycle for a newly seeded MLB slate builds M3 while the
+  // games are still draft, then S11 publishes them. Re-run the existing record
+  // sync only when S11 actually promoted MLB games so publication state reaches
+  // prediction_records in the same lifecycle. The model cycle timestamp remains
+  // the promotion-cycle identity, so M3 and M4 cannot count as two observations.
+  if (shouldRunPostPublishPredictionRecordSync({
+    sport: opts.sport,
+    publishMode,
+    promotedGames,
+  })) {
+    const m4Step = await runStep(
+      "m4_post_publish_prediction_records_sync",
+      effectiveWriteMode.automodel,
+      "automodel",
+      async (writeMode) => {
+        const res = await createPredictionRecords({
+          sport: opts.sport,
+          slateDate: opts.date,
+          launchDay: false,
+          apply: writeMode,
+          supabase: supabaseClient,
+        });
+        return {
+          details: {
+            games_scanned: res.scanned,
+            records_proposed: res.proposed.length,
+            records_written: writeMode ? res.insertedCount : 0,
+            locked_or_existing_skipped: res.skippedExisting,
+            held_or_skipped_markets: res.skippedHeld,
+            errors: res.errors,
+          },
+          reason: writeMode
+            ? `synchronized ${res.insertedCount} member-facing prediction record(s) after first-slate publication`
+            : `dry-run; would synchronize ${res.proposed.length} post-publication member-facing prediction record(s)`,
+          partial: res.errors.length > 0,
+          error_message: res.errors.length > 0
+            ? res.errors.map((error) => error.reason).join("; ")
+            : null,
+        };
+      },
+    );
+    steps.push(m4Step);
+    if (m4Step.mode === "failed" || m4Step.mode === "partial") {
+      warnings.push(`post-publish prediction record sync incomplete: ${m4Step.reason}`);
+    }
   }
 
   // ── Compute ui_safe: is the slate in a state where Daily Edge would
