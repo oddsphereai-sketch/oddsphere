@@ -1,3 +1,8 @@
+import assert from "node:assert/strict";
+import {
+  canonicalActionPromotionIdentity,
+  expectedValueAtAmericanOdds,
+} from "../lib/services/dailyEdge/actionPromotionStability";
 import { assessMlbLockCoherence } from "../lib/services/mlbLockCoherence";
 
 const expected = [{
@@ -138,6 +143,283 @@ if (changedSide.blockedGameIds[0] !== 31215 || !changedSide.errors.some((error) 
   throw new Error("FAIL: a pending promotion cannot excuse a changed model side");
 }
 
+const forecastRelease = "mlb_moneyline_coherent_probability_test";
+const failedEconomicsExpected = {
+  ...expected[0],
+  line_value: null as number | null,
+  play_grade: "best_angle",
+  best_angle: true,
+  no_bet: false,
+  snapshot_json: {
+    ml_evaluation_price: {
+      evaluated_book: null as string | null,
+      evaluated_odds: 104,
+      evaluated_observed_at: null as string | null,
+    },
+    model_layer_versions: {
+      active_probability_head: forecastRelease,
+    },
+    decision_pipeline: {
+      final_side: "away",
+      original_side: "away",
+      action_rule_id: "test_best_angle_rule",
+      grade_source: "additive_rule",
+    },
+  },
+};
+const failedEconomicsExpectedValue = expectedValueAtAmericanOdds(
+  failedEconomicsExpected.model_probability,
+  failedEconomicsExpected.odds_american,
+);
+const failedEconomicsStored = {
+  ...failedEconomicsExpected,
+  play_grade: null as string | null,
+  best_angle: false,
+  no_bet: true,
+  snapshot_json: {
+    ...failedEconomicsExpected.snapshot_json,
+    action_promotion_stability_v1: {
+      contractRelease: "daily_edge_action_promotion_stability_2026_08_29_r1",
+      canonicalIdentity: canonicalActionPromotionIdentity({
+        sport: "mlb",
+        gameId: failedEconomicsExpected.game_id,
+        market: "moneyline",
+        selectedSide: failedEconomicsExpected.side,
+        evaluatedLine: failedEconomicsExpected.line_value,
+        forecastRelease,
+      }),
+      candidateGrade: "best_angle",
+      qualifyingCycleIds: [],
+      firstQualifiedAt: null,
+      lastQualifiedAt: null,
+      status: "failed_economics",
+      exactPriceExpectedValue: failedEconomicsExpectedValue,
+      minimumExpectedValue: null,
+    },
+    action_promotion_candidate_v1: null as Record<string, unknown> | null,
+    decision_pipeline: {
+      ...failedEconomicsExpected.snapshot_json.decision_pipeline,
+      board_action: "no_play",
+      actionable_grade: null,
+      transition_candidate_grade: "best_angle",
+      transition_final_grade: "no_play",
+      transition_reason: "incoherent_exact_price",
+    },
+  },
+};
+
+function expectFailedEconomicsBlocked(
+  label: string,
+  storedRow: typeof failedEconomicsStored,
+): void {
+  const result = assessMlbLockCoherence({
+    gameIds: [31215],
+    expectedRows: [failedEconomicsExpected],
+    storedRows: [storedRow],
+  });
+  assert.deepEqual(result.coherentGameIds, [], `${label}: must not pass`);
+  assert.deepEqual(result.blockedGameIds, [31215], `${label}: must fail closed`);
+  assert.ok(result.errors.length > 0, `${label}: must report the mismatch`);
+}
+
+const exactFailedEconomics = assessMlbLockCoherence({
+  gameIds: [31215],
+  expectedRows: [failedEconomicsExpected],
+  storedRows: [failedEconomicsStored],
+});
+assert.deepEqual(exactFailedEconomics.coherentGameIds, [31215]);
+assert.deepEqual(exactFailedEconomics.errors, []);
+
+expectFailedEconomicsBlocked("different side", {
+  ...failedEconomicsStored,
+  pick: "home",
+  side: "home",
+});
+expectFailedEconomicsBlocked("different price", {
+  ...failedEconomicsStored,
+  odds_american: 105,
+});
+expectFailedEconomicsBlocked("different evaluated book", {
+  ...failedEconomicsStored,
+  snapshot_json: {
+    ...failedEconomicsStored.snapshot_json,
+    ml_evaluation_price: {
+      ...failedEconomicsStored.snapshot_json.ml_evaluation_price,
+      evaluated_book: "Saba",
+    },
+  },
+});
+expectFailedEconomicsBlocked("different evaluated time", {
+  ...failedEconomicsStored,
+  snapshot_json: {
+    ...failedEconomicsStored.snapshot_json,
+    ml_evaluation_price: {
+      ...failedEconomicsStored.snapshot_json.ml_evaluation_price,
+      evaluated_observed_at: "2026-08-30T15:20:00.000Z",
+    },
+  },
+});
+expectFailedEconomicsBlocked("different evaluated odds", {
+  ...failedEconomicsStored,
+  snapshot_json: {
+    ...failedEconomicsStored.snapshot_json,
+    ml_evaluation_price: {
+      ...failedEconomicsStored.snapshot_json.ml_evaluation_price,
+      evaluated_odds: 105,
+    },
+  },
+});
+expectFailedEconomicsBlocked("different status", {
+  ...failedEconomicsStored,
+  snapshot_json: {
+    ...failedEconomicsStored.snapshot_json,
+    action_promotion_stability_v1: {
+      ...failedEconomicsStored.snapshot_json.action_promotion_stability_v1,
+      status: "pending",
+    },
+  },
+});
+expectFailedEconomicsBlocked("different reason", {
+  ...failedEconomicsStored,
+  snapshot_json: {
+    ...failedEconomicsStored.snapshot_json,
+    decision_pipeline: {
+      ...failedEconomicsStored.snapshot_json.decision_pipeline,
+      transition_reason: "promotion_pending_confirmation",
+    },
+  },
+});
+expectFailedEconomicsBlocked("different candidate grade", {
+  ...failedEconomicsStored,
+  snapshot_json: {
+    ...failedEconomicsStored.snapshot_json,
+    action_promotion_stability_v1: {
+      ...failedEconomicsStored.snapshot_json.action_promotion_stability_v1,
+      candidateGrade: "lean",
+    },
+  },
+});
+expectFailedEconomicsBlocked("nonterminal candidate payload", {
+  ...failedEconomicsStored,
+  snapshot_json: {
+    ...failedEconomicsStored.snapshot_json,
+    action_promotion_candidate_v1: {
+      candidate_grade: "best_angle",
+    },
+  },
+});
+expectFailedEconomicsBlocked("non-No-Play", {
+  ...failedEconomicsStored,
+  play_grade: "lean",
+  no_bet: false,
+});
+
+const thresholdExpected = {
+  ...failedEconomicsExpected,
+  odds_american: -110,
+  snapshot_json: {
+    ...failedEconomicsExpected.snapshot_json,
+    ml_evaluation_price: {
+      evaluated_book: "Saba",
+      evaluated_odds: -110,
+      evaluated_observed_at: "2026-08-30T15:20:00.000Z",
+    },
+  },
+};
+const thresholdExpectedValue = expectedValueAtAmericanOdds(
+  thresholdExpected.model_probability,
+  thresholdExpected.odds_american,
+);
+const thresholdStored = {
+  ...failedEconomicsStored,
+  odds_american: -110,
+  snapshot_json: {
+    ...failedEconomicsStored.snapshot_json,
+    ml_evaluation_price: thresholdExpected.snapshot_json.ml_evaluation_price,
+    action_promotion_stability_v1: {
+      ...failedEconomicsStored.snapshot_json.action_promotion_stability_v1,
+      exactPriceExpectedValue: thresholdExpectedValue,
+      minimumExpectedValue: 0.08,
+    },
+    decision_pipeline: {
+      ...failedEconomicsStored.snapshot_json.decision_pipeline,
+      transition_reason: "exact_price_economics_failed",
+    },
+  },
+};
+const exactThresholdFailure = assessMlbLockCoherence({
+  gameIds: [31215],
+  expectedRows: [thresholdExpected],
+  storedRows: [thresholdStored],
+});
+assert.deepEqual(exactThresholdFailure.coherentGameIds, [31215]);
+assert.deepEqual(exactThresholdFailure.errors, []);
+
+expectFailedEconomicsBlocked("different canonical identity", {
+  ...failedEconomicsStored,
+  snapshot_json: {
+    ...failedEconomicsStored.snapshot_json,
+    action_promotion_stability_v1: {
+      ...failedEconomicsStored.snapshot_json.action_promotion_stability_v1,
+      canonicalIdentity: "mlb::wrong",
+    },
+  },
+});
+expectFailedEconomicsBlocked("different forecast release", {
+  ...failedEconomicsStored,
+  snapshot_json: {
+    ...failedEconomicsStored.snapshot_json,
+    model_layer_versions: {
+      ...failedEconomicsStored.snapshot_json.model_layer_versions,
+      active_probability_head: "different_probability_release",
+    },
+  },
+});
+expectFailedEconomicsBlocked("different exact-price EV", {
+  ...failedEconomicsStored,
+  snapshot_json: {
+    ...failedEconomicsStored.snapshot_json,
+    action_promotion_stability_v1: {
+      ...failedEconomicsStored.snapshot_json.action_promotion_stability_v1,
+      exactPriceExpectedValue: (failedEconomicsExpectedValue ?? 0) + 0.01,
+    },
+  },
+});
+expectFailedEconomicsBlocked("different probability", {
+  ...failedEconomicsStored,
+  model_probability: 0.57,
+});
+expectFailedEconomicsBlocked("different market probability", {
+  ...failedEconomicsStored,
+  market_probability: 0.52,
+});
+expectFailedEconomicsBlocked("different line", {
+  ...failedEconomicsStored,
+  line_value: 0,
+});
+expectFailedEconomicsBlocked("different confidence", {
+  ...failedEconomicsStored,
+  confidence: 55,
+});
+expectFailedEconomicsBlocked("different edge", {
+  ...failedEconomicsStored,
+  edge: 0.04,
+});
+expectFailedEconomicsBlocked("different publication time", {
+  ...failedEconomicsStored,
+  published_at: "2026-08-30T15:22:20.363Z",
+});
+expectFailedEconomicsBlocked("different action rule", {
+  ...failedEconomicsStored,
+  snapshot_json: {
+    ...failedEconomicsStored.snapshot_json,
+    decision_pipeline: {
+      ...failedEconomicsStored.snapshot_json.decision_pipeline,
+      action_rule_id: "different_rule",
+    },
+  },
+});
+
 console.log("  ✓ matching final model/member rows may lock");
 console.log("  ✓ stale pick, price, or actionability blocks lock");
 console.log("  ✓ missing member records block lock");
@@ -145,3 +427,5 @@ console.log("  ✓ held first-inning Toss-Up does not block coherent ML/total lo
 console.log("  ✓ extra actionable first-inning records remain fail-closed");
 console.log("  ✓ exact pending promotions lock the retained public tuple");
 console.log("  ✓ candidate or side mismatches remain fail-closed");
+console.log("  ✓ exact failed-economics No Play tuples may lock");
+console.log("  ✓ failed-economics side/price/book/time/status/reason/grade mismatches fail closed");
