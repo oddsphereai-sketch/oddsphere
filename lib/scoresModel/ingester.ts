@@ -129,6 +129,18 @@ function isAutoNullJustified(
     | null
     | undefined;
   if (!sportSpecific) return false;
+  const serializedSportSpecific = sportSpecific as Record<string, unknown>;
+  // FI V2 Toss-Up is a valid first-class prediction state: it deliberately
+  // clears the directional NRFI/YRFI column while retaining the audited
+  // posterior in sport_specific. It is not a data-quality hold.
+  if (
+    market === "nrfi" &&
+    row.predicted_nrfi === null &&
+    serializedSportSpecific.fi_model_used === "fi_v2" &&
+    serializedSportSpecific.nrfi_decision_kind === "toss_up"
+  ) {
+    return true;
+  }
   if (sportSpecific.held === true) return true;
   if (
     Array.isArray(sportSpecific.hold_picks) &&
@@ -153,7 +165,7 @@ export type ScoresModelInputRow = {
   ml_confidence?: number;
   predicted_ou_side?: string;
   ou_confidence?: number;
-  predicted_nrfi?: boolean;
+  predicted_nrfi?: boolean | null;
   nrfi_confidence?: number;
   // Per-sport extras (validated against schema's sport_specific fields)
   sport_specific?: Record<string, unknown>;
@@ -392,9 +404,15 @@ function buildPayload(
     ...(reconciledRow.sport_specific ?? {}),
   };
 
+  const persistExplicitFiTossUpNull = (field: SportSchemaField): boolean =>
+    field.key === "predicted_nrfi" &&
+    reconciledRow.predicted_nrfi === null &&
+    reconciledRow.sport_specific?.fi_model_used === "fi_v2" &&
+    reconciledRow.sport_specific?.nrfi_decision_kind === "toss_up";
+
   for (const field of schema.fields) {
     const value = readFieldValue(field, reconciledRow);
-    if (value === undefined || value === null) continue;
+    if (value === undefined || (value === null && !persistExplicitFiTossUpNull(field))) continue;
     if (field.scope === "top_level") {
       topLevel[field.key] = value;
       if (field.mirrorToSportSpecific) sportSpecific[field.key] = value;

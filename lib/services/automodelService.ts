@@ -427,7 +427,7 @@ async function fetchStartedExternalIds(
   );
 }
 
-function autoModelOutputToScoresRow(
+export function autoModelOutputToScoresRow(
   output: AutoModelOutput,
   computed_at: string
 ): ScoresModelInputRow {
@@ -458,7 +458,15 @@ function autoModelOutputToScoresRow(
   if (output.ou_confidence !== null) {
     row.ou_confidence = output.ou_confidence;
   }
-  if (output.predicted_nrfi !== null) {
+  // A FI V2 Toss-Up is an explicit null-side prediction, not an omitted
+  // legacy field. Preserve that null through the existing sole writer so an
+  // earlier NRFI/YRFI boolean cannot survive a fresh Toss-Up cycle.
+  const outputSportSpecific = output.sport_specific as unknown as Record<string, unknown>;
+  const explicitFiTossUp =
+    output.predicted_nrfi === null &&
+    outputSportSpecific.fi_model_used === "fi_v2" &&
+    outputSportSpecific.nrfi_decision_kind === "toss_up";
+  if (output.predicted_nrfi !== null || explicitFiTossUp) {
     row.predicted_nrfi = output.predicted_nrfi;
   }
   if (output.nrfi_confidence !== null) {
