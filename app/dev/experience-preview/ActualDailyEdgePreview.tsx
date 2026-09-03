@@ -504,7 +504,7 @@ type ReaderSurfaceProps = {
 
 function memberTeamName(game: DailyEdgeGameDto, side: "away" | "home", sport: Sport): string {
   const abbreviation = side === "away" ? game.awayTeam : game.homeTeam;
-  if (sport !== "cfb") return abbreviation;
+  if (sport !== "nfl" && sport !== "cfb") return abbreviation;
   return (side === "away" ? game.awayTeamDisplayName : game.homeTeamDisplayName) ?? abbreviation;
 }
 
@@ -924,8 +924,10 @@ function SoccerDoubleChancePanel({ game }: { game: DailyEdgeGameDto }) {
 function QuickMatchupIdentity({ game, sport }: { game: DailyEdgeGameDto; sport: Sport }) {
   const side = (role: "away" | "home", starter: DailyEdgeGameDto["awayStarter"]) => {
     const team = role === "away" ? game.awayTeam : game.homeTeam;
+    const fullName = memberTeamName(game, role, sport);
     const logo = role === "away" ? game.awayTeamLogo : game.homeTeamLogo;
-    return <div className="min-w-0 rounded-lg border border-white/[0.08] bg-black/25 p-3"><div className="flex min-w-0 items-center gap-2"><TeamLogo key={team} src={logo} label={team} sport={sport} primaryColor={memberTeamColor(game, role, sport)} /><p className="min-w-0 break-words text-base font-black leading-5 tracking-tight text-white">{memberTeamName(game, role, sport)}</p></div>{sport === "mlb" ? <div className="mt-3 border-t border-white/[0.07] pt-2"><p className="text-[7px] font-black uppercase tracking-[0.15em] text-gray-600">Probable starter</p><p className="mt-1 truncate text-[12px] font-black text-gray-100">{starter?.name ?? "Starter TBD"}</p><span className="mt-1 inline-flex rounded border border-gray-700 bg-gray-800/60 px-1.5 py-0.5 text-[7px] font-black uppercase tracking-wider text-gray-400">{starter?.throws ? `${starter.throws}HP` : "Hand unknown"}</span></div> : <p className="mt-3 border-t border-white/[0.07] pt-2 text-[8px] font-bold uppercase tracking-[0.14em] text-gray-600">{team} · {sportLabel(sport)} matchup</p>}</div>;
+    const readerTeam = sport === "nfl" || sport === "cfb" ? team : fullName;
+    return <div className="min-w-0 rounded-lg border border-white/[0.08] bg-black/25 p-3"><div className="flex min-w-0 items-center gap-2"><TeamLogo key={team} src={logo} label={team} sport={sport} primaryColor={memberTeamColor(game, role, sport)} /><p className="min-w-0 break-words text-base font-black leading-5 tracking-tight text-white" aria-label={fullName} title={fullName}>{readerTeam}</p></div>{sport === "mlb" ? <div className="mt-3 border-t border-white/[0.07] pt-2"><p className="text-[7px] font-black uppercase tracking-[0.15em] text-gray-600">Probable starter</p><p className="mt-1 truncate text-[12px] font-black text-gray-100">{starter?.name ?? "Starter TBD"}</p><span className="mt-1 inline-flex rounded border border-gray-700 bg-gray-800/60 px-1.5 py-0.5 text-[7px] font-black uppercase tracking-wider text-gray-400">{starter?.throws ? `${starter.throws}HP` : "Hand unknown"}</span></div> : <p className="mt-3 border-t border-white/[0.07] pt-2 text-[8px] font-bold uppercase tracking-[0.14em] text-gray-600">{team} · {sportLabel(sport)} matchup</p>}</div>;
   };
   return <div><div className="mb-2 flex items-center justify-between"><p className="text-[8px] font-black uppercase tracking-[0.16em] text-emerald-200">Matchup</p><span className="text-[8px] font-black text-gray-600">{game.awayTeam} @ {game.homeTeam}</span></div><div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-stretch gap-2">{side("away", game.awayStarter)}<span className="self-center text-[9px] font-black text-gray-700">AT</span>{side("home", game.homeStarter)}</div></div>;
 }
