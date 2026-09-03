@@ -736,10 +736,11 @@ async function main() {
       && liveBoardSource.includes("MLB_PROPS_FORECAST_TELEMETRY")
       && (liveBoardSource.match(/forecastTelemetry,/g) ?? []).length === 2);
   check("final target-excluded actions enforce projection-side integrity after every promotion",
-    liveBoardSource.includes("function applyProjectionSideActionability")
-      && liveBoardSource.includes("applyProjectionSideActionability(")
-      && liveBoardSource.includes("row.reasonCodes.includes(PROJECTION_SIDE_CONTRADICTION)")
-      && liveBoardSource.includes("reasonCodes: uniqueStrings([...row.reasonCodes, PROJECTION_SIDE_CONTRADICTION])"));
+    liveBoardSource.includes("const coherentProps = applyMlbPropsProjectionSideActionability(calibratedProps)")
+      && liveBoardSource.includes("rows: coherentProps")
+      && liveBoardSource.includes("applyMlbPropsProjectionSideActionability(")
+      && liveBoardSource.indexOf("applyValidatedValuePortfolioPromotions")
+        < liveBoardSource.indexOf("const coherentProps = applyMlbPropsProjectionSideActionability(calibratedProps)"));
   check("pitcher target-excluded evidence resolves one posterior without a duplicate board anchor",
     realScoringSource.includes("buildTargetExcludedPitcherConsensus")
       && realScoringSource.includes("forecastMarketOverProbability: targetExcludedConsensus?.overProbability ?? null")
