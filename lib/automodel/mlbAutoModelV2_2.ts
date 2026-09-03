@@ -30,11 +30,12 @@
  *     in the tracking aggregate for calibration only.
  */
 
-import { computeMarketBaseline } from "./marketPrior";
+import { computeMarketBaseline, type MarketBaseline } from "./marketPrior";
 import {
   estimateMlbStarterWorkload,
   projectIndependent,
   type StarterWorkloadEstimate,
+  type V22IndependentProjection,
 } from "./mlbIndependentProjection";
 import {
   blendPosterior,
@@ -88,6 +89,15 @@ export type V22Audit = {
       ? T extends { total_over: infer O } ? O : null
       : null;
   } | null;
+  evaluation_only_price_exclusion?: {
+    release_id: typeof MLB_FULL_GAME_STRUCTURAL_COHERENCE_RELEASE_ID;
+    moneyline_complete_pair_count: number | null;
+    total_complete_pair_count: number | null;
+    moneyline_forecast_excluded: boolean;
+    total_forecast_excluded: boolean;
+    total_probability_regularization_excluded: boolean;
+    exact_evaluation_price_retained_for_grade: true;
+  };
   // Layer 2
   independent_away_runs: number;
   independent_home_runs: number;
@@ -287,6 +297,94 @@ export type RunMlbAutoModelV2_2Options = {
   useWorkloadPitching?: boolean;
 };
 
+export const MLB_FULL_GAME_STRUCTURAL_COHERENCE_RELEASE_ID =
+  "mlb_full_game_structural_coherence_2026_09_02_r1" as const;
+
+export function resolveMlbEvaluationOnlyPriceAuthority(args: {
+  snapshot: GameSnapshot["market"];
+  market: MarketBaseline;
+  independent: V22IndependentProjection;
+}): {
+  posteriorMarket: MarketBaseline;
+  moneylineCompletePairCount: number | null;
+  totalCompletePairCount: number | null;
+  moneylineForecastExcluded: boolean;
+  totalForecastExcluded: boolean;
+  totalProbabilityRegularizationExcluded: boolean;
+} {
+  const map = args.snapshot.coherent_price_map ?? null;
+  const moneylineCompletePairCount = map === null
+    ? null
+    : map.moneyline_home.sharp_book_count + map.moneyline_home.retail_book_count;
+  const totalCompletePairCount = map === null
+    ? null
+    : map.total_over.sharp_book_count + map.total_over.retail_book_count;
+
+  // A lone complete named-book pair is the evaluated quote, not independent
+  // forecast corroboration. Preserve a real sharp_signal Pinnacle fair prior;
+  // this exclusion is deliberately limited to the raw American pair fallback.
+  const moneylineForecastExcluded =
+    args.market.source === "american_devig" && moneylineCompletePairCount === 1;
+  const totalForecastExcluded =
+    args.market.ouSource === "american_devig" && totalCompletePairCount === 1;
+  const totalProbabilityRegularizationExcluded = totalForecastExcluded;
+
+  if (!moneylineForecastExcluded && !totalForecastExcluded) {
+    return {
+      posteriorMarket: args.market,
+      moneylineCompletePairCount,
+      totalCompletePairCount,
+      moneylineForecastExcluded,
+      totalForecastExcluded,
+      totalProbabilityRegularizationExcluded,
+    };
+  }
+
+  // Remove only the forecast dimension owned by an evaluation-only quote.
+  // A singleton Moneyline cannot own the team split, and a singleton Total
+  // cannot own the scoring environment. Other independently corroborated
+  // market dimensions remain available. The exact listed line and prices stay
+  // on the original baseline for downstream side selection and EV grading.
+  const independentTotal =
+    args.independent.home_expected_runs + args.independent.away_expected_runs;
+  const independentHomeShare = independentTotal > 0
+    ? args.independent.home_expected_runs / independentTotal
+    : 0.5;
+  const forecastTotal = totalForecastExcluded
+    ? independentTotal
+    : args.market.marketExpectedTotal ?? args.market.listedTotal;
+  const forecastHomeShare = moneylineForecastExcluded
+    ? independentHomeShare
+    : args.market.homeRunShare ?? independentHomeShare;
+  const exclusionReasons = [
+    moneylineForecastExcluded
+      ? "Evaluation-only Moneyline pair excluded from forecast team split."
+      : null,
+    totalForecastExcluded
+      ? "Evaluation-only Total pair excluded from forecast scoring environment."
+      : null,
+  ].filter((reason): reason is string => reason !== null);
+  const posteriorMarket = forecastTotal === null
+    ? args.market
+    : {
+        ...args.market,
+        homeRunShare: forecastHomeShare,
+        homeImpliedTotal: forecastTotal * forecastHomeShare,
+        awayImpliedTotal: forecastTotal * (1 - forecastHomeShare),
+        marketExpectedTotal: forecastTotal,
+        reason: `${args.market.reason} ${exclusionReasons.join(" ")}`,
+      };
+
+  return {
+    posteriorMarket,
+    moneylineCompletePairCount,
+    totalCompletePairCount,
+    moneylineForecastExcluded,
+    totalForecastExcluded,
+    totalProbabilityRegularizationExcluded,
+  };
+}
+
 // Best Angle thresholds — V2.2 uses tighter gates than V2.1 since the
 // independent projection has more freedom to move and we want only
 // genuinely model-driven angles to flow through.
@@ -445,9 +543,25 @@ export function runMlbAutoModelV2_2(
     );
   }
 
+  const evaluationOnlyPriceAuthority = resolveMlbEvaluationOnlyPriceAuthority({
+    snapshot: snap.market,
+    market,
+    independent: indep,
+  });
+  if (evaluationOnlyPriceAuthority.moneylineForecastExcluded) {
+    integrityNotes.push(
+      "Evaluation-only Moneyline pair retained for exact-price grading but excluded from the forecast team split.",
+    );
+  }
+  if (evaluationOnlyPriceAuthority.totalProbabilityRegularizationExcluded) {
+    integrityNotes.push(
+      "Evaluation-only Total pair retained for exact-price grading but excluded from the forecast scoring environment and probability regularization.",
+    );
+  }
+
   // Layer 3 — adaptive blend
   const posterior = blendPosterior({
-    market: marketValid ? market : null,
+    market: marketValid ? evaluationOnlyPriceAuthority.posteriorMarket : null,
     independent: indep,
   });
   if (posterior.capped_by_total) {
@@ -497,12 +611,19 @@ export function runMlbAutoModelV2_2(
   // card; the raw prob/edge are preserved for calibration evaluation.
   const mlReg = regularizeProbability({
     rawProb: mlRawModelProb,
-    marketProb: mlMarketProb,
+    marketProb: evaluationOnlyPriceAuthority.moneylineForecastExcluded
+      ? null
+      : mlMarketProb,
     k: V22_SHRINK_K_ML,
     maxDistancePp: V22_MAX_DISTANCE_PP_ML,
   });
   const mlModelProb = mlReg.regularizedProb ?? mlRawModelProb;
-  const mlEdgePct = mlReg.regularizedEdgePct ?? 0;
+  const mlRawEdgePct = mlMarketProb === null
+    ? null
+    : Math.round((mlRawModelProb - mlMarketProb) * 1_000) / 10;
+  const mlEdgePct = evaluationOnlyPriceAuthority.moneylineForecastExcluded
+    ? mlRawEdgePct ?? 0
+    : mlReg.regularizedEdgePct ?? 0;
 
   // OU using market_total (or independent total when market missing)
   const ouLine = market.listedTotal ?? posteriorTotalRuns;
@@ -531,12 +652,19 @@ export function runMlbAutoModelV2_2(
   // ML). Regularized prob/edge drive confidence, grade, Best Angle, card.
   const ouReg = regularizeProbability({
     rawProb: ouRawModelProb,
-    marketProb: ouMarketProb,
+    marketProb: evaluationOnlyPriceAuthority.totalProbabilityRegularizationExcluded
+      ? null
+      : ouMarketProb,
     k: V22_SHRINK_K_OU,
     maxDistancePp: V22_MAX_DISTANCE_PP_OU,
   });
   const ouModelProb = ouReg.regularizedProb ?? ouRawModelProb;
-  const ouEdgePct: number | null = ouReg.regularizedEdgePct;
+  const ouRawEdgePct = ouMarketProb === null
+    ? null
+    : Math.round((ouRawModelProb - ouMarketProb) * 1_000) / 10;
+  const ouEdgePct: number | null = evaluationOnlyPriceAuthority.totalProbabilityRegularizationExcluded
+    ? ouRawEdgePct
+    : ouReg.regularizedEdgePct;
 
   // Confidence
   const mlConfidence = computeConfidence({
@@ -595,9 +723,11 @@ export function runMlbAutoModelV2_2(
     minBestAngleEdgePct: V22_BEST_ANGLE_MIN_EDGE_PCT_ML,
     minBestAngleConfidencePct: V22_BEST_ANGLE_MIN_CONFIDENCE_PCT,
     marketProbIsFallback: mlMarketProbIsFallback,
-    bestAngleHardBlockReason: neutralFallbackBlocksBA
-      ? "key feature group on neutral fallback / missing for both sides"
-      : null,
+    bestAngleHardBlockReason: evaluationOnlyPriceAuthority.moneylineForecastExcluded
+      ? "evaluation-only Moneyline price has no target-excluded forecast corroboration"
+      : neutralFallbackBlocksBA
+        ? "key feature group on neutral fallback / missing for both sides"
+        : null,
   });
   // Phase 6B.8 — pass the picked side's real American OU odds to the
   // grader so EV computation reflects book pricing instead of being
@@ -625,6 +755,8 @@ export function runMlbAutoModelV2_2(
     marketProbIsFallback: ouOddsMissing,
     bestAngleHardBlockReason: ouOddsMissing
       ? "total requires real O/U odds (no fallback) for Best Angle"
+      : evaluationOnlyPriceAuthority.totalProbabilityRegularizationExcluded
+        ? "evaluation-only Total price has no target-excluded forecast corroboration"
       : neutralFallbackBlocksBA
         ? "key feature group on neutral fallback / missing for both sides"
         : null,
@@ -680,6 +812,20 @@ export function runMlbAutoModelV2_2(
           total_over: snap.market.coherent_price_map.total_over,
         }
       : null,
+    evaluation_only_price_exclusion: {
+      release_id: MLB_FULL_GAME_STRUCTURAL_COHERENCE_RELEASE_ID,
+      moneyline_complete_pair_count:
+        evaluationOnlyPriceAuthority.moneylineCompletePairCount,
+      total_complete_pair_count:
+        evaluationOnlyPriceAuthority.totalCompletePairCount,
+      moneyline_forecast_excluded:
+        evaluationOnlyPriceAuthority.moneylineForecastExcluded,
+      total_forecast_excluded:
+        evaluationOnlyPriceAuthority.totalForecastExcluded,
+      total_probability_regularization_excluded:
+        evaluationOnlyPriceAuthority.totalProbabilityRegularizationExcluded,
+      exact_evaluation_price_retained_for_grade: true,
+    },
     independent_away_runs: indep.away_expected_runs,
     independent_home_runs: indep.home_expected_runs,
     independent_total: indep.total_expected_runs,
@@ -714,20 +860,28 @@ export function runMlbAutoModelV2_2(
     under_odds_american: snap.market.under_odds_american,
     // MLB-P0 regularization audit — raw preserved, regularizer math exposed.
     ml_raw_model_prob: mlRawModelProb,
-    ml_raw_edge_pct: mlReg.rawEdgePct,
+    ml_raw_edge_pct: mlRawEdgePct,
     ml_regularized_model_prob: mlModelProb,
-    ml_regularized_edge_pct: mlReg.regularizedEdgePct,
-    ml_shrink_factor: mlReg.shrinkFactor,
+    ml_regularized_edge_pct: mlEdgePct,
+    ml_shrink_factor: evaluationOnlyPriceAuthority.moneylineForecastExcluded
+      ? 1
+      : mlReg.shrinkFactor,
     ml_distance_cap_pp: mlReg.distanceCapPp,
     ml_distance_cap_applied: mlReg.capApplied,
     ou_raw_model_prob: ouRawModelProb,
-    ou_raw_edge_pct: ouReg.rawEdgePct,
+    ou_raw_edge_pct: ouRawEdgePct,
     ou_regularized_model_prob: ouModelProb,
-    ou_regularized_edge_pct: ouReg.regularizedEdgePct,
-    ou_shrink_factor: ouReg.shrinkFactor,
+    ou_regularized_edge_pct: ouEdgePct,
+    ou_shrink_factor: evaluationOnlyPriceAuthority.totalProbabilityRegularizationExcluded
+      ? 1
+      : ouReg.shrinkFactor,
     ou_distance_cap_pp: ouReg.distanceCapPp,
     ou_distance_cap_applied: ouReg.capApplied,
-    regularization_reason: mlReg.reason,
+    regularization_reason:
+      evaluationOnlyPriceAuthority.moneylineForecastExcluded ||
+      evaluationOnlyPriceAuthority.totalProbabilityRegularizationExcluded
+        ? "evaluation_only_price_exclusion"
+        : mlReg.reason,
     ml_play_grade: mlPlayGrade.grade,
     ou_play_grade: finalOuPlayGrade,
     ml_prediction_type: mlPlayGrade.predictionType,

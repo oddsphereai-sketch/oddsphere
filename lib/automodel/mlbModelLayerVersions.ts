@@ -13,15 +13,15 @@ import { resolveFirstInningModelVersion } from "./firstInningModelVersion";
 
 export type MlbModelLayerMarket = "moneyline" | "total" | "first_inning";
 
-export const MLB_MODEL_LAYER_VERSION_SCHEMA = "mlb_model_layer_versions_v12_first_inning_evaluated_quote_exclusion";
-export const MLB_PUBLIC_CALIBRATION_VERSION = "mlb_public_calibration_v30_first_inning_evaluated_quote_exclusion_2026_09_02";
-export const MLB_DAILY_EDGE_DECISION_RELEASE_ID = "mlb_daily_edge_decision_2026_09_02_r79_first_inning_evaluated_quote_exclusion";
-export const MLB_DAILY_EDGE_RULE_BUNDLE_VERSION = "mlb_daily_edge_rule_bundle_v67_first_inning_evaluated_quote_exclusion_2026_09_02";
+export const MLB_MODEL_LAYER_VERSION_SCHEMA = "mlb_model_layer_versions_v13_full_game_structural_coherence";
+export const MLB_PUBLIC_CALIBRATION_VERSION = "mlb_public_calibration_v31_full_game_structural_coherence_2026_09_02";
+export const MLB_DAILY_EDGE_DECISION_RELEASE_ID = "mlb_daily_edge_decision_2026_09_02_r80_full_game_structural_coherence";
+export const MLB_DAILY_EDGE_RULE_BUNDLE_VERSION = "mlb_daily_edge_rule_bundle_v68_full_game_structural_coherence_2026_09_02";
 
 export const MLB_MODEL_LAYER_VERSION_IDS = {
-  projection_core: "mlb_projection_core_v2_3_coherent_sharp_retail_joint_forecast_2026_09_01",
+  projection_core: "mlb_projection_core_v2_4_evaluation_only_price_exclusion_2026_09_02",
   score_distribution: "mlb_score_distribution_poisson_skellam_v2_2_baseline_2026_07_08",
-  moneyline_probability_head: "mlb_moneyline_coherent_sharp_retail_probability_v2_2026_09_01",
+  moneyline_probability_head: "mlb_moneyline_structural_coherence_probability_v3_2026_09_02",
   moneyline_portfolio_ranker: "mlb_ml_sharp_portfolio_ranker_v2_selected_side_floor_train_through_2026_07_31",
   moneyline_market_led_lean: "ml_market_led_toward_move_playable_price_lean_v2_2026_08_12",
   moneyline_neutral_consensus_grade: "ml_sharpapi_consensus_grade_continuity_v2_2026_08_13",
@@ -30,7 +30,7 @@ export const MLB_MODEL_LAYER_VERSION_IDS = {
   moneyline_sharp_price_source: "mlb_sharp_moneyline_source_v2_targeted_complete_pair_recovery_2026_09_01",
   moneyline_action_promotion_stability: "daily_edge_action_promotion_stability_2026_08_29_r1",
   source_aware_split_pair_selector: "mlb_source_aware_split_pair_selector_v2_recency_coherent_2026_08_31",
-  total_probability_head: "mlb_total_coherent_sharp_retail_probability_v2_2026_09_01",
+  total_probability_head: "mlb_total_structural_coherence_probability_v3_2026_09_02",
   coherent_market_price_map: "mlb_coherent_market_price_map_v1_2026_09_01",
   total_market_support_lean: "total_sharpapi_money_over_tickets_support_lean_v1_2026_08_12",
   total_mean_selector_original_under_lean: "total_mean_selector_original_under_lean_v1_2026_08_13",
@@ -39,9 +39,9 @@ export const MLB_MODEL_LAYER_VERSION_IDS = {
   first_inning_market_price_map: "mlb_first_inning_named_book_price_map_v1_2026_09_01",
   first_inning_market_calibration_policy: "mlb_first_inning_market_calibration_v3_evaluated_quote_exclusion_2026_09_02",
   first_inning_member_tuple_contract: "mlb_first_inning_member_tuple_contract_v1_current_authoritative_r78_2026_09_01",
-  market_calibration_policy: "mlb_model_market_calibration_v2_coherent_group_consensus_2026_09_01",
-  grade_policy: "mlb_public_grade_policy_v55_first_inning_named_book_consensus_2026_09_01",
-  correction_policy: "mlb_prediction_corrections_v23_split_pair_recency_2026_08_31",
+  market_calibration_policy: "mlb_model_market_calibration_v3_evaluation_only_price_exclusion_2026_09_02",
+  grade_policy: "mlb_public_grade_policy_v56_full_game_structural_coherence_2026_09_02",
+  correction_policy: "mlb_prediction_corrections_v24_full_game_publication_coherence_2026_09_02",
   tracking_contract: "member_facing_lock_v8_priority_retry_minute_cadence_2026_08_11",
   schedule_time_policy: "mlb_official_schedule_time_v1_2026_07_30",
 } as const;

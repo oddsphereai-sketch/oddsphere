@@ -542,6 +542,47 @@ v1, grade policy v55, all full-game heads, and locked rows remain unchanged.
 Evidence and rollback are recorded in
 `docs/model-audits/2026-09-02-mlb-fi-evaluated-quote-exclusion-r79.md`.
 
+The September 2 MLB r80 full-game structural-coherence release removes two
+publication defects without introducing an uncalibrated market-reversal
+formula. When a full-game Moneyline or Total has exactly one accepted complete
+named-book pair, that pair remains the exact evaluated quote for break-even
+probability, EV, and grade economics, but it cannot validate itself as
+forecast evidence. A singleton Moneyline pair cannot own the team scoring
+split, and a singleton Total pair cannot own the scoring environment; each
+dimension falls back to the independent baseball projection while any
+separately corroborated market dimension remains available. When both are
+singletons, the posterior receives the exact independent projection before
+the unchanged baseball-only team residual correction.
+Moneyline/Total probability regularization also does not shrink toward either
+singleton quote. A
+singleton exact price cannot self-authorize a Best Angle without a
+target-excluded pair; the independent forecast may still reach Lean through
+the existing exact-price economics and promotion-stability contract. A
+multi-book r76 coherent price map remains unchanged while the forward capture
+accumulates the source-diverse chronology required for a later broader
+interpreter.
+
+The authoritative V2.2 decimal score/PMF now also owns the published full-game
+Moneyline and Total sides. Existing inversion, raw-side, pick-calibration, and
+Total residual candidates remain available as internal evidence and may stand
+down or demote the authoritative side, but `prediction_records` cannot relabel
+the public forecast to their opposite side. A favorite becoming No Play is not
+an underdog prediction; a future underdog reversal must first change one
+qualified upstream posterior, decimal score, winner, and side coherently from
+persistent target-excluded source-diverse evidence. Missing splits remain
+neutral, and no underdog/action quota is used.
+
+The release stamps schema v13, calibration v31, projection core v2.4,
+decision r80, rule bundle v68, Moneyline/Total probability heads v3,
+full-game market-calibration v3, grade policy v56, and correction policy v24.
+First-inning r79/v6, the coherent price-map v1, providers, feature-snapshot
+queries, sole writer, shared `prediction_pipeline:mlb` lease, locks, tracking,
+stakes, and member presentation are unchanged. Frozen prediction-quality and
+exact-price grade results are reported separately in
+`docs/model-audits/2026-09-02-mlb-fullgame-structural-coherence-r80.md`.
+Rollback is the complete r79/r76 release set above; immutable prior locks are
+never recomputed.
+
 The August 30 MLB T-60 lifecycle patch makes the lock gate understand r73's
 already-persisted pending-promotion shape. A fresh raw candidate may differ
 from the intentionally retained lower public tuple while confirmation is

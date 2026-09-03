@@ -38,6 +38,7 @@ import {
 } from "../lib/automodel/mlbV22PosteriorBlend";
 import {
   applyMlbTeamResidualRunCorrection,
+  resolveMlbEvaluationOnlyPriceAuthority,
   runMlbAutoModelV2_2,
 } from "../lib/automodel/mlbAutoModelV2_2";
 import { computeMarketBaseline } from "../lib/automodel/marketPrior";
@@ -617,6 +618,209 @@ async function main() {
     const out = runMlbAutoModelV2_2(snap, buildV1Out(), "morning_draft");
     check("near-equal teams → ml model prob between 0.4 and 0.6",
       out.v22Audit.ml_model_prob >= 0.4 && out.v22Audit.ml_model_prob <= 0.6);
+  }
+  {
+    const singletonMap: NonNullable<MarketSnapshot["coherent_price_map"]> = {
+      release_id: "mlb_coherent_market_price_map_v1_2026_09_01",
+      as_of: "2026-09-02T12:00:00.000Z",
+      moneyline_home: {
+        sharp_no_vig_probability: null,
+        retail_no_vig_probability: 0.68,
+        sharp_book_count: 0,
+        retail_book_count: 1,
+        sharp_retail_gap: null,
+        freshness_minutes: 2,
+        eligible: false,
+        ineligible_reason: "insufficient_book_breadth",
+      },
+      total_over: {
+        sharp_no_vig_probability: null,
+        retail_no_vig_probability: 0.57,
+        sharp_book_count: 0,
+        retail_book_count: 1,
+        sharp_retail_gap: null,
+        freshness_minutes: 2,
+        eligible: false,
+        ineligible_reason: "insufficient_book_breadth",
+      },
+    };
+    const snap = buildSnapshot({
+      market: {
+        listed_total: 8.5,
+        home_ml_odds_american: -210,
+        away_ml_odds_american: 185,
+        over_odds_american: -135,
+        under_odds_american: 115,
+        coherent_price_map: singletonMap,
+      },
+    });
+    const independent = projectIndependent(snap);
+    const baseline = computeMarketBaseline(snap.market, null);
+    const authority = resolveMlbEvaluationOnlyPriceAuthority({
+      snapshot: snap.market,
+      market: baseline,
+      independent,
+    });
+    check("singleton Moneyline pair is excluded from forecast authority",
+      authority.moneylineForecastExcluded);
+    check("singleton Total pair is excluded from forecast authority and probability regularization",
+      authority.totalForecastExcluded && authority.totalProbabilityRegularizationExcluded);
+    check("singleton posterior market uses independent team split",
+      authority.posteriorMarket.homeImpliedTotal !== null &&
+      authority.posteriorMarket.awayImpliedTotal !== null &&
+      near(
+        authority.posteriorMarket.homeImpliedTotal /
+          (authority.posteriorMarket.homeImpliedTotal + authority.posteriorMarket.awayImpliedTotal),
+        independent.home_expected_runs / independent.total_expected_runs,
+        1e-9,
+      ));
+    check("singleton posterior market uses the independent scoring total",
+      near(
+        authority.posteriorMarket.marketExpectedTotal ?? Number.NaN,
+        independent.total_expected_runs,
+        1e-9,
+      ));
+    const out = runMlbAutoModelV2_2(snap, buildV1Out(), "morning_draft");
+    check("singleton ML final probability is the PMF probability, not quote-shrunk",
+      near(out.v22Audit.ml_model_prob, out.v22Audit.ml_raw_model_prob, 1e-12));
+    check("singleton Total final probability is the PMF probability, not quote-shrunk",
+      near(out.v22Audit.ou_model_prob, out.v22Audit.ou_raw_model_prob, 1e-12));
+    check("singleton ML and Total posterior resolves to the independent decimal score before residual correction",
+      near(out.predicted_home_score, independent.home_expected_runs, 1e-9) &&
+      near(out.predicted_away_score, independent.away_expected_runs, 1e-9));
+    check("singleton exact prices remain available for grade economics",
+      out.v22Audit.ml_market_prob !== null && out.v22Audit.ou_market_prob !== null);
+    check("singleton evaluated prices cannot self-authorize a Moneyline Best Angle",
+      out.v22Audit.ml_best_angle_eligible === false &&
+      out.v22Audit.ml_best_angle_block_reason?.includes("no target-excluded forecast corroboration") === true);
+    check("singleton evaluated prices cannot self-authorize a Total Best Angle",
+      out.v22Audit.ou_best_angle_eligible === false &&
+      out.v22Audit.ou_best_angle_block_reason?.includes("no target-excluded forecast corroboration") === true);
+    check("singleton audit stamps both structural exclusions",
+      out.v22Audit.evaluation_only_price_exclusion?.moneyline_forecast_excluded === true &&
+      out.v22Audit.evaluation_only_price_exclusion?.total_forecast_excluded === true &&
+      out.v22Audit.evaluation_only_price_exclusion?.total_probability_regularization_excluded === true);
+  }
+  {
+    const completeSide = {
+      sharp_no_vig_probability: 0.54,
+      retail_no_vig_probability: 0.52,
+      sharp_book_count: 2,
+      retail_book_count: 2,
+      sharp_retail_gap: 0.02,
+      freshness_minutes: 2,
+      eligible: true,
+      ineligible_reason: null,
+    };
+    const snap = buildSnapshot({
+      market: {
+        coherent_price_map: {
+          release_id: "mlb_coherent_market_price_map_v1_2026_09_01",
+          as_of: "2026-09-02T12:00:00.000Z",
+          moneyline_home: completeSide,
+          total_over: completeSide,
+        },
+      },
+    });
+    const independent = projectIndependent(snap);
+    const baseline = computeMarketBaseline(snap.market, null);
+    const authority = resolveMlbEvaluationOnlyPriceAuthority({
+      snapshot: snap.market,
+      market: baseline,
+      independent,
+    });
+    check("multi-book r76 Moneyline posterior input remains the exact same object",
+      authority.posteriorMarket === baseline && !authority.moneylineForecastExcluded);
+    check("multi-book r76 Total forecast and regularization remain unchanged",
+      !authority.totalForecastExcluded && !authority.totalProbabilityRegularizationExcluded);
+  }
+  {
+    const singletonSide = {
+      sharp_no_vig_probability: null,
+      retail_no_vig_probability: 0.57,
+      sharp_book_count: 0,
+      retail_book_count: 1,
+      sharp_retail_gap: null,
+      freshness_minutes: 2,
+      eligible: false,
+      ineligible_reason: "insufficient_book_breadth",
+    };
+    const multiBookSide = {
+      sharp_no_vig_probability: 0.54,
+      retail_no_vig_probability: 0.52,
+      sharp_book_count: 2,
+      retail_book_count: 2,
+      sharp_retail_gap: 0.02,
+      freshness_minutes: 2,
+      eligible: true,
+      ineligible_reason: null,
+    };
+    const totalSingletonSnapshot = buildSnapshot({
+      market: {
+        over_odds_american: -135,
+        under_odds_american: 115,
+        coherent_price_map: {
+          release_id: "mlb_coherent_market_price_map_v1_2026_09_01",
+          as_of: "2026-09-02T12:00:00.000Z",
+          moneyline_home: multiBookSide,
+          total_over: singletonSide,
+        },
+      },
+    });
+    const totalSingletonIndependent = projectIndependent(totalSingletonSnapshot);
+    const totalSingletonBaseline = computeMarketBaseline(totalSingletonSnapshot.market, null);
+    const totalSingletonAuthority = resolveMlbEvaluationOnlyPriceAuthority({
+      snapshot: totalSingletonSnapshot.market,
+      market: totalSingletonBaseline,
+      independent: totalSingletonIndependent,
+    });
+    check("Total-only singleton retains the corroborated multi-book Moneyline split",
+      !totalSingletonAuthority.moneylineForecastExcluded &&
+      totalSingletonAuthority.totalForecastExcluded &&
+      near(
+        totalSingletonAuthority.posteriorMarket.homeRunShare ?? Number.NaN,
+        totalSingletonBaseline.homeRunShare ?? Number.NaN,
+        1e-9,
+      ), JSON.stringify({ totalSingletonAuthority, totalSingletonBaseline }));
+    check("Total-only singleton replaces only the scoring environment with the baseball prior",
+      near(
+        totalSingletonAuthority.posteriorMarket.marketExpectedTotal ?? Number.NaN,
+        totalSingletonIndependent.total_expected_runs,
+        1e-9,
+      ), JSON.stringify({ totalSingletonAuthority, totalSingletonIndependent }));
+
+    const moneylineSingletonSnapshot = buildSnapshot({
+      market: {
+        coherent_price_map: {
+          release_id: "mlb_coherent_market_price_map_v1_2026_09_01",
+          as_of: "2026-09-02T12:00:00.000Z",
+          moneyline_home: singletonSide,
+          total_over: multiBookSide,
+        },
+      },
+    });
+    const moneylineSingletonIndependent = projectIndependent(moneylineSingletonSnapshot);
+    const moneylineSingletonBaseline = computeMarketBaseline(moneylineSingletonSnapshot.market, null);
+    const moneylineSingletonAuthority = resolveMlbEvaluationOnlyPriceAuthority({
+      snapshot: moneylineSingletonSnapshot.market,
+      market: moneylineSingletonBaseline,
+      independent: moneylineSingletonIndependent,
+    });
+    check("Moneyline-only singleton retains the corroborated multi-book Total environment",
+      moneylineSingletonAuthority.moneylineForecastExcluded &&
+      !moneylineSingletonAuthority.totalForecastExcluded &&
+      near(
+        moneylineSingletonAuthority.posteriorMarket.marketExpectedTotal ?? Number.NaN,
+        moneylineSingletonBaseline.marketExpectedTotal ?? Number.NaN,
+        1e-9,
+      ));
+    check("Moneyline-only singleton replaces only the team split with the baseball prior",
+      near(
+        moneylineSingletonAuthority.posteriorMarket.homeRunShare ?? Number.NaN,
+        moneylineSingletonIndependent.home_expected_runs /
+          moneylineSingletonIndependent.total_expected_runs,
+        1e-9,
+      ));
   }
 
   // ──────────────────────────────────────────────────────────────────
