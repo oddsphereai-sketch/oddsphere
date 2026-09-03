@@ -173,6 +173,40 @@ assert.throws(
 
 assert.equal(NFL_PLAYER_PROPS_COLLECTION_LIMITS.bdlConcurrency, 3);
 assert.ok(NFL_PLAYER_PROPS_COLLECTION_LIMITS.maxSharpPages <= 8);
+assert.equal(NFL_PLAYER_PROPS_COLLECTION_LIMITS.maxPlayerIdentities, 400);
+assert.equal(NFL_PLAYER_PROPS_COLLECTION_LIMITS.maxPlayerIdentitiesPerGame, 64);
+const capacityRows = Array.from({ length: 306 }, (_, index) => ({
+  providerEventId: `game-${Math.floor(index / 20)}`,
+  providerPlayerId: `player-${index}`,
+}));
+assert.deepEqual(
+  __NFL_PLAYER_PROPS_COLLECTOR_TEST__.collectBoundedPlayerIdentities([
+    ...capacityRows,
+    capacityRows[0]!,
+  ]),
+  capacityRows.map((row) => row.providerPlayerId),
+  "a normal 306-player Week 1 slate is accepted with exact deduplicated identity order",
+);
+assert.throws(
+  () => __NFL_PLAYER_PROPS_COLLECTOR_TEST__.collectBoundedPlayerIdentities(
+    Array.from({ length: 401 }, (_, index) => ({
+      providerEventId: `game-${Math.floor(index / 40)}`,
+      providerPlayerId: `player-${index}`,
+    })),
+  ),
+  /opened at 401 players/,
+  "aggregate identity contamination remains fail-closed",
+);
+assert.throws(
+  () => __NFL_PLAYER_PROPS_COLLECTOR_TEST__.collectBoundedPlayerIdentities(
+    Array.from({ length: 65 }, (_, index) => ({
+      providerEventId: "polluted-game",
+      providerPlayerId: `player-${index}`,
+    })),
+  ),
+  /opened for game polluted-game at 65 players/,
+  "one polluted game cannot consume the expanded slate budget",
+);
 assert.deepEqual(
   __NFL_PLAYER_PROPS_COLLECTOR_TEST__.nextSharpPropsPage({ has_more: true, next_offset: 200 }, 0),
   { offset: 200, cursor: null },

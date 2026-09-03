@@ -20,7 +20,8 @@ const MAX_GAMES = 18;
 const MAX_SHARP_PAGES = 8;
 const SHARP_PAGE_SIZE = 200;
 const BDL_CONCURRENCY = 3;
-const MAX_PLAYER_IDENTITIES = 300;
+const MAX_PLAYER_IDENTITIES = 400;
+const MAX_PLAYER_IDENTITIES_PER_GAME = 64;
 const PLAYER_IDENTITY_BATCH_SIZE = 100;
 
 type Json = Record<string, unknown>;
@@ -113,12 +114,7 @@ export async function collectNflPlayerPropsObservations(args: {
     });
   }
 
-  const bdlPlayerIds = [...new Set([...bdlCurrent.rows, ...bdlOpenings.rows]
-    .map((row) => row.providerPlayerId)
-    .filter((value): value is string => value !== null))];
-  if (bdlPlayerIds.length > MAX_PLAYER_IDENTITIES) {
-    throw new Error(`NFL props player-identity circuit breaker opened at ${bdlPlayerIds.length} players.`);
-  }
+  const bdlPlayerIds = collectBoundedPlayerIdentities([...bdlCurrent.rows, ...bdlOpenings.rows]);
   const identities = new Map<string, { name: string; team: string | null }>();
   for (let index = 0; index < bdlPlayerIds.length; index += PLAYER_IDENTITY_BATCH_SIZE) {
     const playerEnvelope = await bdlFetch({
@@ -368,6 +364,31 @@ function nextCursor(envelope: Envelope): string | null {
   return typeof value === "string" || typeof value === "number" ? String(value) : null;
 }
 
+function collectBoundedPlayerIdentities(
+  rows: ReadonlyArray<Pick<NflPlayerPropPriceObservation, "providerEventId" | "providerPlayerId">>,
+): string[] {
+  const playerIds = new Set<string>();
+  const playerIdsByGame = new Map<string, Set<string>>();
+  for (const row of rows) {
+    if (row.providerPlayerId === null) continue;
+    playerIds.add(row.providerPlayerId);
+    const gameIds = playerIdsByGame.get(row.providerEventId) ?? new Set<string>();
+    gameIds.add(row.providerPlayerId);
+    playerIdsByGame.set(row.providerEventId, gameIds);
+  }
+  for (const [gameId, gameIds] of playerIdsByGame) {
+    if (gameIds.size > MAX_PLAYER_IDENTITIES_PER_GAME) {
+      throw new Error(
+        `NFL props player-identity circuit breaker opened for game ${gameId} at ${gameIds.size} players.`,
+      );
+    }
+  }
+  if (playerIds.size > MAX_PLAYER_IDENTITIES) {
+    throw new Error(`NFL props player-identity circuit breaker opened at ${playerIds.size} players.`);
+  }
+  return [...playerIds];
+}
+
 function object(value: unknown): Json {
   return value !== null && typeof value === "object" && !Array.isArray(value) ? value as Json : {};
 }
@@ -400,6 +421,7 @@ export const NFL_PLAYER_PROPS_COLLECTION_LIMITS = {
   sharpPageSize: SHARP_PAGE_SIZE,
   bdlConcurrency: BDL_CONCURRENCY,
   maxPlayerIdentities: MAX_PLAYER_IDENTITIES,
+  maxPlayerIdentitiesPerGame: MAX_PLAYER_IDENTITIES_PER_GAME,
   playerIdentityBatchSize: PLAYER_IDENTITY_BATCH_SIZE,
 } as const;
 
@@ -412,4 +434,5 @@ export const __NFL_PLAYER_PROPS_COLLECTOR_TEST__ = {
   reconcileSharpRowsToSlate,
   nextSharpPropsPage,
   shouldStopSharpPropsPagination,
+  collectBoundedPlayerIdentities,
 };
