@@ -47,10 +47,10 @@ const toDecimal = (o: number | null) => (o == null ? null : o > 0 ? o / 100 + 1 
 const HISTORY_PAGE_SIZE = 1000;
 const LOCK_WINDOW_MS = 60 * 60 * 1000;
 export const WNBA_PREDICTION_RECORD_CONTRACT_VERSION =
-  "wnba_prediction_record_contract_v5_complete_pair_exact_value_2026_09_02";
+  "wnba_prediction_record_contract_v6_single_market_entry_2026_09_03";
 export const WNBA_ACTION_PROMOTION_EVIDENCE_CONTRACT_VERSION =
-  "wnba_action_promotion_evidence_v2_release_pure_2026_09_02" as const;
-export const WNBA_ACTION_PROMOTION_EVIDENCE_KEY = "wnba_action_promotion_evidence_v2" as const;
+  "wnba_action_promotion_evidence_v3_single_market_entry_2026_09_03" as const;
+export const WNBA_ACTION_PROMOTION_EVIDENCE_KEY = "wnba_action_promotion_evidence_v3" as const;
 export const WNBA_ACTION_PROMOTION_EVIDENCE_MAX_OBSERVATIONS = 32;
 export const WNBA_ACTION_PROMOTION_EVIDENCE_MAX_BYTES = 32 * 1024;
 export const WNBA_ACTION_PROMOTION_EVIDENCE_CADENCE_MINUTES = 30;

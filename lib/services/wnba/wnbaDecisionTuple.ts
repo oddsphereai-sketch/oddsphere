@@ -5,9 +5,11 @@ import {
 } from "../../automodel/wnbaChampionRuntime";
 
 export const WNBA_DECISION_TUPLE_CONTRACT_VERSION =
-  "wnba_decision_tuple_v3_complete_pair_exact_value_2026_09_02" as const;
+  "wnba_decision_tuple_v4_single_market_entry_2026_09_03" as const;
 export const WNBA_LEGACY_DECISION_TUPLE_CONTRACT_VERSION =
   "wnba_decision_tuple_v1_exact_evaluated_price_2026_08_21" as const;
+export const WNBA_LEGACY_V3_DECISION_TUPLE_CONTRACT_VERSION =
+  "wnba_decision_tuple_v3_complete_pair_exact_value_2026_09_02" as const;
 
 export type WnbaDecisionMarket = "moneyline" | "total" | "spread";
 export type WnbaDecisionSide = "home" | "away" | "over" | "under";
@@ -195,14 +197,28 @@ export function isWnbaDecisionTuple(value: unknown): value is WnbaDecisionTuple 
   );
 }
 
-/** Locked v1 tuples remain the immutable public record after a release bump. */
+/** Locked v1/v3 tuples remain the immutable public record after a release bump. */
 export function isLegacyWnbaDecisionTuple(value: unknown): boolean {
   if (!value || typeof value !== "object") return false;
   const tuple = value as Record<string, unknown>;
   const evaluatedMs = typeof tuple.evaluated_at === "string" ? Date.parse(tuple.evaluated_at) : Number.NaN;
   const decisionMs = typeof tuple.decision_at === "string" ? Date.parse(tuple.decision_at) : Number.NaN;
-  return (
+  const v1Release =
     tuple.contract_version === WNBA_LEGACY_DECISION_TUPLE_CONTRACT_VERSION &&
+    tuple.model_version === "wnba_v1_1_team_identity" &&
+    tuple.distribution_version === "wnba_market_heads_value_calibrated_2026_08_02_v3" &&
+    tuple.grade_policy_version === "wnba_grade_policy_v6_authoritative_reader_grade_2026_08_13";
+  const v3Release =
+    tuple.contract_version === WNBA_LEGACY_V3_DECISION_TUPLE_CONTRACT_VERSION &&
+    tuple.model_version === "wnba_v1_3_target_excluded_complete_pairs" &&
+    tuple.distribution_version === "wnba_complete_pair_target_excluded_2026_09_02_v5" &&
+    tuple.grade_policy_version === "wnba_grade_policy_v8_complete_pair_exact_value_2026_09_02" &&
+    (tuple.market_fair_probability_source === null ||
+      typeof tuple.market_fair_probability_source === "string" && tuple.market_fair_probability_source.length > 0) &&
+    Number.isInteger(tuple.market_fair_probability_book_count) &&
+    (tuple.market_fair_probability_book_count as number) >= 0;
+  return (
+    (v1Release || v3Release) &&
     (tuple.market === "moneyline" || tuple.market === "total" || tuple.market === "spread") &&
     (tuple.side === "home" || tuple.side === "away" || tuple.side === "over" || tuple.side === "under") &&
     typeof tuple.model_probability === "number" && Number.isFinite(tuple.model_probability) &&
@@ -216,10 +232,7 @@ export function isLegacyWnbaDecisionTuple(value: unknown): boolean {
     typeof tuple.bet_grade === "string" && tuple.bet_grade.length > 0 &&
     typeof tuple.evaluated_price_american === "number" && Number.isFinite(tuple.evaluated_price_american) &&
     typeof tuple.evaluated_sportsbook === "string" && tuple.evaluated_sportsbook.length > 0 &&
-    Number.isFinite(evaluatedMs) && Number.isFinite(decisionMs) && evaluatedMs <= decisionMs &&
-    tuple.model_version === "wnba_v1_1_team_identity" &&
-    tuple.distribution_version === "wnba_market_heads_value_calibrated_2026_08_02_v3" &&
-    tuple.grade_policy_version === "wnba_grade_policy_v6_authoritative_reader_grade_2026_08_13"
+    Number.isFinite(evaluatedMs) && Number.isFinite(decisionMs) && evaluatedMs <= decisionMs
   );
 }
 

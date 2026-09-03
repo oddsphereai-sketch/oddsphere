@@ -1111,12 +1111,12 @@ The paired live-slate replay is recorded in
 
 ## WNBA champion
 
-- Model: `wnba_v1_3_target_excluded_complete_pairs`
-- Distribution: `wnba_complete_pair_target_excluded_2026_09_02_v5`
-- Calibration schema: `wnba_core_calibration_v3_complete_pair_target_exclusion`
-- Grade policy: `wnba_grade_policy_v8_complete_pair_exact_value_2026_09_02`
-- Decision-tuple contract: `wnba_decision_tuple_v3_complete_pair_exact_value_2026_09_02`
-- Prediction-record contract: `wnba_prediction_record_contract_v5_complete_pair_exact_value_2026_09_02`
+- Model: `wnba_v1_4_single_market_entry`
+- Distribution: `wnba_single_market_entry_2026_09_03_v6`
+- Calibration schema: `wnba_core_calibration_v4_single_market_entry`
+- Grade policy: `wnba_grade_policy_v9_single_market_entry_2026_09_03`
+- Decision-tuple contract: `wnba_decision_tuple_v4_single_market_entry_2026_09_03`
+- Prediction-record contract: `wnba_prediction_record_contract_v6_single_market_entry_2026_09_03`
 - Machine registry: `lib/automodel/wnbaChampionRuntime.ts`
 - Authoritative model writer: `lib/services/wnba/runWnbaModel.ts`
 - Tracking writer: `lib/services/wnba/buildWnbaPredictionRecords.ts`
@@ -1124,7 +1124,7 @@ The paired live-slate replay is recorded in
 - Scheduled owner: `/api/cron/wnba-daily-refresh` under the WNBA-scoped shared
   `prediction_pipeline` lease
 
-The September 2 v1.3/v5/v8 release removes evaluated-book self-validation from Moneyline,
+The September 3 v1.4/v6/v9 release retains the v1.3 removal of evaluated-book self-validation from Moneyline,
 Spread, and Total. Complete paired evidence must be fresh, predecision, prestart, same-book,
 same-line, and no more than 30 seconds skewed. The evaluated book and line are fixed from the
 independent forecast before inference and that book is then excluded. Market authority requires
@@ -1134,6 +1134,16 @@ label shares one unverified-lineage family. Missing, tied, stale, incomplete, si
 correlated evidence returns the exact independent sport-model forecast. A posterior side change
 is repriced from the complementary side of the same fixed evaluated pair, so price drives EV and
 grade only and cannot select the forecast.
+
+The target-excluded Moneyline consensus now enters the forecast exactly once. It no longer first
+rewrites a cold-start team's Elo prior and then enters again through the dynamic Moneyline blend;
+the sport-owned cold-start prior remains authoritative before that single market interpretation.
+If qualified target-excluded Moneyline and Spread evidence imply opposing winner regimes, the
+complete market story is classified as contradictory and all market forecast authority stands
+down to the exact independent distribution. This is an evidence-quality fallback, not a
+winner-only override: compatible evidence may retain or legitimately reverse the independent
+winner, and the resulting single margin distribution regenerates probability, margin, score and
+Spread together.
 
 One versioned margin distribution preserves the final Moneyline win probability, expected
 margin, and incumbent variance; Spread probabilities come from that same CDF, the independent
@@ -1153,7 +1163,8 @@ non-flattening. The natural September 2 production board was empty: repeated lea
 succeeded with zero provider calls and no capture rows. That is zero-slate operational health,
 not a board-count or forecast-quality claim. The first real release-pure slate is scored
 automatically. Evidence and rollback details are recorded in
-`docs/model-audits/2026-09-02-wnba-authoritative-structural-market-result.md`.
+`docs/model-audits/2026-09-02-wnba-authoritative-structural-market-result.md` and
+`docs/model-audits/2026-09-03-wnba-v14-single-market-entry-result.md`.
 
 The earlier v4/v5 spread promotion rules remain historical inputs to the current exact-value
 intersection. They cannot bypass target exclusion or the positive-EV gate.

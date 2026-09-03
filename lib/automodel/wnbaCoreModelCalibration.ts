@@ -23,7 +23,7 @@ export type WnbaCoreModelCalibrationInput = {
 };
 
 export type WnbaCoreModelCalibrationAudit = {
-  schema_version: "wnba_core_calibration_v3_complete_pair_target_exclusion";
+  schema_version: "wnba_core_calibration_v4_single_market_entry";
   recommendation_safe: true;
   formulas: {
     total_25: "market_total + 0.25 * (raw_projected_total - market_total)";
@@ -175,7 +175,7 @@ export function buildWnbaCoreModelCalibrationAudit(
   ];
 
   return {
-    schema_version: "wnba_core_calibration_v3_complete_pair_target_exclusion",
+    schema_version: "wnba_core_calibration_v4_single_market_entry",
     recommendation_safe: true,
     formulas: {
       total_25: "market_total + 0.25 * (raw_projected_total - market_total)",
