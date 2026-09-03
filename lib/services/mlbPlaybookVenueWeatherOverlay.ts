@@ -35,6 +35,18 @@ export type MlbPlaybookVenueWeatherAudit = {
   wind_type: string | null;
   weather_source: string | null;
   fetched_at: string | null;
+  provider_status:
+    | "fresh"
+    | "missing"
+    | "stale"
+    | "rate_limited"
+    | "unavailable"
+    | "provider_error";
+  fallback_source:
+    | "weather_forecasts"
+    | "legacy_weather_snapshot"
+    | "unavailable"
+    | null;
 };
 
 export type MlbPlaybookVenueWeatherOverlayResult = {
@@ -56,6 +68,39 @@ function cleanString(v: unknown): string | null {
 
 function cleanNumber(v: unknown): number | null {
   return typeof v === "number" && Number.isFinite(v) ? v : null;
+}
+
+function classifyProviderFailure(
+  value: unknown,
+): "rate_limited" | "unavailable" | "provider_error" {
+  const message = value instanceof Error ? value.message : String(value ?? "");
+  const normalized = message.toLowerCase();
+  if (
+    /(^|\D)429(\D|$)/.test(normalized) ||
+    normalized.includes("rate limit") ||
+    normalized.includes("requests limitation") ||
+    normalized.includes("temporary blocked")
+  ) {
+    return "rate_limited";
+  }
+  if (
+    normalized.includes("unavailable") ||
+    normalized.includes("timeout") ||
+    normalized.includes("timed out") ||
+    normalized.includes("fetch failed") ||
+    normalized.includes("econn") ||
+    normalized.includes("enotfound")
+  ) {
+    return "unavailable";
+  }
+  return "provider_error";
+}
+
+function fallbackSource(
+  weather: WeatherSnapshot | null,
+): MlbPlaybookVenueWeatherAudit["fallback_source"] {
+  if (!weather) return "unavailable";
+  return weather.standard_source ?? "legacy_weather_snapshot";
 }
 
 function buildWeatherOverlay(
@@ -88,6 +133,8 @@ function buildWeatherOverlay(
       notableReasons.length > 0
         ? notableReasons.join("; ")
         : existing?.notable_reason ?? null,
+    standard_source: existing?.standard_source,
+    standard_fetched_at: existing?.standard_fetched_at ?? null,
   };
 }
 
@@ -103,6 +150,8 @@ function buildClosedRoofWeather(
     wind_direction_degrees: existing?.wind_direction_degrees ?? null,
     is_notable: false,
     notable_reason: null,
+    standard_source: existing?.standard_source,
+    standard_fetched_at: existing?.standard_fetched_at ?? null,
   };
 }
 
@@ -111,14 +160,17 @@ function buildAudit(
   teamId: string | null,
   applied: boolean,
   reason: string,
+  fallback: MlbPlaybookVenueWeatherAudit["fallback_source"],
+  providerStatus?: MlbPlaybookVenueWeatherAudit["provider_status"],
 ): MlbPlaybookVenueWeatherAudit {
+  const staleReason = cleanString(row?.staleReason);
   return {
     enabled: true,
     applied,
     reason,
     team_id: teamId,
     stale: typeof row?.stale === "boolean" ? row.stale : null,
-    stale_reason: cleanString(row?.staleReason),
+    stale_reason: staleReason,
     roof_status: cleanString(row?.venue?.roofStatus?.status),
     roof_confidence: cleanString(row?.venue?.roofStatus?.confidence),
     park_profile: cleanString(row?.venue?.parkProfile),
@@ -127,7 +179,45 @@ function buildAudit(
     wind_type: cleanString(row?.conditions?.wind?.type),
     weather_source: cleanString(row?.weatherSource),
     fetched_at: cleanString(row?.fetchedAt),
+    provider_status:
+      providerStatus ??
+      (!row
+        ? "missing"
+        : row.stale === true
+          ? staleReason
+            ? classifyProviderFailure(staleReason)
+            : "stale"
+          : "fresh"),
+    fallback_source: applied ? null : fallback,
   };
+}
+
+/**
+ * Convert a call-level Playbook failure into bounded, per-game provenance.
+ * The raw error is intentionally not persisted. Model inputs stay unchanged
+ * and the already-loaded standard weather snapshot remains authoritative.
+ */
+export function buildMlbPlaybookVenueWeatherFailureAudits(
+  snapshots: GameSnapshot[],
+  error: unknown,
+): Map<number, MlbPlaybookVenueWeatherAudit> {
+  const providerStatus = classifyProviderFailure(error);
+  return new Map(
+    snapshots.map((snap) => {
+      const teamId = playbookTeamId(snap.home_team.abbreviation);
+      return [
+        snap.game_external_id,
+        buildAudit(
+          undefined,
+          teamId,
+          false,
+          "playbook_fetch_failed",
+          fallbackSource(snap.weather),
+          providerStatus,
+        ),
+      ];
+    }),
+  );
 }
 
 export function applyMlbPlaybookVenueWeatherOverlay(
@@ -149,14 +239,26 @@ export function applyMlbPlaybookVenueWeatherOverlay(
     if (!row) {
       auditByExternalId.set(
         snap.game_external_id,
-        buildAudit(undefined, teamId, false, "missing_playbook_home_team_row"),
+        buildAudit(
+          undefined,
+          teamId,
+          false,
+          "missing_playbook_home_team_row",
+          fallbackSource(snap.weather),
+        ),
       );
       return snap;
     }
     if (row.stale === true) {
       auditByExternalId.set(
         snap.game_external_id,
-        buildAudit(row, teamId, false, "playbook_row_stale"),
+        buildAudit(
+          row,
+          teamId,
+          false,
+          "playbook_row_stale",
+          fallbackSource(snap.weather),
+        ),
       );
       return snap;
     }
@@ -179,7 +281,7 @@ export function applyMlbPlaybookVenueWeatherOverlay(
       };
       auditByExternalId.set(
         snap.game_external_id,
-        buildAudit(row, teamId, true, "closed_roof_weather_neutralized"),
+        buildAudit(row, teamId, true, "closed_roof_weather_neutralized", null),
       );
       return nextSnap;
     }
@@ -192,7 +294,13 @@ export function applyMlbPlaybookVenueWeatherOverlay(
     if (!changedWeather && !changedRoof) {
       auditByExternalId.set(
         snap.game_external_id,
-        buildAudit(row, teamId, false, "no_projection_weather_change"),
+        buildAudit(
+          row,
+          teamId,
+          false,
+          "no_projection_weather_change",
+          fallbackSource(snap.weather),
+        ),
       );
       return snap;
     }
@@ -208,7 +316,7 @@ export function applyMlbPlaybookVenueWeatherOverlay(
     };
     auditByExternalId.set(
       snap.game_external_id,
-      buildAudit(row, teamId, true, "playbook_weather_overlay_applied"),
+      buildAudit(row, teamId, true, "playbook_weather_overlay_applied", null),
     );
     return nextSnap;
   });

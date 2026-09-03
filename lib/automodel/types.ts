@@ -171,6 +171,14 @@ export type WeatherSnapshot = {
   is_notable: boolean;
   /** Diagnostic text, e.g. "wind out 15 mph", "high temp 95F". */
   notable_reason: string | null;
+  /**
+   * Additive provenance for the standard weather row loaded with this
+   * snapshot. Optional so historical fixtures and persisted payloads remain
+   * readable. A later Playbook overlay may adjust weather values, but it does
+   * not erase the identity of the standard fallback that was actually loaded.
+   */
+  standard_source?: "weather_forecasts";
+  standard_fetched_at?: string | null;
 };
 
 export type MarketSnapshot = {
