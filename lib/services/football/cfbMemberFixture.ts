@@ -60,14 +60,14 @@ import { isGameInCfbWeeklyWindow, resolveCfbForwardWindow } from "./cfbWeeklyWin
 import { cfbFootballEvidenceStats } from "./footballMemberEvidence";
 import { CFB_MARKET_SHARP_AWARE_PRODUCTION_RELEASE } from "./cfbMarketSharpAwareShadow";
 import { cfbTeamIdentity } from "./cfbTeamIdentity";
+import { CFB_PUBLIC_SCORE_DIRECTION_TOLERANCE_POINTS } from "./footballCrossMarketCoherence";
 
 export const CFB_MEMBER_FIXTURE_RELEASE =
-  "cfb_v1_member_fixture_2026_09_02_r42_total_publication_coherence" as const;
+  "cfb_v1_member_fixture_2026_09_03_r43_narrow_mean_median_publication" as const;
 export const CFB_PUBLIC_OUTCOME_CONTRACT_RELEASE =
-  "cfb_market_sharp_public_outcome_contract_2026_09_02_r42_total_publication_coherence" as const;
+  "cfb_market_sharp_public_outcome_contract_2026_09_03_r43_narrow_mean_median_publication" as const;
 export const CFB_CONTEXT_ONLY_QUOTE_CAPTURE_SKEW_MS = 5_000 as const;
 const CFB_MARKET_CONTEXT_MAX_CAPTURE_LAG_MINUTES = 10;
-const CFB_PUBLIC_SCORE_DIRECTION_TOLERANCE_POINTS = 0.25;
 const CFB_PRE_DIRECTIONAL_MEMBER_RELEASE = "cfb_v1_member_release_2026_08_28_r14_expanded_sharp_budget" as const;
 const CFB_PRE_DIRECTIONAL_DECISION_RELEASE = "cfb_v1_daily_edge_decision_2026_08_28_r11_market_scoped_data_quality" as const;
 const CFB_AMBIGUOUS_SCOPE_PREVIOUS_MEMBER_RELEASE = "cfb_v1_member_release_2026_08_28_r19_ambiguous_event_scope" as const;

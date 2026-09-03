@@ -327,7 +327,7 @@ assert.deepEqual(trustedCfbSharpEventIdsByGame([trustedSharpRow, {
 }]), {}, "conflicting immutable provider IDs must disable prior-event disambiguation");
 const member = buildCfbMemberFixture([evidence]);
 assert.equal(member.snapshot.games.length, 1);
-assert.equal(member.fixtureRelease, "cfb_v1_member_fixture_2026_09_02_r42_total_publication_coherence");
+assert.equal(member.fixtureRelease, "cfb_v1_member_fixture_2026_09_03_r43_narrow_mean_median_publication");
 assert.equal(member.snapshot.games[0]!.collegeFootballScope, "fbs_involved", "the CFB reader must classify every member game for the FBS-first board without changing writer scope");
 assert.equal(member.snapshot.games[0]!.awayTeamDisplayName, game.away.name);
 assert.equal(member.snapshot.games[0]!.homeTeamDisplayName, game.home.name);
@@ -393,9 +393,9 @@ const ualbLikeDecision = {
 const ualbLikeForecast = {
   ...payload.decisions.forecast,
   expectedAwayPoints: 14.5,
-  expectedHomePoints: 34.2,
-  expectedTotal: 48.7,
-  representativeScore: { away: 14.5, home: 34.2 },
+  expectedHomePoints: 34.32770674927421,
+  expectedTotal: 48.82770674927421,
+  representativeScore: { away: 14.5, home: 34.32770674927421 },
 };
 const ualbLikeSplits = structuredClone(payload.market.playbookSplits!);
 ualbLikeSplits.total = {
@@ -446,7 +446,7 @@ const ualbLikePayload = {
     },
     trackingEnabled: false,
   },
-  independentForecast: { ...payload.independentForecast!, expectedAwayPoints: 14.5, expectedHomePoints: 34.2, expectedTotal: 48.7, representativeScore: { away: 14.5, home: 34.2 } },
+  independentForecast: { ...payload.independentForecast!, expectedAwayPoints: 14.5, expectedHomePoints: 34.32770674927421, expectedTotal: 48.82770674927421, representativeScore: { away: 14.5, home: 34.32770674927421 } },
   coverage: { ...payload.coverage, comparableCurrentBookCount: 6, sharpApiSplits: false, healthHolds: [], availabilityWarnings: ["injury_feed_unavailable", "sharpapi_splits_unavailable"] },
 } as unknown as CfbForwardEvidencePayload;
 const ualbLikeRow: CfbForwardStoredEvidence = {
@@ -476,7 +476,7 @@ assert.equal(ualbLikeTotal.publicSplits[0]?.moneyPct, 53);
 assert.equal(ualbLikeTotal.publicSplits[0]?.betsPct, 43);
 assert.equal(ualbLikeTotal.sharpBookAvailability?.status, "pending");
 assert.equal(ualbLikeMember.snapshot.games[0]!.footballProjection?.expectedAwayPoints, 14.5);
-assert.equal(ualbLikeMember.snapshot.games[0]!.footballProjection?.expectedHomePoints, 34.2);
+assert.equal(ualbLikeMember.snapshot.games[0]!.footballProjection?.expectedHomePoints, 34.32770674927421);
 
 const publicationTransitionCapturedAt = "2026-09-02T12:00:00.000Z";
 const publicationTransitionStartAt = "2026-09-06T17:00:00.000Z";
@@ -1532,6 +1532,7 @@ assert.ok(sharpSplitsIndex >= 0 && evidenceAppendIndex > sharpSplitsIndex, "the 
 assert.ok(coherenceIndex >= 0 && evidenceAppendIndex > coherenceIndex, "the sole CFB writer must pass coherence before its append boundary");
 assert.equal((writerSource.match(/assertFootballCrossMarketCoherence\(\{/g) ?? []).length, 1, "the CFB writer must use one shared per-payload coherence gate");
 assert.match(writerSource, /requireDecisionSideFromForecast: true/, "the CFB writer must fail closed on an exact-line PMF/decision-side contradiction");
+assert.match(writerSource, /publicScoreDirectionTolerancePoints: CFB_PUBLIC_SCORE_DIRECTION_TOLERANCE_POINTS/, "the CFB writer must apply the publication contract's narrow 0.5-point mean/median tolerance");
 assert.equal((writerSource.match(/fetchCfbSharpApiSplits\(\{ games, apiKey/g) ?? []).length, 1, "SharpAPI splits must remain one bounded slate request rather than a per-game loop");
 assert.match(writerSource, /buildCfbMarketSharpAwareForecast/, "the sole writer must build the bounded market\/sharp-aware authoritative PMF");
 assert.match(writerSource, /applyCfbMarketSharpAwareGrades/, "the sole writer must own balanced market\/sharp-aware grade promotion and demotion");

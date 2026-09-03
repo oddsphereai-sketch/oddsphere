@@ -44,11 +44,14 @@ import {
 import { fetchCfbSharpApiSplits } from "./cfbSharpApiSplits";
 import { collectCfbKickoffWeather, type CfbKickoffWeatherSnapshot } from "./cfbKickoffWeather";
 import { buildMarketScopedFootballTrackingPlan } from "./footballMarketScopedTracking";
-import { assertFootballCrossMarketCoherence } from "./footballCrossMarketCoherence";
+import {
+  assertFootballCrossMarketCoherence,
+  CFB_PUBLIC_SCORE_DIRECTION_TOLERANCE_POINTS,
+} from "./footballCrossMarketCoherence";
 import { buildCfbForwardContextCapture } from "./cfbForwardEvidenceCapture";
 
 export const CFB_FORWARD_WRITER_RELEASE =
-  "cfb_forward_evidence_writer_2026_09_02_r40_total_publication_coherence" as const;
+  "cfb_forward_evidence_writer_2026_09_03_r41_narrow_mean_median_publication" as const;
 export const CFB_FORWARD_MAX_QB_TEAMS_PER_RUN = 24 as const;
 export const CFB_FORWARD_RESULTS_BATCH_SIZE = 100 as const;
 export const CFB_FORWARD_MAX_PRIOR_GAME_IDS = 1200 as const;
@@ -293,6 +296,7 @@ export async function runCfbForwardEvidenceWriter(args: {
       unavailableMarkets: decisions.heldMarkets.map((market) => market.market),
       requireDecisionSideFromForecast: true,
       allowPmfVerifiedProbabilityEndpoints: true,
+      publicScoreDirectionTolerancePoints: CFB_PUBLIC_SCORE_DIRECTION_TOLERANCE_POINTS,
     });
     const targetExcludedConsensusReady = decisions.evaluatedBets.length === 3;
     const payload: CfbForwardEvidencePayload = {
