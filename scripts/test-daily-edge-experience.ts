@@ -786,6 +786,15 @@ check(
     !liveRefreshSource.includes("window.location.replace"),
 );
 check(
+  "a resolved unavailable football refresh retains the mounted last-known-good board without masking a cold failure",
+  candidateDailyEdgeSource.includes("lastGoodFootballReader") &&
+    candidateDailyEdgeSource.includes('snapshot.games.length === 0 && weeklySlate?.unavailable === true') &&
+    candidateDailyEdgeSource.includes("lastGoodFootballReader?.sport === sport") &&
+    candidateDailyEdgeSource.includes("setLastGoodFootballReader({ sport, snapshot, weeklySlate })") &&
+    candidateDailyEdgeSource.includes("retainedFootballReader?.snapshot ?? snapshot") &&
+    candidateDailyEdgeSource.includes("retainedFootballReader?.weeklySlate ?? weeklySlate"),
+);
+check(
   "member Daily Edge is request-rendered so refreshes cannot reuse a deployment-time slate",
   dailyEdgeRouteSource.includes('import { connection } from "next/server"') &&
     dailyEdgeRouteSource.includes("await connection()") &&
@@ -1663,6 +1672,13 @@ check(
     candidateDailyEdgeSource.includes("game.homeTeamPrimaryColor") &&
     candidateDailyEdgeSource.includes("<CompactMatchupIdentity game={game} sport={sport} />") &&
     candidateDailyEdgeSource.includes("primaryColor={memberTeamColor(game, role, sport)}"),
+);
+check(
+  "long football names wrap inside fixed reader cards without shrinking the shared surface",
+  candidateDailyEdgeSource.includes('className="flex min-w-0 items-center gap-2"') &&
+    candidateDailyEdgeSource.includes('className="min-w-0 break-words text-base font-black leading-5 tracking-tight text-white"') &&
+    candidateDailyEdgeSource.includes('grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-stretch gap-2') &&
+    !candidateDailyEdgeSource.includes('grid-cols-[1fr_auto_1fr] items-stretch gap-2'),
 );
 check(
   "the CFB board balances abbreviations with full names and supports instant game finding",

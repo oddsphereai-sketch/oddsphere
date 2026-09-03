@@ -172,7 +172,25 @@ export default function ActualDailyEdgePreview({
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const displaySnapshot = useMemo(() => normalizeCandidatePicks(snapshot, sport), [snapshot, sport]);
+  const [lastGoodFootballReader, setLastGoodFootballReader] = useState<{
+    sport: Sport;
+    snapshot: DailyEdgeResponse;
+    weeklySlate?: WeeklySlatePreview;
+  } | null>(() => (sport === "nfl" || sport === "cfb") && snapshot.games.length > 0
+    ? { sport, snapshot, weeklySlate }
+    : null);
+  const incomingFootballReadUnavailable = (sport === "nfl" || sport === "cfb") &&
+    snapshot.games.length === 0 && weeklySlate?.unavailable === true;
+  const retainedFootballReader = incomingFootballReadUnavailable &&
+    lastGoodFootballReader?.sport === sport
+    ? lastGoodFootballReader
+    : null;
+  if ((sport === "nfl" || sport === "cfb") && snapshot.games.length > 0 && lastGoodFootballReader?.snapshot !== snapshot) {
+    setLastGoodFootballReader({ sport, snapshot, weeklySlate });
+  }
+  const renderedSnapshot = retainedFootballReader?.snapshot ?? snapshot;
+  const renderedWeeklySlate = retainedFootballReader?.weeklySlate ?? weeklySlate;
+  const displaySnapshot = useMemo(() => normalizeCandidatePicks(renderedSnapshot, sport), [renderedSnapshot, sport]);
   const requestedGameId = searchParams.get("game");
   const requestedMarket = searchParams.get("market");
   const [cfbBoardScope, setCfbBoardScope] = useState<CfbBoardScope>(() =>
@@ -330,7 +348,7 @@ export default function ActualDailyEdgePreview({
   }, [displaySnapshot.date, displaySnapshot.games, embeddedSample, sport]);
 
   if (!game) {
-    return <div className="space-y-5 pb-16"><SlateHeader snapshot={displaySnapshot} sport={sport} onSportChange={switchSport} onSportPrefetch={prefetchSport} soccerCompetition={soccerCompetition} weeklySlate={weeklySlate} reviewMode={reviewMode} activePreviewSports={activePreviewSports} />{nflWeekOneEvidenceBoard ? <NflWeekOneEvidenceMonitor board={nflWeekOneEvidenceBoard} /> : sport === "nfl" && weeklySlate ? <NflWeekOneEvidenceUnavailable /> : weeklySlate?.unavailable ? <WeeklySlateEvidenceUnavailable sport={sport} /> : <EmptyPreview sport={sport} displayLabel={soccerCompetition?.label} />}</div>;
+    return <div className="space-y-5 pb-16"><SlateHeader snapshot={displaySnapshot} sport={sport} onSportChange={switchSport} onSportPrefetch={prefetchSport} soccerCompetition={soccerCompetition} weeklySlate={renderedWeeklySlate} reviewMode={reviewMode} activePreviewSports={activePreviewSports} />{nflWeekOneEvidenceBoard ? <NflWeekOneEvidenceMonitor board={nflWeekOneEvidenceBoard} /> : sport === "nfl" && renderedWeeklySlate ? <NflWeekOneEvidenceUnavailable /> : renderedWeeklySlate?.unavailable ? <WeeklySlateEvidenceUnavailable sport={sport} /> : <EmptyPreview sport={sport} displayLabel={soccerCompetition?.label} />}</div>;
   }
 
   const market = game.markets[marketKey];
@@ -406,7 +424,7 @@ export default function ActualDailyEdgePreview({
 
   return (
     <div className="space-y-5 pb-16">
-      <SlateHeader snapshot={displaySnapshot} sport={sport} onSportChange={switchSport} onSportPrefetch={prefetchSport} sample={embeddedSample} soccerCompetition={soccerCompetition} weeklySlate={weeklySlate} reviewMode={reviewMode} activePreviewSports={activePreviewSports} />
+      <SlateHeader snapshot={displaySnapshot} sport={sport} onSportChange={switchSport} onSportPrefetch={prefetchSport} sample={embeddedSample} soccerCompetition={soccerCompetition} weeklySlate={renderedWeeklySlate} reviewMode={reviewMode} activePreviewSports={activePreviewSports} />
 
       <div ref={readerRef} className="hidden scroll-mt-4 sm:block">
         {readerOpen ? <div>
@@ -414,7 +432,7 @@ export default function ActualDailyEdgePreview({
         </div> : <CollapsedReader game={game} market={market} marketKey={marketKey} sport={sport} onOpen={() => selectGame(game, marketKey)} onOpenMarket={(nextMarket) => selectGame(game, nextMarket)} index={scopedGameIndex} total={scopedGames.length} />}
       </div>
 
-      <EdgeBoard games={scopedGames} sport={sport} activeId={game.id} activeMarket={marketKey} selectGame={selectGame} groupByDay={Boolean(weeklySlate)} cfbScopeControl={cfbScopeControl} />
+      <EdgeBoard games={scopedGames} sport={sport} activeId={game.id} activeMarket={marketKey} selectGame={selectGame} groupByDay={Boolean(renderedWeeklySlate)} cfbScopeControl={cfbScopeControl} />
 
       {mobileSheetOpen ? (
         <MobileReaderSheet game={game} market={market} marketKey={marketKey} sport={sport} history={history} pitcherFirstInningHistory={pitcherFirstInningHistory} availability={availability[game.id] ?? null} sample={sample} setSample={setSample} deepOpen={deepOpen} setDeepOpen={setDeepOpen} deepView={deepView} setDeepView={setDeepView} setMarket={selectMarket} onClose={collapseReader} onSportChange={switchSport} onSportPrefetch={prefetchSport} activePreviewSports={activePreviewSports} soccerCompetition={soccerCompetition} onPrev={scopedGameIndex > 0 ? () => selectAdjacentGame(-1) : null} onNext={scopedGameIndex < scopedGames.length - 1 ? () => selectAdjacentGame(1) : null} index={scopedGameIndex} total={scopedGames.length} />
@@ -907,9 +925,9 @@ function QuickMatchupIdentity({ game, sport }: { game: DailyEdgeGameDto; sport: 
   const side = (role: "away" | "home", starter: DailyEdgeGameDto["awayStarter"]) => {
     const team = role === "away" ? game.awayTeam : game.homeTeam;
     const logo = role === "away" ? game.awayTeamLogo : game.homeTeamLogo;
-    return <div className="min-w-0 rounded-lg border border-white/[0.08] bg-black/25 p-3"><div className="flex items-center gap-2"><TeamLogo key={team} src={logo} label={team} sport={sport} primaryColor={memberTeamColor(game, role, sport)} /><p className="break-words text-base font-black leading-5 tracking-tight text-white">{memberTeamName(game, role, sport)}</p></div>{sport === "mlb" ? <div className="mt-3 border-t border-white/[0.07] pt-2"><p className="text-[7px] font-black uppercase tracking-[0.15em] text-gray-600">Probable starter</p><p className="mt-1 truncate text-[12px] font-black text-gray-100">{starter?.name ?? "Starter TBD"}</p><span className="mt-1 inline-flex rounded border border-gray-700 bg-gray-800/60 px-1.5 py-0.5 text-[7px] font-black uppercase tracking-wider text-gray-400">{starter?.throws ? `${starter.throws}HP` : "Hand unknown"}</span></div> : <p className="mt-3 border-t border-white/[0.07] pt-2 text-[8px] font-bold uppercase tracking-[0.14em] text-gray-600">{team} · {sportLabel(sport)} matchup</p>}</div>;
+    return <div className="min-w-0 rounded-lg border border-white/[0.08] bg-black/25 p-3"><div className="flex min-w-0 items-center gap-2"><TeamLogo key={team} src={logo} label={team} sport={sport} primaryColor={memberTeamColor(game, role, sport)} /><p className="min-w-0 break-words text-base font-black leading-5 tracking-tight text-white">{memberTeamName(game, role, sport)}</p></div>{sport === "mlb" ? <div className="mt-3 border-t border-white/[0.07] pt-2"><p className="text-[7px] font-black uppercase tracking-[0.15em] text-gray-600">Probable starter</p><p className="mt-1 truncate text-[12px] font-black text-gray-100">{starter?.name ?? "Starter TBD"}</p><span className="mt-1 inline-flex rounded border border-gray-700 bg-gray-800/60 px-1.5 py-0.5 text-[7px] font-black uppercase tracking-wider text-gray-400">{starter?.throws ? `${starter.throws}HP` : "Hand unknown"}</span></div> : <p className="mt-3 border-t border-white/[0.07] pt-2 text-[8px] font-bold uppercase tracking-[0.14em] text-gray-600">{team} · {sportLabel(sport)} matchup</p>}</div>;
   };
-  return <div><div className="mb-2 flex items-center justify-between"><p className="text-[8px] font-black uppercase tracking-[0.16em] text-emerald-200">Matchup</p><span className="text-[8px] font-black text-gray-600">{game.awayTeam} @ {game.homeTeam}</span></div><div className="grid grid-cols-[1fr_auto_1fr] items-stretch gap-2">{side("away", game.awayStarter)}<span className="self-center text-[9px] font-black text-gray-700">AT</span>{side("home", game.homeStarter)}</div></div>;
+  return <div><div className="mb-2 flex items-center justify-between"><p className="text-[8px] font-black uppercase tracking-[0.16em] text-emerald-200">Matchup</p><span className="text-[8px] font-black text-gray-600">{game.awayTeam} @ {game.homeTeam}</span></div><div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-stretch gap-2">{side("away", game.awayStarter)}<span className="self-center text-[9px] font-black text-gray-700">AT</span>{side("home", game.homeStarter)}</div></div>;
 }
 
 function IntegratedEvidence({ game, market, marketKey, sport, availability }: { game: DailyEdgeGameDto; market: MarketEdgeDto; marketKey: MarketKey; sport: Sport; availability: DailyEdgeGameAvailability | null }) {
