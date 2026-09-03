@@ -3164,6 +3164,58 @@ export const MLB_MARKET_AWARE_CORRECTED_GRADE_RULE_ID =
   "mlb_market_aware_corrected_grade_v4_2026_07_20";
 export const MLB_MONEYLINE_MARKET_CONTEXT_SIDE_POLICY_RULE_ID =
   "mlb_moneyline_market_context_grade_only_v1_2026_08_17";
+export const MLB_FULL_GAME_PUBLICATION_COHERENCE_RULE_ID =
+  "mlb_full_game_publication_coherence_v1_2026_09_02" as const;
+
+export function resolveMlbFullGamePublicationCoherence(args: {
+  market: "moneyline" | "total";
+  authoritativeSide: "home" | "away" | "over" | "under" | null;
+  candidateSide: "home" | "away" | "over" | "under" | null;
+  authoritativeOdds: number | null;
+  authoritativeConfidence: number | null;
+  authoritativeModelProbability: number | null;
+  authoritativeMarketProbability: number | null;
+  authoritativeEdgePp: number | null;
+}): {
+  ruleId: typeof MLB_FULL_GAME_PUBLICATION_COHERENCE_RULE_ID;
+  applied: boolean;
+  standDownReason: "opposite_side_candidate_rejected_for_publication_coherence" | null;
+  rejectedCandidateSide: typeof args.candidateSide;
+  side: typeof args.authoritativeSide;
+  odds: number | null;
+  confidence: number | null;
+  modelProbability: number | null;
+  marketProbability: number | null;
+  edgePp: number | null;
+} {
+  const allowed = args.market === "moneyline"
+    ? new Set(["home", "away"])
+    : new Set(["over", "under"]);
+  const authoritativeSide = args.authoritativeSide !== null && allowed.has(args.authoritativeSide)
+    ? args.authoritativeSide
+    : null;
+  const candidateSide = args.candidateSide !== null && allowed.has(args.candidateSide)
+    ? args.candidateSide
+    : null;
+  const applied =
+    authoritativeSide !== null &&
+    candidateSide !== null &&
+    authoritativeSide !== candidateSide;
+  return {
+    ruleId: MLB_FULL_GAME_PUBLICATION_COHERENCE_RULE_ID,
+    applied,
+    standDownReason: applied
+      ? "opposite_side_candidate_rejected_for_publication_coherence"
+      : null,
+    rejectedCandidateSide: candidateSide,
+    side: authoritativeSide,
+    odds: args.authoritativeOdds,
+    confidence: args.authoritativeConfidence,
+    modelProbability: args.authoritativeModelProbability,
+    marketProbability: args.authoritativeMarketProbability,
+    edgePp: args.authoritativeEdgePp,
+  };
+}
 
 type MlbMarketAwareSideCorrectionInput = {
   market: "moneyline" | "total";
@@ -3553,6 +3605,41 @@ function buildMlRecord(
       finalMlPick,
     );
   }
+  const mlPublicationCoherence = resolveMlbFullGamePublicationCoherence({
+    market: "moneyline",
+    authoritativeSide:
+      pred.predicted_ml_winner === "home" || pred.predicted_ml_winner === "away"
+        ? pred.predicted_ml_winner
+        : null,
+    candidateSide:
+      finalMlPick === "home" || finalMlPick === "away" ? finalMlPick : null,
+    authoritativeOdds: mlOddsAmerican,
+    authoritativeConfidence: pred.ml_confidence,
+    authoritativeModelProbability: mlModelProb,
+    authoritativeMarketProbability: mlMarketProb,
+    authoritativeEdgePp: mlEdgePp,
+  });
+  if (mlPublicationCoherence.applied) {
+    finalMlPick = mlPublicationCoherence.side;
+    finalMlOdds = mlPublicationCoherence.odds;
+    finalMlConfidence = mlPublicationCoherence.confidence;
+    finalMlModelProb = mlPublicationCoherence.modelProbability;
+    finalMlMarketProb = mlPublicationCoherence.marketProbability;
+    finalMlEdge = mlPublicationCoherence.edgePp;
+    finalMlLineMovement = mlLineMovement;
+    finalMlLineDirection = readLineDirection(finalMlLineMovement);
+    finalMlPublicSplitConflict = hasOpposingPublicMoneyConflict(
+      signalsForGame,
+      "moneyline",
+      finalMlPick,
+    );
+    mlMarketContextSidePolicy = resolveMlbMoneylineMarketContextSidePolicy({
+      side: finalMlPick,
+      lineDirection: finalMlLineDirection,
+      publicSplitConflict: finalMlPublicSplitConflict,
+      distanceCapApplied: readBoolish(v22.ml_distance_cap_applied),
+    });
+  }
   // The probability head remains anchored to its verified two-sided market
   // baseline, but an unlocked recommendation must be evaluated at a quote a
   // member can actually play. The reader already price-shops with this same
@@ -3688,6 +3775,7 @@ function buildMlRecord(
     publicSplitConflict: finalMlPublicSplitConflict,
   });
   const mlChampionCorrectionReasons = [
+    mlPublicationCoherence.standDownReason,
     mlRawSideChampionApplied ? "raw_side_champion_action_not_independently_qualified" : null,
     mlChampionGuardApplies && mlProjectionConflict ? "projected_score_contradicts_ml_pick" : null,
     mlChampionGuardApplies && readBoolish(v22.ml_requires_market_confirmation) ? "ml_requires_market_confirmation" : null,
@@ -3767,7 +3855,7 @@ function buildMlRecord(
     !mlNoBet &&
     mlInversionGrade.actionable;
   const mlPublicPlayGrade = readPublicPlayGrade(sp.ml_play_grade);
-  const mlMarketAwareCorrectedGrade = mlMarketSideCorrected
+  const mlMarketAwareCorrectedGrade = mlMarketSideCorrected && !mlPublicationCoherence.applied
     ? resolveMlbMarketAwareCorrectedPlayGrade({
         market: "moneyline",
         correctedOdds: finalMlOdds,
@@ -4051,6 +4139,12 @@ function buildMlRecord(
         market_aware_correction_applied: mlMarketSideCorrected,
         raw_side_champion_applied: mlRawSideChampionApplied,
         raw_side_champion_rule_id: mlRawSideChampion.applied ? mlRawSideChampion.ruleId : null,
+        publication_coherence_rule_id: mlPublicationCoherence.ruleId,
+        publication_coherence_applied: mlPublicationCoherence.applied,
+        publication_coherence_rejected_candidate_side:
+          mlPublicationCoherence.applied
+            ? mlPublicationCoherence.rejectedCandidateSide
+            : null,
         board_action:
           mlTrueInversionActionable || mlChampionAction.actionable
             ? "bet"
@@ -4830,6 +4924,31 @@ function buildOuRecord(
     );
     ouLineDirection = readLineDirection(finalOuLineMovement);
   }
+  const ouPublicationCoherence = resolveMlbFullGamePublicationCoherence({
+    market: "total",
+    authoritativeSide:
+      pred.predicted_ou_side === "over" || pred.predicted_ou_side === "under"
+        ? pred.predicted_ou_side
+        : null,
+    candidateSide:
+      finalOuPick === "over" || finalOuPick === "under" ? finalOuPick : null,
+    authoritativeOdds: ouOddsAmerican,
+    authoritativeConfidence: pred.ou_confidence,
+    authoritativeModelProbability: ouModelProb,
+    authoritativeMarketProbability: ouMarketProb,
+    authoritativeEdgePp: ouEdgePp,
+  });
+  if (ouPublicationCoherence.applied) {
+    finalOuPick = ouPublicationCoherence.side;
+    finalOuOdds = ouPublicationCoherence.odds;
+    finalOuBetLine = ouBetLine;
+    finalOuConfidence = ouPublicationCoherence.confidence;
+    finalOuModelProb = ouPublicationCoherence.modelProbability;
+    finalOuMarketProb = ouPublicationCoherence.marketProbability;
+    finalOuEdge = ouPublicationCoherence.edgePp;
+    finalOuLineMovement = ouLineMovement;
+    ouLineDirection = readLineDirection(finalOuLineMovement);
+  }
   const ouBaseBestAngle = ouDivergenceStandDown || ouRawProjectionChampionApplied
     ? false
     : ouBest.bestAngle;
@@ -4909,11 +5028,13 @@ function buildOuRecord(
     splitPairComplete: ouValidatedSharpPublicSplit.pairComplete,
     dataQualityTier: readStringOrNull(sp.v2_data_quality_tier),
   });
-  const ouChampionStandDownReason = ouRawProjectionChampionApplied
-    ? "raw_total_projection_champion_side_changed_action_not_independently_qualified"
-    : ouProjectionConflict && !ouMeanSelectorOriginalUnderLean.lean
-      ? "champion_candidate_total_projection_conflict: projected_total_contradicts_total_pick"
-      : null;
+  const ouChampionStandDownReason = ouPublicationCoherence.standDownReason !== null
+    ? ouPublicationCoherence.standDownReason
+    : ouRawProjectionChampionApplied
+      ? "raw_total_projection_champion_side_changed_action_not_independently_qualified"
+      : ouProjectionConflict && !ouMeanSelectorOriginalUnderLean.lean
+        ? "champion_candidate_total_projection_conflict: projected_total_contradicts_total_pick"
+        : null;
   const ouNoBet =
     ouMissingActionableMarket ||
     ouChampionStandDownReason !== null ||
@@ -4926,7 +5047,8 @@ function buildOuRecord(
     : ouChampionStandDownReason ?? explicitOuNoBetReason;
   const ouPublicSplitSupport = hasSupportingPublicMoneyConfirmation(signalsForGame, "total", finalOuPick);
   const ouPickedPublicSplit = pickedPublicSplit(signalsForGame, "total", finalOuPick);
-  const ouMarketAwareCorrectedGrade = ouMarketSideCorrected && ouCorrectionAccepted
+  const ouMarketAwareCorrectedGrade =
+    ouMarketSideCorrected && ouCorrectionAccepted && !ouPublicationCoherence.applied
     ? resolveMlbMarketAwareCorrectedPlayGrade({
         market: "total",
         correctedOdds: finalOuOdds,
@@ -5128,6 +5250,12 @@ function buildOuRecord(
           : null,
         raw_projection_market_residual: ouRawProjectionChampion.projectedMarketResidual ?? null,
         raw_projection_over_probability: ouRawProjectionChampion.overProbability ?? null,
+        publication_coherence_rule_id: ouPublicationCoherence.ruleId,
+        publication_coherence_applied: ouPublicationCoherence.applied,
+        publication_coherence_rejected_candidate_side:
+          ouPublicationCoherence.applied
+            ? ouPublicationCoherence.rejectedCandidateSide
+            : null,
         correction_rule_id: ouCorrectionRuleId,
         correction_kind: ouCorrectionKind,
         correction_mode: ouCorrectionRejected ? "reject_candidate_evaluate_original" : "none",

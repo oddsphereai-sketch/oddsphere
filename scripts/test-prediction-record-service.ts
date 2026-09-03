@@ -34,6 +34,7 @@ import {
   GATE_TOTAL_UNDER_BEST_ANGLE_MIN_MODEL_PROB,
   GATE_TOTAL_OVER_BEST_ANGLE_MIN_MODEL_PROB,
   MLB_MARKET_AWARE_SIDE_CORRECTION_RULE_ID,
+  MLB_FULL_GAME_PUBLICATION_COHERENCE_RULE_ID,
   MLB_MONEYLINE_MARKET_CONTEXT_SIDE_POLICY_RULE_ID,
   ML_CALIBRATED_MODEL_LEAN_PATH_ID,
   ML_MARKET_DIVERGENCE_LEAN_RULE_ID,
@@ -55,6 +56,7 @@ import {
   resolveMlCoherentNearEdgeWatchlist,
   resolveMlTightMarketPriceBestAngle,
   resolveMlbMarketAwareSideCorrection,
+  resolveMlbFullGamePublicationCoherence,
   resolveMlbMoneylineMarketContextSidePolicy,
   shouldApplyAuthoritativeFiPrediction,
 } from "../lib/services/predictionRecordService";
@@ -104,6 +106,56 @@ const failures: string[] = [];
 function check(label: string, ok: boolean, detail?: string): void {
   if (ok) { pass++; console.log(`  ✓ ${label}`); }
   else { fail++; failures.push(`${label}${detail ? ` — ${detail}` : ""}`); console.log(`  ✗ ${label}${detail ? ` — ${detail}` : ""}`); }
+}
+
+console.log("\n━━━ MLB full-game publication coherence ━━━");
+{
+  const moneyline = resolveMlbFullGamePublicationCoherence({
+    market: "moneyline",
+    authoritativeSide: "home",
+    candidateSide: "away",
+    authoritativeOdds: -130,
+    authoritativeConfidence: 58,
+    authoritativeModelProbability: 0.58,
+    authoritativeMarketProbability: 0.55,
+    authoritativeEdgePp: 3,
+  });
+  check("downstream Moneyline candidate cannot oppose the score winner",
+    moneyline.applied && moneyline.side === "home" &&
+    moneyline.rejectedCandidateSide === "away" &&
+    moneyline.ruleId === MLB_FULL_GAME_PUBLICATION_COHERENCE_RULE_ID);
+  check("rejected opposite Moneyline candidate stands the authoritative side down",
+    moneyline.standDownReason === "opposite_side_candidate_rejected_for_publication_coherence");
+  check("Moneyline coherence retains the authoritative tuple",
+    moneyline.odds === -130 && moneyline.modelProbability === 0.58 &&
+    moneyline.marketProbability === 0.55 && moneyline.edgePp === 3);
+
+  const total = resolveMlbFullGamePublicationCoherence({
+    market: "total",
+    authoritativeSide: "under",
+    candidateSide: "over",
+    authoritativeOdds: -105,
+    authoritativeConfidence: 56,
+    authoritativeModelProbability: 0.56,
+    authoritativeMarketProbability: 0.51,
+    authoritativeEdgePp: 5,
+  });
+  check("downstream Total candidate cannot oppose the authoritative PMF side",
+    total.applied && total.side === "under" && total.rejectedCandidateSide === "over");
+  check("rejected opposite Total candidate stands the authoritative side down",
+    total.standDownReason === "opposite_side_candidate_rejected_for_publication_coherence");
+  const unchanged = resolveMlbFullGamePublicationCoherence({
+    market: "moneyline",
+    authoritativeSide: "away",
+    candidateSide: "away",
+    authoritativeOdds: 125,
+    authoritativeConfidence: 54,
+    authoritativeModelProbability: 0.54,
+    authoritativeMarketProbability: 0.45,
+    authoritativeEdgePp: 9,
+  });
+  check("already coherent publication remains unchanged",
+    !unchanged.applied && unchanged.side === "away" && unchanged.standDownReason === null);
 }
 
 console.log("\n━━━ MLB coherent best-playable Moneyline price ━━━");
