@@ -406,4 +406,61 @@ assert.match(readerSource, /marketsInScope\(\)/);
 assert.match(readerSource, /openingLabel: "Opening"/);
 assert.match(readerSource, /In preseason, expected participation and coach-managed rest must be verified separately/);
 
+assert.match(readerSource, /function FootballDecisionSummary/);
+assert.match(readerSource, /aria-label="Football decision summary"/);
+assert.match(readerSource, /dailyEdgeOutcomeForecastLabel\(\{ game, market, marketKey, sport \}\)/);
+assert.match(readerSource, /dailyEdgeExactPriceSelectionLabel\(\{ market, marketKey \}\)/);
+assert.match(readerSource, /market\.gradePriceAmerican \?\? market\.priceAmerican/);
+assert.match(readerSource, /Forecast and evaluated side agree/);
+assert.match(readerSource, /function FootballMarketSignalRail/);
+assert.match(readerSource, /label: "Model vs market"/);
+assert.match(readerSource, /label: "Same-book move"/);
+assert.match(readerSource, /label: "Public vs price"/);
+assert.match(readerSource, /label: "Verified sharp"/);
+assert.match(readerSource, /Public split · not sharp/);
+assert.match(readerSource, /No verified split yet/);
+assert.match(readerSource, /Historical only/);
+assert.doesNotMatch(readerSource, /\bRLM\b|reverse line movement/i);
+
+const americanImpliedPct = (american: number) => american < 0
+  ? (-american / (-american + 100)) * 100
+  : (100 / (american + 100)) * 100;
+const displayedGapPp = (modelProbability: number, marketProbabilityPct: number) =>
+  Number((modelProbability * 100 - marketProbabilityPct).toFixed(1));
+
+const neSeaReaderRegression = {
+  winner: "SEA",
+  winnerProbability: 0.636,
+  moneyline: { side: "SEA", price: -180, sportsbook: "DraftKings", marketProbabilityPct: 63.2, grade: "No Play", actionability: 32 },
+  spread: { side: "SEA -3.5", price: -109, sportsbook: "BetRivers", modelProbability: 0.538, marketProbabilityPct: 50.2, grade: "Lean", actionability: 62 },
+  total: { side: "Over 44.5", modelProbability: 0.515, grade: "No Play" },
+  selectedSideMove: { opening: -185, current: -180 },
+  public: { money: { side: "SEA", pct: 77 }, tickets: { side: "SEA", pct: 76 } },
+  sharpStatus: "Pending",
+} as const;
+assert.equal(neSeaReaderRegression.winner, neSeaReaderRegression.moneyline.side, "NE@SEA winner and ML evaluated side must remain coherent");
+assert.equal(displayedGapPp(neSeaReaderRegression.winnerProbability, neSeaReaderRegression.moneyline.marketProbabilityPct), 0.4, "NE@SEA ML must retain its +0.4pp gap");
+assert.equal(neSeaReaderRegression.moneyline.grade, "No Play", "NE@SEA short ML price remains a No Play");
+assert.equal(displayedGapPp(neSeaReaderRegression.spread.modelProbability, neSeaReaderRegression.spread.marketProbabilityPct), 3.6, "NE@SEA Spread must retain its +3.6pp gap");
+assert.equal(neSeaReaderRegression.spread.grade, "Lean", "NE@SEA Spread remains the actionable value lane");
+assert.ok(americanImpliedPct(neSeaReaderRegression.selectedSideMove.current) < americanImpliedPct(neSeaReaderRegression.selectedSideMove.opening), "NE@SEA -185 to -180 must read as market conviction easing");
+assert.ok(neSeaReaderRegression.selectedSideMove.current > neSeaReaderRegression.selectedSideMove.opening, "NE@SEA -185 to -180 must also read as improved bettor entry");
+assert.equal(neSeaReaderRegression.sharpStatus, "Pending", "NE@SEA pending sharp data must remain pending");
+
+const ualbBufReaderRegression = {
+  winner: "BUF",
+  winnerProbability: 0.891,
+  expectedScore: { away: 14.5, home: 34.2 },
+  total: { side: "Under 48.5", line: 48.5, modelProbability: 0.5044, marketProbabilityPct: 51.14, price: -110, sportsbook: "FanDuel", grade: "No Play", held: false },
+  public: { money: { side: "Over", pct: 53 }, tickets: { side: "Under", pct: 57 } },
+  sharpStatus: "Pending",
+} as const;
+assert.equal(ualbBufReaderRegression.expectedScore.away + ualbBufReaderRegression.expectedScore.home, 48.7, "UALB@BUF must preserve its 14.5–34.2 decimal score");
+assert.equal(ualbBufReaderRegression.total.side, "Under 48.5", "UALB@BUF must display the authoritative line-specific Total side");
+assert.equal(displayedGapPp(ualbBufReaderRegression.total.modelProbability, ualbBufReaderRegression.total.marketProbabilityPct), -0.7, "UALB@BUF must retain its negative selected-side price gap");
+assert.equal(ualbBufReaderRegression.total.grade, "No Play", "UALB@BUF exact -110 quote must remain a No Play");
+assert.equal(ualbBufReaderRegression.total.held, false, "UALB@BUF complete Total must remain available rather than reader-held");
+assert.notEqual(ualbBufReaderRegression.public.money.side, ualbBufReaderRegression.public.tickets.side, "UALB@BUF public money-ticket disagreement remains explicit");
+assert.equal(ualbBufReaderRegression.sharpStatus, "Pending", "UALB@BUF missing sharp splits must remain neutral and pending");
+
 console.log("Football product preview: provider-backed Week 1 prediction/grade reader plus legacy model and tracking boundaries passed");
