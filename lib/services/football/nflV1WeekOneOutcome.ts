@@ -22,15 +22,15 @@ export const NFL_V1_OUTCOME_PROBABILITY_RELEASE =
 export const NFL_V1_REPRESENTATIVE_SCORE_POLICY_RELEASE =
   "nfl_v1_representative_score_2026_08_23_r2" as const;
 export const NFL_V1_WEEKLY_OUTCOME_MODEL_RELEASE =
-  "nfl_v1_weekly_market_anchored_outcome_2026_09_01_r2_coherent_movement" as const;
+  "nfl_v1_weekly_market_anchored_outcome_2026_09_03_r3_target_excluded_forecast" as const;
 export const NFL_V1_WEEKLY_OUTCOME_DISTRIBUTION_RELEASE =
-  "nfl_pooled_discrete_residual_distribution_2026_09_01_r2_coherent_movement" as const;
+  "nfl_pooled_discrete_residual_distribution_2026_09_03_r3_target_excluded_forecast" as const;
 export const NFL_V1_WEEKLY_OUTCOME_PROBABILITY_RELEASE =
-  "nfl_v1_weekly_pooled_discrete_probability_2026_09_01_r2_coherent_movement" as const;
+  "nfl_v1_weekly_pooled_discrete_probability_2026_09_03_r3_target_excluded_forecast" as const;
 export const NFL_V1_MARKET_EVIDENCE_OUTCOME_RELEASE =
-  "nfl_v1_market_evidence_outcome_2026_09_01_r2_coherent_movement_circa_public" as const;
+  "nfl_v1_market_evidence_outcome_2026_09_03_r3_target_excluded_forecast" as const;
 export const NFL_V1_MARKET_EVIDENCE_REPRESENTATIVE_SCORE_RELEASE =
-  "nfl_v1_market_evidence_representative_score_2026_09_01_r1_coherent_movement" as const;
+  "nfl_v1_market_evidence_representative_score_2026_09_03_r2_target_excluded_forecast" as const;
 export const NFL_V1_MARKET_WEIGHT = 0.75 as const;
 export const NFL_V1_SHARP_SPLIT_MAX_SHIFT_POINTS = 1.5 as const;
 export const NFL_V1_PUBLIC_SPLIT_MAX_SHIFT_POINTS = 0.75 as const;
@@ -58,6 +58,15 @@ export type NflV1WeekOneOutcomeForecast = {
   totalDistribution: DiscreteDistribution;
   sourceExpectedAwayScore: number;
   sourceExpectedHomeScore: number;
+  targetExclusion?: {
+    release: "nfl_target_excluded_market_outcome_2026_09_03_r1";
+    status: "target_excluded_market" | "incumbent_fallback";
+    reason: "stable_complete_tuple" | "insufficient_or_unstable_target_free_evidence";
+    marginFamilyCount: number | null;
+    totalFamilyCount: number | null;
+    marginExcludedSportsbooks: string[];
+    totalExcludedSportsbooks: string[];
+  };
   marketEvidence?: {
     release: typeof NFL_V1_MARKET_EVIDENCE_OUTCOME_RELEASE;
     representativeScoreRelease: typeof NFL_V1_MARKET_EVIDENCE_REPRESENTATIVE_SCORE_RELEASE;

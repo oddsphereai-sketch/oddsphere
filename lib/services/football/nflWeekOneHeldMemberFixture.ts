@@ -40,7 +40,7 @@ import { nflFootballEvidenceStats } from "./footballMemberEvidence";
 import type { NflRegularSharpMarket, NflRegularSharpSplit } from "./sharpApiNflSplits";
 
 export const NFL_WEEK_ONE_HELD_MEMBER_FIXTURE_RELEASE =
-  "nfl_weekly_member_fixture_2026_09_01_r15_forecast_value_separation" as const;
+  "nfl_weekly_member_fixture_2026_09_03_r16_target_excluded_forecast" as const;
 
 const MODEL_RELEASE = NFL_V1_OUTCOME_MODEL_RELEASE;
 const DECISION_RELEASE = NFL_V1_ACTIONABLE_GRADE_DECISION_RELEASE;

@@ -31,6 +31,10 @@ import {
   NFL_V1_WEAK_EVIDENCE_REVERSAL_MINIMUM_ADVANTAGE,
   nflV1WeekOneLineProbabilities,
 } from "../lib/services/football/nflV1WeekOneOutcome";
+import {
+  resolveNflTargetExcludedMarketAnchor,
+  resolveNflTargetExcludedProduction,
+} from "../lib/services/football/nflTargetExcludedMarketOutcome";
 
 const providerGameId = "1392216";
 const awayTeam = "NE";
@@ -46,6 +50,86 @@ const comparableCurrentBooks = [
   quote("fanatics", -106, -114, -105, -115),
   quote("betrivers", -109, -111, -107, -113),
 ];
+const targetExcludedBooks = comparableCurrentBooks.map((book, index) => ({
+  ...book,
+  spread: { ...book.spread!, homeLine: [-3, -3.5, -3.5, -4, -4, -4.5][index]!, awayLine: -[-3, -3.5, -3.5, -4, -4, -4.5][index]! },
+  total: { ...book.total!, line: [44, 44.5, 44.5, 45, 45, 45.5][index]! },
+}));
+assert.deepEqual(resolveNflTargetExcludedMarketAnchor({
+  books: targetExcludedBooks,
+  marginExcludedSportsbooks: ["fanduel", "draftkings"],
+  totalExcludedSportsbooks: ["betmgm"],
+  evaluatedAt,
+}), {
+  release: "nfl_target_excluded_market_outcome_2026_09_03_r1",
+  homeMargin: 4,
+  total: 44.5,
+  marginFamilyCount: 4,
+  totalFamilyCount: 5,
+  marginExcludedSportsbooks: ["draftkings", "fanduel"],
+  totalExcludedSportsbooks: ["betmgm"],
+});
+assert.equal(resolveNflTargetExcludedMarketAnchor({
+  books: targetExcludedBooks,
+  marginExcludedSportsbooks: ["fanduel", "draftkings", "caesars", "betmgm"],
+  totalExcludedSportsbooks: [],
+  evaluatedAt,
+}), null, "fewer than three target-excluded margin families must use the independent PMF");
+assert.equal(resolveNflTargetExcludedMarketAnchor({
+  books: targetExcludedBooks,
+  marginExcludedSportsbooks: [],
+  totalExcludedSportsbooks: [],
+  evaluatedAt: "2026-08-25T13:22:00.000Z",
+}), null, "stale target-excluded landmarks cannot author the PMF");
+
+const targetExcludedProduction = resolveNflTargetExcludedProduction({
+  providerGameId,
+  awayTeam,
+  homeTeam,
+  gameStartsAt,
+  evaluatedAt,
+  baseOutcome: getNflV1WeekOneOutcomeForecast({ providerGameId, awayTeam, homeTeam }),
+  incumbentOutcome: getNflV1WeekOneOutcomeForecast({ providerGameId, awayTeam, homeTeam }),
+  current: targetExcludedBooks[0]!,
+  comparableCurrentBooks: targetExcludedBooks,
+  shadowMoneyline: {
+    ...shadow(),
+    footballProjection: { openingHomeMargin: 3.5, independentCorrection: 0.75, projectedHomeMargin: 4.25 },
+  },
+  playbookLine: null,
+  playbookSplits: null,
+  sharpSplits: null,
+});
+assert.equal(targetExcludedProduction.targetExclusion.status, "target_excluded_market");
+assert.equal(targetExcludedProduction.production.evaluatedBets.length, 3);
+for (const decision of targetExcludedProduction.production.evaluatedBets) {
+  const family = decision.evaluatedQuote.sportsbook.toLowerCase().replace(/[^a-z0-9]+/g, "");
+  const excluded = decision.market === "total"
+    ? targetExcludedProduction.targetExclusion.totalExcludedSportsbooks
+    : targetExcludedProduction.targetExclusion.marginExcludedSportsbooks;
+  assert.ok(excluded.includes(family), `final ${decision.market} target must be recorded as excluded`);
+}
+const targetExcludedFallback = resolveNflTargetExcludedProduction({
+  providerGameId,
+  awayTeam,
+  homeTeam,
+  gameStartsAt,
+  evaluatedAt,
+  baseOutcome: getNflV1WeekOneOutcomeForecast({ providerGameId, awayTeam, homeTeam }),
+  incumbentOutcome: getNflV1WeekOneOutcomeForecast({ providerGameId, awayTeam, homeTeam }),
+  current: targetExcludedBooks[0]!,
+  comparableCurrentBooks: targetExcludedBooks.slice(0, 3),
+  shadowMoneyline: {
+    ...shadow(),
+    footballProjection: { openingHomeMargin: 3.5, independentCorrection: 0.75, projectedHomeMargin: 4.25 },
+  },
+  playbookLine: null,
+  playbookSplits: null,
+  sharpSplits: null,
+});
+assert.equal(targetExcludedFallback.targetExclusion.status, "incumbent_fallback");
+assert.equal(targetExcludedFallback.outcome.expectedAwayScore, getNflV1WeekOneOutcomeForecast({ providerGameId, awayTeam, homeTeam }).expectedAwayScore);
+assert.equal(targetExcludedFallback.outcome.expectedHomeScore, getNflV1WeekOneOutcomeForecast({ providerGameId, awayTeam, homeTeam }).expectedHomeScore);
 
 const correction = getNflV1ActionableGradeCorrection({ providerGameId, awayTeam, homeTeam });
 const outcome = getNflV1WeekOneOutcomeForecast({ providerGameId, awayTeam, homeTeam });
@@ -198,7 +282,7 @@ const circaAway = buildNflMarketEvidenceOutcomeForecast({
   sharpSplits: sharpSplitSet({ homeMoneyPct: 20, homeBetsPct: 70 }),
   evaluatedAt,
 });
-assert.equal(NFL_V1_MARKET_EVIDENCE_OUTCOME_RELEASE, "nfl_v1_market_evidence_outcome_2026_09_01_r2_coherent_movement_circa_public");
+assert.equal(NFL_V1_MARKET_EVIDENCE_OUTCOME_RELEASE, "nfl_v1_market_evidence_outcome_2026_09_03_r3_target_excluded_forecast");
 assert.equal(NFL_V1_MARKET_WEIGHT, 0.75);
 assert.equal(NFL_V1_SHARP_SPLIT_MAX_SHIFT_POINTS, 1.5);
 assert.equal(NFL_V1_PUBLIC_SPLIT_MAX_SHIFT_POINTS, 0.75);

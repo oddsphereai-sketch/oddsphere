@@ -37,7 +37,6 @@ import { NFL_T60_MAX_CAPTURE_LAG_MINUTES } from "./nflRegularDecisionEvidence";
 import { buildNflR6ShadowMoneylineDecision } from "./nflR6MoneylineShadow";
 import { assertFootballCrossMarketCoherence } from "./footballCrossMarketCoherence";
 import {
-  buildNflV1ActionableGradeBundle,
   NFL_V1_ACTIONABLE_GRADE_DECISION_RELEASE,
   NFL_V1_ACTIONABLE_GRADE_MEMBER_RELEASE,
 } from "./nflV1ActionableGradeCandidate";
@@ -48,6 +47,9 @@ import {
   NFL_V1_WEEKLY_OUTCOME_MODEL_RELEASE,
   NFL_V1_WEEK_ONE_OUTCOME_ARTIFACT_RELEASE,
 } from "./nflV1WeekOneOutcome";
+import {
+  resolveNflTargetExcludedProduction,
+} from "./nflTargetExcludedMarketOutcome";
 import { buildNflForwardContextCapture } from "./nflForwardEvidenceCapture";
 import { nflForwardT60TrackingEligibility } from "./nflTrackingLifecycle";
 import {
@@ -62,7 +64,7 @@ import {
 } from "./nflForwardMemberSnapshotStore";
 
 export const NFL_FORWARD_WRITER_RELEASE =
-  "nfl_forward_evidence_writer_2026_09_01_r20_forecast_value_separation" as const;
+  "nfl_forward_evidence_writer_2026_09_03_r21_target_excluded_forecast" as const;
 
 export type NflForwardWriterResult = {
   writerRelease: typeof NFL_FORWARD_WRITER_RELEASE;
@@ -304,7 +306,7 @@ export async function runNflForwardEvidenceWriter(args: {
           }
         : undefined,
     });
-    const outcome = shadowMoneyline.footballProjection
+    const incumbentOutcome = shadowMoneyline.footballProjection
       ? buildNflMarketEvidenceOutcomeForecast({
           baseForecast: baseOutcome,
           footballHomeMargin: shadowMoneyline.footballProjection.projectedHomeMargin,
@@ -316,16 +318,22 @@ export async function runNflForwardEvidenceWriter(args: {
           evaluatedAt: args.now,
         })
       : baseOutcome;
-    const production = buildNflV1ActionableGradeBundle({
+    const resolved = resolveNflTargetExcludedProduction({
       providerGameId: plan.game.providerGameId,
       awayTeam: plan.game.away.abbreviation,
       homeTeam: plan.game.home.abbreviation,
       gameStartsAt: plan.game.scheduledStart,
+      evaluatedAt: args.now,
+      baseOutcome,
+      incumbentOutcome,
       current,
       comparableCurrentBooks,
       shadowMoneyline,
-      outcomeForecast: outcome,
+      playbookLine,
+      playbookSplits,
+      sharpSplits,
     });
+    const { outcome, production } = resolved;
     assertFootballCrossMarketCoherence({
       sport: "nfl",
       providerGameId: plan.game.providerGameId,
@@ -404,6 +412,7 @@ export async function runNflForwardEvidenceWriter(args: {
         operationalOpening: true, rosterAndDepth, expectedQuarterbacks,
         injuries: injuries !== null, playbookSplits: playbookCoverage,
         sharpApiSplits: sharpCoverage, weather: weatherCoverage, healthHolds: holds,
+        forecastTargetExclusion: resolved.targetExclusion,
       },
       requestBudget: {
         balldontlieSlate: slate.providerRequests, balldontlieRoster: rosters.requests,

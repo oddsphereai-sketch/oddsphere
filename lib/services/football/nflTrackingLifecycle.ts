@@ -14,10 +14,10 @@ import {
   NFL_V1_MARKET_EVIDENCE_TOTAL_MODEL_RELEASE,
 } from "./nflV1ActionableGradeCandidate";
 export const NFL_TRACKING_LIFECYCLE_RELEASE =
-  "nfl_tracking_lifecycle_2026_09_01_r8_forecast_value_separation" as const;
+  "nfl_tracking_lifecycle_2026_09_03_r9_target_excluded_forecast" as const;
 
 export const NFL_TRACKING_COMPOSITE_RELEASE_BUNDLE =
-  "nfl_tracking_composite_release_bundle_2026_09_01_r4_forecast_value_separation" as const;
+  "nfl_tracking_composite_release_bundle_2026_09_03_r5_target_excluded_forecast" as const;
 
 const NFL_TRACKING_MARKET_RELEASES = {
   moneyline: {
@@ -76,7 +76,7 @@ export type NflTrackingProposal = {
 };
 
 export const NFL_EVALUATED_TUPLE_TRACKING_BOUNDARY_RELEASE =
-  "nfl_evaluated_tuple_tracking_boundary_2026_09_01_r5_forecast_value_separation" as const;
+  "nfl_evaluated_tuple_tracking_boundary_2026_09_03_r6_target_excluded_forecast" as const;
 
 /**
  * Fail-closed production gate used by the single NFL forward writer before it

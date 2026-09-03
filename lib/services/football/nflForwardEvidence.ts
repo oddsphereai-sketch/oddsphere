@@ -144,7 +144,8 @@ export type NflForwardEvidencePayload = {
       | "nfl_v1_member_release_2026_08_28_r7_event_containment"
       | "nfl_v1_member_release_2026_08_31_r8_weekly_market_injury"
       | "nfl_v1_member_release_2026_08_31_r9_market_split_injury"
-      | "nfl_v1_member_release_2026_09_01_r11_forecast_value_separation";
+      | "nfl_v1_member_release_2026_09_01_r11_forecast_value_separation"
+      | "nfl_v1_member_release_2026_09_03_r12_target_excluded_forecast";
     publicationEnabled: true;
     /** True only after the authoritative regular/postseason T-60 boundary validates the complete tuple. */
     trackingEnabled: boolean;
@@ -162,6 +163,7 @@ export type NflForwardEvidencePayload = {
     sharpApiSplits: boolean;
     weather: boolean;
     healthHolds: string[];
+    forecastTargetExclusion?: NonNullable<NflV1WeekOneOutcomeForecast["targetExclusion"]>;
   };
   requestBudget: {
     balldontlieSlate: number;

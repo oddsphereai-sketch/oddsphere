@@ -29,9 +29,9 @@ export const NFL_V1_ACTIONABLE_GRADE_POLICY_RELEASE =
 export const NFL_V1_ACTIONABLE_GRADE_MEMBER_RELEASE =
   NFL_V1_MEMBER_RELEASE;
 export const NFL_V1_EVENT_CONTAINED_SPREAD_MODEL_RELEASE =
-  "nfl_v1_spread_event_contained_2026_09_01_r4_coherent_movement_evidence" as const;
+  "nfl_v1_spread_event_contained_2026_09_03_r5_target_excluded_forecast" as const;
 export const NFL_V1_MARKET_EVIDENCE_TOTAL_MODEL_RELEASE =
-  "nfl_v1_total_market_evidence_2026_09_01_r3_coherent_movement_evidence" as const;
+  "nfl_v1_total_market_evidence_2026_09_03_r4_target_excluded_forecast" as const;
 
 export const NFL_V1_MONEYLINE_BEST_ANGLE_MINIMUM_EXPECTED_VALUE = 0.02 as const;
 export const NFL_V1_MONEYLINE_BEST_ANGLE_MINIMUM_EDGE_PERCENTAGE_POINTS = 4.0 as const;
