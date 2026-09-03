@@ -20,8 +20,7 @@
  *
  * Toss-Up display contract preserved (matches the Push 3B-7 cutover):
  *   • nrfi_decision_kind = "toss_up"
- *   • predicted_nrfi follows the posterior lean (boolean for legacy
- *     writers; the UI reads decision_kind first)
+ *   • predicted_nrfi is null: Toss-Up has no hidden directional side
  *   • nrfi_confidence = 52 (the legacy sentinel)
  *
  * Held contract preserved:
@@ -73,7 +72,7 @@ export function applyFiV2WriterOverride(
     nrfiConfidence = Math.round((1 - a.posterior_p_nrfi) * 100);
     decisionKind = "yrfi";
   } else if (a.fi_pick === "Toss-Up") {
-    predictedNrfi = a.posterior_p_nrfi >= 0.5;
+    predictedNrfi = null;
     nrfiConfidence = 52;
     decisionKind = "toss_up";
   } else {

@@ -5638,10 +5638,6 @@ function buildFiRecord(
 ): PredictionRecordRow | null {
   const sp = (pred.sport_specific ?? {}) as Record<string, unknown>;
   const holdPicks = Array.isArray(sp.hold_picks) ? (sp.hold_picks as string[]) : [];
-  const held = holdPicks.includes("nrfi") || pred.predicted_nrfi === null;
-  if (held) return null;
-  const freshAudit = fiAuditFreshDataReady(sp);
-  if (!freshAudit.ready && !freshAudit.sparseNamedStarterTossUp) return null;
 
   // Phase 6B.20 — preserve the member-facing FI pill. Daily Edge
   // (`app/api/lab/daily-edge/route.ts:584-597`) displays "Toss-Up"
@@ -5690,6 +5686,13 @@ function buildFiRecord(
       nrfiExpectedRuns !== null &&
       nrfiExpectedRuns >= 0.85 &&
       nrfiExpectedRuns < 1.15);
+  // A null FI side is held unless the authoritative audit explicitly declares
+  // Toss-Up. This keeps Toss-Up visible as a genuine no-side prediction while
+  // preserving the existing safe hold behavior for incomplete FI evidence.
+  const held = holdPicks.includes("nrfi") || (pred.predicted_nrfi === null && !isTossUp);
+  if (held) return null;
+  const freshAudit = fiAuditFreshDataReady(sp);
+  if (!freshAudit.ready && !freshAudit.sparseNamedStarterTossUp) return null;
 
   const internalSide: "under" | "over" =
     pred.predicted_nrfi === true ? "under" : "over";

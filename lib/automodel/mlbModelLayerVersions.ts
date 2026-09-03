@@ -17,6 +17,8 @@ export const MLB_MODEL_LAYER_VERSION_SCHEMA = "mlb_model_layer_versions_v13_full
 export const MLB_PUBLIC_CALIBRATION_VERSION = "mlb_public_calibration_v31_full_game_structural_coherence_2026_09_02";
 export const MLB_DAILY_EDGE_DECISION_RELEASE_ID = "mlb_daily_edge_decision_2026_09_03_r81_first_slate_publication_cycle";
 export const MLB_DAILY_EDGE_RULE_BUNDLE_VERSION = "mlb_daily_edge_rule_bundle_v69_first_slate_publication_cycle_2026_09_03";
+/** FI-only release identity. It is absent from ML/total snapshots. */
+export const MLB_FIRST_INNING_RELEASE_ID = "mlb_first_inning_release_2026_09_03_r80_forecast_authority";
 
 export const MLB_MODEL_LAYER_VERSION_IDS = {
   projection_core: "mlb_projection_core_v2_4_evaluation_only_price_exclusion_2026_09_02",
@@ -46,13 +48,24 @@ export const MLB_MODEL_LAYER_VERSION_IDS = {
   schedule_time_policy: "mlb_official_schedule_time_v1_2026_07_30",
 } as const;
 
+const MLB_FIRST_INNING_SCOPED_VERSION_IDS = {
+  first_inning_probability_head: "mlb_first_inning_fi_v7_target_excluded_forecast_authority_2026_09_03",
+  first_inning_market_calibration_policy: "mlb_first_inning_market_calibration_v4_target_excluded_forecast_authority_2026_09_03",
+  first_inning_member_tuple_contract: "mlb_first_inning_member_tuple_contract_v2_null_side_toss_up_2026_09_03",
+} as const;
+
 const ACTIVE_PROBABILITY_HEAD_BY_MARKET: Record<MlbModelLayerMarket, string> = {
   moneyline: MLB_MODEL_LAYER_VERSION_IDS.moneyline_probability_head,
   total: MLB_MODEL_LAYER_VERSION_IDS.total_probability_head,
   first_inning: MLB_MODEL_LAYER_VERSION_IDS.first_inning_probability_head,
 };
 
-export type MlbModelLayerVersions = typeof MLB_MODEL_LAYER_VERSION_IDS & {
+export type MlbModelLayerVersions = Omit<typeof MLB_MODEL_LAYER_VERSION_IDS, keyof typeof MLB_FIRST_INNING_SCOPED_VERSION_IDS> & {
+  first_inning_probability_head: string;
+  first_inning_market_calibration_policy: string;
+  first_inning_member_tuple_contract: string;
+  /** Present only on first-inning records; ML/total tuples remain byte-identical. */
+  first_inning_release_id?: typeof MLB_FIRST_INNING_RELEASE_ID;
   schema_version: typeof MLB_MODEL_LAYER_VERSION_SCHEMA;
   decision_release_id: typeof MLB_DAILY_EDGE_DECISION_RELEASE_ID;
   rule_bundle_version: typeof MLB_DAILY_EDGE_RULE_BUNDLE_VERSION;
@@ -69,14 +82,23 @@ export function buildMlbModelLayerVersions(
   market: MlbModelLayerMarket | null,
   env: Record<string, string | undefined> = process.env,
 ): MlbModelLayerVersions {
+  const fiScoped = market === "first_inning"
+    ? {
+        ...MLB_FIRST_INNING_SCOPED_VERSION_IDS,
+        first_inning_release_id: MLB_FIRST_INNING_RELEASE_ID,
+      }
+    : {};
   return {
     schema_version: MLB_MODEL_LAYER_VERSION_SCHEMA,
     decision_release_id: MLB_DAILY_EDGE_DECISION_RELEASE_ID,
     rule_bundle_version: MLB_DAILY_EDGE_RULE_BUNDLE_VERSION,
     calibration_version: MLB_PUBLIC_CALIBRATION_VERSION,
     ...MLB_MODEL_LAYER_VERSION_IDS,
+    ...fiScoped,
     market,
-    active_probability_head: market === null ? null : ACTIVE_PROBABILITY_HEAD_BY_MARKET[market],
+    active_probability_head: market === "first_inning"
+      ? MLB_FIRST_INNING_SCOPED_VERSION_IDS.first_inning_probability_head
+      : market === null ? null : ACTIVE_PROBABILITY_HEAD_BY_MARKET[market],
     runtime_env: {
       automodel_version: resolveAutomodelVersion(env),
       first_inning_model_version: resolveFirstInningModelVersion(env),

@@ -6,6 +6,7 @@ import {
 import {
   buildMlbModelLayerVersions,
   MLB_DAILY_EDGE_DECISION_RELEASE_ID,
+  MLB_FIRST_INNING_RELEASE_ID,
   MLB_MODEL_LAYER_VERSION_SCHEMA,
   MLB_PUBLIC_CALIBRATION_VERSION,
 } from "../lib/automodel/mlbModelLayerVersions";
@@ -71,11 +72,23 @@ check(
 );
 
 const layers = buildMlbModelLayerVersions("total", {});
+const fiLayers = buildMlbModelLayerVersions("first_inning", {});
 check("missing model env stamps resolved v2_2", layers.runtime_env.automodel_version === "v2_2");
 check("missing FI env stamps resolved fi_v2", layers.runtime_env.first_inning_model_version === "fi_v2");
 check(
   "grade policy carries r80 full-game structural coherence",
   layers.grade_policy === "mlb_public_grade_policy_v56_full_game_structural_coherence_2026_09_02",
+);
+check(
+  "FI r80 stamps scoped authority identifiers without changing full-game tuple",
+  fiLayers.first_inning_release_id === MLB_FIRST_INNING_RELEASE_ID &&
+    fiLayers.first_inning_probability_head === "mlb_first_inning_fi_v7_target_excluded_forecast_authority_2026_09_03" &&
+    fiLayers.first_inning_market_calibration_policy === "mlb_first_inning_market_calibration_v4_target_excluded_forecast_authority_2026_09_03" &&
+    fiLayers.first_inning_member_tuple_contract === "mlb_first_inning_member_tuple_contract_v2_null_side_toss_up_2026_09_03" &&
+    layers.first_inning_release_id === undefined &&
+    layers.first_inning_probability_head === "mlb_first_inning_fi_v6_evaluated_quote_exclusion_2026_09_02" &&
+    layers.first_inning_market_calibration_policy === "mlb_first_inning_market_calibration_v3_evaluated_quote_exclusion_2026_09_02" &&
+    layers.first_inning_member_tuple_contract === "mlb_first_inning_member_tuple_contract_v1_current_authoritative_r78_2026_09_01",
 );
 check(
   "tracking contract carries the priority-retry minute-lock release",

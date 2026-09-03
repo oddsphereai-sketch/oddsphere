@@ -25,9 +25,9 @@ export type FiMarketBaseline = {
   yrfi_odds_american: number | null;
   /** Under (= NRFI) odds American. */
   nrfi_odds_american: number | null;
-  /** No-vig P(YRFI). */
+  /** Target-excluded no-vig P(YRFI) used only by the forecast posterior. */
   yrfi_no_vig_prob: number | null;
-  /** No-vig P(NRFI). */
+  /** Target-excluded no-vig P(NRFI) used only by the forecast posterior. */
   nrfi_no_vig_prob: number | null;
   /** Current-board consensus before the bounded movement residual. */
   current_nrfi_no_vig_prob: number | null;
@@ -53,10 +53,8 @@ export type FiMarketBaseline = {
   projection_book_count: number;
   /**
    * Forward-only evidence capture for every incumbent-accepted named-book pair.
-   * This is diagnostic provenance, not a second market calculation: v5 still
-   * uses every listed pair in its incumbent consensus. Persisting the actual
-   * per-book inputs lets a later release compare target-excluded adaptive
-   * trust honestly instead of reconstructing a board from later prices.
+   * This records incumbent-accepted per-book inputs so forecast authority can
+   * exclude the exact evaluation book without reconstructing later prices.
    */
   market_evidence_capture_version: "fi_named_book_evidence_capture_v2";
   /** Fixed maximum number of supported named FI books, recorded for audits. */
@@ -105,7 +103,7 @@ export type FiMarketEvidenceBook = {
   current_pair_eligibility_reason: "fi_complete_pair_timestamped_fresh" | "fi_complete_pair_accepted_missing_timestamp";
   /** True only for the exact pair used to evaluate price and EV. */
   is_evaluation_book: boolean;
-  /** Existing v5 consensus eligibility; retained so audits describe reality. */
+  /** Incumbent complete-pair eligibility, retained for release comparison. */
   included_in_v5_forecast_consensus: true;
   consensus_eligibility_reason: "fi_v5_complete_supported_named_pair";
   /** A later adaptive posterior may use only these independently priced rows. */
@@ -465,8 +463,12 @@ export function computeFiMarketBaseline(
     };
   }
   const evaluation = selectEvaluationPair(pairs);
-  const currentNrfiConsensus = projectionConsensus(pairs);
-  if (evaluation === null || currentNrfiConsensus === null) return empty;
+  if (evaluation === null) return empty;
+  // The evaluated book supplies an exact offer for downstream economics only.
+  // It cannot validate its own forecast. A singleton therefore has a valid
+  // price but no market forecast context; Layer 3 retains the independent posterior.
+  const projectionPairs = pairs.filter((pair) => pair.book !== evaluation.book);
+  const currentNrfiConsensus = projectionConsensus(projectionPairs);
 
   // Opening rows are context, never evaluation quotes. Compare only books
   // that have a coherent current pair and coherent retained opening pair so
@@ -481,8 +483,8 @@ export function computeFiMarketBaseline(
   });
   const openingPairs = completeNamedBookPairs(openingCandidates);
   const openingBooks = new Set(openingPairs.map((pair) => pair.book));
-  const currentBooks = new Set(pairs.map((pair) => pair.book));
-  const comparableCurrentPairs = pairs.filter((pair) => openingBooks.has(pair.book));
+  const currentBooks = new Set(projectionPairs.map((pair) => pair.book));
+  const comparableCurrentPairs = projectionPairs.filter((pair) => openingBooks.has(pair.book));
   const comparableOpeningPairs = openingPairs.filter((pair) => currentBooks.has(pair.book));
   const comparableCurrentConsensus = projectionConsensus(comparableCurrentPairs);
   const openingNrfiConsensus = projectionConsensus(comparableOpeningPairs);
@@ -495,8 +497,10 @@ export function computeFiMarketBaseline(
         -FI_MOVEMENT_MAX_ADJUSTMENT,
         Math.min(FI_MOVEMENT_MAX_ADJUSTMENT, movementNrfi * FI_MOVEMENT_RESIDUAL_WEIGHT),
       );
-  const nrfiConsensus = Math.max(0.02, Math.min(0.98, currentNrfiConsensus + movementAdjustment));
-  const yrfiConsensus = 1 - nrfiConsensus;
+  const nrfiConsensus = currentNrfiConsensus === null
+    ? null
+    : Math.max(0.02, Math.min(0.98, currentNrfiConsensus + movementAdjustment));
+  const yrfiConsensus = nrfiConsensus === null ? null : 1 - nrfiConsensus;
   const freshness = evaluation.over.fetched_at ?? evaluation.under.fetched_at ?? null;
   const movementSportsbooks = comparableCurrentPairs.map((pair) => pair.book).sort();
   const marketEvidenceBooks = captureMarketEvidence(pairs, comparableOpeningPairs, evaluation, asOfMs);
@@ -515,15 +519,15 @@ export function computeFiMarketBaseline(
     evaluation_yrfi_no_vig_prob: evaluation.yrfiNoVig,
     evaluation_nrfi_no_vig_prob: evaluation.nrfiNoVig,
     evaluation_sportsbook: evaluation.book,
-    projection_sportsbooks: pairs.map((pair) => pair.book).sort(),
-    projection_book_count: pairs.length,
+    projection_sportsbooks: projectionPairs.map((pair) => pair.book).sort(),
+    projection_book_count: projectionPairs.length,
     market_evidence_capture_version: "fi_named_book_evidence_capture_v2",
     market_evidence_supported_book_cap: FI_SUPPORTED_NAMED_BOOK_CAP,
     market_evidence_books: marketEvidenceBooks,
     market_evidence_exclusions: marketEvidenceExclusions,
     data_quality: "ok",
     freshness,
-    reason: `fi_named_book_consensus_${pairs.length}_movement_${movementSportsbooks.length}_evaluation_${evaluation.book}`,
+    reason: `fi_target_excluded_consensus_${projectionPairs.length}_movement_${movementSportsbooks.length}_evaluation_${evaluation.book}`,
   };
 }
 

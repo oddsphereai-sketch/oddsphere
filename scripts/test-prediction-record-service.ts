@@ -2153,7 +2153,7 @@ console.log("\n━━━ Phase 6B.20 — Toss-Up FI rows ━━━");
   // nrfi_decision_kind=toss_up should produce pick="Toss-Up", no_bet=true
   const tossUpPred = {
     ...basePrediction,
-    predicted_nrfi: true, // internal lean (preserved in snapshot_json)
+    predicted_nrfi: null,
     nrfi_confidence: 52,
     sport_specific: {
       ...v21SportSpecific,
@@ -2176,7 +2176,7 @@ console.log("\n━━━ Phase 6B.20 — Toss-Up FI rows ━━━");
   check("Toss-Up FI: no_bet=true", fi.no_bet === true);
   check("Toss-Up FI: prediction_type='toss_up'", fi.prediction_type === "toss_up");
   check("Toss-Up FI: no_bet_reason explains non-actionable", typeof fi.no_bet_reason === "string" && /non-actionable/i.test(fi.no_bet_reason!));
-  check("Toss-Up FI: snapshot_json preserves internal lean for calibration", (fi.snapshot_json as any)?.nrfi_decision_kind === "toss_up");
+  check("Toss-Up FI: snapshot_json preserves the explicit null-side decision", (fi.snapshot_json as any)?.nrfi_decision_kind === "toss_up" && fi.side === null);
 }
 {
   const sparseNamedStarterTossUp = {

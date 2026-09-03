@@ -87,11 +87,6 @@ const FI_BEST_ANGLE_MIN_EDGE_PCT = 6.0;
 const FI_BEST_ANGLE_MIN_CONFIDENCE = 56;
 const FI_BEST_ANGLE_MIN_PRICE_EXCLUSIVE = -130;
 const FI_LEAN_MIN_EDGE_PCT = 0;
-// r64 price-aware bridge: marginal NRFI probabilities below 54% must clear
-// the actual offered price, not merely the de-vigged market midpoint. The
-// paired route may promote an NRFI-favored probability-band Toss-Up when NRFI
-// clears the actual offered break-even probability.
-const FI_MARGINAL_NRFI_PRICE_GATE_MAX = 0.54;
 // MLB-P0 post-shrink large-edge backstop (abs edge %). FI is not
 // probability-regularized in P0 (its market prob is null on ~100% of
 // rows), but where a market line DOES exist an implausibly large
@@ -205,13 +200,7 @@ function buildFiFeatureCapture(snap: GameSnapshot, factors: unknown, tier: strin
 }
 
 export type FiV2Output = {
-  /** Legacy back-compat boolean for the existing predicted_nrfi column.
-   *  true  → NRFI pick
-   *  false → YRFI pick
-   *  null  → Held (caller decides; Toss-Up collapses to a NRFI-leaning
-   *           boolean for downstream writers that don't speak Toss-Up,
-   *           BUT the audit.fi_pick is the source of truth).
-   */
+  /** true → NRFI; false → YRFI; null → Toss-Up or Held (audit disambiguates). */
   predicted_nrfi: boolean | null;
   /** 0-100 confidence in the pick (whichever side). */
   nrfi_confidence: number | null;
@@ -249,49 +238,6 @@ function computeConfidence(args: {
   return clamp(base, FI_CONFIDENCE_FLOOR, FI_CONFIDENCE_CEILING[args.tier]);
 }
 
-function applyFiMarginalPricePolicy(args: {
-  pick: FiPick;
-  pickReason: string;
-  posteriorNrfi: number;
-  nrfiOdds: number | null;
-}): { pick: FiPick; pickReason: string } {
-  const { posteriorNrfi } = args;
-  if (
-    args.pick === "NRFI" &&
-    posteriorNrfi < FI_MARGINAL_NRFI_PRICE_GATE_MAX &&
-    args.nrfiOdds !== null &&
-    args.nrfiOdds !== 0 &&
-    posteriorNrfi < americanToImpliedProb(args.nrfiOdds)
-  ) {
-    return { pick: "Toss-Up", pickReason: "fi_toss_up_marginal_nrfi_below_offered_break_even" };
-  }
-  if (args.pick !== "Toss-Up" || args.pickReason !== "fi_toss_up_probability") {
-    return { pick: args.pick, pickReason: args.pickReason };
-  }
-  if (posteriorNrfi === 0.5) {
-    return { pick: args.pick, pickReason: args.pickReason };
-  }
-  // The audit found 23 qualifying NRFI promotions but only one YRFI promotion
-  // and none in the latest window. Keep the new exception NRFI-only; YRFI
-  // remains available through the incumbent validated <=48% decision path.
-  if (posteriorNrfi <= 0.5) {
-    return { pick: args.pick, pickReason: args.pickReason };
-  }
-  const selectedProbability = posteriorNrfi;
-  const selectedOdds = args.nrfiOdds;
-  if (
-    selectedOdds !== null &&
-    selectedOdds !== 0 &&
-    selectedProbability >= americanToImpliedProb(selectedOdds)
-  ) {
-    return {
-      pick: "NRFI",
-      pickReason: "fi_marginal_nrfi_clears_offered_break_even",
-    };
-  }
-  return { pick: args.pick, pickReason: args.pickReason };
-}
-
 /**
  * Run FI V2 for a single game.
  *
@@ -310,8 +256,12 @@ export function runMlbFirstInningModelV2(
 
   // Layer 2
   const market: FiMarketBaseline = computeFiMarketBaseline(fiLineRows, asOfIso);
-  const hasMarket =
+  const hasEvaluationMarket =
     market.data_quality === "ok" &&
+    market.evaluation_nrfi_no_vig_prob !== null &&
+    market.evaluation_yrfi_no_vig_prob !== null;
+  const hasForecastMarket =
+    hasEvaluationMarket &&
     market.nrfi_no_vig_prob !== null &&
     market.yrfi_no_vig_prob !== null;
 
@@ -320,22 +270,19 @@ export function runMlbFirstInningModelV2(
   // market posterior requires at least one separately priced, incumbent-
   // accepted current pair. This deliberately leaves all multi-book v5 math
   // unchanged while the singleton path stays on the independent forecast.
-  const hasTargetExcludedForecastPair = market.market_evidence_books.some(
-    (book) => book.target_excluded_from_evaluation,
-  );
-  const evaluatedQuoteOnly = hasMarket && !hasTargetExcludedForecastPair;
-  const trustIndep = evaluatedQuoteOnly
+  const evaluatedQuoteOnly = hasEvaluationMarket && !hasForecastMarket;
+  const trustIndep = !hasForecastMarket
     ? FI_TRUST_INDEPENDENT_NO_MARKET
     : selectTrustIndependent({
         tier: indep.data_quality_tier,
         missingCount: indep.feature_audit.missing_count,
-        hasMarket,
+        hasMarket: hasForecastMarket,
       });
   const trustMarket = 1 - trustIndep;
   let posteriorNrfi = indep.p_nrfi;
   let posteriorCapped = false;
   let posteriorMovedFromMarket = 0;
-  if (hasMarket && market.nrfi_no_vig_prob !== null && !evaluatedQuoteOnly) {
+  if (hasForecastMarket && market.nrfi_no_vig_prob !== null) {
     posteriorNrfi = trustIndep * indep.p_nrfi + trustMarket * market.nrfi_no_vig_prob;
     posteriorMovedFromMarket = Math.abs(posteriorNrfi - market.nrfi_no_vig_prob);
     if (posteriorMovedFromMarket > FI_POSTERIOR_NRFI_CAP) {
@@ -344,8 +291,7 @@ export function runMlbFirstInningModelV2(
       posteriorCapped = true;
       integrityNotes.push("Posterior NRFI prob capped at ±10pts from market.");
     }
-  } else if (evaluatedQuoteOnly && market.nrfi_no_vig_prob !== null) {
-    posteriorMovedFromMarket = Math.abs(indep.p_nrfi - market.nrfi_no_vig_prob);
+  } else if (evaluatedQuoteOnly) {
     integrityNotes.push("Evaluation-only FI quote excluded from forecast posterior; retained for exact-price economics.");
   }
   posteriorNrfi = clamp(posteriorNrfi, 0.02, 0.98);
@@ -361,11 +307,11 @@ export function runMlbFirstInningModelV2(
   const starterFiSourcePublishable = (source: FiFeatureSource) =>
     source === "preferred" || source === "proxy";
   const provisional =
-    !hasMarket ||
+    !hasEvaluationMarket ||
     indep.feature_audit.missing_count >= 5 ||
     indep.data_quality_tier === "fallback" ||
     !starterFiFullyPreferred;
-  if (provisional && !hasMarket) integrityNotes.push("No FI market line; prediction marked provisional.");
+  if (provisional && !hasEvaluationMarket) integrityNotes.push("No FI market line; prediction marked provisional.");
   if (indep.feature_audit.missing_count >= 5) integrityNotes.push(`Sparse FI features (${indep.feature_audit.missing_count} missing).`);
   if (indep.data_quality_tier === "fallback") integrityNotes.push("FI tier=fallback (key starter missing).");
   if (!starterFiFullyPreferred && indep.data_quality_tier !== "fallback") {
@@ -373,7 +319,7 @@ export function runMlbFirstInningModelV2(
   }
 
   const freshDataBlockers: string[] = [];
-  if (!hasMarket) freshDataBlockers.push("fi_market_not_fresh_or_two_sided");
+  if (!hasEvaluationMarket) freshDataBlockers.push("fi_market_not_fresh_or_two_sided");
   if (!starterFiSourcePublishable(indep.feature_audit.away_starter_fi.source)) {
     freshDataBlockers.push(`away_batting_opposing_starter_fi_${indep.feature_audit.away_starter_fi.source}`);
   }
@@ -406,13 +352,13 @@ export function runMlbFirstInningModelV2(
     freshDataBlockers.length > 0 &&
     freshDataBlockers.every((reason) => reason.includes("opposing_starter_fi_"));
   const sparseNamedStarterTossUp =
-    hasMarket &&
+    hasEvaluationMarket &&
     starterIdentityPresent &&
     awayLineupPublishable &&
     homeLineupPublishable &&
     starterHistoryOnlyBlockers;
   const marketBackedUnpublishedStarterTossUp =
-    hasMarket &&
+    hasEvaluationMarket &&
     starterIdentityUnpublished &&
     awayLineupPublishable &&
     homeLineupPublishable &&
@@ -452,26 +398,16 @@ export function runMlbFirstInningModelV2(
     fi_pick_reason = "fi_no_bet_data_quality";
   }
 
-  const priceAwarePick = applyFiMarginalPricePolicy({
-    pick: fi_pick,
-    pickReason: fi_pick_reason,
-    posteriorNrfi,
-    nrfiOdds: market.nrfi_odds_american,
-  });
-  fi_pick = priceAwarePick.pick;
-  fi_pick_reason = priceAwarePick.pickReason;
-
   // Edge (only meaningful when both sides know which side they're picking)
   let fi_edge_pct: number | null = null;
-  if (hasMarket && (fi_pick === "NRFI" || fi_pick === "YRFI")) {
+  if (hasEvaluationMarket && (fi_pick === "NRFI" || fi_pick === "YRFI")) {
     const pickSidePosterior = fi_pick === "NRFI" ? posteriorNrfi : posteriorYrfi;
-    // The projection uses the complete named-book consensus above, while
-    // action economics remain attached to one exact same-book pair. This
-    // prevents consensus evidence from silently replacing the offered quote.
-    const pickSideMarket = fi_pick === "NRFI"
-      ? (market.evaluation_nrfi_no_vig_prob ?? 0.5)
-      : (market.evaluation_yrfi_no_vig_prob ?? 0.5);
-    fi_edge_pct = (pickSidePosterior - pickSideMarket) * 100;
+    // Forecast authority and actionability are separate: use the exact
+    // evaluated offered price for EV, never the de-vig consensus/fair price.
+    const exactBreakEven = americanToImpliedProb(
+      fi_pick === "NRFI" ? market.nrfi_odds_american : market.yrfi_odds_american,
+    );
+    if (exactBreakEven !== null) fi_edge_pct = (pickSidePosterior - exactBreakEven) * 100;
   }
 
   // Confidence
@@ -505,10 +441,8 @@ export function runMlbFirstInningModelV2(
     fi_play_grade_reason = fi_pick_reason;
     fi_no_bet_reason = sparseNamedStarterTossUp
       ? "Toss-Up — named probable starters are available, but verified starter history is too sparse for a directional play."
-      : fi_pick_reason === "fi_toss_up_marginal_nrfi_below_offered_break_even"
-        ? "Toss-Up — marginal NRFI forecast does not clear the offered price."
       : "Toss-Up — model probability in the neutral band.";
-  } else if (!hasMarket) {
+  } else if (!hasEvaluationMarket) {
     fi_play_grade = "lean";
     fi_play_grade_reason = "fi_best_angle_blocked_missing_market";
     fi_no_bet_reason = "No market line; lean only.";
@@ -553,7 +487,7 @@ export function runMlbFirstInningModelV2(
   let legacyPredictedNrfi: boolean | null;
   if (fi_pick === "NRFI") legacyPredictedNrfi = true;
   else if (fi_pick === "YRFI") legacyPredictedNrfi = false;
-  else if (fi_pick === "Toss-Up") legacyPredictedNrfi = true; // collapse to lean-NRFI for legacy writers; audit.fi_pick is truth
+  else if (fi_pick === "Toss-Up") legacyPredictedNrfi = null;
   else legacyPredictedNrfi = null; // Held
 
   const audit: FiV2Audit = {
@@ -629,9 +563,7 @@ export const __TEST__ = {
   FI_BEST_ANGLE_MIN_EDGE_PCT,
   FI_BEST_ANGLE_MIN_CONFIDENCE,
   FI_LEAN_MIN_EDGE_PCT,
-  FI_MARGINAL_NRFI_PRICE_GATE_MAX,
   FI_POSTERIOR_NRFI_CAP,
   selectTrustIndependent,
   computeConfidence,
-  applyFiMarginalPricePolicy,
 };

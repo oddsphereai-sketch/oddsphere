@@ -157,6 +157,7 @@ if (rHeld.sport_specific_overrides.nrfi_decision_kind === "held") {
 const WRITER = readFileSync("lib/services/fiV2Writer.ts", "utf8");
 check("T6 Toss-Up sets nrfi_confidence=52 (legacy sentinel)", /Toss-Up"[\s\S]{0,200}?nrfiConfidence\s*=\s*52/.test(WRITER));
 check("T6 Toss-Up sets nrfi_decision_kind='toss_up'", /Toss-Up"[\s\S]{0,250}?decisionKind\s*=\s*"toss_up"/.test(WRITER));
+check("T6 Toss-Up has no hidden directional predicted_nrfi", /Toss-Up"[\s\S]{0,120}?predictedNrfi\s*=\s*null/.test(WRITER));
 check("T6 Held branch sets predicted_nrfi=null (no fake NRFI)", /Held[\s\S]{0,400}?predictedNrfi\s*=\s*null/.test(WRITER));
 
 // ── T7. Writer never CALLS anything that writes
