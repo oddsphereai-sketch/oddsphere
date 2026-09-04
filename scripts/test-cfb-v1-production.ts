@@ -1639,6 +1639,7 @@ assert.ok(coherenceIndex >= 0 && evidenceAppendIndex > coherenceIndex, "the sole
 assert.equal((writerSource.match(/assertFootballCrossMarketCoherence\(\{/g) ?? []).length, 1, "the CFB writer must use one shared per-payload coherence gate");
 assert.match(writerSource, /requireDecisionSideFromForecast: true/, "the CFB writer must fail closed on an exact-line PMF/decision-side contradiction");
 assert.match(writerSource, /publicScoreDirectionTolerancePoints: CFB_PUBLIC_SCORE_DIRECTION_TOLERANCE_POINTS/, "the CFB writer must apply the publication contract's narrow 0.5-point mean/median tolerance");
+assert.match(writerSource, /executionStatus: decision\.gradeAdjustment\?\.executionStatus/, "the CFB writer must pass its explicit Bet\/Shop axis into shared coherence");
 assert.equal((writerSource.match(/fetchCfbSharpApiSplits\(\{ games, apiKey/g) ?? []).length, 1, "SharpAPI splits must remain one bounded slate request rather than a per-game loop");
 assert.match(writerSource, /buildCfbMarketSharpAwareForecast/, "the sole writer must build the bounded market\/sharp-aware authoritative PMF");
 assert.match(writerSource, /applyCfbMarketSharpAwareGrades/, "the sole writer must own balanced market\/sharp-aware grade promotion and demotion");

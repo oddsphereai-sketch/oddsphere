@@ -152,6 +152,45 @@ const badAction = auditFootballCrossMarketCoherence({
 });
 assert.equal(badAction.fatalIssues.some((row) => row.code === "actionable_nonpositive_value"), true);
 
+const confidenceShop = auditFootballCrossMarketCoherence({
+  sport: "cfb",
+  providerGameId: "458254",
+  awayTeam: "AWY",
+  homeTeam: "HME",
+  forecast,
+  decisions: [
+    decision({ market: "moneyline", side: "HME", probability: 0.5707607016549665, fair: 0.5575221111099302, price: -140, grade: "Best Angle", executionStatus: "shop" }),
+  ],
+  unavailableMarkets: ["spread", "total"],
+});
+assert.equal(confidenceShop.passed, true, "a CFB confidence Best Angle may remain a zero-stake Shop at a negative displayed-price EV");
+
+const falseShop = auditFootballCrossMarketCoherence({
+  sport: "cfb",
+  providerGameId: "false-shop",
+  awayTeam: "AWY",
+  homeTeam: "HME",
+  forecast,
+  decisions: [
+    decision({ market: "moneyline", side: "HME", probability: 0.6, fair: 0.55, price: -110, grade: "Lean", executionStatus: "shop" }),
+  ],
+  unavailableMarkets: ["spread", "total"],
+});
+assert.equal(falseShop.fatalIssues.some((row) => row.code === "decision_execution_status_mismatch"), true, "Shop cannot hide a nonnegative displayed-price EV");
+
+const falseBet = auditFootballCrossMarketCoherence({
+  sport: "cfb",
+  providerGameId: "false-bet",
+  awayTeam: "AWY",
+  homeTeam: "HME",
+  forecast,
+  decisions: [
+    decision({ market: "moneyline", side: "HME", probability: 0.49, fair: 0.48, price: -110, grade: "Lean", executionStatus: "bet" }),
+  ],
+  unavailableMarkets: ["spread", "total"],
+});
+assert.equal(falseBet.fatalIssues.some((row) => row.code === "decision_execution_status_mismatch"), true, "Bet remains fail-closed at negative displayed-price EV");
+
 const mismatchedLine = auditFootballCrossMarketCoherence({
   sport: "cfb",
   providerGameId: "mismatched-line",
@@ -338,6 +377,7 @@ function decision(args: {
   price: number;
   line?: number | null;
   grade: string;
+  executionStatus?: "bet" | "shop";
 }): FootballCoherenceDecision {
   return {
     market: args.market,
@@ -346,6 +386,7 @@ function decision(args: {
     modelProbability: args.probability,
     marketFairProbability: args.fair,
     expectedValue: args.probability * profitOne(args.price) - (1 - args.probability),
+    executionStatus: args.executionStatus,
     pushProbability: 0,
     evaluatedQuote: {
       sportsbook: "testbook",
