@@ -15,6 +15,7 @@ import {
 import { selectPreferredWnbaTipTime } from "../lib/services/wnba/refreshWnbaLines";
 import {
   resolveWnbaPickedMoneylineProbabilities,
+  wnbaExactPriceTrackingHoldReason,
   WNBA_PREDICTION_RECORD_CONTRACT_VERSION,
 } from "../lib/services/wnba/buildWnbaPredictionRecords";
 import {
@@ -517,7 +518,19 @@ check(
 );
 check(
   "WNBA prediction-record probability contract has a new immutable identifier",
-  WNBA_PREDICTION_RECORD_CONTRACT_VERSION === "wnba_prediction_record_contract_v6_single_market_entry_2026_09_03",
+  WNBA_PREDICTION_RECORD_CONTRACT_VERSION === "wnba_prediction_record_contract_v7_complete_prediction_denominators_2026_09_04",
+);
+check(
+  "WNBA missing exact price becomes accuracy-only instead of disappearing",
+  wnbaExactPriceTrackingHoldReason({ market: "moneyline", price: null, tupleContractCurrent: false, hasDecisionTuple: false }) === "moneyline_exact_price_unavailable",
+);
+check(
+  "WNBA incoherent current tuple becomes accuracy-only even when a fallback price exists",
+  wnbaExactPriceTrackingHoldReason({ market: "total", price: -110, tupleContractCurrent: true, hasDecisionTuple: false }) === "incoherent_total_decision_tuple",
+);
+check(
+  "WNBA exact current tuple remains normally actionable-eligible",
+  wnbaExactPriceTrackingHoldReason({ market: "spread", price: -105, tupleContractCurrent: true, hasDecisionTuple: true }) === null,
 );
 const decisionRows: WnbaDecisionPriceRow[] = [
   { market: "spread", side: "away", sportsbook: "fanduel", line: -3.5, priceAmerican: -115, observedAt: "2026-08-21T14:00:00Z" },

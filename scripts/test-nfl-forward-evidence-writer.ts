@@ -259,7 +259,7 @@ assert.match(writer, /currentBooks/);
 assert.match(writer, /comparableCurrentBooks/);
 assert.match(writer, /multibook_consensus_unavailable/);
 assert.match(writer, /readLegacyNflForwardEvidence/);
-assert.match(writer, /nfl_forward_evidence_writer_2026_09_03_r21_target_excluded_forecast/);
+assert.match(writer, /nfl_forward_evidence_writer_2026_09_04_r22_complete_tracking_denominators/);
 assert.doesNotMatch(
   writer,
   /const \[existing, previousExisting, priorExisting, legacyExisting\] = await Promise\.all/,

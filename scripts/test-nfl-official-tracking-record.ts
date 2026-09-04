@@ -7,7 +7,7 @@ import {
   type NflForwardEvidencePayload,
 } from "../lib/services/football/nflForwardEvidence";
 import { buildNflOfficialTrackingRecords } from "../lib/services/football/nflOfficialTrackingRecord";
-import { buildNflRegularEvaluatedBetDecision } from "../lib/services/football/nflRegularDecisionEvidence";
+import { buildNflRegularEvaluatedBetDecision, buildNflRegularOutcomeConfidence } from "../lib/services/football/nflRegularDecisionEvidence";
 import { nflForwardT60TrackingEligibility } from "../lib/services/football/nflTrackingLifecycle";
 import { buildMarketScopedFootballTrackingPlan, FOOTBALL_MARKET_SCOPED_T60_TRACKING_RELEASE } from "../lib/services/football/footballMarketScopedTracking";
 import {
@@ -63,6 +63,11 @@ const decisions = [
     evaluatedQuote: { sportsbook: "caesars", line: 44.5, price: -108, observedAt: capturedAt },
     grade: "Watchlist",
   }),
+];
+const outcomeConfidence = [
+  buildNflRegularOutcomeConfidence({ market: "moneyline", likelySide: "SEA", probability: 0.57, evaluatedAt: capturedAt, modelRelease: NFL_V1_ACTIONABLE_GRADE_MODEL_RELEASE }),
+  buildNflRegularOutcomeConfidence({ market: "spread", likelySide: "SEA", probability: 0.54, evaluatedAt: capturedAt, modelRelease: NFL_V1_EVENT_CONTAINED_SPREAD_MODEL_RELEASE }),
+  buildNflRegularOutcomeConfidence({ market: "total", likelySide: "Over 44.5", probability: 0.53, evaluatedAt: capturedAt, modelRelease: NFL_V1_MARKET_EVIDENCE_TOTAL_MODEL_RELEASE }),
 ];
 
 assert.equal(isPublicallyTracked("nfl", "2026-09-08"), false);
@@ -168,7 +173,7 @@ const payload = {
     home: { id: 2, abbreviation: "SEA", name: "Seattle Seahawks" },
   },
   market: {
-    current: {}, currentBooks: [], comparableCurrentBooks: [], providerOpening: null,
+    current: { spread: { homeLine: -2.5, awayLine: 2.5 }, total: { line: 44.5 } }, currentBooks: [], comparableCurrentBooks: [], providerOpening: null,
     providerOpeningBooks: [], comparableProviderOpeningBooks: [],
     operationalOpening: { provenance: "first_observed", capturedAt, quote: {} },
     playbookLine: null, playbookSplits: null, sharpApiSplits: null,
@@ -181,7 +186,7 @@ const payload = {
   weather: {},
   decisions: {
     evaluatedBets: decisions,
-    outcomeConfidence: [],
+    outcomeConfidence,
     modelPromotionStatus: NFL_V1_ACTIONABLE_GRADE_MEMBER_RELEASE,
     publicationEnabled: true,
     trackingEnabled: true,
@@ -206,8 +211,11 @@ const marketScopedPayload = {
   decisions: { ...payload.decisions, evaluatedBets: decisions.slice(1), trackingEnabled: true },
 } as NflForwardEvidencePayload;
 const marketScopedRecords = buildNflOfficialTrackingRecords({ payload: marketScopedPayload, gameId: 5001 });
-assert.deepEqual(marketScopedRecords.map((record) => record.market), ["spread", "total"]);
-assert.deepEqual(marketScopedRecords.map((record) => record.odds_american), [-105, -108]);
+assert.deepEqual(marketScopedRecords.map((record) => record.market), ["moneyline", "spread", "total"]);
+assert.deepEqual(marketScopedRecords.map((record) => record.odds_american), [null, -105, -108]);
+assert.deepEqual(marketScopedRecords.map((record) => record.held), [true, false, false]);
+assert.equal(marketScopedRecords[0]?.side, "home", "a missing exact ML price retains the immutable winner forecast for accuracy");
+assert.equal(marketScopedRecords[0]?.no_bet, true, "a price-missing forecast is never actionable or ROI-eligible");
 assert.equal(marketScopedRecords.every((record) => record.locked_at === capturedAt), true);
 const oneMarketRecords = buildNflOfficialTrackingRecords({
   payload: {
@@ -216,7 +224,8 @@ const oneMarketRecords = buildNflOfficialTrackingRecords({
   },
   gameId: 5001,
 });
-assert.deepEqual(oneMarketRecords.map((record) => record.market), ["total"]);
+assert.deepEqual(oneMarketRecords.map((record) => record.market), ["moneyline", "spread", "total"]);
+assert.deepEqual(oneMarketRecords.map((record) => record.held), [true, true, false]);
 assert.throws(
   () => buildNflOfficialTrackingRecords({ payload: { ...marketScopedPayload, decisions: { ...marketScopedPayload.decisions, evaluatedBets: [] } }, gameId: 5001 }),
   /one to three exact-price market decisions/,

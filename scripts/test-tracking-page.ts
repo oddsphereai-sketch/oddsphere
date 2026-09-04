@@ -61,7 +61,13 @@ check(
   PUBLIC_CATEGORY_WINDOWS.includes('key: "weekly"') &&
     PUBLIC_CATEGORY_WINDOWS.includes('key: "monthly"') &&
     PUBLIC_CATEGORY_WINDOWS.includes('key: "lifetime"') &&
-    /windows\.map[\s\S]{0,900}<button[\s\S]{0,500}setActiveKey/.test(HOMEPAGE_CATEGORY_TRACKER),
+    /orderedWindows\.map[\s\S]{0,900}<button[\s\S]{0,500}setActiveKey/.test(HOMEPAGE_CATEGORY_TRACKER),
+);
+check(
+  "Homepage alone defaults category tracking to Lifetime and orders it first",
+  HOMEPAGE_CATEGORY_TRACKER.includes('["lifetime", "monthly", "weekly"]') &&
+    HOMEPAGE_CATEGORY_TRACKER.includes('useState<PublicTrackingCategoryWindow["key"]>("lifetime")') &&
+    PAGE.includes('useState<"weekly" | "monthly" | "lifetime">("weekly")'),
 );
 check(
   "Homepage category tracker shares the member CategoryBars visual",

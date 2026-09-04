@@ -50,7 +50,11 @@ const trackingRecord = (sport: PredictionRecordRow["sport"], locked_at: string |
 } as PredictionRecordRow);
 check("locked MLB row is tracking-eligible", isTrackingRecordEligible(trackingRecord("mlb", "2026-08-05T12:00:00Z")));
 check("unlocked MLB row is excluded from tracking", !isTrackingRecordEligible(trackingRecord("mlb", null)));
-check("non-MLB eligibility is unchanged", isTrackingRecordEligible(trackingRecord("wnba", null)));
+check("unlocked WNBA rows are excluded from official tracking", !isTrackingRecordEligible(trackingRecord("wnba", null)));
+check("locked WNBA rows are tracking-eligible", isTrackingRecordEligible(trackingRecord("wnba", "2026-08-30T18:00:00Z")));
+check("unlocked NFL rows are excluded from official tracking", !isTrackingRecordEligible(trackingRecord("nfl", null)));
+check("unlocked CFB rows are excluded from official tracking", !isTrackingRecordEligible(trackingRecord("cfb", null)));
+check("unlocked NBA rows are excluded from official tracking", !isTrackingRecordEligible(trackingRecord("nba", null)));
 const eplRecord = (locked_at: string | null, id = 1, created_at = "2026-08-19T12:00:00Z") => ({
   ...trackingRecord("soccer", locked_at),
   id,
@@ -62,7 +66,7 @@ const eplRecord = (locked_at: string | null, id = 1, created_at = "2026-08-19T12
   competition: "english_premier_league",
   snapshot_json: null,
 } as PredictionRecordRow);
-check("tracking aggregate contract is master-gated and requires complete UCL lock manifests", TRACKING_AGGREGATE_CONTRACT_VERSION === "tracking_aggregate_v7_ucl_complete_manifest_every_reader_2026_09_03");
+check("tracking aggregate contract requires immutable locks and complete UCL manifests", TRACKING_AGGREGATE_CONTRACT_VERSION === "tracking_aggregate_v8_locked_prediction_accuracy_2026_09_04");
 check("unlocked EPL row is excluded from official tracking", !isTrackingRecordEligible(eplRecord(null)));
 check("locked EPL row is officially tracking-eligible", isTrackingRecordEligible(eplRecord("2026-08-21T18:00:00Z")));
 check("EPL receives a separate member-facing competition key", trackingDisplaySport(eplRecord("2026-08-21T18:00:00Z")) === "epl");
