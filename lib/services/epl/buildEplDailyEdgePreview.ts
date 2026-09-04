@@ -59,6 +59,7 @@ export type EplPreviewBuildOptions = {
   captureForwardEvidence?: (captures: EplForwardEvidenceCapture[]) => void;
   marketProvider?: Pick<SharpApiEplMarketProvider, "loadFixture"> | null;
   cacheNamespace?: string;
+  cacheIdentity?: string;
   skipForwardEvidence?: boolean;
   maxFixtureRecoveryLoads?: number;
   competitionLabel?: string;
@@ -69,6 +70,12 @@ export type EplPreviewBuildOptions = {
     derivePreviewGrade: typeof deriveEplPreviewGrade;
   };
 };
+
+export function buildEplPreviewCacheKey(slate: EplShadowSlate, options: EplPreviewBuildOptions = {}): string {
+  const gradeRelease = options.authorities?.gradeRelease ?? EPL_PREVIEW_GRADE_RELEASE;
+  const fixtureIdentity = slate.matches.map((match) => `${match.id}@${match.kickoff}`).join(",");
+  return `${options.cacheNamespace ?? "epl"}:${slate.round}:${slate.modelRelease}:${gradeRelease}:${options.cacheIdentity ?? fixtureIdentity}`;
+}
 
 function boundedTrail(trail: NonNullable<MarketEdgeDto["oddsTrail"]>): NonNullable<MarketEdgeDto["oddsTrail"]> {
   const ordered = [...trail].sort((a, b) => {
@@ -938,7 +945,7 @@ function gameDto(match: EplShadowSlateMatch, sharp: EplSharpFixtureMarket, captu
 }
 
 export async function buildEplDailyEdgePreview(slate: EplShadowSlate, options: EplPreviewBuildOptions = {}): Promise<DailyEdgeResponse> {
-  const cacheKey = `${options.cacheNamespace ?? "epl"}:${slate.round}:${slate.modelRelease}:${EPL_PREVIEW_GRADE_RELEASE}`;
+  const cacheKey = buildEplPreviewCacheKey(slate, options);
   const cached = previewCache.get(cacheKey);
   if (cached && cached.expiresAt > Date.now()) {
     options.captureAllBookPrices?.(cached.allBookPrices);

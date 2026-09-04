@@ -13,6 +13,7 @@ import { UCL_CALIBRATION_RELEASE } from "./uclModel";
 import type { UclSlate } from "./buildUclSlate";
 import { deriveUclCoherentMarketOutcome, UCL_COHERENT_MARKET_OUTCOME_RELEASE } from "./uclCoherentMarketOutcome";
 import { deriveUclMatchResultDecision, deriveUclPreviewGrade } from "./uclPreviewGrade";
+import { uclTeamAsset, uclTeamLogo } from "./uclTeamAssets";
 
 export { hydrateEplPriceHistory as hydrateUclPriceHistory, hydrateEplStoredPriceHistory as hydrateUclStoredPriceHistory };
 export type UclStoredPriceObservation = EplStoredPriceObservation;
@@ -25,7 +26,7 @@ function marketContext(market: MarketEdgeDto): MarketEdgeDto {
     reviewFlags: [...market.reviewFlags.filter((flag) => !flag.startsWith("epl_")), UCL_CALIBRATION_RELEASE],
     soccerGradeContext: market.soccerGradeContext ? {
       ...market.soccerGradeContext,
-      calibration_label: "UCL chronological forecast validation · No Play because calibration-period exact-price evidence is unavailable",
+      calibration_label: "UCL-owned EPL v23 grade transfer · exact-price EV required",
     } : market.soccerGradeContext,
   };
 }
@@ -42,6 +43,7 @@ export async function buildUclDailyEdgePreview(slate: UclSlate, options: UclPrev
     ...options,
     marketProvider: provider,
     cacheNamespace: "ucl",
+    cacheIdentity: `${slate.boardDate}:${slate.matches.map((match) => `${match.id}@${match.kickoff}`).join(",")}`,
     skipForwardEvidence: true,
     maxFixtureRecoveryLoads: 0,
     competitionLabel: "Champions League",
@@ -59,6 +61,8 @@ export async function buildUclDailyEdgePreview(slate: UclSlate, options: UclPrev
     requested_date: slate.boardDate,
     games: base.games.map((game) => {
       const match = matchById.get(Number(game.external_id));
+      const awayAsset = uclTeamAsset(game.awayTeam);
+      const homeAsset = uclTeamAsset(game.homeTeam);
       const context = slate.competitionContexts[Number(game.external_id)];
       const aggregate = context?.aggregateBefore;
       const stage = context ? stageLabel(context.stage, context.leg) : "Stage pending";
@@ -66,10 +70,12 @@ export async function buildUclDailyEdgePreview(slate: UclSlate, options: UclPrev
       return {
         ...game,
         id: `soccer-ucl-${game.external_id}`,
-        awayTeamDisplayName: match?.awayTeam.name ?? null,
-        homeTeamDisplayName: match?.homeTeam.name ?? null,
-        awayTeamLogo: null,
-        homeTeamLogo: null,
+        awayTeamDisplayName: match?.awayTeam.name ?? awayAsset?.displayName ?? null,
+        homeTeamDisplayName: match?.homeTeam.name ?? homeAsset?.displayName ?? null,
+        awayTeamLogo: uclTeamLogo(game.awayTeam),
+        awayTeamPrimaryColor: awayAsset?.primaryColor ?? null,
+        homeTeamLogo: uclTeamLogo(game.homeTeam),
+        homeTeamPrimaryColor: homeAsset?.primaryColor ?? null,
         holdReason: null,
         markets: {
           moneyline: { ...marketContext(game.markets.moneyline), keyStats: [...game.markets.moneyline.keyStats, stageRow] },
