@@ -1686,17 +1686,20 @@ check(
     candidateDailyEdgeSource.includes('if (sport !== "nfl" && sport !== "cfb" && !isUclGame(game)) return abbreviation') &&
     candidateDailyEdgeSource.includes('const readerTeam = sport === "nfl" || sport === "cfb" || isUclGame(game) ? team : fullName') &&
     candidateDailyEdgeSource.includes('aria-label={fullName} title={fullName}>{readerTeam}</p>') &&
-    candidateDailyEdgeSource.includes('presentation?: "board" | "compact"') &&
+    candidateDailyEdgeSource.includes('function CompactMatchupIdentity({ game, sport }') &&
     candidateDailyEdgeSource.includes('grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-stretch gap-2') &&
     !candidateDailyEdgeSource.includes('grid-cols-[1fr_auto_1fr] items-stretch gap-2'),
 );
 check(
-  "UCL board cards show full club names while the reader retains compact abbreviations",
+  "UCL board and reader show abbreviations with wrapped full club names and team-color accents",
   candidateDailyEdgeSource.includes('function isUclGame(game: DailyEdgeGameDto)') &&
-    candidateDailyEdgeSource.includes('isUclGame(game) && presentation === "board"') &&
-    candidateDailyEdgeSource.includes('<CompactMatchupIdentity game={game} sport={sport} presentation="board" />') &&
+    candidateDailyEdgeSource.includes('const ucl = isUclGame(game)') &&
+    candidateDailyEdgeSource.match(/<CompactMatchupIdentity game=\{game\} sport=\{sport\} \/>/g)?.length === 3 &&
+    candidateDailyEdgeSource.includes('isUclGame(game) ? <CompactMatchupIdentity game={game} sport={sport} />') &&
     candidateDailyEdgeSource.includes('const readerTeam = sport === "nfl" || sport === "cfb" || isUclGame(game) ? team : fullName') &&
-    candidateDailyEdgeSource.includes('break-words text-[12px] leading-4 text-white'),
+    candidateDailyEdgeSource.includes('block break-words text-[9px] font-semibold leading-3 text-gray-400') &&
+    candidateDailyEdgeSource.match(/isUclGame\(game\) \? <MatchupColorAccent game=\{game\} sport=\{sport\} \/> : null/g)?.length === 2 &&
+    candidateDailyEdgeSource.includes('<MatchupColorAccent game={game} sport={sport} />'),
 );
 check(
   "shared soccer fallbacks retain provider club names and prefer club logos over country flags",
