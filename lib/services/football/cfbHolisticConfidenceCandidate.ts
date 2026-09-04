@@ -5,7 +5,7 @@ import {
 } from "@/lib/services/dailyEdge/confidenceExecutionContract";
 
 export const CFB_HOLISTIC_CONFIDENCE_CANDIDATE_RELEASE =
-  "cfb_holistic_confidence_2026_09_04_r2_price_portable_execution" as const;
+  "cfb_holistic_confidence_2026_09_04_r3_favorite_price_tier_ceiling" as const;
 export const CFB_HOLISTIC_BEST_ANGLE_MIN_SCORE = 60 as const;
 export const CFB_HOLISTIC_LEAN_MIN_SCORE = 55 as const;
 export const CFB_HOLISTIC_WATCHLIST_MIN_SCORE = 51.5 as const;
@@ -13,6 +13,8 @@ export const CFB_HOLISTIC_SHARP_MAX_POINTS = 2.5 as const;
 export const CFB_HOLISTIC_MOVEMENT_MAX_POINTS = 1.5 as const;
 export const CFB_HOLISTIC_PUBLIC_MAX_POINTS = 1 as const;
 export const CFB_HOLISTIC_TOTAL_EVIDENCE_MAX_POINTS = 4 as const;
+export const CFB_HOLISTIC_BEST_ANGLE_FAVORITE_PRICE_FLOOR = -200 as const;
+export const CFB_HOLISTIC_LEAN_FAVORITE_PRICE_FLOOR = -500 as const;
 
 export type CfbHolisticSelectedSide = "home" | "away" | "over" | "under";
 
@@ -40,13 +42,16 @@ export type CfbHolisticConfidenceResult = {
     public: number;
   };
   probabilityGrade: CfbV1Grade;
+  uncappedConfidenceGrade: CfbV1Grade;
   confidenceGrade: CfbV1Grade;
+  priceTierCeiling: CfbV1Grade | null;
   executionStatus: "bet" | "shop";
 };
 
 /**
- * Outcome-blind confidence scorer. Exact price and EV are retained for execution,
- * but cannot change the confidence score or grade.
+ * Outcome-blind confidence scorer. EV is retained for execution and cannot change
+ * the confidence grade. A selected moneyline favorite's attached price can only
+ * lower the maximum display tier; it can never veto the prediction as a No Play.
  */
 export function evaluateCfbHolisticConfidence(
   input: CfbHolisticConfidenceInput,
@@ -65,6 +70,8 @@ export function evaluateCfbHolisticConfidence(
     CFB_HOLISTIC_TOTAL_EVIDENCE_MAX_POINTS,
   );
   const confidenceScore = clamp(modelConfidenceScore + evidenceConfidenceAdjustment, 0, 100);
+  const uncappedConfidenceGrade = gradeForScore(confidenceScore);
+  const priceTierCeiling = favoritePriceTierCeiling(input.market, input.evaluatedPrice);
   return {
     candidateRelease: CFB_HOLISTIC_CONFIDENCE_CANDIDATE_RELEASE,
     confidenceScore,
@@ -72,7 +79,9 @@ export function evaluateCfbHolisticConfidence(
     evidenceConfidenceAdjustment,
     evidenceContributions: { sharp, movement, public: publicContribution },
     probabilityGrade: gradeForScore(modelConfidenceScore),
-    confidenceGrade: gradeForScore(confidenceScore),
+    uncappedConfidenceGrade,
+    confidenceGrade: applyGradeCeiling(uncappedConfidenceGrade, priceTierCeiling),
+    priceTierCeiling,
     executionStatus: executionStatusForQuote({
       americanPrice: input.evaluatedPrice,
       expectedValue: input.exactPriceExpectedValue,
@@ -80,6 +89,27 @@ export function evaluateCfbHolisticConfidence(
       quoteCoherent: true,
     }) as "bet" | "shop",
   };
+}
+
+export function favoritePriceTierCeiling(
+  market: CfbV1Market,
+  evaluatedPrice: number,
+): CfbV1Grade | null {
+  if (market !== "moneyline" || evaluatedPrice >= 0) return null;
+  if (evaluatedPrice <= CFB_HOLISTIC_LEAN_FAVORITE_PRICE_FLOOR) return "Watchlist";
+  if (evaluatedPrice < CFB_HOLISTIC_BEST_ANGLE_FAVORITE_PRICE_FLOOR) return "Lean";
+  return null;
+}
+
+function applyGradeCeiling(grade: CfbV1Grade, ceiling: CfbV1Grade | null): CfbV1Grade {
+  if (ceiling === null) return grade;
+  const rank: Record<CfbV1Grade, number> = {
+    "No Play": 0,
+    Watchlist: 1,
+    Lean: 2,
+    "Best Angle": 3,
+  };
+  return rank[grade] > rank[ceiling] ? ceiling : grade;
 }
 
 export function gradeForScore(score: number): CfbV1Grade {
