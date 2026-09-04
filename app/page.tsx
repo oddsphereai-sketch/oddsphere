@@ -4,7 +4,6 @@ import Link from "next/link";
 import { HomepageDashboardPrototype } from "@/app/components/HomepageDashboardPrototype";
 import { HomepageTrackingCategoryBoard } from "@/app/components/HomepageTrackingCategoryBoard";
 import { MarketingDailyEdgePreviewSurface } from "@/app/lab/components/daily-edge/DailyEdgeShell";
-import { ACTIVE_DAILY_EDGE_TOP_LEVEL_SPORT_LABELS } from "@/app/lab/lib/dailyEdgeSports";
 import { isHomepageExperienceCandidateEnabled } from "@/lib/config/productExperience";
 import {
   getPublicTrackRecordSummary,
@@ -16,10 +15,6 @@ import {
 } from "@/lib/marketing/trialOffer";
 
 const SITE_URL = "https://www.oddsphereai.com";
-const ACTIVE_DAILY_EDGE_SPORT_COPY = new Intl.ListFormat("en-US", {
-  style: "long",
-  type: "conjunction",
-}).format(ACTIVE_DAILY_EDGE_TOP_LEVEL_SPORT_LABELS);
 
 export const revalidate = 300;
 
@@ -32,8 +27,15 @@ export const metadata: Metadata = {
     "AI sports predictions",
     "sports betting intelligence",
     "MLB predictions",
+    "NFL predictions",
+    "college football predictions",
+    "NBA predictions",
+    "college basketball predictions",
     "WNBA predictions",
+    "soccer predictions",
     "World Cup predictions",
+    "Champions League predictions",
+    "NHL predictions",
     "sports prediction models",
     "market movement analysis",
     "sports model dashboard",
@@ -130,8 +132,8 @@ const faq: FaqItem[] = [
     a: "Yes. Billing is managed through Whop, and users can cancel through their Whop account before the trial ends.",
   },
   {
-    q: "What sports are currently supported?",
-    a: `Daily Edge currently supports ${ACTIVE_DAILY_EDGE_SPORT_COPY} when schedules and verified data are available. Availability follows each sport's active schedule.`,
+    q: "What sports does Daily Edge cover?",
+    a: "Daily Edge is built for major baseball, football, basketball, hockey, and soccer competitions. Boards appear when a league is in season and verified data is available.",
   },
   {
     q: "Is this financial or wagering advice?",
@@ -317,8 +319,8 @@ export async function HomePageContent({ presentation = "current" }: { presentati
         memberFeatures[2],
         memberFeatures[1],
         {
-          title: "MLB Player Prop Research",
-          body: "Filter the prop board quickly, then open recent results, matchup evidence, pricing, and deeper supporting context only when you need it.",
+          title: "Player Prop Research",
+          body: "Scan supported player-prop boards, then open recent results, matchup evidence, pricing, and deeper context only when you need it.",
         },
         memberFeatures[4],
         memberFeatures[5],
@@ -336,12 +338,12 @@ export async function HomePageContent({ presentation = "current" }: { presentati
           </p>
           <h1 className="mt-5 max-w-3xl break-words text-4xl font-black tracking-tight text-white sm:text-5xl xl:text-6xl">
             {candidate
-              ? "The Full Game Read—From Model Edge to Market Pulse."
+              ? "The Full Slate Read—From Model Edge to Market Pulse."
               : "Cut Through the Noise. Find the Plays Worth Your Attention."}
           </h1>
           <p className="mt-5 max-w-2xl text-lg leading-relaxed text-gray-200">
             {candidate
-              ? "Make clearer moneyline, totals, and first-inning decisions with model projections, real price movement, public consensus, verified sharp-book splits where available, matchup evidence, and tracking in one OddSphere workflow."
+              ? "Read Daily Edge across baseball, football, basketball, soccer, and hockey with sport-specific projections, real price movement, public consensus, verified sharp-book signals where available, matchup evidence, and tracking in one OddSphere workflow."
               : "Model projections, market movement, Play Grades, and tracking — organized into one Daily Edge dashboard built to show the why behind every pick."}
           </p>
           <div className="mt-6 flex min-w-0 flex-col gap-3 sm:flex-row">
@@ -444,7 +446,7 @@ export async function HomePageContent({ presentation = "current" }: { presentati
           ))}
         </div>
         <p className="mx-auto mt-6 max-w-3xl text-center text-sm leading-relaxed text-gray-400">
-          Daily Edge currently supports {ACTIVE_DAILY_EDGE_SPORT_COPY} when schedules and verified data are available.
+          Daily Edge covers major baseball, football, basketball, hockey, and soccer competitions when schedules and verified data are available.
         </p>
       </section>
 
