@@ -18,13 +18,14 @@ import {
   readFootballOutcomeMarketMovement,
   type FootballOutcomeMarketMovement,
 } from "./footballOutcomeMarketMovement";
+import { evaluateCfbHolisticConfidence } from "./cfbHolisticConfidenceCandidate";
 
 export const CFB_MARKET_SHARP_AWARE_CANDIDATE_RELEASE =
-  "cfb_market_sharp_aware_candidate_2026_09_04_r13_evidence_identity_continuity" as const;
+  "cfb_market_sharp_aware_candidate_2026_09_04_r14_holistic_confidence" as const;
 export const CFB_MARKET_SHARP_AWARE_SHADOW_RELEASE =
   CFB_MARKET_SHARP_AWARE_CANDIDATE_RELEASE;
 export const CFB_MARKET_SHARP_AWARE_PRODUCTION_RELEASE =
-  "cfb_market_sharp_aware_production_2026_09_04_r15_evidence_identity_continuity" as const;
+  "cfb_market_sharp_aware_production_2026_09_04_r16_holistic_confidence" as const;
 export const CFB_MARKET_SHADOW_WEIGHT = 0.75 as const;
 export const CFB_SHARP_SIGNED_GAP_THRESHOLD_PP = 10 as const;
 export const CFB_SHARP_FULL_STRENGTH_GAP_PP = 20 as const;
@@ -123,6 +124,9 @@ type CfbMarketEvidenceGradeBase = {
   movementDirection: CfbMarketEvidenceDirection;
   movementImpliedProbabilityDeltaPp: number | null;
   movementLineDelta: number | null;
+  confidenceScore: number;
+  confidenceAdjustment: number;
+  executionStatus: "bet" | "shop";
   reasonCodes: string[];
 };
 
@@ -295,137 +299,33 @@ export function buildCfbMarketEvidenceGradeShadow(args: {
     playbookLine: args.playbookLine ?? null,
     publicSplits: args.publicSplits ?? null,
   });
-  const sharpResistance = sharpRead.direction === "resistance";
-  const publicResistance = publicRead.direction === "resistance" && sharpRead.direction !== "support";
-  const movementResistance = movementRead.direction === "resistance";
-  const anyResistance = sharpResistance || publicResistance || movementResistance;
-  const resistanceCount = Number(sharpResistance) + Number(publicResistance) + Number(movementResistance);
-  const promotableSupport = (
-    sharpRead.direction === "support" ||
-    (publicRead.direction === "support" && sharpRead.direction !== "resistance") ||
-    (movementRead.direction === "support" && sharpRead.direction !== "resistance")
-  ) && !anyResistance;
-  let finalGrade = args.decision.grade;
-  const reasonCodes: string[] = [];
-
-  if (args.decision.grade === "Best Angle" && anyResistance) {
-    finalGrade = resistanceCount >= 2 ? "Watchlist" : "Lean";
-    reasonCodes.push(resistanceCount >= 2 ? "joint_market_evidence_resistance" : "market_evidence_resistance");
-  } else if (args.decision.grade === "Lean" && anyResistance) {
-    finalGrade = "Watchlist";
-    reasonCodes.push("market_evidence_resistance");
-  } else if (
-    args.decision.grade === "Lean" &&
-    args.decision.modelProbability >= CFB_PROVISIONAL_BEST_ANGLE_MIN_PROBABILITY &&
-    args.decision.edgePercentagePoints >= CFB_PROVISIONAL_BEST_ANGLE_MIN_EDGE_PP &&
-    args.decision.expectedValue >= CFB_PROVISIONAL_BEST_ANGLE_MIN_EV &&
-    args.decision.evaluatedQuote.price >= CFB_PROVISIONAL_ACTIONABLE_MIN_PRICE &&
-    args.decision.evaluatedQuote.price <= CFB_PROVISIONAL_ACTIONABLE_MAX_PRICE
-  ) {
-    finalGrade = "Best Angle";
-    reasonCodes.push("provisional_complete_tuple_best_angle");
-  } else if (
-    args.decision.grade === "Watchlist" &&
-    args.decision.market === "moneyline" &&
-    !anyResistance &&
-    args.decision.modelProbability >= CFB_PROVISIONAL_MONEYLINE_LEAN_MIN_PROBABILITY &&
-    args.decision.edgePercentagePoints >= CFB_PROVISIONAL_MONEYLINE_LEAN_MIN_EDGE_PP &&
-    args.decision.expectedValue >= CFB_PROVISIONAL_MONEYLINE_LEAN_MIN_EV &&
-    args.decision.evaluatedQuote.price >= CFB_PROVISIONAL_MONEYLINE_LEAN_MIN_PRICE &&
-    args.decision.evaluatedQuote.price <= CFB_PROVISIONAL_MONEYLINE_LEAN_MAX_PRICE
-  ) {
-    finalGrade = "Lean";
-    reasonCodes.push("provisional_complete_tuple_moneyline_lean");
-  } else if (
-    args.decision.grade === "Watchlist" &&
-    args.decision.market === "spread" &&
-    !anyResistance &&
-    args.decision.modelProbability >= CFB_PROVISIONAL_SPREAD_LEAN_MIN_PROBABILITY &&
-    args.decision.edgePercentagePoints >= CFB_PROVISIONAL_SPREAD_LEAN_MIN_EDGE_PP &&
-    args.decision.expectedValue >= CFB_PROVISIONAL_SPREAD_LEAN_MIN_EV &&
-    args.decision.evaluatedQuote.line !== null &&
-    Math.abs(args.decision.evaluatedQuote.line) <= CFB_PROVISIONAL_SPREAD_LEAN_MAX_ABS_LINE &&
-    args.decision.evaluatedQuote.price >= CFB_PROVISIONAL_ACTIONABLE_MIN_PRICE &&
-    args.decision.evaluatedQuote.price <= CFB_PROVISIONAL_ACTIONABLE_MAX_PRICE
-  ) {
-    finalGrade = "Lean";
-    reasonCodes.push("provisional_complete_tuple_spread_lean");
-  } else if (
-    args.decision.grade === "Watchlist" &&
-    args.decision.market === "spread" &&
-    !anyResistance &&
-    args.decision.modelProbability >= CFB_PROVISIONAL_LARGE_SPREAD_LEAN_MIN_PROBABILITY &&
-    args.decision.edgePercentagePoints >= CFB_PROVISIONAL_LARGE_SPREAD_LEAN_MIN_EDGE_PP &&
-    args.decision.expectedValue >= CFB_PROVISIONAL_LARGE_SPREAD_LEAN_MIN_EV &&
-    args.decision.evaluatedQuote.line !== null &&
-    Math.abs(args.decision.evaluatedQuote.line) > CFB_PROVISIONAL_SPREAD_LEAN_MAX_ABS_LINE &&
-    Math.abs(args.decision.evaluatedQuote.line) <= CFB_PROVISIONAL_LARGE_SPREAD_LEAN_MAX_ABS_LINE &&
-    args.decision.evaluatedQuote.price >= CFB_PROVISIONAL_ACTIONABLE_MIN_PRICE &&
-    args.decision.evaluatedQuote.price <= CFB_PROVISIONAL_ACTIONABLE_MAX_PRICE
-  ) {
-    finalGrade = "Lean";
-    reasonCodes.push("provisional_complete_tuple_large_spread_lean");
-  } else if (
-    args.decision.grade === "Watchlist" &&
-    args.decision.market === "total" &&
-    !anyResistance &&
-    args.decision.modelProbability >= CFB_PROVISIONAL_TOTAL_LEAN_MIN_PROBABILITY &&
-    args.decision.edgePercentagePoints >= CFB_PROVISIONAL_TOTAL_LEAN_MIN_EDGE_PP &&
-    args.decision.expectedValue >= CFB_PROVISIONAL_TOTAL_LEAN_MIN_EV &&
-    args.decision.evaluatedQuote.price >= CFB_PROVISIONAL_ACTIONABLE_MIN_PRICE &&
-    args.decision.evaluatedQuote.price <= CFB_PROVISIONAL_ACTIONABLE_MAX_PRICE
-  ) {
-    finalGrade = "Lean";
-    reasonCodes.push("provisional_complete_tuple_total_lean");
-  } else if (
-    args.decision.grade === "Watchlist" &&
-    promotableSupport &&
-    nearLeanThreshold(args.decision)
-  ) {
-    finalGrade = "Lean";
-    reasonCodes.push(sharpRead.direction === "support"
-      ? "strict_sharp_near_threshold_promotion"
-      : movementRead.direction === "support"
-        ? "same_book_movement_near_threshold_promotion"
-        : "public_consensus_near_threshold_promotion");
-  } else if (
-    args.decision.grade === "Watchlist" &&
-    args.decision.market === "spread" &&
-    !anyResistance &&
-    args.decision.evaluatedQuote.line !== null &&
-    Math.abs(args.decision.evaluatedQuote.line) <= CFB_RECALIBRATED_SPREAD_LEAN_MAX_ABS_LINE &&
-    args.decision.evaluatedQuote.price >= CFB_RECALIBRATED_SPREAD_LEAN_MIN_PRICE &&
-    args.decision.evaluatedQuote.price <= CFB_RECALIBRATED_SPREAD_LEAN_MAX_PRICE &&
-    args.decision.edgePercentagePoints >= CFB_RECALIBRATED_SPREAD_LEAN_MIN_EDGE_PP &&
-    args.decision.expectedValue > 0
-  ) {
-    finalGrade = "Lean";
-    reasonCodes.push("recalibrated_borderline_spread_lean");
-  } else if (
-    args.decision.grade === "No Play" &&
-    !anyResistance &&
-    args.decision.edgePercentagePoints >= CFB_WATCHLIST_NEAR_NEUTRAL_MIN_EDGE_PP &&
-    args.decision.expectedValue >= CFB_WATCHLIST_NEAR_NEUTRAL_MIN_EV
-  ) {
-    finalGrade = "Watchlist";
-    reasonCodes.push("near_neutral_price_monitoring");
-  } else if (
-    args.decision.grade === "No Play" &&
-    !anyResistance &&
-    (sharpRead.direction === "support" || publicRead.direction === "support" || movementRead.direction === "support") &&
-    args.decision.edgePercentagePoints >= CFB_WATCHLIST_EVIDENCE_CONFLICT_MIN_EDGE_PP &&
-    args.decision.expectedValue >= CFB_WATCHLIST_EVIDENCE_CONFLICT_MIN_EV
-  ) {
-    finalGrade = "Watchlist";
-    reasonCodes.push("supportive_market_evidence_disagreement_monitoring");
-  }
-
-  if (reasonCodes.length === 0) reasonCodes.push("coherent_pmf_market_evidence_no_grade_change");
+  const holistic = evaluateCfbHolisticConfidence({
+    market: args.decision.market,
+    selectedSide: args.selectedSide,
+    modelProbability: args.decision.modelProbability,
+    exactPriceExpectedValue: args.decision.expectedValue,
+    evaluatedPrice: args.decision.evaluatedQuote.price,
+    evaluatedLine: args.decision.evaluatedQuote.line,
+    sharpMoneyMinusTicketsPp: sharpRead.gapPp,
+    publicMoneyMinusTicketsPp: publicRead.gapPp,
+    selectedSideLineDelta: movementRead.lineDelta,
+    selectedSideImpliedProbabilityDeltaPp: movementRead.impliedProbabilityDeltaPp,
+  });
+  const finalGrade = holistic.confidenceGrade;
+  const reasonCodes = [
+    "holistic_confidence_price_independent",
+    holistic.evidenceConfidenceAdjustment > 0
+      ? "bounded_market_evidence_support"
+      : holistic.evidenceConfidenceAdjustment < 0
+        ? "bounded_market_evidence_resistance"
+        : "bounded_market_evidence_neutral",
+    holistic.executionStatus === "bet" ? "displayed_quote_bet" : "displayed_quote_shop",
+  ];
   return {
     shadowRelease: CFB_MARKET_SHARP_AWARE_SHADOW_RELEASE,
     market: args.decision.market,
     selectedSide: args.selectedSide,
-    probabilityGrade: args.decision.grade,
+    probabilityGrade: holistic.probabilityGrade,
     finalGrade,
     sharpDirection: sharpRead.direction,
     sharpGapPp: sharpRead.gapPp,
@@ -436,6 +336,9 @@ export function buildCfbMarketEvidenceGradeShadow(args: {
     movementDirection: movementRead.direction,
     movementImpliedProbabilityDeltaPp: movementRead.impliedProbabilityDeltaPp,
     movementLineDelta: movementRead.lineDelta,
+    confidenceScore: holistic.confidenceScore,
+    confidenceAdjustment: holistic.evidenceConfidenceAdjustment,
+    executionStatus: holistic.executionStatus,
     reasonCodes,
   };
 }
@@ -492,6 +395,9 @@ export function applyCfbMarketSharpAwareGrades(args: {
           sharpDirection: adjustment.sharpDirection,
           publicDirection: adjustment.publicDirection,
           movementDirection: adjustment.movementDirection,
+          confidenceScore: adjustment.confidenceScore,
+          confidenceAdjustment: adjustment.confidenceAdjustment,
+          executionStatus: adjustment.executionStatus,
           reasonCodes: adjustment.reasonCodes,
         },
       };
@@ -515,21 +421,6 @@ export function annotateCfbCrossMarketGradeCoherence<T extends CfbMarketEvidence
   return rows.map((row) => row.market === "moneyline" || row.market === "spread"
     ? { ...row, reasonCodes: [...row.reasonCodes, code] }
     : row) as T[];
-}
-
-function nearLeanThreshold(decision: CfbV1ExactPriceDecision): boolean {
-  if (!(decision.expectedValue > 0)) return false;
-  if (decision.market === "moneyline") {
-    return decision.evaluatedQuote.price >= -200 &&
-      decision.evaluatedQuote.price <= 200 &&
-      decision.edgePercentagePoints >= 2;
-  }
-  if (decision.market === "spread") {
-    return decision.evaluatedQuote.line !== null &&
-      Math.abs(decision.evaluatedQuote.line) <= 7 &&
-      decision.edgePercentagePoints >= 4;
-  }
-  return decision.edgePercentagePoints >= 4;
 }
 
 function selectedSide(homeTeam: string, decision: CfbV1ExactPriceDecision): CanonicalSide {

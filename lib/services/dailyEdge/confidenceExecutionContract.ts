@@ -1,8 +1,9 @@
 export const DAILY_EDGE_CONFIDENCE_EXECUTION_CONTRACT_RELEASE =
-  "daily_edge_confidence_execution_contract_2026_09_04_r1" as const;
+  "daily_edge_confidence_execution_contract_2026_09_04_r2_recommendation_resolution" as const;
 
 export type DailyEdgeConfidenceGrade = "Best Angle" | "Lean" | "Watchlist" | "No Play";
 export type DailyEdgeExecutionStatus = "bet" | "shop" | "unavailable";
+export type DailyEdgeRecommendationStatus = DailyEdgeExecutionStatus | "monitor";
 
 export type DailyEdgeConfidenceBands = {
   bestAngle: number;
@@ -80,6 +81,82 @@ export function executionStatusForQuote(args: {
   return args.expectedValue >= 0 ? "bet" : "shop";
 }
 
+export type DailyEdgeConfidenceExecutionDecision = {
+  contractRelease: typeof DAILY_EDGE_CONFIDENCE_EXECUTION_CONTRACT_RELEASE;
+  confidenceScore: number;
+  confidenceGrade: DailyEdgeConfidenceGrade;
+  quoteStatus: DailyEdgeExecutionStatus;
+  recommendationStatus: DailyEdgeRecommendationStatus;
+  confidenceActionable: boolean;
+  actionableAtDisplayedQuote: boolean;
+  noBet: boolean;
+  noBetReason: string | null;
+};
+
+/**
+ * Resolves the product decision without allowing quote economics to mutate the
+ * confidence label. Sport models own the score and bands. This layer owns only
+ * stable category presentation and displayed-quote execution semantics.
+ */
+export function resolveDailyEdgeConfidenceExecutionDecision(args: {
+  confidenceScore: number;
+  previousConfidenceGrade?: DailyEdgeConfidenceGrade | null;
+  bands?: DailyEdgeConfidenceBands;
+  transitionBuffer?: number;
+  hardHoldReason?: string | null;
+  americanPrice: number | null;
+  expectedValue: number | null;
+  quoteFresh: boolean;
+  quoteCoherent: boolean;
+}): DailyEdgeConfidenceExecutionDecision {
+  assertScore(args.confidenceScore);
+  const hardHoldReason = cleanReason(args.hardHoldReason);
+  const confidenceGrade = hardHoldReason
+    ? "No Play"
+    : stableConfidenceGrade({
+        score: args.confidenceScore,
+        previousGrade: args.previousConfidenceGrade ?? null,
+        bands: args.bands,
+        transitionBuffer: args.transitionBuffer,
+      });
+  const quoteStatus = executionStatusForQuote({
+    americanPrice: args.americanPrice,
+    expectedValue: args.expectedValue,
+    quoteFresh: args.quoteFresh,
+    quoteCoherent: args.quoteCoherent,
+  });
+  const confidenceActionable = !hardHoldReason && isConfidenceActionable(confidenceGrade);
+  const recommendationStatus: DailyEdgeRecommendationStatus = hardHoldReason || quoteStatus === "unavailable"
+    ? "unavailable"
+    : confidenceActionable
+      ? quoteStatus
+      : "monitor";
+  const actionableAtDisplayedQuote = recommendationStatus === "bet";
+  const noBetReason = actionableAtDisplayedQuote
+    ? null
+    : hardHoldReason
+      ?? (recommendationStatus === "shop"
+        ? "displayed_quote_negative_expected_value_shop"
+        : recommendationStatus === "unavailable"
+          ? "fresh_coherent_named_book_quote_unavailable"
+          : `confidence_grade_${confidenceGrade.toLowerCase().replace(/\s+/g, "_")}`);
+  return {
+    contractRelease: DAILY_EDGE_CONFIDENCE_EXECUTION_CONTRACT_RELEASE,
+    confidenceScore: args.confidenceScore,
+    confidenceGrade,
+    quoteStatus,
+    recommendationStatus,
+    confidenceActionable,
+    actionableAtDisplayedQuote,
+    noBet: !actionableAtDisplayedQuote,
+    noBetReason,
+  };
+}
+
+export function isConfidenceActionable(grade: DailyEdgeConfidenceGrade): boolean {
+  return grade === "Best Angle" || grade === "Lean";
+}
+
 function entryBoundary(grade: DailyEdgeConfidenceGrade, bands: DailyEdgeConfidenceBands): number {
   if (grade === "Best Angle") return bands.bestAngle;
   if (grade === "Lean") return bands.lean;
@@ -105,4 +182,9 @@ function assertBands(bands: DailyEdgeConfidenceBands): void {
     bands.watchlist < 0 ||
     bands.bestAngle > 100
   ) throw new Error("Daily Edge confidence bands must be finite, ordered, and within [0,100].");
+}
+
+function cleanReason(value: string | null | undefined): string | null {
+  const reason = value?.trim();
+  return reason ? reason : null;
 }

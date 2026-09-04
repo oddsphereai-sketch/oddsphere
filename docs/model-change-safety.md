@@ -5,6 +5,46 @@ inputs, probabilities, projections, grades, promotions/demotions, calibration, p
 or stakes. It exists to prevent mixed model eras, competing writers, accidental board
 flattening, and load spikes.
 
+## Owner-approved provisional exception: CFB confidence / execution PR #374
+
+Approval and scope: Daniel Mengel, owner/operator of OddsphereAI, explicitly approved this
+exception on 2026-09-04 after reviewing the limited independent holdout and the identical-board
+impact. It applies only to PR #374 at remote head
+`5df51da44d118121693df08261915b6c4039579a` before this governance amendment and to the CFB
+confidence candidate `cfb_holistic_confidence_2026_09_04_r2_price_portable_execution`. The final
+PR head may add only this approval record and verification metadata. It does not authorize a
+similar exception for another sport, market, model, future threshold change, or stake change.
+
+The owner acknowledges that the settled 2026-09-03 diagnostic is one independent date and does
+not meet the normal held-out sample requirement in section 4. As a narrow exception, the reviewed
+CFB policy may become active after all remaining protected-PR and live-proof gates pass. The
+authoritative selected-side probability plus a maximum four-point combined contribution from
+strict-identity Circa money-minus-tickets, Playbook money-minus-tickets, same-book line movement,
+and same-book implied-price movement determines confidence. Ordinary evidence remains signed and
+bounded; no individual channel is an automatic veto, promotion, or side flip. The evaluated
+named-book quote and exact EV remain attached and determine only `bet` versus `shop` execution.
+
+The reviewed September 3 board moves 2 Best Angles / 4 Leans / 17 Watchlists / 5 No Plays to
+6 / 11 / 6 / 5, with 13 promotions, 6 demotions, and zero side changes. Massachusetts +29.5 is
+recovered as Lean / Bet from 53.48% probability plus 2.4 bounded evidence points. The September 4
+current-board replay moves 0 / 4 / 14 / 3 to 5 / 6 / 5 / 5, with 10 promotions, 7 demotions,
+zero side changes, 7 displayed-quote Bets, and 4 Shops. These counts are evidence outcomes, not
+quotas.
+
+No stake creation or increase is authorized. Shop rows remain `no_bet=true`, zero-stake, and
+excluded from exact-price ROI while retaining their confidence grade and locked-side accuracy.
+The forecast PMF, side, probability, projection, exact quote, provider budget, T-60 immutability,
+sole CFB writer, and `prediction_pipeline:cfb` lease are unchanged. MLB first inning is excluded.
+
+Before merge, the amended exact tree must pass focused CFB tests, TypeScript, lint, `npm run
+verify:model-change`, `npm run verify`, production build, latest-main integration safety, required
+GitHub checks, and protected-PR up-to-date enforcement. Live acceptance requires a successful
+natural CFB writer cycle, one empty released lease, a release-coherent member/tracking board, the
+reviewed Bet/Shop separation, unchanged stake behavior, and preserved locked rows. Mixed releases,
+side/probability drift, a writer or lease failure, missing-price rows presented as normal wagers,
+tracking/reader incoherence, a stake change, or an unexpected actionable collapse triggers rollback
+to the preceding r53/r28/r15 release family without rewriting locked evidence.
+
 ## Owner-approved emergency exception: CFB PR #265 provisional release
 
 Approval and scope: Daniel Mengel, owner/operator of OddsphereAI, approved this exception on

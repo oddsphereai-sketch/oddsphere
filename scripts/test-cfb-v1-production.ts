@@ -342,7 +342,7 @@ assert.equal(compactMemberSnapshot.snapshotRelease, CFB_FORWARD_MEMBER_SNAPSHOT_
 assert.equal(compactMemberSnapshot.fixture, member, "the fast snapshot preserves the authoritative fixture byte-for-byte");
 assert.equal(compactMemberSnapshot.sourceChecksum, member.provenance.sourceChecksum);
 assert.equal(member.snapshot.games.length, 1);
-assert.equal(member.fixtureRelease, "cfb_v1_member_fixture_2026_09_04_r45_evidence_identity_continuity");
+assert.equal(member.fixtureRelease, "cfb_v1_member_fixture_2026_09_04_r46_holistic_confidence");
 assert.equal(member.snapshot.games[0]!.collegeFootballScope, "fbs_involved", "the CFB reader must classify every member game for the FBS-first board without changing writer scope");
 assert.equal(member.snapshot.games[0]!.awayTeamDisplayName, game.away.name);
 assert.equal(member.snapshot.games[0]!.homeTeamDisplayName, game.home.name);
@@ -1370,7 +1370,7 @@ const marginalNegativeEvTracking = buildCfbOfficialTrackingRecords({
 assert.equal(marginalNegativeEvTracking[0]!.play_grade, "lean", "predictive grade remains visible at a marginally negative exact quote");
 assert.equal(marginalNegativeEvTracking[0]!.no_bet, true, "negative exact-price EV cannot become an official wager");
 assert.equal(marginalNegativeEvTracking[0]!.best_angle, false);
-assert.equal(marginalNegativeEvTracking[0]!.no_bet_reason, "exact_price_ev_below_execution_floor");
+assert.equal(marginalNegativeEvTracking[0]!.no_bet_reason, "displayed_quote_negative_expected_value_shop");
 assert.equal(marginalNegativeEvTracking[0]!.odds_american, marginalNegativeEvDecision.evaluatedQuote.price);
 assert.equal(marginalNegativeEvTracking[0]!.line_value, null);
 
