@@ -257,7 +257,7 @@ changed; only deterministic settlement of existing locked rows is affected.
 ## MLB champion
 
 - Projection runtime: resolved automodel `v2_2`
-- First-inning runtime: `fi_v2` with FI-scoped release `mlb_first_inning_release_2026_09_04_r84_pre_r61_probability_rollback` and probability head `mlb_first_inning_fi_v9_pre_r61_model65_target_excluded_2026_09_04`. r84 restores the pre-r61 high-quality 65% independent / 35% market probability blend while retaining r80's evaluated-book exclusion, independent-only singleton forecast, exact-price-only economics, and r81's explicit `predicted_nrfi:null` Toss-Up persistence. It does not change full-game tuples, the sole writer/lease, providers, query budgets, or locked rows.
+- First-inning runtime: `fi_v2` with FI-scoped release `mlb_first_inning_release_2026_09_04_r85_independent_uncertainty` and probability head `mlb_first_inning_fi_v10_independent_uncertainty_target_excluded_2026_09_04`. r85 retains r84's pre-r61 65% independent / 35% target-excluded multi-book posterior and its 48%-52% corroborated uncertainty band. When the evaluated quote is the sole accepted pair, the forecast remains independent-only and now requires the independent probability to clear 55% NRFI or 55% YRFI; otherwise it is a genuine null-side Toss-Up. The evaluated quote remains exact-price economics only. Full-game tuples, probabilities, grades, the sole writer/lease, providers, query budgets, locks, tracking, and settlement are unchanged.
 - Public calibration: `mlb_public_calibration_v30_first_inning_evaluated_quote_exclusion_2026_09_02`
 - Decision release: `mlb_daily_edge_decision_2026_09_02_r79_first_inning_evaluated_quote_exclusion`
 - Rule bundle: `mlb_daily_edge_rule_bundle_v67_first_inning_evaluated_quote_exclusion_2026_09_02`
@@ -630,6 +630,24 @@ identifiers remain unchanged. This rollback is not represented as a
 holdout-winning recalibration: the historical comparisons and forward-only
 acceptance boundary are recorded in
 `docs/model-audits/2026-09-04-mlb-fi-pre-r61-probability-rollback-r84.md`.
+
+The September 4 MLB first-inning r85 release corrects the uncertainty contract
+for evaluation-only rows without restoring evaluated-price self-validation.
+The successful July 11-August 8 head produced 75 Toss-Ups among 322 locked
+forecasts (23.3%); the earlier 238-row performance report counted only settled,
+priced directional picks and was not a complete board denominator. r85 keeps
+r84 byte-identical when a target-excluded market pair exists. When no such pair
+exists, the authoritative event probability and decimal expected runs remain
+the independent model output, but a probability between 45% and 55% is an
+explicit null-side Toss-Up rather than a marginal binary call. The band was
+predeclared before the outcome join and improved directional accuracy in the
+training, validation, and untouched partitions while leaving every probability,
+Brier score, and log loss unchanged. Exact evaluated price remains downstream
+EV/grade-only. Only the FI-scoped release, probability head v10, and market
+calibration policy v7 change; the member tuple contract, all MLB-wide IDs,
+Moneyline/Total behavior, writers, locks, and tracking remain unchanged.
+Evidence and rollback are recorded in
+`docs/model-audits/2026-09-04-mlb-fi-independent-uncertainty-r85.md`.
 
 The September 2 MLB r80 full-game structural-coherence release removes two
 publication defects without introducing an uncalibrated market-reversal

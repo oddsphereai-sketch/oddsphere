@@ -813,17 +813,32 @@ async function main() {
     }
   }
   {
-    // Constants sanity + Push 3B-3 calibration thresholds
+    // Constants sanity + release-scoped uncertainty thresholds.
     check("FI_NRFI_THRESHOLD > FI_YRFI_THRESHOLD",
       FI_TEST.FI_NRFI_THRESHOLD > FI_TEST.FI_YRFI_THRESHOLD);
     check("Best Angle min edge sane (≥ 2%)", FI_TEST.FI_BEST_ANGLE_MIN_EDGE_PCT >= 2);
     check("Posterior cap ≤ 15 pts", FI_TEST.FI_POSTERIOR_NRFI_CAP <= 0.15);
-    check("Push 3B-3: NRFI threshold = 0.52 (narrowed from 0.55)",
+    check("target-excluded corroborated NRFI threshold remains 0.52",
       FI_TEST.FI_NRFI_THRESHOLD === 0.52);
-    check("Push 3B-3: YRFI threshold = 0.48 (narrowed from 0.45)",
+    check("target-excluded corroborated YRFI threshold remains 0.48",
       FI_TEST.FI_YRFI_THRESHOLD === 0.48);
-    check("Push 3B-3: Toss-Up band is symmetric ±2 around 0.50",
+    check("target-excluded corroborated Toss-Up band remains symmetric ±2 around 0.50",
       Math.abs((FI_TEST.FI_NRFI_THRESHOLD - 0.50) - (0.50 - FI_TEST.FI_YRFI_THRESHOLD)) < 0.001);
+    check("independent-only uncertainty band is symmetric 45%-55%",
+      FI_TEST.FI_INDEPENDENT_ONLY_NRFI_THRESHOLD === 0.55 &&
+      FI_TEST.FI_INDEPENDENT_ONLY_YRFI_THRESHOLD === 0.45);
+    const independentMarginal = FI_TEST.classifyFiPosterior(0.53, false);
+    const corroboratedMarginal = FI_TEST.classifyFiPosterior(0.53, true);
+    check("53% independent-only forecast is a genuine Toss-Up",
+      independentMarginal.pick === "Toss-Up" &&
+      independentMarginal.reason === "fi_toss_up_independent_uncertainty_band" &&
+      independentMarginal.mode === "independent_only");
+    check("same 53% posterior remains NRFI with target-excluded corroboration",
+      corroboratedMarginal.pick === "NRFI" &&
+      corroboratedMarginal.mode === "target_excluded_market_corroborated");
+    check("independent-only probability must clear 55%/45% to become directional",
+      FI_TEST.classifyFiPosterior(0.56, false).pick === "NRFI" &&
+      FI_TEST.classifyFiPosterior(0.44, false).pick === "YRFI");
   }
   {
     // Push 3B-3 — posterior just above 0.52 must classify as NRFI (not Toss-Up)

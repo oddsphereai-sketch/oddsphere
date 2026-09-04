@@ -57,7 +57,7 @@ const FI_CONFIDENCE_CEILING = {
 } as const;
 const FI_CONFIDENCE_FLOOR = 50;
 
-// Classification cutoffs on posterior P(NRFI). Push 3B-3 calibration:
+// Classification cutoffs on posterior P(NRFI).
 //
 // Original band [0.45, 0.55] collapsed 67% of games to Toss-Up across a
 // 3-slate calibration sweep (39 games), because most game posteriors
@@ -65,18 +65,16 @@ const FI_CONFIDENCE_FLOOR = 50;
 // independent toward market, and league-average matchups land close
 // to baseline 55% NRFI ≈ 50% on either side.
 //
-// Narrowed to [0.48, 0.52] = ±2 points around 50%:
-//   • Toss-Up rate drops from ~67% → ~36% (target 2-5 per 15-game slate)
-//   • YRFI emerges (was 0 on 2026-06-06; now 3-4 per slate)
-//   • Best Angle gates unchanged (edge ≥ 4% + tier high + market data)
-//   • Held still earned only by fallback tier / severe missing
-//
-// True coin-flip games (49-51%) still receive Toss-Up. Directional
-// signals at 52% NRFI / 48% NRFI become Lean picks, not Toss-Up.
+// The historical 48%-52% band remains exact when an independently priced,
+// target-excluded market pair corroborates the model. r85 uses a wider
+// 45%-55% uncertainty band only when the evaluated quote is the sole pair and
+// therefore cannot validate its own forecast. That band was predeclared and
+// then improved directional accuracy in train, validation, and untouched
+// confirmation while leaving event probabilities and proper scores unchanged.
 const FI_NRFI_THRESHOLD = 0.52;
 const FI_YRFI_THRESHOLD = 0.48;
-const FI_TOSS_UP_MIN = FI_YRFI_THRESHOLD;
-const FI_TOSS_UP_MAX = FI_NRFI_THRESHOLD;
+const FI_INDEPENDENT_ONLY_NRFI_THRESHOLD = 0.55;
+const FI_INDEPENDENT_ONLY_YRFI_THRESHOLD = 0.45;
 
 // Best Angle gates (post-classification).
 //
@@ -141,6 +139,9 @@ export type FiV2Audit = {
   posterior_capped: boolean;
   posterior_moved_from_market: number; // |posterior_nrfi - market_nrfi|, or 0 if no market
   // Layer 4
+  decision_uncertainty_mode: "target_excluded_market_corroborated" | "independent_only";
+  decision_nrfi_threshold: number;
+  decision_yrfi_threshold: number;
   fi_pick: FiPick;
   fi_confidence: number;
   fi_edge_pct: number | null;
@@ -237,6 +238,42 @@ function computeConfidence(args: {
   let base = probSide * 100;
   base = Math.max(FI_CONFIDENCE_FLOOR, base);
   return clamp(base, FI_CONFIDENCE_FLOOR, FI_CONFIDENCE_CEILING[args.tier]);
+}
+
+function classifyFiPosterior(
+  posteriorNrfi: number,
+  hasForecastMarket: boolean,
+): {
+  pick: Exclude<FiPick, "Held">;
+  reason: string;
+  mode: "target_excluded_market_corroborated" | "independent_only";
+  nrfiThreshold: number;
+  yrfiThreshold: number;
+} {
+  const mode = hasForecastMarket
+    ? "target_excluded_market_corroborated" as const
+    : "independent_only" as const;
+  const nrfiThreshold = hasForecastMarket
+    ? FI_NRFI_THRESHOLD
+    : FI_INDEPENDENT_ONLY_NRFI_THRESHOLD;
+  const yrfiThreshold = hasForecastMarket
+    ? FI_YRFI_THRESHOLD
+    : FI_INDEPENDENT_ONLY_YRFI_THRESHOLD;
+  if (posteriorNrfi >= nrfiThreshold) {
+    return { pick: "NRFI", reason: "fi_p_nrfi_above_threshold", mode, nrfiThreshold, yrfiThreshold };
+  }
+  if (posteriorNrfi <= yrfiThreshold) {
+    return { pick: "YRFI", reason: "fi_p_nrfi_below_threshold", mode, nrfiThreshold, yrfiThreshold };
+  }
+  return {
+    pick: "Toss-Up",
+    reason: hasForecastMarket
+      ? "fi_toss_up_probability"
+      : "fi_toss_up_independent_uncertainty_band",
+    mode,
+    nrfiThreshold,
+    yrfiThreshold,
+  };
 }
 
 /**
@@ -371,6 +408,10 @@ export function runMlbFirstInningModelV2(
   }
 
   // Layer 4 — classification
+  const directionalDecision = classifyFiPosterior(posteriorNrfi, hasForecastMarket);
+  const decisionUncertaintyMode = directionalDecision.mode;
+  const decisionNrfiThreshold = directionalDecision.nrfiThreshold;
+  const decisionYrfiThreshold = directionalDecision.yrfiThreshold;
   let fi_pick: FiPick;
   let fi_pick_reason: string;
   if (sparseNamedStarterTossUp) {
@@ -385,18 +426,9 @@ export function runMlbFirstInningModelV2(
   } else if (indep.data_quality_tier === "fallback" || indep.feature_audit.missing_count >= 6) {
     fi_pick = "Held";
     fi_pick_reason = "fi_no_bet_data_quality";
-  } else if (posteriorNrfi >= FI_NRFI_THRESHOLD) {
-    fi_pick = "NRFI";
-    fi_pick_reason = "fi_p_nrfi_above_threshold";
-  } else if (posteriorNrfi <= FI_YRFI_THRESHOLD) {
-    fi_pick = "YRFI";
-    fi_pick_reason = "fi_p_nrfi_below_threshold";
-  } else if (posteriorNrfi >= FI_TOSS_UP_MIN && posteriorNrfi <= FI_TOSS_UP_MAX) {
-    fi_pick = "Toss-Up";
-    fi_pick_reason = "fi_toss_up_probability";
   } else {
-    fi_pick = "Held";
-    fi_pick_reason = "fi_no_bet_data_quality";
+    fi_pick = directionalDecision.pick;
+    fi_pick_reason = directionalDecision.reason;
   }
 
   // Edge (only meaningful when both sides know which side they're picking)
@@ -534,6 +566,9 @@ export function runMlbFirstInningModelV2(
     posterior_expected_first_inning_runs: posteriorExpectedFirstInningRuns,
     posterior_capped: posteriorCapped,
     posterior_moved_from_market: posteriorMovedFromMarket,
+    decision_uncertainty_mode: decisionUncertaintyMode,
+    decision_nrfi_threshold: decisionNrfiThreshold,
+    decision_yrfi_threshold: decisionYrfiThreshold,
     fi_pick,
     fi_confidence,
     fi_edge_pct,
@@ -566,10 +601,13 @@ export function runMlbFirstInningModelV2(
 export const __TEST__ = {
   FI_NRFI_THRESHOLD,
   FI_YRFI_THRESHOLD,
+  FI_INDEPENDENT_ONLY_NRFI_THRESHOLD,
+  FI_INDEPENDENT_ONLY_YRFI_THRESHOLD,
   FI_BEST_ANGLE_MIN_EDGE_PCT,
   FI_BEST_ANGLE_MIN_CONFIDENCE,
   FI_LEAN_MIN_EDGE_PCT,
   FI_POSTERIOR_NRFI_CAP,
   selectTrustIndependent,
   computeConfidence,
+  classifyFiPosterior,
 };
