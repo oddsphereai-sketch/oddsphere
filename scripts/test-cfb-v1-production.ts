@@ -34,6 +34,7 @@ import { normalizeCfbPlaybookLine, normalizeCfbPlaybookSplits } from "../lib/ser
 import {
   cfbMarketAnchorHealthHolds,
   cfbLockPlanningEvidence,
+  cfbTrackingPayloadsForRun,
   publishCfbForwardDecisionBundle,
   trustedCfbSharpEventIdsByGame,
 } from "../lib/services/football/cfbForwardEvidenceWriter";
@@ -1358,6 +1359,21 @@ assert.equal(heldMoneylineTracking.no_bet, true, "a held forecast must remain no
 assert.equal(heldMoneylineTracking.odds_american, null, "a held forecast must not invent executable economics");
 assert.equal(heldMoneylineTracking.side, "home", "held Moneyline tracking must preserve the authoritative forecast side");
 assert.equal((heldMoneylineTracking.snapshot_json?.forecast_outlook as { market?: string } | undefined)?.market, "moneyline");
+const priorT60Stored: CfbForwardStoredEvidence = {
+  id: "71",
+  providerGameId: marketScopedPayload.game.providerGameId,
+  stage: "t60",
+  capturedAt: marketScopedPayload.capturedAt,
+  gameStartAt: marketScopedPayload.game.scheduledStart,
+  payloadSha256: "tracking-backfill-fixture",
+  payload: marketScopedPayload,
+};
+const ordinaryRefreshPayload = { ...marketScopedPayload, stage: "unlocked" as const, capturedAt: "2026-08-29T15:20:00.000Z" };
+assert.deepEqual(
+  cfbTrackingPayloadsForRun([priorT60Stored], [ordinaryRefreshPayload]).map((row) => row.game.providerGameId),
+  [marketScopedPayload.game.providerGameId],
+  "an ordinary collection run must retain prior immutable T-60 payloads for missing-market backfill",
+);
 assert.throws(
   () => buildCfbOfficialTrackingRecords({ payload: { ...marketScopedPayload, captureTiming: "late_first_observation" }, gameId: 9001 }),
   /eligible on-time T-60 evidence payload/,

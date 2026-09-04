@@ -21,6 +21,12 @@ performance remain price-qualified. Existing `(game, market)` rows are never
 replaced; the sole writer's market-scoped idempotency naturally adds only the
 missing rows from retained immutable T-60 evidence.
 
+Writer r44 closes the postdeploy backfill handoff: ordinary collection runs now
+union retained T-60 payloads with any newly captured T-60 payloads before the
+same idempotent tracking write. Writer r43 only passed newly captured T-60 rows
+on collection runs, so its first natural postdeploy cycle could finish healthy
+without repairing earlier missing markets.
+
 Acceptance requires 3/3 market records for every eligible T-60 payload whose
 three model outlooks exist, null economics on held records, no changes to any
 existing row, and equal per-market accuracy denominators. Roll back writer r43
