@@ -112,6 +112,41 @@ Roll back or hold on mixed releases, value/reader incoherence, missing price cov
 normal No Play, a writer/reader crash, lease failure, stale snapshot resurfacing, failed future
 T-60 creation, or another unexpected actionable-board collapse.
 
+## Owner-approved provisional exception: UCL EPL-grade transfer r6
+
+Approval and scope: Daniel Mengel, owner/operator of OddsphereAI, explicitly
+approved this exception on 2026-09-03 after reviewing the live forecast-only
+UCL board. It applies only to the unchanged UCL model
+`ucl_goals_coherent_2026_09_03_r6_authenticated_match_stats_manifest` and the
+grade release
+`ucl_grade_policy_2026_09_03_r6_owner_approved_epl_v23_transfer`.
+
+The owner directed UCL play grades to inherit the established Premier League
+foundation rather than remain universally No Play while new UCL exact-price
+outcomes accrue. The UCL implementation must own and freeze the EPL v23
+hierarchy; it may not call the mutable EPL grade runtime. UCL forecast sides,
+the coherent regulation-time PMF, probabilities, expected scores, and target-
+excluded evidence rules remain unchanged. Every actionable requires a complete
+current quote and positive exact-price forecast-side EV. Match Result remains
+forecast-first, sparse club priors retain their caps, and Double Chance remains
+monitoring-only. No stake, quota, contrarian side, or parallel writer is
+authorized.
+
+This is a provisional transfer policy, not a UCL-specific historical price-
+validation claim. Production and tracking must stamp the exact UCL calibration
+release and report forward T-60 results separately. Before merge, the frozen
+18-game board replay must report coverage, promotions, demotions, market mix,
+side changes, and nonpositive-EV actionables; focused UCL tests, TypeScript,
+lint, `npm run verify:model-change`, production build, protected PR, integration
+safety, deployment, and live proof remain mandatory. A total current-price
+collapse may not replace a priced member LKG. Roll back future unlocked rows to
+r5 on any nonpositive-EV actionable, side substitution, mixed release, broken
+four-market lock, or unexpected actionable-board collapse, while preserving
+all locked r6 evidence unchanged.
+
+Evidence: `docs/model-audits/2026-09-03-ucl-epl-grade-transfer-r6-predeclaration.md`
+and `docs/model-audits/2026-09-03-ucl-epl-grade-transfer-r6-result.md`.
+
 ## 1. Declare scope before editing
 
 - Name every affected sport, market, model family, calibration layer, writer, reader, and cron.

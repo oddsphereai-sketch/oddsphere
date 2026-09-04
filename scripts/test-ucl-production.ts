@@ -11,7 +11,7 @@ import { deriveUclMatchResultDecision, deriveUclPreviewGrade } from "../lib/serv
 import { resolveUclFeatureFlags, resolveUclSettlementGradingPlan, resolveUclTrackingVisibility } from "../lib/services/ucl/uclFeatureFlags";
 import { isCurrentUclTrackingRelease, isTrackingRecordEligible, isUclTrackingRecord, trackingDisplaySport } from "../lib/services/trackingAggregateService";
 import { getOfficialTrackingMarkets } from "../lib/config/officialTrackingMarkets";
-import { evaluateUclPublicationCoverage } from "../lib/services/ucl/uclPublicationReadiness";
+import { evaluateUclPublicationCoverage, mergeVerifiedUclLocksIntoLastKnownGood, uclPriceCollapseIsRecovered } from "../lib/services/ucl/uclPublicationReadiness";
 import { canonicalUclOpeningOdds } from "../lib/services/ucl/uclOpeningOddsEvaluation";
 import type { PredictionRecordRow } from "../lib/types/domain/Tracking";
 import {
@@ -22,6 +22,8 @@ import {
   uclHistoricalStatsManifestDigest,
   UCL_CHRONOLOGICAL_MANIFEST,
 } from "../lib/services/ucl/uclChronologicalManifest";
+import { UCL_TEAM_ASSETS, uclTeamAsset, uclTeamLogo } from "../lib/services/ucl/uclTeamAssets";
+import { buildEplPreviewCacheKey } from "../lib/services/epl/buildEplDailyEdgePreview";
 
 function match(overrides: Partial<BdlUclMatch> & Pick<BdlUclMatch, "id" | "home_team_id" | "away_team_id" | "date">): BdlUclMatch {
   return {
@@ -111,6 +113,56 @@ const partialHistory = new BallDontLieUclProvider("test-ucl-key", async (input) 
 });
 await assert.rejects(() => partialHistory.listHistoricalMatches([2024, 2025]), /no regulation-final rows.*2025/);
 assert.equal(SHARP_UCL_LEAGUE, "uefa_-_champions_league");
+
+// The complete current UCL field has the same deterministic crest/color
+// treatment as EPL. Assets are presentation-only and never affect the model.
+const currentUclClubs = [
+  "AEK", "ARS", "ATM", "AVL", "BAR", "BET", "BODO", "BRU", "COMO",
+  "DOR", "FCP", "FEN", "FEY", "GAL", "INT", "LAS", "LILL", "LIV",
+  "MAN", "MNC", "MUN", "NAP", "PSG", "PSV", "RBL", "RCL", "RMA",
+  "ROMA", "SAB", "SCP", "SHK", "SLB", "SLP", "VFB", "VIK", "VIL",
+] as const;
+assert.deepEqual(Object.keys(UCL_TEAM_ASSETS).sort(), [...currentUclClubs].sort());
+for (const abbreviation of currentUclClubs) {
+  const asset = uclTeamAsset(abbreviation);
+  assert.ok(asset, `${abbreviation} must have an explicit UCL identity asset`);
+  assert.match(asset.primaryColor, /^#[0-9A-F]{6}$/);
+  assert.equal(uclTeamLogo(abbreviation), `https://a.espncdn.com/i/teamlogos/soccer/500/${asset.espnId}.png`);
+}
+assert.equal(uclTeamAsset("unknown"), null);
+assert.equal(uclTeamLogo("unknown"), null);
+
+const previewCacheSlate = {
+  round: 1,
+  modelRelease: UCL_MODEL_RELEASE,
+  matches: [{ id: 101, kickoff: "2026-09-08T17:45:00Z" }],
+};
+const previewAuthority = {
+  gradeRelease: UCL_CALIBRATION_RELEASE,
+  deriveCoherentOutcome: (() => null) as never,
+  deriveMatchResultDecision: (() => null) as never,
+  derivePreviewGrade: (() => null) as never,
+};
+const firstDayCacheKey = buildEplPreviewCacheKey(previewCacheSlate as never, {
+  cacheNamespace: "ucl",
+  cacheIdentity: "2026-09-08:101@2026-09-08T17:45:00Z",
+  authorities: previewAuthority,
+});
+const nextDayCacheKey = buildEplPreviewCacheKey({
+  ...previewCacheSlate,
+  matches: [{ id: 102, kickoff: "2026-09-09T19:00:00Z" }],
+} as never, {
+  cacheNamespace: "ucl",
+  cacheIdentity: "2026-09-09:102@2026-09-09T19:00:00Z",
+  authorities: previewAuthority,
+});
+const nextGradeCacheKey = buildEplPreviewCacheKey(previewCacheSlate as never, {
+  cacheNamespace: "ucl",
+  cacheIdentity: "2026-09-08:101@2026-09-08T17:45:00Z",
+  authorities: { ...previewAuthority, gradeRelease: `${UCL_CALIBRATION_RELEASE}_next` },
+});
+assert.notEqual(firstDayCacheKey, nextDayCacheKey, "a multi-day UCL round cannot reuse the prior ET-day fixture cache");
+assert.notEqual(firstDayCacheKey, nextGradeCacheKey, "a UCL grade authority release cannot reuse a prior release cache");
 
 // Historical opening 1X2 canonicalization is exact-vendor, complete, no-vig,
 // outcome-blind, and stable under duplicates.
@@ -249,9 +301,16 @@ const decision = deriveUclMatchResultDecision({ model: { home: 0.58, draw: 0.25,
 assert.equal(decision.forecastSide, "home");
 assert.equal(decision.selectedSide, "home");
 assert.notEqual(decision.grade.verdict.label, "Lean", "non-positive exact-quote EV cannot remain actionable");
-const bttsHold = deriveUclPreviewGrade({ market: "btts", modelProbability: 0.61, edgePp: 3, priceAmerican: 115, coherentMarket: true, promotedProxy: false });
-assert.equal(bttsHold.verdict.label, "No Play");
-assert.equal(bttsHold.candidateTier, "research_only");
+const bttsLean = deriveUclPreviewGrade({ market: "btts", modelProbability: 0.61, edgePp: 3, priceAmerican: 115, coherentMarket: true, promotedProxy: false });
+assert.equal(bttsLean.verdict.label, "Lean", "the UCL-owned EPL transfer can promote a positive-EV forecast-side tuple");
+const bttsNegativeEv = deriveUclPreviewGrade({ market: "btts", modelProbability: 0.61, edgePp: 3, priceAmerican: -180, coherentMarket: true, promotedProxy: false });
+assert.equal(bttsNegativeEv.verdict.label, "Watchlist", "a transferred confidence floor never bypasses exact-price EV");
+const missingPriceHold = deriveUclPreviewGrade({ market: "total", modelProbability: 0.64, edgePp: null, priceAmerican: null, coherentMarket: false, promotedProxy: false });
+assert.equal(missingPriceHold.candidateTier, "data_hold");
+assert.equal(missingPriceHold.verdict.label, "No Play");
+const bestAngleDecision = deriveUclMatchResultDecision({ model: { home: 0.58, draw: 0.24, away: 0.18 }, market: { home: 0.5, draw: 0.28, away: 0.22 }, prices: { home: 110, draw: 260, away: 340 }, promotedProxy: false });
+assert.equal(bestAngleDecision.selectedSide, "home");
+assert.equal(bestAngleDecision.grade.verdict.label, "Best Angle");
 assert.equal(eplPriorRowsBlockWrite([{ model_version: "legacy", locked_at: "2026-09-08T16:45:00Z", held: false, snapshot_json: {} }]), true, "any prior locked row blocks replacement across releases");
 
 // Namespace, official tracking, and release separation.
@@ -304,6 +363,28 @@ assert.deepEqual(coverage.errors, [], "complete coherent forecasts publish even 
 assert.equal(coverage.heldMarkets, 3);
 assert.equal(coverage.nonpositiveEvActionables, 0);
 assert.equal(coverage.warnings.length, 2);
+const collapsedPriceCoverage = evaluateUclPublicationCoverage(
+  { matches: [{ id: 1, status: "scheduled" }] } as never,
+  { games: [{ external_id: 1, soccerProjection: { goalOutlookProbabilities: { home: 0.4, draw: 0.3, away: 0.3, over25: 0.55, under25: 0.45, bttsYes: 0.52, bttsNo: 0.48 } }, markets: { moneyline: heldMarket, total: heldMarket, first_inning: heldMarket }, soccerDoubleChanceMarket: heldMarket }] } as never,
+  { games: [{ external_id: 1, markets: { moneyline: pricedMarket, total: pricedMarket, first_inning: pricedMarket }, soccerDoubleChanceMarket: pricedMarket }] } as never,
+);
+assert.match(collapsedPriceCoverage.errors.join(";"), /current-price coverage collapsed 4->0.*last-known-good/i, "a transient all-price outage cannot replace a priced UCL member snapshot");
+assert.equal(collapsedPriceCoverage.priceCollapse, true);
+assert.deepEqual(collapsedPriceCoverage.hardErrors, [], "price collapse alone still permits the T60 writer/verifier path");
+const priorPriceCard = { external_id: 1, awayTeam: "AWY", homeTeam: "HOM", markets: { moneyline: pricedMarket, total: pricedMarket, first_inning: pricedMarket }, soccerDoubleChanceMarket: pricedMarket };
+const freshHeldCard = { ...priorPriceCard, markets: { moneyline: heldMarket, total: heldMarket, first_inning: heldMarket }, soccerDoubleChanceMarket: heldMarket };
+const verifiedLockedCard = { ...priorPriceCard, lockState: "locked", lockedAt: "2026-09-08T16:45:00Z" };
+const mergedCollapsedLock = mergeVerifiedUclLocksIntoLastKnownGood({
+  fresh: { date: "2026-09-08", requested_date: "2026-09-08", generatedAt: "fresh", model: "ucl", games: [freshHeldCard, { ...freshHeldCard, external_id: 2 }] } as never,
+  previous: { date: "2026-09-08", requested_date: "2026-09-08", generatedAt: "prior", model: "ucl", games: [priorPriceCard, { ...priorPriceCard, external_id: 2 }] } as never,
+  verified: { date: "2026-09-08", requested_date: "2026-09-08", generatedAt: "fresh", model: "ucl", games: [verifiedLockedCard, { ...freshHeldCard, external_id: 2 }] } as never,
+  dueProviderIds: [1],
+});
+assert.equal(mergedCollapsedLock.games[0]?.lockState, "locked", "a fully verified due card advances to its immutable T60 tuple");
+assert.equal(mergedCollapsedLock.games[1]?.markets.moneyline.currentPriceAmerican, -110, "a non-due collapsed card retains its priced LKG tuple");
+assert.equal(uclPriceCollapseIsRecovered({ coverage: collapsedPriceCoverage, dueProviderIds: [1], incompleteProviderIds: [] }), true, "complete due lock verification permits the LKG merge");
+assert.equal(uclPriceCollapseIsRecovered({ coverage: collapsedPriceCoverage, dueProviderIds: [1], incompleteProviderIds: [1] }), false, "partial due lock verification remains unpublished");
+assert.equal(uclPriceCollapseIsRecovered({ coverage: collapsedPriceCoverage, dueProviderIds: [], incompleteProviderIds: [] }), false, "ordinary non-due price collapse remains unpublished");
 const degradedCoverage = evaluateUclPublicationCoverage(
   { matches: [], providerHealth: { uclHistory: { status: "degraded", strategy: "unavailable", rows: 0, error: "cohort rejected", contractDeviation: null } } } as never,
   { games: [] },
@@ -336,6 +417,7 @@ const foundationStore = readFileSync("lib/services/ucl/uclHistoricalFoundationSt
 const slateBuilder = readFileSync("lib/services/ucl/buildUclSlate.ts", "utf8");
 const uclModelSource = readFileSync("lib/services/ucl/uclModel.ts", "utf8");
 const uclPreviewSource = readFileSync("lib/services/ucl/buildUclDailyEdgePreview.ts", "utf8");
+const uclTransferredGradeSource = readFileSync("lib/services/ucl/uclTransferredGrade.ts", "utf8");
 const uclOpeningEvaluationSource = readFileSync("lib/services/ucl/uclOpeningOddsEvaluation.ts", "utf8");
 const uclOpeningOperatorSource = readFileSync("scripts/operator/evaluate-ucl-opening-odds.ts", "utf8");
 const trackingRefreshSource = readFileSync("lib/services/trackingRefreshService.ts", "utf8");
@@ -348,14 +430,14 @@ for (const route of [refreshRoute, lockRoute]) {
 }
 assert.match(refreshRoute, /writeUclPredictionRecords/);
 assert.match(refreshRoute, /provider_history:\s*slate\.providerHealth\.uclHistory/);
-assert.match(refreshRoute, /verifyUclRefreshAllMarketLocks[\s\S]*incompleteProviderIds[\s\S]*writeCurrentUclMemberSnapshot\(\{ response: lockVerification\.lockedResponse/, "the general refresh proves and reconstructs every T60-due four-market lock before publication");
+assert.match(refreshRoute, /historyWritable = coverage\.hardErrors\.length === 0[\s\S]*writeUclPredictionRecords[\s\S]*verifyUclRefreshAllMarketLocks[\s\S]*uclPriceCollapseIsRecovered[\s\S]*writeCurrentUclMemberSnapshot\(\{ response: publicationResponse/, "a price collapse still reaches the T60 writer/verifier and publishes only the verified LKG merge");
 assert.match(refreshRoute, /writeCurrentUclMemberSnapshot\(\{[^}]*boardDate:\s*slate\.boardDate/, "refresh publication carries the ET day frozen during slate selection");
 assert.match(lockRoute, /writeCurrentUclMemberSnapshot\(\{[^}]*boardDate:\s*slate\.boardDate/, "lock publication carries the ET day frozen during slate selection");
 assert.match(lockRoute, /provider_history:\s*slate\.providerHealth\.uclHistory/);
-assert.ok(refreshRoute.indexOf("coverage.errors.length === 0") < refreshRoute.indexOf("writeUclPredictionRecords({"), "refresh prediction writes must be downstream of the coherence/fixture gate");
+assert.ok(refreshRoute.indexOf("coverage.hardErrors.length === 0") < refreshRoute.indexOf("writeUclPredictionRecords({"), "refresh prediction writes must be downstream of hard history/PMF coverage gates while allowing T60 price-collapse repair");
 assert.ok(lockRoute.indexOf("coverage.errors.length === 0") < lockRoute.indexOf("writeUclPredictionRecords({"), "lock prediction writes must be downstream of the coherence/fixture gate");
-assert.ok(refreshRoute.indexOf("coverage.errors.length === 0") < refreshRoute.indexOf("seedUclSlate({"), "degraded history blocks all refresh DB writes, including slate seeding");
-assert.ok(refreshRoute.indexOf("coverage.errors.length === 0") < refreshRoute.indexOf("persistUclLineHistory({"), "degraded history blocks refresh line-history writes");
+assert.ok(refreshRoute.indexOf("coverage.hardErrors.length === 0") < refreshRoute.indexOf("seedUclSlate({"), "degraded history blocks all refresh DB writes, including slate seeding");
+assert.ok(refreshRoute.indexOf("coverage.hardErrors.length === 0") < refreshRoute.indexOf("persistUclLineHistory({"), "degraded history blocks refresh line-history writes");
 assert.ok(lockRoute.indexOf("coverage.errors.length === 0") < lockRoute.indexOf("persistUclLineHistory({"), "degraded history blocks lock line-history writes");
 assert.doesNotMatch(refreshRoute, /createPredictionRecords|new .*PredictionWriter/);
 assert.match(memberRoute, /sport === "ucl"[\s\S]*readCurrentUclMemberSnapshot/);
@@ -366,8 +448,13 @@ assert.doesNotMatch(uclModelSource, /fitEplShadowModel|predictEplMatch|joinEplMa
 assert.match(uclPreviewSource, /deriveUclCoherentMarketOutcome/);
 assert.match(uclPreviewSource, /deriveUclMatchResultDecision/);
 assert.match(uclPreviewSource, /deriveUclPreviewGrade/);
+assert.doesNotMatch(uclTransferredGradeSource, /deriveEplPreviewGrade|deriveEplMatchResultDecision|from ["'].*eplPreviewGrade/, "the transferred UCL grade authority is frozen and cannot drift with EPL runtime edits");
+assert.match(uclTransferredGradeSource, /positive exact forecast-side expected value/, "actionable transfers retain exact-price EV gating");
+assert.match(uclPreviewSource, /awayTeamLogo:\s*uclTeamLogo\(game\.awayTeam\)[\s\S]*awayTeamPrimaryColor:\s*awayAsset\?\.primaryColor/);
+assert.match(uclPreviewSource, /homeTeamLogo:\s*uclTeamLogo\(game\.homeTeam\)[\s\S]*homeTeamPrimaryColor:\s*homeAsset\?\.primaryColor/);
 assert.match(uclPreviewSource, /competitionLabel:\s*"Champions League"/, "the shared builder receives competition-specific copy without a UCL-only layout");
 assert.match(sharedSoccerBuilder, /No recent \$\{competitionLabel\} sample[\s\S]*no \$\{competitionLabel\} split rows/, "shared soccer evidence copy uses the active competition label");
+assert.match(sharedSoccerBuilder, /buildEplPreviewCacheKey[\s\S]*options\.authorities\?\.gradeRelease \?\? EPL_PREVIEW_GRADE_RELEASE[\s\S]*options\.cacheIdentity \?\? fixtureIdentity/, "UCL grade releases and deterministic fixtures own their shared-preview cache identity");
 assert.match(ui, /soccerCompetitionLabel\(game\)[\s\S]*Completed \$\{competitionLabel\} form only/, "expanded soccer evidence uses the game competition instead of hard-coded EPL copy");
 assert.ok(uclOpeningEvaluationSource.indexOf("if (!coverageQualified)") < uclOpeningEvaluationSource.indexOf("const calibrationRows"), "opening-odds coverage must fail before any outcome evaluation");
 assert.ok(uclOpeningEvaluationSource.indexOf("if (!selected)") < uclOpeningEvaluationSource.indexOf("const holdoutRows"), "holdout outcomes remain untouched until a calibration candidate is frozen");
@@ -378,6 +465,7 @@ assert.match(page, /eplEnabled[\s\S]*league=epl[\s\S]*uclEnabled[\s\S]*league=uc
 assert.match(page, /sport === "soccer"[\s\S]*active: "world_cup"/, "the shared chooser remains reachable on a disabled direct competition route");
 assert.match(ui, /Champions League/);
 assert.match(ui, /Regulation time/);
+assert.match(ui, /uefa_champions_league[\s\S]*uclTeamAsset\(abbreviation\)[\s\S]*uclTeamLogo\(abbreviation\)/, "the shared member cards resolve UCL colors and crests even before a refreshed snapshot arrives");
 assert.doesNotMatch(ui, /UclOnly|UCLCard|ChampionsLeagueLayout/);
 assert.match(trackingUi, /historical archive[\s\S]*never blended/i);
 assert.match(legacyTrackingRoute, /english_premier_league" \|\| r\.snapshot_json\?\.competition === "uefa_champions_league"/, "legacy World Cup tracking excludes UCL current-release rows");

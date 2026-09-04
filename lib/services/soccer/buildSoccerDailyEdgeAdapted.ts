@@ -141,6 +141,7 @@ type TeamRow = {
   id: number;
   abbreviation: string;
   display_name: string | null;
+  logo_url: string | null;
   /** ISO 3166-1 alpha-3 country code from BDL ("MEX", "RSA", …). */
   location: string | null;
 };
@@ -1173,7 +1174,7 @@ export async function buildSoccerDailyEdgeAdapted(
   }
   const { data: teamsData } = await supabase
     .from("teams")
-    .select("id, abbreviation, display_name, location")
+    .select("id, abbreviation, display_name, logo_url, location")
     .in("id", [...teamIds]);
   const teamById = new Map<number, TeamRow>(
     ((teamsData as TeamRow[] | null) ?? []).map((t) => [t.id, t]),
@@ -1331,10 +1332,12 @@ export async function buildSoccerDailyEdgeAdapted(
     const sharpRead = buildSharpRead(perMarket);
     const modelBreakdown = buildModelBreakdown(matchup, perMarket, awayAbbr, homeAbbr);
 
-    // Country flags from BDL alpha-3 code (teams.location). UI falls
-    // back to abbreviation when the flag URL is null.
+    // Country flags from BDL alpha-3 code (teams.location). UI falls back
+    // to abbreviation when neither club logo nor flag can be resolved.
     const homeFlagUrl = flagCdnUrl(homeTeam?.location);
     const awayFlagUrl = flagCdnUrl(awayTeam?.location);
+    const homeClubLogo = homeTeam?.logo_url ?? null;
+    const awayClubLogo = awayTeam?.logo_url ?? null;
 
     // Expected goals (Dixon-Coles λ) come from the WC-3 snapshot. Same
     // model output is stamped on every market's snapshot for the game,
@@ -1440,9 +1443,11 @@ export async function buildSoccerDailyEdgeAdapted(
       sport: "soccer",
       external_id: g.external_id,
       awayTeam: awayAbbr,
-      awayTeamLogo: awayFlagUrl,
+      awayTeamDisplayName: awayTeam?.display_name ?? awayAbbr,
+      awayTeamLogo: awayClubLogo ?? awayFlagUrl,
       homeTeam: homeAbbr,
-      homeTeamLogo: homeFlagUrl,
+      homeTeamDisplayName: homeTeam?.display_name ?? homeAbbr,
+      homeTeamLogo: homeClubLogo ?? homeFlagUrl,
       gameTime,
       gameStartMinutes,
       scheduledLockAt: computeLocksAtIso(g.game_date),

@@ -89,6 +89,10 @@ const legacyDailyEdgeSource = readFileSync(
   "app/lab/components/daily-edge/DailyEdgeShell.tsx",
   "utf8",
 );
+const soccerAdapterSource = readFileSync(
+  "lib/services/soccer/buildSoccerDailyEdgeAdapted.ts",
+  "utf8",
+);
 const candidateDailyEdgeSource = readFileSync(
   "app/dev/experience-preview/ActualDailyEdgePreview.tsx",
   "utf8",
@@ -1679,12 +1683,27 @@ check(
 check(
   "expanded football reader renders MASS for Massachusetts Minutemen while preserving the accessible full name",
   candidateDailyEdgeSource.includes('className="flex min-w-0 items-center gap-2"') &&
-    candidateDailyEdgeSource.includes('if (sport !== "nfl" && sport !== "cfb") return abbreviation') &&
-    candidateDailyEdgeSource.includes('const readerTeam = sport === "nfl" || sport === "cfb" ? team : fullName') &&
+    candidateDailyEdgeSource.includes('if (sport !== "nfl" && sport !== "cfb" && !isUclGame(game)) return abbreviation') &&
+    candidateDailyEdgeSource.includes('const readerTeam = sport === "nfl" || sport === "cfb" || isUclGame(game) ? team : fullName') &&
     candidateDailyEdgeSource.includes('aria-label={fullName} title={fullName}>{readerTeam}</p>') &&
-    candidateDailyEdgeSource.includes('<span className="truncate text-[8px] font-semibold text-gray-500">{memberTeamName(game, role, sport)}</span>') &&
+    candidateDailyEdgeSource.includes('presentation?: "board" | "compact"') &&
     candidateDailyEdgeSource.includes('grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-stretch gap-2') &&
     !candidateDailyEdgeSource.includes('grid-cols-[1fr_auto_1fr] items-stretch gap-2'),
+);
+check(
+  "UCL board cards show full club names while the reader retains compact abbreviations",
+  candidateDailyEdgeSource.includes('function isUclGame(game: DailyEdgeGameDto)') &&
+    candidateDailyEdgeSource.includes('isUclGame(game) && presentation === "board"') &&
+    candidateDailyEdgeSource.includes('<CompactMatchupIdentity game={game} sport={sport} presentation="board" />') &&
+    candidateDailyEdgeSource.includes('const readerTeam = sport === "nfl" || sport === "cfb" || isUclGame(game) ? team : fullName') &&
+    candidateDailyEdgeSource.includes('break-words text-[12px] leading-4 text-white'),
+);
+check(
+  "shared soccer fallbacks retain provider club names and prefer club logos over country flags",
+  soccerAdapterSource.includes('.select("id, abbreviation, display_name, logo_url, location")') &&
+    soccerAdapterSource.includes('awayTeamDisplayName: awayTeam?.display_name ?? awayAbbr') &&
+    soccerAdapterSource.includes('awayTeamLogo: awayClubLogo ?? awayFlagUrl') &&
+    soccerAdapterSource.includes('homeTeamLogo: homeClubLogo ?? homeFlagUrl'),
 );
 check(
   "the CFB board balances abbreviations with full names and supports instant game finding",

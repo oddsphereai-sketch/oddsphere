@@ -5,7 +5,7 @@ import { persistUclLineHistory, readUclStoredPriceHistory } from "@/lib/services
 import { readCurrentUclMemberSnapshot, writeCurrentUclMemberSnapshot } from "@/lib/services/ucl/uclMemberSnapshotStore";
 import { seedUclSlate, verifyUclRefreshAllMarketLocks, writeUclPredictionRecords } from "@/lib/services/ucl/uclProductionPipeline";
 import { UCL_COMPETITION } from "@/lib/services/ucl/uclCompetitionContext";
-import { evaluateUclPublicationCoverage } from "@/lib/services/ucl/uclPublicationReadiness";
+import { evaluateUclPublicationCoverage, mergeVerifiedUclLocksIntoLastKnownGood, uclPriceCollapseIsRecovered } from "@/lib/services/ucl/uclPublicationReadiness";
 import { resolveUclFeatureFlags } from "@/lib/services/ucl/uclFeatureFlags";
 
 export const maxDuration = 300;
@@ -19,13 +19,17 @@ export async function GET(request: Request): Promise<Response> {
     const apply = flags.writes;
     const now = new Date();
     const slate = await buildUclSlate();
-    hydrateUclPriceHistory(await readCurrentUclMemberSnapshot());
+    const previousResponse = await readCurrentUclMemberSnapshot();
+    hydrateUclPriceHistory(previousResponse);
     const storedPriceHistory = await readUclStoredPriceHistory(slate.matches.map((match) => match.id));
     hydrateUclStoredPriceHistory(storedPriceHistory);
     let allBookPrices: UclStoredPriceObservation[] = [];
     const response = await buildUclDailyEdgePreview(slate, { storedPriceHistory, captureAllBookPrices: (rows) => { allBookPrices = rows; } });
-    const coverage = evaluateUclPublicationCoverage(slate, response);
-    const historyWritable = coverage.errors.length === 0;
+    const coverage = evaluateUclPublicationCoverage(slate, response, previousResponse);
+    // A transient price collapse blocks ordinary publication, but it must not
+    // prevent a due T-60 game from freezing its prior priced DB tuple. All
+    // history/fixture/PMF errors remain hard write failures.
+    const historyWritable = coverage.hardErrors.length === 0;
     const seeded = historyWritable
       ? await seedUclSlate({ slate, apply })
       : { mode: apply ? "write" as const : "dry-run" as const, teamsProposed: 0, teamsWritten: 0, gamesProposed: 0, gamesWritten: 0, errors: ["slate seed blocked by UCL coverage/history gate"] };
@@ -38,10 +42,15 @@ export async function GET(request: Request): Promise<Response> {
     const lockVerification = apply && historyWritable && predictions.errors.length === 0
       ? await verifyUclRefreshAllMarketLocks({ response, now, modelRelease: slate.modelRelease, calibrationRelease: slate.calibrationRelease, expectedRows: predictions.proposed, writerLockedRecordIds: predictions.lockedRecordIds })
       : { dueProviderIds: [] as number[], completeProviderIds: [] as number[], incompleteProviderIds: [] as number[], lockedResponse: response };
-    const errors = [...coverage.errors, ...seeded.errors, ...lineHistory.errors, ...predictions.errors,
+    const priceCollapseRecovered = uclPriceCollapseIsRecovered({ coverage, dueProviderIds: lockVerification.dueProviderIds, incompleteProviderIds: lockVerification.incompleteProviderIds });
+    const publicationResponse = coverage.priceCollapse && previousResponse && priceCollapseRecovered
+      ? mergeVerifiedUclLocksIntoLastKnownGood({ fresh: response, previous: previousResponse, verified: lockVerification.lockedResponse, dueProviderIds: lockVerification.dueProviderIds })
+      : lockVerification.lockedResponse;
+    const unresolvedCoverageErrors = coverage.priceCollapse && priceCollapseRecovered ? coverage.hardErrors : coverage.errors;
+    const errors = [...unresolvedCoverageErrors, ...seeded.errors, ...lineHistory.errors, ...predictions.errors,
       ...(lockVerification.incompleteProviderIds.length ? [`UCL refresh all-market lock incomplete for provider IDs ${lockVerification.incompleteProviderIds.join(",")}`] : [])];
     const publication = flags.publication && errors.length === 0
-      ? await writeCurrentUclMemberSnapshot({ response: lockVerification.lockedResponse, matchweek: slate.round, boardDate: slate.boardDate, modelRelease: slate.modelRelease, calibrationRelease: slate.calibrationRelease })
+      ? await writeCurrentUclMemberSnapshot({ response: publicationResponse, matchweek: slate.round, boardDate: slate.boardDate, modelRelease: slate.modelRelease, calibrationRelease: slate.calibrationRelease })
       : { ok: false as const, skipped: true, reason: !apply ? "UCL write gate disabled" : !flags.publication ? "UCL publication gate disabled" : "pipeline_errors" };
     return {
       records_updated: seeded.teamsWritten + seeded.gamesWritten + lineHistory.written + predictions.written + (publication.ok ? 1 : 0),
