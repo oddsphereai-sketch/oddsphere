@@ -199,6 +199,24 @@ assert.equal(promoted.sharpDirection, "support");
 assert.equal(promoted.finalGrade, "Lean", "strict sharp support promotes a positive near-threshold Watchlist");
 assert.equal(promoted.executionStatus, "bet");
 
+const extremeFavorite = buildCfbMarketEvidenceGradeShadow({
+  decision: {
+    ...moneyline,
+    side: "STAN",
+    grade: "Best Angle",
+    probabilityGrade: "Best Angle",
+    modelProbability: 0.96,
+    expectedValue: -0.02,
+    evaluatedQuote: { ...moneyline.evaluatedQuote, price: -4000 },
+  },
+  selectedSide: "home",
+  sharpSplits: [],
+  operationalOpening: null,
+});
+assert.equal(extremeFavorite.finalGrade, "Watchlist", "an extreme favorite cannot publish as Best Angle or Lean");
+assert.equal(extremeFavorite.executionStatus, "shop", "price-tier display ceiling and quote execution remain separate");
+assert.equal(extremeFavorite.reasonCodes.includes("favorite_price_caps_confidence_at_watchlist"), true);
+
 const publicPromoted = buildCfbMarketEvidenceGradeShadow({
   decision: { ...moneyline, grade: "Watchlist", probabilityGrade: "Watchlist", modelProbability: 0.54, edgePercentagePoints: 2.5, expectedValue: 0.01, evaluatedQuote: { ...moneyline.evaluatedQuote, price: 155 } },
   selectedSide: "away",
@@ -209,7 +227,7 @@ const publicPromoted = buildCfbMarketEvidenceGradeShadow({
 });
 assert.equal(publicPromoted.publicDirection, "support");
 assert.ok(publicPromoted.confidenceAdjustment > 0, "public money contributes bounded support without becoming a hard promotion switch");
-assert.equal(publicPromoted.reasonCodes.includes("holistic_confidence_price_independent"), true);
+assert.equal(publicPromoted.reasonCodes.includes("holistic_confidence_price_eligible"), true);
 
 const circaPriorityPromotion = buildCfbMarketEvidenceGradeShadow({
   decision: { ...moneyline, grade: "Watchlist", probabilityGrade: "Watchlist", modelProbability: 0.54, edgePercentagePoints: 2.5, expectedValue: 0.01, evaluatedQuote: { ...moneyline.evaluatedQuote, price: 155 } },

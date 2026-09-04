@@ -21,11 +21,11 @@ import {
 import { evaluateCfbHolisticConfidence } from "./cfbHolisticConfidenceCandidate";
 
 export const CFB_MARKET_SHARP_AWARE_CANDIDATE_RELEASE =
-  "cfb_market_sharp_aware_candidate_2026_09_04_r14_holistic_confidence" as const;
+  "cfb_market_sharp_aware_candidate_2026_09_04_r15_favorite_price_tier_ceiling" as const;
 export const CFB_MARKET_SHARP_AWARE_SHADOW_RELEASE =
   CFB_MARKET_SHARP_AWARE_CANDIDATE_RELEASE;
 export const CFB_MARKET_SHARP_AWARE_PRODUCTION_RELEASE =
-  "cfb_market_sharp_aware_production_2026_09_04_r16_holistic_confidence" as const;
+  "cfb_market_sharp_aware_production_2026_09_04_r17_favorite_price_tier_ceiling" as const;
 export const CFB_MARKET_SHADOW_WEIGHT = 0.75 as const;
 export const CFB_SHARP_SIGNED_GAP_THRESHOLD_PP = 10 as const;
 export const CFB_SHARP_FULL_STRENGTH_GAP_PP = 20 as const;
@@ -313,7 +313,11 @@ export function buildCfbMarketEvidenceGradeShadow(args: {
   });
   const finalGrade = holistic.confidenceGrade;
   const reasonCodes = [
-    "holistic_confidence_price_independent",
+    holistic.priceTierCeiling === "Watchlist"
+      ? "favorite_price_caps_confidence_at_watchlist"
+      : holistic.priceTierCeiling === "Lean"
+        ? "favorite_price_caps_confidence_at_lean"
+        : "holistic_confidence_price_eligible",
     holistic.evidenceConfidenceAdjustment > 0
       ? "bounded_market_evidence_support"
       : holistic.evidenceConfidenceAdjustment < 0

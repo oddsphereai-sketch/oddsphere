@@ -30,9 +30,9 @@ export const CFB_V1_REPRESENTATIVE_SCORE_RELEASE =
 export const CFB_V1_CALIBRATION_RELEASE =
   "cfb_v1_market_sharp_exact_price_calibration_2026_09_01_r8_coherent_pmf_identity" as const;
 export const CFB_V1_GRADE_POLICY_RELEASE =
-  "cfb_v1_composite_grade_policy_2026_09_04_r10_holistic_confidence" as const;
+  "cfb_v1_composite_grade_policy_2026_09_04_r11_favorite_price_tier_ceiling" as const;
 export const CFB_V1_DECISION_RELEASE =
-  "cfb_v1_daily_edge_decision_2026_09_04_r29_holistic_confidence" as const;
+  "cfb_v1_daily_edge_decision_2026_09_04_r30_favorite_price_tier_ceiling" as const;
 export const CFB_V1_GRADE_PREVIOUS_DECISION_RELEASE =
   "cfb_v1_daily_edge_decision_2026_09_01_r26_coherent_movement_evidence" as const;
 const CFB_V1_POLICY_SOURCE_DECISION_RELEASE =
