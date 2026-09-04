@@ -57,7 +57,7 @@ import {
 } from "./cfbForwardMemberSnapshotStore";
 
 export const CFB_FORWARD_WRITER_RELEASE =
-  "cfb_forward_evidence_writer_2026_09_04_r43_complete_tracking_denominators" as const;
+  "cfb_forward_evidence_writer_2026_09_04_r44_complete_tracking_backfill_union" as const;
 export const CFB_FORWARD_MAX_QB_TEAMS_PER_RUN = 24 as const;
 export const CFB_FORWARD_RESULTS_BATCH_SIZE = 100 as const;
 export const CFB_FORWARD_MAX_PRIOR_GAME_IDS = 1200 as const;
@@ -408,7 +408,11 @@ export async function runCfbForwardEvidenceWriter(args: {
     };
   });
   const write = await appendCfbForwardEvidence({ client: args.client, runId: args.runId, payloads, apply: args.apply });
-  const tracking = await writeOfficialTracking({ client: args.client, payloads: payloads.filter((payload) => payload.stage === "t60"), apply: args.apply });
+  const tracking = await writeOfficialTracking({
+    client: args.client,
+    payloads: cfbTrackingPayloadsForRun(existing, payloads),
+    apply: args.apply,
+  });
   const memberSnapshot = await refreshCompactMemberSnapshot({ client: args.client, existing: allExisting, payloads, season: args.season, now: args.now, apply: args.apply });
   const decisions = payloads.flatMap((payload) => payload.decisions.evaluatedBets);
   return {
@@ -645,6 +649,18 @@ function stageCounts(payloads: CfbForwardEvidencePayload[]): Record<"opening" | 
 }
 
 function currentT60Payloads(rows: CfbForwardStoredEvidence[]): CfbForwardEvidencePayload[] { return rows.filter((row) => row.stage === "t60").map((row) => row.payload); }
+
+export function cfbTrackingPayloadsForRun(
+  existing: CfbForwardStoredEvidence[],
+  newlyCaptured: CfbForwardEvidencePayload[],
+): CfbForwardEvidencePayload[] {
+  const byGame = new Map<string, CfbForwardEvidencePayload>();
+  for (const payload of currentT60Payloads(existing)) byGame.set(payload.game.providerGameId, payload);
+  for (const payload of newlyCaptured) {
+    if (payload.stage === "t60") byGame.set(payload.game.providerGameId, payload);
+  }
+  return [...byGame.values()];
+}
 
 export function cfbLockPlanningEvidence(rows: CfbForwardStoredEvidence[]): CfbForwardStoredEvidence[] {
   const currentReleaseT60Games = new Set(rows
