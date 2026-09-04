@@ -33,7 +33,7 @@ import {
   CFB_MARKET_SHARP_AWARE_PRODUCTION_RELEASE,
   type CfbMarketSharpAwareForecast,
 } from "./cfbMarketSharpAwareShadow";
-import { buildCfbOfficialTrackingRecords, cfbProviderIntegerId } from "./cfbOfficialTrackingRecord";
+import { buildCfbOfficialTrackingRecords, cfbProviderIntegerId, cfbTrackingMarketsForPayload } from "./cfbOfficialTrackingRecord";
 import { eligibleCfbWeeklyGames, isGameInCfbWeeklyWindow, resolveCfbForwardWindow, type CfbWeeklyWindow } from "./cfbWeeklyWindow";
 import {
   CFB_SHARP_API_ODDS_RELEASE,
@@ -57,7 +57,7 @@ import {
 } from "./cfbForwardMemberSnapshotStore";
 
 export const CFB_FORWARD_WRITER_RELEASE =
-  "cfb_forward_evidence_writer_2026_09_03_r42_fast_member_snapshot" as const;
+  "cfb_forward_evidence_writer_2026_09_04_r43_complete_tracking_denominators" as const;
 export const CFB_FORWARD_MAX_QB_TEAMS_PER_RUN = 24 as const;
 export const CFB_FORWARD_RESULTS_BATCH_SIZE = 100 as const;
 export const CFB_FORWARD_MAX_PRIOR_GAME_IDS = 1200 as const;
@@ -721,7 +721,10 @@ async function writeOfficialTracking(args: { client: SupabaseClient; payloads: C
     (payload.t60LagMinutes ?? Infinity) <= CFB_T60_MAX_CAPTURE_LAG_MINUTES &&
     isPublicallyTracked("cfb", computeSlateDate("cfb", payload.game.scheduledStart))
   );
-  const trackingGames = eligible.map((payload) => ({ externalId: cfbProviderIntegerId(payload.game.providerGameId, "game"), decisions: payload.decisions.evaluatedBets }));
+  const trackingGames = eligible.map((payload) => ({
+    externalId: cfbProviderIntegerId(payload.game.providerGameId, "game"),
+    decisions: cfbTrackingMarketsForPayload(payload).map((market) => ({ market })),
+  }));
   const proposed = trackingGames.length === 0 ? 0 : buildMarketScopedFootballTrackingPlan(trackingGames).proposed;
   if (!args.apply || proposed === 0) return { trackingAttempted: false, trackingRecordsProposed: proposed, trackingRecordsInserted: 0, trackingRecordsExisting: 0 };
   for (const decision of eligible.flatMap((payload) => payload.decisions.evaluatedBets)) assertOfficialTrackingMarket("cfb", decision.market);
