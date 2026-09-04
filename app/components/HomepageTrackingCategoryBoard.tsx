@@ -45,6 +45,8 @@ const MARKET_SHORT: Record<string, string> = {
   double_chance: "DC",
 };
 
+const WINDOW_ORDER: PublicTrackingCategoryWindow["key"][] = ["lifetime", "monthly", "weekly"];
+
 type SportTheme = {
   accent: string;
   border: string;
@@ -121,10 +123,14 @@ export function HomepageTrackingCategoryBoard({
   windows: PublicTrackingCategoryWindow[];
   available: boolean;
 }) {
-  const [activeKey, setActiveKey] = useState<PublicTrackingCategoryWindow["key"]>("weekly");
+  const [activeKey, setActiveKey] = useState<PublicTrackingCategoryWindow["key"]>("lifetime");
+  const orderedWindows = useMemo(
+    () => [...windows].sort((a, b) => WINDOW_ORDER.indexOf(a.key) - WINDOW_ORDER.indexOf(b.key)),
+    [windows],
+  );
   const activeWindow = useMemo(
-    () => windows.find((window) => window.key === activeKey) ?? windows[0],
-    [activeKey, windows],
+    () => orderedWindows.find((window) => window.key === activeKey) ?? orderedWindows[0],
+    [activeKey, orderedWindows],
   );
   const groups = groupBySport(activeWindow?.rows ?? []);
 
@@ -132,7 +138,7 @@ export function HomepageTrackingCategoryBoard({
     <div className="mt-8">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="inline-flex w-fit items-center gap-1 rounded-lg border border-white/[0.08] bg-white/[0.025] p-1">
-          {windows.map((window) => {
+          {orderedWindows.map((window) => {
             const active = window.key === activeKey;
             return (
               <button
