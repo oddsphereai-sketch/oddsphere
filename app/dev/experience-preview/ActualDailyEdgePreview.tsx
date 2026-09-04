@@ -528,6 +528,18 @@ function memberTeamColor(game: DailyEdgeGameDto, side: "away" | "home", sport: S
   return teamTheme(abbreviation).primary;
 }
 
+function MatchupColorAccent({ game, sport }: { game: DailyEdgeGameDto; sport: Sport }) {
+  const awayColor = memberTeamColor(game, "away", sport);
+  const homeColor = memberTeamColor(game, "home", sport);
+  return (
+    <div
+      aria-hidden="true"
+      className="h-[3px] w-full shrink-0"
+      style={{ background: `linear-gradient(to right, ${awayColor} 0%, ${awayColor} 28%, rgba(255,255,255,0.06) 50%, ${homeColor} 72%, ${homeColor} 100%)` }}
+    />
+  );
+}
+
 function memberTeamLogo(game: DailyEdgeGameDto, side: "away" | "home"): string | null {
   const abbreviation = side === "away" ? game.awayTeam : game.homeTeam;
   const supplied = side === "away" ? game.awayTeamLogo : game.homeTeamLogo;
@@ -537,14 +549,18 @@ function memberTeamLogo(game: DailyEdgeGameDto, side: "away" | "home"): string |
     : null;
 }
 
-function CompactMatchupIdentity({ game, sport, presentation = "compact" }: { game: DailyEdgeGameDto; sport: Sport; presentation?: "board" | "compact" }) {
-  if (sport !== "cfb" && !(isUclGame(game) && presentation === "board")) {
+function CompactMatchupIdentity({ game, sport }: { game: DailyEdgeGameDto; sport: Sport }) {
+  const ucl = isUclGame(game);
+  if (sport !== "cfb" && !ucl) {
     return <div className="flex items-center gap-2"><TeamLogo src={memberTeamLogo(game, "away")} label={game.awayTeam} sport={sport} primaryColor={memberTeamColor(game, "away", sport)} /><strong className="text-sm text-white">{game.awayTeam}</strong><span className="text-[9px] text-gray-700">@</span><strong className="text-sm text-white">{game.homeTeam}</strong><TeamLogo src={memberTeamLogo(game, "home")} label={game.homeTeam} sport={sport} primaryColor={memberTeamColor(game, "home", sport)} /></div>;
   }
   const side = (role: "away" | "home") => {
     const abbreviation = role === "away" ? game.awayTeam : game.homeTeam;
     const logo = memberTeamLogo(game, role);
-    const identity = <span className={`min-w-0 ${role === "home" ? "text-right" : ""}`}><strong className="block break-words text-[12px] leading-4 text-white" title={memberTeamName(game, role, sport)}>{memberTeamName(game, role, sport)}</strong><span className="block text-[8px] font-black uppercase tracking-[0.13em] text-gray-500">{abbreviation}{role === "away" ? " · Away" : " · Home"}</span></span>;
+    const fullName = memberTeamName(game, role, sport);
+    const identity = ucl
+      ? <span className={`min-w-0 ${role === "home" ? "text-right" : ""}`}><strong className="block text-[12px] font-black uppercase tracking-[0.08em] text-white">{abbreviation}</strong><span className="mt-0.5 block break-words text-[9px] font-semibold leading-3 text-gray-400" title={fullName}>{fullName}</span><span className="mt-0.5 block text-[7px] font-black uppercase tracking-[0.13em] text-gray-600">{role === "away" ? "Away" : "Home"}</span></span>
+      : <span className={`min-w-0 ${role === "home" ? "text-right" : ""}`}><strong className="block break-words text-[12px] leading-4 text-white" title={fullName}>{fullName}</strong><span className="block text-[8px] font-black uppercase tracking-[0.13em] text-gray-500">{abbreviation}{role === "away" ? " · Away" : " · Home"}</span></span>;
     return role === "away"
       ? <div className="flex min-w-0 items-center gap-2"><TeamLogo src={logo} label={abbreviation} sport={sport} primaryColor={memberTeamColor(game, role, sport)} />{identity}</div>
       : <div className="flex min-w-0 items-center justify-end gap-2 text-right">{identity}<TeamLogo src={logo} label={abbreviation} sport={sport} primaryColor={memberTeamColor(game, role, sport)} /></div>;
@@ -557,6 +573,7 @@ function CollapsedReader({ game, market, marketKey, sport, onOpen, onOpenMarket,
   const footballBetGrade = footballOutcome ? nflSelectedBetGrade(market) : null;
   return (
     <section aria-label="Selected Edge collapsed reader" className="overflow-hidden rounded-2xl border border-violet-400/35 bg-gradient-to-b from-violet-500/[0.06] via-[#100e18] to-[#0d0c13] shadow-[0_12px_42px_-24px_rgba(124,58,237,0.75),inset_0_1px_0_rgba(255,255,255,0.04)]">
+      {isUclGame(game) ? <MatchupColorAccent game={game} sport={sport} /> : null}
       <div className="border-b border-white/[0.07] px-4 py-3 sm:px-5">
         <div className="flex items-center justify-between gap-3">
           <div className="flex min-w-0 items-center gap-2">
@@ -599,7 +616,8 @@ function CollapsedReader({ game, market, marketKey, sport, onOpen, onOpenMarket,
 function ReaderSurface({ game, market, marketKey, sport, history, pitcherFirstInningHistory, availability, sample, setSample, deepOpen, setDeepOpen, deepView, setDeepView, setMarket, onCollapse, index, total }: ReaderSurfaceProps) {
   return (
     <section className="overflow-hidden rounded-2xl border border-violet-400/30 bg-[#100e18] shadow-[0_0_0_1px_rgba(124,58,237,0.10),0_24px_90px_-48px_rgba(124,58,237,0.95)]">
-      <ReaderHeader game={game} market={market} onCollapse={onCollapse} index={index} total={total} />
+      {isUclGame(game) ? <MatchupColorAccent game={game} sport={sport} /> : null}
+      <ReaderHeader game={game} market={market} sport={sport} onCollapse={onCollapse} index={index} total={total} />
       <MarketStrip game={game} sport={sport} active={marketKey} setActive={setMarket} />
       <ReaderEvidence game={game} market={market} marketKey={marketKey} sport={sport} history={history} pitcherFirstInningHistory={pitcherFirstInningHistory} availability={availability} sample={sample} />
       <DeepResearchToggle open={deepOpen} setOpen={setDeepOpen} market={market} marketKey={marketKey} game={game} />
@@ -735,13 +753,13 @@ function SoccerCompetitionBar({ active, reviewMode, hasGames, eplAvailable, uclA
   return <nav aria-label="Soccer competitions" className="relative mt-3 rounded-2xl border border-violet-300/35 bg-gradient-to-br from-violet-500/[0.14] via-[#11101a] to-sky-500/[0.06] p-3 shadow-[0_18px_50px_-38px_rgba(167,139,250,0.9)] sm:p-4"><span className="absolute -top-2 left-6 h-3 w-3 rotate-45 border-l border-t border-violet-300/35 bg-[#161321]" /><div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between"><div className="flex items-center gap-2.5"><span className="flex h-7 w-7 items-center justify-center rounded-full border border-violet-300/30 bg-violet-400/15 text-[10px] font-black text-violet-100">2</span><div><p className="text-[10px] font-black uppercase tracking-[0.18em] text-white">Choose a soccer competition</p><p className="mt-0.5 text-[9px] text-gray-400">Soccer is selected above. Pick the league or tournament you want to view.</p></div></div><span className="rounded-full border border-violet-300/20 bg-violet-400/[0.08] px-3 py-1 text-[8px] font-black uppercase tracking-wider text-violet-100">Viewing · {items.find((item) => item.key === active)?.label}</span></div><div role="tablist" aria-label="Soccer competition" className="grid gap-2 sm:grid-cols-3">{items.map((item) => { const selected = active === item.key; return <Link key={item.key} role="tab" href={item.href} aria-selected={selected} aria-current={selected ? "page" : undefined} className={`group rounded-xl border p-3.5 transition ${selected ? "border-violet-300 bg-violet-500/25 text-white shadow-[inset_0_0_0_1px_rgba(196,181,253,0.18),0_8px_24px_-16px_rgba(167,139,250,1)]" : "border-white/[0.10] bg-black/30 text-gray-300 hover:border-violet-300/40 hover:bg-violet-400/[0.08] hover:text-white"}`}><div className="flex items-center gap-3"><span className={`flex h-11 w-14 shrink-0 items-center justify-center overflow-hidden rounded-lg border px-1.5 ${selected ? "border-violet-200/40 bg-violet-100/10" : "border-white/[0.08] bg-white/[0.04]"}`}><Image src={item.logo} alt={`${item.label} logo`} width={48} height={34} unoptimized className={`object-contain ${item.key === "premier_league" ? "h-auto w-full" : "h-8 w-8 brightness-0 invert"}`} /></span><div className="min-w-0 flex-1"><div className="flex items-center justify-between gap-2"><span className="truncate text-[11px] font-black uppercase tracking-[0.08em]">{item.label}</span><span className={`text-[9px] font-black ${selected ? "text-violet-100" : "text-gray-700 group-hover:text-gray-400"}`}>{selected ? "✓" : "→"}</span></div><span className={`mt-1 flex items-center gap-1.5 text-[8px] font-bold uppercase tracking-wider ${selected ? "text-violet-100" : "text-gray-600"}`}><i className={`h-1.5 w-1.5 rounded-full ${item.dot}`} />{selected ? `Selected · ${item.status}` : item.status}</span></div></div></Link>; })}</div></nav>;
 }
 
-function ReaderHeader({ game, market, onCollapse, index, total }: { game: DailyEdgeGameDto; market: MarketEdgeDto; onCollapse?: () => void; index: number; total: number }) {
+function ReaderHeader({ game, market, sport, onCollapse, index, total }: { game: DailyEdgeGameDto; market: MarketEdgeDto; sport: Sport; onCollapse?: () => void; index: number; total: number }) {
   return (
     <div className="flex flex-col gap-3 border-b border-white/[0.07] px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-5">
       <div>
         <div className="flex items-center gap-2"><span className="h-4 w-1 rounded-full bg-violet-400" /><p className="text-[9px] font-black uppercase tracking-[0.2em] text-gray-300">Selected Edge</p><span className="hidden text-[10px] text-gray-600 sm:inline">One read first. Complete evidence when you ask for it.</span></div>
         <div className="mt-3 flex flex-wrap items-center gap-2">
-          <h2 className="text-lg font-black tracking-tight text-white sm:text-xl">{game.awayTeam} <span className="text-gray-600">{game.sport === "soccer" ? "vs" : "@"}</span> {game.homeTeam}</h2>
+          {isUclGame(game) ? <CompactMatchupIdentity game={game} sport={sport} /> : <h2 className="text-lg font-black tracking-tight text-white sm:text-xl">{game.awayTeam} <span className="text-gray-600">{game.sport === "soccer" ? "vs" : "@"}</span> {game.homeTeam}</h2>}
           <VerdictBadge market={market} />
           <LocalTime value={game.gameStartAt} fallback={game.gameTime} className="text-[10px] text-gray-600" />
           <LockBadge lockState={game.lockState} lockedAt={game.lockedAt} scheduledLockAt={game.scheduledLockAt} className="font-black uppercase tracking-wider text-emerald-300" />
@@ -2425,10 +2443,10 @@ function BoardGameCard({ game, sport, headlineMarket, active, activeMarket, sele
       }}
       className={`group relative flex h-full cursor-pointer flex-col overflow-hidden rounded-xl border bg-[#0D0D14] shadow-[0_4px_16px_-6px_rgba(0,0,0,0.55),inset_0_1px_0_rgba(255,255,255,0.05)] transition ${active ? "border-white/35 outline outline-2 outline-violet-400/25 outline-offset-2" : boardCardBorder(headlineVerdict.key)}`}
     >
-      <div className="h-[3px] w-full shrink-0" style={{ background: `linear-gradient(to right, ${memberTeamColor(game, "away", sport)} 0%, ${memberTeamColor(game, "away", sport)} 28%, rgba(255,255,255,0.06) 50%, ${memberTeamColor(game, "home", sport)} 72%, ${memberTeamColor(game, "home", sport)} 100%)` }} />
+      <MatchupColorAccent game={game} sport={sport} />
       <div className="flex flex-1 flex-col p-5 sm:p-6">
         <div className="grid gap-3">
-          <CompactMatchupIdentity game={game} sport={sport} presentation="board" />
+          <CompactMatchupIdentity game={game} sport={sport} />
           <div className="flex min-h-8 items-center gap-2">
             <VerdictBadge market={headline} large />
             {finalScore ? <span className="rounded-full border border-white/[0.10] bg-white/[0.05] px-2 py-1 text-[9px] font-black uppercase tracking-wider text-gray-300">Final · {game.awayTeam} {finalScore.away}–{finalScore.home} {game.homeTeam}</span> : <><LocalTime value={game.gameStartAt} fallback={game.gameTime} className="text-[10px] text-gray-500" /><LockBadge lockState={game.lockState} lockedAt={game.lockedAt} scheduledLockAt={game.scheduledLockAt} className="font-black uppercase tracking-wider text-emerald-300" /></>}
