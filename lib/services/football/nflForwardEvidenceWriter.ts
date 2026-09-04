@@ -55,6 +55,7 @@ import { nflForwardT60TrackingEligibility } from "./nflTrackingLifecycle";
 import {
   buildNflOfficialTrackingRecords,
   nflProviderIntegerId,
+  nflTrackingMarketsForPayload,
 } from "./nflOfficialTrackingRecord";
 import { buildMarketScopedFootballTrackingPlan } from "./footballMarketScopedTracking";
 import { buildNflWeekOneHeldMemberFixture } from "./nflWeekOneHeldMemberFixture";
@@ -64,7 +65,7 @@ import {
 } from "./nflForwardMemberSnapshotStore";
 
 export const NFL_FORWARD_WRITER_RELEASE =
-  "nfl_forward_evidence_writer_2026_09_03_r21_target_excluded_forecast" as const;
+  "nfl_forward_evidence_writer_2026_09_04_r22_complete_tracking_denominators" as const;
 
 export type NflForwardWriterResult = {
   writerRelease: typeof NFL_FORWARD_WRITER_RELEASE;
@@ -767,7 +768,7 @@ async function writeOfficialTrackingFromPayloads(args: {
   const payloads = [...eligibleByGame.values()];
   const trackingGames = payloads.map((payload) => ({
     externalId: nflProviderIntegerId(payload.game.providerGameId, "game"),
-    decisions: payload.decisions.evaluatedBets,
+    decisions: nflTrackingMarketsForPayload(payload).map((market) => ({ market })),
   }));
   const proposed = trackingGames.length === 0 ? 0 : buildMarketScopedFootballTrackingPlan(trackingGames).proposed;
   if (!args.apply || proposed === 0) {

@@ -1851,8 +1851,8 @@ check(
     wnbaAdapterSource.includes("currentQuoteSportsbook: currentTrail.sportsbook ?? null"),
 );
 check(
-  "WNBA unlocked readers reuse only a compatible last-known-good v6 tuple",
-  wnbaAdapterSource.includes("record.snapshot_json?.prediction_record_contract_version !== WNBA_V6_RECORD_CONTRACT_VERSION") &&
+  "WNBA unlocked readers reuse only a compatible current-contract tuple",
+  wnbaAdapterSource.includes("record.snapshot_json?.prediction_record_contract_version !== WNBA_CURRENT_RECORD_CONTRACT_VERSION") &&
     wnbaAdapterSource.includes("return retainCompatibleWnbaDecisionTuple(candidate, input.currentDecision)") &&
     wnbaAdapterSource.includes("decisionTuples.total?.evaluated_price_american") &&
     wnbaAdapterSource.includes('decisionLineRows("total", totalSide, totalDecisionLine)'),

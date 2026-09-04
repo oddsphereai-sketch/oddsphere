@@ -240,7 +240,7 @@ console.log("\n━━━ no_bet guidance vs genuine Toss-Up exclusion ━━━"
 {
   // Toss-Up FI row with no_bet=true should NOT be graded as W/L even
   // when first_inning_runs is populated.
-  const r = makeRecord({ market: "first_inning", pick: "Toss-Up", no_bet: true, no_bet_reason: "non-actionable: locked pill was Toss-Up" } as any);
+  const r = makeRecord({ market: "first_inning", pick: "Toss-Up", no_bet: true, no_bet_reason: "non-actionable: locked pill was Toss-Up" });
   const g = gradePrediction({
     record: r,
     game: { status: "STATUS_IN_PROGRESS", home_score: 1, away_score: 0, first_inning_runs: 0 },
@@ -252,13 +252,13 @@ console.log("\n━━━ no_bet guidance vs genuine Toss-Up exclusion ━━━"
 {
   // A real-sided stand-down still counts toward accuracy; no_bet only means
   // it was not recommended as an actionable wager.
-  const r = makeRecord({ market: "moneyline", pick: "home", no_bet: true, no_bet_reason: "test" } as any);
+  const r = makeRecord({ sport: "wnba", market: "moneyline", pick: "home", side: "home", held: true, odds_american: null, no_bet: true, no_bet_reason: "moneyline_exact_price_unavailable" });
   const g = gradePrediction({
     record: r,
     game: { status: "final", home_score: 5, away_score: 3, first_inning_runs: null },
     source: "auto_score_ingest",
   });
-  check("no_bet=true real-sided ML at status=final → graded win", g.result === "win");
+  check("price-missing Held/No Play with a real ML side → graded win for accuracy", g.result === "win");
 }
 
 // ── Phase 6B.19 — FI markets grade mid-game once inning 1 complete ──
