@@ -7,6 +7,10 @@ import { withFirstTrackedSplitObservation } from "@/lib/services/splitDisplayMov
 import type { MarketSplitDisplaySection } from "@/lib/types/domain/RecommendationDecision";
 import {
   CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE,
+  CFB_FORWARD_HOLISTIC_PREVIOUS_EVIDENCE_SCHEMA_RELEASE,
+  CFB_FORWARD_HOLISTIC_PREVIOUS_MEMBER_RELEASE,
+  CFB_FORWARD_CONTINUITY_PREVIOUS_EVIDENCE_SCHEMA_RELEASE,
+  CFB_FORWARD_CONTINUITY_PREVIOUS_MEMBER_RELEASE,
   CFB_FORWARD_COHERENT_PREVIOUS_EVIDENCE_SCHEMA_RELEASE,
   CFB_FORWARD_COHERENT_PREVIOUS_MEMBER_RELEASE,
   CFB_FORWARD_WEATHER_PREVIOUS_EVIDENCE_SCHEMA_RELEASE,
@@ -48,6 +52,8 @@ import {
   CFB_V1_BASE_PROBABILITY_RELEASE,
   CFB_V1_BASE_SCORE_ARTIFACT_RELEASE,
   CFB_V1_DECISION_RELEASE,
+  CFB_V1_HOLISTIC_PREVIOUS_DECISION_RELEASE,
+  CFB_V1_CONTINUITY_PREVIOUS_DECISION_RELEASE,
   CFB_V1_GRADE_PREVIOUS_DECISION_RELEASE,
   CFB_V1_DISTRIBUTION_RELEASE,
   CFB_V1_GRADE_POLICY_RELEASE,
@@ -65,9 +71,9 @@ import { cfbTeamIdentity } from "./cfbTeamIdentity";
 import { CFB_PUBLIC_SCORE_DIRECTION_TOLERANCE_POINTS } from "./footballCrossMarketCoherence";
 
 export const CFB_MEMBER_FIXTURE_RELEASE =
-  "cfb_v1_member_fixture_2026_09_04_r47_favorite_price_tier_ceiling" as const;
+  "cfb_v1_member_fixture_2026_09_04_r48_cross_release_lock_visibility" as const;
 export const CFB_PUBLIC_OUTCOME_CONTRACT_RELEASE =
-  "cfb_market_sharp_public_outcome_contract_2026_09_04_r47_favorite_price_tier_ceiling" as const;
+  "cfb_market_sharp_public_outcome_contract_2026_09_04_r48_cross_release_lock_visibility" as const;
 export const CFB_CONTEXT_ONLY_QUOTE_CAPTURE_SKEW_MS = 5_000 as const;
 const CFB_MARKET_CONTEXT_MAX_CAPTURE_LAG_MINUTES = 10;
 const CFB_PRE_DIRECTIONAL_MEMBER_RELEASE = "cfb_v1_member_release_2026_08_28_r14_expanded_sharp_budget" as const;
@@ -346,19 +352,66 @@ export function selectLatestCfbMemberEvidenceRows(
       )
     : null;
   const publicationPreviousAuthority = publicationPrevious ?? publicationPreviousBoundary ?? coherentPreviousAuthority;
+  const continuityPrevious = completeRowsForRelease(
+    rows,
+    CFB_FORWARD_CONTINUITY_PREVIOUS_EVIDENCE_SCHEMA_RELEASE,
+    CFB_FORWARD_CONTINUITY_PREVIOUS_MEMBER_RELEASE,
+    CFB_V1_CONTINUITY_PREVIOUS_DECISION_RELEASE,
+  );
+  const continuityPreviousBoundary = publicationPreviousAuthority
+    ? immutableBoundaryTransitionRows(
+        rows,
+        now,
+        CFB_FORWARD_CONTINUITY_PREVIOUS_EVIDENCE_SCHEMA_RELEASE,
+        CFB_FORWARD_CONTINUITY_PREVIOUS_MEMBER_RELEASE,
+        CFB_V1_CONTINUITY_PREVIOUS_DECISION_RELEASE,
+        publicationPreviousAuthority,
+      )
+    : null;
+  const continuityPreviousAuthority = continuityPrevious ?? continuityPreviousBoundary ?? publicationPreviousAuthority;
+  const holisticPrevious = completeRowsForRelease(
+    rows,
+    CFB_FORWARD_HOLISTIC_PREVIOUS_EVIDENCE_SCHEMA_RELEASE,
+    CFB_FORWARD_HOLISTIC_PREVIOUS_MEMBER_RELEASE,
+    CFB_V1_HOLISTIC_PREVIOUS_DECISION_RELEASE,
+  );
+  const holisticPreviousBoundary = continuityPreviousAuthority
+    ? immutableBoundaryTransitionRows(
+        rows,
+        now,
+        CFB_FORWARD_HOLISTIC_PREVIOUS_EVIDENCE_SCHEMA_RELEASE,
+        CFB_FORWARD_HOLISTIC_PREVIOUS_MEMBER_RELEASE,
+        CFB_V1_HOLISTIC_PREVIOUS_DECISION_RELEASE,
+        continuityPreviousAuthority,
+      )
+    : null;
+  const holisticPreviousLockOverlay = continuityPreviousAuthority
+    ? immutableLockOverlayRows(
+        rows,
+        CFB_FORWARD_HOLISTIC_PREVIOUS_EVIDENCE_SCHEMA_RELEASE,
+        CFB_FORWARD_HOLISTIC_PREVIOUS_MEMBER_RELEASE,
+        CFB_V1_HOLISTIC_PREVIOUS_DECISION_RELEASE,
+        continuityPreviousAuthority,
+      )
+    : null;
+  const holisticPreviousAuthority = holisticPrevious ?? holisticPreviousBoundary ?? holisticPreviousLockOverlay ?? continuityPreviousAuthority;
   const current = completeRowsForRelease(rows, CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE, CFB_FORWARD_MEMBER_RELEASE, CFB_V1_DECISION_RELEASE);
   if (current) return current;
-  const immutableBoundaryTransition = publicationPreviousAuthority
+  const immutableBoundaryTransition = holisticPreviousAuthority
     ? immutableBoundaryTransitionRows(
         rows,
         now,
         CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE,
         CFB_FORWARD_MEMBER_RELEASE,
         CFB_V1_DECISION_RELEASE,
-        publicationPreviousAuthority,
+        holisticPreviousAuthority,
       )
     : null;
   if (immutableBoundaryTransition) return immutableBoundaryTransition;
+  if (holisticPrevious) return holisticPrevious;
+  if (holisticPreviousBoundary) return holisticPreviousBoundary;
+  if (continuityPrevious) return continuityPrevious;
+  if (continuityPreviousBoundary) return continuityPreviousBoundary;
   if (publicationPrevious) return publicationPrevious;
   if (publicationPreviousBoundary) return publicationPreviousBoundary;
   if (coherentPrevious) return coherentPrevious;
@@ -434,6 +487,27 @@ function immutableBoundaryTransitionRows(
     Date.parse(row.gameStartAt) > responseTime && !isValidImmutableBoundaryT60(row)
   )) return null;
   return previous.map((row) => currentByGame.get(row.providerGameId) ?? row);
+}
+
+function immutableLockOverlayRows(
+  rows: CfbForwardStoredEvidence[],
+  schemaRelease: string,
+  memberRelease: string,
+  decisionRelease: string,
+  previous: CfbForwardStoredEvidence[],
+): CfbForwardStoredEvidence[] | null {
+  const current = latestValidRowsForRelease(rows, schemaRelease, memberRelease, decisionRelease);
+  if (!current || current.values.length >= current.expected || previous.length !== current.expected) return null;
+
+  const previousByGame = new Map(previous.map((row) => [row.providerGameId, row]));
+  if (current.values.some((row) => !previousByGame.has(row.providerGameId))) return null;
+  const lockedByGame = new Map(
+    current.values
+      .filter(isValidImmutableBoundaryT60)
+      .map((row) => [row.providerGameId, row]),
+  );
+  if (lockedByGame.size === 0) return null;
+  return previous.map((row) => lockedByGame.get(row.providerGameId) ?? row);
 }
 
 function isValidImmutableBoundaryT60(row: CfbForwardStoredEvidence): boolean {

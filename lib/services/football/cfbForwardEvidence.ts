@@ -14,6 +14,10 @@ import {
 
 export const CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE =
   "cfb_forward_evidence_snapshot_2026_09_04_r21_favorite_price_tier_ceiling" as const;
+export const CFB_FORWARD_HOLISTIC_PREVIOUS_EVIDENCE_SCHEMA_RELEASE =
+  "cfb_forward_evidence_snapshot_2026_09_04_r20_holistic_confidence" as const;
+export const CFB_FORWARD_CONTINUITY_PREVIOUS_EVIDENCE_SCHEMA_RELEASE =
+  "cfb_forward_evidence_snapshot_2026_09_01_r19_coherent_movement_evidence" as const;
 export const CFB_FORWARD_COHERENT_PREVIOUS_EVIDENCE_SCHEMA_RELEASE =
   "cfb_forward_evidence_snapshot_2026_08_31_r18_kickoff_weather" as const;
 export const CFB_FORWARD_WEATHER_PREVIOUS_EVIDENCE_SCHEMA_RELEASE =
@@ -54,6 +58,10 @@ export const CFB_FORWARD_EVIDENCE_COLLECTOR_RELEASE =
   "cfb_forward_evidence_collector_2026_09_04_r27_sharp_fallback_isolation" as const;
 export const CFB_FORWARD_MEMBER_RELEASE =
   "cfb_v1_member_release_2026_09_04_r33_favorite_price_tier_ceiling" as const;
+export const CFB_FORWARD_HOLISTIC_PREVIOUS_MEMBER_RELEASE =
+  "cfb_v1_member_release_2026_09_04_r32_holistic_confidence" as const;
+export const CFB_FORWARD_CONTINUITY_PREVIOUS_MEMBER_RELEASE =
+  "cfb_v1_member_release_2026_09_04_r31_evidence_identity_continuity" as const;
 export const CFB_FORWARD_PUBLICATION_PREVIOUS_MEMBER_RELEASE =
   "cfb_v1_member_release_2026_09_02_r29_total_publication_coherence" as const;
 export const CFB_FORWARD_COHERENT_PREVIOUS_MEMBER_RELEASE =
