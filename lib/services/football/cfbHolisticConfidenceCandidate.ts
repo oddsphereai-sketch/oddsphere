@@ -5,7 +5,7 @@ import {
 } from "@/lib/services/dailyEdge/confidenceExecutionContract";
 
 export const CFB_HOLISTIC_CONFIDENCE_CANDIDATE_RELEASE =
-  "cfb_holistic_confidence_shadow_2026_09_04_r1_continuous_evidence" as const;
+  "cfb_holistic_confidence_2026_09_04_r2_price_portable_execution" as const;
 export const CFB_HOLISTIC_BEST_ANGLE_MIN_SCORE = 60 as const;
 export const CFB_HOLISTIC_LEAN_MIN_SCORE = 55 as const;
 export const CFB_HOLISTIC_WATCHLIST_MIN_SCORE = 51.5 as const;
@@ -45,7 +45,7 @@ export type CfbHolisticConfidenceResult = {
 };
 
 /**
- * Outcome-blind shadow scorer. Exact price and EV are retained for execution,
+ * Outcome-blind confidence scorer. Exact price and EV are retained for execution,
  * but cannot change the confidence score or grade.
  */
 export function evaluateCfbHolisticConfidence(

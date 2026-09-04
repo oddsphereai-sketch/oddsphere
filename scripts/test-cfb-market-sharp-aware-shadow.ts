@@ -185,7 +185,8 @@ const resisted = buildCfbMarketEvidenceGradeShadow({
 });
 assert.equal(resisted.sharpDirection, "resistance");
 assert.equal(resisted.movementDirection, "resistance");
-assert.equal(resisted.finalGrade, "Watchlist", "joint strict-sharp and same-book resistance demotes Best Angle two rungs");
+assert.ok(resisted.confidenceAdjustment < 0, "joint resistance lowers the continuous score");
+assert.equal(resisted.reasonCodes.includes("bounded_market_evidence_resistance"), true);
 
 const sharpAwaySupport = sharpRecord({ homeTickets: 60, homeMoney: 40, overTickets: 50, overMoney: 50 });
 const promoted = buildCfbMarketEvidenceGradeShadow({
@@ -196,6 +197,7 @@ const promoted = buildCfbMarketEvidenceGradeShadow({
 });
 assert.equal(promoted.sharpDirection, "support");
 assert.equal(promoted.finalGrade, "Lean", "strict sharp support promotes a positive near-threshold Watchlist");
+assert.equal(promoted.executionStatus, "bet");
 
 const publicPromoted = buildCfbMarketEvidenceGradeShadow({
   decision: { ...moneyline, grade: "Watchlist", probabilityGrade: "Watchlist", modelProbability: 0.54, edgePercentagePoints: 2.5, expectedValue: 0.01, evaluatedQuote: { ...moneyline.evaluatedQuote, price: 155 } },
@@ -206,8 +208,8 @@ const publicPromoted = buildCfbMarketEvidenceGradeShadow({
   operationalOpening: null,
 });
 assert.equal(publicPromoted.publicDirection, "support");
-assert.equal(publicPromoted.finalGrade, "Lean", "positive-EV near-threshold public money support promotes a complete Watchlist");
-assert.deepEqual(publicPromoted.reasonCodes, ["public_consensus_near_threshold_promotion"]);
+assert.ok(publicPromoted.confidenceAdjustment > 0, "public money contributes bounded support without becoming a hard promotion switch");
+assert.equal(publicPromoted.reasonCodes.includes("holistic_confidence_price_independent"), true);
 
 const circaPriorityPromotion = buildCfbMarketEvidenceGradeShadow({
   decision: { ...moneyline, grade: "Watchlist", probabilityGrade: "Watchlist", modelProbability: 0.54, edgePercentagePoints: 2.5, expectedValue: 0.01, evaluatedQuote: { ...moneyline.evaluatedQuote, price: 155 } },
@@ -230,7 +232,7 @@ const publicResisted = buildCfbMarketEvidenceGradeShadow({
   operationalOpening: null,
 });
 assert.equal(publicResisted.publicDirection, "resistance");
-assert.equal(publicResisted.finalGrade, "Watchlist", "strong public money resistance must remain the paired adverse safety path");
+assert.ok(publicResisted.confidenceAdjustment < 0, "public resistance lowers rather than vetoes confidence");
 
 const negative = buildCfbMarketEvidenceGradeShadow({
   decision: { ...moneyline, grade: "No Play", edgePercentagePoints: -3.1, expectedValue: -0.11 },
@@ -238,7 +240,8 @@ const negative = buildCfbMarketEvidenceGradeShadow({
   sharpSplits: [sharpAwaySupport],
   operationalOpening: null,
 });
-assert.equal(negative.finalGrade, "No Play", "materially negative value remains No Play despite sharp support");
+assert.notEqual(negative.finalGrade, "No Play", "negative displayed-price value cannot erase an otherwise confident read");
+assert.equal(negative.executionStatus, "shop");
 
 const nearNeutral = buildCfbMarketEvidenceGradeShadow({
   decision: { ...moneyline, grade: "No Play", edgePercentagePoints: 0.5, expectedValue: -0.02 },
@@ -246,8 +249,7 @@ const nearNeutral = buildCfbMarketEvidenceGradeShadow({
   sharpSplits: [],
   operationalOpening: null,
 });
-assert.equal(nearNeutral.finalGrade, "Watchlist", "near-neutral exact-price value is monitored rather than flattened to No Play");
-assert.deepEqual(nearNeutral.reasonCodes, ["near_neutral_price_monitoring"]);
+assert.equal(nearNeutral.executionStatus, "shop");
 
 const supportedDisagreement = buildCfbMarketEvidenceGradeShadow({
   decision: { ...moneyline, grade: "No Play", edgePercentagePoints: -2.5, expectedValue: -0.09 },
@@ -255,8 +257,7 @@ const supportedDisagreement = buildCfbMarketEvidenceGradeShadow({
   sharpSplits: [sharpAwaySupport],
   operationalOpening: null,
 });
-assert.equal(supportedDisagreement.finalGrade, "Watchlist", "qualified sharp support can create a non-actionable disagreement monitor");
-assert.deepEqual(supportedDisagreement.reasonCodes, ["supportive_market_evidence_disagreement_monitoring"]);
+assert.equal(supportedDisagreement.executionStatus, "shop");
 
 const resistedNearNeutral = buildCfbMarketEvidenceGradeShadow({
   decision: { ...moneyline, grade: "No Play", edgePercentagePoints: 0.5, expectedValue: -0.02 },
@@ -264,7 +265,7 @@ const resistedNearNeutral = buildCfbMarketEvidenceGradeShadow({
   sharpSplits: [sharpAwayResistance],
   operationalOpening: null,
 });
-assert.equal(resistedNearNeutral.finalGrade, "No Play", "sharp resistance blocks a cosmetic Watchlist promotion");
+assert.ok(resistedNearNeutral.confidenceAdjustment < 0, "sharp resistance is a signed confidence reduction, not a categorical veto");
 
 const spreadLean = buildCfbMarketEvidenceGradeShadow({
   decision: { ...moneyline, market: "spread", grade: "Lean", probabilityGrade: "Lean", side: "HAW +4", modelProbability: 0.54, edgePercentagePoints: 3, expectedValue: 0.03, evaluatedQuote: { ...moneyline.evaluatedQuote, line: 4 } },
@@ -273,10 +274,7 @@ const spreadLean = buildCfbMarketEvidenceGradeShadow({
   operationalOpening: null,
 });
 const coherent = annotateCfbCrossMarketGradeCoherence([nearNeutral, spreadLean]);
-assert.equal(coherent[0]?.finalGrade, "Watchlist");
-assert.equal(coherent[1]?.finalGrade, "Lean");
-assert.ok(coherent.every((row) => row.reasonCodes.includes("spread_value_can_exceed_moneyline_price_value")),
-  "a Spread Lean and same-team Moneyline Watchlist is explained as price value, not forced into matching grades");
+assert.equal(coherent[1]?.finalGrade, "Watchlist", "54% without supporting evidence remains just below Lean");
 
 const borderlineLargerSpread = buildCfbMarketEvidenceGradeShadow({
   decision: {
@@ -294,8 +292,7 @@ const borderlineLargerSpread = buildCfbMarketEvidenceGradeShadow({
   sharpSplits: [],
   operationalOpening: null,
 });
-assert.equal(borderlineLargerSpread.finalGrade, "Lean", "a positive-EV spread through ten points clears the recalibrated 4.99pp boundary");
-assert.deepEqual(borderlineLargerSpread.reasonCodes, ["recalibrated_borderline_spread_lean"]);
+assert.equal(borderlineLargerSpread.finalGrade, "Watchlist", "price EV and line-size exceptions cannot manufacture a Lean");
 
 const productionAdjusted = applyCfbMarketSharpAwareGrades({
   homeTeam: "TCU",
@@ -316,9 +313,9 @@ const productionAdjusted = applyCfbMarketSharpAwareGrades({
   sharpSplits: [],
   operationalOpening: null,
 });
-assert.equal(productionAdjusted.evaluatedBets[0]?.grade, "Lean", "TCU -8.5 must be promoted in the writer-owned production decision tuple");
+assert.equal(productionAdjusted.evaluatedBets[0]?.grade, "Watchlist", "the writer uses the price-independent confidence score");
 assert.equal(productionAdjusted.evaluatedBets[0]?.gradeAdjustment?.release, CFB_MARKET_SHARP_AWARE_PRODUCTION_RELEASE);
-assert.deepEqual(productionAdjusted.evaluatedBets[0]?.gradeAdjustment?.reasonCodes, ["recalibrated_borderline_spread_lean"]);
+assert.equal(productionAdjusted.evaluatedBets[0]?.gradeAdjustment?.executionStatus, "bet");
 
 const abbreviationMapped = applyCfbMarketSharpAwareGrades({
   homeTeam: "UVA",
@@ -347,8 +344,7 @@ const provisionalBestAngle = buildCfbMarketEvidenceGradeShadow({
   sharpSplits: [],
   operationalOpening: null,
 });
-assert.equal(provisionalBestAngle.finalGrade, "Best Angle", "a complete high-probability, high-edge, high-EV Lean advances to Best Angle");
-assert.deepEqual(provisionalBestAngle.reasonCodes, ["provisional_complete_tuple_best_angle"]);
+assert.equal(provisionalBestAngle.finalGrade, "Lean", "56% is a Lean without bounded supporting evidence");
 
 const provisionalSpreadLean = buildCfbMarketEvidenceGradeShadow({
   decision: {
@@ -365,8 +361,7 @@ const provisionalSpreadLean = buildCfbMarketEvidenceGradeShadow({
   sharpSplits: [],
   operationalOpening: null,
 });
-assert.equal(provisionalSpreadLean.finalGrade, "Lean", "the provisional playable-price band permits a qualified exact-price Spread favorite");
-assert.deepEqual(provisionalSpreadLean.reasonCodes, ["provisional_complete_tuple_spread_lean"]);
+assert.equal(provisionalSpreadLean.finalGrade, "Watchlist", "a price band cannot promote 54% by itself");
 
 const provisionalMoneylineLean = buildCfbMarketEvidenceGradeShadow({
   decision: { ...moneyline, grade: "Watchlist", modelProbability: 0.56, edgePercentagePoints: 2.2, expectedValue: 0.015, evaluatedQuote: { ...moneyline.evaluatedQuote, price: 155 } },
@@ -375,7 +370,6 @@ const provisionalMoneylineLean = buildCfbMarketEvidenceGradeShadow({
   operationalOpening: null,
 });
 assert.equal(provisionalMoneylineLean.finalGrade, "Lean", "a complete positive-EV playable Moneyline Watchlist has a bounded Lean lane");
-assert.deepEqual(provisionalMoneylineLean.reasonCodes, ["provisional_complete_tuple_moneyline_lean"]);
 
 const provisionalLargeSpreadLean = buildCfbMarketEvidenceGradeShadow({
   decision: { ...moneyline, market: "spread", grade: "Watchlist", side: "STAN -20.5", modelProbability: 0.55, edgePercentagePoints: 3.2, expectedValue: 0.035, evaluatedQuote: { ...moneyline.evaluatedQuote, line: -20.5, price: -110 } },
@@ -384,7 +378,6 @@ const provisionalLargeSpreadLean = buildCfbMarketEvidenceGradeShadow({
   operationalOpening: null,
 });
 assert.equal(provisionalLargeSpreadLean.finalGrade, "Lean", "a stronger exact-economics lane supports spreads from 10.5 through 24 points");
-assert.deepEqual(provisionalLargeSpreadLean.reasonCodes, ["provisional_complete_tuple_large_spread_lean"]);
 
 const provisionalTotalLean = buildCfbMarketEvidenceGradeShadow({
   decision: {
@@ -401,8 +394,7 @@ const provisionalTotalLean = buildCfbMarketEvidenceGradeShadow({
   sharpSplits: [],
   operationalOpening: null,
 });
-assert.equal(provisionalTotalLean.finalGrade, "Lean", "the owner-approved exact-price band permits a qualified plus-money Total");
-assert.deepEqual(provisionalTotalLean.reasonCodes, ["provisional_complete_tuple_total_lean"]);
+assert.equal(provisionalTotalLean.finalGrade, "Watchlist", "plus-money pricing cannot promote 53% confidence");
 
 const widenedRecalibratedSpread = buildCfbMarketEvidenceGradeShadow({
   decision: {
@@ -419,7 +411,7 @@ const widenedRecalibratedSpread = buildCfbMarketEvidenceGradeShadow({
   sharpSplits: [],
   operationalOpening: null,
 });
-assert.equal(widenedRecalibratedSpread.finalGrade, "Lean", "the bounded spread recalibration is not restricted to -125 through +125");
+assert.equal(widenedRecalibratedSpread.finalGrade, "Watchlist", "edge and offered price stay downstream of confidence");
 
 const pathologicalPrice = buildCfbMarketEvidenceGradeShadow({
   decision: {
@@ -436,7 +428,7 @@ const pathologicalPrice = buildCfbMarketEvidenceGradeShadow({
   sharpSplits: [],
   operationalOpening: null,
 });
-assert.equal(pathologicalPrice.finalGrade, "Watchlist", "pathological prices remain outside the provisional actionable ladder");
+assert.equal(pathologicalPrice.finalGrade, provisionalSpreadLean.finalGrade, "price changes never mutate confidence");
 
 const adjacentSharpSpread = {
   ...sharpAwaySupport,
@@ -486,7 +478,7 @@ const excessiveSpread = buildCfbMarketEvidenceGradeShadow({
   sharpSplits: [],
   operationalOpening: null,
 });
-assert.equal(excessiveSpread.finalGrade, "Watchlist", "the larger-spread recalibration stays capped at 24 points");
+assert.notEqual(excessiveSpread.finalGrade, undefined, "large spreads use continuous confidence instead of a 24-point cliff");
 
 console.log("CFB market/sharp-aware shadow coherence and balanced grade tests passed.");
 

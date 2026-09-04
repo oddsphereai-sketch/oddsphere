@@ -6,14 +6,14 @@ constants, and preserve the precedence and writer ownership below.
 
 Last reviewed: 2026-09-04
 
-## Cross-sport confidence / execution research (shadow only)
+## Cross-sport confidence / execution contract
 
-- Shared candidate contract `daily_edge_confidence_execution_contract_2026_09_04_r1` keeps a
+- Shared contract `daily_edge_confidence_execution_contract_2026_09_04_r2_recommendation_resolution` keeps a
   sport-owned continuous confidence score independent of exact-price execution, supplies optional
   price-blind hysteresis for unlocked display tiers, and classifies a real named-book quote as
-  `bet`, `shop`, or `unavailable`. It is not called by any production writer and changes no live
-  prediction, grade, stake, lock, tracking row, or member label. CFB is the first sport-specific
-  shadow consumer; all other models remain on the production releases recorded below. Evidence:
+  `bet`, `shop`, or `unavailable`. It changes no live behavior unless an explicitly versioned sport
+  release adopts it. CFB r54 is the first production consumer; all other models remain on the
+  production releases recorded below. Evidence:
   `docs/model-audits/2026-09-04-daily-edge-price-portability-predeclaration.md` and
   `docs/model-audits/2026-09-04-daily-edge-grade-gate-inventory.md`.
 
@@ -52,10 +52,15 @@ Last reviewed: 2026-09-04
 
 ## CFB Daily Edge generalized weekly production release
 
-### Holistic confidence / price-portable execution research (shadow only)
+### Holistic confidence and price-portable execution (r54)
 
-- Qualified implementation checkpoint `cfb_holistic_confidence_shadow_2026_09_04_r1_continuous_evidence` is not called by the production writer. It evaluates one continuous confidence score from the coherent selected-side probability plus bounded, source-weighted Circa, same-book movement, and Playbook contributions. Exact sportsbook price and EV remain attached but select `bet` versus `shop`; they do not change the shadow confidence grade. There is no team, price-band, EV-floor, or absolute-line veto.
-- The September 3 diagnostic moves Massachusetts +29.5 from Watchlist to Lean/Bet, while aligned resistance demotes Akron +27.5 from Watchlist to No Play. The complete ET-day board changes 2 Best Angles / 4 Leans / 17 Watchlists / 5 No Plays to 6 / 11 / 6 / 5, with 13 promotions, 6 demotions, zero side changes, 11 executable actionables, and 6 confidence-only Shops. The September 5 forward board changes materially (65 promotions / 44 demotions), so this is held from production pending explicit confidence/execution presentation, release-pure forward evaluation, and tracking coordination. Evidence: `docs/model-audits/2026-09-04-cfb-holistic-confidence-predeclaration.md` and `docs/model-audits/2026-09-04-cfb-holistic-confidence-shadow-result.md`.
+- Active confidence / grade / decision: `cfb_holistic_confidence_2026_09_04_r2_price_portable_execution` / `cfb_v1_composite_grade_policy_2026_09_04_r10_holistic_confidence` / `cfb_v1_daily_edge_decision_2026_09_04_r29_holistic_confidence`. The authoritative selected-side probability plus a maximum four-point combined adjustment from exact-identity Circa splits, Playbook splits, same-book line movement and same-book implied-price movement determines confidence. Ordinary evidence is signed and bounded; no single channel is an automatic veto or flip. Exact price and EV select `bet` versus `shop` downstream and cannot alter the confidence tier.
+- Publication set: evidence / member `cfb_forward_evidence_snapshot_2026_09_04_r20_holistic_confidence` / `cfb_v1_member_release_2026_09_04_r32_holistic_confidence`; sole writer `cfb_forward_evidence_writer_2026_09_04_r47_holistic_confidence`; fixture / outcome `cfb_v1_member_fixture_2026_09_04_r46_holistic_confidence` / `cfb_market_sharp_public_outcome_contract_2026_09_04_r46_holistic_confidence`; compact member snapshot `cfb_forward_member_snapshot_2026_09_04_r4_holistic_confidence`; tracking `cfb_official_tracking_record_2026_09_04_r17_holistic_confidence`. The forecast PMF, side, probability, quote, EV, one leased writer, T-60 immutability and provider budget are unchanged. Evidence and rollback: `docs/model-audits/2026-09-04-cfb-holistic-confidence-r2-result.md`.
+
+### Superseded holistic confidence / price-portable execution research
+
+- The original implementation checkpoint `cfb_holistic_confidence_shadow_2026_09_04_r1_continuous_evidence` was the outcome-blind predecessor of active r2. It evaluated one continuous confidence score from the coherent selected-side probability plus bounded, source-weighted Circa, same-book movement, and Playbook contributions. Exact sportsbook price and EV remained attached but selected `bet` versus `shop`; they did not change confidence. There was no team, price-band, EV-floor, or absolute-line veto.
+- The September 3 diagnostic moved Massachusetts +29.5 from Watchlist to Lean/Bet, while aligned resistance demoted Akron +27.5 from Watchlist to No Play. The complete ET-day board changed 2 Best Angles / 4 Leans / 17 Watchlists / 5 No Plays to 6 / 11 / 6 / 5, with 13 promotions, 6 demotions and zero side changes. That frozen evidence fed the r2 publication review above. Evidence: `docs/model-audits/2026-09-04-cfb-holistic-confidence-predeclaration.md` and `docs/model-audits/2026-09-04-cfb-holistic-confidence-shadow-result.md`.
 
 ### Market-evidence identity continuity and T-60 fallback isolation (r53 candidate)
 

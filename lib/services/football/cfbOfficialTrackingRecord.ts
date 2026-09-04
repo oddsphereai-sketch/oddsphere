@@ -16,7 +16,7 @@ import { CFB_MARKET_SHARP_AWARE_PRODUCTION_RELEASE } from "./cfbMarketSharpAware
 import { assertMarketScopedFootballDecisions, FOOTBALL_MARKET_SCOPED_T60_TRACKING_RELEASE } from "./footballMarketScopedTracking";
 
 export const CFB_OFFICIAL_TRACKING_RECORD_RELEASE =
-  "cfb_official_tracking_record_2026_09_04_r16_evidence_identity_complete_denominators" as const;
+  "cfb_official_tracking_record_2026_09_04_r17_holistic_confidence" as const;
 
 export function cfbTrackingMarketsForPayload(payload: CfbForwardEvidencePayload): CfbV1Market[] {
   const markets = new Set<CfbV1Market>(payload.decisions.evaluatedBets.map((decision) => decision.market));
@@ -61,7 +61,7 @@ export function buildCfbOfficialTrackingRecords(args: { payload: CfbForwardEvide
       best_angle: decision.grade === "Best Angle" && actionable,
       no_bet: !actionable,
       no_bet_reason: actionable ? null : predictiveActionable
-        ? "exact_price_ev_below_execution_floor"
+        ? "displayed_quote_negative_expected_value_shop"
         : `grade_${playGrade}`,
       market_aligned: Math.abs(decision.modelProbability - decision.marketFairProbability) <= 0.03,
       data_quality_tier: "high",
