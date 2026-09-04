@@ -7,6 +7,7 @@ import type {
   OddsTrailStopDto,
 } from "@/app/lab/lib/labTypes";
 import { buildRecommendationDecision } from "@/lib/services/recommendationDecision";
+import { withFirstTrackedSplitObservation } from "@/lib/services/splitDisplayMovement";
 import type { MarketSplitDisplaySection } from "@/lib/types/domain/RecommendationDecision";
 import type { FootballPreviewFixture } from "@/app/dev/football-preview/footballPreviewFixture";
 import type { PreviewAvailabilityByGame } from "@/app/dev/experience-preview/ActualDailyEdgePreview";
@@ -40,7 +41,7 @@ import { nflFootballEvidenceStats } from "./footballMemberEvidence";
 import type { NflRegularSharpMarket, NflRegularSharpSplit } from "./sharpApiNflSplits";
 
 export const NFL_WEEK_ONE_HELD_MEMBER_FIXTURE_RELEASE =
-  "nfl_weekly_member_fixture_2026_09_03_r16_target_excluded_forecast" as const;
+  "nfl_weekly_member_fixture_2026_09_04_r17_split_history_window" as const;
 
 const MODEL_RELEASE = NFL_V1_OUTCOME_MODEL_RELEASE;
 const DECISION_RELEASE = NFL_V1_ACTIONABLE_GRADE_DECISION_RELEASE;
@@ -365,9 +366,9 @@ function buildHeldGame(
     weather: payload.weather,
   });
   const sourceSplits = {
-    moneyline: nflSourceSplitEvidence(payload, "moneyline"),
-    total: nflSourceSplitEvidence(payload, "total"),
-    spread: nflSourceSplitEvidence(payload, "spread"),
+    moneyline: nflSourceSplitEvidence(payload, "moneyline", movementRows),
+    total: nflSourceSplitEvidence(payload, "total", movementRows),
+    spread: nflSourceSplitEvidence(payload, "spread", movementRows),
   };
   const recommendationDecision = buildNflRecommendationDecision({
     payload,
@@ -526,6 +527,7 @@ function selectedDecisionSide(
 function nflSourceSplitEvidence(
   payload: NflForwardEvidencePayload,
   market: NflRegularSharpMarket,
+  movementRows: NflForwardStoredEvidence[] = [],
 ): NflSourceSplitEvidence {
   const split = payload.market.sharpApiSplits?.[market] ?? null;
   if (!split || !completeNflMarketSplit(split, market)) {
@@ -552,17 +554,29 @@ function nflSourceSplitEvidence(
     };
   }
   const observedAt = split.providerFetchedAt ?? split.capturedAt;
+  const previous = movementRows
+    .map((row) => row.payload.market.sharpApiSplits?.[market] ?? null)
+    .filter((candidate): candidate is NflRegularSharpSplit =>
+      candidate !== null &&
+      normalizeBookName(candidate.sourceSportsbook ?? "") === book &&
+      Date.parse(candidate.providerFetchedAt ?? candidate.capturedAt) < Date.parse(observedAt)
+    )
+    .sort((first, second) =>
+      Date.parse(first.providerFetchedAt ?? first.capturedAt) -
+      Date.parse(second.providerFetchedAt ?? second.capturedAt)
+    )[0] ?? null;
+  const firstTrackedObservedAt = previous?.providerFetchedAt ?? previous?.capturedAt ?? null;
   const staleAfterMinutes = 390;
   const isStale = Date.parse(payload.capturedAt) - Date.parse(observedAt) > staleAfterMinutes * 60_000;
   const stamp = { observedAt, freshnessCheckedAt: split.capturedAt, staleAfterMinutes, isStale };
   const rows = market === "total"
     ? [
-        { side: "over" as const, label: "Over", moneyPct: split.overMoneyPct, betsPct: split.overBetsPct, ...stamp },
-        { side: "under" as const, label: "Under", moneyPct: split.underMoneyPct, betsPct: split.underBetsPct, ...stamp },
+        withFirstTrackedSplitObservation({ side: "over" as const, label: "Over", moneyPct: split.overMoneyPct, betsPct: split.overBetsPct, ...stamp }, previous ? { moneyPct: previous.overMoneyPct, betsPct: previous.overBetsPct, observedAt: firstTrackedObservedAt } : null),
+        withFirstTrackedSplitObservation({ side: "under" as const, label: "Under", moneyPct: split.underMoneyPct, betsPct: split.underBetsPct, ...stamp }, previous ? { moneyPct: previous.underMoneyPct, betsPct: previous.underBetsPct, observedAt: firstTrackedObservedAt } : null),
       ]
     : [
-        { side: "home" as const, label: payload.game.home.abbreviation, moneyPct: split.homeMoneyPct, betsPct: split.homeBetsPct, ...stamp },
-        { side: "away" as const, label: payload.game.away.abbreviation, moneyPct: split.awayMoneyPct, betsPct: split.awayBetsPct, ...stamp },
+        withFirstTrackedSplitObservation({ side: "home" as const, label: payload.game.home.abbreviation, moneyPct: split.homeMoneyPct, betsPct: split.homeBetsPct, ...stamp }, previous ? { moneyPct: previous.homeMoneyPct, betsPct: previous.homeBetsPct, observedAt: firstTrackedObservedAt } : null),
+        withFirstTrackedSplitObservation({ side: "away" as const, label: payload.game.away.abbreviation, moneyPct: split.awayMoneyPct, betsPct: split.awayBetsPct, ...stamp }, previous ? { moneyPct: previous.awayMoneyPct, betsPct: previous.awayBetsPct, observedAt: firstTrackedObservedAt } : null),
       ];
   const section: MarketSplitDisplaySection = {
     label: book === "circa" ? "Sharp Book Splits" : book === "draftkings" ? "DraftKings Splits" : "BetMGM Splits",

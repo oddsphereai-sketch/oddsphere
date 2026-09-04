@@ -20,11 +20,11 @@ import {
 } from "./footballOutcomeMarketMovement";
 
 export const CFB_MARKET_SHARP_AWARE_CANDIDATE_RELEASE =
-  "cfb_market_sharp_aware_candidate_2026_09_01_r11_coherent_movement" as const;
+  "cfb_market_sharp_aware_candidate_2026_09_04_r13_evidence_identity_continuity" as const;
 export const CFB_MARKET_SHARP_AWARE_SHADOW_RELEASE =
   CFB_MARKET_SHARP_AWARE_CANDIDATE_RELEASE;
 export const CFB_MARKET_SHARP_AWARE_PRODUCTION_RELEASE =
-  "cfb_market_sharp_aware_production_2026_09_01_r13_coherent_movement" as const;
+  "cfb_market_sharp_aware_production_2026_09_04_r15_evidence_identity_continuity" as const;
 export const CFB_MARKET_SHADOW_WEIGHT = 0.75 as const;
 export const CFB_SHARP_SIGNED_GAP_THRESHOLD_PP = 10 as const;
 export const CFB_SHARP_FULL_STRENGTH_GAP_PP = 20 as const;
@@ -276,6 +276,7 @@ export function buildCfbMarketEvidenceGradeShadow(args: {
   playbookLine?: CfbForwardPlaybookLine | null;
   publicSplits?: CfbForwardPlaybookSplitSet | null;
   operationalOpening: { quote: NcaafBookOdds } | null;
+  current?: NcaafBookOdds | null;
 }): CfbMarketEvidenceGradeShadow {
   const sharpRead = strictSharpRead({
     decision: args.decision,
@@ -286,6 +287,7 @@ export function buildCfbMarketEvidenceGradeShadow(args: {
     decision: args.decision,
     selectedSide: args.selectedSide,
     operationalOpening: args.operationalOpening,
+    current: args.current ?? null,
   });
   const publicRead = publicConsensusRead({
     decision: args.decision,
@@ -445,6 +447,7 @@ export function buildCfbMarketEvidenceGrade(args: {
   playbookLine?: CfbForwardPlaybookLine | null;
   publicSplits?: CfbForwardPlaybookSplitSet | null;
   operationalOpening: { quote: NcaafBookOdds } | null;
+  current?: NcaafBookOdds | null;
 }): CfbMarketEvidenceGrade {
   const { shadowRelease, ...grade } = buildCfbMarketEvidenceGradeShadow(args);
   return {
@@ -461,6 +464,7 @@ export function applyCfbMarketSharpAwareGrades(args: {
   playbookLine?: CfbForwardPlaybookLine | null;
   publicSplits?: CfbForwardPlaybookSplitSet | null;
   operationalOpening: { quote: NcaafBookOdds } | null;
+  current?: NcaafBookOdds | null;
 }): CfbV1DecisionBundle {
   const adjustments = new Map(annotateCfbCrossMarketGradeCoherence(
     args.bundle.evaluatedBets.map((decision) => buildCfbMarketEvidenceGrade({
@@ -470,6 +474,7 @@ export function applyCfbMarketSharpAwareGrades(args: {
       playbookLine: args.playbookLine,
       publicSplits: args.publicSplits,
       operationalOpening: args.operationalOpening,
+      current: args.current ?? null,
     })),
   ).map((adjustment) => [adjustment.market, adjustment] as const));
   return {
@@ -544,11 +549,11 @@ function strictSharpRead(args: {
     gapPp = signedGap(record.moneyline[args.selectedSide]);
   } else if (args.decision.market === "spread" && record.spread && (args.selectedSide === "home" || args.selectedSide === "away")) {
     const line = args.selectedSide === "home" ? record.spread.homeLine : record.spread.awayLine;
-    if (args.decision.evaluatedQuote.line !== null && Math.abs(line - args.decision.evaluatedQuote.line) < 0.001) {
+    if (args.decision.evaluatedQuote.line !== null && Math.abs(line - args.decision.evaluatedQuote.line) <= CFB_SHARP_LINE_MATCH_TOLERANCE_POINTS) {
       gapPp = signedGap(record.spread[args.selectedSide]);
     }
   } else if (args.decision.market === "total" && record.total && (args.selectedSide === "over" || args.selectedSide === "under")) {
-    if (args.decision.evaluatedQuote.line !== null && Math.abs(record.total.line - args.decision.evaluatedQuote.line) < 0.001) {
+    if (args.decision.evaluatedQuote.line !== null && Math.abs(record.total.line - args.decision.evaluatedQuote.line) <= CFB_SHARP_LINE_MATCH_TOLERANCE_POINTS) {
       gapPp = signedGap(record.total[args.selectedSide]);
     }
   }
@@ -568,17 +573,23 @@ function sameBookMovement(args: {
   decision: CfbV1ExactPriceDecision;
   selectedSide: CanonicalSide;
   operationalOpening: { quote: NcaafBookOdds } | null;
+  current: NcaafBookOdds | null;
 }): { direction: CfbMarketEvidenceDirection; impliedProbabilityDeltaPp: number | null; lineDelta: number | null } {
   const opening = args.operationalOpening?.quote ?? null;
-  if (!opening || normalizeBook(opening.sportsbook) !== normalizeBook(args.decision.evaluatedQuote.sportsbook)) {
+  const currentMatchesOpening = args.current && normalizeBook(opening?.sportsbook ?? "") === normalizeBook(args.current.sportsbook);
+  const decisionMatchesOpening = !args.current && normalizeBook(opening?.sportsbook ?? "") === normalizeBook(args.decision.evaluatedQuote.sportsbook);
+  if (!opening || (!currentMatchesOpening && !decisionMatchesOpening)) {
     return { direction: "unknown", impliedProbabilityDeltaPp: null, lineDelta: null };
   }
-  const quote = quoteFor(opening, args.decision.market, args.selectedSide);
-  if (!quote) return { direction: "unknown", impliedProbabilityDeltaPp: null, lineDelta: null };
-  const impliedProbabilityDeltaPp = 100 * (implied(args.decision.evaluatedQuote.price) - implied(quote.price));
-  const lineDelta = args.decision.evaluatedQuote.line === null || quote.line === null
+  const openingQuote = quoteFor(opening, args.decision.market, args.selectedSide);
+  const currentQuote = currentMatchesOpening
+    ? quoteFor(args.current!, args.decision.market, args.selectedSide)
+    : { line: args.decision.evaluatedQuote.line, price: args.decision.evaluatedQuote.price };
+  if (!openingQuote || !currentQuote) return { direction: "unknown", impliedProbabilityDeltaPp: null, lineDelta: null };
+  const impliedProbabilityDeltaPp = 100 * (implied(currentQuote.price) - implied(openingQuote.price));
+  const lineDelta = currentQuote.line === null || openingQuote.line === null
     ? null
-    : args.decision.evaluatedQuote.line - quote.line;
+    : currentQuote.line - openingQuote.line;
   let signedSupport = impliedProbabilityDeltaPp;
   if (lineDelta !== null && Math.abs(lineDelta) >= 0.5) {
     if (args.decision.market === "spread") signedSupport = -lineDelta;

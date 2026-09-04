@@ -16,7 +16,7 @@ import { CFB_MARKET_SHARP_AWARE_PRODUCTION_RELEASE } from "./cfbMarketSharpAware
 import { assertMarketScopedFootballDecisions, FOOTBALL_MARKET_SCOPED_T60_TRACKING_RELEASE } from "./footballMarketScopedTracking";
 
 export const CFB_OFFICIAL_TRACKING_RECORD_RELEASE =
-  "cfb_official_tracking_record_2026_09_04_r14_complete_prediction_denominators" as const;
+  "cfb_official_tracking_record_2026_09_04_r16_evidence_identity_complete_denominators" as const;
 
 export function cfbTrackingMarketsForPayload(payload: CfbForwardEvidencePayload): CfbV1Market[] {
   const markets = new Set<CfbV1Market>(payload.decisions.evaluatedBets.map((decision) => decision.market));
@@ -26,13 +26,13 @@ export function cfbTrackingMarketsForPayload(payload: CfbForwardEvidencePayload)
   }
   return (["moneyline", "spread", "total"] as const).filter((market) => markets.has(market));
 }
-
 export function buildCfbOfficialTrackingRecords(args: { payload: CfbForwardEvidencePayload; gameId: number }): PredictionRecordRow[] {
   assertCfbTrackingPayload(args.payload);
   assertMarketScopedFootballDecisions(args.payload.decisions.evaluatedBets, "CFB tracking");
   const externalId = providerIntegerId(args.payload.game.providerGameId, "game");
   const evaluated = args.payload.decisions.evaluatedBets.map((decision): PredictionRecordRow => {
-    const actionable = decision.grade === "Best Angle" || decision.grade === "Lean";
+    const predictiveActionable = decision.grade === "Best Angle" || decision.grade === "Lean";
+    const actionable = predictiveActionable && decision.expectedValue >= 0;
     const playGrade = decision.grade.toLowerCase().replace(/\s+/g, "_");
     return {
       game_prediction_id: null,
@@ -58,9 +58,11 @@ export function buildCfbOfficialTrackingRecords(args: { payload: CfbForwardEvide
       expected_value: decision.expectedValue,
       play_grade: playGrade,
       prediction_type: decision.market,
-      best_angle: decision.grade === "Best Angle",
+      best_angle: decision.grade === "Best Angle" && actionable,
       no_bet: !actionable,
-      no_bet_reason: actionable ? null : `grade_${playGrade}`,
+      no_bet_reason: actionable ? null : predictiveActionable
+        ? "exact_price_ev_below_execution_floor"
+        : `grade_${playGrade}`,
       market_aligned: Math.abs(decision.modelProbability - decision.marketFairProbability) <= 0.03,
       data_quality_tier: "high",
       source_quality: "named_book_target_excluded_multibook_consensus",

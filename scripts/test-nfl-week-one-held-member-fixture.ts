@@ -119,6 +119,27 @@ for (const market of [draftKingsGame.markets.moneyline, draftKingsGame.markets.t
   assert.equal(market.publicSplits.length, 2);
 }
 
+const firstTrackedSplitRow = structuredClone(splitRows[0]!);
+firstTrackedSplitRow.id = "row-1392216-first-tracked-splits";
+firstTrackedSplitRow.capturedAt = "2026-08-22T12:50:56.934Z";
+firstTrackedSplitRow.payloadSha256 = "e".repeat(64);
+const firstTrackedSplitPayload = firstTrackedSplitRow.payload as NflForwardEvidencePayload;
+for (const split of Object.values(firstTrackedSplitPayload.market.sharpApiSplits!)) {
+  split.capturedAt = firstTrackedSplitRow.capturedAt;
+  split.providerFetchedAt = firstTrackedSplitRow.capturedAt;
+}
+firstTrackedSplitPayload.market.sharpApiSplits!.total!.overMoneyPct = 54;
+firstTrackedSplitPayload.market.sharpApiSplits!.total!.underMoneyPct = 46;
+firstTrackedSplitPayload.market.sharpApiSplits!.total!.overBetsPct = 51;
+firstTrackedSplitPayload.market.sharpApiSplits!.total!.underBetsPct = 49;
+const movingSplitFixture = buildNflWeekOneHeldMemberFixture([firstTrackedSplitRow, ...splitRows]);
+const movingSplitRows = movingSplitFixture.snapshot.games
+  .find((game) => game.id === `nfl-${splitPayload.game.providerGameId}`)!
+  .markets.total.sportsbookSplits?.rows;
+assert.equal(movingSplitRows?.[0]?.moneyDeltaPp, 9, "NFL split display shows the full money move since first tracked");
+assert.equal(movingSplitRows?.[0]?.betsDeltaPp, 6, "NFL split display shows the full ticket move since first tracked");
+assert.equal(movingSplitRows?.[0]?.comparisonObservedAt, firstTrackedSplitRow.capturedAt);
+
 for (const market of Object.values(splitPayload.market.sharpApiSplits)) market.sourceSportsbook = "circa";
 const circaFixture = buildNflWeekOneHeldMemberFixture(splitRows);
 const circaGame = circaFixture.snapshot.games.find((game) => game.id === `nfl-${splitPayload.game.providerGameId}`)!;

@@ -6,6 +6,17 @@ constants, and preserve the precedence and writer ownership below.
 
 Last reviewed: 2026-09-04
 
+## Cross-sport confidence / execution research (shadow only)
+
+- Shared candidate contract `daily_edge_confidence_execution_contract_2026_09_04_r1` keeps a
+  sport-owned continuous confidence score independent of exact-price execution, supplies optional
+  price-blind hysteresis for unlocked display tiers, and classifies a real named-book quote as
+  `bet`, `shop`, or `unavailable`. It is not called by any production writer and changes no live
+  prediction, grade, stake, lock, tracking row, or member label. CFB is the first sport-specific
+  shadow consumer; all other models remain on the production releases recorded below. Evidence:
+  `docs/model-audits/2026-09-04-daily-edge-price-portability-predeclaration.md` and
+  `docs/model-audits/2026-09-04-daily-edge-grade-gate-inventory.md`.
+
 ## Cross-sport prediction-accuracy denominator contract (2026-09-04)
 
 - Public W-L accuracy counts every immutable locked prediction that has a real side, including Watchlist and No Play. Best Angle and Lean remain separate actionable-only cuts. Exact-price ROI remains separate and excludes null-price records. The aggregate contract is `tracking_aggregate_v8_locked_prediction_accuracy_2026_09_04`; unlocked records from every sport remain outside public accuracy while they can still change.
@@ -40,6 +51,18 @@ Last reviewed: 2026-09-04
 - Evidence: `docs/model-audits/2026-08-28-football-cross-market-coherence-predeclaration.md`, `docs/model-audits/2026-08-28-football-cross-market-coherence-r19.md`, `docs/model-audits/2026-08-26-football-market-scoped-t60-predeclaration.md`, `docs/model-audits/2026-08-25-nfl-odds-history-reader-repair.md`, `docs/model-audits/2026-08-25-nfl-public-release-transition.md`, `docs/model-audits/2026-08-25-nfl-actionable-grades-production-r9.md`, `docs/model-audits/2026-08-25-nfl-actionable-grades-r9.md`, `docs/model-audits/2026-08-25-nfl-projected-qb-context-r11.md`, `docs/model-audits/2026-08-23-nfl-discrete-drive-joint-r10.md`, and `docs/model-audits/2026-08-23-nfl-v1-comprehensive-outcome.md`.
 
 ## CFB Daily Edge generalized weekly production release
+
+### Holistic confidence / price-portable execution research (shadow only)
+
+- Qualified implementation checkpoint `cfb_holistic_confidence_shadow_2026_09_04_r1_continuous_evidence` is not called by the production writer. It evaluates one continuous confidence score from the coherent selected-side probability plus bounded, source-weighted Circa, same-book movement, and Playbook contributions. Exact sportsbook price and EV remain attached but select `bet` versus `shop`; they do not change the shadow confidence grade. There is no team, price-band, EV-floor, or absolute-line veto.
+- The September 3 diagnostic moves Massachusetts +29.5 from Watchlist to Lean/Bet, while aligned resistance demotes Akron +27.5 from Watchlist to No Play. The complete ET-day board changes 2 Best Angles / 4 Leans / 17 Watchlists / 5 No Plays to 6 / 11 / 6 / 5, with 13 promotions, 6 demotions, zero side changes, 11 executable actionables, and 6 confidence-only Shops. The September 5 forward board changes materially (65 promotions / 44 demotions), so this is held from production pending explicit confidence/execution presentation, release-pure forward evaluation, and tracking coordination. Evidence: `docs/model-audits/2026-09-04-cfb-holistic-confidence-predeclaration.md` and `docs/model-audits/2026-09-04-cfb-holistic-confidence-shadow-result.md`.
+
+### Market-evidence identity continuity and T-60 fallback isolation (r53 candidate)
+
+- Candidate grade / decision / member releases: `cfb_v1_composite_grade_policy_2026_09_04_r9_evidence_identity_continuity` / `cfb_v1_daily_edge_decision_2026_09_04_r28_evidence_identity_continuity` / `cfb_v1_member_release_2026_09_04_r31_evidence_identity_continuity`; market-evidence production is `cfb_market_sharp_aware_production_2026_09_04_r15_evidence_identity_continuity`. Grade-time Circa Spread/Total evidence may describe an exact or half-point-adjacent offered line, matching the already-bounded forecast-input tolerance. Coherent movement is read from the same context book at opening and current observation, independently of a better price-shopped execution quote.
+- This release adds no matchup-, team-, spread-size-, price-, or outcome-specific promotion rule. It repairs only whether already-authorized evidence is available to the incumbent evidence-aware ladder; wider line mismatches remain unknown, and movement still requires a coherent opening/current pair from one sportsbook.
+- Confidence and execution remain separate in tracking: a future Best Angle/Lean confidence label at a negative exact-price EV retains its named-book quote but is stored as `no_bet` with no stake or ROI exposure. Missing prices remain held. The current board produces no such execution-status change.
+- Publication identifiers: sole writer `cfb_forward_evidence_writer_2026_09_04_r46_evidence_identity_continuity`, collector `cfb_forward_evidence_collector_2026_09_04_r27_sharp_fallback_isolation`, fixture / outcome `cfb_v1_member_fixture_2026_09_04_r45_evidence_identity_continuity` / `cfb_market_sharp_public_outcome_contract_2026_09_04_r45_evidence_identity_continuity`, member snapshot `cfb_forward_member_snapshot_2026_09_04_r3_evidence_identity_continuity`, tracking `cfb_official_tracking_record_2026_09_04_r16_evidence_identity_complete_denominators`. Optional SharpAPI odds-fallback network failures no longer abort games that already have sufficient primary-provider named books; fallback-dependent games remain held, the incident is surfaced, and structural/identity/cap errors still fail closed. The immutable maximum T-60 lag remains unchanged. Evidence and rollback: `docs/model-audits/2026-09-04-cfb-market-evidence-identity-continuity.md`.
 
 ### Complete prediction-accuracy denominators (tracking r14 / writer r44)
 
@@ -259,9 +282,9 @@ changed; only deterministic settlement of existing locked rows is affected.
 - Projection runtime: resolved automodel `v2_2`
 - First-inning runtime: `fi_v2` with FI-scoped release `mlb_first_inning_release_2026_09_04_r85_independent_uncertainty` and probability head `mlb_first_inning_fi_v10_independent_uncertainty_target_excluded_2026_09_04`. r85 retains r84's pre-r61 65% independent / 35% target-excluded multi-book posterior and its 48%-52% corroborated uncertainty band. When the evaluated quote is the sole accepted pair, the forecast remains independent-only and now requires the independent probability to clear 55% NRFI or 55% YRFI; otherwise it is a genuine null-side Toss-Up. The evaluated quote remains exact-price economics only. Full-game tuples, probabilities, grades, the sole writer/lease, providers, query budgets, locks, tracking, and settlement are unchanged.
 - Public calibration: `mlb_public_calibration_v30_first_inning_evaluated_quote_exclusion_2026_09_02`
-- Decision release: `mlb_daily_edge_decision_2026_09_02_r79_first_inning_evaluated_quote_exclusion`
-- Rule bundle: `mlb_daily_edge_rule_bundle_v67_first_inning_evaluated_quote_exclusion_2026_09_02`
-- Grade policy: `mlb_public_grade_policy_v55_first_inning_named_book_consensus_2026_09_01`
+- Decision release: `mlb_daily_edge_decision_2026_09_04_r82_total_support_under_scope`
+- Rule bundle: `mlb_daily_edge_rule_bundle_v70_total_support_under_scope_2026_09_04`
+- Grade policy: `mlb_public_grade_policy_v57_total_support_under_scope_2026_09_04`
 - Correction policy: `mlb_prediction_corrections_v23_split_pair_recency_2026_08_31`
 - Tracking contract: `member_facing_lock_v8_priority_retry_minute_cadence_2026_08_11`
 - Lock coherence: `mlb_lock_coherence_2026_09_02_r3_failed_economics_tuple`
@@ -648,6 +671,19 @@ calibration policy v7 change; the member tuple contract, all MLB-wide IDs,
 Moneyline/Total behavior, writers, locks, and tracking remain unchanged.
 Evidence and rollback are recorded in
 `docs/model-audits/2026-09-04-mlb-fi-independent-uncertainty-r85.md`.
+
+The September 4 MLB r82 full-game Total scope correction enforces the already-published Under-only
+contract for `total_sharpapi_money_over_tickets_support_lean`. Runtime had incorrectly allowed an
+Over to enter the sleeve even though the Over branch was rejected in validation and holdout. R82
+retains the validated Under path and every existing price, movement, split-gap, quality, probability,
+lock, stake, provider, and writer constraint; an Over can no longer be promoted by this rule.
+Decision/rule/grade stamps are r82/v70/v57 and the sleeve is
+`total_sharpapi_money_over_tickets_support_lean_v2_under_only_2026_09_04`. Full-game Moneyline and
+all first-inning behavior and FI r84 identifiers are unchanged. Roll back the full-game scope change
+to r81/v69/v56 and the v1
+ sleeve without rewriting locked history. It preserves the independently scoped FI r85 release,
+ probability head, calibration policy, member tuple, and first-inning behavior. Evidence:
+ `docs/model-audits/2026-09-04-mlb-total-sharpapi-under-scope-r82.md`.
 
 The September 2 MLB r80 full-game structural-coherence release removes two
 publication defects without introducing an uncalibrated market-reversal

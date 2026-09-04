@@ -117,6 +117,7 @@ import {
   isStale as isObservationStale,
 } from "@/lib/services/lastKnownGoodReader";
 import { verifiedHundredSplitPct, verifiedUnitSplitPct } from "@/lib/services/splitEvidenceQuality";
+import { withFirstTrackedSplitObservation } from "@/lib/services/splitDisplayMovement";
 import {
   pickFresherCurrent,
   loadStreamCurrentForSlate,
@@ -1801,21 +1802,30 @@ function buildSourceAwareSplitSectionsFromRows(
         const row = latestBySide.get(side);
         const sideLabel = splitSideLabel(market, side, home, away);
         if (!row || !sideLabel) return [];
-        return [{
+        const currentObservedMs = splitTimestampMs(row.source_observed_at ?? row.fetched_at);
+        const firstTracked = candidates
+          .filter((candidate) =>
+            candidate.side === side &&
+            candidate.row.provider === row.provider &&
+            candidate.row.source_book === row.source_book &&
+            candidate.row.source_type === row.source_type &&
+            splitTimestampMs(candidate.row.source_observed_at ?? candidate.row.fetched_at) < currentObservedMs
+          )
+          .sort((left, right) =>
+            splitTimestampMs(left.row.source_observed_at ?? left.row.fetched_at) -
+            splitTimestampMs(right.row.source_observed_at ?? right.row.fetched_at)
+          )[0]?.row ?? null;
+        const displayPct = (value: number | null): number | null => scrubUnsupportedEndpoints
+          ? (() => {
+              const verified = verifiedUnitSplitPct(value);
+              return verified === null ? null : Math.round(verified * 100);
+            })()
+          : pctFromFraction(value);
+        return [withFirstTrackedSplitObservation({
           side: side as "home" | "away" | "over" | "under",
           label: sideLabel,
-          moneyPct: scrubUnsupportedEndpoints
-            ? (() => {
-                const value = verifiedUnitSplitPct(row.money_pct);
-                return value === null ? null : Math.round(value * 100);
-              })()
-            : pctFromFraction(row.money_pct),
-          betsPct: scrubUnsupportedEndpoints
-            ? (() => {
-                const value = verifiedUnitSplitPct(row.bets_pct);
-                return value === null ? null : Math.round(value * 100);
-              })()
-            : pctFromFraction(row.bets_pct),
+          moneyPct: displayPct(row.money_pct),
+          betsPct: displayPct(row.bets_pct),
           observedAt: row.source_observed_at ?? row.fetched_at ?? null,
           freshnessCheckedAt: row.fetched_at ?? row.source_observed_at ?? null,
           staleAfterMinutes: SOURCE_AWARE_SPLIT_STALE_AGE_MINUTES,
@@ -1827,7 +1837,11 @@ function buildSourceAwareSplitSectionsFromRows(
               ? (Date.now() - checkedAtMs) / 60_000 > SOURCE_AWARE_SPLIT_STALE_AGE_MINUTES
               : false;
           })(),
-        }];
+        }, firstTracked ? {
+          moneyPct: displayPct(firstTracked.money_pct),
+          betsPct: displayPct(firstTracked.bets_pct),
+          observedAt: firstTracked.source_observed_at ?? firstTracked.fetched_at ?? null,
+        } : null)];
       });
       if (sectionRows.length === 0) return null;
       const lastUpdated = sectionRows.reduce<string | null>((latest, row) => {

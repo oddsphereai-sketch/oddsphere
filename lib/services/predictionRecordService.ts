@@ -665,7 +665,7 @@ export const TOTAL_UNDER_LOW_TICKET_RESISTANCE_MAX_ODDS = -105;
 export const TOTAL_UNDER_LOW_TICKET_RESISTANCE_MAX_BETS_PCT = 35;
 export const TOTAL_UNDER_LOW_TICKET_RESISTANCE_MAX_MONEY_MINUS_BETS_PCT = -5;
 export const TOTAL_SHARPAPI_SUPPORT_LEAN_RULE_ID =
-  "total_sharpapi_money_over_tickets_support_lean_v1_2026_08_12";
+  "total_sharpapi_money_over_tickets_support_lean_v2_under_only_2026_09_04";
 export const TOTAL_SHARPAPI_SUPPORT_MIN_ODDS = -145;
 export const TOTAL_SHARPAPI_SUPPORT_MAX_ODDS = 145;
 export const TOTAL_SHARPAPI_SUPPORT_MIN_MONEY_MINUS_BETS_PCT = 10;
@@ -2895,7 +2895,7 @@ function resolveTotalSharpapiSupportLean(args: {
       : null;
   const lean =
     !args.blocked &&
-    (args.side === "over" || args.side === "under") &&
+    args.side === "under" &&
     args.oddsAmerican !== null &&
     args.oddsAmerican >= TOTAL_SHARPAPI_SUPPORT_MIN_ODDS &&
     args.oddsAmerican <= TOTAL_SHARPAPI_SUPPORT_MAX_ODDS &&
