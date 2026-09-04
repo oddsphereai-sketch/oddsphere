@@ -73,7 +73,7 @@ export type DimensionRow<K extends string = string> = {
 export type TrackingDisplaySport = TrackedSport | "epl";
 
 export const TRACKING_AGGREGATE_CONTRACT_VERSION =
-  "tracking_aggregate_v7_ucl_complete_manifest_every_reader_2026_09_03" as const;
+  "tracking_aggregate_v8_locked_prediction_accuracy_2026_09_04" as const;
 
 /**
  * Sport+market joint split with the Best Angle / Lean cuts most members
@@ -219,16 +219,14 @@ function isTossUp(r: PredictionRecordRow): boolean {
 }
 
 /**
- * MLB's official public record begins at the immutable member-facing lock.
- * The grader enforces the same boundary and refuses to settle unlocked MLB
- * rows, so the tracker must not admit rows that can never receive a grade.
- * Other sports retain their existing eligibility rules.
+ * Official public accuracy begins at the immutable member-facing lock for
+ * every sport. Unlocked rows may continue refreshing and therefore cannot
+ * enter a stable prediction denominator. UCL additionally excludes its
+ * null-side Held manifest rows after proving four-market completeness.
  */
 export function isTrackingRecordEligible(record: PredictionRecordRow): boolean {
-  if (record.sport === "mlb") return record.locked_at !== null;
-  if (isEplTrackingRecord(record)) return record.locked_at !== null;
   if (isUclTrackingRecord(record)) return record.locked_at !== null && record.held !== true;
-  return true;
+  return record.locked_at !== null;
 }
 
 export function isCurrentUclTrackingRelease(record: PredictionRecordRow): boolean {
