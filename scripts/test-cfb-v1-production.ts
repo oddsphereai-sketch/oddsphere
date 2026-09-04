@@ -1343,11 +1343,21 @@ const marketScopedPayload: CfbForwardEvidencePayload = {
       operationalOpening: { quote: currentBooks[0]! },
     }),
     forecast: publishedAuthoritativeForecast,
+    marketOutlooks: buildCfbForwardMarketOutlooks({
+      forecast: authoritativeForecast,
+      playbookLine: payload.market.playbookLine,
+    }),
   },
 };
 const marketScopedTracking = buildCfbOfficialTrackingRecords({ payload: marketScopedPayload, gameId: 9001 });
-assert.deepEqual(marketScopedTracking.map((row) => row.market), ["spread", "total"]);
+assert.deepEqual(marketScopedTracking.map((row) => row.market), ["moneyline", "spread", "total"]);
 assert.equal(marketScopedTracking.every((row) => row.locked_at === lockedAt), true);
+const heldMoneylineTracking = marketScopedTracking.find((row) => row.market === "moneyline")!;
+assert.equal(heldMoneylineTracking.held, true, "a missing exact Moneyline price must retain the forecast in accuracy tracking");
+assert.equal(heldMoneylineTracking.no_bet, true, "a held forecast must remain non-actionable");
+assert.equal(heldMoneylineTracking.odds_american, null, "a held forecast must not invent executable economics");
+assert.equal(heldMoneylineTracking.side, "home", "held Moneyline tracking must preserve the authoritative forecast side");
+assert.equal((heldMoneylineTracking.snapshot_json?.forecast_outlook as { market?: string } | undefined)?.market, "moneyline");
 assert.throws(
   () => buildCfbOfficialTrackingRecords({ payload: { ...marketScopedPayload, captureTiming: "late_first_observation" }, gameId: 9001 }),
   /eligible on-time T-60 evidence payload/,
