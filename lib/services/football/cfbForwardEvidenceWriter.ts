@@ -37,10 +37,12 @@ import { buildCfbOfficialTrackingRecords, cfbProviderIntegerId, cfbTrackingMarke
 import { eligibleCfbWeeklyGames, isGameInCfbWeeklyWindow, resolveCfbForwardWindow, type CfbWeeklyWindow } from "./cfbWeeklyWindow";
 import {
   CFB_SHARP_API_ODDS_RELEASE,
+  CFB_SHARP_FALLBACK_MAX_REQUESTS,
   cfbBooksNeedSharpFallback,
   fetchSharpApiNcaafOddsFallback,
   mergeCfbNamedBooks,
   preferredCfbTargetBook,
+  type CfbSharpApiOddsResult,
 } from "./cfbSharpApiOdds";
 import { fetchCfbSharpApiSplits } from "./cfbSharpApiSplits";
 import { collectCfbKickoffWeather, type CfbKickoffWeatherSnapshot } from "./cfbKickoffWeather";
@@ -57,7 +59,7 @@ import {
 } from "./cfbForwardMemberSnapshotStore";
 
 export const CFB_FORWARD_WRITER_RELEASE =
-  "cfb_forward_evidence_writer_2026_09_04_r44_complete_tracking_backfill_union" as const;
+  "cfb_forward_evidence_writer_2026_09_04_r46_evidence_identity_continuity" as const;
 export const CFB_FORWARD_MAX_QB_TEAMS_PER_RUN = 24 as const;
 export const CFB_FORWARD_RESULTS_BATCH_SIZE = 100 as const;
 export const CFB_FORWARD_MAX_PRIOR_GAME_IDS = 1200 as const;
@@ -132,18 +134,19 @@ export async function runCfbForwardEvidenceWriter(args: {
   const plannedGames = [...new Map(plans.map((plan) => [plan.game.providerGameId, plan.game])).values()];
   const sharpFallbackGames = plannedGames.filter((game) => cfbBooksNeedSharpFallback(slate.currentOddsComparableBooksByGame[game.providerGameId] ?? []));
   const trustedSharpEventIdsByGame = trustedCfbSharpEventIdsByGame(existing);
-  const [linesResult, splitsResult, venueWeatherAttempt, quarterbacks, sharpFallback, sharpSplitsAttempt] = await Promise.all([
+  const [linesResult, splitsResult, venueWeatherAttempt, quarterbacks, sharpFallbackAttempt, sharpSplitsAttempt] = await Promise.all([
     playbook.lines("ncaaf"),
     playbook.splits("ncaaf"),
     playbook.venueWeather("ncaaf")
       .then((result) => ({ rows: result.body.data ?? [], error: null }))
       .catch((error: unknown) => ({ rows: [] as unknown[], error: splitRequestError(error) })),
     fetchBalldontlieNcaafQuarterbacks({ teams: quarterbackTeams.map((team) => ({ id: team.id, abbreviation: team.abbreviation })), previousSeason: args.season - 1, capturedAt: args.now, apiKey: args.balldontlieApiKey }),
-    fetchSharpApiNcaafOddsFallback({ games: sharpFallbackGames, apiKey: args.sharpApiKey, trustedEventIdsByGame: trustedSharpEventIdsByGame }),
+    fetchCfbSharpOddsFallbackAttempt({ games: sharpFallbackGames, apiKey: args.sharpApiKey, trustedEventIdsByGame: trustedSharpEventIdsByGame }),
     fetchCfbSharpApiSplits({ games, apiKey: args.sharpApiKey })
       .then((result) => ({ result, error: null }))
       .catch((error: unknown) => ({ result: null, error: splitRequestError(error) })),
   ]);
+  const sharpFallback = sharpFallbackAttempt.result;
   const quarterbackContext = new Map([...priorQuarterbacks, ...quarterbacks.byTeamId]);
   const lines = (linesResult.body.data ?? []) as unknown[];
   const splits = (splitsResult.body.data ?? []) as unknown[];
@@ -264,6 +267,7 @@ export async function runCfbForwardEvidenceWriter(args: {
           playbookLine,
           publicSplits: playbookSplits,
           operationalOpening,
+          current,
         }).evaluatedBets.map((decision) => [decision.market, decision.evaluatedQuote.sportsbook]))
       : undefined;
     const decisionBundle = buildCfbV1DecisionBundle({
@@ -291,6 +295,7 @@ export async function runCfbForwardEvidenceWriter(args: {
           playbookLine,
           publicSplits: playbookSplits,
           operationalOpening,
+          current,
         })
       : decisionBundle, playbookLine);
     assertFootballCrossMarketCoherence({
@@ -375,6 +380,9 @@ export async function runCfbForwardEvidenceWriter(args: {
         healthHolds,
         availabilityWarnings: [
           ...(sharpFallback.eventDiscoveryStatusByGame[plan.game.providerGameId] === "ambiguous" ? ["sharpapi_canonical_event_ambiguous"] : []),
+          ...(sharpFallbackAttempt.error && sharpFallbackGames.some((game) => game.providerGameId === plan.game.providerGameId)
+            ? ["sharpapi_odds_fallback_request_failed"]
+            : []),
           "quarterback_starter_projected_not_confirmed",
           "injury_feed_unavailable",
           ...(weather.status === "forecast_available" || weather.status === "controlled_indoor" ? [] : [`venue_weather_${weather.status}`]),
@@ -430,7 +438,10 @@ export async function runCfbForwardEvidenceWriter(args: {
     publishedNoPlays: decisions.filter((row) => row.grade === "No Play").length,
     heldMarkets: payloads.reduce((sum, payload) => sum + payload.decisions.heldMarkets.length, 0),
     apiCallsMaximum: slate.providerRequests + priorResults.providerRequests + quarterbacks.providerRequests + sharpFallback.requests + weatherRequests + 4,
-    healthHolds: [...new Set(payloads.flatMap((payload) => payload.coverage.healthHolds))],
+    healthHolds: [...new Set([
+      ...payloads.flatMap((payload) => payload.coverage.healthHolds),
+      ...(sharpFallbackAttempt.error ? ["sharpapi_odds_fallback_request_failed"] : []),
+    ])],
     publicationAttempted: true,
     ...memberSnapshot,
     ...tracking,
@@ -638,6 +649,31 @@ function compactForecast(
 function splitRequestError(error: unknown): string {
   const message = error instanceof Error ? error.message : String(error);
   return message.replace(/\s+/g, " ").trim().slice(0, 240) || "unknown SharpAPI split request failure";
+}
+
+export async function fetchCfbSharpOddsFallbackAttempt(
+  args: Parameters<typeof fetchSharpApiNcaafOddsFallback>[0],
+  fetcher: typeof fetchSharpApiNcaafOddsFallback = fetchSharpApiNcaafOddsFallback,
+): Promise<{ result: CfbSharpApiOddsResult; error: string | null }> {
+  try {
+    return { result: await fetcher(args), error: null };
+  } catch (error) {
+    const message = splitRequestError(error);
+    if (!/sharpapi network error|fetch failed/i.test(message)) throw error;
+    return {
+      result: {
+        release: CFB_SHARP_API_ODDS_RELEASE,
+        requests: args.games.length > 0 ? CFB_SHARP_FALLBACK_MAX_REQUESTS : 0,
+        attemptedGames: args.games.length,
+        matchedGames: 0,
+        booksByGame: {},
+        displayBooksByGame: {},
+        eventIdsByGame: {},
+        eventDiscoveryStatusByGame: {},
+      },
+      error: message,
+    };
+  }
 }
 
 function requiredQuarterbacks(map: Map<number, CfbForwardTeamQuarterbacks>, id: number, abbreviation: string, capturedAt: string): CfbForwardTeamQuarterbacks {

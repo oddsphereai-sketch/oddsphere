@@ -35,6 +35,7 @@ import {
   cfbMarketAnchorHealthHolds,
   cfbLockPlanningEvidence,
   cfbTrackingPayloadsForRun,
+  fetchCfbSharpOddsFallbackAttempt,
   publishCfbForwardDecisionBundle,
   trustedCfbSharpEventIdsByGame,
 } from "../lib/services/football/cfbForwardEvidenceWriter";
@@ -54,6 +55,7 @@ import { FOOTBALL_MARKET_SCOPED_T60_TRACKING_RELEASE } from "../lib/services/foo
 import {
   CFB_T60_MAX_CAPTURE_LAG_MINUTES,
   CFB_V1_DECISION_RELEASE,
+  CFB_V1_GRADE_PREVIOUS_DECISION_RELEASE,
   buildCfbV1DecisionBundle,
   cfbV1LineProbabilities,
   getCfbV1Forecast,
@@ -340,7 +342,7 @@ assert.equal(compactMemberSnapshot.snapshotRelease, CFB_FORWARD_MEMBER_SNAPSHOT_
 assert.equal(compactMemberSnapshot.fixture, member, "the fast snapshot preserves the authoritative fixture byte-for-byte");
 assert.equal(compactMemberSnapshot.sourceChecksum, member.provenance.sourceChecksum);
 assert.equal(member.snapshot.games.length, 1);
-assert.equal(member.fixtureRelease, "cfb_v1_member_fixture_2026_09_03_r43_narrow_mean_median_publication");
+assert.equal(member.fixtureRelease, "cfb_v1_member_fixture_2026_09_04_r45_evidence_identity_continuity");
 assert.equal(member.snapshot.games[0]!.collegeFootballScope, "fbs_involved", "the CFB reader must classify every member game for the FBS-first board without changing writer scope");
 assert.equal(member.snapshot.games[0]!.awayTeamDisplayName, game.away.name);
 assert.equal(member.snapshot.games[0]!.homeTeamDisplayName, game.home.name);
@@ -501,9 +503,11 @@ r28UnlockedPayloadRecord.capturedAt = publicationTransitionCapturedAt;
 r28UnlockedPayloadRecord.cutoffAt = null;
 r28UnlockedPayloadRecord.t60LagMinutes = null;
 const r28UnlockedDecisions = r28UnlockedPayloadRecord.decisions as Record<string, unknown>;
+r28UnlockedDecisions.decisionRelease = CFB_V1_GRADE_PREVIOUS_DECISION_RELEASE;
 r28UnlockedDecisions.trackingEnabled = false;
 r28UnlockedDecisions.evaluatedBets = (r28UnlockedDecisions.evaluatedBets as Array<Record<string, unknown>>).map((decision) => ({
   ...decision,
+  decisionRelease: CFB_V1_GRADE_PREVIOUS_DECISION_RELEASE,
   stage: "unlocked",
   evaluatedAt: publicationTransitionCapturedAt,
   lockedAt: null,
@@ -562,6 +566,14 @@ const r28LockedPayload = {
   ...payload,
   memberRelease: CFB_FORWARD_PUBLICATION_PREVIOUS_MEMBER_RELEASE,
   slateGameCount: 2,
+  decisions: {
+    ...payload.decisions,
+    decisionRelease: CFB_V1_GRADE_PREVIOUS_DECISION_RELEASE,
+    evaluatedBets: payload.decisions.evaluatedBets.map((decision) => ({
+      ...decision,
+      decisionRelease: CFB_V1_GRADE_PREVIOUS_DECISION_RELEASE,
+    })),
+  },
 } as unknown as CfbForwardEvidencePayload;
 const r28LockedRow: CfbForwardStoredEvidence = {
   ...evidence,
@@ -607,6 +619,27 @@ assert.equal(sharpMember.snapshot.games[0]!.markets.total.sharpBookAvailability?
 assert.equal(sharpMember.snapshot.games[0]!.markets.total.recommendationDecision?.sharpBookSplits?.label, "Sharp Book Splits");
 assert.equal(sharpMember.snapshot.games[0]!.markets.total.recommendationDecision?.sharpBookSplits?.rows[0]?.moneyPct, 41);
 assert.equal(sharpMember.snapshot.games[0]!.markets.total.publicSplits[0]?.moneyPct, 27, "Playbook public consensus remains a separate display authority");
+const firstTrackedSharpPayload = structuredClone(sharpPayload);
+firstTrackedSharpPayload.capturedAt = new Date(Date.parse(lockedAt) - 60 * 60_000).toISOString();
+firstTrackedSharpPayload.market.sharpApiSplits![0]!.capturedAt = firstTrackedSharpPayload.capturedAt;
+firstTrackedSharpPayload.market.sharpApiSplits![0]!.total!.over.moneyPct = 35;
+firstTrackedSharpPayload.market.sharpApiSplits![0]!.total!.over.ticketsPct = 49;
+firstTrackedSharpPayload.market.sharpApiSplits![0]!.total!.under.moneyPct = 65;
+firstTrackedSharpPayload.market.sharpApiSplits![0]!.total!.under.ticketsPct = 51;
+const sharpMovementMember = buildCfbMemberFixture([
+  {
+    ...evidence,
+    id: "sharp-split-first-tracked",
+    capturedAt: firstTrackedSharpPayload.capturedAt,
+    payloadSha256: hashCfbForwardEvidencePayload(firstTrackedSharpPayload),
+    payload: firstTrackedSharpPayload,
+  },
+  { ...evidence, id: "sharp-split-current", payloadSha256: hashCfbForwardEvidencePayload(sharpPayload), payload: sharpPayload },
+]);
+const sharpMovementRows = sharpMovementMember.snapshot.games[0]!.markets.total.recommendationDecision?.sharpBookSplits?.rows;
+assert.equal(sharpMovementRows?.[0]?.moneyDeltaPp, 6, "CFB split display shows the full money move since first tracked");
+assert.equal(sharpMovementRows?.[0]?.betsDeltaPp, -4, "CFB split display shows the full ticket move since first tracked");
+assert.equal(sharpMovementRows?.[0]?.comparisonObservedAt, firstTrackedSharpPayload.capturedAt);
 const draftKingsSplitPayload = structuredClone(sharpPayload);
 draftKingsSplitPayload.market.sharpApiSplits![0]!.sportsbook = "draftkings";
 draftKingsSplitPayload.market.sharpApiSplits![0]!.sourceSemantics = "public_recreational";
@@ -1322,6 +1355,25 @@ assert.equal(tracking.every((row) => row.model_version === CFB_V1_DECISION_RELEA
 assert.equal(tracking.every((row) => row.snapshot_json && !("pmf" in (row.snapshot_json.forecast as Record<string, unknown>))), true);
 assert.equal(tracking.every((row) => row.snapshot_json?.football_market_scoped_tracking_release === FOOTBALL_MARKET_SCOPED_T60_TRACKING_RELEASE), true);
 
+const marginalNegativeEvDecision = {
+  ...payload.decisions.evaluatedBets[0]!,
+  grade: "Lean" as const,
+  expectedValue: -0.01,
+};
+const marginalNegativeEvTracking = buildCfbOfficialTrackingRecords({
+  payload: {
+    ...payload,
+    decisions: { ...payload.decisions, evaluatedBets: [marginalNegativeEvDecision] },
+  },
+  gameId: 9001,
+});
+assert.equal(marginalNegativeEvTracking[0]!.play_grade, "lean", "predictive grade remains visible at a marginally negative exact quote");
+assert.equal(marginalNegativeEvTracking[0]!.no_bet, true, "negative exact-price EV cannot become an official wager");
+assert.equal(marginalNegativeEvTracking[0]!.best_angle, false);
+assert.equal(marginalNegativeEvTracking[0]!.no_bet_reason, "exact_price_ev_below_execution_floor");
+assert.equal(marginalNegativeEvTracking[0]!.odds_american, marginalNegativeEvDecision.evaluatedQuote.price);
+assert.equal(marginalNegativeEvTracking[0]!.line_value, null);
+
 const marketScopedPayload: CfbForwardEvidencePayload = {
   ...payload,
   decisions: {
@@ -1567,6 +1619,21 @@ const evidenceAppendIndex = writerSource.lastIndexOf("appendCfbForwardEvidence("
 assert.ok(quarterbackCollectionIndex >= 0 && evidenceAppendIndex > quarterbackCollectionIndex, "the writer must finish bounded QB collection before its sole evidence append");
 assert.match(writerSource, /const need = releaseRefreshNeed\(existing, args\.now\) \?\? ordinaryNeed;/, "an incomplete current release must take planning priority over ordinary cadence and T-60 reasons");
 assert.ok(sharpFallbackIndex >= 0 && evidenceAppendIndex > sharpFallbackIndex, "the writer must finish bounded SharpAPI exact-event fallback before its sole evidence append");
+const isolatedSharpNetworkFailure = await fetchCfbSharpOddsFallbackAttempt(
+  { games: [game], apiKey: "test" },
+  (async () => { throw new Error("SharpAPI network error on /events: fetch failed"); }) as Parameters<typeof fetchCfbSharpOddsFallbackAttempt>[1],
+);
+assert.match(isolatedSharpNetworkFailure.error ?? "", /network error/);
+assert.equal(isolatedSharpNetworkFailure.result.attemptedGames, 1);
+assert.equal(isolatedSharpNetworkFailure.result.matchedGames, 0);
+await assert.rejects(
+  fetchCfbSharpOddsFallbackAttempt(
+    { games: [game], apiKey: "test" },
+    (async () => { throw new Error("CFB SharpAPI fallback exhausted its hard cap"); }) as Parameters<typeof fetchCfbSharpOddsFallbackAttempt>[1],
+  ),
+  /exhausted its hard cap/,
+  "structural SharpAPI fallback failures must remain fail-closed",
+);
 assert.ok(sharpSplitsIndex >= 0 && evidenceAppendIndex > sharpSplitsIndex, "the sole writer must finish its one league-level strict split read before the all-game append");
 assert.ok(coherenceIndex >= 0 && evidenceAppendIndex > coherenceIndex, "the sole CFB writer must pass coherence before its append boundary");
 assert.equal((writerSource.match(/assertFootballCrossMarketCoherence\(\{/g) ?? []).length, 1, "the CFB writer must use one shared per-payload coherence gate");

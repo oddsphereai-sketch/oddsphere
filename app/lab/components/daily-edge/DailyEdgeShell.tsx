@@ -2562,13 +2562,23 @@ function MarketDirectionMeter({ decision }: { decision: MarketDecision }) {
 
 function SplitSection({ section }: { section: NonNullable<MarketDecision["consensusSplits"]> }) {
   const displayRows = canonicalSplitRows(section);
+  const hasTrackedChange = displayRows.some((row) => row.moneyDeltaPp != null || row.betsDeltaPp != null);
+  const comparisonObservedAt = displayRows.reduce<string | null>((earliest, row) => {
+    if (!row.comparisonObservedAt) return earliest;
+    return earliest === null || row.comparisonObservedAt < earliest ? row.comparisonObservedAt : earliest;
+  }, null);
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between gap-2">
         <p className="text-[10px] uppercase tracking-[0.14em] font-bold text-gray-300">{section.label}</p>
-        {section.lastUpdated ? (
-          <p className="text-[9px] text-gray-500">Last updated <LocalTime value={section.lastUpdated} /></p>
-        ) : null}
+        <div className="text-right text-[9px] text-gray-500">
+          {hasTrackedChange ? (
+            <p>
+              Change since {comparisonObservedAt ? <LocalTime value={comparisonObservedAt} /> : "first tracked"}
+            </p>
+          ) : null}
+          {section.lastUpdated ? <p>Last updated <LocalTime value={section.lastUpdated} /></p> : null}
+        </div>
       </div>
       {displayRows.length > 0 ? (
         <div className="space-y-2">
@@ -2578,6 +2588,8 @@ function SplitSection({ section }: { section: NonNullable<MarketDecision["consen
               label={s.label}
               moneyPct={s.moneyPct}
               betsPct={s.betsPct}
+              moneyDeltaPp={s.moneyDeltaPp ?? null}
+              betsDeltaPp={s.betsDeltaPp ?? null}
               observedAt={s.observedAt ?? null}
               isStale={s.isStale ?? false}
             />
@@ -2605,12 +2617,16 @@ function SideSplitsBlock({
   label,
   moneyPct,
   betsPct,
+  moneyDeltaPp,
+  betsDeltaPp,
   observedAt,
   isStale,
 }: {
   label: string;
   moneyPct: number | null;
   betsPct: number | null;
+  moneyDeltaPp?: number | null;
+  betsDeltaPp?: number | null;
   /** Phase 7I — ISO timestamp when the split was last observed. */
   observedAt?: string | null;
   /** Phase 7I — true when observedAt is older than 15 min. */
@@ -2621,18 +2637,18 @@ function SideSplitsBlock({
     <div className="space-y-1">
       <p className="text-[10.5px] uppercase tracking-[0.14em] font-bold text-gray-300">{label}</p>
       {moneyPct !== null ? (
-        <SplitBar label="Money" pct={moneyPct} />
+        <SplitBar label="Money" pct={moneyPct} deltaPp={moneyDeltaPp} />
       ) : (
-        <div className="grid grid-cols-[40px_1fr_36px] items-center gap-2">
+        <div className="grid grid-cols-[40px_1fr_64px] items-center gap-2">
           <span className="text-[9.5px] uppercase tracking-[0.14em] text-gray-500 font-bold">Money</span>
           <span className="text-[10px] text-gray-600 italic">not reported</span>
           <span />
         </div>
       )}
       {betsPct !== null ? (
-        <SplitBar label="Bets" pct={betsPct} />
+        <SplitBar label="Bets" pct={betsPct} deltaPp={betsDeltaPp} />
       ) : (
-        <div className="grid grid-cols-[40px_1fr_36px] items-center gap-2">
+        <div className="grid grid-cols-[40px_1fr_64px] items-center gap-2">
           <span className="text-[9.5px] uppercase tracking-[0.14em] text-gray-500 font-bold">Bets</span>
           <span className="text-[10px] text-gray-600 italic">not reported</span>
           <span />
@@ -2647,15 +2663,37 @@ function SideSplitsBlock({
   );
 }
 
-function SplitBar({ label, pct }: { label: string; pct: number }) {
+function SplitBar({ label, pct, deltaPp }: { label: string; pct: number; deltaPp?: number | null }) {
   const v = Math.max(0, Math.min(100, pct));
+  const delta = deltaPp === null || deltaPp === undefined || !Number.isFinite(deltaPp)
+    ? null
+    : Math.round(deltaPp * 10) / 10;
+  const deltaDirection = delta === null ? null : delta > 0 ? "up" : delta < 0 ? "down" : "unchanged";
+  const deltaLabel = delta === null
+    ? null
+    : delta > 0
+      ? `↑${Math.abs(delta).toFixed(Math.abs(delta) % 1 === 0 ? 0 : 1)}`
+      : delta < 0
+        ? `↓${Math.abs(delta).toFixed(Math.abs(delta) % 1 === 0 ? 0 : 1)}`
+        : "→0";
   return (
-    <div className="grid grid-cols-[40px_1fr_36px] items-center gap-2">
+    <div className="grid grid-cols-[40px_1fr_64px] items-center gap-2">
       <span className="text-[9.5px] uppercase tracking-[0.14em] text-gray-500 font-bold">{label}</span>
       <div className="h-2 bg-white/[0.04] rounded-full overflow-hidden">
         <div className="h-full bg-violet-400/70 rounded-full" style={{ width: `${v}%` }} />
       </div>
-      <span className="text-[10.5px] tabular-nums text-gray-400 font-bold text-right">{Math.round(v)}%</span>
+      <span className="flex items-baseline justify-end gap-1 text-[10.5px] tabular-nums text-gray-400 font-bold">
+        <span>{Math.round(v)}%</span>
+        {deltaLabel ? (
+          <span
+            className={delta === 0 ? "text-gray-500" : "text-violet-300"}
+            title={`${label} ${deltaDirection} ${Math.abs(delta!)} percentage points since first tracked`}
+            aria-label={`${label} ${deltaDirection} ${Math.abs(delta!)} percentage points since first tracked`}
+          >
+            {deltaLabel}
+          </span>
+        ) : null}
+      </span>
     </div>
   );
 }

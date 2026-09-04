@@ -713,6 +713,9 @@ section("Market Pulse presentation coherence");
     check("source-aware split selection prefers the newest verified ingestion batch", sharpBook?.rows.every((row) => row.freshnessCheckedAt === "2026-08-07T15:07:00Z") === true);
     check("source-aware split selection keeps the newest coherent source pair", sharpBook?.rows[0]?.moneyPct === 61 && sharpBook.rows[1]?.moneyPct === 39);
     check("source-aware split selection uses matching latest source timestamps", sharpBook?.rows.every((row) => row.observedAt === "2026-08-07T15:04:00Z") === true);
+    check("source-aware split rows expose money direction since first tracked", sharpBook?.rows[0]?.moneyDeltaPp === 9 && sharpBook.rows[1]?.moneyDeltaPp === -9);
+    check("source-aware split rows expose ticket direction since first tracked", sharpBook?.rows[0]?.betsDeltaPp === -2 && sharpBook.rows[1]?.betsDeltaPp === 2);
+    check("source-aware split direction retains the first tracked timestamp", sharpBook?.rows.every((row) => row.comparisonObservedAt === "2026-08-07T14:09:00Z") === true);
   }
   {
     const sections = dailyEdgeTest.buildSourceAwareSplitSectionsFromRows(

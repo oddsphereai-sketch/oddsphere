@@ -438,6 +438,40 @@ const pathologicalPrice = buildCfbMarketEvidenceGradeShadow({
 });
 assert.equal(pathologicalPrice.finalGrade, "Watchlist", "pathological prices remain outside the provisional actionable ladder");
 
+const adjacentSharpSpread = {
+  ...sharpAwaySupport,
+  spread: {
+    ...sharpAwaySupport.spread!,
+    homeLine: -7,
+    awayLine: 7,
+    home: { ticketsPct: 40, moneyPct: 58 },
+    away: { ticketsPct: 60, moneyPct: 42 },
+  },
+};
+const portableEvidenceDecision = {
+  ...moneyline,
+  market: "spread" as const,
+  grade: "Watchlist" as const,
+  side: "TCU -7.5",
+  evaluatedQuote: { ...moneyline.evaluatedQuote, sportsbook: "betrivers", line: -7.5, price: -110 },
+};
+const portableEvidenceRead = buildCfbMarketEvidenceGradeShadow({
+  decision: portableEvidenceDecision,
+  selectedSide: "home",
+  sharpSplits: [adjacentSharpSpread],
+  operationalOpening: { quote: book("betmgm", -7.5, 54.5) },
+  current: book("betmgm", -8.5, 54.5),
+});
+assert.equal(portableEvidenceRead.sharpDirection, "support", "a half-point-adjacent Circa spread remains the same market context");
+assert.equal(portableEvidenceRead.movementDirection, "support", "same-book context movement survives price shopping to another execution book");
+const widerSharpMismatch = buildCfbMarketEvidenceGradeShadow({
+  decision: portableEvidenceDecision,
+  selectedSide: "home",
+  sharpSplits: [{ ...adjacentSharpSpread, spread: { ...adjacentSharpSpread.spread!, homeLine: -6.9, awayLine: 6.9 } }],
+  operationalOpening: null,
+});
+assert.equal(widerSharpMismatch.sharpDirection, "unknown", "a spread split more than a half point away remains ineligible");
+
 const excessiveSpread = buildCfbMarketEvidenceGradeShadow({
   decision: {
     ...moneyline,

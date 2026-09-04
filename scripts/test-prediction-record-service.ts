@@ -2906,6 +2906,40 @@ console.log("\n━━━ Totals divergence stand-down (integrity patch) ━━�
     (supportTotal?.snapshot_json as any)?.total_sharpapi_support_lean?.split_provider === "sharpapi" &&
       (supportTotal?.snapshot_json as any)?.total_sharpapi_support_lean?.money_minus_bets_pct === 10,
   );
+
+  const unsupportedOverPred = {
+    ...supportPred,
+    predicted_ou_side: "over",
+    sport_specific: {
+      ...supportPred.sport_specific,
+      v2_2_audit: {
+        ...supportPred.sport_specific.v2_2_audit,
+        ou_play_grade: "market_aligned",
+        posterior_total: 9.7,
+      },
+    },
+  };
+  const unsupportedOverRecords = buildPredictionRecordsFromSlate({
+    sport: "mlb",
+    slateDate: "2026-07-10",
+    launchDay: false,
+    games: [baseGame],
+    predictionByGameId: new Map([[14771, unsupportedOverPred]]),
+    abbrevByTeamId,
+    signalsByGameId: new Map([[14771, resistanceSignals]]),
+    sourceAwareSplitsByGameId: new Map([[14771, resistanceSharpSplits.map((split: any) =>
+      split.selection_key.endsWith(":over")
+        ? { ...split, bets_pct: 30, money_pct: 40 }
+        : { ...split, bets_pct: 70, money_pct: 60 }
+    )]]),
+    oddsByGameId: resistanceOdds,
+  });
+  const unsupportedOverTotal = unsupportedOverRecords.find((record) => record.market === "total");
+  check(
+    "an Over cannot activate the Under-only sleeve even when another rule independently earns Lean",
+    (unsupportedOverTotal?.snapshot_json as any)?.total_sharpapi_support_lean === null &&
+      (unsupportedOverTotal?.snapshot_json as any)?.decision_pipeline?.action_rule_id !== TOTAL_SHARPAPI_SUPPORT_LEAN_RULE_ID,
+  );
 }
 
 // ── Phase 6B.22 — pure helpers for snapshot context ──────────────────

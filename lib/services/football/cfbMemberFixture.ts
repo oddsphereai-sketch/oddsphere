@@ -3,6 +3,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { DailyEdgeGameDto, DailyEdgePredictionDto, MarketEdgeDto, OddsTrailStopDto } from "@/app/lab/lib/labTypes";
 import type { PreviewHistoryByTeam } from "@/app/dev/experience-preview/ActualDailyEdgePreview";
 import { buildRecommendationDecision } from "@/lib/services/recommendationDecision";
+import { withFirstTrackedSplitObservation } from "@/lib/services/splitDisplayMovement";
 import type { MarketSplitDisplaySection } from "@/lib/types/domain/RecommendationDecision";
 import {
   CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE,
@@ -47,6 +48,7 @@ import {
   CFB_V1_BASE_PROBABILITY_RELEASE,
   CFB_V1_BASE_SCORE_ARTIFACT_RELEASE,
   CFB_V1_DECISION_RELEASE,
+  CFB_V1_GRADE_PREVIOUS_DECISION_RELEASE,
   CFB_V1_DISTRIBUTION_RELEASE,
   CFB_V1_GRADE_POLICY_RELEASE,
   CFB_V1_MODEL_RELEASE,
@@ -63,9 +65,9 @@ import { cfbTeamIdentity } from "./cfbTeamIdentity";
 import { CFB_PUBLIC_SCORE_DIRECTION_TOLERANCE_POINTS } from "./footballCrossMarketCoherence";
 
 export const CFB_MEMBER_FIXTURE_RELEASE =
-  "cfb_v1_member_fixture_2026_09_03_r43_narrow_mean_median_publication" as const;
+  "cfb_v1_member_fixture_2026_09_04_r45_evidence_identity_continuity" as const;
 export const CFB_PUBLIC_OUTCOME_CONTRACT_RELEASE =
-  "cfb_market_sharp_public_outcome_contract_2026_09_03_r43_narrow_mean_median_publication" as const;
+  "cfb_market_sharp_public_outcome_contract_2026_09_04_r45_evidence_identity_continuity" as const;
 export const CFB_CONTEXT_ONLY_QUOTE_CAPTURE_SKEW_MS = 5_000 as const;
 const CFB_MARKET_CONTEXT_MAX_CAPTURE_LAG_MINUTES = 10;
 const CFB_PRE_DIRECTIONAL_MEMBER_RELEASE = "cfb_v1_member_release_2026_08_28_r14_expanded_sharp_budget" as const;
@@ -331,7 +333,7 @@ export function selectLatestCfbMemberEvidenceRows(
     rows,
     CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE,
     CFB_FORWARD_PUBLICATION_PREVIOUS_MEMBER_RELEASE,
-    CFB_V1_DECISION_RELEASE,
+    CFB_V1_GRADE_PREVIOUS_DECISION_RELEASE,
   );
   const publicationPreviousBoundary = coherentPreviousAuthority
     ? immutableBoundaryTransitionRows(
@@ -339,7 +341,7 @@ export function selectLatestCfbMemberEvidenceRows(
         now,
         CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE,
         CFB_FORWARD_PUBLICATION_PREVIOUS_MEMBER_RELEASE,
-        CFB_V1_DECISION_RELEASE,
+        CFB_V1_GRADE_PREVIOUS_DECISION_RELEASE,
         coherentPreviousAuthority,
       )
     : null;
@@ -530,6 +532,7 @@ function buildGame(row: CfbForwardStoredEvidence, movementRows: CfbForwardStored
   const projected = primaryForecast.representativeScore;
   const recommendationDecision = buildCfbRecommendationDecision({
     payload,
+    movementRows,
     projected,
     moneyline: { market: moneyline, decision: moneylineDecision },
     total: { market: total, decision: totalDecision },
@@ -538,9 +541,9 @@ function buildGame(row: CfbForwardStoredEvidence, movementRows: CfbForwardStored
   moneyline.recommendationDecision = recommendationDecision.markets.moneyline;
   total.recommendationDecision = recommendationDecision.markets.total;
   spread.recommendationDecision = recommendationDecision.markets.firstInning;
-  moneyline.sportsbookSplits = buildSportsbookSplitSection(payload, "moneyline");
-  total.sportsbookSplits = buildSportsbookSplitSection(payload, "total");
-  spread.sportsbookSplits = buildSportsbookSplitSection(payload, "spread");
+  moneyline.sportsbookSplits = buildSportsbookSplitSection(payload, "moneyline", movementRows);
+  total.sportsbookSplits = buildSportsbookSplitSection(payload, "total", movementRows);
+  spread.sportsbookSplits = buildSportsbookSplitSection(payload, "spread", movementRows);
   if (moneyline.sportsbookSplits) moneyline.sharpBookAvailability = null;
   if (total.sportsbookSplits) total.sharpBookAvailability = null;
   if (spread.sportsbookSplits) spread.sharpBookAvailability = null;
@@ -681,6 +684,7 @@ function assertCfbPublicPredictionCoherence(args: {
 
 function buildCfbRecommendationDecision(args: {
   payload: CfbForwardEvidencePayload;
+  movementRows: CfbForwardStoredEvidence[];
   projected: { away: number; home: number };
   moneyline: { market: MarketEdgeDto; decision: CfbV1ExactPriceDecision | null };
   total: { market: MarketEdgeDto; decision: CfbV1ExactPriceDecision | null };
@@ -704,7 +708,7 @@ function buildCfbRecommendationDecision(args: {
     publicSplits: value.market.publicSplits,
     marketReadV2: null,
     marketReadV2Enabled: false,
-    sharpBookSplitsOverride: buildSharpBookSplitSection(args.payload, marketName),
+    sharpBookSplitsOverride: buildSharpBookSplitSection(args.payload, marketName, args.movementRows),
     lineMovementOverride: value.decision?.gradeAdjustment?.movementDirection === "unknown"
       ? null
       : value.decision?.gradeAdjustment?.movementDirection ?? null,
@@ -737,24 +741,36 @@ function selectedMarketSide(
 function buildSharpBookSplitSection(
   payload: CfbForwardEvidencePayload,
   market: CfbV1Market,
+  movementRows: CfbForwardStoredEvidence[] = [],
 ): MarketSplitDisplaySection | null {
   const record = [...(payload.market.sharpApiSplits ?? [])]
     .filter((candidate) => candidate.sourceSemantics === "sharp_adjacent" && sharpMarketAvailable(candidate, market))
     .sort((first, second) => Date.parse(second.capturedAt) - Date.parse(first.capturedAt))[0];
   if (!record) return null;
-  return cfbSplitSection(payload, market, record, "Sharp Book Splits");
+  return cfbSplitSection(payload, market, record, "Sharp Book Splits", previousSharpSplitRecord({
+    movementRows,
+    market,
+    current: record,
+  }));
 }
 
 function buildSportsbookSplitSection(
   payload: CfbForwardEvidencePayload,
   market: CfbV1Market,
+  movementRows: CfbForwardStoredEvidence[] = [],
 ): MarketSplitDisplaySection | null {
-  if (buildSharpBookSplitSection(payload, market)) return null;
+  if (buildSharpBookSplitSection(payload, market, movementRows)) return null;
   const record = [...(payload.market.sharpApiSplits ?? [])]
     .filter((candidate) => candidate.sourceSemantics === "public_recreational" && sharpMarketAvailable(candidate, market))
     .sort((first, second) => Date.parse(second.capturedAt) - Date.parse(first.capturedAt))[0];
   if (!record) return null;
-  return cfbSplitSection(payload, market, record, record.sportsbook === "draftkings" ? "DraftKings Splits" : "BetMGM Splits");
+  return cfbSplitSection(
+    payload,
+    market,
+    record,
+    record.sportsbook === "draftkings" ? "DraftKings Splits" : "BetMGM Splits",
+    previousSharpSplitRecord({ movementRows, market, current: record }),
+  );
 }
 
 function cfbSplitSection(
@@ -762,28 +778,45 @@ function cfbSplitSection(
   market: CfbV1Market,
   record: NonNullable<CfbForwardEvidencePayload["market"]["sharpApiSplits"]>[number],
   label: MarketSplitDisplaySection["label"],
+  previous: NonNullable<CfbForwardEvidencePayload["market"]["sharpApiSplits"]>[number] | null = null,
 ): MarketSplitDisplaySection | null {
   const staleAfterMinutes = cfbSplitStaleAfterMinutes(payload.game.scheduledStart, record.capturedAt);
   const isStale = Date.parse(payload.capturedAt) - Date.parse(record.capturedAt) > staleAfterMinutes * 60_000;
   const stamp = { observedAt: record.capturedAt, freshnessCheckedAt: record.capturedAt, staleAfterMinutes, isStale };
   const rows = market === "total" && record.total
     ? [
-        { side: "over" as const, label: "Over", moneyPct: record.total.over.moneyPct, betsPct: record.total.over.ticketsPct, ...stamp },
-        { side: "under" as const, label: "Under", moneyPct: record.total.under.moneyPct, betsPct: record.total.under.ticketsPct, ...stamp },
+        withFirstTrackedSplitObservation({ side: "over" as const, label: "Over", moneyPct: record.total.over.moneyPct, betsPct: record.total.over.ticketsPct, ...stamp }, previous?.total ? { moneyPct: previous.total.over.moneyPct, betsPct: previous.total.over.ticketsPct, observedAt: previous.capturedAt } : null),
+        withFirstTrackedSplitObservation({ side: "under" as const, label: "Under", moneyPct: record.total.under.moneyPct, betsPct: record.total.under.ticketsPct, ...stamp }, previous?.total ? { moneyPct: previous.total.under.moneyPct, betsPct: previous.total.under.ticketsPct, observedAt: previous.capturedAt } : null),
       ]
     : market === "spread" && record.spread
       ? [
-          { side: "home" as const, label: payload.game.home.abbreviation, moneyPct: record.spread.home.moneyPct, betsPct: record.spread.home.ticketsPct, ...stamp },
-          { side: "away" as const, label: payload.game.away.abbreviation, moneyPct: record.spread.away.moneyPct, betsPct: record.spread.away.ticketsPct, ...stamp },
+          withFirstTrackedSplitObservation({ side: "home" as const, label: payload.game.home.abbreviation, moneyPct: record.spread.home.moneyPct, betsPct: record.spread.home.ticketsPct, ...stamp }, previous?.spread ? { moneyPct: previous.spread.home.moneyPct, betsPct: previous.spread.home.ticketsPct, observedAt: previous.capturedAt } : null),
+          withFirstTrackedSplitObservation({ side: "away" as const, label: payload.game.away.abbreviation, moneyPct: record.spread.away.moneyPct, betsPct: record.spread.away.ticketsPct, ...stamp }, previous?.spread ? { moneyPct: previous.spread.away.moneyPct, betsPct: previous.spread.away.ticketsPct, observedAt: previous.capturedAt } : null),
         ]
       : record.moneyline
         ? [
-            { side: "home" as const, label: payload.game.home.abbreviation, moneyPct: record.moneyline.home.moneyPct, betsPct: record.moneyline.home.ticketsPct, ...stamp },
-            { side: "away" as const, label: payload.game.away.abbreviation, moneyPct: record.moneyline.away.moneyPct, betsPct: record.moneyline.away.ticketsPct, ...stamp },
+            withFirstTrackedSplitObservation({ side: "home" as const, label: payload.game.home.abbreviation, moneyPct: record.moneyline.home.moneyPct, betsPct: record.moneyline.home.ticketsPct, ...stamp }, previous?.moneyline ? { moneyPct: previous.moneyline.home.moneyPct, betsPct: previous.moneyline.home.ticketsPct, observedAt: previous.capturedAt } : null),
+            withFirstTrackedSplitObservation({ side: "away" as const, label: payload.game.away.abbreviation, moneyPct: record.moneyline.away.moneyPct, betsPct: record.moneyline.away.ticketsPct, ...stamp }, previous?.moneyline ? { moneyPct: previous.moneyline.away.moneyPct, betsPct: previous.moneyline.away.ticketsPct, observedAt: previous.capturedAt } : null),
           ]
         : [];
   if (rows.length === 0) return null;
   return { label, rows, signal: null, lastUpdated: record.capturedAt };
+}
+
+function previousSharpSplitRecord(args: {
+  movementRows: CfbForwardStoredEvidence[];
+  market: CfbV1Market;
+  current: NonNullable<CfbForwardEvidencePayload["market"]["sharpApiSplits"]>[number];
+}) {
+  return args.movementRows
+    .flatMap((row) => row.payload.market.sharpApiSplits ?? [])
+    .filter((record) =>
+      record.sportsbook === args.current.sportsbook &&
+      record.sourceSemantics === args.current.sourceSemantics &&
+      sharpMarketAvailable(record, args.market) &&
+      Date.parse(record.capturedAt) < Date.parse(args.current.capturedAt)
+    )
+    .sort((first, second) => Date.parse(first.capturedAt) - Date.parse(second.capturedAt))[0] ?? null;
 }
 
 function sharpMarketAvailable(
@@ -862,7 +895,7 @@ function buildMarket(
       ? `The ${label} prediction is ${outlookLabel(payload, outlook)} at ${(100 * outlook.independentProbability).toFixed(1)}% from the primary outcome PMF. The exact-price Bet grade is No Play because ${unavailableReason ?? "the exact-price evidence is incomplete"}.${oneSidedContext}`
       : `The ${label} Bet grade is No Play because ${unavailableReason ?? "the exact-price evidence is incomplete"}. The game-level prediction remains live.${oneSidedContext}`
     : `${decision.side} is evaluated at ${formatAmerican(decision.evaluatedQuote.price)} from ${decision.evaluatedQuote.sportsbook}; the ${decision.grade} grade uses that exact ${decision.evaluatedQuote.marketSelection === "coherent_paired_alternate" ? "paired alternate offer" : "main-line quote"}, the authoritative PMF and calibrated probability, public money-versus-ticket divergence, stronger strictly matched sharp-book evidence when available, same-book movement, and other-book fair consensus.${crossMarketExplanation(payload, market, decision)}`;
-  const publicSplits = buildPublicSplits(payload, market);
+  const publicSplits = buildPublicSplits(payload, market, movementRows);
   const marketPrediction = buildMarketPrediction(payload, market, decision, outlook);
   return {
     pick: decision?.side ?? null,
@@ -1372,9 +1405,19 @@ function keyStats(payload: CfbForwardEvidencePayload, market: CfbV1Market): Mark
   ];
 }
 
-function buildPublicSplits(payload: CfbForwardEvidencePayload, market: CfbV1Market): MarketEdgeDto["publicSplits"] {
+function buildPublicSplits(
+  payload: CfbForwardEvidencePayload,
+  market: CfbV1Market,
+  movementRows: CfbForwardStoredEvidence[] = [],
+): MarketEdgeDto["publicSplits"] {
   const split = payload.market.playbookSplits?.[market];
   if (!split) return [];
+  const previous = movementRows
+    .map((row) => row.payload.market.playbookSplits?.[market] ?? null)
+    .filter((candidate): candidate is CfbForwardPlaybookSplit =>
+      candidate !== null && Date.parse(candidate.capturedAt) < Date.parse(split.capturedAt)
+    )
+    .sort((first, second) => Date.parse(first.capturedAt) - Date.parse(second.capturedAt))[0] ?? null;
   const stamp = {
     observedAt: split.capturedAt,
     freshnessCheckedAt: split.capturedAt,
@@ -1382,12 +1425,12 @@ function buildPublicSplits(payload: CfbForwardEvidencePayload, market: CfbV1Mark
     isStale: false,
   };
   if (market === "total") return [
-    { side: "over", label: "Over", moneyPct: split.overMoneyPct, betsPct: split.overBetsPct, ...stamp },
-    { side: "under", label: "Under", moneyPct: split.underMoneyPct, betsPct: split.underBetsPct, ...stamp },
+    withFirstTrackedSplitObservation({ side: "over", label: "Over", moneyPct: split.overMoneyPct, betsPct: split.overBetsPct, ...stamp }, previous ? { moneyPct: previous.overMoneyPct, betsPct: previous.overBetsPct, observedAt: previous.capturedAt } : null),
+    withFirstTrackedSplitObservation({ side: "under", label: "Under", moneyPct: split.underMoneyPct, betsPct: split.underBetsPct, ...stamp }, previous ? { moneyPct: previous.underMoneyPct, betsPct: previous.underBetsPct, observedAt: previous.capturedAt } : null),
   ];
   return [
-    { side: "home", label: payload.game.home.abbreviation, moneyPct: split.homeMoneyPct, betsPct: split.homeBetsPct, ...stamp },
-    { side: "away", label: payload.game.away.abbreviation, moneyPct: split.awayMoneyPct, betsPct: split.awayBetsPct, ...stamp },
+    withFirstTrackedSplitObservation({ side: "home", label: payload.game.home.abbreviation, moneyPct: split.homeMoneyPct, betsPct: split.homeBetsPct, ...stamp }, previous ? { moneyPct: previous.homeMoneyPct, betsPct: previous.homeBetsPct, observedAt: previous.capturedAt } : null),
+    withFirstTrackedSplitObservation({ side: "away", label: payload.game.away.abbreviation, moneyPct: split.awayMoneyPct, betsPct: split.awayBetsPct, ...stamp }, previous ? { moneyPct: previous.awayMoneyPct, betsPct: previous.awayBetsPct, observedAt: previous.capturedAt } : null),
   ];
 }
 

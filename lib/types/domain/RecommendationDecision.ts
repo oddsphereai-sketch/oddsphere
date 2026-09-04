@@ -14,6 +14,11 @@ export type SplitSideDisplay = {
   label: string;
   moneyPct: number | null;
   betsPct: number | null;
+  /** Change from the first coherent observation in the current board history, in percentage points. */
+  moneyDeltaPp?: number | null;
+  /** Change from the first coherent observation in the current board history, in percentage points. */
+  betsDeltaPp?: number | null;
+  comparisonObservedAt?: string | null;
   observedAt?: string | null;
   /** When the collector last verified this source value, if different from its last-change time. */
   freshnessCheckedAt?: string | null;

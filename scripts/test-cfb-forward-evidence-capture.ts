@@ -69,8 +69,8 @@ function decision(market: "moneyline" | "spread" | "total", side: string, line: 
     distributionRelease: "cfb_v1_market_sharp_joint_distribution_2026_09_01_r9_coherent_movement_evidence",
     probabilityRelease: "cfb_v1_market_sharp_joint_probability_2026_09_01_r10_coherent_movement_evidence",
     calibrationRelease: "cfb_v1_market_sharp_exact_price_calibration_2026_09_01_r8_coherent_pmf_identity",
-    calibrationFamily: "test", policyRelease: "cfb_v1_composite_grade_policy_2026_09_01_r7_coherent_pmf_economics",
-    decisionRelease: "cfb_v1_daily_edge_decision_2026_09_01_r26_coherent_movement_evidence",
+    calibrationFamily: "test", policyRelease: "cfb_v1_composite_grade_policy_2026_09_04_r9_evidence_identity_continuity",
+    decisionRelease: "cfb_v1_daily_edge_decision_2026_09_04_r28_evidence_identity_continuity",
     gradeAdjustment: null,
   } as const;
 }
@@ -108,8 +108,8 @@ function payload(gameIndex = 0): CfbForwardEvidencePayload {
   const decisionForecast = { ...forecast, providerGameId: gameId };
   return {
     schemaRelease: "cfb_forward_evidence_snapshot_2026_09_01_r19_coherent_movement_evidence",
-    collectorRelease: "cfb_forward_evidence_collector_2026_09_01_r26_coherent_movement_evidence",
-    memberRelease: "cfb_v1_member_release_2026_09_02_r29_total_publication_coherence",
+    collectorRelease: "cfb_forward_evidence_collector_2026_09_04_r27_sharp_fallback_isolation",
+    memberRelease: "cfb_v1_member_release_2026_09_04_r31_evidence_identity_continuity",
     runId: "capture-test", season: 2026, week: 1, slateGameCount: 87,
     stage: "t60", captureTiming: "on_time", capturedAt, cutoffAt: capturedAt, t60LagMinutes: 0,
     game: {
@@ -155,8 +155,8 @@ function payload(gameIndex = 0): CfbForwardEvidencePayload {
       ],
       heldMarkets: [], publicationEnabled: true, trackingEnabled: true,
       modelRelease: "cfb_v1_market_sharp_score_model_2026_09_01_r11_coherent_movement_evidence",
-      decisionRelease: "cfb_v1_daily_edge_decision_2026_09_01_r26_coherent_movement_evidence",
-      policyRelease: "cfb_v1_composite_grade_policy_2026_09_01_r7_coherent_pmf_economics",
+      decisionRelease: "cfb_v1_daily_edge_decision_2026_09_04_r28_evidence_identity_continuity",
+      policyRelease: "cfb_v1_composite_grade_policy_2026_09_04_r9_evidence_identity_continuity",
     },
     independentForecast: null,
     authoritativeForecast: {

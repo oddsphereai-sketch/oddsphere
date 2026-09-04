@@ -1,6 +1,6 @@
 {
-  "policyRelease": "cfb_v1_composite_grade_policy_2026_09_01_r7_coherent_pmf_economics",
-  "decisionRelease": "cfb_v1_daily_edge_decision_2026_09_01_r26_coherent_movement_evidence",
+  "policyRelease": "cfb_v1_composite_grade_policy_2026_09_04_r9_evidence_identity_continuity",
+  "decisionRelease": "cfb_v1_daily_edge_decision_2026_09_04_r28_evidence_identity_continuity",
   "sourceRelease": "cfb_v1_composite_grade_policy_2026_08_25_r1",
   "calibrationContract": "authoritative_market_sharp_pmf_identity",
   "policies": {

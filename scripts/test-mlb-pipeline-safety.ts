@@ -76,8 +76,8 @@ const fiLayers = buildMlbModelLayerVersions("first_inning", {});
 check("missing model env stamps resolved v2_2", layers.runtime_env.automodel_version === "v2_2");
 check("missing FI env stamps resolved fi_v2", layers.runtime_env.first_inning_model_version === "fi_v2");
 check(
-  "grade policy carries r80 full-game structural coherence",
-  layers.grade_policy === "mlb_public_grade_policy_v56_full_game_structural_coherence_2026_09_02",
+  "grade policy carries the r82 full-game Total scope correction",
+  layers.grade_policy === "mlb_public_grade_policy_v57_total_support_under_scope_2026_09_04",
 );
 check(
   "FI r85 stamps the scoped independent-only uncertainty correction without changing the full-game tuple",
@@ -100,10 +100,11 @@ check(
     layers.calibration_version === MLB_PUBLIC_CALIBRATION_VERSION,
 );
 check(
-  "MLB r81 preserves r80 forecast behavior and synchronizes first-slate publication by model-cycle identity",
-  MLB_DAILY_EDGE_DECISION_RELEASE_ID === "mlb_daily_edge_decision_2026_09_03_r81_first_slate_publication_cycle" &&
+  "MLB r82 preserves forecast and FI behavior while enforcing the full-game Under-only sleeve",
+  MLB_DAILY_EDGE_DECISION_RELEASE_ID === "mlb_daily_edge_decision_2026_09_04_r82_total_support_under_scope" &&
     MLB_MODEL_LAYER_VERSION_SCHEMA === "mlb_model_layer_versions_v13_full_game_structural_coherence" &&
-    layers.rule_bundle_version === "mlb_daily_edge_rule_bundle_v69_first_slate_publication_cycle_2026_09_03" &&
+    layers.rule_bundle_version === "mlb_daily_edge_rule_bundle_v70_total_support_under_scope_2026_09_04" &&
+    layers.total_market_support_lean === "total_sharpapi_money_over_tickets_support_lean_v2_under_only_2026_09_04" &&
     layers.calibration_version === "mlb_public_calibration_v31_full_game_structural_coherence_2026_09_02" &&
     layers.projection_core === "mlb_projection_core_v2_4_evaluation_only_price_exclusion_2026_09_02" &&
     layers.moneyline_probability_head === "mlb_moneyline_structural_coherence_probability_v3_2026_09_02" &&
