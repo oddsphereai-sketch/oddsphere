@@ -592,8 +592,8 @@ function previewGradeFromPlayGrade(value: string | null): PreviewModelGrade | nu
   }
 }
 
-const WNBA_V6_RECORD_CONTRACT_VERSION =
-  "wnba_prediction_record_contract_v6_single_market_entry_2026_09_03";
+const WNBA_CURRENT_RECORD_CONTRACT_VERSION =
+  "wnba_prediction_record_contract_v7_complete_prediction_denominators_2026_09_04";
 
 export function selectWnbaDecisionTupleForReader(input: {
   lockedRecord: WnbaLockedRecord | null;
@@ -624,7 +624,7 @@ export function selectWnbaDecisionTupleForReader(input: {
     !record ||
     record.locked_at !== null ||
     !input.currentDecision ||
-    record.snapshot_json?.prediction_record_contract_version !== WNBA_V6_RECORD_CONTRACT_VERSION ||
+    record.snapshot_json?.prediction_record_contract_version !== WNBA_CURRENT_RECORD_CONTRACT_VERSION ||
     !isWnbaDecisionTuple(candidate) ||
     record.pick !== input.currentDecision.pick ||
     record.market !== candidate.market ||
