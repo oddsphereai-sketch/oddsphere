@@ -59,7 +59,7 @@ import {
 } from "./cfbForwardMemberSnapshotStore";
 
 export const CFB_FORWARD_WRITER_RELEASE =
-  "cfb_forward_evidence_writer_2026_09_04_r47_holistic_confidence" as const;
+  "cfb_forward_evidence_writer_2026_09_04_r48_confidence_execution_coherence" as const;
 export const CFB_FORWARD_MAX_QB_TEAMS_PER_RUN = 24 as const;
 export const CFB_FORWARD_RESULTS_BATCH_SIZE = 100 as const;
 export const CFB_FORWARD_MAX_PRIOR_GAME_IDS = 1200 as const;
@@ -311,7 +311,10 @@ export async function runCfbForwardEvidenceWriter(args: {
         homeWinProbability: forecast.homeWinProbability,
         pmf: forecast.pmf,
       },
-      decisions: decisions.evaluatedBets,
+      decisions: decisions.evaluatedBets.map((decision) => ({
+        ...decision,
+        executionStatus: decision.gradeAdjustment?.executionStatus,
+      })),
       unavailableMarkets: decisions.heldMarkets.map((market) => market.market),
       requireDecisionSideFromForecast: true,
       allowPmfVerifiedProbabilityEndpoints: true,

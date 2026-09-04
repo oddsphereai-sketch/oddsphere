@@ -1,5 +1,5 @@
 export const FOOTBALL_CROSS_MARKET_COHERENCE_RELEASE =
-  "football_cross_market_coherence_2026_09_03_r6_cfb_narrow_mean_median_tolerance" as const;
+  "football_cross_market_coherence_2026_09_04_r7_confidence_execution_status" as const;
 
 const EPSILON = 1e-9;
 const EV_TOLERANCE = 1e-8;
@@ -28,6 +28,13 @@ export type FootballCoherenceDecision = {
   modelProbability: number;
   marketFairProbability: number;
   expectedValue: number;
+  /**
+   * Optional two-axis execution state. When absent, the validator preserves
+   * the legacy contract that an actionable grade must also have positive
+   * exact-price value. CFB r54 supplies this explicitly so a confidence
+   * actionable may truthfully be a zero-stake Shop.
+   */
+  executionStatus?: "bet" | "shop";
   pushProbability?: number;
   evaluatedQuote: {
     line: number | null;
@@ -51,6 +58,7 @@ export type FootballCoherenceIssueCode =
   | "decision_forecast_side_disagreement"
   | "decision_quote"
   | "decision_ev_mismatch"
+  | "decision_execution_status_mismatch"
   | "actionable_nonpositive_value"
   | "ml_spread_event_containment";
 
@@ -370,8 +378,21 @@ function normalizeDecision(args: {
   if (Number.isFinite(recomputedEv) && Math.abs(recomputedEv - decision.expectedValue) > EV_TOLERANCE) {
     args.fatalIssues.push({ code: "decision_ev_mismatch", detail: `${decision.market} stored/recomputed EV ${decision.expectedValue}/${recomputedEv}.` });
   }
-  if (isActionable(decision.grade) &&
-      (decision.expectedValue <= 0 || decision.modelProbability <= decision.marketFairProbability)) {
+  if (decision.executionStatus === "bet" && decision.expectedValue < -EV_TOLERANCE) {
+    args.fatalIssues.push({
+      code: "decision_execution_status_mismatch",
+      detail: `${decision.market} Bet has negative EV ${decision.expectedValue}.`,
+    });
+  }
+  if (decision.executionStatus === "shop" && decision.expectedValue >= -EV_TOLERANCE) {
+    args.fatalIssues.push({
+      code: "decision_execution_status_mismatch",
+      detail: `${decision.market} Shop has nonnegative EV ${decision.expectedValue}.`,
+    });
+  }
+  const legacyOrDisplayedBet = decision.executionStatus === undefined || decision.executionStatus === "bet";
+  if (isActionable(decision.grade) && legacyOrDisplayedBet &&
+      (decision.expectedValue < -EV_TOLERANCE || decision.modelProbability <= decision.marketFairProbability)) {
     args.fatalIssues.push({
       code: "actionable_nonpositive_value",
       detail: `${decision.market} ${decision.grade} has EV ${decision.expectedValue} and gap ${decision.modelProbability - decision.marketFairProbability}.`,
