@@ -479,7 +479,7 @@ async function main() {
       })) * (baseline.nrfi_no_vig_prob ?? 0);
     check("target-excluded multi-book posterior uses only independent book context",
       near(model.fiV2Audit.posterior_p_nrfi, v5ExpectedPosterior, 0.000000000001) &&
-      model.fiV2Audit.trust_independent === 0.25 &&
+      model.fiV2Audit.trust_independent === 0.65 &&
       !model.fiV2Audit.integrity_notes.some((note) => note.includes("Evaluation-only")));
   }
   {
@@ -856,7 +856,7 @@ async function main() {
   }
   {
     // selectTrustIndependent direct
-    check("high + market → 0.25", FI_TEST.selectTrustIndependent({ tier: "high", missingCount: 0, hasMarket: true }) === 0.25);
+    check("r84 rollback: high + target-excluded market → 0.65", FI_TEST.selectTrustIndependent({ tier: "high", missingCount: 0, hasMarket: true }) === 0.65);
     check("market-backed Lean floor = nonnegative no-vig edge", FI_TEST.FI_LEAN_MIN_EDGE_PCT === 0);
     check("medium + market → 0.45", FI_TEST.selectTrustIndependent({ tier: "medium", missingCount: 2, hasMarket: true }) === 0.45);
     check("no market → 1.0", FI_TEST.selectTrustIndependent({ tier: "high", missingCount: 0, hasMarket: false }) === 1.0);

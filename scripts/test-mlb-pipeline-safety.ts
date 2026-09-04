@@ -80,10 +80,10 @@ check(
   layers.grade_policy === "mlb_public_grade_policy_v56_full_game_structural_coherence_2026_09_02",
 );
 check(
-  "FI r81 stamps null-side persistence identifiers without changing full-game tuple",
+  "FI r84 stamps the scoped pre-r61 probability rollback without changing the full-game tuple",
   fiLayers.first_inning_release_id === MLB_FIRST_INNING_RELEASE_ID &&
-    fiLayers.first_inning_probability_head === "mlb_first_inning_fi_v8_authoritative_toss_null_persistence_2026_09_03" &&
-    fiLayers.first_inning_market_calibration_policy === "mlb_first_inning_market_calibration_v5_authoritative_toss_null_persistence_2026_09_03" &&
+    fiLayers.first_inning_probability_head === "mlb_first_inning_fi_v9_pre_r61_model65_target_excluded_2026_09_04" &&
+    fiLayers.first_inning_market_calibration_policy === "mlb_first_inning_market_calibration_v6_pre_r61_model65_target_excluded_2026_09_04" &&
     fiLayers.first_inning_member_tuple_contract === "mlb_first_inning_member_tuple_contract_v3_authoritative_toss_null_persistence_2026_09_03" &&
     layers.first_inning_release_id === undefined &&
     layers.first_inning_probability_head === "mlb_first_inning_fi_v6_evaluated_quote_exclusion_2026_09_02" &&
