@@ -33,11 +33,12 @@ import {
 import { americanToImpliedProb } from "./marketPrior";
 
 // ─── trust coefficients (mirror V2.2 full-game) ──────────────────
-// Locked 2026 bridge calibration: high-quality FI rows remain model-informed,
-// but the complete same-book, two-sided no-vig market is the stronger current
-// calibration anchor. The independent model retains 25% weight so matchup
-// ranking survives without letting the stale ~55% NRFI base dominate.
-const FI_TRUST_INDEPENDENT_HIGH = 0.25;
+// r84 owner-directed rollback: restore the last deployed pre-r61 high-quality
+// probability head (65% independent / 35% market). The market input is now
+// safer than the historical r46 implementation because r80 excludes the exact
+// evaluated sportsbook from forecast consensus; singleton evaluation quotes
+// remain downstream economics-only.
+const FI_TRUST_INDEPENDENT_HIGH = 0.65;
 const FI_TRUST_INDEPENDENT_MEDIUM = 0.45;
 const FI_TRUST_INDEPENDENT_LOW = 0.25;
 const FI_TRUST_INDEPENDENT_NO_MARKET = 1.0;

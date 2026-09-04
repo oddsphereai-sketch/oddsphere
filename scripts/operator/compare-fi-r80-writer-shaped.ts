@@ -1,7 +1,7 @@
 /**
- * FI r80 writer-shaped comparator. SELECT-only: no provider calls, outcomes,
+ * FI r84 writer-shaped comparator. SELECT-only: no provider calls, outcomes,
  * mutations, apply mode, or historical backfill. It compares the persisted
- * unlocked FI tuple with the current r80 writer output for one MLB slate.
+ * unlocked FI tuple with the current r84 writer output for one MLB slate.
  *
  * Usage: npx tsx --env-file=.env.local scripts/operator/compare-fi-r80-writer-shaped.ts --date YYYY-MM-DD
  */
@@ -42,7 +42,7 @@ async function main() {
   const snapshots = await buildFeatureSnapshots("mlb", date!);
   const snapByExternal = new Map(snapshots.map((s) => [s.game_external_id, s]));
   let promotions = 0, demotions = 0, changed = 0, candidateActionable = 0, candidateToss = 0;
-  console.log(`FI r80 writer-shaped SELECT-only comparator | ${date} | ${MLB_FIRST_INNING_RELEASE_ID}`);
+  console.log(`FI r84 writer-shaped SELECT-only comparator | ${date} | ${MLB_FIRST_INNING_RELEASE_ID}`);
   for (const game of games ?? []) {
     const current = predByGame.get(game.id as number);
     const currentSp = (current?.sport_specific ?? {}) as Record<string, unknown>;
@@ -65,7 +65,7 @@ async function main() {
     if (oldPill !== newPill || currentAudit.posterior_p_nrfi !== candidateAudit.posterior_p_nrfi || oldGrade !== newGrade) changed++;
     const record = recordByGame.get(game.id as number) as Record<string, unknown> | undefined;
     const matchup = `${abbr.get(game.away_team_id as number) ?? "?"}@${abbr.get(game.home_team_id as number) ?? "?"}`;
-    console.log(JSON.stringify({ matchup, old: { side: oldPill, probability: currentAudit.posterior_p_nrfi ?? null, grade: oldGrade, stake: record?.stake ?? null, exact_price: currentAudit.market_nrfi_odds_american ?? null }, r80: { side: newPill, probability: candidateAudit.posterior_p_nrfi, expected_runs: candidateAudit.posterior_expected_first_inning_runs, grade: newGrade, stake: record?.stake ?? null, exact_price: candidateAudit.market_nrfi_odds_american ?? null, toss_up: newPill === "Toss-Up" } }));
+    console.log(JSON.stringify({ game_id: game.id, external_id: game.external_id, matchup, incumbent: { side: oldPill, probability: currentAudit.posterior_p_nrfi ?? null, expected_runs: currentAudit.posterior_expected_first_inning_runs ?? null, grade: oldGrade, stake: record?.stake ?? null, exact_price: currentAudit.market_nrfi_odds_american ?? null }, r84: { side: newPill, probability: candidateAudit.posterior_p_nrfi, expected_runs: candidateAudit.posterior_expected_first_inning_runs, grade: newGrade, stake: record?.stake ?? null, exact_price: candidateAudit.market_nrfi_odds_american ?? null, toss_up: newPill === "Toss-Up" } }));
   }
   console.log(JSON.stringify({ aggregate: { changed, promotions, demotions, candidate_actionables: candidateActionable, candidate_toss_ups: candidateToss, outcomes_queried: false, mutations: false } }));
 }
