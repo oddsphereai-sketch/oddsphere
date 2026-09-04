@@ -9,6 +9,10 @@ import { dailyEdgeOutcomeForecastLabel } from "../app/lab/lib/dailyEdgeOutcomeFo
 import {
   CFB_FORWARD_EVIDENCE_COLLECTOR_RELEASE,
   CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE,
+  CFB_FORWARD_HOLISTIC_PREVIOUS_EVIDENCE_SCHEMA_RELEASE,
+  CFB_FORWARD_HOLISTIC_PREVIOUS_MEMBER_RELEASE,
+  CFB_FORWARD_CONTINUITY_PREVIOUS_EVIDENCE_SCHEMA_RELEASE,
+  CFB_FORWARD_CONTINUITY_PREVIOUS_MEMBER_RELEASE,
   CFB_FORWARD_IDENTITY_PREVIOUS_EVIDENCE_SCHEMA_RELEASE,
   CFB_FORWARD_IDENTITY_PREVIOUS_MEMBER_RELEASE,
   CFB_FORWARD_AMBIGUOUS_SCOPE_PREVIOUS_EVIDENCE_SCHEMA_RELEASE,
@@ -55,6 +59,8 @@ import { FOOTBALL_MARKET_SCOPED_T60_TRACKING_RELEASE } from "../lib/services/foo
 import {
   CFB_T60_MAX_CAPTURE_LAG_MINUTES,
   CFB_V1_DECISION_RELEASE,
+  CFB_V1_HOLISTIC_PREVIOUS_DECISION_RELEASE,
+  CFB_V1_CONTINUITY_PREVIOUS_DECISION_RELEASE,
   CFB_V1_GRADE_PREVIOUS_DECISION_RELEASE,
   buildCfbV1DecisionBundle,
   cfbV1LineProbabilities,
@@ -342,7 +348,7 @@ assert.equal(compactMemberSnapshot.snapshotRelease, CFB_FORWARD_MEMBER_SNAPSHOT_
 assert.equal(compactMemberSnapshot.fixture, member, "the fast snapshot preserves the authoritative fixture byte-for-byte");
 assert.equal(compactMemberSnapshot.sourceChecksum, member.provenance.sourceChecksum);
 assert.equal(member.snapshot.games.length, 1);
-assert.equal(member.fixtureRelease, "cfb_v1_member_fixture_2026_09_04_r47_favorite_price_tier_ceiling");
+assert.equal(member.fixtureRelease, "cfb_v1_member_fixture_2026_09_04_r48_cross_release_lock_visibility");
 assert.equal(member.snapshot.games[0]!.collegeFootballScope, "fbs_involved", "the CFB reader must classify every member game for the FBS-first board without changing writer scope");
 assert.equal(member.snapshot.games[0]!.awayTeamDisplayName, game.away.name);
 assert.equal(member.snapshot.games[0]!.homeTeamDisplayName, game.home.name);
@@ -594,6 +600,86 @@ assert.deepEqual(
   r28LockedRow,
   "the r28 T-60 row must remain byte-for-byte authoritative while the first r29 wave refreshes only unlocked games",
 );
+
+const continuityPreviousUnlockedPayload = {
+  ...r28UnlockedPayload,
+  schemaRelease: CFB_FORWARD_CONTINUITY_PREVIOUS_EVIDENCE_SCHEMA_RELEASE,
+  memberRelease: CFB_FORWARD_CONTINUITY_PREVIOUS_MEMBER_RELEASE,
+  decisions: {
+    ...r28UnlockedPayload.decisions,
+    decisionRelease: CFB_V1_CONTINUITY_PREVIOUS_DECISION_RELEASE,
+    evaluatedBets: r28UnlockedPayload.decisions.evaluatedBets.map((decision) => ({
+      ...decision,
+      decisionRelease: CFB_V1_CONTINUITY_PREVIOUS_DECISION_RELEASE,
+    })),
+  },
+} as unknown as CfbForwardEvidencePayload;
+const holisticPreviousLockedPayload = {
+  ...payload,
+  schemaRelease: CFB_FORWARD_HOLISTIC_PREVIOUS_EVIDENCE_SCHEMA_RELEASE,
+  memberRelease: CFB_FORWARD_HOLISTIC_PREVIOUS_MEMBER_RELEASE,
+  slateGameCount: 2,
+  decisions: {
+    ...payload.decisions,
+    decisionRelease: CFB_V1_HOLISTIC_PREVIOUS_DECISION_RELEASE,
+    evaluatedBets: payload.decisions.evaluatedBets.map((decision) => ({
+      ...decision,
+      decisionRelease: CFB_V1_HOLISTIC_PREVIOUS_DECISION_RELEASE,
+    })),
+  },
+} as unknown as CfbForwardEvidencePayload;
+const currentPriceTierUnlockedPayload = {
+  ...r29PartialPayload,
+  slateGameCount: 2,
+} as CfbForwardEvidencePayload;
+const continuityPreviousUnlockedRows: CfbForwardStoredEvidence[] = ["r21-current-game", "r21-missing-locked-game"].map((providerGameId) => ({
+  ...evidence,
+  id: `r19-unlocked-${providerGameId}`,
+  providerGameId,
+  stage: "unlocked" as const,
+  capturedAt: publicationTransitionCapturedAt,
+  gameStartAt: publicationTransitionStartAt,
+  payloadSha256: hashCfbForwardEvidencePayload(continuityPreviousUnlockedPayload),
+  payload: continuityPreviousUnlockedPayload,
+}));
+const holisticPreviousLockedRow: CfbForwardStoredEvidence = {
+  ...evidence,
+  id: "r20-immutable-t60",
+  providerGameId: "r21-missing-locked-game",
+  gameStartAt: publicationTransitionStartAt,
+  payloadSha256: hashCfbForwardEvidencePayload(holisticPreviousLockedPayload),
+  payload: holisticPreviousLockedPayload,
+};
+const currentPriceTierUnlockedRow: CfbForwardStoredEvidence = {
+  ...evidence,
+  id: "r21-current-unlocked-game",
+  providerGameId: "r21-current-game",
+  stage: "unlocked",
+  capturedAt: publicationTransitionCapturedAt,
+  gameStartAt: publicationTransitionStartAt,
+  payloadSha256: hashCfbForwardEvidencePayload(currentPriceTierUnlockedPayload),
+  payload: currentPriceTierUnlockedPayload,
+};
+const r21LockVisibilityBoundary = selectLatestCfbMemberEvidenceRows(
+  [...continuityPreviousUnlockedRows, holisticPreviousLockedRow, currentPriceTierUnlockedRow],
+  publicationTransitionCapturedAt,
+);
+assert.equal(r21LockVisibilityBoundary.length, 2);
+assert.equal(
+  r21LockVisibilityBoundary.find((row) => row.providerGameId === "r21-current-game")?.payload.memberRelease,
+  CFB_FORWARD_MEMBER_RELEASE,
+);
+assert.deepEqual(
+  r21LockVisibilityBoundary.find((row) => row.providerGameId === "r21-missing-locked-game"),
+  holisticPreviousLockedRow,
+  "the r20 T-60 row must remain byte-for-byte authoritative while the r21 wave refreshes only another game",
+);
+const r21BoundaryFixture = buildCfbMemberFixture(
+  [...continuityPreviousUnlockedRows, holisticPreviousLockedRow, currentPriceTierUnlockedRow],
+  publicationTransitionCapturedAt,
+);
+const r21BoundaryLockedGame = r21BoundaryFixture.snapshot.games.find((gameRow) => gameRow.lockedAt === lockedAt);
+assert.equal(r21BoundaryLockedGame?.lockState, "locked", "the member card must render the retained r20 T-60 lock timestamp");
 const sharpPayload: CfbForwardEvidencePayload = {
   ...payload,
   market: {
@@ -1655,6 +1741,7 @@ assert.match(memberSnapshotStoreSource, /const SNAPSHOT_STALE_MS = 8 \* 60 \* 60
 const evidenceStoreSource = readFileSync(path.join(process.cwd(), "lib/services/football/cfbForwardEvidenceStore.ts"), "utf8");
 assert.match(evidenceStoreSource, /CFB_FORWARD_PREVIOUS_EVIDENCE_SCHEMA_RELEASE/, "the reader must retain the complete r4 exact-price wave during the natural r5 transition");
 assert.match(evidenceStoreSource, /CFB_FORWARD_IDENTITY_PREVIOUS_EVIDENCE_SCHEMA_RELEASE/, "the reader must retain the complete r46 wave during the natural r47 transition");
+assert.match(evidenceStoreSource, /CFB_FORWARD_HOLISTIC_PREVIOUS_EVIDENCE_SCHEMA_RELEASE/, "the reader must retain valid immutable r20 T-60 rows during a partial r21 transition");
 assert.equal(CFB_FORWARD_EVIDENCE_PAGE_SIZE, 1_000);
 assert.equal(CFB_FORWARD_EVIDENCE_MAX_ROWS, 50_000);
 assert.match(evidenceStoreSource, /\.order\("captured_at", \{ ascending: true \}\)\s*\.order\("id", \{ ascending: true \}\)\s*\.range\(from, from \+ CFB_FORWARD_EVIDENCE_PAGE_SIZE - 1\)/, "the CFB evidence reader must paginate with a stable timestamp-and-ID order");
