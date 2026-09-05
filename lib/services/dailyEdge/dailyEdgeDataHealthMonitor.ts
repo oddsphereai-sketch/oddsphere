@@ -15,7 +15,7 @@ import {
   MLB_MARKET_AWARE_SIDE_CORRECTION_RULE_ID,
 } from "@/lib/services/predictionRecordService";
 import {
-  MLB_MODEL_LAYER_VERSION_IDS,
+  buildMlbModelLayerVersions,
   MLB_MODEL_LAYER_VERSION_SCHEMA,
   type MlbModelLayerMarket,
 } from "@/lib/automodel/mlbModelLayerVersions";
@@ -586,12 +586,6 @@ function expectedMlbModelLayerMarket(market: string | null): MlbModelLayerMarket
   return null;
 }
 
-function expectedMlbActiveProbabilityHead(market: MlbModelLayerMarket): string {
-  if (market === "moneyline") return MLB_MODEL_LAYER_VERSION_IDS.moneyline_probability_head;
-  if (market === "total") return MLB_MODEL_LAYER_VERSION_IDS.total_probability_head;
-  return MLB_MODEL_LAYER_VERSION_IDS.first_inning_probability_head;
-}
-
 function modelLayerVersionsFromSnapshot(snapshot: unknown): Record<string, unknown> | null {
   const direct = snapshotRecord(snapshot, "model_layer_versions");
   if (direct) return direct;
@@ -641,19 +635,20 @@ export function mlbModelLayerFieldsToCompare(
 }
 
 function expectedMlbModelLayerStamp(market: MlbModelLayerMarket): Record<MlbComparableModelLayerField, unknown> {
+  const scoped = buildMlbModelLayerVersions(market);
   return {
-    schema_version: MLB_MODEL_LAYER_VERSION_SCHEMA,
-    projection_core: MLB_MODEL_LAYER_VERSION_IDS.projection_core,
-    score_distribution: MLB_MODEL_LAYER_VERSION_IDS.score_distribution,
-    moneyline_probability_head: MLB_MODEL_LAYER_VERSION_IDS.moneyline_probability_head,
-    total_probability_head: MLB_MODEL_LAYER_VERSION_IDS.total_probability_head,
-    first_inning_probability_head: MLB_MODEL_LAYER_VERSION_IDS.first_inning_probability_head,
-    market_calibration_policy: MLB_MODEL_LAYER_VERSION_IDS.market_calibration_policy,
-    grade_policy: MLB_MODEL_LAYER_VERSION_IDS.grade_policy,
-    correction_policy: MLB_MODEL_LAYER_VERSION_IDS.correction_policy,
-    tracking_contract: MLB_MODEL_LAYER_VERSION_IDS.tracking_contract,
-    market,
-    active_probability_head: expectedMlbActiveProbabilityHead(market),
+    schema_version: scoped.schema_version,
+    projection_core: scoped.projection_core,
+    score_distribution: scoped.score_distribution,
+    moneyline_probability_head: scoped.moneyline_probability_head,
+    total_probability_head: scoped.total_probability_head,
+    first_inning_probability_head: scoped.first_inning_probability_head,
+    market_calibration_policy: scoped.market_calibration_policy,
+    grade_policy: scoped.grade_policy,
+    correction_policy: scoped.correction_policy,
+    tracking_contract: scoped.tracking_contract,
+    market: scoped.market,
+    active_probability_head: scoped.active_probability_head,
   };
 }
 

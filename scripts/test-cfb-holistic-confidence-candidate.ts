@@ -11,6 +11,8 @@ const umass: CfbHolisticConfidenceInput = {
   market: "spread",
   selectedSide: "away",
   modelProbability: 0.5347958920405678,
+  marketFairProbability: 0.52,
+  decisionGrade: "Watchlist",
   exactPriceExpectedValue: 0.025434325105308853,
   evaluatedPrice: -109,
   evaluatedLine: 29.5,
@@ -18,6 +20,9 @@ const umass: CfbHolisticConfidenceInput = {
   publicMoneyMinusTicketsPp: 4,
   selectedSideLineDelta: -0.5,
   selectedSideImpliedProbabilityDeltaPp: 0.46,
+  sharpDirection: "support",
+  movementDirection: "neutral",
+  publicDirection: "neutral",
 };
 
 const umassCandidate = evaluateCfbHolisticConfidence(umass);
@@ -46,12 +51,17 @@ const highConfidenceMoneyline: CfbHolisticConfidenceInput = {
   market: "moneyline",
   selectedSide: "home",
   modelProbability: 0.75,
+  marketFairProbability: 0.75,
+  decisionGrade: "Lean",
   exactPriceExpectedValue: -0.02,
   evaluatedLine: null,
   sharpMoneyMinusTicketsPp: 0,
   publicMoneyMinusTicketsPp: 0,
   selectedSideLineDelta: null,
   selectedSideImpliedProbabilityDeltaPp: 0,
+  sharpDirection: "neutral",
+  movementDirection: "neutral",
+  publicDirection: "neutral",
 };
 const atBestAngleBoundary = evaluateCfbHolisticConfidence({ ...highConfidenceMoneyline, evaluatedPrice: -200 });
 assert.equal(atBestAngleBoundary.uncappedConfidenceGrade, "Best Angle");
@@ -77,11 +87,49 @@ for (const evaluatedPrice of [-500, -4000]) {
 const expensiveSpread = evaluateCfbHolisticConfidence({
   ...highConfidenceMoneyline,
   market: "spread",
+  decisionGrade: "Best Angle",
   evaluatedPrice: -500,
   evaluatedLine: -3.5,
 });
 assert.equal(expensiveSpread.confidenceGrade, "Best Angle", "the favorite-price ceiling is moneyline-only");
 assert.equal(favoritePriceTierCeiling("total", -4000), null, "totals cannot enter the favorite-price ceiling");
+
+const unsupportedSpreadDisagreement = evaluateCfbHolisticConfidence({
+  ...highConfidenceMoneyline,
+  market: "spread",
+  evaluatedPrice: -110,
+  evaluatedLine: 34.5,
+  modelProbability: 0.61,
+  marketFairProbability: 0.46,
+  sharpMoneyMinusTicketsPp: null,
+  publicMoneyMinusTicketsPp: null,
+  selectedSideLineDelta: null,
+  selectedSideImpliedProbabilityDeltaPp: null,
+});
+assert.equal(unsupportedSpreadDisagreement.confidenceGrade, "Lean", "unsupported confidence cannot create a premium Spread tier even though market disagreement is not blended into a second model");
+assert.equal(unsupportedSpreadDisagreement.confidenceScore, unsupportedSpreadDisagreement.modelConfidenceScore);
+
+const exactDecisionCeiling = evaluateCfbHolisticConfidence({
+  ...highConfidenceMoneyline,
+  market: "spread",
+  decisionGrade: "No Play",
+  evaluatedPrice: -110,
+  evaluatedLine: -3.5,
+});
+assert.equal(exactDecisionCeiling.confidenceGrade, "Watchlist", "a poor exact-price Spread foundation advances only one tier without multi-channel affirmation");
+
+const multiChannelSpread = evaluateCfbHolisticConfidence({
+  ...highConfidenceMoneyline,
+  market: "spread",
+  evaluatedPrice: -110,
+  evaluatedLine: -3.5,
+  decisionGrade: "Watchlist",
+  sharpDirection: "support",
+  movementDirection: "support",
+  publicDirection: "neutral",
+});
+assert.equal(multiChannelSpread.confidenceGrade, "Best Angle", "two independent affirming channels preserve a tested premium Spread path");
+assert.equal(multiChannelSpread.marketEvidenceBallot.multiChannelAffirmation, true);
 
 const resisted = evaluateCfbHolisticConfidence({
   ...umass,
@@ -89,6 +137,9 @@ const resisted = evaluateCfbHolisticConfidence({
   publicMoneyMinusTicketsPp: -20,
   selectedSideLineDelta: 1,
   selectedSideImpliedProbabilityDeltaPp: -2,
+  sharpDirection: "resistance",
+  movementDirection: "resistance",
+  publicDirection: "resistance",
 });
 assert.equal(resisted.confidenceGrade, "No Play", "aligned resistance lowers the same continuous confidence score without a one-channel veto");
 assert.ok(resisted.evidenceConfidenceAdjustment < 0);

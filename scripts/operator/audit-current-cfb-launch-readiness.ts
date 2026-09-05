@@ -112,7 +112,7 @@ async function main(): Promise<void> {
       held: row.payload.decisions.heldMarkets,
     }));
 
-  console.log(JSON.stringify({
+  const report = {
     release: "cfb_launch_readiness_select_audit_2026_08_28_r1",
     readOnly: true,
     providerCalls: 0,
@@ -123,7 +123,50 @@ async function main(): Promise<void> {
     markets: games.length * MARKETS.length,
     gamesDetail: games,
     sjsuHistory,
-  }, null, 2));
+  };
+  const latestRows = [...latest.values()];
+  const marketSummaries = games.flatMap((game) => game.markets);
+  const unavailableReasons = marketSummaries.reduce<Record<string, number>>((counts, market) => {
+      if (market.status !== "unavailable") return counts;
+      const reason = market.reason ?? "unknown";
+      counts[reason] = (counts[reason] ?? 0) + 1;
+      return counts;
+    }, {});
+  const summary = {
+    release: report.release,
+    readOnly: true,
+    providerCalls: 0,
+    writes: 0,
+    evidenceRowsRead: rows.length,
+    currentWindowRows: windowRows.length,
+    games: games.length,
+    markets: games.length * MARKETS.length,
+    stages: Object.fromEntries(["opening", "unlocked", "t60"].map((stage) => [
+      stage,
+      latestRows.filter((row) => row.stage === stage).length,
+    ])),
+    evaluatedMarkets: marketSummaries.filter((market) => market.status === "evaluated").length,
+    unavailableMarkets: marketSummaries.filter((market) => market.status === "unavailable").length,
+    unavailableReasons,
+    lockExceptions: games.flatMap((game) => game.markets
+      .filter((market) => market.status === "unavailable" && market.reason === "t60_capture_late")
+      .map((market) => ({ matchup: game.matchup, market: market.market, reason: market.reason }))),
+    releaseFamilies: Object.fromEntries([...new Set(latestRows.map((row) => row.payload.memberRelease))].sort().map((release) => [
+      release,
+      latestRows.filter((row) => row.payload.memberRelease === release).length,
+    ])),
+    coverage: {
+      currentOdds: latestRows.filter((row) => row.payload.coverage.currentOdds).length,
+      targetExcludedConsensusReady: latestRows.filter((row) => row.payload.coverage.targetExcludedConsensusReady).length,
+      playbookSplits: latestRows.filter((row) => row.payload.coverage.playbookSplits).length,
+      sharpApiSplits: latestRows.filter((row) => row.payload.coverage.sharpApiSplits).length,
+      weather: latestRows.filter((row) => row.payload.coverage.weather).length,
+      activeQuarterbacks: latestRows.filter((row) => row.payload.coverage.activeQuarterbacks).length,
+      healthHolds: latestRows.filter((row) => row.payload.coverage.healthHolds.length > 0).length,
+    },
+  };
+
+  console.log(JSON.stringify(process.argv.includes("--summary") ? summary : report, null, 2));
 }
 
 main().catch((error) => {

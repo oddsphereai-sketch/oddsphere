@@ -43,7 +43,7 @@
 
 import { cronHandlerPerSport } from "@/lib/cron/runCron";
 import { parseDateFromUrl } from "@/lib/cron/dates";
-import { sportsInSeasonToday } from "@/lib/cron/seasons";
+import { pregameSweepSports } from "@/lib/cron/pregameSweepSports";
 import { supabase } from "@/lib/db/supabase";
 import {
   GameLinesDeadlineError,
@@ -110,14 +110,6 @@ const PREGAME_SWEEP_SOFT_DEADLINE_MS = 55_000;
 //   • Audit-failure non-fatal (lock UPDATE succeeded; audit-insert
 //     failure pushes to errors[] and continues)
 // ─────────────────────────────────────────────────────────────
-
-function pregameSweepSports(
-  env: Record<string, string | undefined> = process.env
-): Sport[] {
-  const sports: Sport[] = [...sportsInSeasonToday()];
-  if (env.WNBA_PREGAME_SWEEP_ENABLED === "true") sports.push("wnba");
-  return [...new Set(sports)];
-}
 
 // ─────────────────────────────────────────────────────────────
 // Slate read + lock-state partition

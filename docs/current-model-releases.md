@@ -4,7 +4,7 @@ This file is the human-readable production handoff registry. Runtime constants a
 prediction snapshots remain the machine authority. Future model work must start here, verify the
 constants, and preserve the precedence and writer ownership below.
 
-Last reviewed: 2026-09-04
+Last reviewed: 2026-09-05
 
 ## Cross-sport confidence / execution contract
 
@@ -51,6 +51,13 @@ Last reviewed: 2026-09-04
 - Evidence: `docs/model-audits/2026-08-28-football-cross-market-coherence-predeclaration.md`, `docs/model-audits/2026-08-28-football-cross-market-coherence-r19.md`, `docs/model-audits/2026-08-26-football-market-scoped-t60-predeclaration.md`, `docs/model-audits/2026-08-25-nfl-odds-history-reader-repair.md`, `docs/model-audits/2026-08-25-nfl-public-release-transition.md`, `docs/model-audits/2026-08-25-nfl-actionable-grades-production-r9.md`, `docs/model-audits/2026-08-25-nfl-actionable-grades-r9.md`, `docs/model-audits/2026-08-25-nfl-projected-qb-context-r11.md`, `docs/model-audits/2026-08-23-nfl-discrete-drive-joint-r10.md`, and `docs/model-audits/2026-08-23-nfl-v1-comprehensive-outcome.md`.
 
 ## CFB Daily Edge generalized weekly production release
+
+### Confidence / economics bridge (r58)
+
+- Active confidence / grade / decision: `cfb_holistic_confidence_2026_09_05_r4_confidence_economics_bridge` / `cfb_v1_composite_grade_policy_2026_09_05_r12_confidence_economics_bridge` / `cfb_v1_daily_edge_decision_2026_09_05_r31_confidence_economics_bridge`. The selected-side model probability remains primary and the existing bounded, signed Circa, Playbook, same-book line-movement, and same-book implied-price-movement evidence may affirm or resist it. Missing optional evidence is neutral. No new weighted model/market blend, fixed spread-size rule, EV gate, or one-source veto was added.
+- A Spread's final confidence grade ordinarily finishes at most one tier above its underlying exact-price decision grade. A second-tier exception requires at least two independent identity-valid affirming channels among strict Sharp splits, same-book movement, and public splits, with no resistance. Because the frozen historical Spread Best Angle subgroup did not qualify, a Spread reaches Best Angle only from an already-qualified Best Angle foundation or that same multi-channel affirmation. A lone signal never vetoes or flips a prediction, and the UMass Watchlist-to-Lean path remains. The already-released graduated Moneyline price ceilings remain: -200 or better is uncapped, -201 through -499 is capped at Lean, and -500 or worse is capped at Watchlist. Price and EV still select `bet` versus `shop`; they do not erase the prediction or force No Play. Stakes are unchanged.
+- Publication set: evidence / member `cfb_forward_evidence_snapshot_2026_09_05_r22_confidence_economics_bridge` / `cfb_v1_member_release_2026_09_05_r34_confidence_economics_bridge`; candidate / production `cfb_market_sharp_aware_candidate_2026_09_05_r16_confidence_economics_bridge` / `cfb_market_sharp_aware_production_2026_09_05_r18_confidence_economics_bridge`; sole writer `cfb_forward_evidence_writer_2026_09_05_r51_confidence_economics_bridge`; fixture / outcome `cfb_v1_member_fixture_2026_09_05_r49_confidence_economics_bridge` / `cfb_market_sharp_public_outcome_contract_2026_09_05_r49_confidence_economics_bridge`; compact snapshot `cfb_forward_member_snapshot_2026_09_05_r7_confidence_economics_bridge`; tracking `cfb_official_tracking_record_2026_09_05_r19_confidence_economics_bridge`. The reader preserves the immediately prior r21/r33/r30 family and older valid immutable T-60 rows. One leased writer, provider budgets, sides, PMF, probabilities, projections, evaluated quotes, EV, T-60 timing, tracking semantics, settlement, and stakes are unchanged.
+- Outcome-blind September 5 comparison: 63 games / 159 markets move from 4 Best Angles / 57 Leans / 76 Watchlists / 22 No Plays to 1 / 60 / 76 / 22. VMI +55.5, Tulsa +13.5, and New Hampshire +33.5 move from Best Angle to Lean; all 61 confidence-actionables remain, containing 54 `bet` and seven `shop` rows. There are zero side, probability, projection, quote, execution, stake, or actionability changes, and large-spread actionables remain 21. The September 4 diagnostic remains 0 / 8 / 9 / 4 with no retrospective changes. Across all 25 release-separated locked CFB Spreads through September 4, the model side is 8-15-2 and 55%+ rows are 1-7-1; that small mixed-release cohort rejects confidence-only premium placement but does not authorize a side flip or re-fit. The UMass +29.5 regression retains its evidence-supported Watchlist-to-Lean path. Evidence and rollback: `docs/model-audits/2026-09-05-cfb-confidence-reliability-r58-predeclaration.md` and `docs/model-audits/2026-09-05-cfb-confidence-reliability-r58-result.md`. Roll back the complete r58 release family to r57 without rewriting any immutable T-60 payload or tracking row.
 
 ### Holistic confidence with graduated favorite-price ceilings and immutable lock visibility (r57 reader)
 
@@ -1333,11 +1340,26 @@ in `docs/model-audits/2026-08-21-wnba-incoherent-total-tuple-fallback.md`.
 
 ## MLB Player Props production release
 
-- Release: `mlb_props_2026_09_02_r41`
+- Release: `mlb_props_2026_09_05_r42`
 - Machine registry: `lib/mlb/props/marketModelVersions.ts`
 - Authoritative writer: `/api/cron/mlb-player-props-refresh` through
   `refreshMlbPropsBoard`
 - Status: authoritative signed-in member release
+
+The September 5 r42 price-confidence balance keeps the exact named-book quote attached and keeps
+the underlying forecast, side, probability, projection, edge, EV, category eligibility, and
+writer behavior unchanged. After every promotion and projection-side coherence check, ordinary
+unlocked two-way Best Angles worse than -200 step down to Lean; any ordinary Best Angle or Lean
+worse than -400 steps down to Watchlist with zero units. Exact -200 and -400 boundary prices retain
+their higher permitted tier. The policy is a graduated confidence-placement ceiling, never a No
+Play gate. Locked rows and separately validated milestone offers are immutable/exempt, and stakes
+are unchanged for rows that remain actionable. On the September 5 13:27Z 5,963-row production
+snapshot, 23 Best Angles / 85 Leans become 6 / 94, with nine Best Angle-to-Lean and eight Best
+Angle-to-Watchlist changes. The September 4 snapshot moves 9 Best Angles / 3 Leans to 5 / 7 through
+four Best Angle-to-Lean changes. Evidence and rollback:
+`docs/model-audits/2026-09-05-mlb-props-price-confidence-r42-predeclaration.md` and
+`docs/model-audits/2026-09-05-mlb-props-price-confidence-r42-result.md`. Roll back the runtime
+release and price-confidence transform to r41 without changing historical snapshots or locks.
 
 The September 2 r41 post-calibration coherence release leaves the r40 target-excluded posterior,
 forecast side, decimal projection calibration, exact-price economics, category policies, and

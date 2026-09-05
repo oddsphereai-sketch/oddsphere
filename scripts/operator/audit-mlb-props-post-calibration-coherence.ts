@@ -15,7 +15,7 @@ import {
 } from "../../lib/mlb/props/projectionSideIntegrity";
 
 const INCUMBENT_RELEASE = "mlb_props_2026_09_02_r40";
-const CANDIDATE_RELEASE = "mlb_props_2026_09_02_r41";
+const CANDIDATE_RELEASE = "mlb_props_2026_09_05_r42";
 const ACTIONABLE = new Set(["BEST_ANGLE", "LEAN"]);
 const HEALTH = new Set(["PENDING_DATA", "RESEARCH"]);
 

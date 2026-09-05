@@ -5,7 +5,7 @@ import {
 } from "./dailyEdge/actionPromotionStability";
 
 export const MLB_LOCK_COHERENCE_RELEASE =
-  "mlb_lock_coherence_2026_09_02_r3_failed_economics_tuple" as const;
+  "mlb_lock_coherence_2026_09_05_r4_writer_timestamp_independent" as const;
 
 type LockComparableRow = {
   game_id: number;
@@ -108,7 +108,6 @@ const FAILED_ECONOMICS_TUPLE_FIELDS = [
   "model_probability",
   "market_probability",
   "edge",
-  "published_at",
 ] as const;
 
 /**
@@ -243,7 +242,6 @@ function isExactPendingPromotion(expected: LockComparableRow, stored: LockCompar
     [candidate.model_probability, expected.model_probability ?? null],
     [candidate.market_probability, expected.market_probability ?? null],
     [candidate.edge, expected.edge ?? null],
-    [candidate.published_at, expected.published_at ?? null],
   ];
   return candidateFields.every(([first, second]) => sameScalar(first, second)) &&
     sameEvaluationPrice(candidate, expectedSnapshot);

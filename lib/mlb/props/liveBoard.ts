@@ -133,6 +133,7 @@ import {
   buildMlbPropsMarketEvidenceCapture,
   mlbPropsMarketEvidenceInput,
 } from "./marketEvidenceCapture";
+import { applyMlbPropsPriceConfidenceCeilings } from "./priceConfidencePolicy";
 
 type RefreshArgs = {
   slateDate: string;
@@ -452,18 +453,23 @@ export async function refreshMlbPropsBoard(args: RefreshArgs): Promise<MlbPropsB
   // member projection so a later display transform cannot leave an ordinary
   // two-way Lean/Best Angle pointing through the line in the opposite direction.
   const coherentProps = applyMlbPropsProjectionSideActionability(calibratedProps);
+  // Confidence grades describe how strongly the model prefers the outcome,
+  // while the exact available price still determines whether that confidence
+  // deserves premium placement. Keep short-priced reads visible and retain the
+  // quote, but graduate them down instead of turning price into a binary veto.
+  const priceBalancedProps = applyMlbPropsPriceConfidenceCeilings(coherentProps);
   const marketEvidence = buildMlbPropsMarketEvidenceCapture({
     currentOdds: boardSourceOdds,
     openingOdds,
     contexts: marketContexts,
-    rows: coherentProps,
+    rows: priceBalancedProps,
     evaluatedAt: asOfTimestamp,
     maximumQuoteAgeMinutes: Number(
       process.env.ODDSPHERE_PROPS_MAX_ODDS_AGE_MINUTES ?? DEFAULT_MAX_ODDS_AGE_MINUTES,
     ),
   });
   const props = attachMlbPropsMarketEvidenceReferences(
-    coherentProps,
+    priceBalancedProps,
     marketEvidence.retainedIds,
   );
   const data = buildDashboardData({

@@ -13,6 +13,8 @@ import {
 } from "./cfbV1Decision";
 
 export const CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE =
+  "cfb_forward_evidence_snapshot_2026_09_05_r22_confidence_economics_bridge" as const;
+export const CFB_FORWARD_PRICE_PREVIOUS_EVIDENCE_SCHEMA_RELEASE =
   "cfb_forward_evidence_snapshot_2026_09_04_r21_favorite_price_tier_ceiling" as const;
 export const CFB_FORWARD_HOLISTIC_PREVIOUS_EVIDENCE_SCHEMA_RELEASE =
   "cfb_forward_evidence_snapshot_2026_09_04_r20_holistic_confidence" as const;
@@ -57,6 +59,8 @@ export const CFB_FORWARD_INITIAL_EVIDENCE_SCHEMA_RELEASE =
 export const CFB_FORWARD_EVIDENCE_COLLECTOR_RELEASE =
   "cfb_forward_evidence_collector_2026_09_04_r27_sharp_fallback_isolation" as const;
 export const CFB_FORWARD_MEMBER_RELEASE =
+  "cfb_v1_member_release_2026_09_05_r34_confidence_economics_bridge" as const;
+export const CFB_FORWARD_PRICE_PREVIOUS_MEMBER_RELEASE =
   "cfb_v1_member_release_2026_09_04_r33_favorite_price_tier_ceiling" as const;
 export const CFB_FORWARD_HOLISTIC_PREVIOUS_MEMBER_RELEASE =
   "cfb_v1_member_release_2026_09_04_r32_holistic_confidence" as const;
