@@ -119,8 +119,31 @@ const directionCross = auditFootballCrossMarketCoherence({
   decisions: [],
   allowWholeGameOperationalHold: true,
 });
-assert.equal(directionCross.passed, false, "football never accepts a score/winner direction cross, even near an even game");
+assert.equal(directionCross.passed, false, "the shared default rejects a score/winner direction cross, even near an even game");
 assert.equal(directionCross.fatalIssues.some((row) => row.code === "forecast_winner_score_disagreement"), true);
+
+const cfbVerifiedDirectionCross = auditFootballCrossMarketCoherence({
+  sport: "cfb",
+  providerGameId: "457170",
+  awayTeam: "UCLA",
+  homeTeam: "CAL",
+  forecast: {
+    expectedAwayPoints: 20 + directionCrossAwayWinMass,
+    expectedHomePoints: 20 + 2 * directionCrossHomeWinMass,
+    representativeScore: { away: 21, home: 20 },
+    awayWinProbability: 1 - directionCrossHomeWinProbability,
+    homeWinProbability: directionCrossHomeWinProbability,
+    pmf: [
+      { away: 20, home: 22, probability: directionCrossHomeWinMass },
+      { away: 20, home: 20, probability: directionCrossTieMass },
+      { away: 21, home: 20, probability: directionCrossAwayWinMass },
+    ],
+  },
+  decisions: [],
+  allowWholeGameOperationalHold: true,
+  publicScoreDirectionTolerancePoints: CFB_PUBLIC_SCORE_DIRECTION_TOLERANCE_POINTS,
+});
+assert.equal(cfbVerifiedDirectionCross.passed, true, "CFB accepts an explicitly bounded mean/median winner crossover proven by the same PMF");
 
 const unverifiedDirectionCross = auditFootballCrossMarketCoherence({
   sport: "cfb",
