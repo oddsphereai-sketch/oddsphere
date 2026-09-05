@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { IWeatherProvider } from "@/lib/providers/interfaces/IWeatherProvider";
+import { SharpApiClientError } from "@/lib/providers/real_api/_sharpApiClient";
 import { computeSlateDate } from "@/lib/dates/slateDate";
 import { isPublicallyTracked } from "@/lib/config/officialTrackingStart";
 import { assertOfficialTrackingMarket } from "@/lib/config/officialTrackingMarkets";
@@ -59,7 +60,7 @@ import {
 } from "./cfbForwardMemberSnapshotStore";
 
 export const CFB_FORWARD_WRITER_RELEASE =
-  "cfb_forward_evidence_writer_2026_09_05_r51_confidence_economics_bridge" as const;
+  "cfb_forward_evidence_writer_2026_09_05_r52_optional_sharp_rejection_isolation" as const;
 export const CFB_FORWARD_MAX_QB_TEAMS_PER_RUN = 24 as const;
 export const CFB_FORWARD_RESULTS_BATCH_SIZE = 100 as const;
 export const CFB_FORWARD_MAX_PRIOR_GAME_IDS = 1200 as const;
@@ -662,7 +663,9 @@ export async function fetchCfbSharpOddsFallbackAttempt(
     return { result: await fetcher(args), error: null };
   } catch (error) {
     const message = splitRequestError(error);
-    if (!/sharpapi network error|fetch failed/i.test(message)) throw error;
+    const optionalProviderRejection = error instanceof SharpApiClientError
+      && (error.status === 400 || error.status === 404);
+    if (!optionalProviderRejection && !/sharpapi network error|fetch failed/i.test(message)) throw error;
     return {
       result: {
         release: CFB_SHARP_API_ODDS_RELEASE,
