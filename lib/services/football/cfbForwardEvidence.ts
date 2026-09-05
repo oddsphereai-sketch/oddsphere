@@ -57,7 +57,7 @@ export const CFB_FORWARD_LEGACY_EVIDENCE_SCHEMA_RELEASE =
 export const CFB_FORWARD_INITIAL_EVIDENCE_SCHEMA_RELEASE =
   "cfb_forward_evidence_snapshot_2026_08_25_r1" as const;
 export const CFB_FORWARD_EVIDENCE_COLLECTOR_RELEASE =
-  "cfb_forward_evidence_collector_2026_09_04_r27_sharp_fallback_isolation" as const;
+  "cfb_forward_evidence_collector_2026_09_05_r28_optional_sharp_rejection_isolation" as const;
 export const CFB_FORWARD_MEMBER_RELEASE =
   "cfb_v1_member_release_2026_09_05_r34_confidence_economics_bridge" as const;
 export const CFB_FORWARD_PRICE_PREVIOUS_MEMBER_RELEASE =

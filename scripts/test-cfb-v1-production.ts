@@ -58,6 +58,7 @@ import { fetchBalldontlieNcaafQuarterbacks } from "../lib/services/football/ball
 import { ingestCfbFinalScores } from "../lib/services/football/cfbScoreIngestService";
 import { buildCfbOfficialTrackingRecords } from "../lib/services/football/cfbOfficialTrackingRecord";
 import { FOOTBALL_MARKET_SCOPED_T60_TRACKING_RELEASE } from "../lib/services/football/footballMarketScopedTracking";
+import { SharpApiClientError } from "../lib/providers/real_api/_sharpApiClient";
 import {
   CFB_T60_MAX_CAPTURE_LAG_MINUTES,
   CFB_V1_DECISION_RELEASE,
@@ -1775,6 +1776,13 @@ const isolatedSharpNetworkFailure = await fetchCfbSharpOddsFallbackAttempt(
 assert.match(isolatedSharpNetworkFailure.error ?? "", /network error/);
 assert.equal(isolatedSharpNetworkFailure.result.attemptedGames, 1);
 assert.equal(isolatedSharpNetworkFailure.result.matchedGames, 0);
+const isolatedSharpBadRequest = await fetchCfbSharpOddsFallbackAttempt(
+  { games: [game], apiKey: "test" },
+  (async () => { throw new SharpApiClientError("SharpAPI HTTP 400 on /odds", { endpoint: "/odds", status: 400 }); }) as Parameters<typeof fetchCfbSharpOddsFallbackAttempt>[1],
+);
+assert.match(isolatedSharpBadRequest.error ?? "", /HTTP 400 on \/odds/);
+assert.equal(isolatedSharpBadRequest.result.attemptedGames, 1);
+assert.equal(isolatedSharpBadRequest.result.matchedGames, 0);
 await assert.rejects(
   fetchCfbSharpOddsFallbackAttempt(
     { games: [game], apiKey: "test" },
