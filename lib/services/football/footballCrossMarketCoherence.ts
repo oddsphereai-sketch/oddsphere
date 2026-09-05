@@ -1,5 +1,5 @@
 export const FOOTBALL_CROSS_MARKET_COHERENCE_RELEASE =
-  "football_cross_market_coherence_2026_09_04_r7_confidence_execution_status" as const;
+  "football_cross_market_coherence_2026_09_05_r8_verified_pmf_mean_median_winner" as const;
 
 const EPSILON = 1e-9;
 const EV_TOLERANCE = 1e-8;
@@ -128,7 +128,17 @@ export function auditFootballCrossMarketCoherence(args: {
 }): FootballCoherenceReport {
   const fatalIssues: FootballCoherenceIssue[] = [];
   const explanations: FootballCoherenceExplanation[] = [];
-  auditForecast(args.forecast, fatalIssues, args.allowPmfVerifiedProbabilityEndpoints === true);
+  const explicitScoreDirectionTolerance = args.publicScoreDirectionTolerancePoints;
+  if (explicitScoreDirectionTolerance !== undefined &&
+      (!Number.isFinite(explicitScoreDirectionTolerance) || explicitScoreDirectionTolerance < 0)) {
+    throw new Error("publicScoreDirectionTolerancePoints must be finite and nonnegative.");
+  }
+  auditForecast(
+    args.forecast,
+    fatalIssues,
+    args.allowPmfVerifiedProbabilityEndpoints === true,
+    explicitScoreDirectionTolerance ?? null,
+  );
 
   const unavailable = args.unavailableMarkets ?? [];
   const markets = [...args.decisions.map((decision) => decision.market), ...unavailable];
@@ -152,9 +162,6 @@ export function auditFootballCrossMarketCoherence(args: {
   if (args.requireDecisionSideFromForecast) {
     const scoreDirectionTolerance =
       args.publicScoreDirectionTolerancePoints ?? DEFAULT_PUBLIC_SCORE_DIRECTION_TOLERANCE_POINTS;
-    if (!Number.isFinite(scoreDirectionTolerance) || scoreDirectionTolerance < 0) {
-      throw new Error("publicScoreDirectionTolerancePoints must be finite and nonnegative.");
-    }
     for (const decision of normalized) {
       if (!decision.selectedSide || decision.market !== "moneyline" && decision.line === null) continue;
       const forecastSide = selectedForecastSideAtDecision(args.forecast, decision);
@@ -276,6 +283,7 @@ function auditForecast(
   forecast: FootballCoherenceForecast,
   issues: FootballCoherenceIssue[],
   allowPmfVerifiedProbabilityEndpoints: boolean,
+  verifiedPmfDirectionTolerancePoints: number | null,
 ): void {
   const probabilities = [forecast.awayWinProbability, forecast.homeWinProbability];
   const endpointsAllowed = allowPmfVerifiedProbabilityEndpoints && Boolean(forecast.pmf);
@@ -285,7 +293,10 @@ function auditForecast(
   }
   const expectedMargin = forecast.expectedHomePoints - forecast.expectedAwayPoints;
   const forecastDirection = direction(forecast.homeWinProbability - forecast.awayWinProbability);
-  if (direction(expectedMargin) !== forecastDirection) {
+  const narrowVerifiedPmfMeanMedianCross = Boolean(forecast.pmf) &&
+    verifiedPmfDirectionTolerancePoints !== null &&
+    Math.abs(expectedMargin) <= verifiedPmfDirectionTolerancePoints;
+  if (direction(expectedMargin) !== forecastDirection && !narrowVerifiedPmfMeanMedianCross) {
     issues.push({ code: "forecast_winner_score_disagreement", detail: `Expected margin ${expectedMargin}, home win ${forecast.homeWinProbability}.` });
   }
   const representativeMargin = forecast.representativeScore.home - forecast.representativeScore.away;
