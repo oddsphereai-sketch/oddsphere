@@ -98,6 +98,10 @@ const candidateDailyEdgeSource = readFileSync(
   "utf8",
 );
 const labTypesSource = readFileSync("app/lab/lib/labTypes.ts", "utf8");
+const lockBadgeSource = readFileSync(
+  "app/lab/components/daily-edge/LockBadge.tsx",
+  "utf8",
+);
 
 let passed = 0;
 let failed = 0;
@@ -1169,7 +1173,11 @@ check(
   "candidate visibly renders authoritative lock state on board and reader surfaces",
   candidateSource.includes('import { LockBadge }') &&
     candidateSource.includes("minute lock checks") &&
-    (candidateSource.match(/<LockBadge/g) ?? []).length === 4,
+    (candidateSource.match(/<LockBadge/g) ?? []).length === 4 &&
+    labTypesSource.includes('"open" | "locking" | "locked" | "missed"') &&
+    lockBadgeSource.includes('"LOCK MISSED"') &&
+    lockBadgeSource.includes('"LOCKED"') &&
+    lockBadgeSource.includes("No valid immutable T-60 capture was recorded"),
 );
 check(
   "a game, market, or expand action opens the full reader and it can collapse again",

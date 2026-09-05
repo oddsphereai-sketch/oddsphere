@@ -1,14 +1,13 @@
 /**
- * Phase 4.2.B — minimal lock-state badge for Daily Edge cards + reader.
+ * Authoritative lock-state stamp for Daily Edge cards + reader.
  *
  * Renders a single short label next to the game time:
  *
  *   lockState="open"     → renders NOTHING (compact default for unlocked
  *                          games, which is the majority during the day)
- *   lockState="locking"  → "Locks 5:05 PM CDT"  (uses scheduledLockAt)
- *   lockState="locked"   → "Locked 5:05 PM CDT" (uses lockedAt)
- *
- * Plain text, no chrome. Slot-in next to gameTime in any layout.
+ *   lockState="locking"  → "LOCKS · 5:05 PM CDT"       (scheduled boundary)
+ *   lockState="locked"   → "LOCKED · 5:05 PM CDT"      (actual immutable capture)
+ *   lockState="missed"   → "LOCK MISSED · 5:05 PM CDT" (no valid capture)
  *
  * Time formatting follows the member's browser timezone and includes the
  * timezone abbreviation. Stored lock timestamps remain canonical UTC.
@@ -41,12 +40,7 @@ export function LockBadge({
   const userTimeZone = useUserTimeZone();
   if (lockState === "open") return null;
 
-  const label = lockState === "locked" ? "Locked" : "Locks";
-  // For "locked" prefer the actual locked_at timestamp (real lock moment);
-  // fall back to scheduledLockAt if locked_at is null (defensive — once
-  // state is "locked" via the classifier mapping for already_started
-  // games, lockedAt may be null, in which case the scheduled fire time
-  // is the next best display value).
+  const label = lockState === "locked" ? "LOCKED" : lockState === "missed" ? "LOCK MISSED" : "LOCKS";
   const timeIso = lockState === "locked" && lockedAt !== null
     ? lockedAt
     : scheduledLockAt;
@@ -57,12 +51,18 @@ export function LockBadge({
     <>
       {withSeparator ? <span className="text-gray-700 ml-1">·</span> : null}
       <span
+        title={lockState === "missed" ? "No valid immutable T-60 capture was recorded for this game." : undefined}
         className={
-          "text-[11px] text-gray-500 tabular-nums" +
+          "inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.08em] tabular-nums " +
+          (lockState === "locked"
+            ? "border-emerald-400/35 bg-emerald-400/10 text-emerald-300"
+            : lockState === "missed"
+              ? "border-rose-400/40 bg-rose-400/10 text-rose-300"
+              : "border-amber-400/35 bg-amber-400/10 text-amber-300") +
           (className !== undefined ? " " + className : "")
         }
       >
-        {label} {formatted}
+        {label} · {formatted}
       </span>
     </>
   );

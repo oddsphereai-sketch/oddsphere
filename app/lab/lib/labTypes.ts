@@ -756,11 +756,11 @@ export type MarketEdgeDto = {
 };
 
 /**
- * Per-game lock + status block. Most fields are placeholders until the
- * lock DDL lands in Phase 4.1.12 — `lockState` is hardcoded "open" and
- * `lockedAt` is hardcoded null in this phase.
+ * Per-game immutable boundary status. `missed` means the scheduled lock
+ * passed without a valid immutable capture; it must never be presented as
+ * locked or admitted to official tracking.
  */
-export type LockState = "open" | "locking" | "locked";
+export type LockState = "open" | "locking" | "locked" | "missed";
 
 /**
  * Per-game post-grading result. Null pre-grading; populated by the

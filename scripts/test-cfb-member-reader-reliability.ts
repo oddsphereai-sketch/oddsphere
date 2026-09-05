@@ -15,7 +15,7 @@ assert.match(page, /label: "cfb-daily-edge-fixture",[\s\S]*timeoutMs: CFB_MEMBER
 assert.equal(MEMBER_DATA_READ_TIMEOUT_MS, 8_000, "other member reads retain the existing bounded deadline");
 assert.match(page, /read: \(\) => readCachedCfbMemberFixture\(/);
 assert.match(page, /label: "CFB · Weekly slate · evidence temporarily unavailable"[\s\S]*unavailable: true/);
-assert.match(reader, /weeklySlate\?\.unavailable \? <WeeklySlateEvidenceUnavailable/);
+assert.match(reader, /renderedWeeklySlate\?\.unavailable \? <WeeklySlateEvidenceUnavailable/);
 assert.match(reader, /this does not mean the weekly schedule is empty/i);
 
 console.log("CFB member reader caches the expensive fixture and never labels a read timeout as an empty slate.");

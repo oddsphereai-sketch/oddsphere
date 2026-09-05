@@ -74,7 +74,7 @@ import { cfbTeamIdentity } from "./cfbTeamIdentity";
 import { CFB_PUBLIC_SCORE_DIRECTION_TOLERANCE_POINTS } from "./footballCrossMarketCoherence";
 
 export const CFB_MEMBER_FIXTURE_RELEASE =
-  "cfb_v1_member_fixture_2026_09_05_r49_confidence_economics_bridge" as const;
+  "cfb_v1_member_fixture_2026_09_05_r50_authoritative_lock_truth" as const;
 export const CFB_PUBLIC_OUTCOME_CONTRACT_RELEASE =
   "cfb_market_sharp_public_outcome_contract_2026_09_05_r49_confidence_economics_bridge" as const;
 export const CFB_CONTEXT_ONLY_QUOTE_CAPTURE_SKEW_MS = 5_000 as const;
@@ -135,7 +135,7 @@ export function buildCfbMemberFixture(rows: CfbForwardStoredEvidence[], now = ne
   ]));
   const capturedAt = latest.reduce((value, row) => Date.parse(row.capturedAt) > Date.parse(value) ? row.capturedAt : value, latest[0]!.capturedAt);
   const games = latest
-    .map((row) => buildGame(row, movementRowsByGame.get(row.providerGameId)!))
+    .map((row) => buildGame(row, movementRowsByGame.get(row.providerGameId)!, now))
     .sort((a, b) => Date.parse(a.gameStartAt ?? "") - Date.parse(b.gameStartAt ?? ""));
   const date = localDate(games[0]!.gameStartAt!);
   const sourceChecksum = createHash("sha256")
@@ -612,7 +612,7 @@ function completeRowsForRelease(
   return values;
 }
 
-function buildGame(row: CfbForwardStoredEvidence, movementRows: CfbForwardStoredEvidence[]): DailyEdgeGameDto {
+function buildGame(row: CfbForwardStoredEvidence, movementRows: CfbForwardStoredEvidence[], now: string): DailyEdgeGameDto {
   const payload = row.payload;
   const awayIdentity = cfbTeamIdentity(payload.game.away.abbreviation);
   const homeIdentity = cfbTeamIdentity(payload.game.home.abbreviation);
@@ -624,8 +624,17 @@ function buildGame(row: CfbForwardStoredEvidence, movementRows: CfbForwardStored
   const total = buildMarket(payload, "total", totalDecision, movementRows);
   const spread = buildMarket(payload, "spread", spreadDecision, movementRows);
   const startsAt = payload.game.scheduledStart;
-  const started = Date.parse(row.capturedAt) >= Date.parse(startsAt);
-  const t60 = payload.stage === "t60";
+  const startsAtMs = Date.parse(startsAt);
+  const nowMs = Date.parse(now);
+  const scheduledLockAt = new Date(startsAtMs - 60 * 60_000).toISOString();
+  const validT60 = isValidImmutableBoundaryT60(row);
+  const lockState = validT60
+    ? "locked" as const
+    : nowMs >= startsAtMs
+      ? "missed" as const
+      : nowMs >= startsAtMs - 60 * 60_000
+        ? "locking" as const
+        : "open" as const;
   const allHeld = payload.decisions.heldMarkets.length === 3;
   const headline = [moneyline, total, spread].sort((a, b) => verdictRank(b.verdict.key) - verdictRank(a.verdict.key))[0]!;
   const primaryForecast = payload.decisions.forecast;
@@ -671,9 +680,9 @@ function buildGame(row: CfbForwardStoredEvidence, movementRows: CfbForwardStored
     gameTime: timeEt(startsAt),
     gameStartAt: startsAt,
     gameStartMinutes: minutesEt(startsAt),
-    scheduledLockAt: new Date(Date.parse(startsAt) - 60 * 60_000).toISOString(),
-    lockState: started || t60 ? "locked" : Date.parse(row.capturedAt) >= Date.parse(startsAt) - 60 * 60_000 ? "locking" : "open",
-    lockedAt: t60 ? row.capturedAt : null,
+    scheduledLockAt,
+    lockState,
+    lockedAt: validT60 ? row.capturedAt : null,
     updatedAt: row.capturedAt,
     generatedAt: row.capturedAt,
     holdReason: allHeld ? "cfb_exact_price_tuple_incomplete" : null,
