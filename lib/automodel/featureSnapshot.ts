@@ -79,6 +79,12 @@ const TRUSTED_REAL_BOOK_PRIORITY: readonly string[] = BOOK_PRIORITY.filter(
 const TOTAL_BOOK_PRIORITY: readonly string[] = TRUSTED_REAL_BOOK_PRIORITY;
 const ML_BOOK_PRIORITY: readonly string[] = TRUSTED_REAL_BOOK_PRIORITY;
 const MODEL_PRICE_MAX_SOURCE_AGE_MS = 90 * 60 * 1000;
+// Fetch line history in stable, bounded pages. A normal MLB slate can exceed
+// PostgREST's default 1,000-row response cap, especially late in the day.
+// Silently truncating this query removes the highest-id games from the model
+// input and incorrectly turns otherwise priced markets into operational holds.
+const FEATURE_SNAPSHOT_LINE_PAGE_SIZE = 500;
+const FEATURE_SNAPSHOT_LINE_MAX_ROWS = 10_000;
 // Supabase/PostgREST projects commonly cap a response at 1,000 rows. A full
 // MLB slate can exceed that once active team batters, lineups, relievers, and
 // starters are combined, so every all-player lookup must stay below the cap.
@@ -320,6 +326,7 @@ type WeatherRow = {
 };
 
 type LineRow = {
+  id?: number;
   game_id: number;
   market_type: string;
   sportsbook: string;
@@ -328,6 +335,30 @@ type LineRow = {
   odds_american: number | null;
   fetched_at?: string | null;
 };
+
+async function collectBoundedLineRows(
+  readPage: (from: number, to: number) => Promise<LineRow[]>,
+  pageSize = FEATURE_SNAPSHOT_LINE_PAGE_SIZE,
+  maxRows = FEATURE_SNAPSHOT_LINE_MAX_ROWS,
+): Promise<LineRow[]> {
+  if (!Number.isInteger(pageSize) || pageSize <= 0) {
+    throw new Error("featureSnapshot: line page size must be a positive integer");
+  }
+  if (!Number.isInteger(maxRows) || maxRows < pageSize || maxRows % pageSize !== 0) {
+    throw new Error("featureSnapshot: line row cap must be a positive multiple of page size");
+  }
+
+  const rows: LineRow[] = [];
+  for (let from = 0; from < maxRows; from += pageSize) {
+    const page = await readPage(from, from + pageSize - 1);
+    rows.push(...page);
+    if (page.length < pageSize) return rows;
+  }
+
+  throw new Error(
+    `featureSnapshot: lines query reached bounded ${maxRows}-row cap; refusing a partial market snapshot`,
+  );
+}
 
 type SharpSignalRow = {
   game_id: number;
@@ -1139,16 +1170,22 @@ export async function buildFeatureSnapshots(
   );
 
   // ── Query 12: lines ────────────────────────────────────────────
-  const { data: linesRaw, error: linesErr } = await supabase
-    .from("lines")
-    .select("game_id, market_type, sportsbook, side, line_value, odds_american, fetched_at")
-    .in("game_id", Array.from(gameIds))
-    .in("market_type", ["total", "moneyline", "spread"]);
-  if (linesErr) {
-    throw new Error(`featureSnapshot: lines query failed: ${linesErr.message}`);
-  }
+  const lineGameIds = Array.from(gameIds);
+  const linesRaw = await collectBoundedLineRows(async (from, to) => {
+    const { data, error } = await supabase
+      .from("lines")
+      .select("id, game_id, market_type, sportsbook, side, line_value, odds_american, fetched_at")
+      .in("game_id", lineGameIds)
+      .in("market_type", ["total", "moneyline", "spread"])
+      .order("id", { ascending: true })
+      .range(from, to);
+    if (error) {
+      throw new Error(`featureSnapshot: lines query failed: ${error.message}`);
+    }
+    return (data ?? []) as unknown as LineRow[];
+  });
   const linesByGame = groupBy(
-    ((linesRaw ?? []) as unknown as LineRow[]).filter((line) => isFreshModelPriceSource(line.fetched_at)),
+    linesRaw.filter((line) => isFreshModelPriceSource(line.fetched_at)),
     (l) => l.game_id
   );
 
@@ -1520,12 +1557,15 @@ export async function buildFeatureSnapshots(
 // ─────────────────────────────────────────────────────────────
 
 export const __TEST__ = {
+  collectBoundedLineRows,
   deriveSeason,
   computePitchQualityScore,
   pickListedTotal,
   pickMlOdds,
   CURRENT_SEASON_FALLBACK,
   TOTAL_BOOK_PRIORITY,
+  FEATURE_SNAPSHOT_LINE_PAGE_SIZE,
+  FEATURE_SNAPSHOT_LINE_MAX_ROWS,
 };
 
 // Silence unused-helper warnings (kept available for future helpers).

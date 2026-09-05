@@ -298,15 +298,26 @@ changed; only deterministic settlement of existing locked rows is affected.
 
 - Projection runtime: resolved automodel `v2_2`
 - First-inning runtime: `fi_v2` with FI-scoped release `mlb_first_inning_release_2026_09_04_r85_independent_uncertainty` and probability head `mlb_first_inning_fi_v10_independent_uncertainty_target_excluded_2026_09_04`. r85 retains r84's pre-r61 65% independent / 35% target-excluded multi-book posterior and its 48%-52% corroborated uncertainty band. When the evaluated quote is the sole accepted pair, the forecast remains independent-only and now requires the independent probability to clear 55% NRFI or 55% YRFI; otherwise it is a genuine null-side Toss-Up. The evaluated quote remains exact-price economics only. Full-game tuples, probabilities, grades, the sole writer/lease, providers, query budgets, locks, tracking, and settlement are unchanged.
-- Public calibration: `mlb_public_calibration_v30_first_inning_evaluated_quote_exclusion_2026_09_02`
-- Decision release: `mlb_daily_edge_decision_2026_09_04_r82_total_support_under_scope`
-- Rule bundle: `mlb_daily_edge_rule_bundle_v70_total_support_under_scope_2026_09_04`
+- Public calibration: `mlb_public_calibration_v32_complete_line_pagination_2026_09_05`
+- Decision release: `mlb_daily_edge_decision_2026_09_05_r86_complete_line_pagination`
+- Rule bundle: `mlb_daily_edge_rule_bundle_v71_complete_line_pagination_2026_09_05`
+- Market input snapshot: `mlb_market_input_snapshot_v2_complete_line_pagination_2026_09_05`
 - Grade policy: `mlb_public_grade_policy_v57_total_support_under_scope_2026_09_04`
-- Correction policy: `mlb_prediction_corrections_v23_split_pair_recency_2026_08_31`
+- Correction policy: `mlb_prediction_corrections_v24_full_game_publication_coherence_2026_09_02`
 - Tracking contract: `member_facing_lock_v8_priority_retry_minute_cadence_2026_08_11`
 - Lock coherence: `mlb_lock_coherence_2026_09_02_r3_failed_economics_tuple`
 - Machine registry: `lib/automodel/mlbModelLayerVersions.ts`
 - Authoritative member-facing writer: `lib/services/predictionRecordService.ts`
+
+The September 5 r86 input correction preserves the r82 full-game model formulas,
+all r85 first-inning probability/calibration/tuple identifiers and behavior, and
+every stake rule. It replaces the full-game feature snapshot's single unbounded
+`lines` response with stable `id`-ordered 500-row pages and a fail-closed 10,000
+row ceiling. This prevents PostgREST's 1,000-row response limit from silently
+dropping the last games on a large slate and falsely classifying priced Moneyline
+and Total markets as unavailable. The correction restores authentic named-book
+price inputs only; it does not fabricate a price, alter a locked record, or add a
+second writer.
 
 Shared member presentation release: `daily_edge_member_presentation_2026_08_28_r15_football_unavailable_prediction_copy`.
 Internal operational holds remain high-severity health/recovery state, but the
