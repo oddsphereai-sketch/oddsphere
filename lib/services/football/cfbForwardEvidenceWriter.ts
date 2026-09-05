@@ -16,6 +16,7 @@ import {
   buildCfbForwardMarketOutlooks,
   determineCfbForwardCollectionNeed,
   planCfbForwardEvidenceCaptures,
+  type CfbForwardCapturePlan,
   type CfbForwardEvidencePayload,
   type CfbForwardOperationalOpening,
   type CfbForwardPublishedDecisionBundle,
@@ -60,7 +61,7 @@ import {
 } from "./cfbForwardMemberSnapshotStore";
 
 export const CFB_FORWARD_WRITER_RELEASE =
-  "cfb_forward_evidence_writer_2026_09_05_r53_verified_pmf_mean_median_winner" as const;
+  "cfb_forward_evidence_writer_2026_09_05_r54_per_game_lock_isolation" as const;
 export const CFB_FORWARD_MAX_QB_TEAMS_PER_RUN = 24 as const;
 export const CFB_FORWARD_RESULTS_BATCH_SIZE = 100 as const;
 export const CFB_FORWARD_MAX_PRIOR_GAME_IDS = 1200 as const;
@@ -81,6 +82,7 @@ export type CfbForwardWriterResult = {
   heldMarkets: number;
   apiCallsMaximum: number;
   healthHolds: string[];
+  captureFailures: CfbForwardCaptureFailure[];
   publicationAttempted: boolean;
   memberSnapshotAttempted: boolean;
   memberSnapshotUpdated: boolean;
@@ -91,6 +93,38 @@ export type CfbForwardWriterResult = {
   trackingRecordsInserted: number;
   trackingRecordsExisting: number;
 };
+
+export type CfbForwardCaptureFailure = {
+  providerGameId: string;
+  stage: CfbForwardCapturePlan["stage"];
+  error: string;
+};
+
+/**
+ * Isolate synchronous game-specific validation/calculation failures so one
+ * malformed matchup cannot prevent otherwise-due immutable T-60 captures.
+ * Shared provider, storage, lease, and append failures remain fail-closed
+ * outside this boundary.
+ */
+export function buildCfbForwardPayloadsWithIsolation<T>(
+  plans: CfbForwardCapturePlan[],
+  build: (plan: CfbForwardCapturePlan) => T,
+): { payloads: T[]; captureFailures: CfbForwardCaptureFailure[] } {
+  const payloads: T[] = [];
+  const captureFailures: CfbForwardCaptureFailure[] = [];
+  for (const plan of plans) {
+    try {
+      payloads.push(build(plan));
+    } catch (error) {
+      captureFailures.push({
+        providerGameId: plan.game.providerGameId,
+        stage: plan.stage,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+  return { payloads, captureFailures };
+}
 
 export async function runCfbForwardEvidenceWriter(args: {
   client: SupabaseClient;
@@ -176,7 +210,7 @@ export async function runCfbForwardEvidenceWriter(args: {
     books.push(...row.payload.market.currentBooks);
     captureHistoryBooksByGame.set(row.providerGameId, books);
   }
-  const payloads = plans.map((plan): CfbForwardEvidencePayload => {
+  const { payloads, captureFailures } = buildCfbForwardPayloadsWithIsolation(plans, (plan): CfbForwardEvidencePayload => {
     const sharpBooks = sharpFallback.booksByGame[plan.game.providerGameId] ?? [];
     const sharpDisplayBooks = sharpFallback.displayBooksByGame[plan.game.providerGameId] ?? [];
     const currentBooks = mergeCfbNamedBooks(slate.currentOddsComparableBooksByGame[plan.game.providerGameId] ?? [], sharpBooks);
@@ -445,7 +479,9 @@ export async function runCfbForwardEvidenceWriter(args: {
     healthHolds: [...new Set([
       ...payloads.flatMap((payload) => payload.coverage.healthHolds),
       ...(sharpFallbackAttempt.error ? ["sharpapi_odds_fallback_request_failed"] : []),
+      ...(captureFailures.length > 0 ? ["game_capture_failed"] : []),
     ])],
+    captureFailures,
     publicationAttempted: true,
     ...memberSnapshot,
     ...tracking,
@@ -821,5 +857,5 @@ async function upsertGames(client: SupabaseClient, payloads: CfbForwardEvidenceP
 function normalizeStatus(value: string): string { const normalized = value.toLowerCase(); return normalized === "final" ? "final" : normalized === "in_progress" ? "in_progress" : normalized === "postponed" || normalized === "canceled" ? normalized : "scheduled"; }
 
 function emptyResult(reason: string, tracking: TrackingResult, memberSnapshot: MemberSnapshotResult): CfbForwardWriterResult {
-  return { writerRelease: CFB_FORWARD_WRITER_RELEASE, collected: false, collectionReason: reason, proposed: 0, inserted: 0, games: 0, stages: { opening: 0, unlocked: 0, t60: 0 }, publishedEvaluations: 0, publishedBestAngles: 0, publishedLeans: 0, publishedWatchlists: 0, publishedNoPlays: 0, heldMarkets: 0, apiCallsMaximum: 0, healthHolds: [], publicationAttempted: false, ...memberSnapshot, ...tracking };
+  return { writerRelease: CFB_FORWARD_WRITER_RELEASE, collected: false, collectionReason: reason, proposed: 0, inserted: 0, games: 0, stages: { opening: 0, unlocked: 0, t60: 0 }, publishedEvaluations: 0, publishedBestAngles: 0, publishedLeans: 0, publishedWatchlists: 0, publishedNoPlays: 0, heldMarkets: 0, apiCallsMaximum: 0, healthHolds: [], captureFailures: [], publicationAttempted: false, ...memberSnapshot, ...tracking };
 }

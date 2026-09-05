@@ -9,7 +9,7 @@ import {
 } from "./cfbMemberFixture";
 
 export const CFB_FORWARD_MEMBER_SNAPSHOT_RELEASE =
-  "cfb_forward_member_snapshot_2026_09_05_r7_confidence_economics_bridge" as const;
+  "cfb_forward_member_snapshot_2026_09_05_r8_authoritative_lock_truth" as const;
 
 const SNAPSHOT_TTL_MS = 90 * 60 * 1000;
 const SNAPSHOT_STALE_MS = 8 * 60 * 60 * 1000;

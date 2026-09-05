@@ -38,6 +38,7 @@ import {
 import { CFB_FORWARD_EVIDENCE_MAX_ROWS, CFB_FORWARD_EVIDENCE_PAGE_SIZE, readCfbForwardEvidence } from "../lib/services/football/cfbForwardEvidenceStore";
 import { normalizeCfbPlaybookLine, normalizeCfbPlaybookSplits } from "../lib/services/football/cfbPlaybookEvidence";
 import {
+  buildCfbForwardPayloadsWithIsolation,
   cfbMarketAnchorHealthHolds,
   cfbLockPlanningEvidence,
   cfbTrackingPayloadsForRun,
@@ -98,6 +99,22 @@ const game: NcaafGame = {
   away: { id: 10, conferenceId: 1, abbreviation: "UNC", name: "North Carolina Tar Heels", fbs: true },
   home: { id: 43, conferenceId: 3, abbreviation: "TCU", name: "TCU Horned Frogs", fbs: true },
 };
+
+const isolatedPlanGame: NcaafGame = { ...game, providerGameId: "isolated-good" };
+const failedPlanGame: NcaafGame = { ...game, providerGameId: "isolated-bad" };
+const isolatedPayloadBuild = buildCfbForwardPayloadsWithIsolation([
+  { game: failedPlanGame, stage: "t60", captureTiming: "on_time", cutoffAt: "2026-08-29T15:00:00.000Z", t60LagMinutes: 10 },
+  { game: isolatedPlanGame, stage: "t60", captureTiming: "on_time", cutoffAt: "2026-08-29T15:00:00.000Z", t60LagMinutes: 10 },
+], (plan) => {
+  if (plan.game.providerGameId === "isolated-bad") throw new Error("fixture-specific coherence failure");
+  return plan.game.providerGameId;
+});
+assert.deepEqual(isolatedPayloadBuild.payloads, ["isolated-good"], "one game-specific failure must not suppress a sibling T-60 capture");
+assert.deepEqual(isolatedPayloadBuild.captureFailures, [{
+  providerGameId: "isolated-bad",
+  stage: "t60",
+  error: "fixture-specific coherence failure",
+}]);
 
 const currentBooks: NcaafBookOdds[] = [
   book("fanduel", -330, 260, -7.5, -112, -108, 47.5, -105, -115),
@@ -352,7 +369,49 @@ assert.equal(compactMemberSnapshot.snapshotRelease, CFB_FORWARD_MEMBER_SNAPSHOT_
 assert.equal(compactMemberSnapshot.fixture, member, "the fast snapshot preserves the authoritative fixture byte-for-byte");
 assert.equal(compactMemberSnapshot.sourceChecksum, member.provenance.sourceChecksum);
 assert.equal(member.snapshot.games.length, 1);
-assert.equal(member.fixtureRelease, "cfb_v1_member_fixture_2026_09_05_r49_confidence_economics_bridge");
+assert.equal(member.fixtureRelease, "cfb_v1_member_fixture_2026_09_05_r50_authoritative_lock_truth");
+assert.equal(member.snapshot.games[0]!.lockState, "locked", "only a fully valid immutable T-60 tuple is labeled locked");
+assert.equal(member.snapshot.games[0]!.lockedAt, lockedAt);
+
+const latePayload = structuredClone(payload);
+latePayload.capturedAt = "2026-08-29T15:52:00.000Z";
+latePayload.t60LagMinutes = 52;
+latePayload.coverage.healthHolds = ["t60_capture_late"];
+const lateRow: CfbForwardStoredEvidence = {
+  ...evidence,
+  id: "late-t60-row",
+  capturedAt: latePayload.capturedAt,
+  payload: latePayload,
+  payloadSha256: hashCfbForwardEvidencePayload(latePayload),
+};
+const lateFixture = buildCfbMemberFixtureAtTime([lateRow], "2026-08-29T16:05:00.000Z");
+assert.equal(lateFixture.snapshot.games[0]!.lockState, "missed", "a late or unhealthy T-60 attempt must never be represented as locked");
+assert.equal(lateFixture.snapshot.games[0]!.lockedAt, null);
+
+const unlockedPayload = structuredClone(payload);
+unlockedPayload.stage = "unlocked";
+unlockedPayload.captureTiming = "on_time";
+unlockedPayload.capturedAt = "2026-08-29T14:00:00.000Z";
+unlockedPayload.cutoffAt = null;
+unlockedPayload.t60LagMinutes = null;
+const unlockedRow: CfbForwardStoredEvidence = {
+  ...evidence,
+  id: "unlocked-row",
+  stage: "unlocked",
+  capturedAt: unlockedPayload.capturedAt,
+  payload: unlockedPayload,
+  payloadSha256: hashCfbForwardEvidencePayload(unlockedPayload),
+};
+assert.equal(
+  buildCfbMemberFixtureAtTime([unlockedRow], "2026-08-29T15:20:00.000Z").snapshot.games[0]!.lockState,
+  "locking",
+  "a game inside the T-60 window remains visibly pending until a valid immutable capture exists",
+);
+assert.equal(
+  buildCfbMemberFixtureAtTime([unlockedRow], "2026-08-29T16:05:00.000Z").snapshot.games[0]!.lockState,
+  "missed",
+  "a game past kickoff without a valid immutable capture must surface the missed boundary",
+);
 assert.equal(member.snapshot.games[0]!.collegeFootballScope, "fbs_involved", "the CFB reader must classify every member game for the FBS-first board without changing writer scope");
 assert.equal(member.snapshot.games[0]!.awayTeamDisplayName, game.away.name);
 assert.equal(member.snapshot.games[0]!.homeTeamDisplayName, game.home.name);
