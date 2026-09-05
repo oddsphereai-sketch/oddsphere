@@ -4,6 +4,8 @@ import {
   CFB_HOLISTIC_CONFIDENCE_CANDIDATE_RELEASE,
   evaluateCfbHolisticConfidence,
   type CfbHolisticSelectedSide,
+  favoritePriceTierCeiling,
+  gradeForScore,
 } from "../../lib/services/football/cfbHolisticConfidenceCandidate";
 
 type Json = Record<string, any>;
@@ -46,10 +48,15 @@ async function main(): Promise<void> {
       const sharpGap = sharpGapPp(payload, decision, selectedSide);
       const publicGap = publicGapPp(payload, decision, selectedSide);
       const movement = movementInputs(payload, decision, selectedSide);
+      const sharpDirection = splitDirection(sharpGap, 10, 10);
+      const publicDirection = splitDirection(publicGap, 8, 12);
+      const movementDirection = movement.direction;
       const candidate = evaluateCfbHolisticConfidence({
         market: decision.market,
         selectedSide,
         modelProbability: decision.modelProbability,
+        marketFairProbability: decision.marketFairProbability,
+        decisionGrade: decision.grade,
         exactPriceExpectedValue: decision.expectedValue,
         evaluatedPrice: decision.evaluatedQuote.price,
         evaluatedLine: decision.evaluatedQuote.line,
@@ -57,8 +64,18 @@ async function main(): Promise<void> {
         publicMoneyMinusTicketsPp: publicGap,
         selectedSideLineDelta: movement.lineDelta,
         selectedSideImpliedProbabilityDeltaPp: movement.impliedProbabilityDeltaPp,
+        sharpDirection,
+        movementDirection,
+        publicDirection,
       });
       const result = settleDecision(decision, selectedSide, resultsByGame.get(String(row.provider_game_id)) ?? null);
+      const activeConfidenceScore = Math.max(0, Math.min(100,
+        100 * decision.modelProbability + candidate.evidenceConfidenceAdjustment,
+      ));
+      const activeGrade = applyCeiling(
+        gradeForScore(activeConfidenceScore),
+        favoritePriceTierCeiling(decision.market, decision.evaluatedQuote.price),
+      );
       return {
         providerGameId: row.provider_game_id,
         matchup: `${row.away_team}@${row.home_team}`,
@@ -71,11 +88,16 @@ async function main(): Promise<void> {
         probability: decision.modelProbability,
         edgePp: decision.edgePercentagePoints,
         ev: decision.expectedValue,
-        incumbentGrade: decision.grade,
+        baseDecisionGrade: decision.grade,
+        incumbentGrade: activeGrade,
         candidateGrade: candidate.confidenceGrade,
         executionStatus: candidate.executionStatus,
         result,
         confidenceScore: candidate.confidenceScore,
+        incumbentConfidenceScore: activeConfidenceScore,
+        marketFairProbability: decision.marketFairProbability,
+        decisionGradeCeiling: candidate.decisionGradeCeiling,
+        marketEvidenceBallot: candidate.marketEvidenceBallot,
         evidenceAdjustment: candidate.evidenceConfidenceAdjustment,
         evidence: {
           sharpGapPp: sharpGap,
@@ -100,6 +122,23 @@ async function main(): Promise<void> {
     date,
     games: latestComplete.size,
     evaluatedMarkets: rows.length,
+    probabilityGrades: Object.fromEntries(["Best Angle", "Lean", "Watchlist", "No Play"].map((grade) => [
+      grade,
+      rows.filter((row) => gradeForScore(100 * row.probability) === grade).length,
+    ])),
+    baseDecisionGrades: Object.fromEntries(["Best Angle", "Lean", "Watchlist", "No Play"].map((grade) => [
+      grade,
+      rows.filter((row) => row.baseDecisionGrade === grade).length,
+    ])),
+    gradeCrossTable: Object.fromEntries([...new Set(rows.map((row) => [
+      gradeForScore(100 * row.probability),
+      row.baseDecisionGrade,
+      row.incumbentGrade,
+    ].join("|")))].sort().map((key) => [key, rows.filter((row) => [
+      gradeForScore(100 * row.probability),
+      row.baseDecisionGrade,
+      row.incumbentGrade,
+    ].join("|") === key).length])),
     incumbentGrades: gradeCounts("incumbentGrade"),
     candidateGrades: gradeCounts("candidateGrade"),
     transitions: { total: transitions.length, promotions: promotionCount, demotions: demotionCount },
@@ -122,7 +161,11 @@ async function main(): Promise<void> {
       candidateConfidenceOnlyShops: outcomeRecord(rows.filter((row) => actionable(row.candidateGrade) && row.executionStatus === "shop")),
     },
     sideChanges: 0,
-    largeSpreads: rows.filter((row) => row.market === "spread" && Math.abs(row.line ?? 0) > 24),
+    largeSpreads: {
+      rows: rows.filter((row) => row.market === "spread" && Math.abs(row.line ?? 0) > 24).length,
+      incumbentActionable: rows.filter((row) => row.market === "spread" && Math.abs(row.line ?? 0) > 24 && actionable(row.incumbentGrade)).length,
+      candidateActionable: rows.filter((row) => row.market === "spread" && Math.abs(row.line ?? 0) > 24 && actionable(row.candidateGrade)).length,
+    },
     umass: rows.filter((row) => row.matchup === "MASS@RUTG"),
     ...(includeRows ? { rows } : { changedRows: transitions }),
   };
@@ -160,17 +203,33 @@ function publicGapPp(payload: Json, decision: Json, side: CfbHolisticSelectedSid
   return finiteGap(split.underMoneyPct, split.underBetsPct);
 }
 
-function movementInputs(payload: Json, decision: Json, side: CfbHolisticSelectedSide): { lineDelta: number | null; impliedProbabilityDeltaPp: number | null } {
+function movementInputs(payload: Json, decision: Json, side: CfbHolisticSelectedSide): { lineDelta: number | null; impliedProbabilityDeltaPp: number | null; direction: "support" | "resistance" | "neutral" | "unknown" } {
   const opening = payload.market?.operationalOpening?.quote;
   const current = payload.market?.current;
-  if (!opening || !current || normalizeBook(opening.sportsbook) !== normalizeBook(current.sportsbook)) return { lineDelta: null, impliedProbabilityDeltaPp: null };
+  if (!opening || !current || normalizeBook(opening.sportsbook) !== normalizeBook(current.sportsbook)) return { lineDelta: null, impliedProbabilityDeltaPp: null, direction: "unknown" };
   const first = quote(opening, decision.market, side);
   const latest = quote(current, decision.market, side);
-  if (!first || !latest) return { lineDelta: null, impliedProbabilityDeltaPp: null };
+  if (!first || !latest) return { lineDelta: null, impliedProbabilityDeltaPp: null, direction: "unknown" };
+  const lineDelta = finite(first.line) && finite(latest.line) ? latest.line - first.line : null;
+  const impliedProbabilityDeltaPp = 100 * (implied(latest.price) - implied(first.price));
+  let signedSupport = impliedProbabilityDeltaPp;
+  if (lineDelta !== null && Math.abs(lineDelta) >= 0.5) {
+    if (decision.market === "spread") signedSupport = -lineDelta;
+    else if (side === "over") signedSupport = lineDelta;
+    else signedSupport = -lineDelta;
+  }
   return {
-    lineDelta: finite(first.line) && finite(latest.line) ? latest.line - first.line : null,
-    impliedProbabilityDeltaPp: 100 * (implied(latest.price) - implied(first.price)),
+    lineDelta,
+    impliedProbabilityDeltaPp,
+    direction: signedSupport >= 1 ? "support" : signedSupport <= -1 ? "resistance" : "neutral",
   };
+}
+
+function splitDirection(value: number | null, supportThreshold: number, resistanceThreshold: number): "support" | "resistance" | "neutral" | "unknown" {
+  if (value === null) return "unknown";
+  if (value >= supportThreshold) return "support";
+  if (value <= -resistanceThreshold) return "resistance";
+  return "neutral";
 }
 
 function quote(book: Json, market: string, side: CfbHolisticSelectedSide): { line: number | null; price: number } | null {
@@ -191,6 +250,9 @@ function finite(value: unknown): value is number { return typeof value === "numb
 function implied(price: number): number { return price > 0 ? 100 / (price + 100) : -price / (-price + 100); }
 function normalizeBook(value: unknown): string { return String(value ?? "").toLowerCase().replace(/[^a-z0-9]+/g, ""); }
 function rank(grade: string): number { return grade === "Best Angle" ? 3 : grade === "Lean" ? 2 : grade === "Watchlist" ? 1 : 0; }
+function applyCeiling(grade: string, ceiling: string | null): string {
+  return ceiling !== null && rank(grade) > rank(ceiling) ? ceiling : grade;
+}
 function actionable(grade: string): boolean { return grade === "Best Angle" || grade === "Lean"; }
 function settleDecision(decision: Json, side: CfbHolisticSelectedSide, game: Json | null): "win" | "loss" | "push" | null {
   if (!game || !finite(game.home_score) || !finite(game.away_score)) return null;

@@ -1,8 +1,13 @@
 import assert from "node:assert/strict";
 import {
+  assessMlbModelLayerStamp,
   classifyFiHoldDiagnostic,
   isDailyEdgeActionableGrade,
 } from "../lib/services/dailyEdge/dailyEdgeDataHealthMonitor";
+import {
+  buildMlbModelLayerVersions,
+  MLB_MODEL_LAYER_VERSION_IDS,
+} from "../lib/automodel/mlbModelLayerVersions";
 
 assert.equal(isDailyEdgeActionableGrade("Lean"), true);
 assert.equal(isDailyEdgeActionableGrade("Best Angle"), true);
@@ -11,6 +16,31 @@ assert.equal(isDailyEdgeActionableGrade("Watchlist"), false);
 assert.equal(isDailyEdgeActionableGrade("market_aligned"), false);
 assert.equal(isDailyEdgeActionableGrade("No Play"), false);
 assert.equal(isDailyEdgeActionableGrade(null), false);
+
+const currentFiStamp = buildMlbModelLayerVersions("first_inning");
+assert.equal(
+  assessMlbModelLayerStamp({ actual: currentFiStamp, market: "first_inning", locked: false }).classification,
+  "current_contract",
+  "the health monitor must accept the active FI-scoped probability head",
+);
+assert.notEqual(
+  currentFiStamp.first_inning_probability_head,
+  MLB_MODEL_LAYER_VERSION_IDS.first_inning_probability_head,
+  "the FI release remains intentionally scoped without changing the full-game base stamp",
+);
+assert.equal(
+  assessMlbModelLayerStamp({
+    actual: {
+      ...currentFiStamp,
+      first_inning_probability_head: MLB_MODEL_LAYER_VERSION_IDS.first_inning_probability_head,
+      active_probability_head: MLB_MODEL_LAYER_VERSION_IDS.first_inning_probability_head,
+    },
+    market: "first_inning",
+    locked: false,
+  }).classification,
+  "incoherent",
+  "an unlocked FI row stamped with the superseded base head must still be flagged",
+);
 
 const sparseKnownStarter = classifyFiHoldDiagnostic({
   fi_v2_audit: {

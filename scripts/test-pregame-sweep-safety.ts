@@ -32,8 +32,9 @@ import {
   PREGAME_SWEEP_DRY_RUN_ENV,
 } from "../lib/cron/pregameSweepSafety";
 import {
-  GET as pregameSweep,
-} from "../app/api/cron/pregame-sweep/route";
+  pregameSweepSports,
+} from "../lib/cron/pregameSweepSports";
+import { GET as pregameSweep } from "../app/api/cron/pregame-sweep/route";
 
 let pass = 0;
 let fail = 0;
@@ -106,6 +107,11 @@ async function main() {
   {
     check("PREGAME_SWEEP_CRON_ACTIVE_ENV = 'PREGAME_SWEEP_CRON_ACTIVE'", PREGAME_SWEEP_CRON_ACTIVE_ENV === "PREGAME_SWEEP_CRON_ACTIVE");
     check("PREGAME_SWEEP_DRY_RUN_ENV = 'PREGAME_SWEEP_DRY_RUN'", PREGAME_SWEEP_DRY_RUN_ENV === "PREGAME_SWEEP_DRY_RUN");
+    const ownedSports = pregameSweepSports({});
+    check("generic sweep never claims CFB lock ownership", !ownedSports.includes("cfb"));
+    check("generic sweep never claims NFL lock ownership", !ownedSports.includes("nfl"));
+    check("generic sweep never claims soccer/UCL lock ownership", !ownedSports.includes("ucl"));
+    check("WNBA lock checks remain explicit opt-in", pregameSweepSports({ WNBA_PREGAME_SWEEP_ENABLED: "true" }).includes("wnba"));
   }
 
   // ── [D] Blocked-report builder ──────────────────────────────────────

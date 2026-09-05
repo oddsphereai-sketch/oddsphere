@@ -89,7 +89,7 @@ type CandidateRow = {
 };
 
 async function main(): Promise<void> {
-  if (MLB_PROPS_MODEL_RELEASE_ID !== "mlb_props_2026_09_02_r41") {
+  if (MLB_PROPS_MODEL_RELEASE_ID !== "mlb_props_2026_09_05_r42") {
     throw new Error(`Candidate runtime moved to ${MLB_PROPS_MODEL_RELEASE_ID}.`);
   }
   const date = option("date") ?? easternDate();

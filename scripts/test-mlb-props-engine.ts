@@ -73,6 +73,11 @@ import {
 import type { MlbGameEntity, MlbHistoricalStatRow, MlbProbablePitcher, PropOddsSnapshot } from "../lib/mlb/props/providers";
 import { evaluateMlbPropsLaunchReadiness } from "../lib/mlb/props/launchReadiness";
 import { MLB_PROPS_MODEL_RELEASE_ID } from "../lib/mlb/props/marketModelVersions";
+import {
+  MLB_PROPS_ACTIONABLE_PRICE_FLOOR,
+  MLB_PROPS_BEST_ANGLE_PRICE_FLOOR,
+  mlbPropsGradeAfterPriceConfidence,
+} from "../lib/mlb/props/priceConfidencePolicy";
 
 let pass = 0;
 let fail = 0;
@@ -98,6 +103,18 @@ function env(values: Record<string, string>): NodeJS.ProcessEnv {
 }
 
 async function main() {
+  check("MLB props premium placement caps use the declared graduated prices",
+    MLB_PROPS_BEST_ANGLE_PRICE_FLOOR === -200 && MLB_PROPS_ACTIONABLE_PRICE_FLOOR === -400);
+  check("Best Angle retains premium placement at exactly -200",
+    mlbPropsGradeAfterPriceConfidence({ grade: "BEST_ANGLE", price: -200 }).grade === "BEST_ANGLE");
+  check("Best Angle becomes Lean between -200 and -400",
+    mlbPropsGradeAfterPriceConfidence({ grade: "BEST_ANGLE", price: -260 }).grade === "LEAN");
+  check("ordinary actionable props become Watchlist worse than -400",
+    mlbPropsGradeAfterPriceConfidence({ grade: "LEAN", price: -401 }).grade === "WATCHLIST");
+  check("locked rows remain immutable under later price policy releases",
+    mlbPropsGradeAfterPriceConfidence({ grade: "BEST_ANGLE", price: -500, locked: true }).grade === "BEST_ANGLE");
+  check("milestone offers retain their separately validated portfolio policy",
+    mlbPropsGradeAfterPriceConfidence({ grade: "BEST_ANGLE", price: -500, offerContract: "milestone" }).grade === "BEST_ANGLE");
   console.log("\n━━━ MLB Props Engine Phase 1 ━━━");
 
   check("positive American odds to decimal", approx(american_to_decimal(150), 2.5));
@@ -737,10 +754,15 @@ async function main() {
       && (liveBoardSource.match(/forecastTelemetry,/g) ?? []).length === 2);
   check("final target-excluded actions enforce projection-side integrity after every promotion",
     liveBoardSource.includes("const coherentProps = applyMlbPropsProjectionSideActionability(calibratedProps)")
-      && liveBoardSource.includes("rows: coherentProps")
+      && liveBoardSource.includes("const priceBalancedProps = applyMlbPropsPriceConfidenceCeilings(coherentProps)")
+      && liveBoardSource.includes("rows: priceBalancedProps")
       && liveBoardSource.includes("applyMlbPropsProjectionSideActionability(")
       && liveBoardSource.indexOf("applyValidatedValuePortfolioPromotions")
         < liveBoardSource.indexOf("const coherentProps = applyMlbPropsProjectionSideActionability(calibratedProps)"));
+  check("price affects premium confidence placement without removing the quoted read",
+    liveBoardSource.includes("applyMlbPropsPriceConfidenceCeilings")
+      && liveBoardSource.indexOf("const coherentProps = applyMlbPropsProjectionSideActionability(calibratedProps)")
+        < liveBoardSource.indexOf("const priceBalancedProps = applyMlbPropsPriceConfidenceCeilings(coherentProps)"));
   check("pitcher target-excluded evidence resolves one posterior without a duplicate board anchor",
     realScoringSource.includes("buildTargetExcludedPitcherConsensus")
       && realScoringSource.includes("forecastMarketOverProbability: targetExcludedConsensus?.overProbability ?? null")

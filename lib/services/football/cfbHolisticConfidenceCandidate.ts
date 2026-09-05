@@ -5,7 +5,7 @@ import {
 } from "@/lib/services/dailyEdge/confidenceExecutionContract";
 
 export const CFB_HOLISTIC_CONFIDENCE_CANDIDATE_RELEASE =
-  "cfb_holistic_confidence_2026_09_04_r3_favorite_price_tier_ceiling" as const;
+  "cfb_holistic_confidence_2026_09_05_r4_confidence_economics_bridge" as const;
 export const CFB_HOLISTIC_BEST_ANGLE_MIN_SCORE = 60 as const;
 export const CFB_HOLISTIC_LEAN_MIN_SCORE = 55 as const;
 export const CFB_HOLISTIC_WATCHLIST_MIN_SCORE = 51.5 as const;
@@ -17,11 +17,14 @@ export const CFB_HOLISTIC_BEST_ANGLE_FAVORITE_PRICE_FLOOR = -200 as const;
 export const CFB_HOLISTIC_LEAN_FAVORITE_PRICE_FLOOR = -500 as const;
 
 export type CfbHolisticSelectedSide = "home" | "away" | "over" | "under";
+export type CfbHolisticEvidenceDirection = "support" | "resistance" | "neutral" | "unknown";
 
 export type CfbHolisticConfidenceInput = {
   market: CfbV1Market;
   selectedSide: CfbHolisticSelectedSide;
   modelProbability: number;
+  marketFairProbability: number;
+  decisionGrade: CfbV1Grade;
   exactPriceExpectedValue: number;
   evaluatedPrice: number;
   evaluatedLine: number | null;
@@ -29,6 +32,9 @@ export type CfbHolisticConfidenceInput = {
   publicMoneyMinusTicketsPp: number | null;
   selectedSideLineDelta: number | null;
   selectedSideImpliedProbabilityDeltaPp: number | null;
+  sharpDirection: CfbHolisticEvidenceDirection;
+  movementDirection: CfbHolisticEvidenceDirection;
+  publicDirection: CfbHolisticEvidenceDirection;
 };
 
 export type CfbHolisticConfidenceResult = {
@@ -45,13 +51,23 @@ export type CfbHolisticConfidenceResult = {
   uncappedConfidenceGrade: CfbV1Grade;
   confidenceGrade: CfbV1Grade;
   priceTierCeiling: CfbV1Grade | null;
+  decisionGradeCeiling: CfbV1Grade | null;
+  marketEvidenceBallot: {
+    supportCount: number;
+    resistanceCount: number;
+    multiChannelAffirmation: boolean;
+  };
   executionStatus: "bet" | "shop";
 };
 
 /**
- * Outcome-blind confidence scorer. EV is retained for execution and cannot change
- * the confidence grade. A selected moneyline favorite's attached price can only
- * lower the maximum display tier; it can never veto the prediction as a No Play.
+ * Outcome-blind confidence scorer. The model probability stays the primary
+ * confidence axis. Signed market evidence can affirm or resist it within the
+ * existing bounded four-point range; there is no second model/market weighting.
+ * Spread economics provide an ordinal anchor rather than a binary gate. A
+ * second-tier promotion requires multi-channel affirmation, while no single
+ * market channel can veto or flip the prediction. A selected moneyline
+ * favorite's attached price keeps the separately graduated ceiling.
  */
 export function evaluateCfbHolisticConfidence(
   input: CfbHolisticConfidenceInput,
@@ -59,6 +75,7 @@ export function evaluateCfbHolisticConfidence(
   assertProbability(input.modelProbability);
   if (!Number.isFinite(input.exactPriceExpectedValue)) throw new Error("CFB holistic candidate EV must be finite.");
   if (!Number.isFinite(input.evaluatedPrice) || input.evaluatedPrice === 0) throw new Error("CFB holistic candidate price must be a real American quote.");
+  assertProbability(input.marketFairProbability);
   const modelConfidenceScore = 100 * input.modelProbability;
   const sharp = boundedContribution(input.sharpMoneyMinusTicketsPp, CFB_HOLISTIC_SHARP_MAX_POINTS, 20);
   const movementSupportPp = selectedSideMovementSupportPp(input);
@@ -72,6 +89,20 @@ export function evaluateCfbHolisticConfidence(
   const confidenceScore = clamp(modelConfidenceScore + evidenceConfidenceAdjustment, 0, 100);
   const uncappedConfidenceGrade = gradeForScore(confidenceScore);
   const priceTierCeiling = favoritePriceTierCeiling(input.market, input.evaluatedPrice);
+  const marketEvidenceBallot = categoricalEvidenceBallot(input);
+  const decisionGradeCeiling = input.market === "spread"
+    ? spreadDecisionGradeCeiling(input.decisionGrade, marketEvidenceBallot.multiChannelAffirmation)
+    : null;
+  const spreadPremiumCeiling = input.market === "spread"
+    && input.decisionGrade !== "Best Angle"
+    && !marketEvidenceBallot.multiChannelAffirmation
+      ? "Lean"
+      : null;
+  const finalGradeCeiling = mostRestrictiveGradeCeiling([
+    priceTierCeiling,
+    decisionGradeCeiling,
+    spreadPremiumCeiling,
+  ]);
   return {
     candidateRelease: CFB_HOLISTIC_CONFIDENCE_CANDIDATE_RELEASE,
     confidenceScore,
@@ -80,8 +111,10 @@ export function evaluateCfbHolisticConfidence(
     evidenceContributions: { sharp, movement, public: publicContribution },
     probabilityGrade: gradeForScore(modelConfidenceScore),
     uncappedConfidenceGrade,
-    confidenceGrade: applyGradeCeiling(uncappedConfidenceGrade, priceTierCeiling),
+    confidenceGrade: applyGradeCeiling(uncappedConfidenceGrade, finalGradeCeiling),
     priceTierCeiling,
+    decisionGradeCeiling,
+    marketEvidenceBallot,
     executionStatus: executionStatusForQuote({
       americanPrice: input.evaluatedPrice,
       expectedValue: input.exactPriceExpectedValue,
@@ -89,6 +122,41 @@ export function evaluateCfbHolisticConfidence(
       quoteCoherent: true,
     }) as "bet" | "shop",
   };
+}
+
+function spreadDecisionGradeCeiling(
+  grade: CfbV1Grade,
+  multiChannelAffirmation: boolean,
+): CfbV1Grade {
+  if (grade === "No Play") return multiChannelAffirmation ? "Lean" : "Watchlist";
+  if (grade === "Watchlist") return multiChannelAffirmation ? "Best Angle" : "Lean";
+  return "Best Angle";
+}
+
+function categoricalEvidenceBallot(input: CfbHolisticConfidenceInput): {
+  supportCount: number;
+  resistanceCount: number;
+  multiChannelAffirmation: boolean;
+} {
+  const directions = [input.sharpDirection, input.movementDirection, input.publicDirection];
+  const supportCount = directions.filter((direction) => direction === "support").length;
+  const resistanceCount = directions.filter((direction) => direction === "resistance").length;
+  return {
+    supportCount,
+    resistanceCount,
+    multiChannelAffirmation: supportCount >= 2 && resistanceCount === 0,
+  };
+}
+
+function mostRestrictiveGradeCeiling(ceilings: Array<CfbV1Grade | null>): CfbV1Grade | null {
+  const rank: Record<CfbV1Grade, number> = {
+    "No Play": 0,
+    Watchlist: 1,
+    Lean: 2,
+    "Best Angle": 3,
+  };
+  return ceilings.filter((value): value is CfbV1Grade => value !== null)
+    .sort((first, second) => rank[first] - rank[second])[0] ?? null;
 }
 
 export function favoritePriceTierCeiling(

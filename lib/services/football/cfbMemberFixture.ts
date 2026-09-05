@@ -7,6 +7,8 @@ import { withFirstTrackedSplitObservation } from "@/lib/services/splitDisplayMov
 import type { MarketSplitDisplaySection } from "@/lib/types/domain/RecommendationDecision";
 import {
   CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE,
+  CFB_FORWARD_PRICE_PREVIOUS_EVIDENCE_SCHEMA_RELEASE,
+  CFB_FORWARD_PRICE_PREVIOUS_MEMBER_RELEASE,
   CFB_FORWARD_HOLISTIC_PREVIOUS_EVIDENCE_SCHEMA_RELEASE,
   CFB_FORWARD_HOLISTIC_PREVIOUS_MEMBER_RELEASE,
   CFB_FORWARD_CONTINUITY_PREVIOUS_EVIDENCE_SCHEMA_RELEASE,
@@ -52,6 +54,7 @@ import {
   CFB_V1_BASE_PROBABILITY_RELEASE,
   CFB_V1_BASE_SCORE_ARTIFACT_RELEASE,
   CFB_V1_DECISION_RELEASE,
+  CFB_V1_PRICE_PREVIOUS_DECISION_RELEASE,
   CFB_V1_HOLISTIC_PREVIOUS_DECISION_RELEASE,
   CFB_V1_CONTINUITY_PREVIOUS_DECISION_RELEASE,
   CFB_V1_GRADE_PREVIOUS_DECISION_RELEASE,
@@ -71,9 +74,9 @@ import { cfbTeamIdentity } from "./cfbTeamIdentity";
 import { CFB_PUBLIC_SCORE_DIRECTION_TOLERANCE_POINTS } from "./footballCrossMarketCoherence";
 
 export const CFB_MEMBER_FIXTURE_RELEASE =
-  "cfb_v1_member_fixture_2026_09_04_r48_cross_release_lock_visibility" as const;
+  "cfb_v1_member_fixture_2026_09_05_r49_confidence_economics_bridge" as const;
 export const CFB_PUBLIC_OUTCOME_CONTRACT_RELEASE =
-  "cfb_market_sharp_public_outcome_contract_2026_09_04_r48_cross_release_lock_visibility" as const;
+  "cfb_market_sharp_public_outcome_contract_2026_09_05_r49_confidence_economics_bridge" as const;
 export const CFB_CONTEXT_ONLY_QUOTE_CAPTURE_SKEW_MS = 5_000 as const;
 const CFB_MARKET_CONTEXT_MAX_CAPTURE_LAG_MINUTES = 10;
 const CFB_PRE_DIRECTIONAL_MEMBER_RELEASE = "cfb_v1_member_release_2026_08_28_r14_expanded_sharp_budget" as const;
@@ -395,19 +398,48 @@ export function selectLatestCfbMemberEvidenceRows(
       )
     : null;
   const holisticPreviousAuthority = holisticPrevious ?? holisticPreviousBoundary ?? holisticPreviousLockOverlay ?? continuityPreviousAuthority;
+  const pricePrevious = completeRowsForRelease(
+    rows,
+    CFB_FORWARD_PRICE_PREVIOUS_EVIDENCE_SCHEMA_RELEASE,
+    CFB_FORWARD_PRICE_PREVIOUS_MEMBER_RELEASE,
+    CFB_V1_PRICE_PREVIOUS_DECISION_RELEASE,
+  );
+  const pricePreviousBoundary = holisticPreviousAuthority
+    ? immutableBoundaryTransitionRows(
+        rows,
+        now,
+        CFB_FORWARD_PRICE_PREVIOUS_EVIDENCE_SCHEMA_RELEASE,
+        CFB_FORWARD_PRICE_PREVIOUS_MEMBER_RELEASE,
+        CFB_V1_PRICE_PREVIOUS_DECISION_RELEASE,
+        holisticPreviousAuthority,
+      )
+    : null;
+  const pricePreviousLockOverlay = holisticPreviousAuthority
+    ? immutableLockOverlayRows(
+        rows,
+        CFB_FORWARD_PRICE_PREVIOUS_EVIDENCE_SCHEMA_RELEASE,
+        CFB_FORWARD_PRICE_PREVIOUS_MEMBER_RELEASE,
+        CFB_V1_PRICE_PREVIOUS_DECISION_RELEASE,
+        holisticPreviousAuthority,
+      )
+    : null;
+  const pricePreviousAuthority = pricePrevious ?? pricePreviousBoundary ?? pricePreviousLockOverlay ?? holisticPreviousAuthority;
   const current = completeRowsForRelease(rows, CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE, CFB_FORWARD_MEMBER_RELEASE, CFB_V1_DECISION_RELEASE);
   if (current) return current;
-  const immutableBoundaryTransition = holisticPreviousAuthority
+  const immutableBoundaryTransition = pricePreviousAuthority
     ? immutableBoundaryTransitionRows(
         rows,
         now,
         CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE,
         CFB_FORWARD_MEMBER_RELEASE,
         CFB_V1_DECISION_RELEASE,
-        holisticPreviousAuthority,
+        pricePreviousAuthority,
       )
     : null;
   if (immutableBoundaryTransition) return immutableBoundaryTransition;
+  if (pricePrevious) return pricePrevious;
+  if (pricePreviousBoundary) return pricePreviousBoundary;
+  if (pricePreviousLockOverlay) return pricePreviousLockOverlay;
   if (holisticPrevious) return holisticPrevious;
   if (holisticPreviousBoundary) return holisticPreviousBoundary;
   if (continuityPrevious) return continuityPrevious;

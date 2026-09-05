@@ -405,10 +405,30 @@ expectFailedEconomicsBlocked("different edge", {
   ...failedEconomicsStored,
   edge: 0.04,
 });
-expectFailedEconomicsBlocked("different publication time", {
+const regeneratedTimestamp = assessMlbLockCoherence({
+  gameIds: [31215],
+  expectedRows: [failedEconomicsExpected],
+  storedRows: [{
   ...failedEconomicsStored,
   published_at: "2026-08-30T15:22:20.363Z",
+  }],
 });
+assert.deepEqual(
+  regeneratedTimestamp.coherentGameIds,
+  [31215],
+  "the second dry-run writer invocation must not block the first finalized row solely because it generated a later published_at",
+);
+
+const pendingRegeneratedTimestamp = assessMlbLockCoherence({
+  gameIds: [31215],
+  expectedRows: [{ ...pendingExpected[0], published_at: "2026-08-30T15:22:20.363Z" }],
+  storedRows: [pendingStored],
+});
+assert.deepEqual(
+  pendingRegeneratedTimestamp.coherentGameIds,
+  [31215],
+  "a pending promotion candidate remains coherent across two otherwise identical writer invocations",
+);
 expectFailedEconomicsBlocked("different action rule", {
   ...failedEconomicsStored,
   snapshot_json: {

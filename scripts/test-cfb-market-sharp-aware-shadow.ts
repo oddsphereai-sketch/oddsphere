@@ -395,7 +395,7 @@ const provisionalLargeSpreadLean = buildCfbMarketEvidenceGradeShadow({
   sharpSplits: [],
   operationalOpening: null,
 });
-assert.equal(provisionalLargeSpreadLean.finalGrade, "Lean", "a stronger exact-economics lane supports spreads from 10.5 through 24 points");
+assert.equal(provisionalLargeSpreadLean.finalGrade, "Lean", "a stronger model-confidence lane supports a large spread without a hard size veto");
 
 const provisionalTotalLean = buildCfbMarketEvidenceGradeShadow({
   decision: {
