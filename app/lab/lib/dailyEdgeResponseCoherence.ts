@@ -25,6 +25,36 @@ function terminalStop(stops: OddsTrailStopDto[] | undefined): OddsTrailStopDto |
   return [...(stops ?? [])].reverse().find((stop) => stop.label === "current" || stop.label === "locked") ?? null;
 }
 
+type MovementDirection = "support" | "resistance" | "neutral";
+
+function impliedProbability(american: number): number {
+  return american < 0 ? -american / (-american + 100) : 100 / (american + 100);
+}
+
+function visibleTrailDirection(
+  marketKey: DailyEdgeCoherenceIssue["market"],
+  pick: string | null,
+  stops: OddsTrailStopDto[] | undefined,
+): MovementDirection {
+  const trail = stops ?? [];
+  const terminal = terminalStop(trail);
+  if (!terminal) return "neutral";
+  const first = trail.find((stop) =>
+    (stop.label === "open" || stop.label === "first") &&
+    (terminal.sportsbook === null || stop.sportsbook === terminal.sportsbook)
+  ) ?? null;
+  if (!first) return "neutral";
+  if (marketKey === "total" && first.line != null && terminal.line != null && !sameNumber(first.line, terminal.line)) {
+    const normalizedPick = pick?.toLowerCase() ?? "";
+    if (normalizedPick.startsWith("over")) return terminal.line > first.line ? "support" : "resistance";
+    if (normalizedPick.startsWith("under")) return terminal.line < first.line ? "support" : "resistance";
+    return "neutral";
+  }
+  const impliedDelta = impliedProbability(terminal.american) - impliedProbability(first.american);
+  if (Math.abs(impliedDelta) < 0.0125) return "neutral";
+  return impliedDelta > 0 ? "support" : "resistance";
+}
+
 function selectedSide(
   game: DailyEdgeResponse["games"][number],
   marketKey: DailyEdgeCoherenceIssue["market"],
@@ -214,6 +244,19 @@ export function finalizeDailyEdgeResponseCoherence(body: DailyEdgeResponse): Dai
         market.recommendationDecision?.sharpBookSplits ?? null,
         nowMs,
       );
+      if (
+        market.evidenceCoherence?.status !== "limited" &&
+        (
+          market.marketReadV2?.exactLineEvidenceStatus === "display_current_quote_only" ||
+          market.marketReadV2?.label === "Movement history limited"
+        )
+      ) {
+        market.evidenceCoherence = {
+          status: "limited",
+          reasonCodes: ["movement_history_limited"],
+          note: "Current selected quote verified; incompatible movement history withheld.",
+        };
+      }
 
       const reasons: string[] = [];
       const locked = game.lockState === "locked";
@@ -233,6 +276,14 @@ export function finalizeDailyEdgeResponseCoherence(body: DailyEdgeResponse): Dai
       if (movement) {
         if (currentPrice !== null && movement.currentPrice !== null && movement.currentPrice !== currentPrice) reasons.push("market_read_price_mismatch");
         if (marketKey === "total" && movement.currentLine !== null && !sameNumber(movement.currentLine, currentLine)) reasons.push("market_read_line_mismatch");
+        const visibleDirection = visibleTrailDirection(marketKey, market.pick, market.oddsTrail);
+        const readDirection = movement.directionRelativeToPick;
+        if (
+          visibleDirection !== "neutral" &&
+          (readDirection === "neutral" || readDirection !== visibleDirection)
+        ) {
+          reasons.push("market_read_direction_mismatch");
+        }
       }
 
       const side = selectedSide(game, marketKey);
@@ -254,7 +305,7 @@ export function finalizeDailyEdgeResponseCoherence(body: DailyEdgeResponse): Dai
           currentLine,
           observedAt: market.currentPriceObservedAt ?? endpoint?.observedAt ?? market.priceObservedAt ?? null,
         });
-      } else {
+      } else if (market.evidenceCoherence?.status !== "limited") {
         market.evidenceCoherence = { status: "coherent", reasonCodes: [], note: null };
       }
     }
