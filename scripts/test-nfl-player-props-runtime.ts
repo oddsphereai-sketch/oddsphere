@@ -29,7 +29,8 @@ import {
 } from "../lib/services/football/nflPlayerPropsRuntime";
 import type { NflPlayerPropsExactOffer } from "../lib/services/football/nflPlayerPropsMarketBoard";
 
-assert.equal(NFL_PLAYER_PROPS_RUNTIME_RELEASE, "nfl_player_props_runtime_2026_09_03_r10_forecast_authority");
+assert.equal(NFL_PLAYER_PROPS_RUNTIME_RELEASE, "nfl_player_props_runtime_2026_09_07_r11_out_of_support_hold");
+assert.equal(NFL_PLAYER_PROPS_BOARD_RELEASE, "nfl_player_props_board_2026_09_07_r14_out_of_support_hold");
 assert.deepEqual(NFL_PLAYER_PROPS_QB_ROLE_FLOORS, { confirmedStarter: 0.9, projectedStarter: 0.75 });
 verifyNflPlayerPropsRuntimeParity(1e-9);
 
@@ -97,6 +98,13 @@ assert.ok(oneBook.decisions.every((row) => row.marketProbability === row.rawMode
   && row.finalProbability === row.rawModelProbability),
 "an evaluation-only ordinary quote falls back to the independent player distribution");
 assert.equal(oneBook.diagnostics.unavailableNoIndependentBenchmark, 2);
+const outOfSupport = buildNflPlayerPropsRuntimeBoard({
+  offers: [{ ...baseOffer, offerKey: "provider-outlier", line: 22.5 }],
+  features: [feature],
+  evaluatedAt: "2026-08-25T12:01:00.000Z",
+});
+assert.equal(outOfSupport.decisions.length, 0, "an empirical endpoint probability cannot emit a prediction or grade");
+assert.equal(outOfSupport.diagnostics.unavailableFeatureContext, 2, "both out-of-support outcomes remain explicit unavailable-input diagnostics");
 const twoBooks = buildNflPlayerPropsRuntimeBoard({ offers: [baseOffer, { ...baseOffer, offerKey: "test-b", sportsbook: "book-b" }], features: [feature], evaluatedAt: "2026-08-25T12:01:00.000Z" });
 assert.equal(twoBooks.release, NFL_PLAYER_PROPS_BOARD_RELEASE);
 assert.equal(twoBooks.counts.Held, 0, "a second exact-line book supplies the independent benchmark");

@@ -11,7 +11,7 @@ import {
 } from "./nflPlayerPropsMarketEvidenceCapture";
 
 export const NFL_PLAYER_PROPS_PRODUCTION_CANDIDATE_RELEASE =
-  "nfl_player_props_member_2026_09_03_r16_forecast_authority" as const;
+  "nfl_player_props_member_2026_09_07_r17_out_of_support_hold" as const;
 export const NFL_PLAYER_PROPS_WRITER_LEASE_GROUP = "prediction_pipeline:nfl" as const;
 
 export type NflPlayerPropsProductionSnapshot = {

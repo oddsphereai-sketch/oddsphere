@@ -3,6 +3,7 @@ import { SharpApiRateLimitError } from "../lib/providers/real_api/_sharpApiClien
 import {
   NFL_PLAYER_PROPS_DECISION_RELEASE,
   NFL_PLAYER_PROPS_PHASE_ONE_MARKETS,
+  NFL_PLAYER_PROPS_PROVIDER_SNAPSHOT_RELEASE,
   NFL_PLAYER_PROPS_SHADOW_MODEL_RELEASE,
   buildNflPlayerPropsObservationSnapshot,
   summarizeNflPlayerPropsCoverage,
@@ -33,6 +34,7 @@ const games = [{
 assert.equal(canonicalNflPlayerPropMarket("player_passing_yards"), "passing_yards");
 assert.equal(canonicalNflPlayerPropMarket("rushing_yards"), "rushing_yards");
 assert.equal(canonicalNflPlayerPropMarket("unknown_fun_prop"), null);
+assert.equal(NFL_PLAYER_PROPS_PROVIDER_SNAPSHOT_RELEASE, "nfl_player_props_provider_observation_2026_09_07_r8_week_one_identity_capacity");
 assert.deepEqual(NFL_PLAYER_PROPS_PHASE_ONE_MARKETS, [
   "passing_attempts",
   "passing_completions",
@@ -173,10 +175,10 @@ assert.throws(
 
 assert.equal(NFL_PLAYER_PROPS_COLLECTION_LIMITS.bdlConcurrency, 3);
 assert.ok(NFL_PLAYER_PROPS_COLLECTION_LIMITS.maxSharpPages <= 8);
-assert.equal(NFL_PLAYER_PROPS_COLLECTION_LIMITS.maxPlayerIdentities, 400);
+assert.equal(NFL_PLAYER_PROPS_COLLECTION_LIMITS.maxPlayerIdentities, 512);
 assert.equal(NFL_PLAYER_PROPS_COLLECTION_LIMITS.maxPlayerIdentitiesPerGame, 64);
-const capacityRows = Array.from({ length: 306 }, (_, index) => ({
-  providerEventId: `game-${Math.floor(index / 20)}`,
+const capacityRows = Array.from({ length: 475 }, (_, index) => ({
+  providerEventId: `game-${Math.floor(index / 32)}`,
   providerPlayerId: `player-${index}`,
 }));
 assert.deepEqual(
@@ -185,16 +187,16 @@ assert.deepEqual(
     capacityRows[0]!,
   ]),
   capacityRows.map((row) => row.providerPlayerId),
-  "a normal 306-player Week 1 slate is accepted with exact deduplicated identity order",
+  "the observed 475-player Week 1 slate is accepted with exact deduplicated identity order",
 );
 assert.throws(
   () => __NFL_PLAYER_PROPS_COLLECTOR_TEST__.collectBoundedPlayerIdentities(
-    Array.from({ length: 401 }, (_, index) => ({
-      providerEventId: `game-${Math.floor(index / 40)}`,
+    Array.from({ length: 513 }, (_, index) => ({
+      providerEventId: `game-${Math.floor(index / 32)}`,
       providerPlayerId: `player-${index}`,
     })),
   ),
-  /opened at 401 players/,
+  /opened at 513 players/,
   "aggregate identity contamination remains fail-closed",
 );
 assert.throws(

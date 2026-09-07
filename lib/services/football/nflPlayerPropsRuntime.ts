@@ -23,9 +23,9 @@ import {
 export const NFL_PLAYER_PROPS_PORTABLE_ARTIFACT_RELEASE =
   "nfl_player_props_runtime_2026_09_01_r4_cross_market_movement" as const;
 export const NFL_PLAYER_PROPS_RUNTIME_RELEASE =
-  "nfl_player_props_runtime_2026_09_03_r10_forecast_authority" as const;
+  "nfl_player_props_runtime_2026_09_07_r11_out_of_support_hold" as const;
 export const NFL_PLAYER_PROPS_BOARD_RELEASE =
-  "nfl_player_props_board_2026_09_03_r13_forecast_authority" as const;
+  "nfl_player_props_board_2026_09_07_r14_out_of_support_hold" as const;
 export const NFL_PLAYER_PROPS_DECISION_RELEASE =
   "nfl_player_props_decision_2026_09_03_r10_forecast_authority" as const;
 export const NFL_PLAYER_PROPS_MODEL_RELEASE =
@@ -458,6 +458,15 @@ export function buildNflPlayerPropsRuntimeBoard(args: {
       : independentBooks > 0
         ? nflPlayerPropsResidualProbability(rawOver, marketOver, policy.marketResidualWeight)
         : rawOver;
+    if (!(finalOver > 0 && finalOver < 1)) {
+      // Provider catalogs can contain a syntactically complete line outside
+      // the empirical residual support (for example, a receptions offer that
+      // behaves like a longest-reception line). Do not clamp an endpoint into
+      // manufactured confidence and do not let one invalid offer abort the
+      // coherent board. Both sides remain unavailable model-input outcomes.
+      for (const key of outcomeKeys(offer)) unavailableFeatureKeys.add(key);
+      continue;
+    }
     const posterior = nflPlayerPropsCoherentPosteriorDistribution({
       market: offer.market,
       line: offer.line,
