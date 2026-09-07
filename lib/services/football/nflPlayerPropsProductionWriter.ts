@@ -30,18 +30,18 @@ import {
 } from "./nflPlayerPropsSettlement";
 
 export const NFL_PLAYER_PROPS_WRITER_RELEASE =
-  "nfl_player_props_writer_2026_09_03_r19_forecast_authority" as const;
+  "nfl_player_props_writer_2026_09_07_r20_identity_capacity" as const;
 export const NFL_PLAYER_PROPS_PRODUCTION_INCLUDE_OPENINGS = true as const;
 export const NFL_PLAYER_PROPS_PRODUCTION_COLLECTION_CALL_MAXIMUM = (
   1
   + 2 * NFL_PLAYER_PROPS_COLLECTION_LIMITS.maxGames
   + Math.ceil(NFL_PLAYER_PROPS_COLLECTION_LIMITS.maxPlayerIdentities / NFL_PLAYER_PROPS_COLLECTION_LIMITS.playerIdentityBatchSize)
   + NFL_PLAYER_PROPS_COLLECTION_LIMITS.maxSharpPages
-) as 49;
+) as 51;
 export const NFL_PLAYER_PROPS_PRODUCTION_INCREMENTAL_CALL_MAXIMUM = (
   NFL_PLAYER_PROPS_PRODUCTION_COLLECTION_CALL_MAXIMUM
   + NFL_PLAYER_PROPS_SETTLEMENT_MAX_GAMES_PER_CYCLE
-) as 67;
+) as 69;
 
 export type NflPlayerPropsForecastTelemetry = {
   forecastPolicy: "target_excluded_single_posterior_exact_price_downstream";
