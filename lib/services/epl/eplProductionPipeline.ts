@@ -8,6 +8,8 @@ import { mergeEplForwardEvidenceHistory, type EplForwardEvidenceCapture } from "
 export const EPL_COMPETITION = "english_premier_league" as const;
 export const EPL_LOCK_MINUTES = 60;
 export const EPL_EXTERNAL_ID_OFFSET = 20_000_000;
+export const EPL_TRACKING_LOCK_POLICY_RELEASE =
+  "epl_tracking_lock_2026_09_07_r1_prior_priced_tuple_fallback" as const;
 
 const providerExternalId = (id: number, offset = EPL_EXTERNAL_ID_OFFSET) => offset + id;
 
@@ -20,8 +22,9 @@ export type ClubSoccerPipelineConfig = {
   predictionSource: string;
   lockMinutes?: number;
   contextForGame?: (providerId: number) => Record<string, unknown> | null;
-  /** UCL-only lock recovery: preserve the last priced tuple when its quote
-   * disappears at T-60, and return exact already-locked IDs for snapshot repair. */
+  /** Competition-scoped lock recovery: preserve the last priced tuple when
+   * its quote disappears at T-60, and return exact already-locked IDs for
+   * snapshot repair or audit telemetry. */
   preservePriorPricedTupleOnMissingLock?: boolean;
   returnPreservedLockedRecordIds?: boolean;
 };
@@ -34,6 +37,8 @@ export const EPL_PIPELINE_CONFIG: ClubSoccerPipelineConfig = {
   providerIdKey: "balldontlie_epl",
   predictionSource: "epl_club_model",
   lockMinutes: EPL_LOCK_MINUTES,
+  preservePriorPricedTupleOnMissingLock: true,
+  returnPreservedLockedRecordIds: true,
 };
 
 export type EplLockCandidate = { gameId: number; externalId: number; kickoff: string; unlockedMarkets: number };
@@ -174,6 +179,9 @@ function recordFromMarket(input: {
     published_at: null,
     snapshot_json: {
       competition: input.config.competition,
+      ...(input.config.competition === EPL_COMPETITION
+        ? { tracking_lock_policy_release: EPL_TRACKING_LOCK_POLICY_RELEASE }
+        : {}),
       model_release: input.modelRelease,
       calibration_release: input.calibrationRelease,
       captured_at: input.now.toISOString(),

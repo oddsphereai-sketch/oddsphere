@@ -479,8 +479,8 @@ assert.match(experiencePage, /teamsQuery = teamsQuery\.eq\("league", competition
 assert.match(page, /uclRequested \? "uefa_champions_league"[\s\S]*eplRequested \? "english_premier_league"/, "member history passes the exact club competition namespace");
 assert.match(slateBuilder, /contractDeviation:\s*UCL_HISTORY_PROVIDER_CONTRACT_DEVIATION/, "degraded history retains provider-deviation telemetry alongside its validation error");
 assert.match(sharedSoccerWriter, /config\.preservePriorPricedTupleOnMissingLock[\s\S]*row\.locked_at && row\.held/, "prior-priced-tuple recovery is an explicit competition capability");
-assert.match(uclPipeline, /preservePriorPricedTupleOnMissingLock:\s*true[\s\S]*returnPreservedLockedRecordIds:\s*true/, "only the UCL pipeline opts into immutable lock repair");
-assert.doesNotMatch(sharedSoccerWriter.slice(sharedSoccerWriter.indexOf("export const EPL_PIPELINE_CONFIG"), sharedSoccerWriter.indexOf("export type EplLockCandidate")), /preservePriorPricedTupleOnMissingLock|returnPreservedLockedRecordIds/, "EPL keeps its reviewed T-60 behavior");
+assert.match(uclPipeline, /preservePriorPricedTupleOnMissingLock:\s*true[\s\S]*returnPreservedLockedRecordIds:\s*true/, "UCL keeps its independently configured immutable lock repair");
+assert.match(sharedSoccerWriter.slice(sharedSoccerWriter.indexOf("export const EPL_PIPELINE_CONFIG"), sharedSoccerWriter.indexOf("export type EplLockCandidate")), /preservePriorPricedTupleOnMissingLock:\s*true[\s\S]*returnPreservedLockedRecordIds:\s*true/, "EPL independently opts into the shared fallback after its verified BTTS lock miss");
 assert.match(foundationStore, /validateCompleteUclHistoryCohort[\s\S]*assertFrozenUclHistoricalInputs/, "cached history revalidates season coverage and every frozen model-material input");
 assert.match(foundationStore, /schemaVersion:\s*6[\s\S]*historyMatches[\s\S]*teamStats[\s\S]*providerHistory/);
 const persistedShape = foundationStore.slice(foundationStore.indexOf("export type UclHistoricalFoundationPayload"), foundationStore.indexOf("export type UclHistoricalFoundation ="));

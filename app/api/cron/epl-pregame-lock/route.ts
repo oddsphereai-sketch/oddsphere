@@ -2,7 +2,7 @@ import { cronHandler } from "@/lib/cron/runCron";
 import { buildEplDailyEdgePreview, hydrateEplPriceHistory, hydrateEplStoredPriceHistory } from "@/lib/services/epl/buildEplDailyEdgePreview";
 import { buildEplShadowSlate } from "@/lib/services/epl/buildEplShadowSlate";
 import { persistEplLineHistory, readEplStoredPriceHistory } from "@/lib/services/epl/eplLineHistoryStore";
-import { EPL_EXTERNAL_ID_OFFSET, findEplGamesEnteringLock, writeEplPredictionRecords } from "@/lib/services/epl/eplProductionPipeline";
+import { EPL_EXTERNAL_ID_OFFSET, EPL_TRACKING_LOCK_POLICY_RELEASE, findEplGamesEnteringLock, writeEplPredictionRecords } from "@/lib/services/epl/eplProductionPipeline";
 import { eplSnapshotGamesNeedingLock } from "@/lib/services/epl/eplLockedSnapshot";
 import { readCurrentEplMemberSnapshot, writeCurrentEplMemberSnapshot } from "@/lib/services/epl/eplMemberSnapshotStore";
 import type { EplForwardEvidenceCapture } from "@/lib/services/epl/eplForwardEvidenceCapture";
@@ -51,7 +51,7 @@ export async function GET(request: Request): Promise<Response> {
       ? await writeCurrentEplMemberSnapshot({ response: lockedResponse, round: slate.round, modelRelease: slate.modelRelease, calibrationRelease: slate.calibrationRelease })
       : { ok: false as const, skipped: true, reason: !apply ? "EPL_DB_WRITES_ENABLED!=true" : !publicationEnabled ? "EPL_PUBLICATION_ENABLED!=true" : "pipeline_errors" };
     return {
-      records_updated: lineHistory.written + predictions.written + (publication.ok ? 1 : 0),
+      records_updated: lineHistory.written + predictions.written + predictions.priorTuplesLocked + (publication.ok ? 1 : 0),
       partial: pipelineErrors.length > 0 || (publicationEnabled && !publication.ok),
       error_message: pipelineErrors.length ? pipelineErrors.slice(0, 3).join("; ") : null,
       details: {
@@ -63,6 +63,8 @@ export async function GET(request: Request): Promise<Response> {
         proposed: predictions.proposed.length,
         written: predictions.written,
         locked_preserved: predictions.lockedPreserved,
+        prior_priced_tuples_locked: predictions.priorTuplesLocked,
+        tracking_lock_policy_release: EPL_TRACKING_LOCK_POLICY_RELEASE,
         forward_evidence: { proposed: forwardEvidence.length, warnings: predictions.captureWarnings },
         publication,
       },
