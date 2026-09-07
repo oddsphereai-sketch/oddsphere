@@ -167,7 +167,7 @@ assert.match(previewSource, /evaluatedMatchResultCanonicalBook: canonicalEplBook
 assert.match(previewSource, /providerEventId: sharp\.eventId/);
 assert.match(previewSource, /evaluatedBttsCanonicalBook: canonicalEplBook\(btts\?\.sportsbook \?\? null\)/);
 assert.ok(pipelineSource.indexOf("eplPriorRowsBlockWrite(priorRows)") < pipelineSource.indexOf("attachCapture(row, prior?.snapshot_json"), "any prior-release locked record must win before writer merge");
-assert.equal((pipelineSource.match(/\.from\("prediction_records"\)/g) ?? []).length, 3, "lock protection must broaden the incumbent query, not add one");
+assert.equal((pipelineSource.match(/\.from\("prediction_records"\)/g) ?? []).length, 4, "writer permits only discovery, incumbent read, lock-only fallback update, and ordinary upsert calls");
 assert.doesNotMatch(captureSource, /supabase|SharpApiClient|fetch\(/, "forecast vector reuse must stay pure over incumbent cached inputs");
 assert.match(coherentSource, /maximum > input\.decisionMs \|\| maximum >= input\.kickoffMs/);
 assert.match(coherentSource, /decisionMs >= kickoffMs/);
