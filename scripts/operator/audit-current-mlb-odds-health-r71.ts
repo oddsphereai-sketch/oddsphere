@@ -2,6 +2,7 @@
 
 import { supabase } from "../../lib/db/supabase";
 import { createPredictionRecords } from "../../lib/services/predictionRecordService";
+import { loadCompleteCurrentGameLines } from "../../lib/services/currentGameLineReader";
 
 type Row = Record<string, unknown>;
 
@@ -39,26 +40,24 @@ async function main(): Promise<void> {
   const games = (gamesResult.data ?? []) as Row[];
   const gameIds = games.map((row) => Number(row.id));
   const teamIds = [...new Set(games.flatMap((row) => [Number(row.home_team_id), Number(row.away_team_id)]))];
-  const [teamsResult, linesResult, dry] = await Promise.all([
+  const [teamsResult, rawLines, dry] = await Promise.all([
     supabase.from("teams").select("id, abbreviation").in("id", teamIds),
-    supabase
-      .from("lines")
-      .select("game_id, market_type, sportsbook, side, line_value, odds_american, fetched_at")
-      .in("game_id", gameIds)
-      .in("market_type", ["moneyline", "total", "first_inning_total"])
-      .is("player_id", null),
+    loadCompleteCurrentGameLines({
+      client: supabase,
+      gameIds,
+      marketTypes: ["moneyline", "total", "first_inning_total"],
+      context: `MLB odds health ${slateDate}`,
+    }),
     createPredictionRecords({ sport: "mlb", slateDate, launchDay: false, apply: false, supabase }),
   ]);
   if (teamsResult.error) throw new Error(teamsResult.error.message);
-  if (linesResult.error) throw new Error(linesResult.error.message);
   if (dry.errors.length > 0) throw new Error(JSON.stringify(dry.errors));
   const abbr = new Map(((teamsResult.data ?? []) as Row[]).map((row) => [Number(row.id), String(row.abbreviation)]));
   const matchup = new Map(games.map((row) => [
     Number(row.id),
     `${abbr.get(Number(row.away_team_id)) ?? "?"}@${abbr.get(Number(row.home_team_id)) ?? "?"}`,
   ]));
-  const rawLines = (linesResult.data ?? []) as Row[];
-  const lines = rawLines.filter((row) => !SYNTHETIC_BOOKS.has(String(row.sportsbook ?? "").toLowerCase()));
+  const lines = (rawLines as Row[]).filter((row) => !SYNTHETIC_BOOKS.has(String(row.sportsbook ?? "").toLowerCase()));
   const grouped = new Map<string, Row[]>();
   for (const row of lines) {
     const key = `${row.game_id}::${row.market_type}`;
@@ -140,7 +139,7 @@ async function main(): Promise<void> {
     .sort()
     .at(-1) ?? null;
   console.log(JSON.stringify({
-    release: "mlb_odds_health_audit_2026_08_28_r71",
+    release: "mlb_odds_health_audit_2026_09_08_r87_current_line_pagination",
     readOnly: true,
     providerCalls: 0,
     writes: 0,
