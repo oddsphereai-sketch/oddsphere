@@ -36,7 +36,7 @@ import {
   type CfbMarketSharpAwareForecast,
 } from "./cfbMarketSharpAwareShadow";
 import { buildCfbOfficialTrackingRecords, cfbProviderIntegerId, cfbTrackingMarketsForPayload } from "./cfbOfficialTrackingRecord";
-import { eligibleCfbWeeklyGames, isGameInCfbWeeklyWindow, resolveCfbForwardWindow, type CfbWeeklyWindow } from "./cfbWeeklyWindow";
+import { eligibleCfbWeeklyGames, isGameInCfbWeeklyWindow, resolveCfbVisibleWindows, type CfbWeeklyWindow } from "./cfbWeeklyWindow";
 import {
   CFB_SHARP_API_ODDS_RELEASE,
   CFB_SHARP_FALLBACK_MAX_REQUESTS,
@@ -61,7 +61,7 @@ import {
 } from "./cfbForwardMemberSnapshotStore";
 
 export const CFB_FORWARD_WRITER_RELEASE =
-  "cfb_forward_evidence_writer_2026_09_05_r54_per_game_lock_isolation" as const;
+  "cfb_forward_evidence_writer_2026_09_08_r56_week_ahead_schedule_continuity" as const;
 export const CFB_FORWARD_MAX_QB_TEAMS_PER_RUN = 24 as const;
 export const CFB_FORWARD_RESULTS_BATCH_SIZE = 100 as const;
 export const CFB_FORWARD_MAX_PRIOR_GAME_IDS = 1200 as const;
@@ -99,6 +99,29 @@ export type CfbForwardCaptureFailure = {
   stage: CfbForwardCapturePlan["stage"];
   error: string;
 };
+
+type CfbForwardWindowState = {
+  window: CfbWeeklyWindow;
+  existing: CfbForwardStoredEvidence[];
+  lockPlanningExisting: CfbForwardStoredEvidence[];
+  need: { collect: boolean; reason: string; cadenceMinutes: number | null };
+};
+
+export function selectCfbForwardCollectionWindow<T extends Pick<CfbForwardWindowState, "need">>(
+  states: T[],
+): T | null {
+  const priority = (reason: string): number => {
+    if (reason === "t60_due") return 0;
+    if (reason === "release_refresh_due") return 1;
+    if (reason === "opening_seed" || reason === "opening_incomplete") return 2;
+    if (reason === "unlocked_refresh_due") return 3;
+    return 4;
+  };
+  return states
+    .map((state, index) => ({ state, index }))
+    .filter(({ state }) => state.need.collect)
+    .sort((first, second) => priority(first.state.need.reason) - priority(second.state.need.reason) || first.index - second.index)[0]?.state ?? null;
+}
 
 /**
  * Isolate synchronous game-specific validation/calculation failures so one
@@ -138,16 +161,22 @@ export async function runCfbForwardEvidenceWriter(args: {
   weatherProvider?: IWeatherProvider | null;
 }): Promise<CfbForwardWriterResult> {
   const allExisting = await readCfbForwardEvidence({ client: args.client, season: args.season });
-  const window = resolveCfbForwardWindow({ now: args.now, evidence: allExisting, advanceWithoutNextEvidence: true });
-  const existing = allExisting.filter((row) => isGameInCfbWeeklyWindow({ scheduledStart: row.gameStartAt }, window));
-  const lockPlanningExisting = cfbLockPlanningEvidence(existing);
-  const ordinaryNeed = determineCfbForwardCollectionNeed({ existing: lockPlanningExisting, now: args.now });
-  const need = releaseRefreshNeed(existing, args.now) ?? ordinaryNeed;
-  if (!need.collect) {
-    const tracking = await writeOfficialTracking({ client: args.client, payloads: currentT60Payloads(existing), apply: args.apply });
+  const windows = resolveCfbVisibleWindows({ now: args.now, evidence: allExisting });
+  const states: CfbForwardWindowState[] = windows.map((window) => {
+    const existing = allExisting.filter((row) => isGameInCfbWeeklyWindow({ scheduledStart: row.gameStartAt }, window));
+    const lockPlanningExisting = cfbLockPlanningEvidence(existing);
+    const ordinaryNeed = determineCfbForwardCollectionNeed({ existing: lockPlanningExisting, now: args.now });
+    const need = releaseRefreshNeed(existing, args.now) ?? ordinaryNeed;
+    return { window, existing, lockPlanningExisting, need };
+  });
+  const selected = selectCfbForwardCollectionWindow(states);
+  const visibleExisting = states.flatMap((state) => state.existing);
+  if (!selected) {
+    const tracking = await writeOfficialTracking({ client: args.client, payloads: currentT60Payloads(visibleExisting), apply: args.apply });
     const memberSnapshot = await refreshCompactMemberSnapshot({ client: args.client, existing: allExisting, payloads: [], season: args.season, now: args.now, apply: args.apply });
-    return emptyResult(need.reason, tracking, memberSnapshot);
+    return emptyResult(states.map((state) => state.need.reason).join("+"), tracking, memberSnapshot);
   }
+  const { window, existing, lockPlanningExisting, need } = selected;
   const slate = await fetchBalldontlieNcaafSlate({ season: args.season, startDate: window.providerQueryStartDate, endDate: window.providerQueryEndDate, apiKey: args.balldontlieApiKey });
   const games = selectCfbModelCoveredWeeklyGames({ games: slate.games, existing, now: args.now, window });
   if (games.length === 0) throw new Error(`CFB authoritative weekly window ${window.boardStartDate}..${window.boardEndDate} has no eligible model-covered games.`);
@@ -537,16 +566,26 @@ export function selectCfbModelCoveredWeeklyGames(args: {
 }
 
 export function planCfbPriorResultReads(args: {
-  rows: Array<Pick<CfbForwardStoredEvidence, "providerGameId" | "gameStartAt">>;
+  rows: Array<Pick<CfbForwardStoredEvidence, "providerGameId" | "gameStartAt" | "capturedAt">>;
   before: string;
 }): Array<{ gameIds: string[]; dates: string[] }> {
-  const dateById = new Map<string, string>();
-  for (const row of args.rows.filter((value) => value.gameStartAt.slice(0, 10) < args.before)) {
+  const latestById = new Map<string, { date: string; capturedAtMs: number }>();
+  for (const row of args.rows) {
     const date = row.gameStartAt.slice(0, 10);
-    const existing = dateById.get(row.providerGameId);
-    if (existing && existing !== date) throw new Error(`CFB prior game ${row.providerGameId} has conflicting persisted dates.`);
-    dateById.set(row.providerGameId, date);
+    const capturedAtMs = Date.parse(row.capturedAt);
+    if (!Number.isFinite(capturedAtMs)) throw new Error(`CFB prior game ${row.providerGameId} has an invalid capture timestamp.`);
+    const existing = latestById.get(row.providerGameId);
+    if (!existing || capturedAtMs > existing.capturedAtMs) {
+      latestById.set(row.providerGameId, { date, capturedAtMs });
+    } else if (capturedAtMs === existing.capturedAtMs && existing.date !== date) {
+      throw new Error(`CFB prior game ${row.providerGameId} has conflicting dates at the same capture timestamp.`);
+    }
   }
+  const dateById = new Map(
+    [...latestById.entries()]
+      .filter(([, value]) => value.date < args.before)
+      .map(([providerGameId, value]) => [providerGameId, value.date] as const),
+  );
   if (dateById.size > CFB_FORWARD_MAX_PRIOR_GAME_IDS) throw new Error(`CFB prior-game result coverage exceeds its ${CFB_FORWARD_MAX_PRIOR_GAME_IDS}-ID season budget.`);
   const idsByDate = new Map<string, string[]>();
   for (const [id, date] of dateById) idsByDate.set(date, [...(idsByDate.get(date) ?? []), id]);

@@ -9,10 +9,10 @@ import {
 } from "./cfbMemberFixture";
 
 export const CFB_FORWARD_MEMBER_SNAPSHOT_RELEASE =
-  "cfb_forward_member_snapshot_2026_09_05_r8_authoritative_lock_truth" as const;
+  "cfb_forward_member_snapshot_2026_09_07_r9_overlapping_week_ahead" as const;
 
 const SNAPSHOT_TTL_MS = 90 * 60 * 1000;
-const SNAPSHOT_STALE_MS = 8 * 60 * 60 * 1000;
+const SNAPSHOT_STALE_MS = 8 * 24 * 60 * 60 * 1000;
 const TABLE_MISSING_RE = /relation .*lab_response_snapshots.* does not exist|schema cache/i;
 
 export type CfbForwardMemberSnapshot = {
@@ -102,19 +102,18 @@ export async function readCfbForwardMemberSnapshot(input: {
     .from("lab_response_snapshots")
     .select("payload")
     .eq("snapshot_key", cfbForwardMemberSnapshotKey(input))
-    .gt("stale_until", now)
     .maybeSingle();
   if (error) {
     if (TABLE_MISSING_RE.test(error.message)) return null;
     throw new Error(`CFB compact member snapshot read failed: ${error.message}`);
   }
   if (!data) return null;
-  return validateCfbForwardMemberSnapshot((data as SnapshotRow).payload, input);
+  return validateCfbForwardMemberSnapshot((data as SnapshotRow).payload, { ...input, now });
 }
 
 function validateCfbForwardMemberSnapshot(
   value: unknown,
-  expected: { season: number },
+  expected: { season: number; now: string },
 ): CfbForwardMemberSnapshot | null {
   if (!value || typeof value !== "object") return null;
   const snapshot = value as Partial<CfbForwardMemberSnapshot>;
@@ -131,6 +130,7 @@ function validateCfbForwardMemberSnapshot(
     snapshot.fixture?.provenance?.sourceChecksum !== snapshot.sourceChecksum ||
     !Number.isFinite(Date.parse(snapshot.sourceCapturedAt ?? "")) ||
     !Number.isFinite(Date.parse(snapshot.publishedAt ?? "")) ||
+    Date.parse(expected.now) - Date.parse(snapshot.publishedAt ?? "") > SNAPSHOT_STALE_MS ||
     !/^[a-f0-9]{64}$/.test(snapshot.sourceChecksum ?? "")
   ) return null;
   return snapshot as CfbForwardMemberSnapshot;
