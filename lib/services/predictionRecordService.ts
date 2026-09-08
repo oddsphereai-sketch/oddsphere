@@ -76,6 +76,7 @@ import {
   resolveMlbTotalRuntimeResidualChampion,
 } from "../automodel/immediateMarketChampion";
 import { attachMlbFullGameForwardEvidence } from "./mlb/mlbFullGameForwardEvidenceCapture";
+import { loadCompleteCurrentGameLines } from "./currentGameLineReader";
 
 const SYNTHETIC_PRICE_BOOKS = new Set(["locked_snapshot", "recommendation_snapshot", "splits_consensus"]);
 const BOOK_PRIORITY: readonly string[] = SHARED_BOOK_PRIORITY.filter(
@@ -6303,16 +6304,27 @@ export async function createPredictionRecords(
   // can surface total-line drift (e.g., 8.5 → 9.0).
   // Phase 6B.28 — pull fetched_at so the lock substrate's LineRow shape
   // matches the Daily Edge route's LineRow shape exactly.
-  const { data: lineRowsForOdds } = await supabase
-    .from("lines")
-    .select("game_id, market_type, side, sportsbook, odds_american, line_value, fetched_at")
-    .in("game_id", gameIds)
-    // 2026-06-15: include first_inning_total so the FI record can thread its
-    // real lock price (was excluded → FI odds_american hardcoded null).
-    .in("market_type", ["moneyline", "total", "first_inning_total"])
-    .is("player_id", null);
+  let lineRowsForOdds: LineRowForOdds[];
+  if (sport === "mlb") {
+    lineRowsForOdds = await loadCompleteCurrentGameLines({
+      client: supabase,
+      gameIds,
+      // 2026-06-15: include first_inning_total so the FI record can thread its
+      // real lock price (was excluded → FI odds_american hardcoded null).
+      marketTypes: ["moneyline", "total", "first_inning_total"],
+      context: `prediction-record prices mlb/${slateDate}`,
+    }) as LineRowForOdds[];
+  } else {
+    const { data } = await supabase
+      .from("lines")
+      .select("game_id, market_type, side, sportsbook, odds_american, line_value, fetched_at")
+      .in("game_id", gameIds)
+      .in("market_type", ["moneyline", "total", "first_inning_total"])
+      .is("player_id", null);
+    lineRowsForOdds = (data ?? []) as LineRowForOdds[];
+  }
   const linesByGame = new Map<number, LineRowForOdds[]>();
-  for (const l of ((lineRowsForOdds ?? []) as LineRowForOdds[])) {
+  for (const l of lineRowsForOdds) {
     const arr = linesByGame.get(l.game_id) ?? [];
     arr.push(l);
     linesByGame.set(l.game_id, arr);

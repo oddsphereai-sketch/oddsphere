@@ -22,6 +22,10 @@
  */
 
 import { supabase } from "@/lib/db/supabase";
+import {
+  loadCompleteCurrentGameLines,
+  type CurrentGameLineRow,
+} from "@/lib/services/currentGameLineReader";
 import { isBlockedSportsbook } from "@/lib/config/blockedSportsbooks";
 import { fetchMlbStatsScheduleRaw } from "@/lib/providers/real_api/_mlbStatsApiClient";
 import {
@@ -7091,16 +7095,30 @@ export async function GET(request: Request) {
     // 4.1.10 — pull lines for ALL three game-level markets, with odds_american
     // and side, so per-market priceAmerican + the totals line both come from
     // the same fetch. Player-prop rows are filtered server-side via player_id IS NULL.
-    const { data: lineData, error: lineErr } = await supabase
-      .from("lines")
-      .select(
-        "game_id, market_type, sportsbook, side, line_value, odds_american, fetched_at"
-      )
-      .in("game_id", gameIds)
-      .in("market_type", ["moneyline", "total", "first_inning_total"])
-      .is("player_id", null);
-    if (lineErr) {
-      return Response.json({ error: lineErr.message }, { status: 500 });
+    let lineData: CurrentGameLineRow[] | LineRow[];
+    if (sport === "mlb") {
+      try {
+        lineData = await loadCompleteCurrentGameLines({
+          client: supabase,
+          gameIds,
+          marketTypes: ["moneyline", "total", "first_inning_total"],
+          context: `daily-edge ${sport}/${effectiveDate}`,
+        });
+      } catch (error) {
+        return Response.json(
+          { error: error instanceof Error ? error.message : String(error) },
+          { status: 500 },
+        );
+      }
+    } else {
+      const { data, error } = await supabase
+        .from("lines")
+        .select("game_id, market_type, sportsbook, side, line_value, odds_american, fetched_at")
+        .in("game_id", gameIds)
+        .in("market_type", ["moneyline", "total", "first_inning_total"])
+        .is("player_id", null);
+      if (error) return Response.json({ error: error.message }, { status: 500 });
+      lineData = (data ?? []) as LineRow[];
     }
     // Group by game, then pick the preferred book per game.
     const totalsByGame = new Map<
@@ -7112,7 +7130,7 @@ export async function GET(request: Request) {
         fetched_at?: string | null;
       }>
     >();
-    for (const row of (lineData ?? []) as LineRow[]) {
+    for (const row of lineData) {
       const key = `${row.game_id}::${row.market_type}`;
       const arr = currentLinesByGameMarket.get(key) ?? [];
       arr.push(row);

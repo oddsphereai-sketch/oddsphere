@@ -4,7 +4,7 @@ This file is the human-readable production handoff registry. Runtime constants a
 prediction snapshots remain the machine authority. Future model work must start here, verify the
 constants, and preserve the precedence and writer ownership below.
 
-Last reviewed: 2026-09-05
+Last reviewed: 2026-09-08
 
 ## Cross-sport confidence / execution contract
 
@@ -306,16 +306,30 @@ changed; only deterministic settlement of existing locked rows is affected.
 
 - Projection runtime: resolved automodel `v2_2`
 - First-inning runtime: `fi_v2` with FI-scoped release `mlb_first_inning_release_2026_09_04_r85_independent_uncertainty` and probability head `mlb_first_inning_fi_v10_independent_uncertainty_target_excluded_2026_09_04`. r85 retains r84's pre-r61 65% independent / 35% target-excluded multi-book posterior and its 48%-52% corroborated uncertainty band. When the evaluated quote is the sole accepted pair, the forecast remains independent-only and now requires the independent probability to clear 55% NRFI or 55% YRFI; otherwise it is a genuine null-side Toss-Up. The evaluated quote remains exact-price economics only. Full-game tuples, probabilities, grades, the sole writer/lease, providers, query budgets, locks, tracking, and settlement are unchanged.
-- Public calibration: `mlb_public_calibration_v32_complete_line_pagination_2026_09_05`
-- Decision release: `mlb_daily_edge_decision_2026_09_05_r86_complete_line_pagination`
-- Rule bundle: `mlb_daily_edge_rule_bundle_v71_complete_line_pagination_2026_09_05`
-- Market input snapshot: `mlb_market_input_snapshot_v2_complete_line_pagination_2026_09_05`
+- Public calibration: `mlb_public_calibration_v33_current_line_pagination_2026_09_08`
+- Decision release: `mlb_daily_edge_decision_2026_09_08_r87_current_line_pagination`
+- Rule bundle: `mlb_daily_edge_rule_bundle_v72_current_line_pagination_2026_09_08`
+- Market input snapshot: `mlb_market_input_snapshot_v3_current_line_pagination_2026_09_08`
 - Grade policy: `mlb_public_grade_policy_v57_total_support_under_scope_2026_09_04`
 - Correction policy: `mlb_prediction_corrections_v24_full_game_publication_coherence_2026_09_02`
 - Tracking contract: `member_facing_lock_v8_priority_retry_minute_cadence_2026_08_11`
 - Lock coherence: `mlb_lock_coherence_2026_09_02_r3_failed_economics_tuple`
 - Machine registry: `lib/automodel/mlbModelLayerVersions.ts`
 - Authoritative member-facing writer: `lib/services/predictionRecordService.ts`
+
+The September 8 r87 current-line correction preserves every r86 model formula,
+probability head, side rule, grade threshold, provider, cadence, stake, lock,
+tracking, and settlement rule. It extends stable, bounded `lines.id` pagination
+to the two downstream full-slate consumers omitted by r86: the authoritative
+prediction-record price snapshot and the member Daily Edge current-price
+reader. Both now consume the same complete current Moneyline, Total, and
+first-inning row set instead of accepting PostgREST's default 1,000-row prefix.
+The SELECT-only MLB odds-health audit uses the same reader. A saturated
+10,000-row response fails closed rather than publishing a partial price board;
+locked records remain immutable. Evidence and exact board impact are recorded
+in `docs/model-audits/2026-09-08-mlb-current-line-pagination-r87-predeclaration.md`
+and `docs/model-audits/2026-09-08-mlb-current-line-pagination-r87-result.md`.
+Rollback is the complete r86 release family.
 
 The September 5 r86 input correction preserves the r82 full-game model formulas,
 all r85 first-inning probability/calibration/tuple identifiers and behavior, and
