@@ -67,14 +67,14 @@ import {
   type CfbV1ExactPriceDecision,
   type CfbV1Market,
 } from "./cfbV1Decision";
-import { isGameInCfbWeeklyWindow, resolveCfbForwardWindow } from "./cfbWeeklyWindow";
+import { isGameInCfbWeeklyWindow, resolveCfbVisibleWindows } from "./cfbWeeklyWindow";
 import { cfbFootballEvidenceStats } from "./footballMemberEvidence";
 import { CFB_MARKET_SHARP_AWARE_PRODUCTION_RELEASE } from "./cfbMarketSharpAwareShadow";
 import { cfbTeamIdentity } from "./cfbTeamIdentity";
 import { CFB_PUBLIC_SCORE_DIRECTION_TOLERANCE_POINTS } from "./footballCrossMarketCoherence";
 
 export const CFB_MEMBER_FIXTURE_RELEASE =
-  "cfb_v1_member_fixture_2026_09_05_r50_authoritative_lock_truth" as const;
+  "cfb_v1_member_fixture_2026_09_07_r51_overlapping_week_ahead" as const;
 export const CFB_PUBLIC_OUTCOME_CONTRACT_RELEASE =
   "cfb_market_sharp_public_outcome_contract_2026_09_05_r49_confidence_economics_bridge" as const;
 export const CFB_CONTEXT_ONLY_QUOTE_CAPTURE_SKEW_MS = 5_000 as const;
@@ -126,9 +126,14 @@ export async function readCurrentCfbMemberFixture(args: { client: SupabaseClient
 }
 
 export function buildCfbMemberFixture(rows: CfbForwardStoredEvidence[], now = new Date().toISOString()): CfbMemberFixture {
-  const window = resolveCfbForwardWindow({ now, evidence: rows });
-  const windowRows = rows.filter((row) => isGameInCfbWeeklyWindow({ scheduledStart: row.gameStartAt }, window));
-  const latest = selectLatestCfbMemberEvidenceRows(windowRows, now);
+  const windows = resolveCfbVisibleWindows({ now, evidence: rows });
+  const selectedWindows = windows.flatMap((window) => {
+    const evidence = rows.filter((row) => isGameInCfbWeeklyWindow({ scheduledStart: row.gameStartAt }, window));
+    return evidence.length === 0 ? [] : [{ window, evidence, latest: selectLatestCfbMemberEvidenceRows(evidence, now) }];
+  });
+  if (selectedWindows.length === 0) throw new Error("CFB forward evidence has no visible weekly window.");
+  const windowRows = selectedWindows.flatMap((value) => value.evidence);
+  const latest = selectedWindows.flatMap((value) => value.latest);
   const movementRowsByGame = new Map(latest.map((row) => [
     row.providerGameId,
     movementRowsForGame(windowRows, row),
@@ -150,7 +155,7 @@ export function buildCfbMemberFixture(rows: CfbForwardStoredEvidence[], now = ne
     capturedAt,
     snapshot: { as_of: capturedAt, sport: "cfb", date, requested_date: date, fallback_used: false, slateState: "today_draft_only", slate_status: "cfb_week_one_model_live", last_slate_update_at: capturedAt, games },
     history: {},
-    week: { label: window.boardStartDate === "2026-08-27" ? "Opening Week" : `Week of ${shortDate(window.boardStartDate)}` },
+    week: { label: selectedWindows.map(({ window }) => window.boardStartDate === "2026-08-27" ? "Opening Week" : `Week of ${shortDate(window.boardStartDate)}`).join(" + ") },
     provenance: {
       sourceChecksum,
       openingCoverageGames: latest.filter((row) => row.payload.market.operationalOpening !== null).length,

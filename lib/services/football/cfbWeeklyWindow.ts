@@ -1,7 +1,7 @@
 import type { NcaafGame } from "./balldontlieNcaafSlate";
 
 export const CFB_WEEKLY_WINDOW_RELEASE =
-  "cfb_weekly_window_2026_08_30_r3_completed_slate_roll_forward" as const;
+  "cfb_weekly_window_2026_09_07_r4_overlapping_week_ahead" as const;
 
 export type CfbWeeklyWindow = {
   release: typeof CFB_WEEKLY_WINDOW_RELEASE;
@@ -93,6 +93,31 @@ export function resolveCfbForwardWindow(args: {
     : current;
 }
 
+/**
+ * Keep the active Thursday-through-Monday board visible while beginning the
+ * next verified weekly board on Sunday. This overlap is deliberately limited
+ * to two adjacent windows and requires a complete current opening wave, so a
+ * partial provider response cannot manufacture an early rollover.
+ */
+export function resolveCfbVisibleWindows(args: {
+  now: string | Date;
+  evidence: CfbWeeklyEvidenceRow[];
+}): CfbWeeklyWindow[] {
+  const primary = resolveCfbForwardWindow(args);
+  const active = activeCfbWeeklyWindow(args.now);
+  if (primary.boardStartDate !== active.boardStartDate) return [primary];
+
+  const currentRows = args.evidence.filter((row) =>
+    isGameInCfbWeeklyWindow({ scheduledStart: row.gameStartAt }, active)
+  );
+  if (!hasCompleteCfbOpeningWave(currentRows)) return [primary];
+
+  const instant = typeof args.now === "string" ? new Date(args.now) : new Date(args.now.getTime());
+  const easternDate = dateInTimeZone(instant, "America/New_York");
+  const overlapStarts = isoDate(addDays(dateAtUtcNoon(active.boardStartDate), 3));
+  return easternDate >= overlapStarts ? [primary, nextCfbWeeklyWindow(active)] : [primary];
+}
+
 export function isGameInCfbWeeklyWindow(game: Pick<NcaafGame, "scheduledStart">, window: CfbWeeklyWindow): boolean {
   const easternDate = dateInTimeZone(new Date(game.scheduledStart), "America/New_York");
   return easternDate >= window.boardStartDate && easternDate <= window.boardEndDate;
@@ -125,4 +150,11 @@ function addDays(value: Date, days: number): Date {
 
 function isoDate(value: Date): string {
   return value.toISOString().slice(0, 10);
+}
+
+function hasCompleteCfbOpeningWave(rows: CfbWeeklyEvidenceRow[]): boolean {
+  if (rows.length === 0) return false;
+  const expectedGames = Math.max(...rows.map((row) => row.payload.slateGameCount));
+  const capturedGames = new Set(rows.map((row) => row.providerGameId)).size;
+  return Number.isInteger(expectedGames) && expectedGames > 0 && capturedGames >= expectedGames;
 }

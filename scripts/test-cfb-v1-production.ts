@@ -43,6 +43,7 @@ import {
   cfbLockPlanningEvidence,
   cfbTrackingPayloadsForRun,
   fetchCfbSharpOddsFallbackAttempt,
+  planCfbPriorResultReads,
   publishCfbForwardDecisionBundle,
   trustedCfbSharpEventIdsByGame,
 } from "../lib/services/football/cfbForwardEvidenceWriter";
@@ -99,6 +100,31 @@ const game: NcaafGame = {
   away: { id: 10, conferenceId: 1, abbreviation: "UNC", name: "North Carolina Tar Heels", fbs: true },
   home: { id: 43, conferenceId: 3, abbreviation: "TCU", name: "TCU Horned Frogs", fbs: true },
 };
+
+const correctedPriorReads = planCfbPriorResultReads({
+  before: "2026-09-08",
+  rows: [
+    { providerGameId: "458875", gameStartAt: "2026-09-05T23:00:00.000Z", capturedAt: "2026-09-04T12:00:00.000Z" },
+    { providerGameId: "458875", gameStartAt: "2026-09-06T00:00:00.000Z", capturedAt: "2026-09-05T16:52:26.884Z" },
+    { providerGameId: "458876", gameStartAt: "2026-09-05T20:00:00.000Z", capturedAt: "2026-09-05T12:00:00.000Z" },
+  ],
+});
+assert.deepEqual(correctedPriorReads, [{ gameIds: ["458875", "458876"], dates: ["2026-09-05", "2026-09-06"] }]);
+assert.deepEqual(
+  planCfbPriorResultReads({ before: "2026-09-08", rows: [...[
+    { providerGameId: "458875", gameStartAt: "2026-09-05T23:00:00.000Z", capturedAt: "2026-09-04T12:00:00.000Z" },
+    { providerGameId: "458875", gameStartAt: "2026-09-06T00:00:00.000Z", capturedAt: "2026-09-05T16:52:26.884Z" },
+  ]].reverse() }),
+  [{ gameIds: ["458875"], dates: ["2026-09-06"] }],
+  "the newest immutable provider schedule date must win independently of database row order",
+);
+assert.throws(
+  () => planCfbPriorResultReads({ before: "2026-09-08", rows: [
+    { providerGameId: "same-capture", gameStartAt: "2026-09-05T23:00:00.000Z", capturedAt: "2026-09-05T12:00:00.000Z" },
+    { providerGameId: "same-capture", gameStartAt: "2026-09-06T00:00:00.000Z", capturedAt: "2026-09-05T12:00:00.000Z" },
+  ] }),
+  /conflicting dates at the same capture timestamp/,
+);
 
 const isolatedPlanGame: NcaafGame = { ...game, providerGameId: "isolated-good" };
 const failedPlanGame: NcaafGame = { ...game, providerGameId: "isolated-bad" };
@@ -369,7 +395,7 @@ assert.equal(compactMemberSnapshot.snapshotRelease, CFB_FORWARD_MEMBER_SNAPSHOT_
 assert.equal(compactMemberSnapshot.fixture, member, "the fast snapshot preserves the authoritative fixture byte-for-byte");
 assert.equal(compactMemberSnapshot.sourceChecksum, member.provenance.sourceChecksum);
 assert.equal(member.snapshot.games.length, 1);
-assert.equal(member.fixtureRelease, "cfb_v1_member_fixture_2026_09_05_r50_authoritative_lock_truth");
+assert.equal(member.fixtureRelease, "cfb_v1_member_fixture_2026_09_07_r51_overlapping_week_ahead");
 assert.equal(member.snapshot.games[0]!.lockState, "locked", "only a fully valid immutable T-60 tuple is labeled locked");
 assert.equal(member.snapshot.games[0]!.lockedAt, lockedAt);
 
@@ -1867,7 +1893,9 @@ assert.equal((writerSource.match(/appendCfbForwardEvidence\(/g) ?? []).length, 1
 assert.match(writerSource, /refreshCompactMemberSnapshot\(\{ client: args\.client, existing: allExisting, payloads/, "the sole writer must publish the compact member snapshot from the same authoritative evidence rows");
 assert.match(writerSource, /memberSnapshotError: error instanceof Error/, "member snapshot publication failure must be isolated from authoritative evidence and tracking writes");
 assert.match(memberSnapshotStoreSource, /\.from\("lab_response_snapshots"\)\.upsert/, "CFB must reuse the existing response snapshot table rather than add a writer or table");
-assert.match(memberSnapshotStoreSource, /const SNAPSHOT_STALE_MS = 8 \* 60 \* 60 \* 1000/, "the published fixture must retain a bounded eight-hour last-known-good window");
+assert.match(memberSnapshotStoreSource, /const SNAPSHOT_STALE_MS = 8 \* 24 \* 60 \* 60 \* 1000/, "the published fixture must retain a bounded eight-day weekly-board continuity window");
+assert.doesNotMatch(memberSnapshotStoreSource, /\.gt\("stale_until", now\)/, "reader continuity must use the payload publication timestamp so an already-written eight-hour row can recover after deployment");
+assert.match(memberSnapshotStoreSource, /Date\.parse\(expected\.now\) - Date\.parse\(snapshot\.publishedAt/, "reader continuity must remain bounded by the published payload timestamp");
 const evidenceStoreSource = readFileSync(path.join(process.cwd(), "lib/services/football/cfbForwardEvidenceStore.ts"), "utf8");
 assert.match(evidenceStoreSource, /CFB_FORWARD_PREVIOUS_EVIDENCE_SCHEMA_RELEASE/, "the reader must retain the complete r4 exact-price wave during the natural r5 transition");
 assert.match(evidenceStoreSource, /CFB_FORWARD_IDENTITY_PREVIOUS_EVIDENCE_SCHEMA_RELEASE/, "the reader must retain the complete r46 wave during the natural r47 transition");

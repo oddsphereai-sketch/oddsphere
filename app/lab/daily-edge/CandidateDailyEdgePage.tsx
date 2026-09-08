@@ -22,7 +22,7 @@ import DailyEdgeLiveRefresh from "./DailyEdgeLiveRefresh";
 import { readMemberDataWithDeadline } from "@/lib/services/memberDataAvailability";
 import { resolveUclFeatureFlags } from "@/lib/services/ucl/uclFeatureFlags";
 
-const CFB_MEMBER_DATA_READ_TIMEOUT_MS = 15_000;
+const CFB_MEMBER_DATA_READ_TIMEOUT_MS = 4_000;
 
 const readCachedNflForwardMemberSnapshot = unstable_cache(
   async (season: number, week: number) => {
@@ -38,15 +38,13 @@ const readCachedNflForwardMemberSnapshot = unstable_cache(
 
 const readCachedCfbMemberFixture = unstable_cache(
   async (season: number) => {
-    const [{ supabase }, { readCurrentCfbMemberFixture }, { readCfbForwardMemberSnapshot }] = await Promise.all([
+    const [{ supabase }, { readCfbForwardMemberSnapshot }] = await Promise.all([
       import("@/lib/db/supabase"),
-      import("@/lib/services/football/cfbMemberFixture"),
       import("@/lib/services/football/cfbForwardMemberSnapshotStore"),
     ]);
     const published = await readCfbForwardMemberSnapshot({ client: supabase, season })
       .catch(() => null);
-    if (published) return published.fixture;
-    return readCurrentCfbMemberFixture({ client: supabase, season });
+    return published?.fixture ?? null;
   },
   ["cfb-current-member-fixture", CFB_MEMBER_FIXTURE_RELEASE, CFB_FORWARD_MEMBER_SNAPSHOT_RELEASE],
   { revalidate: 60, tags: [CFB_MEMBER_FIXTURE_RELEASE] },

@@ -10,7 +10,7 @@ import {
   type CfbForwardStoredEvidence,
   type CfbForwardTeamQuarterbacks,
 } from "../lib/services/football/cfbForwardEvidence";
-import { CFB_FORWARD_MAX_QB_TEAMS_PER_RUN, latestCfbPayloadTimestamp, planCfbPriorResultReads, selectCfbModelCoveredWeeklyGames, selectQuarterbackTeams } from "../lib/services/football/cfbForwardEvidenceWriter";
+import { CFB_FORWARD_MAX_QB_TEAMS_PER_RUN, latestCfbPayloadTimestamp, planCfbPriorResultReads, selectCfbForwardCollectionWindow, selectCfbModelCoveredWeeklyGames, selectQuarterbackTeams } from "../lib/services/football/cfbForwardEvidenceWriter";
 import { buildCfbMemberFixture } from "../lib/services/football/cfbMemberFixture";
 import {
   CFB_MARKET_SHARP_AWARE_CANDIDATE_RELEASE,
@@ -23,7 +23,7 @@ import {
   getCfbV1Forecasts,
 } from "../lib/services/football/cfbV1Decision";
 import { cfbV1WeeklyGameProfileCoverage } from "../lib/services/football/cfbV1WeeklyForecast";
-import { activeCfbWeeklyWindow, eligibleCfbWeeklyGames, resolveCfbForwardWindow } from "../lib/services/football/cfbWeeklyWindow";
+import { activeCfbWeeklyWindow, eligibleCfbWeeklyGames, nextCfbWeeklyWindow, resolveCfbForwardWindow, resolveCfbVisibleWindows } from "../lib/services/football/cfbWeeklyWindow";
 import type { NcaafGame, NcaafTeam } from "../lib/services/football/balldontlieNcaafSlate";
 
 const openingWindow = activeCfbWeeklyWindow("2026-08-25T16:00:00.000Z");
@@ -146,6 +146,22 @@ assert.deepEqual(
   }],
   "prior results must use the provider-supported persisted-date filter and retain exact game IDs",
 );
+const rescheduledPrior = {
+  ...openingRows[0]!,
+  id: "rescheduled-latest",
+  capturedAt: "2026-09-01T12:00:00.000Z",
+  gameStartAt: "2026-08-30T00:00:00.000Z",
+  payload: {
+    ...openingRows[0]!.payload,
+    capturedAt: "2026-09-01T12:00:00.000Z",
+    game: { ...openingRows[0]!.payload.game, scheduledStart: "2026-08-30T00:00:00.000Z" },
+  },
+};
+assert.deepEqual(
+  planCfbPriorResultReads({ rows: [openingRows[0]!, rescheduledPrior], before: "2026-09-03" }),
+  [{ gameIds: [openingRows[0]!.providerGameId], dates: ["2026-08-30"] }],
+  "a verified provider game reschedule must use its latest persisted kickoff date instead of blocking the next weekly slate",
+);
 assert.equal(
   resolveCfbForwardWindow({ now: "2026-08-30T15:30:00.000Z", evidence: openingRows, advanceWithoutNextEvidence: true }).boardStartDate,
   "2026-09-03",
@@ -173,6 +189,45 @@ assert.equal(earlyWeekOneMember.week.label, "Week of Sep 3");
 const weekOneMember = buildCfbMemberFixture([...openingRows, ...weekOneRows], "2026-09-01T16:00:00.000Z");
 assert.deepEqual(weekOneMember.snapshot.games.map((value) => value.id).sort(), ["cfb-fcs-at-fbs", "cfb-week-one-new-id"]);
 assert.equal(weekOneMember.week.label, "Week of Sep 3");
+
+const mondayTail = game({ id: "monday-tail", start: "2026-08-31T23:30:00.000Z", awayName: "Alabama Crimson Tide", homeName: "Clemson Tigers" });
+const overlapCurrentRows = [
+  ...frozen.slice(0, 2).map((forecast, index) => evidenceRow(
+    game({ id: forecast.providerGameId, start: forecast.gameStartsAt, awayName: forecast.awayTeam, homeName: forecast.homeTeam }),
+    forecast,
+    3,
+    `overlap-current-${index}`,
+  )),
+  evidenceRow(mondayTail, getCfbV1ForecastForGame({ game: mondayTail }).forecast, 3, "overlap-monday"),
+];
+const visibleOverlap = resolveCfbVisibleWindows({
+  now: "2026-08-30T15:30:00.000Z",
+  evidence: [...overlapCurrentRows, ...weekOneRows],
+});
+assert.deepEqual(
+  visibleOverlap.map((window) => window.boardStartDate),
+  ["2026-08-27", "2026-09-03"],
+  "Sunday lookahead must preserve the current Monday tail and expose only the adjacent next window",
+);
+const overlapMember = buildCfbMemberFixture([...overlapCurrentRows, ...weekOneRows], "2026-08-30T15:30:00.000Z");
+assert.deepEqual(
+  overlapMember.snapshot.games.map((value) => value.id).sort(),
+  [...overlapCurrentRows, ...weekOneRows].map((row) => `cfb-${row.providerGameId}`).sort(),
+  "the member fixture must combine two independently complete adjacent waves without mixing their slate counts",
+);
+assert.equal(overlapMember.week.label, "Opening Week + Week of Sep 3");
+assert.deepEqual(
+  resolveCfbVisibleWindows({ now: "2026-08-29T15:30:00.000Z", evidence: overlapCurrentRows }).map((window) => window.boardStartDate),
+  ["2026-08-27"],
+  "Saturday must remain a single-window board",
+);
+assert.equal(nextCfbWeeklyWindow(visibleOverlap[1]!).boardStartDate, "2026-09-10");
+
+const ordinaryCurrent = { name: "current", need: { collect: true, reason: "unlocked_refresh_due", cadenceMinutes: 60 } };
+const openingNext = { name: "next", need: { collect: true, reason: "opening_seed", cadenceMinutes: null } };
+assert.equal(selectCfbForwardCollectionWindow([ordinaryCurrent, openingNext])?.name, "next", "next opening seed must outrank an ordinary current refresh");
+const t60Current = { name: "current", need: { collect: true, reason: "t60_due", cadenceMinutes: null } };
+assert.equal(selectCfbForwardCollectionWindow([t60Current, openingNext])?.name, "current", "the remaining current-game T-60 capture must outrank lookahead seeding");
 
 const writerSource = readFileSync("lib/services/football/cfbForwardEvidenceWriter.ts", "utf8");
 assert.doesNotMatch(writerSource, /requiredIds|getCfbV1Forecasts\(/, "the production writer cannot retain a static launch-artifact allowlist");
@@ -223,6 +278,7 @@ function evidenceRow(value: NcaafGame, forecast: ReturnType<typeof getCfbV1Forec
   const capturedAt = new Date(Date.parse(value.scheduledStart) - 4 * 86_400_000).toISOString();
   const bundle = buildCfbV1DecisionBundle({ providerGameId: value.providerGameId, awayTeam: value.away.abbreviation, homeTeam: value.home.abbreviation, gameStartsAt: value.scheduledStart, comparableCurrentBooks: [], forecast });
   const { pmf: _pmf, ...publishedForecast } = forecast;
+  void _pmf;
   const payload: CfbForwardEvidencePayload = {
     schemaRelease: CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE,
     collectorRelease: CFB_FORWARD_EVIDENCE_COLLECTOR_RELEASE,
