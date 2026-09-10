@@ -129,9 +129,10 @@ export function createNflPlayerPropsMemberSnapshotReader(options: {
           if (cache.get(key)?.inFlight === inFlight) cache.delete(key);
           return null;
         }
-        const memberSnapshot = buildNflPlayerPropsMemberSnapshot(snapshot);
+        const resolvedAt = now();
+        const memberSnapshot = buildNflPlayerPropsMemberSnapshot(snapshot, new Date(resolvedAt).toISOString());
         if (cache.get(key)?.inFlight === inFlight) {
-          cache.set(key, { value: memberSnapshot, expiresAt: now() + cacheTtlMs });
+          cache.set(key, { value: memberSnapshot, expiresAt: resolvedAt + cacheTtlMs });
         }
         return memberSnapshot;
       })

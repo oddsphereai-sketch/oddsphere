@@ -9,9 +9,13 @@ import {
   withoutUnretainedNflPlayerPropsEvidenceReference,
   type NflPlayerPropsMarketEvidenceCapture,
 } from "./nflPlayerPropsMarketEvidenceCapture";
+import { addDaysToSlate, computeSlateDate } from "@/lib/dates/slateDate";
 
 export const NFL_PLAYER_PROPS_PRODUCTION_CANDIDATE_RELEASE =
   "nfl_player_props_member_2026_09_07_r17_out_of_support_hold" as const;
+export const NFL_PLAYER_PROPS_MEMBER_LIFECYCLE_RELEASE =
+  "nfl_player_props_member_lifecycle_2026_09_10_r1_overnight_rollover" as const;
+export const NFL_PLAYER_PROPS_BOARD_ROLLOVER_HOUR_ET = 2 as const;
 export const NFL_PLAYER_PROPS_WRITER_LEASE_GROUP = "prediction_pipeline:nfl" as const;
 
 export type NflPlayerPropsProductionSnapshot = {
@@ -35,6 +39,7 @@ export type NflPlayerPropsProductionSnapshot = {
 export type NflPlayerPropsMemberGrade = "Best Angle" | "Lean" | "Watchlist" | "No Play";
 export type NflPlayerPropsMemberDecision = NflPlayerPropsRuntimeDecision & { grade: NflPlayerPropsMemberGrade };
 export type NflPlayerPropsMemberSnapshot = {
+  lifecycleRelease: typeof NFL_PLAYER_PROPS_MEMBER_LIFECYCLE_RELEASE;
   season: number; week: number; generatedAt: string;
   board: {
     evaluatedAt: string;
@@ -156,8 +161,22 @@ export function buildNflPlayerPropsTrackingRows(snapshot: NflPlayerPropsProducti
     }));
 }
 
-export function buildNflPlayerPropsMemberSnapshot(snapshot: NflPlayerPropsProductionSnapshot): NflPlayerPropsMemberSnapshot {
-  const eligibleMemberDecisions = snapshot.memberDecisions.filter(isMemberDecision);
+export function buildNflPlayerPropsMemberSnapshot(
+  snapshot: NflPlayerPropsProductionSnapshot,
+  asOf = snapshot.generatedAt,
+): NflPlayerPropsMemberSnapshot {
+  const asOfMs = Date.parse(asOf);
+  if (!Number.isFinite(asOfMs)) throw new Error("NFL props member snapshot asOf is invalid.");
+  const boardDate = currentNflPlayerPropsBoardDate(new Date(asOfMs));
+  const eligibleMemberDecisions = snapshot.memberDecisions
+    .filter(isMemberDecision)
+    .filter((row) => {
+      try {
+        return computeSlateDate("nfl", row.scheduledStart) >= boardDate;
+      } catch {
+        return false;
+      }
+    });
   const memberEvidence = subsetNflPlayerPropsMarketEvidenceCapture({
     capture: snapshot.board.marketEvidence,
     decisions: eligibleMemberDecisions,
@@ -168,6 +187,7 @@ export function buildNflPlayerPropsMemberSnapshot(snapshot: NflPlayerPropsProduc
   const count = (grade: NflPlayerPropsMemberGrade) => memberDecisions.filter((row) => row.grade === grade).length;
   const diagnostics = snapshot.board.diagnostics;
   return {
+    lifecycleRelease: NFL_PLAYER_PROPS_MEMBER_LIFECYCLE_RELEASE,
     season: snapshot.season,
     week: snapshot.week,
     generatedAt: snapshot.generatedAt,
@@ -193,6 +213,17 @@ export function buildNflPlayerPropsMemberSnapshot(snapshot: NflPlayerPropsProduc
     },
     memberDecisions,
   };
+}
+
+export function currentNflPlayerPropsBoardDate(now = new Date()): string {
+  if (!Number.isFinite(now.getTime())) throw new Error("NFL props member board date is invalid.");
+  const hourEt = Number(new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/New_York",
+    hour: "2-digit",
+    hourCycle: "h23",
+  }).format(now));
+  const todayEt = computeSlateDate("nfl", now);
+  return hourEt < NFL_PLAYER_PROPS_BOARD_ROLLOVER_HOUR_ET ? addDaysToSlate(todayEt, -1) : todayEt;
 }
 
 export function attachNflPlayerPropsClosingPrice(

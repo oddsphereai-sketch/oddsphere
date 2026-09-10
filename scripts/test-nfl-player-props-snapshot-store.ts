@@ -6,6 +6,8 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { readMemberDataWithDeadline } from "../lib/services/memberDataAvailability";
 import {
   buildNflPlayerPropsMemberSnapshot,
+  currentNflPlayerPropsBoardDate,
+  NFL_PLAYER_PROPS_MEMBER_LIFECYCLE_RELEASE,
   NFL_PLAYER_PROPS_PRODUCTION_CANDIDATE_RELEASE,
   NFL_PLAYER_PROPS_WRITER_LEASE_GROUP,
   type NflPlayerPropsProductionSnapshot,
@@ -42,6 +44,27 @@ const held = decision({
 });
 const snapshot = productionSnapshot([actionable, held]);
 const memberBefore = buildNflPlayerPropsMemberSnapshot(snapshot);
+
+assert.equal(memberBefore.lifecycleRelease,
+  "nfl_player_props_member_lifecycle_2026_09_10_r1_overnight_rollover");
+assert.equal(memberBefore.lifecycleRelease, NFL_PLAYER_PROPS_MEMBER_LIFECYCLE_RELEASE);
+const atKickoff = buildNflPlayerPropsMemberSnapshot(snapshot, actionable.scheduledStart);
+assert.equal(atKickoff.memberDecisions.length, 1,
+  "a game remains available during play so its locked reader can be reviewed");
+const beforeOvernightRollover = buildNflPlayerPropsMemberSnapshot(snapshot, "2026-09-04T05:59:59.999Z");
+assert.equal(beforeOvernightRollover.memberDecisions.length, 1,
+  "the completed game remains through the overnight tracking window");
+const afterOvernightRollover = buildNflPlayerPropsMemberSnapshot(snapshot, "2026-09-04T06:00:00.000Z");
+assert.equal(afterOvernightRollover.memberDecisions.length, 0,
+  "the prior Eastern game date leaves the board at the 2 a.m. ET rollover");
+assert.equal(afterOvernightRollover.board.counts.actionable, 0,
+  "rolled-off actions cannot remain in member headline counts");
+assert.equal(currentNflPlayerPropsBoardDate(new Date("2026-09-04T05:59:59.999Z")), "2026-09-03");
+assert.equal(currentNflPlayerPropsBoardDate(new Date("2026-09-04T06:00:00.000Z")), "2026-09-04");
+assert.equal(snapshot.memberDecisions.length, 1,
+  "member expiry never mutates the canonical locked snapshot used by tracking and settlement");
+assert.throws(() => buildNflPlayerPropsMemberSnapshot(snapshot, "not-a-timestamp"), /asOf is invalid/,
+  "an invalid member lifecycle boundary fails closed");
 
 assert.equal(NFL_PLAYER_PROPS_SNAPSHOT_ENVELOPE_RELEASE,
   "nfl_player_props_snapshot_envelope_2026_09_02_r1_gzip_deduplicated_member");
@@ -157,6 +180,16 @@ async function main(): Promise<void> {
   clock = 90_000;
   assert.deepEqual(await cachedReader.read({ client: cachedClient, season: 2026, week: 1 }), memberBefore);
   assert.equal(cachedReads, 2, "the first read at expiry performs one fresh query");
+
+  let rolloverReads = 0;
+  let rolloverClock = Date.parse("2026-09-04T05:59:00.000Z");
+  const rolloverReader = createNflPlayerPropsMemberSnapshotReader({ now: () => rolloverClock });
+  const rolloverClient = clientFixture({ read: () => encoded, onRead: () => { rolloverReads += 1; } });
+  assert.equal((await rolloverReader.read({ client: rolloverClient, season: 2026, week: 1 }))?.memberDecisions.length, 1);
+  rolloverClock = Date.parse("2026-09-04T06:00:00.000Z");
+  assert.equal((await rolloverReader.read({ client: rolloverClient, season: 2026, week: 1 }))?.memberDecisions.length, 0,
+    "the member cache refreshes the board at the overnight rollover");
+  assert.equal(rolloverReads, 2, "the normal bounded TTL refreshes at the tested rollover boundary");
   let secondWeekReads = 0;
   const secondWeekClient = clientFixture({
     read: () => encoded,
@@ -178,7 +211,7 @@ async function main(): Promise<void> {
 
   let transientError: string | undefined = "temporary read failure";
   let errorReads = 0;
-  const errorReader = createNflPlayerPropsMemberSnapshotReader();
+  const errorReader = createNflPlayerPropsMemberSnapshotReader({ now: () => Date.parse(evaluatedAt) });
   const errorClient = clientFixture({
     read: () => encoded,
     readError: () => transientError,
@@ -191,7 +224,7 @@ async function main(): Promise<void> {
 
   let corruptPayload: unknown = { ...encoded, checksum: "bad" };
   let corruptReads = 0;
-  const corruptReader = createNflPlayerPropsMemberSnapshotReader();
+  const corruptReader = createNflPlayerPropsMemberSnapshotReader({ now: () => Date.parse(evaluatedAt) });
   const corruptClient = clientFixture({ read: () => corruptPayload, onRead: () => { corruptReads += 1; } });
   await assert.rejects(corruptReader.read({ client: corruptClient, season: 2026, week: 1 }), /corrupt or unsupported/);
   corruptPayload = encoded;
@@ -201,7 +234,7 @@ async function main(): Promise<void> {
   let abortReads = 0;
   let observedSignal: AbortSignal | undefined;
   let abortMode = true;
-  const abortReader = createNflPlayerPropsMemberSnapshotReader({ readTimeoutMs: 5 });
+  const abortReader = createNflPlayerPropsMemberSnapshotReader({ readTimeoutMs: 5, now: () => Date.parse(evaluatedAt) });
   const abortClient = clientFixture({
     onRead: () => { abortReads += 1; },
     read: (signal) => {

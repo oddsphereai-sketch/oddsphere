@@ -37,9 +37,9 @@ export function NflPlayerPropsProductDashboard({ snapshot, reviewMode = false, i
     && (bookFilter === "all" || row.sportsbook === bookFilter)
     && (!search.trim() || `${row.playerName} ${row.team} ${row.opponent} ${row.market} ${row.sportsbook}`.toLowerCase().includes(search.trim().toLowerCase()))
   )).sort(sortRows(sort)), [allRows, bookFilter, grade, market, search, selectedGame, sort]);
-  const radarRows = useMemo(() => buildRadarRows(allRows), [allRows]);
-  const pairs = useMemo(() => pairRows(rows), [rows]);
-  const selected = allRows.find((row) => key(row) === selectedKey) ?? null;
+  const radarRows = useMemo(() => buildRadarRows(rows), [rows]);
+  const pairs = useMemo(() => pairRows(rows, sort), [rows, sort]);
+  const selected = rows.find((row) => key(row) === selectedKey) ?? null;
   const activeFilters = [selectedGame, grade, market, bookFilter].filter((value) => value !== "all" && value !== "All").length + (search.trim() ? 1 : 0);
 
   useEffect(() => {
@@ -51,23 +51,28 @@ export function NflPlayerPropsProductDashboard({ snapshot, reviewMode = false, i
 
   if (!snapshot) return <EmptyBoard reviewMode={reviewMode} dataUnavailable={dataUnavailable} />;
 
-  const clearFilters = () => { setSelectedGame("all"); setGrade("All"); setMarket("all"); setBookFilter("all"); setSearch(""); };
-  return <div className="w-full pb-8" data-review-surface={reviewMode ? "nfl-player-props" : undefined}>
+  const changeSelectedGame = (value: string) => { setSelectedGame(value); setSelectedKey(null); };
+  const changeGrade = (value: GradeFilter) => { setGrade(value); setSelectedKey(null); };
+  const changeMarket = (value: string) => { setMarket(value); setSelectedKey(null); };
+  const changeBookFilter = (value: string) => { setBookFilter(value); setSelectedKey(null); };
+  const changeSearch = (value: string) => { setSearch(value); setSelectedKey(null); };
+  const clearFilters = () => { setSelectedGame("all"); setGrade("All"); setMarket("all"); setBookFilter("all"); setSearch(""); setSelectedKey(null); };
+  return <div className="w-full pb-8" data-member-lifecycle-release={snapshot.lifecycleRelease} data-review-surface={reviewMode ? "nfl-player-props" : undefined}>
     {reviewMode ? <aside className="mb-5 border border-amber-400/40 bg-amber-400/[0.08] px-4 py-3 sm:px-5"><p className="text-[10px] font-black uppercase text-amber-300">Private founder review · Real board</p><p className="mt-1 max-w-4xl text-sm leading-6 text-amber-50/80">This view uses the current timestamped NFL model output and exact prices. Review mode does not publish, grade, lock, or track anything.</p></aside> : null}
-    <NflSlateHeader snapshot={snapshot} games={games} selectedGame={selectedGame} onSelectGame={setSelectedGame} reviewMode={reviewMode} />
+    <NflSlateHeader snapshot={snapshot} games={games} selectedGame={selectedGame} onSelectGame={changeSelectedGame} reviewMode={reviewMode} />
     <TodayRadar rows={radarRows} onSelect={setSelectedKey} />
 
     <section data-product-zone="research-entry" className="z-30 -mx-4 border-y border-gray-800 bg-[#07090d]/95 px-4 py-4 shadow-[0_12px_30px_rgba(0,0,0,0.3)] backdrop-blur sm:sticky sm:top-16 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
       <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
         <div className="shrink-0 lg:w-40"><p className="text-[10px] font-black uppercase text-violet-300">Research workspace</p><h2 className="mt-1 text-lg font-black text-white">Explore the board</h2></div>
-        <label className="relative block min-w-0 flex-1"><span className="sr-only">Search NFL player props</span><span aria-hidden="true" className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-sm text-gray-600">⌕</span><input type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search a player, team, market, or sportsbook" className="h-11 w-full rounded-md border border-gray-700 bg-gray-950 pl-9 pr-3 text-sm text-white outline-none placeholder:text-gray-600 focus:border-violet-400" /></label>
-        <p className="shrink-0 text-xs text-gray-500"><strong className="text-gray-200">{pairs.length}</strong> markets shown · {allRows.length} completed reads</p>
+        <label className="relative block min-w-0 flex-1"><span className="sr-only">Search NFL player props</span><span aria-hidden="true" className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-sm text-gray-600">⌕</span><input type="search" value={search} onChange={(event) => changeSearch(event.target.value)} placeholder="Search a player, team, market, or sportsbook" className="h-11 w-full rounded-md border border-gray-700 bg-gray-950 pl-9 pr-3 text-sm text-white outline-none placeholder:text-gray-600 focus:border-violet-400" /></label>
+        <p className="shrink-0 text-xs text-gray-500"><strong className="text-gray-200">{pairs.length}</strong> markets shown · {rows.length} {activeFilters ? "filtered" : "completed"} reads</p>
       </div>
-      <div className="mt-3 flex gap-2 overflow-x-auto pb-1" aria-label="NFL prop markets"><PlayerPropsFilterButton label="All markets" active={market === "all"} onClick={() => setMarket("all")} />{markets.map((value) => <PlayerPropsFilterButton key={value} label={label(value)} active={market === value} onClick={() => setMarket(value)} />)}</div>
+      <div className="mt-3 flex gap-2 overflow-x-auto pb-1" aria-label="NFL prop markets"><PlayerPropsFilterButton label="All markets" active={market === "all"} onClick={() => changeMarket("all")} />{markets.map((value) => <PlayerPropsFilterButton key={value} label={label(value)} active={market === value} onClick={() => changeMarket(value)} />)}</div>
       <div data-product-zone="board-controls" className="mt-3 border-t border-gray-800 pt-3"><div className="flex flex-wrap items-center gap-2">
-        <FilterSelect label="Bet grade" value={grade} onChange={(value) => setGrade(value as GradeFilter)} options={["All", "Best Angle", "Lean", "Watchlist", "No Play"]} />
+        <FilterSelect label="Bet grade" value={grade} onChange={(value) => changeGrade(value as GradeFilter)} options={["All", "Best Angle", "Lean", "Watchlist", "No Play"]} />
         <FilterSelect label="Sort" value={sort} onChange={(value) => setSort(value as SortKey)} options={[{ value: "signal", label: "Signal first" }, { value: "player", label: "Player A–Z" }, { value: "market", label: "Market" }, { value: "start", label: "Start time" }, { value: "ev", label: "Highest EV" }, { value: "edge", label: "Highest model edge" }, { value: "probability", label: "Model probability" }, { value: "book", label: "Book" }, { value: "updated", label: "Last updated" }]} />
-        <FilterSelect label="Sportsbook" value={bookFilter} onChange={setBookFilter} options={["all", ...books]} />
+        <FilterSelect label="Sportsbook" value={bookFilter} onChange={changeBookFilter} options={["all", ...books]} />
         {activeFilters ? <button type="button" onClick={clearFilters} className="h-9 px-2 text-xs font-bold text-sky-300 hover:text-white">Clear {activeFilters}</button> : null}
       </div></div>
     </section>
@@ -201,7 +206,7 @@ function NflTeamBadge({ team, size = "normal" }: { team: string; size?: "small" 
 }
 function EmptyBoard({ reviewMode, dataUnavailable }: { reviewMode: boolean; dataUnavailable: boolean }) { return <section className="mx-auto max-w-4xl py-10 sm:py-20"><div className="border-y border-gray-800 py-10 sm:py-14"><div className="flex items-center gap-3 text-xs font-bold text-emerald-300"><span className="h-2 w-2 rounded-full bg-emerald-400" />NFL Player Props{reviewMode ? " · Private review" : ""}</div><h1 className="mt-5 max-w-2xl text-4xl font-black leading-tight text-white sm:text-5xl">{dataUnavailable ? "Player Props data is temporarily unavailable." : "Today’s prop board is loading."}</h1><p className="mt-4 max-w-2xl text-base leading-7 text-gray-400">{dataUnavailable ? "The data service did not respond in time. Please refresh in a moment; no picks or prices were changed." : "The latest complete exact-price snapshot will appear here as soon as sportsbook prices are ready."}</p></div></section>; }
 
-function pairRows(rows: Row[]): MarketPair[] { const groups = new Map<string, Row[]>(); for (const row of rows) { const pairKey = [row.gameId, row.playerName, row.market, row.line].join("|"); groups.set(pairKey, [...(groups.get(pairKey) ?? []), row]); } return [...groups.entries()].map(([pairKey, pairRows]) => ({ key: pairKey, rows: pairRows, primary: [...pairRows].sort((a, b) => rank(a) - rank(b) || b.expectedValue - a.expectedValue)[0]!, over: pairRows.find((row) => row.side === "over") ?? null, under: pairRows.find((row) => row.side === "under") ?? null, yes: pairRows.find((row) => row.side === "yes") ?? null })).sort((a, b) => sortRows("signal")(a.primary, b.primary)); }
+function pairRows(rows: Row[], sort: SortKey): MarketPair[] { const groups = new Map<string, Row[]>(); for (const row of rows) { const pairKey = [row.gameId, row.playerName, row.market, row.line].join("|"); groups.set(pairKey, [...(groups.get(pairKey) ?? []), row]); } return [...groups.entries()].map(([pairKey, pairRows]) => ({ key: pairKey, rows: pairRows, primary: [...pairRows].sort((a, b) => rank(a) - rank(b) || b.expectedValue - a.expectedValue)[0]!, over: pairRows.find((row) => row.side === "over") ?? null, under: pairRows.find((row) => row.side === "under") ?? null, yes: pairRows.find((row) => row.side === "yes") ?? null })).sort((a, b) => sortRows(sort)(a.primary, b.primary) || sortRows("signal")(a.primary, b.primary)); }
 function deriveGames(rows: Row[]): GameSummary[] { const map = new Map<string, GameSummary>(); for (const row of rows) { const game = map.get(row.gameId) ?? { gameId: row.gameId, teams: [], opponent: row.opponent || null, scheduledStart: row.scheduledStart || null, rows: 0 }; game.teams = unique([...game.teams, row.team]); if (row.opponent && !game.teams.includes(row.opponent) && game.teams.length < 2) game.teams.push(row.opponent); game.rows += 1; map.set(row.gameId, game); } return [...map.values()].sort((a, b) => Date.parse(a.scheduledStart ?? "") - Date.parse(b.scheduledStart ?? "")); }
 function buildRadarRows(rows: Row[]): Row[] { const deduped = new Map<string, Row>(); for (const row of [...rows].sort(sortRows("signal"))) { const radarKey = [row.gameId, row.playerName, row.market].join("|"); if (!deduped.has(radarKey)) deduped.set(radarKey, row); } return [...deduped.values()].filter((row) => row.grade !== "No Play").slice(0, 6); }
 function sortRows(sort: SortKey): (a: Row, b: Row) => number { if (sort === "player") return (a, b) => a.playerName.localeCompare(b.playerName); if (sort === "market") return (a, b) => a.market.localeCompare(b.market) || a.playerName.localeCompare(b.playerName); if (sort === "start") return (a, b) => Date.parse(a.scheduledStart) - Date.parse(b.scheduledStart); if (sort === "ev") return (a, b) => b.expectedValue - a.expectedValue; if (sort === "edge") return (a, b) => b.probabilityEdge - a.probabilityEdge; if (sort === "probability") return (a, b) => b.finalProbability - a.finalProbability; if (sort === "book") return (a, b) => a.sportsbook.localeCompare(b.sportsbook); if (sort === "updated") return (a, b) => Date.parse(b.observedAt) - Date.parse(a.observedAt); return (a, b) => rank(a) - rank(b) || b.expectedValue - a.expectedValue; }
