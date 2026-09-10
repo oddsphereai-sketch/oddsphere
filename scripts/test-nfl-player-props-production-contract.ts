@@ -284,6 +284,15 @@ for (const productHierarchy of ["Today’s Radar", "Research workspace", "Choose
 assert.ok(memberReader.includes('data-product-zone="today-radar"'));
 assert.ok(memberReader.includes('data-product-zone="research-entry"'));
 assert.ok(memberReader.includes('data-product-zone="full-board"'));
+assert.ok(memberReader.includes("buildRadarRows(rows), [rows]"), "NFL filters drive Today’s Radar and the full board from one row set");
+assert.ok(memberReader.includes("const selected = rows.find"), "an open NFL prop reader cannot survive a filter that excludes its row");
+assert.ok(memberReader.includes('{rows.length} {activeFilters ? "filtered" : "completed"} reads'), "NFL filter feedback reports the filtered row count");
+assert.ok(memberReader.includes("pairRows(rows, sort)"), "the selected sort is passed into the paired full-board rows");
+assert.match(memberReader, /\.sort\(\(a, b\) => sortRows\(sort\)\(a\.primary, b\.primary\)/,
+  "the paired full board honors the selected sort instead of forcing signal order");
+for (const filterHandler of ["changeSelectedGame", "changeGrade", "changeMarket", "changeBookFilter", "changeSearch"]) {
+  assert.ok(memberReader.includes(filterHandler), `NFL ${filterHandler} closes any reader excluded by the next filter state`);
+}
 assert.ok(memberReader.includes("getPropGradeColor"), "NFL prop grade badges must use the shared MLB prop-grade palette");
 assert.ok(memberReader.includes("https://a.espncdn.com/i/teamlogos/nfl/500/"), "NFL prop team badges must render the established ESPN NFL team marks");
 for (const truthfulCoverageCopy of ["completed reads", "All markets", "market families currently graded"]) {
