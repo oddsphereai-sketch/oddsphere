@@ -515,6 +515,10 @@ function isUclGame(game: DailyEdgeGameDto): boolean {
   return game.soccerCompetitionContext?.competition === "uefa_champions_league" || game.id.startsWith("soccer-ucl-");
 }
 
+function DailyEdgeGameStartTime({ game, className, fallback }: { game: DailyEdgeGameDto; className?: string; fallback?: string }) {
+  return <LocalTime value={game.gameStartAt} style={isUclGame(game) ? "date-time" : "time"} fallback={fallback ?? game.gameTime} className={className} />;
+}
+
 function memberTeamColor(game: DailyEdgeGameDto, side: "away" | "home", sport: Sport): string {
   const abbreviation = side === "away" ? game.awayTeam : game.homeTeam;
   const supplied = side === "away" ? game.awayTeamPrimaryColor : game.homeTeamPrimaryColor;
@@ -586,7 +590,7 @@ function CollapsedReader({ game, market, marketKey, sport, onOpen, onOpenMarket,
         <div className="mt-3 flex flex-wrap items-center gap-2">
           <CompactMatchupIdentity game={game} sport={sport} />
           <VerdictBadge market={market} />
-          <LocalTime value={game.gameStartAt} fallback={game.gameTime} className="text-[9px] text-gray-600" />
+          <DailyEdgeGameStartTime game={game} className="text-[9px] text-gray-600" />
           <LockBadge lockState={game.lockState} lockedAt={game.lockedAt} scheduledLockAt={game.scheduledLockAt} className="font-black uppercase tracking-wider text-emerald-300" />
           <span className="ml-auto text-[8px] font-black uppercase tracking-wider text-gray-600">{index + 1} / {total}</span>
         </div>
@@ -686,7 +690,7 @@ function MobileReaderSheet({ onClose, onSportChange, onSportPrefetch, activePrev
       <div className="absolute inset-x-0 bottom-0 top-[65px] flex flex-col overflow-hidden rounded-t-2xl border-t border-violet-400/35 bg-[#0a0910] shadow-[0_-24px_80px_-35px_rgba(124,58,237,0.85)]">
         <div className="shrink-0 border-b border-white/[0.07] bg-[#100e18] px-3 pb-2 pt-3">
           <div className="flex items-center justify-between gap-3">
-            <div className="flex min-w-0 items-center gap-2"><CompactMatchupIdentity game={reader.game} sport={reader.sport} /><LocalTime value={reader.game.gameStartAt} fallback={reader.game.gameTime} className="truncate text-[9px] text-gray-600" /><LockBadge lockState={reader.game.lockState} lockedAt={reader.game.lockedAt} scheduledLockAt={reader.game.scheduledLockAt} className="font-black uppercase tracking-wider text-emerald-300" /></div>
+            <div className="flex min-w-0 items-center gap-2"><CompactMatchupIdentity game={reader.game} sport={reader.sport} /><DailyEdgeGameStartTime game={reader.game} className="truncate text-[9px] text-gray-600" /><LockBadge lockState={reader.game.lockState} lockedAt={reader.game.lockedAt} scheduledLockAt={reader.game.scheduledLockAt} className="font-black uppercase tracking-wider text-emerald-300" /></div>
             <button type="button" onClick={onClose} aria-label="Close reader" className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-white/[0.08] bg-white/[0.035] text-xl text-gray-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-300">×</button>
           </div>
           <div className="mt-2 flex items-center justify-between gap-2">
@@ -761,7 +765,7 @@ function ReaderHeader({ game, market, sport, onCollapse, index, total }: { game:
         <div className="mt-3 flex flex-wrap items-center gap-2">
           {isUclGame(game) ? <CompactMatchupIdentity game={game} sport={sport} /> : <h2 className="text-lg font-black tracking-tight text-white sm:text-xl">{game.awayTeam} <span className="text-gray-600">{game.sport === "soccer" ? "vs" : "@"}</span> {game.homeTeam}</h2>}
           <VerdictBadge market={market} />
-          <LocalTime value={game.gameStartAt} fallback={game.gameTime} className="text-[10px] text-gray-600" />
+          <DailyEdgeGameStartTime game={game} className="text-[10px] text-gray-600" />
           <LockBadge lockState={game.lockState} lockedAt={game.lockedAt} scheduledLockAt={game.scheduledLockAt} className="font-black uppercase tracking-wider text-emerald-300" />
         </div>
         {game.soccerCompetitionContext ? <p className="mt-1 text-[9px] font-semibold text-gray-500">{soccerCompetitionContextLabel(game.soccerCompetitionContext)} · Regulation time</p> : null}
@@ -2449,7 +2453,7 @@ function BoardGameCard({ game, sport, headlineMarket, active, activeMarket, sele
           <CompactMatchupIdentity game={game} sport={sport} />
           <div className="flex min-h-8 items-center gap-2">
             <VerdictBadge market={headline} large />
-            {finalScore ? <span className="rounded-full border border-white/[0.10] bg-white/[0.05] px-2 py-1 text-[9px] font-black uppercase tracking-wider text-gray-300">Final · {game.awayTeam} {finalScore.away}–{finalScore.home} {game.homeTeam}</span> : <><LocalTime value={game.gameStartAt} fallback={game.gameTime} className="text-[10px] text-gray-500" /><LockBadge lockState={game.lockState} lockedAt={game.lockedAt} scheduledLockAt={game.scheduledLockAt} className="font-black uppercase tracking-wider text-emerald-300" /></>}
+            {finalScore ? <span className="rounded-full border border-white/[0.10] bg-white/[0.05] px-2 py-1 text-[9px] font-black uppercase tracking-wider text-gray-300">Final · {game.awayTeam} {finalScore.away}–{finalScore.home} {game.homeTeam}</span> : <><DailyEdgeGameStartTime game={game} className="text-[10px] text-gray-500" /><LockBadge lockState={game.lockState} lockedAt={game.lockedAt} scheduledLockAt={game.scheduledLockAt} className="font-black uppercase tracking-wider text-emerald-300" /></>}
           </div>
         </div>
         <div className="mt-5 flex flex-wrap items-baseline gap-2">

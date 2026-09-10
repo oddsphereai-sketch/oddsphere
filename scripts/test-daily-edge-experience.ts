@@ -1710,6 +1710,12 @@ check(
     candidateDailyEdgeSource.includes('<MatchupColorAccent game={game} sport={sport} />'),
 );
 check(
+  "UCL kickoff labels include the local match date across board and reader surfaces",
+  candidateDailyEdgeSource.includes('function DailyEdgeGameStartTime({ game, className, fallback }') &&
+    candidateDailyEdgeSource.includes('style={isUclGame(game) ? "date-time" : "time"}') &&
+    (candidateDailyEdgeSource.match(/<DailyEdgeGameStartTime game=\{/g) ?? []).length === 4,
+);
+check(
   "shared soccer fallbacks retain provider club names and prefer club logos over country flags",
   soccerAdapterSource.includes('.select("id, abbreviation, display_name, logo_url, location")') &&
     soccerAdapterSource.includes('awayTeamDisplayName: awayTeam?.display_name ?? awayAbbr') &&
