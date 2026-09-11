@@ -166,4 +166,44 @@ finalizeDailyEdgeResponseCoherence(sharpFallback);
 assert.equal(sharpFallback.games[0]!.markets.total.sharpBookAvailability?.status, "pending");
 assert.equal(sharpFallback.games[0]!.markets.first_inning.sharpBookAvailability?.status, "unavailable");
 
+const directionMismatch = response(market({
+  currentPriceAmerican: -125,
+  oddsTrail: [
+    { american: -110, line: 8.5, observedAt: "2026-08-25T10:45:00.000Z", sportsbook: "onexbet", source: "line_history", label: "first" },
+    { american: -125, line: 8.5, observedAt: "2026-08-25T11:45:00.000Z", sportsbook: "onexbet", source: "current_line", label: "current" },
+  ],
+  lineTrail: [
+    { american: -110, line: 8.5, observedAt: "2026-08-25T10:45:00.000Z", sportsbook: "onexbet", source: "line_history", label: "first" },
+    { american: -125, line: 8.5, observedAt: "2026-08-25T11:45:00.000Z", sportsbook: "onexbet", source: "current_line", label: "current" },
+  ],
+  marketReadV2: {
+    ...market().marketReadV2!,
+    label: "Projection-Led",
+    movement: {
+      firstTrackedLine: 8.5,
+      firstTrackedPrice: -110,
+      currentLine: 8.5,
+      currentPrice: -125,
+      directionRelativeToPick: "neutral",
+      observedAt: "2026-08-25T11:45:00.000Z",
+    },
+  },
+}));
+finalizeDailyEdgeResponseCoherence(directionMismatch);
+finalizeDailyEdgeResponseCoherence(directionMismatch);
+assert.equal(directionMismatch.games[0]!.markets.total.evidenceCoherence?.status, "limited");
+assert.ok(directionMismatch.games[0]!.markets.total.evidenceCoherence?.reasonCodes.includes("market_read_direction_mismatch"));
+assert.equal(directionMismatch.games[0]!.markets.total.marketReadV2?.validityStatus, "valid_nondirectional");
+
+const cachedLimited = response(market({
+  evidenceCoherence: undefined,
+  marketReadV2: {
+    ...market().marketReadV2!,
+    label: "Movement history limited",
+    exactLineEvidenceStatus: "display_current_quote_only",
+  },
+}));
+finalizeDailyEdgeResponseCoherence(cachedLimited);
+assert.equal(cachedLimited.games[0]!.markets.total.evidenceCoherence?.status, "limited", "cached limited evidence must retain its fail-closed state");
+
 console.log("MLB Daily Edge response coherence: PASS");
