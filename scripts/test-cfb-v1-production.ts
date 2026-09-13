@@ -41,7 +41,7 @@ import {
   buildCfbForwardPayloadsWithIsolation,
   cfbMarketAnchorHealthHolds,
   cfbLockPlanningEvidence,
-  cfbTrackingPayloadsForRun,
+  cfbTrackingCandidatesForRun,
   fetchCfbSharpOddsFallbackAttempt,
   planCfbPriorResultReads,
   publishCfbForwardDecisionBundle,
@@ -52,6 +52,7 @@ import { resolveCfbCanonicalMarketAnchor } from "../lib/services/football/cfbMar
 import {
   CFB_MARKET_SHADOW_WEIGHT,
   CFB_MARKET_SHARP_AWARE_CANDIDATE_RELEASE,
+  CFB_MARKET_SHARP_AWARE_PREVIOUS_PRODUCTION_RELEASE,
   CFB_MARKET_SHARP_AWARE_PRODUCTION_RELEASE,
   applyCfbMarketSharpAwareGrades,
   applyCfbBalancedPositiveValueRule,
@@ -60,7 +61,10 @@ import {
 import { CFB_SHARP_API_SPLITS_RELEASE } from "../lib/services/football/cfbSharpApiSplits";
 import { fetchBalldontlieNcaafQuarterbacks } from "../lib/services/football/balldontlieNcaafQuarterbacks";
 import { ingestCfbFinalScores } from "../lib/services/football/cfbScoreIngestService";
-import { buildCfbOfficialTrackingRecords } from "../lib/services/football/cfbOfficialTrackingRecord";
+import {
+  buildCfbOfficialTrackingRecords,
+  buildCfbPublishedCutoffRecoveryRecords,
+} from "../lib/services/football/cfbOfficialTrackingRecord";
 import { FOOTBALL_MARKET_SCOPED_T60_TRACKING_RELEASE } from "../lib/services/football/footballMarketScopedTracking";
 import { SharpApiClientError } from "../lib/providers/real_api/_sharpApiClient";
 import {
@@ -1683,12 +1687,12 @@ const marketScopedPayload: CfbForwardEvidencePayload = {
 const marketScopedTracking = buildCfbOfficialTrackingRecords({ payload: marketScopedPayload, gameId: 9001 });
 assert.deepEqual(marketScopedTracking.map((row) => row.market), ["moneyline", "spread", "total"]);
 assert.equal(marketScopedTracking.every((row) => row.locked_at === lockedAt), true);
-const heldMoneylineTracking = marketScopedTracking.find((row) => row.market === "moneyline")!;
-assert.equal(heldMoneylineTracking.held, true, "a missing exact Moneyline price must retain the forecast in accuracy tracking");
-assert.equal(heldMoneylineTracking.no_bet, true, "a held forecast must remain non-actionable");
-assert.equal(heldMoneylineTracking.odds_american, null, "a held forecast must not invent executable economics");
-assert.equal(heldMoneylineTracking.side, "home", "held Moneyline tracking must preserve the authoritative forecast side");
-assert.equal((heldMoneylineTracking.snapshot_json?.forecast_outlook as { market?: string } | undefined)?.market, "moneyline");
+const noPlayMoneylineTracking = marketScopedTracking.find((row) => row.market === "moneyline")!;
+assert.equal(noPlayMoneylineTracking.held, false, "a missing exact Moneyline price must remain a prediction, never a Held row");
+assert.equal(noPlayMoneylineTracking.no_bet, true, "a no-price forecast must remain non-actionable");
+assert.equal(noPlayMoneylineTracking.odds_american, null, "a no-price forecast must not invent executable economics");
+assert.equal(noPlayMoneylineTracking.side, "home", "No Play Moneyline tracking must preserve the authoritative forecast side");
+assert.equal((noPlayMoneylineTracking.snapshot_json?.forecast_outlook as { market?: string } | undefined)?.market, "moneyline");
 const priorT60Stored: CfbForwardStoredEvidence = {
   id: "71",
   providerGameId: marketScopedPayload.game.providerGameId,
@@ -1700,9 +1704,58 @@ const priorT60Stored: CfbForwardStoredEvidence = {
 };
 const ordinaryRefreshPayload = { ...marketScopedPayload, stage: "unlocked" as const, capturedAt: "2026-08-29T15:20:00.000Z" };
 assert.deepEqual(
-  cfbTrackingPayloadsForRun([priorT60Stored], [ordinaryRefreshPayload]).map((row) => row.game.providerGameId),
+  cfbTrackingCandidatesForRun([priorT60Stored], [ordinaryRefreshPayload], "2026-08-29T15:20:00.000Z")
+    .map((row) => row.payload.game.providerGameId),
   [marketScopedPayload.game.providerGameId],
   "an ordinary collection run must retain prior immutable T-60 payloads for missing-market backfill",
+);
+const publishedCutoffPayload = structuredClone(marketScopedPayload) as CfbForwardEvidencePayload;
+publishedCutoffPayload.stage = "unlocked";
+publishedCutoffPayload.captureTiming = "on_time";
+publishedCutoffPayload.capturedAt = "2026-08-29T14:55:00.000Z";
+publishedCutoffPayload.cutoffAt = "2026-08-29T15:00:00.000Z";
+publishedCutoffPayload.t60LagMinutes = null;
+(publishedCutoffPayload.authoritativeForecast as { release: string }).release = CFB_MARKET_SHARP_AWARE_PREVIOUS_PRODUCTION_RELEASE;
+const afterCutoffPayload = structuredClone(publishedCutoffPayload);
+afterCutoffPayload.capturedAt = "2026-08-29T15:05:00.000Z";
+const publishedCutoffStored: CfbForwardStoredEvidence = {
+  ...priorT60Stored,
+  id: "published-cutoff-row",
+  stage: "unlocked",
+  capturedAt: publishedCutoffPayload.capturedAt,
+  payload: publishedCutoffPayload,
+};
+const afterCutoffStored: CfbForwardStoredEvidence = {
+  ...publishedCutoffStored,
+  id: "after-cutoff-row",
+  capturedAt: afterCutoffPayload.capturedAt,
+  payload: afterCutoffPayload,
+};
+const recoveryCandidates = cfbTrackingCandidatesForRun(
+  [publishedCutoffStored, afterCutoffStored],
+  [],
+  "2026-08-29T17:00:00.000Z",
+);
+assert.equal(recoveryCandidates.length, 1);
+assert.equal(recoveryCandidates[0]!.mode, "published_cutoff_accuracy_recovery");
+assert.equal(recoveryCandidates[0]!.payload.capturedAt, publishedCutoffPayload.capturedAt, "recovery must select the last immutable prediction at or before T-60, never a later observation");
+assert.deepEqual(cfbTrackingCandidatesForRun([publishedCutoffStored], [], "2026-08-29T14:59:00.000Z"), [], "recovery must never write before a game starts while a real T-60 capture can still occur");
+const recoveryTracking = buildCfbPublishedCutoffRecoveryRecords({ payload: publishedCutoffPayload, gameId: 9001 });
+assert.deepEqual(recoveryTracking.map((row) => row.market), ["moneyline", "spread", "total"]);
+assert.equal(recoveryTracking.every((row) => !row.held && row.no_bet && row.play_grade === "no_play"), true, "recovered predictions must remain accuracy-only No Play predictions, never Held rows");
+assert.equal(recoveryTracking.every((row) => row.odds_american === null && row.edge === null && row.expected_value === null), true, "recovery must never reconstruct betting economics");
+assert.equal(recoveryTracking.every((row) => row.prediction_source === "cfb_forward_evidence_published_cutoff_accuracy_recovery"), true);
+const missingAnchorRecovery = structuredClone(publishedCutoffPayload);
+missingAnchorRecovery.decisions.marketOutlooks!.spread!.line = null;
+missingAnchorRecovery.decisions.marketOutlooks!.total!.line = null;
+assert.deepEqual(
+  buildCfbPublishedCutoffRecoveryRecords({ payload: missingAnchorRecovery, gameId: 9001 }).map((row) => row.market),
+  ["moneyline"],
+  "missing historical reference lines must stay missing instead of being fabricated",
+);
+assert.throws(
+  () => buildCfbPublishedCutoffRecoveryRecords({ payload: afterCutoffPayload, gameId: 9001 }),
+  /supported immutable pre-cutoff prediction payload/,
 );
 assert.throws(
   () => buildCfbOfficialTrackingRecords({ payload: { ...marketScopedPayload, captureTiming: "late_first_observation" }, gameId: 9001 }),
@@ -1963,6 +2016,7 @@ assert.match(evidenceStoreSource, /\.order\("captured_at", \{ ascending: true \}
 assert.match(evidenceStoreSource, /exceeded its bounded.*row season limit/, "the CFB evidence reader must fail explicitly at its hard cap instead of silently truncating a release wave");
 assert.match(evidenceStoreSource, /select\("id,evidence_release,provider_game_id,stage,captured_at,game_start_at"\)/, "the writer history scan must stay payload-free");
 assert.match(evidenceStoreSource, /latestCurrentByGameStage/, "the writer must retain the latest current-release opening, unlocked, and T-60 rows separately");
+assert.match(evidenceStoreSource, /latestPublishedByGameAtCutoff/, "the bounded writer read must retain the last immutable pre-boundary prediction for denominator recovery");
 assert.match(evidenceStoreSource, /CFB_FORWARD_WRITER_PAYLOAD_BATCH_SIZE = 100/, "current writer payload reads must remain bounded");
 const evidenceRanges: Array<[number, number]> = [];
 const storedEvidenceRow = {

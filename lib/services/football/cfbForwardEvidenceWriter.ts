@@ -32,10 +32,16 @@ import {
   buildCfbMarketSharpAwareForecast,
   CFB_MARKET_SHADOW_WEIGHT,
   CFB_MARKET_SHARP_AWARE_CANDIDATE_RELEASE,
+  CFB_MARKET_SHARP_AWARE_PREVIOUS_PRODUCTION_RELEASE,
   CFB_MARKET_SHARP_AWARE_PRODUCTION_RELEASE,
   type CfbMarketSharpAwareForecast,
 } from "./cfbMarketSharpAwareShadow";
-import { buildCfbOfficialTrackingRecords, cfbProviderIntegerId, cfbTrackingMarketsForPayload } from "./cfbOfficialTrackingRecord";
+import {
+  buildCfbOfficialTrackingRecords,
+  buildCfbPublishedCutoffRecoveryRecords,
+  cfbProviderIntegerId,
+  cfbTrackingMarketsForPayload,
+} from "./cfbOfficialTrackingRecord";
 import { eligibleCfbWeeklyGames, isGameInCfbWeeklyWindow, resolveCfbVisibleWindows, type CfbWeeklyWindow } from "./cfbWeeklyWindow";
 import {
   CFB_SHARP_API_ODDS_RELEASE,
@@ -61,7 +67,7 @@ import {
 } from "./cfbForwardMemberSnapshotStore";
 
 export const CFB_FORWARD_WRITER_RELEASE =
-  "cfb_forward_evidence_writer_2026_09_13_r59_balanced_positive_value" as const;
+  "cfb_forward_evidence_writer_2026_09_13_r60_complete_published_tracking_denominators" as const;
 export const CFB_FORWARD_MAX_QB_TEAMS_PER_RUN = 24 as const;
 export const CFB_FORWARD_MAX_SHARP_FALLBACK_GAMES_PER_RUN = 24 as const;
 export const CFB_FORWARD_RESULTS_BATCH_SIZE = 100 as const;
@@ -172,9 +178,12 @@ export async function runCfbForwardEvidenceWriter(args: {
     return { window, existing, lockPlanningExisting, need };
   });
   const selected = selectCfbForwardCollectionWindow(states);
-  const visibleExisting = states.flatMap((state) => state.existing);
   if (!selected) {
-    const tracking = await writeOfficialTracking({ client: args.client, payloads: currentT60Payloads(visibleExisting), apply: args.apply });
+    const tracking = await writeOfficialTracking({
+      client: args.client,
+      candidates: cfbTrackingCandidatesForRun(allExisting, [], args.now),
+      apply: args.apply,
+    });
     const memberSnapshot = await refreshCompactMemberSnapshot({ client: args.client, existing: allExisting, payloads: [], season: args.season, now: args.now, apply: args.apply });
     return emptyResult(states.map((state) => state.need.reason).join("+"), tracking, memberSnapshot);
   }
@@ -189,8 +198,13 @@ export async function runCfbForwardEvidenceWriter(args: {
     ...(need.reason === "release_refresh_due" ? { unlockedCadenceMinutesOverride: 0 } : {}),
   });
   if (plans.length === 0) {
+    const tracking = await writeOfficialTracking({
+      client: args.client,
+      candidates: cfbTrackingCandidatesForRun(allExisting, [], args.now),
+      apply: args.apply,
+    });
     const memberSnapshot = await refreshCompactMemberSnapshot({ client: args.client, existing: allExisting, payloads: [], season: args.season, now: args.now, apply: args.apply });
-    return emptyResult("capture_plan_empty", { trackingAttempted: false, trackingRecordsProposed: 0, trackingRecordsInserted: 0, trackingRecordsExisting: 0 }, memberSnapshot);
+    return emptyResult("capture_plan_empty", tracking, memberSnapshot);
   }
   const playbook = new PlaybookClient(args.playbookApiKey);
   const priorResults = await fetchPriorCompletedGames({ rows: writerEvidence.metadata, before: window.boardStartDate, apiKey: args.balldontlieApiKey });
@@ -496,7 +510,7 @@ export async function runCfbForwardEvidenceWriter(args: {
   const write = await appendCfbForwardEvidence({ client: args.client, runId: args.runId, payloads, apply: args.apply });
   const tracking = await writeOfficialTracking({
     client: args.client,
-    payloads: cfbTrackingPayloadsForRun(existing, payloads),
+    candidates: cfbTrackingCandidatesForRun(allExisting, payloads, args.now),
     apply: args.apply,
   });
   const memberSnapshot = await refreshCompactMemberSnapshot({ client: args.client, existing: allExisting, payloads, season: args.season, now: args.now, apply: args.apply });
@@ -793,18 +807,68 @@ function stageCounts(payloads: CfbForwardEvidencePayload[]): Record<"opening" | 
   return { opening: payloads.filter((row) => row.stage === "opening").length, unlocked: payloads.filter((row) => row.stage === "unlocked").length, t60: payloads.filter((row) => row.stage === "t60").length };
 }
 
-function currentT60Payloads(rows: CfbForwardStoredEvidence[]): CfbForwardEvidencePayload[] { return rows.filter((row) => row.stage === "t60").map((row) => row.payload); }
+export type CfbTrackingCandidate = {
+  payload: CfbForwardEvidencePayload;
+  mode: "official_t60" | "published_cutoff_accuracy_recovery";
+};
 
-export function cfbTrackingPayloadsForRun(
+export function cfbTrackingCandidatesForRun(
   existing: CfbForwardStoredEvidence[],
   newlyCaptured: CfbForwardEvidencePayload[],
-): CfbForwardEvidencePayload[] {
-  const byGame = new Map<string, CfbForwardEvidencePayload>();
-  for (const payload of currentT60Payloads(existing)) byGame.set(payload.game.providerGameId, payload);
-  for (const payload of newlyCaptured) {
-    if (payload.stage === "t60") byGame.set(payload.game.providerGameId, payload);
+  now: string,
+): CfbTrackingCandidate[] {
+  const nowMs = Date.parse(now);
+  if (!Number.isFinite(nowMs)) throw new Error("CFB tracking candidate selection requires a valid timestamp.");
+  const byGame = new Map<string, CfbForwardEvidencePayload[]>();
+  for (const payload of [...existing.map((row) => row.payload), ...newlyCaptured]) {
+    const rows = byGame.get(payload.game.providerGameId) ?? [];
+    rows.push(payload);
+    byGame.set(payload.game.providerGameId, rows);
   }
-  return [...byGame.values()];
+  const selected: CfbTrackingCandidate[] = [];
+  for (const rows of byGame.values()) {
+    const official = rows.filter(isEligibleOfficialTrackingPayload).sort(latestPayloadFirst)[0];
+    if (official) {
+      selected.push({ payload: official, mode: "official_t60" });
+      continue;
+    }
+    const gameStart = Date.parse(rows[0]!.game.scheduledStart);
+    if (!Number.isFinite(gameStart) || gameStart > nowMs) continue;
+    const cutoff = gameStart - 60 * 60_000;
+    const recovery = rows.filter((payload) =>
+      isEligiblePublishedCutoffRecoveryPayload(payload) && Date.parse(payload.capturedAt) <= cutoff
+    ).sort(latestPayloadFirst)[0];
+    if (recovery) selected.push({ payload: recovery, mode: "published_cutoff_accuracy_recovery" });
+  }
+  return selected.sort((first, second) =>
+    Date.parse(first.payload.game.scheduledStart) - Date.parse(second.payload.game.scheduledStart) ||
+    first.payload.game.providerGameId.localeCompare(second.payload.game.providerGameId));
+}
+
+function latestPayloadFirst(first: CfbForwardEvidencePayload, second: CfbForwardEvidencePayload): number {
+  return Date.parse(second.capturedAt) - Date.parse(first.capturedAt) || second.runId.localeCompare(first.runId);
+}
+
+function isEligibleOfficialTrackingPayload(payload: CfbForwardEvidencePayload): boolean {
+  return payload.schemaRelease === CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE &&
+    payload.memberRelease === CFB_FORWARD_MEMBER_RELEASE &&
+    payload.decisions.decisionRelease === CFB_V1_DECISION_RELEASE &&
+    payload.authoritativeForecast?.release === CFB_MARKET_SHARP_AWARE_PRODUCTION_RELEASE &&
+    payload.decisions.trackingEnabled &&
+    payload.stage === "t60" &&
+    payload.captureTiming === "on_time" &&
+    (payload.t60LagMinutes ?? Infinity) >= 0 &&
+    (payload.t60LagMinutes ?? Infinity) <= CFB_T60_MAX_CAPTURE_LAG_MINUTES;
+}
+
+function isEligiblePublishedCutoffRecoveryPayload(payload: CfbForwardEvidencePayload): boolean {
+  const release = payload.authoritativeForecast?.release as string | undefined;
+  return payload.schemaRelease === CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE &&
+    payload.memberRelease === CFB_FORWARD_MEMBER_RELEASE &&
+    payload.decisions.decisionRelease === CFB_V1_DECISION_RELEASE &&
+    payload.decisions.publicationEnabled &&
+    (release === CFB_MARKET_SHARP_AWARE_PRODUCTION_RELEASE || release === CFB_MARKET_SHARP_AWARE_PREVIOUS_PRODUCTION_RELEASE) &&
+    Boolean(payload.decisions.marketOutlooks);
 }
 
 export function cfbLockPlanningEvidence(rows: CfbForwardStoredEvidence[]): CfbForwardStoredEvidence[] {
@@ -869,34 +933,34 @@ function storedEvidenceForPayload(payload: CfbForwardEvidencePayload): CfbForwar
   };
 }
 
-async function writeOfficialTracking(args: { client: SupabaseClient; payloads: CfbForwardEvidencePayload[]; apply: boolean }): Promise<TrackingResult> {
-  const eligible = args.payloads.filter((payload) =>
-    payload.schemaRelease === CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE &&
-    payload.memberRelease === CFB_FORWARD_MEMBER_RELEASE &&
-    payload.decisions.decisionRelease === CFB_V1_DECISION_RELEASE &&
-    payload.authoritativeForecast?.release === CFB_MARKET_SHARP_AWARE_PRODUCTION_RELEASE &&
-    payload.decisions.trackingEnabled &&
-    payload.stage === "t60" &&
-    payload.captureTiming === "on_time" &&
-    (payload.t60LagMinutes ?? Infinity) >= 0 &&
-    (payload.t60LagMinutes ?? Infinity) <= CFB_T60_MAX_CAPTURE_LAG_MINUTES &&
+async function writeOfficialTracking(args: { client: SupabaseClient; candidates: CfbTrackingCandidate[]; apply: boolean }): Promise<TrackingResult> {
+  const eligible = args.candidates.filter(({ payload }) =>
     isPublicallyTracked("cfb", computeSlateDate("cfb", payload.game.scheduledStart))
   );
-  const trackingGames = eligible.map((payload) => ({
+  const trackingGames = eligible.map(({ payload, mode }) => ({
     externalId: cfbProviderIntegerId(payload.game.providerGameId, "game"),
-    decisions: cfbTrackingMarketsForPayload(payload).map((market) => ({ market })),
+    decisions: (mode === "official_t60"
+      ? cfbTrackingMarketsForPayload(payload)
+      : (["moneyline", "spread", "total"] as const).filter((market) => {
+          const outlook = payload.decisions.marketOutlooks?.[market] ?? null;
+          return Boolean(outlook && (market === "moneyline" || outlook.line !== null));
+        })).map((market) => ({ market })),
   }));
   const proposed = trackingGames.length === 0 ? 0 : buildMarketScopedFootballTrackingPlan(trackingGames).proposed;
   if (!args.apply || proposed === 0) return { trackingAttempted: false, trackingRecordsProposed: proposed, trackingRecordsInserted: 0, trackingRecordsExisting: 0 };
-  for (const decision of eligible.flatMap((payload) => payload.decisions.evaluatedBets)) assertOfficialTrackingMarket("cfb", decision.market);
-  const externalIds = eligible.map((payload) => cfbProviderIntegerId(payload.game.providerGameId, "game"));
+  for (const decision of eligible.flatMap(({ payload }) => payload.decisions.evaluatedBets)) assertOfficialTrackingMarket("cfb", decision.market);
+  const externalIds = eligible.map(({ payload }) => cfbProviderIntegerId(payload.game.providerGameId, "game"));
   const { data: existingRows, error: existingError } = await args.client.from("prediction_records").select("external_id,market").eq("sport", "cfb").eq("model_version", CFB_V1_DECISION_RELEASE).in("external_id", externalIds);
   if (existingError) throw new Error(`CFB tracking record read failed: ${existingError.message}`);
   const existingKeys = buildMarketScopedFootballTrackingPlan(trackingGames, (existingRows ?? []) as Array<{ external_id: number; market: string }>).existingKeys;
   if (existingKeys.size === proposed) return { trackingAttempted: true, trackingRecordsProposed: proposed, trackingRecordsInserted: 0, trackingRecordsExisting: existingKeys.size };
-  const teamIds = await upsertTeams(args.client, eligible);
-  const gameIds = await upsertGames(args.client, eligible, teamIds);
-  const records = eligible.flatMap((payload) => buildCfbOfficialTrackingRecords({ payload, gameId: gameIds.get(payload.game.providerGameId)! }).filter((record) => !existingKeys.has(`${record.external_id}:${record.market}`)));
+  const payloads = eligible.map(({ payload }) => payload);
+  const teamIds = await upsertTeams(args.client, payloads);
+  const gameIds = await upsertGames(args.client, payloads, teamIds);
+  const records = eligible.flatMap(({ payload, mode }) => (mode === "official_t60"
+    ? buildCfbOfficialTrackingRecords({ payload, gameId: gameIds.get(payload.game.providerGameId)! })
+    : buildCfbPublishedCutoffRecoveryRecords({ payload, gameId: gameIds.get(payload.game.providerGameId)! }))
+    .filter((record) => !existingKeys.has(`${record.external_id}:${record.market}`)));
   if (records.length > 0) {
     const { data, error } = await args.client.from("prediction_records").insert(records as unknown as Record<string, unknown>[]).select("id");
     if (error) throw new Error(`CFB tracking record insert failed: ${error.message}`);
