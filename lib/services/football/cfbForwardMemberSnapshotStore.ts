@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+import { gunzipSync, gzipSync } from "node:zlib";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE,
@@ -9,7 +11,12 @@ import {
 } from "./cfbMemberFixture";
 
 export const CFB_FORWARD_MEMBER_SNAPSHOT_RELEASE =
-  "cfb_forward_member_snapshot_2026_09_13_r10_live_prediction_visibility" as const;
+  "cfb_forward_member_snapshot_2026_09_13_r11_gzip_transport" as const;
+
+export const CFB_FORWARD_MEMBER_SNAPSHOT_MAX_JSON_BYTES = 8_000_000;
+export const CFB_FORWARD_MEMBER_SNAPSHOT_MAX_GZIP_BYTES = 1_000_000;
+const CFB_FORWARD_MEMBER_SNAPSHOT_MAX_BASE64_CHARACTERS =
+  4 * Math.ceil(CFB_FORWARD_MEMBER_SNAPSHOT_MAX_GZIP_BYTES / 3);
 
 const SNAPSHOT_TTL_MS = 90 * 60 * 1000;
 const SNAPSHOT_STALE_MS = 8 * 24 * 60 * 60 * 1000;
@@ -29,6 +36,19 @@ export type CfbForwardMemberSnapshot = {
 
 type SnapshotRow = {
   payload: unknown;
+};
+
+export type CfbForwardMemberSnapshotEnvelope = {
+  kind: "cfb_forward_member_snapshot_v1";
+  envelopeRelease: typeof CFB_FORWARD_MEMBER_SNAPSHOT_RELEASE;
+  encoding: "gzip-base64";
+  checksum: string;
+  snapshotRelease: typeof CFB_FORWARD_MEMBER_SNAPSHOT_RELEASE;
+  season: number;
+  publishedAt: string;
+  uncompressedBytes: number;
+  compressedBytes: number;
+  payload: string;
 };
 
 export function cfbForwardMemberSnapshotKey(input: { season: number }): string {
@@ -75,12 +95,13 @@ export async function writeCfbForwardMemberSnapshot(input: {
 }): Promise<{ ok: true; snapshotKey: string } | { ok: false; snapshotKey: string; error: string }> {
   const snapshotKey = cfbForwardMemberSnapshotKey(input.snapshot);
   const publishedAtMs = Date.parse(input.snapshot.publishedAt);
+  const payload = encodeCfbForwardMemberSnapshotPayload(input.snapshot);
   const { error } = await input.client.from("lab_response_snapshots").upsert({
     snapshot_key: snapshotKey,
     kind: "daily_edge",
     sport: "cfb",
     slate_date: input.snapshot.fixture.snapshot.date,
-    payload: input.snapshot,
+    payload,
     payload_version: CFB_FORWARD_MEMBER_SNAPSHOT_RELEASE,
     source: "cfb_forward_evidence_writer",
     generated_at: input.snapshot.publishedAt,
@@ -108,7 +129,95 @@ export async function readCfbForwardMemberSnapshot(input: {
     throw new Error(`CFB compact member snapshot read failed: ${error.message}`);
   }
   if (!data) return null;
-  return validateCfbForwardMemberSnapshot((data as SnapshotRow).payload, { ...input, now });
+  const snapshot = decodeCfbForwardMemberSnapshotPayload((data as SnapshotRow).payload);
+  return validateCfbForwardMemberSnapshot(snapshot, { ...input, now });
+}
+
+export function encodeCfbForwardMemberSnapshotPayload(
+  snapshot: CfbForwardMemberSnapshot,
+): CfbForwardMemberSnapshotEnvelope {
+  const json = JSON.stringify(snapshot);
+  const uncompressedBytes = Buffer.byteLength(json);
+  if (uncompressedBytes > CFB_FORWARD_MEMBER_SNAPSHOT_MAX_JSON_BYTES) {
+    throw new Error(
+      `CFB compact member snapshot exceeds the ${CFB_FORWARD_MEMBER_SNAPSHOT_MAX_JSON_BYTES}-byte JSON limit.`,
+    );
+  }
+  const compressed = gzipSync(Buffer.from(json), { level: 9 });
+  if (compressed.byteLength > CFB_FORWARD_MEMBER_SNAPSHOT_MAX_GZIP_BYTES) {
+    throw new Error(
+      `CFB compact member snapshot exceeds the ${CFB_FORWARD_MEMBER_SNAPSHOT_MAX_GZIP_BYTES}-byte gzip limit.`,
+    );
+  }
+  return {
+    kind: "cfb_forward_member_snapshot_v1",
+    envelopeRelease: CFB_FORWARD_MEMBER_SNAPSHOT_RELEASE,
+    encoding: "gzip-base64",
+    checksum: createHash("sha256").update(json).digest("hex"),
+    snapshotRelease: snapshot.snapshotRelease,
+    season: snapshot.season,
+    publishedAt: snapshot.publishedAt,
+    uncompressedBytes,
+    compressedBytes: compressed.byteLength,
+    payload: compressed.toString("base64"),
+  };
+}
+
+export function decodeCfbForwardMemberSnapshotPayload(
+  value: unknown,
+): CfbForwardMemberSnapshot | null {
+  if (!isCfbForwardMemberSnapshotEnvelope(value)) return null;
+  if (
+    value.uncompressedBytes > CFB_FORWARD_MEMBER_SNAPSHOT_MAX_JSON_BYTES ||
+    value.compressedBytes > CFB_FORWARD_MEMBER_SNAPSHOT_MAX_GZIP_BYTES ||
+    value.payload.length > CFB_FORWARD_MEMBER_SNAPSHOT_MAX_BASE64_CHARACTERS ||
+    value.payload.length % 4 !== 0 ||
+    !/^[A-Za-z0-9+/]*={0,2}$/.test(value.payload)
+  ) return null;
+  try {
+    const compressed = Buffer.from(value.payload, "base64");
+    if (compressed.byteLength !== value.compressedBytes) return null;
+    const decoded = gunzipSync(compressed, {
+      maxOutputLength: CFB_FORWARD_MEMBER_SNAPSHOT_MAX_JSON_BYTES,
+    });
+    if (decoded.byteLength !== value.uncompressedBytes) return null;
+    const json = decoded.toString("utf8");
+    if (createHash("sha256").update(json).digest("hex") !== value.checksum) return null;
+    const snapshot = JSON.parse(json) as Partial<CfbForwardMemberSnapshot>;
+    if (
+      !snapshot ||
+      typeof snapshot !== "object" ||
+      snapshot.snapshotRelease !== value.snapshotRelease ||
+      snapshot.season !== value.season ||
+      snapshot.publishedAt !== value.publishedAt
+    ) return null;
+    return snapshot as CfbForwardMemberSnapshot;
+  } catch {
+    return null;
+  }
+}
+
+function isCfbForwardMemberSnapshotEnvelope(
+  value: unknown,
+): value is CfbForwardMemberSnapshotEnvelope {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const envelope = value as Partial<CfbForwardMemberSnapshotEnvelope>;
+  return envelope.kind === "cfb_forward_member_snapshot_v1" &&
+    envelope.envelopeRelease === CFB_FORWARD_MEMBER_SNAPSHOT_RELEASE &&
+    envelope.encoding === "gzip-base64" &&
+    envelope.snapshotRelease === CFB_FORWARD_MEMBER_SNAPSHOT_RELEASE &&
+    typeof envelope.checksum === "string" &&
+    /^[a-f0-9]{64}$/.test(envelope.checksum) &&
+    typeof envelope.season === "number" &&
+    Number.isInteger(envelope.season) &&
+    typeof envelope.publishedAt === "string" &&
+    typeof envelope.uncompressedBytes === "number" &&
+    Number.isInteger(envelope.uncompressedBytes) &&
+    envelope.uncompressedBytes >= 0 &&
+    typeof envelope.compressedBytes === "number" &&
+    Number.isInteger(envelope.compressedBytes) &&
+    envelope.compressedBytes >= 0 &&
+    typeof envelope.payload === "string";
 }
 
 function validateCfbForwardMemberSnapshot(

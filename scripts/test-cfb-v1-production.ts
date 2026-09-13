@@ -80,6 +80,8 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   buildCfbForwardMemberSnapshot,
   CFB_FORWARD_MEMBER_SNAPSHOT_RELEASE,
+  decodeCfbForwardMemberSnapshotPayload,
+  encodeCfbForwardMemberSnapshotPayload,
 } from "../lib/services/football/cfbForwardMemberSnapshotStore";
 
 const buildCfbMemberFixture = (
@@ -414,6 +416,27 @@ const compactMemberSnapshot = buildCfbForwardMemberSnapshot({
 assert.equal(compactMemberSnapshot.snapshotRelease, CFB_FORWARD_MEMBER_SNAPSHOT_RELEASE);
 assert.equal(compactMemberSnapshot.fixture, member, "the fast snapshot preserves the authoritative fixture byte-for-byte");
 assert.equal(compactMemberSnapshot.sourceChecksum, member.provenance.sourceChecksum);
+const compactMemberEnvelope = encodeCfbForwardMemberSnapshotPayload(compactMemberSnapshot);
+assert.equal(compactMemberEnvelope.encoding, "gzip-base64");
+assert.ok(
+  Buffer.byteLength(JSON.stringify(compactMemberEnvelope)) < Buffer.byteLength(JSON.stringify(compactMemberSnapshot)),
+  "the stored transport must be smaller than the complete member snapshot",
+);
+assert.deepEqual(
+  decodeCfbForwardMemberSnapshotPayload(compactMemberEnvelope),
+  compactMemberSnapshot,
+  "gzip transport preserves every member prediction and evidence value",
+);
+assert.equal(
+  decodeCfbForwardMemberSnapshotPayload({ ...compactMemberEnvelope, checksum: "0".repeat(64) }),
+  null,
+  "transport checksum corruption fails closed",
+);
+assert.equal(
+  decodeCfbForwardMemberSnapshotPayload({ ...compactMemberEnvelope, compressedBytes: compactMemberEnvelope.compressedBytes + 1 }),
+  null,
+  "transport byte-length corruption fails closed",
+);
 assert.equal(member.snapshot.games.length, 1);
 assert.equal(member.fixtureRelease, "cfb_v1_member_fixture_2026_09_13_r52_live_prediction_visibility");
 assert.equal(member.snapshot.games[0]!.lockState, "locked", "only a fully valid immutable T-60 tuple is labeled locked");
