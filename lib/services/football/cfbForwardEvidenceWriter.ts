@@ -67,7 +67,7 @@ import {
 } from "./cfbForwardMemberSnapshotStore";
 
 export const CFB_FORWARD_WRITER_RELEASE =
-  "cfb_forward_evidence_writer_2026_09_13_r60_complete_published_tracking_denominators" as const;
+  "cfb_forward_evidence_writer_2026_09_13_r61_payload_owned_recovery_cutoff" as const;
 export const CFB_FORWARD_MAX_QB_TEAMS_PER_RUN = 24 as const;
 export const CFB_FORWARD_MAX_SHARP_FALLBACK_GAMES_PER_RUN = 24 as const;
 export const CFB_FORWARD_RESULTS_BATCH_SIZE = 100 as const;
@@ -832,12 +832,15 @@ export function cfbTrackingCandidatesForRun(
       selected.push({ payload: official, mode: "official_t60" });
       continue;
     }
-    const gameStart = Date.parse(rows[0]!.game.scheduledStart);
-    if (!Number.isFinite(gameStart) || gameStart > nowMs) continue;
-    const cutoff = gameStart - 60 * 60_000;
-    const recovery = rows.filter((payload) =>
-      isEligiblePublishedCutoffRecoveryPayload(payload) && Date.parse(payload.capturedAt) <= cutoff
-    ).sort(latestPayloadFirst)[0];
+    const recovery = rows.filter((payload) => {
+      const gameStart = Date.parse(payload.game.scheduledStart);
+      const capturedAt = Date.parse(payload.capturedAt);
+      return isEligiblePublishedCutoffRecoveryPayload(payload) &&
+        Number.isFinite(gameStart) &&
+        Number.isFinite(capturedAt) &&
+        gameStart <= nowMs &&
+        capturedAt <= gameStart - 60 * 60_000;
+    }).sort(latestPayloadFirst)[0];
     if (recovery) selected.push({ payload: recovery, mode: "published_cutoff_accuracy_recovery" });
   }
   return selected.sort((first, second) =>
