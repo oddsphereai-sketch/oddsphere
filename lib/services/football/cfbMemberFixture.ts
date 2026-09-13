@@ -74,7 +74,7 @@ import { cfbTeamIdentity } from "./cfbTeamIdentity";
 import { CFB_PUBLIC_SCORE_DIRECTION_TOLERANCE_POINTS } from "./footballCrossMarketCoherence";
 
 export const CFB_MEMBER_FIXTURE_RELEASE =
-  "cfb_v1_member_fixture_2026_09_07_r51_overlapping_week_ahead" as const;
+  "cfb_v1_member_fixture_2026_09_13_r52_live_prediction_visibility" as const;
 export const CFB_PUBLIC_OUTCOME_CONTRACT_RELEASE =
   "cfb_market_sharp_public_outcome_contract_2026_09_05_r49_confidence_economics_bridge" as const;
 export const CFB_CONTEXT_ONLY_QUOTE_CAPTURE_SKEW_MS = 5_000 as const;
@@ -690,7 +690,7 @@ function buildGame(row: CfbForwardStoredEvidence, movementRows: CfbForwardStored
     lockedAt: validT60 ? row.capturedAt : null,
     updatedAt: row.capturedAt,
     generatedAt: row.capturedAt,
-    holdReason: allHeld ? "cfb_exact_price_tuple_incomplete" : null,
+    holdReason: null,
     homeStarter: null,
     awayStarter: null,
     predictions: { ml: legacyPrediction(moneyline), total: { ...legacyPrediction(total), line: total.line }, nrfi: legacyPrediction(spread) },

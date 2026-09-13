@@ -45,6 +45,7 @@ import {
   fetchCfbSharpOddsFallbackAttempt,
   planCfbPriorResultReads,
   publishCfbForwardDecisionBundle,
+  selectCfbSharpFallbackGames,
   trustedCfbSharpEventIdsByGame,
 } from "../lib/services/football/cfbForwardEvidenceWriter";
 import { resolveCfbCanonicalMarketAnchor } from "../lib/services/football/cfbMarketInformedOutcome";
@@ -395,7 +396,7 @@ assert.equal(compactMemberSnapshot.snapshotRelease, CFB_FORWARD_MEMBER_SNAPSHOT_
 assert.equal(compactMemberSnapshot.fixture, member, "the fast snapshot preserves the authoritative fixture byte-for-byte");
 assert.equal(compactMemberSnapshot.sourceChecksum, member.provenance.sourceChecksum);
 assert.equal(member.snapshot.games.length, 1);
-assert.equal(member.fixtureRelease, "cfb_v1_member_fixture_2026_09_07_r51_overlapping_week_ahead");
+assert.equal(member.fixtureRelease, "cfb_v1_member_fixture_2026_09_13_r52_live_prediction_visibility");
 assert.equal(member.snapshot.games[0]!.lockState, "locked", "only a fully valid immutable T-60 tuple is labeled locked");
 assert.equal(member.snapshot.games[0]!.lockedAt, lockedAt);
 
@@ -1854,6 +1855,18 @@ const evidenceAppendIndex = writerSource.lastIndexOf("appendCfbForwardEvidence("
 assert.ok(quarterbackCollectionIndex >= 0 && evidenceAppendIndex > quarterbackCollectionIndex, "the writer must finish bounded QB collection before its sole evidence append");
 assert.match(writerSource, /const need = releaseRefreshNeed\(existing, args\.now\) \?\? ordinaryNeed;/, "an incomplete current release must take planning priority over ordinary cadence and T-60 reasons");
 assert.ok(sharpFallbackIndex >= 0 && evidenceAppendIndex > sharpFallbackIndex, "the writer must finish bounded SharpAPI exact-event fallback before its sole evidence append");
+const fallbackSelection = selectCfbSharpFallbackGames({
+  games: Array.from({ length: 30 }, (_, index) => ({
+    ...game,
+    providerGameId: String(index + 1),
+    scheduledStart: new Date(Date.parse(game.scheduledStart) + index * 60_000).toISOString(),
+  })),
+  trustedEventIdsByGame: Object.fromEntries(Array.from({ length: 10 }, (_, index) => [String(index + 1), `trusted-${index + 1}`])),
+  maximum: 24,
+});
+assert.equal(fallbackSelection.length, 24, "week-ahead enrichment must remain inside its per-run exact-game budget");
+assert.deepEqual(fallbackSelection.slice(0, 20).map((value) => value.providerGameId), Array.from({ length: 20 }, (_, index) => String(index + 11)), "games without retained canonical identities must rotate ahead of already-enriched games");
+assert.equal(fallbackSelection.some((value) => value.providerGameId === "1"), true, "remaining capacity may refresh an already-enriched game after every unseeded game is selected");
 const isolatedSharpNetworkFailure = await fetchCfbSharpOddsFallbackAttempt(
   { games: [game], apiKey: "test" },
   (async () => { throw new Error("SharpAPI network error on /events: fetch failed"); }) as Parameters<typeof fetchCfbSharpOddsFallbackAttempt>[1],

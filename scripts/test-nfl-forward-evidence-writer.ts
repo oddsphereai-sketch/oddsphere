@@ -259,7 +259,9 @@ assert.match(writer, /currentBooks/);
 assert.match(writer, /comparableCurrentBooks/);
 assert.match(writer, /multibook_consensus_unavailable/);
 assert.match(writer, /readLegacyNflForwardEvidence/);
-assert.match(writer, /nfl_forward_evidence_writer_2026_09_04_r22_complete_tracking_denominators/);
+assert.match(writer, /nfl_forward_evidence_writer_2026_09_13_r23_game_scoped_odds_gaps/);
+const nflSlateSource = readFileSync(path.resolve("lib/services/football/balldontlieNflPreviewSlate.ts"), "utf8");
+assert.doesNotMatch(nflSlateSource, /BALLDONTLIE regular odds missing/, "completed-game odds removal must not reject the verified weekly schedule before per-game isolation");
 assert.doesNotMatch(
   writer,
   /const \[existing, previousExisting, priorExisting, legacyExisting\] = await Promise\.all/,

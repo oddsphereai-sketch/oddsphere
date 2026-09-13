@@ -2,9 +2,10 @@ import { SharpApiClient, type SharpApiRequestOptions, type SharpApiResponse } fr
 import type { NcaafBookOdds, NcaafGame } from "./balldontlieNcaafSlate";
 
 export const CFB_SHARP_API_ODDS_RELEASE =
-  "cfb_sharpapi_named_book_fallback_2026_08_28_r11_prior_event_disambiguation" as const;
+  "cfb_sharpapi_named_book_fallback_2026_09_13_r12_bounded_writer_deadline" as const;
 export const CFB_SHARP_FALLBACK_MAX_GAMES = 96 as const;
 export const CFB_SHARP_FALLBACK_MAX_REQUESTS = 192 as const;
+export const CFB_SHARP_FALLBACK_MAX_DURATION_MS = 40_000 as const;
 export const CFB_SHARP_FALLBACK_MAX_ROWS_PER_EVENT = 200 as const;
 export const CFB_SHARP_FALLBACK_MAX_PAGES_PER_EVENT = 4 as const;
 export const CFB_SHARP_FALLBACK_MAX_EVENT_DISCOVERY_PAGES_PER_DATE = 8 as const;
@@ -130,6 +131,7 @@ export async function fetchSharpApiNcaafOddsFallback(args: {
   const key = args.apiKey ?? process.env.SHARPAPI_KEY;
   if (!key && !args.client) throw new Error("SHARPAPI_KEY is required for CFB named-book fallback.");
   const client = args.client ?? new SharpApiClient(key!);
+  const signal = AbortSignal.timeout(CFB_SHARP_FALLBACK_MAX_DURATION_MS);
   const maximumRequests = args.maximumRequests ?? CFB_SHARP_FALLBACK_MAX_REQUESTS;
   if (!Number.isInteger(maximumRequests) || maximumRequests < 1 || maximumRequests > CFB_SHARP_FALLBACK_MAX_REQUESTS) {
     throw new Error(`CFB SharpAPI maximumRequests must be 1..${CFB_SHARP_FALLBACK_MAX_REQUESTS}.`);
@@ -160,6 +162,7 @@ export async function fetchSharpApiNcaafOddsFallback(args: {
           limit: CFB_SHARP_FALLBACK_MAX_ROWS_PER_EVENT,
           ...(offset > 0 ? { offset } : {}),
         },
+        signal,
         retryRateLimitInternally: false,
       });
       if (!Array.isArray(response.data)) throw new Error(`CFB SharpAPI event discovery for ${date} returned malformed data.`);
@@ -233,6 +236,7 @@ export async function fetchSharpApiNcaafOddsFallback(args: {
             limit: CFB_SHARP_FALLBACK_MAX_ROWS_PER_EVENT,
             ...(offset > 0 ? { offset } : {}),
           },
+          signal,
           retryRateLimitInternally: false,
         });
         if (!Array.isArray(response.data)) throw new Error(`CFB SharpAPI event ${eventId} returned malformed odds data.`);
