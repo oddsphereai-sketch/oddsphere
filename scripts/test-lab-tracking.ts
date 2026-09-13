@@ -47,6 +47,9 @@ const MLB_MARKETS = ["ML", "O/U", "NRFI", "YRFI", "NRFI/YRFI"];
 
 async function main() {
   const trackingPageSource = readFileSync("app/lab/tracking/TrackingClient.tsx", "utf8");
+  const trackingRouteSource = readFileSync("app/api/lab/tracking/route.ts", "utf8");
+  check("CFB tracking exposes all three official markets", trackingRouteSource.includes('cfb: ["ML", "O/U", "Spread"]'));
+  check("NFL and CFB settled grades bridge from the modern official record path", trackingRouteSource.includes('loadFootballGradeRows(sport)') && trackingRouteSource.includes('["nfl", "cfb"] as const'));
   check(
     "candidate keeps deep tracking sections available without front-loading them",
     trackingPageSource.includes('collapsible={presentation === "candidate"}') &&
@@ -170,8 +173,8 @@ async function main() {
   // ─── (7) Tallies matrix ──────────────────────────────────────────────────
   section("Tallies matrix");
 
-  // Expected count from the current 9-sport registry = 24.
-  check(`tally count = 24 across all 9 sports`, body.tallies.length === 24, `got: ${body.tallies.length}`);
+  // Expected count from the current 9-sport registry = 26.
+  check(`tally count = 26 across all 9 sports`, body.tallies.length === 26, `got: ${body.tallies.length}`);
 
   // MLB has 5 markets and they should all be present with non-zero lifetime.
   const mlbTallies = body.tallies.filter((t) => t.sport === "mlb");
@@ -200,7 +203,13 @@ async function main() {
   check("World Cup has all four tracked category rows", ["Match Result", "Double Chance", "O/U", "BTTS"].every((market) => soccerTallies.some((t) => t.market === market)));
   check("World Cup modern grades populate every tracked category", soccerTallies.every((t) => t.lifetime.total > 0));
 
-  const otherSports = ["nba", "cbb", "nfl", "cfb", "nhl", "ucl"] as const;
+  for (const sport of ["nfl", "cfb"] as const) {
+    const sportTallies = body.tallies.filter((t) => t.sport === sport);
+    check(`${sport.toUpperCase()} has ML, O/U, and Spread category rows`, ["ML", "O/U", "Spread"].every((market) => sportTallies.some((t) => t.market === market)));
+    check(`${sport.toUpperCase()} official settled grades populate every public market`, sportTallies.every((tally) => tally.lifetime.total > 0));
+  }
+
+  const otherSports = ["nba", "cbb", "nhl", "ucl"] as const;
   for (const sport of otherSports) {
     const sportTallies = body.tallies.filter((t) => t.sport === sport);
     check(

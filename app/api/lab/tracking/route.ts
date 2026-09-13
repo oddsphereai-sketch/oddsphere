@@ -61,7 +61,7 @@ const SPORT_MARKETS: Record<Sport, string[]> = {
   nba: ["ML", "O/U"],
   cbb: ["ML", "O/U"],
   nfl: ["ML", "O/U", "Spread"],
-  cfb: ["ML", "O/U"],
+  cfb: ["ML", "O/U", "Spread"],
   nhl: ["ML", "O/U"],
   wnba: ["ML", "O/U", "Spread"], // all 3 publicly tracked from launch; shown once wnba is added to SPORT_DISPLAY_ORDER at launch
   ucl: ["ML", "Double Chance"],
@@ -549,6 +549,51 @@ async function loadWnbaGradeRows(): Promise<ResultRow[]> {
   return rows;
 }
 
+/** NFL and CFB write their official forward-only records to the modern
+ * prediction_records/prediction_grades path. Bridge settled rows into this
+ * legacy aggregate response at each sport's explicit public launch floor. */
+async function loadFootballGradeRows(sport: "nfl" | "cfb"): Promise<ResultRow[]> {
+  const start = officialTrackingStart(sport);
+  if (start == null) return [];
+  const { data: records, error: recErr } = await supabase
+    .from("prediction_records")
+    .select("id, market, slate_date")
+    .eq("sport", sport)
+    .gte("slate_date", start);
+  if (recErr || !records || records.length === 0) return [];
+
+  const byId = new Map<string, { market: string; slate_date: string }>();
+  for (const record of records as Array<{ id: string; market: string; slate_date: string }>) {
+    byId.set(String(record.id), {
+      market: record.market,
+      slate_date: String(record.slate_date).slice(0, 10),
+    });
+  }
+  const ids = [...byId.keys()];
+  const rows: ResultRow[] = [];
+  const CHUNK = 500;
+  for (let index = 0; index < ids.length; index += CHUNK) {
+    const { data: grades, error: gradeError } = await supabase
+      .from("prediction_grades")
+      .select("prediction_record_id, result")
+      .in("prediction_record_id", ids.slice(index, index + CHUNK))
+      .in("result", ["win", "loss", "push"]);
+    if (gradeError || !grades) continue;
+    for (const grade of grades as Array<{ prediction_record_id: string; result: string }>) {
+      const record = byId.get(String(grade.prediction_record_id));
+      if (!record) continue;
+      rows.push({
+        sport,
+        market: record.market,
+        outcome: grade.result,
+        game_date: record.slate_date,
+        prediction_type: "game",
+      });
+    }
+  }
+  return rows;
+}
+
 export async function GET(request: Request) {
   const url = new URL(request.url);
   if (url.searchParams.get("snapshotBypass") !== "true") {
@@ -606,6 +651,16 @@ export async function GET(request: Request) {
     allRows.push(...(await loadWnbaGradeRows()));
   } catch {
     // non-fatal: WNBA rows simply won't appear this request.
+  }
+
+  // NFL and CFB use the same modern immutable T-60 record/grade tables as
+  // WNBA. Keep either bridge failure isolated from every other sport.
+  for (const sport of ["nfl", "cfb"] as const) {
+    try {
+      allRows.push(...(await loadFootballGradeRows(sport)));
+    } catch {
+      // non-fatal: one football sport cannot break the complete tracker.
+    }
   }
 
   const body: TrackingResponse = {

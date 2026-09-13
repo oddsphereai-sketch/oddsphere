@@ -88,3 +88,30 @@ single append/snapshot path while removing repeated and superseded payload trans
 side, probability, grade, actionability, stake, or tracking rule changes; same-input promotions
 and demotions remain zero. Roll back r58 if the latest-row set is incomplete, checksums fail, a
 prior game identity disappears, or the writer still exceeds its route budget.
+
+## Public football tracking reader follow-up
+
+The official modern tables contain 266 CFB records from the August 29 launch boundary: 167 wins,
+97 losses, and 2 pushes, with all 266 graded. The public tracker omitted them because its modern
+grade bridge covered WNBA and soccer only; NFL was omitted by the same reader gap. The tracking
+route now bridges settled NFL and CFB `prediction_records` / `prediction_grades` rows at their
+existing public launch dates and exposes the already-official CFB Spread category. This changes no
+prediction, grade, result, release, model, stake, lock, or stored row; it only reads and aggregates
+the existing official truth.
+
+## Owner-approved balanced value containment
+
+After live r58 isolated provider game 457274 as the only missing September 17–21 opening row, the
+owner explicitly approved containing its invalid Moneyline action so the game and every model
+prediction remain visible. Candidate / production grade releases advance to r17 / r19 and the sole
+writer advances to r59. An actionable Bet with negative EV or a nonpositive target-excluded
+probability gap becomes Watchlist. The paired tested promotion retains the already approved
+market-specific probability, edge, EV, price, line-size, and resistance-free gates: an eligible
+probability-grade Watchlist can become Lean only when all positive-value gates pass. No side,
+probability, projection, calibration, stake, T-60, result, or settlement rule changes. The frozen
+September 17–21 live-input replay completed in 138.4 seconds and covered all 101 games with zero
+capture failures. It produced zero balanced-rule promotions, zero balanced-rule demotions, 2
+actionable Leans, 0 Best Angles, 7 Watchlists, 2 No Plays, and 292 held markets. This is no net
+actionable-board change on the frozen input while preserving both sides of the tested rule.
+Rollback r17/r19/r59 together if coverage is incomplete, actionability unexpectedly collapses, or
+any resistance-bearing/negative-value market promotes.
