@@ -21,11 +21,11 @@ import {
 import { evaluateCfbHolisticConfidence } from "./cfbHolisticConfidenceCandidate";
 
 export const CFB_MARKET_SHARP_AWARE_CANDIDATE_RELEASE =
-  "cfb_market_sharp_aware_candidate_2026_09_05_r16_confidence_economics_bridge" as const;
+  "cfb_market_sharp_aware_candidate_2026_09_13_r17_balanced_positive_value" as const;
 export const CFB_MARKET_SHARP_AWARE_SHADOW_RELEASE =
   CFB_MARKET_SHARP_AWARE_CANDIDATE_RELEASE;
 export const CFB_MARKET_SHARP_AWARE_PRODUCTION_RELEASE =
-  "cfb_market_sharp_aware_production_2026_09_05_r18_confidence_economics_bridge" as const;
+  "cfb_market_sharp_aware_production_2026_09_13_r19_balanced_positive_value" as const;
 export const CFB_MARKET_SHADOW_WEIGHT = 0.75 as const;
 export const CFB_SHARP_SIGNED_GAP_THRESHOLD_PP = 10 as const;
 export const CFB_SHARP_FULL_STRENGTH_GAP_PP = 20 as const;
@@ -392,26 +392,77 @@ export function applyCfbMarketSharpAwareGrades(args: {
   return {
     ...args.bundle,
     evaluatedBets: args.bundle.evaluatedBets.map((decision) => {
-      const adjustment = adjustments.get(decision.market);
-      if (!adjustment) throw new Error(`CFB ${decision.market} market/sharp grade adjustment is missing.`);
+      const rawAdjustment = adjustments.get(decision.market);
+      if (!rawAdjustment) throw new Error(`CFB ${decision.market} market/sharp grade adjustment is missing.`);
+      const balanced = applyCfbBalancedPositiveValueRule({
+        market: decision.market,
+        finalGrade: rawAdjustment.finalGrade,
+        probabilityGrade: rawAdjustment.probabilityGrade,
+        executionStatus: rawAdjustment.executionStatus,
+        expectedValue: decision.expectedValue,
+        modelProbability: decision.modelProbability,
+        marketFairProbability: decision.marketFairProbability,
+        evaluatedPrice: decision.evaluatedQuote.price,
+        evaluatedLine: decision.evaluatedQuote.line,
+        sharpDirection: rawAdjustment.sharpDirection,
+        publicDirection: rawAdjustment.publicDirection,
+        movementDirection: rawAdjustment.movementDirection,
+        reasonCodes: rawAdjustment.reasonCodes,
+      });
       return {
         ...decision,
-        grade: adjustment.finalGrade,
-        probabilityGrade: adjustment.probabilityGrade,
+        grade: balanced.finalGrade,
+        probabilityGrade: rawAdjustment.probabilityGrade,
         gradeAdjustment: {
-          release: adjustment.release,
-          candidateRelease: adjustment.candidateRelease,
-          sharpDirection: adjustment.sharpDirection,
-          publicDirection: adjustment.publicDirection,
-          movementDirection: adjustment.movementDirection,
-          confidenceScore: adjustment.confidenceScore,
-          confidenceAdjustment: adjustment.confidenceAdjustment,
-          executionStatus: adjustment.executionStatus,
-          reasonCodes: adjustment.reasonCodes,
+          release: rawAdjustment.release,
+          candidateRelease: rawAdjustment.candidateRelease,
+          sharpDirection: rawAdjustment.sharpDirection,
+          publicDirection: rawAdjustment.publicDirection,
+          movementDirection: rawAdjustment.movementDirection,
+          confidenceScore: rawAdjustment.confidenceScore,
+          confidenceAdjustment: rawAdjustment.confidenceAdjustment,
+          executionStatus: balanced.executionStatus,
+          reasonCodes: balanced.reasonCodes,
         },
       };
     }),
   };
+}
+
+export function applyCfbBalancedPositiveValueRule(args: {
+  market: CfbV1Market;
+  finalGrade: CfbV1Grade;
+  probabilityGrade: CfbV1Grade;
+  executionStatus: "bet" | "shop";
+  expectedValue: number;
+  modelProbability: number;
+  marketFairProbability: number;
+  evaluatedPrice: number;
+  evaluatedLine: number | null;
+  sharpDirection: CfbMarketEvidenceDirection;
+  publicDirection: CfbMarketEvidenceDirection;
+  movementDirection: CfbMarketEvidenceDirection;
+  reasonCodes: string[];
+}): { finalGrade: CfbV1Grade; executionStatus: "bet" | "shop"; reasonCodes: string[] } {
+  const gapPp = (args.modelProbability - args.marketFairProbability) * 100;
+  const actionable = args.finalGrade === "Best Angle" || args.finalGrade === "Lean";
+  if (actionable && args.executionStatus === "bet" && (args.expectedValue < -1e-8 || gapPp <= 0)) {
+    return { finalGrade: "Watchlist", executionStatus: args.executionStatus, reasonCodes: [...args.reasonCodes, "positive_target_excluded_value_guard"] };
+  }
+
+  const noResistance = args.sharpDirection !== "resistance" && args.publicDirection !== "resistance" && args.movementDirection !== "resistance";
+  const priceEligible = args.evaluatedPrice >= CFB_PROVISIONAL_ACTIONABLE_MIN_PRICE && args.evaluatedPrice <= CFB_PROVISIONAL_ACTIONABLE_MAX_PRICE;
+  const probabilityEligible = args.probabilityGrade === "Best Angle" || args.probabilityGrade === "Lean";
+  const promotionEligible = args.finalGrade === "Watchlist" && args.executionStatus === "bet" && probabilityEligible && noResistance && priceEligible && (
+    args.market === "moneyline"
+      ? args.modelProbability >= CFB_PROVISIONAL_MONEYLINE_LEAN_MIN_PROBABILITY && gapPp >= CFB_PROVISIONAL_MONEYLINE_LEAN_MIN_EDGE_PP && args.expectedValue >= CFB_PROVISIONAL_MONEYLINE_LEAN_MIN_EV
+      : args.market === "spread"
+        ? args.modelProbability >= CFB_PROVISIONAL_SPREAD_LEAN_MIN_PROBABILITY && gapPp >= CFB_PROVISIONAL_SPREAD_LEAN_MIN_EDGE_PP && args.expectedValue >= CFB_PROVISIONAL_SPREAD_LEAN_MIN_EV && args.evaluatedLine !== null && Math.abs(args.evaluatedLine) <= CFB_PROVISIONAL_SPREAD_LEAN_MAX_ABS_LINE
+        : args.modelProbability >= CFB_PROVISIONAL_TOTAL_LEAN_MIN_PROBABILITY && gapPp >= CFB_PROVISIONAL_TOTAL_LEAN_MIN_EDGE_PP && args.expectedValue >= CFB_PROVISIONAL_TOTAL_LEAN_MIN_EV
+  );
+  return promotionEligible
+    ? { finalGrade: "Lean", executionStatus: args.executionStatus, reasonCodes: [...args.reasonCodes, "balanced_positive_value_promotion"] }
+    : { finalGrade: args.finalGrade, executionStatus: args.executionStatus, reasonCodes: args.reasonCodes };
 }
 
 export function annotateCfbCrossMarketGradeCoherence<T extends CfbMarketEvidenceGradeBase>(

@@ -54,6 +54,7 @@ import {
   CFB_MARKET_SHARP_AWARE_CANDIDATE_RELEASE,
   CFB_MARKET_SHARP_AWARE_PRODUCTION_RELEASE,
   applyCfbMarketSharpAwareGrades,
+  applyCfbBalancedPositiveValueRule,
   buildCfbMarketSharpAwareForecast,
 } from "../lib/services/football/cfbMarketSharpAwareShadow";
 import { CFB_SHARP_API_SPLITS_RELEASE } from "../lib/services/football/cfbSharpApiSplits";
@@ -294,6 +295,24 @@ const productionBundle = applyCfbMarketSharpAwareGrades({
   publicSplits: splitSet(),
   operationalOpening: { quote: currentBooks[0]! },
 });
+const guardedDemotion = applyCfbBalancedPositiveValueRule({
+  market: "moneyline", finalGrade: "Best Angle", probabilityGrade: "Best Angle", executionStatus: "bet",
+  expectedValue: 0.02, modelProbability: 0.51, marketFairProbability: 0.52, evaluatedPrice: 120,
+  evaluatedLine: null, sharpDirection: "neutral", publicDirection: "neutral", movementDirection: "neutral", reasonCodes: [],
+});
+assert.equal(guardedDemotion.finalGrade, "Watchlist", "negative target-excluded value must never erase the game or remain actionable");
+const balancedPromotion = applyCfbBalancedPositiveValueRule({
+  market: "moneyline", finalGrade: "Watchlist", probabilityGrade: "Lean", executionStatus: "bet",
+  expectedValue: 0.03, modelProbability: 0.56, marketFairProbability: 0.53, evaluatedPrice: 120,
+  evaluatedLine: null, sharpDirection: "neutral", publicDirection: "neutral", movementDirection: "neutral", reasonCodes: [],
+});
+assert.equal(balancedPromotion.finalGrade, "Lean", "a strictly positive-value, resistance-free probability Lean must retain a tested promotion path");
+const resistedPromotion = applyCfbBalancedPositiveValueRule({
+  market: "moneyline", finalGrade: "Watchlist", probabilityGrade: "Lean", executionStatus: "bet",
+  expectedValue: 0.03, modelProbability: 0.56, marketFairProbability: 0.53, evaluatedPrice: 120,
+  evaluatedLine: null, sharpDirection: "resistance", publicDirection: "neutral", movementDirection: "neutral", reasonCodes: [],
+});
+assert.equal(resistedPromotion.finalGrade, "Watchlist", "the paired promotion cannot bypass resistance evidence");
 const { pmf: _authoritativePmf, ...publishedAuthoritativeForecast } = authoritativeForecast;
 void _authoritativePmf;
 const payload: CfbForwardEvidencePayload = {
