@@ -65,7 +65,7 @@ import {
 } from "./nflForwardMemberSnapshotStore";
 
 export const NFL_FORWARD_WRITER_RELEASE =
-  "nfl_forward_evidence_writer_2026_09_04_r22_complete_tracking_denominators" as const;
+  "nfl_forward_evidence_writer_2026_09_13_r23_game_scoped_odds_gaps" as const;
 
 export type NflForwardWriterResult = {
   writerRelease: typeof NFL_FORWARD_WRITER_RELEASE;

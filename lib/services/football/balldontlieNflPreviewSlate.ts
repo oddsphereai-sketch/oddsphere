@@ -1,7 +1,7 @@
 export const BALLDONTLIE_NFL_PREVIEW_SLATE_RELEASE =
   "balldontlie_nfl_preview_slate_2026_08_19_r1" as const;
 export const BALLDONTLIE_NFL_REGULAR_SLATE_RELEASE =
-  "balldontlie_nfl_regular_slate_2026_08_22_r2_multibook" as const;
+  "balldontlie_nfl_regular_slate_2026_09_13_r3_game_scoped_odds_gaps" as const;
 export const BALLDONTLIE_NFL_REGULAR_RESULTS_RELEASE =
   "balldontlie_nfl_regular_results_2026_08_25_r1" as const;
 
@@ -260,8 +260,6 @@ export async function fetchBalldontlieNflRegularSlate(args: {
     requestedGameIds,
     currentOddsByGame,
   );
-  const missingCurrent = gameIds.filter((gameId) => !currentOddsByGame[gameId]);
-  if (missingCurrent.length > 0) throw new Error(`BALLDONTLIE regular odds missing for ${missingCurrent.length} games.`);
   return {
     release: BALLDONTLIE_NFL_REGULAR_SLATE_RELEASE,
     fetchedAt: new Date().toISOString(),

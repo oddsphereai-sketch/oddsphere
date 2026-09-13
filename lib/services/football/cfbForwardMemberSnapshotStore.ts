@@ -9,7 +9,7 @@ import {
 } from "./cfbMemberFixture";
 
 export const CFB_FORWARD_MEMBER_SNAPSHOT_RELEASE =
-  "cfb_forward_member_snapshot_2026_09_07_r9_overlapping_week_ahead" as const;
+  "cfb_forward_member_snapshot_2026_09_13_r10_live_prediction_visibility" as const;
 
 const SNAPSHOT_TTL_MS = 90 * 60 * 1000;
 const SNAPSHOT_STALE_MS = 8 * 24 * 60 * 60 * 1000;

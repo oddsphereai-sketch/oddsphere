@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { IWeatherProvider } from "@/lib/providers/interfaces/IWeatherProvider";
-import { SharpApiClientError } from "@/lib/providers/real_api/_sharpApiClient";
+import { SharpApiAbortError, SharpApiClientError } from "@/lib/providers/real_api/_sharpApiClient";
 import { computeSlateDate } from "@/lib/dates/slateDate";
 import { isPublicallyTracked } from "@/lib/config/officialTrackingStart";
 import { assertOfficialTrackingMarket } from "@/lib/config/officialTrackingMarkets";
@@ -61,8 +61,9 @@ import {
 } from "./cfbForwardMemberSnapshotStore";
 
 export const CFB_FORWARD_WRITER_RELEASE =
-  "cfb_forward_evidence_writer_2026_09_08_r56_week_ahead_schedule_continuity" as const;
+  "cfb_forward_evidence_writer_2026_09_13_r57_bounded_week_ahead_recovery" as const;
 export const CFB_FORWARD_MAX_QB_TEAMS_PER_RUN = 24 as const;
+export const CFB_FORWARD_MAX_SHARP_FALLBACK_GAMES_PER_RUN = 24 as const;
 export const CFB_FORWARD_RESULTS_BATCH_SIZE = 100 as const;
 export const CFB_FORWARD_MAX_PRIOR_GAME_IDS = 1200 as const;
 
@@ -196,8 +197,14 @@ export async function runCfbForwardEvidenceWriter(args: {
   const priorQuarterbacks = latestQuarterbacksByTeam(allExisting);
   const quarterbackTeams = selectQuarterbackTeams({ plans, teams, priorQuarterbacks, maximum: CFB_FORWARD_MAX_QB_TEAMS_PER_RUN });
   const plannedGames = [...new Map(plans.map((plan) => [plan.game.providerGameId, plan.game])).values()];
-  const sharpFallbackGames = plannedGames.filter((game) => cfbBooksNeedSharpFallback(slate.currentOddsComparableBooksByGame[game.providerGameId] ?? []));
   const trustedSharpEventIdsByGame = trustedCfbSharpEventIdsByGame(existing);
+  const sharpFallbackCandidates = plannedGames.filter((game) => cfbBooksNeedSharpFallback(slate.currentOddsComparableBooksByGame[game.providerGameId] ?? []));
+  const sharpFallbackGames = selectCfbSharpFallbackGames({
+    games: sharpFallbackCandidates,
+    trustedEventIdsByGame: trustedSharpEventIdsByGame,
+    maximum: CFB_FORWARD_MAX_SHARP_FALLBACK_GAMES_PER_RUN,
+  });
+  const sharpFallbackGameIds = new Set(sharpFallbackGames.map((game) => game.providerGameId));
   const [linesResult, splitsResult, venueWeatherAttempt, quarterbacks, sharpFallbackAttempt, sharpSplitsAttempt] = await Promise.all([
     playbook.lines("ncaaf"),
     playbook.splits("ncaaf"),
@@ -450,6 +457,9 @@ export async function runCfbForwardEvidenceWriter(args: {
           ...(sharpFallbackAttempt.error && sharpFallbackGames.some((game) => game.providerGameId === plan.game.providerGameId)
             ? ["sharpapi_odds_fallback_request_failed"]
             : []),
+          ...(sharpFallbackCandidates.some((game) => game.providerGameId === plan.game.providerGameId) && !sharpFallbackGameIds.has(plan.game.providerGameId)
+            ? ["sharpapi_odds_fallback_deferred"]
+            : []),
           "quarterback_starter_projected_not_confirmed",
           "injury_feed_unavailable",
           ...(weather.status === "forecast_available" || weather.status === "controlled_indoor" ? [] : [`venue_weather_${weather.status}`]),
@@ -508,6 +518,7 @@ export async function runCfbForwardEvidenceWriter(args: {
     healthHolds: [...new Set([
       ...payloads.flatMap((payload) => payload.coverage.healthHolds),
       ...(sharpFallbackAttempt.error ? ["sharpapi_odds_fallback_request_failed"] : []),
+      ...(sharpFallbackCandidates.length > sharpFallbackGames.length ? ["sharpapi_odds_fallback_deferred"] : []),
       ...(captureFailures.length > 0 ? ["game_capture_failed"] : []),
     ])],
     captureFailures,
@@ -531,6 +542,22 @@ export function trustedCfbSharpEventIdsByGame(rows: CfbForwardStoredEvidence[]):
   return Object.fromEntries([...observed.entries()].flatMap(([providerGameId, ids]) =>
     ids.size === 1 ? [[providerGameId, [...ids][0]!] as const] : []
   ));
+}
+
+export function selectCfbSharpFallbackGames(args: {
+  games: NcaafGame[];
+  trustedEventIdsByGame: Readonly<Record<string, string>>;
+  maximum: number;
+}): NcaafGame[] {
+  if (!Number.isInteger(args.maximum) || args.maximum < 0) {
+    throw new Error("CFB SharpAPI fallback game budget must be a nonnegative integer.");
+  }
+  return [...new Map(args.games.map((game) => [game.providerGameId, game])).values()]
+    .sort((first, second) =>
+      Number(Boolean(args.trustedEventIdsByGame[first.providerGameId])) - Number(Boolean(args.trustedEventIdsByGame[second.providerGameId])) ||
+      Date.parse(first.scheduledStart) - Date.parse(second.scheduledStart) ||
+      first.providerGameId.localeCompare(second.providerGameId))
+    .slice(0, args.maximum);
 }
 
 export function latestCfbPayloadTimestamp(args: {
@@ -738,7 +765,7 @@ export async function fetchCfbSharpOddsFallbackAttempt(
     return { result: await fetcher(args), error: null };
   } catch (error) {
     const message = splitRequestError(error);
-    const optionalProviderRejection = error instanceof SharpApiClientError
+    const optionalProviderRejection = error instanceof SharpApiAbortError || error instanceof SharpApiClientError
       && (error.status === 400 || error.status === 404);
     if (!optionalProviderRejection && !/sharpapi network error|fetch failed/i.test(message)) throw error;
     return {
