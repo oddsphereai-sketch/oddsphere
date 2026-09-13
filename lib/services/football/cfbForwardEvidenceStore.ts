@@ -53,8 +53,9 @@ export const CFB_FORWARD_EVIDENCE_PAGE_SIZE = 1_000 as const;
 export const CFB_FORWARD_EVIDENCE_MAX_ROWS = 50_000 as const;
 export const CFB_FORWARD_WRITER_PAYLOAD_BATCH_SIZE = 100 as const;
 
-/** Load one authoritative current payload per game/stage plus the lightweight
- * season identity/date trail used by the unchanged prior-results planner. */
+/** Load one authoritative current payload per game/stage, the last immutable
+ * payload published no later than each game's T-60 boundary, and the
+ * lightweight season identity/date trail used by the prior-results planner. */
 export async function readCfbForwardWriterEvidence(args: {
   client: SupabaseClient;
   season: number;
@@ -78,6 +79,7 @@ export async function readCfbForwardWriterEvidence(args: {
   }
 
   const latestCurrentByGameStage = new Map<string, StoredMetadataRow>();
+  const latestPublishedByGameAtCutoff = new Map<string, StoredMetadataRow>();
   for (const row of metadataRows) {
     if (row.evidence_release !== CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE) continue;
     const key = `${row.provider_game_id}:${row.stage}`;
@@ -85,10 +87,20 @@ export async function readCfbForwardWriterEvidence(args: {
     if (!current || row.captured_at > current.captured_at || (row.captured_at === current.captured_at && row.id > current.id)) {
       latestCurrentByGameStage.set(key, row);
     }
+    const cutoffAt = Date.parse(row.game_start_at) - 60 * 60_000;
+    const capturedAt = Date.parse(row.captured_at);
+    if (!Number.isFinite(cutoffAt) || !Number.isFinite(capturedAt) || capturedAt > cutoffAt) continue;
+    const published = latestPublishedByGameAtCutoff.get(row.provider_game_id);
+    if (!published || row.captured_at > published.captured_at || (row.captured_at === published.captured_at && row.id > published.id)) {
+      latestPublishedByGameAtCutoff.set(row.provider_game_id, row);
+    }
   }
 
   const storedRows: StoredRow[] = [];
-  const ids = [...latestCurrentByGameStage.values()].map((row) => row.id).sort();
+  const ids = [...new Set([
+    ...latestCurrentByGameStage.values(),
+    ...latestPublishedByGameAtCutoff.values(),
+  ].map((row) => row.id))].sort();
   for (let index = 0; index < ids.length; index += CFB_FORWARD_WRITER_PAYLOAD_BATCH_SIZE) {
     const { data, error } = await args.client
       .from("cfb_forward_evidence_snapshots")
