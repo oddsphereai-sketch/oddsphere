@@ -22,7 +22,10 @@ import DailyEdgeLiveRefresh from "./DailyEdgeLiveRefresh";
 import { readMemberDataWithDeadline } from "@/lib/services/memberDataAvailability";
 import { resolveUclFeatureFlags } from "@/lib/services/ucl/uclFeatureFlags";
 
-const CFB_MEMBER_DATA_READ_TIMEOUT_MS = 4_000;
+// The compact weekly payload carries 101 games and can take 10-12 seconds to
+// cross the production DB boundary. Keep the read bounded, but do not turn a
+// valid published slate into a false empty-board state at four seconds.
+const CFB_MEMBER_DATA_READ_TIMEOUT_MS = 20_000;
 
 const readCachedNflForwardMemberSnapshot = unstable_cache(
   async (season: number, week: number) => {

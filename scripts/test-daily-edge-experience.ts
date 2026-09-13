@@ -116,6 +116,11 @@ function check(label: string, condition: boolean) {
   console.error(`  ✗ ${label}`);
 }
 
+check(
+  "CFB weekly member reads allow the measured compact-snapshot transfer window",
+  candidateMemberPageSource.includes("const CFB_MEMBER_DATA_READ_TIMEOUT_MS = 20_000"),
+);
+
 check("CFB board cards leave repeated explanatory copy to the reader", candidateDailyEdgeSource.includes('sport !== "cfb" ? <p'));
 
 const heldPresentationMarket = {
