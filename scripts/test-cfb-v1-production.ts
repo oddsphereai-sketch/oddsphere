@@ -1731,14 +1731,24 @@ const afterCutoffStored: CfbForwardStoredEvidence = {
   capturedAt: afterCutoffPayload.capturedAt,
   payload: afterCutoffPayload,
 };
+const correctedScheduleAfterCutoffPayload = structuredClone(publishedCutoffPayload);
+correctedScheduleAfterCutoffPayload.capturedAt = "2026-08-29T14:58:00.000Z";
+correctedScheduleAfterCutoffPayload.game.scheduledStart = "2026-08-29T15:30:00.000Z";
+const correctedScheduleAfterCutoffStored: CfbForwardStoredEvidence = {
+  ...publishedCutoffStored,
+  id: "corrected-schedule-after-cutoff-row",
+  capturedAt: correctedScheduleAfterCutoffPayload.capturedAt,
+  gameStartAt: correctedScheduleAfterCutoffPayload.game.scheduledStart,
+  payload: correctedScheduleAfterCutoffPayload,
+};
 const recoveryCandidates = cfbTrackingCandidatesForRun(
-  [publishedCutoffStored, afterCutoffStored],
+  [publishedCutoffStored, afterCutoffStored, correctedScheduleAfterCutoffStored],
   [],
   "2026-08-29T17:00:00.000Z",
 );
 assert.equal(recoveryCandidates.length, 1);
 assert.equal(recoveryCandidates[0]!.mode, "published_cutoff_accuracy_recovery");
-assert.equal(recoveryCandidates[0]!.payload.capturedAt, publishedCutoffPayload.capturedAt, "recovery must select the last immutable prediction at or before T-60, never a later observation");
+assert.equal(recoveryCandidates[0]!.payload.capturedAt, publishedCutoffPayload.capturedAt, "recovery must use the selected payload's own schedule when enforcing T-60, including after a provider kickoff correction");
 assert.deepEqual(cfbTrackingCandidatesForRun([publishedCutoffStored], [], "2026-08-29T14:59:00.000Z"), [], "recovery must never write before a game starts while a real T-60 capture can still occur");
 const recoveryTracking = buildCfbPublishedCutoffRecoveryRecords({ payload: publishedCutoffPayload, gameId: 9001 });
 assert.deepEqual(recoveryTracking.map((row) => row.market), ["moneyline", "spread", "total"]);
