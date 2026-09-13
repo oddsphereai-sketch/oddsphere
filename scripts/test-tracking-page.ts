@@ -224,6 +224,16 @@ check(
   "Lifetime Tracking uses merged buildLifetimeRecords helper",
   /lifetimeRecords\s*=\s*useMemo[\s\S]{0,300}buildLifetimeRecords/.test(PAGE),
 );
+check(
+  "Complete Lifetime tracking leads instead of a small weekly sample",
+  /useState<"weekly" \| "monthly" \| "lifetime">\("lifetime"\)/.test(PAGE),
+);
+check(
+  "CFB shows its full dynamic prediction denominator and No Play scope",
+  /CFB full tracked record · \{cfbPredictionCount\.toLocaleString\(\)\} predictions/.test(PAGE) &&
+    PAGE.includes("includes sided No Plays") &&
+    PAGE.includes("Daily slice only"),
+);
 // Phase 6B.24 — Lifetime merge: baseline + live MUST combine when both
 // exist (no longer silently picks one or the other). Three source types
 // reflect the new honest categorisation.

@@ -115,3 +115,20 @@ actionable Leans, 0 Best Angles, 7 Watchlists, 2 No Plays, and 292 held markets.
 actionable-board change on the frozen input while preserving both sides of the tested rule.
 Rollback r17/r19/r59 together if coverage is incomplete, actionability unexpectedly collapses, or
 any resistance-bearing/negative-value market promotes.
+
+## CFB member transport and tracking presentation follow-up
+
+The complete 101-game r10 member snapshot is 2.59 MB as JSON and a production database read was
+observed at 74.2 seconds. Extending the page deadline could not make that transfer reliable.
+Snapshot r11 therefore stores the identical member DTO inside a bounded gzip/base64 envelope with
+declared compressed and uncompressed sizes plus a SHA-256 checksum. The reader rejects an invalid
+release, encoding, size, checksum, or decompression result before member validation. This is a
+storage transport change only: the writer, lease, forecast, prediction, probability, grade,
+actionability, stake, lock, tracking, and settlement contracts remain unchanged, so same-input
+promotions and demotions are zero and all 101 games / 303 predictions must round-trip byte-for-byte.
+
+The tracking page now opens its existing complete Lifetime category view by default and labels the
+Yesterday section as a daily slice. A dynamic CFB total makes the full tracked prediction denominator
+explicit and states that sided No Plays count. No tracking row or grade is changed. Roll back r11 if
+the compressed payload breaches its byte bounds, fails exact round-trip validation, omits a game or
+market, or the live member read remains outside the page deadline.
