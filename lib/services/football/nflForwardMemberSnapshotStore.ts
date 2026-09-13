@@ -10,10 +10,15 @@ import {
 } from "./nflV1ActionableGradeCandidate";
 
 export const NFL_FORWARD_MEMBER_SNAPSHOT_RELEASE =
-  "nfl_forward_member_snapshot_2026_09_13_r8_game_scoped_odds_gaps" as const;
+  "nfl_forward_member_snapshot_2026_09_13_r9_bounded_continuity_read" as const;
+const NFL_FORWARD_PREVIOUS_MEMBER_SNAPSHOT_RELEASES = [
+  "nfl_forward_member_snapshot_2026_09_13_r8_game_scoped_odds_gaps",
+  "nfl_forward_member_snapshot_2026_09_03_r7_target_excluded_forecast",
+] as const;
 
 const SNAPSHOT_TTL_MS = 30 * 60 * 1000;
 const SNAPSHOT_STALE_MS = 8 * 60 * 60 * 1000;
+const SNAPSHOT_CONTINUITY_MS = 8 * 24 * 60 * 60 * 1000;
 const TABLE_MISSING_RE = /relation .*lab_response_snapshots.* does not exist|schema cache/i;
 
 export type NflForwardMemberSnapshot = {
@@ -55,12 +60,19 @@ type SnapshotRow = {
 };
 
 export function nflForwardMemberSnapshotKey(input: { season: number; week: number }): string {
+  return nflForwardMemberSnapshotKeyForRelease(input, NFL_FORWARD_MEMBER_SNAPSHOT_RELEASE);
+}
+
+function nflForwardMemberSnapshotKeyForRelease(
+  input: { season: number; week: number },
+  snapshotRelease: string,
+): string {
   return [
     "nfl",
     "daily-edge",
     input.season,
     input.week,
-    NFL_FORWARD_MEMBER_SNAPSHOT_RELEASE,
+    snapshotRelease,
     NFL_WEEK_ONE_HELD_MEMBER_FIXTURE_RELEASE,
     NFL_V1_ACTIONABLE_GRADE_MEMBER_RELEASE,
     NFL_V1_ACTIONABLE_GRADE_DECISION_RELEASE,
@@ -139,21 +151,24 @@ export async function readNflForwardMemberSnapshot(input: {
   week: number;
   now?: string;
 }): Promise<NflForwardMemberSnapshot | null> {
-  const snapshotKey = nflForwardMemberSnapshotKey(input);
   const now = input.now ? new Date(input.now).toISOString() : new Date().toISOString();
-  const { data, error } = await input.client
-    .from("lab_response_snapshots")
-    .select("payload,generated_at,expires_at,stale_until")
-    .eq("snapshot_key", snapshotKey)
-    .gt("stale_until", now)
-    .maybeSingle();
-
-  if (error) {
-    if (TABLE_MISSING_RE.test(error.message)) return null;
-    throw new Error(`NFL compact member snapshot read failed: ${error.message}`);
+  const releases = [NFL_FORWARD_MEMBER_SNAPSHOT_RELEASE, ...NFL_FORWARD_PREVIOUS_MEMBER_SNAPSHOT_RELEASES];
+  for (const release of releases) {
+    const { data, error } = await input.client
+      .from("lab_response_snapshots")
+      .select("payload,generated_at,expires_at,stale_until")
+      .eq("snapshot_key", nflForwardMemberSnapshotKeyForRelease(input, release))
+      .maybeSingle();
+    if (error) {
+      if (TABLE_MISSING_RE.test(error.message)) return null;
+      throw new Error(`NFL compact member snapshot read failed: ${error.message}`);
+    }
+    if (!data) continue;
+    const snapshot = validateNflForwardMemberSnapshot((data as SnapshotRow).payload, input);
+    if (!snapshot || Date.parse(now) - Date.parse(snapshot.publishedAt) > SNAPSHOT_CONTINUITY_MS) continue;
+    return { ...snapshot, snapshotRelease: NFL_FORWARD_MEMBER_SNAPSHOT_RELEASE };
   }
-  if (!data) return null;
-  return validateNflForwardMemberSnapshot((data as SnapshotRow).payload, input);
+  return null;
 }
 
 export function auditNflForwardMemberSnapshot(input: {
@@ -236,7 +251,7 @@ function validateNflForwardMemberSnapshot(
   if (!value || typeof value !== "object") return null;
   const snapshot = value as Partial<NflForwardMemberSnapshot>;
   if (
-    snapshot.snapshotRelease !== NFL_FORWARD_MEMBER_SNAPSHOT_RELEASE ||
+    ![NFL_FORWARD_MEMBER_SNAPSHOT_RELEASE, ...NFL_FORWARD_PREVIOUS_MEMBER_SNAPSHOT_RELEASES].includes(snapshot.snapshotRelease as typeof NFL_FORWARD_MEMBER_SNAPSHOT_RELEASE) ||
     snapshot.evidenceRelease !== NFL_FORWARD_EVIDENCE_SCHEMA_RELEASE ||
     snapshot.memberRelease !== NFL_V1_ACTIONABLE_GRADE_MEMBER_RELEASE ||
     snapshot.decisionRelease !== NFL_V1_ACTIONABLE_GRADE_DECISION_RELEASE ||

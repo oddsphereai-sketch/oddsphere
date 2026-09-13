@@ -38,8 +38,79 @@ type StoredRow = {
   payload: unknown;
 };
 
+type StoredMetadataRow = {
+  id: string;
+  evidence_release: string;
+  provider_game_id: string;
+  stage: string;
+  captured_at: string;
+  game_start_at: string;
+};
+
+export type CfbForwardEvidenceMetadata = Pick<CfbForwardStoredEvidence, "providerGameId" | "capturedAt" | "gameStartAt">;
+
 export const CFB_FORWARD_EVIDENCE_PAGE_SIZE = 1_000 as const;
 export const CFB_FORWARD_EVIDENCE_MAX_ROWS = 50_000 as const;
+export const CFB_FORWARD_WRITER_PAYLOAD_BATCH_SIZE = 100 as const;
+
+/** Load one authoritative current payload per game/stage plus the lightweight
+ * season identity/date trail used by the unchanged prior-results planner. */
+export async function readCfbForwardWriterEvidence(args: {
+  client: SupabaseClient;
+  season: number;
+}): Promise<{ evidence: CfbForwardStoredEvidence[]; metadata: CfbForwardEvidenceMetadata[] }> {
+  const metadataRows: StoredMetadataRow[] = [];
+  for (let from = 0; from < CFB_FORWARD_EVIDENCE_MAX_ROWS; from += CFB_FORWARD_EVIDENCE_PAGE_SIZE) {
+    const { data, error } = await args.client
+      .from("cfb_forward_evidence_snapshots")
+      .select("id,evidence_release,provider_game_id,stage,captured_at,game_start_at")
+      .eq("season", args.season)
+      .order("captured_at", { ascending: true })
+      .order("id", { ascending: true })
+      .range(from, from + CFB_FORWARD_EVIDENCE_PAGE_SIZE - 1);
+    if (error) throw new Error(`CFB forward evidence metadata read failed: ${error.message}`);
+    const page = (data ?? []) as StoredMetadataRow[];
+    metadataRows.push(...page);
+    if (page.length < CFB_FORWARD_EVIDENCE_PAGE_SIZE) break;
+    if (from + CFB_FORWARD_EVIDENCE_PAGE_SIZE >= CFB_FORWARD_EVIDENCE_MAX_ROWS) {
+      throw new Error(`CFB forward evidence metadata read exceeded its bounded ${CFB_FORWARD_EVIDENCE_MAX_ROWS}-row season limit.`);
+    }
+  }
+
+  const latestCurrentByGameStage = new Map<string, StoredMetadataRow>();
+  for (const row of metadataRows) {
+    if (row.evidence_release !== CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE) continue;
+    const key = `${row.provider_game_id}:${row.stage}`;
+    const current = latestCurrentByGameStage.get(key);
+    if (!current || row.captured_at > current.captured_at || (row.captured_at === current.captured_at && row.id > current.id)) {
+      latestCurrentByGameStage.set(key, row);
+    }
+  }
+
+  const storedRows: StoredRow[] = [];
+  const ids = [...latestCurrentByGameStage.values()].map((row) => row.id).sort();
+  for (let index = 0; index < ids.length; index += CFB_FORWARD_WRITER_PAYLOAD_BATCH_SIZE) {
+    const { data, error } = await args.client
+      .from("cfb_forward_evidence_snapshots")
+      .select("id,provider_game_id,stage,captured_at,game_start_at,payload_sha256,payload")
+      .eq("evidence_release", CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE)
+      .in("id", ids.slice(index, index + CFB_FORWARD_WRITER_PAYLOAD_BATCH_SIZE));
+    if (error) throw new Error(`CFB current writer evidence read failed: ${error.message}`);
+    storedRows.push(...((data ?? []) as StoredRow[]));
+  }
+  if (storedRows.length !== ids.length) {
+    throw new Error(`CFB current writer evidence read returned ${storedRows.length} of ${ids.length} latest game rows.`);
+  }
+
+  return {
+    evidence: storedRows.map(normalizeStoredRow).sort((a, b) => Date.parse(a.capturedAt) - Date.parse(b.capturedAt) || a.id.localeCompare(b.id)),
+    metadata: metadataRows.map((row) => ({
+      providerGameId: row.provider_game_id,
+      capturedAt: new Date(row.captured_at).toISOString(),
+      gameStartAt: new Date(row.game_start_at).toISOString(),
+    })),
+  };
+}
 
 export async function readCfbForwardEvidence(args: { client: SupabaseClient; season: number }): Promise<CfbForwardStoredEvidence[]> {
   const rows: StoredRow[] = [];

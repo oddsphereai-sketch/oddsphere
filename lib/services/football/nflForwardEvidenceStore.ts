@@ -20,7 +20,7 @@ type StoredRow = {
   payload: unknown;
 };
 
-export const NFL_FORWARD_EVIDENCE_PAGE_SIZE = 1_000 as const;
+export const NFL_FORWARD_EVIDENCE_PAGE_SIZE = 250 as const;
 export const NFL_FORWARD_EVIDENCE_MAX_ROWS_PER_RELEASE = 5_000 as const;
 
 export async function readNflForwardEvidence(args: {

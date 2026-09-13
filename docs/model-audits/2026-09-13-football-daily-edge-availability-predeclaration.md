@@ -62,3 +62,29 @@ Date: 2026-09-13
 Rollback all release identifiers above together if a complete scheduled game disappears, a partial
 release wave becomes authoritative, exact-price absence creates an actionable decision, writer
 duration breaches the route budget, or either member reader becomes unavailable.
+
+## NFL production follow-up predeclaration
+
+The first r23 production invocation passed the provider-odds boundary and then failed while reading
+the 1,567-row current evidence release: Postgres canceled the 1,000-large-JSON-row page at its
+statement timeout. The r24 writer reads only the current authoritative release and reduces each page
+to 250 rows; superseded r4/r3/r2 evidence has no current publication authority and is no longer
+loaded by the scheduled writer. Snapshot r9 may read the immediately preceding r8/r7 compact Week 1
+snapshot for at most eight days, while the unchanged daily lifecycle hides prior-date games. This
+restores the last complete Sunday board without a write and lets the next successful r24 invocation
+replace it. Forecasts, tuples, grades, actionability, locks, tracking, stakes, and settlement remain
+unchanged; same-input promotions and demotions remain zero. Roll back r24/r9 together if current
+release coverage is incomplete, the bounded read still times out, or continuity exposes a past game.
+
+## CFB production follow-up predeclaration
+
+The first r57 production invocation retained the complete provider window but still died before
+lifecycle close because it loaded 12,024 season-long large JSON evidence payloads. Writer r58
+loads the lightweight season-long game identity/date trail used by the unchanged prior-results
+planner, then retrieves only the checksum-verified latest current-release payload for each game
+and capture stage.
+This preserves prior-result/model context, current release authority, immutable locks, and the
+single append/snapshot path while removing repeated and superseded payload transfer. No model,
+side, probability, grade, actionability, stake, or tracking rule changes; same-input promotions
+and demotions remain zero. Roll back r58 if the latest-row set is incomplete, checksums fail, a
+prior game identity disappears, or the writer still exceeds its route budget.

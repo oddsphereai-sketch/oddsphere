@@ -22,10 +22,7 @@ import {
 } from "./nflForwardEvidence";
 import {
   appendNflForwardEvidence,
-  readLegacyNflForwardEvidence,
   readNflForwardEvidence,
-  readPriorNflForwardEvidence,
-  readPreviousNflForwardEvidence,
 } from "./nflForwardEvidenceStore";
 import { collectNflForwardWeather } from "./nflVenueWeather";
 import {
@@ -65,7 +62,7 @@ import {
 } from "./nflForwardMemberSnapshotStore";
 
 export const NFL_FORWARD_WRITER_RELEASE =
-  "nfl_forward_evidence_writer_2026_09_13_r23_game_scoped_odds_gaps" as const;
+  "nfl_forward_evidence_writer_2026_09_13_r24_bounded_current_release_read" as const;
 
 export type NflForwardWriterResult = {
   writerRelease: typeof NFL_FORWARD_WRITER_RELEASE;
@@ -117,16 +114,11 @@ export async function runNflForwardEvidenceWriter(args: {
   sharpApiKey: string;
   weatherProvider: IWeatherProvider | null;
 }): Promise<NflForwardWriterResult> {
-  // The superseded r3 release contains several thousand large immutable JSON
-  // payloads. Running all four paginated release reads concurrently can make
-  // otherwise bounded SELECTs compete until Postgres cancels one at its
-  // statement timeout. Preserve the complete cross-release history, but read
-  // one release at a time so this writer does not create its own DB spike.
+  // Publication and planning need the complete current release only. Loading
+  // superseded large JSON releases added no current fixture authority and can
+  // make Postgres cancel the writer before it reaches the provider slate.
   const existing = await readNflForwardEvidence({ client: args.client, season: args.season, week: args.week });
-  const previousExisting = await readPreviousNflForwardEvidence({ client: args.client, season: args.season, week: args.week });
-  const priorExisting = await readPriorNflForwardEvidence({ client: args.client, season: args.season, week: args.week });
-  const legacyExisting = await readLegacyNflForwardEvidence({ client: args.client, season: args.season, week: args.week });
-  const historicalExisting = [...legacyExisting, ...priorExisting, ...previousExisting, ...existing];
+  const historicalExisting = existing;
   const need = determineNflForwardCollectionNeed({
     existing,
     now: args.now,

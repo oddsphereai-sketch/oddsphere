@@ -23,7 +23,7 @@ import {
   type CfbForwardStoredEvidence,
   type CfbForwardTeamQuarterbacks,
 } from "./cfbForwardEvidence";
-import { appendCfbForwardEvidence, readCfbForwardEvidence } from "./cfbForwardEvidenceStore";
+import { appendCfbForwardEvidence, readCfbForwardWriterEvidence, type CfbForwardEvidenceMetadata } from "./cfbForwardEvidenceStore";
 import { buildCfbV1DecisionBundle, CFB_T60_MAX_CAPTURE_LAG_MINUTES, CFB_V1_DECISION_RELEASE, getCfbV1ForecastForGame } from "./cfbV1Decision";
 import { CFB_V1_WEEKLY_RUNTIME_RELEASE, cfbV1WeeklyGameProfileCoverage } from "./cfbV1WeeklyForecast";
 import { resolveCfbCanonicalMarketAnchor } from "./cfbMarketInformedOutcome";
@@ -61,7 +61,7 @@ import {
 } from "./cfbForwardMemberSnapshotStore";
 
 export const CFB_FORWARD_WRITER_RELEASE =
-  "cfb_forward_evidence_writer_2026_09_13_r57_bounded_week_ahead_recovery" as const;
+  "cfb_forward_evidence_writer_2026_09_13_r58_latest_game_rows" as const;
 export const CFB_FORWARD_MAX_QB_TEAMS_PER_RUN = 24 as const;
 export const CFB_FORWARD_MAX_SHARP_FALLBACK_GAMES_PER_RUN = 24 as const;
 export const CFB_FORWARD_RESULTS_BATCH_SIZE = 100 as const;
@@ -161,7 +161,8 @@ export async function runCfbForwardEvidenceWriter(args: {
   sharpApiKey: string;
   weatherProvider?: IWeatherProvider | null;
 }): Promise<CfbForwardWriterResult> {
-  const allExisting = await readCfbForwardEvidence({ client: args.client, season: args.season });
+  const writerEvidence = await readCfbForwardWriterEvidence({ client: args.client, season: args.season });
+  const allExisting = writerEvidence.evidence;
   const windows = resolveCfbVisibleWindows({ now: args.now, evidence: allExisting });
   const states: CfbForwardWindowState[] = windows.map((window) => {
     const existing = allExisting.filter((row) => isGameInCfbWeeklyWindow({ scheduledStart: row.gameStartAt }, window));
@@ -192,7 +193,7 @@ export async function runCfbForwardEvidenceWriter(args: {
     return emptyResult("capture_plan_empty", { trackingAttempted: false, trackingRecordsProposed: 0, trackingRecordsInserted: 0, trackingRecordsExisting: 0 }, memberSnapshot);
   }
   const playbook = new PlaybookClient(args.playbookApiKey);
-  const priorResults = await fetchPriorCompletedGames({ rows: allExisting, before: window.boardStartDate, apiKey: args.balldontlieApiKey });
+  const priorResults = await fetchPriorCompletedGames({ rows: writerEvidence.metadata, before: window.boardStartDate, apiKey: args.balldontlieApiKey });
   const teams = [...new Map(games.flatMap((game) => [[game.away.id, game.away] as const, [game.home.id, game.home] as const])).values()];
   const priorQuarterbacks = latestQuarterbacksByTeam(allExisting);
   const quarterbackTeams = selectQuarterbackTeams({ plans, teams, priorQuarterbacks, maximum: CFB_FORWARD_MAX_QB_TEAMS_PER_RUN });
@@ -628,7 +629,7 @@ export function planCfbPriorResultReads(args: {
   return reads;
 }
 
-async function fetchPriorCompletedGames(args: { rows: CfbForwardStoredEvidence[]; before: string; apiKey: string }): Promise<{ games: NcaafGame[]; providerRequests: number }> {
+async function fetchPriorCompletedGames(args: { rows: CfbForwardEvidenceMetadata[]; before: string; apiKey: string }): Promise<{ games: NcaafGame[]; providerRequests: number }> {
   const games: NcaafGame[] = [];
   let providerRequests = 0;
   for (const read of planCfbPriorResultReads(args)) {
