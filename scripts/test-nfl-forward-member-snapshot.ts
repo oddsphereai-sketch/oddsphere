@@ -106,24 +106,18 @@ const client = {
         return {
           eq(column: string, value: string) {
             assert.equal(column, "snapshot_key");
-            assert.equal(value, storedKey);
             return {
-              gt(expiryColumn: string) {
-                assert.equal(expiryColumn, "stale_until");
+              async maybeSingle() {
                 return {
-                  async maybeSingle() {
-                    return {
-                      data: storedPayload
-                        ? {
-                            payload: storedPayload,
-                            generated_at: snapshot.publishedAt,
-                            expires_at: "2026-08-27T12:31:00.000Z",
-                            stale_until: "2026-08-27T20:01:00.000Z",
-                          }
-                        : null,
-                      error: null,
-                    };
-                  },
+                  data: value === storedKey && storedPayload
+                    ? {
+                        payload: storedPayload,
+                        generated_at: snapshot.publishedAt,
+                        expires_at: "2026-08-27T12:31:00.000Z",
+                        stale_until: "2026-08-27T20:01:00.000Z",
+                      }
+                    : null,
+                  error: null,
                 };
               },
             };

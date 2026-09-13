@@ -1898,6 +1898,8 @@ assert.match(writerSource, /executionStatus: decision\.gradeAdjustment\?\.execut
 assert.equal((writerSource.match(/fetchCfbSharpApiSplits\(\{ games, apiKey/g) ?? []).length, 1, "SharpAPI splits must remain one bounded slate request rather than a per-game loop");
 assert.match(writerSource, /buildCfbMarketSharpAwareForecast/, "the sole writer must build the bounded market\/sharp-aware authoritative PMF");
 assert.match(writerSource, /applyCfbMarketSharpAwareGrades/, "the sole writer must own balanced market\/sharp-aware grade promotion and demotion");
+assert.match(writerSource, /readCfbForwardWriterEvidence/, "the scheduled writer must use the bounded current game-stage payload reader");
+assert.doesNotMatch(writerSource, /readCfbForwardEvidence\(\{ client: args\.client/, "the scheduled writer must not reload every historical JSON payload");
 assert.match(sharpOddsSource, /path: "\/events"/, "CFB named-book recovery must discover SharpAPI's canonical events before requesting odds");
 assert.match(sharpOddsSource, /league: "ncaaf"/, "canonical event discovery must stay league-scoped");
 assert.match(sharpOddsSource, /path: "\/odds"[\s\S]*event_id: eventId[\s\S]*market: "main"/, "canonical event odds must stay exact-event and main-market scoped");
@@ -1917,6 +1919,9 @@ assert.equal(CFB_FORWARD_EVIDENCE_PAGE_SIZE, 1_000);
 assert.equal(CFB_FORWARD_EVIDENCE_MAX_ROWS, 50_000);
 assert.match(evidenceStoreSource, /\.order\("captured_at", \{ ascending: true \}\)\s*\.order\("id", \{ ascending: true \}\)\s*\.range\(from, from \+ CFB_FORWARD_EVIDENCE_PAGE_SIZE - 1\)/, "the CFB evidence reader must paginate with a stable timestamp-and-ID order");
 assert.match(evidenceStoreSource, /exceeded its bounded.*row season limit/, "the CFB evidence reader must fail explicitly at its hard cap instead of silently truncating a release wave");
+assert.match(evidenceStoreSource, /select\("id,evidence_release,provider_game_id,stage,captured_at,game_start_at"\)/, "the writer history scan must stay payload-free");
+assert.match(evidenceStoreSource, /latestCurrentByGameStage/, "the writer must retain the latest current-release opening, unlocked, and T-60 rows separately");
+assert.match(evidenceStoreSource, /CFB_FORWARD_WRITER_PAYLOAD_BATCH_SIZE = 100/, "current writer payload reads must remain bounded");
 const evidenceRanges: Array<[number, number]> = [];
 const storedEvidenceRow = {
   id: evidence.id,
