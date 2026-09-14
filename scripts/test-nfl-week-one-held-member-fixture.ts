@@ -40,6 +40,25 @@ const weekOneSlate = [
 const rows = Array.from({ length: 16 }, (_, index) => syntheticRow(index + 1));
 const fixture = buildNflWeekOneHeldMemberFixture(rows);
 
+const releaseTransitionRows = rows.map((row, index) => {
+  const copy = structuredClone(row) as NflForwardStoredEvidence & { payload: NflForwardEvidencePayload };
+  if (index === 0) return copy;
+  copy.stage = "t60";
+  copy.payload.stage = "t60";
+  copy.payload.decisions.modelPromotionStatus = "nfl_v1_member_release_2026_09_03_r12_target_excluded_forecast";
+  copy.payload.decisions.trackingEnabled = true;
+  copy.payload.decisions.evaluatedBets = copy.payload.decisions.evaluatedBets.map((decision) => ({
+    ...decision,
+    decisionRelease: "nfl_v1_daily_edge_decision_2026_09_03_r15_target_excluded_forecast",
+  }));
+  return copy;
+});
+assert.equal(
+  buildNflWeekOneHeldMemberFixture(releaseTransitionRows).snapshot.games.length,
+  16,
+  "a release transition must preserve every immutable T-60 game until its current-release replacement exists",
+);
+
 assert.equal(fixture.heldMemberFixtureRelease, NFL_WEEK_ONE_HELD_MEMBER_FIXTURE_RELEASE);
 assert.equal(fixture.week.label, "Regular Season Week 1");
 assert.equal(fixture.snapshot.games.length, 16);

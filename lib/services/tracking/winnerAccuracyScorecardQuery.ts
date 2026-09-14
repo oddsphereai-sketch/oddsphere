@@ -15,6 +15,7 @@ import {
   uclLockManifestCohortKey,
   type UclLockManifestRow,
 } from "../ucl/uclLockManifest";
+import { nflTrackingCorrectionSupersededRecordId } from "../football/nflPublishedTrackingCorrection";
 
 export const WINNER_ACCURACY_QUERY_PAGE_SIZE = 1_000;
 export const WINNER_ACCURACY_DAILY_RECORD_CAP = 2_000;
@@ -56,6 +57,8 @@ type RecordRow = {
   epl_calibration_release: string | null;
   cfb_tracking_record_release: string | null;
   nfl_tracking_record_release: string | null;
+  tracking_correction_release: string | null;
+  supersedes_prediction_record_id: number | null;
   closing_line_value: {
     closing_odds_american?: number | null;
     clv_pct?: number | null;
@@ -86,6 +89,8 @@ export const WINNER_ACCURACY_RECORD_SELECT = [
   "epl_calibration_release:snapshot_json->>calibration_release",
   "cfb_tracking_record_release:snapshot_json->>cfb_tracking_record_release",
   "nfl_tracking_record_release:snapshot_json->>nfl_tracking_record_release",
+  "tracking_correction_release:snapshot_json->>tracking_correction_release",
+  "supersedes_prediction_record_id:snapshot_json->supersedes_prediction_record_id",
   "closing_line_value:snapshot_json->closing_line_value",
 ].join(",");
 
@@ -396,6 +401,21 @@ async function excludePartialUclWinnerCohorts(
   });
 }
 
+export function preferAppendOnlyWinnerTrackingCorrections<T extends Pick<
+  RecordRow,
+  "id" | "model_version" | "tracking_correction_release" | "supersedes_prediction_record_id"
+>>(records: T[]): T[] {
+  const superseded = new Set(records.flatMap((record) => {
+    const id = nflTrackingCorrectionSupersededRecordId({
+      modelVersion: record.model_version,
+      correctionRelease: record.tracking_correction_release,
+      supersedesPredictionRecordId: record.supersedes_prediction_record_id,
+    });
+    return id === null ? [] : [id];
+  }));
+  return records.filter((record) => !superseded.has(record.id));
+}
+
 export async function loadWinnerAccuracyScorecards(
   options: QueryOptions,
   client: ReadClient = supabase,
@@ -404,10 +424,10 @@ export async function loadWinnerAccuracyScorecards(
   const recordCap = options.recordCap ?? WINNER_ACCURACY_DAILY_RECORD_CAP;
   if (!Number.isInteger(recordCap) || recordCap < 1 || recordCap > 10_000) throw new Error("Invalid record cap.");
   const bounds = options.lockedDate === null ? null : utcBoundsForEtDate(options.lockedDate);
-  const records = await excludePartialUclWinnerCohorts(
+  const records = preferAppendOnlyWinnerTrackingCorrections(await excludePartialUclWinnerCohorts(
     client,
     await fetchRecords(client, bounds, recordCap),
-  );
+  ));
   const grades = await fetchGrades(client, records.map((row) => row.id));
   const gradeById = new Map(grades.map((grade) => [grade.prediction_record_id, grade]));
   const settled = records.filter((row) => {

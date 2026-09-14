@@ -1269,6 +1269,13 @@ check(
     candidateSource.includes("text-teal-300"),
 );
 check(
+  "same-line American odds movement is recomputed from visible selected-side implied probability",
+  candidateSource.includes("pickRelativeImpliedProbabilityDelta(movement.open, movement.current)") &&
+    candidateSource.indexOf("if (sameTrackedLine(movement.openLine, movement.currentLine))") <
+      candidateSource.indexOf("if (market.writerMovementDirection) return market.writerMovementDirection") &&
+    !candidateSource.includes("if (market.writerMovementDirection) return market.writerMovementDirection;\n  const canonical"),
+);
+check(
   "different primary and tracked-book prices are labeled instead of mixed",
   candidateSource.includes("displayedBook !== null") &&
     candidateSource.includes("displayedPrice === stop.american") &&

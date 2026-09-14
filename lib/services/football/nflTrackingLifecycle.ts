@@ -14,10 +14,10 @@ import {
   NFL_V1_MARKET_EVIDENCE_TOTAL_MODEL_RELEASE,
 } from "./nflV1ActionableGradeCandidate";
 export const NFL_TRACKING_LIFECYCLE_RELEASE =
-  "nfl_tracking_lifecycle_2026_09_03_r9_target_excluded_forecast" as const;
+  "nfl_tracking_lifecycle_2026_09_14_r10_prediction_owned_side" as const;
 
 export const NFL_TRACKING_COMPOSITE_RELEASE_BUNDLE =
-  "nfl_tracking_composite_release_bundle_2026_09_03_r5_target_excluded_forecast" as const;
+  "nfl_tracking_composite_release_bundle_2026_09_14_r6_prediction_owned_side" as const;
 
 const NFL_TRACKING_MARKET_RELEASES = {
   moneyline: {
@@ -76,7 +76,7 @@ export type NflTrackingProposal = {
 };
 
 export const NFL_EVALUATED_TUPLE_TRACKING_BOUNDARY_RELEASE =
-  "nfl_evaluated_tuple_tracking_boundary_2026_09_03_r6_target_excluded_forecast" as const;
+  "nfl_evaluated_tuple_tracking_boundary_2026_09_14_r7_prediction_owned_side" as const;
 
 /**
  * Fail-closed production gate used by the single NFL forward writer before it
@@ -93,6 +93,7 @@ export function nflForwardT60TrackingEligibility(args: {
   providerGameId: string;
   gameStartsAt: string;
   decisions: NflRegularEvaluatedBetDecision[];
+  outcomeConfidence?: ReadonlyArray<{ market: string; likelySide: string; probability: number }>;
   publicationApproved: boolean;
   officialRegistryLaunched: boolean;
 }): NflForwardTrackingEligibility {
@@ -107,12 +108,19 @@ export function nflForwardT60TrackingEligibility(args: {
   }
   if (!args.publicationApproved) return { eligible: false, reason: "publication_not_approved" };
   if (args.decisions.length === 0) {
-    return { eligible: false, reason: "incomplete_decision_set" };
-  }
-  try {
-    assertMarketScopedFootballDecisions(args.decisions, "NFL T-60 tracking boundary");
-  } catch {
-    return { eligible: false, reason: "incoherent_decision_tuple" };
+    const forecasts = args.outcomeConfidence ?? [];
+    const markets = forecasts.map((forecast) => forecast.market);
+    const completeForecast = markets.length === 3 && new Set(markets).size === 3 &&
+      ["moneyline", "spread", "total"].every((market) => markets.includes(market)) &&
+      forecasts.every((forecast) => forecast.likelySide.trim().length > 0 &&
+        Number.isFinite(forecast.probability) && forecast.probability > 0 && forecast.probability < 1);
+    if (!completeForecast) return { eligible: false, reason: "incomplete_decision_set" };
+  } else {
+    try {
+      assertMarketScopedFootballDecisions(args.decisions, "NFL T-60 tracking boundary");
+    } catch {
+      return { eligible: false, reason: "incoherent_decision_tuple" };
+    }
   }
   const capturedAt = Date.parse(args.capturedAt);
   const gameStartsAt = Date.parse(args.gameStartsAt);

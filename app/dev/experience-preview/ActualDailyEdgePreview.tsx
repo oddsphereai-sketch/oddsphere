@@ -48,6 +48,7 @@ import {
 } from "@/app/lab/lib/dailyEdgeMarketPulseMovement";
 import { resolveDailyEdgeCurrentOnlyMovement } from "@/app/lab/lib/dailyEdgeCurrentOnlyMovement";
 import { nflSelectedBetGrade } from "@/app/lab/lib/nflReaderPresentation";
+import { pickRelativeImpliedProbabilityDelta } from "@/app/lab/lib/lineMoveTone";
 import {
   dailyEdgeHeldGuide,
   dailyEdgeHeldRisk,
@@ -1151,7 +1152,7 @@ function footballMovementSignal(market: MarketEdgeDto, movement: CoherentMovemen
       tone: direction.tone === "emerald" || direction.tone === "teal" ? "emerald" : direction.tone === "red" || direction.tone === "amber" ? "amber" : "gray",
     };
   }
-  const impliedDelta = americanImpliedPct(movement.current) - americanImpliedPct(movement.open);
+  const impliedDelta = 100 * (pickRelativeImpliedProbabilityDelta(movement.open, movement.current) ?? 0);
   const magnitude = Math.abs(impliedDelta);
   if (magnitude < 0.1) {
     return { label: "Same-book move", value: "Market flat", note: `${formatAmerican(movement.open)} → ${formatAmerican(movement.current)} · ${sportsbook}`, tone: "gray" };
@@ -1465,7 +1466,7 @@ function movementRowDirection(market: MarketEdgeDto, movement: CoherentMovement,
     const direction = coherentMovementDirection(market, movement);
     return direction === "support" ? { label: "Toward pick", tone: "emerald" } : direction === "resistance" ? { label: "Against pick", tone: "red" } : { label: "Flat", tone: "gray" };
   }
-  const impliedDelta = americanImpliedPct(movement.current) - americanImpliedPct(movement.open);
+  const impliedDelta = 100 * (pickRelativeImpliedProbabilityDelta(movement.open, movement.current) ?? 0);
   const magnitude = Math.abs(impliedDelta);
   if (magnitude < 0.1) return { label: "Flat", tone: "gray" };
   const helpsPick = selected ? impliedDelta > 0 : impliedDelta < 0;
@@ -1652,7 +1653,6 @@ function currentAwareGuidedGuide(market: MarketEdgeDto, fallback: string): strin
 
 function coherentMovementDirection(market: MarketEdgeDto, movement: CoherentMovement): "support" | "resistance" | "neutral" {
   if (!movement.coherentTrail || movement.open === null || movement.current === null) return "neutral";
-  if (market.writerMovementDirection) return market.writerMovementDirection;
   const canonical = market.marketReadV2?.movement;
   const canonicalDirection = canonical?.directionRelativeToPick;
   const isVerifiedFirstInningPriceBoard =
@@ -1671,6 +1671,14 @@ function coherentMovementDirection(market: MarketEdgeDto, movement: CoherentMove
     canonical.firstTrackedPrice === movement.open &&
     canonical.currentPrice === movement.current &&
     canonicalLineMatchesVisibleTrail;
+  if (sameTrackedLine(movement.openLine, movement.currentLine)) {
+    // Same-line prices are selected-side American odds. Their raw numeric
+    // direction reverses across favorites and underdogs, so the visible
+    // endpoints—not a stale writer label—own the classification.
+    const impliedDelta = 100 * (pickRelativeImpliedProbabilityDelta(movement.open, movement.current) ?? 0);
+    if (Math.abs(impliedDelta) < 1.25) return "neutral";
+    return impliedDelta > 0 ? "support" : "resistance";
+  }
   if (
     canonicalMatchesVisibleTrail &&
     (canonicalDirection === "support" || canonicalDirection === "resistance")
@@ -1678,13 +1686,12 @@ function coherentMovementDirection(market: MarketEdgeDto, movement: CoherentMove
     return canonicalDirection;
   }
   if (!sameTrackedLine(movement.openLine, movement.currentLine)) {
+    if (market.writerMovementDirection) return market.writerMovementDirection;
     return canonicalDirection === "support" || canonicalDirection === "resistance"
       ? canonicalDirection
       : "neutral";
   }
-  const impliedDelta = americanImpliedPct(movement.current) - americanImpliedPct(movement.open);
-  if (Math.abs(impliedDelta) < 1.25) return "neutral";
-  return impliedDelta > 0 ? "support" : "resistance";
+  return "neutral";
 }
 
 function coherentMovementSummary(market: MarketEdgeDto, movement: CoherentMovement, direction: "support" | "resistance" | "neutral"): string | null {
@@ -1704,10 +1711,6 @@ function coherentMovementSummary(market: MarketEdgeDto, movement: CoherentMoveme
   const lineCopy = line === null ? "" : ` at ${formatNumber(line)}`;
   if (direction === "neutral") return `${book}moved from ${formatAmerican(movement.open)} to ${formatAmerican(movement.current)}${lineCopy}; effectively flat.`;
   return `${book}moved from ${formatAmerican(movement.open)} to ${formatAmerican(movement.current)}${lineCopy}, ${direction === "support" ? "toward" : "against"} our side.`;
-}
-
-function americanImpliedPct(value: number): number {
-  return value < 0 ? (-value / (-value + 100)) * 100 : (100 / (value + 100)) * 100;
 }
 
 type SharpAvailabilityStatus = "complete" | "provider_limited" | "pending" | "stale" | "unavailable" | null;

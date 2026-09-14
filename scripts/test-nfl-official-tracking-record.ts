@@ -4,9 +4,15 @@ import { isPublicallyTracked } from "../lib/config/officialTrackingStart";
 import {
   NFL_FORWARD_EVIDENCE_COLLECTOR_RELEASE,
   NFL_FORWARD_EVIDENCE_SCHEMA_RELEASE,
+  hashNflForwardEvidencePayload,
   type NflForwardEvidencePayload,
 } from "../lib/services/football/nflForwardEvidence";
 import { buildNflOfficialTrackingRecords } from "../lib/services/football/nflOfficialTrackingRecord";
+import {
+  buildNflPublishedMoneylineTrackingCorrection,
+  NFL_PUBLISHED_TRACKING_CORRECTION_MODEL_VERSION,
+  NFL_PUBLISHED_TRACKING_CORRECTION_RELEASE,
+} from "../lib/services/football/nflPublishedTrackingCorrection";
 import { buildNflRegularEvaluatedBetDecision, buildNflRegularOutcomeConfidence } from "../lib/services/football/nflRegularDecisionEvidence";
 import { nflForwardT60TrackingEligibility } from "../lib/services/football/nflTrackingLifecycle";
 import { buildMarketScopedFootballTrackingPlan, FOOTBALL_MARKET_SCOPED_T60_TRACKING_RELEASE } from "../lib/services/football/footballMarketScopedTracking";
@@ -18,9 +24,15 @@ import {
   NFL_V1_ACTIONABLE_GRADE_MEMBER_RELEASE,
   NFL_V1_MARKET_EVIDENCE_TOTAL_MODEL_RELEASE,
 } from "../lib/services/football/nflV1ActionableGradeCandidate";
+import { getNflV1WeekOneOutcomeForecast } from "../lib/services/football/nflV1WeekOneOutcome";
 
 const capturedAt = "2026-09-09T23:30:00.000Z";
 const gameStartsAt = "2026-09-10T00:20:00.000Z";
+const outcomeForecast = getNflV1WeekOneOutcomeForecast({
+  providerGameId: "1392216",
+  awayTeam: "NE",
+  homeTeam: "SEA",
+});
 const common = {
   providerGameId: "1392216",
   stage: "t60_locked" as const,
@@ -46,10 +58,10 @@ const decisions = [
     market: "spread",
     modelRelease: NFL_V1_EVENT_CONTAINED_SPREAD_MODEL_RELEASE,
     calibrationRelease: NFL_V1_ACTIONABLE_GRADE_CALIBRATION_RELEASE,
-    side: "SEA",
+    side: "NE",
     modelProbability: 0.54,
     marketFairProbability: 0.51,
-    evaluatedQuote: { sportsbook: "draftkings", line: -2.5, price: -105, observedAt: capturedAt },
+    evaluatedQuote: { sportsbook: "draftkings", line: 2.5, price: -105, observedAt: capturedAt },
     grade: "Lean",
   }),
   buildNflRegularEvaluatedBetDecision({
@@ -66,7 +78,7 @@ const decisions = [
 ];
 const outcomeConfidence = [
   buildNflRegularOutcomeConfidence({ market: "moneyline", likelySide: "SEA", probability: 0.57, evaluatedAt: capturedAt, modelRelease: NFL_V1_ACTIONABLE_GRADE_MODEL_RELEASE }),
-  buildNflRegularOutcomeConfidence({ market: "spread", likelySide: "SEA", probability: 0.54, evaluatedAt: capturedAt, modelRelease: NFL_V1_EVENT_CONTAINED_SPREAD_MODEL_RELEASE }),
+  buildNflRegularOutcomeConfidence({ market: "spread", likelySide: "NE", probability: 0.54, evaluatedAt: capturedAt, modelRelease: NFL_V1_EVENT_CONTAINED_SPREAD_MODEL_RELEASE }),
   buildNflRegularOutcomeConfidence({ market: "total", likelySide: "Over 44.5", probability: 0.53, evaluatedAt: capturedAt, modelRelease: NFL_V1_MARKET_EVIDENCE_TOTAL_MODEL_RELEASE }),
 ];
 
@@ -117,6 +129,18 @@ assert.equal(nflForwardT60TrackingEligibility({
   publicationApproved: true,
   officialRegistryLaunched: true,
 }).reason, "incomplete_decision_set");
+assert.equal(nflForwardT60TrackingEligibility({
+  stage: "t60",
+  captureTiming: "on_time",
+  t60LagMinutes: 10,
+  capturedAt,
+  providerGameId: "1392216",
+  gameStartsAt,
+  decisions: [],
+  outcomeConfidence,
+  publicationApproved: true,
+  officialRegistryLaunched: true,
+}).eligible, true, "a complete locked forecast remains trackable when every exact-price market is unavailable");
 assert.equal(nflForwardT60TrackingEligibility({
   stage: "t60",
   captureTiming: "on_time",
@@ -184,6 +208,7 @@ const payload = {
   },
   injuries: null,
   weather: {},
+  outcomeForecast,
   decisions: {
     evaluatedBets: decisions,
     outcomeConfidence,
@@ -197,14 +222,45 @@ const payload = {
 const records = buildNflOfficialTrackingRecords({ payload, gameId: 5001 });
 assert.equal(records.length, 3);
 assert.deepEqual(records.map((record) => record.market), ["moneyline", "spread", "total"]);
-assert.deepEqual(records.map((record) => record.side), ["home", "home", "over"]);
-assert.deepEqual(records.map((record) => record.line_value), [null, -2.5, 44.5]);
+assert.deepEqual(records.map((record) => record.side), ["home", "away", "over"]);
+assert.deepEqual(records.map((record) => record.line_value), [null, 2.5, 44.5]);
 assert.deepEqual(records.map((record) => record.play_grade), ["best_angle", "lean", "watchlist"]);
 assert.deepEqual(records.map((record) => record.no_bet), [false, false, true]);
 assert.equal(records.every((record) => record.locked_at === capturedAt), true);
 assert.equal(records.every((record) => record.model_version === common.decisionRelease), true);
 assert.equal(records.every((record) => record.slate_date === "2026-09-09"), true);
 assert.equal(records.every((record) => record.snapshot_json?.football_market_scoped_tracking_release === FOOTBALL_MARKET_SCOPED_T60_TRACKING_RELEASE), true);
+const correctionPayload = {
+  ...payload,
+  market: {
+    ...payload.market,
+    comparableCurrentBooks: [
+      { providerGameId: "1392216", sportsbook: "fanatics", observedAt: capturedAt, moneyline: { awayPrice: 170, homePrice: -200 } },
+      { providerGameId: "1392216", sportsbook: "draftkings", observedAt: capturedAt, moneyline: { awayPrice: 165, homePrice: -195 } },
+      { providerGameId: "1392216", sportsbook: "betmgm", observedAt: capturedAt, moneyline: { awayPrice: 160, homePrice: -190 } },
+    ],
+  },
+} as NflForwardEvidencePayload;
+const wrongSource = {
+  ...records[0]!,
+  id: 9001,
+  pick: "NE",
+  side: "away",
+  model_probability: correctionPayload.outcomeForecast.awayWinProbability,
+  snapshot_json: {
+    ...records[0]!.snapshot_json,
+    evidence_payload_sha256: hashNflForwardEvidencePayload(correctionPayload),
+  },
+};
+const correction = buildNflPublishedMoneylineTrackingCorrection({ source: wrongSource, payload: correctionPayload });
+assert.equal(correction.pick, "SEA");
+assert.equal(correction.side, "home");
+assert.equal(correction.model_probability, correctionPayload.outcomeForecast.homeWinProbability);
+assert.equal(correction.model_version, NFL_PUBLISHED_TRACKING_CORRECTION_MODEL_VERSION);
+assert.equal(correction.snapshot_json?.tracking_correction_release, NFL_PUBLISHED_TRACKING_CORRECTION_RELEASE);
+assert.equal(correction.snapshot_json?.supersedes_prediction_record_id, 9001);
+assert.equal(correction.held, false);
+assert.equal(wrongSource.pick, "NE", "building an append-only correction cannot mutate the original record");
 
 const marketScopedPayload = {
   ...payload,
@@ -213,7 +269,7 @@ const marketScopedPayload = {
 const marketScopedRecords = buildNflOfficialTrackingRecords({ payload: marketScopedPayload, gameId: 5001 });
 assert.deepEqual(marketScopedRecords.map((record) => record.market), ["moneyline", "spread", "total"]);
 assert.deepEqual(marketScopedRecords.map((record) => record.odds_american), [null, -105, -108]);
-assert.deepEqual(marketScopedRecords.map((record) => record.held), [true, false, false]);
+assert.deepEqual(marketScopedRecords.map((record) => record.held), [false, false, false]);
 assert.equal(marketScopedRecords[0]?.side, "home", "a missing exact ML price retains the immutable winner forecast for accuracy");
 assert.equal(marketScopedRecords[0]?.no_bet, true, "a price-missing forecast is never actionable or ROI-eligible");
 assert.equal(marketScopedRecords.every((record) => record.locked_at === capturedAt), true);
@@ -225,11 +281,14 @@ const oneMarketRecords = buildNflOfficialTrackingRecords({
   gameId: 5001,
 });
 assert.deepEqual(oneMarketRecords.map((record) => record.market), ["moneyline", "spread", "total"]);
-assert.deepEqual(oneMarketRecords.map((record) => record.held), [true, true, false]);
-assert.throws(
-  () => buildNflOfficialTrackingRecords({ payload: { ...marketScopedPayload, decisions: { ...marketScopedPayload.decisions, evaluatedBets: [] } }, gameId: 5001 }),
-  /one to three exact-price market decisions/,
-);
+assert.deepEqual(oneMarketRecords.map((record) => record.held), [false, false, false]);
+const forecastOnlyRecords = buildNflOfficialTrackingRecords({
+  payload: { ...marketScopedPayload, decisions: { ...marketScopedPayload.decisions, evaluatedBets: [] } },
+  gameId: 5001,
+});
+assert.deepEqual(forecastOnlyRecords.map((record) => record.market), ["moneyline", "spread", "total"]);
+assert.equal(forecastOnlyRecords.every((record) => record.no_bet && !record.held && record.side !== null), true,
+  "all three forecast-only markets are tracked as side-bearing No Plays, never Held");
 const retryPlan = buildMarketScopedFootballTrackingPlan(
   [{ externalId: 1392216, decisions: decisions.slice(1) }],
   [

@@ -41,7 +41,12 @@ import { nflFootballEvidenceStats } from "./footballMemberEvidence";
 import type { NflRegularSharpMarket, NflRegularSharpSplit } from "./sharpApiNflSplits";
 
 export const NFL_WEEK_ONE_HELD_MEMBER_FIXTURE_RELEASE =
-  "nfl_weekly_member_fixture_2026_09_04_r17_split_history_window" as const;
+  "nfl_weekly_member_fixture_2026_09_14_r18_prediction_owned_side" as const;
+
+const NFL_PREVIOUS_MEMBER_RELEASE =
+  "nfl_v1_member_release_2026_09_03_r12_target_excluded_forecast" as const;
+const NFL_PREVIOUS_DECISION_RELEASE =
+  "nfl_v1_daily_edge_decision_2026_09_03_r15_target_excluded_forecast" as const;
 
 const MODEL_RELEASE = NFL_V1_OUTCOME_MODEL_RELEASE;
 const DECISION_RELEASE = NFL_V1_ACTIONABLE_GRADE_DECISION_RELEASE;
@@ -177,11 +182,29 @@ export function buildNflWeekOneHeldMemberFixture(
 
 function latestCompleteRows(rows: NflForwardStoredEvidence[]): Array<NflForwardStoredEvidence & { payload: NflForwardEvidencePayload }> {
   if (rows.length === 0) throw new Error("NFL Week 1 forward evidence is empty.");
+  const currentRows = rows.filter((row): row is NflForwardStoredEvidence & { payload: NflForwardEvidencePayload } =>
+    row.payload.schemaRelease === NFL_FORWARD_EVIDENCE_SCHEMA_RELEASE);
+  const isCurrentAuthority = (row: NflForwardStoredEvidence & { payload: NflForwardEvidencePayload }) =>
+    row.payload.decisions.modelPromotionStatus === NFL_V1_ACTIONABLE_GRADE_MEMBER_RELEASE &&
+    row.payload.decisions.evaluatedBets.every((decision) =>
+      decision.decisionRelease === NFL_V1_ACTIONABLE_GRADE_DECISION_RELEASE);
+  const isPreviousAuthority = (row: NflForwardStoredEvidence & { payload: NflForwardEvidencePayload }) =>
+    row.payload.decisions.modelPromotionStatus === NFL_PREVIOUS_MEMBER_RELEASE &&
+    row.payload.decisions.evaluatedBets.every((decision) =>
+      decision.decisionRelease === NFL_PREVIOUS_DECISION_RELEASE);
+  const hasCurrentAuthority = currentRows.some(isCurrentAuthority);
+  const transitionAt = hasCurrentAuthority
+    ? Math.max(...currentRows.filter(isCurrentAuthority).map((row) => Date.parse(row.capturedAt)))
+    : null;
   const latest = new Map<string, NflForwardStoredEvidence & { payload: NflForwardEvidencePayload }>();
-  for (const row of rows) {
-    if (row.payload.schemaRelease !== NFL_FORWARD_EVIDENCE_SCHEMA_RELEASE) continue;
+  for (const row of currentRows) {
+    const transitionLockedPrevious = transitionAt !== null && isPreviousAuthority(row) &&
+      row.stage === "t60" && row.payload.decisions.trackingEnabled;
+    if (hasCurrentAuthority && !isCurrentAuthority(row) && !transitionLockedPrevious) continue;
+    if (!hasCurrentAuthority && !isPreviousAuthority(row)) continue;
     const current = latest.get(row.providerGameId);
-    if (!current || Date.parse(row.capturedAt) > Date.parse(current.capturedAt)) {
+    if (!current || isCurrentAuthority(row) && !isCurrentAuthority(current) ||
+        isCurrentAuthority(row) === isCurrentAuthority(current) && Date.parse(row.capturedAt) > Date.parse(current.capturedAt)) {
       latest.set(row.providerGameId, row as NflForwardStoredEvidence & { payload: NflForwardEvidencePayload });
     }
   }
@@ -198,11 +221,13 @@ function latestCompleteRows(rows: NflForwardStoredEvidence[]): Array<NflForwardS
   if (values.some((row) => !row.payload.decisions.publicationEnabled)) {
     throw new Error("NFL Week 1 member fixture requires publication-enabled evidence.");
   }
-  if (values.some((row) =>
-    row.payload.decisions.modelPromotionStatus !== NFL_V1_ACTIONABLE_GRADE_MEMBER_RELEASE ||
-    row.payload.decisions.evaluatedBets.some((decision) =>
-      decision.decisionRelease !== NFL_V1_ACTIONABLE_GRADE_DECISION_RELEASE))) {
+  if (values.some((row) => !isCurrentAuthority(row) && !isPreviousAuthority(row))) {
     throw new Error("NFL Week 1 member fixture refuses a stale or mixed model/decision release.");
+  }
+  if (values.some((row) => isPreviousAuthority(row)) && values.some((row) => isCurrentAuthority(row)) &&
+      values.some((row) => isPreviousAuthority(row) &&
+        (transitionAt === null || row.stage !== "t60" || !row.payload.decisions.trackingEnabled))) {
+    throw new Error("NFL Week 1 transition may retain only immutable T-60 preceding-release games.");
   }
   for (const row of values) {
     const { current, operationalOpening } = row.payload.market;

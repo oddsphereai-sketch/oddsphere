@@ -59,7 +59,9 @@ export type NflV1WeekOneOutcomeForecast = {
   sourceExpectedAwayScore: number;
   sourceExpectedHomeScore: number;
   targetExclusion?: {
-    release: "nfl_target_excluded_market_outcome_2026_09_03_r1";
+    release:
+      | "nfl_target_excluded_market_outcome_2026_09_03_r1"
+      | "nfl_target_excluded_market_outcome_2026_09_14_r2_prediction_owned_side";
     status: "target_excluded_market" | "incumbent_fallback";
     reason: "stable_complete_tuple" | "insufficient_or_unstable_target_free_evidence";
     marginFamilyCount: number | null;

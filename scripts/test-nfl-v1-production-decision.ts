@@ -8,7 +8,11 @@ import {
   NFL_R6_SHADOW_DECISION_SCHEMA_RELEASE,
   NFL_R6_SOURCE_POINT_MODEL_RELEASE,
 } from "../lib/services/football/nflR6MoneylineShadow";
-import { buildNflV1ProductionDecisionBundle } from "../lib/services/football/nflV1ProductionDecision";
+import {
+  buildNflV1ProductionDecisionBundle,
+  NFL_V1_PRODUCTION_MODEL_RELEASE,
+  selectNflPredictionOwnedMoneylineEvaluation,
+} from "../lib/services/football/nflV1ProductionDecision";
 import { getNflV1WeekOneOutcomeForecast } from "../lib/services/football/nflV1WeekOneOutcome";
 
 const providerGameId = "1392216";
@@ -29,6 +33,18 @@ const comparableCurrentBooks = [
   { ...structuredClone(current), sportsbook: "draftkings" },
   { ...structuredClone(current), sportsbook: "caesars" },
 ];
+const predictionOwnedPromotion = selectNflPredictionOwnedMoneylineEvaluation({
+  books: [
+    { ...structuredClone(current), sportsbook: "fanduel", moneyline: { awayPrice: 100, homePrice: -120 } },
+    { ...structuredClone(current), sportsbook: "draftkings", moneyline: { awayPrice: 125, homePrice: -150 } },
+    { ...structuredClone(current), sportsbook: "caesars", moneyline: { awayPrice: 125, homePrice: -150 } },
+  ],
+  home: true,
+  modelProbability: 0.65,
+  gameStartsAt,
+});
+assert.equal(predictionOwnedPromotion?.quote.sportsbook, "fanduel");
+assert.equal(predictionOwnedPromotion?.grade, "Lean", "a value-supported predicted winner retains an actionable promotion path");
 const outcome = getNflV1WeekOneOutcomeForecast({ providerGameId, awayTeam, homeTeam });
 assert.ok(outcome.homeWinProbability > outcome.awayWinProbability);
 
@@ -38,9 +54,10 @@ const aligned = buildNflV1ProductionDecisionBundle({
 });
 assert.equal(aligned.evaluatedBets.length, 3);
 assert.equal(aligned.outcomeConfidence.length, 3);
-assert.equal(aligned.evaluatedBets.find((decision) => decision.market === "moneyline")?.grade, "Lean");
-assert.equal(aligned.evaluatedBets.find((decision) => decision.market === "moneyline")?.modelRelease, NFL_R6_MONEYLINE_MODEL_RELEASE);
-assert.equal(aligned.evaluatedBets.filter((decision) => decision.grade === "No Play").length, 2);
+assert.equal(aligned.evaluatedBets.find((decision) => decision.market === "moneyline")?.grade, "No Play");
+assert.equal(aligned.evaluatedBets.find((decision) => decision.market === "moneyline")?.side, "SEA");
+assert.equal(aligned.evaluatedBets.find((decision) => decision.market === "moneyline")?.modelRelease, NFL_V1_PRODUCTION_MODEL_RELEASE);
+assert.equal(aligned.evaluatedBets.filter((decision) => decision.grade === "No Play").length, 3);
 assert.equal(aligned.trackingEnabled, false);
 
 const opposed = buildNflV1ProductionDecisionBundle({
@@ -48,16 +65,16 @@ const opposed = buildNflV1ProductionDecisionBundle({
   shadowMoneyline: shadow({ team: "NE", side: "away", grade: "Lean", probability: 0.55, price: 162 }),
 });
 const opposedMoneyline = opposed.evaluatedBets.find((decision) => decision.market === "moneyline")!;
-assert.equal(opposedMoneyline.grade, "Watchlist");
+assert.equal(opposedMoneyline.grade, "No Play");
 assert.equal(opposedMoneyline.side, "SEA");
 assert.equal(opposedMoneyline.modelProbability, outcome.homeWinProbability);
-assert.equal(opposedMoneyline.evaluatedQuote.sportsbook, "fanduel");
+assert.equal(opposedMoneyline.evaluatedQuote.sportsbook, "caesars");
 
 const nonqualifier = buildNflV1ProductionDecisionBundle({
   providerGameId, awayTeam, homeTeam, gameStartsAt, current, comparableCurrentBooks,
   shadowMoneyline: shadow({ team: "SEA", side: "home", grade: "Held", probability: 0.595, price: -180, expectedValue: -0.005, edgePp: -0.5 }),
 });
-assert.equal(nonqualifier.evaluatedBets.find((decision) => decision.market === "moneyline")?.grade, "Watchlist");
+assert.equal(nonqualifier.evaluatedBets.find((decision) => decision.market === "moneyline")?.grade, "No Play");
 assert.equal(nonqualifier.evaluatedBets.every((decision) => decision.side.length > 0), true);
 assert.equal(nonqualifier.trackingEnabled, false);
 

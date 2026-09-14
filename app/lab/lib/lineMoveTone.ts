@@ -50,6 +50,20 @@ export function americanToImpliedProb(american: number | null): number | null {
 }
 
 /**
+ * Signed picked-side implied-probability movement. Positive always means the
+ * market moved toward the selected prediction, regardless of whether the
+ * American price is positive, negative, or crossed through even money.
+ */
+export function pickRelativeImpliedProbabilityDelta(
+  openAmerican: number | null,
+  currentAmerican: number | null,
+): number | null {
+  const openProb = americanToImpliedProb(openAmerican);
+  const currentProb = americanToImpliedProb(currentAmerican);
+  return openProb === null || currentProb === null ? null : currentProb - openProb;
+}
+
+/**
  * Classify a line move from the picked side's perspective.
  *
  *   • returns `"flat"` when |current - open| < MIN_MOVE_AMERICAN (noise)
@@ -71,10 +85,8 @@ export function classifyPickRelativeLineMove(
   if (Math.abs(currentAmerican - openAmerican) < MIN_MOVE_AMERICAN) {
     return "flat";
   }
-  const openProb = americanToImpliedProb(openAmerican);
-  const curProb = americanToImpliedProb(currentAmerican);
-  if (openProb === null || curProb === null) return "flat";
-  const delta = curProb - openProb;
+  const delta = pickRelativeImpliedProbabilityDelta(openAmerican, currentAmerican);
+  if (delta === null) return "flat";
   if (delta >= MIN_IMPLIED_DELTA) return "toward";
   if (delta <= -MIN_IMPLIED_DELTA) return "against";
   return "flat";

@@ -14,6 +14,10 @@ import {
 import { readFileSync } from "node:fs";
 import { dedupePredictionRecordsForTracking, filterCompleteUclTrackingCohorts, isCurrentUclTrackingRelease, isTrackingRecordEligible, TRACKING_AGGREGATE_CONTRACT_VERSION, trackingDisplaySport } from "../lib/services/trackingAggregateService";
 import { UCL_CALIBRATION_RELEASE, UCL_MODEL_RELEASE } from "../lib/services/ucl/uclModel";
+import {
+  NFL_PUBLISHED_TRACKING_CORRECTION_MODEL_VERSION,
+  NFL_PUBLISHED_TRACKING_CORRECTION_RELEASE,
+} from "../lib/services/football/nflPublishedTrackingCorrection";
 
 let pass = 0;
 let fail = 0;
@@ -66,7 +70,7 @@ const eplRecord = (locked_at: string | null, id = 1, created_at = "2026-08-19T12
   competition: "english_premier_league",
   snapshot_json: null,
 } as PredictionRecordRow);
-check("tracking aggregate contract requires immutable locks and complete UCL manifests", TRACKING_AGGREGATE_CONTRACT_VERSION === "tracking_aggregate_v8_locked_prediction_accuracy_2026_09_04");
+check("tracking aggregate contract requires immutable locks and append-only correction precedence", TRACKING_AGGREGATE_CONTRACT_VERSION === "tracking_aggregate_v9_append_only_correction_precedence_2026_09_14");
 check("unlocked EPL row is excluded from official tracking", !isTrackingRecordEligible(eplRecord(null)));
 check("locked EPL row is officially tracking-eligible", isTrackingRecordEligible(eplRecord("2026-08-21T18:00:00Z")));
 check("EPL receives a separate member-facing competition key", trackingDisplaySport(eplRecord("2026-08-21T18:00:00Z")) === "epl");
@@ -90,6 +94,36 @@ const canonicalEpl = dedupePredictionRecordsForTracking([
   eplRecord("2026-08-21T18:00:00Z", 11, "2026-08-19T12:00:00Z"),
 ]);
 check("EPL release dedupe preserves the immutable locked prediction", canonicalEpl.length === 1 && canonicalEpl[0]?.id === 11);
+const badNflRecord = {
+  ...eplRecord("2026-09-13T15:00:00Z", 20, "2026-09-13T15:00:00Z"),
+  sport: "nfl",
+  competition: null,
+  market: "moneyline",
+  game_id: 700,
+  external_id: 700,
+  matchup: "WSH@PHI",
+  model_version: "nfl_v1_daily_edge_decision_2026_09_03_r15_target_excluded_forecast",
+  pick: "WSH",
+  side: "away",
+  play_grade: "lean",
+  no_bet: false,
+  snapshot_json: null,
+} as PredictionRecordRow;
+const correctedNflRecord = {
+  ...badNflRecord,
+  id: 21,
+  model_version: NFL_PUBLISHED_TRACKING_CORRECTION_MODEL_VERSION,
+  pick: "PHI",
+  side: "home",
+  play_grade: "no_play",
+  no_bet: true,
+  snapshot_json: {
+    tracking_correction_release: NFL_PUBLISHED_TRACKING_CORRECTION_RELEASE,
+    supersedes_prediction_record_id: 20,
+  },
+} as PredictionRecordRow;
+const canonicalNfl = dedupePredictionRecordsForTracking([badNflRecord, correctedNflRecord]);
+check("append-only NFL correction supersedes the bad row even when its grade is less actionable", canonicalNfl.length === 1 && canonicalNfl[0]?.id === 21 && canonicalNfl[0]?.pick === "PHI");
 const trackingCronSource = readFileSync("app/api/cron/tracking-refresh/route.ts", "utf8");
 const gradingSource = readFileSync("lib/services/predictionGradingService.ts", "utf8");
 const aggregateSource = readFileSync("lib/services/trackingAggregateService.ts", "utf8");
