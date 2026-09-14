@@ -58,7 +58,7 @@ check(
 );
 check(
   "the redesigned Daily Edge localizes every rendered game-time surface",
-  candidateDailyEdgeUi.includes('import { LocalTime } from "@/app/lab/components/UserTimeZone"') &&
+  candidateDailyEdgeUi.includes('import { LocalTime, useUserTimeZone } from "@/app/lab/components/UserTimeZone"') &&
     (candidateDailyEdgeUi.match(/<LocalTime value=\{/g) ?? []).length >= 2 &&
     (candidateDailyEdgeUi.match(/<DailyEdgeGameStartTime game=\{/g) ?? []).length === 4 &&
     !candidateDailyEdgeUi.includes("{game.gameTime}</span>") &&

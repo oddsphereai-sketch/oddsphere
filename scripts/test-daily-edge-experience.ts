@@ -1722,10 +1722,15 @@ check(
     candidateDailyEdgeSource.includes('<MatchupColorAccent game={game} sport={sport} />'),
 );
 check(
-  "UCL kickoff labels include the local match date across board and reader surfaces",
+  "UCL kickoff labels and match-day sections use the member's local calendar date",
   candidateDailyEdgeSource.includes('function DailyEdgeGameStartTime({ game, className, fallback }') &&
     candidateDailyEdgeSource.includes('style={isUclGame(game) ? "date-time" : "time"}') &&
-    (candidateDailyEdgeSource.match(/<DailyEdgeGameStartTime game=\{/g) ?? []).length === 4,
+    (candidateDailyEdgeSource.match(/<DailyEdgeGameStartTime game=\{/g) ?? []).length === 4 &&
+    candidateDailyEdgeSource.includes('const uclBoard = sport === "soccer" && games.some(isUclGame)') &&
+    candidateDailyEdgeSource.includes('const groupingTimeZone = uclBoard ? userTimeZone : "America/New_York"') &&
+    candidateDailyEdgeSource.includes('uclBoard ? "Match Schedule"') &&
+    candidateDailyEdgeSource.includes("Matches are grouped by your local calendar date.") &&
+    candidateDailyEdgeSource.includes("boardDateLabel(rows[0]?.gameStartAt, groupingTimeZone)"),
 );
 check(
   "shared soccer fallbacks retain provider club names and prefer club logos over country flags",
