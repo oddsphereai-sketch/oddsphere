@@ -11,7 +11,7 @@ assert.match(page, /return published\?\.fixture \?\? null/);
 assert.doesNotMatch(page, /readCurrentCfbMemberFixture/, "the member request must never rebuild the full immutable evidence season");
 assert.match(page, /\["cfb-current-member-fixture", CFB_MEMBER_FIXTURE_RELEASE, CFB_FORWARD_MEMBER_SNAPSHOT_RELEASE\]/);
 assert.match(page, /revalidate: 60, tags: \[CFB_MEMBER_FIXTURE_RELEASE\]/);
-assert.match(page, /const CFB_MEMBER_DATA_READ_TIMEOUT_MS = 4_000/);
+assert.match(page, /const CFB_MEMBER_DATA_READ_TIMEOUT_MS = 20_000/);
 assert.match(page, /label: "cfb-daily-edge-fixture",[\s\S]*timeoutMs: CFB_MEMBER_DATA_READ_TIMEOUT_MS,[\s\S]*read: \(\) => readCachedCfbMemberFixture\(/);
 assert.equal(MEMBER_DATA_READ_TIMEOUT_MS, 8_000, "other member reads retain the existing bounded deadline");
 assert.match(page, /read: \(\) => readCachedCfbMemberFixture\(/);
@@ -19,4 +19,4 @@ assert.match(page, /label: "CFB · Weekly slate · evidence temporarily unavaila
 assert.match(reader, /renderedWeeklySlate\?\.unavailable \? <WeeklySlateEvidenceUnavailable/);
 assert.match(reader, /this does not mean the weekly schedule is empty/i);
 
-console.log("CFB member reader uses only the compact continuity snapshot and fails visibly within four seconds.");
+console.log("CFB member reader uses only the compact continuity snapshot and preserves its measured 20-second transfer window.");

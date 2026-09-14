@@ -124,6 +124,7 @@
     "test:football-player-value-shadow": "tsx scripts/test-football-player-value-shadow.ts",
     "test:football-weekly-slate": "tsx scripts/test-football-weekly-slate.ts",
     "test:football-product-preview": "tsx scripts/test-football-product-preview.ts",
+    "test:football-daily-edge-odds-filter": "tsx scripts/test-football-daily-edge-odds-filter.ts",
     "test:football-daily-edge-member": "tsx scripts/test-football-daily-edge-member-snapshot.ts",
     "test:football-production-publication": "tsx scripts/test-football-production-publication.ts",
     "test:football-tracking-lifecycle": "tsx scripts/test-football-tracking-lifecycle.ts",

@@ -1741,7 +1741,7 @@ check(
     candidateDailyEdgeSource.includes("cfbGameMatchesSearch") &&
     candidateDailyEdgeSource.includes("game.awayTeamDisplayName") &&
     candidateDailyEdgeSource.includes("game.homeTeamDisplayName") &&
-    candidateDailyEdgeSource.includes("No college football games match these filters."),
+    candidateDailyEdgeSource.includes('No {footballBoard ? "football " : ""}games match these filters.'),
 );
 check(
   "the active NFL reader discloses its line-specific calibration boundary",
