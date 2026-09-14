@@ -10,6 +10,7 @@ import {
 import { buildNflOfficialTrackingRecords } from "../lib/services/football/nflOfficialTrackingRecord";
 import {
   buildNflPublishedMoneylineTrackingCorrection,
+  nflOppositeMoneylineCorrectionResult,
   NFL_PUBLISHED_TRACKING_CORRECTION_MODEL_VERSION,
   NFL_PUBLISHED_TRACKING_CORRECTION_RELEASE,
 } from "../lib/services/football/nflPublishedTrackingCorrection";
@@ -261,6 +262,11 @@ assert.equal(correction.snapshot_json?.tracking_correction_release, NFL_PUBLISHE
 assert.equal(correction.snapshot_json?.supersedes_prediction_record_id, 9001);
 assert.equal(correction.held, false);
 assert.equal(wrongSource.pick, "NE", "building an append-only correction cannot mutate the original record");
+assert.equal(nflOppositeMoneylineCorrectionResult("win"), "loss");
+assert.equal(nflOppositeMoneylineCorrectionResult("loss"), "win");
+assert.equal(nflOppositeMoneylineCorrectionResult("push"), "push");
+assert.equal(nflOppositeMoneylineCorrectionResult("void"), "void");
+assert.throws(() => nflOppositeMoneylineCorrectionResult("pending"));
 
 const marketScopedPayload = {
   ...payload,

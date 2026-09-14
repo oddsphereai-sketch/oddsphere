@@ -1,4 +1,4 @@
-import type { PredictionRecordRow } from "@/lib/types/domain/Tracking";
+import type { PredictionGradeRow, PredictionRecordRow } from "@/lib/types/domain/Tracking";
 import {
   hashNflForwardEvidencePayload,
   type NflForwardEvidencePayload,
@@ -17,6 +17,15 @@ export type NflPublishedTrackingCorrectionMarker = {
   outcome_blind: true;
   reason: "tracked_moneyline_side_differed_from_immutable_published_prediction";
 };
+
+export function nflOppositeMoneylineCorrectionResult(
+  result: PredictionGradeRow["result"],
+): PredictionGradeRow["result"] {
+  if (result === "win") return "loss";
+  if (result === "loss") return "win";
+  if (result === "push" || result === "void") return result;
+  throw new Error("A pending source grade cannot settle an NFL tracking correction.");
+}
 
 export function nflTrackingCorrectionSupersededRecordId(args: {
   modelVersion?: string | null;

@@ -4,7 +4,7 @@
  * grades them; it never updates or deletes an original prediction record.
  */
 import { supabase } from "@/lib/db/supabase";
-import type { PredictionRecordRow } from "@/lib/types/domain/Tracking";
+import type { PredictionGradeRow, PredictionRecordRow } from "@/lib/types/domain/Tracking";
 import {
   hashNflForwardEvidencePayload,
   type NflForwardEvidencePayload,
@@ -13,6 +13,7 @@ import { nflV1WeekOneLineProbabilities } from "@/lib/services/football/nflV1Week
 import { selectNflPredictionOwnedMoneylineEvaluation } from "@/lib/services/football/nflV1ProductionDecision";
 import {
   buildNflPublishedMoneylineTrackingCorrection,
+  nflOppositeMoneylineCorrectionResult,
   NFL_PUBLISHED_TRACKING_CORRECTION_MODEL_VERSION,
   NFL_PUBLISHED_TRACKING_CORRECTION_RELEASE,
 } from "@/lib/services/football/nflPublishedTrackingCorrection";
@@ -24,7 +25,7 @@ type TrackingRow = PredictionRecordRow & {
   pick: string;
   side: "home" | "away" | "over" | "under";
   locked_at: string;
-  prediction_grades: { result: string | null } | Array<{ result: string | null }> | null;
+  prediction_grades: PredictionGradeRow | PredictionGradeRow[] | null;
 };
 
 type EvidenceRow = {
@@ -123,7 +124,7 @@ async function main(): Promise<void> {
   if (unknownArgs.length > 0) throw new Error(`Unknown argument(s): ${unknownArgs.join(", ")}`);
   const { data: recordsData, error: recordsError } = await supabase
     .from("prediction_records")
-    .select("*,prediction_grades(result)")
+    .select("*,prediction_grades(*)")
     .eq("sport", "nfl")
     .not("locked_at", "is", null)
     .in("market", ["moneyline", "spread", "total"])
@@ -238,7 +239,59 @@ async function main(): Promise<void> {
       if (result.errors.length > 0) throw new Error(`NFL correction grading failed: ${JSON.stringify(result.errors)}`);
       grading.push(result);
     }
-    const sourceIds = candidates.map((candidate) => candidate.snapshot_json?.supersedes_prediction_record_id as number);
+    const sourceById = new Map(records.map((record) => [record.id, record]));
+    const { data: correctionsAfterData, error: correctionsAfterError } = await supabase
+      .from("prediction_records")
+      .select("id,game_id,market,slate_date,snapshot_json,prediction_grades(*)")
+      .eq("sport", "nfl")
+      .eq("model_version", NFL_PUBLISHED_TRACKING_CORRECTION_MODEL_VERSION);
+    if (correctionsAfterError) throw new Error(`NFL correction grade verification failed: ${correctionsAfterError.message}`);
+    const correctionsAfter = (correctionsAfterData ?? []) as unknown as Array<{
+      id: number;
+      game_id: number;
+      market: "moneyline";
+      slate_date: string;
+      snapshot_json: Record<string, unknown> | null;
+      prediction_grades: PredictionGradeRow | PredictionGradeRow[] | null;
+    }>;
+    let sourceGradeFallbacks = 0;
+    for (const correctionRecord of correctionsAfter) {
+      const sourceId = correctionRecord.snapshot_json?.supersedes_prediction_record_id;
+      if (typeof sourceId !== "number" || !sourceIdsForCandidates(candidates).includes(sourceId)) continue;
+      const source = sourceById.get(sourceId);
+      const sourceGrade = source ? one(source.prediction_grades) : null;
+      if (!source || !sourceGrade || sourceGrade.result === "pending") {
+        throw new Error(`NFL correction ${correctionRecord.id} has no settled source grade ${String(sourceId)}.`);
+      }
+      const expectedResult = nflOppositeMoneylineCorrectionResult(sourceGrade.result);
+      const currentGrade = one(correctionRecord.prediction_grades);
+      if (currentGrade?.result === expectedResult) continue;
+      const payload: PredictionGradeRow = {
+        prediction_record_id: correctionRecord.id,
+        game_id: correctionRecord.game_id,
+        market: "moneyline",
+        result: expectedResult,
+        push: expectedResult === "push",
+        win: expectedResult === "win",
+        loss: expectedResult === "loss",
+        void: expectedResult === "void",
+        pending: false,
+        actual_home_score: sourceGrade.actual_home_score,
+        actual_away_score: sourceGrade.actual_away_score,
+        actual_total: sourceGrade.actual_total,
+        actual_first_inning_runs: sourceGrade.actual_first_inning_runs,
+        winning_team: sourceGrade.winning_team,
+        graded_at: new Date().toISOString(),
+        grade_source: "manual_operator",
+        grade_notes: `Append-only prediction-side correction; opposite of settled source record ${sourceId}.`,
+      };
+      const { error } = await supabase
+        .from("prediction_grades")
+        .upsert(payload, { onConflict: "prediction_record_id" });
+      if (error) throw new Error(`NFL correction ${correctionRecord.id} source-grade settlement failed: ${error.message}`);
+      sourceGradeFallbacks++;
+    }
+    const sourceIds = sourceIdsForCandidates(candidates);
     const { data: sourceAfter, error: sourceAfterError } = await supabase
       .from("prediction_records")
       .select("id,pick,side,model_probability,play_grade,no_bet,locked_at,snapshot_json")
@@ -252,7 +305,13 @@ async function main(): Promise<void> {
         }
       }
     }
-    repair = { release: NFL_PUBLISHED_TRACKING_CORRECTION_RELEASE, candidates: candidates.length, inserted: inserted.length, grading };
+    repair = {
+      release: NFL_PUBLISHED_TRACKING_CORRECTION_RELEASE,
+      candidates: candidates.length,
+      inserted: inserted.length,
+      sourceGradeFallbacks,
+      grading,
+    };
   }
   console.log(JSON.stringify({
     release: "nfl_published_tracking_coherence_audit_2026_09_14_r1",
@@ -272,6 +331,16 @@ async function main(): Promise<void> {
     repair,
     mismatches,
   }, null, 2));
+}
+
+function sourceIdsForCandidates(candidates: PredictionRecordRow[]): number[] {
+  return candidates.map((candidate) => {
+    const value = candidate.snapshot_json?.supersedes_prediction_record_id;
+    if (typeof value !== "number" || !Number.isInteger(value) || value < 1) {
+      throw new Error("NFL correction candidate has no valid superseded source record ID.");
+    }
+    return value;
+  });
 }
 
 main().catch((error) => {
