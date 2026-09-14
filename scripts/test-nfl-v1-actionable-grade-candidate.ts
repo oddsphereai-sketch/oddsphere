@@ -32,6 +32,7 @@ import {
   nflV1WeekOneLineProbabilities,
 } from "../lib/services/football/nflV1WeekOneOutcome";
 import {
+  NFL_TARGET_EXCLUDED_MARKET_OUTCOME_RELEASE,
   resolveNflTargetExcludedMarketAnchor,
   resolveNflTargetExcludedProduction,
 } from "../lib/services/football/nflTargetExcludedMarketOutcome";
@@ -61,7 +62,7 @@ assert.deepEqual(resolveNflTargetExcludedMarketAnchor({
   totalExcludedSportsbooks: ["betmgm"],
   evaluatedAt,
 }), {
-  release: "nfl_target_excluded_market_outcome_2026_09_03_r1",
+  release: NFL_TARGET_EXCLUDED_MARKET_OUTCOME_RELEASE,
   homeMargin: 4,
   total: 44.5,
   marginFamilyCount: 4,
@@ -194,11 +195,11 @@ const total = candidate.evaluatedBets.find((decision) => decision.market === "to
 assert.equal(candidate.outcomeConfidence.find((decision) => decision.market === "moneyline")?.likelySide, "SEA");
 assert.ok(outcome.expectedHomeScore > outcome.expectedAwayScore);
 assert.ok(outcome.homeWinProbability > outcome.awayWinProbability);
-assert.equal(moneyline.grade, "Best Angle");
-assert.equal(moneyline.side, "NE");
-assert.equal(moneyline.modelProbability, outcome.awayWinProbability);
-assert.ok(moneyline.modelProbability < 0.5);
-assert.ok(moneyline.expectedValue > 0);
+assert.equal(moneyline.grade, "No Play");
+assert.equal(moneyline.side, "SEA");
+assert.equal(moneyline.modelProbability, outcome.homeWinProbability);
+assert.ok(moneyline.modelProbability > 0.5);
+assert.ok(moneyline.expectedValue < 0);
 assert.equal(spread.modelRelease, NFL_V1_EVENT_CONTAINED_SPREAD_MODEL_RELEASE);
 assert.equal(spread.grade, "Lean");
 assert.equal(spread.modelProbability, reference.spread.awayCoverProbability);
@@ -348,9 +349,9 @@ const circaAwayBundle = buildNflV1ActionableGradeBundle({
 });
 assert.equal(marketOnlyBundle.evaluatedBets.find((decision) => decision.market === "spread")?.side, homeTeam);
 assert.equal(marketOnlyBundle.outcomeConfidence.find((decision) => decision.market === "moneyline")?.likelySide, homeTeam);
-assert.equal(marketOnlyBundle.evaluatedBets.find((decision) => decision.market === "moneyline")?.side, awayTeam);
-assert.ok(marketOnlyBundle.evaluatedBets.find((decision) => decision.market === "moneyline")!.modelProbability < 0.5);
-assert.ok(["Best Angle", "Lean"].includes(
+assert.equal(marketOnlyBundle.evaluatedBets.find((decision) => decision.market === "moneyline")?.side, homeTeam);
+assert.ok(marketOnlyBundle.evaluatedBets.find((decision) => decision.market === "moneyline")!.modelProbability > 0.5);
+assert.ok(["Best Angle", "Lean", "Watchlist", "No Play"].includes(
   marketOnlyBundle.evaluatedBets.find((decision) => decision.market === "moneyline")!.grade,
 ));
 assert.equal(circaAwayBundle.evaluatedBets.find((decision) => decision.market === "moneyline")?.side, awayTeam);
@@ -399,11 +400,11 @@ const underdogValueBundle = buildNflV1ActionableGradeBundle({
 const underdogValueMoneyline = underdogValueBundle.evaluatedBets.find((decision) => decision.market === "moneyline")!;
 assert.equal(underdogValueBundle.outcomeConfidence.find((decision) => decision.market === "moneyline")?.likelySide, homeTeam);
 assert.ok(underdogValueForecast.expectedHomeScore > underdogValueForecast.expectedAwayScore);
-assert.equal(underdogValueMoneyline.side, awayTeam);
-assert.equal(underdogValueMoneyline.modelProbability, 0.46);
-assert.equal(underdogValueMoneyline.grade, "Best Angle");
-assert.ok(underdogValueMoneyline.expectedValue > 0);
-assert.ok(underdogValueMoneyline.modelProbability > underdogValueMoneyline.marketFairProbability);
+assert.equal(underdogValueMoneyline.side, homeTeam);
+assert.equal(underdogValueMoneyline.modelProbability, 0.54);
+assert.equal(underdogValueMoneyline.grade, "No Play");
+assert.ok(underdogValueMoneyline.expectedValue < 0);
+assert.ok(underdogValueMoneyline.modelProbability < underdogValueMoneyline.marketFairProbability);
 assert.equal(underdogValueForecast.marketEvidence?.sharp.homeMarginGapPp, null);
 assert.equal(underdogValueForecast.marketEvidence?.publicConsensus.homeMarginGapPp, null);
 const unqualifiedUnderdogBooks = flipBooks.map((book) => ({

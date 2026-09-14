@@ -1,5 +1,9 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import {
+  NFL_PUBLISHED_TRACKING_CORRECTION_MODEL_VERSION,
+  NFL_PUBLISHED_TRACKING_CORRECTION_RELEASE,
+} from "../lib/services/football/nflPublishedTrackingCorrection";
 
 process.env.NEXT_PUBLIC_SUPABASE_URL ??= "http://127.0.0.1:54321";
 process.env.SUPABASE_SERVICE_ROLE_KEY ??= "test-service-role-key";
@@ -55,6 +59,11 @@ async function main() {
   }, "fall DST day must be a truthful 25-hour ET window");
   assert.equal(query.resolveLockedDate("morning", null, new Date("2026-09-02T16:00:00.000Z")), "2026-09-01");
   assert.equal(query.resolveLockedDate("nightly", null, new Date("2026-09-02T16:00:00.000Z")), "2026-09-02");
+  const correctedWinnerRows = query.preferAppendOnlyWinnerTrackingCorrections([
+    { id: 1, model_version: "old", tracking_correction_release: null, supersedes_prediction_record_id: null },
+    { id: 2, model_version: NFL_PUBLISHED_TRACKING_CORRECTION_MODEL_VERSION, tracking_correction_release: NFL_PUBLISHED_TRACKING_CORRECTION_RELEASE, supersedes_prediction_record_id: 1 },
+  ]);
+  assert.deepEqual(correctedWinnerRows.map((row) => row.id), [2], "append-only correction must replace its superseded winner row");
 
   const records = [{
     id: 11,

@@ -13,9 +13,10 @@ import {
   NFL_V1_PRODUCTION_DECISION_RELEASE,
 } from "./nflV1ProductionDecision";
 import type { NflRegularDecisionMarket, NflRegularOutcomeConfidence } from "./nflRegularDecisionEvidence";
+import { assertFootballCrossMarketCoherence } from "./footballCrossMarketCoherence";
 
 export const NFL_OFFICIAL_TRACKING_RECORD_RELEASE =
-  "nfl_official_tracking_record_2026_09_04_r6_complete_prediction_denominators" as const;
+  "nfl_official_tracking_record_2026_09_14_r7_prediction_owned_side" as const;
 
 const NFL_TRACKED_MARKETS = ["moneyline", "spread", "total"] as const;
 
@@ -37,10 +38,34 @@ export function buildNflOfficialTrackingRecords(args: {
     throw new Error("NFL tracking records require an eligible T-60 evidence payload.");
   }
   const externalId = integerId(args.payload.game.providerGameId, "game");
-  assertMarketScopedFootballDecisions(
-    args.payload.decisions.evaluatedBets,
-    `NFL tracking for ${externalId}`,
-  );
+  if (args.payload.decisions.evaluatedBets.length > 0) {
+    assertMarketScopedFootballDecisions(
+      args.payload.decisions.evaluatedBets,
+      `NFL tracking for ${externalId}`,
+    );
+  }
+  const evaluatedMarketsForCoherence = new Set(args.payload.decisions.evaluatedBets.map((decision) => decision.market));
+  assertFootballCrossMarketCoherence({
+    sport: "nfl",
+    providerGameId: args.payload.game.providerGameId,
+    awayTeam: args.payload.game.away.abbreviation,
+    homeTeam: args.payload.game.home.abbreviation,
+    forecast: {
+      expectedAwayPoints: args.payload.outcomeForecast.expectedAwayScore,
+      expectedHomePoints: args.payload.outcomeForecast.expectedHomeScore,
+      representativeScore: {
+        away: args.payload.outcomeForecast.representativeAwayScore,
+        home: args.payload.outcomeForecast.representativeHomeScore,
+      },
+      awayWinProbability: args.payload.outcomeForecast.awayWinProbability,
+      homeWinProbability: args.payload.outcomeForecast.homeWinProbability,
+      marginDistribution: args.payload.outcomeForecast.marginDistribution,
+      totalDistribution: args.payload.outcomeForecast.totalDistribution,
+    },
+    decisions: args.payload.decisions.evaluatedBets,
+    unavailableMarkets: NFL_TRACKED_MARKETS.filter((market) => !evaluatedMarketsForCoherence.has(market)),
+    requireDecisionSideFromForecast: true,
+  });
   const evaluated = args.payload.decisions.evaluatedBets.map((decision): PredictionRecordRow => {
     const side = canonicalSide(args.payload, decision.market, decision.side);
     const actionable = decision.grade === "Best Angle" || decision.grade === "Lean";
@@ -111,13 +136,13 @@ export function buildNflOfficialTrackingRecords(args: {
     if (evaluatedMarkets.has(forecast.market)) return [];
     const line = referenceLine(args.payload, forecast.market);
     if (line === undefined) return [];
-    return [buildHeldForecastRecord({ payload: args.payload, gameId: args.gameId, externalId, forecast, line })];
+    return [buildUnpricedForecastRecord({ payload: args.payload, gameId: args.gameId, externalId, forecast, line })];
   });
   return [...evaluated, ...held].sort((a, b) =>
     NFL_TRACKED_MARKETS.indexOf(a.market as NflRegularDecisionMarket) - NFL_TRACKED_MARKETS.indexOf(b.market as NflRegularDecisionMarket));
 }
 
-function buildHeldForecastRecord(args: {
+function buildUnpricedForecastRecord(args: {
   payload: NflForwardEvidencePayload;
   gameId: number;
   externalId: number;
@@ -147,7 +172,7 @@ function buildHeldForecastRecord(args: {
     odds_decimal: null,
     model_used: args.forecast.modelRelease,
     model_version: NFL_V1_PRODUCTION_DECISION_RELEASE,
-    prediction_source: "nfl_forward_evidence_t60_held_forecast",
+    prediction_source: "nfl_forward_evidence_t60_unpriced_forecast",
     confidence: args.forecast.probability * 100,
     model_probability: args.forecast.probability,
     market_probability: null,
@@ -159,11 +184,11 @@ function buildHeldForecastRecord(args: {
     no_bet: true,
     no_bet_reason: "exact_price_market_unavailable",
     market_aligned: false,
-    data_quality_tier: "held",
+    data_quality_tier: "limited",
     source_quality: "model_forecast_without_exact_price",
     provisional: false,
-    held: true,
-    hold_reason: "Exact-price market unavailable at T-60",
+    held: false,
+    hold_reason: null,
     launch_day: false,
     manual_outcome_expected: false,
     locked_at: args.payload.capturedAt,

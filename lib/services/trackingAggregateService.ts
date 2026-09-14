@@ -36,6 +36,7 @@ import {
 import { isPublicallyTracked } from "../config/officialTrackingStart";
 import { UCL_CALIBRATION_RELEASE, UCL_MODEL_RELEASE } from "./ucl/uclModel";
 import { filterCompleteUclLockManifestCohorts } from "./ucl/uclLockManifest";
+import { nflTrackingCorrectionSupersededRecordId } from "./football/nflPublishedTrackingCorrection";
 
 export type AggregateKey =
   | "all"
@@ -73,7 +74,7 @@ export type DimensionRow<K extends string = string> = {
 export type TrackingDisplaySport = TrackedSport | "epl";
 
 export const TRACKING_AGGREGATE_CONTRACT_VERSION =
-  "tracking_aggregate_v8_locked_prediction_accuracy_2026_09_04" as const;
+  "tracking_aggregate_v9_append_only_correction_precedence_2026_09_14" as const;
 
 /**
  * Sport+market joint split with the Best Angle / Lean cuts most members
@@ -264,6 +265,8 @@ type Row = {
 type TrackingRecordProjection = PredictionRecordRow & {
   tracking_display_grade_override?: string | null;
   member_facing_grade?: string | null;
+  tracking_correction_release?: string | null;
+  supersedes_prediction_record_id?: number | null;
 };
 
 const TRACKING_PAGE_SIZE = 1000;
@@ -313,6 +316,8 @@ const TRACKING_RECORD_SELECT = [
   // member Tracking request transfer thousands of large audit payloads.
   "tracking_display_grade_override:snapshot_json->>tracking_display_grade_override",
   "member_facing_grade:snapshot_json->member_facing_at_lock->>grade",
+  "tracking_correction_release:snapshot_json->>tracking_correction_release",
+  "supersedes_prediction_record_id:snapshot_json->supersedes_prediction_record_id",
   "calibration_version",
 ].join(",");
 const TRACKING_GRADE_SELECT = [
@@ -440,6 +445,22 @@ function chooseCanonicalTrackingRecord(
   current: PredictionRecordRow,
   candidate: PredictionRecordRow,
 ): PredictionRecordRow {
+  const currentCorrection = current as TrackingRecordProjection;
+  const candidateCorrection = candidate as TrackingRecordProjection;
+  const currentSupersedes = nflTrackingCorrectionSupersededRecordId({
+    modelVersion: current.model_version,
+    correctionRelease: currentCorrection.tracking_correction_release ?? current.snapshot_json?.tracking_correction_release,
+    supersedesPredictionRecordId: currentCorrection.supersedes_prediction_record_id ?? current.snapshot_json?.supersedes_prediction_record_id,
+  });
+  const candidateSupersedes = nflTrackingCorrectionSupersededRecordId({
+    modelVersion: candidate.model_version,
+    correctionRelease: candidateCorrection.tracking_correction_release ?? candidate.snapshot_json?.tracking_correction_release,
+    supersedesPredictionRecordId: candidateCorrection.supersedes_prediction_record_id ?? candidate.snapshot_json?.supersedes_prediction_record_id,
+  });
+  if (currentSupersedes !== null && candidateSupersedes === null) return current;
+  if (candidateSupersedes !== null && currentSupersedes === null) return candidate;
+  if (currentSupersedes === candidate.id) return current;
+  if (candidateSupersedes === current.id) return candidate;
   if (isEplTrackingRecord(current) && isEplTrackingRecord(candidate)) {
     if (Boolean(candidate.locked_at) !== Boolean(current.locked_at)) {
       return candidate.locked_at ? candidate : current;

@@ -11,6 +11,7 @@
 import {
   americanToImpliedProb,
   classifyPickRelativeLineMove,
+  pickRelativeImpliedProbabilityDelta,
   lineMoveTone,
   lineMoveArrow,
 } from "../app/lab/lib/lineMoveTone";
@@ -62,6 +63,16 @@ check(
   classifyPickRelativeLineMove(-170, -200) === "toward",
 );
 check(
+  "favorite -200 → -250 is toward the prediction",
+  classifyPickRelativeLineMove(-200, -250) === "toward" &&
+    (pickRelativeImpliedProbabilityDelta(-200, -250) ?? 0) > 0,
+);
+check(
+  "favorite -250 → -200 is against the prediction",
+  classifyPickRelativeLineMove(-250, -200) === "against" &&
+    (pickRelativeImpliedProbabilityDelta(-250, -200) ?? 0) < 0,
+);
+check(
   "NRFI -135 → -150 classified as 'toward'",
   classifyPickRelativeLineMove(-135, -150) === "toward",
 );
@@ -76,6 +87,8 @@ check(
   "underdog +150 → +130 classified as 'toward'",
   classifyPickRelativeLineMove(150, 130) === "toward",
 );
+check("crossing +105 → -105 is toward", classifyPickRelativeLineMove(105, -105) === "toward");
+check("crossing -105 → +105 is against", classifyPickRelativeLineMove(-105, 105) === "against");
 check(
   "underdog +150 → +130 tone = emerald",
   lineMoveTone(classifyPickRelativeLineMove(150, 130)) === "emerald",
@@ -106,12 +119,12 @@ function fakeMarket(overrides: Partial<MarketEdgeDto>): MarketEdgeDto {
   const base: MarketEdgeDto = {
     pick: "BAL",
     confidence: 0.62,
-    grade: "lean" as any,
+    grade: "model_only",
     signalType: null,
     marketSignal: null,
-    sharpStatus: "none" as any,
+    sharpStatus: "mixed",
     held: false,
-    verdict: { key: "lean" as any, label: "Lean" },
+    verdict: { key: "lean", label: "Lean" },
     guidedGuide: "",
     guidedWatchOut: "",
     whyLine: "",
@@ -135,7 +148,7 @@ function fakeMarket(overrides: Partial<MarketEdgeDto>): MarketEdgeDto {
     marketSource: "ballybet",
     marketDataQuality: "two_sided_consensus",
     reviewFlags: [],
-    reviewActionSummary: "keep" as any,
+    reviewActionSummary: "keep",
     ...overrides,
   };
   return base;

@@ -230,11 +230,11 @@ function selectedForecastSideAtDecision(
   forecast: FootballCoherenceForecast,
   decision: ReturnType<typeof normalizeDecision>,
 ): { pmf: FootballCoherenceSide; mean: FootballCoherenceSide; meanDistance: number } | null {
-  if (!forecast.pmf || forecast.pmf.length === 0 || !decision.selectedSide) return null;
+  if (!decision.selectedSide) return null;
   const expectedMarginHome = forecast.expectedHomePoints - forecast.expectedAwayPoints;
   const expectedTotal = forecast.expectedHomePoints + forecast.expectedAwayPoints;
   if (decision.market === "moneyline") {
-    const home = forecast.pmf.reduce((sum, cell) => sum + (cell.home > cell.away ? 1 : cell.home === cell.away ? 0.5 : 0) * cell.probability, 0);
+    const home = forecast.homeWinProbability;
     return {
       pmf: home >= 0.5 ? "home" : "away",
       mean: expectedMarginHome >= 0 ? "home" : "away",
@@ -243,10 +243,13 @@ function selectedForecastSideAtDecision(
   }
   if (decision.line === null) return null;
   if (decision.market === "total") {
-    const over = forecast.pmf.reduce((sum, cell) => {
-      const total = cell.home + cell.away;
-      return sum + (total > decision.line! ? 1 : total === decision.line ? 0.5 : 0) * cell.probability;
-    }, 0);
+    const over = forecast.pmf && forecast.pmf.length > 0
+      ? forecast.pmf.reduce((sum, cell) => {
+          const total = cell.home + cell.away;
+          return sum + (total > decision.line! ? 1 : total === decision.line ? 0.5 : 0) * cell.probability;
+        }, 0)
+      : distributionAboveProbability(forecast.totalDistribution, decision.line);
+    if (over === null) return null;
     return {
       pmf: over >= 0.5 ? "over" : "under",
       mean: expectedTotal >= decision.line ? "over" : "under",
@@ -255,15 +258,27 @@ function selectedForecastSideAtDecision(
   }
   if (decision.selectedSide !== "home" && decision.selectedSide !== "away") return null;
   const homeSpread = decision.selectedSide === "home" ? decision.line : -decision.line;
-  const homeCover = forecast.pmf.reduce((sum, cell) => {
-    const result = cell.home - cell.away + homeSpread;
-    return sum + (result > 0 ? 1 : result === 0 ? 0.5 : 0) * cell.probability;
-  }, 0);
+  const homeCover = forecast.pmf && forecast.pmf.length > 0
+    ? forecast.pmf.reduce((sum, cell) => {
+        const result = cell.home - cell.away + homeSpread;
+        return sum + (result > 0 ? 1 : result === 0 ? 0.5 : 0) * cell.probability;
+      }, 0)
+    : distributionAboveProbability(forecast.marginDistribution, -homeSpread);
+  if (homeCover === null) return null;
   return {
     pmf: homeCover >= 0.5 ? "home" : "away",
     mean: expectedMarginHome + homeSpread >= 0 ? "home" : "away",
     meanDistance: Math.abs(expectedMarginHome + homeSpread),
   };
+}
+
+function distributionAboveProbability(
+  distribution: FootballCoherenceForecast["marginDistribution"],
+  threshold: number,
+): number | null {
+  if (!distribution || !validDistribution(distribution)) return null;
+  return distribution.values.reduce((sum, value, index) =>
+    sum + (value > threshold ? 1 : value === threshold ? 0.5 : 0) * distribution.probabilities[index]!, 0);
 }
 
 export function assertFootballCrossMarketCoherence(

@@ -259,7 +259,7 @@ assert.match(writer, /currentBooks/);
 assert.match(writer, /comparableCurrentBooks/);
 assert.match(writer, /multibook_consensus_unavailable/);
 assert.doesNotMatch(writer, /readLegacyNflForwardEvidence|readPriorNflForwardEvidence|readPreviousNflForwardEvidence/, "the live writer must not scan superseded large JSON releases");
-assert.match(writer, /nfl_forward_evidence_writer_2026_09_13_r24_bounded_current_release_read/);
+assert.match(writer, /nfl_forward_evidence_writer_2026_09_14_r25_prediction_owned_side/);
 const nflSlateSource = readFileSync(path.resolve("lib/services/football/balldontlieNflPreviewSlate.ts"), "utf8");
 assert.doesNotMatch(nflSlateSource, /BALLDONTLIE regular odds missing/, "completed-game odds removal must not reject the verified weekly schedule before per-game isolation");
 assert.doesNotMatch(
@@ -447,6 +447,12 @@ assert.match(candidatePage, /initialAvailability=\{visibleNflAvailability\}/);
 assert.match(candidatePage, /readCurrentNflWeekOneHeldMemberFixture/);
 assert.doesNotMatch(candidatePage, /nflWeekOneEvidenceBoard=\{/);
 assert.doesNotMatch(candidatePage, /nflPublishedMemberSnapshotStore|readCurrentNflPublishedMemberSnapshot/);
+const writerSource = readFileSync(path.resolve("lib/services/football/nflForwardEvidenceWriter.ts"), "utf8");
+assert.equal(
+  writerSource.match(/nflForwardT60TrackingEligibility\(\{[^}]*outcomeConfidence:/g)?.length,
+  2,
+  "both the payload-time and write-time tracking gates must receive the complete forecast manifest",
+);
 const reader = readFileSync(path.resolve("app/dev/experience-preview/ActualDailyEdgePreview.tsx"), "utf8");
 assert.match(reader, /No score forecast is being published yet/);
 assert.match(reader, /Counts show games containing at least one market with each grade/);

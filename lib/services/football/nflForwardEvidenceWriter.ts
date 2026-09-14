@@ -62,7 +62,7 @@ import {
 } from "./nflForwardMemberSnapshotStore";
 
 export const NFL_FORWARD_WRITER_RELEASE =
-  "nfl_forward_evidence_writer_2026_09_13_r24_bounded_current_release_read" as const;
+  "nfl_forward_evidence_writer_2026_09_14_r25_prediction_owned_side" as const;
 
 export type NflForwardWriterResult = {
   writerRelease: typeof NFL_FORWARD_WRITER_RELEASE;
@@ -346,6 +346,7 @@ export async function runNflForwardEvidenceWriter(args: {
       },
       decisions: production.evaluatedBets,
       allowWholeGameOperationalHold: holds.length > 0 && production.evaluatedBets.length === 0,
+      requireDecisionSideFromForecast: true,
     });
     const trackingEligibility = nflForwardT60TrackingEligibility({
       stage: plan.stage,
@@ -355,6 +356,7 @@ export async function runNflForwardEvidenceWriter(args: {
       providerGameId: plan.game.providerGameId,
       gameStartsAt: plan.game.scheduledStart,
       decisions: production.evaluatedBets,
+      outcomeConfidence: production.outcomeConfidence,
       publicationApproved: production.publicationEnabled,
       officialRegistryLaunched: isPublicallyTracked(
         "nfl",
@@ -747,6 +749,7 @@ async function writeOfficialTrackingFromPayloads(args: {
       providerGameId: payload.game.providerGameId,
       gameStartsAt: payload.game.scheduledStart,
       decisions: payload.decisions.evaluatedBets,
+      outcomeConfidence: payload.decisions.outcomeConfidence,
       publicationApproved: payload.decisions.publicationEnabled,
       officialRegistryLaunched: isPublicallyTracked(
         "nfl",
@@ -773,8 +776,8 @@ async function writeOfficialTrackingFromPayloads(args: {
   }
   const decisionReleases = new Set(payloads.flatMap((payload) =>
     payload.decisions.evaluatedBets.map((decision) => decision.decisionRelease)));
-  if (decisionReleases.size !== 1) throw new Error("NFL T-60 tracking payloads carry incoherent decision releases.");
-  const decisionRelease = [...decisionReleases][0]!;
+  if (decisionReleases.size > 1) throw new Error("NFL T-60 tracking payloads carry incoherent decision releases.");
+  const decisionRelease = [...decisionReleases][0] ?? NFL_V1_ACTIONABLE_GRADE_DECISION_RELEASE;
   const externalIds = payloads.map((payload) => nflProviderIntegerId(payload.game.providerGameId, "game"));
   const { data: existingRows, error: existingError } = await args.client
     .from("prediction_records")

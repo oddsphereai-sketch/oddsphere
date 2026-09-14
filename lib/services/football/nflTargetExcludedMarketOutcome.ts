@@ -15,7 +15,7 @@ import {
 } from "./nflV1WeekOneOutcome";
 
 export const NFL_TARGET_EXCLUDED_MARKET_OUTCOME_RELEASE =
-  "nfl_target_excluded_market_outcome_2026_09_03_r1" as const;
+  "nfl_target_excluded_market_outcome_2026_09_14_r2_prediction_owned_side" as const;
 
 export type NflTargetExcludedMarketAnchor = {
   release: typeof NFL_TARGET_EXCLUDED_MARKET_OUTCOME_RELEASE;
