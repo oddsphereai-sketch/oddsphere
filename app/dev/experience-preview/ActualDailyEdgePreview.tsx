@@ -9,6 +9,7 @@ import type { MarketSplitDisplaySection } from "@/lib/types/domain/Recommendatio
 import { marketSplitSectionIsStale } from "@/app/lab/lib/dailyEdgeSplitFreshness";
 import type { Sport } from "@/lib/types/domain/Sport";
 import { currentSlateDate } from "@/lib/dates/slateDate";
+import { boardDateLabel, dateKeyInTimeZone } from "@/app/lab/lib/dailyEdgeBoardDates";
 import {
   buildDailyEdgeSportSwitchDestination,
   DAILY_EDGE_SPORT_SWITCH_FALLBACK_MS,
@@ -21,7 +22,7 @@ import type {
 } from "@/lib/services/dailyEdge/gameAvailability";
 import SportSelector from "@/app/lab/components/SportSelector";
 import { LockBadge } from "@/app/lab/components/daily-edge/LockBadge";
-import { LocalTime } from "@/app/lab/components/UserTimeZone";
+import { LocalTime, useUserTimeZone } from "@/app/lab/components/UserTimeZone";
 import {
   ACTIVE_DAILY_EDGE_TOP_LEVEL_SPORT_KEYS,
   DAILY_EDGE_SPORT_AVAILABILITY,
@@ -2380,8 +2381,12 @@ function EdgeBoard({ games, sport, activeId, activeMarket, selectGame, groupByDa
   const [cfbSearch, setCfbSearch] = useState("");
   const [oddsMinInput, setOddsMinInput] = useState("");
   const [oddsMaxInput, setOddsMaxInput] = useState("");
+  const userTimeZone = useUserTimeZone();
   const filters: Array<{ key: BoardFilter; label: string }> = [{ key: "all", label: "All" }, { key: "best_angle", label: "Best Angle" }, { key: "lean", label: "Lean" }, { key: "watchlist", label: "Watchlist" }, { key: "caution", label: "Caution" }, { key: "no_play", label: "No Play" }];
   const footballBoard = groupByDay && (sport === "nfl" || sport === "cfb");
+  const uclBoard = sport === "soccer" && games.some(isUclGame);
+  const dateGroupedBoard = groupByDay || uclBoard;
+  const groupingTimeZone = uclBoard ? userTimeZone : "America/New_York";
   const marketKeys: MarketKey[] = ["moneyline", "total", "first_inning"];
   const marketsInScope = (): MarketKey[] => focus === null ? marketKeys : [focus];
   const scopedMarketKeys = marketsInScope();
@@ -2420,7 +2425,7 @@ function EdgeBoard({ games, sport, activeId, activeMarket, selectGame, groupByDa
     if (completedOrder !== 0) return completedOrder;
     return Date.parse(a.gameStartAt ?? "") - Date.parse(b.gameStartAt ?? "");
   });
-  const groupedGames = groupByDay ? Object.entries(Object.groupBy(orderedGames, (game) => game.gameStartAt ? easternDateKey(game.gameStartAt) : "Unscheduled")) : [["", orderedGames] as const];
+  const groupedGames = dateGroupedBoard ? Object.entries(Object.groupBy(orderedGames, (game) => game.gameStartAt ? dateKeyInTimeZone(game.gameStartAt, groupingTimeZone) : "Unscheduled")) : [["", orderedGames] as const];
   const marketFilters: Array<{ key: MarketKey | null; label: string }> = [{ key: null, label: footballBoard ? "All markets" : "Best market" }, { key: "moneyline", label: "Moneyline" }, { key: "total", label: "Totals" }, { key: "first_inning", label: marketLabelFor("first_inning", sport) }];
   const countNote = focus === null
     ? "Counts show games containing at least one market with each grade; a game can appear in more than one grade."
@@ -2453,7 +2458,7 @@ function EdgeBoard({ games, sport, activeId, activeMarket, selectGame, groupByDa
       <div className="mb-3 rounded-xl border border-white/[0.07] bg-white/[0.02] p-3">
         {cfbScopeControl ? <div className="mb-3 rounded-lg border border-violet-400/15 bg-violet-500/[0.04] px-3 py-2.5"><div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between"><div><p className="text-[8px] font-black uppercase tracking-[0.16em] text-violet-200">College football board</p><p className="mt-1 text-[8px] font-semibold text-gray-500">FBS-involved games are the member default. Every model-covered Division I forecast remains available.</p></div><div className="flex gap-1.5" role="group" aria-label="College football board scope"><button type="button" onClick={() => changeScope("fbs")} aria-pressed={cfbScopeControl.active === "fbs"} className={`rounded-md border px-2.5 py-1.5 text-[8px] font-black uppercase tracking-wider ${cfbScopeControl.active === "fbs" ? "border-violet-400/55 bg-violet-500/[0.18] text-white" : "border-white/[0.06] text-gray-500"}`}>FBS {cfbScopeControl.fbsCount}</button><button type="button" onClick={() => changeScope("division_i")} aria-pressed={cfbScopeControl.active === "division_i"} className={`rounded-md border px-2.5 py-1.5 text-[8px] font-black uppercase tracking-wider ${cfbScopeControl.active === "division_i" ? "border-violet-400/55 bg-violet-500/[0.18] text-white" : "border-white/[0.06] text-gray-500"}`}>All Division I {cfbScopeControl.divisionICount}</button></div></div><div className="mt-3 flex items-center gap-2 border-t border-white/[0.06] pt-3"><label htmlFor="cfb-game-search" className="sr-only">Find a college football game</label><input id="cfb-game-search" type="search" value={cfbSearch} onChange={(event) => setCfbSearch(event.target.value)} placeholder="Find a school or abbreviation" className="min-w-0 flex-1 rounded-lg border border-white/[0.09] bg-black/25 px-3 py-2 text-[11px] font-semibold text-white outline-none placeholder:text-gray-700 focus:border-violet-400/55 focus:ring-2 focus:ring-violet-400/15" />{cfbSearch ? <button type="button" onClick={() => setCfbSearch("")} className="shrink-0 rounded-md border border-white/[0.08] px-2.5 py-2 text-[8px] font-black uppercase tracking-wider text-gray-400 hover:text-white">Clear</button> : null}<span className="shrink-0 text-[8px] font-black uppercase tracking-wider text-gray-600">{searchedGames.length} found</span></div></div> : null}
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex items-baseline gap-2"><span className="h-3.5 w-1 rounded-full bg-violet-400/65" /><h2 className="text-[10px] font-black uppercase tracking-[0.18em] text-violet-200">{groupByDay ? "Weekly Slate" : "Slate Board"}</h2><span className="text-[11px] text-gray-600">·</span><span className="text-[11px] text-gray-400">{orderedGames.length === games.length ? games.length : `${orderedGames.length} of ${games.length}`} {games.length === 1 ? "game" : "games"}{footballBoard ? ` · ${predictionCount} ${oddsFilterActive ? "matching markets" : "predictions"}` : ""}</span></div>
+          <div className="flex items-baseline gap-2"><span className="h-3.5 w-1 rounded-full bg-violet-400/65" /><h2 className="text-[10px] font-black uppercase tracking-[0.18em] text-violet-200">{footballBoard ? "Weekly Slate" : uclBoard ? "Match Schedule" : "Slate Board"}</h2><span className="text-[11px] text-gray-600">·</span><span className="text-[11px] text-gray-400">{orderedGames.length === games.length ? games.length : `${orderedGames.length} of ${games.length}`} {games.length === 1 ? "game" : "games"}{footballBoard ? ` · ${predictionCount} ${oddsFilterActive ? "matching markets" : "predictions"}` : ""}</span></div>
           <div className="flex gap-1.5 overflow-x-auto pb-1">{marketFilters.map((item) => <button key={item.key ?? "best"} type="button" onClick={() => setFocus(item.key)} aria-pressed={focus === item.key} className={`whitespace-nowrap rounded-md border px-2.5 py-1.5 text-[8px] font-black uppercase tracking-wider ${focus === item.key ? "border-white/20 bg-white/[0.09] text-white" : "border-white/[0.06] text-gray-500"}`}>{item.label}</button>)}</div>
         </div>
         {footballBoard ? (
@@ -2476,9 +2481,10 @@ function EdgeBoard({ games, sport, activeId, activeMarket, selectGame, groupByDa
             <p id="football-odds-filter-status" role={oddsFilterError ? "alert" : "status"} className={`mt-2 text-[8px] font-semibold ${oddsFilterError ? "text-amber-300" : "text-gray-600"}`}>{oddsFilterError ?? (oddsFilterActive ? `${predictionCount} current ${predictionCount === 1 ? "price matches" : "prices match"} this range.` : "Use a preset or enter one or both bounds.")}</p>
           </div>
         ) : null}
+        {uclBoard ? <p className="mt-3 border-t border-white/[0.05] pt-3 text-[8px] font-semibold text-gray-600">Matches are grouped by your local calendar date. Every card also shows its localized kickoff date and time.</p> : null}
         <div className="mt-3 flex flex-col gap-2 border-t border-white/[0.05] pt-3 sm:flex-row sm:items-center sm:justify-between"><div className="flex gap-1.5 overflow-x-auto">{filters.map((item) => { const total = count(item.key); const active = filter === item.key; const disabled = item.key !== "all" && total === 0; return <button key={item.key} type="button" disabled={disabled} onClick={() => setFilter(item.key)} aria-pressed={active} className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border px-2.5 py-1 text-[9px] font-black uppercase tracking-wider ${active ? "border-violet-400/55 bg-violet-500/[0.18] text-white" : disabled ? "border-white/[0.04] text-gray-800" : "border-white/[0.08] bg-white/[0.03] text-gray-400 hover:border-white/[0.16]"}`}>{item.label}<span className={active ? "text-violet-200" : "text-gray-600"}>{total}</span></button>; })}</div>{footballBoard ? <p className="max-w-xl text-[8px] font-semibold leading-relaxed text-gray-600">{countNote}</p> : null}</div>
       </div>
-      {orderedGames.length === 0 ? <div className="rounded-xl border border-white/[0.07] bg-white/[0.02] px-5 py-10 text-center"><p className="text-sm font-black text-white">No {footballBoard ? "football " : ""}games match these filters.</p><p className="mt-1 text-[9px] text-gray-600">Try another {sport === "cfb" ? "school, abbreviation, " : ""}{footballBoard ? "odds range, " : ""}market, or Bet grade.</p>{cfbSearch ? <button type="button" onClick={() => setCfbSearch("")} className="mt-3 rounded-full border border-violet-400/30 px-3 py-1.5 text-[8px] font-black uppercase tracking-wider text-violet-200">Clear search</button> : null}</div> : <div className="space-y-6">{groupedGames.map(([date, dayGames]) => { const rows = dayGames ?? []; return <section key={date || "slate"}>{date ? <div className="mb-3 flex items-center gap-3 border-b border-white/[0.07] pb-2"><span className="rounded-lg border border-violet-400/25 bg-violet-500/[0.08] px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.16em] text-violet-100">{new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", weekday: "long", month: "short", day: "numeric" }).format(new Date(`${date}T12:00:00Z`))}</span><span className="text-[9px] font-bold text-gray-600">{rows.length} {rows.length === 1 ? "match" : "matches"}</span></div> : null}<div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{rows.map((game) => <BoardGameCard key={game.id} game={game} sport={sport} headlineMarket={headlineMarketFor(game)} active={activeId === game.id} activeMarket={activeId === game.id ? activeMarket : null} selectGame={selectGame} />)}</div></section>; })}</div>}
+      {orderedGames.length === 0 ? <div className="rounded-xl border border-white/[0.07] bg-white/[0.02] px-5 py-10 text-center"><p className="text-sm font-black text-white">No {footballBoard ? "football " : ""}games match these filters.</p><p className="mt-1 text-[9px] text-gray-600">Try another {sport === "cfb" ? "school, abbreviation, " : ""}{footballBoard ? "odds range, " : ""}market, or Bet grade.</p>{cfbSearch ? <button type="button" onClick={() => setCfbSearch("")} className="mt-3 rounded-full border border-violet-400/30 px-3 py-1.5 text-[8px] font-black uppercase tracking-wider text-violet-200">Clear search</button> : null}</div> : <div className="space-y-6">{groupedGames.map(([date, dayGames]) => { const rows = dayGames ?? []; return <section key={date || "slate"}>{date ? <div className="mb-3 flex items-center gap-3 border-b border-white/[0.07] pb-2"><span className="rounded-lg border border-violet-400/25 bg-violet-500/[0.08] px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.16em] text-violet-100">{date === "Unscheduled" ? "Date TBD" : boardDateLabel(rows[0]?.gameStartAt, groupingTimeZone)}</span><span className="text-[9px] font-bold text-gray-600">{rows.length} {rows.length === 1 ? "match" : "matches"}</span></div> : null}<div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{rows.map((game) => <BoardGameCard key={game.id} game={game} sport={sport} headlineMarket={headlineMarketFor(game)} active={activeId === game.id} activeMarket={activeId === game.id ? activeMarket : null} selectGame={selectGame} />)}</div></section>; })}</div>}
     </section>
   );
 }
@@ -2488,17 +2494,6 @@ function cfbGameMatchesSearch(game: DailyEdgeGameDto, query: string): boolean {
   if (!needle) return true;
   return [game.awayTeam, game.homeTeam, game.awayTeamDisplayName, game.homeTeamDisplayName]
     .some((value) => value?.toLowerCase().replace(/[^a-z0-9]/g, "").includes(needle));
-}
-
-function easternDateKey(timestamp: string): string {
-  const parts = new Intl.DateTimeFormat("en-US", {
-    timeZone: "America/New_York",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).formatToParts(new Date(timestamp));
-  const value = (type: "year" | "month" | "day") => parts.find((part) => part.type === type)?.value ?? "";
-  return `${value("year")}-${value("month")}-${value("day")}`;
 }
 
 function BoardGameCard({ game, sport, headlineMarket, active, activeMarket, selectGame }: { game: DailyEdgeGameDto; sport: Sport; headlineMarket: MarketKey; active: boolean; activeMarket: MarketKey | null; selectGame: (game: DailyEdgeGameDto, market?: MarketKey) => void }) {

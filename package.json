@@ -58,6 +58,7 @@
     "test:lab-api": "tsx --env-file=.env.local scripts/test-lab-api.ts",
     "test:lab-daily-edge": "tsx --env-file=.env.local scripts/test-lab-daily-edge.ts",
     "test:daily-edge-experience": "tsx scripts/test-daily-edge-experience.ts",
+    "test:daily-edge-board-dates": "tsx scripts/test-daily-edge-board-dates.ts",
     "test:weekly-reader-lifecycle": "tsx scripts/test-daily-edge-experience.ts",
     "readiness:daily-edge-experience": "tsx --env-file=.env.local scripts/daily-edge-experience-readiness.ts",
     "prime:daily-edge-experience": "tsx --env-file=.env.local scripts/operator/prime-daily-edge-experience-snapshots.ts",

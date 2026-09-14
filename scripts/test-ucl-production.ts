@@ -465,6 +465,11 @@ assert.match(page, /eplEnabled[\s\S]*league=epl[\s\S]*uclEnabled[\s\S]*league=uc
 assert.match(page, /sport === "soccer"[\s\S]*active: "world_cup"/, "the shared chooser remains reachable on a disabled direct competition route");
 assert.match(ui, /Champions League/);
 assert.match(ui, /Regulation time/);
+assert.match(ui, /const uclBoard = sport === "soccer" && games\.some\(isUclGame\)/, "the shared slate detects a UCL-only board without a separate UCL layout");
+assert.match(ui, /const dateGroupedBoard = groupByDay \|\| uclBoard/, "UCL matches receive explicit match-day sections");
+assert.match(ui, /const groupingTimeZone = uclBoard \? userTimeZone : "America\/New_York"/, "UCL match-day sections use the member's local timezone");
+assert.match(ui, /uclBoard \? "Match Schedule"/, "the UCL board labels its date-grouped schedule explicitly");
+assert.match(ui, /Matches are grouped by your local calendar date/, "the UCL board explains its localized date grouping");
 assert.match(ui, /uefa_champions_league[\s\S]*uclTeamAsset\(abbreviation\)[\s\S]*uclTeamLogo\(abbreviation\)/, "the shared member cards resolve UCL colors and crests even before a refreshed snapshot arrives");
 assert.doesNotMatch(ui, /UclOnly|UCLCard|ChampionsLeagueLayout/);
 assert.match(trackingUi, /historical archive[\s\S]*never blended/i);
