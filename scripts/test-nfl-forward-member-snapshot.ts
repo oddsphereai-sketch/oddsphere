@@ -141,6 +141,39 @@ async function main() {
   assert.deepEqual(read, snapshot);
   assert.equal(JSON.stringify(read?.fixture), JSON.stringify(fixture));
 
+  const previousSnapshotRelease = "nfl_forward_member_snapshot_2026_09_14_r10_prediction_owned_side";
+  const previousFixtureRelease = "nfl_weekly_member_fixture_2026_09_14_r18_prediction_owned_side";
+  const previousPayload = {
+    ...snapshot,
+    snapshotRelease: previousSnapshotRelease,
+    fixtureRelease: previousFixtureRelease,
+    fixture: {
+      ...fixture,
+      heldMemberFixtureRelease: previousFixtureRelease,
+    },
+  };
+  storedKey = [
+    "nfl",
+    "daily-edge",
+    2026,
+    1,
+    previousSnapshotRelease,
+    previousFixtureRelease,
+    snapshot.memberRelease,
+    snapshot.decisionRelease,
+  ].join("::");
+  storedPayload = previousPayload;
+  const continuityRead = await readNflForwardMemberSnapshot({
+    client,
+    season: 2026,
+    week: 1,
+    now: "2026-08-27T12:02:00.000Z",
+  });
+  assert.equal(continuityRead?.snapshotRelease, NFL_FORWARD_MEMBER_SNAPSHOT_RELEASE);
+  assert.equal(continuityRead?.fixtureRelease, previousFixtureRelease);
+  assert.equal(continuityRead?.fixture.heldMemberFixtureRelease, previousFixtureRelease);
+
+  storedKey = nflForwardMemberSnapshotKey({ season: 2026, week: 1 });
   storedPayload = { ...snapshot, decisionRelease: "wrong-release" };
   assert.equal(await readNflForwardMemberSnapshot({ client, season: 2026, week: 1 }), null);
 

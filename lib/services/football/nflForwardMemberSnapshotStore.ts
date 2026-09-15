@@ -10,14 +10,19 @@ import {
 } from "./nflV1ActionableGradeCandidate";
 
 export const NFL_FORWARD_MEMBER_SNAPSHOT_RELEASE =
+  "nfl_forward_member_snapshot_2026_09_15_r11_opening_follow_up" as const;
+const NFL_PREDICTION_OWNED_PREVIOUS_SNAPSHOT_RELEASE =
   "nfl_forward_member_snapshot_2026_09_14_r10_prediction_owned_side" as const;
 const NFL_FORWARD_PREVIOUS_MEMBER_SNAPSHOT_RELEASES = [
+  NFL_PREDICTION_OWNED_PREVIOUS_SNAPSHOT_RELEASE,
   "nfl_forward_member_snapshot_2026_09_13_r9_bounded_continuity_read",
   "nfl_forward_member_snapshot_2026_09_13_r8_game_scoped_odds_gaps",
   "nfl_forward_member_snapshot_2026_09_03_r7_target_excluded_forecast",
 ] as const;
 const NFL_PREVIOUS_MEMBER_RELEASE = "nfl_v1_member_release_2026_09_03_r12_target_excluded_forecast" as const;
 const NFL_PREVIOUS_DECISION_RELEASE = "nfl_v1_daily_edge_decision_2026_09_03_r15_target_excluded_forecast" as const;
+const NFL_PREDICTION_OWNED_PREVIOUS_FIXTURE_RELEASE =
+  "nfl_weekly_member_fixture_2026_09_14_r18_prediction_owned_side" as const;
 const NFL_PREVIOUS_FIXTURE_RELEASE = "nfl_weekly_member_fixture_2026_09_04_r17_split_history_window" as const;
 
 const SNAPSHOT_TTL_MS = 30 * 60 * 1000;
@@ -72,15 +77,20 @@ function nflForwardMemberSnapshotKeyForRelease(
   snapshotRelease: string,
 ): string {
   const current = snapshotRelease === NFL_FORWARD_MEMBER_SNAPSHOT_RELEASE;
+  const predictionOwnedPrevious = snapshotRelease === NFL_PREDICTION_OWNED_PREVIOUS_SNAPSHOT_RELEASE;
   return [
     "nfl",
     "daily-edge",
     input.season,
     input.week,
     snapshotRelease,
-    current ? NFL_WEEK_ONE_HELD_MEMBER_FIXTURE_RELEASE : NFL_PREVIOUS_FIXTURE_RELEASE,
-    current ? NFL_V1_ACTIONABLE_GRADE_MEMBER_RELEASE : NFL_PREVIOUS_MEMBER_RELEASE,
-    current ? NFL_V1_ACTIONABLE_GRADE_DECISION_RELEASE : NFL_PREVIOUS_DECISION_RELEASE,
+    current
+      ? NFL_WEEK_ONE_HELD_MEMBER_FIXTURE_RELEASE
+      : predictionOwnedPrevious
+        ? NFL_PREDICTION_OWNED_PREVIOUS_FIXTURE_RELEASE
+        : NFL_PREVIOUS_FIXTURE_RELEASE,
+    current || predictionOwnedPrevious ? NFL_V1_ACTIONABLE_GRADE_MEMBER_RELEASE : NFL_PREVIOUS_MEMBER_RELEASE,
+    current || predictionOwnedPrevious ? NFL_V1_ACTIONABLE_GRADE_DECISION_RELEASE : NFL_PREVIOUS_DECISION_RELEASE,
   ].join("::");
 }
 
@@ -264,6 +274,11 @@ function validateNflForwardMemberSnapshot(
     decisionRelease === NFL_V1_ACTIONABLE_GRADE_DECISION_RELEASE &&
     fixtureRelease === NFL_WEEK_ONE_HELD_MEMBER_FIXTURE_RELEASE &&
     heldMemberFixtureRelease === NFL_WEEK_ONE_HELD_MEMBER_FIXTURE_RELEASE;
+  const predictionOwnedPreviousContract =
+    memberRelease === NFL_V1_ACTIONABLE_GRADE_MEMBER_RELEASE &&
+    decisionRelease === NFL_V1_ACTIONABLE_GRADE_DECISION_RELEASE &&
+    fixtureRelease === NFL_PREDICTION_OWNED_PREVIOUS_FIXTURE_RELEASE &&
+    heldMemberFixtureRelease === NFL_PREDICTION_OWNED_PREVIOUS_FIXTURE_RELEASE;
   const previousContract =
     memberRelease === NFL_PREVIOUS_MEMBER_RELEASE &&
     decisionRelease === NFL_PREVIOUS_DECISION_RELEASE &&
@@ -272,7 +287,7 @@ function validateNflForwardMemberSnapshot(
   if (
     ![NFL_FORWARD_MEMBER_SNAPSHOT_RELEASE, ...NFL_FORWARD_PREVIOUS_MEMBER_SNAPSHOT_RELEASES].includes(snapshot.snapshotRelease as typeof NFL_FORWARD_MEMBER_SNAPSHOT_RELEASE) ||
     snapshot.evidenceRelease !== NFL_FORWARD_EVIDENCE_SCHEMA_RELEASE ||
-    (!currentContract && !previousContract) ||
+    (!currentContract && !predictionOwnedPreviousContract && !previousContract) ||
     snapshot.season !== expected.season ||
     snapshot.week !== expected.week ||
     snapshot.fixture?.week?.week !== expected.week ||

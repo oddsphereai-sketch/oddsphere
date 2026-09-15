@@ -241,6 +241,7 @@ export type NflForwardCapturePlan = {
 };
 
 const T60_MS = 60 * 60_000;
+export const NFL_OPENING_FOLLOW_UP_CADENCE_MINUTES = 15 as const;
 
 export function planNflForwardEvidenceCaptures(args: {
   games: NflPreviewGame[];
@@ -337,9 +338,18 @@ export function determineNflForwardCollectionNeed(args: {
   if (publicReleaseRefreshDue) {
     return { collect: true, reason: "public_release_refresh_due", cadenceMinutes: 0 };
   }
+  const latest = Math.max(...args.existing.map((row) => validTimestamp(row.capturedAt, "stored capturedAt")));
+  const openingFollowUpIncomplete = [...byGame.values()].some((rows) => {
+    const latestRow = [...rows].sort((first, second) => Date.parse(second.capturedAt) - Date.parse(first.capturedAt))[0]!;
+    return validTimestamp(latestRow.gameStartAt, "stored gameStartAt") > now && rows.length < 2;
+  });
+  if (openingFollowUpIncomplete) {
+    return now - latest >= NFL_OPENING_FOLLOW_UP_CADENCE_MINUTES * 60_000
+      ? { collect: true, reason: "opening_follow_up_due", cadenceMinutes: NFL_OPENING_FOLLOW_UP_CADENCE_MINUTES }
+      : { collect: false, reason: "opening_follow_up_wait", cadenceMinutes: NFL_OPENING_FOLLOW_UP_CADENCE_MINUTES };
+  }
   const nextStart = Math.min(...upcomingOutsideT60);
   const cadenceMinutes = nextStart - now <= 48 * 60 * 60_000 ? 60 : 360;
-  const latest = Math.max(...args.existing.map((row) => validTimestamp(row.capturedAt, "stored capturedAt")));
   return now - latest >= cadenceMinutes * 60_000
     ? { collect: true, reason: "unlocked_refresh_due", cadenceMinutes }
     : { collect: false, reason: "cadence_not_due", cadenceMinutes };

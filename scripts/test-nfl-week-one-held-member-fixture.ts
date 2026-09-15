@@ -260,6 +260,48 @@ for (const [marketName, market] of multiWaveMarkets) {
 }
 assert.notEqual(multiWaveFixture.provenance.sourceChecksum, fixture.provenance.sourceChecksum);
 
+const verificationCapture = "2026-08-22T14:20:56.934Z";
+const noProviderOpeningFirst = structuredClone(rows[0]!) as NflForwardStoredEvidence & { payload: NflForwardEvidencePayload };
+noProviderOpeningFirst.payload.market.providerOpening = null;
+noProviderOpeningFirst.payload.market.providerOpeningBooks = [];
+noProviderOpeningFirst.payload.market.comparableProviderOpeningBooks = [];
+noProviderOpeningFirst.payload.market.operationalOpening = {
+  provenance: "first_observed",
+  capturedAt: noProviderOpeningFirst.capturedAt,
+  quote: { ...structuredClone(noProviderOpeningFirst.payload.market.current), sportsbook: "operational-other-book" },
+};
+const noProviderOpeningFollowUp = structuredClone(noProviderOpeningFirst);
+noProviderOpeningFollowUp.id = "row-1392216-opening-follow-up";
+noProviderOpeningFollowUp.stage = "unlocked";
+noProviderOpeningFollowUp.capturedAt = verificationCapture;
+noProviderOpeningFollowUp.payloadSha256 = "9".repeat(64);
+noProviderOpeningFollowUp.payload.stage = "unlocked";
+noProviderOpeningFollowUp.payload.capturedAt = verificationCapture;
+noProviderOpeningFollowUp.payload.runId = "test-run-opening-follow-up";
+noProviderOpeningFollowUp.payload.decisions.evaluatedBets = noProviderOpeningFollowUp.payload.decisions.evaluatedBets.map((decision) => ({
+  ...decision,
+  evaluatedAt: verificationCapture,
+}));
+const verifiedFirstObservationFixture = buildNflWeekOneHeldMemberFixture([
+  noProviderOpeningFirst,
+  noProviderOpeningFollowUp,
+  ...rows.slice(1),
+]);
+const verifiedFirstObservationGame = verifiedFirstObservationFixture.snapshot.games.find((game) => game.id === "nfl-1392216")!;
+for (const market of [
+  verifiedFirstObservationGame.markets.moneyline,
+  verifiedFirstObservationGame.markets.total,
+  verifiedFirstObservationGame.markets.first_inning,
+]) {
+  assert.equal(market.oddsTrail?.length, 2, "an unchanged quote still has two distinct writer verifications");
+  assert.equal(market.oddsTrail?.[0]?.label, "first");
+  assert.equal(market.oddsTrail?.[0]?.observedAt, noProviderOpeningFirst.capturedAt);
+  assert.equal(market.oddsTrail?.[1]?.label, "current");
+  assert.equal(market.oddsTrail?.[1]?.observedAt, verificationCapture);
+  assert.equal(market.oddsTrail?.[0]?.american, market.oddsTrail?.[1]?.american);
+  assert.equal(market.oddsTrail?.[0]?.line, market.oddsTrail?.[1]?.line);
+}
+
 const currentFirstPayload = rows[0]!.payload as NflForwardEvidencePayload;
 const currentMoneylineDecision = currentFirstPayload.decisions.evaluatedBets.find((decision) => decision.market === "moneyline")!;
 const crossReleaseCapturedAt = "2026-08-21T13:50:56.934Z";
