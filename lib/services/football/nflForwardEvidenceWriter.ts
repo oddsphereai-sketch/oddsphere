@@ -32,7 +32,10 @@ import {
 } from "./sharpApiNflSplits";
 import { NFL_T60_MAX_CAPTURE_LAG_MINUTES } from "./nflRegularDecisionEvidence";
 import { buildNflR6ShadowMoneylineDecision } from "./nflR6MoneylineShadow";
-import { assertFootballCrossMarketCoherence } from "./footballCrossMarketCoherence";
+import {
+  assertFootballCrossMarketCoherence,
+  NFL_PUBLIC_SCORE_DIRECTION_TOLERANCE_POINTS,
+} from "./footballCrossMarketCoherence";
 import {
   NFL_V1_ACTIONABLE_GRADE_DECISION_RELEASE,
   NFL_V1_ACTIONABLE_GRADE_MEMBER_RELEASE,
@@ -62,7 +65,7 @@ import {
 } from "./nflForwardMemberSnapshotStore";
 
 export const NFL_FORWARD_WRITER_RELEASE =
-  "nfl_forward_evidence_writer_2026_09_14_r25_prediction_owned_side" as const;
+  "nfl_forward_evidence_writer_2026_09_15_r26_week_rollover_coherence" as const;
 
 export type NflForwardWriterResult = {
   writerRelease: typeof NFL_FORWARD_WRITER_RELEASE;
@@ -347,6 +350,7 @@ export async function runNflForwardEvidenceWriter(args: {
       decisions: production.evaluatedBets,
       allowWholeGameOperationalHold: holds.length > 0 && production.evaluatedBets.length === 0,
       requireDecisionSideFromForecast: true,
+      publicScoreDirectionTolerancePoints: NFL_PUBLIC_SCORE_DIRECTION_TOLERANCE_POINTS,
     });
     const trackingEligibility = nflForwardT60TrackingEligibility({
       stage: plan.stage,

@@ -235,6 +235,7 @@ assert.match(route, /leaseGroup: "prediction_pipeline"/);
 assert.match(route, /requireLease: true/);
 assert.match(route, /publication_attempted/);
 assert.match(route, /tracking_attempted: result\.trackingAttempted/);
+assert.match(route, /resolveNflForwardWeek/);
 const writer = readFileSync(path.resolve("lib/services/football/nflForwardEvidenceWriter.ts"), "utf8");
 const evidenceRuntime = readFileSync(path.resolve("lib/services/football/nflForwardEvidence.ts"), "utf8");
 const coherenceIndex = writer.indexOf("assertFootballCrossMarketCoherence({");
@@ -259,7 +260,8 @@ assert.match(writer, /currentBooks/);
 assert.match(writer, /comparableCurrentBooks/);
 assert.match(writer, /multibook_consensus_unavailable/);
 assert.doesNotMatch(writer, /readLegacyNflForwardEvidence|readPriorNflForwardEvidence|readPreviousNflForwardEvidence/, "the live writer must not scan superseded large JSON releases");
-assert.match(writer, /nfl_forward_evidence_writer_2026_09_14_r25_prediction_owned_side/);
+assert.match(writer, /nfl_forward_evidence_writer_2026_09_15_r26_week_rollover_coherence/);
+assert.match(writer, /publicScoreDirectionTolerancePoints: NFL_PUBLIC_SCORE_DIRECTION_TOLERANCE_POINTS/);
 const nflSlateSource = readFileSync(path.resolve("lib/services/football/balldontlieNflPreviewSlate.ts"), "utf8");
 assert.doesNotMatch(nflSlateSource, /BALLDONTLIE regular odds missing/, "completed-game odds removal must not reject the verified weekly schedule before per-game isolation");
 assert.doesNotMatch(
