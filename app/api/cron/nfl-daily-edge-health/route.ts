@@ -30,10 +30,14 @@ export async function GET(request: Request): Promise<Response> {
       };
     }
     const audit = auditNflForwardMemberSnapshot({ snapshot: published });
+    const findings = [...audit.critical, ...audit.warnings];
     return {
       records_updated: 0,
-      partial: !audit.healthy,
-      error_message: audit.critical.length > 0 ? audit.critical.slice(0, 3).join("; ") : null,
+      // A complete zero-action board may be mathematically valid, but it is a
+      // product-health exception that must page operators instead of silently
+      // reporting a green cron. This never changes or manufactures a grade.
+      partial: findings.length > 0,
+      error_message: findings.length > 0 ? findings.slice(0, 3).join("; ") : null,
       details: {
         healthy: audit.healthy,
         published: true,

@@ -86,6 +86,8 @@ assert.match(brokenAudit.critical.join(";"), /compact member snapshot age/);
 const healthRoute = readFileSync(path.resolve("app/api/cron/nfl-daily-edge-health/route.ts"), "utf8");
 assert.match(healthRoute, /readNflForwardMemberSnapshot/);
 assert.match(healthRoute, /auditNflForwardMemberSnapshot/);
+assert.match(healthRoute, /const findings = \[\.\.\.audit\.critical, \.\.\.audit\.warnings\]/);
+assert.match(healthRoute, /partial: findings\.length > 0/);
 assert.doesNotMatch(healthRoute, /readCurrentNflPublishedMemberSnapshot/);
 
 let storedPayload: unknown = null;
@@ -146,6 +148,8 @@ async function main() {
   const previousPayload = {
     ...snapshot,
     snapshotRelease: previousSnapshotRelease,
+    memberRelease: "nfl_v1_member_release_2026_09_14_r13_prediction_owned_side",
+    decisionRelease: "nfl_v1_daily_edge_decision_2026_09_14_r16_prediction_owned_side",
     fixtureRelease: previousFixtureRelease,
     fixture: {
       ...fixture,
@@ -159,8 +163,8 @@ async function main() {
     1,
     previousSnapshotRelease,
     previousFixtureRelease,
-    snapshot.memberRelease,
-    snapshot.decisionRelease,
+    previousPayload.memberRelease,
+    previousPayload.decisionRelease,
   ].join("::");
   storedPayload = previousPayload;
   const continuityRead = await readNflForwardMemberSnapshot({
