@@ -100,6 +100,8 @@ assert.match(operatorSource, /NFL_DAILY_EDGE_PUBLICATION_ENABLED/);
 assert.match(operatorSource, /cronJobName\("prediction_pipeline", "nfl"\)/);
 assert.match(operatorSource, /readback/);
 assert.match(healthSource, /tracking_eligible/);
+assert.match(healthSource, /resolveNflForwardWeek/);
+assert.match(candidateSource, /resolveNflForwardWeek/);
 assert.match(writerSource, /buildNflV1ActionableGradeBundle/);
 assert.match(writerSource, /writeOfficialTrackingFromPayloads/);
 assert.match(writerSource, /buildNflOfficialTrackingRecords/);

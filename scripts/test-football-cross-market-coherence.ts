@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import {
   CFB_PUBLIC_SCORE_DIRECTION_TOLERANCE_POINTS,
   FOOTBALL_CROSS_MARKET_COHERENCE_RELEASE,
+  NFL_PUBLIC_SCORE_DIRECTION_TOLERANCE_POINTS,
   auditFootballCrossMarketCoherence,
   constrainHomeCoverProbability,
   type FootballCoherenceDecision,
@@ -375,6 +376,58 @@ assert.equal(
   cfbNarrowMeanMedian.fatalIssues.some((row) => row.code === "decision_forecast_side_disagreement"),
   false,
   "CFB must publish a PMF-selected side when its same-PMF mean differs by only 0.3277 points",
+);
+
+const nflHalfPointMeanMedianForecast: FootballCoherenceForecast = {
+  expectedAwayPoints: 20,
+  expectedHomePoints: 21.75031241002071,
+  representativeScore: { away: 20, home: 24 },
+  awayWinProbability: 0.4,
+  homeWinProbability: 0.6,
+  totalDistribution: {
+    values: [40, 44.37578102505178],
+    probabilities: [0.6, 0.4],
+  },
+};
+const nflHalfPointMeanMedianDecision = decision({
+  market: "total",
+  side: "Under 41.5",
+  probability: 0.6,
+  fair: 0.55,
+  price: -110,
+  line: 41.5,
+  grade: "No Play",
+});
+const defaultNflHalfPointMeanMedian = auditFootballCrossMarketCoherence({
+  sport: "nfl",
+  providerGameId: "1392236-default",
+  awayTeam: "AWY",
+  homeTeam: "HME",
+  forecast: nflHalfPointMeanMedianForecast,
+  decisions: [nflHalfPointMeanMedianDecision],
+  unavailableMarkets: ["moneyline", "spread"],
+  requireDecisionSideFromForecast: true,
+});
+assert.equal(
+  defaultNflHalfPointMeanMedian.fatalIssues.some((row) => row.code === "decision_forecast_side_disagreement"),
+  true,
+  "the shared default remains narrower than one half point",
+);
+const verifiedNflHalfPointMeanMedian = auditFootballCrossMarketCoherence({
+  sport: "nfl",
+  providerGameId: "1392236",
+  awayTeam: "AWY",
+  homeTeam: "HME",
+  forecast: nflHalfPointMeanMedianForecast,
+  decisions: [nflHalfPointMeanMedianDecision],
+  unavailableMarkets: ["moneyline", "spread"],
+  requireDecisionSideFromForecast: true,
+  publicScoreDirectionTolerancePoints: NFL_PUBLIC_SCORE_DIRECTION_TOLERANCE_POINTS,
+});
+assert.equal(
+  verifiedNflHalfPointMeanMedian.fatalIssues.some((row) => row.code === "decision_forecast_side_disagreement"),
+  false,
+  "NFL accepts a PMF-selected Total side when the same distribution mean is within one half point of the line",
 );
 assert.throws(
   () => auditFootballCrossMarketCoherence({

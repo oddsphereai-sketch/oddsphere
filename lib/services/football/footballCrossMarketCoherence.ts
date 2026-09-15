@@ -1,10 +1,11 @@
 export const FOOTBALL_CROSS_MARKET_COHERENCE_RELEASE =
-  "football_cross_market_coherence_2026_09_05_r8_verified_pmf_mean_median_winner" as const;
+  "football_cross_market_coherence_2026_09_15_r9_nfl_half_point_mean_median" as const;
 
 const EPSILON = 1e-9;
 const EV_TOLERANCE = 1e-8;
 const DEFAULT_PUBLIC_SCORE_DIRECTION_TOLERANCE_POINTS = 0.25;
 export const CFB_PUBLIC_SCORE_DIRECTION_TOLERANCE_POINTS = 0.5;
+export const NFL_PUBLIC_SCORE_DIRECTION_TOLERANCE_POINTS = 0.5;
 
 export type FootballCoherenceSport = "nfl" | "cfb";
 export type FootballCoherenceMarket = "moneyline" | "spread" | "total";

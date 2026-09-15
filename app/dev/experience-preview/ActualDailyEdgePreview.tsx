@@ -360,7 +360,7 @@ export default function ActualDailyEdgePreview({
   }, [displaySnapshot.date, displaySnapshot.games, embeddedSample, sport]);
 
   if (!game) {
-    return <div className="space-y-5 pb-16"><SlateHeader snapshot={displaySnapshot} sport={sport} onSportChange={switchSport} onSportPrefetch={prefetchSport} soccerCompetition={soccerCompetition} weeklySlate={renderedWeeklySlate} reviewMode={reviewMode} activePreviewSports={activePreviewSports} />{nflWeekOneEvidenceBoard ? <NflWeekOneEvidenceMonitor board={nflWeekOneEvidenceBoard} /> : sport === "nfl" && renderedWeeklySlate ? <NflWeekOneEvidenceUnavailable /> : renderedWeeklySlate?.unavailable ? <WeeklySlateEvidenceUnavailable sport={sport} /> : <EmptyPreview sport={sport} displayLabel={soccerCompetition?.label} />}</div>;
+    return <div className="space-y-5 pb-16"><SlateHeader snapshot={displaySnapshot} sport={sport} onSportChange={switchSport} onSportPrefetch={prefetchSport} soccerCompetition={soccerCompetition} weeklySlate={renderedWeeklySlate} reviewMode={reviewMode} activePreviewSports={activePreviewSports} />{nflWeekOneEvidenceBoard ? <NflWeekOneEvidenceMonitor board={nflWeekOneEvidenceBoard} /> : sport === "nfl" && renderedWeeklySlate ? <NflEvidenceUnavailable label={renderedWeeklySlate.label} /> : renderedWeeklySlate?.unavailable ? <WeeklySlateEvidenceUnavailable sport={sport} /> : <EmptyPreview sport={sport} displayLabel={soccerCompetition?.label} />}</div>;
   }
 
   const market = game.markets[marketKey];
@@ -2645,8 +2645,8 @@ function NflWeekOneEvidenceMonitor({ board }: { board: NflWeekOneEvidenceBoard }
   </div>;
 }
 
-function NflWeekOneEvidenceUnavailable() {
-  return <section className="rounded-2xl border border-amber-300/20 bg-gradient-to-br from-amber-400/[0.07] to-gray-950/70 p-10 text-center"><span className="inline-flex rounded-full border border-amber-300/25 bg-amber-300/[0.07] px-3 py-1 text-[8px] font-black uppercase tracking-wider text-amber-200">Evidence unavailable</span><p className="mt-4 text-[9px] font-black uppercase tracking-wider text-gray-500">NFL · Regular Season Week 1</p><h2 className="mt-2 text-2xl font-black text-white">The Week 1 board is temporarily unavailable</h2><p className="mx-auto mt-2 max-w-2xl text-sm leading-relaxed text-gray-500">OddSphere could not verify the complete current Week 1 evidence set for this request. The reader will not fall back to the expired preseason slate or manufacture predictions from incomplete inputs.</p></section>;
+function NflEvidenceUnavailable({ label }: { label: string }) {
+  return <section className="rounded-2xl border border-amber-300/20 bg-gradient-to-br from-amber-400/[0.07] to-gray-950/70 p-10 text-center"><span className="inline-flex rounded-full border border-amber-300/25 bg-amber-300/[0.07] px-3 py-1 text-[8px] font-black uppercase tracking-wider text-amber-200">Evidence unavailable</span><p className="mt-4 text-[9px] font-black uppercase tracking-wider text-gray-500">{label}</p><h2 className="mt-2 text-2xl font-black text-white">The current NFL board is temporarily unavailable</h2><p className="mx-auto mt-2 max-w-2xl text-sm leading-relaxed text-gray-500">OddSphere could not verify the complete current-week evidence set for this request. The reader will not manufacture predictions from incomplete inputs.</p></section>;
 }
 
 function EvidenceCoverage({ label, value, tone }: { label: string; value: string; tone: "emerald" | "amber" | "gray" }) {

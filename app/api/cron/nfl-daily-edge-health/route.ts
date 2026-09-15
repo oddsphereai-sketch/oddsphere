@@ -5,6 +5,7 @@ import {
   auditNflForwardMemberSnapshot,
   readNflForwardMemberSnapshot,
 } from "@/lib/services/football/nflForwardMemberSnapshotStore";
+import { resolveNflForwardWeek } from "@/lib/services/football/nflForwardWeekSelection";
 
 export const maxDuration = 60;
 
@@ -17,7 +18,8 @@ export async function GET(request: Request): Promise<Response> {
       };
     }
     const season = boundedInteger(process.env.NFL_FORWARD_SEASON ?? "2026", 2026, 2100, "NFL_FORWARD_SEASON");
-    const week = boundedInteger(process.env.NFL_FORWARD_WEEK ?? "1", 1, 18, "NFL_FORWARD_WEEK");
+    const configuredWeek = boundedInteger(process.env.NFL_FORWARD_WEEK ?? "1", 1, 18, "NFL_FORWARD_WEEK");
+    const week = resolveNflForwardWeek({ season, configuredWeek });
     const published = await readNflForwardMemberSnapshot({ client: supabase, season, week });
     if (!published) {
       return {

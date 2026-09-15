@@ -3,6 +3,7 @@ import { supabase } from "@/lib/db/supabase";
 import { OpenWeatherProvider } from "@/lib/providers/real_api/OpenWeatherProvider";
 import { runNflForwardEvidenceWriter } from "@/lib/services/football/nflForwardEvidenceWriter";
 import { runNflPlayerPropsProductionWriter } from "@/lib/services/football/nflPlayerPropsProductionWriter";
+import { resolveNflForwardWeek } from "@/lib/services/football/nflForwardWeekSelection";
 
 export const maxDuration = 300;
 
@@ -24,11 +25,12 @@ export async function GET(request: Request): Promise<Response> {
     const playbookApiKey = requiredEnv("PLAYBOOK_API_KEY");
     const sharpApiKey = requiredEnv("SHARPAPI_KEY");
     const season = boundedInteger(process.env.NFL_FORWARD_SEASON ?? "2026", 2026, 2100, "NFL_FORWARD_SEASON");
-    const week = boundedInteger(process.env.NFL_FORWARD_WEEK ?? "1", 1, 18, "NFL_FORWARD_WEEK");
+    const configuredWeek = boundedInteger(process.env.NFL_FORWARD_WEEK ?? "1", 1, 18, "NFL_FORWARD_WEEK");
     const weatherProvider = process.env.OPENWEATHER_API_KEY
       ? new OpenWeatherProvider(process.env.OPENWEATHER_API_KEY)
       : null;
     const cycleNow = new Date().toISOString();
+    const week = resolveNflForwardWeek({ season, configuredWeek, now: new Date(cycleNow) });
     const result = await runNflForwardEvidenceWriter({
       client: supabase,
       season,

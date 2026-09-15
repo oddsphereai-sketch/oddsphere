@@ -18,6 +18,7 @@ import { CFB_MEMBER_FIXTURE_RELEASE } from "@/lib/services/football/cfbMemberFix
 import { CFB_FORWARD_MEMBER_SNAPSHOT_RELEASE } from "@/lib/services/football/cfbForwardMemberSnapshotStore";
 import { NFL_FORWARD_MEMBER_SNAPSHOT_RELEASE } from "@/lib/services/football/nflForwardMemberSnapshotStore";
 import { enrichCachedNflFootballEvidence } from "@/lib/services/football/footballMemberEvidence";
+import { resolveNflForwardWeek } from "@/lib/services/football/nflForwardWeekSelection";
 import DailyEdgeLiveRefresh from "./DailyEdgeLiveRefresh";
 import { readMemberDataWithDeadline } from "@/lib/services/memberDataAvailability";
 import { resolveUclFeatureFlags } from "@/lib/services/ucl/uclFeatureFlags";
@@ -101,7 +102,10 @@ export default async function CandidateDailyEdgePage({
   const cfbEnabled = cfbRequested && process.env.CFB_DAILY_EDGE_ENABLED === "true";
   const nflWeekOneEvidenceEnabled = nflEnabled && isNflWeekOneEvidenceBoardEnabled();
   const nflSeason = Number(process.env.NFL_FORWARD_SEASON ?? "2026");
-  const nflWeek = Number(process.env.NFL_FORWARD_WEEK ?? "1");
+  const nflWeek = resolveNflForwardWeek({
+    season: nflSeason,
+    configuredWeek: Number(process.env.NFL_FORWARD_WEEK ?? "1"),
+  });
   const nflFixtureRead = !nflWeekOneEvidenceEnabled
     ? { value: null, unavailable: false, reason: "ok" as const }
     : await readMemberDataWithDeadline({
@@ -258,7 +262,7 @@ export default async function CandidateDailyEdgePage({
             }
           : nflWeekOneEvidenceEnabled
             ? {
-                label: "NFL · Regular Season Week 1 · evidence temporarily unavailable · model validation hold",
+                label: `NFL · Regular Season Week ${nflWeek} · evidence temporarily unavailable`,
                 previousHref: null,
                 nextHref: null,
                 displayGameCount: 0,
