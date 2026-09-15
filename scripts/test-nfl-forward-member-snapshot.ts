@@ -5,6 +5,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   auditNflForwardMemberSnapshot,
   buildNflForwardMemberSnapshot,
+  nflFlatBoardWarning,
   NFL_FORWARD_MEMBER_SNAPSHOT_RELEASE,
   nflForwardMemberSnapshotKey,
   readNflForwardMemberSnapshot,
@@ -77,6 +78,18 @@ assert.equal(audit.metrics.games, 1);
 assert.equal(audit.metrics.predictions, 3);
 assert.equal(audit.metrics.maximumSourceAgeMinutes, 390, "far-window evidence follows the six-hour cadence");
 assert.equal(audit.metrics.grades.Lean, 1);
+assert.equal(
+  nflFlatBoardWarning({ grades: { Lean: 1, "No Play": 39, Watchlist: 8 }, predictions: 48 }),
+  "the current weekly slate is materially flat: 1/48 actionable and 39 No Play grades",
+);
+assert.equal(
+  nflFlatBoardWarning({ grades: { Lean: 2, "No Play": 38, Watchlist: 8 }, predictions: 48 }),
+  null,
+);
+assert.equal(
+  nflFlatBoardWarning({ grades: { "No Play": 40, Watchlist: 8 }, predictions: 48 }),
+  "the current weekly slate contains no actionable play grades",
+);
 const brokenAudit = auditNflForwardMemberSnapshot({
   snapshot: { ...auditedSnapshot, publishedAt: "2026-09-01T11:00:00.000Z" },
   now: new Date("2026-09-01T13:30:00.000Z"),
