@@ -41,7 +41,7 @@ import { nflFootballEvidenceStats } from "./footballMemberEvidence";
 import type { NflRegularSharpMarket, NflRegularSharpSplit } from "./sharpApiNflSplits";
 
 export const NFL_WEEK_ONE_HELD_MEMBER_FIXTURE_RELEASE =
-  "nfl_weekly_member_fixture_2026_09_14_r18_prediction_owned_side" as const;
+  "nfl_weekly_member_fixture_2026_09_15_r19_verified_first_observation" as const;
 
 const NFL_PREVIOUS_MEMBER_RELEASE =
   "nfl_v1_member_release_2026_09_03_r12_target_excluded_forecast" as const;
@@ -1104,6 +1104,27 @@ function buildSameBookTrail(args: {
     }
   }
 
+  // The opening endpoint can be empty immediately after a weekly rollover.
+  // In that case preserve the first writer-verified quote for the exact
+  // evaluated sportsbook; never borrow another book's opening. A subsequent
+  // capture is still required before this becomes a two-point movement trail.
+  if (candidates.length === 0) {
+    const firstRow = args.rows[0] ?? null;
+    const firstQuote = firstRow?.payload.market.currentBooks.find((candidate) =>
+      normalizeBookName(candidate.sportsbook) === book) ?? null;
+    const firstSide = firstQuote ? quoteSide(firstQuote, args.slot, args.selectedPrimary) : null;
+    if (firstRow && firstQuote && firstSide) {
+      append({
+        american: firstSide.american,
+        line: firstSide.line,
+        observedAt: firstRow.capturedAt,
+        sportsbook: firstQuote.sportsbook,
+        source: "line_history",
+        label: "first",
+      });
+    }
+  }
+
   for (const row of args.rows.slice(0, -1)) {
     const market = row.payload.market;
     const currentBooks = market.currentBooks;
@@ -1118,7 +1139,7 @@ function buildSameBookTrail(args: {
     append({
       american: side.american,
       line: side.line,
-      observedAt: quote.observedAt,
+      observedAt: row.capturedAt,
       sportsbook: quote.sportsbook,
       source: "line_history",
       label: "move",
@@ -1128,17 +1149,19 @@ function buildSameBookTrail(args: {
   append({
     american: args.terminal.american,
     line: args.terminal.line,
-    observedAt: args.terminal.observedAt,
+    observedAt: args.rows.at(-1)?.capturedAt ?? args.terminal.observedAt,
     sportsbook: args.sportsbook,
     source: args.terminal.locked ? "locked_snapshot" : "current_line",
     label: args.terminal.locked ? "locked" : "current",
   }, true);
 
-  const materialStops = candidates.reduce<OddsTrailStopDto[]>((stops, stop, index) => {
+  const orderedCandidates = [...candidates].sort((first, second) =>
+    Date.parse(first.observedAt ?? "") - Date.parse(second.observedAt ?? ""));
+  const materialStops = orderedCandidates.reduce<OddsTrailStopDto[]>((stops, stop, index) => {
     if (index === 0) return [stop];
     const previous = stops[stops.length - 1]!;
     const changed = previous.american !== stop.american || previous.line !== stop.line;
-    const terminal = index === candidates.length - 1;
+    const terminal = index === orderedCandidates.length - 1;
     if (changed || terminal) stops.push(stop);
     return stops;
   }, []);

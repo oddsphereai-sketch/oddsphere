@@ -76,17 +76,29 @@ assert.deepEqual(
 assert.equal(determineNflForwardCollectionNeed({ existing: [], now: early }).reason, "opening_seed");
 
 const opening = stored("opening", early);
-assert.equal(determineNflForwardCollectionNeed({ existing: [opening], now: "2026-09-01T18:00:00.000Z" }).reason, "unlocked_refresh_due");
+assert.equal(
+  determineNflForwardCollectionNeed({ existing: [opening], now: "2026-09-01T12:14:59.000Z" }).reason,
+  "opening_follow_up_wait",
+);
+assert.deepEqual(
+  determineNflForwardCollectionNeed({ existing: [opening], now: "2026-09-01T12:15:00.000Z" }),
+  { collect: true, reason: "opening_follow_up_due", cadenceMinutes: 15 },
+);
+const openingFollowUp = stored("unlocked", "2026-09-01T12:15:00.000Z");
+assert.equal(
+  determineNflForwardCollectionNeed({ existing: [opening, openingFollowUp], now: "2026-09-01T18:15:00.000Z" }).reason,
+  "unlocked_refresh_due",
+);
 assert.deepEqual(
   planNflForwardEvidenceCaptures({
-    games: [game], existing: [opening], capturedAt: "2026-09-01T18:00:00.000Z", unlockedCadenceMinutes: 360,
+    games: [game], existing: [opening, openingFollowUp], capturedAt: "2026-09-01T18:15:00.000Z", unlockedCadenceMinutes: 360,
   }).map((plan) => plan.stage),
   ["unlocked"],
 );
 
 const beforeCadence = "2026-09-01T13:00:00.000Z";
 assert.equal(
-  determineNflForwardCollectionNeed({ existing: [opening], now: beforeCadence }).reason,
+  determineNflForwardCollectionNeed({ existing: [opening, openingFollowUp], now: beforeCadence }).reason,
   "cadence_not_due",
 );
 const stalePublicReleaseOpening: NflForwardStoredEvidence = {
@@ -162,6 +174,22 @@ const completeCurrentReleaseOpening: NflForwardStoredEvidence = {
 assert.equal(
   determineNflForwardCollectionNeed({
     existing: [completeCurrentReleaseOpening],
+    now: beforeCadence,
+    requiredPublicRelease: {
+      memberRelease: NFL_V1_ACTIONABLE_GRADE_MEMBER_RELEASE,
+      decisionRelease: NFL_V1_ACTIONABLE_GRADE_DECISION_RELEASE,
+      evaluatedBetCount: 3,
+    },
+  }).reason,
+  "opening_follow_up_due",
+);
+const completeCurrentReleaseFollowUp: NflForwardStoredEvidence = {
+  ...openingFollowUp,
+  payload: completeCurrentReleaseOpening.payload,
+};
+assert.equal(
+  determineNflForwardCollectionNeed({
+    existing: [completeCurrentReleaseOpening, completeCurrentReleaseFollowUp],
     now: beforeCadence,
     requiredPublicRelease: {
       memberRelease: NFL_V1_ACTIONABLE_GRADE_MEMBER_RELEASE,
@@ -260,7 +288,7 @@ assert.match(writer, /currentBooks/);
 assert.match(writer, /comparableCurrentBooks/);
 assert.match(writer, /multibook_consensus_unavailable/);
 assert.doesNotMatch(writer, /readLegacyNflForwardEvidence|readPriorNflForwardEvidence|readPreviousNflForwardEvidence/, "the live writer must not scan superseded large JSON releases");
-assert.match(writer, /nfl_forward_evidence_writer_2026_09_15_r26_week_rollover_coherence/);
+assert.match(writer, /nfl_forward_evidence_writer_2026_09_15_r27_opening_follow_up/);
 assert.match(writer, /publicScoreDirectionTolerancePoints: NFL_PUBLIC_SCORE_DIRECTION_TOLERANCE_POINTS/);
 const nflSlateSource = readFileSync(path.resolve("lib/services/football/balldontlieNflPreviewSlate.ts"), "utf8");
 assert.doesNotMatch(nflSlateSource, /BALLDONTLIE regular odds missing/, "completed-game odds removal must not reject the verified weekly schedule before per-game isolation");
