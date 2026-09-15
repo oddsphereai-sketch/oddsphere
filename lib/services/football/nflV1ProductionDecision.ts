@@ -13,15 +13,15 @@ import {
 } from "./nflV1WeekOneOutcome";
 
 export const NFL_V1_PRODUCTION_MODEL_RELEASE =
-  "nfl_v1_daily_edge_model_2026_09_14_r10_prediction_owned_side" as const;
+  "nfl_v1_daily_edge_model_2026_09_15_r11_one_point_pmf_boundary" as const;
 export const NFL_V1_PRODUCTION_CALIBRATION_RELEASE =
-  "nfl_v1_daily_edge_calibration_2026_09_14_r10_prediction_owned_side" as const;
+  "nfl_v1_daily_edge_calibration_2026_09_15_r11_one_point_pmf_boundary" as const;
 export const NFL_V1_PRODUCTION_DECISION_RELEASE =
-  "nfl_v1_daily_edge_decision_2026_09_14_r16_prediction_owned_side" as const;
+  "nfl_v1_daily_edge_decision_2026_09_15_r17_one_point_pmf_boundary" as const;
 export const NFL_V1_GRADE_POLICY_RELEASE =
-  "nfl_v1_grade_policy_2026_09_14_r16_prediction_owned_side" as const;
+  "nfl_v1_grade_policy_2026_09_15_r17_one_point_pmf_boundary" as const;
 export const NFL_V1_MEMBER_RELEASE =
-  "nfl_v1_member_release_2026_09_14_r13_prediction_owned_side" as const;
+  "nfl_v1_member_release_2026_09_15_r14_one_point_pmf_boundary" as const;
 
 export const NFL_V1_WATCHLIST_MINIMUM_EXPECTED_VALUE = -0.01 as const;
 export const NFL_V1_WATCHLIST_MINIMUM_EDGE_PERCENTAGE_POINTS = -1.0 as const;

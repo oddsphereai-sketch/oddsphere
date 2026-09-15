@@ -288,7 +288,7 @@ assert.match(writer, /currentBooks/);
 assert.match(writer, /comparableCurrentBooks/);
 assert.match(writer, /multibook_consensus_unavailable/);
 assert.doesNotMatch(writer, /readLegacyNflForwardEvidence|readPriorNflForwardEvidence|readPreviousNflForwardEvidence/, "the live writer must not scan superseded large JSON releases");
-assert.match(writer, /nfl_forward_evidence_writer_2026_09_15_r27_opening_follow_up/);
+assert.match(writer, /nfl_forward_evidence_writer_2026_09_15_r28_one_point_pmf_boundary/);
 assert.match(writer, /publicScoreDirectionTolerancePoints: NFL_PUBLIC_SCORE_DIRECTION_TOLERANCE_POINTS/);
 const nflSlateSource = readFileSync(path.resolve("lib/services/football/balldontlieNflPreviewSlate.ts"), "utf8");
 assert.doesNotMatch(nflSlateSource, /BALLDONTLIE regular odds missing/, "completed-game odds removal must not reject the verified weekly schedule before per-game isolation");

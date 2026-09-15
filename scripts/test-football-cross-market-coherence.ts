@@ -427,7 +427,45 @@ const verifiedNflHalfPointMeanMedian = auditFootballCrossMarketCoherence({
 assert.equal(
   verifiedNflHalfPointMeanMedian.fatalIssues.some((row) => row.code === "decision_forecast_side_disagreement"),
   false,
-  "NFL accepts a PMF-selected Total side when the same distribution mean is within one half point of the line",
+  "NFL accepts a PMF-selected Total side when the same distribution mean is within one point of the line",
+);
+const nflThreeQuarterPointMeanMedian = auditFootballCrossMarketCoherence({
+  sport: "nfl",
+  providerGameId: "weekly-three-quarter-point",
+  awayTeam: "AWY",
+  homeTeam: "HME",
+  forecast: {
+    ...nflHalfPointMeanMedianForecast,
+    expectedHomePoints: 22.25,
+  },
+  decisions: [nflHalfPointMeanMedianDecision],
+  unavailableMarkets: ["moneyline", "spread"],
+  requireDecisionSideFromForecast: true,
+  publicScoreDirectionTolerancePoints: NFL_PUBLIC_SCORE_DIRECTION_TOLERANCE_POINTS,
+});
+assert.equal(
+  nflThreeQuarterPointMeanMedian.fatalIssues.some((row) => row.code === "decision_forecast_side_disagreement"),
+  false,
+  "NFL accepts the authoritative PMF side across a 0.75-point mean/median boundary",
+);
+const nflBeyondOnePoint = auditFootballCrossMarketCoherence({
+  sport: "nfl",
+  providerGameId: "weekly-beyond-one-point",
+  awayTeam: "AWY",
+  homeTeam: "HME",
+  forecast: {
+    ...nflHalfPointMeanMedianForecast,
+    expectedHomePoints: 22.6,
+  },
+  decisions: [nflHalfPointMeanMedianDecision],
+  unavailableMarkets: ["moneyline", "spread"],
+  requireDecisionSideFromForecast: true,
+  publicScoreDirectionTolerancePoints: NFL_PUBLIC_SCORE_DIRECTION_TOLERANCE_POINTS,
+});
+assert.equal(
+  nflBeyondOnePoint.fatalIssues.some((row) => row.code === "decision_forecast_side_disagreement"),
+  true,
+  "NFL continues to fail closed when PMF and mean differ by more than one point",
 );
 assert.throws(
   () => auditFootballCrossMarketCoherence({
