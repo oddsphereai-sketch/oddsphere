@@ -68,6 +68,19 @@ export type NflForwardMemberSnapshotAudit = {
   };
 };
 
+export function nflFlatBoardWarning(input: {
+  grades: Record<string, number>;
+  predictions: number;
+}): string | null {
+  const actionable = (input.grades.Lean ?? 0) + (input.grades["Best Angle"] ?? 0);
+  const noPlays = input.grades["No Play"] ?? 0;
+  if (actionable === 0) return "the current weekly slate contains no actionable play grades";
+  if (input.predictions > 0 && actionable <= 1 && noPlays / input.predictions >= 0.75) {
+    return `the current weekly slate is materially flat: ${actionable}/${input.predictions} actionable and ${noPlays} No Play grades`;
+  }
+  return null;
+}
+
 type SnapshotRow = {
   payload: unknown;
   generated_at: string;
@@ -256,9 +269,8 @@ export function auditNflForwardMemberSnapshot(input: {
       : null,
     (grades.Missing ?? 0) > 0 ? `${grades.Missing} markets are missing a play grade` : null,
   ].filter((value): value is string => value !== null);
-  const warnings = (grades.Lean ?? 0) + (grades["Best Angle"] ?? 0) === 0
-    ? ["the current weekly slate contains no actionable play grades"]
-    : [];
+  const flatBoardWarning = nflFlatBoardWarning({ grades, predictions: markets.length });
+  const warnings = flatBoardWarning ? [flatBoardWarning] : [];
   return {
     healthy: critical.length === 0,
     critical,
