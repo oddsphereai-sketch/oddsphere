@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { nflPlayerPropsAvailabilityAgeLabel } from "../app/player-props/lib/nflPlayerPropsPresentation";
+import {
+  nflPlayerPropsAvailabilityAgeLabel,
+  resolveNflPlayerPropsPrediction,
+} from "../app/player-props/lib/nflPlayerPropsPresentation";
 import {
   attachNflPlayerPropsClosingPrice,
   buildNflPlayerPropsMemberSnapshot,
@@ -288,6 +291,10 @@ assert.ok(memberReader.includes("buildRadarRows(rows), [rows]"), "NFL filters dr
 assert.ok(memberReader.includes("const selected = rows.find"), "an open NFL prop reader cannot survive a filter that excludes its row");
 assert.ok(memberReader.includes('{rows.length} {activeFilters ? "filtered" : "completed"} reads'), "NFL filter feedback reports the filtered row count");
 assert.ok(memberReader.includes("pairRows(rows, sort)"), "the selected sort is passed into the paired full-board rows");
+assert.ok(memberReader.includes("<span>Prediction</span>"), "the paired NFL board gives the forecast its own visible column");
+assert.ok(!memberReader.includes("Strongest grade"), "a value grade cannot masquerade as the paired market prediction");
+assert.ok(memberReader.includes("resolveNflPlayerPropsPrediction(marketRows)"), "the paired board resolves a market-aware probability prediction before presenting prices");
+assert.ok(memberReader.includes("quoteMovement(row)"), "both market-side quotes retain opening-to-current movement context");
 assert.match(memberReader, /\.sort\(\(a, b\) => sortRows\(sort\)\(a\.primary, b\.primary\)/,
   "the paired full board honors the selected sort instead of forcing signal order");
 for (const filterHandler of ["changeSelectedGame", "changeGrade", "changeMarket", "changeBookFilter", "changeSearch"]) {
@@ -320,7 +327,20 @@ assert.equal(nflPlayerPropsAvailabilityAgeLabel({ reportedAt: "2026-08-27T12:45:
 assert.equal(nflPlayerPropsAvailabilityAgeLabel({ reportedAt: "2026-08-26T12:00:00.000Z", reportUpdatedAt: null }, "2026-08-27T13:00:00.000Z"), "25h old");
 assert.equal(nflPlayerPropsAvailabilityAgeLabel({ reportedAt: null, reportUpdatedAt: "2026-08-15T13:00:00.000Z" }, "2026-08-27T13:00:00.000Z"), "12d old");
 assert.equal(nflPlayerPropsAvailabilityAgeLabel({ reportedAt: "2026-08-28T13:00:00.000Z", reportUpdatedAt: null }, "2026-08-27T13:00:00.000Z"), null);
-for (const responsiveContract of ["overflow-x-auto", "hidden xl:block", "grid gap-3 xl:hidden"]) {
+const probabilityFirstPrediction = resolveNflPlayerPropsPrediction([
+  { side: "over" as const, finalProbability: 0.43, expectedValue: 0.24, grade: "Best Angle" },
+  { side: "under" as const, finalProbability: 0.57, expectedValue: -0.03, grade: "No Play" },
+]);
+assert.equal(probabilityFirstPrediction?.outcome, "under", "accuracy probability, not EV or grade, chooses the displayed prediction");
+assert.equal(probabilityFirstPrediction?.probability, 0.57);
+assert.equal(probabilityFirstPrediction?.quotedSide, "under");
+const filteredSidePrediction = resolveNflPlayerPropsPrediction([{ side: "under" as const, finalProbability: 0.42 }]);
+assert.equal(filteredSidePrediction?.outcome, "over", "a price filter cannot turn the remaining quote into the prediction");
+assert.equal(filteredSidePrediction?.quotedSide, null, "an inferred forecast is not falsely highlighted as a posted quote");
+const touchdownPrediction = resolveNflPlayerPropsPrediction([{ side: "yes" as const, finalProbability: 0.28 }]);
+assert.equal(touchdownPrediction?.outcome, "no", "one-sided touchdown prices still show the model's most likely outcome");
+assert.equal(touchdownPrediction?.probability, 0.72);
+for (const responsiveContract of ["overflow-x-auto", "hidden xl:block", "divide-y divide-gray-800 overflow-hidden rounded-lg border border-gray-800 bg-gray-950 xl:hidden"]) {
   assert.ok(memberReader.includes(responsiveContract), `NFL board preserves the shared responsive interaction contract: ${responsiveContract}`);
 }
 assert.ok(!memberReader.includes("No Edge"), "NFL uses the current universal No Play member vocabulary");
