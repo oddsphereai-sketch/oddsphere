@@ -2461,7 +2461,6 @@ function EdgeBoard({ games, sport, activeId, activeMarket, selectGame, groupByDa
           <div className="flex items-baseline gap-2"><span className="h-3.5 w-1 rounded-full bg-violet-400/65" /><h2 className="text-[10px] font-black uppercase tracking-[0.18em] text-violet-200">{footballBoard ? "Weekly Slate" : uclBoard ? "Match Schedule" : "Slate Board"}</h2><span className="text-[11px] text-gray-600">·</span><span className="text-[11px] text-gray-400">{orderedGames.length === games.length ? games.length : `${orderedGames.length} of ${games.length}`} {games.length === 1 ? "game" : "games"}{footballBoard ? ` · ${predictionCount} ${oddsFilterActive ? "matching markets" : "predictions"}` : ""}</span></div>
           <div className="flex gap-1.5 overflow-x-auto pb-1">{marketFilters.map((item) => <button key={item.key ?? "best"} type="button" onClick={() => setFocus(item.key)} aria-pressed={focus === item.key} className={`whitespace-nowrap rounded-md border px-2.5 py-1.5 text-[8px] font-black uppercase tracking-wider ${focus === item.key ? "border-white/20 bg-white/[0.09] text-white" : "border-white/[0.06] text-gray-500"}`}>{item.label}</button>)}</div>
         </div>
-        {sport === "nfl" ? <div className="mt-3 rounded-lg border border-violet-400/15 bg-violet-500/[0.04] px-3 py-2.5"><p className="text-[8px] font-black uppercase tracking-[0.16em] text-violet-200">{games.length} complete winner forecasts</p><p className="mt-1 text-[9px] font-semibold leading-relaxed text-gray-500">Every game has a tracked prediction. “No Play” below is only the exact-price Bet grade; it never means the winner prediction is missing or held.</p></div> : null}
         {footballBoard ? (
           <div className="mt-3 border-t border-white/[0.05] pt-3">
             <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
@@ -2525,14 +2524,14 @@ function BoardGameCard({ game, sport, headlineMarket, active, activeMarket, sele
           selectGame(game, headlineKey);
         }
       }}
-      className={`group relative flex h-full cursor-pointer flex-col overflow-hidden rounded-xl border bg-[#0D0D14] shadow-[0_4px_16px_-6px_rgba(0,0,0,0.55),inset_0_1px_0_rgba(255,255,255,0.05)] transition ${active ? "border-white/35 outline outline-2 outline-violet-400/25 outline-offset-2" : sport === "nfl" && footballOutcome ? "border-violet-500/20 hover:border-violet-400/40" : boardCardBorder(headlineVerdict.key)}`}
+      className={`group relative flex h-full cursor-pointer flex-col overflow-hidden rounded-xl border bg-[#0D0D14] shadow-[0_4px_16px_-6px_rgba(0,0,0,0.55),inset_0_1px_0_rgba(255,255,255,0.05)] transition ${active ? "border-white/35 outline outline-2 outline-violet-400/25 outline-offset-2" : boardCardBorder(headlineVerdict.key)}`}
     >
       <MatchupColorAccent game={game} sport={sport} />
       <div className="flex flex-1 flex-col p-5 sm:p-6">
         <div className="grid gap-3">
           <CompactMatchupIdentity game={game} sport={sport} />
           <div className="flex min-h-8 items-center gap-2">
-            {sport === "nfl" && footballOutcome ? <span className="inline-flex w-fit items-center gap-1.5 rounded-full border border-violet-400/25 bg-violet-500/[0.08] px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.12em] text-violet-100">Prediction · {footballOutcome.winner}</span> : <VerdictBadge market={headline} large />}
+            <VerdictBadge market={headline} large />
             {finalScore ? <span className="rounded-full border border-white/[0.10] bg-white/[0.05] px-2 py-1 text-[9px] font-black uppercase tracking-wider text-gray-300">Final · {game.awayTeam} {finalScore.away}–{finalScore.home} {game.homeTeam}</span> : <><DailyEdgeGameStartTime game={game} className="text-[10px] text-gray-500" /><LockBadge lockState={game.lockState} lockedAt={game.lockedAt} scheduledLockAt={game.scheduledLockAt} className="font-black uppercase tracking-wider text-emerald-300" /></>}
           </div>
         </div>
