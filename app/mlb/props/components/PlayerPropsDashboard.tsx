@@ -30,6 +30,12 @@ import type {
 import { assessPropPrice } from "@/lib/mlb/props/pricePolicy";
 import { PlayerPropReaderDialog } from "@/app/player-props/components/PlayerPropReaderDialog";
 import {
+  americanOddsInRange,
+  americanOddsRangeIsOrdered,
+  isValidAmericanOddsInput,
+  parseAmericanOddsInput,
+} from "@/app/lab/lib/americanOddsFilter";
+import {
   PlayerPropsFilterButton,
   PlayerPropsRadarCardFrame,
   PlayerPropsSectionHeading,
@@ -287,7 +293,8 @@ export function PlayerPropsDashboard({ data: initialData, mode = "preview", init
   const [confidence, setConfidence] = useState("all");
   const [evRange, setEvRange] = useState("all");
   const [edgeRange, setEdgeRange] = useState("all");
-  const [oddsRange, setOddsRange] = useState("all");
+  const [oddsMinInput, setOddsMinInput] = useState("");
+  const [oddsMaxInput, setOddsMaxInput] = useState("");
   const [startRange, setStartRange] = useState("all");
   const [sort, setSort] = useState<SortKey>("signal");
   const [priceMode, setPriceMode] = useState<PriceMode>("best");
@@ -320,6 +327,20 @@ export function PlayerPropsDashboard({ data: initialData, mode = "preview", init
   }, [displayProps]);
   const players = useMemo(() => unique(displayProps.map((row) => row.player)), [displayProps]);
   const matchups = data.slate?.matchups.length ? data.slate.matchups : deriveMatchups(displayProps);
+  const minOddsValid = isValidAmericanOddsInput(oddsMinInput);
+  const maxOddsValid = isValidAmericanOddsInput(oddsMaxInput);
+  const oddsRange = useMemo(() => ({
+    min: parseAmericanOddsInput(oddsMinInput),
+    max: parseAmericanOddsInput(oddsMaxInput),
+  }), [oddsMaxInput, oddsMinInput]);
+  const oddsRangeOrdered = americanOddsRangeIsOrdered(oddsRange);
+  const oddsInputPresent = Boolean(oddsMinInput.trim() || oddsMaxInput.trim());
+  const oddsFilterActive = oddsInputPresent && minOddsValid && maxOddsValid && oddsRangeOrdered;
+  const oddsFilterError = !minOddsValid || !maxOddsValid
+    ? "Enter American odds of -100 or shorter, or +100 or longer."
+    : !oddsRangeOrdered
+      ? "Minimum odds cannot be greater than maximum odds."
+      : null;
 
   const filteredRows = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -333,9 +354,7 @@ export function PlayerPropsDashboard({ data: initialData, mode = "preview", init
       if (confidence !== "all" && row.confidenceBucket !== confidence) return false;
       if (hideResearch && row.playGrade === "RESEARCH") return false;
       if (!matchesMinimum(row.expectedValue, evRange) || !matchesMinimum(row.modelEdge, edgeRange)) return false;
-      if (oddsRange === "favorite" && row.odds >= 0) return false;
-      if (oddsRange === "plus" && row.odds <= 0) return false;
-      if (oddsRange === "short" && (row.odds < -130 || row.odds > 130)) return false;
+      if (oddsFilterActive && !americanOddsInRange(row.odds, oddsRange)) return false;
       const startHour = hourInZone(row.gameStartTime, userTimeZone);
       if (startRange === "early" && startHour >= 20) return false;
       if (startRange === "late" && startHour < 20) return false;
@@ -345,14 +364,14 @@ export function PlayerPropsDashboard({ data: initialData, mode = "preview", init
     if (lineMode === "main") next = selectPrimaryPropLines(next);
     if (priceMode === "best") next = dedupeBestPrices(next);
     return [...next].sort(sortRows(sort));
-  }, [book, confidence, displayProps, edgeRange, evRange, grade, hideResearch, lineMode, marketFamilyFilter, marketFilter, oddsRange, priceMode, search, selectedGame, sort, startRange, team, userTimeZone]);
+  }, [book, confidence, displayProps, edgeRange, evRange, grade, hideResearch, lineMode, marketFamilyFilter, marketFilter, oddsFilterActive, oddsRange, priceMode, search, selectedGame, sort, startRange, team, userTimeZone]);
 
   const selected = selectedId ? displayProps.find((row) => row.id === selectedId) ?? null : null;
   const selectedResearchPending = Boolean(selected?.researchKey && !availableResearch[selected.researchKey]);
   const selectedPlayer = players.find((player) => player.toLowerCase() === search.trim().toLowerCase()) ?? null;
   const isSearching = search.trim().length > 0;
-  const activeFilterCount = [selectedGame, grade, marketFamilyFilter, marketFilter, book, team, confidence, evRange, edgeRange, oddsRange, startRange]
-    .filter((value) => value !== "all").length + (hideResearch ? 1 : 0) + (lineMode === "all" ? 1 : 0);
+  const activeFilterCount = [selectedGame, grade, marketFamilyFilter, marketFilter, book, team, confidence, evRange, edgeRange, startRange]
+    .filter((value) => value !== "all").length + (hideResearch ? 1 : 0) + (lineMode === "all" ? 1 : 0) + (oddsInputPresent ? 1 : 0);
   const candidatePresentation = presentation === "candidate";
 
   useEffect(() => {
@@ -373,7 +392,8 @@ export function PlayerPropsDashboard({ data: initialData, mode = "preview", init
     setConfidence("all");
     setEvRange("all");
     setEdgeRange("all");
-    setOddsRange("all");
+    setOddsMinInput("");
+    setOddsMaxInput("");
     setStartRange("all");
     setHideResearch(false);
     setLineMode("main");
@@ -527,15 +547,15 @@ export function PlayerPropsDashboard({ data: initialData, mode = "preview", init
             <FilterSelect label="Evidence strength" value={confidence} onChange={setConfidence} options={["high", "medium", "low"]} includeAll />
             <FilterSelect label="EV range" value={evRange} onChange={setEvRange} options={[{ value: "0", label: "EV 0%+" }, { value: "0.05", label: "EV 5%+" }, { value: "0.10", label: "EV 10%+" }]} includeAll />
             <FilterSelect label="Model-edge range" value={edgeRange} onChange={setEdgeRange} options={[{ value: "0", label: "Edge 0%+" }, { value: "0.03", label: "Edge 3%+" }, { value: "0.05", label: "Edge 5%+" }]} includeAll />
-            <FilterSelect label="Odds range" value={oddsRange} onChange={setOddsRange} options={[{ value: "favorite", label: "Favorites" }, { value: "short", label: "-130 to +130" }, { value: "plus", label: "Plus money" }]} includeAll />
             <FilterSelect label="Start time" value={startRange} onChange={setStartRange} options={[{ value: "early", label: "Before 8 PM" }, { value: "late", label: "8 PM or later" }]} includeAll />
             <ToggleControl label="Hide Research" checked={hideResearch} onChange={setHideResearch} />
           </div></details>
+          <div className="mt-3 flex flex-col gap-3 rounded-md border border-gray-800 bg-black/20 p-3 lg:flex-row lg:items-end lg:justify-between"><div><p className="text-[9px] font-black uppercase tracking-wider text-violet-300">Current odds</p><p id="mlb-player-props-odds-filter-help" className="mt-1 text-[10px] text-gray-600">Filter the displayed prop prices.</p></div><div className="flex flex-wrap items-end gap-2"><div className="flex gap-1.5" role="group" aria-label="MLB player prop odds range presets"><button type="button" onClick={() => { setOddsMinInput(""); setOddsMaxInput(""); setSelectedId(null); }} aria-pressed={!oddsInputPresent} className={`rounded-md border px-2.5 py-1.5 text-[9px] font-black uppercase tracking-wider ${!oddsInputPresent ? "border-violet-400/55 bg-violet-500/[0.18] text-white" : "border-gray-800 text-gray-500"}`}>Any odds</button><button type="button" onClick={() => { setOddsMinInput("-200"); setOddsMaxInput("+200"); setSelectedId(null); }} aria-pressed={oddsMinInput === "-200" && oddsMaxInput === "+200"} className={`rounded-md border px-2.5 py-1.5 text-[9px] font-black uppercase tracking-wider ${oddsMinInput === "-200" && oddsMaxInput === "+200" ? "border-violet-400/55 bg-violet-500/[0.18] text-white" : "border-gray-800 text-gray-500"}`}>Common range</button><button type="button" onClick={() => { setOddsMinInput("+100"); setOddsMaxInput(""); setSelectedId(null); }} aria-pressed={oddsMinInput === "+100" && !oddsMaxInput} className={`rounded-md border px-2.5 py-1.5 text-[9px] font-black uppercase tracking-wider ${oddsMinInput === "+100" && !oddsMaxInput ? "border-violet-400/55 bg-violet-500/[0.18] text-white" : "border-gray-800 text-gray-500"}`}>Plus money</button></div><OddsBoundInput label="Min" value={oddsMinInput} onChange={(value) => { setOddsMinInput(value); setSelectedId(null); }} invalid={!minOddsValid || !oddsRangeOrdered} /><OddsBoundInput label="Max" value={oddsMaxInput} onChange={(value) => { setOddsMaxInput(value); setSelectedId(null); }} invalid={!maxOddsValid || !oddsRangeOrdered} /></div><p id="mlb-player-props-odds-filter-status" role={oddsFilterError ? "alert" : "status"} className={`text-[10px] font-semibold lg:max-w-48 lg:text-right ${oddsFilterError ? "text-amber-300" : "text-gray-600"}`}>{oddsFilterError ?? (oddsFilterActive ? `${filteredRows.length} current ${filteredRows.length === 1 ? "price matches" : "prices match"}.` : "Use a preset or enter one or both bounds.")}</p></div>
         </div>
       </section>
 
       {selectedPlayer ? <PlayerView rows={filteredRows} player={selectedPlayer} selectedId={selectedId} onSelect={setSelectedId} onClear={() => setSearch("")} /> : <>
-      <FullBoardView key={[selectedGame, grade, marketFamilyFilter, marketFilter, book, team, confidence, evRange, edgeRange, oddsRange, startRange, sort, priceMode, lineMode, hideResearch, search].join("|")} rows={filteredRows} totalCount={dedupeBestPrices(displayProps).length} priceMode={priceMode} selectedId={selectedId} onSelect={setSelectedId} />
+      <FullBoardView key={[selectedGame, grade, marketFamilyFilter, marketFilter, book, team, confidence, evRange, edgeRange, oddsMinInput, oddsMaxInput, startRange, sort, priceMode, lineMode, hideResearch, search].join("|")} rows={filteredRows} totalCount={dedupeBestPrices(displayProps).length} priceMode={priceMode} selectedId={selectedId} onSelect={setSelectedId} />
       </>}
       {!isSearching && selectedGame === "all" && marketFamilyFilter === "all" && marketFilter === "all"
         ? <PlayerDirectory rows={displayProps} onSelectPlayer={setSearch} />
@@ -1384,6 +1404,10 @@ function ToggleControl({ label, checked, onChange }: { label: string; checked: b
 
 function FilterSelect({ label, value, onChange, options, includeAll = false }: { label: string; value: string; onChange: (value: string) => void; options: ReadonlyArray<string | { value: string; label: string }>; includeAll?: boolean }) {
   return <label className="min-w-0"><span className="sr-only">{label}</span><select aria-label={label} value={value} onChange={(event) => onChange(event.target.value)} className="h-9 max-w-[180px] rounded-md border border-gray-700 bg-gray-950 px-2 text-xs font-semibold text-gray-200 outline-none focus:border-violet-400">{includeAll ? <option value="all">All {label.toLowerCase()}</option> : null}{options.map((option) => { const item = typeof option === "string" ? { value: option, label: option } : option; return <option key={item.value} value={item.value}>{item.label}</option>; })}</select></label>;
+}
+
+function OddsBoundInput({ label, value, onChange, invalid }: { label: string; value: string; onChange: (value: string) => void; invalid: boolean }) {
+  return <label className="grid gap-1 text-[8px] font-black uppercase tracking-wider text-gray-600">{label}<input type="text" inputMode="numeric" value={value} onChange={(event) => onChange(event.target.value)} aria-invalid={invalid} aria-describedby="mlb-player-props-odds-filter-help mlb-player-props-odds-filter-status" placeholder="Any" className="w-20 rounded-md border border-gray-700 bg-gray-950 px-2.5 py-1.5 font-mono text-[11px] text-white outline-none placeholder:text-gray-700 focus:border-violet-400" /></label>;
 }
 
 function CompactMetric({ label, value, positive = false }: { label: string; value: string; positive?: boolean }) {

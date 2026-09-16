@@ -23,15 +23,15 @@ import {
 export const NFL_PLAYER_PROPS_PORTABLE_ARTIFACT_RELEASE =
   "nfl_player_props_runtime_2026_09_01_r4_cross_market_movement" as const;
 export const NFL_PLAYER_PROPS_RUNTIME_RELEASE =
-  "nfl_player_props_runtime_2026_09_07_r11_out_of_support_hold" as const;
+  "nfl_player_props_runtime_2026_09_16_r12_injury_pagination" as const;
 export const NFL_PLAYER_PROPS_BOARD_RELEASE =
-  "nfl_player_props_board_2026_09_07_r14_out_of_support_hold" as const;
+  "nfl_player_props_board_2026_09_16_r15_injury_pagination" as const;
 export const NFL_PLAYER_PROPS_DECISION_RELEASE =
-  "nfl_player_props_decision_2026_09_03_r10_forecast_authority" as const;
+  "nfl_player_props_decision_2026_09_16_r11_injury_pagination" as const;
 export const NFL_PLAYER_PROPS_MODEL_RELEASE =
-  "nfl_player_props_distribution_model_2026_09_03_r7_forecast_authority" as const;
+  "nfl_player_props_distribution_model_2026_09_16_r8_injury_pagination" as const;
 export const NFL_PLAYER_PROPS_CALIBRATION_RELEASE =
-  "nfl_player_props_distribution_calibration_2026_09_03_r7_forecast_authority" as const;
+  "nfl_player_props_distribution_calibration_2026_09_16_r8_injury_pagination" as const;
 export const NFL_PLAYER_PROPS_PASSING_MARKET_RELEASE =
   "nfl_player_props_market_residual_calibration_2026_09_03_r8_single_application" as const;
 export const NFL_PLAYER_PROPS_MARKET_COHERENT_PROJECTION_RELEASE =

@@ -78,9 +78,9 @@ function emptyBoard(): NflPlayerPropsRuntimeBoard {
 }
 
 const unlocked = reconcileNflPlayerPropsProductionSnapshot({ season: 2026, week: 1, evaluatedAt: "2026-08-25T12:00:00.000Z", nextBoard: board(decision) });
-assert.equal(NFL_PLAYER_PROPS_PRODUCTION_CANDIDATE_RELEASE, "nfl_player_props_member_2026_09_07_r17_out_of_support_hold");
-assert.equal(NFL_PLAYER_PROPS_WRITER_RELEASE, "nfl_player_props_writer_2026_09_07_r20_identity_capacity");
-assert.equal(NFL_PLAYER_PROPS_TRACKING_RELEASE, "nfl_player_props_tracking_2026_09_03_r10_forecast_authority");
+assert.equal(NFL_PLAYER_PROPS_PRODUCTION_CANDIDATE_RELEASE, "nfl_player_props_member_2026_09_16_r18_injury_pagination");
+assert.equal(NFL_PLAYER_PROPS_WRITER_RELEASE, "nfl_player_props_writer_2026_09_16_r21_injury_pagination");
+assert.equal(NFL_PLAYER_PROPS_TRACKING_RELEASE, "nfl_player_props_tracking_2026_09_16_r11_injury_pagination");
 assert.equal(NFL_PLAYER_PROPS_SETTLEMENT_RELEASE, "nfl_player_props_settlement_2026_08_25_r3_bounded_finality");
 assert.equal(NFL_PLAYER_PROPS_PRODUCTION_INCLUDE_OPENINGS, true, "production records same-book opening context for movement and CLV interpretation");
 assert.equal(NFL_PLAYER_PROPS_PRODUCTION_COLLECTION_CALL_MAXIMUM, 51, "slate/current+opening props/player identity/Sharp pagination is explicitly bounded");
@@ -349,6 +349,7 @@ assert.ok(mlbReader.includes("PlayerPropReaderDialog"), "MLB and NFL execute the
 const productionWriter = readFileSync("lib/services/football/nflPlayerPropsProductionWriter.ts", "utf8");
 assert.ok(productionWriter.includes("buildNflPlayerPropsInferenceContextFromForwardEvidence"));
 assert.ok(productionWriter.includes("readNflForwardEvidence"));
+assert.ok(productionWriter.includes("eligibleGameIds"), "one incomplete game's context cannot abort or contaminate the rest of the slate");
 assert.ok(!productionWriter.includes("collectNflPlayerPropsInferenceContext"), "production must not duplicate direct roster/injury/main-market calls");
 assert.ok(productionWriter.includes("includeOpenings: NFL_PLAYER_PROPS_PRODUCTION_INCLUDE_OPENINGS"));
 assert.ok(productionWriter.includes("now: args.now"), "settlement finality uses the authorized writer timestamp");
@@ -367,6 +368,7 @@ const memberPage = readFileSync("app/player-props/page.tsx", "utf8");
 assert.ok(memberPage.includes('process.env.NFL_PLAYER_PROPS_MEMBER_ENABLED === "true"'));
 assert.ok(memberPage.includes('if (!enabled || query.league !== "nfl") redirect("/mlb/props")'));
 assert.ok(memberPage.includes("requestedReader") && memberPage.includes("initialSelectedKey"));
+assert.ok(memberPage.includes("resolveNflForwardWeek"), "the NFL props reader advances with the shared weekly NFL board");
 assert.ok(memberPage.includes("buildNflPlayerPropsMemberSnapshot(snapshot)"), "the live route serializes the public DTO, not the stored audit snapshot");
 assert.ok(memberPage.includes("NflPlayerPropsProductDashboard"), "the live NFL route uses the MLB-parity product dashboard");
 const mlbPage = readFileSync("app/mlb/props/page.tsx", "utf8");

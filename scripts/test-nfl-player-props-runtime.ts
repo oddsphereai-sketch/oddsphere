@@ -29,8 +29,8 @@ import {
 } from "../lib/services/football/nflPlayerPropsRuntime";
 import type { NflPlayerPropsExactOffer } from "../lib/services/football/nflPlayerPropsMarketBoard";
 
-assert.equal(NFL_PLAYER_PROPS_RUNTIME_RELEASE, "nfl_player_props_runtime_2026_09_07_r11_out_of_support_hold");
-assert.equal(NFL_PLAYER_PROPS_BOARD_RELEASE, "nfl_player_props_board_2026_09_07_r14_out_of_support_hold");
+assert.equal(NFL_PLAYER_PROPS_RUNTIME_RELEASE, "nfl_player_props_runtime_2026_09_16_r12_injury_pagination");
+assert.equal(NFL_PLAYER_PROPS_BOARD_RELEASE, "nfl_player_props_board_2026_09_16_r15_injury_pagination");
 assert.deepEqual(NFL_PLAYER_PROPS_QB_ROLE_FLOORS, { confirmedStarter: 0.9, projectedStarter: 0.75 });
 verifyNflPlayerPropsRuntimeParity(1e-9);
 

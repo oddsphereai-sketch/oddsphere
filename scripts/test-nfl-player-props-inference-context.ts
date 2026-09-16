@@ -32,7 +32,14 @@ const snapshot = {
   healthFindings: [],
 } as unknown as NflPlayerPropsObservationSnapshot;
 
-function evidence(capturedAt: string, stage: "opening" | "unlocked" | "t60", quarterback: string): NflForwardStoredEvidence {
+function evidence(
+  capturedAt: string,
+  stage: "opening" | "unlocked" | "t60",
+  quarterback: string,
+  game: { id: string; away: string; home: string; start: string; injuries?: boolean } = {
+    id: "game", away: "NE", home: "SEA", start: "2026-09-10T20:00:00.000Z", injuries: true,
+  },
+): NflForwardStoredEvidence {
   const depth = (team: string, name: string) => ({
     provider: "balldontlie" as const,
     team,
@@ -44,11 +51,11 @@ function evidence(capturedAt: string, stage: "opening" | "unlocked" | "t60", qua
     roster: [{ playerId: name, name, position: "QB", depth: "1", depthRank: 1, injuryStatus: null, explicitStarter: true }],
   });
   return {
-    id: `${stage}-${capturedAt}`,
-    providerGameId: "game",
+    id: `${game.id}-${stage}-${capturedAt}`,
+    providerGameId: game.id,
     stage,
     capturedAt,
-    gameStartAt: "2026-09-10T20:00:00.000Z",
+    gameStartAt: game.start,
     payloadSha256: `${stage}-sha`,
     payload: {
       schemaRelease: NFL_FORWARD_EVIDENCE_SCHEMA_RELEASE,
@@ -63,10 +70,10 @@ function evidence(capturedAt: string, stage: "opening" | "unlocked" | "t60", qua
       cutoffAt: null,
       t60LagMinutes: null,
       game: {
-        providerGameId: "game",
-        scheduledStart: "2026-09-10T20:00:00.000Z",
-        away: { id: 1, abbreviation: "NE", name: "New England Patriots" },
-        home: { id: 2, abbreviation: "SEA", name: "Seattle Seahawks" },
+        providerGameId: game.id,
+        scheduledStart: game.start,
+        away: { id: 1, abbreviation: game.away, name: game.away },
+        home: { id: 2, abbreviation: game.home, name: game.home },
       },
       market: {
         current: {} as never,
@@ -80,8 +87,8 @@ function evidence(capturedAt: string, stage: "opening" | "unlocked" | "t60", qua
         playbookSplits: null,
         sharpApiSplits: null,
       },
-      startersAndDepth: { away: depth("NE", quarterback), home: depth("SEA", "Home QB") },
-      injuries: { eventId: "game", reportUpdatedAt: capturedAt, teams: [] } as never,
+      startersAndDepth: { away: depth(game.away, quarterback), home: depth(game.home, "Home QB") },
+      injuries: game.injuries === false ? null : { eventId: game.id, reportUpdatedAt: capturedAt, teams: [] } as never,
       weather: {} as never,
       decisions: { evaluatedBets: [], outcomeConfidence: [], modelPromotionStatus: "nfl_v1_member_release_2026_08_25_r6_actionable_grades", publicationEnabled: true, trackingEnabled: false },
       coverage: {
@@ -94,7 +101,7 @@ function evidence(capturedAt: string, stage: "opening" | "unlocked" | "t60", qua
   } as unknown as NflForwardStoredEvidence;
 }
 
-assert.equal(NFL_PLAYER_PROPS_INFERENCE_CONTEXT_RELEASE, "nfl_player_props_inference_context_2026_08_25_r3_shared_forward_evidence");
+assert.equal(NFL_PLAYER_PROPS_INFERENCE_CONTEXT_RELEASE, "nfl_player_props_inference_context_2026_09_16_r4_game_scoped_availability");
 const context = buildNflPlayerPropsInferenceContextFromForwardEvidence({
   snapshot,
   capturedAt: "2026-08-25T12:00:00.000Z",
@@ -108,6 +115,34 @@ assert.equal(context.source, "nfl_forward_evidence");
 assert.equal(context.requestBudget.totalMaximum, 0, "production context reuses the stored slate bundle without provider calls");
 assert.equal(context.games[0]?.awayDepth.expectedStartingQuarterback?.name, "Current QB", "latest evidence at or before the cycle timestamp wins");
 assert.equal(context.games[0]?.mainMarket.capturedAt, "2026-08-25T11:00:00.000Z");
-assert.throws(() => buildNflPlayerPropsInferenceContextFromForwardEvidence({ snapshot, capturedAt: "2026-08-25T12:00:00.000Z", evidence: [] }), /missing forward evidence/);
+assert.throws(() => buildNflPlayerPropsInferenceContextFromForwardEvidence({ snapshot, capturedAt: "2026-08-25T12:00:00.000Z", evidence: [] }), /no games with complete forward evidence/);
 
-console.log("NFL player-props shared inference context: checksum-backed reuse, as-of selection, and zero provider-call budget passed.");
+const partialSnapshot = {
+  ...snapshot,
+  games: [
+    ...snapshot.games,
+    {
+      ...snapshot.games[0]!,
+      providerGameId: "game-two",
+      awayTeam: "BUF",
+      homeTeam: "DET",
+      awayTeamName: "Buffalo Bills",
+      homeTeamName: "Detroit Lions",
+    },
+  ],
+} as NflPlayerPropsObservationSnapshot;
+const partialContext = buildNflPlayerPropsInferenceContextFromForwardEvidence({
+  snapshot: partialSnapshot,
+  capturedAt: "2026-08-25T12:00:00.000Z",
+  evidence: [
+    evidence("2026-08-25T11:00:00.000Z", "unlocked", "Current QB"),
+    evidence("2026-08-25T11:00:00.000Z", "unlocked", "Other QB", {
+      id: "game-two", away: "BUF", home: "DET", start: "2026-09-10T20:00:00.000Z", injuries: false,
+    }),
+  ],
+});
+assert.deepEqual(partialContext.games.map((game) => game.canonicalGameId), ["game"]);
+assert.deepEqual(partialContext.excludedGames, [{ canonicalGameId: "game-two", reason: "injury_evidence_missing" }]);
+assert.ok(partialContext.healthHolds.includes("game_game-two_injury_evidence_missing"));
+
+console.log("NFL player-props shared inference context: checksum-backed reuse, as-of selection, game-scoped exclusions, and zero provider-call budget passed.");

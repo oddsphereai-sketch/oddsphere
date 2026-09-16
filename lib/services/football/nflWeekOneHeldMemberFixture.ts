@@ -41,7 +41,7 @@ import { nflFootballEvidenceStats } from "./footballMemberEvidence";
 import type { NflRegularSharpMarket, NflRegularSharpSplit } from "./sharpApiNflSplits";
 
 export const NFL_WEEK_ONE_HELD_MEMBER_FIXTURE_RELEASE =
-  "nfl_weekly_member_fixture_2026_09_16_r21_sharp_league_contract" as const;
+  "nfl_weekly_member_fixture_2026_09_16_r22_injury_pagination" as const;
 
 const NFL_PREVIOUS_MEMBER_RELEASE =
   "nfl_v1_member_release_2026_09_03_r12_target_excluded_forecast" as const;

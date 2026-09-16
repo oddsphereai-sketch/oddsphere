@@ -5,7 +5,7 @@ import {
   americanOddsRangeIsOrdered,
   isValidAmericanOddsInput,
   parseAmericanOddsInput,
-} from "../app/lab/lib/footballOddsFilter";
+} from "../app/lab/lib/americanOddsFilter";
 
 assert.equal(isValidAmericanOddsInput(""), true);
 assert.equal(isValidAmericanOddsInput("+125"), true);
@@ -38,4 +38,15 @@ assert.match(dashboardSource, /setOddsMinInput\(""\)/);
 assert.match(dashboardSource, /setOddsMaxInput\(""\)/);
 assert.match(dashboardSource, /Filter the displayed prop prices/);
 
-console.log("NFL Player Props odds filter tests passed");
+const mlbDashboardSource = readFileSync(
+  "app/mlb/props/components/PlayerPropsDashboard.tsx",
+  "utf8",
+);
+assert.match(mlbDashboardSource, /americanOddsInRange\(row\.odds, oddsRange\)/);
+assert.match(mlbDashboardSource, /MLB player prop odds range presets/);
+assert.match(mlbDashboardSource, /Common range/);
+assert.match(mlbDashboardSource, /Plus money/);
+assert.match(mlbDashboardSource, /setOddsMinInput\(""\)/);
+assert.match(mlbDashboardSource, /setOddsMaxInput\(""\)/);
+
+console.log("Shared NFL and MLB Player Props odds filter tests passed");
