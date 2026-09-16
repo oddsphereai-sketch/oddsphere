@@ -65,7 +65,7 @@ import {
 } from "./nflForwardMemberSnapshotStore";
 
 export const NFL_FORWARD_WRITER_RELEASE =
-  "nfl_forward_evidence_writer_2026_09_15_r28_one_point_pmf_boundary" as const;
+  "nfl_forward_evidence_writer_2026_09_16_r29_sharp_league_contract" as const;
 
 export type NflForwardWriterResult = {
   writerRelease: typeof NFL_FORWARD_WRITER_RELEASE;

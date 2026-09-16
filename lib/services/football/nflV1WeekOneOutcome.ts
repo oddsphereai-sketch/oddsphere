@@ -28,7 +28,7 @@ export const NFL_V1_WEEKLY_OUTCOME_DISTRIBUTION_RELEASE =
 export const NFL_V1_WEEKLY_OUTCOME_PROBABILITY_RELEASE =
   "nfl_v1_weekly_pooled_discrete_probability_2026_09_03_r3_target_excluded_forecast" as const;
 export const NFL_V1_MARKET_EVIDENCE_OUTCOME_RELEASE =
-  "nfl_v1_market_evidence_outcome_2026_09_03_r3_target_excluded_forecast" as const;
+  "nfl_v1_market_evidence_outcome_2026_09_16_r4_sharp_league_contract" as const;
 export const NFL_V1_MARKET_EVIDENCE_REPRESENTATIVE_SCORE_RELEASE =
   "nfl_v1_market_evidence_representative_score_2026_09_03_r2_target_excluded_forecast" as const;
 export const NFL_V1_MARKET_WEIGHT = 0.75 as const;

@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
 import {
   completeSharpApiNflSplitSet,
+  fetchSharpApiNflSplits,
   matchSharpApiNflSplitRows,
+  NFL_SHARP_API_SPLITS_RELEASE,
   normalizeSharpApiNflSplit,
   type SharpApiNflSplitRow,
 } from "../lib/services/football/sharpApiNflSplits";
@@ -105,4 +107,30 @@ const partial = normalizeSharpApiNflSplit(game.providerGameId, "2026-08-21T17:01
 });
 assert.equal(completeSharpApiNflSplitSet(partial), false);
 
-console.log("NFL SharpAPI split normalization, identity, date, and completeness tests passed.");
+async function testFetchContract(): Promise<void> {
+  const calls: Array<{ path: string; query: unknown; maxPages?: number }> = [];
+  const fetched = await fetchSharpApiNflSplits({
+    apiKey: "test-key",
+    games: [game],
+    capturedAt: "2026-08-21T17:04:00Z",
+    client: {
+      async fetchAll<T>(options: { path: string; query?: unknown; maxPages?: number }): Promise<T[]> {
+        calls.push({ path: options.path, query: options.query, maxPages: options.maxPages });
+        return [row] as T[];
+      },
+    },
+  });
+  assert.equal(fetched.release, NFL_SHARP_API_SPLITS_RELEASE);
+  assert.equal(fetched.requests, 1);
+  assert.equal(fetched.rows, 1);
+  assert.deepEqual(calls, [{
+    path: "/splits",
+    query: { league: "nfl", sportsbook: "circa,draftkings,betmgm", limit: 200 },
+    maxPages: 1,
+  }]);
+  assert.equal(fetched.splitsByGame[game.providerGameId]?.moneyline.sourceSportsbook, "circa");
+}
+
+void testFetchContract().then(() => {
+  console.log("NFL SharpAPI split normalization, identity, date, completeness, and request-contract tests passed.");
+});
