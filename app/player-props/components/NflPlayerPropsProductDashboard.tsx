@@ -7,6 +7,12 @@ import { PlayerPropReaderDialog } from "./PlayerPropReaderDialog";
 import { nflPlayerPropsAvailabilityAgeLabel } from "../lib/nflPlayerPropsPresentation";
 import { getPropGradeColor, type PropGrade } from "@/lib/mlb/props/propGrades";
 import {
+  americanOddsInRange,
+  americanOddsRangeIsOrdered,
+  isValidAmericanOddsInput,
+  parseAmericanOddsInput,
+} from "@/app/lab/lib/footballOddsFilter";
+import {
   PlayerPropsFilterButton,
   PlayerPropsRadarCardFrame,
   PlayerPropsSectionHeading,
@@ -24,23 +30,40 @@ export function NflPlayerPropsProductDashboard({ snapshot, reviewMode = false, i
   const [market, setMarket] = useState("all");
   const [bookFilter, setBookFilter] = useState("all");
   const [search, setSearch] = useState("");
+  const [oddsMinInput, setOddsMinInput] = useState("");
+  const [oddsMaxInput, setOddsMaxInput] = useState("");
   const [sort, setSort] = useState<SortKey>("signal");
   const [selectedKey, setSelectedKey] = useState<string | null>(initialSelectedKey);
   const allRows = useMemo(() => snapshot?.memberDecisions ?? [], [snapshot]);
   const games = useMemo(() => deriveGames(allRows), [allRows]);
   const markets = useMemo(() => unique(allRows.map((row) => row.market)).sort(), [allRows]);
   const books = useMemo(() => unique(allRows.map((row) => row.sportsbook)).sort(), [allRows]);
+  const minOddsValid = isValidAmericanOddsInput(oddsMinInput);
+  const maxOddsValid = isValidAmericanOddsInput(oddsMaxInput);
+  const oddsRange = useMemo(() => ({
+    min: parseAmericanOddsInput(oddsMinInput),
+    max: parseAmericanOddsInput(oddsMaxInput),
+  }), [oddsMaxInput, oddsMinInput]);
+  const oddsRangeOrdered = americanOddsRangeIsOrdered(oddsRange);
+  const oddsInputPresent = Boolean(oddsMinInput.trim() || oddsMaxInput.trim());
+  const oddsFilterActive = oddsInputPresent && minOddsValid && maxOddsValid && oddsRangeOrdered;
+  const oddsFilterError = !minOddsValid || !maxOddsValid
+    ? "Enter American odds of -100 or shorter, or +100 or longer."
+    : !oddsRangeOrdered
+      ? "Minimum odds cannot be greater than maximum odds."
+      : null;
   const rows = useMemo(() => allRows.filter((row) => (
     (selectedGame === "all" || row.gameId === selectedGame)
     && (grade === "All" || row.grade === grade)
     && (market === "all" || row.market === market)
     && (bookFilter === "all" || row.sportsbook === bookFilter)
+    && (!oddsFilterActive || americanOddsInRange(row.americanPrice, oddsRange))
     && (!search.trim() || `${row.playerName} ${row.team} ${row.opponent} ${row.market} ${row.sportsbook}`.toLowerCase().includes(search.trim().toLowerCase()))
-  )).sort(sortRows(sort)), [allRows, bookFilter, grade, market, search, selectedGame, sort]);
+  )).sort(sortRows(sort)), [allRows, bookFilter, grade, market, oddsFilterActive, oddsRange, search, selectedGame, sort]);
   const radarRows = useMemo(() => buildRadarRows(rows), [rows]);
   const pairs = useMemo(() => pairRows(rows, sort), [rows, sort]);
   const selected = rows.find((row) => key(row) === selectedKey) ?? null;
-  const activeFilters = [selectedGame, grade, market, bookFilter].filter((value) => value !== "all" && value !== "All").length + (search.trim() ? 1 : 0);
+  const activeFilters = [selectedGame, grade, market, bookFilter].filter((value) => value !== "all" && value !== "All").length + (search.trim() ? 1 : 0) + (oddsInputPresent ? 1 : 0);
 
   useEffect(() => {
     const url = new URL(window.location.href);
@@ -56,7 +79,8 @@ export function NflPlayerPropsProductDashboard({ snapshot, reviewMode = false, i
   const changeMarket = (value: string) => { setMarket(value); setSelectedKey(null); };
   const changeBookFilter = (value: string) => { setBookFilter(value); setSelectedKey(null); };
   const changeSearch = (value: string) => { setSearch(value); setSelectedKey(null); };
-  const clearFilters = () => { setSelectedGame("all"); setGrade("All"); setMarket("all"); setBookFilter("all"); setSearch(""); setSelectedKey(null); };
+  const setOddsPreset = (min: string, max: string) => { setOddsMinInput(min); setOddsMaxInput(max); setSelectedKey(null); };
+  const clearFilters = () => { setSelectedGame("all"); setGrade("All"); setMarket("all"); setBookFilter("all"); setSearch(""); setOddsMinInput(""); setOddsMaxInput(""); setSelectedKey(null); };
   return <div className="w-full pb-8" data-member-lifecycle-release={snapshot.lifecycleRelease} data-review-surface={reviewMode ? "nfl-player-props" : undefined}>
     {reviewMode ? <aside className="mb-5 border border-amber-400/40 bg-amber-400/[0.08] px-4 py-3 sm:px-5"><p className="text-[10px] font-black uppercase text-amber-300">Private founder review · Real board</p><p className="mt-1 max-w-4xl text-sm leading-6 text-amber-50/80">This view uses the current timestamped NFL model output and exact prices. Review mode does not publish, grade, lock, or track anything.</p></aside> : null}
     <NflSlateHeader snapshot={snapshot} games={games} selectedGame={selectedGame} onSelectGame={changeSelectedGame} reviewMode={reviewMode} />
@@ -74,7 +98,7 @@ export function NflPlayerPropsProductDashboard({ snapshot, reviewMode = false, i
         <FilterSelect label="Sort" value={sort} onChange={(value) => setSort(value as SortKey)} options={[{ value: "signal", label: "Signal first" }, { value: "player", label: "Player A–Z" }, { value: "market", label: "Market" }, { value: "start", label: "Start time" }, { value: "ev", label: "Highest EV" }, { value: "edge", label: "Highest model edge" }, { value: "probability", label: "Model probability" }, { value: "book", label: "Book" }, { value: "updated", label: "Last updated" }]} />
         <FilterSelect label="Sportsbook" value={bookFilter} onChange={changeBookFilter} options={["all", ...books]} />
         {activeFilters ? <button type="button" onClick={clearFilters} className="h-9 px-2 text-xs font-bold text-sky-300 hover:text-white">Clear {activeFilters}</button> : null}
-      </div></div>
+      </div><div className="mt-3 flex flex-col gap-3 rounded-md border border-gray-800 bg-black/20 p-3 lg:flex-row lg:items-end lg:justify-between"><div><p className="text-[9px] font-black uppercase tracking-wider text-violet-300">Current odds</p><p id="player-props-odds-filter-help" className="mt-1 text-[10px] text-gray-600">Filter the displayed prop prices.</p></div><div className="flex flex-wrap items-end gap-2"><div className="flex gap-1.5" role="group" aria-label="Player prop odds range presets"><button type="button" onClick={() => setOddsPreset("", "")} aria-pressed={!oddsInputPresent} className={`rounded-md border px-2.5 py-1.5 text-[9px] font-black uppercase tracking-wider ${!oddsInputPresent ? "border-violet-400/55 bg-violet-500/[0.18] text-white" : "border-gray-800 text-gray-500"}`}>Any odds</button><button type="button" onClick={() => setOddsPreset("-200", "+200")} aria-pressed={oddsMinInput === "-200" && oddsMaxInput === "+200"} className={`rounded-md border px-2.5 py-1.5 text-[9px] font-black uppercase tracking-wider ${oddsMinInput === "-200" && oddsMaxInput === "+200" ? "border-violet-400/55 bg-violet-500/[0.18] text-white" : "border-gray-800 text-gray-500"}`}>Common range</button><button type="button" onClick={() => setOddsPreset("+100", "")} aria-pressed={oddsMinInput === "+100" && !oddsMaxInput} className={`rounded-md border px-2.5 py-1.5 text-[9px] font-black uppercase tracking-wider ${oddsMinInput === "+100" && !oddsMaxInput ? "border-violet-400/55 bg-violet-500/[0.18] text-white" : "border-gray-800 text-gray-500"}`}>Plus money</button></div><OddsBoundInput label="Min" value={oddsMinInput} onChange={(value) => { setOddsMinInput(value); setSelectedKey(null); }} invalid={!minOddsValid || !oddsRangeOrdered} /><OddsBoundInput label="Max" value={oddsMaxInput} onChange={(value) => { setOddsMaxInput(value); setSelectedKey(null); }} invalid={!maxOddsValid || !oddsRangeOrdered} /></div><p id="player-props-odds-filter-status" role={oddsFilterError ? "alert" : "status"} className={`text-[10px] font-semibold lg:max-w-48 lg:text-right ${oddsFilterError ? "text-amber-300" : "text-gray-600"}`}>{oddsFilterError ?? (oddsFilterActive ? `${rows.length} current ${rows.length === 1 ? "price matches" : "prices match"}.` : "Use a preset or enter one or both bounds.")}</p></div></div>
     </section>
 
     <FullBoard pairs={pairs} rows={rows} selectedKey={selectedKey} onSelect={setSelectedKey} />
@@ -193,6 +217,10 @@ function LockBadge({ lockedAt }: { lockedAt: string }) { return <span className=
 function GradeBadge({ grade }: { grade: Row["grade"] }) { const colors = gradeColors(grade); return <span className="inline-flex w-fit rounded border px-2 py-1 text-[9px] font-black uppercase tracking-wider" style={{ borderColor: colors.border, background: colors.background, color: colors.text }}>{grade}</span>; }
 function Metric({ title, value, positive = false }: { title: string; value: string; positive?: boolean }) { return <span className="text-center"><span className="block text-[8px] font-bold uppercase text-gray-600">{title}</span><strong className={`mt-1 block text-xs ${positive ? "text-emerald-300" : "text-gray-200"}`}>{value}</strong></span>; }
 function FilterSelect({ label: title, value, onChange, options }: { label: string; value: string; onChange: (value: string) => void; options: ReadonlyArray<string | { value: string; label: string }> }) { return <label className="flex h-9 items-center gap-2 rounded-md border border-gray-700 bg-gray-950 px-3"><span className="text-[9px] font-black uppercase text-gray-600">{title}</span><select value={value} onChange={(event) => onChange(event.target.value)} className="min-w-0 bg-transparent text-xs font-bold text-gray-200 outline-none">{options.map((option) => { const item = typeof option === "string" ? { value: option, label: option === "all" ? "All" : option } : option; return <option key={item.value} value={item.value}>{item.label}</option>; })}</select></label>; }
+
+function OddsBoundInput({ label: title, value, onChange, invalid }: { label: string; value: string; onChange: (value: string) => void; invalid: boolean }) {
+  return <label className="grid gap-1 text-[8px] font-black uppercase tracking-wider text-gray-600">{title}<input type="text" inputMode="numeric" value={value} onChange={(event) => onChange(event.target.value)} aria-invalid={invalid} aria-describedby="player-props-odds-filter-help player-props-odds-filter-status" placeholder="Any" className="w-20 rounded-md border border-gray-700 bg-gray-950 px-2.5 py-1.5 font-mono text-[11px] text-white outline-none placeholder:text-gray-700 focus:border-violet-400" /></label>;
+}
 function NflTeamBadge({ team, size = "normal" }: { team: string; size?: "small" | "normal" }) {
   const dimension = size === "small" ? "h-7 w-7 text-[8px]" : "h-10 w-10 text-[10px]";
   return (
