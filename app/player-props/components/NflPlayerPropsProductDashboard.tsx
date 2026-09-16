@@ -6,7 +6,11 @@ import type { NflPlayerPropsForecastTrend } from "@/lib/services/football/nflPla
 import { PlayerPropReaderDialog } from "./PlayerPropReaderDialog";
 import {
   nflPlayerPropsAvailabilityAgeLabel,
+  nflPlayerPropsOverUnderMarketKey,
+  nflPlayerPropsTouchdownPlayerKey,
   resolveNflPlayerPropsPrediction,
+  selectNflPlayerPropsOverForecasts,
+  selectNflPlayerPropsTouchdownScorers,
   type NflPlayerPropsPrediction,
 } from "../lib/nflPlayerPropsPresentation";
 import { getPropGradeColor, type PropGrade } from "@/lib/mlb/props/propGrades";
@@ -64,8 +68,10 @@ export function NflPlayerPropsProductDashboard({ snapshot, reviewMode = false, i
     && (!oddsFilterActive || americanOddsInRange(row.americanPrice, oddsRange))
     && (!search.trim() || `${row.playerName} ${row.team} ${row.opponent} ${row.market} ${row.sportsbook}`.toLowerCase().includes(search.trim().toLowerCase()))
   )).sort(sortRows(sort)), [allRows, bookFilter, grade, market, oddsFilterActive, oddsRange, search, selectedGame, sort]);
-  const radarRows = useMemo(() => buildRadarRows(rows), [rows]);
-  const pairs = useMemo(() => pairRows(rows, sort), [rows, sort]);
+  const touchdownScorers = useMemo(() => selectNflPlayerPropsTouchdownScorers(allRows), [allRows]);
+  const overForecasts = useMemo(() => selectNflPlayerPropsOverForecasts(allRows), [allRows]);
+  const radarRows = useMemo(() => buildRadarRows(rows, touchdownScorers, overForecasts), [rows, touchdownScorers, overForecasts]);
+  const pairs = useMemo(() => pairRows(rows, sort, touchdownScorers, overForecasts), [rows, sort, touchdownScorers, overForecasts]);
   const selected = rows.find((row) => key(row) === selectedKey) ?? null;
   const activeFilters = [selectedGame, grade, market, bookFilter].filter((value) => value !== "all" && value !== "All").length + (search.trim() ? 1 : 0) + (oddsInputPresent ? 1 : 0);
 
@@ -247,7 +253,7 @@ function NflTeamBadge({ team, size = "normal" }: { team: string; size?: "small" 
 }
 function EmptyBoard({ reviewMode, dataUnavailable }: { reviewMode: boolean; dataUnavailable: boolean }) { return <section className="mx-auto max-w-4xl py-10 sm:py-20"><div className="border-y border-gray-800 py-10 sm:py-14"><div className="flex items-center gap-3 text-xs font-bold text-emerald-300"><span className="h-2 w-2 rounded-full bg-emerald-400" />NFL Player Props{reviewMode ? " · Private review" : ""}</div><h1 className="mt-5 max-w-2xl text-4xl font-black leading-tight text-white sm:text-5xl">{dataUnavailable ? "Player Props data is temporarily unavailable." : "Today’s prop board is loading."}</h1><p className="mt-4 max-w-2xl text-base leading-7 text-gray-400">{dataUnavailable ? "The data service did not respond in time. Please refresh in a moment; no picks or prices were changed." : "The latest complete exact-price snapshot will appear here as soon as sportsbook prices are ready."}</p></div></section>; }
 
-function pairRows(rows: Row[], sort: SortKey): MarketPair[] {
+function pairRows(rows: Row[], sort: SortKey, touchdownScorers: ReadonlySet<string>, overForecasts: ReadonlySet<string>): MarketPair[] {
   const groups = new Map<string, Row[]>();
   for (const row of rows) {
     const pairKey = [row.gameId, row.playerName, row.market, row.line].join("|");
@@ -260,12 +266,19 @@ function pairRows(rows: Row[], sort: SortKey): MarketPair[] {
     over: marketRows.find((row) => row.side === "over") ?? null,
     under: marketRows.find((row) => row.side === "under") ?? null,
     yes: marketRows.find((row) => row.side === "yes") ?? null,
-    prediction: resolveNflPlayerPropsPrediction(marketRows),
+    prediction: resolveNflPlayerPropsPrediction(marketRows, {
+      touchdownPositive: marketRows[0]?.market === "anytime_td"
+        ? touchdownScorers.has(nflPlayerPropsTouchdownPlayerKey(marketRows[0]))
+        : undefined,
+      overPositive: marketRows[0]?.market !== "anytime_td"
+        ? overForecasts.has(nflPlayerPropsOverUnderMarketKey(marketRows[0]!))
+        : undefined,
+    }),
   })).sort((a, b) => sortRows(sort)(a.primary, b.primary) || sortRows("signal")(a.primary, b.primary));
 }
 function deriveGames(rows: Row[]): GameSummary[] { const map = new Map<string, GameSummary>(); for (const row of rows) { const game = map.get(row.gameId) ?? { gameId: row.gameId, teams: [], opponent: row.opponent || null, scheduledStart: row.scheduledStart || null, rows: 0 }; game.teams = unique([...game.teams, row.team]); if (row.opponent && !game.teams.includes(row.opponent) && game.teams.length < 2) game.teams.push(row.opponent); game.rows += 1; map.set(row.gameId, game); } return [...map.values()].sort((a, b) => Date.parse(a.scheduledStart ?? "") - Date.parse(b.scheduledStart ?? "")); }
-function buildRadarRows(rows: Row[]): Row[] {
-  const predictions = pairRows(rows, "signal")
+function buildRadarRows(rows: Row[], touchdownScorers: ReadonlySet<string>, overForecasts: ReadonlySet<string>): Row[] {
+  const predictions = pairRows(rows, "signal", touchdownScorers, overForecasts)
     .flatMap((pair) => pair.prediction?.quotedSide ? [pair.rows.find((row) => row.side === pair.prediction!.quotedSide) ?? pair.prediction.row] : [])
     .filter((row) => row.grade !== "No Play")
     .sort(sortRows("signal"));

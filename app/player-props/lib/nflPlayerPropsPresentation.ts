@@ -12,16 +12,24 @@ export type NflPlayerPropsPrediction<T> = {
   quotedSide: "over" | "under" | "yes" | null;
 };
 
+export {
+  nflPlayerPropsOverUnderMarketKey,
+  nflPlayerPropsTouchdownPlayerKey,
+  selectNflPlayerPropsOverForecasts,
+  selectNflPlayerPropsTouchdownScorers,
+} from "@/lib/services/football/nflPlayerPropsPrediction";
+
 /**
  * Resolves the board's forecast from the calibrated, market-aware probability.
  * Grade and expected value deliberately do not choose the displayed prediction.
  */
 export function resolveNflPlayerPropsPrediction<
   T extends { side: "over" | "under" | "yes"; finalProbability: number },
->(rows: readonly T[]): NflPlayerPropsPrediction<T> | null {
+>(rows: readonly T[], options?: { touchdownPositive?: boolean; overPositive?: boolean }): NflPlayerPropsPrediction<T> | null {
   const yes = rows.find((row) => row.side === "yes");
   if (yes) {
-    return yes.finalProbability >= 0.5
+    const touchdownPositive = options?.touchdownPositive ?? yes.finalProbability >= 0.5;
+    return touchdownPositive
       ? { outcome: "yes", probability: yes.finalProbability, row: yes, quotedSide: "yes" }
       : { outcome: "no", probability: 1 - yes.finalProbability, row: yes, quotedSide: null };
   }
@@ -32,7 +40,7 @@ export function resolveNflPlayerPropsPrediction<
 
   const overProbability = over?.finalProbability ?? 1 - under!.finalProbability;
   const underProbability = under?.finalProbability ?? 1 - over!.finalProbability;
-  if (overProbability >= underProbability) {
+  if (options?.overPositive ?? overProbability >= underProbability) {
     return {
       outcome: "over",
       probability: overProbability,
@@ -47,6 +55,7 @@ export function resolveNflPlayerPropsPrediction<
     quotedSide: under ? "under" : null,
   };
 }
+
 
 export function nflPlayerPropsAvailabilityAgeLabel(
   availability: NflPlayerPropsAvailabilityTimestamps,
