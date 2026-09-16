@@ -28,6 +28,7 @@ import {
 } from "./PlayerPropsProductUi";
 
 type GradeFilter = "All" | NflPlayerPropsMemberGrade;
+type PredictionFilter = "all" | "yes" | "no" | "over" | "under";
 type SortKey = "signal" | "player" | "market" | "start" | "ev" | "edge" | "probability" | "book" | "updated";
 type GameSummary = { gameId: string; teams: string[]; opponent: string | null; scheduledStart: string | null; rows: number };
 type MarketPair = { key: string; rows: Row[]; primary: Row; over: Row | null; under: Row | null; yes: Row | null; prediction: NflPlayerPropsPrediction<Row> | null };
@@ -36,6 +37,7 @@ export function NflPlayerPropsProductDashboard({ snapshot, reviewMode = false, i
   const [selectedGame, setSelectedGame] = useState("all");
   const [grade, setGrade] = useState<GradeFilter>("All");
   const [market, setMarket] = useState("all");
+  const [predictionFilter, setPredictionFilter] = useState<PredictionFilter>("all");
   const [bookFilter, setBookFilter] = useState("all");
   const [search, setSearch] = useState("");
   const [oddsMinInput, setOddsMinInput] = useState("");
@@ -60,7 +62,7 @@ export function NflPlayerPropsProductDashboard({ snapshot, reviewMode = false, i
     : !oddsRangeOrdered
       ? "Minimum odds cannot be greater than maximum odds."
       : null;
-  const rows = useMemo(() => allRows.filter((row) => (
+  const filteredRows = useMemo(() => allRows.filter((row) => (
     (selectedGame === "all" || row.gameId === selectedGame)
     && (grade === "All" || row.grade === grade)
     && (market === "all" || row.market === market)
@@ -70,10 +72,14 @@ export function NflPlayerPropsProductDashboard({ snapshot, reviewMode = false, i
   )).sort(sortRows(sort)), [allRows, bookFilter, grade, market, oddsFilterActive, oddsRange, search, selectedGame, sort]);
   const touchdownScorers = useMemo(() => selectNflPlayerPropsTouchdownScorers(allRows), [allRows]);
   const overForecasts = useMemo(() => selectNflPlayerPropsOverForecasts(allRows), [allRows]);
+  const allPairs = useMemo(() => pairRows(filteredRows, sort, touchdownScorers, overForecasts), [filteredRows, sort, touchdownScorers, overForecasts]);
+  const pairs = useMemo(() => predictionFilter === "all"
+    ? allPairs
+    : allPairs.filter((pair) => pair.prediction?.outcome === predictionFilter), [allPairs, predictionFilter]);
+  const rows = useMemo(() => predictionFilter === "all" ? filteredRows : pairs.flatMap((pair) => pair.rows), [filteredRows, pairs, predictionFilter]);
   const radarRows = useMemo(() => buildRadarRows(rows, touchdownScorers, overForecasts), [rows, touchdownScorers, overForecasts]);
-  const pairs = useMemo(() => pairRows(rows, sort, touchdownScorers, overForecasts), [rows, sort, touchdownScorers, overForecasts]);
   const selected = rows.find((row) => key(row) === selectedKey) ?? null;
-  const activeFilters = [selectedGame, grade, market, bookFilter].filter((value) => value !== "all" && value !== "All").length + (search.trim() ? 1 : 0) + (oddsInputPresent ? 1 : 0);
+  const activeFilters = [selectedGame, grade, market, predictionFilter, bookFilter].filter((value) => value !== "all" && value !== "All").length + (search.trim() ? 1 : 0) + (oddsInputPresent ? 1 : 0);
 
   useEffect(() => {
     const url = new URL(window.location.href);
@@ -87,10 +93,11 @@ export function NflPlayerPropsProductDashboard({ snapshot, reviewMode = false, i
   const changeSelectedGame = (value: string) => { setSelectedGame(value); setSelectedKey(null); };
   const changeGrade = (value: GradeFilter) => { setGrade(value); setSelectedKey(null); };
   const changeMarket = (value: string) => { setMarket(value); setSelectedKey(null); };
+  const changePredictionFilter = (value: string) => { setPredictionFilter(value as PredictionFilter); setSelectedKey(null); };
   const changeBookFilter = (value: string) => { setBookFilter(value); setSelectedKey(null); };
   const changeSearch = (value: string) => { setSearch(value); setSelectedKey(null); };
   const setOddsPreset = (min: string, max: string) => { setOddsMinInput(min); setOddsMaxInput(max); setSelectedKey(null); };
-  const clearFilters = () => { setSelectedGame("all"); setGrade("All"); setMarket("all"); setBookFilter("all"); setSearch(""); setOddsMinInput(""); setOddsMaxInput(""); setSelectedKey(null); };
+  const clearFilters = () => { setSelectedGame("all"); setGrade("All"); setMarket("all"); setPredictionFilter("all"); setBookFilter("all"); setSearch(""); setOddsMinInput(""); setOddsMaxInput(""); setSelectedKey(null); };
   return <div className="w-full pb-8" data-member-lifecycle-release={snapshot.lifecycleRelease} data-review-surface={reviewMode ? "nfl-player-props" : undefined}>
     {reviewMode ? <aside className="mb-5 border border-amber-400/40 bg-amber-400/[0.08] px-4 py-3 sm:px-5"><p className="text-[10px] font-black uppercase text-amber-300">Private founder review · Real board</p><p className="mt-1 max-w-4xl text-sm leading-6 text-amber-50/80">This view uses the current timestamped NFL model output and exact prices. Review mode does not publish, grade, lock, or track anything.</p></aside> : null}
     <NflSlateHeader snapshot={snapshot} games={games} selectedGame={selectedGame} onSelectGame={changeSelectedGame} reviewMode={reviewMode} />
@@ -105,6 +112,7 @@ export function NflPlayerPropsProductDashboard({ snapshot, reviewMode = false, i
       <div className="mt-3 flex gap-2 overflow-x-auto pb-1" aria-label="NFL prop markets"><PlayerPropsFilterButton label="All markets" active={market === "all"} onClick={() => changeMarket("all")} />{markets.map((value) => <PlayerPropsFilterButton key={value} label={label(value)} active={market === value} onClick={() => changeMarket(value)} />)}</div>
       <div data-product-zone="board-controls" className="mt-3 border-t border-gray-800 pt-3"><div className="flex flex-wrap items-center gap-2">
         <FilterSelect label="Bet grade" value={grade} onChange={(value) => changeGrade(value as GradeFilter)} options={["All", "Best Angle", "Lean", "Watchlist", "No Play"]} />
+        <FilterSelect label="Prediction" value={predictionFilter} onChange={changePredictionFilter} options={[{ value: "all", label: "All" }, { value: "yes", label: "TD scorer" }, { value: "no", label: "No TD" }, { value: "over", label: "Over" }, { value: "under", label: "Under" }]} />
         <FilterSelect label="Sort" value={sort} onChange={(value) => setSort(value as SortKey)} options={[{ value: "signal", label: "Signal first" }, { value: "player", label: "Player A–Z" }, { value: "market", label: "Market" }, { value: "start", label: "Start time" }, { value: "ev", label: "Highest EV" }, { value: "edge", label: "Highest model edge" }, { value: "probability", label: "Model probability" }, { value: "book", label: "Book" }, { value: "updated", label: "Last updated" }]} />
         <FilterSelect label="Sportsbook" value={bookFilter} onChange={changeBookFilter} options={["all", ...books]} />
         {activeFilters ? <button type="button" onClick={clearFilters} className="h-9 px-2 text-xs font-bold text-sky-300 hover:text-white">Clear {activeFilters}</button> : null}
