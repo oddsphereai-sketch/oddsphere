@@ -480,9 +480,7 @@ export default function LabTrackingPage({
   const yesterdayRows = useMemo(() => visibleBuckets(data?.yesterday?.bySportMarket ?? []), [data]);
   const weekRows      = useMemo(() => visibleBuckets(data?.thisWeek?.bySportMarket ?? []),  [data]);
   const monthRows     = useMemo(() => visibleBuckets(data?.thisMonth?.bySportMarket ?? []), [data]);
-  // Lead with the complete record. Short windows remain one tap away, but a
-  // small daily/weekly slice must not look like the product's full history.
-  const [trackWindow, setTrackWindow] = useState<"weekly" | "monthly" | "lifetime">("lifetime");
+  const [trackWindow, setTrackWindow] = useState<"weekly" | "monthly" | "lifetime">("weekly");
   // Lifetime Tracking: ONE record per (sport, market). Live automated
   // data takes precedence when decided > 0; otherwise the stored
   // baseline number stands in. Non-MLB sports currently always fall
@@ -776,17 +774,8 @@ function lifetimeSourceLabel(record: LifetimeRecord): string {
 }
 
 function LifetimeTrackingBoard({ records }: { records: LifetimeRecord[] }) {
-  const cfbPredictionCount = records
-    .filter((record) => record.sport === "cfb")
-    .reduce((total, record) => total + record.display_total, 0);
   return (
     <>
-      {cfbPredictionCount > 0 ? (
-        <div className="mb-3 rounded-xl border border-amber-300/20 bg-amber-300/[0.045] px-3.5 py-3 text-[11.5px] leading-relaxed text-amber-100/80">
-          <span className="font-black text-amber-100">CFB full tracked record · {cfbPredictionCount.toLocaleString()} predictions</span>
-          <span className="text-amber-100/60"> · Moneyline, Spread, and Over / Under · includes sided No Plays</span>
-        </div>
-      ) : null}
       <CategoryTrackingBoard
         rows={records.map((record) => ({
           sport: record.sport,
@@ -860,9 +849,6 @@ function YesterdayBoard({ date, rows, overall }: { date: string | null; rows: Sp
   const groups = groupBySport(rows);
   return (
     <Card>
-      <p className="mb-3 text-[11px] leading-relaxed text-gray-500">
-        Daily slice only. The complete all-prediction record is shown in Lifetime tracking below.
-      </p>
       <div className="space-y-3">
         {groups.map((group) => {
           const theme = sportTheme(group.sport);

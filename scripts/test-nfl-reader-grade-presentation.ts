@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import path from "node:path";
 import { nflSelectedBetGrade } from "../app/lab/lib/nflReaderPresentation";
 
 assert.deepEqual(
@@ -20,12 +19,9 @@ assert.deepEqual(
   { label: "No Play", className: "text-gray-400" },
 );
 
-const boardSource = readFileSync(
-  path.resolve("app/dev/experience-preview/ActualDailyEdgePreview.tsx"),
-  "utf8",
-);
-assert.match(boardSource, /\{games\.length\} complete winner forecasts/);
-assert.match(boardSource, /Prediction · \{footballOutcome\.winner\}/);
-assert.match(boardSource, /No Play.*exact-price Bet grade/);
+const boardSource = readFileSync("app/dev/experience-preview/ActualDailyEdgePreview.tsx", "utf8");
+assert.doesNotMatch(boardSource, /complete winner forecasts/);
+assert.doesNotMatch(boardSource, /Every game has a tracked prediction/);
+assert.doesNotMatch(boardSource, /Prediction · \{footballOutcome\.winner\}/);
 
 console.log("NFL reader selected-market Bet grade presentation: Lean, Watchlist, and No Play passed");
