@@ -24,13 +24,26 @@ import {
 import { readNflPlayerPropsSnapshot, writeNflPlayerPropsSnapshot } from "./nflPlayerPropsSnapshotStore";
 import { updateNflPlayerPropsClosingPrices, writeLockedNflPlayerPropsTracking } from "./nflPlayerPropsTrackingStore";
 import {
+  NFL_PLAYER_PROPS_CURRENT_SEASON_GAMES_PAGE_MAXIMUM,
+  NFL_PLAYER_PROPS_CURRENT_SEASON_STATS_PAGE_MAXIMUM,
+  readNflPlayerPropsCurrentSeasonState,
+  refreshNflPlayerPropsCurrentSeasonState,
+  writeNflPlayerPropsCurrentSeasonState,
+} from "./nflPlayerPropsCurrentSeasonState";
+import {
   NFL_PLAYER_PROPS_SETTLEMENT_MAX_GAMES_PER_CYCLE,
   NFL_PLAYER_PROPS_SETTLEMENT_RELEASE,
   settleNflPlayerPropsRecords,
 } from "./nflPlayerPropsSettlement";
+import {
+  nflPlayerPropsOverUnderMarketKey,
+  nflPlayerPropsTouchdownPlayerKey,
+  selectNflPlayerPropsOverForecasts,
+  selectNflPlayerPropsTouchdownScorers,
+} from "./nflPlayerPropsPrediction";
 
 export const NFL_PLAYER_PROPS_WRITER_RELEASE =
-  "nfl_player_props_writer_2026_09_16_r21_injury_pagination" as const;
+  "nfl_player_props_writer_2026_09_16_r22_current_season_inputs" as const;
 export const NFL_PLAYER_PROPS_PRODUCTION_INCLUDE_OPENINGS = true as const;
 export const NFL_PLAYER_PROPS_PRODUCTION_COLLECTION_CALL_MAXIMUM = (
   1
@@ -40,8 +53,10 @@ export const NFL_PLAYER_PROPS_PRODUCTION_COLLECTION_CALL_MAXIMUM = (
 ) as 51;
 export const NFL_PLAYER_PROPS_PRODUCTION_INCREMENTAL_CALL_MAXIMUM = (
   NFL_PLAYER_PROPS_PRODUCTION_COLLECTION_CALL_MAXIMUM
+  + NFL_PLAYER_PROPS_CURRENT_SEASON_GAMES_PAGE_MAXIMUM
+  + NFL_PLAYER_PROPS_CURRENT_SEASON_STATS_PAGE_MAXIMUM
   + NFL_PLAYER_PROPS_SETTLEMENT_MAX_GAMES_PER_CYCLE
-) as 69;
+) as 93;
 
 export type NflPlayerPropsForecastTelemetry = {
   forecastPolicy: "target_excluded_single_posterior_exact_price_downstream";
@@ -55,6 +70,8 @@ export type NflPlayerPropsForecastTelemetry = {
   unlockedPassingReleaseMismatches: number;
   lockedRows: number;
   actionableRows: number;
+  predictionSidesByMarket: Record<string, { over: number; under: number; yes: number; no: number }>;
+  modalPredictionSidesByMarket: Record<string, { over: number; under: number; yes: number; no: number }>;
 };
 
 export type NflPlayerPropsWriterResult = {
@@ -66,6 +83,9 @@ export type NflPlayerPropsWriterResult = {
   exactOffers: number;
   featureRows: number;
   scoreEligibleFeatures: number;
+  currentSeasonStateApiCalls: number;
+  currentSeasonGamesAdded: number;
+  currentSeasonStatsAdded: number;
   memberRows: number;
   counts: Record<string, number>;
   heldDiagnostics: number;
@@ -90,6 +110,8 @@ export function summarizeNflPlayerPropsForecastTelemetry(
     || row.calibrationRelease !== NFL_PLAYER_PROPS_CALIBRATION_RELEASE
     || row.decisionRelease !== NFL_PLAYER_PROPS_DECISION_RELEASE
   )).length;
+  const predictionSidesByMarket = summarizePredictionSides(rows, true);
+  const modalPredictionSidesByMarket = summarizePredictionSides(rows, false);
   return {
     forecastPolicy: "target_excluded_single_posterior_exact_price_downstream",
     lastKnownGoodPolicy: "write_only_after_complete_cycle_and_reconcile_locked_rows",
@@ -105,7 +127,43 @@ export function summarizeNflPlayerPropsForecastTelemetry(
     unlockedPassingReleaseMismatches,
     lockedRows: rows.filter((row) => row.state === "locked").length,
     actionableRows: rows.filter((row) => row.grade === "Best Angle" || row.grade === "Lean").length,
+    predictionSidesByMarket,
+    modalPredictionSidesByMarket,
   };
+}
+
+function summarizePredictionSides(
+  rows: NflPlayerPropsProductionSnapshot["memberDecisions"],
+  ranked: boolean,
+): Record<string, { over: number; under: number; yes: number; no: number }> {
+  const result: Record<string, { over: number; under: number; yes: number; no: number }> = {};
+  const groups = new Map<string, typeof rows>();
+  const touchdownScorers = selectNflPlayerPropsTouchdownScorers(rows);
+  const overForecasts = selectNflPlayerPropsOverForecasts(rows);
+  for (const row of rows) {
+    const groupKey = [row.gameId, row.playerName, row.market, row.line].join("|");
+    groups.set(groupKey, [...(groups.get(groupKey) ?? []), row]);
+  }
+  for (const marketRows of groups.values()) {
+    const first = marketRows[0]!;
+    const counts = result[first.market] ?? { over: 0, under: 0, yes: 0, no: 0 };
+    if (first.market === "anytime_td") {
+      const outcome = (ranked
+        ? touchdownScorers.has(nflPlayerPropsTouchdownPlayerKey(first))
+        : first.finalProbability >= 0.5) ? "yes" : "no";
+      counts[outcome] += 1;
+    } else {
+      const over = marketRows.find((row) => row.side === "over");
+      const under = marketRows.find((row) => row.side === "under");
+      const overProbability = over?.finalProbability ?? (under ? 1 - under.finalProbability : 0);
+      const overSelected = ranked
+        ? overForecasts.has(nflPlayerPropsOverUnderMarketKey(first))
+        : overProbability >= 0.5;
+      counts[overSelected ? "over" : "under"] += 1;
+    }
+    result[first.market] = counts;
+  }
+  return result;
 }
 
 export async function runNflPlayerPropsProductionWriter(args: {
@@ -119,6 +177,15 @@ export async function runNflPlayerPropsProductionWriter(args: {
   fetchImpl?: typeof fetch;
 }): Promise<NflPlayerPropsWriterResult> {
   verifyNflPlayerPropsRuntimeParity();
+  const priorCurrentSeasonState = await readNflPlayerPropsCurrentSeasonState({ client: args.client, season: args.season });
+  const currentSeason = await refreshNflPlayerPropsCurrentSeasonState({
+    season: args.season,
+    week: args.week,
+    now: args.now,
+    apiKey: args.ballDontLieApiKey,
+    previous: priorCurrentSeasonState,
+    fetchImpl: args.fetchImpl,
+  });
   const collection = await collectNflPlayerPropsObservations({
     season: args.season,
     week: args.week,
@@ -143,7 +210,11 @@ export async function runNflPlayerPropsProductionWriter(args: {
     )),
   };
   const offers = buildNflPlayerPropsExactBoard({ snapshots: [eligibleSnapshot], evaluatedAt: args.now });
-  const features = buildNflPlayerPropsRuntimeFeatureRows({ snapshot: eligibleSnapshot, context });
+  const features = buildNflPlayerPropsRuntimeFeatureRows({
+    snapshot: eligibleSnapshot,
+    context,
+    currentSeasonState: currentSeason.state,
+  });
   const nextBoard = buildNflPlayerPropsRuntimeBoard({ offers, features, evaluatedAt: args.now });
   const previous = await readNflPlayerPropsSnapshot({ client: args.client, season: args.season, week: args.week });
   const snapshot = reconcileNflPlayerPropsProductionSnapshot({
@@ -155,6 +226,7 @@ export async function runNflPlayerPropsProductionWriter(args: {
   });
   let closingPricesUpdated = 0;
   if (args.apply) {
+    await writeNflPlayerPropsCurrentSeasonState({ client: args.client, state: currentSeason.state });
     await writeNflPlayerPropsSnapshot({ client: args.client, snapshot, source: NFL_PLAYER_PROPS_WRITER_RELEASE });
     await writeLockedNflPlayerPropsTracking({ client: args.client, snapshot });
     closingPricesUpdated = await updateNflPlayerPropsClosingPrices({ client: args.client, production: snapshot, observations: eligibleSnapshot });
@@ -169,7 +241,7 @@ export async function runNflPlayerPropsProductionWriter(args: {
   if (providerRequests > NFL_PLAYER_PROPS_PRODUCTION_COLLECTION_CALL_MAXIMUM) {
     throw new Error(`NFL player props collection exceeded its ${NFL_PLAYER_PROPS_PRODUCTION_COLLECTION_CALL_MAXIMUM}-call production budget.`);
   }
-  const apiCallsMaximum = providerRequests + context.requestBudget.totalMaximum + settlement.apiCalls;
+  const apiCallsMaximum = providerRequests + context.requestBudget.totalMaximum + currentSeason.apiCalls + settlement.apiCalls;
   if (apiCallsMaximum > NFL_PLAYER_PROPS_PRODUCTION_INCREMENTAL_CALL_MAXIMUM) {
     throw new Error(`NFL player props cycle exceeded its ${NFL_PLAYER_PROPS_PRODUCTION_INCREMENTAL_CALL_MAXIMUM}-call incremental budget.`);
   }
@@ -182,6 +254,9 @@ export async function runNflPlayerPropsProductionWriter(args: {
     exactOffers: offers.length,
     featureRows: features.length,
     scoreEligibleFeatures: features.filter((row) => row.scoreEligible).length,
+    currentSeasonStateApiCalls: currentSeason.apiCalls,
+    currentSeasonGamesAdded: currentSeason.gamesAdded,
+    currentSeasonStatsAdded: currentSeason.statsAdded,
     memberRows: snapshot.memberDecisions.length,
     counts: snapshot.board.counts,
     heldDiagnostics: snapshot.board.counts.Held,

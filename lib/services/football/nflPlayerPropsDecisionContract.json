@@ -1,12 +1,18 @@
 {
-  "decisionRelease": "nfl_player_props_decision_2026_09_16_r11_injury_pagination",
-  "modelRelease": "nfl_player_props_distribution_model_2026_09_16_r8_injury_pagination",
-  "calibrationRelease": "nfl_player_props_distribution_calibration_2026_09_16_r8_injury_pagination",
+  "decisionRelease": "nfl_player_props_decision_2026_09_16_r12_ranked_predictions",
+  "modelRelease": "nfl_player_props_distribution_model_2026_09_16_r9_current_season_inputs",
+  "calibrationRelease": "nfl_player_props_distribution_calibration_2026_09_16_r9_ranked_predictions",
   "touchdownModelRelease": "nfl_player_props_anytime_td_model_2026_08_25_r3_shared_context",
   "touchdownCalibrationRelease": "nfl_player_props_anytime_td_calibration_2026_08_25_r3_shared_context",
   "marketBoardRelease": "nfl_player_props_exact_market_board_2026_09_01_r2_cross_line_opening",
   "mode": "production_owner_approved_forward_monitoring",
   "noQuotas": true,
+  "predictionSetPolicy": {
+    "scope": "displayed_prediction_only",
+    "overUnder": "ranked_expected_prevalence_by_market",
+    "touchdown": "ranked_expected_distinct_scorers_by_team",
+    "changesProbabilitiesPricesGradesOrActionability": false
+  },
   "lockLeadMinutes": 60,
   "maximumQuoteAgeHours": 6,
   "maximumRawMarketDivergence": 0.48,

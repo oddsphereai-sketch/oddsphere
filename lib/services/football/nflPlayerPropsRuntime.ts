@@ -13,6 +13,10 @@ import playerStates3Json from "./modelArtifacts/nflPlayerPropsRuntimePlayers3.js
 import touchdownJson from "./modelArtifacts/nflPlayerPropsRuntimeTouchdown.json";
 import type { NflPlayerPropMarket, NflPlayerPropsObservationSnapshot } from "./nflPlayerPropsContract";
 import type { NflPlayerPropsInferenceContext } from "./nflPlayerPropsInferenceContext";
+import type {
+  NflPlayerPropsCurrentSeasonState,
+  NflPlayerPropsCurrentSeasonStat,
+} from "./nflPlayerPropsCurrentSeasonState";
 import type { NflPlayerPropsExactOffer } from "./nflPlayerPropsMarketBoard";
 import {
   buildNflPlayerPropsMarketEvidenceCapture,
@@ -23,15 +27,15 @@ import {
 export const NFL_PLAYER_PROPS_PORTABLE_ARTIFACT_RELEASE =
   "nfl_player_props_runtime_2026_09_01_r4_cross_market_movement" as const;
 export const NFL_PLAYER_PROPS_RUNTIME_RELEASE =
-  "nfl_player_props_runtime_2026_09_16_r12_injury_pagination" as const;
+  "nfl_player_props_runtime_2026_09_16_r13_current_season_inputs" as const;
 export const NFL_PLAYER_PROPS_BOARD_RELEASE =
-  "nfl_player_props_board_2026_09_16_r15_injury_pagination" as const;
+  "nfl_player_props_board_2026_09_16_r16_ranked_predictions" as const;
 export const NFL_PLAYER_PROPS_DECISION_RELEASE =
-  "nfl_player_props_decision_2026_09_16_r11_injury_pagination" as const;
+  "nfl_player_props_decision_2026_09_16_r12_ranked_predictions" as const;
 export const NFL_PLAYER_PROPS_MODEL_RELEASE =
-  "nfl_player_props_distribution_model_2026_09_16_r8_injury_pagination" as const;
+  "nfl_player_props_distribution_model_2026_09_16_r9_current_season_inputs" as const;
 export const NFL_PLAYER_PROPS_CALIBRATION_RELEASE =
-  "nfl_player_props_distribution_calibration_2026_09_16_r8_injury_pagination" as const;
+  "nfl_player_props_distribution_calibration_2026_09_16_r9_ranked_predictions" as const;
 export const NFL_PLAYER_PROPS_PASSING_MARKET_RELEASE =
   "nfl_player_props_market_residual_calibration_2026_09_03_r8_single_application" as const;
 export const NFL_PLAYER_PROPS_MARKET_COHERENT_PROJECTION_RELEASE =
@@ -287,18 +291,25 @@ export function nflPlayerPropsExpectedValue(probability: number, americanPrice: 
 export function buildNflPlayerPropsRuntimeFeatureRows(args: {
   snapshot: NflPlayerPropsObservationSnapshot;
   context: NflPlayerPropsInferenceContext;
+  currentSeasonState?: NflPlayerPropsCurrentSeasonState | null;
 }): NflPlayerPropsRuntimeFeatureRow[] {
   if (args.context.providerSnapshotGeneratedAt !== args.snapshot.generatedAt) {
     throw new Error("NFL props runtime observation/context identity mismatch.");
   }
-  const candidates = new Map<string, { gameId: string; playerName: string; playerTeam: string | null }>();
+  const candidates = new Map<string, { gameId: string; playerName: string; playerTeam: string | null; providerPlayerId: string | null }>();
   for (const row of args.snapshot.observations) {
     const ordinary = artifact.markets[row.market] && row.offerType === "over_under";
     const touchdown = row.market === "anytime_td" && row.offerType === "milestone" && row.line === 0.5;
     if (!row.isOpening && row.canonicalGameId && row.playerName && (ordinary || touchdown)) {
-      candidates.set(`${row.canonicalGameId}|${normalizeName(row.playerName)}`, { gameId: row.canonicalGameId, playerName: row.playerName, playerTeam: row.playerTeam });
+      candidates.set(`${row.canonicalGameId}|${normalizeName(row.playerName)}`, {
+        gameId: row.canonicalGameId,
+        playerName: row.playerName,
+        playerTeam: row.playerTeam,
+        providerPlayerId: row.providerPlayerId,
+      });
     }
   }
+  const currentSeason = buildCurrentSeasonFeatureIndex(args.currentSeasonState);
   const contextByGame = new Map(args.context.games.map((game) => [game.canonicalGameId, game]));
   return [...candidates.values()].map((candidate) => {
     const game = contextByGame.get(candidate.gameId);
@@ -322,6 +333,12 @@ export function buildNflPlayerPropsRuntimeFeatureRows(args: {
     const features: Record<string, number | null> = {};
     for (const name of new Set([...artifact.featureNames, ...artifact.touchdown.featureNames])) features[name] = null;
     mergeNumeric(features, playerState); mergeNumeric(features, artifact.teamStates[team]); mergeNumeric(features, artifact.opponentStates[opponent]);
+    applyNflPlayerPropsCurrentSeasonFeatures({
+      features,
+      playerStats: currentSeason.player(candidate.playerName, candidate.playerTeam, candidate.providerPlayerId ?? roster?.playerId ?? null),
+      teamGames: currentSeason.team(team),
+      opponentAllowedGames: currentSeason.opponentAllowed(opponent),
+    });
     features.is_home = Number(team === home);
     for (const position of ["qb", "rb", "fb", "wr", "te"]) features[`position_${position}`] = Number(roster?.position?.toLowerCase() === position);
     features.team_implied_touchdowns = impliedPoints === null ? null : impliedPoints / 7;
@@ -344,6 +361,162 @@ export function buildNflPlayerPropsRuntimeFeatureRows(args: {
     };
   });
 }
+
+type CurrentSeasonTeamGame = {
+  gameId: string;
+  week: number;
+  team: string;
+  opponent: string;
+  team_pass_attempts: number;
+  team_completions: number;
+  team_passing_yards: number;
+  team_rush_attempts: number;
+  team_rushing_yards: number;
+  team_targets: number;
+  team_offensive_plays: number;
+  team_touchdowns: number;
+};
+
+function buildCurrentSeasonFeatureIndex(state: NflPlayerPropsCurrentSeasonState | null | undefined): {
+  player(name: string, team: string | null, providerPlayerId: string | null): NflPlayerPropsCurrentSeasonStat[];
+  team(team: string): CurrentSeasonTeamGame[];
+  opponentAllowed(team: string): CurrentSeasonTeamGame[];
+} {
+  const stats = state?.stats ?? [];
+  const byPlayerId = new Map<string, NflPlayerPropsCurrentSeasonStat[]>();
+  const byPlayerName = new Map<string, NflPlayerPropsCurrentSeasonStat[]>();
+  for (const row of stats) {
+    byPlayerId.set(row.playerId, [...(byPlayerId.get(row.playerId) ?? []), row]);
+    const key = normalizeName(row.playerName);
+    byPlayerName.set(key, [...(byPlayerName.get(key) ?? []), row]);
+  }
+  const byGameTeam = new Map<string, NflPlayerPropsCurrentSeasonStat[]>();
+  for (const row of stats) {
+    const key = `${row.gameId}|${normalizeTeam(row.team)}`;
+    byGameTeam.set(key, [...(byGameTeam.get(key) ?? []), row]);
+  }
+  const teamGames: CurrentSeasonTeamGame[] = [];
+  const gameTeams = new Map<string, string[]>();
+  for (const key of byGameTeam.keys()) {
+    const separator = key.indexOf("|");
+    const gameId = key.slice(0, separator);
+    const team = key.slice(separator + 1);
+    gameTeams.set(gameId, [...(gameTeams.get(gameId) ?? []), team]);
+  }
+  for (const [key, rows] of byGameTeam) {
+    const separator = key.indexOf("|");
+    const gameId = key.slice(0, separator);
+    const team = key.slice(separator + 1);
+    const opponent = (gameTeams.get(gameId) ?? []).find((value) => value !== team) ?? "";
+    const total = (field: keyof NflPlayerPropsCurrentSeasonStat) => rows.reduce((sum, row) => sum + Number(row[field] ?? 0), 0);
+    const teamPassAttempts = total("passing_attempts");
+    const teamRushAttempts = total("rushing_attempts");
+    teamGames.push({
+      gameId,
+      week: rows[0]!.week,
+      team,
+      opponent,
+      team_pass_attempts: teamPassAttempts,
+      team_completions: total("passing_completions"),
+      team_passing_yards: total("passing_yards"),
+      team_rush_attempts: teamRushAttempts,
+      team_rushing_yards: total("rushing_yards"),
+      team_targets: total("receiving_targets"),
+      team_offensive_plays: teamPassAttempts + teamRushAttempts,
+      team_touchdowns: rows.reduce((sum, row) => sum + playerTouchdowns(row), 0),
+    });
+  }
+  const sorted = (values: CurrentSeasonTeamGame[]) => [...values].sort((a, b) => a.week - b.week || a.gameId.localeCompare(b.gameId));
+  return {
+    player: (name, team, providerPlayerId) => {
+      const exact = providerPlayerId ? byPlayerId.get(providerPlayerId) : null;
+      const candidates = exact?.length ? exact : byPlayerName.get(normalizeName(name)) ?? [];
+      const normalizedTeam = team ? normalizeTeam(team) : null;
+      const matched = normalizedTeam && candidates.some((row) => normalizeTeam(row.team) === normalizedTeam)
+        ? candidates.filter((row) => normalizeTeam(row.team) === normalizedTeam)
+        : candidates;
+      return [...matched].sort((a, b) => a.week - b.week || a.gameId.localeCompare(b.gameId));
+    },
+    team: (team) => sorted(teamGames.filter((game) => game.team === normalizeTeam(team))),
+    opponentAllowed: (team) => sorted(teamGames.filter((game) => game.opponent === normalizeTeam(team))),
+  };
+}
+
+export function applyNflPlayerPropsCurrentSeasonFeatures(args: {
+  features: Record<string, number | null>;
+  playerStats: NflPlayerPropsCurrentSeasonStat[];
+  teamGames: CurrentSeasonTeamGame[];
+  opponentAllowedGames: CurrentSeasonTeamGame[];
+}): void {
+  const { features, playerStats, teamGames, opponentAllowedGames } = args;
+  if (playerStats.length) {
+    const teamByGame = new Map(teamGames.map((game) => [game.gameId, game]));
+    const playerMetrics: Array<[string, (row: NflPlayerPropsCurrentSeasonStat) => number]> = [
+      ["passing_attempts", (row) => row.passing_attempts],
+      ["passing_completions", (row) => row.passing_completions],
+      ["passing_yards", (row) => row.passing_yards],
+      ["rushing_attempts", (row) => row.rushing_attempts],
+      ["rushing_yards", (row) => row.rushing_yards],
+      ["targets", (row) => row.receiving_targets],
+      ["receptions", (row) => row.receptions],
+      ["receiving_yards", (row) => row.receiving_yards],
+      ["participated", () => 1],
+      ["pass_attempt_share", (row) => ratio(row.passing_attempts, teamByGame.get(row.gameId)?.team_pass_attempts)],
+      ["rush_attempt_share", (row) => ratio(row.rushing_attempts, teamByGame.get(row.gameId)?.team_rush_attempts)],
+      ["target_share", (row) => ratio(row.receiving_targets, teamByGame.get(row.gameId)?.team_targets)],
+    ];
+    for (const [metric, read] of playerMetrics) updateRollingFeatures(features, `prior_${metric}`, playerStats.map(read));
+    features.prior_roster_game_rows = (numericFeature(features.prior_roster_game_rows) ?? 0) + playerStats.length;
+    features.prior_participations = (numericFeature(features.prior_participations) ?? 0) + playerStats.length;
+    updateRollingFeatures(features, "prior_anytime_td", playerStats.map((row) => Number(playerTouchdowns(row) > 0)), [5]);
+  }
+  const teamMetrics: Array<[string, keyof CurrentSeasonTeamGame]> = [
+    ["team_pass_attempts", "team_pass_attempts"],
+    ["team_completions", "team_completions"],
+    ["team_passing_yards", "team_passing_yards"],
+    ["team_rush_attempts", "team_rush_attempts"],
+    ["team_rushing_yards", "team_rushing_yards"],
+    ["team_targets", "team_targets"],
+    ["team_offensive_plays", "team_offensive_plays"],
+  ];
+  for (const [metric, field] of teamMetrics) {
+    updateRollingFeatures(features, `prior_${metric}`, teamGames.map((game) => Number(game[field])), [3, 5]);
+    const allowedMetric = metric.replace("team_", "allowed_");
+    updateRollingFeatures(features, `prior_opponent_${allowedMetric}`, opponentAllowedGames.map((game) => Number(game[field])), [3, 5]);
+  }
+  if (teamGames.length) features.prior_team_td_avg5 = rollingAverageWithPrior(features.prior_team_td_avg5, teamGames.map((game) => game.team_touchdowns), 5);
+  if (opponentAllowedGames.length) features.prior_opponent_td_allowed_avg5 = rollingAverageWithPrior(features.prior_opponent_td_allowed_avg5, opponentAllowedGames.map((game) => game.team_touchdowns), 5);
+}
+
+function updateRollingFeatures(
+  features: Record<string, number | null>,
+  base: string,
+  values: number[],
+  windows: number[] = [3, 5],
+): void {
+  if (!values.length) return;
+  const clean = values.map((value) => Number.isFinite(value) ? value : 0);
+  features[`${base}_lag1`] = clean.at(-1)!;
+  for (const window of windows) features[`${base}_avg${window}`] = rollingAverageWithPrior(features[`${base}_avg${window}`], clean, window);
+  let ewm = numericFeature(features[`${base}_ewm`]);
+  for (const value of clean) ewm = ewm === null ? value : 0.35 * value + 0.65 * ewm;
+  features[`${base}_ewm`] = ewm;
+  features[`${base}_season_avg`] = clean.reduce((sum, value) => sum + value, 0) / clean.length;
+}
+
+function rollingAverageWithPrior(prior: number | null | undefined, values: number[], window: number): number {
+  const current = values.slice(-window);
+  const priorValue = numericFeature(prior);
+  const priorCount = priorValue === null ? 0 : Math.max(0, window - current.length);
+  const denominator = current.length + priorCount;
+  return denominator === 0 ? 0 : (current.reduce((sum, value) => sum + value, 0) + (priorValue ?? 0) * priorCount) / denominator;
+}
+
+function playerTouchdowns(row: NflPlayerPropsCurrentSeasonStat): number {
+  return row.rushing_touchdowns + row.receiving_touchdowns + row.kick_return_touchdowns + row.punt_return_touchdowns + row.fumbles_touchdowns;
+}
+function ratio(numerator: number, denominator: number | undefined): number { return denominator && denominator > 0 ? numerator / denominator : 0; }
+function numericFeature(value: number | null | undefined): number | null { return typeof value === "number" && Number.isFinite(value) ? value : null; }
 
 export function buildNflPlayerPropsRuntimeBoard(args: {
   offers: NflPlayerPropsExactOffer[];
