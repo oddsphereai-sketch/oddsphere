@@ -4,7 +4,11 @@ import { useEffect, useMemo, useState } from "react";
 import type { NflPlayerPropsMemberDecision as Row, NflPlayerPropsMemberGrade, NflPlayerPropsMemberSnapshot } from "@/lib/services/football/nflPlayerPropsProductionContract";
 import type { NflPlayerPropsForecastTrend } from "@/lib/services/football/nflPlayerPropsRuntime";
 import { PlayerPropReaderDialog } from "./PlayerPropReaderDialog";
-import { nflPlayerPropsAvailabilityAgeLabel } from "../lib/nflPlayerPropsPresentation";
+import {
+  nflPlayerPropsAvailabilityAgeLabel,
+  resolveNflPlayerPropsPrediction,
+  type NflPlayerPropsPrediction,
+} from "../lib/nflPlayerPropsPresentation";
 import { getPropGradeColor, type PropGrade } from "@/lib/mlb/props/propGrades";
 import {
   americanOddsInRange,
@@ -22,7 +26,7 @@ import {
 type GradeFilter = "All" | NflPlayerPropsMemberGrade;
 type SortKey = "signal" | "player" | "market" | "start" | "ev" | "edge" | "probability" | "book" | "updated";
 type GameSummary = { gameId: string; teams: string[]; opponent: string | null; scheduledStart: string | null; rows: number };
-type MarketPair = { key: string; rows: Row[]; primary: Row; over: Row | null; under: Row | null; yes: Row | null };
+type MarketPair = { key: string; rows: Row[]; primary: Row; over: Row | null; under: Row | null; yes: Row | null; prediction: NflPlayerPropsPrediction<Row> | null };
 
 export function NflPlayerPropsProductDashboard({ snapshot, reviewMode = false, initialSelectedKey = null, dataUnavailable = false }: { snapshot: NflPlayerPropsMemberSnapshot | null; reviewMode?: boolean; initialSelectedKey?: string | null; dataUnavailable?: boolean }) {
   const [selectedGame, setSelectedGame] = useState("all");
@@ -146,20 +150,29 @@ function RadarCard({ row, index, onSelect }: { row: Row; index: number; onSelect
 }
 
 function FullBoard({ pairs, rows, selectedKey, onSelect }: { pairs: MarketPair[]; rows: Row[]; selectedKey: string | null; onSelect: (value: string) => void }) {
-  return <section id="nfl-props-board" data-product-zone="full-board" className="scroll-mt-24 pt-5"><div className="mb-3 flex items-end justify-between gap-4"><div><p className="text-[10px] font-black uppercase text-gray-500">Search results</p><h2 className="mt-1 text-xl font-black text-white">Prop Board</h2></div><p className="text-right text-xs text-gray-500"><strong className="text-gray-200">{pairs.length}</strong> markets shown<br />{rows.length} exact-price reads</p></div>{pairs.length ? <><div className="hidden xl:block"><PairTable pairs={pairs} selectedKey={selectedKey} onSelect={onSelect} /></div><div className="grid gap-3 xl:hidden">{pairs.map((pair) => <PairCard key={pair.key} pair={pair} selectedKey={selectedKey} onSelect={onSelect} />)}</div></> : <div className="rounded-lg border border-gray-800 p-8 text-center text-sm text-gray-500">No props match these controls.</div>}</section>;
+  return <section id="nfl-props-board" data-product-zone="full-board" className="scroll-mt-24 pt-5"><div className="mb-3 flex items-end justify-between gap-4"><div><p className="text-[10px] font-black uppercase text-gray-500">Search results</p><h2 className="mt-1 text-xl font-black text-white">Prop Board</h2></div><p className="text-right text-xs text-gray-500"><strong className="text-gray-200">{pairs.length}</strong> markets shown<br />{rows.length} exact-price reads</p></div>{pairs.length ? <><div className="hidden xl:block"><PairTable pairs={pairs} selectedKey={selectedKey} onSelect={onSelect} /></div><div className="divide-y divide-gray-800 overflow-hidden rounded-lg border border-gray-800 bg-gray-950 xl:hidden">{pairs.map((pair) => <PairCard key={pair.key} pair={pair} selectedKey={selectedKey} onSelect={onSelect} />)}</div></> : <div className="rounded-lg border border-gray-800 p-8 text-center text-sm text-gray-500">No props match these controls.</div>}</section>;
 }
 
 function PairTable({ pairs, selectedKey, onSelect }: { pairs: MarketPair[]; selectedKey: string | null; onSelect: (value: string) => void }) {
-  return <div className="overflow-hidden rounded-lg border border-gray-800 bg-gray-950"><div className="grid grid-cols-[1.35fr_0.9fr_1fr_1fr_0.8fr] gap-3 border-b border-gray-800 bg-[#151922] px-4 py-3 text-[9px] font-black uppercase tracking-wider text-gray-600"><span>Player / matchup</span><span>Market / forecast</span><span>Over / Yes</span><span>Under</span><span>Strongest grade</span></div><div className="divide-y divide-gray-800">{pairs.map((pair) => <div key={pair.key} className="grid grid-cols-[1.35fr_0.9fr_1fr_1fr_0.8fr] items-center gap-3 px-4 py-3"><span className="min-w-0"><strong className="block truncate text-sm text-white">{pair.primary.playerName}</strong><span className="mt-0.5 block truncate text-[10px] text-gray-500">{matchup(pair.primary)} · {gameTime(pair.primary.scheduledStart)}</span><AvailabilityBadge row={pair.primary} /></span><span><strong className="block text-xs text-white">{label(pair.primary.market)} {pair.primary.line}</strong><span className="mt-0.5 block text-[10px] text-gray-500">Projection {projectionValue(pair.primary)}</span></span><SideQuote row={pair.over ?? pair.yes} selectedKey={selectedKey} onSelect={onSelect} /><SideQuote row={pair.under} selectedKey={selectedKey} onSelect={onSelect} /><GradeBadge grade={pair.primary.grade} /></div>)}</div></div>;
+  return <div className="overflow-hidden rounded-lg border border-gray-800 bg-gray-950"><div className="grid grid-cols-[1.15fr_0.95fr_0.42fr_0.5fr_0.78fr_1.18fr_1.18fr] gap-3 border-b border-gray-800 bg-black/40 px-3 py-2 text-[9px] font-bold uppercase text-gray-500"><span>Player</span><span>Market</span><span>Line</span><span>Projection</span><span>Prediction</span><span>Over / Yes</span><span>Under</span></div><div className="divide-y divide-gray-800">{pairs.map((pair) => <div key={pair.key} className={`grid grid-cols-[1.15fr_0.95fr_0.42fr_0.5fr_0.78fr_1.18fr_1.18fr] items-center gap-3 px-3 py-2.5 ${pair.rows.some((row) => key(row) === selectedKey) ? "bg-violet-400/10" : "hover:bg-gray-900"}`}><span className="flex min-w-0 items-center gap-2"><NflTeamBadge team={pair.primary.team} size="small" /><span className="min-w-0"><strong className="block truncate text-sm text-white">{pair.primary.playerName}</strong><span className="block truncate text-[10px] text-gray-600">{matchup(pair.primary)} · {gameTime(pair.primary.scheduledStart)}</span><AvailabilityBadge row={pair.primary} /></span></span><span className="truncate text-xs font-semibold text-gray-200">{label(pair.primary.market)}</span><strong className="text-xs tabular-nums text-white">{pair.primary.line}</strong><span className="text-xs font-bold tabular-nums text-gray-300">{projectionValue(pair.primary)}</span><PredictionBadge prediction={pair.prediction} line={pair.primary.line} /><SideQuote row={pair.over ?? pair.yes} prediction={pair.prediction} selectedKey={selectedKey} onSelect={onSelect} /><SideQuote row={pair.under} prediction={pair.prediction} selectedKey={selectedKey} onSelect={onSelect} /></div>)}</div></div>;
 }
 
 function PairCard({ pair, selectedKey, onSelect }: { pair: MarketPair; selectedKey: string | null; onSelect: (value: string) => void }) {
-  return <article className="rounded-lg border border-gray-800 bg-[#0e1218] p-4"><div className="flex items-start justify-between gap-3"><div className="flex min-w-0 items-center gap-3"><NflTeamBadge team={pair.primary.team} size="small" /><div className="min-w-0"><strong className="block truncate text-sm text-white">{pair.primary.playerName}</strong><span className="mt-0.5 block truncate text-xs text-gray-500">{matchup(pair.primary)} · {gameTime(pair.primary.scheduledStart)}</span><AvailabilityBadge row={pair.primary} /></div></div><GradeBadge grade={pair.primary.grade} /></div><div className="mt-4 flex items-end justify-between border-y border-gray-800 py-3"><span><span className="block text-[9px] font-bold uppercase text-gray-600">{label(pair.primary.market)}</span><strong className="mt-1 block text-lg text-white">Line {pair.primary.line}</strong></span><span className="text-right"><span className="block text-[9px] font-bold uppercase text-gray-600">Projection</span><strong className="mt-1 block text-lg text-white">{projectionValue(pair.primary)}</strong></span></div><div className={`mt-3 grid gap-2 ${(pair.over ?? pair.yes) && pair.under ? "grid-cols-2" : "grid-cols-1"}`}><SideQuote row={pair.over ?? pair.yes} selectedKey={selectedKey} onSelect={onSelect} card /><SideQuote row={pair.under} selectedKey={selectedKey} onSelect={onSelect} card /></div></article>;
+  return <article className={`p-4 ${pair.rows.some((row) => key(row) === selectedKey) ? "bg-violet-400/10" : ""}`}><div className="flex items-start justify-between gap-3"><div className="flex min-w-0 items-center gap-3"><NflTeamBadge team={pair.primary.team} size="small" /><div className="min-w-0"><strong className="block truncate text-sm text-white">{pair.primary.playerName}</strong><span className="mt-0.5 block truncate text-xs text-gray-500">{matchup(pair.primary)} · {gameTime(pair.primary.scheduledStart)}</span><AvailabilityBadge row={pair.primary} /></div></div><PredictionBadge prediction={pair.prediction} line={pair.primary.line} compact /></div><div className="mt-3 flex items-center justify-between border-y border-gray-800 py-2 text-xs"><span className="text-gray-500">{label(pair.primary.market)} <strong className="ml-1 text-white">{pair.primary.line}</strong></span><span className="text-gray-500">Projection <strong className="ml-1 text-white">{projectionValue(pair.primary)}</strong></span></div><div className={`mt-3 grid gap-2 ${(pair.over ?? pair.yes) && pair.under ? "grid-cols-2" : "grid-cols-1"}`}><SideQuote row={pair.over ?? pair.yes} prediction={pair.prediction} selectedKey={selectedKey} onSelect={onSelect} card /><SideQuote row={pair.under} prediction={pair.prediction} selectedKey={selectedKey} onSelect={onSelect} card /></div></article>;
 }
 
-function SideQuote({ row, selectedKey, onSelect, card = false }: { row: Row | null; selectedKey: string | null; onSelect: (value: string) => void; card?: boolean }) {
+function PredictionBadge({ prediction, line, compact = false }: { prediction: NflPlayerPropsPrediction<Row> | null; line: number; compact?: boolean }) {
+  if (!prediction) return <span className="text-xs text-gray-700">—</span>;
+  const outcome = prediction.outcome === "yes" ? "Anytime TD" : prediction.outcome === "no" ? "No TD" : `${capitalize(prediction.outcome)} ${line}`;
+  return <span className={`inline-flex w-fit shrink-0 flex-col rounded border border-violet-400/35 bg-violet-400/[0.09] ${compact ? "px-2 py-1" : "px-2.5 py-1.5"}`}><span className="text-[8px] font-black uppercase tracking-wider text-violet-300">Prediction</span><strong className={`${compact ? "text-[10px]" : "text-xs"} text-white`}>{outcome} · {pct(prediction.probability)}</strong></span>;
+}
+
+function SideQuote({ row, prediction, selectedKey, onSelect, card = false }: { row: Row | null; prediction: NflPlayerPropsPrediction<Row> | null; selectedKey: string | null; onSelect: (value: string) => void; card?: boolean }) {
   if (!row) return card ? null : <span className="text-xs text-gray-700">Not posted</span>;
-  return <button type="button" onClick={() => onSelect(key(row))} aria-pressed={selectedKey === key(row)} className={`min-w-0 rounded-md border p-2.5 text-left transition ${selectedKey === key(row) ? "border-violet-400 bg-violet-400/10" : "border-gray-800 bg-black/20 hover:border-gray-700"}`}><span className="flex items-start justify-between gap-2"><strong className="text-xs text-white">{row.side === "yes" ? "Anytime TD" : capitalize(row.side)}</strong><span className="text-xs font-black text-emerald-300">{price(row.americanPrice)}</span></span><span className="mt-1 flex items-end justify-between gap-2 text-[9px] text-gray-600"><span>{book(row.sportsbook)}</span><span>{pct(row.finalProbability)} · {signedPct(row.expectedValue)} EV</span></span></button>;
+  const isPrediction = prediction?.quotedSide === row.side;
+  const colors = isPrediction ? gradeColors(row.grade) : null;
+  const movement = quoteMovement(row);
+  return <button type="button" onClick={() => onSelect(key(row))} aria-pressed={selectedKey === key(row)} className={`min-w-0 rounded-md border p-2.5 text-left transition ${selectedKey === key(row) ? "ring-1 ring-violet-300/70" : ""} ${isPrediction ? "hover:brightness-125" : "border-gray-800 bg-black/20 hover:border-gray-700"}`} style={colors ? { borderColor: colors.border, background: colors.background } : undefined}><span className="flex items-start justify-between gap-2"><strong className="text-xs text-white">{row.side === "yes" ? "Anytime TD" : capitalize(row.side)}</strong><span className="text-xs font-black text-emerald-300">{price(row.americanPrice)}</span></span><span className="mt-1 flex items-end justify-between gap-2 text-[9px]"><span className="truncate text-gray-600">{book(row.sportsbook)}</span>{isPrediction ? <span className="shrink-0 font-black uppercase" style={colors ? { color: colors.text } : undefined}>Prediction · {row.grade}</span> : <span className="shrink-0 text-gray-600">{pct(impliedProbability(row.americanPrice))} implied</span>}</span>{isPrediction ? <span className="mt-1 block text-[9px] text-gray-500">{pct(row.finalProbability)} model · {signedPct(row.expectedValue)} EV</span> : null}{movement ? <span className="mt-1 block text-[9px] text-sky-300/75">{movement}</span> : null}</button>;
 }
 
 function PropReader({ row, onClose }: { row: Row; onClose: () => void }) {
@@ -234,9 +247,35 @@ function NflTeamBadge({ team, size = "normal" }: { team: string; size?: "small" 
 }
 function EmptyBoard({ reviewMode, dataUnavailable }: { reviewMode: boolean; dataUnavailable: boolean }) { return <section className="mx-auto max-w-4xl py-10 sm:py-20"><div className="border-y border-gray-800 py-10 sm:py-14"><div className="flex items-center gap-3 text-xs font-bold text-emerald-300"><span className="h-2 w-2 rounded-full bg-emerald-400" />NFL Player Props{reviewMode ? " · Private review" : ""}</div><h1 className="mt-5 max-w-2xl text-4xl font-black leading-tight text-white sm:text-5xl">{dataUnavailable ? "Player Props data is temporarily unavailable." : "Today’s prop board is loading."}</h1><p className="mt-4 max-w-2xl text-base leading-7 text-gray-400">{dataUnavailable ? "The data service did not respond in time. Please refresh in a moment; no picks or prices were changed." : "The latest complete exact-price snapshot will appear here as soon as sportsbook prices are ready."}</p></div></section>; }
 
-function pairRows(rows: Row[], sort: SortKey): MarketPair[] { const groups = new Map<string, Row[]>(); for (const row of rows) { const pairKey = [row.gameId, row.playerName, row.market, row.line].join("|"); groups.set(pairKey, [...(groups.get(pairKey) ?? []), row]); } return [...groups.entries()].map(([pairKey, pairRows]) => ({ key: pairKey, rows: pairRows, primary: [...pairRows].sort((a, b) => rank(a) - rank(b) || b.expectedValue - a.expectedValue)[0]!, over: pairRows.find((row) => row.side === "over") ?? null, under: pairRows.find((row) => row.side === "under") ?? null, yes: pairRows.find((row) => row.side === "yes") ?? null })).sort((a, b) => sortRows(sort)(a.primary, b.primary) || sortRows("signal")(a.primary, b.primary)); }
+function pairRows(rows: Row[], sort: SortKey): MarketPair[] {
+  const groups = new Map<string, Row[]>();
+  for (const row of rows) {
+    const pairKey = [row.gameId, row.playerName, row.market, row.line].join("|");
+    groups.set(pairKey, [...(groups.get(pairKey) ?? []), row]);
+  }
+  return [...groups.entries()].map(([pairKey, marketRows]) => ({
+    key: pairKey,
+    rows: marketRows,
+    primary: [...marketRows].sort((a, b) => rank(a) - rank(b) || b.expectedValue - a.expectedValue)[0]!,
+    over: marketRows.find((row) => row.side === "over") ?? null,
+    under: marketRows.find((row) => row.side === "under") ?? null,
+    yes: marketRows.find((row) => row.side === "yes") ?? null,
+    prediction: resolveNflPlayerPropsPrediction(marketRows),
+  })).sort((a, b) => sortRows(sort)(a.primary, b.primary) || sortRows("signal")(a.primary, b.primary));
+}
 function deriveGames(rows: Row[]): GameSummary[] { const map = new Map<string, GameSummary>(); for (const row of rows) { const game = map.get(row.gameId) ?? { gameId: row.gameId, teams: [], opponent: row.opponent || null, scheduledStart: row.scheduledStart || null, rows: 0 }; game.teams = unique([...game.teams, row.team]); if (row.opponent && !game.teams.includes(row.opponent) && game.teams.length < 2) game.teams.push(row.opponent); game.rows += 1; map.set(row.gameId, game); } return [...map.values()].sort((a, b) => Date.parse(a.scheduledStart ?? "") - Date.parse(b.scheduledStart ?? "")); }
-function buildRadarRows(rows: Row[]): Row[] { const deduped = new Map<string, Row>(); for (const row of [...rows].sort(sortRows("signal"))) { const radarKey = [row.gameId, row.playerName, row.market].join("|"); if (!deduped.has(radarKey)) deduped.set(radarKey, row); } return [...deduped.values()].filter((row) => row.grade !== "No Play").slice(0, 6); }
+function buildRadarRows(rows: Row[]): Row[] {
+  const predictions = pairRows(rows, "signal")
+    .flatMap((pair) => pair.prediction?.quotedSide ? [pair.rows.find((row) => row.side === pair.prediction!.quotedSide) ?? pair.prediction.row] : [])
+    .filter((row) => row.grade !== "No Play")
+    .sort(sortRows("signal"));
+  const deduped = new Map<string, Row>();
+  for (const row of predictions) {
+    const radarKey = [row.gameId, row.playerName, row.market].join("|");
+    if (!deduped.has(radarKey)) deduped.set(radarKey, row);
+  }
+  return [...deduped.values()].slice(0, 6);
+}
 function sortRows(sort: SortKey): (a: Row, b: Row) => number { if (sort === "player") return (a, b) => a.playerName.localeCompare(b.playerName); if (sort === "market") return (a, b) => a.market.localeCompare(b.market) || a.playerName.localeCompare(b.playerName); if (sort === "start") return (a, b) => Date.parse(a.scheduledStart) - Date.parse(b.scheduledStart); if (sort === "ev") return (a, b) => b.expectedValue - a.expectedValue; if (sort === "edge") return (a, b) => b.probabilityEdge - a.probabilityEdge; if (sort === "probability") return (a, b) => b.finalProbability - a.finalProbability; if (sort === "book") return (a, b) => a.sportsbook.localeCompare(b.sportsbook); if (sort === "updated") return (a, b) => Date.parse(b.observedAt) - Date.parse(a.observedAt); return (a, b) => rank(a) - rank(b) || b.expectedValue - a.expectedValue; }
 function rank(row: Row): number { return ({ "Best Angle": 0, Lean: 1, Watchlist: 2, "No Play": 3 })[row.grade]; }
 function key(row: Row): string { return [row.gameId, row.playerName, row.market, row.line, row.side].join("|"); }
@@ -264,6 +303,17 @@ function pct(value: number): string { return `${(value * 100).toFixed(1)}%`; }
 function signedPct(value: number): string { return `${value >= 0 ? "+" : ""}${(value * 100).toFixed(1)}%`; }
 function price(value: number): string { return value > 0 ? `+${value}` : String(value); }
 function impliedProbability(value: number): number { return value > 0 ? 100 / (value + 100) : Math.abs(value) / (Math.abs(value) + 100); }
+function quoteMovement(row: Row): string | null {
+  const evidence = row.bookEvidence?.find((value) => normalizeBook(value.sportsbook) === normalizeBook(row.sportsbook) && value.provider === row.provider);
+  if (!evidence?.openingObservedAt || evidence.openingAmericanPrice === null) return null;
+  const opening = evidence.openingLine !== null && evidence.openingLine !== row.line
+    ? `${evidence.openingLine} ${price(evidence.openingAmericanPrice)}`
+    : price(evidence.openingAmericanPrice);
+  const current = evidence.openingLine !== null && evidence.openingLine !== row.line
+    ? `${row.line} ${price(row.americanPrice)}`
+    : price(row.americanPrice);
+  return `Open ${opening} → ${current}`;
+}
 function normalizeBook(value: string): string { return value.toLowerCase().replace(/[^a-z0-9]/g, ""); }
 function book(value: string): string { const labels: Record<string, string> = { draftkings: "DraftKings", fanduel: "FanDuel", novig: "NoVig", ballybet: "Bally Bet" }; return labels[value.toLowerCase()] ?? value; }
 function provider(value: string): string { return value === "balldontlie" ? "Ball Don’t Lie" : value === "sharpapi" ? "Sharp API" : value; }
