@@ -4,7 +4,10 @@ import { isPublicallyTracked } from "@/lib/config/officialTrackingStart";
 import { computeSlateDate } from "@/lib/dates/slateDate";
 import { PlaybookClient } from "@/lib/providers/playbook/playbookClient";
 import type { PlaybookLineGame, PlaybookSplitGame } from "@/lib/providers/playbook/types";
-import { fetchBalldontlieNflSlateAvailability } from "./balldontlieNflAvailability";
+import {
+  fetchBalldontlieNflSlateAvailability,
+  NFL_INJURY_MAX_PAGES,
+} from "./balldontlieNflAvailability";
 import { fetchBalldontlieNflRegularSlate, type NflPreviewBookOdds, type NflPreviewGame } from "./balldontlieNflPreviewSlate";
 import { fetchBalldontlieNflTeamDepthSnapshots } from "./balldontlieNflRoster";
 import {
@@ -65,7 +68,7 @@ import {
 } from "./nflForwardMemberSnapshotStore";
 
 export const NFL_FORWARD_WRITER_RELEASE =
-  "nfl_forward_evidence_writer_2026_09_16_r29_sharp_league_contract" as const;
+  "nfl_forward_evidence_writer_2026_09_16_r30_injury_pagination" as const;
 
 export type NflForwardWriterResult = {
   writerRelease: typeof NFL_FORWARD_WRITER_RELEASE;
@@ -226,7 +229,7 @@ export async function runNflForwardEvidenceWriter(args: {
     }));
   }
   const weatherRequests = [...weatherByGame.values()].reduce((sum, value) => sum + value.requests, 0);
-  const apiCallsMaximum = slate.providerRequests + rosters.requests + 4 + 2 + sharpResult.requests + weatherRequests;
+  const apiCallsMaximum = slate.providerRequests + rosters.requests + NFL_INJURY_MAX_PAGES + 2 + sharpResult.requests + weatherRequests;
 
   const payloadBuildHolds: string[] = [];
   const payloads = plans.flatMap((plan): NflForwardEvidencePayload[] => {
@@ -415,7 +418,7 @@ export async function runNflForwardEvidenceWriter(args: {
       },
       requestBudget: {
         balldontlieSlate: slate.providerRequests, balldontlieRoster: rosters.requests,
-        balldontlieInjuriesMaximum: 4, playbook: 2, sharpApi: sharpResult.requests,
+        balldontlieInjuriesMaximum: NFL_INJURY_MAX_PAGES, playbook: 2, sharpApi: sharpResult.requests,
         weather: weatherRequests, totalMaximum: apiCallsMaximum,
       },
     };

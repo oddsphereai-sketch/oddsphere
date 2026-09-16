@@ -10,6 +10,8 @@ import {
 } from "./nflV1ActionableGradeCandidate";
 
 export const NFL_FORWARD_MEMBER_SNAPSHOT_RELEASE =
+  "nfl_forward_member_snapshot_2026_09_16_r14_injury_pagination" as const;
+const NFL_SHARP_CONTRACT_PREVIOUS_SNAPSHOT_RELEASE =
   "nfl_forward_member_snapshot_2026_09_16_r13_sharp_league_contract" as const;
 const NFL_ONE_POINT_PREVIOUS_SNAPSHOT_RELEASE =
   "nfl_forward_member_snapshot_2026_09_15_r12_one_point_pmf_boundary" as const;
@@ -28,6 +30,7 @@ const NFL_ONE_POINT_PREVIOUS_DECISION_RELEASE =
 const NFL_ONE_POINT_PREVIOUS_FIXTURE_RELEASE =
   "nfl_weekly_member_fixture_2026_09_15_r20_one_point_pmf_boundary" as const;
 const NFL_FORWARD_PREVIOUS_MEMBER_SNAPSHOT_RELEASES = [
+  NFL_SHARP_CONTRACT_PREVIOUS_SNAPSHOT_RELEASE,
   NFL_ONE_POINT_PREVIOUS_SNAPSHOT_RELEASE,
   NFL_OPENING_FOLLOW_UP_PREVIOUS_SNAPSHOT_RELEASE,
   NFL_PREDICTION_OWNED_PREVIOUS_SNAPSHOT_RELEASE,

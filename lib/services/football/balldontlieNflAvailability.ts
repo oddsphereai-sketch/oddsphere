@@ -36,7 +36,10 @@ type BdlNflInjuryPage = {
 const NFL_INJURIES_ENDPOINT = "https://api.balldontlie.io/nfl/v1/player_injuries";
 const NFL_TEAMS_ENDPOINT = "https://api.balldontlie.io/nfl/v1/teams";
 const NFL_INJURIES_DOCS = "https://nfl.balldontlie.io/#player-injuries";
-const MAX_PAGES = 4;
+// A full 32-team regular-season slate currently exceeds four 100-row pages
+// (Week 2, 2026 returned 488 rows). Keep the request bounded, but do not turn
+// a valid fifth page into a slate-wide "injuries unavailable" result.
+export const NFL_INJURY_MAX_PAGES = 8;
 
 /**
  * Read-only NFL availability collector for a stored Daily Edge snapshot.
@@ -66,7 +69,7 @@ export async function fetchBalldontlieNflSlateAvailability(
 
     const rows: BdlNflInjuryRow[] = [];
     let cursor: string | null = null;
-    for (let page = 0; page < MAX_PAGES; page += 1) {
+    for (let page = 0; page < NFL_INJURY_MAX_PAGES; page += 1) {
       const params = new URLSearchParams({ per_page: "100" });
       for (const teamId of teamIds) params.append("team_ids[]", String(teamId));
       if (cursor) params.set("cursor", cursor);
@@ -80,7 +83,7 @@ export async function fetchBalldontlieNflSlateAvailability(
       const nextCursor = body.meta?.next_cursor;
       cursor = typeof nextCursor === "string" || typeof nextCursor === "number" ? String(nextCursor) : null;
       if (!cursor) break;
-      if (page === MAX_PAGES - 1) return null;
+      if (page === NFL_INJURY_MAX_PAGES - 1) return null;
     }
 
     const teams = normalizeNflInjuryTeams(rows, requestedTeams);

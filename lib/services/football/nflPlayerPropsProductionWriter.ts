@@ -30,7 +30,7 @@ import {
 } from "./nflPlayerPropsSettlement";
 
 export const NFL_PLAYER_PROPS_WRITER_RELEASE =
-  "nfl_player_props_writer_2026_09_07_r20_identity_capacity" as const;
+  "nfl_player_props_writer_2026_09_16_r21_injury_pagination" as const;
 export const NFL_PLAYER_PROPS_PRODUCTION_INCLUDE_OPENINGS = true as const;
 export const NFL_PLAYER_PROPS_PRODUCTION_COLLECTION_CALL_MAXIMUM = (
   1
@@ -134,8 +134,16 @@ export async function runNflPlayerPropsProductionWriter(args: {
     evidence,
     capturedAt: args.now,
   });
-  const offers = buildNflPlayerPropsExactBoard({ snapshots: [collection.snapshot], evaluatedAt: args.now });
-  const features = buildNflPlayerPropsRuntimeFeatureRows({ snapshot: collection.snapshot, context });
+  const eligibleGameIds = new Set(context.games.map((game) => game.canonicalGameId));
+  const eligibleSnapshot = {
+    ...collection.snapshot,
+    games: collection.snapshot.games.filter((game) => eligibleGameIds.has(game.providerGameId)),
+    observations: collection.snapshot.observations.filter((row) => (
+      row.canonicalGameId !== null && eligibleGameIds.has(row.canonicalGameId)
+    )),
+  };
+  const offers = buildNflPlayerPropsExactBoard({ snapshots: [eligibleSnapshot], evaluatedAt: args.now });
+  const features = buildNflPlayerPropsRuntimeFeatureRows({ snapshot: eligibleSnapshot, context });
   const nextBoard = buildNflPlayerPropsRuntimeBoard({ offers, features, evaluatedAt: args.now });
   const previous = await readNflPlayerPropsSnapshot({ client: args.client, season: args.season, week: args.week });
   const snapshot = reconcileNflPlayerPropsProductionSnapshot({
@@ -149,7 +157,7 @@ export async function runNflPlayerPropsProductionWriter(args: {
   if (args.apply) {
     await writeNflPlayerPropsSnapshot({ client: args.client, snapshot, source: NFL_PLAYER_PROPS_WRITER_RELEASE });
     await writeLockedNflPlayerPropsTracking({ client: args.client, snapshot });
-    closingPricesUpdated = await updateNflPlayerPropsClosingPrices({ client: args.client, production: snapshot, observations: collection.snapshot });
+    closingPricesUpdated = await updateNflPlayerPropsClosingPrices({ client: args.client, production: snapshot, observations: eligibleSnapshot });
   }
   // Closing price must attach while a locked record is still pending. Running
   // settlement first made same-cycle finals permanently miss CLV because the

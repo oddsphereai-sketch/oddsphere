@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import {
   fetchBalldontlieNflSlateAvailability,
+  NFL_INJURY_MAX_PAGES,
   type NflAvailabilityMatchup,
 } from "./balldontlieNflAvailability";
 import {
@@ -21,7 +22,12 @@ import type { DailyEdgeGameAvailability } from "../dailyEdge/gameAvailability";
 import type { NflPlayerPropsObservationSnapshot } from "./nflPlayerPropsContract";
 
 export const NFL_PLAYER_PROPS_INFERENCE_CONTEXT_RELEASE =
-  "nfl_player_props_inference_context_2026_08_25_r3_shared_forward_evidence" as const;
+  "nfl_player_props_inference_context_2026_09_16_r4_game_scoped_availability" as const;
+
+export type NflPlayerPropsExcludedGame = {
+  canonicalGameId: string;
+  reason: "forward_evidence_missing" | "injury_evidence_missing" | "coverage_incomplete";
+};
 
 export type NflPlayerPropsInferenceGameContext = {
   canonicalGameId: string;
@@ -47,6 +53,7 @@ export type NflPlayerPropsInferenceContext = {
   week: number;
   phase: NflPlayerPropsObservationSnapshot["phase"];
   games: NflPlayerPropsInferenceGameContext[];
+  excludedGames: NflPlayerPropsExcludedGame[];
   requestBudget: { teams: number; rosters: number; injuriesMaximum: number; mainMarket: number; totalMaximum: number };
   coverage: {
     games: number;
@@ -112,7 +119,8 @@ export async function collectNflPlayerPropsInferenceContext(args: {
     week: args.snapshot.week,
     phase: args.snapshot.phase,
     games,
-    requestBudget: { teams: 1, rosters: depth.requests, injuriesMaximum: 4, mainMarket: mainMarket.providerRequests, totalMaximum: 1 + depth.requests + 4 + mainMarket.providerRequests },
+    excludedGames: [],
+    requestBudget: { teams: 1, rosters: depth.requests, injuriesMaximum: NFL_INJURY_MAX_PAGES, mainMarket: mainMarket.providerRequests, totalMaximum: 1 + depth.requests + NFL_INJURY_MAX_PAGES + mainMarket.providerRequests },
     coverage: {
       games: games.length,
       teams: selectedTeams.length,
@@ -144,21 +152,30 @@ export function buildNflPlayerPropsInferenceContextFromForwardEvidence(args: {
     }
   }
   const sourceRows: Array<NflForwardStoredEvidence & { payload: NflForwardEvidencePayload }> = [];
-  const games = args.snapshot.games.map((game) => {
+  const games: NflPlayerPropsInferenceGameContext[] = [];
+  const excludedGames: NflPlayerPropsExcludedGame[] = [];
+  for (const game of args.snapshot.games) {
     const row = latest.get(game.providerGameId);
-    if (!row) throw new Error(`NFL props shared context is missing forward evidence for ${game.providerGameId}.`);
+    if (!row) {
+      excludedGames.push({ canonicalGameId: game.providerGameId, reason: "forward_evidence_missing" });
+      continue;
+    }
     const payload = row.payload;
     if (Date.parse(payload.game.scheduledStart) !== Date.parse(game.scheduledStart)
       || payload.game.away.abbreviation !== game.awayTeam
       || payload.game.home.abbreviation !== game.homeTeam) {
       throw new Error(`NFL props shared context game identity mismatch for ${game.providerGameId}.`);
     }
-    if (!payload.injuries) throw new Error(`NFL props shared context injury evidence is missing for ${game.providerGameId}.`);
+    if (!payload.injuries) {
+      excludedGames.push({ canonicalGameId: game.providerGameId, reason: "injury_evidence_missing" });
+      continue;
+    }
     if (!payload.coverage.rosterAndDepth || payload.market.currentBooks.length === 0) {
-      throw new Error(`NFL props shared context coverage is incomplete for ${game.providerGameId}.`);
+      excludedGames.push({ canonicalGameId: game.providerGameId, reason: "coverage_incomplete" });
+      continue;
     }
     sourceRows.push(row);
-    return {
+    games.push({
       canonicalGameId: game.providerGameId,
       scheduledStart: game.scheduledStart,
       awayTeam: game.awayTeam,
@@ -167,9 +184,13 @@ export function buildNflPlayerPropsInferenceContextFromForwardEvidence(args: {
       homeDepth: payload.startersAndDepth.home,
       injuries: payload.injuries,
       mainMarket: { capturedAt: payload.capturedAt, currentBooks: payload.market.currentBooks },
-    };
-  });
+    });
+  }
+  if (games.length === 0) {
+    throw new Error("NFL props shared context has no games with complete forward evidence.");
+  }
   const healthHolds = [
+    ...excludedGames.map((game) => `game_${game.canonicalGameId}_${game.reason}`),
     games.some((game) => !game.awayDepth.expectedStartingQuarterback || !game.homeDepth.expectedStartingQuarterback) ? "expected_quarterback_incomplete" : null,
     games.some((game) => game.injuries.reportUpdatedAt === null) ? "injury_report_timestamp_incomplete" : null,
     games.some((game) => game.mainMarket.currentBooks.length === 0) ? "main_market_incomplete" : null,
@@ -190,6 +211,7 @@ export function buildNflPlayerPropsInferenceContextFromForwardEvidence(args: {
     week: args.snapshot.week,
     phase: args.snapshot.phase,
     games,
+    excludedGames,
     requestBudget: { teams: 0, rosters: 0, injuriesMaximum: 0, mainMarket: 0, totalMaximum: 0 },
     coverage: {
       games: games.length,

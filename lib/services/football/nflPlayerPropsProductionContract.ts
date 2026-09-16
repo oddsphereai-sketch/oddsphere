@@ -12,7 +12,7 @@ import {
 import { addDaysToSlate, computeSlateDate } from "@/lib/dates/slateDate";
 
 export const NFL_PLAYER_PROPS_PRODUCTION_CANDIDATE_RELEASE =
-  "nfl_player_props_member_2026_09_07_r17_out_of_support_hold" as const;
+  "nfl_player_props_member_2026_09_16_r18_injury_pagination" as const;
 export const NFL_PLAYER_PROPS_MEMBER_LIFECYCLE_RELEASE =
   "nfl_player_props_member_lifecycle_2026_09_10_r1_overnight_rollover" as const;
 export const NFL_PLAYER_PROPS_BOARD_ROLLOVER_HOUR_ET = 2 as const;

@@ -11,7 +11,7 @@ import {
   americanOddsRangeIsOrdered,
   isValidAmericanOddsInput,
   parseAmericanOddsInput,
-} from "@/app/lab/lib/footballOddsFilter";
+} from "@/app/lab/lib/americanOddsFilter";
 import {
   PlayerPropsFilterButton,
   PlayerPropsRadarCardFrame,

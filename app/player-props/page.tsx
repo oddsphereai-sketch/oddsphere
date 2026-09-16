@@ -5,6 +5,7 @@ import { readNflPlayerPropsMemberSnapshot } from "@/lib/services/football/nflPla
 import { NflPlayerPropsProductDashboard } from "./components/NflPlayerPropsProductDashboard";
 import { PlayerPropsLeaguePills } from "./components/PlayerPropsLeaguePills";
 import { readMemberDataWithDeadline } from "@/lib/services/memberDataAvailability";
+import { resolveNflForwardWeek } from "@/lib/services/football/nflForwardWeekSelection";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "NFL Player Props | Oddsphere", robots: { index: false, follow: false } };
@@ -14,7 +15,8 @@ export default async function PlayerPropsPage({ searchParams }: { searchParams: 
   const enabled = process.env.NFL_PLAYER_PROPS_MEMBER_ENABLED === "true";
   if (!enabled || query.league !== "nfl") redirect("/mlb/props");
   const season = bounded(process.env.NFL_FORWARD_SEASON, 2026);
-  const week = bounded(process.env.NFL_FORWARD_WEEK, 1);
+  const configuredWeek = bounded(process.env.NFL_FORWARD_WEEK, 1);
+  const week = resolveNflForwardWeek({ season, configuredWeek });
   const snapshotResult = await readMemberDataWithDeadline({
     label: "nfl-player-props-snapshot",
     fallback: null,
