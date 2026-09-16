@@ -1,5 +1,11 @@
-import { SharpApiClient } from "@/lib/providers/real_api/_sharpApiClient";
+import {
+  SharpApiClient,
+  type SharpApiRequestOptions,
+} from "@/lib/providers/real_api/_sharpApiClient";
 import type { NflPreviewGame } from "./balldontlieNflPreviewSlate";
+
+export const NFL_SHARP_API_SPLITS_RELEASE =
+  "nfl_sharpapi_splits_2026_09_16_r1_league_contract" as const;
 
 export type NflRegularSharpMarket = "moneyline" | "spread" | "total";
 
@@ -44,6 +50,9 @@ type SharpApiNflSplitMarket = {
 };
 
 type DatedRows = { date: string; rows: SharpApiNflSplitRow[] };
+type SharpClient = {
+  fetchAll<T>(opts: SharpApiRequestOptions & { maxPages?: number }): Promise<T[]>;
+};
 
 const TEAM_ALIASES: Record<string, string[]> = {
   ARI: ["arizona cardinals", "cardinals"], ATL: ["atlanta falcons", "falcons"],
@@ -70,27 +79,29 @@ export async function fetchSharpApiNflSplits(args: {
   apiKey: string;
   games: NflPreviewGame[];
   capturedAt: string;
+  client?: SharpClient;
 }): Promise<{
+  release: typeof NFL_SHARP_API_SPLITS_RELEASE;
   splitsByGame: Record<string, NflRegularSharpSplitSet>;
   requests: number;
   rows: number;
   dates: string[];
 }> {
-  const client = new SharpApiClient(args.apiKey);
+  const client = args.client ?? new SharpApiClient(args.apiKey);
   const dates = Array.from(new Set(args.games.map((game) => nflLocalDate(game.scheduledStart)))).sort();
-  // Live probing showed the endpoint currently ignores its date parameter
-  // for the football-family response. Fetch once for the entire Week 1 card,
-  // then apply our own strict NFL league, event-date, and team-identity guards.
-  // This prevents four duplicate calls for the Thursday/Sunday/Monday dates.
+  // SharpAPI classifies NFL rows with league=nfl and sport=football. A sport=nfl
+  // filter returns an empty payload. Fetch once for the whole weekly card, then
+  // apply our own strict league, event-date, and team-identity guards.
   const rows = await client.fetchAll<SharpApiNflSplitRow>({
     path: "/splits",
-    query: { sport: "nfl", sportsbook: "circa,draftkings,betmgm", limit: 200 },
+    query: { league: "nfl", sportsbook: "circa,draftkings,betmgm", limit: 200 },
     // One 200-row page safely exceeds a complete football-family slate and
     // keeps the provider budget deterministic.
     maxPages: 1,
   });
   const datedRows = dates.map((date) => ({ date, rows }));
   return {
+    release: NFL_SHARP_API_SPLITS_RELEASE,
     splitsByGame: matchSharpApiNflSplitRows(args.games, datedRows, args.capturedAt),
     requests: 1,
     rows: rows.length,
