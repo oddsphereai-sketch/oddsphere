@@ -7,6 +7,7 @@ import { readMemberDataWithDeadline } from "../lib/services/memberDataAvailabili
 import {
   buildNflPlayerPropsMemberSnapshot,
   currentNflPlayerPropsBoardDate,
+  deriveNflPlayerPropsMemberDecisions,
   NFL_PLAYER_PROPS_MEMBER_LIFECYCLE_RELEASE,
   NFL_PLAYER_PROPS_PRODUCTION_CANDIDATE_RELEASE,
   NFL_PLAYER_PROPS_WRITER_LEASE_GROUP,
@@ -46,13 +47,13 @@ const snapshot = productionSnapshot([actionable, held]);
 const memberBefore = buildNflPlayerPropsMemberSnapshot(snapshot);
 
 assert.equal(memberBefore.lifecycleRelease,
-  "nfl_player_props_member_lifecycle_2026_09_10_r1_overnight_rollover");
+  "nfl_player_props_member_lifecycle_2026_09_17_r2_no_held_member_coverage");
 assert.equal(memberBefore.lifecycleRelease, NFL_PLAYER_PROPS_MEMBER_LIFECYCLE_RELEASE);
 const atKickoff = buildNflPlayerPropsMemberSnapshot(snapshot, actionable.scheduledStart);
-assert.equal(atKickoff.memberDecisions.length, 1,
+assert.equal(atKickoff.memberDecisions.length, 2,
   "a game remains available during play so its locked reader can be reviewed");
 const beforeOvernightRollover = buildNflPlayerPropsMemberSnapshot(snapshot, "2026-09-04T05:59:59.999Z");
-assert.equal(beforeOvernightRollover.memberDecisions.length, 1,
+assert.equal(beforeOvernightRollover.memberDecisions.length, 2,
   "the completed game remains through the overnight tracking window");
 const afterOvernightRollover = buildNflPlayerPropsMemberSnapshot(snapshot, "2026-09-04T06:00:00.000Z");
 assert.equal(afterOvernightRollover.memberDecisions.length, 0,
@@ -61,7 +62,7 @@ assert.equal(afterOvernightRollover.board.counts.actionable, 0,
   "rolled-off actions cannot remain in member headline counts");
 assert.equal(currentNflPlayerPropsBoardDate(new Date("2026-09-04T05:59:59.999Z")), "2026-09-03");
 assert.equal(currentNflPlayerPropsBoardDate(new Date("2026-09-04T06:00:00.000Z")), "2026-09-04");
-assert.equal(snapshot.memberDecisions.length, 1,
+assert.equal(snapshot.memberDecisions.length, 2,
   "member expiry never mutates the canonical locked snapshot used by tracking and settlement");
 assert.throws(() => buildNflPlayerPropsMemberSnapshot(snapshot, "not-a-timestamp"), /asOf is invalid/,
   "an invalid member lifecycle boundary fails closed");
@@ -185,7 +186,7 @@ async function main(): Promise<void> {
   let rolloverClock = Date.parse("2026-09-04T05:59:00.000Z");
   const rolloverReader = createNflPlayerPropsMemberSnapshotReader({ now: () => rolloverClock });
   const rolloverClient = clientFixture({ read: () => encoded, onRead: () => { rolloverReads += 1; } });
-  assert.equal((await rolloverReader.read({ client: rolloverClient, season: 2026, week: 1 }))?.memberDecisions.length, 1);
+  assert.equal((await rolloverReader.read({ client: rolloverClient, season: 2026, week: 1 }))?.memberDecisions.length, 2);
   rolloverClock = Date.parse("2026-09-04T06:00:00.000Z");
   assert.equal((await rolloverReader.read({ client: rolloverClient, season: 2026, week: 1 }))?.memberDecisions.length, 0,
     "the member cache refreshes the board at the overnight rollover");
@@ -359,7 +360,7 @@ function decision(overrides: Partial<NflPlayerPropsRuntimeDecision> = {}): NflPl
 }
 
 function productionSnapshot(rows: NflPlayerPropsRuntimeDecision[]): NflPlayerPropsProductionSnapshot {
-  const memberDecisions = rows.filter((row) => row.grade !== "Held");
+  const memberDecisions = deriveNflPlayerPropsMemberDecisions({ decisions: rows });
   const count = (grade: NflPlayerPropsRuntimeDecision["grade"]) => rows.filter((row) => row.grade === grade).length;
   return {
     release: NFL_PLAYER_PROPS_PRODUCTION_CANDIDATE_RELEASE,
