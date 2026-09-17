@@ -2,7 +2,8 @@ import { redirect } from "next/navigation";
 import ProductAppFrame from "@/app/lab/components/ProductAppFrame";
 import { supabase } from "@/lib/db/supabase";
 import { readNflPlayerPropsMemberSnapshot } from "@/lib/services/football/nflPlayerPropsSnapshotStore";
-import { NflPlayerPropsProductDashboard } from "./components/NflPlayerPropsProductDashboard";
+import { encodeNflPlayerPropsMemberTransport } from "@/lib/services/football/nflPlayerPropsMemberTransport.server";
+import { NflPlayerPropsProductDashboardTransport } from "./components/NflPlayerPropsProductDashboardTransport";
 import { PlayerPropsLeaguePills } from "./components/PlayerPropsLeaguePills";
 import { readMemberDataWithDeadline } from "@/lib/services/memberDataAvailability";
 import { resolveNflForwardWeek } from "@/lib/services/football/nflForwardWeekSelection";
@@ -26,7 +27,8 @@ export default async function PlayerPropsPage({ searchParams }: { searchParams: 
   const memberSnapshot = snapshotResult.value;
   const requestedReader = typeof query.reader === "string" ? query.reader : null;
   const initialSelectedKey = memberSnapshot?.memberDecisions.some((row) => decisionKey(row) === requestedReader) ? requestedReader : null;
-  return <ProductAppFrame><PlayerPropsLeaguePills league="nfl" nflEnabled /><NflPlayerPropsProductDashboard snapshot={memberSnapshot} initialSelectedKey={initialSelectedKey} dataUnavailable={snapshotResult.unavailable} /></ProductAppFrame>;
+  const transport = memberSnapshot ? encodeNflPlayerPropsMemberTransport(memberSnapshot) : null;
+  return <ProductAppFrame><PlayerPropsLeaguePills league="nfl" nflEnabled /><NflPlayerPropsProductDashboardTransport transport={transport} initialSelectedKey={initialSelectedKey} dataUnavailable={snapshotResult.unavailable} /></ProductAppFrame>;
 }
 
 function bounded(value: string | undefined, fallback: number): number { const parsed = Number(value ?? fallback); return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback; }
