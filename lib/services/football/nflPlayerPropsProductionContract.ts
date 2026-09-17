@@ -12,9 +12,9 @@ import {
 import { addDaysToSlate, computeSlateDate } from "@/lib/dates/slateDate";
 
 export const NFL_PLAYER_PROPS_PRODUCTION_CANDIDATE_RELEASE =
-  "nfl_player_props_member_2026_09_16_r19_ranked_predictions" as const;
+  "nfl_player_props_member_2026_09_17_r20_no_held_member_coverage" as const;
 export const NFL_PLAYER_PROPS_MEMBER_LIFECYCLE_RELEASE =
-  "nfl_player_props_member_lifecycle_2026_09_10_r1_overnight_rollover" as const;
+  "nfl_player_props_member_lifecycle_2026_09_17_r2_no_held_member_coverage" as const;
 export const NFL_PLAYER_PROPS_BOARD_ROLLOVER_HOUR_ET = 2 as const;
 export const NFL_PLAYER_PROPS_WRITER_LEASE_GROUP = "prediction_pipeline:nfl" as const;
 
@@ -55,7 +55,10 @@ export type NflPlayerPropsMemberSnapshot = {
 export function deriveNflPlayerPropsMemberDecisions(
   board: Pick<NflPlayerPropsRuntimeBoard, "decisions">,
 ): NflPlayerPropsMemberDecision[] {
-  return board.decisions.filter(isMemberDecision);
+  return board.decisions.map((row): NflPlayerPropsMemberDecision => {
+    if (row.grade === "Held") return { ...row, grade: "No Play" };
+    return row as NflPlayerPropsMemberDecision;
+  });
 }
 
 export type NflPlayerPropsTrackedDecision = {
@@ -141,8 +144,8 @@ export function reconcileNflPlayerPropsProductionSnapshot(args: {
     generatedAt: new Date(evaluatedAt).toISOString(), writerLeaseGroup: NFL_PLAYER_PROPS_WRITER_LEASE_GROUP,
     publicationEligible: true, trackingEligible: true, riskLabel: "forward_monitoring_2025_exact_price_confirmation",
     board,
-    // Held rows remain in the audit payload, but genuine role/identity
-    // ambiguity is not useful as a default member recommendation list.
+    // Internal operational exceptions remain auditable as Held on the stored
+    // board, while the complete member slate exposes them as non-actionable No Play.
     memberDecisions: deriveNflPlayerPropsMemberDecisions(board),
     lifecycle: { recomputedUnlocked, retainedStillFreshUnlocked, frozenAtLock, retainedPreviouslyLocked },
   };

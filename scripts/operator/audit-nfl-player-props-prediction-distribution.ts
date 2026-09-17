@@ -1,8 +1,11 @@
 import { loadEnvConfig } from "@next/env";
 import { createClient } from "@supabase/supabase-js";
+import { writeFile } from "node:fs/promises";
 import { readNflPlayerPropsSnapshotRecord } from "../../lib/services/football/nflPlayerPropsSnapshotStore";
 import type { NflPlayerPropsRuntimeDecision } from "../../lib/services/football/nflPlayerPropsRuntime";
 import { selectNflPlayerPropsTouchdownScorers, nflPlayerPropsTouchdownPlayerKey } from "../../lib/services/football/nflPlayerPropsPrediction";
+import { NFL_FORWARD_EVIDENCE_SCHEMA_RELEASE, type NflForwardStoredEvidence } from "../../lib/services/football/nflForwardEvidence";
+import { readNflForwardEvidence } from "../../lib/services/football/nflForwardEvidenceStore";
 
 loadEnvConfig(process.cwd());
 
@@ -35,6 +38,32 @@ type ProbabilityScore = {
 
 async function main(): Promise<void> {
   const client = createClient(url!, key!, { auth: { persistSession: false } });
+  if (process.argv.includes("--forward-depth-only")) {
+    const evidence = await readNflForwardEvidence({ client, season, week });
+    const latest = new Map<string, NflForwardStoredEvidence>();
+    for (const row of evidence) {
+      const previous = latest.get(row.providerGameId);
+      if (!previous || Date.parse(row.capturedAt) > Date.parse(previous.capturedAt)) latest.set(row.providerGameId, row);
+    }
+    const payload = {
+      readOnly: true,
+      season,
+      week,
+      storedRows: evidence.length,
+      games: [...latest.values()].map((row) => ({
+        gameId: row.providerGameId,
+        capturedAt: row.capturedAt,
+        away: row.payload.startersAndDepth.away,
+        home: row.payload.startersAndDepth.home,
+      })),
+    };
+    const outputPath = stringArg("--output");
+    if (outputPath) await writeFile(outputPath, `${JSON.stringify(payload, null, 2)}\n`, "utf8");
+    console.log(JSON.stringify(outputPath
+      ? { readOnly: true, season, week, outputPath, storedRows: evidence.length, games: latest.size }
+      : payload, null, 2));
+    return;
+  }
   const record = await readNflPlayerPropsSnapshotRecord({ client, season, week });
   if (!record) throw new Error(`NFL props snapshot is unavailable for ${season} Week ${week}.`);
   const rows = record.snapshot.board.decisions;
@@ -63,7 +92,52 @@ async function main(): Promise<void> {
     const probabilityScores = scoreProbabilities(groupPredictions(rows), stats);
     report.results = summarizeResults(scored, lockedScored, probabilityScores, rows, stats);
   }
-  if (process.argv.includes("--ranked-summary")) {
+  if (process.argv.includes("--touchdown-candidate-context")) {
+    const stats = includeResults ? await readStats(rows) : new Map<string, Map<string, Stat>>();
+    const forwardEvidence = await readNflForwardEvidence({ client, season, week });
+    const players = new Map<string, NflPlayerPropsRuntimeDecision>();
+    for (const row of rows) {
+      const key = `${row.gameId}|${normalize(row.playerName)}`;
+      const previous = players.get(key);
+      if (!previous || (row.market === "anytime_td" && previous.market !== "anytime_td")) players.set(key, row);
+    }
+    const candidatePayload = {
+      readOnly: true,
+      season,
+      week,
+      candidates: [...players.values()].map((row) => {
+        const stat = row.providerPlayerId ? stats.get(row.gameId)?.get(row.providerPlayerId) : undefined;
+        const depth = depthPlayerForDecision(forwardEvidence, row);
+        return {
+          gameId: row.gameId,
+          playerName: row.playerName,
+          providerPlayerId: row.providerPlayerId,
+          team: row.team,
+          opponent: row.opponent,
+          position: row.forecastContext.position,
+          depth: depth?.player.depth ?? null,
+          depthRank: depth?.player.depthRank ?? null,
+          explicitStarter: depth?.player.explicitStarter ?? null,
+          rosterInjuryStatus: depth?.player.injuryStatus ?? null,
+          rosterCapturedAt: depth?.capturedAt ?? null,
+          teamImpliedTouchdowns: row.forecastContext.teamImpliedTouchdowns,
+          offeredAnytimeTouchdown: row.market === "anytime_td",
+          incumbentRawProbability: row.market === "anytime_td" ? row.rawModelProbability : null,
+          marketProbability: row.market === "anytime_td" ? row.marketProbability : null,
+          incumbentFinalProbability: row.market === "anytime_td" ? row.finalProbability : null,
+          independentMarket: row.market === "anytime_td"
+            ? !row.healthHolds.includes("independent_same_line_confirmation_missing")
+            : null,
+          actualTouchdowns: stat ? actualValue("anytime_td", stat) : null,
+        };
+      }),
+    };
+    const outputPath = stringArg("--output");
+    if (outputPath) await writeFile(outputPath, `${JSON.stringify(candidatePayload, null, 2)}\n`, "utf8");
+    console.log(JSON.stringify(outputPath
+      ? { readOnly: true, season, week, outputPath, candidates: candidatePayload.candidates.length }
+      : candidatePayload, null, 2));
+  } else if (process.argv.includes("--ranked-summary")) {
     const compactResults = report.results as { rankedTouchdownCohort?: unknown; probabilityQuality?: { byMarket?: Record<string, Record<string, { rankedExpectedPrevalence?: unknown; sideAccuracy?: unknown }>> } } | undefined;
     const byMarket = compactResults?.probabilityQuality?.byMarket ?? {};
     console.log(JSON.stringify({
@@ -78,6 +152,24 @@ async function main(): Promise<void> {
       )])),
     }, null, 2));
   } else console.log(JSON.stringify(report, null, 2));
+}
+
+function depthPlayerForDecision(evidence: NflForwardStoredEvidence[], row: NflPlayerPropsRuntimeDecision) {
+  const featureAsOf = Date.parse(row.forecastContext.featureAsOf);
+  const latest = evidence
+    .filter((candidate) => candidate.providerGameId === row.gameId
+      && candidate.payload.schemaRelease === NFL_FORWARD_EVIDENCE_SCHEMA_RELEASE
+      && Date.parse(candidate.capturedAt) <= featureAsOf)
+    .sort((a, b) => Date.parse(b.capturedAt) - Date.parse(a.capturedAt))[0];
+  if (!latest || latest.payload.schemaRelease !== NFL_FORWARD_EVIDENCE_SCHEMA_RELEASE) return null;
+  const teams = [latest.payload.startersAndDepth.away, latest.payload.startersAndDepth.home];
+  const normalizedName = normalize(row.playerName);
+  for (const team of teams) {
+    if (team.team !== row.team) continue;
+    const player = team.roster.find((candidate) => normalize(candidate.name) === normalizedName);
+    if (player) return { player, capturedAt: team.capturedAt };
+  }
+  return null;
 }
 
 function groupPredictions(rows: NflPlayerPropsRuntimeDecision[]): NflPlayerPropsRuntimeDecision[][] {
@@ -334,6 +426,10 @@ function quantiles(values: number[]) {
 function numberArg(name: string, fallback: number): number {
   const value = process.argv.find((argument) => argument.startsWith(`${name}=`))?.slice(name.length + 1);
   return value ? Number(value) : fallback;
+}
+
+function stringArg(name: string): string | null {
+  return process.argv.find((argument) => argument.startsWith(`${name}=`))?.slice(name.length + 1) ?? null;
 }
 
 function normalize(value: string): string { return value.toLowerCase().replace(/[^a-z0-9]/g, ""); }

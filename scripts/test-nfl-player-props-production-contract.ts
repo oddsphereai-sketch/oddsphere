@@ -83,7 +83,7 @@ function emptyBoard(): NflPlayerPropsRuntimeBoard {
 }
 
 const unlocked = reconcileNflPlayerPropsProductionSnapshot({ season: 2026, week: 1, evaluatedAt: "2026-08-25T12:00:00.000Z", nextBoard: board(decision) });
-assert.equal(NFL_PLAYER_PROPS_PRODUCTION_CANDIDATE_RELEASE, "nfl_player_props_member_2026_09_16_r19_ranked_predictions");
+assert.equal(NFL_PLAYER_PROPS_PRODUCTION_CANDIDATE_RELEASE, "nfl_player_props_member_2026_09_17_r20_no_held_member_coverage");
 assert.equal(NFL_PLAYER_PROPS_WRITER_RELEASE, "nfl_player_props_writer_2026_09_16_r22_current_season_inputs");
 assert.equal(NFL_PLAYER_PROPS_TRACKING_RELEASE, "nfl_player_props_tracking_2026_09_16_r12_current_season_inputs");
 assert.equal(NFL_PLAYER_PROPS_SETTLEMENT_RELEASE, "nfl_player_props_settlement_2026_08_25_r3_bounded_finality");
@@ -218,12 +218,13 @@ assert.equal(operationalHeld.board.counts.Held, 1, "Held remains visible in the 
 assert.equal(operationalHeld.board.diagnostics.completedEvaluations, 0);
 assert.equal(operationalHeld.board.diagnostics.operationalExceptions, 1);
 assert.equal(operationalHeld.board.diagnostics.recoveryEligibleOperationalExceptions, 1);
-assert.equal(operationalHeld.memberDecisions.length, 0, "Held is excluded from member completeness rather than treated as a completed grade");
+assert.equal(operationalHeld.memberDecisions.length, 1, "every evaluated row remains present in the member slate");
+assert.equal(operationalHeld.memberDecisions[0]?.grade, "No Play", "internal Held becomes a non-actionable member No Play");
 assert.equal(buildNflPlayerPropsTrackingRows(operationalHeld).length, 0, "Held is never official tracking eligibility");
 const operationalMemberView = buildNflPlayerPropsMemberSnapshot(operationalHeld);
-assert.equal(operationalMemberView.memberDecisions.length, 0, "the public DTO excludes internal operational exceptions");
-assert.deepEqual(operationalMemberView.board.counts, { "Best Angle": 0, Lean: 0, Watchlist: 0, "No Play": 0, actionable: 0 });
-assert.equal(operationalMemberView.board.diagnostics.completedEvaluations, 0);
+assert.equal(operationalMemberView.memberDecisions.length, 1, "the public DTO preserves complete prediction coverage");
+assert.deepEqual(operationalMemberView.board.counts, { "Best Angle": 0, Lean: 0, Watchlist: 0, "No Play": 1, actionable: 0 });
+assert.equal(operationalMemberView.board.diagnostics.completedEvaluations, 1);
 assert.ok(!JSON.stringify(operationalMemberView).includes("Held"), "the public DTO serializes no Held grade, count, or diagnostic");
 assert.ok(!("operationalExceptions" in operationalMemberView.board.diagnostics));
 assert.ok(!("recoveryEligibleOperationalExceptions" in operationalMemberView.board.diagnostics));
