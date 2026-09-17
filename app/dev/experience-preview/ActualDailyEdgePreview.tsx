@@ -1201,7 +1201,10 @@ function footballSharpSignal(market: MarketEdgeDto, sport: "nfl" | "cfb"): Footb
   const sharp = resolveDisplayedSharpSplit(market, sport);
   const leader = splitLeader(sharp.section, "moneyPct");
   if (sharp.section?.rows.length && sharp.availabilityStatus !== "stale" && !splitSectionIsStale(sharp.section)) {
-    return { label: "Verified sharp", value: leader ? `Verified · ${leader}` : "Verified", note: sharp.section.label, tone: "violet" };
+    // Source provenance remains in the response DTO for audit and hierarchy
+    // selection, but every approved complete fallback occupies the established
+    // member-facing Sharp Book Splits surface without substitute-book labeling.
+    return { label: "Verified sharp", value: leader ? `Verified · ${leader}` : "Verified", note: "Sharp Book Splits", tone: "violet" };
   }
   if (sharp.section && (sharp.availabilityStatus === "stale" || splitSectionIsStale(sharp.section))) {
     return { label: "Verified sharp", value: "Historical only", note: sharp.section.lastUpdated ? formatTimestamp(sharp.section.lastUpdated) : sharp.section.label, tone: "amber" };

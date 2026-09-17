@@ -1658,6 +1658,8 @@ check(
 check(
   "football sharp state and missing evidence remain truthful and neutral",
   candidateSource.includes("resolveDisplayedSharpSplit") &&
+    candidateSource.includes('note: "Sharp Book Splits"') &&
+    !candidateSource.includes("note: sharp.section.label") &&
     candidateSource.includes('value: "Historical only"') &&
     candidateSource.includes('value: status') &&
     candidateSource.includes('"No verified split yet"') &&
