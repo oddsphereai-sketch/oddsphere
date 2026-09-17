@@ -53,6 +53,7 @@ const PROTECTED_PAGE_PREFIXES = [
   "/lab",
   "/admin",
   "/mlb/props",
+  "/player-props",
   "/dev/experience-preview",
   "/dev/mlb-props-preview",
   "/dev/tracking-preview",

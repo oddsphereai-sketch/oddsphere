@@ -32,6 +32,8 @@ import {
   NFL_PLAYER_PROPS_BOARD_RELEASE,
   type NflPlayerPropsRuntimeDecision,
 } from "../lib/services/football/nflPlayerPropsRuntime";
+import { decodeNflPlayerPropsMemberTransport } from "../lib/services/football/nflPlayerPropsMemberTransport";
+import { encodeNflPlayerPropsMemberTransport } from "../lib/services/football/nflPlayerPropsMemberTransport.server";
 
 const evaluatedAt = "2026-09-02T12:00:00.000Z";
 const actionable = decision({ state: "locked", grade: "Best Angle" });
@@ -132,6 +134,17 @@ assert.ok(measured.envelopeJsonBytes < Buffer.byteLength(JSON.stringify(largeSna
 assert.ok(measured.jsonBytes <= NFL_PLAYER_PROPS_SNAPSHOT_MAX_JSON_BYTES);
 
 async function main(): Promise<void> {
+  const memberTransport = encodeNflPlayerPropsMemberTransport(memberBefore);
+  assert.ok(memberTransport.compressedBytes < memberTransport.uncompressedBytes,
+    "the member boundary transfers a compressed board instead of the multi-megabyte JSON object");
+  assert.deepEqual(await decodeNflPlayerPropsMemberTransport(memberTransport), memberBefore,
+    "the browser transport reconstructs every member decision and price losslessly");
+  await assert.rejects(
+    decodeNflPlayerPropsMemberTransport({ ...memberTransport, checksum: "0".repeat(64) }),
+    /checksum does not match/,
+    "the browser transport rejects a payload whose integrity check does not match",
+  );
+
   let storedPayload: unknown = null;
   let reads = 0;
   let writes = 0;
@@ -305,6 +318,8 @@ async function main(): Promise<void> {
   const writer = readFileSync("lib/services/football/nflPlayerPropsProductionWriter.ts", "utf8");
   const readiness = readFileSync("scripts/operator/audit-current-nfl-player-props-readiness.ts", "utf8");
   assert.match(memberPage, /readNflPlayerPropsMemberSnapshot/);
+  assert.match(memberPage, /encodeNflPlayerPropsMemberTransport/,
+    "the member page must not serialize the full multi-megabyte snapshot across the client boundary");
   assert.match(writer, /readNflPlayerPropsSnapshot/);
   assert.match(readiness, /readNflPlayerPropsSnapshotRecord/);
   assert.doesNotMatch(writer, /readNflPlayerPropsMemberSnapshot/,

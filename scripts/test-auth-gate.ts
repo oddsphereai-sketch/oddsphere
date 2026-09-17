@@ -232,6 +232,7 @@ async function main() {
     "/lab/tracking",
     "/lab/account",
     "/mlb/props",
+    "/player-props",
     "/dev/experience-preview",
     "/dev/mlb-props-preview",
     "/dev/tracking-preview",
@@ -290,6 +291,7 @@ async function main() {
   for (const path of [
     "/lab/daily-edge",
     "/mlb/props",
+    "/player-props",
     "/dev/experience-preview",
     "/dev/mlb-props-preview",
     "/dev/tracking-preview",
