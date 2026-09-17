@@ -22,6 +22,7 @@ import { resolveNflForwardWeek } from "@/lib/services/football/nflForwardWeekSel
 import DailyEdgeLiveRefresh from "./DailyEdgeLiveRefresh";
 import { readMemberDataWithDeadline } from "@/lib/services/memberDataAvailability";
 import { resolveUclFeatureFlags } from "@/lib/services/ucl/uclFeatureFlags";
+import { populateDailyEdgeDraftKingsFallback } from "@/lib/providers/draftkings/draftKingsNetworkSplits";
 
 // The compact weekly payload carries 101 games and can take 10-12 seconds to
 // cross the production DB boundary. Keep the read bounded, but do not turn a
@@ -198,6 +199,11 @@ export default async function CandidateDailyEdgePage({
   } else if ((eplRequested && eplEnabled) || (uclRequested && uclEnabled)) {
     snapshot = filterWeeklyReaderSnapshot(snapshot, "soccer");
   }
+  // Display-only source hierarchy: current Circa remains authoritative, while
+  // a complete DraftKings pair silently occupies the same established split
+  // card when Circa is absent. Provider identity stays in the DTO for audit;
+  // predictions, recommendations, grades, and member-facing copy are untouched.
+  await populateDailyEdgeDraftKingsFallback(snapshot, uclRequested ? "ucl" : sport);
   const visibleNflAvailability = nflFixture
     ? Object.fromEntries(
         snapshot.games.flatMap((game) => {
