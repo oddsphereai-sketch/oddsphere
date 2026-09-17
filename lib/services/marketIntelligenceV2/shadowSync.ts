@@ -87,6 +87,31 @@ export type SharpHistoryRequestOutcome =
 
 export type SharpHistoryRetryBudget = { remaining: number };
 
+export function assessAdvertisedSharpHistoryCoverage(opts: {
+  advertisedCanonicalEventIds: readonly (number | string)[];
+  historyResults: readonly {
+    canonicalEventId: number | string;
+    rows: readonly unknown[];
+  }[];
+}): {
+  expectedGames: number;
+  coveredGames: number;
+  missingEventIds: string[];
+} {
+  const expected = new Set(opts.advertisedCanonicalEventIds.map(String));
+  const covered = new Set(
+    opts.historyResults
+      .filter((result) => result.rows.length > 0)
+      .map((result) => String(result.canonicalEventId))
+      .filter((eventId) => expected.has(eventId)),
+  );
+  return {
+    expectedGames: expected.size,
+    coveredGames: covered.size,
+    missingEventIds: Array.from(expected).filter((eventId) => !covered.has(eventId)).sort(),
+  };
+}
+
 export function classifySharpHistoryFailure(error: unknown): {
   failureClass: SharpHistoryFailureClass;
   retryable: boolean;
@@ -943,6 +968,7 @@ async function collectSharpApiSplits(opts: {
 
   let catalogEventsMatched = 0;
   const catalogGamesRecovered = new Set<number>();
+  const catalogPregameGamesExpected = new Set<number>();
   for (const event of catalogRows) {
     const providerEventId = event.id === undefined || event.id === null ? null : String(event.id);
     if (!providerEventId || extractEventIdDate(providerEventId) !== opts.slateDate) continue;
@@ -953,6 +979,9 @@ async function collectSharpApiSplits(opts: {
     if (!game) continue;
     catalogEventsMatched++;
     catalogGamesRecovered.add(game.externalId);
+    if (game.gameDate === null || Date.parse(game.gameDate) > opts.now.getTime()) {
+      catalogPregameGamesExpected.add(game.externalId);
+    }
     queueHistoryRequest(providerEventId, game);
     // SharpAPI history has been observed under an unsuffixed canonical ID
     // even when the event catalog and odds rows use a bucket suffix. The base
@@ -964,6 +993,13 @@ async function collectSharpApiSplits(opts: {
     }
   }
   const historyResults = await Promise.all(historyRequests);
+  const advertisedHistoryCoverage = assessAdvertisedSharpHistoryCoverage({
+    advertisedCanonicalEventIds: Array.from(catalogPregameGamesExpected),
+    historyResults: historyResults.map((result) => ({
+      canonicalEventId: result.game.externalId,
+      rows: result.rows,
+    })),
+  });
   let historyRowsReceived = 0;
   let historyRowsAfterStartTime = 0;
   let historyCanonicalConstructed = 0;
@@ -986,6 +1022,13 @@ async function collectSharpApiSplits(opts: {
     providerErrors.push(
       `SharpAPI split history recovery failed for ${failedHistoryResults.length}/${historyResults.length} requests; ` +
       `classes=${failureSummary}; events=${eventSample}`,
+    );
+  }
+  if (advertisedHistoryCoverage.missingEventIds.length > 0) {
+    providerErrors.push(
+      `SharpAPI source-book split history returned no rows for ` +
+      `${advertisedHistoryCoverage.missingEventIds.length}/${advertisedHistoryCoverage.expectedGames} ` +
+      `advertised pregame slate events; canonical_events=${advertisedHistoryCoverage.missingEventIds.slice(0, 8).join(",")}`,
     );
   }
   for (const result of historyResults) {
@@ -1043,6 +1086,9 @@ async function collectSharpApiSplits(opts: {
       event_catalog_rows_received: catalogRows.length,
       event_catalog_matches: catalogEventsMatched,
       event_catalog_games_recovered: catalogGamesRecovered.size,
+      history_expected_advertised_games: advertisedHistoryCoverage.expectedGames,
+      history_covered_advertised_games: advertisedHistoryCoverage.coveredGames,
+      history_missing_advertised_games: advertisedHistoryCoverage.missingEventIds,
       history_requests_made: historyRequests.length,
       history_requests_skipped_after_start: historyRequestsSkippedAfterStart,
       history_requests_skipped_at_cycle_cap: historyRequestsSkippedAtCycleCap,

@@ -1,4 +1,5 @@
 import {
+  assessAdvertisedSharpHistoryCoverage,
   dedupeSharpApiHistorySplitObservations,
   assessSharpApiSplitSlateAlignment,
   classifySharpHistoryFailure,
@@ -27,6 +28,36 @@ function check(label: string, ok: boolean, detail?: string): void {
     fail++;
     failures.push(detail ? `${label}: ${detail}` : label);
   }
+}
+
+{
+  const coverage = assessAdvertisedSharpHistoryCoverage({
+    advertisedCanonicalEventIds: [5060059, 5060060],
+    historyResults: [
+      { canonicalEventId: 5060059, rows: [{ book: "circa" }] },
+      { canonicalEventId: 5060060, rows: [] },
+    ],
+  });
+  check(
+    "SharpAPI advertised history coverage identifies silent empty-game gaps",
+    coverage.expectedGames === 2 &&
+      coverage.coveredGames === 1 &&
+      coverage.missingEventIds.join(",") === "5060060",
+  );
+}
+
+{
+  const coverage = assessAdvertisedSharpHistoryCoverage({
+    advertisedCanonicalEventIds: [5060059],
+    historyResults: [
+      { canonicalEventId: 5060059, rows: [] },
+      { canonicalEventId: "5060059", rows: [{ book: "draftkings" }] },
+    ],
+  });
+  check(
+    "SharpAPI advertised history coverage counts bucket and base identities once",
+    coverage.expectedGames === 1 && coverage.coveredGames === 1 && coverage.missingEventIds.length === 0,
+  );
 }
 
 check(
