@@ -160,6 +160,7 @@ import {
   stripAmbiguousDoubleheaderSharpSplits,
 } from "../../../../lib/services/publicSplitsDisplayOverlay";
 import type { MarketDecision, MarketSplitDisplaySection } from "@/lib/types/domain/RecommendationDecision";
+import { populateDailyEdgeDraftKingsFallback } from "@/lib/providers/draftkings/draftKingsNetworkSplits";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -6622,6 +6623,7 @@ export async function GET(request: Request) {
     const { readCurrentUclMemberSnapshot } = await import("@/lib/services/ucl/uclMemberSnapshotStore");
     const payload = await readCurrentUclMemberSnapshot();
     if (payload) {
+      await populateDailyEdgeDraftKingsFallback(payload, "ucl");
       return Response.json(payload, {
         headers: {
           "Cache-Control": "private, max-age=30, stale-while-revalidate=300",
@@ -6671,6 +6673,7 @@ export async function GET(request: Request) {
         stripAmbiguousDoubleheaderSharpSplits(payload.games);
         alignMarketReadsToDisplayedPublicSplits(payload.games);
       }
+      await populateDailyEdgeDraftKingsFallback(payload, sport);
       suppressIncomparableLineMovePrices(payload);
       finalizeDailyEdgeResponseCoherence(payload);
       return Response.json(payload, {
@@ -6713,6 +6716,7 @@ export async function GET(request: Request) {
   if (sport === "nba") {
     try {
       const adapted = await buildNbaDailyEdgeAdapted(requestedDate);
+      await populateDailyEdgeDraftKingsFallback(adapted, sport);
       return Response.json(suppressIncomparableLineMovePrices(adapted), {
         headers: DAILY_EDGE_NO_STORE_HEADERS,
       });
@@ -6751,6 +6755,7 @@ export async function GET(request: Request) {
         "@/lib/services/wnba/buildWnbaDailyEdgeAdapted"
       );
       const adapted = await buildWnbaDailyEdgeAdapted(requestedDate, renderedCopyFlagOverrides);
+      await populateDailyEdgeDraftKingsFallback(adapted, sport);
       return Response.json(suppressIncomparableLineMovePrices(adapted), {
         headers: DAILY_EDGE_NO_STORE_HEADERS,
       });
@@ -6777,6 +6782,7 @@ export async function GET(request: Request) {
         "@/lib/services/nhl/buildNhlDailyEdgeAdapted"
       );
       const adapted = await buildNhlDailyEdgeAdapted(requestedDate);
+      await populateDailyEdgeDraftKingsFallback(adapted, sport);
       return Response.json(suppressIncomparableLineMovePrices(adapted), {
         headers: DAILY_EDGE_NO_STORE_HEADERS,
       });
@@ -8107,6 +8113,7 @@ export async function GET(request: Request) {
     last_slate_update_at: lastSlateUpdateAt,
     games: dtos,
   };
+  await populateDailyEdgeDraftKingsFallback(body, sport);
   finalizeDailyEdgeResponseCoherence(body);
   if (sport === "mlb") {
     dailyEdgeWarmCache.set(warmCacheKey, {
