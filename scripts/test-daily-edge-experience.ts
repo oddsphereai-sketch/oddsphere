@@ -1470,10 +1470,8 @@ check(
     !candidateDailyEdgeSource.includes('availabilityStatus === "pending" ? "Awaiting provider data"'),
 );
 check(
-  "MLB Sharp panels retain a verified price-action signal while percentage rows are pending",
-  candidateDailyEdgeSource.indexOf(": section?.signal ? <p") >= 0 &&
-    candidateDailyEdgeSource.indexOf(": section?.signal ? <p") <
-      candidateDailyEdgeSource.indexOf(": splitPending ? null : null"),
+  "MLB Sharp panels do not replace missing percentage rows with signal copy",
+  candidateDailyEdgeSource.indexOf(": splitPending ? null : section?.signal ? <p") >= 0,
 );
 check(
   "first-inning reader distinguishes team results from starter-game context",
