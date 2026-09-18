@@ -35,7 +35,14 @@ import {
   type CfbForwardEvidencePayload,
   type CfbForwardStoredEvidence,
 } from "../lib/services/football/cfbForwardEvidence";
-import { CFB_FORWARD_EVIDENCE_MAX_ROWS, CFB_FORWARD_EVIDENCE_PAGE_SIZE, readCfbForwardEvidence } from "../lib/services/football/cfbForwardEvidenceStore";
+import {
+  CFB_FORWARD_EVIDENCE_MAX_ROWS,
+  CFB_FORWARD_EVIDENCE_PAGE_SIZE,
+  CFB_FORWARD_MARKET_HISTORY_MAX_ROWS,
+  CFB_FORWARD_MARKET_HISTORY_PAGE_SIZE,
+  readCfbForwardEvidence,
+  readCfbForwardMarketHistory,
+} from "../lib/services/football/cfbForwardEvidenceStore";
 import { normalizeCfbPlaybookLine, normalizeCfbPlaybookSplits } from "../lib/services/football/cfbPlaybookEvidence";
 import {
   buildCfbForwardPayloadsWithIsolation,
@@ -442,7 +449,7 @@ assert.equal(
   "transport byte-length corruption fails closed",
 );
 assert.equal(member.snapshot.games.length, 1);
-assert.equal(member.fixtureRelease, "cfb_v1_member_fixture_2026_09_13_r52_live_prediction_visibility");
+assert.equal(member.fixtureRelease, "cfb_v1_member_fixture_2026_09_18_r53_complete_price_history");
 assert.equal(member.snapshot.games[0]!.lockState, "locked", "only a fully valid immutable T-60 tuple is labeled locked");
 assert.equal(member.snapshot.games[0]!.lockedAt, lockedAt);
 
@@ -1587,6 +1594,17 @@ const unchangedMiddleEvidence: CfbForwardStoredEvidence = {
 };
 const movementMember = buildCfbMemberFixture([earlierEvidence, unchangedMiddleEvidence, evidence]);
 const movementGame = movementMember.snapshot.games[0]!;
+const compactHistoryMember = buildCfbMemberFixtureAtTime(
+  [evidence],
+  "2026-08-29T15:10:00.000Z",
+  [earlierEvidence, unchangedMiddleEvidence, evidence],
+);
+assert.deepEqual(
+  compactHistoryMember.snapshot.games[0]!.markets,
+  movementGame.markets,
+  "the bounded market-only history must restore the same complete same-book trails without reloading historical forecast payloads",
+);
+assert.equal(compactHistoryMember.provenance.sourceChecksum, movementMember.provenance.sourceChecksum);
 for (const decision of productionBundle.evaluatedBets) {
   const market = decision.market === "spread" ? movementGame.markets.first_inning : movementGame.markets[decision.market];
   const selectedSide = decision.market === "total"
@@ -2010,7 +2028,7 @@ assert.match(sharpOddsSource, /league: "ncaaf"/, "canonical event discovery must
 assert.match(sharpOddsSource, /path: "\/odds"[\s\S]*event_id: eventId[\s\S]*market: "main"/, "canonical event odds must stay exact-event and main-market scoped");
 assert.doesNotMatch(sharpOddsSource, /sharpEventIdCandidates|teamSlug\(/, "the writer path must not reconstruct or guess provider event bucket IDs");
 assert.equal((writerSource.match(/appendCfbForwardEvidence\(/g) ?? []).length, 1, "the writer must keep one all-payload append and never insert partial game evidence inside the collection loop");
-assert.match(writerSource, /refreshCompactMemberSnapshot\(\{ client: args\.client, existing: allExisting, payloads/, "the sole writer must publish the compact member snapshot from the same authoritative evidence rows");
+assert.match(writerSource, /refreshCompactMemberSnapshot\(\{ client: args\.client, existing: allExisting, marketHistory, payloads/, "the sole writer must publish the compact member snapshot from the authoritative rows and their bounded market history");
 assert.match(writerSource, /memberSnapshotError: error instanceof Error/, "member snapshot publication failure must be isolated from authoritative evidence and tracking writes");
 assert.match(memberSnapshotStoreSource, /\.from\("lab_response_snapshots"\)\.upsert/, "CFB must reuse the existing response snapshot table rather than add a writer or table");
 assert.match(memberSnapshotStoreSource, /const SNAPSHOT_STALE_MS = 8 \* 24 \* 60 \* 60 \* 1000/, "the published fixture must retain a bounded eight-day weekly-board continuity window");
@@ -2022,12 +2040,16 @@ assert.match(evidenceStoreSource, /CFB_FORWARD_IDENTITY_PREVIOUS_EVIDENCE_SCHEMA
 assert.match(evidenceStoreSource, /CFB_FORWARD_HOLISTIC_PREVIOUS_EVIDENCE_SCHEMA_RELEASE/, "the reader must retain valid immutable r20 T-60 rows during a partial r21 transition");
 assert.equal(CFB_FORWARD_EVIDENCE_PAGE_SIZE, 1_000);
 assert.equal(CFB_FORWARD_EVIDENCE_MAX_ROWS, 50_000);
+assert.equal(CFB_FORWARD_MARKET_HISTORY_PAGE_SIZE, 1_000);
+assert.equal(CFB_FORWARD_MARKET_HISTORY_MAX_ROWS, 12_000);
 assert.match(evidenceStoreSource, /\.order\("captured_at", \{ ascending: true \}\)\s*\.order\("id", \{ ascending: true \}\)\s*\.range\(from, from \+ CFB_FORWARD_EVIDENCE_PAGE_SIZE - 1\)/, "the CFB evidence reader must paginate with a stable timestamp-and-ID order");
 assert.match(evidenceStoreSource, /exceeded its bounded.*row season limit/, "the CFB evidence reader must fail explicitly at its hard cap instead of silently truncating a release wave");
 assert.match(evidenceStoreSource, /select\("id,evidence_release,provider_game_id,stage,captured_at,game_start_at"\)/, "the writer history scan must stay payload-free");
 assert.match(evidenceStoreSource, /latestCurrentByGameStage/, "the writer must retain the latest current-release opening, unlocked, and T-60 rows separately");
 assert.match(evidenceStoreSource, /latestPublishedByGameAtCutoff/, "the bounded writer read must retain the last immutable pre-boundary prediction for denominator recovery");
 assert.match(evidenceStoreSource, /CFB_FORWARD_WRITER_PAYLOAD_BATCH_SIZE = 100/, "current writer payload reads must remain bounded");
+assert.match(evidenceStoreSource, /current_books:payload->market->currentBooks/, "movement recovery must project compact market fields instead of reloading historical forecast payloads");
+assert.match(evidenceStoreSource, /exceeded its bounded.*row visible-board limit/, "movement recovery must fail explicitly at its visible-board row ceiling");
 const evidenceRanges: Array<[number, number]> = [];
 const storedEvidenceRow = {
   id: evidence.id,
@@ -2056,6 +2078,48 @@ const pagedEvidenceClient = {
 const pagedEvidence = await readCfbForwardEvidence({ client: pagedEvidenceClient, season: 2026 });
 assert.equal(pagedEvidence.length, 1_001, "a complete evidence read must include the second Supabase page");
 assert.deepEqual(evidenceRanges, [[0, 999], [1_000, 1_999]], "the reader must advance in exact non-overlapping 1,000-row pages");
+
+const projectedMarketHistoryRow = {
+  id: earlierEvidence.id,
+  evidence_release: CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE,
+  provider_game_id: earlierEvidence.providerGameId,
+  stage: earlierEvidence.stage,
+  captured_at: earlierEvidence.capturedAt,
+  game_start_at: earlierEvidence.gameStartAt,
+  payload_sha256: earlierEvidence.payloadSha256,
+  payload_schema_release: CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE,
+  payload_provider_game_id: earlierEvidence.providerGameId,
+  payload_stage: earlierEvidence.stage,
+  payload_captured_at: earlierEvidence.capturedAt,
+  current: earlierEvidence.payload.market.current,
+  current_books: earlierEvidence.payload.market.currentBooks,
+  provider_opening: earlierEvidence.payload.market.providerOpening,
+  operational_opening: earlierEvidence.payload.market.operationalOpening,
+  playbook_splits: earlierEvidence.payload.market.playbookSplits,
+  sharp_api_splits: earlierEvidence.payload.market.sharpApiSplits,
+};
+let marketHistorySelect = "";
+const marketHistoryClient = {
+  from() {
+    const query = {
+      select(value: string) { marketHistorySelect = value; return query; },
+      in() { return query; },
+      eq() { return query; },
+      order() { return query; },
+      range() { return Promise.resolve({ data: [projectedMarketHistoryRow], error: null }); },
+    };
+    return query;
+  },
+} as unknown as SupabaseClient;
+const marketHistoryRows = await readCfbForwardMarketHistory({
+  client: marketHistoryClient,
+  season: 2026,
+  providerGameIds: [earlierEvidence.providerGameId, earlierEvidence.providerGameId],
+});
+assert.equal(marketHistoryRows.length, 1);
+assert.deepEqual(marketHistoryRows[0]!.payload.market.currentBooks, earlierEvidence.payload.market.currentBooks);
+assert.match(marketHistorySelect, /current_books:payload->market->currentBooks/);
+assert.doesNotMatch(marketHistorySelect, /(?:^|,)payload(?:,|$)/, "the recurring movement reader must never select the full historical payload");
 
 const scoreReadClient = {
   from(table: string) {

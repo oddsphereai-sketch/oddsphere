@@ -25,6 +25,7 @@ import {
   hashCfbForwardEvidencePayload,
   matchesCfbForwardEvidencePayloadHash,
   type CfbForwardEvidencePayload,
+  type CfbForwardMarketHistoryEvidence,
   type CfbForwardStoredEvidence,
 } from "./cfbForwardEvidence";
 
@@ -47,11 +48,93 @@ type StoredMetadataRow = {
   game_start_at: string;
 };
 
+type StoredMarketHistoryRow = {
+  id: string;
+  evidence_release: string;
+  provider_game_id: string;
+  stage: string;
+  captured_at: string;
+  game_start_at: string;
+  payload_sha256: string;
+  payload_schema_release: string;
+  payload_provider_game_id: string;
+  payload_stage: string;
+  payload_captured_at: string;
+  current: CfbForwardEvidencePayload["market"]["current"];
+  current_books: CfbForwardEvidencePayload["market"]["currentBooks"];
+  provider_opening: CfbForwardEvidencePayload["market"]["providerOpening"];
+  operational_opening: CfbForwardEvidencePayload["market"]["operationalOpening"];
+  playbook_splits: CfbForwardEvidencePayload["market"]["playbookSplits"];
+  sharp_api_splits: CfbForwardEvidencePayload["market"]["sharpApiSplits"];
+};
+
 export type CfbForwardEvidenceMetadata = Pick<CfbForwardStoredEvidence, "providerGameId" | "capturedAt" | "gameStartAt">;
 
 export const CFB_FORWARD_EVIDENCE_PAGE_SIZE = 1_000 as const;
 export const CFB_FORWARD_EVIDENCE_MAX_ROWS = 50_000 as const;
 export const CFB_FORWARD_WRITER_PAYLOAD_BATCH_SIZE = 100 as const;
+export const CFB_FORWARD_MARKET_HISTORY_PAGE_SIZE = 1_000 as const;
+export const CFB_FORWARD_MARKET_HISTORY_MAX_ROWS = 12_000 as const;
+export const CFB_FORWARD_MARKET_HISTORY_GAME_BATCH_SIZE = 100 as const;
+
+/**
+ * Read only the JSON fields required by the member movement panels for the
+ * visible board. This preserves the real same-book chronology without
+ * returning the large forecast, context, quarterback, and decision payload on
+ * every historical row.
+ */
+export async function readCfbForwardMarketHistory(args: {
+  client: SupabaseClient;
+  season: number;
+  providerGameIds: string[];
+}): Promise<CfbForwardMarketHistoryEvidence[]> {
+  const providerGameIds = [...new Set(args.providerGameIds)].sort();
+  if (providerGameIds.length === 0) return [];
+  const rows: StoredMarketHistoryRow[] = [];
+  for (let gameIndex = 0; gameIndex < providerGameIds.length; gameIndex += CFB_FORWARD_MARKET_HISTORY_GAME_BATCH_SIZE) {
+    const gameIds = providerGameIds.slice(gameIndex, gameIndex + CFB_FORWARD_MARKET_HISTORY_GAME_BATCH_SIZE);
+    for (let from = 0; from < CFB_FORWARD_MARKET_HISTORY_MAX_ROWS; from += CFB_FORWARD_MARKET_HISTORY_PAGE_SIZE) {
+      const { data, error } = await args.client
+        .from("cfb_forward_evidence_snapshots")
+        .select([
+          "id",
+          "evidence_release",
+          "provider_game_id",
+          "stage",
+          "captured_at",
+          "game_start_at",
+          "payload_sha256",
+          "payload_schema_release:payload->>schemaRelease",
+          "payload_provider_game_id:payload->game->>providerGameId",
+          "payload_stage:payload->>stage",
+          "payload_captured_at:payload->>capturedAt",
+          "current:payload->market->current",
+          "current_books:payload->market->currentBooks",
+          "provider_opening:payload->market->providerOpening",
+          "operational_opening:payload->market->operationalOpening",
+          "playbook_splits:payload->market->playbookSplits",
+          "sharp_api_splits:payload->market->sharpApiSplits",
+        ].join(","))
+        .eq("season", args.season)
+        .eq("evidence_release", CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE)
+        .in("provider_game_id", gameIds)
+        .order("captured_at", { ascending: true })
+        .order("id", { ascending: true })
+        .range(from, from + CFB_FORWARD_MARKET_HISTORY_PAGE_SIZE - 1);
+      if (error) throw new Error(`CFB forward market history read failed: ${error.message}`);
+      const page = (data ?? []) as unknown as StoredMarketHistoryRow[];
+      if (rows.length + page.length > CFB_FORWARD_MARKET_HISTORY_MAX_ROWS) {
+        throw new Error(`CFB forward market history exceeded its bounded ${CFB_FORWARD_MARKET_HISTORY_MAX_ROWS}-row visible-board limit.`);
+      }
+      rows.push(...page);
+      if (page.length < CFB_FORWARD_MARKET_HISTORY_PAGE_SIZE) break;
+      if (from + CFB_FORWARD_MARKET_HISTORY_PAGE_SIZE >= CFB_FORWARD_MARKET_HISTORY_MAX_ROWS) {
+        throw new Error(`CFB forward market history exceeded its bounded ${CFB_FORWARD_MARKET_HISTORY_MAX_ROWS}-row visible-board limit.`);
+      }
+    }
+  }
+  return rows.map(normalizeMarketHistoryRow);
+}
 
 /** Load one authoritative current payload per game/stage, the last immutable
  * payload published no later than each game's T-60 boundary, and the
@@ -184,4 +267,38 @@ function normalizeStoredRow(row: StoredRow): CfbForwardStoredEvidence {
   }
   if (!matchesCfbForwardEvidencePayloadHash(payload, row.payload_sha256)) throw new Error(`CFB evidence ${row.id} checksum mismatch.`);
   return { id: row.id, providerGameId: row.provider_game_id, stage: payload.stage, capturedAt: payload.capturedAt, gameStartAt: new Date(row.game_start_at).toISOString(), payloadSha256: row.payload_sha256, payload };
+}
+
+function normalizeMarketHistoryRow(row: StoredMarketHistoryRow): CfbForwardMarketHistoryEvidence {
+  const capturedAt = new Date(row.captured_at).toISOString();
+  const gameStartAt = new Date(row.game_start_at).toISOString();
+  if (
+    row.evidence_release !== CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE ||
+    row.payload_schema_release !== CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE ||
+    row.payload_provider_game_id !== row.provider_game_id ||
+    row.payload_stage !== row.stage ||
+    new Date(row.payload_captured_at).toISOString() !== capturedAt ||
+    !["opening", "unlocked", "t60"].includes(row.stage) ||
+    !Array.isArray(row.current_books)
+  ) {
+    throw new Error(`CFB market history ${row.id} violates the immutable payload identity contract.`);
+  }
+  return {
+    id: row.id,
+    providerGameId: row.provider_game_id,
+    stage: row.stage as CfbForwardMarketHistoryEvidence["stage"],
+    capturedAt,
+    gameStartAt,
+    payloadSha256: row.payload_sha256,
+    payload: {
+      market: {
+        current: row.current ?? null,
+        currentBooks: row.current_books,
+        providerOpening: row.provider_opening ?? null,
+        operationalOpening: row.operational_opening ?? null,
+        playbookSplits: row.playbook_splits ?? null,
+        sharpApiSplits: row.sharp_api_splits ?? null,
+      },
+    },
+  };
 }

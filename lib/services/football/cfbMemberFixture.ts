@@ -43,6 +43,7 @@ import {
   CFB_FORWARD_PUBLICATION_PREVIOUS_MEMBER_RELEASE,
   type CfbForwardMarketOutlook,
   type CfbForwardEvidencePayload,
+  type CfbForwardMarketHistoryEvidence,
   type CfbForwardPlaybookSplit,
   type CfbForwardStoredEvidence,
 } from "./cfbForwardEvidence";
@@ -74,7 +75,7 @@ import { cfbTeamIdentity } from "./cfbTeamIdentity";
 import { CFB_PUBLIC_SCORE_DIRECTION_TOLERANCE_POINTS } from "./footballCrossMarketCoherence";
 
 export const CFB_MEMBER_FIXTURE_RELEASE =
-  "cfb_v1_member_fixture_2026_09_13_r52_live_prediction_visibility" as const;
+  "cfb_v1_member_fixture_2026_09_18_r53_complete_price_history" as const;
 export const CFB_PUBLIC_OUTCOME_CONTRACT_RELEASE =
   "cfb_market_sharp_public_outcome_contract_2026_09_05_r49_confidence_economics_bridge" as const;
 export const CFB_CONTEXT_ONLY_QUOTE_CAPTURE_SKEW_MS = 5_000 as const;
@@ -125,14 +126,21 @@ export async function readCurrentCfbMemberFixture(args: { client: SupabaseClient
   return buildCfbMemberFixture(await readCfbForwardEvidence({ client: args.client, season: args.season ?? 2026 }));
 }
 
-export function buildCfbMemberFixture(rows: CfbForwardStoredEvidence[], now = new Date().toISOString()): CfbMemberFixture {
+export function buildCfbMemberFixture(
+  rows: CfbForwardStoredEvidence[],
+  now = new Date().toISOString(),
+  marketHistory: CfbForwardMarketHistoryEvidence[] = rows,
+): CfbMemberFixture {
   const windows = resolveCfbVisibleWindows({ now, evidence: rows });
   const selectedWindows = windows.flatMap((window) => {
     const evidence = rows.filter((row) => isGameInCfbWeeklyWindow({ scheduledStart: row.gameStartAt }, window));
     return evidence.length === 0 ? [] : [{ window, evidence, latest: selectLatestCfbMemberEvidenceRows(evidence, now) }];
   });
   if (selectedWindows.length === 0) throw new Error("CFB forward evidence has no visible weekly window.");
-  const windowRows = selectedWindows.flatMap((value) => value.evidence);
+  const visibleWindows = selectedWindows.map((value) => value.window);
+  const windowRows = marketHistory.filter((row) =>
+    visibleWindows.some((window) => isGameInCfbWeeklyWindow({ scheduledStart: row.gameStartAt }, window))
+  );
   const latest = selectedWindows.flatMap((value) => value.latest);
   const movementRowsByGame = new Map(latest.map((row) => [
     row.providerGameId,
@@ -169,9 +177,9 @@ export function buildCfbMemberFixture(rows: CfbForwardStoredEvidence[], now = ne
 }
 
 function movementRowsForGame(
-  rows: CfbForwardStoredEvidence[],
+  rows: CfbForwardMarketHistoryEvidence[],
   latest: CfbForwardStoredEvidence,
-): CfbForwardStoredEvidence[] {
+): CfbForwardMarketHistoryEvidence[] {
   return rows
     .filter((row) =>
       row.providerGameId === latest.providerGameId &&
@@ -617,7 +625,7 @@ function completeRowsForRelease(
   return values;
 }
 
-function buildGame(row: CfbForwardStoredEvidence, movementRows: CfbForwardStoredEvidence[], now: string): DailyEdgeGameDto {
+function buildGame(row: CfbForwardStoredEvidence, movementRows: CfbForwardMarketHistoryEvidence[], now: string): DailyEdgeGameDto {
   const payload = row.payload;
   const awayIdentity = cfbTeamIdentity(payload.game.away.abbreviation);
   const homeIdentity = cfbTeamIdentity(payload.game.home.abbreviation);
@@ -804,7 +812,7 @@ function assertCfbPublicPredictionCoherence(args: {
 
 function buildCfbRecommendationDecision(args: {
   payload: CfbForwardEvidencePayload;
-  movementRows: CfbForwardStoredEvidence[];
+  movementRows: CfbForwardMarketHistoryEvidence[];
   projected: { away: number; home: number };
   moneyline: { market: MarketEdgeDto; decision: CfbV1ExactPriceDecision | null };
   total: { market: MarketEdgeDto; decision: CfbV1ExactPriceDecision | null };
@@ -861,7 +869,7 @@ function selectedMarketSide(
 function buildSharpBookSplitSection(
   payload: CfbForwardEvidencePayload,
   market: CfbV1Market,
-  movementRows: CfbForwardStoredEvidence[] = [],
+  movementRows: CfbForwardMarketHistoryEvidence[] = [],
 ): MarketSplitDisplaySection | null {
   const record = [...(payload.market.sharpApiSplits ?? [])]
     .filter((candidate) => candidate.sourceSemantics === "sharp_adjacent" && sharpMarketAvailable(candidate, market))
@@ -877,7 +885,7 @@ function buildSharpBookSplitSection(
 function buildSportsbookSplitSection(
   payload: CfbForwardEvidencePayload,
   market: CfbV1Market,
-  movementRows: CfbForwardStoredEvidence[] = [],
+  movementRows: CfbForwardMarketHistoryEvidence[] = [],
 ): MarketSplitDisplaySection | null {
   if (buildSharpBookSplitSection(payload, market, movementRows)) return null;
   const record = [...(payload.market.sharpApiSplits ?? [])]
@@ -924,7 +932,7 @@ function cfbSplitSection(
 }
 
 function previousSharpSplitRecord(args: {
-  movementRows: CfbForwardStoredEvidence[];
+  movementRows: CfbForwardMarketHistoryEvidence[];
   market: CfbV1Market;
   current: NonNullable<CfbForwardEvidencePayload["market"]["sharpApiSplits"]>[number];
 }) {
@@ -967,7 +975,7 @@ function buildMarket(
   payload: CfbForwardEvidencePayload,
   market: CfbV1Market,
   decision: CfbV1ExactPriceDecision | null,
-  movementRows: CfbForwardStoredEvidence[],
+  movementRows: CfbForwardMarketHistoryEvidence[],
 ): MarketEdgeDto {
   const held = decision === null;
   const outlook = payload.decisions.marketOutlooks?.[market] ?? null;
@@ -1227,7 +1235,7 @@ function contextQuoteTrails(
   market: CfbV1Market,
   side: "home" | "away" | "over" | "under",
   current: CfbCurrentDisplayQuote,
-  movementRows: CfbForwardStoredEvidence[],
+  movementRows: CfbForwardMarketHistoryEvidence[],
 ): { selected: OddsTrailStopDto[]; opposing: OddsTrailStopDto[] } {
   const selected = buildSameBookTrail({
     rows: movementRows,
@@ -1367,7 +1375,7 @@ function outlookLabel(payload: CfbForwardEvidencePayload, outlook: CfbForwardMar
 function decisionTrails(
   payload: CfbForwardEvidencePayload,
   decision: CfbV1ExactPriceDecision,
-  movementRows: CfbForwardStoredEvidence[],
+  movementRows: CfbForwardMarketHistoryEvidence[],
 ): { selected: OddsTrailStopDto[]; opposing: OddsTrailStopDto[] } {
   const selectedSide = canonicalSide(payload, decision);
   const exactBook = payload.market.currentBooks.find((book) => normalizeBook(book.sportsbook) === normalizeBook(decision.evaluatedQuote.sportsbook));
@@ -1400,7 +1408,7 @@ function decisionTrails(
 }
 
 function buildSameBookTrail(args: {
-  rows: CfbForwardStoredEvidence[];
+  rows: CfbForwardMarketHistoryEvidence[];
   sportsbook: string;
   market: CfbV1Market;
   side: "home" | "away" | "over" | "under";
@@ -1528,7 +1536,7 @@ function keyStats(payload: CfbForwardEvidencePayload, market: CfbV1Market): Mark
 function buildPublicSplits(
   payload: CfbForwardEvidencePayload,
   market: CfbV1Market,
-  movementRows: CfbForwardStoredEvidence[] = [],
+  movementRows: CfbForwardMarketHistoryEvidence[] = [],
 ): MarketEdgeDto["publicSplits"] {
   const split = payload.market.playbookSplits?.[market];
   if (!split) return [];

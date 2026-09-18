@@ -18,12 +18,13 @@ import {
   planCfbForwardEvidenceCaptures,
   type CfbForwardCapturePlan,
   type CfbForwardEvidencePayload,
+  type CfbForwardMarketHistoryEvidence,
   type CfbForwardOperationalOpening,
   type CfbForwardPublishedDecisionBundle,
   type CfbForwardStoredEvidence,
   type CfbForwardTeamQuarterbacks,
 } from "./cfbForwardEvidence";
-import { appendCfbForwardEvidence, readCfbForwardWriterEvidence, type CfbForwardEvidenceMetadata } from "./cfbForwardEvidenceStore";
+import { appendCfbForwardEvidence, readCfbForwardMarketHistory, readCfbForwardWriterEvidence, type CfbForwardEvidenceMetadata } from "./cfbForwardEvidenceStore";
 import { buildCfbV1DecisionBundle, CFB_T60_MAX_CAPTURE_LAG_MINUTES, CFB_V1_DECISION_RELEASE, getCfbV1ForecastForGame } from "./cfbV1Decision";
 import { CFB_V1_WEEKLY_RUNTIME_RELEASE, cfbV1WeeklyGameProfileCoverage } from "./cfbV1WeeklyForecast";
 import { resolveCfbCanonicalMarketAnchor } from "./cfbMarketInformedOutcome";
@@ -67,7 +68,7 @@ import {
 } from "./cfbForwardMemberSnapshotStore";
 
 export const CFB_FORWARD_WRITER_RELEASE =
-  "cfb_forward_evidence_writer_2026_09_13_r61_payload_owned_recovery_cutoff" as const;
+  "cfb_forward_evidence_writer_2026_09_18_r62_complete_price_history" as const;
 export const CFB_FORWARD_MAX_QB_TEAMS_PER_RUN = 24 as const;
 export const CFB_FORWARD_MAX_SHARP_FALLBACK_GAMES_PER_RUN = 24 as const;
 export const CFB_FORWARD_RESULTS_BATCH_SIZE = 100 as const;
@@ -170,6 +171,14 @@ export async function runCfbForwardEvidenceWriter(args: {
   const writerEvidence = await readCfbForwardWriterEvidence({ client: args.client, season: args.season });
   const allExisting = writerEvidence.evidence;
   const windows = resolveCfbVisibleWindows({ now: args.now, evidence: allExisting });
+  const visibleGameIds = [...new Set(allExisting
+    .filter((row) => windows.some((window) => isGameInCfbWeeklyWindow({ scheduledStart: row.gameStartAt }, window)))
+    .map((row) => row.providerGameId))];
+  const marketHistory = await readCfbForwardMarketHistory({
+    client: args.client,
+    season: args.season,
+    providerGameIds: visibleGameIds,
+  });
   const states: CfbForwardWindowState[] = windows.map((window) => {
     const existing = allExisting.filter((row) => isGameInCfbWeeklyWindow({ scheduledStart: row.gameStartAt }, window));
     const lockPlanningExisting = cfbLockPlanningEvidence(existing);
@@ -184,7 +193,7 @@ export async function runCfbForwardEvidenceWriter(args: {
       candidates: cfbTrackingCandidatesForRun(allExisting, [], args.now),
       apply: args.apply,
     });
-    const memberSnapshot = await refreshCompactMemberSnapshot({ client: args.client, existing: allExisting, payloads: [], season: args.season, now: args.now, apply: args.apply });
+    const memberSnapshot = await refreshCompactMemberSnapshot({ client: args.client, existing: allExisting, marketHistory, payloads: [], season: args.season, now: args.now, apply: args.apply });
     return emptyResult(states.map((state) => state.need.reason).join("+"), tracking, memberSnapshot);
   }
   const { window, existing, lockPlanningExisting, need } = selected;
@@ -203,7 +212,7 @@ export async function runCfbForwardEvidenceWriter(args: {
       candidates: cfbTrackingCandidatesForRun(allExisting, [], args.now),
       apply: args.apply,
     });
-    const memberSnapshot = await refreshCompactMemberSnapshot({ client: args.client, existing: allExisting, payloads: [], season: args.season, now: args.now, apply: args.apply });
+    const memberSnapshot = await refreshCompactMemberSnapshot({ client: args.client, existing: allExisting, marketHistory, payloads: [], season: args.season, now: args.now, apply: args.apply });
     return emptyResult("capture_plan_empty", tracking, memberSnapshot);
   }
   const playbook = new PlaybookClient(args.playbookApiKey);
@@ -513,7 +522,7 @@ export async function runCfbForwardEvidenceWriter(args: {
     candidates: cfbTrackingCandidatesForRun(allExisting, payloads, args.now),
     apply: args.apply,
   });
-  const memberSnapshot = await refreshCompactMemberSnapshot({ client: args.client, existing: allExisting, payloads, season: args.season, now: args.now, apply: args.apply });
+  const memberSnapshot = await refreshCompactMemberSnapshot({ client: args.client, existing: allExisting, marketHistory, payloads, season: args.season, now: args.now, apply: args.apply });
   const decisions = payloads.flatMap((payload) => payload.decisions.evaluatedBets);
   return {
     writerRelease: CFB_FORWARD_WRITER_RELEASE,
@@ -906,6 +915,7 @@ type MemberSnapshotResult = Pick<CfbForwardWriterResult, "memberSnapshotAttempte
 async function refreshCompactMemberSnapshot(args: {
   client: SupabaseClient;
   existing: CfbForwardStoredEvidence[];
+  marketHistory: CfbForwardMarketHistoryEvidence[];
   payloads: CfbForwardEvidencePayload[];
   season: number;
   now: string;
@@ -915,7 +925,8 @@ async function refreshCompactMemberSnapshot(args: {
   const rows = [...args.existing, ...args.payloads.map(storedEvidenceForPayload)];
   if (rows.length === 0) return { memberSnapshotAttempted: false, memberSnapshotUpdated: false, memberSnapshotKey: null, memberSnapshotError: null };
   try {
-    const fixture = buildCfbMemberFixture(rows, args.now);
+    const marketHistory = [...args.marketHistory, ...args.payloads.map(marketHistoryForPayload)];
+    const fixture = buildCfbMemberFixture(rows, args.now, marketHistory);
     const snapshot = buildCfbForwardMemberSnapshot({ fixture, season: args.season, publishedAt: args.now });
     const write = await writeCfbForwardMemberSnapshot({ client: args.client, snapshot });
     return { memberSnapshotAttempted: true, memberSnapshotUpdated: write.ok, memberSnapshotKey: write.snapshotKey, memberSnapshotError: write.ok ? null : write.error };
@@ -933,6 +944,27 @@ function storedEvidenceForPayload(payload: CfbForwardEvidencePayload): CfbForwar
     gameStartAt: payload.game.scheduledStart,
     payloadSha256: hashCfbForwardEvidencePayload(payload),
     payload,
+  };
+}
+
+function marketHistoryForPayload(payload: CfbForwardEvidencePayload): CfbForwardMarketHistoryEvidence {
+  return {
+    id: `pending:${payload.runId}:${payload.game.providerGameId}:${payload.stage}`,
+    providerGameId: payload.game.providerGameId,
+    stage: payload.stage,
+    capturedAt: payload.capturedAt,
+    gameStartAt: payload.game.scheduledStart,
+    payloadSha256: hashCfbForwardEvidencePayload(payload),
+    payload: {
+      market: {
+        current: payload.market.current,
+        currentBooks: payload.market.currentBooks,
+        providerOpening: payload.market.providerOpening,
+        operationalOpening: payload.market.operationalOpening,
+        playbookSplits: payload.market.playbookSplits,
+        sharpApiSplits: payload.market.sharpApiSplits,
+      },
+    },
   };
 }
 

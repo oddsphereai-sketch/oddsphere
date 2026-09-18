@@ -251,6 +251,23 @@ export type CfbForwardStoredEvidence = {
   payload: CfbForwardEvidencePayload;
 };
 
+/**
+ * Compact market-only history used to render same-book movement. The scheduled
+ * writer intentionally avoids reloading every historical forecast payload, but
+ * the member reader still needs the chronological price and split fields.
+ */
+export type CfbForwardMarketHistoryEvidence = Pick<
+  CfbForwardStoredEvidence,
+  "id" | "providerGameId" | "stage" | "capturedAt" | "gameStartAt" | "payloadSha256"
+> & {
+  payload: {
+    market: Pick<
+      CfbForwardEvidencePayload["market"],
+      "current" | "currentBooks" | "providerOpening" | "operationalOpening" | "playbookSplits" | "sharpApiSplits"
+    >;
+  };
+};
+
 export type CfbForwardCapturePlan = {
   game: NcaafGame;
   stage: CfbForwardEvidenceStage;
