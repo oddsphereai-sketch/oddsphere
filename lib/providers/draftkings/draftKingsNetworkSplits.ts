@@ -427,6 +427,11 @@ function lastToken(value: string): string {
 }
 
 function validPercentage(value: number | undefined): value is number {
+  // This independently verified pair is presentation-only: it is never fed
+  // into recommendationDecision, grading, or tracking. Preserve provider-
+  // reported endpoint percentages when both sides form a coherent 100% pair
+  // so a real DraftKings fallback does not disappear from the member card.
+  // Decision-grade source-aware evidence retains its stricter endpoint guard.
   return value !== undefined && Number.isFinite(value) && value >= 0 && value <= 100;
 }
 

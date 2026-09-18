@@ -77,7 +77,7 @@ export function NflPlayerPropsProductDashboard({ snapshot, reviewMode = false, i
     ? allPairs
     : allPairs.filter((pair) => pair.prediction?.outcome === predictionFilter), [allPairs, predictionFilter]);
   const rows = useMemo(() => predictionFilter === "all" ? filteredRows : pairs.flatMap((pair) => pair.rows), [filteredRows, pairs, predictionFilter]);
-  const radarRows = useMemo(() => buildRadarRows(rows, touchdownScorers, overForecasts), [rows, touchdownScorers, overForecasts]);
+  const radarRows = useMemo(() => buildRadarRows(rows), [rows]);
   const selected = rows.find((row) => key(row) === selectedKey) ?? null;
   const activeFilters = [selectedGame, grade, market, predictionFilter, bookFilter].filter((value) => value !== "all" && value !== "All").length + (search.trim() ? 1 : 0) + (oddsInputPresent ? 1 : 0);
 
@@ -285,10 +285,12 @@ function pairRows(rows: Row[], sort: SortKey, touchdownScorers: ReadonlySet<stri
   })).sort((a, b) => sortRows(sort)(a.primary, b.primary) || sortRows("signal")(a.primary, b.primary));
 }
 function deriveGames(rows: Row[]): GameSummary[] { const map = new Map<string, GameSummary>(); for (const row of rows) { const game = map.get(row.gameId) ?? { gameId: row.gameId, teams: [], opponent: row.opponent || null, scheduledStart: row.scheduledStart || null, rows: 0 }; game.teams = unique([...game.teams, row.team]); if (row.opponent && !game.teams.includes(row.opponent) && game.teams.length < 2) game.teams.push(row.opponent); game.rows += 1; map.set(row.gameId, game); } return [...map.values()].sort((a, b) => Date.parse(a.scheduledStart ?? "") - Date.parse(b.scheduledStart ?? "")); }
-function buildRadarRows(rows: Row[], touchdownScorers: ReadonlySet<string>, overForecasts: ReadonlySet<string>): Row[] {
-  const predictions = pairRows(rows, "signal", touchdownScorers, overForecasts)
-    .flatMap((pair) => pair.prediction?.quotedSide ? [pair.rows.find((row) => row.side === pair.prediction!.quotedSide) ?? pair.prediction.row] : [])
-    .filter((row) => row.grade !== "No Play")
+function buildRadarRows(rows: Row[]): Row[] {
+  // Radar is the actionable surface. A ranked display forecast may select the
+  // opposite sibling (or an unquoted No-TD outcome), but it must not hide a
+  // real Best Angle/Lean that is present on the complete board.
+  const predictions = rows
+    .filter((row) => row.grade === "Best Angle" || row.grade === "Lean")
     .sort(sortRows("signal"));
   const deduped = new Map<string, Row>();
   for (const row of predictions) {

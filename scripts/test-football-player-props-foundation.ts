@@ -33,8 +33,11 @@ const games = [{
 
 assert.equal(canonicalNflPlayerPropMarket("player_passing_yards"), "passing_yards");
 assert.equal(canonicalNflPlayerPropMarket("rushing_yards"), "rushing_yards");
+assert.equal(canonicalNflPlayerPropMarket("player_total_receptions"), "receptions");
+assert.equal(canonicalNflPlayerPropMarket("player_total_rush_attempts"), "rushing_attempts");
+assert.equal(canonicalNflPlayerPropMarket("player_rushing_+_receiving_yards"), "rushing_receiving_yards");
 assert.equal(canonicalNflPlayerPropMarket("unknown_fun_prop"), null);
-assert.equal(NFL_PLAYER_PROPS_PROVIDER_SNAPSHOT_RELEASE, "nfl_player_props_provider_observation_2026_09_07_r8_week_one_identity_capacity");
+assert.equal(NFL_PLAYER_PROPS_PROVIDER_SNAPSHOT_RELEASE, "nfl_player_props_provider_observation_2026_09_18_r9_sharp_alias_coverage");
 assert.deepEqual(NFL_PLAYER_PROPS_PHASE_ONE_MARKETS, [
   "passing_attempts",
   "passing_completions",

@@ -4,7 +4,7 @@ This file is the human-readable production handoff registry. Runtime constants a
 prediction snapshots remain the machine authority. Future model work must start here, verify the
 constants, and preserve the precedence and writer ownership below.
 
-Last reviewed: 2026-09-16
+Last reviewed: 2026-09-18
 
 ## Cross-sport confidence / execution contract
 
@@ -16,6 +16,14 @@ Last reviewed: 2026-09-16
   production releases recorded below. Evidence:
   `docs/model-audits/2026-09-04-daily-edge-price-portability-predeclaration.md` and
   `docs/model-audits/2026-09-04-daily-edge-grade-gate-inventory.md`.
+
+- September 18 MLB split-display repair: the existing one-card hierarchy remains
+  current complete Circa, then current complete DraftKings, then current complete
+  BetMGM. The independent DraftKings display feed now matches all current MLB
+  provider abbreviations and preserves a coherent provider-reported 0/100 pair
+  only in the display-only fallback. The stricter decision-grade endpoint guard,
+  Playbook consensus separation, presentation labels/copy, model inputs,
+  predictions, probabilities, grades, stakes, locks, and tracking are unchanged.
 
 ## Cross-sport prediction-accuracy denominator contract (2026-09-04)
 
@@ -225,6 +233,7 @@ The bullets below record the preceding r29/r15 rollback era and its historical v
 
 ## NFL Player Props production release
 
+- September 18 provider/Radar coverage repair: active provider observation / member / member lifecycle / writer are `nfl_player_props_provider_observation_2026_09_18_r9_sharp_alias_coverage` / `nfl_player_props_member_2026_09_18_r21_actionable_radar_coverage` / `nfl_player_props_member_lifecycle_2026_09_18_r3_actionable_radar_coverage` / `nfl_player_props_writer_2026_09_18_r23_provider_alias_coverage`. Exact SharpAPI aliases recognize supported receptions and rushing-attempt inputs, while ambiguous and period markets remain rejected. BALLDONTLIE identity health now tests exact requested-ID completeness instead of treating a harmless cursor as failure. Today’s Radar selects actual Best Angle/Lean rows so a ranked No Play sibling cannot hide an action; full-board ranked predictions remain unchanged. A same-capture A/B replay at `2026-09-18T20:40:03.874Z` removed only the four repaired-alias observations and produced identical 3,147-row, 16-game boards: 17 Best Angles / 58 Leans / 311 Watchlists / 2,505 ordinary No Plays / 256 internal exceptions, with zero added/removed/changed decisions and zero actionable promotions/demotions. The same capture found 13 actionable scopes hidden from the old Radar candidate pool and used 46 calls under the unchanged 51-call ceiling. Model / calibration / decision / runtime / board / tracking remain `nfl_player_props_distribution_model_2026_09_16_r9_current_season_inputs` / `nfl_player_props_distribution_calibration_2026_09_16_r9_ranked_predictions` / `nfl_player_props_decision_2026_09_16_r12_ranked_predictions` / `nfl_player_props_runtime_2026_09_16_r13_current_season_inputs` / `nfl_player_props_board_2026_09_16_r16_ranked_predictions` / `nfl_player_props_tracking_2026_09_16_r12_current_season_inputs`; probabilities, projections, prediction sides, grades, stakes, locks, settlement, tracking formulas, copy, labels, provider calls, cron, and `prediction_pipeline:nfl` lease are unchanged. Evidence and rollback: `docs/model-audits/2026-09-18-nfl-player-props-provider-radar-coverage-predeclaration.md` and `docs/model-audits/2026-09-18-nfl-player-props-provider-radar-coverage-result.md`.
 - September 17 no-Held member coverage correction: active model / calibration / decision / runtime / board / member / writer / tracking are `nfl_player_props_distribution_model_2026_09_16_r9_current_season_inputs` / `nfl_player_props_distribution_calibration_2026_09_16_r9_ranked_predictions` / `nfl_player_props_decision_2026_09_16_r12_ranked_predictions` / `nfl_player_props_runtime_2026_09_16_r13_current_season_inputs` / `nfl_player_props_board_2026_09_16_r16_ranked_predictions` / `nfl_player_props_member_2026_09_17_r20_no_held_member_coverage` / `nfl_player_props_writer_2026_09_16_r22_current_season_inputs` / `nfl_player_props_tracking_2026_09_16_r12_current_season_inputs`; member lifecycle is `nfl_player_props_member_lifecycle_2026_09_17_r2_no_held_member_coverage`. Internal role/identity exceptions remain auditable as Held but are projected to members as non-actionable No Play predictions so the complete evaluated slate remains visible. Probabilities, projections, prediction sides, ranked scorer selection, prices, EV, actionable grades, stakes, locks, tracking eligibility, writer, and lease are unchanged. Week 2 same-snapshot impact: 1,798 to 1,994 member rows, 196 additional No Plays, zero actionable promotions/demotions, and unchanged tracking. Evidence and rollback: `docs/model-audits/2026-09-17-nfl-player-props-no-held-member-coverage-predeclaration.md` and `docs/model-audits/2026-09-17-nfl-player-props-no-held-member-coverage-result.md`.
 
 - September 16 injury-pagination recovery: active model / calibration / decision / runtime / board / member / writer / tracking / inference context are `nfl_player_props_distribution_model_2026_09_16_r8_injury_pagination` / `nfl_player_props_distribution_calibration_2026_09_16_r8_injury_pagination` / `nfl_player_props_decision_2026_09_16_r11_injury_pagination` / `nfl_player_props_runtime_2026_09_16_r12_injury_pagination` / `nfl_player_props_board_2026_09_16_r15_injury_pagination` / `nfl_player_props_member_2026_09_16_r18_injury_pagination` / `nfl_player_props_writer_2026_09_16_r21_injury_pagination` / `nfl_player_props_tracking_2026_09_16_r11_injury_pagination` / `nfl_player_props_inference_context_2026_09_16_r4_game_scoped_availability`. The shared five-page Week 2 injury response now completes inside an eight-page ceiling, the reader uses the shared current NFL week, and a single incomplete shared-evidence game no longer aborts the complete slate. The current direct no-write replay covers all 16 games with zero context holds and produces a nonempty 1,260-row classified board. No model equation, grade threshold, side, stake, lock, settlement, writer, cron, or lease changes. Evidence and rollback are recorded in the September 16 injury-pagination audit above.
