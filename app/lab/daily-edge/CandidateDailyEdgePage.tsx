@@ -15,7 +15,10 @@ import { filterWeeklyReaderSnapshot } from "@/lib/services/dailyEdge/weeklyReade
 import type { Sport } from "@/lib/types/domain/Sport";
 import { unstable_cache } from "next/cache";
 import { CFB_MEMBER_FIXTURE_RELEASE } from "@/lib/services/football/cfbMemberFixture";
-import { CFB_FORWARD_MEMBER_SNAPSHOT_RELEASE } from "@/lib/services/football/cfbForwardMemberSnapshotStore";
+import {
+  CFB_FORWARD_MEMBER_SNAPSHOT_RELEASE,
+  CFB_MEMBER_SNAPSHOT_READER_RELEASE,
+} from "@/lib/services/football/cfbForwardMemberSnapshotStore";
 import { NFL_FORWARD_MEMBER_SNAPSHOT_RELEASE } from "@/lib/services/football/nflForwardMemberSnapshotStore";
 import { enrichCachedNflFootballEvidence } from "@/lib/services/football/footballMemberEvidence";
 import { resolveNflForwardWeek } from "@/lib/services/football/nflForwardWeekSelection";
@@ -41,19 +44,34 @@ const readCachedNflForwardMemberSnapshot = unstable_cache(
   { revalidate: 15, tags: [NFL_FORWARD_MEMBER_SNAPSHOT_RELEASE] },
 );
 
+async function readUncachedCfbMemberFixture(season: number) {
+  const [{ supabase }, { readCfbForwardMemberSnapshot }] = await Promise.all([
+    import("@/lib/db/supabase"),
+    import("@/lib/services/football/cfbForwardMemberSnapshotStore"),
+  ]);
+  const published = await readCfbForwardMemberSnapshot({ client: supabase, season });
+  return published?.fixture ?? null;
+}
+
 const readCachedCfbMemberFixture = unstable_cache(
   async (season: number) => {
-    const [{ supabase }, { readCfbForwardMemberSnapshot }] = await Promise.all([
-      import("@/lib/db/supabase"),
-      import("@/lib/services/football/cfbForwardMemberSnapshotStore"),
-    ]);
-    const published = await readCfbForwardMemberSnapshot({ client: supabase, season })
-      .catch(() => null);
-    return published?.fixture ?? null;
+    return readUncachedCfbMemberFixture(season);
   },
-  ["cfb-current-member-fixture", CFB_MEMBER_FIXTURE_RELEASE, CFB_FORWARD_MEMBER_SNAPSHOT_RELEASE],
+  [
+    "cfb-current-member-fixture",
+    CFB_MEMBER_FIXTURE_RELEASE,
+    CFB_FORWARD_MEMBER_SNAPSHOT_RELEASE,
+    CFB_MEMBER_SNAPSHOT_READER_RELEASE,
+  ],
   { revalidate: 60, tags: [CFB_MEMBER_FIXTURE_RELEASE] },
 );
+
+async function readResilientCfbMemberFixture(season: number) {
+  const cached = await readCachedCfbMemberFixture(season).catch(() => null);
+  // A cached miss must not extend an outage after the sole writer recovers.
+  // Retry the compact snapshot directly; never rebuild the evidence season.
+  return cached ?? readUncachedCfbMemberFixture(season);
+}
 
 const MEMBER_SPORT_SWITCH_DESTINATIONS: Partial<Record<Sport, string>> = {
   mlb: "/lab/daily-edge?sport=mlb",
@@ -143,7 +161,7 @@ export default async function CandidateDailyEdgePage({
       label: "cfb-daily-edge-fixture",
       fallback: null,
       timeoutMs: CFB_MEMBER_DATA_READ_TIMEOUT_MS,
-      read: () => readCachedCfbMemberFixture(
+      read: () => readResilientCfbMemberFixture(
         Number(process.env.CFB_FORWARD_SEASON ?? "2026"),
       ),
     });

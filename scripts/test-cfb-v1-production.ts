@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import path from "node:path";
+import { gzipSync } from "node:zlib";
 import { isPublicallyTracked } from "../lib/config/officialTrackingStart";
 import { buildCfbMemberFixture as buildCfbMemberFixtureAtTime, selectLatestCfbMemberEvidenceRows } from "../lib/services/football/cfbMemberFixture";
 import { cfbTeamIdentity } from "../lib/services/football/cfbTeamIdentity";
@@ -91,8 +93,11 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   buildCfbForwardMemberSnapshot,
   CFB_FORWARD_MEMBER_SNAPSHOT_RELEASE,
+  CFB_FORWARD_PREVIOUS_MEMBER_SNAPSHOT_RELEASE,
+  CFB_PREVIOUS_MEMBER_FIXTURE_RELEASE,
   decodeCfbForwardMemberSnapshotPayload,
   encodeCfbForwardMemberSnapshotPayload,
+  readCfbForwardMemberSnapshot,
 } from "../lib/services/football/cfbForwardMemberSnapshotStore";
 
 const buildCfbMemberFixture = (
@@ -448,6 +453,59 @@ assert.equal(
   null,
   "transport byte-length corruption fails closed",
 );
+const previousFixture = structuredClone(member) as unknown as Record<string, unknown>;
+previousFixture.fixtureRelease = CFB_PREVIOUS_MEMBER_FIXTURE_RELEASE;
+const previousSnapshot = {
+  ...structuredClone(compactMemberSnapshot),
+  snapshotRelease: CFB_FORWARD_PREVIOUS_MEMBER_SNAPSHOT_RELEASE,
+  fixtureRelease: CFB_PREVIOUS_MEMBER_FIXTURE_RELEASE,
+  fixture: previousFixture,
+};
+const previousJson = JSON.stringify(previousSnapshot);
+const previousCompressed = gzipSync(Buffer.from(previousJson), { level: 9 });
+const previousEnvelope = {
+  kind: "cfb_forward_member_snapshot_v1",
+  envelopeRelease: CFB_FORWARD_PREVIOUS_MEMBER_SNAPSHOT_RELEASE,
+  encoding: "gzip-base64",
+  checksum: createHash("sha256").update(previousJson).digest("hex"),
+  snapshotRelease: CFB_FORWARD_PREVIOUS_MEMBER_SNAPSHOT_RELEASE,
+  season: 2026,
+  publishedAt: lockedAt,
+  uncompressedBytes: Buffer.byteLength(previousJson),
+  compressedBytes: previousCompressed.byteLength,
+  payload: previousCompressed.toString("base64"),
+};
+let memberSnapshotRead = 0;
+const transitionFallbackClient = {
+  from() {
+    memberSnapshotRead += 1;
+    if (memberSnapshotRead === 1) {
+      const currentQuery = {
+        select() { return currentQuery; },
+        eq() { return currentQuery; },
+        maybeSingle() { return Promise.resolve({ data: null, error: null }); },
+      };
+      return currentQuery;
+    }
+    const fallbackQuery = {
+      select() { return fallbackQuery; },
+      eq() { return fallbackQuery; },
+      like() { return fallbackQuery; },
+      order() { return fallbackQuery; },
+      limit() { return Promise.resolve({ data: [{ payload: previousEnvelope }], error: null }); },
+    };
+    return fallbackQuery;
+  },
+} as unknown as SupabaseClient;
+const transitionFallback = await readCfbForwardMemberSnapshot({
+  client: transitionFallbackClient,
+  season: 2026,
+  now: lockedAt,
+});
+assert.ok(transitionFallback, "a release transition must retain the immediately previous verified CFB board");
+assert.equal(transitionFallback.fixtureRelease, CFB_PREVIOUS_MEMBER_FIXTURE_RELEASE);
+assert.equal(transitionFallback.fixture.snapshot.games.length, 1);
+assert.equal(memberSnapshotRead, 2, "the previous release is queried only after the current release is missing");
 assert.equal(member.snapshot.games.length, 1);
 assert.equal(member.fixtureRelease, "cfb_v1_member_fixture_2026_09_18_r53_complete_price_history");
 assert.equal(member.snapshot.games[0]!.lockState, "locked", "only a fully valid immutable T-60 tuple is labeled locked");
