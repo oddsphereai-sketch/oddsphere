@@ -248,7 +248,10 @@ export function auditNflForwardMemberSnapshot(input: {
     game.markets.total,
     game.markets.first_inning,
   ]);
-  const soonestStart = Math.min(...games.map((game) => Date.parse(game.gameStartAt ?? game.scheduledLockAt)));
+  const upcomingStarts = games
+    .map((game) => Date.parse(game.gameStartAt ?? game.scheduledLockAt))
+    .filter((startsAt) => Number.isFinite(startsAt) && startsAt > nowMs);
+  const soonestStart = upcomingStarts.length ? Math.min(...upcomingStarts) : Number.POSITIVE_INFINITY;
   const maximumSourceAgeMinutes = Number.isFinite(soonestStart) && soonestStart - nowMs <= 48 * 60 * 60 * 1000
     ? 90
     : 390;
@@ -265,7 +268,7 @@ export function auditNflForwardMemberSnapshot(input: {
     game.markets.first_inning,
   ].every((market) => Array.isArray(market.oddsTrail)
     && market.oddsTrail.some((point) => point.label === "open" || point.label === "first")
-    && market.oddsTrail.some((point) => point.label === "current"))).length;
+    && market.oddsTrail.some((point) => point.label === "current" || point.label === "locked"))).length;
   const minimumPriceObservations = markets.length
     ? Math.min(...markets.map((market) => market.oddsTrail?.length ?? 0))
     : 0;
