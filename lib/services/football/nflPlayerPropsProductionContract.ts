@@ -12,9 +12,9 @@ import {
 import { addDaysToSlate, computeSlateDate } from "@/lib/dates/slateDate";
 
 export const NFL_PLAYER_PROPS_PRODUCTION_CANDIDATE_RELEASE =
-  "nfl_player_props_member_2026_09_17_r20_no_held_member_coverage" as const;
+  "nfl_player_props_member_2026_09_18_r21_actionable_radar_coverage" as const;
 export const NFL_PLAYER_PROPS_MEMBER_LIFECYCLE_RELEASE =
-  "nfl_player_props_member_lifecycle_2026_09_17_r2_no_held_member_coverage" as const;
+  "nfl_player_props_member_lifecycle_2026_09_18_r3_actionable_radar_coverage" as const;
 export const NFL_PLAYER_PROPS_BOARD_ROLLOVER_HOUR_ET = 2 as const;
 export const NFL_PLAYER_PROPS_WRITER_LEASE_GROUP = "prediction_pipeline:nfl" as const;
 

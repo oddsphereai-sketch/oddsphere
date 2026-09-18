@@ -52,10 +52,12 @@ const TEAM_VARIANTS: Record<string, MlbTeamAbbrev> = {
   "bos": "BOS",
   // CHC
   "chicago cubs": "CHC",
+  "chi cubs": "CHC",
   "cubs": "CHC",
   "chc": "CHC",
   // CWS
   "chicago white sox": "CWS",
+  "chi white sox": "CWS",
   "white sox": "CWS",
   "cws": "CWS",
   "chw": "CWS",
@@ -204,6 +206,7 @@ const TEAM_VARIANTS: Record<string, MlbTeamAbbrev> = {
   "tor": "TOR",
   // WSH
   "washington nationals": "WSH",
+  "was nationals": "WSH",
   "nationals": "WSH",
   "washington": "WSH",
   "wsh": "WSH",

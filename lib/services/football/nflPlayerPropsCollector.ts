@@ -124,7 +124,6 @@ export async function collectNflPlayerPropsObservations(args: {
       fetchImpl,
     });
     bdlRequests += 1;
-    if (nextCursor(playerEnvelope) !== null) healthFindings.push("BALLDONTLIE_PLAYER_IDENTITY_PAGINATION_UNEXPECTED");
     for (const value of data(playerEnvelope)) {
       const identity = normalizePlayerIdentity(value);
       if (identity) identities.set(identity.id, { name: identity.name, team: identity.team });
@@ -132,6 +131,9 @@ export async function collectNflPlayerPropsObservations(args: {
   }
   bdlCurrent = { ...bdlCurrent, rows: enrichPlayerIdentities(bdlCurrent.rows, identities) };
   bdlOpenings = { ...bdlOpenings, rows: enrichPlayerIdentities(bdlOpenings.rows, identities) };
+  // BALLDONTLIE can return a next_cursor even when an explicit <=100-ID batch
+  // already contains every requested identity. Completeness is the invariant;
+  // the cursor alone is not a health failure for this bounded lookup.
   if (bdlPlayerIds.some((id) => !identities.has(id))) healthFindings.push("BALLDONTLIE_PLAYER_IDENTITY_INCOMPLETE");
 
   const sharpRaw: unknown[] = [];

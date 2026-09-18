@@ -103,6 +103,15 @@ assert.equal(older.populatedMarkets, 0, "an older fetch must not replace newer s
 const invalid = parseDraftKingsNetworkSplitsHtml(html.replace("88%", "70%"));
 assert.equal(invalid[0]?.markets.moneyline, undefined, "non-complementary percentage pairs fail closed");
 
+const endpoint = parseDraftKingsNetworkSplitsHtml(html.replace(
+  side("Over 9.5", 55, 45) + side("Under 9.5", 45, 55),
+  side("Over 9.5", 100, 100) + side("Under 9.5", 0, 0),
+));
+assert.deepEqual(endpoint[0]?.markets.total?.sides.map((row) => [row.moneyPct, row.betsPct]), [
+  [100, 100],
+  [0, 0],
+], "provider-reported endpoint pairs remain available to the display-only fallback");
+
 const footballMarket = (marketName: "moneyline" | "spread" | "total", first: string, second: string): DraftKingsNetworkSplitMarket => ({
   market: marketName,
   sides: [
@@ -126,6 +135,36 @@ const footballResponse = (sport: "nfl" | "cfb", awayTeam: string, homeTeam: stri
     markets: { moneyline: emptyMarket(), total: emptyMarket(), first_inning: emptyMarket() },
   }],
 } as unknown as DailyEdgeResponse);
+
+for (const [providerName, abbreviation] of [
+  ["CHI Cubs", "CHC"],
+  ["CHI White Sox", "CWS"],
+  ["WAS Nationals", "WSH"],
+] as const) {
+  const mlbAliasResponse = {
+    ...response,
+    games: [{
+      ...response.games[0]!,
+      awayTeam: abbreviation,
+      homeTeam: "CIN",
+      gameStartAt: "2026-09-17T16:40:00.000Z",
+      markets: { moneyline: emptyMarket(), total: emptyMarket(), first_inning: emptyMarket() },
+    }],
+  } as unknown as DailyEdgeResponse;
+  const aliasApplied = applyDraftKingsNetworkSplitFallback(mlbAliasResponse, {
+    source: "draftkings_network",
+    sport: "MLB",
+    fetchedAt: "2026-09-17T15:01:00.000Z",
+    games: [{
+      providerEventId: `alias-${abbreviation}`,
+      awayName: providerName,
+      homeName: "CIN Reds",
+      monthDay: "9/17",
+      markets: { moneyline: footballMarket("moneyline", providerName, "CIN Reds") },
+    }],
+  });
+  assert.deepEqual(aliasApplied, { matchedGames: 1, populatedMarkets: 1 }, `${providerName} must resolve to ${abbreviation}`);
+}
 
 const nfl = footballResponse("nfl", "GB", "NYJ");
 const nflApplied = applyDraftKingsNetworkSplitFallback(nfl, {

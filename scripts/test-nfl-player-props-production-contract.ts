@@ -83,8 +83,8 @@ function emptyBoard(): NflPlayerPropsRuntimeBoard {
 }
 
 const unlocked = reconcileNflPlayerPropsProductionSnapshot({ season: 2026, week: 1, evaluatedAt: "2026-08-25T12:00:00.000Z", nextBoard: board(decision) });
-assert.equal(NFL_PLAYER_PROPS_PRODUCTION_CANDIDATE_RELEASE, "nfl_player_props_member_2026_09_17_r20_no_held_member_coverage");
-assert.equal(NFL_PLAYER_PROPS_WRITER_RELEASE, "nfl_player_props_writer_2026_09_16_r22_current_season_inputs");
+assert.equal(NFL_PLAYER_PROPS_PRODUCTION_CANDIDATE_RELEASE, "nfl_player_props_member_2026_09_18_r21_actionable_radar_coverage");
+assert.equal(NFL_PLAYER_PROPS_WRITER_RELEASE, "nfl_player_props_writer_2026_09_18_r23_provider_alias_coverage");
 assert.equal(NFL_PLAYER_PROPS_TRACKING_RELEASE, "nfl_player_props_tracking_2026_09_16_r12_current_season_inputs");
 assert.equal(NFL_PLAYER_PROPS_SETTLEMENT_RELEASE, "nfl_player_props_settlement_2026_08_25_r3_bounded_finality");
 assert.equal(NFL_PLAYER_PROPS_PRODUCTION_INCLUDE_OPENINGS, true, "production records same-book opening context for movement and CLV interpretation");
@@ -292,7 +292,8 @@ for (const productHierarchy of ["Today’s Radar", "Research workspace", "Choose
 assert.ok(memberReader.includes('data-product-zone="today-radar"'));
 assert.ok(memberReader.includes('data-product-zone="research-entry"'));
 assert.ok(memberReader.includes('data-product-zone="full-board"'));
-assert.ok(memberReader.includes("buildRadarRows(rows, touchdownScorers, overForecasts), [rows, touchdownScorers, overForecasts]"), "NFL filters drive Today’s Radar and the full board from one row set while prediction cohorts remain slate-stable");
+assert.ok(memberReader.includes("buildRadarRows(rows), [rows]"), "NFL filters drive Today’s Radar and the full board from one row set");
+assert.ok(memberReader.includes('row.grade === "Best Angle" || row.grade === "Lean"'), "Today’s Radar surfaces real actionable rows even when the ranked forecast selects a non-actionable sibling");
 assert.ok(memberReader.includes("const selected = rows.find"), "an open NFL prop reader cannot survive a filter that excludes its row");
 assert.ok(memberReader.includes('{rows.length} {activeFilters ? "filtered" : "completed"} reads'), "NFL filter feedback reports the filtered row count");
 assert.ok(memberReader.includes("pairRows(filteredRows, sort, touchdownScorers, overForecasts)"), "the selected sort and slate-level prediction cohorts are passed into the paired full-board rows");
