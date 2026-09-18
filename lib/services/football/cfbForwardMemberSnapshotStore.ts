@@ -12,6 +12,12 @@ import {
 
 export const CFB_FORWARD_MEMBER_SNAPSHOT_RELEASE =
   "cfb_forward_member_snapshot_2026_09_18_r12_complete_price_history" as const;
+export const CFB_FORWARD_PREVIOUS_MEMBER_SNAPSHOT_RELEASE =
+  "cfb_forward_member_snapshot_2026_09_13_r11_gzip_transport" as const;
+export const CFB_PREVIOUS_MEMBER_FIXTURE_RELEASE =
+  "cfb_v1_member_fixture_2026_09_13_r52_live_prediction_visibility" as const;
+export const CFB_MEMBER_SNAPSHOT_READER_RELEASE =
+  "cfb_member_snapshot_reader_2026_09_18_r1_transition_fallback" as const;
 
 export const CFB_FORWARD_MEMBER_SNAPSHOT_MAX_JSON_BYTES = 8_000_000;
 export const CFB_FORWARD_MEMBER_SNAPSHOT_MAX_GZIP_BYTES = 1_000_000;
@@ -37,6 +43,17 @@ export type CfbForwardMemberSnapshot = {
 type SnapshotRow = {
   payload: unknown;
 };
+
+const SUPPORTED_MEMBER_SNAPSHOT_RELEASES = [
+  {
+    snapshotRelease: CFB_FORWARD_MEMBER_SNAPSHOT_RELEASE,
+    fixtureRelease: CFB_MEMBER_FIXTURE_RELEASE,
+  },
+  {
+    snapshotRelease: CFB_FORWARD_PREVIOUS_MEMBER_SNAPSHOT_RELEASE,
+    fixtureRelease: CFB_PREVIOUS_MEMBER_FIXTURE_RELEASE,
+  },
+] as const;
 
 export type CfbForwardMemberSnapshotEnvelope = {
   kind: "cfb_forward_member_snapshot_v1";
@@ -128,9 +145,47 @@ export async function readCfbForwardMemberSnapshot(input: {
     if (TABLE_MISSING_RE.test(error.message)) return null;
     throw new Error(`CFB compact member snapshot read failed: ${error.message}`);
   }
-  if (!data) return null;
-  const snapshot = decodeCfbForwardMemberSnapshotPayload((data as SnapshotRow).payload);
-  return validateCfbForwardMemberSnapshot(snapshot, { ...input, now });
+  if (data) {
+    const snapshot = decodeCfbForwardMemberSnapshotPayload((data as SnapshotRow).payload);
+    const current = validateCfbForwardMemberSnapshot(snapshot, {
+      ...input,
+      now,
+      snapshotRelease: CFB_FORWARD_MEMBER_SNAPSHOT_RELEASE,
+      fixtureRelease: CFB_MEMBER_FIXTURE_RELEASE,
+    });
+    if (current) return current;
+  }
+
+  // A release deploys before its first scheduled writer run. Keep the board
+  // available during that handoff by accepting only the explicitly supported
+  // immediately previous release from the same sole writer. This is a reader
+  // continuity fallback; it never rebuilds predictions or changes a grade.
+  const { data: candidates, error: fallbackError } = await input.client
+    .from("lab_response_snapshots")
+    .select("payload")
+    .eq("kind", "daily_edge")
+    .eq("sport", "cfb")
+    .eq("source", "cfb_forward_evidence_writer")
+    .like("snapshot_key", `cfb::daily-edge::${input.season}::%`)
+    .order("generated_at", { ascending: false })
+    .limit(SUPPORTED_MEMBER_SNAPSHOT_RELEASES.length);
+  if (fallbackError) {
+    if (TABLE_MISSING_RE.test(fallbackError.message)) return null;
+    throw new Error(`CFB compact member snapshot fallback read failed: ${fallbackError.message}`);
+  }
+  for (const row of (candidates ?? []) as SnapshotRow[]) {
+    for (const release of SUPPORTED_MEMBER_SNAPSHOT_RELEASES) {
+      const snapshot = decodeCfbForwardMemberSnapshotPayloadForRelease(row.payload, release.snapshotRelease);
+      const compatible = validateCfbForwardMemberSnapshot(snapshot, {
+        ...input,
+        now,
+        snapshotRelease: release.snapshotRelease,
+        fixtureRelease: release.fixtureRelease,
+      });
+      if (compatible) return compatible;
+    }
+  }
+  return null;
 }
 
 export function encodeCfbForwardMemberSnapshotPayload(
@@ -166,7 +221,14 @@ export function encodeCfbForwardMemberSnapshotPayload(
 export function decodeCfbForwardMemberSnapshotPayload(
   value: unknown,
 ): CfbForwardMemberSnapshot | null {
-  if (!isCfbForwardMemberSnapshotEnvelope(value)) return null;
+  return decodeCfbForwardMemberSnapshotPayloadForRelease(value, CFB_FORWARD_MEMBER_SNAPSHOT_RELEASE);
+}
+
+function decodeCfbForwardMemberSnapshotPayloadForRelease(
+  value: unknown,
+  snapshotRelease: string,
+): CfbForwardMemberSnapshot | null {
+  if (!isCfbForwardMemberSnapshotEnvelope(value, snapshotRelease)) return null;
   if (
     value.uncompressedBytes > CFB_FORWARD_MEMBER_SNAPSHOT_MAX_JSON_BYTES ||
     value.compressedBytes > CFB_FORWARD_MEMBER_SNAPSHOT_MAX_GZIP_BYTES ||
@@ -199,13 +261,14 @@ export function decodeCfbForwardMemberSnapshotPayload(
 
 function isCfbForwardMemberSnapshotEnvelope(
   value: unknown,
+  snapshotRelease: string,
 ): value is CfbForwardMemberSnapshotEnvelope {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
   const envelope = value as Partial<CfbForwardMemberSnapshotEnvelope>;
   return envelope.kind === "cfb_forward_member_snapshot_v1" &&
-    envelope.envelopeRelease === CFB_FORWARD_MEMBER_SNAPSHOT_RELEASE &&
+    envelope.envelopeRelease === snapshotRelease &&
     envelope.encoding === "gzip-base64" &&
-    envelope.snapshotRelease === CFB_FORWARD_MEMBER_SNAPSHOT_RELEASE &&
+    envelope.snapshotRelease === snapshotRelease &&
     typeof envelope.checksum === "string" &&
     /^[a-f0-9]{64}$/.test(envelope.checksum) &&
     typeof envelope.season === "number" &&
@@ -222,17 +285,17 @@ function isCfbForwardMemberSnapshotEnvelope(
 
 function validateCfbForwardMemberSnapshot(
   value: unknown,
-  expected: { season: number; now: string },
+  expected: { season: number; now: string; snapshotRelease: string; fixtureRelease: string },
 ): CfbForwardMemberSnapshot | null {
   if (!value || typeof value !== "object") return null;
   const snapshot = value as Partial<CfbForwardMemberSnapshot>;
   if (
-    snapshot.snapshotRelease !== CFB_FORWARD_MEMBER_SNAPSHOT_RELEASE ||
+    snapshot.snapshotRelease !== expected.snapshotRelease ||
     snapshot.evidenceRelease !== CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE ||
     snapshot.memberRelease !== CFB_FORWARD_MEMBER_RELEASE ||
-    snapshot.fixtureRelease !== CFB_MEMBER_FIXTURE_RELEASE ||
+    snapshot.fixtureRelease !== expected.fixtureRelease ||
     snapshot.season !== expected.season ||
-    snapshot.fixture?.fixtureRelease !== CFB_MEMBER_FIXTURE_RELEASE ||
+    snapshot.fixture?.fixtureRelease !== expected.fixtureRelease ||
     snapshot.fixture?.snapshot?.sport !== "cfb" ||
     snapshot.fixture?.snapshot?.games?.length === 0 ||
     snapshot.fixture?.capturedAt !== snapshot.sourceCapturedAt ||
