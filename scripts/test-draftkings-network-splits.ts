@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import type { DailyEdgeResponse, MarketEdgeDto } from "../app/lab/lib/labTypes";
 import {
   applyDraftKingsNetworkSplitFallback,
+  fetchDraftKingsNetworkSplits,
   parseDraftKingsNetworkSplitsHtml,
   type DraftKingsNetworkSplitFeed,
   type DraftKingsNetworkSplitMarket,
@@ -42,6 +43,37 @@ assert.deepEqual(parsed[0]?.markets.moneyline?.sides, [
   { label: "CIN Reds", moneyPct: 12, betsPct: 20 },
   { label: "LA Dodgers", moneyPct: 88, betsPct: 80 },
 ]);
+
+const splitPageResponse = (body: string) => new Response(body, {
+  status: 200,
+  headers: { date: "Thu, 17 Sep 2026 15:01:00 GMT" },
+});
+const pageTwoHtml = html.replaceAll("123456", "654321");
+const paginationTest = (async () => {
+  const completeFeed = await fetchDraftKingsNetworkSplits({
+    sport: "mlb",
+    timeoutMs: 1_000,
+    fetchImpl: async (input) => {
+      const page = new URL(String(input)).searchParams.get("tb_page");
+      return splitPageResponse(page === "2" ? pageTwoHtml : html);
+    },
+  });
+  assert.equal(completeFeed?.games.length, 2, "both required seed pages are retained when the feed succeeds");
+
+  await assert.rejects(
+    fetchDraftKingsNetworkSplits({
+      sport: "mlb",
+      timeoutMs: 1_000,
+      fetchImpl: async (input) => {
+        const page = new URL(String(input)).searchParams.get("tb_page");
+        if (page === "2") throw new Error("simulated second-page timeout");
+        return splitPageResponse(html);
+      },
+    }),
+    /simulated second-page timeout/,
+    "a partial pagination wave must fail instead of replacing the last complete cached feed",
+  );
+})();
 
 const emptyMarket = (): MarketEdgeDto => ({
   sportsbookSplits: null,
@@ -208,4 +240,9 @@ const hierarchyApplied = applyDraftKingsNetworkSplitFallback(lowerPriority, {
 assert.equal(hierarchyApplied.populatedMarkets, 1, "DraftKings must outrank a lower-priority named-book fallback");
 assert.equal(lowerPriority.games[0]!.markets.moneyline.sportsbookSplits?.label, "DraftKings Splits");
 
-console.log("DraftKings Network split parser and silent fallback overlay tests passed.");
+paginationTest
+  .then(() => console.log("DraftKings Network split parser and silent fallback overlay tests passed."))
+  .catch((error) => {
+    console.error(error);
+    process.exitCode = 1;
+  });
