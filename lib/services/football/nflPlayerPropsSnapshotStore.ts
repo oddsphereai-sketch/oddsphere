@@ -7,11 +7,17 @@ import {
   type NflPlayerPropsMemberSnapshot,
   type NflPlayerPropsProductionSnapshot,
 } from "./nflPlayerPropsProductionContract";
+import { NFL_PLAYER_PROPS_MEMBER_TRANSPORT_MAX_JSON_BYTES } from "./nflPlayerPropsMemberTransport";
 
 export const NFL_PLAYER_PROPS_SNAPSHOT_KEY_PREFIX = "nfl::player-props" as const;
 export const NFL_PLAYER_PROPS_SNAPSHOT_ENVELOPE_RELEASE =
   "nfl_player_props_snapshot_envelope_2026_09_02_r1_gzip_deduplicated_member" as const;
-export const NFL_PLAYER_PROPS_SNAPSHOT_MAX_JSON_BYTES = 12_000_000;
+// The stored canonical snapshot is gzip-compressed and omits the derived
+// member-decision duplicate. Keep its decoded ceiling aligned with the
+// established member transport boundary so a board that the page can safely
+// carry cannot be rejected by the writer first.
+export const NFL_PLAYER_PROPS_SNAPSHOT_MAX_JSON_BYTES =
+  NFL_PLAYER_PROPS_MEMBER_TRANSPORT_MAX_JSON_BYTES;
 export const NFL_PLAYER_PROPS_SNAPSHOT_MAX_GZIP_BYTES = 1_000_000;
 export const NFL_PLAYER_PROPS_MEMBER_CACHE_TTL_MS = 60_000;
 export const NFL_PLAYER_PROPS_MEMBER_READ_TIMEOUT_MS = 6_000;

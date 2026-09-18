@@ -78,6 +78,57 @@ assert.equal(audit.metrics.games, 1);
 assert.equal(audit.metrics.predictions, 3);
 assert.equal(audit.metrics.maximumSourceAgeMinutes, 390, "far-window evidence follows the six-hour cadence");
 assert.equal(audit.metrics.grades.Lean, 1);
+
+const lockedTerminalFixture = {
+  ...auditedFixture,
+  capturedAt: "2026-09-01T13:00:00.000Z",
+  snapshot: {
+    ...auditedFixture.snapshot,
+    games: auditedFixture.snapshot.games.map((game) => ({
+      ...game,
+      gameStartAt: "2026-09-01T12:00:00.000Z",
+      markets: Object.fromEntries(Object.entries(game.markets).map(([market, value]) => [market, {
+        ...value,
+        oddsTrail: [value.oddsTrail![0], { ...value.oddsTrail![1], label: "locked" }],
+      }])),
+    })),
+  },
+} as unknown as NflWeekOneHeldMemberFixture;
+const lockedTerminalAudit = auditNflForwardMemberSnapshot({
+  snapshot: buildNflForwardMemberSnapshot({
+    fixture: lockedTerminalFixture,
+    season: 2026,
+    week: 1,
+    publishedAt: "2026-09-01T13:20:00.000Z",
+  }),
+  now: new Date("2026-09-01T13:30:00.000Z"),
+});
+assert.equal(lockedTerminalAudit.healthy, true,
+  "a completed market's first-to-locked same-book trail is a complete terminal history");
+
+const pastAndFarFutureFixture = {
+  ...auditedFixture,
+  capturedAt: "2026-09-01T10:10:00.000Z",
+  snapshot: {
+    ...auditedFixture.snapshot,
+    games: [
+      { ...auditedFixture.snapshot.games[0], id: "nfl-past", gameStartAt: "2026-09-01T12:00:00.000Z" },
+      { ...auditedFixture.snapshot.games[0], id: "nfl-future", gameStartAt: "2026-09-10T00:20:00.000Z" },
+    ],
+  },
+} as unknown as NflWeekOneHeldMemberFixture;
+const pastAndFarFutureAudit = auditNflForwardMemberSnapshot({
+  snapshot: buildNflForwardMemberSnapshot({
+    fixture: pastAndFarFutureFixture,
+    season: 2026,
+    week: 1,
+    publishedAt: "2026-09-01T13:20:00.000Z",
+  }),
+  now: new Date("2026-09-01T13:30:00.000Z"),
+});
+assert.equal(pastAndFarFutureAudit.metrics.maximumSourceAgeMinutes, 390,
+  "completed games cannot force far-window upcoming evidence onto the near-kickoff cadence");
+assert.equal(pastAndFarFutureAudit.healthy, true);
 assert.equal(
   nflFlatBoardWarning({ grades: { Lean: 1, "No Play": 39, Watchlist: 8 }, predictions: 48 }),
   "the current weekly slate is materially flat: 1/48 actionable and 39 No Play grades",

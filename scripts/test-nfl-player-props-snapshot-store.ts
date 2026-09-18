@@ -32,7 +32,10 @@ import {
   NFL_PLAYER_PROPS_BOARD_RELEASE,
   type NflPlayerPropsRuntimeDecision,
 } from "../lib/services/football/nflPlayerPropsRuntime";
-import { decodeNflPlayerPropsMemberTransport } from "../lib/services/football/nflPlayerPropsMemberTransport";
+import {
+  decodeNflPlayerPropsMemberTransport,
+  NFL_PLAYER_PROPS_MEMBER_TRANSPORT_MAX_JSON_BYTES,
+} from "../lib/services/football/nflPlayerPropsMemberTransport";
 import { encodeNflPlayerPropsMemberTransport } from "../lib/services/football/nflPlayerPropsMemberTransport.server";
 
 const evaluatedAt = "2026-09-02T12:00:00.000Z";
@@ -71,6 +74,23 @@ assert.throws(() => buildNflPlayerPropsMemberSnapshot(snapshot, "not-a-timestamp
 
 assert.equal(NFL_PLAYER_PROPS_SNAPSHOT_ENVELOPE_RELEASE,
   "nfl_player_props_snapshot_envelope_2026_09_02_r1_gzip_deduplicated_member");
+assert.equal(NFL_PLAYER_PROPS_SNAPSHOT_MAX_JSON_BYTES, 16_000_000);
+assert.equal(NFL_PLAYER_PROPS_SNAPSHOT_MAX_JSON_BYTES, NFL_PLAYER_PROPS_MEMBER_TRANSPORT_MAX_JSON_BYTES,
+  "the writer must accept every decoded board that the member transport is designed to carry");
+
+const recoveredCapacityDecision = {
+  ...actionable,
+  forecastContext: {
+    ...actionable.forecastContext,
+    capacityFixture: "x".repeat(12_100_000),
+  },
+} as NflPlayerPropsRuntimeDecision;
+const recoveredCapacitySnapshot = productionSnapshot([recoveredCapacityDecision]);
+const recoveredCapacityEnvelope = encodeNflPlayerPropsSnapshotPayload(recoveredCapacitySnapshot);
+assert.ok(recoveredCapacityEnvelope.uncompressedBytes > 12_000_000,
+  "the production regression fixture must exercise the former writer ceiling");
+assert.ok(recoveredCapacityEnvelope.uncompressedBytes < NFL_PLAYER_PROPS_SNAPSHOT_MAX_JSON_BYTES,
+  "a board inside the established member boundary remains publishable");
 
 const encoded = encodeNflPlayerPropsSnapshotPayload(snapshot);
 assert.equal(encoded.memberDecisionsStorage, "derived_from_board_non_held");
