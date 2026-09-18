@@ -8,7 +8,10 @@ import { unstable_cache } from "next/cache";
 const DRAFTKINGS_NETWORK_SPLITS_URL =
   "https://dknetwork.draftkings.com/draftkings-sportsbook-betting-splits/";
 const DRAFTKINGS_NETWORK_REVALIDATE_SECONDS = 5 * 60;
-const DRAFTKINGS_NETWORK_TIMEOUT_MS = 3_500;
+// The complete-feed cache keeps normal member reads fast. Give its cold fill
+// enough time for both provider pages to finish from the production region;
+// the prior 3.5s ceiling repeatedly returned only page one for the MLB slate.
+const DRAFTKINGS_NETWORK_TIMEOUT_MS = 6_000;
 const DRAFTKINGS_NETWORK_PAGE_SIZE = 10;
 const DRAFTKINGS_NETWORK_CACHE_TAG = "draftkings-network-splits-complete";
 
