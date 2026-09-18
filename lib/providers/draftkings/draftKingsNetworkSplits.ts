@@ -3,12 +3,14 @@ import type { MarketSplitDisplaySection } from "@/lib/types/domain/Recommendatio
 import type { Sport } from "@/lib/types/domain/Sport";
 import { normalizeMlbTeamName } from "@/lib/providers/real_api/_teamNameNormalizer";
 import { cfbTeamIdentity } from "@/lib/services/football/cfbTeamIdentity";
+import { unstable_cache } from "next/cache";
 
 const DRAFTKINGS_NETWORK_SPLITS_URL =
   "https://dknetwork.draftkings.com/draftkings-sportsbook-betting-splits/";
 const DRAFTKINGS_NETWORK_REVALIDATE_SECONDS = 5 * 60;
 const DRAFTKINGS_NETWORK_TIMEOUT_MS = 3_500;
 const DRAFTKINGS_NETWORK_PAGE_SIZE = 10;
+const DRAFTKINGS_NETWORK_CACHE_TAG = "draftkings-network-splits-complete";
 
 type DraftKingsNetworkSport =
   | "MLB"
@@ -144,11 +146,10 @@ export async function fetchDraftKingsNetworkSplits(args: {
     };
   };
   const initial = await Promise.allSettled([fetchPage(1), fetchPage(2)]);
+  const failedInitialPage = initial.find((result) => result.status === "rejected");
+  if (failedInitialPage?.status === "rejected") throw failedInitialPage.reason;
   const initialPages = initial.flatMap((result) => result.status === "fulfilled" ? [result.value] : []);
-  if (initialPages.length === 0) {
-    const reason = initial.find((result) => result.status === "rejected");
-    throw reason && reason.status === "rejected" ? reason.reason : new Error("DraftKings Network split pages unavailable");
-  }
+  if (initialPages.length !== 2) throw new Error("DraftKings Network split seed pages incomplete");
   const firstSignature = pageSignature(initialPages[0]?.games ?? []);
   const secondSignature = pageSignature(initialPages[1]?.games ?? []);
   const pageCap = SPORT_PAGE_CAP[args.sport] ?? 2;
@@ -158,6 +159,8 @@ export async function fetchDraftKingsNetworkSplits(args: {
   const remaining = needsRemainingPages && pageCap > 2
     ? await Promise.allSettled(Array.from({ length: pageCap - 2 }, (_, index) => fetchPage(index + 3)))
     : [];
+  const failedRemainingPage = remaining.find((result) => result.status === "rejected");
+  if (failedRemainingPage?.status === "rejected") throw failedRemainingPage.reason;
   const pages = [
     ...initialPages,
     ...remaining.flatMap((result) => result.status === "fulfilled" ? [result.value] : []),
@@ -173,6 +176,18 @@ export async function fetchDraftKingsNetworkSplits(args: {
     games,
   };
 }
+
+// Cache only a fully collected feed. A partial pagination wave must throw so
+// Next keeps serving the previous successful value across requests and
+// deployments instead of replacing a complete slate with a one-page subset.
+const readCachedDraftKingsNetworkSplits = unstable_cache(
+  async (sport: Sport) => fetchDraftKingsNetworkSplits({ sport }),
+  ["draftkings-network-splits-complete-v1"],
+  {
+    revalidate: DRAFTKINGS_NETWORK_REVALIDATE_SECONDS,
+    tags: [DRAFTKINGS_NETWORK_CACHE_TAG],
+  },
+);
 
 export function parseDraftKingsNetworkSplitsHtml(html: string): DraftKingsNetworkSplitGame[] {
   const starts = Array.from(html.matchAll(/<div\s+class="tb-se(?:\s[^"]*)?"[^>]*>/gi));
@@ -265,7 +280,7 @@ export async function populateDailyEdgeDraftKingsFallback(
   try {
     return applyDraftKingsNetworkSplitFallback(
       response,
-      await fetchDraftKingsNetworkSplits({ sport }),
+      await readCachedDraftKingsNetworkSplits(sport),
     );
   } catch (error) {
     console.warn(`DraftKings Network split fallback skipped: ${error instanceof Error ? error.message : String(error)}`);
