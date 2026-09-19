@@ -11,6 +11,7 @@ import { dailyEdgeOutcomeForecastLabel } from "../app/lab/lib/dailyEdgeOutcomeFo
 import {
   CFB_FORWARD_EVIDENCE_COLLECTOR_RELEASE,
   CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE,
+  CFB_FORWARD_MARKET_HISTORY_BASE_EVIDENCE_SCHEMA_RELEASE,
   CFB_FORWARD_PRICE_PREVIOUS_EVIDENCE_SCHEMA_RELEASE,
   CFB_FORWARD_PRICE_PREVIOUS_MEMBER_RELEASE,
   CFB_FORWARD_HOLISTIC_PREVIOUS_EVIDENCE_SCHEMA_RELEASE,
@@ -42,6 +43,7 @@ import {
   CFB_FORWARD_EVIDENCE_PAGE_SIZE,
   CFB_FORWARD_MARKET_HISTORY_MAX_ROWS,
   CFB_FORWARD_MARKET_HISTORY_PAGE_SIZE,
+  CFB_FORWARD_MARKET_HISTORY_COMPATIBLE_RELEASES,
   readCfbForwardEvidence,
   readCfbForwardMarketHistory,
 } from "../lib/services/football/cfbForwardEvidenceStore";
@@ -2173,14 +2175,37 @@ const projectedMarketHistoryRow = {
   sharp_api_splits: earlierEvidence.payload.market.sharpApiSplits,
 };
 let marketHistorySelect = "";
+let marketHistoryReleaseFilter: string[] = [];
 const marketHistoryClient = {
   from() {
     const query = {
       select(value: string) { marketHistorySelect = value; return query; },
-      in() { return query; },
+      in(column: string, values: string[]) {
+        if (column === "evidence_release") marketHistoryReleaseFilter = values;
+        return query;
+      },
       eq() { return query; },
       order() { return query; },
-      range() { return Promise.resolve({ data: [projectedMarketHistoryRow], error: null }); },
+      range() {
+        return Promise.resolve({
+          data: [
+            {
+              ...projectedMarketHistoryRow,
+              id: "market-history-r22",
+              evidence_release: CFB_FORWARD_MARKET_HISTORY_BASE_EVIDENCE_SCHEMA_RELEASE,
+              payload_schema_release: CFB_FORWARD_MARKET_HISTORY_BASE_EVIDENCE_SCHEMA_RELEASE,
+            },
+            {
+              ...projectedMarketHistoryRow,
+              id: "market-history-r23",
+              evidence_release: CFB_FORWARD_PRICE_PREVIOUS_EVIDENCE_SCHEMA_RELEASE,
+              payload_schema_release: CFB_FORWARD_PRICE_PREVIOUS_EVIDENCE_SCHEMA_RELEASE,
+            },
+            projectedMarketHistoryRow,
+          ],
+          error: null,
+        });
+      },
     };
     return query;
   },
@@ -2190,8 +2215,9 @@ const marketHistoryRows = await readCfbForwardMarketHistory({
   season: 2026,
   providerGameIds: [earlierEvidence.providerGameId, earlierEvidence.providerGameId],
 });
-assert.equal(marketHistoryRows.length, 1);
+assert.equal(marketHistoryRows.length, 3, "member movement history must survive compatible prediction-release bumps");
 assert.deepEqual(marketHistoryRows[0]!.payload.market.currentBooks, earlierEvidence.payload.market.currentBooks);
+assert.deepEqual(marketHistoryReleaseFilter, [...CFB_FORWARD_MARKET_HISTORY_COMPATIBLE_RELEASES]);
 assert.match(marketHistorySelect, /current_books:payload->market->currentBooks/);
 assert.doesNotMatch(marketHistorySelect, /(?:^|,)payload(?:,|$)/, "the recurring movement reader must never select the full historical payload");
 

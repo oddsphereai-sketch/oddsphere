@@ -14,6 +14,8 @@ import {
 
 export const CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE =
   "cfb_forward_evidence_snapshot_2026_09_19_r24_contained_spread_counter_signal" as const;
+export const CFB_FORWARD_MARKET_HISTORY_BASE_EVIDENCE_SCHEMA_RELEASE =
+  "cfb_forward_evidence_snapshot_2026_09_05_r22_confidence_economics_bridge" as const;
 export const CFB_FORWARD_PRICE_PREVIOUS_EVIDENCE_SCHEMA_RELEASE =
   "cfb_forward_evidence_snapshot_2026_09_19_r23_spread_counter_signal" as const;
 export const CFB_FORWARD_HOLISTIC_PREVIOUS_EVIDENCE_SCHEMA_RELEASE =
