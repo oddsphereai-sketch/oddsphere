@@ -34,6 +34,7 @@ import { resolveWnbaMoneylineSide, wnbaLogoUrl } from "./wnbaTeams";
 import {
   isLegacyWnbaDecisionTuple,
   isWnbaDecisionTuple,
+  resolveWnbaEconomicDenominator,
   retainCompatibleWnbaDecisionTuple,
   type WnbaDecisionTuple,
 } from "./wnbaDecisionTuple";
@@ -593,7 +594,7 @@ function previewGradeFromPlayGrade(value: string | null): PreviewModelGrade | nu
 }
 
 const WNBA_CURRENT_RECORD_CONTRACT_VERSION =
-  "wnba_prediction_record_contract_v7_complete_prediction_denominators_2026_09_04";
+  "wnba_prediction_record_contract_v8_exact_price_denominator_2026_09_19";
 
 export function selectWnbaDecisionTupleForReader(input: {
   lockedRecord: WnbaLockedRecord | null;
@@ -1286,6 +1287,20 @@ export function resolveWnbaReaderGrade(args: {
   );
 }
 
+export function resolveWnbaReaderEconomicDenominator(args: {
+  gradePolicyVersion: string | null | undefined;
+  marketFairProbability: number | null;
+  evaluatedPriceAmerican: number | null;
+}): number | null {
+  if (args.gradePolicyVersion !== EXPECTED_WNBA_GRADE_POLICY_VERSION) {
+    return args.marketFairProbability;
+  }
+  return resolveWnbaEconomicDenominator({
+    marketFairProbability: args.marketFairProbability,
+    evaluatedPriceAmerican: args.evaluatedPriceAmerican,
+  }).probability;
+}
+
 function wnbaPickProbabilityFromConfidence(confidence: number | null): number | null {
   if (confidence === null) return null;
   return Math.max(0, Math.min(1, confidence / 100));
@@ -1320,8 +1335,13 @@ function buildMarket(opts: {
 }): MarketEdgeDto {
   const { slot, pick, confFrac, grade, line, modelTotal, marketTotal, bookCount, aligned, whyLine } = opts;
   const modelProbPick = opts.decisionTuple?.model_probability ?? opts.modelProbPick;
-  const marketFairProbPick = opts.decisionTuple?.market_fair_probability ?? opts.marketFairProbPick;
   const priceAmerican = opts.decisionTuple?.evaluated_price_american ?? opts.priceAmerican;
+  const storedMarketProbability = opts.decisionTuple?.market_fair_probability ?? opts.marketFairProbPick;
+  const marketFairProbPick = resolveWnbaReaderEconomicDenominator({
+    gradePolicyVersion: opts.gradePolicyVersion,
+    marketFairProbability: storedMarketProbability,
+    evaluatedPriceAmerican: priceAmerican,
+  });
   const effectiveGrade = resolveWnbaReaderGrade({
     gradePolicyVersion: opts.gradePolicyVersion,
     grade,

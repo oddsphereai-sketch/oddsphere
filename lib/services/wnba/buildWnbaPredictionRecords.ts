@@ -34,6 +34,7 @@ import {
 import { resolveWnbaMoneylineSide } from "./wnbaTeams";
 import {
   isWnbaDecisionTuple,
+  resolveWnbaEconomicDenominator,
   WNBA_DECISION_TUPLE_CONTRACT_VERSION,
   type WnbaDecisionTuple,
 } from "./wnbaDecisionTuple";
@@ -48,7 +49,7 @@ const toDecimal = (o: number | null) => (o == null ? null : o > 0 ? o / 100 + 1 
 const HISTORY_PAGE_SIZE = 1000;
 const LOCK_WINDOW_MS = 60 * 60 * 1000;
 export const WNBA_PREDICTION_RECORD_CONTRACT_VERSION =
-  "wnba_prediction_record_contract_v7_complete_prediction_denominators_2026_09_04";
+  "wnba_prediction_record_contract_v8_exact_price_denominator_2026_09_19";
 
 export function wnbaExactPriceTrackingHoldReason(args: {
   market: "moneyline" | "total" | "spread";
@@ -553,13 +554,18 @@ export async function buildWnbaPredictionRecords(opts: {
         ss[WNBA_FORWARD_EVIDENCE_CAPTURE_KEY],
         market_type,
       );
+      const economicDenominator = resolveWnbaEconomicDenominator({
+        marketFairProbability: heldReason === null ? mktProb : null,
+        evaluatedPriceAmerican: heldReason === null ? odds : null,
+      });
+      const recordMarketProbability = economicDenominator.probability;
       return {
         game_prediction_id: gp.id, game_id: g.id, external_id: g.external_id, sport: "wnba",
         slate_date: slate, game_date: g.game_date, matchup, market: market_type, pick, side,
         line_value, odds_american: odds, odds_decimal: toDecimal(odds),
         model_used: EXPECTED_WNBA_MODEL_VERSION, model_version: EXPECTED_WNBA_MODEL_VERSION, prediction_source: "auto_v1_wnba",
-        confidence, model_probability: modelProb, market_probability: mktProb,
-        edge: modelProb != null && mktProb != null ? Math.round((modelProb - mktProb) * 1000) / 10 : null,
+        confidence, model_probability: modelProb, market_probability: recordMarketProbability,
+        edge: modelProb != null && recordMarketProbability != null ? Math.round((modelProb - recordMarketProbability) * 1000) / 10 : null,
         play_grade: heldReason === null ? (gradeStr ? PLAY_GRADE[gradeStr] ?? "watchlist" : null) : "no_play",
         best_angle: heldReason === null && gradeStr === "Best Angle",
         no_bet: heldReason !== null,
@@ -578,6 +584,12 @@ export async function buildWnbaPredictionRecords(opts: {
           prediction_record_contract_version: WNBA_PREDICTION_RECORD_CONTRACT_VERSION,
           decision_tuple_contract_version: decisionTuple?.contract_version ?? null,
           decision_tuple: decisionTuple,
+          prediction_record_economic_denominator: {
+            probability: economicDenominator.probability,
+            source: economicDenominator.source,
+            target_excluded_market_fair_probability: decisionTuple?.market_fair_probability ?? null,
+            evaluated_price_american: odds,
+          },
           accuracy_only_forecast: heldReason === null ? null : {
             reason: heldReason,
             side,
