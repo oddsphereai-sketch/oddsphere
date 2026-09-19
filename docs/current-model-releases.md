@@ -4,7 +4,7 @@ This file is the human-readable production handoff registry. Runtime constants a
 prediction snapshots remain the machine authority. Future model work must start here, verify the
 constants, and preserve the precedence and writer ownership below.
 
-Last reviewed: 2026-09-18
+Last reviewed: 2026-09-19
 
 ## Cross-sport confidence / execution contract
 
@@ -372,9 +372,9 @@ changed; only deterministic settlement of existing locked rows is affected.
 
 - Projection runtime: resolved automodel `v2_2`
 - First-inning runtime: `fi_v2` with FI-scoped release `mlb_first_inning_release_2026_09_04_r85_independent_uncertainty` and probability head `mlb_first_inning_fi_v10_independent_uncertainty_target_excluded_2026_09_04`. r85 retains r84's pre-r61 65% independent / 35% target-excluded multi-book posterior and its 48%-52% corroborated uncertainty band. When the evaluated quote is the sole accepted pair, the forecast remains independent-only and now requires the independent probability to clear 55% NRFI or 55% YRFI; otherwise it is a genuine null-side Toss-Up. The evaluated quote remains exact-price economics only. Full-game tuples, probabilities, grades, the sole writer/lease, providers, query budgets, locks, tracking, and settlement are unchanged.
-- Public calibration: `mlb_public_calibration_v33_current_line_pagination_2026_09_08`
-- Decision release: `mlb_daily_edge_decision_2026_09_08_r87_current_line_pagination`
-- Rule bundle: `mlb_daily_edge_rule_bundle_v72_current_line_pagination_2026_09_08`
+- Public calibration: `mlb_public_calibration_v34_totals_regime_2026_09_19`
+- Decision release: `mlb_daily_edge_decision_2026_09_19_r88_totals_regime_calibration`
+- Rule bundle: `mlb_daily_edge_rule_bundle_v73_totals_regime_calibration_2026_09_19`
 - Market input snapshot: `mlb_market_input_snapshot_v3_current_line_pagination_2026_09_08`
 - Grade policy: `mlb_public_grade_policy_v57_total_support_under_scope_2026_09_04`
 - Correction policy: `mlb_prediction_corrections_v24_full_game_publication_coherence_2026_09_02`
@@ -382,6 +382,34 @@ changed; only deterministic settlement of existing locked rows is affected.
 - Lock coherence: `mlb_lock_coherence_2026_09_02_r3_failed_economics_tuple`
 - Machine registry: `lib/automodel/mlbModelLayerVersions.ts`
 - Authoritative member-facing writer: `lib/services/predictionRecordService.ts`
+
+The September 19 r88 totals release changes only the full-game Total
+probability head. For each slate, the existing authoritative writer makes one
+bounded database read and reconstructs the Over result from the latest 90
+settled, locked MLB Total predictions strictly before that slate date. A
+Beta(5,5)-smoothed run-environment rate receives 35% weight and the existing
+target-excluded, market-regularized Over probability receives 65%. The selected
+90-game/35% candidate was fixed on chronological train plus August calibration,
+then improved the untouched September 1–18 holdout from 48.07% to 54.94%
+accuracy, Brier 0.252973 to 0.247758, and log loss 0.699253 to 0.688790. At
+available locked prices, the all-forecast sensitivity moved from -18.419 units
+(-7.91%) to +15.317 units (+6.60%); this is forecast-head evidence, not a claim
+that every forecast is actionable.
+
+The exact September 19 no-write record-builder replay covered all 15 games.
+Totals moved from 2 Best Angles / 0 Leans / 7 Watchlists / 6 No Plays to
+0 / 4 / 9 / 2: four promotions, two demotions, net +2 actionables, and six
+side changes. The regime head is already downstream of the existing market
+regularizer, so the writer neither price-calibrates it a second time nor sends
+it through the superseded, historically rejected Total side-candidate stack.
+All exact-price, data-quality, freshness, provisional, and negative-economics
+gates remain active. If the bounded prior read fails or fewer than 90 settled
+rows exist, the model preserves the r87 probability unchanged. Moneyline,
+first inning, projection scores, providers, UI copy/labels, stakes, locks,
+tracking, settlement, cron cadence, sole writer, and `prediction_pipeline:mlb`
+lease are unchanged. Evidence and rollback are in
+`docs/model-audits/2026-09-19-mlb-totals-regime-calibration-r88.md`; rollback is
+the complete r87 release family without rewriting any locked row.
 
 The September 8 r87 current-line correction preserves every r86 model formula,
 probability head, side rule, grade threshold, provider, cadence, stake, lock,

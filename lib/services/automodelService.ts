@@ -57,6 +57,10 @@ import {
 import { overProbabilityPoisson } from "../automodel/runDistribution";
 import { regularizeProbability } from "../automodel/mlbProbabilityRegularization";
 import {
+  buildMlbTotalsRegimePrior,
+  type MlbTotalsRegimePrior,
+} from "../automodel/mlbTotalsRegimeCalibration";
+import {
   reconcileTotalProjection,
   type TotalProjectionReconciliation,
 } from "../automodel/totalProjectionReconciliation";
@@ -200,6 +204,12 @@ export type AutoModelRunOpts = {
    * Scheduled writers never set this option.
    */
   auditSnapshotTransform?: (snapshots: GameSnapshot[]) => GameSnapshot[];
+  /**
+   * Dry-run-only override used by release audits to compare the incumbent
+   * totals head with a fixed regime prior on the exact same slate inputs.
+   * Omit to load the production prior; pass null to preserve the incumbent.
+   */
+  auditTotalsRegimePriorOverride?: MlbTotalsRegimePrior | null;
 };
 
 /**
@@ -246,6 +256,34 @@ export type AutoModelDbWriteOutcome = {
     | { error: string; game_predictions_updated: 0 }
     | null;
 };
+
+function joinedPredictionGradeResult(value: unknown): string | null {
+  const first = Array.isArray(value) ? value[0] : value;
+  if (first === null || typeof first !== "object") return null;
+  const result = (first as Record<string, unknown>).result;
+  return typeof result === "string" ? result.toLowerCase() : null;
+}
+
+async function loadMlbTotalsRegimePrior(
+  slateDate: string,
+): Promise<MlbTotalsRegimePrior | null> {
+  const { data, error } = await supabase
+    .from("prediction_records")
+    .select("slate_date,side,prediction_grades(result)")
+    .eq("sport", "mlb")
+    .eq("market", "total")
+    .not("locked_at", "is", null)
+    .lt("slate_date", slateDate)
+    .order("slate_date", { ascending: false })
+    .order("id", { ascending: false })
+    .limit(240);
+  if (error) throw error;
+  return buildMlbTotalsRegimePrior((data ?? []).map((row) => ({
+    date: String(row.slate_date),
+    side: typeof row.side === "string" ? row.side.toLowerCase() : null,
+    result: joinedPredictionGradeResult(row.prediction_grades),
+  })));
+}
 
 export type AutoModelRunResult = {
   sport: Sport;
@@ -549,6 +587,12 @@ export async function generatePredictionsForSlate(
         "is dry-run only and cannot be combined with writeToDb=true."
     );
   }
+  if (wantWrite && Object.prototype.hasOwnProperty.call(opts, "auditTotalsRegimePriorOverride")) {
+    throw new Error(
+      "automodelService.generatePredictionsForSlate: auditTotalsRegimePriorOverride " +
+        "is dry-run only and cannot be combined with writeToDb=true.",
+    );
+  }
   if (!wantWrite && envEnabled) {
     // Informational only — operator may have left the env flag set after
     // a smoke test. Proceeding with dry-run is the safe choice.
@@ -681,6 +725,32 @@ export async function generatePredictionsForSlate(
 
   if (opts.auditSnapshotTransform !== undefined) {
     snapshots = opts.auditSnapshotTransform(snapshots);
+  }
+
+  let totalsRegimePrior: MlbTotalsRegimePrior | null = null;
+  if (effectiveVersion === "v2_2" && snapshots.length > 0) {
+    const hasAuditOverride = Object.prototype.hasOwnProperty.call(
+      opts,
+      "auditTotalsRegimePriorOverride",
+    );
+    try {
+      totalsRegimePrior = hasAuditOverride
+        ? opts.auditTotalsRegimePriorOverride ?? null
+        : await loadMlbTotalsRegimePrior(slate_date);
+      console.log(
+        `[automodelService] mlb_totals_regime_prior${hasAuditOverride ? "_audit_override" : ""}=` +
+          (totalsRegimePrior === null
+            ? "unavailable"
+            : `${totalsRegimePrior.overWins}-${totalsRegimePrior.underWins} ` +
+              `through ${totalsRegimePrior.latestSettledDate}`),
+      );
+    } catch (e) {
+      console.warn(
+        `[automodelService] MLB totals regime prior load failed: ${
+          e instanceof Error ? e.message : String(e)
+        }. Preserving the incumbent totals probability.`,
+      );
+    }
   }
 
   // Phase 6B.1.7 / r77 — load current FI prices plus bounded FI-specific
@@ -940,6 +1010,7 @@ export async function generatePredictionsForSlate(
         v1Output: finalPredictionV1,
         stage,
         effectiveVersion,
+        totalsRegimePrior,
       });
       const playbookVenueWeatherAudit = playbookVenueWeatherAuditByExternalId.get(
         snap.game_external_id,
@@ -1361,8 +1432,9 @@ function applyV2IfSelected(args: {
   v1Output: AutoModelOutput;
   stage: ModelStage;
   effectiveVersion: AutomodelVersion;
+  totalsRegimePrior: MlbTotalsRegimePrior | null;
 }): AutoModelOutput {
-  const { snap, v1Output, stage, effectiveVersion } = args;
+  const { snap, v1Output, stage, effectiveVersion, totalsRegimePrior } = args;
   if (effectiveVersion === "v1") {
     return {
       ...v1Output,
@@ -1450,6 +1522,7 @@ function applyV2IfSelected(args: {
     try {
       v22 = runMlbAutoModelV2_2(snap, v1Output, stage, {
         useWorkloadPitching: process.env.MLB_WORKLOAD_PITCHING_ENABLED === "true",
+        totalsRegimePrior,
       });
     } catch (e) {
       console.warn(

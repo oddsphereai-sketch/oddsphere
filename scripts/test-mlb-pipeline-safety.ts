@@ -100,18 +100,18 @@ check(
     layers.calibration_version === MLB_PUBLIC_CALIBRATION_VERSION,
 );
 check(
-  "MLB r87 preserves forecast and FI behavior while reading complete current game lines",
-  MLB_DAILY_EDGE_DECISION_RELEASE_ID === "mlb_daily_edge_decision_2026_09_08_r87_current_line_pagination" &&
-    MLB_MODEL_LAYER_VERSION_SCHEMA === "mlb_model_layer_versions_v15_current_line_pagination" &&
-    layers.rule_bundle_version === "mlb_daily_edge_rule_bundle_v72_current_line_pagination_2026_09_08" &&
+  "MLB r88 stamps the totals regime calibration while preserving unrelated heads",
+  MLB_DAILY_EDGE_DECISION_RELEASE_ID === "mlb_daily_edge_decision_2026_09_19_r88_totals_regime_calibration" &&
+    MLB_MODEL_LAYER_VERSION_SCHEMA === "mlb_model_layer_versions_v16_totals_regime_calibration" &&
+    layers.rule_bundle_version === "mlb_daily_edge_rule_bundle_v73_totals_regime_calibration_2026_09_19" &&
     layers.total_market_support_lean === "total_sharpapi_money_over_tickets_support_lean_v2_under_only_2026_09_04" &&
-    layers.calibration_version === "mlb_public_calibration_v33_current_line_pagination_2026_09_08" &&
+    layers.calibration_version === "mlb_public_calibration_v34_totals_regime_2026_09_19" &&
     layers.projection_core === "mlb_projection_core_v2_4_evaluation_only_price_exclusion_2026_09_02" &&
     layers.market_input_snapshot === "mlb_market_input_snapshot_v3_current_line_pagination_2026_09_08" &&
     layers.moneyline_probability_head === "mlb_moneyline_structural_coherence_probability_v3_2026_09_02" &&
-    layers.total_probability_head === "mlb_total_structural_coherence_probability_v3_2026_09_02" &&
+    layers.total_probability_head === "mlb_total_regime_calibrated_probability_v4_trailing90_2026_09_19" &&
     layers.coherent_market_price_map === "mlb_coherent_market_price_map_v1_2026_09_01" &&
-    layers.market_calibration_policy === "mlb_model_market_calibration_v3_evaluation_only_price_exclusion_2026_09_02" &&
+    layers.market_calibration_policy === "mlb_model_market_calibration_v4_totals_regime_2026_09_19" &&
     layers.moneyline_action_promotion_stability === "daily_edge_action_promotion_stability_2026_08_29_r1" &&
     layers.source_aware_split_pair_selector === "mlb_source_aware_split_pair_selector_v2_recency_coherent_2026_08_31" &&
     layers.moneyline_evaluation_price_policy === "mlb_ml_fresh_coherent_best_playable_price_same_book_movement_v4_sharp_source_recovery_2026_09_01" &&

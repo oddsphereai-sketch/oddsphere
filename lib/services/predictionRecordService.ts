@@ -21,6 +21,7 @@ import type {
   TrackedSport,
   TrackedMarketV17,
 } from "../types/domain/Tracking";
+import type { AutoModelOutput } from "../automodel/types";
 import { BOOK_PRIORITY as SHARED_BOOK_PRIORITY } from "../config/bookPriority";
 import { isBlockedSportsbook } from "../config/blockedSportsbooks";
 import {
@@ -119,6 +120,11 @@ export type CreateRecordsOptions = {
    * newer natural writer cycle.
    */
   authoritativeFiPredictions?: ReadonlyArray<AuthoritativeFiPredictionInput>;
+  /**
+   * Dry-run-only writer output injection for exact release board audits.
+   * It is rejected in apply mode and never used by scheduled writers.
+   */
+  auditPredictionsOverride?: ReadonlyArray<AutoModelOutput>;
 };
 
 export type AuthoritativeFiPredictionInput = {
@@ -4582,6 +4588,8 @@ function buildOuRecord(
   if (held) return null;
   const v21 = (sp.v2_1_audit ?? {}) as Record<string, unknown>;
   const v22 = (sp.v2_2_audit ?? {}) as Record<string, unknown>;
+  const totalRegimeCalibration = readRecordOrNull(v22.total_regime_calibration);
+  const totalRegimeCalibrationApplied = readBoolish(totalRegimeCalibration?.applied);
   const legacyMarketSignalGradeInfluenceEnabled =
     readMarketIntelligenceV2Config().legacyMarketSignalGradeInfluenceEnabled;
   // Phase 6B.17 — read line_value from V2.2 audit FIRST (the active
@@ -4691,7 +4699,9 @@ function buildOuRecord(
         : typeof pred.predicted_away_score === "number" && typeof pred.predicted_home_score === "number"
           ? pred.predicted_away_score + pred.predicted_home_score
           : null;
-  const ouFlip = resolveTotalsMeanFlip({
+  const ouFlip = totalRegimeCalibrationApplied
+    ? { action: "none" as const }
+    : resolveTotalsMeanFlip({
     predictedSide: pred.predicted_ou_side === "over" || pred.predicted_ou_side === "under" ? pred.predicted_ou_side : null,
     line: ouBetLine,
     projectedTotal: ouScoreSum,
@@ -4701,10 +4711,10 @@ function buildOuRecord(
     overOdds: oddsForGame?.ouOverOdds ?? null,
     underOdds: oddsForGame?.ouUnderOdds ?? null,
     reconciliationDivergence: ouReconciliation !== null && ouReconciliation.mean_probability_divergence === true,
-  });
+      });
   const ouFlipped = ouFlip.action === "flip";
   const ouDivergenceStandDown = ouFlip.action === "standdown";
-  const ouMarketFlip = ouFlip.action === "none"
+  const ouMarketFlip = ouFlip.action === "none" && !totalRegimeCalibrationApplied
     ? resolveTotalsMarketOpposedFlip({
         predictedSide: pred.predicted_ou_side === "over" || pred.predicted_ou_side === "under" ? pred.predicted_ou_side : null,
         modelProb: ouModelProb,
@@ -4775,7 +4785,7 @@ function buildOuRecord(
       ? buildLineMovementSnapshot(openersForGame, currentLinesForGame, signalsForGame, "total", finalOuPick, freshnessReferenceMs)
       : ouLineMovement;
   let ouLineDirection = readLineDirection(finalOuLineMovement);
-  const ouMarketSideCorrection = !ouFlipped && !ouMarketFlipped && !ouDivergenceStandDown
+  const ouMarketSideCorrection = !totalRegimeCalibrationApplied && !ouFlipped && !ouMarketFlipped && !ouDivergenceStandDown
     ? resolveMlbMarketAwareSideCorrection({
         market: "total",
         side: finalOuPick,
@@ -4830,7 +4840,12 @@ function buildOuRecord(
     currentConfidence: finalOuConfidence,
     overOdds: oddsForGame?.ouOverOdds ?? null,
     underOdds: oddsForGame?.ouUnderOdds ?? null,
-    priorCorrectionApplied: ouFlipped || ouMarketFlipped || ouMarketSideCorrected || ouDivergenceStandDown,
+    priorCorrectionApplied:
+      totalRegimeCalibrationApplied ||
+      ouFlipped ||
+      ouMarketFlipped ||
+      ouMarketSideCorrected ||
+      ouDivergenceStandDown,
   });
   const ouMidEdgeFlipped = ouMidEdgeFlip.action === "flip";
   if (ouMidEdgeFlipped) {
@@ -4909,8 +4924,9 @@ function buildOuRecord(
     overLine: oddsForGame?.oddsSourceOu?.over?.line ?? null,
     underLine: oddsForGame?.oddsSourceOu?.under?.line ?? null,
   });
-  const ouRawProjectionChampionApplied = ouRawProjectionChampion.applied === true;
-  if (ouRawProjectionChampion.applied) {
+  const ouRawProjectionChampionApplied =
+    !totalRegimeCalibrationApplied && ouRawProjectionChampion.applied === true;
+  if (ouRawProjectionChampionApplied && ouRawProjectionChampion.applied) {
     finalOuPick = ouRawProjectionChampion.correctedSide;
     finalOuOdds = ouRawProjectionChampion.correctedOdds;
     finalOuBetLine = ouRawProjectionChampion.correctedLine;
@@ -5034,7 +5050,9 @@ function buildOuRecord(
     ? ouPublicationCoherence.standDownReason
     : ouRawProjectionChampionApplied
       ? "raw_total_projection_champion_side_changed_action_not_independently_qualified"
-      : ouProjectionConflict && !ouMeanSelectorOriginalUnderLean.lean
+      : !totalRegimeCalibrationApplied &&
+          ouProjectionConflict &&
+          !ouMeanSelectorOriginalUnderLean.lean
         ? "champion_candidate_total_projection_conflict: projected_total_contradicts_total_pick"
         : null;
   const ouNoBet =
@@ -5060,11 +5078,13 @@ function buildOuRecord(
   const ouPreChampionModelProb = finalOuModelProb;
   const ouChampionModelProb = ouRawProjectionChampionApplied
     ? null
-    : calibrateMlbTotalPickedProbability({
+    : totalRegimeCalibrationApplied
+      ? ouPreChampionModelProb
+      : calibrateMlbTotalPickedProbability({
         rawPickedProbability: ouPreChampionModelProb,
         oddsAmerican: finalOuOdds,
         selectedSide: finalOuPick === "over" || finalOuPick === "under" ? finalOuPick : null,
-      });
+        });
   const ouConfidenceValueContextLean = resolveMlbTotalConfidenceValueContextLean({
     blocked:
       ouNoBet ||
@@ -5298,6 +5318,9 @@ function buildOuRecord(
           ? ouRawProjectionChampion.ruleId
           : MLB_TOTAL_PRICE_CALIBRATION_RULE_ID,
         champion_action_policy: "retain_current_production_action_selection",
+        legacy_total_side_candidate_policy: totalRegimeCalibrationApplied
+          ? "bypass_superseded_side_candidates_for_regime_calibrated_head"
+          : "evaluate_legacy_side_candidates",
         promotion_rule_id: ouPromotedBestAngle
           ? TOTAL_CLEAN_CONFIRMED_BEST_ANGLE_RULE_ID
           : ouMeanSelectorOriginalUnderLean.lean
@@ -6180,6 +6203,12 @@ export async function createPredictionRecords(
   opts: CreateRecordsOptions,
 ): Promise<CreateRecordsResult> {
   const { sport, slateDate, launchDay, apply, supabase } = opts;
+  if (apply && opts.auditPredictionsOverride !== undefined) {
+    throw new Error(
+      "predictionRecordService.createPredictionRecords: auditPredictionsOverride " +
+        "is dry-run only and cannot be combined with apply=true.",
+    );
+  }
   const preserveExistingUnlocked = opts.preserveExistingUnlocked === true;
   const result: CreateRecordsResult = {
     scanned: 0,
@@ -6219,6 +6248,45 @@ export async function createPredictionRecords(
   const predictionByGameId = new Map<number, PredictionRow>(
     preds.map((p) => [p.game_id, p]),
   );
+  if (opts.auditPredictionsOverride !== undefined) {
+    const auditPredictionByExternalId = new Map(
+      opts.auditPredictionsOverride.map((prediction) => [
+        prediction.game_external_id,
+        prediction,
+      ]),
+    );
+    for (const game of games) {
+      const prediction = auditPredictionByExternalId.get(game.external_id);
+      if (prediction === undefined) continue;
+      const persisted = predictionByGameId.get(game.id);
+      predictionByGameId.set(game.id, {
+        id: persisted?.id ?? -game.id,
+        game_id: game.id,
+        predicted_ml_winner: prediction.predicted_ml_winner,
+        ml_confidence: prediction.ml_confidence,
+        predicted_ou_side: prediction.predicted_ou_side,
+        ou_confidence: prediction.ou_confidence,
+        predicted_nrfi: prediction.predicted_nrfi,
+        nrfi_confidence: prediction.nrfi_confidence,
+        prediction_source: prediction.prediction_source,
+        is_override: false,
+        locked_at: persisted?.locked_at ?? null,
+        computed_at: persisted?.computed_at ?? new Date().toISOString(),
+        sport_specific: prediction.sport_specific,
+        predicted_home_score: prediction.predicted_home_score,
+        predicted_away_score: prediction.predicted_away_score,
+        ml_grade: persisted?.ml_grade ?? null,
+        ou_grade: persisted?.ou_grade ?? null,
+        nrfi_grade: persisted?.nrfi_grade ?? null,
+        ml_signal_type: persisted?.ml_signal_type ?? null,
+        ou_signal_type: persisted?.ou_signal_type ?? null,
+        nrfi_signal_type: persisted?.nrfi_signal_type ?? null,
+        ml_market_signal: persisted?.ml_market_signal ?? null,
+        ou_market_signal: persisted?.ou_market_signal ?? null,
+        nrfi_market_signal: persisted?.nrfi_market_signal ?? null,
+      });
+    }
+  }
   const authoritativeFiByExternalId = new Map(
     (opts.authoritativeFiPredictions ?? []).map((prediction) => [
       prediction.game_external_id,

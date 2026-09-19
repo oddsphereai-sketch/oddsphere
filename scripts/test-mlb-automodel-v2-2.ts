@@ -556,6 +556,44 @@ async function main() {
     check("workload pitching audit captures home role", out.v22Audit.home_starter_workload?.role === "normal_starter");
   }
   {
+    const snap = buildSnapshot();
+    const incumbent = runMlbAutoModelV2_2(snap, buildV1Out(), "morning_draft");
+    const calibrated = runMlbAutoModelV2_2(snap, buildV1Out(), "morning_draft", {
+      totalsRegimePrior: {
+        release: "mlb_totals_regime_calibration_2026_09_19_r1_trailing90",
+        sampleSize: 90,
+        overWins: 70,
+        underWins: 20,
+        rawOverRate: 70 / 90,
+        smoothedOverRate: 0.75,
+        latestSettledDate: "2026-09-18",
+      },
+    });
+    const incumbentOverProbability = incumbent.predicted_ou_side === "over"
+      ? incumbent.v22Audit.ou_model_prob
+      : 1 - incumbent.v22Audit.ou_model_prob;
+    const expectedOverProbability = 0.65 * incumbentOverProbability + 0.35 * 0.75;
+    const calibratedOverProbability = calibrated.predicted_ou_side === "over"
+      ? calibrated.v22Audit.ou_model_prob
+      : 1 - calibrated.v22Audit.ou_model_prob;
+    check(
+      "totals regime calibration is wired into the authoritative V2.2 output",
+      near(calibratedOverProbability, expectedOverProbability, 1e-9),
+      `actual=${calibratedOverProbability} expected=${expectedOverProbability}`,
+    );
+    check(
+      "totals regime calibration records the exact trailing sample",
+      calibrated.v22Audit.total_regime_calibration.applied === true &&
+        calibrated.v22Audit.total_regime_calibration.prior?.sampleSize === 90 &&
+        calibrated.v22Audit.total_regime_calibration.prior?.latestSettledDate === "2026-09-18",
+    );
+    check(
+      "missing totals regime evidence preserves the incumbent forecast",
+      incumbent.v22Audit.total_regime_calibration.applied === false &&
+        incumbent.v22Audit.total_regime_calibration.reason === "prior_unavailable",
+    );
+  }
+  {
     const snap = buildSnapshot({
       awayStarter: buildStarter({
         season_era: 2.50,
