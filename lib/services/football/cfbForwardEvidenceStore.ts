@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE,
+  CFB_FORWARD_MARKET_HISTORY_BASE_EVIDENCE_SCHEMA_RELEASE,
   CFB_FORWARD_PRICE_PREVIOUS_EVIDENCE_SCHEMA_RELEASE,
   CFB_FORWARD_HOLISTIC_PREVIOUS_EVIDENCE_SCHEMA_RELEASE,
   CFB_FORWARD_CONTINUITY_PREVIOUS_EVIDENCE_SCHEMA_RELEASE,
@@ -76,6 +77,11 @@ export const CFB_FORWARD_WRITER_PAYLOAD_BATCH_SIZE = 100 as const;
 export const CFB_FORWARD_MARKET_HISTORY_PAGE_SIZE = 1_000 as const;
 export const CFB_FORWARD_MARKET_HISTORY_MAX_ROWS = 12_000 as const;
 export const CFB_FORWARD_MARKET_HISTORY_GAME_BATCH_SIZE = 100 as const;
+export const CFB_FORWARD_MARKET_HISTORY_COMPATIBLE_RELEASES = [
+  CFB_FORWARD_MARKET_HISTORY_BASE_EVIDENCE_SCHEMA_RELEASE,
+  CFB_FORWARD_PRICE_PREVIOUS_EVIDENCE_SCHEMA_RELEASE,
+  CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE,
+] as const;
 
 /**
  * Read only the JSON fields required by the member movement panels for the
@@ -116,7 +122,7 @@ export async function readCfbForwardMarketHistory(args: {
           "sharp_api_splits:payload->market->sharpApiSplits",
         ].join(","))
         .eq("season", args.season)
-        .eq("evidence_release", CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE)
+        .in("evidence_release", [...CFB_FORWARD_MARKET_HISTORY_COMPATIBLE_RELEASES])
         .in("provider_game_id", gameIds)
         .order("captured_at", { ascending: true })
         .order("id", { ascending: true })
@@ -273,8 +279,10 @@ function normalizeMarketHistoryRow(row: StoredMarketHistoryRow): CfbForwardMarke
   const capturedAt = new Date(row.captured_at).toISOString();
   const gameStartAt = new Date(row.game_start_at).toISOString();
   if (
-    row.evidence_release !== CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE ||
-    row.payload_schema_release !== CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE ||
+    row.evidence_release !== row.payload_schema_release ||
+    !CFB_FORWARD_MARKET_HISTORY_COMPATIBLE_RELEASES.includes(
+      row.evidence_release as typeof CFB_FORWARD_MARKET_HISTORY_COMPATIBLE_RELEASES[number],
+    ) ||
     row.payload_provider_game_id !== row.provider_game_id ||
     row.payload_stage !== row.stage ||
     new Date(row.payload_captured_at).toISOString() !== capturedAt ||
