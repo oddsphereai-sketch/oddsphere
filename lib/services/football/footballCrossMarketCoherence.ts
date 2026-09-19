@@ -1,5 +1,5 @@
 export const FOOTBALL_CROSS_MARKET_COHERENCE_RELEASE =
-  "football_cross_market_coherence_2026_09_15_r10_nfl_one_point_mean_median" as const;
+  "football_cross_market_coherence_2026_09_19_r11_cfb_validated_spread_calibration" as const;
 
 const EPSILON = 1e-9;
 const EV_TOLERANCE = 1e-8;
@@ -37,6 +37,7 @@ export type FootballCoherenceDecision = {
    */
   executionStatus?: "bet" | "shop";
   pushProbability?: number;
+  calibrationFamily?: string;
   evaluatedQuote: {
     line: number | null;
     price: number;
@@ -126,6 +127,7 @@ export function auditFootballCrossMarketCoherence(args: {
   requireDecisionSideFromForecast?: boolean;
   allowPmfVerifiedProbabilityEndpoints?: boolean;
   publicScoreDirectionTolerancePoints?: number;
+  allowForecastSideCalibrationFamilies?: string[];
 }): FootballCoherenceReport {
   const fatalIssues: FootballCoherenceIssue[] = [];
   const explanations: FootballCoherenceExplanation[] = [];
@@ -165,6 +167,10 @@ export function auditFootballCrossMarketCoherence(args: {
       args.publicScoreDirectionTolerancePoints ?? DEFAULT_PUBLIC_SCORE_DIRECTION_TOLERANCE_POINTS;
     for (const decision of normalized) {
       if (!decision.selectedSide || decision.market !== "moneyline" && decision.line === null) continue;
+      if (
+        decision.calibrationFamily &&
+        args.allowForecastSideCalibrationFamilies?.includes(decision.calibrationFamily)
+      ) continue;
       const forecastSide = selectedForecastSideAtDecision(args.forecast, decision);
       if (forecastSide === null) {
         fatalIssues.push({
