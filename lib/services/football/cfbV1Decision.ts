@@ -24,17 +24,17 @@ export const CFB_V1_MODEL_RELEASE =
 export const CFB_V1_DISTRIBUTION_RELEASE =
   "cfb_v1_market_sharp_joint_distribution_2026_09_01_r9_coherent_movement_evidence" as const;
 export const CFB_V1_PROBABILITY_RELEASE =
-  "cfb_v1_market_sharp_joint_probability_2026_09_19_r11_spread_counter_signal" as const;
+  "cfb_v1_market_sharp_joint_probability_2026_09_19_r12_contained_spread_counter_signal" as const;
 export const CFB_V1_REPRESENTATIVE_SCORE_RELEASE =
   "cfb_v1_market_sharp_reachable_score_2026_09_01_r9_coherent_movement_evidence" as const;
 export const CFB_V1_CALIBRATION_RELEASE =
-  "cfb_v1_market_sharp_exact_price_calibration_2026_09_19_r9_spread_counter_signal" as const;
+  "cfb_v1_market_sharp_exact_price_calibration_2026_09_19_r10_contained_spread_counter_signal" as const;
 export const CFB_V1_GRADE_POLICY_RELEASE =
   "cfb_v1_composite_grade_policy_2026_09_19_r13_spread_counter_signal" as const;
 export const CFB_V1_DECISION_RELEASE =
-  "cfb_v1_daily_edge_decision_2026_09_19_r32_spread_counter_signal" as const;
+  "cfb_v1_daily_edge_decision_2026_09_19_r33_contained_spread_counter_signal" as const;
 export const CFB_V1_PRICE_PREVIOUS_DECISION_RELEASE =
-  "cfb_v1_daily_edge_decision_2026_09_05_r31_confidence_economics_bridge" as const;
+  "cfb_v1_daily_edge_decision_2026_09_19_r32_spread_counter_signal" as const;
 export const CFB_V1_HOLISTIC_PREVIOUS_DECISION_RELEASE =
   "cfb_v1_daily_edge_decision_2026_09_04_r29_holistic_confidence" as const;
 export const CFB_V1_CONTINUITY_PREVIOUS_DECISION_RELEASE =
@@ -44,7 +44,7 @@ export const CFB_V1_GRADE_PREVIOUS_DECISION_RELEASE =
 const CFB_V1_POLICY_SOURCE_DECISION_RELEASE =
   "cfb_v1_daily_edge_decision_2026_09_04_r28_evidence_identity_continuity" as const;
 export const CFB_V1_DECISION_SCHEMA_RELEASE =
-  "cfb_v1_exact_price_decision_tuple_2026_09_19_r20_spread_counter_signal" as const;
+  "cfb_v1_exact_price_decision_tuple_2026_09_19_r21_contained_spread_counter_signal" as const;
 export const CFB_SPREAD_COUNTER_SIGNAL_MIN_EXCLUSIVE = 0.53 as const;
 export const CFB_SPREAD_COUNTER_SIGNAL_MAX_INCLUSIVE = 0.55 as const;
 export const CFB_T60_TARGET_MINUTES = 60 as const;
@@ -373,6 +373,7 @@ function evaluateTarget(args: {
   const selection = cfbV1CalibratedSelection({
     probabilities: lineProbabilities,
     market: args.market,
+    homeSpread,
     calibrationContract,
   });
   const sides = [selection.side];
@@ -458,6 +459,7 @@ function evaluateTarget(args: {
 export function cfbV1CalibratedSelection(args: {
   probabilities: ReturnType<typeof cfbV1LineProbabilities>;
   market: CfbV1Market;
+  homeSpread?: number;
   calibrationContract?: CfbV1CalibrationContract;
 }): {
   side: "home" | "away" | "over" | "under";
@@ -469,20 +471,55 @@ export function cfbV1CalibratedSelection(args: {
   const rawSelectedSide = pmfSelectedSide(args.probabilities, args.market);
   const rawSelectedProbability = independentSideProbability(args.probabilities, args.market, rawSelectedSide);
   const calibrationContract = args.calibrationContract ?? "authoritative_pmf_spread_counter_signal";
-  const counterSignalApplied = calibrationContract === "authoritative_pmf_spread_counter_signal" &&
+  const counterSignalQualified = calibrationContract === "authoritative_pmf_spread_counter_signal" &&
     args.market === "spread" &&
     rawSelectedProbability > CFB_SPREAD_COUNTER_SIGNAL_MIN_EXCLUSIVE &&
     rawSelectedProbability <= CFB_SPREAD_COUNTER_SIGNAL_MAX_INCLUSIVE;
-  const side = counterSignalApplied ? opposingSide(rawSelectedSide) : rawSelectedSide;
+  if (counterSignalQualified && !Number.isFinite(args.homeSpread)) {
+    throw new Error("CFB spread counter-signal calibration requires the exact home spread.");
+  }
+  const counterSignalSide = opposingSide(rawSelectedSide);
+  const containedCounterSignalProbability = counterSignalQualified
+    ? containedCfbSpreadProbability({
+        probabilities: args.probabilities,
+        selectedSide: counterSignalSide,
+        proposedSelectedProbability: rawSelectedProbability,
+        homeSpread: args.homeSpread!,
+      })
+    : rawSelectedProbability;
+  const counterSignalApplied = counterSignalQualified && containedCounterSignalProbability > 0.5;
+  const side = counterSignalApplied ? counterSignalSide : rawSelectedSide;
   return {
     side,
     rawSelectedSide,
     rawSelectedProbability,
     calibratedProbability: counterSignalApplied
-      ? rawSelectedProbability
+      ? containedCounterSignalProbability
       : independentSideProbability(args.probabilities, args.market, side),
     counterSignalApplied,
   };
+}
+
+function containedCfbSpreadProbability(args: {
+  probabilities: ReturnType<typeof cfbV1LineProbabilities>;
+  selectedSide: "home" | "away" | "over" | "under";
+  proposedSelectedProbability: number;
+  homeSpread: number;
+}): number {
+  if (args.selectedSide !== "home" && args.selectedSide !== "away") {
+    throw new Error("CFB spread containment requires a home or away side.");
+  }
+  const proposedHomeCover = args.selectedSide === "home"
+    ? args.proposedSelectedProbability
+    : 1 - args.proposedSelectedProbability;
+  const homeWin = args.probabilities.moneyline.home;
+  const halfPush = 0.5 * args.probabilities.spread.push;
+  const containedHomeCover = args.homeSpread > 0
+    ? Math.max(proposedHomeCover, homeWin + halfPush)
+    : args.homeSpread < 0
+      ? Math.min(proposedHomeCover, homeWin - halfPush)
+      : homeWin;
+  return args.selectedSide === "home" ? containedHomeCover : 1 - containedHomeCover;
 }
 
 function calibratePrimaryThenSide(args: {
@@ -632,6 +669,7 @@ function unavailableReasonCodes(args: {
     const side = cfbV1CalibratedSelection({
       probabilities,
       market: args.market,
+      homeSpread,
       calibrationContract: args.calibrationContract,
     }).side;
     const quote = targetQuote(target, args.market, side);

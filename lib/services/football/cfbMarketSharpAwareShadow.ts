@@ -21,13 +21,13 @@ import {
 import { evaluateCfbHolisticConfidence } from "./cfbHolisticConfidenceCandidate";
 
 export const CFB_MARKET_SHARP_AWARE_CANDIDATE_RELEASE =
-  "cfb_market_sharp_aware_candidate_2026_09_19_r18_spread_counter_signal" as const;
+  "cfb_market_sharp_aware_candidate_2026_09_19_r19_contained_spread_counter_signal" as const;
 export const CFB_MARKET_SHARP_AWARE_SHADOW_RELEASE =
   CFB_MARKET_SHARP_AWARE_CANDIDATE_RELEASE;
 export const CFB_MARKET_SHARP_AWARE_PRODUCTION_RELEASE =
-  "cfb_market_sharp_aware_production_2026_09_19_r20_spread_counter_signal" as const;
+  "cfb_market_sharp_aware_production_2026_09_19_r21_contained_spread_counter_signal" as const;
 export const CFB_MARKET_SHARP_AWARE_PREVIOUS_PRODUCTION_RELEASE =
-  "cfb_market_sharp_aware_production_2026_09_13_r19_balanced_positive_value" as const;
+  "cfb_market_sharp_aware_production_2026_09_19_r20_spread_counter_signal" as const;
 export const CFB_MARKET_SHADOW_WEIGHT = 0.75 as const;
 export const CFB_SHARP_SIGNED_GAP_THRESHOLD_PP = 10 as const;
 export const CFB_SHARP_FULL_STRENGTH_GAP_PP = 20 as const;
