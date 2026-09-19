@@ -29,10 +29,14 @@ import {
 import { gradePrediction } from "../lib/services/predictionGrader";
 import { resolveWnbaMoneylineSide } from "../lib/services/wnba/wnbaTeams";
 import { applyPublicMarketContext } from "../lib/services/publicMarketContext";
-import { resolveWnbaReaderGrade } from "../lib/services/wnba/buildWnbaDailyEdgeAdapted";
+import {
+  resolveWnbaReaderEconomicDenominator,
+  resolveWnbaReaderGrade,
+} from "../lib/services/wnba/buildWnbaDailyEdgeAdapted";
 import {
   buildWnbaDecisionTuple,
   isWnbaDecisionTuple,
+  resolveWnbaEconomicDenominator,
   selectWnbaEvaluatedPriceRow,
   WNBA_DECISION_TUPLE_CONTRACT_VERSION,
   type WnbaDecisionPriceRow,
@@ -518,7 +522,46 @@ check(
 );
 check(
   "WNBA prediction-record probability contract has a new immutable identifier",
-  WNBA_PREDICTION_RECORD_CONTRACT_VERSION === "wnba_prediction_record_contract_v7_complete_prediction_denominators_2026_09_04",
+  WNBA_PREDICTION_RECORD_CONTRACT_VERSION === "wnba_prediction_record_contract_v8_exact_price_denominator_2026_09_19",
+);
+const exactPriceDenominator = resolveWnbaEconomicDenominator({
+  marketFairProbability: null,
+  evaluatedPriceAmerican: -115,
+});
+check(
+  "WNBA tracking retains the exact-price economic denominator when independent fair probability is unavailable",
+  exactPriceDenominator.source === "evaluated_price_break_even" &&
+    Math.abs((exactPriceDenominator.probability ?? 0) - 115 / 215) < 1e-12,
+);
+check(
+  "WNBA tracking keeps qualified market fair probability ahead of price break-even",
+  resolveWnbaEconomicDenominator({
+    marketFairProbability: 0.5,
+    evaluatedPriceAmerican: -115,
+  }).probability === 0.5,
+);
+check(
+  "WNBA tracking never invents a denominator without a valid price",
+  resolveWnbaEconomicDenominator({
+    marketFairProbability: null,
+    evaluatedPriceAmerican: 0,
+  }).probability === null,
+);
+check(
+  "WNBA current reader uses the exact-price denominator without changing the writer grade",
+  Math.abs((resolveWnbaReaderEconomicDenominator({
+    gradePolicyVersion: EXPECTED_WNBA_GRADE_POLICY_VERSION,
+    marketFairProbability: null,
+    evaluatedPriceAmerican: -115,
+  }) ?? 0) - 115 / 215) < 1e-12,
+);
+check(
+  "WNBA legacy reader does not retrofit the new denominator onto locked history",
+  resolveWnbaReaderEconomicDenominator({
+    gradePolicyVersion: "wnba_grade_policy_v5_projection_rest_spread_agreement_2026_08_12",
+    marketFairProbability: null,
+    evaluatedPriceAmerican: -115,
+  }) === null,
 );
 check(
   "WNBA missing exact price becomes accuracy-only instead of disappearing",

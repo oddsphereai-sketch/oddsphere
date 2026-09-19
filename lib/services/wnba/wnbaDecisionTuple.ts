@@ -43,6 +43,35 @@ export type WnbaDecisionTuple = {
   grade_policy_version: typeof EXPECTED_WNBA_GRADE_POLICY_VERSION;
 };
 
+export type WnbaEconomicDenominatorSource =
+  | "market_fair_probability"
+  | "evaluated_price_break_even";
+
+export function resolveWnbaEconomicDenominator(args: {
+  marketFairProbability: number | null;
+  evaluatedPriceAmerican: number | null;
+}): { probability: number | null; source: WnbaEconomicDenominatorSource | null } {
+  if (
+    args.marketFairProbability !== null &&
+    Number.isFinite(args.marketFairProbability) &&
+    args.marketFairProbability >= 0 &&
+    args.marketFairProbability <= 1
+  ) {
+    return {
+      probability: args.marketFairProbability,
+      source: "market_fair_probability",
+    };
+  }
+  const american = args.evaluatedPriceAmerican;
+  if (american === null || !Number.isFinite(american) || american === 0) {
+    return { probability: null, source: null };
+  }
+  return {
+    probability: american > 0 ? 100 / (american + 100) : -american / (-american + 100),
+    source: "evaluated_price_break_even",
+  };
+}
+
 function sameLine(left: number | null, right: number | null): boolean {
   if (left === null || right === null) return left === right;
   return Math.abs(left - right) < 0.01;

@@ -29,8 +29,8 @@ Last reviewed: 2026-09-19
 
 - Public W-L accuracy counts every immutable locked prediction that has a real side, including Watchlist and No Play. Best Angle and Lean remain separate actionable-only cuts. Exact-price ROI remains separate and excludes null-price records. The aggregate contract is `tracking_aggregate_v9_append_only_correction_precedence_2026_09_14`; an append-only correction explicitly supersedes its erroneous original before grade/actionability precedence is evaluated. Unlocked records from every sport remain outside public accuracy while they can still change.
 - NFL tracking record / sole writer are `nfl_official_tracking_record_2026_09_14_r7_prediction_owned_side` / `nfl_forward_evidence_writer_2026_09_16_r30_injury_pagination`. An eligible T-60 payload emits all three immutable forecast markets. A complete side-bearing forecast without a coherent exact-price tuple is stored as a non-Held No Play with null price/market probability/edge/EV; it counts for prediction accuracy but cannot enter Best Angle, Lean, stake, or ROI. A complete three-market forecast manifest remains eligible even when all three exact-price tuples disappear at lock. Null-side or internally incoherent forecasts and true whole-game health failures remain ineligible. The regular slate adapter `balldontlie_nfl_regular_slate_2026_09_13_r3_game_scoped_odds_gaps` retains the complete verified schedule when current odds have disappeared for completed games; only a due game's invalid forecast is isolated by the writer. Week selector `nfl_forward_week_selection_2026_09_15_r1_tuesday_et_rollover` advances the reader, health route, sole writer, and Player Props reader together at Tuesday midnight Eastern while keeping the configured week as an operator floor. Collector `nfl_forward_evidence_collector_2026_09_16_r7_injury_pagination` retains a complete five-page Week 2 injury response inside an eight-page bounded ceiling. Compact snapshot `nfl_forward_member_snapshot_2026_09_16_r14_injury_pagination` publishes the resulting complete current-release wave and retains r13 as the bounded availability fallback. After a new weekly opening wave, the sole writer performs one 15-minute follow-up capture before returning to the established six-hour/hourly/T-60 cadence. The writer reads only current publication authority in bounded pages rather than scanning superseded large JSON rows.
-- WNBA prediction-record contract is `wnba_prediction_record_contract_v7_complete_prediction_denominators_2026_09_04`. A side-bearing ML, Total, or Spread forecast no longer disappears solely because its exact price or current decision tuple is unavailable; it becomes the same accuracy-only Held No Play shape. Null-side forecasts, invalid team identity, release mismatch, and unverified game identity remain withheld. Existing locked records are immutable.
-- This release changes no forecast, side, probability, grade policy, actionable count, stake, provider query, schedule, lease, or database schema. Evidence and rollback: `docs/model-audits/2026-09-04-cross-sport-complete-tracking-denominators.md`.
+- WNBA prediction-record contract is `wnba_prediction_record_contract_v8_exact_price_denominator_2026_09_19`. A side-bearing ML, Total, or Spread forecast no longer disappears solely because its exact price or current decision tuple is unavailable; it becomes the same accuracy-only Held No Play shape. A complete exact-price tuple now retains that quote's break-even probability as the economic denominator when the stricter target-excluded fair probability is unavailable, while preserving the latter as null with its original provenance. Null-side forecasts, invalid team identity, release mismatch, and unverified game identity remain withheld. Existing locked records are immutable.
+- The September 4 denominator release changed no forecast, side, probability, grade policy, actionable count, stake, provider query, schedule, lease, or database schema. Evidence and rollback: `docs/model-audits/2026-09-04-cross-sport-complete-tracking-denominators.md`. The September 19 WNBA r8 change is limited to its explicitly versioned economic denominator handoff described below.
 
 ## NFL Daily Edge generalized weekly production release
 
@@ -1392,7 +1392,7 @@ The paired live-slate replay is recorded in
 - Calibration schema: `wnba_core_calibration_v4_single_market_entry`
 - Grade policy: `wnba_grade_policy_v9_single_market_entry_2026_09_03`
 - Decision-tuple contract: `wnba_decision_tuple_v4_single_market_entry_2026_09_03`
-- Prediction-record contract: `wnba_prediction_record_contract_v7_complete_prediction_denominators_2026_09_04`
+- Prediction-record contract: `wnba_prediction_record_contract_v8_exact_price_denominator_2026_09_19`
 - Machine registry: `lib/automodel/wnbaChampionRuntime.ts`
 - Authoritative model writer: `lib/services/wnba/runWnbaModel.ts`
 - Tracking writer: `lib/services/wnba/buildWnbaPredictionRecords.ts`
@@ -1420,6 +1420,14 @@ down to the exact independent distribution. This is an evidence-quality fallback
 winner-only override: compatible evidence may retain or legitimately reverse the independent
 winner, and the resulting single margin distribution regenerates probability, margin, score and
 Spread together.
+
+The September 19 v8 prediction-record handoff preserves the target-excluded fair probability as
+the higher-authority market denominator when it exists. When it is intentionally null because
+the remaining books do not span two independent source families, the already evaluated named-book
+quote supplies only its exact break-even probability for value display, tracking evidence, and
+health checks. It does not enter the forecast, validate its own side, or change the v1.4 model,
+v6 distribution, v9 grade, decision tuple, board count, stake, writer, lease, or provider load.
+Evidence and rollback: `docs/model-audits/2026-09-19-wnba-exact-price-denominator-r8.md`.
 
 One versioned margin distribution preserves the final Moneyline win probability, expected
 margin, and incumbent variance; Spread probabilities come from that same CDF, the independent
