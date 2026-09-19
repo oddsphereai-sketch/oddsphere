@@ -18,6 +18,7 @@
  */
 
 import { cronHandler } from "@/lib/cron/runCron";
+import { resolveSlateHealthAuditApply } from "@/lib/cron/slateHealthAuditApply";
 import { supabase } from "@/lib/db/supabase";
 import { runSlateHealthAudit, type Sport } from "@/lib/services/audit/slateHealthAuditor";
 import { sendAuditAlert } from "@/lib/services/audit/auditAlert";
@@ -43,7 +44,10 @@ export async function GET(request: Request): Promise<Response> {
     }
 
     const url = new URL(request.url);
-    const apply = url.searchParams.get("apply") === "true" || process.env[APPLY_ENV] === "true";
+    // An explicit query value must override the environment default. This
+    // keeps report-only operator requests read-only even when the scheduled
+    // production audit is configured to apply deterministic safe repairs.
+    const apply = resolveSlateHealthAuditApply(url.searchParams.get("apply"), process.env[APPLY_ENV]);
     const sportsParam = url.searchParams.get("sports");
     const sports = sportsParam
       ? (sportsParam.split(",").map((s) => s.trim()) as Sport[])
