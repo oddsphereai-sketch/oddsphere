@@ -5,6 +5,7 @@
  */
 
 import { __TEST__ } from "../lib/services/audit/slateHealthAuditor";
+import { resolveSlateHealthAuditApply } from "../lib/cron/slateHealthAuditApply";
 
 const { classifyNoPredictionReason, slatesForSport, addDays } = __TEST__;
 
@@ -19,6 +20,16 @@ console.log("\nscripts/test-slate-health-auditor.ts");
 console.log("─".repeat(60));
 
 const now = 1_000_000_000_000;
+
+test("explicit report-only mode overrides an enabled environment default", () => {
+  assert(resolveSlateHealthAuditApply("false", "true") === false);
+});
+
+test("apply mode remains explicit and the environment only supplies a default", () => {
+  assert(resolveSlateHealthAuditApply("true", undefined) === true);
+  assert(resolveSlateHealthAuditApply(null, "true") === true);
+  assert(resolveSlateHealthAuditApply(null, undefined) === false);
+});
 
 test("upcoming soccer game with odds + 0 preds → error, auto_safe (rerun writer)", () => {
   const r = classifyNoPredictionReason({ status: "scheduled", kickoffMs: now + 3_600_000, nowMs: now, slateDate: "2026-06-14", gameSport: "soccer" });
