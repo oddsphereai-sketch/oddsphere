@@ -12,6 +12,10 @@ import {
   type CfbV1ExactPriceDecision,
   type CfbV1Grade,
 } from "../../lib/services/football/cfbV1Decision";
+import {
+  assertFootballCrossMarketCoherence,
+  CFB_PUBLIC_SCORE_DIRECTION_TOLERANCE_POINTS,
+} from "../../lib/services/football/footballCrossMarketCoherence";
 
 const date = process.argv.find((arg) => arg.startsWith("--date="))?.slice("--date=".length) ?? "2026-09-19";
 const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -72,6 +76,29 @@ async function main(): Promise<void> {
       ...shared,
       calibrationContract: "authoritative_pmf_spread_counter_signal",
     }), payload);
+    assertFootballCrossMarketCoherence({
+      sport: "cfb",
+      providerGameId: row.providerGameId,
+      awayTeam: payload.game.away.abbreviation,
+      homeTeam: payload.game.home.abbreviation,
+      forecast: {
+        expectedAwayPoints: forecast.expectedAwayPoints,
+        expectedHomePoints: forecast.expectedHomePoints,
+        representativeScore: forecast.representativeScore,
+        awayWinProbability: 1 - forecast.homeWinProbability,
+        homeWinProbability: forecast.homeWinProbability,
+        pmf: forecast.pmf,
+      },
+      decisions: candidate.evaluatedBets.map((decision) => ({
+        ...decision,
+        executionStatus: decision.gradeAdjustment?.executionStatus,
+      })),
+      unavailableMarkets: candidate.heldMarkets.map((market) => market.market),
+      requireDecisionSideFromForecast: true,
+      allowPmfVerifiedProbabilityEndpoints: true,
+      publicScoreDirectionTolerancePoints: CFB_PUBLIC_SCORE_DIRECTION_TOLERANCE_POINTS,
+      allowForecastSideCalibrationFamilies: ["authoritative_market_sharp_spread_counter_signal"],
+    });
     const before = incumbent.evaluatedBets.find((decision) => decision.market === "spread") ?? null;
     const after = candidate.evaluatedBets.find((decision) => decision.market === "spread") ?? null;
     if (!before || !after) return [];

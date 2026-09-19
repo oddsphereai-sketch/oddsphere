@@ -47,7 +47,11 @@ for (const decision of bundle.evaluatedBets) {
   if (decision.market === "moneyline") {
     assert.equal(decision.side, line.moneyline.home >= line.moneyline.away ? "TCU" : "UNC", "Moneyline grade side must be selected by the joint PMF");
   } else if (decision.market === "spread") {
-    const calibrated = cfbV1CalibratedSelection({ probabilities: line, market: "spread" });
+    const calibrated = cfbV1CalibratedSelection({
+      probabilities: line,
+      market: "spread",
+      homeSpread: decision.side.startsWith("TCU ") ? decision.evaluatedQuote.line! : -decision.evaluatedQuote.line!,
+    });
     assert.equal(decision.side.startsWith("TCU "), calibrated.side === "home", "Spread grade side must follow the released calibration contract at the exact line");
   } else {
     assert.equal(decision.side.startsWith("Over "), line.total.over >= line.total.under, "Total grade side must be selected by the joint PMF at the exact line");
@@ -95,18 +99,22 @@ const boundaryProbabilities = (home: number) => ({
 assert.equal(cfbV1CalibratedSelection({
   probabilities: boundaryProbabilities(CFB_SPREAD_COUNTER_SIGNAL_MIN_EXCLUSIVE),
   market: "spread",
+  homeSpread: -3.5,
 }).counterSignalApplied, false, "the lower boundary is exclusive");
 assert.equal(cfbV1CalibratedSelection({
   probabilities: boundaryProbabilities(CFB_SPREAD_COUNTER_SIGNAL_MIN_EXCLUSIVE + 0.0001),
   market: "spread",
+  homeSpread: -3.5,
 }).side, "away", "a qualified spread signal flips sides");
 assert.equal(cfbV1CalibratedSelection({
   probabilities: boundaryProbabilities(CFB_SPREAD_COUNTER_SIGNAL_MAX_INCLUSIVE),
   market: "spread",
+  homeSpread: -3.5,
 }).counterSignalApplied, true, "the upper boundary is inclusive");
 assert.equal(cfbV1CalibratedSelection({
   probabilities: boundaryProbabilities(CFB_SPREAD_COUNTER_SIGNAL_MAX_INCLUSIVE + 0.0001),
   market: "spread",
+  homeSpread: -3.5,
 }).counterSignalApplied, false, "confidence above the qualified band is unchanged");
 assert.equal(cfbV1CalibratedSelection({
   probabilities: boundaryProbabilities(0.54),
@@ -116,6 +124,35 @@ assert.equal(cfbV1CalibratedSelection({
   probabilities: boundaryProbabilities(0.54),
   market: "moneyline",
 }).side, "home", "the spread-only calibration cannot alter moneylines");
+
+const containedFavorite = cfbV1CalibratedSelection({
+  probabilities: {
+    moneyline: { home: 0.5263, away: 0.4737 },
+    spread: { home: 0.46, away: 0.54, push: 0.032 },
+    total: { over: 0.5, under: 0.5, push: 0 },
+  },
+  market: "spread",
+  homeSpread: -3,
+});
+assert.equal(containedFavorite.side, "home");
+assert.ok(Math.abs(containedFavorite.calibratedProbability - (0.5263 - 0.016)) < 1e-12, "favorite cover probability is capped by the same-PMF win event");
+
+const containmentPreventsInvalidFlip = cfbV1CalibratedSelection({
+  probabilities: {
+    moneyline: { home: 0.51, away: 0.49 },
+    spread: { home: 0.54, away: 0.46, push: 0.02 },
+    total: { over: 0.5, under: 0.5, push: 0 },
+  },
+  market: "spread",
+  homeSpread: 1.5,
+});
+assert.equal(containmentPreventsInvalidFlip.side, "home", "identity remains when containment cannot leave the counter-signal above 50%");
+assert.equal(containmentPreventsInvalidFlip.counterSignalApplied, false);
+assert.equal(containmentPreventsInvalidFlip.calibratedProbability, 0.54);
+assert.throws(() => cfbV1CalibratedSelection({
+  probabilities: boundaryProbabilities(0.54),
+  market: "spread",
+}), /exact home spread/, "spread calibration fails closed without its exact line");
 
 const counterSignalForecast = {
   providerGameId: "counter-signal-test",

@@ -1,11 +1,15 @@
 # CFB spread counter-signal calibration — 2026-09-19
 
+Starting production base: `48020c3981a6c15a1033b5386f24ef4b13a97e69`.
+
 ## Decision
 
 Promote the release-selected Spread calibration candidate. When the authoritative joint PMF's
-selected Spread side is above 53% and at most 55%, publish the opposite side with the same
-calibrated confidence. Moneyline, Total, the score PMF, expected scores, representative score,
-provider inputs, stake policy, and UI copy are unchanged.
+selected Spread side is above 53% and at most 55%, publish the opposite side. Its calibrated
+confidence is bounded by the same joint PMF's Moneyline/Spread event-containment relationship;
+if the bound cannot leave the opposite side above 50%, the identity side remains. Moneyline,
+Total, the score PMF, expected scores, representative score, provider inputs, stake policy, and
+UI copy are unchanged.
 
 This is a side-calibration correction, not an abstention rule. The raw PMF probability for the
 published side remains in `forecastProbability`; `calibratedProbability` and `modelProbability`
@@ -21,9 +25,9 @@ confirmation seasons were scored.
 
 | Season | Cohort | Incumbent | Candidate | Net wins | Incumbent Brier / log loss | Candidate Brier / log loss |
 |---|---:|---:|---:|---:|---:|---:|
-| 2023 selection | 882 | 429–453 (48.64%) | 455–427 (51.59%) | +26 | .251485 / .696127 | .249232 / .691612 |
-| 2024 confirmation | 965, 1 push | 487–478 (50.47%) | 491–474 (50.88%) | +4 | .251065 / .695284 | .250549 / .694248 |
-| 2025 confirmation | 958 | 508–450 (53.03%) | 513–445 (53.55%) | +5 | .247629 / .688359 | .247086 / .687270 |
+| 2023 selection | 882 | 429–453 (48.64%) | 454–428 (51.47%) | +25 | .251485 / .696127 | .249459 / .692066 |
+| 2024 confirmation | 965, 1 push | 487–478 (50.47%) | 490–475 (50.78%) | +3 | .251065 / .695284 | .250564 / .694278 |
+| 2025 confirmation | 958 | 508–450 (53.03%) | 512–446 (53.44%) | +4 | .247629 / .688359 | .247079 / .687257 |
 
 The Total candidate did not clear both confirmation seasons and is rejected. No CFB Total
 production behavior changes in this release.
@@ -43,7 +47,7 @@ and the calibrated side is 19–17. Most settled band evidence belongs to foreca
 current r19 has only four settled Spreads and none in the band, so it is not represented as an
 r19-only result.
 
-The SELECT-only September 19 exact-price replay covered 69 games and 60 evaluable Spreads:
+The initial SELECT-only September 19 exact-price replay covered 69 games and 60 evaluable Spreads:
 
 - 10 side and exact-quote changes;
 - 29 actionables before and 29 after;
@@ -56,6 +60,16 @@ The promotion is the calibrated M-OH@CIN side through the existing, previously a
 resistance-free large-Spread lane: probability at least 54%, target-excluded edge at least 3pp,
 EV at least 3%, absolute line at most 24, and a real price between -500 and +500. The rule cannot
 bypass resistance and does not create a stake.
+
+The first r63 production writer run (`4163f63b-6be8-4838-9d00-ab7fa7449762`) correctly isolated
+four event-containment failures and refused to publish an incomplete r13 compact snapshot. The
+immediately previous verified r12 snapshot remained readable, so the board did not go empty. The
+r64 repair bounds the calibrated Spread probability against the same-PMF Moneyline probability
+and exact-line push mass instead of weakening the validator. A post-incident SELECT-only replay
+asserted the full production coherence contract on every candidate bundle: 52 evaluable current
+Spreads, seven side changes, 26→28 actionables, two promotions, zero demotions, and unchanged
+Moneyline/Total behavior. The release-pure settled result remains 66–77→82–61 overall and
+16–20→19–17 among actionables because all 32 settled qualified-band sides remain containment-valid.
 
 ## Runtime and safety contract
 
@@ -72,9 +86,9 @@ bypass resistance and does not create a stake.
 
 ## Rollback
 
-Restore the r31 identity decision/calibration family and the immediately previous r22/r34
-evidence/member, r62 writer, r53 fixture, r12 compact snapshot, r20 tracking, and r19 market-grade
-releases together. Preserve all immutable evidence and prediction records. Roll back if a natural
+Restore the r31 identity decision/calibration family and the r22/r34 evidence/member, r62 writer,
+r53 fixture, r12 compact snapshot, r20 tracking, and r19 market-grade releases together. Preserve
+all immutable evidence and prediction records. Roll back if a natural
 writer cycle changes Moneyline or Total, reduces total Spread actionability outside the documented
-one-promotion/one-demotion replay, produces a mixed release wave, loses a named-book quote, or
+current-board replay, produces a mixed release wave, loses a named-book quote, or
 fails the member snapshot/coherence checks.

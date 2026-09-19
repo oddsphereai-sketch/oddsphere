@@ -19,10 +19,9 @@ from typing import Any, Callable
 
 import numpy as np
 import pandas as pd
-from sklearn.metrics import brier_score_loss, log_loss
 
 
-RELEASE = "cfb_market_mixture_accuracy_audit_2026_09_19_r1"
+RELEASE = "cfb_market_mixture_accuracy_audit_2026_09_19_r2_contained_spread_counter_signal"
 SELECTION_SEASON = 2023
 CONFIRMATION_SEASONS = (2024, 2025)
 MARKET_WEIGHTS = (0.50, 0.60, 0.70, 0.75, 0.80)
@@ -115,6 +114,10 @@ def component_probabilities(
         rows.append({
             "independent_home_cover": event_probability(independent_margin, spread_threshold),
             "market_home_cover": event_probability(market_margin, spread_threshold),
+            "independent_home_win": event_probability(independent_margin, 0),
+            "market_home_win": event_probability(market_margin, 0),
+            "independent_spread_push": float(np.mean(independent_margin == spread_threshold)),
+            "market_spread_push": float(np.mean(market_margin == spread_threshold)),
             "independent_over": event_probability(independent_total, total_threshold),
             "market_over": event_probability(market_total, total_threshold),
             "independent_margin": float(independent_margin.mean()),
@@ -152,8 +155,8 @@ def metrics(frame: pd.DataFrame, probability: np.ndarray, market: str) -> dict[s
         "wins": wins,
         "losses": losses,
         "accuracy": wins / len(target) if len(target) else None,
-        "brier": float(brier_score_loss(target, p)) if len(target) else None,
-        "logLoss": float(log_loss(target, p, labels=[0, 1])) if len(target) else None,
+        "brier": float(np.mean(np.square(target - p))) if len(target) else None,
+        "logLoss": float(np.mean(-(target * np.log(p) + (1 - target) * np.log(1 - p)))) if len(target) else None,
         "homeOrOverSelections": int(selected.sum()),
         "awayOrUnderSelections": int((~selected).sum()),
     }
@@ -161,6 +164,20 @@ def metrics(frame: pd.DataFrame, probability: np.ndarray, market: str) -> dict[s
 
 def flip(probability: np.ndarray, mask: np.ndarray) -> np.ndarray:
     return np.where(mask, 1 - probability, probability)
+
+
+def contained_spread_flip(frame: pd.DataFrame, incumbent: np.ndarray, mask: np.ndarray) -> np.ndarray:
+    home_win = 0.25 * frame.independent_home_win.to_numpy(float) + 0.75 * frame.market_home_win.to_numpy(float)
+    push = 0.25 * frame.independent_spread_push.to_numpy(float) + 0.75 * frame.market_spread_push.to_numpy(float)
+    home_spread = frame.home_spread.to_numpy(float)
+    proposed_home_cover = 1 - incumbent
+    contained_home_cover = np.where(
+        home_spread > 0,
+        np.maximum(proposed_home_cover, home_win + 0.5 * push),
+        np.where(home_spread < 0, np.minimum(proposed_home_cover, home_win - 0.5 * push), home_win),
+    )
+    changes_side = np.where(incumbent >= 0.5, contained_home_cover < 0.5, contained_home_cover > 0.5)
+    return np.where(mask & changes_side, contained_home_cover, incumbent)
 
 
 def candidate_grid(frame: pd.DataFrame, market: str) -> list[Candidate]:
@@ -186,7 +203,7 @@ def candidate_grid(frame: pd.DataFrame, market: str) -> list[Candidate]:
             mask = (confidence > low) & (confidence <= high)
             candidates.append(Candidate(
                 f"counter_signal_confidence_{100 * low:.1f}_to_{100 * high:.1f}pp",
-                lambda _frame, value=flip(incumbent, mask): value,
+                lambda _frame, value=contained_spread_flip(frame, incumbent, mask): value,
             ))
         gap = np.abs(frame.independent_margin.to_numpy(float) + frame.home_spread.to_numpy(float))
     else:
@@ -284,7 +301,10 @@ def main() -> None:
     parser.add_argument("--tournament-script", default="scripts/operator/tournament_cfb_v1_model.py")
     parser.add_argument("--score-artifact", default="lib/services/football/modelArtifacts/cfbV1JointScoreArtifact.json")
     parser.add_argument("--market-artifact", default="lib/services/football/modelArtifacts/cfbMarketResidualArtifact.json")
-    parser.add_argument("--output", default="football-research/reports/cfb_market_mixture_accuracy_audit_2026_09_19_r1.json")
+    parser.add_argument(
+        "--output",
+        default="football-research/reports/cfb_market_mixture_accuracy_audit_2026_09_19_r2_contained_spread_counter_signal.json",
+    )
     args = parser.parse_args()
     report = run(args)
     output = Path(args.output)

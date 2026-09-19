@@ -11,13 +11,13 @@ import {
 } from "./cfbMemberFixture";
 
 export const CFB_FORWARD_MEMBER_SNAPSHOT_RELEASE =
-  "cfb_forward_member_snapshot_2026_09_19_r13_spread_counter_signal" as const;
+  "cfb_forward_member_snapshot_2026_09_19_r14_contained_spread_counter_signal" as const;
 export const CFB_FORWARD_PREVIOUS_MEMBER_SNAPSHOT_RELEASE =
-  "cfb_forward_member_snapshot_2026_09_18_r12_complete_price_history" as const;
+  "cfb_forward_member_snapshot_2026_09_19_r13_spread_counter_signal" as const;
 export const CFB_PREVIOUS_MEMBER_FIXTURE_RELEASE =
-  "cfb_v1_member_fixture_2026_09_18_r53_complete_price_history" as const;
+  "cfb_v1_member_fixture_2026_09_19_r54_spread_counter_signal" as const;
 export const CFB_MEMBER_SNAPSHOT_READER_RELEASE =
-  "cfb_member_snapshot_reader_2026_09_19_r2_spread_counter_signal" as const;
+  "cfb_member_snapshot_reader_2026_09_19_r3_contained_spread_counter_signal" as const;
 
 export const CFB_FORWARD_MEMBER_SNAPSHOT_MAX_JSON_BYTES = 8_000_000;
 export const CFB_FORWARD_MEMBER_SNAPSHOT_MAX_GZIP_BYTES = 1_000_000;
