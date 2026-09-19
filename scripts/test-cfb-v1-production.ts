@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { gzipSync } from "node:zlib";
 import { isPublicallyTracked } from "../lib/config/officialTrackingStart";
-import { buildCfbMemberFixture as buildCfbMemberFixtureAtTime, selectLatestCfbMemberEvidenceRows } from "../lib/services/football/cfbMemberFixture";
+import { buildCfbMemberFixture as buildCfbMemberFixtureAtTime, CFB_MEMBER_FIXTURE_RELEASE, selectLatestCfbMemberEvidenceRows } from "../lib/services/football/cfbMemberFixture";
 import { cfbTeamIdentity } from "../lib/services/football/cfbTeamIdentity";
 import { finalizeDailyEdgeResponseCoherence } from "../app/lab/lib/dailyEdgeResponseCoherence";
 import { dailyEdgeOutcomeForecastLabel } from "../app/lab/lib/dailyEdgeOutcomeForecast";
@@ -331,6 +331,22 @@ const resistedPromotion = applyCfbBalancedPositiveValueRule({
   evaluatedLine: null, sharpDirection: "resistance", publicDirection: "neutral", movementDirection: "neutral", reasonCodes: [],
 });
 assert.equal(resistedPromotion.finalGrade, "Watchlist", "the paired promotion cannot bypass resistance evidence");
+const counterSignalPromotion = applyCfbBalancedPositiveValueRule({
+  market: "spread", finalGrade: "Watchlist", probabilityGrade: "Watchlist", executionStatus: "bet",
+  expectedValue: 0.04, modelProbability: 0.542, marketFairProbability: 0.502, evaluatedPrice: -108,
+  evaluatedLine: -15.5, sharpDirection: "unknown", publicDirection: "neutral", movementDirection: "unknown",
+  reasonCodes: ["bounded_market_evidence_support"],
+  calibrationFamily: "authoritative_market_sharp_spread_counter_signal",
+});
+assert.equal(counterSignalPromotion.finalGrade, "Lean", "a validated counter-signal must retain the tested positive-value large-spread promotion path");
+const counterSignalResistance = applyCfbBalancedPositiveValueRule({
+  market: "spread", finalGrade: "Watchlist", probabilityGrade: "Watchlist", executionStatus: "bet",
+  expectedValue: 0.04, modelProbability: 0.542, marketFairProbability: 0.502, evaluatedPrice: -108,
+  evaluatedLine: -15.5, sharpDirection: "unknown", publicDirection: "resistance", movementDirection: "unknown",
+  reasonCodes: ["bounded_market_evidence_support"],
+  calibrationFamily: "authoritative_market_sharp_spread_counter_signal",
+});
+assert.equal(counterSignalResistance.finalGrade, "Watchlist", "counter-signal actionability cannot bypass resistance evidence");
 const { pmf: _authoritativePmf, ...publishedAuthoritativeForecast } = authoritativeForecast;
 void _authoritativePmf;
 const payload: CfbForwardEvidencePayload = {
@@ -507,7 +523,7 @@ assert.equal(transitionFallback.fixtureRelease, CFB_PREVIOUS_MEMBER_FIXTURE_RELE
 assert.equal(transitionFallback.fixture.snapshot.games.length, 1);
 assert.equal(memberSnapshotRead, 2, "the previous release is queried only after the current release is missing");
 assert.equal(member.snapshot.games.length, 1);
-assert.equal(member.fixtureRelease, "cfb_v1_member_fixture_2026_09_18_r53_complete_price_history");
+assert.equal(member.fixtureRelease, CFB_MEMBER_FIXTURE_RELEASE);
 assert.equal(member.snapshot.games[0]!.lockState, "locked", "only a fully valid immutable T-60 tuple is labeled locked");
 assert.equal(member.snapshot.games[0]!.lockedAt, lockedAt);
 

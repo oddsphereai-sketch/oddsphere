@@ -24,17 +24,17 @@ export const CFB_V1_MODEL_RELEASE =
 export const CFB_V1_DISTRIBUTION_RELEASE =
   "cfb_v1_market_sharp_joint_distribution_2026_09_01_r9_coherent_movement_evidence" as const;
 export const CFB_V1_PROBABILITY_RELEASE =
-  "cfb_v1_market_sharp_joint_probability_2026_09_01_r10_coherent_movement_evidence" as const;
+  "cfb_v1_market_sharp_joint_probability_2026_09_19_r11_spread_counter_signal" as const;
 export const CFB_V1_REPRESENTATIVE_SCORE_RELEASE =
   "cfb_v1_market_sharp_reachable_score_2026_09_01_r9_coherent_movement_evidence" as const;
 export const CFB_V1_CALIBRATION_RELEASE =
-  "cfb_v1_market_sharp_exact_price_calibration_2026_09_01_r8_coherent_pmf_identity" as const;
+  "cfb_v1_market_sharp_exact_price_calibration_2026_09_19_r9_spread_counter_signal" as const;
 export const CFB_V1_GRADE_POLICY_RELEASE =
-  "cfb_v1_composite_grade_policy_2026_09_05_r12_confidence_economics_bridge" as const;
+  "cfb_v1_composite_grade_policy_2026_09_19_r13_spread_counter_signal" as const;
 export const CFB_V1_DECISION_RELEASE =
-  "cfb_v1_daily_edge_decision_2026_09_05_r31_confidence_economics_bridge" as const;
+  "cfb_v1_daily_edge_decision_2026_09_19_r32_spread_counter_signal" as const;
 export const CFB_V1_PRICE_PREVIOUS_DECISION_RELEASE =
-  "cfb_v1_daily_edge_decision_2026_09_04_r30_favorite_price_tier_ceiling" as const;
+  "cfb_v1_daily_edge_decision_2026_09_05_r31_confidence_economics_bridge" as const;
 export const CFB_V1_HOLISTIC_PREVIOUS_DECISION_RELEASE =
   "cfb_v1_daily_edge_decision_2026_09_04_r29_holistic_confidence" as const;
 export const CFB_V1_CONTINUITY_PREVIOUS_DECISION_RELEASE =
@@ -44,14 +44,19 @@ export const CFB_V1_GRADE_PREVIOUS_DECISION_RELEASE =
 const CFB_V1_POLICY_SOURCE_DECISION_RELEASE =
   "cfb_v1_daily_edge_decision_2026_09_04_r28_evidence_identity_continuity" as const;
 export const CFB_V1_DECISION_SCHEMA_RELEASE =
-  "cfb_v1_exact_price_decision_tuple_2026_09_01_r19_coherent_movement_evidence" as const;
+  "cfb_v1_exact_price_decision_tuple_2026_09_19_r20_spread_counter_signal" as const;
+export const CFB_SPREAD_COUNTER_SIGNAL_MIN_EXCLUSIVE = 0.53 as const;
+export const CFB_SPREAD_COUNTER_SIGNAL_MAX_INCLUSIVE = 0.55 as const;
 export const CFB_T60_TARGET_MINUTES = 60 as const;
 export const CFB_T60_MAX_CAPTURE_LAG_MINUTES = 20 as const;
 
 export type CfbV1Market = "moneyline" | "spread" | "total";
 export type CfbV1Grade = "Best Angle" | "Lean" | "Watchlist" | "No Play";
 export type CfbV1DecisionStage = "unlocked" | "t60_locked";
-export type CfbV1CalibrationContract = "legacy_independent_artifact" | "authoritative_pmf_identity";
+export type CfbV1CalibrationContract =
+  | "legacy_independent_artifact"
+  | "authoritative_pmf_identity"
+  | "authoritative_pmf_spread_counter_signal";
 export type CfbV1UnavailableReasonCode =
   | "named_target_quote_unavailable"
   | "market_context_line_unavailable"
@@ -364,9 +369,13 @@ function evaluateTarget(args: {
     : args.target.total?.line ?? args.contextLines?.totalLine ?? args.forecast.expectedTotal;
   if (homeSpread === undefined || homeSpread === null || totalLine === undefined || totalLine === null) return [];
   const lineProbabilities = cfbV1LineProbabilities({ forecast: args.forecast, homeSpread, totalLine });
-  // The supplied authoritative joint PMF owns the forecast side. Calibration and exact
-  // price can change the grade, but can never silently select its opposite.
-  const sides = [pmfSelectedSide(lineProbabilities, args.market)];
+  const calibrationContract = args.calibrationContract ?? "authoritative_pmf_spread_counter_signal";
+  const selection = cfbV1CalibratedSelection({
+    probabilities: lineProbabilities,
+    market: args.market,
+    calibrationContract,
+  });
+  const sides = [selection.side];
   return sides.flatMap((side) => {
     const quote = targetQuote(args.target, args.market, side);
     if (!quote) return [];
@@ -374,9 +383,9 @@ function evaluateTarget(args: {
     if (!consensus) return [];
     const independentProbability = independentSideProbability(lineProbabilities, args.market, side);
     const pushProbability = args.market === "spread" ? lineProbabilities.spread.push : args.market === "total" ? lineProbabilities.total.push : 0;
-    const calibrationContract = args.calibrationContract ?? "authoritative_pmf_identity";
-    const calibratedProbability = calibrationContract === "authoritative_pmf_identity"
-      ? independentProbability
+    const calibratedProbability = calibrationContract === "authoritative_pmf_spread_counter_signal"
+      ? selection.calibratedProbability
+      : calibrationContract === "authoritative_pmf_identity" ? independentProbability
       : calibratePrimaryThenSide({
       market: args.market,
       side,
@@ -388,7 +397,8 @@ function evaluateTarget(args: {
       totalLine,
       policy: args.policy,
       });
-    const modelProbability = calibrationContract === "authoritative_pmf_identity"
+    const modelProbability = calibrationContract === "authoritative_pmf_identity" ||
+      calibrationContract === "authoritative_pmf_spread_counter_signal"
       ? calibratedProbability
       : args.policy.weight * calibratedProbability + (1 - args.policy.weight) * consensus.fairProbability;
     const expectedValue = expectedValueWithPush(modelProbability, pushProbability, quote.price);
@@ -433,14 +443,46 @@ function evaluateTarget(args: {
       distributionRelease: CFB_V1_DISTRIBUTION_RELEASE,
       probabilityRelease: CFB_V1_PROBABILITY_RELEASE,
       calibrationRelease: CFB_V1_CALIBRATION_RELEASE,
-      calibrationFamily: calibrationContract === "authoritative_pmf_identity"
-        ? "authoritative_market_sharp_pmf_identity"
-        : args.policy.family,
+      calibrationFamily: selection.counterSignalApplied
+        ? "authoritative_market_sharp_spread_counter_signal"
+        : calibrationContract === "authoritative_pmf_identity" || calibrationContract === "authoritative_pmf_spread_counter_signal"
+          ? "authoritative_market_sharp_pmf_identity"
+          : args.policy.family,
       policyRelease: CFB_V1_GRADE_POLICY_RELEASE,
       decisionRelease: CFB_V1_DECISION_RELEASE,
       gradeAdjustment: null,
     }];
   });
+}
+
+export function cfbV1CalibratedSelection(args: {
+  probabilities: ReturnType<typeof cfbV1LineProbabilities>;
+  market: CfbV1Market;
+  calibrationContract?: CfbV1CalibrationContract;
+}): {
+  side: "home" | "away" | "over" | "under";
+  rawSelectedSide: "home" | "away" | "over" | "under";
+  rawSelectedProbability: number;
+  calibratedProbability: number;
+  counterSignalApplied: boolean;
+} {
+  const rawSelectedSide = pmfSelectedSide(args.probabilities, args.market);
+  const rawSelectedProbability = independentSideProbability(args.probabilities, args.market, rawSelectedSide);
+  const calibrationContract = args.calibrationContract ?? "authoritative_pmf_spread_counter_signal";
+  const counterSignalApplied = calibrationContract === "authoritative_pmf_spread_counter_signal" &&
+    args.market === "spread" &&
+    rawSelectedProbability > CFB_SPREAD_COUNTER_SIGNAL_MIN_EXCLUSIVE &&
+    rawSelectedProbability <= CFB_SPREAD_COUNTER_SIGNAL_MAX_INCLUSIVE;
+  const side = counterSignalApplied ? opposingSide(rawSelectedSide) : rawSelectedSide;
+  return {
+    side,
+    rawSelectedSide,
+    rawSelectedProbability,
+    calibratedProbability: counterSignalApplied
+      ? rawSelectedProbability
+      : independentSideProbability(args.probabilities, args.market, side),
+    counterSignalApplied,
+  };
 }
 
 function calibratePrimaryThenSide(args: {
@@ -568,6 +610,7 @@ function unavailableReasonCodes(args: {
   evaluatedAt?: string;
   lockedAt?: string | null;
   contextLines?: CfbV1ContextLines;
+  calibrationContract?: CfbV1CalibrationContract;
 }): CfbV1UnavailableReasonCode[] {
   const reasons = new Set<CfbV1UnavailableReasonCode>();
   const targets = args.comparableCurrentBooks.filter((book) => book.targetEligible !== false);
@@ -586,7 +629,11 @@ function unavailableReasonCodes(args: {
       continue;
     }
     const probabilities = cfbV1LineProbabilities({ forecast: args.forecast, homeSpread, totalLine });
-    const side = pmfSelectedSide(probabilities, args.market);
+    const side = cfbV1CalibratedSelection({
+      probabilities,
+      market: args.market,
+      calibrationContract: args.calibrationContract,
+    }).side;
     const quote = targetQuote(target, args.market, side);
     if (!quote) {
       reasons.add("named_target_quote_unavailable");

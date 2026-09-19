@@ -21,13 +21,13 @@ import {
 import { evaluateCfbHolisticConfidence } from "./cfbHolisticConfidenceCandidate";
 
 export const CFB_MARKET_SHARP_AWARE_CANDIDATE_RELEASE =
-  "cfb_market_sharp_aware_candidate_2026_09_13_r17_balanced_positive_value" as const;
+  "cfb_market_sharp_aware_candidate_2026_09_19_r18_spread_counter_signal" as const;
 export const CFB_MARKET_SHARP_AWARE_SHADOW_RELEASE =
   CFB_MARKET_SHARP_AWARE_CANDIDATE_RELEASE;
 export const CFB_MARKET_SHARP_AWARE_PRODUCTION_RELEASE =
-  "cfb_market_sharp_aware_production_2026_09_13_r19_balanced_positive_value" as const;
+  "cfb_market_sharp_aware_production_2026_09_19_r20_spread_counter_signal" as const;
 export const CFB_MARKET_SHARP_AWARE_PREVIOUS_PRODUCTION_RELEASE =
-  "cfb_market_sharp_aware_production_2026_09_05_r18_confidence_economics_bridge" as const;
+  "cfb_market_sharp_aware_production_2026_09_13_r19_balanced_positive_value" as const;
 export const CFB_MARKET_SHADOW_WEIGHT = 0.75 as const;
 export const CFB_SHARP_SIGNED_GAP_THRESHOLD_PP = 10 as const;
 export const CFB_SHARP_FULL_STRENGTH_GAP_PP = 20 as const;
@@ -410,6 +410,7 @@ export function applyCfbMarketSharpAwareGrades(args: {
         publicDirection: rawAdjustment.publicDirection,
         movementDirection: rawAdjustment.movementDirection,
         reasonCodes: rawAdjustment.reasonCodes,
+        calibrationFamily: decision.calibrationFamily,
       });
       return {
         ...decision,
@@ -445,6 +446,7 @@ export function applyCfbBalancedPositiveValueRule(args: {
   publicDirection: CfbMarketEvidenceDirection;
   movementDirection: CfbMarketEvidenceDirection;
   reasonCodes: string[];
+  calibrationFamily?: string;
 }): { finalGrade: CfbV1Grade; executionStatus: "bet" | "shop"; reasonCodes: string[] } {
   const gapPp = (args.modelProbability - args.marketFairProbability) * 100;
   const actionable = args.finalGrade === "Best Angle" || args.finalGrade === "Lean";
@@ -462,7 +464,19 @@ export function applyCfbBalancedPositiveValueRule(args: {
         ? args.modelProbability >= CFB_PROVISIONAL_SPREAD_LEAN_MIN_PROBABILITY && gapPp >= CFB_PROVISIONAL_SPREAD_LEAN_MIN_EDGE_PP && args.expectedValue >= CFB_PROVISIONAL_SPREAD_LEAN_MIN_EV && args.evaluatedLine !== null && Math.abs(args.evaluatedLine) <= CFB_PROVISIONAL_SPREAD_LEAN_MAX_ABS_LINE
         : args.modelProbability >= CFB_PROVISIONAL_TOTAL_LEAN_MIN_PROBABILITY && gapPp >= CFB_PROVISIONAL_TOTAL_LEAN_MIN_EDGE_PP && args.expectedValue >= CFB_PROVISIONAL_TOTAL_LEAN_MIN_EV
   );
-  return promotionEligible
+  const validatedCounterSignalPromotion = args.finalGrade === "Watchlist" &&
+    args.executionStatus === "bet" &&
+    args.market === "spread" &&
+    args.calibrationFamily === "authoritative_market_sharp_spread_counter_signal" &&
+    noResistance &&
+    priceEligible &&
+    args.reasonCodes.includes("bounded_market_evidence_support") &&
+    args.modelProbability >= CFB_PROVISIONAL_LARGE_SPREAD_LEAN_MIN_PROBABILITY &&
+    gapPp >= CFB_PROVISIONAL_LARGE_SPREAD_LEAN_MIN_EDGE_PP &&
+    args.expectedValue >= CFB_PROVISIONAL_LARGE_SPREAD_LEAN_MIN_EV &&
+    args.evaluatedLine !== null &&
+    Math.abs(args.evaluatedLine) <= CFB_PROVISIONAL_LARGE_SPREAD_LEAN_MAX_ABS_LINE;
+  return promotionEligible || validatedCounterSignalPromotion
     ? { finalGrade: "Lean", executionStatus: args.executionStatus, reasonCodes: [...args.reasonCodes, "balanced_positive_value_promotion"] }
     : { finalGrade: args.finalGrade, executionStatus: args.executionStatus, reasonCodes: args.reasonCodes };
 }

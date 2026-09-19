@@ -75,9 +75,9 @@ import { cfbTeamIdentity } from "./cfbTeamIdentity";
 import { CFB_PUBLIC_SCORE_DIRECTION_TOLERANCE_POINTS } from "./footballCrossMarketCoherence";
 
 export const CFB_MEMBER_FIXTURE_RELEASE =
-  "cfb_v1_member_fixture_2026_09_18_r53_complete_price_history" as const;
+  "cfb_v1_member_fixture_2026_09_19_r54_spread_counter_signal" as const;
 export const CFB_PUBLIC_OUTCOME_CONTRACT_RELEASE =
-  "cfb_market_sharp_public_outcome_contract_2026_09_05_r49_confidence_economics_bridge" as const;
+  "cfb_market_sharp_public_outcome_contract_2026_09_19_r50_spread_counter_signal" as const;
 export const CFB_CONTEXT_ONLY_QUOTE_CAPTURE_SKEW_MS = 5_000 as const;
 const CFB_MARKET_CONTEXT_MAX_CAPTURE_LAG_MINUTES = 10;
 const CFB_PRE_DIRECTIONAL_MEMBER_RELEASE = "cfb_v1_member_release_2026_08_28_r14_expanded_sharp_budget" as const;
@@ -800,7 +800,11 @@ function assertCfbPublicPredictionCoherence(args: {
       const scoreTotalMargin = expectedTotal - decision.evaluatedQuote.line;
       if (Math.abs(scoreTotalMargin) > CFB_PUBLIC_SCORE_DIRECTION_TOLERANCE_POINTS) scoreSide = scoreTotalMargin > 0 ? "over" : "under";
     }
-    if (scoreSide && scoreSide !== selected) {
+    if (
+      scoreSide &&
+      scoreSide !== selected &&
+      decision.calibrationFamily !== "authoritative_market_sharp_spread_counter_signal"
+    ) {
       throw new Error(
         `${CFB_PUBLIC_OUTCOME_CONTRACT_RELEASE}: ${args.payload.game.away.abbreviation}@${args.payload.game.home.abbreviation} ` +
         `${market} score direction ${scoreSide} conflicts with ${selected} at line ${decision.evaluatedQuote.line}; ` +

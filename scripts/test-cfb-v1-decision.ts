@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import {
   buildCfbV1DecisionBundle,
+  cfbV1CalibratedSelection,
   cfbV1LineProbabilities,
+  CFB_SPREAD_COUNTER_SIGNAL_MAX_INCLUSIVE,
+  CFB_SPREAD_COUNTER_SIGNAL_MIN_EXCLUSIVE,
   CFB_T60_MAX_CAPTURE_LAG_MINUTES,
   CFB_V1_DECISION_RELEASE,
   CFB_V1_GRADE_POLICY_RELEASE,
@@ -44,7 +47,8 @@ for (const decision of bundle.evaluatedBets) {
   if (decision.market === "moneyline") {
     assert.equal(decision.side, line.moneyline.home >= line.moneyline.away ? "TCU" : "UNC", "Moneyline grade side must be selected by the joint PMF");
   } else if (decision.market === "spread") {
-    assert.equal(decision.side.startsWith("TCU "), line.spread.home >= line.spread.away, "Spread grade side must be selected by the joint PMF at the exact line");
+    const calibrated = cfbV1CalibratedSelection({ probabilities: line, market: "spread" });
+    assert.equal(decision.side.startsWith("TCU "), calibrated.side === "home", "Spread grade side must follow the released calibration contract at the exact line");
   } else {
     assert.equal(decision.side.startsWith("Over "), line.total.over >= line.total.under, "Total grade side must be selected by the joint PMF at the exact line");
   }
@@ -82,6 +86,88 @@ assert.equal(held.heldMarkets.every((market) => market.reasonCodes?.includes("gl
 
 assert.equal(CFB_T60_MAX_CAPTURE_LAG_MINUTES, 20);
 assert.throws(() => buildCfbV1DecisionBundle({ providerGameId: "457157", awayTeam: "UNC", homeTeam: "TCU", gameStartsAt: "2026-08-29T16:00:00Z", comparableCurrentBooks: books, stage: "t60_locked", evaluatedAt: "2026-08-29T15:30:01Z", lockedAt: "2026-08-29T15:30:01Z" }), /outside the 0-20 minute/);
+
+const boundaryProbabilities = (home: number) => ({
+  moneyline: { home, away: 1 - home },
+  spread: { home, away: 1 - home, push: 0 },
+  total: { over: home, under: 1 - home, push: 0 },
+});
+assert.equal(cfbV1CalibratedSelection({
+  probabilities: boundaryProbabilities(CFB_SPREAD_COUNTER_SIGNAL_MIN_EXCLUSIVE),
+  market: "spread",
+}).counterSignalApplied, false, "the lower boundary is exclusive");
+assert.equal(cfbV1CalibratedSelection({
+  probabilities: boundaryProbabilities(CFB_SPREAD_COUNTER_SIGNAL_MIN_EXCLUSIVE + 0.0001),
+  market: "spread",
+}).side, "away", "a qualified spread signal flips sides");
+assert.equal(cfbV1CalibratedSelection({
+  probabilities: boundaryProbabilities(CFB_SPREAD_COUNTER_SIGNAL_MAX_INCLUSIVE),
+  market: "spread",
+}).counterSignalApplied, true, "the upper boundary is inclusive");
+assert.equal(cfbV1CalibratedSelection({
+  probabilities: boundaryProbabilities(CFB_SPREAD_COUNTER_SIGNAL_MAX_INCLUSIVE + 0.0001),
+  market: "spread",
+}).counterSignalApplied, false, "confidence above the qualified band is unchanged");
+assert.equal(cfbV1CalibratedSelection({
+  probabilities: boundaryProbabilities(0.54),
+  market: "total",
+}).side, "over", "the spread-only calibration cannot alter totals");
+assert.equal(cfbV1CalibratedSelection({
+  probabilities: boundaryProbabilities(0.54),
+  market: "moneyline",
+}).side, "home", "the spread-only calibration cannot alter moneylines");
+
+const counterSignalForecast = {
+  providerGameId: "counter-signal-test",
+  awayTeam: "AWY",
+  homeTeam: "HME",
+  gameStartsAt: "2026-09-20T16:00:00Z",
+  expectedAwayPoints: 24.22,
+  expectedHomePoints: 24.78,
+  expectedMarginHome: 0.56,
+  expectedTotal: 49,
+  homeWinProbability: 0.54,
+  representativeScore: { away: 21, home: 28 },
+  interval80: { away: [21, 28] as [number, number], home: [21, 28] as [number, number], marginHome: [-7, 7] as [number, number], total: [49, 49] as [number, number] },
+  pmf: [
+    { home: 28, away: 21, probability: 0.54 },
+    { home: 21, away: 28, probability: 0.46 },
+  ],
+};
+const counterSignalBooks = ["fanduel", "draftkings", "caesars", "betmgm"].map((sportsbook): NcaafBookOdds => ({
+  providerGameId: "counter-signal-test",
+  sportsbook,
+  observedAt: "2026-09-19T12:00:00Z",
+  moneyline: { homePrice: -110, awayPrice: -110 },
+  spread: { homeLine: -3.5, homePrice: -110, awayLine: 3.5, awayPrice: -110 },
+  total: { line: 48.5, overPrice: -110, underPrice: -110 },
+}));
+const counterSignalBundle = buildCfbV1DecisionBundle({
+  providerGameId: "counter-signal-test",
+  awayTeam: "AWY",
+  homeTeam: "HME",
+  gameStartsAt: "2026-09-20T16:00:00Z",
+  comparableCurrentBooks: counterSignalBooks,
+  forecast: counterSignalForecast,
+});
+const correctedSpread = counterSignalBundle.evaluatedBets.find((decision) => decision.market === "spread");
+assert.equal(correctedSpread?.side, "AWY +3.5");
+assert.equal(correctedSpread?.independentProbability, 0.46, "forecastProbability retains the raw PMF probability for the published side");
+assert.equal(correctedSpread?.forecastProbability, 0.46);
+assert.equal(correctedSpread?.calibratedProbability, 0.54);
+assert.equal(correctedSpread?.modelProbability, 0.54);
+assert.equal(correctedSpread?.calibrationFamily, "authoritative_market_sharp_spread_counter_signal");
+const incumbentSpread = buildCfbV1DecisionBundle({
+  providerGameId: "counter-signal-test",
+  awayTeam: "AWY",
+  homeTeam: "HME",
+  gameStartsAt: "2026-09-20T16:00:00Z",
+  comparableCurrentBooks: counterSignalBooks,
+  forecast: counterSignalForecast,
+  calibrationContract: "authoritative_pmf_identity",
+}).evaluatedBets.find((decision) => decision.market === "spread");
+assert.equal(incumbentSpread?.side, "HME -3.5", "the versioned incumbent remains available for direct replay and rollback");
+assert.equal(incumbentSpread?.modelProbability, 0.54);
 
 function book(sportsbook: string, homeMl: number, awayMl: number, homeLine: number, homeSpreadPrice: number, awaySpreadPrice: number, totalLine: number, overPrice: number, underPrice: number): NcaafBookOdds {
   return { providerGameId: "457157", sportsbook, observedAt, moneyline: { homePrice: homeMl, awayPrice: awayMl }, spread: { homeLine, homePrice: homeSpreadPrice, awayLine: -homeLine, awayPrice: awaySpreadPrice }, total: { line: totalLine, overPrice, underPrice } };
