@@ -23,6 +23,16 @@ assert.equal(
   releaseB,
   "model-layer fallback release must remain readable",
 );
+assert.equal(
+  decisionRelease({ grade_policy_version: "wnba_grade_policy_v9" }),
+  "wnba_grade_policy_v9",
+  "legacy WNBA snapshots must remain release-separated by grade policy",
+);
+assert.equal(
+  decisionRelease({ model_release: "epl_model_r18" }),
+  "epl_model_r18",
+  "soccer snapshots must remain release-separated by model release",
+);
 assert.equal(decisionRelease({}), "unknown", "missing release must be explicit, not blended");
 
 function row(id: number, release: string, result: "win" | "loss", noBet: boolean) {
@@ -41,6 +51,8 @@ function row(id: number, release: string, result: "win" | "loss", noBet: boolean
     edge: 3.62,
     play_grade: noBet ? "watchlist" : "lean",
     no_bet: noBet,
+    no_bet_reason: noBet ? "held for test" : null,
+    held: false,
     locked_at: "2026-09-03T16:00:00.000Z",
     snapshot_json: {
       decision_tuple: { decisionRelease: release, expectedValue: noBet ? -0.03 : 0.04 },
@@ -93,6 +105,8 @@ const supportedWinner = compactAuditRow({
     edge: 3.62,
     play_grade: "lean",
     no_bet: false,
+    no_bet_reason: null,
+    held: false,
     locked_at: "2026-09-03T16:00:00.000Z",
     snapshot_json: {
       decision_tuple: {
@@ -130,6 +144,69 @@ assert.equal(
   summarizeEvidenceBallots([supportedWinner, resistedLoss]).reduce((sum, cohort) => sum + cohort.records, 0),
   2,
   "evidence ballots must include both wins and losses",
+);
+
+const titleCaseLean = compactAuditRow({
+  ...({
+    id: 6,
+    sport: "soccer",
+    slate_date: "2026-09-18",
+    matchup: "AWAY @ HOME",
+    market: "total",
+    pick: "Over 2.5",
+    side: "over",
+    line_value: 2.5,
+    odds_american: -110,
+    model_probability: 0.56,
+    market_probability: 0.5238,
+    edge: 3.62,
+    play_grade: "Lean",
+    no_bet: false,
+    no_bet_reason: null,
+    held: false,
+    locked_at: "2026-09-18T16:00:00.000Z",
+    snapshot_json: { model_release: "epl_model_r18", competition: "english_premier_league" },
+    prediction_grades: { result: "win", win: true, loss: false },
+  }),
+});
+assert.equal(titleCaseLean.actionable, true, "actionable grade matching must be case-insensitive");
+assert.equal(titleCaseLean.competition, "english_premier_league", "competition identity must survive compaction");
+
+const totalEvidence = compactAuditRow({
+  id: 7,
+  sport: "mlb",
+  slate_date: "2026-09-18",
+  matchup: "AWAY@HOME",
+  market: "total",
+  pick: "over",
+  side: "over",
+  line_value: 8.5,
+  odds_american: -110,
+  model_probability: 0.56,
+  market_probability: 0.5238,
+  edge: 3.62,
+  play_grade: "lean",
+  no_bet: false,
+  no_bet_reason: null,
+  held: false,
+  locked_at: "2026-09-18T16:00:00.000Z",
+  snapshot_json: {
+    decision_pipeline: { original_side: "under" },
+    v2_2_audit: {
+      over_odds_american: -110,
+      under_odds_american: -110,
+      posterior_total: 8.4,
+      market_total: 8.5,
+      ou_model_prob: 0.57,
+      ou_market_prob: 0.52,
+    },
+  },
+  prediction_grades: { result: "loss", win: false, loss: true },
+});
+assert.equal(
+  totalEvidence.totalPriceState?.preChampionSelectedSide,
+  "under",
+  "totals accuracy audit must retain the model's pre-champion side instead of a later record correction",
 );
 
 console.log("daily-edge loss market audit tests passed");

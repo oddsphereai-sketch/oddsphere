@@ -13,10 +13,10 @@ import { resolveFirstInningModelVersion } from "./firstInningModelVersion";
 
 export type MlbModelLayerMarket = "moneyline" | "total" | "first_inning";
 
-export const MLB_MODEL_LAYER_VERSION_SCHEMA = "mlb_model_layer_versions_v15_current_line_pagination";
-export const MLB_PUBLIC_CALIBRATION_VERSION = "mlb_public_calibration_v33_current_line_pagination_2026_09_08";
-export const MLB_DAILY_EDGE_DECISION_RELEASE_ID = "mlb_daily_edge_decision_2026_09_08_r87_current_line_pagination";
-export const MLB_DAILY_EDGE_RULE_BUNDLE_VERSION = "mlb_daily_edge_rule_bundle_v72_current_line_pagination_2026_09_08";
+export const MLB_MODEL_LAYER_VERSION_SCHEMA = "mlb_model_layer_versions_v16_totals_regime_calibration";
+export const MLB_PUBLIC_CALIBRATION_VERSION = "mlb_public_calibration_v34_totals_regime_2026_09_19";
+export const MLB_DAILY_EDGE_DECISION_RELEASE_ID = "mlb_daily_edge_decision_2026_09_19_r88_totals_regime_calibration";
+export const MLB_DAILY_EDGE_RULE_BUNDLE_VERSION = "mlb_daily_edge_rule_bundle_v73_totals_regime_calibration_2026_09_19";
 /** FI-only release identity. It is absent from ML/total snapshots. */
 export const MLB_FIRST_INNING_RELEASE_ID = "mlb_first_inning_release_2026_09_04_r85_independent_uncertainty";
 
@@ -33,7 +33,7 @@ export const MLB_MODEL_LAYER_VERSION_IDS = {
   moneyline_sharp_price_source: "mlb_sharp_moneyline_source_v2_targeted_complete_pair_recovery_2026_09_01",
   moneyline_action_promotion_stability: "daily_edge_action_promotion_stability_2026_08_29_r1",
   source_aware_split_pair_selector: "mlb_source_aware_split_pair_selector_v2_recency_coherent_2026_08_31",
-  total_probability_head: "mlb_total_structural_coherence_probability_v3_2026_09_02",
+  total_probability_head: "mlb_total_regime_calibrated_probability_v4_trailing90_2026_09_19",
   coherent_market_price_map: "mlb_coherent_market_price_map_v1_2026_09_01",
   total_market_support_lean: "total_sharpapi_money_over_tickets_support_lean_v2_under_only_2026_09_04",
   total_mean_selector_original_under_lean: "total_mean_selector_original_under_lean_v1_2026_08_13",
@@ -42,7 +42,7 @@ export const MLB_MODEL_LAYER_VERSION_IDS = {
   first_inning_market_price_map: "mlb_first_inning_named_book_price_map_v1_2026_09_01",
   first_inning_market_calibration_policy: "mlb_first_inning_market_calibration_v3_evaluated_quote_exclusion_2026_09_02",
   first_inning_member_tuple_contract: "mlb_first_inning_member_tuple_contract_v1_current_authoritative_r78_2026_09_01",
-  market_calibration_policy: "mlb_model_market_calibration_v3_evaluation_only_price_exclusion_2026_09_02",
+  market_calibration_policy: "mlb_model_market_calibration_v4_totals_regime_2026_09_19",
   grade_policy: "mlb_public_grade_policy_v57_total_support_under_scope_2026_09_04",
   correction_policy: "mlb_prediction_corrections_v24_full_game_publication_coherence_2026_09_02",
   tracking_contract: "member_facing_lock_v8_priority_retry_minute_cadence_2026_08_11",

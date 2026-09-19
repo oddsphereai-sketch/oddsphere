@@ -22,17 +22,19 @@ type PredictionRecord = {
   edge: number | null;
   play_grade: string | null;
   no_bet: boolean | null;
+  no_bet_reason: string | null;
+  held: boolean | null;
   locked_at: string;
   snapshot_json: JsonObject | null;
   prediction_grades:
-    | { result?: string | null; win?: boolean | null; loss?: boolean | null; push?: boolean | null; void?: boolean | null }
-    | Array<{ result?: string | null; win?: boolean | null; loss?: boolean | null; push?: boolean | null; void?: boolean | null }>
+    | { result?: string | null; win?: boolean | null; loss?: boolean | null; push?: boolean | null; void?: boolean | null; actual_total?: number | null }
+    | Array<{ result?: string | null; win?: boolean | null; loss?: boolean | null; push?: boolean | null; void?: boolean | null; actual_total?: number | null }>
     | null;
 };
 
 type AuditRow = ReturnType<typeof compactAuditRow>;
 
-const PAGE_SIZE = 750;
+const PAGE_SIZE = 400;
 const MAX_ROWS = 50_000;
 
 function object(value: unknown): JsonObject {
@@ -76,8 +78,14 @@ export function decisionRelease(snapshotValue: unknown): string {
     string(decision.decisionRelease ?? decision.decision_release ?? decision.release_id) ??
     string(versions.decision_release_id) ??
     string(snapshot.decision_release ?? snapshot.release) ??
+    string(snapshot.grade_policy_version ?? snapshot.grade_release) ??
+    string(snapshot.model_release ?? snapshot.model_version ?? snapshot.model) ??
     "unknown"
   );
+}
+
+function normalizedGrade(value: string | null): string {
+  return (value ?? "").trim().toLowerCase().replace(/[\s-]+/g, "_");
 }
 
 function decisionObject(snapshot: JsonObject): JsonObject {
@@ -155,7 +163,10 @@ export function compactAuditRow(row: PredictionRecord) {
   const publicSplits = object(snapshot.public_splits);
   const stability = object(snapshot.action_promotion_stability_v1);
   const fullGameEvidence = object(snapshot.mlb_fullgame_market_evidence_v1);
+  const fiAudit = object(snapshot.fi_v2_audit);
+  const fullGameAudit = object(snapshot.v2_2_audit);
   const marketPrefix = row.market === "moneyline" ? "ml" : row.market === "total" ? "ou" : "nrfi";
+  const settledGrade = first(row.prediction_grades);
 
   return {
     id: row.id,
@@ -170,9 +181,38 @@ export function compactAuditRow(row: PredictionRecord) {
     marketProbability: row.market_probability,
     edge: row.edge,
     grade: row.play_grade,
-    actionable: row.no_bet !== true && ["best_angle", "lean"].includes(row.play_grade ?? ""),
+    noBet: row.no_bet === true,
+    noBetReason: row.no_bet_reason,
+    held: row.held === true,
+    actionable: row.no_bet !== true && ["best_angle", "lean"].includes(normalizedGrade(row.play_grade)),
     result: resultOf(row),
+    actualTotal: number(settledGrade?.actual_total),
     release: decisionRelease(snapshot),
+    competition: string(snapshot.competition ?? snapshot.league),
+    actionRuleId: string(decision.actionRuleId ?? decision.action_rule_id),
+    boardAction: string(decision.boardAction ?? decision.board_action),
+    gradeSource: string(decision.gradeSource ?? decision.grade_source),
+    dataQualityTier: string(snapshot.v2_data_quality_tier ?? object(snapshot.v2_2_audit).data_quality_tier),
+    fiProbabilityState: row.market === "first_inning"
+      ? {
+          independentNrfi: number(fiAudit.independent_p_nrfi),
+          posteriorNrfi: number(fiAudit.posterior_p_nrfi),
+          forecastMarketNrfi: number(fiAudit.market_nrfi_no_vig),
+          evaluationMarketNrfi: number(fiAudit.market_evaluation_nrfi_no_vig),
+        }
+      : null,
+    totalPriceState: row.market === "total"
+      ? {
+          overPrice: number(fullGameAudit.over_odds_american),
+          underPrice: number(fullGameAudit.under_odds_american),
+          projectedTotal: number(fullGameAudit.posterior_total),
+          marketTotal: number(fullGameAudit.market_total ?? row.line_value),
+          preChampionSelectedSide:
+            string(decision.original_side) ?? string(row.side ?? row.pick),
+          preChampionSelectedProbability: number(fullGameAudit.ou_model_prob),
+          preChampionSelectedMarketProbability: number(fullGameAudit.ou_market_prob),
+        }
+      : null,
     expectedValue: number(decision.expectedValue ?? decision.expected_value ?? stability.exactPriceExpectedValue),
     probabilityGrade:
       string(decision.probabilityGrade ?? decision.probability_grade ?? decision.transition_candidate_grade) ??
@@ -373,7 +413,7 @@ async function loadRows(sport: Sport, startDate: string | null, endDate: string 
     let query = client
       .from("prediction_records")
       .select(
-        "id,sport,slate_date,matchup,market,pick,side,line_value,odds_american,model_probability,market_probability,edge,play_grade,no_bet,locked_at,snapshot_json,prediction_grades(result,win,loss,push,void)",
+        "id,sport,slate_date,matchup,market,pick,side,line_value,odds_american,model_probability,market_probability,edge,play_grade,no_bet,no_bet_reason,held,locked_at,snapshot_json,prediction_grades(result,win,loss,push,void,actual_total)",
       )
       .eq("sport", sport)
       .not("locked_at", "is", null)

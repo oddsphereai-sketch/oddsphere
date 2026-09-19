@@ -49,6 +49,11 @@ import {
 } from "./runDistribution";
 import { computePlayGrade } from "./playGrade";
 import { regularizeProbability } from "./mlbProbabilityRegularization";
+import {
+  applyMlbTotalsRegimeCalibration,
+  type MlbTotalsRegimeCalibration,
+  type MlbTotalsRegimePrior,
+} from "./mlbTotalsRegimeCalibration";
 import type { AutoModelOutput, GameSnapshot, ModelStage, StarterSnapshot, TeamSnapshot, BatterSnapshot } from "./types";
 import { MODEL_VERSION_V2_2 } from "./types";
 
@@ -167,6 +172,7 @@ export type V22Audit = {
   ou_shrink_factor: number;
   ou_distance_cap_pp: number;
   ou_distance_cap_applied: boolean;
+  total_regime_calibration: MlbTotalsRegimeCalibration;
   /** Always "probability_space_regularization" — the reason both edges were shrunk. */
   regularization_reason: string;
   // Layer 5
@@ -295,6 +301,7 @@ export type V22Output = {
 
 export type RunMlbAutoModelV2_2Options = {
   useWorkloadPitching?: boolean;
+  totalsRegimePrior?: MlbTotalsRegimePrior | null;
 };
 
 export const MLB_FULL_GAME_STRUCTURAL_COHERENCE_RELEASE_ID =
@@ -627,14 +634,14 @@ export function runMlbAutoModelV2_2(
 
   // OU using market_total (or independent total when market missing)
   const ouLine = market.listedTotal ?? posteriorTotalRuns;
-  const ouOverProb = overProbabilityPoisson(
+  const ouRawOverProb = overProbabilityPoisson(
     posteriorAwayRuns,
     posteriorHomeRuns,
     ouLine,
   );
-  const ouPickIsOver = ouOverProb >= 0.5;
+  const ouPreRegimePickIsOver = ouRawOverProb >= 0.5;
   // RAW O/U model probability for the picked side (preserved in audit).
-  const ouRawModelProb = ouPickIsOver ? ouOverProb : (1 - ouOverProb);
+  const ouRawModelProb = ouPreRegimePickIsOver ? ouRawOverProb : (1 - ouRawOverProb);
 
   // Phase 6B.8 — real no-vig O/U market probability for the picked
   // side. Pre-6B.8 this was hard-coded to 0.5, which made every OU
@@ -645,7 +652,7 @@ export function runMlbAutoModelV2_2(
   // ouMarketProb is null and ouEdgePct is null — surfaced honestly
   // downstream so the UI displays model projection only and Top
   // Available Angles cannot rank totals on placeholder edge.
-  const ouMarketProb: number | null = ouPickIsOver
+  const ouPreRegimeMarketProb: number | null = ouPreRegimePickIsOver
     ? market.overNoVigProb
     : market.underNoVigProb;
   // MLB-P0 — regularize O/U toward the no-vig market (harder shrink than
@@ -654,17 +661,34 @@ export function runMlbAutoModelV2_2(
     rawProb: ouRawModelProb,
     marketProb: evaluationOnlyPriceAuthority.totalProbabilityRegularizationExcluded
       ? null
-      : ouMarketProb,
+      : ouPreRegimeMarketProb,
     k: V22_SHRINK_K_OU,
     maxDistancePp: V22_MAX_DISTANCE_PP_OU,
   });
-  const ouModelProb = ouReg.regularizedProb ?? ouRawModelProb;
-  const ouRawEdgePct = ouMarketProb === null
+  const ouPreRegimeModelProb = ouReg.regularizedProb ?? ouRawModelProb;
+  const ouRegularizedOverProb = ouPreRegimePickIsOver
+    ? ouPreRegimeModelProb
+    : 1 - ouPreRegimeModelProb;
+  const totalRegimeCalibration = applyMlbTotalsRegimeCalibration({
+    modelOverProbability: ouRegularizedOverProb,
+    prior: opts.totalsRegimePrior ?? null,
+  });
+  const ouOverProb = totalRegimeCalibration.modelOverProbabilityAfter;
+  const ouPickIsOver = ouOverProb >= 0.5;
+  const ouModelProb = ouPickIsOver ? ouOverProb : 1 - ouOverProb;
+  const ouMarketProb: number | null = ouPickIsOver
+    ? market.overNoVigProb
+    : market.underNoVigProb;
+  const ouRawEdgePct = ouPreRegimeMarketProb === null
     ? null
-    : Math.round((ouRawModelProb - ouMarketProb) * 1_000) / 10;
+    : Math.round((ouRawModelProb - ouPreRegimeMarketProb) * 1_000) / 10;
   const ouEdgePct: number | null = evaluationOnlyPriceAuthority.totalProbabilityRegularizationExcluded
-    ? ouRawEdgePct
-    : ouReg.regularizedEdgePct;
+    ? ouMarketProb === null
+      ? null
+      : Math.round((ouModelProb - ouMarketProb) * 1_000) / 10
+    : ouMarketProb === null
+      ? null
+      : Math.round((ouModelProb - ouMarketProb) * 1_000) / 10;
 
   // Confidence
   const mlConfidence = computeConfidence({
@@ -877,6 +901,7 @@ export function runMlbAutoModelV2_2(
       : ouReg.shrinkFactor,
     ou_distance_cap_pp: ouReg.distanceCapPp,
     ou_distance_cap_applied: ouReg.capApplied,
+    total_regime_calibration: totalRegimeCalibration,
     regularization_reason:
       evaluationOnlyPriceAuthority.moneylineForecastExcluded ||
       evaluationOnlyPriceAuthority.totalProbabilityRegularizationExcluded

@@ -2555,6 +2555,72 @@ console.log("\n━━━ Totals divergence stand-down (integrity patch) ━━�
   check("Calibrated total head: no suppressed-legacy audit remains", ouFlip == null);
 }
 {
+  // r88: the validated rolling run-environment probability is already
+  // downstream of market regularization. The record writer must not feed it
+  // through the retired side-candidate stack or price-calibrate it a second
+  // time, even when the distribution mean sits on the other side of the line.
+  const regimePred = {
+    ...basePrediction,
+    predicted_ou_side: "over",
+    ou_confidence: 60,
+    sport_specific: {
+      ...v21SportSpecific,
+      hold_picks: [],
+      ou_play_grade: "lean",
+      ou_best_angle_eligible: false,
+      v2_2_audit: {
+        market_total: 8,
+        posterior_total: 7.2,
+        ou_model_prob: 0.60,
+        ou_market_prob: 0.52,
+        ou_edge_pct: 8,
+        total_regime_calibration: {
+          applied: true,
+          reason: "applied",
+        },
+      },
+      total_projection_reconciliation: {
+        mean_probability_divergence: true,
+      },
+    },
+  };
+  const oddsByGameId = new Map([
+    [14771, {
+      mlHomeOdds: -120,
+      mlAwayOdds: 110,
+      ouOverOdds: -110,
+      ouUnderOdds: -110,
+      oddsSourceMl: {
+        home: { source: "lines" as const, book: "pinnacle", odds: -120, line: null, observedAt: "2026-09-19T16:00:00Z" },
+        away: { source: "lines" as const, book: "pinnacle", odds: 110, line: null, observedAt: "2026-09-19T16:00:00Z" },
+      },
+      oddsSourceOu: {
+        over: { source: "lines" as const, book: "pinnacle", odds: -110, line: 8, observedAt: "2026-09-19T16:00:00Z" },
+        under: { source: "lines" as const, book: "pinnacle", odds: -110, line: 8, observedAt: "2026-09-19T16:00:00Z" },
+      },
+    }],
+  ]);
+  const recs = buildPredictionRecordsFromSlate({
+    sport: "mlb",
+    slateDate: "2026-09-19",
+    launchDay: false,
+    games: [baseGame],
+    predictionByGameId: new Map([[14771, regimePred]]),
+    abbrevByTeamId,
+    oddsByGameId,
+  });
+  const ou = recs.find((record) => record.market === "total");
+  const decision = ou?.snapshot_json?.decision_pipeline as Record<string, unknown> | undefined;
+  check("Regime-calibrated total keeps the authoritative side", ou?.side === "over");
+  check("Regime-calibrated total is not stood down by the retired mean-side candidate", ou?.no_bet === false);
+  check("Regime-calibrated total probability is not calibrated a second time", ou?.model_probability === 0.60);
+  check(
+    "Regime-calibrated total stamps the legacy-candidate bypass",
+    decision?.legacy_total_side_candidate_policy ===
+      "bypass_superseded_side_candidates_for_regime_calibrated_head",
+  );
+}
+{
   const projectionOpposedPred = {
     ...basePrediction,
     predicted_ou_side: "under",
