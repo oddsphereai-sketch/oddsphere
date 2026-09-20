@@ -162,6 +162,26 @@ response.games[0]!.markets.moneyline.sportsbookSplits = {
 const older = applyDraftKingsNetworkSplitFallback(response, feed);
 assert.equal(older.populatedMarkets, 0, "an older fetch must not replace newer source-specific rows");
 
+response.games[0]!.markets.moneyline.sportsbookSplits = {
+  label: "DraftKings Splits",
+  rows: [{
+    side: "away", label: "LAD", moneyPct: 88, betsPct: 80,
+    observedAt: feed.fetchedAt, freshnessCheckedAt: feed.fetchedAt,
+    staleAfterMinutes: 15, isStale: false,
+  }, {
+    side: "home", label: "CIN", moneyPct: 12, betsPct: 20,
+    observedAt: feed.fetchedAt, freshnessCheckedAt: feed.fetchedAt,
+    staleAfterMinutes: 15, isStale: false,
+  }],
+  signal: null,
+  lastUpdated: feed.fetchedAt,
+};
+const sanitized = applyDraftKingsNetworkSplitFallback(response, feed);
+assert.equal(sanitized.populatedMarkets, 1, "an equal-source cached section must be replaced when it still carries stale-state presentation fields");
+assert.equal(response.games[0]!.markets.moneyline.sportsbookSplits?.lastUpdated, null);
+assert.equal(response.games[0]!.markets.moneyline.sportsbookSplits?.rows[0]?.observedAt, null);
+assert.equal(response.games[0]!.markets.moneyline.sportsbookSplits?.rows[0]?.staleAfterMinutes, undefined);
+
 const invalid = parseDraftKingsNetworkSplitsHtml(html.replace("88%", "70%"));
 assert.equal(invalid[0]?.markets.moneyline, undefined, "non-complementary percentage pairs fail closed");
 

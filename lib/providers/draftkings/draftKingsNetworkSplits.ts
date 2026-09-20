@@ -419,7 +419,10 @@ function draftKingsShouldReplace(existing: MarketSplitDisplaySection, incoming: 
   if (existing.label === "Sharp Book Splits") return false;
   if (existing.label === "BetMGM Splits") return true;
   if (existing.label !== "DraftKings Splits") return false;
-  return sectionSourceTimestamp(incoming) > sectionSourceTimestamp(existing);
+  const incomingAt = sectionSourceTimestamp(incoming);
+  const existingAt = sectionSourceTimestamp(existing);
+  return incomingAt > existingAt ||
+    (incomingAt === existingAt && hasMemberFacingFreshnessState(existing));
 }
 
 function sectionIsCurrent(section: MarketSplitDisplaySection): boolean {
@@ -436,6 +439,12 @@ function sectionSourceTimestamp(section: MarketSplitDisplaySection): number {
   return rowTimestamps.length > 0
     ? Math.max(...rowTimestamps)
     : Date.parse(section.lastUpdated ?? "");
+}
+
+function hasMemberFacingFreshnessState(section: MarketSplitDisplaySection): boolean {
+  return section.lastUpdated !== null || section.rows.some((row) =>
+    row.observedAt != null || row.staleAfterMinutes != null || row.isStale === true
+  );
 }
 
 function marketFromLabel(label: string): DraftKingsNetworkMarket | null {
