@@ -14,10 +14,12 @@ import {
 } from "./cfbV1Decision";
 
 export const CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE =
-  "cfb_forward_evidence_snapshot_2026_09_20_r25_complete_tracking_reference" as const;
+  "cfb_forward_evidence_snapshot_2026_09_20_r26_reference_coverage_cursor" as const;
 export const CFB_FORWARD_MARKET_HISTORY_BASE_EVIDENCE_SCHEMA_RELEASE =
   "cfb_forward_evidence_snapshot_2026_09_05_r22_confidence_economics_bridge" as const;
 export const CFB_FORWARD_PRICE_PREVIOUS_EVIDENCE_SCHEMA_RELEASE =
+  "cfb_forward_evidence_snapshot_2026_09_20_r25_complete_tracking_reference" as const;
+export const CFB_FORWARD_MARKET_HISTORY_PRICE_EVIDENCE_SCHEMA_RELEASE =
   "cfb_forward_evidence_snapshot_2026_09_19_r24_contained_spread_counter_signal" as const;
 export const CFB_FORWARD_SPREAD_PREVIOUS_EVIDENCE_SCHEMA_RELEASE =
   "cfb_forward_evidence_snapshot_2026_09_19_r23_spread_counter_signal" as const;
@@ -62,11 +64,11 @@ export const CFB_FORWARD_LEGACY_EVIDENCE_SCHEMA_RELEASE =
 export const CFB_FORWARD_INITIAL_EVIDENCE_SCHEMA_RELEASE =
   "cfb_forward_evidence_snapshot_2026_08_25_r1" as const;
 export const CFB_FORWARD_EVIDENCE_COLLECTOR_RELEASE =
-  "cfb_forward_evidence_collector_2026_09_20_r31_complete_tracking_reference" as const;
+  "cfb_forward_evidence_collector_2026_09_20_r32_reference_coverage_cursor" as const;
 export const CFB_FORWARD_MEMBER_RELEASE =
-  "cfb_v1_member_release_2026_09_20_r37_complete_tracking_reference" as const;
+  "cfb_v1_member_release_2026_09_20_r38_reference_coverage_cursor" as const;
 export const CFB_FORWARD_PRICE_PREVIOUS_MEMBER_RELEASE =
-  "cfb_v1_member_release_2026_09_19_r36_contained_spread_counter_signal" as const;
+  "cfb_v1_member_release_2026_09_20_r37_complete_tracking_reference" as const;
 export const CFB_FORWARD_HOLISTIC_PREVIOUS_MEMBER_RELEASE =
   "cfb_v1_member_release_2026_09_04_r32_holistic_confidence" as const;
 export const CFB_FORWARD_CONTINUITY_PREVIOUS_MEMBER_RELEASE =

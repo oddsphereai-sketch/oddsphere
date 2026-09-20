@@ -17,6 +17,13 @@ const game: NcaafGame = {
   away: { id: 1, conferenceId: null, abbreviation: "VILL", name: "Villanova Wildcats", fbs: false },
   home: { id: 2, conferenceId: null, abbreviation: "LIU", name: "Long Island University Sharks", fbs: false },
 };
+const tcuGame: NcaafGame = {
+  ...game,
+  providerGameId: "457287",
+  scheduledStart: "2026-09-26T19:30:00.000Z",
+  away: { ...game.away, abbreviation: "TCU", name: "TCU Horned Frogs" },
+  home: { ...game.home, abbreviation: "UCF", name: "UCF Knights" },
+};
 
 const pickcenter = {
   pickcenter: [{
@@ -59,6 +66,13 @@ const fetchImpl = (async (input: string | URL | Request) => {
         { homeAway: "away", team: { id: "222" } },
         { homeAway: "home", team: { id: "2341" } },
       ] }],
+    }, {
+      id: "401856815",
+      date: tcuGame.scheduledStart,
+      competitions: [{ competitors: [
+        { homeAway: "away", team: { id: "2628" } },
+        { homeAway: "home", team: { id: "2116" } },
+      ] }],
     }],
   };
   return new Response(JSON.stringify(payload), { status: 200, headers: { "content-type": "application/json" } });
@@ -69,6 +83,8 @@ assert.equal(result.attemptedGames, 1);
 assert.equal(result.linesByGame[game.providerGameId]?.total, 45.5);
 assert.equal(result.requests, requests);
 assert.ok(result.requests <= 5, "one game is bounded to duplicate-group scoreboards plus one summary");
+const overrideIdentity = await fetchCfbEspnReferenceLines({ games: [tcuGame], capturedAt: "2026-09-20T12:00:00.000Z", fetchImpl });
+assert.equal(overrideIdentity.matchedGames, 1, "the verified TCU ESPN identity override must match the exact scheduled event");
 
 const ambiguousFetch = (async (input: string | URL | Request) => {
   const url = String(input);

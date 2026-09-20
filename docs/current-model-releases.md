@@ -82,7 +82,37 @@ Last reviewed: 2026-09-20
 
 ## CFB Daily Edge generalized weekly production release
 
-### Complete three-market tracking and strict reference fallback (r71)
+### Bounded reference-coverage cursor and carry-forward (r72)
+
+- Active ESPN reference / evidence / collector / member releases are
+  `cfb_espn_reference_line_2026_09_20_r2_coverage_cursor` /
+  `cfb_forward_evidence_snapshot_2026_09_20_r26_reference_coverage_cursor` /
+  `cfb_forward_evidence_collector_2026_09_20_r32_reference_coverage_cursor` /
+  `cfb_v1_member_release_2026_09_20_r38_reference_coverage_cursor`. Sole writer / fixture / outcome are
+  `cfb_forward_evidence_writer_2026_09_20_r67_reference_coverage_cursor` /
+  `cfb_v1_member_fixture_2026_09_20_r58_reference_coverage_cursor` /
+  `cfb_market_sharp_public_outcome_contract_2026_09_20_r53_reference_coverage_cursor`; compact snapshot /
+  reader are `cfb_forward_member_snapshot_2026_09_20_r17_reference_coverage_cursor` /
+  `cfb_member_snapshot_reader_2026_09_20_r6_reference_coverage_cursor`; tracking is
+  `cfb_official_tracking_record_2026_09_20_r24_reference_coverage_cursor`.
+- Live verification after r71 proved the historical repair at 97/97/97 and the board healthy, but also
+  exposed that the eight-game prospective bound revisited the nearest missing games instead of advancing
+  across the slate. r72 raises the bounded batch to the provider module's existing 32-game ceiling,
+  carries a verified opening reference forward, prioritizes never-attempted deferred games, and schedules
+  targeted zero-cadence completion batches only while deferred work remains. Once every candidate has
+  been attempted, genuinely unpublished openings wait for the ordinary six-hour/hourly refresh cadence;
+  there is no provider hot loop or per-card request.
+- Exact ESPN schedule inspection added verified identities for TCU, UTSA, Robert Morris, Lehigh, UT
+  Martin, and East Tennessee State. The exact-team, exact-orientation, bounded-kickoff, DraftKings-opening
+  requirements are unchanged. A line that has not been published stays unavailable rather than being
+  fabricated. Playbook retains per-market precedence, and r71's append-only 52-row historical repair is
+  untouched.
+- Score model, PMF, probabilities, calibration, exact-price decisions, grades, actionability, stakes,
+  copy, labels, and page structure remain unchanged; promotions / demotions / actionable-board impact are
+  0 / 0 / 0. Evidence and rollback are in
+  `docs/model-audits/2026-09-20-cfb-reference-coverage-cursor.md`.
+
+### Complete three-market tracking and strict reference fallback (r71; retained by r72)
 
 - Active ESPN reference / evidence / collector / member releases are
   `cfb_espn_reference_line_2026_09_20_r1_strict_opening_fallback` /

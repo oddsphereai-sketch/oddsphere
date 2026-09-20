@@ -79,10 +79,10 @@ import {
 } from "./cfbForwardMemberSnapshotStore";
 
 export const CFB_FORWARD_WRITER_RELEASE =
-  "cfb_forward_evidence_writer_2026_09_20_r66_complete_tracking_reference" as const;
+  "cfb_forward_evidence_writer_2026_09_20_r67_reference_coverage_cursor" as const;
 export const CFB_FORWARD_MAX_QB_TEAMS_PER_RUN = 24 as const;
 export const CFB_FORWARD_MAX_SHARP_FALLBACK_GAMES_PER_RUN = 24 as const;
-export const CFB_FORWARD_MAX_ESPN_PROSPECTIVE_GAMES_PER_RUN = 8 as const;
+export const CFB_FORWARD_MAX_ESPN_PROSPECTIVE_GAMES_PER_RUN = 32 as const;
 export const CFB_FORWARD_RESULTS_BATCH_SIZE = 100 as const;
 export const CFB_FORWARD_MAX_PRIOR_GAME_IDS = 1200 as const;
 
@@ -135,9 +135,10 @@ export function selectCfbForwardCollectionWindow<T extends Pick<CfbForwardWindow
   const priority = (reason: string): number => {
     if (reason === "t60_due") return 0;
     if (reason === "release_refresh_due") return 1;
-    if (reason === "opening_seed" || reason === "opening_incomplete") return 2;
-    if (reason === "unlocked_refresh_due") return 3;
-    return 4;
+    if (reason === "reference_line_completion_due") return 2;
+    if (reason === "opening_seed" || reason === "opening_incomplete") return 3;
+    if (reason === "unlocked_refresh_due") return 4;
+    return 5;
   };
   return states
     .map((state, index) => ({ state, index }))
@@ -217,12 +218,16 @@ export async function runCfbForwardEvidenceWriter(args: {
   const slate = await fetchBalldontlieNcaafSlate({ season: args.season, startDate: window.providerQueryStartDate, endDate: window.providerQueryEndDate, apiKey: args.balldontlieApiKey });
   const games = selectCfbModelCoveredWeeklyGames({ games: slate.games, existing, now: args.now, window });
   if (games.length === 0) throw new Error(`CFB authoritative weekly window ${window.boardStartDate}..${window.boardEndDate} has no eligible model-covered games.`);
-  const plans = planCfbForwardEvidenceCaptures({
+  const latestByGame = latestCfbEvidenceByGame(existing);
+  const plannedCaptures = planCfbForwardEvidenceCaptures({
     games,
     existing: lockPlanningExisting,
     capturedAt: args.now,
-    ...(need.reason === "release_refresh_due" ? { unlockedCadenceMinutesOverride: 0 } : {}),
+    ...(need.reason === "release_refresh_due" || need.reason === "reference_line_completion_due" ? { unlockedCadenceMinutesOverride: 0 } : {}),
   });
+  const plans = need.reason === "reference_line_completion_due"
+    ? plannedCaptures.filter((plan) => cfbReferenceCompletionNeeded(latestByGame.get(plan.game.providerGameId), args.now))
+    : plannedCaptures;
   if (plans.length === 0) {
     const tracking = await writeOfficialTracking({
       client: args.client,
@@ -243,7 +248,7 @@ export async function runCfbForwardEvidenceWriter(args: {
   const plannedGames = [...new Map(plans.map((plan) => [plan.game.providerGameId, plan.game])).values()];
   const trustedSharpEventIdsByGame = trustedCfbSharpEventIdsByGame(existing);
   const sharpFallbackCandidates = plannedGames.filter((game) => cfbBooksNeedSharpFallback(slate.currentOddsComparableBooksByGame[game.providerGameId] ?? []));
-  const sharpFallbackGames = selectCfbSharpFallbackGames({
+  const sharpFallbackGames = need.reason === "reference_line_completion_due" ? [] : selectCfbSharpFallbackGames({
     games: sharpFallbackCandidates,
     trustedEventIdsByGame: trustedSharpEventIdsByGame,
     maximum: CFB_FORWARD_MAX_SHARP_FALLBACK_GAMES_PER_RUN,
@@ -268,18 +273,21 @@ export async function runCfbForwardEvidenceWriter(args: {
   const espnReferenceCandidates = plannedGames.filter((game) => {
     const evidence = resolveCfbPlaybookEvidence({ game, lines, splits });
     const line = evidence ? normalizeCfbPlaybookLine(evidence.lineRow, args.now) : null;
-    return line?.homeSpread === null || line?.homeSpread === undefined || line.total === null || line.total === undefined;
+    const primaryMissing = line?.homeSpread === null || line?.homeSpread === undefined || line.total === null || line.total === undefined;
+    const previousReference = latestByGame.get(game.providerGameId)?.payload.market.espnReferenceLine ?? null;
+    return primaryMissing && previousReference === null;
   });
-  const espnReferenceGames = [...espnReferenceCandidates]
-    .sort((first, second) => Date.parse(first.scheduledStart) - Date.parse(second.scheduledStart) || first.providerGameId.localeCompare(second.providerGameId))
-    .slice(0, CFB_FORWARD_MAX_ESPN_PROSPECTIVE_GAMES_PER_RUN);
+  const espnReferenceGames = selectCfbEspnReferenceGames({
+    games: espnReferenceCandidates,
+    latestByGame,
+    maximum: CFB_FORWARD_MAX_ESPN_PROSPECTIVE_GAMES_PER_RUN,
+  });
   const espnReferenceGameIds = new Set(espnReferenceGames.map((game) => game.providerGameId));
   const espnReferenceAttempt = await fetchCfbEspnReferenceAttempt({
     games: espnReferenceGames,
     capturedAt: args.now,
     maximumGames: CFB_FORWARD_MAX_ESPN_PROSPECTIVE_GAMES_PER_RUN,
   });
-  const latestByGame = latestCfbEvidenceByGame(existing);
   const weatherByGame = new Map<string, { snapshot: CfbKickoffWeatherSnapshot; requests: number }>();
   await mapCfbWithConcurrency([...new Map(plans.map((plan) => [plan.game.providerGameId, plan.game])).values()], 6, async (game) => {
     const gamePlans = plans.filter((plan) => plan.game.providerGameId === game.providerGameId);
@@ -319,7 +327,8 @@ export async function runCfbForwardEvidenceWriter(args: {
     const weather = weatherByGame.get(plan.game.providerGameId)!.snapshot;
     const playbookEvidence = resolveCfbPlaybookEvidence({ game: plan.game, lines, splits });
     const playbookLine = playbookEvidence ? normalizeCfbPlaybookLine(playbookEvidence.lineRow, args.now) : null;
-    const espnReferenceLine = espnReferenceAttempt.result.linesByGame[plan.game.providerGameId] ?? null;
+    const espnReferenceLine = espnReferenceAttempt.result.linesByGame[plan.game.providerGameId] ??
+      latestByGame.get(plan.game.providerGameId)?.payload.market.espnReferenceLine ?? null;
     const playbookSplits = playbookEvidence ? normalizeCfbPlaybookSplits(playbookEvidence.splitRow, args.now) : null;
     const sharpApiSplits = sharpSplitsAttempt.result?.recordsByGame[plan.game.providerGameId] ?? [];
     const sharpApiSplitsStatus = sharpSplitsAttempt.result === null
@@ -736,6 +745,29 @@ function latestCfbEvidenceByGame(rows: CfbForwardStoredEvidence[]): Map<string, 
   return latest;
 }
 
+export function selectCfbEspnReferenceGames(args: {
+  games: NcaafGame[];
+  latestByGame: Map<string, CfbForwardStoredEvidence>;
+  maximum: number;
+}): NcaafGame[] {
+  if (!Number.isInteger(args.maximum) || args.maximum < 0 || args.maximum > CFB_ESPN_REFERENCE_MAX_GAMES_PER_RUN) {
+    throw new Error(`CFB ESPN prospective batch must be between 0 and ${CFB_ESPN_REFERENCE_MAX_GAMES_PER_RUN} games.`);
+  }
+  const attemptPriority = (game: NcaafGame): number => {
+    const payload = args.latestByGame.get(game.providerGameId)?.payload;
+    if (payload?.market.espnReferenceLine) return 3;
+    if (payload?.coverage.availabilityWarnings.includes("espn_reference_line_deferred")) return 0;
+    if (payload?.coverage.availabilityWarnings.includes("espn_reference_line_unavailable")) return 2;
+    return 1;
+  };
+  return [...new Map(args.games.map((game) => [game.providerGameId, game])).values()]
+    .filter((game) => !args.latestByGame.get(game.providerGameId)?.payload.market.espnReferenceLine)
+    .sort((first, second) => attemptPriority(first) - attemptPriority(second) ||
+      Date.parse(first.scheduledStart) - Date.parse(second.scheduledStart) ||
+      first.providerGameId.localeCompare(second.providerGameId))
+    .slice(0, args.maximum);
+}
+
 async function mapCfbWithConcurrency<T>(
   values: T[],
   concurrency: number,
@@ -796,7 +828,20 @@ function releaseRefreshNeed(rows: CfbForwardStoredEvidence[], now: string): { co
       row.payload.authoritativeForecast?.release !== CFB_MARKET_SHARP_AWARE_PRODUCTION_RELEASE ||
       row.payload.decisions.evaluatedBets.length + row.payload.decisions.heldMarkets.length !== 3)
   );
-  return staleUpcoming ? { collect: true, reason: "release_refresh_due", cadenceMinutes: 0 } : null;
+  if (staleUpcoming) return { collect: true, reason: "release_refresh_due", cadenceMinutes: 0 };
+  return [...latest.values()].some((row) => cfbReferenceCompletionNeeded(row, now))
+    ? { collect: true, reason: "reference_line_completion_due", cadenceMinutes: 0 }
+    : null;
+}
+
+export function cfbReferenceCompletionNeeded(row: CfbForwardStoredEvidence | undefined, now: string): boolean {
+  if (!row || row.payload.schemaRelease !== CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE) return false;
+  const nowMs = Date.parse(now);
+  const cutoffMs = Date.parse(row.gameStartAt) - 60 * 60_000;
+  if (!Number.isFinite(nowMs) || !Number.isFinite(cutoffMs) || nowMs >= cutoffMs) return false;
+  const primaryIncomplete = row.payload.market.playbookLine?.homeSpread == null || row.payload.market.playbookLine?.total == null;
+  return primaryIncomplete && row.payload.market.espnReferenceLine == null &&
+    row.payload.coverage.availabilityWarnings.includes("espn_reference_line_deferred");
 }
 
 export function cfbMarketAnchorHealthHolds(

@@ -50,6 +50,7 @@ import {
 import { normalizeCfbPlaybookLine, normalizeCfbPlaybookSplits } from "../lib/services/football/cfbPlaybookEvidence";
 import {
   buildCfbForwardPayloadsWithIsolation,
+  cfbReferenceCompletionNeeded,
   cfbMarketAnchorHealthHolds,
   cfbLockPlanningEvidence,
   cfbTrackingCandidatesForRun,
@@ -57,6 +58,7 @@ import {
   planCfbPriorResultReads,
   publishCfbForwardDecisionBundle,
   selectCfbSharpFallbackGames,
+  selectCfbEspnReferenceGames,
   trustedCfbSharpEventIdsByGame,
 } from "../lib/services/football/cfbForwardEvidenceWriter";
 import { resolveCfbCanonicalMarketAnchor } from "../lib/services/football/cfbMarketInformedOutcome";
@@ -1997,6 +1999,32 @@ const mixedCollectionNeed = determineCfbForwardCollectionNeed({
   now: "2026-08-28T20:00:00.000Z",
 });
 assert.deepEqual(mixedCollectionNeed, { collect: true, reason: "unlocked_refresh_due", cadenceMinutes: 360 }, "a due distant game cannot be masked by a newer near-game observation");
+const deferredReferenceEvidence = structuredClone(farEvidence);
+deferredReferenceEvidence.payload.schemaRelease = CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE;
+deferredReferenceEvidence.payload.memberRelease = CFB_FORWARD_MEMBER_RELEASE;
+deferredReferenceEvidence.payload.market.playbookLine = null;
+deferredReferenceEvidence.payload.market.espnReferenceLine = null;
+deferredReferenceEvidence.payload.coverage.availabilityWarnings = ["espn_reference_line_deferred"];
+const unavailableReferenceGame = { ...farGame, providerGameId: "unavailable-reference-game", scheduledStart: "2026-08-31T21:00:00.000Z" };
+const unavailableReferenceEvidence = structuredClone(deferredReferenceEvidence);
+unavailableReferenceEvidence.providerGameId = unavailableReferenceGame.providerGameId;
+unavailableReferenceEvidence.gameStartAt = unavailableReferenceGame.scheduledStart;
+unavailableReferenceEvidence.payload.game = unavailableReferenceGame;
+unavailableReferenceEvidence.payload.coverage.availabilityWarnings = ["espn_reference_line_unavailable"];
+assert.equal(cfbReferenceCompletionNeeded(deferredReferenceEvidence, "2026-08-28T20:00:00.000Z"), true, "a deferred exact-event reference must request the next bounded completion batch");
+assert.equal(cfbReferenceCompletionNeeded(unavailableReferenceEvidence, "2026-08-28T20:00:00.000Z"), false, "a provider-confirmed not-yet-published opening must wait for the ordinary refresh cadence");
+assert.deepEqual(
+  selectCfbEspnReferenceGames({
+    games: [unavailableReferenceGame, farGame],
+    latestByGame: new Map([
+      [farGame.providerGameId, deferredReferenceEvidence],
+      [unavailableReferenceGame.providerGameId, unavailableReferenceEvidence],
+    ]),
+    maximum: 1,
+  }).map((candidate) => candidate.providerGameId),
+  [farGame.providerGameId],
+  "the cursor must advance deferred games before retrying a known unavailable opening",
+);
 const lateT60 = planCfbForwardEvidenceCaptures({ games: [game], existing: [evidenceAt("opening", "2026-08-25T16:00:00.000Z")], capturedAt: "2026-08-29T15:21:00.000Z" });
 assert.equal(lateT60[0]?.stage, "t60");
 assert.equal(lateT60[0]?.t60LagMinutes, 21);

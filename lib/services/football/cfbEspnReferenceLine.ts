@@ -2,7 +2,7 @@ import { CFB_TEAM_IDENTITIES } from "./cfbTeamIdentity";
 import type { NcaafGame } from "./balldontlieNcaafSlate";
 
 export const CFB_ESPN_REFERENCE_LINE_RELEASE =
-  "cfb_espn_reference_line_2026_09_20_r1_strict_opening_fallback" as const;
+  "cfb_espn_reference_line_2026_09_20_r2_coverage_cursor" as const;
 export const CFB_ESPN_REFERENCE_MAX_GAMES_PER_RUN = 32 as const;
 export const CFB_ESPN_REFERENCE_MAX_SCOREBOARD_DATES = 7 as const;
 export const CFB_ESPN_REFERENCE_MAX_REQUESTS =
@@ -44,6 +44,7 @@ const ESPN_TEAM_ID_OVERRIDES: Record<string, string> = {
   VAL: "2674", INST: "282", YALE: "43", HC: "107", CCSU: "2115", MTST: "147",
   PENN: "219", BUCK: "2083", SHU: "2529", ELON: "2210", NCCU: "2428", GWEB: "2241",
   CARK: "2110", SEMO: "2546", HCU: "2277", UIW: "2916",
+  TCU: "2628", UTSA: "2636", RMU: "2523", LEH: "2329", UTM: "2630", ETSU: "2193",
 };
 
 export async function fetchCfbEspnReferenceLines(args: {
