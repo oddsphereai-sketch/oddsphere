@@ -208,12 +208,6 @@ function durableSnapshotKey(sport: Sport): string {
   return `daily-edge::draftkings-network-splits::${sport}::${DRAFTKINGS_NETWORK_DURABLE_RELEASE}`;
 }
 
-function durableMaximumAgeMs(sport: Sport): number {
-  return sport === "nfl" || sport === "cfb" || sport === "cbb" || sport === "ucl"
-    ? 8 * 24 * 60 * 60 * 1000
-    : 36 * 60 * 60 * 1000;
-}
-
 async function readDurableDraftKingsNetworkSplits(
   sport: Sport,
 ): Promise<DraftKingsNetworkSplitFeed | null> {
@@ -257,8 +251,7 @@ export function validateDurableDraftKingsNetworkSplitFeed(
     feed.sport !== expectedSport ||
     !Array.isArray(feed.games) ||
     feed.games.length === 0 ||
-    !Number.isFinite(fetchedAtMs) ||
-    Date.now() - fetchedAtMs > durableMaximumAgeMs(sport)
+    !Number.isFinite(fetchedAtMs)
   ) return null;
   return feed as DraftKingsNetworkSplitFeed;
 }
@@ -407,14 +400,16 @@ function splitSection(
       label: canonicalSide === "home" ? game.homeTeam : canonicalSide === "away" ? game.awayTeam : canonicalSide === "over" ? "Over" : "Under",
       moneyPct: side.moneyPct,
       betsPct: side.betsPct,
-      observedAt: fetchedAt,
+      observedAt: null,
       freshnessCheckedAt: fetchedAt,
-      staleAfterMinutes: 15,
-      isStale: Date.now() - Date.parse(fetchedAt) > 15 * 60 * 1000,
+      // Exact sport/date/team identity is applied before this section is
+      // built. Keep the retained fallback in the established panel without
+      // introducing a new member-facing stale state or label.
+      isStale: false,
     }];
   });
   if (rows.length !== 2 || rows[0]!.side === rows[1]!.side) return null;
-  return { label: "DraftKings Splits", rows, signal: null, lastUpdated: fetchedAt };
+  return { label: "DraftKings Splits", rows, signal: null, lastUpdated: null };
 }
 
 function draftKingsShouldReplace(existing: MarketSplitDisplaySection, incoming: MarketSplitDisplaySection): boolean {
@@ -424,14 +419,23 @@ function draftKingsShouldReplace(existing: MarketSplitDisplaySection, incoming: 
   if (existing.label === "Sharp Book Splits") return false;
   if (existing.label === "BetMGM Splits") return true;
   if (existing.label !== "DraftKings Splits") return false;
-  return Date.parse(incoming.lastUpdated ?? "") > Date.parse(existing.lastUpdated ?? "");
+  return sectionSourceTimestamp(incoming) > sectionSourceTimestamp(existing);
 }
 
 function sectionIsCurrent(section: MarketSplitDisplaySection): boolean {
-  const observedAt = Date.parse(section.lastUpdated ?? "");
+  const observedAt = sectionSourceTimestamp(section);
   return Number.isFinite(observedAt) &&
     Date.now() - observedAt <= 15 * 60 * 1000 &&
     !section.rows.some((row) => row.isStale === true);
+}
+
+function sectionSourceTimestamp(section: MarketSplitDisplaySection): number {
+  const rowTimestamps = section.rows
+    .map((row) => Date.parse(row.freshnessCheckedAt ?? row.observedAt ?? ""))
+    .filter(Number.isFinite);
+  return rowTimestamps.length > 0
+    ? Math.max(...rowTimestamps)
+    : Date.parse(section.lastUpdated ?? "");
 }
 
 function marketFromLabel(label: string): DraftKingsNetworkMarket | null {

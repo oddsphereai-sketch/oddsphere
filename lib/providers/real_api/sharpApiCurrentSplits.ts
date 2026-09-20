@@ -73,12 +73,6 @@ function snapshotKey(sport: SupportedSport): string {
   return `daily-edge::sharpapi-current-splits::${sport}::${CURRENT_SPLITS_RELEASE}`;
 }
 
-function maximumAgeMs(sport: SupportedSport): number {
-  return sport === "nfl" || sport === "cfb" || sport === "cbb"
-    ? 8 * 24 * 60 * 60 * 1000
-    : 36 * 60 * 60 * 1000;
-}
-
 function supportedSport(sport: Sport): sport is SupportedSport {
   return sport !== "soccer" && sport !== "ucl";
 }
@@ -142,7 +136,6 @@ async function readDurableCurrentSplits(sport: SupportedSport): Promise<SharpApi
 export function validateSharpApiCurrentSplitFeed(
   value: unknown,
   sport: SupportedSport,
-  nowMs = Date.now(),
 ): SharpApiCurrentSplitFeed | null {
   if (!isRecord(value)) return null;
   const fetchedAt = timestamp(value.fetchedAt);
@@ -151,7 +144,6 @@ export function validateSharpApiCurrentSplitFeed(
     value.release !== CURRENT_SPLITS_RELEASE ||
     value.sport !== sport ||
     fetchedAt === null ||
-    nowMs - Date.parse(fetchedAt) > maximumAgeMs(sport) ||
     !Array.isArray(value.rows) ||
     value.rows.length === 0 ||
     !value.rows.every(isRecord)
@@ -205,10 +197,13 @@ function attachBestMarket(
   const sections = BOOK_PRIORITY.flatMap((book) => {
     const rows = dedupeBookRows(candidates.filter((row) => normalize(text(row.sportsbook) ?? "") === book));
     if (rows.length !== 1) return [];
-    const section = sectionFromRow(game, sourceMarket, book, rows[0]!, nowMs);
+    const section = sectionFromRow(game, sourceMarket, book, rows[0]!);
     return section ? [section] : [];
   });
-  const current = sections.filter((section) => !section.rows.some((row) => row.isStale));
+  // Freshness still controls internal source selection, but it does not
+  // create a member-facing stale state. A current lower-priority fallback can
+  // therefore remain until the preferred book publishes a current update.
+  const current = sections.filter((section) => sectionIsFreshAt(section, nowMs));
   const selected = current[0] ?? sections.sort((a, b) => Date.parse(b.lastUpdated ?? "") - Date.parse(a.lastUpdated ?? ""))[0];
   if (!selected) return 0;
 
@@ -236,7 +231,6 @@ function sectionFromRow(
   market: SplitMarket,
   book: NamedBook,
   row: Json,
-  nowMs: number,
 ): MarketSplitDisplaySection | null {
   const fetchedAt = timestamp(row.fetched_at);
   const source = record(row[market]);
@@ -253,7 +247,6 @@ function sectionFromRow(
     firstMoney === null || secondMoney === null || firstBets === null || secondBets === null ||
     !complementary(firstMoney, secondMoney) || !complementary(firstBets, secondBets)
   ) return null;
-  const isStale = nowMs - Date.parse(fetchedAt) > 15 * 60 * 1000;
   return {
     label: BOOK_LABEL[book],
     rows: [
@@ -262,24 +255,24 @@ function sectionFromRow(
         label: market === "total" ? "Over" : game.awayTeam,
         moneyPct: firstMoney,
         betsPct: firstBets,
-        observedAt: fetchedAt,
+        observedAt: null,
         freshnessCheckedAt: fetchedAt,
-        staleAfterMinutes: 15,
-        isStale,
+        // The exact-game fallback remains until a verified update replaces it.
+        // Do not introduce a member-facing stale state, copy, badge, or label.
+        isStale: false,
       },
       {
         side: market === "total" ? "under" : "home",
         label: market === "total" ? "Under" : game.homeTeam,
         moneyPct: secondMoney,
         betsPct: secondBets,
-        observedAt: fetchedAt,
+        observedAt: null,
         freshnessCheckedAt: fetchedAt,
-        staleAfterMinutes: 15,
-        isStale,
+        isStale: false,
       },
     ],
     signal: null,
-    lastUpdated: fetchedAt,
+    lastUpdated: null,
   };
 }
 
@@ -295,14 +288,26 @@ function shouldReplace(existing: MarketSplitDisplaySection, incoming: MarketSpli
   };
   const priorityDelta = priority(incoming.label) - priority(existing.label);
   if (priorityDelta !== 0) return priorityDelta < 0;
-  return Date.parse(incoming.lastUpdated ?? "") > Date.parse(existing.lastUpdated ?? "");
+  return sectionSourceTimestamp(incoming) > sectionSourceTimestamp(existing);
 }
 
 function sectionIsCurrent(section: MarketSplitDisplaySection): boolean {
-  const observedAt = Date.parse(section.lastUpdated ?? "");
+  return sectionIsFreshAt(section, Date.now());
+}
+
+function sectionIsFreshAt(section: MarketSplitDisplaySection, nowMs: number): boolean {
+  const observedAt = sectionSourceTimestamp(section);
   return Number.isFinite(observedAt) &&
-    Date.now() - observedAt <= 15 * 60 * 1000 &&
-    !section.rows.some((row) => row.isStale === true);
+    nowMs - observedAt <= 15 * 60 * 1000;
+}
+
+function sectionSourceTimestamp(section: MarketSplitDisplaySection): number {
+  const rowTimestamps = section.rows
+    .map((row) => Date.parse(row.freshnessCheckedAt ?? row.observedAt ?? ""))
+    .filter(Number.isFinite);
+  return rowTimestamps.length > 0
+    ? Math.max(...rowTimestamps)
+    : Date.parse(section.lastUpdated ?? "");
 }
 
 function rowMatchesGame(row: Json, game: DailyEdgeGameDto, slateDate: string, sport: SupportedSport): boolean {

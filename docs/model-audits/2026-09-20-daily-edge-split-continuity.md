@@ -25,9 +25,11 @@ probabilities, grades, promotions, stakes, tracking, or model releases.
 - Current complete book priority is Circa, DraftKings, then BetMGM.
 - A non-empty provider response is stored in `lab_response_snapshots`.
   An empty/error response cannot overwrite the last verified snapshot.
-- Last-known-good maximum age is eight days for weekly sports and 36 hours for
-  daily sports. Rows older than their 15-minute freshness window remain
-  visibly stale rather than masquerading as current.
+- A last-known-good exact-game row remains eligible until a newer verified row
+  replaces it. Exact sport, calendar date, away team, and home team matching
+  prevents an old row from leaking onto another slate. Source timestamps remain
+  internal; the repair adds no member-facing stale copy, badge, timestamp,
+  subtitle, or replacement label.
 - The SharpAPI and DraftKings Network reads execute concurrently, keeping the
   cold-path deadline bounded by the slower existing source rather than adding
   the two timeouts together.

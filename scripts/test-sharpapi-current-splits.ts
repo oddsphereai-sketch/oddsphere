@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import type { DailyEdgeResponse, MarketEdgeDto } from "../app/lab/lib/labTypes";
+import { marketSplitSectionIsStale } from "../app/lab/lib/dailyEdgeSplitFreshness";
 import {
   applySharpApiCurrentSplitOverlay,
   validateSharpApiCurrentSplitFeed,
@@ -90,7 +91,7 @@ applySharpApiCurrentSplitOverlay(stale, {
   fetchedAt: "2026-09-19T20:04:00.000Z",
   rows: [complete("ncaaf", "draftkings", "Liberty Flames", "Coastal Carolina Chanticleers", "2026-09-19T20:04:00.000Z")],
 }, now);
-assert.equal(stale.games[0]!.markets.moneyline.sportsbookSplits?.rows[0]?.isStale, true, "last-known-good rows remain visible but honest about age");
+assert.equal(stale.games[0]!.markets.moneyline.sportsbookSplits?.rows[0]?.isStale, false, "last-known-good rows stay in the established panel without new stale-state copy");
 
 const feed = {
   source: "sharpapi_current_splits",
@@ -99,8 +100,15 @@ const feed = {
   fetchedAt: "2026-09-20T20:04:00.000Z",
   rows: [complete("ncaaf", "circa", "Liberty Flames", "Coastal Carolina Chanticleers", "2026-09-20T20:04:00.000Z")],
 } as const;
-assert.ok(validateSharpApiCurrentSplitFeed(feed, "cfb", now));
-assert.equal(validateSharpApiCurrentSplitFeed({ ...feed, rows: [] }, "cfb", now), null, "an empty provider response cannot erase durable coverage");
-assert.equal(validateSharpApiCurrentSplitFeed({ ...feed, sport: "nfl" }, "cfb", now), null, "durable coverage cannot cross sports");
+assert.ok(validateSharpApiCurrentSplitFeed(feed, "cfb"));
+assert.equal(validateSharpApiCurrentSplitFeed({ ...feed, rows: [] }, "cfb"), null, "an empty provider response cannot erase durable coverage");
+assert.equal(validateSharpApiCurrentSplitFeed({ ...feed, sport: "nfl" }, "cfb"), null, "durable coverage cannot cross sports");
+assert.equal(stale.games[0]!.markets.moneyline.sportsbookSplits?.lastUpdated, null, "retained fallback adds no freshness copy");
+assert.equal(stale.games[0]!.markets.moneyline.sportsbookSplits?.rows[0]?.observedAt, null, "retained fallback adds no stale timestamp label");
+assert.equal(
+  marketSplitSectionIsStale(stale.games[0]!.markets.moneyline.sportsbookSplits ?? null, Date.parse("2027-09-20T20:05:00.000Z")),
+  false,
+  "retained fallback never triggers member-facing stale or historical copy",
+);
 
 console.log("SharpAPI current split overlay and durable continuity tests passed.");
