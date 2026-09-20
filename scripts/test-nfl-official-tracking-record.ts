@@ -256,6 +256,27 @@ assert.equal(records.every((record) => record.model_version === common.decisionR
 assert.equal(records.every((record) => record.slate_date === "2026-09-09"), true);
 assert.equal(records.every((record) => record.snapshot_json?.football_market_scoped_tracking_release === FOOTBALL_MARKET_SCOPED_T60_TRACKING_RELEASE), true);
 assert.equal(records.every((record) => record.snapshot_json?.nfl_tracking_record_release === NFL_OFFICIAL_TRACKING_RECORD_RELEASE), true);
+const legacyFalseFlagPayload = {
+  ...payload,
+  decisions: { ...payload.decisions, trackingEnabled: false },
+} as NflForwardEvidencePayload;
+assert.throws(
+  () => buildNflOfficialTrackingRecords({ payload: legacyFalseFlagPayload, gameId: 5002 }),
+  /eligible T-60 evidence payload/,
+  "the record builder must not bypass a false stored flag without an explicit revalidated boundary",
+);
+const recoveredLegacyFlagRecords = buildNflOfficialTrackingRecords({
+  payload: legacyFalseFlagPayload,
+  gameId: 5002,
+  trackingBoundaryRevalidated: true,
+});
+assert.equal(recoveredLegacyFlagRecords.length, 3,
+  "the sole writer may serialize an immutable payload after recomputing the complete T-60 boundary");
+assert.equal(
+  recoveredLegacyFlagRecords[0]?.snapshot_json?.evidence_payload_sha256,
+  hashNflForwardEvidencePayload(legacyFalseFlagPayload),
+  "recovery must retain the original immutable payload hash",
+);
 
 const trackingBoundaryTotal = buildNflRegularEvaluatedBetDecision({
   ...common,
@@ -391,6 +412,8 @@ assert.match(writerSource, /\.insert\(records/);
 assert.match(writerSource, /buildMarketScopedFootballTrackingPlan/);
 assert.match(writerSource, /if \(boundary\.eligible\)/,
   "recovery must recompute eligibility from the immutable tuple instead of trusting an old stored boolean");
+assert.match(writerSource, /trackingBoundaryRevalidated: true/,
+  "the sole writer must explicitly hand the recomputed boundary to the record serializer");
 const trackingSource = readFileSync("lib/services/trackingRefreshService.ts", "utf8");
 assert.match(trackingSource, /sport === "nfl"/);
 assert.match(trackingSource, /ingestNflFinalScores/);

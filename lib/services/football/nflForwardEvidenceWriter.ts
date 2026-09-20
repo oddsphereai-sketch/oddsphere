@@ -68,7 +68,7 @@ import {
 } from "./nflForwardMemberSnapshotStore";
 
 export const NFL_FORWARD_WRITER_RELEASE =
-  "nfl_forward_evidence_writer_2026_09_20_r33_tracking_parity" as const;
+  "nfl_forward_evidence_writer_2026_09_20_r34_boundary_handoff" as const;
 
 export type NflForwardWriterResult = {
   writerRelease: typeof NFL_FORWARD_WRITER_RELEASE;
@@ -818,7 +818,11 @@ async function writeOfficialTrackingFromPayloads(args: {
     const externalId = nflProviderIntegerId(payload.game.providerGameId, "game");
     const gameId = gameIdByProviderId.get(payload.game.providerGameId);
     if (gameId === undefined) throw new Error(`NFL tracking game row missing for ${payload.game.providerGameId}.`);
-    return buildNflOfficialTrackingRecords({ payload, gameId })
+    return buildNflOfficialTrackingRecords({
+      payload,
+      gameId,
+      trackingBoundaryRevalidated: true,
+    })
       .filter((record) => !existingKeys.has(`${externalId}:${record.market}`));
   });
   if (records.length > 0) {
