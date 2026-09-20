@@ -572,7 +572,24 @@ function nflSourceSplitEvidence(
   market: NflRegularSharpMarket,
   movementRows: NflForwardStoredEvidence[] = [],
 ): NflSourceSplitEvidence {
-  const split = payload.market.sharpApiSplits?.[market] ?? null;
+  const current = payload.market.sharpApiSplits?.[market] ?? null;
+  const historical = movementRows
+    .map((row) => row.payload.market.sharpApiSplits?.[market] ?? null)
+    .filter((candidate): candidate is NflRegularSharpSplit =>
+      candidate !== null &&
+      completeNflMarketSplit(candidate, market) &&
+      Date.parse(candidate.providerFetchedAt ?? candidate.capturedAt) <= Date.parse(payload.capturedAt)
+    )
+    .sort((first, second) =>
+      Date.parse(second.providerFetchedAt ?? second.capturedAt) -
+      Date.parse(first.providerFetchedAt ?? first.capturedAt)
+    );
+  // A provider-wide miss must not erase the last exact-game named-book pair
+  // already captured by the sole writer. This recovery is presentation-only:
+  // the current payload's model input, forecast, grade and lock stay intact.
+  const split = current && completeNflMarketSplit(current, market)
+    ? current
+    : historical[0] ?? null;
   if (!split || !completeNflMarketSplit(split, market)) {
     return {
       sharp: null,

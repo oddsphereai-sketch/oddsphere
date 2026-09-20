@@ -168,6 +168,24 @@ assert.equal(movingSplitRows?.[0]?.moneyDeltaPp, 9, "NFL split display shows the
 assert.equal(movingSplitRows?.[0]?.betsDeltaPp, 6, "NFL split display shows the full ticket move since first tracked");
 assert.equal(movingSplitRows?.[0]?.comparisonObservedAt, firstTrackedSplitRow.capturedAt);
 
+const providerOutageRow = structuredClone(splitRows[0]!);
+providerOutageRow.id = "row-1392216-provider-outage";
+providerOutageRow.capturedAt = new Date(Date.parse(capturedAt) + 5 * 60_000).toISOString();
+providerOutageRow.payloadSha256 = "9".repeat(64);
+const providerOutagePayload = providerOutageRow.payload as NflForwardEvidencePayload;
+providerOutagePayload.capturedAt = providerOutageRow.capturedAt;
+providerOutagePayload.market.sharpApiSplits = null;
+providerOutagePayload.coverage.sharpApiSplits = false;
+const outageFixture = buildNflWeekOneHeldMemberFixture([...splitRows, providerOutageRow]);
+const outageGame = outageFixture.snapshot.games.find((game) => game.id === `nfl-${splitPayload.game.providerGameId}`)!;
+assert.equal(outageGame.markets.total.sportsbookSplits?.label, "DraftKings Splits");
+assert.equal(outageGame.markets.total.sportsbookSplits?.rows[0]?.moneyPct, 63);
+assert.equal(
+  outageGame.markets.total.recommendationDecision?.sharpBookSplits,
+  null,
+  "a provider outage retains the exact-game named-book display row without relabeling it as sharp",
+);
+
 for (const market of Object.values(splitPayload.market.sharpApiSplits)) market.sourceSportsbook = "circa";
 const circaFixture = buildNflWeekOneHeldMemberFixture(splitRows);
 const circaGame = circaFixture.snapshot.games.find((game) => game.id === `nfl-${splitPayload.game.providerGameId}`)!;

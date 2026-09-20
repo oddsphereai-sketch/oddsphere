@@ -14,6 +14,10 @@ const DRAFTKINGS_NETWORK_REVALIDATE_SECONDS = 5 * 60;
 const DRAFTKINGS_NETWORK_TIMEOUT_MS = 6_000;
 const DRAFTKINGS_NETWORK_PAGE_SIZE = 10;
 const DRAFTKINGS_NETWORK_CACHE_TAG = "draftkings-network-splits-complete";
+const DRAFTKINGS_NETWORK_DURABLE_RELEASE =
+  "draftkings_network_splits_2026_09_20_r2_durable_last_known_good" as const;
+const DRAFTKINGS_NETWORK_DURABLE_TTL_MS = 5 * 60 * 1000;
+const DRAFTKINGS_NETWORK_DURABLE_STALE_MS = 10 * 24 * 60 * 60 * 1000;
 
 type DraftKingsNetworkSport =
   | "MLB"
@@ -191,13 +195,72 @@ export async function fetchDraftKingsNetworkSplits(args: {
 // Next keeps serving the previous successful value across requests and
 // deployments instead of replacing a complete slate with a one-page subset.
 const readCachedDraftKingsNetworkSplits = unstable_cache(
-  async (sport: Sport) => fetchDraftKingsNetworkSplits({ sport }),
-  ["draftkings-network-splits-complete-v1"],
+  async (sport: Sport) => readDurableDraftKingsNetworkSplits(sport),
+  ["draftkings-network-splits-complete-v2-durable-lkg"],
   {
     revalidate: DRAFTKINGS_NETWORK_REVALIDATE_SECONDS,
     tags: [DRAFTKINGS_NETWORK_CACHE_TAG],
   },
 );
+
+function durableSnapshotKey(sport: Sport): string {
+  return `daily-edge::draftkings-network-splits::${sport}::${DRAFTKINGS_NETWORK_DURABLE_RELEASE}`;
+}
+
+function durableMaximumAgeMs(sport: Sport): number {
+  return sport === "nfl" || sport === "cfb" || sport === "cbb" || sport === "ucl"
+    ? 8 * 24 * 60 * 60 * 1000
+    : 36 * 60 * 60 * 1000;
+}
+
+async function readDurableDraftKingsNetworkSplits(
+  sport: Sport,
+): Promise<DraftKingsNetworkSplitFeed | null> {
+  try {
+    const current = await fetchDraftKingsNetworkSplits({ sport });
+    // The provider can return a successful HTML shell with no usable games.
+    // Never let that erase a previously complete cross-instance fallback.
+    if (current && current.games.length > 0) {
+      const { upsertLabResponseSnapshot } = await import("@/lib/services/labResponseSnapshots");
+      await upsertLabResponseSnapshot({
+        snapshotKey: durableSnapshotKey(sport),
+        kind: "daily_edge",
+        payload: current as unknown as Record<string, unknown>,
+        ttlMs: DRAFTKINGS_NETWORK_DURABLE_TTL_MS,
+        staleMs: DRAFTKINGS_NETWORK_DURABLE_STALE_MS,
+        sport,
+        source: "draftkings_network_splits",
+        payloadVersion: DRAFTKINGS_NETWORK_DURABLE_RELEASE,
+      });
+      return current;
+    }
+  } catch (error) {
+    console.warn(`DraftKings Network current split fetch failed: ${error instanceof Error ? error.message : String(error)}`);
+  }
+
+  const { readLatestLabResponseSnapshot } = await import("@/lib/services/labResponseSnapshots");
+  const stored = await readLatestLabResponseSnapshot<Record<string, unknown>>(durableSnapshotKey(sport));
+  return validateDurableDraftKingsNetworkSplitFeed(stored?.payload, sport);
+}
+
+export function validateDurableDraftKingsNetworkSplitFeed(
+  value: unknown,
+  sport: Sport,
+): DraftKingsNetworkSplitFeed | null {
+  if (!value || typeof value !== "object") return null;
+  const feed = value as Partial<DraftKingsNetworkSplitFeed>;
+  const expectedSport = SPORT_EVENT_GROUP[sport];
+  const fetchedAtMs = Date.parse(feed.fetchedAt ?? "");
+  if (
+    feed.source !== "draftkings_network" ||
+    feed.sport !== expectedSport ||
+    !Array.isArray(feed.games) ||
+    feed.games.length === 0 ||
+    !Number.isFinite(fetchedAtMs) ||
+    Date.now() - fetchedAtMs > durableMaximumAgeMs(sport)
+  ) return null;
+  return feed as DraftKingsNetworkSplitFeed;
+}
 
 export function parseDraftKingsNetworkSplitsHtml(html: string): DraftKingsNetworkSplitGame[] {
   const starts = Array.from(html.matchAll(/<div\s+class="tb-se(?:\s[^"]*)?"[^>]*>/gi));

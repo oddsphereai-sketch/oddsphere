@@ -1043,6 +1043,23 @@ const sharpMovementRows = sharpMovementMember.snapshot.games[0]!.markets.total.r
 assert.equal(sharpMovementRows?.[0]?.moneyDeltaPp, 6, "CFB split display shows the full money move since first tracked");
 assert.equal(sharpMovementRows?.[0]?.betsDeltaPp, -4, "CFB split display shows the full ticket move since first tracked");
 assert.equal(sharpMovementRows?.[0]?.comparisonObservedAt, firstTrackedSharpPayload.capturedAt);
+const sharpOutagePayload = structuredClone(sharpPayload);
+sharpOutagePayload.capturedAt = new Date(Date.parse(lockedAt) + 5 * 60_000).toISOString();
+sharpOutagePayload.market.sharpApiSplits = [];
+sharpOutagePayload.market.sharpApiSplitsStatus = "request_failed";
+sharpOutagePayload.coverage.sharpApiSplits = false;
+const sharpOutageMember = buildCfbMemberFixture([
+  { ...evidence, id: "sharp-split-before-outage", payloadSha256: hashCfbForwardEvidencePayload(sharpPayload), payload: sharpPayload },
+  {
+    ...evidence,
+    id: "sharp-split-provider-outage",
+    capturedAt: sharpOutagePayload.capturedAt,
+    payloadSha256: hashCfbForwardEvidencePayload(sharpOutagePayload),
+    payload: sharpOutagePayload,
+  },
+]);
+assert.equal(sharpOutageMember.snapshot.games[0]!.markets.total.sharpBookAvailability?.status, "complete");
+assert.equal(sharpOutageMember.snapshot.games[0]!.markets.total.recommendationDecision?.sharpBookSplits?.rows[0]?.moneyPct, 41);
 const draftKingsSplitPayload = structuredClone(sharpPayload);
 draftKingsSplitPayload.market.sharpApiSplits![0]!.sportsbook = "draftkings";
 draftKingsSplitPayload.market.sharpApiSplits![0]!.sourceSemantics = "public_recreational";
