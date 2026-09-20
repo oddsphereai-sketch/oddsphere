@@ -60,15 +60,28 @@ assert.equal(cfb.games[0]!.markets.moneyline.sportsbookSplits?.rows[0]?.moneyPct
 assert.equal(cfb.games[0]!.markets.moneyline.recommendationDecision?.sharpBookSplits, null, "overlay stays display-only");
 
 const mlb = response("mlb", "PHI", "NYM", "Philadelphia Phillies", "New York Mets");
-const mlbResult = applySharpApiCurrentSplitOverlay(mlb, {
+const mlbFeed: NonNullable<Parameters<typeof applySharpApiCurrentSplitOverlay>[1]> = {
   source: "sharpapi_current_splits",
   release: "sharpapi_current_splits_2026_09_20_r1_durable_overlay",
   sport: "mlb",
   fetchedAt: "2026-09-20T20:04:00.000Z",
   rows: [complete("mlb", "draftkings", "Philadelphia Phillies", "New York Mets", "2026-09-20T20:04:00.000Z")],
-}, now);
+};
+const mlbResult = applySharpApiCurrentSplitOverlay(mlb, mlbFeed, now);
 assert.deepEqual(mlbResult, { matchedGames: 1, populatedMarkets: 2 });
 assert.equal(mlb.games[0]!.markets.first_inning.sportsbookSplits, null, "MLB full-game spread cannot populate first inning");
+
+const legacyMlbSection = mlb.games[0]!.markets.moneyline.sportsbookSplits!;
+legacyMlbSection.lastUpdated = mlbFeed.fetchedAt;
+for (const row of legacyMlbSection.rows) {
+  row.observedAt = mlbFeed.fetchedAt;
+  row.staleAfterMinutes = 15;
+}
+const sanitizedMlb = applySharpApiCurrentSplitOverlay(mlb, mlbFeed, now);
+assert.equal(sanitizedMlb.populatedMarkets, 1, "an equal-source SharpAPI section must shed cached stale-state presentation fields");
+assert.equal(mlb.games[0]!.markets.moneyline.sportsbookSplits?.lastUpdated, null);
+assert.equal(mlb.games[0]!.markets.moneyline.sportsbookSplits?.rows[0]?.observedAt, null);
+assert.equal(mlb.games[0]!.markets.moneyline.sportsbookSplits?.rows[0]?.staleAfterMinutes, undefined);
 
 const incomplete = response("cfb", "LIB", "CCU", "Liberty Flames", "Coastal Carolina Chanticleers");
 const incompleteRow = complete("ncaaf", "betmgm", "Liberty Flames", "Coastal Carolina Chanticleers", "2026-09-20T20:04:00.000Z");

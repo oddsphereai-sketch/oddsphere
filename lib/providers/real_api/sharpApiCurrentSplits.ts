@@ -288,7 +288,10 @@ function shouldReplace(existing: MarketSplitDisplaySection, incoming: MarketSpli
   };
   const priorityDelta = priority(incoming.label) - priority(existing.label);
   if (priorityDelta !== 0) return priorityDelta < 0;
-  return sectionSourceTimestamp(incoming) > sectionSourceTimestamp(existing);
+  const incomingAt = sectionSourceTimestamp(incoming);
+  const existingAt = sectionSourceTimestamp(existing);
+  return incomingAt > existingAt ||
+    (incomingAt === existingAt && hasMemberFacingFreshnessState(existing));
 }
 
 function sectionIsCurrent(section: MarketSplitDisplaySection): boolean {
@@ -308,6 +311,12 @@ function sectionSourceTimestamp(section: MarketSplitDisplaySection): number {
   return rowTimestamps.length > 0
     ? Math.max(...rowTimestamps)
     : Date.parse(section.lastUpdated ?? "");
+}
+
+function hasMemberFacingFreshnessState(section: MarketSplitDisplaySection): boolean {
+  return section.lastUpdated !== null || section.rows.some((row) =>
+    row.observedAt != null || row.staleAfterMinutes != null || row.isStale === true
+  );
 }
 
 function rowMatchesGame(row: Json, game: DailyEdgeGameDto, slateDate: string, sport: SupportedSport): boolean {
