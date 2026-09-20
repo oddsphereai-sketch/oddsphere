@@ -1137,7 +1137,7 @@ check(
 check(
   "public consensus and sharp book split cards retain their established presentation while Circa-priority fill-ins remain display-only",
   candidateSource.includes("const sportsbook = market.sportsbookSplits ?? null") &&
-    candidateSource.includes("const selectedSharp = currentSharp ?? (sportsbook?.rows.length ? sportsbook : sharp)") &&
+    candidateSource.includes("const selectedSharp = sportsbook?.rows.length ? sportsbook : currentSharp ?? sharp") &&
     candidateSource.includes("const selectedSharpIsSportsbook = selectedSharp !== null && selectedSharp === sportsbook") &&
     candidateSource.includes('source="PUBLIC CONSENSUS"') &&
     candidateSource.includes('displayedSharp.label === "Sharp Book Signal" ? "SHARP SPLITS" : "SHARP BOOK SPLITS"') &&

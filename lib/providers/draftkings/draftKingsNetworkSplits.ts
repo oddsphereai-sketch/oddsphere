@@ -7,6 +7,11 @@ import {
   populateDailyEdgeSharpApiCurrentSplits,
   sanitizeRetainedSharpSplitPresentation,
 } from "@/lib/providers/real_api/sharpApiCurrentSplits";
+import {
+  loadDailyEdgeSharpBookSplitContinuity,
+  persistDailyEdgeSharpBookSplitContinuity,
+  reconcileDailyEdgeSharpBookSplitAuthority,
+} from "@/lib/providers/sharpBookSplitContinuity";
 import { unstable_cache } from "next/cache";
 
 const DRAFTKINGS_NETWORK_SPLITS_URL =
@@ -22,6 +27,7 @@ const DRAFTKINGS_NETWORK_DURABLE_RELEASE =
   "draftkings_network_splits_2026_09_20_r2_durable_last_known_good" as const;
 const DRAFTKINGS_NETWORK_DURABLE_TTL_MS = 5 * 60 * 1000;
 const DRAFTKINGS_NETWORK_DURABLE_STALE_MS = 10 * 24 * 60 * 60 * 1000;
+const SOURCE_FAILOVER_GRACE_MS = 3 * 60 * 60 * 1000;
 
 type DraftKingsNetworkSport =
   | "MLB"
@@ -44,6 +50,7 @@ export type DraftKingsNetworkSplitSide = {
 export type DraftKingsNetworkSplitMarket = {
   market: DraftKingsNetworkMarket;
   sides: [DraftKingsNetworkSplitSide, DraftKingsNetworkSplitSide];
+  observedAt?: string;
 };
 
 export type DraftKingsNetworkSplitGame = {
@@ -214,31 +221,56 @@ function durableSnapshotKey(sport: Sport): string {
 async function readDurableDraftKingsNetworkSplits(
   sport: Sport,
 ): Promise<DraftKingsNetworkSplitFeed | null> {
+  const { readLatestLabResponseSnapshot, upsertLabResponseSnapshot } = await import("@/lib/services/labResponseSnapshots");
+  const stored = await readLatestLabResponseSnapshot<Record<string, unknown>>(durableSnapshotKey(sport));
+  const previous = validateDurableDraftKingsNetworkSplitFeed(stored?.payload, sport);
   try {
     const current = await fetchDraftKingsNetworkSplits({ sport });
     // The provider can return a successful HTML shell with no usable games.
     // Never let that erase a previously complete cross-instance fallback.
     if (current && current.games.length > 0) {
-      const { upsertLabResponseSnapshot } = await import("@/lib/services/labResponseSnapshots");
+      const merged = mergeDraftKingsNetworkFeeds(previous, current);
       await upsertLabResponseSnapshot({
         snapshotKey: durableSnapshotKey(sport),
         kind: "daily_edge",
-        payload: current as unknown as Record<string, unknown>,
+        payload: merged as unknown as Record<string, unknown>,
         ttlMs: DRAFTKINGS_NETWORK_DURABLE_TTL_MS,
         staleMs: DRAFTKINGS_NETWORK_DURABLE_STALE_MS,
         sport,
         source: "draftkings_network_splits",
         payloadVersion: DRAFTKINGS_NETWORK_DURABLE_RELEASE,
       });
-      return current;
+      return merged;
     }
   } catch (error) {
     console.warn(`DraftKings Network current split fetch failed: ${error instanceof Error ? error.message : String(error)}`);
   }
 
-  const { readLatestLabResponseSnapshot } = await import("@/lib/services/labResponseSnapshots");
-  const stored = await readLatestLabResponseSnapshot<Record<string, unknown>>(durableSnapshotKey(sport));
-  return validateDurableDraftKingsNetworkSplitFeed(stored?.payload, sport);
+  return previous;
+}
+
+function mergeDraftKingsNetworkFeeds(
+  previous: DraftKingsNetworkSplitFeed | null,
+  current: DraftKingsNetworkSplitFeed,
+): DraftKingsNetworkSplitFeed {
+  const stamp = (feed: DraftKingsNetworkSplitFeed) => feed.games.map((game) => ({
+    ...game,
+    markets: Object.fromEntries(Object.entries(game.markets).map(([key, market]) => [
+      key,
+      market ? { ...market, observedAt: market.observedAt ?? feed.fetchedAt } : market,
+    ])) as DraftKingsNetworkSplitGame["markets"],
+  }));
+  if (!previous) return { ...current, games: stamp(current) };
+  const games = new Map(stamp(previous).map((game) => [game.providerEventId, game] as const));
+  for (const game of stamp(current)) {
+    const prior = games.get(game.providerEventId);
+    games.set(game.providerEventId, prior ? {
+      ...prior,
+      ...game,
+      markets: { ...prior.markets, ...game.markets },
+    } : game);
+  }
+  return { ...current, games: [...games.values()] };
 }
 
 export function validateDurableDraftKingsNetworkSplitFeed(
@@ -347,9 +379,10 @@ export async function populateDailyEdgeDraftKingsFallback(
   response: DailyEdgeResponse,
   sport: Sport,
 ): Promise<DraftKingsNetworkOverlayResult> {
-  // Both reads are one-per-sport cached operations. Run them together so the
-  // additional current-source continuity check cannot stack its deadline on
-  // top of the existing DraftKings Network fallback during a cold fill.
+  // Apply the prior display authority before evaluating current sources. This
+  // makes the source-hold decision deterministic rather than dependent on
+  // which concurrent provider read happens to mutate the response first.
+  const continuity = await loadDailyEdgeSharpBookSplitContinuity(response, sport);
   const [current, durableFeed] = await Promise.all([
     populateDailyEdgeSharpApiCurrentSplits(response, sport),
     readCachedDraftKingsNetworkSplits(sport).catch((error) => {
@@ -358,10 +391,12 @@ export async function populateDailyEdgeDraftKingsFallback(
     }),
   ]);
   const durable = applyDraftKingsNetworkSplitFallback(response, durableFeed);
+  reconcileDailyEdgeSharpBookSplitAuthority(response);
+  await persistDailyEdgeSharpBookSplitContinuity(response, sport, continuity.feed);
   sanitizeRetainedSharpSplitPresentation(response);
   return {
-    matchedGames: Math.max(current.matchedGames, durable.matchedGames),
-    populatedMarkets: current.populatedMarkets + durable.populatedMarkets,
+    matchedGames: Math.max(current.matchedGames, durable.matchedGames, continuity.matchedGames),
+    populatedMarkets: current.populatedMarkets + durable.populatedMarkets + continuity.populatedMarkets,
   };
 }
 
@@ -373,7 +408,7 @@ function attachMarketFallback(
 ): 0 | 1 {
   const market = game.markets[slot];
   if (!market || !source) return 0;
-  const section = splitSection(game, source, fetchedAt);
+  const section = splitSection(game, source, source.observedAt ?? fetchedAt);
   if (!section) return 0;
   const existing = market.sportsbookSplits;
   // The display-only hierarchy is Circa (held separately in sharpBookSplits),
@@ -413,16 +448,23 @@ function splitSection(
     }];
   });
   if (rows.length !== 2 || rows[0]!.side === rows[1]!.side) return null;
-  return { label: "DraftKings Splits", rows, signal: null, lastUpdated: null };
+  return {
+    label: "Sharp Book Splits",
+    sourceBook: "draftkings_network",
+    sourceObservedAt: fetchedAt,
+    rows,
+    signal: null,
+    lastUpdated: null,
+  };
 }
 
 function draftKingsShouldReplace(existing: MarketSplitDisplaySection, incoming: MarketSplitDisplaySection): boolean {
   const existingCurrent = sectionIsCurrent(existing);
   const incomingCurrent = sectionIsCurrent(incoming);
   if (existingCurrent !== incomingCurrent) return incomingCurrent;
-  if (existing.label === "Sharp Book Splits") return false;
-  if (existing.label === "BetMGM Splits") return true;
-  if (existing.label !== "DraftKings Splits") return false;
+  if (existing.sourceBook === "circa" || (existing.label === "Sharp Book Splits" && !existing.sourceBook)) return false;
+  if (existing.sourceBook === "betmgm" || existing.label === "BetMGM Splits") return true;
+  if (existing.sourceBook !== "draftkings" && existing.sourceBook !== "draftkings_network" && existing.label !== "DraftKings Splits") return false;
   const incomingAt = sectionSourceTimestamp(incoming);
   const existingAt = sectionSourceTimestamp(existing);
   return incomingAt > existingAt ||
@@ -432,11 +474,13 @@ function draftKingsShouldReplace(existing: MarketSplitDisplaySection, incoming: 
 function sectionIsCurrent(section: MarketSplitDisplaySection): boolean {
   const observedAt = sectionSourceTimestamp(section);
   return Number.isFinite(observedAt) &&
-    Date.now() - observedAt <= 15 * 60 * 1000 &&
+    Date.now() - observedAt <= SOURCE_FAILOVER_GRACE_MS &&
     !section.rows.some((row) => row.isStale === true);
 }
 
 function sectionSourceTimestamp(section: MarketSplitDisplaySection): number {
+  const internal = Date.parse(section.sourceObservedAt ?? "");
+  if (Number.isFinite(internal)) return internal;
   const rowTimestamps = section.rows
     .map((row) => Date.parse(row.freshnessCheckedAt ?? row.observedAt ?? ""))
     .filter(Number.isFinite);
@@ -562,4 +606,4 @@ function pageSignature(games: DraftKingsNetworkSplitGame[]): string {
   return games.map((game) => game.providerEventId).sort().join("|");
 }
 
-export const __TEST__ = { providerTeamMatches, gameMonthDay };
+export const __TEST__ = { providerTeamMatches, gameMonthDay, mergeDraftKingsNetworkFeeds };

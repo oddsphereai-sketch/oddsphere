@@ -5,6 +5,7 @@ import {
   applySharpApiCurrentSplitOverlay,
   sanitizeRetainedSharpSplitPresentation,
   validateSharpApiCurrentSplitFeed,
+  __TEST__ as sharpApiCurrentTest,
 } from "../lib/providers/real_api/sharpApiCurrentSplits";
 
 const emptyMarket = (): MarketEdgeDto => ({
@@ -117,6 +118,13 @@ const feed = {
 assert.ok(validateSharpApiCurrentSplitFeed(feed, "cfb"));
 assert.equal(validateSharpApiCurrentSplitFeed({ ...feed, rows: [] }, "cfb"), null, "an empty provider response cannot erase durable coverage");
 assert.equal(validateSharpApiCurrentSplitFeed({ ...feed, sport: "nfl" }, "cfb"), null, "durable coverage cannot cross sports");
+
+const retainedComplete = complete("ncaaf", "circa", "Liberty Flames", "Coastal Carolina Chanticleers", "2026-09-20T19:00:00.000Z");
+const partialUpdate = complete("ncaaf", "circa", "Liberty Flames", "Coastal Carolina Chanticleers", "2026-09-20T20:00:00.000Z");
+partialUpdate.total.handle_pct = { over: null, under: null } as unknown as typeof partialUpdate.total.handle_pct;
+const mergedFeed = sharpApiCurrentTest.mergeCurrentSplitFeeds({ ...feed, rows: [retainedComplete] }, { ...feed, fetchedAt: "2026-09-20T20:00:00.000Z", rows: [partialUpdate] });
+assert.deepEqual(mergedFeed.rows[0]?.total, retainedComplete.total, "a newer partial provider row cannot erase the last complete market pair");
+assert.equal(mergedFeed.rows[0]?.fetched_at, partialUpdate.fetched_at, "new row identity and fetch time remain current for unaffected markets");
 assert.equal(stale.games[0]!.markets.moneyline.sportsbookSplits?.lastUpdated, null, "retained fallback adds no freshness copy");
 assert.equal(stale.games[0]!.markets.moneyline.sportsbookSplits?.rows[0]?.observedAt, null, "retained fallback adds no stale timestamp label");
 assert.equal(
