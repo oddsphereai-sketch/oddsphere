@@ -436,7 +436,7 @@ assert.match(productionPipeline, /\.eq\("model_version", options\.modelRelease \
 assert.match(productionPipeline, /\.in\("id", gameIds\)/, "T-60 discovery must resolve due fixtures from the release-owned game IDs");
 assert.match(productionPipeline, /scheduled_lock_at: lockAt/);
 assert.match(productionPipeline, /locked_at: shouldLock \? input\.now\.toISOString\(\) : null/);
-assert.match(productionPipeline, /EPL_TRACKING_LOCK_POLICY_RELEASE\s*=\s*[\s\S]*epl_tracking_lock_2026_09_07_r1_prior_priced_tuple_fallback/);
+assert.match(productionPipeline, /EPL_TRACKING_LOCK_POLICY_RELEASE\s*=\s*[\s\S]*epl_tracking_lock_2026_09_20_r2_verified_member_reconstruction/);
 assert.match(productionPipeline.slice(productionPipeline.indexOf("export const EPL_PIPELINE_CONFIG"), productionPipeline.indexOf("export type EplLockCandidate")), /preservePriorPricedTupleOnMissingLock:\s*true[\s\S]*returnPreservedLockedRecordIds:\s*true/, "EPL must lock the last verified published tuple when a provider market disappears at T-60");
 assert.match(productionPipeline, /config\.preservePriorPricedTupleOnMissingLock[\s\S]*row\.locked_at && row\.held && prior\?\.held === false[\s\S]*update\(\{ locked_at: row\.locked_at \}\)/, "EPL fallback freezes the prior tuple without rewriting its prediction or price");
 assert.match(productionPipeline, /trackedMarket: "match_result"/);
@@ -460,7 +460,12 @@ assert.match(lockRoute, /findEplGamesEnteringLock/);
 assert.match(lockRoute, /predictions\.priorTuplesLocked[\s\S]*prior_priced_tuples_locked:\s*predictions\.priorTuplesLocked/, "fallback locks must count as writes and remain visible in cron telemetry");
 assert.match(memberStore, /current-week/);
 assert.match(memberStore, /readLatestLabResponseSnapshot/, "EPL reads need a bounded emergency fallback when a valid weekly snapshot outlives its cache deadline");
-assert.match(memberStore, /epl_member_snapshot_lifecycle_2026_08_24_r2/, "EPL continuity behavior must carry its own immutable lifecycle release");
+assert.match(memberStore, /epl_member_snapshot_lifecycle_2026_09_20_r3_verified_locked_record_reconstruction/, "EPL continuity behavior must carry its own immutable lifecycle release");
+for (const route of [refreshRoute, lockRoute]) {
+  assert.match(route, /reconstructVerifiedEplLockedGames/, "every EPL publisher must reconstruct due locked games from the verified four-market DB cohort");
+  assert.match(route, /authoritativeLockedProviderIds:\s*lockVerification\.completeProviderIds/, "only DB-verified locked games may replace a prior locked member card");
+  assert.match(route, /incomplete verified locked EPL games/, "a partial locked cohort must fail publication closed");
+}
 assert.match(foundationStore, /historical-foundation::through-2025/);
 assert.match(slateBuilder, /EPL_FOUNDATION_CACHE_WRITES_ENABLED/);
 assert.match(candidatePage, /PREMIER_LEAGUE_DAILY_EDGE_ENABLED/);

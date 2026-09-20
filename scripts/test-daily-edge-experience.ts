@@ -1043,7 +1043,7 @@ const footballEvidenceSource = readFileSync(
 );
 const sportSwitchSource = readFileSync("app/lab/lib/dailyEdgeSportSwitch.ts", "utf8");
 const candidatePageSource = readFileSync(
-  "app/dev/experience-preview/page.tsx",
+  "app/dev/experience-preview/previewData.ts",
   "utf8",
 );
 const availabilityRouteSource = readFileSync(

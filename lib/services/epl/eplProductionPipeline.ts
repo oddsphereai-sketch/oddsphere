@@ -9,7 +9,7 @@ export const EPL_COMPETITION = "english_premier_league" as const;
 export const EPL_LOCK_MINUTES = 60;
 export const EPL_EXTERNAL_ID_OFFSET = 20_000_000;
 export const EPL_TRACKING_LOCK_POLICY_RELEASE =
-  "epl_tracking_lock_2026_09_07_r1_prior_priced_tuple_fallback" as const;
+  "epl_tracking_lock_2026_09_20_r2_verified_member_reconstruction" as const;
 
 const providerExternalId = (id: number, offset = EPL_EXTERNAL_ID_OFFSET) => offset + id;
 
