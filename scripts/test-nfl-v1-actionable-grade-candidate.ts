@@ -56,20 +56,27 @@ const targetExcludedBooks = comparableCurrentBooks.map((book, index) => ({
   spread: { ...book.spread!, homeLine: [-3, -3.5, -3.5, -4, -4, -4.5][index]!, awayLine: -[-3, -3.5, -3.5, -4, -4, -4.5][index]! },
   total: { ...book.total!, line: [44, 44.5, 44.5, 45, 45, 45.5][index]! },
 }));
-assert.deepEqual(resolveNflTargetExcludedMarketAnchor({
+const targetExcludedAnchor = resolveNflTargetExcludedMarketAnchor({
   books: targetExcludedBooks,
   marginExcludedSportsbooks: ["fanduel", "draftkings"],
   totalExcludedSportsbooks: ["betmgm"],
   evaluatedAt,
-}), {
+});
+assert.deepEqual(targetExcludedAnchor && {
+  ...targetExcludedAnchor,
+  totalOverFairProbability: undefined,
+}, {
   release: NFL_TARGET_EXCLUDED_MARKET_OUTCOME_RELEASE,
   homeMargin: 4,
   total: 44.5,
+  totalOverFairProbability: undefined,
   marginFamilyCount: 4,
   totalFamilyCount: 5,
   marginExcludedSportsbooks: ["draftkings", "fanduel"],
   totalExcludedSportsbooks: ["betmgm"],
 });
+assert.ok(targetExcludedAnchor && targetExcludedAnchor.totalOverFairProbability > 0.48 &&
+  targetExcludedAnchor.totalOverFairProbability < 0.51);
 assert.equal(resolveNflTargetExcludedMarketAnchor({
   books: targetExcludedBooks,
   marginExcludedSportsbooks: ["fanduel", "draftkings", "caesars", "betmgm"],
@@ -82,6 +89,47 @@ assert.equal(resolveNflTargetExcludedMarketAnchor({
   totalExcludedSportsbooks: [],
   evaluatedAt: "2026-08-25T13:22:00.000Z",
 }), null, "stale target-excluded landmarks cannot author the PMF");
+assert.equal(resolveNflTargetExcludedMarketAnchor({
+  books: targetExcludedBooks,
+  marginExcludedSportsbooks: [],
+  totalExcludedSportsbooks: [],
+  evaluatedAt,
+  requireSameLineTotalPrices: true,
+}), null, "priced-neutral totals require three target-excluded books at the exact consensus line");
+
+const pricedNeutralBooks = comparableCurrentBooks.slice(0, 4).map((book) => ({
+  ...book,
+  total: { ...book.total!, line: 44.5 },
+}));
+const pricedNeutralAnchor = resolveNflTargetExcludedMarketAnchor({
+  books: pricedNeutralBooks,
+  marginExcludedSportsbooks: [],
+  totalExcludedSportsbooks: [],
+  evaluatedAt,
+  requireSameLineTotalPrices: true,
+});
+assert.ok(pricedNeutralAnchor);
+const pricedNeutralForecast = buildNflMarketEvidenceOutcomeForecast({
+  baseForecast: getNflV1WeekOneOutcomeForecast({
+    providerGameId: "priced-neutral-test",
+    awayTeam,
+    homeTeam,
+    weeklyFallback: { projectedHomeMargin: 3.5, marketTotal: 44.5 },
+  }),
+  footballHomeMargin: 3.5,
+  current: pricedNeutralBooks[0]!,
+  playbookLine: null,
+  playbookSplits: null,
+  sharpSplits: null,
+  marketOverProbability: pricedNeutralAnchor.totalOverFairProbability,
+  evaluatedAt,
+});
+const pricedNeutralProbability = nflV1WeekOneLineProbabilities({
+  forecast: pricedNeutralForecast,
+  homeSpread: pricedNeutralBooks[0]!.spread!.homeLine,
+  totalLine: 44.5,
+}).total.overProbability;
+assert.ok(Math.abs(pricedNeutralProbability - pricedNeutralAnchor.totalOverFairProbability) < 0.000002);
 
 const targetExcludedProduction = resolveNflTargetExcludedProduction({
   providerGameId,
@@ -195,11 +243,12 @@ const total = candidate.evaluatedBets.find((decision) => decision.market === "to
 assert.equal(candidate.outcomeConfidence.find((decision) => decision.market === "moneyline")?.likelySide, "SEA");
 assert.ok(outcome.expectedHomeScore > outcome.expectedAwayScore);
 assert.ok(outcome.homeWinProbability > outcome.awayWinProbability);
-assert.equal(moneyline.grade, "No Play");
+assert.equal(moneyline.grade, "Best Angle");
 assert.equal(moneyline.side, "SEA");
-assert.equal(moneyline.modelProbability, outcome.homeWinProbability);
+assert.equal(moneyline.modelProbability, 0.65);
+assert.equal(moneyline.modelRelease, NFL_R6_MONEYLINE_MODEL_RELEASE);
 assert.ok(moneyline.modelProbability > 0.5);
-assert.ok(moneyline.expectedValue < 0);
+assert.ok(moneyline.expectedValue > 0);
 assert.equal(spread.modelRelease, NFL_V1_EVENT_CONTAINED_SPREAD_MODEL_RELEASE);
 assert.equal(spread.grade, "Lean");
 assert.equal(spread.modelProbability, reference.spread.awayCoverProbability);
@@ -283,7 +332,7 @@ const circaAway = buildNflMarketEvidenceOutcomeForecast({
   sharpSplits: sharpSplitSet({ homeMoneyPct: 20, homeBetsPct: 70 }),
   evaluatedAt,
 });
-assert.equal(NFL_V1_MARKET_EVIDENCE_OUTCOME_RELEASE, "nfl_v1_market_evidence_outcome_2026_09_16_r4_sharp_league_contract");
+assert.equal(NFL_V1_MARKET_EVIDENCE_OUTCOME_RELEASE, "nfl_v1_market_evidence_outcome_2026_09_20_r5_priced_neutral_total");
 assert.equal(NFL_V1_MARKET_WEIGHT, 0.75);
 assert.equal(NFL_V1_SHARP_SPLIT_MAX_SHIFT_POINTS, 1.5);
 assert.equal(NFL_V1_PUBLIC_SPLIT_MAX_SHIFT_POINTS, 0.75);
@@ -334,7 +383,12 @@ const marketOnlyBundle = buildNflV1ActionableGradeBundle({
   gameStartsAt,
   current: flipBooks[0]!,
   comparableCurrentBooks: flipBooks,
-  shadowMoneyline: { ...shadow(), providerGameId: "market-side-reselection-test" },
+  shadowMoneyline: {
+    ...shadow(),
+    providerGameId: "market-side-reselection-test",
+    grade: "Held",
+    reason: "exact_price_does_not_clear_candidate_thresholds",
+  },
   outcomeForecast: marketOnly,
 });
 const circaAwayBundle = buildNflV1ActionableGradeBundle({
@@ -344,7 +398,12 @@ const circaAwayBundle = buildNflV1ActionableGradeBundle({
   gameStartsAt,
   current: flipBooks[0]!,
   comparableCurrentBooks: flipBooks,
-  shadowMoneyline: { ...shadow(), providerGameId: "market-side-reselection-test" },
+  shadowMoneyline: {
+    ...shadow(),
+    providerGameId: "market-side-reselection-test",
+    grade: "Held",
+    reason: "exact_price_does_not_clear_candidate_thresholds",
+  },
   outcomeForecast: circaAway,
 });
 assert.equal(marketOnlyBundle.evaluatedBets.find((decision) => decision.market === "spread")?.side, homeTeam);
@@ -394,7 +453,12 @@ const underdogValueBundle = buildNflV1ActionableGradeBundle({
   gameStartsAt,
   current: underdogValueBooks[0]!,
   comparableCurrentBooks: underdogValueBooks,
-  shadowMoneyline: { ...shadow(), providerGameId: "market-side-reselection-test" },
+  shadowMoneyline: {
+    ...shadow(),
+    providerGameId: "market-side-reselection-test",
+    grade: "Held",
+    reason: "exact_price_does_not_clear_candidate_thresholds",
+  },
   outcomeForecast: underdogValueForecast,
 });
 const underdogValueMoneyline = underdogValueBundle.evaluatedBets.find((decision) => decision.market === "moneyline")!;
@@ -418,7 +482,12 @@ const unqualifiedUnderdogBundle = buildNflV1ActionableGradeBundle({
   gameStartsAt,
   current: unqualifiedUnderdogBooks[0]!,
   comparableCurrentBooks: unqualifiedUnderdogBooks,
-  shadowMoneyline: { ...shadow(), providerGameId: "market-side-reselection-test" },
+  shadowMoneyline: {
+    ...shadow(),
+    providerGameId: "market-side-reselection-test",
+    grade: "Held",
+    reason: "exact_price_does_not_clear_candidate_thresholds",
+  },
   outcomeForecast: underdogValueForecast,
 });
 const unqualifiedUnderdogMoneyline = unqualifiedUnderdogBundle.evaluatedBets.find((decision) => decision.market === "moneyline")!;

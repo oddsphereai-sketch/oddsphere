@@ -1,4 +1,4 @@
-/** SELECT-only Week 1 replay for the NFL actionable-grade candidate. */
+/** SELECT-only weekly replay for the NFL actionable-grade candidate. */
 
 import { createClient } from "@supabase/supabase-js";
 import {
@@ -21,15 +21,20 @@ import {
   buildNflMarketEvidenceOutcomeForecast,
   getNflV1WeekOneOutcomeForecast,
 } from "../../lib/services/football/nflV1WeekOneOutcome";
+import { resolveNflTargetExcludedProduction } from "../../lib/services/football/nflTargetExcludedMarketOutcome";
 
 async function main() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!url || !serviceKey) throw new Error("Supabase read credentials are required.");
   const client = createClient(url, serviceKey, { auth: { persistSession: false } });
+  const week = Number(argumentValue("--week") ?? "1");
+  if (!Number.isInteger(week) || week < 1 || week > 22) {
+    throw new Error(`Invalid --week value: ${week}.`);
+  }
   const stored = [
-    ...await readPreviousNflForwardEvidence({ client, season: 2026, week: 1 }),
-    ...await readNflForwardEvidence({ client, season: 2026, week: 1 }),
+    ...await readPreviousNflForwardEvidence({ client, season: 2026, week }),
+    ...await readNflForwardEvidence({ client, season: 2026, week }),
   ];
   const capturedAt = argumentValue("--captured-at");
   if (capturedAt && !Number.isFinite(Date.parse(capturedAt))) {
@@ -40,10 +45,21 @@ async function main() {
       .sort((first, second) => first.payload.game.scheduledStart.localeCompare(second.payload.game.scheduledStart))
     : latestRows(stored);
   if (selected.length !== 16) {
-    throw new Error(`Expected 16 Week 1 games${capturedAt ? ` at ${capturedAt}` : ""}; received ${selected.length}.`);
+    throw new Error(`Expected 16 Week ${week} games${capturedAt ? ` at ${capturedAt}` : ""}; received ${selected.length}.`);
   }
 
   const candidateFixtureRows: NflForwardStoredEvidence[] = [];
+  const pricedNeutralRows: Array<{
+    game: string;
+    market: "moneyline" | "spread" | "total";
+    previousSide: string;
+    candidateSide: string;
+    previousGrade: string;
+    candidateGrade: string;
+    probability: number;
+    price: number;
+    targetExclusionStatus: string;
+  }> = [];
   const projectionChanges: Array<{
     game: string;
     previousAway: number;
@@ -78,7 +94,7 @@ async function main() {
           }
         : undefined,
     });
-    const outcome = shadow.footballProjection
+    const incumbentOutcome = shadow.footballProjection
       ? buildNflMarketEvidenceOutcomeForecast({
           baseForecast: baseOutcome,
           footballHomeMargin: shadow.footballProjection.projectedHomeMargin,
@@ -90,6 +106,39 @@ async function main() {
           evaluatedAt: payload.capturedAt,
         })
       : baseOutcome;
+    const pricedNeutral = resolveNflTargetExcludedProduction({
+      providerGameId: payload.game.providerGameId,
+      awayTeam: payload.game.away.abbreviation,
+      homeTeam: payload.game.home.abbreviation,
+      gameStartsAt: payload.game.scheduledStart,
+      evaluatedAt: payload.capturedAt,
+      baseOutcome,
+      incumbentOutcome,
+      current: payload.market.current,
+      comparableCurrentBooks: payload.market.comparableCurrentBooks,
+      shadowMoneyline: shadow,
+      playbookLine: payload.market.playbookLine,
+      playbookSplits: payload.market.playbookSplits,
+      sharpSplits: payload.market.sharpApiSplits,
+      pricedNeutralTotalCandidate: true,
+    });
+    const outcome = pricedNeutral.outcome;
+    const previousByMarketForPricedNeutral = new Map(payload.decisions.evaluatedBets.map((decision) => [decision.market, decision]));
+    for (const decision of pricedNeutral.production.evaluatedBets) {
+      const previous = previousByMarketForPricedNeutral.get(decision.market);
+      if (!previous) continue;
+      pricedNeutralRows.push({
+        game: `${payload.game.away.abbreviation}@${payload.game.home.abbreviation}`,
+        market: decision.market,
+        previousSide: previous.side,
+        candidateSide: decision.side,
+        previousGrade: previous.grade,
+        candidateGrade: decision.grade,
+        probability: decision.modelProbability,
+        price: decision.evaluatedQuote.price,
+        targetExclusionStatus: pricedNeutral.targetExclusion.status,
+      });
+    }
     const marketOnlyOutcome = shadow.footballProjection
       ? buildNflMarketEvidenceOutcomeForecast({
           baseForecast: baseOutcome,
@@ -114,16 +163,7 @@ async function main() {
           evaluatedAt: payload.capturedAt,
         })
       : baseOutcome;
-    const candidate = buildNflV1ActionableGradeBundle({
-      providerGameId: payload.game.providerGameId,
-      awayTeam: payload.game.away.abbreviation,
-      homeTeam: payload.game.home.abbreviation,
-      gameStartsAt: payload.game.scheduledStart,
-      current: payload.market.current,
-      comparableCurrentBooks: payload.market.comparableCurrentBooks,
-      shadowMoneyline: shadow,
-      outcomeForecast: outcome,
-    });
+    const candidate = pricedNeutral.production;
     const stagedBundle = (forecast: typeof outcome) => buildNflV1ActionableGradeBundle({
       providerGameId: payload.game.providerGameId,
       awayTeam: payload.game.away.abbreviation,
@@ -212,6 +252,10 @@ async function main() {
           ? payload.game.home.abbreviation
           : payload.game.away.abbreviation
         : null,
+      shadowMoneylineGrade: decision.market === "moneyline" ? shadow.grade : null,
+      shadowMoneylineTeam: decision.market === "moneyline" ? shadow.team : null,
+      shadowMoneylineExpectedValue: decision.market === "moneyline" ? shadow.expectedValuePerUnit : null,
+      shadowMoneylineEdgePercentagePoints: decision.market === "moneyline" ? shadow.edgePercentagePoints : null,
       previousPredictionSide: decision.market === "moneyline"
         ? payload.outcomeForecast.homeWinProbability >= payload.outcomeForecast.awayWinProbability
           ? payload.game.home.abbreviation
@@ -268,6 +312,18 @@ async function main() {
     market,
     count(rows.filter((row) => row.market === market).map((row) => row.grade)),
   ]));
+  const totals = rows.filter((row) => row.market === "total");
+  const direction = (values: Array<string | null>) => count(values.map((value) =>
+    value?.startsWith("Over ") ? "Over" : value?.startsWith("Under ") ? "Under" : "Missing"));
+  const moneylines = rows.filter((row) => row.market === "moneyline");
+  const pricedNeutralTotals = pricedNeutralRows.filter((row) => row.market === "total");
+  const pricedNeutralPromotions = pricedNeutralRows.filter((row) =>
+    rank(row.candidateGrade) >= rank("Lean") && rank(row.previousGrade) < rank("Lean"));
+  const pricedNeutralDemotions = pricedNeutralRows.filter((row) =>
+    rank(row.candidateGrade) < rank("Lean") && rank(row.previousGrade) >= rank("Lean"));
+  const forwardMoneylineResults = process.argv.includes("--with-results")
+    ? await readMoneylineResults(client, pricedNeutralRows)
+    : [];
   const promotions = rows.filter((row) => rank(row.grade) > rank(row.previousGrade));
   const demotions = rows.filter((row) => rank(row.grade) < rank(row.previousGrade));
   const sideChangesByMarket = Object.fromEntries(["moneyline", "spread", "total"].map((market) => [
@@ -314,6 +370,70 @@ async function main() {
     grades,
     previousByMarket,
     byMarket,
+    totalDirections: {
+      previous: direction(totals.map((row) => row.previousSide)),
+      structural: direction(totals.map((row) => row.structuralSide)),
+      marketOnly: direction(totals.map((row) => row.marketOnlySide)),
+      sharpPublic: direction(totals.map((row) => row.sharpPublicSide)),
+      final: direction(totals.map((row) => row.side)),
+    },
+    totalEvidenceShiftDirection: {
+      sharpUp: totals.filter((row) => row.sharpShiftPoints > 1e-12).length,
+      sharpDown: totals.filter((row) => row.sharpShiftPoints < -1e-12).length,
+      publicUp: totals.filter((row) => row.publicShiftPoints > 1e-12).length,
+      publicDown: totals.filter((row) => row.publicShiftPoints < -1e-12).length,
+      movementUp: totals.filter((row) => row.movementShiftPoints > 1e-12).length,
+      movementDown: totals.filter((row) => row.movementShiftPoints < -1e-12).length,
+      appliedUp: totals.filter((row) => row.appliedEvidenceShiftPoints > 1e-12).length,
+      appliedDown: totals.filter((row) => row.appliedEvidenceShiftPoints < -1e-12).length,
+    },
+    moneylinePredictionConfidenceBands: {
+      atLeast55: moneylines.filter((row) => row.probability >= 0.55).length,
+      atLeast60: moneylines.filter((row) => row.probability >= 0.60).length,
+      atLeast65: moneylines.filter((row) => row.probability >= 0.65).length,
+      atLeast70: moneylines.filter((row) => row.probability >= 0.70).length,
+    },
+    shadowMoneyline: {
+      grades: count(moneylines.map((row) => row.shadowMoneylineGrade ?? "Missing")),
+      predictionAlignedLeans: moneylines.filter((row) => row.shadowMoneylineGrade === "Lean" &&
+        row.shadowMoneylineTeam === row.predictionSide).length,
+      predictionOpposedLeans: moneylines.filter((row) => row.shadowMoneylineGrade === "Lean" &&
+        row.shadowMoneylineTeam !== row.predictionSide).length,
+      alignedLeanRows: moneylines.filter((row) => row.shadowMoneylineGrade === "Lean" &&
+        row.shadowMoneylineTeam === row.predictionSide).map((row) => ({
+          game: row.game,
+          predictedWinner: row.predictionSide,
+          outcomeProbability: row.probability,
+          outcomePrice: row.price,
+          outcomeExpectedValue: row.expectedValue,
+          outcomeEdgePercentagePoints: row.edgePercentagePoints,
+          shadowExpectedValue: row.shadowMoneylineExpectedValue,
+          shadowEdgePercentagePoints: row.shadowMoneylineEdgePercentagePoints,
+        })),
+    },
+    pricedNeutralTotalCandidate: {
+      decisions: pricedNeutralRows.length,
+      stableTargetExcludedGames: new Set(pricedNeutralRows.filter((row) =>
+        row.targetExclusionStatus === "target_excluded_market").map((row) => row.game)).size,
+      directions: direction(pricedNeutralTotals.map((row) => row.candidateSide)),
+      grades: count(pricedNeutralTotals.map((row) => row.candidateGrade)),
+      sideChanges: pricedNeutralTotals.filter((row) => row.candidateSide !== row.previousSide).length,
+      promotions: pricedNeutralPromotions.length,
+      demotions: pricedNeutralDemotions.length,
+      actionableBefore: pricedNeutralTotals.filter((row) => rank(row.previousGrade) >= rank("Lean")).length,
+      actionableAfter: pricedNeutralTotals.filter((row) => rank(row.candidateGrade) >= rank("Lean")).length,
+      changedTotals: pricedNeutralTotals.filter((row) => row.candidateSide !== row.previousSide ||
+        row.candidateGrade !== row.previousGrade),
+      nonTotalChanges: pricedNeutralRows.filter((row) => row.market !== "total" &&
+        (row.candidateSide !== row.previousSide || row.candidateGrade !== row.previousGrade)),
+    },
+    forwardMoneylineResults: process.argv.includes("--with-results") ? {
+      actions: forwardMoneylineResults.length,
+      wins: forwardMoneylineResults.filter((row) => row.result === "win").length,
+      losses: forwardMoneylineResults.filter((row) => row.result === "loss").length,
+      pending: forwardMoneylineResults.filter((row) => row.result !== "win" && row.result !== "loss").length,
+      rows: forwardMoneylineResults,
+    } : undefined,
     promotions: promotions.length,
     demotions: demotions.length,
     promotionsByMarket: Object.fromEntries(["moneyline", "spread", "total"].map((market) => [
@@ -403,6 +523,44 @@ function count(values: string[]): Record<string, number> {
 function rank(grade: string): number {
   return grade === "Best Angle" ? 4 : grade === "Lean" ? 3 : grade === "Watchlist" ? 2 :
     grade === "No Play" ? 1 : 0;
+}
+
+async function readMoneylineResults(
+  client: Parameters<typeof readNflForwardEvidence>[0]["client"],
+  candidateRows: Array<{
+    game: string;
+    market: "moneyline" | "spread" | "total";
+    candidateSide: string;
+    candidateGrade: string;
+  }>,
+) {
+  const actions = candidateRows.filter((row) => row.market === "moneyline" && rank(row.candidateGrade) >= rank("Lean"));
+  const { data, error } = await client
+    .from("prediction_records")
+    .select("external_id,matchup,pick,model_version,prediction_grades(result)")
+    .eq("sport", "nfl")
+    .eq("market", "moneyline")
+    .in("matchup", actions.map((row) => row.game));
+  if (error) throw new Error(`NFL forward Moneyline result read failed: ${error.message}`);
+  return actions.map((action) => {
+    const matches = ((data ?? []) as Array<{
+      matchup: string; pick: string | null; model_version: string | null;
+      prediction_grades: { result: string | null } | Array<{ result: string | null }> | null;
+    }>).filter((row) => row.matchup === action.game && row.pick === action.candidateSide);
+    const settled = matches.map((row) => ({
+      ...row,
+      result: Array.isArray(row.prediction_grades)
+        ? row.prediction_grades[0]?.result ?? null
+        : row.prediction_grades?.result ?? null,
+    })).find((row) => row.result === "win" || row.result === "loss");
+    return {
+      game: action.game,
+      side: action.candidateSide,
+      grade: action.candidateGrade,
+      result: settled?.result ?? null,
+      trackedModelVersion: settled?.model_version ?? null,
+    };
+  });
 }
 
 function latestRows(rows: NflForwardStoredEvidence[]): NflForwardStoredEvidence[] {

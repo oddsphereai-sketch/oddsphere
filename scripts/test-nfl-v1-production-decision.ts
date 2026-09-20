@@ -54,10 +54,15 @@ const aligned = buildNflV1ProductionDecisionBundle({
 });
 assert.equal(aligned.evaluatedBets.length, 3);
 assert.equal(aligned.outcomeConfidence.length, 3);
-assert.equal(aligned.evaluatedBets.find((decision) => decision.market === "moneyline")?.grade, "No Play");
-assert.equal(aligned.evaluatedBets.find((decision) => decision.market === "moneyline")?.side, "SEA");
-assert.equal(aligned.evaluatedBets.find((decision) => decision.market === "moneyline")?.modelRelease, NFL_V1_PRODUCTION_MODEL_RELEASE);
-assert.equal(aligned.evaluatedBets.filter((decision) => decision.grade === "No Play").length, 3);
+const alignedMoneyline = aligned.evaluatedBets.find((decision) => decision.market === "moneyline")!;
+assert.equal(alignedMoneyline.grade, "Lean");
+assert.equal(alignedMoneyline.side, "SEA");
+assert.equal(alignedMoneyline.modelProbability, 0.65);
+assert.equal(alignedMoneyline.marketFairProbability, 0.6);
+assert.equal(alignedMoneyline.evaluatedQuote.sportsbook, "draftkings");
+assert.equal(alignedMoneyline.modelRelease, NFL_R6_MONEYLINE_MODEL_RELEASE);
+assert.equal(alignedMoneyline.calibrationRelease, NFL_R6_MONEYLINE_CALIBRATION_RELEASE);
+assert.equal(aligned.evaluatedBets.filter((decision) => decision.grade === "No Play").length, 2);
 assert.equal(aligned.trackingEnabled, false);
 
 const opposed = buildNflV1ProductionDecisionBundle({
@@ -69,6 +74,7 @@ assert.equal(opposedMoneyline.grade, "No Play");
 assert.equal(opposedMoneyline.side, "SEA");
 assert.equal(opposedMoneyline.modelProbability, outcome.homeWinProbability);
 assert.equal(opposedMoneyline.evaluatedQuote.sportsbook, "caesars");
+assert.equal(opposedMoneyline.modelRelease, NFL_V1_PRODUCTION_MODEL_RELEASE);
 
 const nonqualifier = buildNflV1ProductionDecisionBundle({
   providerGameId, awayTeam, homeTeam, gameStartsAt, current, comparableCurrentBooks,
@@ -91,6 +97,14 @@ const unboundedPublicPrice = buildNflV1ProductionDecisionBundle({
   shadowMoneyline: shadow({ team: "NE", side: "away", grade: "Lean", probability: 0.55, price: 255 }),
 });
 assert.equal(unboundedPublicPrice.evaluatedBets.find((decision) => decision.market === "moneyline")?.grade, "No Play");
+
+const unboundedAlignedShadow = buildNflV1ProductionDecisionBundle({
+  providerGameId, awayTeam, homeTeam, gameStartsAt, current, comparableCurrentBooks,
+  shadowMoneyline: shadow({ team: "SEA", side: "home", grade: "Lean", probability: 0.76, price: -325 }),
+});
+const unboundedAlignedMoneyline = unboundedAlignedShadow.evaluatedBets.find((decision) => decision.market === "moneyline")!;
+assert.equal(unboundedAlignedMoneyline.grade, "No Play");
+assert.equal(unboundedAlignedMoneyline.modelRelease, NFL_V1_PRODUCTION_MODEL_RELEASE);
 
 const denCurrent = {
   providerGameId: "1392231",
