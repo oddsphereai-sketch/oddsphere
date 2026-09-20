@@ -143,9 +143,16 @@ export async function fetchDraftKingsNetworkSplits(args: {
     } as RequestInit & { next: { revalidate: number } });
     if (!response.ok) throw new Error(`DraftKings Network splits page ${page} HTTP ${response.status}`);
     const responseDate = response.headers.get("date");
+    const html = await response.text();
+    // The WordPress shell can return HTTP 200 while its sportsbook-data
+    // request failed with 403. Treat that as an upstream failure rather than
+    // caching an apparently successful empty slate as the complete fallback.
+    if (/Unable to fetch data from server\.\s*403/i.test(html)) {
+      throw new Error(`DraftKings Network splits page ${page} embedded upstream HTTP 403`);
+    }
     return {
       fetchedAt: responseDate ? new Date(responseDate).toISOString() : (args.now ?? new Date()).toISOString(),
-      games: parseDraftKingsNetworkSplitsHtml(await response.text()),
+      games: parseDraftKingsNetworkSplitsHtml(html),
     };
   };
   const initial = await Promise.allSettled([fetchPage(1), fetchPage(2)]);
