@@ -98,6 +98,17 @@ const MLB_CRON_CONFIGS: CronCfg[] = [
  * `unknown`, which causes RefreshIndicator to hide the pill entirely.
  */
 function cronConfigsForSport(sport: Sport): CronCfg[] {
+  if (sport === "nfl") {
+    return [
+      { data_source: "nfl_forward_evidence", per_sport: true, cadence_minutes: 15, frontline: true },
+      { data_source: "nfl_daily_edge_health", per_sport: true, cadence_minutes: 30, frontline: false },
+    ];
+  }
+  if (sport === "cfb") {
+    return [
+      { data_source: "cfb_forward_evidence", per_sport: true, cadence_minutes: 15, frontline: true },
+    ];
+  }
   if (sport === "wnba") {
     return [
       { data_source: "wnba_daily_refresh", per_sport: true, cadence_minutes: 30, frontline: true },

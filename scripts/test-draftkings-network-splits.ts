@@ -73,6 +73,19 @@ const paginationTest = (async () => {
     /simulated second-page timeout/,
     "a partial pagination wave must fail instead of replacing the last complete cached feed",
   );
+
+  await assert.rejects(
+    fetchDraftKingsNetworkSplits({
+      sport: "mlb",
+      timeoutMs: 1_000,
+      fetchImpl: async () => splitPageResponse(`
+        <p>No events match your current selections.</p>
+        <p hidden>Unable to fetch data from server. 403</p>
+      `),
+    }),
+    /embedded upstream HTTP 403/,
+    "an HTTP-200 shell containing the provider's embedded 403 must not replace a complete cached feed",
+  );
 })();
 
 const emptyMarket = (): MarketEdgeDto => ({
