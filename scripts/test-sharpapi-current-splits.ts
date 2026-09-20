@@ -1,0 +1,106 @@
+import assert from "node:assert/strict";
+import type { DailyEdgeResponse, MarketEdgeDto } from "../app/lab/lib/labTypes";
+import {
+  applySharpApiCurrentSplitOverlay,
+  validateSharpApiCurrentSplitFeed,
+} from "../lib/providers/real_api/sharpApiCurrentSplits";
+
+const emptyMarket = (): MarketEdgeDto => ({
+  sportsbookSplits: null,
+  recommendationDecision: { sharpBookSplits: null },
+} as unknown as MarketEdgeDto);
+
+const response = (sport: "cfb" | "mlb", awayTeam: string, homeTeam: string, awayName: string, homeName: string) => ({
+  as_of: "2026-09-20T20:00:00.000Z",
+  sport,
+  date: "2026-09-20",
+  requested_date: "2026-09-20",
+  games: [{
+    id: `${sport}-1`, sport, external_id: 1,
+    awayTeam, homeTeam,
+    awayTeamDisplayName: awayName,
+    homeTeamDisplayName: homeName,
+    gameStartAt: "2026-09-20T23:00:00.000Z",
+    markets: { moneyline: emptyMarket(), total: emptyMarket(), first_inning: emptyMarket() },
+  }],
+} as unknown as DailyEdgeResponse);
+
+const complete = (league: string, sportsbook: string, away: string, home: string, fetchedAt: string) => ({
+  event_id: `${league}_2026-09-20_${away}_${home}`,
+  event_start_time: "2026-09-20T23:00:00.000Z",
+  league,
+  away_team: away,
+  home_team: home,
+  sportsbook,
+  fetched_at: fetchedAt,
+  moneyline: { handle_pct: { away: 61, home: 39 }, bets_pct: { away: 53, home: 47 } },
+  spread: { handle_pct: { away: 58, home: 42 }, bets_pct: { away: 48, home: 52 } },
+  total: { handle_pct: { over: 44, under: 56 }, bets_pct: { over: 49, under: 51 } },
+});
+
+const now = Date.parse("2026-09-20T20:05:00.000Z");
+const cfb = response("cfb", "LIB", "CCU", "Liberty Flames", "Coastal Carolina Chanticleers");
+const cfbResult = applySharpApiCurrentSplitOverlay(cfb, {
+  source: "sharpapi_current_splits",
+  release: "sharpapi_current_splits_2026_09_20_r1_durable_overlay",
+  sport: "cfb",
+  fetchedAt: "2026-09-20T20:04:00.000Z",
+  rows: [
+    complete("ncaaf", "draftkings", "Liberty Flames", "Coastal Carolina Chanticleers", "2026-09-20T20:04:00.000Z"),
+    complete("ncaaf", "circa", "Liberty Flames", "Coastal Carolina Chanticleers", "2026-09-20T20:03:00.000Z"),
+  ],
+}, now);
+assert.deepEqual(cfbResult, { matchedGames: 1, populatedMarkets: 3 });
+for (const market of Object.values(cfb.games[0]!.markets)) {
+  assert.equal(market?.sportsbookSplits?.label, "Sharp Book Splits", "current Circa must win each complete market");
+  assert.equal(market?.sportsbookSplits?.rows.length, 2);
+}
+assert.equal(cfb.games[0]!.markets.moneyline.sportsbookSplits?.rows[0]?.moneyPct, 61);
+assert.equal(cfb.games[0]!.markets.moneyline.recommendationDecision?.sharpBookSplits, null, "overlay stays display-only");
+
+const mlb = response("mlb", "PHI", "NYM", "Philadelphia Phillies", "New York Mets");
+const mlbResult = applySharpApiCurrentSplitOverlay(mlb, {
+  source: "sharpapi_current_splits",
+  release: "sharpapi_current_splits_2026_09_20_r1_durable_overlay",
+  sport: "mlb",
+  fetchedAt: "2026-09-20T20:04:00.000Z",
+  rows: [complete("mlb", "draftkings", "Philadelphia Phillies", "New York Mets", "2026-09-20T20:04:00.000Z")],
+}, now);
+assert.deepEqual(mlbResult, { matchedGames: 1, populatedMarkets: 2 });
+assert.equal(mlb.games[0]!.markets.first_inning.sportsbookSplits, null, "MLB full-game spread cannot populate first inning");
+
+const incomplete = response("cfb", "LIB", "CCU", "Liberty Flames", "Coastal Carolina Chanticleers");
+const incompleteRow = complete("ncaaf", "betmgm", "Liberty Flames", "Coastal Carolina Chanticleers", "2026-09-20T20:04:00.000Z");
+incompleteRow.total.handle_pct = { over: 44 } as typeof incompleteRow.total.handle_pct;
+const incompleteResult = applySharpApiCurrentSplitOverlay(incomplete, {
+  source: "sharpapi_current_splits",
+  release: "sharpapi_current_splits_2026_09_20_r1_durable_overlay",
+  sport: "cfb",
+  fetchedAt: "2026-09-20T20:04:00.000Z",
+  rows: [incompleteRow],
+}, now);
+assert.deepEqual(incompleteResult, { matchedGames: 1, populatedMarkets: 2 }, "partial metrics must fail closed per market");
+assert.equal(incomplete.games[0]!.markets.total.sportsbookSplits, null);
+
+const stale = response("cfb", "LIB", "CCU", "Liberty Flames", "Coastal Carolina Chanticleers");
+applySharpApiCurrentSplitOverlay(stale, {
+  source: "sharpapi_current_splits",
+  release: "sharpapi_current_splits_2026_09_20_r1_durable_overlay",
+  sport: "cfb",
+  fetchedAt: "2026-09-19T20:04:00.000Z",
+  rows: [complete("ncaaf", "draftkings", "Liberty Flames", "Coastal Carolina Chanticleers", "2026-09-19T20:04:00.000Z")],
+}, now);
+assert.equal(stale.games[0]!.markets.moneyline.sportsbookSplits?.rows[0]?.isStale, true, "last-known-good rows remain visible but honest about age");
+
+const feed = {
+  source: "sharpapi_current_splits",
+  release: "sharpapi_current_splits_2026_09_20_r1_durable_overlay",
+  sport: "cfb",
+  fetchedAt: "2026-09-20T20:04:00.000Z",
+  rows: [complete("ncaaf", "circa", "Liberty Flames", "Coastal Carolina Chanticleers", "2026-09-20T20:04:00.000Z")],
+} as const;
+assert.ok(validateSharpApiCurrentSplitFeed(feed, "cfb", now));
+assert.equal(validateSharpApiCurrentSplitFeed({ ...feed, rows: [] }, "cfb", now), null, "an empty provider response cannot erase durable coverage");
+assert.equal(validateSharpApiCurrentSplitFeed({ ...feed, sport: "nfl" }, "cfb", now), null, "durable coverage cannot cross sports");
+
+console.log("SharpAPI current split overlay and durable continuity tests passed.");
