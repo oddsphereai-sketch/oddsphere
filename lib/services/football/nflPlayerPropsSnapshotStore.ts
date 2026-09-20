@@ -7,18 +7,21 @@ import {
   type NflPlayerPropsMemberSnapshot,
   type NflPlayerPropsProductionSnapshot,
 } from "./nflPlayerPropsProductionContract";
-import { NFL_PLAYER_PROPS_MEMBER_TRANSPORT_MAX_JSON_BYTES } from "./nflPlayerPropsMemberTransport";
+import {
+  NFL_PLAYER_PROPS_MEMBER_TRANSPORT_MAX_GZIP_BYTES,
+  NFL_PLAYER_PROPS_MEMBER_TRANSPORT_MAX_JSON_BYTES,
+} from "./nflPlayerPropsMemberTransport";
 
 export const NFL_PLAYER_PROPS_SNAPSHOT_KEY_PREFIX = "nfl::player-props" as const;
 export const NFL_PLAYER_PROPS_SNAPSHOT_ENVELOPE_RELEASE =
   "nfl_player_props_snapshot_envelope_2026_09_02_r1_gzip_deduplicated_member" as const;
-// The stored canonical snapshot is gzip-compressed and omits the derived
-// member-decision duplicate. Keep its decoded ceiling aligned with the
-// established member transport boundary so a board that the page can safely
-// carry cannot be rejected by the writer first.
-export const NFL_PLAYER_PROPS_SNAPSHOT_MAX_JSON_BYTES =
-  NFL_PLAYER_PROPS_MEMBER_TRANSPORT_MAX_JSON_BYTES;
-export const NFL_PLAYER_PROPS_SNAPSHOT_MAX_GZIP_BYTES = 1_000_000;
+// The canonical snapshot retains prior-date locked rows for tracking and
+// settlement after those rows roll off the member board. It therefore needs a
+// larger decoded ceiling than the current/future member transport. Every write
+// separately preflights the exact member DTO against the unchanged member
+// limits below, so canonical history cannot make the page payload unbounded.
+export const NFL_PLAYER_PROPS_SNAPSHOT_MAX_JSON_BYTES = 32_000_000;
+export const NFL_PLAYER_PROPS_SNAPSHOT_MAX_GZIP_BYTES = 2_000_000;
 export const NFL_PLAYER_PROPS_MEMBER_CACHE_TTL_MS = 60_000;
 export const NFL_PLAYER_PROPS_MEMBER_READ_TIMEOUT_MS = 6_000;
 const NFL_PLAYER_PROPS_SNAPSHOT_MAX_BASE64_CHARACTERS =
@@ -177,6 +180,20 @@ export async function writeNflPlayerPropsSnapshot(args: {
   source: string;
 }): Promise<void> {
   const generatedAt = args.snapshot.generatedAt;
+  const memberSnapshot = buildNflPlayerPropsMemberSnapshot(args.snapshot, generatedAt);
+  const memberJson = JSON.stringify(memberSnapshot);
+  const memberJsonBytes = Buffer.byteLength(memberJson);
+  if (memberJsonBytes > NFL_PLAYER_PROPS_MEMBER_TRANSPORT_MAX_JSON_BYTES) {
+    throw new Error(
+      `NFL player props member transport exceeds the ${NFL_PLAYER_PROPS_MEMBER_TRANSPORT_MAX_JSON_BYTES}-byte JSON limit.`,
+    );
+  }
+  const memberCompressedBytes = gzipSync(Buffer.from(memberJson), { level: 9 }).byteLength;
+  if (memberCompressedBytes > NFL_PLAYER_PROPS_MEMBER_TRANSPORT_MAX_GZIP_BYTES) {
+    throw new Error(
+      `NFL player props member transport exceeds the ${NFL_PLAYER_PROPS_MEMBER_TRANSPORT_MAX_GZIP_BYTES}-byte gzip limit.`,
+    );
+  }
   const starts = args.snapshot.board.decisions.map((row) => Date.parse(row.lockAt) + 60 * 60_000);
   const staleUntilMs = starts.length ? Math.max(...starts) + 36 * 60 * 60_000 : Date.parse(generatedAt) + 48 * 60 * 60_000;
   const payload = encodeNflPlayerPropsSnapshotPayload(args.snapshot);

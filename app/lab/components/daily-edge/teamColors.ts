@@ -79,6 +79,47 @@ export const MLB_TEAM_COLORS: Record<string, TeamColorEntry> = {
   SF:  { primary: "#FD5A1E" }, // Giants Orange
 };
 
+/** NFL primary brand colors, keyed by the canonical abbreviations used by Daily Edge. */
+export const NFL_TEAM_COLORS: Record<string, TeamColorEntry> = {
+  ARI: { primary: "#97233F" }, ATL: { primary: "#A71930" },
+  BAL: { primary: "#241773" }, BUF: { primary: "#00338D" },
+  CAR: { primary: "#0085CA" }, CHI: { primary: "#0B162A" },
+  CIN: { primary: "#FB4F14" }, CLE: { primary: "#311D00" },
+  DAL: { primary: "#003594" }, DEN: { primary: "#FB4F14" },
+  DET: { primary: "#0076B6" }, GB:  { primary: "#203731" },
+  HOU: { primary: "#03202F" }, IND: { primary: "#002C5F" },
+  JAX: { primary: "#006778" }, KC:  { primary: "#E31837" },
+  LV:  { primary: "#000000" }, LAC: { primary: "#0080C6" },
+  LAR: { primary: "#003594" }, MIA: { primary: "#008E97" },
+  MIN: { primary: "#4F2683" }, NE:  { primary: "#002244" },
+  NO:  { primary: "#D3BC8D" }, NYG: { primary: "#0B2265" },
+  NYJ: { primary: "#125740" }, PHI: { primary: "#004C54" },
+  PIT: { primary: "#FFB612" }, SEA: { primary: "#002244" },
+  SF:  { primary: "#AA0000" }, TB:  { primary: "#D50A0A" },
+  TEN: { primary: "#0C2340" }, WSH: { primary: "#5A1414" },
+};
+
+/**
+ * Presentation fallback for CFB rows whose compact snapshot predates a newly
+ * reconciled team identity. Most CFB rows carry their color in the response;
+ * this map prevents an abbreviation shared with MLB from inheriting MLB color.
+ */
+export const CFB_TEAM_COLOR_FALLBACKS: Record<string, TeamColorEntry> = {
+  AAMU: { primary: "#790000" }, CARK: { primary: "#A7A9AC" },
+  CP:   { primary: "#1E4D2B" }, ELON: { primary: "#020303" },
+  ETSU: { primary: "#002D61" }, GRAM: { primary: "#EE8601" },
+  JKST: { primary: "#123297" }, KENN: { primary: "#FDBB30" },
+  LEH:  { primary: "#6C2B2A" }, MCN:  { primary: "#00529C" },
+  MER:  { primary: "#FF7F29" }, MONT: { primary: "#751D4A" },
+  MTST: { primary: "#00205C" }, NCCU: { primary: "#880023" },
+  NCSU: { primary: "#CC0000" }, PENN: { primary: "#082A74" },
+  RMU:  { primary: "#00214D" }, SAC:  { primary: "#00573C" },
+  SOU:  { primary: "#004B97" }, TCU:  { primary: "#4D1979" },
+  UCD:  { primary: "#002855" }, UIW:  { primary: "#000000" },
+  UTM:  { primary: "#FF6700" }, UTSA: { primary: "#0C2340" },
+  UVA:  { primary: "#232D4B" },
+};
+
 /**
  * Phase 7F — NBA team primary colors. Same shape + lookup discipline
  * as MLB above. Keyed by ESPN abbreviation (e.g. "NY" for Knicks,
@@ -267,6 +308,15 @@ export function teamPrimaryColor(
   if (!abbreviation) return FALLBACK_TEAM_COLOR;
   if (sport === "wnba") {
     return WNBA_TEAM_COLORS[abbreviation]?.primary ?? FALLBACK_TEAM_COLOR;
+  }
+  if (sport === "nfl") {
+    return NFL_TEAM_COLORS[abbreviation]?.primary ?? FALLBACK_TEAM_COLOR;
+  }
+  if (sport === "cfb") {
+    return CFB_TEAM_COLOR_FALLBACKS[abbreviation]?.primary ?? FALLBACK_TEAM_COLOR;
+  }
+  if (sport === "cbb") {
+    return FALLBACK_TEAM_COLOR;
   }
   if (sport === "nba") {
     return NBA_TEAM_COLORS[abbreviation]?.primary ?? FALLBACK_TEAM_COLOR;

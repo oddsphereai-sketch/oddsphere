@@ -19,4 +19,20 @@ assert.equal(isFinalFiGradeCoherent({ liveBaseGrade: "lean", recordGrade: "best_
 assert.equal(isFinalFiGradeCoherent({ liveBaseGrade: "lean", recordGrade: "best_angle", snapshot: snapshot("lean") }), false);
 assert.equal(isFinalFiGradeCoherent({ liveBaseGrade: "lean", recordGrade: "lean", snapshot: snapshot("best_angle") }), false);
 
+const staleUnlockedCleanup = {
+  ...snapshot("toss_up"),
+  stale_unlocked_fi_cleanup: {
+    action: "neutralize_to_toss_up",
+    reason: "fi_fresh_data_gate_no_current_actionable_prediction",
+  },
+  member_facing_at_lock: { play_grade: "held", held: true },
+};
+assert.equal(isFinalFiGradeCoherent({ liveBaseGrade: "held", recordGrade: "held", snapshot: staleUnlockedCleanup }), true,
+  "an explicit stale unlocked cleanup preserves the prior forecast audit without creating a false divergence");
+assert.equal(isFinalFiGradeCoherent({
+  liveBaseGrade: "held",
+  recordGrade: "held",
+  snapshot: { ...staleUnlockedCleanup, stale_unlocked_fi_cleanup: { action: "neutralize_to_toss_up", reason: "other" } },
+}), false, "only the exact writer-owned fresh-data cleanup is accepted");
+
 console.log("FI final-grade coherence tests passed.");
