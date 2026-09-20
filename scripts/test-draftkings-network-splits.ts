@@ -137,9 +137,9 @@ assert.equal(
   "a durable feed can never cross sport identities",
 );
 assert.equal(
-  validateDurableDraftKingsNetworkSplitFeed({ ...feed, fetchedAt: "2026-01-01T00:00:00.000Z" }, "mlb"),
-  null,
-  "an expired daily-sport durable feed fails closed",
+  validateDurableDraftKingsNetworkSplitFeed({ ...feed, fetchedAt: "2026-01-01T00:00:00.000Z" }, "mlb")?.games.length,
+  1,
+  "an exact-game last-known-good feed remains eligible until a verified update replaces it",
 );
 
 const applied = applyDraftKingsNetworkSplitFallback(response, feed);
