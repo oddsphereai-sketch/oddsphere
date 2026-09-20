@@ -13,10 +13,13 @@ import {
   NFL_V1_PRODUCTION_DECISION_RELEASE,
 } from "./nflV1ProductionDecision";
 import type { NflRegularDecisionMarket, NflRegularOutcomeConfidence } from "./nflRegularDecisionEvidence";
-import { assertFootballCrossMarketCoherence } from "./footballCrossMarketCoherence";
+import {
+  assertFootballCrossMarketCoherence,
+  NFL_PUBLIC_SCORE_DIRECTION_TOLERANCE_POINTS,
+} from "./footballCrossMarketCoherence";
 
 export const NFL_OFFICIAL_TRACKING_RECORD_RELEASE =
-  "nfl_official_tracking_record_2026_09_20_r8_ml_total_coherence" as const;
+  "nfl_official_tracking_record_2026_09_20_r9_coherence_parity" as const;
 
 const NFL_TRACKED_MARKETS = ["moneyline", "spread", "total"] as const;
 
@@ -65,6 +68,10 @@ export function buildNflOfficialTrackingRecords(args: {
     decisions: args.payload.decisions.evaluatedBets,
     unavailableMarkets: NFL_TRACKED_MARKETS.filter((market) => !evaluatedMarketsForCoherence.has(market)),
     requireDecisionSideFromForecast: true,
+    // Tracking consumes the exact writer-approved immutable T-60 payload. It
+    // must use the same NFL mean/median tolerance as publication or a valid
+    // payload can publish successfully and then fail at the tracking boundary.
+    publicScoreDirectionTolerancePoints: NFL_PUBLIC_SCORE_DIRECTION_TOLERANCE_POINTS,
   });
   const evaluated = args.payload.decisions.evaluatedBets.map((decision): PredictionRecordRow => {
     const side = canonicalSide(args.payload, decision.market, decision.side);

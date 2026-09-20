@@ -7,7 +7,10 @@ import {
   hashNflForwardEvidencePayload,
   type NflForwardEvidencePayload,
 } from "../lib/services/football/nflForwardEvidence";
-import { buildNflOfficialTrackingRecords } from "../lib/services/football/nflOfficialTrackingRecord";
+import {
+  buildNflOfficialTrackingRecords,
+  NFL_OFFICIAL_TRACKING_RECORD_RELEASE,
+} from "../lib/services/football/nflOfficialTrackingRecord";
 import {
   buildNflPublishedMoneylineTrackingCorrection,
   nflOppositeMoneylineCorrectionResult,
@@ -15,6 +18,10 @@ import {
   NFL_PUBLISHED_TRACKING_CORRECTION_RELEASE,
 } from "../lib/services/football/nflPublishedTrackingCorrection";
 import { buildNflRegularEvaluatedBetDecision, buildNflRegularOutcomeConfidence } from "../lib/services/football/nflRegularDecisionEvidence";
+import {
+  NFL_R6_MONEYLINE_CALIBRATION_RELEASE,
+  NFL_R6_MONEYLINE_MODEL_RELEASE,
+} from "../lib/services/football/nflR6MoneylineShadow";
 import { nflForwardT60TrackingEligibility } from "../lib/services/football/nflTrackingLifecycle";
 import { buildMarketScopedFootballTrackingPlan, FOOTBALL_MARKET_SCOPED_T60_TRACKING_RELEASE } from "../lib/services/football/footballMarketScopedTracking";
 import {
@@ -175,6 +182,23 @@ assert.equal(nflForwardT60TrackingEligibility({
   publicationApproved: true,
   officialRegistryLaunched: true,
 }).eligible, false);
+const r6MoneylineDecision = {
+  ...decisions[0]!,
+  modelRelease: NFL_R6_MONEYLINE_MODEL_RELEASE,
+  calibrationRelease: NFL_R6_MONEYLINE_CALIBRATION_RELEASE,
+};
+assert.deepEqual(nflForwardT60TrackingEligibility({
+  stage: "t60",
+  captureTiming: "on_time",
+  t60LagMinutes: 10,
+  capturedAt,
+  providerGameId: "1392216",
+  gameStartsAt,
+  decisions: [r6MoneylineDecision, decisions[1]!, decisions[2]!],
+  publicationApproved: true,
+  officialRegistryLaunched: true,
+}), { eligible: true, reason: "eligible_regular_t60" },
+"tracking must admit the active release's documented r6 moneyline model/calibration pair");
 
 const payload = {
   schemaRelease: NFL_FORWARD_EVIDENCE_SCHEMA_RELEASE,
@@ -231,6 +255,59 @@ assert.equal(records.every((record) => record.locked_at === capturedAt), true);
 assert.equal(records.every((record) => record.model_version === common.decisionRelease), true);
 assert.equal(records.every((record) => record.slate_date === "2026-09-09"), true);
 assert.equal(records.every((record) => record.snapshot_json?.football_market_scoped_tracking_release === FOOTBALL_MARKET_SCOPED_T60_TRACKING_RELEASE), true);
+assert.equal(records.every((record) => record.snapshot_json?.nfl_tracking_record_release === NFL_OFFICIAL_TRACKING_RECORD_RELEASE), true);
+
+const trackingBoundaryTotal = buildNflRegularEvaluatedBetDecision({
+  ...common,
+  market: "total",
+  modelRelease: NFL_V1_MARKET_EVIDENCE_TOTAL_MODEL_RELEASE,
+  calibrationRelease: NFL_V1_ACTIONABLE_GRADE_CALIBRATION_RELEASE,
+  side: "Under 45.5",
+  modelProbability: 0.6,
+  marketFairProbability: 0.55,
+  evaluatedQuote: { sportsbook: "caesars", line: 45.5, price: -110, observedAt: capturedAt },
+  grade: "No Play",
+});
+const expectedMargin = outcomeForecast.expectedHomeScore - outcomeForecast.expectedAwayScore;
+const trackingBoundaryExpectedTotal = 45.914;
+const trackingBoundaryPayload = {
+  ...payload,
+  market: {
+    ...payload.market,
+    current: { ...payload.market.current, total: { line: 45.5 } },
+  },
+  outcomeForecast: {
+    ...outcomeForecast,
+    expectedAwayScore: (trackingBoundaryExpectedTotal - expectedMargin) / 2,
+    expectedHomeScore: (trackingBoundaryExpectedTotal + expectedMargin) / 2,
+    totalDistribution: {
+      values: [44, 48.785],
+      probabilities: [0.6, 0.4],
+    },
+  },
+  decisions: {
+    ...payload.decisions,
+    evaluatedBets: [decisions[0]!, decisions[1]!, trackingBoundaryTotal],
+    outcomeConfidence: [
+      outcomeConfidence[0]!,
+      outcomeConfidence[1]!,
+      buildNflRegularOutcomeConfidence({
+        market: "total",
+        likelySide: "Under 45.5",
+        probability: 0.6,
+        evaluatedAt: capturedAt,
+        modelRelease: NFL_V1_MARKET_EVIDENCE_TOTAL_MODEL_RELEASE,
+      }),
+    ],
+  },
+} as NflForwardEvidencePayload;
+const trackingBoundaryRecords = buildNflOfficialTrackingRecords({
+  payload: trackingBoundaryPayload,
+  gameId: 5002,
+});
+assert.equal(trackingBoundaryRecords.length, 3,
+  "tracking must accept the same sub-one-point NFL PMF/mean boundary already accepted by the writer");
+assert.equal(trackingBoundaryRecords.find((record) => record.market === "total")?.side, "under");
 const correctionPayload = {
   ...payload,
   market: {
@@ -312,6 +389,8 @@ assert.match(writerSource, /currentT60Payloads/);
 assert.match(writerSource, /\.from\("prediction_records"\)/);
 assert.match(writerSource, /\.insert\(records/);
 assert.match(writerSource, /buildMarketScopedFootballTrackingPlan/);
+assert.match(writerSource, /if \(boundary\.eligible\)/,
+  "recovery must recompute eligibility from the immutable tuple instead of trusting an old stored boolean");
 const trackingSource = readFileSync("lib/services/trackingRefreshService.ts", "utf8");
 assert.match(trackingSource, /sport === "nfl"/);
 assert.match(trackingSource, /ingestNflFinalScores/);

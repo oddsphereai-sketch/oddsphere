@@ -68,7 +68,7 @@ import {
 } from "./nflForwardMemberSnapshotStore";
 
 export const NFL_FORWARD_WRITER_RELEASE =
-  "nfl_forward_evidence_writer_2026_09_20_r32_locked_transition" as const;
+  "nfl_forward_evidence_writer_2026_09_20_r33_tracking_parity" as const;
 
 export type NflForwardWriterResult = {
   writerRelease: typeof NFL_FORWARD_WRITER_RELEASE;
@@ -764,7 +764,11 @@ async function writeOfficialTrackingFromPayloads(args: {
         computeSlateDate("nfl", payload.game.scheduledStart),
       ),
     });
-    if (payload.decisions.trackingEnabled && boundary.eligible) {
+    // Recompute from the immutable T-60 tuple instead of trusting a stored
+    // boolean produced by an older tracking allowlist. This permits delayed
+    // append-only serialization of a genuinely on-time, writer-approved
+    // payload without reconstructing any prediction after kickoff.
+    if (boundary.eligible) {
       eligibleByGame.set(payload.game.providerGameId, payload);
     }
   }
