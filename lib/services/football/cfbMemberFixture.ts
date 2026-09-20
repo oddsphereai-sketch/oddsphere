@@ -75,9 +75,9 @@ import { cfbTeamIdentity } from "./cfbTeamIdentity";
 import { CFB_PUBLIC_SCORE_DIRECTION_TOLERANCE_POINTS } from "./footballCrossMarketCoherence";
 
 export const CFB_MEMBER_FIXTURE_RELEASE =
-  "cfb_v1_member_fixture_2026_09_19_r56_price_history_continuity" as const;
+  "cfb_v1_member_fixture_2026_09_20_r57_complete_tracking_reference" as const;
 export const CFB_PUBLIC_OUTCOME_CONTRACT_RELEASE =
-  "cfb_market_sharp_public_outcome_contract_2026_09_19_r51_contained_spread_counter_signal" as const;
+  "cfb_market_sharp_public_outcome_contract_2026_09_20_r52_complete_tracking_reference" as const;
 export const CFB_CONTEXT_ONLY_QUOTE_CAPTURE_SKEW_MS = 5_000 as const;
 const CFB_MARKET_CONTEXT_MAX_CAPTURE_LAG_MINUTES = 10;
 const CFB_PRE_DIRECTIONAL_MEMBER_RELEASE = "cfb_v1_member_release_2026_08_28_r14_expanded_sharp_budget" as const;
@@ -730,7 +730,7 @@ function buildGame(row: CfbForwardStoredEvidence, movementRows: CfbForwardMarket
       artifactRelease: CFB_V1_BASE_SCORE_ARTIFACT_RELEASE,
     } : null,
     sharpSignals: buildSignals(payload),
-    status: { lineupConfirmed: null, linesLocked: payload.market.current !== null || payload.market.playbookLine !== null, sharpSignalPending: !payload.market.sharpApiSplits?.some((record) => record.sourceSemantics === "sharp_adjacent"), marketDataLimited: payload.market.current === null && payload.market.playbookLine === null },
+    status: { lineupConfirmed: null, linesLocked: payload.market.current !== null || payload.market.playbookLine !== null || payload.market.espnReferenceLine != null, sharpSignalPending: !payload.market.sharpApiSplits?.some((record) => record.sourceSemantics === "sharp_adjacent"), marketDataLimited: payload.market.current === null && payload.market.playbookLine === null && payload.market.espnReferenceLine == null },
     result: null,
     breakdown: { verdict: headline.verdict, sharpRead: { key: "mixed", sentence: "The authoritative CFB forecast coherently combines football, bounded market state, and strictly matched sharp evidence before exact-price grading." }, modelBreakdown: `OddSphere's authoritative joint PMF projects ${payload.game.away.abbreviation} ${primaryForecast.expectedAwayPoints.toFixed(1)}–${primaryForecast.expectedHomePoints.toFixed(1)} ${payload.game.home.abbreviation}; the reachable representative score is ${primaryForecast.representativeScore.away}–${primaryForecast.representativeScore.home}.` },
     recommendationDecision,

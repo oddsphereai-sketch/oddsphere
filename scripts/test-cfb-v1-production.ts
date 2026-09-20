@@ -74,8 +74,12 @@ import { fetchBalldontlieNcaafQuarterbacks } from "../lib/services/football/ball
 import { ingestCfbFinalScores } from "../lib/services/football/cfbScoreIngestService";
 import {
   buildCfbOfficialTrackingRecords,
+  buildCfbEspnOpeningRecoveryRecords,
   buildCfbPublishedCutoffRecoveryRecords,
 } from "../lib/services/football/cfbOfficialTrackingRecord";
+import { buildCfbForwardContextCapture } from "../lib/services/football/cfbForwardEvidenceCapture";
+import { CFB_ESPN_REFERENCE_LINE_RELEASE } from "../lib/services/football/cfbEspnReferenceLine";
+import { CFB_V1_WEEKLY_RUNTIME_RELEASE } from "../lib/services/football/cfbV1WeeklyForecast";
 import { FOOTBALL_MARKET_SCOPED_T60_TRACKING_RELEASE } from "../lib/services/football/footballMarketScopedTracking";
 import { SharpApiClientError } from "../lib/providers/real_api/_sharpApiClient";
 import {
@@ -96,7 +100,9 @@ import {
   buildCfbForwardMemberSnapshot,
   CFB_FORWARD_MEMBER_SNAPSHOT_RELEASE,
   CFB_FORWARD_PREVIOUS_MEMBER_SNAPSHOT_RELEASE,
+  CFB_PREVIOUS_EVIDENCE_RELEASE,
   CFB_PREVIOUS_MEMBER_FIXTURE_RELEASE,
+  CFB_PREVIOUS_MEMBER_RELEASE,
   decodeCfbForwardMemberSnapshotPayload,
   encodeCfbForwardMemberSnapshotPayload,
   readCfbForwardMemberSnapshot,
@@ -297,6 +303,34 @@ const authoritativeForecast = buildCfbMarketSharpAwareForecast({
   publicSplits: splitSet(),
   evaluatedAt: lockedAt,
 });
+const perMarketReferenceOutlooks = buildCfbForwardMarketOutlooks({
+  forecast: authoritativeForecast,
+  playbookLine: {
+    provider: "playbook",
+    capturedAt: observedAt,
+    sourceTier: "tier1",
+    homeMoneyline: -330,
+    awayMoneyline: 260,
+    homeSpread: null,
+    awaySpread: null,
+    total: 47.5,
+  },
+  espnReferenceLine: {
+    release: CFB_ESPN_REFERENCE_LINE_RELEASE,
+    provider: "espn",
+    sportsbook: "DraftKings",
+    providerEventId: "401000001",
+    capturedAt: "2026-08-28T12:00:00.000Z",
+    lineType: "opening",
+    homeSpread: -6.5,
+    awaySpread: 6.5,
+    total: 46.5,
+  },
+});
+assert.equal(perMarketReferenceOutlooks.spread?.source, "authoritative_pmf_at_espn_opening_line", "the strict opening fallback must fill only a missing primary Spread");
+assert.equal(Math.abs(perMarketReferenceOutlooks.spread?.line ?? 0), 6.5);
+assert.equal(perMarketReferenceOutlooks.total?.source, "authoritative_pmf_at_playbook_line", "a primary Total must retain precedence over the fallback");
+assert.equal(perMarketReferenceOutlooks.total?.line, 47.5);
 const productionBundle = applyCfbMarketSharpAwareGrades({
   homeTeam: game.home.abbreviation,
   bundle: buildCfbV1DecisionBundle({
@@ -476,6 +510,8 @@ previousFixture.fixtureRelease = CFB_PREVIOUS_MEMBER_FIXTURE_RELEASE;
 const previousSnapshot = {
   ...structuredClone(compactMemberSnapshot),
   snapshotRelease: CFB_FORWARD_PREVIOUS_MEMBER_SNAPSHOT_RELEASE,
+  evidenceRelease: CFB_PREVIOUS_EVIDENCE_RELEASE,
+  memberRelease: CFB_PREVIOUS_MEMBER_RELEASE,
   fixtureRelease: CFB_PREVIOUS_MEMBER_FIXTURE_RELEASE,
   fixture: previousFixture,
 };
@@ -1856,6 +1892,66 @@ assert.deepEqual(
   buildCfbPublishedCutoffRecoveryRecords({ payload: missingAnchorRecovery, gameId: 9001 }).map((row) => row.market),
   ["moneyline"],
   "missing historical reference lines must stay missing instead of being fabricated",
+);
+const espnRecoveryPayload = structuredClone(missingAnchorRecovery);
+espnRecoveryPayload.decisions.evaluatedBets = [];
+espnRecoveryPayload.decisions.heldMarkets = (["moneyline", "spread", "total"] as const).map((market) => ({
+  market,
+  reason: "authoritative_market_anchor_unavailable",
+  reasonCodes: ["global_health_hold" as const],
+}));
+espnRecoveryPayload.decisions.forecast = publishedForecast;
+espnRecoveryPayload.authoritativeForecast = {
+  status: "market_anchor_unavailable_hold",
+  release: CFB_MARKET_SHARP_AWARE_PRODUCTION_RELEASE,
+  candidateRelease: CFB_MARKET_SHARP_AWARE_CANDIDATE_RELEASE,
+  marketWeight: 0,
+};
+espnRecoveryPayload.contextualEvidenceCapture = buildCfbForwardContextCapture({
+  payload: espnRecoveryPayload,
+  independentForecast: forecast,
+  independentRelease: CFB_V1_WEEKLY_RUNTIME_RELEASE,
+  authoritativeForecast: forecast,
+  openingBooks: [],
+})!;
+const espnRecovery = buildCfbEspnOpeningRecoveryRecords({
+  payload: espnRecoveryPayload,
+  gameId: 9001,
+  replayForecast: forecast,
+  referenceLine: {
+    release: CFB_ESPN_REFERENCE_LINE_RELEASE,
+    provider: "espn",
+    sportsbook: "DraftKings",
+    providerEventId: "401000001",
+    capturedAt: "2026-08-30T12:00:00.000Z",
+    lineType: "opening",
+    homeSpread: -7.5,
+    awaySpread: 7.5,
+    total: 47.5,
+  },
+});
+assert.deepEqual(espnRecovery.map((row) => row.market), ["spread", "total"]);
+assert.equal(espnRecovery.every((row) => row.no_bet && !row.held && row.odds_american === null && row.expected_value === null), true);
+assert.equal(espnRecovery.every((row) => row.prediction_source === "cfb_forward_evidence_espn_opening_accuracy_recovery"), true);
+assert.throws(
+  () => buildCfbEspnOpeningRecoveryRecords({
+    payload: espnRecoveryPayload,
+    gameId: 9001,
+    replayForecast: { ...forecast, expectedHomePoints: forecast.expectedHomePoints + 1 },
+    referenceLine: {
+      release: CFB_ESPN_REFERENCE_LINE_RELEASE,
+      provider: "espn",
+      sportsbook: "DraftKings",
+      providerEventId: "401000001",
+      capturedAt: "2026-08-30T12:00:00.000Z",
+      lineType: "opening",
+      homeSpread: -7.5,
+      awaySpread: 7.5,
+      total: 47.5,
+    },
+  }),
+  /immutable independent PMF replay mismatch/,
+  "recovery must fail closed when any immutable forecast output differs even if the PMF hash is unchanged",
 );
 assert.throws(
   () => buildCfbPublishedCutoffRecoveryRecords({ payload: afterCutoffPayload, gameId: 9001 }),
