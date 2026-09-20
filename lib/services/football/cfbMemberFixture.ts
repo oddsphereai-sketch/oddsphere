@@ -875,7 +875,7 @@ function buildSharpBookSplitSection(
   market: CfbV1Market,
   movementRows: CfbForwardMarketHistoryEvidence[] = [],
 ): MarketSplitDisplaySection | null {
-  const record = [...(payload.market.sharpApiSplits ?? [])]
+  const record = sourceSpecificSplitRecords(payload, movementRows)
     .filter((candidate) => candidate.sourceSemantics === "sharp_adjacent" && sharpMarketAvailable(candidate, market))
     .sort((first, second) => Date.parse(second.capturedAt) - Date.parse(first.capturedAt))[0];
   if (!record) return null;
@@ -892,7 +892,7 @@ function buildSportsbookSplitSection(
   movementRows: CfbForwardMarketHistoryEvidence[] = [],
 ): MarketSplitDisplaySection | null {
   if (buildSharpBookSplitSection(payload, market, movementRows)) return null;
-  const record = [...(payload.market.sharpApiSplits ?? [])]
+  const record = sourceSpecificSplitRecords(payload, movementRows)
     .filter((candidate) => candidate.sourceSemantics === "public_recreational" && sharpMarketAvailable(candidate, market))
     .sort((first, second) => Date.parse(second.capturedAt) - Date.parse(first.capturedAt))[0];
   if (!record) return null;
@@ -903,6 +903,20 @@ function buildSportsbookSplitSection(
     record.sportsbook === "draftkings" ? "DraftKings Splits" : "BetMGM Splits",
     previousSharpSplitRecord({ movementRows, market, current: record }),
   );
+}
+
+function sourceSpecificSplitRecords(
+  payload: CfbForwardEvidencePayload,
+  movementRows: CfbForwardMarketHistoryEvidence[],
+): NonNullable<CfbForwardEvidencePayload["market"]["sharpApiSplits"]> {
+  const records = [
+    ...(payload.market.sharpApiSplits ?? []),
+    ...movementRows.flatMap((row) => row.payload.market.sharpApiSplits ?? []),
+  ].filter((record) => Date.parse(record.capturedAt) <= Date.parse(payload.capturedAt));
+  return [...new Map(records.map((record) => [
+    `${record.providerEventId}:${record.sportsbook}:${record.capturedAt}`,
+    record,
+  ])).values()];
 }
 
 function cfbSplitSection(
@@ -961,10 +975,11 @@ function sharpMarketAvailable(
 function sharpBookAvailability(
   payload: CfbForwardEvidencePayload,
   market: CfbV1Market,
+  movementRows: CfbForwardMarketHistoryEvidence[] = [],
 ): NonNullable<MarketEdgeDto["sharpBookAvailability"]> {
-  const sharp = buildSharpBookSplitSection(payload, market);
+  const sharp = buildSharpBookSplitSection(payload, market, movementRows);
   if (sharp) return { status: sharp.rows.some((row) => row.isStale) ? "stale" : "complete", message: "Verified sharp splits are available for this game and market.", lastUpdated: sharp.lastUpdated };
-  const records = payload.market.sharpApiSplits ?? [];
+  const records = sourceSpecificSplitRecords(payload, movementRows);
   const latest = records.reduce<string | null>((value, record) => value === null || record.capturedAt > value ? record.capturedAt : value, null);
   if (payload.market.sharpApiSplitsStatus === "request_failed") {
     return { status: "unavailable", message: "Verified sharp splits are unavailable for this capture. Public consensus remains separate.", lastUpdated: null };
@@ -1058,7 +1073,7 @@ function buildMarket(
     moneyPct: selectedSplit.money,
     betsPct: selectedSplit.bets,
     publicSplits,
-    sharpBookAvailability: sharpBookAvailability(payload, market),
+    sharpBookAvailability: sharpBookAvailability(payload, market, movementRows),
     priceAmerican: decision?.evaluatedQuote.price ?? null,
     currentPriceAmerican: decision?.evaluatedQuote.price ?? currentQuote?.quote.price ?? null,
     currentPriceSportsbook: decision?.evaluatedQuote.sportsbook ?? currentQuote?.book.sportsbook ?? null,

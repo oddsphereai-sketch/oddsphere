@@ -25,6 +25,18 @@ Last reviewed: 2026-09-20
   Playbook consensus separation, presentation labels/copy, model inputs,
   predictions, probabilities, grades, stakes, locks, and tracking are unchanged.
 
+- September 20 cross-sport split-continuity repair: the shared DraftKings Network
+  display fallback now persists only complete, non-empty verified feeds in the
+  existing response-snapshot store and reuses the bounded last-known-good feed
+  after a provider failure or server cold start. Weekly feeds expire after eight
+  days; daily-sport feeds expire after 36 hours; exact sport, game date, and team
+  identity matching still applies before any row is attached. NFL and CFB member
+  assembly also retain the newest exact-game named-book observation from their
+  immutable movement history when a later provider capture is empty. Consensus
+  is never relabeled, and predictions, model inputs, probabilities, grades,
+  stakes, locks, tracking, copy, and labels are unchanged. Promotions,
+  demotions, and actionable-board impact are 0 / 0 / 0.
+
 ## Cross-sport prediction-accuracy denominator contract (2026-09-04)
 
 - Public W-L accuracy counts every immutable locked prediction that has a real side, including Watchlist and No Play. Best Angle and Lean remain separate actionable-only cuts. Exact-price ROI remains separate and excludes null-price records. The aggregate contract is `tracking_aggregate_v9_append_only_correction_precedence_2026_09_14`; an append-only correction explicitly supersedes its erroneous original before grade/actionability precedence is evaluated. Unlocked records from every sport remain outside public accuracy while they can still change.

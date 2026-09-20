@@ -4,6 +4,7 @@ import {
   applyDraftKingsNetworkSplitFallback,
   fetchDraftKingsNetworkSplits,
   parseDraftKingsNetworkSplitsHtml,
+  validateDurableDraftKingsNetworkSplitFeed,
   type DraftKingsNetworkSplitFeed,
   type DraftKingsNetworkSplitMarket,
 } from "../lib/providers/draftkings/draftKingsNetworkSplits";
@@ -124,6 +125,22 @@ const feed: DraftKingsNetworkSplitFeed = {
   fetchedAt: "2026-09-17T15:01:00.000Z",
   games: parsed,
 };
+
+assert.equal(
+  validateDurableDraftKingsNetworkSplitFeed({ ...feed, fetchedAt: new Date().toISOString() }, "mlb")?.games.length,
+  1,
+  "a complete same-sport durable feed remains eligible during a provider outage",
+);
+assert.equal(
+  validateDurableDraftKingsNetworkSplitFeed({ ...feed, fetchedAt: new Date().toISOString() }, "nfl"),
+  null,
+  "a durable feed can never cross sport identities",
+);
+assert.equal(
+  validateDurableDraftKingsNetworkSplitFeed({ ...feed, fetchedAt: "2026-01-01T00:00:00.000Z" }, "mlb"),
+  null,
+  "an expired daily-sport durable feed fails closed",
+);
 
 const applied = applyDraftKingsNetworkSplitFallback(response, feed);
 assert.deepEqual(applied, { matchedGames: 1, populatedMarkets: 2 });
