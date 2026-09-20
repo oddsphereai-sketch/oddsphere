@@ -19,7 +19,7 @@ import {
 } from "./footballCrossMarketCoherence";
 
 export const NFL_OFFICIAL_TRACKING_RECORD_RELEASE =
-  "nfl_official_tracking_record_2026_09_20_r9_coherence_parity" as const;
+  "nfl_official_tracking_record_2026_09_20_r10_boundary_handoff" as const;
 
 const NFL_TRACKED_MARKETS = ["moneyline", "spread", "total"] as const;
 
@@ -36,8 +36,12 @@ export function nflTrackingMarketsForPayload(payload: NflForwardEvidencePayload)
 export function buildNflOfficialTrackingRecords(args: {
   payload: NflForwardEvidencePayload;
   gameId: number;
+  trackingBoundaryRevalidated?: boolean;
 }): PredictionRecordRow[] {
-  if (!args.payload.decisions.trackingEnabled || args.payload.stage !== "t60") {
+  if (
+    args.payload.stage !== "t60" ||
+    !args.payload.decisions.trackingEnabled && args.trackingBoundaryRevalidated !== true
+  ) {
     throw new Error("NFL tracking records require an eligible T-60 evidence payload.");
   }
   const externalId = integerId(args.payload.game.providerGameId, "game");
