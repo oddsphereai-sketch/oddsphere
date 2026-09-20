@@ -45,11 +45,11 @@ const releaseTransitionRows = rows.map((row, index) => {
   if (index === 0) return copy;
   copy.stage = "t60";
   copy.payload.stage = "t60";
-  copy.payload.decisions.modelPromotionStatus = "nfl_v1_member_release_2026_09_03_r12_target_excluded_forecast";
+  copy.payload.decisions.modelPromotionStatus = "nfl_v1_member_release_2026_09_16_r16_injury_pagination";
   copy.payload.decisions.trackingEnabled = true;
   copy.payload.decisions.evaluatedBets = copy.payload.decisions.evaluatedBets.map((decision) => ({
     ...decision,
-    decisionRelease: "nfl_v1_daily_edge_decision_2026_09_03_r15_target_excluded_forecast",
+    decisionRelease: "nfl_v1_daily_edge_decision_2026_09_16_r19_injury_pagination",
   }));
   return copy;
 });
@@ -57,6 +57,15 @@ assert.equal(
   buildNflWeekOneHeldMemberFixture(releaseTransitionRows).snapshot.games.length,
   16,
   "a release transition must preserve every immutable T-60 game until its current-release replacement exists",
+);
+const invalidUnlockedTransitionRows = structuredClone(releaseTransitionRows);
+invalidUnlockedTransitionRows[1]!.stage = "unlocked";
+invalidUnlockedTransitionRows[1]!.payload.stage = "unlocked";
+invalidUnlockedTransitionRows[1]!.payload.decisions.trackingEnabled = false;
+assert.throws(
+  () => buildNflWeekOneHeldMemberFixture(invalidUnlockedTransitionRows),
+  /coverage is 15\/16 games/,
+  "an unlocked preceding-release row must never cross the release boundary",
 );
 
 assert.equal(fixture.heldMemberFixtureRelease, NFL_WEEK_ONE_HELD_MEMBER_FIXTURE_RELEASE);
