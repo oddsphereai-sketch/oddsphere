@@ -3,6 +3,7 @@ import type { MarketSplitDisplaySection } from "@/lib/types/domain/Recommendatio
 import type { Sport } from "@/lib/types/domain/Sport";
 import { normalizeMlbTeamName } from "@/lib/providers/real_api/_teamNameNormalizer";
 import { cfbTeamIdentity } from "@/lib/services/football/cfbTeamIdentity";
+import { populateDailyEdgeSharpApiCurrentSplits } from "@/lib/providers/real_api/sharpApiCurrentSplits";
 import { unstable_cache } from "next/cache";
 
 const DRAFTKINGS_NETWORK_SPLITS_URL =
@@ -350,15 +351,21 @@ export async function populateDailyEdgeDraftKingsFallback(
   response: DailyEdgeResponse,
   sport: Sport,
 ): Promise<DraftKingsNetworkOverlayResult> {
-  try {
-    return applyDraftKingsNetworkSplitFallback(
-      response,
-      await readCachedDraftKingsNetworkSplits(sport),
-    );
-  } catch (error) {
-    console.warn(`DraftKings Network split fallback skipped: ${error instanceof Error ? error.message : String(error)}`);
-    return { matchedGames: 0, populatedMarkets: 0 };
-  }
+  // Both reads are one-per-sport cached operations. Run them together so the
+  // additional current-source continuity check cannot stack its deadline on
+  // top of the existing DraftKings Network fallback during a cold fill.
+  const [current, durableFeed] = await Promise.all([
+    populateDailyEdgeSharpApiCurrentSplits(response, sport),
+    readCachedDraftKingsNetworkSplits(sport).catch((error) => {
+      console.warn(`DraftKings Network split fallback skipped: ${error instanceof Error ? error.message : String(error)}`);
+      return null;
+    }),
+  ]);
+  const durable = applyDraftKingsNetworkSplitFallback(response, durableFeed);
+  return {
+    matchedGames: Math.max(current.matchedGames, durable.matchedGames),
+    populatedMarkets: current.populatedMarkets + durable.populatedMarkets,
+  };
 }
 
 function attachMarketFallback(
@@ -376,11 +383,7 @@ function attachMarketFallback(
   // then DraftKings, then another complete approved named book. A current
   // DraftKings row already in the DTO wins by freshness; a lower-priority
   // BetMGM row is replaced by this independently verified DraftKings pair.
-  if (
-    existing &&
-    existing.label !== "BetMGM Splits" &&
-    sectionIsSameAgeOrNewer(existing, fetchedAt)
-  ) return 0;
+  if (existing && !draftKingsShouldReplace(existing, section)) return 0;
   market.sportsbookSplits = section;
   return 1;
 }
@@ -407,17 +410,28 @@ function splitSection(
       observedAt: fetchedAt,
       freshnessCheckedAt: fetchedAt,
       staleAfterMinutes: 15,
-      isStale: false,
+      isStale: Date.now() - Date.parse(fetchedAt) > 15 * 60 * 1000,
     }];
   });
   if (rows.length !== 2 || rows[0]!.side === rows[1]!.side) return null;
   return { label: "DraftKings Splits", rows, signal: null, lastUpdated: fetchedAt };
 }
 
-function sectionIsSameAgeOrNewer(section: MarketSplitDisplaySection, incomingAt: string): boolean {
-  const existingAt = Date.parse(section.lastUpdated ?? "");
-  const nextAt = Date.parse(incomingAt);
-  return Number.isFinite(existingAt) && Number.isFinite(nextAt) && existingAt >= nextAt;
+function draftKingsShouldReplace(existing: MarketSplitDisplaySection, incoming: MarketSplitDisplaySection): boolean {
+  const existingCurrent = sectionIsCurrent(existing);
+  const incomingCurrent = sectionIsCurrent(incoming);
+  if (existingCurrent !== incomingCurrent) return incomingCurrent;
+  if (existing.label === "Sharp Book Splits") return false;
+  if (existing.label === "BetMGM Splits") return true;
+  if (existing.label !== "DraftKings Splits") return false;
+  return Date.parse(incoming.lastUpdated ?? "") > Date.parse(existing.lastUpdated ?? "");
+}
+
+function sectionIsCurrent(section: MarketSplitDisplaySection): boolean {
+  const observedAt = Date.parse(section.lastUpdated ?? "");
+  return Number.isFinite(observedAt) &&
+    Date.now() - observedAt <= 15 * 60 * 1000 &&
+    !section.rows.some((row) => row.isStale === true);
 }
 
 function marketFromLabel(label: string): DraftKingsNetworkMarket | null {
