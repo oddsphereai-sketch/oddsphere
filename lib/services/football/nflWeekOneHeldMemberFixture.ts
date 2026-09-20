@@ -45,12 +45,12 @@ import { nflFootballEvidenceStats } from "./footballMemberEvidence";
 import type { NflRegularSharpMarket, NflRegularSharpSplit } from "./sharpApiNflSplits";
 
 export const NFL_WEEK_ONE_HELD_MEMBER_FIXTURE_RELEASE =
-  "nfl_weekly_member_fixture_2026_09_20_r23_ml_total_coherence" as const;
+  "nfl_weekly_member_fixture_2026_09_20_r24_locked_transition" as const;
 
 const NFL_PREVIOUS_MEMBER_RELEASE =
-  "nfl_v1_member_release_2026_09_03_r12_target_excluded_forecast" as const;
+  "nfl_v1_member_release_2026_09_16_r16_injury_pagination" as const;
 const NFL_PREVIOUS_DECISION_RELEASE =
-  "nfl_v1_daily_edge_decision_2026_09_03_r15_target_excluded_forecast" as const;
+  "nfl_v1_daily_edge_decision_2026_09_16_r19_injury_pagination" as const;
 
 const DECISION_RELEASE = NFL_V1_ACTIONABLE_GRADE_DECISION_RELEASE;
 const HOLD_REASON = "The prediction remains live. The Bet grade is No Play while the exact-price writer repairs incomplete sportsbook or data-health evidence.";
