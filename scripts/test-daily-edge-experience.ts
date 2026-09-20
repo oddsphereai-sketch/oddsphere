@@ -1423,6 +1423,12 @@ check(
     candidateSource.includes("Historical cross-source read"),
 );
 check(
+  "retained named-book rows render silently without freshness badges or subtitles",
+  candidateSource.includes("const silentNamedBook = isSharp && Boolean(section?.rows.length)") &&
+    candidateSource.includes("!silentNamedBook && (stale || availabilityStatus === \"stale\")") &&
+    candidateSource.includes("!silentNamedBook ? <p"),
+);
+check(
   "legacy consensus divergence is relabeled instead of being shown as sharp money",
   candidateSource.includes('if (/sharp money/i.test(rawChip))') &&
     candidateSource.includes("Consensus money split leans against our side") &&
