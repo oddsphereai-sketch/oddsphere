@@ -68,7 +68,7 @@ import {
 } from "./nflForwardMemberSnapshotStore";
 
 export const NFL_FORWARD_WRITER_RELEASE =
-  "nfl_forward_evidence_writer_2026_09_16_r30_injury_pagination" as const;
+  "nfl_forward_evidence_writer_2026_09_20_r31_ml_total_coherence" as const;
 
 export type NflForwardWriterResult = {
   writerRelease: typeof NFL_FORWARD_WRITER_RELEASE;
@@ -331,6 +331,7 @@ export async function runNflForwardEvidenceWriter(args: {
       playbookLine,
       playbookSplits,
       sharpSplits,
+      pricedNeutralTotalCandidate: true,
     });
     const { outcome, production } = resolved;
     assertFootballCrossMarketCoherence({

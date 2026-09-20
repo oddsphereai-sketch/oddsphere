@@ -207,6 +207,39 @@ async function main() {
   assert.deepEqual(read, snapshot);
   assert.equal(JSON.stringify(read?.fixture), JSON.stringify(fixture));
 
+  const injuryPreviousSnapshotRelease = "nfl_forward_member_snapshot_2026_09_16_r14_injury_pagination";
+  const injuryPreviousFixtureRelease = "nfl_weekly_member_fixture_2026_09_16_r22_injury_pagination";
+  const injuryPreviousPayload = {
+    ...snapshot,
+    snapshotRelease: injuryPreviousSnapshotRelease,
+    memberRelease: "nfl_v1_member_release_2026_09_16_r16_injury_pagination",
+    decisionRelease: "nfl_v1_daily_edge_decision_2026_09_16_r19_injury_pagination",
+    fixtureRelease: injuryPreviousFixtureRelease,
+    fixture: {
+      ...fixture,
+      heldMemberFixtureRelease: injuryPreviousFixtureRelease,
+    },
+  };
+  storedKey = [
+    "nfl",
+    "daily-edge",
+    2026,
+    1,
+    injuryPreviousSnapshotRelease,
+    injuryPreviousFixtureRelease,
+    injuryPreviousPayload.memberRelease,
+    injuryPreviousPayload.decisionRelease,
+  ].join("::");
+  storedPayload = injuryPreviousPayload;
+  const injuryContinuityRead = await readNflForwardMemberSnapshot({
+    client,
+    season: 2026,
+    week: 1,
+    now: "2026-08-27T12:02:00.000Z",
+  });
+  assert.equal(injuryContinuityRead?.snapshotRelease, NFL_FORWARD_MEMBER_SNAPSHOT_RELEASE);
+  assert.equal(injuryContinuityRead?.fixtureRelease, injuryPreviousFixtureRelease);
+
   const onePointPreviousSnapshotRelease = "nfl_forward_member_snapshot_2026_09_15_r12_one_point_pmf_boundary";
   const onePointPreviousFixtureRelease = "nfl_weekly_member_fixture_2026_09_15_r20_one_point_pmf_boundary";
   const onePointPreviousPayload = {

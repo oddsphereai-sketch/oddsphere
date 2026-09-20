@@ -15,12 +15,13 @@ import {
 } from "./nflV1WeekOneOutcome";
 
 export const NFL_TARGET_EXCLUDED_MARKET_OUTCOME_RELEASE =
-  "nfl_target_excluded_market_outcome_2026_09_14_r2_prediction_owned_side" as const;
+  "nfl_target_excluded_market_outcome_2026_09_20_r3_priced_neutral_total" as const;
 
 export type NflTargetExcludedMarketAnchor = {
   release: typeof NFL_TARGET_EXCLUDED_MARKET_OUTCOME_RELEASE;
   homeMargin: number;
   total: number;
+  totalOverFairProbability: number;
   marginFamilyCount: number;
   totalFamilyCount: number;
   marginExcludedSportsbooks: string[];
@@ -47,6 +48,7 @@ export function resolveNflTargetExcludedProduction(args: {
   playbookLine: NflForwardPlaybookLine | null;
   playbookSplits: NflForwardPlaybookSplitSet | null;
   sharpSplits: NflRegularSharpSplitSet | null;
+  pricedNeutralTotalCandidate?: boolean;
 }): {
   outcome: NflV1WeekOneOutcomeForecast;
   production: NflV1ActionableGradeBundle;
@@ -97,6 +99,7 @@ export function resolveNflTargetExcludedProduction(args: {
       marginExcludedSportsbooks: excluded.margin,
       totalExcludedSportsbooks: excluded.total,
       evaluatedAt: args.evaluatedAt,
+      requireSameLineTotalPrices: args.pricedNeutralTotalCandidate === true,
     });
     if (!anchor) return fallback();
     const targetFreeCurrent: NflPreviewBookOdds = {
@@ -118,6 +121,7 @@ export function resolveNflTargetExcludedProduction(args: {
       playbookLine: args.playbookLine,
       playbookSplits: args.playbookSplits,
       sharpSplits: targetFreeSharpSplits(args.sharpSplits, excluded),
+      marketOverProbability: args.pricedNeutralTotalCandidate ? anchor.totalOverFairProbability : undefined,
       evaluatedAt: args.evaluatedAt,
     });
     const productionCandidate = buildProduction(outcomeCandidate);
@@ -154,6 +158,7 @@ export function resolveNflTargetExcludedMarketAnchor(args: {
   evaluatedAt: string;
   freshnessMinutes?: number;
   minimumFamilies?: number;
+  requireSameLineTotalPrices?: boolean;
 }): NflTargetExcludedMarketAnchor | null {
   const evaluatedAt = Date.parse(args.evaluatedAt);
   if (!Number.isFinite(evaluatedAt)) throw new Error("NFL target-excluded anchor evaluatedAt is invalid.");
@@ -171,10 +176,18 @@ export function resolveNflTargetExcludedMarketAnchor(args: {
     book.total !== null && isFresh(book.observedAt, evaluatedAt, freshnessMs)
   );
   if (marginBooks.length < minimumFamilies || totalBooks.length < minimumFamilies) return null;
+  const total = median(totalBooks.map((book) => book.total!.line));
+  const sameLineTotalBooks = totalBooks.filter((book) => book.total!.line === total);
+  if (args.requireSameLineTotalPrices && sameLineTotalBooks.length < minimumFamilies) return null;
+  const totalPriceBooks = sameLineTotalBooks.length >= minimumFamilies ? sameLineTotalBooks : totalBooks;
   return {
     release: NFL_TARGET_EXCLUDED_MARKET_OUTCOME_RELEASE,
     homeMargin: -median(marginBooks.map((book) => book.spread!.homeLine)),
-    total: median(totalBooks.map((book) => book.total!.line)),
+    total,
+    totalOverFairProbability: median(totalPriceBooks.map((book) => twoSidedFair(
+      book.total!.overPrice,
+      book.total!.underPrice,
+    ))),
     marginFamilyCount: marginBooks.length,
     totalFamilyCount: totalBooks.length,
     marginExcludedSportsbooks: [...marginExcluded].sort(),
@@ -248,4 +261,15 @@ function median(values: number[]): number {
   const rows = [...values].sort((first, second) => first - second);
   const middle = Math.floor(rows.length / 2);
   return rows.length % 2 === 0 ? (rows[middle - 1]! + rows[middle]!) / 2 : rows[middle]!;
+}
+
+function twoSidedFair(selectedPrice: number, opposingPrice: number): number {
+  const selected = americanImplied(selectedPrice);
+  const opposing = americanImplied(opposingPrice);
+  return selected / (selected + opposing);
+}
+
+function americanImplied(price: number): number {
+  if (!Number.isFinite(price) || price === 0) throw new Error("NFL target-excluded price must be non-zero American odds.");
+  return price > 0 ? 100 / (price + 100) : -price / (-price + 100);
 }

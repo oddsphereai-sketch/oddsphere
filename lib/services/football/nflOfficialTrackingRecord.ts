@@ -16,7 +16,7 @@ import type { NflRegularDecisionMarket, NflRegularOutcomeConfidence } from "./nf
 import { assertFootballCrossMarketCoherence } from "./footballCrossMarketCoherence";
 
 export const NFL_OFFICIAL_TRACKING_RECORD_RELEASE =
-  "nfl_official_tracking_record_2026_09_14_r7_prediction_owned_side" as const;
+  "nfl_official_tracking_record_2026_09_20_r8_ml_total_coherence" as const;
 
 const NFL_TRACKED_MARKETS = ["moneyline", "spread", "total"] as const;
 

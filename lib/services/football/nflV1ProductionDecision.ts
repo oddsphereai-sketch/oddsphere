@@ -5,7 +5,11 @@ import {
   type NflRegularEvaluatedBetDecision,
   type NflRegularOutcomeConfidence,
 } from "./nflRegularDecisionEvidence";
-import type { NflR6ShadowMoneylineDecision } from "./nflR6MoneylineShadow";
+import {
+  NFL_R6_MONEYLINE_CALIBRATION_RELEASE,
+  NFL_R6_MONEYLINE_MODEL_RELEASE,
+  type NflR6ShadowMoneylineDecision,
+} from "./nflR6MoneylineShadow";
 import {
   getNflV1WeekOneOutcomeForecast,
   nflV1WeekOneLineProbabilities,
@@ -13,15 +17,15 @@ import {
 } from "./nflV1WeekOneOutcome";
 
 export const NFL_V1_PRODUCTION_MODEL_RELEASE =
-  "nfl_v1_daily_edge_model_2026_09_16_r13_injury_pagination" as const;
+  "nfl_v1_daily_edge_model_2026_09_20_r14_ml_total_coherence" as const;
 export const NFL_V1_PRODUCTION_CALIBRATION_RELEASE =
-  "nfl_v1_daily_edge_calibration_2026_09_16_r13_injury_pagination" as const;
+  "nfl_v1_daily_edge_calibration_2026_09_20_r14_ml_total_coherence" as const;
 export const NFL_V1_PRODUCTION_DECISION_RELEASE =
-  "nfl_v1_daily_edge_decision_2026_09_16_r19_injury_pagination" as const;
+  "nfl_v1_daily_edge_decision_2026_09_20_r20_ml_total_coherence" as const;
 export const NFL_V1_GRADE_POLICY_RELEASE =
-  "nfl_v1_grade_policy_2026_09_16_r19_injury_pagination" as const;
+  "nfl_v1_grade_policy_2026_09_20_r20_ml_total_coherence" as const;
 export const NFL_V1_MEMBER_RELEASE =
-  "nfl_v1_member_release_2026_09_16_r16_injury_pagination" as const;
+  "nfl_v1_member_release_2026_09_20_r17_ml_total_coherence" as const;
 
 export const NFL_V1_WATCHLIST_MINIMUM_EXPECTED_VALUE = -0.01 as const;
 export const NFL_V1_WATCHLIST_MINIMUM_EDGE_PERCENTAGE_POINTS = -1.0 as const;
@@ -128,16 +132,31 @@ export function buildNflV1ProductionDecisionBundle(args: {
     gameStartsAt: args.gameStartsAt,
   });
   if (!coherentMoneyline) throw new Error(`NFL v1 target-excluded moneyline tuple is incomplete for ${args.providerGameId}.`);
+  const useAlignedR6Lean = args.shadowMoneyline.grade === "Lean" &&
+    args.shadowMoneyline.team === outcomeWinner &&
+    args.shadowMoneyline.modelProbability !== null &&
+    args.shadowMoneyline.otherBooksConsensusFairProbability !== null &&
+    args.shadowMoneyline.evaluatedQuote !== null &&
+    boundedGradePrice(args.shadowMoneyline.evaluatedQuote.price);
+  const moneylineModelProbability = useAlignedR6Lean
+    ? args.shadowMoneyline.modelProbability!
+    : coherentMoneyline.modelProbability;
+  const moneylineMarketFairProbability = useAlignedR6Lean
+    ? args.shadowMoneyline.otherBooksConsensusFairProbability!
+    : coherentMoneyline.looFairProbability;
+  const moneylineQuote = useAlignedR6Lean
+    ? args.shadowMoneyline.evaluatedQuote!
+    : coherentMoneyline.quote;
   const moneyline = buildNflRegularEvaluatedBetDecision({
     ...common,
     market: "moneyline",
     side: outcomeWinner,
-    modelProbability: coherentMoneyline.modelProbability,
-    marketFairProbability: coherentMoneyline.looFairProbability,
-    evaluatedQuote: coherentMoneyline.quote,
-    grade: coherentMoneyline.grade,
-    modelRelease: NFL_V1_PRODUCTION_MODEL_RELEASE,
-    calibrationRelease: NFL_V1_PRODUCTION_CALIBRATION_RELEASE,
+    modelProbability: moneylineModelProbability,
+    marketFairProbability: moneylineMarketFairProbability,
+    evaluatedQuote: moneylineQuote,
+    grade: useAlignedR6Lean ? "Lean" : coherentMoneyline.grade,
+    modelRelease: useAlignedR6Lean ? NFL_R6_MONEYLINE_MODEL_RELEASE : NFL_V1_PRODUCTION_MODEL_RELEASE,
+    calibrationRelease: useAlignedR6Lean ? NFL_R6_MONEYLINE_CALIBRATION_RELEASE : NFL_V1_PRODUCTION_CALIBRATION_RELEASE,
   });
   const spreadEvaluation = selectSpreadTotalEvaluation({
     market: "spread", forecast: outcome, books: args.comparableCurrentBooks,

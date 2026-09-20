@@ -27,10 +27,14 @@ import { NFL_T60_MAX_CAPTURE_LAG_MINUTES } from "./nflRegularDecisionEvidence";
 import type { NflRegularEvaluatedBetDecision } from "./nflRegularDecisionEvidence";
 import {
   getNflV1WeekOneOutcomeForecast,
+  hasNflV1WeekOneOutcomeForecast,
   nflV1WeekOneLineProbabilities,
   NFL_V1_OUTCOME_DISTRIBUTION_RELEASE,
   NFL_V1_OUTCOME_MODEL_RELEASE,
   NFL_V1_OUTCOME_PROBABILITY_RELEASE,
+  NFL_V1_WEEKLY_OUTCOME_DISTRIBUTION_RELEASE,
+  NFL_V1_WEEKLY_OUTCOME_MODEL_RELEASE,
+  NFL_V1_WEEKLY_OUTCOME_PROBABILITY_RELEASE,
   NFL_V1_WEEK_ONE_OUTCOME_ARTIFACT_RELEASE,
 } from "./nflV1WeekOneOutcome";
 import {
@@ -41,14 +45,13 @@ import { nflFootballEvidenceStats } from "./footballMemberEvidence";
 import type { NflRegularSharpMarket, NflRegularSharpSplit } from "./sharpApiNflSplits";
 
 export const NFL_WEEK_ONE_HELD_MEMBER_FIXTURE_RELEASE =
-  "nfl_weekly_member_fixture_2026_09_16_r22_injury_pagination" as const;
+  "nfl_weekly_member_fixture_2026_09_20_r23_ml_total_coherence" as const;
 
 const NFL_PREVIOUS_MEMBER_RELEASE =
   "nfl_v1_member_release_2026_09_03_r12_target_excluded_forecast" as const;
 const NFL_PREVIOUS_DECISION_RELEASE =
   "nfl_v1_daily_edge_decision_2026_09_03_r15_target_excluded_forecast" as const;
 
-const MODEL_RELEASE = NFL_V1_OUTCOME_MODEL_RELEASE;
 const DECISION_RELEASE = NFL_V1_ACTIONABLE_GRADE_DECISION_RELEASE;
 const HOLD_REASON = "The prediction remains live. The Bet grade is No Play while the exact-price writer repairs incomplete sportsbook or data-health evidence.";
 
@@ -148,7 +151,7 @@ export function buildNflWeekOneHeldMemberFixture(
       schedule: "BALLDONTLIE NFL games from the leased forward-evidence collector",
       odds: "BALLDONTLIE named-sportsbook two-sided current and operational Opening quotes",
       results: "Preseason is excluded; official regular-season results append automatically from each valid immutable T-60 tuple",
-      modelRelease: MODEL_RELEASE,
+      modelRelease: outcomeReleases(firstPayload.game.providerGameId).modelRelease,
       decisionRelease: DECISION_RELEASE,
       sourceChecksum,
       providerRequests: 0,
@@ -426,6 +429,7 @@ function buildHeldGame(
   });
   const externalId = Number(game.providerGameId);
   if (!Number.isFinite(externalId)) throw new Error(`NFL provider game id ${game.providerGameId} is not numeric.`);
+  const releases = outcomeReleases(game.providerGameId);
   return {
     id: `nfl-${game.providerGameId}`,
     sport: "nfl",
@@ -462,9 +466,9 @@ function buildHeldGame(
       homeWinProbability: outcome.homeWinProbability,
       expectedAwayPoints: outcome.expectedAwayScore,
       expectedHomePoints: outcome.expectedHomeScore,
-      modelRelease: NFL_V1_OUTCOME_MODEL_RELEASE,
-      distributionRelease: NFL_V1_OUTCOME_DISTRIBUTION_RELEASE,
-      probabilityRelease: NFL_V1_OUTCOME_PROBABILITY_RELEASE,
+      modelRelease: releases.modelRelease,
+      distributionRelease: releases.distributionRelease,
+      probabilityRelease: releases.probabilityRelease,
       artifactRelease: NFL_V1_WEEK_ONE_OUTCOME_ARTIFACT_RELEASE,
     },
     sharpSignals: [],
@@ -489,6 +493,20 @@ function buildHeldGame(
     },
     recommendationDecision,
   };
+}
+
+function outcomeReleases(providerGameId: string) {
+  return hasNflV1WeekOneOutcomeForecast(providerGameId)
+    ? {
+        modelRelease: NFL_V1_OUTCOME_MODEL_RELEASE,
+        distributionRelease: NFL_V1_OUTCOME_DISTRIBUTION_RELEASE,
+        probabilityRelease: NFL_V1_OUTCOME_PROBABILITY_RELEASE,
+      }
+    : {
+        modelRelease: NFL_V1_WEEKLY_OUTCOME_MODEL_RELEASE,
+        distributionRelease: NFL_V1_WEEKLY_OUTCOME_DISTRIBUTION_RELEASE,
+        probabilityRelease: NFL_V1_WEEKLY_OUTCOME_PROBABILITY_RELEASE,
+      };
 }
 
 type NflSourceSplitEvidence = {
