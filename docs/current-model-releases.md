@@ -4,7 +4,7 @@ This file is the human-readable production handoff registry. Runtime constants a
 prediction snapshots remain the machine authority. Future model work must start here, verify the
 constants, and preserve the precedence and writer ownership below.
 
-Last reviewed: 2026-09-19
+Last reviewed: 2026-09-20
 
 ## Cross-sport confidence / execution contract
 
@@ -82,9 +82,43 @@ Last reviewed: 2026-09-19
 
 ## CFB Daily Edge generalized weekly production release
 
-### Same-book history continuity across prediction releases (r70)
+### Complete three-market tracking and strict reference fallback (r71)
 
-- Active sole writer / member fixture / compact snapshot / reader are
+- Active ESPN reference / evidence / collector / member releases are
+  `cfb_espn_reference_line_2026_09_20_r1_strict_opening_fallback` /
+  `cfb_forward_evidence_snapshot_2026_09_20_r25_complete_tracking_reference` /
+  `cfb_forward_evidence_collector_2026_09_20_r31_complete_tracking_reference` /
+  `cfb_v1_member_release_2026_09_20_r37_complete_tracking_reference`. Sole writer / fixture / outcome
+  are `cfb_forward_evidence_writer_2026_09_20_r66_complete_tracking_reference` /
+  `cfb_v1_member_fixture_2026_09_20_r57_complete_tracking_reference` /
+  `cfb_market_sharp_public_outcome_contract_2026_09_20_r52_complete_tracking_reference`; compact
+  snapshot / reader are `cfb_forward_member_snapshot_2026_09_20_r16_complete_tracking_reference` /
+  `cfb_member_snapshot_reader_2026_09_20_r5_complete_tracking_reference`; tracking is
+  `cfb_official_tracking_record_2026_09_20_r23_complete_tracking_reference`.
+- The September 19 production denominator was 97 Moneylines / 71 Spreads / 71 Totals even though all
+  239 existing grades independently re-graded exactly. Twenty-six games lacked both Spread and Total.
+  The outcome-blind repair reproduces all 26 immutable pre-cutoff PMFs and matches all 26 exact ESPN
+  events plus complete DraftKings opening lines. It proposes exactly 52 append-only accuracy-only No
+  Plays—26 Spreads and 26 Totals—with zero duplicate keys and zero reconstructed economic fields. One
+  game's two rows retain its earlier immutable published exact prediction; 50 rows use the strict opening
+  reference. Normal settlement yields equal 97/97/97 denominators. Existing rows are never changed.
+- Prospectively, Playbook remains the primary per-market context. Its absent Spread or Total may use the
+  strictly identified ESPN/DraftKings opening reference only to evaluate the already-authoritative PMF.
+  The fallback is never a current quote, multi-book consensus, sharp input, exact-price decision, grade,
+  promotion, stake, or ROI source. Collection is slate-scoped, bounded, and isolated inside the existing
+  `/api/cron/cfb-forward-evidence` writer and `prediction_pipeline:cfb` lease. Actionable promotions /
+  demotions and board-count impact are 0 / 0 / 0; the September 19 r69 score, PMF, probability,
+  calibration, exact-price decision, grade, and stake releases remain unchanged.
+- The release-transition reader now validates the immediately previous snapshot against that snapshot's
+  exact r24/r36/r56 release tuple, keeping the verified board visible until r25/r37/r57 is first published.
+  The market-history reader retains r22, r23, r24, and r25 price-only chronology. Evidence, verification,
+  corrected result counts, load bounds, and atomic rollback are recorded in
+  `docs/model-audits/2026-09-20-cfb-complete-tracking-recovery-predeclaration.md` and
+  `docs/model-audits/2026-09-20-cfb-complete-tracking-recovery-result.md`.
+
+### Same-book history continuity across prediction releases (r70; retained by r71)
+
+- Preceding sole writer / member fixture / compact snapshot / reader were
   `cfb_forward_evidence_writer_2026_09_19_r65_price_history_continuity` /
   `cfb_v1_member_fixture_2026_09_19_r56_price_history_continuity` /
   `cfb_forward_member_snapshot_2026_09_19_r15_price_history_continuity` /

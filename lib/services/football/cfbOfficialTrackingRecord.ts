@@ -1,8 +1,12 @@
+import { createHash } from "node:crypto";
 import { computeSlateDate } from "@/lib/dates/slateDate";
 import type { PredictionRecordRow } from "@/lib/types/domain/Tracking";
 import {
   CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE,
+  CFB_FORWARD_PRICE_PREVIOUS_EVIDENCE_SCHEMA_RELEASE,
   CFB_FORWARD_MEMBER_RELEASE,
+  CFB_FORWARD_PRICE_PREVIOUS_MEMBER_RELEASE,
+  buildCfbForwardMarketOutlooks,
   hashCfbForwardEvidencePayload,
   type CfbForwardEvidencePayload,
 } from "./cfbForwardEvidence";
@@ -12,6 +16,8 @@ import {
   CFB_V1_DECISION_RELEASE,
   type CfbV1Market,
 } from "./cfbV1Decision";
+import type { CfbV1Forecast } from "./cfbV1Decision";
+import type { CfbEspnReferenceLine } from "./cfbEspnReferenceLine";
 import {
   CFB_MARKET_SHARP_AWARE_PREVIOUS_PRODUCTION_RELEASE,
   CFB_MARKET_SHARP_AWARE_PRODUCTION_RELEASE,
@@ -19,7 +25,7 @@ import {
 import { assertMarketScopedFootballDecisions, FOOTBALL_MARKET_SCOPED_T60_TRACKING_RELEASE } from "./footballMarketScopedTracking";
 
 export const CFB_OFFICIAL_TRACKING_RECORD_RELEASE =
-  "cfb_official_tracking_record_2026_09_19_r22_contained_spread_counter_signal" as const;
+  "cfb_official_tracking_record_2026_09_20_r23_complete_tracking_reference" as const;
 
 export function cfbTrackingMarketsForPayload(payload: CfbForwardEvidencePayload): CfbV1Market[] {
   const markets = new Set<CfbV1Market>(payload.decisions.evaluatedBets.map((decision) => decision.market));
@@ -132,7 +138,15 @@ export function buildCfbPublishedCutoffRecoveryRecords(args: {
   const outlooks = args.payload.decisions.marketOutlooks;
   if (!outlooks) throw new Error("CFB published-cutoff recovery requires immutable market outlooks.");
   return (["moneyline", "spread", "total"] as const).flatMap((market) => {
-    const outlook = outlooks[market] ?? null;
+    const immutableDecision = args.payload.decisions.evaluatedBets.find((decision) => decision.market === market) ?? null;
+    const outlook = outlooks[market] ?? (immutableDecision ? {
+      market,
+      side: canonicalSide(args.payload, market, immutableDecision.side),
+      line: market === "moneyline" ? null : immutableDecision.evaluatedQuote.line,
+      independentProbability: immutableDecision.modelProbability,
+      source: market === "moneyline" ? "authoritative_pmf" as const : "authoritative_pmf_at_named_book_line" as const,
+      contextObservedAt: immutableDecision.evaluatedQuote.observedAt,
+    } : null);
     if (!outlook || (market !== "moneyline" && outlook.line === null)) return [];
     return [buildNoPlayForecastRecord({
       payload: args.payload,
@@ -144,8 +158,52 @@ export function buildCfbPublishedCutoffRecoveryRecords(args: {
       outlook,
       predictionSource: "cfb_forward_evidence_published_cutoff_accuracy_recovery",
       recovery: true,
+      recoveryDetails: immutableDecision ? {
+        source: "immutable_published_exact_price_decision",
+        original_decision: immutableDecision,
+      } : { source: "immutable_published_market_outlook" },
     })];
   });
+}
+
+export function buildCfbEspnOpeningRecoveryRecords(args: {
+  payload: CfbForwardEvidencePayload;
+  gameId: number;
+  referenceLine: CfbEspnReferenceLine;
+  replayForecast: CfbV1Forecast;
+}): PredictionRecordRow[] {
+  assertCfbPublishedCutoffRecoveryPayload(args.payload);
+  assertCfbIndependentReplay(args.payload, args.replayForecast);
+  if (args.payload.authoritativeForecast?.status !== "market_anchor_unavailable_hold") {
+    throw new Error("CFB ESPN recovery requires a held independent authoritative forecast.");
+  }
+  const outlooks = buildCfbForwardMarketOutlooks({
+    forecast: args.replayForecast,
+    playbookLine: null,
+    espnReferenceLine: args.referenceLine,
+  });
+  const externalId = providerIntegerId(args.payload.game.providerGameId, "game");
+  return (["spread", "total"] as const).map((market) => buildNoPlayForecastRecord({
+    payload: args.payload,
+    gameId: args.gameId,
+    externalId,
+    market,
+    reason: "t60_reference_line_unavailable_accuracy_recovery",
+    reasonCodes: ["published_before_t60_cutoff", "strict_espn_event_identity", "draftkings_opening_reference", "no_reconstructed_betting_economics"],
+    outlook: outlooks[market]!,
+    predictionSource: "cfb_forward_evidence_espn_opening_accuracy_recovery",
+    recovery: true,
+    recoveryDetails: {
+      source: "espn_pickcenter_draftkings_opening",
+      reference_line_release: args.referenceLine.release,
+      provider_event_id: args.referenceLine.providerEventId,
+      provider: args.referenceLine.provider,
+      sportsbook: args.referenceLine.sportsbook,
+      line_type: args.referenceLine.lineType,
+      recovered_at: args.referenceLine.capturedAt,
+      immutable_independent_pmf_sha256: createHash("sha256").update(JSON.stringify(args.replayForecast.pmf)).digest("hex"),
+    },
+  }));
 }
 
 function buildNoPlayForecastRecord(args: {
@@ -158,6 +216,7 @@ function buildNoPlayForecastRecord(args: {
   outlook: NonNullable<NonNullable<CfbForwardEvidencePayload["decisions"]["marketOutlooks"]>[CfbV1Market]>;
   predictionSource?: string;
   recovery?: boolean;
+  recoveryDetails?: Record<string, unknown>;
 }): PredictionRecordRow {
   const side = args.outlook.side;
   const team = side === "home" ? args.payload.game.home.abbreviation : args.payload.game.away.abbreviation;
@@ -228,6 +287,7 @@ function buildNoPlayForecastRecord(args: {
           original_forecast_release: args.payload.authoritativeForecast?.release ?? null,
           selected_at_or_before_cutoff: new Date(Date.parse(args.payload.game.scheduledStart) - 60 * 60_000).toISOString(),
           excludes: ["odds", "edge", "expected_value", "recommendation", "stake", "roi"],
+          ...(args.recoveryDetails ? { details: args.recoveryDetails } : {}),
         },
       } : {}),
     },
@@ -242,8 +302,8 @@ function assertCfbPublishedCutoffRecoveryPayload(payload: CfbForwardEvidencePayl
   const supportedForecastRelease = forecastRelease === CFB_MARKET_SHARP_AWARE_PRODUCTION_RELEASE ||
     forecastRelease === CFB_MARKET_SHARP_AWARE_PREVIOUS_PRODUCTION_RELEASE;
   if (
-    payload.schemaRelease !== CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE ||
-    payload.memberRelease !== CFB_FORWARD_MEMBER_RELEASE ||
+    !((String(payload.schemaRelease) === CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE && String(payload.memberRelease) === CFB_FORWARD_MEMBER_RELEASE) ||
+      (String(payload.schemaRelease) === CFB_FORWARD_PRICE_PREVIOUS_EVIDENCE_SCHEMA_RELEASE && String(payload.memberRelease) === CFB_FORWARD_PRICE_PREVIOUS_MEMBER_RELEASE)) ||
     payload.decisions.decisionRelease !== CFB_V1_DECISION_RELEASE ||
     !payload.decisions.publicationEnabled ||
     !supportedForecastRelease ||
@@ -252,6 +312,30 @@ function assertCfbPublishedCutoffRecoveryPayload(payload: CfbForwardEvidencePayl
     capturedAt > cutoffAt
   ) {
     throw new Error("CFB published-cutoff recovery requires a supported immutable pre-cutoff prediction payload.");
+  }
+}
+
+function assertCfbIndependentReplay(payload: CfbForwardEvidencePayload, replay: CfbV1Forecast): void {
+  const expected = payload.contextualEvidenceCapture?.prior.outcome;
+  const actualHash = createHash("sha256").update(JSON.stringify(replay.pmf)).digest("hex");
+  const exact = (first: number, second: number) => Math.abs(first - second) <= 1e-12;
+  const pair = (first: readonly [number, number], second: readonly [number, number]) =>
+    exact(first[0], second[0]) && exact(first[1], second[1]);
+  if (
+    !expected ||
+    expected.pmf.sha256 !== actualHash ||
+    expected.pmf.cells !== replay.pmf.length ||
+    !exact(expected.homeWin, replay.homeWinProbability) ||
+    !exact(expected.expected[0], replay.expectedAwayPoints) ||
+    !exact(expected.expected[1], replay.expectedHomePoints) ||
+    expected.representative[0] !== replay.representativeScore.away ||
+    expected.representative[1] !== replay.representativeScore.home ||
+    !pair(expected.interval80.away, replay.interval80.away) ||
+    !pair(expected.interval80.home, replay.interval80.home) ||
+    !pair(expected.interval80.marginHome, replay.interval80.marginHome) ||
+    !pair(expected.interval80.total, replay.interval80.total)
+  ) {
+    throw new Error("CFB ESPN recovery immutable independent PMF replay mismatch.");
   }
 }
 

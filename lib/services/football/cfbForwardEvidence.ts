@@ -5,6 +5,7 @@ import type { CfbMarketInformedOutcomeForecast } from "./cfbMarketInformedOutcom
 import type { CfbSharpApiSplitRecord } from "./cfbSharpApiSplits";
 import type { CfbKickoffWeatherSnapshot } from "./cfbKickoffWeather";
 import type { CfbForwardContextCapture } from "./cfbForwardEvidenceCapture";
+import type { CfbEspnReferenceLine } from "./cfbEspnReferenceLine";
 import {
   cfbV1LineProbabilities,
   type CfbV1DecisionBundle,
@@ -13,10 +14,12 @@ import {
 } from "./cfbV1Decision";
 
 export const CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE =
-  "cfb_forward_evidence_snapshot_2026_09_19_r24_contained_spread_counter_signal" as const;
+  "cfb_forward_evidence_snapshot_2026_09_20_r25_complete_tracking_reference" as const;
 export const CFB_FORWARD_MARKET_HISTORY_BASE_EVIDENCE_SCHEMA_RELEASE =
   "cfb_forward_evidence_snapshot_2026_09_05_r22_confidence_economics_bridge" as const;
 export const CFB_FORWARD_PRICE_PREVIOUS_EVIDENCE_SCHEMA_RELEASE =
+  "cfb_forward_evidence_snapshot_2026_09_19_r24_contained_spread_counter_signal" as const;
+export const CFB_FORWARD_SPREAD_PREVIOUS_EVIDENCE_SCHEMA_RELEASE =
   "cfb_forward_evidence_snapshot_2026_09_19_r23_spread_counter_signal" as const;
 export const CFB_FORWARD_HOLISTIC_PREVIOUS_EVIDENCE_SCHEMA_RELEASE =
   "cfb_forward_evidence_snapshot_2026_09_04_r20_holistic_confidence" as const;
@@ -59,11 +62,11 @@ export const CFB_FORWARD_LEGACY_EVIDENCE_SCHEMA_RELEASE =
 export const CFB_FORWARD_INITIAL_EVIDENCE_SCHEMA_RELEASE =
   "cfb_forward_evidence_snapshot_2026_08_25_r1" as const;
 export const CFB_FORWARD_EVIDENCE_COLLECTOR_RELEASE =
-  "cfb_forward_evidence_collector_2026_09_19_r30_contained_spread_counter_signal" as const;
+  "cfb_forward_evidence_collector_2026_09_20_r31_complete_tracking_reference" as const;
 export const CFB_FORWARD_MEMBER_RELEASE =
-  "cfb_v1_member_release_2026_09_19_r36_contained_spread_counter_signal" as const;
+  "cfb_v1_member_release_2026_09_20_r37_complete_tracking_reference" as const;
 export const CFB_FORWARD_PRICE_PREVIOUS_MEMBER_RELEASE =
-  "cfb_v1_member_release_2026_09_19_r35_spread_counter_signal" as const;
+  "cfb_v1_member_release_2026_09_19_r36_contained_spread_counter_signal" as const;
 export const CFB_FORWARD_HOLISTIC_PREVIOUS_MEMBER_RELEASE =
   "cfb_v1_member_release_2026_09_04_r32_holistic_confidence" as const;
 export const CFB_FORWARD_CONTINUITY_PREVIOUS_MEMBER_RELEASE =
@@ -150,7 +153,7 @@ export type CfbForwardMarketOutlook = {
   side: "home" | "away" | "over" | "under";
   line: number | null;
   independentProbability: number;
-  source: "authoritative_pmf" | "authoritative_pmf_at_playbook_line" | "independent_pmf" | "independent_pmf_at_playbook_line";
+  source: "authoritative_pmf" | "authoritative_pmf_at_playbook_line" | "authoritative_pmf_at_named_book_line" | "authoritative_pmf_at_espn_opening_line" | "independent_pmf" | "independent_pmf_at_playbook_line";
   contextObservedAt: string | null;
 };
 
@@ -182,6 +185,8 @@ export type CfbForwardEvidencePayload = {
     providerOpening: NcaafBookOdds | null;
     operationalOpening: CfbForwardOperationalOpening | null;
     playbookLine: CfbForwardPlaybookLine | null;
+    /** Strictly identified DraftKings opening reference used only when the primary context line is absent. */
+    espnReferenceLine?: CfbEspnReferenceLine | null;
     playbookSplits: CfbForwardPlaybookSplitSet | null;
     sharpApiOddsRelease: typeof CFB_SHARP_API_ODDS_RELEASE | null;
     sharpApiSplits: CfbSharpApiSplitRecord[] | null;
@@ -224,6 +229,7 @@ export type CfbForwardEvidencePayload = {
     targetExcludedConsensusReady: boolean;
     operationalOpening: boolean;
     playbookLine: boolean;
+    espnReferenceLine?: boolean;
     playbookSplits: boolean;
     sharpApiSplits: boolean;
     activeQuarterbacks: boolean;
@@ -236,6 +242,7 @@ export type CfbForwardEvidencePayload = {
     balldontlieSlate: number;
     balldontlieQuarterbacks: number;
     playbook: number;
+    espnReference?: number;
     sharpApiOdds: number;
     sharpApiSplits?: number;
     weather?: number;
@@ -372,50 +379,58 @@ export function matchesCfbForwardEvidencePayloadHash(
 export function buildCfbForwardMarketOutlooks(args: {
   forecast: CfbV1Forecast;
   playbookLine: CfbForwardPlaybookLine | null;
+  espnReferenceLine?: CfbEspnReferenceLine | null;
 }): Record<CfbV1Market, CfbForwardMarketOutlook | null> {
   const homeWin = args.forecast.homeWinProbability;
   const moneyline = homeWin >= 0.5
     ? outlook("moneyline", "home", null, homeWin, "authoritative_pmf", null)
     : outlook("moneyline", "away", null, 1 - homeWin, "authoritative_pmf", null);
-  const playbookLine = args.playbookLine;
-  if (!playbookLine) return { moneyline, spread: null, total: null };
-  const homeSpread = playbookLine.homeSpread;
-  const totalLine = playbookLine.total;
+  const homeSpread = args.playbookLine?.homeSpread ?? args.espnReferenceLine?.homeSpread ?? null;
+  const totalLine = args.playbookLine?.total ?? args.espnReferenceLine?.total ?? null;
+  const spreadObservedAt = args.playbookLine?.homeSpread !== null && args.playbookLine?.homeSpread !== undefined
+    ? args.playbookLine.capturedAt : args.espnReferenceLine?.capturedAt ?? null;
+  const totalObservedAt = args.playbookLine?.total !== null && args.playbookLine?.total !== undefined
+    ? args.playbookLine.capturedAt : args.espnReferenceLine?.capturedAt ?? null;
+  const spreadSource = args.playbookLine?.homeSpread !== null && args.playbookLine?.homeSpread !== undefined
+    ? "authoritative_pmf_at_playbook_line" as const : "authoritative_pmf_at_espn_opening_line" as const;
+  const totalSource = args.playbookLine?.total !== null && args.playbookLine?.total !== undefined
+    ? "authoritative_pmf_at_playbook_line" as const : "authoritative_pmf_at_espn_opening_line" as const;
+  if (homeSpread === null && totalLine === null) return { moneyline, spread: null, total: null };
   if (homeSpread === null || homeSpread === undefined || totalLine === null || totalLine === undefined) {
     return {
       moneyline,
       spread: homeSpread === null || homeSpread === undefined
         ? null
-        : spreadOutlook(args.forecast, homeSpread, playbookLine.capturedAt),
+        : spreadOutlook(args.forecast, homeSpread, spreadObservedAt!, spreadSource),
       total: totalLine === null || totalLine === undefined
         ? null
-        : totalOutlook(args.forecast, totalLine, playbookLine.capturedAt),
+        : totalOutlook(args.forecast, totalLine, totalObservedAt!, totalSource),
     };
   }
   const probabilities = cfbV1LineProbabilities({ forecast: args.forecast, homeSpread, totalLine });
   return {
     moneyline,
     spread: probabilities.spread.home >= probabilities.spread.away
-      ? outlook("spread", "home", homeSpread, probabilities.spread.home, "authoritative_pmf_at_playbook_line", playbookLine.capturedAt)
-      : outlook("spread", "away", -homeSpread, probabilities.spread.away, "authoritative_pmf_at_playbook_line", playbookLine.capturedAt),
+      ? outlook("spread", "home", homeSpread, probabilities.spread.home, spreadSource, spreadObservedAt)
+      : outlook("spread", "away", -homeSpread, probabilities.spread.away, spreadSource, spreadObservedAt),
     total: probabilities.total.over >= probabilities.total.under
-      ? outlook("total", "over", totalLine, probabilities.total.over, "authoritative_pmf_at_playbook_line", playbookLine.capturedAt)
-      : outlook("total", "under", totalLine, probabilities.total.under, "authoritative_pmf_at_playbook_line", playbookLine.capturedAt),
+      ? outlook("total", "over", totalLine, probabilities.total.over, totalSource, totalObservedAt)
+      : outlook("total", "under", totalLine, probabilities.total.under, totalSource, totalObservedAt),
   };
 }
 
-function spreadOutlook(forecast: CfbV1Forecast, homeSpread: number, observedAt: string): CfbForwardMarketOutlook {
+function spreadOutlook(forecast: CfbV1Forecast, homeSpread: number, observedAt: string, source: CfbForwardMarketOutlook["source"] = "authoritative_pmf_at_playbook_line"): CfbForwardMarketOutlook {
   const probabilities = cfbV1LineProbabilities({ forecast, homeSpread, totalLine: forecast.expectedTotal });
   return probabilities.spread.home >= probabilities.spread.away
-    ? outlook("spread", "home", homeSpread, probabilities.spread.home, "authoritative_pmf_at_playbook_line", observedAt)
-    : outlook("spread", "away", -homeSpread, probabilities.spread.away, "authoritative_pmf_at_playbook_line", observedAt);
+    ? outlook("spread", "home", homeSpread, probabilities.spread.home, source, observedAt)
+    : outlook("spread", "away", -homeSpread, probabilities.spread.away, source, observedAt);
 }
 
-function totalOutlook(forecast: CfbV1Forecast, totalLine: number, observedAt: string): CfbForwardMarketOutlook {
+function totalOutlook(forecast: CfbV1Forecast, totalLine: number, observedAt: string, source: CfbForwardMarketOutlook["source"] = "authoritative_pmf_at_playbook_line"): CfbForwardMarketOutlook {
   const probabilities = cfbV1LineProbabilities({ forecast, homeSpread: 0, totalLine });
   return probabilities.total.over >= probabilities.total.under
-    ? outlook("total", "over", totalLine, probabilities.total.over, "authoritative_pmf_at_playbook_line", observedAt)
-    : outlook("total", "under", totalLine, probabilities.total.under, "authoritative_pmf_at_playbook_line", observedAt);
+    ? outlook("total", "over", totalLine, probabilities.total.over, source, observedAt)
+    : outlook("total", "under", totalLine, probabilities.total.under, source, observedAt);
 }
 
 function outlook(
