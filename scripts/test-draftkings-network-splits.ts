@@ -7,6 +7,7 @@ import {
   validateDurableDraftKingsNetworkSplitFeed,
   type DraftKingsNetworkSplitFeed,
   type DraftKingsNetworkSplitMarket,
+  __TEST__ as draftKingsTest,
 } from "../lib/providers/draftkings/draftKingsNetworkSplits";
 
 const side = (label: string, handle: number, bets: number) => `
@@ -44,6 +45,21 @@ assert.deepEqual(parsed[0]?.markets.moneyline?.sides, [
   { label: "CIN Reds", moneyPct: 12, betsPct: 20 },
   { label: "LA Dodgers", moneyPct: 88, betsPct: 80 },
 ]);
+
+const mergedProviderFeed = draftKingsTest.mergeDraftKingsNetworkFeeds({
+  source: "draftkings_network",
+  sport: "MLB",
+  fetchedAt: "2026-09-17T14:00:00.000Z",
+  games: parsed,
+}, {
+  source: "draftkings_network",
+  sport: "MLB",
+  fetchedAt: "2026-09-17T15:00:00.000Z",
+  games: [{ ...parsed[0]!, markets: { moneyline: parsed[0]!.markets.moneyline } }],
+});
+assert.ok(mergedProviderFeed.games[0]?.markets.total, "a partial provider refresh cannot erase a previously complete market");
+assert.equal(mergedProviderFeed.games[0]?.markets.total?.observedAt, "2026-09-17T14:00:00.000Z", "retained markets preserve their own observation time");
+assert.equal(mergedProviderFeed.games[0]?.markets.moneyline?.observedAt, "2026-09-17T15:00:00.000Z", "new complete markets silently take over");
 
 const splitPageResponse = (body: string) => new Response(body, {
   status: 200,
@@ -144,7 +160,8 @@ assert.equal(
 
 const applied = applyDraftKingsNetworkSplitFallback(response, feed);
 assert.deepEqual(applied, { matchedGames: 1, populatedMarkets: 2 });
-assert.equal(response.games[0]?.markets.moneyline.sportsbookSplits?.label, "DraftKings Splits");
+assert.equal(response.games[0]?.markets.moneyline.sportsbookSplits?.label, "Sharp Book Splits");
+assert.equal(response.games[0]?.markets.moneyline.sportsbookSplits?.sourceBook, "draftkings_network");
 assert.deepEqual(response.games[0]?.markets.moneyline.sportsbookSplits?.rows.map((row) => [row.side, row.moneyPct, row.betsPct]), [
   ["home", 12, 20],
   ["away", 88, 80],
@@ -288,7 +305,8 @@ const hierarchyApplied = applyDraftKingsNetworkSplitFallback(lowerPriority, {
   }],
 });
 assert.equal(hierarchyApplied.populatedMarkets, 1, "DraftKings must outrank a lower-priority named-book fallback");
-assert.equal(lowerPriority.games[0]!.markets.moneyline.sportsbookSplits?.label, "DraftKings Splits");
+assert.equal(lowerPriority.games[0]!.markets.moneyline.sportsbookSplits?.label, "Sharp Book Splits");
+assert.equal(lowerPriority.games[0]!.markets.moneyline.sportsbookSplits?.sourceBook, "draftkings_network");
 
 paginationTest
   .then(() => console.log("DraftKings Network split parser and silent fallback overlay tests passed."))

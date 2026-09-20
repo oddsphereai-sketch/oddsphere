@@ -1743,7 +1743,10 @@ function resolveDisplayedSharpSplit(market: MarketEdgeDto, sport: Sport | null):
   // otherwise a complete named-book fill-in occupies the same established
   // card until Circa is current again. Stale Circa remains visible only when
   // no fresher approved sportsbook row is available.
-  const selectedSharp = currentSharp ?? (sportsbook?.rows.length ? sportsbook : sharp);
+  // `sportsbookSplits` is the response-boundary authority only when the
+  // server has already determined that a complete fresher fallback should
+  // silently replace the writer-captured row. Otherwise it is cleared.
+  const selectedSharp = sportsbook?.rows.length ? sportsbook : currentSharp ?? sharp;
   const selectedSharpIsSportsbook = selectedSharp !== null && selectedSharp === sportsbook;
   const displayedSharp = selectedSharp ?? (sharpAvailability === null ? null : {
     label: "Sharp Book Signal" as const,

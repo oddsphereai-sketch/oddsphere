@@ -10,11 +10,12 @@ const CURRENT_SPLITS_RELEASE = "sharpapi_current_splits_2026_09_20_r1_durable_ov
 const CURRENT_SPLITS_TTL_MS = 5 * 60 * 1000;
 const CURRENT_SPLITS_STALE_MS = 10 * 24 * 60 * 60 * 1000;
 const CURRENT_SPLITS_TIMEOUT_MS = 4_000;
+const SOURCE_FAILOVER_GRACE_MS = 3 * 60 * 60 * 1000;
 
 type Json = Record<string, unknown>;
 type SupportedSport = Exclude<Sport, "soccer" | "ucl">;
 type SplitMarket = "moneyline" | "spread" | "total";
-type NamedBook = "circa" | "draftkings" | "betmgm";
+type NamedBook = "circa" | "draftkings" | "consensus" | "betmgm";
 
 type SharpApiCurrentSplitFeed = {
   source: "sharpapi_current_splits";
@@ -39,12 +40,16 @@ const LEAGUE_BY_SPORT: Record<SupportedSport, string> = {
   wnba: "wnba",
 };
 
-const BOOK_PRIORITY: readonly NamedBook[] = ["circa", "draftkings", "betmgm"];
+const BOOK_PRIORITY: readonly NamedBook[] = ["circa", "draftkings", "consensus", "betmgm"];
 
 const BOOK_LABEL: Record<NamedBook, MarketSplitDisplaySection["label"]> = {
   circa: "Sharp Book Splits",
-  draftkings: "DraftKings Splits",
-  betmgm: "BetMGM Splits",
+  draftkings: "Sharp Book Splits",
+  // SharpAPI emits `consensus` when every contributing source publishes the
+  // same row. It is a synthetic merge, not a fourth book, and belongs in the
+  // existing Sharp Book Splits panel rather than a new member-facing label.
+  consensus: "Sharp Book Splits",
+  betmgm: "Sharp Book Splits",
 };
 
 const NFL_ALIASES: Record<string, readonly string[]> = {
@@ -89,6 +94,8 @@ async function readDurableCurrentSplits(sport: SupportedSport): Promise<SharpApi
   const fresh = await readLabResponseSnapshot<Record<string, unknown>>(key, "fresh");
   const validatedFresh = validateSharpApiCurrentSplitFeed(fresh?.payload, sport);
   if (validatedFresh) return validatedFresh;
+  const stored = await readLatestLabResponseSnapshot<Record<string, unknown>>(key);
+  const validatedStored = validateSharpApiCurrentSplitFeed(stored?.payload, sport);
 
   const apiKey = process.env.SHARPAPI_KEY;
   if (apiKey) {
@@ -97,7 +104,6 @@ async function readDurableCurrentSplits(sport: SupportedSport): Promise<SharpApi
         path: "/splits",
         query: {
           league: LEAGUE_BY_SPORT[sport],
-          sportsbook: "circa,draftkings,betmgm",
           limit: 200,
         },
         maxPages: 2,
@@ -105,13 +111,14 @@ async function readDurableCurrentSplits(sport: SupportedSport): Promise<SharpApi
         signal: AbortSignal.timeout(CURRENT_SPLITS_TIMEOUT_MS),
       });
       if (rows.length > 0) {
-        const feed: SharpApiCurrentSplitFeed = {
+        const current: SharpApiCurrentSplitFeed = {
           source: "sharpapi_current_splits",
           release: CURRENT_SPLITS_RELEASE,
           sport,
           fetchedAt: newestTimestamp(rows) ?? new Date().toISOString(),
           rows,
         };
+        const feed = mergeCurrentSplitFeeds(validatedStored, current);
         await upsertLabResponseSnapshot({
           snapshotKey: key,
           kind: "daily_edge",
@@ -129,8 +136,7 @@ async function readDurableCurrentSplits(sport: SupportedSport): Promise<SharpApi
     }
   }
 
-  const stored = await readLatestLabResponseSnapshot<Record<string, unknown>>(key);
-  return validateSharpApiCurrentSplitFeed(stored?.payload, sport);
+  return validatedStored;
 }
 
 export function validateSharpApiCurrentSplitFeed(
@@ -240,8 +246,12 @@ function attachBestMarket(
   // Freshness still controls internal source selection, but it does not
   // create a member-facing stale state. A current lower-priority fallback can
   // therefore remain until the preferred book publishes a current update.
-  const current = sections.filter((section) => sectionIsFreshAt(section, nowMs));
-  const selected = current[0] ?? sections.sort((a, b) => Date.parse(b.lastUpdated ?? "") - Date.parse(a.lastUpdated ?? ""))[0];
+  // Money and tickets are a single display contract. Never degrade a retained
+  // complete pair to a partial row merely because the partial row is newer.
+  const complete = sections.filter((section) => sectionQuality(section) === 2);
+  const eligible = complete;
+  const current = eligible.filter((section) => sectionIsFreshAt(section, nowMs));
+  const selected = current[0] ?? eligible.sort((a, b) => sectionSourceTimestamp(b) - sectionSourceTimestamp(a))[0];
   if (!selected) return 0;
 
   const existing = market.sportsbookSplits;
@@ -269,7 +279,7 @@ function sectionFromRow(
   book: NamedBook,
   row: Json,
 ): MarketSplitDisplaySection | null {
-  const fetchedAt = timestamp(row.fetched_at);
+  const fetchedAt = timestamp(record(row._oddsphere_market_fetched_at)[market]) ?? timestamp(row.fetched_at);
   const source = record(row[market]);
   if (!fetchedAt) return null;
   const firstKey = market === "total" ? "over" : "away";
@@ -286,6 +296,8 @@ function sectionFromRow(
   ) return null;
   return {
     label: BOOK_LABEL[book],
+    sourceBook: book,
+    sourceObservedAt: fetchedAt,
     rows: [
       {
         side: market === "total" ? "over" : "away",
@@ -313,7 +325,63 @@ function sectionFromRow(
   };
 }
 
+function mergeCurrentSplitFeeds(
+  previous: SharpApiCurrentSplitFeed | null,
+  current: SharpApiCurrentSplitFeed,
+): SharpApiCurrentSplitFeed {
+  if (!previous) return current;
+  const merged = new Map<string, Json>();
+  for (const row of previous.rows) merged.set(splitRowKey(row), row);
+  for (const row of current.rows) {
+    const key = splitRowKey(row);
+    const prior = merged.get(key);
+    if (!prior) {
+      merged.set(key, row);
+      continue;
+    }
+    const marketFetchedAt = {
+      ...record(prior._oddsphere_market_fetched_at),
+      ...record(row._oddsphere_market_fetched_at),
+    };
+    const next: Json = { ...prior, ...row };
+    for (const market of ["moneyline", "spread", "total"] as const) {
+      const currentMarket = record(row[market]);
+      const previousMarket = record(prior[market]);
+      if (completeMarket(currentMarket, market)) {
+        next[market] = currentMarket;
+        marketFetchedAt[market] = timestamp(row.fetched_at);
+      } else if (completeMarket(previousMarket, market)) {
+        next[market] = previousMarket;
+        marketFetchedAt[market] = timestamp(record(prior._oddsphere_market_fetched_at)[market]) ?? timestamp(prior.fetched_at);
+      }
+    }
+    next._oddsphere_market_fetched_at = marketFetchedAt;
+    merged.set(key, next);
+  }
+  return { ...current, rows: [...merged.values()] };
+}
+
+function splitRowKey(row: Json): string {
+  return `${text(row.event_id) ?? ""}::${normalize(text(row.sportsbook) ?? "")}`;
+}
+
+function completeMarket(value: Json, market: SplitMarket): boolean {
+  const first = market === "total" ? "over" : "away";
+  const second = market === "total" ? "under" : "home";
+  const bets = record(value.bets_pct);
+  const handle = record(value.handle_pct);
+  const firstMoney = percentage(handle[first]);
+  const secondMoney = percentage(handle[second]);
+  const firstBets = percentage(bets[first]);
+  const secondBets = percentage(bets[second]);
+  return firstMoney !== null && secondMoney !== null && firstBets !== null && secondBets !== null &&
+    complementary(firstMoney, secondMoney) && complementary(firstBets, secondBets);
+}
+
 function shouldReplace(existing: MarketSplitDisplaySection, incoming: MarketSplitDisplaySection): boolean {
+  const existingQuality = sectionQuality(existing);
+  const incomingQuality = sectionQuality(incoming);
+  if (existingQuality !== incomingQuality) return incomingQuality > existingQuality;
   const existingCurrent = sectionIsCurrent(existing);
   const incomingCurrent = sectionIsCurrent(incoming);
   if (existingCurrent !== incomingCurrent) return incomingCurrent;
@@ -323,12 +391,28 @@ function shouldReplace(existing: MarketSplitDisplaySection, incoming: MarketSpli
     if (label === "BetMGM Splits") return 2;
     return 3;
   };
-  const priorityDelta = priority(incoming.label) - priority(existing.label);
+  const sourcePriority = (section: MarketSplitDisplaySection) => {
+    if (section.sourceBook === "circa") return 0;
+    if (section.sourceBook === "draftkings" || section.sourceBook === "draftkings_network") return 1;
+    if (section.sourceBook === "consensus") return 2;
+    if (section.sourceBook === "betmgm") return 3;
+    return priority(section.label);
+  };
+  const priorityDelta = sourcePriority(incoming) - sourcePriority(existing);
   if (priorityDelta !== 0) return priorityDelta < 0;
   const incomingAt = sectionSourceTimestamp(incoming);
   const existingAt = sectionSourceTimestamp(existing);
   return incomingAt > existingAt ||
     (incomingAt === existingAt && hasMemberFacingFreshnessState(existing));
+}
+
+function sectionQuality(section: MarketSplitDisplaySection): 0 | 1 | 2 {
+  if (section.rows.length !== 2 || section.rows[0]!.side === section.rows[1]!.side) return 0;
+  const money = section.rows.map((row) => row.moneyPct);
+  const bets = section.rows.map((row) => row.betsPct);
+  const moneyComplete = money.every((value) => value !== null) && complementary(money[0]!, money[1]!);
+  const betsComplete = bets.every((value) => value !== null) && complementary(bets[0]!, bets[1]!);
+  return moneyComplete && betsComplete ? 2 : moneyComplete || betsComplete ? 1 : 0;
 }
 
 function sectionIsCurrent(section: MarketSplitDisplaySection): boolean {
@@ -338,10 +422,12 @@ function sectionIsCurrent(section: MarketSplitDisplaySection): boolean {
 function sectionIsFreshAt(section: MarketSplitDisplaySection, nowMs: number): boolean {
   const observedAt = sectionSourceTimestamp(section);
   return Number.isFinite(observedAt) &&
-    nowMs - observedAt <= 15 * 60 * 1000;
+    nowMs - observedAt <= SOURCE_FAILOVER_GRACE_MS;
 }
 
 function sectionSourceTimestamp(section: MarketSplitDisplaySection): number {
+  const internal = Date.parse(section.sourceObservedAt ?? "");
+  if (Number.isFinite(internal)) return internal;
   const rowTimestamps = section.rows
     .map((row) => Date.parse(row.freshnessCheckedAt ?? row.observedAt ?? ""))
     .filter(Number.isFinite);
@@ -444,4 +530,4 @@ function normalizeTeam(value: string): string {
   return value.replace(/^\s*\(\d+\)\s*/, "").normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "");
 }
 
-export const __TEST__ = { rowMatchesGame, sectionFromRow, teamMatches, shouldReplace };
+export const __TEST__ = { rowMatchesGame, sectionFromRow, teamMatches, shouldReplace, sectionQuality, mergeCurrentSplitFeeds };
