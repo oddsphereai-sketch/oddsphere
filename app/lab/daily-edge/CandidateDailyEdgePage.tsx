@@ -5,7 +5,7 @@ import {
   loadDailyEdgeSnapshot,
   loadPitcherFirstInningHistory,
   loadTeamHistory,
-} from "@/app/dev/experience-preview/page";
+} from "@/app/dev/experience-preview/previewData";
 import { DAILY_EDGE_SPORT_KEYS } from "@/app/lab/lib/dailyEdgeSports";
 import {
   isNflDailyEdgeEnabled,

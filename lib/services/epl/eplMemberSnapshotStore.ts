@@ -8,7 +8,7 @@ const SNAPSHOT_TTL_MS = 20 * 60 * 1000;
 const SNAPSHOT_STALE_MS = 24 * 60 * 60 * 1000;
 
 export const EPL_MEMBER_SNAPSHOT_LIFECYCLE_RELEASE =
-  "epl_member_snapshot_lifecycle_2026_08_24_r2" as const;
+  "epl_member_snapshot_lifecycle_2026_09_20_r3_verified_locked_record_reconstruction" as const;
 
 /**
  * EPL member reads use one prebuilt weekly snapshot. They never invoke paid
@@ -28,8 +28,14 @@ export async function writeCurrentEplMemberSnapshot(input: {
   round: number;
   modelRelease: string;
   calibrationRelease: string;
+  authoritativeLockedProviderIds?: number[];
 }) {
-  const lockSafeResponse = preserveLockedEplGames(await readCurrentEplMemberSnapshot(), input.response);
+  const lockSafeResponse = preserveLockedEplGames(
+    await readCurrentEplMemberSnapshot(),
+    input.response,
+    new Date(),
+    { authoritativeLockedProviderIds: input.authoritativeLockedProviderIds },
+  );
   const payload: DailyEdgeResponse = {
     ...lockSafeResponse,
     slateState: "today_published",

@@ -30,10 +30,11 @@ export function preserveLockedEplGames(
   previous: DailyEdgeResponse | null,
   incoming: DailyEdgeResponse,
   now: Date = new Date(),
-  options: { boardDate?: string } = {},
+  options: { boardDate?: string; authoritativeLockedProviderIds?: readonly number[] } = {},
 ): DailyEdgeResponse {
   if (!previous) return incoming;
   const previousByExternalId = new Map(previous.games.map((game) => [game.external_id, game]));
+  const authoritativeLockedProviderIds = new Set(options.authoritativeLockedProviderIds ?? []);
   const incomingExternalIds = new Set(incoming.games.map((game) => game.external_id));
   // EPL/WC retain their established 2 a.m. board rollover by default. A
   // competition with a different published lifecycle may supply the exact
@@ -50,6 +51,7 @@ export function preserveLockedEplGames(
   });
   const games = incoming.games.map((fresh) => {
     const locked = previousByExternalId.get(fresh.external_id);
+    if (authoritativeLockedProviderIds.has(Number(fresh.external_id))) return fresh;
     if (!locked || locked.lockState !== "locked" || !locked.lockedAt) return fresh;
     const preserved: DailyEdgeGameDto = {
       ...locked,

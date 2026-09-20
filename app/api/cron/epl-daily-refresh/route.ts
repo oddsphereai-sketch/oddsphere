@@ -3,6 +3,7 @@ import { buildEplDailyEdgePreview, hydrateEplPriceHistory, hydrateEplStoredPrice
 import { buildEplShadowSlate } from "@/lib/services/epl/buildEplShadowSlate";
 import { persistEplLineHistory, readEplStoredPriceHistory } from "@/lib/services/epl/eplLineHistoryStore";
 import { seedEplSlate, writeEplPredictionRecords } from "@/lib/services/epl/eplProductionPipeline";
+import { eplProviderIdsDueForLock, reconstructVerifiedEplLockedGames } from "@/lib/services/epl/eplLockedMemberSnapshot";
 import { readCurrentEplMemberSnapshot, writeCurrentEplMemberSnapshot } from "@/lib/services/epl/eplMemberSnapshotStore";
 import { evaluateEplPublicationCoverage } from "@/lib/services/epl/eplPublicationReadiness";
 import type { EplForwardEvidenceCapture } from "@/lib/services/epl/eplForwardEvidenceCapture";
@@ -29,20 +30,42 @@ export async function GET(request: Request): Promise<Response> {
       captureAllBookPrices: (rows) => { allBookPrices = rows; },
       captureForwardEvidence: (captures) => { forwardEvidence = captures; },
     });
-    const coverage = evaluateEplPublicationCoverage(slate, response);
     const seeded = await seedEplSlate({ slate, apply });
     const lineHistory = seeded.errors.length === 0
       ? await persistEplLineHistory({ response, allBookPrices, apply })
       : { proposed: 0, written: 0, errors: ["line history skipped because slate seeding failed"] };
     const predictions = await writeEplPredictionRecords({ slate, response, forwardEvidence, apply });
-    const errors = [...coverage.errors, ...seeded.errors, ...lineHistory.errors, ...predictions.errors];
+    const dueProviderIds = eplProviderIdsDueForLock(response);
+    const lockVerification = apply
+      ? await reconstructVerifiedEplLockedGames({
+          providerIds: dueProviderIds,
+          modelRelease: slate.modelRelease,
+          calibrationRelease: slate.calibrationRelease,
+          response,
+        })
+      : {
+          completeProviderIds: [] as number[],
+          incompleteProviderIds: [] as number[],
+          lockedResponse: response,
+        };
+    const coverage = evaluateEplPublicationCoverage(slate, lockVerification.lockedResponse);
+    const errors = [
+      ...coverage.errors,
+      ...seeded.errors,
+      ...lineHistory.errors,
+      ...predictions.errors,
+      ...(lockVerification.incompleteProviderIds.length > 0
+        ? [`incomplete verified locked EPL games: ${lockVerification.incompleteProviderIds.join(",")}`]
+        : []),
+    ];
     const publicationEnabled = process.env.EPL_PUBLICATION_ENABLED === "true";
     const publication = apply && publicationEnabled && errors.length === 0
       ? await writeCurrentEplMemberSnapshot({
-          response,
+          response: lockVerification.lockedResponse,
           round: slate.round,
           modelRelease: slate.modelRelease,
           calibrationRelease: slate.calibrationRelease,
+          authoritativeLockedProviderIds: lockVerification.completeProviderIds,
         })
       : { ok: false as const, skipped: true, reason: !apply ? "EPL_DB_WRITES_ENABLED!=true" : !publicationEnabled ? "EPL_PUBLICATION_ENABLED!=true" : "pipeline_errors" };
     return {
@@ -60,6 +83,10 @@ export async function GET(request: Request): Promise<Response> {
         seed: seeded,
         line_history: lineHistory,
         predictions: { mode: predictions.mode, proposed: predictions.proposed.length, written: predictions.written, lockedPreserved: predictions.lockedPreserved, errors: predictions.errors },
+        lock_verification: {
+          complete_provider_ids: lockVerification.completeProviderIds,
+          incomplete_provider_ids: lockVerification.incompleteProviderIds,
+        },
         forward_evidence: { proposed: forwardEvidence.length, warnings: predictions.captureWarnings },
         publication,
       },
