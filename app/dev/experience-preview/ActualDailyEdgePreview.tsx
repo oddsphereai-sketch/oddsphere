@@ -81,6 +81,7 @@ import {
 import type { NflWeekOneEvidenceBoard } from "@/lib/services/football/nflWeekOneEvidenceBoard";
 import { exactLockedEplScoreOutlook, impliedEplMatchResultScoreOutlook } from "@/lib/services/epl/eplDerivedMarketForecast";
 import { uclTeamAsset, uclTeamLogo } from "@/lib/services/ucl/uclTeamAssets";
+import { teamPrimaryColor } from "@/app/lab/components/daily-edge/teamColors";
 
 type DeepView = "case" | "market" | "matchup" | "trend" | "model";
 
@@ -535,10 +536,7 @@ function memberTeamColor(game: DailyEdgeGameDto, side: "away" | "home", sport: S
   if (game.soccerCompetitionContext?.competition === "uefa_champions_league") {
     return uclTeamAsset(abbreviation)?.primaryColor ?? "#6D28D9";
   }
-  if (sport === "cfb") {
-    return "#6D28D9";
-  }
-  return teamTheme(abbreviation).primary;
+  return teamPrimaryColor(abbreviation, sport);
 }
 
 function MatchupColorAccent({ game, sport }: { game: DailyEdgeGameDto; sport: Sport }) {
@@ -2769,8 +2767,8 @@ function TeamLogo({ src, label, sport, primaryColor }: { src: string | null; lab
     ? (!suppliedSrc || suppliedIsMlbStatic ? mlbLogoUrl(label) : suppliedSrc)
     : suppliedIsMlbStatic ? null : suppliedSrc;
   const [imageFailed, setImageFailed] = useState(!resolvedSrc);
-  const theme = teamTheme(label);
-  const accent = primaryColor ?? teamAccent(label);
+  const theme = teamTheme(label, sport);
+  const accent = primaryColor ?? (sport ? teamPrimaryColor(label, sport) : teamAccent(label));
   return (
     <span className="relative inline-flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-lg border bg-[#f7f8fb] text-[7px] font-black shadow-[0_4px_14px_rgba(0,0,0,0.28)]" style={{ borderColor: `${accent}99`, color: primaryColor ?? theme.primary }}>
       <span className="relative z-10 tracking-tight">{label.slice(0, 3)}</span>
@@ -3144,7 +3142,10 @@ function sideMatchesPick(label: string, pick: string | null): boolean {
   return normalizedLabel === normalizedPick || normalizedLabel.includes(normalizedPick) || normalizedPick.includes(normalizedLabel);
 }
 
-function teamTheme(team: string): { primary: string; secondary: string } {
+function teamTheme(team: string, sport: Sport = "mlb"): { primary: string; secondary: string } {
+  if (sport !== "mlb") {
+    return { primary: teamPrimaryColor(team, sport), secondary: "#38BDF8" };
+  }
   return MLB_TEAM_THEME[team.toUpperCase()] ?? { primary: "#6D28D9", secondary: "#38BDF8" };
 }
 

@@ -74,9 +74,9 @@ assert.throws(() => buildNflPlayerPropsMemberSnapshot(snapshot, "not-a-timestamp
 
 assert.equal(NFL_PLAYER_PROPS_SNAPSHOT_ENVELOPE_RELEASE,
   "nfl_player_props_snapshot_envelope_2026_09_02_r1_gzip_deduplicated_member");
-assert.equal(NFL_PLAYER_PROPS_SNAPSHOT_MAX_JSON_BYTES, 16_000_000);
-assert.equal(NFL_PLAYER_PROPS_SNAPSHOT_MAX_JSON_BYTES, NFL_PLAYER_PROPS_MEMBER_TRANSPORT_MAX_JSON_BYTES,
-  "the writer must accept every decoded board that the member transport is designed to carry");
+assert.equal(NFL_PLAYER_PROPS_SNAPSHOT_MAX_JSON_BYTES, 32_000_000);
+assert.ok(NFL_PLAYER_PROPS_SNAPSHOT_MAX_JSON_BYTES > NFL_PLAYER_PROPS_MEMBER_TRANSPORT_MAX_JSON_BYTES,
+  "canonical retained-week history has bounded headroom beyond the current/future member board");
 
 const recoveredCapacityDecision = {
   ...actionable,
@@ -91,6 +91,23 @@ assert.ok(recoveredCapacityEnvelope.uncompressedBytes > 12_000_000,
   "the production regression fixture must exercise the former writer ceiling");
 assert.ok(recoveredCapacityEnvelope.uncompressedBytes < NFL_PLAYER_PROPS_SNAPSHOT_MAX_JSON_BYTES,
   "a board inside the established member boundary remains publishable");
+
+const canonicalOnlyCapacityDecision = {
+  ...actionable,
+  scheduledStart: "2026-09-01T12:00:00.000Z",
+  lockAt: "2026-09-01T11:00:00.000Z",
+  state: "locked" as const,
+  forecastContext: {
+    ...actionable.forecastContext,
+    capacityFixture: "x".repeat(16_100_000),
+  },
+} as NflPlayerPropsRuntimeDecision;
+const canonicalOnlyCapacitySnapshot = productionSnapshot([canonicalOnlyCapacityDecision]);
+const canonicalOnlyEnvelope = encodeNflPlayerPropsSnapshotPayload(canonicalOnlyCapacitySnapshot);
+assert.ok(canonicalOnlyEnvelope.uncompressedBytes > NFL_PLAYER_PROPS_MEMBER_TRANSPORT_MAX_JSON_BYTES,
+  "canonical locked history may exceed the member decoded ceiling after it rolls off the board");
+assert.equal(buildNflPlayerPropsMemberSnapshot(canonicalOnlyCapacitySnapshot).memberDecisions.length, 0,
+  "the oversized prior-date locked row is absent from the current member DTO");
 
 const encoded = encodeNflPlayerPropsSnapshotPayload(snapshot);
 assert.equal(encoded.memberDecisionsStorage, "derived_from_board_non_held");

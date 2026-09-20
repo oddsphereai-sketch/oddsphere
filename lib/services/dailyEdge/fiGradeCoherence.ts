@@ -38,6 +38,22 @@ export function isFinalFiGradeCoherent(args: {
   snapshot: JsonRecord | null;
 }): boolean {
   if (args.liveBaseGrade === null || args.recordGrade === null) return false;
+  const staleCleanup = record(args.snapshot?.stale_unlocked_fi_cleanup);
+  const memberFacing = record(args.snapshot?.member_facing_at_lock);
+  if (
+    args.liveBaseGrade === "held" &&
+    args.recordGrade === "held" &&
+    text(staleCleanup?.action) === "neutralize_to_toss_up" &&
+    text(staleCleanup?.reason) === "fi_fresh_data_gate_no_current_actionable_prediction" &&
+    text(memberFacing?.play_grade) === "held" &&
+    memberFacing?.held === true
+  ) {
+    // The current writer deliberately preserves the prior forecast audit while
+    // neutralizing only the unlocked member/tracking tuple after its market
+    // evidence becomes stale. That explicit transition is coherent even though
+    // fi_v2_audit describes the preceding non-Held model state.
+    return true;
+  }
   const snapFi = record(args.snapshot?.fi_v2_audit);
   if (text(snapFi?.fi_play_grade) !== args.liveBaseGrade) return false;
   return expectedFinalFiGradeFromResolution({
