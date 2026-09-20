@@ -185,6 +185,43 @@ export function applySharpApiCurrentSplitOverlay(
   return { matchedGames, populatedMarkets };
 }
 
+/**
+ * Presentation-only response cleanup for any retained named-book section,
+ * including writer-captured Circa rows that predate the durable overlays.
+ * The authoritative source timestamp remains in its stored snapshot/feed;
+ * member responses keep only the values and established source label.
+ */
+export function sanitizeRetainedSharpSplitPresentation(response: DailyEdgeResponse): number {
+  let sanitized = 0;
+  for (const game of response.games) {
+    for (const market of Object.values(game.markets)) {
+      if (!market) continue;
+      const sections = [
+        market.sportsbookSplits ?? null,
+        market.recommendationDecision?.sharpBookSplits ?? null,
+      ];
+      for (const section of sections) {
+        if (!section?.rows.length) continue;
+        section.lastUpdated = null;
+        for (const row of section.rows) {
+          row.observedAt = null;
+          row.freshnessCheckedAt = null;
+          delete row.staleAfterMinutes;
+          row.isStale = false;
+        }
+        sanitized += 1;
+      }
+      if (market.recommendationDecision?.sharpBookSplits?.rows.length) {
+        // A complete retained section is the presentation authority. Remove
+        // an older availability warning so the reader cannot render stale or
+        // historical copy beside the preserved values.
+        market.sharpBookAvailability = null;
+      }
+    }
+  }
+  return sanitized;
+}
+
 function attachBestMarket(
   game: DailyEdgeGameDto,
   slot: keyof DailyEdgeGameDto["markets"],

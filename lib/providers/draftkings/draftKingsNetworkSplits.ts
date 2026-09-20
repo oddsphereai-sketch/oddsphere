@@ -3,7 +3,10 @@ import type { MarketSplitDisplaySection } from "@/lib/types/domain/Recommendatio
 import type { Sport } from "@/lib/types/domain/Sport";
 import { normalizeMlbTeamName } from "@/lib/providers/real_api/_teamNameNormalizer";
 import { cfbTeamIdentity } from "@/lib/services/football/cfbTeamIdentity";
-import { populateDailyEdgeSharpApiCurrentSplits } from "@/lib/providers/real_api/sharpApiCurrentSplits";
+import {
+  populateDailyEdgeSharpApiCurrentSplits,
+  sanitizeRetainedSharpSplitPresentation,
+} from "@/lib/providers/real_api/sharpApiCurrentSplits";
 import { unstable_cache } from "next/cache";
 
 const DRAFTKINGS_NETWORK_SPLITS_URL =
@@ -355,6 +358,7 @@ export async function populateDailyEdgeDraftKingsFallback(
     }),
   ]);
   const durable = applyDraftKingsNetworkSplitFallback(response, durableFeed);
+  sanitizeRetainedSharpSplitPresentation(response);
   return {
     matchedGames: Math.max(current.matchedGames, durable.matchedGames),
     populatedMarkets: current.populatedMarkets + durable.populatedMarkets,

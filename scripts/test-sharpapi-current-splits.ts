@@ -3,6 +3,7 @@ import type { DailyEdgeResponse, MarketEdgeDto } from "../app/lab/lib/labTypes";
 import { marketSplitSectionIsStale } from "../app/lab/lib/dailyEdgeSplitFreshness";
 import {
   applySharpApiCurrentSplitOverlay,
+  sanitizeRetainedSharpSplitPresentation,
   validateSharpApiCurrentSplitFeed,
 } from "../lib/providers/real_api/sharpApiCurrentSplits";
 
@@ -122,6 +123,44 @@ assert.equal(
   marketSplitSectionIsStale(stale.games[0]!.markets.moneyline.sportsbookSplits ?? null, Date.parse("2027-09-20T20:05:00.000Z")),
   false,
   "retained fallback never triggers member-facing stale or historical copy",
+);
+
+const retainedWriterSharp = response("cfb", "PIT", "NE", "Pittsburgh Panthers", "New England College");
+const retainedMarket = retainedWriterSharp.games[0]!.markets.moneyline;
+retainedMarket.recommendationDecision!.sharpBookSplits = {
+  label: "Sharp Book Splits",
+  rows: [{
+    side: "away", label: "PIT", moneyPct: 62, betsPct: 55,
+    observedAt: "2026-09-20T16:00:00.000Z",
+    freshnessCheckedAt: "2026-09-20T16:00:00.000Z",
+    staleAfterMinutes: 15,
+    isStale: true,
+  }, {
+    side: "home", label: "NE", moneyPct: 38, betsPct: 45,
+    observedAt: "2026-09-20T16:00:00.000Z",
+    freshnessCheckedAt: "2026-09-20T16:00:00.000Z",
+    staleAfterMinutes: 15,
+    isStale: true,
+  }],
+  signal: null,
+  lastUpdated: "2026-09-20T16:00:00.000Z",
+};
+retainedMarket.sharpBookAvailability = {
+  status: "stale",
+  message: "legacy warning",
+  lastUpdated: "2026-09-20T16:00:00.000Z",
+};
+assert.equal(sanitizeRetainedSharpSplitPresentation(retainedWriterSharp), 1);
+assert.equal(retainedMarket.recommendationDecision!.sharpBookSplits.lastUpdated, null);
+assert.equal(retainedMarket.recommendationDecision!.sharpBookSplits.rows[0]?.observedAt, null);
+assert.equal(retainedMarket.recommendationDecision!.sharpBookSplits.rows[0]?.freshnessCheckedAt, null);
+assert.equal(retainedMarket.recommendationDecision!.sharpBookSplits.rows[0]?.staleAfterMinutes, undefined);
+assert.equal(retainedMarket.recommendationDecision!.sharpBookSplits.rows[0]?.isStale, false);
+assert.equal(retainedMarket.sharpBookAvailability, null);
+assert.equal(
+  marketSplitSectionIsStale(retainedMarket.recommendationDecision!.sharpBookSplits, Date.parse("2036-09-20T21:10:00.000Z")),
+  false,
+  "writer-captured retained Sharp panels never trigger stale or historical member copy",
 );
 
 console.log("SharpAPI current split overlay and durable continuity tests passed.");
