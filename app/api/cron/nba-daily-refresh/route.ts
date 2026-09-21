@@ -47,6 +47,7 @@ import { refreshNbaTeamRatings } from "@/lib/services/nba/refreshNbaTeamRatingsS
 import { refreshNbaLines } from "@/lib/services/nba/refreshNbaLinesService";
 
 const NBA_CRON_ENV = "NBA_CRON_ENABLED";
+const NBA_DAILY_REFRESH_RELEASE = "nba_daily_refresh_schedule_2026_09_21_r1";
 
 /**
  * NBA-ratings season convention: Basketball Reference uses the END-year
@@ -82,6 +83,7 @@ export async function GET(request: Request): Promise<Response> {
         return {
           records_updated: 0,
           details: {
+            refresh_release: NBA_DAILY_REFRESH_RELEASE,
             disabled: true,
             reason: `${NBA_CRON_ENV}!=true`,
           },
@@ -110,6 +112,7 @@ export async function GET(request: Request): Promise<Response> {
       // soft failures occur.
       let partial = false;
       const stepDetails: Record<string, unknown> = {
+        refresh_release: NBA_DAILY_REFRESH_RELEASE,
         slate_date_et: etDateDashed,
         ratings_season: season,
       };

@@ -44,6 +44,7 @@ import { writeNhlPredictionRecords } from "@/lib/services/nhl/buildNhlPrediction
 
 const NHL_CRON_ENV = "NHL_CRON_ENABLED";
 const NHL_PREDS_ENV = "NHL_PREDICTIONS_DB_WRITES_ENABLED";
+const NHL_DAILY_REFRESH_RELEASE = "nhl_daily_refresh_schedule_2026_09_21_r1";
 
 /**
  * Returns the MoneyPuck-style season start-year for a given UTC date.
@@ -67,7 +68,11 @@ export async function GET(request: Request): Promise<Response> {
       if (process.env[NHL_CRON_ENV] !== "true") {
         return {
           records_updated: 0,
-          details: { disabled: true, reason: `${NHL_CRON_ENV}!=true` },
+          details: {
+            refresh_release: NHL_DAILY_REFRESH_RELEASE,
+            disabled: true,
+            reason: `${NHL_CRON_ENV}!=true`,
+          },
         };
       }
 
@@ -84,7 +89,10 @@ export async function GET(request: Request): Promise<Response> {
         };
 
       let partial = false;
-      const stepDetails: Record<string, unknown> = { slate_date_et: slateDate };
+      const stepDetails: Record<string, unknown> = {
+        refresh_release: NHL_DAILY_REFRESH_RELEASE,
+        slate_date_et: slateDate,
+      };
 
       // Step 1 — seed NHL games + teams for today's ET slate.
       console.log(`[nhl-daily-refresh] step=seed  date=${slateDate}`);

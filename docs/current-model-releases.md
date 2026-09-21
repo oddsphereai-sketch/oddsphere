@@ -1500,6 +1500,15 @@ The tracking follow-up is recorded in
 The paired live-slate replay is recorded in
 `docs/model-audits/2026-08-11-daily-edge-fi-probable-availability-r27.md`.
 
+## NBA/NHL operational refresh schedules
+
+- NBA refresh release: `nba_daily_refresh_schedule_2026_09_21_r1`
+- NBA schedule: `/api/cron/nba-daily-refresh` once daily at `30 13 * * *`, fail closed unless `NBA_CRON_ENABLED=true`
+- NHL refresh release: `nhl_daily_refresh_schedule_2026_09_21_r1`
+- NHL schedule: `/api/cron/nhl-daily-refresh` once daily at `45 13 * * *`, fail closed unless `NHL_CRON_ENABLED=true`
+
+The September 21 operational releases restore the two bounded daily schedules removed by the emergency cron pause. NBA and NHL are offseason on the release date: the verified current slate has zero games for each sport, so the routes exit after schedule discovery without requesting paid odds or writing predictions. The release changes no model coefficient, projection, probability, side, grade, stake, member copy, or board count. Existing route gates, writers, and leases remain authoritative. Evidence and rollback are recorded in `docs/model-audits/2026-09-21-nba-nhl-scheduled-refresh-recovery-predeclaration.md` and `docs/model-audits/2026-09-21-nba-nhl-scheduled-refresh-recovery-result.md`.
+
 ## WNBA champion
 
 - Model: `wnba_v1_4_single_market_entry`
