@@ -68,7 +68,7 @@ import {
 } from "./nflForwardMemberSnapshotStore";
 
 export const NFL_FORWARD_WRITER_RELEASE =
-  "nfl_forward_evidence_writer_2026_09_20_r34_boundary_handoff" as const;
+  "nfl_forward_evidence_writer_2026_09_21_r35_opening_market_direction" as const;
 
 export type NflForwardWriterResult = {
   writerRelease: typeof NFL_FORWARD_WRITER_RELEASE;
@@ -314,6 +314,7 @@ export async function runNflForwardEvidenceWriter(args: {
           playbookLine,
           playbookSplits,
           sharpSplits,
+          spreadDirectionCandidate: true,
           evaluatedAt: args.now,
         })
       : baseOutcome;
@@ -327,6 +328,7 @@ export async function runNflForwardEvidenceWriter(args: {
       incumbentOutcome,
       current,
       comparableCurrentBooks,
+      operationalOpening: opening,
       shadowMoneyline,
       playbookLine,
       playbookSplits,

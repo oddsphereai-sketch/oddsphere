@@ -207,6 +207,39 @@ async function main() {
   assert.deepEqual(read, snapshot);
   assert.equal(JSON.stringify(read?.fixture), JSON.stringify(fixture));
 
+  const lockedTransitionPreviousSnapshotRelease = "nfl_forward_member_snapshot_2026_09_20_r16_locked_transition";
+  const lockedTransitionPreviousFixtureRelease = "nfl_weekly_member_fixture_2026_09_20_r24_locked_transition";
+  const lockedTransitionPreviousPayload = {
+    ...snapshot,
+    snapshotRelease: lockedTransitionPreviousSnapshotRelease,
+    memberRelease: "nfl_v1_member_release_2026_09_20_r17_ml_total_coherence",
+    decisionRelease: "nfl_v1_daily_edge_decision_2026_09_20_r20_ml_total_coherence",
+    fixtureRelease: lockedTransitionPreviousFixtureRelease,
+    fixture: {
+      ...fixture,
+      heldMemberFixtureRelease: lockedTransitionPreviousFixtureRelease,
+    },
+  };
+  storedKey = [
+    "nfl",
+    "daily-edge",
+    2026,
+    1,
+    lockedTransitionPreviousSnapshotRelease,
+    lockedTransitionPreviousFixtureRelease,
+    lockedTransitionPreviousPayload.memberRelease,
+    lockedTransitionPreviousPayload.decisionRelease,
+  ].join("::");
+  storedPayload = lockedTransitionPreviousPayload;
+  const lockedTransitionContinuityRead = await readNflForwardMemberSnapshot({
+    client,
+    season: 2026,
+    week: 1,
+    now: "2026-08-27T12:02:00.000Z",
+  });
+  assert.equal(lockedTransitionContinuityRead?.snapshotRelease, NFL_FORWARD_MEMBER_SNAPSHOT_RELEASE);
+  assert.equal(lockedTransitionContinuityRead?.fixtureRelease, lockedTransitionPreviousFixtureRelease);
+
   const mlTotalPreviousSnapshotRelease = "nfl_forward_member_snapshot_2026_09_20_r15_ml_total_coherence";
   const mlTotalPreviousFixtureRelease = "nfl_weekly_member_fixture_2026_09_20_r23_ml_total_coherence";
   const mlTotalPreviousPayload = {

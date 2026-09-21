@@ -22,15 +22,15 @@ export const NFL_V1_OUTCOME_PROBABILITY_RELEASE =
 export const NFL_V1_REPRESENTATIVE_SCORE_POLICY_RELEASE =
   "nfl_v1_representative_score_2026_08_23_r2" as const;
 export const NFL_V1_WEEKLY_OUTCOME_MODEL_RELEASE =
-  "nfl_v1_weekly_market_anchored_outcome_2026_09_20_r4_priced_neutral_total" as const;
+  "nfl_v1_weekly_market_anchored_outcome_2026_09_21_r5_opening_market_direction" as const;
 export const NFL_V1_WEEKLY_OUTCOME_DISTRIBUTION_RELEASE =
-  "nfl_pooled_discrete_residual_distribution_2026_09_20_r4_priced_neutral_total" as const;
+  "nfl_pooled_discrete_residual_distribution_2026_09_21_r5_opening_market_direction" as const;
 export const NFL_V1_WEEKLY_OUTCOME_PROBABILITY_RELEASE =
-  "nfl_v1_weekly_pooled_discrete_probability_2026_09_20_r4_priced_neutral_total" as const;
+  "nfl_v1_weekly_pooled_discrete_probability_2026_09_21_r5_opening_market_direction" as const;
 export const NFL_V1_MARKET_EVIDENCE_OUTCOME_RELEASE =
-  "nfl_v1_market_evidence_outcome_2026_09_20_r5_priced_neutral_total" as const;
+  "nfl_v1_market_evidence_outcome_2026_09_21_r6_opening_market_direction" as const;
 export const NFL_V1_MARKET_EVIDENCE_REPRESENTATIVE_SCORE_RELEASE =
-  "nfl_v1_market_evidence_representative_score_2026_09_20_r3_priced_neutral_total" as const;
+  "nfl_v1_market_evidence_representative_score_2026_09_21_r4_opening_market_direction" as const;
 export const NFL_V1_MARKET_WEIGHT = 0.75 as const;
 export const NFL_V1_SHARP_SPLIT_MAX_SHIFT_POINTS = 1.5 as const;
 export const NFL_V1_PUBLIC_SPLIT_MAX_SHIFT_POINTS = 0.75 as const;
@@ -38,6 +38,8 @@ export const NFL_V1_RESIDUAL_HEAD_LOGIT_WEIGHT = 0.5 as const;
 export const NFL_V1_WEAK_EVIDENCE_REVERSAL_MINIMUM_ADVANTAGE = 0.025 as const;
 export const NFL_V1_PRICED_NEUTRAL_TOTAL_RELEASE =
   "nfl_v1_priced_neutral_total_2026_09_20_r1" as const;
+export const NFL_V1_OPENING_MARKET_SPREAD_DIRECTION_RELEASE =
+  "nfl_v1_opening_market_spread_direction_2026_09_21_r1" as const;
 
 type DiscreteDistribution = {
   values: number[];
@@ -64,7 +66,8 @@ export type NflV1WeekOneOutcomeForecast = {
     release:
       | "nfl_target_excluded_market_outcome_2026_09_03_r1"
       | "nfl_target_excluded_market_outcome_2026_09_14_r2_prediction_owned_side"
-      | "nfl_target_excluded_market_outcome_2026_09_20_r3_priced_neutral_total";
+      | "nfl_target_excluded_market_outcome_2026_09_20_r3_priced_neutral_total"
+      | "nfl_target_excluded_market_outcome_2026_09_21_r4_opening_market_direction";
     status: "target_excluded_market" | "incumbent_fallback";
     reason: "stable_complete_tuple" | "insufficient_or_unstable_target_free_evidence";
     marginFamilyCount: number | null;
@@ -79,6 +82,17 @@ export type NflV1WeekOneOutcomeForecast = {
     sharp: { homeMarginGapPp: number | null; overTotalGapPp: number | null; homeMarginShiftPoints: number; totalShiftPoints: number };
     publicConsensus: { homeMarginGapPp: number | null; overTotalGapPp: number | null; homeMarginShiftPoints: number; totalShiftPoints: number };
     movement: FootballOutcomeMarketMovement;
+    spreadDirection?: {
+      release: typeof NFL_V1_OPENING_MARKET_SPREAD_DIRECTION_RELEASE;
+      status: "available" | "unavailable";
+      side: "home" | "away" | null;
+      reason: "move_home" | "move_away" | "flat_price" | null;
+      openingHomeLine: number | null;
+      currentHomeLine: number | null;
+      homeFairProbability: number | null;
+      preOrientationHomeCoverProbability: number;
+      orientedHomeCoverProbability: number;
+    };
     calibratedCore: {
       source: "week_one_spread_total_residual_heads" | typeof NFL_V1_PRICED_NEUTRAL_TOTAL_RELEASE | null;
       rawHomeCoverProbability: number;
@@ -168,7 +182,9 @@ export function buildNflMarketEvidenceOutcomeForecast(args: {
   playbookLine: { capturedAt: string; homeSpread: number | null; total: number | null } | null;
   playbookSplits: { spread: SplitPercentages; moneyline: SplitPercentages; total: SplitPercentages } | null;
   sharpSplits: { spread: SharpSplitPercentages; moneyline: SharpSplitPercentages; total: SharpSplitPercentages } | null;
+  marketHomeCoverProbability?: number;
   marketOverProbability?: number;
+  spreadDirectionCandidate?: boolean;
   evaluatedAt: string;
 }): NflV1WeekOneOutcomeForecast {
   if (!args.current.spread || !args.current.total) return args.baseForecast;
@@ -228,6 +244,10 @@ export function buildNflMarketEvidenceOutcomeForecast(args: {
       (!Number.isFinite(args.marketOverProbability) || args.marketOverProbability <= 0 || args.marketOverProbability >= 1)) {
     throw new Error("NFL priced-neutral Total probability must be between zero and one.");
   }
+  if (args.marketHomeCoverProbability !== undefined &&
+      (!Number.isFinite(args.marketHomeCoverProbability) || args.marketHomeCoverProbability <= 0 || args.marketHomeCoverProbability >= 1)) {
+    throw new Error("NFL priced-neutral Spread probability must be between zero and one.");
+  }
   const correction = hasNflV1ActionableGradeCorrection(args.baseForecast.providerGameId)
     ? getNflV1ActionableGradeCorrection({
         providerGameId: args.baseForecast.providerGameId,
@@ -286,12 +306,37 @@ export function buildNflMarketEvidenceOutcomeForecast(args: {
     movementShift: movement.totalShiftPoints,
     publicShift: publicTotalShiftPoints,
   });
+  const preOrientationHomeCoverProbability = distributionSideProbability(
+    shiftedDistribution(args.baseForecast.marginDistribution, guardedMargin.mean, false),
+    (margin) => margin + args.current.spread!.homeLine,
+  );
+  const spreadDirection = args.spreadDirectionCandidate === true
+    ? orientNflSpreadProbabilityToOpeningMarket({
+        opening: args.operationalOpening?.quote ?? null,
+        current: args.current,
+        homeFairProbability: args.marketHomeCoverProbability ?? twoSidedFair(
+          args.current.spread.homePrice,
+          args.current.spread.awayPrice,
+        ),
+        preOrientationHomeCoverProbability,
+        evaluatedAt: args.evaluatedAt,
+      })
+    : null;
+  const finalHomeMargin = spreadDirection?.status === "available"
+    ? meanForSideProbability({
+        source: args.baseForecast.marginDistribution,
+        initialMean: guardedMargin.mean,
+        targetProbability: spreadDirection.orientedHomeCoverProbability,
+        score: (margin) => margin + args.current.spread!.homeLine,
+        nonNegative: false,
+      })
+    : guardedMargin.mean;
   return {
     ...outcomeFromDistributions({
     providerGameId: args.baseForecast.providerGameId,
     awayTeam: args.baseForecast.awayTeam,
     homeTeam: args.baseForecast.homeTeam,
-    marginDistribution: shiftedDistribution(args.baseForecast.marginDistribution, guardedMargin.mean, false),
+    marginDistribution: shiftedDistribution(args.baseForecast.marginDistribution, finalHomeMargin, false),
     totalDistribution: shiftedDistribution(args.baseForecast.totalDistribution, guardedTotal.mean, true),
     }),
     marketEvidence: {
@@ -311,6 +356,7 @@ export function buildNflMarketEvidenceOutcomeForecast(args: {
         totalShiftPoints: publicTotalShiftPoints,
       },
       movement,
+      ...(spreadDirection ? { spreadDirection } : {}),
       calibratedCore: {
         source: correction
           ? "week_one_spread_total_residual_heads"
@@ -326,11 +372,65 @@ export function buildNflMarketEvidenceOutcomeForecast(args: {
       },
       combinedHomeMarginShiftPoints,
       combinedTotalShiftPoints,
-      appliedHomeMarginShiftPoints: guardedMargin.mean - calibratedHomeMargin,
+      appliedHomeMarginShiftPoints: finalHomeMargin - calibratedHomeMargin,
       appliedTotalShiftPoints: guardedTotal.mean - calibratedTotal,
       weakHomeMarginReversalRejected: guardedMargin.reversalRejected,
       weakTotalReversalRejected: guardedTotal.reversalRejected,
     },
+  };
+}
+
+function orientNflSpreadProbabilityToOpeningMarket(args: {
+  opening: NflPreviewBookOdds | null;
+  current: NflPreviewBookOdds;
+  homeFairProbability: number;
+  preOrientationHomeCoverProbability: number;
+  evaluatedAt: string;
+}): NonNullable<NonNullable<NflV1WeekOneOutcomeForecast["marketEvidence"]>["spreadDirection"]> {
+  const unavailable = () => ({
+    release: NFL_V1_OPENING_MARKET_SPREAD_DIRECTION_RELEASE,
+    status: "unavailable" as const,
+    side: null,
+    reason: null,
+    openingHomeLine: args.opening?.spread?.homeLine ?? null,
+    currentHomeLine: args.current.spread?.homeLine ?? null,
+    homeFairProbability: Number.isFinite(args.homeFairProbability) ? args.homeFairProbability : null,
+    preOrientationHomeCoverProbability: args.preOrientationHomeCoverProbability,
+    orientedHomeCoverProbability: args.preOrientationHomeCoverProbability,
+  });
+  if (!args.opening?.spread || !args.current.spread ||
+      !Number.isFinite(args.homeFairProbability) || args.homeFairProbability <= 0 || args.homeFairProbability >= 1) {
+    return unavailable();
+  }
+  const openingObservedAt = Date.parse(args.opening.observedAt);
+  const currentObservedAt = Date.parse(args.current.observedAt);
+  const evaluatedAt = Date.parse(args.evaluatedAt);
+  if (!Number.isFinite(openingObservedAt) || !Number.isFinite(currentObservedAt) ||
+      !Number.isFinite(evaluatedAt) || openingObservedAt > currentObservedAt || currentObservedAt > evaluatedAt) {
+    return unavailable();
+  }
+  const movement = args.current.spread.homeLine - args.opening.spread.homeLine;
+  const side = movement <= -0.5
+    ? "home" as const
+    : movement >= 0.5
+      ? "away" as const
+      : args.homeFairProbability >= 0.5 ? "home" as const : "away" as const;
+  const reason = movement <= -0.5
+    ? "move_home" as const
+    : movement >= 0.5
+      ? "move_away" as const
+      : "flat_price" as const;
+  const confidence = Math.max(0.000001, Math.abs(args.preOrientationHomeCoverProbability - 0.5));
+  return {
+    release: NFL_V1_OPENING_MARKET_SPREAD_DIRECTION_RELEASE,
+    status: "available",
+    side,
+    reason,
+    openingHomeLine: args.opening.spread.homeLine,
+    currentHomeLine: args.current.spread.homeLine,
+    homeFairProbability: args.homeFairProbability,
+    preOrientationHomeCoverProbability: args.preOrientationHomeCoverProbability,
+    orientedHomeCoverProbability: side === "home" ? 0.5 + confidence : 0.5 - confidence,
   };
 }
 
@@ -608,6 +708,17 @@ function playbookLineMatches(value: number | null | undefined, current: number):
 
 function firstFinite(...values: Array<number | null>): number | null {
   return values.find((value): value is number => value !== null && Number.isFinite(value)) ?? null;
+}
+
+function twoSidedFair(selectedPrice: number, opposingPrice: number): number {
+  const selected = americanImplied(selectedPrice);
+  const opposing = americanImplied(opposingPrice);
+  return selected / (selected + opposing);
+}
+
+function americanImplied(price: number): number {
+  if (!Number.isFinite(price) || price === 0) throw new Error("NFL spread direction price must be non-zero American odds.");
+  return price > 0 ? 100 / (price + 100) : -price / (-price + 100);
 }
 
 function normalizeBook(value: string | null): string {
