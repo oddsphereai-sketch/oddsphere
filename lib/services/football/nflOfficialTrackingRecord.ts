@@ -19,7 +19,7 @@ import {
 } from "./footballCrossMarketCoherence";
 
 export const NFL_OFFICIAL_TRACKING_RECORD_RELEASE =
-  "nfl_official_tracking_record_2026_09_20_r10_boundary_handoff" as const;
+  "nfl_official_tracking_record_2026_09_21_r11_opening_market_direction" as const;
 
 const NFL_TRACKED_MARKETS = ["moneyline", "spread", "total"] as const;
 

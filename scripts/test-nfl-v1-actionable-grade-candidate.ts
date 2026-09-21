@@ -64,10 +64,12 @@ const targetExcludedAnchor = resolveNflTargetExcludedMarketAnchor({
 });
 assert.deepEqual(targetExcludedAnchor && {
   ...targetExcludedAnchor,
+  spreadHomeFairProbability: undefined,
   totalOverFairProbability: undefined,
 }, {
   release: NFL_TARGET_EXCLUDED_MARKET_OUTCOME_RELEASE,
   homeMargin: 4,
+  spreadHomeFairProbability: undefined,
   total: 44.5,
   totalOverFairProbability: undefined,
   marginFamilyCount: 4,
@@ -77,6 +79,8 @@ assert.deepEqual(targetExcludedAnchor && {
 });
 assert.ok(targetExcludedAnchor && targetExcludedAnchor.totalOverFairProbability > 0.48 &&
   targetExcludedAnchor.totalOverFairProbability < 0.51);
+assert.ok(targetExcludedAnchor && targetExcludedAnchor.spreadHomeFairProbability > 0.49 &&
+  targetExcludedAnchor.spreadHomeFairProbability < 0.52);
 assert.equal(resolveNflTargetExcludedMarketAnchor({
   books: targetExcludedBooks,
   marginExcludedSportsbooks: ["fanduel", "draftkings", "caesars", "betmgm"],
@@ -141,6 +145,15 @@ const targetExcludedProduction = resolveNflTargetExcludedProduction({
   incumbentOutcome: getNflV1WeekOneOutcomeForecast({ providerGameId, awayTeam, homeTeam }),
   current: targetExcludedBooks[0]!,
   comparableCurrentBooks: targetExcludedBooks,
+  operationalOpening: {
+    provenance: "provider_opening",
+    capturedAt: "2026-08-25T09:21:34.519Z",
+    quote: {
+      ...targetExcludedBooks[0]!,
+      observedAt: "2026-08-25T09:21:34.519Z",
+      spread: { ...targetExcludedBooks[0]!.spread!, homeLine: -3, awayLine: 3 },
+    },
+  },
   shadowMoneyline: {
     ...shadow(),
     footballProjection: { openingHomeMargin: 3.5, independentCorrection: 0.75, projectedHomeMargin: 4.25 },
@@ -151,6 +164,8 @@ const targetExcludedProduction = resolveNflTargetExcludedProduction({
 });
 assert.equal(targetExcludedProduction.targetExclusion.status, "target_excluded_market");
 assert.equal(targetExcludedProduction.production.evaluatedBets.length, 3);
+assert.equal(targetExcludedProduction.outcome.marketEvidence?.spreadDirection?.status, "available");
+assert.equal(targetExcludedProduction.outcome.marketEvidence?.spreadDirection?.side, "home");
 for (const decision of targetExcludedProduction.production.evaluatedBets) {
   const family = decision.evaluatedQuote.sportsbook.toLowerCase().replace(/[^a-z0-9]+/g, "");
   const excluded = decision.market === "total"
@@ -332,7 +347,7 @@ const circaAway = buildNflMarketEvidenceOutcomeForecast({
   sharpSplits: sharpSplitSet({ homeMoneyPct: 20, homeBetsPct: 70 }),
   evaluatedAt,
 });
-assert.equal(NFL_V1_MARKET_EVIDENCE_OUTCOME_RELEASE, "nfl_v1_market_evidence_outcome_2026_09_20_r5_priced_neutral_total");
+assert.equal(NFL_V1_MARKET_EVIDENCE_OUTCOME_RELEASE, "nfl_v1_market_evidence_outcome_2026_09_21_r6_opening_market_direction");
 assert.equal(NFL_V1_MARKET_WEIGHT, 0.75);
 assert.equal(NFL_V1_SHARP_SPLIT_MAX_SHIFT_POINTS, 1.5);
 assert.equal(NFL_V1_PUBLIC_SPLIT_MAX_SHIFT_POINTS, 0.75);
@@ -517,6 +532,37 @@ assert.ok(withMovement.expectedHomeScore - withMovement.expectedAwayScore >
   marketOnly.expectedHomeScore - marketOnly.expectedAwayScore);
 assert.ok(withMovement.expectedHomeScore + withMovement.expectedAwayScore >
   marketOnly.expectedHomeScore + marketOnly.expectedAwayScore);
+const directionCandidate = buildNflMarketEvidenceOutcomeForecast({
+  baseForecast: weeklyBase,
+  footballHomeMargin: 4.25,
+  current: flipBooks[0]!,
+  operationalOpening: {
+    quote: {
+      ...flipBooks[0]!,
+      observedAt: "2026-08-25T09:21:34.519Z",
+      spread: { ...flipBooks[0]!.spread!, awayLine: -0, homeLine: 0 },
+    },
+  },
+  playbookLine: null,
+  playbookSplits: null,
+  sharpSplits: null,
+  marketHomeCoverProbability: 0.49,
+  spreadDirectionCandidate: true,
+  evaluatedAt,
+});
+const directionProbability = nflV1WeekOneLineProbabilities({
+  forecast: directionCandidate,
+  homeSpread: flipBooks[0]!.spread!.homeLine,
+  totalLine: flipBooks[0]!.total!.line,
+}).spread;
+assert.equal(directionCandidate.marketEvidence?.spreadDirection?.status, "available");
+assert.equal(directionCandidate.marketEvidence?.spreadDirection?.reason, "move_away");
+assert.ok(directionProbability.awayCoverProbability > directionProbability.homeCoverProbability);
+assert.equal(
+  Math.abs(directionProbability.homeCoverProbability - 0.5).toFixed(6),
+  Math.abs(directionCandidate.marketEvidence!.spreadDirection!.preOrientationHomeCoverProbability - 0.5).toFixed(6),
+  "direction arbitration must flip incumbent conviction rather than flatten it",
+);
 const mismatchedOpening = buildNflMarketEvidenceOutcomeForecast({
   baseForecast: weeklyBase,
   footballHomeMargin: 4.25,

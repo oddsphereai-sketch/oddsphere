@@ -103,6 +103,7 @@ async function main() {
           playbookLine: payload.market.playbookLine,
           playbookSplits: payload.market.playbookSplits,
           sharpSplits: payload.market.sharpApiSplits,
+          spreadDirectionCandidate: true,
           evaluatedAt: payload.capturedAt,
         })
       : baseOutcome;
@@ -116,6 +117,7 @@ async function main() {
       incumbentOutcome,
       current: payload.market.current,
       comparableCurrentBooks: payload.market.comparableCurrentBooks,
+      operationalOpening: payload.market.operationalOpening,
       shadowMoneyline: shadow,
       playbookLine: payload.market.playbookLine,
       playbookSplits: payload.market.playbookSplits,

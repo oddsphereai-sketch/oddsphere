@@ -1,5 +1,6 @@
 import type { NflPreviewBookOdds } from "./balldontlieNflPreviewSlate";
 import type {
+  NflForwardOperationalOpening,
   NflForwardPlaybookLine,
   NflForwardPlaybookSplitSet,
 } from "./nflForwardEvidence";
@@ -15,11 +16,12 @@ import {
 } from "./nflV1WeekOneOutcome";
 
 export const NFL_TARGET_EXCLUDED_MARKET_OUTCOME_RELEASE =
-  "nfl_target_excluded_market_outcome_2026_09_20_r3_priced_neutral_total" as const;
+  "nfl_target_excluded_market_outcome_2026_09_21_r4_opening_market_direction" as const;
 
 export type NflTargetExcludedMarketAnchor = {
   release: typeof NFL_TARGET_EXCLUDED_MARKET_OUTCOME_RELEASE;
   homeMargin: number;
+  spreadHomeFairProbability: number;
   total: number;
   totalOverFairProbability: number;
   marginFamilyCount: number;
@@ -44,6 +46,7 @@ export function resolveNflTargetExcludedProduction(args: {
   incumbentOutcome: NflV1WeekOneOutcomeForecast;
   current: NflPreviewBookOdds;
   comparableCurrentBooks: NflPreviewBookOdds[];
+  operationalOpening?: NflForwardOperationalOpening | null;
   shadowMoneyline: NflR6ShadowMoneylineDecision;
   playbookLine: NflForwardPlaybookLine | null;
   playbookSplits: NflForwardPlaybookSplitSet | null;
@@ -117,11 +120,13 @@ export function resolveNflTargetExcludedProduction(args: {
       baseForecast: args.baseOutcome,
       footballHomeMargin: args.shadowMoneyline.footballProjection.projectedHomeMargin,
       current: targetFreeCurrent,
-      operationalOpening: null,
+      operationalOpening: args.operationalOpening ?? null,
       playbookLine: args.playbookLine,
       playbookSplits: args.playbookSplits,
       sharpSplits: targetFreeSharpSplits(args.sharpSplits, excluded),
+      marketHomeCoverProbability: anchor.spreadHomeFairProbability,
       marketOverProbability: args.pricedNeutralTotalCandidate ? anchor.totalOverFairProbability : undefined,
+      spreadDirectionCandidate: args.operationalOpening !== undefined && args.operationalOpening !== null,
       evaluatedAt: args.evaluatedAt,
     });
     const productionCandidate = buildProduction(outcomeCandidate);
@@ -183,6 +188,10 @@ export function resolveNflTargetExcludedMarketAnchor(args: {
   return {
     release: NFL_TARGET_EXCLUDED_MARKET_OUTCOME_RELEASE,
     homeMargin: -median(marginBooks.map((book) => book.spread!.homeLine)),
+    spreadHomeFairProbability: median(marginBooks.map((book) => twoSidedFair(
+      book.spread!.homePrice,
+      book.spread!.awayPrice,
+    ))),
     total,
     totalOverFairProbability: median(totalPriceBooks.map((book) => twoSidedFair(
       book.total!.overPrice,
