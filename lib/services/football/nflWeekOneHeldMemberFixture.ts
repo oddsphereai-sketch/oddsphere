@@ -45,11 +45,15 @@ import { nflFootballEvidenceStats } from "./footballMemberEvidence";
 import type { NflRegularSharpMarket, NflRegularSharpSplit } from "./sharpApiNflSplits";
 
 export const NFL_WEEK_ONE_HELD_MEMBER_FIXTURE_RELEASE =
-  "nfl_weekly_member_fixture_2026_09_21_r25_opening_market_direction" as const;
+  "nfl_weekly_member_fixture_2026_09_21_r26_locked_transition_continuity" as const;
 
 const NFL_PREVIOUS_MEMBER_RELEASE =
-  "nfl_v1_member_release_2026_09_16_r16_injury_pagination" as const;
+  "nfl_v1_member_release_2026_09_20_r17_ml_total_coherence" as const;
 const NFL_PREVIOUS_DECISION_RELEASE =
+  "nfl_v1_daily_edge_decision_2026_09_20_r20_ml_total_coherence" as const;
+const NFL_TRANSITION_FALLBACK_MEMBER_RELEASE =
+  "nfl_v1_member_release_2026_09_16_r16_injury_pagination" as const;
+const NFL_TRANSITION_FALLBACK_DECISION_RELEASE =
   "nfl_v1_daily_edge_decision_2026_09_16_r19_injury_pagination" as const;
 
 const DECISION_RELEASE = NFL_V1_ACTIONABLE_GRADE_DECISION_RELEASE;
@@ -192,9 +196,12 @@ function latestCompleteRows(rows: NflForwardStoredEvidence[]): Array<NflForwardS
     row.payload.decisions.evaluatedBets.every((decision) =>
       decision.decisionRelease === NFL_V1_ACTIONABLE_GRADE_DECISION_RELEASE);
   const isPreviousAuthority = (row: NflForwardStoredEvidence & { payload: NflForwardEvidencePayload }) =>
-    row.payload.decisions.modelPromotionStatus === NFL_PREVIOUS_MEMBER_RELEASE &&
-    row.payload.decisions.evaluatedBets.every((decision) =>
-      decision.decisionRelease === NFL_PREVIOUS_DECISION_RELEASE);
+    (row.payload.decisions.modelPromotionStatus === NFL_PREVIOUS_MEMBER_RELEASE &&
+      row.payload.decisions.evaluatedBets.every((decision) =>
+        decision.decisionRelease === NFL_PREVIOUS_DECISION_RELEASE)) ||
+    (row.payload.decisions.modelPromotionStatus === NFL_TRANSITION_FALLBACK_MEMBER_RELEASE &&
+      row.payload.decisions.evaluatedBets.every((decision) =>
+        decision.decisionRelease === NFL_TRANSITION_FALLBACK_DECISION_RELEASE));
   const hasCurrentAuthority = currentRows.some(isCurrentAuthority);
   const transitionAt = hasCurrentAuthority
     ? Math.max(...currentRows.filter(isCurrentAuthority).map((row) => Date.parse(row.capturedAt)))
@@ -202,7 +209,7 @@ function latestCompleteRows(rows: NflForwardStoredEvidence[]): Array<NflForwardS
   const latest = new Map<string, NflForwardStoredEvidence & { payload: NflForwardEvidencePayload }>();
   for (const row of currentRows) {
     const transitionLockedPrevious = transitionAt !== null && isPreviousAuthority(row) &&
-      row.stage === "t60" && row.payload.decisions.trackingEnabled;
+      hasImmutableT60Tuple(row);
     if (hasCurrentAuthority && !isCurrentAuthority(row) && !transitionLockedPrevious) continue;
     if (!hasCurrentAuthority && !isPreviousAuthority(row)) continue;
     const current = latest.get(row.providerGameId);
@@ -229,7 +236,7 @@ function latestCompleteRows(rows: NflForwardStoredEvidence[]): Array<NflForwardS
   }
   if (values.some((row) => isPreviousAuthority(row)) && values.some((row) => isCurrentAuthority(row)) &&
       values.some((row) => isPreviousAuthority(row) &&
-        (transitionAt === null || row.stage !== "t60" || !row.payload.decisions.trackingEnabled))) {
+        (transitionAt === null || !hasImmutableT60Tuple(row)))) {
     throw new Error("NFL Week 1 transition may retain only immutable T-60 preceding-release games.");
   }
   for (const row of values) {
@@ -242,6 +249,32 @@ function latestCompleteRows(rows: NflForwardStoredEvidence[]): Array<NflForwardS
     }
   }
   return values;
+}
+
+function hasImmutableT60Tuple(
+  row: NflForwardStoredEvidence & { payload: NflForwardEvidencePayload },
+): boolean {
+  const payload = row.payload;
+  const capturedAt = Date.parse(payload.capturedAt);
+  const gameStartsAt = Date.parse(payload.game.scheduledStart);
+  const markets = payload.decisions.evaluatedBets.map((decision) => decision.market);
+  return row.stage === "t60" && payload.stage === "t60" &&
+    payload.captureTiming === "on_time" &&
+    payload.t60LagMinutes !== null &&
+    payload.t60LagMinutes >= 0 &&
+    payload.t60LagMinutes <= NFL_T60_MAX_CAPTURE_LAG_MINUTES &&
+    payload.decisions.publicationEnabled &&
+    Number.isFinite(capturedAt) && Number.isFinite(gameStartsAt) && capturedAt < gameStartsAt &&
+    markets.length === 3 && new Set(markets).size === 3 &&
+    ["moneyline", "spread", "total"].every((market) => markets.includes(market as NflRegularEvaluatedBetDecision["market"])) &&
+    payload.decisions.evaluatedBets.every((decision) =>
+      decision.providerGameId === payload.game.providerGameId &&
+      decision.stage === "t60_locked" &&
+      decision.lockedAt !== null &&
+      Date.parse(decision.lockedAt) === capturedAt &&
+      Date.parse(decision.evaluatedAt) === capturedAt &&
+      Date.parse(decision.gameStartsAt) === gameStartsAt &&
+      Date.parse(decision.evaluatedQuote.observedAt) <= capturedAt);
 }
 
 function movementRowsForGame(

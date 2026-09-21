@@ -45,12 +45,29 @@ const releaseTransitionRows = rows.map((row, index) => {
   if (index === 0) return copy;
   copy.stage = "t60";
   copy.payload.stage = "t60";
-  copy.payload.decisions.modelPromotionStatus = "nfl_v1_member_release_2026_09_16_r16_injury_pagination";
+  copy.payload.captureTiming = "on_time";
+  copy.payload.t60LagMinutes = 10;
+  copy.payload.decisions.modelPromotionStatus = "nfl_v1_member_release_2026_09_20_r17_ml_total_coherence";
   copy.payload.decisions.trackingEnabled = true;
   copy.payload.decisions.evaluatedBets = copy.payload.decisions.evaluatedBets.map((decision) => ({
     ...decision,
-    decisionRelease: "nfl_v1_daily_edge_decision_2026_09_16_r19_injury_pagination",
+    decisionRelease: "nfl_v1_daily_edge_decision_2026_09_20_r20_ml_total_coherence",
+    stage: "t60_locked",
+    lockedAt: copy.payload.capturedAt,
+    evaluatedAt: copy.payload.capturedAt,
+    gameStartsAt: copy.payload.game.scheduledStart,
+    evaluatedQuote: {
+      ...decision.evaluatedQuote,
+      observedAt: copy.payload.capturedAt,
+    },
   }));
+  if (index === 1) {
+    copy.payload.decisions.modelPromotionStatus = "nfl_v1_member_release_2026_09_16_r16_injury_pagination";
+    copy.payload.decisions.evaluatedBets = copy.payload.decisions.evaluatedBets.map((decision) => ({
+      ...decision,
+      decisionRelease: "nfl_v1_daily_edge_decision_2026_09_16_r19_injury_pagination",
+    }));
+  }
   return copy;
 });
 assert.equal(

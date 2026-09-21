@@ -50,7 +50,7 @@ This is not a quota. The board remains complete and action count is an output of
 - Market outcome / representative score / Spread direction: `nfl_v1_market_evidence_outcome_2026_09_21_r6_opening_market_direction` / `nfl_v1_market_evidence_representative_score_2026_09_21_r4_opening_market_direction` / `nfl_v1_opening_market_spread_direction_2026_09_21_r1`.
 - Spread head / target exclusion: `nfl_v1_spread_market_direction_2026_09_21_r6` / `nfl_target_excluded_market_outcome_2026_09_21_r4_opening_market_direction`.
 - Model / calibration / decision / grade / member: `nfl_v1_daily_edge_model_2026_09_21_r15_opening_market_direction` / `nfl_v1_daily_edge_calibration_2026_09_21_r15_opening_market_direction` / `nfl_v1_daily_edge_decision_2026_09_21_r21_opening_market_direction` / `nfl_v1_grade_policy_2026_09_21_r21_opening_market_direction` / `nfl_v1_member_release_2026_09_21_r18_opening_market_direction`.
-- Collector / writer / fixture / compact snapshot: `nfl_forward_evidence_collector_2026_09_21_r9_opening_market_direction` / `nfl_forward_evidence_writer_2026_09_21_r35_opening_market_direction` / `nfl_weekly_member_fixture_2026_09_21_r25_opening_market_direction` / `nfl_forward_member_snapshot_2026_09_21_r17_opening_market_direction`.
+- Collector / writer / fixture / compact snapshot: `nfl_forward_evidence_collector_2026_09_21_r9_opening_market_direction` / `nfl_forward_evidence_writer_2026_09_21_r36_locked_transition_continuity` / `nfl_weekly_member_fixture_2026_09_21_r26_locked_transition_continuity` / `nfl_forward_member_snapshot_2026_09_21_r18_locked_transition_continuity`. The transition-only publication repair is documented in `docs/model-audits/2026-09-21-nfl-opening-direction-transition-hotfix.md`.
 - Tracking lifecycle / bundle / boundary / record: `nfl_tracking_lifecycle_2026_09_21_r13_opening_market_direction` / `nfl_tracking_composite_release_bundle_2026_09_21_r9_opening_market_direction` / `nfl_evaluated_tuple_tracking_boundary_2026_09_21_r10_opening_market_direction` / `nfl_official_tracking_record_2026_09_21_r11_opening_market_direction`.
 
 The evidence schema, one `prediction_pipeline:nfl` lease, sole writer, request budget, append-only storage, immutable T-60 behavior, and settlement path are unchanged.
@@ -58,4 +58,3 @@ The evidence schema, one `prediction_pipeline:nfl` lease, sole writer, request b
 ## Rollback
 
 Roll back the complete release family to the September 20 r17/r14/r20 outcome and publication set. The compact reader retains the immediately preceding r16 snapshot as bounded availability continuity. Never rewrite locked or settled rows.
-
