@@ -21,6 +21,8 @@ assert.ok(scheduled("/api/cron/lineup-watch"), "lineup-watch is scheduled");
 assert.ok(scheduled("/api/cron/pregame-sweep?lockOnly=true"), "targeted lock sweep is scheduled");
 assert.ok(scheduled("/api/cron/public-splits-observations-refresh"), "public-splits refresh is scheduled");
 assert.ok(scheduled("/api/cron/tracking-refresh"), "tracking refresh is scheduled");
+assert.ok(scheduled("/api/cron/nba-daily-refresh"), "NBA's gated daily seed/ratings/lines writer is scheduled");
+assert.ok(scheduled("/api/cron/nhl-daily-refresh"), "NHL's gated daily seed/lines/predictions writer is scheduled");
 assert.ok(scheduled("/api/cron/mlb-player-props-refresh"), "fast Player Props refresh is scheduled");
 assert.ok(scheduled("/api/cron/mlb-player-props-refresh?full=true"), "full Player Props refresh is scheduled");
 assert.ok(scheduled("/api/cron/mlb-player-props-settlement"), "Player Props settlement is scheduled");
@@ -127,6 +129,20 @@ assert.match(source("app/api/cron/mlb-player-props-refresh/route.ts"), /refreshM
 const coldSlateSchedules = crons.filter((cron) => cron.path === "/api/cron/slate-cycle").map((cron) => cron.schedule);
 assert.ok(coldSlateSchedules.includes("5 8,10-12 * * *"), "cold slate schedule includes the 11:05 UTC freshness run");
 assert.ok(crons.some((cron) => cron.path === "/api/cron/tracking-refresh" && cron.schedule === "33 * * * *"), "Tracking publishes hourly");
+assert.deepEqual(
+  crons.filter((cron) => cron.path === "/api/cron/nba-daily-refresh").map((cron) => cron.schedule),
+  ["30 13 * * *"],
+  "NBA has one bounded daily refresh; the route's exact env gate controls writes",
+);
+assert.deepEqual(
+  crons.filter((cron) => cron.path === "/api/cron/nhl-daily-refresh").map((cron) => cron.schedule),
+  ["45 13 * * *"],
+  "NHL has one bounded daily refresh; the route's exact env gate controls writes",
+);
+assert.match(source("app/api/cron/nba-daily-refresh/route.ts"), /process\.env\[NBA_CRON_ENV\] !== "true"/, "NBA refresh remains fail-closed behind its runtime gate");
+assert.match(source("app/api/cron/nhl-daily-refresh/route.ts"), /process\.env\[NHL_CRON_ENV\] !== "true"/, "NHL refresh remains fail-closed behind its runtime gate");
+assert.match(source("app/api/cron/nba-daily-refresh/route.ts"), /nba_daily_refresh_schedule_2026_09_21_r1/, "NBA refresh exposes its immutable operational release");
+assert.match(source("app/api/cron/nhl-daily-refresh/route.ts"), /nhl_daily_refresh_schedule_2026_09_21_r1/, "NHL refresh exposes its immutable operational release");
 assert.ok(crons.some((cron) => cron.path === "/api/cron/pregame-sweep?lockOnly=true" && cron.schedule?.startsWith("* ")), "lock sweep runs every minute while remaining targeted");
 assert.ok(crons.some((cron) => cron.path === "/api/cron/public-splits-observations-refresh" && cron.schedule === "*/15 11-12 * * *"), "split recovery starts at 07:00 ET");
 assert.match(source("app/api/cron/pregame-sweep/route.ts"), /leaseRetryMaxWaitMs:\s*!dryRun && gateActive \? 20_000/, "lock sweep briefly waits for the shared lease before deferring");
