@@ -78,6 +78,7 @@ import {
   MLB_PROPS_BEST_ANGLE_PRICE_FLOOR,
   mlbPropsGradeAfterPriceConfidence,
 } from "../lib/mlb/props/priceConfidencePolicy";
+import { shouldRetainMlbPropOffer } from "../lib/mlb/props/offerRetention";
 
 let pass = 0;
 let fail = 0;
@@ -103,6 +104,9 @@ function env(values: Record<string, string>): NodeJS.ProcessEnv {
 }
 
 async function main() {
+  check("verified pitcher offers survive an empty recent-log sample as held research", shouldRetainMlbPropOffer({ family: "pitcher", recentLogCount: 0 }));
+  check("unmodeled hitter offers still require recent history", !shouldRetainMlbPropOffer({ family: "batter", recentLogCount: 0 }));
+  check("modeled hitter offers retain normal publication eligibility", shouldRetainMlbPropOffer({ family: "batter", recentLogCount: 1 }));
   check("MLB props premium placement caps use the declared graduated prices",
     MLB_PROPS_BEST_ANGLE_PRICE_FLOOR === -200 && MLB_PROPS_ACTIONABLE_PRICE_FLOOR === -400);
   check("Best Angle retains premium placement at exactly -200",
@@ -705,8 +709,8 @@ async function main() {
   check("projection and model visuals expose member-friendly comparison", drawerSource.includes("data-projection={projection}") && drawerSource.includes("data-line={line}") && drawerSource.includes("OddSphere estimate") && drawerSource.includes("Market implied") && drawerSource.includes("Model difference"));
   check(
     "player prop projections display with one decimal without rounding model inputs",
-    propsUiSource.includes("function formatProjection(value: number): string") &&
-      propsUiSource.includes("return value.toFixed(1);") &&
+    propsUiSource.includes("function formatProjection(value: number | null): string") &&
+      propsUiSource.includes('return value === null ? "-" : value.toFixed(1);') &&
       drawerSource.includes("data-projection={projection}") &&
       !propsUiSource.includes("String(row.projection)") &&
       !propsUiSource.includes("{pair.primary.projection}</") &&
@@ -727,6 +731,7 @@ async function main() {
   check("radar prioritizes playable positive signals before context watches", propsUiSource.includes("function isRadarEligible") && propsUiSource.includes("row.odds >= -250") && propsUiSource.includes("const signalRows = uniqueRows.filter(isPositiveSignal)") && propsUiSource.includes("const primaryRows = signalRows.length ? signalRows") && propsUiSource.includes("signalRows.length < RADAR_ITEM_LIMIT") && propsUiSource.includes('row.playGrade !== "RESEARCH"'));
   check("radar can horizontally scan six existing model reads", propsUiSource.includes("const RADAR_ITEM_LIMIT = 6") && propsUiSource.includes("overflow-x-auto") && propsUiSource.includes("snap-x") && propsUiSource.includes("items.slice(0, RADAR_ITEM_LIMIT)"));
   check("lineup context is status not a board blocker", liveBoardSource.indexOf('definition.recommendationEligibility === "research_only" || !eligibleModel ? "RESEARCH"') >= 0 && liveBoardSource.indexOf('definition.recommendationEligibility === "research_only" || !eligibleModel ? "RESEARCH"') < liveBoardSource.indexOf(': !memberReady ? "PENDING_DATA"') && liveBoardSource.includes("HITTER_ROWS_PROJECTED_LINEUP") && !liveBoardSource.includes("HITTER_ROWS_AWAITING_LINEUP"));
+  check("verified no-history pitcher offers remain visible only as held research rows", liveBoardSource.includes("shouldRetainMlbPropOffer") && liveBoardSource.includes('projection === null') && liveBoardSource.includes('row.playGrade !== "PENDING_DATA"') && liveBoardSource.includes('row.playGrade !== "RESEARCH"') && liveBoardSource.includes("MISSING_MEMBER_PROJECTION_OUTSIDE_HELD_ROW"));
   check("hitter model reads use integrated evidence stack", liveBoardSource.includes("buildIntegratedHitterSignal") && ["RECENT_FORM_EDGE", "PITCH_MIX_MATCHUP_EDGE", "DIRECT_MATCHUP_CONTEXT", "PARK_WEATHER_CONTEXT", "MARKET_MOVEMENT_CONTEXT"].every((label) => liveBoardSource.includes(label)));
   check("fast hitter refreshes preserve full-season projection inputs", liveBoardSource.includes("recent?.samples?.last5.average") && liveBoardSource.includes("recent?.samples?.last10.average") && liveBoardSource.includes("recent?.samples?.season.average") && liveBoardSource.includes("recent?.samples?.season.count") && !liveBoardSource.includes("const season = averageNumber(logs.map"));
   check("fast refreshes converge missing research and rebuild changed-starter rows", liveBoardSource.includes("async function refreshFastResearch") && liveBoardSource.includes("loadBatterPitcherHistories") && liveBoardSource.includes("starterContextChangedGameIds.has(row.game.id)") && liveBoardSource.includes("attachFastMatchupHistories"));
@@ -767,7 +772,7 @@ async function main() {
     realScoringSource.includes("buildTargetExcludedPitcherConsensus")
       && realScoringSource.includes("forecastMarketOverProbability: targetExcludedConsensus?.overProbability ?? null")
       && liveBoardSource.includes("if (signal && !scoredPitcherSignal)"));
-  check("generic pitcher scorer warnings cannot suppress integrated hitter reads", liveBoardSource.includes('const scoredPitcherSignal = definition.family === "pitcher"') && liveBoardSource.includes("let signal: IntegratedPropSignal | null = scoredPitcherSignal ?") && liveBoardSource.includes("const blockingModelWarnings = (scoredPitcherSignal?.featureWarnings ?? [])"));
+  check("generic pitcher scorer warnings cannot suppress integrated hitter reads", liveBoardSource.includes('const scoredPitcherSignal = definition.family === "pitcher"') && liveBoardSource.includes("let signal: IntegratedPropSignal | null = scoredPitcherSignal && pitcherModelProjection !== null ?") && liveBoardSource.includes("const blockingModelWarnings = (scoredPitcherSignal?.featureWarnings ?? [])"));
   check("positive prop signals collapse duplicate sportsbook rows to the best price", liveBoardSource.includes("applyBestPriceSignalDiscipline(deduped)") && liveBoardSource.includes("applyHitterSignalDiscipline(priceDisciplined)") && liveBoardSource.includes("signalOfferKey") && liveBoardSource.includes("BETTER_PRICE_AVAILABLE"));
   check("validated Hits and H+R+RBI Under promotions use shared uncapped Best Angle rules", liveBoardSource.includes("applyValidatedUnderActionablePromotions") && liveBoardSource.includes("qualifiesValidatedUnderPromotion") && liveBoardSource.includes("qualifiesHitsUnderPriceEdge") && liveBoardSource.includes("for (const row of bestOffers) promotedIds.add(row.id)") && liveBoardSource.includes('playGrade: "BEST_ANGLE"') && liveBoardSource.includes("VALIDATED_UNDER_BEST_ANGLE") && propsConfigSource.includes("VALIDATED_UNDER_BEST_ANGLE"));
   check("validated Doubles Under residual reads use the exact value gate", liveBoardSource.includes("projectBatterDoublesResidual") && liveBoardSource.includes("qualifiesBatterDoublesResidualPromotion") && liveBoardSource.includes("DOUBLES_MARKET_RESIDUAL_READ") && liveBoardSource.includes("VALIDATED_DOUBLES_RESIDUAL_BEST_ANGLE") && propsConfigSource.includes("VALIDATED_DOUBLES_RESIDUAL_BEST_ANGLE"));
@@ -923,7 +928,7 @@ async function main() {
   check("props snapshot retention is bounded while locked references are preserved", boardSnapshotStoreSource.includes("DEFAULT_MLB_PROPS_SNAPSHOT_RETENTION_PER_SLATE = 24") && boardSnapshotStoreSource.includes("referencedSnapshotIds") && boardSnapshotStoreSource.includes("board_snapshot_id"));
   check("props cron reports actual database writes instead of embedded display-row count", propsRefreshRouteSource.includes("result.tracking.entriesLocked") && propsRefreshRouteSource.includes("result.tracking.closingPricesUpdated") && !propsRefreshRouteSource.includes("records_updated: result.published ? result.snapshot.data.props.length"));
   check("member props UI marks locked rows on cards and reader", propsUiSource.includes("function LockStatusBadge") && propsUiSource.includes("row.lockStatus") && propsUiSource.includes("Locked <LocalTime") && propsUiSource.includes("lockedAt={row.lockStatus.lockedAt}"));
-  check("props UI exposes search/filter data shape", ["type=\"search\"", "Model signal", "Market groups", "Specific market filters", "Book", "Team / game", "Evidence strength", "EV range", "Model-edge range", "Odds range", "Start time", "Sort"].every((label) => propsUiSource.includes(label)));
+  check("props UI exposes search/filter data shape", ["type=\"search\"", "Model signal", "Market groups", "Specific market filters", "Book", "Team / game", "Evidence strength", "EV range", "Model-edge range", "Current odds", "Start time", "Sort"].every((label) => propsUiSource.includes(label)));
   check("positive model signals retain actionable backend semantics", isActionablePropGrade("BEST_ANGLE") && isActionablePropGrade("LEAN") && !isActionablePropGrade("WATCHLIST"));
   check("all props grades are inspectable", PROP_GRADES.every(isInspectablePropGrade));
   check("grade helpers use Daily Edge-aligned member labels", getPropGradeLabel("BEST_ANGLE") === "Best Angle" && getPropGradeLabel("LEAN") === "Lean" && getPropGradeLabel("WATCHLIST") === "Watchlist" && getPropGradeLabel("NO_PLAY") === "No Edge" && getPropGradeLabel("PENDING_DATA") === "Data Check" && getPropGradeDescription("BEST_ANGLE").length > 0);
