@@ -37,7 +37,7 @@ assert.equal(canonicalNflPlayerPropMarket("player_total_receptions"), "reception
 assert.equal(canonicalNflPlayerPropMarket("player_total_rush_attempts"), "rushing_attempts");
 assert.equal(canonicalNflPlayerPropMarket("player_rushing_+_receiving_yards"), "rushing_receiving_yards");
 assert.equal(canonicalNflPlayerPropMarket("unknown_fun_prop"), null);
-assert.equal(NFL_PLAYER_PROPS_PROVIDER_SNAPSHOT_RELEASE, "nfl_player_props_provider_observation_2026_09_18_r9_sharp_alias_coverage");
+assert.equal(NFL_PLAYER_PROPS_PROVIDER_SNAPSHOT_RELEASE, "nfl_player_props_provider_observation_2026_09_21_r10_receiving_market_integrity");
 assert.deepEqual(NFL_PLAYER_PROPS_PHASE_ONE_MARKETS, [
   "passing_attempts",
   "passing_completions",
@@ -90,6 +90,33 @@ assert.deepEqual(bdl.rows.slice(0, 2).map((row) => row.side), ["over", "under"])
 assert.equal(bdl.rows[2]?.offerType, "milestone");
 assert.equal(bdl.rows[2]?.side, "yes");
 assert.ok(bdl.rows.every((row) => row.playerName === null && row.providerPlayerId === "490"));
+
+const receivingMarketIntegrity = normalizeBalldontlieNflPlayerProps({
+  fetchedAt,
+  values: [
+    bdlTwoWay(20, "fanduel", "receiving_yards", 67.5),
+    bdlTwoWay(21, "fanduel", "receiving_yards", 11.5),
+    bdlTwoWay(22, "draftkings", "receiving_yards", 11.5),
+    bdlTwoWay(23, "betmgm", "receiving_yards", 12.5),
+    bdlTwoWay(24, "betmgm", "player_rushing_+_receiving_yards", 67.5),
+  ],
+});
+assert.equal(receivingMarketIntegrity.inputRows, 5);
+assert.equal(receivingMarketIntegrity.rejectedRows, 1);
+assert.equal(receivingMarketIntegrity.rows.length, 8);
+assert.equal(receivingMarketIntegrity.rows.some((row) => row.sportsbook === "fanduel" && row.market === "receiving_yards" && row.line === 67.5), false);
+assert.equal(receivingMarketIntegrity.rows.some((row) => row.sportsbook === "fanduel" && row.market === "receiving_yards" && row.line === 11.5), true);
+
+const ambiguousReceivingMarket = normalizeBalldontlieNflPlayerProps({
+  fetchedAt,
+  values: [
+    bdlTwoWay(30, "fanduel", "receiving_yards", 67.5),
+    bdlTwoWay(31, "draftkings", "receiving_yards", 11.5),
+    bdlTwoWay(32, "betmgm", "player_rushing_+_receiving_yards", 67.5),
+  ],
+});
+assert.equal(ambiguousReceivingMarket.rejectedRows, 0, "one independent receiving book cannot prove a semantic mismatch");
+assert.equal(ambiguousReceivingMarket.rows.length, 6);
 
 const opening = normalizeBalldontlieNflPlayerProps({
   fetchedAt,
@@ -178,6 +205,19 @@ assert.throws(
 
 assert.equal(NFL_PLAYER_PROPS_COLLECTION_LIMITS.bdlConcurrency, 3);
 assert.ok(NFL_PLAYER_PROPS_COLLECTION_LIMITS.maxSharpPages <= 8);
+
+function bdlTwoWay(id: number, vendor: string, propType: string, line: number) {
+  return {
+    id,
+    game_id: 424129,
+    player_id: 490,
+    vendor,
+    prop_type: propType,
+    line_value: String(line),
+    market: { type: "over_under", over_odds: -110, under_odds: -110 },
+    updated_at: "2026-09-09T18:00:00Z",
+  };
+}
 assert.equal(NFL_PLAYER_PROPS_COLLECTION_LIMITS.maxPlayerIdentities, 512);
 assert.equal(NFL_PLAYER_PROPS_COLLECTION_LIMITS.maxPlayerIdentitiesPerGame, 64);
 const capacityRows = Array.from({ length: 475 }, (_, index) => ({

@@ -60,8 +60,13 @@ export function normalizeBalldontlieNflPlayerProps(args: {
 }): NflPlayerPropsProviderNormalization {
   const rows: NflPlayerPropPriceObservation[] = [];
   const unknownMarkets = new Map<string, number>();
+  const semanticallyRejected = misclassifiedFanDuelReceivingRows(args.values);
   let rejectedRows = 0;
-  for (const value of args.values) {
+  for (const [index, value] of args.values.entries()) {
+    if (semanticallyRejected.has(index)) {
+      rejectedRows += 1;
+      continue;
+    }
     const row = object(value);
     const marketRaw = text(row.prop_type);
     const market = canonicalNflPlayerPropMarket(marketRaw);
@@ -103,6 +108,77 @@ export function normalizeBalldontlieNflPlayerProps(args: {
     }
   }
   return result(args.values.length, rows, rejectedRows, unknownMarkets);
+}
+
+/**
+ * BALLDONTLIE can expose FanDuel rushing-plus-receiving offers under the
+ * ordinary receiving-yard provider label. Reject only rows whose target-
+ * excluded cross-book family identity proves that mismatch. This operates on
+ * the already-fetched payload and therefore adds no provider calls.
+ */
+function misclassifiedFanDuelReceivingRows(values: unknown[]): Set<number> {
+  type IndexedLine = {
+    index: number;
+    eventId: string;
+    playerId: string;
+    sportsbook: string;
+    market: NflPlayerPropMarket;
+    line: number;
+  };
+  const indexed = values.flatMap((value, index): IndexedLine[] => {
+    const row = object(value);
+    const market = canonicalNflPlayerPropMarket(row.prop_type);
+    const marketObject = object(row.market);
+    const eventId = textOrNumber(row.game_id);
+    const playerId = textOrNumber(row.player_id);
+    const sportsbook = text(row.vendor)?.toLowerCase() ?? null;
+    const line = number(row.line_value);
+    if ((market !== "receiving_yards" && market !== "rushing_receiving_yards")
+      || text(marketObject.type) !== "over_under"
+      || !eventId || !playerId || !sportsbook || line === null) return [];
+    return [{ index, eventId, playerId, sportsbook, market, line }];
+  });
+  const byPlayer = new Map<string, IndexedLine[]>();
+  for (const row of indexed) {
+    const key = `${row.eventId}|${row.playerId}`;
+    byPlayer.set(key, [...(byPlayer.get(key) ?? []), row]);
+  }
+  const rejected = new Set<number>();
+  for (const rows of byPlayer.values()) {
+    for (const candidate of rows) {
+      if (candidate.sportsbook !== "fanduel" || candidate.market !== "receiving_yards") continue;
+      const receiving = sportsbookMedianLines(rows, candidate, "receiving_yards");
+      const combined = sportsbookMedianLines(rows, candidate, "rushing_receiving_yards");
+      if (receiving.length < 2 || combined.length < 1) continue;
+      const receivingDistance = Math.abs(candidate.line - median(receiving));
+      const combinedDistance = Math.abs(candidate.line - median(combined));
+      if (receivingDistance >= 10 && combinedDistance <= 3 && receivingDistance >= combinedDistance + 7) {
+        rejected.add(candidate.index);
+      }
+    }
+  }
+  return rejected;
+}
+
+function sportsbookMedianLines(
+  rows: Array<{ sportsbook: string; market: NflPlayerPropMarket; line: number }>,
+  candidate: { sportsbook: string },
+  market: NflPlayerPropMarket,
+): number[] {
+  const bySportsbook = new Map<string, number[]>();
+  for (const row of rows) {
+    if (row.sportsbook === candidate.sportsbook || row.market !== market) continue;
+    bySportsbook.set(row.sportsbook, [...(bySportsbook.get(row.sportsbook) ?? []), row.line]);
+  }
+  return [...bySportsbook.values()].map(median);
+}
+
+function median(values: number[]): number {
+  const ordered = [...values].sort((a, b) => a - b);
+  const middle = Math.floor(ordered.length / 2);
+  return ordered.length % 2 === 1
+    ? ordered[middle]!
+    : (ordered[middle - 1]! + ordered[middle]!) / 2;
 }
 
 export function normalizeSharpNflPlayerProps(args: {
