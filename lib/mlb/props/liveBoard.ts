@@ -134,6 +134,7 @@ import {
   mlbPropsMarketEvidenceInput,
 } from "./marketEvidenceCapture";
 import { applyMlbPropsPriceConfidenceCeilings } from "./priceConfidencePolicy";
+import { shouldRetainMlbPropOffer } from "./offerRetention";
 
 type RefreshArgs = {
   slateDate: string;
@@ -437,6 +438,7 @@ export async function refreshMlbPropsBoard(args: RefreshArgs): Promise<MlbPropsB
   // Expected-count calibration is intentionally applied only after every
   // probability, side, grade, actionability, and stake decision is complete.
   const calibratedProps = decisionProps.map((row) => {
+    if (row.projection === null) return row;
     const forecastSide = (row.overProbability ?? 0.5) >= (row.underProbability ?? 0.5)
       ? "over"
       : "under";
@@ -1246,11 +1248,17 @@ function buildDashboardRows(args: {
   const rows: PlayerPropPreviewRow[] = [];
   for (const mapped of args.mappedOdds) {
     const identity = args.identities.get(mapped.bdlPlayerId);
+    if (!identity) continue;
+    const definition = getMlbPropMarketDefinition(mapped.odds.marketKey);
     const research = args.researchByKey.get(researchKey(mapped.bdlPlayerId, mapped.odds.marketKey, mapped.game.id));
     const recentLogs = research?.evidence.recentForm?.logs.slice(0, 10) ?? [];
-    if (!identity || !recentLogs.length) continue;
-    const projection = round(recentLogs.reduce((sum, row) => sum + row.value, 0) / recentLogs.length, 2);
-    const definition = getMlbPropMarketDefinition(mapped.odds.marketKey);
+    // A verified pitcher offer must not disappear merely because the confirmed
+    // starter lacks enough recent MLB history to support a forecast. Retain the
+    // real quote as a held research row; hitter offers still require recent form.
+    if (!shouldRetainMlbPropOffer({ family: definition.family, recentLogCount: recentLogs.length })) continue;
+    const projection = recentLogs.length
+      ? round(recentLogs.reduce((sum, row) => sum + row.value, 0) / recentLogs.length, 2)
+      : null;
     // A provider player profile can lag a trade or roster move. For pitchers,
     // the official probable-pitcher assignment is the authoritative game-side
     // identity and must win over the provider's cached team abbreviation.
@@ -1281,9 +1289,11 @@ function buildDashboardRows(args: {
     const price = assessPropPrice(mapped.odds.americanOdds);
     if (!price.displayEligible) continue;
     const memberReady = Boolean(research?.memberReady);
-    const hitterSignal = buildIntegratedHitterSignal({ mapped, definition, research, lineupStatus, marketProbability, currentOdds: mapped.odds.americanOdds, projection, homeAway });
+    const hitterSignal = projection === null
+      ? null
+      : buildIntegratedHitterSignal({ mapped, definition, research, lineupStatus, marketProbability, currentOdds: mapped.odds.americanOdds, projection, homeAway });
     const pitcherModelProjection = scoredPitcherSignal?.modelProjection ?? projection;
-    let signal: IntegratedPropSignal | null = scoredPitcherSignal ? {
+    let signal: IntegratedPropSignal | null = scoredPitcherSignal && pitcherModelProjection !== null ? {
       side: scoredPitcherSignal.side,
       modelProbability: scoredPitcherSignal.modelProbability,
       finalProbability: scoredPitcherSignal.finalProbability,
@@ -1358,7 +1368,7 @@ function buildDashboardRows(args: {
     const modelProbability = signal
       ? mapped.odds.side === "over" ? signal.overModelProbability : signal.underModelProbability
       : null;
-    const eligibleModel = Boolean(scoredPitcherSignal || hitterSignal);
+    const eligibleModel = Boolean(signal);
     const blockingModelWarnings = (scoredPitcherSignal?.featureWarnings ?? []).filter(isBlockingModelContextWarning);
     const modelContextIntegrated = blockingModelWarnings.length === 0;
     const isSelectedModelSide = Boolean(signal && mapped.odds.side === signal.side);
@@ -1465,7 +1475,7 @@ function buildDashboardRows(args: {
       source: "Ball Don't Lie + MLB Stats + NWS + Baseball Savant",
       lastUpdated: mapped.odds.asOfTimestamp,
       projection: signal?.projection ?? projection,
-      projectionSource: signal ? "model" : "recent_form",
+      projectionSource: signal ? "model" : recentLogs.length ? "recent_form" : undefined,
       overProbability: eligibleModel && signal ? signal.overFinalProbability : null,
       underProbability: eligibleModel && signal ? signal.underFinalProbability : null,
       lineupStatus,
@@ -1477,12 +1487,15 @@ function buildDashboardRows(args: {
         mlbStatsPlayerId: identity.mlbStatsPlayerId,
       },
       keyFeatures: uniqueStrings([
-        `${recentLogs.length} recent ${research?.evidence.recentForm?.sampleLabel ?? "games"}`,
+        ...(recentLogs.length ? [`${recentLogs.length} recent ${research?.evidence.recentForm?.sampleLabel ?? "games"}`] : []),
         ...(definition.family === "pitcher" && probableForPlayer(args.probablePitchers, mapped.game.id, identity.player.fullName) ? ["Starter listed"] : []),
         ...(hitterSignal ? ["integrated hitter read"] : []),
         ...(research?.availableModules.map((module) => module.replaceAll("_", " ")) ?? []),
       ]),
-      missingFeatures: research?.missingModules.map((module) => module.replaceAll("_", " ")) ?? ["research evidence"],
+      missingFeatures: uniqueStrings([
+        ...(research?.missingModules.map((module) => module.replaceAll("_", " ")) ?? ["research evidence"]),
+        ...(!recentLogs.length ? ["recent form"] : []),
+      ]),
       modelInputWarnings: scoredPitcherSignal?.featureWarnings ?? [],
       marketContext: [
         `Lineup ${lineupContextLabel(lineupStatus.status)}`,
@@ -1752,6 +1765,7 @@ function applyValidatedUnderActionablePromotions(
 
   return rows.map((row) => {
     if (!promotedIds.has(row.id)) return row;
+    if (row.projection === null) return row;
     const hrrScore = hrrScores.get(row.id);
     const doublesScore = doublesScores.get(row.id);
     const accuracyScore = hrrScore ?? doublesScore;
@@ -1823,6 +1837,7 @@ function applyValidatedBatterStrikeoutsAccuracyPromotions(
   }
   return rows.map((row) => {
     if (!bestOfferIds.has(row.id)) return row;
+    if (row.projection === null) return row;
     const score = scores.get(row.id)!;
     return {
       ...row,
@@ -2732,7 +2747,16 @@ export function validateMlbPropsBoardData(args: {
   const maxBoardRows = envPositiveInteger("ODDSPHERE_PROPS_MAX_BOARD_ROWS", DEFAULT_MAX_BOARD_ROWS);
   if (args.data.props.length > maxBoardRows) errors.push(`BOARD_ROW_LIMIT_EXCEEDED_${args.data.props.length}_OF_${maxBoardRows}`);
   if (new Set(ids).size !== ids.length) errors.push("DUPLICATE_BOARD_ROW_IDS");
-  if (args.data.props.some((row) => !Number.isFinite(row.line) || !Number.isFinite(row.odds) || !Number.isFinite(row.projection))) errors.push("NON_FINITE_MEMBER_VALUE");
+  if (args.data.props.some((row) =>
+    !Number.isFinite(row.line)
+    || !Number.isFinite(row.odds)
+    || (row.projection !== null && !Number.isFinite(row.projection))
+  )) errors.push("NON_FINITE_MEMBER_VALUE");
+  if (args.data.props.some((row) =>
+    row.projection === null
+    && row.playGrade !== "PENDING_DATA"
+    && row.playGrade !== "RESEARCH"
+  )) errors.push("MISSING_MEMBER_PROJECTION_OUTSIDE_HELD_ROW");
   if (staleOddsRows > 0) {
     errors.push("STALE_ODDS_PRESENT");
     warnings.push(`${staleOddsRows}_STALE_ODDS_ROWS_WITHHELD_FROM_SIGNALS`);

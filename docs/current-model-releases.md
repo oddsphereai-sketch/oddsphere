@@ -1618,11 +1618,13 @@ in `docs/model-audits/2026-08-21-wnba-incoherent-total-tuple-fallback.md`.
 
 ## MLB Player Props production release
 
-- Release: `mlb_props_2026_09_05_r42`
+- Release: `mlb_props_2026_09_21_r43`
 - Machine registry: `lib/mlb/props/marketModelVersions.ts`
 - Authoritative writer: `/api/cron/mlb-player-props-refresh` through
   `refreshMlbPropsBoard`
 - Status: authoritative signed-in member release
+
+The September 21 r43 priced-offer retention release keeps fresh, supported pitcher offers visible when a confirmed probable starter has no recent MLB log sample. Such rows remain explicitly held by the existing Research or Data Check path with zero units. When no active scored model candidate exists, projection, probability, edge, EV, and fair odds remain null; when the established conservative pitcher scorer has an output but required member research is incomplete, the existing member-readiness gate preserves Data Check and zero units. r43 never substitutes the market for an independent model output. Hitter rows still require recent form, and every actionable pitcher row still requires the complete probability-backed model path. Snapshot validation permits a null projection only on an existing Research or Data Check hold and rejects it everywhere else. The writer, shared lease, provider budgets, exact-price selection, locks, tracking, UI copy, labels, and layout are unchanged. Evidence and rollback are recorded in `docs/model-audits/2026-09-21-mlb-props-priced-offer-retention-r43-predeclaration.md` and its paired result. Rollback is r42 without rewriting historical snapshots or locks.
 
 The September 5 r42 price-confidence balance keeps the exact named-book quote attached and keeps
 the underlying forecast, side, probability, projection, edge, EV, category eligibility, and

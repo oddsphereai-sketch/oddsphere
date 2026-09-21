@@ -52,7 +52,7 @@ const UNSUPPORTED_ACTIONABLE = new Set([
   "batter_singles|over", "batter_total_bases|over", "batter_total_bases|under", "batter_walks|over",
   "pitcher_earned_runs|over", "pitcher_earned_runs|under", "pitcher_outs|under", "pitcher_strikeouts|under",
 ]);
-type AuditRow = PlayerPropPreviewRow & { marketEvidenceId?: string };
+type AuditRow = Omit<PlayerPropPreviewRow, "projection"> & { projection: number; marketEvidenceId?: string };
 type Quote = {
   key: string;
   evidenceId: string;
@@ -89,7 +89,7 @@ type CandidateRow = {
 };
 
 async function main(): Promise<void> {
-  if (MLB_PROPS_MODEL_RELEASE_ID !== "mlb_props_2026_09_05_r42") {
+  if (String(MLB_PROPS_MODEL_RELEASE_ID) !== "mlb_props_2026_09_05_r42") {
     throw new Error(`Candidate runtime moved to ${MLB_PROPS_MODEL_RELEASE_ID}.`);
   }
   const date = option("date") ?? easternDate();

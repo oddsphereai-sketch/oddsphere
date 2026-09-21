@@ -121,7 +121,7 @@ export type PlayerPropPreviewRow = {
   playGrade: PropGrade;
   source: string;
   lastUpdated: string;
-  projection: number;
+  projection: number | null;
   projectionSource?: "model" | "recent_form";
   overProbability: number | null;
   underProbability: number | null;
@@ -912,6 +912,7 @@ function rowPredictionSide(row: PlayerPropPreviewRow): "over" | "under" | null {
 }
 
 function projectionSideFor(row: PlayerPropPreviewRow): "over" | "under" | null {
+  if (row.projection === null) return null;
   if (row.projection === row.line) return null;
   return row.projection > row.line ? "over" : "under";
 }
@@ -1223,7 +1224,10 @@ function ProbabilityBar({ label, value, tone }: { label: string; value: number |
   return <div><div className="flex items-center justify-between text-xs"><span className="text-gray-400">{label}</span><strong className="tabular-nums text-white">{value === null ? "Unavailable" : pct(value)}</strong></div><div className="mt-1.5 h-2 overflow-hidden rounded-full bg-gray-800">{value !== null ? <span className={`block h-full rounded-full ${tone === "model" ? "bg-violet-400" : "bg-sky-400"}`} style={{ width: `${Math.round(clamp01(value) * 100)}%` }} /> : null}</div></div>;
 }
 
-export function ProjectionVsLineVisual({ projection, line, side, label = "Projection" }: { projection: number; line: number; side: "over" | "under"; label?: string }) {
+export function ProjectionVsLineVisual({ projection, line, side, label = "Projection" }: { projection: number | null; line: number; side: "over" | "under"; label?: string }) {
+  if (projection === null) {
+    return <div data-visual="projection-vs-line" data-projection="" data-line={line} data-side={side} className="rounded-lg border border-gray-800 bg-black/20 p-3"><div className="flex items-center justify-between gap-3 text-xs"><span className="text-gray-500">{label} <strong className="ml-1 text-white">-</strong></span><span className="text-gray-500">Line <strong className="ml-1 text-white">{line}</strong></span></div></div>;
+  }
   const low = Math.max(0, Math.min(projection, line) * 0.75);
   const high = Math.max(projection, line) * 1.25 || 1;
   const position = (value: number) => `${Math.max(3, Math.min(97, ((value - low) / (high - low)) * 100))}%`;
@@ -1245,6 +1249,7 @@ function MilestoneProbabilityVisual({ row }: { row: PlayerPropPreviewRow }) {
 
 function ProjectionIntegrityNotice({ row }: { row: PlayerPropPreviewRow }) {
   if (isHomeRunMarket(row)) return null;
+  if (row.projection === null) return null;
   if (isProjectionSideCoherent(row)) return null;
   const projectionSide = row.projection > row.line ? "Over" : "Under";
   const predictionSide = rowPredictionSide(row);
@@ -1374,10 +1379,10 @@ function PlayerEditorialVisual({ row, compact = false }: { row: PlayerPropPrevie
   const [imageFailed, setImageFailed] = useState(false);
   const teamColor = teamPrimaryColor(row.team, "mlb");
   const safeLocalHeadshot = row.headshotUrl?.startsWith("/") ? row.headshotUrl : null;
-  const projectionDelta = row.projection - row.line;
+  const projectionDelta = row.projection === null ? null : row.projection - row.line;
   const projectionLabel = isHomeRunMarket(row) ? "OddSphere model read" : row.projectionSource === "recent_form" ? "Recent-game average" : "OddSphere projection";
   const visualValue = isHomeRunMarket(row) ? projectionHeadlineValue(row) : formatProjection(row.projection);
-  return <div data-player-visual data-photo-ready={safeLocalHeadshot ? "true" : "false"} className={`relative flex min-h-[190px] overflow-hidden ${compact ? "xl:min-h-full" : "sm:min-h-full"}`} style={{ backgroundColor: `${teamColor}24` }}><div className="absolute inset-y-0 left-0 w-1.5" style={{ backgroundColor: teamColor }} /><div className="absolute inset-0 opacity-[0.06]" style={{ backgroundImage: "linear-gradient(rgba(255,255,255,.6) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.6) 1px, transparent 1px)", backgroundSize: "28px 28px" }} /><div className="absolute -right-10 -top-6 opacity-[0.08]"><ProductTeamBadge abbreviation={row.team} size={190} /></div>{safeLocalHeadshot && !imageFailed ? <img src={safeLocalHeadshot} alt={row.player} onError={() => setImageFailed(true)} className="absolute inset-0 h-full w-full object-cover object-top" /> : <div className="relative z-[1] flex w-full flex-col justify-center px-6"><span className="inline-flex w-fit rounded-md bg-black/35 p-2 ring-1 ring-white/10"><ProductTeamBadge abbreviation={row.team} size={compact ? 34 : 42} /></span><p className="mt-6 text-[9px] font-black uppercase text-white/45">{projectionLabel}</p><strong className={`${isHomeRunMarket(row) ? "text-3xl" : "text-5xl"} mt-1 font-black tabular-nums text-white`}>{visualValue}</strong><div className="mt-3 border-t border-white/15 pt-3">{isHomeRunMarket(row) ? <><p className="text-xs font-bold text-white/80">Best price {signed(row.odds)}</p><p className="mt-1 text-[10px] text-emerald-300">Fair price {row.fairOdds === null ? "-" : signed(row.fairOdds)}</p></> : <><p className="text-xs font-bold text-white/80">Line {row.line}</p><p className="mt-1 text-[10px] text-emerald-300">{Math.abs(projectionDelta).toFixed(1)} {projectionDelta >= 0 ? "above" : "below"} the line</p></>}</div></div>}<div className="absolute inset-x-0 bottom-0 z-[2] flex items-center justify-between bg-black/55 px-4 py-2 text-[9px] font-black uppercase text-white/60"><span>{MARKET_CODES[row.market] ?? row.marketGroup}</span><span>{row.team} · {row.homeAway === "home" ? "Home" : "Away"}</span></div></div>;
+  return <div data-player-visual data-photo-ready={safeLocalHeadshot ? "true" : "false"} className={`relative flex min-h-[190px] overflow-hidden ${compact ? "xl:min-h-full" : "sm:min-h-full"}`} style={{ backgroundColor: `${teamColor}24` }}><div className="absolute inset-y-0 left-0 w-1.5" style={{ backgroundColor: teamColor }} /><div className="absolute inset-0 opacity-[0.06]" style={{ backgroundImage: "linear-gradient(rgba(255,255,255,.6) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.6) 1px, transparent 1px)", backgroundSize: "28px 28px" }} /><div className="absolute -right-10 -top-6 opacity-[0.08]"><ProductTeamBadge abbreviation={row.team} size={190} /></div>{safeLocalHeadshot && !imageFailed ? <img src={safeLocalHeadshot} alt={row.player} onError={() => setImageFailed(true)} className="absolute inset-0 h-full w-full object-cover object-top" /> : <div className="relative z-[1] flex w-full flex-col justify-center px-6"><span className="inline-flex w-fit rounded-md bg-black/35 p-2 ring-1 ring-white/10"><ProductTeamBadge abbreviation={row.team} size={compact ? 34 : 42} /></span><p className="mt-6 text-[9px] font-black uppercase text-white/45">{projectionLabel}</p><strong className={`${isHomeRunMarket(row) ? "text-3xl" : "text-5xl"} mt-1 font-black tabular-nums text-white`}>{visualValue}</strong><div className="mt-3 border-t border-white/15 pt-3">{isHomeRunMarket(row) ? <><p className="text-xs font-bold text-white/80">Best price {signed(row.odds)}</p><p className="mt-1 text-[10px] text-emerald-300">Fair price {row.fairOdds === null ? "-" : signed(row.fairOdds)}</p></> : <><p className="text-xs font-bold text-white/80">Line {row.line}</p>{projectionDelta === null ? null : <p className="mt-1 text-[10px] text-emerald-300">{Math.abs(projectionDelta).toFixed(1)} {projectionDelta >= 0 ? "above" : "below"} the line</p>}</>}</div></div>}<div className="absolute inset-x-0 bottom-0 z-[2] flex items-center justify-between bg-black/55 px-4 py-2 text-[9px] font-black uppercase text-white/60"><span>{MARKET_CODES[row.market] ?? row.marketGroup}</span><span>{row.team} · {row.homeAway === "home" ? "Home" : "Away"}</span></div></div>;
 }
 
 export function PlayerAvatar({ player, team, headshotUrl, compact = false, large = false }: { player: string; team: string; headshotUrl?: string | null; compact?: boolean; large?: boolean }) {
@@ -1516,10 +1521,10 @@ function buildRadarItems(rows: PlayerPropPreviewRow[]): RadarItem[] {
   };
 
   const projectionGap = [...primaryRows]
-    .filter((row) => row.projectionSource !== "recent_form" && isProjectionSideCoherent(row))
-    .sort((a, b) => Math.abs(b.projection - b.line) - Math.abs(a.projection - a.line))[0];
+    .filter((row) => row.projection !== null && row.projectionSource !== "recent_form" && isProjectionSideCoherent(row))
+    .sort((a, b) => Math.abs((b.projection ?? b.line) - b.line) - Math.abs((a.projection ?? a.line) - a.line))[0];
   if (projectionGap) {
-    const delta = projectionGap.projection - projectionGap.line;
+    const delta = (projectionGap.projection ?? projectionGap.line) - projectionGap.line;
     add(projectionGap, "Projection gap", `The model sits ${Math.abs(delta).toFixed(1)} ${delta >= 0 ? "above" : "below"} the current line.`);
   }
 
@@ -1668,8 +1673,8 @@ function pct(value: number, signedValue = false): string {
   return signedValue && value > 0 ? `+${formatted}` : formatted;
 }
 
-function formatProjection(value: number): string {
-  return value.toFixed(1);
+function formatProjection(value: number | null): string {
+  return value === null ? "-" : value.toFixed(1);
 }
 
 function isHomeRunMarket(row: PlayerPropPreviewRow): boolean {
@@ -1890,6 +1895,7 @@ function propReaderSummary(row: PlayerPropPreviewRow, prices: PlayerPropPreviewR
     const signal = isPositiveSignal(row) ? "OddSphere's current prediction is 1+ home run." : "This remains a non-actionable home-run read.";
     return `${signal} Estimated chance ${chance === null ? "is unavailable" : `is ${pct(chance)}`}; fair price ${row.fairOdds === null ? "is unavailable" : `is ${signed(row.fairOdds)}`}, and the best available price is ${signed(bestPrice.odds)} at ${bestPrice.book}.`;
   }
+  if (row.projection === null) return memberGradeDescription(row.playGrade);
   const delta = row.projection - row.line;
   const direction = delta >= 0 ? "above" : "below";
   const selectedSide = row.side === "over" ? "over" : "under";
@@ -1917,6 +1923,7 @@ function propReaderSummary(row: PlayerPropPreviewRow, prices: PlayerPropPreviewR
 }
 
 function cardReason(row: PlayerPropPreviewRow): string {
+  if (row.projection === null) return memberGradeDescription(row.playGrade);
   if (!assessPropPrice(row.odds).signalEligible) return "This price remains visible for comparison but is not eligible for a positive signal.";
   if (row.reasonCodes.includes("LONGSHOT_VALUE_CONTEXT")) return isPositiveSignal(row)
     ? "The model makes 1+ home run actionable at the best available price."
@@ -1948,6 +1955,7 @@ function projectionReasonLabel(row: PlayerPropPreviewRow): string {
 }
 
 function isProjectionSideCoherent(row: PlayerPropPreviewRow): boolean {
+  if (row.projection === null) return false;
   if (row.projectionSource === "recent_form") return true;
   return checkProjectionSideIntegrity({ side: row.side, line: row.line, projection: row.projection }).status === "coherent";
 }

@@ -70,7 +70,7 @@ function rowBehavior(row: PlayerPropPreviewRow) {
 }
 
 async function main(): Promise<void> {
-  if (MLB_PROPS_MODEL_RELEASE_ID !== CANDIDATE_RELEASE) {
+  if (String(MLB_PROPS_MODEL_RELEASE_ID) !== CANDIDATE_RELEASE) {
     throw new Error(`Expected candidate runtime ${CANDIDATE_RELEASE}; received ${MLB_PROPS_MODEL_RELEASE_ID}.`);
   }
   const date = option("date") ?? easternDate();
