@@ -230,7 +230,7 @@ assert.equal(falsifiedLagT60.lockedAt, null);
 assert.ok(falsifiedLagT60.health.blockingReasons.includes("t60_capture_late"));
 
 const writer = readFileSync(path.resolve("lib/services/football/nflForwardEvidenceWriter.ts"), "utf8");
-assert.match(writer, /nfl_forward_evidence_writer_2026_09_21_r36_locked_transition_continuity/);
+assert.match(writer, /nfl_forward_evidence_writer_2026_09_22_r37_nonpush_side_alignment/);
 assert.match(writer, /buildNflR6ShadowMoneylineDecision/);
 assert.doesNotMatch(
   writer,

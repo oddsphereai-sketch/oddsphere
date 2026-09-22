@@ -1416,16 +1416,17 @@ check(
     candidateSource.includes("effectively flat"),
 );
 check(
-  "stale split snapshots cannot masquerade as current sharp-money evidence",
+  "retained split values keep freshness internal without member-facing stale or historical copy",
   candidateSource.includes("function splitSectionIsStale") &&
-    candidateSource.includes("Stale snapshot") &&
-    candidateSource.includes("historical context—not a current sharp-money claim") &&
-    candidateSource.includes("Historical cross-source read"),
+    !candidateSource.includes("Stale snapshot") &&
+    !candidateSource.includes("historical context—not a current sharp-money claim") &&
+    !candidateSource.includes("Historical cross-source read") &&
+    !candidateSource.includes("Historical source conflict") &&
+    !candidateSource.includes("Historical only"),
 );
 check(
   "retained named-book rows render silently without freshness badges or subtitles",
   candidateSource.includes("const silentNamedBook = isSharp && Boolean(section?.rows.length)") &&
-    candidateSource.includes("!silentNamedBook && (stale || availabilityStatus === \"stale\")") &&
     candidateSource.includes("!silentNamedBook ? <p"),
 );
 check(
@@ -1666,7 +1667,7 @@ check(
   candidateSource.includes("resolveDisplayedSharpSplit") &&
     candidateSource.includes('note: "Sharp Book Splits"') &&
     !candidateSource.includes("note: sharp.section.label") &&
-    candidateSource.includes('value: "Historical only"') &&
+    !candidateSource.includes('value: "Historical only"') &&
     candidateSource.includes('value: status') &&
     candidateSource.includes('"No verified split yet"') &&
     candidateSource.includes('"Missing stays neutral"') &&

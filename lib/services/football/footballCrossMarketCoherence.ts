@@ -1,5 +1,5 @@
 export const FOOTBALL_CROSS_MARKET_COHERENCE_RELEASE =
-  "football_cross_market_coherence_2026_09_19_r11_cfb_validated_spread_calibration" as const;
+  "football_cross_market_coherence_2026_09_22_r12_nfl_nonpush_side_alignment" as const;
 
 const EPSILON = 1e-9;
 const EV_TOLERANCE = 1e-8;
@@ -128,6 +128,7 @@ export function auditFootballCrossMarketCoherence(args: {
   allowPmfVerifiedProbabilityEndpoints?: boolean;
   publicScoreDirectionTolerancePoints?: number;
   allowForecastSideCalibrationFamilies?: string[];
+  decisionSideProbabilityConvention?: "half_push" | "exclude_push";
 }): FootballCoherenceReport {
   const fatalIssues: FootballCoherenceIssue[] = [];
   const explanations: FootballCoherenceExplanation[] = [];
@@ -171,7 +172,11 @@ export function auditFootballCrossMarketCoherence(args: {
         decision.calibrationFamily &&
         args.allowForecastSideCalibrationFamilies?.includes(decision.calibrationFamily)
       ) continue;
-      const forecastSide = selectedForecastSideAtDecision(args.forecast, decision);
+      const forecastSide = selectedForecastSideAtDecision(
+        args.forecast,
+        decision,
+        args.decisionSideProbabilityConvention ?? "half_push",
+      );
       if (forecastSide === null) {
         fatalIssues.push({
           code: "decision_forecast_side_disagreement",
@@ -236,6 +241,7 @@ export function auditFootballCrossMarketCoherence(args: {
 function selectedForecastSideAtDecision(
   forecast: FootballCoherenceForecast,
   decision: ReturnType<typeof normalizeDecision>,
+  probabilityConvention: "half_push" | "exclude_push",
 ): { pmf: FootballCoherenceSide; mean: FootballCoherenceSide; meanDistance: number } | null {
   if (!decision.selectedSide) return null;
   const expectedMarginHome = forecast.expectedHomePoints - forecast.expectedAwayPoints;
@@ -251,11 +257,14 @@ function selectedForecastSideAtDecision(
   if (decision.line === null) return null;
   if (decision.market === "total") {
     const over = forecast.pmf && forecast.pmf.length > 0
-      ? forecast.pmf.reduce((sum, cell) => {
-          const total = cell.home + cell.away;
-          return sum + (total > decision.line! ? 1 : total === decision.line ? 0.5 : 0) * cell.probability;
-        }, 0)
-      : distributionAboveProbability(forecast.totalDistribution, decision.line);
+      ? sideProbability(
+          forecast.pmf.map((cell) => ({
+            score: cell.home + cell.away - decision.line!,
+            probability: cell.probability,
+          })),
+          probabilityConvention,
+        )
+      : distributionSideProbability(forecast.totalDistribution, decision.line, probabilityConvention);
     if (over === null) return null;
     return {
       pmf: over >= 0.5 ? "over" : "under",
@@ -266,11 +275,14 @@ function selectedForecastSideAtDecision(
   if (decision.selectedSide !== "home" && decision.selectedSide !== "away") return null;
   const homeSpread = decision.selectedSide === "home" ? decision.line : -decision.line;
   const homeCover = forecast.pmf && forecast.pmf.length > 0
-    ? forecast.pmf.reduce((sum, cell) => {
-        const result = cell.home - cell.away + homeSpread;
-        return sum + (result > 0 ? 1 : result === 0 ? 0.5 : 0) * cell.probability;
-      }, 0)
-    : distributionAboveProbability(forecast.marginDistribution, -homeSpread);
+    ? sideProbability(
+        forecast.pmf.map((cell) => ({
+          score: cell.home - cell.away + homeSpread,
+          probability: cell.probability,
+        })),
+        probabilityConvention,
+      )
+    : distributionSideProbability(forecast.marginDistribution, -homeSpread, probabilityConvention);
   if (homeCover === null) return null;
   return {
     pmf: homeCover >= 0.5 ? "home" : "away",
@@ -279,13 +291,38 @@ function selectedForecastSideAtDecision(
   };
 }
 
-function distributionAboveProbability(
+function distributionSideProbability(
   distribution: FootballCoherenceForecast["marginDistribution"],
   threshold: number,
+  probabilityConvention: "half_push" | "exclude_push",
 ): number | null {
   if (!distribution || !validDistribution(distribution)) return null;
-  return distribution.values.reduce((sum, value, index) =>
-    sum + (value > threshold ? 1 : value === threshold ? 0.5 : 0) * distribution.probabilities[index]!, 0);
+  return sideProbability(
+    distribution.values.map((value, index) => ({
+      score: value - threshold,
+      probability: distribution.probabilities[index]!,
+    })),
+    probabilityConvention,
+  );
+}
+
+function sideProbability(
+  rows: Array<{ score: number; probability: number }>,
+  probabilityConvention: "half_push" | "exclude_push",
+): number | null {
+  let positive = 0;
+  let negative = 0;
+  let push = 0;
+  for (const row of rows) {
+    if (row.score > EPSILON) positive += row.probability;
+    else if (row.score < -EPSILON) negative += row.probability;
+    else push += row.probability;
+  }
+  if (probabilityConvention === "exclude_push") {
+    const decided = positive + negative;
+    return decided > EPSILON ? positive / decided : null;
+  }
+  return positive + 0.5 * push;
 }
 
 export function assertFootballCrossMarketCoherence(

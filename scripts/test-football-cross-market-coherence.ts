@@ -467,6 +467,69 @@ assert.equal(
   true,
   "NFL continues to fail closed when PMF and mean differ by more than one point",
 );
+const nearNormalizedPushDistribution = {
+  values: [40, 42.5, 45],
+  probabilities: [0.2500001, 0.500001, 0.2499999],
+};
+const nearNormalizedTotalMean = nearNormalizedPushDistribution.values.reduce(
+  (sum, value, index) => sum + value * nearNormalizedPushDistribution.probabilities[index]!,
+  0,
+);
+const nonPushUnderProbability = 0.2500001 / (0.2500001 + 0.2499999);
+const nflNonPushTotalForecast: FootballCoherenceForecast = {
+  expectedAwayPoints: (nearNormalizedTotalMean - 0.6) / 2,
+  expectedHomePoints: (nearNormalizedTotalMean + 0.6) / 2,
+  representativeScore: { away: 20, home: 23 },
+  awayWinProbability: 0.4,
+  homeWinProbability: 0.6,
+  marginDistribution: {
+    values: [-3, 3],
+    probabilities: [0.4, 0.6],
+  },
+  totalDistribution: nearNormalizedPushDistribution,
+};
+const nflNonPushTotalDecision = decision({
+  market: "total",
+  side: "Under 42.5",
+  probability: nonPushUnderProbability,
+  fair: 0.5,
+  price: 100,
+  line: 42.5,
+  grade: "No Play",
+});
+const nflHalfPushConvention = auditFootballCrossMarketCoherence({
+  sport: "nfl",
+  providerGameId: "near-normalized-half-push",
+  awayTeam: "AWY",
+  homeTeam: "HME",
+  forecast: nflNonPushTotalForecast,
+  decisions: [nflNonPushTotalDecision],
+  unavailableMarkets: ["moneyline", "spread"],
+  requireDecisionSideFromForecast: true,
+  publicScoreDirectionTolerancePoints: NFL_PUBLIC_SCORE_DIRECTION_TOLERANCE_POINTS,
+});
+assert.equal(
+  nflHalfPushConvention.fatalIssues.some((row) => row.code === "decision_forecast_side_disagreement"),
+  true,
+  "half-push display math can oppose the NFL decision probability on a near-normalized push-heavy distribution",
+);
+const nflNonPushConvention = auditFootballCrossMarketCoherence({
+  sport: "nfl",
+  providerGameId: "1392255",
+  awayTeam: "AWY",
+  homeTeam: "HME",
+  forecast: nflNonPushTotalForecast,
+  decisions: [nflNonPushTotalDecision],
+  unavailableMarkets: ["moneyline", "spread"],
+  requireDecisionSideFromForecast: true,
+  publicScoreDirectionTolerancePoints: NFL_PUBLIC_SCORE_DIRECTION_TOLERANCE_POINTS,
+  decisionSideProbabilityConvention: "exclude_push",
+});
+assert.equal(
+  nflNonPushConvention.fatalIssues.some((row) => row.code === "decision_forecast_side_disagreement"),
+  false,
+  "NFL publication must validate the same non-push probability convention used by its released decision",
+);
 assert.throws(
   () => auditFootballCrossMarketCoherence({
     sport: "cfb",
