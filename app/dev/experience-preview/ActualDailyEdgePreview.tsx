@@ -1198,14 +1198,11 @@ function footballPublicPriceSignal(market: MarketEdgeDto, movement: CoherentMove
 function footballSharpSignal(market: MarketEdgeDto, sport: "nfl" | "cfb"): FootballMarketSignal {
   const sharp = resolveDisplayedSharpSplit(market, sport);
   const leader = splitLeader(sharp.section, "moneyPct");
-  if (sharp.section?.rows.length && sharp.availabilityStatus !== "stale" && !splitSectionIsStale(sharp.section)) {
+  if (sharp.section?.rows.length) {
     // Source provenance remains in the response DTO for audit and hierarchy
     // selection, but every approved complete fallback occupies the established
     // member-facing Sharp Book Splits surface without substitute-book labeling.
     return { label: "Verified sharp", value: leader ? `Verified · ${leader}` : "Verified", note: "Sharp Book Splits", tone: "violet" };
-  }
-  if (sharp.section && (sharp.availabilityStatus === "stale" || splitSectionIsStale(sharp.section))) {
-    return { label: "Verified sharp", value: "Historical only", note: sharp.section.lastUpdated ? formatTimestamp(sharp.section.lastUpdated) : sharp.section.label, tone: "amber" };
   }
   const status = sharp.availabilityStatus === "pending" || sharp.availabilityStatus === "provider_limited" ? "Pending" : "Unavailable";
   return { label: "Verified sharp", value: status, note: status === "Pending" ? "No verified split yet" : "Missing stays neutral", tone: "gray" };
@@ -1575,27 +1572,25 @@ function sourceCoherentMarketPulse(market: MarketEdgeDto, movement: CoherentMove
   const consensusLeader = consensusSignal.direction;
   const sharpLeader = sharpSignal.direction;
   const splitConflict = splitSourcesConflict(consensus, sharp);
-  const staleSplits = splitSectionIsStale(consensus) || splitSectionIsStale(sharp);
   const movementDirection = coherentMovementDirection(market, movement);
   const movementCopy = coherentMovementSummary(market, movement, movementDirection);
   const splitCopy = splitConflict && consensusLeader && sharpLeader
-    ? `Public consensus money leans ${consensusLeader}, while the ${splitSectionIsStale(sharp) ? "older " : ""}sharp-book split snapshot leans ${sharpLeader}.`
+    ? `Public consensus money leans ${consensusLeader}, while the sharp-book split snapshot leans ${sharpLeader}.`
     : null;
-  const freshnessCopy = staleSplits ? "At least one displayed split source is stale, so it is historical context—not a current sharp-money claim." : null;
 
   if (splitConflict) {
     return {
       chip: "Split sources disagree",
-      detail: [movementCopy, splitCopy, freshnessCopy].filter(Boolean).join(" "),
+      detail: [movementCopy, splitCopy].filter(Boolean).join(" "),
       tone: "gray",
     };
   }
 
   if (movementDirection === "support") {
-    return { chip: "Price movement supports our side", detail: [movementCopy, freshnessCopy].filter(Boolean).join(" "), tone: "emerald" };
+    return { chip: "Price movement supports our side", detail: movementCopy ?? "", tone: "emerald" };
   }
   if (movementDirection === "resistance") {
-    return { chip: "Price movement resists our side", detail: [movementCopy, freshnessCopy].filter(Boolean).join(" "), tone: "amber" };
+    return { chip: "Price movement resists our side", detail: movementCopy ?? "", tone: "amber" };
   }
 
   if (consensusSignal.internallySplit || sharpSignal.internallySplit) {
@@ -1612,7 +1607,7 @@ function sourceCoherentMarketPulse(market: MarketEdgeDto, movement: CoherentMove
     ];
     return {
       chip: consensusSignal.internallySplit ? "Public consensus is split" : "Sharp-book splits are mixed",
-      detail: [movementCopy, ...sections, freshnessCopy].filter(Boolean).join(" "),
+      detail: [movementCopy, ...sections].filter(Boolean).join(" "),
       tone: "gray",
     };
   }
@@ -1636,13 +1631,13 @@ function sourceCoherentMarketPulse(market: MarketEdgeDto, movement: CoherentMove
     const consensusSupports = consensusLeader && market.pick ? sideMatchesPick(consensusLeader, market.pick) : null;
     return {
       chip: consensusSupports === true ? "Consensus money split supports our side" : consensusSupports === false ? "Consensus money split leans against our side" : "Consensus split signal",
-      detail: [movementCopy, rawDetail.replace(/sharp money/gi, "consensus money split"), freshnessCopy].filter(Boolean).join(" "),
+      detail: [movementCopy, rawDetail.replace(/sharp money/gi, "consensus money split")].filter(Boolean).join(" "),
       tone: consensusSupports === true ? "emerald" : consensusSupports === false ? "amber" : "gray",
     };
   }
   return {
     chip: rawChip,
-    detail: [movementCopy, rawDetail, freshnessCopy].filter(Boolean).join(" "),
+    detail: [movementCopy, rawDetail].filter(Boolean).join(" "),
     tone: market.marketReadV2?.tone ?? decision?.resolvedMarketRead.tone ?? market.marketInterpretation?.chipTone ?? "gray",
   };
 }
@@ -1765,12 +1760,11 @@ function DefaultSplitSummary({ market, sport = null }: { market: MarketEdgeDto; 
   const sharpDisplay = resolveDisplayedSharpSplit(market, sport);
   const displayedSharp = sharpDisplay.section;
   const displayedConflict = splitSourcesConflict(consensus, displayedSharp);
-  const conflictIsHistorical = displayedConflict && (splitSectionIsStale(consensus) || splitSectionIsStale(displayedSharp));
   if (consensus === null && displayedSharp === null) return <Unavailable label="Consensus and sharp-book split data are unavailable for this market." />;
   const hasSourceSpecificEvidence = displayedSharp !== null;
   return (
     <div className="mt-3 border-t border-white/[0.06] pt-3">
-      <div className="flex flex-wrap items-center justify-between gap-2"><div><p className="text-[8px] font-black uppercase tracking-[0.15em] text-gray-300">Market splits</p><p className="mt-0.5 text-[7px] text-gray-600">{hasSourceSpecificEvidence ? "Public and sharp splits remain separate signals" : "Public money and ticket distribution"}</p></div>{displayedConflict ? <span className="rounded-full border border-amber-400/25 bg-amber-400/[0.08] px-2 py-0.5 text-[7px] font-black uppercase tracking-wider text-amber-200">{conflictIsHistorical ? "Historical source conflict" : "Sources conflict"}</span> : null}</div>
+      <div className="flex flex-wrap items-center justify-between gap-2"><div><p className="text-[8px] font-black uppercase tracking-[0.15em] text-gray-300">Market splits</p><p className="mt-0.5 text-[7px] text-gray-600">{hasSourceSpecificEvidence ? "Public and sharp splits remain separate signals" : "Public money and ticket distribution"}</p></div>{displayedConflict ? <span className="rounded-full border border-amber-400/25 bg-amber-400/[0.08] px-2 py-0.5 text-[7px] font-black uppercase tracking-wider text-amber-200">Sources conflict</span> : null}</div>
       <div className="mt-2 space-y-2">
         <SplitSourcePanel source="PUBLIC CONSENSUS" section={consensus} pick={market.pick} />
         {displayedSharp ? <SplitSourcePanel source={displayedSharp.label === "Sharp Book Signal" ? "SHARP SPLITS" : "SHARP BOOK SPLITS"} section={displayedSharp} pick={market.pick} availabilityStatus={sharpDisplay.availabilityStatus} /> : null}
@@ -1784,7 +1778,6 @@ function SplitSourcePanel({ source, section, pick, availabilityStatus = null }: 
   const moneyLeader = splitLeader(section, "moneyPct");
   const ticketLeader = splitLeader(section, "betsPct");
   const isSharp = source === "SHARP BOOK SPLITS" || source === "SHARP SPLITS";
-  const stale = splitSectionIsStale(section);
   const displayRows = canonicalSplitRows(section);
   // Complete retained named-book rows show the values and established source
   // heading only. Do not turn continuity into a new status badge, timestamp,
@@ -1792,7 +1785,7 @@ function SplitSourcePanel({ source, section, pick, availabilityStatus = null }: 
   const silentNamedBook = isSharp && Boolean(section?.rows.length);
   const availabilityLabel = silentNamedBook ? null : availabilityStatus === "provider_limited" ? "Limited" : availabilityStatus === "pending" ? "Pending" : availabilityStatus === "complete" ? "Complete" : availabilityStatus === "unavailable" ? "Unavailable" : null;
   const splitPending = availabilityStatus === "pending" || availabilityStatus === "provider_limited";
-  return <section className={`rounded-lg border p-3 ${isSharp ? "border-violet-400/20 bg-violet-500/[0.045]" : "border-white/[0.10] bg-black/20"}`}><div className="flex items-start justify-between gap-2"><div><div className="flex flex-wrap items-center gap-1.5"><p className={`text-[8px] font-black uppercase tracking-[0.14em] ${isSharp ? "text-violet-200" : "text-gray-300"}`}>{source}</p>{!silentNamedBook && (stale || availabilityStatus === "stale") ? <span className="rounded-full border border-amber-400/20 bg-amber-400/[0.07] px-1.5 py-0.5 text-[6px] font-black uppercase tracking-wider text-amber-200">Stale snapshot</span> : availabilityLabel ? <span className="rounded-full border border-violet-400/20 bg-violet-400/[0.07] px-1.5 py-0.5 text-[6px] font-black uppercase tracking-wider text-violet-200">{availabilityLabel}</span> : null}</div>{!silentNamedBook ? <p className="mt-0.5 text-[7px] text-gray-600">{section?.lastUpdated ? formatTimestamp(section.lastUpdated) : splitPending ? "No verified split yet" : section ? "Current snapshot" : "Unavailable"}</p> : null}</div>{moneyLeader ? <span className="rounded-full border border-white/[0.09] bg-black/20 px-2 py-0.5 text-[7px] font-black text-gray-300">Money → {moneyLeader}</span> : null}</div>{displayRows.length ? <div className="mt-3 space-y-3">{displayRows.slice(0, 2).map((row) => <SplitSideCard key={`${source}-${row.side}`} label={row.label} moneyPct={row.moneyPct} betsPct={row.betsPct} isPick={sideMatchesPick(row.label, pick)} />)}</div> : splitPending ? null : section?.signal ? <p className="mt-3 text-[9px] leading-relaxed text-gray-400">{section.signal}</p> : null}{moneyLeader && ticketLeader && moneyLeader.toLowerCase() !== ticketLeader.toLowerCase() ? <p className="mt-3 border-t border-white/[0.06] pt-2 text-[8px] leading-relaxed text-amber-200/80">Money leans {moneyLeader}; ticket count leans {ticketLeader}.</p> : null}</section>;
+  return <section className={`rounded-lg border p-3 ${isSharp ? "border-violet-400/20 bg-violet-500/[0.045]" : "border-white/[0.10] bg-black/20"}`}><div className="flex items-start justify-between gap-2"><div><div className="flex flex-wrap items-center gap-1.5"><p className={`text-[8px] font-black uppercase tracking-[0.14em] ${isSharp ? "text-violet-200" : "text-gray-300"}`}>{source}</p>{availabilityLabel ? <span className="rounded-full border border-violet-400/20 bg-violet-400/[0.07] px-1.5 py-0.5 text-[6px] font-black uppercase tracking-wider text-violet-200">{availabilityLabel}</span> : null}</div>{!silentNamedBook ? <p className="mt-0.5 text-[7px] text-gray-600">{section?.lastUpdated ? formatTimestamp(section.lastUpdated) : splitPending ? "No verified split yet" : section ? "Current snapshot" : "Unavailable"}</p> : null}</div>{moneyLeader ? <span className="rounded-full border border-white/[0.09] bg-black/20 px-2 py-0.5 text-[7px] font-black text-gray-300">Money → {moneyLeader}</span> : null}</div>{displayRows.length ? <div className="mt-3 space-y-3">{displayRows.slice(0, 2).map((row) => <SplitSideCard key={`${source}-${row.side}`} label={row.label} moneyPct={row.moneyPct} betsPct={row.betsPct} isPick={sideMatchesPick(row.label, pick)} />)}</div> : splitPending ? null : section?.signal ? <p className="mt-3 text-[9px] leading-relaxed text-gray-400">{section.signal}</p> : null}{moneyLeader && ticketLeader && moneyLeader.toLowerCase() !== ticketLeader.toLowerCase() ? <p className="mt-3 border-t border-white/[0.06] pt-2 text-[8px] leading-relaxed text-amber-200/80">Money leans {moneyLeader}; ticket count leans {ticketLeader}.</p> : null}</section>;
 }
 
 function SplitSideCard({ label, moneyPct, betsPct, isPick }: { label: string; moneyPct: number | null; betsPct: number | null; isPick: boolean }) {
@@ -1813,8 +1806,7 @@ function CrossSourceSplitRead({ consensus, sharp }: { consensus: MarketSplitDisp
   if (!publicMoney && !sharpMoney && !publicTickets && !sharpTickets) return null;
   const moneyRead = publicMoney && sharpMoney ? publicMoney.toLowerCase() === sharpMoney.toLowerCase() ? `Money agrees on ${publicMoney}` : `Money: Public ${publicMoney} · Sharp ${sharpMoney}` : `Money: ${publicMoney ? `Public ${publicMoney}` : `Sharp ${sharpMoney}`}`;
   const ticketRead = publicTickets && sharpTickets ? publicTickets.toLowerCase() === sharpTickets.toLowerCase() ? `Tickets agree on ${publicTickets}` : `Tickets: Public ${publicTickets} · Sharp ${sharpTickets}` : `Tickets: ${publicTickets ? `Public ${publicTickets}` : `Sharp ${sharpTickets}`}`;
-  const historical = splitSectionIsStale(consensus) || splitSectionIsStale(sharp);
-  return <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border border-white/[0.07] bg-black/15 px-3 py-2"><span className="text-[7px] font-black uppercase tracking-[0.14em] text-gray-500">{historical ? "Historical cross-source read" : "Cross-source read"}</span><span className="text-[8px] font-bold text-gray-300">{moneyRead}</span><span className="hidden h-3 w-px bg-white/10 sm:block" /><span className="text-[8px] font-bold text-gray-400">{ticketRead}</span></div>;
+  return <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border border-white/[0.07] bg-black/15 px-3 py-2"><span className="text-[7px] font-black uppercase tracking-[0.14em] text-gray-500">Cross-source read</span><span className="text-[8px] font-bold text-gray-300">{moneyRead}</span><span className="hidden h-3 w-px bg-white/10 sm:block" /><span className="text-[8px] font-bold text-gray-400">{ticketRead}</span></div>;
 }
 
 function splitSourcesConflict(consensus: MarketSplitDisplaySection | null, sharp: MarketSplitDisplaySection | null): boolean {

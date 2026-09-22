@@ -425,7 +425,7 @@ assert.match(readerSource, /label: "Public vs price"/);
 assert.match(readerSource, /label: "Verified sharp"/);
 assert.match(readerSource, /Public split · not sharp/);
 assert.match(readerSource, /No verified split yet/);
-assert.match(readerSource, /Historical only/);
+assert.doesNotMatch(readerSource, /Historical only|Stale snapshot|Historical cross-source read/);
 assert.doesNotMatch(readerSource, /\bRLM\b|reverse line movement/i);
 assert.match(readerSource, /<div className="mt-2 space-y-2">/);
 assert.match(readerSource, /<div className="mt-3 space-y-3">/);
