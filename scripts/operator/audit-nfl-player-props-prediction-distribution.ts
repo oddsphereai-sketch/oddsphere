@@ -2,8 +2,22 @@ import { loadEnvConfig } from "@next/env";
 import { createClient } from "@supabase/supabase-js";
 import { writeFile } from "node:fs/promises";
 import { readNflPlayerPropsSnapshotRecord } from "../../lib/services/football/nflPlayerPropsSnapshotStore";
-import type { NflPlayerPropsRuntimeDecision } from "../../lib/services/football/nflPlayerPropsRuntime";
-import { selectNflPlayerPropsTouchdownScorers, nflPlayerPropsTouchdownPlayerKey } from "../../lib/services/football/nflPlayerPropsPrediction";
+import {
+  gradeNflPlayerPropsCrossMarketCandidate,
+  nflPlayerPropsExpectedValue,
+  nflPlayerPropsProductionMarketLane,
+  nflPlayerPropsRawMarketDivergenceImplausible,
+  nflPlayerPropsResidualProbability,
+  nflPlayerPropsRuntimeMarketPolicy,
+  nflPlayerPropsRuntimePolicy,
+  type NflPlayerPropsRuntimeDecision,
+} from "../../lib/services/football/nflPlayerPropsRuntime";
+import {
+  selectNflPlayerPropsOverForecasts,
+  selectNflPlayerPropsTouchdownScorers,
+  nflPlayerPropsOverUnderMarketKey,
+  nflPlayerPropsTouchdownPlayerKey,
+} from "../../lib/services/football/nflPlayerPropsPrediction";
 import { NFL_FORWARD_EVIDENCE_SCHEMA_RELEASE, type NflForwardStoredEvidence } from "../../lib/services/football/nflForwardEvidence";
 import { readNflForwardEvidence } from "../../lib/services/football/nflForwardEvidenceStore";
 
@@ -137,6 +151,25 @@ async function main(): Promise<void> {
     console.log(JSON.stringify(outputPath
       ? { readOnly: true, season, week, outputPath, candidates: candidatePayload.candidates.length }
       : candidatePayload, null, 2));
+  } else if (process.argv.includes("--confidence-candidate-summary")) {
+    const compactResults = report.results as { confidenceCandidateActionability?: unknown } | undefined;
+    console.log(JSON.stringify({
+      readOnly: true,
+      season,
+      week,
+      confidenceCandidateActionability: compactResults?.confidenceCandidateActionability,
+    }, null, 2));
+  } else if (process.argv.includes("--actionability-evidence-summary")) {
+    const compactResults = report.results as { rankedActionability?: unknown; gradeMarketSide?: unknown; weightCandidateActionability?: unknown; confidenceCandidateActionability?: unknown } | undefined;
+    console.log(JSON.stringify({
+      readOnly: true,
+      season,
+      week,
+      gradeMarketSide: compactResults?.gradeMarketSide,
+      weightCandidateActionability: compactResults?.weightCandidateActionability,
+      confidenceCandidateActionability: compactResults?.confidenceCandidateActionability,
+      rankedActionability: compactResults?.rankedActionability,
+    }, null, 2));
   } else if (process.argv.includes("--ranked-summary")) {
     const compactResults = report.results as { rankedTouchdownCohort?: unknown; probabilityQuality?: { byMarket?: Record<string, Record<string, { rankedExpectedPrevalence?: unknown; sideAccuracy?: unknown }>> } } | undefined;
     const byMarket = compactResults?.probabilityQuality?.byMarket ?? {};
@@ -182,6 +215,7 @@ function groupPredictions(rows: NflPlayerPropsRuntimeDecision[]): NflPlayerProps
 }
 
 function summarizeMarkets(rows: NflPlayerPropsRuntimeDecision[], grouped: NflPlayerPropsRuntimeDecision[][]) {
+  const rankedOvers = selectNflPlayerPropsOverForecasts(rows);
   return Object.fromEntries([...new Set(rows.map((row) => row.market))].sort().map((market) => {
     const marketRows = rows.filter((row) => row.market === market);
     const pairs = grouped.filter((values) => values[0]?.market === market);
@@ -193,6 +227,10 @@ function summarizeMarkets(rows: NflPlayerPropsRuntimeDecision[], grouped: NflPla
       players: new Set(marketRows.map((row) => `${row.gameId}|${normalize(row.playerName)}`)).size,
       sides: counts(marketRows.map((row) => row.side)),
       forecastSides: counts(predictions.map((row) => row.side)),
+      rankedForecastSides: market === "anytime_td" ? null : {
+        over: pairs.filter((values) => values[0] && rankedOvers.has(nflPlayerPropsOverUnderMarketKey(values[0]))).length,
+        under: pairs.filter((values) => values[0] && !rankedOvers.has(nflPlayerPropsOverUnderMarketKey(values[0]))).length,
+      },
       grades: counts(marketRows.map((row) => row.grade)),
       probability: quantiles(predictions.map((row) => row.probability)),
     }];
@@ -329,6 +367,10 @@ function summarizeResults(scored: Scored[], lockedScored: Scored[], probabilityS
     },
     byMarket: Object.fromEntries([...new Set(scored.map((row) => row.market))].sort().map((market) => [market, resultLine(scored.filter((row) => row.market === market))])),
     byForecastSide: Object.fromEntries([...new Set(scored.map((row) => row.side))].sort().map((side) => [side, resultLine(scored.filter((row) => row.side === side))])),
+    gradeMarketSide: summarizeGradeMarketSide(rows, stats),
+    weightCandidateActionability: summarizeWeightCandidateActionability(rows, stats),
+    confidenceCandidateActionability: summarizeConfidenceCandidateActionability(rows, stats),
+    rankedActionability: summarizeRankedActionability(rows, stats),
     probabilityQuality: {
       all: probabilityComparison(probabilityScores),
       independentMarketOnly: probabilityComparison(probabilityScores.filter((row) => row.independentMarket)),
@@ -348,6 +390,260 @@ function summarizeResults(scored: Scored[], lockedScored: Scored[], probabilityS
       grade: row.row.grade,
     })).sort((a, b) => b.probability - a.probability),
   };
+}
+
+function summarizeGradeMarketSide(
+  rows: NflPlayerPropsRuntimeDecision[],
+  stats: Map<string, Map<string, Stat>>,
+) {
+  const values = rows.flatMap((row) => {
+    if (!row.providerPlayerId) return [];
+    const stat = stats.get(row.gameId)?.get(row.providerPlayerId);
+    if (!stat) return [];
+    const actual = actualValue(row.market, stat);
+    if (actual === null) return [];
+    const result = actual === row.line ? "push" as const
+      : row.side === "over" || row.side === "yes"
+        ? actual > row.line ? "win" as const : "loss" as const
+        : actual < row.line ? "win" as const : "loss" as const;
+    return [{ market: row.market, side: row.side, probability: row.finalProbability, result, actual, row }];
+  });
+  const keys = [...new Set(values.map(({ row }) => `${row.grade}|${row.market}|${row.side}`))].sort();
+  return Object.fromEntries(keys.map((key) => [key, resultLine(values.filter(({ row }) =>
+    `${row.grade}|${row.market}|${row.side}` === key))]));
+}
+
+function summarizeWeightCandidateActionability(
+  rows: NflPlayerPropsRuntimeDecision[],
+  stats: Map<string, Map<string, Stat>>,
+) {
+  const candidateRows = rows.map((row) => replayWeightCandidate(row));
+  const baseline = rows.filter((row) => actionable(row.grade));
+  const candidate = candidateRows.filter((row) => actionable(row.grade));
+  const key = (row: NflPlayerPropsRuntimeDecision) => [row.gameId, normalize(row.playerName), row.market, row.line, row.side].join("|");
+  const baselineKeys = new Set(baseline.map(key));
+  const candidateKeys = new Set(candidate.map(key));
+  const scoreRows = (values: NflPlayerPropsRuntimeDecision[]) => resultLine(values.flatMap((row) => {
+    if (!row.providerPlayerId) return [];
+    const stat = stats.get(row.gameId)?.get(row.providerPlayerId);
+    if (!stat) return [];
+    const actual = actualValue(row.market, stat);
+    if (actual === null) return [];
+    const result = actual === row.line ? "push" as const
+      : row.side === "over" ? actual > row.line ? "win" as const : "loss" as const
+        : actual < row.line ? "win" as const : "loss" as const;
+    return [{ market: row.market, side: row.side, probability: row.finalProbability, result, actual, row }];
+  }));
+  return {
+    policy: { receiving_yards: 0.1 },
+    baseline: { actions: baseline.length, results: scoreRows(baseline) },
+    candidate: { actions: candidate.length, results: scoreRows(candidate) },
+    promotions: candidate.filter((row) => !baselineKeys.has(key(row))).map(compactDecision),
+    demotions: baseline.filter((row) => !candidateKeys.has(key(row))).map(compactDecision),
+    retained: candidate.filter((row) => baselineKeys.has(key(row))).length,
+  };
+}
+
+function summarizeConfidenceCandidateActionability(
+  rows: NflPlayerPropsRuntimeDecision[],
+  stats: Map<string, Map<string, Stat>>,
+) {
+  const candidateRows = rows.map((row) => {
+    if (row.market === "anytime_td" || row.side === "yes") return row;
+    if (actionable(row.grade) && row.finalProbability < 0.55) return { ...row, grade: "Watchlist" as const };
+    if (row.grade !== "Watchlist" || row.finalProbability < 0.55 || row.expectedValue < 0.03
+      || row.probabilityEdge < 0.015 || row.participationProbability < 0.7 || row.marketMovement === "adverse") return row;
+    const lane = nflPlayerPropsProductionMarketLane(row.market);
+    const independentBooks = new Set(row.bookEvidence.map((book) => normalize(book.sportsbook))
+      .filter((book) => book !== normalize(row.sportsbook))).size;
+    const blockingHolds = row.healthHolds.filter((reason) => ![
+      "independent_same_line_confirmation_missing", "model_market_divergence_implausible",
+    ].includes(reason));
+    return lane?.lean && lane.eligibleSides.includes(row.side as "over" | "under")
+      && independentBooks >= 1 && blockingHolds.length === 0
+      ? { ...row, grade: "Lean" as const }
+      : row;
+  });
+  const baseline = rows.filter((row) => actionable(row.grade));
+  const candidate = candidateRows.filter((row) => actionable(row.grade));
+  const key = (row: NflPlayerPropsRuntimeDecision) => [row.gameId, normalize(row.playerName), row.market, row.line, row.side].join("|");
+  const baselineKeys = new Set(baseline.map(key));
+  const candidateKeys = new Set(candidate.map(key));
+  const scoreRows = (values: NflPlayerPropsRuntimeDecision[]) => resultLine(values.flatMap((row) => {
+    if (!row.providerPlayerId) return [];
+    const stat = stats.get(row.gameId)?.get(row.providerPlayerId);
+    if (!stat) return [];
+    const actual = actualValue(row.market, stat);
+    if (actual === null) return [];
+    const result = actual === row.line ? "push" as const
+      : row.side === "over" ? actual > row.line ? "win" as const : "loss" as const
+        : actual < row.line ? "win" as const : "loss" as const;
+    return [{ market: row.market, side: row.side, probability: row.finalProbability, result, actual, row }];
+  }));
+  return {
+    policy: { minimumActionProbability: 0.55, promotionMinimumEv: 0.03, promotionMinimumEdge: 0.015 },
+    baseline: { actions: baseline.length, results: scoreRows(baseline) },
+    candidate: { actions: candidate.length, results: scoreRows(candidate) },
+    promotions: candidate.filter((row) => !baselineKeys.has(key(row))).map(compactDecision),
+    demotions: baseline.filter((row) => !candidateKeys.has(key(row))).map(compactDecision),
+    retained: candidate.filter((row) => baselineKeys.has(key(row))).length,
+  };
+}
+
+function replayWeightCandidate(row: NflPlayerPropsRuntimeDecision): NflPlayerPropsRuntimeDecision {
+  if (row.market !== "receiving_yards") return row;
+  const finalProbability = nflPlayerPropsResidualProbability(row.rawModelProbability, row.marketProbability, 0.1);
+  const probabilityEdge = finalProbability - row.marketProbability;
+  const expectedValue = nflPlayerPropsExpectedValue(finalProbability, row.americanPrice);
+  const policy = nflPlayerPropsRuntimeMarketPolicy(row.market);
+  const lane = nflPlayerPropsProductionMarketLane(row.market);
+  if (!policy || !lane) return row;
+  const independentBooks = new Set(row.bookEvidence.map((book) => normalize(book.sportsbook))
+    .filter((book) => book !== normalize(row.sportsbook))).size;
+  const commonHolds = row.healthHolds.filter((reason) => ![
+    "independent_same_line_confirmation_missing", "model_market_divergence_implausible",
+  ].includes(reason));
+  const divergenceImplausible = nflPlayerPropsRawMarketDivergenceImplausible(
+    row.rawModelProbability, row.marketProbability,
+  );
+  const runtime = nflPlayerPropsRuntimePolicy();
+  const leanThresholds = row.marketMovement === "support"
+    ? runtime.volumeAndYardage.movementSupportedLean
+    : lane.leanThresholds ?? runtime.volumeAndYardage.lean;
+  const bestAngleThresholds = row.marketMovement === "support"
+    ? runtime.volumeAndYardage.movementSupportedBestAngle
+    : runtime.volumeAndYardage.bestAngle;
+  const baseGrade = gradeNflPlayerPropsCrossMarketCandidate({
+    commonHolds,
+    independentBooks,
+    divergenceImplausible,
+    eligibleSide: lane.eligibleSides.includes(row.side as "over" | "under"),
+    marketResidualQualified: policy.qualified || runtime.releaseEvidence.ownerApprovedForwardException === true,
+    bestAngleEnabled: lane.bestAngle,
+    leanEnabled: lane.lean,
+    watchlistEnabled: lane.watchlist,
+    expectedValue,
+    probabilityEdge,
+    participationProbability: row.participationProbability,
+    movement: row.marketMovement,
+    leanThresholds,
+    bestAngleThresholds,
+  });
+  const finalOver = row.side === "over" ? finalProbability : 1 - finalProbability;
+  const forecastSide = finalOver >= 0.5 ? "over" : "under";
+  const grade = actionable(baseGrade) && row.side !== forecastSide ? "Watchlist" : baseGrade;
+  return { ...row, finalProbability, probabilityEdge, expectedValue, grade };
+}
+
+function compactDecision(row: NflPlayerPropsRuntimeDecision) {
+  return {
+    player: row.playerName,
+    gameId: row.gameId,
+    market: row.market,
+    line: row.line,
+    side: row.side,
+    grade: row.grade,
+    probability: round(row.finalProbability),
+    edge: round(row.probabilityEdge),
+    ev: round(row.expectedValue),
+    movement: row.marketMovement,
+  };
+}
+
+function actionable(grade: NflPlayerPropsRuntimeDecision["grade"]): boolean {
+  return grade === "Best Angle" || grade === "Lean";
+}
+
+function summarizeRankedActionability(
+  rows: NflPlayerPropsRuntimeDecision[],
+  stats: Map<string, Map<string, Stat>>,
+) {
+  const overForecasts = selectNflPlayerPropsOverForecasts(rows);
+  const baseline = rows.filter((row) => row.grade === "Best Angle" || row.grade === "Lean");
+  const candidateGrades = new Map<NflPlayerPropsRuntimeDecision, NflPlayerPropsRuntimeDecision["grade"]>();
+  for (const row of rows) {
+    if (row.market === "anytime_td" || row.side === "yes") {
+      candidateGrades.set(row, row.grade);
+      continue;
+    }
+    const rankedSide = overForecasts.has(nflPlayerPropsOverUnderMarketKey(row)) ? "over" : "under";
+    const thresholdGrade = reconstructThresholdGrade(row);
+    candidateGrades.set(row, row.side === rankedSide ? thresholdGrade : capActionAtWatchlist(thresholdGrade));
+  }
+  const candidate = rows.filter((row) => {
+    const grade = candidateGrades.get(row);
+    return grade === "Best Angle" || grade === "Lean";
+  });
+  const key = (row: NflPlayerPropsRuntimeDecision) => [row.gameId, normalize(row.playerName), row.market, row.line, row.side].join("|");
+  const baselineKeys = new Set(baseline.map(key));
+  const candidateKeys = new Set(candidate.map(key));
+  const scoreRows = (values: NflPlayerPropsRuntimeDecision[]) => resultLine(values.flatMap((row) => {
+    if (!row.providerPlayerId) return [];
+    const stat = stats.get(row.gameId)?.get(row.providerPlayerId);
+    if (!stat) return [];
+    const actual = actualValue(row.market, stat);
+    if (actual === null) return [];
+    const result = actual === row.line ? "push" as const
+      : row.side === "over" ? actual > row.line ? "win" as const : "loss" as const
+        : actual < row.line ? "win" as const : "loss" as const;
+    return [{ market: row.market, side: row.side, probability: row.finalProbability, result, actual, row }];
+  }));
+  const transition = (row: NflPlayerPropsRuntimeDecision) => ({
+    player: row.playerName,
+    gameId: row.gameId,
+    market: row.market,
+    line: row.line,
+    side: row.side,
+    from: row.grade,
+    to: candidateGrades.get(row),
+    probability: round(row.finalProbability),
+    edge: round(row.probabilityEdge),
+    ev: round(row.expectedValue),
+    movement: row.marketMovement,
+  });
+  return {
+    policy: "ranked_expected_prevalence_side_plus_existing_exact_economics_thresholds",
+    baseline: { actions: baseline.length, results: scoreRows(baseline) },
+    candidate: { actions: candidate.length, results: scoreRows(candidate) },
+    promotions: candidate.filter((row) => !baselineKeys.has(key(row))).map(transition),
+    demotions: baseline.filter((row) => !candidateKeys.has(key(row))).map(transition),
+    retained: candidate.filter((row) => baselineKeys.has(key(row))).length,
+    byMarketSide: Object.fromEntries([...new Set(candidate.map((row) => `${row.market}:${row.side}`))].sort().map((value) => [
+      value,
+      scoreRows(candidate.filter((row) => `${row.market}:${row.side}` === value)),
+    ])),
+  };
+}
+
+function reconstructThresholdGrade(row: NflPlayerPropsRuntimeDecision): NflPlayerPropsRuntimeDecision["grade"] {
+  if (row.healthHolds.some((reason) => [
+    "identity_ambiguous",
+    "role_ambiguous",
+    "player_listed_out",
+    "lock_observation_missing",
+    "model_market_divergence_implausible",
+  ].includes(reason))) return row.grade === "Held" ? "Held" : "No Play";
+  if (row.healthHolds.includes("independent_same_line_confirmation_missing")) return "No Play";
+  const independentBooks = Math.max(0, new Set(row.bookEvidence.map((value) => normalize(value.sportsbook))).size - 1);
+  if (independentBooks < 1 || row.marketMovement === "adverse") {
+    return row.expectedValue >= 0 && row.probabilityEdge >= 0 ? "Watchlist" : "No Play";
+  }
+  const supported = row.marketMovement === "support";
+  const best = supported
+    ? { ev: 0.07, edge: 0.03, participation: 0.85 }
+    : { ev: 0.08, edge: 0.035, participation: 0.85 };
+  const lean = supported
+    ? { ev: 0.03, edge: 0.015, participation: 0.7 }
+    : { ev: 0.04, edge: 0.02, participation: 0.7 };
+  if (row.expectedValue >= best.ev && row.probabilityEdge >= best.edge
+    && row.participationProbability >= best.participation) return "Best Angle";
+  if (row.expectedValue >= lean.ev && row.probabilityEdge >= lean.edge
+    && row.participationProbability >= lean.participation) return "Lean";
+  return row.expectedValue >= 0 && row.probabilityEdge >= 0 ? "Watchlist" : "No Play";
+}
+
+function capActionAtWatchlist(grade: NflPlayerPropsRuntimeDecision["grade"]): NflPlayerPropsRuntimeDecision["grade"] {
+  return grade === "Best Angle" || grade === "Lean" ? "Watchlist" : grade;
 }
 
 function probabilityComparison(rows: ProbabilityScore[]) {
