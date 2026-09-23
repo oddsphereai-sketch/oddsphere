@@ -16,6 +16,7 @@
  *     (return false from both `isOfficiallyTrackedMarket` and
  *     `isContextOnlyDisplayMarket`).
  */
+import { readFileSync } from "node:fs";
 import {
   OFFICIAL_TRACKING_MARKETS,
   CONTEXT_ONLY_DISPLAY_MARKETS,
@@ -56,6 +57,11 @@ check("NHL total officially tracked", isOfficiallyTrackedMarket("nhl", "total") 
 check("NHL spread (puck-line) officially tracked", isOfficiallyTrackedMarket("nhl", "spread") === true);
 check("NHL spread (puck-line) is not context-only", isContextOnlyDisplayMarket("nhl", "spread") === false);
 check("NHL first_inning NOT officially tracked", isOfficiallyTrackedMarket("nhl", "first_inning") === false);
+const trackingRouteSource = readFileSync(new URL("../app/api/lab/tracking/route.ts", import.meta.url), "utf8");
+check(
+  "NHL tracking page exposes the official puck-line category",
+  /nhl:\s*\["ML",\s*"O\/U",\s*"Spread"\]/.test(trackingRouteSource),
+);
 
 // NFL — forward-only 2026 launch markets; preseason remains excluded by its
 // separate lifecycle and public-start boundary.
