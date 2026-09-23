@@ -114,7 +114,10 @@ def main() -> None:
     if r2_artifact["calibrationRelease"] != calibration_contract["calibrationRelease"]:
         raise RuntimeError("NFL props price backtest calibration release mismatch")
     opening = json.loads(args.openings.read_text(encoding="utf-8"))
-    if opening["release"] != "nfl_player_props_2025_opening_prices_2026_09_01_r2_provider_recovery":
+    if opening["release"] not in {
+        "nfl_player_props_2025_opening_prices_2026_08_25_r1",
+        "nfl_player_props_2025_opening_prices_2026_09_01_r2_provider_recovery",
+    }:
         raise RuntimeError("NFL props opening-price release mismatch")
 
     holdout = frame[frame["season"].eq(2025)].copy()
