@@ -131,6 +131,7 @@
     "test:football-production-publication": "tsx scripts/test-football-production-publication.ts",
     "test:football-tracking-lifecycle": "tsx scripts/test-football-tracking-lifecycle.ts",
     "test:official-tracking-markets": "tsx scripts/test-official-tracking-markets.ts",
+    "test:nhl-regular-model": "tsx scripts/test-nhl-regular-model.ts",
     "test:tracking-scope-invariant": "tsx scripts/test-wc2-tracking-scope-invariant.ts",
     "test:football-player-props-foundation": "tsx scripts/test-football-player-props-foundation.ts",
     "test:football-player-props-history-contract": "tsx scripts/test-nfl-player-props-history-contract.ts",

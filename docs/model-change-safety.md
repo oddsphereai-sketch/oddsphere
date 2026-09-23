@@ -5,6 +5,36 @@ inputs, probabilities, projections, grades, promotions/demotions, calibration, p
 or stakes. It exists to prevent mixed model eras, competing writers, accidental board
 flattening, and load spikes.
 
+## Owner-approved provisional exception: NHL regular-season r1 split overlay
+
+On 2026-09-23 Daniel Mengel explicitly directed the NHL model to relaunch for
+regular-season games only with the mature Daily Edge combination of independent
+prediction, market reading, public money/ticket splits, silent provider fallback,
+and official puck-line tracking. This approval excludes every preseason game and
+does not authorize new member copy, labels, stakes, a second model writer, or a
+historical rewrite.
+
+The underlying 2026 independent state and market weights must remain release-pure:
+2023 is warmup, 2024 selects the independent parameters, the first 70% of priced
+2025 games selects market weights, and the final 30% is untouched holdout. Because
+historical public split observations are unavailable, only the explicitly bounded
+split overlay may be provisional: money-minus-tickets can move the selected-side
+moneyline probability by at most 1.2 percentage points and the total by at most
+0.09 goals. Same-book opening-to-current moneyline movement is capped at 1.5
+probability points. The combined margin translation is capped by those inputs and
+cannot create or increase a stake.
+
+Every split observation remains provider-separated. The member read prefers the
+latest complete Playbook money+ticket pair and silently falls back to the latest
+complete SharpAPI pair; a failed refresh never clears the last known good row and
+no stale label or replacement copy is added. These provisional channels must be
+evaluated prospectively by the exact r1 release and lock timestamp. The regular
+model, calibrated market weights, puck-line distribution, and member board still
+must pass every clean-PR, current-main, lease, test, build, coverage, and live-proof
+gate in this document. Any preseason publication, mixed release, incomplete-price
+actionable, unexpected board collapse, split-driven instability, writer overlap,
+or snapshot failure holds/rolls back r1 while preserving locked evidence.
+
 ## Owner-approved provisional exception: CFB confidence / execution PR #374
 
 Approval and scope: Daniel Mengel, owner/operator of OddsphereAI, explicitly approved this

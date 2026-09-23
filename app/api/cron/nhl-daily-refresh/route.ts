@@ -41,10 +41,14 @@ import { currentSlateDate } from "@/lib/dates/slateDate";
 import { seedNhlGames } from "@/lib/services/nhl/seedNhlGamesService";
 import { refreshNhlLines } from "@/lib/services/nhl/refreshNhlLinesService";
 import { writeNhlPredictionRecords } from "@/lib/services/nhl/buildNhlPredictionRecords";
+import { refreshNhlTeamStats } from "@/lib/services/nhl/refreshNhlTeamStatsService";
+import { syncPublicSplitsObservations } from "@/lib/services/syncPublicSplitsObservations";
+import { refreshDailyEdgeResponseSnapshot } from "@/lib/services/labResponseSnapshotWriter";
+import { supabase } from "@/lib/db/supabase";
 
 const NHL_CRON_ENV = "NHL_CRON_ENABLED";
 const NHL_PREDS_ENV = "NHL_PREDICTIONS_DB_WRITES_ENABLED";
-const NHL_DAILY_REFRESH_RELEASE = "nhl_daily_refresh_schedule_2026_09_21_r1";
+const NHL_DAILY_REFRESH_RELEASE = "nhl_daily_refresh_schedule_2026_09_23_r2_regular_only";
 
 /**
  * Returns the MoneyPuck-style season start-year for a given UTC date.
@@ -57,7 +61,7 @@ const NHL_DAILY_REFRESH_RELEASE = "nhl_daily_refresh_schedule_2026_09_21_r1";
 function nhlSeasonStartYearFromDate(date: Date = new Date()): number {
   const m = date.getUTCMonth(); // 0-11
   const y = date.getUTCFullYear();
-  return m >= 9 ? y : y - 1;
+  return m >= 8 ? y : y - 1;
 }
 
 export async function GET(request: Request): Promise<Response> {
@@ -139,7 +143,41 @@ export async function GET(request: Request): Promise<Response> {
       };
       if (linesResult.errors.length > 0) partial = true;
 
-      // Step 3 — write prediction_records for tonight's NHL slate.
+      // Step 3 — persist both NHL split providers before the model reads
+      // market evidence. Failed refreshes never delete the last good rows.
+      const splitsResult = await syncPublicSplitsObservations({
+        supabase,
+        sport: "nhl",
+        slateDate,
+        apply: true,
+        todayUtc: slateDate,
+        logger: stepLog("splits"),
+      });
+      stepDetails.splits = splitsResult;
+      if (splitsResult.errors.length > 0 || splitsResult.skippedTableMissing) partial = true;
+
+      // Refresh the completed prior regular season after the slate seed has
+      // ensured every participating team exists locally. BALLDONTLIE supplies
+      // current/prior team metrics at model time; MoneyPuck remains the
+      // independent team-strength input and is refreshed once per daily run.
+      const season = nhlSeasonStartYearFromDate(new Date());
+      let teamStatsWritten = 0;
+      try {
+        const teamStats = await refreshNhlTeamStats({
+          season: season - 1,
+          includePlayoffs: false,
+          dryRun: false,
+          logger: stepLog("team-stats"),
+        });
+        teamStatsWritten = teamStats.written;
+        stepDetails.team_stats = teamStats;
+        if (teamStats.errors.length > 0) partial = true;
+      } catch (error) {
+        partial = true;
+        stepDetails.team_stats = { error: error instanceof Error ? error.message : String(error) };
+      }
+
+      // Step 4 — write prediction_records for tonight's regular-season slate.
       //
       // Two-key gate: NHL_PREDICTIONS_DB_WRITES_ENABLED=true must be set
       // in env, same gate as the operator script. When unset, this step
@@ -174,7 +212,6 @@ export async function GET(request: Request): Promise<Response> {
       } else {
         console.log(`[nhl-daily-refresh] step=predictions  slateDate=${slateDate}`);
         try {
-          const season = nhlSeasonStartYearFromDate(new Date());
           const wp = await writeNhlPredictionRecords({
             slateDate,
             season,
@@ -207,12 +244,28 @@ export async function GET(request: Request): Promise<Response> {
       }
       stepDetails.predictions = predictionsResult;
 
+      // Publish only a coherent reader snapshot. The writer itself filters
+      // preseason games, so preparation runs cannot leak preseason cards or
+      // tracking rows into the regular-season product.
+      const responseSnapshot = predictionsResult.errors.length === 0
+        ? await refreshDailyEdgeResponseSnapshot({
+            sport: "nhl",
+            date: slateDate,
+            source: "nhl_daily_refresh",
+          })
+        : null;
+      stepDetails.response_snapshot = responseSnapshot;
+      if (responseSnapshot?.ok === false) partial = true;
+
       const recordsUpdated =
         seedResult.teamsUpserted +
         seedResult.gamesUpserted +
         linesResult.linesWritten +
         linesResult.lineHistoryWritten +
-        (predictionsResult.recordsCreated ?? 0);
+        splitsResult.upserted +
+        teamStatsWritten +
+        (predictionsResult.recordsCreated ?? 0) +
+        (responseSnapshot?.ok ? 1 : 0);
 
       return {
         records_updated: recordsUpdated,

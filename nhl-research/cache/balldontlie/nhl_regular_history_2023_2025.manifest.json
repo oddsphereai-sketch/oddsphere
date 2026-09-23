@@ -1,0 +1,20 @@
+{
+  "release": "bdl_nhl_regular_history_2026_09_23_r1",
+  "provider": "BALLDONTLIE NHL",
+  "seasons": [
+    2023,
+    2024,
+    2025
+  ],
+  "odds_season": 2025,
+  "game_count": 3936,
+  "opening_row_count": 5362,
+  "opening_game_count": 1210,
+  "game_counts_by_season": {
+    "2023": 1312,
+    "2024": 1312,
+    "2025": 1312
+  },
+  "sha256": "c2df5ddf8d67005a13679c6e680aeab2d082df9d63579dc38638315c6e96e7db",
+  "fetched_at": "2026-09-23T11:52:59.802Z"
+}

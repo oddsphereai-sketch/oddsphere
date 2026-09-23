@@ -58,9 +58,9 @@ export const PUBLIC_SPLITS_CAPABILITY: Record<string, SportSplitsCapability> = {
     note: "Playbook lists NBA (in-season); coverage/quality NOT yet audited. Observe-only until the per-sport audit clears it.",
   },
   nhl: {
-    sharpSignalsProvider: "none", playbookSplits: true, sharpApiSplits: false,
-    status: "audit_required",
-    note: "Playbook lists NHL (in-season); audit before display/model use.",
+    sharpSignalsProvider: "sharpapi", playbookSplits: true, sharpApiSplits: true,
+    status: "supported",
+    note: "Verified 2026-09-23: Playbook supplies all three game markets across the opening slate and SharpAPI supplies per-book NHL splits; persistent observations provide silent last-known-good fallback.",
   },
   nfl: {
     sharpSignalsProvider: "none", playbookSplits: true, sharpApiSplits: false,

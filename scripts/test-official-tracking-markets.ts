@@ -6,12 +6,10 @@
  *   • Public tracking markets per sport:
  *       MLB: moneyline, total, first_inning
  *       NBA: moneyline, total
- *       NHL: moneyline, total
+ *       NHL: moneyline, total, spread (puck line)
  *       WNBA: moneyline, total, spread
  *   • Context-only displayed markets per sport:
  *       NBA: spread (rendered in DailyEdgeShell as `Sprd*`)
- *       NHL: spread (rendered in DailyEdgeShell as `PL*`; puck-line
- *            is stored under market_type="spread")
  *   • Other sports (CBB, UCL): empty until intentional
  *     product launch.
  *   • Unknown / unregistered (sport, market) tuples FAIL CLOSED
@@ -52,11 +50,11 @@ check("NBA spread NOT officially tracked", isOfficiallyTrackedMarket("nba", "spr
 check("NBA spread IS context-only display", isContextOnlyDisplayMarket("nba", "spread") === true);
 check("NBA first_inning NOT officially tracked", isOfficiallyTrackedMarket("nba", "first_inning") === false);
 
-// NHL — moneyline + total tracked; spread (puck-line) is context-only
+// NHL — moneyline + total + spread (puck-line) are officially tracked
 check("NHL moneyline officially tracked", isOfficiallyTrackedMarket("nhl", "moneyline") === true);
 check("NHL total officially tracked", isOfficiallyTrackedMarket("nhl", "total") === true);
-check("NHL spread (puck-line) NOT officially tracked", isOfficiallyTrackedMarket("nhl", "spread") === false);
-check("NHL spread (puck-line) IS context-only display", isContextOnlyDisplayMarket("nhl", "spread") === true);
+check("NHL spread (puck-line) officially tracked", isOfficiallyTrackedMarket("nhl", "spread") === true);
+check("NHL spread (puck-line) is not context-only", isContextOnlyDisplayMarket("nhl", "spread") === false);
 check("NHL first_inning NOT officially tracked", isOfficiallyTrackedMarket("nhl", "first_inning") === false);
 
 // NFL — forward-only 2026 launch markets; preseason remains excluded by its
@@ -100,8 +98,8 @@ check("OFFICIAL_TRACKING_MARKETS.mlb = [moneyline, total, first_inning]",
   JSON.stringify(OFFICIAL_TRACKING_MARKETS.mlb) === JSON.stringify(["moneyline", "total", "first_inning"]));
 check("OFFICIAL_TRACKING_MARKETS.nba = [moneyline, total]",
   JSON.stringify(OFFICIAL_TRACKING_MARKETS.nba) === JSON.stringify(["moneyline", "total"]));
-check("OFFICIAL_TRACKING_MARKETS.nhl = [moneyline, total]",
-  JSON.stringify(OFFICIAL_TRACKING_MARKETS.nhl) === JSON.stringify(["moneyline", "total"]));
+check("OFFICIAL_TRACKING_MARKETS.nhl = [moneyline, total, spread]",
+  JSON.stringify(OFFICIAL_TRACKING_MARKETS.nhl) === JSON.stringify(["moneyline", "total", "spread"]));
 check("OFFICIAL_TRACKING_MARKETS.soccer = [match_result, total, btts, double_chance]",
   JSON.stringify(OFFICIAL_TRACKING_MARKETS.soccer) === JSON.stringify(["match_result", "total", "btts", "double_chance"]));
 check("OFFICIAL_TRACKING_MARKETS.wnba = [moneyline, total, spread]",
@@ -112,8 +110,8 @@ check("OFFICIAL_TRACKING_MARKETS.cfb = [moneyline, total, spread]",
   JSON.stringify(OFFICIAL_TRACKING_MARKETS.cfb) === JSON.stringify(["moneyline", "total", "spread"]));
 check("CONTEXT_ONLY_DISPLAY_MARKETS.nba = [spread]",
   JSON.stringify(CONTEXT_ONLY_DISPLAY_MARKETS.nba) === JSON.stringify(["spread"]));
-check("CONTEXT_ONLY_DISPLAY_MARKETS.nhl = [spread]",
-  JSON.stringify(CONTEXT_ONLY_DISPLAY_MARKETS.nhl) === JSON.stringify(["spread"]));
+check("CONTEXT_ONLY_DISPLAY_MARKETS.nhl is empty",
+  JSON.stringify(CONTEXT_ONLY_DISPLAY_MARKETS.nhl) === JSON.stringify([]));
 
 // assertOfficialTrackingMarket — happy path doesn't throw
 let assertHappyOk = true;
@@ -125,6 +123,7 @@ try {
   assertOfficialTrackingMarket("nba", "total");
   assertOfficialTrackingMarket("nhl", "moneyline");
   assertOfficialTrackingMarket("nhl", "total");
+  assertOfficialTrackingMarket("nhl", "spread");
   assertOfficialTrackingMarket("wnba", "moneyline");
   assertOfficialTrackingMarket("wnba", "total");
   assertOfficialTrackingMarket("wnba", "spread");
@@ -153,14 +152,14 @@ check("NBA spread error mentions CONTEXT-ONLY",
   nbaSpreadErrMessage.includes("CONTEXT-ONLY"),
   `got: ${nbaSpreadErrMessage.slice(0, 200)}`);
 
-// assertOfficialTrackingMarket — throws for NHL spread (puck-line)
-let assertNhlSpreadThrew = false;
+// assertOfficialTrackingMarket — throws for unsupported NHL first-inning
+let assertNhlFirstInningThrew = false;
 try {
-  assertOfficialTrackingMarket("nhl", "spread");
+  assertOfficialTrackingMarket("nhl", "first_inning");
 } catch {
-  assertNhlSpreadThrew = true;
+  assertNhlFirstInningThrew = true;
 }
-check("assertOfficialTrackingMarket throws for NHL spread (puck-line)", assertNhlSpreadThrew);
+check("assertOfficialTrackingMarket throws for NHL first inning", assertNhlFirstInningThrew);
 
 // assertOfficialTrackingMarket — throws for unknown market
 let assertUnknownThrew = false;

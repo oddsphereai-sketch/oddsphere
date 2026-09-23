@@ -1,13 +1,11 @@
 /**
  * Phase 7L Phase 4 — NHL prediction_records writer.
  *
- * Writes one prediction_records row per non-passed market (ML, Total)
- * for the requested slate. Mirrors NBA's writer shape; uses the v0
- * NHL model.
+ * Writes one prediction_records row per regular-season game market
+ * (moneyline, total, puck line) for the requested slate.
  *
  * Scope:
- *   • Markets: `moneyline` and `total` ONLY (per v0 spec; puck-line
- *     deferred until calibration justifies it).
+ *   • Markets: moneyline, total, and spread (NHL puck line).
  *   • No props.
  *   • sport='nhl'; never touches MLB / NBA rows.
  *
@@ -25,8 +23,8 @@
  *
  * snapshot_json (stable schema for ops review + future migrations):
  *   {
- *     model_version: "nhl_v0_2026_finals",
- *     model_output: { ...nhlAutoModelV0 result },
+ *     model_version: "nhl_regular_2026_r1",
+ *     model_output: { ...nhlRegularModelV1 result },
  *     feature_inputs: { ...featureSnapshot inputs },
  *     market_at_lock: {
  *       ml_implied_home_prob, ml_book_count,
@@ -43,17 +41,23 @@
 
 import { supabase } from "../../db/supabase";
 import { isBlockedSportsbook } from "../../config/blockedSportsbooks";
-import { buildNhlFeatureSnapshot } from "./featureSnapshot";
 import {
-  nhlAutoModelV0,
-  NHL_MODEL_VERSION_CONST,
+  buildNhlFeatureSnapshot,
+  nhlGameTypeFromExternalId,
+  nhlSeasonStartYearFromExternalId,
+} from "./featureSnapshot";
+import {
+  nhlRegularModelV1,
+  NHL_REGULAR_CALIBRATION_RELEASE,
+  NHL_REGULAR_MODEL_RELEASE,
   type NhlModelOutput,
-} from "../../automodel/nhlAutoModelV0";
+} from "../../automodel/nhlRegularModelV1";
+import { fetchBdlNhlTeamMetricsWithPriorFallback } from "../../providers/nhl/_ballDontLieNhlClient";
+import type { SharpNhlSplitsEvent } from "../../providers/nhl/_sharpApiNhlClient";
+import { assertOfficialTrackingMarket } from "../../config/officialTrackingMarkets";
 import type { PredictionRecordRow, TrackedMarketV17 } from "../../types/domain/Tracking";
-import {
-  CONTEXT_SNAPSHOT_NOTE,
-  type NhlPuckLineDisplayedContext,
-} from "../../types/domain/DisplayedContextMarket";
+import { resolvedNhlSplitsByGame } from "./nhlResolvedSplits";
+import { loadNhlRegularStateForSlate } from "./loadNhlRegularState";
 
 const LOCK_MINUTES_BEFORE_PUCK_DROP = 60;
 
@@ -61,7 +65,7 @@ export type WriteNhlRecordsOptions = {
   /** YYYY-MM-DD ET slate. */
   slateDate: string;
   /** MoneyPuck season start-year (2025 for 2025-26). */
-  season: number;
+  season?: number;
   /** false = dry-run; no DB writes. */
   apply: boolean;
   /** Manual goalie overrides (player_external_id from nhl_goalie_stats). */
@@ -118,103 +122,6 @@ function gradeFromVerdict(verdict: string): string {
 }
 
 /**
- * P1-2 Commit A — build the displayed_context_markets.spread substrate
- * for NHL (puck-line). The PL* chip on the slate card is rendered from
- * `model.puck_line`; this substrate captures what was shown so the
- * auditor can verify display-vs-snapshot truth without polluting
- * public tracking. See lib/types/domain/DisplayedContextMarket.ts.
- */
-function buildNhlPuckLineDisplayedContext(opts: {
-  model: NhlModelOutput;
-  spreadLines: Array<{
-    market_type: string;
-    sportsbook: string;
-    side: string;
-    line_value: number | null;
-    odds_american: number | null;
-  }>;
-  homeAbbr: string;
-  capturedAt: string;
-}): NhlPuckLineDisplayedContext {
-  const pl = opts.model.puck_line;
-  const pickIsPass = pl.verdict === "pass";
-  // pl.pick like "VGK +1.5" — first token is team abbr
-  const pickTeam = pl.pick.split(" ")[0] ?? "";
-  const pickIsHome = pickTeam === opts.homeAbbr;
-  const side: NhlPuckLineDisplayedContext["side"] = pickIsPass
-    ? null
-    : pickIsHome
-      ? "home"
-      : "away";
-  const pickSideForLineLookup = pickIsHome ? "home" : "away";
-
-  // Extract the expected puck-line value from the pick label so we match
-  // the right side of the puck-line. Without this, `home +1.5` and
-  // `home -1.5` (which can both appear when sportsbooks list either
-  // direction on the home side) would be conflated.
-  const pickLineMatch = pl.pick.match(/[+-]?\d+(?:\.\d+)?/);
-  const expectedLine = pickLineMatch !== null ? parseFloat(pickLineMatch[0]) : null;
-
-  // Get the best price for the picked side + expected line on spread market.
-  const sideLines = opts.spreadLines.filter((l) => {
-    if (l.side !== pickSideForLineLookup) return false;
-    if (expectedLine === null) return true;
-    if (l.line_value === null) return false;
-    return Math.abs(l.line_value - expectedLine) < 0.05;
-  });
-  const bestOdds = sideLines.length > 0
-    ? sideLines
-        .map((l) => l.odds_american)
-        .filter((x): x is number => x !== null)
-        .reduce((max, p) => (p > max ? p : max), -Infinity)
-    : null;
-  const lineValue =
-    sideLines.find((l) => l.line_value !== null)?.line_value ?? expectedLine;
-  const sportsbook =
-    sideLines.find((l) => l.odds_american === bestOdds && bestOdds !== null)
-      ?.sportsbook ?? null;
-
-  const lineSourceQuality: NhlPuckLineDisplayedContext["source_evidence"]["line_source_quality"] =
-    bestOdds !== null && bestOdds !== -Infinity
-      ? "real_book"
-      : opts.spreadLines.length > 0
-        ? "consensus_fallback"
-        : "unavailable";
-
-  const verdict: NhlPuckLineDisplayedContext["verdict"] = pickIsPass
-    ? "no_play"
-    : (pl.verdict as NhlPuckLineDisplayedContext["verdict"]);
-
-  return {
-    market: "spread",
-    display_label: "PL*",
-    official_tracked: false,
-    context_only: true,
-    displayed_at_lock: !pickIsPass,
-    pick: pickIsPass ? null : pl.pick,
-    side,
-    line: lineValue,
-    odds_american: bestOdds !== null && bestOdds !== -Infinity ? bestOdds : null,
-    sportsbook,
-    verdict,
-    confidence_displayed: pickIsPass ? null : pl.confidence * 100,
-    edge_pct: pl.model_market_gap_pct !== null ? pl.model_market_gap_pct * 100 : null,
-    rationale_one_liner: pl.notes[0] ?? null,
-    source_evidence: {
-      line_source_quality: lineSourceQuality,
-      lines_observed_count: opts.spreadLines.length,
-      open_to_current_movement: null,
-    },
-    model_projection: {
-      predicted_goal_diff_home: opts.model.expected_goal_diff,
-      predicted_total_goals: opts.model.expected_total_goals,
-    },
-    snapshot_note: CONTEXT_SNAPSHOT_NOTE,
-    captured_at: opts.capturedAt,
-  };
-}
-
-/**
  * Build the snapshot_json payload — a stable, ops-readable record of
  * everything that fed the prediction at lock time. Caller passes the
  * goalie meta directly so we don't re-fetch.
@@ -239,9 +146,9 @@ function buildSnapshotJson(opts: {
   homeAbbr: string;
   capturedAt: string;
 }): Record<string, unknown> {
-  const spreadLines = opts.marketLines.filter((l) => l.market_type === "spread");
   return {
-    model_version: NHL_MODEL_VERSION_CONST,
+    model_version: NHL_REGULAR_MODEL_RELEASE,
+    calibration_version: NHL_REGULAR_CALIBRATION_RELEASE,
     model_output: opts.model,
     feature_inputs: opts.featureInputs,
     market_at_lock: {
@@ -259,18 +166,6 @@ function buildSnapshotJson(opts: {
     goalie_assumption: opts.goalieAssumption,
     locked_at_iso: opts.lockedAtIso,
     lock_source: opts.lockSource,
-    // P1-2 Commit A — internal-only substrate for the displayed
-    // context-only `PL*` chip. Same block written on ML + Total rows
-    // for join robustness. Does NOT create a public tracking row for
-    // puck-line; see lib/types/domain/DisplayedContextMarket.ts.
-    displayed_context_markets: {
-      spread: buildNhlPuckLineDisplayedContext({
-        model: opts.model,
-        spreadLines,
-        homeAbbr: opts.homeAbbr,
-        capturedAt: opts.capturedAt,
-      }),
-    },
   };
 }
 
@@ -288,9 +183,11 @@ export async function writeNhlPredictionRecords(
     .eq("sport", "nhl")
     .eq("slate_date", opts.slateDate);
   if (gamesErr) throw new Error(`load NHL games: ${gamesErr.message}`);
-  const games = (gamesData as DbGame[] | null) ?? [];
+  const games = ((gamesData as DbGame[] | null) ?? []).filter((game) => (
+    nhlGameTypeFromExternalId(game.external_id) === 2
+  ));
   if (games.length === 0) {
-    log(`(no NHL games on slate ${opts.slateDate})`);
+    log(`(no NHL regular-season games on slate ${opts.slateDate})`);
     return {
       mode: "no-games", gamesProcessed: 0,
       recordsCreated: 0, recordsSkippedLocked: 0, recordsSkippedPass: 0,
@@ -312,6 +209,33 @@ export async function writeNhlPredictionRecords(
     (teamsData as TeamRow[] | null ?? []).map((t) => [t.id, t]),
   );
 
+  const featureSeason = opts.season ?? nhlSeasonStartYearFromExternalId(games[0]!.external_id);
+  const calibratedStateByTeam = await loadNhlRegularStateForSlate(
+    supabase,
+    featureSeason,
+    games.reduce((earliest, game) => game.game_date < earliest ? game.game_date : earliest, games[0]!.game_date),
+  );
+  let providerMetricsByTeam: Awaited<ReturnType<typeof fetchBdlNhlTeamMetricsWithPriorFallback>>["metrics"] = new Map();
+  let providerFeatureSeason: number | null = null;
+  if (process.env.BALLDONTLIE_API_KEY) {
+    try {
+      const provider = await fetchBdlNhlTeamMetricsWithPriorFallback(
+        featureSeason,
+        process.env.BALLDONTLIE_API_KEY,
+      );
+      providerMetricsByTeam = provider.metrics;
+      providerFeatureSeason = provider.sourceSeason;
+    } catch (error) {
+      errors.push(`BALLDONTLIE team metrics: ${(error as Error).message}`);
+    }
+  }
+  let splitsByGame = new Map<number, SharpNhlSplitsEvent>();
+  try {
+    splitsByGame = await resolvedNhlSplitsByGame(supabase, opts.slateDate);
+  } catch (error) {
+    errors.push(`resolved NHL splits: ${(error as Error).message}`);
+  }
+
   // 3. For each game: snapshot → model → write record(s).
   let recordsCreated = 0;
   let recordsSkippedLocked = 0;
@@ -319,13 +243,25 @@ export async function writeNhlPredictionRecords(
 
   for (const g of games) {
     try {
+      const homeAbbr = g.home_team_id !== null ? teamById.get(g.home_team_id)?.abbreviation ?? "?" : "?";
+      const awayAbbr = g.away_team_id !== null ? teamById.get(g.away_team_id)?.abbreviation ?? "?" : "?";
+      const split = splitsByGame.get(g.id) ?? null;
       const { snapshot, meta } = await buildNhlFeatureSnapshot({
         gameId: g.id,
-        season: opts.season,
+        season: featureSeason,
         homeGoalieExternalId: opts.homeGoalieExternalId,
         awayGoalieExternalId: opts.awayGoalieExternalId,
+        providerMetricsByTeam,
+        providerFeatureSeason,
+        calibratedStateByTeam,
+        marketEvidence: {
+          mlHomeBetsPct: split?.moneyline?.bets_pct?.home == null ? null : split.moneyline.bets_pct.home * 100,
+          mlHomeMoneyPct: split?.moneyline?.handle_pct?.home == null ? null : split.moneyline.handle_pct.home * 100,
+          totalOverBetsPct: split?.total?.bets_pct?.over == null ? null : split.total.bets_pct.over * 100,
+          totalOverMoneyPct: split?.total?.handle_pct?.over == null ? null : split.total.handle_pct.over * 100,
+        },
       });
-      const model = nhlAutoModelV0(snapshot);
+      const model = nhlRegularModelV1(snapshot);
 
       // Fetch lines snapshot for the snapshot_json. P1-2 Commit A —
       // additionally fetch "spread" lines (NHL puck-line is stored as
@@ -348,8 +284,6 @@ export async function writeNhlPredictionRecords(
         line_value: number | null; odds_american: number | null;
       }> | null) ?? []).filter((l) => !isBlockedSportsbook(l.sportsbook));
 
-      const homeAbbr = g.home_team_id !== null ? teamById.get(g.home_team_id)?.abbreviation ?? "?" : "?";
-      const awayAbbr = g.away_team_id !== null ? teamById.get(g.away_team_id)?.abbreviation ?? "?" : "?";
       const matchup = `${awayAbbr} @ ${homeAbbr}`;
 
       const goalieSource = opts.goalieSource ??
@@ -374,10 +308,11 @@ export async function writeNhlPredictionRecords(
       const lockedAtIso = isLockingNow ? now.toISOString() : null;
       const lockSource = isLockingNow ? "locked" : "live";
 
-      // Build one row per active market (ML + Total). Skip "pass".
+      // Build one row per official regular-season market.
       const marketsToWrite: Array<{
         market: TrackedMarketV17;
         modelMarket: NhlModelOutput["moneyline"];
+        side: "home" | "away" | "over" | "under";
         priceAmerican: number | null;
         lineValue: number | null;
       }> = [];
@@ -405,6 +340,7 @@ export async function writeNhlPredictionRecords(
         marketsToWrite.push({
           market: "moneyline",
           modelMarket: model.moneyline,
+          side: pickSide,
           priceAmerican: bestPrice === -99999 ? null : bestPrice,
           lineValue: null,
         });
@@ -414,13 +350,16 @@ export async function writeNhlPredictionRecords(
         // Total — same persist-on-pass policy. For Pass, default the
         // side to over if model_total > market_line, else under.
         const totalIsPass = model.total.verdict === "pass";
-        const totalLineCandidates = lines.filter((l) => l.market_type === "total");
-        const marketLine = totalLineCandidates.find((l) => l.line_value !== null)?.line_value ?? null;
+        const marketLine = snapshot.market.market_total_line;
         const pickIsOver = totalIsPass
           ? marketLine === null || model.expected_total_goals > marketLine
           : model.total.pick.startsWith("OVER");
         const totalSide = pickIsOver ? "over" : "under";
-        const totalLines = lines.filter((l) => l.market_type === "total" && l.side === totalSide);
+        const totalLines = lines.filter((l) => (
+          l.market_type === "total" && l.side === totalSide && (
+            marketLine === null || (l.line_value !== null && Math.abs(l.line_value - marketLine) < 0.01)
+          )
+        ));
         const bestPrice = totalLines.length > 0
           ? totalLines.map((l) => l.odds_american).filter((x): x is number => x !== null).reduce((max, p) => p > max ? p : max, -99999)
           : null;
@@ -428,10 +367,33 @@ export async function writeNhlPredictionRecords(
         marketsToWrite.push({
           market: "total",
           modelMarket: model.total,
+          side: totalSide,
           priceAmerican: bestPrice === -99999 ? null : bestPrice,
           lineValue,
         });
         if (totalIsPass) recordsSkippedPass += 1;
+      }
+      {
+        const spreadIsPass = model.puck_line.verdict === "pass";
+        const pickIsHome = model.puck_line.pick.startsWith(homeAbbr);
+        const side = pickIsHome ? "home" : "away";
+        const lineValue = model.puck_line.puck_line_value;
+        const spreadLines = lines.filter((line) => (
+          line.market_type === "spread" && line.side === side && line.line_value !== null &&
+          Math.abs(line.line_value - lineValue) < 0.01
+        ));
+        const bestPrice = spreadLines.length > 0
+          ? spreadLines.map((line) => line.odds_american).filter((price): price is number => price !== null)
+              .reduce((max, price) => price > max ? price : max, -99999)
+          : null;
+        marketsToWrite.push({
+          market: "spread",
+          modelMarket: model.puck_line,
+          side,
+          priceAmerican: bestPrice === -99999 ? null : bestPrice,
+          lineValue,
+        });
+        if (spreadIsPass) recordsSkippedPass += 1;
       }
 
       const snapshotJson = buildSnapshotJson({
@@ -446,9 +408,8 @@ export async function writeNhlPredictionRecords(
       });
 
       for (const m of marketsToWrite) {
-        const pickSide = m.market === "moneyline"
-          ? (model.moneyline.pick.startsWith(homeAbbr) ? "home" : "away")
-          : (model.total.pick.startsWith("OVER") ? "over" : "under");
+        assertOfficialTrackingMarket("nhl", m.market);
+        const pickSide = m.side;
 
         // Check if a locked row already exists — skip if so.
         const { data: existing } = await supabase
@@ -456,7 +417,7 @@ export async function writeNhlPredictionRecords(
           .select("id, locked_at")
           .eq("game_id", g.id)
           .eq("market", m.market)
-          .eq("model_version", NHL_MODEL_VERSION_CONST)
+          .eq("model_version", NHL_REGULAR_MODEL_RELEASE)
           .eq("slate_date", g.slate_date)
           .maybeSingle();
         if (existing && (existing as { locked_at: string | null }).locked_at !== null) {
@@ -465,6 +426,17 @@ export async function writeNhlPredictionRecords(
           continue;
         }
 
+        const oddsDecimal = m.priceAmerican !== null
+          ? (m.priceAmerican > 0 ? 1 + m.priceAmerican / 100 : 1 + 100 / Math.abs(m.priceAmerican))
+          : null;
+        const marketProbability = m.priceAmerican === null
+          ? null
+          : m.priceAmerican > 0
+            ? 100 / (m.priceAmerican + 100)
+            : -m.priceAmerican / (-m.priceAmerican + 100);
+        const priceComplete = m.priceAmerican !== null
+          && (m.market === "moneyline" || m.lineValue !== null);
+        const effectiveVerdict = priceComplete ? m.modelMarket.verdict : "pass";
         const row: Omit<PredictionRecordRow, "id" | "created_at"> = {
           game_prediction_id: null, // v18: nullable for non-MLB
           game_id: g.id,
@@ -478,34 +450,37 @@ export async function writeNhlPredictionRecords(
           side: pickSide,
           line_value: m.lineValue,
           odds_american: m.priceAmerican,
-          odds_decimal: m.priceAmerican !== null
-            ? (m.priceAmerican > 0 ? 1 + m.priceAmerican / 100 : 1 + 100 / Math.abs(m.priceAmerican))
-            : null,
-          model_used: "nhlAutoModelV0",
-          model_version: NHL_MODEL_VERSION_CONST,
+          odds_decimal: oddsDecimal,
+          model_used: "nhlRegularModelV1",
+          model_version: NHL_REGULAR_MODEL_RELEASE,
+          calibration_version: NHL_REGULAR_CALIBRATION_RELEASE,
           prediction_source: "daily_edge_pipeline",
           confidence: m.modelMarket.confidence,
           model_probability: m.modelMarket.probability,
-          market_probability: null,
-          edge: null,
-          expected_value: null,
-          play_grade: gradeFromVerdict(m.modelMarket.verdict),
-          prediction_type: m.market === "moneyline" ? "game_ml" : "game_total",
-          best_angle: m.modelMarket.verdict === "best_angle",
-          no_bet: m.modelMarket.verdict === "pass",
-          no_bet_reason: m.modelMarket.verdict === "pass" ? "below_edge_threshold" : null,
+          market_probability: marketProbability,
+          edge: marketProbability === null ? null : m.modelMarket.probability - marketProbability,
+          expected_value: oddsDecimal === null ? null : m.modelMarket.probability * oddsDecimal - 1,
+          play_grade: gradeFromVerdict(effectiveVerdict),
+          prediction_type: m.market === "moneyline" ? "game_ml" : m.market === "total" ? "game_total" : "game_spread",
+          best_angle: effectiveVerdict === "best_angle",
+          no_bet: effectiveVerdict === "pass",
+          no_bet_reason: !priceComplete
+            ? "missing_current_price"
+            : effectiveVerdict === "pass"
+              ? "below_edge_threshold"
+              : null,
           market_aligned: m.modelMarket.model_market_gap_pct !== null
             ? Math.abs(m.modelMarket.model_market_gap_pct) <= 0.05
             : false,
           data_quality_tier: model.inputs_summary.market_book_count >= 3 ? "two_sided_consensus" : "single_book",
-          source_quality: "v0_calibration",
-          provisional: true, // v0 calibration phase
+          source_quality: "release_pure_holdout",
+          provisional: false,
           held: false,
           hold_reason: null,
           launch_day: false,
           manual_outcome_expected: false,
           locked_at: lockedAtIso,
-          published_at: null,
+          published_at: now.toISOString(),
           snapshot_json: snapshotJson,
         };
 

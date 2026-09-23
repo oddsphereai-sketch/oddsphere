@@ -28,8 +28,13 @@ import {
 import { PlaybookClient } from "../providers/playbook/playbookClient";
 import type { PlaybookSplitGame } from "../providers/playbook/types";
 import { normalizeMlbTeamName } from "../providers/real_api/_teamNameNormalizer";
-import { normalizeTeamAbbr, type NormalizerSport } from "../providers/playbook/playbookTeamNormalizer";
+import { buildGameKey, type NormalizerSport } from "../providers/playbook/playbookTeamNormalizer";
 import { publicSplitsCapability, shouldObservePlaybook } from "../config/publicSplitsCapability";
+import {
+  fetchSharpNhlSplits,
+  type SharpNhlSplitsEvent,
+} from "../providers/nhl/_sharpApiNhlClient";
+import { normalizeNhlTeamName } from "../providers/nhl/_teamNameNormalizer";
 
 type Side = "home" | "away" | "over" | "under";
 type Market = "moneyline" | "total" | "spread";
@@ -147,8 +152,7 @@ function gameKey(sport: string, away: unknown, home: unknown): string | null {
     const a = normalizeMlbTeamName(String(away ?? "")), h = normalizeMlbTeamName(String(home ?? ""));
     return a && h ? `${a}@${h}` : null;
   }
-  const a = normalizeTeamAbbr(sport as NormalizerSport, away), h = normalizeTeamAbbr(sport as NormalizerSport, home);
-  return a && h ? `${a}@${h}` : null;
+  return buildGameKey(sport as NormalizerSport, away, home);
 }
 
 function pbCells(pb: PlaybookSplitGame, market: Market, side: Side): { bet: number | null; money: number | null; books: number | null } {
@@ -168,6 +172,38 @@ function pbCells(pb: PlaybookSplitGame, market: Market, side: Side): { bet: numb
 
 const SIDES: Record<Market, Side[]> = { moneyline: ["home", "away"], spread: ["home", "away"], total: ["over", "under"] };
 
+function sharpPct(value: number | null | undefined): number | null {
+  if (typeof value !== "number" || !Number.isFinite(value)) return null;
+  return verifiedHundredSplitPct(value >= 0 && value <= 1 ? value * 100 : value);
+}
+
+function sharpNhlScore(event: SharpNhlSplitsEvent): number {
+  return [
+    event.moneyline?.bets_pct?.home,
+    event.moneyline?.handle_pct?.home,
+    event.total?.bets_pct?.over,
+    event.total?.handle_pct?.over,
+    event.spread?.bets_pct?.home,
+    event.spread?.handle_pct?.home,
+  ].filter((value) => value !== null && value !== undefined).length
+    + (event.sportsbook === "consensus" ? 1 : 0);
+}
+
+function reduceSharpNhlSplits(events: readonly SharpNhlSplitsEvent[]): Map<string, SharpNhlSplitsEvent> {
+  const result = new Map<string, SharpNhlSplitsEvent>();
+  for (const event of events) {
+    const home = normalizeNhlTeamName(event.home_team);
+    const away = normalizeNhlTeamName(event.away_team);
+    if (!home || !away) continue;
+    const key = `${away}@${home}`;
+    const current = result.get(key);
+    if (!current || sharpNhlScore(event) > sharpNhlScore(current)) result.set(key, event);
+  }
+  return result;
+}
+
+export const __NHL_SPLITS_SYNC_TEST__ = { sharpPct, reduceSharpNhlSplits };
+
 export async function syncPublicSplitsObservations(opts: {
   supabase: SupabaseClient;
   sport: string;
@@ -186,6 +222,7 @@ export async function syncPublicSplitsObservations(opts: {
   const ids = (games ?? []).map((g) => g.id as number);
   if (ids.length === 0) { logger(`${sport} ${slateDate}: no games`); return res; }
   const keyById = new Map<number, string>();
+  const nhlAbbrKeyById = new Map<number, string>();
   const slateGames: SlateGame[] = [];
   for (const g of games ?? []) {
     const k = sport === "mlb" ? `${abbr.get(g.away_team_id as number)}@${abbr.get(g.home_team_id as number)}` : gameKey(sport, tname.get(g.away_team_id as number), tname.get(g.home_team_id as number));
@@ -193,12 +230,58 @@ export async function syncPublicSplitsObservations(opts: {
       keyById.set(g.id as number, k);
       slateGames.push({ id: g.id as number, key: k, gameDate: (g.game_date as string | null) ?? null });
     }
+    if (sport === "nhl") {
+      const away = abbr.get(g.away_team_id as number)?.toUpperCase();
+      const home = abbr.get(g.home_team_id as number)?.toUpperCase();
+      if (away && home) nhlAbbrKeyById.set(g.id as number, `${away}@${home}`);
+    }
   }
 
   const rows: ObsRow[] = [];
 
+  // NHL SharpAPI does not flow through sharp_signals. Read it once at slate
+  // scope and persist provider-separated observations directly. Upsert never
+  // deletes older observations, so a temporary upstream gap leaves the last
+  // complete money+ticket read available to the NHL resolver.
+  if (sport === "nhl" && process.env.SHARPAPI_KEY) {
+    try {
+      const byMatchup = reduceSharpNhlSplits(await fetchSharpNhlSplits(slateDate, process.env.SHARPAPI_KEY));
+      for (const [gameId, key] of nhlAbbrKeyById) {
+        const event = byMatchup.get(key);
+        if (!event) continue;
+        const observedAt = event.fetched_at ?? new Date().toISOString();
+        const cells: Array<{ market: Market; side: Side; bet: number | null; money: number | null }> = [
+          { market: "moneyline", side: "home", bet: sharpPct(event.moneyline?.bets_pct?.home), money: sharpPct(event.moneyline?.handle_pct?.home) },
+          { market: "moneyline", side: "away", bet: sharpPct(event.moneyline?.bets_pct?.away), money: sharpPct(event.moneyline?.handle_pct?.away) },
+          { market: "total", side: "over", bet: sharpPct(event.total?.bets_pct?.over), money: sharpPct(event.total?.handle_pct?.over) },
+          { market: "total", side: "under", bet: sharpPct(event.total?.bets_pct?.under), money: sharpPct(event.total?.handle_pct?.under) },
+          { market: "spread", side: "home", bet: sharpPct(event.spread?.bets_pct?.home), money: sharpPct(event.spread?.handle_pct?.home) },
+          { market: "spread", side: "away", bet: sharpPct(event.spread?.bets_pct?.away), money: sharpPct(event.spread?.handle_pct?.away) },
+        ];
+        for (const cell of cells) {
+          if (cell.bet === null || cell.money === null) continue;
+          if (!shouldPersistSplitMirrorObservation({ sport, bettingPct: cell.bet, moneyPct: cell.money })) continue;
+          rows.push({
+            provider: "sharpapi",
+            sport,
+            game_id: gameId,
+            market_type: cell.market,
+            side: cell.side,
+            public_betting_pct: cell.bet,
+            public_money_pct: cell.money,
+            books_used: null,
+            observed_at: observedAt,
+          });
+          res.sharpapiRows++;
+        }
+      }
+    } catch (error) {
+      res.errors.push(`sharpapi NHL fetch: ${(error as Error).message}`);
+    }
+  }
+
   // ── SharpAPI observations: mirror sharp_signals (sports where it's SharpAPI) ──
-  if (publicSplitsCapability(sport).sharpSignalsProvider === "sharpapi") {
+  if (sport !== "nhl" && publicSplitsCapability(sport).sharpSignalsProvider === "sharpapi") {
     const { data: ss } = await supabase.from("sharp_signals")
       .select("game_id, market_type, side, public_betting_pct, public_money_pct, computed_at")
       .in("game_id", ids).in("market_type", ["moneyline", "total", "spread"]);
@@ -230,13 +313,14 @@ export async function syncPublicSplitsObservations(opts: {
     } catch (e) { res.errors.push(`playbook fetch: ${(e as Error).message}`); }
     const pbByGameId = matchPlaybookSplitsToSlateGames(slateGames, pbRows, sport);
     const observedAt = new Date().toISOString();
-    for (const [gid, gkey] of keyById) {
+    for (const [gid] of keyById) {
       const pb = pbByGameId.get(gid); if (!pb) continue;
       for (const market of ["moneyline", "total", "spread"] as Market[]) {
         for (const side of SIDES[market]) {
           const c = pbCells(pb, market, side);
           const bet = sport === "mlb" ? verifiedHundredSplitPct(c.bet) : c.bet;
           const money = sport === "mlb" ? verifiedHundredSplitPct(c.money) : c.money;
+          if (sport === "nhl" && (bet === null || money === null)) continue;
           if (!shouldPersistSplitMirrorObservation({ sport, bettingPct: bet, moneyPct: money })) continue;
           rows.push({ provider: "playbook", sport, game_id: gid, market_type: market, side, public_betting_pct: bet, public_money_pct: money, books_used: c.books, observed_at: observedAt });
           res.playbookRows++;

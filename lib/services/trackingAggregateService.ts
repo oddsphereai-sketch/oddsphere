@@ -37,6 +37,11 @@ import { isPublicallyTracked } from "../config/officialTrackingStart";
 import { UCL_CALIBRATION_RELEASE, UCL_MODEL_RELEASE } from "./ucl/uclModel";
 import { filterCompleteUclLockManifestCohorts } from "./ucl/uclLockManifest";
 import { nflTrackingCorrectionSupersededRecordId } from "./football/nflPublishedTrackingCorrection";
+import {
+  NHL_REGULAR_CALIBRATION_RELEASE,
+  NHL_REGULAR_MODEL_RELEASE,
+} from "../automodel/nhlRegularModelV1";
+import { nhlGameTypeFromExternalId } from "./nhl/nhlScheduleIdentity";
 
 export type AggregateKey =
   | "all"
@@ -74,7 +79,7 @@ export type DimensionRow<K extends string = string> = {
 export type TrackingDisplaySport = TrackedSport | "epl";
 
 export const TRACKING_AGGREGATE_CONTRACT_VERSION =
-  "tracking_aggregate_v9_append_only_correction_precedence_2026_09_14" as const;
+  "tracking_aggregate_v10_nhl_regular_release_boundary_2026_09_23" as const;
 
 /**
  * Sport+market joint split with the Best Angle / Lean cuts most members
@@ -227,6 +232,12 @@ function isTossUp(r: PredictionRecordRow): boolean {
  */
 export function isTrackingRecordEligible(record: PredictionRecordRow): boolean {
   if (isUclTrackingRecord(record)) return record.locked_at !== null && record.held !== true;
+  if (record.sport === "nhl") {
+    return record.locked_at !== null
+      && record.model_version === NHL_REGULAR_MODEL_RELEASE
+      && record.calibration_version === NHL_REGULAR_CALIBRATION_RELEASE
+      && nhlGameTypeFromExternalId(record.external_id) === 2;
+  }
   return record.locked_at !== null;
 }
 
