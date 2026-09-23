@@ -62,7 +62,7 @@ const SPORT_MARKETS: Record<Sport, string[]> = {
   cbb: ["ML", "O/U"],
   nfl: ["ML", "O/U", "Spread"],
   cfb: ["ML", "O/U", "Spread"],
-  nhl: ["ML", "O/U"],
+  nhl: ["ML", "O/U", "Spread"],
   wnba: ["ML", "O/U", "Spread"], // all 3 publicly tracked from launch; shown once wnba is added to SPORT_DISPLAY_ORDER at launch
   ucl: ["ML", "Double Chance"],
   // WC-1 — soccer launch markets per OFFICIAL_TRACKING_MARKETS:
