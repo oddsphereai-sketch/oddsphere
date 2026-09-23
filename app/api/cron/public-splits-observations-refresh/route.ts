@@ -24,7 +24,7 @@ import { refreshDailyEdgeResponseSnapshot } from "@/lib/services/labResponseSnap
 import { runScheduledMarketIntelligenceV2Collection } from "@/lib/services/marketIntelligenceV2/scheduledCollection";
 
 const ENV = "PUBLIC_SPLITS_OBSERVATIONS_ENABLED";
-const SPORTS: Sport[] = ["mlb", "wnba"];
+const SPORTS: Sport[] = ["mlb", "wnba", "nhl"];
 
 export async function GET(request: Request): Promise<Response> {
   return cronHandlerPerSport(

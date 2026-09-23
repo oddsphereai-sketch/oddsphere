@@ -1,0 +1,1263 @@
+{
+  "release": "nhl_regular_model_tournament_2026_09_23_r1",
+  "source_manifest": "bdl_nhl_regular_history_2026_09_23_r1",
+  "design": {
+    "parameter_training": "2024 regular season, after 2023 warmup",
+    "market_weight_tuning": "first 783 priced games of 2025 regular season",
+    "untouched_holdout": "last 336 priced games of 2025 regular season",
+    "note": "All features are updated only after each game's outcome; no result is used before its forecast."
+  },
+  "selected_parameters": {
+    "alpha": 0.04,
+    "eloK": 16,
+    "eloHome": 40,
+    "goalHome": 0.05,
+    "mlSlope": 0.78
+  },
+  "runtime_2026_opening_priors": {
+    "ANA": {
+      "elo": 1487.7674838255984,
+      "goalsFor": 3.1744523682877315,
+      "goalsAgainst": 3.363668202059932
+    },
+    "ARI": {
+      "elo": 1488.8323812883632,
+      "goalsFor": 3.129098344344212,
+      "goalsAgainst": 3.1578577865905335
+    },
+    "BOS": {
+      "elo": 1516.8413418061982,
+      "goalsFor": 3.1821930255897932,
+      "goalsAgainst": 2.9381422492207414
+    },
+    "BUF": {
+      "elo": 1566.773613433276,
+      "goalsFor": 3.4335635618817113,
+      "goalsAgainst": 2.8949511375825727
+    },
+    "CAR": {
+      "elo": 1574.6321819187376,
+      "goalsFor": 3.480600772951993,
+      "goalsAgainst": 2.961378287777149
+    },
+    "CBJ": {
+      "elo": 1495.3555697973256,
+      "goalsFor": 2.9572957471503756,
+      "goalsAgainst": 2.9672408372909396
+    },
+    "CGY": {
+      "elo": 1469.1640267486773,
+      "goalsFor": 2.820160242030693,
+      "goalsAgainst": 3.1775112359547952
+    },
+    "CHI": {
+      "elo": 1414.5181262521883,
+      "goalsFor": 2.683760552856092,
+      "goalsAgainst": 3.3985272409109726
+    },
+    "COL": {
+      "elo": 1569.7872291460162,
+      "goalsFor": 3.2513404564564485,
+      "goalsAgainst": 2.653232558964839
+    },
+    "DAL": {
+      "elo": 1553.1764766048743,
+      "goalsFor": 3.245921047228352,
+      "goalsAgainst": 2.8812412003485064
+    },
+    "DET": {
+      "elo": 1480.1942989813672,
+      "goalsFor": 2.9228024505082524,
+      "goalsAgainst": 3.2605893053859365
+    },
+    "EDM": {
+      "elo": 1505.2121960602117,
+      "goalsFor": 3.2676012594255646,
+      "goalsAgainst": 3.0635237824232235
+    },
+    "FLA": {
+      "elo": 1495.031431613045,
+      "goalsFor": 3.1076649654168484,
+      "goalsAgainst": 3.2804819956614875
+    },
+    "LAK": {
+      "elo": 1471.1936451217905,
+      "goalsFor": 2.954076472036625,
+      "goalsAgainst": 3.0696258261484606
+    },
+    "MIN": {
+      "elo": 1527.258660213075,
+      "goalsFor": 3.2466020507803197,
+      "goalsAgainst": 3.0530175145366405
+    },
+    "MTL": {
+      "elo": 1555.4184095350192,
+      "goalsFor": 3.2309223020860425,
+      "goalsAgainst": 2.9095590621109833
+    },
+    "NJD": {
+      "elo": 1499.1389964790455,
+      "goalsFor": 2.9865622379735504,
+      "goalsAgainst": 3.1409062783297323
+    },
+    "NSH": {
+      "elo": 1483.2696002745622,
+      "goalsFor": 3.0923375534206055,
+      "goalsAgainst": 3.0901408559752817
+    },
+    "NYI": {
+      "elo": 1494.7781134758086,
+      "goalsFor": 2.8045662675191227,
+      "goalsAgainst": 3.087946040096218
+    },
+    "NYR": {
+      "elo": 1460.8444209171516,
+      "goalsFor": 3.1213083855543,
+      "goalsAgainst": 3.0156677762796082
+    },
+    "OTT": {
+      "elo": 1537.4147565050532,
+      "goalsFor": 3.3033279893145258,
+      "goalsAgainst": 2.8158097130971265
+    },
+    "PHI": {
+      "elo": 1527.4495861935793,
+      "goalsFor": 3.1579821583620227,
+      "goalsAgainst": 2.8806012333616855
+    },
+    "PIT": {
+      "elo": 1500.7621635044882,
+      "goalsFor": 3.557532004598277,
+      "goalsAgainst": 3.4064474724706333
+    },
+    "SEA": {
+      "elo": 1441.7560775869556,
+      "goalsFor": 2.7980262166991605,
+      "goalsAgainst": 3.317201291531878
+    },
+    "SJS": {
+      "elo": 1468.0229135253596,
+      "goalsFor": 3.0300015754600973,
+      "goalsAgainst": 3.3990815484598706
+    },
+    "STL": {
+      "elo": 1510.7171146616693,
+      "goalsFor": 3.181450652181998,
+      "goalsAgainst": 2.8991354442353363
+    },
+    "TBL": {
+      "elo": 1551.2959508155318,
+      "goalsFor": 3.296081185104029,
+      "goalsAgainst": 3.0102019024803948
+    },
+    "TOR": {
+      "elo": 1444.1151657128387,
+      "goalsFor": 2.944759956926076,
+      "goalsAgainst": 3.6120448035856034
+    },
+    "UTA": {
+      "elo": 1508.8284848819906,
+      "goalsFor": 3.3078770872126264,
+      "goalsAgainst": 3.1107413685819525
+    },
+    "VAN": {
+      "elo": 1400.4356695250947,
+      "goalsFor": 2.789868463196468,
+      "goalsAgainst": 3.685672642584631
+    },
+    "VGK": {
+      "elo": 1495.100480286432,
+      "goalsFor": 3.1759158617461773,
+      "goalsAgainst": 2.9361774974749912
+    },
+    "WPG": {
+      "elo": 1476.701478828131,
+      "goalsFor": 2.825742325032705,
+      "goalsAgainst": 3.2343513780656887
+    },
+    "WSH": {
+      "elo": 1528.2119544805437,
+      "goalsFor": 3.1940294671649396,
+      "goalsAgainst": 3.0232037717399383
+    }
+  },
+  "selected_market_weights": {
+    "ml": 0.30000000000000004,
+    "total": 0.9,
+    "spread": 0.45
+  },
+  "weight_curve": [
+    {
+      "weight": 0,
+      "tune": {
+        "moneyline": {
+          "n": 783,
+          "accuracy": 0.5044699872286079,
+          "brier": 0.24946999316223842,
+          "log_loss": 0.692028862967484
+        },
+        "total": {
+          "n": 761,
+          "accuracy": 0.5269382391590013,
+          "score_mae": 1.8381990410903168
+        },
+        "puckline": {
+          "n": 783,
+          "accuracy": 0.6781609195402298,
+          "brier": 0.21568396447239954
+        }
+      },
+      "holdout": {
+        "moneyline": {
+          "n": 336,
+          "accuracy": 0.5684523809523809,
+          "brier": 0.24216968962947721,
+          "log_loss": 0.6773391589541465
+        },
+        "total": {
+          "n": 316,
+          "accuracy": 0.5031645569620253,
+          "score_mae": 1.8167486742967913
+        },
+        "puckline": {
+          "n": 336,
+          "accuracy": 0.6785714285714286,
+          "brier": 0.21362005236338283
+        }
+      }
+    },
+    {
+      "weight": 0.05,
+      "tune": {
+        "moneyline": {
+          "n": 783,
+          "accuracy": 0.5108556832694764,
+          "brier": 0.24919112286759804,
+          "log_loss": 0.6914630563067795
+        },
+        "total": {
+          "n": 758,
+          "accuracy": 0.5277044854881267,
+          "score_mae": 1.837667641909911
+        },
+        "puckline": {
+          "n": 783,
+          "accuracy": 0.6781609195402298,
+          "brier": 0.21554240937743205
+        }
+      },
+      "holdout": {
+        "moneyline": {
+          "n": 336,
+          "accuracy": 0.5684523809523809,
+          "brier": 0.2420039183642861,
+          "log_loss": 0.6770072246027379
+        },
+        "total": {
+          "n": 315,
+          "accuracy": 0.5047619047619047,
+          "score_mae": 1.8150595915524514
+        },
+        "puckline": {
+          "n": 336,
+          "accuracy": 0.6785714285714286,
+          "brier": 0.2135570368847109
+        }
+      }
+    },
+    {
+      "weight": 0.1,
+      "tune": {
+        "moneyline": {
+          "n": 783,
+          "accuracy": 0.5210727969348659,
+          "brier": 0.24893006446009638,
+          "log_loss": 0.6909326482975044
+        },
+        "total": {
+          "n": 757,
+          "accuracy": 0.5284015852047557,
+          "score_mae": 1.8374160069331527
+        },
+        "puckline": {
+          "n": 783,
+          "accuracy": 0.6781609195402298,
+          "brier": 0.215409518612237
+        }
+      },
+      "holdout": {
+        "moneyline": {
+          "n": 336,
+          "accuracy": 0.5684523809523809,
+          "brier": 0.24185284194497297,
+          "log_loss": 0.6767049263195198
+        },
+        "total": {
+          "n": 313,
+          "accuracy": 0.5047923322683706,
+          "score_mae": 1.8135542621724963
+        },
+        "puckline": {
+          "n": 336,
+          "accuracy": 0.6785714285714286,
+          "brier": 0.21350119801180292
+        }
+      }
+    },
+    {
+      "weight": 0.15000000000000002,
+      "tune": {
+        "moneyline": {
+          "n": 783,
+          "accuracy": 0.5223499361430396,
+          "brier": 0.24868681793973335,
+          "log_loss": 0.6904376181387136
+        },
+        "total": {
+          "n": 756,
+          "accuracy": 0.5291005291005291,
+          "score_mae": 1.8374795453856787
+        },
+        "puckline": {
+          "n": 783,
+          "accuracy": 0.6781609195402298,
+          "brier": 0.21528544530212196
+        }
+      },
+      "holdout": {
+        "moneyline": {
+          "n": 336,
+          "accuracy": 0.5714285714285714,
+          "brier": 0.24171646037153915,
+          "log_loss": 0.6764322967919663
+        },
+        "total": {
+          "n": 313,
+          "accuracy": 0.5047923322683706,
+          "score_mae": 1.8121633935038355
+        },
+        "puckline": {
+          "n": 336,
+          "accuracy": 0.6785714285714286,
+          "brier": 0.21345263612678475
+        }
+      }
+    },
+    {
+      "weight": 0.2,
+      "tune": {
+        "moneyline": {
+          "n": 783,
+          "accuracy": 0.5338441890166028,
+          "brier": 0.24846138330651027,
+          "log_loss": 0.6899779666901212
+        },
+        "total": {
+          "n": 753,
+          "accuracy": 0.5298804780876494,
+          "score_mae": 1.8378225280029756
+        },
+        "puckline": {
+          "n": 783,
+          "accuracy": 0.6781609195402298,
+          "brier": 0.21517034102915086
+        }
+      },
+      "holdout": {
+        "moneyline": {
+          "n": 336,
+          "accuracy": 0.5684523809523809,
+          "brier": 0.24159477364398368,
+          "log_loss": 0.6761893839845576
+        },
+        "total": {
+          "n": 312,
+          "accuracy": 0.5064102564102564,
+          "score_mae": 1.8108264011688784
+        },
+        "puckline": {
+          "n": 336,
+          "accuracy": 0.6785714285714286,
+          "brier": 0.2134114507860906
+        }
+      }
+    },
+    {
+      "weight": 0.25,
+      "tune": {
+        "moneyline": {
+          "n": 783,
+          "accuracy": 0.5338441890166028,
+          "brier": 0.24825376056042583,
+          "log_loss": 0.6895537166081196
+        },
+        "total": {
+          "n": 753,
+          "accuracy": 0.5298804780876494,
+          "score_mae": 1.838376877542834
+        },
+        "puckline": {
+          "n": 783,
+          "accuracy": 0.6781609195402298,
+          "brier": 0.2150643557440388
+        }
+      },
+      "holdout": {
+        "moneyline": {
+          "n": 336,
+          "accuracy": 0.5744047619047619,
+          "brier": 0.24148778176230642,
+          "log_loss": 0.6759762513174051
+        },
+        "total": {
+          "n": 312,
+          "accuracy": 0.5064102564102564,
+          "score_mae": 1.8096244777615094
+        },
+        "puckline": {
+          "n": 336,
+          "accuracy": 0.6785714285714286,
+          "brier": 0.2133777406769946
+        }
+      }
+    },
+    {
+      "weight": 0.30000000000000004,
+      "tune": {
+        "moneyline": {
+          "n": 783,
+          "accuracy": 0.5363984674329502,
+          "brier": 0.2480639497014804,
+          "log_loss": 0.6891649125522775
+        },
+        "total": {
+          "n": 752,
+          "accuracy": 0.5305851063829787,
+          "score_mae": 1.8393881995024963
+        },
+        "puckline": {
+          "n": 783,
+          "accuracy": 0.6781609195402298,
+          "brier": 0.2149676376801313
+        }
+      },
+      "holdout": {
+        "moneyline": {
+          "n": 336,
+          "accuracy": 0.5714285714285714,
+          "brier": 0.24139548472650837,
+          "log_loss": 0.6757929778844909
+        },
+        "total": {
+          "n": 312,
+          "accuracy": 0.5064102564102564,
+          "score_mae": 1.8084861725301375
+        },
+        "puckline": {
+          "n": 336,
+          "accuracy": 0.6785714285714286,
+          "brier": 0.21335160357463873
+        }
+      }
+    },
+    {
+      "weight": 0.35000000000000003,
+      "tune": {
+        "moneyline": {
+          "n": 783,
+          "accuracy": 0.5312899106002554,
+          "brier": 0.24789195072967474,
+          "log_loss": 0.6888116214644288
+        },
+        "total": {
+          "n": 750,
+          "accuracy": 0.532,
+          "score_mae": 1.84074229147491
+        },
+        "puckline": {
+          "n": 783,
+          "accuracy": 0.6781609195402298,
+          "brier": 0.21488033326953584
+        }
+      },
+      "holdout": {
+        "moneyline": {
+          "n": 336,
+          "accuracy": 0.5833333333333334,
+          "brier": 0.2413178825365888,
+          "log_loss": 0.6756396587129876
+        },
+        "total": {
+          "n": 311,
+          "accuracy": 0.5080385852090032,
+          "score_mae": 1.8075505105466927
+        },
+        "puckline": {
+          "n": 336,
+          "accuracy": 0.6785714285714286,
+          "brier": 0.2133331362996055
+        }
+      }
+    },
+    {
+      "weight": 0.4,
+      "tune": {
+        "moneyline": {
+          "n": 783,
+          "accuracy": 0.5287356321839081,
+          "brier": 0.2477377636450073,
+          "log_loss": 0.6884939329231154
+        },
+        "total": {
+          "n": 748,
+          "accuracy": 0.5320855614973262,
+          "score_mae": 1.8422522132690156
+        },
+        "puckline": {
+          "n": 783,
+          "accuracy": 0.6781609195402298,
+          "brier": 0.21480258706144806
+        }
+      },
+      "holdout": {
+        "moneyline": {
+          "n": 336,
+          "accuracy": 0.5863095238095238,
+          "brier": 0.24125497519254763,
+          "log_loss": 0.6755164050654273
+        },
+        "total": {
+          "n": 310,
+          "accuracy": 0.5064516129032258,
+          "score_mae": 1.8067236886651095
+        },
+        "puckline": {
+          "n": 336,
+          "accuracy": 0.6785714285714286,
+          "brier": 0.21332243467608772
+        }
+      }
+    },
+    {
+      "weight": 0.45,
+      "tune": {
+        "moneyline": {
+          "n": 783,
+          "accuracy": 0.5236270753512133,
+          "brier": 0.24760138844747953,
+          "log_loss": 0.6882119595768471
+        },
+        "total": {
+          "n": 745,
+          "accuracy": 0.5328859060402684,
+          "score_mae": 1.843867531428785
+        },
+        "puckline": {
+          "n": 783,
+          "accuracy": 0.6781609195402298,
+          "brier": 0.21473454164270736
+        }
+      },
+      "holdout": {
+        "moneyline": {
+          "n": 336,
+          "accuracy": 0.5803571428571429,
+          "brier": 0.24120676269438518,
+          "log_loss": 0.6754233447867485
+        },
+        "total": {
+          "n": 307,
+          "accuracy": 0.50814332247557,
+          "score_mae": 1.8062846809410151
+        },
+        "puckline": {
+          "n": 336,
+          "accuracy": 0.6785714285714286,
+          "brier": 0.2133195934907039
+        }
+      }
+    },
+    {
+      "weight": 0.5,
+      "tune": {
+        "moneyline": {
+          "n": 783,
+          "accuracy": 0.5261813537675607,
+          "brier": 0.24748282513709108,
+          "log_loss": 0.687965837660374
+        },
+        "total": {
+          "n": 743,
+          "accuracy": 0.5329744279946165,
+          "score_mae": 1.8455802590371968
+        },
+        "puckline": {
+          "n": 783,
+          "accuracy": 0.6768837803320562,
+          "brier": 0.21467633756181
+        }
+      },
+      "holdout": {
+        "moneyline": {
+          "n": 336,
+          "accuracy": 0.5625,
+          "brier": 0.2411732450421017,
+          "log_loss": 0.6753606226986077
+        },
+        "total": {
+          "n": 307,
+          "accuracy": 0.50814332247557,
+          "score_mae": 1.8061056623273297
+        },
+        "puckline": {
+          "n": 336,
+          "accuracy": 0.6785714285714286,
+          "brier": 0.21332470645200333
+        }
+      }
+    },
+    {
+      "weight": 0.55,
+      "tune": {
+        "moneyline": {
+          "n": 783,
+          "accuracy": 0.5300127713920817,
+          "brier": 0.24738207371384088,
+          "log_loss": 0.6877557275990767
+        },
+        "total": {
+          "n": 739,
+          "accuracy": 0.5345060893098782,
+          "score_mae": 1.847292986645609
+        },
+        "puckline": {
+          "n": 783,
+          "accuracy": 0.6768837803320562,
+          "brier": 0.21462811324858228
+        }
+      },
+      "holdout": {
+        "moneyline": {
+          "n": 336,
+          "accuracy": 0.5595238095238095,
+          "brier": 0.24115442223569653,
+          "log_loss": 0.675328401043686
+        },
+        "total": {
+          "n": 303,
+          "accuracy": 0.5115511551155115,
+          "score_mae": 1.8059266437136448
+        },
+        "puckline": {
+          "n": 336,
+          "accuracy": 0.6815476190476191,
+          "brier": 0.2133378661481479
+        }
+      }
+    },
+    {
+      "weight": 0.6000000000000001,
+      "tune": {
+        "moneyline": {
+          "n": 783,
+          "accuracy": 0.5351213282247765,
+          "brier": 0.2472991341777304,
+          "log_loss": 0.6875818147074496
+        },
+        "total": {
+          "n": 736,
+          "accuracy": 0.5339673913043478,
+          "score_mae": 1.849005714254027
+        },
+        "puckline": {
+          "n": 783,
+          "accuracy": 0.6781609195402298,
+          "brier": 0.21459000494880473
+        }
+      },
+      "holdout": {
+        "moneyline": {
+          "n": 336,
+          "accuracy": 0.5714285714285714,
+          "brier": 0.24115029427516954,
+          "log_loss": 0.6753268599831059
+        },
+        "total": {
+          "n": 301,
+          "accuracy": 0.5116279069767442,
+          "score_mae": 1.8058100542678897
+        },
+        "puckline": {
+          "n": 336,
+          "accuracy": 0.6815476190476191,
+          "brier": 0.21335916401957378
+        }
+      }
+    },
+    {
+      "weight": 0.65,
+      "tune": {
+        "moneyline": {
+          "n": 783,
+          "accuracy": 0.5338441890166028,
+          "brier": 0.24723400652875896,
+          "log_loss": 0.6874443099887511
+        },
+        "total": {
+          "n": 723,
+          "accuracy": 0.5394190871369294,
+          "score_mae": 1.8507184418624367
+        },
+        "puckline": {
+          "n": 783,
+          "accuracy": 0.6781609195402298,
+          "brier": 0.2145621466536024
+        }
+      },
+      "holdout": {
+        "moneyline": {
+          "n": 336,
+          "accuracy": 0.5654761904761905,
+          "brier": 0.2411608611605217,
+          "log_loss": 0.6753561981505241
+        },
+        "total": {
+          "n": 295,
+          "accuracy": 0.5152542372881356,
+          "score_mae": 1.8058092439129758
+        },
+        "puckline": {
+          "n": 336,
+          "accuracy": 0.6815476190476191,
+          "brier": 0.21338869030240784
+        }
+      }
+    },
+    {
+      "weight": 0.7000000000000001,
+      "tune": {
+        "moneyline": {
+          "n": 783,
+          "accuracy": 0.5338441890166028,
+          "brier": 0.2471866907669263,
+          "log_loss": 0.6873434510440907
+        },
+        "total": {
+          "n": 707,
+          "accuracy": 0.5403111739745403,
+          "score_mae": 1.8525031850955465
+        },
+        "puckline": {
+          "n": 783,
+          "accuracy": 0.6781609195402298,
+          "brier": 0.2145446700249478
+        }
+      },
+      "holdout": {
+        "moneyline": {
+          "n": 336,
+          "accuracy": 0.5684523809523809,
+          "brier": 0.24118612289175237,
+          "log_loss": 0.6754166332669393
+        },
+        "total": {
+          "n": 286,
+          "accuracy": 0.513986013986014,
+          "score_mae": 1.805808433558061
+        },
+        "puckline": {
+          "n": 336,
+          "accuracy": 0.6815476190476191,
+          "brier": 0.2134265340036609
+        }
+      }
+    },
+    {
+      "weight": 0.75,
+      "tune": {
+        "moneyline": {
+          "n": 783,
+          "accuracy": 0.5338441890166028,
+          "brier": 0.24715718689223293,
+          "log_loss": 0.6872795031005609
+        },
+        "total": {
+          "n": 686,
+          "accuracy": 0.5451895043731778,
+          "score_mae": 1.8543103383671933
+        },
+        "puckline": {
+          "n": 783,
+          "accuracy": 0.6781609195402298,
+          "brier": 0.21453770433508174
+        }
+      },
+      "holdout": {
+        "moneyline": {
+          "n": 336,
+          "accuracy": 0.5595238095238095,
+          "brier": 0.24122607946886163,
+          "log_loss": 0.6755084028207807
+        },
+        "total": {
+          "n": 275,
+          "accuracy": 0.52,
+          "score_mae": 1.8058076232031466
+        },
+        "puckline": {
+          "n": 336,
+          "accuracy": 0.6785714285714286,
+          "brier": 0.21347278286443058
+        }
+      }
+    },
+    {
+      "weight": 0.8,
+      "tune": {
+        "moneyline": {
+          "n": 783,
+          "accuracy": 0.5363984674329502,
+          "brier": 0.2471454949046788,
+          "log_loss": 0.6872527601696644
+        },
+        "total": {
+          "n": 656,
+          "accuracy": 0.5442073170731707,
+          "score_mae": 1.8561174916388339
+        },
+        "puckline": {
+          "n": 783,
+          "accuracy": 0.6781609195402298,
+          "brier": 0.2145413764018428
+        }
+      },
+      "holdout": {
+        "moneyline": {
+          "n": 336,
+          "accuracy": 0.5625,
+          "brier": 0.24128073089184937,
+          "log_loss": 0.6756317648184762
+        },
+        "total": {
+          "n": 261,
+          "accuracy": 0.524904214559387,
+          "score_mae": 1.8058068128482312
+        },
+        "puckline": {
+          "n": 336,
+          "accuracy": 0.6785714285714286,
+          "brier": 0.213527523309196
+        }
+      }
+    },
+    {
+      "weight": 0.8500000000000001,
+      "tune": {
+        "moneyline": {
+          "n": 783,
+          "accuracy": 0.5363984674329502,
+          "brier": 0.24715161480426368,
+          "log_loss": 0.6872635463490389
+        },
+        "total": {
+          "n": 617,
+          "accuracy": 0.5429497568881686,
+          "score_mae": 1.85792464491048
+        },
+        "puckline": {
+          "n": 783,
+          "accuracy": 0.6768837803320562,
+          "brier": 0.2145558105283271
+        }
+      },
+      "holdout": {
+        "moneyline": {
+          "n": 336,
+          "accuracy": 0.5625,
+          "brier": 0.24135007716071594,
+          "log_loss": 0.6757869986113559
+        },
+        "total": {
+          "n": 244,
+          "accuracy": 0.5286885245901639,
+          "score_mae": 1.8058060024933138
+        },
+        "puckline": {
+          "n": 336,
+          "accuracy": 0.6785714285714286,
+          "brier": 0.2135908404369019
+        }
+      }
+    },
+    {
+      "weight": 0.9,
+      "tune": {
+        "moneyline": {
+          "n": 783,
+          "accuracy": 0.5402298850574713,
+          "brier": 0.24717554659098778,
+          "log_loss": 0.6873122172826867
+        },
+        "total": {
+          "n": 536,
+          "accuracy": 0.5485074626865671,
+          "score_mae": 1.8597317981821242
+        },
+        "puckline": {
+          "n": 783,
+          "accuracy": 0.6768837803320562,
+          "brier": 0.21458112843913482
+        }
+      },
+      "holdout": {
+        "moneyline": {
+          "n": 336,
+          "accuracy": 0.5595238095238095,
+          "brier": 0.2414341182754612,
+          "log_loss": 0.6759744058055206
+        },
+        "total": {
+          "n": 207,
+          "accuracy": 0.5362318840579711,
+          "score_mae": 1.8058051921384017
+        },
+        "puckline": {
+          "n": 336,
+          "accuracy": 0.6815476190476191,
+          "brier": 0.21366281797162173
+        }
+      }
+    },
+    {
+      "weight": 0.9500000000000001,
+      "tune": {
+        "moneyline": {
+          "n": 783,
+          "accuracy": 0.5389527458492975,
+          "brier": 0.24721729026485112,
+          "log_loss": 0.6873991617973836
+        },
+        "total": {
+          "n": 334,
+          "accuracy": 0.5359281437125748,
+          "score_mae": 1.8615389514537721
+        },
+        "puckline": {
+          "n": 783,
+          "accuracy": 0.6768837803320562,
+          "brier": 0.21461744923226514
+        }
+      },
+      "holdout": {
+        "moneyline": {
+          "n": 336,
+          "accuracy": 0.5595238095238095,
+          "brier": 0.24153285423608506,
+          "log_loss": 0.6761943112622032
+        },
+        "total": {
+          "n": 116,
+          "accuracy": 0.4827586206896552,
+          "score_mae": 1.8058043817834855
+        },
+        "puckline": {
+          "n": 336,
+          "accuracy": 0.6815476190476191,
+          "brier": 0.21374353824678685
+        }
+      }
+    },
+    {
+      "weight": 1,
+      "tune": {
+        "moneyline": {
+          "n": 783,
+          "accuracy": 0.5440613026819924,
+          "brier": 0.24727684582585296,
+          "log_loss": 0.6875248037359103
+        },
+        "total": {
+          "n": 0,
+          "accuracy": null,
+          "score_mae": 1.8633461047254152
+        },
+        "puckline": {
+          "n": 783,
+          "accuracy": 0.6794380587484036,
+          "brier": 0.21466488932837696
+        }
+      },
+      "holdout": {
+        "moneyline": {
+          "n": 336,
+          "accuracy": 0.5654761904761905,
+          "brier": 0.24164628504258734,
+          "log_loss": 0.6764470641971161
+        },
+        "total": {
+          "n": 0,
+          "accuracy": null,
+          "score_mae": 1.8058035714285714
+        },
+        "puckline": {
+          "n": 336,
+          "accuracy": 0.6845238095238095,
+          "brier": 0.21383308214595195
+        }
+      }
+    }
+  ],
+  "tune": {
+    "independent": {
+      "moneyline": {
+        "n": 783,
+        "accuracy": 0.5044699872286079,
+        "brier": 0.24946999316223842,
+        "log_loss": 0.692028862967484
+      },
+      "total": {
+        "n": 761,
+        "accuracy": 0.5269382391590013,
+        "score_mae": 1.8381990410903168
+      },
+      "puckline": {
+        "n": 783,
+        "accuracy": 0.6781609195402298,
+        "brier": 0.21568396447239954
+      }
+    },
+    "market": {
+      "moneyline": {
+        "n": 783,
+        "accuracy": 0.5440613026819924,
+        "brier": 0.24727684582585296,
+        "log_loss": 0.6875248037359103
+      },
+      "total": {
+        "n": 0,
+        "accuracy": null,
+        "score_mae": 1.8633461047254152
+      },
+      "puckline": {
+        "n": 783,
+        "accuracy": 0.6794380587484036,
+        "brier": 0.21466488932837696
+      }
+    },
+    "selected": {
+      "moneyline": {
+        "n": 783,
+        "accuracy": 0.5363984674329502,
+        "brier": 0.2480639497014804,
+        "log_loss": 0.6891649125522775
+      },
+      "total": {
+        "n": 536,
+        "accuracy": 0.5485074626865671,
+        "score_mae": 1.8597317981821242
+      },
+      "puckline": {
+        "n": 783,
+        "accuracy": 0.6781609195402298,
+        "brier": 0.21465519286794613
+      }
+    }
+  },
+  "holdout": {
+    "independent": {
+      "moneyline": {
+        "n": 336,
+        "accuracy": 0.5684523809523809,
+        "brier": 0.24216968962947721,
+        "log_loss": 0.6773391589541465
+      },
+      "total": {
+        "n": 316,
+        "accuracy": 0.5031645569620253,
+        "score_mae": 1.8167486742967913
+      },
+      "puckline": {
+        "n": 336,
+        "accuracy": 0.6785714285714286,
+        "brier": 0.21362005236338283
+      }
+    },
+    "market": {
+      "moneyline": {
+        "n": 336,
+        "accuracy": 0.5654761904761905,
+        "brier": 0.24164628504258734,
+        "log_loss": 0.6764470641971161
+      },
+      "total": {
+        "n": 0,
+        "accuracy": null,
+        "score_mae": 1.8058035714285714
+      },
+      "puckline": {
+        "n": 336,
+        "accuracy": 0.6845238095238095,
+        "brier": 0.21383308214595195
+      }
+    },
+    "selected": {
+      "moneyline": {
+        "n": 336,
+        "accuracy": 0.5714285714285714,
+        "brier": 0.24139548472650837,
+        "log_loss": 0.6757929778844909
+      },
+      "total": {
+        "n": 207,
+        "accuracy": 0.5362318840579711,
+        "score_mae": 1.8058051921384017
+      },
+      "puckline": {
+        "n": 336,
+        "accuracy": 0.6785714285714286,
+        "brier": 0.21349817673294447
+      }
+    }
+  },
+  "board_impact_vs_independent": {
+    "tune": {
+      "moneyline": {
+        "before": 701,
+        "after": 672,
+        "retained": 672,
+        "promoted": 0,
+        "demoted": 29,
+        "net": -29
+      },
+      "total": {
+        "before": 536,
+        "after": 536,
+        "retained": 536,
+        "promoted": 0,
+        "demoted": 0,
+        "net": 0
+      },
+      "puckline": {
+        "before": 772,
+        "after": 754,
+        "retained": 754,
+        "promoted": 0,
+        "demoted": 18,
+        "net": -18
+      }
+    },
+    "holdout": {
+      "moneyline": {
+        "before": 316,
+        "after": 296,
+        "retained": 296,
+        "promoted": 0,
+        "demoted": 20,
+        "net": -20
+      },
+      "total": {
+        "before": 208,
+        "after": 208,
+        "retained": 208,
+        "promoted": 0,
+        "demoted": 0,
+        "net": 0
+      },
+      "puckline": {
+        "before": 328,
+        "after": 317,
+        "retained": 316,
+        "promoted": 1,
+        "demoted": 12,
+        "net": -11
+      }
+    },
+    "note": "Paired on the same eligible games. Puck line is a new official market; before counts are the independent-only candidate under the same thresholds, not prior production."
+  },
+  "total_action_curve": {
+    "tune": [
+      {
+        "minimumIndependentGap": 0.1,
+        "n": 656,
+        "accuracy": 0.5442073170731707
+      },
+      {
+        "minimumIndependentGap": 0.15,
+        "n": 595,
+        "accuracy": 0.5495798319327732
+      },
+      {
+        "minimumIndependentGap": 0.2,
+        "n": 536,
+        "accuracy": 0.5485074626865671
+      },
+      {
+        "minimumIndependentGap": 0.25,
+        "n": 485,
+        "accuracy": 0.5484536082474227
+      },
+      {
+        "minimumIndependentGap": 0.3,
+        "n": 434,
+        "accuracy": 0.5460829493087558
+      },
+      {
+        "minimumIndependentGap": 0.4,
+        "n": 334,
+        "accuracy": 0.5359281437125748
+      },
+      {
+        "minimumIndependentGap": 0.45,
+        "n": 300,
+        "accuracy": 0.5533333333333333
+      },
+      {
+        "minimumIndependentGap": 0.5,
+        "n": 259,
+        "accuracy": 0.555984555984556
+      }
+    ],
+    "holdout": [
+      {
+        "minimumIndependentGap": 0.1,
+        "n": 261,
+        "accuracy": 0.524904214559387
+      },
+      {
+        "minimumIndependentGap": 0.15,
+        "n": 236,
+        "accuracy": 0.5254237288135594
+      },
+      {
+        "minimumIndependentGap": 0.2,
+        "n": 207,
+        "accuracy": 0.5362318840579711
+      },
+      {
+        "minimumIndependentGap": 0.25,
+        "n": 183,
+        "accuracy": 0.5191256830601093
+      },
+      {
+        "minimumIndependentGap": 0.3,
+        "n": 161,
+        "accuracy": 0.515527950310559
+      },
+      {
+        "minimumIndependentGap": 0.4,
+        "n": 116,
+        "accuracy": 0.4827586206896552
+      },
+      {
+        "minimumIndependentGap": 0.45,
+        "n": 103,
+        "accuracy": 0.46601941747572817
+      },
+      {
+        "minimumIndependentGap": 0.5,
+        "n": 82,
+        "accuracy": 0.45121951219512196
+      }
+    ]
+  }
+}

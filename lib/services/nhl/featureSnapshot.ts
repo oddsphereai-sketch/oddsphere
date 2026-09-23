@@ -20,17 +20,36 @@
 
 import { supabase } from "../../db/supabase";
 import { isBlockedSportsbook } from "../../config/blockedSportsbooks";
-import type { NhlFeatureSnapshot, NhlModelTeam } from "../../automodel/nhlAutoModelV0";
+import type { NhlFeatureSnapshot, NhlModelTeam } from "../../automodel/nhlRegularModelV1";
+import type { BdlNhlTeamMetrics } from "../../providers/nhl/_ballDontLieNhlClient";
+import type { NhlCalibratedTeamState } from "../../automodel/nhlRegularPriors2026";
+export {
+  nhlGameTypeFromExternalId,
+  nhlSeasonStartYearFromExternalId,
+} from "./nhlScheduleIdentity";
+import {
+  nhlGameTypeFromExternalId,
+  nhlSeasonStartYearFromExternalId,
+} from "./nhlScheduleIdentity";
 import { fetchNhlScheduleForDate } from "../../providers/nhl/_nhlApiClient";
 
 export type BuildSnapshotOptions = {
   /** games.id (sport='nhl'). */
   gameId: number;
   /** MoneyPuck start-year (2025 for 2025-26 playoffs). */
-  season: number;
+  season?: number;
   /** Manual goalie overrides — player_external_id from nhl_goalie_stats. */
   homeGoalieExternalId?: number;
   awayGoalieExternalId?: number;
+  providerMetricsByTeam?: ReadonlyMap<string, BdlNhlTeamMetrics>;
+  providerFeatureSeason?: number | null;
+  calibratedStateByTeam?: ReadonlyMap<string, NhlCalibratedTeamState>;
+  marketEvidence?: {
+    mlHomeBetsPct?: number | null;
+    mlHomeMoneyPct?: number | null;
+    totalOverBetsPct?: number | null;
+    totalOverMoneyPct?: number | null;
+  };
   logger?: (msg: string) => void;
 };
 
@@ -85,23 +104,22 @@ type DbLineRow = {
  * Pick the team-stats row most representative of the team for the
  * model: prefer playoffs/all, fall back to regular/all.
  */
-function pickAllSituationStats(rows: DbTeamStatsRow[]): DbTeamStatsRow | null {
-  return (
-    rows.find((r) => r.season_type === "playoffs" && r.situation === "all") ??
-    rows.find((r) => r.season_type === "regular" && r.situation === "all") ??
-    null
-  );
-}
-
 function pickSituationStats(
   rows: DbTeamStatsRow[],
-  situation: "5on4" | "4on5",
+  situation: "all" | "5on4" | "4on5",
+  season: number,
+  gameType: 1 | 2 | 3,
 ): DbTeamStatsRow | null {
-  return (
-    rows.find((r) => r.season_type === "playoffs" && r.situation === situation) ??
-    rows.find((r) => r.season_type === "regular" && r.situation === situation) ??
-    null
-  );
+  const order = gameType === 3
+    ? [[season, "playoffs"], [season, "regular"], [season - 1, "regular"]] as const
+    : [[season, "regular"], [season - 1, "regular"]] as const;
+  for (const [candidateSeason, seasonType] of order) {
+    const found = rows.find((row) => (
+      row.season === candidateSeason && row.season_type === seasonType && row.situation === situation
+    ));
+    if (found) return found;
+  }
+  return null;
 }
 
 /**
@@ -122,15 +140,19 @@ function per60(value: number | null, iceTimeSeconds: number | null): number | nu
 function selectGoalieByDefault(
   rows: DbGoalieStatsRow[],
   teamAbbr: string,
+  season: number,
+  gameType: 1 | 2 | 3,
 ): DbGoalieStatsRow | null {
-  const playoffs = rows
-    .filter((r) => r.team_abbr === teamAbbr && r.season_type === "playoffs" && r.situation === "all")
-    .sort((a, b) => (b.games_played ?? 0) - (a.games_played ?? 0));
-  if (playoffs[0]) return playoffs[0];
-  const regular = rows
-    .filter((r) => r.team_abbr === teamAbbr && r.season_type === "regular" && r.situation === "all")
-    .sort((a, b) => (b.games_played ?? 0) - (a.games_played ?? 0));
-  return regular[0] ?? null;
+  const order = gameType === 3
+    ? [[season, "playoffs"], [season, "regular"], [season - 1, "regular"]] as const
+    : [[season, "regular"], [season - 1, "regular"]] as const;
+  for (const [candidateSeason, seasonType] of order) {
+    const candidates = rows
+      .filter((row) => row.team_abbr === teamAbbr && row.season === candidateSeason && row.season_type === seasonType && row.situation === "all")
+      .sort((a, b) => (b.games_played ?? 0) - (a.games_played ?? 0));
+    if (candidates[0]) return candidates[0];
+  }
+  return null;
 }
 
 function selectGoalieByOverride(
@@ -147,6 +169,11 @@ function goalieXgsaaPer60(g: DbGoalieStatsRow | null): number | null {
   if (g === null || g.x_goals === null || g.goals === null) return null;
   const saved = g.x_goals - g.goals; // positive = saved more than expected
   return per60(saved, g.ice_time);
+}
+
+function americanToImplied(american: number | null): number | null {
+  if (american === null || american === 0) return null;
+  return american > 0 ? 100 / (american + 100) : -american / (-american + 100);
 }
 
 function pickMlImpliedProbHome(lines: DbLineRow[]): { prob: number | null; bookCount: number } {
@@ -252,6 +279,9 @@ export async function buildNhlFeatureSnapshot(
   const teams = teamsData as DbTeamRow[];
   const homeTeam = teams.find((t) => t.id === game.home_team_id)!;
   const awayTeam = teams.find((t) => t.id === game.away_team_id)!;
+  const gameType = nhlGameTypeFromExternalId(game.external_id);
+  if (gameType === null) throw new Error(`game ${opts.gameId} has invalid NHL external_id ${game.external_id}`);
+  const featureSeason = opts.season ?? nhlSeasonStartYearFromExternalId(game.external_id);
   log(`Snapshot for game ${opts.gameId}: ${awayTeam.abbreviation} @ ${homeTeam.abbreviation}`);
 
   // 3. Team stats for both teams + the season.
@@ -259,30 +289,32 @@ export async function buildNhlFeatureSnapshot(
     .from("nhl_team_stats")
     .select("team_id, season, season_type, situation, games_played, ice_time, xgoals_pct, x_goals_for, x_goals_against")
     .in("team_id", [game.home_team_id, game.away_team_id])
-    .eq("season", opts.season);
+    .in("season", [featureSeason, featureSeason - 1]);
   if (teamStatsErr) throw new Error(`team stats lookup: ${teamStatsErr.message}`);
   const teamStats = (teamStatsData as DbTeamStatsRow[] | null) ?? [];
-  const homeStatsAll = pickAllSituationStats(teamStats.filter((r) => r.team_id === game.home_team_id));
-  const awayStatsAll = pickAllSituationStats(teamStats.filter((r) => r.team_id === game.away_team_id));
-  const homeStats5on4 = pickSituationStats(teamStats.filter((r) => r.team_id === game.home_team_id), "5on4");
-  const awayStats5on4 = pickSituationStats(teamStats.filter((r) => r.team_id === game.away_team_id), "5on4");
-  const homeStats4on5 = pickSituationStats(teamStats.filter((r) => r.team_id === game.home_team_id), "4on5");
-  const awayStats4on5 = pickSituationStats(teamStats.filter((r) => r.team_id === game.away_team_id), "4on5");
+  const homeTeamStats = teamStats.filter((r) => r.team_id === game.home_team_id);
+  const awayTeamStats = teamStats.filter((r) => r.team_id === game.away_team_id);
+  const homeStatsAll = pickSituationStats(homeTeamStats, "all", featureSeason, gameType);
+  const awayStatsAll = pickSituationStats(awayTeamStats, "all", featureSeason, gameType);
+  const homeStats5on4 = pickSituationStats(homeTeamStats, "5on4", featureSeason, gameType);
+  const awayStats5on4 = pickSituationStats(awayTeamStats, "5on4", featureSeason, gameType);
+  const homeStats4on5 = pickSituationStats(homeTeamStats, "4on5", featureSeason, gameType);
+  const awayStats4on5 = pickSituationStats(awayTeamStats, "4on5", featureSeason, gameType);
 
   // 4. Goalie stats — full table for the season. Filter team-side.
   const { data: goalieData, error: goalieErr } = await supabase
     .from("nhl_goalie_stats")
     .select("player_external_id, player_name, team_abbr, season, season_type, situation, games_played, ice_time, x_goals, goals")
-    .eq("season", opts.season);
+    .in("season", [featureSeason, featureSeason - 1]);
   if (goalieErr) throw new Error(`goalie stats lookup: ${goalieErr.message}`);
   const goalies = (goalieData as DbGoalieStatsRow[] | null) ?? [];
 
   const homeGoalie = opts.homeGoalieExternalId !== undefined
     ? selectGoalieByOverride(goalies, opts.homeGoalieExternalId)
-    : selectGoalieByDefault(goalies, homeTeam.abbreviation);
+    : selectGoalieByDefault(goalies, homeTeam.abbreviation, featureSeason, gameType);
   const awayGoalie = opts.awayGoalieExternalId !== undefined
     ? selectGoalieByOverride(goalies, opts.awayGoalieExternalId)
-    : selectGoalieByDefault(goalies, awayTeam.abbreviation);
+    : selectGoalieByDefault(goalies, awayTeam.abbreviation, featureSeason, gameType);
 
   if (homeGoalie) log(`  home goalie: ${homeGoalie.player_name} (id=${homeGoalie.player_external_id}, ${homeGoalie.season_type})`);
   else log(`  home goalie: <none found>`);
@@ -306,6 +338,33 @@ export async function buildNhlFeatureSnapshot(
   const marketTotalLine = selectMainNhlTotalLine(lines);
   log(`  market: ML home prob=${marketHomeProb?.toFixed(3) ?? "n/a"} (${bookCount} books), total line=${marketTotalLine?.toFixed(1) ?? "n/a"}`);
 
+  const { data: historyData } = await supabase
+    .from("line_history")
+    .select("market_type, sportsbook, side, line_value, odds_american, recorded_at")
+    .eq("game_id", opts.gameId)
+    .is("player_id", null)
+    .in("market_type", ["moneyline", "total"])
+    .order("recorded_at", { ascending: true });
+  const firstByBookMarketSide = new Map<string, DbLineRow>();
+  for (const raw of (historyData ?? []) as Array<{
+    market_type: string; sportsbook: string; side: string; line_value: number | null; odds_american: number | null;
+  }>) {
+    if (isBlockedSportsbook(raw.sportsbook)) continue;
+    const key = `${raw.market_type}:${raw.sportsbook}:${raw.side}`;
+    if (firstByBookMarketSide.has(key)) continue;
+    firstByBookMarketSide.set(key, {
+      market_type: raw.market_type,
+      sportsbook: raw.sportsbook,
+      side: raw.side,
+      line_value: raw.line_value,
+      odds_american: raw.odds_american,
+      implied_probability: americanToImplied(raw.odds_american),
+    });
+  }
+  const openingLines = [...firstByBookMarketSide.values()];
+  const marketOpenHomeProb = pickMlImpliedProbHome(openingLines).prob;
+  const marketOpenTotalLine = selectMainNhlTotalLine(openingLines);
+
   // 6. Series context — fetch fresh from NHL API at prediction time.
   // Cheap (~1 HTTP call per snapshot); always up-to-date (NHL API
   // updates wins immediately after each game).
@@ -314,26 +373,46 @@ export async function buildNhlFeatureSnapshot(
   let seriesAbbrev: string | null = null;
   let gameNumberInSeries = 0;
   let gamesToWin = 4;
-  try {
-    const scheduleEvents = await fetchNhlScheduleForDate(game.slate_date);
-    const apiEvent = scheduleEvents.find((e) => e.nhl_game_id === String(game.external_id));
-    const series = apiEvent?.series ?? null;
-    if (series && series.top_seed_abbrev && series.bottom_seed_abbrev) {
-      seriesAbbrev = series.series_abbrev || null;
-      gameNumberInSeries = series.game_number_in_series;
-      gamesToWin = series.games_to_win;
-      if (series.top_seed_abbrev === homeTeam.abbreviation) {
-        homeSeriesWins = series.top_seed_wins;
-        awaySeriesWins = series.bottom_seed_wins;
-      } else if (series.bottom_seed_abbrev === homeTeam.abbreviation) {
-        homeSeriesWins = series.bottom_seed_wins;
-        awaySeriesWins = series.top_seed_wins;
+  if (gameType === 3) {
+    try {
+      const scheduleEvents = await fetchNhlScheduleForDate(game.slate_date);
+      const apiEvent = scheduleEvents.find((e) => e.nhl_game_id === String(game.external_id));
+      const series = apiEvent?.series ?? null;
+      if (series && series.top_seed_abbrev && series.bottom_seed_abbrev) {
+        seriesAbbrev = series.series_abbrev || null;
+        gameNumberInSeries = series.game_number_in_series;
+        gamesToWin = series.games_to_win;
+        if (series.top_seed_abbrev === homeTeam.abbreviation) {
+          homeSeriesWins = series.top_seed_wins;
+          awaySeriesWins = series.bottom_seed_wins;
+        } else if (series.bottom_seed_abbrev === homeTeam.abbreviation) {
+          homeSeriesWins = series.bottom_seed_wins;
+          awaySeriesWins = series.top_seed_wins;
+        }
       }
+    } catch (e) {
+      log(`  ⚠ series context fetch failed (continuing without): ${(e as Error).message}`);
     }
-  } catch (e) {
-    log(`  ⚠ series context fetch failed (continuing without): ${(e as Error).message}`);
   }
   const isElim = (seriesAbbrev !== null) && (homeSeriesWins === gamesToWin - 1 || awaySeriesWins === gamesToWin - 1);
+
+  const { data: priorGamesData } = await supabase
+    .from("games")
+    .select("external_id, game_date, home_team_id, away_team_id")
+    .eq("sport", "nhl")
+    .lt("game_date", game.game_date)
+    .or(`home_team_id.in.(${game.home_team_id},${game.away_team_id}),away_team_id.in.(${game.home_team_id},${game.away_team_id})`)
+    .order("game_date", { ascending: false })
+    .limit(40);
+  const priorGames = ((priorGamesData ?? []) as Array<{
+    external_id: number; game_date: string; home_team_id: number | null; away_team_id: number | null;
+  }>).filter((row) => nhlGameTypeFromExternalId(row.external_id) === 2);
+  const restDays = (teamId: number): number | null => {
+    const prior = priorGames.find((row) => row.home_team_id === teamId || row.away_team_id === teamId);
+    if (!prior) return null;
+    const days = (Date.parse(game.game_date) - Date.parse(prior.game_date)) / 86_400_000;
+    return Number.isFinite(days) ? Math.max(0, Math.min(10, days)) : null;
+  };
 
   // 7. Build the model snapshot.
   const homeModel: NhlModelTeam = {
@@ -344,9 +423,11 @@ export async function buildNhlFeatureSnapshot(
     pp_xgoals_pct: homeStats5on4?.xgoals_pct ?? null,
     pk_xgoals_pct: homeStats4on5?.xgoals_pct ?? null,
     goalie_xgsaa_per_60: goalieXgsaaPer60(homeGoalie),
-    rest_days: null,            // not yet sourced; v0.5 will add via schedule lookback
+    rest_days: restDays(game.home_team_id),
     series_wins: homeSeriesWins,
     is_home: true,
+    provider_metrics: opts.providerMetricsByTeam?.get(homeTeam.abbreviation) ?? null,
+    calibrated_state: opts.calibratedStateByTeam?.get(homeTeam.abbreviation) ?? null,
   };
   const awayModel: NhlModelTeam = {
     abbreviation: awayTeam.abbreviation,
@@ -356,9 +437,11 @@ export async function buildNhlFeatureSnapshot(
     pp_xgoals_pct: awayStats5on4?.xgoals_pct ?? null,
     pk_xgoals_pct: awayStats4on5?.xgoals_pct ?? null,
     goalie_xgsaa_per_60: goalieXgsaaPer60(awayGoalie),
-    rest_days: null,
+    rest_days: restDays(game.away_team_id),
     series_wins: awaySeriesWins,
     is_home: false,
+    provider_metrics: opts.providerMetricsByTeam?.get(awayTeam.abbreviation) ?? null,
+    calibrated_state: opts.calibratedStateByTeam?.get(awayTeam.abbreviation) ?? null,
   };
 
   const snapshot: NhlFeatureSnapshot = {
@@ -366,14 +449,23 @@ export async function buildNhlFeatureSnapshot(
     away: awayModel,
     market: {
       market_home_prob: marketHomeProb,
+      market_open_home_prob: marketOpenHomeProb,
       market_total_line: marketTotalLine,
+      market_open_total_line: marketOpenTotalLine,
       market_book_count: bookCount,
+      ml_home_bets_pct: opts.marketEvidence?.mlHomeBetsPct ?? null,
+      ml_home_money_pct: opts.marketEvidence?.mlHomeMoneyPct ?? null,
+      total_over_bets_pct: opts.marketEvidence?.totalOverBetsPct ?? null,
+      total_over_money_pct: opts.marketEvidence?.totalOverMoneyPct ?? null,
     },
     series: {
       series_abbrev: seriesAbbrev,
       game_number_in_series: gameNumberInSeries,
       is_elimination_game: isElim,
     },
+    game_type: gameType,
+    feature_season: featureSeason,
+    provider_feature_season: opts.providerFeatureSeason ?? null,
   };
 
   return {

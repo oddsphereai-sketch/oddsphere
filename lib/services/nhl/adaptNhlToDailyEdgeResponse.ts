@@ -1,12 +1,11 @@
 /**
  * Phase 7L Phase 3 — NHL → DailyEdgeResponse adapter (admin-safe).
  *
- * Lean adapter for v0. Produces a structurally-valid DailyEdgeResponse
+ * Regular-season adapter. Produces a structurally-valid DailyEdgeResponse
  * so the existing DailyEdgeShell can render NHL games when sport='nhl',
- * but only fills the fields the v0 NHL pipeline actually has data for.
+ * and fills the regular-season model and market fields the NHL pipeline owns.
  * Mirrors the spirit of adaptNbaToDailyEdgeResponse.ts without copying
- * its 489 LOC — the NHL v0 has a simpler feature surface and we'll
- * polish field-by-field as we move toward member-facing launch.
+ * its 489 LOC while preserving the shared DTO contract.
  *
  * What we populate
  *   • Top-level: as_of, sport, date, requested_date, slate_status,
@@ -20,11 +19,10 @@
  *   • NRFI / first_inning markets — MLB-only concept, returned as no_play.
  *   • homeStarter / awayStarter — null (DailyEdgeShell already handles
  *     this via sport guards for non-MLB sports).
- *   • holdReason — null in v0 (no held markets).
+ *   • holdReason — null; price-incomplete markets fail closed as No Play.
  *
  * Admin-safe — this adapter only runs when sport='nhl' AND the route
- * caller is authenticated. SportRail still has NHL as live=false, so
- * member-facing access stays off until launch.
+ * caller is authenticated.
  */
 
 import type {
@@ -42,7 +40,7 @@ import type {
   NhlFeatureSnapshot,
   NhlModelOutput,
   NhlVerdictKey,
-} from "../../automodel/nhlAutoModelV0";
+} from "../../automodel/nhlRegularModelV1";
 import type { SharpNhlSplitsEvent } from "../../providers/nhl/_sharpApiNhlClient";
 import { americanToImplied } from "../../utils/odds";
 
@@ -219,7 +217,7 @@ function buildKeyStats(
 
 const NHL_LOGO_BASE = "https://a.espncdn.com/i/teamlogos/nhl/500";
 
-/** v0 verdict → MLB-style Verdict union. */
+/** NHL verdict → shared Daily Edge Verdict union. */
 function verdictKeyMap(v: NhlVerdictKey): Verdict {
   switch (v) {
     case "best_angle": return "best_angle";
@@ -246,6 +244,27 @@ function gradeFromVerdict(v: NhlVerdictKey): Grade | null {
     case "watchlist":  return "market_watch";
     case "pass":       return null;
   }
+}
+
+function sharpReadFromSplits(
+  model: NhlModelOutput,
+  splits: SharpNhlSplitsEvent | null,
+  homeAbbr: string,
+): { key: SharpReadKey; sentence: string } {
+  const bets = splits?.moneyline?.bets_pct?.home;
+  const money = splits?.moneyline?.handle_pct?.home;
+  if (bets === null || bets === undefined || money === null || money === undefined) {
+    return { key: "no_data", sentence: SHARP_READ_SENTENCES.no_data };
+  }
+  const homeSharpDifference = money - bets;
+  const pickedHome = model.moneyline.pick.startsWith(homeAbbr);
+  const selectedSideDifference = pickedHome ? homeSharpDifference : -homeSharpDifference;
+  const key: SharpReadKey = Math.abs(selectedSideDifference) < 0.05
+    ? "mixed"
+    : selectedSideDifference > 0
+      ? "support"
+      : "push_against";
+  return { key, sentence: SHARP_READ_SENTENCES[key] };
 }
 
 function timeShortEt(utcIso: string | null): string {
@@ -285,12 +304,14 @@ function logoFor(abbr: string): string {
 
 function buildPredictionDto(
   market: NhlModelOutput["moneyline"],
+  priceComplete = true,
 ): DailyEdgePredictionDto {
+  const verdict = priceComplete ? market.verdict : "pass";
   return {
     pick: market.pick,
     confidence: market.confidence,
     sharpStatus: "mixed",
-    grade: gradeFromVerdict(market.verdict),
+    grade: gradeFromVerdict(verdict),
     signalType: null,
     marketSignal: null,
   };
@@ -299,9 +320,10 @@ function buildPredictionDto(
 function buildTotalDto(
   market: NhlModelOutput["total"],
   marketLine: number | null,
+  priceComplete = true,
 ): DailyEdgeTotalPredictionDto {
   return {
-    ...buildPredictionDto(market),
+    ...buildPredictionDto(market, priceComplete && marketLine !== null),
     // 2026-06-14: the displayed line is the MARKET consensus line — the same
     // value the pick label "OVER {marketLine}" is built from. It used to be
     // set to the model's expected_total_goals (a 5.879-style projection),
@@ -321,8 +343,10 @@ function buildMarketEdge(opts: {
   keyStats: KeyStatRow[];
 }): MarketEdgeDto {
   const { market, slot, modelTotal, marketLine, bundle, publicSplits, keyStats } = opts;
-  const verdict = verdictKeyMap(market.verdict);
-  const held = market.verdict === "pass";
+  const priceComplete = bundle.priceAmerican !== null && (slot === "ml" || marketLine !== null);
+  const effectiveVerdict: NhlVerdictKey = priceComplete ? market.verdict : "pass";
+  const verdict = verdictKeyMap(effectiveVerdict);
+  const held = effectiveVerdict === "pass";
   // For Total, the model's `model_market_gap_pct` is in GOAL units
   // (model_total - market_line), not probability units. Mixing the
   // two would produce nonsense pp values and a wrong fairProb fallback.
@@ -343,7 +367,7 @@ function buildMarketEdge(opts: {
   return {
     pick: market.pick,
     confidence: market.confidence,
-    grade: gradeFromVerdict(market.verdict),
+    grade: gradeFromVerdict(effectiveVerdict),
     signalType: null,
     marketSignal: null,
     sharpStatus: "mixed",
@@ -401,7 +425,7 @@ export type NhlAdapterGameInput = {
   /** Final score; null pre-game. */
   homeScore: number | null;
   awayScore: number | null;
-  /** Per-game model output (already run via nhlAutoModelV0). */
+  /** Per-game regular-season model output. */
   model: NhlModelOutput;
   /** From featureSnapshot. */
   snapshot: NhlFeatureSnapshot;
@@ -414,8 +438,7 @@ export type NhlAdapterGameInput = {
   /** Market total line (median from lines). */
   marketTotalLine: number | null;
   /**
-   * Puck-line market line — typically ±1.5 in NHL. Display-only; the
-   * model always reads at the canonical 1.5 boundary regardless.
+   * Puck-line market line — typically ±1.5 in NHL.
    */
   puckLineMarketLine: number | null;
   /**
@@ -432,13 +455,13 @@ export type NhlAdapterGameInput = {
 
 export function adaptNhlGameToDto(input: NhlAdapterGameInput): DailyEdgeGameDto {
   const { model } = input;
-  const homeWinProjected = model.expected_goal_diff >= 0;
-  const halfGoals = Math.abs(model.expected_goal_diff) / 2;
-  const baseTotal = model.expected_total_goals / 2;
-  const projectedHome = Math.max(0, baseTotal + (homeWinProjected ? halfGoals : -halfGoals));
-  const projectedAway = Math.max(0, baseTotal + (homeWinProjected ? -halfGoals : halfGoals));
+  const projectedHome = model.projected_home_goals;
+  const projectedAway = model.projected_away_goals;
 
-  const verdict = verdictKeyMap(model.moneyline.verdict);
+  const headlineVerdict: NhlVerdictKey = input.mlBundle.priceAmerican !== null
+    ? model.moneyline.verdict
+    : "pass";
+  const verdict = verdictKeyMap(headlineVerdict);
   const lockState: "open" | "locking" | "locked" =
     input.lockedAt !== null
       ? "locked"
@@ -466,12 +489,10 @@ export function adaptNhlGameToDto(input: NhlAdapterGameInput): DailyEdgeGameDto 
     homeStarter: null,
     awayStarter: null,
     predictions: {
-      ml: buildPredictionDto(model.moneyline),
-      total: buildTotalDto(model.total, input.marketTotalLine),
-      // Puck-line read piggybacks the `nrfi` prediction slot the same
-      // way NBA's spread does. v0: display-only, NOT persisted to
-      // prediction_records and NOT graded.
-      nrfi: buildPredictionDto(model.puck_line),
+      ml: buildPredictionDto(model.moneyline, input.mlBundle.priceAmerican !== null),
+      total: buildTotalDto(model.total, input.marketTotalLine, input.totalBundle.priceAmerican !== null),
+      // Puck-line read piggybacks the shared third-market prediction slot.
+      nrfi: buildPredictionDto(model.puck_line, input.puckLineBundle.priceAmerican !== null && input.puckLineMarketLine !== null),
     },
     markets: (() => {
       const mlPickIsHome = model.moneyline.pick.startsWith(input.homeAbbr);
@@ -496,9 +517,7 @@ export function adaptNhlGameToDto(input: NhlAdapterGameInput): DailyEdgeGameDto 
           publicSplits: buildPublicSplits("total", false, totalPickIsOver, input.splits, input.homeAbbr, input.awayAbbr),
           keyStats: buildKeyStats("total", input.snapshot, model),
         }),
-        // first_inning slot carries the puck-line read for NHL
-        // (display-only; not written to prediction_records by the
-        // writer, not graded after final).
+        // first_inning slot carries the official puck-line read for NHL.
         first_inning: buildMarketEdge({
           market: model.puck_line,
           slot: "puckline",
@@ -515,13 +534,8 @@ export function adaptNhlGameToDto(input: NhlAdapterGameInput): DailyEdgeGameDto 
       away: Math.round(projectedAway * 10) / 10,
       home: Math.round(projectedHome * 10) / 10,
     },
-    // P0-4 2026-06-10: empty array is currently honest because the NHL
-    // pipeline does not yet populate sharp_signals rows for NHL games
-    // (per Phase 4 §D: SharpAPI NHL coverage gap during Finals — 0 rows
-    // observed for verified game.id=15204). Wiring an upstream fetch
-    // through buildNhlDailyEdgeAdapted is a P1 follow-up so that if
-    // signal data ever lands, the UI surfaces it instead of silently
-    // ignoring it. For now, [] reflects reality.
+    // Public money/ticket evidence is carried by each market's publicSplits;
+    // this legacy array remains reserved for sharp_signals table rows.
     sharpSignals: [],
     status: {
       lineupConfirmed: null,
@@ -541,19 +555,7 @@ export function adaptNhlGameToDto(input: NhlAdapterGameInput): DailyEdgeGameDto 
       : null,
     breakdown: {
       verdict: { key: verdict, label: verdictLabelFromKey(verdict) },
-      // P0-4 2026-06-10: previously hardcoded key="wait_no_edge_clean"
-      // (which is NOT a valid SharpReadKey — SHARP_READ_SENTENCES has no
-      // such entry; the cast was a phantom) and the sentence pulled from
-      // model.moneyline.notes[0] which implied a sharp read had been
-      // computed. Reality: NHL pipeline does not yet ingest sharp_signals
-      // (Phase 4 §D). The honest key when no signal data exists is
-      // "no_data" with the canonical sentence. When the upstream fetch
-      // lands (P1 follow-up), this should be replaced with a derived
-      // selectSharpReadKey(...) call using real signals.
-      sharpRead: {
-        key: "no_data" as SharpReadKey,
-        sentence: SHARP_READ_SENTENCES.no_data,
-      },
+      sharpRead: sharpReadFromSplits(model, input.splits, input.homeAbbr),
       modelBreakdown: [
         `${input.awayAbbr} @ ${input.homeAbbr} ${model.inputs_summary.series ? `(${model.inputs_summary.series})` : ""}.`,
         `Model expected goal diff (home - away): ${model.expected_goal_diff.toFixed(2)} from team xG, goalie, special teams, rest, home ice, and series layers.`,

@@ -45,6 +45,7 @@ import { ingestNbaFinalScores } from "./nba/nbaScoreIngestService";
 // firing. Member-facing NHL launch is gated separately via SportRail.
 import { writeNhlPredictionRecords } from "./nhl/buildNhlPredictionRecords";
 import { ingestNhlFinalScores } from "./nhl/nhlScoreIngestService";
+import { refreshNhlLines } from "./nhl/refreshNhlLinesService";
 import { ingestSoccerFinalScores } from "./soccer/soccerScoreIngestService";
 import { ingestEplFinalScores } from "./epl/eplScoreIngestService";
 import { ingestUclFinalScores } from "./ucl/uclScoreIngestService";
@@ -53,7 +54,7 @@ import { buildWnbaPredictionRecords } from "./wnba/buildWnbaPredictionRecords";
 import { ingestWnbaFinalScores } from "./wnba/ingestWnbaFinalScores";
 import { ingestNflFinalScores } from "./football/nflScoreIngestService";
 import { ingestCfbFinalScores } from "./football/cfbScoreIngestService";
-import { moneyPuckSeasonStartYear } from "../providers/nhl/_moneyPuckClient";
+import { currentSlateDate } from "../dates/slateDate";
 
 export type TrackingRefreshOptions = {
   /**
@@ -368,14 +369,24 @@ export async function runTrackingRefresh(
         // contract).
         const existing = await loadExistingRecordCounts(opts.supabase, sport, date);
         perDate.records_existed_before = existing.total;
+        if (date === currentSlateDate("nhl") && process.env.SHARPAPI_KEY) {
+          try {
+            const lineRefresh = await refreshNhlLines({
+              slateDate: date,
+              sharpApiKey: process.env.SHARPAPI_KEY,
+              dryRun: !opts.apply,
+            });
+            for (const error of lineRefresh.errors) perDate.errors.push(`nhl-lines: ${error}`);
+          } catch (error) {
+            perDate.errors.push(`nhl-lines exception: ${error instanceof Error ? error.message : String(error)}`);
+          }
+        }
         if (existing.launchDay > 0) {
           perDate.records_skipped_due_to_launch_day_preservation = true;
         } else {
           try {
-            const season = moneyPuckSeasonStartYear(new Date());
             const createRes = await writeNhlPredictionRecords({
               slateDate: date,
-              season,
               apply: opts.apply,
             });
             perDate.records_created = createRes.recordsCreated;

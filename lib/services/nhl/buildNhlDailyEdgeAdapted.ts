@@ -2,30 +2,41 @@
  * Phase 7L Phase 3 — NHL Daily Edge pipeline + adapter entry.
  *
  * Single entry point that the /api/lab/daily-edge route's NHL branch
- * calls. Reads all NHL data for the slate, runs the v0 model per game,
+ * calls. Reads all NHL data for the slate, runs the regular model per game,
  * and returns a DailyEdgeResponse-shaped object the shell can render.
  *
  * Read-only — no DB writes. Pure pipeline.
  */
 
 import { supabase } from "../../db/supabase";
-import { buildNhlFeatureSnapshot } from "./featureSnapshot";
-import { nhlAutoModelV0 } from "../../automodel/nhlAutoModelV0";
+import {
+  buildNhlFeatureSnapshot,
+  nhlGameTypeFromExternalId,
+  nhlSeasonStartYearFromExternalId,
+} from "./featureSnapshot";
+import {
+  NHL_REGULAR_MODEL_RELEASE,
+  nhlRegularModelV1,
+  type NhlFeatureSnapshot,
+  type NhlModelOutput,
+} from "../../automodel/nhlRegularModelV1";
 import {
   adaptNhlGameToDto,
   buildNhlDailyEdgeResponse,
   type NhlAdapterGameInput,
   type NhlPerMarketBest,
 } from "./adaptNhlToDailyEdgeResponse";
-import { moneyPuckSeasonStartYear } from "../../providers/nhl/_moneyPuckClient";
+import { fetchBdlNhlTeamMetricsWithPriorFallback } from "../../providers/nhl/_ballDontLieNhlClient";
 import {
-  fetchSharpNhlSplits,
   fetchSharpNhlOpportunities,
   type SharpNhlSplitsEvent,
   type SharpNhlOpportunity,
 } from "../../providers/nhl/_sharpApiNhlClient";
 import { normalizeNhlTeamName } from "../../providers/nhl/_teamNameNormalizer";
 import type { DailyEdgeResponse } from "../../../app/lab/lib/labTypes";
+import { resolvedNhlSplitsByGame } from "./nhlResolvedSplits";
+import { loadNhlRegularStateForSlate } from "./loadNhlRegularState";
+import { isBlockedSportsbook } from "../../config/blockedSportsbooks";
 
 /**
  * Bucket SharpAPI NHL opportunities by `"AWAY@HOME"` matchup key (normalized
@@ -89,55 +100,12 @@ function findOpportunityForPick(
  * single most-recent event row whose home/away teams normalize to our DB
  * abbreviations. Returns a map keyed by `"AWAY@HOME"`.
  */
-function reduceSplitsByMatchup(
-  events: SharpNhlSplitsEvent[],
-): Map<string, SharpNhlSplitsEvent> {
-  const byKey = new Map<string, SharpNhlSplitsEvent>();
-  for (const ev of events) {
-    if (!ev.home_team || !ev.away_team) continue;
-    const home = normalizeNhlTeamName(ev.home_team);
-    const away = normalizeNhlTeamName(ev.away_team);
-    if (!home || !away) continue;
-    const key = `${away}@${home}`;
-    const existing = byKey.get(key);
-    if (!existing) {
-      byKey.set(key, ev);
-      continue;
-    }
-    // Prefer the event row with more populated split fields. SharpAPI
-    // typically returns BOTH per-book events (bets_pct only) and a
-    // "consensus" event (bets_pct + handle_pct). Score both kinds of
-    // splits so the consensus event with handle data wins; an explicit
-    // "consensus" sportsbook tag also breaks ties in its favor.
-    const score = (e: SharpNhlSplitsEvent) =>
-      Number(e.moneyline?.bets_pct?.home !== undefined) +
-      Number(e.moneyline?.handle_pct?.home !== undefined) +
-      Number(e.total?.bets_pct?.over !== undefined) +
-      Number(e.total?.handle_pct?.over !== undefined) +
-      Number(e.spread?.bets_pct?.home !== undefined) +
-      Number(e.spread?.handle_pct?.home !== undefined) +
-      (e.sportsbook === "consensus" ? 1 : 0);
-    if (score(ev) > score(existing)) byKey.set(key, ev);
-  }
-  return byKey;
-}
-
 export async function buildNhlDailyEdgeAdapted(date: string): Promise<DailyEdgeResponse> {
-  const season = moneyPuckSeasonStartYear(new Date());
-
-  // Fetch SharpAPI public splits + cross-book EV opportunities for the
-  // slate once. Best-effort: a missing key or upstream error doesn't
-  // break the pipeline — the affected fields just come through as null.
-  let splitsByMatchup = new Map<string, SharpNhlSplitsEvent>();
+  // Fetch cross-book EV opportunities once. Public splits come from the
+  // persisted dual-provider resolver after the slate games are loaded.
   let oppsByMatchup = new Map<string, SharpNhlOpportunity[]>();
   const sharpKey = process.env.SHARPAPI_KEY;
   if (sharpKey) {
-    try {
-      const events = await fetchSharpNhlSplits(date, sharpKey);
-      splitsByMatchup = reduceSplitsByMatchup(events);
-    } catch (e) {
-      console.warn(`nhl daily-edge: splits fetch failed: ${(e as Error).message}`);
-    }
     try {
       const opps = await fetchSharpNhlOpportunities(date, sharpKey);
       oppsByMatchup = bucketOpportunitiesByMatchup(opps);
@@ -153,7 +121,7 @@ export async function buildNhlDailyEdgeAdapted(date: string): Promise<DailyEdgeR
     .eq("sport", "nhl")
     .eq("slate_date", date);
   if (gamesErr) throw new Error(`NHL games load: ${gamesErr.message}`);
-  const games = (gamesData ?? []) as Array<{
+  const games = ((gamesData ?? []) as Array<{
     id: number;
     external_id: number;
     home_team_id: number | null;
@@ -162,10 +130,17 @@ export async function buildNhlDailyEdgeAdapted(date: string): Promise<DailyEdgeR
     status: string;
     home_score: number | null;
     away_score: number | null;
-  }>;
+  }>).filter((game) => nhlGameTypeFromExternalId(game.external_id) === 2);
 
   if (games.length === 0) {
     return buildNhlDailyEdgeResponse({ date, requestedDate: date, games: [] });
+  }
+
+  let splitsByGame = new Map<number, SharpNhlSplitsEvent>();
+  try {
+    splitsByGame = await resolvedNhlSplitsByGame(supabase, date);
+  } catch (error) {
+    console.warn(`nhl daily-edge: persisted splits unavailable: ${(error as Error).message}`);
   }
 
   // Load teams for the games.
@@ -182,18 +157,58 @@ export async function buildNhlDailyEdgeAdapted(date: string): Promise<DailyEdgeR
     ((teamsData ?? []) as Array<{ id: number; abbreviation: string }>).map((t) => [t.id, t]),
   );
 
+  const featureSeason = nhlSeasonStartYearFromExternalId(games[0]!.external_id);
+  const calibratedStateByTeam = await loadNhlRegularStateForSlate(
+    supabase,
+    featureSeason,
+    games.reduce((earliest, game) => game.game_date < earliest ? game.game_date : earliest, games[0]!.game_date),
+  );
+  let providerMetricsByTeam: Awaited<ReturnType<typeof fetchBdlNhlTeamMetricsWithPriorFallback>>["metrics"] = new Map();
+  let providerFeatureSeason: number | null = null;
+  const bdlKey = process.env.BALLDONTLIE_API_KEY;
+  if (bdlKey) {
+    try {
+      const provider = await fetchBdlNhlTeamMetricsWithPriorFallback(featureSeason, bdlKey);
+      providerMetricsByTeam = provider.metrics;
+      providerFeatureSeason = provider.sourceSeason;
+    } catch (error) {
+      console.warn(`nhl daily-edge: BALLDONTLIE team metrics unavailable: ${(error as Error).message}`);
+    }
+  }
+
   // For lock state, look up any existing prediction_records.
   const { data: recordsData } = await supabase
     .from("prediction_records")
-    .select("game_id, locked_at")
+    .select("game_id, locked_at, model_version, snapshot_json")
     .eq("sport", "nhl")
+    .eq("model_version", NHL_REGULAR_MODEL_RELEASE)
     .in("game_id", games.map((g) => g.id));
   const lockedByGame = new Map<number, string | null>();
-  for (const r of ((recordsData ?? []) as Array<{ game_id: number; locked_at: string | null }>)) {
+  const lockedPayloadByGame = new Map<number, { model: NhlModelOutput; snapshot: NhlFeatureSnapshot }>();
+  for (const r of ((recordsData ?? []) as Array<{
+    game_id: number;
+    locked_at: string | null;
+    model_version: string;
+    snapshot_json: unknown;
+  }>)) {
     const existing = lockedByGame.get(r.game_id);
     // Prefer non-null locked_at over null when multiple rows exist for a game.
     if (existing === undefined || (existing === null && r.locked_at !== null)) {
       lockedByGame.set(r.game_id, r.locked_at);
+    }
+    if (r.locked_at === null || lockedPayloadByGame.has(r.game_id)) continue;
+    const payload = r.snapshot_json as {
+      model_output?: NhlModelOutput;
+      feature_inputs?: NhlFeatureSnapshot;
+    } | null;
+    if (
+      payload?.model_output?.model_version === NHL_REGULAR_MODEL_RELEASE
+      && payload.feature_inputs?.game_type === 2
+    ) {
+      lockedPayloadByGame.set(r.game_id, {
+        model: payload.model_output,
+        snapshot: payload.feature_inputs,
+      });
     }
   }
 
@@ -203,14 +218,27 @@ export async function buildNhlDailyEdgeAdapted(date: string): Promise<DailyEdgeR
     const homeAbbr = g.home_team_id !== null ? teamById.get(g.home_team_id)?.abbreviation ?? "?" : "?";
     const awayAbbr = g.away_team_id !== null ? teamById.get(g.away_team_id)?.abbreviation ?? "?" : "?";
     try {
-      const { snapshot } = await buildNhlFeatureSnapshot({ gameId: g.id, season });
-      const model = nhlAutoModelV0(snapshot);
+      const splitsEvent = splitsByGame.get(g.id) ?? null;
+      const built = await buildNhlFeatureSnapshot({
+        gameId: g.id,
+        providerMetricsByTeam,
+        providerFeatureSeason,
+        calibratedStateByTeam,
+        marketEvidence: {
+          mlHomeBetsPct: splitsEvent?.moneyline?.bets_pct?.home == null ? null : splitsEvent.moneyline.bets_pct.home * 100,
+          mlHomeMoneyPct: splitsEvent?.moneyline?.handle_pct?.home == null ? null : splitsEvent.moneyline.handle_pct.home * 100,
+          totalOverBetsPct: splitsEvent?.total?.bets_pct?.over == null ? null : splitsEvent.total.bets_pct.over * 100,
+          totalOverMoneyPct: splitsEvent?.total?.handle_pct?.over == null ? null : splitsEvent.total.handle_pct.over * 100,
+        },
+      });
+      const lockedPayload = lockedPayloadByGame.get(g.id);
+      const snapshot = lockedPayload?.snapshot ?? built.snapshot;
+      const model = lockedPayload?.model ?? nhlRegularModelV1(snapshot);
 
       // Pull lines once for ML + Total + Spread (NHL puck-line is
       // stored under market_type="spread" in our lines table, same
-      // convention as NBA). Puck-line is display-only here — the
-      // writer still ignores it; we fetch only to surface the real
-      // market line/price alongside the model's puck-line read.
+      // convention as NBA). Puck line is an official NHL market, so the
+      // real line and price must remain coherent with the tracked read.
       const { data: linesData } = await supabase
         .from("lines")
         .select("market_type, sportsbook, side, line_value, odds_american")
@@ -220,7 +248,7 @@ export async function buildNhlDailyEdgeAdapted(date: string): Promise<DailyEdgeR
       const lines = ((linesData ?? []) as Array<{
         market_type: string; sportsbook: string; side: string;
         line_value: number | null; odds_american: number | null;
-      }>);
+      }>).filter((line) => !isBlockedSportsbook(line.sportsbook));
 
       // Pull line_history once for the same game so we can surface the
       // first-observed price per (market, side) as "open" alongside
@@ -241,11 +269,9 @@ export async function buildNhlDailyEdgeAdapted(date: string): Promise<DailyEdgeR
 
       /**
        * Find the best-price (highest American odds) row for the picked
-       * side, with line-value sign filtering for spread markets so we
-       * never confuse VGK +1.5 (the natural underdog cover) with VGK
-       * -1.5 (the alt "wins by 2+" line) — both arrive tagged
-       * `side=home` from different books and must be filtered apart
-       * by line_value sign.
+       * side and exact displayed line. Exact line matching prevents a total
+       * or puck-line pick from borrowing a more attractive alternate-line
+       * price under the same side token.
        *
        * Boost / promotional-price filter: some books (e.g. fliff) ingest
        * with both their main line and a heavily-boosted promotional
@@ -256,23 +282,20 @@ export async function buildNhlDailyEdgeAdapted(date: string): Promise<DailyEdgeR
        * variance (typically < 20 pp) intact. With 1-2 candidates we
        * have no robust median, so we take what's available.
        *
-       * For ML: line_value is always null → no sign filter.
-       * For Total: line_value is the O/U number (5.5) → no sign filter.
-       * For Spread: line_value carries the signed spread; pickLineSign
-       *   ("+"|"-") selects the right side.
+       * For ML, line_value is not part of the identity. Totals and spreads
+       * must match `targetLine` exactly.
        */
       const BOOST_OUTLIER_THRESHOLD = 50; // American points
       function bestPriceFor(
         market: string,
         side: string,
-        pickLineSign: "+" | "-" | null,
+        targetLine: number | null,
       ): { price: number | null; book: string | null } {
         const candidates = lines.filter((l) => {
           if (l.market_type !== market || l.side !== side) return false;
           if (l.odds_american === null) return false;
-          if (market !== "spread") return true;
-          if (l.line_value === null) return false;
-          return pickLineSign === "+" ? l.line_value > 0 : l.line_value < 0;
+          if (market === "moneyline") return true;
+          return targetLine !== null && l.line_value !== null && Math.abs(l.line_value - targetLine) < 0.01;
         });
         if (candidates.length === 0) return { price: null, book: null };
 
@@ -303,23 +326,22 @@ export async function buildNhlDailyEdgeAdapted(date: string): Promise<DailyEdgeR
        * returns the first-observed price FROM THE SAME book that is
        * currently quoting the best price. If `targetBook` is null
        * (no current best), returns null. If that book has no history
-       * rows, also returns null. Spread markets get the same line-
-       * value sign filter as bestPriceFor.
+       * rows, also returns null. Totals and spreads use the same exact-line
+       * identity as bestPriceFor.
        */
       function openPriceForSameBook(
         market: string,
         side: string,
         targetBook: string | null,
-        pickLineSign: "+" | "-" | null,
+        targetLine: number | null,
       ): number | null {
         if (targetBook === null) return null;
         const row = history.find((h) => {
           if (h.market_type !== market || h.side !== side) return false;
           if (h.sportsbook !== targetBook) return false;
           if (h.odds_american === null) return false;
-          if (market !== "spread") return true;
-          if (h.line_value === null) return false;
-          return pickLineSign === "+" ? h.line_value > 0 : h.line_value < 0;
+          if (market === "moneyline") return true;
+          return targetLine !== null && h.line_value !== null && Math.abs(h.line_value - targetLine) < 0.01;
         });
         return row?.odds_american ?? null;
       }
@@ -328,39 +350,37 @@ export async function buildNhlDailyEdgeAdapted(date: string): Promise<DailyEdgeR
       const mlSide = mlPickIsHome ? "home" : "away";
       const mlBest = bestPriceFor("moneyline", mlSide, null);
 
+      const marketTotalLine = snapshot.market.market_total_line;
       const totalPickIsOver = model.total.pick.startsWith("OVER");
       const totalSide = totalPickIsOver ? "over" : "under";
-      const totalBest = bestPriceFor("total", totalSide, null);
+      const totalBest = bestPriceFor("total", totalSide, marketTotalLine);
       // 2026-06-14: the displayed market line MUST be the exact value the
-      // model's pick label was built from. nhlAutoModelV0 builds
+      // model's pick label was built from. nhlRegularModelV1 builds
       // "OVER {snap.market.market_total_line}" — so read the same field here
       // (single source of truth) instead of re-deriving from a separate lines
       // query. snapshot.market.market_total_line = selectMainNhlTotalLine
       // (consensus, blocked-book filtered). Old code took an arbitrary book's
       // first non-null row → card line disagreed with the pick label.
-      const marketTotalLine = snapshot.market.market_total_line;
-
       // Puck-line: stored under market_type="spread". The lines table
       // can carry BOTH the natural puck-line side and an alt-line
-      // side under the same `side` tag, distinguished only by the
-      // sign of `line_value`. Filter to the side our pick maps to.
+      // side under the same `side` tag. Filter to the exact signed line our
+      // pick maps to.
       //
       // Model pick string is "{ABBR} -1.5" (laying points) or
       // "{ABBR} +1.5" (taking points). The line_value sign on the
       // matching row will mirror this.
       const plPickIsHome = model.puck_line.pick.startsWith(homeAbbr);
       const plSide = plPickIsHome ? "home" : "away";
-      const plPickLineSign: "+" | "-" = model.puck_line.pick.includes("-1.5") ? "-" : "+";
+      const predictedPuckLine = model.puck_line.puck_line_value;
       const plLineEntries = lines.filter((l) =>
         l.market_type === "spread"
         && l.side === plSide
         && l.line_value !== null
-        && (plPickLineSign === "+" ? l.line_value > 0 : l.line_value < 0)
+        && Math.abs(l.line_value - predictedPuckLine) < 0.01
       );
-      const plBest = bestPriceFor("spread", plSide, plPickLineSign);
+      const plBest = bestPriceFor("spread", plSide, predictedPuckLine);
       const puckLineMarketLine = plLineEntries.find((l) => l.line_value !== null)?.line_value ?? null;
 
-      const splitsEvent = splitsByMatchup.get(`${awayAbbr}@${homeAbbr}`) ?? null;
       const oppsForGame = oppsByMatchup.get(`${awayAbbr}@${homeAbbr}`) ?? [];
 
       const mlOpp = findOpportunityForPick(oppsForGame, "ml", mlPickIsHome, false);
@@ -377,14 +397,14 @@ export async function buildNhlDailyEdgeAdapted(date: string): Promise<DailyEdgeR
       const totalBundle: NhlPerMarketBest = {
         priceAmerican: totalBest.price,
         sportsbook: totalBest.book,
-        openAmerican: openPriceForSameBook("total", totalSide, totalBest.book, null),
+        openAmerican: openPriceForSameBook("total", totalSide, totalBest.book, marketTotalLine),
         pinnacleEvPct: totalOpp?.ev_percentage ?? null,
         fairProbability: totalOpp?.fair_probability ?? null,
       };
       const puckLineBundle: NhlPerMarketBest = {
         priceAmerican: plBest.price,
         sportsbook: plBest.book,
-        openAmerican: openPriceForSameBook("spread", plSide, plBest.book, plPickLineSign),
+        openAmerican: openPriceForSameBook("spread", plSide, plBest.book, predictedPuckLine),
         pinnacleEvPct: puckLineOpp?.ev_percentage ?? null,
         fairProbability: puckLineOpp?.fair_probability ?? null,
       };

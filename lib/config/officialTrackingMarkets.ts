@@ -67,7 +67,7 @@ export const OFFICIAL_TRACKING_MARKETS: Readonly<
 > = {
   mlb: ["moneyline", "total", "first_inning"],
   nba: ["moneyline", "total"],
-  nhl: ["moneyline", "total"],
+  nhl: ["moneyline", "total", "spread"],
   // NFL launches forward-only with the 2026 regular season. Preseason is
   // excluded independently by the football tracking lifecycle and the
   // future-dated public tracking boundary.
@@ -112,7 +112,7 @@ export const CONTEXT_ONLY_DISPLAY_MARKETS: Readonly<
 > = {
   mlb: [],
   nba: ["spread"],
-  nhl: ["spread"], // NHL puck-line is stored under market_type="spread" in lines
+  nhl: [],
   nfl: [],
   cbb: [],
   cfb: [],

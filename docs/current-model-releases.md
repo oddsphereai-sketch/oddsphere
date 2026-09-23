@@ -1504,10 +1504,42 @@ The paired live-slate replay is recorded in
 
 - NBA refresh release: `nba_daily_refresh_schedule_2026_09_21_r1`
 - NBA schedule: `/api/cron/nba-daily-refresh` once daily at `30 13 * * *`, fail closed unless `NBA_CRON_ENABLED=true`
-- NHL refresh release: `nhl_daily_refresh_schedule_2026_09_21_r1`
+- NHL refresh release: `nhl_daily_refresh_schedule_2026_09_23_r2_regular_only`
 - NHL schedule: `/api/cron/nhl-daily-refresh` once daily at `45 13 * * *`, fail closed unless `NHL_CRON_ENABLED=true`
 
-The September 21 operational releases restore the two bounded daily schedules removed by the emergency cron pause. NBA and NHL are offseason on the release date: the verified current slate has zero games for each sport, so the routes exit after schedule discovery without requesting paid odds or writing predictions. The release changes no model coefficient, projection, probability, side, grade, stake, member copy, or board count. Existing route gates, writers, and leases remain authoritative. Evidence and rollback are recorded in `docs/model-audits/2026-09-21-nba-nhl-scheduled-refresh-recovery-predeclaration.md` and `docs/model-audits/2026-09-21-nba-nhl-scheduled-refresh-recovery-result.md`.
+The September 21 operational release restored the two bounded daily schedules removed by the emergency cron pause. NBA remains on that schedule contract. NHL's September 23 regular-season release supersedes only the NHL refresh identifier and retains the existing route gates and sport-scoped lease.
+
+## NHL regular-season champion (active from 2026-09-29)
+
+- Model: `nhl_regular_2026_r1`
+- Calibration: `nhl_regular_calibration_2026_r1`
+- Decision: `nhl_regular_decision_2026_r1`
+- Public tracking start: `2026-09-29`
+- Official markets: moneyline, total, spread (puck line)
+- Retired release: `nhl_v0_2026_finals`
+
+Only NHL game type `02` is eligible for the reader, writer, and public tracking.
+The September 22 game type `01` rows are preseason audit evidence and never enter
+member tracking. The independent runtime exactly replays the release-pure 2026
+opening priors and prior settled regular-season results, then applies the selected
+market weights to produce one coherent projected score. BallDontLie NHL is the
+cached current/prior stats provider; MoneyPuck remains the advanced prior context.
+
+Public money/ticket observations are stored separately by Playbook and SharpAPI.
+The product prefers the latest complete Playbook pair and silently falls back to
+the latest complete SharpAPI pair. Failed refreshes do not clear the previous
+complete observation and the member UI adds no freshness labels or copy. The
+bounded provisional split overlay is governed by the explicit NHL exception in
+`docs/model-change-safety.md` and must be evaluated prospectively by exact release
+and lock time.
+
+The release-pure untouched holdout was 57.14% moneyline (336), 53.62% total
+direction (207), and 67.86% puck line (336). The three-market candidate produced
+821 actionable holdout decisions and zero demotions from an active regular-season
+board because no prior regular-season board existed. Full design, source manifest,
+board impact, failure behavior, and rollback are recorded in
+`docs/model-audits/2026-09-23-nhl-regular-season-r1-predeclaration.md` and
+`docs/model-audits/2026-09-23-nhl-regular-season-r1-result.md`.
 
 ## WNBA champion
 

@@ -299,8 +299,9 @@ export async function refreshNhlLines(
     };
   }
 
-  // Apply: same delete-then-insert per (game_id, market_type, sportsbook)
-  // pattern the NBA service uses. Plus append-only line_history snapshot.
+  // Apply only changed book/market groups. Insert the replacement first and
+  // retire old row ids only after success, so a failed refresh cannot empty a
+  // card. Append line_history only for changed groups.
   log(`\nApplying ${payloads.length} rows…`);
   const groups = new Map<string, LinePayload[]>();
   for (const p of payloads) {
@@ -309,21 +310,35 @@ export async function refreshNhlLines(
     arr.push(p);
     groups.set(k, arr);
   }
+  const { data: currentRows, error: currentRowsError } = await supabase
+    .from("lines")
+    .select("id, game_id, market_type, sportsbook, side, line_value, odds_american")
+    .in("game_id", games.map((game) => game.id))
+    .is("player_id", null)
+    .in("market_type", ["moneyline", "total", "spread"]);
+  if (currentRowsError) throw new Error(`load current NHL lines for change detection: ${currentRowsError.message}`);
+  const currentByGroup = new Map<string, Array<{ id: number; side: string; line_value: number | null; odds_american: number | null }>>();
+  for (const row of currentRows ?? []) {
+    const key = `${row.game_id}|${row.market_type}|${row.sportsbook}`;
+    const list = currentByGroup.get(key) ?? [];
+    list.push({
+      id: Number(row.id),
+      side: String(row.side),
+      line_value: row.line_value as number | null,
+      odds_american: row.odds_american as number | null,
+    });
+    currentByGroup.set(key, list);
+  }
+  const rowSignature = (row: { side: string; line_value: number | null; odds_american: number | null }): string => (
+    `${row.side}|${row.line_value ?? "null"}|${row.odds_american ?? "null"}`
+  );
+  const groupSignature = (rows: Array<{ side: string; line_value: number | null; odds_american: number | null }>): string => (
+    rows.map(rowSignature).sort().join(";")
+  );
   let linesWritten = 0;
+  const changedPayloads: LinePayload[] = [];
   for (const [key, group] of groups) {
-    const [gameIdStr, market, book] = key.split("|");
-    const gameId = Number.parseInt(gameIdStr, 10);
-    const { error: delErr } = await supabase
-      .from("lines")
-      .delete()
-      .eq("game_id", gameId)
-      .eq("market_type", market)
-      .eq("sportsbook", book)
-      .is("player_id", null);
-    if (delErr) {
-      const msg = `  ✗ delete existing ${key}: ${delErr.message}`;
-      log(msg); errors.push(msg); continue;
-    }
+    if (groupSignature(group) === groupSignature(currentByGroup.get(key) ?? [])) continue;
     const { error: insErr } = await supabase.from("lines").insert(group);
     if (insErr) {
       const msg = `  ✗ insert ${key}: ${insErr.message}`;
@@ -332,10 +347,20 @@ export async function refreshNhlLines(
       continue;
     }
     linesWritten += group.length;
+    changedPayloads.push(...group);
+    const oldIds = (currentByGroup.get(key) ?? []).map((row) => row.id).filter(Number.isFinite);
+    if (oldIds.length > 0) {
+      const { error: delErr } = await supabase.from("lines").delete().in("id", oldIds);
+      if (delErr) {
+        const msg = `  ✗ retire previous ${key}: ${delErr.message}`;
+        log(msg);
+        errors.push(msg);
+      }
+    }
   }
 
   const nowIso = new Date().toISOString();
-  const historyRows: LineHistoryPayload[] = payloads.map((p) => ({
+  const historyRows: LineHistoryPayload[] = changedPayloads.map((p) => ({
     game_id: p.game_id,
     market_type: p.market_type,
     player_id: null,

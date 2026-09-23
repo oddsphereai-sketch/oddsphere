@@ -143,9 +143,12 @@ test("NBA tracked markets unchanged: moneyline, total", () => {
   assert(JSON.stringify(nba) === JSON.stringify(["moneyline", "total"]), `NBA drifted: ${nba.join(",")}`);
 });
 
-test("NHL tracked markets unchanged: moneyline, total", () => {
+test("NHL regular-season launch tracks moneyline, total, and puck line", () => {
   const nhl = [...OFFICIAL_TRACKING_MARKETS.nhl].sort();
-  assert(JSON.stringify(nhl) === JSON.stringify(["moneyline", "total"]), `NHL drifted: ${nhl.join(",")}`);
+  assert(
+    JSON.stringify(nhl) === JSON.stringify(["moneyline", "spread", "total"]),
+    `NHL drifted: ${nhl.join(",")}`,
+  );
 });
 
 test("UCL launches the shared four soccer markets while CBB remains empty", () => {

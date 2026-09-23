@@ -7,6 +7,8 @@ export type DailyEdgeSportDefinition = {
   inSeason?: boolean;
 };
 
+const NHL_2026_REGULAR_SEASON_START_MS = Date.parse("2026-09-29T04:00:00.000Z");
+
 /**
  * One presentation/readiness registry for every Daily Edge surface.
  * This controls navigation and honest availability labels only; it does not
@@ -19,7 +21,7 @@ export const DAILY_EDGE_SPORTS: readonly DailyEdgeSportDefinition[] = [
   { key: "nfl", label: "NFL", memberAvailable: true, inSeason: true },
   { key: "cfb", label: "CFB", memberAvailable: true, inSeason: true },
   { key: "nba", label: "NBA", memberAvailable: true, inSeason: false },
-  { key: "nhl", label: "NHL", memberAvailable: true, inSeason: false },
+  { key: "nhl", label: "NHL", memberAvailable: true, inSeason: Date.now() >= NHL_2026_REGULAR_SEASON_START_MS },
   { key: "cbb", label: "CBB", memberAvailable: false },
   { key: "ucl", label: "UCL", memberAvailable: false, inSeason: false },
 ] as const;
