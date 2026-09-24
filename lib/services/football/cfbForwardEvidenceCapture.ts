@@ -8,8 +8,8 @@ import type { CfbSharpApiSplitRecord } from "./cfbSharpApiSplits";
 import type { CfbV1ExactPriceDecision, CfbV1Forecast, CfbV1Market } from "./cfbV1Decision";
 
 export const CFB_FORWARD_CONTEXT_CAPTURE_RELEASE =
-  "cfb_daily_edge_forward_context_capture_2026_09_02_r1" as const;
-export const CFB_FORWARD_CONTEXT_CAPTURE_SCHEMA = "cfbfec1" as const;
+  "cfb_daily_edge_forward_context_capture_2026_09_24_r2_sharp_price_trail" as const;
+export const CFB_FORWARD_CONTEXT_CAPTURE_SCHEMA = "cfbfec2" as const;
 export const CFB_FORWARD_CONTEXT_CAPTURE_MAX_FAMILIES_PER_MARKET = 8 as const;
 export const CFB_FORWARD_CONTEXT_CAPTURE_MAX_PROVENANCE_RECORDS_PER_MARKET = 2 as const;
 export const CFB_FORWARD_CONTEXT_CAPTURE_MAX_MARKET_BYTES = 8 * 1024;
@@ -20,7 +20,7 @@ type Market = CfbV1Market;
 type CanonicalSide = "h" | "a" | "o" | "u";
 type Freshness = "f" | "s" | "x";
 type Provider = "b" | "s";
-type SourceClass = "c" | "n";
+type SourceClass = "c" | "p" | "b" | "n";
 
 /** [observedAt, ageMinutes, freshness, line, away/over price, home/under price]. */
 export type CfbForwardContextLandmark = readonly [string, number, Freshness, number | null, number, number];
@@ -117,6 +117,8 @@ export type CfbForwardContextCapture = {
 
 export function buildCfbForwardContextCapture(args: {
   payload: CfbForwardEvidencePayload;
+  /** Capture-only books; never used by the production decision path. */
+  captureCurrentBooks?: NcaafBookOdds[];
   independentForecast: CfbV1Forecast;
   independentRelease: string;
   authoritativeForecast: CfbV1Forecast;
@@ -129,7 +131,7 @@ export function buildCfbForwardContextCapture(args: {
       buildMarket({
         market,
         capturedAt: args.payload.capturedAt,
-        currentBooks: args.payload.market.currentBooks,
+        currentBooks: args.captureCurrentBooks ?? args.payload.market.currentBooks,
         openingBooks: args.openingBooks,
         operationalOpening: args.payload.market.operationalOpening?.quote ?? null,
         decision: decisions.get(market) ?? null,
@@ -214,7 +216,7 @@ function buildMarket(args: {
     return [
       family,
       providerCode(book),
-      family === "circa" ? "c" : "n",
+      sourceClass(family),
       null,
       landmark(openingByFamily.get(family) ?? null, args.market, args.capturedAt),
       landmark(book, args.market, args.capturedAt)!,
@@ -275,6 +277,13 @@ function compactForecast(forecast: CfbV1Forecast) {
     homeWin: forecast.homeWinProbability,
     interval80: forecast.interval80,
   };
+}
+
+function sourceClass(family: string): SourceClass {
+  if (family === "circa") return "c";
+  if (family === "pinnacle") return "p";
+  if (family === "bookmaker") return "b";
+  return "n";
 }
 
 function compactDecision(decision: CfbV1ExactPriceDecision | null, homeTeam: string) {
@@ -385,7 +394,7 @@ function uniqueFamilies(books: NcaafBookOdds[]) {
 
 function priority(book: NcaafBookOdds, evaluated: string) {
   const family = canonicalBook(book.sportsbook);
-  return family === evaluated ? 0 : family === "circa" ? 1 : 2;
+  return family === evaluated ? 0 : family === "circa" ? 1 : family === "pinnacle" ? 2 : family === "bookmaker" ? 3 : 4;
 }
 function sharpPriority(row: CfbSharpApiSplitRecord) { return row.sportsbook === "circa" ? 0 : 1; }
 function providerCode(book: NcaafBookOdds): Provider { return book.provider === "sharpapi" ? "s" : "b"; }

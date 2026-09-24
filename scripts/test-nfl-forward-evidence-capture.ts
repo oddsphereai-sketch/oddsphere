@@ -150,7 +150,13 @@ function payload(gameIndex = 0): NflForwardEvidencePayload {
 const base = payload();
 const before = JSON.stringify(base);
 const capture = buildNflForwardContextCapture({
-  payload: base, independentForecast: forecast, independentTargetFree: true,
+  payload: base,
+  captureCurrentBooks: [
+    { ...book("Circa", capturedAt, 1), provider: "sharpapi", providerEventId: "circa-event", targetEligible: false },
+    { ...book("Pinnacle", capturedAt, 2), provider: "sharpapi", providerEventId: "pinnacle-event", targetEligible: false },
+    ...base.market.comparableCurrentBooks.filter((row) => row.sportsbook !== "Circa"),
+  ],
+  independentForecast: forecast, independentTargetFree: true,
   independentRelease: "target-free-artifact", authoritativeForecast: forecast,
 });
 assert.ok(capture, "valid capture must be retained");
@@ -159,13 +165,19 @@ assert.deepEqual({ ...base, contextualEvidenceCapture: undefined }, { ...base, c
 assert.equal(capture.authoritative.decisions.find((row) => row.market === "moneyline")?.side, "h");
 assert.equal(capture.authoritative.decisions.find((row) => row.market === "spread")?.side, "a");
 assert.equal(capture.authoritative.decisions.find((row) => row.market === "total")?.side, "u");
+for (const market of Object.values(capture.markets)) {
+  assert.equal(market.families.find((family) => family[0] === "circa")?.[1], "s",
+    "capture-only Circa price provenance must remain SharpAPI");
+  assert.deepEqual(market.families.find((family) => family[0] === "pinnacle")?.slice(1, 3), ["s", "p"],
+    "Pinnacle must remain a distinct SharpAPI sharp-book family");
+}
 
 for (const market of Object.values(capture.markets)) {
-  assert.equal(market.coverage.completeObserved, sportsbooks.length);
+  assert.equal(market.coverage.completeObserved, sportsbooks.length + 1);
   assert.equal(market.coverage.completeRetained, NFL_FORWARD_CONTEXT_CAPTURE_MAX_FAMILIES_PER_MARKET);
-  assert.equal(market.coverage.completeOmitted, sportsbooks.length - NFL_FORWARD_CONTEXT_CAPTURE_MAX_FAMILIES_PER_MARKET);
+  assert.equal(market.coverage.completeOmitted, sportsbooks.length + 1 - NFL_FORWARD_CONTEXT_CAPTURE_MAX_FAMILIES_PER_MARKET);
   assert.equal(market.families.length, NFL_FORWARD_CONTEXT_CAPTURE_MAX_FAMILIES_PER_MARKET);
-  assert.equal(market.coverage.chronologyPairsRetained, NFL_FORWARD_CONTEXT_CAPTURE_MAX_FAMILIES_PER_MARKET);
+  assert.equal(market.coverage.chronologyPairsRetained, NFL_FORWARD_CONTEXT_CAPTURE_MAX_FAMILIES_PER_MARKET - 1);
   assert.ok(!market.targetExcludedFamilies.includes("fanduel"), "evaluated family must be target-excluded");
   assert.ok(market.public && market.sharp, "one authentic public and one authentic sharp record are retained");
   assert.ok(Number(Boolean(market.public)) + Number(Boolean(market.sharp)) <=
