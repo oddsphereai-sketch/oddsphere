@@ -47,12 +47,16 @@ Last reviewed: 2026-09-24
   and there is no per-game request loop. Writer / context-capture releases are
   `nfl_forward_evidence_writer_2026_09_24_r38_sharp_price_capture` /
   `nfl_daily_edge_forward_context_capture_2026_09_24_r2_sharp_price_trail` and
-  `cfb_forward_evidence_writer_2026_09_24_r68_sharp_price_capture` /
+  `cfb_forward_evidence_writer_2026_09_24_r69_sharp_price_release_seed` /
   `cfb_daily_edge_forward_context_capture_2026_09_24_r2_sharp_price_trail`.
   Promotions, demotions, side changes, and actionable-board impact are all
   0 / 0 / 0 / 0. Any later model weight requires release-pure settled forward
   validation and a separate versioned model release. Evidence and rollback:
   `docs/model-audits/2026-09-24-football-sharp-price-capture.md`.
+  CFB writer r69 additionally treats a missing or superseded contextual-capture
+  release on an upcoming game as a zero-cadence release refresh. This seeds the
+  capture after deployment instead of waiting up to the ordinary six-hour
+  far-slate cadence; once seeded, the established bounded cadence resumes.
 
 ## Cross-sport prediction-accuracy denominator contract (2026-09-04)
 
@@ -132,7 +136,7 @@ Last reviewed: 2026-09-24
   `cfb_forward_evidence_snapshot_2026_09_20_r26_reference_coverage_cursor` /
   `cfb_forward_evidence_collector_2026_09_20_r32_reference_coverage_cursor` /
   `cfb_v1_member_release_2026_09_20_r38_reference_coverage_cursor`. Sole writer / fixture / outcome are
-  `cfb_forward_evidence_writer_2026_09_24_r68_sharp_price_capture` /
+  `cfb_forward_evidence_writer_2026_09_24_r69_sharp_price_release_seed` /
   `cfb_v1_member_fixture_2026_09_20_r58_reference_coverage_cursor` /
   `cfb_market_sharp_public_outcome_contract_2026_09_20_r53_reference_coverage_cursor`; compact snapshot /
   reader are `cfb_forward_member_snapshot_2026_09_20_r17_reference_coverage_cursor` /
