@@ -736,8 +736,10 @@ export const MLB_ML_CONFIDENCE_VALUE_CONTEXT_LEAN_RULE_ID =
 export const MLB_ML_CONFIDENCE_VALUE_CONTEXT_MIN_MODEL_PROB = 0.60;
 export const MLB_ML_CONFIDENCE_VALUE_CONTEXT_MIN_OFFERED_EDGE_PP = -3;
 export const MLB_TOTAL_CONFIDENCE_VALUE_CONTEXT_LEAN_RULE_ID =
-  "mlb_total_confidence_value_context_lean_v1_2026_08_17";
-export const MLB_TOTAL_CONFIDENCE_VALUE_CONTEXT_MIN_MODEL_PROB = 0.55;
+  "mlb_total_confidence_value_context_lean_v2_midband_projection_gap_2026_09_24";
+export const MLB_TOTAL_CONFIDENCE_VALUE_CONTEXT_MIN_MODEL_PROB = 0.52;
+export const MLB_TOTAL_CONFIDENCE_VALUE_CONTEXT_MAX_MODEL_PROB_EXCLUSIVE = 0.55;
+export const MLB_TOTAL_CONFIDENCE_VALUE_CONTEXT_MIN_PROJECTION_GAP = 0.5;
 export const MLB_TOTAL_CONFIDENCE_VALUE_CONTEXT_MIN_OFFERED_EDGE_PP = -1;
 export const ML_NEUTRAL_CONSENSUS_MIN_ODDS = -200;
 export const ML_NEUTRAL_CONSENSUS_MAX_ODDS = 200;
@@ -2713,10 +2715,11 @@ export function resolveMlbTotalConfidenceValueContextLean(args: {
     (args.side === "over" || args.side === "under") &&
     args.modelProbability !== null &&
     args.modelProbability >= MLB_TOTAL_CONFIDENCE_VALUE_CONTEXT_MIN_MODEL_PROB &&
+    args.modelProbability < MLB_TOTAL_CONFIDENCE_VALUE_CONTEXT_MAX_MODEL_PROB_EXCLUSIVE &&
     priceEdgePp !== null &&
     priceEdgePp >= MLB_TOTAL_CONFIDENCE_VALUE_CONTEXT_MIN_OFFERED_EDGE_PP &&
     args.sameSideProjectionGap !== null &&
-    args.sameSideProjectionGap >= 0 &&
+    args.sameSideProjectionGap >= MLB_TOTAL_CONFIDENCE_VALUE_CONTEXT_MIN_PROJECTION_GAP &&
     args.lineDirection !== "against_pick" &&
     !args.publicSplitConflict;
   return {
@@ -5088,6 +5091,7 @@ function buildOuRecord(
   const ouConfidenceValueContextLean = resolveMlbTotalConfidenceValueContextLean({
     blocked:
       ouNoBet ||
+      !totalRegimeCalibrationApplied ||
       ouFlipped ||
       ouMarketFlipped ||
       ouMarketSideCorrected ||
@@ -5409,6 +5413,8 @@ function buildOuRecord(
             action: "promote_or_retain_as_lean",
             model_probability: finalOuModelProb,
             minimum_model_probability: MLB_TOTAL_CONFIDENCE_VALUE_CONTEXT_MIN_MODEL_PROB,
+            maximum_model_probability_exclusive:
+              MLB_TOTAL_CONFIDENCE_VALUE_CONTEXT_MAX_MODEL_PROB_EXCLUSIVE,
             odds_american: finalOuOdds,
             offered_price_edge_pp: ouConfidenceValueContextLean.offeredPriceEdgePp,
             minimum_offered_price_edge_pp:
@@ -5416,10 +5422,12 @@ function buildOuRecord(
             projected_total: ouScoreSum,
             line: finalOuBetLine,
             same_side_projection_gap: ouSameSideProjectionGap,
+            minimum_same_side_projection_gap:
+              MLB_TOTAL_CONFIDENCE_VALUE_CONTEXT_MIN_PROJECTION_GAP,
             line_direction: ouLineDirection,
             public_split_conflict: ouPublicSplitConflict,
             validation_note:
-              "Release-separated replay of unchanged MLB totals: the clean calibrated-probability, exact-price, projection, and market-context cohort went 48-32-2 overall, 25-21-1 in development, 9-4 in validation, and 14-7-1 in holdout. Incremental nonactions went 17-10. Adverse movement and public/sharp conflict remain blockers; the rule never changes the predicted side or creates a Best Angle.",
+              "Chronological reconstruction of the retained r88 probability head: the 52%-to-54.9% selected-probability cohort with at least a 0.5-run same-side projection gap went 35-30 in train, 29-23 in August validation, 11-9 in September 1-18 confirmation, and 5-1 on exact r88 rows from September 19-23. Exact-price edge, adverse movement, and public/sharp conflict remain gates; the rule never changes a side, score, or Best Angle.",
           }
         : null,
       total_lean_projection_gap_cap: ouThinProjectionLeanCap

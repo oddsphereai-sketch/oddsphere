@@ -4,7 +4,7 @@ This file is the human-readable production handoff registry. Runtime constants a
 prediction snapshots remain the machine authority. Future model work must start here, verify the
 constants, and preserve the precedence and writer ownership below.
 
-Last reviewed: 2026-09-21
+Last reviewed: 2026-09-24
 
 ## Cross-sport confidence / execution contract
 
@@ -501,16 +501,28 @@ changed; only deterministic settlement of existing locked rows is affected.
 
 - Projection runtime: resolved automodel `v2_2`
 - First-inning runtime: `fi_v2` with FI-scoped release `mlb_first_inning_release_2026_09_04_r85_independent_uncertainty` and probability head `mlb_first_inning_fi_v10_independent_uncertainty_target_excluded_2026_09_04`. r85 retains r84's pre-r61 65% independent / 35% target-excluded multi-book posterior and its 48%-52% corroborated uncertainty band. When the evaluated quote is the sole accepted pair, the forecast remains independent-only and now requires the independent probability to clear 55% NRFI or 55% YRFI; otherwise it is a genuine null-side Toss-Up. The evaluated quote remains exact-price economics only. Full-game tuples, probabilities, grades, the sole writer/lease, providers, query budgets, locks, tracking, and settlement are unchanged.
-- Public calibration: `mlb_public_calibration_v34_totals_regime_2026_09_19`
-- Decision release: `mlb_daily_edge_decision_2026_09_19_r88_totals_regime_calibration`
-- Rule bundle: `mlb_daily_edge_rule_bundle_v73_totals_regime_calibration_2026_09_19`
+- Public calibration: `mlb_public_calibration_v35_total_action_recalibration_2026_09_24`
+- Decision release: `mlb_daily_edge_decision_2026_09_24_r89_total_action_recalibration`
+- Rule bundle: `mlb_daily_edge_rule_bundle_v74_total_action_recalibration_2026_09_24`
 - Market input snapshot: `mlb_market_input_snapshot_v3_current_line_pagination_2026_09_08`
-- Grade policy: `mlb_public_grade_policy_v57_total_support_under_scope_2026_09_04`
+- Grade policy: `mlb_public_grade_policy_v58_total_action_recalibration_2026_09_24`
 - Correction policy: `mlb_prediction_corrections_v24_full_game_publication_coherence_2026_09_02`
 - Tracking contract: `member_facing_lock_v8_priority_retry_minute_cadence_2026_08_11`
 - Lock coherence: `mlb_lock_coherence_2026_09_02_r3_failed_economics_tuple`
 - Machine registry: `lib/automodel/mlbModelLayerVersions.ts`
 - Authoritative member-facing writer: `lib/services/predictionRecordService.ts`
+
+The September 24 r89 release retains the r88 Total probability head, every
+predicted side and score, and the full member presentation. It replaces only
+the failed additive Total Lean sleeve: the incumbent 55%+ selected-probability
+cohort is retired, while 52% inclusive through 55% exclusive may qualify only
+with at least a 0.5-run same-side projection gap. Exact-price edge, adverse
+movement, public/split conflict, completeness, provisional, and side-change
+gates are unchanged. Chronological reconstruction was 35-30 / 29-23 / 11-9 in
+train / August validation / September 1-18 confirmation; the release-separated
+r88 check was 5-1 versus 3-12 for the retired sleeve. No quota, stake, provider,
+cron, copy, label, or layout changed. Evidence and rollback are in
+`docs/model-audits/2026-09-24-mlb-total-action-recalibration-r89.md`.
 
 The September 19 r88 totals release changes only the full-game Total
 probability head. For each slate, the existing authoritative writer makes one
