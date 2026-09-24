@@ -15,7 +15,7 @@ The sole existing writers remain authoritative under the existing
 identifiers are:
 
 - `nfl_forward_evidence_writer_2026_09_24_r38_sharp_price_capture`
-- `cfb_forward_evidence_writer_2026_09_24_r68_sharp_price_capture`
+- `cfb_forward_evidence_writer_2026_09_24_r69_sharp_price_release_seed`
 
 The contextual capture identifiers are:
 
@@ -60,6 +60,12 @@ cross-game identity collision fails the optional evidence capture closed while
 the board continues. Failed-call telemetry conservatively counts the full
 twelve-page-per-book cap.
 No additional cron, writer, database table, or per-card request path is added.
+
+The CFB writer treats an upcoming row whose contextual-capture release is
+missing or superseded as a bounded zero-cadence release refresh. That makes a
+new capture schema seed immediately after deployment rather than waiting for
+the ordinary six-hour far-slate cadence. Once the current capture release is
+present, the existing six-hour/hourly/T-60 cadence resumes unchanged.
 
 The existing bounded contextual-capture family count is preserved, so capture
 storage remains capped. Sharp families are retained ahead of ordinary non-target

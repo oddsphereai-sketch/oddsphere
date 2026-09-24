@@ -71,7 +71,10 @@ import {
   assertFootballCrossMarketCoherence,
   CFB_PUBLIC_SCORE_DIRECTION_TOLERANCE_POINTS,
 } from "./footballCrossMarketCoherence";
-import { buildCfbForwardContextCapture } from "./cfbForwardEvidenceCapture";
+import {
+  buildCfbForwardContextCapture,
+  CFB_FORWARD_CONTEXT_CAPTURE_RELEASE,
+} from "./cfbForwardEvidenceCapture";
 import {
   captureBooksWithSharpBooks,
   fetchSharpApiNcaafSharpOdds,
@@ -85,7 +88,7 @@ import {
 } from "./cfbForwardMemberSnapshotStore";
 
 export const CFB_FORWARD_WRITER_RELEASE =
-  "cfb_forward_evidence_writer_2026_09_24_r68_sharp_price_capture" as const;
+  "cfb_forward_evidence_writer_2026_09_24_r69_sharp_price_release_seed" as const;
 export const CFB_FORWARD_MAX_QB_TEAMS_PER_RUN = 24 as const;
 export const CFB_FORWARD_MAX_SHARP_FALLBACK_GAMES_PER_RUN = 24 as const;
 export const CFB_FORWARD_MAX_ESPN_PROSPECTIVE_GAMES_PER_RUN = 32 as const;
@@ -204,7 +207,7 @@ export async function runCfbForwardEvidenceWriter(args: {
     const existing = allExisting.filter((row) => isGameInCfbWeeklyWindow({ scheduledStart: row.gameStartAt }, window));
     const lockPlanningExisting = cfbLockPlanningEvidence(existing);
     const ordinaryNeed = determineCfbForwardCollectionNeed({ existing: lockPlanningExisting, now: args.now });
-    const need = releaseRefreshNeed(existing, args.now) ?? ordinaryNeed;
+    const need = cfbForwardReleaseRefreshNeed(existing, args.now) ?? ordinaryNeed;
     return { window, existing, lockPlanningExisting, need };
   });
   const selected = selectCfbForwardCollectionWindow(states);
@@ -829,7 +832,7 @@ function latestQuarterbacksByTeam(rows: CfbForwardStoredEvidence[]): Map<number,
   return result;
 }
 
-function releaseRefreshNeed(rows: CfbForwardStoredEvidence[], now: string): { collect: true; reason: string; cadenceMinutes: number } | null {
+export function cfbForwardReleaseRefreshNeed(rows: CfbForwardStoredEvidence[], now: string): { collect: true; reason: string; cadenceMinutes: number } | null {
   const timestamp = Date.parse(now);
   const latest = new Map<string, CfbForwardStoredEvidence>();
   for (const row of rows) {
@@ -842,6 +845,7 @@ function releaseRefreshNeed(rows: CfbForwardStoredEvidence[], now: string): { co
       row.payload.memberRelease !== CFB_FORWARD_MEMBER_RELEASE ||
       row.payload.decisions.decisionRelease !== CFB_V1_DECISION_RELEASE ||
       row.payload.authoritativeForecast?.release !== CFB_MARKET_SHARP_AWARE_PRODUCTION_RELEASE ||
+      row.payload.contextualEvidenceCapture?.release !== CFB_FORWARD_CONTEXT_CAPTURE_RELEASE ||
       row.payload.decisions.evaluatedBets.length + row.payload.decisions.heldMarkets.length !== 3)
   );
   if (staleUpcoming) return { collect: true, reason: "release_refresh_due", cadenceMinutes: 0 };

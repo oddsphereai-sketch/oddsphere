@@ -50,6 +50,7 @@ import {
 import { normalizeCfbPlaybookLine, normalizeCfbPlaybookSplits } from "../lib/services/football/cfbPlaybookEvidence";
 import {
   buildCfbForwardPayloadsWithIsolation,
+  cfbForwardReleaseRefreshNeed,
   cfbReferenceCompletionNeeded,
   cfbMarketAnchorHealthHolds,
   cfbLockPlanningEvidence,
@@ -2005,6 +2006,24 @@ const farEvidence: CfbForwardStoredEvidence = {
   gameStartAt: farGame.scheduledStart,
   payload: { ...farEvidenceBase.payload, game: farGame },
 };
+assert.deepEqual(
+  cfbForwardReleaseRefreshNeed([farEvidence], "2026-08-28T20:00:00.000Z"),
+  { collect: true, reason: "release_refresh_due", cadenceMinutes: 0 },
+  "a newly deployed contextual capture release must seed immediately instead of waiting for the six-hour far-slate cadence",
+);
+const currentCaptureEvidence = structuredClone(farEvidence);
+currentCaptureEvidence.payload.contextualEvidenceCapture = buildCfbForwardContextCapture({
+  payload: currentCaptureEvidence.payload,
+  independentForecast: forecast,
+  independentRelease: CFB_V1_WEEKLY_RUNTIME_RELEASE,
+  authoritativeForecast,
+  openingBooks: [],
+})!;
+assert.equal(
+  cfbForwardReleaseRefreshNeed([currentCaptureEvidence], "2026-08-28T20:00:00.000Z"),
+  null,
+  "a current contextual capture must return to the ordinary bounded collection cadence",
+);
 const mixedCadencePlans = planCfbForwardEvidenceCaptures({
   games: [game, farGame],
   existing: [evidenceAt("opening", "2026-08-28T19:00:00.000Z"), farEvidence],
@@ -2193,7 +2212,8 @@ const sharpSplitsIndex = writerSource.indexOf("fetchCfbSharpApiSplits({ games, a
 const coherenceIndex = writerSource.indexOf("assertFootballCrossMarketCoherence({");
 const evidenceAppendIndex = writerSource.lastIndexOf("appendCfbForwardEvidence(");
 assert.ok(quarterbackCollectionIndex >= 0 && evidenceAppendIndex > quarterbackCollectionIndex, "the writer must finish bounded QB collection before its sole evidence append");
-assert.match(writerSource, /const need = releaseRefreshNeed\(existing, args\.now\) \?\? ordinaryNeed;/, "an incomplete current release must take planning priority over ordinary cadence and T-60 reasons");
+assert.match(writerSource, /const need = cfbForwardReleaseRefreshNeed\(existing, args\.now\) \?\? ordinaryNeed;/, "an incomplete current release must take planning priority over ordinary cadence and T-60 reasons");
+assert.match(writerSource, /contextualEvidenceCapture\?\.release !== CFB_FORWARD_CONTEXT_CAPTURE_RELEASE/, "a new evidence-only capture release must seed without waiting for ordinary far-slate cadence");
 assert.ok(sharpFallbackIndex >= 0 && evidenceAppendIndex > sharpFallbackIndex, "the writer must finish bounded SharpAPI exact-event fallback before its sole evidence append");
 const fallbackSelection = selectCfbSharpFallbackGames({
   games: Array.from({ length: 30 }, (_, index) => ({
