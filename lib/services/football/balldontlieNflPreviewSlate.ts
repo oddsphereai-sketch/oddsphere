@@ -36,6 +36,14 @@ export type NflPreviewBookOdds = {
   providerGameId: string;
   sportsbook: string;
   observedAt: string;
+  /** Price-feed provenance. Older immutable rows omit this and are BALLDONTLIE by contract. */
+  provider?: "balldontlie" | "sharpapi";
+  /** Exact upstream event identity when a secondary named-book feed is used. */
+  providerEventId?: string;
+  /** Capture-only named books are never eligible as the evaluated member quote. */
+  targetEligible?: boolean;
+  marketSelection?: Partial<Record<"moneyline" | "spread" | "total", "main_line" | "coherent_paired_alternate">>;
+  marketObservedAt?: Partial<Record<"moneyline" | "spread" | "total", string>>;
   moneyline: {
     awayPrice: number;
     homePrice: number;

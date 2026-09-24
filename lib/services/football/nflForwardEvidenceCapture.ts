@@ -6,8 +6,8 @@ import type { NflRegularSharpSplit } from "./sharpApiNflSplits";
 import type { NflV1WeekOneOutcomeForecast } from "./nflV1WeekOneOutcome";
 
 export const NFL_FORWARD_CONTEXT_CAPTURE_RELEASE =
-  "nfl_daily_edge_forward_context_capture_2026_09_02_r1" as const;
-export const NFL_FORWARD_CONTEXT_CAPTURE_SCHEMA = "nflfec1" as const;
+  "nfl_daily_edge_forward_context_capture_2026_09_24_r2_sharp_price_trail" as const;
+export const NFL_FORWARD_CONTEXT_CAPTURE_SCHEMA = "nflfec2" as const;
 export const NFL_FORWARD_CONTEXT_CAPTURE_MAX_FAMILIES_PER_MARKET = 8 as const;
 export const NFL_FORWARD_CONTEXT_CAPTURE_MAX_PROVENANCE_RECORDS_PER_MARKET = 2 as const;
 export const NFL_FORWARD_CONTEXT_CAPTURE_MAX_MARKET_BYTES = 8 * 1024;
@@ -17,8 +17,8 @@ export const NFL_FORWARD_CONTEXT_CAPTURE_FRESH_MINUTES = 120 as const;
 type Market = NflRegularDecisionMarket;
 type CanonicalSide = "h" | "a" | "o" | "u";
 type Freshness = "f" | "s" | "x";
-type Provider = "b";
-type SourceClass = "c" | "n";
+type Provider = "b" | "s";
+type SourceClass = "c" | "p" | "b" | "n";
 
 /** [observedAt, ageMinutes, freshness, line, away/over price, home/under price]. */
 export type NflForwardContextLandmark = readonly [string, number, Freshness, number | null, number, number];
@@ -114,6 +114,8 @@ export type NflForwardContextCapture = {
 
 export function buildNflForwardContextCapture(args: {
   payload: NflForwardEvidencePayload;
+  /** Capture-only books; never used by the production decision path. */
+  captureCurrentBooks?: NflPreviewBookOdds[];
   independentForecast: NflV1WeekOneOutcomeForecast;
   independentTargetFree: boolean;
   independentRelease: string;
@@ -126,7 +128,7 @@ export function buildNflForwardContextCapture(args: {
       buildMarket({
         market,
         capturedAt: args.payload.capturedAt,
-        currentBooks: args.payload.market.comparableCurrentBooks,
+        currentBooks: args.captureCurrentBooks ?? args.payload.market.comparableCurrentBooks,
         openingBooks: args.payload.market.comparableProviderOpeningBooks,
         operationalOpening: args.payload.market.operationalOpening.quote,
         decision: decisions.get(market) ?? null,
@@ -212,8 +214,8 @@ function buildMarket(args: {
     const family = canonicalBook(book.sportsbook);
     return [
       family,
-      "b",
-      family === "circa" ? "c" : "n",
+      book.provider === "sharpapi" ? "s" : "b",
+      sourceClass(family),
       null,
       landmark(openingByFamily.get(family) ?? null, args.market, args.capturedAt),
       landmark(book, args.market, args.capturedAt)!,
@@ -272,6 +274,13 @@ function compactForecast(forecast: NflV1WeekOneOutcomeForecast) {
     representative: [forecast.representativeAwayScore, forecast.representativeHomeScore] as const,
     win: [forecast.awayWinProbability, forecast.homeWinProbability, forecast.tieProbability] as const,
   };
+}
+
+function sourceClass(family: string): SourceClass {
+  if (family === "circa") return "c";
+  if (family === "pinnacle") return "p";
+  if (family === "bookmaker") return "b";
+  return "n";
 }
 
 function distributionSummary(distribution: { values: number[]; probabilities: number[] }) {
@@ -377,7 +386,7 @@ function uniqueFamilies(books: NflPreviewBookOdds[]) {
 
 function priority(book: NflPreviewBookOdds, evaluated: string) {
   const family = canonicalBook(book.sportsbook);
-  return family === evaluated ? 0 : family === "circa" ? 1 : 2;
+  return family === evaluated ? 0 : family === "circa" ? 1 : family === "pinnacle" ? 2 : family === "bookmaker" ? 3 : 4;
 }
 
 function sideCode(side: string, market: Market, homeTeam: string): CanonicalSide {

@@ -54,6 +54,12 @@ import {
   resolveNflTargetExcludedProduction,
 } from "./nflTargetExcludedMarketOutcome";
 import { buildNflForwardContextCapture } from "./nflForwardEvidenceCapture";
+import {
+  captureBooksWithSharpBooks,
+  fetchSharpApiNflSharpOdds,
+  FOOTBALL_SHARP_PRICE_CAPTURE_BOOKS,
+  FOOTBALL_SHARP_PRICE_CAPTURE_MAX_PAGES_PER_BOOK,
+} from "./sharpApiFootballSharpOdds";
 import { nflForwardT60TrackingEligibility } from "./nflTrackingLifecycle";
 import {
   buildNflOfficialTrackingRecords,
@@ -68,7 +74,7 @@ import {
 } from "./nflForwardMemberSnapshotStore";
 
 export const NFL_FORWARD_WRITER_RELEASE =
-  "nfl_forward_evidence_writer_2026_09_22_r37_nonpush_side_alignment" as const;
+  "nfl_forward_evidence_writer_2026_09_24_r38_sharp_price_capture" as const;
 
 export type NflForwardWriterResult = {
   writerRelease: typeof NFL_FORWARD_WRITER_RELEASE;
@@ -188,7 +194,7 @@ export async function runNflForwardEvidenceWriter(args: {
     .filter((team, index, rows) => criticalTeamIds.has(team.id) && rows.findIndex((row) => row.id === team.id) === index);
 
   const playbook = new PlaybookClient(args.playbookApiKey);
-  const [rosters, availability, linesResult, splitsResult, sharpResult] = await Promise.all([
+  const [rosters, availability, linesResult, splitsResult, sharpResult, circaAttempt] = await Promise.all([
     fetchBalldontlieNflTeamDepthSnapshots({
       teams: criticalTeams,
       season: args.season,
@@ -211,6 +217,15 @@ export async function runNflForwardEvidenceWriter(args: {
         rows: 0,
         dates: [],
       })),
+    fetchSharpApiNflSharpOdds({
+      apiKey: args.sharpApiKey,
+      games: uniquePlannedGames(plans.map((plan) => plan.game)),
+    })
+      .then((result) => ({ result, requests: result.requests }))
+      .catch(() => ({
+        result: null,
+        requests: FOOTBALL_SHARP_PRICE_CAPTURE_BOOKS.length * FOOTBALL_SHARP_PRICE_CAPTURE_MAX_PAGES_PER_BOOK,
+      })),
   ]);
 
   const availabilityByGame = new Map((availability ?? []).map((row) => [row.eventId, row]));
@@ -229,7 +244,7 @@ export async function runNflForwardEvidenceWriter(args: {
     }));
   }
   const weatherRequests = [...weatherByGame.values()].reduce((sum, value) => sum + value.requests, 0);
-  const apiCallsMaximum = slate.providerRequests + rosters.requests + NFL_INJURY_MAX_PAGES + 2 + sharpResult.requests + weatherRequests;
+  const apiCallsMaximum = slate.providerRequests + rosters.requests + NFL_INJURY_MAX_PAGES + 2 + sharpResult.requests + circaAttempt.requests + weatherRequests;
 
   const payloadBuildHolds: string[] = [];
   const payloads = plans.flatMap((plan): NflForwardEvidencePayload[] => {
@@ -422,13 +437,18 @@ export async function runNflForwardEvidenceWriter(args: {
       },
       requestBudget: {
         balldontlieSlate: slate.providerRequests, balldontlieRoster: rosters.requests,
-        balldontlieInjuriesMaximum: NFL_INJURY_MAX_PAGES, playbook: 2, sharpApi: sharpResult.requests,
+        balldontlieInjuriesMaximum: NFL_INJURY_MAX_PAGES, playbook: 2,
+        sharpApi: sharpResult.requests + circaAttempt.requests,
         weather: weatherRequests, totalMaximum: apiCallsMaximum,
       },
     };
     const hasTargetFreePrior = hasNflV1WeekOneOutcomeForecast(plan.game.providerGameId);
     const contextualEvidenceCapture = buildNflForwardContextCapture({
       payload,
+      captureCurrentBooks: captureBooksWithSharpBooks(
+        payload.market.comparableCurrentBooks,
+        circaAttempt.result?.booksByGame[plan.game.providerGameId] ?? [],
+      ),
       independentForecast: baseOutcome,
       independentTargetFree: hasTargetFreePrior,
       independentRelease: hasTargetFreePrior

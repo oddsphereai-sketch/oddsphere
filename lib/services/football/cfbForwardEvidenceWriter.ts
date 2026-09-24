@@ -72,6 +72,12 @@ import {
   CFB_PUBLIC_SCORE_DIRECTION_TOLERANCE_POINTS,
 } from "./footballCrossMarketCoherence";
 import { buildCfbForwardContextCapture } from "./cfbForwardEvidenceCapture";
+import {
+  captureBooksWithSharpBooks,
+  fetchSharpApiNcaafSharpOdds,
+  FOOTBALL_SHARP_PRICE_CAPTURE_BOOKS,
+  FOOTBALL_SHARP_PRICE_CAPTURE_MAX_PAGES_PER_BOOK,
+} from "./sharpApiFootballSharpOdds";
 import { buildCfbMemberFixture } from "./cfbMemberFixture";
 import {
   buildCfbForwardMemberSnapshot,
@@ -79,7 +85,7 @@ import {
 } from "./cfbForwardMemberSnapshotStore";
 
 export const CFB_FORWARD_WRITER_RELEASE =
-  "cfb_forward_evidence_writer_2026_09_20_r67_reference_coverage_cursor" as const;
+  "cfb_forward_evidence_writer_2026_09_24_r68_sharp_price_capture" as const;
 export const CFB_FORWARD_MAX_QB_TEAMS_PER_RUN = 24 as const;
 export const CFB_FORWARD_MAX_SHARP_FALLBACK_GAMES_PER_RUN = 24 as const;
 export const CFB_FORWARD_MAX_ESPN_PROSPECTIVE_GAMES_PER_RUN = 32 as const;
@@ -254,7 +260,7 @@ export async function runCfbForwardEvidenceWriter(args: {
     maximum: CFB_FORWARD_MAX_SHARP_FALLBACK_GAMES_PER_RUN,
   });
   const sharpFallbackGameIds = new Set(sharpFallbackGames.map((game) => game.providerGameId));
-  const [linesResult, splitsResult, venueWeatherAttempt, quarterbacks, sharpFallbackAttempt, sharpSplitsAttempt] = await Promise.all([
+  const [linesResult, splitsResult, venueWeatherAttempt, quarterbacks, sharpFallbackAttempt, sharpSplitsAttempt, circaAttempt] = await Promise.all([
     playbook.lines("ncaaf"),
     playbook.splits("ncaaf"),
     playbook.venueWeather("ncaaf")
@@ -265,6 +271,12 @@ export async function runCfbForwardEvidenceWriter(args: {
     fetchCfbSharpApiSplits({ games, apiKey: args.sharpApiKey })
       .then((result) => ({ result, error: null }))
       .catch((error: unknown) => ({ result: null, error: splitRequestError(error) })),
+    fetchSharpApiNcaafSharpOdds({ games: plannedGames, apiKey: args.sharpApiKey })
+      .then((result) => ({ result, requests: result.requests }))
+      .catch(() => ({
+        result: null,
+        requests: FOOTBALL_SHARP_PRICE_CAPTURE_BOOKS.length * FOOTBALL_SHARP_PRICE_CAPTURE_MAX_PAGES_PER_BOOK,
+      })),
   ]);
   const sharpFallback = sharpFallbackAttempt.result;
   const quarterbackContext = new Map([...priorQuarterbacks, ...quarterbacks.byTeamId]);
@@ -547,14 +559,18 @@ export async function runCfbForwardEvidenceWriter(args: {
         balldontlieQuarterbacks: quarterbacks.providerRequests,
         playbook: 3,
         espnReference: espnReferenceAttempt.result.requests,
-        sharpApiOdds: sharpFallback.requests,
+        sharpApiOdds: sharpFallback.requests + circaAttempt.requests,
         sharpApiSplits: 1,
         weather: weatherRequests,
-        totalMaximum: slate.providerRequests + priorResults.providerRequests + quarterbacks.providerRequests + sharpFallback.requests + weatherRequests + espnReferenceAttempt.result.requests + 4,
+        totalMaximum: slate.providerRequests + priorResults.providerRequests + quarterbacks.providerRequests + sharpFallback.requests + circaAttempt.requests + weatherRequests + espnReferenceAttempt.result.requests + 4,
       },
     };
     const contextualEvidenceCapture = buildCfbForwardContextCapture({
       payload,
+      captureCurrentBooks: captureBooksWithSharpBooks(
+        payload.market.currentBooks,
+        circaAttempt.result?.booksByGame[plan.game.providerGameId] ?? [],
+      ),
       independentForecast: weeklyForecast.forecast,
       independentRelease: CFB_V1_WEEKLY_RUNTIME_RELEASE,
       authoritativeForecast: forecast,

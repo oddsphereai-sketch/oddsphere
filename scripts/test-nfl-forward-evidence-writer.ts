@@ -288,7 +288,7 @@ assert.match(writer, /currentBooks/);
 assert.match(writer, /comparableCurrentBooks/);
 assert.match(writer, /multibook_consensus_unavailable/);
 assert.doesNotMatch(writer, /readLegacyNflForwardEvidence|readPriorNflForwardEvidence|readPreviousNflForwardEvidence/, "the live writer must not scan superseded large JSON releases");
-assert.match(writer, /nfl_forward_evidence_writer_2026_09_22_r37_nonpush_side_alignment/);
+assert.match(writer, /nfl_forward_evidence_writer_2026_09_24_r38_sharp_price_capture/);
 assert.match(writer, /NFL_INJURY_MAX_PAGES/);
 assert.match(writer, /publicScoreDirectionTolerancePoints: NFL_PUBLIC_SCORE_DIRECTION_TOLERANCE_POINTS/);
 assert.match(writer, /decisionSideProbabilityConvention: "exclude_push"/);
