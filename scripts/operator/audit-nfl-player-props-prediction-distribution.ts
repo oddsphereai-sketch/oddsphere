@@ -13,7 +13,7 @@ import {
   type NflPlayerPropsRuntimeDecision,
 } from "../../lib/services/football/nflPlayerPropsRuntime";
 import {
-  selectNflPlayerPropsOverForecasts,
+  selectNflPlayerPropsRankedOverForecasts,
   selectNflPlayerPropsTouchdownScorers,
   nflPlayerPropsOverUnderMarketKey,
   nflPlayerPropsTouchdownPlayerKey,
@@ -215,7 +215,7 @@ function groupPredictions(rows: NflPlayerPropsRuntimeDecision[]): NflPlayerProps
 }
 
 function summarizeMarkets(rows: NflPlayerPropsRuntimeDecision[], grouped: NflPlayerPropsRuntimeDecision[][]) {
-  const rankedOvers = selectNflPlayerPropsOverForecasts(rows);
+  const rankedOvers = selectNflPlayerPropsRankedOverForecasts(rows);
   return Object.fromEntries([...new Set(rows.map((row) => row.market))].sort().map((market) => {
     const marketRows = rows.filter((row) => row.market === market);
     const pairs = grouped.filter((values) => values[0]?.market === market);
@@ -558,7 +558,7 @@ function summarizeRankedActionability(
   rows: NflPlayerPropsRuntimeDecision[],
   stats: Map<string, Map<string, Stat>>,
 ) {
-  const overForecasts = selectNflPlayerPropsOverForecasts(rows);
+  const overForecasts = selectNflPlayerPropsRankedOverForecasts(rows);
   const baseline = rows.filter((row) => row.grade === "Best Angle" || row.grade === "Lean");
   const candidateGrades = new Map<NflPlayerPropsRuntimeDecision, NflPlayerPropsRuntimeDecision["grade"]>();
   for (const row of rows) {

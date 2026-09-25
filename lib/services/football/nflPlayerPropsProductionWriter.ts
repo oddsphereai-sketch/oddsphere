@@ -43,7 +43,7 @@ import {
 } from "./nflPlayerPropsPrediction";
 
 export const NFL_PLAYER_PROPS_WRITER_RELEASE =
-  "nfl_player_props_writer_2026_09_21_r25_receiving_market_integrity" as const;
+  "nfl_player_props_writer_2026_09_24_r26_projection_line_forecast" as const;
 export const NFL_PLAYER_PROPS_PRODUCTION_INCLUDE_OPENINGS = true as const;
 export const NFL_PLAYER_PROPS_PRODUCTION_COLLECTION_CALL_MAXIMUM = (
   1
@@ -134,7 +134,7 @@ export function summarizeNflPlayerPropsForecastTelemetry(
 
 function summarizePredictionSides(
   rows: NflPlayerPropsProductionSnapshot["memberDecisions"],
-  ranked: boolean,
+  publishedForecast: boolean,
 ): Record<string, { over: number; under: number; yes: number; no: number }> {
   const result: Record<string, { over: number; under: number; yes: number; no: number }> = {};
   const groups = new Map<string, typeof rows>();
@@ -148,7 +148,7 @@ function summarizePredictionSides(
     const first = marketRows[0]!;
     const counts = result[first.market] ?? { over: 0, under: 0, yes: 0, no: 0 };
     if (first.market === "anytime_td") {
-      const outcome = (ranked
+      const outcome = (publishedForecast
         ? touchdownScorers.has(nflPlayerPropsTouchdownPlayerKey(first))
         : first.finalProbability >= 0.5) ? "yes" : "no";
       counts[outcome] += 1;
@@ -156,7 +156,7 @@ function summarizePredictionSides(
       const over = marketRows.find((row) => row.side === "over");
       const under = marketRows.find((row) => row.side === "under");
       const overProbability = over?.finalProbability ?? (under ? 1 - under.finalProbability : 0);
-      const overSelected = ranked
+      const overSelected = publishedForecast
         ? overForecasts.has(nflPlayerPropsOverUnderMarketKey(first))
         : overProbability >= 0.5;
       counts[overSelected ? "over" : "under"] += 1;
