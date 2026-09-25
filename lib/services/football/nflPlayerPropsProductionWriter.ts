@@ -26,6 +26,7 @@ import { updateNflPlayerPropsClosingPrices, writeLockedNflPlayerPropsTracking } 
 import {
   NFL_PLAYER_PROPS_CURRENT_SEASON_GAMES_PAGE_MAXIMUM,
   NFL_PLAYER_PROPS_CURRENT_SEASON_STATS_PAGE_MAXIMUM,
+  NFL_PLAYER_PROPS_CURRENT_SEASON_TEAM_STATS_PAGE_MAXIMUM,
   readNflPlayerPropsCurrentSeasonState,
   refreshNflPlayerPropsCurrentSeasonState,
   writeNflPlayerPropsCurrentSeasonState,
@@ -43,7 +44,7 @@ import {
 } from "./nflPlayerPropsPrediction";
 
 export const NFL_PLAYER_PROPS_WRITER_RELEASE =
-  "nfl_player_props_writer_2026_09_25_r28_team_score_capture" as const;
+  "nfl_player_props_writer_2026_09_25_r29_team_boxscore_capture" as const;
 export const NFL_PLAYER_PROPS_PRODUCTION_INCLUDE_OPENINGS = true as const;
 export const NFL_PLAYER_PROPS_PRODUCTION_COLLECTION_CALL_MAXIMUM = (
   1
@@ -55,8 +56,9 @@ export const NFL_PLAYER_PROPS_PRODUCTION_INCREMENTAL_CALL_MAXIMUM = (
   NFL_PLAYER_PROPS_PRODUCTION_COLLECTION_CALL_MAXIMUM
   + NFL_PLAYER_PROPS_CURRENT_SEASON_GAMES_PAGE_MAXIMUM
   + NFL_PLAYER_PROPS_CURRENT_SEASON_STATS_PAGE_MAXIMUM
+  + NFL_PLAYER_PROPS_CURRENT_SEASON_TEAM_STATS_PAGE_MAXIMUM
   + NFL_PLAYER_PROPS_SETTLEMENT_MAX_GAMES_PER_CYCLE
-) as 93;
+) as 101;
 
 export type NflPlayerPropsForecastTelemetry = {
   forecastPolicy: "target_excluded_single_posterior_exact_price_downstream";
@@ -85,6 +87,7 @@ export type NflPlayerPropsWriterResult = {
   scoreEligibleFeatures: number;
   currentSeasonStateApiCalls: number;
   currentSeasonGamesAdded: number;
+  currentSeasonTeamStatsAdded: number;
   currentSeasonStatsAdded: number;
   memberRows: number;
   counts: Record<string, number>;
@@ -256,6 +259,7 @@ export async function runNflPlayerPropsProductionWriter(args: {
     scoreEligibleFeatures: features.filter((row) => row.scoreEligible).length,
     currentSeasonStateApiCalls: currentSeason.apiCalls,
     currentSeasonGamesAdded: currentSeason.gamesAdded,
+    currentSeasonTeamStatsAdded: currentSeason.teamStatsAdded,
     currentSeasonStatsAdded: currentSeason.statsAdded,
     memberRows: snapshot.memberDecisions.length,
     counts: snapshot.board.counts,
