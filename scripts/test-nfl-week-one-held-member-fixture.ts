@@ -47,7 +47,7 @@ const releaseTransitionRows = rows.map((row, index) => {
   copy.payload.stage = "t60";
   copy.payload.captureTiming = "on_time";
   copy.payload.t60LagMinutes = 10;
-  copy.payload.decisions.modelPromotionStatus = "nfl_v1_member_release_2026_09_21_r18_opening_market_direction";
+  copy.payload.decisions.modelPromotionStatus = "nfl_v1_member_release_2026_09_25_r19_marginal_likelihood_score";
   copy.payload.decisions.trackingEnabled = true;
   copy.payload.decisions.evaluatedBets = copy.payload.decisions.evaluatedBets.map((decision) => ({
     ...decision,
@@ -62,10 +62,10 @@ const releaseTransitionRows = rows.map((row, index) => {
     },
   }));
   if (index === 1) {
-    copy.payload.decisions.modelPromotionStatus = "nfl_v1_member_release_2026_09_16_r16_injury_pagination";
+    copy.payload.decisions.modelPromotionStatus = "nfl_v1_member_release_2026_09_21_r18_opening_market_direction";
     copy.payload.decisions.evaluatedBets = copy.payload.decisions.evaluatedBets.map((decision) => ({
       ...decision,
-      decisionRelease: "nfl_v1_daily_edge_decision_2026_09_16_r19_injury_pagination",
+      decisionRelease: "nfl_v1_daily_edge_decision_2026_09_21_r21_opening_market_direction",
     }));
   }
   return copy;

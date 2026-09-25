@@ -12,11 +12,12 @@ import {
 } from "./nflV1ActionableGradeCandidate";
 import {
   buildNflMarketEvidenceOutcomeForecast,
+  NFL_V1_WEEKLY_RAW_SIGNAL_RELEASE,
   type NflV1WeekOneOutcomeForecast,
 } from "./nflV1WeekOneOutcome";
 
 export const NFL_TARGET_EXCLUDED_MARKET_OUTCOME_RELEASE =
-  "nfl_target_excluded_market_outcome_2026_09_21_r4_opening_market_direction" as const;
+  "nfl_target_excluded_market_outcome_2026_09_25_r5_current_season_raw_signal" as const;
 
 export type NflTargetExcludedMarketAnchor = {
   release: typeof NFL_TARGET_EXCLUDED_MARKET_OUTCOME_RELEASE;
@@ -52,6 +53,10 @@ export function resolveNflTargetExcludedProduction(args: {
   playbookSplits: NflForwardPlaybookSplitSet | null;
   sharpSplits: NflRegularSharpSplitSet | null;
   pricedNeutralTotalCandidate?: boolean;
+  weeklyRawSignal?: {
+    release: typeof NFL_V1_WEEKLY_RAW_SIGNAL_RELEASE;
+    independentHomeMargin: number;
+  };
 }): {
   outcome: NflV1WeekOneOutcomeForecast;
   production: NflV1ActionableGradeBundle;
@@ -127,6 +132,10 @@ export function resolveNflTargetExcludedProduction(args: {
       marketHomeCoverProbability: anchor.spreadHomeFairProbability,
       marketOverProbability: args.pricedNeutralTotalCandidate ? anchor.totalOverFairProbability : undefined,
       spreadDirectionCandidate: args.operationalOpening !== undefined && args.operationalOpening !== null,
+      movementCurrent: !excluded.total.includes(normalizeBook(args.current.sportsbook))
+        ? args.current
+        : null,
+      weeklyRawSignal: args.weeklyRawSignal,
       evaluatedAt: args.evaluatedAt,
     });
     const productionCandidate = buildProduction(outcomeCandidate);

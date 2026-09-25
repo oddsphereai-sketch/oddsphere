@@ -2,7 +2,7 @@ import artifactJson from "./modelArtifacts/nflSlowStateRuntime.json";
 import type { NflPlayerPropsCurrentSeasonState } from "./nflPlayerPropsCurrentSeasonState";
 
 export const NFL_WEEKLY_POSSESSION_MARGIN_RELEASE =
-  "nfl_weekly_possession_margin_2026_09_25_r1_shadow" as const;
+  "nfl_weekly_possession_margin_2026_09_25_r2_production" as const;
 
 type Metric = "points" | "plays" | "sack_rate" | "turnover_rate" | "redzone_td_rate";
 type Metrics = Record<Metric, number>;

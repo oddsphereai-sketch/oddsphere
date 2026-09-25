@@ -5,6 +5,39 @@ inputs, probabilities, projections, grades, promotions/demotions, calibration, p
 or stakes. It exists to prevent mixed model eras, competing writers, accidental board
 flattening, and load spikes.
 
+## Owner-approved provisional exception: NFL current-season raw signal r20
+
+On 2026-09-25 Daniel Mengel explicitly directed Oddsphere to repair and improve
+the NFL raw prediction signals rather than change thresholds, hide selections,
+or flatten the board. This narrow exception authorizes the reviewed release
+`nfl_weekly_raw_signal_2026_09_25_r2_current_season_possession` after its exact
+release-pure Weeks 1-2 replay and current Week 3 board replay pass. It does not
+authorize stakes, quotas, member copy or labels, a second writer, a new schedule,
+or a reusable relaxation for another model.
+
+The owner acknowledges that the 32-game Weeks 1-2 set is already opened and is
+therefore diagnostic rather than a pristine holdout. Week 1 remains the immutable
+released artifact. Beginning with Week 2, the sole writer may blend the selected
+current-season possession/efficiency margin 10% with the current target-excluded
+market margin 90%. The independent input is limited to final prior-week points,
+plays, sacks, turnovers, and red-zone conversion captured in the existing bounded
+current-season state. No current-week result may enter its forecast. The existing
+price-neutral Total core remains authoritative; only valid same-book
+opening-to-current movement outside the evaluated Total family may shift its mean. Money/ticket splits remain internal
+evidence but may not directly rewrite the raw Total mean.
+
+The diagnostic must improve Spread and Total direction without worsening
+Moneyline, improve all three reported score-error measures, retain all 48 Week 3
+markets, preserve every immutable T-60 game, and avoid a net actionable-board
+collapse. All affected releases must advance together. The existing
+`prediction_pipeline:nfl` lease, append-only evidence, target exclusion, price and
+freshness gates, writer cadence, provider-call budget, and zero-stake policy remain
+unchanged. Production must be evaluated prospectively by exact release and lock
+timestamp. A mixed release, incomplete prior-week state, locked-row rewrite,
+coherence failure, missing-price presentation as normal, unexpected board collapse,
+writer overlap, timeout growth, or reader failure holds or rolls back the release
+while preserving immutable evidence.
+
 ## Owner-approved provisional exception: NHL regular-season r1 split overlay
 
 On 2026-09-23 Daniel Mengel explicitly directed the NHL model to relaunch for

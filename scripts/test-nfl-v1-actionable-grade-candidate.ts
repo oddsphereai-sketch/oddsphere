@@ -31,6 +31,8 @@ import {
   NFL_V1_SHARP_SPLIT_MAX_SHIFT_POINTS,
   NFL_V1_WEAK_EVIDENCE_REVERSAL_MINIMUM_ADVANTAGE,
   NFL_V1_WEEKLY_OUTCOME_MODEL_RELEASE,
+  NFL_V1_WEEKLY_RAW_MARGIN_MARKET_WEIGHT,
+  NFL_V1_WEEKLY_RAW_SIGNAL_RELEASE,
   NFL_V1_WEEKLY_REPRESENTATIVE_SCORE_CENTER_WEIGHT,
   nflV1WeekOneLineProbabilities,
 } from "../lib/services/football/nflV1WeekOneOutcome";
@@ -328,8 +330,8 @@ const weeklyBase = getNflV1WeekOneOutcomeForecast({
   homeTeam,
   weeklyFallback: { projectedHomeMargin: 4.25, marketTotal: 44.5 },
 });
-assert.equal(NFL_V1_WEEKLY_OUTCOME_MODEL_RELEASE, "nfl_v1_weekly_market_anchored_outcome_2026_09_25_r6_marginal_likelihood_score");
-assert.equal(NFL_V1_MARKET_EVIDENCE_REPRESENTATIVE_SCORE_RELEASE, "nfl_v1_market_evidence_representative_score_2026_09_25_r5_marginal_likelihood");
+assert.equal(NFL_V1_WEEKLY_OUTCOME_MODEL_RELEASE, "nfl_v1_weekly_market_anchored_outcome_2026_09_25_r7_current_season_raw_signal");
+assert.equal(NFL_V1_MARKET_EVIDENCE_REPRESENTATIVE_SCORE_RELEASE, "nfl_v1_market_evidence_representative_score_2026_09_25_r6_current_season_raw_signal");
 assert.equal(NFL_V1_WEEKLY_REPRESENTATIVE_SCORE_CENTER_WEIGHT, 0.2);
 const representativeMargin = weeklyBase.representativeHomeScore - weeklyBase.representativeAwayScore;
 const representativeTotal = weeklyBase.representativeHomeScore + weeklyBase.representativeAwayScore;
@@ -379,7 +381,7 @@ const circaAway = buildNflMarketEvidenceOutcomeForecast({
   sharpSplits: sharpSplitSet({ homeMoneyPct: 20, homeBetsPct: 70 }),
   evaluatedAt,
 });
-assert.equal(NFL_V1_MARKET_EVIDENCE_OUTCOME_RELEASE, "nfl_v1_market_evidence_outcome_2026_09_21_r6_opening_market_direction");
+assert.equal(NFL_V1_MARKET_EVIDENCE_OUTCOME_RELEASE, "nfl_v1_market_evidence_outcome_2026_09_25_r7_current_season_raw_signal");
 assert.equal(NFL_V1_MARKET_WEIGHT, 0.75);
 assert.equal(NFL_V1_SHARP_SPLIT_MAX_SHIFT_POINTS, 1.5);
 assert.equal(NFL_V1_PUBLIC_SPLIT_MAX_SHIFT_POINTS, 0.75);
@@ -483,6 +485,72 @@ const staleCirca = buildNflMarketEvidenceOutcomeForecast({
 });
 assert.equal(staleCirca.expectedHomeScore.toFixed(9), marketOnly.expectedHomeScore.toFixed(9));
 assert.equal(staleCirca.expectedAwayScore.toFixed(9), marketOnly.expectedAwayScore.toFixed(9));
+const weeklyRawSignal = {
+  release: NFL_V1_WEEKLY_RAW_SIGNAL_RELEASE,
+  independentHomeMargin: -6,
+};
+const rawSignalBaseline = buildNflMarketEvidenceOutcomeForecast({
+  baseForecast: weeklyBase,
+  footballHomeMargin: 4.25,
+  current,
+  playbookLine: null,
+  playbookSplits: null,
+  sharpSplits: null,
+  weeklyRawSignal,
+  evaluatedAt,
+});
+const rawSignalWithSplits = buildNflMarketEvidenceOutcomeForecast({
+  baseForecast: weeklyBase,
+  footballHomeMargin: 4.25,
+  current,
+  playbookLine: { capturedAt: evaluatedAt, homeSpread: -3.5, total: 44.5 },
+  playbookSplits: splitSet({ homeMoneyPct: 80, homeBetsPct: 20 }),
+  sharpSplits: sharpSplitSet({ homeMoneyPct: 80, homeBetsPct: 20 }),
+  weeklyRawSignal,
+  evaluatedAt,
+});
+const rawSignalWithMovement = buildNflMarketEvidenceOutcomeForecast({
+  baseForecast: weeklyBase,
+  footballHomeMargin: 4.25,
+  current,
+  operationalOpening: {
+    quote: {
+      ...current,
+      observedAt: "2026-08-25T09:21:34.519Z",
+      total: { ...current.total!, line: 42.5 },
+    },
+  },
+  movementCurrent: current,
+  playbookLine: null,
+  playbookSplits: null,
+  sharpSplits: null,
+  weeklyRawSignal,
+  evaluatedAt,
+});
+assert.equal(NFL_V1_WEEKLY_RAW_MARGIN_MARKET_WEIGHT, 0.9);
+assert.equal(rawSignalBaseline.marketEvidence?.weeklyRawSignal?.release, NFL_V1_WEEKLY_RAW_SIGNAL_RELEASE);
+assert.equal(rawSignalBaseline.marketEvidence?.weeklyRawSignal?.independentHomeMargin, -6);
+assert.equal(rawSignalBaseline.marketEvidence?.weeklyRawSignal?.totalMeanEvidencePolicy, "same_book_movement_only");
+assert.equal(
+  (rawSignalWithSplits.expectedHomeScore + rawSignalWithSplits.expectedAwayScore).toFixed(9),
+  (rawSignalBaseline.expectedHomeScore + rawSignalBaseline.expectedAwayScore).toFixed(9),
+  "money/ticket splits must not rewrite the released raw Total mean",
+);
+assert.ok(
+  rawSignalWithMovement.expectedHomeScore + rawSignalWithMovement.expectedAwayScore >
+    rawSignalBaseline.expectedHomeScore + rawSignalBaseline.expectedAwayScore,
+  "eligible same-book Total movement must remain available after target-free anchoring",
+);
+assert.throws(() => buildNflMarketEvidenceOutcomeForecast({
+  baseForecast: weeklyBase,
+  footballHomeMargin: 4.25,
+  current,
+  playbookLine: null,
+  playbookSplits: null,
+  sharpSplits: null,
+  weeklyRawSignal: { ...weeklyRawSignal, independentHomeMargin: Number.NaN },
+  evaluatedAt,
+}), /weekly raw-signal margin is invalid/);
 const underdogValueForecast = {
   ...marketOnly,
   awayWinProbability: 0.46,
