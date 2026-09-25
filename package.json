@@ -136,6 +136,7 @@
     "test:football-player-props-foundation": "tsx scripts/test-football-player-props-foundation.ts",
     "test:football-player-props-history-contract": "tsx scripts/test-nfl-player-props-history-contract.ts",
     "test:football-player-props-current-season-state": "tsx scripts/test-nfl-player-props-current-season-state.ts",
+    "test:nfl-weekly-possession-margin": "tsx scripts/test-nfl-weekly-possession-margin.ts",
     "test:football-player-props-history": "football-research/cache/nfl-model-env/bin/python scripts/test_nfl_player_props_history.py",
     "audit:football-bdl-coverage": "tsx --env-file=.env.local scripts/operator/audit-football-bdl-coverage.ts",
     "audit:football-market-providers": "tsx --env-file=.env.local scripts/operator/audit-football-market-providers.ts",
