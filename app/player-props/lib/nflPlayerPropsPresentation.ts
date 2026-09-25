@@ -8,6 +8,7 @@ export type NflPlayerPropsPredictionOutcome = "over" | "under" | "yes" | "no";
 export type NflPlayerPropsPrediction<T> = {
   outcome: NflPlayerPropsPredictionOutcome;
   probability: number;
+  projection: number | null;
   row: T;
   quotedSide: "over" | "under" | "yes" | null;
 };
@@ -36,8 +37,8 @@ export function resolveNflPlayerPropsPrediction<
   if (yes) {
     const touchdownPositive = options?.touchdownPositive ?? yes.finalProbability >= 0.5;
     return touchdownPositive
-      ? { outcome: "yes", probability: yes.finalProbability, row: yes, quotedSide: "yes" }
-      : { outcome: "no", probability: 1 - yes.finalProbability, row: yes, quotedSide: null };
+      ? { outcome: "yes", probability: yes.finalProbability, projection: null, row: yes, quotedSide: "yes" }
+      : { outcome: "no", probability: 1 - yes.finalProbability, projection: null, row: yes, quotedSide: null };
   }
 
   const over = rows.find((row) => row.side === "over");
@@ -46,15 +47,25 @@ export function resolveNflPlayerPropsPrediction<
 
   const overProbability = over?.finalProbability ?? 1 - under!.finalProbability;
   const underProbability = under?.finalProbability ?? 1 - over!.finalProbability;
-  const projection = rows.find((row) => Number.isFinite(row.projection))?.projection;
+  const projections = rows
+    .map((row) => row.projection)
+    .filter((projection): projection is number => Number.isFinite(projection))
+    .sort((left, right) => left - right);
+  const midpoint = Math.floor(projections.length / 2);
+  const projection = projections.length === 0
+    ? null
+    : projections.length % 2 === 1
+      ? projections[midpoint]!
+      : (projections[midpoint - 1]! + projections[midpoint]!) / 2;
   const line = rows[0]!.line;
-  const overPositive = projection !== null && projection !== undefined
+  const overPositive = projection !== null
     ? projection > line || (projection === line && overProbability >= underProbability)
     : overProbability >= underProbability;
   if (overPositive) {
     return {
       outcome: "over",
       probability: overProbability,
+      projection,
       row: over ?? under!,
       quotedSide: over ? "over" : null,
     };
@@ -62,6 +73,7 @@ export function resolveNflPlayerPropsPrediction<
   return {
     outcome: "under",
     probability: underProbability,
+    projection,
     row: under ?? over!,
     quotedSide: under ? "under" : null,
   };

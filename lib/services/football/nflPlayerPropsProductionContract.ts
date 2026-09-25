@@ -15,7 +15,7 @@ import { selectNflPlayerPropsCanonicalLines } from "./nflPlayerPropsCanonicalLin
 export const NFL_PLAYER_PROPS_PRODUCTION_CANDIDATE_RELEASE =
   "nfl_player_props_member_2026_09_25_r24_canonical_main_line" as const;
 export const NFL_PLAYER_PROPS_MEMBER_LIFECYCLE_RELEASE =
-  "nfl_player_props_member_lifecycle_2026_09_25_r6_canonical_main_line" as const;
+  "nfl_player_props_member_lifecycle_2026_09_25_r7_canonical_projection" as const;
 export const NFL_PLAYER_PROPS_BOARD_ROLLOVER_HOUR_ET = 2 as const;
 export const NFL_PLAYER_PROPS_WRITER_LEASE_GROUP = "prediction_pipeline:nfl" as const;
 

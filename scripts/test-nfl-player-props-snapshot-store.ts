@@ -52,7 +52,7 @@ const snapshot = productionSnapshot([actionable, held]);
 const memberBefore = buildNflPlayerPropsMemberSnapshot(snapshot);
 
 assert.equal(memberBefore.lifecycleRelease,
-  "nfl_player_props_member_lifecycle_2026_09_25_r6_canonical_main_line");
+  "nfl_player_props_member_lifecycle_2026_09_25_r7_canonical_projection");
 assert.equal(memberBefore.lifecycleRelease, NFL_PLAYER_PROPS_MEMBER_LIFECYCLE_RELEASE);
 const atKickoff = buildNflPlayerPropsMemberSnapshot(snapshot, actionable.scheduledStart);
 assert.equal(atKickoff.memberDecisions.length, 2,
