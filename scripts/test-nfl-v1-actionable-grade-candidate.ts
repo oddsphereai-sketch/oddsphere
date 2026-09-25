@@ -24,11 +24,14 @@ import {
   buildNflMarketEvidenceOutcomeForecast,
   getNflV1WeekOneOutcomeForecast,
   NFL_V1_MARKET_EVIDENCE_OUTCOME_RELEASE,
+  NFL_V1_MARKET_EVIDENCE_REPRESENTATIVE_SCORE_RELEASE,
   NFL_V1_MARKET_WEIGHT,
   NFL_V1_PUBLIC_SPLIT_MAX_SHIFT_POINTS,
   NFL_V1_RESIDUAL_HEAD_LOGIT_WEIGHT,
   NFL_V1_SHARP_SPLIT_MAX_SHIFT_POINTS,
   NFL_V1_WEAK_EVIDENCE_REVERSAL_MINIMUM_ADVANTAGE,
+  NFL_V1_WEEKLY_OUTCOME_MODEL_RELEASE,
+  NFL_V1_WEEKLY_REPRESENTATIVE_SCORE_CENTER_WEIGHT,
   nflV1WeekOneLineProbabilities,
 } from "../lib/services/football/nflV1WeekOneOutcome";
 import {
@@ -325,6 +328,35 @@ const weeklyBase = getNflV1WeekOneOutcomeForecast({
   homeTeam,
   weeklyFallback: { projectedHomeMargin: 4.25, marketTotal: 44.5 },
 });
+assert.equal(NFL_V1_WEEKLY_OUTCOME_MODEL_RELEASE, "nfl_v1_weekly_market_anchored_outcome_2026_09_25_r6_marginal_likelihood_score");
+assert.equal(NFL_V1_MARKET_EVIDENCE_REPRESENTATIVE_SCORE_RELEASE, "nfl_v1_market_evidence_representative_score_2026_09_25_r5_marginal_likelihood");
+assert.equal(NFL_V1_WEEKLY_REPRESENTATIVE_SCORE_CENTER_WEIGHT, 0.2);
+const representativeMargin = weeklyBase.representativeHomeScore - weeklyBase.representativeAwayScore;
+const representativeTotal = weeklyBase.representativeHomeScore + weeklyBase.representativeAwayScore;
+const marginIndex = weeklyBase.marginDistribution.values.indexOf(representativeMargin);
+const totalIndex = weeklyBase.totalDistribution.values.indexOf(representativeTotal);
+assert.ok(marginIndex >= 0 && totalIndex >= 0, "the displayed score must be supported by both released marginal distributions");
+assert.ok((weeklyBase.marginDistribution.probabilities[marginIndex] ?? 0) > 0);
+assert.ok((weeklyBase.totalDistribution.probabilities[totalIndex] ?? 0) > 0);
+assert.ok(Math.abs(weeklyBase.representativeScoreProbability -
+  (weeklyBase.marginDistribution.probabilities[marginIndex] ?? 0) *
+  (weeklyBase.totalDistribution.probabilities[totalIndex] ?? 0)) < 1e-15);
+assert.equal(
+  weeklyBase.representativeHomeScore > weeklyBase.representativeAwayScore,
+  weeklyBase.homeWinProbability > weeklyBase.awayWinProbability,
+  "the marginal-likelihood score must preserve the released winner",
+);
+const closeScoreCandidate = getNflV1WeekOneOutcomeForecast({
+  providerGameId: "marginal-likelihood-close-score-test",
+  awayTeam,
+  homeTeam,
+  weeklyFallback: { projectedHomeMargin: -2.5, marketTotal: 35.5 },
+});
+assert.deepEqual(
+  [closeScoreCandidate.representativeAwayScore, closeScoreCandidate.representativeHomeScore],
+  [19, 16],
+  "the selected supported football score must replace the independently rounded 19-17 mean summary",
+);
 const marketOnly = buildNflMarketEvidenceOutcomeForecast({
   baseForecast: weeklyBase,
   footballHomeMargin: 4.25,

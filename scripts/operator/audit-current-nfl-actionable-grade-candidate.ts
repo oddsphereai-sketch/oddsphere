@@ -69,6 +69,10 @@ async function main() {
     awayChange: number;
     homeChange: number;
     movementStatus: string;
+    previousRepresentativeAway: number;
+    previousRepresentativeHome: number;
+    candidateRepresentativeAway: number;
+    candidateRepresentativeHome: number;
   }> = [];
   const rows = selected.flatMap((row) => {
     const payload = row.payload as NflForwardEvidencePayload;
@@ -125,6 +129,7 @@ async function main() {
       pricedNeutralTotalCandidate: true,
     });
     const outcome = pricedNeutral.outcome;
+    const incumbentRepresentative = incumbentRepresentativeScore(outcome);
     const previousByMarketForPricedNeutral = new Map(payload.decisions.evaluatedBets.map((decision) => [decision.market, decision]));
     for (const decision of pricedNeutral.production.evaluatedBets) {
       const previous = previousByMarketForPricedNeutral.get(decision.market);
@@ -188,6 +193,10 @@ async function main() {
       awayChange: outcome.expectedAwayScore - payload.outcomeForecast.expectedAwayScore,
       homeChange: outcome.expectedHomeScore - payload.outcomeForecast.expectedHomeScore,
       movementStatus: outcome.marketEvidence?.movement.status ?? "unavailable",
+      previousRepresentativeAway: incumbentRepresentative.away,
+      previousRepresentativeHome: incumbentRepresentative.home,
+      candidateRepresentativeAway: outcome.representativeAwayScore,
+      candidateRepresentativeHome: outcome.representativeHomeScore,
     });
     if (!candidate.publicationEnabled || candidate.trackingEnabled ||
         candidate.evaluatedBets.length !== 3) {
@@ -497,6 +506,13 @@ async function main() {
     maximumAbsoluteTeamScoreChange: Math.max(...projectionChanges.flatMap((row) =>
       [Math.abs(row.awayChange), Math.abs(row.homeChange)])),
     movementAvailableGames: projectionChanges.filter((row) => row.movementStatus === "available").length,
+    representativeScoreChangedGames: projectionChanges.filter((row) =>
+      row.previousRepresentativeAway !== row.candidateRepresentativeAway ||
+      row.previousRepresentativeHome !== row.candidateRepresentativeHome).length,
+    representativeAbsoluteMarginAtMostTwoBefore: projectionChanges.filter((row) =>
+      Math.abs(row.previousRepresentativeHome - row.previousRepresentativeAway) <= 2).length,
+    representativeAbsoluteMarginAtMostTwoAfter: projectionChanges.filter((row) =>
+      Math.abs(row.candidateRepresentativeHome - row.candidateRepresentativeAway) <= 2).length,
     primaryPredictionCoherenceGames: primaryPredictionChecks.filter((row) =>
       row.scoreWinner === row.predictedWinner && row.predictedWinner === row.moneylinePrediction).length,
     predictionMarkets: fixture.snapshot.games.reduce((sum, game) => sum +
@@ -520,6 +536,19 @@ function count(values: string[]): Record<string, number> {
     result[value] = (result[value] ?? 0) + 1;
     return result;
   }, {});
+}
+
+function incumbentRepresentativeScore(outcome: NflForwardEvidencePayload["outcomeForecast"]): { away: number; home: number } {
+  const homeFavored = outcome.homeWinProbability > outcome.awayWinProbability;
+  let best = { away: 0, home: homeFavored ? 1 : 0, distance: Number.POSITIVE_INFINITY };
+  for (let away = 0; away <= 70; away += 1) {
+    for (let home = 0; home <= 70; home += 1) {
+      if (away === home || (home > away) !== homeFavored) continue;
+      const distance = Math.abs(away - outcome.expectedAwayScore) + Math.abs(home - outcome.expectedHomeScore);
+      if (distance < best.distance) best = { away, home, distance };
+    }
+  }
+  return { away: best.away, home: best.home };
 }
 
 function rank(grade: string): number {

@@ -47,11 +47,11 @@ const releaseTransitionRows = rows.map((row, index) => {
   copy.payload.stage = "t60";
   copy.payload.captureTiming = "on_time";
   copy.payload.t60LagMinutes = 10;
-  copy.payload.decisions.modelPromotionStatus = "nfl_v1_member_release_2026_09_20_r17_ml_total_coherence";
+  copy.payload.decisions.modelPromotionStatus = "nfl_v1_member_release_2026_09_21_r18_opening_market_direction";
   copy.payload.decisions.trackingEnabled = true;
   copy.payload.decisions.evaluatedBets = copy.payload.decisions.evaluatedBets.map((decision) => ({
     ...decision,
-    decisionRelease: "nfl_v1_daily_edge_decision_2026_09_20_r20_ml_total_coherence",
+    decisionRelease: "nfl_v1_daily_edge_decision_2026_09_21_r21_opening_market_direction",
     stage: "t60_locked",
     lockedAt: copy.payload.capturedAt,
     evaluatedAt: copy.payload.capturedAt,

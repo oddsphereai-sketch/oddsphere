@@ -22,7 +22,7 @@ export const NFL_V1_OUTCOME_PROBABILITY_RELEASE =
 export const NFL_V1_REPRESENTATIVE_SCORE_POLICY_RELEASE =
   "nfl_v1_representative_score_2026_08_23_r2" as const;
 export const NFL_V1_WEEKLY_OUTCOME_MODEL_RELEASE =
-  "nfl_v1_weekly_market_anchored_outcome_2026_09_21_r5_opening_market_direction" as const;
+  "nfl_v1_weekly_market_anchored_outcome_2026_09_25_r6_marginal_likelihood_score" as const;
 export const NFL_V1_WEEKLY_OUTCOME_DISTRIBUTION_RELEASE =
   "nfl_pooled_discrete_residual_distribution_2026_09_21_r5_opening_market_direction" as const;
 export const NFL_V1_WEEKLY_OUTCOME_PROBABILITY_RELEASE =
@@ -30,7 +30,8 @@ export const NFL_V1_WEEKLY_OUTCOME_PROBABILITY_RELEASE =
 export const NFL_V1_MARKET_EVIDENCE_OUTCOME_RELEASE =
   "nfl_v1_market_evidence_outcome_2026_09_21_r6_opening_market_direction" as const;
 export const NFL_V1_MARKET_EVIDENCE_REPRESENTATIVE_SCORE_RELEASE =
-  "nfl_v1_market_evidence_representative_score_2026_09_21_r4_opening_market_direction" as const;
+  "nfl_v1_market_evidence_representative_score_2026_09_25_r5_marginal_likelihood" as const;
+export const NFL_V1_WEEKLY_REPRESENTATIVE_SCORE_CENTER_WEIGHT = 0.2 as const;
 export const NFL_V1_MARKET_WEIGHT = 0.75 as const;
 export const NFL_V1_SHARP_SPLIT_MAX_SHIFT_POINTS = 1.5 as const;
 export const NFL_V1_PUBLIC_SPLIT_MAX_SHIFT_POINTS = 0.75 as const;
@@ -644,6 +645,8 @@ function outcomeFromDistributions(args: {
     expectedAwayScore,
     expectedHomeScore,
     homeFavored: homeWinProbability > awayWinProbability,
+    marginDistribution: args.marginDistribution,
+    totalDistribution: args.totalDistribution,
   });
   return {
     providerGameId: args.providerGameId,
@@ -774,16 +777,54 @@ function representativeScore(args: {
   expectedAwayScore: number;
   expectedHomeScore: number;
   homeFavored: boolean;
+  marginDistribution: DiscreteDistribution;
+  totalDistribution: DiscreteDistribution;
 }): { away: number; home: number; probability: number } {
-  let best = { away: 0, home: 1, distance: Number.POSITIVE_INFINITY };
-  for (let away = 0; away <= 70; away += 1) {
-    for (let home = 0; home <= 70; home += 1) {
-      if (away === home || (home > away) !== args.homeFavored) continue;
-      const distance = Math.abs(away - args.expectedAwayScore) + Math.abs(home - args.expectedHomeScore);
-      if (distance < best.distance) best = { away, home, distance };
-    }
+  const expectedMargin = args.expectedHomeScore - args.expectedAwayScore;
+  const expectedTotal = args.expectedHomeScore + args.expectedAwayScore;
+  let best = {
+    away: 0,
+    home: args.homeFavored ? 1 : 0,
+    probability: 0,
+    key: [Number.POSITIVE_INFINITY] as number[],
+  };
+  args.marginDistribution.values.forEach((margin, marginIndex) => {
+    if (margin === 0 || (margin > 0) !== args.homeFavored) return;
+    const marginProbability = args.marginDistribution.probabilities[marginIndex] ?? 0;
+    if (!(marginProbability > 0)) return;
+    args.totalDistribution.values.forEach((total, totalIndex) => {
+      if (total < Math.abs(margin) || (total + margin) % 2 !== 0) return;
+      const home = (total + margin) / 2;
+      const away = (total - margin) / 2;
+      if (!Number.isInteger(home) || !Number.isInteger(away) || home < 0 || away < 0 || home > 70 || away > 70) return;
+      const totalProbability = args.totalDistribution.probabilities[totalIndex] ?? 0;
+      if (!(totalProbability > 0)) return;
+      const probability = marginProbability * totalProbability;
+      const centerDistance = Math.abs(margin - expectedMargin) + Math.abs(total - expectedTotal);
+      const key = [
+        -Math.log(Math.max(probability, 1e-300)) + NFL_V1_WEEKLY_REPRESENTATIVE_SCORE_CENTER_WEIGHT * centerDistance,
+        centerDistance,
+        -probability,
+        away,
+        home,
+      ];
+      if (lexicographicallyBefore(key, best.key)) best = { away, home, probability, key };
+    });
+  });
+  if (!(best.probability > 0)) {
+    throw new Error("NFL weekly representative score has no valid marginally supported candidate.");
   }
-  return { away: best.away, home: best.home, probability: 1 / (1 + best.distance + 100) };
+  return { away: best.away, home: best.home, probability: best.probability };
+}
+
+function lexicographicallyBefore(candidate: number[], incumbent: number[]): boolean {
+  for (let index = 0; index < Math.max(candidate.length, incumbent.length); index += 1) {
+    const left = candidate[index] ?? 0;
+    const right = incumbent[index] ?? 0;
+    if (left < right) return true;
+    if (left > right) return false;
+  }
+  return false;
 }
 
 function validateDistribution(value: DiscreteDistribution, label: string): void {
