@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type { NflPlayerPropsMemberDecision as Row, NflPlayerPropsMemberGrade, NflPlayerPropsMemberSnapshot } from "@/lib/services/football/nflPlayerPropsProductionContract";
 import type { NflPlayerPropsForecastTrend } from "@/lib/services/football/nflPlayerPropsRuntime";
+import { nflPlayerPropsCanonicalMarketScopeKey } from "@/lib/services/football/nflPlayerPropsCanonicalLine";
 import { PlayerPropReaderDialog } from "./PlayerPropReaderDialog";
 import {
   nflPlayerPropsAvailabilityAgeLabel,
@@ -261,7 +262,7 @@ function EmptyBoard({ reviewMode, dataUnavailable }: { reviewMode: boolean; data
 function pairRows(rows: Row[], sort: SortKey, touchdownScorers: ReadonlySet<string>): MarketPair[] {
   const groups = new Map<string, Row[]>();
   for (const row of rows) {
-    const pairKey = [row.gameId, row.playerName, row.market, row.line].join("|");
+    const pairKey = [nflPlayerPropsCanonicalMarketScopeKey(row), row.line].join("|");
     groups.set(pairKey, [...(groups.get(pairKey) ?? []), row]);
   }
   return [...groups.entries()].map(([pairKey, marketRows]) => ({
@@ -288,7 +289,7 @@ function buildRadarRows(rows: Row[]): Row[] {
     .sort(sortRows("signal"));
   const deduped = new Map<string, Row>();
   for (const row of predictions) {
-    const radarKey = [row.gameId, row.playerName, row.market].join("|");
+    const radarKey = nflPlayerPropsCanonicalMarketScopeKey(row);
     if (!deduped.has(radarKey)) deduped.set(radarKey, row);
   }
   return [...deduped.values()].slice(0, 6);

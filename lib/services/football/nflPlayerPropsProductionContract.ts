@@ -10,11 +10,12 @@ import {
   type NflPlayerPropsMarketEvidenceCapture,
 } from "./nflPlayerPropsMarketEvidenceCapture";
 import { addDaysToSlate, computeSlateDate } from "@/lib/dates/slateDate";
+import { selectNflPlayerPropsCanonicalLines } from "./nflPlayerPropsCanonicalLine";
 
 export const NFL_PLAYER_PROPS_PRODUCTION_CANDIDATE_RELEASE =
-  "nfl_player_props_member_2026_09_24_r23_projection_line_forecast" as const;
+  "nfl_player_props_member_2026_09_25_r24_canonical_main_line" as const;
 export const NFL_PLAYER_PROPS_MEMBER_LIFECYCLE_RELEASE =
-  "nfl_player_props_member_lifecycle_2026_09_24_r5_projection_line_forecast" as const;
+  "nfl_player_props_member_lifecycle_2026_09_25_r6_canonical_main_line" as const;
 export const NFL_PLAYER_PROPS_BOARD_ROLLOVER_HOUR_ET = 2 as const;
 export const NFL_PLAYER_PROPS_WRITER_LEASE_GROUP = "prediction_pipeline:nfl" as const;
 
@@ -139,14 +140,29 @@ export function reconcileNflPlayerPropsProductionSnapshot(args: {
     diagnostics: recountOperationalDiagnostics(args.nextBoard.diagnostics, capturedDecisions),
     ...(mergedEvidence.capture ? { marketEvidence: mergedEvidence.capture } : {}),
   };
+  const previousLockedKeys = new Set((args.previous?.board.decisions ?? [])
+    .filter((row) => row.state === "locked")
+    .map(decisionKey));
+  const previousLockedMemberKeys = new Set((args.previous?.memberDecisions ?? [])
+    .filter((row) => previousLockedKeys.has(decisionKey(row)))
+    .map(decisionKey));
+  const derivedMemberDecisions = deriveNflPlayerPropsMemberDecisions(board);
+  const canonicalCurrentDecisions = selectNflPlayerPropsCanonicalLines(
+    derivedMemberDecisions.filter((row) => !previousLockedKeys.has(decisionKey(row))),
+  );
+  const selectedMemberKeys = new Set([
+    ...canonicalCurrentDecisions.map(decisionKey),
+    ...previousLockedMemberKeys,
+  ]);
   return {
     release: NFL_PLAYER_PROPS_PRODUCTION_CANDIDATE_RELEASE, season: args.season, week: args.week,
     generatedAt: new Date(evaluatedAt).toISOString(), writerLeaseGroup: NFL_PLAYER_PROPS_WRITER_LEASE_GROUP,
     publicationEligible: true, trackingEligible: true, riskLabel: "forward_monitoring_2025_exact_price_confirmation",
     board,
-    // Internal operational exceptions remain auditable as Held on the stored
-    // board, while the complete member slate exposes them as non-actionable No Play.
-    memberDecisions: deriveNflPlayerPropsMemberDecisions(board),
+    // Internal alternate ladders and operational exceptions remain auditable
+    // on the stored board. The member DTO selects one main line for every new
+    // scope while preserving every previously locked member row exactly.
+    memberDecisions: derivedMemberDecisions.filter((row) => selectedMemberKeys.has(decisionKey(row))),
     lifecycle: { recomputedUnlocked, retainedStillFreshUnlocked, frozenAtLock, retainedPreviouslyLocked },
   };
 }
