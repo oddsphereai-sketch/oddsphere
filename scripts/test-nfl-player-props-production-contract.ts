@@ -437,13 +437,21 @@ const probabilityFirstPrediction = resolveNflPlayerPropsPrediction([
 ]);
 assert.equal(probabilityFirstPrediction?.outcome, "under", "the projection relative to the exact line, not probability, EV, or grade, chooses the displayed prediction");
 assert.equal(probabilityFirstPrediction?.probability, 0.43);
+assert.equal(probabilityFirstPrediction?.projection, 49.2);
 assert.equal(probabilityFirstPrediction?.quotedSide, "under");
+const quoteSpecificProjectionPrediction = resolveNflPlayerPropsPrediction([
+  { side: "over" as const, finalProbability: 0.51, line: 3.5, projection: 3.5316 },
+  { side: "under" as const, finalProbability: 0.54, line: 3.5, projection: 3.4294 },
+]);
+assert.equal(quoteSpecificProjectionPrediction?.projection, 3.4805, "paired quotes resolve one median canonical projection");
+assert.equal(quoteSpecificProjectionPrediction?.outcome, "under", "the badge and displayed canonical projection remain on the same side of the line");
 const filteredSidePrediction = resolveNflPlayerPropsPrediction([{ side: "under" as const, finalProbability: 0.42, line: 40.5, projection: 42.1 }]);
 assert.equal(filteredSidePrediction?.outcome, "over", "a price filter cannot turn the remaining quote into the prediction");
 assert.equal(filteredSidePrediction?.quotedSide, null, "an inferred forecast is not falsely highlighted as a posted quote");
 const touchdownPrediction = resolveNflPlayerPropsPrediction([{ side: "yes" as const, finalProbability: 0.28, line: 0.5, projection: null }]);
 assert.equal(touchdownPrediction?.outcome, "no", "one-sided touchdown prices still show the model's most likely outcome");
 assert.equal(touchdownPrediction?.probability, 0.72);
+assert.equal(touchdownPrediction?.projection, null);
 const touchdownRows = [
   { gameId: "g1", playerName: "Player A", team: "BUF", market: "anytime_td", line: 0.5, projection: null, side: "yes" as const, finalProbability: 0.45 },
   { gameId: "g1", playerName: "Player B", team: "BUF", market: "anytime_td", line: 0.5, projection: null, side: "yes" as const, finalProbability: 0.35 },
