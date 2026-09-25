@@ -1,6 +1,8 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 export const NFL_PLAYER_PROPS_CURRENT_SEASON_STATE_RELEASE =
+  "nfl_player_props_current_season_state_2026_09_25_r2_team_score_capture" as const;
+const NFL_PLAYER_PROPS_CURRENT_SEASON_STATE_PRECEDING_RELEASE =
   "nfl_player_props_current_season_state_2026_09_16_r1_prior_final_games" as const;
 export const NFL_PLAYER_PROPS_CURRENT_SEASON_GAMES_PAGE_MAXIMUM = 4 as const;
 export const NFL_PLAYER_PROPS_CURRENT_SEASON_STATS_PAGE_MAXIMUM = 20 as const;
@@ -29,11 +31,24 @@ export type NflPlayerPropsCurrentSeasonStat = {
   fumbles_touchdowns: number;
 };
 
+export type NflPlayerPropsCurrentSeasonGame = {
+  gameId: string;
+  season: number;
+  week: number;
+  scheduledStart: string;
+  status: "final";
+  homeTeam: string;
+  awayTeam: string;
+  homeScore: number;
+  awayScore: number;
+};
+
 export type NflPlayerPropsCurrentSeasonState = {
   release: typeof NFL_PLAYER_PROPS_CURRENT_SEASON_STATE_RELEASE;
   season: number;
   completeThroughWeek: number;
   updatedAt: string;
+  games: NflPlayerPropsCurrentSeasonGame[];
   stats: NflPlayerPropsCurrentSeasonStat[];
 };
 
@@ -82,14 +97,21 @@ export async function refreshNflPlayerPropsCurrentSeasonState(args: {
     apiKey: args.apiKey,
     fetchImpl,
   });
-  const completed = games.rows.filter((game) => game.status === "final" && Date.parse(game.scheduledStart) < now);
-  const existingGameIds = new Set(base.stats.map((row) => row.gameId));
-  const missing = completed.filter((game) => !existingGameIds.has(game.gameId));
-  const stats = missing.length
-    ? await fetchGameStats({ games: missing, apiKey: args.apiKey, fetchImpl })
+  const malformedFinal = games.rows.filter((game) => game.status === "final" && !isCompletedGame(game));
+  if (malformedFinal.length) {
+    throw new Error(`NFL props current-season state is missing team or score identity for ${malformedFinal.length} final games.`);
+  }
+  const completed = games.rows.filter((game): game is NflPlayerPropsCurrentSeasonGame =>
+    isCompletedGame(game) && Date.parse(game.scheduledStart) < now);
+  const existingGameIds = new Set(base.games.map((row) => row.gameId));
+  const existingStatGameIds = new Set(base.stats.map((row) => row.gameId));
+  const missingGames = completed.filter((game) => !existingGameIds.has(game.gameId));
+  const gamesNeedingStats = completed.filter((game) => !existingStatGameIds.has(game.gameId));
+  const stats = gamesNeedingStats.length
+    ? await fetchGameStats({ games: gamesNeedingStats, apiKey: args.apiKey, fetchImpl })
     : { rows: [] as NflPlayerPropsCurrentSeasonStat[], calls: 0 };
   const gamesWithStats = new Set(stats.rows.map((row) => row.gameId));
-  const missingCompleted = missing.filter((game) => !gamesWithStats.has(game.gameId));
+  const missingCompleted = gamesNeedingStats.filter((game) => !gamesWithStats.has(game.gameId));
   if (missingCompleted.length) {
     throw new Error(`NFL props current-season stats are incomplete for ${missingCompleted.length} final games.`);
   }
@@ -99,13 +121,14 @@ export async function refreshNflPlayerPropsCurrentSeasonState(args: {
     season: args.season,
     completeThroughWeek: allPriorGamesFinal ? targetWeek : base.completeThroughWeek,
     updatedAt: new Date(now).toISOString(),
+    games: [...base.games, ...missingGames].sort(compareGame),
     stats: [...base.stats, ...stats.rows].sort(compareStat),
   };
   return {
     state,
     apiCalls: games.calls + stats.calls,
     gamesDiscovered: games.rows.length,
-    gamesAdded: missing.length,
+    gamesAdded: missingGames.length,
     statsAdded: stats.rows.length,
   };
 }
@@ -136,6 +159,10 @@ type PriorGame = {
   week: number;
   scheduledStart: string;
   status: string;
+  homeTeam: string | null;
+  awayTeam: string | null;
+  homeScore: number | null;
+  awayScore: number | null;
 };
 
 async function fetchPriorGames(args: {
@@ -212,8 +239,12 @@ function normalizeGame(value: unknown): PriorGame | null {
   const week = integer(row.week);
   const scheduledStart = iso(row.date);
   const status = text(row.status_state)?.toLowerCase() ?? "unknown";
+  const home = normalizeTeamRecord(row.home_team);
+  const away = normalizeTeamRecord(row.visitor_team ?? row.away_team);
+  const homeScore = integer(row.home_team_score) ?? integer(row.home_score);
+  const awayScore = integer(row.visitor_team_score) ?? integer(row.away_team_score) ?? integer(row.away_score);
   return gameId && season !== null && week !== null && scheduledStart
-    ? { gameId, season, week, scheduledStart, status }
+    ? { gameId, season, week, scheduledStart, status, homeTeam: home, awayTeam: away, homeScore, awayScore }
     : null;
 }
 
@@ -254,20 +285,36 @@ function normalizeStat(value: unknown, games: ReadonlyMap<string, PriorGame>): N
 
 function parseState(value: unknown, season: number): NflPlayerPropsCurrentSeasonState | null {
   const row = record(value);
+  if (row.release === NFL_PLAYER_PROPS_CURRENT_SEASON_STATE_PRECEDING_RELEASE
+    && row.season === season
+    && Number.isInteger(row.completeThroughWeek)
+    && typeof row.updatedAt === "string"
+    && Array.isArray(row.stats)) {
+    return {
+      release: NFL_PLAYER_PROPS_CURRENT_SEASON_STATE_RELEASE,
+      season,
+      completeThroughWeek: 0,
+      updatedAt: row.updatedAt,
+      games: [],
+      stats: row.stats as NflPlayerPropsCurrentSeasonStat[],
+    };
+  }
   return row.release === NFL_PLAYER_PROPS_CURRENT_SEASON_STATE_RELEASE
     && row.season === season
     && Number.isInteger(row.completeThroughWeek)
     && typeof row.updatedAt === "string"
+    && Array.isArray(row.games)
     && Array.isArray(row.stats)
       ? value as NflPlayerPropsCurrentSeasonState
       : null;
 }
 
 function emptyState(season: number, now: string): NflPlayerPropsCurrentSeasonState {
-  return { release: NFL_PLAYER_PROPS_CURRENT_SEASON_STATE_RELEASE, season, completeThroughWeek: 0, updatedAt: new Date(now).toISOString(), stats: [] };
+  return { release: NFL_PLAYER_PROPS_CURRENT_SEASON_STATE_RELEASE, season, completeThroughWeek: 0, updatedAt: new Date(now).toISOString(), games: [], stats: [] };
 }
 function snapshotKey(season: number): string { return `nfl::player-props-current-season::${season}`; }
 function nextCursor(meta: Record<string, unknown> | undefined): string | null { const value = meta?.next_cursor; return typeof value === "number" || typeof value === "string" ? String(value) : null; }
+function compareGame(a: NflPlayerPropsCurrentSeasonGame, b: NflPlayerPropsCurrentSeasonGame): number { return a.week - b.week || a.gameId.localeCompare(b.gameId); }
 function compareStat(a: NflPlayerPropsCurrentSeasonStat, b: NflPlayerPropsCurrentSeasonStat): number { return a.week - b.week || a.gameId.localeCompare(b.gameId) || a.playerId.localeCompare(b.playerId); }
 function record(value: unknown): Record<string, unknown> { return value && typeof value === "object" ? value as Record<string, unknown> : {}; }
 function text(value: unknown): string | null { return typeof value === "string" && value.trim() ? value.trim() : null; }
@@ -276,3 +323,8 @@ function integer(value: unknown): number | null { const parsed = Number(value); 
 function numeric(value: unknown): number { const parsed = Number(value); return Number.isFinite(parsed) ? parsed : 0; }
 function iso(value: unknown): string | null { const parsed = typeof value === "string" ? Date.parse(value) : NaN; return Number.isFinite(parsed) ? new Date(parsed).toISOString() : null; }
 function normalizeTeam(value: string): string { return ({ LAR: "LA", WSH: "WAS", OAK: "LV", SD: "LAC", STL: "LA" } as Record<string, string>)[value] ?? value; }
+function normalizeTeamRecord(value: unknown): string | null { const abbreviation = text(record(value).abbreviation)?.toUpperCase(); return abbreviation ? normalizeTeam(abbreviation) : null; }
+function isCompletedGame(game: PriorGame): game is NflPlayerPropsCurrentSeasonGame {
+  return game.status === "final" && game.homeTeam !== null && game.awayTeam !== null
+    && game.homeScore !== null && game.awayScore !== null;
+}

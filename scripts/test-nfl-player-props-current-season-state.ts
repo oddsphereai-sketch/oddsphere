@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import {
   NFL_PLAYER_PROPS_CURRENT_SEASON_STATE_RELEASE,
+  readNflPlayerPropsCurrentSeasonState,
   refreshNflPlayerPropsCurrentSeasonState,
   type NflPlayerPropsCurrentSeasonStat,
 } from "../lib/services/football/nflPlayerPropsCurrentSeasonState";
@@ -15,8 +16,8 @@ const fetchImpl: typeof fetch = async (request) => {
     assert.deepEqual(url.searchParams.getAll("season_type[]"), ["2"]);
     return json({
       data: [
-        { id: 10, season: 2026, week: 1, date: "2026-09-10T00:00:00.000Z", status_state: "final" },
-        { id: 11, season: 2026, week: 1, date: "2026-09-11T00:00:00.000Z", status_state: "final" },
+        game(10, "BUF", "NYJ", 27, 20, "2026-09-10T00:00:00.000Z"),
+        game(11, "KC", "LAR", 24, 17, "2026-09-11T00:00:00.000Z"),
       ],
       meta: {},
     });
@@ -37,6 +38,10 @@ async function main(): Promise<void> {
   assert.equal(refreshed.state.release, NFL_PLAYER_PROPS_CURRENT_SEASON_STATE_RELEASE);
   assert.equal(refreshed.state.completeThroughWeek, 1);
   assert.equal(refreshed.gamesAdded, 2);
+  assert.deepEqual(refreshed.state.games, [
+    { gameId: "10", season: 2026, week: 1, scheduledStart: "2026-09-10T00:00:00.000Z", status: "final", homeTeam: "BUF", awayTeam: "NYJ", homeScore: 27, awayScore: 20 },
+    { gameId: "11", season: 2026, week: 1, scheduledStart: "2026-09-11T00:00:00.000Z", status: "final", homeTeam: "KC", awayTeam: "LA", homeScore: 24, awayScore: 17 },
+  ]);
   assert.equal(refreshed.statsAdded, 4);
   assert.equal(refreshed.apiCalls, 2);
   assert.equal(requested.length, 2);
@@ -51,6 +56,61 @@ async function main(): Promise<void> {
   });
   assert.equal(cached.apiCalls, 0);
   assert.equal(cached.state, refreshed.state);
+
+  const legacyState = {
+    release: "nfl_player_props_current_season_state_2026_09_16_r1_prior_final_games",
+    season: 2026,
+    completeThroughWeek: 1,
+    updatedAt: "2026-09-16T12:00:00.000Z",
+    stats: refreshed.state.stats,
+  };
+  const legacyClient = {
+    from: () => ({
+      select: () => ({
+        eq: () => ({ maybeSingle: async () => ({ data: { payload: legacyState }, error: null }) }),
+      }),
+    }),
+  };
+  const migrated = await readNflPlayerPropsCurrentSeasonState({
+    client: legacyClient as never,
+    season: 2026,
+  });
+  assert.equal(migrated?.release, NFL_PLAYER_PROPS_CURRENT_SEASON_STATE_RELEASE);
+  assert.equal(migrated?.completeThroughWeek, 0);
+  assert.deepEqual(migrated?.games, []);
+  assert.equal(migrated?.stats.length, 4);
+  const migrationRequests: URL[] = [];
+  const migrationRefresh = await refreshNflPlayerPropsCurrentSeasonState({
+    season: 2026,
+    week: 2,
+    now: "2026-09-16T14:00:00.000Z",
+    apiKey: "test",
+    previous: migrated,
+    fetchImpl: async (request) => {
+      const url = new URL(String(request));
+      migrationRequests.push(url);
+      assert.equal(url.pathname.endsWith("/games"), true);
+      return json({ data: [game(10, "BUF", "NYJ", 27, 20, "2026-09-10T00:00:00.000Z"), game(11, "KC", "LAR", 24, 17, "2026-09-11T00:00:00.000Z")], meta: {} });
+    },
+  });
+  assert.equal(migrationRefresh.apiCalls, 1);
+  assert.equal(migrationRefresh.statsAdded, 0);
+  assert.equal(migrationRefresh.gamesAdded, 2);
+  assert.equal(migrationRequests.length, 1);
+
+  await assert.rejects(
+    refreshNflPlayerPropsCurrentSeasonState({
+      season: 2026,
+      week: 2,
+      now: "2026-09-16T15:00:00.000Z",
+      apiKey: "test",
+      fetchImpl: async () => json({
+        data: [{ id: 12, season: 2026, week: 1, date: "2026-09-12T00:00:00.000Z", status_state: "final" }],
+        meta: {},
+      }),
+    }),
+    /missing team or score identity for 1 final games/,
+  );
 
   const features: Record<string, number | null> = {
     prior_rushing_attempts_avg3: 9,
@@ -94,6 +154,13 @@ function stat(gameId: number, playerId: number, playerName: string, team: string
     passing_attempts: 0, passing_completions: 0, passing_yards: 0, rushing_attempts: 0, rushing_yards: 0,
     receptions: 0, receiving_yards: 0, receiving_targets: 0, rushing_touchdowns: 0, receiving_touchdowns: 0,
     kick_return_touchdowns: 0, punt_return_touchdowns: 0, fumbles_touchdowns: 0, ...values,
+  };
+}
+function game(id: number, home: string, away: string, homeScore: number, awayScore: number, date: string): Record<string, unknown> {
+  return {
+    id, season: 2026, week: 1, date, status_state: "final",
+    home_team_score: homeScore, visitor_team_score: awayScore,
+    home_team: { abbreviation: home }, visitor_team: { abbreviation: away },
   };
 }
 function json(value: unknown): Promise<Response> { return Promise.resolve(new Response(JSON.stringify(value), { status: 200, headers: { "content-type": "application/json" } })); }

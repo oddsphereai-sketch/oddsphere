@@ -43,7 +43,7 @@ import {
 } from "./nflPlayerPropsPrediction";
 
 export const NFL_PLAYER_PROPS_WRITER_RELEASE =
-  "nfl_player_props_writer_2026_09_25_r27_canonical_main_line" as const;
+  "nfl_player_props_writer_2026_09_25_r28_team_score_capture" as const;
 export const NFL_PLAYER_PROPS_PRODUCTION_INCLUDE_OPENINGS = true as const;
 export const NFL_PLAYER_PROPS_PRODUCTION_COLLECTION_CALL_MAXIMUM = (
   1
