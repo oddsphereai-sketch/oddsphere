@@ -38,6 +38,10 @@ import {
   type NflPlayerPropsRuntimeBoard,
   type NflPlayerPropsRuntimeDecision,
 } from "../lib/services/football/nflPlayerPropsRuntime";
+import {
+  nflPlayerPropsCanonicalMarketScopeKey,
+  selectNflPlayerPropsCanonicalLines,
+} from "../lib/services/football/nflPlayerPropsCanonicalLine";
 
 const decision: NflPlayerPropsRuntimeDecision = {
   gameId: "game", providerPlayerId: "1", playerName: "Player", team: "NE", opponent: "NYJ",
@@ -81,10 +85,30 @@ function emptyBoard(): NflPlayerPropsRuntimeBoard {
     counts: { "Best Angle": 0, Lean: 0, Watchlist: 0, "No Play": 0, Held: 0, actionable: 0 },
   };
 }
+function boardRows(rows: NflPlayerPropsRuntimeDecision[]): NflPlayerPropsRuntimeBoard {
+  const count = (grade: NflPlayerPropsRuntimeDecision["grade"]) => rows.filter((row) => row.grade === grade).length;
+  return {
+    ...board(rows[0]!),
+    decisions: rows,
+    counts: {
+      "Best Angle": count("Best Angle"), Lean: count("Lean"), Watchlist: count("Watchlist"),
+      "No Play": count("No Play"), Held: count("Held"), actionable: count("Best Angle") + count("Lean"),
+    },
+    diagnostics: {
+      ...board(rows[0]!).diagnostics,
+      inputOffers: rows.length,
+      completeExactOffers: rows.length,
+      completedEvaluations: rows.filter((row) => row.grade !== "Held").length,
+      operationalExceptions: count("Held"),
+      recoveryEligibleOperationalExceptions: rows.filter((row) => row.grade === "Held" && row.state === "unlocked").length,
+      roleOrIdentityHeld: count("Held"),
+    },
+  };
+}
 
 const unlocked = reconcileNflPlayerPropsProductionSnapshot({ season: 2026, week: 1, evaluatedAt: "2026-08-25T12:00:00.000Z", nextBoard: board(decision) });
-assert.equal(NFL_PLAYER_PROPS_PRODUCTION_CANDIDATE_RELEASE, "nfl_player_props_member_2026_09_24_r23_projection_line_forecast");
-assert.equal(NFL_PLAYER_PROPS_WRITER_RELEASE, "nfl_player_props_writer_2026_09_24_r26_projection_line_forecast");
+assert.equal(NFL_PLAYER_PROPS_PRODUCTION_CANDIDATE_RELEASE, "nfl_player_props_member_2026_09_25_r24_canonical_main_line");
+assert.equal(NFL_PLAYER_PROPS_WRITER_RELEASE, "nfl_player_props_writer_2026_09_25_r27_canonical_main_line");
 assert.equal(NFL_PLAYER_PROPS_TRACKING_RELEASE, "nfl_player_props_tracking_2026_09_16_r12_current_season_inputs");
 assert.equal(NFL_PLAYER_PROPS_SETTLEMENT_RELEASE, "nfl_player_props_settlement_2026_08_25_r3_bounded_finality");
 assert.equal(NFL_PLAYER_PROPS_PRODUCTION_INCLUDE_OPENINGS, true, "production records same-book opening context for movement and CLV interpretation");
@@ -99,6 +123,75 @@ assert.equal(unlocked.writerLeaseGroup, NFL_PLAYER_PROPS_WRITER_LEASE_GROUP);
 assert.equal(unlocked.lifecycle.recomputedUnlocked, 1);
 assert.equal(unlocked.lifecycle.retainedStillFreshUnlocked, 0);
 assert.equal(buildNflPlayerPropsTrackingRows(unlocked).length, 0);
+
+const ladderRows: NflPlayerPropsRuntimeDecision[] = [
+  ["DraftKings", "Michael Penix", 199.5, "over", -250],
+  ["DraftKings", "Michael Penix", 199.5, "under", 190],
+  ["DraftKings", "Michael Penix", 230.5, "over", -110],
+  ["DraftKings", "Michael Penix", 230.5, "under", -110],
+  ["FanDuel", "Michael Penix Jr.", 230.5, "over", -108],
+  ["FanDuel", "Michael Penix Jr.", 230.5, "under", -112],
+  ["FanDuel", "Michael Penix Jr.", 260.5, "over", 180],
+  ["FanDuel", "Michael Penix Jr.", 260.5, "under", -240],
+  ["Pinnacle", "Michael Penix Jr", 229.5, "over", -105],
+  ["Pinnacle", "Michael Penix Jr", 229.5, "under", -115],
+].map(([sportsbook, playerName, line, side, americanPrice]) => ({
+  ...decision,
+  providerPlayerId: null,
+  playerName: String(playerName),
+  team: "ATL",
+  market: "passing_yards" as const,
+  line: Number(line),
+  side: side as "over" | "under",
+  sportsbook: String(sportsbook),
+  americanPrice: Number(americanPrice),
+}));
+assert.equal(
+  nflPlayerPropsCanonicalMarketScopeKey(ladderRows[0]!),
+  nflPlayerPropsCanonicalMarketScopeKey(ladderRows[4]!),
+  "suffix aliases share one player/market scope",
+);
+const canonicalLadder = selectNflPlayerPropsCanonicalLines(ladderRows);
+assert.deepEqual([...new Set(canonicalLadder.map((row) => row.line))], [230.5],
+  "cross-book main-line votes select one actual consensus line instead of alternate ladders");
+assert.deepEqual([...new Set(canonicalLadder.map((row) => row.side))].sort(), ["over", "under"],
+  "the selected listed line retains both exact sides");
+
+const canonicalUnlocked = reconcileNflPlayerPropsProductionSnapshot({
+  season: 2026,
+  week: 1,
+  evaluatedAt: "2026-08-25T12:00:00.000Z",
+  nextBoard: boardRows(ladderRows),
+});
+assert.deepEqual([...new Set(canonicalUnlocked.memberDecisions.map((row) => row.line))], [230.5],
+  "new unlocked member scopes publish only the canonical main line");
+assert.equal(canonicalUnlocked.board.decisions.length, ladderRows.length,
+  "the canonical production board retains every exact alternate offer internally");
+const canonicalAtLock = reconcileNflPlayerPropsProductionSnapshot({
+  season: 2026,
+  week: 1,
+  evaluatedAt: "2026-09-01T11:00:00.000Z",
+  previous: canonicalUnlocked,
+  nextBoard: boardRows(ladderRows.map((row) => ({ ...row, americanPrice: row.americanPrice + 1 }))),
+});
+assert.deepEqual([...new Set(canonicalAtLock.memberDecisions.map((row) => row.line))], [230.5],
+  "a future game freezes on the same one-line member contract at T-60");
+const legacyLockedSnapshot = {
+  ...canonicalAtLock,
+  memberDecisions: canonicalAtLock.board.decisions.map((row) => row.grade === "Held"
+    ? { ...row, grade: "No Play" as const }
+    : row as Exclude<typeof row, { grade: "Held" }>),
+};
+const legacyLockedMemberJson = JSON.stringify(legacyLockedSnapshot.memberDecisions);
+const legacyReconciled = reconcileNflPlayerPropsProductionSnapshot({
+  season: 2026,
+  week: 1,
+  evaluatedAt: "2026-09-01T12:00:00.000Z",
+  previous: legacyLockedSnapshot,
+  nextBoard: boardRows(ladderRows),
+});
+assert.equal(JSON.stringify(legacyReconciled.memberDecisions), legacyLockedMemberJson,
+  "a previously locked legacy member payload retains exact precedence across the release boundary");
 
 const passingConsensus: NflPlayerPropsRuntimeDecision = {
   ...decision,
