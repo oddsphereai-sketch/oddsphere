@@ -1,7 +1,7 @@
 {
-  "decisionRelease": "nfl_player_props_decision_2026_09_16_r12_ranked_predictions",
+  "decisionRelease": "nfl_player_props_decision_2026_09_24_r13_projection_line_forecast",
   "modelRelease": "nfl_player_props_distribution_model_2026_09_16_r9_current_season_inputs",
-  "calibrationRelease": "nfl_player_props_distribution_calibration_2026_09_16_r9_ranked_predictions",
+  "calibrationRelease": "nfl_player_props_distribution_calibration_2026_09_24_r10_projection_line_forecast",
   "touchdownModelRelease": "nfl_player_props_anytime_td_model_2026_08_25_r3_shared_context",
   "touchdownCalibrationRelease": "nfl_player_props_anytime_td_calibration_2026_08_25_r3_shared_context",
   "marketBoardRelease": "nfl_player_props_exact_market_board_2026_09_01_r2_cross_line_opening",
@@ -9,7 +9,7 @@
   "noQuotas": true,
   "predictionSetPolicy": {
     "scope": "displayed_prediction_only",
-    "overUnder": "ranked_expected_prevalence_by_market",
+    "overUnder": "published_projection_vs_exact_line_with_posterior_tie_break",
     "touchdown": "ranked_expected_distinct_scorers_by_team",
     "changesProbabilitiesPricesGradesOrActionability": false
   },

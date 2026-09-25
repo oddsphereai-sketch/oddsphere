@@ -83,8 +83,8 @@ function emptyBoard(): NflPlayerPropsRuntimeBoard {
 }
 
 const unlocked = reconcileNflPlayerPropsProductionSnapshot({ season: 2026, week: 1, evaluatedAt: "2026-08-25T12:00:00.000Z", nextBoard: board(decision) });
-assert.equal(NFL_PLAYER_PROPS_PRODUCTION_CANDIDATE_RELEASE, "nfl_player_props_member_2026_09_21_r22_receiving_market_integrity");
-assert.equal(NFL_PLAYER_PROPS_WRITER_RELEASE, "nfl_player_props_writer_2026_09_21_r25_receiving_market_integrity");
+assert.equal(NFL_PLAYER_PROPS_PRODUCTION_CANDIDATE_RELEASE, "nfl_player_props_member_2026_09_24_r23_projection_line_forecast");
+assert.equal(NFL_PLAYER_PROPS_WRITER_RELEASE, "nfl_player_props_writer_2026_09_24_r26_projection_line_forecast");
 assert.equal(NFL_PLAYER_PROPS_TRACKING_RELEASE, "nfl_player_props_tracking_2026_09_16_r12_current_season_inputs");
 assert.equal(NFL_PLAYER_PROPS_SETTLEMENT_RELEASE, "nfl_player_props_settlement_2026_08_25_r3_bounded_finality");
 assert.equal(NFL_PLAYER_PROPS_PRODUCTION_INCLUDE_OPENINGS, true, "production records same-book opening context for movement and CLV interpretation");
@@ -105,6 +105,7 @@ const passingConsensus: NflPlayerPropsRuntimeDecision = {
   playerName: "Consensus Quarterback",
   market: "passing_yards",
   line: 225.5,
+  projection: 231.2,
   grade: "Lean",
   modelRelease: NFL_PLAYER_PROPS_MODEL_RELEASE,
   calibrationRelease: NFL_PLAYER_PROPS_CALIBRATION_RELEASE,
@@ -130,6 +131,7 @@ const passingFallback: NflPlayerPropsRuntimeDecision = {
   playerName: "Fallback Quarterback",
   market: "passing_yards",
   line: 225.5,
+  projection: 219.7,
   state: "locked",
   grade: "No Play",
   projectionEvidence: {
@@ -293,16 +295,16 @@ assert.ok(memberReader.includes('data-product-zone="today-radar"'));
 assert.ok(memberReader.includes('data-product-zone="research-entry"'));
 assert.ok(memberReader.includes('data-product-zone="full-board"'));
 assert.ok(memberReader.includes("buildRadarRows(rows), [rows]"), "NFL filters drive Today’s Radar and the full board from one row set");
-assert.ok(memberReader.includes('row.grade === "Best Angle" || row.grade === "Lean"'), "Today’s Radar surfaces real actionable rows even when the ranked forecast selects a non-actionable sibling");
+assert.ok(memberReader.includes('row.grade === "Best Angle" || row.grade === "Lean"'), "Today’s Radar surfaces real actionable rows independently of the paired projection forecast");
 assert.ok(memberReader.includes("const selected = rows.find"), "an open NFL prop reader cannot survive a filter that excludes its row");
 assert.ok(memberReader.includes('{rows.length} {activeFilters ? "filtered" : "completed"} reads'), "NFL filter feedback reports the filtered row count");
-assert.ok(memberReader.includes("pairRows(filteredRows, sort, touchdownScorers, overForecasts)"), "the selected sort and slate-level prediction cohorts are passed into the paired full-board rows");
+assert.ok(memberReader.includes("pairRows(filteredRows, sort, touchdownScorers)"), "the selected sort and touchdown cohort are passed into the paired full-board rows");
 assert.ok(memberReader.includes('pair.prediction?.outcome === predictionFilter'), "the prediction control filters resolved forecast outcomes rather than price sides");
 assert.ok(memberReader.includes('{ value: "yes", label: "TD scorer" }'), "the NFL board exposes a direct scorer-prediction filter");
 assert.ok(memberReader.includes('setPredictionFilter("all")'), "clearing controls also clears the prediction-side filter");
 assert.ok(memberReader.includes("<span>Prediction</span>"), "the paired NFL board gives the forecast its own visible column");
 assert.ok(!memberReader.includes("Strongest grade"), "a value grade cannot masquerade as the paired market prediction");
-assert.ok(memberReader.includes("resolveNflPlayerPropsPrediction(marketRows"), "the paired board resolves a market-aware probability prediction before presenting prices");
+assert.ok(memberReader.includes("resolveNflPlayerPropsPrediction(marketRows"), "the paired board resolves a projection-line-coherent prediction before presenting prices");
 assert.ok(memberReader.includes("quoteMovement(row)"), "both market-side quotes retain opening-to-current movement context");
 assert.match(memberReader, /\.sort\(\(a, b\) => sortRows\(sort\)\(a\.primary, b\.primary\)/,
   "the paired full board honors the selected sort instead of forcing signal order");
@@ -337,41 +339,43 @@ assert.equal(nflPlayerPropsAvailabilityAgeLabel({ reportedAt: "2026-08-26T12:00:
 assert.equal(nflPlayerPropsAvailabilityAgeLabel({ reportedAt: null, reportUpdatedAt: "2026-08-15T13:00:00.000Z" }, "2026-08-27T13:00:00.000Z"), "12d old");
 assert.equal(nflPlayerPropsAvailabilityAgeLabel({ reportedAt: "2026-08-28T13:00:00.000Z", reportUpdatedAt: null }, "2026-08-27T13:00:00.000Z"), null);
 const probabilityFirstPrediction = resolveNflPlayerPropsPrediction([
-  { side: "over" as const, finalProbability: 0.43, expectedValue: 0.24, grade: "Best Angle" },
-  { side: "under" as const, finalProbability: 0.57, expectedValue: -0.03, grade: "No Play" },
+  { side: "over" as const, finalProbability: 0.57, expectedValue: 0.24, grade: "Best Angle", line: 50.5, projection: 49.2 },
+  { side: "under" as const, finalProbability: 0.43, expectedValue: -0.03, grade: "No Play", line: 50.5, projection: 49.2 },
 ]);
-assert.equal(probabilityFirstPrediction?.outcome, "under", "accuracy probability, not EV or grade, chooses the displayed prediction");
-assert.equal(probabilityFirstPrediction?.probability, 0.57);
+assert.equal(probabilityFirstPrediction?.outcome, "under", "the projection relative to the exact line, not probability, EV, or grade, chooses the displayed prediction");
+assert.equal(probabilityFirstPrediction?.probability, 0.43);
 assert.equal(probabilityFirstPrediction?.quotedSide, "under");
-const filteredSidePrediction = resolveNflPlayerPropsPrediction([{ side: "under" as const, finalProbability: 0.42 }]);
+const filteredSidePrediction = resolveNflPlayerPropsPrediction([{ side: "under" as const, finalProbability: 0.42, line: 40.5, projection: 42.1 }]);
 assert.equal(filteredSidePrediction?.outcome, "over", "a price filter cannot turn the remaining quote into the prediction");
 assert.equal(filteredSidePrediction?.quotedSide, null, "an inferred forecast is not falsely highlighted as a posted quote");
-const touchdownPrediction = resolveNflPlayerPropsPrediction([{ side: "yes" as const, finalProbability: 0.28 }]);
+const touchdownPrediction = resolveNflPlayerPropsPrediction([{ side: "yes" as const, finalProbability: 0.28, line: 0.5, projection: null }]);
 assert.equal(touchdownPrediction?.outcome, "no", "one-sided touchdown prices still show the model's most likely outcome");
 assert.equal(touchdownPrediction?.probability, 0.72);
 const touchdownRows = [
-  { gameId: "g1", playerName: "Player A", team: "BUF", market: "anytime_td", side: "yes" as const, finalProbability: 0.45 },
-  { gameId: "g1", playerName: "Player B", team: "BUF", market: "anytime_td", side: "yes" as const, finalProbability: 0.35 },
-  { gameId: "g1", playerName: "Player C", team: "BUF", market: "anytime_td", side: "yes" as const, finalProbability: 0.30 },
-  { gameId: "g1", playerName: "Player D", team: "BUF", market: "anytime_td", side: "yes" as const, finalProbability: 0.20 },
-  { gameId: "g1", playerName: "Player E", team: "BUF", market: "anytime_td", side: "yes" as const, finalProbability: 0.10 },
+  { gameId: "g1", playerName: "Player A", team: "BUF", market: "anytime_td", line: 0.5, projection: null, side: "yes" as const, finalProbability: 0.45 },
+  { gameId: "g1", playerName: "Player B", team: "BUF", market: "anytime_td", line: 0.5, projection: null, side: "yes" as const, finalProbability: 0.35 },
+  { gameId: "g1", playerName: "Player C", team: "BUF", market: "anytime_td", line: 0.5, projection: null, side: "yes" as const, finalProbability: 0.30 },
+  { gameId: "g1", playerName: "Player D", team: "BUF", market: "anytime_td", line: 0.5, projection: null, side: "yes" as const, finalProbability: 0.20 },
+  { gameId: "g1", playerName: "Player E", team: "BUF", market: "anytime_td", line: 0.5, projection: null, side: "yes" as const, finalProbability: 0.10 },
 ];
 const touchdownScorers = selectNflPlayerPropsTouchdownScorers(touchdownRows);
 assert.deepEqual([...touchdownScorers], ["g1|playera"], "a team's ranked positive cohort matches its rounded expected distinct-scorer count");
 assert.equal(resolveNflPlayerPropsPrediction([touchdownRows[0]!], { touchdownPositive: touchdownScorers.has("g1|playera") })?.outcome, "yes");
 assert.equal(resolveNflPlayerPropsPrediction([touchdownRows[1]!], { touchdownPositive: touchdownScorers.has("g1|playerb") })?.outcome, "no");
 const overRows = [
-  { gameId: "g1", playerName: "Player A", team: "BUF", market: "receiving_yards", line: 50.5, side: "over" as const, finalProbability: 0.49 },
-  { gameId: "g1", playerName: "Player B", team: "BUF", market: "receiving_yards", line: 40.5, side: "over" as const, finalProbability: 0.48 },
-  { gameId: "g1", playerName: "Player C", team: "BUF", market: "receiving_yards", line: 30.5, side: "over" as const, finalProbability: 0.47 },
+  { gameId: "g1", playerName: "Player A", team: "BUF", market: "receiving_yards", line: 50.5, projection: 51.2, side: "over" as const, finalProbability: 0.49 },
+  { gameId: "g1", playerName: "Player B", team: "BUF", market: "receiving_yards", line: 40.5, projection: 39.8, side: "over" as const, finalProbability: 0.58 },
+  { gameId: "g1", playerName: "Player C", team: "BUF", market: "receiving_yards", line: 30.5, projection: 30.5, side: "over" as const, finalProbability: 0.47 },
 ];
 const overForecasts = selectNflPlayerPropsOverForecasts(overRows);
-assert.deepEqual([...overForecasts], ["g1|playera|receiving_yards|50.5"], "the ranked Over cohort matches the market's rounded expected Over count");
-assert.equal(resolveNflPlayerPropsPrediction([overRows[0]!], { overPositive: overForecasts.has("g1|playera|receiving_yards|50.5") })?.outcome, "over");
-assert.equal(resolveNflPlayerPropsPrediction([overRows[1]!], { overPositive: overForecasts.has("g1|playerb|receiving_yards|40.5") })?.outcome, "under");
+assert.deepEqual([...overForecasts], ["g1|playera|receiving_yards|50.5"], "only projections above their exact line enter the Over forecast cohort");
+assert.equal(resolveNflPlayerPropsPrediction([overRows[0]!])?.outcome, "over");
+assert.equal(resolveNflPlayerPropsPrediction([overRows[1]!])?.outcome, "under");
+assert.equal(resolveNflPlayerPropsPrediction([overRows[2]!])?.outcome, "under", "an exact projection/line tie uses posterior probability only as a deterministic tie-break");
 for (const responsiveContract of ["overflow-x-auto", "hidden xl:block", "divide-y divide-gray-800 overflow-hidden rounded-lg border border-gray-800 bg-gray-950 xl:hidden"]) {
   assert.ok(memberReader.includes(responsiveContract), `NFL board preserves the shared responsive interaction contract: ${responsiveContract}`);
 }
+
 assert.ok(!memberReader.includes("No Edge"), "NFL uses the current universal No Play member vocabulary");
 assert.ok(memberReader.includes("Complete exact-price reads remain visible as No Play when independent same-line confirmation is still missing."));
 assert.ok(memberReader.includes("independent_same_line_confirmation_missing"));

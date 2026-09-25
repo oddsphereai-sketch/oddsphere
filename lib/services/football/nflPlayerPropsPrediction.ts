@@ -7,7 +7,10 @@ export type NflPlayerPropsTouchdownForecastRow = {
   finalProbability: number;
 };
 
-export type NflPlayerPropsOverUnderForecastRow = NflPlayerPropsTouchdownForecastRow & { line: number };
+export type NflPlayerPropsOverUnderForecastRow = NflPlayerPropsTouchdownForecastRow & {
+  line: number;
+  projection: number | null;
+};
 
 /**
  * Selects a team's highest-probability players until the binary forecast count
@@ -43,12 +46,41 @@ export function nflPlayerPropsTouchdownPlayerKey(
 }
 
 /**
- * Produces a discriminating Over/Under forecast set without changing any
- * probability, price, grade, or actionability rule. Within each market the
- * expected number of Overs is the sum of the calibrated Over probabilities;
- * the highest-probability outcomes fill that expected count.
+ * Resolves the displayed Over cohort from each market's published projection
+ * and exact line. Grades and portfolio-level prevalence never choose a
+ * different member-facing forecast side.
  */
 export function selectNflPlayerPropsOverForecasts<T extends NflPlayerPropsOverUnderForecastRow>(
+  rows: readonly T[],
+): ReadonlySet<string> {
+  const pairs = new Map<string, T[]>();
+  for (const row of rows) {
+    if (row.market === "anytime_td" || (row.side !== "over" && row.side !== "under")) continue;
+    const key = nflPlayerPropsOverUnderMarketKey(row);
+    pairs.set(key, [...(pairs.get(key) ?? []), row]);
+  }
+  const selected = new Set<string>();
+  for (const [key, marketRows] of pairs) {
+    const over = marketRows.find((row) => row.side === "over");
+    const under = marketRows.find((row) => row.side === "under");
+    const projection = marketRows.find((row) => Number.isFinite(row.projection))?.projection;
+    const line = marketRows[0]!.line;
+    if (projection !== null && projection !== undefined && projection > line) {
+      selected.add(key);
+      continue;
+    }
+    if (projection !== null && projection !== undefined && projection < line) continue;
+
+    // Exact projection/line equality has no directional point-estimate edge.
+    // Use the same posterior probability only as the deterministic tie-break.
+    const overProbability = over?.finalProbability ?? (under ? 1 - under.finalProbability : NaN);
+    if (Number.isFinite(overProbability) && overProbability >= 0.5) selected.add(key);
+  }
+  return selected;
+}
+
+/** Historical audit comparator for the superseded slate-level prevalence policy. */
+export function selectNflPlayerPropsRankedOverForecasts<T extends NflPlayerPropsOverUnderForecastRow>(
   rows: readonly T[],
 ): ReadonlySet<string> {
   const pairs = new Map<string, T[]>();

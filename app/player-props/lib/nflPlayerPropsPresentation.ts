@@ -20,12 +20,18 @@ export {
 } from "@/lib/services/football/nflPlayerPropsPrediction";
 
 /**
- * Resolves the board's forecast from the calibrated, market-aware probability.
- * Grade and expected value deliberately do not choose the displayed prediction.
+ * Resolves the board's forecast from the published projection and exact line.
+ * Grade, expected value, and slate-level side prevalence deliberately do not
+ * choose a different displayed prediction.
  */
 export function resolveNflPlayerPropsPrediction<
-  T extends { side: "over" | "under" | "yes"; finalProbability: number },
->(rows: readonly T[], options?: { touchdownPositive?: boolean; overPositive?: boolean }): NflPlayerPropsPrediction<T> | null {
+  T extends {
+    side: "over" | "under" | "yes";
+    finalProbability: number;
+    line: number;
+    projection: number | null;
+  },
+>(rows: readonly T[], options?: { touchdownPositive?: boolean }): NflPlayerPropsPrediction<T> | null {
   const yes = rows.find((row) => row.side === "yes");
   if (yes) {
     const touchdownPositive = options?.touchdownPositive ?? yes.finalProbability >= 0.5;
@@ -40,7 +46,12 @@ export function resolveNflPlayerPropsPrediction<
 
   const overProbability = over?.finalProbability ?? 1 - under!.finalProbability;
   const underProbability = under?.finalProbability ?? 1 - over!.finalProbability;
-  if (options?.overPositive ?? overProbability >= underProbability) {
+  const projection = rows.find((row) => Number.isFinite(row.projection))?.projection;
+  const line = rows[0]!.line;
+  const overPositive = projection !== null && projection !== undefined
+    ? projection > line || (projection === line && overProbability >= underProbability)
+    : overProbability >= underProbability;
+  if (overPositive) {
     return {
       outcome: "over",
       probability: overProbability,

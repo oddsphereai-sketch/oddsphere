@@ -141,7 +141,7 @@ function countActionSides(rows: NflPlayerPropsRuntimeDecision[]): Record<string,
 
 function hiddenActionableScopes(rows: NflPlayerPropsRuntimeDecision[]): number {
   const touchdownScorers = selectNflPlayerPropsTouchdownScorers(rows);
-  const overForecasts = selectNflPlayerPropsOverForecasts(rows);
+  const projectionForecasts = selectNflPlayerPropsOverForecasts(rows);
   const groups = new Map<string, NflPlayerPropsRuntimeDecision[]>();
   for (const row of rows) {
     const key = [row.gameId, normalize(row.playerName), row.market, row.line].join("|");
@@ -150,10 +150,10 @@ function hiddenActionableScopes(rows: NflPlayerPropsRuntimeDecision[]): number {
   let hidden = 0;
   for (const marketRows of groups.values()) {
     const first = marketRows[0]!;
-    const rankedSide = first.market === "anytime_td"
+    const forecastSide = first.market === "anytime_td"
       ? (touchdownScorers.has(nflPlayerPropsTouchdownPlayerKey(first)) ? "yes" : null)
-      : (overForecasts.has(nflPlayerPropsOverUnderMarketKey(first)) ? "over" : "under");
-    const selected = rankedSide ? marketRows.find((row) => row.side === rankedSide) : null;
+      : (projectionForecasts.has(nflPlayerPropsOverUnderMarketKey(first)) ? "over" : "under");
+    const selected = forecastSide ? marketRows.find((row) => row.side === forecastSide) : null;
     const hasAction = marketRows.some((row) => row.grade === "Best Angle" || row.grade === "Lean");
     if (hasAction && (!selected || (selected.grade !== "Best Angle" && selected.grade !== "Lean"))) hidden += 1;
   }
