@@ -45,12 +45,12 @@ import { nflFootballEvidenceStats } from "./footballMemberEvidence";
 import type { NflRegularSharpMarket, NflRegularSharpSplit } from "./sharpApiNflSplits";
 
 export const NFL_WEEK_ONE_HELD_MEMBER_FIXTURE_RELEASE =
-  "nfl_weekly_member_fixture_2026_09_22_r27_nonpush_side_alignment" as const;
+  "nfl_weekly_member_fixture_2026_09_25_r28_marginal_likelihood_score" as const;
 
 const NFL_PREVIOUS_MEMBER_RELEASE =
-  "nfl_v1_member_release_2026_09_20_r17_ml_total_coherence" as const;
+  "nfl_v1_member_release_2026_09_21_r18_opening_market_direction" as const;
 const NFL_PREVIOUS_DECISION_RELEASE =
-  "nfl_v1_daily_edge_decision_2026_09_20_r20_ml_total_coherence" as const;
+  "nfl_v1_daily_edge_decision_2026_09_21_r21_opening_market_direction" as const;
 const NFL_TRANSITION_FALLBACK_MEMBER_RELEASE =
   "nfl_v1_member_release_2026_09_16_r16_injury_pagination" as const;
 const NFL_TRANSITION_FALLBACK_DECISION_RELEASE =

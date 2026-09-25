@@ -23,7 +23,7 @@ export const NFL_FORWARD_EVIDENCE_PRIOR_SCHEMA_RELEASE =
 export const NFL_FORWARD_EVIDENCE_LEGACY_SCHEMA_RELEASE =
   "nfl_forward_evidence_snapshot_2026_08_22_r2_multibook" as const;
 export const NFL_FORWARD_EVIDENCE_COLLECTOR_RELEASE =
-  "nfl_forward_evidence_collector_2026_09_21_r9_opening_market_direction" as const;
+  "nfl_forward_evidence_collector_2026_09_25_r10_marginal_likelihood_score" as const;
 
 export type NflForwardEvidenceStage = "opening" | "unlocked" | "t60";
 
@@ -151,7 +151,8 @@ export type NflForwardEvidencePayload = {
       | "nfl_v1_member_release_2026_09_16_r15_sharp_league_contract"
       | "nfl_v1_member_release_2026_09_16_r16_injury_pagination"
       | "nfl_v1_member_release_2026_09_20_r17_ml_total_coherence"
-      | "nfl_v1_member_release_2026_09_21_r18_opening_market_direction";
+      | "nfl_v1_member_release_2026_09_21_r18_opening_market_direction"
+      | "nfl_v1_member_release_2026_09_25_r19_marginal_likelihood_score";
     publicationEnabled: true;
     /** True only after the authoritative regular/postseason T-60 boundary validates the complete tuple. */
     trackingEnabled: boolean;

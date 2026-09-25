@@ -74,7 +74,7 @@ import {
 } from "./nflForwardMemberSnapshotStore";
 
 export const NFL_FORWARD_WRITER_RELEASE =
-  "nfl_forward_evidence_writer_2026_09_24_r38_sharp_price_capture" as const;
+  "nfl_forward_evidence_writer_2026_09_25_r39_marginal_likelihood_score" as const;
 
 export type NflForwardWriterResult = {
   writerRelease: typeof NFL_FORWARD_WRITER_RELEASE;
