@@ -48,6 +48,7 @@ import {
   getNflV1WeekOneOutcomeForecast,
   hasNflV1WeekOneOutcomeForecast,
   NFL_V1_WEEKLY_OUTCOME_MODEL_RELEASE,
+  NFL_V1_WEEKLY_RAW_SIGNAL_RELEASE,
   NFL_V1_WEEK_ONE_OUTCOME_ARTIFACT_RELEASE,
 } from "./nflV1WeekOneOutcome";
 import {
@@ -72,9 +73,11 @@ import {
   buildNflForwardMemberSnapshot,
   writeNflForwardMemberSnapshot,
 } from "./nflForwardMemberSnapshotStore";
+import { readNflPlayerPropsCurrentSeasonState } from "./nflPlayerPropsCurrentSeasonState";
+import { buildNflWeeklyPossessionMargin } from "./nflWeeklyPossessionMargin";
 
 export const NFL_FORWARD_WRITER_RELEASE =
-  "nfl_forward_evidence_writer_2026_09_25_r39_marginal_likelihood_score" as const;
+  "nfl_forward_evidence_writer_2026_09_25_r40_current_season_raw_signal" as const;
 
 export type NflForwardWriterResult = {
   writerRelease: typeof NFL_FORWARD_WRITER_RELEASE;
@@ -194,7 +197,7 @@ export async function runNflForwardEvidenceWriter(args: {
     .filter((team, index, rows) => criticalTeamIds.has(team.id) && rows.findIndex((row) => row.id === team.id) === index);
 
   const playbook = new PlaybookClient(args.playbookApiKey);
-  const [rosters, availability, linesResult, splitsResult, sharpResult, circaAttempt] = await Promise.all([
+  const [rosters, availability, linesResult, splitsResult, sharpResult, circaAttempt, currentSeasonState] = await Promise.all([
     fetchBalldontlieNflTeamDepthSnapshots({
       teams: criticalTeams,
       season: args.season,
@@ -226,7 +229,13 @@ export async function runNflForwardEvidenceWriter(args: {
         result: null,
         requests: FOOTBALL_SHARP_PRICE_CAPTURE_BOOKS.length * FOOTBALL_SHARP_PRICE_CAPTURE_MAX_PAGES_PER_BOOK,
       })),
+    args.week > 1
+      ? readNflPlayerPropsCurrentSeasonState({ client: args.client, season: args.season })
+      : Promise.resolve(null),
   ]);
+  if (args.week > 1 && (!currentSeasonState || currentSeasonState.completeThroughWeek < args.week - 1)) {
+    throw new Error(`NFL current-season matchup state is incomplete through Week ${args.week - 1}.`);
+  }
 
   const availabilityByGame = new Map((availability ?? []).map((row) => [row.eventId, row]));
   const linesByGame = matchPlaybookRowsOptional(slate.games, linesResult ?? []);
@@ -309,6 +318,14 @@ export async function runNflForwardEvidenceWriter(args: {
       t60LagMinutes: plan.t60LagMinutes,
       coverageHealthHolds: holds,
     });
+    const weeklyRawSignal = currentSeasonState && current.spread && !hasNflV1WeekOneOutcomeForecast(plan.game.providerGameId)
+      ? buildNflWeeklyPossessionMargin({
+          currentSeasonState,
+          homeTeam: plan.game.home.abbreviation,
+          awayTeam: plan.game.away.abbreviation,
+          marketHomeMargin: -current.spread.homeLine,
+        })
+      : null;
     const baseOutcome = getNflV1WeekOneOutcomeForecast({
       providerGameId: plan.game.providerGameId,
       awayTeam: plan.game.away.abbreviation,
@@ -330,6 +347,11 @@ export async function runNflForwardEvidenceWriter(args: {
           playbookSplits,
           sharpSplits,
           spreadDirectionCandidate: true,
+          movementCurrent: current,
+          weeklyRawSignal: weeklyRawSignal ? {
+            release: NFL_V1_WEEKLY_RAW_SIGNAL_RELEASE,
+            independentHomeMargin: weeklyRawSignal.independentHomeMargin,
+          } : undefined,
           evaluatedAt: args.now,
         })
       : baseOutcome;
@@ -349,6 +371,10 @@ export async function runNflForwardEvidenceWriter(args: {
       playbookSplits,
       sharpSplits,
       pricedNeutralTotalCandidate: true,
+      weeklyRawSignal: weeklyRawSignal ? {
+        release: NFL_V1_WEEKLY_RAW_SIGNAL_RELEASE,
+        independentHomeMargin: weeklyRawSignal.independentHomeMargin,
+      } : undefined,
     });
     const { outcome, production } = resolved;
     assertFootballCrossMarketCoherence({
