@@ -25,12 +25,16 @@ Circa/Pinnacle landmarks therefore do not survive to become the next cycle's ope
 Advance only the additive context-capture and writer identifiers. Reconstruct capture-only,
 target-ineligible SharpAPI books from the preceding compact landmark and add them to the
 existing opening-history input. The reconstructed books remain excluded from production
-decisions and exact-price selection.
+decisions and exact-price selection. The writer must also treat a changed context-capture
+release as a one-cycle unlocked refresh requirement; otherwise a successful cadence check can
+defer activation of the new capture contract. After that one refresh, normal request-bounded
+cadence resumes.
 
 ## Gates
 
 - Focused context-capture and NFL production tests pass.
 - TypeScript, model-change verification, build, and integration safety pass.
-- Existing writer call count, lease, request budget, and member output remain unchanged.
+- Existing lease, per-cycle request budget, and member output remain unchanged. The release
+  transition intentionally adds one unlocked collection cycle, then returns to normal cadence.
 - Before/after SELECT-only audit proves chronological Circa/Pinnacle pairs begin accumulating.
 - No locked evidence is rewritten; prior rows remain immutable.

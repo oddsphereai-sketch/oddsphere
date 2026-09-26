@@ -307,6 +307,7 @@ export function determineNflForwardCollectionNeed(args: {
     memberRelease: string;
     decisionRelease: string;
     evaluatedBetCount: number;
+    contextCaptureRelease?: string;
   };
 }): { collect: boolean; reason: string; cadenceMinutes: number | null } {
   const now = validTimestamp(args.now, "now");
@@ -317,6 +318,7 @@ export function determineNflForwardCollectionNeed(args: {
   if (openings < expected) return { collect: true, reason: "opening_incomplete", cadenceMinutes: null };
   const upcomingOutsideT60: number[] = [];
   let publicReleaseRefreshDue = false;
+  let contextCaptureReleaseRefreshDue = false;
   for (const rows of byGame.values()) {
     const latestRow = [...rows].sort((first, second) => Date.parse(second.capturedAt) - Date.parse(first.capturedAt))[0]!;
     const startsAt = validTimestamp(latestRow.gameStartAt, "stored gameStartAt");
@@ -338,12 +340,20 @@ export function determineNflForwardCollectionNeed(args: {
               decision.decisionRelease !== args.requiredPublicRelease!.decisionRelease)) {
           publicReleaseRefreshDue = true;
         }
+        if (args.requiredPublicRelease.contextCaptureRelease &&
+            latestRow.payload.contextualEvidenceCapture?.release !==
+              args.requiredPublicRelease.contextCaptureRelease) {
+          contextCaptureReleaseRefreshDue = true;
+        }
       }
     }
   }
   if (upcomingOutsideT60.length === 0) return { collect: false, reason: "no_unlocked_games_due", cadenceMinutes: null };
   if (publicReleaseRefreshDue) {
     return { collect: true, reason: "public_release_refresh_due", cadenceMinutes: 0 };
+  }
+  if (contextCaptureReleaseRefreshDue) {
+    return { collect: true, reason: "context_capture_release_refresh_due", cadenceMinutes: 0 };
   }
   const latest = Math.max(...args.existing.map((row) => validTimestamp(row.capturedAt, "stored capturedAt")));
   const openingFollowUpIncomplete = [...byGame.values()].some((rows) => {

@@ -56,6 +56,7 @@ import {
 } from "./nflTargetExcludedMarketOutcome";
 import {
   buildNflForwardContextCapture,
+  NFL_FORWARD_CONTEXT_CAPTURE_RELEASE,
   nflForwardContextSharpHistoryBooks,
 } from "./nflForwardEvidenceCapture";
 import {
@@ -80,7 +81,7 @@ import { readNflPlayerPropsCurrentSeasonState } from "./nflPlayerPropsCurrentSea
 import { buildNflWeeklyPossessionMargin } from "./nflWeeklyPossessionMargin";
 
 export const NFL_FORWARD_WRITER_RELEASE =
-  "nfl_forward_evidence_writer_2026_09_26_r41_sharp_price_trail_continuity" as const;
+  "nfl_forward_evidence_writer_2026_09_26_r42_context_capture_release_refresh" as const;
 
 export type NflForwardWriterResult = {
   writerRelease: typeof NFL_FORWARD_WRITER_RELEASE;
@@ -144,6 +145,7 @@ export async function runNflForwardEvidenceWriter(args: {
       memberRelease: NFL_V1_ACTIONABLE_GRADE_MEMBER_RELEASE,
       decisionRelease: NFL_V1_ACTIONABLE_GRADE_DECISION_RELEASE,
       evaluatedBetCount: 3,
+      contextCaptureRelease: NFL_FORWARD_CONTEXT_CAPTURE_RELEASE,
     },
   });
   if (!need.collect) {
