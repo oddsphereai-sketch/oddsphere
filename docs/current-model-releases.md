@@ -143,6 +143,22 @@ Last reviewed: 2026-09-25
 
 ## CFB Daily Edge generalized weekly production release
 
+### SharpAPI exact-event failure isolation (writer r72)
+
+- Active named-book fallback / sole writer releases are
+  `cfb_sharpapi_named_book_fallback_2026_09_26_r13_event_failure_isolation` /
+  `cfb_forward_evidence_writer_2026_09_26_r72_sharpapi_event_failure_isolation`. An oversized,
+  malformed, or non-advancing exact-event odds response is recorded only for its verified game
+  and cannot abort healthy sibling games before the atomic append. The four-page per-event and
+  192-request run ceilings remain unchanged; canonical discovery, global exhaustion, shared
+  transport failures, and ambiguous identity still fail closed.
+- Live-provider zero-write proof completed 106 games and proposed 100 opening payloads with 158
+  exact-price evaluations and zero capture failures after the James Madison–Old Dominion event
+  exceeded four pages. There were zero writes. The active r71 score/side prediction, evidence,
+  member, fixture, snapshot, and tracking family is unchanged, as are model math, board tiers,
+  stakes, copy, labels, layout, cron cadence, and the `prediction_pipeline:cfb` lease. Evidence
+  and rollback: `docs/model-audits/2026-09-26-cfb-sharpapi-event-failure-isolation-r72.md`.
+
 ### Score/Spread side coherence (r71)
 
 - Active probability / calibration / grade / decision / tuple releases are
