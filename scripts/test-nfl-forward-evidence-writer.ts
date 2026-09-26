@@ -22,6 +22,7 @@ import {
   NFL_V1_ACTIONABLE_GRADE_DECISION_RELEASE,
   NFL_V1_ACTIONABLE_GRADE_MEMBER_RELEASE,
 } from "../lib/services/football/nflV1ActionableGradeCandidate";
+import { NFL_FORWARD_CONTEXT_CAPTURE_RELEASE } from "../lib/services/football/nflForwardEvidenceCapture";
 import {
   NFL_WEEK_ONE_EVIDENCE_BOARD_RELEASE,
   buildNflWeekOneEvidenceBoard,
@@ -199,6 +200,50 @@ assert.equal(
   }).reason,
   "cadence_not_due",
 );
+const staleContextCaptureFollowUp: NflForwardStoredEvidence = {
+  ...completeCurrentReleaseFollowUp,
+  payload: {
+    ...completeCurrentReleaseFollowUp.payload,
+    contextualEvidenceCapture: {
+      release: "nfl_daily_edge_forward_context_capture_2026_09_26_r3_public_split_provenance",
+    },
+  } as unknown as NflForwardEvidencePayload,
+};
+assert.deepEqual(
+  determineNflForwardCollectionNeed({
+    existing: [completeCurrentReleaseOpening, staleContextCaptureFollowUp],
+    now: beforeCadence,
+    requiredPublicRelease: {
+      memberRelease: NFL_V1_ACTIONABLE_GRADE_MEMBER_RELEASE,
+      decisionRelease: NFL_V1_ACTIONABLE_GRADE_DECISION_RELEASE,
+      evaluatedBetCount: 3,
+      contextCaptureRelease: NFL_FORWARD_CONTEXT_CAPTURE_RELEASE,
+    },
+  }),
+  { collect: true, reason: "context_capture_release_refresh_due", cadenceMinutes: 0 },
+);
+const currentContextCaptureFollowUp: NflForwardStoredEvidence = {
+  ...completeCurrentReleaseFollowUp,
+  payload: {
+    ...completeCurrentReleaseFollowUp.payload,
+    contextualEvidenceCapture: {
+      release: NFL_FORWARD_CONTEXT_CAPTURE_RELEASE,
+    },
+  } as unknown as NflForwardEvidencePayload,
+};
+assert.equal(
+  determineNflForwardCollectionNeed({
+    existing: [completeCurrentReleaseOpening, currentContextCaptureFollowUp],
+    now: beforeCadence,
+    requiredPublicRelease: {
+      memberRelease: NFL_V1_ACTIONABLE_GRADE_MEMBER_RELEASE,
+      decisionRelease: NFL_V1_ACTIONABLE_GRADE_DECISION_RELEASE,
+      evaluatedBetCount: 3,
+      contextCaptureRelease: NFL_FORWARD_CONTEXT_CAPTURE_RELEASE,
+    },
+  }).reason,
+  "cadence_not_due",
+);
 
 const t60Time = "2026-09-09T23:30:00.000Z";
 assert.equal(
@@ -288,7 +333,7 @@ assert.match(writer, /currentBooks/);
 assert.match(writer, /comparableCurrentBooks/);
 assert.match(writer, /multibook_consensus_unavailable/);
 assert.doesNotMatch(writer, /readLegacyNflForwardEvidence|readPriorNflForwardEvidence|readPreviousNflForwardEvidence/, "the live writer must not scan superseded large JSON releases");
-assert.match(writer, /nfl_forward_evidence_writer_2026_09_26_r41_sharp_price_trail_continuity/);
+assert.match(writer, /nfl_forward_evidence_writer_2026_09_26_r42_context_capture_release_refresh/);
 assert.equal((writer.match(/readNflPlayerPropsCurrentSeasonState\(/g) ?? []).length, 1, "the NFL writer must read current-season state once per cycle");
 assert.match(writer, /currentSeasonState\.completeThroughWeek < args\.week - 1/);
 assert.match(writer, /buildNflWeeklyPossessionMargin/);
@@ -308,6 +353,7 @@ assert.doesNotMatch(
 );
 assert.match(writer, /const existing = await readNflForwardEvidence[\s\S]*const historicalExisting = existing/);
 assert.match(evidenceRuntime, /public_release_refresh_due/);
+assert.match(evidenceRuntime, /context_capture_release_refresh_due/);
 assert.equal(NFL_T60_MAX_CAPTURE_LAG_MINUTES, 20);
 assert.match(writer, /NFL_T60_MAX_CAPTURE_LAG_MINUTES/);
 assert.doesNotMatch(writer, /t60LagMinutes[^\n]*> 20/);
