@@ -25,7 +25,7 @@ import {
 import { assertMarketScopedFootballDecisions, FOOTBALL_MARKET_SCOPED_T60_TRACKING_RELEASE } from "./footballMarketScopedTracking";
 
 export const CFB_OFFICIAL_TRACKING_RECORD_RELEASE =
-  "cfb_official_tracking_record_2026_09_26_r25_score_side_coherent" as const;
+  "cfb_official_tracking_record_2026_09_26_r27_published_pregame_tracking" as const;
 
 export function cfbTrackingMarketsForPayload(payload: CfbForwardEvidencePayload): CfbV1Market[] {
   const markets = new Set<CfbV1Market>(payload.decisions.evaluatedBets.map((decision) => decision.market));
@@ -34,6 +34,20 @@ export function cfbTrackingMarketsForPayload(payload: CfbForwardEvidencePayload)
     if (outlook && (heldMarket.market === "moneyline" || outlook.line !== null)) markets.add(heldMarket.market);
   }
   return (["moneyline", "spread", "total"] as const).filter((market) => markets.has(market));
+}
+
+/**
+ * Markets with an exact directional prediction in an immutable member payload.
+ * Price/EV availability is intentionally irrelevant; Spread and Total still
+ * require the exact published line so the eventual result can be graded.
+ */
+export function cfbPublishedPregameRecoveryMarkets(payload: CfbForwardEvidencePayload): CfbV1Market[] {
+  const decisions = new Set(payload.decisions.evaluatedBets.map((decision) => decision.market));
+  return (["moneyline", "spread", "total"] as const).filter((market) => {
+    if (decisions.has(market)) return true;
+    const outlook = payload.decisions.marketOutlooks?.[market] ?? null;
+    return Boolean(outlook && (market === "moneyline" || outlook.line !== null));
+  });
 }
 export function buildCfbOfficialTrackingRecords(args: { payload: CfbForwardEvidencePayload; gameId: number }): PredictionRecordRow[] {
   assertCfbTrackingPayload(args.payload);
@@ -124,22 +138,21 @@ export function buildCfbOfficialTrackingRecords(args: { payload: CfbForwardEvide
 }
 
 /**
- * Recover an accuracy denominator from the exact immutable forecast that was
- * published before the game's T-60 boundary when the separate T-60 tracking
- * writer missed its run. These records are deliberately No Play predictions:
+ * Recover an accuracy denominator from the latest exact immutable forecast
+ * published before kickoff when the separate T-60 tracking writer missed its
+ * run. These records are deliberately No Play predictions:
  * they do not reconstruct a price, edge, EV, recommendation, stake, or ROI.
  */
-export function buildCfbPublishedCutoffRecoveryRecords(args: {
+export function buildCfbPublishedPregameRecoveryRecords(args: {
   payload: CfbForwardEvidencePayload;
   gameId: number;
 }): PredictionRecordRow[] {
-  assertCfbPublishedCutoffRecoveryPayload(args.payload);
+  assertCfbPublishedPregameRecoveryPayload(args.payload);
   const externalId = providerIntegerId(args.payload.game.providerGameId, "game");
   const outlooks = args.payload.decisions.marketOutlooks;
-  if (!outlooks) throw new Error("CFB published-cutoff recovery requires immutable market outlooks.");
   return (["moneyline", "spread", "total"] as const).flatMap((market) => {
     const immutableDecision = args.payload.decisions.evaluatedBets.find((decision) => decision.market === market) ?? null;
-    const outlook = outlooks[market] ?? (immutableDecision ? {
+    const outlook = outlooks?.[market] ?? (immutableDecision ? {
       market,
       side: canonicalSide(args.payload, market, immutableDecision.side),
       line: market === "moneyline" ? null : immutableDecision.evaluatedQuote.line,
@@ -153,10 +166,10 @@ export function buildCfbPublishedCutoffRecoveryRecords(args: {
       gameId: args.gameId,
       externalId,
       market,
-      reason: "t60_tracking_writer_missed_accuracy_only",
-      reasonCodes: ["published_before_t60_cutoff", "no_reconstructed_betting_economics"],
+      reason: "pregame_tracking_writer_missed_accuracy_only",
+      reasonCodes: ["published_before_kickoff", "no_reconstructed_betting_economics"],
       outlook,
-      predictionSource: "cfb_forward_evidence_published_cutoff_accuracy_recovery",
+      predictionSource: "cfb_forward_evidence_published_pregame_accuracy_recovery",
       recovery: true,
       recoveryDetails: immutableDecision ? {
         source: "immutable_published_exact_price_decision",
@@ -172,7 +185,7 @@ export function buildCfbEspnOpeningRecoveryRecords(args: {
   referenceLine: CfbEspnReferenceLine;
   replayForecast: CfbV1Forecast;
 }): PredictionRecordRow[] {
-  assertCfbPublishedCutoffRecoveryPayload(args.payload);
+  assertCfbPublishedPregameRecoveryPayload(args.payload);
   assertCfbIndependentReplay(args.payload, args.replayForecast);
   if (args.payload.authoritativeForecast?.status !== "market_anchor_unavailable_hold") {
     throw new Error("CFB ESPN recovery requires a held independent authoritative forecast.");
@@ -189,7 +202,7 @@ export function buildCfbEspnOpeningRecoveryRecords(args: {
     externalId,
     market,
     reason: "t60_reference_line_unavailable_accuracy_recovery",
-    reasonCodes: ["published_before_t60_cutoff", "strict_espn_event_identity", "draftkings_opening_reference", "no_reconstructed_betting_economics"],
+    reasonCodes: ["published_before_kickoff", "strict_espn_event_identity", "draftkings_opening_reference", "no_reconstructed_betting_economics"],
     outlook: outlooks[market]!,
     predictionSource: "cfb_forward_evidence_espn_opening_accuracy_recovery",
     recovery: true,
@@ -281,11 +294,11 @@ function buildNoPlayForecastRecord(args: {
       current_books_at_lock: args.payload.market.currentBooks,
       coverage_at_lock: args.payload.coverage,
       ...(args.recovery ? {
-        published_cutoff_recovery: {
+        published_pregame_recovery: {
           accuracy_only: true,
           original_capture_timing: args.payload.captureTiming,
           original_forecast_release: args.payload.authoritativeForecast?.release ?? null,
-          selected_at_or_before_cutoff: new Date(Date.parse(args.payload.game.scheduledStart) - 60 * 60_000).toISOString(),
+          selected_before_kickoff: args.payload.capturedAt,
           excludes: ["odds", "edge", "expected_value", "recommendation", "stake", "roi"],
           ...(args.recoveryDetails ? { details: args.recoveryDetails } : {}),
         },
@@ -295,10 +308,10 @@ function buildNoPlayForecastRecord(args: {
   };
 }
 
-function assertCfbPublishedCutoffRecoveryPayload(payload: CfbForwardEvidencePayload): void {
+function assertCfbPublishedPregameRecoveryPayload(payload: CfbForwardEvidencePayload): void {
   const forecastRelease = payload.authoritativeForecast?.release as string | undefined;
   const capturedAt = Date.parse(payload.capturedAt);
-  const cutoffAt = Date.parse(payload.game.scheduledStart) - 60 * 60_000;
+  const gameStart = Date.parse(payload.game.scheduledStart);
   const supportedForecastRelease = forecastRelease === CFB_MARKET_SHARP_AWARE_PRODUCTION_RELEASE ||
     forecastRelease === CFB_MARKET_SHARP_AWARE_PREVIOUS_PRODUCTION_RELEASE;
   if (
@@ -308,10 +321,10 @@ function assertCfbPublishedCutoffRecoveryPayload(payload: CfbForwardEvidencePayl
     !payload.decisions.publicationEnabled ||
     !supportedForecastRelease ||
     !Number.isFinite(capturedAt) ||
-    !Number.isFinite(cutoffAt) ||
-    capturedAt > cutoffAt
+    !Number.isFinite(gameStart) ||
+    capturedAt >= gameStart
   ) {
-    throw new Error("CFB published-cutoff recovery requires a supported immutable pre-cutoff prediction payload.");
+    throw new Error("CFB published-pregame recovery requires a supported immutable pregame prediction payload.");
   }
 }
 

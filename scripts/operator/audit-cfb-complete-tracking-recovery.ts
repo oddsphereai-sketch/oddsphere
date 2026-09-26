@@ -16,7 +16,7 @@ import { activeCfbWeeklyWindow } from "../../lib/services/football/cfbWeeklyWind
 import type { CfbForwardEvidencePayload } from "../../lib/services/football/cfbForwardEvidence";
 import {
   buildCfbEspnOpeningRecoveryRecords,
-  buildCfbPublishedCutoffRecoveryRecords,
+  buildCfbPublishedPregameRecoveryRecords,
 } from "../../lib/services/football/cfbOfficialTrackingRecord";
 import { CFB_ESPN_REFERENCE_LINE_RELEASE } from "../../lib/services/football/cfbEspnReferenceLine";
 import type { PredictionRecordRow } from "../../lib/types/domain/Tracking";
@@ -185,7 +185,7 @@ async function main() {
       ? { side: "over" as const, probability: probabilities.total.over }
       : { side: "under" as const, probability: probabilities.total.under };
     const alreadyPresent = new Set(rows.map((row) => row.market));
-    const immutableRecords = buildCfbPublishedCutoffRecoveryRecords({ payload, gameId: rows[0]!.game_id })
+    const immutableRecords = buildCfbPublishedPregameRecoveryRecords({ payload, gameId: rows[0]!.game_id })
       .filter((record) => !alreadyPresent.has(record.market));
     const immutableMarkets = new Set(immutableRecords.map((record) => record.market));
     const referenceLine = {

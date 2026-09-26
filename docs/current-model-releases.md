@@ -153,6 +153,24 @@ Last reviewed: 2026-09-25
 
 ## CFB Daily Edge generalized weekly production release
 
+### Published-pregame tracking completeness (writer r77; tracking r27)
+
+- Active sole writer / tracking record releases are
+  `cfb_forward_evidence_writer_2026_09_26_r77_published_pregame_tracking` /
+  `cfb_official_tracking_record_2026_09_26_r27_published_pregame_tracking`.
+  Tracking insertion is atomic per game instead of across the entire weekly slate. When the T-60
+  writer misses, the latest immutable prediction published before kickoff supplies accuracy-only
+  Moneyline, Spread, and Total records even when its exact American price is unavailable. No odds,
+  edge, EV, recommendation, stake, or ROI is reconstructed. A game without a required reference
+  line remains explicitly reported, but it cannot suppress complete sibling locks. An older payload
+  that contains exact-price predictions but omits the redundant outlook map is still recoverable.
+  Existing records remain immutable and retries remain idempotent.
+- Prediction models, PMFs, expected and representative scores, probabilities, sides, grades,
+  actions, stakes, evidence, member snapshots, copy, labels, provider calls, cron cadence, and the
+  sole `prediction_pipeline:cfb` lease are unchanged. Same-input prediction impact is zero
+  promotions, zero demotions, zero side changes, and zero score changes. Evidence and rollback:
+  `docs/model-audits/2026-09-26-cfb-tracking-game-scope-isolation-r76.md`.
+
 ### Sharp price-trail continuity (writer r75; retains r74 member transition)
 
 - Active sole writer is `cfb_forward_evidence_writer_2026_09_26_r75_sharp_price_trail_continuity`.
