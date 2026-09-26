@@ -5,7 +5,10 @@ import {
   PlaybookReadBroker,
   playbookSplitsReadMode,
 } from "../lib/providers/playbook/playbookReadBroker";
-import { isPlaybookPregameCandidate } from "../lib/services/syncPublicSplitsObservations";
+import {
+  isPlaybookPregameCandidate,
+  selectPlaybookObservationGames,
+} from "../lib/services/syncPublicSplitsObservations";
 
 const originalFetch = globalThis.fetch;
 const originalApiKey = process.env.PLAYBOOK_API_KEY;
@@ -71,6 +74,24 @@ try {
   assert.equal(isPlaybookPregameCandidate({
     gameDate: "2026-09-26T17:00:00Z", status: "FUT", seasonType: "regular",
   }, "nhl", now), true);
+
+  const startedGame = {
+    id: 1,
+    key: "AWAY@HOME",
+    gameDate: "2026-09-25T17:00:00Z",
+    status: "final",
+    seasonType: "regular",
+  };
+  assert.equal(
+    selectPlaybookObservationGames([startedGame], "mlb", now, "2026-09-25", "2026-09-26").length,
+    1,
+    "explicit historical repair runs must retain frozen-history coverage",
+  );
+  assert.equal(
+    selectPlaybookObservationGames([startedGame], "mlb", now, "2026-09-26", "2026-09-26").length,
+    0,
+    "current slates must not keep polling after games start",
+  );
 
   console.log("playbook request efficiency tests passed");
 } finally {

@@ -26,6 +26,7 @@ Additional request gates:
 - NHL public-split ingestion returns before provider access for preseason games; the member product remains regular-season only.
 - Started, final, postponed, canceled, and suspended events are excluded from current-split polling.
 - Today and future slates use current endpoints; only past dates use immutable history.
+- Explicit historical repair runs retain frozen-history coverage even after games have ended.
 - Last-known-good stored split rows are not deleted by an empty provider response.
 
 ## Measured request impact
