@@ -88,7 +88,7 @@ import {
 } from "./cfbForwardMemberSnapshotStore";
 
 export const CFB_FORWARD_WRITER_RELEASE =
-  "cfb_forward_evidence_writer_2026_09_26_r71_score_side_coherent" as const;
+  "cfb_forward_evidence_writer_2026_09_26_r72_sharpapi_event_failure_isolation" as const;
 export const CFB_FORWARD_MAX_QB_TEAMS_PER_RUN = 24 as const;
 export const CFB_FORWARD_MAX_SHARP_FALLBACK_GAMES_PER_RUN = 24 as const;
 export const CFB_FORWARD_MAX_ESPN_PROSPECTIVE_GAMES_PER_RUN = 32 as const;
@@ -547,7 +547,7 @@ export async function runCfbForwardEvidenceWriter(args: {
         healthHolds,
         availabilityWarnings: [
           ...(sharpFallback.eventDiscoveryStatusByGame[plan.game.providerGameId] === "ambiguous" ? ["sharpapi_canonical_event_ambiguous"] : []),
-          ...(sharpFallbackAttempt.error && sharpFallbackGames.some((game) => game.providerGameId === plan.game.providerGameId)
+          ...(sharpFallback.failuresByGame[plan.game.providerGameId]
             ? ["sharpapi_odds_fallback_request_failed"]
             : []),
           ...(sharpFallbackCandidates.some((game) => game.providerGameId === plan.game.providerGameId) && !sharpFallbackGameIds.has(plan.game.providerGameId)
@@ -947,7 +947,14 @@ export async function fetchCfbSharpOddsFallbackAttempt(
   fetcher: typeof fetchSharpApiNcaafOddsFallback = fetchSharpApiNcaafOddsFallback,
 ): Promise<{ result: CfbSharpApiOddsResult; error: string | null }> {
   try {
-    return { result: await fetcher(args), error: null };
+    const result = await fetcher(args);
+    const failures = Object.entries(result.failuresByGame ?? {});
+    return {
+      result,
+      error: failures.length > 0
+        ? failures.slice(0, 4).map(([gameId, reason]) => `${gameId}:${reason}`).join(" | ")
+        : null,
+    };
   } catch (error) {
     const message = splitRequestError(error);
     const optionalProviderRejection = error instanceof SharpApiAbortError || error instanceof SharpApiClientError
@@ -963,6 +970,7 @@ export async function fetchCfbSharpOddsFallbackAttempt(
         displayBooksByGame: {},
         eventIdsByGame: {},
         eventDiscoveryStatusByGame: {},
+        failuresByGame: {},
       },
       error: message,
     };

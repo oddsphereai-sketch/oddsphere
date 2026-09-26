@@ -350,8 +350,7 @@ await fetchSharpApiNcaafOddsFallback({
 });
 assert.deepEqual(oversizedExpansionCalls.map((call) => call.query?.offset ?? 0), [0, 200], "an expanded event payload must not synthesize an offset from its larger returned-row count");
 
-await assert.rejects(
-  fetchSharpApiNcaafOddsFallback({
+const repeatedPageFailure = await fetchSharpApiNcaafOddsFallback({
     games: [game],
     maximumRequests: 3,
     client: withDiscoveredEvent({
@@ -360,13 +359,12 @@ await assert.rejects(
         return { data: data as T, pagination: { count: data.length, has_more: true } };
       },
     }),
-  }),
-  /repeated a prior page instead of advancing its offset/,
-  "a provider that ignores the derived offset must fail before publication",
-);
+  });
+assert.match(repeatedPageFailure.failuresByGame[game.providerGameId] ?? "", /repeated a prior page instead of advancing its offset/);
+assert.equal(repeatedPageFailure.eventDiscoveryStatusByGame[game.providerGameId], "odds_unavailable", "one malformed event remains unavailable without aborting healthy siblings");
+assert.deepEqual(repeatedPageFailure.booksByGame[game.providerGameId], []);
 
-await assert.rejects(
-  fetchSharpApiNcaafOddsFallback({
+const conflictingOffsetFailure = await fetchSharpApiNcaafOddsFallback({
     games: [game],
     maximumRequests: 3,
     client: withDiscoveredEvent({
@@ -375,13 +373,10 @@ await assert.rejects(
         return { data: data as T, pagination: { offset: 200, count: data.length, has_more: true } };
       },
     }),
-  }),
-  /without a valid forward offset/,
-  "a provider offset that conflicts with the requested page must fail closed",
-);
+  });
+assert.match(conflictingOffsetFailure.failuresByGame[game.providerGameId] ?? "", /without a valid forward offset/);
 
-await assert.rejects(
-  fetchSharpApiNcaafOddsFallback({
+const boundedEventFailure = await fetchSharpApiNcaafOddsFallback({
     games: [game],
     maximumRequests: CFB_SHARP_FALLBACK_MAX_PAGES_PER_EVENT + 1,
     client: withDiscoveredEvent({
@@ -390,18 +385,16 @@ await assert.rejects(
         return { data: [] as T, pagination: { has_more: true, offset, next_offset: offset + 200 } };
       },
     }),
-  }),
-  new RegExp(`bounded ${CFB_SHARP_FALLBACK_MAX_PAGES_PER_EVENT}-page safety cap`),
-);
+  });
+assert.match(boundedEventFailure.failuresByGame[game.providerGameId] ?? "", new RegExp(`bounded ${CFB_SHARP_FALLBACK_MAX_PAGES_PER_EVENT}-page safety cap`));
+assert.equal(boundedEventFailure.requests, CFB_SHARP_FALLBACK_MAX_PAGES_PER_EVENT + 1, "isolating an oversized event cannot bypass the existing request accounting");
 
-await assert.rejects(
-  fetchSharpApiNcaafOddsFallback({
+const invalidOffsetFailure = await fetchSharpApiNcaafOddsFallback({
     games: [game],
     maximumRequests: 3,
     client: withDiscoveredEvent({ async fetch<T>(): Promise<SharpApiResponse<T>> { return { data: [] as T, pagination: { has_more: true, next_offset: 0 } }; } }),
-  }),
-  /without a valid forward offset/,
-);
+  });
+assert.match(invalidOffsetFailure.failuresByGame[game.providerGameId] ?? "", /without a valid forward offset/);
 
 await assert.rejects(
   fetchSharpApiNcaafOddsFallback({

@@ -2,7 +2,7 @@ import { SharpApiClient, type SharpApiRequestOptions, type SharpApiResponse } fr
 import type { NcaafBookOdds, NcaafGame } from "./balldontlieNcaafSlate";
 
 export const CFB_SHARP_API_ODDS_RELEASE =
-  "cfb_sharpapi_named_book_fallback_2026_09_13_r12_bounded_writer_deadline" as const;
+  "cfb_sharpapi_named_book_fallback_2026_09_26_r13_event_failure_isolation" as const;
 export const CFB_SHARP_FALLBACK_MAX_GAMES = 96 as const;
 export const CFB_SHARP_FALLBACK_MAX_REQUESTS = 192 as const;
 export const CFB_SHARP_FALLBACK_MAX_DURATION_MS = 40_000 as const;
@@ -114,7 +114,8 @@ export type CfbSharpApiOddsResult = {
   /** Includes verified one-sided named-book offers for display-only context. */
   displayBooksByGame: Record<string, NcaafBookOdds[]>;
   eventIdsByGame: Record<string, string | null>;
-  eventDiscoveryStatusByGame: Record<string, "matched" | "unpublished" | "ambiguous">;
+  eventDiscoveryStatusByGame: Record<string, "matched" | "unpublished" | "ambiguous" | "odds_unavailable">;
+  failuresByGame: Record<string, string>;
 };
 
 export async function fetchSharpApiNcaafOddsFallback(args: {
@@ -141,6 +142,7 @@ export async function fetchSharpApiNcaafOddsFallback(args: {
   const displayBooksByGame: Record<string, NcaafBookOdds[]> = {};
   const eventIdsByGame: Record<string, string | null> = {};
   const eventDiscoveryStatusByGame: CfbSharpApiOddsResult["eventDiscoveryStatusByGame"] = {};
+  const failuresByGame: Record<string, string> = {};
   const discoveryDates = [...new Set(games.flatMap((game) => sharpEventDiscoveryDates(game)))].sort();
   const discoveredEvents: SharpEventRow[] = [];
   for (const date of discoveryDates) {
@@ -218,60 +220,68 @@ export async function fetchSharpApiNcaafOddsFallback(args: {
         throw new Error(`CFB SharpAPI canonical event ${eventId} matched more than one scheduled game.`);
       }
       discoveredEventIds.add(eventId);
-      const rows: unknown[] = [];
-      const pageFingerprints = new Set<string>();
-      let offset = 0;
-      let complete = false;
-      for (let page = 0; page < CFB_SHARP_FALLBACK_MAX_PAGES_PER_EVENT; page += 1) {
-        if (requests >= maximumRequests) {
-          throw new Error(`CFB SharpAPI fallback exhausted its ${maximumRequests}-request hard cap before resolving every deficient game.`);
-        }
-        requests += 1;
-        const response = await client.fetch<unknown[]>({
-          path: "/odds",
-          query: {
-            event_id: eventId,
-            market: "main",
-            is_live: false,
-            limit: CFB_SHARP_FALLBACK_MAX_ROWS_PER_EVENT,
-            ...(offset > 0 ? { offset } : {}),
-          },
-          signal,
-          retryRateLimitInternally: false,
-        });
-        if (!Array.isArray(response.data)) throw new Error(`CFB SharpAPI event ${eventId} returned malformed odds data.`);
-        const fingerprint = JSON.stringify(response.data);
-        if (response.data.length > 0 && pageFingerprints.has(fingerprint)) {
-          throw new Error(`CFB SharpAPI event ${eventId} repeated a prior page instead of advancing its offset.`);
-        }
-        if (response.data.length > 0) pageFingerprints.add(fingerprint);
-        rows.push(...response.data);
-        if (response.pagination?.has_more !== true) {
-          complete = true;
-          break;
-        }
-        const nextOffset = nextCfbSharpOddsOffset({
-          pagination: response.pagination,
-          requestedOffset: offset,
-          returnedRows: response.data.length,
-        });
-        if (nextOffset === null) {
-          throw new Error(`CFB SharpAPI event ${eventId} reported more rows without a valid forward offset.`);
-        }
-        offset = nextOffset;
-      }
-      if (!complete) {
-        throw new Error(`CFB SharpAPI event ${eventId} exceeded the bounded ${CFB_SHARP_FALLBACK_MAX_PAGES_PER_EVENT}-page safety cap.`);
-      }
-      const books = normalizeSharpRows({ game, eventId, rows });
-      acceptedDisplay = books;
-      accepted = books.filter((book) => bookCompleteness(book) > 0);
       acceptedEventId = eventId;
+      try {
+        const rows: unknown[] = [];
+        const pageFingerprints = new Set<string>();
+        let offset = 0;
+        let complete = false;
+        for (let page = 0; page < CFB_SHARP_FALLBACK_MAX_PAGES_PER_EVENT; page += 1) {
+          if (requests >= maximumRequests) {
+            throw new Error(`CFB SharpAPI fallback exhausted its ${maximumRequests}-request hard cap before resolving every deficient game.`);
+          }
+          requests += 1;
+          const response = await client.fetch<unknown[]>({
+            path: "/odds",
+            query: {
+              event_id: eventId,
+              market: "main",
+              is_live: false,
+              limit: CFB_SHARP_FALLBACK_MAX_ROWS_PER_EVENT,
+              ...(offset > 0 ? { offset } : {}),
+            },
+            signal,
+            retryRateLimitInternally: false,
+          });
+          if (!Array.isArray(response.data)) throw new Error(`CFB SharpAPI event ${eventId} returned malformed odds data.`);
+          const fingerprint = JSON.stringify(response.data);
+          if (response.data.length > 0 && pageFingerprints.has(fingerprint)) {
+            throw new Error(`CFB SharpAPI event ${eventId} repeated a prior page instead of advancing its offset.`);
+          }
+          if (response.data.length > 0) pageFingerprints.add(fingerprint);
+          rows.push(...response.data);
+          if (response.pagination?.has_more !== true) {
+            complete = true;
+            break;
+          }
+          const nextOffset = nextCfbSharpOddsOffset({
+            pagination: response.pagination,
+            requestedOffset: offset,
+            returnedRows: response.data.length,
+          });
+          if (nextOffset === null) {
+            throw new Error(`CFB SharpAPI event ${eventId} reported more rows without a valid forward offset.`);
+          }
+          offset = nextOffset;
+        }
+        if (!complete) {
+          throw new Error(`CFB SharpAPI event ${eventId} exceeded the bounded ${CFB_SHARP_FALLBACK_MAX_PAGES_PER_EVENT}-page safety cap.`);
+        }
+        const books = normalizeSharpRows({ game, eventId, rows });
+        acceptedDisplay = books;
+        accepted = books.filter((book) => bookCompleteness(book) > 0);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        if (!message.startsWith(`CFB SharpAPI event ${eventId} `)) throw error;
+        failuresByGame[game.providerGameId] = message.replace(/\s+/g, " ").trim().slice(0, 240);
+      }
     }
     booksByGame[game.providerGameId] = accepted;
     displayBooksByGame[game.providerGameId] = acceptedDisplay;
     eventIdsByGame[game.providerGameId] = acceptedEventId;
-    eventDiscoveryStatusByGame[game.providerGameId] = acceptedEventId ? "matched" : "unpublished";
+    eventDiscoveryStatusByGame[game.providerGameId] = failuresByGame[game.providerGameId]
+      ? "odds_unavailable"
+      : acceptedEventId ? "matched" : "unpublished";
   }
   return {
     release: CFB_SHARP_API_ODDS_RELEASE,
@@ -282,6 +292,7 @@ export async function fetchSharpApiNcaafOddsFallback(args: {
     displayBooksByGame,
     eventIdsByGame,
     eventDiscoveryStatusByGame,
+    failuresByGame,
   };
 }
 
