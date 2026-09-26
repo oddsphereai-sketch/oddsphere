@@ -148,9 +148,11 @@ export async function readCfbForwardMarketHistory(args: {
   return rows.map(normalizeMarketHistoryRow);
 }
 
-/** Load one authoritative current payload per game/stage, the last immutable
- * payload published no later than each game's T-60 boundary, and the
- * lightweight season identity/date trail used by the prior-results planner. */
+/** Load one authoritative current payload per game/stage, one latest payload
+ * per game from the immediately previous release for a bounded member-release
+ * transition, the last immutable payload published no later than each game's
+ * T-60 boundary, and the lightweight season identity/date trail used by the
+ * prior-results planner. */
 export async function readCfbForwardWriterEvidence(args: {
   client: SupabaseClient;
   season: number;
@@ -174,9 +176,11 @@ export async function readCfbForwardWriterEvidence(args: {
   }
 
   const latestCurrentByGameStage = new Map<string, StoredMetadataRow>();
+  const latestTransitionPreviousByGame = new Map<string, StoredMetadataRow>();
   const latestPublishedByGameAtCutoff = new Map<string, StoredMetadataRow>();
   for (const row of metadataRows) {
     const currentRelease = row.evidence_release === CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE;
+    const transitionPreviousRelease = row.evidence_release === CFB_FORWARD_SCORE_COHERENCE_PREVIOUS_EVIDENCE_SCHEMA_RELEASE;
     const recoveryRelease = currentRelease ||
       row.evidence_release === CFB_FORWARD_SCORE_COHERENCE_PREVIOUS_EVIDENCE_SCHEMA_RELEASE ||
       row.evidence_release === CFB_FORWARD_PRICE_PREVIOUS_EVIDENCE_SCHEMA_RELEASE ||
@@ -186,6 +190,12 @@ export async function readCfbForwardWriterEvidence(args: {
       const current = latestCurrentByGameStage.get(key);
       if (!current || row.captured_at > current.captured_at || (row.captured_at === current.captured_at && row.id > current.id)) {
         latestCurrentByGameStage.set(key, row);
+      }
+    }
+    if (transitionPreviousRelease) {
+      const previous = latestTransitionPreviousByGame.get(row.provider_game_id);
+      if (!previous || row.captured_at > previous.captured_at || (row.captured_at === previous.captured_at && row.id > previous.id)) {
+        latestTransitionPreviousByGame.set(row.provider_game_id, row);
       }
     }
     if (!recoveryRelease) continue;
@@ -201,6 +211,7 @@ export async function readCfbForwardWriterEvidence(args: {
   const storedRows: StoredRow[] = [];
   const ids = [...new Set([
     ...latestCurrentByGameStage.values(),
+    ...latestTransitionPreviousByGame.values(),
     ...latestPublishedByGameAtCutoff.values(),
   ].map((row) => row.id))].sort();
   for (let index = 0; index < ids.length; index += CFB_FORWARD_WRITER_PAYLOAD_BATCH_SIZE) {

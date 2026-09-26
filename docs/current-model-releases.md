@@ -143,6 +143,17 @@ Last reviewed: 2026-09-25
 
 ## CFB Daily Edge generalized weekly production release
 
+### Bounded member-transition completion (writer r74)
+
+- Active sole writer is `cfb_forward_evidence_writer_2026_09_26_r74_member_transition_completion`.
+  Its existing metadata-first reader now loads one latest payload per game from the immediately
+  previous verified release, in addition to current game/stage rows and immutable cutoff recovery.
+  This supplies the compact snapshot's existing started-game transition without reloading the
+  season's historical JSON payloads or adding a writer/provider call.
+- Prediction math, releases, sides, probabilities, grades, actions, stakes, locks, tracking,
+  provider budgets, member copy, labels, and layout are unchanged. Evidence and rollback:
+  `docs/model-audits/2026-09-26-cfb-member-transition-completion-r74.md`.
+
 ### Directional probability normalization (writer r73)
 
 - Active sole writer is `cfb_forward_evidence_writer_2026_09_26_r73_directional_probability_normalization`.

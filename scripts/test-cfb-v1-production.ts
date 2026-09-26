@@ -2318,6 +2318,7 @@ assert.match(evidenceStoreSource, /\.order\("captured_at", \{ ascending: true \}
 assert.match(evidenceStoreSource, /exceeded its bounded.*row season limit/, "the CFB evidence reader must fail explicitly at its hard cap instead of silently truncating a release wave");
 assert.match(evidenceStoreSource, /select\("id,evidence_release,provider_game_id,stage,captured_at,game_start_at"\)/, "the writer history scan must stay payload-free");
 assert.match(evidenceStoreSource, /latestCurrentByGameStage/, "the writer must retain the latest current-release opening, unlocked, and T-60 rows separately");
+assert.match(evidenceStoreSource, /latestTransitionPreviousByGame/, "the bounded writer read must retain one latest prior-release row per game so a started-game transition can publish the current member snapshot");
 assert.match(evidenceStoreSource, /latestPublishedByGameAtCutoff/, "the bounded writer read must retain the last immutable pre-boundary prediction for denominator recovery");
 assert.match(evidenceStoreSource, /CFB_FORWARD_WRITER_PAYLOAD_BATCH_SIZE = 100/, "current writer payload reads must remain bounded");
 assert.match(evidenceStoreSource, /current_books:payload->market->currentBooks/, "movement recovery must project compact market fields instead of reloading historical forecast payloads");
