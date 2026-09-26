@@ -58,6 +58,16 @@ Last reviewed: 2026-09-25
   capture after deployment instead of waiting up to the ordinary six-hour
   far-slate cadence; once seeded, the established bounded cadence resumes.
 
+- September 26 CFB sharp-price continuity: capture / sole-writer releases are
+  `cfb_daily_edge_forward_context_capture_2026_09_26_r3_sharp_price_trail_continuity`
+  (`cfbfec3`) / `cfb_forward_evidence_writer_2026_09_26_r75_sharp_price_trail_continuity`.
+  The writer now carries prior target-ineligible Circa and Pinnacle landmarks from the compact
+  contextual capture into the next capture's opening candidates, preserving a real same-book
+  chronological trail across cycles. It adds zero provider calls and still cannot affect current
+  quote selection, consensus, forecasts, scores, sides, grades, stakes, tracking, member copy, or
+  labels. Its audit boundary and rollback are recorded in
+  `docs/model-audits/2026-09-26-cfb-market-reading-marriage-predeclaration.md`.
+
 ## Cross-sport prediction-accuracy denominator contract (2026-09-04)
 
 - Public W-L accuracy counts every immutable locked prediction that has a real side, including Watchlist and No Play. Best Angle and Lean remain separate actionable-only cuts. Exact-price ROI remains separate and excludes null-price records. The aggregate contract is `tracking_aggregate_v9_append_only_correction_precedence_2026_09_14`; an append-only correction explicitly supersedes its erroneous original before grade/actionability precedence is evaluated. Unlocked records from every sport remain outside public accuracy while they can still change.
@@ -143,9 +153,9 @@ Last reviewed: 2026-09-25
 
 ## CFB Daily Edge generalized weekly production release
 
-### Bounded member-transition completion (writer r74)
+### Sharp price-trail continuity (writer r75; retains r74 member transition)
 
-- Active sole writer is `cfb_forward_evidence_writer_2026_09_26_r74_member_transition_completion`.
+- Active sole writer is `cfb_forward_evidence_writer_2026_09_26_r75_sharp_price_trail_continuity`.
   Its existing metadata-first reader now loads one latest payload per game from the immediately
   previous verified release, in addition to current game/stage rows and immutable cutoff recovery.
   This supplies the compact snapshot's existing started-game transition without reloading the

@@ -74,6 +74,7 @@ import {
 import {
   buildCfbForwardContextCapture,
   CFB_FORWARD_CONTEXT_CAPTURE_RELEASE,
+  cfbForwardContextSharpHistoryBooks,
 } from "./cfbForwardEvidenceCapture";
 import {
   captureBooksWithSharpBooks,
@@ -88,7 +89,7 @@ import {
 } from "./cfbForwardMemberSnapshotStore";
 
 export const CFB_FORWARD_WRITER_RELEASE =
-  "cfb_forward_evidence_writer_2026_09_26_r74_member_transition_completion" as const;
+  "cfb_forward_evidence_writer_2026_09_26_r75_sharp_price_trail_continuity" as const;
 export const CFB_FORWARD_MAX_QB_TEAMS_PER_RUN = 24 as const;
 export const CFB_FORWARD_MAX_SHARP_FALLBACK_GAMES_PER_RUN = 24 as const;
 export const CFB_FORWARD_MAX_ESPN_PROSPECTIVE_GAMES_PER_RUN = 32 as const;
@@ -325,6 +326,7 @@ export async function runCfbForwardEvidenceWriter(args: {
   for (const row of existing) {
     const books = captureHistoryBooksByGame.get(row.providerGameId) ?? [];
     books.push(...row.payload.market.currentBooks);
+    books.push(...cfbForwardContextSharpHistoryBooks(row.payload.contextualEvidenceCapture));
     captureHistoryBooksByGame.set(row.providerGameId, books);
   }
   const { payloads, captureFailures } = buildCfbForwardPayloadsWithIsolation(plans, (plan): CfbForwardEvidencePayload => {
