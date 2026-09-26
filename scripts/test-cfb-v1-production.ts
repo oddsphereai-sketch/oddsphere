@@ -55,9 +55,11 @@ import {
   cfbMarketAnchorHealthHolds,
   cfbLockPlanningEvidence,
   cfbTrackingCandidatesForRun,
+  fetchCfbPlaybookRowsAttempt,
   fetchCfbSharpOddsFallbackAttempt,
   planCfbPriorResultReads,
   publishCfbForwardDecisionBundle,
+  retainLatestCfbPlaybookObservation,
   selectCfbSharpFallbackGames,
   selectCfbEspnReferenceGames,
   trustedCfbSharpEventIdsByGame,
@@ -2241,6 +2243,16 @@ const isolatedSharpBadRequest = await fetchCfbSharpOddsFallbackAttempt(
 assert.match(isolatedSharpBadRequest.error ?? "", /HTTP 400 on \/odds/);
 assert.equal(isolatedSharpBadRequest.result.attemptedGames, 1);
 assert.equal(isolatedSharpBadRequest.result.matchedGames, 0);
+const isolatedPlaybookFailure = await fetchCfbPlaybookRowsAttempt(async () => {
+  throw new Error("Playbook HTTP 429 on /v1/lines");
+});
+assert.deepEqual(isolatedPlaybookFailure.rows, [], "Playbook throttling must become an isolated empty attempt");
+assert.match(isolatedPlaybookFailure.error ?? "", /HTTP 429/);
+const freshPlaybookRows = await fetchCfbPlaybookRowsAttempt(async () => ({ body: { data: [{ id: "fresh" }] } }));
+assert.deepEqual(freshPlaybookRows, { rows: [{ id: "fresh" }], error: null });
+const retainedPlaybook = { capturedAt: "2026-09-25T18:24:48.501Z", total: 55.5 };
+assert.equal(retainLatestCfbPlaybookObservation(null, retainedPlaybook), retainedPlaybook, "a missing refresh must preserve the exact prior timestamped observation");
+assert.deepEqual(retainLatestCfbPlaybookObservation({ capturedAt: "2026-09-26T13:39:48.278Z", total: 56.5 }, retainedPlaybook), { capturedAt: "2026-09-26T13:39:48.278Z", total: 56.5 }, "a fresh exact observation must silently replace the retained fallback");
 await assert.rejects(
   fetchCfbSharpOddsFallbackAttempt(
     { games: [game], apiKey: "test" },
