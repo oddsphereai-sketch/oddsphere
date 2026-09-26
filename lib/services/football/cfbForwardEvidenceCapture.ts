@@ -8,8 +8,8 @@ import type { CfbSharpApiSplitRecord } from "./cfbSharpApiSplits";
 import type { CfbV1ExactPriceDecision, CfbV1Forecast, CfbV1Market } from "./cfbV1Decision";
 
 export const CFB_FORWARD_CONTEXT_CAPTURE_RELEASE =
-  "cfb_daily_edge_forward_context_capture_2026_09_24_r2_sharp_price_trail" as const;
-export const CFB_FORWARD_CONTEXT_CAPTURE_SCHEMA = "cfbfec2" as const;
+  "cfb_daily_edge_forward_context_capture_2026_09_26_r3_sharp_price_trail_continuity" as const;
+export const CFB_FORWARD_CONTEXT_CAPTURE_SCHEMA = "cfbfec3" as const;
 export const CFB_FORWARD_CONTEXT_CAPTURE_MAX_FAMILIES_PER_MARKET = 8 as const;
 export const CFB_FORWARD_CONTEXT_CAPTURE_MAX_PROVENANCE_RECORDS_PER_MARKET = 2 as const;
 export const CFB_FORWARD_CONTEXT_CAPTURE_MAX_MARKET_BYTES = 8 * 1024;
@@ -429,4 +429,41 @@ function nonNull<T>(value: T | null): value is T { return value !== null; }
 
 export function cfbForwardContextCaptureAddedBytes(capture: CfbForwardContextCapture): number {
   return byteLength({ contextualEvidenceCapture: capture }) - byteLength({});
+}
+
+/**
+ * Restores prior target-excluded sharp-book landmarks as opening candidates for
+ * the next capture. The compact capture is the authoritative history for these
+ * books; they deliberately never enter the production quote or consensus arrays.
+ */
+export function cfbForwardContextSharpHistoryBooks(
+  capture: CfbForwardContextCapture | null | undefined,
+): NcaafBookOdds[] {
+  if (!capture) return [];
+  const books: NcaafBookOdds[] = [];
+  for (const market of ["moneyline", "spread", "total"] as const) {
+    for (const family of capture.markets[market].families) {
+      const [sportsbook, provider, source, , , current] = family;
+      if (provider !== "s" || !["c", "p", "b"].includes(source)) continue;
+      const [observedAt, , freshness, line, firstPrice, secondPrice] = current;
+      if (freshness === "x") continue;
+      books.push({
+        providerGameId: capture.gameId,
+        sportsbook,
+        observedAt,
+        provider: "sharpapi",
+        targetEligible: false,
+        marketSelection: { [market]: "main_line" },
+        marketObservedAt: { [market]: observedAt },
+        moneyline: market === "moneyline" ? { awayPrice: firstPrice, homePrice: secondPrice } : null,
+        spread: market === "spread" && line !== null
+          ? { awayLine: -line, awayPrice: firstPrice, homeLine: line, homePrice: secondPrice }
+          : null,
+        total: market === "total" && line !== null
+          ? { line, overPrice: firstPrice, underPrice: secondPrice }
+          : null,
+      });
+    }
+  }
+  return books;
 }
