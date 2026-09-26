@@ -88,7 +88,7 @@ import {
 } from "./cfbForwardMemberSnapshotStore";
 
 export const CFB_FORWARD_WRITER_RELEASE =
-  "cfb_forward_evidence_writer_2026_09_26_r70_playbook_failure_isolation" as const;
+  "cfb_forward_evidence_writer_2026_09_26_r71_score_side_coherent" as const;
 export const CFB_FORWARD_MAX_QB_TEAMS_PER_RUN = 24 as const;
 export const CFB_FORWARD_MAX_SHARP_FALLBACK_GAMES_PER_RUN = 24 as const;
 export const CFB_FORWARD_MAX_ESPN_PROSPECTIVE_GAMES_PER_RUN = 32 as const;
@@ -480,7 +480,7 @@ export async function runCfbForwardEvidenceWriter(args: {
       requireDecisionSideFromForecast: true,
       allowPmfVerifiedProbabilityEndpoints: true,
       publicScoreDirectionTolerancePoints: CFB_PUBLIC_SCORE_DIRECTION_TOLERANCE_POINTS,
-      allowForecastSideCalibrationFamilies: ["authoritative_market_sharp_spread_counter_signal"],
+      allowForecastSideCalibrationFamilies: [],
     });
     const targetExcludedConsensusReady = decisions.evaluatedBets.length === 3;
     const payload: CfbForwardEvidencePayload = {
