@@ -89,7 +89,7 @@ import {
 } from "./cfbForwardMemberSnapshotStore";
 
 export const CFB_FORWARD_WRITER_RELEASE =
-  "cfb_forward_evidence_writer_2026_09_26_r75_sharp_price_trail_continuity" as const;
+  "cfb_forward_evidence_writer_2026_09_26_r76_tracking_game_scope_isolation" as const;
 export const CFB_FORWARD_MAX_QB_TEAMS_PER_RUN = 24 as const;
 export const CFB_FORWARD_MAX_SHARP_FALLBACK_GAMES_PER_RUN = 24 as const;
 export const CFB_FORWARD_MAX_ESPN_PROSPECTIVE_GAMES_PER_RUN = 32 as const;
@@ -1210,28 +1210,48 @@ async function writeOfficialTracking(args: {
       espnRecords.push(...buildCfbEspnOpeningRecoveryRecords({ payload, gameId, referenceLine, replayForecast }));
     }
   }
-  const records = uniqueRecordsByMarket([...standardRecords, ...espnRecords])
-    .filter((record) => !existingKeys.has(`${record.external_id}:${record.market}`));
-  const finalKeys = new Set([...existingKeys, ...records.map((record) => `${record.external_id}:${record.market}`)]);
-  const missing = trackingGames.flatMap((game) => game.decisions
-    .filter((decision) => !finalKeys.has(`${game.externalId}:${decision.market}`))
-    .map((decision) => `${game.externalId}:${decision.market}`));
-  if (missing.length > 0) {
-    return {
-      trackingAttempted: true,
-      trackingRecordsProposed: proposed,
-      trackingRecordsInserted: 0,
-      trackingRecordsExisting: existingKeys.size,
-      trackingError: `complete_tracking_recovery_unavailable:${missing.slice(0, 12).join(",")}`,
-      trackingProviderRequests,
-    };
-  }
+  const { records, missing } = planCfbTrackingRecordInsert({
+    trackingGames,
+    existingKeys,
+    candidateRecords: [...standardRecords, ...espnRecords],
+  });
   if (records.length > 0) {
     const { data, error } = await args.client.from("prediction_records").insert(records as unknown as Record<string, unknown>[]).select("id");
     if (error) throw new Error(`CFB tracking record insert failed: ${error.message}`);
     if ((data?.length ?? records.length) !== records.length) throw new Error("CFB tracking record insert count mismatch.");
   }
-  return { trackingAttempted: true, trackingRecordsProposed: proposed, trackingRecordsInserted: records.length, trackingRecordsExisting: existingKeys.size, trackingError: null, trackingProviderRequests };
+  return {
+    trackingAttempted: true,
+    trackingRecordsProposed: proposed,
+    trackingRecordsInserted: records.length,
+    trackingRecordsExisting: existingKeys.size,
+    trackingError: missing.length > 0
+      ? `complete_tracking_recovery_unavailable:${missing.slice(0, 12).join(",")}`
+      : null,
+    trackingProviderRequests,
+  };
+}
+
+export function planCfbTrackingRecordInsert(args: {
+  trackingGames: Array<{ externalId: number; decisions: Array<{ market: CfbV1Market }> }>;
+  existingKeys: ReadonlySet<string>;
+  candidateRecords: PredictionRecordRow[];
+}): { records: PredictionRecordRow[]; missing: string[] } {
+  const candidates = uniqueRecordsByMarket(args.candidateRecords)
+    .filter((record) => !args.existingKeys.has(`${record.external_id}:${record.market}`));
+  const candidateKeys = new Set(candidates.map((record) => `${record.external_id}:${record.market}`));
+  const completeGames = new Set(args.trackingGames
+    .filter((game) => game.decisions.every((decision) => {
+      const key = `${game.externalId}:${decision.market}`;
+      return args.existingKeys.has(key) || candidateKeys.has(key);
+    }))
+    .map((game) => game.externalId));
+  const records = candidates.filter((record) => completeGames.has(record.external_id));
+  const finalKeys = new Set([...args.existingKeys, ...records.map((record) => `${record.external_id}:${record.market}`)]);
+  const missing = args.trackingGames.flatMap((game) => game.decisions
+    .filter((decision) => !finalKeys.has(`${game.externalId}:${decision.market}`))
+    .map((decision) => `${game.externalId}:${decision.market}`));
+  return { records, missing };
 }
 
 function candidateTrackingMarkets(candidate: CfbTrackingCandidate): CfbV1Market[] {

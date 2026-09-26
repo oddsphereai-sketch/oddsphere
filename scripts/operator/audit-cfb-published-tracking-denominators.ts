@@ -25,7 +25,14 @@ async function main(): Promise<void> {
           const outlook = payload.decisions.marketOutlooks?.[market] ?? null;
           return Boolean(outlook && (market === "moneyline" || outlook.line !== null));
         });
-    return markets.map((market) => ({ externalId: Number(payload.game.providerGameId), market, mode }));
+    return markets.map((market) => ({
+      externalId: Number(payload.game.providerGameId),
+      matchup: `${payload.game.away.abbreviation}@${payload.game.home.abbreviation}`,
+      startsAt: payload.game.scheduledStart,
+      capturedAt: payload.capturedAt,
+      market,
+      mode,
+    }));
   });
   const externalIds = [...new Set(planned.map((row) => row.externalId))];
   const { data, error } = externalIds.length === 0
@@ -46,8 +53,14 @@ async function main(): Promise<void> {
     recoveryGames: candidates.filter((row) => row.mode === "published_cutoff_accuracy_recovery").length,
     predictions: planned.length,
     byMarket,
+    existingByMarket: Object.fromEntries(([
+      "moneyline",
+      "spread",
+      "total",
+    ] as const).map((market) => [market, planned.filter((row) => row.market === market && existing.has(`${row.externalId}:${row.market}`)).length])),
     existing: planned.filter((row) => existing.has(`${row.externalId}:${row.market}`)).length,
     missing: planned.filter((row) => !existing.has(`${row.externalId}:${row.market}`)).length,
+    missingRows: planned.filter((row) => !existing.has(`${row.externalId}:${row.market}`)),
   }, null, 2)}\n`);
 }
 

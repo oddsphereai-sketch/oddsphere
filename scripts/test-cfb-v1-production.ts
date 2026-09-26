@@ -58,6 +58,7 @@ import {
   fetchCfbPlaybookRowsAttempt,
   fetchCfbSharpOddsFallbackAttempt,
   planCfbPriorResultReads,
+  planCfbTrackingRecordInsert,
   publishCfbForwardDecisionBundle,
   retainLatestCfbPlaybookObservation,
   selectCfbSharpFallbackGames,
@@ -1930,6 +1931,28 @@ assert.deepEqual(recoveryTracking.map((row) => row.market), ["moneyline", "sprea
 assert.equal(recoveryTracking.every((row) => !row.held && row.no_bet && row.play_grade === "no_play"), true, "recovered predictions must remain accuracy-only No Play predictions, never Held rows");
 assert.equal(recoveryTracking.every((row) => row.odds_american === null && row.edge === null && row.expected_value === null), true, "recovery must never reconstruct betting economics");
 assert.equal(recoveryTracking.every((row) => row.prediction_source === "cfb_forward_evidence_published_cutoff_accuracy_recovery"), true);
+const completeTrackingGame = recoveryTracking.map((row) => ({ ...row, external_id: 9101 }));
+const incompleteTrackingGame = recoveryTracking
+  .filter((row) => row.market === "moneyline")
+  .map((row) => ({ ...row, external_id: 9102 }));
+const isolatedTrackingPlan = planCfbTrackingRecordInsert({
+  trackingGames: [9101, 9102].map((externalId) => ({
+    externalId,
+    decisions: (["moneyline", "spread", "total"] as const).map((market) => ({ market })),
+  })),
+  existingKeys: new Set<string>(),
+  candidateRecords: [...completeTrackingGame, ...incompleteTrackingGame],
+});
+assert.deepEqual(
+  isolatedTrackingPlan.records.map((row) => `${row.external_id}:${row.market}`),
+  ["9101:moneyline", "9101:spread", "9101:total"],
+  "an incomplete recovery game must not block a complete sibling game's three-market lock insert",
+);
+assert.deepEqual(
+  isolatedTrackingPlan.missing,
+  ["9102:moneyline", "9102:spread", "9102:total"],
+  "an incomplete recovery game must remain explicitly missing rather than being partially written",
+);
 const missingAnchorRecovery = structuredClone(publishedCutoffPayload);
 missingAnchorRecovery.decisions.marketOutlooks!.spread!.line = null;
 missingAnchorRecovery.decisions.marketOutlooks!.total!.line = null;

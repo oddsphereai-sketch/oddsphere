@@ -153,6 +153,21 @@ Last reviewed: 2026-09-25
 
 ## CFB Daily Edge generalized weekly production release
 
+### Tracking game-scope isolation (writer r76; tracking r26)
+
+- Active sole writer / tracking record releases are
+  `cfb_forward_evidence_writer_2026_09_26_r76_tracking_game_scope_isolation` /
+  `cfb_official_tracking_record_2026_09_26_r26_tracking_game_scope_isolation`.
+  Tracking insertion is atomic per game instead of across the entire weekly slate. A game whose
+  immutable pre-cutoff recovery still lacks a required Spread or Total line remains completely
+  unwritten and explicitly reported, but it cannot suppress complete three-market T-60 records for
+  another game. Existing records remain immutable and retries remain idempotent.
+- Prediction models, PMFs, expected and representative scores, probabilities, sides, grades,
+  actions, stakes, evidence, member snapshots, copy, labels, provider calls, cron cadence, and the
+  sole `prediction_pipeline:cfb` lease are unchanged. Same-input prediction impact is zero
+  promotions, zero demotions, zero side changes, and zero score changes. Evidence and rollback:
+  `docs/model-audits/2026-09-26-cfb-tracking-game-scope-isolation-r76.md`.
+
 ### Sharp price-trail continuity (writer r75; retains r74 member transition)
 
 - Active sole writer is `cfb_forward_evidence_writer_2026_09_26_r75_sharp_price_trail_continuity`.
