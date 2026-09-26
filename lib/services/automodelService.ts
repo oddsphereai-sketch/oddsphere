@@ -64,7 +64,10 @@ import {
   reconcileTotalProjection,
   type TotalProjectionReconciliation,
 } from "../automodel/totalProjectionReconciliation";
-import { calibrateMlbTotalProjectionToMarket } from "../automodel/mlbCoreModelCalibration";
+import {
+  calibrateMlbTotalProjectionToMarket,
+  selectMlbMarketAwareScoreProjection,
+} from "../automodel/mlbCoreModelCalibration";
 import { reviewAutoModelOutput } from "../automodel/aiSanityBoundary";
 import {
   resolveEffectiveVersion,
@@ -1662,6 +1665,11 @@ function applyV2IfSelected(args: {
       isLocked: isLockedHere,
       lockedReconciliation: prevReconciliation,
     });
+    const memberScoreProjection = selectMlbMarketAwareScoreProjection({
+      calibration: totalCalibration,
+      selectedTotalSide: reconciliation.reconciled_total_side,
+      enabled: projectionCalibrationEnabled && !isLockedHere,
+    });
 
     // computeHoldPicks runs on the RECONCILED ou side. The downstream
     // hold-picks bookkeeping is now consistent with the displayed side.
@@ -1672,9 +1680,9 @@ function applyV2IfSelected(args: {
     });
     return {
       ...v1Output,
-      predicted_home_score: reconciliation.reconciled_home_score,
-      predicted_away_score: reconciliation.reconciled_away_score,
-      predicted_total: reconciliation.reconciled_total,
+      predicted_home_score: memberScoreProjection.homeScore,
+      predicted_away_score: memberScoreProjection.awayScore,
+      predicted_total: memberScoreProjection.total,
       predicted_ml_winner: v22.predicted_ml_winner,
       ml_confidence: v22.ml_confidence,
       predicted_ou_side: reconciliation.reconciled_total_side,
@@ -1716,7 +1724,7 @@ function applyV2IfSelected(args: {
         total_projection_reconciliation: reconciliation,
         mlb_core_model_calibration: {
           schema_version: "mlb_core_calibration_v1",
-          formula_version: "market_total_plus_25pct_model_edge_v1",
+          formula_version: "market_total_plus_25pct_model_edge_preserve_margin_v2",
           formula: "final_total = market_total + 0.25 * (raw_projected_total - market_total)",
           edge_weight: totalCalibration.edgeWeight,
           raw_projected_total: totalCalibration.rawProjectedTotal,
@@ -1738,6 +1746,17 @@ function applyV2IfSelected(args: {
           model_edge_runs: totalCalibration.modelEdgeRuns,
           run_environment_correction_runs: totalCalibration.runEnvironmentCorrectionRuns,
           run_environment_correction_reasons: totalCalibration.runEnvironmentCorrectionReasons,
+          member_score_projection: {
+            release_id: "mlb_score_projection_2026_09_26_r1_market_total_preserve_margin",
+            applied: memberScoreProjection.applied,
+            reason: memberScoreProjection.reason,
+            selected_total_side: reconciliation.reconciled_total_side,
+            projected_away_score: memberScoreProjection.awayScore,
+            projected_home_score: memberScoreProjection.homeScore,
+            projected_total: memberScoreProjection.total,
+            winner_and_margin_preserved: true,
+            probability_side_grade_price_unchanged: true,
+          },
           formula_available: totalCalibration.enabled,
           projection_calibration_enabled: projectionCalibrationEnabled,
           recommendation_uses_calibrated_projection: recommendationUsesCalibratedProjection,

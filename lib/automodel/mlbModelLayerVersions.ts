@@ -13,7 +13,7 @@ import { resolveFirstInningModelVersion } from "./firstInningModelVersion";
 
 export type MlbModelLayerMarket = "moneyline" | "total" | "first_inning";
 
-export const MLB_MODEL_LAYER_VERSION_SCHEMA = "mlb_model_layer_versions_v16_totals_regime_calibration";
+export const MLB_MODEL_LAYER_VERSION_SCHEMA = "mlb_model_layer_versions_v17_market_total_score_projection";
 export const MLB_PUBLIC_CALIBRATION_VERSION = "mlb_public_calibration_v35_total_action_recalibration_2026_09_24";
 export const MLB_DAILY_EDGE_DECISION_RELEASE_ID = "mlb_daily_edge_decision_2026_09_24_r89_total_action_recalibration";
 export const MLB_DAILY_EDGE_RULE_BUNDLE_VERSION = "mlb_daily_edge_rule_bundle_v74_total_action_recalibration_2026_09_24";
@@ -21,7 +21,7 @@ export const MLB_DAILY_EDGE_RULE_BUNDLE_VERSION = "mlb_daily_edge_rule_bundle_v7
 export const MLB_FIRST_INNING_RELEASE_ID = "mlb_first_inning_release_2026_09_04_r85_independent_uncertainty";
 
 export const MLB_MODEL_LAYER_VERSION_IDS = {
-  projection_core: "mlb_projection_core_v2_4_evaluation_only_price_exclusion_2026_09_02",
+  projection_core: "mlb_projection_core_v2_5_market_total_preserve_margin_2026_09_26",
   market_input_snapshot: "mlb_market_input_snapshot_v3_current_line_pagination_2026_09_08",
   score_distribution: "mlb_score_distribution_poisson_skellam_v2_2_baseline_2026_07_08",
   moneyline_probability_head: "mlb_moneyline_structural_coherence_probability_v3_2026_09_02",
