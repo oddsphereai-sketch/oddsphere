@@ -1,5 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
-import { readCfbForwardEvidence } from "../../lib/services/football/cfbForwardEvidenceStore";
+import { readCfbForwardWriterEvidence } from "../../lib/services/football/cfbForwardEvidenceStore";
 import { resolveCfbCanonicalMarketAnchor } from "../../lib/services/football/cfbMarketInformedOutcome";
 import {
   applyCfbMarketSharpAwareGrades,
@@ -23,10 +23,10 @@ const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
 if (!url || !key) throw new Error("Supabase read credentials are required.");
 
 async function main(): Promise<void> {
-  const rows = await readCfbForwardEvidence({
+  const rows = (await readCfbForwardWriterEvidence({
     client: createClient(url!, key!, { auth: { persistSession: false } }),
     season: Number(date.slice(0, 4)),
-  });
+  })).evidence;
   const latest = [...new Map(rows
     .filter((row) => localDate(row.gameStartAt) === date)
     .filter((row) => row.payload.game.away.fbs || row.payload.game.home.fbs)
@@ -136,7 +136,7 @@ async function main(): Promise<void> {
   }, null, 2));
 }
 
-function grade(bundle: CfbV1DecisionBundle, payload: Awaited<ReturnType<typeof readCfbForwardEvidence>>[number]["payload"]): CfbV1DecisionBundle {
+function grade(bundle: CfbV1DecisionBundle, payload: Awaited<ReturnType<typeof readCfbForwardWriterEvidence>>["evidence"][number]["payload"]): CfbV1DecisionBundle {
   return applyCfbMarketSharpAwareGrades({
     bundle,
     homeTeam: payload.game.home.abbreviation,

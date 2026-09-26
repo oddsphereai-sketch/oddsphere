@@ -88,7 +88,7 @@ import {
 } from "./cfbForwardMemberSnapshotStore";
 
 export const CFB_FORWARD_WRITER_RELEASE =
-  "cfb_forward_evidence_writer_2026_09_24_r69_sharp_price_release_seed" as const;
+  "cfb_forward_evidence_writer_2026_09_26_r70_playbook_failure_isolation" as const;
 export const CFB_FORWARD_MAX_QB_TEAMS_PER_RUN = 24 as const;
 export const CFB_FORWARD_MAX_SHARP_FALLBACK_GAMES_PER_RUN = 24 as const;
 export const CFB_FORWARD_MAX_ESPN_PROSPECTIVE_GAMES_PER_RUN = 32 as const;
@@ -263,9 +263,9 @@ export async function runCfbForwardEvidenceWriter(args: {
     maximum: CFB_FORWARD_MAX_SHARP_FALLBACK_GAMES_PER_RUN,
   });
   const sharpFallbackGameIds = new Set(sharpFallbackGames.map((game) => game.providerGameId));
-  const [linesResult, splitsResult, venueWeatherAttempt, quarterbacks, sharpFallbackAttempt, sharpSplitsAttempt, circaAttempt] = await Promise.all([
-    playbook.lines("ncaaf"),
-    playbook.splits("ncaaf"),
+  const [linesAttempt, splitsAttempt, venueWeatherAttempt, quarterbacks, sharpFallbackAttempt, sharpSplitsAttempt, circaAttempt] = await Promise.all([
+    fetchCfbPlaybookRowsAttempt(() => playbook.lines("ncaaf")),
+    fetchCfbPlaybookRowsAttempt(() => playbook.splits("ncaaf")),
     playbook.venueWeather("ncaaf")
       .then((result) => ({ rows: result.body.data ?? [], error: null }))
       .catch((error: unknown) => ({ rows: [] as unknown[], error: splitRequestError(error) })),
@@ -283,8 +283,8 @@ export async function runCfbForwardEvidenceWriter(args: {
   ]);
   const sharpFallback = sharpFallbackAttempt.result;
   const quarterbackContext = new Map([...priorQuarterbacks, ...quarterbacks.byTeamId]);
-  const lines = (linesResult.body.data ?? []) as unknown[];
-  const splits = (splitsResult.body.data ?? []) as unknown[];
+  const lines = linesAttempt.rows;
+  const splits = splitsAttempt.rows;
   const espnReferenceCandidates = plannedGames.filter((game) => {
     const evidence = resolveCfbPlaybookEvidence({ game, lines, splits });
     const line = evidence ? normalizeCfbPlaybookLine(evidence.lineRow, args.now) : null;
@@ -341,10 +341,17 @@ export async function runCfbForwardEvidenceWriter(args: {
     const homeQuarterbacks = requiredQuarterbacks(quarterbackContext, plan.game.home.id, plan.game.home.abbreviation, args.now);
     const weather = weatherByGame.get(plan.game.providerGameId)!.snapshot;
     const playbookEvidence = resolveCfbPlaybookEvidence({ game: plan.game, lines, splits });
-    const playbookLine = playbookEvidence ? normalizeCfbPlaybookLine(playbookEvidence.lineRow, args.now) : null;
+    const previousMarket = latestByGame.get(plan.game.providerGameId)?.payload.market ?? null;
+    const playbookLine = retainLatestCfbPlaybookObservation(
+      playbookEvidence ? normalizeCfbPlaybookLine(playbookEvidence.lineRow, args.now) : null,
+      previousMarket?.playbookLine ?? null,
+    );
     const espnReferenceLine = espnReferenceAttempt.result.linesByGame[plan.game.providerGameId] ??
       latestByGame.get(plan.game.providerGameId)?.payload.market.espnReferenceLine ?? null;
-    const playbookSplits = playbookEvidence ? normalizeCfbPlaybookSplits(playbookEvidence.splitRow, args.now) : null;
+    const playbookSplits = retainLatestCfbPlaybookObservation(
+      playbookEvidence ? normalizeCfbPlaybookSplits(playbookEvidence.splitRow, args.now) : null,
+      previousMarket?.playbookSplits ?? null,
+    );
     const sharpApiSplits = sharpSplitsAttempt.result?.recordsByGame[plan.game.providerGameId] ?? [];
     const sharpApiSplitsStatus = sharpSplitsAttempt.result === null
       ? "request_failed" as const
@@ -620,6 +627,8 @@ export async function runCfbForwardEvidenceWriter(args: {
       ...(sharpFallbackCandidates.length > sharpFallbackGames.length ? ["sharpapi_odds_fallback_deferred"] : []),
       ...(espnReferenceAttempt.error ? ["espn_reference_line_request_failed"] : []),
       ...(espnReferenceCandidates.length > espnReferenceGames.length ? ["espn_reference_line_deferred"] : []),
+      ...(linesAttempt.error ? ["playbook_lines_request_failed"] : []),
+      ...(splitsAttempt.error ? ["playbook_splits_request_failed"] : []),
       ...(tracking.trackingError ? ["official_tracking_incomplete"] : []),
       ...(captureFailures.length > 0 ? ["game_capture_failed"] : []),
     ])],
@@ -628,6 +637,21 @@ export async function runCfbForwardEvidenceWriter(args: {
     ...memberSnapshot,
     ...tracking,
   };
+}
+
+export async function fetchCfbPlaybookRowsAttempt(
+  fetcher: () => Promise<{ body?: { data?: unknown[] | null } }>,
+): Promise<{ rows: unknown[]; error: string | null }> {
+  try {
+    const result = await fetcher();
+    return { rows: result.body?.data ?? [], error: null };
+  } catch (error) {
+    return { rows: [], error: splitRequestError(error) };
+  }
+}
+
+export function retainLatestCfbPlaybookObservation<T>(fresh: T | null, previous: T | null): T | null {
+  return fresh ?? previous;
 }
 
 export function trustedCfbSharpEventIdsByGame(rows: CfbForwardStoredEvidence[]): Record<string, string> {

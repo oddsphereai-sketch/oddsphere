@@ -143,6 +143,21 @@ Last reviewed: 2026-09-25
 
 ## CFB Daily Edge generalized weekly production release
 
+### Playbook failure isolation and last-valid carry-forward (writer r70)
+
+- Active sole writer is `cfb_forward_evidence_writer_2026_09_26_r70_playbook_failure_isolation`.
+  Playbook lines and splits requests are independently optional: an HTTP 429 or other request failure
+  is reported in cron/operator health but cannot abort healthy BallDontLie, SharpAPI, ESPN-reference,
+  quarterback, weather, tracking, and compact-snapshot work.
+- When a Playbook response fails or omits an exact event, the writer retains that game's newest valid
+  timestamped Playbook line and split observations. Their original observation times remain unchanged;
+  nothing is fabricated or relabeled as fresh. No member copy, stale tag, substitute label, badge, or
+  layout is added.
+- Evidence schema, collector, member, fixture, snapshot, reader, model, PMF, probability, calibration,
+  decision, grade, stake, and tracking releases remain r72's existing active family. The successful-
+  provider math and sole `prediction_pipeline:cfb` lease are unchanged. Evidence and rollback:
+  `docs/model-audits/2026-09-26-cfb-playbook-failure-isolation-predeclaration.md`.
+
 ### Bounded reference-coverage cursor and carry-forward (r72)
 
 - Active ESPN reference / evidence / collector / member releases are
@@ -150,7 +165,7 @@ Last reviewed: 2026-09-25
   `cfb_forward_evidence_snapshot_2026_09_20_r26_reference_coverage_cursor` /
   `cfb_forward_evidence_collector_2026_09_20_r32_reference_coverage_cursor` /
   `cfb_v1_member_release_2026_09_20_r38_reference_coverage_cursor`. Sole writer / fixture / outcome are
-  `cfb_forward_evidence_writer_2026_09_24_r69_sharp_price_release_seed` /
+  `cfb_forward_evidence_writer_2026_09_26_r70_playbook_failure_isolation` /
   `cfb_v1_member_fixture_2026_09_20_r58_reference_coverage_cursor` /
   `cfb_market_sharp_public_outcome_contract_2026_09_20_r53_reference_coverage_cursor`; compact snapshot /
   reader are `cfb_forward_member_snapshot_2026_09_20_r17_reference_coverage_cursor` /
