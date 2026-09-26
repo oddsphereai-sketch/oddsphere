@@ -336,6 +336,29 @@ assert.equal(perMarketReferenceOutlooks.spread?.source, "authoritative_pmf_at_es
 assert.equal(Math.abs(perMarketReferenceOutlooks.spread?.line ?? 0), 6.5);
 assert.equal(perMarketReferenceOutlooks.total?.source, "authoritative_pmf_at_playbook_line", "a primary Total must retain precedence over the fallback");
 assert.equal(perMarketReferenceOutlooks.total?.line, 47.5);
+const nearlyNormalizedForecast = {
+  ...fullBundle.forecast,
+  pmf: [
+    { away: 20, home: 20, probability: 0.499999999999 },
+    { away: 21, home: 20, probability: 0.499999999999 },
+  ],
+  homeWinProbability: 0.499999999999,
+};
+const nearlyNormalizedOutlooks = buildCfbForwardMarketOutlooks({
+  forecast: nearlyNormalizedForecast,
+  playbookLine: {
+    provider: "playbook",
+    capturedAt: observedAt,
+    sourceTier: "tier1",
+    homeMoneyline: 100,
+    awayMoneyline: -100,
+    homeSpread: 0,
+    awaySpread: 0,
+    total: 40.5,
+  },
+});
+assert.ok((nearlyNormalizedOutlooks.total?.independentProbability ?? 0) >= 0.5, "rounding drift in a valid binary PMF must not abort a game's Total outlook");
+assert.ok((nearlyNormalizedOutlooks.spread?.independentProbability ?? 0) >= 0.5, "rounding drift in a valid binary PMF must not abort a game's Spread outlook");
 const productionBundle = applyCfbMarketSharpAwareGrades({
   homeTeam: game.home.abbreviation,
   bundle: buildCfbV1DecisionBundle({

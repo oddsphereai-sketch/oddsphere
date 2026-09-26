@@ -387,10 +387,13 @@ export function buildCfbForwardMarketOutlooks(args: {
   playbookLine: CfbForwardPlaybookLine | null;
   espnReferenceLine?: CfbEspnReferenceLine | null;
 }): Record<CfbV1Market, CfbForwardMarketOutlook | null> {
-  const homeWin = args.forecast.homeWinProbability;
-  const moneyline = homeWin >= 0.5
-    ? outlook("moneyline", "home", null, homeWin, "authoritative_pmf", null)
-    : outlook("moneyline", "away", null, 1 - homeWin, "authoritative_pmf", null);
+  const moneylineProbabilities = normalizedDirectionalProbabilities(
+    args.forecast.homeWinProbability,
+    1 - args.forecast.homeWinProbability,
+  );
+  const moneyline = moneylineProbabilities.first >= moneylineProbabilities.second
+    ? outlook("moneyline", "home", null, moneylineProbabilities.first, "authoritative_pmf", null)
+    : outlook("moneyline", "away", null, moneylineProbabilities.second, "authoritative_pmf", null);
   const homeSpread = args.playbookLine?.homeSpread ?? args.espnReferenceLine?.homeSpread ?? null;
   const totalLine = args.playbookLine?.total ?? args.espnReferenceLine?.total ?? null;
   const spreadObservedAt = args.playbookLine?.homeSpread !== null && args.playbookLine?.homeSpread !== undefined
@@ -414,29 +417,40 @@ export function buildCfbForwardMarketOutlooks(args: {
     };
   }
   const probabilities = cfbV1LineProbabilities({ forecast: args.forecast, homeSpread, totalLine });
+  const spread = normalizedDirectionalProbabilities(probabilities.spread.home, probabilities.spread.away);
+  const total = normalizedDirectionalProbabilities(probabilities.total.over, probabilities.total.under);
   return {
     moneyline,
-    spread: probabilities.spread.home >= probabilities.spread.away
-      ? outlook("spread", "home", homeSpread, probabilities.spread.home, spreadSource, spreadObservedAt)
-      : outlook("spread", "away", -homeSpread, probabilities.spread.away, spreadSource, spreadObservedAt),
-    total: probabilities.total.over >= probabilities.total.under
-      ? outlook("total", "over", totalLine, probabilities.total.over, totalSource, totalObservedAt)
-      : outlook("total", "under", totalLine, probabilities.total.under, totalSource, totalObservedAt),
+    spread: spread.first >= spread.second
+      ? outlook("spread", "home", homeSpread, spread.first, spreadSource, spreadObservedAt)
+      : outlook("spread", "away", -homeSpread, spread.second, spreadSource, spreadObservedAt),
+    total: total.first >= total.second
+      ? outlook("total", "over", totalLine, total.first, totalSource, totalObservedAt)
+      : outlook("total", "under", totalLine, total.second, totalSource, totalObservedAt),
   };
 }
 
 function spreadOutlook(forecast: CfbV1Forecast, homeSpread: number, observedAt: string, source: CfbForwardMarketOutlook["source"] = "authoritative_pmf_at_playbook_line"): CfbForwardMarketOutlook {
   const probabilities = cfbV1LineProbabilities({ forecast, homeSpread, totalLine: forecast.expectedTotal });
-  return probabilities.spread.home >= probabilities.spread.away
-    ? outlook("spread", "home", homeSpread, probabilities.spread.home, source, observedAt)
-    : outlook("spread", "away", -homeSpread, probabilities.spread.away, source, observedAt);
+  const spread = normalizedDirectionalProbabilities(probabilities.spread.home, probabilities.spread.away);
+  return spread.first >= spread.second
+    ? outlook("spread", "home", homeSpread, spread.first, source, observedAt)
+    : outlook("spread", "away", -homeSpread, spread.second, source, observedAt);
 }
 
 function totalOutlook(forecast: CfbV1Forecast, totalLine: number, observedAt: string, source: CfbForwardMarketOutlook["source"] = "authoritative_pmf_at_playbook_line"): CfbForwardMarketOutlook {
   const probabilities = cfbV1LineProbabilities({ forecast, homeSpread: 0, totalLine });
-  return probabilities.total.over >= probabilities.total.under
-    ? outlook("total", "over", totalLine, probabilities.total.over, source, observedAt)
-    : outlook("total", "under", totalLine, probabilities.total.under, source, observedAt);
+  const total = normalizedDirectionalProbabilities(probabilities.total.over, probabilities.total.under);
+  return total.first >= total.second
+    ? outlook("total", "over", totalLine, total.first, source, observedAt)
+    : outlook("total", "under", totalLine, total.second, source, observedAt);
+}
+
+function normalizedDirectionalProbabilities(first: number, second: number): { first: number; second: number } {
+  if (Math.max(first, second) >= 0.5) return { first, second };
+  const mass = first + second;
+  if (!Number.isFinite(mass) || mass <= 0) return { first, second };
+  return { first: first / mass, second: second / mass };
 }
 
 function outlook(
