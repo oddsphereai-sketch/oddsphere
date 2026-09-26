@@ -19,7 +19,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { WNBA_TEAMS_BY_BDL_ID } from "./wnbaTeams";
 import { addDaysToSlate, computeSlateDate, currentSlateDate } from "../../dates/slateDate";
-import { PlaybookClient } from "../../providers/playbook/playbookClient";
+import { PlaybookReadBroker } from "../../providers/playbook/playbookReadBroker";
 import type { PlaybookLineGame } from "../../providers/playbook/types";
 
 const SHARP = "https://api.sharpapi.io/api/v1";
@@ -84,7 +84,7 @@ async function fetchSharpWnbaOdds(key: string): Promise<OddRow[]> {
 
 async function fetchPlaybookWnbaLineFallbacks(key: string): Promise<OddRow[]> {
   const rows: OddRow[] = [];
-  const client = new PlaybookClient(key);
+  const client = new PlaybookReadBroker(key);
   const res = await client.lines("wnba");
   const games = res.body.data ?? [];
   for (const g of games) {
@@ -169,6 +169,25 @@ export async function refreshWnbaLines(opts: {
     .gte("slate_date", today)
     .lte("slate_date", end);
   const games = gameRows ?? [];
+  if (games.length === 0) {
+    logger("wnba lines: no scheduled games in refresh window");
+    return {
+      apply,
+      gamesScheduled: 0,
+      gamesMatched: 0,
+      oddsRows: 0,
+      unmatchedOddsRows: 0,
+      linesWritten: 0,
+      lineHistoryWritten: 0,
+      sharpSignalsWritten: 0,
+      tipTimesUpdated: 0,
+      missingTipTimes: [],
+      duplicatePairs: [],
+      slateRebuckets: [],
+      perGame: [],
+      errors,
+    };
+  }
 
   const { data: teamRows } = await supabase.from("teams").select("id, external_id").eq("sport", "wnba");
   const bdlByTeamId = new Map<number, number>();

@@ -2,7 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { IWeatherProvider } from "@/lib/providers/interfaces/IWeatherProvider";
 import { isPublicallyTracked } from "@/lib/config/officialTrackingStart";
 import { computeSlateDate } from "@/lib/dates/slateDate";
-import { PlaybookClient } from "@/lib/providers/playbook/playbookClient";
+import { PlaybookReadBroker } from "@/lib/providers/playbook/playbookReadBroker";
 import type { PlaybookLineGame, PlaybookSplitGame } from "@/lib/providers/playbook/types";
 import {
   fetchBalldontlieNflSlateAvailability,
@@ -196,7 +196,7 @@ export async function runNflForwardEvidenceWriter(args: {
   const criticalTeams = slate.games.flatMap((game) => [game.away, game.home])
     .filter((team, index, rows) => criticalTeamIds.has(team.id) && rows.findIndex((row) => row.id === team.id) === index);
 
-  const playbook = new PlaybookClient(args.playbookApiKey);
+  const playbook = new PlaybookReadBroker(args.playbookApiKey);
   const [rosters, availability, linesResult, splitsResult, sharpResult, circaAttempt, currentSeasonState] = await Promise.all([
     fetchBalldontlieNflTeamDepthSnapshots({
       teams: criticalTeams,

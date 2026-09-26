@@ -1,5 +1,8 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { PlaybookClient } from "../../providers/playbook/playbookClient";
+import {
+  PlaybookReadBroker,
+  playbookSplitsReadMode,
+} from "../../providers/playbook/playbookReadBroker";
 import type { PlaybookLineGame, PlaybookSplitGame } from "../../providers/playbook/types";
 import {
   SharpApiClient,
@@ -519,12 +522,13 @@ async function collectPlaybookSplits(opts: {
   if (!opts.apiKey) {
     return { fetchedRows: 0, observations: [], rejected: [], errors: ["PLAYBOOK_API_KEY missing; skipped Playbook v2 shadow splits"] };
   }
-  const client = new PlaybookClient(opts.apiKey);
-  const res = opts.slateDate === opts.todayUtc
+  const client = new PlaybookReadBroker(opts.apiKey);
+  const readMode = playbookSplitsReadMode(opts.slateDate, opts.todayUtc);
+  const res = readMode === "current"
     ? await client.splits(opts.sport)
     : await client.splitsHistory(opts.sport, opts.slateDate);
   let lineRows: PlaybookLineGame[] = [];
-  if (opts.slateDate === opts.todayUtc) {
+  if (readMode === "current") {
     try {
       const lineRes = await client.lines(opts.sport);
       lineRows = lineRes.body.data ?? [];
