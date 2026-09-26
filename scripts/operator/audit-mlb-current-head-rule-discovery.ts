@@ -7,7 +7,10 @@
  */
 
 import { supabase } from "../../lib/db/supabase";
-import { MLB_MODEL_LAYER_VERSION_IDS } from "../../lib/automodel/mlbModelLayerVersions";
+import {
+  buildMlbModelLayerVersions,
+  MLB_MODEL_LAYER_VERSION_IDS,
+} from "../../lib/automodel/mlbModelLayerVersions";
 
 type Row = Record<string, any>;
 type Result = "win" | "loss" | "push";
@@ -17,6 +20,9 @@ type Candidate = {
   target: "lean" | "best_angle";
   filter: (row: Row) => boolean;
 };
+
+const ACTIVE_FIRST_INNING_PROBABILITY_HEAD =
+  buildMlbModelLayerVersions("first_inning").active_probability_head;
 
 function finite(value: unknown): number | null {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
@@ -106,7 +112,7 @@ function currentHead(row: Row): boolean {
   const head = layer(row).active_probability_head;
   if (row.market === "moneyline") return head === MLB_MODEL_LAYER_VERSION_IDS.moneyline_probability_head;
   if (row.market === "total") return head === MLB_MODEL_LAYER_VERSION_IDS.total_probability_head;
-  if (row.market === "first_inning") return head === MLB_MODEL_LAYER_VERSION_IDS.first_inning_probability_head;
+  if (row.market === "first_inning") return head === ACTIVE_FIRST_INNING_PROBABILITY_HEAD;
   return false;
 }
 

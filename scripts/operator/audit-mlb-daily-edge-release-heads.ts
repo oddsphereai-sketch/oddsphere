@@ -11,7 +11,10 @@
  */
 
 import { existsSync, readFileSync } from "node:fs";
-import { MLB_MODEL_LAYER_VERSION_IDS } from "../../lib/automodel/mlbModelLayerVersions";
+import {
+  buildMlbModelLayerVersions,
+  MLB_MODEL_LAYER_VERSION_IDS,
+} from "../../lib/automodel/mlbModelLayerVersions";
 
 type Row = Record<string, any>;
 type SettledResult = "win" | "loss" | "push";
@@ -20,7 +23,7 @@ const markets = ["moneyline", "total", "first_inning"] as const;
 const activeHeads = {
   moneyline: MLB_MODEL_LAYER_VERSION_IDS.moneyline_probability_head,
   total: MLB_MODEL_LAYER_VERSION_IDS.total_probability_head,
-  first_inning: MLB_MODEL_LAYER_VERSION_IDS.first_inning_probability_head,
+  first_inning: buildMlbModelLayerVersions("first_inning").active_probability_head,
 } as const;
 
 function relation(row: Row): Row | null {
@@ -183,6 +186,10 @@ async function main() {
       byPublicGrade: groupMetrics(
         currentHeadRows,
         (row) => String(row.best_angle === true ? "best_angle" : row.play_grade ?? "null"),
+      ),
+      byDecisionReleaseAndPublicGrade: groupMetrics(
+        currentHeadRows,
+        (row) => `${decisionRelease(row)} :: ${String(row.best_angle === true ? "best_angle" : row.play_grade ?? "null")}`,
       ),
       excludedOtherHeads: marketRows.length - currentHeadRows.length,
     }];

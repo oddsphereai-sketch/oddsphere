@@ -102,11 +102,11 @@ check(
 check(
   "MLB r89 stamps the Total action recalibration while preserving the r88 probability head and unrelated heads",
   MLB_DAILY_EDGE_DECISION_RELEASE_ID === "mlb_daily_edge_decision_2026_09_24_r89_total_action_recalibration" &&
-    MLB_MODEL_LAYER_VERSION_SCHEMA === "mlb_model_layer_versions_v16_totals_regime_calibration" &&
+    MLB_MODEL_LAYER_VERSION_SCHEMA === "mlb_model_layer_versions_v17_market_total_score_projection" &&
     layers.rule_bundle_version === "mlb_daily_edge_rule_bundle_v74_total_action_recalibration_2026_09_24" &&
     layers.total_market_support_lean === "total_sharpapi_money_over_tickets_support_lean_v2_under_only_2026_09_04" &&
     layers.calibration_version === "mlb_public_calibration_v35_total_action_recalibration_2026_09_24" &&
-    layers.projection_core === "mlb_projection_core_v2_4_evaluation_only_price_exclusion_2026_09_02" &&
+    layers.projection_core === "mlb_projection_core_v2_5_market_total_preserve_margin_2026_09_26" &&
     layers.market_input_snapshot === "mlb_market_input_snapshot_v3_current_line_pagination_2026_09_08" &&
     layers.moneyline_probability_head === "mlb_moneyline_structural_coherence_probability_v3_2026_09_02" &&
     layers.total_probability_head === "mlb_total_regime_calibrated_probability_v4_trailing90_2026_09_19" &&

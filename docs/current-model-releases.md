@@ -635,6 +635,7 @@ changed; only deterministic settlement of existing locked rows is affected.
 ## MLB champion
 
 - Projection runtime: resolved automodel `v2_2`
+- Projection core: `mlb_projection_core_v2_5_market_total_preserve_margin_2026_09_26`
 - First-inning runtime: `fi_v2` with FI-scoped release `mlb_first_inning_release_2026_09_04_r85_independent_uncertainty` and probability head `mlb_first_inning_fi_v10_independent_uncertainty_target_excluded_2026_09_04`. r85 retains r84's pre-r61 65% independent / 35% target-excluded multi-book posterior and its 48%-52% corroborated uncertainty band. When the evaluated quote is the sole accepted pair, the forecast remains independent-only and now requires the independent probability to clear 55% NRFI or 55% YRFI; otherwise it is a genuine null-side Toss-Up. The evaluated quote remains exact-price economics only. Full-game tuples, probabilities, grades, the sole writer/lease, providers, query budgets, locks, tracking, and settlement are unchanged.
 - Public calibration: `mlb_public_calibration_v35_total_action_recalibration_2026_09_24`
 - Decision release: `mlb_daily_edge_decision_2026_09_24_r89_total_action_recalibration`
@@ -646,6 +647,22 @@ changed; only deterministic settlement of existing locked rows is affected.
 - Lock coherence: `mlb_lock_coherence_2026_09_02_r3_failed_economics_tuple`
 - Machine registry: `lib/automodel/mlbModelLayerVersions.ts`
 - Authoritative member-facing writer: `lib/services/predictionRecordService.ts`
+
+The September 26 projection-core release changes only future unlocked MLB
+member score projections. When the existing target-excluded market-aware Total
+agrees with the already-authoritative Total forecast, the displayed score uses
+that Total while preserving the incumbent projected margin exactly. A conflict,
+missing market Total, disabled calibration, or exact-line candidate preserves
+the incumbent score. Moneyline winner/margin, Total side/probability/grade,
+first inning, exact prices, stakes, providers, copy, labels, writer, lease,
+locks, and tracking remain unchanged. The fixed shadow was evaluated on 302
+settled games stamped with the preceding exact projection core: team-score MAE
+improved 2.403725→2.342682 and Total MAE 3.435397→3.302318 while margin MAE and
+winner accuracy were identical. All three chronological partitions improved
+both team-score and Total MAE. A same-input 13-game dry run changed seven score
+projections with zero side, grade, probability, confidence, or board-count
+changes. Evidence and rollback are in
+`docs/model-audits/2026-09-26-mlb-market-total-score-projection-v2-5.md`.
 
 The September 24 r89 release retains the r88 Total probability head, every
 predicted side and score, and the full member presentation. It replaces only

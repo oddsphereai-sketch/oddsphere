@@ -9,9 +9,12 @@
  *   npx tsx --env-file=.env.local scripts/operator/audit-mlb-first-inning-grade-ladder.ts
  */
 import { supabase } from "../../lib/db/supabase";
-import { MLB_MODEL_LAYER_VERSION_IDS } from "../../lib/automodel/mlbModelLayerVersions";
+import { buildMlbModelLayerVersions } from "../../lib/automodel/mlbModelLayerVersions";
 
 type Row = Record<string, any>;
+
+const ACTIVE_FIRST_INNING_PROBABILITY_HEAD =
+  buildMlbModelLayerVersions("first_inning").active_probability_head;
 type Result = "win" | "loss" | "push";
 
 function finite(value: unknown): number | null {
@@ -262,7 +265,7 @@ async function main() {
     row.launch_day !== true &&
     result(row) !== null &&
     row.snapshot_json?.model_layer_versions?.active_probability_head ===
-      MLB_MODEL_LAYER_VERSION_IDS.first_inning_probability_head
+      ACTIVE_FIRST_INNING_PROBABILITY_HEAD
   );
   const actionable = rows.filter((row) => grade(row) === "best_angle" || grade(row) === "lean");
   const r18BestAngles = rows.filter((row) => replayR18Grade(row) === "best_angle");
