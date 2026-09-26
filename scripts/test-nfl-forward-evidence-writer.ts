@@ -288,7 +288,7 @@ assert.match(writer, /currentBooks/);
 assert.match(writer, /comparableCurrentBooks/);
 assert.match(writer, /multibook_consensus_unavailable/);
 assert.doesNotMatch(writer, /readLegacyNflForwardEvidence|readPriorNflForwardEvidence|readPreviousNflForwardEvidence/, "the live writer must not scan superseded large JSON releases");
-assert.match(writer, /nfl_forward_evidence_writer_2026_09_25_r40_current_season_raw_signal/);
+assert.match(writer, /nfl_forward_evidence_writer_2026_09_26_r41_sharp_price_trail_continuity/);
 assert.equal((writer.match(/readNflPlayerPropsCurrentSeasonState\(/g) ?? []).length, 1, "the NFL writer must read current-season state once per cycle");
 assert.match(writer, /currentSeasonState\.completeThroughWeek < args\.week - 1/);
 assert.match(writer, /buildNflWeeklyPossessionMargin/);

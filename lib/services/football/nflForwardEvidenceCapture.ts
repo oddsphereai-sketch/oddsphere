@@ -6,8 +6,8 @@ import type { NflRegularSharpSplit } from "./sharpApiNflSplits";
 import type { NflV1WeekOneOutcomeForecast } from "./nflV1WeekOneOutcome";
 
 export const NFL_FORWARD_CONTEXT_CAPTURE_RELEASE =
-  "nfl_daily_edge_forward_context_capture_2026_09_25_r3_current_season_raw_signal" as const;
-export const NFL_FORWARD_CONTEXT_CAPTURE_SCHEMA = "nflfec2" as const;
+  "nfl_daily_edge_forward_context_capture_2026_09_26_r4_sharp_price_trail_continuity" as const;
+export const NFL_FORWARD_CONTEXT_CAPTURE_SCHEMA = "nflfec3" as const;
 export const NFL_FORWARD_CONTEXT_CAPTURE_MAX_FAMILIES_PER_MARKET = 8 as const;
 export const NFL_FORWARD_CONTEXT_CAPTURE_MAX_PROVENANCE_RECORDS_PER_MARKET = 2 as const;
 export const NFL_FORWARD_CONTEXT_CAPTURE_MAX_MARKET_BYTES = 8 * 1024;
@@ -116,6 +116,8 @@ export function buildNflForwardContextCapture(args: {
   payload: NflForwardEvidencePayload;
   /** Capture-only books; never used by the production decision path. */
   captureCurrentBooks?: NflPreviewBookOdds[];
+  /** Capture-only prior landmarks; never used by the production decision path. */
+  openingBooks?: NflPreviewBookOdds[];
   independentForecast: NflV1WeekOneOutcomeForecast;
   independentTargetFree: boolean;
   independentRelease: string;
@@ -129,7 +131,7 @@ export function buildNflForwardContextCapture(args: {
         market,
         capturedAt: args.payload.capturedAt,
         currentBooks: args.captureCurrentBooks ?? args.payload.market.comparableCurrentBooks,
-        openingBooks: args.payload.market.comparableProviderOpeningBooks,
+        openingBooks: args.openingBooks ?? args.payload.market.comparableProviderOpeningBooks,
         operationalOpening: args.payload.market.operationalOpening.quote,
         decision: decisions.get(market) ?? null,
         homeTeam: args.payload.game.home.abbreviation,
@@ -424,4 +426,36 @@ function nonNull<T>(value: T | null): value is T { return value !== null; }
 
 export function nflForwardContextCaptureAddedBytes(capture: NflForwardContextCapture): number {
   return byteLength({ contextualEvidenceCapture: capture }) - byteLength({});
+}
+
+export function nflForwardContextSharpHistoryBooks(
+  capture: NflForwardContextCapture | null | undefined,
+): NflPreviewBookOdds[] {
+  if (!capture) return [];
+  const books: NflPreviewBookOdds[] = [];
+  for (const market of ["moneyline", "spread", "total"] as const) {
+    for (const family of capture.markets[market].families) {
+      const [sportsbook, provider, source, , , current] = family;
+      if (provider !== "s" || !["c", "p", "b"].includes(source)) continue;
+      const [observedAt, , freshness, line, firstPrice, secondPrice] = current;
+      if (freshness === "x") continue;
+      books.push({
+        providerGameId: capture.gameId,
+        sportsbook,
+        observedAt,
+        provider: "sharpapi",
+        targetEligible: false,
+        marketSelection: { [market]: "main_line" },
+        marketObservedAt: { [market]: observedAt },
+        moneyline: market === "moneyline" ? { awayPrice: firstPrice, homePrice: secondPrice } : null,
+        spread: market === "spread" && line !== null
+          ? { awayLine: -line, awayPrice: firstPrice, homeLine: line, homePrice: secondPrice }
+          : null,
+        total: market === "total" && line !== null
+          ? { line, overPrice: firstPrice, underPrice: secondPrice }
+          : null,
+      });
+    }
+  }
+  return books;
 }

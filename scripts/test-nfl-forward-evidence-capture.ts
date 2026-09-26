@@ -7,6 +7,7 @@ import {
   NFL_FORWARD_CONTEXT_CAPTURE_MAX_GAME_BYTES,
   NFL_FORWARD_CONTEXT_CAPTURE_MAX_MARKET_BYTES,
   NFL_FORWARD_CONTEXT_CAPTURE_MAX_PROVENANCE_RECORDS_PER_MARKET,
+  nflForwardContextSharpHistoryBooks,
   nflForwardContextCaptureAddedBytes,
 } from "../lib/services/football/nflForwardEvidenceCapture";
 import type { NflV1WeekOneOutcomeForecast } from "../lib/services/football/nflV1WeekOneOutcome";
@@ -170,6 +171,32 @@ for (const market of Object.values(capture.markets)) {
     "capture-only Circa price provenance must remain SharpAPI");
   assert.deepEqual(market.families.find((family) => family[0] === "pinnacle")?.slice(1, 3), ["s", "p"],
     "Pinnacle must remain a distinct SharpAPI sharp-book family");
+}
+
+const priorSharpHistory = nflForwardContextSharpHistoryBooks(capture);
+assert.equal(priorSharpHistory.length, 6, "Circa and Pinnacle must retain one prior landmark per market");
+assert.deepEqual([...new Set(priorSharpHistory.map((row) => row.sportsbook))].sort(), ["circa", "pinnacle"]);
+assert.ok(priorSharpHistory.every((row) => row.provider === "sharpapi" && row.targetEligible === false));
+const nextCapturedAt = "2026-09-09T20:30:00.000Z";
+const nextCapture = buildNflForwardContextCapture({
+  payload: { ...base, capturedAt: nextCapturedAt },
+  captureCurrentBooks: [
+    { ...book("Circa", nextCapturedAt, 3), provider: "sharpapi", providerEventId: "circa-event", targetEligible: false },
+    { ...book("Pinnacle", nextCapturedAt, 4), provider: "sharpapi", providerEventId: "pinnacle-event", targetEligible: false },
+  ],
+  independentForecast: forecast,
+  independentTargetFree: true,
+  independentRelease: "target-free-artifact",
+  authoritativeForecast: forecast,
+  openingBooks: priorSharpHistory,
+});
+assert.ok(nextCapture);
+for (const market of Object.values(nextCapture.markets)) {
+  for (const family of ["circa", "pinnacle"] as const) {
+    const trail = market.families.find((row) => row[0] === family);
+    assert.equal(trail?.[4]?.[0], capturedAt, `${family} ${market.market} must retain its prior observation`);
+    assert.equal(trail?.[5][0], nextCapturedAt, `${family} ${market.market} must retain its current observation`);
+  }
 }
 
 for (const market of Object.values(capture.markets)) {
