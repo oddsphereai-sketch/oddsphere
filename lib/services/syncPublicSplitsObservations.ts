@@ -87,6 +87,19 @@ export function isPlaybookPregameCandidate(
   return Number.isFinite(startsAt) && startsAt > now.getTime();
 }
 
+export function selectPlaybookObservationGames(
+  games: SlateGame[],
+  sport: string,
+  now: Date,
+  slateDate: string,
+  todayUtc: string,
+): SlateGame[] {
+  // Explicit historical repair runs use Playbook's frozen history endpoint.
+  // The pregame gate applies only to current/future polling.
+  if (slateDate < todayUtc) return games;
+  return games.filter((game) => isPlaybookPregameCandidate(game, sport, now));
+}
+
 function providerStartMs(row: PlaybookSplitGame): number | null {
   const raw = row.startTime ?? row.startTimeEst ?? row.date ?? null;
   if (!raw) return null;
@@ -332,8 +345,12 @@ export async function syncPublicSplitsObservations(opts: {
   // ── Playbook observations: fetch Playbook splits / splits-history ──
   // Observe for supported + audit_required sports (read-only data gathering);
   // unsupported sports (e.g. soccer/WC) are skipped — never fabricated.
-  const playbookSlateGames = slateGames.filter((game) =>
-    isPlaybookPregameCandidate(game, sport, new Date()),
+  const playbookSlateGames = selectPlaybookObservationGames(
+    slateGames,
+    sport,
+    new Date(),
+    slateDate,
+    todayUtc,
   );
   if (playbookSlateGames.length > 0 && shouldObservePlaybook(sport) && process.env.PLAYBOOK_API_KEY) {
     const client = new PlaybookReadBroker(process.env.PLAYBOOK_API_KEY);
