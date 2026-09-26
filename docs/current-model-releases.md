@@ -143,6 +143,20 @@ Last reviewed: 2026-09-25
 
 ## CFB Daily Edge generalized weekly production release
 
+### Directional probability normalization (writer r73)
+
+- Active sole writer is `cfb_forward_evidence_writer_2026_09_26_r73_directional_probability_normalization`.
+  When finite-precision accumulation leaves both sides of an otherwise valid binary Spread or Total
+  outlook infinitesimally below 50%, the writer normalizes that pair before enforcing the existing
+  majority-probability invariant. Pairs with either side already at or above 50% are returned
+  unchanged, so ordinary probabilities, sides, prices, grades, actions, stakes, promotions, and
+  demotions are identical.
+- Live-provider zero-write proof completed all 106 games, proposed 100 payloads, produced 168
+  evaluated markets with zero capture failures, and performed zero writes. The existing model,
+  evidence, member, snapshot, tracking, provider-budget, lease, copy, label, and layout releases
+  remain unchanged. Evidence and rollback:
+  `docs/model-audits/2026-09-26-cfb-directional-probability-normalization-r73.md`.
+
 ### SharpAPI exact-event failure isolation (writer r72)
 
 - Active named-book fallback / sole writer releases are
