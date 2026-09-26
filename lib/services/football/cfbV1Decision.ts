@@ -24,14 +24,16 @@ export const CFB_V1_MODEL_RELEASE =
 export const CFB_V1_DISTRIBUTION_RELEASE =
   "cfb_v1_market_sharp_joint_distribution_2026_09_01_r9_coherent_movement_evidence" as const;
 export const CFB_V1_PROBABILITY_RELEASE =
-  "cfb_v1_market_sharp_joint_probability_2026_09_19_r12_contained_spread_counter_signal" as const;
+  "cfb_v1_market_sharp_joint_probability_2026_09_26_r13_score_side_coherent" as const;
 export const CFB_V1_REPRESENTATIVE_SCORE_RELEASE =
   "cfb_v1_market_sharp_reachable_score_2026_09_01_r9_coherent_movement_evidence" as const;
 export const CFB_V1_CALIBRATION_RELEASE =
-  "cfb_v1_market_sharp_exact_price_calibration_2026_09_19_r10_contained_spread_counter_signal" as const;
+  "cfb_v1_market_sharp_exact_price_calibration_2026_09_26_r11_score_side_coherent" as const;
 export const CFB_V1_GRADE_POLICY_RELEASE =
-  "cfb_v1_composite_grade_policy_2026_09_19_r13_spread_counter_signal" as const;
+  "cfb_v1_composite_grade_policy_2026_09_26_r14_score_side_coherent" as const;
 export const CFB_V1_DECISION_RELEASE =
+  "cfb_v1_daily_edge_decision_2026_09_26_r34_score_side_coherent" as const;
+export const CFB_V1_SCORE_COHERENCE_PREVIOUS_DECISION_RELEASE =
   "cfb_v1_daily_edge_decision_2026_09_19_r33_contained_spread_counter_signal" as const;
 export const CFB_V1_PRICE_PREVIOUS_DECISION_RELEASE =
   "cfb_v1_daily_edge_decision_2026_09_19_r32_spread_counter_signal" as const;
@@ -44,7 +46,7 @@ export const CFB_V1_GRADE_PREVIOUS_DECISION_RELEASE =
 const CFB_V1_POLICY_SOURCE_DECISION_RELEASE =
   "cfb_v1_daily_edge_decision_2026_09_04_r28_evidence_identity_continuity" as const;
 export const CFB_V1_DECISION_SCHEMA_RELEASE =
-  "cfb_v1_exact_price_decision_tuple_2026_09_19_r21_contained_spread_counter_signal" as const;
+  "cfb_v1_exact_price_decision_tuple_2026_09_26_r22_score_side_coherent" as const;
 export const CFB_SPREAD_COUNTER_SIGNAL_MIN_EXCLUSIVE = 0.53 as const;
 export const CFB_SPREAD_COUNTER_SIGNAL_MAX_INCLUSIVE = 0.55 as const;
 export const CFB_T60_TARGET_MINUTES = 60 as const;
@@ -369,7 +371,7 @@ function evaluateTarget(args: {
     : args.target.total?.line ?? args.contextLines?.totalLine ?? args.forecast.expectedTotal;
   if (homeSpread === undefined || homeSpread === null || totalLine === undefined || totalLine === null) return [];
   const lineProbabilities = cfbV1LineProbabilities({ forecast: args.forecast, homeSpread, totalLine });
-  const calibrationContract = args.calibrationContract ?? "authoritative_pmf_spread_counter_signal";
+  const calibrationContract = args.calibrationContract ?? "authoritative_pmf_identity";
   const selection = cfbV1CalibratedSelection({
     probabilities: lineProbabilities,
     market: args.market,
@@ -470,7 +472,7 @@ export function cfbV1CalibratedSelection(args: {
 } {
   const rawSelectedSide = pmfSelectedSide(args.probabilities, args.market);
   const rawSelectedProbability = independentSideProbability(args.probabilities, args.market, rawSelectedSide);
-  const calibrationContract = args.calibrationContract ?? "authoritative_pmf_spread_counter_signal";
+  const calibrationContract = args.calibrationContract ?? "authoritative_pmf_identity";
   const counterSignalQualified = calibrationContract === "authoritative_pmf_spread_counter_signal" &&
     args.market === "spread" &&
     rawSelectedProbability > CFB_SPREAD_COUNTER_SIGNAL_MIN_EXCLUSIVE &&

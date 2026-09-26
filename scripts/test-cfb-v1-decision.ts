@@ -100,29 +100,35 @@ assert.equal(cfbV1CalibratedSelection({
   probabilities: boundaryProbabilities(CFB_SPREAD_COUNTER_SIGNAL_MIN_EXCLUSIVE),
   market: "spread",
   homeSpread: -3.5,
+  calibrationContract: "authoritative_pmf_spread_counter_signal",
 }).counterSignalApplied, false, "the lower boundary is exclusive");
 assert.equal(cfbV1CalibratedSelection({
   probabilities: boundaryProbabilities(CFB_SPREAD_COUNTER_SIGNAL_MIN_EXCLUSIVE + 0.0001),
   market: "spread",
   homeSpread: -3.5,
+  calibrationContract: "authoritative_pmf_spread_counter_signal",
 }).side, "away", "a qualified spread signal flips sides");
 assert.equal(cfbV1CalibratedSelection({
   probabilities: boundaryProbabilities(CFB_SPREAD_COUNTER_SIGNAL_MAX_INCLUSIVE),
   market: "spread",
   homeSpread: -3.5,
+  calibrationContract: "authoritative_pmf_spread_counter_signal",
 }).counterSignalApplied, true, "the upper boundary is inclusive");
 assert.equal(cfbV1CalibratedSelection({
   probabilities: boundaryProbabilities(CFB_SPREAD_COUNTER_SIGNAL_MAX_INCLUSIVE + 0.0001),
   market: "spread",
   homeSpread: -3.5,
+  calibrationContract: "authoritative_pmf_spread_counter_signal",
 }).counterSignalApplied, false, "confidence above the qualified band is unchanged");
 assert.equal(cfbV1CalibratedSelection({
   probabilities: boundaryProbabilities(0.54),
   market: "total",
+  calibrationContract: "authoritative_pmf_spread_counter_signal",
 }).side, "over", "the spread-only calibration cannot alter totals");
 assert.equal(cfbV1CalibratedSelection({
   probabilities: boundaryProbabilities(0.54),
   market: "moneyline",
+  calibrationContract: "authoritative_pmf_spread_counter_signal",
 }).side, "home", "the spread-only calibration cannot alter moneylines");
 
 const containedFavorite = cfbV1CalibratedSelection({
@@ -133,6 +139,7 @@ const containedFavorite = cfbV1CalibratedSelection({
   },
   market: "spread",
   homeSpread: -3,
+  calibrationContract: "authoritative_pmf_spread_counter_signal",
 });
 assert.equal(containedFavorite.side, "home");
 assert.ok(Math.abs(containedFavorite.calibratedProbability - (0.5263 - 0.016)) < 1e-12, "favorite cover probability is capped by the same-PMF win event");
@@ -145,6 +152,7 @@ const containmentPreventsInvalidFlip = cfbV1CalibratedSelection({
   },
   market: "spread",
   homeSpread: 1.5,
+  calibrationContract: "authoritative_pmf_spread_counter_signal",
 });
 assert.equal(containmentPreventsInvalidFlip.side, "home", "identity remains when containment cannot leave the counter-signal above 50%");
 assert.equal(containmentPreventsInvalidFlip.counterSignalApplied, false);
@@ -152,6 +160,7 @@ assert.equal(containmentPreventsInvalidFlip.calibratedProbability, 0.54);
 assert.throws(() => cfbV1CalibratedSelection({
   probabilities: boundaryProbabilities(0.54),
   market: "spread",
+  calibrationContract: "authoritative_pmf_spread_counter_signal",
 }), /exact home spread/, "spread calibration fails closed without its exact line");
 
 const counterSignalForecast = {
@@ -187,24 +196,56 @@ const counterSignalBundle = buildCfbV1DecisionBundle({
   comparableCurrentBooks: counterSignalBooks,
   forecast: counterSignalForecast,
 });
-const correctedSpread = counterSignalBundle.evaluatedBets.find((decision) => decision.market === "spread");
-assert.equal(correctedSpread?.side, "AWY +3.5");
-assert.equal(correctedSpread?.independentProbability, 0.46, "forecastProbability retains the raw PMF probability for the published side");
-assert.equal(correctedSpread?.forecastProbability, 0.46);
-assert.equal(correctedSpread?.calibratedProbability, 0.54);
-assert.equal(correctedSpread?.modelProbability, 0.54);
-assert.equal(correctedSpread?.calibrationFamily, "authoritative_market_sharp_spread_counter_signal");
-const incumbentSpread = buildCfbV1DecisionBundle({
+const coherentSpread = counterSignalBundle.evaluatedBets.find((decision) => decision.market === "spread");
+assert.equal(coherentSpread?.side, "HME -3.5", "the production default stays on the authoritative PMF side");
+assert.equal(coherentSpread?.independentProbability, 0.54);
+assert.equal(coherentSpread?.forecastProbability, 0.54);
+assert.equal(coherentSpread?.calibratedProbability, 0.54);
+assert.equal(coherentSpread?.modelProbability, 0.54);
+assert.equal(coherentSpread?.calibrationFamily, "authoritative_market_sharp_pmf_identity");
+const diagnosticCounterSignal = buildCfbV1DecisionBundle({
   providerGameId: "counter-signal-test",
   awayTeam: "AWY",
   homeTeam: "HME",
   gameStartsAt: "2026-09-20T16:00:00Z",
   comparableCurrentBooks: counterSignalBooks,
   forecast: counterSignalForecast,
-  calibrationContract: "authoritative_pmf_identity",
+  calibrationContract: "authoritative_pmf_spread_counter_signal",
 }).evaluatedBets.find((decision) => decision.market === "spread");
-assert.equal(incumbentSpread?.side, "HME -3.5", "the versioned incumbent remains available for direct replay and rollback");
-assert.equal(incumbentSpread?.modelProbability, 0.54);
+assert.equal(diagnosticCounterSignal?.side, "AWY +3.5", "the counter-signal remains available for explicit diagnostic replay");
+assert.equal(diagnosticCounterSignal?.modelProbability, 0.54);
+
+const toledoCoherenceForecast = {
+  ...counterSignalForecast,
+  providerGameId: "sdsu-toledo-coherence",
+  awayTeam: "SDSU",
+  homeTeam: "TOL",
+  expectedAwayPoints: 23.3,
+  expectedHomePoints: 27.6,
+  expectedMarginHome: 4.3,
+  expectedTotal: 50.9,
+  homeWinProbability: 0.603,
+  representativeScore: { away: 23, home: 28 },
+  pmf: [
+    { home: 28, away: 23, probability: 0.603 },
+    { home: 23, away: 28, probability: 0.397 },
+  ],
+};
+const toledoBooks = counterSignalBooks.map((book) => ({
+  ...book,
+  providerGameId: "sdsu-toledo-coherence",
+  spread: { homeLine: -2.5, homePrice: -110, awayLine: 2.5, awayPrice: -110 },
+}));
+const toledoSpread = buildCfbV1DecisionBundle({
+  providerGameId: "sdsu-toledo-coherence",
+  awayTeam: "SDSU",
+  homeTeam: "TOL",
+  gameStartsAt: "2026-09-20T16:00:00Z",
+  comparableCurrentBooks: toledoBooks,
+  forecast: toledoCoherenceForecast,
+}).evaluatedBets.find((decision) => decision.market === "spread");
+assert.equal(toledoSpread?.side, "TOL -2.5", "a Toledo 27.6-23.3 forecast cannot publish SDSU +2.5");
+assert.equal(toledoSpread?.calibrationFamily, "authoritative_market_sharp_pmf_identity");
 
 function book(sportsbook: string, homeMl: number, awayMl: number, homeLine: number, homeSpreadPrice: number, awaySpreadPrice: number, totalLine: number, overPrice: number, underPrice: number): NcaafBookOdds {
   return { providerGameId: "457157", sportsbook, observedAt, moneyline: { homePrice: homeMl, awayPrice: awayMl }, spread: { homeLine, homePrice: homeSpreadPrice, awayLine: -homeLine, awayPrice: awaySpreadPrice }, total: { line: totalLine, overPrice, underPrice } };

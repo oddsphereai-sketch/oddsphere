@@ -143,9 +143,39 @@ Last reviewed: 2026-09-25
 
 ## CFB Daily Edge generalized weekly production release
 
+### Score/Spread side coherence (r71)
+
+- Active probability / calibration / grade / decision / tuple releases are
+  `cfb_v1_market_sharp_joint_probability_2026_09_26_r13_score_side_coherent` /
+  `cfb_v1_market_sharp_exact_price_calibration_2026_09_26_r11_score_side_coherent` /
+  `cfb_v1_composite_grade_policy_2026_09_26_r14_score_side_coherent` /
+  `cfb_v1_daily_edge_decision_2026_09_26_r34_score_side_coherent` /
+  `cfb_v1_exact_price_decision_tuple_2026_09_26_r22_score_side_coherent`. Spread selection now
+  defaults to the same authoritative joint PMF that produces the displayed expected and
+  representative score. The prior bounded counter-signal remains explicit diagnostic code for
+  upstream margin-model research, but it cannot silently publish the opposite team.
+- Active market candidate / production, evidence / collector / member, writer, fixture / outcome,
+  compact snapshot / reader, and tracking releases are
+  `cfb_market_sharp_aware_candidate_2026_09_26_r20_score_side_coherent` /
+  `cfb_market_sharp_aware_production_2026_09_26_r22_score_side_coherent`,
+  `cfb_forward_evidence_snapshot_2026_09_26_r27_score_side_coherent` /
+  `cfb_forward_evidence_collector_2026_09_26_r33_score_side_coherent` /
+  `cfb_v1_member_release_2026_09_26_r39_score_side_coherent`,
+  `cfb_forward_evidence_writer_2026_09_26_r71_score_side_coherent`,
+  `cfb_v1_member_fixture_2026_09_26_r59_score_side_coherent` /
+  `cfb_market_sharp_public_outcome_contract_2026_09_26_r54_score_side_coherent`,
+  `cfb_forward_member_snapshot_2026_09_26_r18_score_side_coherent` /
+  `cfb_member_snapshot_reader_2026_09_26_r7_score_side_coherent`, and
+  `cfb_official_tracking_record_2026_09_26_r25_score_side_coherent`.
+- The prior r70/r26/r38/r58/r17 family is the explicit transition fallback until the sole writer
+  publishes r71. Expected scores, PMF values, market/sharp inputs, thresholds, stakes, provider
+  budgets, copy, labels, and layout are unchanged. Evidence and rollback:
+  `docs/model-audits/2026-09-26-cfb-score-side-coherence-r71.md`.
+
 ### Playbook failure isolation and last-valid carry-forward (writer r70)
 
-- Active sole writer is `cfb_forward_evidence_writer_2026_09_26_r70_playbook_failure_isolation`.
+- Preceding sole writer is `cfb_forward_evidence_writer_2026_09_26_r70_playbook_failure_isolation`;
+  its behavior is retained by active r71.
   Playbook lines and splits requests are independently optional: an HTTP 429 or other request failure
   is reported in cron/operator health but cannot abort healthy BallDontLie, SharpAPI, ESPN-reference,
   quarterback, weather, tracking, and compact-snapshot work.
@@ -244,9 +274,9 @@ Last reviewed: 2026-09-25
   `prediction_pipeline:cfb` lease are unchanged. Evidence and rollback are recorded in
   `docs/model-audits/2026-09-19-cfb-price-history-release-continuity.md`.
 
-### Contained Spread counter-signal calibration (r69)
+### Contained Spread counter-signal calibration (r69; superseded as production default by r71)
 
-- Active probability / calibration / decision / tuple releases are `cfb_v1_market_sharp_joint_probability_2026_09_19_r12_contained_spread_counter_signal` / `cfb_v1_market_sharp_exact_price_calibration_2026_09_19_r10_contained_spread_counter_signal` / `cfb_v1_daily_edge_decision_2026_09_19_r33_contained_spread_counter_signal` / `cfb_v1_exact_price_decision_tuple_2026_09_19_r21_contained_spread_counter_signal`. The selected 53–55% Spread counter-signal remains accuracy-authoritative, but its confidence is now bounded by the same joint PMF's Moneyline/Spread event-containment relationship at the exact line and push mass. If the bound cannot leave the opposite side above 50%, identity remains. Moneyline, Total, score projections, stake policy, and UI copy remain unchanged.
+- Historical probability / calibration / decision / tuple releases were `cfb_v1_market_sharp_joint_probability_2026_09_19_r12_contained_spread_counter_signal` / `cfb_v1_market_sharp_exact_price_calibration_2026_09_19_r10_contained_spread_counter_signal` / `cfb_v1_daily_edge_decision_2026_09_19_r33_contained_spread_counter_signal` / `cfb_v1_exact_price_decision_tuple_2026_09_19_r21_contained_spread_counter_signal`. Their 53–55% Spread counter-signal is retained only for explicit diagnostic replay after r71; it is no longer the production default.
 - Contained chronology still clears every gate: 2023 selection improves 429–453 to 454–428 with Brier/log loss .251485/.696127→.249459/.692066; 2024 confirmation improves 487–478 to 490–475 and .251065/.695284→.250564/.694278; 2025 improves 508–450 to 512–446 and .247629/.688359→.247079/.687257. Release-pure settled 2026 sides remain 66–77→82–61 overall and 16–20→19–17 among actionables.
 - The first r63 production cycle isolated four event-containment failures and refused the incomplete compact snapshot; the declared previous r12 snapshot remained readable and prevented an empty board. r64 keeps that validator intact and corrects the probability before grading. The post-incident SELECT-only exact-price replay passed the production coherence assertion on every bundle: 52 evaluable Spreads, seven side changes, 26→28 actionables, two promotions, zero demotions. No provider call or write occurred in that replay.
 - Publication set: evidence / collector / member `cfb_forward_evidence_snapshot_2026_09_19_r24_contained_spread_counter_signal` / `cfb_forward_evidence_collector_2026_09_19_r30_contained_spread_counter_signal` / `cfb_v1_member_release_2026_09_19_r36_contained_spread_counter_signal`; market grade candidate / production `cfb_market_sharp_aware_candidate_2026_09_19_r19_contained_spread_counter_signal` / `cfb_market_sharp_aware_production_2026_09_19_r21_contained_spread_counter_signal`; sole writer `cfb_forward_evidence_writer_2026_09_19_r65_price_history_continuity`; fixture / outcome `cfb_v1_member_fixture_2026_09_19_r56_price_history_continuity` / `cfb_market_sharp_public_outcome_contract_2026_09_19_r51_contained_spread_counter_signal`; compact snapshot / reader `cfb_forward_member_snapshot_2026_09_19_r15_price_history_continuity` / `cfb_member_snapshot_reader_2026_09_19_r4_price_history_continuity`; tracking `cfb_official_tracking_record_2026_09_19_r22_contained_spread_counter_signal`. r14/r55 are the immediate publication-transition fallbacks. The sole `/api/cron/cfb-forward-evidence` writer and `prediction_pipeline:cfb` lease are unchanged. Evidence and rollback: `docs/model-audits/2026-09-19-cfb-spread-counter-signal-calibration.md` and `docs/model-audits/2026-09-19-cfb-price-history-release-continuity.md`.
