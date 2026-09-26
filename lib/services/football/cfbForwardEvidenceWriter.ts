@@ -43,7 +43,8 @@ import {
 import {
   buildCfbOfficialTrackingRecords,
   buildCfbEspnOpeningRecoveryRecords,
-  buildCfbPublishedCutoffRecoveryRecords,
+  buildCfbPublishedPregameRecoveryRecords,
+  cfbPublishedPregameRecoveryMarkets,
   cfbProviderIntegerId,
   cfbTrackingMarketsForPayload,
 } from "./cfbOfficialTrackingRecord";
@@ -89,7 +90,7 @@ import {
 } from "./cfbForwardMemberSnapshotStore";
 
 export const CFB_FORWARD_WRITER_RELEASE =
-  "cfb_forward_evidence_writer_2026_09_26_r76_tracking_game_scope_isolation" as const;
+  "cfb_forward_evidence_writer_2026_09_26_r77_published_pregame_tracking" as const;
 export const CFB_FORWARD_MAX_QB_TEAMS_PER_RUN = 24 as const;
 export const CFB_FORWARD_MAX_SHARP_FALLBACK_GAMES_PER_RUN = 24 as const;
 export const CFB_FORWARD_MAX_ESPN_PROSPECTIVE_GAMES_PER_RUN = 32 as const;
@@ -989,8 +990,8 @@ function stageCounts(payloads: CfbForwardEvidencePayload[]): Record<"opening" | 
 
 export type CfbTrackingCandidate = {
   payload: CfbForwardEvidencePayload;
-  mode: "official_t60" | "published_cutoff_accuracy_recovery";
-  publishedCutoffPayload: CfbForwardEvidencePayload | null;
+  mode: "official_t60" | "published_pregame_accuracy_recovery";
+  publishedPregamePayload: CfbForwardEvidencePayload | null;
 };
 
 export function cfbTrackingCandidatesForRun(
@@ -1012,14 +1013,14 @@ export function cfbTrackingCandidatesForRun(
     const recovery = rows.filter((payload) => {
       const gameStart = Date.parse(payload.game.scheduledStart);
       const capturedAt = Date.parse(payload.capturedAt);
-      return isEligiblePublishedCutoffRecoveryPayload(payload) &&
+      return isEligiblePublishedPregameRecoveryPayload(payload) &&
         Number.isFinite(gameStart) &&
         Number.isFinite(capturedAt) &&
         gameStart <= nowMs &&
-        capturedAt <= gameStart - 60 * 60_000;
+        capturedAt < gameStart;
     }).sort(latestPayloadFirst)[0];
-    if (official) selected.push({ payload: official, mode: "official_t60", publishedCutoffPayload: recovery ?? null });
-    else if (recovery) selected.push({ payload: recovery, mode: "published_cutoff_accuracy_recovery", publishedCutoffPayload: recovery });
+    if (official) selected.push({ payload: official, mode: "official_t60", publishedPregamePayload: recovery ?? null });
+    else if (recovery) selected.push({ payload: recovery, mode: "published_pregame_accuracy_recovery", publishedPregamePayload: recovery });
   }
   return selected.sort((first, second) =>
     Date.parse(first.payload.game.scheduledStart) - Date.parse(second.payload.game.scheduledStart) ||
@@ -1042,7 +1043,7 @@ function isEligibleOfficialTrackingPayload(payload: CfbForwardEvidencePayload): 
     (payload.t60LagMinutes ?? Infinity) <= CFB_T60_MAX_CAPTURE_LAG_MINUTES;
 }
 
-function isEligiblePublishedCutoffRecoveryPayload(payload: CfbForwardEvidencePayload): boolean {
+function isEligiblePublishedPregameRecoveryPayload(payload: CfbForwardEvidencePayload): boolean {
   const release = payload.authoritativeForecast?.release as string | undefined;
   return ((String(payload.schemaRelease) === CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE && String(payload.memberRelease) === CFB_FORWARD_MEMBER_RELEASE) ||
     (String(payload.schemaRelease) === CFB_FORWARD_PRICE_PREVIOUS_EVIDENCE_SCHEMA_RELEASE && String(payload.memberRelease) === CFB_FORWARD_PRICE_PREVIOUS_MEMBER_RELEASE)) &&
@@ -1169,30 +1170,30 @@ async function writeOfficialTracking(args: {
     const gameId = gameIds.get(candidate.payload.game.providerGameId)!;
     const primary = candidate.mode === "official_t60"
       ? buildCfbOfficialTrackingRecords({ payload: candidate.payload, gameId })
-      : buildCfbPublishedCutoffRecoveryRecords({ payload: candidate.payload, gameId });
-    const recovery = candidate.publishedCutoffPayload && candidate.publishedCutoffPayload !== candidate.payload
-      ? buildCfbPublishedCutoffRecoveryRecords({ payload: candidate.publishedCutoffPayload, gameId })
+      : buildCfbPublishedPregameRecoveryRecords({ payload: candidate.payload, gameId });
+    const recovery = candidate.publishedPregamePayload && candidate.publishedPregamePayload !== candidate.payload
+      ? buildCfbPublishedPregameRecoveryRecords({ payload: candidate.publishedPregamePayload, gameId })
       : [];
     return uniqueRecordsByMarket([...primary, ...recovery]);
   });
   const availableKeys = new Set([...existingKeys, ...standardRecords.map((record) => `${record.external_id}:${record.market}`)]);
   const espnCandidates = eligible.filter((candidate) => {
     const externalId = cfbProviderIntegerId(candidate.payload.game.providerGameId, "game");
-    return candidate.publishedCutoffPayload !== null && (["spread", "total"] as const)
+    return candidate.publishedPregamePayload !== null && (["spread", "total"] as const)
       .some((market) => !availableKeys.has(`${externalId}:${market}`));
   });
   const espnRecords: PredictionRecordRow[] = [];
   let trackingProviderRequests = 0;
   if (espnCandidates.length > 0) {
     const attempt = await fetchCfbEspnReferenceAttempt({
-      games: espnCandidates.map((candidate) => candidate.publishedCutoffPayload!.game),
+      games: espnCandidates.map((candidate) => candidate.publishedPregamePayload!.game),
       capturedAt: args.now,
       maximumGames: CFB_ESPN_REFERENCE_MAX_GAMES_PER_RUN,
     });
     trackingProviderRequests += attempt.result.requests;
     const priorByWindow = new Map(args.priorGamesByWindow ?? []);
     for (const candidate of espnCandidates) {
-      const payload = candidate.publishedCutoffPayload!;
+      const payload = candidate.publishedPregamePayload!;
       const before = activeCfbWeeklyWindow(payload.capturedAt).boardStartDate;
       if (!priorByWindow.has(before)) {
         const prior = await fetchPriorCompletedGames({
@@ -1254,14 +1255,14 @@ export function planCfbTrackingRecordInsert(args: {
   return { records, missing };
 }
 
-function candidateTrackingMarkets(candidate: CfbTrackingCandidate): CfbV1Market[] {
+export function candidateTrackingMarkets(candidate: CfbTrackingCandidate): CfbV1Market[] {
   const markets = new Set<CfbV1Market>(candidate.mode === "official_t60"
     ? cfbTrackingMarketsForPayload(candidate.payload)
     : recoverableMarkets(candidate.payload));
-  if (candidate.publishedCutoffPayload) {
-    for (const market of recoverableMarkets(candidate.publishedCutoffPayload)) markets.add(market);
-    if (candidate.publishedCutoffPayload.authoritativeForecast?.status === "market_anchor_unavailable_hold" &&
-      candidate.publishedCutoffPayload.contextualEvidenceCapture?.prior.outcome.pmf.sha256) {
+  if (candidate.publishedPregamePayload) {
+    for (const market of recoverableMarkets(candidate.publishedPregamePayload)) markets.add(market);
+    if (candidate.publishedPregamePayload.authoritativeForecast?.status === "market_anchor_unavailable_hold" &&
+      candidate.publishedPregamePayload.contextualEvidenceCapture?.prior.outcome.pmf.sha256) {
       markets.add("spread");
       markets.add("total");
     }
@@ -1270,12 +1271,7 @@ function candidateTrackingMarkets(candidate: CfbTrackingCandidate): CfbV1Market[
 }
 
 function recoverableMarkets(payload: CfbForwardEvidencePayload): CfbV1Market[] {
-  const decisions = new Set(payload.decisions.evaluatedBets.map((decision) => decision.market));
-  return (["moneyline", "spread", "total"] as const).filter((market) => {
-    if (decisions.has(market)) return true;
-    const outlook = payload.decisions.marketOutlooks?.[market] ?? null;
-    return Boolean(outlook && (market === "moneyline" || outlook.line !== null));
-  });
+  return cfbPublishedPregameRecoveryMarkets(payload);
 }
 
 function uniqueRecordsByMarket(records: PredictionRecordRow[]): PredictionRecordRow[] {

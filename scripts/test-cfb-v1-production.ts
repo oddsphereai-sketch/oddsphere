@@ -50,6 +50,7 @@ import {
 import { normalizeCfbPlaybookLine, normalizeCfbPlaybookSplits } from "../lib/services/football/cfbPlaybookEvidence";
 import {
   buildCfbForwardPayloadsWithIsolation,
+  candidateTrackingMarkets,
   cfbForwardReleaseRefreshNeed,
   cfbReferenceCompletionNeeded,
   cfbMarketAnchorHealthHolds,
@@ -81,7 +82,7 @@ import { ingestCfbFinalScores } from "../lib/services/football/cfbScoreIngestSer
 import {
   buildCfbOfficialTrackingRecords,
   buildCfbEspnOpeningRecoveryRecords,
-  buildCfbPublishedCutoffRecoveryRecords,
+  buildCfbPublishedPregameRecoveryRecords,
 } from "../lib/services/football/cfbOfficialTrackingRecord";
 import { buildCfbForwardContextCapture } from "../lib/services/football/cfbForwardEvidenceCapture";
 import { CFB_ESPN_REFERENCE_LINE_RELEASE } from "../lib/services/football/cfbEspnReferenceLine";
@@ -1923,14 +1924,35 @@ const recoveryCandidates = cfbTrackingCandidatesForRun(
   "2026-08-29T17:00:00.000Z",
 );
 assert.equal(recoveryCandidates.length, 1);
-assert.equal(recoveryCandidates[0]!.mode, "published_cutoff_accuracy_recovery");
-assert.equal(recoveryCandidates[0]!.payload.capturedAt, publishedCutoffPayload.capturedAt, "recovery must use the selected payload's own schedule when enforcing T-60, including after a provider kickoff correction");
+assert.equal(recoveryCandidates[0]!.mode, "published_pregame_accuracy_recovery");
+assert.equal(recoveryCandidates[0]!.payload.capturedAt, afterCutoffPayload.capturedAt, "recovery must use the latest immutable prediction published before kickoff, including after a provider kickoff correction");
 assert.deepEqual(cfbTrackingCandidatesForRun([publishedCutoffStored], [], "2026-08-29T14:59:00.000Z"), [], "recovery must never write before a game starts while a real T-60 capture can still occur");
-const recoveryTracking = buildCfbPublishedCutoffRecoveryRecords({ payload: publishedCutoffPayload, gameId: 9001 });
+const recoveryTracking = buildCfbPublishedPregameRecoveryRecords({ payload: publishedCutoffPayload, gameId: 9001 });
 assert.deepEqual(recoveryTracking.map((row) => row.market), ["moneyline", "spread", "total"]);
 assert.equal(recoveryTracking.every((row) => !row.held && row.no_bet && row.play_grade === "no_play"), true, "recovered predictions must remain accuracy-only No Play predictions, never Held rows");
 assert.equal(recoveryTracking.every((row) => row.odds_american === null && row.edge === null && row.expected_value === null), true, "recovery must never reconstruct betting economics");
-assert.equal(recoveryTracking.every((row) => row.prediction_source === "cfb_forward_evidence_published_cutoff_accuracy_recovery"), true);
+assert.equal(recoveryTracking.every((row) => row.prediction_source === "cfb_forward_evidence_published_pregame_accuracy_recovery"), true);
+const evaluatedWithoutOutlookPayload = structuredClone(publishedCutoffPayload);
+delete evaluatedWithoutOutlookPayload.decisions.marketOutlooks;
+const evaluatedWithoutOutlookTracking = buildCfbPublishedPregameRecoveryRecords({
+  payload: evaluatedWithoutOutlookPayload,
+  gameId: 9001,
+});
+assert.deepEqual(
+  evaluatedWithoutOutlookTracking.map((row) => row.market),
+  ["spread", "total"],
+  "an immutable exact-price prediction remains trackable when an older payload omitted the redundant outlook map",
+);
+assert.equal(
+  evaluatedWithoutOutlookTracking.every((row) => row.odds_american === null && row.expected_value === null),
+  true,
+  "pregame recovery must strip betting economics even when the immutable prediction originally had a price",
+);
+assert.deepEqual(
+  candidateTrackingMarkets(recoveryCandidates[0]!),
+  ["moneyline", "spread", "total"],
+  "every defined member prediction must be included in the lock denominator regardless of price availability",
+);
 const completeTrackingGame = recoveryTracking.map((row) => ({ ...row, external_id: 9101 }));
 const incompleteTrackingGame = recoveryTracking
   .filter((row) => row.market === "moneyline")
@@ -1957,7 +1979,7 @@ const missingAnchorRecovery = structuredClone(publishedCutoffPayload);
 missingAnchorRecovery.decisions.marketOutlooks!.spread!.line = null;
 missingAnchorRecovery.decisions.marketOutlooks!.total!.line = null;
 assert.deepEqual(
-  buildCfbPublishedCutoffRecoveryRecords({ payload: missingAnchorRecovery, gameId: 9001 }).map((row) => row.market),
+  buildCfbPublishedPregameRecoveryRecords({ payload: missingAnchorRecovery, gameId: 9001 }).map((row) => row.market),
   ["moneyline"],
   "missing historical reference lines must stay missing instead of being fabricated",
 );
@@ -2022,8 +2044,8 @@ assert.throws(
   "recovery must fail closed when any immutable forecast output differs even if the PMF hash is unchanged",
 );
 assert.throws(
-  () => buildCfbPublishedCutoffRecoveryRecords({ payload: afterCutoffPayload, gameId: 9001 }),
-  /supported immutable pre-cutoff prediction payload/,
+  () => buildCfbPublishedPregameRecoveryRecords({ payload: { ...afterCutoffPayload, capturedAt: afterCutoffPayload.game.scheduledStart }, gameId: 9001 }),
+  /supported immutable pregame prediction payload/,
 );
 assert.throws(
   () => buildCfbOfficialTrackingRecords({ payload: { ...marketScopedPayload, captureTiming: "late_first_observation" }, gameId: 9001 }),

@@ -1,4 +1,4 @@
-# CFB tracking game-scope isolation r76
+# CFB published-pregame tracking completeness r77
 
 ## Scope and predeclaration
 
@@ -9,8 +9,8 @@
   `cfb_forward_evidence_writer_2026_09_26_r75_sharp_price_trail_continuity` /
   `cfb_official_tracking_record_2026_09_26_r25_score_side_coherent`.
 - Candidate writer / tracking record releases:
-  `cfb_forward_evidence_writer_2026_09_26_r76_tracking_game_scope_isolation` /
-  `cfb_official_tracking_record_2026_09_26_r26_tracking_game_scope_isolation`.
+  `cfb_forward_evidence_writer_2026_09_26_r77_published_pregame_tracking` /
+  `cfb_official_tracking_record_2026_09_26_r27_published_pregame_tracking`.
 - Trigger: the September 26 writer reported `official_tracking_incomplete` while a complete new
   T-60 cohort existed. Read-only audit showed that an older incomplete recovery candidate caused
   the slate-wide tracking transaction to return before inserting complete sibling games.
@@ -19,8 +19,14 @@
 
 Tracking completeness is enforced at game scope. A candidate game is inserted only when every
 market planned for that game is already present or has an immutable record ready in the current
-run. An incomplete game remains fully missing and is reported for recovery. Complete sibling games
-are inserted in the same run. Existing keys remain idempotent and immutable.
+run. When the T-60 writer missed, recovery selects the latest immutable prediction published before
+kickoff, not merely the last hourly row before T-60. This locks the prediction that members actually
+saw and retains all three category denominators whenever their reference lines existed. Missing
+American prices stay null and cannot manufacture odds, edge, EV, recommendation, stake, or ROI.
+An immutable exact-price prediction remains recoverable even when an older payload omitted its
+redundant market-outlook map.
+An incomplete game remains fully missing and reported for recovery. Complete sibling games are
+inserted in the same run. Existing keys remain idempotent and immutable.
 
 The change cannot recalculate or alter a prediction, probability, projected score, side, line,
 price, grade, action, stake, member card, or settled result. It adds no provider request and no
