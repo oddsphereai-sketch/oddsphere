@@ -45,6 +45,8 @@ async function main(): Promise<void> {
   if (refreshError) throw new Error(`CFB refresh log read failed: ${refreshError.message}`);
 
   const games = snapshot.fixture.snapshot.games;
+  const summaryOnly = process.argv.includes("--summary");
+  const focusOnly = process.argv.includes("--focus-only");
   const matchupFilter = process.argv.find((value) => value.startsWith("--matchup="))?.slice(10).toUpperCase() ?? null;
   const rows = games.flatMap((game) => MARKETS.map((market) => {
     const dto = market === "spread" ? game.markets.first_inning : game.markets[market];
@@ -87,6 +89,7 @@ async function main(): Promise<void> {
   const upcomingRows = rows.filter((row) => Date.parse(row.startsAt ?? "") > nowMs);
   const upcomingActionable = upcomingRows.filter((row) => row.grade === "Lean" || row.grade === "Best Angle");
   const missingPrice = rows.filter((row) => row.currentPrice === null);
+  const upcomingMissingPrice = upcomingRows.filter((row) => row.currentPrice === null);
   const zeroTrail = rows.filter((row) => row.trailLength === 0);
   const report = {
     release: "cfb_current_board_health_select_audit_2026_09_26_r1",
@@ -106,7 +109,26 @@ async function main(): Promise<void> {
       provenance: snapshot.fixture.provenance,
     },
     recentRefreshes: refreshRows ?? [],
-    focusGames: games.filter((game) => !matchupFilter || `${game.awayTeam}@${game.homeTeam}`.toUpperCase() === matchupFilter).map((game) => ({
+    focusGames: summaryOnly ? games.filter((game) => matchupFilter !== null && `${game.awayTeam}@${game.homeTeam}`.toUpperCase() === matchupFilter).map((game) => ({
+      matchup: `${game.awayTeam}@${game.homeTeam}`,
+      startsAt: game.gameStartAt,
+      projected: game.projected,
+      markets: Object.fromEntries(MARKETS.map((market) => {
+        const dto = market === "spread" ? game.markets.first_inning : game.markets[market];
+        return [market, {
+          prediction: dto.marketPrediction,
+          pick: dto.pick,
+          held: dto.held,
+          line: dto.line,
+          currentPrice: dto.currentPriceAmerican,
+          source: dto.currentPriceSportsbook ?? dto.marketSource,
+          observedAt: dto.currentPriceObservedAt,
+          reviewFlags: dto.reviewFlags,
+          publicSplits: dto.publicSplits,
+          sportsbookSplits: dto.sportsbookSplits,
+        }];
+      })),
+    })) : games.filter((game) => !matchupFilter || `${game.awayTeam}@${game.homeTeam}`.toUpperCase() === matchupFilter).map((game) => ({
       matchup: `${game.awayTeam}@${game.homeTeam}`,
       startsAt: game.gameStartAt,
       projected: game.projected,
@@ -131,11 +153,19 @@ async function main(): Promise<void> {
       missingCurrentPrice: missingPrice.length,
       missingCurrentPriceByMarket: count(missingPrice, (row) => row.market),
       missingCurrentPriceByScopeAndMarket: count(missingPrice, (row) => `${row.scope}:${row.market}`),
-      missingFbsInvolved: missingPrice.filter((row) => row.scope === "fbs_involved"),
+      missingFbsInvolved: summaryOnly ? missingPrice.filter((row) => row.scope === "fbs_involved").length : missingPrice.filter((row) => row.scope === "fbs_involved"),
+      upcomingMissingCurrentPrice: upcomingMissingPrice.length,
+      upcomingMissingCurrentPriceByScopeAndMarket: count(upcomingMissingPrice, (row) => `${row.scope}:${row.market}`),
+      upcomingMissingPriceSample: upcomingMissingPrice.map((row) => ({
+        matchup: row.matchup,
+        startsAt: row.startsAt,
+        scope: row.scope,
+        market: row.market,
+      })),
       zeroTrail: zeroTrail.length,
       zeroTrailByMarket: count(zeroTrail, (row) => row.market),
-      missingPriceSample: missingPrice.slice(0, 40),
-      zeroTrailWithCurrentPriceSample: zeroTrail.filter((row) => row.currentPrice !== null).slice(0, 30),
+      missingPriceSample: summaryOnly ? [] : missingPrice.slice(0, 40),
+      zeroTrailWithCurrentPriceSample: summaryOnly ? [] : zeroTrail.filter((row) => row.currentPrice !== null).slice(0, 30),
     },
     scoreHealth: {
       expectedMarginAbsBuckets: count(projections, (row) => bucket(Math.abs(row.expectedMarginHome), [1, 2, 3, 6, 10, 14, 21, 28])),
@@ -144,11 +174,18 @@ async function main(): Promise<void> {
       representativeTotalBuckets: count(projections, (row) => bucket(row.representativeTotal, [35, 42, 49, 56, 63, 70, 84])),
       closeExpectedGames: projections.filter((row) => Math.abs(row.expectedMarginHome) <= 2).length,
       closeRepresentativeGames: projections.filter((row) => Math.abs(row.representativeMarginHome) <= 2).length,
-      projectionExtremes: [...projections].sort((a, b) => Math.abs(b.expectedMarginHome) - Math.abs(a.expectedMarginHome)).slice(0, 20),
-      projectionClosest: [...projections].sort((a, b) => Math.abs(a.expectedMarginHome) - Math.abs(b.expectedMarginHome)).slice(0, 20),
+      projectionExtremes: summaryOnly ? [] : [...projections].sort((a, b) => Math.abs(b.expectedMarginHome) - Math.abs(a.expectedMarginHome)).slice(0, 20),
+      projectionClosest: summaryOnly ? [] : [...projections].sort((a, b) => Math.abs(a.expectedMarginHome) - Math.abs(b.expectedMarginHome)).slice(0, 20),
     },
   };
-  console.log(JSON.stringify(report, null, 2));
+  console.log(JSON.stringify(focusOnly ? {
+    release: report.release,
+    readOnly: report.readOnly,
+    writes: report.writes,
+    now: report.now,
+    snapshot: report.snapshot,
+    focusGames: report.focusGames,
+  } : report, null, 2));
 }
 
 main().catch((error) => {

@@ -19,6 +19,7 @@ if (!record) throw new Error(`NFL props snapshot is unavailable for ${season} We
 const snapshot = record.snapshot;
 const rows = snapshot.board.decisions.map((row) => ({
   market: row.market,
+  side: row.side,
   grade: row.grade,
   candidateGrade: row.grade === "Held"
     ? "Held"
@@ -67,6 +68,11 @@ const report = {
     divergenceDemotions: rows.filter((row) => row.grade !== row.candidateGrade && row.candidateGrade === "No Play").length,
     unchanged: rows.filter((row) => row.grade === row.candidateGrade).length,
   },
+  actionableDistribution: Object.fromEntries(
+    [...new Set(rows.filter((row) => row.grade === "Best Angle" || row.grade === "Lean").map((row) => `${row.market}:${row.side}`))]
+      .sort()
+      .map((key) => [key, rows.filter((row) => `${row.market}:${row.side}` === key && (row.grade === "Best Angle" || row.grade === "Lean")).length]),
+  ),
   byMarket,
   divergencePp: {
     p50: quantile(divergences, 0.5),
@@ -108,6 +114,7 @@ console.log(JSON.stringify(process.argv.includes("--summary") ? {
   grades: report.grades,
   candidateGrades: report.candidateGrades,
   candidateImpact: report.candidateImpact,
+  actionableDistribution: report.actionableDistribution,
   divergencePp: report.divergencePp,
   openingCoverage: report.openingCoverage,
   tracking: report.tracking,
