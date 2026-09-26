@@ -20,7 +20,7 @@
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { computeSlateDate } from "../../dates/slateDate";
-import { PlaybookClient } from "../../providers/playbook/playbookClient";
+import { PlaybookReadBroker } from "../../providers/playbook/playbookReadBroker";
 import { mapPlaybookSplitsToSharpSignalRecords } from "../../providers/playbook/playbookPublicSplitsMapper";
 import type { PlaybookSplitGame } from "../../providers/playbook/types";
 
@@ -75,7 +75,7 @@ export async function refreshWnbaPlaybookSplits(opts: {
   }
 
   // 2. Fetch Playbook WNBA splits; keep rows whose ET(startTime) == this slate.
-  const client = new PlaybookClient(key);
+  const client = new PlaybookReadBroker(key);
   let allRows: PlaybookSplitGame[] = [];
   try {
     const res = await client.splits("wnba");

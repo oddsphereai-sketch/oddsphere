@@ -3,7 +3,7 @@ import {
   normalizeMlbTeamName,
   type MlbTeamAbbrev,
 } from "@/lib/providers/real_api/_teamNameNormalizer";
-import { PlaybookClient } from "@/lib/providers/playbook/playbookClient";
+import { PlaybookReadBroker } from "@/lib/providers/playbook/playbookReadBroker";
 import type { PlaybookInjuryTeamRow } from "@/lib/providers/playbook/types";
 import type {
   DailyEdgeGameAvailability,
@@ -54,7 +54,7 @@ export async function fetchPlaybookMlbSlateAvailability(
   if (apiKey) try {
     // Availability is supplementary context and must never hold the primary
     // reader open for the client's broader 20-second audit timeout.
-    const response = await new PlaybookClient(apiKey, { timeoutMs: 2_500 }).injuries("mlb");
+    const response = await new PlaybookReadBroker(apiKey, { timeoutMs: 2_500 }).injuries("mlb");
     const parsed = parsePlaybookMlbInjuries(response.body);
     if (
       parsed === null ||

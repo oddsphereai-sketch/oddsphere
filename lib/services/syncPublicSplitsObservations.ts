@@ -25,7 +25,7 @@ import {
   shouldPersistSplitMirrorObservation,
   verifiedHundredSplitPct,
 } from "./splitEvidenceQuality";
-import { PlaybookClient } from "../providers/playbook/playbookClient";
+import { PlaybookReadBroker } from "../providers/playbook/playbookReadBroker";
 import type { PlaybookSplitGame } from "../providers/playbook/types";
 import { normalizeMlbTeamName } from "../providers/real_api/_teamNameNormalizer";
 import { buildGameKey, type NormalizerSport } from "../providers/playbook/playbookTeamNormalizer";
@@ -66,7 +66,26 @@ type SlateGame = {
   id: number;
   key: string;
   gameDate: string | null;
+  status?: string | null;
+  seasonType?: string | null;
 };
+
+const NON_PREGAME_STATUSES = new Set([
+  "final", "post", "completed", "closed", "live", "in_progress", "in progress",
+  "postponed", "cancelled", "canceled", "suspended",
+]);
+
+export function isPlaybookPregameCandidate(
+  game: Pick<SlateGame, "gameDate" | "status" | "seasonType">,
+  sport: string,
+  now: Date,
+): boolean {
+  if (sport === "nhl" && game.seasonType !== "regular") return false;
+  if (NON_PREGAME_STATUSES.has(String(game.status ?? "").trim().toLowerCase())) return false;
+  if (game.gameDate === null) return true;
+  const startsAt = Date.parse(game.gameDate);
+  return Number.isFinite(startsAt) && startsAt > now.getTime();
+}
 
 function providerStartMs(row: PlaybookSplitGame): number | null {
   const raw = row.startTime ?? row.startTimeEst ?? row.date ?? null;
@@ -218,17 +237,26 @@ export async function syncPublicSplitsObservations(opts: {
   const { data: teams } = await supabase.from("teams").select("id, abbreviation, name").eq("sport", sport);
   const abbr = new Map<number, string>(), tname = new Map<number, string>();
   for (const t of teams ?? []) { abbr.set(t.id as number, (t.abbreviation as string) ?? ""); tname.set(t.id as number, (t.name as string) ?? ""); }
-  const { data: games } = await supabase.from("games").select("id, home_team_id, away_team_id, game_date").eq("sport", sport).eq("slate_date", slateDate);
-  const ids = (games ?? []).map((g) => g.id as number);
+  const { data: games } = await supabase.from("games").select("id, home_team_id, away_team_id, game_date, status, season_type").eq("sport", sport).eq("slate_date", slateDate);
+  const eligibleGames = sport === "nhl"
+    ? (games ?? []).filter((game) => game.season_type === "regular")
+    : (games ?? []);
+  const ids = eligibleGames.map((g) => g.id as number);
   if (ids.length === 0) { logger(`${sport} ${slateDate}: no games`); return res; }
   const keyById = new Map<number, string>();
   const nhlAbbrKeyById = new Map<number, string>();
   const slateGames: SlateGame[] = [];
-  for (const g of games ?? []) {
+  for (const g of eligibleGames) {
     const k = sport === "mlb" ? `${abbr.get(g.away_team_id as number)}@${abbr.get(g.home_team_id as number)}` : gameKey(sport, tname.get(g.away_team_id as number), tname.get(g.home_team_id as number));
     if (k) {
       keyById.set(g.id as number, k);
-      slateGames.push({ id: g.id as number, key: k, gameDate: (g.game_date as string | null) ?? null });
+      slateGames.push({
+        id: g.id as number,
+        key: k,
+        gameDate: (g.game_date as string | null) ?? null,
+        status: (g.status as string | null) ?? null,
+        seasonType: (g.season_type as string | null) ?? null,
+      });
     }
     if (sport === "nhl") {
       const away = abbr.get(g.away_team_id as number)?.toUpperCase();
@@ -304,14 +332,17 @@ export async function syncPublicSplitsObservations(opts: {
   // ── Playbook observations: fetch Playbook splits / splits-history ──
   // Observe for supported + audit_required sports (read-only data gathering);
   // unsupported sports (e.g. soccer/WC) are skipped — never fabricated.
-  if (shouldObservePlaybook(sport) && process.env.PLAYBOOK_API_KEY) {
-    const client = new PlaybookClient(process.env.PLAYBOOK_API_KEY);
+  const playbookSlateGames = slateGames.filter((game) =>
+    isPlaybookPregameCandidate(game, sport, new Date()),
+  );
+  if (playbookSlateGames.length > 0 && shouldObservePlaybook(sport) && process.env.PLAYBOOK_API_KEY) {
+    const client = new PlaybookReadBroker(process.env.PLAYBOOK_API_KEY);
     let pbRows: PlaybookSplitGame[] = [];
     try {
       const r = slateDate === todayUtc ? await client.splits(sport) : await client.splitsHistory(sport, slateDate);
       pbRows = ((r.body as { data?: PlaybookSplitGame[] }).data) ?? [];
     } catch (e) { res.errors.push(`playbook fetch: ${(e as Error).message}`); }
-    const pbByGameId = matchPlaybookSplitsToSlateGames(slateGames, pbRows, sport);
+    const pbByGameId = matchPlaybookSplitsToSlateGames(playbookSlateGames, pbRows, sport);
     const observedAt = new Date().toISOString();
     for (const [gid] of keyById) {
       const pb = pbByGameId.get(gid); if (!pb) continue;

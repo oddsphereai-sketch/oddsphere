@@ -18,7 +18,7 @@
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { computeSlateDate } from "../../dates/slateDate";
-import { PlaybookClient } from "../../providers/playbook/playbookClient";
+import { PlaybookReadBroker } from "../../providers/playbook/playbookReadBroker";
 import { resolveTeam } from "../../providers/playbook/playbookTeamNormalizer";
 import { WNBA_TEAMS_BY_BDL_ID, isRealWnbaTeam } from "./wnbaTeams";
 
@@ -77,7 +77,7 @@ async function playbookSlateByMatchup(key: string): Promise<Map<string, { slateD
     return playbookSlateCache.map;
   }
   const out = new Map<string, { slateDate: string; startTime: string }>();
-  const client = new PlaybookClient(key);
+  const client = new PlaybookReadBroker(key);
   const rows = (await client.splits("wnba")).body.data ?? [];
   for (const row of rows) {
     const away = resolveTeam("wnba", row.awayTeamName)?.abbr;
@@ -145,13 +145,23 @@ export async function seedWnbaGames(opts: {
   // real startTime to bucket the game into the correct ET betting slate.
   const next = new Date(+new Date(`${slateDate}T00:00:00Z`) + 86400000).toISOString().slice(0, 10);
   const raw = await bdlGamesByDate(key, [slateDate, next]);
+  const eligibleRaw = raw.filter((g) => (
+    g.home_team != null &&
+    g.visitor_team != null &&
+    isRealWnbaTeam(g.home_team.id) &&
+    isRealWnbaTeam(g.visitor_team.id)
+  ));
+  if (eligibleRaw.length === 0) {
+    logger(`wnba seed ${slateDate}: no real-franchise games`);
+    return { mode: "no-events", teamsUpserted, gamesUpserted: 0, games: [], errors };
+  }
   const existingByExternalId = new Map<number, { game_date: string | null; slate_date: string | null }>();
-  if (raw.length > 0) {
+  if (eligibleRaw.length > 0) {
     const { data: existing } = await supabase
       .from("games")
       .select("external_id, game_date, slate_date")
       .eq("sport", "wnba")
-      .in("external_id", raw.map((g) => g.id));
+      .in("external_id", eligibleRaw.map((g) => g.id));
     for (const row of existing ?? []) {
       existingByExternalId.set(row.external_id as number, {
         game_date: (row.game_date as string | null) ?? null,
@@ -177,17 +187,7 @@ export async function seedWnbaGames(opts: {
     if (hasSpecificTipTime(g.date)) return computeSlateDate("wnba", g.date);
     return String(g.date).slice(0, 10);
   };
-  const games = raw.filter((g) => {
-    if (
-      g.home_team == null ||
-      g.visitor_team == null ||
-      !isRealWnbaTeam(g.home_team.id) ||
-      !isRealWnbaTeam(g.visitor_team.id)
-    ) {
-      return false;
-    }
-    return slateFor(g) === slateDate;
-  });
+  const games = eligibleRaw.filter((g) => slateFor(g) === slateDate);
   if (games.length === 0) {
     logger(`wnba seed ${slateDate}: no real-franchise games`);
     return { mode: "no-events", teamsUpserted, gamesUpserted: 0, games: [], errors };

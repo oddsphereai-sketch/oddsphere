@@ -5,7 +5,7 @@ import { computeSlateDate } from "@/lib/dates/slateDate";
 import { isPublicallyTracked } from "@/lib/config/officialTrackingStart";
 import { assertOfficialTrackingMarket } from "@/lib/config/officialTrackingMarkets";
 import type { PredictionRecordRow } from "@/lib/types/domain/Tracking";
-import { PlaybookClient } from "@/lib/providers/playbook/playbookClient";
+import { PlaybookReadBroker } from "@/lib/providers/playbook/playbookReadBroker";
 import { fetchBalldontlieNcaafResultsForDates, fetchBalldontlieNcaafSlate, type NcaafBookOdds, type NcaafGame } from "./balldontlieNcaafSlate";
 import { fetchBalldontlieNcaafQuarterbacks } from "./balldontlieNcaafQuarterbacks";
 import { normalizeCfbPlaybookLine, normalizeCfbPlaybookSplits, resolveCfbPlaybookEvidence } from "./cfbPlaybookEvidence";
@@ -249,7 +249,7 @@ export async function runCfbForwardEvidenceWriter(args: {
     const memberSnapshot = await refreshCompactMemberSnapshot({ client: args.client, existing: allExisting, marketHistory, payloads: [], season: args.season, now: args.now, apply: args.apply });
     return emptyResult("capture_plan_empty", tracking, memberSnapshot);
   }
-  const playbook = new PlaybookClient(args.playbookApiKey);
+  const playbook = new PlaybookReadBroker(args.playbookApiKey);
   const priorResults = await fetchPriorCompletedGames({ rows: writerEvidence.metadata, before: window.boardStartDate, apiKey: args.balldontlieApiKey });
   const teams = [...new Map(games.flatMap((game) => [[game.away.id, game.away] as const, [game.home.id, game.home] as const])).values()];
   const priorQuarterbacks = latestQuarterbacksByTeam(allExisting);

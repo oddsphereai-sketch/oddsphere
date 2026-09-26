@@ -108,7 +108,7 @@ import {
   type AuthoritativeFiPredictionInput,
 } from "./predictionRecordService";
 import { recordFirstPublishedLines } from "./postedLinesWriter";
-import { PlaybookClient } from "../providers/playbook/playbookClient";
+import { PlaybookReadBroker } from "../providers/playbook/playbookReadBroker";
 import { applyMlbDataCompletenessGate } from "./mlbDataCompletenessGate";
 
 // ─────────────────────────────────────────────────────────────
@@ -697,7 +697,7 @@ export async function generatePredictionsForSlate(
     snapshots.length > 0
   ) {
     try {
-      const playbook = new PlaybookClient(process.env.PLAYBOOK_API_KEY);
+      const playbook = new PlaybookReadBroker(process.env.PLAYBOOK_API_KEY);
       const venueWeather = await playbook.mlbVenueWeather();
       const overlay = applyMlbPlaybookVenueWeatherOverlay(
         snapshots,
