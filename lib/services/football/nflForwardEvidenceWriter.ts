@@ -54,7 +54,10 @@ import {
 import {
   resolveNflTargetExcludedProduction,
 } from "./nflTargetExcludedMarketOutcome";
-import { buildNflForwardContextCapture } from "./nflForwardEvidenceCapture";
+import {
+  buildNflForwardContextCapture,
+  nflForwardContextSharpHistoryBooks,
+} from "./nflForwardEvidenceCapture";
 import {
   captureBooksWithSharpBooks,
   fetchSharpApiNflSharpOdds,
@@ -77,7 +80,7 @@ import { readNflPlayerPropsCurrentSeasonState } from "./nflPlayerPropsCurrentSea
 import { buildNflWeeklyPossessionMargin } from "./nflWeeklyPossessionMargin";
 
 export const NFL_FORWARD_WRITER_RELEASE =
-  "nfl_forward_evidence_writer_2026_09_25_r40_current_season_raw_signal" as const;
+  "nfl_forward_evidence_writer_2026_09_26_r41_sharp_price_trail_continuity" as const;
 
 export type NflForwardWriterResult = {
   writerRelease: typeof NFL_FORWARD_WRITER_RELEASE;
@@ -254,6 +257,13 @@ export async function runNflForwardEvidenceWriter(args: {
   }
   const weatherRequests = [...weatherByGame.values()].reduce((sum, value) => sum + value.requests, 0);
   const apiCallsMaximum = slate.providerRequests + rosters.requests + NFL_INJURY_MAX_PAGES + 2 + sharpResult.requests + circaAttempt.requests + weatherRequests;
+  const captureHistoryBooksByGame = new Map<string, NflPreviewBookOdds[]>();
+  for (const row of historicalExisting) {
+    const books = captureHistoryBooksByGame.get(row.providerGameId) ?? [];
+    books.push(...row.payload.market.comparableCurrentBooks);
+    books.push(...nflForwardContextSharpHistoryBooks(row.payload.contextualEvidenceCapture));
+    captureHistoryBooksByGame.set(row.providerGameId, books);
+  }
 
   const payloadBuildHolds: string[] = [];
   const payloads = plans.flatMap((plan): NflForwardEvidencePayload[] => {
@@ -475,6 +485,10 @@ export async function runNflForwardEvidenceWriter(args: {
         payload.market.comparableCurrentBooks,
         circaAttempt.result?.booksByGame[plan.game.providerGameId] ?? [],
       ),
+      openingBooks: [
+        ...payload.market.comparableProviderOpeningBooks,
+        ...(captureHistoryBooksByGame.get(plan.game.providerGameId) ?? []),
+      ],
       independentForecast: baseOutcome,
       independentTargetFree: hasTargetFreePrior,
       independentRelease: hasTargetFreePrior
