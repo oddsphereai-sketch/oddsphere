@@ -330,8 +330,8 @@ const weeklyBase = getNflV1WeekOneOutcomeForecast({
   homeTeam,
   weeklyFallback: { projectedHomeMargin: 4.25, marketTotal: 44.5 },
 });
-assert.equal(NFL_V1_WEEKLY_OUTCOME_MODEL_RELEASE, "nfl_v1_weekly_market_anchored_outcome_2026_09_25_r7_current_season_raw_signal");
-assert.equal(NFL_V1_MARKET_EVIDENCE_REPRESENTATIVE_SCORE_RELEASE, "nfl_v1_market_evidence_representative_score_2026_09_25_r6_current_season_raw_signal");
+assert.equal(NFL_V1_WEEKLY_OUTCOME_MODEL_RELEASE, "nfl_v1_weekly_market_anchored_outcome_2026_09_27_r8_pressure_direction");
+assert.equal(NFL_V1_MARKET_EVIDENCE_REPRESENTATIVE_SCORE_RELEASE, "nfl_v1_market_evidence_representative_score_2026_09_27_r7_pressure_direction");
 assert.equal(NFL_V1_WEEKLY_REPRESENTATIVE_SCORE_CENTER_WEIGHT, 0.2);
 const representativeMargin = weeklyBase.representativeHomeScore - weeklyBase.representativeAwayScore;
 const representativeTotal = weeklyBase.representativeHomeScore + weeklyBase.representativeAwayScore;
@@ -381,7 +381,7 @@ const circaAway = buildNflMarketEvidenceOutcomeForecast({
   sharpSplits: sharpSplitSet({ homeMoneyPct: 20, homeBetsPct: 70 }),
   evaluatedAt,
 });
-assert.equal(NFL_V1_MARKET_EVIDENCE_OUTCOME_RELEASE, "nfl_v1_market_evidence_outcome_2026_09_25_r7_current_season_raw_signal");
+assert.equal(NFL_V1_MARKET_EVIDENCE_OUTCOME_RELEASE, "nfl_v1_market_evidence_outcome_2026_09_27_r8_pressure_direction");
 assert.equal(NFL_V1_MARKET_WEIGHT, 0.75);
 assert.equal(NFL_V1_SHARP_SPLIT_MAX_SHIFT_POINTS, 1.5);
 assert.equal(NFL_V1_PUBLIC_SPLIT_MAX_SHIFT_POINTS, 0.75);
@@ -488,6 +488,8 @@ assert.equal(staleCirca.expectedAwayScore.toFixed(9), marketOnly.expectedAwaySco
 const weeklyRawSignal = {
   release: NFL_V1_WEEKLY_RAW_SIGNAL_RELEASE,
   independentHomeMargin: -6,
+  directionHomeCoverProbability: 0.55,
+  directionHomeMarginCorrection: 1,
 };
 const rawSignalBaseline = buildNflMarketEvidenceOutcomeForecast({
   baseForecast: weeklyBase,
@@ -530,6 +532,8 @@ const rawSignalWithMovement = buildNflMarketEvidenceOutcomeForecast({
 assert.equal(NFL_V1_WEEKLY_RAW_MARGIN_MARKET_WEIGHT, 0.9);
 assert.equal(rawSignalBaseline.marketEvidence?.weeklyRawSignal?.release, NFL_V1_WEEKLY_RAW_SIGNAL_RELEASE);
 assert.equal(rawSignalBaseline.marketEvidence?.weeklyRawSignal?.independentHomeMargin, -6);
+assert.equal(rawSignalBaseline.marketEvidence?.weeklyRawSignal?.directionHomeCoverProbability, 0.55);
+assert.equal(rawSignalBaseline.marketEvidence?.weeklyRawSignal?.directionHomeMarginCorrection, 1);
 assert.equal(rawSignalBaseline.marketEvidence?.weeklyRawSignal?.totalMeanEvidencePolicy, "same_book_movement_only");
 assert.equal(
   (rawSignalWithSplits.expectedHomeScore + rawSignalWithSplits.expectedAwayScore).toFixed(9),

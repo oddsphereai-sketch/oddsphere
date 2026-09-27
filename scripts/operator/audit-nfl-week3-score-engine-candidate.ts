@@ -72,7 +72,12 @@ async function main() {
       awayTeam: payload.game.away.abbreviation,
       marketHomeMargin: -payload.market.current.spread.homeLine,
     });
-    const rawSignal = { release: RAW_RELEASE, independentHomeMargin: possession.independentHomeMargin };
+    const rawSignal = {
+      release: RAW_RELEASE,
+      independentHomeMargin: possession.independentHomeMargin,
+      directionHomeCoverProbability: possession.directionHomeCoverProbability,
+      directionHomeMarginCorrection: possession.directionHomeMarginCorrection,
+    };
     const baseOutcome = getNflV1WeekOneOutcomeForecast({
       providerGameId: row.providerGameId,
       awayTeam: payload.game.away.abbreviation,

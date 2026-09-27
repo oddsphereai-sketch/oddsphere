@@ -19,7 +19,7 @@ import {
 } from "./footballCrossMarketCoherence";
 
 export const NFL_OFFICIAL_TRACKING_RECORD_RELEASE =
-  "nfl_official_tracking_record_2026_09_25_r12_current_season_raw_signal" as const;
+  "nfl_official_tracking_record_2026_09_27_r13_pressure_direction" as const;
 
 const NFL_TRACKED_MARKETS = ["moneyline", "spread", "total"] as const;
 

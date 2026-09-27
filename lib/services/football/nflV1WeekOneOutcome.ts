@@ -22,17 +22,17 @@ export const NFL_V1_OUTCOME_PROBABILITY_RELEASE =
 export const NFL_V1_REPRESENTATIVE_SCORE_POLICY_RELEASE =
   "nfl_v1_representative_score_2026_08_23_r2" as const;
 export const NFL_V1_WEEKLY_OUTCOME_MODEL_RELEASE =
-  "nfl_v1_weekly_market_anchored_outcome_2026_09_25_r7_current_season_raw_signal" as const;
+  "nfl_v1_weekly_market_anchored_outcome_2026_09_27_r8_pressure_direction" as const;
 export const NFL_V1_WEEKLY_OUTCOME_DISTRIBUTION_RELEASE =
-  "nfl_pooled_discrete_residual_distribution_2026_09_25_r6_current_season_raw_signal" as const;
+  "nfl_pooled_discrete_residual_distribution_2026_09_27_r7_pressure_direction" as const;
 export const NFL_V1_WEEKLY_OUTCOME_PROBABILITY_RELEASE =
-  "nfl_v1_weekly_pooled_discrete_probability_2026_09_25_r6_current_season_raw_signal" as const;
+  "nfl_v1_weekly_pooled_discrete_probability_2026_09_27_r7_pressure_direction" as const;
 export const NFL_V1_MARKET_EVIDENCE_OUTCOME_RELEASE =
-  "nfl_v1_market_evidence_outcome_2026_09_25_r7_current_season_raw_signal" as const;
+  "nfl_v1_market_evidence_outcome_2026_09_27_r8_pressure_direction" as const;
 export const NFL_V1_MARKET_EVIDENCE_REPRESENTATIVE_SCORE_RELEASE =
-  "nfl_v1_market_evidence_representative_score_2026_09_25_r6_current_season_raw_signal" as const;
+  "nfl_v1_market_evidence_representative_score_2026_09_27_r7_pressure_direction" as const;
 export const NFL_V1_WEEKLY_RAW_SIGNAL_RELEASE =
-  "nfl_weekly_raw_signal_2026_09_25_r2_current_season_possession" as const;
+  "nfl_weekly_raw_signal_2026_09_27_r3_pressure_direction" as const;
 export const NFL_V1_WEEKLY_REPRESENTATIVE_SCORE_CENTER_WEIGHT = 0.2 as const;
 export const NFL_V1_MARKET_WEIGHT = 0.75 as const;
 export const NFL_V1_WEEKLY_RAW_MARGIN_MARKET_WEIGHT = 0.9 as const;
@@ -72,7 +72,8 @@ export type NflV1WeekOneOutcomeForecast = {
       | "nfl_target_excluded_market_outcome_2026_09_14_r2_prediction_owned_side"
       | "nfl_target_excluded_market_outcome_2026_09_20_r3_priced_neutral_total"
       | "nfl_target_excluded_market_outcome_2026_09_21_r4_opening_market_direction"
-      | "nfl_target_excluded_market_outcome_2026_09_25_r5_current_season_raw_signal";
+      | "nfl_target_excluded_market_outcome_2026_09_25_r5_current_season_raw_signal"
+      | "nfl_target_excluded_market_outcome_2026_09_27_r6_pressure_direction";
     status: "target_excluded_market" | "incumbent_fallback";
     reason: "stable_complete_tuple" | "insufficient_or_unstable_target_free_evidence";
     marginFamilyCount: number | null;
@@ -87,6 +88,8 @@ export type NflV1WeekOneOutcomeForecast = {
     weeklyRawSignal?: {
       release: typeof NFL_V1_WEEKLY_RAW_SIGNAL_RELEASE;
       independentHomeMargin: number;
+      directionHomeCoverProbability: number;
+      directionHomeMarginCorrection: number;
       marginMarketWeight: typeof NFL_V1_WEEKLY_RAW_MARGIN_MARKET_WEIGHT;
       totalMeanEvidencePolicy: "same_book_movement_only";
     };
@@ -201,6 +204,8 @@ export function buildNflMarketEvidenceOutcomeForecast(args: {
   weeklyRawSignal?: {
     release: typeof NFL_V1_WEEKLY_RAW_SIGNAL_RELEASE;
     independentHomeMargin: number;
+    directionHomeCoverProbability: number;
+    directionHomeMarginCorrection: number;
   };
   evaluatedAt: string;
 }): NflV1WeekOneOutcomeForecast {
@@ -208,12 +213,17 @@ export function buildNflMarketEvidenceOutcomeForecast(args: {
   const evaluatedAt = Date.parse(args.evaluatedAt);
   if (!Number.isFinite(evaluatedAt)) throw new Error("NFL market-evidence evaluatedAt is invalid.");
   const baseTotal = args.baseForecast.expectedAwayScore + args.baseForecast.expectedHomeScore;
-  if (args.weeklyRawSignal && !Number.isFinite(args.weeklyRawSignal.independentHomeMargin)) {
+  if (args.weeklyRawSignal && (!Number.isFinite(args.weeklyRawSignal.independentHomeMargin) ||
+      !Number.isFinite(args.weeklyRawSignal.directionHomeMarginCorrection) ||
+      !Number.isFinite(args.weeklyRawSignal.directionHomeCoverProbability) ||
+      args.weeklyRawSignal.directionHomeCoverProbability <= 0 ||
+      args.weeklyRawSignal.directionHomeCoverProbability >= 1)) {
     throw new Error("NFL weekly raw-signal margin is invalid.");
   }
   const rawTargetMargin = args.weeklyRawSignal
     ? (1 - NFL_V1_WEEKLY_RAW_MARGIN_MARKET_WEIGHT) * args.weeklyRawSignal.independentHomeMargin
       + NFL_V1_WEEKLY_RAW_MARGIN_MARKET_WEIGHT * -args.current.spread.homeLine
+      + args.weeklyRawSignal.directionHomeMarginCorrection
     : (1 - NFL_V1_MARKET_WEIGHT) * args.footballHomeMargin
       + NFL_V1_MARKET_WEIGHT * -args.current.spread.homeLine;
   const rawTargetTotal = (1 - NFL_V1_MARKET_WEIGHT) * baseTotal
@@ -372,6 +382,8 @@ export function buildNflMarketEvidenceOutcomeForecast(args: {
         weeklyRawSignal: {
           release: args.weeklyRawSignal.release,
           independentHomeMargin: args.weeklyRawSignal.independentHomeMargin,
+          directionHomeCoverProbability: args.weeklyRawSignal.directionHomeCoverProbability,
+          directionHomeMarginCorrection: args.weeklyRawSignal.directionHomeMarginCorrection,
           marginMarketWeight: NFL_V1_WEEKLY_RAW_MARGIN_MARKET_WEIGHT,
           totalMeanEvidencePolicy: "same_book_movement_only" as const,
         },

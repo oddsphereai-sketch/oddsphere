@@ -1,8 +1,9 @@
 import artifactJson from "./modelArtifacts/nflSlowStateRuntime.json";
 import type { NflPlayerPropsCurrentSeasonState } from "./nflPlayerPropsCurrentSeasonState";
+import { buildNflPressureDirectionMargin } from "./nflPressureDirectionMargin";
 
 export const NFL_WEEKLY_POSSESSION_MARGIN_RELEASE =
-  "nfl_weekly_possession_margin_2026_09_25_r2_production" as const;
+  "nfl_weekly_possession_margin_2026_09_27_r3_pressure_direction" as const;
 
 type Metric = "points" | "plays" | "sack_rate" | "turnover_rate" | "redzone_td_rate";
 type Metrics = Record<Metric, number>;
@@ -24,6 +25,8 @@ export type NflWeeklyPossessionMargin = {
   independentAwayScore: number;
   independentHomeMargin: number;
   calibratedHomeMargin: number;
+  directionHomeCoverProbability: number;
+  directionHomeMarginCorrection: number;
   completeThroughWeek: number;
 };
 
@@ -48,12 +51,20 @@ export function buildNflWeeklyPossessionMargin(args: {
   const independentHomeScore = expectedScore(homeState.offSlow, awayState.defSlow, true);
   const independentAwayScore = expectedScore(awayState.offSlow, homeState.defSlow, false);
   const independentHomeMargin = independentHomeScore - independentAwayScore;
+  const direction = buildNflPressureDirectionMargin({
+    currentSeasonState: args.currentSeasonState,
+    homeTeam: args.homeTeam,
+    awayTeam: args.awayTeam,
+  });
   return {
     release: NFL_WEEKLY_POSSESSION_MARGIN_RELEASE,
     independentHomeScore,
     independentAwayScore,
     independentHomeMargin,
-    calibratedHomeMargin: 0.1 * independentHomeMargin + 0.9 * args.marketHomeMargin,
+    calibratedHomeMargin:
+      0.1 * independentHomeMargin + 0.9 * args.marketHomeMargin + direction.homeMarginCorrection,
+    directionHomeCoverProbability: direction.homeCoverProbability,
+    directionHomeMarginCorrection: direction.homeMarginCorrection,
     completeThroughWeek: args.currentSeasonState.completeThroughWeek,
   };
 }

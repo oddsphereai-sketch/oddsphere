@@ -17,7 +17,7 @@ import {
 } from "./nflV1WeekOneOutcome";
 
 export const NFL_TARGET_EXCLUDED_MARKET_OUTCOME_RELEASE =
-  "nfl_target_excluded_market_outcome_2026_09_25_r5_current_season_raw_signal" as const;
+  "nfl_target_excluded_market_outcome_2026_09_27_r6_pressure_direction" as const;
 
 export type NflTargetExcludedMarketAnchor = {
   release: typeof NFL_TARGET_EXCLUDED_MARKET_OUTCOME_RELEASE;
@@ -56,6 +56,8 @@ export function resolveNflTargetExcludedProduction(args: {
   weeklyRawSignal?: {
     release: typeof NFL_V1_WEEKLY_RAW_SIGNAL_RELEASE;
     independentHomeMargin: number;
+    directionHomeCoverProbability: number;
+    directionHomeMarginCorrection: number;
   };
 }): {
   outcome: NflV1WeekOneOutcomeForecast;

@@ -68,7 +68,12 @@ const second = buildNflWeeklyPossessionMargin({
 assert.deepEqual(first, second);
 assert.equal(first.release, NFL_WEEKLY_POSSESSION_MARGIN_RELEASE);
 assert.equal(first.completeThroughWeek, 1);
-assert.equal(first.calibratedHomeMargin, 0.1 * first.independentHomeMargin + 0.9 * 7);
+assert.equal(
+  first.calibratedHomeMargin,
+  0.1 * first.independentHomeMargin + 0.9 * 7 + first.directionHomeMarginCorrection,
+);
+assert.ok(first.directionHomeCoverProbability > 0 && first.directionHomeCoverProbability < 1);
+assert.ok(Math.abs(first.directionHomeMarginCorrection) <= 3);
 assert.ok(first.independentHomeScore > first.independentAwayScore);
 assert.equal(JSON.stringify(state), before, "weekly score state must remain immutable");
 assert.throws(() => buildNflWeeklyPossessionMargin({
