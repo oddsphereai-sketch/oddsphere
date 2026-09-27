@@ -1,0 +1,660 @@
+{
+  "artifactRelease": "nfl_pressure_direction_runtime_artifact_2026_09_27_r1",
+  "modelRelease": "nfl_pressure_direction_margin_2026_09_27_r1",
+  "featureRelease": "nfl_player_value_features_2016_2025_2026_08_20_r3",
+  "trainedThrough": 2025,
+  "source": {
+    "featureSha256": "0e50926aef2b52a3d63413c9fad1728c218a39358298d8c1f6bb9b18c14caa0c",
+    "stateSha256": "ed1ccae1315072cb426463254fd6c1475d4f7ca5324b6c0077c83baf77f7493f"
+  },
+  "recipe": {
+    "regularizationC": 0.03,
+    "halfLifeWeeks": 128.0,
+    "correctionScale": 0.5,
+    "correctionCap": 3.0,
+    "residualSd": 12.717371338960593,
+    "offseasonCarry": 0.65,
+    "fastAlpha": 0.35,
+    "slowAlpha": 0.16,
+    "priors": {
+      "sack_rate": 0.07,
+      "turnover_rate": 0.022
+    }
+  },
+  "features": [
+    "away_matchup_fast_sack_rate",
+    "away_matchup_fast_turnover_rate",
+    "away_matchup_slow_sack_rate",
+    "away_matchup_slow_turnover_rate",
+    "home_matchup_fast_sack_rate",
+    "home_matchup_fast_turnover_rate",
+    "home_matchup_slow_sack_rate",
+    "home_matchup_slow_turnover_rate"
+  ],
+  "imputer": {
+    "statistics": [
+      0.0697610582240992,
+      0.02190477181617554,
+      0.06982247169907627,
+      0.022,
+      0.06938884243816561,
+      0.022004633585089847,
+      0.06918424113666209,
+      0.022
+    ],
+    "indicatorFeatures": []
+  },
+  "scaler": {
+    "mean": [
+      0.07012559062866026,
+      0.021757153213818412,
+      0.07001699315092316,
+      0.021869866049174246,
+      0.0697077522088294,
+      0.022215977242033943,
+      0.0697965218513838,
+      0.022087068871521398
+    ],
+    "scale": [
+      0.031884770231675,
+      0.012226862790005665,
+      0.021702864094662686,
+      0.007942379225995246,
+      0.03250360558474687,
+      0.012134519063320734,
+      0.02223189651487421,
+      0.00789121101051507
+    ]
+  },
+  "logistic": {
+    "coefficients": [
+      -0.059971198934434804,
+      -0.1603473076086108,
+      0.12083318707588737,
+      0.06981967359209477,
+      0.045266356810656556,
+      0.006088808576597343,
+      -0.08763342461354212,
+      0.0165901878893834
+    ],
+    "intercept": -0.028585676942279686
+  },
+  "teams": {
+    "ARI": {
+      "offFast": {
+        "sack_rate": 0.09947726445029947,
+        "turnover_rate": 0.020939641942808222
+      },
+      "offSlow": {
+        "sack_rate": 0.08297208116382085,
+        "turnover_rate": 0.018798014023924732
+      },
+      "defFast": {
+        "sack_rate": 0.03990916479350378,
+        "turnover_rate": 0.00480210150387483
+      },
+      "defSlow": {
+        "sack_rate": 0.045610032283280026,
+        "turnover_rate": 0.010954444422870193
+      }
+    },
+    "ATL": {
+      "offFast": {
+        "sack_rate": 0.054258350679062844,
+        "turnover_rate": 0.013509499016710766
+      },
+      "offSlow": {
+        "sack_rate": 0.04881069129337661,
+        "turnover_rate": 0.014484742062457957
+      },
+      "defFast": {
+        "sack_rate": 0.08433627531382847,
+        "turnover_rate": 0.02830520926176263
+      },
+      "defSlow": {
+        "sack_rate": 0.08503392773484594,
+        "turnover_rate": 0.022502291777292977
+      }
+    },
+    "BAL": {
+      "offFast": {
+        "sack_rate": 0.09958072713197672,
+        "turnover_rate": 0.02098738037720947
+      },
+      "offSlow": {
+        "sack_rate": 0.09121266308070788,
+        "turnover_rate": 0.022780419181951908
+      },
+      "defFast": {
+        "sack_rate": 0.05201203989892767,
+        "turnover_rate": 0.015112100832401483
+      },
+      "defSlow": {
+        "sack_rate": 0.05151544645638524,
+        "turnover_rate": 0.018116435106684314
+      }
+    },
+    "BUF": {
+      "offFast": {
+        "sack_rate": 0.05735539300896691,
+        "turnover_rate": 0.007907801953068882
+      },
+      "offSlow": {
+        "sack_rate": 0.06399580060925177,
+        "turnover_rate": 0.013678344059080897
+      },
+      "defFast": {
+        "sack_rate": 0.04977471749955771,
+        "turnover_rate": 0.012038085908039923
+      },
+      "defSlow": {
+        "sack_rate": 0.05535816239339887,
+        "turnover_rate": 0.01885389251017426
+      }
+    },
+    "CAR": {
+      "offFast": {
+        "sack_rate": 0.03894289960698991,
+        "turnover_rate": 0.029490213855795137
+      },
+      "offSlow": {
+        "sack_rate": 0.054008956201386044,
+        "turnover_rate": 0.023549885714102693
+      },
+      "defFast": {
+        "sack_rate": 0.07594354556144693,
+        "turnover_rate": 0.02088434257611308
+      },
+      "defSlow": {
+        "sack_rate": 0.06557528124690515,
+        "turnover_rate": 0.020210402918139685
+      }
+    },
+    "CHI": {
+      "offFast": {
+        "sack_rate": 0.024914907725144514,
+        "turnover_rate": 0.008947800913045447
+      },
+      "offSlow": {
+        "sack_rate": 0.03418139325561881,
+        "turnover_rate": 0.009342130671438647
+      },
+      "defFast": {
+        "sack_rate": 0.056727750374240084,
+        "turnover_rate": 0.02081190778441981
+      },
+      "defSlow": {
+        "sack_rate": 0.05659559970611069,
+        "turnover_rate": 0.02653830799717112
+      }
+    },
+    "CIN": {
+      "offFast": {
+        "sack_rate": 0.052871006779764036,
+        "turnover_rate": 0.01756957936853378
+      },
+      "offSlow": {
+        "sack_rate": 0.05099294056044162,
+        "turnover_rate": 0.019300982191125624
+      },
+      "defFast": {
+        "sack_rate": 0.12406403722516708,
+        "turnover_rate": 0.02239784743811501
+      },
+      "defSlow": {
+        "sack_rate": 0.0917463035167421,
+        "turnover_rate": 0.02346580860104466
+      }
+    },
+    "CLE": {
+      "offFast": {
+        "sack_rate": 0.12197346291686953,
+        "turnover_rate": 0.029517548696442044
+      },
+      "offSlow": {
+        "sack_rate": 0.09805176816534975,
+        "turnover_rate": 0.027339832280547448
+      },
+      "defFast": {
+        "sack_rate": 0.06469168880949325,
+        "turnover_rate": 0.013223119544034571
+      },
+      "defSlow": {
+        "sack_rate": 0.08087080576295548,
+        "turnover_rate": 0.013856480350895258
+      }
+    },
+    "DAL": {
+      "offFast": {
+        "sack_rate": 0.04797305950670188,
+        "turnover_rate": 0.014355857136507038
+      },
+      "offSlow": {
+        "sack_rate": 0.04758010127187196,
+        "turnover_rate": 0.01686975614086134
+      },
+      "defFast": {
+        "sack_rate": 0.060896577736373865,
+        "turnover_rate": 0.008031267363998923
+      },
+      "defSlow": {
+        "sack_rate": 0.054908145875597655,
+        "turnover_rate": 0.009588357105783565
+      }
+    },
+    "DEN": {
+      "offFast": {
+        "sack_rate": 0.058973561928076665,
+        "turnover_rate": 0.010931753268186439
+      },
+      "offSlow": {
+        "sack_rate": 0.044739794645276804,
+        "turnover_rate": 0.012986298042788514
+      },
+      "defFast": {
+        "sack_rate": 0.07707275687676249,
+        "turnover_rate": 0.015172803375232562
+      },
+      "defSlow": {
+        "sack_rate": 0.08779576097246795,
+        "turnover_rate": 0.013364651367871525
+      }
+    },
+    "DET": {
+      "offFast": {
+        "sack_rate": 0.07716810178276659,
+        "turnover_rate": 0.020584707255217286
+      },
+      "offSlow": {
+        "sack_rate": 0.06849663770579474,
+        "turnover_rate": 0.015623362505751408
+      },
+      "defFast": {
+        "sack_rate": 0.0946035049303076,
+        "turnover_rate": 0.013252524910500952
+      },
+      "defSlow": {
+        "sack_rate": 0.08280701024426035,
+        "turnover_rate": 0.0146511021457426
+      }
+    },
+    "GB": {
+      "offFast": {
+        "sack_rate": 0.11842795830064695,
+        "turnover_rate": 0.012589968862665443
+      },
+      "offSlow": {
+        "sack_rate": 0.07935123081960438,
+        "turnover_rate": 0.013522997809261847
+      },
+      "defFast": {
+        "sack_rate": 0.04328935749020097,
+        "turnover_rate": 0.010091253356776499
+      },
+      "defSlow": {
+        "sack_rate": 0.05126830521413218,
+        "turnover_rate": 0.012905015714063276
+      }
+    },
+    "HOU": {
+      "offFast": {
+        "sack_rate": 0.013696869726825977,
+        "turnover_rate": 0.0086180323468273
+      },
+      "offSlow": {
+        "sack_rate": 0.031922292335977626,
+        "turnover_rate": 0.008832781026163977
+      },
+      "defFast": {
+        "sack_rate": 0.07075901924971542,
+        "turnover_rate": 0.03006421267700407
+      },
+      "defSlow": {
+        "sack_rate": 0.07498246279065064,
+        "turnover_rate": 0.027924201352996433
+      }
+    },
+    "IND": {
+      "offFast": {
+        "sack_rate": 0.04222738524851292,
+        "turnover_rate": 0.03340460317619466
+      },
+      "offSlow": {
+        "sack_rate": 0.046926932250666034,
+        "turnover_rate": 0.026428782882436868
+      },
+      "defFast": {
+        "sack_rate": 0.025340264204507988,
+        "turnover_rate": 0.012118387776356
+      },
+      "defSlow": {
+        "sack_rate": 0.04070804192837154,
+        "turnover_rate": 0.015332833280123435
+      }
+    },
+    "JAX": {
+      "offFast": {
+        "sack_rate": 0.05643830782429411,
+        "turnover_rate": 0.01207211425778139
+      },
+      "offSlow": {
+        "sack_rate": 0.058445470816846874,
+        "turnover_rate": 0.015842267687935507
+      },
+      "defFast": {
+        "sack_rate": 0.04362358899454091,
+        "turnover_rate": 0.0283977142283582
+      },
+      "defSlow": {
+        "sack_rate": 0.04788852548361291,
+        "turnover_rate": 0.026553620106763688
+      }
+    },
+    "KC": {
+      "offFast": {
+        "sack_rate": 0.12157313487148425,
+        "turnover_rate": 0.01883294765228688
+      },
+      "offSlow": {
+        "sack_rate": 0.09384593180812867,
+        "turnover_rate": 0.016975065098697416
+      },
+      "defFast": {
+        "sack_rate": 0.0687096978806159,
+        "turnover_rate": 0.011650668687684877
+      },
+      "defSlow": {
+        "sack_rate": 0.06316573933179215,
+        "turnover_rate": 0.011317385452479501
+      }
+    },
+    "LA": {
+      "offFast": {
+        "sack_rate": 0.0344852856733789,
+        "turnover_rate": 0.015514859153397354
+      },
+      "offSlow": {
+        "sack_rate": 0.03473405615680499,
+        "turnover_rate": 0.015361304721442074
+      },
+      "defFast": {
+        "sack_rate": 0.08038686944252718,
+        "turnover_rate": 0.02366180415683667
+      },
+      "defSlow": {
+        "sack_rate": 0.06849588127883807,
+        "turnover_rate": 0.022840204424523995
+      }
+    },
+    "LAC": {
+      "offFast": {
+        "sack_rate": 0.08931180892524986,
+        "turnover_rate": 0.019589542679850795
+      },
+      "offSlow": {
+        "sack_rate": 0.09168975795760158,
+        "turnover_rate": 0.017536885122720336
+      },
+      "defFast": {
+        "sack_rate": 0.07225115072420556,
+        "turnover_rate": 0.019817871759143322
+      },
+      "defSlow": {
+        "sack_rate": 0.07441268391900918,
+        "turnover_rate": 0.022642503397728272
+      }
+    },
+    "LV": {
+      "offFast": {
+        "sack_rate": 0.11300876824449466,
+        "turnover_rate": 0.021370894002049938
+      },
+      "offSlow": {
+        "sack_rate": 0.11137762985354321,
+        "turnover_rate": 0.02034869732895328
+      },
+      "defFast": {
+        "sack_rate": 0.0994929834240562,
+        "turnover_rate": 0.014033738051977373
+      },
+      "defSlow": {
+        "sack_rate": 0.07427988594016223,
+        "turnover_rate": 0.014114392933759202
+      }
+    },
+    "MIA": {
+      "offFast": {
+        "sack_rate": 0.08971820909311207,
+        "turnover_rate": 0.024971177510175975
+      },
+      "offSlow": {
+        "sack_rate": 0.07818906068862423,
+        "turnover_rate": 0.023669465892781648
+      },
+      "defFast": {
+        "sack_rate": 0.04825686913967896,
+        "turnover_rate": 0.016897045398921458
+      },
+      "defSlow": {
+        "sack_rate": 0.061729047640528056,
+        "turnover_rate": 0.018811188989883244
+      }
+    },
+    "MIN": {
+      "offFast": {
+        "sack_rate": 0.12611476499216873,
+        "turnover_rate": 0.019580077708429754
+      },
+      "offSlow": {
+        "sack_rate": 0.11558964466307356,
+        "turnover_rate": 0.02576964697231231
+      },
+      "defFast": {
+        "sack_rate": 0.1731759795202027,
+        "turnover_rate": 0.022533730081246782
+      },
+      "defSlow": {
+        "sack_rate": 0.1297581566107464,
+        "turnover_rate": 0.020822033999102058
+      }
+    },
+    "NE": {
+      "offFast": {
+        "sack_rate": 0.04095141957734592,
+        "turnover_rate": 0.007831671079358352
+      },
+      "offSlow": {
+        "sack_rate": 0.06024589573401309,
+        "turnover_rate": 0.011747529323361212
+      },
+      "defFast": {
+        "sack_rate": 0.07466577931079878,
+        "turnover_rate": 0.02350521292449711
+      },
+      "defSlow": {
+        "sack_rate": 0.06122362627251063,
+        "turnover_rate": 0.018292565671599967
+      }
+    },
+    "NO": {
+      "offFast": {
+        "sack_rate": 0.08523105315553517,
+        "turnover_rate": 0.021270612927051284
+      },
+      "offSlow": {
+        "sack_rate": 0.08159914519167633,
+        "turnover_rate": 0.02128829494837641
+      },
+      "defFast": {
+        "sack_rate": 0.10081542733280784,
+        "turnover_rate": 0.01847973962993541
+      },
+      "defSlow": {
+        "sack_rate": 0.08778644841173026,
+        "turnover_rate": 0.0182034740818495
+      }
+    },
+    "NYG": {
+      "offFast": {
+        "sack_rate": 0.09946881877578737,
+        "turnover_rate": 0.011332499183838877
+      },
+      "offSlow": {
+        "sack_rate": 0.0906893718134673,
+        "turnover_rate": 0.012837350084301112
+      },
+      "defFast": {
+        "sack_rate": 0.06606934873272169,
+        "turnover_rate": 0.025023691431307463
+      },
+      "defSlow": {
+        "sack_rate": 0.06986776391844106,
+        "turnover_rate": 0.019743679985816418
+      }
+    },
+    "NYJ": {
+      "offFast": {
+        "sack_rate": 0.07328246945565542,
+        "turnover_rate": 0.017468833005223748
+      },
+      "offSlow": {
+        "sack_rate": 0.08850263004981779,
+        "turnover_rate": 0.02065349526714687
+      },
+      "defFast": {
+        "sack_rate": 0.02516619404935537,
+        "turnover_rate": 0.0037091465774589157
+      },
+      "defSlow": {
+        "sack_rate": 0.035975409852218206,
+        "turnover_rate": 0.004591487579358775
+      }
+    },
+    "PHI": {
+      "offFast": {
+        "sack_rate": 0.04855332230823223,
+        "turnover_rate": 0.011884806467075557
+      },
+      "offSlow": {
+        "sack_rate": 0.05053938464090834,
+        "turnover_rate": 0.013486014062193272
+      },
+      "defFast": {
+        "sack_rate": 0.06796208919209273,
+        "turnover_rate": 0.018167234819317826
+      },
+      "defSlow": {
+        "sack_rate": 0.07467164037610007,
+        "turnover_rate": 0.019219172644604324
+      }
+    },
+    "PIT": {
+      "offFast": {
+        "sack_rate": 0.047394524801657914,
+        "turnover_rate": 0.005620977127621354
+      },
+      "offSlow": {
+        "sack_rate": 0.05069453235227254,
+        "turnover_rate": 0.011523781545169474
+      },
+      "defFast": {
+        "sack_rate": 0.0919749288883343,
+        "turnover_rate": 0.022645615753114603
+      },
+      "defSlow": {
+        "sack_rate": 0.07445419320596497,
+        "turnover_rate": 0.02231511726470636
+      }
+    },
+    "SEA": {
+      "offFast": {
+        "sack_rate": 0.0739010133598666,
+        "turnover_rate": 0.017411098253917675
+      },
+      "offSlow": {
+        "sack_rate": 0.06515413836962561,
+        "turnover_rate": 0.020523152282660825
+      },
+      "defFast": {
+        "sack_rate": 0.06270052916338964,
+        "turnover_rate": 0.027393966256293405
+      },
+      "defSlow": {
+        "sack_rate": 0.062195838010941265,
+        "turnover_rate": 0.026945625375350217
+      }
+    },
+    "SF": {
+      "offFast": {
+        "sack_rate": 0.05286684940658192,
+        "turnover_rate": 0.01838903821380278
+      },
+      "offSlow": {
+        "sack_rate": 0.045304387437085605,
+        "turnover_rate": 0.019014155820585164
+      },
+      "defFast": {
+        "sack_rate": 0.040055426493351684,
+        "turnover_rate": 0.005717530747250743
+      },
+      "defSlow": {
+        "sack_rate": 0.03704919587407359,
+        "turnover_rate": 0.009782814825903088
+      }
+    },
+    "TB": {
+      "offFast": {
+        "sack_rate": 0.06769359128672275,
+        "turnover_rate": 0.022677426141941605
+      },
+      "offSlow": {
+        "sack_rate": 0.06394067788454251,
+        "turnover_rate": 0.019461893192316795
+      },
+      "defFast": {
+        "sack_rate": 0.04101620491615296,
+        "turnover_rate": 0.02107405746928588
+      },
+      "defSlow": {
+        "sack_rate": 0.0510386963564504,
+        "turnover_rate": 0.019757149814735808
+      }
+    },
+    "TEN": {
+      "offFast": {
+        "sack_rate": 0.05155639891159709,
+        "turnover_rate": 0.012375239777661355
+      },
+      "offSlow": {
+        "sack_rate": 0.06529279725929305,
+        "turnover_rate": 0.014017930529050017
+      },
+      "defFast": {
+        "sack_rate": 0.07065464179691029,
+        "turnover_rate": 0.008027234364587878
+      },
+      "defSlow": {
+        "sack_rate": 0.07321184556093191,
+        "turnover_rate": 0.009392702959298862
+      }
+    },
+    "WAS": {
+      "offFast": {
+        "sack_rate": 0.046919437008585196,
+        "turnover_rate": 0.01780375024552136
+      },
+      "offSlow": {
+        "sack_rate": 0.058839570967322063,
+        "turnover_rate": 0.020473481049774592
+      },
+      "defFast": {
+        "sack_rate": 0.07822138157133782,
+        "turnover_rate": 0.008214455311837432
+      },
+      "defSlow": {
+        "sack_rate": 0.07180461065786549,
+        "turnover_rate": 0.008558642602740463
+      }
+    }
+  }
+}

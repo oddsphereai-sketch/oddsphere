@@ -81,7 +81,7 @@ import { readNflPlayerPropsCurrentSeasonState } from "./nflPlayerPropsCurrentSea
 import { buildNflWeeklyPossessionMargin } from "./nflWeeklyPossessionMargin";
 
 export const NFL_FORWARD_WRITER_RELEASE =
-  "nfl_forward_evidence_writer_2026_09_26_r42_context_capture_release_refresh" as const;
+  "nfl_forward_evidence_writer_2026_09_27_r43_pressure_direction" as const;
 
 export type NflForwardWriterResult = {
   writerRelease: typeof NFL_FORWARD_WRITER_RELEASE;
@@ -363,6 +363,8 @@ export async function runNflForwardEvidenceWriter(args: {
           weeklyRawSignal: weeklyRawSignal ? {
             release: NFL_V1_WEEKLY_RAW_SIGNAL_RELEASE,
             independentHomeMargin: weeklyRawSignal.independentHomeMargin,
+            directionHomeCoverProbability: weeklyRawSignal.directionHomeCoverProbability,
+            directionHomeMarginCorrection: weeklyRawSignal.directionHomeMarginCorrection,
           } : undefined,
           evaluatedAt: args.now,
         })
@@ -386,6 +388,8 @@ export async function runNflForwardEvidenceWriter(args: {
       weeklyRawSignal: weeklyRawSignal ? {
         release: NFL_V1_WEEKLY_RAW_SIGNAL_RELEASE,
         independentHomeMargin: weeklyRawSignal.independentHomeMargin,
+        directionHomeCoverProbability: weeklyRawSignal.directionHomeCoverProbability,
+        directionHomeMarginCorrection: weeklyRawSignal.directionHomeMarginCorrection,
       } : undefined,
     });
     const { outcome, production } = resolved;
