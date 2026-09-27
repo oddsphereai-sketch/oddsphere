@@ -385,6 +385,7 @@ export function matchesCfbForwardEvidencePayloadHash(
 export function buildCfbForwardMarketOutlooks(args: {
   forecast: CfbV1Forecast;
   playbookLine: CfbForwardPlaybookLine | null;
+  namedBookLine?: NcaafBookOdds | null;
   espnReferenceLine?: CfbEspnReferenceLine | null;
 }): Record<CfbV1Market, CfbForwardMarketOutlook | null> {
   const moneylineProbabilities = normalizedDirectionalProbabilities(
@@ -394,16 +395,36 @@ export function buildCfbForwardMarketOutlooks(args: {
   const moneyline = moneylineProbabilities.first >= moneylineProbabilities.second
     ? outlook("moneyline", "home", null, moneylineProbabilities.first, "authoritative_pmf", null)
     : outlook("moneyline", "away", null, moneylineProbabilities.second, "authoritative_pmf", null);
-  const homeSpread = args.playbookLine?.homeSpread ?? args.espnReferenceLine?.homeSpread ?? null;
-  const totalLine = args.playbookLine?.total ?? args.espnReferenceLine?.total ?? null;
-  const spreadObservedAt = args.playbookLine?.homeSpread !== null && args.playbookLine?.homeSpread !== undefined
-    ? args.playbookLine.capturedAt : args.espnReferenceLine?.capturedAt ?? null;
-  const totalObservedAt = args.playbookLine?.total !== null && args.playbookLine?.total !== undefined
-    ? args.playbookLine.capturedAt : args.espnReferenceLine?.capturedAt ?? null;
-  const spreadSource = args.playbookLine?.homeSpread !== null && args.playbookLine?.homeSpread !== undefined
-    ? "authoritative_pmf_at_playbook_line" as const : "authoritative_pmf_at_espn_opening_line" as const;
-  const totalSource = args.playbookLine?.total !== null && args.playbookLine?.total !== undefined
-    ? "authoritative_pmf_at_playbook_line" as const : "authoritative_pmf_at_espn_opening_line" as const;
+  const hasPlaybookSpread = args.playbookLine?.homeSpread !== null && args.playbookLine?.homeSpread !== undefined;
+  const hasPlaybookTotal = args.playbookLine?.total !== null && args.playbookLine?.total !== undefined;
+  const namedSpread = args.namedBookLine?.spread ?? null;
+  const namedTotal = args.namedBookLine?.total ?? null;
+  const homeSpread = hasPlaybookSpread
+    ? args.playbookLine!.homeSpread
+    : namedSpread?.homeLine ?? args.espnReferenceLine?.homeSpread ?? null;
+  const totalLine = hasPlaybookTotal
+    ? args.playbookLine!.total
+    : namedTotal?.line ?? args.espnReferenceLine?.total ?? null;
+  const spreadObservedAt = hasPlaybookSpread
+    ? args.playbookLine!.capturedAt
+    : namedSpread
+      ? args.namedBookLine?.marketObservedAt?.spread ?? args.namedBookLine!.observedAt
+      : args.espnReferenceLine?.capturedAt ?? null;
+  const totalObservedAt = hasPlaybookTotal
+    ? args.playbookLine!.capturedAt
+    : namedTotal
+      ? args.namedBookLine?.marketObservedAt?.total ?? args.namedBookLine!.observedAt
+      : args.espnReferenceLine?.capturedAt ?? null;
+  const spreadSource = hasPlaybookSpread
+    ? "authoritative_pmf_at_playbook_line" as const
+    : namedSpread
+      ? "authoritative_pmf_at_named_book_line" as const
+      : "authoritative_pmf_at_espn_opening_line" as const;
+  const totalSource = hasPlaybookTotal
+    ? "authoritative_pmf_at_playbook_line" as const
+    : namedTotal
+      ? "authoritative_pmf_at_named_book_line" as const
+      : "authoritative_pmf_at_espn_opening_line" as const;
   if (homeSpread === null && totalLine === null) return { moneyline, spread: null, total: null };
   if (homeSpread === null || homeSpread === undefined || totalLine === null || totalLine === undefined) {
     return {

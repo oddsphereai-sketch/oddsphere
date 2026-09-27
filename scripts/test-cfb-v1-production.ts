@@ -82,6 +82,7 @@ import { ingestCfbFinalScores } from "../lib/services/football/cfbScoreIngestSer
 import {
   buildCfbOfficialTrackingRecords,
   buildCfbEspnOpeningRecoveryRecords,
+  buildCfbNamedBookLineRecoveryRecords,
   buildCfbPublishedPregameRecoveryRecords,
 } from "../lib/services/football/cfbOfficialTrackingRecord";
 import { buildCfbForwardContextCapture } from "../lib/services/football/cfbForwardEvidenceCapture";
@@ -2023,6 +2024,53 @@ const espnRecovery = buildCfbEspnOpeningRecoveryRecords({
 assert.deepEqual(espnRecovery.map((row) => row.market), ["spread", "total"]);
 assert.equal(espnRecovery.every((row) => row.no_bet && !row.held && row.odds_american === null && row.expected_value === null), true);
 assert.equal(espnRecovery.every((row) => row.prediction_source === "cfb_forward_evidence_espn_opening_accuracy_recovery"), true);
+const namedBookRecovery = buildCfbNamedBookLineRecoveryRecords({
+  payload: espnRecoveryPayload,
+  gameId: 9001,
+  replayForecast: forecast,
+});
+assert.deepEqual(namedBookRecovery.map((row) => row.market), ["spread", "total"]);
+assert.equal(namedBookRecovery.every((row) => row.no_bet && !row.held && row.odds_american === null && row.expected_value === null), true);
+assert.equal(namedBookRecovery.every((row) => row.prediction_source === "cfb_forward_evidence_named_book_line_accuracy_recovery"), true);
+assert.equal(namedBookRecovery.every((row) => row.source_quality === "authoritative_pmf_at_named_book_line"), true);
+const postCaptureNamedLine = structuredClone(espnRecoveryPayload);
+postCaptureNamedLine.market.current!.observedAt = new Date(Date.parse(postCaptureNamedLine.capturedAt) + 1).toISOString();
+assert.throws(
+  () => buildCfbNamedBookLineRecoveryRecords({ payload: postCaptureNamedLine, gameId: 9001, replayForecast: forecast }),
+  /not coherent with its immutable pregame payload/,
+  "named-book recovery must reject a quote observed after the immutable payload capture",
+);
+assert.deepEqual(
+  candidateTrackingMarkets({
+    payload: espnRecoveryPayload,
+    mode: "published_pregame_accuracy_recovery",
+    publishedPregamePayload: espnRecoveryPayload,
+  }),
+  ["moneyline", "spread", "total"],
+  "stored named-book lines make the immutable spread and total predictions recoverable without their prices",
+);
+const lineLessRecoveryPayload = structuredClone(espnRecoveryPayload);
+lineLessRecoveryPayload.market.current = null;
+lineLessRecoveryPayload.market.currentBooks = [];
+assert.deepEqual(
+  candidateTrackingMarkets({
+    payload: lineLessRecoveryPayload,
+    mode: "published_pregame_accuracy_recovery",
+    publishedPregamePayload: lineLessRecoveryPayload,
+  }),
+  ["moneyline"],
+  "a game with no stored pregame spread or total line still locks its Moneyline prediction without fabricating markets",
+);
+const noExtraMarketPlan = planCfbTrackingRecordInsert({
+  trackingGames: [{ externalId: 9201, decisions: [{ market: "moneyline" }] }],
+  existingKeys: new Set<string>(),
+  candidateRecords: recoveryTracking.map((row) => ({ ...row, external_id: 9201 })),
+});
+assert.deepEqual(
+  noExtraMarketPlan.records.map((row) => row.market),
+  ["moneyline"],
+  "tracking recovery must never insert an unplanned synthetic sibling market",
+);
 assert.throws(
   () => buildCfbEspnOpeningRecoveryRecords({
     payload: espnRecoveryPayload,

@@ -28,7 +28,7 @@ import {
   type CfbForwardTeamQuarterbacks,
 } from "./cfbForwardEvidence";
 import { appendCfbForwardEvidence, readCfbForwardMarketHistory, readCfbForwardWriterEvidence, type CfbForwardEvidenceMetadata } from "./cfbForwardEvidenceStore";
-import { buildCfbV1DecisionBundle, CFB_T60_MAX_CAPTURE_LAG_MINUTES, CFB_V1_DECISION_RELEASE, getCfbV1ForecastForGame, type CfbV1Market } from "./cfbV1Decision";
+import { buildCfbV1DecisionBundle, CFB_T60_MAX_CAPTURE_LAG_MINUTES, CFB_V1_DECISION_RELEASE, getCfbV1ForecastForGame, type CfbV1Forecast, type CfbV1Market } from "./cfbV1Decision";
 import { CFB_V1_WEEKLY_RUNTIME_RELEASE, cfbV1WeeklyGameProfileCoverage } from "./cfbV1WeeklyForecast";
 import { resolveCfbCanonicalMarketAnchor } from "./cfbMarketInformedOutcome";
 import {
@@ -43,6 +43,7 @@ import {
 import {
   buildCfbOfficialTrackingRecords,
   buildCfbEspnOpeningRecoveryRecords,
+  buildCfbNamedBookLineRecoveryRecords,
   buildCfbPublishedPregameRecoveryRecords,
   cfbPublishedPregameRecoveryMarkets,
   cfbProviderIntegerId,
@@ -90,7 +91,7 @@ import {
 } from "./cfbForwardMemberSnapshotStore";
 
 export const CFB_FORWARD_WRITER_RELEASE =
-  "cfb_forward_evidence_writer_2026_09_26_r77_published_pregame_tracking" as const;
+  "cfb_forward_evidence_writer_2026_09_26_r78_named_line_tracking_recovery" as const;
 export const CFB_FORWARD_MAX_QB_TEAMS_PER_RUN = 24 as const;
 export const CFB_FORWARD_MAX_SHARP_FALLBACK_GAMES_PER_RUN = 24 as const;
 export const CFB_FORWARD_MAX_ESPN_PROSPECTIVE_GAMES_PER_RUN = 32 as const;
@@ -1177,13 +1178,41 @@ async function writeOfficialTracking(args: {
     return uniqueRecordsByMarket([...primary, ...recovery]);
   });
   const availableKeys = new Set([...existingKeys, ...standardRecords.map((record) => `${record.external_id}:${record.market}`)]);
-  const espnCandidates = eligible.filter((candidate) => {
+  const supplementalCandidates = eligible.filter((candidate) => {
     const externalId = cfbProviderIntegerId(candidate.payload.game.providerGameId, "game");
+    const planned = new Set(candidateTrackingMarkets(candidate));
     return candidate.publishedPregamePayload !== null && (["spread", "total"] as const)
-      .some((market) => !availableKeys.has(`${externalId}:${market}`));
+      .some((market) => planned.has(market) && !availableKeys.has(`${externalId}:${market}`));
   });
+  const namedBookRecords: PredictionRecordRow[] = [];
   const espnRecords: PredictionRecordRow[] = [];
   let trackingProviderRequests = 0;
+  const replayForecasts = new Map<string, CfbV1Forecast>();
+  const priorByWindow = new Map(args.priorGamesByWindow ?? []);
+  for (const candidate of supplementalCandidates) {
+    const payload = candidate.publishedPregamePayload!;
+    const before = activeCfbWeeklyWindow(payload.capturedAt).boardStartDate;
+    if (!priorByWindow.has(before)) {
+      const prior = await fetchPriorCompletedGames({
+        rows: args.metadata,
+        before,
+        apiKey: args.balldontlieApiKey,
+      });
+      trackingProviderRequests += prior.providerRequests;
+      priorByWindow.set(before, prior.games);
+    }
+    const replayForecast = getCfbV1ForecastForGame({ game: payload.game, completedGames: priorByWindow.get(before)! }).forecast;
+    replayForecasts.set(payload.game.providerGameId, replayForecast);
+    const gameId = gameIds.get(payload.game.providerGameId)!;
+    namedBookRecords.push(...buildCfbNamedBookLineRecoveryRecords({ payload, gameId, replayForecast }));
+  }
+  const availableAfterNamed = new Set([...availableKeys, ...namedBookRecords.map((record) => `${record.external_id}:${record.market}`)]);
+  const espnCandidates = supplementalCandidates.filter((candidate) => {
+    const externalId = cfbProviderIntegerId(candidate.payload.game.providerGameId, "game");
+    const planned = new Set(candidateTrackingMarkets(candidate));
+    return (["spread", "total"] as const)
+      .some((market) => planned.has(market) && !availableAfterNamed.has(`${externalId}:${market}`));
+  });
   if (espnCandidates.length > 0) {
     const attempt = await fetchCfbEspnReferenceAttempt({
       games: espnCandidates.map((candidate) => candidate.publishedPregamePayload!.game),
@@ -1191,22 +1220,11 @@ async function writeOfficialTracking(args: {
       maximumGames: CFB_ESPN_REFERENCE_MAX_GAMES_PER_RUN,
     });
     trackingProviderRequests += attempt.result.requests;
-    const priorByWindow = new Map(args.priorGamesByWindow ?? []);
     for (const candidate of espnCandidates) {
       const payload = candidate.publishedPregamePayload!;
-      const before = activeCfbWeeklyWindow(payload.capturedAt).boardStartDate;
-      if (!priorByWindow.has(before)) {
-        const prior = await fetchPriorCompletedGames({
-          rows: args.metadata,
-          before,
-          apiKey: args.balldontlieApiKey,
-        });
-        trackingProviderRequests += prior.providerRequests;
-        priorByWindow.set(before, prior.games);
-      }
       const referenceLine = attempt.result.linesByGame[payload.game.providerGameId] ?? null;
       if (!referenceLine) continue;
-      const replayForecast = getCfbV1ForecastForGame({ game: payload.game, completedGames: priorByWindow.get(before)! }).forecast;
+      const replayForecast = replayForecasts.get(payload.game.providerGameId)!;
       const gameId = gameIds.get(payload.game.providerGameId)!;
       espnRecords.push(...buildCfbEspnOpeningRecoveryRecords({ payload, gameId, referenceLine, replayForecast }));
     }
@@ -1214,7 +1232,7 @@ async function writeOfficialTracking(args: {
   const { records, missing } = planCfbTrackingRecordInsert({
     trackingGames,
     existingKeys,
-    candidateRecords: [...standardRecords, ...espnRecords],
+    candidateRecords: [...standardRecords, ...namedBookRecords, ...espnRecords],
   });
   if (records.length > 0) {
     const { data, error } = await args.client.from("prediction_records").insert(records as unknown as Record<string, unknown>[]).select("id");
@@ -1238,7 +1256,10 @@ export function planCfbTrackingRecordInsert(args: {
   existingKeys: ReadonlySet<string>;
   candidateRecords: PredictionRecordRow[];
 }): { records: PredictionRecordRow[]; missing: string[] } {
+  const plannedKeys = new Set(args.trackingGames.flatMap((game) => game.decisions
+    .map((decision) => `${game.externalId}:${decision.market}`)));
   const candidates = uniqueRecordsByMarket(args.candidateRecords)
+    .filter((record) => plannedKeys.has(`${record.external_id}:${record.market}`))
     .filter((record) => !args.existingKeys.has(`${record.external_id}:${record.market}`));
   const candidateKeys = new Set(candidates.map((record) => `${record.external_id}:${record.market}`));
   const completeGames = new Set(args.trackingGames
@@ -1261,10 +1282,11 @@ export function candidateTrackingMarkets(candidate: CfbTrackingCandidate): CfbV1
     : recoverableMarkets(candidate.payload));
   if (candidate.publishedPregamePayload) {
     for (const market of recoverableMarkets(candidate.publishedPregamePayload)) markets.add(market);
-    if (candidate.publishedPregamePayload.authoritativeForecast?.status === "market_anchor_unavailable_hold" &&
-      candidate.publishedPregamePayload.contextualEvidenceCapture?.prior.outcome.pmf.sha256) {
-      markets.add("spread");
-      markets.add("total");
+    const payload = candidate.publishedPregamePayload;
+    if (payload.authoritativeForecast?.status === "market_anchor_unavailable_hold" &&
+      payload.contextualEvidenceCapture?.prior.outcome.pmf.sha256) {
+      if (payload.market.current?.spread) markets.add("spread");
+      if (payload.market.current?.total) markets.add("total");
     }
   }
   return (["moneyline", "spread", "total"] as const).filter((market) => markets.has(market));

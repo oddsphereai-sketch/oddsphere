@@ -153,6 +153,24 @@ Last reviewed: 2026-09-25
 
 ## CFB Daily Edge generalized weekly production release
 
+### Stored named-book tracking recovery (writer r78; tracking r28)
+
+- Active sole writer / tracking record releases are
+  `cfb_forward_evidence_writer_2026_09_26_r78_named_line_tracking_recovery` /
+  `cfb_official_tracking_record_2026_09_26_r28_named_line_recovery`.
+  When a published held game has an immutable pregame named-book line but lacks the redundant
+  Spread or Total outlook, the writer replays the exact independent PMF, verifies every replayed
+  output against its stored hash and summary, and evaluates that exact stored line for an
+  accuracy-only record. Odds, edge, EV, recommendation, stake, and ROI remain null. If no pregame
+  line ever existed, the game still locks its published Moneyline prediction and no missing
+  Spread or Total is fabricated.
+- The tracking planner now filters candidate rows to the exact planned game/market keys. One
+  missing market cannot block complete sibling games, and a supplemental recovery cannot insert
+  an unplanned market. Prediction PMFs, scores, member cards, sides, grades, actions, stakes,
+  copy, labels, layouts, provider collection cadence, and the sole `prediction_pipeline:cfb`
+  lease are unchanged. Evidence and rollback:
+  `docs/model-audits/2026-09-26-cfb-named-line-tracking-recovery-r78.md`.
+
 ### Published-pregame tracking completeness (writer r77; tracking r27)
 
 - Active sole writer / tracking record releases are
