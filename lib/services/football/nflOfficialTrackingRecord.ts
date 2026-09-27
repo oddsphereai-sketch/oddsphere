@@ -14,12 +14,13 @@ import {
 } from "./nflV1ProductionDecision";
 import type { NflRegularDecisionMarket, NflRegularOutcomeConfidence } from "./nflRegularDecisionEvidence";
 import {
+  auditFootballCrossMarketCoherence,
   assertFootballCrossMarketCoherence,
   NFL_PUBLIC_SCORE_DIRECTION_TOLERANCE_POINTS,
 } from "./footballCrossMarketCoherence";
 
 export const NFL_OFFICIAL_TRACKING_RECORD_RELEASE =
-  "nfl_official_tracking_record_2026_09_27_r13_pressure_direction" as const;
+  "nfl_official_tracking_record_2026_09_27_r14_immutable_tuple_recovery" as const;
 
 const NFL_TRACKED_MARKETS = ["moneyline", "spread", "total"] as const;
 
@@ -51,32 +52,85 @@ export function buildNflOfficialTrackingRecords(args: {
       `NFL tracking for ${externalId}`,
     );
   }
-  const evaluatedMarketsForCoherence = new Set(args.payload.decisions.evaluatedBets.map((decision) => decision.market));
-  assertFootballCrossMarketCoherence({
+  assertFootballCrossMarketCoherence(coherenceArgs(args.payload));
+  return serializeTrackingRecords(args);
+}
+
+/**
+ * Serializes an already-published immutable T-60 tuple when the only failed
+ * invariant is direction agreement between its decision and its own score
+ * distribution. This is deliberately narrower than the normal builder: it
+ * cannot repair or reinterpret the tuple, and every price, side, probability,
+ * grade, timestamp, and evidence hash remains exactly as captured pregame.
+ */
+export function buildNflImmutableT60RecoveryRecords(args: {
+  payload: NflForwardEvidencePayload;
+  gameId: number;
+  trackingBoundaryRevalidated?: boolean;
+}): PredictionRecordRow[] {
+  if (
+    args.payload.stage !== "t60" ||
+    !args.payload.decisions.trackingEnabled && args.trackingBoundaryRevalidated !== true
+  ) {
+    throw new Error("NFL immutable tracking recovery requires an eligible T-60 evidence payload.");
+  }
+  const externalId = integerId(args.payload.game.providerGameId, "game");
+  if (args.payload.decisions.evaluatedBets.length > 0) {
+    assertMarketScopedFootballDecisions(
+      args.payload.decisions.evaluatedBets,
+      `NFL immutable tracking recovery for ${externalId}`,
+    );
+  }
+  const report = auditFootballCrossMarketCoherence(coherenceArgs(args.payload));
+  if (
+    report.passed ||
+    report.fatalIssues.length === 0 ||
+    report.fatalIssues.some((issue) => issue.code !== "decision_forecast_side_disagreement")
+  ) {
+    throw new Error(
+      `NFL immutable tracking recovery is not applicable for ${externalId}: ` +
+      (report.passed
+        ? "the strict tuple is already coherent."
+        : report.fatalIssues.map((issue) => `${issue.code}(${issue.detail})`).join("; ")),
+    );
+  }
+  return serializeTrackingRecords(args, report.fatalIssues.map((issue) => issue.detail));
+}
+
+function coherenceArgs(payload: NflForwardEvidencePayload): Parameters<typeof assertFootballCrossMarketCoherence>[0] {
+  const evaluatedMarketsForCoherence = new Set(payload.decisions.evaluatedBets.map((decision) => decision.market));
+  return {
     sport: "nfl",
-    providerGameId: args.payload.game.providerGameId,
-    awayTeam: args.payload.game.away.abbreviation,
-    homeTeam: args.payload.game.home.abbreviation,
+    providerGameId: payload.game.providerGameId,
+    awayTeam: payload.game.away.abbreviation,
+    homeTeam: payload.game.home.abbreviation,
     forecast: {
-      expectedAwayPoints: args.payload.outcomeForecast.expectedAwayScore,
-      expectedHomePoints: args.payload.outcomeForecast.expectedHomeScore,
+      expectedAwayPoints: payload.outcomeForecast.expectedAwayScore,
+      expectedHomePoints: payload.outcomeForecast.expectedHomeScore,
       representativeScore: {
-        away: args.payload.outcomeForecast.representativeAwayScore,
-        home: args.payload.outcomeForecast.representativeHomeScore,
+        away: payload.outcomeForecast.representativeAwayScore,
+        home: payload.outcomeForecast.representativeHomeScore,
       },
-      awayWinProbability: args.payload.outcomeForecast.awayWinProbability,
-      homeWinProbability: args.payload.outcomeForecast.homeWinProbability,
-      marginDistribution: args.payload.outcomeForecast.marginDistribution,
-      totalDistribution: args.payload.outcomeForecast.totalDistribution,
+      awayWinProbability: payload.outcomeForecast.awayWinProbability,
+      homeWinProbability: payload.outcomeForecast.homeWinProbability,
+      marginDistribution: payload.outcomeForecast.marginDistribution,
+      totalDistribution: payload.outcomeForecast.totalDistribution,
     },
-    decisions: args.payload.decisions.evaluatedBets,
+    decisions: payload.decisions.evaluatedBets,
     unavailableMarkets: NFL_TRACKED_MARKETS.filter((market) => !evaluatedMarketsForCoherence.has(market)),
     requireDecisionSideFromForecast: true,
     // Tracking consumes the exact writer-approved immutable T-60 payload. It
     // must use the same NFL mean/median tolerance as publication or a valid
     // payload can publish successfully and then fail at the tracking boundary.
     publicScoreDirectionTolerancePoints: NFL_PUBLIC_SCORE_DIRECTION_TOLERANCE_POINTS,
-  });
+  };
+}
+
+function serializeTrackingRecords(
+  args: { payload: NflForwardEvidencePayload; gameId: number },
+  recoveryIssues: string[] = [],
+): PredictionRecordRow[] {
+  const externalId = integerId(args.payload.game.providerGameId, "game");
   const evaluated = args.payload.decisions.evaluatedBets.map((decision): PredictionRecordRow => {
     const side = canonicalSide(args.payload, decision.market, decision.side);
     const actionable = decision.grade === "Best Angle" || decision.grade === "Lean";
@@ -138,6 +192,12 @@ export function buildNflOfficialTrackingRecords(args: {
           home: args.payload.startersAndDepth.home.starterStatus,
         },
         coverage_at_lock: args.payload.coverage,
+        ...(recoveryIssues.length > 0 ? {
+          immutable_t60_tracking_recovery: {
+            applied: true,
+            issues: recoveryIssues,
+          },
+        } : {}),
       },
       calibration_version: decision.calibrationRelease,
     };
