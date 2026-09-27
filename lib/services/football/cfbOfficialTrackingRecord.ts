@@ -25,7 +25,7 @@ import {
 import { assertMarketScopedFootballDecisions, FOOTBALL_MARKET_SCOPED_T60_TRACKING_RELEASE } from "./footballMarketScopedTracking";
 
 export const CFB_OFFICIAL_TRACKING_RECORD_RELEASE =
-  "cfb_official_tracking_record_2026_09_26_r27_published_pregame_tracking" as const;
+  "cfb_official_tracking_record_2026_09_26_r28_named_line_recovery" as const;
 
 export function cfbTrackingMarketsForPayload(payload: CfbForwardEvidencePayload): CfbV1Market[] {
   const markets = new Set<CfbV1Market>(payload.decisions.evaluatedBets.map((decision) => decision.market));
@@ -217,6 +217,80 @@ export function buildCfbEspnOpeningRecoveryRecords(args: {
       immutable_independent_pmf_sha256: createHash("sha256").update(JSON.stringify(args.replayForecast.pmf)).digest("hex"),
     },
   }));
+}
+
+export function buildCfbNamedBookLineRecoveryRecords(args: {
+  payload: CfbForwardEvidencePayload;
+  gameId: number;
+  replayForecast: CfbV1Forecast;
+}): PredictionRecordRow[] {
+  assertCfbPublishedPregameRecoveryPayload(args.payload);
+  assertCfbIndependentReplay(args.payload, args.replayForecast);
+  if (args.payload.authoritativeForecast?.status !== "market_anchor_unavailable_hold") {
+    throw new Error("CFB named-book recovery requires a held independent authoritative forecast.");
+  }
+  const namedBookLine = args.payload.market.current;
+  if (!namedBookLine) return [];
+  assertCfbNamedBookRecoveryLine(args.payload, namedBookLine);
+  const outlooks = buildCfbForwardMarketOutlooks({
+    forecast: args.replayForecast,
+    playbookLine: null,
+    namedBookLine,
+    espnReferenceLine: null,
+  });
+  const externalId = providerIntegerId(args.payload.game.providerGameId, "game");
+  return (["spread", "total"] as const).flatMap((market) => {
+    const outlook = outlooks[market];
+    if (!outlook || outlook.line === null) return [];
+    return [buildNoPlayForecastRecord({
+      payload: args.payload,
+      gameId: args.gameId,
+      externalId,
+      market,
+      reason: "pregame_named_book_line_accuracy_recovery",
+      reasonCodes: ["published_before_kickoff", "stored_named_book_line", "no_reconstructed_betting_economics"],
+      outlook,
+      predictionSource: "cfb_forward_evidence_named_book_line_accuracy_recovery",
+      recovery: true,
+      recoveryDetails: {
+        source: "immutable_published_named_book_line",
+        sportsbook: namedBookLine.sportsbook,
+        provider: namedBookLine.provider ?? "balldontlie",
+        provider_event_id: namedBookLine.providerEventId ?? null,
+        observed_at: outlook.contextObservedAt,
+        immutable_independent_pmf_sha256: createHash("sha256").update(JSON.stringify(args.replayForecast.pmf)).digest("hex"),
+      },
+    })];
+  });
+}
+
+function assertCfbNamedBookRecoveryLine(
+  payload: CfbForwardEvidencePayload,
+  line: NonNullable<CfbForwardEvidencePayload["market"]["current"]>,
+): void {
+  const capturedAt = Date.parse(payload.capturedAt);
+  const gameStart = Date.parse(payload.game.scheduledStart);
+  const observed = [
+    line.observedAt,
+    ...(line.spread ? [line.marketObservedAt?.spread ?? line.observedAt] : []),
+    ...(line.total ? [line.marketObservedAt?.total ?? line.observedAt] : []),
+  ].map(Date.parse);
+  const coherentSpread = !line.spread || (
+    Number.isFinite(line.spread.homeLine) &&
+    Number.isFinite(line.spread.awayLine) &&
+    Math.abs(line.spread.homeLine + line.spread.awayLine) <= 1e-9
+  );
+  const coherentTotal = !line.total || Number.isFinite(line.total.line) && line.total.line > 0;
+  if (
+    line.providerGameId !== payload.game.providerGameId ||
+    !Number.isFinite(capturedAt) ||
+    !Number.isFinite(gameStart) ||
+    observed.some((value) => !Number.isFinite(value) || value > capturedAt || value >= gameStart) ||
+    !coherentSpread ||
+    !coherentTotal
+  ) {
+    throw new Error("CFB named-book recovery line is not coherent with its immutable pregame payload.");
+  }
 }
 
 function buildNoPlayForecastRecord(args: {
