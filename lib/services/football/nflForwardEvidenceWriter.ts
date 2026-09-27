@@ -81,7 +81,7 @@ import { readNflPlayerPropsCurrentSeasonState } from "./nflPlayerPropsCurrentSea
 import { buildNflWeeklyPossessionMargin } from "./nflWeeklyPossessionMargin";
 
 export const NFL_FORWARD_WRITER_RELEASE =
-  "nfl_forward_evidence_writer_2026_09_27_r43_pressure_direction" as const;
+  "nfl_forward_evidence_writer_2026_09_27_r44_pressure_transition_continuity" as const;
 
 export type NflForwardWriterResult = {
   writerRelease: typeof NFL_FORWARD_WRITER_RELEASE;
