@@ -327,13 +327,19 @@ assert.match(writer, /outcomeForecast: outcome/);
 assert.match(writer, /evaluatedBets: production\.evaluatedBets/);
 assert.match(writer, /writeOfficialTrackingFromPayloads/);
 assert.match(writer, /buildNflOfficialTrackingRecords/);
+assert.match(writer, /buildNflImmutableT60RecoveryRecords/);
 assert.match(writer, /\.from\("prediction_records"\)/);
 assert.match(writer, /isPublicallyTracked/);
 assert.match(writer, /currentBooks/);
 assert.match(writer, /comparableCurrentBooks/);
 assert.match(writer, /multibook_consensus_unavailable/);
 assert.doesNotMatch(writer, /readLegacyNflForwardEvidence|readPriorNflForwardEvidence|readPreviousNflForwardEvidence/, "the live writer must not scan superseded large JSON releases");
-assert.match(writer, /nfl_forward_evidence_writer_2026_09_27_r44_pressure_transition_continuity/);
+assert.match(writer, /nfl_forward_evidence_writer_2026_09_27_r45_tracking_isolation/);
+assert.match(
+  writer,
+  /const memberSnapshot = await refreshCompactMemberSnapshot\([\s\S]*?const tracking = await writeOfficialTrackingFromPayloads\(/,
+  "member publication must not be downstream of tracking serialization",
+);
 assert.equal((writer.match(/readNflPlayerPropsCurrentSeasonState\(/g) ?? []).length, 1, "the NFL writer must read current-season state once per cycle");
 assert.match(writer, /currentSeasonState\.completeThroughWeek < args\.week - 1/);
 assert.match(writer, /buildNflWeeklyPossessionMargin/);

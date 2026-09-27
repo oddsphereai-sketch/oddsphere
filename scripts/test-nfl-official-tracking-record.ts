@@ -8,6 +8,7 @@ import {
   type NflForwardEvidencePayload,
 } from "../lib/services/football/nflForwardEvidence";
 import {
+  buildNflImmutableT60RecoveryRecords,
   buildNflOfficialTrackingRecords,
   NFL_OFFICIAL_TRACKING_RECORD_RELEASE,
 } from "../lib/services/football/nflOfficialTrackingRecord";
@@ -329,6 +330,54 @@ const trackingBoundaryRecords = buildNflOfficialTrackingRecords({
 assert.equal(trackingBoundaryRecords.length, 3,
   "tracking must accept the same sub-one-point NFL PMF/mean boundary already accepted by the writer");
 assert.equal(trackingBoundaryRecords.find((record) => record.market === "total")?.side, "under");
+const contradictoryTotal = buildNflRegularEvaluatedBetDecision({
+  ...common,
+  market: "total",
+  modelRelease: NFL_V1_MARKET_EVIDENCE_TOTAL_MODEL_RELEASE,
+  calibrationRelease: NFL_V1_ACTIONABLE_GRADE_CALIBRATION_RELEASE,
+  side: "Under 44.5",
+  modelProbability: 0.52,
+  marketFairProbability: 0.51,
+  evaluatedQuote: { sportsbook: "caesars", line: 44.5, price: -110, observedAt: capturedAt },
+  grade: "No Play",
+});
+const contradictoryPayload = {
+  ...payload,
+  decisions: {
+    ...payload.decisions,
+    evaluatedBets: [decisions[0]!, decisions[1]!, contradictoryTotal],
+    outcomeConfidence: [
+      outcomeConfidence[0]!,
+      outcomeConfidence[1]!,
+      buildNflRegularOutcomeConfidence({
+        market: "total",
+        likelySide: "Under 44.5",
+        probability: 0.52,
+        evaluatedAt: capturedAt,
+        modelRelease: NFL_V1_MARKET_EVIDENCE_TOTAL_MODEL_RELEASE,
+      }),
+    ],
+  },
+} as NflForwardEvidencePayload;
+assert.throws(
+  () => buildNflOfficialTrackingRecords({ payload: contradictoryPayload, gameId: 5003 }),
+  /decision_forecast_side_disagreement/,
+  "the normal tracking path must continue rejecting a directionally contradictory tuple",
+);
+const recoveredContradiction = buildNflImmutableT60RecoveryRecords({
+  payload: contradictoryPayload,
+  gameId: 5003,
+});
+const recoveredTotal = recoveredContradiction.find((record) => record.market === "total");
+assert.equal(recoveredTotal?.pick, contradictoryTotal.side,
+  "recovery must preserve the exact immutable pregame pick rather than recomputing it");
+assert.equal(recoveredTotal?.locked_at, contradictoryTotal.lockedAt);
+assert.equal(recoveredTotal?.snapshot_json?.evidence_payload_sha256, hashNflForwardEvidencePayload(contradictoryPayload));
+assert.equal(
+  (recoveredTotal?.snapshot_json?.immutable_t60_tracking_recovery as { applied?: boolean } | undefined)?.applied,
+  true,
+  "recovery provenance must remain internal to tracking metadata",
+);
 const correctionPayload = {
   ...payload,
   market: {

@@ -67,6 +67,7 @@ import {
 } from "./sharpApiFootballSharpOdds";
 import { nflForwardT60TrackingEligibility } from "./nflTrackingLifecycle";
 import {
+  buildNflImmutableT60RecoveryRecords,
   buildNflOfficialTrackingRecords,
   nflProviderIntegerId,
   nflTrackingMarketsForPayload,
@@ -81,7 +82,7 @@ import { readNflPlayerPropsCurrentSeasonState } from "./nflPlayerPropsCurrentSea
 import { buildNflWeeklyPossessionMargin } from "./nflWeeklyPossessionMargin";
 
 export const NFL_FORWARD_WRITER_RELEASE =
-  "nfl_forward_evidence_writer_2026_09_27_r44_pressure_transition_continuity" as const;
+  "nfl_forward_evidence_writer_2026_09_27_r45_tracking_isolation" as const;
 
 export type NflForwardWriterResult = {
   writerRelease: typeof NFL_FORWARD_WRITER_RELEASE;
@@ -149,11 +150,6 @@ export async function runNflForwardEvidenceWriter(args: {
     },
   });
   if (!need.collect) {
-    const tracking = await writeOfficialTrackingFromPayloads({
-      client: args.client,
-      payloads: currentT60Payloads(existing),
-      apply: args.apply,
-    });
     const memberSnapshot = await refreshCompactMemberSnapshot({
       client: args.client,
       existing: historicalExisting,
@@ -161,6 +157,11 @@ export async function runNflForwardEvidenceWriter(args: {
       season: args.season,
       week: args.week,
       now: args.now,
+      apply: args.apply,
+    });
+    const tracking = await writeOfficialTrackingFromPayloads({
+      client: args.client,
+      payloads: currentT60Payloads(existing),
       apply: args.apply,
     });
     return emptyResult(need.reason, tracking, memberSnapshot);
@@ -178,11 +179,6 @@ export async function runNflForwardEvidenceWriter(args: {
     unlockedCadenceMinutes: need.cadenceMinutes ?? 60,
   });
   if (plans.length === 0) {
-    const tracking = await writeOfficialTrackingFromPayloads({
-      client: args.client,
-      payloads: currentT60Payloads(existing),
-      apply: args.apply,
-    });
     const memberSnapshot = await refreshCompactMemberSnapshot({
       client: args.client,
       existing: historicalExisting,
@@ -190,6 +186,11 @@ export async function runNflForwardEvidenceWriter(args: {
       season: args.season,
       week: args.week,
       now: args.now,
+      apply: args.apply,
+    });
+    const tracking = await writeOfficialTrackingFromPayloads({
+      client: args.client,
+      payloads: currentT60Payloads(existing),
       apply: args.apply,
     });
     return emptyResult("provider_slate_has_no_due_capture", tracking, memberSnapshot);
@@ -514,11 +515,6 @@ export async function runNflForwardEvidenceWriter(args: {
   });
 
   const write = await appendNflForwardEvidence({ client: args.client, runId: args.runId, payloads, apply: args.apply });
-  const tracking = await writeOfficialTrackingFromPayloads({
-    client: args.client,
-    payloads: [...currentT60Payloads(existing), ...payloads.filter((payload) => payload.stage === "t60")],
-    apply: args.apply,
-  });
   const memberSnapshot = await refreshCompactMemberSnapshot({
     client: args.client,
     existing: historicalExisting,
@@ -526,6 +522,11 @@ export async function runNflForwardEvidenceWriter(args: {
     season: args.season,
     week: args.week,
     now: args.now,
+    apply: args.apply,
+  });
+  const tracking = await writeOfficialTrackingFromPayloads({
+    client: args.client,
+    payloads: [...currentT60Payloads(existing), ...payloads.filter((payload) => payload.stage === "t60")],
     apply: args.apply,
   });
   const publishedEvaluations = payloads.flatMap((payload) => payload.decisions.evaluatedBets);
@@ -811,7 +812,7 @@ function currentT60Payloads(rows: NflForwardStoredEvidence[]): NflForwardEvidenc
  * while a frozen prediction record is inserted only when its exact
  * game/market/release key does not already exist.
  */
-async function writeOfficialTrackingFromPayloads(args: {
+export async function writeOfficialTrackingFromPayloads(args: {
   client: SupabaseClient;
   payloads: NflForwardEvidencePayload[];
   apply: boolean;
@@ -887,11 +888,28 @@ async function writeOfficialTrackingFromPayloads(args: {
     const externalId = nflProviderIntegerId(payload.game.providerGameId, "game");
     const gameId = gameIdByProviderId.get(payload.game.providerGameId);
     if (gameId === undefined) throw new Error(`NFL tracking game row missing for ${payload.game.providerGameId}.`);
-    return buildNflOfficialTrackingRecords({
-      payload,
-      gameId,
-      trackingBoundaryRevalidated: true,
-    })
+    let built: ReturnType<typeof buildNflOfficialTrackingRecords>;
+    try {
+      built = buildNflOfficialTrackingRecords({
+        payload,
+        gameId,
+        trackingBoundaryRevalidated: true,
+      });
+    } catch (strictError) {
+      try {
+        built = buildNflImmutableT60RecoveryRecords({
+          payload,
+          gameId,
+          trackingBoundaryRevalidated: true,
+        });
+      } catch (recoveryError) {
+        throw new AggregateError(
+          [strictError, recoveryError],
+          `NFL tracking serialization failed for immutable T-60 game ${payload.game.providerGameId}.`,
+        );
+      }
+    }
+    return built
       .filter((record) => !existingKeys.has(`${externalId}:${record.market}`));
   });
   if (records.length > 0) {
