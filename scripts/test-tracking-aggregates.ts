@@ -12,7 +12,7 @@ import {
   type PredictionRecordRow,
 } from "../lib/types/domain/Tracking";
 import { readFileSync } from "node:fs";
-import { dedupePredictionRecordsForTracking, filterCompleteUclTrackingCohorts, isCurrentUclTrackingRelease, isTrackingRecordEligible, TRACKING_AGGREGATE_CONTRACT_VERSION, trackingDisplaySport } from "../lib/services/trackingAggregateService";
+import { dedupePredictionRecordsForTracking, filterCompleteUclTrackingCohorts, isCurrentUclTrackingRelease, isTrackingPlayGradeCutEligible, isTrackingRecordEligible, TRACKING_AGGREGATE_CONTRACT_VERSION, trackingDisplaySport } from "../lib/services/trackingAggregateService";
 import { UCL_CALIBRATION_RELEASE, UCL_MODEL_RELEASE } from "../lib/services/ucl/uclModel";
 import {
   NFL_PUBLISHED_TRACKING_CORRECTION_MODEL_VERSION,
@@ -70,7 +70,7 @@ const eplRecord = (locked_at: string | null, id = 1, created_at = "2026-08-19T12
   competition: "english_premier_league",
   snapshot_json: null,
 } as PredictionRecordRow);
-check("tracking aggregate contract includes the NHL regular-release boundary", TRACKING_AGGREGATE_CONTRACT_VERSION === "tracking_aggregate_v10_nhl_regular_release_boundary_2026_09_23");
+check("tracking aggregate contract includes CFB member-grade parity", TRACKING_AGGREGATE_CONTRACT_VERSION === "tracking_aggregate_v11_cfb_member_grade_parity_2026_09_27");
 check("unlocked EPL row is excluded from official tracking", !isTrackingRecordEligible(eplRecord(null)));
 check("locked EPL row is officially tracking-eligible", isTrackingRecordEligible(eplRecord("2026-08-21T18:00:00Z")));
 check("EPL receives a separate member-facing competition key", trackingDisplaySport(eplRecord("2026-08-21T18:00:00Z")) === "epl");
@@ -124,10 +124,18 @@ const correctedNflRecord = {
 } as PredictionRecordRow;
 const canonicalNfl = dedupePredictionRecordsForTracking([badNflRecord, correctedNflRecord]);
 check("append-only NFL correction supersedes the bad row even when its grade is less actionable", canonicalNfl.length === 1 && canonicalNfl[0]?.id === 21 && canonicalNfl[0]?.pick === "PHI");
+const shopLean = { ...badNflRecord, sport: "cfb", no_bet: true, play_grade: "lean" } as PredictionRecordRow;
+check("CFB shop-priced Lean remains in the member-facing play-grade cut", isTrackingPlayGradeCutEligible(shopLean));
+check("other sports keep shop/no-bet rows out of actionable play-grade cuts", !isTrackingPlayGradeCutEligible({ ...shopLean, sport: "nfl" }));
+check("ordinary actionable rows remain in play-grade cuts", isTrackingPlayGradeCutEligible({ ...shopLean, sport: "mlb", no_bet: false }));
 const trackingCronSource = readFileSync("app/api/cron/tracking-refresh/route.ts", "utf8");
 const gradingSource = readFileSync("lib/services/predictionGradingService.ts", "utf8");
 const aggregateSource = readFileSync("lib/services/trackingAggregateService.ts", "utf8");
 const consistencyAuditSource = readFileSync("scripts/tracking-consistency-audit.ts", "utf8");
+check(
+  "tracking consistency audit shares the member-facing play-grade eligibility contract",
+  consistencyAuditSource.includes("isTrackingPlayGradeCutEligible(row.record)"),
+);
 check("scheduled tracking refresh includes soccer for active EPL settlement", /DEFAULT_SPORTS[^;]+"soccer"/.test(trackingCronSource));
 check("EPL grading is competition-scoped and locked-only", /sport === "soccer"[\s\S]{0,300}english_premier_league[\s\S]{0,200}locked_at/.test(gradingSource));
 check("bounded tracking reads retain the projected EPL competition identity", aggregateSource.includes('"competition:snapshot_json->>competition"'));

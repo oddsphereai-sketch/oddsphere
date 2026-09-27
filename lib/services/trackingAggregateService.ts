@@ -79,7 +79,7 @@ export type DimensionRow<K extends string = string> = {
 export type TrackingDisplaySport = TrackedSport | "epl";
 
 export const TRACKING_AGGREGATE_CONTRACT_VERSION =
-  "tracking_aggregate_v10_nhl_regular_release_boundary_2026_09_23" as const;
+  "tracking_aggregate_v11_cfb_member_grade_parity_2026_09_27" as const;
 
 /**
  * Sport+market joint split with the Best Angle / Lean cuts most members
@@ -530,6 +530,16 @@ export function effectiveTrackingPlayGrade(record: PredictionRecordRow): string 
   return grade;
 }
 
+/**
+ * CFB publishes its exact-price grade as the member-facing verdict even when
+ * the locked offer is marked shop/no-bet. Tracking the grade members saw must
+ * therefore retain those rows in the Best Angle / Lean cuts. Other sports keep
+ * their existing actionable-only interpretation of these cuts.
+ */
+export function isTrackingPlayGradeCutEligible(record: PredictionRecordRow): boolean {
+  return record.sport === "cfb" || record.no_bet !== true;
+}
+
 async function fetchAllPredictionRecords(
   supabase: SupabaseClient,
   opts: {
@@ -801,14 +811,14 @@ export async function computeTrackingAggregate(opts: {
   // card grades on, so it's the authoritative tier.
   const grade = (r: Row): string => effectiveTrackingPlayGrade(r.record);
 
-  // Best Angle / Lean measure how our ACTUAL recommendations performed, so they
-  // stay actionable-only — a `no_bet` stand-down is not advice we gave (it counts
-  // for accuracy above, just not in these recommendation-performance cuts).
-  const bestRows = rows.filter((r) => r.record.no_bet !== true && grade(r) === "best_angle");
+  // Most sports retain actionable-only recommendation cuts. CFB's member card
+  // verdict remains Best Angle / Lean for a shop-priced tuple, so its grade cut
+  // follows the immutable member-facing label instead of silently losing it.
+  const bestRows = rows.filter((r) => isTrackingPlayGradeCutEligible(r.record) && grade(r) === "best_angle");
   for (const row of bestRows) accumulate(result.bestAngles, row);
   finalize(result.bestAngles, bestRows);
 
-  const leanRows = rows.filter((r) => r.record.no_bet !== true && grade(r) === "lean");
+  const leanRows = rows.filter((r) => isTrackingPlayGradeCutEligible(r.record) && grade(r) === "lean");
   for (const row of leanRows) accumulate(result.leans, row);
   finalize(result.leans, leanRows);
 
@@ -864,11 +874,11 @@ export async function computeTrackingAggregate(opts: {
       for (const r of rs) accumulate(m, r);
       finalize(m, rs);
       const ba = emptyMetrics();
-      const bestRs = rs.filter((r) => r.record.no_bet !== true && grade(r) === "best_angle");
+      const bestRs = rs.filter((r) => isTrackingPlayGradeCutEligible(r.record) && grade(r) === "best_angle");
       for (const r of bestRs) accumulate(ba, r);
       finalize(ba, bestRs);
       const le = emptyMetrics();
-      const leanRs = rs.filter((r) => r.record.no_bet !== true && grade(r) === "lean");
+      const leanRs = rs.filter((r) => isTrackingPlayGradeCutEligible(r.record) && grade(r) === "lean");
       for (const r of leanRs) accumulate(le, r);
       finalize(le, leanRs);
       out.push({ sport, market, metrics: m, bestAngles: ba, leans: le });

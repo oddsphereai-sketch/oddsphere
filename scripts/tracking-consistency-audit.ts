@@ -5,6 +5,7 @@ import {
   effectiveTrackingPlayGrade,
   filterCompleteUclTrackingCohorts,
   isTrackingRecordEligible,
+  isTrackingPlayGradeCutEligible,
   trackingDisplaySport,
   type AggregateMetrics,
   type SportMarketBucket,
@@ -195,7 +196,7 @@ function buildExpectedBuckets(rows: Row[]): CompactBucket[] {
     const bucket = createBucket(sport, market);
     for (const row of groupRows) {
       addResult(bucket.metrics, row);
-      if (row.record.no_bet === true) continue;
+      if (!isTrackingPlayGradeCutEligible(row.record)) continue;
       const effectiveGrade = effectiveTrackingPlayGrade(row.record);
       if (effectiveGrade === "best_angle") addResult(bucket.bestAngles, row);
       if (effectiveGrade === "lean") addResult(bucket.leans, row);
