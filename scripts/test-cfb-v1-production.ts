@@ -81,6 +81,7 @@ import { fetchBalldontlieNcaafQuarterbacks } from "../lib/services/football/ball
 import { ingestCfbFinalScores } from "../lib/services/football/cfbScoreIngestService";
 import {
   buildCfbOfficialTrackingRecords,
+  buildCfbDisplayedBookLineRecoveryRecords,
   buildCfbEspnOpeningRecoveryRecords,
   buildCfbNamedBookLineRecoveryRecords,
   buildCfbPublishedPregameRecoveryRecords,
@@ -2052,6 +2053,7 @@ assert.deepEqual(
 const lineLessRecoveryPayload = structuredClone(espnRecoveryPayload);
 lineLessRecoveryPayload.market.current = null;
 lineLessRecoveryPayload.market.currentBooks = [];
+delete lineLessRecoveryPayload.market.displayBooks;
 assert.deepEqual(
   candidateTrackingMarkets({
     payload: lineLessRecoveryPayload,
@@ -2060,6 +2062,61 @@ assert.deepEqual(
   }),
   ["moneyline"],
   "a game with no stored pregame spread or total line still locks its Moneyline prediction without fabricating markets",
+);
+const displayedLineRecoveryPayload = structuredClone(lineLessRecoveryPayload);
+const displayedFallbackBooks: NcaafBookOdds[] = [
+  { sportsbook: "betonline", observedAt: displayedLineRecoveryPayload.capturedAt },
+  { sportsbook: "onexbet", observedAt: new Date(Date.parse(displayedLineRecoveryPayload.capturedAt) - 1_000).toISOString() },
+].map(({ sportsbook, observedAt }) => ({
+  providerGameId: displayedLineRecoveryPayload.game.providerGameId,
+  provider: "sharpapi" as const,
+  providerEventId: "ncaaf_test_event",
+  sportsbook,
+  observedAt,
+  targetEligible: false,
+  marketObservedAt: { spread: observedAt, total: observedAt },
+  moneyline: null,
+  spread: { awayLine: 20.5, awayPrice: -115, homeLine: -20.5, homePrice: -115 },
+  total: { line: 55.5, overPrice: -115, underPrice: -115 },
+}));
+displayedLineRecoveryPayload.market.currentBooks = displayedFallbackBooks;
+displayedLineRecoveryPayload.market.displayBooks = displayedFallbackBooks;
+assert.deepEqual(
+  candidateTrackingMarkets({
+    payload: displayedLineRecoveryPayload,
+    mode: "published_pregame_accuracy_recovery",
+    publishedPregamePayload: displayedLineRecoveryPayload,
+  }),
+  ["moneyline", "spread", "total"],
+  "paired immutable member-display lines must remain in the tracking denominator even when no target book is eligible",
+);
+const displayedLineRecovery = buildCfbDisplayedBookLineRecoveryRecords({
+  payload: displayedLineRecoveryPayload,
+  gameId: 9001,
+  replayForecast: forecast,
+});
+assert.deepEqual(displayedLineRecovery.map((row) => row.market), ["spread", "total"]);
+assert.equal(Math.abs(displayedLineRecovery.find((row) => row.market === "spread")!.line_value!), 20.5);
+assert.equal(displayedLineRecovery.find((row) => row.market === "total")!.line_value, 55.5);
+assert.equal(displayedLineRecovery.every((row) => row.no_bet && !row.held && row.play_grade === "no_play"), true);
+assert.equal(displayedLineRecovery.every((row) => row.odds_american === null && row.market_probability === null && row.edge === null && row.expected_value === null), true);
+assert.equal(displayedLineRecovery.every((row) => row.prediction_source === "cfb_forward_evidence_displayed_book_line_accuracy_recovery"), true);
+const invalidDisplayedLinePayload = structuredClone(displayedLineRecoveryPayload);
+invalidDisplayedLinePayload.market.displayBooks = invalidDisplayedLinePayload.market.displayBooks!.map((book, index) => ({
+  ...book,
+  providerGameId: index === 0 ? "wrong-event" : book.providerGameId,
+  observedAt: index === 1 ? new Date(Date.parse(invalidDisplayedLinePayload.capturedAt) + 1).toISOString() : book.observedAt,
+  marketObservedAt: index === 1
+    ? {
+      spread: new Date(Date.parse(invalidDisplayedLinePayload.capturedAt) + 1).toISOString(),
+      total: new Date(Date.parse(invalidDisplayedLinePayload.capturedAt) + 1).toISOString(),
+    }
+    : book.marketObservedAt,
+}));
+assert.deepEqual(
+  buildCfbDisplayedBookLineRecoveryRecords({ payload: invalidDisplayedLinePayload, gameId: 9001, replayForecast: forecast }),
+  [],
+  "displayed-line recovery must reject wrong-event and post-capture quotes instead of fabricating a denominator",
 );
 const noExtraMarketPlan = planCfbTrackingRecordInsert({
   trackingGames: [{ externalId: 9201, decisions: [{ market: "moneyline" }] }],
