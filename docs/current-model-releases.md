@@ -153,6 +153,26 @@ Last reviewed: 2026-09-25
 
 ## CFB Daily Edge generalized weekly production release
 
+### Member-facing play-grade tracking parity (aggregate v11)
+
+- Active tracking aggregate contract is
+  `tracking_aggregate_v11_cfb_member_grade_parity_2026_09_27`. CFB Best Angle
+  and Lean performance cuts now follow the exact immutable grade displayed on
+  the member card. A CFB Lean whose locked offer was internally marked
+  shop/no-bet remains a Lean for grade-accuracy tracking instead of silently
+  disappearing from that cut. Other sports retain their existing
+  actionable-only Best Angle / Lean cuts.
+- For the September 26 slate, the member-facing CFB grade ledger is exactly
+  **4 Best Angles (3-1), 58 Leans (39-19), 75 Watchlists (46-29), and 161 No
+  Plays (101-60)**. The previous CFB Lean panel incorrectly showed only 27
+  rows (15-12), including just 3 of 34 Moneyline Leans. Correct Moneyline Lean
+  grade tracking is 34 rows at 25-9; Spread remains 20 at 12-8 and Total
+  remains 4 at 2-2.
+- This is a reader aggregation repair only. It changes no locked prediction,
+  score, probability, side, line, price, grade, action, stake, result, overall
+  W-L record, Daily Edge card, UI copy, label, or layout. Evidence and rollback:
+  `docs/model-audits/2026-09-27-cfb-play-grade-tracking-parity-v11.md`.
+
 ### Displayed fallback-line tracking recovery (writer r79; tracking r29)
 
 - Active sole writer / tracking record releases are
