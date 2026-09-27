@@ -18,6 +18,7 @@ import {
 } from "./cfbV1Decision";
 import type { CfbV1Forecast } from "./cfbV1Decision";
 import type { CfbEspnReferenceLine } from "./cfbEspnReferenceLine";
+import type { NcaafBookOdds } from "./balldontlieNcaafSlate";
 import {
   CFB_MARKET_SHARP_AWARE_PREVIOUS_PRODUCTION_RELEASE,
   CFB_MARKET_SHARP_AWARE_PRODUCTION_RELEASE,
@@ -25,7 +26,7 @@ import {
 import { assertMarketScopedFootballDecisions, FOOTBALL_MARKET_SCOPED_T60_TRACKING_RELEASE } from "./footballMarketScopedTracking";
 
 export const CFB_OFFICIAL_TRACKING_RECORD_RELEASE =
-  "cfb_official_tracking_record_2026_09_26_r28_named_line_recovery" as const;
+  "cfb_official_tracking_record_2026_09_27_r29_displayed_book_line_recovery" as const;
 
 export function cfbTrackingMarketsForPayload(payload: CfbForwardEvidencePayload): CfbV1Market[] {
   const markets = new Set<CfbV1Market>(payload.decisions.evaluatedBets.map((decision) => decision.market));
@@ -262,6 +263,90 @@ export function buildCfbNamedBookLineRecoveryRecords(args: {
       },
     })];
   });
+}
+
+/**
+ * Recover the exact paired line already exposed as immutable member context
+ * when no target-eligible named book occupied `market.current`. This is line
+ * provenance only: prices from a context-only book never become economics.
+ */
+export function buildCfbDisplayedBookLineRecoveryRecords(args: {
+  payload: CfbForwardEvidencePayload;
+  gameId: number;
+  replayForecast: CfbV1Forecast;
+}): PredictionRecordRow[] {
+  assertCfbPublishedPregameRecoveryPayload(args.payload);
+  assertCfbIndependentReplay(args.payload, args.replayForecast);
+  if (args.payload.authoritativeForecast?.status !== "market_anchor_unavailable_hold") {
+    throw new Error("CFB displayed-book recovery requires a held independent authoritative forecast.");
+  }
+  const externalId = providerIntegerId(args.payload.game.providerGameId, "game");
+  return (["spread", "total"] as const).flatMap((market) => {
+    const displayedBook = cfbDisplayedLineRecoveryBook(args.payload, market);
+    if (!displayedBook) return [];
+    const outlook = buildCfbForwardMarketOutlooks({
+      forecast: args.replayForecast,
+      playbookLine: null,
+      namedBookLine: displayedBook,
+      espnReferenceLine: null,
+    })[market];
+    if (!outlook || outlook.line === null) return [];
+    return [buildNoPlayForecastRecord({
+      payload: args.payload,
+      gameId: args.gameId,
+      externalId,
+      market,
+      reason: "pregame_displayed_book_line_accuracy_recovery",
+      reasonCodes: ["published_before_kickoff", "stored_displayed_book_line", "no_reconstructed_betting_economics"],
+      outlook,
+      predictionSource: "cfb_forward_evidence_displayed_book_line_accuracy_recovery",
+      recovery: true,
+      recoveryDetails: {
+        source: "immutable_published_displayed_book_line",
+        sportsbook: displayedBook.sportsbook,
+        provider: displayedBook.provider ?? "balldontlie",
+        provider_event_id: displayedBook.providerEventId ?? null,
+        observed_at: outlook.contextObservedAt,
+        immutable_independent_pmf_sha256: createHash("sha256").update(JSON.stringify(args.replayForecast.pmf)).digest("hex"),
+      },
+    })];
+  });
+}
+
+export function cfbDisplayedLineRecoveryBook(
+  payload: CfbForwardEvidencePayload,
+  market: "spread" | "total",
+): NcaafBookOdds | null {
+  const capturedAt = Date.parse(payload.capturedAt);
+  const gameStart = Date.parse(payload.game.scheduledStart);
+  if (!Number.isFinite(capturedAt) || !Number.isFinite(gameStart)) return null;
+  const candidates = (payload.market.displayBooks ?? payload.market.currentBooks).filter((book) => {
+    if (book.providerGameId !== payload.game.providerGameId) return false;
+    const observedAt = Date.parse(book.marketObservedAt?.[market] ?? book.observedAt);
+    if (!Number.isFinite(observedAt) || observedAt > capturedAt || observedAt >= gameStart) return false;
+    if (market === "spread") {
+      return Boolean(book.spread &&
+        Number.isFinite(book.spread.awayLine) && Number.isFinite(book.spread.homeLine) &&
+        Number.isFinite(book.spread.awayPrice) && Number.isFinite(book.spread.homePrice) &&
+        Math.abs(book.spread.awayLine + book.spread.homeLine) <= 1e-9);
+    }
+    return Boolean(book.total && Number.isFinite(book.total.line) && book.total.line > 0 &&
+      Number.isFinite(book.total.overPrice) && Number.isFinite(book.total.underPrice));
+  });
+  if (candidates.length === 0) return null;
+  const lineFor = (book: NcaafBookOdds) => market === "spread" ? book.spread!.homeLine : book.total!.line;
+  const orderedLines = candidates.map(lineFor).sort((a, b) => a - b);
+  const middle = Math.floor(orderedLines.length / 2);
+  const center = orderedLines.length % 2 === 0
+    ? (orderedLines[middle - 1]! + orderedLines[middle]!) / 2
+    : orderedLines[middle]!;
+  const tolerance = market === "spread" ? 1 : 2;
+  return candidates
+    .filter((book) => Math.abs(lineFor(book) - center) <= tolerance)
+    .sort((first, second) =>
+      Number(second.targetEligible !== false) - Number(first.targetEligible !== false) ||
+      Date.parse(second.marketObservedAt?.[market] ?? second.observedAt) - Date.parse(first.marketObservedAt?.[market] ?? first.observedAt) ||
+      first.sportsbook.localeCompare(second.sportsbook))[0] ?? null;
 }
 
 function assertCfbNamedBookRecoveryLine(

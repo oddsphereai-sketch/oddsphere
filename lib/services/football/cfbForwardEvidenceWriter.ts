@@ -42,12 +42,14 @@ import {
 } from "./cfbMarketSharpAwareShadow";
 import {
   buildCfbOfficialTrackingRecords,
+  buildCfbDisplayedBookLineRecoveryRecords,
   buildCfbEspnOpeningRecoveryRecords,
   buildCfbNamedBookLineRecoveryRecords,
   buildCfbPublishedPregameRecoveryRecords,
   cfbPublishedPregameRecoveryMarkets,
   cfbProviderIntegerId,
   cfbTrackingMarketsForPayload,
+  cfbDisplayedLineRecoveryBook,
 } from "./cfbOfficialTrackingRecord";
 import {
   CFB_ESPN_REFERENCE_LINE_RELEASE,
@@ -91,7 +93,7 @@ import {
 } from "./cfbForwardMemberSnapshotStore";
 
 export const CFB_FORWARD_WRITER_RELEASE =
-  "cfb_forward_evidence_writer_2026_09_26_r78_named_line_tracking_recovery" as const;
+  "cfb_forward_evidence_writer_2026_09_27_r79_displayed_book_line_tracking_recovery" as const;
 export const CFB_FORWARD_MAX_QB_TEAMS_PER_RUN = 24 as const;
 export const CFB_FORWARD_MAX_SHARP_FALLBACK_GAMES_PER_RUN = 24 as const;
 export const CFB_FORWARD_MAX_ESPN_PROSPECTIVE_GAMES_PER_RUN = 32 as const;
@@ -1185,6 +1187,7 @@ async function writeOfficialTracking(args: {
       .some((market) => planned.has(market) && !availableKeys.has(`${externalId}:${market}`));
   });
   const namedBookRecords: PredictionRecordRow[] = [];
+  const displayedBookRecords: PredictionRecordRow[] = [];
   const espnRecords: PredictionRecordRow[] = [];
   let trackingProviderRequests = 0;
   const replayForecasts = new Map<string, CfbV1Forecast>();
@@ -1205,8 +1208,13 @@ async function writeOfficialTracking(args: {
     replayForecasts.set(payload.game.providerGameId, replayForecast);
     const gameId = gameIds.get(payload.game.providerGameId)!;
     namedBookRecords.push(...buildCfbNamedBookLineRecoveryRecords({ payload, gameId, replayForecast }));
+    displayedBookRecords.push(...buildCfbDisplayedBookLineRecoveryRecords({ payload, gameId, replayForecast }));
   }
-  const availableAfterNamed = new Set([...availableKeys, ...namedBookRecords.map((record) => `${record.external_id}:${record.market}`)]);
+  const availableAfterNamed = new Set([
+    ...availableKeys,
+    ...namedBookRecords.map((record) => `${record.external_id}:${record.market}`),
+    ...displayedBookRecords.map((record) => `${record.external_id}:${record.market}`),
+  ]);
   const espnCandidates = supplementalCandidates.filter((candidate) => {
     const externalId = cfbProviderIntegerId(candidate.payload.game.providerGameId, "game");
     const planned = new Set(candidateTrackingMarkets(candidate));
@@ -1232,7 +1240,7 @@ async function writeOfficialTracking(args: {
   const { records, missing } = planCfbTrackingRecordInsert({
     trackingGames,
     existingKeys,
-    candidateRecords: [...standardRecords, ...namedBookRecords, ...espnRecords],
+    candidateRecords: [...standardRecords, ...namedBookRecords, ...displayedBookRecords, ...espnRecords],
   });
   if (records.length > 0) {
     const { data, error } = await args.client.from("prediction_records").insert(records as unknown as Record<string, unknown>[]).select("id");
@@ -1287,6 +1295,8 @@ export function candidateTrackingMarkets(candidate: CfbTrackingCandidate): CfbV1
       payload.contextualEvidenceCapture?.prior.outcome.pmf.sha256) {
       if (payload.market.current?.spread) markets.add("spread");
       if (payload.market.current?.total) markets.add("total");
+      if (cfbDisplayedLineRecoveryBook(payload, "spread")) markets.add("spread");
+      if (cfbDisplayedLineRecoveryBook(payload, "total")) markets.add("total");
     }
   }
   return (["moneyline", "spread", "total"] as const).filter((market) => markets.has(market));

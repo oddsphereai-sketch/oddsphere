@@ -153,6 +153,27 @@ Last reviewed: 2026-09-25
 
 ## CFB Daily Edge generalized weekly production release
 
+### Displayed fallback-line tracking recovery (writer r79; tracking r29)
+
+- Active sole writer / tracking record releases are
+  `cfb_forward_evidence_writer_2026_09_27_r79_displayed_book_line_tracking_recovery` /
+  `cfb_official_tracking_record_2026_09_27_r29_displayed_book_line_recovery`.
+  A held immutable pregame payload can now recover Spread and Total accuracy records from the
+  same complete paired fallback-book line already retained for member display when no
+  target-eligible book occupied `market.current`. The line must match the exact provider game,
+  be observed no later than the immutable capture and before kickoff, remain internally paired,
+  and survive deterministic cross-book representative-line filtering. The exact independent PMF
+  is replayed and verified against its stored hash and summary before it is evaluated at that
+  line. Prices remain context-only and odds, edge, EV, recommendation, stake, and ROI remain null.
+- The September 26 audit therefore adds only Southern–Jackson State Spread and Total at the real
+  stored fallback lines (Jackson State -20.5 and 55.5), moving the immutable denominator from
+  100/98/98 to 100/99/99 for Moneyline/Spread/Total. Prairie View–Grambling remains Moneyline-only
+  because no Spread or Total existed in any stored pregame evidence. No line is fabricated to
+  force equal counts. Forecasts, PMFs, scores, member cards, sides, grades, actions, stakes, copy,
+  labels, layouts, provider calls, cadence, and the `prediction_pipeline:cfb` lease are unchanged.
+  Promotions / demotions / actionable changes are 0 / 0 / 0. Evidence and rollback:
+  `docs/model-audits/2026-09-27-cfb-displayed-line-tracking-recovery-r79.md`.
+
 ### Stored named-book tracking recovery (writer r78; tracking r28)
 
 - Active sole writer / tracking record releases are
