@@ -4,7 +4,7 @@ import { buildNflPlayerPropsTrackingRows } from "./nflPlayerPropsProductionContr
 import type { NflPlayerPropsObservationSnapshot } from "./nflPlayerPropsContract";
 
 export const NFL_PLAYER_PROPS_TRACKING_RELEASE =
-  "nfl_player_props_tracking_2026_09_28_r14_current_role_coherent_posterior" as const;
+  "nfl_player_props_tracking_2026_09_28_r15_qb_workload_marriage" as const;
 
 export async function writeLockedNflPlayerPropsTracking(args: {
   client: SupabaseClient;

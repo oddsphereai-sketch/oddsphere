@@ -44,7 +44,7 @@ import {
 } from "./nflPlayerPropsPrediction";
 
 export const NFL_PLAYER_PROPS_WRITER_RELEASE =
-  "nfl_player_props_writer_2026_09_28_r31_current_role_coherent_posterior" as const;
+  "nfl_player_props_writer_2026_09_28_r32_qb_workload_marriage" as const;
 export const NFL_PLAYER_PROPS_PRODUCTION_INCLUDE_OPENINGS = true as const;
 export const NFL_PLAYER_PROPS_PRODUCTION_COLLECTION_CALL_MAXIMUM = (
   1
@@ -101,6 +101,17 @@ export type NflPlayerPropsWriterResult = {
   apiCallsMaximum: number;
   healthFindings: string[];
   forecastTelemetry: NflPlayerPropsForecastTelemetry;
+  candidateImpact?: {
+    matchedRows: number;
+    addedRows: number;
+    removedRows: number;
+    projectionChanges: number;
+    forecastSideChanges: number;
+    promotions: number;
+    demotions: number;
+    precedingActionables: number;
+    candidateActionables: number;
+  };
 };
 
 export function summarizeNflPlayerPropsForecastTelemetry(
@@ -227,6 +238,21 @@ export async function runNflPlayerPropsProductionWriter(args: {
     nextBoard,
     previous,
   });
+  const candidateImpact = args.apply ? undefined : compareNflPlayerPropsCandidateImpact(
+    reconcileNflPlayerPropsProductionSnapshot({
+      season: args.season,
+      week: args.week,
+      evaluatedAt: args.now,
+      nextBoard: buildNflPlayerPropsRuntimeBoard({
+        offers,
+        features,
+        evaluatedAt: args.now,
+        auditPrecedingPassingYardsOnly: true,
+      }),
+      previous,
+    }),
+    snapshot,
+  );
   let closingPricesUpdated = 0;
   if (args.apply) {
     await writeNflPlayerPropsCurrentSeasonState({ client: args.client, state: currentSeason.state });
@@ -272,11 +298,51 @@ export async function runNflPlayerPropsProductionWriter(args: {
     settledRecords: settlement.settled,
     apiCallsMaximum,
     forecastTelemetry: summarizeNflPlayerPropsForecastTelemetry(snapshot),
+    ...(candidateImpact ? { candidateImpact } : {}),
     healthFindings: [...new Set([
       ...collection.snapshot.healthFindings,
       ...context.healthHolds,
       ...(settlement.deferredGames > 0 ? [`NFL_PLAYER_PROPS_SETTLEMENT_GAMES_DEFERRED:${settlement.deferredGames}`] : []),
       ...(settlement.recordReadLimitReached ? ["NFL_PLAYER_PROPS_SETTLEMENT_RECORD_READ_LIMIT_REACHED"] : []),
     ])].sort(),
+  };
+}
+
+function compareNflPlayerPropsCandidateImpact(
+  preceding: NflPlayerPropsProductionSnapshot,
+  candidate: NflPlayerPropsProductionSnapshot,
+): NonNullable<NflPlayerPropsWriterResult["candidateImpact"]> {
+  const rowKey = (row: NflPlayerPropsProductionSnapshot["memberDecisions"][number]): string => [
+    row.gameId, row.providerPlayerId ?? row.playerName.toLowerCase(), row.market, row.line,
+    row.side, row.sportsbook.toLowerCase(),
+  ].join("|");
+  const precedingRows = new Map(preceding.memberDecisions.map((row) => [rowKey(row), row]));
+  const candidateRows = new Map(candidate.memberDecisions.map((row) => [rowKey(row), row]));
+  let matchedRows = 0;
+  let projectionChanges = 0;
+  let forecastSideChanges = 0;
+  let promotions = 0;
+  let demotions = 0;
+  const actionable = (grade: string): boolean => grade === "Best Angle" || grade === "Lean";
+  for (const [key, next] of candidateRows) {
+    const prior = precedingRows.get(key);
+    if (!prior) continue;
+    matchedRows += 1;
+    if (prior.projection !== next.projection) projectionChanges += 1;
+    if (prior.side !== "yes" && prior.projection !== null && next.projection !== null
+      && (prior.projection > prior.line) !== (next.projection > next.line)) forecastSideChanges += 1;
+    if (!actionable(prior.grade) && actionable(next.grade)) promotions += 1;
+    if (actionable(prior.grade) && !actionable(next.grade)) demotions += 1;
+  }
+  return {
+    matchedRows,
+    addedRows: [...candidateRows.keys()].filter((key) => !precedingRows.has(key)).length,
+    removedRows: [...precedingRows.keys()].filter((key) => !candidateRows.has(key)).length,
+    projectionChanges,
+    forecastSideChanges,
+    promotions,
+    demotions,
+    precedingActionables: preceding.memberDecisions.filter((row) => actionable(row.grade)).length,
+    candidateActionables: candidate.memberDecisions.filter((row) => actionable(row.grade)).length,
   };
 }
