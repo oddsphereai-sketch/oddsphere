@@ -1,7 +1,7 @@
 {
-  "decisionRelease": "nfl_player_props_decision_2026_09_28_r14_injury_context_continuity",
-  "modelRelease": "nfl_player_props_distribution_model_2026_09_28_r10_injury_context_continuity",
-  "calibrationRelease": "nfl_player_props_distribution_calibration_2026_09_28_r11_injury_context_continuity",
+  "decisionRelease": "nfl_player_props_decision_2026_09_28_r15_current_role_coherent_posterior",
+  "modelRelease": "nfl_player_props_distribution_model_2026_09_28_r11_current_role_coherent_posterior",
+  "calibrationRelease": "nfl_player_props_distribution_calibration_2026_09_28_r12_current_role_coherent_posterior",
   "touchdownModelRelease": "nfl_player_props_anytime_td_model_2026_08_25_r3_shared_context",
   "touchdownCalibrationRelease": "nfl_player_props_anytime_td_calibration_2026_08_25_r3_shared_context",
   "marketBoardRelease": "nfl_player_props_exact_market_board_2026_09_01_r2_cross_line_opening",
@@ -9,9 +9,9 @@
   "noQuotas": true,
   "predictionSetPolicy": {
     "scope": "displayed_prediction_only",
-    "overUnder": "published_projection_vs_exact_line_with_posterior_tie_break",
+    "overUnder": "canonical_posterior_median_vs_exact_line",
     "touchdown": "ranked_expected_distinct_scorers_by_team",
-    "changesProbabilitiesPricesGradesOrActionability": false
+    "changesProbabilitiesPricesGradesOrActionability": true
   },
   "lockLeadMinutes": 60,
   "maximumQuoteAgeHours": 6,
@@ -30,6 +30,9 @@
   },
   "quarterbackRole": {
     "requiresExpectedStarterIdentity": true,
+    "currentMultiBookPassingMarketMaySupersedeOlderDepth": true,
+    "minimumMarketRoleBooks": 2,
+    "hardAvailabilityMaximumGameAgeDays": 6,
     "confirmedStarterParticipationFloor": 0.9,
     "projectedStarterParticipationFloor": 0.75,
     "unavailableStatuses": ["out", "inactive", "injured reserve", "ir", "doubtful"]

@@ -13,6 +13,7 @@ import playerStates3Json from "./modelArtifacts/nflPlayerPropsRuntimePlayers3.js
 import touchdownJson from "./modelArtifacts/nflPlayerPropsRuntimeTouchdown.json";
 import type { NflPlayerPropMarket, NflPlayerPropsObservationSnapshot } from "./nflPlayerPropsContract";
 import type { NflPlayerPropsInferenceContext } from "./nflPlayerPropsInferenceContext";
+import type { DailyEdgeAvailabilityPlayer } from "../dailyEdge/gameAvailability";
 import type {
   NflPlayerPropsCurrentSeasonState,
   NflPlayerPropsCurrentSeasonStat,
@@ -27,15 +28,15 @@ import {
 export const NFL_PLAYER_PROPS_PORTABLE_ARTIFACT_RELEASE =
   "nfl_player_props_runtime_2026_09_01_r4_cross_market_movement" as const;
 export const NFL_PLAYER_PROPS_RUNTIME_RELEASE =
-  "nfl_player_props_runtime_2026_09_28_r15_injury_context_continuity" as const;
+  "nfl_player_props_runtime_2026_09_28_r16_current_role_coherent_posterior" as const;
 export const NFL_PLAYER_PROPS_BOARD_RELEASE =
-  "nfl_player_props_board_2026_09_28_r18_injury_context_continuity" as const;
+  "nfl_player_props_board_2026_09_28_r19_current_role_coherent_posterior" as const;
 export const NFL_PLAYER_PROPS_DECISION_RELEASE =
-  "nfl_player_props_decision_2026_09_28_r14_injury_context_continuity" as const;
+  "nfl_player_props_decision_2026_09_28_r15_current_role_coherent_posterior" as const;
 export const NFL_PLAYER_PROPS_MODEL_RELEASE =
-  "nfl_player_props_distribution_model_2026_09_28_r10_injury_context_continuity" as const;
+  "nfl_player_props_distribution_model_2026_09_28_r11_current_role_coherent_posterior" as const;
 export const NFL_PLAYER_PROPS_CALIBRATION_RELEASE =
-  "nfl_player_props_distribution_calibration_2026_09_28_r11_injury_context_continuity" as const;
+  "nfl_player_props_distribution_calibration_2026_09_28_r12_current_role_coherent_posterior" as const;
 export const NFL_PLAYER_PROPS_PASSING_MARKET_RELEASE =
   "nfl_player_props_market_residual_calibration_2026_09_03_r8_single_application" as const;
 export const NFL_PLAYER_PROPS_MARKET_COHERENT_PROJECTION_RELEASE =
@@ -53,6 +54,8 @@ export const NFL_PLAYER_PROPS_QB_ROLE_FLOORS = {
 } as const;
 export const NFL_PLAYER_PROPS_MAXIMUM_RAW_MARKET_DIVERGENCE = 0.48 as const;
 export const NFL_PLAYER_PROPS_MATERIAL_PRICE_MOVEMENT_PP = 0.025 as const;
+export const NFL_PLAYER_PROPS_HARD_AVAILABILITY_MAX_GAME_AGE_DAYS = 6 as const;
+export const NFL_PLAYER_PROPS_MARKET_ROLE_MINIMUM_BOOKS = 2 as const;
 
 type TreeNode = {
   value: number; featureIndex: number; threshold: number; missingGoToLeft: boolean;
@@ -311,11 +314,13 @@ export function buildNflPlayerPropsRuntimeFeatureRows(args: {
   }
   const currentSeason = buildCurrentSeasonFeatureIndex(args.currentSeasonState);
   const contextByGame = new Map(args.context.games.map((game) => [game.canonicalGameId, game]));
+  const marketExpectedQuarterbacks = inferMarketExpectedQuarterbacks(args.snapshot, args.context);
   return [...candidates.values()].map((candidate) => {
     const game = contextByGame.get(candidate.gameId);
     if (!game) throw new Error(`NFL props runtime context is missing ${candidate.gameId}.`);
     const roster = [...game.awayDepth.roster, ...game.homeDepth.roster].find((player) => normalizeName(player.name) === normalizeName(candidate.playerName));
-    const injury = game.injuries.teams.flatMap((team) => team.players).find((player) => normalizeName(player.name) === normalizeName(candidate.playerName));
+    const reportedInjury = game.injuries.teams.flatMap((team) => team.players).find((player) => normalizeName(player.name) === normalizeName(candidate.playerName));
+    const injury = nflPlayerPropsCurrentGameAvailability(reportedInjury, game.scheduledStart);
     const playerState = artifact.playerStates[normalizeName(candidate.playerName)];
     const ambiguous = artifact.ambiguousPlayerNames.includes(normalizeName(candidate.playerName));
     const team = normalizeTeam(roster ? ([game.awayDepth, game.homeDepth].find((depth) => depth.roster.includes(roster))?.team ?? candidate.playerTeam ?? "") : (candidate.playerTeam ?? ""));
@@ -330,6 +335,12 @@ export function buildNflPlayerPropsRuntimeFeatureRows(args: {
     ].filter((value): value is string => value !== null);
     const impliedPoints = impliedTeamPoints(game, team);
     const teamDepth = team === home ? game.homeDepth : game.awayDepth;
+    const marketExpectedQuarterback = marketExpectedQuarterbacks.get(`${candidate.gameId}|${team}`) ?? null;
+    const expectedQuarterback = marketExpectedQuarterback ?? (teamDepth.expectedStartingQuarterback ? {
+      name: teamDepth.expectedStartingQuarterback.name,
+      starterStatus: teamDepth.starterStatus,
+      capturedAt: teamDepth.capturedAt,
+    } : null);
     const features: Record<string, number | null> = {};
     for (const name of new Set([...artifact.featureNames, ...artifact.touchdown.featureNames])) features[name] = null;
     mergeNumeric(features, playerState); mergeNumeric(features, artifact.teamStates[team]); mergeNumeric(features, artifact.opponentStates[opponent]);
@@ -345,14 +356,10 @@ export function buildNflPlayerPropsRuntimeFeatureRows(args: {
     return {
       gameId: candidate.gameId, playerName: candidate.playerName, team, opponent,
       position: roster?.position ?? null, featureAsOf: args.context.capturedAt,
-      roleFingerprint: stableRoleFingerprint({ roster, injury }), scoreEligible: holds.length === 0,
+      roleFingerprint: stableRoleFingerprint({ roster, injury, expectedQuarterback }), scoreEligible: holds.length === 0,
       healthHolds: holds, teamImpliedPoints: impliedPoints,
       teamImpliedTouchdowns: features.team_implied_touchdowns, features,
-      expectedQuarterback: teamDepth.expectedStartingQuarterback ? {
-        name: teamDepth.expectedStartingQuarterback.name,
-        starterStatus: teamDepth.starterStatus,
-        capturedAt: teamDepth.capturedAt,
-      } : null,
+      expectedQuarterback,
       availability: {
         listed: Boolean(injury), status: injury?.status ?? null, detail: injury?.detail ?? null,
         reportedAt: injury?.reportedAt ?? null, reportUpdatedAt: game.injuries.reportUpdatedAt,
@@ -360,6 +367,80 @@ export function buildNflPlayerPropsRuntimeFeatureRows(args: {
       },
     };
   });
+}
+
+export function nflPlayerPropsCurrentGameAvailability(
+  injury: DailyEdgeAvailabilityPlayer | undefined,
+  scheduledStart: string,
+): DailyEdgeAvailabilityPlayer | undefined {
+  if (!injury) return undefined;
+  const expiringGameStatus = ["out", "inactive"].includes(injury.status.trim().toLowerCase());
+  if (!expiringGameStatus || !injury.reportedAt) return injury;
+  const ageAtGame = Date.parse(scheduledStart) - Date.parse(injury.reportedAt);
+  if (!Number.isFinite(ageAtGame)) return injury;
+  return ageAtGame > NFL_PLAYER_PROPS_HARD_AVAILABILITY_MAX_GAME_AGE_DAYS * 86_400_000
+    ? undefined
+    : injury;
+}
+
+function inferMarketExpectedQuarterbacks(
+  snapshot: NflPlayerPropsObservationSnapshot,
+  context: NflPlayerPropsInferenceContext,
+): Map<string, NflPlayerPropsRuntimeFeatureRow["expectedQuarterback"]> {
+  type Candidate = {
+    gameId: string; team: string; playerName: string; books: Set<string>;
+    passingYardsLine: number; passingAttemptsLine: number; observedAt: string;
+  };
+  const candidates = new Map<string, Candidate>();
+  const gameById = new Map(context.games.map((game) => [game.canonicalGameId, game]));
+  for (const row of snapshot.observations) {
+    if (row.isOpening || row.isLive || !row.canonicalGameId || !row.playerName) continue;
+    if (row.market !== "passing_yards" && row.market !== "passing_attempts") continue;
+    const game = gameById.get(row.canonicalGameId);
+    if (!game) continue;
+    const depth = [game.awayDepth, game.homeDepth].find((teamDepth) => teamDepth.roster.some((player) =>
+      player.position?.trim().toLowerCase() === "qb" && normalizeName(player.name) === normalizeName(row.playerName!)));
+    if (!depth) continue;
+    const starterScale = row.market === "passing_yards" ? row.line >= 100 : row.line >= 15;
+    if (!starterScale) continue;
+    const key = `${row.canonicalGameId}|${normalizeTeam(depth.team)}|${normalizeName(row.playerName)}`;
+    const candidate = candidates.get(key) ?? {
+      gameId: row.canonicalGameId,
+      team: normalizeTeam(depth.team),
+      playerName: row.playerName,
+      books: new Set<string>(),
+      passingYardsLine: Number.NEGATIVE_INFINITY,
+      passingAttemptsLine: Number.NEGATIVE_INFINITY,
+      observedAt: row.observedAt,
+    };
+    candidate.books.add(normalizeBook(row.sportsbook));
+    if (row.market === "passing_yards") candidate.passingYardsLine = Math.max(candidate.passingYardsLine, row.line);
+    if (row.market === "passing_attempts") candidate.passingAttemptsLine = Math.max(candidate.passingAttemptsLine, row.line);
+    if (Date.parse(row.observedAt) > Date.parse(candidate.observedAt)) candidate.observedAt = row.observedAt;
+    candidates.set(key, candidate);
+  }
+  const byTeam = new Map<string, Candidate[]>();
+  for (const candidate of candidates.values()) {
+    if (candidate.books.size < NFL_PLAYER_PROPS_MARKET_ROLE_MINIMUM_BOOKS) continue;
+    const key = `${candidate.gameId}|${candidate.team}`;
+    byTeam.set(key, [...(byTeam.get(key) ?? []), candidate]);
+  }
+  const selected = new Map<string, NflPlayerPropsRuntimeFeatureRow["expectedQuarterback"]>();
+  for (const [key, teamCandidates] of byTeam) {
+    const ranked = [...teamCandidates].sort((left, right) =>
+      right.books.size - left.books.size
+      || right.passingYardsLine - left.passingYardsLine
+      || right.passingAttemptsLine - left.passingAttemptsLine
+      || left.playerName.localeCompare(right.playerName));
+    const first = ranked[0];
+    if (!first) continue;
+    const second = ranked[1];
+    if (second && first.books.size === second.books.size
+      && first.passingYardsLine === second.passingYardsLine
+      && first.passingAttemptsLine === second.passingAttemptsLine) continue;
+    selected.set(key, { name: first.playerName, starterStatus: "projected", capturedAt: first.observedAt });
+  }
+  return selected;
 }
 
 type CurrentSeasonTeamGame = {
@@ -646,9 +727,7 @@ export function buildNflPlayerPropsRuntimeBoard(args: {
       calibratedOverProbability: finalOver,
       independentProjection: projection,
     });
-    const publishedProjection = independentBooks === 0 && !passingProjection?.evidence
-      ? projection
-      : posterior.projection;
+    const publishedProjection = posterior.projection;
     const projectionEvidence = passingProjection?.evidence ?? {
       release: NFL_PLAYER_PROPS_MARKET_COHERENT_PROJECTION_RELEASE,
       source: "single_posterior_distribution" as const,
