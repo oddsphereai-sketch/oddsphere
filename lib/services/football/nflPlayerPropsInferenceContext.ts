@@ -22,7 +22,7 @@ import type { DailyEdgeGameAvailability } from "../dailyEdge/gameAvailability";
 import type { NflPlayerPropsObservationSnapshot } from "./nflPlayerPropsContract";
 
 export const NFL_PLAYER_PROPS_INFERENCE_CONTEXT_RELEASE =
-  "nfl_player_props_inference_context_2026_09_16_r4_game_scoped_availability" as const;
+  "nfl_player_props_inference_context_2026_09_28_r5_last_known_injury_continuity" as const;
 
 export type NflPlayerPropsExcludedGame = {
   canonicalGameId: string;
@@ -142,6 +142,7 @@ export function buildNflPlayerPropsInferenceContextFromForwardEvidence(args: {
   const capturedAtMs = Date.parse(args.capturedAt);
   if (!Number.isFinite(capturedAtMs)) throw new Error("NFL props shared context capturedAt is invalid.");
   const latest = new Map<string, NflForwardStoredEvidence & { payload: NflForwardEvidencePayload }>();
+  const latestWithInjuries = new Map<string, NflForwardStoredEvidence & { payload: NflForwardEvidencePayload }>();
   for (const row of args.evidence) {
     if (row.payload.schemaRelease !== NFL_FORWARD_EVIDENCE_SCHEMA_RELEASE) continue;
     if (row.payload.season !== args.snapshot.season || row.payload.week !== args.snapshot.week) continue;
@@ -149,6 +150,10 @@ export function buildNflPlayerPropsInferenceContextFromForwardEvidence(args: {
     const current = latest.get(row.providerGameId);
     if (!current || compareEvidence(row, current) > 0) {
       latest.set(row.providerGameId, row as NflForwardStoredEvidence & { payload: NflForwardEvidencePayload });
+    }
+    const injuryCurrent = latestWithInjuries.get(row.providerGameId);
+    if (row.payload.injuries && (!injuryCurrent || compareEvidence(row, injuryCurrent) > 0)) {
+      latestWithInjuries.set(row.providerGameId, row as NflForwardStoredEvidence & { payload: NflForwardEvidencePayload });
     }
   }
   const sourceRows: Array<NflForwardStoredEvidence & { payload: NflForwardEvidencePayload }> = [];
@@ -161,12 +166,13 @@ export function buildNflPlayerPropsInferenceContextFromForwardEvidence(args: {
       continue;
     }
     const payload = row.payload;
+    const injuryRow = payload.injuries ? row : latestWithInjuries.get(game.providerGameId);
     if (Date.parse(payload.game.scheduledStart) !== Date.parse(game.scheduledStart)
       || payload.game.away.abbreviation !== game.awayTeam
       || payload.game.home.abbreviation !== game.homeTeam) {
       throw new Error(`NFL props shared context game identity mismatch for ${game.providerGameId}.`);
     }
-    if (!payload.injuries) {
+    if (!injuryRow?.payload.injuries) {
       excludedGames.push({ canonicalGameId: game.providerGameId, reason: "injury_evidence_missing" });
       continue;
     }
@@ -175,6 +181,7 @@ export function buildNflPlayerPropsInferenceContextFromForwardEvidence(args: {
       continue;
     }
     sourceRows.push(row);
+    if (injuryRow.id !== row.id) sourceRows.push(injuryRow);
     games.push({
       canonicalGameId: game.providerGameId,
       scheduledStart: game.scheduledStart,
@@ -182,7 +189,7 @@ export function buildNflPlayerPropsInferenceContextFromForwardEvidence(args: {
       homeTeam: game.homeTeam,
       awayDepth: payload.startersAndDepth.away,
       homeDepth: payload.startersAndDepth.home,
-      injuries: payload.injuries,
+      injuries: injuryRow.payload.injuries,
       mainMarket: { capturedAt: payload.capturedAt, currentBooks: payload.market.currentBooks },
     });
   }
@@ -199,7 +206,8 @@ export function buildNflPlayerPropsInferenceContextFromForwardEvidence(args: {
     snapshot: args.snapshot.snapshotRelease,
     generatedAt: args.snapshot.generatedAt,
     capturedAt: args.capturedAt,
-    evidence: sourceRows.map((row) => ({ id: row.id, capturedAt: row.capturedAt, sha256: row.payloadSha256 })),
+    evidence: [...new Map(sourceRows.map((row) => [row.id, row])).values()]
+      .map((row) => ({ id: row.id, capturedAt: row.capturedAt, sha256: row.payloadSha256 })),
   })).digest("hex");
   return {
     release: NFL_PLAYER_PROPS_INFERENCE_CONTEXT_RELEASE,

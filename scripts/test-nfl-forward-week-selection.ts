@@ -1,10 +1,11 @@
 import assert from "node:assert/strict";
 import {
   NFL_FORWARD_WEEK_SELECTION_RELEASE,
+  resolveNflOperationalWeek,
   resolveNflForwardWeek,
 } from "../lib/services/football/nflForwardWeekSelection";
 
-assert.match(NFL_FORWARD_WEEK_SELECTION_RELEASE, /tuesday_et_rollover/);
+assert.match(NFL_FORWARD_WEEK_SELECTION_RELEASE, /completed_slate_rollover/);
 assert.equal(resolveNflForwardWeek({
   season: 2026,
   configuredWeek: 1,
@@ -40,4 +41,23 @@ assert.throws(() => resolveNflForwardWeek({
   configuredWeek: 0,
 }), /configured forward week/);
 
-console.log("NFL forward week selection: Tuesday ET rollover, operator floor, and Week 18 cap passed.");
+assert.equal(resolveNflOperationalWeek({
+  season: 2026,
+  configuredWeek: 1,
+  now: new Date("2026-09-28T20:00:00.000Z"),
+  scheduledStarts: ["2026-09-27T17:00:00.000Z", "2026-09-28T00:20:00.000Z"],
+}), 4, "a completed Sunday-only Week 3 board advances after the established Monday 2 a.m. ET rollover");
+assert.equal(resolveNflOperationalWeek({
+  season: 2026,
+  configuredWeek: 1,
+  now: new Date("2026-09-28T20:00:00.000Z"),
+  scheduledStarts: ["2026-09-27T17:00:00.000Z", "2026-09-29T00:15:00.000Z"],
+}), 3, "a Monday-night game keeps Week 3 selected");
+assert.equal(resolveNflOperationalWeek({
+  season: 2026,
+  configuredWeek: 1,
+  now: new Date("2026-09-28T20:00:00.000Z"),
+  scheduledStarts: [],
+}), 3, "missing published schedule evidence fails closed to the calendar week");
+
+console.log("NFL forward week selection: calendar floor, completed-slate rollover, Monday protection, and Week 18 cap passed.");

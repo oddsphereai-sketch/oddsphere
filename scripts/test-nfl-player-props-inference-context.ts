@@ -101,7 +101,7 @@ function evidence(
   } as unknown as NflForwardStoredEvidence;
 }
 
-assert.equal(NFL_PLAYER_PROPS_INFERENCE_CONTEXT_RELEASE, "nfl_player_props_inference_context_2026_09_16_r4_game_scoped_availability");
+assert.equal(NFL_PLAYER_PROPS_INFERENCE_CONTEXT_RELEASE, "nfl_player_props_inference_context_2026_09_28_r5_last_known_injury_continuity");
 const context = buildNflPlayerPropsInferenceContextFromForwardEvidence({
   snapshot,
   capturedAt: "2026-08-25T12:00:00.000Z",
@@ -144,5 +144,23 @@ const partialContext = buildNflPlayerPropsInferenceContextFromForwardEvidence({
 assert.deepEqual(partialContext.games.map((game) => game.canonicalGameId), ["game"]);
 assert.deepEqual(partialContext.excludedGames, [{ canonicalGameId: "game-two", reason: "injury_evidence_missing" }]);
 assert.ok(partialContext.healthHolds.includes("game_game-two_injury_evidence_missing"));
+
+const continuityContext = buildNflPlayerPropsInferenceContextFromForwardEvidence({
+  snapshot: partialSnapshot,
+  capturedAt: "2026-08-25T12:00:00.000Z",
+  evidence: [
+    evidence("2026-08-25T11:00:00.000Z", "unlocked", "Current QB"),
+    evidence("2026-08-25T10:00:00.000Z", "opening", "Earlier QB", {
+      id: "game-two", away: "BUF", home: "DET", start: "2026-09-10T20:00:00.000Z", injuries: true,
+    }),
+    evidence("2026-08-25T11:00:00.000Z", "unlocked", "Other QB", {
+      id: "game-two", away: "BUF", home: "DET", start: "2026-09-10T20:00:00.000Z", injuries: false,
+    }),
+  ],
+});
+assert.deepEqual(continuityContext.games.map((game) => game.canonicalGameId), ["game", "game-two"]);
+assert.equal(continuityContext.games[1]?.injuries.reportUpdatedAt, "2026-08-25T10:00:00.000Z");
+assert.equal(continuityContext.games[1]?.mainMarket.capturedAt, "2026-08-25T11:00:00.000Z");
+assert.deepEqual(continuityContext.excludedGames, []);
 
 console.log("NFL player-props shared inference context: checksum-backed reuse, as-of selection, game-scoped exclusions, and zero provider-call budget passed.");
