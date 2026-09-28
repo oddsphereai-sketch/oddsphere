@@ -27,6 +27,10 @@ import {
   NFL_WEEK_ONE_EVIDENCE_BOARD_RELEASE,
   buildNflWeekOneEvidenceBoard,
 } from "../lib/services/football/nflWeekOneEvidenceBoard";
+import {
+  latestVerifiedInjuriesForGame,
+  nflEvidenceCapturedAt,
+} from "../lib/services/football/nflForwardEvidenceWriter";
 
 const game: NflPreviewGame = {
   providerGameId: "1001",
@@ -334,7 +338,7 @@ assert.match(writer, /currentBooks/);
 assert.match(writer, /comparableCurrentBooks/);
 assert.match(writer, /multibook_consensus_unavailable/);
 assert.doesNotMatch(writer, /readLegacyNflForwardEvidence|readPriorNflForwardEvidence|readPreviousNflForwardEvidence/, "the live writer must not scan superseded large JSON releases");
-assert.match(writer, /nfl_forward_evidence_writer_2026_09_28_r49_next_window_state_order/);
+assert.match(writer, /nfl_forward_evidence_writer_2026_09_28_r50_injury_continuity/);
 assert.match(
   writer,
   /const opening = operationalOpening\(\{[\s\S]*providerOpening: slate\.openingOddsByGame[\s\S]*allowProviderUpgrade: plan\.stage === "unlocked"[\s\S]*\}\);/,
@@ -502,6 +506,47 @@ const evidenceRows: NflForwardStoredEvidence[] = [
   { ...stored("opening", early), payload: completePayload(early, -140) },
   { ...stored("unlocked", "2026-09-01T18:00:00.000Z"), payload: completePayload("2026-09-01T18:00:00.000Z", -150) },
 ];
+
+const verifiedInjuries = {
+  eventId: game.providerGameId,
+  homeTeamId: game.home.id,
+  awayTeamId: game.away.id,
+  teams: [],
+} as unknown as NflForwardEvidencePayload["injuries"];
+const injuryContinuityRows = [
+  {
+    ...stored("unlocked", "2026-09-09T18:00:00.000Z"),
+    payload: {
+      ...completePayload("2026-09-09T18:00:00.000Z", -150),
+      injuries: verifiedInjuries,
+    },
+  },
+  {
+    ...stored("unlocked", "2026-09-09T22:00:00.000Z"),
+    payload: {
+      ...completePayload("2026-09-09T22:00:00.000Z", -150),
+      injuries: null,
+    },
+  },
+] as NflForwardStoredEvidence[];
+assert.equal(
+  latestVerifiedInjuriesForGame(injuryContinuityRows, game.providerGameId),
+  verifiedInjuries,
+  "an empty refresh retains the latest verified injury payload for the exact game",
+);
+assert.equal(
+  latestVerifiedInjuriesForGame(injuryContinuityRows, "different-game"),
+  null,
+  "injury continuity must never cross provider game identity",
+);
+assert.equal(
+  nflEvidenceCapturedAt("2026-09-09T23:20:00.000Z", [{
+    ...completePayload("2026-09-09T23:20:00.000Z", -150).market.current,
+    observedAt: "2026-09-09T23:20:01.250Z",
+  }]),
+  "2026-09-09T23:20:01.250Z",
+  "the evidence timestamp must include a provider quote that lands just after cron invocation",
+);
 const board = buildNflWeekOneEvidenceBoard(evidenceRows);
 assert.equal(board.release, NFL_WEEK_ONE_EVIDENCE_BOARD_RELEASE);
 assert.equal(board.games.length, 1);

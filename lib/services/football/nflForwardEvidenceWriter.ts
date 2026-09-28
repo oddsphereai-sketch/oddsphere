@@ -90,7 +90,7 @@ import {
 } from "./balldontlieNflWeeklyProjectionShadow";
 
 export const NFL_FORWARD_WRITER_RELEASE =
-  "nfl_forward_evidence_writer_2026_09_28_r49_next_window_state_order" as const;
+  "nfl_forward_evidence_writer_2026_09_28_r50_injury_continuity" as const;
 
 export type NflForwardWriterResult = {
   writerRelease: typeof NFL_FORWARD_WRITER_RELEASE;
@@ -314,6 +314,10 @@ export async function runNflForwardEvidenceWriter(args: {
       "comparable-book",
       false,
     );
+    const capturedAt = nflEvidenceCapturedAt(args.now, [current, ...currentBooks, ...comparableCurrentBooks]);
+    const t60LagMinutes = plan.stage === "t60" && plan.cutoffAt
+      ? (Date.parse(capturedAt) - Date.parse(plan.cutoffAt)) / 60_000
+      : plan.t60LagMinutes;
     const providerOpeningBooks = slate.openingOddsAllBooksByGame[plan.game.providerGameId] ?? [];
     const comparableProviderOpeningBooks = slate.openingOddsComparableBooksByGame[plan.game.providerGameId] ?? [];
     const previous = latestEvidenceForGame(historicalExisting, plan.game.providerGameId);
@@ -321,18 +325,19 @@ export async function runNflForwardEvidenceWriter(args: {
       previous,
       providerOpening: slate.openingOddsByGame[plan.game.providerGameId] ?? null,
       current,
-      capturedAt: args.now,
+      capturedAt,
       allowProviderUpgrade: plan.stage === "unlocked" &&
         Date.parse(args.now) < Date.parse(plan.game.scheduledStart),
     });
     const awayDepth = depthForTeam(plan.game.away.abbreviation, rosters.byTeam, previous, "away");
     const homeDepth = depthForTeam(plan.game.home.abbreviation, rosters.byTeam, previous, "home");
     const playbookLine = linesByGame[plan.game.providerGameId]
-      ? normalizePlaybookLine(args.now, linesByGame[plan.game.providerGameId]!) : null;
+      ? normalizePlaybookLine(capturedAt, linesByGame[plan.game.providerGameId]!) : null;
     const playbookSplits = splitsByGame[plan.game.providerGameId]
-      ? normalizePlaybookSplits(args.now, splitsByGame[plan.game.providerGameId]!) : null;
+      ? normalizePlaybookSplits(capturedAt, splitsByGame[plan.game.providerGameId]!) : null;
     const sharpSplits = sharpResult.splitsByGame[plan.game.providerGameId] ?? null;
-    const injuries = availabilityByGame.get(plan.game.providerGameId) ?? null;
+    const injuries = availabilityByGame.get(plan.game.providerGameId) ??
+      latestVerifiedInjuriesForGame(historicalExisting, plan.game.providerGameId);
     const weather = weatherByGame.get(plan.game.providerGameId)!.snapshot;
     const paidProjectionShadow = paidProjectionShadows[plan.game.providerGameId];
     const rosterAndDepth = awayDepth.roster.length > 0 && homeDepth.roster.length > 0;
@@ -349,7 +354,7 @@ export async function runNflForwardEvidenceWriter(args: {
       comparableCurrentBooks.length < 2 ? "multibook_consensus_unavailable" : null,
       comparableCurrentBooks.length < 3 ? "r6_leave_one_out_consensus_unavailable" : null,
       !weatherCoverage ? "weather_unavailable" : null,
-      plan.stage === "t60" && (plan.t60LagMinutes ?? 0) > NFL_T60_MAX_CAPTURE_LAG_MINUTES
+      plan.stage === "t60" && (t60LagMinutes ?? 0) > NFL_T60_MAX_CAPTURE_LAG_MINUTES
         ? "t60_capture_late"
         : null,
     ].filter((value): value is string => value !== null);
@@ -360,8 +365,8 @@ export async function runNflForwardEvidenceWriter(args: {
       startersAndDepth: { away: awayDepth, home: homeDepth },
       injuries,
       stage: plan.stage,
-      capturedAt: args.now,
-      t60LagMinutes: plan.t60LagMinutes,
+      capturedAt,
+      t60LagMinutes,
       coverageHealthHolds: holds,
     });
     const weeklyRawSignal = !paidProjectionShadow && currentSeasonState && current.spread &&
@@ -409,7 +414,7 @@ export async function runNflForwardEvidenceWriter(args: {
             directionHomeMarginCorrection: weeklyRawSignal.directionHomeMarginCorrection,
           } : undefined,
           paidTeamScore: paidProjectionShadow,
-          evaluatedAt: args.now,
+          evaluatedAt: capturedAt,
         })
       : baseOutcome;
     const resolved = resolveNflTargetExcludedProduction({
@@ -417,7 +422,7 @@ export async function runNflForwardEvidenceWriter(args: {
       awayTeam: plan.game.away.abbreviation,
       homeTeam: plan.game.home.abbreviation,
       gameStartsAt: plan.game.scheduledStart,
-      evaluatedAt: args.now,
+      evaluatedAt: capturedAt,
       baseOutcome,
       incumbentOutcome,
       current,
@@ -464,8 +469,8 @@ export async function runNflForwardEvidenceWriter(args: {
     const trackingEligibility = nflForwardT60TrackingEligibility({
       stage: plan.stage,
       captureTiming: plan.captureTiming,
-      t60LagMinutes: plan.t60LagMinutes,
-      capturedAt: new Date(args.now).toISOString(),
+      t60LagMinutes,
+      capturedAt,
       providerGameId: plan.game.providerGameId,
       gameStartsAt: plan.game.scheduledStart,
       decisions: production.evaluatedBets,
@@ -485,9 +490,9 @@ export async function runNflForwardEvidenceWriter(args: {
       slateGameCount: slate.games.length,
       stage: plan.stage,
       captureTiming: plan.captureTiming,
-      capturedAt: new Date(args.now).toISOString(),
+      capturedAt,
       cutoffAt: plan.cutoffAt,
-      t60LagMinutes: plan.t60LagMinutes,
+      t60LagMinutes,
       game: plan.game,
       market: {
         current,
@@ -748,6 +753,29 @@ function completePlaybookSplits(value: NflForwardPlaybookSplitSet | null): boole
 function latestEvidenceForGame(rows: NflForwardStoredEvidence[], providerGameId: string): NflForwardStoredEvidence | null {
   return rows.filter((row) => row.providerGameId === providerGameId)
     .sort((first, second) => Date.parse(second.capturedAt) - Date.parse(first.capturedAt))[0] ?? null;
+}
+
+/** Preserve provider provenance while containing continuity to one exact game. */
+export function latestVerifiedInjuriesForGame(
+  rows: NflForwardStoredEvidence[],
+  providerGameId: string,
+): NflForwardEvidencePayload["injuries"] {
+  return rows
+    .filter((row) => row.providerGameId === providerGameId && row.payload.injuries !== null)
+    .sort((first, second) => Date.parse(second.capturedAt) - Date.parse(first.capturedAt))[0]
+    ?.payload.injuries ?? null;
+}
+
+/** Ensure a provider quote can never appear newer than the decision consuming it. */
+export function nflEvidenceCapturedAt(writerNow: string, books: NflPreviewBookOdds[]): string {
+  const writerTime = Date.parse(writerNow);
+  if (!Number.isFinite(writerTime)) throw new Error("NFL writer capture time is invalid.");
+  const latestQuoteTime = books.reduce((latest, book) => {
+    const observedAt = Date.parse(book.observedAt);
+    if (!Number.isFinite(observedAt)) throw new Error(`NFL quote time is invalid for ${book.sportsbook}.`);
+    return Math.max(latest, observedAt);
+  }, writerTime);
+  return new Date(latestQuoteTime).toISOString();
 }
 
 function requiredCurrentOdds(value: NflPreviewBookOdds | undefined, gameId: string): NflPreviewBookOdds {
