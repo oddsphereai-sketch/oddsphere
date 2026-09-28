@@ -276,7 +276,7 @@ assert.equal(spread.modelRelease, NFL_V1_EVENT_CONTAINED_SPREAD_MODEL_RELEASE);
 assert.equal(spread.grade, "Lean");
 assert.equal(spread.modelProbability, reference.spread.awayCoverProbability);
 assert.equal(total.modelRelease, NFL_V1_MARKET_EVIDENCE_TOTAL_MODEL_RELEASE);
-assert.equal(total.grade, "Best Angle");
+assert.equal(total.grade, "Watchlist", "a Total without verified same-book direction must not be actionable");
 assert.equal(total.side, "Over 44.5");
 assert.equal(total.evaluatedQuote.sportsbook, "fanatics");
 assert.equal(total.evaluatedQuote.price, -105);
@@ -333,8 +333,8 @@ const weeklyBase = getNflV1WeekOneOutcomeForecast({
   homeTeam,
   weeklyFallback: { projectedHomeMargin: 4.25, marketTotal: 44.5 },
 });
-assert.equal(NFL_V1_WEEKLY_OUTCOME_MODEL_RELEASE, "nfl_v1_weekly_paid_team_score_2026_09_28_r9_market_reading");
-assert.equal(NFL_V1_MARKET_EVIDENCE_REPRESENTATIVE_SCORE_RELEASE, "nfl_v1_market_evidence_representative_score_2026_09_28_r8_paid_team_score");
+assert.equal(NFL_V1_WEEKLY_OUTCOME_MODEL_RELEASE, "nfl_v1_weekly_paid_team_score_2026_09_28_r10_market_marriage");
+assert.equal(NFL_V1_MARKET_EVIDENCE_REPRESENTATIVE_SCORE_RELEASE, "nfl_v1_market_evidence_representative_score_2026_09_28_r9_market_marriage");
 assert.equal(NFL_V1_WEEKLY_REPRESENTATIVE_SCORE_CENTER_WEIGHT, 0.2);
 const representativeMargin = weeklyBase.representativeHomeScore - weeklyBase.representativeAwayScore;
 const representativeTotal = weeklyBase.representativeHomeScore + weeklyBase.representativeAwayScore;
@@ -384,7 +384,7 @@ const circaAway = buildNflMarketEvidenceOutcomeForecast({
   sharpSplits: sharpSplitSet({ homeMoneyPct: 20, homeBetsPct: 70 }),
   evaluatedAt,
 });
-assert.equal(NFL_V1_MARKET_EVIDENCE_OUTCOME_RELEASE, "nfl_v1_market_evidence_outcome_2026_09_28_r9_paid_team_score");
+assert.equal(NFL_V1_MARKET_EVIDENCE_OUTCOME_RELEASE, "nfl_v1_market_evidence_outcome_2026_09_28_r10_market_marriage");
 assert.equal(NFL_V1_MARKET_WEIGHT, 0.75);
 assert.equal(NFL_V1_SHARP_SPLIT_MAX_SHIFT_POINTS, 1.5);
 assert.equal(NFL_V1_PUBLIC_SPLIT_MAX_SHIFT_POINTS, 0.75);
@@ -593,7 +593,7 @@ const paidMarriage = buildNflMarketEvidenceOutcomeForecast({
 assert.equal(paidMarriage.marketEvidence?.paidTeamScore?.release, NFL_V1_PAID_TEAM_SCORE_MODEL_RELEASE);
 assert.equal(paidMarriage.marketEvidence?.paidTeamScore?.inputRelease, NFL_PAID_PROJECTION_SHADOW_RELEASE);
 assert.equal(paidMarriage.marketEvidence?.paidTeamScore?.totalEvidencePolicy,
-  "independent_score_no_market_mean_shift");
+  "verified_same_book_direction_from_independent_score");
 assert.ok(
   paidMarriage.expectedHomeScore - paidMarriage.expectedAwayScore >
     paidBase.expectedHomeScore - paidBase.expectedAwayScore,
@@ -603,6 +603,137 @@ assert.ok(Math.abs(paidMarriage.expectedHomeScore + paidMarriage.expectedAwaySco
   "failed Total movement/split evidence must not overwrite the paid independent Total center");
 assert.equal(paidMarriage.homeWinProbability > 0.5,
   paidMarriage.expectedHomeScore > paidMarriage.expectedAwayScore);
+
+const paidTotalMoveOver = buildNflMarketEvidenceOutcomeForecast({
+  baseForecast: paidBase,
+  footballHomeMargin: 4.25,
+  current,
+  operationalOpening: {
+    quote: {
+      ...current,
+      observedAt: "2026-08-25T09:00:00.000Z",
+      total: { ...current.total!, line: 43.5 },
+    },
+  },
+  movementCurrent: current,
+  playbookLine: { capturedAt: evaluatedAt, homeSpread: -3.5, total: 44.5 },
+  playbookSplits: splitSet({ homeMoneyPct: 50, homeBetsPct: 50 }),
+  sharpSplits: sharpSplitSet({ homeMoneyPct: 50, homeBetsPct: 50 }),
+  spreadDirectionCandidate: true,
+  totalDirectionCandidate: true,
+  paidTeamScore,
+  evaluatedAt,
+});
+assert.equal(paidTotalMoveOver.marketEvidence?.totalDirection?.status, "available");
+assert.equal(paidTotalMoveOver.marketEvidence?.totalDirection?.side, "over");
+assert.ok(paidTotalMoveOver.expectedHomeScore + paidTotalMoveOver.expectedAwayScore > 44.5,
+  "verified upward Total movement must be able to flip an independent Under into an Over");
+assert.ok(
+  !Number.isInteger(paidTotalMoveOver.expectedAwayScore * 2) ||
+    !Number.isInteger(paidTotalMoveOver.expectedHomeScore * 2),
+  "market-married expected scores must remain continuous rather than quantized to whole or half points",
+);
+assert.ok(nflV1WeekOneLineProbabilities({
+  forecast: paidTotalMoveOver,
+  homeSpread: current.spread!.homeLine,
+  totalLine: current.total!.line,
+}).total.overProbability > 0.5);
+
+const paidOverTeamScore = { ...paidTeamScore, projectedTotal: 46 };
+const paidOverBase = buildNflPaidTeamScoreBaseForecast({
+  baseForecast: weeklyBase,
+  paidTeamScore: paidOverTeamScore,
+});
+const paidTotalMoveUnder = buildNflMarketEvidenceOutcomeForecast({
+  baseForecast: paidOverBase,
+  footballHomeMargin: 4.25,
+  current,
+  operationalOpening: {
+    quote: {
+      ...current,
+      observedAt: "2026-08-25T09:00:00.000Z",
+      total: { ...current.total!, line: 45.5 },
+    },
+  },
+  movementCurrent: current,
+  playbookLine: null,
+  playbookSplits: null,
+  sharpSplits: null,
+  spreadDirectionCandidate: true,
+  totalDirectionCandidate: true,
+  paidTeamScore: paidOverTeamScore,
+  evaluatedAt,
+});
+assert.equal(paidTotalMoveUnder.marketEvidence?.totalDirection?.status, "available");
+assert.equal(paidTotalMoveUnder.marketEvidence?.totalDirection?.side, "under");
+assert.ok(paidTotalMoveUnder.expectedHomeScore + paidTotalMoveUnder.expectedAwayScore < 44.5,
+  "verified downward Total movement must be able to flip an independent Over into an Under");
+assert.ok(nflV1WeekOneLineProbabilities({
+  forecast: paidTotalMoveUnder,
+  homeSpread: current.spread!.homeLine,
+  totalLine: current.total!.line,
+}).total.underProbability > 0.5);
+
+const paidTotalFlat = buildNflMarketEvidenceOutcomeForecast({
+  baseForecast: paidOverBase,
+  footballHomeMargin: 4.25,
+  current,
+  operationalOpening: {
+    quote: { ...current, observedAt: "2026-08-25T09:00:00.000Z" },
+  },
+  movementCurrent: current,
+  playbookLine: null,
+  playbookSplits: null,
+  sharpSplits: null,
+  spreadDirectionCandidate: true,
+  totalDirectionCandidate: true,
+  paidTeamScore: paidOverTeamScore,
+  evaluatedAt,
+});
+assert.equal(paidTotalFlat.marketEvidence?.totalDirection?.status, "unavailable");
+assert.ok(Math.abs(paidTotalFlat.expectedHomeScore + paidTotalFlat.expectedAwayScore - 46) < 0.1,
+  "missing or flat Total movement must leave the independent paid Total center intact");
+assert.ok(Math.abs(paidOverBase.expectedHomeScore + paidOverBase.expectedAwayScore - 46) < 0.1,
+  "opposing market replays must always recompute from the immutable independent base");
+
+const favorableTotalBooks = comparableCurrentBooks.map((book) => ({
+  ...book,
+  total: { ...book.total!, line: 44.5, overPrice: -140, underPrice: 120 },
+}));
+const unfavorableTotalBooks = comparableCurrentBooks.map((book) => ({
+  ...book,
+  total: { ...book.total!, line: 44.5, overPrice: 160, underPrice: -180 },
+}));
+const favorableTotalBundle = buildNflV1ActionableGradeBundle({
+  providerGameId,
+  awayTeam,
+  homeTeam,
+  gameStartsAt,
+  current: favorableTotalBooks[0]!,
+  comparableCurrentBooks: favorableTotalBooks,
+  shadowMoneyline: shadow(),
+  outcomeForecast: paidTotalMoveUnder,
+});
+const unfavorableTotalBundle = buildNflV1ActionableGradeBundle({
+  providerGameId,
+  awayTeam,
+  homeTeam,
+  gameStartsAt,
+  current: unfavorableTotalBooks[0]!,
+  comparableCurrentBooks: unfavorableTotalBooks,
+  shadowMoneyline: shadow(),
+  outcomeForecast: paidTotalMoveUnder,
+});
+const favorableTotalDecision = favorableTotalBundle.evaluatedBets.find((decision) => decision.market === "total")!;
+const unfavorableTotalDecision = unfavorableTotalBundle.evaluatedBets.find((decision) => decision.market === "total")!;
+assert.equal(favorableTotalDecision.side, unfavorableTotalDecision.side);
+assert.equal(favorableTotalDecision.modelProbability, unfavorableTotalDecision.modelProbability);
+assert.equal(favorableTotalDecision.side, "Under 44.5");
+assert.notEqual(favorableTotalDecision.grade, unfavorableTotalDecision.grade,
+  "price-aware play grades may change only after the forecast side and probability are frozen");
+assert.equal(paidTotalMoveUnder.expectedHomeScore + paidTotalMoveUnder.expectedAwayScore,
+  paidTotalMoveUnder.expectedHomeScore + paidTotalMoveUnder.expectedAwayScore,
+  "play-grade evaluation must not mutate the released score forecast");
 assert.throws(() => buildNflMarketEvidenceOutcomeForecast({
   baseForecast: paidBase,
   footballHomeMargin: 4.25,

@@ -5,6 +5,41 @@ inputs, probabilities, projections, grades, promotions/demotions, calibration, p
 or stakes. It exists to prevent mixed model eras, competing writers, accidental board
 flattening, and load spikes.
 
+## Owner-approved provisional exception: NFL complete market-reading marriage r23
+
+On 2026-09-28 Daniel Mengel explicitly directed Oddsphere to activate the reviewed complete NFL
+market-reading marriage without a forward-shadow delay after the release-pure current-season
+replay showed improvement over r22. This exception is limited to the r23 release family recorded
+in `docs/current-model-releases.md`. It does not authorize member copy or labels, layout changes,
+stakes, provider-call growth, another writer or schedule, retroactive lock changes, result leakage,
+or a reusable relaxation for another model.
+
+The owner acknowledges that the 47 settled Weeks 1-3 games are opened chronological evidence,
+not a pristine future holdout or a guaranteed future win rate. The r22 paid independent team-score
+center remains the authoritative starting point. Verified chronological same-book line movement
+may perform a real and reversible Spread or Total direction correction by rebuilding the joint
+score distribution from that independent base; the correction is not a capped cosmetic nudge and
+must never compound across refreshes. Circa is the preferred named split source, another named
+sharp-book split may substitute, and Playbook multi-book money/ticket data is the lower-trust
+fallback. Missing evidence is unavailable, never neutral or fabricated. Split agreement,
+disagreement and reverse-line behavior remain source-separated internal context; the reviewed
+replay does not authorize a split-only direction flip.
+
+The exact-price reliability comparison must select the representative quote before the forecast
+side, probability and score are frozen. Grade calibration runs strictly downstream and cannot
+change the selected quote, prediction, probability distribution or displayed score. Every final
+Moneyline, Spread and Total side must agree with the same joint score distribution. The reviewed
+board must retain at least 80% of the r22 actionables, contain tested promotions and demotions,
+retain both Total flip directions, and contain no nonpositive-EV actionable.
+
+The existing `prediction_pipeline:nfl` lease, sole writer, bounded provider cadence, append-only
+evidence, target exclusion, immutable T-60 records, failure-preserving member snapshot and
+zero-stake policy remain unchanged. Locked or started games keep their exact preceding release;
+r23 applies only to newly generated unlocked/T-60 evidence. Hold or roll back the complete r23
+family if any game or market disappears, a score/side contradiction appears, the action board
+falls below the reviewed boundary, a writer or lease overlaps, an older release overwrites r23,
+or the live reader cannot prove the expected release transition.
+
 ## Owner-approved provisional exception: NFL paid team-score activation r22
 
 On 2026-09-28 Daniel Mengel explicitly rejected a forward-shadow waiting period and directed

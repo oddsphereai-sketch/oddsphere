@@ -334,7 +334,7 @@ assert.match(writer, /currentBooks/);
 assert.match(writer, /comparableCurrentBooks/);
 assert.match(writer, /multibook_consensus_unavailable/);
 assert.doesNotMatch(writer, /readLegacyNflForwardEvidence|readPriorNflForwardEvidence|readPreviousNflForwardEvidence/, "the live writer must not scan superseded large JSON releases");
-assert.match(writer, /nfl_forward_evidence_writer_2026_09_28_r47_paid_team_score_activation/);
+assert.match(writer, /nfl_forward_evidence_writer_2026_09_28_r48_market_marriage/);
 assert.match(
   writer,
   /const opening = operationalOpening\(\{[\s\S]*providerOpening: slate\.openingOddsByGame[\s\S]*allowProviderUpgrade: plan\.stage === "unlocked"[\s\S]*\}\);/,

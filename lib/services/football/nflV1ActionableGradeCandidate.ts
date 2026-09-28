@@ -29,9 +29,9 @@ export const NFL_V1_ACTIONABLE_GRADE_POLICY_RELEASE =
 export const NFL_V1_ACTIONABLE_GRADE_MEMBER_RELEASE =
   NFL_V1_MEMBER_RELEASE;
 export const NFL_V1_EVENT_CONTAINED_SPREAD_MODEL_RELEASE =
-  "nfl_v1_spread_market_direction_2026_09_28_r9_paid_team_score" as const;
+  "nfl_v1_spread_market_direction_2026_09_28_r10_market_marriage" as const;
 export const NFL_V1_MARKET_EVIDENCE_TOTAL_MODEL_RELEASE =
-  "nfl_v1_total_market_evidence_2026_09_28_r8_paid_team_score" as const;
+  "nfl_v1_total_market_evidence_2026_09_28_r9_market_marriage" as const;
 
 export const NFL_V1_MONEYLINE_BEST_ANGLE_MINIMUM_EXPECTED_VALUE = 0.02 as const;
 export const NFL_V1_MONEYLINE_BEST_ANGLE_MINIMUM_EDGE_PERCENTAGE_POINTS = 4.0 as const;
@@ -56,6 +56,9 @@ export const NFL_V1_TOTAL_WATCHLIST_MINIMUM_PROBABILITY = 0.525 as const;
 export const NFL_V1_TOTAL_WATCHLIST_MINIMUM_EXPECTED_VALUE = 0.0 as const;
 export const NFL_V1_TOTAL_WATCHLIST_MINIMUM_EDGE_PERCENTAGE_POINTS = 0.0 as const;
 export const NFL_V1_TOTAL_WATCHLIST_MINIMUM_CUSHION = 0.5 as const;
+export const NFL_V1_TOTAL_MOVEMENT_LEAN_MINIMUM_PROBABILITY = 0.525 as const;
+export const NFL_V1_TOTAL_MOVEMENT_LEAN_MINIMUM_EXPECTED_VALUE = 0.01 as const;
+export const NFL_V1_TOTAL_MOVEMENT_LEAN_MINIMUM_EDGE_PERCENTAGE_POINTS = 2.5 as const;
 
 export type NflV1ActionableGradeBundle = {
   evaluatedBets: NflRegularEvaluatedBetDecision[];
@@ -83,6 +86,7 @@ type MarketEvaluation = {
   quote: { sportsbook: string; line: number; price: number; observedAt: string };
   grade: CandidateGrade;
   modelRelease: string;
+  exactPriceReliability: boolean;
 };
 
 export function buildNflV1ActionableGradeBundle(args: {
@@ -257,10 +261,21 @@ function selectMarket(args: {
         edgePercentagePoints,
         cushion,
         penalty,
+        totalDirectionAvailable: args.market === "total" &&
+          args.forecast.marketEvidence?.totalDirection?.status === "available",
       });
-      // A fragmented board can still publish a coherent prediction with one
-      // target-excluded same-line comparator. Action requires at least two.
-      const grade = otherFairs.length >= 2 || gradeRank(qualifiedGrade) < gradeRank("Lean")
+      // A stable target-excluded anchor already excludes the evaluated family
+      // and proves at least three independent market families. It can replace
+      // a second exact-line comparator for reliability, but never any of the
+      // probability, EV, edge, or cushion gates above.
+      const targetExcludedFamilyCount = args.market === "spread"
+        ? args.forecast.targetExclusion?.marginFamilyCount
+        : args.forecast.targetExclusion?.totalFamilyCount;
+      const targetExcludedReliability = args.forecast.targetExclusion?.status === "target_excluded_market" &&
+        (targetExcludedFamilyCount ?? 0) >= 3;
+      const exactPriceReliability = otherFairs.length >= 2 || targetExcludedReliability;
+      const grade = exactPriceReliability ||
+        gradeRank(qualifiedGrade) < gradeRank("Lean")
         ? qualifiedGrade
         : "Watchlist";
       return {
@@ -284,15 +299,17 @@ function selectMarket(args: {
         modelRelease: args.market === "spread"
           ? NFL_V1_EVENT_CONTAINED_SPREAD_MODEL_RELEASE
           : NFL_V1_MARKET_EVIDENCE_TOTAL_MODEL_RELEASE,
+        exactPriceReliability,
       };
     };
     const evaluation = evaluate(primaryProbability);
     return evaluation ? [evaluation] : [];
   });
   return candidates.sort((first, second) =>
-    gradeRank(second.grade) - gradeRank(first.grade) ||
+    Number(second.exactPriceReliability) - Number(first.exactPriceReliability) ||
     second.expectedValue - first.expectedValue ||
     second.edgePercentagePoints - first.edgePercentagePoints ||
+    second.probability - first.probability ||
     second.quote.price - first.quote.price ||
     first.quote.sportsbook.localeCompare(second.quote.sportsbook))[0] ?? null;
 }
@@ -304,6 +321,7 @@ function marketGrade(args: {
   edgePercentagePoints: number;
   cushion: number;
   penalty: number;
+  totalDirectionAvailable: boolean;
 }): CandidateGrade {
   const lean = args.market === "spread"
     ? args.probability >= NFL_V1_SPREAD_LEAN_MINIMUM_PROBABILITY &&
@@ -322,9 +340,17 @@ function marketGrade(args: {
       : args.probability >= NFL_V1_TOTAL_BEST_ANGLE_MINIMUM_PROBABILITY &&
         args.expectedValue >= NFL_V1_TOTAL_BEST_ANGLE_MINIMUM_EXPECTED_VALUE);
   if (bestAngle) {
-    return "Best Angle";
+    return args.market !== "total" || args.totalDirectionAvailable ? "Best Angle" : "Watchlist";
   }
-  if (lean) return "Lean";
+  if (lean) {
+    return args.market !== "total" || args.totalDirectionAvailable ? "Lean" : "Watchlist";
+  }
+  if (args.market === "total" && args.totalDirectionAvailable &&
+      args.probability >= NFL_V1_TOTAL_MOVEMENT_LEAN_MINIMUM_PROBABILITY &&
+      args.expectedValue >= NFL_V1_TOTAL_MOVEMENT_LEAN_MINIMUM_EXPECTED_VALUE &&
+      args.edgePercentagePoints >= NFL_V1_TOTAL_MOVEMENT_LEAN_MINIMUM_EDGE_PERCENTAGE_POINTS) {
+    return "Lean";
+  }
   const watchlist = args.market === "spread"
     ? args.probability >= NFL_V1_SPREAD_WATCHLIST_MINIMUM_PROBABILITY &&
       args.expectedValue >= NFL_V1_SPREAD_WATCHLIST_MINIMUM_EXPECTED_VALUE &&
