@@ -1,6 +1,10 @@
 import artifactJson from "./modelArtifacts/nflV1WeekOneOutcome.json";
 import type { NflPreviewBookOdds } from "./balldontlieNflPreviewSlate";
 import {
+  NFL_PAID_PROJECTION_SHADOW_RELEASE,
+  type NflPaidProjectionShadow,
+} from "./balldontlieNflWeeklyProjectionShadow";
+import {
   applyNflV1LogitCorrection,
   getNflV1ActionableGradeCorrection,
   hasNflV1ActionableGradeCorrection,
@@ -22,15 +26,17 @@ export const NFL_V1_OUTCOME_PROBABILITY_RELEASE =
 export const NFL_V1_REPRESENTATIVE_SCORE_POLICY_RELEASE =
   "nfl_v1_representative_score_2026_08_23_r2" as const;
 export const NFL_V1_WEEKLY_OUTCOME_MODEL_RELEASE =
-  "nfl_v1_weekly_market_anchored_outcome_2026_09_27_r8_pressure_direction" as const;
+  "nfl_v1_weekly_paid_team_score_2026_09_28_r9_market_reading" as const;
 export const NFL_V1_WEEKLY_OUTCOME_DISTRIBUTION_RELEASE =
-  "nfl_pooled_discrete_residual_distribution_2026_09_27_r7_pressure_direction" as const;
+  "nfl_pooled_discrete_residual_distribution_2026_09_28_r8_paid_team_score" as const;
 export const NFL_V1_WEEKLY_OUTCOME_PROBABILITY_RELEASE =
-  "nfl_v1_weekly_pooled_discrete_probability_2026_09_27_r7_pressure_direction" as const;
+  "nfl_v1_weekly_pooled_discrete_probability_2026_09_28_r8_paid_team_score" as const;
 export const NFL_V1_MARKET_EVIDENCE_OUTCOME_RELEASE =
-  "nfl_v1_market_evidence_outcome_2026_09_27_r8_pressure_direction" as const;
+  "nfl_v1_market_evidence_outcome_2026_09_28_r9_paid_team_score" as const;
 export const NFL_V1_MARKET_EVIDENCE_REPRESENTATIVE_SCORE_RELEASE =
-  "nfl_v1_market_evidence_representative_score_2026_09_27_r7_pressure_direction" as const;
+  "nfl_v1_market_evidence_representative_score_2026_09_28_r8_paid_team_score" as const;
+export const NFL_V1_PAID_TEAM_SCORE_MODEL_RELEASE =
+  "nfl_v1_paid_team_score_model_2026_09_28_r1_market_reading" as const;
 export const NFL_V1_WEEKLY_RAW_SIGNAL_RELEASE =
   "nfl_weekly_raw_signal_2026_09_27_r3_pressure_direction" as const;
 export const NFL_V1_WEEKLY_REPRESENTATIVE_SCORE_CENTER_WEIGHT = 0.2 as const;
@@ -73,7 +79,8 @@ export type NflV1WeekOneOutcomeForecast = {
       | "nfl_target_excluded_market_outcome_2026_09_20_r3_priced_neutral_total"
       | "nfl_target_excluded_market_outcome_2026_09_21_r4_opening_market_direction"
       | "nfl_target_excluded_market_outcome_2026_09_25_r5_current_season_raw_signal"
-      | "nfl_target_excluded_market_outcome_2026_09_27_r6_pressure_direction";
+      | "nfl_target_excluded_market_outcome_2026_09_27_r6_pressure_direction"
+      | "nfl_target_excluded_market_outcome_2026_09_28_r7_paid_team_score";
     status: "target_excluded_market" | "incumbent_fallback";
     reason: "stable_complete_tuple" | "insufficient_or_unstable_target_free_evidence";
     marginFamilyCount: number | null;
@@ -93,6 +100,15 @@ export type NflV1WeekOneOutcomeForecast = {
       marginMarketWeight: typeof NFL_V1_WEEKLY_RAW_MARGIN_MARKET_WEIGHT;
       totalMeanEvidencePolicy: "same_book_movement_only";
     };
+    paidTeamScore?: {
+      release: typeof NFL_V1_PAID_TEAM_SCORE_MODEL_RELEASE;
+      inputRelease: typeof NFL_PAID_PROJECTION_SHADOW_RELEASE;
+      providerCollectedAt: string;
+      independentHomeMargin: number;
+      independentTotal: number;
+      marginEvidencePolicy: "bounded_verified_market_reading";
+      totalEvidencePolicy: "independent_score_no_market_mean_shift";
+    };
     sharp: { homeMarginGapPp: number | null; overTotalGapPp: number | null; homeMarginShiftPoints: number; totalShiftPoints: number };
     publicConsensus: { homeMarginGapPp: number | null; overTotalGapPp: number | null; homeMarginShiftPoints: number; totalShiftPoints: number };
     movement: FootballOutcomeMarketMovement;
@@ -108,7 +124,11 @@ export type NflV1WeekOneOutcomeForecast = {
       orientedHomeCoverProbability: number;
     };
     calibratedCore: {
-      source: "week_one_spread_total_residual_heads" | typeof NFL_V1_PRICED_NEUTRAL_TOTAL_RELEASE | null;
+      source:
+        | "week_one_spread_total_residual_heads"
+        | typeof NFL_V1_PRICED_NEUTRAL_TOTAL_RELEASE
+        | typeof NFL_V1_PAID_TEAM_SCORE_MODEL_RELEASE
+        | null;
       rawHomeCoverProbability: number;
       calibratedHomeCoverProbability: number;
       rawOverProbability: number;
@@ -178,6 +198,46 @@ export function hasNflV1WeekOneOutcomeForecast(providerGameId: string): boolean 
   return forecasts.has(providerGameId);
 }
 
+/**
+ * Re-centers the established discrete football score shapes on the paid,
+ * target-free team-score projection. This is the independent weekly score
+ * core; market reading is applied later to the same distributions.
+ */
+export function buildNflPaidTeamScoreBaseForecast(args: {
+  baseForecast: NflV1WeekOneOutcomeForecast;
+  paidTeamScore: Pick<NflPaidProjectionShadow,
+    "release" | "providerGameId" | "awayTeam" | "homeTeam" |
+    "providerCollectedAt" | "projectedHomeMargin" | "projectedTotal">;
+}): NflV1WeekOneOutcomeForecast {
+  if (
+    args.paidTeamScore.release !== NFL_PAID_PROJECTION_SHADOW_RELEASE ||
+    args.paidTeamScore.providerGameId !== args.baseForecast.providerGameId ||
+    normalizeTeam(args.paidTeamScore.awayTeam) !== args.baseForecast.awayTeam ||
+    normalizeTeam(args.paidTeamScore.homeTeam) !== args.baseForecast.homeTeam ||
+    !Number.isFinite(Date.parse(args.paidTeamScore.providerCollectedAt)) ||
+    !Number.isFinite(args.paidTeamScore.projectedHomeMargin) ||
+    !Number.isFinite(args.paidTeamScore.projectedTotal) ||
+    args.paidTeamScore.projectedTotal <= Math.abs(args.paidTeamScore.projectedHomeMargin)
+  ) {
+    throw new Error(`NFL paid team-score identity or values are invalid for ${args.baseForecast.providerGameId}.`);
+  }
+  return outcomeFromDistributions({
+    providerGameId: args.baseForecast.providerGameId,
+    awayTeam: args.baseForecast.awayTeam,
+    homeTeam: args.baseForecast.homeTeam,
+    marginDistribution: shiftedDistribution(
+      args.baseForecast.marginDistribution,
+      args.paidTeamScore.projectedHomeMargin,
+      false,
+    ),
+    totalDistribution: shiftedDistribution(
+      args.baseForecast.totalDistribution,
+      args.paidTeamScore.projectedTotal,
+      true,
+    ),
+  });
+}
+
 type SplitPercentages = {
   capturedAt: string;
   homeMoneyPct: number | null; homeBetsPct: number | null;
@@ -207,6 +267,8 @@ export function buildNflMarketEvidenceOutcomeForecast(args: {
     directionHomeCoverProbability: number;
     directionHomeMarginCorrection: number;
   };
+  paidTeamScore?: Pick<NflPaidProjectionShadow,
+    "release" | "providerCollectedAt" | "projectedHomeMargin" | "projectedTotal">;
   evaluatedAt: string;
 }): NflV1WeekOneOutcomeForecast {
   if (!args.current.spread || !args.current.total) return args.baseForecast;
@@ -220,14 +282,29 @@ export function buildNflMarketEvidenceOutcomeForecast(args: {
       args.weeklyRawSignal.directionHomeCoverProbability >= 1)) {
     throw new Error("NFL weekly raw-signal margin is invalid.");
   }
-  const rawTargetMargin = args.weeklyRawSignal
+  if (args.paidTeamScore && args.weeklyRawSignal) {
+    throw new Error("NFL paid team score and legacy weekly raw signal cannot both own the score center.");
+  }
+  if (args.paidTeamScore && (
+    args.paidTeamScore.release !== NFL_PAID_PROJECTION_SHADOW_RELEASE ||
+    !Number.isFinite(args.paidTeamScore.projectedHomeMargin) ||
+    !Number.isFinite(args.paidTeamScore.projectedTotal) ||
+    args.paidTeamScore.projectedTotal <= 0 ||
+    !Number.isFinite(Date.parse(args.paidTeamScore.providerCollectedAt))
+  )) {
+    throw new Error("NFL paid team-score input is invalid.");
+  }
+  const rawTargetMargin = args.paidTeamScore
+    ? args.paidTeamScore.projectedHomeMargin
+    : args.weeklyRawSignal
     ? (1 - NFL_V1_WEEKLY_RAW_MARGIN_MARKET_WEIGHT) * args.weeklyRawSignal.independentHomeMargin
       + NFL_V1_WEEKLY_RAW_MARGIN_MARKET_WEIGHT * -args.current.spread.homeLine
       + args.weeklyRawSignal.directionHomeMarginCorrection
     : (1 - NFL_V1_MARKET_WEIGHT) * args.footballHomeMargin
       + NFL_V1_MARKET_WEIGHT * -args.current.spread.homeLine;
-  const rawTargetTotal = (1 - NFL_V1_MARKET_WEIGHT) * baseTotal
-    + NFL_V1_MARKET_WEIGHT * args.current.total.line;
+  const rawTargetTotal = args.paidTeamScore
+    ? args.paidTeamScore.projectedTotal
+    : (1 - NFL_V1_MARKET_WEIGHT) * baseTotal + NFL_V1_MARKET_WEIGHT * args.current.total.line;
   const sharpMarginGap = firstFinite(
     freshCircaGap(args.sharpSplits?.spread, "home", evaluatedAt),
     freshCircaGap(args.sharpSplits?.moneyline, "home", evaluatedAt),
@@ -244,7 +321,9 @@ export function buildNflMarketEvidenceOutcomeForecast(args: {
     : null;
   const movement = readFootballOutcomeMarketMovement({
     opening: args.operationalOpening?.quote ?? null,
-    current: args.weeklyRawSignal ? args.movementCurrent ?? null : args.current,
+    current: args.weeklyRawSignal || args.paidTeamScore
+      ? args.movementCurrent ?? null
+      : args.current,
     evaluatedAt: args.evaluatedAt,
   });
   const sharpHomeMarginShiftPoints = splitShift(sharpMarginGap, 10, 20, NFL_V1_SHARP_SPLIT_MAX_SHIFT_POINTS);
@@ -281,7 +360,7 @@ export function buildNflMarketEvidenceOutcomeForecast(args: {
       (!Number.isFinite(args.marketHomeCoverProbability) || args.marketHomeCoverProbability <= 0 || args.marketHomeCoverProbability >= 1)) {
     throw new Error("NFL priced-neutral Spread probability must be between zero and one.");
   }
-  const correction = hasNflV1ActionableGradeCorrection(args.baseForecast.providerGameId)
+  const correction = !args.paidTeamScore && hasNflV1ActionableGradeCorrection(args.baseForecast.providerGameId)
     ? getNflV1ActionableGradeCorrection({
         providerGameId: args.baseForecast.providerGameId,
         awayTeam: args.baseForecast.awayTeam,
@@ -294,7 +373,9 @@ export function buildNflMarketEvidenceOutcomeForecast(args: {
         NFL_V1_RESIDUAL_HEAD_LOGIT_WEIGHT * correction.spreadHomeLogitCorrection,
       )
     : rawHomeCoverProbability;
-  const pricedNeutralOverProbability = args.marketOverProbability ?? rawOverProbability;
+  const pricedNeutralOverProbability = args.paidTeamScore
+    ? rawOverProbability
+    : args.marketOverProbability ?? rawOverProbability;
   const calibratedOverProbability = correction
     ? applyNflV1LogitCorrection(
         pricedNeutralOverProbability,
@@ -310,7 +391,7 @@ export function buildNflMarketEvidenceOutcomeForecast(args: {
         nonNegative: false,
       })
     : rawTargetMargin;
-  const calibratedTotal = correction || args.marketOverProbability !== undefined
+  const calibratedTotal = correction || (!args.paidTeamScore && args.marketOverProbability !== undefined)
     ? meanForSideProbability({
         source: args.baseForecast.totalDistribution,
         initialMean: rawTargetTotal,
@@ -332,14 +413,16 @@ export function buildNflMarketEvidenceOutcomeForecast(args: {
   const guardedTotal = guardWeakEvidenceReversal({
     source: args.baseForecast.totalDistribution,
     calibratedMean: calibratedTotal,
-    proposedMean: calibratedTotal + (args.weeklyRawSignal
-      ? movement.totalShiftPoints
-      : combinedTotalShiftPoints),
+    proposedMean: calibratedTotal + (args.paidTeamScore
+      ? 0
+      : args.weeklyRawSignal
+        ? movement.totalShiftPoints
+        : combinedTotalShiftPoints),
     score: (points) => points - args.current.total!.line,
     nonNegative: true,
-    sharpShift: args.weeklyRawSignal ? 0 : sharpTotalShiftPoints,
-    movementShift: movement.totalShiftPoints,
-    publicShift: args.weeklyRawSignal ? 0 : publicTotalShiftPoints,
+    sharpShift: args.paidTeamScore || args.weeklyRawSignal ? 0 : sharpTotalShiftPoints,
+    movementShift: args.paidTeamScore ? 0 : movement.totalShiftPoints,
+    publicShift: args.paidTeamScore || args.weeklyRawSignal ? 0 : publicTotalShiftPoints,
   });
   const preOrientationHomeCoverProbability = distributionSideProbability(
     shiftedDistribution(args.baseForecast.marginDistribution, guardedMargin.mean, false),
@@ -388,6 +471,17 @@ export function buildNflMarketEvidenceOutcomeForecast(args: {
           totalMeanEvidencePolicy: "same_book_movement_only" as const,
         },
       } : {}),
+      ...(args.paidTeamScore ? {
+        paidTeamScore: {
+          release: NFL_V1_PAID_TEAM_SCORE_MODEL_RELEASE,
+          inputRelease: args.paidTeamScore.release,
+          providerCollectedAt: args.paidTeamScore.providerCollectedAt,
+          independentHomeMargin: args.paidTeamScore.projectedHomeMargin,
+          independentTotal: args.paidTeamScore.projectedTotal,
+          marginEvidencePolicy: "bounded_verified_market_reading" as const,
+          totalEvidencePolicy: "independent_score_no_market_mean_shift" as const,
+        },
+      } : {}),
       sharp: {
         homeMarginGapPp: sharpMarginGap,
         overTotalGapPp: sharpTotalGap,
@@ -405,9 +499,11 @@ export function buildNflMarketEvidenceOutcomeForecast(args: {
       calibratedCore: {
         source: correction
           ? "week_one_spread_total_residual_heads"
-          : args.marketOverProbability !== undefined
+          : !args.paidTeamScore && args.marketOverProbability !== undefined
             ? NFL_V1_PRICED_NEUTRAL_TOTAL_RELEASE
-            : null,
+            : args.paidTeamScore
+              ? NFL_V1_PAID_TEAM_SCORE_MODEL_RELEASE
+              : null,
         rawHomeCoverProbability,
         calibratedHomeCoverProbability,
         rawOverProbability,

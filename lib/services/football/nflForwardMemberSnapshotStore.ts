@@ -10,7 +10,15 @@ import {
 } from "./nflV1ActionableGradeCandidate";
 
 export const NFL_FORWARD_MEMBER_SNAPSHOT_RELEASE =
+  "nfl_forward_member_snapshot_2026_09_28_r24_paid_team_score_transition" as const;
+const NFL_PAID_SCORE_PREVIOUS_SNAPSHOT_RELEASE =
   "nfl_forward_member_snapshot_2026_09_27_r23_pressure_transition_continuity" as const;
+const NFL_PAID_SCORE_PREVIOUS_MEMBER_RELEASE =
+  "nfl_v1_member_release_2026_09_27_r21_pressure_direction" as const;
+const NFL_PAID_SCORE_PREVIOUS_DECISION_RELEASE =
+  "nfl_v1_daily_edge_decision_2026_09_27_r23_pressure_direction" as const;
+const NFL_PAID_SCORE_PREVIOUS_FIXTURE_RELEASE =
+  "nfl_weekly_member_fixture_2026_09_27_r31_pressure_transition_continuity" as const;
 const NFL_PRESSURE_DIRECTION_PREVIOUS_SNAPSHOT_RELEASE =
   "nfl_forward_member_snapshot_2026_09_27_r22_pressure_direction" as const;
 const NFL_PRESSURE_DIRECTION_PREVIOUS_MEMBER_RELEASE =
@@ -98,6 +106,7 @@ const NFL_RAW_SIGNAL_PREVIOUS_FIXTURE_RELEASE =
 const NFL_NONPUSH_PREVIOUS_FIXTURE_RELEASE =
   "nfl_weekly_member_fixture_2026_09_21_r26_locked_transition_continuity" as const;
 const NFL_FORWARD_PREVIOUS_MEMBER_SNAPSHOT_RELEASES = [
+  NFL_PAID_SCORE_PREVIOUS_SNAPSHOT_RELEASE,
   NFL_PRESSURE_DIRECTION_PREVIOUS_SNAPSHOT_RELEASE,
   NFL_CURRENT_SEASON_PREVIOUS_SNAPSHOT_RELEASE,
   NFL_RAW_SIGNAL_PREVIOUS_SNAPSHOT_RELEASE,
@@ -466,6 +475,11 @@ function validateNflForwardMemberSnapshot(
     decisionRelease === NFL_V1_ACTIONABLE_GRADE_DECISION_RELEASE &&
     fixtureRelease === NFL_WEEK_ONE_HELD_MEMBER_FIXTURE_RELEASE &&
     heldMemberFixtureRelease === NFL_WEEK_ONE_HELD_MEMBER_FIXTURE_RELEASE;
+  const paidScorePreviousContract =
+    memberRelease === NFL_PAID_SCORE_PREVIOUS_MEMBER_RELEASE &&
+    decisionRelease === NFL_PAID_SCORE_PREVIOUS_DECISION_RELEASE &&
+    fixtureRelease === NFL_PAID_SCORE_PREVIOUS_FIXTURE_RELEASE &&
+    heldMemberFixtureRelease === NFL_PAID_SCORE_PREVIOUS_FIXTURE_RELEASE;
   const pressureDirectionPreviousContract =
     memberRelease === NFL_PRESSURE_DIRECTION_PREVIOUS_MEMBER_RELEASE &&
     decisionRelease === NFL_PRESSURE_DIRECTION_PREVIOUS_DECISION_RELEASE &&
@@ -534,7 +548,7 @@ function validateNflForwardMemberSnapshot(
   if (
     ![NFL_FORWARD_MEMBER_SNAPSHOT_RELEASE, ...NFL_FORWARD_PREVIOUS_MEMBER_SNAPSHOT_RELEASES].includes(snapshot.snapshotRelease as typeof NFL_FORWARD_MEMBER_SNAPSHOT_RELEASE) ||
     snapshot.evidenceRelease !== NFL_FORWARD_EVIDENCE_SCHEMA_RELEASE ||
-    (!currentContract && !pressureDirectionPreviousContract && !currentSeasonPreviousContract && !rawSignalPreviousContract && !scorePreviousContract && !nonpushPreviousContract && !openingDirectionPreviousContract && !lockedTransitionPreviousContract && !mlTotalPreviousContract && !injuryPaginationPreviousContract && !onePointPreviousContract && !openingFollowUpPreviousContract && !predictionOwnedPreviousContract && !previousContract) ||
+    (!currentContract && !paidScorePreviousContract && !pressureDirectionPreviousContract && !currentSeasonPreviousContract && !rawSignalPreviousContract && !scorePreviousContract && !nonpushPreviousContract && !openingDirectionPreviousContract && !lockedTransitionPreviousContract && !mlTotalPreviousContract && !injuryPaginationPreviousContract && !onePointPreviousContract && !openingFollowUpPreviousContract && !predictionOwnedPreviousContract && !previousContract) ||
     snapshot.season !== expected.season ||
     snapshot.week !== expected.week ||
     snapshot.fixture?.week?.week !== expected.week ||

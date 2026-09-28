@@ -6,7 +6,7 @@ import type { NflRegularSharpSplit } from "./sharpApiNflSplits";
 import type { NflV1WeekOneOutcomeForecast } from "./nflV1WeekOneOutcome";
 
 export const NFL_FORWARD_CONTEXT_CAPTURE_RELEASE =
-  "nfl_daily_edge_forward_context_capture_2026_09_28_r5_provider_opening_timestamp" as const;
+  "nfl_daily_edge_forward_context_capture_2026_09_28_r6_paid_team_score_activation" as const;
 export const NFL_FORWARD_CONTEXT_CAPTURE_SCHEMA = "nflfec3" as const;
 export const NFL_FORWARD_CONTEXT_CAPTURE_MAX_FAMILIES_PER_MARKET = 8 as const;
 export const NFL_FORWARD_CONTEXT_CAPTURE_MAX_PROVENANCE_RECORDS_PER_MARKET = 2 as const;

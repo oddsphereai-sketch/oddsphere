@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import type { NflPreviewBookOdds } from "../lib/services/football/balldontlieNflPreviewSlate";
+import { NFL_PAID_PROJECTION_SHADOW_RELEASE } from "../lib/services/football/balldontlieNflWeeklyProjectionShadow";
 import {
   NFL_R6_MONEYLINE_CALIBRATION_RELEASE,
   NFL_R6_MONEYLINE_DECISION_RELEASE,
@@ -21,10 +22,12 @@ import {
   NFL_V1_MARKET_EVIDENCE_TOTAL_MODEL_RELEASE,
 } from "../lib/services/football/nflV1ActionableGradeCandidate";
 import {
+  buildNflPaidTeamScoreBaseForecast,
   buildNflMarketEvidenceOutcomeForecast,
   getNflV1WeekOneOutcomeForecast,
   NFL_V1_MARKET_EVIDENCE_OUTCOME_RELEASE,
   NFL_V1_MARKET_EVIDENCE_REPRESENTATIVE_SCORE_RELEASE,
+  NFL_V1_PAID_TEAM_SCORE_MODEL_RELEASE,
   NFL_V1_MARKET_WEIGHT,
   NFL_V1_PUBLIC_SPLIT_MAX_SHIFT_POINTS,
   NFL_V1_RESIDUAL_HEAD_LOGIT_WEIGHT,
@@ -330,8 +333,8 @@ const weeklyBase = getNflV1WeekOneOutcomeForecast({
   homeTeam,
   weeklyFallback: { projectedHomeMargin: 4.25, marketTotal: 44.5 },
 });
-assert.equal(NFL_V1_WEEKLY_OUTCOME_MODEL_RELEASE, "nfl_v1_weekly_market_anchored_outcome_2026_09_27_r8_pressure_direction");
-assert.equal(NFL_V1_MARKET_EVIDENCE_REPRESENTATIVE_SCORE_RELEASE, "nfl_v1_market_evidence_representative_score_2026_09_27_r7_pressure_direction");
+assert.equal(NFL_V1_WEEKLY_OUTCOME_MODEL_RELEASE, "nfl_v1_weekly_paid_team_score_2026_09_28_r9_market_reading");
+assert.equal(NFL_V1_MARKET_EVIDENCE_REPRESENTATIVE_SCORE_RELEASE, "nfl_v1_market_evidence_representative_score_2026_09_28_r8_paid_team_score");
 assert.equal(NFL_V1_WEEKLY_REPRESENTATIVE_SCORE_CENTER_WEIGHT, 0.2);
 const representativeMargin = weeklyBase.representativeHomeScore - weeklyBase.representativeAwayScore;
 const representativeTotal = weeklyBase.representativeHomeScore + weeklyBase.representativeAwayScore;
@@ -381,7 +384,7 @@ const circaAway = buildNflMarketEvidenceOutcomeForecast({
   sharpSplits: sharpSplitSet({ homeMoneyPct: 20, homeBetsPct: 70 }),
   evaluatedAt,
 });
-assert.equal(NFL_V1_MARKET_EVIDENCE_OUTCOME_RELEASE, "nfl_v1_market_evidence_outcome_2026_09_27_r8_pressure_direction");
+assert.equal(NFL_V1_MARKET_EVIDENCE_OUTCOME_RELEASE, "nfl_v1_market_evidence_outcome_2026_09_28_r9_paid_team_score");
 assert.equal(NFL_V1_MARKET_WEIGHT, 0.75);
 assert.equal(NFL_V1_SHARP_SPLIT_MAX_SHIFT_POINTS, 1.5);
 assert.equal(NFL_V1_PUBLIC_SPLIT_MAX_SHIFT_POINTS, 0.75);
@@ -555,6 +558,62 @@ assert.throws(() => buildNflMarketEvidenceOutcomeForecast({
   weeklyRawSignal: { ...weeklyRawSignal, independentHomeMargin: Number.NaN },
   evaluatedAt,
 }), /weekly raw-signal margin is invalid/);
+const paidTeamScore = {
+  release: NFL_PAID_PROJECTION_SHADOW_RELEASE,
+  providerGameId: weeklyBase.providerGameId,
+  awayTeam,
+  homeTeam,
+  providerCollectedAt: "2026-08-25T10:00:00.000Z",
+  projectedHomeMargin: 6,
+  projectedTotal: 44,
+};
+const paidBase = buildNflPaidTeamScoreBaseForecast({ baseForecast: weeklyBase, paidTeamScore });
+assert.ok(Math.abs(paidBase.expectedAwayScore - 19) < 0.1);
+assert.ok(Math.abs(paidBase.expectedHomeScore - 25) < 0.1);
+const paidMarriage = buildNflMarketEvidenceOutcomeForecast({
+  baseForecast: paidBase,
+  footballHomeMargin: 4.25,
+  current,
+  operationalOpening: {
+    quote: {
+      ...current,
+      observedAt: "2026-08-25T09:00:00.000Z",
+      spread: { ...current.spread!, awayLine: 1.5, homeLine: -1.5 },
+      total: { ...current.total!, line: 42.5 },
+    },
+  },
+  movementCurrent: current,
+  playbookLine: { capturedAt: evaluatedAt, homeSpread: -3.5, total: 44.5 },
+  playbookSplits: splitSet({ homeMoneyPct: 80, homeBetsPct: 20 }),
+  sharpSplits: sharpSplitSet({ homeMoneyPct: 80, homeBetsPct: 20 }),
+  spreadDirectionCandidate: true,
+  paidTeamScore,
+  evaluatedAt,
+});
+assert.equal(paidMarriage.marketEvidence?.paidTeamScore?.release, NFL_V1_PAID_TEAM_SCORE_MODEL_RELEASE);
+assert.equal(paidMarriage.marketEvidence?.paidTeamScore?.inputRelease, NFL_PAID_PROJECTION_SHADOW_RELEASE);
+assert.equal(paidMarriage.marketEvidence?.paidTeamScore?.totalEvidencePolicy,
+  "independent_score_no_market_mean_shift");
+assert.ok(
+  paidMarriage.expectedHomeScore - paidMarriage.expectedAwayScore >
+    paidBase.expectedHomeScore - paidBase.expectedAwayScore,
+  "verified same-book movement and corroborating fresh margin evidence must adjust the paid score coherently",
+);
+assert.ok(Math.abs(paidMarriage.expectedHomeScore + paidMarriage.expectedAwayScore - 44) < 0.1,
+  "failed Total movement/split evidence must not overwrite the paid independent Total center");
+assert.equal(paidMarriage.homeWinProbability > 0.5,
+  paidMarriage.expectedHomeScore > paidMarriage.expectedAwayScore);
+assert.throws(() => buildNflMarketEvidenceOutcomeForecast({
+  baseForecast: paidBase,
+  footballHomeMargin: 4.25,
+  current,
+  playbookLine: null,
+  playbookSplits: null,
+  sharpSplits: null,
+  weeklyRawSignal,
+  paidTeamScore,
+  evaluatedAt,
+}), /cannot both own the score center/);
 const underdogValueForecast = {
   ...marketOnly,
   awayWinProbability: 0.46,

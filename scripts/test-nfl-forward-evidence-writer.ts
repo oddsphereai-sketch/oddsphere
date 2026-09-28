@@ -334,12 +334,17 @@ assert.match(writer, /currentBooks/);
 assert.match(writer, /comparableCurrentBooks/);
 assert.match(writer, /multibook_consensus_unavailable/);
 assert.doesNotMatch(writer, /readLegacyNflForwardEvidence|readPriorNflForwardEvidence|readPreviousNflForwardEvidence/, "the live writer must not scan superseded large JSON releases");
-assert.match(writer, /nfl_forward_evidence_writer_2026_09_28_r46_opening_timestamp_paid_projection_shadow/);
+assert.match(writer, /nfl_forward_evidence_writer_2026_09_28_r47_paid_team_score_activation/);
 assert.match(
   writer,
-  /const opening = operationalOpening\(\{[\s\S]*providerOpening: null,[\s\S]*\}\);/,
-  "provider openers remain target-ineligible until their forward gate clears",
+  /const opening = operationalOpening\(\{[\s\S]*providerOpening: slate\.openingOddsByGame[\s\S]*allowProviderUpgrade: plan\.stage === "unlocked"[\s\S]*\}\);/,
+  "verified provider openers may enter market reading only for an unlocked pregame release",
 );
+assert.match(writer, /buildNflPaidTeamScoreBaseForecast/);
+assert.match(writer, /paidTeamScore: paidProjectionShadow/);
+assert.match(writer, /previous\.provenance === "first_observed"/);
+assert.doesNotMatch(writer, /allowProviderUpgrade: plan\.stage === "t60"/,
+  "the opening upgrade must never reinterpret an immutable T-60 tuple");
 assert.match(
   writer,
   /const memberSnapshot = await refreshCompactMemberSnapshot\([\s\S]*?const tracking = await writeOfficialTrackingFromPayloads\(/,
@@ -350,8 +355,11 @@ assert.match(writer, /currentSeasonState\.completeThroughWeek < args\.week - 1/)
 assert.match(writer, /buildNflWeeklyPossessionMargin/);
 assert.match(writer, /weeklyRawSignal/);
 const targetExcluded = readFileSync(path.resolve("lib/services/football/nflTargetExcludedMarketOutcome.ts"), "utf8");
-assert.match(targetExcluded, /!excluded\.total\.includes\(normalizeBook\(args\.current\.sportsbook\)\)/);
-assert.match(targetExcluded, /movementCurrent:/);
+assert.match(targetExcluded, /movementCurrent: targetFreeMovementCurrent\(args\.current, excluded\)/);
+assert.match(targetExcluded, /const marginExcluded = excluded\.margin\.includes\(family\)/);
+assert.match(targetExcluded, /const totalExcluded = excluded\.total\.includes\(family\)/);
+assert.match(targetExcluded, /spread: marginExcluded \? null : current\.spread/);
+assert.match(targetExcluded, /total: totalExcluded \? null : current\.total/);
 assert.match(writer, /NFL_INJURY_MAX_PAGES/);
 assert.match(writer, /publicScoreDirectionTolerancePoints: NFL_PUBLIC_SCORE_DIRECTION_TOLERANCE_POINTS/);
 assert.match(writer, /decisionSideProbabilityConvention: "exclude_push"/);
