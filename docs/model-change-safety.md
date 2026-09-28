@@ -11,15 +11,19 @@ On 2026-09-28 Daniel Mengel explicitly directed Oddsphere to repair and lock the
 before kickoff after the scheduled T-60 capture received a provider quote 4.178 seconds newer
 than the cron invocation and an empty injury response, then published zero decisions. This
 exception is limited to provider game `1392263`. The zero-decision row is
-not an immutable valid lock and may not be used for tracking. A correction must be append-only,
-must reuse only the most recent verified injury report for this exact provider game, must retain
+not an immutable valid lock and may not be used for tracking, but it remains immutable. Because
+production enforces one T-60 row per game, the correction is published only into the recoverable
+member snapshot and append-only official tracking rows. It must reuse only the most recent verified
+injury report for this exact provider game, must retain
 the original provider timestamp and provenance, and must recompute all three exact-price decisions
 from the already-captured T-60 market and authoritative joint score distribution. It may be
-appended only before kickoff and only while the original T-60 lag remains within the released
+applied only before kickoff and only while the original T-60 lag remains within the released
 20-minute boundary. The repaired row must preserve coherent PHI Moneyline, PHI Spread and Under
 directions if and only if those directions follow the captured distribution and exact prices.
 
-The permanent writer repair may carry the last verified injury payload only within the exact same
+No evidence row or valid T-60 tuple may be changed. The permanent writer remains append-only,
+preserves a previously verified locked member card when its underlying evidence row is the audited
+zero-decision failure, and may carry the last verified injury payload only within the exact same
 provider game when a later provider response is empty. Its evidence timestamp must also advance to
 the newest consumed provider-quote timestamp so fresh evidence cannot falsely postdate its own
 decision. It adds no provider call, schedule, writer,

@@ -75,9 +75,13 @@ import {
   nflTrackingMarketsForPayload,
 } from "./nflOfficialTrackingRecord";
 import { buildMarketScopedFootballTrackingPlan } from "./footballMarketScopedTracking";
-import { buildNflWeekOneHeldMemberFixture } from "./nflWeekOneHeldMemberFixture";
+import {
+  buildNflWeekOneHeldMemberFixture,
+  type NflWeekOneHeldMemberFixture,
+} from "./nflWeekOneHeldMemberFixture";
 import {
   buildNflForwardMemberSnapshot,
+  readNflForwardMemberSnapshot,
   writeNflForwardMemberSnapshot,
 } from "./nflForwardMemberSnapshotStore";
 import { readNflPlayerPropsCurrentSeasonState } from "./nflPlayerPropsCurrentSeasonState";
@@ -875,7 +879,21 @@ async function refreshCompactMemberSnapshot(args: {
     };
   }
   try {
-    const fixture = buildNflWeekOneHeldMemberFixture(rows);
+    const candidateFixture = buildNflWeekOneHeldMemberFixture(rows);
+    const previousSnapshot = await readNflForwardMemberSnapshot({
+      client: args.client,
+      season: args.season,
+      week: args.week,
+      now: args.now,
+    }).catch(() => null);
+    const invalidT60GameIds = new Set(rows
+      .filter((row) => row.stage === "t60" && row.payload.decisions.evaluatedBets.length === 0)
+      .map((row) => row.providerGameId));
+    const fixture = preserveVerifiedNflLockedGames({
+      candidate: candidateFixture,
+      previous: previousSnapshot?.fixture ?? null,
+      invalidT60GameIds,
+    });
     const snapshot = buildNflForwardMemberSnapshot({
       fixture,
       season: args.season,
@@ -897,6 +915,29 @@ async function refreshCompactMemberSnapshot(args: {
       memberSnapshotError: error instanceof Error ? error.message : String(error),
     };
   }
+}
+
+export function preserveVerifiedNflLockedGames(args: {
+  candidate: NflWeekOneHeldMemberFixture;
+  previous: NflWeekOneHeldMemberFixture | null;
+  invalidT60GameIds: ReadonlySet<string>;
+}): NflWeekOneHeldMemberFixture {
+  if (!args.previous || args.invalidT60GameIds.size === 0) return args.candidate;
+  const previousById = new Map(args.previous.snapshot.games.map((game) => [game.id, game]));
+  return {
+    ...args.candidate,
+    snapshot: {
+      ...args.candidate.snapshot,
+      games: args.candidate.snapshot.games.map((game) => {
+        const providerGameId = game.id.replace(/^nfl-/, "");
+        const previous = previousById.get(game.id);
+        return args.invalidT60GameIds.has(providerGameId) &&
+          previous?.lockState === "locked" && previous.status.linesLocked
+          ? previous
+          : game;
+      }),
+    },
+  };
 }
 
 function storedEvidenceForPayload(payload: NflForwardEvidencePayload): NflForwardStoredEvidence {
