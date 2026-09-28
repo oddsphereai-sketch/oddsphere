@@ -246,7 +246,9 @@ async function handleCallback(request: Request): Promise<Response> {
       // so support can confirm "yes, the access check ran and they
       // were not a member" rather than silently routing.
       const checkout = getCheckoutUrl();
-      const target = checkout !== null ? checkout : (() => {
+      const target = checkout !== null
+        ? new URL("/api/checkout/whop?plan=monthly", request.url).toString()
+        : (() => {
         const u = new URL("/pricing", request.url);
         u.searchParams.set("error", "whop_no_resource_access");
         u.searchParams.set("wd", "no_membership");

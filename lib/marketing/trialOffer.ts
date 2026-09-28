@@ -1,7 +1,7 @@
 export const PRICING_PAGE_URL = "/pricing";
 
-export const MONTHLY_CHECKOUT_URL = "https://whop.com/checkout/plan_zR8HdNVFZv5Sr";
-export const ANNUAL_CHECKOUT_URL = "https://whop.com/checkout/plan_Twz3lU0osOoyf";
+export const MONTHLY_CHECKOUT_URL = "/api/checkout/whop?plan=monthly";
+export const ANNUAL_CHECKOUT_URL = "/api/checkout/whop?plan=annual";
 export const TRIAL_CHECKOUT_URL = MONTHLY_CHECKOUT_URL;
 
 export const MONTHLY_PRICE = "$19.99";

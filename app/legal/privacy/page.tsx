@@ -1,10 +1,8 @@
 /**
  * /legal/privacy — Phase 6B.4 launch-safe placeholder.
  *
- * Covers what data we actually handle today: Whop OAuth identity,
- * session cookies, and standard server logs. No analytics tracker
- * inventory yet — keep this honest. Update once the analytics stack
- * is finalized.
+ * Covers Whop identity/billing, first-party sessions, Google Analytics,
+ * conversion attribution, and standard server logs.
  */
 
 export const metadata = {
@@ -18,7 +16,7 @@ export default function PrivacyPage() {
     <>
       <p className="text-xs uppercase tracking-[0.18em] font-bold text-violet-300 mb-3">Legal</p>
       <h1 className="text-3xl sm:text-4xl font-black tracking-tight mb-3">Privacy Policy</h1>
-      <p className="text-sm text-gray-400 mb-8">Last updated June 2026</p>
+      <p className="text-sm text-gray-400 mb-8">Last updated September 2026</p>
 
       <section className="space-y-5 text-[14px] sm:text-[15px] text-gray-200 leading-relaxed">
         <p>
@@ -49,6 +47,17 @@ export default function PrivacyPage() {
           IP address, user agent, URL, status code, and timestamp. These
           are used for security, debugging, and abuse prevention.
         </p>
+        <p className="font-semibold text-white mt-3">Analytics &amp; conversion measurement</p>
+        <p>
+          We use Google Analytics to understand site usage and measure whether
+          visits lead to a confirmed free-trial activation or a first paid
+          subscription. Google may set analytics cookies that identify a browser
+          and session. When you open Whop checkout, we keep those identifiers in
+          our private database and give Whop only a random lookup token. After
+          Whop confirms the membership event, we use that token to send the
+          corresponding conversion to Google. A pricing-page view or checkout
+          click is not reported as a trial activation.
+        </p>
 
         <h2 className="text-xl font-bold text-white mt-8 mb-2">2. What we do NOT collect</h2>
         <p>
@@ -74,6 +83,7 @@ export default function PrivacyPage() {
           <li>Whop — identity, membership, billing, Discord access.</li>
           <li>Vercel — application hosting and request logging.</li>
           <li>Supabase — database storage for app content.</li>
+          <li>Google Analytics — aggregate site usage and conversion measurement.</li>
           <li>Sports data providers — public game / odds / stats data.</li>
         </ul>
         <p>
