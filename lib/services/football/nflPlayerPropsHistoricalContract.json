@@ -1,7 +1,7 @@
 {
-  "schemaRelease": "nfl_player_props_historical_schema_2026_09_01_r2_active_role",
-  "datasetRelease": "nfl_player_props_historical_features_2016_2025_2026_09_01_r2_active_role",
-  "sourceCacheRelease": "nfl_real_model_source_cache_2016_2025_2026_08_19_r1",
+  "schemaRelease": "nfl_player_props_historical_schema_2026_09_28_r3_official_stats",
+  "datasetRelease": "nfl_player_props_historical_features_2016_2025_2026_09_28_r3_official_stats",
+  "sourceCacheRelease": "nfl_real_model_source_cache_2016_2025_2026_09_28_r2_official_stats",
   "minimumSeason": 2016,
   "maximumSeason": 2025,
   "phase": "regular",

@@ -18,6 +18,8 @@ from scipy import stats
 
 CONTRACT_PATH = pathlib.Path("lib/services/football/nflPlayerPropsCalibrationContract.json")
 BASELINE_PATH = pathlib.Path("scripts/operator/tournament_nfl_player_props_baseline.py")
+JOINT_PATH = pathlib.Path("scripts/operator/tournament_nfl_player_props_joint_model.py")
+JOINT_REPORT = pathlib.Path("football-research/cache/nfl-player-props-joint/nfl_player_props_joint_model_r3.json")
 DEFAULT_MANIFEST = pathlib.Path("football-research/cache/nfl-player-props-history/nfl_player_props_2016_2025_r1.manifest.json")
 DEFAULT_R1_ARTIFACT = pathlib.Path("football-research/cache/nfl-player-props-baseline/nfl_player_props_distribution_shadow_2026_08_25_r1.joblib")
 OUTPUT_ROOT = pathlib.Path("football-research/cache/nfl-player-props-calibration")
@@ -27,6 +29,16 @@ def load_baseline_module() -> Any:
     spec = importlib.util.spec_from_file_location("nfl_props_baseline_recalibration", BASELINE_PATH)
     if not spec or not spec.loader:
         raise RuntimeError("NFL props baseline module could not be loaded")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+def load_joint_module() -> Any:
+    spec = importlib.util.spec_from_file_location("nfl_props_joint_recalibration", JOINT_PATH)
+    if not spec or not spec.loader:
+        raise RuntimeError("NFL props joint module could not be loaded")
     module = importlib.util.module_from_spec(spec)
     sys.modules[spec.name] = module
     spec.loader.exec_module(module)
@@ -161,6 +173,7 @@ def main() -> None:
     args = parser.parse_args()
     contract = json.loads(CONTRACT_PATH.read_text(encoding="utf-8"))
     baseline = load_baseline_module()
+    joint = load_joint_module()
     history_contract = json.loads(baseline.CONTRACT_PATH.read_text(encoding="utf-8"))
     frame, manifest = baseline.load_verified_dataset(args.manifest, history_contract)
     frame, features = baseline.prepare_features(frame, manifest)
@@ -170,11 +183,28 @@ def main() -> None:
     if r1_artifact["shadowModelRelease"] != contract["shadowModelRelease"]:
         raise RuntimeError("NFL props r1 artifact release mismatch")
 
+    joint_report = json.loads(JOINT_REPORT.read_text(encoding="utf-8"))
+    qb_eligible = baseline.market_eligible(frame, history_contract["markets"]["passing_attempts"])
+    joint_predictions: dict[str, dict[int, np.ndarray]] = {
+        "passing_completions": {},
+        "passing_yards": {},
+    }
+    for season in (2023, 2024, 2025):
+        _, values = joint.season_predictions(frame, qb_eligible, season, features, joint.predict_qb)
+        for market in joint_predictions:
+            weight = float(joint_report["families"]["qb"]["markets"][market]["confirmedJointWeight"])
+            prediction = weight * values[f"{market}_joint"] + (1.0 - weight) * values[f"{market}_direct"]
+            if market == "passing_completions":
+                prediction = np.minimum(values["passing_attempts"], np.clip(prediction, 0.0, None))
+            joint_predictions[market][season] = prediction
+
     reports: dict[str, Any] = {}
     calibrated_markets = dict(r1_artifact["markets"])
     for market, config in history_contract["markets"].items():
         champion = contract["projectionChampions"][market]
-        predictions = market_predictions(baseline, frame, features, market, config, champion)
+        predictions = joint_predictions.get(market) or market_predictions(
+            baseline, frame, features, market, config, champion,
+        )
         eligible = baseline.market_eligible(frame, config)
         rows = {season: frame[eligible & frame["season"].eq(season)] for season in (2023, 2024, 2025)}
         fit_y = rows[2023][market].to_numpy(float)

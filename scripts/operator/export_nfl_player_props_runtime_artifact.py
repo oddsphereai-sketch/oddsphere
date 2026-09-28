@@ -18,7 +18,7 @@ from sklearn.ensemble import HistGradientBoostingClassifier, HistGradientBoostin
 from sklearn.pipeline import Pipeline
 
 
-RUNTIME_RELEASE = "nfl_player_props_runtime_2026_09_01_r4_cross_market_movement"
+RUNTIME_RELEASE = "nfl_player_props_runtime_2026_09_28_r5_official_joint_outcomes"
 MARKET_RESIDUAL_RELEASE = "nfl_player_props_market_residual_calibration_2026_09_01_r5_cross_market_movement"
 SCORER_PATH = pathlib.Path("lib/services/football/nfl_player_props_shadow_model.py")
 FEATURE_BUILDER_PATH = pathlib.Path("scripts/operator/build_nfl_player_props_2026_features.py")
@@ -183,7 +183,11 @@ def main() -> None:
         else set(existing["playerStates"])
     )
     volume = joblib.load(VOLUME_ARTIFACT)
-    market_report = json.loads(MARKET_REPORT.read_text(encoding="utf-8"))
+    market_report = json.loads(MARKET_REPORT.read_text(encoding="utf-8")) if MARKET_REPORT.exists() else {
+        "selectedWeights": {market: value["marketResidualWeight"] for market, value in existing["markets"].items()},
+        "qualifiedMarkets": {market: value["marketResidualQualified"] for market, value in existing["markets"].items()},
+        "marketResidualRelease": existing["marketResidualRelease"],
+    }
     decision = json.loads(DECISION_CONTRACT.read_text(encoding="utf-8"))
     market_residual_contract = json.loads(MARKET_RESIDUAL_CONTRACT.read_text(encoding="utf-8"))
 
@@ -254,7 +258,7 @@ def main() -> None:
             "history": manifest["featureFileSha256"],
             "volumeArtifact": sha256_file(VOLUME_ARTIFACT),
             "touchdownArtifact": existing["sourceChecksums"]["touchdownArtifact"],
-            "marketReport": sha256_file(MARKET_REPORT),
+            "marketReport": sha256_file(MARKET_REPORT) if MARKET_REPORT.exists() else existing["sourceChecksums"]["marketReport"],
             "touchdownReport": existing["sourceChecksums"]["touchdownReport"],
             "sourceVolumeModelRelease": volume["shadowModelRelease"],
             "sourceVolumeCalibrationRelease": volume["calibrationRelease"],
