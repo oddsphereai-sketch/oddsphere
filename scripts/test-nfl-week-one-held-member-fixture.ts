@@ -444,11 +444,23 @@ assert.equal(fixture.snapshot.games.every((game) => {
 const jax = fixture.snapshot.games.find((game) => game.id === "nfl-1392224");
 assert.equal(jax?.awayTeam, "CLE");
 assert.equal(jax?.homeTeam, "JAX");
-assert.equal(jax?.projected.away, 17);
-assert.equal(jax?.projected.home, 27);
+assert.equal(jax?.projected.away, 17.6);
+assert.equal(jax?.projected.home, 27.7);
 assert.equal(jax?.footballProjection?.expectedAwayPoints.toFixed(1), "17.6");
 assert.equal(jax?.footballProjection?.expectedHomePoints.toFixed(1), "27.7");
 assert.equal(jax?.footballProjection?.homeWinProbability.toFixed(3), "0.770");
+const legacyRoundedRow = structuredClone(rows.find((row) => row.providerGameId === "1392224")!);
+(legacyRoundedRow.payload as unknown as { collectorRelease: string }).collectorRelease =
+  "nfl_forward_evidence_collector_2026_09_28_r15_market_marriage";
+const legacyRoundedGame = buildNflWeekOneHeldMemberFixture([
+  ...rows.filter((row) => row.providerGameId !== "1392224"),
+  legacyRoundedRow,
+]).snapshot.games.find((game) => game.id === "nfl-1392224");
+assert.deepEqual(
+  legacyRoundedGame?.projected,
+  { away: 17, home: 27 },
+  "older locked evidence retains its released representative-score presentation",
+);
 const jaxForecast = getNflV1WeekOneOutcomeForecast({ providerGameId: "1392224", awayTeam: "CLE", homeTeam: "JAX" });
 const distributionMean = (distribution: { values: number[]; probabilities: number[] }) =>
   distribution.values.reduce((sum, value, index) => sum + value * distribution.probabilities[index]!, 0);

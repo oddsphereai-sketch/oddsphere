@@ -5,6 +5,31 @@ inputs, probabilities, projections, grades, promotions/demotions, calibration, p
 or stakes. It exists to prevent mixed model eras, competing writers, accidental board
 flattening, and load spikes.
 
+## Owner-approved emergency exception: NFL exact-game T-60 injury continuity
+
+On 2026-09-28 Daniel Mengel explicitly directed Oddsphere to repair and lock the PHI-CHI card
+before kickoff after the scheduled T-60 capture received a provider quote 4.178 seconds newer
+than the cron invocation and an empty injury response, then published zero decisions. This
+exception is limited to provider game `1392263`. The zero-decision row is
+not an immutable valid lock and may not be used for tracking. A correction must be append-only,
+must reuse only the most recent verified injury report for this exact provider game, must retain
+the original provider timestamp and provenance, and must recompute all three exact-price decisions
+from the already-captured T-60 market and authoritative joint score distribution. It may be
+appended only before kickoff and only while the original T-60 lag remains within the released
+20-minute boundary. The repaired row must preserve coherent PHI Moneyline, PHI Spread and Under
+directions if and only if those directions follow the captured distribution and exact prices.
+
+The permanent writer repair may carry the last verified injury payload only within the exact same
+provider game when a later provider response is empty. Its evidence timestamp must also advance to
+the newest consumed provider-quote timestamp so fresh evidence cannot falsely postdate its own
+decision. It adds no provider call, schedule, writer,
+lease, member copy, label, layout, stake, threshold, score-model equation or market input. Older
+valid T-60 rows remain immutable and retain their existing presentation. Newly captured evidence
+may expose the authoritative expected score means rounded to one decimal instead of the integer
+representative score; winner, Spread and Total must still derive from the same joint distribution.
+Publication requires focused NFL tests, model-change verification, current-main integration safety,
+protected-PR checks, live release proof, exactly three locked markets, and no duplicate tracking rows.
+
 ## Owner-approved provisional exception: NFL complete market-reading marriage r23
 
 On 2026-09-28 Daniel Mengel explicitly directed Oddsphere to activate the reviewed complete NFL

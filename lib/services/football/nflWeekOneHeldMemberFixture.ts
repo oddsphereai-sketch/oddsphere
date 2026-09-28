@@ -12,6 +12,7 @@ import type { MarketSplitDisplaySection } from "@/lib/types/domain/Recommendatio
 import type { FootballPreviewFixture } from "@/app/dev/football-preview/footballPreviewFixture";
 import type { PreviewAvailabilityByGame } from "@/app/dev/experience-preview/ActualDailyEdgePreview";
 import {
+  NFL_FORWARD_EVIDENCE_COLLECTOR_RELEASE,
   NFL_FORWARD_EVIDENCE_SCHEMA_RELEASE,
   type NflForwardEvidencePayload,
   type NflForwardPlaybookSplit,
@@ -45,7 +46,7 @@ import { nflFootballEvidenceStats } from "./footballMemberEvidence";
 import type { NflRegularSharpMarket, NflRegularSharpSplit } from "./sharpApiNflSplits";
 
 export const NFL_WEEK_ONE_HELD_MEMBER_FIXTURE_RELEASE =
-  "nfl_weekly_member_fixture_2026_09_28_r33_market_marriage_transition" as const;
+  "nfl_weekly_member_fixture_2026_09_28_r34_expected_score_tenths" as const;
 
 const NFL_PRECEDING_MEMBER_RELEASE =
   "nfl_v1_member_release_2026_09_28_r22_paid_team_score" as const;
@@ -446,9 +447,18 @@ function buildHeldGame(
     total: nflSourceSplitEvidence(payload, "total", movementRows),
     spread: nflSourceSplitEvidence(payload, "spread", movementRows),
   };
+  const projected = payload.collectorRelease === NFL_FORWARD_EVIDENCE_COLLECTOR_RELEASE
+    ? {
+        away: roundToTenths(outcome.expectedAwayScore),
+        home: roundToTenths(outcome.expectedHomeScore),
+      }
+    : {
+        away: outcome.representativeAwayScore,
+        home: outcome.representativeHomeScore,
+      };
   const recommendationDecision = buildNflRecommendationDecision({
     payload,
-    projected: { away: outcome.representativeAwayScore, home: outcome.representativeHomeScore },
+    projected,
     moneyline: { market: moneyline, decision: moneylineDecision, split: sourceSplits.moneyline },
     total: { market: total, decision: totalDecision, split: sourceSplits.total },
     spread: { market: spread, decision: spreadDecision, split: sourceSplits.spread },
@@ -505,10 +515,7 @@ function buildHeldGame(
     },
     markets,
     decisionLine: "The discrete football forecast supplies the score and winner probability. The active Spread and Total decision heads apply separate line-specific calibration before each exact-price Bet grade.",
-    projected: {
-      away: outcome.representativeAwayScore,
-      home: outcome.representativeHomeScore,
-    },
+    projected,
     footballProjection: {
       awayWinProbability: outcome.awayWinProbability,
       homeWinProbability: outcome.homeWinProbability,
@@ -541,6 +548,11 @@ function buildHeldGame(
     },
     recommendationDecision,
   };
+}
+
+function roundToTenths(value: number): number {
+  if (!Number.isFinite(value)) throw new Error("NFL expected score must be finite.");
+  return Math.round((value + Number.EPSILON) * 10) / 10;
 }
 
 function outcomeReleases(providerGameId: string) {

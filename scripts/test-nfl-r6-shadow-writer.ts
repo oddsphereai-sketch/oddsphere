@@ -230,7 +230,7 @@ assert.equal(falsifiedLagT60.lockedAt, null);
 assert.ok(falsifiedLagT60.health.blockingReasons.includes("t60_capture_late"));
 
 const writer = readFileSync(path.resolve("lib/services/football/nflForwardEvidenceWriter.ts"), "utf8");
-assert.match(writer, /nfl_forward_evidence_writer_2026_09_28_r49_next_window_state_order/);
+assert.match(writer, /nfl_forward_evidence_writer_2026_09_28_r50_injury_continuity/);
 assert.equal((writer.match(/readNflPlayerPropsCurrentSeasonState\(/g) ?? []).length, 1);
 assert.match(writer, /buildNflWeeklyPossessionMargin/);
 assert.match(writer, /buildNflR6ShadowMoneylineDecision/);
