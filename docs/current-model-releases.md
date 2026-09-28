@@ -4,7 +4,7 @@ This file is the human-readable production handoff registry. Runtime constants a
 prediction snapshots remain the machine authority. Future model work must start here, verify the
 constants, and preserve the precedence and writer ownership below.
 
-Last reviewed: 2026-09-27
+Last reviewed: 2026-09-28
 
 ## Cross-sport confidence / execution contract
 
@@ -159,6 +159,24 @@ Last reviewed: 2026-09-27
 - Evidence: `docs/model-audits/2026-08-28-football-cross-market-coherence-predeclaration.md`, `docs/model-audits/2026-08-28-football-cross-market-coherence-r19.md`, `docs/model-audits/2026-08-26-football-market-scoped-t60-predeclaration.md`, `docs/model-audits/2026-08-25-nfl-odds-history-reader-repair.md`, `docs/model-audits/2026-08-25-nfl-public-release-transition.md`, `docs/model-audits/2026-08-25-nfl-actionable-grades-production-r9.md`, `docs/model-audits/2026-08-25-nfl-actionable-grades-r9.md`, `docs/model-audits/2026-08-25-nfl-projected-qb-context-r11.md`, `docs/model-audits/2026-08-23-nfl-discrete-drive-joint-r10.md`, and `docs/model-audits/2026-08-23-nfl-v1-comprehensive-outcome.md`.
 
 ## CFB Daily Edge generalized weekly production release
+
+### Next-window seed priority (writer r80)
+
+- Active sole writer release is
+  `cfb_forward_evidence_writer_2026_09_28_r80_next_window_seed_priority`.
+  During the established Sunday/Monday two-window overlap, the one-time
+  `opening_seed` for an empty adjacent week now runs before terminal
+  `opening_incomplete` bookkeeping from the completed week. Valid current-week
+  T-60 captures, release refreshes, and reference-line completion remain higher
+  priority.
+- This repairs a live starvation case in which all 106 September 24–28 games
+  had started, six games lacked a separate opening-stage row, and every
+  15-minute writer cycle selected the old week, produced no capture plan, and
+  left the October 1–5 window empty. Prediction math, model inputs, PMFs,
+  projected scores, sides, probabilities, grades, actions, stakes, member copy,
+  labels, and layout are unchanged. Promotions / demotions / actionable changes
+  on the already-published board are 0 / 0 / 0. Evidence and rollback:
+  `docs/model-audits/2026-09-28-cfb-next-window-seed-priority-r80.md`.
 
 ### Member-facing play-grade tracking parity (aggregate v11)
 
