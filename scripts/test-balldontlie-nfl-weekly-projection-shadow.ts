@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import {
   fetchBalldontlieNflWeeklyProjectionShadows,
   NFL_PAID_PROJECTION_SHADOW_RELEASE,
+  shouldRefreshNflPaidProjectionShadows,
 } from "../lib/services/football/balldontlieNflWeeklyProjectionShadow";
 import type { NflPreviewGame } from "../lib/services/football/balldontlieNflPreviewSlate";
 
@@ -89,6 +90,21 @@ assert.equal(shadow.expectedHomeScore, 24);
 assert.equal(shadow.projectedHomeMargin, 4);
 assert.equal(shadow.projectedTotal, 44);
 assert.deepEqual(shadow.positions, ["DST", "K", "QB"]);
+assert.equal(shouldRefreshNflPaidProjectionShadows({
+  byGame: { "7001": shadow },
+  requiredGameIds: new Set(["7001"]),
+  now: "2026-10-01T05:29:59.000Z",
+}), false);
+assert.equal(shouldRefreshNflPaidProjectionShadows({
+  byGame: { "7001": shadow },
+  requiredGameIds: new Set(["7001"]),
+  now: "2026-10-01T05:30:00.000Z",
+}), true);
+assert.equal(shouldRefreshNflPaidProjectionShadows({
+  byGame: { "7001": shadow },
+  requiredGameIds: new Set(["7001", "7002"]),
+  now: "2026-10-01T00:00:00.000Z",
+}), true);
 
 const postKickoffRows = rows.map((value) => ({ ...value, collected_at: "2026-10-01T00:16:00.000Z" }));
 const postKickoff = await fetchBalldontlieNflWeeklyProjectionShadows({

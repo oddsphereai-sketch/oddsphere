@@ -1,7 +1,7 @@
 export const BALLDONTLIE_NFL_PREVIEW_SLATE_RELEASE =
   "balldontlie_nfl_preview_slate_2026_08_19_r1" as const;
 export const BALLDONTLIE_NFL_REGULAR_SLATE_RELEASE =
-  "balldontlie_nfl_regular_slate_2026_09_13_r3_game_scoped_odds_gaps" as const;
+  "balldontlie_nfl_regular_slate_2026_09_28_r4_opening_timestamp_capture" as const;
 export const BALLDONTLIE_NFL_REGULAR_RESULTS_RELEASE =
   "balldontlie_nfl_regular_results_2026_08_25_r1" as const;
 

@@ -63,6 +63,19 @@ export type NflPaidProjectionShadowFetch = {
   incompleteGameIds: string[];
 };
 
+export function shouldRefreshNflPaidProjectionShadows(args: {
+  byGame: Record<string, Pick<NflPaidProjectionShadow, "fetchedAt">>;
+  requiredGameIds: Set<string>;
+  now: string;
+}): boolean {
+  const now = Date.parse(args.now);
+  if (!Number.isFinite(now)) throw new Error("Invalid NFL paid-projection refresh time.");
+  const required = [...args.requiredGameIds];
+  if (required.length === 0 || required.some((gameId) => !args.byGame[gameId])) return true;
+  const oldest = Math.min(...required.map((gameId) => Date.parse(args.byGame[gameId]!.fetchedAt)));
+  return !Number.isFinite(oldest) || now - oldest >= NFL_PAID_PROJECTION_REFRESH_MINUTES * 60_000;
+}
+
 export async function fetchBalldontlieNflWeeklyProjectionShadows(args: {
   apiKey: string;
   season: number;

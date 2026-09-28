@@ -7,11 +7,11 @@ normalizer requires `updated_at`, so valid provider opening rows are discarded b
 opening and same-book market-reading logic. A bounded production probe confirmed the provider row
 contains `opened_at` and no `updated_at`.
 
-This repair affects the NFL regular-slate adapter, operational-opening input, same-book movement,
-weekly outcome/score distribution, Spread/Total direction, target-excluded decisions, collector,
-sole writer, member fixture/snapshot, and forward tracking release family. Player Props and every
-other sport are out of scope. Member copy, labels, layout, stakes, cron cadence, and lease topology
-must not change.
+This repair affects the NFL regular-slate adapter and target-ineligible forward context only. The
+first release does not replace the established operational opening or alter weekly outcomes,
+scores, sides, exact-price decisions, grades, stakes, member fixture/snapshot, tracking, Player
+Props, or any other sport. Member copy, labels, layout, cron cadence, and lease topology do not
+change.
 
 ## Frozen repair
 
@@ -20,20 +20,21 @@ must not change.
 - The timestamp is never synthesized from request time or from a current quote.
 - Opening/current evidence must retain exact provider game and sportsbook identity.
 - Missing or malformed opening rows remain unavailable.
-- Existing T-60 rows and tracking records remain immutable. The repair applies only to new
-  unlocked/future evidence through the sole `runNflForwardEvidenceWriter` path under
-  `prediction_pipeline:nfl`.
+- Existing T-60 rows and tracking records remain immutable. Repaired provider openers enter only
+  the existing target-ineligible contextual capture through the sole
+  `runNflForwardEvidenceWriter` path under `prediction_pipeline:nfl`. The active operational
+  opening continues using its existing first-observed behavior until a separate forward gate
+  explicitly promotes the provider-opening signal.
 
 ## Release and evaluation gates
 
-The adapter and every active output release whose values can change must advance together before
-publication. Before promotion, a no-write current-board replay must report provider opening
-coverage, score/probability/side changes, promotions, demotions, market mix, actionable count, and
-coherence. A behavior-changing release is rejected on an unexpected board collapse, missing current
-prices, cross-market contradiction, locked-row rewrite, additional writer/schedule, or load increase
-beyond the existing bounded opening request.
+The adapter, context capture, collector, and writer releases advance together. A no-write
+current-board replay must report provider-opening coverage and prove zero score, probability, side,
+grade, promotion, demotion, or actionable-count changes. Any later active promotion requires a new
+model release and release-pure forward evidence. The capture release is rejected on missing current
+prices, cross-market contradiction, locked-row rewrite, additional writer/schedule, or load
+increase beyond the existing bounded opening request.
 
 Focused NFL tests, TypeScript, lint, `npm run verify:model-change`, build, integration safety,
 protected-PR checks, merge, and live release/lease/coverage/site proof remain mandatory. The prior
 pressure-direction release family is the rollback target.
-

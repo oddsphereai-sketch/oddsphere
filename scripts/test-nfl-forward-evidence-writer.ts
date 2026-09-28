@@ -337,6 +337,11 @@ assert.doesNotMatch(writer, /readLegacyNflForwardEvidence|readPriorNflForwardEvi
 assert.match(writer, /nfl_forward_evidence_writer_2026_09_28_r46_opening_timestamp_paid_projection_shadow/);
 assert.match(
   writer,
+  /const opening = operationalOpening\(\{[\s\S]*providerOpening: null,[\s\S]*\}\);/,
+  "provider openers remain target-ineligible until their forward gate clears",
+);
+assert.match(
+  writer,
   /const memberSnapshot = await refreshCompactMemberSnapshot\([\s\S]*?const tracking = await writeOfficialTrackingFromPayloads\(/,
   "member publication must not be downstream of tracking serialization",
 );

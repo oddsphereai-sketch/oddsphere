@@ -83,7 +83,7 @@ import { buildNflWeeklyPossessionMargin } from "./nflWeeklyPossessionMargin";
 import {
   fetchBalldontlieNflWeeklyProjectionShadows,
   NFL_PAID_PROJECTION_MAX_PAGES,
-  NFL_PAID_PROJECTION_REFRESH_MINUTES,
+  shouldRefreshNflPaidProjectionShadows,
   type NflPaidProjectionShadow,
 } from "./balldontlieNflWeeklyProjectionShadow";
 
@@ -211,7 +211,7 @@ export async function runNflForwardEvidenceWriter(args: {
   const playbook = new PlaybookReadBroker(args.playbookApiKey);
   const storedPaidProjectionShadows = latestStoredPaidProjectionShadows(historicalExisting);
   const plannedGameIds = new Set(plans.map((plan) => plan.game.providerGameId));
-  const paidProjectionRefreshDue = shouldRefreshPaidProjectionShadows({
+  const paidProjectionRefreshDue = shouldRefreshNflPaidProjectionShadows({
     byGame: storedPaidProjectionShadows,
     requiredGameIds: plannedGameIds,
     now: args.now,
@@ -315,9 +315,12 @@ export async function runNflForwardEvidenceWriter(args: {
     const providerOpeningBooks = slate.openingOddsAllBooksByGame[plan.game.providerGameId] ?? [];
     const comparableProviderOpeningBooks = slate.openingOddsComparableBooksByGame[plan.game.providerGameId] ?? [];
     const previous = latestEvidenceForGame(historicalExisting, plan.game.providerGameId);
+    // The repaired provider opener is captured below as target-ineligible
+    // context. It cannot silently change the active model until the forward
+    // opening-movement candidate clears its separately versioned gate.
     const opening = operationalOpening({
       previous,
-      providerOpening: slate.openingOddsByGame[plan.game.providerGameId] ?? null,
+      providerOpening: null,
       current,
       capturedAt: args.now,
     });
@@ -607,19 +610,6 @@ function latestStoredPaidProjectionShadows(existing: NflForwardStoredEvidence[])
     }
   }
   return byGame;
-}
-
-function shouldRefreshPaidProjectionShadows(args: {
-  byGame: Record<string, NflPaidProjectionShadow>;
-  requiredGameIds: Set<string>;
-  now: string;
-}): boolean {
-  const now = Date.parse(args.now);
-  if (!Number.isFinite(now)) throw new Error("Invalid NFL paid-projection refresh time.");
-  const required = [...args.requiredGameIds];
-  if (required.length === 0 || required.some((gameId) => !args.byGame[gameId])) return true;
-  const oldest = Math.min(...required.map((gameId) => Date.parse(args.byGame[gameId]!.fetchedAt)));
-  return !Number.isFinite(oldest) || now - oldest >= NFL_PAID_PROJECTION_REFRESH_MINUTES * 60_000;
 }
 
 function depthForTeam(
