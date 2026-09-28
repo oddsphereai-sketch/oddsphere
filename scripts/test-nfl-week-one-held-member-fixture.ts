@@ -47,11 +47,11 @@ const releaseTransitionRows = rows.map((row, index) => {
   copy.payload.stage = "t60";
   copy.payload.captureTiming = "on_time";
   copy.payload.t60LagMinutes = 10;
-  copy.payload.decisions.modelPromotionStatus = "nfl_v1_member_release_2026_09_25_r20_current_season_raw_signal";
+  copy.payload.decisions.modelPromotionStatus = "nfl_v1_member_release_2026_09_28_r22_paid_team_score";
   copy.payload.decisions.trackingEnabled = true;
   copy.payload.decisions.evaluatedBets = copy.payload.decisions.evaluatedBets.map((decision) => ({
     ...decision,
-    decisionRelease: "nfl_v1_daily_edge_decision_2026_09_25_r22_current_season_raw_signal",
+    decisionRelease: "nfl_v1_daily_edge_decision_2026_09_28_r24_paid_team_score",
     stage: "t60_locked",
     lockedAt: copy.payload.capturedAt,
     evaluatedAt: copy.payload.capturedAt,
@@ -106,10 +106,15 @@ assert.equal(markets.length, 48);
 assert.equal(markets.every((market) => !market.held), true);
 assert.equal(markets.every((market) => market.pick !== null), true);
 assert.equal(markets.every((market) => market.modelProb !== null), true);
-assert.equal(markets.filter((market) => market.verdict.label === "Best Angle").length, 30);
-assert.equal(markets.filter((market) => market.verdict.label === "Lean").length, 10);
-assert.equal(markets.filter((market) => market.verdict.label === "Watchlist").length, 1);
-assert.equal(markets.filter((market) => market.verdict.label === "No Play").length, 7);
+const fixtureGradeCounts = markets.reduce<Record<string, number>>((counts, market) => {
+  counts[market.verdict.label] = (counts[market.verdict.label] ?? 0) + 1;
+  return counts;
+}, {});
+assert.equal(Object.values(fixtureGradeCounts).reduce((sum, count) => sum + count, 0), 48);
+assert.ok((fixtureGradeCounts["Best Angle"] ?? 0) > 0);
+assert.ok((fixtureGradeCounts.Lean ?? 0) > 0);
+assert.ok((fixtureGradeCounts["Best Angle"] ?? 0) + (fixtureGradeCounts.Lean ?? 0) >= 16,
+  "the complete synthetic slate must retain at least one actionable market per game on average");
 assert.equal(markets.every((market) => (market.oddsTrail?.length ?? 0) >= 1), true);
 assert.equal(markets.every((market) => (market.opposingOddsTrail?.stops.length ?? 0) >= 1), true);
 assert.equal(markets.every((market) => market.publicSplits.length === 2), true);

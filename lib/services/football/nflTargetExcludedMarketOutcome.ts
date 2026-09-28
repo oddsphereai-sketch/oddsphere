@@ -18,7 +18,7 @@ import {
 import type { NflPaidProjectionShadow } from "./balldontlieNflWeeklyProjectionShadow";
 
 export const NFL_TARGET_EXCLUDED_MARKET_OUTCOME_RELEASE =
-  "nfl_target_excluded_market_outcome_2026_09_28_r7_paid_team_score" as const;
+  "nfl_target_excluded_market_outcome_2026_09_28_r8_market_marriage" as const;
 
 export type NflTargetExcludedMarketAnchor = {
   release: typeof NFL_TARGET_EXCLUDED_MARKET_OUTCOME_RELEASE;
@@ -54,6 +54,7 @@ export function resolveNflTargetExcludedProduction(args: {
   playbookSplits: NflForwardPlaybookSplitSet | null;
   sharpSplits: NflRegularSharpSplitSet | null;
   pricedNeutralTotalCandidate?: boolean;
+  totalDirectionCandidate?: boolean;
   weeklyRawSignal?: {
     release: typeof NFL_V1_WEEKLY_RAW_SIGNAL_RELEASE;
     independentHomeMargin: number;
@@ -137,6 +138,8 @@ export function resolveNflTargetExcludedProduction(args: {
       marketHomeCoverProbability: anchor.spreadHomeFairProbability,
       marketOverProbability: args.pricedNeutralTotalCandidate ? anchor.totalOverFairProbability : undefined,
       spreadDirectionCandidate: args.operationalOpening !== undefined && args.operationalOpening !== null,
+      totalDirectionCandidate: args.totalDirectionCandidate === true &&
+        args.operationalOpening !== undefined && args.operationalOpening !== null,
       movementCurrent: targetFreeMovementCurrent(args.current, excluded),
       weeklyRawSignal: args.weeklyRawSignal,
       paidTeamScore: args.paidTeamScore,

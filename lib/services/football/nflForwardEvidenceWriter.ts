@@ -90,7 +90,7 @@ import {
 } from "./balldontlieNflWeeklyProjectionShadow";
 
 export const NFL_FORWARD_WRITER_RELEASE =
-  "nfl_forward_evidence_writer_2026_09_28_r47_paid_team_score_activation" as const;
+  "nfl_forward_evidence_writer_2026_09_28_r48_market_marriage" as const;
 
 export type NflForwardWriterResult = {
   writerRelease: typeof NFL_FORWARD_WRITER_RELEASE;
@@ -400,6 +400,7 @@ export async function runNflForwardEvidenceWriter(args: {
           playbookSplits,
           sharpSplits,
           spreadDirectionCandidate: true,
+          totalDirectionCandidate: true,
           movementCurrent: current,
           weeklyRawSignal: weeklyRawSignal ? {
             release: NFL_V1_WEEKLY_RAW_SIGNAL_RELEASE,
@@ -427,6 +428,7 @@ export async function runNflForwardEvidenceWriter(args: {
       playbookSplits,
       sharpSplits,
       pricedNeutralTotalCandidate: true,
+      totalDirectionCandidate: true,
       weeklyRawSignal: weeklyRawSignal ? {
         release: NFL_V1_WEEKLY_RAW_SIGNAL_RELEASE,
         independentHomeMargin: weeklyRawSignal.independentHomeMargin,
