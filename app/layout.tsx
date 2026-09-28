@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
+import AnalyticsConsent from "./components/AnalyticsConsent";
 import Navbar from "./components/Navbar";
 import Footer from "./components/Footer";
 
@@ -85,6 +86,10 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const measurementId = process.env.GOOGLE_ANALYTICS_MEASUREMENT_ID;
+  const validMeasurementId = measurementId !== undefined && /^G-[A-Z0-9]+$/.test(measurementId)
+    ? measurementId
+    : null;
   return (
     <html lang="en" className={`dark ${geistSans.variable} ${geistMono.variable}`}>
       <body className="text-white min-h-screen flex flex-col antialiased">
@@ -99,6 +104,7 @@ export default function RootLayout({
         <Navbar />
         <div className="flex-1">{children}</div>
         <Footer />
+        <AnalyticsConsent measurementId={validMeasurementId} />
       </body>
     </html>
   );
