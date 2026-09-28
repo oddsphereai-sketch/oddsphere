@@ -30,8 +30,8 @@ import {
 } from "../lib/services/football/nflPlayerPropsRuntime";
 import type { NflPlayerPropsExactOffer } from "../lib/services/football/nflPlayerPropsMarketBoard";
 
-assert.equal(NFL_PLAYER_PROPS_RUNTIME_RELEASE, "nfl_player_props_runtime_2026_09_28_r16_current_role_coherent_posterior");
-assert.equal(NFL_PLAYER_PROPS_BOARD_RELEASE, "nfl_player_props_board_2026_09_28_r19_current_role_coherent_posterior");
+assert.equal(NFL_PLAYER_PROPS_RUNTIME_RELEASE, "nfl_player_props_runtime_2026_09_28_r17_qb_workload_marriage");
+assert.equal(NFL_PLAYER_PROPS_BOARD_RELEASE, "nfl_player_props_board_2026_09_28_r20_qb_workload_marriage");
 assert.deepEqual(NFL_PLAYER_PROPS_QB_ROLE_FLOORS, { confirmedStarter: 0.9, projectedStarter: 0.75 });
 const priorGameInactive = {
   name: "Case Keenum", status: "Inactive", detail: "Inactive for the preceding game", position: "QB",
@@ -211,9 +211,50 @@ assert.equal(expectedStarterProjection?.evidence?.source, "market_dominant_expec
 if (expectedStarterProjection?.evidence.source !== "market_dominant_expected_starter") throw new Error("passing projection evidence narrowed incorrectly");
 const expectedStarterEvidence = expectedStarterProjection.evidence;
 assert.equal(expectedStarterEvidence.books, 1);
+assert.equal(expectedStarterEvidence.market, "passing_yards");
 assert.equal(expectedStarterEvidence.roleProjection, 235);
 assert.ok((expectedStarterProjection?.projection ?? 0) > 215 && (expectedStarterProjection?.projection ?? 999) < 240,
   "the repaired projection is market-realistic while retaining bounded recent-role context");
+const attemptsFeature = {
+  ...quarterbackFeature,
+  features: {
+    ...quarterbackFeature.features,
+    prior_passing_attempts_avg3: 20,
+    prior_passing_attempts_avg5: 19,
+    prior_passing_attempts_ewm: 20.5,
+  },
+};
+const attemptsOffer: NflPlayerPropsExactOffer = {
+  ...passingOffer,
+  offerKey: "qb-attempts-a",
+  market: "passing_attempts",
+  line: 28.5,
+};
+const expectedStarterAttempts = nflPlayerPropsExpectedStarterPassingProjection({
+  feature: attemptsFeature,
+  market: "passing_attempts",
+  modeledProjection: 4,
+  offers: [attemptsOffer, { ...attemptsOffer, offerKey: "qb-attempts-b", sportsbook: "book-b", line: 29.5 }],
+  evaluatedSportsbook: "book-a",
+});
+assert.equal(
+  expectedStarterAttempts?.evidence?.source === "market_dominant_expected_starter"
+    ? expectedStarterAttempts.evidence.market
+    : null,
+  "passing_attempts",
+);
+assert.ok((expectedStarterAttempts?.projection ?? 0) > 25,
+  "a verified starter's passing-attempt projection uses current target-excluded workload evidence instead of a reserve head");
+const attemptsBoard = buildNflPlayerPropsRuntimeBoard({
+  offers: [attemptsOffer, { ...attemptsOffer, offerKey: "qb-attempts-b", sportsbook: "book-b", line: 29.5 }],
+  features: [attemptsFeature],
+  evaluatedAt: "2026-08-25T12:01:00.000Z",
+});
+assert.ok(attemptsBoard.decisions.every((row) => row.healthHolds.includes("independent_same_line_confirmation_missing")),
+  "transported target-excluded workload evidence repairs the posterior without creating an unvalidated action");
+assert.ok(attemptsBoard.decisions.every((row) => row.projection !== null
+  && (row.projection > row.line) === (row.side === "over" ? row.finalProbability >= 0.5 : row.finalProbability < 0.5)),
+"starter workload projection and probability remain one posterior");
 assert.equal(nflPlayerPropsExpectedStarterPassingProjection({
   feature: { ...quarterbackFeature, expectedQuarterback: { ...quarterbackFeature.expectedQuarterback, name: "Other Quarterback" } },
   modeledProjection: 110,
@@ -296,13 +337,13 @@ const crossLinePassing = buildNflPlayerPropsRuntimeBoard({
   evaluatedAt: "2026-08-25T12:01:00.000Z",
 });
 const targetOver = crossLinePassing.decisions.find((row) => row.sportsbook === "book-a" && row.side === "over");
-assert.equal(targetOver?.grade, "Watchlist", "positive target-book economics supported by another book at a different line are visible as Watchlist");
+assert.equal(targetOver?.grade, "Watchlist", "transported target-excluded evidence can repair a passing forecast without authorizing an unvalidated action");
 assert.equal(targetOver?.passingMarketEvidence?.source, "target_book_excluded_cross_line_transport");
 assert.equal(targetOver?.modelRelease, NFL_PLAYER_PROPS_MODEL_RELEASE);
 assert.equal(targetOver?.calibrationRelease, NFL_PLAYER_PROPS_CALIBRATION_RELEASE);
 assert.equal(targetOver?.decisionRelease, NFL_PLAYER_PROPS_DECISION_RELEASE);
-assert.ok(crossLinePassing.decisions.every((row) => !["Lean", "Best Angle"].includes(row.grade)),
-  "different-line confirmation alone cannot authorize a passing-yards action grade");
+assert.equal(crossLinePassing.decisions.filter((row) => ["Lean", "Best Angle"].includes(row.grade)).length, 0,
+  "different-line passing evidence does not bypass the same-line action gate");
 assert.ok(crossLinePassing.decisions.every((row) => row.finalProbability === row.rawModelProbability),
   "the target-excluded QB point head is not anchored to the same market evidence a second time");
 const touchdownOffer: NflPlayerPropsExactOffer = {
