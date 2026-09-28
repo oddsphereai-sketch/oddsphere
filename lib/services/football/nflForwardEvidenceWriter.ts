@@ -80,9 +80,15 @@ import {
 } from "./nflForwardMemberSnapshotStore";
 import { readNflPlayerPropsCurrentSeasonState } from "./nflPlayerPropsCurrentSeasonState";
 import { buildNflWeeklyPossessionMargin } from "./nflWeeklyPossessionMargin";
+import {
+  fetchBalldontlieNflWeeklyProjectionShadows,
+  NFL_PAID_PROJECTION_MAX_PAGES,
+  shouldRefreshNflPaidProjectionShadows,
+  type NflPaidProjectionShadow,
+} from "./balldontlieNflWeeklyProjectionShadow";
 
 export const NFL_FORWARD_WRITER_RELEASE =
-  "nfl_forward_evidence_writer_2026_09_27_r45_tracking_isolation" as const;
+  "nfl_forward_evidence_writer_2026_09_28_r46_opening_timestamp_paid_projection_shadow" as const;
 
 export type NflForwardWriterResult = {
   writerRelease: typeof NFL_FORWARD_WRITER_RELEASE;
@@ -203,7 +209,14 @@ export async function runNflForwardEvidenceWriter(args: {
     .filter((team, index, rows) => criticalTeamIds.has(team.id) && rows.findIndex((row) => row.id === team.id) === index);
 
   const playbook = new PlaybookReadBroker(args.playbookApiKey);
-  const [rosters, availability, linesResult, splitsResult, sharpResult, circaAttempt, currentSeasonState] = await Promise.all([
+  const storedPaidProjectionShadows = latestStoredPaidProjectionShadows(historicalExisting);
+  const plannedGameIds = new Set(plans.map((plan) => plan.game.providerGameId));
+  const paidProjectionRefreshDue = shouldRefreshNflPaidProjectionShadows({
+    byGame: storedPaidProjectionShadows,
+    requiredGameIds: plannedGameIds,
+    now: args.now,
+  });
+  const [rosters, availability, linesResult, splitsResult, sharpResult, circaAttempt, currentSeasonState, paidProjectionFetch] = await Promise.all([
     fetchBalldontlieNflTeamDepthSnapshots({
       teams: criticalTeams,
       season: args.season,
@@ -238,6 +251,15 @@ export async function runNflForwardEvidenceWriter(args: {
     args.week > 1
       ? readNflPlayerPropsCurrentSeasonState({ client: args.client, season: args.season })
       : Promise.resolve(null),
+    paidProjectionRefreshDue
+      ? fetchBalldontlieNflWeeklyProjectionShadows({
+          apiKey: args.balldontlieApiKey,
+          season: args.season,
+          week: args.week,
+          games: slate.games,
+          fetchedAt: args.now,
+        }).catch(() => null)
+      : Promise.resolve(null),
   ]);
   if (args.week > 1 && (!currentSeasonState || currentSeasonState.completeThroughWeek < args.week - 1)) {
     throw new Error(`NFL current-season matchup state is incomplete through Week ${args.week - 1}.`);
@@ -259,7 +281,13 @@ export async function runNflForwardEvidenceWriter(args: {
     }));
   }
   const weatherRequests = [...weatherByGame.values()].reduce((sum, value) => sum + value.requests, 0);
-  const apiCallsMaximum = slate.providerRequests + rosters.requests + NFL_INJURY_MAX_PAGES + 2 + sharpResult.requests + circaAttempt.requests + weatherRequests;
+  const paidProjectionShadows = {
+    ...storedPaidProjectionShadows,
+    ...(paidProjectionFetch?.byGame ?? {}),
+  };
+  const paidProjectionRequestsMaximum = paidProjectionRefreshDue ? NFL_PAID_PROJECTION_MAX_PAGES : 0;
+  const apiCallsMaximum = slate.providerRequests + rosters.requests + NFL_INJURY_MAX_PAGES + paidProjectionRequestsMaximum
+    + 2 + sharpResult.requests + circaAttempt.requests + weatherRequests;
   const captureHistoryBooksByGame = new Map<string, NflPreviewBookOdds[]>();
   for (const row of historicalExisting) {
     const books = captureHistoryBooksByGame.get(row.providerGameId) ?? [];
@@ -287,9 +315,12 @@ export async function runNflForwardEvidenceWriter(args: {
     const providerOpeningBooks = slate.openingOddsAllBooksByGame[plan.game.providerGameId] ?? [];
     const comparableProviderOpeningBooks = slate.openingOddsComparableBooksByGame[plan.game.providerGameId] ?? [];
     const previous = latestEvidenceForGame(historicalExisting, plan.game.providerGameId);
+    // The repaired provider opener is captured below as target-ineligible
+    // context. It cannot silently change the active model until the forward
+    // opening-movement candidate clears its separately versioned gate.
     const opening = operationalOpening({
       previous,
-      providerOpening: slate.openingOddsByGame[plan.game.providerGameId] ?? null,
+      providerOpening: null,
       current,
       capturedAt: args.now,
     });
@@ -302,6 +333,7 @@ export async function runNflForwardEvidenceWriter(args: {
     const sharpSplits = sharpResult.splitsByGame[plan.game.providerGameId] ?? null;
     const injuries = availabilityByGame.get(plan.game.providerGameId) ?? null;
     const weather = weatherByGame.get(plan.game.providerGameId)!.snapshot;
+    const paidProjectionShadow = paidProjectionShadows[plan.game.providerGameId];
     const rosterAndDepth = awayDepth.roster.length > 0 && homeDepth.roster.length > 0;
     const expectedQuarterbacks = awayDepth.expectedStartingQuarterback !== null && homeDepth.expectedStartingQuarterback !== null;
     const playbookCoverage = completePlaybookSplits(playbookSplits);
@@ -461,6 +493,7 @@ export async function runNflForwardEvidenceWriter(args: {
       injuries,
       weather,
       outcomeForecast: outcome,
+      ...(paidProjectionShadow ? { paidProjectionShadow } : {}),
       decisions: {
         evaluatedBets: production.evaluatedBets,
         outcomeConfidence: production.outcomeConfidence,
@@ -477,10 +510,12 @@ export async function runNflForwardEvidenceWriter(args: {
         injuries: injuries !== null, playbookSplits: playbookCoverage,
         sharpApiSplits: sharpCoverage, weather: weatherCoverage, healthHolds: holds,
         forecastTargetExclusion: resolved.targetExclusion,
+        paidProjectionShadow: Boolean(paidProjectionShadow),
       },
       requestBudget: {
         balldontlieSlate: slate.providerRequests, balldontlieRoster: rosters.requests,
         balldontlieInjuriesMaximum: NFL_INJURY_MAX_PAGES, playbook: 2,
+        balldontlieWeeklyProjectionsMaximum: paidProjectionRequestsMaximum,
         sharpApi: sharpResult.requests + circaAttempt.requests,
         weather: weatherRequests, totalMaximum: apiCallsMaximum,
       },
@@ -562,6 +597,19 @@ export async function runNflForwardEvidenceWriter(args: {
     ...memberSnapshot,
     ...tracking,
   };
+}
+
+function latestStoredPaidProjectionShadows(existing: NflForwardStoredEvidence[]): Record<string, NflPaidProjectionShadow> {
+  const byGame: Record<string, NflPaidProjectionShadow> = {};
+  for (const row of existing) {
+    const shadow = row.payload.paidProjectionShadow;
+    if (!shadow) continue;
+    const current = byGame[row.providerGameId];
+    if (!current || Date.parse(shadow.fetchedAt) > Date.parse(current.fetchedAt)) {
+      byGame[row.providerGameId] = shadow;
+    }
+  }
+  return byGame;
 }
 
 function depthForTeam(

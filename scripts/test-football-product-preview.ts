@@ -116,6 +116,31 @@ assert.equal(normalizedOdds?.sportsbook, "fanduel");
 assert.equal(normalizedOdds?.spread?.homeLine, 1.5);
 assert.equal(normalizedOdds?.total?.line, 37.5);
 
+const openingOnlyTimestamp = {
+  game_id: 1393564,
+  vendor: "draftkings",
+  moneyline_home_odds: -118,
+  moneyline_away_odds: -102,
+  spread_home_value: -1.5,
+  spread_home_odds: -105,
+  spread_away_value: 1.5,
+  spread_away_odds: -115,
+  total_value: 46.5,
+  total_over_odds: -110,
+  total_under_odds: -110,
+  opened_at: "2026-06-14T13:27:49.716Z",
+};
+assert.equal(
+  __BALLDONTLIE_NFL_PREVIEW_SLATE_TEST__.normalizeOdds(openingOnlyTimestamp),
+  null,
+  "current rows cannot borrow an opening-only timestamp",
+);
+assert.equal(
+  __BALLDONTLIE_NFL_PREVIEW_SLATE_TEST__.normalizeOdds(openingOnlyTimestamp, true)?.observedAt,
+  "2026-06-14T13:27:49.716Z",
+  "opening rows retain the provider-native opened_at timestamp",
+);
+
 const providerSlate: NflPreviewProviderSlate = {
   release: BALLDONTLIE_NFL_PREVIEW_SLATE_RELEASE,
   fetchedAt: "2026-08-19T18:00:00.000Z",
