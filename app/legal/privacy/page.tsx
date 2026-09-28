@@ -49,14 +49,17 @@ export default function PrivacyPage() {
         </p>
         <p className="font-semibold text-white mt-3">Analytics &amp; conversion measurement</p>
         <p>
-          We use Google Analytics to understand site usage and measure whether
-          visits lead to a confirmed free-trial activation or a first paid
-          subscription. Google may set analytics cookies that identify a browser
-          and session. When you open Whop checkout, we keep those identifiers in
-          our private database and give Whop only a random lookup token. After
-          Whop confirms the membership event, we use that token to send the
-          corresponding conversion to Google. A pricing-page view or checkout
-          click is not reported as a trial activation.
+          If you choose Accept in our analytics controls, we use Google Analytics
+          to understand site usage and measure whether visits lead to a confirmed
+          free-trial activation or a first paid subscription. Until you accept,
+          we do not load the Google Analytics browser tag or send those membership
+          events. Google may set analytics cookies that identify a browser and
+          session. When you open Whop checkout after accepting, we keep those
+          identifiers in our private database and give Whop only a random lookup
+          token. After Whop confirms the membership event, we use that token to
+          send the corresponding conversion to Google only while your choice is
+          still accepted. A pricing-page view or checkout click is not reported
+          as a trial activation.
         </p>
 
         <h2 className="text-xl font-bold text-white mt-8 mb-2">2. What we do NOT collect</h2>
@@ -102,7 +105,10 @@ export default function PrivacyPage() {
         <h2 className="text-xl font-bold text-white mt-8 mb-2">6. Your choices</h2>
         <p>
           You can sign out at any time from the Lab. You can manage your
-          subscription or cancel via Whop. Email{" "}
+          subscription or cancel via Whop. You can use the Analytics choices
+          control on the site to accept, decline, or withdraw optional analytics
+          at any time. Declining analytics does not affect membership access,
+          checkout, billing, or the product. Email{" "}
           <a href="mailto:support@oddsphereai.com" className="text-violet-300 hover:text-violet-200 underline underline-offset-2">
             support@oddsphereai.com
           </a>{" "}

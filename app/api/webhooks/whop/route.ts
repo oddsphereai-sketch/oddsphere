@@ -66,25 +66,42 @@ async function isFirstSuccessfulPayment(candidate: ConversionCandidate): Promise
   return match;
 }
 
-async function attachPrivateAttribution(candidate: ConversionCandidate): Promise<ConversionCandidate> {
+async function attachPrivateAttribution(candidate: ConversionCandidate): Promise<{
+  candidate: ConversionCandidate;
+  consentGranted: boolean;
+}> {
   const attributionId = text(candidate.metadata.oddsphere_attribution_id);
-  if (!attributionId || !/^[0-9a-f]{8}-[0-9a-f-]{27}$/i.test(attributionId)) return candidate;
+  if (!attributionId || !/^[0-9a-f]{8}-[0-9a-f-]{27}$/i.test(attributionId)) {
+    return { candidate, consentGranted: false };
+  }
 
   const { data, error } = await supabase
     .from("checkout_attributions")
-    .select("ga_client_id,ga_session_id,ga_measurement_id")
+    .select("ga_client_id,ga_session_id,ga_measurement_id,consent_choice_id")
     .eq("id", attributionId)
     .gt("expires_at", new Date().toISOString())
     .maybeSingle();
   if (error) throw new Error(`Could not resolve private checkout attribution: ${error.message}`);
-  if (!data) return candidate;
+  if (!data?.consent_choice_id) return { candidate, consentGranted: false };
+
+  const { data: consent, error: consentError } = await supabase
+    .from("analytics_consent_choices")
+    .select("choice")
+    .eq("id", data.consent_choice_id)
+    .maybeSingle();
+  if (consentError) throw new Error(`Could not resolve analytics consent: ${consentError.message}`);
+  if (consent?.choice !== "granted") return { candidate, consentGranted: false };
+
   return {
-    ...candidate,
-    metadata: {
-      ...candidate.metadata,
-      oddsphere_ga_client_id: data.ga_client_id,
-      oddsphere_ga_session_id: data.ga_session_id,
-      oddsphere_ga_measurement_id: data.ga_measurement_id,
+    consentGranted: true,
+    candidate: {
+      ...candidate,
+      metadata: {
+        ...candidate.metadata,
+        oddsphere_ga_client_id: data.ga_client_id,
+        oddsphere_ga_session_id: data.ga_session_id,
+        oddsphere_ga_measurement_id: data.ga_measurement_id,
+      },
     },
   };
 }
@@ -158,10 +175,18 @@ export async function POST(request: Request): Promise<Response> {
   if (!candidate) return Response.json({ accepted: true, conversion: null });
 
   try {
+    const attribution = await attachPrivateAttribution(candidate);
+    candidate = attribution.candidate;
+    if (!attribution.consentGranted) {
+      return Response.json({
+        accepted: true,
+        conversion: null,
+        reason: "analytics_consent_not_granted",
+      });
+    }
     if (candidate.kind === "first_paid" && !(await isFirstSuccessfulPayment(candidate))) {
       return Response.json({ accepted: true, conversion: null, reason: "not_first_payment" });
     }
-    candidate = await attachPrivateAttribution(candidate);
     const deliveryClaim = await claim(candidate, webhookId);
     if (!deliveryClaim.claimed) {
       if (deliveryClaim.status === "sent") {

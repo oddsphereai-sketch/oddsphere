@@ -24,9 +24,24 @@ Checkout creates a random attribution UUID. Only that opaque UUID is copied
 into Whop metadata. GA browser/session identifiers remain in the private
 `checkout_attributions` table and are joined only after a verified webhook.
 
+## Consent boundary
+
+- No choice and **Decline** both mean no Google browser tag, no checkout
+  attribution, and no Whop-to-GA4 trial or purchase event.
+- **Accept** is stored in a signed, HTTP-only first-party cookie and a private
+  `analytics_consent_choices` row. The checkout relay works only when both
+  records currently say `granted`.
+- A webhook re-checks the current database choice before claiming or sending a
+  conversion. Withdrawing consent therefore suppresses later trial or payment
+  delivery even when the Whop membership still carries an older attribution
+  token.
+- Consent never gates the direct Whop checkout fallback, membership access,
+  billing, or authentication.
+
 ## Production setup (after merge)
 
-1. Apply `lib/db/schema-migration-v41-membership-conversions.sql`.
+1. Apply `lib/db/schema-migration-v41-membership-conversions.sql`, followed by
+   `lib/db/schema-migration-v42-analytics-consent.sql`.
 2. Set `GOOGLE_ANALYTICS_MEASUREMENT_ID`, a Measurement Protocol
    `GOOGLE_ANALYTICS_API_SECRET`, `WHOP_WEBHOOK_SECRET`, `WHOP_ACCOUNT_ID`, and
    a 32+ character `CONVERSION_TRACKING_SALT` in production.
@@ -34,10 +49,14 @@ into Whop metadata. GA browser/session identifiers remain in the private
    `https://www.oddsphereai.com/api/webhooks/whop` for
    `membership.activated` and `payment.succeeded` and copy its signing secret
    into `WHOP_WEBHOOK_SECRET`.
-4. Complete a controlled seven-day-trial activation and verify exactly one
+4. Verify the no-choice and declined states load no Google script and return a
+   direct Whop checkout without creating an attribution. Verify the accepted
+   state loads the tag and creates a consent-bound attribution, then withdraw
+   consent and confirm the webhook is acknowledged without a GA delivery.
+5. Complete a controlled seven-day-trial activation and verify exactly one
    `trial_activation_confirmed` row is `sent`. Replay the same webhook and
    verify it is reported as a duplicate without a second GA event.
-5. Use a controlled first paid charge and verify one GA `purchase` with the
+6. Use a controlled first paid charge and verify one GA `purchase` with the
    Whop payment id as `transaction_id`; verify a renewal is ignored.
 
 Do not configure or launch an ad campaign as part of this setup.

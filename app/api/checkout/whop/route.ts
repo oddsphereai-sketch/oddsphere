@@ -1,6 +1,12 @@
 import { randomUUID } from "node:crypto";
 
 import {
+  ANALYTICS_CHOICE_COOKIE,
+  analyticsAllowed,
+  analyticsConsentFromCookieHeader,
+  cookieValue,
+} from "@/lib/analytics/consent";
+import {
   WHOP_ACCOUNT_ID,
   WHOP_ANNUAL_PLAN_ID,
   WHOP_API_VERSION,
@@ -38,9 +44,21 @@ export async function GET(request: Request): Promise<Response> {
   const plan = selectedPlan(new URL(request.url));
   const apiKey = process.env.WHOP_API_KEY;
   const measurementId = process.env.GOOGLE_ANALYTICS_MEASUREMENT_ID;
-  if (!apiKey || !measurementId) return fallback(plan);
+  const salt = process.env.CONVERSION_TRACKING_SALT;
+  if (!apiKey || !measurementId || !salt) return fallback(plan);
 
-  const analytics = analyticsMetadataFromCookies(request.headers.get("cookie"), measurementId);
+  const cookieHeader = request.headers.get("cookie");
+  if (cookieValue(cookieHeader, ANALYTICS_CHOICE_COOKIE) !== "granted") return fallback(plan);
+  const consent = analyticsConsentFromCookieHeader(cookieHeader, salt);
+  if (!analyticsAllowed(consent)) return fallback(plan);
+  const { data: currentConsent, error: consentError } = await supabase
+    .from("analytics_consent_choices")
+    .select("choice")
+    .eq("id", consent.id)
+    .maybeSingle();
+  if (consentError || currentConsent?.choice !== "granted") return fallback(plan);
+
+  const analytics = analyticsMetadataFromCookies(cookieHeader, measurementId);
   const clientId = analytics.oddsphere_ga_client_id;
   if (typeof clientId !== "string") return fallback(plan);
 
@@ -52,6 +70,7 @@ export async function GET(request: Request): Promise<Response> {
       ? analytics.oddsphere_ga_session_id
       : null,
     ga_measurement_id: measurementId,
+    consent_choice_id: consent.id,
   });
   if (attributionError) return fallback(plan);
 

@@ -4,6 +4,17 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 import {
+  analyticsAllowed,
+  analyticsConsentFromCookieHeader,
+  googleAnalyticsCookieNames,
+  parseAnalyticsConsent,
+  serializeAnalyticsConsent,
+} from "../lib/analytics/consent";
+import {
+  analyticsBrowserTagAllowed,
+  browserAnalyticsChoice,
+} from "../lib/analytics/consentBrowser";
+import {
   FIRST_PAID_CONVERSION_EVENT,
   TRIAL_CONVERSION_EVENT,
   analyticsMetadataFromCookies,
@@ -15,6 +26,57 @@ import {
 } from "../lib/analytics/membershipConversions";
 
 const monthly = "plan_zR8HdNVFZv5Sr";
+const consentSalt = "consent-test-salt-that-is-at-least-32-characters";
+const consentId = "b3d52fea-bbb1-4c79-8e51-a467d23898fd";
+
+assert.equal(
+  analyticsAllowed(analyticsConsentFromCookieHeader(null, consentSalt)),
+  false,
+  "no analytics choice must default to denied",
+);
+const deniedConsentCookie = serializeAnalyticsConsent({ id: consentId, choice: "denied" }, consentSalt);
+assert.equal(
+  analyticsAllowed(analyticsConsentFromCookieHeader(
+    `oddsphere_analytics_consent=${encodeURIComponent(deniedConsentCookie)}`,
+    consentSalt,
+  )),
+  false,
+  "an explicit decline must keep analytics disabled",
+);
+const grantedConsentCookie = serializeAnalyticsConsent({ id: consentId, choice: "granted" }, consentSalt);
+const grantedConsent = analyticsConsentFromCookieHeader(
+  `other=value; oddsphere_analytics_consent=${encodeURIComponent(grantedConsentCookie)}`,
+  consentSalt,
+);
+assert.equal(analyticsAllowed(grantedConsent), true, "an authentic accepted choice may enable analytics");
+assert.equal(grantedConsent?.id, consentId);
+assert.equal(
+  parseAnalyticsConsent(`${grantedConsentCookie.slice(0, -1)}x`, consentSalt),
+  null,
+  "a modified consent cookie must fail closed",
+);
+assert.deepEqual(googleAnalyticsCookieNames("G-ABC123"), ["_ga", "_ga_ABC123"]);
+assert.equal(browserAnalyticsChoice(""), null);
+assert.equal(
+  analyticsBrowserTagAllowed(null, "G-ABC123"),
+  false,
+  "no browser choice must not load the Google tag",
+);
+assert.equal(
+  analyticsBrowserTagAllowed(browserAnalyticsChoice("oddsphere_analytics_choice=denied"), "G-ABC123"),
+  false,
+  "decline must not load the Google tag",
+);
+assert.equal(
+  analyticsBrowserTagAllowed(browserAnalyticsChoice("oddsphere_analytics_choice=granted"), "G-ABC123"),
+  true,
+  "accept may load the configured Google tag",
+);
+assert.equal(
+  analyticsBrowserTagAllowed(browserAnalyticsChoice("oddsphere_analytics_choice=granted"), null),
+  false,
+  "accept must remain inert while analytics is unconfigured",
+);
 
 const trialPayload = {
   type: "membership.activated",
@@ -143,13 +205,34 @@ assert.doesNotMatch(
   /ga_client_id|ga_session_id/,
   "Whop metadata must receive only the opaque attribution token",
 );
+assert.match(checkoutSource, /analyticsAllowed\(consent\)/);
+assert.match(checkoutSource, /currentConsent\?\.choice !== "granted"/);
+assert.match(checkoutSource, /return fallback\(plan\)/, "analytics refusal must retain direct Whop checkout");
 
 const migration = readFileSync(resolve("lib/db/schema-migration-v41-membership-conversions.sql"), "utf8");
+const consentMigration = readFileSync(resolve("lib/db/schema-migration-v42-analytics-consent.sql"), "utf8");
 const webhookSource = readFileSync(resolve("app/api/webhooks/whop/route.ts"), "utf8");
+const layoutSource = readFileSync(resolve("app/layout.tsx"), "utf8");
+const consentUiSource = readFileSync(resolve("app/components/AnalyticsConsent.tsx"), "utf8");
+const consentRouteSource = readFileSync(resolve("app/api/privacy/analytics-consent/route.ts"), "utf8");
 assert.match(migration, /conversion_key text PRIMARY KEY/);
 assert.match(migration, /ON CONFLICT \(conversion_key\)/);
 assert.match(migration, /membership_conversion_events\.status = 'failed'/);
 assert.match(webhookSource, /deliveryClaim\.status === "sent"/);
 assert.match(webhookSource, /conversion_already_processing[^]*status: 503/);
+assert.match(consentMigration, /analytics_consent_choices/);
+assert.match(consentMigration, /consent_choice_id uuid/);
+assert.match(webhookSource, /consent\?\.choice !== "granted"/);
+assert.match(webhookSource, /analytics_consent_not_granted/);
+assert.match(layoutSource, /<AnalyticsConsent measurementId=\{validMeasurementId\}/);
+assert.match(consentUiSource, /analyticsBrowserTagAllowed\(choice, measurementId\)/);
+assert.match(consentUiSource, /ad_storage:'denied'/);
+assert.match(consentUiSource, /"Decline"/);
+assert.match(consentUiSource, /"Accept"/);
+assert.match(consentUiSource, /Declining does not affect membership access,/);
+assert.match(consentUiSource, /Current choice:/);
+assert.match(consentRouteSource, /analytics_consent_choices/);
+assert.match(consentRouteSource, /serializeAnalyticsConsent/);
+assert.match(consentRouteSource, /ANALYTICS_CHOICE_COOKIE/);
 
 console.log("membership conversion tracking tests passed");
