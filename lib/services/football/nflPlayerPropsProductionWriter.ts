@@ -44,7 +44,7 @@ import {
 } from "./nflPlayerPropsPrediction";
 
 export const NFL_PLAYER_PROPS_WRITER_RELEASE =
-  "nfl_player_props_writer_2026_09_28_r30_injury_continuity_and_rollover" as const;
+  "nfl_player_props_writer_2026_09_28_r31_current_role_coherent_posterior" as const;
 export const NFL_PLAYER_PROPS_PRODUCTION_INCLUDE_OPENINGS = true as const;
 export const NFL_PLAYER_PROPS_PRODUCTION_COLLECTION_CALL_MAXIMUM = (
   1

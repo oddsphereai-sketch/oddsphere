@@ -12,6 +12,7 @@ import {
   gradeNflPlayerPropsTouchdownCandidate,
   nflPlayerPropsMarketImpliedCenter,
   nflPlayerPropsCoherentPosteriorDistribution,
+  nflPlayerPropsCurrentGameAvailability,
   nflPlayerPropsOverProbability,
   nflPlayerPropsProbabilityCoherentProjection,
   nflPlayerPropsPassingYardsWatchlistEligible,
@@ -29,9 +30,24 @@ import {
 } from "../lib/services/football/nflPlayerPropsRuntime";
 import type { NflPlayerPropsExactOffer } from "../lib/services/football/nflPlayerPropsMarketBoard";
 
-assert.equal(NFL_PLAYER_PROPS_RUNTIME_RELEASE, "nfl_player_props_runtime_2026_09_28_r15_injury_context_continuity");
-assert.equal(NFL_PLAYER_PROPS_BOARD_RELEASE, "nfl_player_props_board_2026_09_28_r18_injury_context_continuity");
+assert.equal(NFL_PLAYER_PROPS_RUNTIME_RELEASE, "nfl_player_props_runtime_2026_09_28_r16_current_role_coherent_posterior");
+assert.equal(NFL_PLAYER_PROPS_BOARD_RELEASE, "nfl_player_props_board_2026_09_28_r19_current_role_coherent_posterior");
 assert.deepEqual(NFL_PLAYER_PROPS_QB_ROLE_FLOORS, { confirmedStarter: 0.9, projectedStarter: 0.75 });
+const priorGameInactive = {
+  name: "Case Keenum", status: "Inactive", detail: "Inactive for the preceding game", position: "QB",
+  reportedAt: "2026-09-20T15:39:00.000Z",
+};
+assert.equal(nflPlayerPropsCurrentGameAvailability(priorGameInactive, "2026-09-29T00:15:00.000Z"), undefined,
+  "a prior-game inactive designation cannot override the next game's current role evidence");
+assert.deepEqual(nflPlayerPropsCurrentGameAvailability({
+  ...priorGameInactive, reportedAt: "2026-09-27T18:00:00.000Z",
+}, "2026-09-29T00:15:00.000Z"), {
+  ...priorGameInactive, reportedAt: "2026-09-27T18:00:00.000Z",
+}, "a current-game inactive designation remains authoritative");
+assert.equal(nflPlayerPropsCurrentGameAvailability({
+  ...priorGameInactive, status: "Injured Reserve",
+}, "2026-09-29T00:15:00.000Z")?.status, "Injured Reserve",
+"a persistent injured-reserve designation never expires under the game-status rule");
 verifyNflPlayerPropsRuntimeParity(1e-9);
 
 const receiving = nflPlayerPropsRuntimeMarketPolicy("receiving_yards");
@@ -220,8 +236,9 @@ const evaluationOnlyPassing = buildNflPlayerPropsRuntimeBoard({
   evaluatedAt: "2026-08-25T12:01:00.000Z",
 });
 assert.ok(evaluationOnlyPassing.decisions.length === 2);
-assert.ok(evaluationOnlyPassing.decisions.every((row) => row.projection === 235),
-  "an evaluation-only board publishes the existing independent role projection");
+assert.ok(evaluationOnlyPassing.decisions.every((row) => row.projection !== null
+  && (row.side === "over" ? row.projection > row.line : row.projection < row.line) === (row.finalProbability >= 0.5)),
+"an evaluation-only board publishes the median from the same independent posterior as its probability");
 assert.ok(evaluationOnlyPassing.decisions.every((row) => row.marketProbability === row.rawModelProbability),
   "an evaluation-only quote cannot validate its own passing probability");
 assert.ok(evaluationOnlyPassing.decisions.every((row) => row.grade === "No Play"),
