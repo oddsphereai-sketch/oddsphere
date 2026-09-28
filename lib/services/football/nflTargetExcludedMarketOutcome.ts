@@ -15,9 +15,10 @@ import {
   NFL_V1_WEEKLY_RAW_SIGNAL_RELEASE,
   type NflV1WeekOneOutcomeForecast,
 } from "./nflV1WeekOneOutcome";
+import type { NflPaidProjectionShadow } from "./balldontlieNflWeeklyProjectionShadow";
 
 export const NFL_TARGET_EXCLUDED_MARKET_OUTCOME_RELEASE =
-  "nfl_target_excluded_market_outcome_2026_09_27_r6_pressure_direction" as const;
+  "nfl_target_excluded_market_outcome_2026_09_28_r7_paid_team_score" as const;
 
 export type NflTargetExcludedMarketAnchor = {
   release: typeof NFL_TARGET_EXCLUDED_MARKET_OUTCOME_RELEASE;
@@ -59,6 +60,8 @@ export function resolveNflTargetExcludedProduction(args: {
     directionHomeCoverProbability: number;
     directionHomeMarginCorrection: number;
   };
+  paidTeamScore?: Pick<NflPaidProjectionShadow,
+    "release" | "providerCollectedAt" | "projectedHomeMargin" | "projectedTotal">;
 }): {
   outcome: NflV1WeekOneOutcomeForecast;
   production: NflV1ActionableGradeBundle;
@@ -134,10 +137,9 @@ export function resolveNflTargetExcludedProduction(args: {
       marketHomeCoverProbability: anchor.spreadHomeFairProbability,
       marketOverProbability: args.pricedNeutralTotalCandidate ? anchor.totalOverFairProbability : undefined,
       spreadDirectionCandidate: args.operationalOpening !== undefined && args.operationalOpening !== null,
-      movementCurrent: !excluded.total.includes(normalizeBook(args.current.sportsbook))
-        ? args.current
-        : null,
+      movementCurrent: targetFreeMovementCurrent(args.current, excluded),
       weeklyRawSignal: args.weeklyRawSignal,
+      paidTeamScore: args.paidTeamScore,
       evaluatedAt: args.evaluatedAt,
     });
     const productionCandidate = buildProduction(outcomeCandidate);
@@ -160,6 +162,27 @@ export function resolveNflTargetExcludedProduction(args: {
     excluded = nextExcluded;
   }
   return fallback();
+}
+
+/**
+ * Target exclusion is market-family scoped. A sportsbook evaluated for Total
+ * cannot contribute its Total movement, but that must not erase a separately
+ * target-free moneyline/Spread trail from the same named book.
+ */
+function targetFreeMovementCurrent(
+  current: NflPreviewBookOdds,
+  excluded: NflEvaluatedTargetFamilies,
+): NflPreviewBookOdds | null {
+  const family = normalizeBook(current.sportsbook);
+  const marginExcluded = excluded.margin.includes(family);
+  const totalExcluded = excluded.total.includes(family);
+  const result: NflPreviewBookOdds = {
+    ...current,
+    moneyline: marginExcluded ? null : current.moneyline,
+    spread: marginExcluded ? null : current.spread,
+    total: totalExcluded ? null : current.total,
+  };
+  return result.moneyline || result.spread || result.total ? result : null;
 }
 
 /**

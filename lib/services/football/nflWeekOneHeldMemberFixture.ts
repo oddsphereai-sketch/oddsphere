@@ -45,15 +45,19 @@ import { nflFootballEvidenceStats } from "./footballMemberEvidence";
 import type { NflRegularSharpMarket, NflRegularSharpSplit } from "./sharpApiNflSplits";
 
 export const NFL_WEEK_ONE_HELD_MEMBER_FIXTURE_RELEASE =
-  "nfl_weekly_member_fixture_2026_09_27_r31_pressure_transition_continuity" as const;
+  "nfl_weekly_member_fixture_2026_09_28_r32_paid_team_score_transition" as const;
 
 const NFL_PREVIOUS_MEMBER_RELEASE =
-  "nfl_v1_member_release_2026_09_25_r20_current_season_raw_signal" as const;
+  "nfl_v1_member_release_2026_09_27_r21_pressure_direction" as const;
 const NFL_PREVIOUS_DECISION_RELEASE =
-  "nfl_v1_daily_edge_decision_2026_09_25_r22_current_season_raw_signal" as const;
+  "nfl_v1_daily_edge_decision_2026_09_27_r23_pressure_direction" as const;
 const NFL_TRANSITION_FALLBACK_MEMBER_RELEASE =
-  "nfl_v1_member_release_2026_09_21_r18_opening_market_direction" as const;
+  "nfl_v1_member_release_2026_09_25_r20_current_season_raw_signal" as const;
 const NFL_TRANSITION_FALLBACK_DECISION_RELEASE =
+  "nfl_v1_daily_edge_decision_2026_09_25_r22_current_season_raw_signal" as const;
+const NFL_LEGACY_TRANSITION_FALLBACK_MEMBER_RELEASE =
+  "nfl_v1_member_release_2026_09_21_r18_opening_market_direction" as const;
+const NFL_LEGACY_TRANSITION_FALLBACK_DECISION_RELEASE =
   "nfl_v1_daily_edge_decision_2026_09_21_r21_opening_market_direction" as const;
 
 const DECISION_RELEASE = NFL_V1_ACTIONABLE_GRADE_DECISION_RELEASE;
@@ -201,7 +205,10 @@ function latestCompleteRows(rows: NflForwardStoredEvidence[]): Array<NflForwardS
         decision.decisionRelease === NFL_PREVIOUS_DECISION_RELEASE)) ||
     (row.payload.decisions.modelPromotionStatus === NFL_TRANSITION_FALLBACK_MEMBER_RELEASE &&
       row.payload.decisions.evaluatedBets.every((decision) =>
-        decision.decisionRelease === NFL_TRANSITION_FALLBACK_DECISION_RELEASE));
+        decision.decisionRelease === NFL_TRANSITION_FALLBACK_DECISION_RELEASE)) ||
+    (row.payload.decisions.modelPromotionStatus === NFL_LEGACY_TRANSITION_FALLBACK_MEMBER_RELEASE &&
+      row.payload.decisions.evaluatedBets.every((decision) =>
+        decision.decisionRelease === NFL_LEGACY_TRANSITION_FALLBACK_DECISION_RELEASE));
   const hasCurrentAuthority = currentRows.some(isCurrentAuthority);
   const transitionAt = hasCurrentAuthority
     ? Math.max(...currentRows.filter(isCurrentAuthority).map((row) => Date.parse(row.capturedAt)))

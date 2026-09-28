@@ -5,6 +5,40 @@ inputs, probabilities, projections, grades, promotions/demotions, calibration, p
 or stakes. It exists to prevent mixed model eras, competing writers, accidental board
 flattening, and load spikes.
 
+## Owner-approved provisional exception: NFL paid team-score activation r22
+
+On 2026-09-28 Daniel Mengel explicitly rejected a forward-shadow waiting period and directed
+Oddsphere to activate the already-captured BALLDONTLIE weekly team-score projection after a
+release-pure Weeks 1-3 comparison showed that it materially outperformed the active independent
+NFL signal. This exception is limited to the reviewed r22 architecture and does not authorize
+stakes, quotas, member copy or labels, another writer or schedule, result leakage, retroactive
+lock changes, or a reusable relaxation for another model.
+
+The owner acknowledges that the 47 settled games are an opened chronological diagnostic rather
+than a pristine future holdout. The direct opponent-D/ST `points_allowed` projection becomes the
+target-free weekly team-score center when a complete pregame provider snapshot exists. The
+existing football model remains the bounded last-known-good fallback. The active score may be
+adjusted only through the established strictly same-book opening/current Spread direction and
+the existing bounded, fresh, correctly matched Circa/public margin evidence. Total line/price
+movement and Total splits remain observable evidence but receive zero score-mean weight because
+the exact replay showed that Total movement worsened results. Exact sportsbook price continues
+to affect only the line-specific probability, edge, expected value, and grade.
+
+The exact 47-game comparison must retain the direct score's improvement over the preceding
+independent signal in winner, Spread and Total direction and all three score-error measures.
+The current-board replay must preserve all games and markets, report every promotion, demotion,
+side change and actionable-count change, and prove that winner, Spread, Total, expected score,
+representative score and probability all derive from one coherent final distribution. The
+existing `prediction_pipeline:nfl` lease, sole writer, bounded slate-level projection request,
+append-only evidence, target exclusion, immutable T-60 records, failure-preserving member
+snapshot, and zero-stake policy remain unchanged. Locked or started games retain their exact
+preceding release; the new release applies only to newly generated unlocked/T-60 evidence.
+
+Hold or roll back the complete release family if the paid projection is not pregame-complete,
+the fallback cannot build a coherent game, the board loses price coverage, the model creates a
+score/side contradiction, actionables collapse without balanced replacements, a writer or lease
+overlaps, or the live reader does not prove the expected release transition.
+
 ## Owner-approved provisional exception: NFL current-season raw signal r20
 
 On 2026-09-25 Daniel Mengel explicitly directed Oddsphere to repair and improve

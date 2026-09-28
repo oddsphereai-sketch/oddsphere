@@ -44,10 +44,12 @@ import {
   NFL_V1_ACTIONABLE_GRADE_MEMBER_RELEASE,
 } from "./nflV1ActionableGradeCandidate";
 import {
+  buildNflPaidTeamScoreBaseForecast,
   buildNflMarketEvidenceOutcomeForecast,
   getNflV1WeekOneOutcomeForecast,
   hasNflV1WeekOneOutcomeForecast,
   NFL_V1_WEEKLY_OUTCOME_MODEL_RELEASE,
+  NFL_V1_PAID_TEAM_SCORE_MODEL_RELEASE,
   NFL_V1_WEEKLY_RAW_SIGNAL_RELEASE,
   NFL_V1_WEEK_ONE_OUTCOME_ARTIFACT_RELEASE,
 } from "./nflV1WeekOneOutcome";
@@ -88,7 +90,7 @@ import {
 } from "./balldontlieNflWeeklyProjectionShadow";
 
 export const NFL_FORWARD_WRITER_RELEASE =
-  "nfl_forward_evidence_writer_2026_09_28_r46_opening_timestamp_paid_projection_shadow" as const;
+  "nfl_forward_evidence_writer_2026_09_28_r47_paid_team_score_activation" as const;
 
 export type NflForwardWriterResult = {
   writerRelease: typeof NFL_FORWARD_WRITER_RELEASE;
@@ -315,14 +317,13 @@ export async function runNflForwardEvidenceWriter(args: {
     const providerOpeningBooks = slate.openingOddsAllBooksByGame[plan.game.providerGameId] ?? [];
     const comparableProviderOpeningBooks = slate.openingOddsComparableBooksByGame[plan.game.providerGameId] ?? [];
     const previous = latestEvidenceForGame(historicalExisting, plan.game.providerGameId);
-    // The repaired provider opener is captured below as target-ineligible
-    // context. It cannot silently change the active model until the forward
-    // opening-movement candidate clears its separately versioned gate.
     const opening = operationalOpening({
       previous,
-      providerOpening: null,
+      providerOpening: slate.openingOddsByGame[plan.game.providerGameId] ?? null,
       current,
       capturedAt: args.now,
+      allowProviderUpgrade: plan.stage === "unlocked" &&
+        Date.parse(args.now) < Date.parse(plan.game.scheduledStart),
     });
     const awayDepth = depthForTeam(plan.game.away.abbreviation, rosters.byTeam, previous, "away");
     const homeDepth = depthForTeam(plan.game.home.abbreviation, rosters.byTeam, previous, "home");
@@ -363,7 +364,8 @@ export async function runNflForwardEvidenceWriter(args: {
       t60LagMinutes: plan.t60LagMinutes,
       coverageHealthHolds: holds,
     });
-    const weeklyRawSignal = currentSeasonState && current.spread && !hasNflV1WeekOneOutcomeForecast(plan.game.providerGameId)
+    const weeklyRawSignal = !paidProjectionShadow && currentSeasonState && current.spread &&
+      !hasNflV1WeekOneOutcomeForecast(plan.game.providerGameId)
       ? buildNflWeeklyPossessionMargin({
           currentSeasonState,
           homeTeam: plan.game.home.abbreviation,
@@ -371,7 +373,7 @@ export async function runNflForwardEvidenceWriter(args: {
           marketHomeMargin: -current.spread.homeLine,
         })
       : null;
-    const baseOutcome = getNflV1WeekOneOutcomeForecast({
+    const legacyBaseOutcome = getNflV1WeekOneOutcomeForecast({
       providerGameId: plan.game.providerGameId,
       awayTeam: plan.game.away.abbreviation,
       homeTeam: plan.game.home.abbreviation,
@@ -382,6 +384,12 @@ export async function runNflForwardEvidenceWriter(args: {
           }
         : undefined,
     });
+    const baseOutcome = paidProjectionShadow
+      ? buildNflPaidTeamScoreBaseForecast({
+          baseForecast: legacyBaseOutcome,
+          paidTeamScore: paidProjectionShadow,
+        })
+      : legacyBaseOutcome;
     const incumbentOutcome = shadowMoneyline.footballProjection
       ? buildNflMarketEvidenceOutcomeForecast({
           baseForecast: baseOutcome,
@@ -399,6 +407,7 @@ export async function runNflForwardEvidenceWriter(args: {
             directionHomeCoverProbability: weeklyRawSignal.directionHomeCoverProbability,
             directionHomeMarginCorrection: weeklyRawSignal.directionHomeMarginCorrection,
           } : undefined,
+          paidTeamScore: paidProjectionShadow,
           evaluatedAt: args.now,
         })
       : baseOutcome;
@@ -424,6 +433,7 @@ export async function runNflForwardEvidenceWriter(args: {
         directionHomeCoverProbability: weeklyRawSignal.directionHomeCoverProbability,
         directionHomeMarginCorrection: weeklyRawSignal.directionHomeMarginCorrection,
       } : undefined,
+      paidTeamScore: paidProjectionShadow,
     });
     const { outcome, production } = resolved;
     assertFootballCrossMarketCoherence({
@@ -520,7 +530,7 @@ export async function runNflForwardEvidenceWriter(args: {
         weather: weatherRequests, totalMaximum: apiCallsMaximum,
       },
     };
-    const hasTargetFreePrior = hasNflV1WeekOneOutcomeForecast(plan.game.providerGameId);
+    const hasTargetFreePrior = Boolean(paidProjectionShadow) || hasNflV1WeekOneOutcomeForecast(plan.game.providerGameId);
     const contextualEvidenceCapture = buildNflForwardContextCapture({
       payload,
       captureCurrentBooks: captureBooksWithSharpBooks(
@@ -534,7 +544,9 @@ export async function runNflForwardEvidenceWriter(args: {
       independentForecast: baseOutcome,
       independentTargetFree: hasTargetFreePrior,
       independentRelease: hasTargetFreePrior
-        ? NFL_V1_WEEK_ONE_OUTCOME_ARTIFACT_RELEASE
+        ? paidProjectionShadow
+          ? NFL_V1_PAID_TEAM_SCORE_MODEL_RELEASE
+          : NFL_V1_WEEK_ONE_OUTCOME_ARTIFACT_RELEASE
         : NFL_V1_WEEKLY_OUTCOME_MODEL_RELEASE,
       authoritativeForecast: outcome,
     });
@@ -630,11 +642,33 @@ function operationalOpening(args: {
   providerOpening: NflPreviewBookOdds | null;
   current: NflPreviewBookOdds;
   capturedAt: string;
+  /** Never true for T-60 or started games; immutable locks are not reinterpreted. */
+  allowProviderUpgrade: boolean;
 }): NflForwardOperationalOpening {
-  if (args.previous) return args.previous.payload.market.operationalOpening;
+  if (args.previous) {
+    const previous = args.previous.payload.market.operationalOpening;
+    if (
+      args.allowProviderUpgrade &&
+      previous.provenance === "first_observed" &&
+      args.providerOpening &&
+      normalizeBook(args.providerOpening.sportsbook) === normalizeBook(previous.quote.sportsbook) &&
+      Date.parse(args.providerOpening.observedAt) <= Date.parse(previous.capturedAt)
+    ) {
+      return {
+        provenance: "provider_opening",
+        capturedAt: args.providerOpening.observedAt,
+        quote: args.providerOpening,
+      };
+    }
+    return previous;
+  }
   return args.providerOpening
     ? { provenance: "provider_opening", capturedAt: args.providerOpening.observedAt, quote: args.providerOpening }
     : { provenance: "first_observed", capturedAt: new Date(args.capturedAt).toISOString(), quote: args.current };
+}
+
+function normalizeBook(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9]/g, "");
 }
 
 function matchPlaybookRowsOptional<T extends PlaybookLineGame | PlaybookSplitGame>(
