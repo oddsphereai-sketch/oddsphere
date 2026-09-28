@@ -90,7 +90,7 @@ import {
 } from "./balldontlieNflWeeklyProjectionShadow";
 
 export const NFL_FORWARD_WRITER_RELEASE =
-  "nfl_forward_evidence_writer_2026_09_28_r48_market_marriage" as const;
+  "nfl_forward_evidence_writer_2026_09_28_r49_next_window_state_order" as const;
 
 export type NflForwardWriterResult = {
   writerRelease: typeof NFL_FORWARD_WRITER_RELEASE;

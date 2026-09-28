@@ -2,8 +2,14 @@ import { cronHandler } from "@/lib/cron/runCron";
 import { supabase } from "@/lib/db/supabase";
 import { OpenWeatherProvider } from "@/lib/providers/real_api/OpenWeatherProvider";
 import { runNflForwardEvidenceWriter } from "@/lib/services/football/nflForwardEvidenceWriter";
+import { readNflForwardMemberSnapshot } from "@/lib/services/football/nflForwardMemberSnapshotStore";
+import {
+  readNflPlayerPropsCurrentSeasonState,
+  refreshNflPlayerPropsCurrentSeasonState,
+  writeNflPlayerPropsCurrentSeasonState,
+} from "@/lib/services/football/nflPlayerPropsCurrentSeasonState";
 import { runNflPlayerPropsProductionWriter } from "@/lib/services/football/nflPlayerPropsProductionWriter";
-import { resolveNflForwardWeek } from "@/lib/services/football/nflForwardWeekSelection";
+import { resolveNflForwardWeek, resolveNflOperationalWeek } from "@/lib/services/football/nflForwardWeekSelection";
 
 export const maxDuration = 300;
 
@@ -30,7 +36,36 @@ export async function GET(request: Request): Promise<Response> {
       ? new OpenWeatherProvider(process.env.OPENWEATHER_API_KEY)
       : null;
     const cycleNow = new Date().toISOString();
-    const week = resolveNflForwardWeek({ season, configuredWeek, now: new Date(cycleNow) });
+    const calendarWeek = resolveNflForwardWeek({ season, configuredWeek, now: new Date(cycleNow) });
+    const currentPublished = await readNflForwardMemberSnapshot({
+      client: supabase,
+      season,
+      week: calendarWeek,
+      now: cycleNow,
+    });
+    const week = resolveNflOperationalWeek({
+      season,
+      configuredWeek,
+      scheduledStarts: currentPublished?.fixture.snapshot.games
+        .map((game) => game.gameStartAt)
+        .filter((value): value is string => typeof value === "string") ?? [],
+      now: new Date(cycleNow),
+    });
+    // The Week N+1 football forecast consumes the completed Week N team state.
+    // Refresh it once under this existing sport lease before either downstream
+    // writer reads it; the props writer then reuses the persisted state with
+    // zero duplicate state-provider calls.
+    const priorCurrentSeasonState = await readNflPlayerPropsCurrentSeasonState({ client: supabase, season });
+    const currentSeasonState = await refreshNflPlayerPropsCurrentSeasonState({
+      season,
+      week,
+      now: cycleNow,
+      apiKey: balldontlieApiKey,
+      previous: priorCurrentSeasonState,
+    });
+    if (currentSeasonState.apiCalls > 0) {
+      await writeNflPlayerPropsCurrentSeasonState({ client: supabase, state: currentSeasonState.state });
+    }
     const result = await runNflForwardEvidenceWriter({
       client: supabase,
       season,
@@ -64,11 +99,15 @@ export async function GET(request: Request): Promise<Response> {
     }
     return {
       records_updated: result.inserted + (playerProps?.memberRows ?? 0),
-      api_calls_made: result.apiCallsMaximum + (playerProps?.apiCallsMaximum ?? 0),
+      api_calls_made: currentSeasonState.apiCalls + result.apiCallsMaximum + (playerProps?.apiCallsMaximum ?? 0),
       partial: result.healthHolds.length > 0 || result.memberSnapshotError !== null || playerPropsError !== null,
       error_message: [result.healthHolds.join(","), result.memberSnapshotError, playerPropsError].filter(Boolean).join(",") || null,
       details: {
         writer_release: result.writerRelease,
+        calendar_week: calendarWeek,
+        operational_week: week,
+        current_season_state_api_calls: currentSeasonState.apiCalls,
+        current_season_state_complete_through_week: currentSeasonState.state.completeThroughWeek,
         collected: result.collected,
         collection_reason: result.collectionReason,
         proposed: result.proposed,

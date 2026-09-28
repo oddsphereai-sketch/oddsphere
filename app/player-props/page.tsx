@@ -17,11 +17,16 @@ export default async function PlayerPropsPage({ searchParams }: { searchParams: 
   if (!enabled || query.league !== "nfl") redirect("/mlb/props");
   const season = bounded(process.env.NFL_FORWARD_SEASON, 2026);
   const configuredWeek = bounded(process.env.NFL_FORWARD_WEEK, 1);
-  const week = resolveNflForwardWeek({ season, configuredWeek });
+  const calendarWeek = resolveNflForwardWeek({ season, configuredWeek });
   const snapshotResult = await readMemberDataWithDeadline({
     label: "nfl-player-props-snapshot",
     fallback: null,
-    read: () => readNflPlayerPropsMemberSnapshot({ client: supabase, season, week }),
+    read: async () => {
+      const current = await readNflPlayerPropsMemberSnapshot({ client: supabase, season, week: calendarWeek });
+      if ((current?.memberDecisions.length ?? 0) > 0 || calendarWeek >= 18) return current;
+      const next = await readNflPlayerPropsMemberSnapshot({ client: supabase, season, week: calendarWeek + 1 });
+      return (next?.memberDecisions.length ?? 0) > 0 ? next : current;
+    },
   });
   // The member-only store now performs buildNflPlayerPropsMemberSnapshot(snapshot) before caching.
   const memberSnapshot = snapshotResult.value;

@@ -1,7 +1,9 @@
-import { computeSlateDate } from "@/lib/dates/slateDate";
+import { addDaysToSlate, computeSlateDate } from "@/lib/dates/slateDate";
 
 export const NFL_FORWARD_WEEK_SELECTION_RELEASE =
-  "nfl_forward_week_selection_2026_09_15_r1_tuesday_et_rollover" as const;
+  "nfl_forward_week_selection_2026_09_28_r2_completed_slate_rollover" as const;
+
+export const NFL_FORWARD_BOARD_ROLLOVER_HOUR_ET = 2 as const;
 
 const NFL_REGULAR_WEEK_ONE_BOARD_START_ET: Readonly<Record<number, string>> = {
   2026: "2026-09-08",
@@ -35,6 +37,47 @@ export function resolveNflForwardWeek(input: {
 
   const calendarWeek = Math.min(18, Math.floor(elapsedDays / 7) + 1);
   return Math.max(input.configuredWeek, calendarWeek);
+}
+
+/**
+ * Advance an already-published, completed Sunday-only slate without hiding a
+ * live Monday game. Missing or malformed schedule evidence fails closed to the
+ * calendar week.
+ */
+export function resolveNflOperationalWeek(input: {
+  season: number;
+  configuredWeek: number;
+  scheduledStarts: string[];
+  now?: Date;
+}): number {
+  const now = input.now ?? new Date();
+  const calendarWeek = resolveNflForwardWeek({
+    season: input.season,
+    configuredWeek: input.configuredWeek,
+    now,
+  });
+  if (calendarWeek >= 18 || input.scheduledStarts.length === 0) return calendarWeek;
+  const boardDate = currentNflBoardDate(now);
+  let latestSlateDate: string | null = null;
+  for (const scheduledStart of input.scheduledStarts) {
+    try {
+      const slateDate = computeSlateDate("nfl", scheduledStart);
+      if (latestSlateDate === null || slateDate > latestSlateDate) latestSlateDate = slateDate;
+    } catch {
+      return calendarWeek;
+    }
+  }
+  return latestSlateDate !== null && latestSlateDate < boardDate ? calendarWeek + 1 : calendarWeek;
+}
+
+function currentNflBoardDate(now: Date): string {
+  const hourEt = Number(new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/New_York",
+    hour: "2-digit",
+    hourCycle: "h23",
+  }).format(now));
+  const todayEt = computeSlateDate("nfl", now);
+  return hourEt < NFL_FORWARD_BOARD_ROLLOVER_HOUR_ET ? addDaysToSlate(todayEt, -1) : todayEt;
 }
 
 function calendarDayNumber(value: string): number {
