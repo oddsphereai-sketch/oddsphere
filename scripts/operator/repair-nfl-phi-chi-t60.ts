@@ -1,6 +1,6 @@
 #!/usr/bin/env tsx
 
-/** Exact-game append-only repair for the invalid zero-decision PHI-CHI T-60 row. */
+/** Immutable-evidence member/tracking repair for the zero-decision PHI-CHI T-60 row. */
 
 import { randomUUID } from "node:crypto";
 import { loadEnvConfig } from "@next/env";
@@ -14,15 +14,20 @@ import {
   hashNflForwardEvidencePayload,
   type NflForwardEvidencePayload,
 } from "../../lib/services/football/nflForwardEvidence";
-import { appendNflForwardEvidence, readNflForwardEvidence } from "../../lib/services/football/nflForwardEvidenceStore";
+import { readNflForwardEvidence } from "../../lib/services/football/nflForwardEvidenceStore";
 import {
   latestVerifiedInjuriesForGame,
   nflEvidenceCapturedAt,
-  runNflForwardEvidenceWriter,
+  writeOfficialTrackingFromPayloads,
 } from "../../lib/services/football/nflForwardEvidenceWriter";
 import { buildNflR6ShadowMoneylineDecision } from "../../lib/services/football/nflR6MoneylineShadow";
 import { nflForwardT60TrackingEligibility } from "../../lib/services/football/nflTrackingLifecycle";
 import { buildNflV1ActionableGradeBundle } from "../../lib/services/football/nflV1ActionableGradeCandidate";
+import { buildNflWeekOneHeldMemberFixture } from "../../lib/services/football/nflWeekOneHeldMemberFixture";
+import {
+  buildNflForwardMemberSnapshot,
+  writeNflForwardMemberSnapshot,
+} from "../../lib/services/football/nflForwardMemberSnapshotStore";
 
 loadEnvConfig(process.cwd());
 
@@ -33,7 +38,7 @@ const WEEK = 3;
 async function main(): Promise<void> {
   const apply = process.argv.includes("--apply");
   const now = new Date();
-  const runId = `nfl-phi-chi-t60-repair-${randomUUID()}`;
+  const runId = randomUUID();
   const rows = await readNflForwardEvidence({ client: supabase, season: SEASON, week: WEEK });
   const targetRows = rows.filter((row) => row.providerGameId === TARGET_PROVIDER_GAME_ID);
   const bad = targetRows
@@ -178,29 +183,36 @@ async function main(): Promise<void> {
     throw new Error(`Required NFL prediction-pipeline lease was not acquired (${acquired.lease.mode}).`);
   }
   try {
-    const write = await appendNflForwardEvidence({ client: supabase, runId, payloads: [payload], apply: true });
-    if (write.inserted !== 1) throw new Error(`Expected one corrected evidence row; inserted ${write.inserted}.`);
-    await runNflForwardEvidenceWriter({
-      client: supabase,
+    const correctedRow = {
+      ...bad,
+      capturedAt: payload.capturedAt,
+      payloadSha256: hashNflForwardEvidencePayload(payload),
+      payload,
+    };
+    const fixture = buildNflWeekOneHeldMemberFixture([
+      ...rows.filter((row) => row.id !== bad.id),
+      correctedRow,
+    ]);
+    const snapshot = buildNflForwardMemberSnapshot({
+      fixture,
       season: SEASON,
       week: WEEK,
-      runId,
-      now: new Date().toISOString(),
-      apply: true,
-      balldontlieApiKey: requiredEnv("BALLDONTLIE_API_KEY"),
-      playbookApiKey: requiredEnv("PLAYBOOK_API_KEY"),
-      sharpApiKey: requiredEnv("SHARP_API_KEY"),
-      weatherProvider: null,
+      publishedAt: new Date().toISOString(),
     });
+    const snapshotWrite = await writeNflForwardMemberSnapshot({ client: supabase, snapshot });
+    if (!snapshotWrite.ok) throw new Error(`NFL corrected member snapshot failed: ${snapshotWrite.error}`);
+    const trackingWrite = await writeOfficialTrackingFromPayloads({
+      client: supabase,
+      payloads: [payload],
+      apply: true,
+    });
+    if (trackingWrite.trackingRecordsProposed !== 3 ||
+        trackingWrite.trackingRecordsInserted + trackingWrite.trackingRecordsExisting !== 3) {
+      throw new Error(`NFL corrected tracking write is incomplete: ${JSON.stringify(trackingWrite)}.`);
+    }
   } finally {
     await releaseCronJobLease({ jobName, runId });
   }
-}
-
-function requiredEnv(name: string): string {
-  const value = process.env[name]?.trim();
-  if (!value) throw new Error(`${name} is required.`);
-  return value;
 }
 
 main().catch((error) => {

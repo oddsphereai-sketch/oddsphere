@@ -30,6 +30,7 @@ import {
 import {
   latestVerifiedInjuriesForGame,
   nflEvidenceCapturedAt,
+  preserveVerifiedNflLockedGames,
 } from "../lib/services/football/nflForwardEvidenceWriter";
 
 const game: NflPreviewGame = {
@@ -546,6 +547,21 @@ assert.equal(
   }]),
   "2026-09-09T23:20:01.250Z",
   "the evidence timestamp must include a provider quote that lands just after cron invocation",
+);
+const candidateRecoveryFixture = {
+  snapshot: { games: [{ id: "nfl-1001", lockState: "open", status: { linesLocked: false } }] },
+} as unknown as Parameters<typeof preserveVerifiedNflLockedGames>[0]["candidate"];
+const previousRecoveryFixture = {
+  snapshot: { games: [{ id: "nfl-1001", lockState: "locked", status: { linesLocked: true } }] },
+} as unknown as Parameters<typeof preserveVerifiedNflLockedGames>[0]["previous"];
+assert.equal(
+  preserveVerifiedNflLockedGames({
+    candidate: candidateRecoveryFixture,
+    previous: previousRecoveryFixture,
+    invalidT60GameIds: new Set(["1001"]),
+  }).snapshot.games[0]?.lockState,
+  "locked",
+  "a verified member lock survives a later refresh of the audited zero-decision T-60 evidence",
 );
 const board = buildNflWeekOneEvidenceBoard(evidenceRows);
 assert.equal(board.release, NFL_WEEK_ONE_EVIDENCE_BOARD_RELEASE);
