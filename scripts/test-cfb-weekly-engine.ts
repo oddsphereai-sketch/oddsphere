@@ -226,6 +226,12 @@ assert.equal(nextCfbWeeklyWindow(visibleOverlap[1]!).boardStartDate, "2026-09-10
 const ordinaryCurrent = { name: "current", need: { collect: true, reason: "unlocked_refresh_due", cadenceMinutes: 60 } };
 const openingNext = { name: "next", need: { collect: true, reason: "opening_seed", cadenceMinutes: null } };
 assert.equal(selectCfbForwardCollectionWindow([ordinaryCurrent, openingNext])?.name, "next", "next opening seed must outrank an ordinary current refresh");
+const terminalIncompleteCurrent = { name: "current", need: { collect: true, reason: "opening_incomplete", cadenceMinutes: null } };
+assert.equal(
+  selectCfbForwardCollectionWindow([terminalIncompleteCurrent, openingNext])?.name,
+  "next",
+  "an empty adjacent window must not be starved by terminal opening-stage bookkeeping",
+);
 const t60Current = { name: "current", need: { collect: true, reason: "t60_due", cadenceMinutes: null } };
 assert.equal(selectCfbForwardCollectionWindow([t60Current, openingNext])?.name, "current", "the remaining current-game T-60 capture must outrank lookahead seeding");
 

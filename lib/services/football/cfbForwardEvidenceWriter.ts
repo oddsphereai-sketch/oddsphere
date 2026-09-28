@@ -93,7 +93,7 @@ import {
 } from "./cfbForwardMemberSnapshotStore";
 
 export const CFB_FORWARD_WRITER_RELEASE =
-  "cfb_forward_evidence_writer_2026_09_27_r79_displayed_book_line_tracking_recovery" as const;
+  "cfb_forward_evidence_writer_2026_09_28_r80_next_window_seed_priority" as const;
 export const CFB_FORWARD_MAX_QB_TEAMS_PER_RUN = 24 as const;
 export const CFB_FORWARD_MAX_SHARP_FALLBACK_GAMES_PER_RUN = 24 as const;
 export const CFB_FORWARD_MAX_ESPN_PROSPECTIVE_GAMES_PER_RUN = 32 as const;
@@ -150,9 +150,17 @@ export function selectCfbForwardCollectionWindow<T extends Pick<CfbForwardWindow
     if (reason === "t60_due") return 0;
     if (reason === "release_refresh_due") return 1;
     if (reason === "reference_line_completion_due") return 2;
-    if (reason === "opening_seed" || reason === "opening_incomplete") return 3;
-    if (reason === "unlocked_refresh_due") return 4;
-    return 5;
+    // During the Sunday/Monday overlap, a terminal current window can remain
+    // `opening_incomplete` forever when a game was first captured at T-60 (or
+    // later) and therefore has no separate opening-stage row. Seed the empty
+    // adjacent window first so that terminal bookkeeping cannot starve the
+    // next slate. A still-actionable current T-60 or release repair remains
+    // higher priority, and the following cycle can resume current-window
+    // completion after the one-time next-window seed.
+    if (reason === "opening_seed") return 3;
+    if (reason === "opening_incomplete") return 4;
+    if (reason === "unlocked_refresh_due") return 5;
+    return 6;
   };
   return states
     .map((state, index) => ({ state, index }))
