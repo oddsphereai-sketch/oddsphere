@@ -13,6 +13,7 @@ import type { NflR6ShadowMoneylineDecision } from "./nflR6MoneylineShadow";
 import type { NflRegularSharpSplitSet } from "./sharpApiNflSplits";
 import type { NflV1WeekOneOutcomeForecast } from "./nflV1WeekOneOutcome";
 import type { NflForwardContextCapture } from "./nflForwardEvidenceCapture";
+import type { NflPaidProjectionShadow } from "./balldontlieNflWeeklyProjectionShadow";
 
 export const NFL_FORWARD_EVIDENCE_SCHEMA_RELEASE =
   "nfl_forward_evidence_snapshot_2026_09_01_r6_forecast_value_separation" as const;
@@ -23,7 +24,7 @@ export const NFL_FORWARD_EVIDENCE_PRIOR_SCHEMA_RELEASE =
 export const NFL_FORWARD_EVIDENCE_LEGACY_SCHEMA_RELEASE =
   "nfl_forward_evidence_snapshot_2026_08_22_r2_multibook" as const;
 export const NFL_FORWARD_EVIDENCE_COLLECTOR_RELEASE =
-  "nfl_forward_evidence_collector_2026_09_27_r12_pressure_direction" as const;
+  "nfl_forward_evidence_collector_2026_09_28_r13_opening_timestamp_paid_projection_shadow" as const;
 
 export type NflForwardEvidenceStage = "opening" | "unlocked" | "t60";
 
@@ -130,6 +131,8 @@ export type NflForwardEvidencePayload = {
   injuries: DailyEdgeGameAvailability | null;
   weather: NflForwardWeatherSnapshot;
   outcomeForecast: NflV1WeekOneOutcomeForecast;
+  /** Internal forward evidence only; no member or tracking reader may consume this field. */
+  paidProjectionShadow?: NflPaidProjectionShadow;
   contextualEvidenceCapture?: NflForwardContextCapture;
   decisions: {
     evaluatedBets: NflRegularEvaluatedBetDecision[];
@@ -173,11 +176,13 @@ export type NflForwardEvidencePayload = {
     weather: boolean;
     healthHolds: string[];
     forecastTargetExclusion?: NonNullable<NflV1WeekOneOutcomeForecast["targetExclusion"]>;
+    paidProjectionShadow?: boolean;
   };
   requestBudget: {
     balldontlieSlate: number;
     balldontlieRoster: number;
     balldontlieInjuriesMaximum: number;
+    balldontlieWeeklyProjectionsMaximum?: number;
     playbook: number;
     sharpApi: number;
     weather: number;

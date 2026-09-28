@@ -334,7 +334,7 @@ assert.match(writer, /currentBooks/);
 assert.match(writer, /comparableCurrentBooks/);
 assert.match(writer, /multibook_consensus_unavailable/);
 assert.doesNotMatch(writer, /readLegacyNflForwardEvidence|readPriorNflForwardEvidence|readPreviousNflForwardEvidence/, "the live writer must not scan superseded large JSON releases");
-assert.match(writer, /nfl_forward_evidence_writer_2026_09_27_r45_tracking_isolation/);
+assert.match(writer, /nfl_forward_evidence_writer_2026_09_28_r46_opening_timestamp_paid_projection_shadow/);
 assert.match(
   writer,
   /const memberSnapshot = await refreshCompactMemberSnapshot\([\s\S]*?const tracking = await writeOfficialTrackingFromPayloads\(/,

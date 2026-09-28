@@ -185,6 +185,7 @@ export async function fetchBalldontlieNflPreviewSlate(args: {
     openingRead.rows,
     new Set(gameIds),
     currentOddsByGame,
+    true,
   );
   const missingCurrent = gameIds.filter((gameId) => !currentOddsByGame[gameId]);
   if (missingCurrent.length > 0) {
@@ -257,7 +258,7 @@ export async function fetchBalldontlieNflRegularSlate(args: {
   const requestedGameIds = new Set(gameIds);
   const currentOddsAllBooksByGame = groupBooksByGame(currentRead.rows, requestedGameIds);
   const currentOddsComparableBooksByGame = comparableBooksByGame(currentOddsAllBooksByGame);
-  const openingOddsAllBooksByGame = groupBooksByGame(openingRead.rows, requestedGameIds);
+  const openingOddsAllBooksByGame = groupBooksByGame(openingRead.rows, requestedGameIds, true);
   const openingOddsComparableBooksByGame = comparableBooksByGame(openingOddsAllBooksByGame);
   const currentOddsByGame = selectRepresentativeNormalizedBooks(
     Object.values(currentOddsComparableBooksByGame).flat(),
@@ -405,8 +406,10 @@ function selectRepresentativeBookByGame(
   values: unknown[],
   requestedGameIds: ReadonlySet<string>,
   currentSelection: Record<string, NflPreviewBookOdds> = {},
+  allowOpenedAt = false,
 ): Record<string, NflPreviewBookOdds> {
-  const rows = values.map(normalizeOdds).filter((row): row is NflPreviewBookOdds => row !== null && requestedGameIds.has(row.providerGameId));
+  const rows = values.map((value) => normalizeOdds(value, allowOpenedAt))
+    .filter((row): row is NflPreviewBookOdds => row !== null && requestedGameIds.has(row.providerGameId));
   return selectRepresentativeNormalizedBooks(rows, requestedGameIds, currentSelection);
 }
 
@@ -432,10 +435,11 @@ function selectRepresentativeNormalizedBooks(
 function groupBooksByGame(
   values: unknown[],
   requestedGameIds: ReadonlySet<string>,
+  allowOpenedAt = false,
 ): Record<string, NflPreviewBookOdds[]> {
   const grouped = new Map<string, Map<string, NflPreviewBookOdds[]>>();
   for (const value of values) {
-    const row = normalizeOdds(value);
+    const row = normalizeOdds(value, allowOpenedAt);
     if (!row || !requestedGameIds.has(row.providerGameId)) continue;
     const vendor = row.sportsbook.toLowerCase();
     const byVendor = grouped.get(row.providerGameId) ?? new Map<string, NflPreviewBookOdds[]>();
@@ -468,11 +472,11 @@ function compareOddsRows(first: NflPreviewBookOdds, second: NflPreviewBookOdds):
     Date.parse(second.observedAt) - Date.parse(first.observedAt);
 }
 
-function normalizeOdds(value: unknown): NflPreviewBookOdds | null {
+function normalizeOdds(value: unknown, allowOpenedAt = false): NflPreviewBookOdds | null {
   const row = record(value);
   const providerGameId = stringOrNumber(row.game_id);
   const sportsbook = text(row.vendor);
-  const observedAt = iso(row.updated_at);
+  const observedAt = iso(row.updated_at) ?? (allowOpenedAt ? iso(row.opened_at) : null);
   if (!providerGameId || !sportsbook || !observedAt) return null;
   const moneylineHome = price(row.moneyline_home_odds);
   const moneylineAway = price(row.moneyline_away_odds);
