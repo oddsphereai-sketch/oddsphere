@@ -28,7 +28,7 @@ import {
 } from "@/lib/automodel/wnbaChampionRuntime";
 import type { WnbaIndependentModelEvidence } from "./wnbaForwardEvidenceCapture";
 import {
-  buildWnbaMaximumEntropyMarginDistribution,
+  buildWnbaCoherentNormalMarginDistribution,
   buildWnbaResolvedMarketDecision,
   pairWnbaCompleteMarketRows,
   selectWnbaUpperMedianEvaluatedRow,
@@ -851,11 +851,9 @@ export function computeWnbaPrediction(
     calibrationFlags,
   );
   const independentInputs = independent._distribution_inputs;
-  const independentDistribution = buildWnbaMaximumEntropyMarginDistribution({
-    desiredMean: independentInputs.rawModelMargin,
-    independentMean: independentInputs.rawModelMargin,
+  const independentDistribution = buildWnbaCoherentNormalMarginDistribution({
+    mean: independentInputs.rawModelMargin,
     standardDeviation: independentInputs.sigM,
-    positiveProbability: independentInputs.modelP,
   });
 
   const independentMlSide = independentDistribution.positiveProbability >= 0.5 ? "home" : "away";
@@ -949,11 +947,9 @@ export function computeWnbaPrediction(
   const inputs = core._distribution_inputs;
   const distribution = crossMarketContradiction
     ? independentDistribution
-    : buildWnbaMaximumEntropyMarginDistribution({
-        desiredMean: spreadDesiredMean,
-        independentMean: independentInputs.rawModelMargin,
+    : buildWnbaCoherentNormalMarginDistribution({
+        mean: spreadDesiredMean,
         standardDeviation: inputs.sigM,
-        positiveProbability: inputs.finalP,
       });
   const spreadSideForPrice = fixedSpreadLine === null
     ? null
@@ -973,7 +969,7 @@ export function computeWnbaPrediction(
     forecastMarketLine:
       !crossMarketContradiction &&
       spreadMarketAuthorityQualified &&
-      distribution.kind === "maximum_entropy_sign_tilt"
+      distribution.kind !== "independent_normal_fallback"
         ? fixedSpreadLine
         : null,
   };
@@ -1182,6 +1178,7 @@ export function computeWnbaPrediction(
         market_coherent_margin: inputs.finalPImpliedMargin,
         blended_precalibration_margin: inputs.projMargin,
         calibrated_spread_margin: distribution.mean,
+        representative_home_margin: distribution.mean,
         canonical_home_margin: distribution.mean,
         raw_projected_total: inputs.projTotal,
         canonical_projected_total: inputs.projTotal,

@@ -1,5 +1,5 @@
 export const WNBA_TARGET_EXCLUDED_MARKET_DECISION_VERSION =
-  "wnba_target_excluded_market_decision_v2_2026_09_02" as const;
+  "wnba_target_excluded_market_decision_v3_2026_09_29_coherent_normal" as const;
 
 export const WNBA_TARGET_EXCLUDED_MAX_AGE_MS = 15 * 60 * 1000;
 export const WNBA_TARGET_EXCLUDED_MAX_PAIR_SKEW_MS = 30 * 1000;
@@ -41,6 +41,13 @@ export type WnbaLineConsensus = {
 };
 
 export type WnbaMarginDistribution =
+  | {
+      kind: "coherent_normal";
+      mean: number;
+      standardDeviation: number;
+      variance: number;
+      positiveProbability: number;
+    }
   | {
       kind: "maximum_entropy_sign_tilt";
       mean: number;
@@ -416,6 +423,21 @@ function independentNormal(
   };
 }
 
+export function buildWnbaCoherentNormalMarginDistribution(args: {
+  mean: number;
+  standardDeviation: number;
+}): WnbaMarginDistribution {
+  const standardDeviation = Math.max(Math.abs(args.standardDeviation) || 1, 1e-6);
+  const mean = finite(args.mean) ? args.mean : 0;
+  return {
+    kind: "coherent_normal",
+    mean,
+    standardDeviation,
+    variance: standardDeviation * standardDeviation,
+    positiveProbability: 1 - standardNormalCdf((0 - mean) / standardDeviation),
+  };
+}
+
 /**
  * Maximum-entropy distribution under fixed mean, variance and sign mass. Its
  * density is a shared Gaussian kernel with one mass multiplier on x > 0.
@@ -520,7 +542,7 @@ export function wnbaMarginDistributionCdf(
   distribution: WnbaMarginDistribution,
   value: number,
 ): number {
-  if (distribution.kind === "independent_normal_fallback") {
+  if (distribution.kind !== "maximum_entropy_sign_tilt") {
     return standardNormalCdf((value - distribution.mean) / distribution.standardDeviation);
   }
   const baseCdfAtZero = standardNormalCdf(distribution.thresholdZ);
@@ -537,6 +559,36 @@ export function wnbaMarginProbabilityAbove(
   threshold: number,
 ): number {
   return Math.max(0, Math.min(1, 1 - wnbaMarginDistributionCdf(distribution, threshold)));
+}
+
+/**
+ * Returns a representative margin from the same distribution used by the
+ * Moneyline and Spread heads. The median is the point forecast that minimizes
+ * expected absolute margin error, and its position relative to zero or a
+ * spread threshold is necessarily consistent with the corresponding side
+ * probability.
+ */
+export function wnbaMarginDistributionMedian(
+  distribution: WnbaMarginDistribution,
+): number {
+  const scale = Math.max(
+    distribution.standardDeviation,
+    distribution.kind === "maximum_entropy_sign_tilt"
+      ? distribution.baseStandardDeviation
+      : distribution.standardDeviation,
+    1e-6,
+  );
+  const center = distribution.kind === "maximum_entropy_sign_tilt"
+    ? distribution.baseMean
+    : distribution.mean;
+  let lower = Math.min(center, distribution.mean) - 16 * scale;
+  let upper = Math.max(center, distribution.mean) + 16 * scale;
+  for (let iteration = 0; iteration < 120; iteration += 1) {
+    const midpoint = (lower + upper) / 2;
+    if (wnbaMarginDistributionCdf(distribution, midpoint) < 0.5) lower = midpoint;
+    else upper = midpoint;
+  }
+  return (lower + upper) / 2;
 }
 
 export function wnbaExactPriceValueGate(args: {
