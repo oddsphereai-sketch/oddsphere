@@ -345,20 +345,24 @@ export function selectMainNhlPuckLinePair(
     && (line.side === "home" || line.side === "away")
     && !isBlockedSportsbook(line.sportsbook)
   ));
-  const byBook = new Map<string, { home?: number; away?: number }>();
+  const byBook = new Map<string, { home: Set<number>; away: Set<number> }>();
   for (const line of clean) {
-    const pair = byBook.get(line.sportsbook) ?? {};
-    pair[line.side as "home" | "away"] = line.line_value!;
-    byBook.set(line.sportsbook, pair);
+    const book = normalizedBook(line.sportsbook);
+    const sides = byBook.get(book) ?? { home: new Set<number>(), away: new Set<number>() };
+    sides[line.side as "home" | "away"].add(line.line_value!);
+    byBook.set(book, sides);
   }
   const counts = new Map<string, { home: number; away: number; books: Set<string> }>();
-  for (const [book, pair] of byBook) {
-    if (pair.home === undefined || pair.away === undefined) continue;
-    if (Math.abs(pair.home + pair.away) >= 0.01) continue;
-    const key = `${pair.home}|${pair.away}`;
-    const candidate = counts.get(key) ?? { home: pair.home, away: pair.away, books: new Set<string>() };
-    candidate.books.add(book);
-    counts.set(key, candidate);
+  for (const [book, sides] of byBook) {
+    for (const home of sides.home) {
+      for (const away of sides.away) {
+        if (Math.abs(home + away) >= 0.01) continue;
+        const key = `${home}|${away}`;
+        const candidate = counts.get(key) ?? { home, away, books: new Set<string>() };
+        candidate.books.add(book);
+        counts.set(key, candidate);
+      }
+    }
   }
   const selected = [...counts.values()].sort((a, b) => (
     b.books.size - a.books.size

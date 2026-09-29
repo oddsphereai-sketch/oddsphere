@@ -1805,9 +1805,9 @@ The September 21 operational release restored the two bounded daily schedules re
 
 ## NHL regular-season champion (active from 2026-09-29)
 
-- Model: `nhl_regular_2026_r3_professional_joint_score`
-- Calibration: `nhl_regular_calibration_2026_r3_professional_joint_score`
-- Decision: `nhl_regular_decision_2026_r3_professional_joint_score`
+- Model: `nhl_regular_2026_r4_quoted_puck_pair`
+- Calibration: `nhl_regular_calibration_2026_r4_quoted_puck_pair`
+- Decision: `nhl_regular_decision_2026_r4_quoted_puck_pair`
 - Public tracking start: `2026-09-29`
 - Official markets: moneyline, total, spread (puck line)
 - Retired release: `nhl_v0_2026_finals`
@@ -1857,6 +1857,15 @@ board promotions/demotions, input fallbacks, and rollback gates are recorded in
 `docs/model-audits/2026-09-29-nhl-professional-joint-score-r3-predeclaration.md`
 and
 `docs/model-audits/2026-09-29-nhl-professional-joint-score-r3-result.md`.
+
+The September 29 r4 quoted-puck-pair release retains the r3 score-model
+coefficients and probability calibration unchanged. It makes the current-line
+resolver order-independent when one sportsbook supplies repeated zero-handicap
+rows alongside the actual `-1.5/+1.5` pair. Every complementary pair is now
+enumerated per book and the existing main-puckline priority selects the real
+quoted pair. The live MTL-TOR regression, board impact, and rollback gate are
+recorded in
+`docs/model-audits/2026-09-29-nhl-quoted-puck-pair-r4.md`.
 
 ## WNBA champion
 

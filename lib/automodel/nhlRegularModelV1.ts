@@ -1,9 +1,9 @@
 import type { BdlNhlTeamMetrics } from "../providers/nhl/_ballDontLieNhlClient";
 import type { NhlCalibratedTeamState } from "./nhlRegularPriors2026";
 
-export const NHL_REGULAR_MODEL_RELEASE = "nhl_regular_2026_r3_professional_joint_score" as const;
-export const NHL_REGULAR_CALIBRATION_RELEASE = "nhl_regular_calibration_2026_r3_professional_joint_score" as const;
-export const NHL_REGULAR_DECISION_RELEASE = "nhl_regular_decision_2026_r3_professional_joint_score" as const;
+export const NHL_REGULAR_MODEL_RELEASE = "nhl_regular_2026_r4_quoted_puck_pair" as const;
+export const NHL_REGULAR_CALIBRATION_RELEASE = "nhl_regular_calibration_2026_r4_quoted_puck_pair" as const;
+export const NHL_REGULAR_DECISION_RELEASE = "nhl_regular_decision_2026_r4_quoted_puck_pair" as const;
 
 export type NhlVerdictKey = "best_angle" | "lean" | "watchlist" | "pass";
 
