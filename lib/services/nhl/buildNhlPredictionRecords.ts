@@ -23,7 +23,7 @@
  *
  * snapshot_json (stable schema for ops review + future migrations):
  *   {
- *     model_version: "nhl_regular_2026_r1",
+ *     model_version: "nhl_regular_2026_r2_complete_slate_odds",
  *     model_output: { ...nhlRegularModelV1 result },
  *     feature_inputs: { ...featureSnapshot inputs },
  *     market_at_lock: {

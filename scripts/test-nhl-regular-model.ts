@@ -168,6 +168,8 @@ assert.equal(matchedPlaybookNhl.get(1)?.gameId, "playbook-nhl-1", "NHL Playbook 
 const writer = readFileSync(new URL("../lib/services/nhl/buildNhlPredictionRecords.ts", import.meta.url), "utf8");
 const reader = readFileSync(new URL("../lib/services/nhl/buildNhlDailyEdgeAdapted.ts", import.meta.url), "utf8");
 const cron = readFileSync(new URL("../app/api/cron/nhl-daily-refresh/route.ts", import.meta.url), "utf8");
+const linesProvider = readFileSync(new URL("../lib/providers/nhl/_sharpApiNhlClient.ts", import.meta.url), "utf8");
+const linesRefresh = readFileSync(new URL("../lib/services/nhl/refreshNhlLinesService.ts", import.meta.url), "utf8");
 assert.match(writer, /nhlGameTypeFromExternalId\(game\.external_id\) === 2/);
 assert.match(reader, /nhlGameTypeFromExternalId\(game\.external_id\) === 2/);
 assert.match(reader, /bestPriceFor\("total", totalSide, marketTotalLine\)/, "reader prices the exact predicted total line");
@@ -176,5 +178,9 @@ assert.match(reader, /lockedPayloadByGame/, "reader preserves the writer-owned l
 assert.ok(cron.indexOf("syncPublicSplitsObservations") < cron.indexOf("writeNhlPredictionRecords({"), "persistent splits refresh precedes the only NHL writer");
 assert.match(cron, /leaseGroup: "prediction_pipeline"/);
 assert.match(cron, /refreshDailyEdgeResponseSnapshot/);
+assert.match(linesProvider, /fetchSharpNhlEvents/, "NHL resolves exact events before fetching odds");
+assert.match(linesProvider, /event_id: eventId/, "NHL odds retrieval is event-scoped instead of scanning an incomplete league slice");
+assert.match(linesProvider, /recovered \$\{market\}/, "an event-scoped missing market gets a targeted recovery call");
+assert.match(linesRefresh, /incomplete SharpAPI \$\{market\} coverage/, "a refresh cannot silently call an incomplete five-game board healthy");
 
 console.log("NHL regular-season model, tracking boundary, split fallback, and writer safety tests passed.");
