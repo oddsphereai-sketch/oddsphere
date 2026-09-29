@@ -15,6 +15,9 @@ import {
   nhlGameTypeFromExternalId,
   nhlSeasonStartYearFromExternalId,
 } from "../lib/services/nhl/nhlScheduleIdentity";
+import { selectMainNhlPuckLinePair, selectSameBookNhlMovement } from "../lib/services/nhl/featureSnapshot";
+import { normalizeNhlTeamName } from "../lib/providers/nhl/_teamNameNormalizer";
+import { sportsInSeasonToday } from "../lib/cron/seasons";
 import type { PredictionRecordRow } from "../lib/types/domain/Tracking";
 import {
   __NHL_SPLITS_SYNC_TEST__,
@@ -28,6 +31,10 @@ const base: NhlFeatureSnapshot = {
     xgoals_pct: 0.54,
     x_goals_for_per_60: 3.12,
     x_goals_against_per_60: 2.68,
+    five_x_goals_for_per_60: 2.42,
+    five_x_goals_against_per_60: 2.08,
+    pp_x_goals_for_per_60: 0.62,
+    pk_x_goals_against_per_60: 0.48,
     pp_xgoals_pct: 0.23,
     pk_xgoals_pct: 0.82,
     goalie_xgsaa_per_60: 0.09,
@@ -46,6 +53,10 @@ const base: NhlFeatureSnapshot = {
     xgoals_pct: 0.49,
     x_goals_for_per_60: 2.82,
     x_goals_against_per_60: 2.91,
+    five_x_goals_for_per_60: 2.12,
+    five_x_goals_against_per_60: 2.31,
+    pp_x_goals_for_per_60: 0.48,
+    pk_x_goals_against_per_60: 0.56,
     pp_xgoals_pct: 0.20,
     pk_xgoals_pct: 0.79,
     goalie_xgsaa_per_60: 0.01,
@@ -61,9 +72,17 @@ const base: NhlFeatureSnapshot = {
   },
   market: {
     market_home_prob: 0.58,
+    best_home_ml_prob: 0.56,
+    best_away_ml_prob: 0.46,
     market_open_home_prob: 0.55,
     market_total_line: 6.5,
     market_open_total_line: 6,
+    same_book_home_prob_move: 0.03,
+    same_book_total_move: 0.5,
+    market_home_puck_line: -1.5,
+    market_away_puck_line: 1.5,
+    market_home_puck_prob: 0.36,
+    market_away_puck_prob: 0.68,
     market_book_count: 8,
     ml_home_bets_pct: 48,
     ml_home_money_pct: 62,
@@ -82,16 +101,36 @@ assert.equal(result.calibration_version, NHL_REGULAR_CALIBRATION_RELEASE);
 assert.equal(result.decision_version, NHL_REGULAR_DECISION_RELEASE);
 assert.ok(Math.abs(result.projected_home_goals + result.projected_away_goals - result.expected_total_goals) < 1e-9);
 assert.ok(Math.abs(result.projected_home_goals - result.projected_away_goals - result.expected_goal_diff) < 1e-9);
-const rest = 0.035;
-const independentHome = (3.30 + 3.10) / 2 + 0.05 + rest / 2;
-const independentAway = (2.90 + 2.80) / 2 - rest / 2;
-const expectedIndependentDiff = 0.58 * (independentHome - independentAway) + 0.42 * ((1540 + 40 - 1490) / 330);
-assert.ok(Math.abs(result.independent_goal_diff - expectedIndependentDiff) < 1e-9, "runtime independent margin matches the release-pure tournament formula");
-assert.ok(Math.abs(result.independent_total_goals - (independentHome + independentAway)) < 1e-9, "runtime independent total matches the release-pure tournament formula");
+assert.ok(Number.isFinite(result.independent_goal_diff), "professional independent margin is finite");
+assert.ok(result.independent_total_goals >= 4.5 && result.independent_total_goals <= 8, "professional independent total remains inside the trained support");
 assert.ok(result.puck_line.pick.includes("1.5"));
+assert.equal(normalizeNhlTeamName("MTL Canadiens"), "MTL");
+assert.equal(normalizeNhlTeamName("NYR Rangers"), "NYR");
+assert.deepEqual(selectMainNhlPuckLinePair([
+  { market_type: "spread", sportsbook: "saba", side: "home", line_value: -1.5 },
+  { market_type: "spread", sportsbook: "saba", side: "away", line_value: 1.5 },
+]), { home: -1.5, away: 1.5 });
+assert.deepEqual(selectSameBookNhlMovement([
+  { market_type: "moneyline", sportsbook: "Circa", side: "home", line_value: null, odds_american: -140, implied_probability: null },
+  { market_type: "moneyline", sportsbook: "Circa", side: "away", line_value: null, odds_american: 120, implied_probability: null },
+  { market_type: "total", sportsbook: "Circa", side: "over", line_value: 6.5, odds_american: -110, implied_probability: null },
+], [
+  { market_type: "moneyline", sportsbook: "Circa", side: "home", line_value: null, odds_american: -120, implied_probability: null },
+  { market_type: "moneyline", sportsbook: "Circa", side: "away", line_value: null, odds_american: 100, implied_probability: null },
+  { market_type: "total", sportsbook: "Circa", side: "over", line_value: 6, odds_american: -110, implied_probability: null },
+]).totalMove, 0.5, "market reading uses a continuous same-book trail");
+const pickemQuotedLine = nhlRegularModelV1({
+  ...base,
+  home: { ...base.home, abbreviation: "TOR" },
+  away: { ...base.away, abbreviation: "MTL" },
+  market: { ...base.market, market_home_prob: 0.4989, market_home_puck_line: -1.5, market_away_puck_line: 1.5 },
+});
+assert.notEqual(pickemQuotedLine.puck_line.pick, "TOR +1.5", "puck-line output must be one of the actually quoted sides");
+assert.ok(["TOR -1.5", "MTL +1.5"].includes(pickemQuotedLine.puck_line.pick));
+assert.ok(sportsInSeasonToday(new Date("2026-09-29T12:00:00.000Z")).includes("nhl"), "opening-night minute lock includes NHL");
 assert.ok(result.moneyline.probability >= 0.5 && result.moneyline.probability <= 0.8);
-assert.ok(result.total.probability >= 0.5 && result.total.probability <= 0.6);
-assert.ok(Math.abs(result.expected_total_goals - 6.5) < Math.abs(result.independent_total_goals - 6.5));
+assert.ok(result.total.probability >= 0.5 && result.total.probability <= 1);
+assert.ok(Math.abs(result.expected_total_goals - result.independent_total_goals) <= 0.59, "movement and split reading condition rather than replace the independent total");
 
 const noMarket = nhlRegularModelV1({
   ...base,
@@ -101,6 +140,8 @@ const noMarket = nhlRegularModelV1({
     market_open_home_prob: null,
     market_total_line: null,
     market_open_total_line: null,
+    same_book_home_prob_move: null,
+    same_book_total_move: null,
     ml_home_bets_pct: null,
     ml_home_money_pct: null,
     total_over_bets_pct: null,
@@ -109,6 +150,32 @@ const noMarket = nhlRegularModelV1({
 });
 assert.notEqual(result.expected_goal_diff, noMarket.expected_goal_diff, "market movement and sharp splits alter the bounded final margin");
 assert.notEqual(result.expected_total_goals, noMarket.expected_total_goals, "market total and sharp splits alter the bounded final total");
+
+const totalLineOnlyA = nhlRegularModelV1({
+  ...base,
+  market: {
+    ...base.market,
+    market_total_line: 5.5,
+    market_open_total_line: 5.5,
+    same_book_total_move: 0,
+    total_over_bets_pct: null,
+    total_over_money_pct: null,
+  },
+});
+const totalLineOnlyB = nhlRegularModelV1({
+  ...base,
+  market: {
+    ...base.market,
+    market_total_line: 7.5,
+    market_open_total_line: 7.5,
+    same_book_total_move: 0,
+    total_over_bets_pct: null,
+    total_over_money_pct: null,
+  },
+});
+assert.equal(totalLineOnlyA.expected_total_goals, totalLineOnlyB.expected_total_goals, "the posted Total line evaluates the forecast but never anchors its score mean");
+assert.ok(totalLineOnlyA.total.pick.startsWith("OVER"));
+assert.ok(totalLineOnlyB.total.pick.startsWith("UNDER"));
 
 assert.equal(nhlGameTypeFromExternalId(2026010001), 1);
 assert.equal(nhlGameTypeFromExternalId(2026020001), 2);

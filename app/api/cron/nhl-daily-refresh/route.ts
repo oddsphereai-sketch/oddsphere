@@ -42,13 +42,14 @@ import { seedNhlGames } from "@/lib/services/nhl/seedNhlGamesService";
 import { refreshNhlLines } from "@/lib/services/nhl/refreshNhlLinesService";
 import { writeNhlPredictionRecords } from "@/lib/services/nhl/buildNhlPredictionRecords";
 import { refreshNhlTeamStats } from "@/lib/services/nhl/refreshNhlTeamStatsService";
+import { refreshNhlGoalieStats } from "@/lib/services/nhl/refreshNhlGoalieStatsService";
 import { syncPublicSplitsObservations } from "@/lib/services/syncPublicSplitsObservations";
 import { refreshDailyEdgeResponseSnapshot } from "@/lib/services/labResponseSnapshotWriter";
 import { supabase } from "@/lib/db/supabase";
 
 const NHL_CRON_ENV = "NHL_CRON_ENABLED";
 const NHL_PREDS_ENV = "NHL_PREDICTIONS_DB_WRITES_ENABLED";
-const NHL_DAILY_REFRESH_RELEASE = "nhl_daily_refresh_schedule_2026_09_29_r3_complete_slate_odds";
+const NHL_DAILY_REFRESH_RELEASE = "nhl_daily_refresh_schedule_2026_09_29_r4_professional_inputs";
 
 /**
  * Returns the MoneyPuck-style season start-year for a given UTC date.
@@ -156,25 +157,67 @@ export async function GET(request: Request): Promise<Response> {
       stepDetails.splits = splitsResult;
       if (splitsResult.errors.length > 0 || splitsResult.skippedTableMissing) partial = true;
 
-      // Refresh the completed prior regular season after the slate seed has
-      // ensured every participating team exists locally. BALLDONTLIE supplies
-      // current/prior team metrics at model time; MoneyPuck remains the
-      // independent team-strength input and is refreshed once per daily run.
+      // Refresh the current regular season after the slate seed has ensured
+      // every participating team exists locally. Snapshot selection silently
+      // falls back to the completed prior season during opening-week lag.
       const season = nhlSeasonStartYearFromDate(new Date());
       let teamStatsWritten = 0;
       try {
-        const teamStats = await refreshNhlTeamStats({
-          season: season - 1,
-          includePlayoffs: false,
-          dryRun: false,
-          logger: stepLog("team-stats"),
-        });
+        let sourceSeason = season;
+        let currentError: string | null = null;
+        let teamStats;
+        try {
+          teamStats = await refreshNhlTeamStats({
+            season,
+            includePlayoffs: false,
+            dryRun: false,
+            logger: stepLog("team-stats"),
+          });
+        } catch (error) {
+          currentError = error instanceof Error ? error.message : String(error);
+          sourceSeason = season - 1;
+          teamStats = await refreshNhlTeamStats({
+            season: sourceSeason,
+            includePlayoffs: false,
+            dryRun: false,
+            logger: stepLog("team-stats-fallback"),
+          });
+        }
         teamStatsWritten = teamStats.written;
-        stepDetails.team_stats = teamStats;
+        stepDetails.team_stats = { ...teamStats, sourceSeason, currentError };
         if (teamStats.errors.length > 0) partial = true;
       } catch (error) {
         partial = true;
         stepDetails.team_stats = { error: error instanceof Error ? error.message : String(error) };
+      }
+      let goalieStatsWritten = 0;
+      try {
+        let sourceSeason = season;
+        let currentError: string | null = null;
+        let goalieStats;
+        try {
+          goalieStats = await refreshNhlGoalieStats({
+            season,
+            includePlayoffs: false,
+            dryRun: false,
+            logger: stepLog("goalie-stats"),
+          });
+        } catch (error) {
+          currentError = error instanceof Error ? error.message : String(error);
+          sourceSeason = season - 1;
+          goalieStats = await refreshNhlGoalieStats({
+            season: sourceSeason,
+            includePlayoffs: false,
+            dryRun: false,
+            logger: stepLog("goalie-stats-fallback"),
+          });
+        }
+        goalieStatsWritten = goalieStats.written;
+        stepDetails.goalie_stats = { ...goalieStats, sourceSeason, currentError };
+        if (goalieStats.errors.length > 0) partial = true;
+      } catch (error) {
+        partial = true;
+        stepDetails.goalie_stats = { error: error instanceof Error ? error.message : String(error) };
       }
 
       // Step 4 — write prediction_records for tonight's regular-season slate.
@@ -264,6 +307,7 @@ export async function GET(request: Request): Promise<Response> {
         linesResult.lineHistoryWritten +
         splitsResult.upserted +
         teamStatsWritten +
+        goalieStatsWritten +
         (predictionsResult.recordsCreated ?? 0) +
         (responseSnapshot?.ok ? 1 : 0);
 

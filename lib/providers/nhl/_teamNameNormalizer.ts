@@ -122,7 +122,18 @@ export function normalizeNhlTeamName(raw: string | null | undefined): NhlTeamAbb
   if (!raw) return null;
   const key = raw.trim().toLowerCase();
   if (key === "") return null;
-  return TEAM_VARIANTS[key] ?? null;
+  const exact = TEAM_VARIANTS[key];
+  if (exact) return exact;
+
+  // SharpAPI's sportsbook-specific split rows often prefix a nickname with
+  // the canonical abbreviation (for example `CHI Blackhawks`, `MTL
+  // Canadiens`, or `VAN Canucks`). Keep exact full-name matching first, then
+  // accept a leading token only when that token is itself an unambiguous NHL
+  // abbreviation already present in the vetted variant map. This recovers
+  // complete DraftKings/Circa money+ticket observations without introducing
+  // fuzzy city matching.
+  const firstToken = key.split(/\s+/, 1)[0];
+  return TEAM_VARIANTS[firstToken] ?? null;
 }
 
 /** Test-only helper. Exposes the variants table for assertions. */

@@ -20,8 +20,8 @@ export const DAILY_EDGE_SPORTS: readonly DailyEdgeSportDefinition[] = [
   { key: "soccer", label: "Soccer", memberAvailable: true, inSeason: true },
   { key: "nfl", label: "NFL", memberAvailable: true, inSeason: true },
   { key: "cfb", label: "CFB", memberAvailable: true, inSeason: true },
-  { key: "nba", label: "NBA", memberAvailable: true, inSeason: false },
   { key: "nhl", label: "NHL", memberAvailable: true, inSeason: Date.now() >= NHL_2026_REGULAR_SEASON_START_MS },
+  { key: "nba", label: "NBA", memberAvailable: true, inSeason: false },
   { key: "cbb", label: "CBB", memberAvailable: false },
   { key: "ucl", label: "UCL", memberAvailable: false, inSeason: false },
 ] as const;

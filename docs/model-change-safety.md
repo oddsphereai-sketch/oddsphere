@@ -240,6 +240,37 @@ gate in this document. Any preseason publication, mixed release, incomplete-pric
 actionable, unexpected board collapse, split-driven instability, writer overlap,
 or snapshot failure holds/rolls back r1 while preserving locked evidence.
 
+## Owner-approved provisional exception: NHL professional joint-score r3
+
+On 2026-09-29 Daniel Mengel explicitly directed Oddsphere to replace the NHL
+line-hugging model with the same independent-model-first architecture established
+for NFL: maximize sport-specific projection and prediction accuracy, then marry
+the forecast to market reading without restoring a 90% market anchor. He also
+directed immediate publication without a shadow-only delay, no member copy or
+label changes, preservation of a non-flat board, and safe current/prior input
+fallbacks. This exception is limited to the r3 release family recorded in
+`docs/current-model-releases.md` and the evidence in
+`docs/model-audits/2026-09-29-nhl-professional-joint-score-r3-result.md`.
+
+The owner acknowledges that historical split and intraday same-book movement
+observations are not available across the full tournament. The independent score
+and ability heads, fixed market weights, coherent joint distribution, and grade
+calibration must pass the chronological train/tune/untouched-holdout protocol.
+The existing forward-only split overlay remains bounded. Same-book line movement
+may continuously condition the score only from a single preferred complete trail
+(Circa, Pinnacle, Bookmaker, then another complete same-book trail), must apply
+once from the independent base, and may not compound across refreshes. Split-only
+evidence may not create a stake. The Total market line receives zero fixed weight.
+
+Publication requires all five opening-night games and 15 markets, actual paired
+puck-line quotes, zero score/side contradictions, the reviewed 5 Best Angle / 8
+Lean / 2 Watchlist board, tested promotions and demotions, all available split
+cells, focused and full model-change tests, TypeScript/build, latest-main
+integration safety, protected-PR checks, the existing `prediction_pipeline:nhl`
+lease, immutable prior locks, and live reader/writer proof. Hold or roll back on
+mixed releases, incomplete coverage, a current-price actionable without price,
+unexpected board collapse, writer overlap, lock failure, or reader failure.
+
 ## Owner-approved provisional exception: CFB confidence / execution PR #374
 
 Approval and scope: Daniel Mengel, owner/operator of OddsphereAI, explicitly approved this
