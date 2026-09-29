@@ -38,6 +38,9 @@ import { resolvedNhlSplitsByGame } from "./nhlResolvedSplits";
 import { loadNhlRegularStateForSlate } from "./loadNhlRegularState";
 import { isBlockedSportsbook } from "../../config/blockedSportsbooks";
 
+export const NHL_DAILY_EDGE_READER_RELEASE =
+  "nhl_daily_edge_reader_2026_09_29_r2_writer_tuple_coherence" as const;
+
 /**
  * Bucket SharpAPI NHL opportunities by `"AWAY@HOME"` matchup key (normalized
  * to our DB abbreviations). Multiple opportunities per matchup are expected
@@ -176,7 +179,11 @@ export async function buildNhlDailyEdgeAdapted(date: string): Promise<DailyEdgeR
     }
   }
 
-  // For lock state, look up any existing prediction_records.
+  // Read the writer-owned active-release tuple for both unlocked and locked
+  // games. Recomputing an unlocked r6 card without the writer's persisted
+  // opponent-adjusted state silently falls back to r5 scoring and can publish
+  // a different score under the r6 deployment. Current lines/prices remain a
+  // separate live read below; the prediction tuple comes from the sole writer.
   const { data: recordsData } = await supabase
     .from("prediction_records")
     .select("game_id, locked_at, model_version, snapshot_json")
@@ -184,7 +191,13 @@ export async function buildNhlDailyEdgeAdapted(date: string): Promise<DailyEdgeR
     .eq("model_version", NHL_REGULAR_MODEL_RELEASE)
     .in("game_id", games.map((g) => g.id));
   const lockedByGame = new Map<number, string | null>();
-  const lockedPayloadByGame = new Map<number, { model: NhlModelOutput; snapshot: NhlFeatureSnapshot }>();
+  const predictionPayloadByGame = new Map<number, {
+    model: NhlModelOutput;
+    snapshot: NhlFeatureSnapshot;
+    lockedAt: string | null;
+    identity: string;
+  }>();
+  const incoherentPayloadGames = new Set<number>();
   for (const r of ((recordsData ?? []) as Array<{
     game_id: number;
     locked_at: string | null;
@@ -196,7 +209,6 @@ export async function buildNhlDailyEdgeAdapted(date: string): Promise<DailyEdgeR
     if (existing === undefined || (existing === null && r.locked_at !== null)) {
       lockedByGame.set(r.game_id, r.locked_at);
     }
-    if (r.locked_at === null || lockedPayloadByGame.has(r.game_id)) continue;
     const payload = r.snapshot_json as {
       model_output?: NhlModelOutput;
       feature_inputs?: NhlFeatureSnapshot;
@@ -205,12 +217,24 @@ export async function buildNhlDailyEdgeAdapted(date: string): Promise<DailyEdgeR
       payload?.model_output?.model_version === NHL_REGULAR_MODEL_RELEASE
       && payload.feature_inputs?.game_type === 2
     ) {
-      lockedPayloadByGame.set(r.game_id, {
+      const identity = JSON.stringify({
         model: payload.model_output,
         snapshot: payload.feature_inputs,
       });
+      const prior = predictionPayloadByGame.get(r.game_id);
+      if (prior && prior.identity !== identity) {
+        incoherentPayloadGames.add(r.game_id);
+        continue;
+      }
+      if (!prior || (prior.lockedAt === null && r.locked_at !== null)) predictionPayloadByGame.set(r.game_id, {
+        model: payload.model_output,
+        snapshot: payload.feature_inputs,
+        lockedAt: r.locked_at,
+        identity,
+      });
     }
   }
+  for (const gameId of incoherentPayloadGames) predictionPayloadByGame.delete(gameId);
 
   // Per-game pipeline.
   const dtos = [];
@@ -231,9 +255,9 @@ export async function buildNhlDailyEdgeAdapted(date: string): Promise<DailyEdgeR
           totalOverMoneyPct: splitsEvent?.total?.handle_pct?.over == null ? null : splitsEvent.total.handle_pct.over * 100,
         },
       });
-      const lockedPayload = lockedPayloadByGame.get(g.id);
-      const snapshot = lockedPayload?.snapshot ?? built.snapshot;
-      const model = lockedPayload?.model ?? nhlRegularModelV1(snapshot);
+      const storedPayload = predictionPayloadByGame.get(g.id);
+      const snapshot = storedPayload?.snapshot ?? built.snapshot;
+      const model = storedPayload?.model ?? nhlRegularModelV1(snapshot);
 
       // Pull lines once for ML + Total + Spread (NHL puck-line is
       // stored under market_type="spread" in our lines table, same
