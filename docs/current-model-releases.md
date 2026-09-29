@@ -1896,6 +1896,15 @@ unavailable or incomplete update silently executes the exact r5 Total fallback
 and cannot remove the board. Evidence and rollback gates are in
 `docs/model-audits/2026-09-29-nhl-matchup-total-hybrid-r6-result.md`.
 
+Reader follow-up `nhl_daily_edge_reader_2026_09_29_r2_writer_tuple_coherence`
+uses the sole writer's active-release model/feature tuple for unlocked and
+locked cards while continuing to read current prices separately. This prevents
+an unlocked r6 record from being displayed with a state-missing r5 fallback.
+Sibling market snapshots must be identical before the tuple is accepted. No
+model, probability, score, grade, provider call, lock, member copy, label, or
+layout changes. Evidence and rollback are in
+`docs/model-audits/2026-09-29-nhl-r6-reader-tuple-coherence.md`.
+
 ## WNBA champion
 
 - Model: `wnba_v1_5_coherent_expected_margin`
