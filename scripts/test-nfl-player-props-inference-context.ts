@@ -110,7 +110,7 @@ function evidence(
   } as unknown as NflForwardStoredEvidence;
 }
 
-assert.equal(NFL_PLAYER_PROPS_INFERENCE_CONTEXT_RELEASE, "nfl_player_props_inference_context_2026_09_29_r6_matchup_environment");
+assert.equal(NFL_PLAYER_PROPS_INFERENCE_CONTEXT_RELEASE, "nfl_player_props_inference_context_2026_09_29_r7_injury_feed_continuity");
 const context = buildNflPlayerPropsInferenceContextFromForwardEvidence({
   snapshot,
   capturedAt: "2026-08-25T12:00:00.000Z",
@@ -152,9 +152,13 @@ const partialContext = buildNflPlayerPropsInferenceContextFromForwardEvidence({
     }),
   ],
 });
-assert.deepEqual(partialContext.games.map((game) => game.canonicalGameId), ["game"]);
-assert.deepEqual(partialContext.excludedGames, [{ canonicalGameId: "game-two", reason: "injury_evidence_missing" }]);
+assert.deepEqual(partialContext.games.map((game) => game.canonicalGameId), ["game", "game-two"]);
+assert.deepEqual(partialContext.excludedGames, []);
 assert.ok(partialContext.healthHolds.includes("game_game-two_injury_evidence_missing"));
+assert.equal(partialContext.coverage.injuryGames, 1);
+assert.equal(partialContext.games[1]?.injuryEvidenceAvailable, false);
+assert.equal(partialContext.games[1]?.injuries.reportUpdatedAt, null);
+assert.deepEqual(partialContext.games[1]?.injuries.teams.map((team) => team.abbreviation), ["BUF", "DET"]);
 
 const continuityContext = buildNflPlayerPropsInferenceContextFromForwardEvidence({
   snapshot: partialSnapshot,
@@ -171,7 +175,8 @@ const continuityContext = buildNflPlayerPropsInferenceContextFromForwardEvidence
 });
 assert.deepEqual(continuityContext.games.map((game) => game.canonicalGameId), ["game", "game-two"]);
 assert.equal(continuityContext.games[1]?.injuries.reportUpdatedAt, "2026-08-25T10:00:00.000Z");
+assert.equal(continuityContext.games[1]?.injuryEvidenceAvailable, true);
 assert.equal(continuityContext.games[1]?.mainMarket.capturedAt, "2026-08-25T11:00:00.000Z");
 assert.deepEqual(continuityContext.excludedGames, []);
 
-console.log("NFL player-props shared inference context: checksum-backed reuse, as-of selection, game-scoped exclusions, and zero provider-call budget passed.");
+console.log("NFL player-props shared inference context: checksum-backed reuse, as-of selection, injury-feed continuity, game-scoped exclusions, and zero provider-call budget passed.");

@@ -29,15 +29,15 @@ import {
 export const NFL_PLAYER_PROPS_PORTABLE_ARTIFACT_RELEASE =
   "nfl_player_props_runtime_2026_09_29_r6_full_family_matchup" as const;
 export const NFL_PLAYER_PROPS_RUNTIME_RELEASE =
-  "nfl_player_props_runtime_2026_09_29_r19_full_family_matchup" as const;
+  "nfl_player_props_runtime_2026_09_29_r20_injury_feed_continuity" as const;
 export const NFL_PLAYER_PROPS_BOARD_RELEASE =
-  "nfl_player_props_board_2026_09_29_r22_full_family_matchup" as const;
+  "nfl_player_props_board_2026_09_29_r23_injury_feed_continuity" as const;
 export const NFL_PLAYER_PROPS_DECISION_RELEASE =
-  "nfl_player_props_decision_2026_09_29_r18_full_family_matchup" as const;
+  "nfl_player_props_decision_2026_09_29_r19_injury_feed_continuity" as const;
 export const NFL_PLAYER_PROPS_MODEL_RELEASE =
-  "nfl_player_props_distribution_model_2026_09_29_r14_full_family_matchup" as const;
+  "nfl_player_props_distribution_model_2026_09_29_r15_injury_feed_continuity" as const;
 export const NFL_PLAYER_PROPS_CALIBRATION_RELEASE =
-  "nfl_player_props_distribution_calibration_2026_09_29_r15_full_family_matchup" as const;
+  "nfl_player_props_distribution_calibration_2026_09_29_r16_injury_feed_continuity" as const;
 export const NFL_PLAYER_PROPS_PASSING_MARKET_RELEASE =
   "nfl_player_props_market_residual_calibration_2026_09_03_r8_single_application" as const;
 export const NFL_PLAYER_PROPS_MARKET_COHERENT_PROJECTION_RELEASE =
@@ -150,6 +150,9 @@ type JointRuntimeArtifact = {
 
 const artifact = {
   ...artifactCoreJson,
+  modelRelease: NFL_PLAYER_PROPS_MODEL_RELEASE,
+  calibrationRelease: NFL_PLAYER_PROPS_CALIBRATION_RELEASE,
+  decisionRelease: NFL_PLAYER_PROPS_DECISION_RELEASE,
   markets: {
     passing_attempts: passingAttemptsJson,
     passing_completions: passingCompletionsJson,
