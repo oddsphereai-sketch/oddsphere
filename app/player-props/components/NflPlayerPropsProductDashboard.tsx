@@ -8,7 +8,9 @@ import { PlayerPropReaderDialog } from "./PlayerPropReaderDialog";
 import {
   nflPlayerPropsAvailabilityAgeLabel,
   nflPlayerPropsTouchdownPlayerKey,
+  resolveNflPlayerPropsActionableForecast,
   resolveNflPlayerPropsPrediction,
+  type NflPlayerPropsActionableForecast,
   selectNflPlayerPropsTouchdownScorers,
   type NflPlayerPropsPrediction,
 } from "../lib/nflPlayerPropsPresentation";
@@ -31,6 +33,7 @@ type PredictionFilter = "all" | "yes" | "no" | "over" | "under";
 type SortKey = "signal" | "player" | "market" | "start" | "ev" | "edge" | "probability" | "book" | "updated";
 type GameSummary = { gameId: string; teams: string[]; opponent: string | null; scheduledStart: string | null; rows: number };
 type MarketPair = { key: string; rows: Row[]; primary: Row; over: Row | null; under: Row | null; yes: Row | null; prediction: NflPlayerPropsPrediction<Row> | null };
+type RadarItem = NflPlayerPropsActionableForecast<Row>;
 
 export function NflPlayerPropsProductDashboard({ snapshot, reviewMode = false, initialSelectedKey = null, dataUnavailable = false }: { snapshot: NflPlayerPropsMemberSnapshot | null; reviewMode?: boolean; initialSelectedKey?: string | null; dataUnavailable?: boolean }) {
   const [selectedGame, setSelectedGame] = useState("all");
@@ -70,12 +73,14 @@ export function NflPlayerPropsProductDashboard({ snapshot, reviewMode = false, i
     && (!search.trim() || `${row.playerName} ${row.team} ${row.opponent} ${row.market} ${row.sportsbook}`.toLowerCase().includes(search.trim().toLowerCase()))
   )).sort(sortRows(sort)), [allRows, bookFilter, grade, market, oddsFilterActive, oddsRange, search, selectedGame, sort]);
   const touchdownScorers = useMemo(() => selectNflPlayerPropsTouchdownScorers(allRows), [allRows]);
+  const boardPairs = useMemo(() => pairRows(allRows, "signal", touchdownScorers), [allRows, touchdownScorers]);
+  const boardActionables = useMemo(() => buildRadarItems(boardPairs, Number.POSITIVE_INFINITY), [boardPairs]);
   const allPairs = useMemo(() => pairRows(filteredRows, sort, touchdownScorers), [filteredRows, sort, touchdownScorers]);
   const pairs = useMemo(() => predictionFilter === "all"
     ? allPairs
     : allPairs.filter((pair) => pair.prediction?.outcome === predictionFilter), [allPairs, predictionFilter]);
   const rows = useMemo(() => predictionFilter === "all" ? filteredRows : pairs.flatMap((pair) => pair.rows), [filteredRows, pairs, predictionFilter]);
-  const radarRows = useMemo(() => buildRadarRows(rows), [rows]);
+  const radarItems = useMemo(() => buildRadarItems(allPairs), [allPairs]);
   const selected = rows.find((row) => key(row) === selectedKey) ?? null;
   const activeFilters = [selectedGame, grade, market, predictionFilter, bookFilter].filter((value) => value !== "all" && value !== "All").length + (search.trim() ? 1 : 0) + (oddsInputPresent ? 1 : 0);
 
@@ -98,8 +103,8 @@ export function NflPlayerPropsProductDashboard({ snapshot, reviewMode = false, i
   const clearFilters = () => { setSelectedGame("all"); setGrade("All"); setMarket("all"); setPredictionFilter("all"); setBookFilter("all"); setSearch(""); setOddsMinInput(""); setOddsMaxInput(""); setSelectedKey(null); };
   return <div className="w-full pb-8" data-member-lifecycle-release={snapshot.lifecycleRelease} data-review-surface={reviewMode ? "nfl-player-props" : undefined}>
     {reviewMode ? <aside className="mb-5 border border-amber-400/40 bg-amber-400/[0.08] px-4 py-3 sm:px-5"><p className="text-[10px] font-black uppercase text-amber-300">Private founder review · Real board</p><p className="mt-1 max-w-4xl text-sm leading-6 text-amber-50/80">This view uses the current timestamped NFL model output and exact prices. Review mode does not publish, grade, lock, or track anything.</p></aside> : null}
-    <NflSlateHeader snapshot={snapshot} games={games} selectedGame={selectedGame} onSelectGame={changeSelectedGame} reviewMode={reviewMode} />
-    <TodayRadar rows={radarRows} onSelect={setSelectedKey} />
+    <NflSlateHeader snapshot={snapshot} games={games} actionables={boardActionables} selectedGame={selectedGame} onSelectGame={changeSelectedGame} reviewMode={reviewMode} />
+    <TodayRadar items={radarItems} onSelect={setSelectedKey} />
 
     <section data-product-zone="research-entry" className="z-30 -mx-4 border-y border-gray-800 bg-[#07090d]/95 px-4 py-4 shadow-[0_12px_30px_rgba(0,0,0,0.3)] backdrop-blur sm:sticky sm:top-16 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
       <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
@@ -123,7 +128,7 @@ export function NflPlayerPropsProductDashboard({ snapshot, reviewMode = false, i
   </div>;
 }
 
-function NflSlateHeader({ snapshot, games, selectedGame, onSelectGame, reviewMode }: { snapshot: NflPlayerPropsMemberSnapshot; games: GameSummary[]; selectedGame: string; onSelectGame: (value: string) => void; reviewMode: boolean }) {
+function NflSlateHeader({ snapshot, games, actionables, selectedGame, onSelectGame, reviewMode }: { snapshot: NflPlayerPropsMemberSnapshot; games: GameSummary[]; actionables: RadarItem[]; selectedGame: string; onSelectGame: (value: string) => void; reviewMode: boolean }) {
   return <header data-product-zone="slate-intelligence" className="border-b border-gray-800 pb-6"><PlayerPropsSlateHero
     badge={reviewMode ? <span className="mb-2 inline-flex rounded border border-amber-400/30 px-2 py-1 text-[10px] font-black uppercase text-amber-200">Review only</span> : null}
     eyebrow={<>NFL · Week {snapshot.week}</>}
@@ -132,8 +137,8 @@ function NflSlateHeader({ snapshot, games, selectedGame, onSelectGame, reviewMod
     status={<>Prices updated {localTime(snapshot.board.evaluatedAt)}</>}
     statusDetail={<>Exact offered prices across {unique(snapshot.memberDecisions.map((row) => row.sportsbook)).length} books · freezes at T-60</>}
     metrics={[
-      { label: "Best angles", value: String(snapshot.board.counts["Best Angle"]), tone: "best" },
-      { label: "Model leans", value: String(snapshot.board.counts.Lean), tone: "lean" },
+      { label: "Best angles", value: String(actionables.filter((item) => item.row.grade === "Best Angle").length), tone: "best" },
+      { label: "Model leans", value: String(actionables.filter((item) => item.row.grade === "Lean").length), tone: "lean" },
       { label: "This week’s games", value: String(games.length), tone: "slate" },
     ]}
   />{games.length ? <GameNavigator games={games} rows={snapshot.memberDecisions} selectedGame={selectedGame} onSelectGame={onSelectGame} /> : null}</header>;
@@ -146,17 +151,18 @@ function GameNavigator({ games, rows, selectedGame, onSelectGame }: { games: Gam
   </div></div>;
 }
 
-function TodayRadar({ rows, onSelect }: { rows: Row[]; onSelect: (value: string) => void }) {
-  return <section data-product-zone="today-radar" className="border-b border-gray-800 py-7"><PlayerPropsSectionHeading eyebrow="Today’s Radar" title="Model reads worth a look" count={`${rows.length} reads`} /><div className="mt-4 flex snap-x gap-3 overflow-x-auto pb-2" aria-label="Model reads worth a look">{rows.map((row, index) => <RadarCard key={key(row)} row={row} index={index} onSelect={onSelect} />)}</div></section>;
+function TodayRadar({ items, onSelect }: { items: RadarItem[]; onSelect: (value: string) => void }) {
+  return <section data-product-zone="today-radar" className="border-b border-gray-800 py-7"><PlayerPropsSectionHeading eyebrow="Today’s Radar" title="Model reads worth a look" count={`${items.length} reads`} /><div className="mt-4 flex snap-x gap-3 overflow-x-auto pb-2" aria-label="Model reads worth a look">{items.map((item, index) => <RadarCard key={key(item.row)} item={item} index={index} onSelect={onSelect} />)}</div></section>;
 }
 
-function RadarCard({ row, index, onSelect }: { row: Row; index: number; onSelect: (value: string) => void }) {
+function RadarCard({ item, index, onSelect }: { item: RadarItem; index: number; onSelect: (value: string) => void }) {
+  const { row, prediction } = item;
   const colors = gradeColors(row.grade);
   return <PlayerPropsRadarCardFrame borderColor={colors.border} background={`linear-gradient(180deg, ${colors.background}, rgba(14,18,24,0.98) 42%)`} accentColor={nflTeamColor(row.team)} watermark={<span className="text-[96px] font-black tracking-tighter text-white">{row.team}</span>}>
     <div className="flex items-start justify-between gap-3"><span className="text-[10px] font-black uppercase text-violet-300">{index === 0 && row.grade === "Best Angle" ? "Top rated" : row.grade === "Lean" ? "Model lean" : "Worth a look"}</span><GradeBadge grade={row.grade} /></div>
     <div className="mt-4 flex min-w-0 items-center gap-3"><NflTeamBadge team={row.team} /><div className="min-w-0"><h3 className="truncate text-base font-black text-white">{row.playerName}</h3><p className="truncate text-xs text-gray-500">{row.team} · {row.opponent} · {label(row.market)}</p><AvailabilityBadge row={row} /></div></div>
-    <div className="mt-5 grid grid-cols-[minmax(0,1fr)_auto] items-end gap-3"><div><p className="text-[9px] font-bold uppercase text-gray-600">Prediction</p><p className="mt-1 text-2xl font-black text-white">{selection(row)}</p></div><div className="text-right"><p className="text-[9px] font-bold uppercase text-gray-600">Best price</p><p className="mt-1 text-xl font-black text-white">{price(row.americanPrice)}</p><p className="text-[10px] text-gray-500">{book(row.sportsbook)}</p></div></div>
-    <div className="mt-4 border-y border-gray-800 py-3"><div className="flex items-center justify-between text-xs"><span className="text-gray-500">Projection <strong className="ml-1 text-white">{projectionValue(row)}</strong></span><span className="text-gray-500">Edge <strong className={row.probabilityEdge > 0 ? "ml-1 text-emerald-300" : "ml-1 text-gray-300"}>{signedPct(row.probabilityEdge)}</strong></span></div><p className="mt-2 text-xs leading-5 text-gray-400">{shortModelRead(row)}</p></div>
+    <div className="mt-5 grid grid-cols-[minmax(0,1fr)_auto] items-end gap-3"><div><p className="text-[9px] font-bold uppercase text-gray-600">Prediction</p><p className="mt-1 text-2xl font-black text-white">{predictionSelection(prediction, row.line)}</p></div><div className="text-right"><p className="text-[9px] font-bold uppercase text-gray-600">Best price</p><p className="mt-1 text-xl font-black text-white">{price(row.americanPrice)}</p><p className="text-[10px] text-gray-500">{book(row.sportsbook)}</p></div></div>
+    <div className="mt-4 border-y border-gray-800 py-3"><div className="flex items-center justify-between text-xs"><span className="text-gray-500">Projection <strong className="ml-1 text-white">{predictionProjectionValue(prediction, row)}</strong></span><span className="text-gray-500">Edge <strong className={row.probabilityEdge > 0 ? "ml-1 text-emerald-300" : "ml-1 text-gray-300"}>{signedPct(row.probabilityEdge)}</strong></span></div><p className="mt-2 text-xs leading-5 text-gray-400">{shortCanonicalModelRead(prediction, row)}</p></div>
     <button type="button" onClick={() => onSelect(key(row))} className="mt-4 h-9 w-full rounded-md border border-gray-700 text-xs font-black text-gray-100 hover:border-violet-400 hover:bg-violet-500/10">Open Reader</button>
   </PlayerPropsRadarCardFrame>;
 }
@@ -280,19 +286,19 @@ function pairRows(rows: Row[], sort: SortKey, touchdownScorers: ReadonlySet<stri
   })).sort((a, b) => sortRows(sort)(a.primary, b.primary) || sortRows("signal")(a.primary, b.primary));
 }
 function deriveGames(rows: Row[]): GameSummary[] { const map = new Map<string, GameSummary>(); for (const row of rows) { const game = map.get(row.gameId) ?? { gameId: row.gameId, teams: [], opponent: row.opponent || null, scheduledStart: row.scheduledStart || null, rows: 0 }; game.teams = unique([...game.teams, row.team]); if (row.opponent && !game.teams.includes(row.opponent) && game.teams.length < 2) game.teams.push(row.opponent); game.rows += 1; map.set(row.gameId, game); } return [...map.values()].sort((a, b) => Date.parse(a.scheduledStart ?? "") - Date.parse(b.scheduledStart ?? "")); }
-function buildRadarRows(rows: Row[]): Row[] {
-  // Radar is the actionable surface. A ranked display forecast may select the
-  // unquoted No-TD outcome, but it must not hide a real Best Angle/Lean that
-  // is present on the complete board.
-  const predictions = rows
-    .filter((row) => row.grade === "Best Angle" || row.grade === "Lean")
-    .sort(sortRows("signal"));
-  const deduped = new Map<string, Row>();
-  for (const row of predictions) {
-    const radarKey = nflPlayerPropsCanonicalMarketScopeKey(row);
-    if (!deduped.has(radarKey)) deduped.set(radarKey, row);
+function buildRadarItems(pairs: MarketPair[], limit = 6): RadarItem[] {
+  const candidates = pairs.flatMap((pair) => {
+    const item = resolveNflPlayerPropsActionableForecast(pair.rows, {
+      touchdownPositive: pair.prediction?.outcome === "yes",
+    });
+    return item ? [item] : [];
+  }).sort((left, right) => sortRows("signal")(left.row, right.row));
+  const deduped = new Map<string, RadarItem>();
+  for (const item of candidates) {
+    const radarKey = nflPlayerPropsCanonicalMarketScopeKey(item.row);
+    if (!deduped.has(radarKey)) deduped.set(radarKey, item);
   }
-  return [...deduped.values()].slice(0, 6);
+  return [...deduped.values()].slice(0, limit);
 }
 function sortRows(sort: SortKey): (a: Row, b: Row) => number { if (sort === "player") return (a, b) => a.playerName.localeCompare(b.playerName); if (sort === "market") return (a, b) => a.market.localeCompare(b.market) || a.playerName.localeCompare(b.playerName); if (sort === "start") return (a, b) => Date.parse(a.scheduledStart) - Date.parse(b.scheduledStart); if (sort === "ev") return (a, b) => b.expectedValue - a.expectedValue; if (sort === "edge") return (a, b) => b.probabilityEdge - a.probabilityEdge; if (sort === "probability") return (a, b) => b.finalProbability - a.finalProbability; if (sort === "book") return (a, b) => a.sportsbook.localeCompare(b.sportsbook); if (sort === "updated") return (a, b) => Date.parse(b.observedAt) - Date.parse(a.observedAt); return (a, b) => rank(a) - rank(b) || b.expectedValue - a.expectedValue; }
 function rank(row: Row): number { return ({ "Best Angle": 0, Lean: 1, Watchlist: 2, "No Play": 3 })[row.grade]; }
@@ -301,9 +307,11 @@ function selection(row: Row): string { return row.side === "yes" ? "Anytime TD" 
 function selectionAtLine(row: Row, line: number): string { return row.side === "yes" ? "Anytime TD" : `${capitalize(row.side)} ${line}`; }
 function projectionValue(row: Row): string { return row.projection === null ? `${pct(row.rawModelProbability)} TD` : row.projection.toFixed(1); }
 function pairProjectionValue(pair: MarketPair): string { return pair.prediction?.projection === null || pair.prediction?.projection === undefined ? projectionValue(pair.primary) : pair.prediction.projection.toFixed(1); }
+function predictionProjectionValue(prediction: NflPlayerPropsPrediction<Row>, row: Row): string { return prediction.projection === null ? projectionValue(row) : prediction.projection.toFixed(1); }
+function predictionSelection(prediction: NflPlayerPropsPrediction<Row>, line: number): string { return prediction.outcome === "yes" ? "Anytime TD" : prediction.outcome === "no" ? "No TD" : `${capitalize(prediction.outcome)} ${line}`; }
+function shortCanonicalModelRead(prediction: NflPlayerPropsPrediction<Row>, row: Row): string { return prediction.projection === null ? `${pct(prediction.probability)} touchdown forecast from role, team, and opponent context.` : `${prediction.projection.toFixed(1)} projected against ${row.line}, with an empirical range retained in the reader.`; }
 function matchup(row: Row): string { return row.opponent ? `${row.team} · ${row.opponent}` : row.team; }
 function gameLabel(game: GameSummary): string { return game.teams.length > 1 ? `${game.teams[0]} · ${game.teams[1]}` : game.opponent ? `${game.teams[0] ?? "NFL"} · ${game.opponent}` : game.teams[0] ?? "NFL matchup"; }
-function shortModelRead(row: Row): string { if (row.projection === null) return `${pct(row.rawModelProbability)} touchdown forecast from role, team, and opponent context.`; return `${row.projection.toFixed(1)} projected against ${row.line}, with an empirical range retained in the reader.`; }
 function modelRead(row: Row): string { const independentConfirmationMissing = row.healthHolds.includes("independent_same_line_confirmation_missing"); const comparison = independentConfirmationMissing ? `${pct(row.marketProbability)} from the current book's two-sided no-vig price context` : `${pct(row.marketProbability)} from the independent market`; const priceCase = `OddSphere gives it a ${pct(row.finalProbability)} calibrated chance versus ${comparison}, producing ${signedPct(row.expectedValue)} expected value at ${price(row.americanPrice)}.${independentConfirmationMissing ? " Independent same-line confirmation is still required, so this read remains No Play." : ""}`; if (row.projection === null) return `The model forecasts a ${pct(row.rawModelProbability)} touchdown probability from participation, role opportunity, team environment, and opponent context. ${priceCase}`; const relation = row.projection >= row.line ? "above" : "below"; const range = row.projectionRange ? ` Its empirical 80% range is ${row.projectionRange.lower.toFixed(1)}–${row.projectionRange.upper.toFixed(1)}.` : ""; return `The model projects ${row.projection.toFixed(1)}, ${Math.abs(row.projection - row.line).toFixed(1)} ${relation} the ${row.line} line.${range} ${priceCase}`; }
 function gradeColors(grade: Row["grade"]): { border: string; background: string; text: string } {
   const sharedGrade: PropGrade = grade === "Best Angle" ? "BEST_ANGLE" : grade === "Lean" ? "LEAN" : grade === "Watchlist" ? "WATCHLIST" : "NO_PLAY";
