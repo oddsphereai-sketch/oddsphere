@@ -14,7 +14,7 @@ from typing import Any
 import joblib
 import numpy as np
 import pandas as pd
-from sklearn.ensemble import HistGradientBoostingClassifier, HistGradientBoostingRegressor
+from sklearn.ensemble import ExtraTreesRegressor, HistGradientBoostingClassifier, HistGradientBoostingRegressor
 from sklearn.pipeline import Pipeline
 
 
@@ -114,12 +114,38 @@ def export_trees(model: HistGradientBoostingClassifier | HistGradientBoostingReg
 
 def export_model(model: Any, feature_names: list[str], *, classifier: bool = False) -> dict[str, Any]:
     if isinstance(model, (HistGradientBoostingClassifier, HistGradientBoostingRegressor)):
-        return {
+        payload = {
             "kind": "hgb_classifier" if classifier else "hgb_regressor",
             "featureNames": feature_names,
             "baseline": float(np.ravel(model._baseline_prediction)[0]),  # noqa: SLF001
             "trees": export_trees(model),
         }
+        if isinstance(model, HistGradientBoostingRegressor) and str(model.loss) == "poisson":
+            payload["link"] = "exponential"
+        return payload
+    if isinstance(model, ExtraTreesRegressor):
+        trees: list[dict[str, Any]] = []
+        for estimator in model.estimators_:
+            tree = estimator.tree_
+            missing = getattr(tree, "missing_go_to_left", np.zeros(tree.node_count, dtype=bool))
+            nodes = []
+            for index in range(tree.node_count):
+                leaf = int(tree.children_left[index]) == int(tree.children_right[index])
+                threshold = float(tree.threshold[index])
+                # Forests contain many more nodes than the HGB heads. A fixed
+                # tuple avoids repeating seven JSON field names per node while
+                # preserving exact portable inference parity.
+                nodes.append([
+                    float(np.ravel(tree.value[index])[0]),
+                    int(tree.feature[index]),
+                    threshold if np.isfinite(threshold) else (1e308 if threshold > 0 else -1e308),
+                    1 if bool(missing[index]) else 0,
+                    int(tree.children_left[index]),
+                    int(tree.children_right[index]),
+                    1 if leaf else 0,
+                ])
+            trees.append({"nodes": nodes})
+        return {"kind": "extra_trees_regressor", "featureNames": feature_names, "trees": trees}
     if isinstance(model, Pipeline):
         imputer = next(value for value in model.named_steps.values() if hasattr(value, "statistics_"))
         scaler = next(value for value in model.named_steps.values() if hasattr(value, "scale_") and hasattr(value, "mean_"))
@@ -134,6 +160,19 @@ def export_model(model: Any, feature_names: list[str], *, classifier: bool = Fal
             "intercept": float(np.ravel(np.asarray(linear.intercept_))[0]),
         }
     raise RuntimeError(f"unsupported portable model: {type(model)}")
+
+
+def export_weighted_components(components: list[dict[str, Any]]) -> dict[str, Any]:
+    return {
+        "kind": "weighted_blend",
+        "components": [
+            {
+                "weight": float(component["weight"]),
+                "model": export_model(component["model"], list(component["features"])),
+            }
+            for component in components
+        ],
+    }
 
 
 def clean_record(values: dict[str, Any]) -> dict[str, float | str | None]:

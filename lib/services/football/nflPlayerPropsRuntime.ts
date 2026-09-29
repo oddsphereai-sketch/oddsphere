@@ -27,17 +27,17 @@ import {
 } from "./nflPlayerPropsMarketEvidenceCapture";
 
 export const NFL_PLAYER_PROPS_PORTABLE_ARTIFACT_RELEASE =
-  "nfl_player_props_runtime_2026_09_28_r5_official_joint_outcomes" as const;
+  "nfl_player_props_runtime_2026_09_29_r6_full_family_matchup" as const;
 export const NFL_PLAYER_PROPS_RUNTIME_RELEASE =
-  "nfl_player_props_runtime_2026_09_28_r18_official_joint_outcomes" as const;
+  "nfl_player_props_runtime_2026_09_29_r19_full_family_matchup" as const;
 export const NFL_PLAYER_PROPS_BOARD_RELEASE =
-  "nfl_player_props_board_2026_09_28_r21_official_joint_outcomes" as const;
+  "nfl_player_props_board_2026_09_29_r22_full_family_matchup" as const;
 export const NFL_PLAYER_PROPS_DECISION_RELEASE =
-  "nfl_player_props_decision_2026_09_28_r17_official_joint_outcomes" as const;
+  "nfl_player_props_decision_2026_09_29_r18_full_family_matchup" as const;
 export const NFL_PLAYER_PROPS_MODEL_RELEASE =
-  "nfl_player_props_distribution_model_2026_09_28_r13_official_joint_outcomes" as const;
+  "nfl_player_props_distribution_model_2026_09_29_r14_full_family_matchup" as const;
 export const NFL_PLAYER_PROPS_CALIBRATION_RELEASE =
-  "nfl_player_props_distribution_calibration_2026_09_28_r14_official_joint_outcomes" as const;
+  "nfl_player_props_distribution_calibration_2026_09_29_r15_full_family_matchup" as const;
 export const NFL_PLAYER_PROPS_PASSING_MARKET_RELEASE =
   "nfl_player_props_market_residual_calibration_2026_09_03_r8_single_application" as const;
 export const NFL_PLAYER_PROPS_MARKET_COHERENT_PROJECTION_RELEASE =
@@ -66,9 +66,18 @@ type TreeNode = {
   value: number; featureIndex: number; threshold: number; missingGoToLeft: boolean;
   left: number; right: number; isLeaf: boolean;
 };
-type TreeModel = { kind: "hgb_regressor" | "hgb_classifier"; featureNames: string[]; baseline: number; trees: Array<Array<{ nodes: TreeNode[] }>> };
+type TreeModel = {
+  kind: "hgb_regressor" | "hgb_classifier";
+  featureNames: string[];
+  baseline: number;
+  trees: Array<Array<{ nodes: TreeNode[] }>>;
+  link?: "exponential";
+};
+type CompactForestNode = [value: number, featureIndex: number, threshold: number, missingGoToLeft: 0 | 1, left: number, right: number, isLeaf: 0 | 1];
+type ForestModel = { kind: "extra_trees_regressor"; featureNames: string[]; trees: Array<{ nodes: CompactForestNode[] }> };
 type LinearModel = { kind: "linear_regressor"; featureNames: string[]; imputer: number[]; means: number[]; scales: number[]; coefficients: number[]; intercept: number };
-type PortableModel = TreeModel | LinearModel;
+type BlendModel = { kind: "weighted_blend"; components: Array<{ weight: number; model: PortableModel }> };
+type PortableModel = TreeModel | ForestModel | LinearModel | BlendModel;
 type EmpiricalDistribution = { family: "empirical_residual"; residualQuantiles: number[] };
 type Distribution = EmpiricalDistribution | {
   family: "empirical_residual_mean_bucket";
@@ -120,7 +129,7 @@ type GradeThresholds = {
   minimumEv: number; minimumProbabilityEdge: number; minimumParticipationProbability: number; minimumIndependentBooks: number;
 };
 type JointRuntimeArtifact = {
-  release: "nfl_player_props_joint_runtime_2026_09_28_r1_qb_latent_workload";
+  release: "nfl_player_props_joint_runtime_2026_09_29_r2_full_family_matchup";
   leaguePriors: {
     completionRate: number;
     yardsPerAttempt: number;
@@ -157,7 +166,7 @@ const jointArtifact = jointArtifactJson as unknown as JointRuntimeArtifact;
 if (artifact.runtimeRelease !== NFL_PLAYER_PROPS_PORTABLE_ARTIFACT_RELEASE) {
   throw new Error("NFL player props runtime artifact release mismatch.");
 }
-if (jointArtifact.release !== "nfl_player_props_joint_runtime_2026_09_28_r1_qb_latent_workload") {
+if (jointArtifact.release !== "nfl_player_props_joint_runtime_2026_09_29_r2_full_family_matchup") {
   throw new Error("NFL player props joint runtime artifact release mismatch.");
 }
 
@@ -395,6 +404,16 @@ export function buildNflPlayerPropsRuntimeFeatureRows(args: {
     features.is_home = Number(team === home);
     for (const position of ["qb", "rb", "fb", "wr", "te"]) features[`position_${position}`] = Number(roster?.position?.toLowerCase() === position);
     features.team_implied_touchdowns = impliedPoints === null ? null : impliedPoints / 7;
+    features.matchup_week = args.context.week;
+    features.matchup_temperature_f = game.weather?.forecast?.temperature_f ?? null;
+    features.matchup_wind_mph = game.weather?.forecast?.wind_speed_mph ?? null;
+    features.matchup_roof_fixed = game.weather
+      ? Number(game.weather.roofType === "fixed" || game.weather.status === "controlled_indoor")
+      : null;
+    features.matchup_roof_outdoor = game.weather
+      ? Number(game.weather.roofType === "outdoor"
+        || (game.weather.roofType === "retractable" && game.weather.status === "forecast_available"))
+      : null;
     return {
       gameId: candidate.gameId, playerName: candidate.playerName, team, opponent,
       position: roster?.position ?? null, featureAsOf: args.context.capturedAt,
@@ -498,6 +517,13 @@ type CurrentSeasonTeamGame = {
   team_targets: number;
   team_offensive_plays: number;
   team_touchdowns: number;
+  matchup_pass_rate?: number | null;
+  matchup_completion_rate?: number | null;
+  matchup_pass_yards_per_attempt?: number | null;
+  matchup_sack_rate?: number | null;
+  matchup_rush_yards_per_attempt?: number | null;
+  matchup_first_down_rate?: number | null;
+  matchup_turnover_rate?: number | null;
 };
 
 function buildCurrentSeasonFeatureIndex(state: NflPlayerPropsCurrentSeasonState | null | undefined): {
@@ -506,6 +532,10 @@ function buildCurrentSeasonFeatureIndex(state: NflPlayerPropsCurrentSeasonState 
   opponentAllowed(team: string): CurrentSeasonTeamGame[];
 } {
   const stats = state?.stats ?? [];
+  const teamStatsByGameTeam = new Map((state?.teamStats ?? []).map((row) => [
+    `${row.gameId}|${normalizeTeam(row.team)}`,
+    row,
+  ]));
   const byPlayerId = new Map<string, NflPlayerPropsCurrentSeasonStat[]>();
   const byPlayerName = new Map<string, NflPlayerPropsCurrentSeasonStat[]>();
   for (const row of stats) {
@@ -534,6 +564,9 @@ function buildCurrentSeasonFeatureIndex(state: NflPlayerPropsCurrentSeasonState 
     const total = (field: keyof NflPlayerPropsCurrentSeasonStat) => rows.reduce((sum, row) => sum + Number(row[field] ?? 0), 0);
     const teamPassAttempts = total("passing_attempts");
     const teamRushAttempts = total("rushing_attempts");
+    const teamStat = teamStatsByGameTeam.get(`${gameId}|${team}`);
+    const dropbacks = teamStat ? teamStat.passingAttempts + teamStat.sacksAllowed : teamPassAttempts;
+    const modeledPlays = teamStat ? dropbacks + teamStat.rushingAttempts : teamPassAttempts + teamRushAttempts;
     teamGames.push({
       gameId,
       week: rows[0]!.week,
@@ -547,6 +580,13 @@ function buildCurrentSeasonFeatureIndex(state: NflPlayerPropsCurrentSeasonState 
       team_targets: total("receiving_targets"),
       team_offensive_plays: teamPassAttempts + teamRushAttempts,
       team_touchdowns: rows.reduce((sum, row) => sum + playerTouchdowns(row), 0),
+      matchup_pass_rate: teamStat ? nullableRatio(dropbacks, modeledPlays) : null,
+      matchup_completion_rate: teamStat ? nullableRatio(teamPassAttempts === 0 ? 0 : total("passing_completions"), teamStat.passingAttempts) : null,
+      matchup_pass_yards_per_attempt: teamStat ? nullableRatio(teamStat.netPassingYards, teamStat.passingAttempts) : null,
+      matchup_sack_rate: teamStat ? nullableRatio(teamStat.sacksAllowed, dropbacks) : null,
+      matchup_rush_yards_per_attempt: teamStat ? nullableRatio(teamStat.rushingYards, teamStat.rushingAttempts) : null,
+      matchup_first_down_rate: teamStat ? nullableRatio(teamStat.firstDowns, modeledPlays) : null,
+      matchup_turnover_rate: teamStat ? nullableRatio(teamStat.turnovers, modeledPlays) : null,
     });
   }
   const sorted = (values: CurrentSeasonTeamGame[]) => [...values].sort((a, b) => a.week - b.week || a.gameId.localeCompare(b.gameId));
@@ -609,6 +649,23 @@ export function applyNflPlayerPropsCurrentSeasonFeatures(args: {
   }
   if (teamGames.length) features.prior_team_td_avg5 = rollingAverageWithPrior(features.prior_team_td_avg5, teamGames.map((game) => game.team_touchdowns), 5);
   if (opponentAllowedGames.length) features.prior_opponent_td_allowed_avg5 = rollingAverageWithPrior(features.prior_opponent_td_allowed_avg5, opponentAllowedGames.map((game) => game.team_touchdowns), 5);
+  const matchupMetrics: Array<[string, keyof CurrentSeasonTeamGame]> = [
+    ["pass_rate", "matchup_pass_rate"],
+    ["completion_rate", "matchup_completion_rate"],
+    ["pass_yards_per_attempt", "matchup_pass_yards_per_attempt"],
+    ["sack_rate", "matchup_sack_rate"],
+    ["rush_yards_per_attempt", "matchup_rush_yards_per_attempt"],
+    ["first_down_rate", "matchup_first_down_rate"],
+    ["turnover_rate", "matchup_turnover_rate"],
+  ];
+  for (const [metric, field] of matchupMetrics) {
+    updateRollingFeatures(features, `matchup_team_${metric}`, finiteTeamMetricValues(teamGames, field), [3, 5]);
+    updateRollingFeatures(features, `matchup_opponent_allowed_${metric}`, finiteTeamMetricValues(opponentAllowedGames, field), [3, 5]);
+  }
+}
+
+function finiteTeamMetricValues(games: CurrentSeasonTeamGame[], field: keyof CurrentSeasonTeamGame): number[] {
+  return games.map((game) => game[field]).filter((value): value is number => typeof value === "number" && Number.isFinite(value));
 }
 
 function updateRollingFeatures(
@@ -639,6 +696,7 @@ function playerTouchdowns(row: NflPlayerPropsCurrentSeasonStat): number {
   return row.rushing_touchdowns + row.receiving_touchdowns + row.kick_return_touchdowns + row.punt_return_touchdowns + row.fumbles_touchdowns;
 }
 function ratio(numerator: number, denominator: number | undefined): number { return denominator && denominator > 0 ? numerator / denominator : 0; }
+function nullableRatio(numerator: number, denominator: number): number | null { return denominator > 0 ? numerator / denominator : null; }
 function numericFeature(value: number | null | undefined): number | null { return typeof value === "number" && Number.isFinite(value) ? value : null; }
 
 export function buildNflPlayerPropsRuntimeBoard(args: {
@@ -976,6 +1034,9 @@ export function nflPlayerPropsTouchdownPolicy(): { weight: number; actionable: b
 }
 
 function predict(model: PortableModel, features: Record<string, number | null>): number {
+  if (model.kind === "weighted_blend") {
+    return model.components.reduce((sum, component) => sum + component.weight * predict(component.model, features), 0);
+  }
   if (model.kind === "linear_regressor") {
     let value = model.intercept;
     for (let index = 0; index < model.featureNames.length; index += 1) {
@@ -985,9 +1046,22 @@ function predict(model: PortableModel, features: Record<string, number | null>):
     return value;
   }
   const inputs = model.featureNames.map((name) => features[name] ?? Number.NaN);
+  if (model.kind === "extra_trees_regressor") {
+    return model.trees.reduce((sum, tree) => sum + predictCompactForestTree(tree.nodes, inputs), 0) / Math.max(1, model.trees.length);
+  }
   let value = model.baseline;
   for (const iteration of model.trees) for (const tree of iteration) value += predictTree(tree.nodes, inputs);
-  return value;
+  return model.link === "exponential" ? Math.exp(value) : value;
+}
+
+function predictCompactForestTree(nodes: CompactForestNode[], inputs: number[]): number {
+  let index = 0;
+  while (true) {
+    const node = nodes[index]; if (!node) throw new Error("NFL props runtime forest node is missing.");
+    if (node[6]) return node[0];
+    const input = inputs[node[1]];
+    index = input === undefined || !Number.isFinite(input) ? (node[3] ? node[4] : node[5]) : (input <= node[2] ? node[4] : node[5]);
+  }
 }
 
 function predictTree(nodes: TreeNode[], inputs: number[]): number {
