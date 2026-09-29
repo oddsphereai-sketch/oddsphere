@@ -535,3 +535,31 @@ hold the new release when any of these occur:
 - unexpected actionable-board collapse without the approved balanced replacement;
 - overlapping prediction writers, timeout growth, snapshot-size failure, or reader crash;
 - material disagreement between stored predictions and the member-visible snapshot.
+## Owner-approved provisional exception: NHL opponent-adjusted Total hybrid r6
+
+On 2026-09-29 Daniel Mengel explicitly directed Oddsphere to preserve the good
+parts of the active NHL model, identify and repair its weak points, improve it
+immediately rather than restart or remain in shadow mode, and make no member
+copy, label, or product-surface change. This exception is limited to
+`nhl_regular_2026_r6_opponent_adjusted_total` and the evidence in
+`docs/model-audits/2026-09-29-nhl-matchup-total-hybrid-r6-result.md`.
+
+The r5 Moneyline probability, winner, and puck-line direction must remain exact.
+Only the independent scoring Total may use the reviewed multi-season,
+opponent-adjusted expected-goals component. The final margin must be solved at
+that Total so one joint Poisson distribution retains the r5 home-win probability
+and supplies every displayed score and market probability. Existing Total
+confidence calibration and grade thresholds remain unchanged. This exception
+accepts the 0.000079-goal untouched margin-MAE regression because untouched
+team-score MAE, Total MAE, and Total direction improve, full-2025 team-score,
+margin, Total MAE, and Total direction improve, and Moneyline calibration plus
+puck-line direction remain unchanged.
+
+The production state may consume only MoneyPuck game rows strictly earlier than
+the slate. The frozen opening state is authoritative before current-season rows
+exist; incomplete or failed current-season retrieval must silently execute the
+exact r5 Total fallback and may never suppress the board. Existing locks remain
+immutable. Publication requires 5 games and 15 markets on the reviewed opening
+slate, unchanged actionable count, explicit promotion/demotion reporting,
+focused and full model-change tests, current-main integration safety, protected
+PR checks, and live release, coverage, writer, lease, lock, and reader proof.

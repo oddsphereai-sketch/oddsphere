@@ -1805,9 +1805,9 @@ The September 21 operational release restored the two bounded daily schedules re
 
 ## NHL regular-season champion (active from 2026-09-29)
 
-- Model: `nhl_regular_2026_r5_total_confidence_calibration`
-- Calibration: `nhl_regular_calibration_2026_r5_total_confidence_calibration`
-- Decision: `nhl_regular_decision_2026_r5_total_confidence_calibration`
+- Model: `nhl_regular_2026_r6_opponent_adjusted_total`
+- Calibration: `nhl_regular_calibration_2026_r6_opponent_adjusted_total`
+- Decision: `nhl_regular_decision_2026_r6_opponent_adjusted_total`
 - Public tracking start: `2026-09-29`
 - Official markets: moneyline, total, spread (puck line)
 - Retired release: `nhl_v0_2026_finals`
@@ -1879,6 +1879,22 @@ stable: Best Angle Totals were 58.30% in 2024 and 57.51% in 2025; Leans were
 Lean with no promotion, demotion, side, or score change. Evidence and rollback
 are recorded in
 `docs/model-audits/2026-09-29-nhl-total-confidence-calibration-r5.md`.
+
+The September 29 r6 opponent-adjusted Total hybrid retains the r5 Moneyline
+probability and winner exactly, retains puck-line direction, and replaces only
+the weaker independent scoring-Total component. A recency-weighted 2018-2024
+score fit consumes a pregame opponent-adjusted expected-goals state. The final
+margin is solved at the repaired Total so one coherent joint Poisson distribution
+preserves the r5 home-win probability. On the 394-game untouched priced-2025
+segment, team-score MAE improves from 1.393818 to 1.389944, Total MAE from
+1.857158 to 1.849124, and Total direction from 56.56% to 58.61%; Moneyline
+accuracy/calibration and puck-line direction are unchanged. Full priced-2025
+team-score, margin, and Total MAE also improve. The five-game opening board keeps
+all 15 markets and 14 actionables, with one promotion and no demotion or side
+change. Current-season game rows are applied only before the target slate; an
+unavailable or incomplete update silently executes the exact r5 Total fallback
+and cannot remove the board. Evidence and rollback gates are in
+`docs/model-audits/2026-09-29-nhl-matchup-total-hybrid-r6-result.md`.
 
 ## WNBA champion
 

@@ -23,6 +23,7 @@ import { isBlockedSportsbook } from "../../config/blockedSportsbooks";
 import type { NhlFeatureSnapshot, NhlModelTeam } from "../../automodel/nhlRegularModelV1";
 import type { BdlNhlTeamMetrics } from "../../providers/nhl/_ballDontLieNhlClient";
 import type { NhlCalibratedTeamState } from "../../automodel/nhlRegularPriors2026";
+import type { NhlOpponentAdjustedState } from "../../automodel/nhlOpponentAdjustedState2026";
 export {
   nhlGameTypeFromExternalId,
   nhlSeasonStartYearFromExternalId,
@@ -44,6 +45,7 @@ export type BuildSnapshotOptions = {
   providerMetricsByTeam?: ReadonlyMap<string, BdlNhlTeamMetrics>;
   providerFeatureSeason?: number | null;
   calibratedStateByTeam?: ReadonlyMap<string, NhlCalibratedTeamState>;
+  opponentAdjustedStateByTeam?: ReadonlyMap<string, NhlOpponentAdjustedState>;
   marketEvidence?: {
     mlHomeBetsPct?: number | null;
     mlHomeMoneyPct?: number | null;
@@ -583,6 +585,8 @@ export async function buildNhlFeatureSnapshot(
     is_home: true,
     provider_metrics: opts.providerMetricsByTeam?.get(homeTeam.abbreviation) ?? null,
     calibrated_state: opts.calibratedStateByTeam?.get(homeTeam.abbreviation) ?? null,
+    opponent_adjusted_attack: opts.opponentAdjustedStateByTeam?.get(homeTeam.abbreviation)?.attack ?? null,
+    opponent_adjusted_defense_weakness: opts.opponentAdjustedStateByTeam?.get(homeTeam.abbreviation)?.defenseWeakness ?? null,
   };
   const awayModel: NhlModelTeam = {
     abbreviation: awayTeam.abbreviation,
@@ -601,6 +605,8 @@ export async function buildNhlFeatureSnapshot(
     is_home: false,
     provider_metrics: opts.providerMetricsByTeam?.get(awayTeam.abbreviation) ?? null,
     calibrated_state: opts.calibratedStateByTeam?.get(awayTeam.abbreviation) ?? null,
+    opponent_adjusted_attack: opts.opponentAdjustedStateByTeam?.get(awayTeam.abbreviation)?.attack ?? null,
+    opponent_adjusted_defense_weakness: opts.opponentAdjustedStateByTeam?.get(awayTeam.abbreviation)?.defenseWeakness ?? null,
   };
 
   const snapshot: NhlFeatureSnapshot = {

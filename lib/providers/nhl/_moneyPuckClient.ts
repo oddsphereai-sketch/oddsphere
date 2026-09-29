@@ -19,6 +19,7 @@
  */
 
 const MONEYPUCK_BASE = "https://moneypuck.com/moneypuck/playerData/seasonSummary";
+const MONEYPUCK_TEAM_GAMES_BASE = "https://moneypuck.com/moneypuck/playerData/teamGameByGame";
 const USER_AGENT = "oddsphere/1.0 (NHL model ingest)";
 
 export type MoneyPuckSeasonType = "regular" | "playoffs";
@@ -60,6 +61,32 @@ export type MoneyPuckGoalieRow = {
   source_url: string;
   fetched_at: string;
 };
+
+export type MoneyPuckTeamGameRow = {
+  game_id: number;
+  season: number;
+  game_date: string;
+  team_abbr: string;
+  opponent_abbr: string;
+  home_or_away: "HOME" | "AWAY";
+  x_goals_for: number;
+};
+
+export async function fetchMoneyPuckTeamGameDirectory(season: number): Promise<string[]> {
+  const url = `${MONEYPUCK_TEAM_GAMES_BASE}/${season}/regular/`;
+  const res = await fetch(url, {
+    headers: { "User-Agent": USER_AGENT },
+    signal: AbortSignal.timeout(12_000),
+  });
+  if (res.status === 404) return [];
+  if (!res.ok) throw new Error(`MoneyPuck team-game directory ${season} failed: HTTP ${res.status}`);
+  const html = await res.text();
+  const teams = new Set<string>();
+  for (const match of html.matchAll(/href=["']([A-Za-z]{2,3})\.csv["']/g)) {
+    teams.add(match[1]!.toUpperCase());
+  }
+  return [...teams].sort();
+}
 
 /**
  * Compute the MoneyPuck season start-year for a given calendar date.
@@ -244,6 +271,60 @@ export async function fetchMoneyPuckGoalies(
       saves,
       source_url: url,
       fetched_at: fetchedAt,
+    });
+  }
+  return out;
+}
+
+/**
+ * Fetch one bounded current-season team file. The file is roughly 200 KB at
+ * season end and much smaller early in the year. A 404 means MoneyPuck has not
+ * published current-season game rows yet; callers use the frozen opening state.
+ */
+export async function fetchMoneyPuckTeamGames(
+  season: number,
+  teamAbbr: string,
+): Promise<MoneyPuckTeamGameRow[] | null> {
+  const team = teamAbbr.trim().toUpperCase();
+  const url = `${MONEYPUCK_TEAM_GAMES_BASE}/${season}/regular/${encodeURIComponent(team)}.csv`;
+  const res = await fetch(url, {
+    headers: { "User-Agent": USER_AGENT },
+    signal: AbortSignal.timeout(12_000),
+  });
+  if (res.status === 404) return null;
+  if (!res.ok) {
+    throw new Error(`MoneyPuck team games ${season}/${team} failed: HTTP ${res.status}`);
+  }
+  const text = await res.text();
+  const { header, rows } = parseCsv(text);
+  const ixGame = colIndex(header, "gameId");
+  const ixSeason = colIndex(header, "season");
+  const ixDate = colIndex(header, "gameDate");
+  const ixTeam = colIndex(header, "playerTeam");
+  const ixOpponent = colIndex(header, "opposingTeam");
+  const ixVenue = colIndex(header, "home_or_away");
+  const ixPosition = colIndex(header, "position");
+  const ixSituation = colIndex(header, "situation");
+  const ixXg = colIndex(header, "xGoalsFor");
+  if ([ixGame, ixSeason, ixDate, ixTeam, ixOpponent, ixVenue, ixPosition, ixSituation, ixXg].some((index) => index < 0)) {
+    throw new Error(`MoneyPuck team games ${season}/${team} header is incomplete`);
+  }
+  const out: MoneyPuckTeamGameRow[] = [];
+  for (const row of rows) {
+    if (row[ixPosition] !== "Team Level" || row[ixSituation] !== "all") continue;
+    const gameId = parseNullableInt(row[ixGame]);
+    const rowSeason = parseNullableInt(row[ixSeason]);
+    const xGoals = parseNullableNumber(row[ixXg]);
+    const venue = row[ixVenue];
+    if (gameId === null || rowSeason !== season || xGoals === null || (venue !== "HOME" && venue !== "AWAY")) continue;
+    out.push({
+      game_id: gameId,
+      season: rowSeason,
+      game_date: String(row[ixDate] ?? ""),
+      team_abbr: String(row[ixTeam] ?? "").trim().toUpperCase(),
+      opponent_abbr: String(row[ixOpponent] ?? "").trim().toUpperCase(),
+      home_or_away: venue,
+      x_goals_for: xGoals,
     });
   }
   return out;

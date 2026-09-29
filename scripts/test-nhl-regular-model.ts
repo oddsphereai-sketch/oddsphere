@@ -25,6 +25,7 @@ import {
   matchPlaybookSplitsToSlateGames,
 } from "../lib/services/syncPublicSplitsObservations";
 import { replayNhlRegularState } from "../lib/automodel/nhlRegularState";
+import { replayNhlOpponentAdjustedState } from "../lib/services/nhl/loadNhlOpponentAdjustedState";
 
 const base: NhlFeatureSnapshot = {
   home: {
@@ -48,6 +49,8 @@ const base: NhlFeatureSnapshot = {
       penaltyKillPct: 0.81, pointsPct: 0.64, fetchedAt: "2026-09-23T00:00:00.000Z",
     },
     calibrated_state: { elo: 1540, goalsFor: 3.30, goalsAgainst: 2.80 },
+    opponent_adjusted_attack: 0.03,
+    opponent_adjusted_defense_weakness: 0.12,
   },
   away: {
     abbreviation: "BOS",
@@ -70,6 +73,8 @@ const base: NhlFeatureSnapshot = {
       penaltyKillPct: 0.79, pointsPct: 0.51, fetchedAt: "2026-09-23T00:00:00.000Z",
     },
     calibrated_state: { elo: 1490, goalsFor: 2.90, goalsAgainst: 3.10 },
+    opponent_adjusted_attack: 0.00,
+    opponent_adjusted_defense_weakness: 0.11,
   },
   market: {
     market_home_prob: 0.58,
@@ -97,6 +102,11 @@ const base: NhlFeatureSnapshot = {
 };
 
 const result = nhlRegularModelV1(base);
+const legacyFallback = nhlRegularModelV1({
+  ...base,
+  home: { ...base.home, opponent_adjusted_attack: null, opponent_adjusted_defense_weakness: null },
+  away: { ...base.away, opponent_adjusted_attack: null, opponent_adjusted_defense_weakness: null },
+});
 assert.equal(result.model_version, NHL_REGULAR_MODEL_RELEASE);
 assert.equal(result.calibration_version, NHL_REGULAR_CALIBRATION_RELEASE);
 assert.equal(result.decision_version, NHL_REGULAR_DECISION_RELEASE);
@@ -105,6 +115,10 @@ assert.ok(Math.abs(result.projected_home_goals - result.projected_away_goals - r
 assert.ok(Number.isFinite(result.independent_goal_diff), "professional independent margin is finite");
 assert.ok(result.independent_total_goals >= 4.5 && result.independent_total_goals <= 8, "professional independent total remains inside the trained support");
 assert.ok(result.puck_line.pick.includes("1.5"));
+assert.ok(Math.abs(result.moneyline.probability - legacyFallback.moneyline.probability) < 1e-12, "opponent-adjusted Total preserves the validated r5 Moneyline probability exactly");
+assert.equal(result.moneyline.pick, legacyFallback.moneyline.pick, "Total repair cannot flip the Moneyline winner");
+assert.notEqual(result.independent_total_goals, legacyFallback.independent_total_goals, "complete matchup state activates the new Total component");
+assert.ok(Math.abs(legacyFallback.expected_goal_diff - ((legacyFallback.projected_home_goals - legacyFallback.projected_away_goals))) < 1e-12, "feed fallback remains one coherent r5 score pair");
 assert.equal(normalizeNhlTeamName("MTL Canadiens"), "MTL");
 assert.equal(normalizeNhlTeamName("NYR Rangers"), "NYR");
 assert.deepEqual(selectMainNhlPuckLinePair([
@@ -203,6 +217,18 @@ const stateBefore = replayNhlRegularState([]).get("BOS")!;
 const stateAfter = replayNhlRegularState([{ externalId: 2026020001, startTime: "2026-09-29T23:00:00Z", homeTeam: "BOS", awayTeam: "FLA", homeScore: 4, awayScore: 2 }]).get("BOS")!;
 assert.notEqual(stateAfter.elo, stateBefore.elo);
 assert.notEqual(stateAfter.goalsFor, stateBefore.goalsFor);
+const openingAdjusted = replayNhlOpponentAdjustedState([], "2026-09-29");
+const replayedAdjusted = replayNhlOpponentAdjustedState([
+  { game_id: 2026020001, season: 2026, game_date: "20260929", team_abbr: "BOS", opponent_abbr: "FLA", home_or_away: "HOME", x_goals_for: 4.2 },
+  { game_id: 2026020001, season: 2026, game_date: "20260929", team_abbr: "FLA", opponent_abbr: "BOS", home_or_away: "AWAY", x_goals_for: 1.8 },
+], "2026-09-30");
+const noLeakAdjusted = replayNhlOpponentAdjustedState([
+  { game_id: 2026020001, season: 2026, game_date: "20260929", team_abbr: "BOS", opponent_abbr: "FLA", home_or_away: "HOME", x_goals_for: 4.2 },
+  { game_id: 2026020001, season: 2026, game_date: "20260929", team_abbr: "FLA", opponent_abbr: "BOS", home_or_away: "AWAY", x_goals_for: 1.8 },
+], "2026-09-29");
+assert.equal(replayedAdjusted.gamesApplied, 1);
+assert.notDeepEqual(replayedAdjusted.states.get("BOS"), openingAdjusted.states.get("BOS"));
+assert.deepEqual(noLeakAdjusted.states.get("BOS"), openingAdjusted.states.get("BOS"), "same-day outcomes never leak into a pregame slate");
 
 const trackingBase = {
   sport: "nhl",
