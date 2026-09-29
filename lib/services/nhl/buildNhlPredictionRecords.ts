@@ -485,7 +485,7 @@ export async function writeNhlPredictionRecords(
         };
 
         if (!opts.apply) {
-          log(`  [dry-run] ${matchup} ${m.market}/${pickSide}  pick=${m.modelMarket.pick}  prob=${m.modelMarket.probability.toFixed(3)}  verdict=${m.modelMarket.verdict}  price=${m.priceAmerican}  locked_at=${lockedAtIso ?? "null"}`);
+          log(`  [dry-run] ${matchup} ${m.market}/${pickSide}  pick=${m.modelMarket.pick}  prob=${m.modelMarket.probability.toFixed(3)}  verdict=${m.modelMarket.verdict}  score=${model.projected_away_goals.toFixed(2)}-${model.projected_home_goals.toFixed(2)}  price=${m.priceAmerican}  locked_at=${lockedAtIso ?? "null"}`);
           recordsCreated += 1;
           continue;
         }

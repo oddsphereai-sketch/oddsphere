@@ -1798,16 +1798,16 @@ The paired live-slate replay is recorded in
 
 - NBA refresh release: `nba_daily_refresh_schedule_2026_09_21_r1`
 - NBA schedule: `/api/cron/nba-daily-refresh` once daily at `30 13 * * *`, fail closed unless `NBA_CRON_ENABLED=true`
-- NHL refresh release: `nhl_daily_refresh_schedule_2026_09_29_r3_complete_slate_odds`
+- NHL refresh release: `nhl_daily_refresh_schedule_2026_09_29_r4_professional_inputs`
 - NHL schedule: `/api/cron/nhl-daily-refresh` once daily at `45 13 * * *`, fail closed unless `NHL_CRON_ENABLED=true`
 
 The September 21 operational release restored the two bounded daily schedules removed by the emergency cron pause. NBA remains on that schedule contract. NHL's September 29 complete-slate release resolves exact provider events before requesting odds, retains the existing route gates and sport-scoped lease, and reports incomplete two-sided game-market coverage as partial rather than silently healthy.
 
 ## NHL regular-season champion (active from 2026-09-29)
 
-- Model: `nhl_regular_2026_r2_complete_slate_odds`
-- Calibration: `nhl_regular_calibration_2026_r2_complete_slate_odds`
-- Decision: `nhl_regular_decision_2026_r2_complete_slate_odds`
+- Model: `nhl_regular_2026_r3_professional_joint_score`
+- Calibration: `nhl_regular_calibration_2026_r3_professional_joint_score`
+- Decision: `nhl_regular_decision_2026_r3_professional_joint_score`
 - Public tracking start: `2026-09-29`
 - Official markets: moneyline, total, spread (puck line)
 - Retired release: `nhl_v0_2026_finals`
@@ -1844,6 +1844,19 @@ board impact, failure behavior, and rollback are recorded in
 `docs/model-audits/2026-09-23-nhl-regular-season-r1-result.md`. Complete-slate
 input recovery is recorded in
 `docs/model-audits/2026-09-29-nhl-complete-slate-odds-r2.md`.
+
+The September 29 r3 professional joint-score release replaces the 90%-market-
+anchored Total construction with a sport-specific rolling score model and a
+coherent joint Poisson distribution. The independently modeled Total receives
+zero fixed market-line weight. A separately calibrated ability-to-win head and
+20% Moneyline sanity correction improve score error and winner probability
+calibration; verified same-book movement and provider-separated splits remain
+bounded conditional corrections. All three market sides derive from the same
+decimal score means. The exact protocol, 394-game untouched holdout, current-
+board promotions/demotions, input fallbacks, and rollback gates are recorded in
+`docs/model-audits/2026-09-29-nhl-professional-joint-score-r3-predeclaration.md`
+and
+`docs/model-audits/2026-09-29-nhl-professional-joint-score-r3-result.md`.
 
 ## WNBA champion
 

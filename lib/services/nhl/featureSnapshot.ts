@@ -106,7 +106,7 @@ type DbLineRow = {
  */
 function pickSituationStats(
   rows: DbTeamStatsRow[],
-  situation: "all" | "5on4" | "4on5",
+  situation: "all" | "5on5" | "5on4" | "4on5",
   season: number,
   gameType: 1 | 2 | 3,
 ): DbTeamStatsRow | null {
@@ -202,6 +202,93 @@ function pickMlImpliedProbHome(lines: DbLineRow[]): { prob: number | null; bookC
   return { prob: avg, bookCount: devigged.length };
 }
 
+function bestMlBreakEven(lines: DbLineRow[], side: "home" | "away"): number | null {
+  const prices = lines
+    .filter((line) => line.market_type === "moneyline" && line.side === side && line.odds_american !== null)
+    .map((line) => line.odds_american!);
+  if (prices.length === 0) return null;
+  return americanToImplied(Math.max(...prices));
+}
+
+const SHARP_BOOK_PRIORITY = ["circa", "pinnacle", "bookmaker"] as const;
+
+function normalizedBook(value: string): string {
+  return value.trim().toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+function median(values: readonly number[]): number | null {
+  if (values.length === 0) return null;
+  const ordered = [...values].sort((a, b) => a - b);
+  const middle = Math.floor(ordered.length / 2);
+  return ordered.length % 2 === 1
+    ? ordered[middle]!
+    : (ordered[middle - 1]! + ordered[middle]!) / 2;
+}
+
+function completeMlByBook(lines: DbLineRow[]): Map<string, number> {
+  const byBook = new Map<string, { home?: number; away?: number }>();
+  for (const line of lines) {
+    if (line.market_type !== "moneyline" || (line.side !== "home" && line.side !== "away")) continue;
+    const probability = line.implied_probability ?? americanToImplied(line.odds_american);
+    if (probability === null) continue;
+    const book = normalizedBook(line.sportsbook);
+    const pair = byBook.get(book) ?? {};
+    pair[line.side] = probability;
+    byBook.set(book, pair);
+  }
+  const out = new Map<string, number>();
+  for (const [book, pair] of byBook) {
+    if (pair.home === undefined || pair.away === undefined || pair.home + pair.away <= 0) continue;
+    out.set(book, pair.home / (pair.home + pair.away));
+  }
+  return out;
+}
+
+function totalLineByBook(lines: DbLineRow[]): Map<string, number> {
+  const values = new Map<string, number[]>();
+  for (const line of lines) {
+    if (line.market_type !== "total" || line.line_value === null) continue;
+    const book = normalizedBook(line.sportsbook);
+    const bookValues = values.get(book) ?? [];
+    bookValues.push(line.line_value);
+    values.set(book, bookValues);
+  }
+  const out = new Map<string, number>();
+  for (const [book, bookValues] of values) {
+    const selected = median(bookValues);
+    if (selected !== null) out.set(book, selected);
+  }
+  return out;
+}
+
+function preferredCommonBook(current: ReadonlyMap<string, number>, opening: ReadonlyMap<string, number>): string | null {
+  const common = [...current.keys()].filter((book) => opening.has(book));
+  if (common.length === 0) return null;
+  return [...common].sort((a, b) => {
+    const aPriority = SHARP_BOOK_PRIORITY.findIndex((book) => a.includes(book));
+    const bPriority = SHARP_BOOK_PRIORITY.findIndex((book) => b.includes(book));
+    const ai = aPriority === -1 ? SHARP_BOOK_PRIORITY.length : aPriority;
+    const bi = bPriority === -1 ? SHARP_BOOK_PRIORITY.length : bPriority;
+    return ai - bi || a.localeCompare(b);
+  })[0] ?? null;
+}
+
+export function selectSameBookNhlMovement(
+  currentLines: DbLineRow[],
+  openingLines: DbLineRow[],
+): { homeProbMove: number | null; totalMove: number | null } {
+  const currentMl = completeMlByBook(currentLines);
+  const openingMl = completeMlByBook(openingLines);
+  const mlBook = preferredCommonBook(currentMl, openingMl);
+  const currentTotals = totalLineByBook(currentLines);
+  const openingTotals = totalLineByBook(openingLines);
+  const totalBook = preferredCommonBook(currentTotals, openingTotals);
+  return {
+    homeProbMove: mlBook === null ? null : currentMl.get(mlBook)! - openingMl.get(mlBook)!,
+    totalMove: totalBook === null ? null : currentTotals.get(totalBook)! - openingTotals.get(totalBook)!,
+  };
+}
+
 /**
  * Select the MAIN consensus total line for an NHL game. EXPORTED + shared by
  * both the model feature snapshot AND the daily-edge adapter so the pick
@@ -243,6 +330,60 @@ export function selectMainNhlTotalLine(
     (best, v) => (Math.abs(v - median) < Math.abs(best - median) ? v : best),
     modes[0]!,
   );
+}
+
+/** Resolve the actual paired puck line offered by the books. Near pick'em
+ * moneylines do not reliably identify which team a sportsbook assigns -1.5,
+ * so the model must consume the quoted pair rather than infer it from a
+ * rounded no-vig moneyline probability. */
+export function selectMainNhlPuckLinePair(
+  lines: ReadonlyArray<{ market_type: string; sportsbook: string; side: string; line_value: number | null }>,
+): { home: number | null; away: number | null } {
+  const clean = lines.filter((line) => (
+    line.market_type === "spread"
+    && line.line_value !== null
+    && (line.side === "home" || line.side === "away")
+    && !isBlockedSportsbook(line.sportsbook)
+  ));
+  const byBook = new Map<string, { home?: number; away?: number }>();
+  for (const line of clean) {
+    const pair = byBook.get(line.sportsbook) ?? {};
+    pair[line.side as "home" | "away"] = line.line_value!;
+    byBook.set(line.sportsbook, pair);
+  }
+  const counts = new Map<string, { home: number; away: number; books: Set<string> }>();
+  for (const [book, pair] of byBook) {
+    if (pair.home === undefined || pair.away === undefined) continue;
+    if (Math.abs(pair.home + pair.away) >= 0.01) continue;
+    const key = `${pair.home}|${pair.away}`;
+    const candidate = counts.get(key) ?? { home: pair.home, away: pair.away, books: new Set<string>() };
+    candidate.books.add(book);
+    counts.set(key, candidate);
+  }
+  const selected = [...counts.values()].sort((a, b) => (
+    b.books.size - a.books.size
+    || Math.abs(Math.abs(a.home) - 1.5) - Math.abs(Math.abs(b.home) - 1.5)
+    || a.home - b.home
+  ))[0];
+  return selected ? { home: selected.home, away: selected.away } : { home: null, away: null };
+}
+
+function puckLineBreakEvenProbabilities(
+  lines: DbLineRow[],
+  selected: { home: number | null; away: number | null },
+): { home: number | null; away: number | null } {
+  if (selected.home === null || selected.away === null) return { home: null, away: null };
+  const bestPrices: { home: number[]; away: number[] } = { home: [], away: [] };
+  for (const line of lines) {
+    if (line.market_type !== "spread" || (line.side !== "home" && line.side !== "away")) continue;
+    const expectedLine = line.side === "home" ? selected.home : selected.away;
+    if (line.line_value === null || Math.abs(line.line_value - expectedLine) >= 0.01) continue;
+    if (line.odds_american !== null) bestPrices[line.side].push(line.odds_american);
+  }
+  return {
+    home: bestPrices.home.length === 0 ? null : americanToImplied(Math.max(...bestPrices.home)),
+    away: bestPrices.away.length === 0 ? null : americanToImplied(Math.max(...bestPrices.away)),
+  };
 }
 
 /**
@@ -296,6 +437,8 @@ export async function buildNhlFeatureSnapshot(
   const awayTeamStats = teamStats.filter((r) => r.team_id === game.away_team_id);
   const homeStatsAll = pickSituationStats(homeTeamStats, "all", featureSeason, gameType);
   const awayStatsAll = pickSituationStats(awayTeamStats, "all", featureSeason, gameType);
+  const homeStats5on5 = pickSituationStats(homeTeamStats, "5on5", featureSeason, gameType);
+  const awayStats5on5 = pickSituationStats(awayTeamStats, "5on5", featureSeason, gameType);
   const homeStats5on4 = pickSituationStats(homeTeamStats, "5on4", featureSeason, gameType);
   const awayStats5on4 = pickSituationStats(awayTeamStats, "5on4", featureSeason, gameType);
   const homeStats4on5 = pickSituationStats(homeTeamStats, "4on5", featureSeason, gameType);
@@ -321,13 +464,14 @@ export async function buildNhlFeatureSnapshot(
   if (awayGoalie) log(`  away goalie: ${awayGoalie.player_name} (id=${awayGoalie.player_external_id}, ${awayGoalie.season_type})`);
   else log(`  away goalie: <none found>`);
 
-  // 5. Lines (moneyline + total) for the market layer.
+  // 5. Lines (moneyline + total + the actual paired puck line) for the
+  // market layer.
   const { data: linesData } = await supabase
     .from("lines")
     .select("market_type, sportsbook, side, line_value, odds_american, implied_probability")
     .eq("game_id", opts.gameId)
     .is("player_id", null)
-    .in("market_type", ["moneyline", "total"]);
+    .in("market_type", ["moneyline", "total", "spread"]);
   // #39 — drop blocked books (fliff, kalshi) at the load point so every
   // downstream selection (ML implied prob, total line) is clean. Previously
   // only selectMainNhlTotalLine filtered; the ML implied-prob path did not.
@@ -336,6 +480,8 @@ export async function buildNhlFeatureSnapshot(
   );
   const { prob: marketHomeProb, bookCount } = pickMlImpliedProbHome(lines);
   const marketTotalLine = selectMainNhlTotalLine(lines);
+  const marketPuckLine = selectMainNhlPuckLinePair(lines);
+  const marketPuckProbabilities = puckLineBreakEvenProbabilities(lines, marketPuckLine);
   log(`  market: ML home prob=${marketHomeProb?.toFixed(3) ?? "n/a"} (${bookCount} books), total line=${marketTotalLine?.toFixed(1) ?? "n/a"}`);
 
   const { data: historyData } = await supabase
@@ -364,6 +510,7 @@ export async function buildNhlFeatureSnapshot(
   const openingLines = [...firstByBookMarketSide.values()];
   const marketOpenHomeProb = pickMlImpliedProbHome(openingLines).prob;
   const marketOpenTotalLine = selectMainNhlTotalLine(openingLines);
+  const sameBookMovement = selectSameBookNhlMovement(lines, openingLines);
 
   // 6. Series context — fetch fresh from NHL API at prediction time.
   // Cheap (~1 HTTP call per snapshot); always up-to-date (NHL API
@@ -420,6 +567,10 @@ export async function buildNhlFeatureSnapshot(
     xgoals_pct: homeStatsAll?.xgoals_pct ?? null,
     x_goals_for_per_60: per60(homeStatsAll?.x_goals_for ?? null, homeStatsAll?.ice_time ?? null),
     x_goals_against_per_60: per60(homeStatsAll?.x_goals_against ?? null, homeStatsAll?.ice_time ?? null),
+    five_x_goals_for_per_60: per60(homeStats5on5?.x_goals_for ?? null, homeStats5on5?.ice_time ?? null),
+    five_x_goals_against_per_60: per60(homeStats5on5?.x_goals_against ?? null, homeStats5on5?.ice_time ?? null),
+    pp_x_goals_for_per_60: per60(homeStats5on4?.x_goals_for ?? null, homeStats5on4?.ice_time ?? null),
+    pk_x_goals_against_per_60: per60(homeStats4on5?.x_goals_against ?? null, homeStats4on5?.ice_time ?? null),
     pp_xgoals_pct: homeStats5on4?.xgoals_pct ?? null,
     pk_xgoals_pct: homeStats4on5?.xgoals_pct ?? null,
     goalie_xgsaa_per_60: goalieXgsaaPer60(homeGoalie),
@@ -434,6 +585,10 @@ export async function buildNhlFeatureSnapshot(
     xgoals_pct: awayStatsAll?.xgoals_pct ?? null,
     x_goals_for_per_60: per60(awayStatsAll?.x_goals_for ?? null, awayStatsAll?.ice_time ?? null),
     x_goals_against_per_60: per60(awayStatsAll?.x_goals_against ?? null, awayStatsAll?.ice_time ?? null),
+    five_x_goals_for_per_60: per60(awayStats5on5?.x_goals_for ?? null, awayStats5on5?.ice_time ?? null),
+    five_x_goals_against_per_60: per60(awayStats5on5?.x_goals_against ?? null, awayStats5on5?.ice_time ?? null),
+    pp_x_goals_for_per_60: per60(awayStats5on4?.x_goals_for ?? null, awayStats5on4?.ice_time ?? null),
+    pk_x_goals_against_per_60: per60(awayStats4on5?.x_goals_against ?? null, awayStats4on5?.ice_time ?? null),
     pp_xgoals_pct: awayStats5on4?.xgoals_pct ?? null,
     pk_xgoals_pct: awayStats4on5?.xgoals_pct ?? null,
     goalie_xgsaa_per_60: goalieXgsaaPer60(awayGoalie),
@@ -449,9 +604,17 @@ export async function buildNhlFeatureSnapshot(
     away: awayModel,
     market: {
       market_home_prob: marketHomeProb,
+      best_home_ml_prob: bestMlBreakEven(lines, "home"),
+      best_away_ml_prob: bestMlBreakEven(lines, "away"),
       market_open_home_prob: marketOpenHomeProb,
       market_total_line: marketTotalLine,
       market_open_total_line: marketOpenTotalLine,
+      same_book_home_prob_move: sameBookMovement.homeProbMove,
+      same_book_total_move: sameBookMovement.totalMove,
+      market_home_puck_line: marketPuckLine.home,
+      market_away_puck_line: marketPuckLine.away,
+      market_home_puck_prob: marketPuckProbabilities.home,
+      market_away_puck_prob: marketPuckProbabilities.away,
       market_book_count: bookCount,
       ml_home_bets_pct: opts.marketEvidence?.mlHomeBetsPct ?? null,
       ml_home_money_pct: opts.marketEvidence?.mlHomeMoneyPct ?? null,

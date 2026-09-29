@@ -33,7 +33,7 @@ const SPORTS_IN_SEASON_BY_MONTH: Record<number, readonly Sport[]> = {
   6:  ["mlb"],
   7:  ["mlb"],
   8:  ["mlb", "cfb"],
-  9:  ["mlb", "cfb", "nfl", "ucl"],
+  9:  ["mlb", "cfb", "nfl", "nhl", "ucl"],
   10: ["mlb", "cfb", "nfl", "nba", "nhl", "ucl"],
   11: ["cfb", "nfl", "nba", "nhl", "cbb", "ucl"],
   12: ["cfb", "nfl", "nba", "nhl", "cbb", "ucl"],
