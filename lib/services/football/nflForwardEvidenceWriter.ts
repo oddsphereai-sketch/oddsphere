@@ -94,7 +94,7 @@ import {
 } from "./balldontlieNflWeeklyProjectionShadow";
 
 export const NFL_FORWARD_WRITER_RELEASE =
-  "nfl_forward_evidence_writer_2026_09_28_r50_injury_continuity" as const;
+  "nfl_forward_evidence_writer_2026_09_29_r51_joint_moneyline_coherence" as const;
 
 export type NflForwardWriterResult = {
   writerRelease: typeof NFL_FORWARD_WRITER_RELEASE;

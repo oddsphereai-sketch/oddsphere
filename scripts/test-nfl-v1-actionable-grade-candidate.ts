@@ -21,6 +21,7 @@ import {
   NFL_V1_EVENT_CONTAINED_SPREAD_MODEL_RELEASE,
   NFL_V1_MARKET_EVIDENCE_TOTAL_MODEL_RELEASE,
 } from "../lib/services/football/nflV1ActionableGradeCandidate";
+import { NFL_V1_PRODUCTION_MODEL_RELEASE } from "../lib/services/football/nflV1ProductionDecision";
 import {
   buildNflPaidTeamScoreBaseForecast,
   buildNflMarketEvidenceOutcomeForecast,
@@ -266,12 +267,11 @@ const total = candidate.evaluatedBets.find((decision) => decision.market === "to
 assert.equal(candidate.outcomeConfidence.find((decision) => decision.market === "moneyline")?.likelySide, "SEA");
 assert.ok(outcome.expectedHomeScore > outcome.expectedAwayScore);
 assert.ok(outcome.homeWinProbability > outcome.awayWinProbability);
-assert.equal(moneyline.grade, "Best Angle");
+assert.equal(moneyline.grade, "No Play");
 assert.equal(moneyline.side, "SEA");
-assert.equal(moneyline.modelProbability, 0.65);
-assert.equal(moneyline.modelRelease, NFL_R6_MONEYLINE_MODEL_RELEASE);
+assert.equal(moneyline.modelProbability, outcome.homeWinProbability);
+assert.equal(moneyline.modelRelease, NFL_V1_PRODUCTION_MODEL_RELEASE);
 assert.ok(moneyline.modelProbability > 0.5);
-assert.ok(moneyline.expectedValue > 0);
 assert.equal(spread.modelRelease, NFL_V1_EVENT_CONTAINED_SPREAD_MODEL_RELEASE);
 assert.equal(spread.grade, "Lean");
 assert.equal(spread.modelProbability, reference.spread.awayCoverProbability);
