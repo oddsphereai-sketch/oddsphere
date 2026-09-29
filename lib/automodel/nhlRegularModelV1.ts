@@ -1,9 +1,9 @@
 import type { BdlNhlTeamMetrics } from "../providers/nhl/_ballDontLieNhlClient";
 import type { NhlCalibratedTeamState } from "./nhlRegularPriors2026";
 
-export const NHL_REGULAR_MODEL_RELEASE = "nhl_regular_2026_r4_quoted_puck_pair" as const;
-export const NHL_REGULAR_CALIBRATION_RELEASE = "nhl_regular_calibration_2026_r4_quoted_puck_pair" as const;
-export const NHL_REGULAR_DECISION_RELEASE = "nhl_regular_decision_2026_r4_quoted_puck_pair" as const;
+export const NHL_REGULAR_MODEL_RELEASE = "nhl_regular_2026_r5_total_confidence_calibration" as const;
+export const NHL_REGULAR_CALIBRATION_RELEASE = "nhl_regular_calibration_2026_r5_total_confidence_calibration" as const;
+export const NHL_REGULAR_DECISION_RELEASE = "nhl_regular_decision_2026_r5_total_confidence_calibration" as const;
 
 export type NhlVerdictKey = "best_angle" | "lean" | "watchlist" | "pass";
 
@@ -109,6 +109,8 @@ const ML_SLOPE = 0.78;
 const LEAGUE_TOTAL = 6.10;
 const HOME_ELO_POINTS = 40;
 const ABILITY_WEIGHT = 0.45;
+const TOTAL_CONFIDENCE_INTERCEPT = 0.05706714956351745;
+const TOTAL_CONFIDENCE_LOGIT_SLOPE = 0.514946128177911;
 const SCORE_BETA = [
   2.9780546116531066, 0.1796256256709038, 0.19790828165857607,
   0.1916787455944218, 0.21571727756307035, 0.31307021298110915,
@@ -135,6 +137,13 @@ function logistic(value: number): number {
 function logit(probability: number): number {
   const p = clamp(probability, 0.03, 0.97);
   return Math.log(p / (1 - p));
+}
+
+export function calibrateNhlTotalConfidence(rawProbability: number): number {
+  return logistic(
+    TOTAL_CONFIDENCE_INTERCEPT
+      + TOTAL_CONFIDENCE_LOGIT_SLOPE * logit(clamp(rawProbability, 0.001, 0.999)),
+  );
 }
 
 function dot(values: readonly number[], coefficients: readonly number[]): number {
@@ -328,9 +337,10 @@ export function nhlRegularModelV1(snapshot: NhlFeatureSnapshot): NhlModelOutput 
   const underProbability = marketTotal === null ? 0.5 : probabilityBelow(finalDistribution.total, marketTotal);
   const totalPickOver = overProbability >= underProbability;
   const nonPushProbability = overProbability + underProbability;
-  const totalProbability = nonPushProbability <= 0
+  const rawTotalProbability = nonPushProbability <= 0
     ? 0.5
     : (totalPickOver ? overProbability : underProbability) / nonPushProbability;
+  const totalProbability = marketTotal === null ? 0.5 : calibrateNhlTotalConfidence(rawTotalProbability);
   const totalPick = marketTotal === null
     ? `Model ${expectedTotal.toFixed(1)}`
     : `${totalPickOver ? "OVER" : "UNDER"} ${marketTotal.toFixed(1)}`;

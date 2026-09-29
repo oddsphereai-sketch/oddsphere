@@ -4,6 +4,7 @@ import {
   NHL_REGULAR_CALIBRATION_RELEASE,
   NHL_REGULAR_DECISION_RELEASE,
   NHL_REGULAR_MODEL_RELEASE,
+  calibrateNhlTotalConfidence,
   nhlRegularModelV1,
   type NhlFeatureSnapshot,
 } from "../lib/automodel/nhlRegularModelV1";
@@ -137,6 +138,8 @@ assert.ok(["TOR -1.5", "MTL +1.5"].includes(pickemQuotedLine.puck_line.pick));
 assert.ok(sportsInSeasonToday(new Date("2026-09-29T12:00:00.000Z")).includes("nhl"), "opening-night minute lock includes NHL");
 assert.ok(result.moneyline.probability >= 0.5 && result.moneyline.probability <= 0.8);
 assert.ok(result.total.probability >= 0.5 && result.total.probability <= 1);
+assert.ok(Math.abs(calibrateNhlTotalConfidence(0.647456) - 0.5914807818317462) < 1e-12);
+assert.ok(calibrateNhlTotalConfidence(0.688847) < 0.688847, "total confidence is release-pure calibrated rather than raw Poisson certainty");
 assert.ok(Math.abs(result.expected_total_goals - result.independent_total_goals) <= 0.59, "movement and split reading condition rather than replace the independent total");
 
 const noMarket = nhlRegularModelV1({
@@ -183,6 +186,8 @@ const totalLineOnlyB = nhlRegularModelV1({
 assert.equal(totalLineOnlyA.expected_total_goals, totalLineOnlyB.expected_total_goals, "the posted Total line evaluates the forecast but never anchors its score mean");
 assert.ok(totalLineOnlyA.total.pick.startsWith("OVER"));
 assert.ok(totalLineOnlyB.total.pick.startsWith("UNDER"));
+assert.notEqual(totalLineOnlyA.total.verdict, "pass", "confidence calibration does not silently flatten the Over grade path");
+assert.notEqual(totalLineOnlyB.total.verdict, "pass", "confidence calibration does not silently flatten the Under grade path");
 
 assert.equal(nhlGameTypeFromExternalId(2026010001), 1);
 assert.equal(nhlGameTypeFromExternalId(2026020001), 2);
