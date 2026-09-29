@@ -1798,16 +1798,16 @@ The paired live-slate replay is recorded in
 
 - NBA refresh release: `nba_daily_refresh_schedule_2026_09_21_r1`
 - NBA schedule: `/api/cron/nba-daily-refresh` once daily at `30 13 * * *`, fail closed unless `NBA_CRON_ENABLED=true`
-- NHL refresh release: `nhl_daily_refresh_schedule_2026_09_29_r4_professional_inputs`
+- NHL refresh release: `nhl_daily_refresh_schedule_2026_09_29_r5_canonical_two_sided_quotes`
 - NHL schedule: `/api/cron/nhl-daily-refresh` once daily at `45 13 * * *`, fail closed unless `NHL_CRON_ENABLED=true`
 
 The September 21 operational release restored the two bounded daily schedules removed by the emergency cron pause. NBA remains on that schedule contract. NHL's September 29 complete-slate release resolves exact provider events before requesting odds, retains the existing route gates and sport-scoped lease, and reports incomplete two-sided game-market coverage as partial rather than silently healthy.
 
 ## NHL regular-season champion (active from 2026-09-29)
 
-- Model: `nhl_regular_2026_r6_opponent_adjusted_total`
-- Calibration: `nhl_regular_calibration_2026_r6_opponent_adjusted_total`
-- Decision: `nhl_regular_decision_2026_r6_opponent_adjusted_total`
+- Model: `nhl_regular_2026_r7_runtime_parity`
+- Calibration: `nhl_regular_calibration_2026_r7_runtime_parity`
+- Decision: `nhl_regular_decision_2026_r7_runtime_parity`
 - Public tracking start: `2026-09-29`
 - Official markets: moneyline, total, spread (puck line)
 - Retired release: `nhl_v0_2026_finals`
@@ -1904,6 +1904,18 @@ Sibling market snapshots must be identical before the tuple is accepted. No
 model, probability, score, grade, provider call, lock, member copy, label, or
 layout changes. Evidence and rollback are in
 `docs/model-audits/2026-09-29-nhl-r6-reader-tuple-coherence.md`.
+
+The September 29 r7 runtime-parity release repairs a production/training unit
+mismatch in the r6 special-teams inputs. The score fit was trained on expected
+goals per game but live production supplied expected goals per 60 special-
+teams minutes, compressing every opening-night Total toward five. r7 restores
+the trained units without changing coefficients. Reader r3 exposes both sides
+and same-book history through the existing price-trail contract, while refresh
+r5 filters inactive/live/stale/alternate rows and accepts only coherent paired
+quotes. The five-game replay retains all 15 markets and 10 actionables across
+all three market families. Evidence, the explicit correctness exception and
+rollback gates are in
+`docs/model-audits/2026-09-29-nhl-runtime-parity-two-sided-prices-r7.md`.
 
 ## WNBA champion
 

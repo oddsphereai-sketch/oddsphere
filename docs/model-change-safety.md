@@ -563,3 +563,33 @@ immutable. Publication requires 5 games and 15 markets on the reviewed opening
 slate, unchanged actionable count, explicit promotion/demotion reporting,
 focused and full model-change tests, current-main integration safety, protected
 PR checks, and live release, coverage, writer, lease, lock, and reader proof.
+
+## Owner-approved correctness exception: NHL runtime-unit parity r7
+
+On 2026-09-29 Daniel Mengel explicitly directed Oddsphere to correct the NHL
+score huddling, restore complete two-sided line/odds tracking for internal
+market reading and the existing member surface, publish the repair immediately,
+and avoid new member copy or labels. This exception is limited to the r7 model,
+r3 reader and r5 refresh releases documented in
+`docs/model-audits/2026-09-29-nhl-runtime-parity-two-sided-prices-r7.md`.
+
+The candidate may replace production special-teams per-60 inputs with the
+per-game units used by the already validated score fit. It may canonicalize
+only active, pregame, complete two-sided named-book quotes and expose their
+existing append-only trail through the existing UI. It cannot change the
+historical coefficients, thresholds, stakes, provider-call ceiling, schedule,
+writer, sport-scoped lease, lock rules, copy or labels.
+
+The owner-authorized correctness repair may ship the reviewed 14-to-10
+actionable change without fabricating compensating promotions: five Total Best
+Angles were artifacts of the unit mismatch, and the sixth demotion follows the
+corrected coherent puck-line probability. The board remains non-flat with
+actionable Moneyline, Total and puck-line markets, all five games and all 15
+markets. This is not a reusable exception to the promotion/demotion rule.
+
+Publication still requires focused/full tests, exact board-impact reporting,
+latest-main integration safety, protected PR checks and live proof of the r7
+writer, r3 reader, r5 refresh, complete prices, one lease and immutable prior
+locks. Hold or roll back on mixed releases, lost coverage, a partial quote
+replacing last-known-good data, score/side contradiction, writer overlap,
+reader failure or mobile navigation overlap.

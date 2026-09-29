@@ -56,6 +56,14 @@ export type NhlPerMarketBest = {
   sportsbook: string | null;
   /** First-observed price for this (market, picked side) from line_history. */
   openAmerican: number | null;
+  /** Observation time of the current best named-book quote. */
+  observedAt: string | null;
+  /** Same-book picked-side price history. */
+  oddsTrail: MarketEdgeDto["oddsTrail"];
+  /** Same-book point-line history for Total/Puck Line. */
+  lineTrail: MarketEdgeDto["lineTrail"];
+  /** Other outcome from the same complete market/book pair. */
+  opposingOddsTrail: NonNullable<MarketEdgeDto["opposingOddsTrail"]>;
   /** Pinnacle / cross-book EV % from SharpAPI opportunities; null when none. */
   pinnacleEvPct: number | null;
   /** No-vig fair probability from SharpAPI opportunities; null when none. */
@@ -384,7 +392,14 @@ function buildMarketEdge(opts: {
     betsPct: publicSplits[0]?.betsPct ?? null,
     publicSplits,
     priceAmerican: bundle.priceAmerican,
+    currentPriceAmerican: bundle.priceAmerican,
+    currentPriceSportsbook: bundle.sportsbook,
+    currentPriceObservedAt: bundle.observedAt,
+    gradePriceAmerican: bundle.priceAmerican,
     lineOpenAmerican: bundle.openAmerican,
+    oddsTrail: bundle.oddsTrail,
+    lineTrail: bundle.lineTrail,
+    opposingOddsTrail: bundle.opposingOddsTrail.stops.length > 0 ? bundle.opposingOddsTrail : null,
     modelTotal: slot === "total" && !held ? modelTotal : null,
     marketTotal: slot === "total" ? marketLine : null,
     // ML carries no line; Total + Puck Line use the `line` slot.

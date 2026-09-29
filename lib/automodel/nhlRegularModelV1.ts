@@ -1,9 +1,9 @@
 import type { BdlNhlTeamMetrics } from "../providers/nhl/_ballDontLieNhlClient";
 import type { NhlCalibratedTeamState } from "./nhlRegularPriors2026";
 
-export const NHL_REGULAR_MODEL_RELEASE = "nhl_regular_2026_r6_opponent_adjusted_total" as const;
-export const NHL_REGULAR_CALIBRATION_RELEASE = "nhl_regular_calibration_2026_r6_opponent_adjusted_total" as const;
-export const NHL_REGULAR_DECISION_RELEASE = "nhl_regular_decision_2026_r6_opponent_adjusted_total" as const;
+export const NHL_REGULAR_MODEL_RELEASE = "nhl_regular_2026_r7_runtime_parity" as const;
+export const NHL_REGULAR_CALIBRATION_RELEASE = "nhl_regular_calibration_2026_r7_runtime_parity" as const;
+export const NHL_REGULAR_DECISION_RELEASE = "nhl_regular_decision_2026_r7_runtime_parity" as const;
 
 export type NhlVerdictKey = "best_angle" | "lean" | "watchlist" | "pass";
 
@@ -16,6 +16,13 @@ export type NhlModelTeam = {
   five_x_goals_against_per_60: number | null;
   pp_x_goals_for_per_60: number | null;
   pk_x_goals_against_per_60: number | null;
+  /**
+   * The released score fit was trained on one-game MoneyPuck observations,
+   * where special-teams xG is expressed per game. Keep the per-60 fields for
+   * evidence display, but score with these runtime-parity inputs.
+   */
+  pp_x_goals_for_per_game?: number | null;
+  pk_x_goals_against_per_game?: number | null;
   pp_xgoals_pct: number | null;
   pk_xgoals_pct: number | null;
   goalie_xgsaa_per_60: number | null;
@@ -177,8 +184,8 @@ function scoreFeatures(team: NhlModelTeam, opponent: NhlModelTeam): number[] {
   const opponentXga = opponent.x_goals_against_per_60 ?? opponentState.goalsAgainst;
   const fiveXgf = team.five_x_goals_for_per_60 ?? 2.35;
   const opponentFiveXga = opponent.five_x_goals_against_per_60 ?? 2.35;
-  const ppXgf = team.pp_x_goals_for_per_60 ?? 0.52;
-  const opponentPkXga = opponent.pk_x_goals_against_per_60 ?? 0.52;
+  const ppXgf = team.pp_x_goals_for_per_game ?? team.pp_x_goals_for_per_60 ?? 0.52;
+  const opponentPkXga = opponent.pk_x_goals_against_per_game ?? opponent.pk_x_goals_against_per_60 ?? 0.52;
   const teamRest = team.rest_days;
   const opponentRest = opponent.rest_days;
   const restDiff = teamRest === null || opponentRest === null

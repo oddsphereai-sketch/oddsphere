@@ -51,12 +51,12 @@ export default function SportSelector({
   const compact = density === "compact";
 
   return (
-    <div className={compact ? "w-full" : "-mx-4 overflow-x-auto sm:mx-0"}>
+    <div className={compact ? "w-full overflow-x-auto overscroll-x-contain" : "-mx-4 overflow-x-auto sm:mx-0"}>
       <div
         role="tablist"
         aria-label="Sport"
         className={compact
-          ? "grid w-full grid-cols-5 gap-1"
+          ? "flex min-w-max flex-nowrap gap-1"
           : "flex min-w-max gap-2 px-4 pb-2 sm:min-w-0 sm:gap-3 sm:px-0 sm:pb-0"}
       >
         {sports.map((sport) => {
@@ -75,7 +75,7 @@ export default function SportSelector({
           };
 
           const base = compact
-            ? "relative inline-flex min-h-12 min-w-0 flex-col items-center justify-center gap-0.5 overflow-hidden whitespace-nowrap rounded-lg px-1 py-2 transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-300 focus-visible:ring-offset-1 focus-visible:ring-offset-[#100e18]"
+            ? "relative inline-flex min-h-12 min-w-[64px] shrink-0 flex-col items-center justify-center gap-0.5 overflow-hidden whitespace-nowrap rounded-lg px-1.5 py-2 transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-300 focus-visible:ring-offset-1 focus-visible:ring-offset-[#100e18]"
             : "relative inline-flex min-h-16 min-w-[120px] flex-shrink-0 flex-col items-center justify-center gap-1 whitespace-nowrap rounded-xl px-4 py-3 transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-300 focus-visible:ring-offset-2 focus-visible:ring-offset-[#100e18] sm:min-w-0 sm:flex-1 sm:flex-shrink sm:px-5 sm:py-4";
 
           const stateClasses = isActive
