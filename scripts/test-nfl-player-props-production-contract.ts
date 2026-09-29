@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import {
   nflPlayerPropsAvailabilityAgeLabel,
   resolveNflPlayerPropsPrediction,
+  resolveNflPlayerPropsActionableForecast,
   selectNflPlayerPropsOverForecasts,
   selectNflPlayerPropsTouchdownScorers,
 } from "../app/player-props/lib/nflPlayerPropsPresentation";
@@ -388,8 +389,8 @@ for (const productHierarchy of ["Today’s Radar", "Research workspace", "Choose
 assert.ok(memberReader.includes('data-product-zone="today-radar"'));
 assert.ok(memberReader.includes('data-product-zone="research-entry"'));
 assert.ok(memberReader.includes('data-product-zone="full-board"'));
-assert.ok(memberReader.includes("buildRadarRows(rows), [rows]"), "NFL filters drive Today’s Radar and the full board from one row set");
-assert.ok(memberReader.includes('row.grade === "Best Angle" || row.grade === "Lean"'), "Today’s Radar surfaces real actionable rows independently of the paired projection forecast");
+assert.ok(memberReader.includes("buildRadarItems(allPairs), [allPairs]"), "NFL filters drive Today’s Radar and the full board from the same canonical market pairs");
+assert.ok(memberReader.includes("resolveNflPlayerPropsActionableForecast(pair.rows"), "Today’s Radar requires an actionable exact price on the canonical forecast side");
 assert.ok(memberReader.includes("const selected = rows.find"), "an open NFL prop reader cannot survive a filter that excludes its row");
 assert.ok(memberReader.includes('{rows.length} {activeFilters ? "filtered" : "completed"} reads'), "NFL filter feedback reports the filtered row count");
 assert.ok(memberReader.includes("pairRows(filteredRows, sort, touchdownScorers)"), "the selected sort and touchdown cohort are passed into the paired full-board rows");
@@ -446,6 +447,16 @@ const quoteSpecificProjectionPrediction = resolveNflPlayerPropsPrediction([
 ]);
 assert.equal(quoteSpecificProjectionPrediction?.projection, 3.4805, "paired quotes resolve one median canonical projection");
 assert.equal(quoteSpecificProjectionPrediction?.outcome, "under", "the badge and displayed canonical projection remain on the same side of the line");
+const contradictoryActionableForecast = resolveNflPlayerPropsActionableForecast([
+  { side: "over" as const, finalProbability: 0.532, expectedValue: 0.092, grade: "Lean", line: 18.5, projection: 18.96 },
+  { side: "under" as const, finalProbability: 0.532, expectedValue: 0.040, grade: "Watchlist", line: 18.5, projection: 17.44 },
+]);
+assert.equal(contradictoryActionableForecast, null, "an actionable quote-specific side cannot contradict the canonical market-pair forecast in Today’s Radar");
+const coherentActionableForecast = resolveNflPlayerPropsActionableForecast([
+  { side: "over" as const, finalProbability: 0.57, expectedValue: 0.10, grade: "Lean", line: 18.5, projection: 19.2 },
+  { side: "under" as const, finalProbability: 0.43, expectedValue: -0.02, grade: "No Play", line: 18.5, projection: 19.0 },
+]);
+assert.equal(coherentActionableForecast?.row.side, "over", "a grade remains actionable when its exact-price side agrees with the canonical forecast");
 const filteredSidePrediction = resolveNflPlayerPropsPrediction([{ side: "under" as const, finalProbability: 0.42, line: 40.5, projection: 42.1 }]);
 assert.equal(filteredSidePrediction?.outcome, "over", "a price filter cannot turn the remaining quote into the prediction");
 assert.equal(filteredSidePrediction?.quotedSide, null, "an inferred forecast is not falsely highlighted as a posted quote");

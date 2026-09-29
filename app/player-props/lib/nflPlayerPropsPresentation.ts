@@ -13,6 +13,11 @@ export type NflPlayerPropsPrediction<T> = {
   quotedSide: "over" | "under" | "yes" | null;
 };
 
+export type NflPlayerPropsActionableForecast<T> = {
+  prediction: NflPlayerPropsPrediction<T>;
+  row: T;
+};
+
 export {
   nflPlayerPropsOverUnderMarketKey,
   nflPlayerPropsTouchdownPlayerKey,
@@ -77,6 +82,35 @@ export function resolveNflPlayerPropsPrediction<
     row: under ?? over!,
     quotedSide: under ? "under" : null,
   };
+}
+
+/**
+ * Returns an actionable exact-price row only when its side agrees with the
+ * canonical projection resolved across the displayed market pair. This keeps
+ * the radar and headline counts from promoting one quote-specific forecast
+ * against the board's single player/market prediction.
+ */
+export function resolveNflPlayerPropsActionableForecast<
+  T extends {
+    side: "over" | "under" | "yes";
+    finalProbability: number;
+    line: number;
+    projection: number | null;
+    grade: string;
+    expectedValue: number;
+  },
+>(rows: readonly T[], options?: { touchdownPositive?: boolean }): NflPlayerPropsActionableForecast<T> | null {
+  const prediction = resolveNflPlayerPropsPrediction(rows, options);
+  if (!prediction?.quotedSide) return null;
+  const candidates = rows
+    .filter((row) => row.side === prediction.quotedSide && (row.grade === "Best Angle" || row.grade === "Lean"))
+    .sort((left, right) => actionableGradeRank(left.grade) - actionableGradeRank(right.grade)
+      || right.expectedValue - left.expectedValue);
+  return candidates[0] ? { prediction, row: candidates[0] } : null;
+}
+
+function actionableGradeRank(grade: string): number {
+  return grade === "Best Angle" ? 0 : grade === "Lean" ? 1 : 2;
 }
 
 
