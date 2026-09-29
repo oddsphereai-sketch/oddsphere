@@ -1,7 +1,7 @@
 {
-  "decisionRelease": "nfl_player_props_decision_2026_09_28_r16_qb_workload_marriage",
-  "modelRelease": "nfl_player_props_distribution_model_2026_09_28_r12_qb_workload_marriage",
-  "calibrationRelease": "nfl_player_props_distribution_calibration_2026_09_28_r13_qb_workload_marriage",
+  "decisionRelease": "nfl_player_props_decision_2026_09_28_r17_official_joint_outcomes",
+  "modelRelease": "nfl_player_props_distribution_model_2026_09_28_r13_official_joint_outcomes",
+  "calibrationRelease": "nfl_player_props_distribution_calibration_2026_09_28_r14_official_joint_outcomes",
   "touchdownModelRelease": "nfl_player_props_anytime_td_model_2026_08_25_r3_shared_context",
   "touchdownCalibrationRelease": "nfl_player_props_anytime_td_calibration_2026_08_25_r3_shared_context",
   "marketBoardRelease": "nfl_player_props_exact_market_board_2026_09_01_r2_cross_line_opening",
@@ -17,7 +17,7 @@
   "maximumQuoteAgeHours": 6,
   "maximumRawMarketDivergence": 0.48,
   "quarterbackPassingProjection": {
-    "release": "nfl_player_props_qb_passing_projection_2026_09_28_r3_all_workload_markets",
+    "release": "nfl_player_props_qb_passing_projection_2026_09_28_r4_joint_latent_workload",
     "eligibleMarkets": ["passing_attempts", "passing_completions", "passing_yards"],
     "requiresExpectedStarterIdentity": true,
     "minimumBooksForProjection": 1,

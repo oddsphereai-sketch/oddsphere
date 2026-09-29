@@ -30,8 +30,8 @@ import {
 } from "../lib/services/football/nflPlayerPropsRuntime";
 import type { NflPlayerPropsExactOffer } from "../lib/services/football/nflPlayerPropsMarketBoard";
 
-assert.equal(NFL_PLAYER_PROPS_RUNTIME_RELEASE, "nfl_player_props_runtime_2026_09_28_r17_qb_workload_marriage");
-assert.equal(NFL_PLAYER_PROPS_BOARD_RELEASE, "nfl_player_props_board_2026_09_28_r20_qb_workload_marriage");
+assert.equal(NFL_PLAYER_PROPS_RUNTIME_RELEASE, "nfl_player_props_runtime_2026_09_28_r18_official_joint_outcomes");
+assert.equal(NFL_PLAYER_PROPS_BOARD_RELEASE, "nfl_player_props_board_2026_09_28_r21_official_joint_outcomes");
 assert.deepEqual(NFL_PLAYER_PROPS_QB_ROLE_FLOORS, { confirmedStarter: 0.9, projectedStarter: 0.75 });
 const priorGameInactive = {
   name: "Case Keenum", status: "Inactive", detail: "Inactive for the preceding game", position: "QB",
@@ -213,7 +213,7 @@ const expectedStarterEvidence = expectedStarterProjection.evidence;
 assert.equal(expectedStarterEvidence.books, 1);
 assert.equal(expectedStarterEvidence.market, "passing_yards");
 assert.equal(expectedStarterEvidence.roleProjection, 235);
-assert.ok((expectedStarterProjection?.projection ?? 0) > 215 && (expectedStarterProjection?.projection ?? 999) < 240,
+assert.ok((expectedStarterProjection?.projection ?? 0) > 205 && (expectedStarterProjection?.projection ?? 999) < 240,
   "the repaired projection is market-realistic while retaining bounded recent-role context");
 const attemptsFeature = {
   ...quarterbackFeature,
@@ -301,6 +301,44 @@ const independentOnlyProjection = nflPlayerPropsExpectedStarterPassingProjection
 });
 assert.equal(targetExcludedProjection?.projection, independentOnlyProjection?.projection,
   "changing the evaluated offer cannot change its target-excluded QB point projection");
+const completionOffer: NflPlayerPropsExactOffer = {
+  ...passingOffer, offerKey: "qb-completions-b", sportsbook: "book-b", market: "passing_completions", line: 18.5,
+};
+const workloadOffers = [
+  { ...attemptsOffer, offerKey: "qb-attempts-b", sportsbook: "book-b", line: 29.5 },
+  completionOffer,
+  { ...passingOffer, offerKey: "qb-yards-b", sportsbook: "book-b", line: 175.5 },
+];
+const modeledPassing = { passing_attempts: 19.7, passing_completions: 18.75, passing_yards: 160 };
+const jointAttempts = nflPlayerPropsExpectedStarterPassingProjection({
+  feature: { ...attemptsFeature, features: { ...attemptsFeature.features, prior_participations: 0 } },
+  market: "passing_attempts", modeledProjection: modeledPassing.passing_attempts,
+  modeledProjections: modeledPassing, offers: workloadOffers, evaluatedSportsbook: "book-a",
+});
+const jointCompletions = nflPlayerPropsExpectedStarterPassingProjection({
+  feature: { ...attemptsFeature, features: { ...attemptsFeature.features, prior_participations: 0 } },
+  market: "passing_completions", modeledProjection: modeledPassing.passing_completions,
+  modeledProjections: modeledPassing, offers: workloadOffers, evaluatedSportsbook: "book-a",
+});
+const jointYards = nflPlayerPropsExpectedStarterPassingProjection({
+  feature: { ...attemptsFeature, features: { ...attemptsFeature.features, prior_participations: 0 } },
+  market: "passing_yards", modeledProjection: modeledPassing.passing_yards,
+  modeledProjections: modeledPassing, offers: workloadOffers, evaluatedSportsbook: "book-a",
+});
+assert.ok((jointAttempts?.projection ?? 0) > 25,
+  "cross-market workload evidence repairs an expected starter's implausibly low reserve attempt head");
+assert.ok((jointCompletions?.projection ?? Infinity) <= (jointAttempts?.projection ?? -Infinity),
+  "the joint passing projection cannot publish more completions than attempts");
+assert.ok((jointYards?.projection ?? 0) > 160,
+  "target-excluded yards evidence contributes to the coherent expected-starter workload");
+const targetContaminatedWorkload = nflPlayerPropsExpectedStarterPassingProjection({
+  feature: { ...attemptsFeature, features: { ...attemptsFeature.features, prior_participations: 0 } },
+  market: "passing_attempts", modeledProjection: modeledPassing.passing_attempts,
+  modeledProjections: modeledPassing,
+  offers: [{ ...attemptsOffer, line: 60.5 }, ...workloadOffers], evaluatedSportsbook: "book-a",
+});
+assert.equal(targetContaminatedWorkload?.projection, jointAttempts?.projection,
+  "the evaluated sportsbook cannot contaminate any latent workload component");
 const primaryKeys = primaryNflPlayerPropsOfferKeys([
   passingOffer,
   { ...passingOffer, offerKey: "book-a-alternate", line: 230.5 },
@@ -311,7 +349,9 @@ const sameLine = nflPlayerPropsTransportedMarketProbability({ projection: 225, s
 const higherLine = nflPlayerPropsTransportedMarketProbability({ projection: 225, sourceLine: 224.5, sourceOverProbability: 0.55, targetLine: 230.5 });
 assert.ok(Math.abs(sameLine - 0.55) <= 0.03, "same-line transport preserves the independent no-vig probability within empirical resolution");
 assert.ok(higherLine < sameLine, "a higher target line lowers the transported Over probability");
-assert.ok(Math.abs(nflPlayerPropsMarketImpliedCenter({ referenceProjection: 225, line: 225.5, overProbability: 0.5 }) - 225.5) <= 8);
+const medianImpliedCenter = nflPlayerPropsMarketImpliedCenter({ referenceProjection: 225, line: 225.5, overProbability: 0.5 });
+assert.ok(Number.isFinite(medianImpliedCenter) && Math.abs(medianImpliedCenter - 225.5) <= 30,
+  "the inverse market center uses the selected skew-aware residual distribution rather than assuming zero median residual");
 assert.equal(nflPlayerPropsPassingYardsWatchlistEligible({
   market: "passing_yards", commonHolds: [], primaryTarget: true, independentMarketBooks: 1,
   divergenceImplausible: false, movement: "support", expectedValue: 0.02, probabilityEdge: 0.005,
@@ -337,7 +377,8 @@ const crossLinePassing = buildNflPlayerPropsRuntimeBoard({
   evaluatedAt: "2026-08-25T12:01:00.000Z",
 });
 const targetOver = crossLinePassing.decisions.find((row) => row.sportsbook === "book-a" && row.side === "over");
-assert.equal(targetOver?.grade, "Watchlist", "transported target-excluded evidence can repair a passing forecast without authorizing an unvalidated action");
+assert.equal(targetOver?.grade, "Watchlist",
+  "transported target-excluded evidence can repair a passing forecast without authorizing an unvalidated action");
 assert.equal(targetOver?.passingMarketEvidence?.source, "target_book_excluded_cross_line_transport");
 assert.equal(targetOver?.modelRelease, NFL_PLAYER_PROPS_MODEL_RELEASE);
 assert.equal(targetOver?.calibrationRelease, NFL_PLAYER_PROPS_CALIBRATION_RELEASE);

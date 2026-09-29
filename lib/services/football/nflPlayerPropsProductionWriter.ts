@@ -44,7 +44,7 @@ import {
 } from "./nflPlayerPropsPrediction";
 
 export const NFL_PLAYER_PROPS_WRITER_RELEASE =
-  "nfl_player_props_writer_2026_09_28_r32_qb_workload_marriage" as const;
+  "nfl_player_props_writer_2026_09_28_r33_official_joint_outcomes" as const;
 export const NFL_PLAYER_PROPS_PRODUCTION_INCLUDE_OPENINGS = true as const;
 export const NFL_PLAYER_PROPS_PRODUCTION_COLLECTION_CALL_MAXIMUM = (
   1
@@ -76,6 +76,18 @@ export type NflPlayerPropsForecastTelemetry = {
   modalPredictionSidesByMarket: Record<string, { over: number; under: number; yes: number; no: number }>;
 };
 
+export type NflPlayerPropsCandidateImpact = {
+  matchedRows: number;
+  addedRows: number;
+  removedRows: number;
+  projectionChanges: number;
+  forecastSideChanges: number;
+  promotions: number;
+  demotions: number;
+  precedingActionables: number;
+  candidateActionables: number;
+};
+
 export type NflPlayerPropsWriterResult = {
   writerRelease: typeof NFL_PLAYER_PROPS_WRITER_RELEASE;
   settlementRelease: typeof NFL_PLAYER_PROPS_SETTLEMENT_RELEASE;
@@ -101,17 +113,8 @@ export type NflPlayerPropsWriterResult = {
   apiCallsMaximum: number;
   healthFindings: string[];
   forecastTelemetry: NflPlayerPropsForecastTelemetry;
-  candidateImpact?: {
-    matchedRows: number;
-    addedRows: number;
-    removedRows: number;
-    projectionChanges: number;
-    forecastSideChanges: number;
-    promotions: number;
-    demotions: number;
-    precedingActionables: number;
-    candidateActionables: number;
-  };
+  candidateImpact?: NflPlayerPropsCandidateImpact;
+  liveImpact?: NflPlayerPropsCandidateImpact;
 };
 
 export function summarizeNflPlayerPropsForecastTelemetry(
@@ -253,6 +256,9 @@ export async function runNflPlayerPropsProductionWriter(args: {
     }),
     snapshot,
   );
+  const liveImpact = !args.apply && previous
+    ? compareNflPlayerPropsCandidateImpact(previous, snapshot)
+    : undefined;
   let closingPricesUpdated = 0;
   if (args.apply) {
     await writeNflPlayerPropsCurrentSeasonState({ client: args.client, state: currentSeason.state });
@@ -299,6 +305,7 @@ export async function runNflPlayerPropsProductionWriter(args: {
     apiCallsMaximum,
     forecastTelemetry: summarizeNflPlayerPropsForecastTelemetry(snapshot),
     ...(candidateImpact ? { candidateImpact } : {}),
+    ...(liveImpact ? { liveImpact } : {}),
     healthFindings: [...new Set([
       ...collection.snapshot.healthFindings,
       ...context.healthHolds,

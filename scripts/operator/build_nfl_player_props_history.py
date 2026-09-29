@@ -52,7 +52,7 @@ def verified_source_paths(root: pathlib.Path, start: int, end: int, contract: di
     if manifest.get("cacheRelease") != contract["sourceCacheRelease"] or manifest.get("failures"):
         raise RuntimeError("NFL props source cache release/failures mismatch")
     paths: dict[tuple[str, int], pathlib.Path] = {}
-    required = {"pbp", "weekly_rosters", "snap_counts", "injuries"}
+    required = {"pbp", "weekly_rosters", "snap_counts", "injuries", "player_stats", "team_stats"}
     for item in manifest.get("files", []):
         dataset = str(item.get("dataset"))
         season = int(item.get("season", 0))
@@ -78,11 +78,13 @@ def read_columns(path: pathlib.Path, columns: Iterable[str]) -> pd.DataFrame:
     return result
 
 
-def load_inputs(paths: dict[tuple[str, int], pathlib.Path], start: int, end: int) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+def load_inputs(paths: dict[tuple[str, int], pathlib.Path], start: int, end: int) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     pbp_frames: list[pd.DataFrame] = []
     roster_frames: list[pd.DataFrame] = []
     snap_frames: list[pd.DataFrame] = []
     injury_frames: list[pd.DataFrame] = []
+    player_stat_frames: list[pd.DataFrame] = []
+    team_stat_frames: list[pd.DataFrame] = []
     for season in range(start, end + 1):
         pbp_frames.append(read_columns(paths[("pbp", season)], [
             "season", "season_type", "week", "game_id", "game_date", "home_team", "away_team",
@@ -100,19 +102,34 @@ def load_inputs(paths: dict[tuple[str, int], pathlib.Path], start: int, end: int
         injury_frames.append(read_columns(paths[("injuries", season)], [
             "season", "week", "season_type", "game_type", "team", "gsis_id", "report_status", "practice_status",
         ]))
+        player_stat_frames.append(read_columns(paths[("player_stats", season)], [
+            "season", "week", "season_type", "game_id", "team", "opponent_team", "player_id", "player_display_name",
+            "attempts", "completions", "passing_yards", "carries", "rushing_yards", "targets", "receptions", "receiving_yards",
+        ]))
+        team_stat_frames.append(read_columns(paths[("team_stats", season)], [
+            "season", "week", "season_type", "game_id", "team", "opponent_team", "attempts", "completions",
+            "passing_yards", "carries", "rushing_yards", "targets",
+        ]))
     pbp = pd.concat(pbp_frames, ignore_index=True)
     rosters = pd.concat(roster_frames, ignore_index=True)
     snaps = pd.concat(snap_frames, ignore_index=True)
     injuries = pd.concat(injury_frames, ignore_index=True)
+    player_stats = pd.concat(player_stat_frames, ignore_index=True)
+    team_stats = pd.concat(team_stat_frames, ignore_index=True)
     pbp = pbp[pbp["season_type"].fillna("").eq("REG")].copy()
     rosters = rosters[rosters["game_type"].fillna("REG").eq("REG")].copy()
     snaps = snaps[snaps["game_type"].fillna("REG").eq("REG")].copy()
     injuries = injuries[injuries["season_type"].fillna("").eq("REG") | injuries["game_type"].fillna("REG").eq("REG")].copy()
+    player_stats = player_stats[player_stats["season_type"].fillna("").eq("REG")].copy()
+    team_stats = team_stats[team_stats["season_type"].fillna("").eq("REG")].copy()
     for frame in (rosters, snaps, injuries):
         frame["team"] = frame["team"].map(normalize_team)
     for column in ("posteam", "defteam", "home_team", "away_team"):
         pbp[column] = pbp[column].map(normalize_team)
-    return pbp, rosters, snaps, injuries
+    for frame in (player_stats, team_stats):
+        frame["team"] = frame["team"].map(normalize_team)
+        frame["opponent_team"] = frame["opponent_team"].map(normalize_team)
+    return pbp, rosters, snaps, injuries, player_stats, team_stats
 
 
 def build_game_teams(pbp: pd.DataFrame) -> pd.DataFrame:
@@ -132,49 +149,41 @@ def numeric_sum(frame: pd.DataFrame, column: str) -> pd.Series:
     return pd.to_numeric(frame[column], errors="coerce").fillna(0.0)
 
 
-def player_outcomes(pbp: pd.DataFrame) -> pd.DataFrame:
-    keys = ["season", "week", "game_id", "posteam"]
-    passes = pbp[pbp["passer_player_id"].notna()].copy()
-    passes["passing_attempts"] = numeric_sum(passes, "pass_attempt")
-    passes["passing_completions"] = numeric_sum(passes, "complete_pass")
-    passes["passing_yards"] = numeric_sum(passes, "passing_yards")
-    passing = passes.groupby(keys + ["passer_player_id"], observed=True, as_index=False).agg(
-        player_name=("passer_player_name", "last"), passing_attempts=("passing_attempts", "sum"),
-        passing_completions=("passing_completions", "sum"), passing_yards=("passing_yards", "sum"),
-    ).rename(columns={"passer_player_id": "player_id"})
-    rushes = pbp[pbp["rusher_player_id"].notna()].copy()
-    rushes["rushing_attempts"] = numeric_sum(rushes, "rush_attempt")
-    rushes["rushing_yards"] = numeric_sum(rushes, "rushing_yards")
-    rushing = rushes.groupby(keys + ["rusher_player_id"], observed=True, as_index=False).agg(
-        rusher_name=("rusher_player_name", "last"), rushing_attempts=("rushing_attempts", "sum"), rushing_yards=("rushing_yards", "sum"),
-    ).rename(columns={"rusher_player_id": "player_id"})
-    targets = pbp[pbp["receiver_player_id"].notna()].copy()
-    targets["targets"] = numeric_sum(targets, "pass_attempt")
-    targets["receptions"] = numeric_sum(targets, "complete_pass")
-    targets["receiving_yards"] = numeric_sum(targets, "passing_yards")
-    receiving = targets.groupby(keys + ["receiver_player_id"], observed=True, as_index=False).agg(
-        receiver_name=("receiver_player_name", "last"), targets=("targets", "sum"), receptions=("receptions", "sum"), receiving_yards=("receiving_yards", "sum"),
-    ).rename(columns={"receiver_player_id": "player_id"})
-    identity = ["season", "week", "game_id", "posteam", "player_id"]
-    result = passing.merge(rushing, on=identity, how="outer").merge(receiving, on=identity, how="outer")
-    result["player_name"] = result["player_name"].combine_first(result["rusher_name"]).combine_first(result["receiver_name"])
-    result = result.drop(columns=["rusher_name", "receiver_name"])
+def player_outcomes(player_stats: pd.DataFrame) -> pd.DataFrame:
+    result = player_stats.rename(columns={
+        "player_display_name": "player_name",
+        "attempts": "passing_attempts",
+        "completions": "passing_completions",
+        "carries": "rushing_attempts",
+    }).copy()
     labels = ["passing_attempts", "passing_completions", "passing_yards", "rushing_attempts", "rushing_yards", "targets", "receptions", "receiving_yards"]
-    result[labels] = result[labels].fillna(0.0)
-    return result.rename(columns={"posteam": "team"})
+    result[labels] = result[labels].apply(pd.to_numeric, errors="coerce").fillna(0.0)
+    result = result[result[labels].abs().sum(axis=1).gt(0)].copy()
+    columns = ["season", "week", "game_id", "team", "player_id", "player_name", *labels]
+    result = result[columns].sort_values(["season", "week", "game_id", "team", "player_id"])
+    if result.duplicated(["season", "week", "game_id", "team", "player_id"]).any():
+        raise RuntimeError("official NFL player stats contain duplicate player-game identities")
+    return result
 
 
-def team_outcomes(pbp: pd.DataFrame) -> pd.DataFrame:
-    rows = pbp[pbp["posteam"].notna()].copy()
-    rows["team_pass_attempts"] = numeric_sum(rows, "pass_attempt")
-    rows["team_completions"] = numeric_sum(rows, "complete_pass")
-    rows["team_passing_yards"] = numeric_sum(rows, "passing_yards")
-    rows["team_rush_attempts"] = numeric_sum(rows, "rush_attempt")
-    rows["team_rushing_yards"] = numeric_sum(rows, "rushing_yards")
-    rows["team_targets"] = rows["receiver_player_id"].notna().astype(float) * rows["team_pass_attempts"]
-    rows["team_offensive_plays"] = rows["team_pass_attempts"] + rows["team_rush_attempts"]
-    metrics = ["team_pass_attempts", "team_completions", "team_passing_yards", "team_rush_attempts", "team_rushing_yards", "team_targets", "team_offensive_plays"]
-    return rows.groupby(["season", "week", "game_id", "posteam", "defteam"], observed=True, as_index=False)[metrics].sum().rename(columns={"posteam": "team", "defteam": "opponent"})
+def team_outcomes(team_stats: pd.DataFrame) -> pd.DataFrame:
+    result = team_stats.rename(columns={
+        "opponent_team": "opponent",
+        "attempts": "team_pass_attempts",
+        "completions": "team_completions",
+        "passing_yards": "team_passing_yards",
+        "carries": "team_rush_attempts",
+        "rushing_yards": "team_rushing_yards",
+        "targets": "team_targets",
+    }).copy()
+    metrics = ["team_pass_attempts", "team_completions", "team_passing_yards", "team_rush_attempts", "team_rushing_yards", "team_targets"]
+    result[metrics] = result[metrics].apply(pd.to_numeric, errors="coerce").fillna(0.0)
+    result["team_offensive_plays"] = result["team_pass_attempts"] + result["team_rush_attempts"]
+    columns = ["season", "week", "game_id", "team", "opponent", *metrics, "team_offensive_plays"]
+    result = result[columns].sort_values(["season", "week", "game_id", "team"])
+    if result.duplicated(["season", "week", "game_id", "team"]).any():
+        raise RuntimeError("official NFL team stats contain duplicate team-game identities")
+    return result
 
 
 def roster_candidates(rosters: pd.DataFrame, injuries: pd.DataFrame, games: pd.DataFrame, positions: list[str]) -> pd.DataFrame:
@@ -276,15 +285,15 @@ def add_team_prior_features(team: pd.DataFrame) -> tuple[pd.DataFrame, list[str]
     return own.merge(allowed[["season", "week", "game_id", "team", *defense_columns]], on=["season", "week", "game_id", "team"], validate="one_to_one"), [*own_columns, *defense_columns]
 
 
-def build_dataset(pbp: pd.DataFrame, rosters: pd.DataFrame, snaps: pd.DataFrame, injuries: pd.DataFrame, contract: dict[str, Any]) -> tuple[pd.DataFrame, dict[str, Any]]:
+def build_dataset(pbp: pd.DataFrame, rosters: pd.DataFrame, snaps: pd.DataFrame, injuries: pd.DataFrame, player_stats: pd.DataFrame, team_stats: pd.DataFrame, contract: dict[str, Any]) -> tuple[pd.DataFrame, dict[str, Any]]:
     games = build_game_teams(pbp)
-    outcomes = player_outcomes(pbp)
-    team = team_outcomes(pbp)
+    outcomes = player_outcomes(player_stats)
+    team = team_outcomes(team_stats)
     rows = attach_snap_labels(roster_candidates(rosters, injuries, games, list(contract["positions"])), snaps)
     identity = ["season", "week", "game_id", "team", "player_id"]
-    rows = rows.merge(outcomes, on=identity, how="left", suffixes=("", "_pbp"), validate="one_to_one")
-    rows["player_name"] = rows["player_name"].combine_first(rows["player_name_pbp"])
-    rows = rows.drop(columns=["player_name_pbp"])
+    rows = rows.merge(outcomes, on=identity, how="left", suffixes=("", "_official"), validate="one_to_one")
+    rows["player_name"] = rows["player_name"].combine_first(rows["player_name_official"])
+    rows = rows.drop(columns=["player_name_official"])
     phase_labels = list(contract["phaseOneLabels"])
     statistical_labels = [*phase_labels[:5], "targets", *phase_labels[5:]]
     for column in statistical_labels + ["offense_snaps", "offense_snap_pct"]:
@@ -368,6 +377,7 @@ def main() -> None:
             "sameWeekFreeze": "no current-week outcome, share, or snap column is included in modelFeatureColumns",
             "currentWeekContext": "weekly roster and injury values are retained only as unstamped context and excluded from modelFeatureColumns",
             "market": "no historical prop line or price is present; market calibration and value testing remain blocked",
+            "outcomes": "official nflverse weekly player/team box-score stats; play-level flags are not used as sportsbook prop labels",
         },
         "healthFindings": health, **diagnostics,
     }

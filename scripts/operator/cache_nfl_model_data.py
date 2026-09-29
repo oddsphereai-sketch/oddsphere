@@ -19,7 +19,7 @@ import urllib.error
 import urllib.request
 
 
-CACHE_RELEASE = "nfl_real_model_source_cache_2016_2025_2026_08_19_r1"
+CACHE_RELEASE = "nfl_real_model_source_cache_2016_2025_2026_09_28_r2_official_stats"
 DEFAULT_START = 2016
 DEFAULT_END = 2025
 BASE = "https://github.com/nflverse/nflverse-data/releases/download"
@@ -28,6 +28,8 @@ DATASETS = {
     "weekly_rosters": f"{BASE}/weekly_rosters/roster_weekly_{{season}}.parquet",
     "snap_counts": f"{BASE}/snap_counts/snap_counts_{{season}}.parquet",
     "injuries": f"{BASE}/injuries/injuries_{{season}}.parquet",
+    "player_stats": f"{BASE}/stats_player/stats_player_week_{{season}}.parquet",
+    "team_stats": f"{BASE}/stats_team/stats_team_week_{{season}}.parquet",
 }
 
 
