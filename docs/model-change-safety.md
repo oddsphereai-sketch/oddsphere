@@ -5,6 +5,30 @@ inputs, probabilities, projections, grades, promotions/demotions, calibration, p
 or stakes. It exists to prevent mixed model eras, competing writers, accidental board
 flattening, and load spikes.
 
+## Owner-approved emergency exception: NFL Week 4 joint-Moneyline coherence
+
+On 2026-09-29 Daniel Mengel explicitly directed Oddsphere to restore the missing NFL weekly board
+immediately, preserve prediction accuracy and the new market-reading model, make the new release
+the durable forward default, and add no member copy, labels, or product-surface changes. This
+exception is limited to the r24 joint-Moneyline coherence family recorded in
+`docs/current-model-releases.md` and the evidence report
+`docs/model-audits/2026-09-29-nfl-week-four-rollover-joint-moneyline-coherence.md`.
+
+The r23 score distribution, Moneyline winner, Spread, Total, market-reading inputs, prices, and
+thresholds remain unchanged. The exact-price Moneyline evaluation must consume the winner
+probability from that same final joint PMF; an older aligned-r6 probability may no longer replace
+it after the final score distribution is frozen. Target-excluded book selection and other-book
+fair consensus remain downstream economic inputs. This exception authorizes the resulting
+Moneyline grade recalculation but no stake, score-model, market-reading, provider-call, cadence,
+writer, schedule, copy, label, or layout change.
+
+Production requires all 16 Week 4 games and all 48 markets, zero score/side or event-containment
+contradictions, the reviewed non-flat 25-actionable board, focused and full model-change tests,
+latest-main integration safety, protected-PR checks, the existing `prediction_pipeline:nfl`
+lease, append-only evidence, immutable prior locks, and live reader/writer proof. Hold or roll back
+unlocked r24 evidence on mixed releases, incomplete coverage, coherence failure, unexpected board
+collapse, writer overlap, or reader failure; never rewrite a valid locked tuple.
+
 ## Owner-approved emergency exception: NFL exact-game T-60 injury continuity
 
 On 2026-09-28 Daniel Mengel explicitly directed Oddsphere to repair and lock the PHI-CHI card

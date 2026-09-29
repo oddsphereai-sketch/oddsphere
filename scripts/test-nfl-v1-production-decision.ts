@@ -10,6 +10,7 @@ import {
 } from "../lib/services/football/nflR6MoneylineShadow";
 import {
   buildNflV1ProductionDecisionBundle,
+  NFL_V1_PRODUCTION_CALIBRATION_RELEASE,
   NFL_V1_PRODUCTION_MODEL_RELEASE,
   selectNflPredictionOwnedMoneylineEvaluation,
 } from "../lib/services/football/nflV1ProductionDecision";
@@ -55,14 +56,13 @@ const aligned = buildNflV1ProductionDecisionBundle({
 assert.equal(aligned.evaluatedBets.length, 3);
 assert.equal(aligned.outcomeConfidence.length, 3);
 const alignedMoneyline = aligned.evaluatedBets.find((decision) => decision.market === "moneyline")!;
-assert.equal(alignedMoneyline.grade, "Lean");
+assert.equal(alignedMoneyline.grade, "No Play");
 assert.equal(alignedMoneyline.side, "SEA");
-assert.equal(alignedMoneyline.modelProbability, 0.65);
-assert.equal(alignedMoneyline.marketFairProbability, 0.6);
-assert.equal(alignedMoneyline.evaluatedQuote.sportsbook, "draftkings");
-assert.equal(alignedMoneyline.modelRelease, NFL_R6_MONEYLINE_MODEL_RELEASE);
-assert.equal(alignedMoneyline.calibrationRelease, NFL_R6_MONEYLINE_CALIBRATION_RELEASE);
-assert.equal(aligned.evaluatedBets.filter((decision) => decision.grade === "No Play").length, 2);
+assert.equal(alignedMoneyline.modelProbability, outcome.homeWinProbability);
+assert.equal(alignedMoneyline.evaluatedQuote.sportsbook, "caesars");
+assert.equal(alignedMoneyline.modelRelease, NFL_V1_PRODUCTION_MODEL_RELEASE);
+assert.equal(alignedMoneyline.calibrationRelease, NFL_V1_PRODUCTION_CALIBRATION_RELEASE);
+assert.equal(aligned.evaluatedBets.filter((decision) => decision.grade === "No Play").length, 3);
 assert.equal(aligned.trackingEnabled, false);
 
 const opposed = buildNflV1ProductionDecisionBundle({
@@ -158,7 +158,7 @@ assert.equal(trueHealthHold.outcomeConfidence.length, 3);
 assert.equal(trueHealthHold.publicationEnabled, true);
 assert.equal(trueHealthHold.trackingEnabled, false);
 
-console.log("NFL v1 decision bundle: r10 forecasts, r6 Leans, bounded Watchlists, No Plays, and true health Holds passed");
+console.log("NFL v1 decision bundle: joint-PMF Moneylines, bounded Watchlists, No Plays, and true health Holds passed");
 
 function shadow(args: {
   team: "NE" | "SEA";
