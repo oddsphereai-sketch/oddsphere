@@ -26,6 +26,8 @@ import {
 } from "../lib/services/syncPublicSplitsObservations";
 import { replayNhlRegularState } from "../lib/automodel/nhlRegularState";
 import { replayNhlOpponentAdjustedState } from "../lib/services/nhl/loadNhlOpponentAdjustedState";
+import { buildNhlTwoSidedPriceTrail } from "../lib/services/nhl/nhlPriceTrail";
+import { canonicalizeNhlLineRows } from "../lib/services/nhl/nhlLineBoard";
 
 const base: NhlFeatureSnapshot = {
   home: {
@@ -102,6 +104,23 @@ const base: NhlFeatureSnapshot = {
 };
 
 const result = nhlRegularModelV1(base);
+const runtimeParity = nhlRegularModelV1({
+  ...base,
+  home: {
+    ...base.home,
+    pp_x_goals_for_per_60: 8.62,
+    pk_x_goals_against_per_60: 7.48,
+    pp_x_goals_for_per_game: base.home.pp_x_goals_for_per_60,
+    pk_x_goals_against_per_game: base.home.pk_x_goals_against_per_60,
+  },
+  away: {
+    ...base.away,
+    pp_x_goals_for_per_60: 7.48,
+    pk_x_goals_against_per_60: 8.56,
+    pp_x_goals_for_per_game: base.away.pp_x_goals_for_per_60,
+    pk_x_goals_against_per_game: base.away.pk_x_goals_against_per_60,
+  },
+});
 const legacyFallback = nhlRegularModelV1({
   ...base,
   home: { ...base.home, opponent_adjusted_attack: null, opponent_adjusted_defense_weakness: null },
@@ -118,7 +137,52 @@ assert.ok(result.puck_line.pick.includes("1.5"));
 assert.ok(Math.abs(result.moneyline.probability - legacyFallback.moneyline.probability) < 1e-12, "opponent-adjusted Total preserves the validated r5 Moneyline probability exactly");
 assert.equal(result.moneyline.pick, legacyFallback.moneyline.pick, "Total repair cannot flip the Moneyline winner");
 assert.notEqual(result.independent_total_goals, legacyFallback.independent_total_goals, "complete matchup state activates the new Total component");
+assert.ok(
+  Math.abs(runtimeParity.independent_total_goals - result.independent_total_goals) < 1e-12,
+  "production special-teams per-60 evidence cannot replace the per-game units used by the released score fit",
+);
 assert.ok(Math.abs(legacyFallback.expected_goal_diff - ((legacyFallback.projected_home_goals - legacyFallback.projected_away_goals))) < 1e-12, "feed fallback remains one coherent r5 score pair");
+
+const pairedTrail = buildNhlTwoSidedPriceTrail({
+  market: "moneyline",
+  selectedSide: "home",
+  opposingSide: "away",
+  selectedLine: null,
+  opposingLine: null,
+  preferredBook: "pinnacle",
+  history: [
+    { market_type: "moneyline", sportsbook: "pinnacle", side: "home", line_value: null, odds_american: -130, observed_at: "2026-09-29T10:00:00.000Z" },
+    { market_type: "moneyline", sportsbook: "pinnacle", side: "away", line_value: null, odds_american: 115, observed_at: "2026-09-29T10:00:00.000Z" },
+    { market_type: "moneyline", sportsbook: "pinnacle", side: "home", line_value: null, odds_american: -135, observed_at: "2026-09-29T12:00:00.000Z" },
+    { market_type: "moneyline", sportsbook: "pinnacle", side: "away", line_value: null, odds_american: 120, observed_at: "2026-09-29T12:00:00.000Z" },
+  ],
+  live: [
+    { market_type: "moneyline", sportsbook: "pinnacle", side: "home", line_value: null, odds_american: -140, observed_at: "2026-09-29T14:00:00.000Z" },
+    { market_type: "moneyline", sportsbook: "pinnacle", side: "away", line_value: null, odds_american: 125, observed_at: "2026-09-29T14:00:00.000Z" },
+  ],
+});
+assert.equal(pairedTrail.sportsbook, "pinnacle", "two-sided price board stays on one complete book");
+assert.deepEqual(pairedTrail.selected.map((stop) => stop.american), [-130, -135, -140]);
+assert.deepEqual(pairedTrail.opposing.map((stop) => stop.american), [115, 120, 125]);
+assert.equal(pairedTrail.selected.at(-1)?.label, "current");
+assert.equal(pairedTrail.opposing.at(-1)?.label, "current");
+
+const canonicalLines = canonicalizeNhlLineRows([
+  { game_id: 1, market_type: "moneyline", sportsbook: "pinnacle", side: "home", line_value: null, odds_american: -145, source_timestamp: "2026-09-29T12:00:00.000Z" },
+  { game_id: 1, market_type: "moneyline", sportsbook: "pinnacle", side: "away", line_value: null, odds_american: 125, source_timestamp: "2026-09-29T12:00:00.000Z" },
+  { game_id: 1, market_type: "moneyline", sportsbook: "pinnacle", side: "home", line_value: null, odds_american: -140, source_timestamp: "2026-09-29T14:00:00.000Z" },
+  { game_id: 1, market_type: "moneyline", sportsbook: "pinnacle", side: "away", line_value: null, odds_american: 120, source_timestamp: "2026-09-29T14:00:00.000Z" },
+  { game_id: 1, market_type: "total", sportsbook: "circa", side: "over", line_value: 6.5, odds_american: -105, source_timestamp: "2026-09-29T14:00:00.000Z" },
+  { game_id: 1, market_type: "total", sportsbook: "circa", side: "under", line_value: 6.5, odds_american: -115, source_timestamp: "2026-09-29T14:00:00.000Z" },
+  { game_id: 1, market_type: "spread", sportsbook: "saba", side: "home", line_value: -1.5, odds_american: 130, source_timestamp: "2026-09-29T14:00:00.000Z" },
+]);
+assert.deepEqual(
+  canonicalLines.filter((row) => row.market_type === "moneyline").map((row) => row.odds_american).sort((a, b) => a! - b!),
+  [-140, 120],
+  "the current complete two-sided observation replaces older same-book prices",
+);
+assert.equal(canonicalLines.filter((row) => row.market_type === "total").length, 2, "a complete exact-line total pair is retained");
+assert.equal(canonicalLines.filter((row) => row.market_type === "spread").length, 0, "an incomplete one-sided refresh cannot enter the price board");
 assert.equal(normalizeNhlTeamName("MTL Canadiens"), "MTL");
 assert.equal(normalizeNhlTeamName("NYR Rangers"), "NYR");
 assert.deepEqual(selectMainNhlPuckLinePair([

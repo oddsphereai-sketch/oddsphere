@@ -27,6 +27,7 @@ import {
 } from "../../providers/nhl/_sharpApiNhlClient";
 import { normalizeNhlTeamName, type NhlTeamAbbrev } from "../../providers/nhl/_teamNameNormalizer";
 import { flagOpenersInHistoryPayload } from "../_lineHistoryOpenerHelper";
+import { canonicalizeNhlLineRows } from "./nhlLineBoard";
 
 export type RefreshNhlLinesOptions = {
   /** ET sports-day in YYYY-MM-DD. Filters games.slate_date directly. */
@@ -71,6 +72,10 @@ type LinePayload = {
   implied_probability: number | null;
   ev_percent: number | null;
   fair_odds: number | null;
+};
+
+type PreparedLinePayload = LinePayload & {
+  source_timestamp: string | null;
 };
 
 type LineHistoryPayload = {
@@ -202,7 +207,7 @@ function buildPayload(
   gameId: number,
   market: "moneyline" | "spread" | "total",
   side: "home" | "away" | "over" | "under",
-): LinePayload | null {
+): PreparedLinePayload | null {
   const sportsbook = (row.sportsbook ?? "").toLowerCase();
   if (sportsbook === "") return null;
   const american =
@@ -225,6 +230,7 @@ function buildPayload(
     implied_probability: implied,
     ev_percent: null,
     fair_odds: null,
+    source_timestamp: row.timestamp ?? null,
   };
 }
 
@@ -294,10 +300,16 @@ export async function refreshNhlLines(
   let matched = 0;
   let unmatched = 0;
   let parsed = 0;
-  const payloads: LinePayload[] = [];
+  const preparedPayloads: PreparedLinePayload[] = [];
 
   for (const r of oddsRows) {
-    if (r.is_alternate_line === true || r.is_main_line === false) continue;
+    if (
+      r.is_alternate_line === true
+      || r.is_main_line === false
+      || r.is_active === false
+      || r.is_live === true
+      || r.is_stale_pregame_price === true
+    ) continue;
     const homeAbbr = normalizeNhlTeamName(r.home_team);
     const awayAbbr = normalizeNhlTeamName(r.away_team);
     if (homeAbbr === null || awayAbbr === null) { unmatched++; continue; }
@@ -334,8 +346,17 @@ export async function refreshNhlLines(
     const payload = buildPayload(r, gameId, market, side);
     if (payload === null) continue;
     parsed++;
-    payloads.push(payload);
+    preparedPayloads.push(payload);
   }
+
+  // SharpAPI can return exact duplicates or multiple observations for one
+  // named book. Keep the newest deterministic quote and only complete
+  // two-sided pairs. A partial refresh leaves the prior complete DB group in
+  // place instead of erasing a side from the member board.
+  const payloads: LinePayload[] = canonicalizeNhlLineRows(preparedPayloads).map(({ source_timestamp, ...payload }) => {
+    void source_timestamp;
+    return payload;
+  });
 
   log(`\nProcessed: matched=${matched} unmatched=${unmatched} parsed=${parsed}`);
 

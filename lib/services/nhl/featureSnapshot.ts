@@ -33,6 +33,7 @@ import {
   nhlSeasonStartYearFromExternalId,
 } from "./nhlScheduleIdentity";
 import { fetchNhlScheduleForDate } from "../../providers/nhl/_nhlApiClient";
+import { canonicalizeNhlLineRows } from "./nhlLineBoard";
 
 export type BuildSnapshotOptions = {
   /** games.id (sport='nhl'). */
@@ -100,6 +101,7 @@ type DbLineRow = {
   line_value: number | null;
   odds_american: number | null;
   implied_probability: number | null;
+  observed_at?: string | null;
 };
 
 /**
@@ -132,6 +134,11 @@ function pickSituationStats(
 function per60(value: number | null, iceTimeSeconds: number | null): number | null {
   if (value === null || iceTimeSeconds === null || iceTimeSeconds <= 0) return null;
   return value / (iceTimeSeconds / 3600);
+}
+
+function perGame(value: number | null, gamesPlayed: number | null): number | null {
+  if (value === null || gamesPlayed === null || gamesPlayed <= 0) return null;
+  return value / gamesPlayed;
 }
 
 /**
@@ -474,16 +481,16 @@ export async function buildNhlFeatureSnapshot(
   // market layer.
   const { data: linesData } = await supabase
     .from("lines")
-    .select("market_type, sportsbook, side, line_value, odds_american, implied_probability")
+    .select("market_type, sportsbook, side, line_value, odds_american, implied_probability, fetched_at")
     .eq("game_id", opts.gameId)
     .is("player_id", null)
     .in("market_type", ["moneyline", "total", "spread"]);
   // #39 — drop blocked books (fliff, kalshi) at the load point so every
   // downstream selection (ML implied prob, total line) is clean. Previously
   // only selectMainNhlTotalLine filtered; the ML implied-prob path did not.
-  const lines = ((linesData as DbLineRow[] | null) ?? []).filter(
+  const lines = canonicalizeNhlLineRows((((linesData ?? []) as Array<DbLineRow & { fetched_at: string | null }>).filter(
     (l) => !isBlockedSportsbook(l.sportsbook),
-  );
+  ).map((line) => ({ ...line, observed_at: line.fetched_at }))));
   const { prob: marketHomeProb, bookCount } = pickMlImpliedProbHome(lines);
   const marketTotalLine = selectMainNhlTotalLine(lines);
   const marketPuckLine = selectMainNhlPuckLinePair(lines);
@@ -497,23 +504,30 @@ export async function buildNhlFeatureSnapshot(
     .is("player_id", null)
     .in("market_type", ["moneyline", "total"])
     .order("recorded_at", { ascending: true });
-  const firstByBookMarketSide = new Map<string, DbLineRow>();
-  for (const raw of (historyData ?? []) as Array<{
-    market_type: string; sportsbook: string; side: string; line_value: number | null; odds_american: number | null;
-  }>) {
-    if (isBlockedSportsbook(raw.sportsbook)) continue;
-    const key = `${raw.market_type}:${raw.sportsbook}:${raw.side}`;
-    if (firstByBookMarketSide.has(key)) continue;
-    firstByBookMarketSide.set(key, {
+  const historyLines = canonicalizeNhlLineRows(((historyData ?? []) as Array<{
+    market_type: string; sportsbook: string; side: string; line_value: number | null;
+    odds_american: number | null; recorded_at: string | null;
+  }>).filter((raw) => !isBlockedSportsbook(raw.sportsbook)).map((raw) => ({
       market_type: raw.market_type,
       sportsbook: raw.sportsbook,
       side: raw.side,
       line_value: raw.line_value,
       odds_american: raw.odds_american,
       implied_probability: americanToImplied(raw.odds_american),
-    });
+      observed_at: raw.recorded_at,
+    })), { scopeKey: (row) => row.observed_at ?? "unknown" });
+  const firstObservationByBookMarket = new Map<string, number>();
+  for (const row of historyLines) {
+    const key = `${normalizedBook(row.sportsbook)}:${row.market_type}`;
+    const observedAt = Date.parse(row.observed_at ?? "");
+    if (!Number.isFinite(observedAt)) continue;
+    const first = firstObservationByBookMarket.get(key);
+    if (first === undefined || observedAt < first) firstObservationByBookMarket.set(key, observedAt);
   }
-  const openingLines = [...firstByBookMarketSide.values()];
+  const openingLines = historyLines.filter((row) => {
+    const key = `${normalizedBook(row.sportsbook)}:${row.market_type}`;
+    return Date.parse(row.observed_at ?? "") === firstObservationByBookMarket.get(key);
+  });
   const marketOpenHomeProb = pickMlImpliedProbHome(openingLines).prob;
   const marketOpenTotalLine = selectMainNhlTotalLine(openingLines);
   const sameBookMovement = selectSameBookNhlMovement(lines, openingLines);
@@ -577,6 +591,8 @@ export async function buildNhlFeatureSnapshot(
     five_x_goals_against_per_60: per60(homeStats5on5?.x_goals_against ?? null, homeStats5on5?.ice_time ?? null),
     pp_x_goals_for_per_60: per60(homeStats5on4?.x_goals_for ?? null, homeStats5on4?.ice_time ?? null),
     pk_x_goals_against_per_60: per60(homeStats4on5?.x_goals_against ?? null, homeStats4on5?.ice_time ?? null),
+    pp_x_goals_for_per_game: perGame(homeStats5on4?.x_goals_for ?? null, homeStats5on4?.games_played ?? null),
+    pk_x_goals_against_per_game: perGame(homeStats4on5?.x_goals_against ?? null, homeStats4on5?.games_played ?? null),
     pp_xgoals_pct: homeStats5on4?.xgoals_pct ?? null,
     pk_xgoals_pct: homeStats4on5?.xgoals_pct ?? null,
     goalie_xgsaa_per_60: goalieXgsaaPer60(homeGoalie),
@@ -597,6 +613,8 @@ export async function buildNhlFeatureSnapshot(
     five_x_goals_against_per_60: per60(awayStats5on5?.x_goals_against ?? null, awayStats5on5?.ice_time ?? null),
     pp_x_goals_for_per_60: per60(awayStats5on4?.x_goals_for ?? null, awayStats5on4?.ice_time ?? null),
     pk_x_goals_against_per_60: per60(awayStats4on5?.x_goals_against ?? null, awayStats4on5?.ice_time ?? null),
+    pp_x_goals_for_per_game: perGame(awayStats5on4?.x_goals_for ?? null, awayStats5on4?.games_played ?? null),
+    pk_x_goals_against_per_game: perGame(awayStats4on5?.x_goals_against ?? null, awayStats4on5?.games_played ?? null),
     pp_xgoals_pct: awayStats5on4?.xgoals_pct ?? null,
     pk_xgoals_pct: awayStats4on5?.xgoals_pct ?? null,
     goalie_xgsaa_per_60: goalieXgsaaPer60(awayGoalie),

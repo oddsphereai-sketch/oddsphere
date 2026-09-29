@@ -49,7 +49,7 @@ import { supabase } from "@/lib/db/supabase";
 
 const NHL_CRON_ENV = "NHL_CRON_ENABLED";
 const NHL_PREDS_ENV = "NHL_PREDICTIONS_DB_WRITES_ENABLED";
-const NHL_DAILY_REFRESH_RELEASE = "nhl_daily_refresh_schedule_2026_09_29_r4_professional_inputs";
+const NHL_DAILY_REFRESH_RELEASE = "nhl_daily_refresh_schedule_2026_09_29_r5_canonical_two_sided_quotes";
 
 /**
  * Returns the MoneyPuck-style season start-year for a given UTC date.

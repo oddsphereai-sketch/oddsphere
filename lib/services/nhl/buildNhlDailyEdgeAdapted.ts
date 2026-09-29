@@ -37,9 +37,11 @@ import type { DailyEdgeResponse } from "../../../app/lab/lib/labTypes";
 import { resolvedNhlSplitsByGame } from "./nhlResolvedSplits";
 import { loadNhlRegularStateForSlate } from "./loadNhlRegularState";
 import { isBlockedSportsbook } from "../../config/blockedSportsbooks";
+import { buildNhlTwoSidedPriceTrail } from "./nhlPriceTrail";
+import { canonicalizeNhlLineRows } from "./nhlLineBoard";
 
 export const NHL_DAILY_EDGE_READER_RELEASE =
-  "nhl_daily_edge_reader_2026_09_29_r2_writer_tuple_coherence" as const;
+  "nhl_daily_edge_reader_2026_09_29_r3_two_sided_price_history" as const;
 
 /**
  * Bucket SharpAPI NHL opportunities by `"AWAY@HOME"` matchup key (normalized
@@ -265,14 +267,18 @@ export async function buildNhlDailyEdgeAdapted(date: string): Promise<DailyEdgeR
       // real line and price must remain coherent with the tracked read.
       const { data: linesData } = await supabase
         .from("lines")
-        .select("market_type, sportsbook, side, line_value, odds_american")
+        .select("market_type, sportsbook, side, line_value, odds_american, fetched_at")
         .eq("game_id", g.id)
         .is("player_id", null)
         .in("market_type", ["moneyline", "total", "spread"]);
-      const lines = ((linesData ?? []) as Array<{
+      const lines = canonicalizeNhlLineRows(((linesData ?? []) as Array<{
         market_type: string; sportsbook: string; side: string;
         line_value: number | null; odds_american: number | null;
-      }>).filter((line) => !isBlockedSportsbook(line.sportsbook));
+        fetched_at: string | null;
+      }>).filter((line) => !isBlockedSportsbook(line.sportsbook)).map((line) => ({
+        ...line,
+        observed_at: line.fetched_at,
+      })));
 
       // Pull line_history once for the same game so we can surface the
       // first-observed price per (market, side) as "open" alongside
@@ -314,14 +320,14 @@ export async function buildNhlDailyEdgeAdapted(date: string): Promise<DailyEdgeR
         market: string,
         side: string,
         targetLine: number | null,
-      ): { price: number | null; book: string | null } {
+      ): { price: number | null; book: string | null; observedAt: string | null } {
         const candidates = lines.filter((l) => {
           if (l.market_type !== market || l.side !== side) return false;
           if (l.odds_american === null) return false;
           if (market === "moneyline") return true;
           return targetLine !== null && l.line_value !== null && Math.abs(l.line_value - targetLine) < 0.01;
         });
-        if (candidates.length === 0) return { price: null, book: null };
+        if (candidates.length === 0) return { price: null, book: null, observedAt: null };
 
         let filtered = candidates;
         if (candidates.length >= 3) {
@@ -337,13 +343,15 @@ export async function buildNhlDailyEdgeAdapted(date: string): Promise<DailyEdgeR
 
         let bestPrice: number | null = null;
         let bestBook: string | null = null;
+        let observedAt: string | null = null;
         for (const c of filtered) {
           if (bestPrice === null || c.odds_american! > bestPrice) {
             bestPrice = c.odds_american!;
             bestBook = c.sportsbook;
+            observedAt = c.fetched_at;
           }
         }
-        return { price: bestPrice, book: bestBook };
+        return { price: bestPrice, book: bestBook, observedAt };
       }
       /**
        * Open-price for the line-move row. Honest apples-to-apples:
@@ -405,6 +413,55 @@ export async function buildNhlDailyEdgeAdapted(date: string): Promise<DailyEdgeR
       const plBest = bestPriceFor("spread", plSide, predictedPuckLine);
       const puckLineMarketLine = plLineEntries.find((l) => l.line_value !== null)?.line_value ?? null;
 
+      const liveTrailRows = lines.map((line) => ({
+        market_type: line.market_type,
+        sportsbook: line.sportsbook,
+        side: line.side,
+        line_value: line.line_value,
+        odds_american: line.odds_american,
+        observed_at: line.fetched_at,
+      }));
+      const historyTrailRows = history
+        .filter((row) => !isBlockedSportsbook(row.sportsbook))
+        .map((row) => ({
+          market_type: row.market_type,
+          sportsbook: row.sportsbook,
+          side: row.side,
+          line_value: row.line_value,
+          odds_american: row.odds_american,
+          observed_at: row.recorded_at,
+        }));
+      const mlTrail = buildNhlTwoSidedPriceTrail({
+        live: liveTrailRows,
+        history: historyTrailRows,
+        market: "moneyline",
+        selectedSide: mlSide,
+        opposingSide: mlSide === "home" ? "away" : "home",
+        selectedLine: null,
+        opposingLine: null,
+        preferredBook: mlBest.book,
+      });
+      const totalTrail = buildNhlTwoSidedPriceTrail({
+        live: liveTrailRows,
+        history: historyTrailRows,
+        market: "total",
+        selectedSide: totalSide,
+        opposingSide: totalSide === "over" ? "under" : "over",
+        selectedLine: marketTotalLine,
+        opposingLine: marketTotalLine,
+        preferredBook: totalBest.book,
+      });
+      const puckLineTrail = buildNhlTwoSidedPriceTrail({
+        live: liveTrailRows,
+        history: historyTrailRows,
+        market: "spread",
+        selectedSide: plSide,
+        opposingSide: plSide === "home" ? "away" : "home",
+        selectedLine: predictedPuckLine,
+        opposingLine: -predictedPuckLine,
+        preferredBook: plBest.book,
+      });
+
       const oppsForGame = oppsByMatchup.get(`${awayAbbr}@${homeAbbr}`) ?? [];
 
       const mlOpp = findOpportunityForPick(oppsForGame, "ml", mlPickIsHome, false);
@@ -414,21 +471,45 @@ export async function buildNhlDailyEdgeAdapted(date: string): Promise<DailyEdgeR
       const mlBundle: NhlPerMarketBest = {
         priceAmerican: mlBest.price,
         sportsbook: mlBest.book,
-        openAmerican: openPriceForSameBook("moneyline", mlSide, mlBest.book, null),
+        openAmerican: mlTrail.selected[0]?.american ?? openPriceForSameBook("moneyline", mlSide, mlBest.book, null),
+        observedAt: mlBest.observedAt,
+        oddsTrail: mlTrail.selected,
+        lineTrail: mlTrail.line,
+        opposingOddsTrail: {
+          side: mlSide === "home" ? "away" : "home",
+          label: mlSide === "home" ? awayAbbr : homeAbbr,
+          stops: mlTrail.opposing,
+        },
         pinnacleEvPct: mlOpp?.ev_percentage ?? null,
         fairProbability: mlOpp?.fair_probability ?? null,
       };
       const totalBundle: NhlPerMarketBest = {
         priceAmerican: totalBest.price,
         sportsbook: totalBest.book,
-        openAmerican: openPriceForSameBook("total", totalSide, totalBest.book, marketTotalLine),
+        openAmerican: totalTrail.selected[0]?.american ?? openPriceForSameBook("total", totalSide, totalBest.book, marketTotalLine),
+        observedAt: totalBest.observedAt,
+        oddsTrail: totalTrail.selected,
+        lineTrail: totalTrail.line,
+        opposingOddsTrail: {
+          side: totalSide === "over" ? "under" : "over",
+          label: totalSide === "over" ? "Under" : "Over",
+          stops: totalTrail.opposing,
+        },
         pinnacleEvPct: totalOpp?.ev_percentage ?? null,
         fairProbability: totalOpp?.fair_probability ?? null,
       };
       const puckLineBundle: NhlPerMarketBest = {
         priceAmerican: plBest.price,
         sportsbook: plBest.book,
-        openAmerican: openPriceForSameBook("spread", plSide, plBest.book, predictedPuckLine),
+        openAmerican: puckLineTrail.selected[0]?.american ?? openPriceForSameBook("spread", plSide, plBest.book, predictedPuckLine),
+        observedAt: plBest.observedAt,
+        oddsTrail: puckLineTrail.selected,
+        lineTrail: puckLineTrail.line,
+        opposingOddsTrail: {
+          side: plSide === "home" ? "away" : "home",
+          label: `${plSide === "home" ? awayAbbr : homeAbbr} ${-predictedPuckLine > 0 ? "+" : ""}${(-predictedPuckLine).toFixed(1)}`,
+          stops: puckLineTrail.opposing,
+        },
         pinnacleEvPct: puckLineOpp?.ev_percentage ?? null,
         fairProbability: puckLineOpp?.fair_probability ?? null,
       };

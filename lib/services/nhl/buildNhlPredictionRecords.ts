@@ -41,6 +41,7 @@
 
 import { supabase } from "../../db/supabase";
 import { isBlockedSportsbook } from "../../config/blockedSportsbooks";
+import { canonicalizeNhlLineRows } from "./nhlLineBoard";
 import {
   buildNhlFeatureSnapshot,
   nhlGameTypeFromExternalId,
@@ -283,10 +284,10 @@ export async function writeNhlPredictionRecords(
       // "best odds" (max) selections below for ML / total / puck-line can
       // never pick a corrupted blocked-book price (e.g. fliff's flipped
       // +385 on a -205 favorite would otherwise win the max).
-      const lines = ((linesData as Array<{
+      const lines = canonicalizeNhlLineRows(((linesData as Array<{
         market_type: string; sportsbook: string; side: string;
         line_value: number | null; odds_american: number | null;
-      }> | null) ?? []).filter((l) => !isBlockedSportsbook(l.sportsbook));
+      }> | null) ?? []).filter((l) => !isBlockedSportsbook(l.sportsbook)));
 
       const matchup = `${awayAbbr} @ ${homeAbbr}`;
 

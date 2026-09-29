@@ -1106,9 +1106,12 @@ check(
 );
 const sportSelectorSource = readFileSync("app/lab/components/SportSelector.tsx", "utf8");
 check(
-  "the compact reader selector keeps five sports simultaneously visible with tab and keyboard semantics",
+  "the compact reader selector stays on one scrollable mobile row with tab and keyboard semantics",
   sportSelectorSource.includes('density?: "default" | "compact"') &&
-    sportSelectorSource.includes('"grid w-full grid-cols-5 gap-1"') &&
+    sportSelectorSource.includes('"w-full overflow-x-auto overscroll-x-contain"') &&
+    sportSelectorSource.includes('"flex min-w-max flex-nowrap gap-1"') &&
+    sportSelectorSource.includes("min-w-[64px] shrink-0") &&
+    !sportSelectorSource.includes('"grid w-full grid-cols-5 gap-1"') &&
     sportSelectorSource.includes('role="tab"') &&
     sportSelectorSource.includes("aria-selected={isActive}") &&
     sportSelectorSource.includes("focus-visible:ring-2 focus-visible:ring-violet-300"),
