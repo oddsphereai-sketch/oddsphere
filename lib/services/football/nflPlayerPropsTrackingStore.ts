@@ -4,7 +4,7 @@ import { buildNflPlayerPropsTrackingRows } from "./nflPlayerPropsProductionContr
 import type { NflPlayerPropsObservationSnapshot } from "./nflPlayerPropsContract";
 
 export const NFL_PLAYER_PROPS_TRACKING_RELEASE =
-  "nfl_player_props_tracking_2026_09_28_r16_official_joint_outcomes" as const;
+  "nfl_player_props_tracking_2026_09_29_r17_full_family_matchup" as const;
 
 export async function writeLockedNflPlayerPropsTracking(args: {
   client: SupabaseClient;

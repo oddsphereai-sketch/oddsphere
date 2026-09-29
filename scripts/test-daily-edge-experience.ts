@@ -1201,10 +1201,8 @@ check(
 );
 check(
   "available offseason models remain selectable but are not presented as active today",
-  ["nba", "nhl"].every(
-    (sport) =>
-      DAILY_EDGE_SPORT_AVAILABILITY[sport as keyof typeof DAILY_EDGE_SPORT_AVAILABILITY]
-        ?.statusLabel === "No games today",
+  DAILY_EDGE_SPORTS.filter((sport) => sport.memberAvailable && !sport.inSeason).every(
+    (sport) => DAILY_EDGE_SPORT_AVAILABILITY[sport.key]?.statusLabel === "No games today",
   ) &&
     candidateSource.includes("Model available") &&
     candidateSource.includes("instead of showing games from an older date"),

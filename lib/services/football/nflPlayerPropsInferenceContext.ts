@@ -17,12 +17,13 @@ import {
   type NflForwardTeamDepthSnapshot,
   type NflForwardEvidencePayload,
   type NflForwardStoredEvidence,
+  type NflForwardWeatherSnapshot,
 } from "./nflForwardEvidence";
 import type { DailyEdgeGameAvailability } from "../dailyEdge/gameAvailability";
 import type { NflPlayerPropsObservationSnapshot } from "./nflPlayerPropsContract";
 
 export const NFL_PLAYER_PROPS_INFERENCE_CONTEXT_RELEASE =
-  "nfl_player_props_inference_context_2026_09_28_r5_last_known_injury_continuity" as const;
+  "nfl_player_props_inference_context_2026_09_29_r6_matchup_environment" as const;
 
 export type NflPlayerPropsExcludedGame = {
   canonicalGameId: string;
@@ -41,6 +42,7 @@ export type NflPlayerPropsInferenceGameContext = {
     capturedAt: string;
     currentBooks: NflPreviewBookOdds[];
   };
+  weather?: NflForwardWeatherSnapshot | null;
 };
 
 export type NflPlayerPropsInferenceContext = {
@@ -101,7 +103,7 @@ export async function collectNflPlayerPropsInferenceContext(args: {
     const injuries = byGame.get(game.providerGameId);
     if (!awayDepth || !homeDepth || !injuries) throw new Error(`NFL props context is incomplete for ${game.providerGameId}.`);
     const currentBooks = mainMarket.currentOddsAllBooksByGame[game.providerGameId] ?? [];
-    return { canonicalGameId: game.providerGameId, scheduledStart: game.scheduledStart, awayTeam: game.awayTeam, homeTeam: game.homeTeam, awayDepth, homeDepth, injuries, mainMarket: { capturedAt: mainMarket.fetchedAt, currentBooks } };
+    return { canonicalGameId: game.providerGameId, scheduledStart: game.scheduledStart, awayTeam: game.awayTeam, homeTeam: game.homeTeam, awayDepth, homeDepth, injuries, mainMarket: { capturedAt: mainMarket.fetchedAt, currentBooks }, weather: null };
   });
   const healthHolds = [
     games.some((game) => !game.awayDepth.expectedStartingQuarterback || !game.homeDepth.expectedStartingQuarterback) ? "expected_quarterback_incomplete" : null,
@@ -191,6 +193,7 @@ export function buildNflPlayerPropsInferenceContextFromForwardEvidence(args: {
       homeDepth: payload.startersAndDepth.home,
       injuries: injuryRow.payload.injuries,
       mainMarket: { capturedAt: payload.capturedAt, currentBooks: payload.market.currentBooks },
+      weather: payload.weather,
     });
   }
   if (games.length === 0) {

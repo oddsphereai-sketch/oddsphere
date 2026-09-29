@@ -3,7 +3,6 @@ import {
   NFL_PLAYER_PROPS_CURRENT_SEASON_STATE_RELEASE,
   readNflPlayerPropsCurrentSeasonState,
   refreshNflPlayerPropsCurrentSeasonState,
-  type NflPlayerPropsCurrentSeasonStat,
 } from "../lib/services/football/nflPlayerPropsCurrentSeasonState";
 import { applyNflPlayerPropsCurrentSeasonFeatures } from "../lib/services/football/nflPlayerPropsRuntime";
 
@@ -156,12 +155,18 @@ async function main(): Promise<void> {
     prior_opponent_allowed_pass_attempts_avg3: 31,
     prior_opponent_allowed_pass_attempts_avg5: 30,
     prior_opponent_allowed_pass_attempts_ewm: 29,
+    matchup_team_pass_rate_avg3: 0.55,
+    matchup_team_pass_rate_avg5: 0.54,
+    matchup_team_pass_rate_ewm: 0.53,
+    matchup_opponent_allowed_sack_rate_avg3: 0.07,
+    matchup_opponent_allowed_sack_rate_avg5: 0.06,
+    matchup_opponent_allowed_sack_rate_ewm: 0.05,
   };
   applyNflPlayerPropsCurrentSeasonFeatures({
     features,
     playerStats: refreshed.state.stats.filter((row) => row.playerId === "5"),
-    teamGames: [{ gameId: "10", week: 1, team: "BUF", opponent: "NYJ", team_pass_attempts: 30, team_completions: 20, team_passing_yards: 250, team_rush_attempts: 12, team_rushing_yards: 61, team_targets: 4, team_offensive_plays: 42, team_touchdowns: 1 }],
-    opponentAllowedGames: [{ gameId: "10", week: 1, team: "BUF", opponent: "NYJ", team_pass_attempts: 30, team_completions: 20, team_passing_yards: 250, team_rush_attempts: 12, team_rushing_yards: 61, team_targets: 4, team_offensive_plays: 42, team_touchdowns: 1 }],
+    teamGames: [{ gameId: "10", week: 1, team: "BUF", opponent: "NYJ", team_pass_attempts: 30, team_completions: 20, team_passing_yards: 250, team_rush_attempts: 12, team_rushing_yards: 61, team_targets: 4, team_offensive_plays: 42, team_touchdowns: 1, matchup_pass_rate: 0.6 }],
+    opponentAllowedGames: [{ gameId: "10", week: 1, team: "BUF", opponent: "NYJ", team_pass_attempts: 30, team_completions: 20, team_passing_yards: 250, team_rush_attempts: 12, team_rushing_yards: 61, team_targets: 4, team_offensive_plays: 42, team_touchdowns: 1, matchup_sack_rate: 0.1 }],
   });
   assert.equal(features.prior_rushing_attempts_lag1, 12);
   assert.equal(features.prior_rushing_attempts_avg3, 10);
@@ -171,6 +176,8 @@ async function main(): Promise<void> {
   assert.equal(features.prior_anytime_td_avg5, 0.36);
   assert.equal(features.prior_team_rush_attempts_avg3, 62 / 3);
   assert.equal(features.prior_opponent_allowed_pass_attempts_avg3, 92 / 3);
+  assert.equal(features.matchup_team_pass_rate_avg3, (0.55 * 2 + 0.6) / 3);
+  assert.equal(features.matchup_opponent_allowed_sack_rate_avg3, (0.07 * 2 + 0.1) / 3);
   console.log("NFL player-props current-season state refresh and rolling feature overlay passed.");
 }
 

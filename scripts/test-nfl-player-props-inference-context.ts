@@ -89,7 +89,16 @@ function evidence(
       },
       startersAndDepth: { away: depth(game.away, quarterback), home: depth(game.home, "Home QB") },
       injuries: game.injuries === false ? null : { eventId: game.id, reportUpdatedAt: capturedAt, teams: [] } as never,
-      weather: {} as never,
+      weather: {
+        venueTeam: game.home, venueName: "Test Stadium", roofType: "outdoor",
+        status: "forecast_available", capturedAt,
+        forecast: {
+          forecast_for: game.start, fetched_at: capturedAt, temperature_f: 52,
+          feels_like_f: 49, humidity_pct: 60, precipitation_mm: 0,
+          precipitation_probability: 10, wind_speed_mph: 12,
+          wind_direction_degrees: 180, conditions: "Clouds",
+        },
+      },
       decisions: { evaluatedBets: [], outcomeConfidence: [], modelPromotionStatus: "nfl_v1_member_release_2026_08_25_r6_actionable_grades", publicationEnabled: true, trackingEnabled: false },
       coverage: {
         currentOdds: true, currentBookCount: 1, comparableCurrentBookCount: 0, multibookConsensusReady: false,
@@ -101,7 +110,7 @@ function evidence(
   } as unknown as NflForwardStoredEvidence;
 }
 
-assert.equal(NFL_PLAYER_PROPS_INFERENCE_CONTEXT_RELEASE, "nfl_player_props_inference_context_2026_09_28_r5_last_known_injury_continuity");
+assert.equal(NFL_PLAYER_PROPS_INFERENCE_CONTEXT_RELEASE, "nfl_player_props_inference_context_2026_09_29_r6_matchup_environment");
 const context = buildNflPlayerPropsInferenceContextFromForwardEvidence({
   snapshot,
   capturedAt: "2026-08-25T12:00:00.000Z",
@@ -115,6 +124,8 @@ assert.equal(context.source, "nfl_forward_evidence");
 assert.equal(context.requestBudget.totalMaximum, 0, "production context reuses the stored slate bundle without provider calls");
 assert.equal(context.games[0]?.awayDepth.expectedStartingQuarterback?.name, "Current QB", "latest evidence at or before the cycle timestamp wins");
 assert.equal(context.games[0]?.mainMarket.capturedAt, "2026-08-25T11:00:00.000Z");
+assert.equal(context.games[0]?.weather?.forecast?.wind_speed_mph, 12,
+  "stored forward weather is carried into the player-props inference context without a provider call");
 assert.throws(() => buildNflPlayerPropsInferenceContextFromForwardEvidence({ snapshot, capturedAt: "2026-08-25T12:00:00.000Z", evidence: [] }), /no games with complete forward evidence/);
 
 const partialSnapshot = {
