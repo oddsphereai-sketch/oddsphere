@@ -23,7 +23,7 @@ import type { DailyEdgeGameAvailability } from "../dailyEdge/gameAvailability";
 import type { NflPlayerPropsObservationSnapshot } from "./nflPlayerPropsContract";
 
 export const NFL_PLAYER_PROPS_INFERENCE_CONTEXT_RELEASE =
-  "nfl_player_props_inference_context_2026_09_29_r6_matchup_environment" as const;
+  "nfl_player_props_inference_context_2026_09_29_r7_injury_feed_continuity" as const;
 
 export type NflPlayerPropsExcludedGame = {
   canonicalGameId: string;
@@ -38,6 +38,7 @@ export type NflPlayerPropsInferenceGameContext = {
   awayDepth: NflForwardTeamDepthSnapshot;
   homeDepth: NflForwardTeamDepthSnapshot;
   injuries: DailyEdgeGameAvailability;
+  injuryEvidenceAvailable: boolean;
   mainMarket: {
     capturedAt: string;
     currentBooks: NflPreviewBookOdds[];
@@ -103,7 +104,7 @@ export async function collectNflPlayerPropsInferenceContext(args: {
     const injuries = byGame.get(game.providerGameId);
     if (!awayDepth || !homeDepth || !injuries) throw new Error(`NFL props context is incomplete for ${game.providerGameId}.`);
     const currentBooks = mainMarket.currentOddsAllBooksByGame[game.providerGameId] ?? [];
-    return { canonicalGameId: game.providerGameId, scheduledStart: game.scheduledStart, awayTeam: game.awayTeam, homeTeam: game.homeTeam, awayDepth, homeDepth, injuries, mainMarket: { capturedAt: mainMarket.fetchedAt, currentBooks }, weather: null };
+    return { canonicalGameId: game.providerGameId, scheduledStart: game.scheduledStart, awayTeam: game.awayTeam, homeTeam: game.homeTeam, awayDepth, homeDepth, injuries, injuryEvidenceAvailable: true, mainMarket: { capturedAt: mainMarket.fetchedAt, currentBooks }, weather: null };
   });
   const healthHolds = [
     games.some((game) => !game.awayDepth.expectedStartingQuarterback || !game.homeDepth.expectedStartingQuarterback) ? "expected_quarterback_incomplete" : null,
@@ -174,16 +175,14 @@ export function buildNflPlayerPropsInferenceContextFromForwardEvidence(args: {
       || payload.game.home.abbreviation !== game.homeTeam) {
       throw new Error(`NFL props shared context game identity mismatch for ${game.providerGameId}.`);
     }
-    if (!injuryRow?.payload.injuries) {
-      excludedGames.push({ canonicalGameId: game.providerGameId, reason: "injury_evidence_missing" });
-      continue;
-    }
     if (!payload.coverage.rosterAndDepth || payload.market.currentBooks.length === 0) {
       excludedGames.push({ canonicalGameId: game.providerGameId, reason: "coverage_incomplete" });
       continue;
     }
+    const injuryEvidenceAvailable = Boolean(injuryRow?.payload.injuries);
+    const injuries = injuryRow?.payload.injuries ?? unavailableInjuryContext(payload);
     sourceRows.push(row);
-    if (injuryRow.id !== row.id) sourceRows.push(injuryRow);
+    if (injuryRow && injuryRow.id !== row.id) sourceRows.push(injuryRow);
     games.push({
       canonicalGameId: game.providerGameId,
       scheduledStart: game.scheduledStart,
@@ -191,7 +190,8 @@ export function buildNflPlayerPropsInferenceContextFromForwardEvidence(args: {
       homeTeam: game.homeTeam,
       awayDepth: payload.startersAndDepth.away,
       homeDepth: payload.startersAndDepth.home,
-      injuries: injuryRow.payload.injuries,
+      injuries,
+      injuryEvidenceAvailable,
       mainMarket: { capturedAt: payload.capturedAt, currentBooks: payload.market.currentBooks },
       weather: payload.weather,
     });
@@ -201,6 +201,8 @@ export function buildNflPlayerPropsInferenceContextFromForwardEvidence(args: {
   }
   const healthHolds = [
     ...excludedGames.map((game) => `game_${game.canonicalGameId}_${game.reason}`),
+    ...games.filter((game) => !game.injuryEvidenceAvailable)
+      .map((game) => `game_${game.canonicalGameId}_injury_evidence_missing`),
     games.some((game) => !game.awayDepth.expectedStartingQuarterback || !game.homeDepth.expectedStartingQuarterback) ? "expected_quarterback_incomplete" : null,
     games.some((game) => game.injuries.reportUpdatedAt === null) ? "injury_report_timestamp_incomplete" : null,
     games.some((game) => game.mainMarket.currentBooks.length === 0) ? "main_market_incomplete" : null,
@@ -228,12 +230,29 @@ export function buildNflPlayerPropsInferenceContextFromForwardEvidence(args: {
       games: games.length,
       teams: new Set(games.flatMap((game) => [game.awayTeam, game.homeTeam])).size,
       depthTeams: games.length * 2,
-      injuryGames: games.length,
+      injuryGames: games.filter((game) => game.injuryEvidenceAvailable).length,
       expectedQuarterbacks: games.reduce((count, game) => count + Number(Boolean(game.awayDepth.expectedStartingQuarterback)) + Number(Boolean(game.homeDepth.expectedStartingQuarterback)), 0),
       mainMarketGames: games.filter((game) => game.mainMarket.currentBooks.length > 0).length,
     },
     sourceSha256,
     healthHolds,
+  };
+}
+
+function unavailableInjuryContext(payload: NflForwardEvidencePayload): DailyEdgeGameAvailability {
+  return {
+    eventId: payload.game.providerGameId,
+    awayTeam: payload.game.away.abbreviation,
+    homeTeam: payload.game.home.abbreviation,
+    source: "BALLDONTLIE",
+    sourceLabel: "BALLDONTLIE",
+    sourceUrl: null,
+    reportDate: null,
+    reportUpdatedAt: null,
+    teams: [
+      { abbreviation: payload.game.away.abbreviation, teamName: payload.game.away.name, players: [] },
+      { abbreviation: payload.game.home.abbreviation, teamName: payload.game.home.name, players: [] },
+    ],
   };
 }
 

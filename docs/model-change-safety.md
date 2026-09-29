@@ -29,6 +29,35 @@ lease, append-only evidence, immutable prior locks, and live reader/writer proof
 unlocked r24 evidence on mixed releases, incomplete coverage, coherence failure, unexpected board
 collapse, writer overlap, or reader failure; never rewrite a valid locked tuple.
 
+## Owner-approved emergency exception: NFL Week 4 player-props injury-feed continuity
+
+On 2026-09-29 Daniel Mengel explicitly directed Oddsphere to restore the missing Week 4 NFL
+player-props board immediately, preserve the newly released full-family model, make the repair the
+durable forward behavior, and add no member copy, labels, or layout changes. This exception is
+limited to the September 29 `injury_feed_continuity` release family recorded in
+`docs/current-model-releases.md` and
+`docs/model-audits/2026-09-29-nfl-player-props-injury-feed-continuity.md`.
+
+The shared context must continue to prefer the newest verified injury payload for the exact same
+provider game, including last-known exact-game evidence when a later provider cycle omits it. When
+no injury payload has ever been returned for a future game, that absence is an internal health
+finding rather than permission to erase an otherwise complete slate. The sole writer may score
+only players present in current exact prop offers and the current roster/depth context, using the
+existing official current-season state, matchup/weather features, target-book exclusion, posterior,
+price, grade, and lock rules. A subsequent verified injury payload silently takes precedence, and
+listed-out/inactive players retain the existing hard hold. Missing roster/depth, main-market, game
+identity, or forward evidence remains a game exclusion.
+
+The reviewed zero-write Week 4 replay must retain all 16 games, remain within the existing provider
+ceiling, create no new provider call, and publish a nonempty, non-flat member board. This exception
+does not authorize a model-equation, calibration surface, threshold, stake, provider cadence,
+schedule, writer, lease, member copy, label, or layout change. Releases advance because input
+eligibility changes, while the September 29 portable full-family artifact remains immutable
+checksum provenance. Publication still requires focused tests, model-change verification,
+latest-main integration safety, protected-PR checks, the existing `prediction_pipeline:nfl` lease,
+and live Week 4 reader/writer proof. Hold or roll back the unlocked continuity release on a mixed
+release, zero/partial slate, provider-budget growth, lock rewrite, reader failure, or writer overlap.
+
 ## Owner-approved emergency exception: NFL exact-game T-60 injury continuity
 
 On 2026-09-28 Daniel Mengel explicitly directed Oddsphere to repair and lock the PHI-CHI card
