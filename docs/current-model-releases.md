@@ -4,7 +4,7 @@ This file is the human-readable production handoff registry. Runtime constants a
 prediction snapshots remain the machine authority. Future model work must start here, verify the
 constants, and preserve the precedence and writer ownership below.
 
-Last reviewed: 2026-09-28
+Last reviewed: 2026-09-29
 
 ## Cross-sport confidence / execution contract
 
@@ -1837,10 +1837,10 @@ board impact, failure behavior, and rollback are recorded in
 
 ## WNBA champion
 
-- Model: `wnba_v1_4_single_market_entry`
-- Distribution: `wnba_single_market_entry_2026_09_03_v6`
+- Model: `wnba_v1_5_coherent_expected_margin`
+- Distribution: `wnba_coherent_normal_2026_09_29_v7`
 - Calibration schema: `wnba_core_calibration_v4_single_market_entry`
-- Grade policy: `wnba_grade_policy_v9_single_market_entry_2026_09_03`
+- Grade policy: `wnba_grade_policy_v10_coherent_expected_margin_2026_09_29`
 - Decision-tuple contract: `wnba_decision_tuple_v4_single_market_entry_2026_09_03`
 - Prediction-record contract: `wnba_prediction_record_contract_v8_exact_price_denominator_2026_09_19`
 - Machine registry: `lib/automodel/wnbaChampionRuntime.ts`
@@ -1878,6 +1878,32 @@ quote supplies only its exact break-even probability for value display, tracking
 health checks. It does not enter the forecast, validate its own side, or change the v1.4 model,
 v6 distribution, v9 grade, decision tuple, board count, stake, writer, lease, or provider load.
 Evidence and rollback: `docs/model-audits/2026-09-19-wnba-exact-price-denominator-r8.md`.
+
+The September 29 v1.5/v7/v10 release replaces the sign-tilted final margin
+distribution with one coherent normal distribution centered on the existing
+validated expected margin. The prior distribution could preserve a separate
+Moneyline probability and expected margin even when they implied opposing
+winners or opposing sides of the quoted spread; the member score used the mean
+while the predictions used those separate probability cuts. The new release
+derives Moneyline probability, Spread probability, projected-score margin and
+both selected sides from the same expected margin and incumbent variance. Total
+projection and Total decisions are unchanged. Target-excluded Moneyline evidence
+remains available once for exact-price value, conflict detection and audit;
+qualified target-excluded Spread consensus retains the established 25/75 center.
+No copy, label, layout, stake, provider request, writer, lease, schedule, lock, or
+tracking-boundary behavior changes.
+
+On 38 settled release-era games, the retained expected margin recorded 11.1979
+margin MAE and 31/38 winner direction versus 11.3465 and 28/38 for the
+probability-median display alternative. On 37 non-push spreads, the expected
+margin implied 24/37 correct sides versus 22/37 for the prior published side.
+All 38 Moneyline identities and all 37 Spread identities become score-coherent.
+The current two-game board changes New York Moneyline Lean to Minnesota
+Watchlist and Indiana -1.5 Watchlist to Las Vegas +1.5 Watchlist; both Totals and
+all other grades remain. Actionables move 2 to 1: one owner-approved accuracy
+demotion, zero promotions, with the existing symmetric exact-price promotion
+paths retained. Evidence and rollback are recorded in
+`docs/model-audits/2026-09-29-wnba-score-prediction-coherence.md`.
 
 One versioned margin distribution preserves the final Moneyline win probability, expected
 margin, and incumbent variance; Spread probabilities come from that same CDF, the independent

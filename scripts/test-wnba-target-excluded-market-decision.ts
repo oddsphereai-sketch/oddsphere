@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import {
+  buildWnbaCoherentNormalMarginDistribution,
   buildWnbaMaximumEntropyMarginDistribution,
   buildWnbaResolvedMarketDecision,
   classifyWnbaMarketSource,
@@ -9,6 +10,7 @@ import {
   uniqueWnbaModalLine,
   wnbaExactPriceValueGate,
   wnbaMarginDistributionCdf,
+  wnbaMarginDistributionMedian,
   wnbaMarginProbabilityAbove,
   wnbaNoVigProbabilityForSide,
   type WnbaTargetExcludedPriceRow,
@@ -161,6 +163,9 @@ assert.ok(
   wnbaMarginProbabilityAbove(distribution, 4.5) < wnbaMarginProbabilityAbove(distribution, 0),
   "Spread probabilities are derived monotonically from the same margin CDF",
 );
+const distributionMedian = wnbaMarginDistributionMedian(distribution);
+assert.ok(Math.abs(wnbaMarginDistributionCdf(distribution, distributionMedian) - 0.5) < 1e-9, "representative margin is the distribution median");
+assert.equal(Math.sign(distributionMedian), Math.sign(distribution.positiveProbability - 0.5), "representative margin agrees with the Moneyline side");
 
 const infeasible = buildWnbaMaximumEntropyMarginDistribution({
   desiredMean: 20,
@@ -170,6 +175,21 @@ const infeasible = buildWnbaMaximumEntropyMarginDistribution({
 });
 assert.equal(infeasible.kind, "independent_normal_fallback", "Cantelli-infeasible constraints fail back to the independent normal");
 assert.equal(infeasible.mean, 1.75, "infeasible market context cannot move the independent center");
+
+const moneylineConflictRepair = buildWnbaCoherentNormalMarginDistribution({
+  mean: -1.60448,
+  standardDeviation: 12.8,
+});
+assert.ok(moneylineConflictRepair.positiveProbability < 0.5, "a negative expected margin publishes the away Moneyline side");
+assert.ok(wnbaMarginProbabilityAbove(moneylineConflictRepair, -3.5) > 0.5, "the same distribution can coherently publish the home underdog at +3.5");
+assert.ok(Math.abs(wnbaMarginDistributionMedian(moneylineConflictRepair) - moneylineConflictRepair.mean) < 1e-12, "normal representative score retains the validated expected margin");
+
+const spreadConflictRepair = buildWnbaCoherentNormalMarginDistribution({
+  mean: 0.2780126,
+  standardDeviation: 12.8,
+});
+assert.ok(spreadConflictRepair.positiveProbability > 0.5, "a positive expected margin publishes the home Moneyline side");
+assert.ok(wnbaMarginProbabilityAbove(spreadConflictRepair, 1.5) < 0.5, "a sub-line expected margin publishes the away +1.5 spread side");
 
 const promotion = wnbaExactPriceValueGate({ modelProbability: 0.61, evaluatedPriceAmerican: -110, pointEdge: 4.5 });
 assert.equal(promotion.grade, "Best Angle", "existing point/probability/EV thresholds create a promotion path");
@@ -228,13 +248,22 @@ assert.equal(
 assert.equal(promoted.target_excluded_market_decision.spread.target_excluded_consensus_qualified, true, "Spread final inference excludes its evaluated sportsbook");
 assert.equal(promoted.target_excluded_market_decision.total.target_excluded_consensus_qualified, true, "Total value consensus excludes its evaluated sportsbook");
 assert.ok(Math.abs(promoted.projected_score.home + promoted.projected_score.away - promoted.model.total) < 1e-12, "decimal expected scores exactly generate Total mean");
-assert.ok(Math.abs(promoted.projected_score.home - promoted.projected_score.away - promoted.model.margin) < 1e-12, "decimal expected scores exactly generate margin mean");
+assert.ok(Math.abs(promoted.projected_score.home - promoted.projected_score.away - promoted.model.margin) < 1e-12, "decimal expected scores exactly generate the representative margin");
+assert.ok(
+  Math.abs(
+    wnbaMarginDistributionCdf(
+      promoted.target_excluded_market_decision.spread.margin_distribution,
+      promoted.model.margin,
+    ) - 0.5,
+  ) < 1e-9,
+  "displayed score margin is the median of the released margin distribution",
+);
 assert.ok(
   Math.abs(
     promoted.model.final_home_win_prob -
     promoted.target_excluded_market_decision.spread.margin_distribution.positiveProbability,
   ) < 1e-12,
-  "Moneyline probability and score margin use the same maximum-entropy distribution",
+  "Moneyline probability and representative score use the same released distribution",
 );
 assert.ok(
   promoted.model.margin !== Math.round(promoted.model.margin * 10) / 10 &&
@@ -437,8 +466,8 @@ assert.equal(
 );
 assert.equal(
   coldStartQualified.model.components.pre_market_home_win_probability,
-  coldStartIndependent.model.final_home_win_prob,
-  "cold-start sport evidence is identical to the no-market independent forecast",
+  coldStartIndependent.model.home_win_prob,
+  "cold-start sport evidence is identical to the no-market independent model head",
 );
 assert.equal(
   coldStartQualified.model.components.moneyline_market_interpretation_count,
@@ -448,7 +477,7 @@ assert.equal(
 assert.notEqual(
   coldStartQualified.model.final_home_win_prob,
   coldStartIndependent.model.final_home_win_prob,
-  "the retained dynamic Moneyline interpretation can still change the final posterior",
+  "qualified market context can still change the coherent margin distribution",
 );
 assert.equal(
   coldStartQualified.model.total,
@@ -470,6 +499,11 @@ assert.equal(
   Math.sign(coldStartQualified.model.final_home_win_prob - 0.5),
   Math.sign(coldStartQualified.model.margin),
   "a non-conflicting qualified favorite regime retains one publication-side winner",
+);
+assert.equal(
+  coldStartQualified.spread.side?.startsWith(coldStartQualified.home_abbr ?? ""),
+  coldStartQualified.model.margin + (coldStartQualified.spread.line ?? 0) >= 0,
+  "the published Spread side agrees with the exact displayed-score margin and line",
 );
 
 const contradictoryColdStart = computeWnbaPrediction(

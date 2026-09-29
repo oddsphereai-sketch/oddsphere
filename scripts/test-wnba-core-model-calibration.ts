@@ -174,7 +174,7 @@ const recommendationEnabled = buildWnbaCoreModelCalibrationAudit({
 
 check("recommendation-use can activate total only with projection flag", recommendationEnabled.recommendation_uses_calibrated_total === true);
 check("recommendation-use can activate spread only with margin flag", recommendationEnabled.recommendation_uses_calibrated_spread === true);
-check("calibration schema records the v1.4 probability era", recommendationEnabled.schema_version === EXPECTED_WNBA_CALIBRATION_SCHEMA_VERSION);
+check("calibration schema remains explicit for the v1.5 probability era", recommendationEnabled.schema_version === EXPECTED_WNBA_CALIBRATION_SCHEMA_VERSION);
 check(
   "calibration formulas remain byte-identical across the schema-only bump",
   JSON.stringify(recommendationEnabled.formulas) === JSON.stringify({
@@ -635,7 +635,7 @@ check(
   }).length === 0,
 );
 check(
-  "WNBA v9 reader preserves the authoritative writer Lean",
+  "WNBA v10 reader preserves the authoritative writer Lean",
   resolveWnbaReaderGrade({
     gradePolicyVersion: EXPECTED_WNBA_GRADE_POLICY_VERSION,
     grade: "Lean",

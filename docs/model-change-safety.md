@@ -5,6 +5,27 @@ inputs, probabilities, projections, grades, promotions/demotions, calibration, p
 or stakes. It exists to prevent mixed model eras, competing writers, accidental board
 flattening, and load spikes.
 
+## Owner-approved emergency exception: WNBA score / prediction coherence v1.5
+
+On 2026-09-29 Daniel Mengel explicitly directed that WNBA projected scores and
+predictions be made logically coherent, prioritized prediction accuracy, and
+previously authorized one accuracy-driven actionable demotion when a promotion
+was not available. This exception is limited to
+`wnba_v1_5_coherent_expected_margin` and the evidence in
+`docs/model-audits/2026-09-29-wnba-score-prediction-coherence.md`.
+
+The release may replace the final sign-tilted margin distribution with the
+coherent normal distribution centered on the already released expected margin.
+It must preserve Total identity, exact target exclusion, the sole writer, shared
+lease, immutable locks, schedules, provider calls, stakes, and all member copy,
+labels, and layout. The stored release-era replay must show zero score/side
+contradictions and must not worsen expected-margin MAE, winner direction, or
+Spread direction versus the rejected median alternative. The current-board
+impact is expressly bounded to one Lean demotion, zero promotions, no lost game
+or market, and no new suppressive threshold. The existing symmetric exact-price
+promotion paths remain covered and active. This exception does not authorize a
+similar unpaired demotion in any other release or sport.
+
 ## Owner-approved emergency exception: NFL Week 4 joint-Moneyline coherence
 
 On 2026-09-29 Daniel Mengel explicitly directed Oddsphere to restore the missing NFL weekly board

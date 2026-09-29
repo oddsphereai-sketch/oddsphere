@@ -281,15 +281,15 @@ check("champion runtime accepts resolved defaults", (() => {
 check("champion runtime refuses an explicit old model", (() => {
   try { assertMlbChampionRuntime({ AUTOMODEL_VERSION: "v1" }); return false; } catch { return true; }
 })());
-check("WNBA model family is single-sourced", EXPECTED_WNBA_MODEL_VERSION === "wnba_v1_4_single_market_entry");
+check("WNBA model family is single-sourced", EXPECTED_WNBA_MODEL_VERSION === "wnba_v1_5_coherent_expected_margin");
 check(
   "WNBA distribution version is explicit",
-  EXPECTED_WNBA_DISTRIBUTION_VERSION === "wnba_single_market_entry_2026_09_03_v6",
+  EXPECTED_WNBA_DISTRIBUTION_VERSION === "wnba_coherent_normal_2026_09_29_v7",
 );
 check(
-  "WNBA single-market-entry exact-value grade policy is immutable",
+  "WNBA coherent expected-margin exact-value grade policy is immutable",
   EXPECTED_WNBA_GRADE_POLICY_VERSION ===
-    "wnba_grade_policy_v9_single_market_entry_2026_09_03",
+    "wnba_grade_policy_v10_coherent_expected_margin_2026_09_29",
 );
 const wnbaModelSource = readFileSync("lib/services/wnba/buildWnbaDailyEdgePreview.ts", "utf8");
 const wnbaModelWriterSource = readFileSync("lib/services/wnba/runWnbaModel.ts", "utf8");
