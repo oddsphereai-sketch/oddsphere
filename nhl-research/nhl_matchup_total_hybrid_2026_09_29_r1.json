@@ -1,0 +1,103 @@
+{
+  "release": "nhl_matchup_total_hybrid_2026_09_29_r1",
+  "model_release": "nhl_regular_2026_r6_opponent_adjusted_total",
+  "protocol": {
+    "fit": "recency-weighted MoneyPuck regular-season games from 2018 through 2024",
+    "selection": "2024 chronological season",
+    "market_tune": "first 70 percent of priced 2025 games",
+    "untouched_report": "final 30 percent of priced 2025 games",
+    "runtime": "pregame opponent-adjusted xG state updated only by earlier games"
+  },
+  "architecture": {
+    "preserved": [
+      "r5 independent and market-conditioned Moneyline probability",
+      "r5 Moneyline direction",
+      "r5 puck-line direction",
+      "r5 Total confidence calibration and grade thresholds"
+    ],
+    "repaired": "independent scoring Total",
+    "coherence": "solve the new score margin at the repaired Total so the joint Poisson home-win probability exactly equals r5"
+  },
+  "opponent_adjusted_state": {
+    "release": "nhl_opponent_adjusted_state_2026_09_29_r1",
+    "alpha": 0.085,
+    "season_regression": 0.65,
+    "observation": "MoneyPuck expected goals",
+    "same_day_leakage": false
+  },
+  "score_coefficients": [
+    3.0092264324209728,
+    0.1481247256394834,
+    0.06044622628279624,
+    0.0658335615941799,
+    0.01674823600200073,
+    0.024440281416022905,
+    0.1548981486711866,
+    0.2645738074648139,
+    0.04459037866682026,
+    0.2317113325107479,
+    -0.036653759502945235,
+    -0.0484924145180711,
+    0.04369799028078689,
+    0.041393280178392854,
+    -0.15294922160128802,
+    0.6404383539681211,
+    0.01849762920161113,
+    -0.1782855236868974,
+    0.1599451336069983,
+    0.33277559680418367,
+    0.3350351206594338
+  ],
+  "full_priced_2025": {
+    "n": 1311,
+    "active": {
+      "team_score_mae": 1.3581630808,
+      "margin_mae": 2.065813549,
+      "total_mae": 1.8302698687,
+      "winner_accuracy": 0.5545385,
+      "total_direction": 0.5487337,
+      "puck_line_direction": 0.6720183
+    },
+    "hybrid": {
+      "team_score_mae": 1.3569809093,
+      "margin_mae": 2.0657162164,
+      "total_mae": 1.8271147504,
+      "winner_accuracy": 0.5545385,
+      "total_direction": 0.552571,
+      "puck_line_direction": 0.6720183
+    }
+  },
+  "untouched_2025_holdout": {
+    "n": 394,
+    "active": {
+      "team_score_mae": 1.3938176458,
+      "margin_mae": 2.1033204819,
+      "total_mae": 1.857157516,
+      "winner_accuracy": 0.543147,
+      "winner_brier": 0.24382826,
+      "winner_logloss": 0.68022849,
+      "total_direction": 0.565553,
+      "puck_line_direction": 0.65736
+    },
+    "hybrid": {
+      "team_score_mae": 1.38994401,
+      "margin_mae": 2.1033995022,
+      "total_mae": 1.8491241278,
+      "winner_accuracy": 0.543147,
+      "winner_brier": 0.24382826,
+      "winner_logloss": 0.68022849,
+      "total_direction": 0.586118,
+      "puck_line_direction": 0.65736
+    }
+  },
+  "current_board": {
+    "slate_date": "2026-09-29",
+    "games": 5,
+    "markets": 15,
+    "active_actionable": 14,
+    "candidate_actionable": 14,
+    "promotions": 1,
+    "demotions": 0,
+    "side_changes": 0
+  }
+}

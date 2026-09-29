@@ -58,6 +58,7 @@ import { assertOfficialTrackingMarket } from "../../config/officialTrackingMarke
 import type { PredictionRecordRow, TrackedMarketV17 } from "../../types/domain/Tracking";
 import { resolvedNhlSplitsByGame } from "./nhlResolvedSplits";
 import { loadNhlRegularStateForSlate } from "./loadNhlRegularState";
+import { loadNhlOpponentAdjustedState } from "./loadNhlOpponentAdjustedState";
 
 const LOCK_MINUTES_BEFORE_PUCK_DROP = 60;
 
@@ -215,6 +216,8 @@ export async function writeNhlPredictionRecords(
     featureSeason,
     games.reduce((earliest, game) => game.game_date < earliest ? game.game_date : earliest, games[0]!.game_date),
   );
+  const opponentAdjusted = await loadNhlOpponentAdjustedState(featureSeason, opts.slateDate);
+  log(`NHL opponent-adjusted state: ${opponentAdjusted.source}; games=${opponentAdjusted.gamesApplied}; requests=${opponentAdjusted.requestCount}${opponentAdjusted.error ? `; fallback=${opponentAdjusted.error}` : ""}`);
   let providerMetricsByTeam: Awaited<ReturnType<typeof fetchBdlNhlTeamMetricsWithPriorFallback>>["metrics"] = new Map();
   let providerFeatureSeason: number | null = null;
   if (process.env.BALLDONTLIE_API_KEY) {
@@ -254,6 +257,7 @@ export async function writeNhlPredictionRecords(
         providerMetricsByTeam,
         providerFeatureSeason,
         calibratedStateByTeam,
+        opponentAdjustedStateByTeam: opponentAdjusted.complete ? opponentAdjusted.states : undefined,
         marketEvidence: {
           mlHomeBetsPct: split?.moneyline?.bets_pct?.home == null ? null : split.moneyline.bets_pct.home * 100,
           mlHomeMoneyPct: split?.moneyline?.handle_pct?.home == null ? null : split.moneyline.handle_pct.home * 100,

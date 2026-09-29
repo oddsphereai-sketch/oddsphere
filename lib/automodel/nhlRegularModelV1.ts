@@ -1,9 +1,9 @@
 import type { BdlNhlTeamMetrics } from "../providers/nhl/_ballDontLieNhlClient";
 import type { NhlCalibratedTeamState } from "./nhlRegularPriors2026";
 
-export const NHL_REGULAR_MODEL_RELEASE = "nhl_regular_2026_r5_total_confidence_calibration" as const;
-export const NHL_REGULAR_CALIBRATION_RELEASE = "nhl_regular_calibration_2026_r5_total_confidence_calibration" as const;
-export const NHL_REGULAR_DECISION_RELEASE = "nhl_regular_decision_2026_r5_total_confidence_calibration" as const;
+export const NHL_REGULAR_MODEL_RELEASE = "nhl_regular_2026_r6_opponent_adjusted_total" as const;
+export const NHL_REGULAR_CALIBRATION_RELEASE = "nhl_regular_calibration_2026_r6_opponent_adjusted_total" as const;
+export const NHL_REGULAR_DECISION_RELEASE = "nhl_regular_decision_2026_r6_opponent_adjusted_total" as const;
 
 export type NhlVerdictKey = "best_angle" | "lean" | "watchlist" | "pass";
 
@@ -24,6 +24,8 @@ export type NhlModelTeam = {
   is_home: boolean;
   provider_metrics: BdlNhlTeamMetrics | null;
   calibrated_state: NhlCalibratedTeamState | null;
+  opponent_adjusted_attack: number | null;
+  opponent_adjusted_defense_weakness: number | null;
 };
 
 export type NhlModelMarket = {
@@ -119,6 +121,15 @@ const SCORE_BETA = [
   -0.017808995904590084, -0.12139146738681414, 0.05824064025009689,
   0.3687578559301108, 0.07458718668794515, -0.11097641372547018,
   0.04338959014834951, 0.08307004907456006,
+] as const;
+const OPPONENT_ADJUSTED_TOTAL_BETA = [
+  3.0092264324209728, 0.1481247256394834, 0.06044622628279624,
+  0.0658335615941799, 0.01674823600200073, 0.024440281416022905,
+  0.1548981486711866, 0.2645738074648139, 0.04459037866682026,
+  0.2317113325107479, -0.036653759502945235, -0.0484924145180711,
+  0.04369799028078689, 0.041393280178392854, -0.15294922160128802,
+  0.6404383539681211, 0.01849762920161113, -0.1782855236868974,
+  0.1599451336069983, 0.33277559680418367, 0.3350351206594338,
 ] as const;
 const ABILITY_BETA = [
   -0.17236562564475472, 0.7948403714740907, 0.37042700976601217,
@@ -234,6 +245,22 @@ function jointDistribution(homeGoals: number, awayGoals: number): {
   return { homeWin: homeRegulation + tie * overtimeHome, margin, total };
 }
 
+function goalDiffForHomeWin(totalGoals: number, targetHomeWin: number): number | null {
+  const homeWinAt = (goalDiff: number) => jointDistribution(
+    Math.max(0, (totalGoals + goalDiff) / 2),
+    Math.max(0, (totalGoals - goalDiff) / 2),
+  ).homeWin;
+  let low = -totalGoals;
+  let high = totalGoals;
+  if (targetHomeWin < homeWinAt(low) || targetHomeWin > homeWinAt(high)) return null;
+  for (let iteration = 0; iteration < 60; iteration += 1) {
+    const middle = (low + high) / 2;
+    if (homeWinAt(middle) < targetHomeWin) low = middle;
+    else high = middle;
+  }
+  return (low + high) / 2;
+}
+
 function probabilityAbove(distribution: ReadonlyMap<number, number>, line: number): number {
   let probability = 0;
   for (const [value, mass] of distribution) if (value > line) probability += mass;
@@ -311,14 +338,45 @@ export function nhlRegularModelV1(snapshot: NhlFeatureSnapshot): NhlModelOutput 
   const marketHome = snapshot.market.market_home_prob;
   const marketGoalDiff = marketHome === null ? independentGoalDiff : logit(marketHome) / ML_SLOPE;
   const probabilityNudge = sharpHomeNudge(snapshot.market) + movementHomeNudge(snapshot.market);
-  const expectedGoalDiff = (1 - ML_MARKET_WEIGHT) * independentGoalDiff + ML_MARKET_WEIGHT * marketGoalDiff + probabilityNudge / 0.12;
+  const activeExpectedGoalDiff = (1 - ML_MARKET_WEIGHT) * independentGoalDiff + ML_MARKET_WEIGHT * marketGoalDiff + probabilityNudge / 0.12;
 
   const marketTotal = snapshot.market.market_total_line;
   const totalNudge = sharpTotalNudge(snapshot.market);
   const totalMovement = snapshot.market.same_book_total_move !== null
     ? clamp(snapshot.market.same_book_total_move * 0.35, -0.25, 0.25)
     : 0;
-  const expectedTotal = clamp(independentTotal + totalMovement + totalNudge, 4.5, 8);
+  const hasOpponentAdjustedState = [
+    snapshot.home.opponent_adjusted_attack,
+    snapshot.home.opponent_adjusted_defense_weakness,
+    snapshot.away.opponent_adjusted_attack,
+    snapshot.away.opponent_adjusted_defense_weakness,
+  ].every((value) => value !== null && Number.isFinite(value));
+  const opponentAdjustedIndependentTotal = hasOpponentAdjustedState
+    ? clamp(
+      clamp(dot([
+        ...homeFeatures.slice(0, 19),
+        snapshot.home.opponent_adjusted_attack!,
+        snapshot.away.opponent_adjusted_defense_weakness!,
+      ], OPPONENT_ADJUSTED_TOTAL_BETA), 1.25, 5.25)
+      + clamp(dot([
+        ...awayFeatures.slice(0, 19),
+        snapshot.away.opponent_adjusted_attack!,
+        snapshot.home.opponent_adjusted_defense_weakness!,
+      ], OPPONENT_ADJUSTED_TOTAL_BETA), 1.25, 5.25),
+      4.5,
+      8,
+    )
+    : independentTotal;
+  const expectedTotal = clamp(opponentAdjustedIndependentTotal + totalMovement + totalNudge, 4.5, 8);
+  const activeExpectedTotal = clamp(independentTotal + totalMovement + totalNudge, 4.5, 8);
+  const activeDistribution = jointDistribution(
+    Math.max(0, (activeExpectedTotal + activeExpectedGoalDiff) / 2),
+    Math.max(0, (activeExpectedTotal - activeExpectedGoalDiff) / 2),
+  );
+  const solvedGoalDiff = hasOpponentAdjustedState
+    ? goalDiffForHomeWin(expectedTotal, activeDistribution.homeWin)
+    : null;
+  const expectedGoalDiff = solvedGoalDiff ?? activeExpectedGoalDiff;
   const projectedHome = Math.max(0, (expectedTotal + expectedGoalDiff) / 2);
   const projectedAway = Math.max(0, (expectedTotal - expectedGoalDiff) / 2);
   const finalDistribution = jointDistribution(projectedHome, projectedAway);
@@ -385,7 +443,7 @@ export function nhlRegularModelV1(snapshot: NhlFeatureSnapshot): NhlModelOutput 
       split_movement_goals: probabilityNudge / 0.12,
     },
     independent_goal_diff: independentGoalDiff,
-    independent_total_goals: independentTotal,
+    independent_total_goals: opponentAdjustedIndependentTotal,
     expected_goal_diff: expectedGoalDiff,
     expected_total_goals: expectedTotal,
     projected_home_goals: projectedHome,
@@ -406,7 +464,7 @@ export function nhlRegularModelV1(snapshot: NhlFeatureSnapshot): NhlModelOutput 
       confidence: totalProbability,
       verdict: totalVerdict(totalGap),
       model_market_gap_pct: totalGap,
-      notes: [`Independent ${independentTotal.toFixed(2)}; final projection ${expectedTotal.toFixed(2)}${marketTotal === null ? "" : ` vs ${marketTotal.toFixed(1)}`}.`],
+      notes: [`Independent ${opponentAdjustedIndependentTotal.toFixed(2)}; final projection ${expectedTotal.toFixed(2)}${marketTotal === null ? "" : ` vs ${marketTotal.toFixed(1)}`}.`],
     },
     puck_line: {
       pick: pucklinePick,
