@@ -19,7 +19,12 @@
  */
 
 import { supabase } from "../../db/supabase";
-import { fetchSharpNhlOdds, type SharpNhlOddsRow } from "../../providers/nhl/_sharpApiNhlClient";
+import {
+  fetchSharpNhlEventOdds,
+  fetchSharpNhlEvents,
+  type SharpNhlEvent,
+  type SharpNhlOddsRow,
+} from "../../providers/nhl/_sharpApiNhlClient";
 import { normalizeNhlTeamName, type NhlTeamAbbrev } from "../../providers/nhl/_teamNameNormalizer";
 import { flagOpenersInHistoryPayload } from "../_lineHistoryOpenerHelper";
 
@@ -165,6 +170,33 @@ function sharpApiDatesForGames(games: GameRow[]): string[] {
   return [...set].sort();
 }
 
+function eventCandidateScore(
+  event: SharpNhlEvent,
+  game: GameRow,
+  home: NhlTeamAbbrev,
+  away: NhlTeamAbbrev,
+): number {
+  if (!event.id || !event.home_team?.trim() || !event.away_team?.trim()) return Number.NEGATIVE_INFINITY;
+  const eventHome = normalizeNhlTeamName(event.home_team);
+  const eventAway = normalizeNhlTeamName(event.away_team);
+  if (eventHome !== home || eventAway !== away) return Number.NEGATIVE_INFINITY;
+  const deltaMinutes = Math.abs(Date.parse(event.start_time ?? "") - Date.parse(game.game_date)) / 60_000;
+  if (!Number.isFinite(deltaMinutes) || deltaMinutes > 12 * 60) return Number.NEGATIVE_INFINITY;
+  return (event.market_count ?? 0) * 1_000 - deltaMinutes;
+}
+
+export function selectSharpNhlEvent(
+  events: SharpNhlEvent[],
+  game: GameRow,
+  home: NhlTeamAbbrev,
+  away: NhlTeamAbbrev,
+): SharpNhlEvent | null {
+  return events
+    .map((event) => ({ event, score: eventCandidateScore(event, game, home, away) }))
+    .filter((candidate) => Number.isFinite(candidate.score))
+    .sort((left, right) => right.score - left.score)[0]?.event ?? null;
+}
+
 function buildPayload(
   row: SharpNhlOddsRow,
   gameId: number,
@@ -229,11 +261,33 @@ export async function refreshNhlLines(
   }
 
   const sharpApiDates = sharpApiDatesForGames(games);
-  log(`SharpAPI fetch dates (UTC): ${sharpApiDates.join(", ")}`);
+  log(`SharpAPI event dates (UTC): ${sharpApiDates.join(", ")}`);
+  const events: SharpNhlEvent[] = [];
+  for (const date of sharpApiDates) {
+    try {
+      events.push(...await fetchSharpNhlEvents(date, opts.sharpApiKey, log));
+    } catch (error) {
+      errors.push(`SharpAPI event catalog ${date}: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
   const oddsRows: SharpNhlOddsRow[] = [];
-  for (const d of sharpApiDates) {
-    const batch = await fetchSharpNhlOdds(d, opts.sharpApiKey, log);
-    oddsRows.push(...batch);
+  for (const game of games) {
+    const abbrs = gameAbbrs.get(game.id);
+    if (!abbrs) {
+      errors.push(`game_id=${game.id}: canonical NHL teams unavailable`);
+      continue;
+    }
+    const event = selectSharpNhlEvent(events, game, abbrs.home, abbrs.away);
+    if (!event?.id) {
+      errors.push(`game_id=${game.id}: SharpAPI event not found`);
+      continue;
+    }
+    try {
+      const batch = await fetchSharpNhlEventOdds(event.id, opts.sharpApiKey, log);
+      oddsRows.push(...batch);
+    } catch (error) {
+      errors.push(`game_id=${game.id}: SharpAPI event odds failed: ${error instanceof Error ? error.message : String(error)}`);
+    }
   }
   log(`SharpAPI /odds rows fetched: ${oddsRows.length}`);
 
@@ -284,6 +338,25 @@ export async function refreshNhlLines(
   }
 
   log(`\nProcessed: matched=${matched} unmatched=${unmatched} parsed=${parsed}`);
+
+  const coverage = new Map<number, Map<string, Set<string>>>();
+  for (const payload of payloads) {
+    const gameMarkets = coverage.get(payload.game_id) ?? new Map<string, Set<string>>();
+    const sides = gameMarkets.get(payload.market_type) ?? new Set<string>();
+    sides.add(payload.side);
+    gameMarkets.set(payload.market_type, sides);
+    coverage.set(payload.game_id, gameMarkets);
+  }
+  for (const game of games) {
+    const gameMarkets = coverage.get(game.id);
+    for (const market of ["moneyline", "spread", "total"] as const) {
+      const expectedSides = market === "total" ? ["over", "under"] : ["home", "away"];
+      const sides = gameMarkets?.get(market);
+      if (expectedSides.some((side) => !sides?.has(side))) {
+        errors.push(`game_id=${game.id}: incomplete SharpAPI ${market} coverage`);
+      }
+    }
+  }
 
   if (opts.dryRun) {
     log(`\n[dry-run] would upsert ${payloads.length} lines row(s)`);

@@ -25,6 +25,7 @@
 const SHARP_API_BASE = "https://api.sharpapi.io/api/v1";
 
 export type SharpNhlOddsRow = {
+  id?: string;
   event_id?: string;
   external_event_id?: string;
   event_start_time?: string;
@@ -46,6 +47,20 @@ export type SharpNhlOddsRow = {
   is_live?: boolean;
   is_stale_pregame_price?: boolean;
   timestamp?: string;
+};
+
+export type SharpNhlEvent = {
+  id?: string;
+  league?: string;
+  home_team?: string;
+  away_team?: string;
+  start_time?: string;
+  market_count?: number;
+};
+
+type SharpPagination = {
+  has_more?: boolean;
+  next_cursor?: string | null;
 };
 
 export type SharpNhlSplitsEvent = {
@@ -98,31 +113,94 @@ export type SharpNhlOpportunity = {
   is_live?: boolean;
 };
 
-/**
- * Limit-paginated /odds fetch. Mirrors the NBA implementation: stop at
- * first non-200 OR when a page returns < limit rows. Returns whatever
- * rows were successfully fetched.
- */
-export async function fetchSharpNhlOdds(
+async function fetchSharpPage<T>(
+  path: string,
+  query: Record<string, string>,
+  apiKey: string,
+): Promise<{ data: T[]; pagination: SharpPagination | null }> {
+  const url = new URL(`${SHARP_API_BASE}/${path}`);
+  for (const [key, value] of Object.entries(query)) url.searchParams.set(key, value);
+  const res = await fetch(url, { headers: { Authorization: `Bearer ${apiKey}` } });
+  if (!res.ok) throw new Error(`SharpAPI /${path} NHL fetch failed: HTTP ${res.status}`);
+  const body = (await res.json()) as { data?: T[]; pagination?: SharpPagination | null };
+  return { data: body.data ?? [], pagination: body.pagination ?? null };
+}
+
+/** Fetch the bounded event catalog for a single UTC date. The provider's
+ * league/date odds query can exceed 1,000 rows because futures and player
+ * props sort ahead of later games; resolving the exact event first keeps the
+ * game-line workload complete and materially cheaper. */
+export async function fetchSharpNhlEvents(
   date: string,
+  apiKey: string,
+  logger?: (msg: string) => void,
+): Promise<SharpNhlEvent[]> {
+  const log = logger ?? (() => {});
+  const all: SharpNhlEvent[] = [];
+  let cursor: string | null = null;
+  for (let page = 0; page < 4; page++) {
+    const response: { data: SharpNhlEvent[]; pagination: SharpPagination | null } = await fetchSharpPage<SharpNhlEvent>("events", {
+      league: "nhl",
+      date,
+      limit: "200",
+      ...(cursor ? { cursor } : {}),
+    }, apiKey);
+    all.push(...response.data);
+    if (!response.pagination?.has_more || !response.pagination.next_cursor) break;
+    cursor = response.pagination.next_cursor;
+  }
+  log(`SharpAPI NHL event catalog ${date}: ${all.length} rows`);
+  return all;
+}
+
+const NHL_GAME_MARKETS = ["moneyline", "puck_line", "total_goals"] as const;
+
+function presentGameMarkets(rows: SharpNhlOddsRow[]): Set<string> {
+  return new Set(rows
+    .filter((row) => row.home_team?.trim() && row.away_team?.trim())
+    .filter((row) => !/\bperiod\b/i.test(`${row.home_team} ${row.away_team}`))
+    .map((row) => row.market_type ?? ""));
+}
+
+/** Fetch one exact event. A single 200-row event page normally contains all
+ * three full-game markets. Any absent game market is retried directly, so
+ * props cannot crowd a required line off the response. */
+export async function fetchSharpNhlEventOdds(
+  eventId: string,
   apiKey: string,
   logger?: (msg: string) => void,
 ): Promise<SharpNhlOddsRow[]> {
   const log = logger ?? (() => {});
-  const all: SharpNhlOddsRow[] = [];
-  for (let offset = 0; offset < 1000; offset += 100) {
-    const url = `${SHARP_API_BASE}/odds?league=nhl&date=${date}&limit=100&offset=${offset}`;
-    const res = await fetch(url, { headers: { Authorization: `Bearer ${apiKey}` } });
-    if (!res.ok) {
-      log(`  ✗ /odds page offset=${offset} HTTP ${res.status}`);
-      break;
-    }
-    const j = (await res.json()) as { data?: SharpNhlOddsRow[] };
-    const items = j.data ?? [];
-    all.push(...items);
-    if (items.length < 100) break;
+  const first = await fetchSharpPage<SharpNhlOddsRow>("odds", {
+    event_id: eventId,
+    limit: "200",
+  }, apiKey);
+  const rows = [...first.data];
+  const present = presentGameMarkets(rows);
+  for (const market of NHL_GAME_MARKETS) {
+    if (present.has(market)) continue;
+    const fallback = await fetchSharpPage<SharpNhlOddsRow>("odds", {
+      event_id: eventId,
+      market_type: market,
+      limit: "200",
+    }, apiKey);
+    rows.push(...fallback.data);
+    log(`SharpAPI NHL event ${eventId}: recovered ${market} with ${fallback.data.length} rows`);
   }
-  return all;
+  const unique = new Map<string, SharpNhlOddsRow>();
+  for (const row of rows) {
+    const key = row.id ?? [
+      row.event_id,
+      row.sportsbook,
+      row.market_type,
+      row.selection_type,
+      row.selection,
+      row.line,
+      row.odds_american,
+    ].join("|");
+    unique.set(key, row);
+  }
+  return [...unique.values()];
 }
 
 /**
