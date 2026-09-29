@@ -1,0 +1,64 @@
+{
+  "release": "nhl_total_confidence_calibration_2026_09_29_r1",
+  "source_manifest": {
+    "release": "bdl_nhl_multiseason_openings_2026_09_29_r1",
+    "game_count": 3936,
+    "opening_row_count": 14990,
+    "opening_game_count": 3935,
+    "sha256": "49cd2480e5a8fbb1170975f9b0f7238f5d9ce73ed370ad6b726ee85f51971cd3"
+  },
+  "protocol": {
+    "score_train": 2023,
+    "confidence_fit_and_internal_tune": 2024,
+    "score_refit": [2023, 2024],
+    "report_only": 2025,
+    "direction_score_and_grade_policy_changed": false
+  },
+  "calibrator": {
+    "family": "platt_logit",
+    "intercept": 0.05706714956351745,
+    "raw_probability_logit_slope": 0.514946128177911,
+    "regularization_c": 0.3
+  },
+  "report_2025": {
+    "settled_non_push_totals": 1303,
+    "direction_accuracy": 0.5495011511895626,
+    "raw_probability": {
+      "mean": 0.5662172825638252,
+      "brier": 0.2475122642767361,
+      "logloss": 0.6881610368349774
+    },
+    "calibrated_probability": {
+      "mean": 0.5485746166530139,
+      "brier": 0.2469839871957849,
+      "logloss": 0.6870839903516429
+    }
+  },
+  "grade_validation": {
+    "2024": {
+      "best_angle": { "n": 223, "accuracy": 0.5829596412556054 },
+      "lean": { "n": 681, "accuracy": 0.5359765051395007 },
+      "watchlist": { "n": 360, "accuracy": 0.5388888888888889 }
+    },
+    "2025": {
+      "best_angle": { "n": 346, "accuracy": 0.5751445086705202 },
+      "lean": { "n": 738, "accuracy": 0.5528455284552846 },
+      "watchlist": { "n": 219, "accuracy": 0.4977168949771689 }
+    }
+  },
+  "current_board_probability_replay": [
+    { "matchup": "FLA @ CAR", "pick": "UNDER 6.5", "raw": 0.688847, "calibrated": 0.6145106203403565, "grade_changed": false },
+    { "matchup": "MTL @ TOR", "pick": "UNDER 6.5", "raw": 0.647456, "calibrated": 0.5914807818317462, "grade_changed": false },
+    { "matchup": "NYR @ BOS", "pick": "UNDER 6.0", "raw": 0.583573, "calibrated": 0.5574550998470256, "grade_changed": false },
+    { "matchup": "VAN @ EDM", "pick": "UNDER 6.5", "raw": 0.658105, "calibrated": 0.5973138454155673, "grade_changed": false },
+    { "matchup": "CHI @ VGK", "pick": "UNDER 6.0", "raw": 0.664411, "calibrated": 0.6007958922371571, "grade_changed": false }
+  ],
+  "board_impact": {
+    "side_changes": 0,
+    "score_changes": 0,
+    "best_angle_promotions": 0,
+    "best_angle_demotions": 0,
+    "lean_promotions": 0,
+    "lean_demotions": 0
+  }
+}

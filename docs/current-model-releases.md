@@ -1805,9 +1805,9 @@ The September 21 operational release restored the two bounded daily schedules re
 
 ## NHL regular-season champion (active from 2026-09-29)
 
-- Model: `nhl_regular_2026_r4_quoted_puck_pair`
-- Calibration: `nhl_regular_calibration_2026_r4_quoted_puck_pair`
-- Decision: `nhl_regular_decision_2026_r4_quoted_puck_pair`
+- Model: `nhl_regular_2026_r5_total_confidence_calibration`
+- Calibration: `nhl_regular_calibration_2026_r5_total_confidence_calibration`
+- Decision: `nhl_regular_decision_2026_r5_total_confidence_calibration`
 - Public tracking start: `2026-09-29`
 - Official markets: moneyline, total, spread (puck line)
 - Retired release: `nhl_v0_2026_finals`
@@ -1866,6 +1866,19 @@ enumerated per book and the existing main-puckline priority selects the real
 quoted pair. The live MTL-TOR regression, board impact, and rollback gate are
 recorded in
 `docs/model-audits/2026-09-29-nhl-quoted-puck-pair-r4.md`.
+
+The September 29 r5 total-confidence release retains every r4 score, side,
+market line, price, grade, market-reading input, writer, lock rule, and member
+surface. It replaces only the raw conditional Poisson Total confidence with a
+release-pure Platt calibration fitted on priced 2024 games and reported once on
+all 1,303 non-push priced 2025 Totals. Brier score improves from 0.247512 to
+0.246984 and log loss from 0.688161 to 0.687084, while the 2025 Total direction
+remains 54.95%. The existing grade policy remains non-flat and chronologically
+stable: Best Angle Totals were 58.30% in 2024 and 57.51% in 2025; Leans were
+53.60% and 55.28%. The current five-game board retains four Best Angles and one
+Lean with no promotion, demotion, side, or score change. Evidence and rollback
+are recorded in
+`docs/model-audits/2026-09-29-nhl-total-confidence-calibration-r5.md`.
 
 ## WNBA champion
 
