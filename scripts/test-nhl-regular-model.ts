@@ -110,6 +110,13 @@ assert.deepEqual(selectMainNhlPuckLinePair([
   { market_type: "spread", sportsbook: "saba", side: "home", line_value: -1.5 },
   { market_type: "spread", sportsbook: "saba", side: "away", line_value: 1.5 },
 ]), { home: -1.5, away: 1.5 });
+assert.deepEqual(selectMainNhlPuckLinePair([
+  { market_type: "spread", sportsbook: "saba", side: "home", line_value: 0 },
+  { market_type: "spread", sportsbook: "saba", side: "away", line_value: 0 },
+  { market_type: "spread", sportsbook: "saba", side: "home", line_value: -1.5 },
+  { market_type: "spread", sportsbook: "saba", side: "away", line_value: 1.5 },
+  { market_type: "spread", sportsbook: "saba", side: "home", line_value: 0 },
+]), { home: -1.5, away: 1.5 }, "multiple same-book rows cannot erase the actual quoted puck-line pair");
 assert.deepEqual(selectSameBookNhlMovement([
   { market_type: "moneyline", sportsbook: "Circa", side: "home", line_value: null, odds_american: -140, implied_probability: null },
   { market_type: "moneyline", sportsbook: "Circa", side: "away", line_value: null, odds_american: 120, implied_probability: null },
