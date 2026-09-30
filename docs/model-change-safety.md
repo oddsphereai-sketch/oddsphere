@@ -5,6 +5,30 @@ inputs, probabilities, projections, grades, promotions/demotions, calibration, p
 or stakes. It exists to prevent mixed model eras, competing writers, accidental board
 flattening, and load spikes.
 
+## Owner-approved emergency exception: NHL overnight slate readiness r6
+
+On 2026-09-30 Daniel Mengel reported that the NHL board showed no games and
+directed Oddsphere to restore it. Production evidence showed three official
+regular-season games available from the NHL schedule provider, zero September
+30 game or prediction rows, and a correctly empty member snapshot. The sole
+NHL daily seed was scheduled for 13:45 UTC, almost three hours after the report.
+
+The r6 operational repair moves the existing single bounded daily refresh to
+07:45 UTC (03:45 EDT / 02:45 EST). It does not add a second provider cycle, writer, schedule instance,
+or lease; change any model coefficient, probability, score, side, grade,
+threshold, stake, copy, label, or layout; or rewrite any lock. The r10 T-60
+refresh remains the authoritative final market-read and lock path. The manual
+recovery run proved the existing leased route could seed all three games, write
+nine r10 markets, preserve complete two-sided prices, and publish the member
+snapshot with no errors. Paired model/board impact for identical captured input
+is zero side changes, promotions, demotions, or actionable-count changes.
+
+Publication requires the focused schedule and NHL suites, full model-change
+verification, production build, latest-main integration safety, protected PR,
+and post-deploy schedule/release verification. Roll back only the cron time and
+r6 operational stamp if the earlier run creates provider errors or load growth;
+never rewrite already locked evidence.
+
 ## Owner-approved emergency exception: NHL T-60 market refresh r10
 
 On 2026-09-29 Daniel Mengel explicitly directed Oddsphere to make the new NHL
