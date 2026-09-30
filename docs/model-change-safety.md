@@ -5,6 +5,44 @@ inputs, probabilities, projections, grades, promotions/demotions, calibration, p
 or stakes. It exists to prevent mixed model eras, competing writers, accidental board
 flattening, and load spikes.
 
+## Owner-approved provisional exception: NHL source-aware market trust r9
+
+On 2026-09-29 Daniel Mengel explicitly directed Oddsphere to research which NHL
+market movements deserve trust because not every move is equal, preserve a
+strong independent model, and make market reading intelligent rather than a
+uniform nudge. This exception is limited to the r9 release family and evidence
+in `docs/model-audits/2026-09-29-nhl-source-aware-market-trust-r9.md`.
+
+The r8 independent score, opponent-adjusted Total, bounded 20% no-vig Moneyline
+sanity input, exact-price decisions, and named same-book movement remain
+authoritative. Public Playbook and legacy SharpAPI money/ticket observations
+remain source-separated, silently carried forward, and visible through the
+unchanged member product, but no longer alter the projected score. They are
+multi-book/public consensus, not proof of named sharp-book steam or RLM.
+Circa, Pinnacle, then Bookmaker retain priority for a continuous same-book
+opening/current trail. A fallback book may be used only when it has its own
+complete same-book trail; books are never crossed to fabricate movement.
+
+The owner acknowledges that the 589-game current-era split archive and its
+147-game final chronological window are opened diagnostic evidence, not a
+guarantee of future results. On that confirmation window, the price-sanity path
+without the public-split nudge was 56.46% on Moneylines versus 54.42% with the
+nudge. Public split direction was unstable across development, tuning, and
+confirmation. For Totals the learned conditional candidate worsened direction,
+and the prior split nudge changed no confirmation direction. No broad split-
+only flip or learned market model is authorized.
+
+R9 changes no independent coefficient, price weight, same-book movement
+equation, grade threshold, stake, provider call, cadence, writer, lease, member
+copy, label, or layout. The current-board replay must retain every game and all
+three markets, remain actionable, and report all promotions, demotions, and
+side changes. Locked r7 tuples remain immutable and tracking-eligible; no r8
+tuple was published to production. Publication still requires focused tests,
+full model-change verification, latest-main integration safety, protected PR
+checks, and live writer/reader proof. Hold or roll back unlocked r9 output on
+coverage loss, board collapse, mixed releases, score/side incoherence, missing
+prices, writer overlap, lock failure, or reader failure.
+
 ## Owner-approved provisional exception: NHL validated market-read r8
 
 On 2026-09-29 Daniel Mengel explicitly directed Oddsphere to complete a deeper

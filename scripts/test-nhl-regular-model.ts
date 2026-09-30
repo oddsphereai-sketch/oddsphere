@@ -222,7 +222,32 @@ assert.ok(result.moneyline.probability >= 0.5 && result.moneyline.probability <=
 assert.ok(result.total.probability >= 0.5 && result.total.probability <= 1);
 assert.ok(Math.abs(calibrateNhlTotalConfidence(0.647456) - 0.5914807818317462) < 1e-12);
 assert.ok(calibrateNhlTotalConfidence(0.688847) < 0.688847, "total confidence is release-pure calibrated rather than raw Poisson certainty");
-assert.ok(Math.abs(result.expected_total_goals - result.independent_total_goals) <= 0.59, "movement and split reading condition rather than replace the independent total");
+assert.ok(Math.abs(result.expected_total_goals - result.independent_total_goals) <= 0.59, "same-book movement conditions rather than replaces the independent total");
+
+const differentPublicSplits = nhlRegularModelV1({
+  ...base,
+  market: {
+    ...base.market,
+    ml_home_bets_pct: 81,
+    ml_home_money_pct: 19,
+    total_over_bets_pct: 18,
+    total_over_money_pct: 82,
+    ml_split_source: "sharpapi",
+    ml_split_confidence: "medium",
+    total_split_source: "playbook",
+    total_split_confidence: "high",
+  },
+});
+assert.equal(
+  differentPublicSplits.expected_goal_diff,
+  result.expected_goal_diff,
+  "public-consensus splits remain visible evidence but cannot impersonate named sharp-book movement",
+);
+assert.equal(
+  differentPublicSplits.expected_total_goals,
+  result.expected_total_goals,
+  "unvalidated public-consensus totals cannot rewrite the independent Total",
+);
 
 const noMarket = nhlRegularModelV1({
   ...base,
@@ -240,8 +265,8 @@ const noMarket = nhlRegularModelV1({
     total_over_money_pct: null,
   },
 });
-assert.notEqual(result.expected_goal_diff, noMarket.expected_goal_diff, "market movement and sharp splits alter the bounded final margin");
-assert.notEqual(result.expected_total_goals, noMarket.expected_total_goals, "market total and sharp splits alter the bounded final total");
+assert.notEqual(result.expected_goal_diff, noMarket.expected_goal_diff, "no-vig price and same-book movement alter the bounded final margin");
+assert.notEqual(result.expected_total_goals, noMarket.expected_total_goals, "same-book Total movement alters the bounded final total");
 
 const totalLineOnlyA = nhlRegularModelV1({
   ...base,
@@ -310,7 +335,7 @@ assert.equal(isTrackingRecordEligible({
   ...trackingBase,
   model_version: "nhl_regular_2026_r7_runtime_parity",
   calibration_version: "nhl_regular_calibration_2026_r7_runtime_parity",
-}), true, "locked r7 rows remain in public accuracy during the r8 transition");
+}), true, "locked r7 rows remain in public accuracy during the r9 transition");
 assert.equal(isTrackingRecordEligible({ ...trackingBase, external_id: 2026010001 }), false, "preseason never enters public NHL accuracy");
 assert.equal(isTrackingRecordEligible({ ...trackingBase, model_version: "nhl_v0_2026_finals" }), false, "retired release never enters new regular-season record");
 
@@ -354,7 +379,7 @@ assert.match(reader, /bestPriceFor\("total", totalSide, marketTotalLine\)/, "rea
 assert.match(reader, /Math\.abs\(l\.line_value - predictedPuckLine\) < 0\.01/, "reader prices the exact predicted puck line");
 assert.match(reader, /predictionPayloadByGame/, "reader preserves the writer-owned active-release tuple before and after lock");
 assert.match(reader, /NHL_REGULAR_TRANSITION_MODEL_RELEASES/, "reader preserves an already-locked prior-release tuple during deployment");
-assert.match(reader, /nhl_daily_edge_reader_2026_09_29_r4_release_transition_continuity/, "reader release records transition-safe tuple selection");
+assert.match(reader, /nhl_daily_edge_reader_2026_09_29_r5_source_aware_transition/, "reader release records transition-safe tuple selection");
 assert.match(reader, /incoherentPayloadReleaseGames/, "reader quarantines incoherence by release instead of hiding a valid prior lock");
 assert.match(reader, /const model = storedPayload\?\.model \?\? nhlRegularModelV1\(snapshot\)/, "reader cannot silently recompute an unlocked r6 card without its persisted matchup state");
 assert.match(reader, /incoherentPayloadReleaseGames/, "reader rejects internally inconsistent sibling market snapshots");
