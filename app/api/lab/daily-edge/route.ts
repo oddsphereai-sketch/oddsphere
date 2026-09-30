@@ -3563,6 +3563,15 @@ type TwoSidedMovementReference = {
   opposingRow: LineRow;
 };
 
+function medianProbability(values: number[]): number | null {
+  if (values.length === 0) return null;
+  const sorted = [...values].sort((a, b) => a - b);
+  const middle = Math.floor(sorted.length / 2);
+  return sorted.length % 2 === 1
+    ? sorted[middle]!
+    : (sorted[middle - 1]! + sorted[middle]!) / 2;
+}
+
 function distinctHistoryTimes(rows: LineHistoryRow[]): number {
   return new Set(rows.map((row) => row.recorded_at)).size;
 }
@@ -3610,7 +3619,33 @@ function selectTwoSidedMovementReference(args: {
       .sort((a, b) =>
         Date.parse(lineRowObservedAt(b) ?? "") - Date.parse(lineRowObservedAt(a) ?? "")
       )[0] ?? null;
+  // A coherent two-sided pair can still be a provider outlier. Require a
+  // robust cross-book center before excluding a book, then quarantine only
+  // pairs whose no-vig selected-side probability is materially outside that
+  // center. This keeps Circa/Pinnacle eligible normally while preventing an
+  // isolated -425/+345 pair from presenting as the board's real movement.
+  const currentPairs = books.flatMap((sportsbook) => {
+    const selectedRow = newestFreshAtBook(selectedRows, sportsbook);
+    const opposingRow = newestFreshAtBook(opposingRows, sportsbook);
+    const selectedImplied = americanToImpliedProb(selectedRow?.odds_american ?? null);
+    const opposingImplied = americanToImpliedProb(opposingRow?.odds_american ?? null);
+    if (selectedRow === null || opposingRow === null || selectedImplied === null || opposingImplied === null) return [];
+    const hold = selectedImplied + opposingImplied;
+    if (hold < 0.98 || hold > 1.12) return [];
+    return [{ sportsbook, noVigSelected: selectedImplied / hold }];
+  });
+  const currentCenter = currentPairs.length >= 3
+    ? medianProbability(currentPairs.map((pair) => pair.noVigSelected))
+    : null;
+  const coherentCurrentBooks = currentCenter === null
+    ? null
+    : new Set(
+        currentPairs
+          .filter((pair) => Math.abs(pair.noVigSelected - currentCenter) <= 0.04)
+          .map((pair) => pair.sportsbook),
+      );
   const ranked = books.flatMap((sportsbook) => {
+    if (coherentCurrentBooks !== null && !coherentCurrentBooks.has(sportsbook)) return [];
     const selectedRow = newestFreshAtBook(selectedRows, sportsbook);
     const opposingRow = newestFreshAtBook(opposingRows, sportsbook);
     if (selectedRow === null || opposingRow === null) return [];

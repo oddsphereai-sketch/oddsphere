@@ -218,6 +218,50 @@ function parseSide(selectionKey: string): "home" | "away" | "over" | "under" | n
   return side === "home" || side === "away" || side === "over" || side === "under" ? side : null;
 }
 
+function medianProbability(values: number[]): number | null {
+  if (values.length === 0) return null;
+  const sorted = [...values].sort((a, b) => a - b);
+  const middle = Math.floor(sorted.length / 2);
+  return sorted.length % 2 === 1
+    ? sorted[middle]!
+    : (sorted[middle - 1]! + sorted[middle]!) / 2;
+}
+
+function filterCrossBookPriceOutliers(args: {
+  rows: readonly PriceObservationForResolver[];
+  marketType: MarketIntelligenceMarketType;
+  selectedLine: number | null | undefined;
+}): { rows: PriceObservationForResolver[]; rejectedBooks: string[] } {
+  const exactLineRows = args.rows.filter((row) =>
+    args.marketType === "moneyline" || sameLine(row.line, args.selectedLine)
+  );
+  const latestByBook = new Map<string, PriceObservationForResolver>();
+  for (const row of exactLineRows) {
+    const prior = latestByBook.get(row.sportsbook);
+    if (!prior || obsTimeMs(row) >= obsTimeMs(prior)) latestByBook.set(row.sportsbook, row);
+  }
+  const current = [...latestByBook.values()].flatMap((row) => {
+    const probability = typeof row.no_vig_probability === "number" && Number.isFinite(row.no_vig_probability)
+      ? row.no_vig_probability
+      : americanToImpliedProb(row.american_price);
+    return probability === null ? [] : [{ sportsbook: row.sportsbook, probability }];
+  });
+  // Four books are required before one quote may be rejected. With a thinner
+  // board there is no robust center and the resolver preserves all evidence.
+  if (current.length < 4) return { rows: [...args.rows], rejectedBooks: [] };
+  const center = medianProbability(current.map((row) => row.probability));
+  if (center === null) return { rows: [...args.rows], rejectedBooks: [] };
+  const rejectedBooks = current
+    .filter((row) => Math.abs(row.probability - center) > 0.06)
+    .map((row) => row.sportsbook);
+  if (rejectedBooks.length === 0) return { rows: [...args.rows], rejectedBooks: [] };
+  const rejected = new Set(rejectedBooks);
+  return {
+    rows: args.rows.filter((row) => !rejected.has(row.sportsbook)),
+    rejectedBooks,
+  };
+}
+
 function stale(row: Timed, asOf: string | undefined, maxAgeMinutes: number): boolean {
   if (!asOf) return false;
   const a = Date.parse(asOf);
@@ -728,7 +772,7 @@ export function resolveMarketReadV2(input: MarketReadResolverInput): MarketReadR
     }
     return true;
   });
-  const sameSelectionPriceRows = input.priceObservations.filter((r) => {
+  const sameSelectionPriceRowsRaw = input.priceObservations.filter((r) => {
     if (r.market_type !== input.marketType || r.selection_key !== input.selectionKey) return false;
     if (afterStart(r, input.eventStartTime)) {
       rejected.push(`${r.sportsbook}:post_start`);
@@ -744,6 +788,13 @@ export function resolveMarketReadV2(input: MarketReadResolverInput): MarketReadR
     }
     return true;
   });
+  const coherentPrices = filterCrossBookPriceOutliers({
+    rows: sameSelectionPriceRowsRaw,
+    marketType: input.marketType,
+    selectedLine: input.selectedLine,
+  });
+  for (const sportsbook of coherentPrices.rejectedBooks) rejected.push(`${sportsbook}:cross_book_price_outlier`);
+  const sameSelectionPriceRows = coherentPrices.rows;
 
   const exactLinePriceEvidence = resolveExactLinePriceEvidence({
     rows: sameSelectionPriceRows,

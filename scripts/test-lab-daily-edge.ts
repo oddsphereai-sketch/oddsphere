@@ -2536,6 +2536,39 @@ section("Market Pulse presentation coherence");
         movementReference.opposingRow.odds_american === -115,
     );
 
+    const coherentMovementReference = dailyEdgeTest.selectTwoSidedMovementReference({
+      selectedSide: "home",
+      opposingSide: "away",
+      currentLine: null,
+      selectedCurrentRows: [
+        { game_id: 6, market_type: "moneyline", sportsbook: "circa", side: "home", line_value: null, odds_american: -425, fetched_at: movementCurrentAt },
+        { game_id: 6, market_type: "moneyline", sportsbook: "pinnacle", side: "home", line_value: null, odds_american: -141, fetched_at: movementCurrentAt },
+        { game_id: 6, market_type: "moneyline", sportsbook: "draftkings", side: "home", line_value: null, odds_american: -135, fetched_at: movementCurrentAt },
+      ],
+      opposingCurrentRows: [
+        { game_id: 6, market_type: "moneyline", sportsbook: "circa", side: "away", line_value: null, odds_american: 345, fetched_at: movementCurrentAt },
+        { game_id: 6, market_type: "moneyline", sportsbook: "pinnacle", side: "away", line_value: null, odds_american: 121, fetched_at: movementCurrentAt },
+        { game_id: 6, market_type: "moneyline", sportsbook: "draftkings", side: "away", line_value: null, odds_american: 115, fetched_at: movementCurrentAt },
+      ],
+      selectedHistory: [
+        { id: 51, game_id: 6, market_type: "moneyline", sportsbook: "circa", side: "home", line_value: null, odds_american: -134, recorded_at: "2026-09-30T12:00:00Z" },
+        { id: 52, game_id: 6, market_type: "moneyline", sportsbook: "pinnacle", side: "home", line_value: null, odds_american: -139, recorded_at: "2026-09-30T12:01:00Z" },
+        { id: 53, game_id: 6, market_type: "moneyline", sportsbook: "draftkings", side: "home", line_value: null, odds_american: -133, recorded_at: "2026-09-30T12:02:00Z" },
+      ],
+      opposingHistory: [
+        { id: 54, game_id: 6, market_type: "moneyline", sportsbook: "circa", side: "away", line_value: null, odds_american: 116, recorded_at: "2026-09-30T12:00:00Z" },
+        { id: 55, game_id: 6, market_type: "moneyline", sportsbook: "pinnacle", side: "away", line_value: null, odds_american: 119, recorded_at: "2026-09-30T12:01:00Z" },
+        { id: 56, game_id: 6, market_type: "moneyline", sportsbook: "draftkings", side: "away", line_value: null, odds_american: 113, recorded_at: "2026-09-30T12:02:00Z" },
+      ],
+      preferredSportsbook: "circa",
+    });
+    check(
+      "an isolated incoherent Circa pair cannot become the displayed movement trail",
+      coherentMovementReference !== null &&
+        coherentMovementReference.sportsbook !== "circa" &&
+        Math.abs(coherentMovementReference.selectedRow.odds_american ?? 0) < 200,
+    );
+
     const stableOpeningReference = dailyEdgeTest.selectTwoSidedMovementReference({
       selectedSide: "home",
       opposingSide: "away",
