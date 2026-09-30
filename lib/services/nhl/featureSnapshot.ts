@@ -24,6 +24,10 @@ import type { NhlFeatureSnapshot, NhlModelTeam } from "../../automodel/nhlRegula
 import type { BdlNhlTeamMetrics } from "../../providers/nhl/_ballDontLieNhlClient";
 import type { NhlCalibratedTeamState } from "../../automodel/nhlRegularPriors2026";
 import type { NhlOpponentAdjustedState } from "../../automodel/nhlOpponentAdjustedState2026";
+import {
+  normalizeNhlPlayerName,
+  type NhlRosterPrior,
+} from "../../automodel/nhlRosterPrior2026";
 export {
   nhlGameTypeFromExternalId,
   nhlSeasonStartYearFromExternalId,
@@ -47,6 +51,8 @@ export type BuildSnapshotOptions = {
   providerFeatureSeason?: number | null;
   calibratedStateByTeam?: ReadonlyMap<string, NhlCalibratedTeamState>;
   opponentAdjustedStateByTeam?: ReadonlyMap<string, NhlOpponentAdjustedState>;
+  rosterPriorByTeam?: ReadonlyMap<string, NhlRosterPrior>;
+  currentRosterGoaliesByTeam?: ReadonlyMap<string, ReadonlySet<string>>;
   marketEvidence?: {
     mlHomeBetsPct?: number | null;
     mlHomeMoneyPct?: number | null;
@@ -155,13 +161,23 @@ function selectGoalieByDefault(
   teamAbbr: string,
   season: number,
   gameType: 1 | 2 | 3,
+  currentRosterGoalies?: ReadonlySet<string>,
 ): DbGoalieStatsRow | null {
   const order = gameType === 3
     ? [[season, "playoffs"], [season, "regular"], [season - 1, "regular"]] as const
     : [[season, "regular"], [season - 1, "regular"]] as const;
   for (const [candidateSeason, seasonType] of order) {
     const candidates = rows
-      .filter((row) => row.team_abbr === teamAbbr && row.season === candidateSeason && row.season_type === seasonType && row.situation === "all")
+      .filter((row) => (
+        row.team_abbr === teamAbbr
+        && row.season === candidateSeason
+        && row.season_type === seasonType
+        && row.situation === "all"
+        && (
+          currentRosterGoalies === undefined
+          || currentRosterGoalies.has(normalizeNhlPlayerName(row.player_name))
+        )
+      ))
       .sort((a, b) => (b.games_played ?? 0) - (a.games_played ?? 0));
     if (candidates[0]) return candidates[0];
   }
@@ -471,10 +487,22 @@ export async function buildNhlFeatureSnapshot(
 
   const homeGoalie = opts.homeGoalieExternalId !== undefined
     ? selectGoalieByOverride(goalies, opts.homeGoalieExternalId)
-    : selectGoalieByDefault(goalies, homeTeam.abbreviation, featureSeason, gameType);
+    : selectGoalieByDefault(
+      goalies,
+      homeTeam.abbreviation,
+      featureSeason,
+      gameType,
+      opts.currentRosterGoaliesByTeam?.get(homeTeam.abbreviation),
+    );
   const awayGoalie = opts.awayGoalieExternalId !== undefined
     ? selectGoalieByOverride(goalies, opts.awayGoalieExternalId)
-    : selectGoalieByDefault(goalies, awayTeam.abbreviation, featureSeason, gameType);
+    : selectGoalieByDefault(
+      goalies,
+      awayTeam.abbreviation,
+      featureSeason,
+      gameType,
+      opts.currentRosterGoaliesByTeam?.get(awayTeam.abbreviation),
+    );
 
   if (homeGoalie) log(`  home goalie: ${homeGoalie.player_name} (id=${homeGoalie.player_external_id}, ${homeGoalie.season_type})`);
   else log(`  home goalie: <none found>`);
@@ -607,6 +635,8 @@ export async function buildNhlFeatureSnapshot(
     calibrated_state: opts.calibratedStateByTeam?.get(homeTeam.abbreviation) ?? null,
     opponent_adjusted_attack: opts.opponentAdjustedStateByTeam?.get(homeTeam.abbreviation)?.attack ?? null,
     opponent_adjusted_defense_weakness: opts.opponentAdjustedStateByTeam?.get(homeTeam.abbreviation)?.defenseWeakness ?? null,
+    roster_prior: opts.rosterPriorByTeam?.get(homeTeam.abbreviation) ?? null,
+    current_season_games: homeStatsAll?.season === featureSeason ? homeStatsAll.games_played ?? 0 : 0,
   };
   const awayModel: NhlModelTeam = {
     abbreviation: awayTeam.abbreviation,
@@ -629,6 +659,8 @@ export async function buildNhlFeatureSnapshot(
     calibrated_state: opts.calibratedStateByTeam?.get(awayTeam.abbreviation) ?? null,
     opponent_adjusted_attack: opts.opponentAdjustedStateByTeam?.get(awayTeam.abbreviation)?.attack ?? null,
     opponent_adjusted_defense_weakness: opts.opponentAdjustedStateByTeam?.get(awayTeam.abbreviation)?.defenseWeakness ?? null,
+    roster_prior: opts.rosterPriorByTeam?.get(awayTeam.abbreviation) ?? null,
+    current_season_games: awayStatsAll?.season === featureSeason ? awayStatsAll.games_played ?? 0 : 0,
   };
 
   const snapshot: NhlFeatureSnapshot = {
@@ -676,3 +708,5 @@ export async function buildNhlFeatureSnapshot(
     },
   };
 }
+
+export const __NHL_FEATURE_SNAPSHOT_TEST__ = { selectGoalieByDefault };
