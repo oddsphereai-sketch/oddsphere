@@ -1819,9 +1819,9 @@ The September 21 operational release restored the two bounded daily schedules re
 
 ## NHL regular-season champion (active from 2026-09-29)
 
-- Model: `nhl_regular_2026_r10_t60_market_refresh`
-- Calibration: `nhl_regular_calibration_2026_r10_t60_market_refresh`
-- Decision: `nhl_regular_decision_2026_r10_source_aware_exact_price`
+- Model: `nhl_regular_2026_r11_early_prior_market_arbitration`
+- Calibration: `nhl_regular_calibration_2026_r11_early_prior_market_arbitration`
+- Decision: `nhl_regular_decision_2026_r11_early_prior_market_arbitration`
 - Public tracking start: `2026-09-29`
 - Official markets: moneyline, total, spread (puck line)
 - Retired release: `nhl_v0_2026_finals`
@@ -1839,6 +1839,20 @@ member snapshot. Locked r7 rows remain immutable and tracking-eligible. The
 paired score/grade board impact is zero; this release changes freshness and
 lock ownership rather than model math. Evidence:
 `docs/model-audits/2026-09-29-nhl-t60-market-refresh-r10.md`.
+
+The September 30 r11 release preserves the professional independent score,
+ordinary 20% Moneyline market marriage, Total, exact-price grade surfaces,
+providers, cadence, sole writer, lease, locks, and member product. During the
+prior-only opening regime, a conflict with a market of at least 54% may use a
+60% Moneyline arbitration only when at least two complete books, continuous
+same-book movement, and a complete medium/high-confidence money-and-ticket
+observation all confirm the market side. Missing or conflicting evidence keeps
+r10 behavior, and current-season opponent-adjusted evidence automatically ends
+eligibility. The reviewed September 30 board retains all three games and nine
+markets, changes NYI-TOR to a coherent TOR 3.19–NYI 3.14 winner, leaves every
+Total and LAK-COL unchanged, and discloses zero promotions / two demotions on
+the one invalidated prior-conflict game. Evidence and rollback:
+`docs/model-audits/2026-09-30-nhl-early-prior-market-arbitration-r11.md`.
 
 The September 30 r7 reader release
 `nhl_daily_edge_reader_2026_09_30_r7_sharp_split_identity` preserves the r10
