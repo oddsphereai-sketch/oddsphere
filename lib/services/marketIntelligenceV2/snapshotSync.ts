@@ -9,7 +9,7 @@ import {
   type SplitObservationForResolver,
 } from "./resolver";
 
-export const MARKET_INTELLIGENCE_V2_RESOLVER_VERSION = "market-intelligence-v2.3-unified-price-map-0.5.0";
+export const MARKET_INTELLIGENCE_V2_RESOLVER_VERSION = "market-intelligence-v2.3-unified-price-map-0.6.0-coherent-observation";
 const OBSERVATION_PAGE_SIZE = 1000;
 
 type GameRow = {

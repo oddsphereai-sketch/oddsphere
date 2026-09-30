@@ -426,6 +426,35 @@ check("score -5 label", labelForMarketReadScore(-5) === "Strong Market Resistanc
   check("total requires selected line", out.label === null && out.evidence.trace.explanationReasonCodes.includes("missing_selected_line"));
 }
 
+{
+  const out = resolveMarketReadV2({
+    marketType: "moneyline",
+    selectionKey,
+    selectedLine: null,
+    selectedPrice: -135,
+    splitObservations: [],
+    priceObservations: [
+      { sportsbook: "circa", sharp_book: true, market_type: "moneyline", selection_key: selectionKey, american_price: -134, no_vig_probability: 0.57, line: null, provider_timestamp: "2026-09-30T12:00:00Z", fetched_at: "2026-09-30T12:00:00Z" },
+      { sportsbook: "circa", sharp_book: true, market_type: "moneyline", selection_key: selectionKey, american_price: -425, no_vig_probability: 0.81, line: null, provider_timestamp: "2026-09-30T13:00:00Z", fetched_at: "2026-09-30T13:00:00Z" },
+      { sportsbook: "pinnacle", sharp_book: true, market_type: "moneyline", selection_key: selectionKey, american_price: -141, no_vig_probability: 0.58, line: null, provider_timestamp: "2026-09-30T13:00:00Z", fetched_at: "2026-09-30T13:00:00Z" },
+      { sportsbook: "draftkings", sharp_book: false, market_type: "moneyline", selection_key: selectionKey, american_price: -135, no_vig_probability: 0.57, line: null, provider_timestamp: "2026-09-30T13:00:00Z", fetched_at: "2026-09-30T13:00:00Z" },
+      { sportsbook: "fanduel", sharp_book: false, market_type: "moneyline", selection_key: selectionKey, american_price: -138, no_vig_probability: 0.575, line: null, provider_timestamp: "2026-09-30T13:00:00Z", fetched_at: "2026-09-30T13:00:00Z" },
+    ],
+    asOf: "2026-09-30T13:01:00Z",
+  });
+  check(
+    "an isolated cross-book price outlier is quarantined from market intelligence",
+    out.evidence.trace.evidenceRejected.includes("circa:cross_book_price_outlier"),
+    out.evidence.trace.evidenceRejected.join(","),
+  );
+  check(
+    "coherent Pinnacle evidence remains after quarantining the isolated Circa print",
+    out.evidence.sharpRetailPriceMap.sharpProbability !== null &&
+      out.evidence.sharpRetailPriceMap.sharpProbability < 0.7,
+    String(out.evidence.sharpRetailPriceMap.sharpProbability),
+  );
+}
+
 console.log(`\nmarket-intelligence-v2-resolver: ${pass} passed, ${fail} failed`);
 if (fail > 0) {
   console.error("\nFailures:");

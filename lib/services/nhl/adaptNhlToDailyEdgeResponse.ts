@@ -43,6 +43,7 @@ import type {
 } from "../../automodel/nhlRegularModelV1";
 import type { SharpNhlSplitsEvent } from "../../providers/nhl/_sharpApiNhlClient";
 import { americanToImplied } from "../../utils/odds";
+import type { ResolvedNhlSplitsEvent } from "./nhlResolvedSplits";
 
 /**
  * Per-market best-of-book bundle the pipeline assembles and the adapter
@@ -78,18 +79,23 @@ function pctTo100(v: number | null | undefined): number | null {
 
 /**
  * Build the two-row publicSplits array (pick side first, other side
- * second) for a market, mirroring NBA's pattern. Returns [] when the
- * SharpAPI splits payload doesn't carry usable data for this market.
+ * second) for a market, mirroring NBA's pattern. Public Consensus is a
+ * multi-book lane: only the independently resolved Playbook observation may
+ * populate it. A SharpAPI named-book fallback belongs exclusively in the
+ * Sharp Book Splits lane applied at the response boundary; reusing it here
+ * would present one observation as two independent sources.
  */
 function buildPublicSplits(
   market: "ml" | "total" | "puckline",
   pickIsHome: boolean,
   pickIsOver: boolean,
-  splits: SharpNhlSplitsEvent | null,
+  splits: ResolvedNhlSplitsEvent | null,
   homeAbbr: string,
   awayAbbr: string,
 ): MarketEdgeDto["publicSplits"] {
   if (!splits) return [];
+  const resolvedMarket = market === "ml" ? "moneyline" : market === "puckline" ? "spread" : "total";
+  if (splits.internal_resolution?.[resolvedMarket]?.source !== "playbook") return [];
   const arr: MarketEdgeDto["publicSplits"] = [];
   if (market === "total") {
     if (!splits.total) return [];
@@ -466,7 +472,7 @@ export type NhlAdapterGameInput = {
    * sub-objects (`moneyline`, `spread`, `total`) may themselves be
    * partially populated — the adapter renders only what's present.
    */
-  splits: SharpNhlSplitsEvent | null;
+  splits: ResolvedNhlSplitsEvent | null;
   /** locked_at from prediction_records, if any. Null when not yet written. */
   lockedAt: string | null;
 };

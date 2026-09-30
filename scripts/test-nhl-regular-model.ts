@@ -49,6 +49,36 @@ assert.deepEqual(
   "a missing NHL Total split must not borrow the puck-line split pair",
 );
 
+const namedBookFallbackSplits = {
+  spread: {
+    bets_pct: { away: 0.67, home: 0.33 },
+    handle_pct: { away: 0.2, home: 0.8 },
+  },
+  internal_resolution: {
+    spread: {
+      source: "sharpapi",
+      agreement: "single_provider",
+      confidence: "source_specific_only",
+      providerGapPct: null,
+    },
+  },
+} as any;
+assert.deepEqual(
+  __NHL_ADAPTER_TEST__.buildPublicSplits("puckline", false, false, namedBookFallbackSplits, "TOR", "NYI"),
+  [],
+  "a SharpAPI named-book fallback must not also populate Public Consensus",
+);
+const independentConsensusSplits = structuredClone(namedBookFallbackSplits);
+independentConsensusSplits.internal_resolution.spread.source = "playbook";
+assert.deepEqual(
+  __NHL_ADAPTER_TEST__.buildPublicSplits("puckline", false, false, independentConsensusSplits, "TOR", "NYI"),
+  [
+    { side: "away", label: "NYI", moneyPct: 20, betsPct: 67 },
+    { side: "home", label: "TOR", moneyPct: 80, betsPct: 33 },
+  ],
+  "an independent Playbook consensus remains available beside Sharp Book Splits",
+);
+
 const base: NhlFeatureSnapshot = {
   home: {
     abbreviation: "FLA",
@@ -455,7 +485,7 @@ assert.match(reader, /bestPriceFor\("total", totalSide, marketTotalLine\)/, "rea
 assert.match(reader, /Math\.abs\(l\.line_value - predictedPuckLine\) < 0\.01/, "reader prices the exact predicted puck line");
 assert.match(reader, /predictionPayloadByGame/, "reader preserves the writer-owned active-release tuple before and after lock");
 assert.match(reader, /NHL_REGULAR_TRANSITION_MODEL_RELEASES/, "reader preserves an already-locked prior-release tuple during deployment");
-assert.match(reader, /nhl_daily_edge_reader_2026_09_30_r7_sharp_split_identity/, "reader release records NHL Sharp-split identity recovery");
+assert.match(reader, /nhl_daily_edge_reader_2026_09_30_r8_split_source_independence/, "reader release records independent public and Sharp split lanes");
 assert.match(pregameSweep, /externalIdsFilter:\s*externalIds/, "T-60 writer refreshes only the games entering the lock window");
 assert.match(pregameSweep, /deferLock:\s*true/, "T-60 writer defers locking until the coherence gate passes");
 assert.match(reader, /incoherentPayloadReleaseGames/, "reader quarantines incoherence by release instead of hiding a valid prior lock");

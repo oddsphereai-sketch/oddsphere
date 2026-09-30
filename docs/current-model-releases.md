@@ -794,6 +794,20 @@ projections with zero side, grade, probability, confidence, or board-count
 changes. Evidence and rollback are in
 `docs/model-audits/2026-09-26-mlb-market-total-score-projection-v2-5.md`.
 
+The September 30 evidence-integrity release advances the shared resolver to
+`market-intelligence-v2.3-unified-price-map-0.6.0-coherent-observation`. It keeps
+Circa and Pinnacle in their established priority order, but requires a current
+selected-side observation to remain within six percentage points of the median
+of at least four books before that book and its history can influence market
+intelligence. The member movement trail applies the same principle to at least
+three complete two-sided pairs with a four-point no-vig tolerance. This
+quarantines the isolated CHC-SD Circa SD -425 / CHC +345 observation while the
+coherent board remains SD -133 through -155; it does not ban or globally
+downweight Circa. The SD -135 exact-price recommendation, projections, sides,
+probabilities, grades, stakes, locks, tracking, writers, schedules, leases, and
+provider calls are unchanged. Evidence and rollback:
+`docs/model-audits/2026-09-30-market-evidence-source-integrity.md`.
+
 The September 24 r89 release retains the r88 Total probability head, every
 predicted side and score, and the full member presentation. It replaces only
 the failed additive Total Lean sleeve: the incumbent 55%+ selected-probability
@@ -1839,6 +1853,18 @@ production-feed replay covers all three September 30 games and all nine market
 slots from SharpAPI, with DraftKings Network independently covering all six
 available Moneyline/Total slots. Evidence:
 `docs/model-audits/2026-09-30-nhl-sharp-split-identity-r7.md`.
+
+The September 30 r8 reader release
+`nhl_daily_edge_reader_2026_09_30_r8_split_source_independence` prevents one
+SharpAPI named-book observation from populating both Public Consensus and Sharp
+Book Splits. Public Consensus now requires independently resolved Playbook
+multi-book evidence. SharpAPI named-book splits and DraftKings Network remain
+eligible for the existing Sharp Book section and last-known-good continuity, so
+the fallback does not disappear. If independent sources genuinely agree, both
+may display. No copy, label, layout, model input, score, side, probability,
+grade, stake, lock, or tracking behavior changes; promotions/demotions and the
+actionable-count change are all zero. Evidence and rollback:
+`docs/model-audits/2026-09-30-market-evidence-source-integrity.md`.
 
 Only NHL game type `02` is eligible for the reader, writer, and public tracking.
 The September 22 game type `01` rows are preseason audit evidence and never enter
