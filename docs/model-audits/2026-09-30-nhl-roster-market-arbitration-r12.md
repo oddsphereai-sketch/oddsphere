@@ -86,6 +86,15 @@ scope and cached for 30 minutes. Default goalie history is filtered to current
 roster identity; an empty/unavailable verified set yields neutral goalie
 context. Locked prior-release tuples are never rewritten.
 
+Production activation also verified the transition cleanup path against the
+real pending-grade substrate. Superseded unlocked rows can have pending
+`prediction_grades` children before puck drop, so r12 retirement now verifies
+that every child remains pending and unset, removes only those pending
+children, and then removes only the still-unlocked superseded rows. Any locked
+or settled state fails closed. This is a writer-integrity repair only; it does
+not change r12 projections, probabilities, sides, grades, member copy, or
+layout.
+
 Rollback the unlocked r12 release tuple to r10 if the live writer loses roster
 coverage, any game or market, exact prices, source-separated splits, coherence,
 the shared lease, or lock/tracking integrity. Do not roll back the September 30
