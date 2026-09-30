@@ -106,7 +106,7 @@ def load_games(csv_path: Path) -> list[dict[str, Any]]:
 
 def load_openings(path: Path) -> dict[tuple[int, str, str, str], dict[str, float | None]]:
     payload = json.loads(path.read_text())
-    game_by_id = {game["id"]: game for game in payload["games"] if game["season"] == 2025}
+    game_by_id = {game["id"]: game for game in payload["games"]}
     grouped: dict[int, list[dict[str, Any]]] = defaultdict(list)
     for row in payload["opening_odds"]:
         if row.get("vendor") not in {"kalshi", "polymarket"}:
@@ -127,7 +127,7 @@ def load_openings(path: Path) -> dict[tuple[int, str, str, str], dict[str, float
             spread = n(row.get("spread_home_value"), math.nan)
             if math.isfinite(total): totals.append(total)
             if math.isfinite(spread): home_spreads.append(spread)
-        key = (2025, game["game_date"], alias(game["home_team"]["tricode"]), alias(game["away_team"]["tricode"]))
+        key = (int(game["season"]), game["game_date"], alias(game["home_team"]["tricode"]), alias(game["away_team"]["tricode"]))
         out[key] = {"home_prob": median(probs), "total": median(totals), "home_spread": median(home_spreads)}
     return out
 
@@ -567,6 +567,88 @@ def decision_bins(
     }
 
 
+def early_market_conflict_curve(
+    rows: list[dict[str, Any]],
+    ability_weight: float,
+    ability_beta: list[float],
+    minimum_market_conviction: float = 0.0,
+) -> list[dict[str, Any]]:
+    if not rows:
+        return []
+    first_date = min(datetime.fromisoformat(row["date"]) for row in rows)
+    early = [
+        row for row in rows
+        if (datetime.fromisoformat(row["date"]) - first_date).days <= 30
+    ]
+    conflicts = []
+    for row in early:
+        market_home = row["market"]["home_prob"]
+        if market_home is None or abs(market_home - .5) < minimum_market_conviction:
+            continue
+        independent_home, independent_away = independent_scores(row, ability_weight, ability_beta)
+        independent_probability = distribution(independent_home, independent_away)["home_win"]
+        if (independent_probability >= .5) == (market_home >= .5):
+            continue
+        conflicts.append((row, independent_probability))
+
+    curve = []
+    def actionable(probability: float, market_home: float) -> bool:
+        picked_home = probability >= .5
+        picked_probability = probability if picked_home else 1 - probability
+        market_probability = market_home if picked_home else 1 - market_home
+        conviction = abs(probability - .5)
+        edge = picked_probability - market_probability
+        return conviction >= .08 or edge >= .025
+
+    baseline_by_game: dict[int, tuple[bool, bool]] = {}
+    for row, _ in conflicts:
+        baseline_home, baseline_away = blended(row, ability_weight, .2, 0.0, ability_beta)
+        baseline_probability = distribution(baseline_home, baseline_away)["home_win"]
+        baseline_by_game[row["id"]] = (
+            baseline_probability >= .5,
+            actionable(baseline_probability, row["market"]["home_prob"]),
+        )
+    for weight in [0.0, .2, .4, .6, .8, 1.0]:
+        correct = 0
+        brier = 0.0
+        flipped = corrected = worsened = 0
+        promoted = demoted = retained_actionable = 0
+        for row, independent_probability in conflicts:
+            home, away = blended(row, ability_weight, weight, 0.0, ability_beta)
+            probability = distribution(home, away)["home_win"]
+            actual = row["home_goals"] > row["away_goals"]
+            independent_side = independent_probability >= .5
+            candidate_side = probability >= .5
+            correct += int(candidate_side == actual)
+            brier += (probability - int(actual)) ** 2
+            if candidate_side != independent_side:
+                flipped += 1
+                corrected += int(candidate_side == actual)
+                worsened += int(independent_side == actual)
+            baseline_side, baseline_actionable = baseline_by_game[row["id"]]
+            candidate_actionable = actionable(probability, row["market"]["home_prob"])
+            promoted += int(candidate_actionable and not baseline_actionable)
+            demoted += int(baseline_actionable and not candidate_actionable)
+            retained_actionable += int(baseline_actionable and candidate_actionable)
+        curve.append({
+            "market_weight": weight,
+            "n": len(conflicts),
+            "accuracy": correct / len(conflicts) if conflicts else None,
+            "brier": brier / len(conflicts) if conflicts else None,
+            "flipped": flipped,
+            "corrected": corrected,
+            "worsened": worsened,
+            "side_changes_vs_20pct": sum(
+                int((distribution(*blended(row, ability_weight, weight, 0.0, ability_beta))["home_win"] >= .5) != baseline_by_game[row["id"]][0])
+                for row, _ in conflicts
+            ),
+            "promoted_vs_20pct": promoted,
+            "demoted_vs_20pct": demoted,
+            "retained_actionable_vs_20pct": retained_actionable,
+        })
+    return curve
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--moneypuck", required=True, type=Path)
@@ -665,6 +747,10 @@ def main() -> None:
         "top_marriage": sorted(marriage_candidates, key=lambda row: row["objective"])[:10],
         "diagnostic_ability_curve": diagnostic_ability_curve,
         "diagnostic_market_curve": diagnostic_market_curve,
+        "early_market_conflict_diagnostic": {
+            "all_conflicts": early_market_conflict_curve(priced, selected_ability_weight, ability_beta),
+            "market_at_least_54_pct": early_market_conflict_curve(priced, selected_ability_weight, ability_beta, .04),
+        },
     }
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(result, indent=2) + "\n")

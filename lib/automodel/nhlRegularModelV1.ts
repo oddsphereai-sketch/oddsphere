@@ -1,16 +1,18 @@
 import type { BdlNhlTeamMetrics } from "../providers/nhl/_ballDontLieNhlClient";
 import type { NhlCalibratedTeamState } from "./nhlRegularPriors2026";
 
-export const NHL_REGULAR_MODEL_RELEASE = "nhl_regular_2026_r10_t60_market_refresh" as const;
-export const NHL_REGULAR_CALIBRATION_RELEASE = "nhl_regular_calibration_2026_r10_t60_market_refresh" as const;
-export const NHL_REGULAR_DECISION_RELEASE = "nhl_regular_decision_2026_r10_source_aware_exact_price" as const;
+export const NHL_REGULAR_MODEL_RELEASE = "nhl_regular_2026_r11_early_prior_market_arbitration" as const;
+export const NHL_REGULAR_CALIBRATION_RELEASE = "nhl_regular_calibration_2026_r11_early_prior_market_arbitration" as const;
+export const NHL_REGULAR_DECISION_RELEASE = "nhl_regular_decision_2026_r11_early_prior_market_arbitration" as const;
 export const NHL_REGULAR_TRANSITION_MODEL_RELEASES = [
   NHL_REGULAR_MODEL_RELEASE,
+  "nhl_regular_2026_r10_t60_market_refresh",
   "nhl_regular_2026_r9_source_aware_market_read",
   "nhl_regular_2026_r7_runtime_parity",
 ] as const;
 export const NHL_REGULAR_TRANSITION_CALIBRATION_RELEASES = [
   NHL_REGULAR_CALIBRATION_RELEASE,
+  "nhl_regular_calibration_2026_r10_t60_market_refresh",
   "nhl_regular_calibration_2026_r9_source_aware_market_read",
   "nhl_regular_calibration_2026_r7_runtime_parity",
 ] as const;
@@ -115,6 +117,7 @@ export type NhlModelOutput = {
     special_teams_diff_raw: number;
     market_goal_diff: number;
     split_movement_goals: number;
+    market_arbitration_weight: number;
   };
   independent_goal_diff: number;
   independent_total_goals: number;
@@ -128,6 +131,7 @@ export type NhlModelOutput = {
 };
 
 const ML_MARKET_WEIGHT = 0.20;
+const EARLY_PRIOR_MARKET_WEIGHT = 0.60;
 const ML_SLOPE = 0.78;
 const LEAGUE_TOTAL = 6.10;
 const HOME_ELO_POINTS = 40;
@@ -299,6 +303,45 @@ function movementHomeNudge(market: NhlModelMarket): number {
   return clamp(market.same_book_home_prob_move * 0.35, -0.015, 0.015);
 }
 
+function splitDirectionConfirmsMarket(market: NhlModelMarket, marketHome: number): boolean {
+  if (!["high", "medium"].includes(market.ml_split_confidence)) return false;
+  const bets = market.ml_home_bets_pct;
+  const money = market.ml_home_money_pct;
+  if (bets === null || money === null) return false;
+  return marketHome >= 0.5
+    ? bets >= 55 && money >= 55
+    : bets <= 45 && money <= 45;
+}
+
+function moneylineMarketWeight(
+  snapshot: NhlFeatureSnapshot,
+  independentGoalDiff: number,
+  marketHome: number | null,
+  hasOpponentAdjustedState: boolean,
+): number {
+  if (marketHome === null) return ML_MARKET_WEIGHT;
+  const priorOnlyRegularSeason = snapshot.game_type === 2
+    && snapshot.provider_feature_season !== null
+    && snapshot.provider_feature_season < snapshot.feature_season
+    && !hasOpponentAdjustedState;
+  const marketDirection = Math.sign(marketHome - 0.5);
+  const independentDirection = Math.sign(independentGoalDiff);
+  const meaningfulConflict = Math.abs(marketHome - 0.5) >= 0.04
+    && marketDirection !== 0
+    && independentDirection !== 0
+    && marketDirection !== independentDirection;
+  const move = snapshot.market.same_book_home_prob_move;
+  const confirmingMove = move !== null
+    && Math.abs(move) >= 0.01
+    && Math.sign(move) === marketDirection;
+  const corroboratedMarket = snapshot.market.market_book_count >= 2
+    && confirmingMove
+    && splitDirectionConfirmsMarket(snapshot.market, marketHome);
+  return priorOnlyRegularSeason && meaningfulConflict && corroboratedMarket
+    ? EARLY_PRIOR_MARKET_WEIGHT
+    : ML_MARKET_WEIGHT;
+}
+
 function moneylineVerdict(probability: number, marketProbability: number | null): NhlVerdictKey {
   const conviction = Math.abs(probability - 0.5);
   const edge = marketProbability === null ? 0 : probability - marketProbability;
@@ -343,27 +386,35 @@ export function nhlRegularModelV1(snapshot: NhlFeatureSnapshot): NhlModelOutput 
   const independentGoalDiff = (1 - ABILITY_WEIGHT) * scoreMargin + ABILITY_WEIGHT * abilityMargin;
   const independentTotal = clamp(scoreHome + scoreAway, 4.5, 8);
 
-  const marketHome = snapshot.market.market_home_prob;
-  const marketGoalDiff = marketHome === null ? independentGoalDiff : logit(marketHome) / ML_SLOPE;
-  // Playbook and the legacy SharpAPI splits lane are public-consensus inputs,
-  // not named sharp-book movement. They remain stored and displayed, but the
-  // current-era chronological replay did not validate either as a projection
-  // rewrite. Only exact same-book price movement enters the score equation.
-  const probabilityNudge = movementHomeNudge(snapshot.market);
-  const activeExpectedGoalDiff = (1 - ML_MARKET_WEIGHT) * independentGoalDiff
-    + ML_MARKET_WEIGHT * marketGoalDiff
-    + probabilityNudge / 0.12;
-
-  const marketTotal = snapshot.market.market_total_line;
-  const totalMovement = snapshot.market.same_book_total_move !== null
-    ? clamp(snapshot.market.same_book_total_move * 0.35, -0.25, 0.25)
-    : 0;
   const hasOpponentAdjustedState = [
     snapshot.home.opponent_adjusted_attack,
     snapshot.home.opponent_adjusted_defense_weakness,
     snapshot.away.opponent_adjusted_attack,
     snapshot.away.opponent_adjusted_defense_weakness,
   ].every((value) => value !== null && Number.isFinite(value));
+
+  const marketHome = snapshot.market.market_home_prob;
+  const marketGoalDiff = marketHome === null ? independentGoalDiff : logit(marketHome) / ML_SLOPE;
+  // Playbook and the legacy SharpAPI lane remain public/fallback consensus,
+  // never named sharp-book movement. In the ordinary regime they do not
+  // rewrite the projection. During the prior-only opening regime they may
+  // corroborate (but never independently trigger) the validated conditional
+  // arbitration path alongside a broad market and continuous same-book move.
+  const probabilityNudge = movementHomeNudge(snapshot.market);
+  const marketWeight = moneylineMarketWeight(
+    snapshot,
+    independentGoalDiff,
+    marketHome,
+    hasOpponentAdjustedState,
+  );
+  const activeExpectedGoalDiff = (1 - marketWeight) * independentGoalDiff
+    + marketWeight * marketGoalDiff
+    + probabilityNudge / 0.12;
+
+  const marketTotal = snapshot.market.market_total_line;
+  const totalMovement = snapshot.market.same_book_total_move !== null
+    ? clamp(snapshot.market.same_book_total_move * 0.35, -0.25, 0.25)
+    : 0;
   const opponentAdjustedIndependentTotal = hasOpponentAdjustedState
     ? clamp(
       clamp(dot([
@@ -454,6 +505,7 @@ export function nhlRegularModelV1(snapshot: NhlFeatureSnapshot): NhlModelOutput 
       special_teams_diff_raw: (homeFeatures[10]! + homeFeatures[11]!) - (awayFeatures[10]! + awayFeatures[11]!),
       market_goal_diff: marketGoalDiff,
       split_movement_goals: probabilityNudge / 0.12,
+      market_arbitration_weight: marketWeight,
     },
     independent_goal_diff: independentGoalDiff,
     independent_total_goals: opponentAdjustedIndependentTotal,

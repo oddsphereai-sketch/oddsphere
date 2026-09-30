@@ -5,6 +5,35 @@ inputs, probabilities, projections, grades, promotions/demotions, calibration, p
 or stakes. It exists to prevent mixed model eras, competing writers, accidental board
 flattening, and load spikes.
 
+## Owner-approved provisional exception: NHL early-prior market arbitration r11
+
+On 2026-09-30 Daniel Mengel explicitly directed Oddsphere to protect prediction
+accuracy when the opening-night independent NHL model still depends on 2025
+priors, to read corroborated price movement and money/ticket evidence as a
+possible real direction flip rather than a cosmetic nudge, and to avoid
+publishing a bogus featured pick. This exception is limited to the r11 release
+and evidence in
+`docs/model-audits/2026-09-30-nhl-early-prior-market-arbitration-r11.md`.
+
+The independent score coefficients and ordinary 20% market marriage remain
+unchanged. A 60% Moneyline arbitration is allowed only in the prior-only
+regular-season regime when current opponent-adjusted state is absent, a market
+of at least 54% conflicts with the independent winner, at least two complete
+books exist, a continuous same-book move of at least one percentage point
+confirms the market direction, and a complete medium/high-confidence money and
+ticket observation independently confirms it. Missing or conflicting evidence
+keeps the incumbent behavior. Splits or movement alone cannot flip a side, and
+Totals are out of scope.
+
+The owner acknowledges the disclosed three-game board impact: all nine markets
+remain, NYI-TOR becomes a coherent TOR winner, and two actionables on that one
+invalidated conflict demote with zero current promotions. This does not add a
+quota or suppressive grade rule; the existing symmetric exact-price promotion
+paths remain active. No member copy, labels, layout, stake, provider call,
+cadence, writer, lease, or lock behavior changes. Publication still requires
+focused tests, full model-change verification, production build, latest-main
+integration safety, protected PR checks, and live release/writer/reader proof.
+
 ## Owner-approved emergency exception: NHL overnight slate readiness r6
 
 On 2026-09-30 Daniel Mengel reported that the NHL board showed no games and

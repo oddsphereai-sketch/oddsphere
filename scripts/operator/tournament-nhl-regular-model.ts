@@ -299,6 +299,28 @@ function boardImpact(rows: Forecast[], beforeWeights: { ml: number; total: numbe
   }));
 }
 
+function marketConflictMetrics(rows: Forecast[], minimumMarketConviction = 0) {
+  const conflicts = rows.filter((row) =>
+    row.marketHomeProb !== null
+    && Math.abs(row.marketHomeProb - 0.5) >= minimumMarketConviction
+    && (row.independentHomeProb >= 0.5) !== (row.marketHomeProb >= 0.5)
+  );
+  const correct = (probability: number, row: Forecast) =>
+    Number((probability >= 0.5) === (row.game.home_score > row.game.away_score));
+  return {
+    n: conflicts.length,
+    independentAccuracy: conflicts.length
+      ? conflicts.reduce((sum, row) => sum + correct(row.independentHomeProb, row), 0) / conflicts.length
+      : null,
+    marketAccuracy: conflicts.length
+      ? conflicts.reduce((sum, row) => sum + correct(row.marketHomeProb!, row), 0) / conflicts.length
+      : null,
+    twentyPctBlendAccuracy: conflicts.length
+      ? conflicts.reduce((sum, row) => sum + correct(0.8 * row.independentHomeProb + 0.2 * row.marketHomeProb!, row), 0) / conflicts.length
+      : null,
+  };
+}
+
 function totalActionCurve(rows: Forecast[], totalWeight: number) {
   return [0.1, 0.15, 0.2, 0.25, 0.3, 0.4, 0.45, 0.5].map((minimumIndependentGap) => {
     let n = 0, correct = 0;
@@ -319,7 +341,10 @@ function totalActionCurve(rows: Forecast[], totalWeight: number) {
 async function main(): Promise<void> {
   const rootArg = process.argv.find((arg) => arg.startsWith("--root="));
   const root = path.resolve(rootArg?.slice("--root=".length) || process.cwd());
-  const cachePath = path.join(root, "nhl-research/cache/balldontlie/nhl_regular_history_2023_2025.json");
+  const cacheArg = process.argv.find((arg) => arg.startsWith("--cache="));
+  const cachePath = cacheArg
+    ? path.resolve(cacheArg.slice("--cache=".length))
+    : path.join(root, "nhl-research/cache/balldontlie/nhl_regular_history_2023_2025.json");
   const cache = JSON.parse(await readFile(cachePath, "utf8")) as Cache;
   const openingsByGame = new Map<number, Opening[]>();
   for (const row of cache.opening_odds) {
@@ -382,6 +407,17 @@ async function main(): Promise<void> {
   const selected = { ml: mlWeight, total: totalWeight, spread: spreadWeight };
   const independent = { ml: 0, total: 0, spread: 0 };
   const market = { ml: 1, total: 1, spread: 1 };
+  const seasonStartMs = Math.min(...season2025.map((row) => Date.parse(row.game.start_time_utc)));
+  const early2025 = season2025.filter((row) => Date.parse(row.game.start_time_utc) <= seasonStartMs + 30 * 86_400_000);
+  const earlyBySeason = Object.fromEntries([2023, 2024, 2025].map((year) => {
+    const seasonRows = allForecasts.filter((row) => row.game.season === year && row.marketHomeProb !== null);
+    const startMs = Math.min(...seasonRows.map((row) => Date.parse(row.game.start_time_utc)));
+    const earlyRows = seasonRows.filter((row) => Date.parse(row.game.start_time_utc) <= startMs + 30 * 86_400_000);
+    return [year, {
+      all_conflicts: marketConflictMetrics(earlyRows),
+      market_at_least_54_pct: marketConflictMetrics(earlyRows, 0.04),
+    }];
+  }));
   const report = {
     release: "nhl_regular_model_tournament_2026_09_23_r1",
     source_manifest: "bdl_nhl_regular_history_2026_09_23_r1",
@@ -408,6 +444,17 @@ async function main(): Promise<void> {
       independent: metrics(holdout, independent),
       market: metrics(holdout, market),
       selected: metrics(holdout, selected),
+    },
+    market_conflict_diagnostic: {
+      early_by_season: earlyBySeason,
+      early_first_30_days: {
+        all_conflicts: marketConflictMetrics(early2025),
+        market_at_least_54_pct: marketConflictMetrics(early2025, 0.04),
+      },
+      untouched_holdout: {
+        all_conflicts: marketConflictMetrics(holdout),
+        market_at_least_54_pct: marketConflictMetrics(holdout, 0.04),
+      },
     },
     board_impact_vs_independent: {
       tune: boardImpact(tune, independent, selected),

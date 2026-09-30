@@ -332,6 +332,64 @@ assert.equal(
   "unvalidated public-consensus totals cannot rewrite the independent Total",
 );
 
+const priorOnlyConflict: NhlFeatureSnapshot = {
+  ...base,
+  home: {
+    ...base.home,
+    abbreviation: "TOR",
+    xgoals_pct: 0.38,
+    x_goals_for_per_60: 2.0,
+    x_goals_against_per_60: 4.0,
+    five_x_goals_for_per_60: 1.7,
+    five_x_goals_against_per_60: 3.4,
+    provider_metrics: { ...base.home.provider_metrics!, pointsPct: 0.35, goalsForPerGame: 2.5, goalsAgainstPerGame: 4.0 },
+    calibrated_state: { elo: 1380, goalsFor: 2.5, goalsAgainst: 4.0 },
+    opponent_adjusted_attack: null,
+    opponent_adjusted_defense_weakness: null,
+  },
+  away: {
+    ...base.away,
+    abbreviation: "NYI",
+    xgoals_pct: 0.62,
+    x_goals_for_per_60: 4.0,
+    x_goals_against_per_60: 2.0,
+    five_x_goals_for_per_60: 3.4,
+    five_x_goals_against_per_60: 1.7,
+    provider_metrics: { ...base.away.provider_metrics!, pointsPct: 0.70, goalsForPerGame: 4.0, goalsAgainstPerGame: 2.0 },
+    calibrated_state: { elo: 1650, goalsFor: 4.0, goalsAgainst: 2.0 },
+    opponent_adjusted_attack: null,
+    opponent_adjusted_defense_weakness: null,
+  },
+  market: {
+    ...base.market,
+    market_home_prob: 0.55,
+    market_open_home_prob: 0.52,
+    same_book_home_prob_move: 0.03,
+    ml_home_bets_pct: 75,
+    ml_home_money_pct: 76,
+    ml_split_confidence: "high",
+    market_book_count: 8,
+  },
+};
+const corroboratedEarlyConflict = nhlRegularModelV1(priorOnlyConflict);
+const uncorroboratedEarlyConflict = nhlRegularModelV1({
+  ...priorOnlyConflict,
+  market: {
+    ...priorOnlyConflict.market,
+    same_book_home_prob_move: 0,
+  },
+});
+assert.equal(corroboratedEarlyConflict.layers.market_arbitration_weight, 0.60);
+assert.equal(uncorroboratedEarlyConflict.layers.market_arbitration_weight, 0.20);
+assert.ok(
+  corroboratedEarlyConflict.expected_goal_diff > uncorroboratedEarlyConflict.expected_goal_diff,
+  "a meaningful prior-only conflict can perform a real, coherent market-side correction when breadth, movement, and splits agree",
+);
+assert.ok(
+  Math.abs(corroboratedEarlyConflict.projected_home_goals - corroboratedEarlyConflict.projected_away_goals - corroboratedEarlyConflict.expected_goal_diff) < 1e-12,
+  "early arbitration rebuilds one coherent score pair",
+);
+
 const noMarket = nhlRegularModelV1({
   ...base,
   market: {
