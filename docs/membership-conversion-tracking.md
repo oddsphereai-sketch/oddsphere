@@ -70,6 +70,38 @@ until paid conversion volume and value-based bidding justify changing the
 campaign goal. Do not use `page_view`, pricing views, or checkout clicks as the
 trial conversion.
 
+## September 30 compatibility repair
+
+Whop v1 activation deliveries use `renewal_period_start/end`; the classifier
+now supports that complete pair as well as `current_period_start/end`. It
+never mixes fields between the two contracts. The seven-day tolerance, plan,
+status, signature verification, consent gate and membership deduplication remain.
+
+The checkout request now explicitly uses `mode: payment` with only the existing
+`plan_id` and opaque attribution metadata. It does not inline or change a plan,
+price, trial, payment method, membership or billing setting. Whop documents that
+memberships and payments created from a checkout configuration inherit its
+metadata: [checkout configuration API](https://docs.whop.com/api-reference/checkout-configurations/create-checkout-configuration).
+
+The two inspected September 30 trials had no metadata or checkout configuration
+ID. Their exact checkout API failure is not yet established. A successful mocked
+request is not evidence that production credentials have the necessary Whop
+permissions. The relay now logs only the fallback reason and HTTP status, never
+the response body, API key, customer information, consent ID or attribution ID.
+On any failure it retains the existing direct Whop checkout.
+
+Before calling attribution repaired in production, inspect the relay's actual
+Whop response (especially 401/403/422), verify the existing key's required scope,
+and confirm a new consented checkout reaches `/checkout/ch_...` and its genuine
+activation carries the exact opaque UUID. Do not broaden API-key permissions
+without owner approval. Do not infer historical associations from timestamps.
+
+Offline checks: `node --import tsx scripts/test-membership-conversion-tracking.ts`
+and `node --import tsx scripts/test-whop-checkout-relay.ts`. The relay test mocks
+all network calls and verifies both plan IDs, no-choice/decline/withdrawal,
+401/403/422/500, timeout and invalid destination fallback. No production event,
+subscription, payment or configuration is created by either test.
+
 References: [Whop webhook guide](https://docs.whop.com/developer/guides/webhooks),
 [GA4 Measurement Protocol](https://developers.google.com/analytics/devguides/collection/protocol/ga4),
 [GA4 purchase deduplication](https://support.google.com/analytics/answer/12313109).

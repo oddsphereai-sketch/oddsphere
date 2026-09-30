@@ -59,6 +59,7 @@ function eventData(payload: JsonRecord): JsonRecord {
 function eventOccurredAt(payload: JsonRecord, data: JsonRecord): string | null {
   return text(data.paid_at)
     ?? text(data.current_period_start)
+    ?? text(data.renewal_period_start)
     ?? text(payload.timestamp)
     ?? text(payload.created_at);
 }
@@ -94,8 +95,11 @@ export function classifyConfirmedTrial(payload: JsonRecord): ConversionCandidate
   const id = text(data.id) ?? membershipId(data);
   const plan = planId(data);
   const status = text(data.status);
-  const start = text(data.current_period_start);
-  const end = text(data.current_period_end);
+  // Whop v1 deliveries use renewal_period_*. Keep each pair together: do not
+  // construct a period from a mixture of two different payload contracts.
+  const hasCurrentPeriod = data.current_period_start != null || data.current_period_end != null;
+  const start = text(hasCurrentPeriod ? data.current_period_start : data.renewal_period_start);
+  const end = text(hasCurrentPeriod ? data.current_period_end : data.renewal_period_end);
   if (id === null || plan !== WHOP_MONTHLY_PLAN_ID || status !== "trialing" || start === null || end === null) {
     return null;
   }
