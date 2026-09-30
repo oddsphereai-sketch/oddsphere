@@ -45,6 +45,10 @@ assert.deepEqual(parsed[0]?.markets.moneyline?.sides, [
   { label: "CIN Reds", moneyPct: 12, betsPct: 20 },
   { label: "LA Dodgers", moneyPct: 88, betsPct: 80 },
 ]);
+assert.equal(draftKingsTest.providerTeamMatches("nhl", "NY Islanders", "NYI"), true);
+assert.equal(draftKingsTest.providerTeamMatches("nhl", "LA Kings", "LAK"), true);
+assert.equal(draftKingsTest.providerTeamMatches("nhl", "PIT Penguins", "PIT"), true);
+assert.equal(draftKingsTest.providerTeamMatches("nhl", "NY Rangers", "NYI"), false, "NHL fallback matching cannot cross franchises");
 
 const mergedProviderFeed = draftKingsTest.mergeDraftKingsNetworkFeeds({
   source: "draftkings_network",

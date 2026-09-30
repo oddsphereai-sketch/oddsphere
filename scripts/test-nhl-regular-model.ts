@@ -29,6 +29,25 @@ import { replayNhlOpponentAdjustedState } from "../lib/services/nhl/loadNhlOppon
 import { buildNhlTwoSidedPriceTrail } from "../lib/services/nhl/nhlPriceTrail";
 import { canonicalizeNhlLineRows } from "../lib/services/nhl/nhlLineBoard";
 import { assessNhlLockCoherence } from "../lib/services/nhl/nhlLockCoherence";
+import { __NHL_ADAPTER_TEST__ } from "../lib/services/nhl/adaptNhlToDailyEdgeResponse";
+
+assert.deepEqual(
+  __NHL_ADAPTER_TEST__.buildPublicSplits(
+    "total",
+    false,
+    true,
+    {
+      spread: {
+        bets_pct: { away: 0.42, home: 0.58 },
+        handle_pct: { away: 0.35, home: 0.65 },
+      },
+    },
+    "TOR",
+    "NYI",
+  ),
+  [],
+  "a missing NHL Total split must not borrow the puck-line split pair",
+);
 
 const base: NhlFeatureSnapshot = {
   home: {
@@ -436,7 +455,7 @@ assert.match(reader, /bestPriceFor\("total", totalSide, marketTotalLine\)/, "rea
 assert.match(reader, /Math\.abs\(l\.line_value - predictedPuckLine\) < 0\.01/, "reader prices the exact predicted puck line");
 assert.match(reader, /predictionPayloadByGame/, "reader preserves the writer-owned active-release tuple before and after lock");
 assert.match(reader, /NHL_REGULAR_TRANSITION_MODEL_RELEASES/, "reader preserves an already-locked prior-release tuple during deployment");
-assert.match(reader, /nhl_daily_edge_reader_2026_09_29_r6_t60_market_refresh_transition/, "reader release records transition-safe tuple selection");
+assert.match(reader, /nhl_daily_edge_reader_2026_09_30_r7_sharp_split_identity/, "reader release records NHL Sharp-split identity recovery");
 assert.match(pregameSweep, /externalIdsFilter:\s*externalIds/, "T-60 writer refreshes only the games entering the lock window");
 assert.match(pregameSweep, /deferLock:\s*true/, "T-60 writer defers locking until the coherence gate passes");
 assert.match(reader, /incoherentPayloadReleaseGames/, "reader quarantines incoherence by release instead of hiding a valid prior lock");

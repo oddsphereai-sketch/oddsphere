@@ -41,7 +41,7 @@ import { buildNhlTwoSidedPriceTrail } from "./nhlPriceTrail";
 import { canonicalizeNhlLineRows } from "./nhlLineBoard";
 
 export const NHL_DAILY_EDGE_READER_RELEASE =
-  "nhl_daily_edge_reader_2026_09_29_r6_t60_market_refresh_transition" as const;
+  "nhl_daily_edge_reader_2026_09_30_r7_sharp_split_identity" as const;
 
 /**
  * Bucket SharpAPI NHL opportunities by `"AWAY@HOME"` matchup key (normalized
