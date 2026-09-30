@@ -1,9 +1,17 @@
 import type { BdlNhlTeamMetrics } from "../providers/nhl/_ballDontLieNhlClient";
 import type { NhlCalibratedTeamState } from "./nhlRegularPriors2026";
 
-export const NHL_REGULAR_MODEL_RELEASE = "nhl_regular_2026_r7_runtime_parity" as const;
-export const NHL_REGULAR_CALIBRATION_RELEASE = "nhl_regular_calibration_2026_r7_runtime_parity" as const;
-export const NHL_REGULAR_DECISION_RELEASE = "nhl_regular_decision_2026_r7_runtime_parity" as const;
+export const NHL_REGULAR_MODEL_RELEASE = "nhl_regular_2026_r9_source_aware_market_read" as const;
+export const NHL_REGULAR_CALIBRATION_RELEASE = "nhl_regular_calibration_2026_r9_source_aware_market_read" as const;
+export const NHL_REGULAR_DECISION_RELEASE = "nhl_regular_decision_2026_r9_source_aware_exact_price" as const;
+export const NHL_REGULAR_TRANSITION_MODEL_RELEASES = [
+  NHL_REGULAR_MODEL_RELEASE,
+  "nhl_regular_2026_r7_runtime_parity",
+] as const;
+export const NHL_REGULAR_TRANSITION_CALIBRATION_RELEASES = [
+  NHL_REGULAR_CALIBRATION_RELEASE,
+  "nhl_regular_calibration_2026_r7_runtime_parity",
+] as const;
 
 export type NhlVerdictKey = "best_angle" | "lean" | "watchlist" | "pass";
 
@@ -53,6 +61,10 @@ export type NhlModelMarket = {
   ml_home_money_pct: number | null;
   total_over_bets_pct: number | null;
   total_over_money_pct: number | null;
+  ml_split_source: "playbook" | "sharpapi" | null;
+  ml_split_confidence: "high" | "medium" | "low" | "none";
+  total_split_source: "playbook" | "sharpapi" | null;
+  total_split_confidence: "high" | "medium" | "low" | "none";
 };
 
 export type NhlFeatureSnapshot = {
@@ -280,20 +292,6 @@ function probabilityBelow(distribution: ReadonlyMap<number, number>, line: numbe
   return probability;
 }
 
-function sharpHomeNudge(market: NhlModelMarket): number {
-  const tickets = market.ml_home_bets_pct;
-  const money = market.ml_home_money_pct;
-  if (tickets === null || money === null) return 0;
-  return clamp((money - tickets) / 100 * 0.08, -0.012, 0.012);
-}
-
-function sharpTotalNudge(market: NhlModelMarket): number {
-  const tickets = market.total_over_bets_pct;
-  const money = market.total_over_money_pct;
-  if (tickets === null || money === null) return 0;
-  return clamp((money - tickets) / 100 * 0.55, -0.09, 0.09);
-}
-
 function movementHomeNudge(market: NhlModelMarket): number {
   if (market.same_book_home_prob_move === null) return 0;
   return clamp(market.same_book_home_prob_move * 0.35, -0.015, 0.015);
@@ -315,9 +313,10 @@ function totalVerdict(projectedGap: number | null): NhlVerdictKey {
 }
 
 function pucklineVerdict(probability: number, marketProbability: number | null): NhlVerdictKey {
-  const edge = marketProbability === null ? 0 : probability - marketProbability;
-  if (probability >= 0.70 && (marketProbability === null || edge >= 0.02)) return "best_angle";
-  if (probability >= 0.58 || edge >= 0.012) return "lean";
+  if (marketProbability === null) return "watchlist";
+  const edge = probability - marketProbability;
+  if (probability >= 0.70 && edge >= 0.05) return "best_angle";
+  if ((probability >= 0.58 && edge >= 0.015) || edge >= 0.05) return "lean";
   return "watchlist";
 }
 
@@ -344,11 +343,16 @@ export function nhlRegularModelV1(snapshot: NhlFeatureSnapshot): NhlModelOutput 
 
   const marketHome = snapshot.market.market_home_prob;
   const marketGoalDiff = marketHome === null ? independentGoalDiff : logit(marketHome) / ML_SLOPE;
-  const probabilityNudge = sharpHomeNudge(snapshot.market) + movementHomeNudge(snapshot.market);
-  const activeExpectedGoalDiff = (1 - ML_MARKET_WEIGHT) * independentGoalDiff + ML_MARKET_WEIGHT * marketGoalDiff + probabilityNudge / 0.12;
+  // Playbook and the legacy SharpAPI splits lane are public-consensus inputs,
+  // not named sharp-book movement. They remain stored and displayed, but the
+  // current-era chronological replay did not validate either as a projection
+  // rewrite. Only exact same-book price movement enters the score equation.
+  const probabilityNudge = movementHomeNudge(snapshot.market);
+  const activeExpectedGoalDiff = (1 - ML_MARKET_WEIGHT) * independentGoalDiff
+    + ML_MARKET_WEIGHT * marketGoalDiff
+    + probabilityNudge / 0.12;
 
   const marketTotal = snapshot.market.market_total_line;
-  const totalNudge = sharpTotalNudge(snapshot.market);
   const totalMovement = snapshot.market.same_book_total_move !== null
     ? clamp(snapshot.market.same_book_total_move * 0.35, -0.25, 0.25)
     : 0;
@@ -374,8 +378,8 @@ export function nhlRegularModelV1(snapshot: NhlFeatureSnapshot): NhlModelOutput 
       8,
     )
     : independentTotal;
-  const expectedTotal = clamp(opponentAdjustedIndependentTotal + totalMovement + totalNudge, 4.5, 8);
-  const activeExpectedTotal = clamp(independentTotal + totalMovement + totalNudge, 4.5, 8);
+  const expectedTotal = clamp(opponentAdjustedIndependentTotal + totalMovement, 4.5, 8);
+  const activeExpectedTotal = clamp(independentTotal + totalMovement, 4.5, 8);
   const activeDistribution = jointDistribution(
     Math.max(0, (activeExpectedTotal + activeExpectedGoalDiff) / 2),
     Math.max(0, (activeExpectedTotal - activeExpectedGoalDiff) / 2),

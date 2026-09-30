@@ -1,6 +1,22 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { SharpNhlSplitsEvent } from "../../providers/nhl/_sharpApiNhlClient";
+import type {
+  PublicSplitAgreementState,
+  PublicSplitModelConfidence,
+  PublicSplitsProvider,
+} from "../publicSplitsResolver";
 import { resolveSlatePublicSplits } from "../resolveSlatePublicSplits";
+
+type NhlResolvedSplitEvidence = {
+  source: PublicSplitsProvider | null;
+  agreement: PublicSplitAgreementState;
+  confidence: PublicSplitModelConfidence;
+  providerGapPct: number | null;
+};
+
+export type ResolvedNhlSplitsEvent = SharpNhlSplitsEvent & {
+  internal_resolution?: Partial<Record<"moneyline" | "spread" | "total", NhlResolvedSplitEvidence>>;
+};
 
 /**
  * NHL product contract: the last complete provider observation remains usable
@@ -12,19 +28,26 @@ import { resolveSlatePublicSplits } from "../resolveSlatePublicSplits";
 export async function resolvedNhlSplitsByGame(
   supabase: SupabaseClient,
   slateDate: string,
-): Promise<Map<number, SharpNhlSplitsEvent>> {
+): Promise<Map<number, ResolvedNhlSplitsEvent>> {
   const cells = await resolveSlatePublicSplits({
     supabase,
     sport: "nhl",
     slateDate,
     staleAfterMinutes: Number.POSITIVE_INFINITY,
   });
-  const byGame = new Map<number, SharpNhlSplitsEvent>();
+  const byGame = new Map<number, ResolvedNhlSplitsEvent>();
   for (const cell of cells) {
     const bet = cell.resolved.displayBettingPct;
     const money = cell.resolved.displayMoneyPct;
     if (bet === null || money === null) continue;
     const event = byGame.get(cell.gameId) ?? {};
+    event.internal_resolution ??= {};
+    event.internal_resolution[cell.market] = {
+      source: cell.resolved.displaySource,
+      agreement: cell.resolved.agreementState,
+      confidence: cell.resolved.modelConfidence,
+      providerGapPct: cell.resolved.providerGapPct.max,
+    };
     const betFraction = bet / 100;
     const moneyFraction = money / 100;
     if (cell.market === "moneyline" && (cell.side === "home" || cell.side === "away")) {
