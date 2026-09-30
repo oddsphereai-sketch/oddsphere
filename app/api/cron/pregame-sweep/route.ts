@@ -56,10 +56,17 @@ import { createPredictionRecords } from "@/lib/services/predictionRecordService"
 import { assessMlbLockCoherence, MLB_LOCK_COHERENCE_RELEASE } from "@/lib/services/mlbLockCoherence";
 import { updateMarketSignalsForSlate } from "@/lib/services/marketSignalDerivationService";
 import { updateGradesForSlate } from "@/lib/services/gradeDerivationService";
+import { syncPublicSplitsObservations } from "@/lib/services/syncPublicSplitsObservations";
 import { detectSnapshotStaleness } from "@/lib/services/snapshotStalenessDetector";
 import { dailyEdgeSnapshotKey } from "@/lib/services/labResponseSnapshots";
 import { refreshDailyEdgeResponseSnapshot } from "@/lib/services/labResponseSnapshotWriter";
 import { isVoidStatus } from "@/lib/services/gameLifecycle";
+import { refreshNhlLines } from "@/lib/services/nhl/refreshNhlLinesService";
+import { writeNhlPredictionRecords } from "@/lib/services/nhl/buildNhlPredictionRecords";
+import {
+  assessNhlLockCoherence,
+  NHL_LOCK_COHERENCE_RELEASE,
+} from "@/lib/services/nhl/nhlLockCoherence";
 import {
   loadLatestMlbPropsBoardSnapshot,
   loadLatestMlbPropsGameLockSchedule,
@@ -410,6 +417,8 @@ export async function GET(request: Request) {
 
       let preLockGameLines: Awaited<ReturnType<typeof linesService.refreshGameLinesV2>> | null = null;
       let preLockSignals: Awaited<ReturnType<typeof linesService.refreshSharpSignals>> | null = null;
+      let nhlPreLockLines: Awaited<ReturnType<typeof refreshNhlLines>> | null = null;
+      let nhlPreLockSplits: Awaited<ReturnType<typeof syncPublicSplitsObservations>> | null = null;
       let marketIntelligenceV2: ScheduledMarketIntelligenceV2Result | null = null;
 
       // Fresh market data must exist BEFORE the T-60 model pass. The scheduled
@@ -484,6 +493,27 @@ export async function GET(request: Request) {
           apiCalls += marketIntelligenceV2.apiCallsMade;
         }
       }
+      if (partition.entering_lock.length > 0 && sport === "nhl") {
+        const sharpApiKey = process.env.SHARPAPI_KEY;
+        if (!sharpApiKey) throw new Error("SHARPAPI_KEY missing from NHL T-60 refresh");
+        const enteringExternalIds = partition.entering_lock.map((game) => game.external_id);
+        nhlPreLockLines = await refreshNhlLines({
+          slateDate: date,
+          sharpApiKey,
+          dryRun: false,
+          externalIdsFilter: enteringExternalIds,
+        });
+        records += nhlPreLockLines.linesWritten + nhlPreLockLines.lineHistoryWritten;
+        apiCalls += 1 + nhlPreLockLines.gamesInDb;
+        nhlPreLockSplits = await syncPublicSplitsObservations({
+          supabase,
+          sport: "nhl",
+          slateDate: date,
+          apply: true,
+          todayUtc: date,
+        });
+        records += nhlPreLockSplits.upserted;
+      }
 
       // ── 2. Final pre-lock auto-model pass for ENTERING_LOCK games ───
       // We use respectLocks=false because these games aren't locked YET
@@ -535,13 +565,42 @@ export async function GET(request: Request) {
           );
         }
       }
+      if (partition.entering_lock.length > 0 && sport === "nhl") {
+        const externalIds = partition.entering_lock.map((game) => game.external_id);
+        try {
+          const result = await writeNhlPredictionRecords({
+            slateDate: date,
+            apply: true,
+            externalIdsFilter: externalIds,
+            deferLock: true,
+            goalieSource: "default_most_playoff_gp",
+          });
+          enteringLockModelResult = {
+            attempted: externalIds.length,
+            successful: result.errors.length === 0 ? externalIds.length : 0,
+            errors: result.errors,
+          };
+          records += result.recordsCreated;
+          if (result.errors.length > 0) {
+            for (const externalId of externalIds) failedEnteringLockExternalIds.add(externalId);
+          }
+        } catch (error) {
+          enteringLockRefreshThrew = true;
+          enteringLockModelResult = {
+            attempted: externalIds.length,
+            successful: 0,
+            errors: [error instanceof Error ? error.message : String(error)],
+          };
+        }
+      }
 
       // ── 2.5. Fail-closed member-record coherence gate ───────────────
       // The final T-60 model write and its member-facing prediction_records
       // sync must describe the same recommendation before either row can be
       // frozen. A sync failure or stale member row blocks only that game from
       // locking; the next sweep can retry after the underlying issue clears.
-      const modelEligibleGames = sport !== "mlb"
+      const requiresFinalModelRefresh = sport === "mlb" || sport === "nhl";
+      const modelEligibleGames = !requiresFinalModelRefresh
         ? partition.entering_lock
         : enteringLockRefreshThrew
           ? []
@@ -553,7 +612,7 @@ export async function GET(request: Request) {
       );
       let gamesReadyForLock = modelEligibleGames;
       let lockCoherence: {
-        release: typeof MLB_LOCK_COHERENCE_RELEASE;
+        release: string;
         checked: number;
         coherent: number;
         blocked_game_ids: number[];
@@ -616,6 +675,44 @@ export async function GET(request: Request) {
             coherent: 0,
             blocked_game_ids: partition.entering_lock.map((game) => game.game_id),
             errors: [`lock coherence check failed closed: ${error instanceof Error ? error.message : String(error)}`],
+          };
+        }
+      }
+      if (modelEligibleGames.length > 0 && sport === "nhl") {
+        const enteringGameIds = modelEligibleGames.map((game) => game.game_id);
+        try {
+          const { data: storedRows, error: storedError } = await supabase
+            .from("prediction_records")
+            .select("game_id, market, pick, model_version, locked_at, snapshot_json")
+            .eq("sport", "nhl")
+            .eq("slate_date", date)
+            .in("game_id", enteringGameIds)
+            .is("locked_at", null);
+          if (storedError) throw new Error(storedError.message);
+          const assessment = assessNhlLockCoherence({
+            gameIds: enteringGameIds,
+            rows: storedRows ?? [],
+          });
+          lockCoherence = {
+            release: NHL_LOCK_COHERENCE_RELEASE,
+            checked: assessment.checked,
+            coherent: assessment.coherentGameIds.length,
+            blocked_game_ids: [
+              ...modelDeferredGames.map((game) => game.game_id),
+              ...assessment.blockedGameIds,
+            ],
+            errors: assessment.errors,
+          };
+          const coherentIds = new Set(assessment.coherentGameIds);
+          gamesReadyForLock = modelEligibleGames.filter((game) => coherentIds.has(game.game_id));
+        } catch (error) {
+          gamesReadyForLock = [];
+          lockCoherence = {
+            release: NHL_LOCK_COHERENCE_RELEASE,
+            checked: modelEligibleGames.length,
+            coherent: 0,
+            blocked_game_ids: partition.entering_lock.map((game) => game.game_id),
+            errors: [`NHL lock coherence check failed closed: ${error instanceof Error ? error.message : String(error)}`],
           };
         }
       }
@@ -703,11 +800,16 @@ export async function GET(request: Request) {
           missedLockGames.length > 0 ||
           propsLockSweep.error !== null ||
           (marketIntelligenceV2?.errors.length ?? 0) > 0;
+        const nhlRefreshErrors = [
+          ...(nhlPreLockLines?.errors ?? []),
+          ...(nhlPreLockSplits?.errors ?? []),
+        ];
+        const lockOnlyHasErrors = anyErrors || nhlRefreshErrors.length > 0;
         return {
           records_updated: records,
           api_calls_made: apiCalls,
-          partial: anyErrors,
-          error_message: anyErrors
+          partial: lockOnlyHasErrors,
+          error_message: lockOnlyHasErrors
             ? [
                 ...enteringLockModelResult.errors,
                 ...lockCoherence.errors,
@@ -717,6 +819,7 @@ export async function GET(request: Request) {
                   : []),
                 ...(propsLockSweep.error ? [`MLB props lock sweep: ${propsLockSweep.error}`] : []),
                 ...(marketIntelligenceV2?.errors ?? []),
+                ...nhlRefreshErrors,
               ].slice(0, 5).join(" | ").slice(0, 1500)
             : null,
           details: {
@@ -747,12 +850,17 @@ export async function GET(request: Request) {
               sharp_signal_records_updated: preLockSignals?.records_updated ?? 0,
               sharp_signal_api_calls_made: preLockSignals?.api_calls_made ?? 0,
               ran_before_t60_model: preLockGameLines !== null || preLockSignals !== null,
+              nhl_lines_written: nhlPreLockLines?.linesWritten ?? 0,
+              nhl_line_history_written: nhlPreLockLines?.lineHistoryWritten ?? 0,
+              nhl_splits_upserted: nhlPreLockSplits?.upserted ?? 0,
+              nhl_ran_before_t60_model: nhlPreLockLines !== null,
             },
             errors_count:
               lockResult.errors.length +
               enteringLockModelResult.errors.length +
               lockCoherence.errors.length +
-              (marketIntelligenceV2?.errors.length ?? 0),
+              (marketIntelligenceV2?.errors.length ?? 0) +
+              nhlRefreshErrors.length,
             steps_skipped: [
               "lines_refresh",
               "sharp_signals_refresh",

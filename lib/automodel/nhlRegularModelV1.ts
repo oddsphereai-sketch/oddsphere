@@ -1,15 +1,17 @@
 import type { BdlNhlTeamMetrics } from "../providers/nhl/_ballDontLieNhlClient";
 import type { NhlCalibratedTeamState } from "./nhlRegularPriors2026";
 
-export const NHL_REGULAR_MODEL_RELEASE = "nhl_regular_2026_r9_source_aware_market_read" as const;
-export const NHL_REGULAR_CALIBRATION_RELEASE = "nhl_regular_calibration_2026_r9_source_aware_market_read" as const;
-export const NHL_REGULAR_DECISION_RELEASE = "nhl_regular_decision_2026_r9_source_aware_exact_price" as const;
+export const NHL_REGULAR_MODEL_RELEASE = "nhl_regular_2026_r10_t60_market_refresh" as const;
+export const NHL_REGULAR_CALIBRATION_RELEASE = "nhl_regular_calibration_2026_r10_t60_market_refresh" as const;
+export const NHL_REGULAR_DECISION_RELEASE = "nhl_regular_decision_2026_r10_source_aware_exact_price" as const;
 export const NHL_REGULAR_TRANSITION_MODEL_RELEASES = [
   NHL_REGULAR_MODEL_RELEASE,
+  "nhl_regular_2026_r9_source_aware_market_read",
   "nhl_regular_2026_r7_runtime_parity",
 ] as const;
 export const NHL_REGULAR_TRANSITION_CALIBRATION_RELEASES = [
   NHL_REGULAR_CALIBRATION_RELEASE,
+  "nhl_regular_calibration_2026_r9_source_aware_market_read",
   "nhl_regular_calibration_2026_r7_runtime_parity",
 ] as const;
 

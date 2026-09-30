@@ -70,6 +70,10 @@ export type WriteNhlRecordsOptions = {
   season?: number;
   /** false = dry-run; no DB writes. */
   apply: boolean;
+  /** Optional exact NHL API game ids for a targeted pre-lock refresh. */
+  externalIdsFilter?: number[];
+  /** Let the shared pregame sweep apply the lock only after coherence checks. */
+  deferLock?: boolean;
   /** Manual goalie overrides (player_external_id from nhl_goalie_stats). */
   homeGoalieExternalId?: number;
   awayGoalieExternalId?: number;
@@ -185,8 +189,12 @@ export async function writeNhlPredictionRecords(
     .eq("sport", "nhl")
     .eq("slate_date", opts.slateDate);
   if (gamesErr) throw new Error(`load NHL games: ${gamesErr.message}`);
+  const requestedExternalIds = opts.externalIdsFilter === undefined
+    ? null
+    : new Set(opts.externalIdsFilter);
   const games = ((gamesData as DbGame[] | null) ?? []).filter((game) => (
     nhlGameTypeFromExternalId(game.external_id) === 2
+    && (requestedExternalIds === null || requestedExternalIds.has(game.external_id))
   ));
   if (games.length === 0) {
     log(`(no NHL regular-season games on slate ${opts.slateDate})`);
@@ -247,6 +255,7 @@ export async function writeNhlPredictionRecords(
 
   for (const g of games) {
     try {
+      const gameErrorCountBefore = errors.length;
       const homeAbbr = g.home_team_id !== null ? teamById.get(g.home_team_id)?.abbreviation ?? "?" : "?";
       const awayAbbr = g.away_team_id !== null ? teamById.get(g.away_team_id)?.abbreviation ?? "?" : "?";
       const split = splitsByGame.get(g.id) ?? null;
@@ -313,7 +322,7 @@ export async function writeNhlPredictionRecords(
         },
       };
 
-      const isLockingNow = shouldLock(g.game_date, now);
+      const isLockingNow = opts.deferLock !== true && shouldLock(g.game_date, now);
       const lockedAtIso = isLockingNow ? now.toISOString() : null;
       const lockSource = isLockingNow ? "locked" : "live";
 
@@ -514,6 +523,29 @@ export async function writeNhlPredictionRecords(
         } else {
           log(`  ✓ ${matchup} ${m.market}/${pickSide}  pick=${m.modelMarket.pick}  locked_at=${lockedAtIso ?? "null"}`);
           recordsCreated += 1;
+        }
+      }
+
+      // Once the complete current-release tuple exists, retire only older
+      // unlocked transition rows for this game. Locked historical tuples are
+      // immutable. This prevents the shared lock propagation from freezing
+      // both the superseded and current release and double-counting tracking.
+      if (opts.apply && errors.length === gameErrorCountBefore) {
+        const supersededReleases = NHL_REGULAR_TRANSITION_MODEL_RELEASES.filter(
+          (release) => release !== NHL_REGULAR_MODEL_RELEASE,
+        );
+        if (supersededReleases.length > 0) {
+          const { error: retireError } = await supabase
+            .from("prediction_records")
+            .delete()
+            .eq("game_id", g.id)
+            .eq("sport", "nhl")
+            .eq("slate_date", g.slate_date)
+            .is("locked_at", null)
+            .in("model_version", [...supersededReleases]);
+          if (retireError) {
+            errors.push(`  ✗ retire superseded ${matchup}: ${retireError.message}`);
+          }
         }
       }
     } catch (e) {

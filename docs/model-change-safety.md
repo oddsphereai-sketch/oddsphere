@@ -5,6 +5,35 @@ inputs, probabilities, projections, grades, promotions/demotions, calibration, p
 or stakes. It exists to prevent mixed model eras, competing writers, accidental board
 flattening, and load spikes.
 
+## Owner-approved emergency exception: NHL T-60 market refresh r10
+
+On 2026-09-29 Daniel Mengel explicitly directed Oddsphere to make the new NHL
+independent/market-reading model durable, update it through the day, preserve
+logical decimal score/pick coherence, and lock and track the correct final card
+without changing member copy, labels, or layout. Live verification after r9
+deployment proved that the generic T-60 sweep froze the earlier r7 daily tuple
+without rerunning the NHL writer. This exception is limited to the r10 lifecycle
+repair documented in
+`docs/model-audits/2026-09-29-nhl-t60-market-refresh-r10.md`.
+
+R10 changes no independent coefficient, probability calibration, market weight,
+same-book movement equation, grade rule, stake, or displayed product surface.
+Within the existing sport-scoped `prediction_pipeline` lease, the existing
+pregame sweep refreshes only the NHL game entering T-60, persists the latest
+complete public-split fallback, reruns the sole NHL prediction writer, verifies
+one coherent three-market current-release tuple, and only then applies the
+authoritative lock and reader snapshot. Superseded unlocked transition tuples
+may be retired after the complete current tuple is safely written; locked rows
+remain immutable. A model, write, cleanup, or coherence failure defers the lock
+for the next minute rather than freezing mixed releases.
+
+The reviewed paired board impact is zero side changes, promotions, demotions, or
+actionable-count changes because the score and grade equations are unchanged.
+The targeted odds refresh uses the existing bounded event-catalog and exact-event
+request path only for entering games instead of rescanning the whole slate. Publication
+still requires focused tests, full model-change verification, latest-main
+integration safety, protected PR checks, and live next-slate writer/reader proof.
+
 ## Owner-approved provisional exception: NHL source-aware market trust r9
 
 On 2026-09-29 Daniel Mengel explicitly directed Oddsphere to research which NHL
