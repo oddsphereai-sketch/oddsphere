@@ -567,9 +567,64 @@ export async function writeNhlPredictionRecords(
           (release) => release !== NHL_REGULAR_MODEL_RELEASE,
         );
         if (supersededReleases.length > 0) {
+          const { data: supersededRows, error: supersededRowsError } = await supabase
+            .from("prediction_records")
+            .select("id, locked_at")
+            .eq("game_id", g.id)
+            .eq("sport", "nhl")
+            .eq("slate_date", g.slate_date)
+            .is("locked_at", null)
+            .in("model_version", [...supersededReleases]);
+          if (supersededRowsError) {
+            errors.push(`  ✗ inspect superseded ${matchup}: ${supersededRowsError.message}`);
+            continue;
+          }
+
+          const supersededIds = (supersededRows ?? []).map((row) => Number(row.id));
+          if (supersededIds.length === 0) continue;
+
+          // The grader creates pending child rows before puck drop. The FK is
+          // intentionally restrictive, so verify those children are still
+          // wholly pending before removing them. A settled child or a row
+          // that has locked since the query fails closed and remains intact.
+          const { data: gradeRows, error: gradeRowsError } = await supabase
+            .from("prediction_grades")
+            .select("prediction_record_id, result, win, loss, push")
+            .in("prediction_record_id", supersededIds);
+          if (gradeRowsError) {
+            errors.push(`  ✗ inspect superseded grades ${matchup}: ${gradeRowsError.message}`);
+            continue;
+          }
+          const unsafeGrade = (gradeRows ?? []).find((grade) => (
+            grade.result !== "pending"
+            || grade.win === true
+            || grade.loss === true
+            || grade.push === true
+          ));
+          if (unsafeGrade) {
+            errors.push(`  ✗ retire superseded ${matchup}: grade is no longer pending`);
+            continue;
+          }
+
+          if ((gradeRows ?? []).length > 0) {
+            const { error: retireGradesError } = await supabase
+              .from("prediction_grades")
+              .delete()
+              .in("prediction_record_id", supersededIds)
+              .eq("result", "pending")
+              .eq("win", false)
+              .eq("loss", false)
+              .eq("push", false);
+            if (retireGradesError) {
+              errors.push(`  ✗ retire superseded grades ${matchup}: ${retireGradesError.message}`);
+              continue;
+            }
+          }
+
           const { error: retireError } = await supabase
             .from("prediction_records")
             .delete()
+            .in("id", supersededIds)
             .eq("game_id", g.id)
             .eq("sport", "nhl")
             .eq("slate_date", g.slate_date)
@@ -577,6 +632,8 @@ export async function writeNhlPredictionRecords(
             .in("model_version", [...supersededReleases]);
           if (retireError) {
             errors.push(`  ✗ retire superseded ${matchup}: ${retireError.message}`);
+          } else {
+            log(`  ✓ retired ${supersededIds.length} superseded unlocked rows for ${matchup}`);
           }
         }
       }

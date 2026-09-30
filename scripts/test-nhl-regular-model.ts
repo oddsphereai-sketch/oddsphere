@@ -638,6 +638,8 @@ assert.match(cron, /leaseGroup: "prediction_pipeline"/);
 assert.match(cron, /refreshDailyEdgeResponseSnapshot/);
 assert.match(writer, /NHL_REGULAR_TRANSITION_MODEL_RELEASES/, "writer cannot duplicate an already-locked prior-release tuple");
 assert.doesNotMatch(writer, /\.maybeSingle\(\)/, "writer supports multiple transition-release rows when checking for locks");
+assert.match(writer, /\.from\("prediction_grades"\)[\s\S]*?\.eq\("result", "pending"\)[\s\S]*?\.eq\("win", false\)[\s\S]*?\.eq\("loss", false\)[\s\S]*?\.eq\("push", false\)/, "writer retires only verified pending grade children before superseded unlocked rows");
+assert.match(writer, /\.is\("locked_at", null\)[\s\S]*?\.in\("model_version", \[\.\.\.supersededReleases\]\)/, "writer never retires a locked transition row");
 assert.match(linesProvider, /fetchSharpNhlEvents/, "NHL resolves exact events before fetching odds");
 assert.match(linesProvider, /event_id: eventId/, "NHL odds retrieval is event-scoped instead of scanning an incomplete league slice");
 assert.match(linesProvider, /recovered \$\{market\}/, "an event-scoped missing market gets a targeted recovery call");
