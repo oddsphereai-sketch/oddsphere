@@ -1817,14 +1817,37 @@ The paired live-slate replay is recorded in
 
 The September 21 operational release restored the two bounded daily schedules removed by the emergency cron pause. NBA remains on that schedule contract. NHL's September 29 complete-slate release resolves exact provider events before requesting odds, retains the existing route gates and sport-scoped lease, and reports incomplete two-sided game-market coverage as partial rather than silently healthy. The September 30 r6 schedule moves that same single bounded NHL refresh from 13:45 UTC to 07:45 UTC after a three-game regular-season slate remained absent during the member morning. The 03:45 EDT / 02:45 EST execution is an overnight rollover, adds no second refresh, provider call cycle, writer, or lease, and gives the existing data-health cycle time to detect a failed seed before members wake. The r10 T-60 path remains the authoritative final market refresh and lock owner.
 
-## NHL regular-season champion (active from 2026-09-29)
+## NHL regular-season champion (active from 2026-09-30)
 
-- Model: `nhl_regular_2026_r10_t60_market_refresh`
-- Calibration: `nhl_regular_calibration_2026_r10_t60_market_refresh`
-- Decision: `nhl_regular_decision_2026_r10_source_aware_exact_price`
+- Model: `nhl_regular_2026_r12_roster_discrete_market_read`
+- Calibration: `nhl_regular_calibration_2026_r12_roster_discrete_market_read`
+- Decision: `nhl_regular_decision_2026_r12_coherent_exact_price`
 - Public tracking start: `2026-09-29`
 - Official markets: moneyline, total, spread (puck line)
 - Retired release: `nhl_v0_2026_finals`
+
+The September 30 r12 model release replaces opening-season stale-team behavior
+with a target-excluded current-roster skater prior during each team's first ten
+regular-season games, filters default goalie history to the verified current
+roster, and falls back to neutral goalie context when no eligible current goalie
+is known. Roster data is loaded once per slate and cached; the existing writer,
+schedule, provider cadence, sport-scoped lease, lock, tracking, member copy,
+labels, and layout remain unchanged. Current-season team evidence automatically
+supersedes the opening roster path after the bounded window.
+
+R12 also removes the generic continuous 20% market anchor. The independent
+forecast is left intact unless current no-vig price, a continuous same-book
+move, and complete source-aware money/ticket evidence all corroborate the
+opposite side. A qualified current or future conflict becomes a discrete flip,
+not a partial blend, and the final margin is solved into one coherent score
+distribution while preserving the independent Total. Uncorroborated conflict
+does nothing. The untouched 2025 replay improves winner, Brier, team-score MAE,
+margin MAE, Total MAE, and puck-line direction; historical Total direction is
+0.38 percentage points lower and is recorded as the reviewed score-accuracy
+tradeoff. The September 30 board retains all nine markets and five actionables with two
+promotions paired to two demotions. Locked r10/r9/r7 tuples remain immutable and
+tracking-eligible. Evidence and rollback:
+`docs/model-audits/2026-09-30-nhl-roster-market-arbitration-r12.md`.
 
 The September 29 r10 lifecycle release preserves every r9 score coefficient,
 market-reading weight, decision threshold, and grade. It corrects the live

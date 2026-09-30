@@ -54,7 +54,15 @@ import {
   NHL_REGULAR_TRANSITION_MODEL_RELEASES,
   type NhlModelOutput,
 } from "../../automodel/nhlRegularModelV1";
-import { fetchBdlNhlTeamMetricsWithPriorFallback } from "../../providers/nhl/_ballDontLieNhlClient";
+import {
+  fetchBdlNhlRosters,
+  fetchBdlNhlTeamMetricsWithPriorFallback,
+} from "../../providers/nhl/_ballDontLieNhlClient";
+import {
+  aggregateNhlRosterPrior,
+  normalizeNhlPlayerName,
+  type NhlRosterPrior,
+} from "../../automodel/nhlRosterPrior2026";
 import { assertOfficialTrackingMarket } from "../../config/officialTrackingMarkets";
 import type { PredictionRecordRow, TrackedMarketV17 } from "../../types/domain/Tracking";
 import { resolvedNhlSplitsByGame, type ResolvedNhlSplitsEvent } from "./nhlResolvedSplits";
@@ -83,7 +91,7 @@ export type WriteNhlRecordsOptions = {
    * Caller controls the tag — operator script passes "manual_override"
    * when --home-goalie/--away-goalie is set.
    */
-  goalieSource?: "default_most_playoff_gp" | "manual_override";
+  goalieSource?: "current_roster_prior_gp" | "default_most_playoff_gp" | "manual_override";
   logger?: (msg: string) => void;
 };
 
@@ -229,6 +237,10 @@ export async function writeNhlPredictionRecords(
   log(`NHL opponent-adjusted state: ${opponentAdjusted.source}; games=${opponentAdjusted.gamesApplied}; requests=${opponentAdjusted.requestCount}${opponentAdjusted.error ? `; fallback=${opponentAdjusted.error}` : ""}`);
   let providerMetricsByTeam: Awaited<ReturnType<typeof fetchBdlNhlTeamMetricsWithPriorFallback>>["metrics"] = new Map();
   let providerFeatureSeason: number | null = null;
+  const rosterPriorByTeam = new Map<string, NhlRosterPrior>();
+  const currentRosterGoaliesByTeam = new Map<string, ReadonlySet<string>>(
+    [...teamById.values()].map((team) => [team.abbreviation, new Set<string>()]),
+  );
   if (process.env.BALLDONTLIE_API_KEY) {
     try {
       const provider = await fetchBdlNhlTeamMetricsWithPriorFallback(
@@ -239,6 +251,24 @@ export async function writeNhlPredictionRecords(
       providerFeatureSeason = provider.sourceSeason;
     } catch (error) {
       errors.push(`BALLDONTLIE team metrics: ${(error as Error).message}`);
+    }
+    try {
+      const rosters = await fetchBdlNhlRosters(
+        featureSeason,
+        [...teamById.values()].map((team) => team.abbreviation),
+        process.env.BALLDONTLIE_API_KEY,
+      );
+      for (const [team, players] of rosters) {
+        const prior = aggregateNhlRosterPrior(players);
+        if (prior) rosterPriorByTeam.set(team, prior);
+        currentRosterGoaliesByTeam.set(team, new Set(
+          players
+            .filter((player) => player.positionCode === "G")
+            .map((player) => normalizeNhlPlayerName(player.fullName)),
+        ));
+      }
+    } catch (error) {
+      errors.push(`BALLDONTLIE current rosters: ${(error as Error).message}`);
     }
   }
   let splitsByGame = new Map<number, ResolvedNhlSplitsEvent>();
@@ -268,6 +298,8 @@ export async function writeNhlPredictionRecords(
         providerFeatureSeason,
         calibratedStateByTeam,
         opponentAdjustedStateByTeam: opponentAdjusted.complete ? opponentAdjusted.states : undefined,
+        rosterPriorByTeam,
+        currentRosterGoaliesByTeam,
         marketEvidence: {
           mlHomeBetsPct: split?.moneyline?.bets_pct?.home == null ? null : split.moneyline.bets_pct.home * 100,
           mlHomeMoneyPct: split?.moneyline?.handle_pct?.home == null ? null : split.moneyline.handle_pct.home * 100,
@@ -307,7 +339,7 @@ export async function writeNhlPredictionRecords(
       const goalieSource = opts.goalieSource ??
         (opts.homeGoalieExternalId !== undefined || opts.awayGoalieExternalId !== undefined
           ? "manual_override"
-          : "default_most_playoff_gp");
+          : "current_roster_prior_gp");
 
       const goalieAssumption = {
         home: {
