@@ -91,7 +91,8 @@ function buildPublicSplits(
 ): MarketEdgeDto["publicSplits"] {
   if (!splits) return [];
   const arr: MarketEdgeDto["publicSplits"] = [];
-  if (market === "total" && splits.total) {
+  if (market === "total") {
+    if (!splits.total) return [];
     const t = splits.total;
     const overBets = pctTo100(t.bets_pct?.over ?? null);
     const overHandle = pctTo100(t.handle_pct?.over ?? null);
@@ -133,6 +134,8 @@ function buildPublicSplits(
   });
   return arr;
 }
+
+export const __NHL_ADAPTER_TEST__ = { buildPublicSplits };
 
 /**
  * Build the keyStats rows for a market from the model's feature

@@ -13,7 +13,7 @@ const emptyMarket = (): MarketEdgeDto => ({
   recommendationDecision: { sharpBookSplits: null },
 } as unknown as MarketEdgeDto);
 
-const response = (sport: "cfb" | "mlb", awayTeam: string, homeTeam: string, awayName: string, homeName: string) => ({
+const response = (sport: "cfb" | "mlb" | "nhl", awayTeam: string, homeTeam: string, awayName: string, homeName: string) => ({
   as_of: "2026-09-20T20:00:00.000Z",
   sport,
   date: "2026-09-20",
@@ -72,6 +72,18 @@ const mlbFeed: NonNullable<Parameters<typeof applySharpApiCurrentSplitOverlay>[1
 const mlbResult = applySharpApiCurrentSplitOverlay(mlb, mlbFeed, now);
 assert.deepEqual(mlbResult, { matchedGames: 1, populatedMarkets: 2 });
 assert.equal(mlb.games[0]!.markets.first_inning.sportsbookSplits, null, "MLB full-game spread cannot populate first inning");
+
+const nhl = response("nhl", "NYI", "TOR", "New York Islanders", "Toronto Maple Leafs");
+const nhlResult = applySharpApiCurrentSplitOverlay(nhl, {
+  source: "sharpapi_current_splits",
+  release: "sharpapi_current_splits_2026_09_20_r1_durable_overlay",
+  sport: "nhl",
+  fetchedAt: "2026-09-20T20:04:00.000Z",
+  rows: [complete("nhl", "draftkings", "NY Islanders", "TOR Maple Leafs", "2026-09-20T20:04:00.000Z")],
+}, now);
+assert.deepEqual(nhlResult, { matchedGames: 1, populatedMarkets: 3 }, "NHL provider names must resolve through the canonical team normalizer");
+assert.equal(nhl.games[0]!.markets.moneyline.sportsbookSplits?.label, "Sharp Book Splits");
+assert.equal(nhl.games[0]!.markets.first_inning.sportsbookSplits?.rows.length, 2);
 
 const legacyMlbSection = mlb.games[0]!.markets.moneyline.sportsbookSplits!;
 legacyMlbSection.lastUpdated = mlbFeed.fetchedAt;

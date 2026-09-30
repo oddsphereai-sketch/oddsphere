@@ -2,6 +2,7 @@ import type { DailyEdgeGameDto, DailyEdgeResponse } from "@/app/lab/lib/labTypes
 import type { MarketSplitDisplaySection } from "@/lib/types/domain/RecommendationDecision";
 import type { Sport } from "@/lib/types/domain/Sport";
 import { normalizeMlbTeamName } from "@/lib/providers/real_api/_teamNameNormalizer";
+import { normalizeNhlTeamName } from "@/lib/providers/nhl/_teamNameNormalizer";
 import { cfbTeamIdentity } from "@/lib/services/football/cfbTeamIdentity";
 import {
   populateDailyEdgeSharpApiCurrentSplits,
@@ -515,6 +516,11 @@ function providerTeamMatches(
     if (provider !== null && target !== null) return provider === target;
     const providerTokens = new Set(cleanName(providerName).split(" "));
     return target !== null && providerTokens.has(cleanName(target));
+  }
+  if (sport === "nhl") {
+    const provider = normalizeNhlTeamName(providerName);
+    const target = normalizeNhlTeamName(abbreviation) ?? normalizeNhlTeamName(displayName);
+    return provider !== null && target !== null && provider === target;
   }
   const provider = cleanName(providerName).replace(/\s+\d+(?:\s+\d+)*$/, "");
   const abbr = cleanName(abbreviation);

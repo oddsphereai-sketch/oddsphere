@@ -1,5 +1,6 @@
 import type { DailyEdgeGameDto, DailyEdgeResponse } from "@/app/lab/lib/labTypes";
 import { normalizeMlbTeamName } from "@/lib/providers/real_api/_teamNameNormalizer";
+import { normalizeNhlTeamName } from "@/lib/providers/nhl/_teamNameNormalizer";
 import { SharpApiClient } from "@/lib/providers/real_api/_sharpApiClient";
 import { cfbTeamIdentity } from "@/lib/services/football/cfbTeamIdentity";
 import type { MarketSplitDisplaySection } from "@/lib/types/domain/RecommendationDecision";
@@ -474,6 +475,11 @@ function teamMatches(sport: SupportedSport, raw: unknown, abbreviation: string, 
   if (sport === "mlb") {
     const observed = normalizeMlbTeamName(raw);
     const expected = normalizeMlbTeamName(abbreviation) ?? normalizeMlbTeamName(displayName ?? "");
+    return observed !== null && expected !== null && observed === expected;
+  }
+  if (sport === "nhl") {
+    const observed = normalizeNhlTeamName(raw);
+    const expected = normalizeNhlTeamName(abbreviation) ?? normalizeNhlTeamName(displayName);
     return observed !== null && expected !== null && observed === expected;
   }
   const observed = normalizeTeam(raw);

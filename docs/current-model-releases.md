@@ -1826,6 +1826,20 @@ paired score/grade board impact is zero; this release changes freshness and
 lock ownership rather than model math. Evidence:
 `docs/model-audits/2026-09-29-nhl-t60-market-refresh-r10.md`.
 
+The September 30 r7 reader release
+`nhl_daily_edge_reader_2026_09_30_r7_sharp_split_identity` preserves the r10
+model, calibration, decision, score, probability, grade, stake, lock, and
+tracking contracts. It applies the established canonical NHL team normalizer
+to both current SharpAPI named-book splits and the DraftKings Network fallback,
+so provider labels such as `NY Islanders` and `LA Kings` match canonical `NYI`
+and `LAK` cards. The existing Sharp Book Splits section, source hierarchy,
+silent last-known-good continuity, and member copy remain unchanged. A missing
+Total split now fails closed instead of borrowing the puck-line pair. A
+production-feed replay covers all three September 30 games and all nine market
+slots from SharpAPI, with DraftKings Network independently covering all six
+available Moneyline/Total slots. Evidence:
+`docs/model-audits/2026-09-30-nhl-sharp-split-identity-r7.md`.
+
 Only NHL game type `02` is eligible for the reader, writer, and public tracking.
 The September 22 game type `01` rows are preseason audit evidence and never enter
 member tracking. The independent runtime exactly replays the release-pure 2026
