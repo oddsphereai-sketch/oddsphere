@@ -1880,6 +1880,19 @@ No copy, label, layout, provider call, schedule, writer, or lease changes.
 Evidence and rollback:
 `docs/model-audits/2026-09-30-nhl-independent-public-retail-fallback-r9.md`.
 
+The September 30 r10 reader release
+`nhl_daily_edge_reader_2026_09_30_r10_playbook_identity_repair` repairs the
+NHL-only Playbook observation join: canonical database abbreviations and
+Playbook full team names now resolve through the same existing NHL normalizer.
+This restores the independent Public Consensus lane from complete Playbook
+money-and-ticket rows while SharpAPI named-book evidence remains exclusively in
+Sharp Book Splits. It adds no request, writer, schedule, lease, copy, label, or
+layout. Public splits remain display/internal evidence only and do not alter the
+r10 score or grade equations; projected scores, sides, probabilities, prices,
+grades, stakes, locks, tracking, board count, promotions, demotions, and
+actionable count are unchanged. Evidence and rollback:
+`docs/model-audits/2026-09-30-nhl-playbook-split-identity-r10.md`.
+
 Only NHL game type `02` is eligible for the reader, writer, and public tracking.
 The September 22 game type `01` rows are preseason audit evidence and never enter
 member tracking. The independent runtime exactly replays the release-pure 2026

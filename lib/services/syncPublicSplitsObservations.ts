@@ -184,6 +184,10 @@ function gameKey(sport: string, away: unknown, home: unknown): string | null {
     const a = normalizeMlbTeamName(String(away ?? "")), h = normalizeMlbTeamName(String(home ?? ""));
     return a && h ? `${a}@${h}` : null;
   }
+  if (sport === "nhl") {
+    const a = normalizeNhlTeamName(String(away ?? "")), h = normalizeNhlTeamName(String(home ?? ""));
+    return a && h ? `${a}@${h}` : null;
+  }
   return buildGameKey(sport as NormalizerSport, away, home);
 }
 

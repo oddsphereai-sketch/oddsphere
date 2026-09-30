@@ -462,7 +462,7 @@ assert.equal(lkg.displaySource, "playbook", "NHL retains the latest complete pre
 const fallback = resolvePublicSplit({ playbook: { ...stalePlaybook, public_money_pct: null }, sharpapi: freshSharp, now: new Date("2026-09-23T12:01:00.000Z"), staleAfterMinutes: Number.POSITIVE_INFINITY });
 assert.equal(fallback.displaySource, "sharpapi", "a complete fallback silently replaces an incomplete preferred source");
 const matchedPlaybookNhl = matchPlaybookSplitsToSlateGames(
-  [{ id: 1, key: "bruins@panthers", gameDate: "2026-09-29T23:00:00.000Z" }],
+  [{ id: 1, key: "BOS@FLA", gameDate: "2026-09-29T23:00:00.000Z" }],
   [{
     gameId: "playbook-nhl-1",
     awayTeamName: "Boston Bruins",
@@ -471,7 +471,7 @@ const matchedPlaybookNhl = matchPlaybookSplitsToSlateGames(
   }],
   "nhl",
 );
-assert.equal(matchedPlaybookNhl.get(1)?.gameId, "playbook-nhl-1", "NHL Playbook rows match via the generic team-name fallback");
+assert.equal(matchedPlaybookNhl.get(1)?.gameId, "playbook-nhl-1", "NHL DB abbreviations match Playbook full team names through the canonical NHL identity");
 
 const writer = readFileSync(new URL("../lib/services/nhl/buildNhlPredictionRecords.ts", import.meta.url), "utf8");
 const reader = readFileSync(new URL("../lib/services/nhl/buildNhlDailyEdgeAdapted.ts", import.meta.url), "utf8");
@@ -485,7 +485,7 @@ assert.match(reader, /bestPriceFor\("total", totalSide, marketTotalLine\)/, "rea
 assert.match(reader, /Math\.abs\(l\.line_value - predictedPuckLine\) < 0\.01/, "reader prices the exact predicted puck line");
 assert.match(reader, /predictionPayloadByGame/, "reader preserves the writer-owned active-release tuple before and after lock");
 assert.match(reader, /NHL_REGULAR_TRANSITION_MODEL_RELEASES/, "reader preserves an already-locked prior-release tuple during deployment");
-assert.match(reader, /nhl_daily_edge_reader_2026_09_30_r9_independent_public_retail_fallback/, "reader release records the independent public retail fallback");
+assert.match(reader, /nhl_daily_edge_reader_2026_09_30_r10_playbook_identity_repair/, "reader release records the Playbook NHL identity repair");
 assert.match(pregameSweep, /externalIdsFilter:\s*externalIds/, "T-60 writer refreshes only the games entering the lock window");
 assert.match(pregameSweep, /deferLock:\s*true/, "T-60 writer defers locking until the coherence gate passes");
 assert.match(reader, /incoherentPayloadReleaseGames/, "reader quarantines incoherence by release instead of hiding a valid prior lock");
