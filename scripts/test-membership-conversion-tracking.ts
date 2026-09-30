@@ -248,6 +248,8 @@ assert.match(checkoutSource, /return fallback\(plan\)/, "analytics refusal must 
 const migration = readFileSync(resolve("lib/db/schema-migration-v41-membership-conversions.sql"), "utf8");
 const consentMigration = readFileSync(resolve("lib/db/schema-migration-v42-analytics-consent.sql"), "utf8");
 const webhookSource = readFileSync(resolve("app/api/webhooks/whop/route.ts"), "utf8");
+assert.ok(webhookSource.includes('"Api-Version-Date": WHOP_API_VERSION'), "first-paid verification must pin the supported Whop API version");
+assert.ok(!webhookSource.includes('"whop-version"'), "first-paid verification must not send the ignored version header");
 const layoutSource = readFileSync(resolve("app/layout.tsx"), "utf8");
 const consentUiSource = readFileSync(resolve("app/components/AnalyticsConsent.tsx"), "utf8");
 const consentRouteSource = readFileSync(resolve("app/api/privacy/analytics-consent/route.ts"), "utf8");

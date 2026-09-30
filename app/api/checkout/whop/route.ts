@@ -80,7 +80,7 @@ export async function GET(request: Request): Promise<Response> {
         authorization: `Bearer ${apiKey}`,
         "content-type": "application/json",
         "idempotency-key": randomUUID(),
-        "whop-version": WHOP_API_VERSION,
+        "Api-Version-Date": WHOP_API_VERSION,
       },
       body: JSON.stringify({
         // Reference the existing plan; never create or override billing terms.

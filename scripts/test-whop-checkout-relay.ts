@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { serializeAnalyticsConsent } from "../lib/analytics/consent";
-import { WHOP_MONTHLY_PLAN_ID, WHOP_ANNUAL_PLAN_ID } from "../lib/analytics/membershipConversions";
+import { WHOP_MONTHLY_PLAN_ID, WHOP_ANNUAL_PLAN_ID, WHOP_API_VERSION } from "../lib/analytics/membershipConversions";
 
 // All requests are intercepted; this test never contacts Whop, Google or a DB.
 process.env.NEXT_PUBLIC_SUPABASE_URL = "https://checkout-test.invalid";
@@ -31,6 +31,9 @@ globalThis.fetch = async (input, init) => {
   if (url.href === "https://api.whop.com/api/v1/checkout_configurations") {
     whopCalls++;
     assert.equal(init?.method, "POST");
+    const headers = new Headers(init?.headers);
+    assert.equal(headers.get("Api-Version-Date"), WHOP_API_VERSION);
+    assert.equal(headers.has("whop-version"), false);
     lastBody = JSON.parse(String(init?.body));
     assert.deepEqual(Object.keys(lastBody).sort(), ["metadata", "mode", "plan_id"]);
     assert.equal(lastBody.mode, "payment");
@@ -66,11 +69,11 @@ async function main() {
   assert.equal(lastBody.plan_id, WHOP_MONTHLY_PLAN_ID);
   assert.equal(await redirect(request("annual")), "https://whop.com/checkout/ch_test/");
   assert.equal(lastBody.plan_id, WHOP_ANNUAL_PLAN_ID);
-  for (const error of [401, 403, 422, 500, "throw", "invalid_url"] as const) {
+  for (const error of [400, 401, 403, 422, 500, "throw", "invalid_url"] as const) {
     failure = error;
     assert.equal(await redirect(request("monthly")), `https://whop.com/checkout/${WHOP_MONTHLY_PLAN_ID}`);
   }
-  assert.equal(diagnostics.length, 6);
+  assert.equal(diagnostics.length, 7);
   const logged = JSON.stringify(diagnostics);
   assert.ok(!logged.includes("test-only-whop-key") && !logged.includes(consentId) && !logged.includes("GA1.1"));
   console.log("Whop checkout relay tests passed (all network mocked)");
