@@ -38,8 +38,8 @@ import { UCL_CALIBRATION_RELEASE, UCL_MODEL_RELEASE } from "./ucl/uclModel";
 import { filterCompleteUclLockManifestCohorts } from "./ucl/uclLockManifest";
 import { nflTrackingCorrectionSupersededRecordId } from "./football/nflPublishedTrackingCorrection";
 import {
-  NHL_REGULAR_CALIBRATION_RELEASE,
-  NHL_REGULAR_MODEL_RELEASE,
+  NHL_REGULAR_TRANSITION_CALIBRATION_RELEASES,
+  NHL_REGULAR_TRANSITION_MODEL_RELEASES,
 } from "../automodel/nhlRegularModelV1";
 import { nhlGameTypeFromExternalId } from "./nhl/nhlScheduleIdentity";
 
@@ -234,8 +234,12 @@ export function isTrackingRecordEligible(record: PredictionRecordRow): boolean {
   if (isUclTrackingRecord(record)) return record.locked_at !== null && record.held !== true;
   if (record.sport === "nhl") {
     return record.locked_at !== null
-      && record.model_version === NHL_REGULAR_MODEL_RELEASE
-      && record.calibration_version === NHL_REGULAR_CALIBRATION_RELEASE
+      && NHL_REGULAR_TRANSITION_MODEL_RELEASES.includes(
+        record.model_version as typeof NHL_REGULAR_TRANSITION_MODEL_RELEASES[number],
+      )
+      && NHL_REGULAR_TRANSITION_CALIBRATION_RELEASES.includes(
+        record.calibration_version as typeof NHL_REGULAR_TRANSITION_CALIBRATION_RELEASES[number],
+      )
       && nhlGameTypeFromExternalId(record.external_id) === 2;
   }
   return record.locked_at !== null;

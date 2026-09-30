@@ -5,6 +5,45 @@ inputs, probabilities, projections, grades, promotions/demotions, calibration, p
 or stakes. It exists to prevent mixed model eras, competing writers, accidental board
 flattening, and load spikes.
 
+## Owner-approved provisional exception: NHL validated market-read r8
+
+On 2026-09-29 Daniel Mengel explicitly directed Oddsphere to complete a deeper
+professional NHL architecture review, prioritize real projection and prediction
+accuracy, preserve one coherent final score, correctly marry the independent
+model to market reading, and publish the strongest validated model without
+adding member copy or labels. He also directed that the board remain actionable
+rather than being cosmetically flattened. This exception is limited to the r8
+release family and evidence in
+`docs/model-audits/2026-09-29-nhl-professional-architecture-market-marriage-r8.md`.
+
+The frozen r7 independent score, opponent-adjusted Total, and validated 20%
+Moneyline market sanity layer remain authoritative. The proposed learned market
+marriage is explicitly rejected: after the official shootout-deciding scores
+were restored, it made 132 side changes on untouched 2025 and worsened ten more
+games than it corrected. No rejected score or market-arbitration candidate may
+replace the released path. Provider-separated split provenance and agreement
+confidence are retained in the internal snapshot for forward evaluation; they
+do not change member copy, labels, or the score equations in this release.
+
+The owner acknowledges that a 60% future hit rate is a goal rather than a
+guarantee. The five-game transition replay retains all 15 markets and 10
+actionables; the one unlocked puck-line demotion has no quota replacement.
+Moneyline and Total retain their tested symmetric promotion paths. Puck-line
+Best Angle now requires the only exact-price edge band that was profitable in
+both 2024 selection and untouched 2025 confirmation (at least 5%). Missing
+selected-side prices cannot create an actionable grade. Unvalidated goalie-pool
+inputs, retrospective starter identity, and every rejected score/tail model
+remain ineligible.
+
+No stake, provider call, schedule, lease, member copy, label, or layout changes
+are authorized. The sole writer and reader must accept locked r7 tuples during
+the bounded r8 transition so existing valid locks remain immutable and tracked.
+Publication still requires focused tests, full model-change verification,
+latest-main integration safety, protected PR checks, and live writer/reader
+proof. Hold or roll back unlocked r8 output on mixed releases, coverage loss,
+unexpected board collapse, missing prices, coherence failure, writer overlap,
+lock failure, or reader failure.
+
 ## Owner-approved emergency exception: WNBA score / prediction coherence v1.5
 
 On 2026-09-29 Daniel Mengel explicitly directed that WNBA projected scores and

@@ -1805,9 +1805,9 @@ The September 21 operational release restored the two bounded daily schedules re
 
 ## NHL regular-season champion (active from 2026-09-29)
 
-- Model: `nhl_regular_2026_r7_runtime_parity`
-- Calibration: `nhl_regular_calibration_2026_r7_runtime_parity`
-- Decision: `nhl_regular_decision_2026_r7_runtime_parity`
+- Model: `nhl_regular_2026_r8_validated_market_read`
+- Calibration: `nhl_regular_calibration_2026_r8_validated_market_read`
+- Decision: `nhl_regular_decision_2026_r8_exact_price_calibrated`
 - Public tracking start: `2026-09-29`
 - Official markets: moneyline, total, spread (puck line)
 - Retired release: `nhl_v0_2026_finals`
@@ -1823,9 +1823,25 @@ Public money/ticket observations are stored separately by Playbook and SharpAPI.
 The product prefers the latest complete Playbook pair and silently falls back to
 the latest complete SharpAPI pair. Failed refreshes do not clear the previous
 complete observation and the member UI adds no freshness labels or copy. The
-bounded provisional split overlay is governed by the explicit NHL exception in
-`docs/model-change-safety.md` and must be evaluated prospectively by exact release
-and lock time.
+resolved source, provider agreement, and confidence are also retained internally
+in the prediction snapshot so fallback evidence is no longer indistinguishable
+from aligned dual-provider evidence. The bounded split overlay is governed by
+the explicit NHL exception in `docs/model-change-safety.md` and must be evaluated
+prospectively by exact release and lock time.
+
+The September 29 r8 validation release retains the r7 independent score,
+opponent-adjusted Total, and 20% Moneyline market sanity path. Correcting the
+historical settlement target for shootout-deciding goals invalidated the proposed
+learned market blend: on 1,311 untouched 2025 games it made 132 flips with 61
+corrections and 71 regressions. The current path was 55.07% on Moneylines,
+53.56% on Totals, and 67.43% on puck-line direction. High-conviction validation
+cohorts were 65.00% Moneyline at 12pp+ winner conviction and 62.22% Totals at a
+0.5-goal+ model-line gap. A 5pp+ exact-price puck-line edge returned +2.56% in
+2024 selection and +8.76% in untouched 2025 confirmation; only that stable band
+can receive a puck-line Best Angle. The live transition replay retains 5/5 games,
+15/15 markets, and 10 actionables. Already-locked r7 rows remain immutable,
+visible, and tracking-eligible; only unlocked or future rows advance to r8.
+Evidence: `docs/model-audits/2026-09-29-nhl-professional-architecture-market-marriage-r8.md`.
 
 The September 29 r2 input-coverage release keeps the validated r1 coefficients
 unchanged but replaces the incomplete league-wide odds scan with exact-event
@@ -1916,6 +1932,23 @@ quotes. The five-game replay retains all 15 markets and 10 actionables across
 all three market families. Evidence, the explicit correctness exception and
 rollback gates are in
 `docs/model-audits/2026-09-29-nhl-runtime-parity-two-sided-prices-r7.md`.
+
+The corrected September 29 r8 validation retains the r7 independent score,
+opponent-adjusted Total, and validated 20% Moneyline market sanity path. The
+proposed learned market blend is rejected after restoring official shootout
+settlement outcomes: on 1,311 untouched priced 2025 games it fell from 55.07%
+to 54.23% winner accuracy and made 71 bad flips against 61 corrections. Puck-
+line Best Angle now requires a quoted exact-price edge of at least 5pp, the only
+tested edge band with positive ROI in both 2024 selection and untouched 2025
+confirmation. Split source/agreement confidence is retained internally for
+forward evaluation but does not receive an unvalidated side-flip weight. Reader
+release `nhl_daily_edge_reader_2026_09_29_r4_release_transition_continuity`
+preserves locked r7 tuples and quarantines incoherence by release; the writer
+also preserves any locked transition row when both release rows coexist. The
+five-game replay retains all 15 markets and 10 actionables across Moneyline,
+Total, and puck line. Full corrected architecture research, rejected candidates,
+board impact, and rollback gates are in
+`docs/model-audits/2026-09-29-nhl-professional-architecture-market-marriage-r8.md`.
 
 ## WNBA champion
 

@@ -96,6 +96,10 @@ const base: NhlFeatureSnapshot = {
     ml_home_money_pct: 62,
     total_over_bets_pct: 43,
     total_over_money_pct: 57,
+    ml_split_source: "playbook",
+    ml_split_confidence: "high",
+    total_split_source: "sharpapi",
+    total_split_confidence: "medium",
   },
   series: { series_abbrev: null, game_number_in_series: 0, is_elimination_game: false },
   game_type: 2,
@@ -302,6 +306,11 @@ const trackingBase = {
   calibration_version: NHL_REGULAR_CALIBRATION_RELEASE,
 } as PredictionRecordRow;
 assert.equal(isTrackingRecordEligible(trackingBase), true);
+assert.equal(isTrackingRecordEligible({
+  ...trackingBase,
+  model_version: "nhl_regular_2026_r7_runtime_parity",
+  calibration_version: "nhl_regular_calibration_2026_r7_runtime_parity",
+}), true, "locked r7 rows remain in public accuracy during the r8 transition");
 assert.equal(isTrackingRecordEligible({ ...trackingBase, external_id: 2026010001 }), false, "preseason never enters public NHL accuracy");
 assert.equal(isTrackingRecordEligible({ ...trackingBase, model_version: "nhl_v0_2026_finals" }), false, "retired release never enters new regular-season record");
 
@@ -344,11 +353,16 @@ assert.match(reader, /nhlGameTypeFromExternalId\(game\.external_id\) === 2/);
 assert.match(reader, /bestPriceFor\("total", totalSide, marketTotalLine\)/, "reader prices the exact predicted total line");
 assert.match(reader, /Math\.abs\(l\.line_value - predictedPuckLine\) < 0\.01/, "reader prices the exact predicted puck line");
 assert.match(reader, /predictionPayloadByGame/, "reader preserves the writer-owned active-release tuple before and after lock");
+assert.match(reader, /NHL_REGULAR_TRANSITION_MODEL_RELEASES/, "reader preserves an already-locked prior-release tuple during deployment");
+assert.match(reader, /nhl_daily_edge_reader_2026_09_29_r4_release_transition_continuity/, "reader release records transition-safe tuple selection");
+assert.match(reader, /incoherentPayloadReleaseGames/, "reader quarantines incoherence by release instead of hiding a valid prior lock");
 assert.match(reader, /const model = storedPayload\?\.model \?\? nhlRegularModelV1\(snapshot\)/, "reader cannot silently recompute an unlocked r6 card without its persisted matchup state");
-assert.match(reader, /incoherentPayloadGames/, "reader rejects internally inconsistent sibling market snapshots");
+assert.match(reader, /incoherentPayloadReleaseGames/, "reader rejects internally inconsistent sibling market snapshots");
 assert.ok(cron.indexOf("syncPublicSplitsObservations") < cron.indexOf("writeNhlPredictionRecords({"), "persistent splits refresh precedes the only NHL writer");
 assert.match(cron, /leaseGroup: "prediction_pipeline"/);
 assert.match(cron, /refreshDailyEdgeResponseSnapshot/);
+assert.match(writer, /NHL_REGULAR_TRANSITION_MODEL_RELEASES/, "writer cannot duplicate an already-locked prior-release tuple");
+assert.doesNotMatch(writer, /\.maybeSingle\(\)/, "writer supports multiple transition-release rows when checking for locks");
 assert.match(linesProvider, /fetchSharpNhlEvents/, "NHL resolves exact events before fetching odds");
 assert.match(linesProvider, /event_id: eventId/, "NHL odds retrieval is event-scoped instead of scanning an incomplete league slice");
 assert.match(linesProvider, /recovered \$\{market\}/, "an event-scoped missing market gets a targeted recovery call");

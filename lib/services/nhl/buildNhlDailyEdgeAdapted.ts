@@ -16,6 +16,7 @@ import {
 } from "./featureSnapshot";
 import {
   NHL_REGULAR_MODEL_RELEASE,
+  NHL_REGULAR_TRANSITION_MODEL_RELEASES,
   nhlRegularModelV1,
   type NhlFeatureSnapshot,
   type NhlModelOutput,
@@ -29,19 +30,18 @@ import {
 import { fetchBdlNhlTeamMetricsWithPriorFallback } from "../../providers/nhl/_ballDontLieNhlClient";
 import {
   fetchSharpNhlOpportunities,
-  type SharpNhlSplitsEvent,
   type SharpNhlOpportunity,
 } from "../../providers/nhl/_sharpApiNhlClient";
 import { normalizeNhlTeamName } from "../../providers/nhl/_teamNameNormalizer";
 import type { DailyEdgeResponse } from "../../../app/lab/lib/labTypes";
-import { resolvedNhlSplitsByGame } from "./nhlResolvedSplits";
+import { resolvedNhlSplitsByGame, type ResolvedNhlSplitsEvent } from "./nhlResolvedSplits";
 import { loadNhlRegularStateForSlate } from "./loadNhlRegularState";
 import { isBlockedSportsbook } from "../../config/blockedSportsbooks";
 import { buildNhlTwoSidedPriceTrail } from "./nhlPriceTrail";
 import { canonicalizeNhlLineRows } from "./nhlLineBoard";
 
 export const NHL_DAILY_EDGE_READER_RELEASE =
-  "nhl_daily_edge_reader_2026_09_29_r3_two_sided_price_history" as const;
+  "nhl_daily_edge_reader_2026_09_29_r4_release_transition_continuity" as const;
 
 /**
  * Bucket SharpAPI NHL opportunities by `"AWAY@HOME"` matchup key (normalized
@@ -141,7 +141,7 @@ export async function buildNhlDailyEdgeAdapted(date: string): Promise<DailyEdgeR
     return buildNhlDailyEdgeResponse({ date, requestedDate: date, games: [] });
   }
 
-  let splitsByGame = new Map<number, SharpNhlSplitsEvent>();
+  let splitsByGame = new Map<number, ResolvedNhlSplitsEvent>();
   try {
     splitsByGame = await resolvedNhlSplitsByGame(supabase, date);
   } catch (error) {
@@ -190,7 +190,7 @@ export async function buildNhlDailyEdgeAdapted(date: string): Promise<DailyEdgeR
     .from("prediction_records")
     .select("game_id, locked_at, model_version, snapshot_json")
     .eq("sport", "nhl")
-    .eq("model_version", NHL_REGULAR_MODEL_RELEASE)
+    .in("model_version", [...NHL_REGULAR_TRANSITION_MODEL_RELEASES])
     .in("game_id", games.map((g) => g.id));
   const lockedByGame = new Map<number, string | null>();
   const predictionPayloadByGame = new Map<number, {
@@ -198,8 +198,9 @@ export async function buildNhlDailyEdgeAdapted(date: string): Promise<DailyEdgeR
     snapshot: NhlFeatureSnapshot;
     lockedAt: string | null;
     identity: string;
+    modelVersion: string;
   }>();
-  const incoherentPayloadGames = new Set<number>();
+  const incoherentPayloadReleaseGames = new Set<string>();
   for (const r of ((recordsData ?? []) as Array<{
     game_id: number;
     locked_at: string | null;
@@ -216,27 +217,40 @@ export async function buildNhlDailyEdgeAdapted(date: string): Promise<DailyEdgeR
       feature_inputs?: NhlFeatureSnapshot;
     } | null;
     if (
-      payload?.model_output?.model_version === NHL_REGULAR_MODEL_RELEASE
-      && payload.feature_inputs?.game_type === 2
+      payload?.model_output
+      && payload.feature_inputs
+      && NHL_REGULAR_TRANSITION_MODEL_RELEASES.includes(
+        payload.model_output.model_version as typeof NHL_REGULAR_TRANSITION_MODEL_RELEASES[number],
+      )
+      && payload.feature_inputs.game_type === 2
+      && (r.model_version === NHL_REGULAR_MODEL_RELEASE || r.locked_at !== null)
     ) {
       const identity = JSON.stringify({
         model: payload.model_output,
         snapshot: payload.feature_inputs,
       });
       const prior = predictionPayloadByGame.get(r.game_id);
-      if (prior && prior.identity !== identity) {
-        incoherentPayloadGames.add(r.game_id);
+      if (prior && prior.modelVersion === r.model_version && prior.identity !== identity) {
+        incoherentPayloadReleaseGames.add(`${r.game_id}:${r.model_version}`);
         continue;
       }
-      if (!prior || (prior.lockedAt === null && r.locked_at !== null)) predictionPayloadByGame.set(r.game_id, {
+      const shouldReplace = !prior
+        || (prior.lockedAt === null && r.locked_at !== null)
+        || (prior.lockedAt === null && r.locked_at === null && r.model_version === NHL_REGULAR_MODEL_RELEASE);
+      if (shouldReplace) predictionPayloadByGame.set(r.game_id, {
         model: payload.model_output,
         snapshot: payload.feature_inputs,
         lockedAt: r.locked_at,
         identity,
+        modelVersion: r.model_version,
       });
     }
   }
-  for (const gameId of incoherentPayloadGames) predictionPayloadByGame.delete(gameId);
+  for (const [gameId, payload] of predictionPayloadByGame) {
+    if (incoherentPayloadReleaseGames.has(`${gameId}:${payload.modelVersion}`)) {
+      predictionPayloadByGame.delete(gameId);
+    }
+  }
 
   // Per-game pipeline.
   const dtos = [];
@@ -255,6 +269,10 @@ export async function buildNhlDailyEdgeAdapted(date: string): Promise<DailyEdgeR
           mlHomeMoneyPct: splitsEvent?.moneyline?.handle_pct?.home == null ? null : splitsEvent.moneyline.handle_pct.home * 100,
           totalOverBetsPct: splitsEvent?.total?.bets_pct?.over == null ? null : splitsEvent.total.bets_pct.over * 100,
           totalOverMoneyPct: splitsEvent?.total?.handle_pct?.over == null ? null : splitsEvent.total.handle_pct.over * 100,
+          mlSplitSource: splitsEvent?.internal_resolution?.moneyline?.source ?? null,
+          mlSplitConfidence: splitsEvent?.internal_resolution?.moneyline?.confidence ?? "none",
+          totalSplitSource: splitsEvent?.internal_resolution?.total?.source ?? null,
+          totalSplitConfidence: splitsEvent?.internal_resolution?.total?.confidence ?? "none",
         },
       });
       const storedPayload = predictionPayloadByGame.get(g.id);

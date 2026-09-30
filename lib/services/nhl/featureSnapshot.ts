@@ -52,6 +52,10 @@ export type BuildSnapshotOptions = {
     mlHomeMoneyPct?: number | null;
     totalOverBetsPct?: number | null;
     totalOverMoneyPct?: number | null;
+    mlSplitSource?: "playbook" | "sharpapi" | null;
+    mlSplitConfidence?: "high" | "medium" | "low" | "none";
+    totalSplitSource?: "playbook" | "sharpapi" | null;
+    totalSplitConfidence?: "high" | "medium" | "low" | "none";
   };
   logger?: (msg: string) => void;
 };
@@ -648,6 +652,10 @@ export async function buildNhlFeatureSnapshot(
       ml_home_money_pct: opts.marketEvidence?.mlHomeMoneyPct ?? null,
       total_over_bets_pct: opts.marketEvidence?.totalOverBetsPct ?? null,
       total_over_money_pct: opts.marketEvidence?.totalOverMoneyPct ?? null,
+      ml_split_source: opts.marketEvidence?.mlSplitSource ?? null,
+      ml_split_confidence: opts.marketEvidence?.mlSplitConfidence ?? "none",
+      total_split_source: opts.marketEvidence?.totalSplitSource ?? null,
+      total_split_confidence: opts.marketEvidence?.totalSplitConfidence ?? "none",
     },
     series: {
       series_abbrev: seriesAbbrev,

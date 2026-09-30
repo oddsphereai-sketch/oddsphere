@@ -51,13 +51,13 @@ import {
   nhlRegularModelV1,
   NHL_REGULAR_CALIBRATION_RELEASE,
   NHL_REGULAR_MODEL_RELEASE,
+  NHL_REGULAR_TRANSITION_MODEL_RELEASES,
   type NhlModelOutput,
 } from "../../automodel/nhlRegularModelV1";
 import { fetchBdlNhlTeamMetricsWithPriorFallback } from "../../providers/nhl/_ballDontLieNhlClient";
-import type { SharpNhlSplitsEvent } from "../../providers/nhl/_sharpApiNhlClient";
 import { assertOfficialTrackingMarket } from "../../config/officialTrackingMarkets";
 import type { PredictionRecordRow, TrackedMarketV17 } from "../../types/domain/Tracking";
-import { resolvedNhlSplitsByGame } from "./nhlResolvedSplits";
+import { resolvedNhlSplitsByGame, type ResolvedNhlSplitsEvent } from "./nhlResolvedSplits";
 import { loadNhlRegularStateForSlate } from "./loadNhlRegularState";
 import { loadNhlOpponentAdjustedState } from "./loadNhlOpponentAdjustedState";
 
@@ -233,7 +233,7 @@ export async function writeNhlPredictionRecords(
       errors.push(`BALLDONTLIE team metrics: ${(error as Error).message}`);
     }
   }
-  let splitsByGame = new Map<number, SharpNhlSplitsEvent>();
+  let splitsByGame = new Map<number, ResolvedNhlSplitsEvent>();
   try {
     splitsByGame = await resolvedNhlSplitsByGame(supabase, opts.slateDate);
   } catch (error) {
@@ -264,6 +264,10 @@ export async function writeNhlPredictionRecords(
           mlHomeMoneyPct: split?.moneyline?.handle_pct?.home == null ? null : split.moneyline.handle_pct.home * 100,
           totalOverBetsPct: split?.total?.bets_pct?.over == null ? null : split.total.bets_pct.over * 100,
           totalOverMoneyPct: split?.total?.handle_pct?.over == null ? null : split.total.handle_pct.over * 100,
+          mlSplitSource: split?.internal_resolution?.moneyline?.source ?? null,
+          mlSplitConfidence: split?.internal_resolution?.moneyline?.confidence ?? "none",
+          totalSplitSource: split?.internal_resolution?.total?.source ?? null,
+          totalSplitConfidence: split?.internal_resolution?.total?.confidence ?? "none",
         },
       });
       const model = nhlRegularModelV1(snapshot);
@@ -417,15 +421,20 @@ export async function writeNhlPredictionRecords(
         const pickSide = m.side;
 
         // Check if a locked row already exists — skip if so.
-        const { data: existing } = await supabase
+        const { data: existingRows, error: existingRowsError } = await supabase
           .from("prediction_records")
-          .select("id, locked_at")
+          .select("id, locked_at, model_version")
           .eq("game_id", g.id)
           .eq("market", m.market)
-          .eq("model_version", NHL_REGULAR_MODEL_RELEASE)
-          .eq("slate_date", g.slate_date)
-          .maybeSingle();
-        if (existing && (existing as { locked_at: string | null }).locked_at !== null) {
+          .in("model_version", [...NHL_REGULAR_TRANSITION_MODEL_RELEASES])
+          .eq("slate_date", g.slate_date);
+        if (existingRowsError) {
+          throw new Error(`failed to inspect NHL transition locks: ${existingRowsError.message}`);
+        }
+        const existingLocked = ((existingRows ?? []) as Array<{
+          locked_at: string | null;
+        }>).some((row) => row.locked_at !== null);
+        if (existingLocked) {
           recordsSkippedLocked += 1;
           log(`  ⏭ ${matchup} ${m.market}: locked row preserved`);
           continue;

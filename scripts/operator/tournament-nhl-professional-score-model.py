@@ -73,7 +73,7 @@ def load_games(csv_path: Path) -> list[dict[str, Any]]:
     with csv_path.open(newline="", encoding="utf-8") as handle:
         for row in csv.DictReader(handle):
             season = int(row["season"])
-            if season < 2022 or season > 2025 or row["position"] != "Team Level":
+            if season < 2016 or season > 2025 or row["position"] != "Team Level":
                 continue
             if len(row["gameId"]) < 6 or row["gameId"][4:6] != "02":
                 continue
@@ -130,6 +130,40 @@ def load_openings(path: Path) -> dict[tuple[int, str, str, str], dict[str, float
         key = (2025, game["game_date"], alias(game["home_team"]["tricode"]), alias(game["away_team"]["tricode"]))
         out[key] = {"home_prob": median(probs), "total": median(totals), "home_spread": median(home_spreads)}
     return out
+
+
+def load_settled_scores(path: Path) -> dict[tuple[int, str, str, str], tuple[int, int]]:
+    payload = json.loads(path.read_text())
+    return {
+        (
+            int(game["season"]),
+            str(game["game_date"]),
+            alias(game["home_team"]["tricode"]),
+            alias(game["away_team"]["tricode"]),
+        ): (int(game["home_score"]), int(game["away_score"]))
+        for game in payload["games"]
+        if game.get("home_score") is not None and game.get("away_score") is not None
+    }
+
+
+def apply_settled_scores(
+    games: list[dict[str, Any]],
+    settled: dict[tuple[int, str, str, str], tuple[int, int]],
+) -> list[dict[str, Any]]:
+    return [
+        {
+            **game,
+            "home_goals": settled.get(
+                (game["season"], game["date"], game["home"], game["away"]),
+                (game["home_goals"], game["away_goals"]),
+            )[0],
+            "away_goals": settled.get(
+                (game["season"], game["date"], game["home"], game["away"]),
+                (game["home_goals"], game["away_goals"]),
+            )[1],
+        }
+        for game in games
+    ]
 
 
 def load_legacy_forecasts(path: Path) -> dict[tuple[int, str, str, str], tuple[float, float, float]]:
@@ -539,7 +573,7 @@ def main() -> None:
     parser.add_argument("--bdl", required=True, type=Path)
     parser.add_argument("--output", required=True, type=Path)
     args = parser.parse_args()
-    games = load_games(args.moneypuck)
+    games = apply_settled_scores(load_games(args.moneypuck), load_settled_scores(args.bdl))
     openings = load_openings(args.bdl)
     legacy_forecasts = load_legacy_forecasts(args.bdl)
     core_candidates = []

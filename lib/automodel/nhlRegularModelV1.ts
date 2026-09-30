@@ -1,9 +1,17 @@
 import type { BdlNhlTeamMetrics } from "../providers/nhl/_ballDontLieNhlClient";
 import type { NhlCalibratedTeamState } from "./nhlRegularPriors2026";
 
-export const NHL_REGULAR_MODEL_RELEASE = "nhl_regular_2026_r7_runtime_parity" as const;
-export const NHL_REGULAR_CALIBRATION_RELEASE = "nhl_regular_calibration_2026_r7_runtime_parity" as const;
-export const NHL_REGULAR_DECISION_RELEASE = "nhl_regular_decision_2026_r7_runtime_parity" as const;
+export const NHL_REGULAR_MODEL_RELEASE = "nhl_regular_2026_r8_validated_market_read" as const;
+export const NHL_REGULAR_CALIBRATION_RELEASE = "nhl_regular_calibration_2026_r8_validated_market_read" as const;
+export const NHL_REGULAR_DECISION_RELEASE = "nhl_regular_decision_2026_r8_exact_price_calibrated" as const;
+export const NHL_REGULAR_TRANSITION_MODEL_RELEASES = [
+  NHL_REGULAR_MODEL_RELEASE,
+  "nhl_regular_2026_r7_runtime_parity",
+] as const;
+export const NHL_REGULAR_TRANSITION_CALIBRATION_RELEASES = [
+  NHL_REGULAR_CALIBRATION_RELEASE,
+  "nhl_regular_calibration_2026_r7_runtime_parity",
+] as const;
 
 export type NhlVerdictKey = "best_angle" | "lean" | "watchlist" | "pass";
 
@@ -53,6 +61,10 @@ export type NhlModelMarket = {
   ml_home_money_pct: number | null;
   total_over_bets_pct: number | null;
   total_over_money_pct: number | null;
+  ml_split_source: "playbook" | "sharpapi" | null;
+  ml_split_confidence: "high" | "medium" | "low" | "none";
+  total_split_source: "playbook" | "sharpapi" | null;
+  total_split_confidence: "high" | "medium" | "low" | "none";
 };
 
 export type NhlFeatureSnapshot = {
@@ -315,9 +327,10 @@ function totalVerdict(projectedGap: number | null): NhlVerdictKey {
 }
 
 function pucklineVerdict(probability: number, marketProbability: number | null): NhlVerdictKey {
-  const edge = marketProbability === null ? 0 : probability - marketProbability;
-  if (probability >= 0.70 && (marketProbability === null || edge >= 0.02)) return "best_angle";
-  if (probability >= 0.58 || edge >= 0.012) return "lean";
+  if (marketProbability === null) return "watchlist";
+  const edge = probability - marketProbability;
+  if (probability >= 0.70 && edge >= 0.05) return "best_angle";
+  if ((probability >= 0.58 && edge >= 0.015) || edge >= 0.05) return "lean";
   return "watchlist";
 }
 
@@ -345,7 +358,9 @@ export function nhlRegularModelV1(snapshot: NhlFeatureSnapshot): NhlModelOutput 
   const marketHome = snapshot.market.market_home_prob;
   const marketGoalDiff = marketHome === null ? independentGoalDiff : logit(marketHome) / ML_SLOPE;
   const probabilityNudge = sharpHomeNudge(snapshot.market) + movementHomeNudge(snapshot.market);
-  const activeExpectedGoalDiff = (1 - ML_MARKET_WEIGHT) * independentGoalDiff + ML_MARKET_WEIGHT * marketGoalDiff + probabilityNudge / 0.12;
+  const activeExpectedGoalDiff = (1 - ML_MARKET_WEIGHT) * independentGoalDiff
+    + ML_MARKET_WEIGHT * marketGoalDiff
+    + probabilityNudge / 0.12;
 
   const marketTotal = snapshot.market.market_total_line;
   const totalNudge = sharpTotalNudge(snapshot.market);
