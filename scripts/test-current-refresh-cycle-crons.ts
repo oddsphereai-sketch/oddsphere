@@ -136,13 +136,13 @@ assert.deepEqual(
 );
 assert.deepEqual(
   crons.filter((cron) => cron.path === "/api/cron/nhl-daily-refresh").map((cron) => cron.schedule),
-  ["45 13 * * *"],
-  "NHL has one bounded daily refresh; the route's exact env gate controls writes",
+  ["45 7 * * *"],
+  "NHL has one bounded overnight refresh; the route's exact env gate controls writes",
 );
 assert.match(source("app/api/cron/nba-daily-refresh/route.ts"), /process\.env\[NBA_CRON_ENV\] !== "true"/, "NBA refresh remains fail-closed behind its runtime gate");
 assert.match(source("app/api/cron/nhl-daily-refresh/route.ts"), /process\.env\[NHL_CRON_ENV\] !== "true"/, "NHL refresh remains fail-closed behind its runtime gate");
 assert.match(source("app/api/cron/nba-daily-refresh/route.ts"), /nba_daily_refresh_schedule_2026_09_21_r1/, "NBA refresh exposes its immutable operational release");
-assert.match(source("app/api/cron/nhl-daily-refresh/route.ts"), /nhl_daily_refresh_schedule_2026_09_29_r5_canonical_two_sided_quotes/, "NHL refresh exposes its immutable complete-slate operational release");
+assert.match(source("app/api/cron/nhl-daily-refresh/route.ts"), /nhl_daily_refresh_schedule_2026_09_30_r6_overnight_slate_readiness/, "NHL refresh exposes its immutable overnight-slate operational release");
 assert.ok(crons.some((cron) => cron.path === "/api/cron/pregame-sweep?lockOnly=true" && cron.schedule?.startsWith("* ")), "lock sweep runs every minute while remaining targeted");
 assert.ok(crons.some((cron) => cron.path === "/api/cron/public-splits-observations-refresh" && cron.schedule === "*/15 11-12 * * *"), "split recovery starts at 07:00 ET");
 assert.match(source("app/api/cron/pregame-sweep/route.ts"), /leaseRetryMaxWaitMs:\s*!dryRun && gateActive \? 20_000/, "lock sweep briefly waits for the shared lease before deferring");

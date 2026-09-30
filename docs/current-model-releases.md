@@ -1798,10 +1798,10 @@ The paired live-slate replay is recorded in
 
 - NBA refresh release: `nba_daily_refresh_schedule_2026_09_21_r1`
 - NBA schedule: `/api/cron/nba-daily-refresh` once daily at `30 13 * * *`, fail closed unless `NBA_CRON_ENABLED=true`
-- NHL refresh release: `nhl_daily_refresh_schedule_2026_09_29_r5_canonical_two_sided_quotes`
-- NHL schedule: `/api/cron/nhl-daily-refresh` once daily at `45 13 * * *`, fail closed unless `NHL_CRON_ENABLED=true`
+- NHL refresh release: `nhl_daily_refresh_schedule_2026_09_30_r6_overnight_slate_readiness`
+- NHL schedule: `/api/cron/nhl-daily-refresh` once daily at `45 7 * * *`, fail closed unless `NHL_CRON_ENABLED=true`
 
-The September 21 operational release restored the two bounded daily schedules removed by the emergency cron pause. NBA remains on that schedule contract. NHL's September 29 complete-slate release resolves exact provider events before requesting odds, retains the existing route gates and sport-scoped lease, and reports incomplete two-sided game-market coverage as partial rather than silently healthy.
+The September 21 operational release restored the two bounded daily schedules removed by the emergency cron pause. NBA remains on that schedule contract. NHL's September 29 complete-slate release resolves exact provider events before requesting odds, retains the existing route gates and sport-scoped lease, and reports incomplete two-sided game-market coverage as partial rather than silently healthy. The September 30 r6 schedule moves that same single bounded NHL refresh from 13:45 UTC to 07:45 UTC after a three-game regular-season slate remained absent during the member morning. The 03:45 EDT / 02:45 EST execution is an overnight rollover, adds no second refresh, provider call cycle, writer, or lease, and gives the existing data-health cycle time to detect a failed seed before members wake. The r10 T-60 path remains the authoritative final market refresh and lock owner.
 
 ## NHL regular-season champion (active from 2026-09-29)
 

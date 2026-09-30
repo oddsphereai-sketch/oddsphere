@@ -79,7 +79,7 @@
     },
     {
       "path": "/api/cron/nhl-daily-refresh",
-      "schedule": "45 13 * * *"
+      "schedule": "45 7 * * *"
     },
     {
       "path": "/api/cron/epl-daily-refresh",
