@@ -256,9 +256,45 @@ function attachBestMarket(
   if (!selected) return 0;
 
   const existing = market.sportsbookSplits;
-  if (existing && !shouldReplace(existing, selected)) return 0;
-  market.sportsbookSplits = selected;
-  return 1;
+  let populated: 0 | 1 = 0;
+  if (!existing || shouldReplace(existing, selected)) {
+    market.sportsbookSplits = selected;
+    populated = 1;
+  }
+
+  // NHL may silently use a complete BetMGM retail split as the Public
+  // Consensus fallback only when the Sharp Book panel is owned by a different
+  // named book. Playbook remains authoritative whenever it populated the
+  // public lane upstream. This keeps both panels useful without ever showing
+  // one book/observation twice or inventing a blended consensus.
+  if (game.sport === "nhl" && (market.publicSplits?.length ?? 0) === 0) {
+    const publicRetail = sections.find((section) => section.sourceBook === "betmgm") ?? null;
+    const finalSharpBook = market.sportsbookSplits?.sourceBook ?? null;
+    if (publicRetail && finalSharpBook !== null && finalSharpBook !== publicRetail.sourceBook) {
+      market.publicSplits = publicRetail.rows.map((row) => ({ ...row }));
+      const selectedPublicRow = selectedPublicSplitRow(market, publicRetail);
+      if (selectedPublicRow) {
+        market.moneyPct = selectedPublicRow.moneyPct;
+        market.betsPct = selectedPublicRow.betsPct;
+      }
+      populated = 1;
+    }
+  }
+  return populated;
+}
+
+function selectedPublicSplitRow(
+  market: DailyEdgeGameDto["markets"][keyof DailyEdgeGameDto["markets"]],
+  section: MarketSplitDisplaySection,
+): MarketSplitDisplaySection["rows"][number] | null {
+  if (!market) return null;
+  const pick = (market.pick ?? "").trim().toUpperCase();
+  if (!pick) return null;
+  return section.rows.find((row) =>
+    (row.side === "over" && pick.startsWith("OVER")) ||
+    (row.side === "under" && pick.startsWith("UNDER")) ||
+    ((row.side === "home" || row.side === "away") && pick.includes(row.label.trim().toUpperCase()))
+  ) ?? null;
 }
 
 function dedupeBookRows(rows: Json[]): Json[] {

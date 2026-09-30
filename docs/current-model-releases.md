@@ -1866,6 +1866,20 @@ grade, stake, lock, or tracking behavior changes; promotions/demotions and the
 actionable-count change are all zero. Evidence and rollback:
 `docs/model-audits/2026-09-30-market-evidence-source-integrity.md`.
 
+The September 30 r9 reader release
+`nhl_daily_edge_reader_2026_09_30_r9_independent_public_retail_fallback`
+preserves r8 source independence while filling an empty public lane from a
+complete BetMGM retail row when the final Sharp Book section is owned by a
+different named book. Playbook remains primary for Public Consensus; Circa and
+DraftKings retain the existing Sharp Book hierarchy and continuity. The same
+book or observation can never occupy both panels, and a missing distinct retail
+row leaves Public Consensus unavailable. The current three-game / nine-market
+board has zero promotions, demotions, actionable-count changes, or changes to
+scores, sides, probabilities, grades, actions, stakes, locks, or tracking.
+No copy, label, layout, provider call, schedule, writer, or lease changes.
+Evidence and rollback:
+`docs/model-audits/2026-09-30-nhl-independent-public-retail-fallback-r9.md`.
+
 Only NHL game type `02` is eligible for the reader, writer, and public tracking.
 The September 22 game type `01` rows are preseason audit evidence and never enter
 member tracking. The independent runtime exactly replays the release-pure 2026

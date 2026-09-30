@@ -9,6 +9,7 @@ import {
 } from "../lib/providers/real_api/sharpApiCurrentSplits";
 
 const emptyMarket = (): MarketEdgeDto => ({
+  publicSplits: [],
   sportsbookSplits: null,
   recommendationDecision: { sharpBookSplits: null },
 } as unknown as MarketEdgeDto);
@@ -74,16 +75,48 @@ assert.deepEqual(mlbResult, { matchedGames: 1, populatedMarkets: 2 });
 assert.equal(mlb.games[0]!.markets.first_inning.sportsbookSplits, null, "MLB full-game spread cannot populate first inning");
 
 const nhl = response("nhl", "NYI", "TOR", "New York Islanders", "Toronto Maple Leafs");
+const nhlRetail = complete("nhl", "betmgm", "New York Islanders", "Toronto Maple Leafs", "2026-09-20T20:04:30.000Z");
+nhlRetail.moneyline.handle_pct = { away: 44, home: 56 };
+nhlRetail.moneyline.bets_pct = { away: 41, home: 59 };
+nhlRetail.spread.handle_pct = { away: 37, home: 63 };
+nhlRetail.spread.bets_pct = { away: 46, home: 54 };
+nhlRetail.total.handle_pct = { over: 52, under: 48 };
+nhlRetail.total.bets_pct = { over: 55, under: 45 };
 const nhlResult = applySharpApiCurrentSplitOverlay(nhl, {
+  source: "sharpapi_current_splits",
+  release: "sharpapi_current_splits_2026_09_20_r1_durable_overlay",
+  sport: "nhl",
+  fetchedAt: "2026-09-20T20:04:00.000Z",
+  rows: [
+    complete("nhl", "draftkings", "NY Islanders", "TOR Maple Leafs", "2026-09-20T20:04:00.000Z"),
+    nhlRetail,
+  ],
+}, now);
+assert.deepEqual(nhlResult, { matchedGames: 1, populatedMarkets: 3 }, "NHL provider names must resolve through the canonical team normalizer");
+assert.equal(nhl.games[0]!.markets.moneyline.sportsbookSplits?.label, "Sharp Book Splits");
+assert.equal(nhl.games[0]!.markets.first_inning.sportsbookSplits?.rows.length, 2);
+assert.equal(nhl.games[0]!.markets.moneyline.sportsbookSplits?.sourceBook, "draftkings");
+assert.equal(nhl.games[0]!.markets.moneyline.sportsbookSplits?.rows[0]?.moneyPct, 61, "DraftKings remains the Sharp Book fallback");
+assert.equal(nhl.games[0]!.markets.moneyline.publicSplits[0]?.moneyPct, 44, "independent BetMGM retail splits fill the public lane");
+assert.notDeepEqual(
+  nhl.games[0]!.markets.moneyline.publicSplits,
+  nhl.games[0]!.markets.moneyline.sportsbookSplits?.rows,
+  "public and Sharp Book panels cannot reuse the same observation",
+);
+
+const nhlSingleSource = response("nhl", "NYI", "TOR", "New York Islanders", "Toronto Maple Leafs");
+applySharpApiCurrentSplitOverlay(nhlSingleSource, {
   source: "sharpapi_current_splits",
   release: "sharpapi_current_splits_2026_09_20_r1_durable_overlay",
   sport: "nhl",
   fetchedAt: "2026-09-20T20:04:00.000Z",
   rows: [complete("nhl", "draftkings", "NY Islanders", "TOR Maple Leafs", "2026-09-20T20:04:00.000Z")],
 }, now);
-assert.deepEqual(nhlResult, { matchedGames: 1, populatedMarkets: 3 }, "NHL provider names must resolve through the canonical team normalizer");
-assert.equal(nhl.games[0]!.markets.moneyline.sportsbookSplits?.label, "Sharp Book Splits");
-assert.equal(nhl.games[0]!.markets.first_inning.sportsbookSplits?.rows.length, 2);
+assert.deepEqual(
+  nhlSingleSource.games[0]!.markets.moneyline.publicSplits,
+  [],
+  "one named-book source may populate Sharp Book Splits but cannot be duplicated as public fallback",
+);
 
 const legacyMlbSection = mlb.games[0]!.markets.moneyline.sportsbookSplits!;
 legacyMlbSection.lastUpdated = mlbFeed.fetchedAt;
