@@ -28,6 +28,7 @@ import { replayNhlRegularState } from "../lib/automodel/nhlRegularState";
 import { replayNhlOpponentAdjustedState } from "../lib/services/nhl/loadNhlOpponentAdjustedState";
 import { buildNhlTwoSidedPriceTrail } from "../lib/services/nhl/nhlPriceTrail";
 import { canonicalizeNhlLineRows } from "../lib/services/nhl/nhlLineBoard";
+import { assessNhlLockCoherence } from "../lib/services/nhl/nhlLockCoherence";
 
 const base: NhlFeatureSnapshot = {
   home: {
@@ -138,6 +139,39 @@ assert.ok(Math.abs(result.projected_home_goals - result.projected_away_goals - r
 assert.ok(Number.isFinite(result.independent_goal_diff), "professional independent margin is finite");
 assert.ok(result.independent_total_goals >= 4.5 && result.independent_total_goals <= 8, "professional independent total remains inside the trained support");
 assert.ok(result.puck_line.pick.includes("1.5"));
+const strongFavorite = nhlRegularModelV1({
+  ...base,
+  home: {
+    ...base.home,
+    xgoals_pct: 0.64,
+    x_goals_for_per_60: 4.1,
+    x_goals_against_per_60: 2.0,
+    five_x_goals_for_per_60: 3.3,
+    five_x_goals_against_per_60: 1.7,
+    goalie_xgsaa_per_60: 0.28,
+    calibrated_state: { elo: 1700, goalsFor: 4.1, goalsAgainst: 2.0 },
+  },
+  away: {
+    ...base.away,
+    xgoals_pct: 0.38,
+    x_goals_for_per_60: 2.0,
+    x_goals_against_per_60: 4.0,
+    five_x_goals_for_per_60: 1.6,
+    five_x_goals_against_per_60: 3.4,
+    goalie_xgsaa_per_60: -0.3,
+    calibrated_state: { elo: 1320, goalsFor: 2.0, goalsAgainst: 4.1 },
+  },
+  market: {
+    ...base.market,
+    market_home_prob: 0.8,
+    best_home_ml_prob: 0.77,
+    best_away_ml_prob: 0.24,
+    same_book_home_prob_move: 0.08,
+    market_home_puck_prob: 0.55,
+    market_away_puck_prob: 0.49,
+  },
+});
+assert.equal(strongFavorite.puck_line.pick, "FLA -1.5", "a supported favorite margin can select -1.5 without a quota or side restriction");
 assert.ok(Math.abs(result.moneyline.probability - legacyFallback.moneyline.probability) < 1e-12, "opponent-adjusted Total preserves the validated r5 Moneyline probability exactly");
 assert.equal(result.moneyline.pick, legacyFallback.moneyline.pick, "Total repair cannot flip the Moneyline winner");
 assert.notEqual(result.independent_total_goals, legacyFallback.independent_total_goals, "complete matchup state activates the new Total component");
@@ -268,6 +302,28 @@ const noMarket = nhlRegularModelV1({
 assert.notEqual(result.expected_goal_diff, noMarket.expected_goal_diff, "no-vig price and same-book movement alter the bounded final margin");
 assert.notEqual(result.expected_total_goals, noMarket.expected_total_goals, "same-book Total movement alters the bounded final total");
 
+const coherentRows = ([
+  ["moneyline", result.moneyline.pick],
+  ["total", result.total.pick],
+  ["spread", result.puck_line.pick],
+] as const).map(([market, pick]) => ({
+  game_id: 101,
+  market,
+  pick,
+  model_version: NHL_REGULAR_MODEL_RELEASE,
+  locked_at: null,
+  snapshot_json: { model_output: result, feature_inputs: base },
+}));
+assert.deepEqual(assessNhlLockCoherence({ gameIds: [101], rows: coherentRows }).coherentGameIds, [101]);
+assert.deepEqual(
+  assessNhlLockCoherence({
+    gameIds: [101],
+    rows: coherentRows.map((row) => row.market === "spread" ? { ...row, pick: "BOS -1.5" } : row),
+  }).blockedGameIds,
+  [101],
+  "T-60 lock fails closed when a stored pick disagrees with the unified score output",
+);
+
 const totalLineOnlyA = nhlRegularModelV1({
   ...base,
   market: {
@@ -335,7 +391,7 @@ assert.equal(isTrackingRecordEligible({
   ...trackingBase,
   model_version: "nhl_regular_2026_r7_runtime_parity",
   calibration_version: "nhl_regular_calibration_2026_r7_runtime_parity",
-}), true, "locked r7 rows remain in public accuracy during the r9 transition");
+}), true, "locked r7 rows remain in public accuracy during the r10 transition");
 assert.equal(isTrackingRecordEligible({ ...trackingBase, external_id: 2026010001 }), false, "preseason never enters public NHL accuracy");
 assert.equal(isTrackingRecordEligible({ ...trackingBase, model_version: "nhl_v0_2026_finals" }), false, "retired release never enters new regular-season record");
 
@@ -371,6 +427,7 @@ assert.equal(matchedPlaybookNhl.get(1)?.gameId, "playbook-nhl-1", "NHL Playbook 
 const writer = readFileSync(new URL("../lib/services/nhl/buildNhlPredictionRecords.ts", import.meta.url), "utf8");
 const reader = readFileSync(new URL("../lib/services/nhl/buildNhlDailyEdgeAdapted.ts", import.meta.url), "utf8");
 const cron = readFileSync(new URL("../app/api/cron/nhl-daily-refresh/route.ts", import.meta.url), "utf8");
+const pregameSweep = readFileSync(new URL("../app/api/cron/pregame-sweep/route.ts", import.meta.url), "utf8");
 const linesProvider = readFileSync(new URL("../lib/providers/nhl/_sharpApiNhlClient.ts", import.meta.url), "utf8");
 const linesRefresh = readFileSync(new URL("../lib/services/nhl/refreshNhlLinesService.ts", import.meta.url), "utf8");
 assert.match(writer, /nhlGameTypeFromExternalId\(game\.external_id\) === 2/);
@@ -379,7 +436,9 @@ assert.match(reader, /bestPriceFor\("total", totalSide, marketTotalLine\)/, "rea
 assert.match(reader, /Math\.abs\(l\.line_value - predictedPuckLine\) < 0\.01/, "reader prices the exact predicted puck line");
 assert.match(reader, /predictionPayloadByGame/, "reader preserves the writer-owned active-release tuple before and after lock");
 assert.match(reader, /NHL_REGULAR_TRANSITION_MODEL_RELEASES/, "reader preserves an already-locked prior-release tuple during deployment");
-assert.match(reader, /nhl_daily_edge_reader_2026_09_29_r5_source_aware_transition/, "reader release records transition-safe tuple selection");
+assert.match(reader, /nhl_daily_edge_reader_2026_09_29_r6_t60_market_refresh_transition/, "reader release records transition-safe tuple selection");
+assert.match(pregameSweep, /externalIdsFilter:\s*externalIds/, "T-60 writer refreshes only the games entering the lock window");
+assert.match(pregameSweep, /deferLock:\s*true/, "T-60 writer defers locking until the coherence gate passes");
 assert.match(reader, /incoherentPayloadReleaseGames/, "reader quarantines incoherence by release instead of hiding a valid prior lock");
 assert.match(reader, /const model = storedPayload\?\.model \?\? nhlRegularModelV1\(snapshot\)/, "reader cannot silently recompute an unlocked r6 card without its persisted matchup state");
 assert.match(reader, /incoherentPayloadReleaseGames/, "reader rejects internally inconsistent sibling market snapshots");

@@ -35,6 +35,8 @@ export type RefreshNhlLinesOptions = {
   /** SharpAPI bearer token. NEVER logged. */
   sharpApiKey: string;
   dryRun: boolean;
+  /** Optional exact NHL API game ids for a targeted pre-lock refresh. */
+  externalIdsFilter?: number[];
   logger?: (msg: string) => void;
 };
 
@@ -240,7 +242,12 @@ export async function refreshNhlLines(
   const log = opts.logger ?? (() => {});
   const errors: string[] = [];
 
-  const games = await loadNhlGamesForSlateDate(opts.slateDate);
+  const requestedExternalIds = opts.externalIdsFilter === undefined
+    ? null
+    : new Set(opts.externalIdsFilter);
+  const games = (await loadNhlGamesForSlateDate(opts.slateDate)).filter((game) => (
+    requestedExternalIds === null || requestedExternalIds.has(game.external_id)
+  ));
   log(`NHL games on slate ${opts.slateDate}: ${games.length}`);
   if (games.length === 0) {
     log(`(no NHL games in DB for slate_date ${opts.slateDate}; run seed-nhl-games.ts first)`);

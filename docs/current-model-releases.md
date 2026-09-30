@@ -1805,12 +1805,26 @@ The September 21 operational release restored the two bounded daily schedules re
 
 ## NHL regular-season champion (active from 2026-09-29)
 
-- Model: `nhl_regular_2026_r9_source_aware_market_read`
-- Calibration: `nhl_regular_calibration_2026_r9_source_aware_market_read`
-- Decision: `nhl_regular_decision_2026_r9_source_aware_exact_price`
+- Model: `nhl_regular_2026_r10_t60_market_refresh`
+- Calibration: `nhl_regular_calibration_2026_r10_t60_market_refresh`
+- Decision: `nhl_regular_decision_2026_r10_source_aware_exact_price`
 - Public tracking start: `2026-09-29`
 - Official markets: moneyline, total, spread (puck line)
 - Retired release: `nhl_v0_2026_finals`
+
+The September 29 r10 lifecycle release preserves every r9 score coefficient,
+market-reading weight, decision threshold, and grade. It corrects the live
+handoff exposed after r9 deployment: NHL's daily writer had created the slate,
+but the generic T-60 sweep froze that earlier tuple without rerunning the NHL
+model against the newest exact-event prices and same-book trail. The existing
+pregame sweep now refreshes only the entering NHL event, persists the ordinary
+split fallbacks, reruns the sole NHL writer under the shared sport-scoped lease,
+requires one coherent current-release Moneyline/Total/puck-line tuple, retires
+only superseded unlocked transition rows, and then locks and republishes the
+member snapshot. Locked r7 rows remain immutable and tracking-eligible. The
+paired score/grade board impact is zero; this release changes freshness and
+lock ownership rather than model math. Evidence:
+`docs/model-audits/2026-09-29-nhl-t60-market-refresh-r10.md`.
 
 Only NHL game type `02` is eligible for the reader, writer, and public tracking.
 The September 22 game type `01` rows are preseason audit evidence and never enter
@@ -1826,7 +1840,7 @@ complete observation and the member UI adds no freshness labels or copy. The
 resolved source, provider agreement, and confidence are also retained internally
 in the prediction snapshot so fallback evidence is no longer indistinguishable
 from aligned dual-provider evidence. Public-consensus splits do not change the
-r9 projected score. Named same-book Circa, Pinnacle, then Bookmaker movement
+r10 projected score. Named same-book Circa, Pinnacle, then Bookmaker movement
 remains the trusted projection-moving lane; the no-vig multi-book price remains
 the bounded Moneyline sanity input.
 
