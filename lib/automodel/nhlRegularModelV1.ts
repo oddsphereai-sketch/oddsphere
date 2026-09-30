@@ -1,16 +1,19 @@
 import type { BdlNhlTeamMetrics } from "../providers/nhl/_ballDontLieNhlClient";
 import type { NhlCalibratedTeamState } from "./nhlRegularPriors2026";
+import type { NhlRosterPrior } from "./nhlRosterPrior2026";
 
-export const NHL_REGULAR_MODEL_RELEASE = "nhl_regular_2026_r10_t60_market_refresh" as const;
-export const NHL_REGULAR_CALIBRATION_RELEASE = "nhl_regular_calibration_2026_r10_t60_market_refresh" as const;
-export const NHL_REGULAR_DECISION_RELEASE = "nhl_regular_decision_2026_r10_source_aware_exact_price" as const;
+export const NHL_REGULAR_MODEL_RELEASE = "nhl_regular_2026_r12_roster_discrete_market_read" as const;
+export const NHL_REGULAR_CALIBRATION_RELEASE = "nhl_regular_calibration_2026_r12_roster_discrete_market_read" as const;
+export const NHL_REGULAR_DECISION_RELEASE = "nhl_regular_decision_2026_r12_coherent_exact_price" as const;
 export const NHL_REGULAR_TRANSITION_MODEL_RELEASES = [
   NHL_REGULAR_MODEL_RELEASE,
+  "nhl_regular_2026_r10_t60_market_refresh",
   "nhl_regular_2026_r9_source_aware_market_read",
   "nhl_regular_2026_r7_runtime_parity",
 ] as const;
 export const NHL_REGULAR_TRANSITION_CALIBRATION_RELEASES = [
   NHL_REGULAR_CALIBRATION_RELEASE,
+  "nhl_regular_calibration_2026_r10_t60_market_refresh",
   "nhl_regular_calibration_2026_r9_source_aware_market_read",
   "nhl_regular_calibration_2026_r7_runtime_parity",
 ] as const;
@@ -43,6 +46,8 @@ export type NhlModelTeam = {
   calibrated_state: NhlCalibratedTeamState | null;
   opponent_adjusted_attack: number | null;
   opponent_adjusted_defense_weakness: number | null;
+  roster_prior?: NhlRosterPrior | null;
+  current_season_games?: number;
 };
 
 export type NhlModelMarket = {
@@ -115,6 +120,9 @@ export type NhlModelOutput = {
     special_teams_diff_raw: number;
     market_goal_diff: number;
     split_movement_goals: number;
+    market_decision: "independent" | "confirmed" | "flipped";
+    market_target_home_probability: number | null;
+    roster_prior_active: boolean;
   };
   independent_goal_diff: number;
   independent_total_goals: number;
@@ -127,7 +135,6 @@ export type NhlModelOutput = {
   puck_line: NhlModelMarketOutput & { puck_line_value: number };
 };
 
-const ML_MARKET_WEIGHT = 0.20;
 const ML_SLOPE = 0.78;
 const LEAGUE_TOTAL = 6.10;
 const HOME_ELO_POINTS = 40;
@@ -142,6 +149,17 @@ const SCORE_BETA = [
   -0.017808995904590084, -0.12139146738681414, 0.05824064025009689,
   0.3687578559301108, 0.07458718668794515, -0.11097641372547018,
   0.04338959014834951, 0.08307004907456006,
+] as const;
+const ROSTER_SCORE_BETA = [
+  2.8627335183356593, 0.18097660433990212, -0.04290122589447318,
+  0.17336428120862124, 0.08375237227954732, 0.2904386353953811,
+  -0.06622197415700082, 0.2669045558563523, -0.04503468060624234,
+  0.23788365112877533, -0.13014779631034876, -0.17124085523932803,
+  -0.12665359817437713, -0.11707435418720692, -0.462594552181677,
+  0.45923342632413855, 0.07011129359055548, -0.13216188373581528,
+  0.057010954106550105, 0.023780899098990116, 0.24853606087984212,
+  -0.19194588224494297, 0.1512376901428658, -0.030318817072768782,
+  0.6648677791438763, -0.12458888446629911,
 ] as const;
 const OPPONENT_ADJUSTED_TOTAL_BETA = [
   3.0092264324209728, 0.1481247256394834, 0.06044622628279624,
@@ -233,6 +251,20 @@ function scoreFeatures(team: NhlModelTeam, opponent: NhlModelTeam): number[] {
   ];
 }
 
+function rosterScoreFeatures(team: NhlModelTeam, opponent: NhlModelTeam): number[] | null {
+  if (!team.roster_prior || !opponent.roster_prior) return null;
+  if (team.roster_prior.coverage < 0.5 || opponent.roster_prior.coverage < 0.5) return null;
+  return [
+    ...scoreFeatures(team, opponent),
+    team.roster_prior.gameScore - 1.45,
+    opponent.roster_prior.gameScore - 1.45,
+    team.roster_prior.ixg - 0.60,
+    opponent.roster_prior.ixg - 0.60,
+    team.roster_prior.points - 1.45,
+    opponent.roster_prior.points - 1.45,
+  ];
+}
+
 function poissonPmf(lambda: number, maximum = 12): number[] {
   const values = [Math.exp(-lambda)];
   for (let goals = 1; goals <= maximum; goals += 1) {
@@ -294,9 +326,18 @@ function probabilityBelow(distribution: ReadonlyMap<number, number>, line: numbe
   return probability;
 }
 
-function movementHomeNudge(market: NhlModelMarket): number {
-  if (market.same_book_home_prob_move === null) return 0;
-  return clamp(market.same_book_home_prob_move * 0.35, -0.015, 0.015);
+function marketSideCorroborated(market: NhlModelMarket, marketHome: boolean): boolean {
+  if (market.market_book_count < 2) return false;
+  if (market.ml_split_confidence !== "high" && market.ml_split_confidence !== "medium") return false;
+  if (market.ml_home_bets_pct === null || market.ml_home_money_pct === null) return false;
+  if (market.same_book_home_prob_move === null || Math.abs(market.same_book_home_prob_move) < 0.01) return false;
+  const moveAgrees = marketHome
+    ? market.same_book_home_prob_move > 0
+    : market.same_book_home_prob_move < 0;
+  const splitsAgree = marketHome
+    ? market.ml_home_bets_pct >= 55 && market.ml_home_money_pct >= 55
+    : market.ml_home_bets_pct <= 45 && market.ml_home_money_pct <= 45;
+  return moveAgrees && splitsAgree;
 }
 
 function moneylineVerdict(probability: number, marketProbability: number | null): NhlVerdictKey {
@@ -325,8 +366,25 @@ function pucklineVerdict(probability: number, marketProbability: number | null):
 export function nhlRegularModelV1(snapshot: NhlFeatureSnapshot): NhlModelOutput {
   const homeFeatures = scoreFeatures(snapshot.home, snapshot.away);
   const awayFeatures = scoreFeatures(snapshot.away, snapshot.home);
-  const scoreHome = clamp(dot(homeFeatures, SCORE_BETA), 1.25, 5.25);
-  const scoreAway = clamp(dot(awayFeatures, SCORE_BETA), 1.25, 5.25);
+  const hasOpponentAdjustedState = [
+    snapshot.home.opponent_adjusted_attack,
+    snapshot.home.opponent_adjusted_defense_weakness,
+    snapshot.away.opponent_adjusted_attack,
+    snapshot.away.opponent_adjusted_defense_weakness,
+  ].every((value) => value !== null && Number.isFinite(value));
+  const openingRosterWindow = snapshot.game_type === 2
+    && Math.max(snapshot.home.current_season_games ?? 0, snapshot.away.current_season_games ?? 0) < 10;
+  const homeRosterFeatures = openingRosterWindow ? rosterScoreFeatures(snapshot.home, snapshot.away) : null;
+  const awayRosterFeatures = openingRosterWindow ? rosterScoreFeatures(snapshot.away, snapshot.home) : null;
+  const rosterPriorActive = homeRosterFeatures !== null && awayRosterFeatures !== null;
+  const scoreHome = clamp(dot(
+    homeRosterFeatures ?? homeFeatures,
+    rosterPriorActive ? ROSTER_SCORE_BETA : SCORE_BETA,
+  ), 1.25, 5.25);
+  const scoreAway = clamp(dot(
+    awayRosterFeatures ?? awayFeatures,
+    rosterPriorActive ? ROSTER_SCORE_BETA : SCORE_BETA,
+  ), 1.25, 5.25);
   const scoreMargin = scoreHome - scoreAway;
   const abilityFeatures = [
     1,
@@ -340,30 +398,18 @@ export function nhlRegularModelV1(snapshot: NhlFeatureSnapshot): NhlModelOutput 
   ];
   const abilityHomeProbability = logistic(dot(abilityFeatures, ABILITY_BETA));
   const abilityMargin = logit(abilityHomeProbability) / ML_SLOPE;
-  const independentGoalDiff = (1 - ABILITY_WEIGHT) * scoreMargin + ABILITY_WEIGHT * abilityMargin;
+  const independentGoalDiff = rosterPriorActive
+    ? scoreMargin
+    : (1 - ABILITY_WEIGHT) * scoreMargin + ABILITY_WEIGHT * abilityMargin;
   const independentTotal = clamp(scoreHome + scoreAway, 4.5, 8);
 
   const marketHome = snapshot.market.market_home_prob;
   const marketGoalDiff = marketHome === null ? independentGoalDiff : logit(marketHome) / ML_SLOPE;
-  // Playbook and the legacy SharpAPI splits lane are public-consensus inputs,
-  // not named sharp-book movement. They remain stored and displayed, but the
-  // current-era chronological replay did not validate either as a projection
-  // rewrite. Only exact same-book price movement enters the score equation.
-  const probabilityNudge = movementHomeNudge(snapshot.market);
-  const activeExpectedGoalDiff = (1 - ML_MARKET_WEIGHT) * independentGoalDiff
-    + ML_MARKET_WEIGHT * marketGoalDiff
-    + probabilityNudge / 0.12;
 
   const marketTotal = snapshot.market.market_total_line;
   const totalMovement = snapshot.market.same_book_total_move !== null
     ? clamp(snapshot.market.same_book_total_move * 0.35, -0.25, 0.25)
     : 0;
-  const hasOpponentAdjustedState = [
-    snapshot.home.opponent_adjusted_attack,
-    snapshot.home.opponent_adjusted_defense_weakness,
-    snapshot.away.opponent_adjusted_attack,
-    snapshot.away.opponent_adjusted_defense_weakness,
-  ].every((value) => value !== null && Number.isFinite(value));
   const opponentAdjustedIndependentTotal = hasOpponentAdjustedState
     ? clamp(
       clamp(dot([
@@ -382,14 +428,29 @@ export function nhlRegularModelV1(snapshot: NhlFeatureSnapshot): NhlModelOutput 
     : independentTotal;
   const expectedTotal = clamp(opponentAdjustedIndependentTotal + totalMovement, 4.5, 8);
   const activeExpectedTotal = clamp(independentTotal + totalMovement, 4.5, 8);
-  const activeDistribution = jointDistribution(
-    Math.max(0, (activeExpectedTotal + activeExpectedGoalDiff) / 2),
-    Math.max(0, (activeExpectedTotal - activeExpectedGoalDiff) / 2),
+  const independentDistribution = jointDistribution(
+    Math.max(0, (activeExpectedTotal + independentGoalDiff) / 2),
+    Math.max(0, (activeExpectedTotal - independentGoalDiff) / 2),
   );
-  const solvedGoalDiff = hasOpponentAdjustedState
-    ? goalDiffForHomeWin(expectedTotal, activeDistribution.homeWin)
-    : null;
-  const expectedGoalDiff = solvedGoalDiff ?? activeExpectedGoalDiff;
+  const independentHome = independentDistribution.homeWin >= 0.5;
+  const marketSideHome = marketHome === null ? independentHome : marketHome >= 0.5;
+  const marketStrongEnough = marketHome !== null && (marketSideHome ? marketHome >= 0.54 : marketHome <= 0.46);
+  const marketCorroborated = marketHome !== null && marketSideCorroborated(snapshot.market, marketSideHome);
+  const marketConflict = marketHome !== null && independentHome !== marketSideHome;
+  const shouldFlip = marketStrongEnough && marketCorroborated && marketConflict;
+  const marketDecision: "independent" | "confirmed" | "flipped" = shouldFlip
+    ? "flipped"
+    : marketStrongEnough && marketCorroborated && !marketConflict
+      ? "confirmed"
+      : "independent";
+  const marketTargetHomeProbability = shouldFlip ? marketHome : null;
+  const coherentIndependentGoalDiff = hasOpponentAdjustedState
+    ? goalDiffForHomeWin(expectedTotal, independentDistribution.homeWin) ?? independentGoalDiff
+    : independentGoalDiff;
+  const flippedGoalDiff = marketTargetHomeProbability === null
+    ? null
+    : goalDiffForHomeWin(expectedTotal, marketTargetHomeProbability);
+  const expectedGoalDiff = flippedGoalDiff ?? coherentIndependentGoalDiff;
   const projectedHome = Math.max(0, (expectedTotal + expectedGoalDiff) / 2);
   const projectedAway = Math.max(0, (expectedTotal - expectedGoalDiff) / 2);
   const finalDistribution = jointDistribution(projectedHome, projectedAway);
@@ -453,7 +514,10 @@ export function nhlRegularModelV1(snapshot: NhlFeatureSnapshot): NhlModelOutput 
       team_strength_diff_raw: scoreMargin,
       special_teams_diff_raw: (homeFeatures[10]! + homeFeatures[11]!) - (awayFeatures[10]! + awayFeatures[11]!),
       market_goal_diff: marketGoalDiff,
-      split_movement_goals: probabilityNudge / 0.12,
+      split_movement_goals: 0,
+      market_decision: marketDecision,
+      market_target_home_probability: marketTargetHomeProbability,
+      roster_prior_active: rosterPriorActive,
     },
     independent_goal_diff: independentGoalDiff,
     independent_total_goals: opponentAdjustedIndependentTotal,
@@ -468,7 +532,7 @@ export function nhlRegularModelV1(snapshot: NhlFeatureSnapshot): NhlModelOutput 
       verdict: moneylineVerdict(mlProbability, mlMarketProbability),
       model_market_gap_pct: mlGap,
       notes: [
-        `Independent ${independentGoalDiff >= 0 ? "+" : ""}${independentGoalDiff.toFixed(2)} goals; market-blended ${expectedGoalDiff >= 0 ? "+" : ""}${expectedGoalDiff.toFixed(2)}.`,
+        `Independent ${independentGoalDiff >= 0 ? "+" : ""}${independentGoalDiff.toFixed(2)} goals; final ${expectedGoalDiff >= 0 ? "+" : ""}${expectedGoalDiff.toFixed(2)}.`,
       ],
     },
     total: {

@@ -27,7 +27,15 @@ import {
   type NhlAdapterGameInput,
   type NhlPerMarketBest,
 } from "./adaptNhlToDailyEdgeResponse";
-import { fetchBdlNhlTeamMetricsWithPriorFallback } from "../../providers/nhl/_ballDontLieNhlClient";
+import {
+  fetchBdlNhlRosters,
+  fetchBdlNhlTeamMetricsWithPriorFallback,
+} from "../../providers/nhl/_ballDontLieNhlClient";
+import {
+  aggregateNhlRosterPrior,
+  normalizeNhlPlayerName,
+  type NhlRosterPrior,
+} from "../../automodel/nhlRosterPrior2026";
 import {
   fetchSharpNhlOpportunities,
   type SharpNhlOpportunity,
@@ -170,6 +178,10 @@ export async function buildNhlDailyEdgeAdapted(date: string): Promise<DailyEdgeR
   );
   let providerMetricsByTeam: Awaited<ReturnType<typeof fetchBdlNhlTeamMetricsWithPriorFallback>>["metrics"] = new Map();
   let providerFeatureSeason: number | null = null;
+  const rosterPriorByTeam = new Map<string, NhlRosterPrior>();
+  const currentRosterGoaliesByTeam = new Map<string, ReadonlySet<string>>(
+    [...teamById.values()].map((team) => [team.abbreviation, new Set<string>()]),
+  );
   const bdlKey = process.env.BALLDONTLIE_API_KEY;
   if (bdlKey) {
     try {
@@ -178,6 +190,24 @@ export async function buildNhlDailyEdgeAdapted(date: string): Promise<DailyEdgeR
       providerFeatureSeason = provider.sourceSeason;
     } catch (error) {
       console.warn(`nhl daily-edge: BALLDONTLIE team metrics unavailable: ${(error as Error).message}`);
+    }
+    try {
+      const rosters = await fetchBdlNhlRosters(
+        featureSeason,
+        [...teamById.values()].map((team) => team.abbreviation),
+        bdlKey,
+      );
+      for (const [team, players] of rosters) {
+        const prior = aggregateNhlRosterPrior(players);
+        if (prior) rosterPriorByTeam.set(team, prior);
+        currentRosterGoaliesByTeam.set(team, new Set(
+          players
+            .filter((player) => player.positionCode === "G")
+            .map((player) => normalizeNhlPlayerName(player.fullName)),
+        ));
+      }
+    } catch (error) {
+      console.warn(`nhl daily-edge: BALLDONTLIE current rosters unavailable: ${(error as Error).message}`);
     }
   }
 
@@ -264,6 +294,8 @@ export async function buildNhlDailyEdgeAdapted(date: string): Promise<DailyEdgeR
         providerMetricsByTeam,
         providerFeatureSeason,
         calibratedStateByTeam,
+        rosterPriorByTeam,
+        currentRosterGoaliesByTeam,
         marketEvidence: {
           mlHomeBetsPct: splitsEvent?.moneyline?.bets_pct?.home == null ? null : splitsEvent.moneyline.bets_pct.home * 100,
           mlHomeMoneyPct: splitsEvent?.moneyline?.handle_pct?.home == null ? null : splitsEvent.moneyline.handle_pct.home * 100,

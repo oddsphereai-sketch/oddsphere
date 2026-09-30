@@ -16,7 +16,12 @@ import {
   nhlGameTypeFromExternalId,
   nhlSeasonStartYearFromExternalId,
 } from "../lib/services/nhl/nhlScheduleIdentity";
-import { selectMainNhlPuckLinePair, selectSameBookNhlMovement } from "../lib/services/nhl/featureSnapshot";
+import {
+  __NHL_FEATURE_SNAPSHOT_TEST__,
+  selectMainNhlPuckLinePair,
+  selectSameBookNhlMovement,
+} from "../lib/services/nhl/featureSnapshot";
+import { aggregateNhlRosterPrior, normalizeNhlPlayerName } from "../lib/automodel/nhlRosterPrior2026";
 import { normalizeNhlTeamName } from "../lib/providers/nhl/_teamNameNormalizer";
 import { sportsInSeasonToday } from "../lib/cron/seasons";
 import type { PredictionRecordRow } from "../lib/types/domain/Tracking";
@@ -49,7 +54,7 @@ assert.deepEqual(
   "a missing NHL Total split must not borrow the puck-line split pair",
 );
 
-const namedBookFallbackSplits = {
+const namedBookFallbackSplits: NonNullable<Parameters<typeof __NHL_ADAPTER_TEST__.buildPublicSplits>[3]> = {
   spread: {
     bets_pct: { away: 0.67, home: 0.33 },
     handle_pct: { away: 0.2, home: 0.8 },
@@ -57,19 +62,19 @@ const namedBookFallbackSplits = {
   internal_resolution: {
     spread: {
       source: "sharpapi",
-      agreement: "single_provider",
-      confidence: "source_specific_only",
+      agreement: "single_source",
+      confidence: "medium",
       providerGapPct: null,
     },
   },
-} as any;
+};
 assert.deepEqual(
   __NHL_ADAPTER_TEST__.buildPublicSplits("puckline", false, false, namedBookFallbackSplits, "TOR", "NYI"),
   [],
   "a SharpAPI named-book fallback must not also populate Public Consensus",
 );
 const independentConsensusSplits = structuredClone(namedBookFallbackSplits);
-independentConsensusSplits.internal_resolution.spread.source = "playbook";
+independentConsensusSplits.internal_resolution!.spread!.source = "playbook";
 assert.deepEqual(
   __NHL_ADAPTER_TEST__.buildPublicSplits("puckline", false, false, independentConsensusSplits, "TOR", "NYI"),
   [
@@ -158,6 +163,142 @@ const base: NhlFeatureSnapshot = {
 };
 
 const result = nhlRegularModelV1(base);
+const strongRosterPrior = {
+  gameScore: 1.9,
+  ixg: 0.8,
+  points: 1.8,
+  onIceXgDiff: 0.1,
+  knownSkaters: 18,
+  totalSkaters: 20,
+  coverage: 0.9,
+  release: "nhl_roster_player_priors_2026_09_30_r1" as const,
+};
+const weakRosterPrior = {
+  ...strongRosterPrior,
+  gameScore: 1.1,
+  ixg: 0.4,
+  points: 1.0,
+};
+const corroboratedFlip = nhlRegularModelV1({
+  ...base,
+  home: {
+    ...base.home,
+    opponent_adjusted_attack: null,
+    opponent_adjusted_defense_weakness: null,
+    roster_prior: strongRosterPrior,
+  },
+  away: {
+    ...base.away,
+    opponent_adjusted_attack: null,
+    opponent_adjusted_defense_weakness: null,
+    roster_prior: weakRosterPrior,
+  },
+  market: {
+    ...base.market,
+    market_home_prob: 0.44,
+    market_open_home_prob: 0.47,
+    same_book_home_prob_move: -0.03,
+    market_book_count: 5,
+    ml_home_bets_pct: 38,
+    ml_home_money_pct: 34,
+    ml_split_confidence: "high",
+  },
+});
+assert.equal(corroboratedFlip.layers.roster_prior_active, true, "opening-week forecast consumes the current roster prior");
+assert.equal(corroboratedFlip.layers.market_decision, "flipped", "corroborated price, movement and splits can fully correct the independent side");
+assert.equal(corroboratedFlip.moneyline.pick, "BOS ML");
+assert.ok(Math.abs(corroboratedFlip.projected_home_goals + corroboratedFlip.projected_away_goals - corroboratedFlip.expected_total_goals) < 1e-12);
+assert.ok(Math.abs(corroboratedFlip.projected_home_goals - corroboratedFlip.projected_away_goals - corroboratedFlip.expected_goal_diff) < 1e-12);
+
+const uncorroboratedConflict = nhlRegularModelV1({
+  ...base,
+  home: { ...base.home, opponent_adjusted_attack: null, opponent_adjusted_defense_weakness: null, roster_prior: strongRosterPrior },
+  away: { ...base.away, opponent_adjusted_attack: null, opponent_adjusted_defense_weakness: null, roster_prior: weakRosterPrior },
+  market: {
+    ...base.market,
+    market_home_prob: 0.44,
+    market_open_home_prob: 0.47,
+    same_book_home_prob_move: 0.01,
+    market_book_count: 5,
+    ml_home_bets_pct: 38,
+    ml_home_money_pct: 34,
+    ml_split_confidence: "high",
+  },
+});
+assert.equal(uncorroboratedConflict.layers.market_decision, "independent", "a conflicting but unconfirmed market cannot drag or flip the score");
+assert.equal(uncorroboratedConflict.moneyline.pick, "FLA ML");
+assert.equal(uncorroboratedConflict.expected_goal_diff, uncorroboratedConflict.independent_goal_diff);
+
+const currentSeasonState = nhlRegularModelV1({
+  ...base,
+  provider_feature_season: base.feature_season,
+  home: { ...base.home, opponent_adjusted_attack: null, opponent_adjusted_defense_weakness: null, roster_prior: strongRosterPrior, current_season_games: 12 },
+  away: { ...base.away, opponent_adjusted_attack: null, opponent_adjusted_defense_weakness: null, roster_prior: weakRosterPrior, current_season_games: 12 },
+});
+assert.equal(currentSeasonState.layers.roster_prior_active, false, "current-season team evidence supersedes the opening roster prior automatically");
+const futureSeasonFlip = nhlRegularModelV1({
+  ...base,
+  provider_feature_season: base.feature_season,
+  home: {
+    ...base.home,
+    opponent_adjusted_attack: null,
+    opponent_adjusted_defense_weakness: null,
+    roster_prior: strongRosterPrior,
+    current_season_games: 12,
+  },
+  away: {
+    ...base.away,
+    opponent_adjusted_attack: null,
+    opponent_adjusted_defense_weakness: null,
+    roster_prior: weakRosterPrior,
+    current_season_games: 12,
+  },
+  market: {
+    ...base.market,
+    market_home_prob: 0.44,
+    market_open_home_prob: 0.47,
+    same_book_home_prob_move: -0.03,
+    market_book_count: 5,
+    ml_home_bets_pct: 38,
+    ml_home_money_pct: 34,
+    ml_split_confidence: "high",
+  },
+});
+assert.equal(futureSeasonFlip.layers.roster_prior_active, false);
+assert.equal(futureSeasonFlip.layers.market_decision, "flipped", "the discrete market reader remains active after the opening roster window");
+assert.equal(futureSeasonFlip.moneyline.pick, "BOS ML");
+
+const aggregatedRoster = aggregateNhlRosterPrior([
+  { fullName: "A.J. Greer", positionCode: "L" },
+  { fullName: "Aaron Ekblad", positionCode: "D" },
+  ...Array.from({ length: 8 }, (_, index) => ({ fullName: `Unknown Skater ${index}`, positionCode: "C" })),
+  { fullName: "Goalie Example", positionCode: "G" },
+]);
+assert.ok(aggregatedRoster);
+assert.equal(aggregatedRoster.totalSkaters, 10);
+assert.equal(aggregatedRoster.knownSkaters, 2);
+assert.equal(normalizeNhlPlayerName("  A.J. Gréér "), "a j greer");
+
+const goalieRows = [
+  { player_external_id: 1, player_name: "Departed Goalie", team_abbr: "PIT", season: 2025, season_type: "regular", situation: "all", games_played: 50, ice_time: 1, x_goals: 1, goals: 1 },
+  { player_external_id: 2, player_name: "Current Goalie", team_abbr: "PIT", season: 2025, season_type: "regular", situation: "all", games_played: 20, ice_time: 1, x_goals: 1, goals: 1 },
+] satisfies Parameters<typeof __NHL_FEATURE_SNAPSHOT_TEST__.selectGoalieByDefault>[0];
+assert.equal(
+  __NHL_FEATURE_SNAPSHOT_TEST__.selectGoalieByDefault(
+    goalieRows,
+    "PIT",
+    2026,
+    2,
+    new Set([normalizeNhlPlayerName("Current Goalie")]),
+  )?.player_name,
+  "Current Goalie",
+  "default goalie history is restricted to a verified current-roster goalie",
+);
+assert.equal(
+  __NHL_FEATURE_SNAPSHOT_TEST__.selectGoalieByDefault(goalieRows, "PIT", 2026, 2, new Set()),
+  null,
+  "an unverifiable current goalie falls back to neutral instead of a departed player",
+);
 const runtimeParity = nhlRegularModelV1({
   ...base,
   home: {
@@ -478,6 +619,7 @@ const reader = readFileSync(new URL("../lib/services/nhl/buildNhlDailyEdgeAdapte
 const cron = readFileSync(new URL("../app/api/cron/nhl-daily-refresh/route.ts", import.meta.url), "utf8");
 const pregameSweep = readFileSync(new URL("../app/api/cron/pregame-sweep/route.ts", import.meta.url), "utf8");
 const linesProvider = readFileSync(new URL("../lib/providers/nhl/_sharpApiNhlClient.ts", import.meta.url), "utf8");
+const bdlProvider = readFileSync(new URL("../lib/providers/nhl/_ballDontLieNhlClient.ts", import.meta.url), "utf8");
 const linesRefresh = readFileSync(new URL("../lib/services/nhl/refreshNhlLinesService.ts", import.meta.url), "utf8");
 assert.match(writer, /nhlGameTypeFromExternalId\(game\.external_id\) === 2/);
 assert.match(reader, /nhlGameTypeFromExternalId\(game\.external_id\) === 2/);
@@ -500,5 +642,7 @@ assert.match(linesProvider, /fetchSharpNhlEvents/, "NHL resolves exact events be
 assert.match(linesProvider, /event_id: eventId/, "NHL odds retrieval is event-scoped instead of scanning an incomplete league slice");
 assert.match(linesProvider, /recovered \$\{market\}/, "an event-scoped missing market gets a targeted recovery call");
 assert.match(linesRefresh, /incomplete SharpAPI \$\{market\} coverage/, "a refresh cannot silently call an incomplete five-game board healthy");
+assert.match(bdlProvider, /searchParams\.append\("seasons\[\]", String\(season\)\)/, "NHL roster fetch uses the provider's documented season-array filter");
+assert.match(writer, /fetchBdlNhlRosters\([\s\S]*for \(const g of games\)/, "current rosters are loaded once at slate scope before the per-game writer loop");
 
 console.log("NHL regular-season model, tracking boundary, split fallback, and writer safety tests passed.");

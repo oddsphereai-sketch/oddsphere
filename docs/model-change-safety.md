@@ -5,6 +5,60 @@ inputs, probabilities, projections, grades, promotions/demotions, calibration, p
 or stakes. It exists to prevent mixed model eras, competing writers, accidental board
 flattening, and load spikes.
 
+## Owner-approved provisional exception: NHL roster-aware discrete market read r12
+
+On 2026-09-30 Daniel Mengel explicitly directed Oddsphere to replace the
+opening-season NHL model's stale roster assumptions, make the independent
+forecast and market reader operate as one coherent product, publish the repair
+without a shadow delay, and retain it for every future game without changing
+member copy, labels, or layout. This exception is limited to the r12 release
+family and the frozen evidence in
+`docs/model-audits/2026-09-30-nhl-roster-market-arbitration-r12.md`.
+
+R12 removes the generic continuous 20% Moneyline market anchor. During each
+team's first ten regular-season games, the independent margin may consume a
+frozen, target-excluded current-roster skater prior. Current-roster identity is
+loaded once per slate through the existing BALLDONTLIE integration and cached;
+it does not add a writer, schedule, or per-game request loop. Default prior-
+season goalie history is eligible only for a goalie verified on the current
+roster. If no current goalie can be verified, goalie context is neutral rather
+than silently assigned to a departed player. After the opening window, current-
+season team evidence automatically resumes the released scoring path.
+
+Market evidence remains downstream of the independent model. It cannot average
+every score toward consensus. For current and future slates, a Moneyline side
+may flip only when the independent and market sides conflict, at least two
+complete books support a 54% side, a continuous same-book price trail moves at
+least one percentage point toward that side, and complete money and ticket
+evidence with medium/high source agreement also supports that side. An
+authorized flip solves the goal margin from the final target probability while
+preserving the independent Total, then rebuilds one Poisson score distribution;
+Moneyline, Total, and puck-line predictions remain coherent. Missing or
+uncorroborated evidence leaves the independent side unchanged. Split-only and
+popularity-only flips remain prohibited.
+
+The chronological official-score tournament warms up on 2022, trains on 2023,
+selects on 2024, and reports once on untouched 2025. The selected independent
+margin improved untouched winner accuracy from 54.89% to 56.26%, Brier from
+0.24530 to 0.24411, team-score MAE from 1.3719 to 1.3665, margin MAE from
+2.1251 to 2.1109, Total MAE from 1.8448 to 1.8383, and puck-line direction from
+67.48% to 67.63%. Total direction moved from 53.68% to 53.29%, a 0.38-point
+tradeoff reviewed against the stronger score-error and winner metrics.
+First-30-day winner accuracy improved from 54.38% to 56.22%. These are
+historical estimates, not a guaranteed future hit rate.
+
+The paired September 30 production-path replay retains all three games and all
+nine markets. It makes one Moneyline side correction (NYI to TOR), promotes PIT
+Under and LAK Under from Watchlist to Lean, demotes TOR Moneyline from the old
+NYI Lean to Watchlist and NYI +1.5 from Best Angle to Watchlist, and preserves
+five actionables overall (two promotions, two demotions). Publication still
+requires focused tests, full model-change verification, latest-main integration
+safety, protected-PR checks, and live current-release writer/reader, coverage,
+price, split, lock, and tracking proof. Hold or roll back unlocked r12 output on
+roster coverage failure, mixed releases, missing games or markets, score/side
+incoherence, unexpected board collapse, writer overlap, lock failure, or reader
+failure. Locked r10/r9/r7 tuples remain immutable and tracking-eligible.
+
 ## Owner-approved emergency exception: NHL overnight slate readiness r6
 
 On 2026-09-30 Daniel Mengel reported that the NHL board showed no games and

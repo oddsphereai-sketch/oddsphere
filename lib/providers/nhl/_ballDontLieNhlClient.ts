@@ -37,6 +37,25 @@ export type BdlNhlTeamMetrics = {
 type Cached = { expiresAt: number; value: Map<string, BdlNhlTeamMetrics> };
 const cache = new Map<number, Cached>();
 
+export type BdlNhlRosterPlayer = {
+  id: number;
+  fullName: string;
+  positionCode: string;
+  team: string;
+};
+
+type BdlNhlTeamRow = { id?: number; tricode?: string; season?: number };
+type BdlNhlPlayerRow = {
+  id?: number;
+  first_name?: string;
+  last_name?: string;
+  full_name?: string;
+  position_code?: string;
+  teams?: BdlNhlTeamRow[];
+};
+type RosterCached = { expiresAt: number; value: Map<string, BdlNhlRosterPlayer[]> };
+const rosterCache = new Map<string, RosterCached>();
+
 function finite(value: unknown): number | null {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
@@ -117,6 +136,76 @@ export async function fetchBdlNhlTeamMetricsWithPriorFallback(
   }
   const prior = await fetchBdlNhlTeamMetrics(season - 1, apiKey);
   return { metrics: prior, sourceSeason: season - 1 };
+}
+
+/**
+ * Load the current season roster once per slate-team set. The NHL API exposes
+ * player-team membership as a season-specific array on each player, so a
+ * player is assigned only through the requested season row (never a stale
+ * profile-level team). Pagination is bounded to protect the scheduled writer.
+ */
+export async function fetchBdlNhlRosters(
+  season: number,
+  teamTricodes: readonly string[],
+  apiKey: string,
+): Promise<Map<string, BdlNhlRosterPlayer[]>> {
+  const requested = [...new Set(teamTricodes.map((team) => team.trim().toUpperCase()).filter(Boolean))].sort();
+  const cacheKey = `${season}:${requested.join(",")}`;
+  const cached = rosterCache.get(cacheKey);
+  if (cached && cached.expiresAt > Date.now()) {
+    return new Map([...cached.value].map(([team, players]) => [team, [...players]]));
+  }
+  if (requested.length === 0) return new Map();
+
+  const teamsUrl = new URL(`${BDL_NHL_BASE}/teams`);
+  const teamsResponse = await fetch(teamsUrl, { headers: { Authorization: apiKey } });
+  if (!teamsResponse.ok) throw new Error(`BALLDONTLIE NHL teams/${season} failed with HTTP ${teamsResponse.status}`);
+  const teamsBody = await teamsResponse.json() as { data?: BdlNhlTeamRow[] };
+  const requestedIds = new Set<number>();
+  for (const team of teamsBody.data ?? []) {
+    if (typeof team.id === "number" && requested.includes(team.tricode?.trim().toUpperCase() ?? "")) {
+      requestedIds.add(team.id);
+    }
+  }
+  if (requestedIds.size === 0) throw new Error(`BALLDONTLIE NHL teams/${season} did not resolve requested slate teams`);
+
+  const byTeam = new Map<string, BdlNhlRosterPlayer[]>(requested.map((team) => [team, []]));
+  let cursor: number | null = null;
+  for (let page = 0; page < 20; page += 1) {
+    const url = new URL(`${BDL_NHL_BASE}/players`);
+    url.searchParams.append("seasons[]", String(season));
+    url.searchParams.set("per_page", "100");
+    for (const teamId of requestedIds) url.searchParams.append("team_ids[]", String(teamId));
+    if (cursor !== null) url.searchParams.set("cursor", String(cursor));
+    const response = await fetch(url, { headers: { Authorization: apiKey } });
+    if (!response.ok) throw new Error(`BALLDONTLIE NHL players/${season} failed with HTTP ${response.status}`);
+    const body = await response.json() as {
+      data?: BdlNhlPlayerRow[];
+      meta?: { next_cursor?: number | null };
+    };
+    if (!Array.isArray(body.data)) throw new Error(`BALLDONTLIE NHL players/${season} returned malformed data`);
+    for (const player of body.data) {
+      const membership = (player.teams ?? []).find((team) => (
+        team.season === season && typeof team.id === "number" && requestedIds.has(team.id)
+      ));
+      const team = membership?.tricode?.trim().toUpperCase();
+      const fullName = player.full_name?.trim()
+        || `${player.first_name ?? ""} ${player.last_name ?? ""}`.trim();
+      if (!team || !requested.includes(team) || !fullName || typeof player.id !== "number") continue;
+      byTeam.get(team)!.push({
+        id: player.id,
+        fullName,
+        positionCode: player.position_code?.trim().toUpperCase() ?? "",
+        team,
+      });
+    }
+    const next = body.meta?.next_cursor;
+    if (next === null || next === undefined) break;
+    cursor = next;
+    if (page === 19) throw new Error(`BALLDONTLIE NHL players/${season} exceeded pagination budget`);
+  }
+  rosterCache.set(cacheKey, { expiresAt: Date.now() + CACHE_MS, value: byTeam });
+  return new Map([...byTeam].map(([team, players]) => [team, [...players]]));
 }
 
 export const __BALLDONTLIE_NHL_TEST__ = { TEAM_STAT_TYPES };
