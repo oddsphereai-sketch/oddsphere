@@ -485,7 +485,7 @@ assert.match(reader, /bestPriceFor\("total", totalSide, marketTotalLine\)/, "rea
 assert.match(reader, /Math\.abs\(l\.line_value - predictedPuckLine\) < 0\.01/, "reader prices the exact predicted puck line");
 assert.match(reader, /predictionPayloadByGame/, "reader preserves the writer-owned active-release tuple before and after lock");
 assert.match(reader, /NHL_REGULAR_TRANSITION_MODEL_RELEASES/, "reader preserves an already-locked prior-release tuple during deployment");
-assert.match(reader, /nhl_daily_edge_reader_2026_09_30_r8_split_source_independence/, "reader release records independent public and Sharp split lanes");
+assert.match(reader, /nhl_daily_edge_reader_2026_09_30_r9_independent_public_retail_fallback/, "reader release records the independent public retail fallback");
 assert.match(pregameSweep, /externalIdsFilter:\s*externalIds/, "T-60 writer refreshes only the games entering the lock window");
 assert.match(pregameSweep, /deferLock:\s*true/, "T-60 writer defers locking until the coherence gate passes");
 assert.match(reader, /incoherentPayloadReleaseGames/, "reader quarantines incoherence by release instead of hiding a valid prior lock");
