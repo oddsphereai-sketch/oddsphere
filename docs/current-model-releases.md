@@ -182,6 +182,55 @@ Last reviewed: 2026-09-29
 
 ## CFB Daily Edge generalized weekly production release
 
+### Professional independent score + validated market marriage (r15; writer r81)
+
+- Active independent/runtime releases are
+  `cfb_professional_weekly_runtime_2026_10_01_r7_compact48` /
+  `cfb_professional_independent_score_model_2026_10_01_r7_compact48` /
+  `cfb_professional_empirical_joint_distribution_2026_10_01_r7_compact48`.
+  The portable score engine uses matchup-specific rolling offense and defense,
+  QB/passing, rushing/trench, scoring opportunity, pace, field position,
+  red-zone, third-down, turnover, special-teams, rest, venue, Elo and personnel
+  inputs. A weekly cross-family scoring-domain correction is applied only when
+  the predeclared disagreement gate is met.
+- Active market candidate / production releases are
+  `cfb_market_sharp_aware_candidate_2026_10_01_r21_split_spread_arbitration` /
+  `cfb_market_sharp_aware_production_2026_10_01_r23_split_spread_arbitration`.
+  Consensus is not a score anchor. The only validated score mutation is a real
+  Spread-side arbitration when retained Playbook evidence spans at least eight
+  books, money-minus-ticket divergence is at least five points, and the signal
+  conflicts with the independent cover side. It preserves the independent
+  Total and rebuilds one coherent joint PMF. Other split, price and same-book
+  movement evidence remains source-separated in the established confidence
+  path and may not create an unvalidated score nudge.
+- Active probability / calibration / grade / decision / tuple releases are
+  `cfb_v1_professional_joint_probability_2026_10_01_r14_market_marriage` /
+  `cfb_v1_exact_price_calibration_2026_10_01_r12_professional_market_marriage` /
+  `cfb_v1_composite_grade_policy_2026_10_01_r15_professional_market_marriage` /
+  `cfb_v1_daily_edge_decision_2026_10_01_r35_professional_market_marriage` /
+  `cfb_v1_exact_price_decision_tuple_2026_10_01_r23_professional_market_marriage`.
+- Publication set: evidence / collector / member
+  `cfb_forward_evidence_snapshot_2026_10_01_r28_professional_market_marriage` /
+  `cfb_forward_evidence_collector_2026_10_01_r34_professional_market_marriage` /
+  `cfb_v1_member_release_2026_10_01_r40_professional_market_marriage`; sole
+  writer `cfb_forward_evidence_writer_2026_10_01_r81_professional_market_marriage`;
+  fixture / outcome
+  `cfb_v1_member_fixture_2026_10_01_r60_professional_market_marriage` /
+  `cfb_market_sharp_public_outcome_contract_2026_10_01_r55_professional_market_marriage`;
+  compact snapshot / reader
+  `cfb_forward_member_snapshot_2026_10_01_r19_professional_market_marriage` /
+  `cfb_member_snapshot_reader_2026_10_01_r8_professional_market_marriage`; and
+  tracking `cfb_official_tracking_record_2026_10_01_r30_professional_market_marriage`.
+  The existing writer and `prediction_pipeline:cfb` lease remain sole owners.
+- 2024–25 validate only the independent model because they lack complete market
+  evidence. Full marriage validation uses 2026 Weeks 1–2 for development and
+  Weeks 3–4 for confirmation. The current exact-input board replay contains 77
+  promotions, 15 demotions, 46 side changes and 86 actionables versus 44, with
+  zero coherence failures. The live-provider zero-write replay covers all 99
+  games and all 297 markets without adding copy, labels, layout, stakes,
+  schedules or writers. Evidence and rollback:
+  `docs/model-audits/2026-10-01-cfb-professional-independent-market-marriage-r15.md`.
+
 ### Next-window seed priority (writer r80)
 
 - Active sole writer release is

@@ -1,40 +1,42 @@
 import gradeArtifactJson from "./modelArtifacts/cfbV1MarketSharpGradePolicy.json";
-import scoreArtifactJson from "./modelArtifacts/cfbV1JointScoreArtifact.json";
-import weeklyArtifactJson from "./modelArtifacts/cfbV1WeeklyRuntimeArtifact.json";
+import legacyScoreArtifactJson from "./modelArtifacts/cfbV1JointScoreArtifact.json";
+import scoreArtifactJson from "./modelArtifacts/cfbProfessionalScoreArtifact.json";
+import weeklyArtifactJson from "./modelArtifacts/cfbProfessionalScoreWeeklyArtifact.json";
 import type { NcaafBookOdds } from "./balldontlieNcaafSlate";
 import { CFB_V1_WEEKLY_BASE_ARTIFACT_RELEASE, getCfbV1WeeklyForecast } from "./cfbV1WeeklyForecast";
+import type { CfbCurrentAdvancedGame } from "./cfbCurrentAdvancedState";
 import type { NcaafGame } from "./balldontlieNcaafSlate";
 
 export const CFB_V1_BASE_SCORE_ARTIFACT_RELEASE =
-  "cfb_v1_joint_score_artifact_2026_08_28_r4_directional_pmf" as const;
+  "cfb_professional_weekly_runtime_2026_10_01_r7_compact48" as const;
 export const CFB_V1_BASE_MODEL_RELEASE =
-  "cfb_v1_independent_score_model_2026_08_28_r2_directional_pmf" as const;
+  "cfb_professional_independent_score_model_2026_10_01_r7_compact48" as const;
 export const CFB_V1_BASE_DISTRIBUTION_RELEASE =
-  "cfb_v1_empirical_joint_score_distribution_2026_08_28_r2_directional_pmf" as const;
+  "cfb_professional_empirical_joint_distribution_2026_10_01_r7_compact48" as const;
 export const CFB_V1_BASE_PROBABILITY_RELEASE =
-  "cfb_v1_joint_market_probability_2026_08_28_r2_directional_pmf" as const;
+  "cfb_professional_joint_probability_2026_10_01_r7_compact48" as const;
 export const CFB_V1_BASE_REPRESENTATIVE_SCORE_RELEASE =
-  "cfb_v1_central_reachable_score_2026_08_28_r2_directional_pmf" as const;
+  "cfb_professional_reachable_score_2026_10_01_r7_compact48" as const;
 const CFB_V1_BASE_GRADE_POLICY_RELEASE =
   "cfb_v1_composite_grade_policy_2026_09_04_r9_evidence_identity_continuity" as const;
 export const CFB_V1_SCORE_ARTIFACT_RELEASE =
-  "cfb_v1_joint_score_runtime_2026_09_01_r12_coherent_movement_evidence" as const;
+  "cfb_v1_joint_score_runtime_2026_10_01_r13_professional_market_marriage" as const;
 export const CFB_V1_MODEL_RELEASE =
-  "cfb_v1_market_sharp_score_model_2026_09_01_r11_coherent_movement_evidence" as const;
+  "cfb_v1_professional_score_model_2026_10_01_r12_market_marriage" as const;
 export const CFB_V1_DISTRIBUTION_RELEASE =
-  "cfb_v1_market_sharp_joint_distribution_2026_09_01_r9_coherent_movement_evidence" as const;
+  "cfb_v1_professional_joint_distribution_2026_10_01_r10_market_marriage" as const;
 export const CFB_V1_PROBABILITY_RELEASE =
-  "cfb_v1_market_sharp_joint_probability_2026_09_26_r13_score_side_coherent" as const;
+  "cfb_v1_professional_joint_probability_2026_10_01_r14_market_marriage" as const;
 export const CFB_V1_REPRESENTATIVE_SCORE_RELEASE =
-  "cfb_v1_market_sharp_reachable_score_2026_09_01_r9_coherent_movement_evidence" as const;
+  "cfb_v1_professional_reachable_score_2026_10_01_r10_market_marriage" as const;
 export const CFB_V1_CALIBRATION_RELEASE =
-  "cfb_v1_market_sharp_exact_price_calibration_2026_09_26_r11_score_side_coherent" as const;
+  "cfb_v1_exact_price_calibration_2026_10_01_r12_professional_market_marriage" as const;
 export const CFB_V1_GRADE_POLICY_RELEASE =
-  "cfb_v1_composite_grade_policy_2026_09_26_r14_score_side_coherent" as const;
+  "cfb_v1_composite_grade_policy_2026_10_01_r15_professional_market_marriage" as const;
 export const CFB_V1_DECISION_RELEASE =
-  "cfb_v1_daily_edge_decision_2026_09_26_r34_score_side_coherent" as const;
+  "cfb_v1_daily_edge_decision_2026_10_01_r35_professional_market_marriage" as const;
 export const CFB_V1_SCORE_COHERENCE_PREVIOUS_DECISION_RELEASE =
-  "cfb_v1_daily_edge_decision_2026_09_19_r33_contained_spread_counter_signal" as const;
+  "cfb_v1_daily_edge_decision_2026_09_26_r34_score_side_coherent" as const;
 export const CFB_V1_PRICE_PREVIOUS_DECISION_RELEASE =
   "cfb_v1_daily_edge_decision_2026_09_19_r32_spread_counter_signal" as const;
 export const CFB_V1_HOLISTIC_PREVIOUS_DECISION_RELEASE =
@@ -46,7 +48,7 @@ export const CFB_V1_GRADE_PREVIOUS_DECISION_RELEASE =
 const CFB_V1_POLICY_SOURCE_DECISION_RELEASE =
   "cfb_v1_daily_edge_decision_2026_09_04_r28_evidence_identity_continuity" as const;
 export const CFB_V1_DECISION_SCHEMA_RELEASE =
-  "cfb_v1_exact_price_decision_tuple_2026_09_26_r22_score_side_coherent" as const;
+  "cfb_v1_exact_price_decision_tuple_2026_10_01_r23_professional_market_marriage" as const;
 export const CFB_SPREAD_COUNTER_SIGNAL_MIN_EXCLUSIVE = 0.53 as const;
 export const CFB_SPREAD_COUNTER_SIGNAL_MAX_INCLUSIVE = 0.55 as const;
 export const CFB_T60_TARGET_MINUTES = 60 as const;
@@ -204,23 +206,24 @@ type GradeArtifact = {
 };
 
 const scoreArtifact = scoreArtifactJson as unknown as ScoreArtifact;
+const legacyScoreArtifact = legacyScoreArtifactJson as unknown as ScoreArtifact;
 const weeklyArtifact = weeklyArtifactJson as unknown as WeeklyArtifact;
 const gradeArtifact = gradeArtifactJson as GradeArtifact;
 
 assertArtifactReleases();
 
 export function getCfbV1Forecast(providerGameId: string): CfbV1Forecast {
-  const forecast = scoreArtifact.forecasts.find((row) => row.providerGameId === providerGameId);
+  const forecast = legacyScoreArtifact.forecasts.find((row) => row.providerGameId === providerGameId);
   if (!forecast) throw new Error(`CFB v1 has no qualified forecast for provider game ${providerGameId}.`);
   return forecast;
 }
 
-export function getCfbV1ForecastForGame(args: { game: NcaafGame; completedGames?: NcaafGame[] }): ReturnType<typeof getCfbV1WeeklyForecast> {
+export function getCfbV1ForecastForGame(args: { game: NcaafGame; completedGames?: NcaafGame[]; advancedGames?: CfbCurrentAdvancedGame[] }): ReturnType<typeof getCfbV1WeeklyForecast> {
   return getCfbV1WeeklyForecast(args);
 }
 
 export function getCfbV1Forecasts(): CfbV1Forecast[] {
-  return scoreArtifact.forecasts.map((forecast) => ({ ...forecast, pmf: forecast.pmf.map((cell) => ({ ...cell })) }));
+  return legacyScoreArtifact.forecasts.map((forecast) => ({ ...forecast, pmf: forecast.pmf.map((cell) => ({ ...cell })) }));
 }
 
 export function cfbV1LineProbabilities(args: {

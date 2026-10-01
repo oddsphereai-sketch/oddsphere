@@ -1,8 +1,5 @@
 import type { NcaafBookOdds } from "./balldontlieNcaafSlate";
-import {
-  buildCfbMarketInformedOutcomeForecast,
-  type CfbCanonicalMarketAnchor,
-} from "./cfbMarketInformedOutcome";
+import type { CfbCanonicalMarketAnchor } from "./cfbMarketInformedOutcome";
 import type { CfbSharpApiSplitRecord } from "./cfbSharpApiSplits";
 import type { CfbKickoffWeatherSnapshot } from "./cfbKickoffWeather";
 import type { CfbForwardPlaybookLine, CfbForwardPlaybookSplit, CfbForwardPlaybookSplitSet } from "./cfbForwardEvidence";
@@ -21,14 +18,14 @@ import {
 import { evaluateCfbHolisticConfidence } from "./cfbHolisticConfidenceCandidate";
 
 export const CFB_MARKET_SHARP_AWARE_CANDIDATE_RELEASE =
-  "cfb_market_sharp_aware_candidate_2026_09_26_r20_score_side_coherent" as const;
+  "cfb_market_sharp_aware_candidate_2026_10_01_r21_split_spread_arbitration" as const;
 export const CFB_MARKET_SHARP_AWARE_SHADOW_RELEASE =
   CFB_MARKET_SHARP_AWARE_CANDIDATE_RELEASE;
 export const CFB_MARKET_SHARP_AWARE_PRODUCTION_RELEASE =
-  "cfb_market_sharp_aware_production_2026_09_26_r22_score_side_coherent" as const;
+  "cfb_market_sharp_aware_production_2026_10_01_r23_split_spread_arbitration" as const;
 export const CFB_MARKET_SHARP_AWARE_PREVIOUS_PRODUCTION_RELEASE =
-  "cfb_market_sharp_aware_production_2026_09_19_r21_contained_spread_counter_signal" as const;
-export const CFB_MARKET_SHADOW_WEIGHT = 0.75 as const;
+  "cfb_market_sharp_aware_production_2026_09_26_r22_score_side_coherent" as const;
+export const CFB_MARKET_SHADOW_WEIGHT = 0 as const;
 export const CFB_SHARP_SIGNED_GAP_THRESHOLD_PP = 10 as const;
 export const CFB_SHARP_FULL_STRENGTH_GAP_PP = 20 as const;
 export const CFB_SHARP_MAX_MARGIN_SHIFT_POINTS = 1.5 as const;
@@ -77,7 +74,7 @@ export type CfbMarketEvidenceDirection = "support" | "resistance" | "neutral" | 
 
 export type CfbMarketSharpAwareShadowForecast = CfbV1Forecast & {
   shadowRelease: typeof CFB_MARKET_SHARP_AWARE_SHADOW_RELEASE;
-  forecastBasis: "independent_market_sharp_public_joint_pmf_mixture";
+  forecastBasis: "independent_score_with_validated_spread_arbitration";
   marketWeight: typeof CFB_MARKET_SHADOW_WEIGHT;
   sharpAdjustment: {
     source: "circa" | null;
@@ -196,12 +193,8 @@ export function buildCfbMarketSharpAwareShadowForecast(args: {
     homeSpread: -( -args.anchor.homeSpread + homeMarginShiftPoints),
     totalLine: args.anchor.totalLine + totalShiftPoints,
   };
-  const marketForecast = buildCfbMarketInformedOutcomeForecast({
-    independentForecast,
-    anchor: adjustedAnchor,
-  });
-  const pmfWithoutWeather = mixPmfs(args.independentForecast.pmf, marketForecast.pmf, CFB_MARKET_SHADOW_WEIGHT);
-  const pmf = mixPmfs(independentForecast.pmf, marketForecast.pmf, CFB_MARKET_SHADOW_WEIGHT);
+  const pmfWithoutWeather = applyValidatedSpreadArbitration(args.independentForecast, args.anchor, args.publicSplits ?? null, args.evaluatedAt);
+  const pmf = applyValidatedSpreadArbitration(independentForecast, args.anchor, args.publicSplits ?? null, args.evaluatedAt);
   const summary = summarizePmf(pmf);
   const summaryWithoutWeather = summarizePmf(pmfWithoutWeather);
   return {
@@ -212,7 +205,7 @@ export function buildCfbMarketSharpAwareShadowForecast(args: {
     ...summary,
     pmf,
     shadowRelease: CFB_MARKET_SHARP_AWARE_SHADOW_RELEASE,
-    forecastBasis: "independent_market_sharp_public_joint_pmf_mixture",
+    forecastBasis: "independent_score_with_validated_spread_arbitration",
     marketWeight: CFB_MARKET_SHADOW_WEIGHT,
     sharpAdjustment: {
       source: sharp ? "circa" : null,
@@ -689,6 +682,88 @@ function publicSelectedGap(split: CfbForwardPlaybookSplit, side: CanonicalSide):
   if (side === "away") return split.awayMoneyPct !== null && split.awayBetsPct !== null ? split.awayMoneyPct - split.awayBetsPct : null;
   if (side === "over") return split.overMoneyPct !== null && split.overBetsPct !== null ? split.overMoneyPct - split.overBetsPct : null;
   return split.underMoneyPct !== null && split.underBetsPct !== null ? split.underMoneyPct - split.underBetsPct : null;
+}
+
+function applyValidatedSpreadArbitration(
+  forecast: CfbV1Forecast,
+  anchor: CfbCanonicalMarketAnchor,
+  splits: CfbForwardPlaybookSplitSet | null,
+  evaluatedAt: string,
+): CfbV1Forecast["pmf"] {
+  const split = splits?.spread
+    ? eligiblePublicSplit(splits.spread, evaluatedAt, forecast.gameStartsAt)
+    : null;
+  if (!split || (split.booksUsed ?? 0) < 8) return forecast.pmf.map((cell) => ({ ...cell }));
+  if (
+    split.homeMoneyPct === null || split.homeBetsPct === null ||
+    split.awayMoneyPct === null || split.awayBetsPct === null
+  ) return forecast.pmf.map((cell) => ({ ...cell }));
+  const homeGap = split.homeMoneyPct - split.homeBetsPct;
+  const awayGap = split.awayMoneyPct - split.awayBetsPct;
+  const signalSide = homeGap >= awayGap ? "home" : "away";
+  const divergence = Math.abs(signalSide === "home" ? homeGap : awayGap);
+  if (divergence < 5) return forecast.pmf.map((cell) => ({ ...cell }));
+  const independentSide = forecast.expectedMarginHome + anchor.homeSpread >= 0 ? "home" : "away";
+  if (signalSide === independentSide) return forecast.pmf.map((cell) => ({ ...cell }));
+  const targetMargin = -2 * anchor.homeSpread - forecast.expectedMarginHome;
+  return tiltCfbMarginWithinTotals(forecast.pmf, targetMargin - forecast.expectedMarginHome);
+}
+
+function tiltCfbMarginWithinTotals(
+  pmf: CfbV1Forecast["pmf"],
+  marginShiftPoints: number,
+): CfbV1Forecast["pmf"] {
+  const groups = new Map<number, CfbV1Forecast["pmf"]>();
+  for (const cell of pmf) {
+    const total = cell.home + cell.away;
+    groups.set(total, [...(groups.get(total) ?? []), cell]);
+  }
+  const output: CfbV1Forecast["pmf"] = [];
+  for (const cells of groups.values()) {
+    const mass = cells.reduce((sum, cell) => sum + cell.probability, 0);
+    if (!(mass > 0)) continue;
+    const originalMean = cells.reduce((sum, cell) => sum + (cell.home - cell.away) * cell.probability, 0) / mass;
+    const margins = cells.map((cell) => cell.home - cell.away);
+    const target = Math.max(Math.min(...margins), Math.min(Math.max(...margins), originalMean + marginShiftPoints));
+    if (Math.abs(target - originalMean) <= 1e-12 || new Set(margins).size === 1) {
+      output.push(...cells.map((cell) => ({ ...cell })));
+      continue;
+    }
+    let low = -8;
+    let high = 8;
+    for (let iteration = 0; iteration < 80; iteration += 1) {
+      const middle = (low + high) / 2;
+      const mean = exponentiallyTiltedMarginMean(cells, middle);
+      if (mean < target) low = middle;
+      else high = middle;
+    }
+    const lambda = (low + high) / 2;
+    const weights = cells.map((cell) => cell.probability * boundedExponential(lambda * (cell.home - cell.away - originalMean)));
+    const weightTotal = weights.reduce((sum, value) => sum + value, 0);
+    output.push(...cells.map((cell, index) => ({
+      ...cell,
+      probability: weightTotal > 0 ? mass * weights[index]! / weightTotal : cell.probability,
+    })));
+  }
+  const total = output.reduce((sum, cell) => sum + cell.probability, 0);
+  if (!(total > 0)) throw new Error("CFB spread arbitration removed all probability mass.");
+  return output
+    .map((cell) => ({ ...cell, probability: cell.probability / total }))
+    .sort((first, second) => first.home - second.home || first.away - second.away);
+}
+
+function exponentiallyTiltedMarginMean(cells: CfbV1Forecast["pmf"], lambda: number): number {
+  const reference = cells.reduce((sum, cell) => sum + (cell.home - cell.away) * cell.probability, 0) /
+    cells.reduce((sum, cell) => sum + cell.probability, 0);
+  let weightedTotal = 0;
+  let weight = 0;
+  for (const cell of cells) {
+    const margin = cell.home - cell.away;
+    const cellWeight = cell.probability * boundedExponential(lambda * (margin - reference));
+    weight += cellWeight;
+    weightedTotal += margin * cellWeight;
+  }
+  return weightedTotal / weight;
 }
 
 function tiltCfbTotalWithinMargins(

@@ -126,7 +126,10 @@ def team_game_metrics(frames: dict[str, pd.DataFrame]) -> dict[tuple[int, str], 
     passing = frames["adv_passing"].copy()
     passing["game_id"] = passing["game_id"].astype(int)
     passing["Att_num"] = pd.to_numeric(passing["Att"], errors="coerce").fillna(0)
-    passing = passing.sort_values("Att_num").groupby(["game_id", "pos_team"], as_index=False).tail(1)
+    passing["passer_sort"] = passing["passer_player_name"].fillna("").map(normalized_name)
+    passing = passing.sort_values(
+        ["game_id", "pos_team", "Att_num", "passer_sort"], kind="mergesort"
+    ).groupby(["game_id", "pos_team"], as_index=False).tail(1)
 
     joined = adv.merge(
         situ,
@@ -213,7 +216,13 @@ def roster_context(rosters: pd.DataFrame, passing: pd.DataFrame) -> dict[tuple[i
     return output
 
 
-def blend_state(previous: TeamState | None, current: TeamState | None, key: str, global_mean: float) -> float:
+def blend_state(
+    previous: TeamState | None,
+    current: TeamState | None,
+    key: str,
+    global_mean: float,
+    current_season_prior_games: float = 4.0,
+) -> float:
     prior = previous.mean(key) if previous else np.nan
     if not math.isfinite(prior):
         prior = global_mean
@@ -223,11 +232,18 @@ def blend_state(previous: TeamState | None, current: TeamState | None, key: str,
     now = current.mean(key)
     if not math.isfinite(now):
         return prior
-    weight = current.games / (current.games + 4.0)
+    weight = current.games / (current.games + current_season_prior_games)
     return weight * now + (1.0 - weight) * prior
 
 
-def build_dataset(frames: dict[str, pd.DataFrame], future_games: pd.DataFrame | None = None) -> pd.DataFrame:
+def build_dataset(
+    frames: dict[str, pd.DataFrame],
+    future_games: pd.DataFrame | None = None,
+    current_season_prior_games: float = 4.0,
+    include_opponent_adjusted_matchups: bool = False,
+) -> pd.DataFrame:
+    if current_season_prior_games <= 0:
+        raise ValueError("current_season_prior_games must be positive")
     schedules = frames["schedules"].copy()
     schedules = schedules[schedules["season_type"].isin([2, 3])]
     schedules["game_id"] = schedules["game_id"].astype(int)
@@ -245,6 +261,8 @@ def build_dataset(frames: dict[str, pd.DataFrame], future_games: pd.DataFrame | 
 
     state: dict[tuple[int, str], TeamState] = defaultdict(TeamState)
     season_final: dict[tuple[int, str], TeamState] = {}
+    defense_state: dict[tuple[int, str], TeamState] = defaultdict(TeamState)
+    defense_season_final: dict[tuple[int, str], TeamState] = {}
     elo: dict[str, float] = defaultdict(lambda: 1500.0)
     last_season: int | None = None
     last_played: dict[str, pd.Timestamp] = {}
@@ -259,6 +277,9 @@ def build_dataset(frames: dict[str, pd.DataFrame], future_games: pd.DataFrame | 
                 for (state_season, team), team_state in list(state.items()):
                     if state_season == last_season:
                         season_final[(last_season, team)] = team_state
+                for (state_season, team), team_state in list(defense_state.items()):
+                    if state_season == last_season:
+                        defense_season_final[(last_season, team)] = team_state
                 for team in list(elo):
                     elo[team] = 1500.0 + 0.72 * (elo[team] - 1500.0)
             last_season = season
@@ -268,6 +289,10 @@ def build_dataset(frames: dict[str, pd.DataFrame], future_games: pd.DataFrame | 
         away_prev = season_final.get((season - 1, away))
         home_now = state.get((season, home))
         away_now = state.get((season, away))
+        home_defense_prev = defense_season_final.get((season - 1, home))
+        away_defense_prev = defense_season_final.get((season - 1, away))
+        home_defense_now = defense_state.get((season, home))
+        away_defense_now = defense_state.get((season, away))
         home_personnel = personnel.get((season, home), {})
         away_personnel = personnel.get((season, away), {})
         neutral = bool(game.get("neutral_site"))
@@ -285,13 +310,36 @@ def build_dataset(frames: dict[str, pd.DataFrame], future_games: pd.DataFrame | 
             "elo_sum_strength": elo[home] + elo[away] - 3000.0,
             "rest_diff": max(-14.0, min(14.0, home_rest - away_rest)),
         }
+        home_offense: dict[str, float] = {}
+        away_offense: dict[str, float] = {}
         for key in ROLLING_KEYS:
-            hv = blend_state(home_prev, home_now, key, global_means[key])
-            av = blend_state(away_prev, away_now, key, global_means[key])
+            hv = blend_state(home_prev, home_now, key, global_means[key], current_season_prior_games)
+            av = blend_state(away_prev, away_now, key, global_means[key], current_season_prior_games)
+            home_offense[key] = hv
+            away_offense[key] = av
             feature[f"{key}_diff"] = hv - av
             feature[f"{key}_sum"] = hv + av
             feature[f"home_{key}"] = hv
             feature[f"away_{key}"] = av
+            if include_opponent_adjusted_matchups:
+                home_defense = blend_state(
+                    home_defense_prev,
+                    home_defense_now,
+                    key,
+                    0.0,
+                    current_season_prior_games,
+                )
+                away_defense = blend_state(
+                    away_defense_prev,
+                    away_defense_now,
+                    key,
+                    0.0,
+                    current_season_prior_games,
+                )
+                home_matchup = hv + away_defense
+                away_matchup = av + home_defense
+                feature[f"matchup_{key}_diff"] = home_matchup - away_matchup
+                feature[f"matchup_{key}_sum"] = home_matchup + away_matchup
         for key in ("roster_continuity", "roster_experience", "returning_qb"):
             hv = finite(home_personnel.get(key), np.nan)
             av = finite(away_personnel.get(key), np.nan)
@@ -312,6 +360,15 @@ def build_dataset(frames: dict[str, pd.DataFrame], future_games: pd.DataFrame | 
         away_metric.update(points_for=away_score, points_against=home_score, margin=away_score-home_score, total=home_score+away_score)
         state[(season, home)].observe(home_metric)
         state[(season, away)].observe(away_metric)
+        if include_opponent_adjusted_matchups:
+            defense_state[(season, home)].observe({
+                key: away_metric.get(key, np.nan) - away_offense[key]
+                for key in ROLLING_KEYS
+            })
+            defense_state[(season, away)].observe({
+                key: home_metric.get(key, np.nan) - home_offense[key]
+                for key in ROLLING_KEYS
+            })
         margin = home_score - away_score
         expectation = 1.0 / (1.0 + 10.0 ** (-(elo[home] - elo[away] + (0 if neutral else 55.0)) / 400.0))
         outcome = 1.0 if margin > 0 else 0.5 if margin == 0 else 0.0

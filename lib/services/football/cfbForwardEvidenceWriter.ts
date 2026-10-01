@@ -29,7 +29,8 @@ import {
 } from "./cfbForwardEvidence";
 import { appendCfbForwardEvidence, readCfbForwardMarketHistory, readCfbForwardWriterEvidence, type CfbForwardEvidenceMetadata } from "./cfbForwardEvidenceStore";
 import { buildCfbV1DecisionBundle, CFB_T60_MAX_CAPTURE_LAG_MINUTES, CFB_V1_DECISION_RELEASE, getCfbV1ForecastForGame, type CfbV1Forecast, type CfbV1Market } from "./cfbV1Decision";
-import { CFB_V1_WEEKLY_RUNTIME_RELEASE, cfbV1WeeklyGameProfileCoverage } from "./cfbV1WeeklyForecast";
+import { CFB_V1_WEEKLY_RUNTIME_RELEASE, cfbV1WeeklyGameProfileCoverage, getCfbV1WeeklyForecasts } from "./cfbV1WeeklyForecast";
+import { loadCfbCurrentAdvancedState } from "./cfbCurrentAdvancedState";
 import { resolveCfbCanonicalMarketAnchor } from "./cfbMarketInformedOutcome";
 import {
   applyCfbMarketSharpAwareGrades,
@@ -93,7 +94,7 @@ import {
 } from "./cfbForwardMemberSnapshotStore";
 
 export const CFB_FORWARD_WRITER_RELEASE =
-  "cfb_forward_evidence_writer_2026_09_28_r80_next_window_seed_priority" as const;
+  "cfb_forward_evidence_writer_2026_10_01_r81_professional_market_marriage" as const;
 export const CFB_FORWARD_MAX_QB_TEAMS_PER_RUN = 24 as const;
 export const CFB_FORWARD_MAX_SHARP_FALLBACK_GAMES_PER_RUN = 24 as const;
 export const CFB_FORWARD_MAX_ESPN_PROSPECTIVE_GAMES_PER_RUN = 32 as const;
@@ -264,10 +265,21 @@ export async function runCfbForwardEvidenceWriter(args: {
   }
   const playbook = new PlaybookReadBroker(args.playbookApiKey);
   const priorResults = await fetchPriorCompletedGames({ rows: writerEvidence.metadata, before: window.boardStartDate, apiKey: args.balldontlieApiKey });
+  const advancedState = await loadCfbCurrentAdvancedState({
+    client: args.client,
+    season: args.season,
+    now: args.now,
+    apply: args.apply,
+  });
   const teams = [...new Map(games.flatMap((game) => [[game.away.id, game.away] as const, [game.home.id, game.home] as const])).values()];
   const priorQuarterbacks = latestQuarterbacksByTeam(allExisting);
   const quarterbackTeams = selectQuarterbackTeams({ plans, teams, priorQuarterbacks, maximum: CFB_FORWARD_MAX_QB_TEAMS_PER_RUN });
   const plannedGames = [...new Map(plans.map((plan) => [plan.game.providerGameId, plan.game])).values()];
+  const weeklyForecasts = getCfbV1WeeklyForecasts({
+    games,
+    completedGames: priorResults.games,
+    advancedGames: advancedState.state?.games ?? [],
+  });
   const trustedSharpEventIdsByGame = trustedCfbSharpEventIdsByGame(existing);
   const sharpFallbackCandidates = plannedGames.filter((game) => cfbBooksNeedSharpFallback(slate.currentOddsComparableBooksByGame[game.providerGameId] ?? []));
   const sharpFallbackGames = need.reason === "reference_line_completion_due" ? [] : selectCfbSharpFallbackGames({
@@ -380,7 +392,8 @@ export async function runCfbForwardEvidenceWriter(args: {
     const effectiveT60LagMinutes = plan.stage === "t60" && plan.cutoffAt
       ? Math.max(0, (Date.parse(capturedAt) - Date.parse(plan.cutoffAt)) / 60_000)
       : plan.t60LagMinutes;
-    const weeklyForecast = getCfbV1ForecastForGame({ game: plan.game, completedGames: priorResults.games });
+    const weeklyForecast = weeklyForecasts.get(plan.game.providerGameId);
+    if (!weeklyForecast) throw new Error(`CFB professional forecast missing for ${plan.game.providerGameId}.`);
     const outcomeAnchor = resolveCfbCanonicalMarketAnchor({
       books: currentBooks,
       contextLines: {
@@ -586,7 +599,7 @@ export async function runCfbForwardEvidenceWriter(args: {
         sharpApiOdds: sharpFallback.requests + circaAttempt.requests,
         sharpApiSplits: 1,
         weather: weatherRequests,
-        totalMaximum: slate.providerRequests + priorResults.providerRequests + quarterbacks.providerRequests + sharpFallback.requests + circaAttempt.requests + weatherRequests + espnReferenceAttempt.result.requests + 4,
+        totalMaximum: slate.providerRequests + priorResults.providerRequests + quarterbacks.providerRequests + sharpFallback.requests + circaAttempt.requests + weatherRequests + espnReferenceAttempt.result.requests + advancedState.requests + 4,
       },
     };
     const contextualEvidenceCapture = buildCfbForwardContextCapture({
@@ -634,7 +647,7 @@ export async function runCfbForwardEvidenceWriter(args: {
     publishedWatchlists: decisions.filter((row) => row.grade === "Watchlist").length,
     publishedNoPlays: decisions.filter((row) => row.grade === "No Play").length,
     heldMarkets: payloads.reduce((sum, payload) => sum + payload.decisions.heldMarkets.length, 0),
-    apiCallsMaximum: slate.providerRequests + priorResults.providerRequests + quarterbacks.providerRequests + sharpFallback.requests + weatherRequests + espnReferenceAttempt.result.requests + tracking.trackingProviderRequests + 4,
+    apiCallsMaximum: slate.providerRequests + priorResults.providerRequests + quarterbacks.providerRequests + sharpFallback.requests + weatherRequests + espnReferenceAttempt.result.requests + advancedState.requests + tracking.trackingProviderRequests + 4,
     healthHolds: [...new Set([
       ...payloads.flatMap((payload) => payload.coverage.healthHolds),
       ...(sharpFallbackAttempt.error ? ["sharpapi_odds_fallback_request_failed"] : []),
@@ -643,6 +656,7 @@ export async function runCfbForwardEvidenceWriter(args: {
       ...(espnReferenceCandidates.length > espnReferenceGames.length ? ["espn_reference_line_deferred"] : []),
       ...(linesAttempt.error ? ["playbook_lines_request_failed"] : []),
       ...(splitsAttempt.error ? ["playbook_splits_request_failed"] : []),
+      ...(advancedState.error ? ["cfb_current_advanced_state_refresh_failed"] : []),
       ...(tracking.trackingError ? ["official_tracking_incomplete"] : []),
       ...(captureFailures.length > 0 ? ["game_capture_failed"] : []),
     ])],
