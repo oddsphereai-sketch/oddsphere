@@ -6,6 +6,7 @@ import {
   NHL_REGULAR_MODEL_RELEASE,
   calibrateNhlTotalConfidence,
   nhlRegularModelV1,
+  resolveNhlPriceAwareVerdict,
   type NhlFeatureSnapshot,
 } from "../lib/automodel/nhlRegularModelV1";
 import { isOfficiallyTrackedMarket } from "../lib/config/officialTrackingMarkets";
@@ -35,6 +36,16 @@ import { buildNhlTwoSidedPriceTrail } from "../lib/services/nhl/nhlPriceTrail";
 import { canonicalizeNhlLineRows } from "../lib/services/nhl/nhlLineBoard";
 import { assessNhlLockCoherence } from "../lib/services/nhl/nhlLockCoherence";
 import { __NHL_ADAPTER_TEST__ } from "../lib/services/nhl/adaptNhlToDailyEdgeResponse";
+
+assert.equal(resolveNhlPriceAwareVerdict("moneyline", "best_angle", -199, 0.70), "best_angle");
+assert.equal(resolveNhlPriceAwareVerdict("moneyline", "best_angle", -200, 0.70), "lean", "a price in the -200s cannot be an NHL Best Angle");
+assert.equal(resolveNhlPriceAwareVerdict("moneyline", "lean", -230, 0.72), "lean", "a short likely winner remains actionable as a Lean");
+assert.equal(resolveNhlPriceAwareVerdict("moneyline", "lean", -899, 0.90), "lean");
+assert.equal(resolveNhlPriceAwareVerdict("moneyline", "lean", -900, 0.92), "pass", "an extreme negative price is not actionable");
+assert.equal(resolveNhlPriceAwareVerdict("moneyline", "best_angle", null, 0.70), "pass", "a missing exact price is not actionable");
+assert.equal(resolveNhlPriceAwareVerdict("spread", "watchlist", 120, 0.60), "lean", "a validated 5pp puck-line exact-price edge provides the paired promotion");
+assert.equal(resolveNhlPriceAwareVerdict("spread", "watchlist", -120, 0.58), "watchlist", "a puck-line promotion still requires its exact-price edge");
+assert.equal(resolveNhlPriceAwareVerdict("moneyline", "watchlist", 120, 0.60), "watchlist", "the puck-line promotion cannot leak into Moneylines");
 
 assert.deepEqual(
   __NHL_ADAPTER_TEST__.buildPublicSplits(

@@ -257,7 +257,7 @@ export default async function CandidateDailyEdgePage({
 
   return (
     <>
-      <DailyEdgeLiveRefresh />
+      <DailyEdgeLiveRefresh initialGameCount={snapshot.games.length} />
       <ActualDailyEdgePreview
         key={`${sport}-${snapshot.date}`}
         snapshot={snapshot}

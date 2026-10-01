@@ -1892,14 +1892,32 @@ The paired live-slate replay is recorded in
 
 The September 21 operational release restored the two bounded daily schedules removed by the emergency cron pause. NBA remains on that schedule contract. NHL's September 29 complete-slate release resolves exact provider events before requesting odds, retains the existing route gates and sport-scoped lease, and reports incomplete two-sided game-market coverage as partial rather than silently healthy. The September 30 r6 schedule moves that same single bounded NHL refresh from 13:45 UTC to 07:45 UTC after a three-game regular-season slate remained absent during the member morning. The 03:45 EDT / 02:45 EST execution is an overnight rollover, adds no second refresh, provider call cycle, writer, or lease, and gives the existing data-health cycle time to detect a failed seed before members wake. The r10 T-60 path remains the authoritative final market refresh and lock owner.
 
-## NHL regular-season champion (active from 2026-09-30)
+## NHL regular-season champion (active from 2026-10-01)
 
-- Model: `nhl_regular_2026_r12_roster_discrete_market_read`
-- Calibration: `nhl_regular_calibration_2026_r12_roster_discrete_market_read`
-- Decision: `nhl_regular_decision_2026_r12_coherent_exact_price`
+- Model: `nhl_regular_2026_r13_price_aware_grades`
+- Calibration: `nhl_regular_calibration_2026_r13_price_aware_grades`
+- Decision: `nhl_regular_decision_2026_r13_price_aware_exact_price`
 - Public tracking start: `2026-09-29`
 - Official markets: moneyline, total, spread (puck line)
 - Retired release: `nhl_v0_2026_finals`
+
+The October 1 r13 release preserves the r12 independent model, market-reading
+arbitration, coherent projected score, probabilities, and prediction sides. It
+makes the existing exact-price grade surface explicitly price-aware: a Best
+Angle at -200 or shorter remains actionable as a Lean, while a selected price
+of -900 or shorter is a No Play. The paired promotion path moves a puck-line
+Watchlist to Lean only at the already validated 58% selected-side probability
+and 5-percentage-point exact-price edge band. On the October 1 production board,
+the exact replay changes 10 Best Angles / 6 Leans / 8 Watchlists to 8 / 8 / 8:
+UTA -213 and EDM -208 move from Best Angle to Lean, with zero side changes,
+zero No Plays, zero actionable promotions, zero actionable demotions, and all
+16 actionables retained. This is a grade-only release; no member copy, label,
+layout, score, probability, pick, provider call, writer, schedule, lease, lock,
+or stake changes. The same release also lets a cold empty Daily Edge page
+request the newly published server slate immediately, once per mount, while
+retaining the normal 60-second refresh and last-known-good behavior. Evidence
+and rollback:
+`docs/model-audits/2026-10-01-nhl-price-aware-grade-and-empty-slate-recovery-r13.md`.
 
 The September 30 r12 model release replaces opening-season stale-team behavior
 with a target-excluded current-roster skater prior during each team's first ten

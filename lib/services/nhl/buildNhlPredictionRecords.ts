@@ -52,6 +52,7 @@ import {
   NHL_REGULAR_CALIBRATION_RELEASE,
   NHL_REGULAR_MODEL_RELEASE,
   NHL_REGULAR_TRANSITION_MODEL_RELEASES,
+  resolveNhlPriceAwareVerdict,
   type NhlModelOutput,
 } from "../../automodel/nhlRegularModelV1";
 import {
@@ -64,7 +65,7 @@ import {
   type NhlRosterPrior,
 } from "../../automodel/nhlRosterPrior2026";
 import { assertOfficialTrackingMarket } from "../../config/officialTrackingMarkets";
-import type { PredictionRecordRow, TrackedMarketV17 } from "../../types/domain/Tracking";
+import type { PredictionRecordRow } from "../../types/domain/Tracking";
 import { resolvedNhlSplitsByGame, type ResolvedNhlSplitsEvent } from "./nhlResolvedSplits";
 import { loadNhlRegularStateForSlate } from "./loadNhlRegularState";
 import { loadNhlOpponentAdjustedState } from "./loadNhlOpponentAdjustedState";
@@ -360,7 +361,7 @@ export async function writeNhlPredictionRecords(
 
       // Build one row per official regular-season market.
       const marketsToWrite: Array<{
-        market: TrackedMarketV17;
+        market: "moneyline" | "total" | "spread";
         modelMarket: NhlModelOutput["moneyline"];
         side: "home" | "away" | "over" | "under";
         priceAmerican: number | null;
@@ -446,8 +447,38 @@ export async function writeNhlPredictionRecords(
         if (spreadIsPass) recordsSkippedPass += 1;
       }
 
+      const pricedModel: NhlModelOutput = {
+        ...model,
+        moneyline: {
+          ...model.moneyline,
+          verdict: resolveNhlPriceAwareVerdict(
+            "moneyline",
+            model.moneyline.verdict,
+            marketsToWrite[0]?.priceAmerican ?? null,
+            model.moneyline.probability,
+          ),
+        },
+        total: {
+          ...model.total,
+          verdict: resolveNhlPriceAwareVerdict(
+            "total",
+            model.total.verdict,
+            marketsToWrite[1]?.priceAmerican ?? null,
+            model.total.probability,
+          ),
+        },
+        puck_line: {
+          ...model.puck_line,
+          verdict: resolveNhlPriceAwareVerdict(
+            "spread",
+            model.puck_line.verdict,
+            marketsToWrite[2]?.priceAmerican ?? null,
+            model.puck_line.probability,
+          ),
+        },
+      };
       const snapshotJson = buildSnapshotJson({
-        model,
+        model: pricedModel,
         marketLines: lines,
         goalieAssumption,
         featureInputs: snapshot,
@@ -491,7 +522,9 @@ export async function writeNhlPredictionRecords(
             : -m.priceAmerican / (-m.priceAmerican + 100);
         const priceComplete = m.priceAmerican !== null
           && (m.market === "moneyline" || m.lineValue !== null);
-        const effectiveVerdict = priceComplete ? m.modelMarket.verdict : "pass";
+        const effectiveVerdict = priceComplete
+          ? resolveNhlPriceAwareVerdict(m.market, m.modelMarket.verdict, m.priceAmerican, m.modelMarket.probability)
+          : "pass";
         const row: Omit<PredictionRecordRow, "id" | "created_at"> = {
           game_prediction_id: null, // v18: nullable for non-MLB
           game_id: g.id,

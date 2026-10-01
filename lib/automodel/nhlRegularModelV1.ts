@@ -2,23 +2,54 @@ import type { BdlNhlTeamMetrics } from "../providers/nhl/_ballDontLieNhlClient";
 import type { NhlCalibratedTeamState } from "./nhlRegularPriors2026";
 import type { NhlRosterPrior } from "./nhlRosterPrior2026";
 
-export const NHL_REGULAR_MODEL_RELEASE = "nhl_regular_2026_r12_roster_discrete_market_read" as const;
-export const NHL_REGULAR_CALIBRATION_RELEASE = "nhl_regular_calibration_2026_r12_roster_discrete_market_read" as const;
-export const NHL_REGULAR_DECISION_RELEASE = "nhl_regular_decision_2026_r12_coherent_exact_price" as const;
+export const NHL_REGULAR_MODEL_RELEASE = "nhl_regular_2026_r13_price_aware_grades" as const;
+export const NHL_REGULAR_CALIBRATION_RELEASE = "nhl_regular_calibration_2026_r13_price_aware_grades" as const;
+export const NHL_REGULAR_DECISION_RELEASE = "nhl_regular_decision_2026_r13_price_aware_exact_price" as const;
 export const NHL_REGULAR_TRANSITION_MODEL_RELEASES = [
   NHL_REGULAR_MODEL_RELEASE,
+  "nhl_regular_2026_r12_roster_discrete_market_read",
   "nhl_regular_2026_r10_t60_market_refresh",
   "nhl_regular_2026_r9_source_aware_market_read",
   "nhl_regular_2026_r7_runtime_parity",
 ] as const;
 export const NHL_REGULAR_TRANSITION_CALIBRATION_RELEASES = [
   NHL_REGULAR_CALIBRATION_RELEASE,
+  "nhl_regular_calibration_2026_r12_roster_discrete_market_read",
   "nhl_regular_calibration_2026_r10_t60_market_refresh",
   "nhl_regular_calibration_2026_r9_source_aware_market_read",
   "nhl_regular_calibration_2026_r7_runtime_parity",
 ] as const;
 
 export type NhlVerdictKey = "best_angle" | "lean" | "watchlist" | "pass";
+
+function americanImpliedProbability(oddsAmerican: number): number {
+  return oddsAmerican > 0
+    ? 100 / (oddsAmerican + 100)
+    : -oddsAmerican / (-oddsAmerican + 100);
+}
+
+/**
+ * Exact-price actionability belongs downstream of the score and side model.
+ * Short likely winners can remain useful Leans without being presented as the
+ * board's best wagers. The paired puck-line promotion reuses the historically
+ * validated 58% probability / 5pp exact-price edge boundary.
+ */
+export function resolveNhlPriceAwareVerdict(
+  market: "moneyline" | "total" | "spread",
+  verdict: NhlVerdictKey,
+  oddsAmerican: number | null,
+  modelProbability: number,
+): NhlVerdictKey {
+  if (oddsAmerican === null) return "pass";
+  if (oddsAmerican <= -900) return "pass";
+  if (oddsAmerican <= -200 && verdict === "best_angle") return "lean";
+
+  const exactPriceEdge = modelProbability - americanImpliedProbability(oddsAmerican);
+  if (market === "spread" && verdict === "watchlist" && modelProbability >= 0.58 && exactPriceEdge >= 0.05) {
+    return "lean";
+  }
+  return verdict;
+}
 
 export type NhlModelTeam = {
   abbreviation: string;

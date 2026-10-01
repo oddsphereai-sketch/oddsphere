@@ -14,12 +14,20 @@ const RESUME_DEDUPE_MS = 15_000;
  * router.refresh() merges the latest Server Component payload without
  * discarding reader state or making the existing page non-interactive.
  */
-export default function DailyEdgeLiveRefresh() {
+export default function DailyEdgeLiveRefresh({ initialGameCount }: { initialGameCount: number }) {
   const router = useRouter();
   const lastRefreshAt = useRef(0);
 
   useEffect(() => {
     lastRefreshAt.current = Date.now();
+
+    // A slate can publish between the server read and hydration. Recover that
+    // cold empty state immediately instead of making an already-open member
+    // wait for the normal minute cadence. An actually empty slate still makes
+    // only this one additional request per mounted page.
+    if (initialGameCount === 0 && document.visibilityState === "visible") {
+      router.refresh();
+    }
 
     function refresh(force = false) {
       if (document.visibilityState !== "visible") return;
@@ -49,7 +57,7 @@ export default function DailyEdgeLiveRefresh() {
       window.removeEventListener("online", onOnline);
       window.removeEventListener("pageshow", onPageShow);
     };
-  }, [router]);
+  }, [initialGameCount, router]);
 
   return null;
 }
