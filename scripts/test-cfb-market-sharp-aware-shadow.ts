@@ -30,7 +30,8 @@ assert.equal(noSharp.marketWeight, CFB_MARKET_SHADOW_WEIGHT);
 assert.equal(noSharp.sharpAdjustment.source, null);
 assert.equal(noSharp.sharpAdjustment.homeMarginShiftPoints, 0);
 assert.equal(noSharp.sharpAdjustment.totalShiftPoints, 0);
-assert.ok(noSharp.expectedMarginHome > independent.expectedMarginHome, "the market-dominant forecast moves the Hawaii margin toward Stanford");
+assert.equal(noSharp.expectedMarginHome.toFixed(9), independent.expectedMarginHome.toFixed(9), "unqualified market context cannot average the independent margin toward consensus");
+assert.equal(noSharp.expectedTotal.toFixed(9), independent.expectedTotal.toFixed(9));
 const openingDraftKings: NcaafBookOdds = {
   ...books[0]!,
   observedAt: "2026-08-28T10:00:00.000Z",
@@ -48,8 +49,8 @@ const withMovement = buildCfbMarketSharpAwareShadowForecast({
 assert.equal(withMovement.marketMovementAdjustment.status, "available");
 assert.ok(withMovement.marketMovementAdjustment.homeMarginShiftPoints > 0);
 assert.ok(withMovement.marketMovementAdjustment.totalShiftPoints > 0);
-assert.ok(withMovement.expectedMarginHome > noSharp.expectedMarginHome);
-assert.ok(withMovement.expectedTotal > noSharp.expectedTotal);
+assert.equal(withMovement.expectedMarginHome.toFixed(9), noSharp.expectedMarginHome.toFixed(9), "movement remains recorded but cannot become an unvalidated score nudge");
+assert.equal(withMovement.expectedTotal.toFixed(9), noSharp.expectedTotal.toFixed(9));
 const mismatchedMovement = buildCfbMarketSharpAwareShadowForecast({
   independentForecast: independent,
   anchor,
@@ -67,8 +68,9 @@ const withPublic = buildCfbMarketSharpAwareShadowForecast({ independentForecast:
 assert.equal(withPublic.publicConsensusAdjustment.source, "playbook_public_consensus");
 assert.equal(withPublic.publicConsensusAdjustment.homeMarginShiftPoints, 0.75);
 assert.equal(withPublic.publicConsensusAdjustment.totalShiftPoints, 0.75);
-assert.ok(withPublic.expectedMarginHome > noSharp.expectedMarginHome, "public home money-versus-ticket divergence must move the coherent margin at bounded lower strength");
-assert.ok(withPublic.expectedTotal > noSharp.expectedTotal, "public Over money-versus-ticket divergence must move the coherent total at bounded lower strength");
+assert.ok(noSharp.expectedMarginHome + anchor.homeSpread < 0, "fixture starts on the away cover side");
+assert.ok(withPublic.expectedMarginHome + anchor.homeSpread > 0, "qualified eight-book spread divergence performs a real coherent side flip");
+assert.equal(withPublic.expectedTotal.toFixed(9), noSharp.expectedTotal.toFixed(9), "spread arbitration preserves the independent total");
 const stalePublic = Object.fromEntries(Object.entries(publicHomeOver).map(([market, split]) => [market, { ...split, capturedAt: "2026-08-28T05:29:59.000Z" }])) as typeof publicHomeOver;
 const stalePublicForecast = buildCfbMarketSharpAwareShadowForecast({ independentForecast: independent, anchor, sharpSplits: [], playbookLine, publicSplits: stalePublic, evaluatedAt: observedAt });
 assert.equal(stalePublicForecast.publicConsensusAdjustment.source, null, "public evidence older than the far-game cadence is unavailable");
@@ -100,14 +102,14 @@ const withSharp = buildCfbMarketSharpAwareShadowForecast({ independentForecast: 
 assert.equal(withSharp.sharpAdjustment.source, "circa");
 assert.equal(withSharp.sharpAdjustment.homeMarginShiftPoints, 1.5);
 assert.equal(withSharp.sharpAdjustment.totalShiftPoints, 1.5);
-assert.ok(withSharp.expectedMarginHome > noSharp.expectedMarginHome, "strict home sharp support moves the coherent margin toward Stanford");
-assert.ok(withSharp.expectedTotal > noSharp.expectedTotal, "strict Over sharp support moves the coherent total upward");
+assert.equal(withSharp.expectedMarginHome.toFixed(9), noSharp.expectedMarginHome.toFixed(9), "small-sample Circa splits remain recorded without an unvalidated score mutation");
+assert.equal(withSharp.expectedTotal.toFixed(9), noSharp.expectedTotal.toFixed(9));
 
 const publicAwayUnder = publicSplitSet({ homeTickets: 60, homeMoney: 40, overTickets: 60, overMoney: 40 });
 const opposingInputs = buildCfbMarketSharpAwareShadowForecast({ independentForecast: independent, anchor, sharpSplits: [sharpHomeOver], playbookLine, publicSplits: publicAwayUnder, evaluatedAt: observedAt });
 assert.equal(opposingInputs.sharpAdjustment.homeMarginShiftPoints, 1.5);
 assert.equal(opposingInputs.publicConsensusAdjustment.homeMarginShiftPoints, -0.75);
-assert.ok(opposingInputs.expectedMarginHome > noSharp.expectedMarginHome, "full-strength Circa support must remain stronger than opposing public consensus");
+assert.equal(opposingInputs.expectedMarginHome.toFixed(9), noSharp.expectedMarginHome.toFixed(9), "a qualified spread read that confirms the independent cover side leaves the score unchanged");
 const weakSharpHomeOver = sharpRecord({ homeTickets: 44, homeMoney: 56, overTickets: 44, overMoney: 56 });
 const weakSharpOpposed = buildCfbMarketSharpAwareShadowForecast({ independentForecast: independent, anchor, sharpSplits: [weakSharpHomeOver], playbookLine, publicSplits: publicAwayUnder, evaluatedAt: observedAt });
 assert.ok(weakSharpOpposed.sharpAdjustment.homeMarginShiftPoints > 0);
@@ -124,7 +126,7 @@ assert.ok(Math.abs(expectedHome + expectedAway - withSharp.expectedTotal) < 1e-1
 const authoritative = buildCfbMarketSharpAwareForecast({ independentForecast: independent, anchor, sharpSplits: [sharpHomeOver], evaluatedAt: observedAt });
 assert.equal(authoritative.release, CFB_MARKET_SHARP_AWARE_PRODUCTION_RELEASE);
 assert.equal(authoritative.candidateRelease, CFB_MARKET_SHARP_AWARE_CANDIDATE_RELEASE);
-assert.equal(authoritative.marketWeight, 0.75);
+assert.equal(authoritative.marketWeight, 0);
 
 const dominantFavorite = buildCfbMarketSharpAwareForecast({
   independentForecast: {
