@@ -52,6 +52,14 @@ export async function buildUclDailyEdgePreview(slate: UclSlate, options: UclPrev
       deriveCoherentOutcome: deriveUclCoherentMarketOutcome,
       deriveMatchResultDecision: deriveUclMatchResultDecision,
       derivePreviewGrade: deriveUclPreviewGrade,
+      selectMatchResultSide: (prediction) => {
+        const probabilities = prediction.probabilities;
+        const side = (["home", "draw", "away"] as const).reduce(
+          (best, candidate) => probabilities[candidate] > probabilities[best] ? candidate : best,
+          "home",
+        );
+        return { release: slate.modelRelease, side, rawSide: side, applied: false };
+      },
     },
   });
   const matchById = new Map(slate.matches.map((match) => [match.id, match]));

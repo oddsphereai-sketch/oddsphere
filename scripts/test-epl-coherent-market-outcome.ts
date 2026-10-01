@@ -153,7 +153,7 @@ for (const market of ["total", "btts"] as const) {
   assert.match(negative.reasons.join(" "), /exact forecast-side price does not have positive expected value/);
 }
 assert.equal(EPL_PREVIEW_GRADE_RELEASE, EPL_SHADOW_CALIBRATION_RELEASE);
-assert.equal(EPL_SHADOW_MODEL_RELEASE, "epl_goals_coherent_2026_09_02_r18_structural_target_exclusion");
+assert.equal(EPL_SHADOW_MODEL_RELEASE, "epl_goals_coherent_2026_10_01_r19_draw_arbitration");
 
 const previewSource = readFileSync("lib/services/epl/buildEplDailyEdgePreview.ts", "utf8");
 const coherentSource = readFileSync("lib/services/epl/eplCoherentMarketOutcome.ts", "utf8");
@@ -172,4 +172,4 @@ assert.doesNotMatch(captureSource, /supabase|SharpApiClient|fetch\(/, "forecast 
 assert.match(coherentSource, /maximum > input\.decisionMs \|\| maximum >= input\.kickoffMs/);
 assert.match(coherentSource, /decisionMs >= kickoffMs/);
 
-console.log("EPL r18 coherent PMF identity, target exclusion, correlation fallback, exact EV grading, copy, lock, and zero-load checks passed.");
+console.log("EPL r19 coherent PMF identity, target exclusion, correlation fallback, exact EV grading, copy, lock, and zero-load checks passed.");

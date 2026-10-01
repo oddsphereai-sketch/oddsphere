@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { EPL_SHADOW_MODEL_RELEASE, fitEplShadowModel, predictEplMatch, type EplTrainingMatch } from "../lib/services/epl/eplShadowModel";
+import { EPL_DRAW_ARBITRATION_RELEASE, EPL_SHADOW_MODEL_RELEASE, fitEplShadowModel, predictEplMatch, reconcileEplProjectedGoalsWithResult, selectEplMatchResultSide, type EplTrainingMatch } from "../lib/services/epl/eplShadowModel";
 import { bdlMoneylineRead, canonicalEplLineHistoryTimestamp, compactEplStoredPriceHistory, earliestEplMarketQuote, forecastAnchoredDoubleChanceSide, hydrateEplStoredPriceHistory, trackedPrice } from "../lib/services/epl/buildEplDailyEdgePreview";
 import { deriveEplMatchResultDecision, deriveEplPreviewGrade, EPL_PREVIEW_GRADE_RELEASE } from "../lib/services/epl/eplPreviewGrade";
 import { calibratedEplGoalProjection, calibratedEplTotalOverProbability, EPL_MATCH_RESULT_SCORE_READER_RELEASE, exactLockedEplScoreOutlook, impliedEplBttsYesProbability, impliedEplGoalsMarketDistribution, impliedEplMatchResultScoreOutlook } from "../lib/services/epl/eplDerivedMarketForecast";
@@ -117,6 +117,26 @@ if (prediction.representativeScore) {
   assert.equal(representative.home + representative.away > 2.5, prediction.probabilities.over25 >= 0.5);
   assert.equal(representative.home > 0 && representative.away > 0, prediction.probabilities.bttsYes >= 0.5);
 }
+const validatedDraw = selectEplMatchResultSide({
+  lambdaHome: 1.38,
+  lambdaAway: 1.2,
+  likelyScore: { home: 1, away: 1, probability: 0.12 },
+  probabilities: { home: 0.39, draw: 0.32, away: 0.29, over25: 0.51, under25: 0.49, bttsYes: 0.55, bttsNo: 0.45 },
+});
+assert.equal(validatedDraw.release, EPL_DRAW_ARBITRATION_RELEASE);
+assert.equal(validatedDraw.side, "draw", "the validated narrow-match lane can make Draw a first-class forecast");
+assert.equal(validatedDraw.applied, true);
+const coherentDrawGoals = reconcileEplProjectedGoalsWithResult({ home: 1.38, away: 1.2 }, validatedDraw);
+assert.deepEqual(coherentDrawGoals, { home: 1.29, away: 1.29 }, "a Draw forecast must publish a level decimal score");
+assert.equal(coherentDrawGoals.home + coherentDrawGoals.away, 2.58, "Draw score reconciliation must preserve the independently projected Total");
+const overbroadDraw = selectEplMatchResultSide({
+  lambdaHome: 1.38,
+  lambdaAway: 1.2,
+  likelyScore: { home: 1, away: 1, probability: 0.12 },
+  probabilities: { home: 0.41, draw: 0.3, away: 0.29, over25: 0.51, under25: 0.49, bttsYes: 0.55, bttsNo: 0.45 },
+});
+assert.equal(overbroadDraw.side, "home", "the rejected broad draw lane must remain disabled");
+assert.equal(overbroadDraw.applied, false);
 
 const outcomeKeys = ["home", "draw", "away", "over", "under", "yes", "no"] as const;
 for (const [index, side] of outcomeKeys.entries()) {
@@ -243,20 +263,24 @@ const valueBestAngle = deriveEplMatchResultDecision({ model: { home: 0.58, draw:
 assert.equal(valueBestAngle.forecastSide, "home");
 assert.equal(valueBestAngle.valueSide, "away", "the price-adjusted value side remains visible as secondary context");
 assert.equal(valueBestAngle.selectedSide, "home", "price must never replace the most likely result as the headline prediction");
-assert.equal(valueBestAngle.grade.verdict.label, "Watchlist", "a non-positive exact forecast-side price must not remain actionable");
-const alignedValueBestAngle = deriveEplMatchResultDecision({ model: { home: 0.58, draw: 0.25, away: 0.17 }, market: { home: 0.5, draw: 0.3, away: 0.2 }, prices: { home: 110, draw: 250, away: 400 }, promotedProxy: false });
+assert.equal(valueBestAngle.grade.verdict.label, "Lean", "a validated likely-winner Lean remains distinct from a Best Angle value claim");
+const alignedValueBestAngle = deriveEplMatchResultDecision({ model: { home: 0.68, draw: 0.2, away: 0.12 }, market: { home: 0.58, draw: 0.25, away: 0.17 }, prices: { home: -180, draw: 300, away: 500 }, promotedProxy: false });
 assert.equal(alignedValueBestAngle.selectedSide, "home");
-assert.equal(alignedValueBestAngle.grade.verdict.label, "Best Angle", "value can promote a forecast only when it supports the predicted outcome");
+assert.equal(alignedValueBestAngle.grade.verdict.label, "Best Angle", "only a high-confidence, market-aligned, price-eligible forecast can be a Match Result Best Angle");
+const premiumPriceLean = deriveEplMatchResultDecision({ model: { home: 0.68, draw: 0.2, away: 0.12 }, market: { home: 0.7, draw: 0.18, away: 0.12 }, prices: { home: -270, draw: 400, away: 700 }, promotedProxy: false });
+assert.equal(premiumPriceLean.grade.verdict.label, "Lean", "a high-confidence forecast at a premium price cannot remain Best Angle");
+const lowProbabilityValue = deriveEplMatchResultDecision({ model: { home: 0.446, draw: 0.271, away: 0.283 }, market: { home: 0.362, draw: 0.27, away: 0.368 }, prices: { home: 163, draw: 270, away: 150 }, promotedProxy: false });
+assert.equal(lowProbabilityValue.grade.verdict.label, "Watchlist", "a low-probability value thesis is monitoring context, not an accuracy-first actionable pick");
 const drawBestAngle = deriveEplMatchResultDecision({ model: { home: 0.34, draw: 0.38, away: 0.28 }, market: { home: 0.48, draw: 0.3, away: 0.22 }, prices: { home: 115, draw: 275, away: 340 }, promotedProxy: false });
 assert.equal(drawBestAngle.forecastSide, "draw");
 assert.equal(drawBestAngle.selectedSide, "draw", "draw is a first-class Match Result outcome");
-assert.equal(drawBestAngle.grade.verdict.label, "Best Angle");
+assert.equal(drawBestAngle.grade.verdict.label, "Watchlist", "a Draw prediction is not automatically an actionable grade");
 assert.equal(forecastAnchoredDoubleChanceSide("home", { home: 0.72, draw: 0.19, away: 0.09 }), "home_or_draw", "a home forecast must be covered by home or draw");
 assert.equal(forecastAnchoredDoubleChanceSide("away", { home: 0.18, draw: 0.24, away: 0.58 }), "away_or_draw", "an away forecast must be covered by away or draw");
 assert.equal(forecastAnchoredDoubleChanceSide("draw", { home: 0.34, draw: 0.38, away: 0.28 }), "home_or_draw", "a draw forecast should pair with the more likely club");
 assert.equal(forecastAnchoredDoubleChanceSide("draw", { home: 0.27, draw: 0.4, away: 0.33 }), "away_or_draw", "a draw forecast should pair with the more likely club");
-assert.equal(EPL_SHADOW_MODEL_RELEASE, "epl_goals_coherent_2026_09_02_r18_structural_target_exclusion");
-assert.equal(EPL_PREVIEW_GRADE_RELEASE, "epl_grade_policy_2026_09_02_v23_positive_forecast_ev");
+assert.equal(EPL_SHADOW_MODEL_RELEASE, "epl_goals_coherent_2026_10_01_r19_draw_arbitration");
+assert.equal(EPL_PREVIEW_GRADE_RELEASE, "epl_grade_policy_2026_10_01_v24_accuracy_first");
 const lockedMarkets = { moneyline: { pick: "ARS" }, total: { pick: "Over" }, first_inning: { pick: "No" } } as unknown as DailyEdgeGameDto["markets"];
 const refreshedMarkets = { moneyline: { pick: "COV" }, total: { pick: "Under" }, first_inning: { pick: "Yes" } } as unknown as DailyEdgeGameDto["markets"];
 const lockedGame = {
@@ -317,7 +341,7 @@ assert.equal(confidenceLean.selectedSide, "home");
 assert.equal(confidenceLean.grade.verdict.label, "Lean");
 const heavyFavorite = deriveEplMatchResultDecision({ model: { home: 0.85, draw: 0.1, away: 0.05 }, market: { home: 0.82, draw: 0.11, away: 0.07 }, prices: { home: -450, draw: 500, away: 1100 }, promotedProxy: false });
 assert.equal(heavyFavorite.grade.verdict.label, "Lean", "a high-confidence winner can be surfaced without masquerading as standalone value");
-assert.match(heavyFavorite.grade.reasons.join(" "), /positive exact-price expected value/);
+assert.match(heavyFavorite.grade.reasons.join(" "), /High-confidence winner at a short price/);
 const promotedOpponentHeavyFavorite = deriveEplMatchResultDecision({ model: { home: 0.88, draw: 0.08, away: 0.04 }, market: { home: 0.85, draw: 0.09, away: 0.06 }, prices: { home: -625, draw: 650, away: 1400 }, promotedProxy: true });
 assert.equal(promotedOpponentHeavyFavorite.grade.verdict.label, "Lean");
 assert.match(promotedOpponentHeavyFavorite.grade.reasons.join(" "), /promoted-team proxy/);
@@ -325,8 +349,7 @@ const negativeEvConfidence = deriveEplMatchResultDecision({ model: { home: 0.54,
 assert.equal(negativeEvConfidence.grade.verdict.label, "Watchlist");
 assert.match(negativeEvConfidence.grade.reasons.join(" "), /does not have positive expected value/);
 const negativeEvHeavyFavorite = deriveEplMatchResultDecision({ model: { home: 0.75, draw: 0.16, away: 0.09 }, market: { home: 0.78, draw: 0.15, away: 0.07 }, prices: { home: -450, draw: 500, away: 1100 }, promotedProxy: false });
-assert.equal(negativeEvHeavyFavorite.grade.verdict.label, "Watchlist");
-assert.match(negativeEvHeavyFavorite.grade.reasons.join(" "), /does not have positive expected value/);
+assert.equal(negativeEvHeavyFavorite.grade.verdict.label, "Lean", "the validated high-confidence context lane is accuracy-first even when standalone EV is negative");
 const ordinaryHeavyFavorite = deriveEplMatchResultDecision({ model: { home: 0.58, draw: 0.25, away: 0.17 }, market: { home: 0.6, draw: 0.24, away: 0.16 }, prices: { home: -350, draw: 400, away: 800 }, promotedProxy: false });
 assert.equal(ordinaryHeavyFavorite.grade.verdict.label, "Watchlist");
 assert.equal(eplTeamsMatch("Crystal Palace", "C Palace"), true);

@@ -13,6 +13,7 @@ import {
   type EplForwardEvidenceCapture,
 } from "./eplForwardEvidenceCapture";
 import { deriveEplCoherentMarketOutcome } from "./eplCoherentMarketOutcome";
+import { reconcileEplProjectedGoalsWithResult, selectEplMatchResultSide } from "./eplShadowModel";
 
 const BOOK_PRIORITY = ["pinnacle", "circa", "draftkings", "fanduel", "betmgm", "caesars"];
 const MAX_FIXTURE_RECOVERY_LOADS = 4;
@@ -68,6 +69,12 @@ export type EplPreviewBuildOptions = {
     deriveCoherentOutcome: typeof deriveEplCoherentMarketOutcome;
     deriveMatchResultDecision: typeof deriveEplMatchResultDecision;
     derivePreviewGrade: typeof deriveEplPreviewGrade;
+    selectMatchResultSide?: (prediction: EplShadowSlateMatch["prediction"]) => {
+      release: string;
+      side: EplMatchResultSide;
+      rawSide: EplMatchResultSide;
+      applied: boolean;
+    };
   };
 };
 
@@ -550,17 +557,12 @@ function marketBase(input: {
   };
 }
 
-function bestMatchResultSide(match: EplShadowSlateMatch): "home" | "draw" | "away" {
-  const p = match.prediction.probabilities;
-  const sides: Array<"home" | "draw" | "away"> = ["home", "draw", "away"];
-  return sides.sort((a, b) => p[b] - p[a])[0];
-}
-
 function gameDto(match: EplShadowSlateMatch, sharp: EplSharpFixtureMarket, capturedAt: string, authorities: NonNullable<EplPreviewBuildOptions["authorities"]> = {
   gradeRelease: EPL_PREVIEW_GRADE_RELEASE,
   deriveCoherentOutcome: deriveEplCoherentMarketOutcome,
   deriveMatchResultDecision: deriveEplMatchResultDecision,
   derivePreviewGrade: deriveEplPreviewGrade,
+  selectMatchResultSide: selectEplMatchResultSide,
 }, competitionLabel = "EPL"): DailyEdgeGameDto {
   const clubP = match.prediction.probabilities;
   const mr = coherentRead(sharp.odds, "match_result", ["home", "draw", "away"])
@@ -581,7 +583,16 @@ function gameDto(match: EplShadowSlateMatch, sharp: EplSharpFixtureMarket, captu
     decisionAt: capturedAt,
     kickoff: match.kickoff,
   });
-  const publishedGoals = coherentOutcome.expectedGoals;
+  const forecastArbitration = authorities.selectMatchResultSide?.(match.prediction) ?? (() => {
+    const probabilities = match.prediction.probabilities;
+    const side = (["home", "draw", "away"] as const).reduce(
+      (best, candidate) => probabilities[candidate] > probabilities[best] ? candidate : best,
+      "home",
+    );
+    return { release: match.prediction.release, side, rawSide: side, applied: false };
+  })();
+  const forecastSide = forecastArbitration.side;
+  const publishedGoals = reconcileEplProjectedGoalsWithResult(coherentOutcome.expectedGoals, forecastArbitration);
   const publishedTotal = publishedGoals.home + publishedGoals.away;
   const goalOutlookProbabilities = coherentOutcome.markets;
   const p = {
@@ -591,12 +602,12 @@ function gameDto(match: EplShadowSlateMatch, sharp: EplSharpFixtureMarket, captu
     bttsYes: coherentOutcome.markets.btts.yes,
     bttsNo: coherentOutcome.markets.btts.no,
   };
-  const forecastSide = bestMatchResultSide(match);
   const mrDecision = authorities.deriveMatchResultDecision({
     model: { home: p.home, draw: p.draw, away: p.away },
     market: mr ? { home: mr.probabilities.home!, draw: mr.probabilities.draw!, away: mr.probabilities.away! } : null,
     prices: mr ? { home: mr.prices.home!, draw: mr.prices.draw!, away: mr.prices.away! } : null,
     promotedProxy: match.prediction.homeStrengthSource === "promoted_proxy" || match.prediction.awayStrengthSource === "promoted_proxy",
+    forecastSide,
   });
   const resultSide = mrDecision.selectedSide;
   const resultPick = resultSide === "home" ? match.homeTeam.abbreviation : resultSide === "away" ? match.awayTeam.abbreviation : "Draw";
@@ -605,7 +616,9 @@ function gameDto(match: EplShadowSlateMatch, sharp: EplSharpFixtureMarket, captu
   const totalSide = totalForecastSide;
   const bttsForecastSide = p.bttsYes >= p.bttsNo ? "yes" : "no";
   const bttsSide = bttsForecastSide;
-  const representativeScore = coherentOutcome.representativeScore;
+  const representativeScore = forecastArbitration.applied
+    ? coherentOutcome.likelyScore
+    : coherentOutcome.representativeScore;
   const split = bestSplits(sharp.splits);
   const matchResultSplits = publicSplits({ market: "moneyline", split, home: match.homeTeam.abbreviation, away: match.awayTeam.abbreviation, pick: resultSide });
   const totalSplits = publicSplits({ market: "total", split, home: match.homeTeam.abbreviation, away: match.awayTeam.abbreviation, pick: totalSide });
@@ -671,7 +684,7 @@ function gameDto(match: EplShadowSlateMatch, sharp: EplSharpFixtureMarket, captu
           earliest_market_quote: earliestEplMarketQuote(`${match.id}:match_result:${side}`),
         })),
       } : null,
-      soccerGradeContext: { calibration_label: mrGrade.verdict.key === "best_angle" ? "Validated value path: ≥5 pp, price > -300" : mrGrade.verdict.key === "lean" ? "Validated winner-confidence path: ≥50%, market agreement, price > -300" : "EPL production-candidate hierarchy", model_pct: p[resultSide] * 100, market_pct: mr?.probabilities[resultSide] === undefined ? null : mr.probabilities[resultSide]! * 100, edge_pp: mrEdge, grade_reason: mrGrade.reasons.join(" "), miscalibration_flag: mrGrade.candidateTier === "caution" },
+      soccerGradeContext: { calibration_label: mrGrade.verdict.key === "best_angle" ? "Validated 65% winner-confidence path with market agreement and price above -250" : mrGrade.verdict.key === "lean" ? "Validated 55% winner-confidence path with market agreement and price above -300" : "EPL accuracy-first hierarchy", model_pct: p[resultSide] * 100, market_pct: mr?.probabilities[resultSide] === undefined ? null : mr.probabilities[resultSide]! * 100, edge_pp: mrEdge, grade_reason: mrGrade.reasons.join(" "), miscalibration_flag: mrGrade.candidateTier === "caution" },
     },
   });
   const dcProbabilities = {

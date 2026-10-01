@@ -6,8 +6,18 @@ import {
 import { deriveSoccerMarketProbabilities } from "@/lib/services/soccer/soccerMarketProbabilities";
 import type { BdlEplMatch, BdlEplTeamMatchStats } from "@/lib/providers/real_api/BallDontLieEplProvider";
 
-export const EPL_SHADOW_MODEL_RELEASE = "epl_goals_coherent_2026_09_02_r18_structural_target_exclusion" as const;
-export const EPL_SHADOW_CALIBRATION_RELEASE = "epl_grade_policy_2026_09_02_v23_positive_forecast_ev" as const;
+export const EPL_SHADOW_MODEL_RELEASE = "epl_goals_coherent_2026_10_01_r19_draw_arbitration" as const;
+export const EPL_SHADOW_CALIBRATION_RELEASE = "epl_grade_policy_2026_10_01_v24_accuracy_first" as const;
+export const EPL_DRAW_ARBITRATION_RELEASE = "epl_draw_arbitration_2026_10_01_r1" as const;
+
+export type EplMatchResultSide = "home" | "draw" | "away";
+
+export type EplDrawArbitration = {
+  release: typeof EPL_DRAW_ARBITRATION_RELEASE;
+  side: EplMatchResultSide;
+  rawSide: EplMatchResultSide;
+  applied: boolean;
+};
 
 export type EplModelConfig = {
   halfLifeDays: number;
@@ -85,6 +95,42 @@ export type EplShadowPrediction = {
   awayStrengthSource: EplTeamStrength["source"];
   confidence: "standard" | "limited";
 };
+
+/**
+ * A Dixon-Coles marginal almost never makes Draw the largest of three result
+ * probabilities, even when the exact-score mode and scoring means describe a
+ * genuinely level match. This conservative arbitration lane was selected on
+ * 2024-25 and then improved both untouched 2025-26 and the exact 2026 forward
+ * release. It does not alter the PMF or manufacture a draw quota.
+ */
+export function selectEplMatchResultSide(input: Pick<EplShadowPrediction, "lambdaHome" | "lambdaAway" | "likelyScore" | "probabilities">): EplDrawArbitration {
+  const rawSide = (["home", "draw", "away"] as const).reduce(
+    (best, side) => input.probabilities[side] > input.probabilities[best] ? side : best,
+    "home",
+  );
+  const bestClubProbability = Math.max(input.probabilities.home, input.probabilities.away);
+  const drawEligible = rawSide !== "draw"
+    && input.likelyScore.home === input.likelyScore.away
+    && bestClubProbability - input.probabilities.draw <= 0.08
+    && Math.abs(input.lambdaHome - input.lambdaAway) <= 0.2
+    && input.probabilities.draw >= 0.24
+    && bestClubProbability <= 0.4;
+  return {
+    release: EPL_DRAW_ARBITRATION_RELEASE,
+    side: drawEligible ? "draw" : rawSide,
+    rawSide,
+    applied: drawEligible,
+  };
+}
+
+export function reconcileEplProjectedGoalsWithResult(
+  expectedGoals: { home: number; away: number },
+  arbitration: Pick<EplDrawArbitration, "applied">,
+): { home: number; away: number } {
+  if (!arbitration.applied) return { ...expectedGoals };
+  const midpoint = (expectedGoals.home + expectedGoals.away) / 2;
+  return { home: midpoint, away: midpoint };
+}
 
 function validNumber(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value);
