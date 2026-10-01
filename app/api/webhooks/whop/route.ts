@@ -47,7 +47,7 @@ async function isFirstSuccessfulPayment(candidate: ConversionCandidate): Promise
   const response = await fetch(url, {
     headers: {
       authorization: `Bearer ${apiKey}`,
-      "whop-version": WHOP_API_VERSION,
+      "Api-Version-Date": WHOP_API_VERSION,
     },
     cache: "no-store",
     signal: AbortSignal.timeout(8_000),

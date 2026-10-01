@@ -97,6 +97,42 @@ const trial = classifyConfirmedTrial(trialPayload);
 assert.ok(trial, "a signed lifecycle payload with a seven-day trial must classify");
 assert.equal(trial.kind, "trial");
 assert.equal(trial.conversionKey, "trial:mem_trial_1");
+// Sanitized shape of the real September 30 v1 activation deliveries.
+const renewalTrialPayload = {
+  type: "membership.activated",
+  timestamp: "2026-09-30T20:14:47.262Z",
+  data: {
+    id: "mem_fixture_v1",
+    plan: { id: monthly },
+    product: { id: "prod_grypgrmtPLcQw" },
+    status: "trialing",
+    initial_price_paid: "$0.00",
+    renewal_period_start: "2026-09-30T20:14:43.581Z",
+    renewal_period_end: "2026-10-07T20:14:43.585Z",
+    metadata: {},
+    checkout_configuration_id: null,
+  },
+};
+const renewalTrial = classifyConfirmedTrial(renewalTrialPayload);
+assert.ok(renewalTrial, "v1 seven-day periods with millisecond jitter must classify");
+assert.equal(renewalTrial.occurredAt, renewalTrialPayload.data.renewal_period_start);
+assert.equal(renewalTrial.conversionKey, "trial:mem_fixture_v1");
+assert.deepEqual(classifyConfirmedTrial(renewalTrialPayload), renewalTrial, "repeat delivery keeps the same deduplication key");
+assert.equal(classifyConfirmedTrial({ ...renewalTrialPayload, data: {
+  ...renewalTrialPayload.data, renewal_period_end: "2026-10-06T20:14:43.585Z",
+}}), null);
+assert.equal(classifyConfirmedTrial({ ...renewalTrialPayload, data: {
+  ...renewalTrialPayload.data, status: "active",
+}}), null);
+assert.equal(classifyConfirmedTrial({ ...renewalTrialPayload, data: {
+  ...renewalTrialPayload.data, plan: { id: "plan_other" },
+}}), null);
+assert.equal(classifyConfirmedTrial({ ...renewalTrialPayload, data: {
+  ...renewalTrialPayload.data, current_period_start: "2026-09-30T20:14:43.581Z",
+}}), null, "partial current-period fields must not borrow a renewal end");
+assert.equal(classifyConfirmedTrial({ ...renewalTrialPayload, data: {
+  ...renewalTrialPayload.data, renewal_period_start: "invalid",
+}}), null);
 assert.equal(classifyConfirmedTrial({ ...trialPayload, type: "checkout.opened" }), null);
 assert.equal(classifyConfirmedTrial({ ...trialPayload, type: "page.viewed" }), null);
 assert.equal(classifyConfirmedTrial({
@@ -212,6 +248,8 @@ assert.match(checkoutSource, /return fallback\(plan\)/, "analytics refusal must 
 const migration = readFileSync(resolve("lib/db/schema-migration-v41-membership-conversions.sql"), "utf8");
 const consentMigration = readFileSync(resolve("lib/db/schema-migration-v42-analytics-consent.sql"), "utf8");
 const webhookSource = readFileSync(resolve("app/api/webhooks/whop/route.ts"), "utf8");
+assert.ok(webhookSource.includes('"Api-Version-Date": WHOP_API_VERSION'), "first-paid verification must pin the supported Whop API version");
+assert.ok(!webhookSource.includes('"whop-version"'), "first-paid verification must not send the ignored version header");
 const layoutSource = readFileSync(resolve("app/layout.tsx"), "utf8");
 const consentUiSource = readFileSync(resolve("app/components/AnalyticsConsent.tsx"), "utf8");
 const consentRouteSource = readFileSync(resolve("app/api/privacy/analytics-consent/route.ts"), "utf8");

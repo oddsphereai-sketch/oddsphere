@@ -7,7 +7,6 @@ import {
   cookieValue,
 } from "@/lib/analytics/consent";
 import {
-  WHOP_ACCOUNT_ID,
   WHOP_ANNUAL_PLAN_ID,
   WHOP_API_VERSION,
   WHOP_MONTHLY_PLAN_ID,
@@ -81,24 +80,32 @@ export async function GET(request: Request): Promise<Response> {
         authorization: `Bearer ${apiKey}`,
         "content-type": "application/json",
         "idempotency-key": randomUUID(),
-        "whop-version": WHOP_API_VERSION,
+        "Api-Version-Date": WHOP_API_VERSION,
       },
       body: JSON.stringify({
-        account_id: process.env.WHOP_ACCOUNT_ID || WHOP_ACCOUNT_ID,
+        // Reference the existing plan; never create or override billing terms.
         plan_id: planId(plan),
+        mode: "payment",
         metadata: { oddsphere_attribution_id: attributionId },
       }),
       cache: "no-store",
       signal: AbortSignal.timeout(8_000),
     });
-    if (!response.ok) return fallback(plan);
-    const body = await response.json() as { purchase_url?: unknown };
-    if (typeof body.purchase_url !== "string" || !body.purchase_url.startsWith("https://")) {
+    if (!response.ok) {
+      // Do not log the response body, credentials, consent or attribution IDs.
+      console.warn("Whop checkout attribution fallback", { reason: "whop_http_error", status: response.status });
       return fallback(plan);
     }
-    return Response.redirect(body.purchase_url, 302);
+    const body = await response.json() as { purchase_url?: unknown };
+    const purchaseUrl = typeof body.purchase_url === "string" ? new URL(body.purchase_url) : null;
+    if (!purchaseUrl || purchaseUrl.origin !== "https://whop.com" || purchaseUrl.username || purchaseUrl.password) {
+      console.warn("Whop checkout attribution fallback", { reason: "invalid_purchase_url" });
+      return fallback(plan);
+    }
+    return Response.redirect(purchaseUrl.toString(), 302);
   } catch {
     // Attribution must never make checkout unavailable.
+    console.warn("Whop checkout attribution fallback", { reason: "request_or_response_failure" });
     return fallback(plan);
   }
 }

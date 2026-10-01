@@ -70,6 +70,44 @@ until paid conversion volume and value-based bidding justify changing the
 campaign goal. Do not use `page_view`, pricing views, or checkout clicks as the
 trial conversion.
 
+## September 30 compatibility repair
+
+Whop v1 activation deliveries use `renewal_period_start/end`; the classifier
+now supports that complete pair as well as `current_period_start/end`. It
+never mixes fields between the two contracts. The seven-day tolerance, plan,
+status, signature verification, consent gate and membership deduplication remain.
+
+The checkout request now explicitly uses `mode: payment` with only the existing
+`plan_id` and opaque attribution metadata. It does not inline or change a plan,
+price, trial, payment method, membership or billing setting. Whop documents that
+memberships and payments created from a checkout configuration inherit its
+metadata: [checkout configuration API](https://docs.whop.com/api-reference/checkout-configurations/create-checkout-configuration).
+
+The two inspected September 30 trials had no metadata or checkout configuration
+ID. Production inspection identified HTTP 400 (`Cannot provide company_id for
+this configuration`): the deployed request combined `account_id` and `plan_id`
+while its ignored `whop-version` header left it on the key's default 2025 contract.
+The checkout relay now sends the supported `Api-Version-Date` header using the
+existing `WHOP_API_VERSION` constant. The mocked relay test asserts the dated
+header and rejects the ignored header. The separate first-paid payment lookup
+uses the same supported header; its source contract check prevents regression.
+
+The owner-provided production review confirmed that the existing key has the
+necessary permissions. A request using the proposed body and a deliberately
+nonexistent plan passed authentication/schema validation and returned the
+expected `404 Plan not found`, without creating a checkout. This is not an
+end-to-end attribution test; do not call production conversion delivery repaired
+until a new consented checkout and genuine activation carry the exact opaque UUID.
+The relay logs only fallback reason and HTTP status, never response bodies,
+credentials or customer/attribution identifiers. All failures retain direct Whop
+checkout. Do not infer historical associations from timestamps.
+
+Offline checks: `node --import tsx scripts/test-membership-conversion-tracking.ts`
+and `node --import tsx scripts/test-whop-checkout-relay.ts`. The relay test mocks
+all network calls and verifies both plan IDs, no-choice/decline/withdrawal,
+400/401/403/422/500, timeout and invalid destination fallback. No production event,
+subscription, payment or configuration is created by either test.
+
 References: [Whop webhook guide](https://docs.whop.com/developer/guides/webhooks),
 [GA4 Measurement Protocol](https://developers.google.com/analytics/devguides/collection/protocol/ga4),
 [GA4 purchase deduplication](https://support.google.com/analytics/answer/12313109).
