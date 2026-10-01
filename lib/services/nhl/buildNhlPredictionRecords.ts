@@ -65,7 +65,7 @@ import {
   type NhlRosterPrior,
 } from "../../automodel/nhlRosterPrior2026";
 import { assertOfficialTrackingMarket } from "../../config/officialTrackingMarkets";
-import type { PredictionRecordRow, TrackedMarketV17 } from "../../types/domain/Tracking";
+import type { PredictionRecordRow } from "../../types/domain/Tracking";
 import { resolvedNhlSplitsByGame, type ResolvedNhlSplitsEvent } from "./nhlResolvedSplits";
 import { loadNhlRegularStateForSlate } from "./loadNhlRegularState";
 import { loadNhlOpponentAdjustedState } from "./loadNhlOpponentAdjustedState";
@@ -361,7 +361,7 @@ export async function writeNhlPredictionRecords(
 
       // Build one row per official regular-season market.
       const marketsToWrite: Array<{
-        market: TrackedMarketV17;
+        market: "moneyline" | "total" | "spread";
         modelMarket: NhlModelOutput["moneyline"];
         side: "home" | "away" | "over" | "under";
         priceAmerican: number | null;
