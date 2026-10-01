@@ -5,7 +5,7 @@
  * USAGE:
  *   npx tsx --env-file=.env.local scripts/operator/publish-slate.ts \
  *     [--sport mlb] [--date YYYY-MM-DD] [--verbose] \
- *     [--apply]
+ *     [--apply] [--revive-hidden]
  *
  * GUARDS (defense in depth, mirrors refresh-slate.ts):
  *   1. Writes require TWO keys: --apply AND SLATE_PUBLISH_DB_WRITES_ENABLED=true.
@@ -15,7 +15,9 @@
  *      exact sport/date and game count about to be published.
  *
  * WRITES (when --apply confirmed):
- *   • games.slate_status: 'draft' (or 'hidden') → 'published'
+ *   • games.slate_status: 'draft' → 'published'
+ *   • hidden rows remain hidden unless the operator explicitly supplies
+ *     --revive-hidden
  *   • admin_audit_log: one row with action_type='slate.publish'
  *   • No other tables touched.
  *
@@ -105,9 +107,12 @@ function statusBreakdown(
 }
 
 function countWouldPromote(
-  rows: Array<{ slate_status: SlateStatus }>
+  rows: Array<{ slate_status: SlateStatus }>,
+  reviveHidden: boolean,
 ): number {
-  return rows.filter((r) => r.slate_status !== "published" && r.slate_status !== "final").length;
+  return rows.filter(
+    (r) => r.slate_status === "draft" || (reviveHidden && r.slate_status === "hidden"),
+  ).length;
 }
 
 async function confirmApply(
@@ -121,8 +126,8 @@ async function confirmApply(
     const ans = await rl.question(
       `About to PUBLISH slate for sport=${sport} date=${date}.\n` +
         `  Total games on slate: ${total}\n` +
-        `  Games to promote (draft/hidden → published): ${wouldPromote}\n` +
-        `  Games already published/final (no-op): ${total - wouldPromote}\n` +
+        `  Games to promote: ${wouldPromote}\n` +
+        `  Games left unchanged: ${total - wouldPromote}\n` +
         `  One audit row will be written to admin_audit_log.\n` +
         `  Continue? [y/N]: `
     );
@@ -137,6 +142,7 @@ async function confirmApply(
 async function main() {
   const argv = process.argv;
   const common = parseCommonCliOptions(argv);
+  const reviveHidden = readBoolFlag(argv, "--revive-hidden");
 
   const applyGate = resolveApplyGate(argv);
   refuseApplyMisconfig(applyGate.applyRequested, applyGate.envEnabled);
@@ -155,7 +161,7 @@ async function main() {
   const rows = await loadSlateRows(common.sport, common.date);
   const breakdown = statusBreakdown(rows);
   const collective = await getPublishStatus(common.sport, common.date);
-  const wouldPromote = countWouldPromote(rows);
+  const wouldPromote = countWouldPromote(rows, reviveHidden);
 
   console.log();
   console.log("━━━ Pre-state ━━━");
@@ -180,6 +186,9 @@ async function main() {
 
   console.log();
   console.log("━━━ Action plan ━━━");
+  if (reviveHidden) {
+    console.log("  Explicit --revive-hidden enabled for this exact sport/date.");
+  }
   if (rows.length === 0) {
     console.log("  No games on this slate. publishSlate will be a no-op.");
   } else if (wouldPromote === 0) {
@@ -213,7 +222,7 @@ async function main() {
 
   console.log();
   console.log("Writing via slatePublishService.publishSlate…");
-  const result = await publishSlate(common.sport, common.date);
+  const result = await publishSlate(common.sport, common.date, { reviveHidden });
   console.log(`  promoted: ${result.promoted}`);
 
   // Post-state

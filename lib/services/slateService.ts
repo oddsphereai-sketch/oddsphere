@@ -106,6 +106,31 @@ export function resolveCanonicalGameDate(input: {
   return input.providerGameDate;
 }
 
+/**
+ * MLB Stats is authoritative for whether a game belongs on the slate. A
+ * successful official response can legitimately contain zero games, so the
+ * presence of the response—not its parsed length—controls this gate.
+ */
+export function shouldSkipUnmatchedLowerAuthorityMlbGame(input: {
+  sport: Sport;
+  authoritativeOfficialScheduleAvailable: boolean;
+  officialGameMatched: boolean;
+}): boolean {
+  return (
+    input.sport === "mlb" &&
+    input.authoritativeOfficialScheduleAvailable &&
+    !input.officialGameMatched
+  );
+}
+
+export function isSuccessfulOfficialMlbSchedulePayload(value: unknown): boolean {
+  return (
+    value !== null &&
+    typeof value === "object" &&
+    Array.isArray((value as { dates?: unknown }).dates)
+  );
+}
+
 export const slateService = {
   /**
    * Refresh today's game slate for `sport` on `date` (YYYY-MM-DD).
@@ -163,6 +188,9 @@ export const slateService = {
     const ballparkIdByTeamId = await loadBallparkIdByTeamId();
     const officialScheduleGames =
       sport === "mlb" ? parseMlbStatsSchedule(opts?.officialMlbScheduleRaw) : [];
+    const authoritativeOfficialScheduleAvailable =
+      sport === "mlb" &&
+      isSuccessfulOfficialMlbSchedulePayload(opts?.officialMlbScheduleRaw);
 
     const gameRecords = await stats.getGames(date, sport);
     apiCalls++;
@@ -201,6 +229,7 @@ export const slateService = {
     const skipped: number[] = [];
     let officialGameTimesMatched = 0;
     let officialGameTimesChanged = 0;
+    let officialScheduleUnmatchedSkipped = 0;
 
     for (const g of gameRecords) {
       const homeTeamId =
@@ -226,6 +255,19 @@ export const slateService = {
               officialScheduleGames,
             })
           : null;
+      if (shouldSkipUnmatchedLowerAuthorityMlbGame({
+        sport,
+        authoritativeOfficialScheduleAvailable,
+        officialGameMatched: officialGame !== null,
+      })) {
+        // MLB Stats is the schedule authority. Postseason slate providers can
+        // retain an "if necessary" game after the series has already ended.
+        // Do not create or reactivate that conditional row when the successful
+        // official fetch does not contain the exact matchup.
+        skipped.push(g.external_id);
+        officialScheduleUnmatchedSkipped++;
+        continue;
+      }
       const canonicalGameDate = resolveCanonicalGameDate({
         providerGameDate: g.game_date,
         officialGameDate: officialGame?.gameDate ?? null,
@@ -311,6 +353,7 @@ export const slateService = {
         ...(skipped.length > 0 ? { skipped_external_ids: skipped } : {}),
         official_game_times_matched: officialGameTimesMatched,
         official_game_times_changed: officialGameTimesChanged,
+        official_schedule_unmatched_skipped: officialScheduleUnmatchedSkipped,
       },
     };
   },
