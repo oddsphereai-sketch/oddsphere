@@ -249,15 +249,25 @@ Last reviewed: 2026-09-29
   on the already-published board are 0 / 0 / 0. Evidence and rollback:
   `docs/model-audits/2026-09-28-cfb-next-window-seed-priority-r80.md`.
 
-### Member-facing play-grade tracking parity (aggregate v11)
+### Member-facing play-grade tracking parity (aggregate v12)
 
 - Active tracking aggregate contract is
-  `tracking_aggregate_v11_cfb_member_grade_parity_2026_09_27`. CFB Best Angle
+  `tracking_aggregate_v12_nhl_member_grade_parity_2026_10_01`. CFB Best Angle
   and Lean performance cuts now follow the exact immutable grade displayed on
   the member card. A CFB Lean whose locked offer was internally marked
   shop/no-bet remains a Lean for grade-accuracy tracking instead of silently
   disappearing from that cut. Other sports retain their existing
   actionable-only Best Angle / Lean cuts.
+- NHL's immutable writer uses the established Daily Edge presentation tokens
+  `best_signal`, `model_only`, and `market_watch`. The aggregate now translates
+  those locked tokens to Best Angle, Lean, and Watchlist respectively; a
+  `model_only` row explicitly marked no-bet remains No Play. This restores NHL
+  market-category and play-grade cuts without rewriting a prediction, grade,
+  result, or historical row. The September 29 canonical release-pure ledger
+  restores **4 Moneyline Leans, 4 puck-line Leans, and 2 Total Leans**; the
+  September 30 ledger restores **1 / 1 / 3** respectively. Those locked cohorts
+  contain zero authoritative Best Angles, so none are invented. A future
+  eligible `best_signal` row enters the Best Angle cut automatically.
 - For the September 26 slate, the member-facing CFB grade ledger is exactly
   **4 Best Angles (3-1), 58 Leans (39-19), 75 Watchlists (46-29), and 161 No
   Plays (101-60)**. The previous CFB Lean panel incorrectly showed only 27

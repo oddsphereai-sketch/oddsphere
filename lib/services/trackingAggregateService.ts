@@ -79,7 +79,7 @@ export type DimensionRow<K extends string = string> = {
 export type TrackingDisplaySport = TrackedSport | "epl";
 
 export const TRACKING_AGGREGATE_CONTRACT_VERSION =
-  "tracking_aggregate_v11_cfb_member_grade_parity_2026_09_27" as const;
+  "tracking_aggregate_v12_nhl_member_grade_parity_2026_10_01" as const;
 
 /**
  * Sport+market joint split with the Best Angle / Lean cuts most members
@@ -530,6 +530,17 @@ export function effectiveTrackingPlayGrade(record: PredictionRecordRow): string 
   const memberFacingAtLock = memberFacingGradeAtLock(record);
   if (memberFacingAtLock !== null) return memberFacingAtLock;
   const grade = storedGrade(record);
+  // NHL's immutable writer rows use the shared Daily Edge presentation tokens
+  // for the same model verdicts that the Tracking surface calls play grades.
+  // Preserve those locked rows and translate only at read time:
+  // best_signal -> Best Angle, actionable model_only -> Lean, and
+  // market_watch -> Watchlist. A model_only row marked no_bet is the writer's
+  // persisted Pass, so it remains No Play rather than entering the Lean cut.
+  if (record.sport === "nhl") {
+    if (grade === "best_signal") return "best_angle";
+    if (grade === "model_only") return record.no_bet === true ? "no_play" : "lean";
+    if (grade === "market_watch") return "watchlist";
+  }
   if (grade === "best_angle" && record.best_angle === false) return "lean";
   return grade;
 }
