@@ -2,7 +2,7 @@
  * Tests for slatePublishService (Phase 6.3d).
  *
  *   • Transitions: draft → published, published → final (gated on all
- *     games STATUS_FINAL), any → hidden.
+ *     games STATUS_FINAL), any → hidden, and explicit-only hidden revival.
  *   • Idempotency: re-running a transition on the current state returns
  *     the right counts without writing duplicates.
  *   • promoteHistoricalDrafts respects the cutoff date.
@@ -225,6 +225,23 @@ async function main() {
       "hideSlate writes one audit row",
       (await countAuditRows("slate.hide")) === 1
     );
+
+    const hiddenPublish = await publishSlate(TEST_SPORT, TEST_SLATE);
+    check(
+      "ordinary publish does not revive explicitly hidden rows",
+      hiddenPublish.promoted === 0 &&
+        (await loadSlateStatuses(TEST_SLATE)).every((r) => r.slate_status === "hidden"),
+    );
+
+    const explicitRevival = await publishSlate(TEST_SPORT, TEST_SLATE, {
+      reviveHidden: true,
+    });
+    check(
+      "hidden rows revive only through the explicit operator option",
+      explicitRevival.promoted === 2 &&
+        (await loadSlateStatuses(TEST_SLATE)).every((r) => r.slate_status === "published"),
+    );
+    await hideSlate(TEST_SPORT, TEST_SLATE, "restore hidden state after revival test");
 
     // ─── getPublishStatus → uniform / mixed / empty ─────────────────────
     section("getPublishStatus");

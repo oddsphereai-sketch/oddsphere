@@ -71,6 +71,7 @@ function buildRepairActions(missing: string[], degraded: string[]): string[] {
 export function assessMlbDataCompleteness(
   snap: GameSnapshot,
   prediction: AutoModelOutput,
+  options: { allowOfficialTbdStarterFallback?: boolean } = {},
 ): MlbDataCompletenessAudit {
   const missing: string[] = [];
   const degraded: string[] = [];
@@ -94,12 +95,22 @@ export function assessMlbDataCompleteness(
   if (snap.market.under_odds_american === null) pushUnique(missing, "under_price");
 
   if (snap.home_starter === null) {
-    pushUnique(missing, "home_probable_pitcher");
-    fallbackReasons.push("provider_missing_probable_pitcher_home");
+    if (options.allowOfficialTbdStarterFallback) {
+      pushUnique(degraded, "home_official_tbd_starter");
+      fallbackReasons.push("official_tbd_starter_neutral_bullpen_home");
+    } else {
+      pushUnique(missing, "home_probable_pitcher");
+      fallbackReasons.push("provider_missing_probable_pitcher_home");
+    }
   }
   if (snap.away_starter === null) {
-    pushUnique(missing, "away_probable_pitcher");
-    fallbackReasons.push("provider_missing_probable_pitcher_away");
+    if (options.allowOfficialTbdStarterFallback) {
+      pushUnique(degraded, "away_official_tbd_starter");
+      fallbackReasons.push("official_tbd_starter_neutral_bullpen_away");
+    } else {
+      pushUnique(missing, "away_probable_pitcher");
+      fallbackReasons.push("provider_missing_probable_pitcher_away");
+    }
   }
 
   for (const [side, starter] of [
@@ -275,8 +286,9 @@ export function assessMlbDataCompleteness(
 export function applyMlbDataCompletenessGate(
   snap: GameSnapshot,
   prediction: AutoModelOutput,
+  options: { allowOfficialTbdStarterFallback?: boolean } = {},
 ): AutoModelOutput {
-  const audit = assessMlbDataCompleteness(snap, prediction);
+  const audit = assessMlbDataCompleteness(snap, prediction, options);
   const current = prediction.sport_specific;
   if (audit.best_angle_allowed) {
     return {

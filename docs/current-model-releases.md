@@ -778,6 +778,22 @@ changed; only deterministic settlement of existing locked rows is affected.
 - Machine registry: `lib/automodel/mlbModelLayerVersions.ts`
 - Authoritative member-facing writer: `lib/services/predictionRecordService.ts`
 
+The October 1 official-slate continuity repair changes no MLB formula, probability
+head, grade threshold, stake, or member presentation. The model-layer schema advances
+to `mlb_model_layer_versions_v18_official_tbd_bullpen_eligibility` and stamps input
+eligibility policy `mlb_input_eligibility_v1_official_tbd_starter_neutral_bullpen_2026_10_01`.
+When a successful
+MLB Stats schedule response is available, unmatched lower-authority conditional games
+are excluded from active ingestion. Hidden retractions are excluded from shared game-id
+maps and cannot be revived by ordinary publication. On a one- or two-game official
+postseason slate where every probable starter remains officially TBD, the starter gate
+admits only those exact officially verified games to the existing low-tier
+starter-neutral/bullpen model. The member card receives one coherent decimal score,
+Moneyline and Total predictions, verified prices, and market evidence; Best Angle is
+blocked and first-inning action remains held without pitcher identity. The next ordinary
+leased cycle replaces the fallback inputs after official starters arrive. Evidence and rollback are in
+`docs/model-audits/2026-10-01-mlb-official-tbd-slate-continuity-predeclaration.md`.
+
 The September 26 projection-core release changes only future unlocked MLB
 member score projections. When the existing target-excluded market-aware Total
 agrees with the already-authoritative Total forecast, the displayed score uses
