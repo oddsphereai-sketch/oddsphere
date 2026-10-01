@@ -144,6 +144,13 @@ export type AutoModelRunOpts = {
    */
   gameExternalIdsFilter?: number[];
   /**
+   * Exact games verified against a successful official MLB schedule where
+   * both probable starters are genuinely TBD. These games may use the
+   * starter-neutral/bullpen fallback; ordinary missing-starter games remain
+   * fail-closed.
+   */
+  verifiedOfficialTbdStarterExternalIds?: number[];
+  /**
    * Phase 4C: optional hook called per-game after the model + AI sanity
    * boundary, BEFORE the prediction is added to the result array and
    * (if writeToDb=true) ingested. Returns a partial `sport_specific`
@@ -1072,7 +1079,10 @@ export async function generatePredictionsForSlate(
       }
 
       if (sport === "mlb") {
-        finalPrediction = applyMlbDataCompletenessGate(snap, finalPrediction);
+        finalPrediction = applyMlbDataCompletenessGate(snap, finalPrediction, {
+          allowOfficialTbdStarterFallback:
+            opts.verifiedOfficialTbdStarterExternalIds?.includes(snap.game_external_id) === true,
+        });
       }
 
       // 2e — tally

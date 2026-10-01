@@ -12,7 +12,8 @@
  *   draft     → published  via publishSlate
  *   published → final      via finalizeSlate  (only when ALL games STATUS_FINAL)
  *   any       → hidden     via hideSlate
- *   hidden    → published  via publishSlate   (manual revival path)
+ *   hidden    → published  via publishSlate({ reviveHidden: true })
+ *                                      (explicit manual revival path)
  *
  * AUDIT — every transition writes one row to admin_audit_log (V12 table).
  * action_type uses the slate.* namespace: slate.publish / slate.finalize /
@@ -151,19 +152,23 @@ export async function listPublishedSlates(
 
 /**
  * Transition a slate to `published`. Idempotent — promoting an already-
- * published slate returns { promoted: 0 } with no audit write. Promotes
- * BOTH draft and hidden rows (hidden→published is the manual revival
- * path), which means the audit row's before_state may show mixed statuses.
+ * published slate returns { promoted: 0 } with no audit write. Automatic
+ * callers publish draft rows only. A hidden row was explicitly retracted and
+ * can be revived only when a manual operator passes `reviveHidden: true`.
  */
 export async function publishSlate(
   sport: Sport,
-  date: string
+  date: string,
+  options: { reviveHidden?: boolean } = {},
 ): Promise<{ promoted: number }> {
   const before = await loadSlateGames(sport, date);
   if (before.length === 0) return { promoted: 0 };
 
   const ids = before
-    .filter((r) => r.slate_status !== "published" && r.slate_status !== "final")
+    .filter((r) =>
+      r.slate_status === "draft" ||
+      (options.reviveHidden === true && r.slate_status === "hidden"),
+    )
     .map((r) => r.id);
   if (ids.length === 0) return { promoted: 0 };
 

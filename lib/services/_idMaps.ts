@@ -163,7 +163,11 @@ export async function loadGameIdMap(
     .from("games")
     .select("id, external_id")
     .eq("sport", sport)
-    .eq("slate_date", date);
+    .eq("slate_date", date)
+    // A hidden game is explicitly retracted. Keeping it in the shared map
+    // lets lower-authority conditional events contaminate every downstream
+    // slate consumer (coverage, lines, starters, and the model writer).
+    .neq("slate_status", "hidden");
   if (error) throw new Error(`loadGameIdMap failed: ${error.message}`);
   return new Map(
     ((data ?? []) as { id: number; external_id: number }[]).map((r) => [

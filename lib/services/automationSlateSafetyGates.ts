@@ -196,6 +196,13 @@ export interface StarterCoverageInput {
   catastrophicMinPct?: number;
   /** Optional override — defaults to DEFAULT_MAX_MISSING_BOTH_FOR_CATASTROPHIC. */
   catastrophicMaxMissingBoth?: number;
+  /**
+   * A successful official MLB short-slate response can explicitly leave both
+   * starters TBD (for example, a winner-take-all bullpen game). In that narrow
+   * case, keep every game excluded from M2 but allow the existing pending-card
+   * lifecycle to continue instead of classifying the provider as catastrophic.
+   */
+  allowOfficialShortSlatePendingCards?: boolean;
 }
 
 /**
@@ -307,6 +314,14 @@ export function assessStarterCoverage(
   const coveragePct = Math.round((both / total) * 1000) / 10;
   const isCatastrophic =
     coveragePct < catastrophicPct || missingBoth >= catastrophicMissingBoth;
+  const officialShortSlatePending =
+    opts.sport === "mlb" &&
+    opts.allowOfficialShortSlatePendingCards === true &&
+    total > 0 &&
+    total <= 2 &&
+    both === 0 &&
+    missingOne === 0 &&
+    missingBoth === total;
   const base = {
     totalGames: total,
     gamesWithBothStarters: both,
@@ -319,6 +334,20 @@ export function assessStarterCoverage(
     starter_warning_external_ids: warningIds,
     held_reasons: heldReasons,
   };
+  if (isCatastrophic && officialShortSlatePending) {
+    return {
+      ...base,
+      // MLB has officially declared the short slate while leaving both
+      // starters TBD. Run the audited starter-neutral/bullpen model instead
+      // of deleting the game from the prediction pipeline.
+      m2_excluded_external_ids: [],
+      status: "partial_ok",
+      reason:
+        `Official short MLB slate has ${missingBoth}/${total} game(s) with both ` +
+        `starters explicitly TBD. Games use the official-TBD starter-neutral ` +
+        `bullpen path and refresh when official starters arrive.`,
+    };
+  }
   if (isCatastrophic) {
     return {
       ...base,

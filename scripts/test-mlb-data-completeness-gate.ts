@@ -199,6 +199,16 @@ check("missing starter records exact missing field", missingStarter.missing_fiel
 check("missing starter schedules probable pitcher repair", missingStarter.repair_actions.includes("retry_probable_pitcher_fetch"));
 check("missing starter blocks Best Angle", missingStarter.best_angle_allowed === false);
 
+const officialTbdStarters = assessMlbDataCompleteness(
+  snapshot({ home_starter: null, away_starter: null }),
+  prediction(),
+  { allowOfficialTbdStarterFallback: true },
+);
+check("verified official TBD starters remain publishable", officialTbdStarters.can_publish_normal === true);
+check("verified official TBD starters use degraded pitcher fallback", officialTbdStarters.status === "degraded_pitcher_fallback");
+check("verified official TBD fallback blocks Best Angle", officialTbdStarters.best_angle_allowed === false);
+check("verified official TBD fallback does not pretend pitcher identities", !officialTbdStarters.missing_fields.includes("home_probable_pitcher") && !officialTbdStarters.missing_fields.includes("away_probable_pitcher"));
+
 const probableStarter = assessMlbDataCompleteness(
   snapshot({ home_starter: starter({ is_confirmed: false }) }),
   prediction(),

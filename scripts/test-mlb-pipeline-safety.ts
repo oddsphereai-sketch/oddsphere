@@ -35,8 +35,10 @@ import type { PredictionRecordRow } from "../lib/types/domain/Tracking";
 import { normalizeGameStatus } from "../lib/providers/real_api/BallDontLieSlateProvider";
 import {
   preserveAuthoritativeGameStatus,
+  isSuccessfulOfficialMlbSchedulePayload,
   resolveCanonicalGameDate,
   resolveOfficialMlbScheduleGame,
+  shouldSkipUnmatchedLowerAuthorityMlbGame,
 } from "../lib/services/slateService";
 
 let passed = 0;
@@ -70,6 +72,32 @@ check(
   "scheduled run outside cooldown proceeds",
   !isWithinCronMinimumInterval(new Date(now - 10 * 60_000), 10, now),
 );
+check(
+  "successful official MLB schedule rejects an unmatched lower-authority conditional game",
+  shouldSkipUnmatchedLowerAuthorityMlbGame({
+    sport: "mlb",
+    authoritativeOfficialScheduleAvailable: true,
+    officialGameMatched: false,
+  }),
+);
+check(
+  "official MLB schedule gate preserves a matched game",
+  !shouldSkipUnmatchedLowerAuthorityMlbGame({
+    sport: "mlb",
+    authoritativeOfficialScheduleAvailable: true,
+    officialGameMatched: true,
+  }),
+);
+check(
+  "official MLB schedule gate does not affect another sport",
+  !shouldSkipUnmatchedLowerAuthorityMlbGame({
+    sport: "nfl",
+    authoritativeOfficialScheduleAvailable: true,
+    officialGameMatched: false,
+  }),
+);
+check("official MLB schedule recognizes a successful empty slate", isSuccessfulOfficialMlbSchedulePayload({ dates: [] }));
+check("malformed official MLB payload cannot erase provider games", !isSuccessfulOfficialMlbSchedulePayload({}));
 
 const layers = buildMlbModelLayerVersions("total", {});
 const fiLayers = buildMlbModelLayerVersions("first_inning", {});
@@ -102,7 +130,7 @@ check(
 check(
   "MLB r89 stamps the Total action recalibration while preserving the r88 probability head and unrelated heads",
   MLB_DAILY_EDGE_DECISION_RELEASE_ID === "mlb_daily_edge_decision_2026_09_24_r89_total_action_recalibration" &&
-    MLB_MODEL_LAYER_VERSION_SCHEMA === "mlb_model_layer_versions_v17_market_total_score_projection" &&
+    MLB_MODEL_LAYER_VERSION_SCHEMA === "mlb_model_layer_versions_v18_official_tbd_bullpen_eligibility" &&
     layers.rule_bundle_version === "mlb_daily_edge_rule_bundle_v74_total_action_recalibration_2026_09_24" &&
     layers.total_market_support_lean === "total_sharpapi_money_over_tickets_support_lean_v2_under_only_2026_09_04" &&
     layers.calibration_version === "mlb_public_calibration_v35_total_action_recalibration_2026_09_24" &&
@@ -122,6 +150,11 @@ check(
     layers.first_inning_market_calibration_policy === "mlb_first_inning_market_calibration_v3_evaluated_quote_exclusion_2026_09_02" &&
     layers.first_inning_member_tuple_contract === "mlb_first_inning_member_tuple_contract_v1_current_authoritative_r78_2026_09_01" &&
     layers.schedule_time_policy === "mlb_official_schedule_time_v1_2026_07_30",
+);
+check(
+  "MLB layer stamp records the official-TBD starter-neutral eligibility policy",
+  layers.input_eligibility_policy ===
+    "mlb_input_eligibility_v1_official_tbd_starter_neutral_bullpen_2026_10_01",
 );
 const strongWinnerResistanceLean = resolveMlStrongWinnerResistanceLean({
   blocked: false,

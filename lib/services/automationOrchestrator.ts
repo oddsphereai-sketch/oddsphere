@@ -417,6 +417,7 @@ export async function runSlateCycleAutomated(opts: {
   const blockingReasons: string[] = [];
   const warnings: string[] = [];
   let officialScheduledGameCount: number | null = null;
+  let officialShortSlateAllStartersTbd = false;
   let officialMlbScheduleRaw: unknown = null;
   if (opts.sport === "mlb") {
     try {
@@ -425,12 +426,29 @@ export async function runSlateCycleAutomated(opts: {
         signal: AbortSignal.timeout(6_000),
       });
       const schedule = officialMlbScheduleRaw as {
-        dates?: Array<{ games?: Array<{ gameType?: string }> }>;
+        dates?: Array<{
+          games?: Array<{
+            gameType?: string;
+            teams?: {
+              home?: { probablePitcher?: unknown };
+              away?: { probablePitcher?: unknown };
+            };
+          }>;
+        }>;
       } | null;
       const officialGames = schedule?.dates?.flatMap((day) => day.games ?? []) ?? [];
-      officialScheduledGameCount = officialGames.filter((game) =>
+      const supportedOfficialGames = officialGames.filter((game) =>
         game.gameType !== "A" && game.gameType !== "S" && game.gameType !== "E"
-      ).length;
+      );
+      officialScheduledGameCount = supportedOfficialGames.length;
+      officialShortSlateAllStartersTbd =
+        supportedOfficialGames.length > 0 &&
+        supportedOfficialGames.length <= 2 &&
+        supportedOfficialGames.every(
+          (game) =>
+            game.teams?.home?.probablePitcher == null &&
+            game.teams?.away?.probablePitcher == null,
+        );
     } catch (error) {
       warnings.push(`official MLB schedule count unavailable: ${error instanceof Error ? error.message : String(error)}`);
     }
@@ -1293,7 +1311,8 @@ export async function runSlateCycleAutomated(opts: {
         "game_predictions ( locked_at )"
       )
       .eq("sport", opts.sport)
-      .eq("slate_date", opts.date);
+      .eq("slate_date", opts.date)
+      .neq("slate_status", "hidden");
     slateRows = (data ?? []) as unknown as SlateRow[];
     g2Result = assessStarterCoverage({
       sport: opts.sport,
@@ -1302,6 +1321,7 @@ export async function runSlateCycleAutomated(opts: {
         home_pitcher_id: r.home_pitcher_id,
         away_pitcher_id: r.away_pitcher_id,
       })),
+      allowOfficialShortSlatePendingCards: officialShortSlateAllStartersTbd,
     });
     // R-19 Phase 5g.4 — G2 step mode reflects the new tri-state
     // semantics. "fail_closed" is now reserved for catastrophic coverage
@@ -1523,6 +1543,10 @@ export async function runSlateCycleAutomated(opts: {
       const res = await generatePredictionsForSlate(opts.sport, opts.date, "morning_draft", {
         writeToDb: writeMode,
         excludeGameExternalIds: combinedM2Exclusions,
+        verifiedOfficialTbdStarterExternalIds:
+          opts.sport === "mlb" && officialShortSlateAllStartersTbd
+            ? g2Result?.starter_warning_external_ids ?? []
+            : [],
       });
       // R-19 Phase 4b — report lock-skipped counts alongside model output.
       // `lock_skipped_by_layer_2` = games excluded by automodelService's

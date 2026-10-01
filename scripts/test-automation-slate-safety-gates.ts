@@ -241,6 +241,35 @@ async function main() {
     check("9 m2_excluded (catastrophic defense in depth)", r.m2_excluded_external_ids.length === 9);
   }
   {
+    // October 1 postseason pattern: MLB Stats confirms one official game
+    // but explicitly leaves both starters TBD. The game remains excluded
+    // from M2 while the existing pending-card lifecycle may publish it.
+    const games = [
+      { external_id: 15467368, home_pitcher_id: null, away_pitcher_id: null },
+    ];
+    const r = assessStarterCoverage({
+      sport: "mlb",
+      games,
+      allowOfficialShortSlatePendingCards: true,
+    });
+    check("official one-game all-TBD slate → partial_ok", r.status === "partial_ok");
+    check("official all-TBD game uses the starter-neutral M2 path", r.m2_excluded_external_ids.length === 0);
+    check("official all-TBD reason names bullpen path", r.reason.includes("bullpen path"));
+  }
+  {
+    const games = Array.from({ length: 3 }, (_, i) => ({
+      external_id: 16000000 + i,
+      home_pitcher_id: null,
+      away_pitcher_id: null,
+    }));
+    const r = assessStarterCoverage({
+      sport: "mlb",
+      games,
+      allowOfficialShortSlatePendingCards: true,
+    });
+    check("three-game all-missing slate cannot use short-slate exception", r.status === "fail_closed");
+  }
+  {
     // Phase 6B.30C — Missing-one distribution case. Two missing_one
     // games + 1 complete = 1/3 = 33% → fail_closed (catastrophic). In
     // catastrophic mode the m2_excluded list mirrors warning (defense
