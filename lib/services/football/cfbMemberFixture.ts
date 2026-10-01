@@ -78,9 +78,9 @@ import { cfbTeamIdentity } from "./cfbTeamIdentity";
 import { CFB_PUBLIC_SCORE_DIRECTION_TOLERANCE_POINTS } from "./footballCrossMarketCoherence";
 
 export const CFB_MEMBER_FIXTURE_RELEASE =
-  "cfb_v1_member_fixture_2026_10_01_r60_professional_market_marriage" as const;
+  "cfb_v1_member_fixture_2026_10_01_r61_last_verified_price_continuity" as const;
 export const CFB_PUBLIC_OUTCOME_CONTRACT_RELEASE =
-  "cfb_market_sharp_public_outcome_contract_2026_10_01_r55_professional_market_marriage" as const;
+  "cfb_market_sharp_public_outcome_contract_2026_10_01_r56_last_verified_price_continuity" as const;
 export const CFB_CONTEXT_ONLY_QUOTE_CAPTURE_SKEW_MS = 5_000 as const;
 const CFB_MARKET_CONTEXT_MAX_CAPTURE_LAG_MINUTES = 10;
 const CFB_PRE_DIRECTIONAL_MEMBER_RELEASE = "cfb_v1_member_release_2026_08_28_r14_expanded_sharp_budget" as const;
@@ -1034,10 +1034,12 @@ function buildMarket(
   const selectedSide = decision ? canonicalSide(payload, decision) : outlook?.side ?? (market === "total" ? "over" : "home");
   const selectedSplit = splitValue(split, market, selectedSide);
   const currentQuote = decision === null
-    ? currentDisplayQuote(payload, market, selectedSide)
+    ? currentDisplayQuote(payload, market, selectedSide) ??
+      latestHistoricalDisplayQuote(payload, market, selectedSide, movementRows)
     : null;
   const contextOnlyQuote = decision === null && currentQuote === null
-    ? currentDisplayQuote(payload, market, opposingCanonicalSide(selectedSide))
+    ? currentDisplayQuote(payload, market, opposingCanonicalSide(selectedSide)) ??
+      latestHistoricalDisplayQuote(payload, market, opposingCanonicalSide(selectedSide), movementRows)
     : null;
   const trails = decision
     ? decisionTrails(payload, decision, movementRows)
@@ -1211,6 +1213,29 @@ function currentDisplayQuote(
       Number(second.book.targetEligible !== false) - Number(first.book.targetEligible !== false) ||
       Date.parse(second.observedAt) - Date.parse(first.observedAt) ||
       first.book.sportsbook.localeCompare(second.book.sportsbook))[0] ?? null;
+}
+
+function latestHistoricalDisplayQuote(
+  payload: CfbForwardEvidencePayload,
+  market: CfbV1Market,
+  side: "home" | "away" | "over" | "under",
+  movementRows: CfbForwardMarketHistoryEvidence[],
+): CfbCurrentDisplayQuote | null {
+  for (const row of [...movementRows].sort((first, second) =>
+    Date.parse(second.capturedAt) - Date.parse(first.capturedAt))) {
+    if (row.payload.market.currentBooks.length === 0) continue;
+    const quote = currentDisplayQuote({
+      ...payload,
+      market: {
+        ...payload.market,
+        current: null,
+        currentBooks: row.payload.market.currentBooks,
+        displayBooks: row.payload.market.currentBooks,
+      },
+    }, market, side);
+    if (quote) return quote;
+  }
+  return null;
 }
 
 function marketQuoteFor(

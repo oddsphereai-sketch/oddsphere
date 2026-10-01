@@ -182,7 +182,27 @@ Last reviewed: 2026-09-29
 
 ## CFB Daily Edge generalized weekly production release
 
-### Professional independent score + validated market marriage (r15; writer r81)
+### Last-verified price continuity (fixture r61; writer r82)
+
+- Active member publication releases are
+  `cfb_forward_evidence_writer_2026_10_01_r82_last_verified_price_continuity` /
+  `cfb_v1_member_fixture_2026_10_01_r61_last_verified_price_continuity` /
+  `cfb_market_sharp_public_outcome_contract_2026_10_01_r56_last_verified_price_continuity` /
+  `cfb_forward_member_snapshot_2026_10_01_r20_last_verified_price_continuity` /
+  `cfb_member_snapshot_reader_2026_10_01_r9_last_verified_price_continuity`.
+- When a later provider response omits a previously verified named-book quote,
+  the member snapshot silently retains the newest pregame quote for that exact
+  market side from bounded compatible history. A fresh quote always wins. The
+  fallback keeps the real sportsbook and observation timestamp, adds no copy or
+  label, and cannot create a selection, probability, grade, stake, or tracking
+  tuple.
+- The October 1 live replay retains all 99 games and 297 markets, restores the
+  two previously observed McNeese-LSU Spread/Total prices, and changes zero
+  predictions, scores, probabilities, sides, grades, actionables, locks, or
+  provider requests. Evidence and rollback:
+  `docs/model-audits/2026-10-01-cfb-last-verified-price-continuity-r61.md`.
+
+### Professional independent score + validated market marriage (r15; writer r82)
 
 - Active independent/runtime releases are
   `cfb_professional_weekly_runtime_2026_10_01_r7_compact48` /
@@ -213,13 +233,13 @@ Last reviewed: 2026-09-29
   `cfb_forward_evidence_snapshot_2026_10_01_r28_professional_market_marriage` /
   `cfb_forward_evidence_collector_2026_10_01_r34_professional_market_marriage` /
   `cfb_v1_member_release_2026_10_01_r40_professional_market_marriage`; sole
-  writer `cfb_forward_evidence_writer_2026_10_01_r81_professional_market_marriage`;
+  writer `cfb_forward_evidence_writer_2026_10_01_r82_last_verified_price_continuity`;
   fixture / outcome
-  `cfb_v1_member_fixture_2026_10_01_r60_professional_market_marriage` /
-  `cfb_market_sharp_public_outcome_contract_2026_10_01_r55_professional_market_marriage`;
+  `cfb_v1_member_fixture_2026_10_01_r61_last_verified_price_continuity` /
+  `cfb_market_sharp_public_outcome_contract_2026_10_01_r56_last_verified_price_continuity`;
   compact snapshot / reader
-  `cfb_forward_member_snapshot_2026_10_01_r19_professional_market_marriage` /
-  `cfb_member_snapshot_reader_2026_10_01_r8_professional_market_marriage`; and
+  `cfb_forward_member_snapshot_2026_10_01_r20_last_verified_price_continuity` /
+  `cfb_member_snapshot_reader_2026_10_01_r9_last_verified_price_continuity`; and
   tracking `cfb_official_tracking_record_2026_10_01_r30_professional_market_marriage`.
   The existing writer and `prediction_pipeline:cfb` lease remain sole owners.
 - 2024–25 validate only the independent model because they lack complete market
@@ -231,10 +251,10 @@ Last reviewed: 2026-09-29
   schedules or writers. Evidence and rollback:
   `docs/model-audits/2026-10-01-cfb-professional-independent-market-marriage-r15.md`.
 
-### Next-window seed priority (writer r80)
+### Retained next-window seed priority behavior (introduced in writer r80)
 
-- Active sole writer release is
-  `cfb_forward_evidence_writer_2026_09_28_r80_next_window_seed_priority`.
+- The active r82 sole writer retains the next-window priority behavior first
+  introduced by `cfb_forward_evidence_writer_2026_09_28_r80_next_window_seed_priority`.
   During the established Sunday/Monday two-window overlap, the one-time
   `opening_seed` for an empty adjacent week now runs before terminal
   `opening_incomplete` bookkeeping from the completed week. Valid current-week
