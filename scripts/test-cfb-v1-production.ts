@@ -1640,6 +1640,48 @@ for (const marketKey of ["moneyline", "total", "first_inning"] as const) {
   assert.equal(market.oddsTrail?.at(-1)?.sportsbook, "fanduel", `${marketKey} current context trail must stay same-book`);
 }
 
+const continuityCapturedAt = new Date(Date.parse(observedAt) + 15 * 60_000).toISOString();
+const missingCurrentBooksPayload: CfbForwardEvidencePayload = {
+  ...thinBookPayload,
+  capturedAt: continuityCapturedAt,
+  market: {
+    ...thinBookPayload.market,
+    current: null,
+    currentBooks: [],
+    displayBooks: [],
+  },
+};
+const thinBookHistoryRow: CfbForwardStoredEvidence = {
+  ...evidence,
+  id: "thin-book-history-row",
+  stage: "unlocked",
+  capturedAt: observedAt,
+  payloadSha256: hashCfbForwardEvidencePayload(thinBookPayload),
+  payload: thinBookPayload,
+};
+const missingCurrentBooksRow: CfbForwardStoredEvidence = {
+  ...evidence,
+  id: "missing-current-books-row",
+  stage: "unlocked",
+  capturedAt: continuityCapturedAt,
+  payloadSha256: hashCfbForwardEvidencePayload(missingCurrentBooksPayload),
+  payload: missingCurrentBooksPayload,
+};
+const priceContinuityMember = buildCfbMemberFixtureAtTime(
+  [thinBookHistoryRow, missingCurrentBooksRow],
+  continuityCapturedAt,
+  [thinBookHistoryRow, missingCurrentBooksRow],
+);
+for (const marketKey of ["moneyline", "total", "first_inning"] as const) {
+  const market = priceContinuityMember.snapshot.games[0]!.markets[marketKey];
+  assert.equal(market.held, true, `${marketKey} last-known price continuity cannot manufacture an exact-price grade`);
+  assert.equal(market.pick, null, `${marketKey} last-known price continuity cannot manufacture a Bet selection`);
+  assert.notEqual(market.currentPriceAmerican, null, `${marketKey} must retain its latest verified price when a later provider response is empty`);
+  assert.equal(market.currentPriceSportsbook, "fanduel", `${marketKey} must retain the verified sportsbook provenance`);
+  assert.equal(market.currentPriceObservedAt, observedAt, `${marketKey} must retain the quote's real observation time`);
+  assert.equal(market.oddsTrail?.at(-1)?.sportsbook, "fanduel", `${marketKey} retained context must remain a same-book trail`);
+}
+
 const missingLinePayload = structuredClone(heldPayload);
 missingLinePayload.market.playbookLine = null;
 missingLinePayload.decisions.marketOutlooks = buildCfbForwardMarketOutlooks({ forecast, playbookLine: null });
