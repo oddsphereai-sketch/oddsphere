@@ -783,8 +783,9 @@ check(
 );
 check(
   "member Daily Edge refreshes while open and recovers on focus, reconnect, and back-forward restore",
-  candidateMemberPageSource.includes("<DailyEdgeLiveRefresh />") &&
+  candidateMemberPageSource.includes("<DailyEdgeLiveRefresh initialGameCount={snapshot.games.length} />") &&
     liveRefreshSource.includes("router.refresh()") &&
+    liveRefreshSource.includes("initialGameCount === 0") &&
     liveRefreshSource.includes('document.addEventListener("visibilitychange"') &&
     liveRefreshSource.includes('window.addEventListener("focus"') &&
     liveRefreshSource.includes('window.addEventListener("online"') &&
