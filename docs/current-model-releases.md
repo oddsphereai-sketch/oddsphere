@@ -190,9 +190,45 @@ Last reviewed: 2026-09-29
 
 ## CFB Daily Edge generalized weekly production release
 
-### Last-verified price continuity (fixture r61; writer r82)
+### Verified-quarterback and same-book market continuity (r16; writer r83)
 
-- Active member publication releases are
+- Active availability / market / grade / decision releases are
+  `cfb_verified_availability_2026_10_02_r1_source_attributed_likely_out` /
+  `cfb_market_sharp_aware_candidate_2026_10_02_r22_same_book_qb_availability` /
+  `cfb_market_sharp_aware_production_2026_10_02_r24_same_book_qb_availability` /
+  `cfb_v1_composite_grade_policy_2026_10_02_r16_verified_qb_market_continuity` /
+  `cfb_v1_daily_edge_decision_2026_10_02_r36_verified_qb_market_continuity` /
+  `cfb_v1_exact_price_decision_tuple_2026_10_02_r24_verified_qb_market_continuity`.
+- Active publication releases are evidence / collector / member
+  `cfb_forward_evidence_snapshot_2026_10_02_r29_verified_qb_market_continuity` /
+  `cfb_forward_evidence_collector_2026_10_02_r35_verified_qb_market_continuity` /
+  `cfb_v1_member_release_2026_10_02_r41_verified_qb_market_continuity`; sole
+  writer `cfb_forward_evidence_writer_2026_10_02_r83_verified_qb_market_continuity`;
+  fixture / outcome
+  `cfb_v1_member_fixture_2026_10_02_r62_verified_qb_market_continuity` /
+  `cfb_market_sharp_public_outcome_contract_2026_10_02_r57_verified_qb_market_continuity`;
+  compact snapshot / reader
+  `cfb_forward_member_snapshot_2026_10_02_r21_verified_qb_market_continuity` /
+  `cfb_member_snapshot_reader_2026_10_02_r10_verified_qb_market_continuity`; and
+  tracking `cfb_official_tracking_record_2026_10_02_r31_verified_qb_market_continuity`.
+- Source-attributed expected-QB absence selects the active replacement in the
+  existing field, and later league-provider evidence supersedes the provisional
+  report. The existing cached league injury read and a fresh T-60 roster read
+  update the unlocked card before the normal immutable lock. Missing reports
+  remain unknown rather than healthy. Unvalidated replacement-QB score impact
+  cannot stay actionable, but the prediction and three-market tracking
+  denominator remain present.
+- Opening/current movement is same-sportsbook only; price shopping remains a
+  separate exact-price decision. The 99-game stored-board replay pairs nine
+  promotions with fifteen demotions and moves actionables 44 to 40. The
+  live-provider zero-write replay contains 17 Best Angles and 72 Leans among
+  158 evaluated markets, with zero capture failures. No member copy, labels,
+  layout, stake, writer, schedule, or lease changed. Evidence and rollback:
+  `docs/model-audits/2026-10-02-cfb-verified-qb-market-continuity-r16.md`.
+
+### Preceding last-verified price continuity (fixture r61; writer r82)
+
+- Preceding member publication releases were
   `cfb_forward_evidence_writer_2026_10_01_r82_last_verified_price_continuity` /
   `cfb_v1_member_fixture_2026_10_01_r61_last_verified_price_continuity` /
   `cfb_market_sharp_public_outcome_contract_2026_10_01_r56_last_verified_price_continuity` /
@@ -210,9 +246,9 @@ Last reviewed: 2026-09-29
   provider requests. Evidence and rollback:
   `docs/model-audits/2026-10-01-cfb-last-verified-price-continuity-r61.md`.
 
-### Professional independent score + validated market marriage (r15; writer r82)
+### Retained professional independent score + validated market marriage (r15; writer r82)
 
-- Active independent/runtime releases are
+- Retained independent/runtime releases are
   `cfb_professional_weekly_runtime_2026_10_01_r7_compact48` /
   `cfb_professional_independent_score_model_2026_10_01_r7_compact48` /
   `cfb_professional_empirical_joint_distribution_2026_10_01_r7_compact48`.
@@ -221,7 +257,7 @@ Last reviewed: 2026-09-29
   red-zone, third-down, turnover, special-teams, rest, venue, Elo and personnel
   inputs. A weekly cross-family scoring-domain correction is applied only when
   the predeclared disagreement gate is met.
-- Active market candidate / production releases are
+- Preceding market candidate / production releases were
   `cfb_market_sharp_aware_candidate_2026_10_01_r21_split_spread_arbitration` /
   `cfb_market_sharp_aware_production_2026_10_01_r23_split_spread_arbitration`.
   Consensus is not a score anchor. The only validated score mutation is a real
@@ -231,13 +267,13 @@ Last reviewed: 2026-09-29
   Total and rebuilds one coherent joint PMF. Other split, price and same-book
   movement evidence remains source-separated in the established confidence
   path and may not create an unvalidated score nudge.
-- Active probability / calibration / grade / decision / tuple releases are
+- Retained probability / calibration releases and preceding grade / decision / tuple releases were
   `cfb_v1_professional_joint_probability_2026_10_01_r14_market_marriage` /
   `cfb_v1_exact_price_calibration_2026_10_01_r12_professional_market_marriage` /
   `cfb_v1_composite_grade_policy_2026_10_01_r15_professional_market_marriage` /
   `cfb_v1_daily_edge_decision_2026_10_01_r35_professional_market_marriage` /
   `cfb_v1_exact_price_decision_tuple_2026_10_01_r23_professional_market_marriage`.
-- Publication set: evidence / collector / member
+- Preceding publication set: evidence / collector / member
   `cfb_forward_evidence_snapshot_2026_10_01_r28_professional_market_marriage` /
   `cfb_forward_evidence_collector_2026_10_01_r34_professional_market_marriage` /
   `cfb_v1_member_release_2026_10_01_r40_professional_market_marriage`; sole

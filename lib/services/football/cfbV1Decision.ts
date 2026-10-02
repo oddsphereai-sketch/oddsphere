@@ -32,8 +32,10 @@ export const CFB_V1_REPRESENTATIVE_SCORE_RELEASE =
 export const CFB_V1_CALIBRATION_RELEASE =
   "cfb_v1_exact_price_calibration_2026_10_01_r12_professional_market_marriage" as const;
 export const CFB_V1_GRADE_POLICY_RELEASE =
-  "cfb_v1_composite_grade_policy_2026_10_01_r15_professional_market_marriage" as const;
+  "cfb_v1_composite_grade_policy_2026_10_02_r16_verified_qb_market_continuity" as const;
 export const CFB_V1_DECISION_RELEASE =
+  "cfb_v1_daily_edge_decision_2026_10_02_r36_verified_qb_market_continuity" as const;
+export const CFB_V1_AVAILABILITY_PREVIOUS_DECISION_RELEASE =
   "cfb_v1_daily_edge_decision_2026_10_01_r35_professional_market_marriage" as const;
 export const CFB_V1_SCORE_COHERENCE_PREVIOUS_DECISION_RELEASE =
   "cfb_v1_daily_edge_decision_2026_09_26_r34_score_side_coherent" as const;
@@ -48,7 +50,7 @@ export const CFB_V1_GRADE_PREVIOUS_DECISION_RELEASE =
 const CFB_V1_POLICY_SOURCE_DECISION_RELEASE =
   "cfb_v1_daily_edge_decision_2026_09_04_r28_evidence_identity_continuity" as const;
 export const CFB_V1_DECISION_SCHEMA_RELEASE =
-  "cfb_v1_exact_price_decision_tuple_2026_10_01_r23_professional_market_marriage" as const;
+  "cfb_v1_exact_price_decision_tuple_2026_10_02_r24_verified_qb_market_continuity" as const;
 export const CFB_SPREAD_COUNTER_SIGNAL_MIN_EXCLUSIVE = 0.53 as const;
 export const CFB_SPREAD_COUNTER_SIGNAL_MAX_INCLUSIVE = 0.55 as const;
 export const CFB_T60_TARGET_MINUTES = 60 as const;

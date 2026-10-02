@@ -54,6 +54,7 @@ import {
   cfbForwardReleaseRefreshNeed,
   cfbReferenceCompletionNeeded,
   cfbMarketAnchorHealthHolds,
+  currentCfbMovementContextBook,
   cfbLockPlanningEvidence,
   cfbTrackingCandidatesForRun,
   fetchCfbPlaybookRowsAttempt,
@@ -62,6 +63,7 @@ import {
   planCfbTrackingRecordInsert,
   publishCfbForwardDecisionBundle,
   retainLatestCfbPlaybookObservation,
+  selectQuarterbackTeams,
   selectCfbSharpFallbackGames,
   selectCfbEspnReferenceGames,
   trustedCfbSharpEventIdsByGame,
@@ -116,6 +118,12 @@ import {
   encodeCfbForwardMemberSnapshotPayload,
   readCfbForwardMemberSnapshot,
 } from "../lib/services/football/cfbForwardMemberSnapshotStore";
+import {
+  applyCfbVerifiedAvailabilityGradeCap,
+  applyVerifiedCfbQuarterbackAvailability,
+  playbookCfbQuarterbackAvailability,
+  verifiedCfbQuarterbackAvailability,
+} from "../lib/services/football/cfbVerifiedAvailability";
 
 const buildCfbMemberFixture = (
   rows: Parameters<typeof buildCfbMemberFixtureAtTime>[0],
@@ -137,6 +145,92 @@ const game: NcaafGame = {
   away: { id: 10, conferenceId: 1, abbreviation: "UNC", name: "North Carolina Tar Heels", fbs: true },
   home: { id: 43, conferenceId: 3, abbreviation: "TCU", name: "TCU Horned Frogs", fbs: true },
 };
+
+const delawareAvailabilityGame: NcaafGame = {
+  ...game,
+  providerGameId: "457727",
+  away: { ...game.away, id: 99, abbreviation: "LIB", name: "Liberty Flames" },
+  home: { ...game.home, id: 66, abbreviation: "DEL", name: "Delaware Fightin Blue Hens" },
+};
+const quarterbackTemplate = {
+  provider: "balldontlie" as const,
+  capturedAt: observedAt,
+  starterStatus: "projected" as const,
+  projectionMethod: "active_roster_previous_season_attempts" as const,
+};
+const verifiedAvailability = applyVerifiedCfbQuarterbackAvailability({
+  game: delawareAvailabilityGame,
+  away: {
+    ...quarterbackTemplate,
+    teamId: 99,
+    team: "LIB",
+    expectedStartingQuarterback: null,
+    activeQuarterbacks: [],
+  },
+  home: {
+    ...quarterbackTemplate,
+    teamId: 66,
+    team: "DEL",
+    expectedStartingQuarterback: { playerId: "59644", name: "Nick Minicucci", position: "QB", jerseyNumber: "4", previousSeasonPassingAttempts: 310, previousSeasonPassingYards: 2700 },
+    activeQuarterbacks: [
+      { playerId: "59644", name: "Nick Minicucci", position: "QB", jerseyNumber: "4", previousSeasonPassingAttempts: 310, previousSeasonPassingYards: 2700 },
+      { playerId: "78900", name: "Braden Streeter", position: "QB", jerseyNumber: "12", previousSeasonPassingAttempts: 21, previousSeasonPassingYards: 140 },
+    ],
+  },
+});
+assert.equal(verifiedAvailability.availability?.designation, "likely_out");
+assert.equal(verifiedAvailability.home.expectedStartingQuarterback?.name, "Braden Streeter", "verified likely-out evidence must replace the projected unavailable quarterback with the active backup");
+assert.equal(verifiedAvailability.away.team, "LIB", "the unaffected opponent quarterback context must remain unchanged");
+assert.equal(verifiedCfbQuarterbackAvailability(game.providerGameId), null, "the verified override must remain exact-game scoped");
+const playbookAvailability = playbookCfbQuarterbackAvailability({
+  game: delawareAvailabilityGame,
+  away: verifiedAvailability.away,
+  home: {
+    ...verifiedAvailability.home,
+    expectedStartingQuarterback: verifiedAvailability.home.activeQuarterbacks[0]!,
+  },
+  injuryRows: [{ teamAbbr: "DEL", updatedAt: "2026-10-02T18:00:00.000Z", players: [{ name: "Nick Minicucci", status: "Out", reason: "Knee" }] }],
+  capturedAt: "2026-10-02T18:01:00.000Z",
+});
+assert.equal(playbookAvailability?.designation, "out");
+assert.equal(playbookAvailability?.sourceAuthority, "official_provider");
+assert.equal(verifiedCfbQuarterbackAvailability("457727", playbookAvailability)?.designation, "out", "fresh provider status must supersede the credentialed likely-out report");
+const availablePlaybookAvailability = playbookCfbQuarterbackAvailability({
+  game: delawareAvailabilityGame,
+  away: verifiedAvailability.away,
+  home: verifiedAvailability.home,
+  injuryRows: [{ teamAbbr: "DEL", updatedAt: "2026-10-02T18:30:00.000Z", players: [{ name: "Nick Minicucci", status: "Active" }] }],
+  capturedAt: "2026-10-02T18:31:00.000Z",
+  previousEvidence: playbookAvailability,
+});
+assert.equal(availablePlaybookAvailability?.designation, "available", "an explicit active designation must clear rather than retain a prior absence");
+assert.equal(applyVerifiedCfbQuarterbackAvailability({
+  game: delawareAvailabilityGame,
+  away: verifiedAvailability.away,
+  home: verifiedAvailability.home,
+  providerEvidence: availablePlaybookAvailability,
+}).home.expectedStartingQuarterback?.name, "Nick Minicucci", "explicit active evidence must restore the named starter from the retained active roster");
+const questionablePlaybookAvailability = playbookCfbQuarterbackAvailability({
+  game: delawareAvailabilityGame,
+  away: verifiedAvailability.away,
+  home: verifiedAvailability.home,
+  injuryRows: [{ teamAbbr: "DEL", updatedAt: "2026-10-02T18:40:00.000Z", players: [{ name: "Nick Minicucci", status: "Questionable" }] }],
+  capturedAt: "2026-10-02T18:41:00.000Z",
+  previousEvidence: playbookAvailability,
+});
+assert.equal(questionablePlaybookAvailability?.designation, "questionable");
+assert.equal(applyVerifiedCfbQuarterbackAvailability({
+  game: delawareAvailabilityGame,
+  away: verifiedAvailability.away,
+  home: verifiedAvailability.home,
+  providerEvidence: questionablePlaybookAvailability,
+}).home.expectedStartingQuarterback?.name, "Nick Minicucci", "questionable evidence must not be treated as a confirmed backup start");
+const priorQuarterbacks = new Map([
+  [66, verifiedAvailability.home],
+  [99, { ...verifiedAvailability.away, expectedStartingQuarterback: verifiedAvailability.home.activeQuarterbacks[0]!, activeQuarterbacks: [verifiedAvailability.home.activeQuarterbacks[0]!] }],
+]);
+assert.equal(selectQuarterbackTeams({ plans: [{ game: delawareAvailabilityGame, stage: "unlocked" }], teams: [delawareAvailabilityGame.away, delawareAvailabilityGame.home], priorQuarterbacks, maximum: 2 }).length, 0, "unlocked refreshes must reuse bounded current roster evidence");
+assert.equal(selectQuarterbackTeams({ plans: [{ game: delawareAvailabilityGame, stage: "t60" }], teams: [delawareAvailabilityGame.away, delawareAvailabilityGame.home], priorQuarterbacks, maximum: 2 }).length, 0, "T-60 availability updates must reuse immutable roster context rather than open a second provider-fetch path");
 
 const correctedPriorReads = planCfbPriorResultReads({
   before: "2026-09-08",
@@ -201,6 +295,17 @@ const providerOpening = __BALLDONTLIE_NCAAF_SLATE_TEST__.normalizeOdds({
   total_under_odds: -110,
 });
 assert.equal(providerOpening?.observedAt, "2026-08-20T12:00:00.000Z", "BALLDONTLIE opening rows use opened_at when updated_at is absent");
+const fanduelMovementContext = currentCfbMovementContextBook(currentBooks, {
+  provenance: "provider_opening",
+  capturedAt: currentBooks[0]!.observedAt,
+  quote: { ...currentBooks[0]!, observedAt: "2026-08-20T12:00:00.000Z" },
+});
+assert.equal(fanduelMovementContext?.sportsbook, "fanduel", "movement context must match the opening sportsbook instead of the price-shopping target");
+assert.equal(currentCfbMovementContextBook(currentBooks, {
+  provenance: "provider_opening",
+  capturedAt: currentBooks[0]!.observedAt,
+  quote: { ...currentBooks[0]!, sportsbook: "unavailable-book" },
+}), null, "movement must remain unavailable when no current quote exists for the opening sportsbook");
 
 const forecasts = getCfbV1Forecasts();
 assert.equal(forecasts.length, 8, "launch artifact must contain the exact eight-game opening slate");
@@ -243,6 +348,18 @@ assert.equal(fullBundle.trackingEnabled, true);
 assert.equal(fullBundle.evaluatedBets.every((decision) => decision.decisionRelease === CFB_V1_DECISION_RELEASE), true);
 assert.equal(new Set(fullBundle.evaluatedBets.map((decision) => decision.market)).size, 3);
 assert.equal(fullBundle.evaluatedBets.every((decision) => decision.consensus.books.every((bookName) => bookName !== decision.evaluatedQuote.sportsbook)), true, "consensus must exclude the evaluated sportsbook");
+const availabilityCappedBundle = applyCfbVerifiedAvailabilityGradeCap({
+  bundle: {
+    ...fullBundle,
+    evaluatedBets: fullBundle.evaluatedBets.map((decision, index) => ({
+      ...decision,
+      grade: index === 0 ? "Best Angle" : index === 1 ? "Lean" : "No Play",
+    })),
+  },
+  availability: verifiedAvailability.availability,
+});
+assert.deepEqual(availabilityCappedBundle.evaluatedBets.map((decision) => decision.grade), ["Watchlist", "Watchlist", "No Play"], "unmodeled verified quarterback replacement risk must not remain actionable");
+assert.equal(availabilityCappedBundle.evaluatedBets.every((decision) => decision.gradeAdjustment?.reasonCodes.includes("verified_qb_availability_projection_uncalibrated")), true);
 const totalDecision = fullBundle.evaluatedBets.find((decision) => decision.market === "total");
 assert.ok(totalDecision);
 const nearTossupTotal = {
