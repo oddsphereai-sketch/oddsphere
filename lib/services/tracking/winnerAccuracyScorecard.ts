@@ -1,7 +1,7 @@
 export const WINNER_ACCURACY_SCORECARD_CONTRACT =
   "winner_accuracy_scorecard_v1_release_pure_locked_window_2026_09_02" as const;
 
-export type WinnerScorecardSport = "mlb" | "nfl" | "cfb" | "wnba" | "epl" | "ucl";
+export type WinnerScorecardSport = "mlb" | "nfl" | "cfb" | "wnba" | "nhl" | "epl" | "ucl";
 export type WinnerOutcome = "home" | "away" | "draw";
 
 export type WinnerAccuracyObservation = {

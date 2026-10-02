@@ -114,6 +114,16 @@ async function main() {
   assert.equal(result.scorecards.length, 1);
   assert.equal(result.scorecards[0].winnerAccuracy.accuracyPct, 100);
   assert.equal(result.scorecards[0].exactPriceReturns.actionableOnly.resolved, 1);
+  const sportFilter = fake.operations.find((entry) =>
+    entry.table === "prediction_records"
+      && entry.method === "in"
+      && entry.args[0] === "sport",
+  );
+  assert.deepEqual(
+    sportFilter?.args[1],
+    ["mlb", "nfl", "cfb", "wnba", "nhl", "soccer"],
+    "the cross-sport health scorecard must not omit NHL",
+  );
   assert.equal(fake.operations.filter((entry) => entry.table === "prediction_records" && entry.method === "select").length, 1);
   assert.equal(fake.operations.filter((entry) => entry.table === "prediction_grades" && entry.method === "select").length, 1);
   assert.ok(fake.operations.some((entry) => entry.table === "prediction_records" && entry.method === "gte"));

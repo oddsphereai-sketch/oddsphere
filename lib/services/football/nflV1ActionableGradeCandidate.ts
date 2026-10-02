@@ -35,12 +35,12 @@ export const NFL_V1_MARKET_EVIDENCE_TOTAL_MODEL_RELEASE =
 
 export const NFL_V1_MONEYLINE_BEST_ANGLE_MINIMUM_EXPECTED_VALUE = 0.02 as const;
 export const NFL_V1_MONEYLINE_BEST_ANGLE_MINIMUM_EDGE_PERCENTAGE_POINTS = 4.0 as const;
-export const NFL_V1_SPREAD_BEST_ANGLE_MINIMUM_PROBABILITY = 0.55 as const;
+export const NFL_V1_SPREAD_BEST_ANGLE_MINIMUM_PROBABILITY = 0.59 as const;
 export const NFL_V1_SPREAD_BEST_ANGLE_MINIMUM_EXPECTED_VALUE = 0.04 as const;
 export const NFL_V1_TOTAL_BEST_ANGLE_MINIMUM_PROBABILITY = 0.535 as const;
 export const NFL_V1_TOTAL_BEST_ANGLE_MINIMUM_EXPECTED_VALUE = 0.035 as const;
 export const NFL_V1_SPREAD_TOTAL_BEST_ANGLE_MINIMUM_EDGE_PERCENTAGE_POINTS = 4.0 as const;
-export const NFL_V1_SPREAD_LEAN_MINIMUM_PROBABILITY = 0.51 as const;
+export const NFL_V1_SPREAD_LEAN_MINIMUM_PROBABILITY = 0.565 as const;
 export const NFL_V1_SPREAD_LEAN_MINIMUM_EXPECTED_VALUE = 0.0 as const;
 export const NFL_V1_SPREAD_LEAN_MINIMUM_EDGE_PERCENTAGE_POINTS = 0.0 as const;
 export const NFL_V1_SPREAD_LEAN_MINIMUM_CUSHION = 0.0 as const;
@@ -254,7 +254,7 @@ function selectMarket(args: {
       const cushion = args.market === "spread"
         ? first ? expectedMargin + line : -(expectedMargin + line)
         : first ? expectedTotal - line : line - expectedTotal;
-      const qualifiedGrade = marketGrade({
+      const qualifiedGrade = gradeNflV1SpreadTotalMarket({
         market: args.market,
         probability,
         expectedValue,
@@ -314,7 +314,7 @@ function selectMarket(args: {
     first.quote.sportsbook.localeCompare(second.quote.sportsbook))[0] ?? null;
 }
 
-function marketGrade(args: {
+export function gradeNflV1SpreadTotalMarket(args: {
   market: "spread" | "total";
   probability: number;
   expectedValue: number;

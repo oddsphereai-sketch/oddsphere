@@ -342,7 +342,7 @@ async function fetchRecords(
   for (let start = 0; start < recordCap; start += WINNER_ACCURACY_QUERY_PAGE_SIZE) {
     let query = client.from("prediction_records")
       .select(WINNER_ACCURACY_RECORD_SELECT)
-      .in("sport", ["mlb", "nfl", "cfb", "wnba", "soccer"])
+      .in("sport", ["mlb", "nfl", "cfb", "wnba", "nhl", "soccer"])
       .in("market", ["moneyline", "match_result"])
       .not("locked_at", "is", null);
     if (bounds !== null) query = query.gte("locked_at", bounds.from).lt("locked_at", bounds.to);

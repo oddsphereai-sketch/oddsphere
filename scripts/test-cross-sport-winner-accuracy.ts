@@ -88,6 +88,21 @@ assert.equal(epl.upsetDetection.actualUpsets, 1);
 assert.equal(epl.upsetDetection.correctlyCalledUpsets, 1);
 assert.ok(Math.abs((epl.modelProbability.brierScore ?? 0) - 0.6159) < 1e-12);
 
+const nhl = buildWinnerAccuracyScorecards([
+  row({
+    recordId: 7,
+    sport: "nhl",
+    gameKey: "nhl:1",
+    releaseKey: "nhl-r13",
+    modelPick: "away",
+    actualOutcome: "away",
+    modelProbabilities: { home: 0.42, away: 0.58 },
+    marketProbabilities: { home: 0.46, away: 0.54 },
+  }),
+])[0];
+assert.equal(nhl.sport, "nhl");
+assert.equal(nhl.winnerAccuracy.accuracyPct, 100);
+
 const releaseSplit = buildWinnerAccuracyScorecards([
   row(),
   row({ recordId: 5, gameKey: "mlb:1", releaseKey: "mlb-r2" }),
