@@ -213,11 +213,14 @@ Last reviewed: 2026-09-29
   tracking `cfb_official_tracking_record_2026_10_02_r31_verified_qb_market_continuity`.
 - Source-attributed expected-QB absence selects the active replacement in the
   existing field, and later league-provider evidence supersedes the provisional
-  report. The existing cached league injury read and a fresh T-60 roster read
-  update the unlocked card before the normal immutable lock. Missing reports
-  remain unknown rather than healthy. Unvalidated replacement-QB score impact
-  cannot stay actionable, but the prediction and three-market tracking
-  denominator remain present.
+  report. One bounded league injury read runs per writer collection; successful
+  responses use the existing shared cache, while failed or empty responses
+  cannot erase retained exact-game evidence or the board. Availability selects
+  only from already captured active-roster context and does not add a second
+  T-60 roster-fetch path. An explicit active/available status clears the
+  absence; omission remains unknown rather than healthy. Unvalidated
+  replacement-QB score impact cannot stay actionable, but the prediction and
+  three-market tracking denominator remain present.
 - Opening/current movement is same-sportsbook only; price shopping remains a
   separate exact-price decision. The 99-game stored-board replay pairs nine
   promotions with fifteen demotions and moves actionables 44 to 40. The
