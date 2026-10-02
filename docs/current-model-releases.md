@@ -77,6 +77,14 @@ Last reviewed: 2026-09-29
 
 ## NFL Daily Edge generalized weekly production release
 
+### Spread actionable-grade recalibration (r25)
+
+- Active member / model / calibration / decision / grade are `nfl_v1_member_release_2026_10_02_r25_spread_grade_calibration` / `nfl_v1_daily_edge_model_2026_10_02_r22_spread_grade_calibration` / `nfl_v1_daily_edge_calibration_2026_10_02_r21_spread_grade_calibration` / `nfl_v1_daily_edge_decision_2026_10_02_r27_spread_grade_calibration` / `nfl_v1_grade_policy_2026_10_02_r27_spread_grade_calibration`.
+- The r24 joint PMF, independent score, market-reading marriage, prediction sides, probabilities, expected scores, exact quotes, Moneyline grades, and Total grades remain unchanged. Spread actionability now requires at least 56.5% model probability in addition to the existing exact-price reliability, nonnegative-EV, nonnegative-edge, and cushion gates; Best Angle requires at least 59.0%. Grades remain downstream and cannot change a prediction or score.
+- On the exact 47-game opened r23 replay, Weeks 1-2 selection is 9-4 across 13 actions and Week 3 confirmation is 4-2 across six actions. The combined candidate is 13-6 across 19 actions, with Best Angle 8-2 and Lean 5-4. These are opened diagnostics, not a promised future hit rate.
+- The exact Week 4 no-write comparison retains 16 games / 48 markets and moves 20 Best Angles / 7 Leans / 5 Watchlists / 16 No Plays to 17 / 5 / 10 / 16. Spread moves 9 / 3 / 3 / 1 to 6 / 1 / 8 / 1: zero actionable promotions, five actionable demotions, one within-actionable demotion, seven actionable Spreads, and 22 total actionables. The symmetric promotion path remains active and boundary-tested for any future unlocked row that clears every released gate; the board remains above its predeclared non-flat floor.
+- Publication set: writer / fixture / compact snapshot are `nfl_forward_evidence_writer_2026_10_02_r52_spread_grade_calibration` / `nfl_weekly_member_fixture_2026_10_02_r36_spread_grade_calibration` / `nfl_forward_member_snapshot_2026_10_02_r28_spread_grade_calibration`. The r24/r26/r27 joint-Moneyline family remains the explicit immutable-lock transition predecessor. No stake, provider call, cadence, schedule, second writer, member copy, label, or layout changes. Evidence and rollback: `docs/model-audits/2026-10-02-nfl-spread-grade-calibration-predeclaration.md` and `docs/model-audits/2026-10-02-nfl-spread-grade-calibration-result.md`.
+
 ### Joint-PMF Moneyline coherence repair (r24)
 
 - Active member / model / calibration / decision / grade are `nfl_v1_member_release_2026_09_29_r24_joint_moneyline_coherence` / `nfl_v1_daily_edge_model_2026_09_29_r21_joint_moneyline_coherence` / `nfl_v1_daily_edge_calibration_2026_09_29_r20_joint_moneyline_coherence` / `nfl_v1_daily_edge_decision_2026_09_29_r26_joint_moneyline_coherence` / `nfl_v1_grade_policy_2026_09_29_r26_joint_moneyline_coherence`.

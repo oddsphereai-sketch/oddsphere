@@ -17,6 +17,7 @@ import {
 } from "../lib/services/football/nflV1ActionableGradeCorrections";
 import {
   buildNflV1ActionableGradeBundle,
+  gradeNflV1SpreadTotalMarket,
   NFL_V1_ACTIONABLE_GRADE_DECISION_RELEASE,
   NFL_V1_EVENT_CONTAINED_SPREAD_MODEL_RELEASE,
   NFL_V1_MARKET_EVIDENCE_TOTAL_MODEL_RELEASE,
@@ -273,7 +274,7 @@ assert.equal(moneyline.modelProbability, outcome.homeWinProbability);
 assert.equal(moneyline.modelRelease, NFL_V1_PRODUCTION_MODEL_RELEASE);
 assert.ok(moneyline.modelProbability > 0.5);
 assert.equal(spread.modelRelease, NFL_V1_EVENT_CONTAINED_SPREAD_MODEL_RELEASE);
-assert.equal(spread.grade, "Lean");
+assert.equal(spread.grade, "Watchlist");
 assert.equal(spread.modelProbability, reference.spread.awayCoverProbability);
 assert.equal(total.modelRelease, NFL_V1_MARKET_EVIDENCE_TOTAL_MODEL_RELEASE);
 assert.equal(total.grade, "Watchlist", "a Total without verified same-book direction must not be actionable");
@@ -285,6 +286,19 @@ assert.ok(total.expectedValue > 0.15);
 assert.ok(total.modelProbability > total.marketFairProbability);
 assert.equal(candidate.evaluatedBets.every((decision) => decision.evaluatedAt === evaluatedAt), true);
 assert.equal(candidate.evaluatedBets.every((decision) => decision.lockedAt === null), true);
+
+const spreadGradeArgs = {
+  market: "spread" as const,
+  expectedValue: 0.05,
+  edgePercentagePoints: 5,
+  cushion: 2,
+  penalty: 0,
+  totalDirectionAvailable: false,
+};
+assert.equal(gradeNflV1SpreadTotalMarket({ ...spreadGradeArgs, probability: 0.5649 }), "Watchlist");
+assert.equal(gradeNflV1SpreadTotalMarket({ ...spreadGradeArgs, probability: 0.565 }), "Lean");
+assert.equal(gradeNflV1SpreadTotalMarket({ ...spreadGradeArgs, probability: 0.5899 }), "Lean");
+assert.equal(gradeNflV1SpreadTotalMarket({ ...spreadGradeArgs, probability: 0.59 }), "Best Angle");
 
 const held = buildNflV1ActionableGradeBundle({
   providerGameId,
