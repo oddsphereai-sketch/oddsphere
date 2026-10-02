@@ -7,6 +7,8 @@ import { withFirstTrackedSplitObservation } from "@/lib/services/splitDisplayMov
 import type { MarketSplitDisplaySection } from "@/lib/types/domain/RecommendationDecision";
 import {
   CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE,
+  CFB_FORWARD_AVAILABILITY_PREVIOUS_EVIDENCE_SCHEMA_RELEASE,
+  CFB_FORWARD_AVAILABILITY_PREVIOUS_MEMBER_RELEASE,
   CFB_FORWARD_SCORE_COHERENCE_PREVIOUS_EVIDENCE_SCHEMA_RELEASE,
   CFB_FORWARD_SCORE_COHERENCE_PREVIOUS_MEMBER_RELEASE,
   CFB_FORWARD_PRICE_PREVIOUS_EVIDENCE_SCHEMA_RELEASE,
@@ -57,6 +59,7 @@ import {
   CFB_V1_BASE_PROBABILITY_RELEASE,
   CFB_V1_BASE_SCORE_ARTIFACT_RELEASE,
   CFB_V1_DECISION_RELEASE,
+  CFB_V1_AVAILABILITY_PREVIOUS_DECISION_RELEASE,
   CFB_V1_SCORE_COHERENCE_PREVIOUS_DECISION_RELEASE,
   CFB_V1_PRICE_PREVIOUS_DECISION_RELEASE,
   CFB_V1_HOLISTIC_PREVIOUS_DECISION_RELEASE,
@@ -78,9 +81,9 @@ import { cfbTeamIdentity } from "./cfbTeamIdentity";
 import { CFB_PUBLIC_SCORE_DIRECTION_TOLERANCE_POINTS } from "./footballCrossMarketCoherence";
 
 export const CFB_MEMBER_FIXTURE_RELEASE =
-  "cfb_v1_member_fixture_2026_10_01_r61_last_verified_price_continuity" as const;
+  "cfb_v1_member_fixture_2026_10_02_r62_verified_qb_market_continuity" as const;
 export const CFB_PUBLIC_OUTCOME_CONTRACT_RELEASE =
-  "cfb_market_sharp_public_outcome_contract_2026_10_01_r56_last_verified_price_continuity" as const;
+  "cfb_market_sharp_public_outcome_contract_2026_10_02_r57_verified_qb_market_continuity" as const;
 export const CFB_CONTEXT_ONLY_QUOTE_CAPTURE_SKEW_MS = 5_000 as const;
 const CFB_MARKET_CONTEXT_MAX_CAPTURE_LAG_MINUTES = 10;
 const CFB_PRE_DIRECTIONAL_MEMBER_RELEASE = "cfb_v1_member_release_2026_08_28_r14_expanded_sharp_budget" as const;
@@ -466,19 +469,48 @@ export function selectLatestCfbMemberEvidenceRows(
       )
     : null;
   const scoreCoherencePreviousAuthority = scoreCoherencePrevious ?? scoreCoherencePreviousBoundary ?? scoreCoherencePreviousLockOverlay ?? pricePreviousAuthority;
+  const availabilityPrevious = completeRowsForRelease(
+    rows,
+    CFB_FORWARD_AVAILABILITY_PREVIOUS_EVIDENCE_SCHEMA_RELEASE,
+    CFB_FORWARD_AVAILABILITY_PREVIOUS_MEMBER_RELEASE,
+    CFB_V1_AVAILABILITY_PREVIOUS_DECISION_RELEASE,
+  );
+  const availabilityPreviousBoundary = scoreCoherencePreviousAuthority
+    ? immutableBoundaryTransitionRows(
+        rows,
+        now,
+        CFB_FORWARD_AVAILABILITY_PREVIOUS_EVIDENCE_SCHEMA_RELEASE,
+        CFB_FORWARD_AVAILABILITY_PREVIOUS_MEMBER_RELEASE,
+        CFB_V1_AVAILABILITY_PREVIOUS_DECISION_RELEASE,
+        scoreCoherencePreviousAuthority,
+      )
+    : null;
+  const availabilityPreviousLockOverlay = scoreCoherencePreviousAuthority
+    ? immutableLockOverlayRows(
+        rows,
+        CFB_FORWARD_AVAILABILITY_PREVIOUS_EVIDENCE_SCHEMA_RELEASE,
+        CFB_FORWARD_AVAILABILITY_PREVIOUS_MEMBER_RELEASE,
+        CFB_V1_AVAILABILITY_PREVIOUS_DECISION_RELEASE,
+        scoreCoherencePreviousAuthority,
+      )
+    : null;
+  const availabilityPreviousAuthority = availabilityPrevious ?? availabilityPreviousBoundary ?? availabilityPreviousLockOverlay ?? scoreCoherencePreviousAuthority;
   const current = completeRowsForRelease(rows, CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE, CFB_FORWARD_MEMBER_RELEASE, CFB_V1_DECISION_RELEASE);
   if (current) return current;
-  const immutableBoundaryTransition = scoreCoherencePreviousAuthority
+  const immutableBoundaryTransition = availabilityPreviousAuthority
     ? immutableBoundaryTransitionRows(
         rows,
         now,
         CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE,
         CFB_FORWARD_MEMBER_RELEASE,
         CFB_V1_DECISION_RELEASE,
-        scoreCoherencePreviousAuthority,
+        availabilityPreviousAuthority,
       )
     : null;
   if (immutableBoundaryTransition) return immutableBoundaryTransition;
+  if (availabilityPrevious) return availabilityPrevious;
+  if (availabilityPreviousBoundary) return availabilityPreviousBoundary;
+  if (availabilityPreviousLockOverlay) return availabilityPreviousLockOverlay;
   if (scoreCoherencePrevious) return scoreCoherencePrevious;
   if (scoreCoherencePreviousBoundary) return scoreCoherencePreviousBoundary;
   if (scoreCoherencePreviousLockOverlay) return scoreCoherencePreviousLockOverlay;
@@ -684,6 +716,7 @@ function buildGame(row: CfbForwardStoredEvidence, movementRows: CfbForwardMarket
   const headline = [moneyline, total, spread].sort((a, b) => verdictRank(b.verdict.key) - verdictRank(a.verdict.key))[0]!;
   const primaryForecast = payload.decisions.forecast;
   const independentForecast = (payload.schemaRelease === CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE ||
+    payload.schemaRelease === CFB_FORWARD_AVAILABILITY_PREVIOUS_EVIDENCE_SCHEMA_RELEASE ||
     payload.schemaRelease === CFB_FORWARD_SCORE_COHERENCE_PREVIOUS_EVIDENCE_SCHEMA_RELEASE ||
     payload.schemaRelease === CFB_FORWARD_WEATHER_PREVIOUS_EVIDENCE_SCHEMA_RELEASE ||
     payload.schemaRelease === CFB_FORWARD_IDENTITY_PREVIOUS_EVIDENCE_SCHEMA_RELEASE) &&

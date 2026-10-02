@@ -92,9 +92,15 @@ import {
   buildCfbForwardMemberSnapshot,
   writeCfbForwardMemberSnapshot,
 } from "./cfbForwardMemberSnapshotStore";
+import {
+  applyCfbVerifiedAvailabilityGradeCap,
+  applyVerifiedCfbQuarterbackAvailability,
+  playbookCfbQuarterbackAvailability,
+} from "./cfbVerifiedAvailability";
+import type { PlaybookInjuryTeamRow } from "@/lib/providers/playbook/types";
 
 export const CFB_FORWARD_WRITER_RELEASE =
-  "cfb_forward_evidence_writer_2026_10_01_r82_last_verified_price_continuity" as const;
+  "cfb_forward_evidence_writer_2026_10_02_r83_verified_qb_market_continuity" as const;
 export const CFB_FORWARD_MAX_QB_TEAMS_PER_RUN = 24 as const;
 export const CFB_FORWARD_MAX_SHARP_FALLBACK_GAMES_PER_RUN = 24 as const;
 export const CFB_FORWARD_MAX_ESPN_PROSPECTIVE_GAMES_PER_RUN = 32 as const;
@@ -136,6 +142,21 @@ export type CfbForwardCaptureFailure = {
   stage: CfbForwardCapturePlan["stage"];
   error: string;
 };
+
+/**
+ * Movement is evidence only when the opening and current quote come from the
+ * same sportsbook. The execution quote remains independently price-shopped.
+ */
+export function currentCfbMovementContextBook(
+  books: NcaafBookOdds[],
+  operationalOpening: CfbForwardOperationalOpening | null,
+): NcaafBookOdds | null {
+  const openingBook = operationalOpening?.quote.sportsbook.trim().toLowerCase() ?? "";
+  if (!openingBook) return null;
+  return books
+    .filter((book) => book.sportsbook.trim().toLowerCase() === openingBook)
+    .sort((first, second) => Date.parse(second.observedAt) - Date.parse(first.observedAt))[0] ?? null;
+}
 
 type CfbForwardWindowState = {
   window: CfbWeeklyWindow;
@@ -288,12 +309,13 @@ export async function runCfbForwardEvidenceWriter(args: {
     maximum: CFB_FORWARD_MAX_SHARP_FALLBACK_GAMES_PER_RUN,
   });
   const sharpFallbackGameIds = new Set(sharpFallbackGames.map((game) => game.providerGameId));
-  const [linesAttempt, splitsAttempt, venueWeatherAttempt, quarterbacks, sharpFallbackAttempt, sharpSplitsAttempt, circaAttempt] = await Promise.all([
+  const [linesAttempt, splitsAttempt, venueWeatherAttempt, injuryAttempt, quarterbacks, sharpFallbackAttempt, sharpSplitsAttempt, circaAttempt] = await Promise.all([
     fetchCfbPlaybookRowsAttempt(() => playbook.lines("ncaaf")),
     fetchCfbPlaybookRowsAttempt(() => playbook.splits("ncaaf")),
     playbook.venueWeather("ncaaf")
       .then((result) => ({ rows: result.body.data ?? [], error: null }))
       .catch((error: unknown) => ({ rows: [] as unknown[], error: splitRequestError(error) })),
+    fetchCfbPlaybookRowsAttempt(() => playbook.injuries("ncaaf")),
     fetchBalldontlieNcaafQuarterbacks({ teams: quarterbackTeams.map((team) => ({ id: team.id, abbreviation: team.abbreviation })), previousSeason: args.season - 1, capturedAt: args.now, apiKey: args.balldontlieApiKey }),
     fetchCfbSharpOddsFallbackAttempt({ games: sharpFallbackGames, apiKey: args.sharpApiKey, trustedEventIdsByGame: trustedSharpEventIdsByGame }),
     fetchCfbSharpApiSplits({ games, apiKey: args.sharpApiKey })
@@ -363,8 +385,28 @@ export async function runCfbForwardEvidenceWriter(args: {
     const operationalOpening = providerOpening
       ? { provenance: "provider_opening" as const, capturedAt: providerOpening.observedAt, quote: providerOpening }
       : priorOpening.get(plan.game.providerGameId) ?? (current ? { provenance: "first_observed" as const, capturedAt: current.observedAt, quote: current } : null);
-    const awayQuarterbacks = requiredQuarterbacks(quarterbackContext, plan.game.away.id, plan.game.away.abbreviation, args.now);
-    const homeQuarterbacks = requiredQuarterbacks(quarterbackContext, plan.game.home.id, plan.game.home.abbreviation, args.now);
+    const movementCurrent = currentCfbMovementContextBook(currentBooks, operationalOpening);
+    const baseAwayQuarterbacks = requiredQuarterbacks(quarterbackContext, plan.game.away.id, plan.game.away.abbreviation, args.now);
+    const baseHomeQuarterbacks = requiredQuarterbacks(quarterbackContext, plan.game.home.id, plan.game.home.abbreviation, args.now);
+    const previousVerifiedAvailability = latestByGame.get(plan.game.providerGameId)?.payload.availability.verifiedQuarterback ?? null;
+    const freshProviderAvailability = playbookCfbQuarterbackAvailability({
+      game: plan.game,
+      away: baseAwayQuarterbacks,
+      home: baseHomeQuarterbacks,
+      injuryRows: injuryAttempt.rows as PlaybookInjuryTeamRow[],
+      capturedAt: args.now,
+      previousEvidence: previousVerifiedAvailability,
+    });
+    const retainedProviderAvailability = freshProviderAvailability ??
+      (previousVerifiedAvailability?.sourceAuthority === "official_provider" ? previousVerifiedAvailability : null);
+    const quarterbackAvailability = applyVerifiedCfbQuarterbackAvailability({
+      game: plan.game,
+      away: baseAwayQuarterbacks,
+      home: baseHomeQuarterbacks,
+      providerEvidence: retainedProviderAvailability,
+    });
+    const awayQuarterbacks = quarterbackAvailability.away;
+    const homeQuarterbacks = quarterbackAvailability.home;
     const weather = weatherByGame.get(plan.game.providerGameId)!.snapshot;
     const playbookEvidence = resolveCfbPlaybookEvidence({ game: plan.game, lines, splits });
     const previousMarket = latestByGame.get(plan.game.providerGameId)?.payload.market ?? null;
@@ -405,7 +447,7 @@ export async function runCfbForwardEvidenceWriter(args: {
       ? buildCfbMarketSharpAwareForecast({
           independentForecast: weeklyForecast.forecast,
           anchor: outcomeAnchor,
-          current,
+          current: movementCurrent,
           operationalOpening,
           sharpSplits: sharpApiSplits,
           playbookLine,
@@ -417,7 +459,7 @@ export async function runCfbForwardEvidenceWriter(args: {
       ? buildCfbMarketSharpAwareForecast({
           independentForecast: weeklyForecast.forecast,
           anchor: outcomeAnchor,
-          current,
+          current: movementCurrent,
           operationalOpening,
           sharpSplits: sharpApiSplits,
           playbookLine,
@@ -455,7 +497,7 @@ export async function runCfbForwardEvidenceWriter(args: {
           playbookLine,
           publicSplits: playbookSplits,
           operationalOpening,
-          current,
+          current: movementCurrent,
         }).evaluatedBets.map((decision) => [decision.market, decision.evaluatedQuote.sportsbook]))
       : undefined;
     const decisionBundle = buildCfbV1DecisionBundle({
@@ -475,7 +517,7 @@ export async function runCfbForwardEvidenceWriter(args: {
       },
       fixedEvaluatedSportsbookByMarket,
     });
-    const decisions = publishCfbForwardDecisionBundle(outcomeAnchor
+    const marketAwareDecisions = outcomeAnchor
       ? applyCfbMarketSharpAwareGrades({
           bundle: decisionBundle,
           homeTeam: plan.game.home.abbreviation,
@@ -483,9 +525,13 @@ export async function runCfbForwardEvidenceWriter(args: {
           playbookLine,
           publicSplits: playbookSplits,
           operationalOpening,
-          current,
+          current: movementCurrent,
         })
-      : decisionBundle, playbookLine, espnReferenceLine);
+      : decisionBundle;
+    const decisions = publishCfbForwardDecisionBundle(applyCfbVerifiedAvailabilityGradeCap({
+      bundle: marketAwareDecisions,
+      availability: quarterbackAvailability.availability,
+    }), playbookLine, espnReferenceLine);
     assertFootballCrossMarketCoherence({
       sport: "cfb",
       providerGameId: plan.game.providerGameId,
@@ -541,11 +587,14 @@ export async function runCfbForwardEvidenceWriter(args: {
       quarterbacks: { away: awayQuarterbacks, home: homeQuarterbacks },
       availability: {
         injuryStatus: "provider_unavailable",
+        verifiedQuarterback: quarterbackAvailability.availability,
         weatherStatus: weather.status,
         weather,
-        note: venueWeatherAttempt.error
-          ? `Timestamped NCAAF injury reports remain unavailable. Kickoff weather venue metadata was unavailable: ${venueWeatherAttempt.error}`
-          : "Timestamped NCAAF injury reports remain unavailable. Kickoff weather uses exact Playbook venue identity and the configured game-time forecast provider when available.",
+        note: quarterbackAvailability.availability
+          ? `Source-attributed quarterback availability captured by ${quarterbackAvailability.availability.sourceAuthority}.`
+          : venueWeatherAttempt.error
+            ? `Timestamped NCAAF injury reports remain unavailable. Kickoff weather venue metadata was unavailable: ${venueWeatherAttempt.error}`
+            : "Timestamped NCAAF injury reports remain unavailable. Kickoff weather uses exact Playbook venue identity and the configured game-time forecast provider when available.",
       },
       decisions,
       independentForecast: compactForecast(weeklyForecast.forecast),
@@ -569,7 +618,7 @@ export async function runCfbForwardEvidenceWriter(args: {
         playbookSplits: playbookSplits !== null,
         sharpApiSplits: sharpApiSplits.length > 0,
         activeQuarterbacks: awayQuarterbacks.activeQuarterbacks.length > 0 && homeQuarterbacks.activeQuarterbacks.length > 0,
-        injuries: false,
+        injuries: quarterbackAvailability.availability !== null,
         weather: weather.status === "forecast_available" || weather.status === "controlled_indoor",
         healthHolds,
         availabilityWarnings: [
@@ -581,7 +630,7 @@ export async function runCfbForwardEvidenceWriter(args: {
             ? ["sharpapi_odds_fallback_deferred"]
             : []),
           "quarterback_starter_projected_not_confirmed",
-          "injury_feed_unavailable",
+          ...(quarterbackAvailability.availability ? [] : ["injury_feed_unavailable"]),
           ...(weather.status === "forecast_available" || weather.status === "controlled_indoor" ? [] : [`venue_weather_${weather.status}`]),
           ...(sharpApiSplitsStatus === "request_failed" ? ["sharpapi_splits_request_failed"] : sharpApiSplitsStatus === "event_not_published" ? ["sharpapi_splits_event_not_published"] : []),
           ...(sharpBooks.length > 0 ? ["sharpapi_named_book_price_fallback"] : []),
@@ -594,12 +643,12 @@ export async function runCfbForwardEvidenceWriter(args: {
       requestBudget: {
         balldontlieSlate: slate.providerRequests + priorResults.providerRequests,
         balldontlieQuarterbacks: quarterbacks.providerRequests,
-        playbook: 3,
+        playbook: 4,
         espnReference: espnReferenceAttempt.result.requests,
         sharpApiOdds: sharpFallback.requests + circaAttempt.requests,
         sharpApiSplits: 1,
         weather: weatherRequests,
-        totalMaximum: slate.providerRequests + priorResults.providerRequests + quarterbacks.providerRequests + sharpFallback.requests + circaAttempt.requests + weatherRequests + espnReferenceAttempt.result.requests + advancedState.requests + 4,
+        totalMaximum: slate.providerRequests + priorResults.providerRequests + quarterbacks.providerRequests + sharpFallback.requests + circaAttempt.requests + weatherRequests + espnReferenceAttempt.result.requests + advancedState.requests + 5,
       },
     };
     const contextualEvidenceCapture = buildCfbForwardContextCapture({
@@ -647,7 +696,7 @@ export async function runCfbForwardEvidenceWriter(args: {
     publishedWatchlists: decisions.filter((row) => row.grade === "Watchlist").length,
     publishedNoPlays: decisions.filter((row) => row.grade === "No Play").length,
     heldMarkets: payloads.reduce((sum, payload) => sum + payload.decisions.heldMarkets.length, 0),
-    apiCallsMaximum: slate.providerRequests + priorResults.providerRequests + quarterbacks.providerRequests + sharpFallback.requests + weatherRequests + espnReferenceAttempt.result.requests + advancedState.requests + tracking.trackingProviderRequests + 4,
+    apiCallsMaximum: slate.providerRequests + priorResults.providerRequests + quarterbacks.providerRequests + sharpFallback.requests + weatherRequests + espnReferenceAttempt.result.requests + advancedState.requests + tracking.trackingProviderRequests + 5,
     healthHolds: [...new Set([
       ...payloads.flatMap((payload) => payload.coverage.healthHolds),
       ...(sharpFallbackAttempt.error ? ["sharpapi_odds_fallback_request_failed"] : []),
@@ -656,6 +705,7 @@ export async function runCfbForwardEvidenceWriter(args: {
       ...(espnReferenceCandidates.length > espnReferenceGames.length ? ["espn_reference_line_deferred"] : []),
       ...(linesAttempt.error ? ["playbook_lines_request_failed"] : []),
       ...(splitsAttempt.error ? ["playbook_splits_request_failed"] : []),
+      ...(injuryAttempt.error ? ["playbook_injuries_request_failed"] : []),
       ...(advancedState.error ? ["cfb_current_advanced_state_refresh_failed"] : []),
       ...(tracking.trackingError ? ["official_tracking_incomplete"] : []),
       ...(captureFailures.length > 0 ? ["game_capture_failed"] : []),
@@ -865,6 +915,9 @@ export function selectQuarterbackTeams(args: {
   const candidates = new Map<number, { team: NcaafGame["home"]; priority: number; startsAt: number }>();
   for (const plan of args.plans) {
     for (const team of [plan.game.away, plan.game.home]) {
+      // The active roster is immutable capture context. Availability updates
+      // select a different quarterback from that retained roster without
+      // opening a second provider-fetch path at T-60.
       if (args.priorQuarterbacks.get(team.id)?.activeQuarterbacks.length) continue;
       const priority = plan.stage === "t60" ? 0 : plan.stage === "opening" ? 1 : 2;
       const current = candidates.get(team.id);

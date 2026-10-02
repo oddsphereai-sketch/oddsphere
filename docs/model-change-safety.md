@@ -5,6 +5,44 @@ inputs, probabilities, projections, grades, promotions/demotions, calibration, p
 or stakes. It exists to prevent mixed model eras, competing writers, accidental board
 flattening, and load spikes.
 
+## Owner-approved emergency exception: CFB verified-QB and same-book continuity r16
+
+On 2026-10-02 Daniel Mengel reported that Delaware quarterback Nick Minicucci
+was expected to miss the Liberty game and explicitly directed Oddsphere to
+account for the injury immediately, update when a later designation is
+announced, keep injuries from silently disappearing, and publish the repair
+without new member copy or labels. This exception is limited to the r16 release
+family and the outcome-blind evidence in
+`docs/model-audits/2026-10-02-cfb-verified-qb-market-continuity-r16.md`.
+
+R16 leaves the independent score artifact, PMF equations, probability
+calibration, prices, stakes, schedules, sole writer, and
+`prediction_pipeline:cfb` lease unchanged. Source-attributed likely-out
+evidence may select an active-roster replacement in the existing expected-QB
+field. A later exact-team Playbook Out, Doubtful, or Questionable designation
+supersedes that report; the last verified exact-game provider designation is
+retained through a later omission. An explicit Active, Available, Healthy, or
+Cleared designation restores the named quarterback and removes the grade cap;
+Questionable restores the named quarterback while retaining the unresolved
+availability cap. The existing writer adds one league-scoped
+injury read per collection; successful responses use the shared cache, while a
+failed response cannot erase retained evidence or the board. Availability
+updates select only from the already captured active roster and may not infer
+healthy from a missing response or manufacture a player.
+
+Because the frozen score artifact does not have a validated starter-level
+substitution response, a source-attributed expected-QB replacement caps an
+unlocked Best Angle or Lean at Watchlist. It does not erase or flip the score,
+side, probability, exact price, game, market, lock, or tracking denominator.
+Market movement must compare the operational opening with a current quote from
+the same sportsbook; execution price shopping remains separate. The stored
+board replay pairs nine promotions with fifteen demotions, moves actionables
+44 to 40, and the live-provider candidate remains non-flat with 17 Best Angles
+and 72 Leans. Publication still requires focused and full model-change tests,
+latest-main integration safety, protected PR checks, and live writer/reader,
+coverage, expected-QB, price, split, lock, and tracking verification. Prior
+locks remain immutable.
+
 ## Owner-approved provisional exception: NHL roster-aware discrete market read r12
 
 On 2026-09-30 Daniel Mengel explicitly directed Oddsphere to replace the
