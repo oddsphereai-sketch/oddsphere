@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import type { SharpApiRequestOptions, SharpApiResponse } from "../lib/providers/real_api/_sharpApiClient";
 import type { NcaafGame } from "../lib/services/football/balldontlieNcaafSlate";
 import {
+  __TEST__,
   CFB_SHARP_FALLBACK_MAX_EVENT_DISCOVERY_PAGES_PER_DATE,
   CFB_SHARP_FALLBACK_MAX_PAGES_PER_EVENT,
   CFB_SHARP_FALLBACK_MAX_REQUESTS,
@@ -31,6 +32,11 @@ assert.deepEqual(
   sharpEventDiscoveryDates(easternEveningGame),
   ["2026-08-28", "2026-08-29"],
   "an evening kickoff crossing UTC midnight must discover both the Eastern football date and UTC date",
+);
+assert.equal(
+  __TEST__.teamMatches("Albany Great Danes", "UAlbany Great Danes", "UALB"),
+  true,
+  "a provider's omitted leading university marker must not hide the exact named team",
 );
 
 void main();
@@ -436,6 +442,61 @@ assert.equal(ambiguousEvent.matchedGames, 0);
 assert.equal(ambiguousEvent.eventIdsByGame[game.providerGameId], null);
 assert.equal(ambiguousEvent.eventDiscoveryStatusByGame[game.providerGameId], "ambiguous");
 assert.deepEqual(ambiguousEvent.booksByGame[game.providerGameId], []);
+
+let partitionedOddsCalls = 0;
+const partitionedEventId = `${expectedEventId}-full-book-partition`;
+const partitionedEvent = await fetchSharpApiNcaafOddsFallback({
+  games: [game],
+  maximumRequests: 3,
+  client: {
+    async fetch<T>(opts: SharpApiRequestOptions): Promise<SharpApiResponse<T>> {
+      if (opts.path === "/events") {
+        return {
+          data: [
+            sharpEvent({ books: ["coral", "kalshi"], book_count: 2 }),
+            sharpEvent({
+              id: partitionedEventId,
+              books: ["betmgm", "caesars", "fanatics", "goldrush", "onexbet", "sportzino", "thescorebet"],
+              book_count: 7,
+            }),
+          ] as T,
+          pagination: { has_more: false },
+        };
+      }
+      partitionedOddsCalls += 1;
+      assert.equal(opts.query?.event_id, partitionedEventId);
+      return { data: sharpRows(partitionedEventId) as T, pagination: { has_more: false } };
+    },
+  },
+});
+assert.equal(partitionedOddsCalls, 1, "a unique strongest exact-kickoff sportsbook partition must be selected once");
+assert.equal(partitionedEvent.eventIdsByGame[game.providerGameId], partitionedEventId);
+assert.equal(partitionedEvent.eventDiscoveryStatusByGame[game.providerGameId], "matched");
+assert.equal(partitionedEvent.matchedGames, 1);
+
+let tiedPartitionOddsCalls = 0;
+const tiedPartitionEvent = await fetchSharpApiNcaafOddsFallback({
+  games: [game],
+  maximumRequests: 3,
+  client: {
+    async fetch<T>(opts: SharpApiRequestOptions): Promise<SharpApiResponse<T>> {
+      if (opts.path === "/events") {
+        return {
+          data: [
+            sharpEvent({ books: ["betmgm", "caesars"], book_count: 2 }),
+            sharpEvent({ id: `${expectedEventId}-equal-partition`, books: ["betmgm", "caesars"], book_count: 2 }),
+          ] as T,
+          pagination: { has_more: false },
+        };
+      }
+      tiedPartitionOddsCalls += 1;
+      return { data: [] as T, pagination: { has_more: false } };
+    },
+  },
+});
+assert.equal(tiedPartitionOddsCalls, 0, "equal exact-kickoff sportsbook partitions must remain ambiguous");
+assert.equal(tiedPartitionEvent.eventIdsByGame[game.providerGameId], null);
+assert.equal(tiedPartitionEvent.eventDiscoveryStatusByGame[game.providerGameId], "ambiguous");
 
 let exactKickoffOddsCalls = 0;
 const exactKickoffEvent = await fetchSharpApiNcaafOddsFallback({

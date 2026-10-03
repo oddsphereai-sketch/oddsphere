@@ -190,6 +190,38 @@ Last reviewed: 2026-10-03
 
 ## CFB Daily Edge generalized weekly production release
 
+### Exact-kickoff sportsbook-partition recovery (Sharp odds r15; collector r40; writer r92)
+
+- Active Sharp named-book fallback / collector / sole writer releases are
+  `cfb_sharpapi_named_book_fallback_2026_10_03_r15_sportsbook_partition_resolution` /
+  `cfb_forward_evidence_collector_2026_10_03_r40_sportsbook_partition_resolution` /
+  `cfb_forward_evidence_writer_2026_10_03_r92_sportsbook_partition_resolution`. The active score,
+  PMF, calibration, decision, grade, member, fixture, snapshot, reader, tracking and presentation
+  releases remain unchanged. Writer r92 retains the complete r91 T-60 accuracy-lock contract.
+- SharpAPI can publish one exact matchup/kickoff under several event IDs partitioned by sportsbook.
+  A still-current retained event ID remains authoritative. Without one, r15 selects an event only
+  when one exact-kickoff partition has a unique lexicographically strongest verified footprint:
+  trusted consensus-book count, then eligible target-book count, then declared book count. A tie,
+  non-exact kickoff, or non-matching team remains ambiguous and triggers no odds request. Quotes
+  from different event IDs are never merged.
+- Exact team identity now accepts the provider's otherwise identical omission of a single leading
+  `U` university marker (for example Albany Great Danes versus UAlbany Great Danes). It does not
+  loosen date, kickoff, home/away, abbreviation, or other team-name identity.
+- Collector r40 is an immediate forward refresh boundary for unlocked games, so deployment does
+  not wait for the ordinary hourly cadence. Locked and started cards remain terminal. The existing
+  maximum of 24 fallback games and 192 requests is unchanged; the bounded attempt timeout is 60
+  seconds inside the five-minute leased route so the verified 46-request batch is not discarded at
+  the former 40-second boundary.
+- The live-provider prepublication proof resolved all three audited partitioned games. SDST-ILST
+  recovered six named books with complete Moneyline, Spread and Total context; NWST-LAM recovered
+  six named books with Spread and Total context while Moneyline remained truthfully unavailable;
+  DSU-UALB resolved to its real sportsbook partition but its existing lock is not rewritten. The
+  39-game production-path replay produced all 117 ML/Spread/Total forecasts, zero capture or score/
+  side coherence failures, and a non-flat 11 Best Angle / 33 Lean / 23 Watchlist / 4 No Play exact-
+  price surface across 71 evaluated markets; 46 markets stayed held rather than receiving invented
+  prices. Evidence and rollback:
+  `docs/model-audits/2026-10-03-cfb-sharp-sportsbook-partition-recovery-r92.md`.
+
 ### T-60 prediction-lock continuity (fixture r69; writer r91)
 
 - The active CFB score, PMF, probability, market-reading, decision, grade, evidence, collector,
