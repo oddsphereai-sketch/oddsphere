@@ -79,6 +79,10 @@ async function main(): Promise<void> {
     });
     const sharpSplits = payload.market.sharpApiSplits ?? [];
     const publicSplits = payload.market.playbookSplits;
+    const priorSpreadSplits = rows
+      .filter((candidate) => candidate.providerGameId === row.providerGameId && Date.parse(candidate.capturedAt) <= Date.parse(payload.capturedAt))
+      .map((candidate) => candidate.payload.market.playbookSplits?.spread ?? null)
+      .filter((split): split is NonNullable<typeof split> => split !== null);
     const operationalOpening = payload.market.operationalOpening;
     const weather = payload.availability.weather ?? null;
     const baseForecast = anchor ? buildCfbMarketSharpAwareForecast({
@@ -89,6 +93,7 @@ async function main(): Promise<void> {
       sharpSplits,
       playbookLine: payload.market.playbookLine,
       publicSplits,
+      priorSpreadSplits,
       evaluatedAt: payload.capturedAt,
     }) : weekly.forecast;
     const forecast = anchor && weather && weather.independentTotalAdjustmentPoints < 0
@@ -100,6 +105,7 @@ async function main(): Promise<void> {
           sharpSplits,
           playbookLine: payload.market.playbookLine,
           publicSplits,
+          priorSpreadSplits,
           kickoffWeather: weather,
           evaluatedAt: payload.capturedAt,
         })
@@ -150,7 +156,7 @@ async function main(): Promise<void> {
       publicSplits,
       operationalOpening,
       current,
-    }) : rawBundle, payload.market.playbookLine, payload.market.espnReferenceLine ?? null);
+    }) : rawBundle, payload.market.playbookLine, payload.market.espnReferenceLine ?? null, current);
     if (Math.abs(candidate.forecast.expectedHomePoints + candidate.forecast.expectedAwayPoints - forecast.expectedTotal) > 1e-8) {
       coherenceFailures.push(payload.game.providerGameId);
     }
@@ -194,6 +200,8 @@ async function main(): Promise<void> {
       resultSummary,
       selectionWeeks1to2: summarizeResults(comparisons.filter((row) => row.week <= 2)),
       confirmationWeeks3to4: summarizeResults(comparisons.filter((row) => row.week >= 3 && row.week <= 4)),
+      calibrationDiagnostics: summarizeCalibrationDiagnostics(comparisons),
+      tierCandidates: summarizeTierCandidates(comparisons),
     } : {
       promotionRows: promotions,
       demotionRows: demotions,
@@ -203,7 +211,23 @@ async function main(): Promise<void> {
 }
 
 function compact(decision: CfbV1ExactPriceDecision | undefined) {
-  return decision ? { side: decision.side, grade: decision.grade, line: decision.evaluatedQuote.line, price: decision.evaluatedQuote.price, book: decision.evaluatedQuote.sportsbook } : null;
+  return decision ? {
+    side: decision.side,
+    grade: decision.grade,
+    line: decision.evaluatedQuote.line,
+    price: decision.evaluatedQuote.price,
+    book: decision.evaluatedQuote.sportsbook,
+    modelProbability: decision.modelProbability,
+    marketFairProbability: decision.marketFairProbability,
+    expectedValue: decision.expectedValue,
+    probabilityGrade: decision.probabilityGrade,
+    confidenceScore: decision.gradeAdjustment?.confidenceScore ?? null,
+    confidenceAdjustment: decision.gradeAdjustment?.confidenceAdjustment ?? null,
+    sharpDirection: decision.gradeAdjustment?.sharpDirection ?? "unknown",
+    publicDirection: decision.gradeAdjustment?.publicDirection ?? "unknown",
+    movementDirection: decision.gradeAdjustment?.movementDirection ?? "unknown",
+    executionStatus: decision.gradeAdjustment?.executionStatus ?? null,
+  } : null;
 }
 
 function rank(grade: CfbV1Grade | undefined): number { return grade === "Best Angle" ? 4 : grade === "Lean" ? 3 : grade === "Watchlist" ? 2 : grade === "No Play" ? 1 : 0; }
@@ -259,6 +283,129 @@ function summarizeResults(rows: AuditRow[]) {
     lean: summarize(rows.filter((row) => row.candidate?.grade === "Lean" && row.result !== null)),
     byMarket: Object.fromEntries(MARKETS.map((market) => [market, summarize(rows.filter((row) => row.market === market && row.result !== null))])),
     actionableByMarket: Object.fromEntries(MARKETS.map((market) => [market, summarize(rows.filter((row) => row.market === market && actionable(row.candidate?.grade) && row.result !== null))])),
+  };
+}
+
+function summarizeCalibrationDiagnostics(rows: AuditRow[]) {
+  const settled = rows.filter((row) => row.result !== null && row.candidate !== null);
+  const summarize = (subset: AuditRow[]) => {
+    const wins = subset.filter((row) => row.result === "win").length;
+    const losses = subset.filter((row) => row.result === "loss").length;
+    const pushes = subset.filter((row) => row.result === "push").length;
+    const decided = wins + losses;
+    const units = subset.reduce((sum, row) => {
+      if (row.result === "push") return sum;
+      if (row.result === "loss") return sum - 1;
+      const price = row.candidate?.price ?? -110;
+      return sum + (price < 0 ? 100 / Math.abs(price) : price / 100);
+    }, 0);
+    return {
+      rows: subset.length,
+      games: new Set(subset.map((row) => row.providerGameId)).size,
+      wins,
+      losses,
+      pushes,
+      accuracy: decided ? wins / decided : null,
+      units,
+      roi: decided ? units / decided : null,
+    };
+  };
+  const by = (key: (row: AuditRow) => string) => Object.fromEntries(
+    [...new Set(settled.map(key))].sort().map((value) => [value, summarize(settled.filter((row) => key(row) === value))]),
+  );
+  const confidenceBand = (row: AuditRow) => {
+    const score = row.candidate?.confidenceScore;
+    if (score === null || score === undefined) return "unknown";
+    if (score < 51.5) return "<51.5";
+    if (score < 55) return "51.5-54.99";
+    if (score < 57.5) return "55-57.49";
+    if (score < 60) return "57.5-59.99";
+    if (score < 62.5) return "60-62.49";
+    return ">=62.5";
+  };
+  const evidencePattern = (row: AuditRow) => [
+    row.candidate?.sharpDirection ?? "unknown",
+    row.candidate?.publicDirection ?? "unknown",
+    row.candidate?.movementDirection ?? "unknown",
+  ].join("/");
+  return {
+    byConfidenceBand: by(confidenceBand),
+    byGradeMarket: by((row) => `${row.candidate?.grade}:${row.market}`),
+    byGradeEvidence: by((row) => `${row.candidate?.grade}:${evidencePattern(row)}`),
+    selectionByGrade: Object.fromEntries(["Best Angle", "Lean", "Watchlist", "No Play"].map((grade) => [grade,
+      summarize(settled.filter((row) => row.week <= 2 && row.candidate?.grade === grade))])),
+    confirmationByGrade: Object.fromEntries(["Best Angle", "Lean", "Watchlist", "No Play"].map((grade) => [grade,
+      summarize(settled.filter((row) => row.week >= 3 && row.week <= 4 && row.candidate?.grade === grade))])),
+  };
+}
+
+type TierCandidate = {
+  name: string;
+  moneylineProbability: number;
+  spreadProbability: number;
+  totalProbability: number;
+  requireNoResistance: boolean;
+  requireSupportForSpreadTotal: boolean;
+};
+
+function summarizeTierCandidates(rows: AuditRow[]) {
+  const candidates: TierCandidate[] = [
+    { name: "p65_all_markets", moneylineProbability: 0.65, spreadProbability: 0.65, totalProbability: 0.65, requireNoResistance: false, requireSupportForSpreadTotal: false },
+    { name: "p60_no_resistance", moneylineProbability: 0.60, spreadProbability: 0.60, totalProbability: 0.60, requireNoResistance: true, requireSupportForSpreadTotal: false },
+    { name: "market_65_60_60_no_resistance", moneylineProbability: 0.65, spreadProbability: 0.60, totalProbability: 0.60, requireNoResistance: true, requireSupportForSpreadTotal: false },
+    { name: "market_65_60_60_supported_spread_total", moneylineProbability: 0.65, spreadProbability: 0.60, totalProbability: 0.60, requireNoResistance: true, requireSupportForSpreadTotal: true },
+    { name: "market_625_60_60_no_resistance", moneylineProbability: 0.625, spreadProbability: 0.60, totalProbability: 0.60, requireNoResistance: true, requireSupportForSpreadTotal: false },
+    { name: "market_675_625_625_no_resistance", moneylineProbability: 0.675, spreadProbability: 0.625, totalProbability: 0.625, requireNoResistance: true, requireSupportForSpreadTotal: false },
+  ];
+  return Object.fromEntries(candidates.map((candidate) => [candidate.name, {
+    policy: candidate,
+    selection: summarizeTierCandidate(rows.filter((row) => row.week <= 2), candidate),
+    confirmation: summarizeTierCandidate(rows.filter((row) => row.week >= 3 && row.week <= 4), candidate),
+  }]));
+}
+
+function summarizeTierCandidate(rows: AuditRow[], policy: TierCandidate) {
+  const actionableRows = rows.filter((row) => actionable(row.candidate?.grade) && row.result !== null && row.candidate !== null);
+  const candidateGrade = (row: AuditRow): CfbV1Grade => {
+    const decision = row.candidate!;
+    const threshold = row.market === "moneyline"
+      ? policy.moneylineProbability
+      : row.market === "spread"
+        ? policy.spreadProbability
+        : policy.totalProbability;
+    const directions = [decision.sharpDirection, decision.publicDirection, decision.movementDirection];
+    const noResistance = !directions.includes("resistance");
+    const hasSupport = directions.includes("support");
+    const qualifies = decision.modelProbability >= threshold
+      && (!policy.requireNoResistance || noResistance)
+      && (!policy.requireSupportForSpreadTotal || row.market === "moneyline" || hasSupport);
+    return qualifies ? "Best Angle" : "Lean";
+  };
+  const summarize = (subset: AuditRow[]) => {
+    const wins = subset.filter((row) => row.result === "win").length;
+    const losses = subset.filter((row) => row.result === "loss").length;
+    const pushes = subset.filter((row) => row.result === "push").length;
+    const decided = wins + losses;
+    const units = subset.reduce((sum, row) => {
+      if (row.result === "push") return sum;
+      if (row.result === "loss") return sum - 1;
+      const price = row.candidate?.price ?? -110;
+      return sum + (price < 0 ? 100 / Math.abs(price) : price / 100);
+    }, 0);
+    return { rows: subset.length, wins, losses, pushes, accuracy: decided ? wins / decided : null, units, roi: decided ? units / decided : null };
+  };
+  const best = actionableRows.filter((row) => candidateGrade(row) === "Best Angle");
+  const lean = actionableRows.filter((row) => candidateGrade(row) === "Lean");
+  return {
+    actionable: summarize(actionableRows),
+    bestAngle: summarize(best),
+    lean: summarize(lean),
+    promotions: actionableRows.filter((row) => row.candidate?.grade === "Lean" && candidateGrade(row) === "Best Angle").length,
+    demotions: actionableRows.filter((row) => row.candidate?.grade === "Best Angle" && candidateGrade(row) === "Lean").length,
+    byMarket: Object.fromEntries(MARKETS.map((market) => [market, {
+      bestAngle: summarize(best.filter((row) => row.market === market)),
+      lean: summarize(lean.filter((row) => row.market === market)),
+    }])),
   };
 }
 

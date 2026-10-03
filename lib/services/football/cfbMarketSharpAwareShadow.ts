@@ -18,13 +18,13 @@ import {
 import { evaluateCfbHolisticConfidence } from "./cfbHolisticConfidenceCandidate";
 
 export const CFB_MARKET_SHARP_AWARE_CANDIDATE_RELEASE =
-  "cfb_market_sharp_aware_candidate_2026_10_02_r22_same_book_qb_availability" as const;
+  "cfb_market_sharp_aware_candidate_2026_10_03_r23_spread_signal_continuity" as const;
 export const CFB_MARKET_SHARP_AWARE_SHADOW_RELEASE =
   CFB_MARKET_SHARP_AWARE_CANDIDATE_RELEASE;
 export const CFB_MARKET_SHARP_AWARE_PRODUCTION_RELEASE =
-  "cfb_market_sharp_aware_production_2026_10_02_r24_same_book_qb_availability" as const;
+  "cfb_market_sharp_aware_production_2026_10_03_r25_spread_signal_continuity" as const;
 export const CFB_MARKET_SHARP_AWARE_PREVIOUS_PRODUCTION_RELEASE =
-  "cfb_market_sharp_aware_production_2026_10_01_r23_split_spread_arbitration" as const;
+  "cfb_market_sharp_aware_production_2026_10_02_r24_same_book_qb_availability" as const;
 export const CFB_MARKET_SHADOW_WEIGHT = 0 as const;
 export const CFB_SHARP_SIGNED_GAP_THRESHOLD_PP = 10 as const;
 export const CFB_SHARP_FULL_STRENGTH_GAP_PP = 20 as const;
@@ -146,6 +146,7 @@ export function buildCfbMarketSharpAwareShadowForecast(args: {
   sharpSplits: CfbSharpApiSplitRecord[];
   playbookLine?: CfbForwardPlaybookLine | null;
   publicSplits?: CfbForwardPlaybookSplitSet | null;
+  priorSpreadSplits?: CfbForwardPlaybookSplit[];
   kickoffWeather?: CfbKickoffWeatherSnapshot | null;
   evaluatedAt: string;
 }): CfbMarketSharpAwareShadowForecast {
@@ -193,8 +194,8 @@ export function buildCfbMarketSharpAwareShadowForecast(args: {
     homeSpread: -( -args.anchor.homeSpread + homeMarginShiftPoints),
     totalLine: args.anchor.totalLine + totalShiftPoints,
   };
-  const pmfWithoutWeather = applyValidatedSpreadArbitration(args.independentForecast, args.anchor, args.publicSplits ?? null, args.evaluatedAt);
-  const pmf = applyValidatedSpreadArbitration(independentForecast, args.anchor, args.publicSplits ?? null, args.evaluatedAt);
+  const pmfWithoutWeather = applyValidatedSpreadArbitration(args.independentForecast, args.anchor, args.publicSplits ?? null, args.priorSpreadSplits ?? [], args.evaluatedAt);
+  const pmf = applyValidatedSpreadArbitration(independentForecast, args.anchor, args.publicSplits ?? null, args.priorSpreadSplits ?? [], args.evaluatedAt);
   const summary = summarizePmf(pmf);
   const summaryWithoutWeather = summarizePmf(pmfWithoutWeather);
   return {
@@ -244,6 +245,7 @@ export function buildCfbMarketSharpAwareForecast(args: {
   sharpSplits: CfbSharpApiSplitRecord[];
   playbookLine?: CfbForwardPlaybookLine | null;
   publicSplits?: CfbForwardPlaybookSplitSet | null;
+  priorSpreadSplits?: CfbForwardPlaybookSplit[];
   kickoffWeather?: CfbKickoffWeatherSnapshot | null;
   evaluatedAt: string;
 }): CfbMarketSharpAwareForecast {
@@ -688,25 +690,61 @@ function applyValidatedSpreadArbitration(
   forecast: CfbV1Forecast,
   anchor: CfbCanonicalMarketAnchor,
   splits: CfbForwardPlaybookSplitSet | null,
+  priorSpreadSplits: CfbForwardPlaybookSplit[],
   evaluatedAt: string,
 ): CfbV1Forecast["pmf"] {
-  const split = splits?.spread
+  const currentSplit = splits?.spread
     ? eligiblePublicSplit(splits.spread, evaluatedAt, forecast.gameStartsAt)
     : null;
-  if (!split || (split.booksUsed ?? 0) < 8) return forecast.pmf.map((cell) => ({ ...cell }));
+  const currentDirection = currentSplit ? spreadSignalDirection(currentSplit) : null;
+  let signalSide = currentSplit ? qualifyingSpreadSignal(currentSplit) : null;
   if (
-    split.homeMoneyPct === null || split.homeBetsPct === null ||
-    split.awayMoneyPct === null || split.awayBetsPct === null
-  ) return forecast.pmf.map((cell) => ({ ...cell }));
-  const homeGap = split.homeMoneyPct - split.homeBetsPct;
-  const awayGap = split.awayMoneyPct - split.awayBetsPct;
-  const signalSide = homeGap >= awayGap ? "home" : "away";
-  const divergence = Math.abs(signalSide === "home" ? homeGap : awayGap);
-  if (divergence < 5) return forecast.pmf.map((cell) => ({ ...cell }));
+    signalSide === null &&
+    currentDirection !== null &&
+    isFavoriteSpreadSide(currentDirection, anchor.homeSpread) &&
+    Math.abs(forecast.expectedMarginHome + anchor.homeSpread) >= 5
+  ) {
+    const evaluatedMs = Date.parse(evaluatedAt);
+    const gameMs = Date.parse(forecast.gameStartsAt);
+    const retained = [...priorSpreadSplits]
+      .filter((split) => {
+        const capturedMs = Date.parse(split.capturedAt);
+        if (![capturedMs, evaluatedMs, gameMs].every(Number.isFinite)) return false;
+        const ageHours = (evaluatedMs - capturedMs) / 3_600_000;
+        return capturedMs <= gameMs && ageHours >= 0 && ageHours <= 24 && qualifyingSpreadSignal(split) === currentDirection;
+      })
+      .sort((first, second) => Date.parse(second.capturedAt) - Date.parse(first.capturedAt))[0];
+    signalSide = retained ? currentDirection : null;
+  }
+  if (signalSide === null) return forecast.pmf.map((cell) => ({ ...cell }));
   const independentSide = forecast.expectedMarginHome + anchor.homeSpread >= 0 ? "home" : "away";
   if (signalSide === independentSide) return forecast.pmf.map((cell) => ({ ...cell }));
   const targetMargin = -2 * anchor.homeSpread - forecast.expectedMarginHome;
   return tiltCfbMarginWithinTotals(forecast.pmf, targetMargin - forecast.expectedMarginHome);
+}
+
+function spreadSignalDirection(split: CfbForwardPlaybookSplit): "home" | "away" | null {
+  if (
+    split.homeMoneyPct === null || split.homeBetsPct === null ||
+    split.awayMoneyPct === null || split.awayBetsPct === null
+  ) return null;
+  const homeGap = split.homeMoneyPct - split.homeBetsPct;
+  const awayGap = split.awayMoneyPct - split.awayBetsPct;
+  return homeGap >= awayGap ? "home" : "away";
+}
+
+function qualifyingSpreadSignal(split: CfbForwardPlaybookSplit): "home" | "away" | null {
+  if ((split.booksUsed ?? 0) < 8) return null;
+  const direction = spreadSignalDirection(split);
+  if (direction === null) return null;
+  const gap = direction === "home"
+    ? (split.homeMoneyPct ?? 0) - (split.homeBetsPct ?? 0)
+    : (split.awayMoneyPct ?? 0) - (split.awayBetsPct ?? 0);
+  return Math.abs(gap) >= 5 ? direction : null;
+}
+
+function isFavoriteSpreadSide(side: "home" | "away", homeSpread: number): boolean {
+  return homeSpread < 0 ? side === "home" : homeSpread > 0 ? side === "away" : false;
 }
 
 function tiltCfbMarginWithinTotals(

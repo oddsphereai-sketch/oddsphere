@@ -71,6 +71,38 @@ assert.equal(withPublic.publicConsensusAdjustment.totalShiftPoints, 0.75);
 assert.ok(noSharp.expectedMarginHome + anchor.homeSpread < 0, "fixture starts on the away cover side");
 assert.ok(withPublic.expectedMarginHome + anchor.homeSpread > 0, "qualified eight-book spread divergence performs a real coherent side flip");
 assert.equal(withPublic.expectedTotal.toFixed(9), noSharp.expectedTotal.toFixed(9), "spread arbitration preserves the independent total");
+const weakSameDirection = publicSplitSet({ homeTickets: 49, homeMoney: 51, overTickets: 50, overMoney: 50 });
+const retainedPublic = buildCfbMarketSharpAwareShadowForecast({
+  independentForecast: independent,
+  anchor,
+  sharpSplits: [],
+  playbookLine,
+  publicSplits: weakSameDirection,
+  priorSpreadSplits: [publicHomeOver.spread],
+  evaluatedAt: observedAt,
+});
+assert.equal(retainedPublic.expectedMarginHome.toFixed(9), withPublic.expectedMarginHome.toFixed(9), "a same-side favorite signal does not disappear at an arbitrary five-point cutoff");
+const weakOppositeDirection = publicSplitSet({ homeTickets: 51, homeMoney: 49, overTickets: 50, overMoney: 50 });
+const endedPublic = buildCfbMarketSharpAwareShadowForecast({
+  independentForecast: independent,
+  anchor,
+  sharpSplits: [],
+  playbookLine,
+  publicSplits: weakOppositeDirection,
+  priorSpreadSplits: [publicHomeOver.spread],
+  evaluatedAt: observedAt,
+});
+assert.equal(endedPublic.expectedMarginHome.toFixed(9), noSharp.expectedMarginHome.toFixed(9), "an opposite current direction ends continuity rather than preserving an obsolete signal");
+const expiredPublic = buildCfbMarketSharpAwareShadowForecast({
+  independentForecast: independent,
+  anchor,
+  sharpSplits: [],
+  playbookLine,
+  publicSplits: weakSameDirection,
+  priorSpreadSplits: [{ ...publicHomeOver.spread, capturedAt: "2026-08-27T11:59:59.000Z" }],
+  evaluatedAt: observedAt,
+});
+assert.equal(expiredPublic.expectedMarginHome.toFixed(9), noSharp.expectedMarginHome.toFixed(9), "spread continuity expires after twenty-four hours");
 const stalePublic = Object.fromEntries(Object.entries(publicHomeOver).map(([market, split]) => [market, { ...split, capturedAt: "2026-08-28T05:29:59.000Z" }])) as typeof publicHomeOver;
 const stalePublicForecast = buildCfbMarketSharpAwareShadowForecast({ independentForecast: independent, anchor, sharpSplits: [], playbookLine, publicSplits: stalePublic, evaluatedAt: observedAt });
 assert.equal(stalePublicForecast.publicConsensusAdjustment.source, null, "public evidence older than the far-game cadence is unavailable");
