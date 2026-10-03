@@ -68,6 +68,7 @@ import {
   fetchSharpApiNcaafOddsFallback,
   mergeCfbNamedBooks,
   preferredCfbTargetBook,
+  retainLatestCfbNamedBookMarkets,
   type CfbSharpApiOddsResult,
 } from "./cfbSharpApiOdds";
 import { fetchCfbSharpApiSplits } from "./cfbSharpApiSplits";
@@ -101,7 +102,7 @@ import {
 import type { PlaybookInjuryTeamRow } from "@/lib/providers/playbook/types";
 
 export const CFB_FORWARD_WRITER_RELEASE =
-  "cfb_forward_evidence_writer_2026_10_03_r85_spread_signal_continuity" as const;
+  "cfb_forward_evidence_writer_2026_10_03_r86_verified_quote_market_flip_continuity" as const;
 export const CFB_FORWARD_MAX_QB_TEAMS_PER_RUN = 24 as const;
 export const CFB_FORWARD_MAX_SHARP_FALLBACK_GAMES_PER_RUN = 24 as const;
 export const CFB_FORWARD_MAX_ESPN_PROSPECTIVE_GAMES_PER_RUN = 32 as const;
@@ -370,6 +371,20 @@ export async function runCfbForwardEvidenceWriter(args: {
   const weatherRequests = [...weatherByGame.values()].reduce((sum, value) => sum + value.requests, 0);
   const priorOpening = firstOpenings(existing);
   const captureHistoryBooksByGame = new Map<string, NcaafBookOdds[]>();
+  const captureHistorySpreadSplitsByGame = new Map<string, CfbForwardPlaybookSplit[]>();
+  for (const row of marketHistory) {
+    captureHistoryBooksByGame.set(row.providerGameId, [
+      ...(captureHistoryBooksByGame.get(row.providerGameId) ?? []),
+      ...row.payload.market.currentBooks,
+    ]);
+    const spread = row.payload.market.playbookSplits?.spread ?? null;
+    if (spread) {
+      captureHistorySpreadSplitsByGame.set(row.providerGameId, [
+        ...(captureHistorySpreadSplitsByGame.get(row.providerGameId) ?? []),
+        spread,
+      ]);
+    }
+  }
   for (const row of existing) {
     const books = captureHistoryBooksByGame.get(row.providerGameId) ?? [];
     books.push(...row.payload.market.currentBooks);
@@ -379,8 +394,15 @@ export async function runCfbForwardEvidenceWriter(args: {
   const { payloads, captureFailures } = buildCfbForwardPayloadsWithIsolation(plans, (plan): CfbForwardEvidencePayload => {
     const sharpBooks = sharpFallback.booksByGame[plan.game.providerGameId] ?? [];
     const sharpDisplayBooks = sharpFallback.displayBooksByGame[plan.game.providerGameId] ?? [];
-    const currentBooks = mergeCfbNamedBooks(slate.currentOddsComparableBooksByGame[plan.game.providerGameId] ?? [], sharpBooks);
-    const displayBooks = mergeCfbNamedBooks(slate.currentOddsAllBooksByGame[plan.game.providerGameId] ?? [], sharpDisplayBooks);
+    const freshCurrentBooks = mergeCfbNamedBooks(slate.currentOddsComparableBooksByGame[plan.game.providerGameId] ?? [], sharpBooks);
+    const currentBooks = retainLatestCfbNamedBookMarkets(
+      freshCurrentBooks,
+      captureHistoryBooksByGame.get(plan.game.providerGameId) ?? [],
+    );
+    const displayBooks = mergeCfbNamedBooks(
+      mergeCfbNamedBooks(slate.currentOddsAllBooksByGame[plan.game.providerGameId] ?? [], sharpDisplayBooks),
+      currentBooks,
+    );
     const current = preferredCfbTargetBook(currentBooks);
     const providerOpening = slate.openingOddsByGame[plan.game.providerGameId] ?? null;
     const operationalOpening = providerOpening
@@ -421,10 +443,7 @@ export async function runCfbForwardEvidenceWriter(args: {
       playbookEvidence ? normalizeCfbPlaybookSplits(playbookEvidence.splitRow, args.now) : null,
       previousMarket?.playbookSplits ?? null,
     );
-    const priorSpreadSplits = existing
-      .filter((row) => row.providerGameId === plan.game.providerGameId)
-      .map((row) => row.payload.market.playbookSplits?.spread ?? null)
-      .filter((split): split is CfbForwardPlaybookSplit => split !== null);
+    const priorSpreadSplits = captureHistorySpreadSplitsByGame.get(plan.game.providerGameId) ?? [];
     const sharpApiSplits = sharpSplitsAttempt.result?.recordsByGame[plan.game.providerGameId] ?? [];
     const sharpApiSplitsStatus = sharpSplitsAttempt.result === null
       ? "request_failed" as const
@@ -538,7 +557,10 @@ export async function runCfbForwardEvidenceWriter(args: {
     const decisions = publishCfbForwardDecisionBundle(applyCfbVerifiedAvailabilityGradeCap({
       bundle: marketAwareDecisions,
       availability: quarterbackAvailability.availability,
-    }), playbookLine, espnReferenceLine, current);
+    }), playbookLine, espnReferenceLine, {
+      spread: preferredCfbTargetBook(currentBooks.filter((book) => book.spread !== null)),
+      total: preferredCfbTargetBook(currentBooks.filter((book) => book.total !== null)),
+    });
     assertFootballCrossMarketCoherence({
       sport: "cfb",
       providerGameId: plan.game.providerGameId,
@@ -986,14 +1008,14 @@ export function publishCfbForwardDecisionBundle(
   bundle: ReturnType<typeof buildCfbV1DecisionBundle>,
   playbookLine: CfbForwardEvidencePayload["market"]["playbookLine"],
   espnReferenceLine: CfbForwardEvidencePayload["market"]["espnReferenceLine"] = null,
-  namedBookLine: NcaafBookOdds | null = null,
+  namedBookLines: Partial<Record<"spread" | "total", NcaafBookOdds | null>> = {},
 ): CfbForwardPublishedDecisionBundle {
   const { pmf: _pmf, ...forecast } = bundle.forecast;
   void _pmf;
   return {
     ...bundle,
     forecast,
-    marketOutlooks: buildCfbForwardMarketOutlooks({ forecast: bundle.forecast, playbookLine, namedBookLine, espnReferenceLine }),
+    marketOutlooks: buildCfbForwardMarketOutlooks({ forecast: bundle.forecast, playbookLine, namedBookLines, espnReferenceLine }),
   };
 }
 

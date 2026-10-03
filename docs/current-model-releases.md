@@ -190,34 +190,37 @@ Last reviewed: 2026-10-03
 
 ## CFB Daily Edge generalized weekly production release
 
-### Spread-signal continuity and covered-market publication (r25; writer r85)
+### Verified-quote, release-transition, and market-flip continuity (r26; writer r86)
 
 - Active score / market / decision releases are
-  `cfb_v1_joint_score_runtime_2026_10_03_r14_spread_signal_continuity` /
-  `cfb_market_sharp_aware_candidate_2026_10_03_r23_spread_signal_continuity` /
-  `cfb_market_sharp_aware_production_2026_10_03_r25_spread_signal_continuity` /
-  `cfb_v1_daily_edge_decision_2026_10_03_r37_spread_signal_continuity` /
-  `cfb_v1_exact_price_decision_tuple_2026_10_03_r25_spread_signal_continuity`.
+  `cfb_v1_joint_score_runtime_2026_10_03_r15_verified_quote_market_flip_continuity` /
+  `cfb_market_sharp_aware_candidate_2026_10_03_r24_verified_quote_market_flip_continuity` /
+  `cfb_market_sharp_aware_production_2026_10_03_r26_verified_quote_market_flip_continuity` /
+  `cfb_v1_daily_edge_decision_2026_10_03_r38_verified_quote_market_flip_continuity` /
+  `cfb_v1_exact_price_decision_tuple_2026_10_03_r26_verified_quote_market_flip_continuity`.
   Grade policy r16 is unchanged.
 - Active evidence / collector / member / writer releases are
-  `cfb_forward_evidence_snapshot_2026_10_03_r30_spread_signal_continuity` /
-  `cfb_forward_evidence_collector_2026_10_03_r36_spread_signal_continuity` /
-  `cfb_v1_member_release_2026_10_03_r42_spread_signal_continuity` /
-  `cfb_forward_evidence_writer_2026_10_03_r85_spread_signal_continuity`.
-  Fixture / outcome / snapshot / reader / tracking are r63 / r58 / r22 / r11 / r32.
-- The existing eight-book, five-percentage-point Playbook spread-arbitration entry remains
-  unchanged. A qualified favorite-side signal now survives a same-direction sub-threshold update
-  for at most 24 hours only when the independent cover disagreement is at least five points. An
-  opposite current direction ends continuity. The score reflection still preserves the independent
-  total and one coherent PMF, score, winner, Spread side, and Total side.
-- A verified current named-book line is now passed to the already-existing market-outlook fallback,
-  so a covered game does not lose its Spread or Total prediction merely because Playbook or ESPN
-  context is absent. This adds no request, writer, schedule, label, copy, or layout.
-- Release-pure replay covers 230 settled games. Weeks 1-2 move Moneyline 82-14 to 84-12 and Spread
-  51-45 to 52-44; Week 3+ remains 109-25 Moneyline and 68-66 Spread with identical margin and
-  team-score MAE. Overall margin MAE improves 13.5545 to 13.3907 and team-score MAE 9.4883 to
-  9.4714. There are no grade-threshold changes, so promotions, demotions, and actionable count are
-  unchanged; this is a side/score continuity correction, not board flattening.
+  `cfb_forward_evidence_snapshot_2026_10_03_r31_verified_quote_market_flip_continuity` /
+  `cfb_forward_evidence_collector_2026_10_03_r37_verified_quote_market_flip_continuity` /
+  `cfb_v1_member_release_2026_10_03_r43_verified_quote_market_flip_continuity` /
+  `cfb_forward_evidence_writer_2026_10_03_r86_verified_quote_market_flip_continuity`.
+  Fixture / outcome / snapshot / reader / tracking are r64 / r59 / r23 / r12 / r33.
+- The writer now loads the immediately previous release plus the bounded older transition base, so
+  fresh evidence can assemble a complete member board instead of republishing an older slate.
+  A valid immutable lock always wins over a later unlocked refresh; releases can no longer reopen a
+  locked game or revert its kickoff state.
+- Latest verified paired named-book quotes are retained independently by sportsbook and market when
+  a later provider cycle omits them. A fresh quote supersedes retained evidence. Spread and Total
+  outlooks use their own verified book, so one incomplete sibling market cannot erase the other.
+- Spread divergence may reflect the full score distribution only when the selected Spread side owns
+  at least half of reported Spread money and current Moneyline money does not explicitly support the
+  opposing winner. Missing evidence remains neutral; the released book-count and divergence tests
+  remain in force.
+- Release-pure replay covers 230 settled games. Overall Moneyline moves 193-37 to 194-36, Spread
+  120-110 to 122-108, margin MAE 13.391 to 13.318, and team-score MAE 9.471 to 9.392. The untouched
+  confirmation segment improves Moneyline 109-25 to 111-23 and Spread 68-66 to 70-64. The exact
+  current-board replay remains non-flat and has zero score/side coherence failures. There is no new
+  provider request, writer, schedule, copy, label, or layout.
 - Evidence and rollback:
   `docs/model-audits/2026-10-03-cfb-spread-arbitration-continuity-predeclaration.md` and
   `docs/model-audits/2026-10-03-cfb-spread-arbitration-continuity-result.md`. Roll back the complete

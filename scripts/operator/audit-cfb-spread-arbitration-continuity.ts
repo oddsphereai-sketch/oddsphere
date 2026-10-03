@@ -76,15 +76,10 @@ async function main(): Promise<void> {
     const homeSpread = latest?.payload.market.playbookLine?.homeSpread;
     if (!latest || homeSpread == null) return [];
     const independentMargin = prediction.expectedHome - prediction.expectedAway;
-    const currentSignal = qualifyingSignal(latest.payload.market.playbookSplits?.spread ?? null);
-    const currentDirection = signalDirection(latest.payload.market.playbookSplits?.spread ?? null);
-    const retainedRow = currentSignal ? latest : [...history].reverse().find((row) => {
-      const age = Date.parse(latest.capturedAt) - Date.parse(row.capturedAt);
-      const prior = qualifyingSignal(row.payload.market.playbookSplits?.spread ?? null);
-      return age >= 0 && age <= MAX_RETENTION_MS && prior !== null && prior === currentDirection &&
-        isFavoriteSide(prior, homeSpread) && Math.abs(independentMargin + homeSpread) >= 5;
-    }) ?? null;
-    const retainedSignal = currentSignal ?? qualifyingSignal(retainedRow?.payload.market.playbookSplits?.spread ?? null);
+    const currentSignal = resolveSignal(history, latest, independentMargin, homeSpread, legacyQualifyingSignal, false);
+    const retainedSignal = resolveSignal(history, latest, independentMargin, homeSpread, qualifyingSignal, true);
+    const retainedRow = currentSignal === null && retainedSignal !== null ? [...history].reverse().find((row) =>
+      qualifyingSignal(row.payload.market.playbookSplits?.spread ?? null) === retainedSignal) ?? null : null;
     const total = prediction.expectedHome + prediction.expectedAway;
     const baselineMargin = arbitratedMargin(independentMargin, homeSpread, currentSignal);
     const candidateMargin = arbitratedMargin(independentMargin, homeSpread, retainedSignal);
@@ -132,7 +127,46 @@ function qualifyingSignal(split: CfbForwardPlaybookSplit | null): Side | null {
   const homeGap = split.homeMoneyPct! - split.homeBetsPct!;
   const awayGap = split.awayMoneyPct! - split.awayBetsPct!;
   const side = homeGap >= awayGap ? "home" : "away";
+  const money = side === "home" ? split.homeMoneyPct! : split.awayMoneyPct!;
+  return Math.abs(side === "home" ? homeGap : awayGap) >= 5 && money >= 50 ? side : null;
+}
+
+function legacyQualifyingSignal(split: CfbForwardPlaybookSplit | null): Side | null {
+  if (!split || (split.booksUsed ?? 0) < 8) return null;
+  if ([split.homeMoneyPct, split.homeBetsPct, split.awayMoneyPct, split.awayBetsPct].some((value) => value == null)) return null;
+  const homeGap = split.homeMoneyPct! - split.homeBetsPct!;
+  const awayGap = split.awayMoneyPct! - split.awayBetsPct!;
+  const side = homeGap >= awayGap ? "home" : "away";
   return Math.abs(side === "home" ? homeGap : awayGap) >= 5 ? side : null;
+}
+
+function resolveSignal(
+  history: CfbForwardStoredEvidence[],
+  latest: CfbForwardStoredEvidence,
+  independentMargin: number,
+  homeSpread: number,
+  qualifier: (split: CfbForwardPlaybookSplit | null) => Side | null,
+  requireCurrentMoneyMajority: boolean,
+): Side | null {
+  const currentSplit = latest.payload.market.playbookSplits?.spread ?? null;
+  const current = qualifier(currentSplit);
+  const moneylineSide = moneylineMajoritySide(latest.payload.market.playbookSplits?.moneyline ?? null);
+  if (current && (!requireCurrentMoneyMajority || moneylineSide === null || moneylineSide === current)) return current;
+  const direction = signalDirection(currentSplit);
+  if (!direction || !isFavoriteSide(direction, homeSpread) || Math.abs(independentMargin + homeSpread) < 5) return null;
+  const money = direction === "home" ? currentSplit?.homeMoneyPct : currentSplit?.awayMoneyPct;
+  if (requireCurrentMoneyMajority && (money === null || money === undefined || money < 50)) return null;
+  if (requireCurrentMoneyMajority && moneylineSide !== null && moneylineSide !== direction) return null;
+  return [...history].reverse().find((row) => {
+    const age = Date.parse(latest.capturedAt) - Date.parse(row.capturedAt);
+    return age >= 0 && age <= MAX_RETENTION_MS && qualifier(row.payload.market.playbookSplits?.spread ?? null) === direction;
+  }) ? direction : null;
+}
+
+function moneylineMajoritySide(split: CfbForwardPlaybookSplit | null): Side | null {
+  if (!split || (split.booksUsed ?? 0) < 8 || split.homeMoneyPct === null || split.awayMoneyPct === null) return null;
+  if (split.homeMoneyPct === split.awayMoneyPct) return null;
+  return split.homeMoneyPct > split.awayMoneyPct ? "home" : "away";
 }
 
 function signalDirection(split: CfbForwardPlaybookSplit | null): Side | null {
