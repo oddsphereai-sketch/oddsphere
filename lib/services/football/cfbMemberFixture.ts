@@ -84,9 +84,9 @@ import { cfbTeamIdentity } from "./cfbTeamIdentity";
 import { CFB_PUBLIC_SCORE_DIRECTION_TOLERANCE_POINTS } from "./footballCrossMarketCoherence";
 
 export const CFB_MEMBER_FIXTURE_RELEASE =
-  "cfb_v1_member_fixture_2026_10_03_r65_retained_market_prediction_continuity" as const;
+  "cfb_v1_member_fixture_2026_10_03_r66_verified_quote_prediction_continuity" as const;
 export const CFB_PUBLIC_OUTCOME_CONTRACT_RELEASE =
-  "cfb_market_sharp_public_outcome_contract_2026_10_03_r60_retained_market_prediction_continuity" as const;
+  "cfb_market_sharp_public_outcome_contract_2026_10_03_r61_verified_quote_prediction_continuity" as const;
 export const CFB_CONTEXT_ONLY_QUOTE_CAPTURE_SKEW_MS = 5_000 as const;
 const CFB_PRE_DIRECTIONAL_MEMBER_RELEASE = "cfb_v1_member_release_2026_08_28_r14_expanded_sharp_budget" as const;
 const CFB_PRE_DIRECTIONAL_DECISION_RELEASE = "cfb_v1_daily_edge_decision_2026_08_28_r11_market_scoped_data_quality" as const;
@@ -1099,7 +1099,7 @@ function buildMarket(
   movementRows: CfbForwardMarketHistoryEvidence[],
 ): MarketEdgeDto {
   const held = decision === null;
-  const outlook = payload.decisions.marketOutlooks?.[market] ?? null;
+  const outlook = payload.decisions.marketOutlooks?.[market] ?? payload.outcomeMarketOutlooks?.[market] ?? null;
   const displayedProbability = decision?.modelProbability ?? outlook?.independentProbability ?? null;
   const slot = market === "spread" ? payload.market.current?.spread : market === "total" ? payload.market.current?.total : payload.market.current?.moneyline;
   const split = payload.market.playbookSplits?.[market] ?? null;
@@ -1147,7 +1147,7 @@ function buildMarket(
       : `The ${label} Bet grade is No Play because ${unavailableReason ?? "the exact-price evidence is incomplete"}. The game-level prediction remains live.${oneSidedContext}`
     : `${decision.side} is evaluated at ${formatAmerican(decision.evaluatedQuote.price)} from ${decision.evaluatedQuote.sportsbook}; the ${decision.grade} grade uses that exact ${decision.evaluatedQuote.marketSelection === "coherent_paired_alternate" ? "paired alternate offer" : "main-line quote"}, the authoritative PMF and calibrated probability, public money-versus-ticket divergence, stronger strictly matched sharp-book evidence when available, same-book movement, and other-book fair consensus.${crossMarketExplanation(payload, market, decision)}`;
   const publicSplits = buildPublicSplits(payload, market, movementRows);
-  const marketPrediction = buildMarketPrediction(payload, market, decision, outlook);
+  const marketPrediction = buildMarketPrediction(payload, market, decision, outlook, currentQuote);
   return {
     pick: decision?.side ?? null,
     confidence: displayedProbability,
@@ -1443,6 +1443,7 @@ function buildMarketPrediction(
   market: CfbV1Market,
   decision: CfbV1ExactPriceDecision | null,
   outlook: CfbForwardMarketOutlook | null,
+  currentQuote: CfbCurrentDisplayQuote | null,
 ): NonNullable<MarketEdgeDto["marketPrediction"]> {
   if (decision) {
     return {
@@ -1472,7 +1473,10 @@ function buildMarketPrediction(
       reason: "The authoritative game forecast remains available without an offered Moneyline price; no price or grade is fabricated.",
     };
   }
-  if (outlook && currentMarketContextIsVerified(payload, outlook)) {
+  if (outlook && (
+    currentMarketContextIsVerified(payload, outlook) ||
+    verifiedQuoteMatchesOutlook(currentQuote, outlook)
+  )) {
     return {
       status: "available",
       label: outlookLabel(payload, outlook),
@@ -1496,6 +1500,16 @@ function buildMarketPrediction(
     freshnessCheckedAt: payload.capturedAt,
     reason: `A fresh coherent current ${market} line is unavailable; projected score context is not substituted for a bettable market prediction.`,
   };
+}
+
+function verifiedQuoteMatchesOutlook(
+  currentQuote: CfbCurrentDisplayQuote | null,
+  outlook: CfbForwardMarketOutlook,
+): boolean {
+  return currentQuote !== null &&
+    currentQuote.quote.line !== null &&
+    outlook.line !== null &&
+    Math.abs(currentQuote.quote.line - outlook.line) < 1e-9;
 }
 
 function currentMarketContextIsVerified(

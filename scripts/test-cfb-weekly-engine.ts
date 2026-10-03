@@ -118,10 +118,16 @@ assert.deepEqual(
   "a game first discovered after kickoff cannot be backfilled",
 );
 const supportedFcsForecast = getCfbV1ForecastForGame({ game: supportedFcs }).forecast;
+const supportedFcsEvidence = evidenceRow(supportedFcs, supportedFcsForecast, 1, "supported-fcs-opening");
 assert.deepEqual(
-  selectCfbModelCoveredWeeklyGames({ games: [supportedFcs], existing: [evidenceRow(supportedFcs, supportedFcsForecast, 1, "supported-fcs-opening")], now: "2026-09-05T19:00:00.000Z", window: weekOneWindow }).map((row) => row.providerGameId),
+  selectCfbModelCoveredWeeklyGames({ games: [supportedFcs], existing: [supportedFcsEvidence], now: "2026-09-05T19:00:00.000Z", window: weekOneWindow }).map((row) => row.providerGameId),
   ["supported-fcs"],
   "an already captured game remains inside immutable lifecycle handling",
+);
+assert.deepEqual(
+  selectCfbModelCoveredWeeklyGames({ games: [weekOneGame], existing: [supportedFcsEvidence], now: "2026-09-05T12:00:00.000Z", window: weekOneWindow }).map((row) => row.providerGameId),
+  ["supported-fcs", "week-one-new-id"],
+  "a transient provider schedule omission must not erase an already verified upcoming game from refresh planning",
 );
 
 const qbPlans = Array.from({ length: 20 }, (_, index) => {

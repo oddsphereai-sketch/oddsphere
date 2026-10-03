@@ -102,7 +102,7 @@ import {
 import type { PlaybookInjuryTeamRow } from "@/lib/providers/playbook/types";
 
 export const CFB_FORWARD_WRITER_RELEASE =
-  "cfb_forward_evidence_writer_2026_10_03_r87_retained_market_prediction_continuity" as const;
+  "cfb_forward_evidence_writer_2026_10_03_r88_verified_quote_prediction_continuity" as const;
 export const CFB_FORWARD_MAX_QB_TEAMS_PER_RUN = 24 as const;
 export const CFB_FORWARD_MAX_SHARP_FALLBACK_GAMES_PER_RUN = 24 as const;
 export const CFB_FORWARD_MAX_ESPN_PROSPECTIVE_GAMES_PER_RUN = 32 as const;
@@ -819,7 +819,18 @@ export function selectCfbModelCoveredWeeklyGames(args: {
   const existingIds = new Set(args.existing.map((row) => row.providerGameId));
   const nowMs = Date.parse(args.now);
   if (!Number.isFinite(nowMs)) throw new Error("CFB model-covered weekly selection requires a valid timestamp.");
-  return eligibleCfbWeeklyGames(args.games, args.window).filter((game) =>
+  const providerIds = new Set(args.games.map((game) => game.providerGameId));
+  const latestStoredGames = new Map<string, { game: NcaafGame; capturedAt: number }>();
+  for (const row of args.existing) {
+    if (providerIds.has(row.providerGameId)) continue;
+    const capturedAt = Date.parse(row.capturedAt);
+    const current = latestStoredGames.get(row.providerGameId);
+    if (!current || capturedAt > current.capturedAt) {
+      latestStoredGames.set(row.providerGameId, { game: row.payload.game, capturedAt });
+    }
+  }
+  const candidates = [...args.games, ...[...latestStoredGames.values()].map((value) => value.game)];
+  return eligibleCfbWeeklyGames(candidates, args.window).filter((game) =>
     (Date.parse(game.scheduledStart) > nowMs || existingIds.has(game.providerGameId)) &&
     cfbV1WeeklyGameProfileCoverage(game).supported
   );

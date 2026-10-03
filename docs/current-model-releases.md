@@ -190,7 +190,34 @@ Last reviewed: 2026-10-03
 
 ## CFB Daily Edge generalized weekly production release
 
-### Retained market-prediction continuity (r26; writer r87)
+### Verified-quote prediction and schedule continuity (r26; writer r88)
+
+- Active numerical score / market / decision releases remain
+  `cfb_v1_joint_score_runtime_2026_10_03_r15_verified_quote_market_flip_continuity` /
+  `cfb_market_sharp_aware_candidate_2026_10_03_r24_verified_quote_market_flip_continuity` /
+  `cfb_market_sharp_aware_production_2026_10_03_r26_verified_quote_market_flip_continuity` /
+  `cfb_v1_daily_edge_decision_2026_10_03_r38_verified_quote_market_flip_continuity` /
+  `cfb_v1_exact_price_decision_tuple_2026_10_03_r26_verified_quote_market_flip_continuity`.
+  Grade policy r16 is unchanged.
+- Evidence remains r31. Active member / writer releases are
+  `cfb_v1_member_release_2026_10_03_r45_verified_quote_prediction_continuity` /
+  `cfb_forward_evidence_writer_2026_10_03_r88_verified_quote_prediction_continuity`.
+  Fixture / outcome / snapshot are r66 / r61 / r25; reader and tracking remain r12 / r33.
+- The weekly collector now keeps a previously verified upcoming matchup in refresh planning when a
+  later schedule response temporarily omits it. A currently returned provider game remains
+  authoritative, and the immutable-boundary selector still prevents any terminal lock from being
+  rewritten or reopened.
+- The member contract accepts a stored release-pure legacy market outlook when the immediately
+  newer decision bundle omitted that optional field. It publishes only when the outlook is tied to
+  the identical verified sportsbook line; it does not recompute a probability in the reader,
+  fabricate an exact-price grade, or manufacture a Bet selection.
+- The no-write production-evidence audit retained 99 games and planned 71 unlocked refreshes with
+  no capture failures. It published 142 evaluated markets: 19 Best Angles, 65 Leans, 46 Watchlists,
+  and 12 No Plays; 71 markets remained exact-price held. No grade rule changed, so the one-count
+  Best-Angle/Lean difference from the preceding live run is ordinary fresh-input movement rather
+  than a new demotion rule. Existing locks remain unchanged.
+
+### Retained market-prediction continuity (r26; writer r87; superseded member surface)
 
 - Active numerical score / market / decision releases remain
   `cfb_v1_joint_score_runtime_2026_10_03_r15_verified_quote_market_flip_continuity` /

@@ -1782,6 +1782,29 @@ for (const marketKey of ["moneyline", "total", "first_inning"] as const) {
   assert.equal(market.oddsTrail?.at(-1)?.sportsbook, "fanduel", `${marketKey} current context trail must stay same-book`);
 }
 
+const quoteOnlyOutlookPayload = structuredClone(thinBookPayload);
+const quoteOnlyOutlooks = quoteOnlyOutlookPayload.decisions.marketOutlooks!;
+quoteOnlyOutlookPayload.decisions.marketOutlooks = {
+  moneyline: quoteOnlyOutlooks.moneyline,
+  spread: null,
+  total: null,
+};
+quoteOnlyOutlookPayload.outcomeMarketOutlooks = quoteOnlyOutlooks;
+const quoteOnlyOutlookMember = buildCfbMemberFixture([{
+  ...evidence,
+  id: "quote-only-outlook-row",
+  stage: "unlocked",
+  capturedAt: observedAt,
+  payloadSha256: hashCfbForwardEvidencePayload(quoteOnlyOutlookPayload),
+  payload: quoteOnlyOutlookPayload,
+}]);
+for (const marketKey of ["total", "first_inning"] as const) {
+  const market = quoteOnlyOutlookMember.snapshot.games[0]!.markets[marketKey];
+  assert.equal(market.marketPrediction?.status, "available", `${marketKey} must use its verified matching sportsbook quote when the separate context timestamp is absent`);
+  assert.notEqual(market.currentPriceAmerican, null, `${marketKey} verified quote must remain visible`);
+  assert.equal(market.pick, null, `${marketKey} verified context quote cannot manufacture a Bet selection`);
+}
+
 const continuityCapturedAt = new Date(Date.parse(observedAt) + 15 * 60_000).toISOString();
 const missingCurrentBooksPayload: CfbForwardEvidencePayload = {
   ...thinBookPayload,
