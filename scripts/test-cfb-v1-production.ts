@@ -482,6 +482,24 @@ assert.equal(perMarketReferenceOutlooks.spread?.source, "authoritative_pmf_at_es
 assert.equal(Math.abs(perMarketReferenceOutlooks.spread?.line ?? 0), 6.5);
 assert.equal(perMarketReferenceOutlooks.total?.source, "authoritative_pmf_at_playbook_line", "a primary Total must retain precedence over the fallback");
 assert.equal(perMarketReferenceOutlooks.total?.line, 47.5);
+const oneSidedContextBook = {
+  ...currentBooks[0]!,
+  spread: null,
+  total: null,
+  marketQuotes: [
+    { market: "spread" as const, side: "home" as const, line: -7.5, price: -110, observedAt, marketSelection: "main_line" as const },
+    { market: "total" as const, side: "over" as const, line: 47.5, price: -108, observedAt, marketSelection: "main_line" as const },
+  ],
+};
+const oneSidedContextOutlooks = buildCfbForwardMarketOutlooks({
+  forecast: authoritativeForecast,
+  playbookLine: null,
+  namedBookLines: { spread: oneSidedContextBook, total: oneSidedContextBook },
+});
+assert.equal(oneSidedContextOutlooks.spread?.source, "authoritative_pmf_at_named_book_line", "a verified one-sided main-line Spread quote must support a line-specific PMF outlook without becoming a grade input");
+assert.equal(Math.abs(oneSidedContextOutlooks.spread?.line ?? 0), 7.5);
+assert.equal(oneSidedContextOutlooks.total?.source, "authoritative_pmf_at_named_book_line", "a verified one-sided main-line Total quote must support a line-specific PMF outlook without becoming a grade input");
+assert.equal(oneSidedContextOutlooks.total?.line, 47.5);
 const nearlyNormalizedForecast = {
   ...fullBundle.forecast,
   pmf: [

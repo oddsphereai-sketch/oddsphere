@@ -51,3 +51,21 @@ started/locked games are not rewritten.
 No-write audit on production evidence: 99 games, 71 unlocked capture proposals, 142 evaluated
 markets, 19 Best Angles, 65 Leans, 46 Watchlists, 12 No Plays, 71 exact-price holds, and zero capture
 failures. The grade policy is unchanged. Existing locked rows remain terminal.
+
+## One-sided verified context-line follow-up
+
+Production r25 confirmed the four still-upcoming unresolved games were selected and written under
+r45. Their provider rows contained verified one-sided main-line prices in `marketQuotes`, but the
+outlook builder read only complete paired `spread` and `total` fields. It therefore retained the
+real sportsbook line and price while omitting the line-specific PMF outlook.
+
+The r32 evidence contract now permits a verified one-sided `main_line` quote to supply only the
+context line and observation time for the authoritative PMF. It never supplies a no-vig benchmark
+or exact-price grade; those markets remain held unless the existing paired-book requirements pass.
+Playbook retains first priority, paired named-book fields retain second priority, and the strict
+ESPN opening reference remains the final fallback.
+
+No-write production-evidence audit: 99 games, 81 release-refresh captures, 148 evaluated markets,
+19 Best Angles, 66 Leans, 48 Watchlists, 15 No Plays, 95 exact-price holds, and zero capture
+failures. Numerical score, decision, and grade-policy releases remain unchanged, and terminal locks
+continue to win over newer rows.
