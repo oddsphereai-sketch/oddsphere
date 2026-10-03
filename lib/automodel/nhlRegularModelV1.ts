@@ -2,11 +2,12 @@ import type { BdlNhlTeamMetrics } from "../providers/nhl/_ballDontLieNhlClient";
 import type { NhlCalibratedTeamState } from "./nhlRegularPriors2026";
 import type { NhlRosterPrior } from "./nhlRosterPrior2026";
 
-export const NHL_REGULAR_MODEL_RELEASE = "nhl_regular_2026_r13_price_aware_grades" as const;
-export const NHL_REGULAR_CALIBRATION_RELEASE = "nhl_regular_calibration_2026_r13_price_aware_grades" as const;
-export const NHL_REGULAR_DECISION_RELEASE = "nhl_regular_decision_2026_r13_price_aware_exact_price" as const;
+export const NHL_REGULAR_MODEL_RELEASE = "nhl_regular_2026_r14_best_angle_calibration" as const;
+export const NHL_REGULAR_CALIBRATION_RELEASE = "nhl_regular_calibration_2026_r14_best_angle_calibration" as const;
+export const NHL_REGULAR_DECISION_RELEASE = "nhl_regular_decision_2026_r14_best_angle_calibration" as const;
 export const NHL_REGULAR_TRANSITION_MODEL_RELEASES = [
   NHL_REGULAR_MODEL_RELEASE,
+  "nhl_regular_2026_r13_price_aware_grades",
   "nhl_regular_2026_r12_roster_discrete_market_read",
   "nhl_regular_2026_r10_t60_market_refresh",
   "nhl_regular_2026_r9_source_aware_market_read",
@@ -14,6 +15,7 @@ export const NHL_REGULAR_TRANSITION_MODEL_RELEASES = [
 ] as const;
 export const NHL_REGULAR_TRANSITION_CALIBRATION_RELEASES = [
   NHL_REGULAR_CALIBRATION_RELEASE,
+  "nhl_regular_calibration_2026_r13_price_aware_grades",
   "nhl_regular_calibration_2026_r12_roster_discrete_market_read",
   "nhl_regular_calibration_2026_r10_t60_market_refresh",
   "nhl_regular_calibration_2026_r9_source_aware_market_read",
@@ -45,6 +47,12 @@ export function resolveNhlPriceAwareVerdict(
   if (oddsAmerican <= -200 && verdict === "best_angle") return "lean";
 
   const exactPriceEdge = modelProbability - americanImpliedProbability(oddsAmerican);
+  if (verdict === "best_angle" && market === "moneyline" && (modelProbability < 0.70 || exactPriceEdge < 0.05)) {
+    return "lean";
+  }
+  if (verdict === "best_angle" && market === "total" && (modelProbability < 0.65 || exactPriceEdge < 0.05)) {
+    return "lean";
+  }
   if (market === "spread" && verdict === "watchlist" && modelProbability >= 0.58 && exactPriceEdge >= 0.05) {
     return "lean";
   }

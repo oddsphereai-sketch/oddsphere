@@ -37,7 +37,12 @@ import { canonicalizeNhlLineRows } from "../lib/services/nhl/nhlLineBoard";
 import { assessNhlLockCoherence } from "../lib/services/nhl/nhlLockCoherence";
 import { __NHL_ADAPTER_TEST__ } from "../lib/services/nhl/adaptNhlToDailyEdgeResponse";
 
-assert.equal(resolveNhlPriceAwareVerdict("moneyline", "best_angle", -199, 0.70), "best_angle");
+assert.equal(resolveNhlPriceAwareVerdict("moneyline", "best_angle", -175, 0.70), "best_angle");
+assert.equal(resolveNhlPriceAwareVerdict("moneyline", "best_angle", -110, 0.69), "lean", "Moneyline Best Angle requires 70% outcome confidence");
+assert.equal(resolveNhlPriceAwareVerdict("moneyline", "best_angle", -190, 0.70), "lean", "Moneyline Best Angle also requires 5pp exact-price edge");
+assert.equal(resolveNhlPriceAwareVerdict("total", "best_angle", -110, 0.64), "lean", "Total Best Angle requires 65% calibrated outcome confidence");
+assert.equal(resolveNhlPriceAwareVerdict("total", "best_angle", -155, 0.65), "lean", "Total Best Angle also requires 5pp exact-price edge");
+assert.equal(resolveNhlPriceAwareVerdict("total", "best_angle", -110, 0.65), "best_angle", "a qualified Total remains a Best Angle");
 assert.equal(resolveNhlPriceAwareVerdict("moneyline", "best_angle", -200, 0.70), "lean", "a price in the -200s cannot be an NHL Best Angle");
 assert.equal(resolveNhlPriceAwareVerdict("moneyline", "lean", -230, 0.72), "lean", "a short likely winner remains actionable as a Lean");
 assert.equal(resolveNhlPriceAwareVerdict("moneyline", "lean", -899, 0.90), "lean");
