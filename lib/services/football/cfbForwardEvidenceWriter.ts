@@ -14,6 +14,7 @@ import {
   CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE,
   CFB_FORWARD_PRICE_PREVIOUS_EVIDENCE_SCHEMA_RELEASE,
   CFB_FORWARD_MEMBER_RELEASE,
+  isCfbPublishedT60AccuracyLockPayload,
   CFB_FORWARD_PRICE_PREVIOUS_MEMBER_RELEASE,
   hashCfbForwardEvidencePayload,
   buildCfbForwardMarketOutlooks,
@@ -102,7 +103,7 @@ import {
 import type { PlaybookInjuryTeamRow } from "@/lib/providers/playbook/types";
 
 export const CFB_FORWARD_WRITER_RELEASE =
-  "cfb_forward_evidence_writer_2026_10_03_r90_display_context_outlook" as const;
+  "cfb_forward_evidence_writer_2026_10_03_r91_t60_accuracy_lock" as const;
 export const CFB_FORWARD_MAX_QB_TEAMS_PER_RUN = 24 as const;
 export const CFB_FORWARD_MAX_SHARP_FALLBACK_GAMES_PER_RUN = 24 as const;
 export const CFB_FORWARD_MAX_ESPN_PROSPECTIVE_GAMES_PER_RUN = 32 as const;
@@ -1125,7 +1126,7 @@ function stageCounts(payloads: CfbForwardEvidencePayload[]): Record<"opening" | 
 
 export type CfbTrackingCandidate = {
   payload: CfbForwardEvidencePayload;
-  mode: "official_t60" | "published_pregame_accuracy_recovery";
+  mode: "official_t60" | "published_t60_accuracy_lock" | "published_pregame_accuracy_recovery";
   publishedPregamePayload: CfbForwardEvidencePayload | null;
 };
 
@@ -1145,6 +1146,7 @@ export function cfbTrackingCandidatesForRun(
   const selected: CfbTrackingCandidate[] = [];
   for (const rows of byGame.values()) {
     const official = rows.filter(isEligibleOfficialTrackingPayload).sort(latestPayloadFirst)[0];
+    const accuracyLock = rows.filter(isCfbPublishedT60AccuracyLockPayload).sort(latestPayloadFirst)[0];
     const recovery = rows.filter((payload) => {
       const gameStart = Date.parse(payload.game.scheduledStart);
       const capturedAt = Date.parse(payload.capturedAt);
@@ -1155,6 +1157,7 @@ export function cfbTrackingCandidatesForRun(
         capturedAt < gameStart;
     }).sort(latestPayloadFirst)[0];
     if (official) selected.push({ payload: official, mode: "official_t60", publishedPregamePayload: recovery ?? null });
+    else if (accuracyLock) selected.push({ payload: accuracyLock, mode: "published_t60_accuracy_lock", publishedPregamePayload: accuracyLock });
     else if (recovery) selected.push({ payload: recovery, mode: "published_pregame_accuracy_recovery", publishedPregamePayload: recovery });
   }
   return selected.sort((first, second) =>

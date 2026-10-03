@@ -8,6 +8,8 @@ import type { CfbForwardContextCapture } from "./cfbForwardEvidenceCapture";
 import type { CfbEspnReferenceLine } from "./cfbEspnReferenceLine";
 import type { CfbVerifiedQuarterbackAvailability } from "./cfbVerifiedAvailability";
 import {
+  CFB_T60_MAX_CAPTURE_LAG_MINUTES,
+  CFB_V1_DECISION_RELEASE,
   cfbV1LineProbabilities,
   type CfbV1DecisionBundle,
   type CfbV1Forecast,
@@ -106,6 +108,43 @@ export const CFB_FORWARD_MARKET_SHARP_PRIOR_MEMBER_RELEASE =
   "cfb_v1_member_release_2026_08_28_r20_prior_event_disambiguation" as const;
 
 export type CfbForwardEvidenceStage = "opening" | "unlocked" | "t60";
+
+/**
+ * A complete, on-time T-60 prediction remains a real immutable accuracy
+ * boundary even when exact-price grading is held because no canonical market
+ * anchor is available. This never authorizes reconstructed economics or an
+ * actionable grade; it only freezes the three published forecast directions.
+ */
+export function isCfbPublishedT60AccuracyLockPayload(payload: CfbForwardEvidencePayload): boolean {
+  const lag = payload.t60LagMinutes;
+  const capturedAt = Date.parse(payload.capturedAt);
+  const gameStartsAt = Date.parse(payload.game.scheduledStart);
+  const outlooks = payload.decisions.marketOutlooks;
+  const completeOutlooks = outlooks !== undefined &&
+    outlooks.moneyline !== null &&
+    outlooks.spread !== null && outlooks.spread.line !== null &&
+    outlooks.total !== null && outlooks.total.line !== null &&
+    ([outlooks.moneyline, outlooks.spread, outlooks.total] as const).every((outlook) =>
+      Number.isFinite(outlook.independentProbability) &&
+      outlook.independentProbability >= 0 &&
+      outlook.independentProbability <= 1 &&
+      Boolean(outlook.side));
+  return payload.schemaRelease === CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE &&
+    payload.memberRelease === CFB_FORWARD_MEMBER_RELEASE &&
+    payload.decisions.decisionRelease === CFB_V1_DECISION_RELEASE &&
+    payload.stage === "t60" &&
+    payload.captureTiming === "on_time" &&
+    lag !== null && Number.isFinite(lag) && lag >= 0 && lag <= CFB_T60_MAX_CAPTURE_LAG_MINUTES &&
+    Number.isFinite(capturedAt) && Number.isFinite(gameStartsAt) && capturedAt < gameStartsAt &&
+    payload.decisions.publicationEnabled &&
+    !payload.decisions.trackingEnabled &&
+    payload.decisions.evaluatedBets.length === 0 &&
+    payload.decisions.heldMarkets.length === 3 &&
+    payload.coverage.healthHolds.length === 1 &&
+    payload.coverage.healthHolds[0] === "authoritative_market_anchor_unavailable" &&
+    payload.authoritativeForecast?.status === "market_anchor_unavailable_hold" &&
+    completeOutlooks;
+}
 
 export type CfbForwardQuarterback = {
   playerId: string;

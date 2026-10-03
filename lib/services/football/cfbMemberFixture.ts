@@ -46,6 +46,7 @@ import {
   CFB_FORWARD_TRANSITION_PREVIOUS_EVIDENCE_SCHEMA_RELEASE,
   CFB_FORWARD_TRANSITION_PREVIOUS_MEMBER_RELEASE,
   CFB_FORWARD_MEMBER_RELEASE,
+  isCfbPublishedT60AccuracyLockPayload,
   CFB_FORWARD_PUBLICATION_PREVIOUS_MEMBER_RELEASE,
   type CfbForwardMarketOutlook,
   type CfbForwardEvidencePayload,
@@ -84,7 +85,7 @@ import { cfbTeamIdentity } from "./cfbTeamIdentity";
 import { CFB_PUBLIC_SCORE_DIRECTION_TOLERANCE_POINTS } from "./footballCrossMarketCoherence";
 
 export const CFB_MEMBER_FIXTURE_RELEASE =
-  "cfb_v1_member_fixture_2026_10_03_r68_display_context_outlook" as const;
+  "cfb_v1_member_fixture_2026_10_03_r69_t60_accuracy_lock" as const;
 export const CFB_PUBLIC_OUTCOME_CONTRACT_RELEASE =
   "cfb_market_sharp_public_outcome_contract_2026_10_03_r63_display_context_outlook" as const;
 export const CFB_CONTEXT_ONLY_QUOTE_CAPTURE_SKEW_MS = 5_000 as const;
@@ -660,7 +661,7 @@ function immutableLockOverlayRows(
 
 function isValidImmutableBoundaryT60(row: CfbForwardStoredEvidence): boolean {
   const lag = row.payload.t60LagMinutes;
-  return row.stage === "t60" &&
+  const officialLock = row.stage === "t60" &&
     row.payload.stage === "t60" &&
     row.payload.captureTiming === "on_time" &&
     lag !== null &&
@@ -675,6 +676,7 @@ function isValidImmutableBoundaryT60(row: CfbForwardStoredEvidence): boolean {
       decision.lockedAt === row.payload.capturedAt &&
       decision.evaluatedAt === row.payload.capturedAt
     );
+  return officialLock || (row.stage === "t60" && isCfbPublishedT60AccuracyLockPayload(row.payload));
 }
 
 function latestValidRowsForRelease(

@@ -33,6 +33,7 @@ import {
   buildCfbForwardMarketOutlooks,
   determineCfbForwardCollectionNeed,
   hashCfbForwardEvidencePayload,
+  isCfbPublishedT60AccuracyLockPayload,
   matchesCfbForwardEvidencePayloadHash,
   planCfbForwardEvidenceCaptures,
   type CfbForwardEvidencePayload,
@@ -2171,6 +2172,48 @@ assert.equal(recoveryCandidates.length, 1);
 assert.equal(recoveryCandidates[0]!.mode, "published_pregame_accuracy_recovery");
 assert.equal(recoveryCandidates[0]!.payload.capturedAt, afterCutoffPayload.capturedAt, "recovery must use the latest immutable prediction published before kickoff, including after a provider kickoff correction");
 assert.deepEqual(cfbTrackingCandidatesForRun([publishedCutoffStored], [], "2026-08-29T14:59:00.000Z"), [], "recovery must never write before a game starts while a real T-60 capture can still occur");
+const publishedT60AccuracyPayload = structuredClone(publishedCutoffPayload) as CfbForwardEvidencePayload;
+publishedT60AccuracyPayload.stage = "t60";
+publishedT60AccuracyPayload.capturedAt = "2026-08-29T15:10:00.000Z";
+publishedT60AccuracyPayload.cutoffAt = "2026-08-29T15:00:00.000Z";
+publishedT60AccuracyPayload.t60LagMinutes = 10;
+publishedT60AccuracyPayload.authoritativeForecast = {
+  status: "market_anchor_unavailable_hold",
+  release: CFB_MARKET_SHARP_AWARE_PRODUCTION_RELEASE,
+  candidateRelease: CFB_MARKET_SHARP_AWARE_CANDIDATE_RELEASE,
+  marketWeight: 0,
+};
+publishedT60AccuracyPayload.coverage.healthHolds = ["authoritative_market_anchor_unavailable"];
+publishedT60AccuracyPayload.decisions.evaluatedBets = [];
+publishedT60AccuracyPayload.decisions.heldMarkets = (["moneyline", "spread", "total"] as const).map((market) => ({
+  market,
+  reason: "authoritative_market_anchor_unavailable",
+  reasonCodes: ["global_health_hold" as const],
+}));
+publishedT60AccuracyPayload.decisions.trackingEnabled = false;
+const publishedT60AccuracyStored: CfbForwardStoredEvidence = {
+  ...publishedCutoffStored,
+  id: "published-t60-accuracy-lock",
+  stage: "t60",
+  capturedAt: publishedT60AccuracyPayload.capturedAt,
+  payload: publishedT60AccuracyPayload,
+};
+assert.equal(isCfbPublishedT60AccuracyLockPayload(publishedT60AccuracyPayload), true);
+const accuracyLockCandidates = cfbTrackingCandidatesForRun(
+  [publishedT60AccuracyStored],
+  [],
+  "2026-08-29T15:20:00.000Z",
+);
+assert.equal(accuracyLockCandidates.length, 1);
+assert.equal(accuracyLockCandidates[0]!.mode, "published_t60_accuracy_lock");
+assert.deepEqual(candidateTrackingMarkets(accuracyLockCandidates[0]!), ["moneyline", "spread", "total"]);
+const accuracyLockFixture = buildCfbMemberFixture([publishedT60AccuracyStored], "2026-08-29T15:20:00.000Z");
+assert.equal(accuracyLockFixture.snapshot.games[0]!.lockState, "locked", "a coherent on-time T-60 prediction card must freeze even when exact-price economics remain held");
+assert.equal(accuracyLockFixture.snapshot.games[0]!.lockedAt, publishedT60AccuracyPayload.capturedAt);
+assert.equal(isCfbPublishedT60AccuracyLockPayload({
+  ...publishedT60AccuracyPayload,
+  coverage: { ...publishedT60AccuracyPayload.coverage, healthHolds: ["authoritative_market_anchor_unavailable", "away_model_team_profile_unavailable"] },
+}), false, "a model-input health failure must never be reclassified as an accuracy lock");
 const recoveryTracking = buildCfbPublishedPregameRecoveryRecords({ payload: publishedCutoffPayload, gameId: 9001 });
 assert.deepEqual(recoveryTracking.map((row) => row.market), ["moneyline", "spread", "total"]);
 assert.equal(recoveryTracking.every((row) => !row.held && row.no_bet && row.play_grade === "no_play"), true, "recovered predictions must remain accuracy-only No Play predictions, never Held rows");

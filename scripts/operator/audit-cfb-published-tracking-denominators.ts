@@ -66,6 +66,7 @@ async function main(): Promise<void> {
     date,
     games: candidates.length,
     officialT60Games: candidates.filter((row) => row.mode === "official_t60").length,
+    publishedT60AccuracyLockGames: candidates.filter((row) => row.mode === "published_t60_accuracy_lock").length,
     recoveryGames: candidates.filter((row) => row.mode === "published_pregame_accuracy_recovery").length,
     predictions: planned.length,
     byMarket,
