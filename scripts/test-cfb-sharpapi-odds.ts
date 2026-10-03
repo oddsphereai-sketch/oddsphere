@@ -437,6 +437,36 @@ assert.equal(ambiguousEvent.eventIdsByGame[game.providerGameId], null);
 assert.equal(ambiguousEvent.eventDiscoveryStatusByGame[game.providerGameId], "ambiguous");
 assert.deepEqual(ambiguousEvent.booksByGame[game.providerGameId], []);
 
+let exactKickoffOddsCalls = 0;
+const exactKickoffEvent = await fetchSharpApiNcaafOddsFallback({
+  games: [game],
+  maximumRequests: 3,
+  client: {
+    async fetch<T>(opts: SharpApiRequestOptions): Promise<SharpApiResponse<T>> {
+      if (opts.path === "/events") {
+        return {
+          data: [
+            sharpEvent(),
+            sharpEvent({
+              id: `${expectedEventId}-one-minute-late`,
+              start_time: "2026-08-29T19:01:00.000Z",
+            }),
+          ] as T,
+          pagination: { has_more: false },
+        };
+      }
+      exactKickoffOddsCalls += 1;
+      assert.equal(opts.query?.event_id, expectedEventId);
+      return { data: sharpRows(expectedEventId) as T, pagination: { has_more: false } };
+    },
+  },
+});
+assert.equal(exactKickoffEvent.requests, 2);
+assert.equal(exactKickoffOddsCalls, 1, "one unique exact kickoff must resolve a near-time duplicate catalog event");
+assert.equal(exactKickoffEvent.eventIdsByGame[game.providerGameId], expectedEventId);
+assert.equal(exactKickoffEvent.eventDiscoveryStatusByGame[game.providerGameId], "matched");
+assert.equal(exactKickoffEvent.matchedGames, 1);
+
 let trustedAmbiguousOddsCalls = 0;
 const trustedAmbiguousEvent = await fetchSharpApiNcaafOddsFallback({
   games: [game],
