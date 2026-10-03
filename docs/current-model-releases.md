@@ -190,6 +190,32 @@ Last reviewed: 2026-10-03
 
 ## CFB Daily Edge generalized weekly production release
 
+### T-60 prediction-lock continuity (fixture r69; writer r91)
+
+- The active CFB score, PMF, probability, market-reading, decision, grade, evidence, collector,
+  and member releases remain unchanged. Fixture / compact snapshot / reader / tracking advance to
+  `cfb_v1_member_fixture_2026_10_03_r69_t60_accuracy_lock` /
+  `cfb_forward_member_snapshot_2026_10_03_r28_t60_accuracy_lock` /
+  `cfb_member_snapshot_reader_2026_10_03_r13_t60_accuracy_lock` /
+  `cfb_official_tracking_record_2026_10_03_r34_t60_accuracy_lock`; the sole leased writer advances
+  to `cfb_forward_evidence_writer_2026_10_03_r91_t60_accuracy_lock`.
+- A current-release T-60 payload captured within the existing 20-minute boundary now freezes the
+  member card when it contains all three coherent published forecast directions and exact Spread
+  and Total context lines, even if the sole health hold is a missing canonical exact-price market
+  anchor. Those markets are persisted immediately as accuracy-only No Play records: price, fair
+  market probability, edge, EV, recommendation, stake and ROI remain null and cannot be inferred.
+- Any late capture, missing direction/line, incomplete model profile, mixed release, post-kickoff
+  quote, or additional health hold still fails closed. Existing exact-price locks remain immutable
+  and retain priority. The production read-only audit at 2026-10-03T18:55:02.833Z found 27 eligible
+  lock/tracking games and 81 forecast markets; 63 rows already existed and the repair identifies
+  exactly 18 missing rows across six complete T-60 cards. It changes zero scores, sides,
+  probabilities, prices, grades, promotions, demotions, actionables, provider calls, schedules,
+  copy, labels or layout.
+- Evidence and rollback are recorded in
+  `docs/model-audits/2026-10-03-cfb-t60-accuracy-lock-continuity.md`. Roll back fixture r69,
+  snapshot r28, reader r13, tracking r34 and writer r91 together while preserving all append-only
+  evidence and tracking rows.
+
 ### Display-book verified context outlook (r26; writer r90)
 
 - Active numerical score / market / decision releases remain
