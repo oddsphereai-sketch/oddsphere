@@ -18,11 +18,11 @@ import {
 import { evaluateCfbHolisticConfidence } from "./cfbHolisticConfidenceCandidate";
 
 export const CFB_MARKET_SHARP_AWARE_CANDIDATE_RELEASE =
-  "cfb_market_sharp_aware_candidate_2026_10_03_r23_spread_signal_continuity" as const;
+  "cfb_market_sharp_aware_candidate_2026_10_03_r24_verified_quote_market_flip_continuity" as const;
 export const CFB_MARKET_SHARP_AWARE_SHADOW_RELEASE =
   CFB_MARKET_SHARP_AWARE_CANDIDATE_RELEASE;
 export const CFB_MARKET_SHARP_AWARE_PRODUCTION_RELEASE =
-  "cfb_market_sharp_aware_production_2026_10_03_r25_spread_signal_continuity" as const;
+  "cfb_market_sharp_aware_production_2026_10_03_r26_verified_quote_market_flip_continuity" as const;
 export const CFB_MARKET_SHARP_AWARE_PREVIOUS_PRODUCTION_RELEASE =
   "cfb_market_sharp_aware_production_2026_10_02_r24_same_book_qb_availability" as const;
 export const CFB_MARKET_SHADOW_WEIGHT = 0 as const;
@@ -696,11 +696,21 @@ function applyValidatedSpreadArbitration(
   const currentSplit = splits?.spread
     ? eligiblePublicSplit(splits.spread, evaluatedAt, forecast.gameStartsAt)
     : null;
+  const currentMoneylineSplit = splits?.moneyline
+    ? eligiblePublicSplit(splits.moneyline, evaluatedAt, forecast.gameStartsAt)
+    : null;
   const currentDirection = currentSplit ? spreadSignalDirection(currentSplit) : null;
   let signalSide = currentSplit ? qualifyingSpreadSignal(currentSplit) : null;
+  const moneylineMajoritySide = moneylineMoneyMajoritySide(currentMoneylineSplit);
+  if (signalSide !== null && moneylineMajoritySide !== null && moneylineMajoritySide !== signalSide) {
+    signalSide = null;
+  }
   if (
     signalSide === null &&
+    currentSplit !== null &&
     currentDirection !== null &&
+    spreadSignalHasMoneyMajority(currentSplit, currentDirection) &&
+    (moneylineMajoritySide === null || moneylineMajoritySide === currentDirection) &&
     isFavoriteSpreadSide(currentDirection, anchor.homeSpread) &&
     Math.abs(forecast.expectedMarginHome + anchor.homeSpread) >= 5
   ) {
@@ -740,7 +750,21 @@ function qualifyingSpreadSignal(split: CfbForwardPlaybookSplit): "home" | "away"
   const gap = direction === "home"
     ? (split.homeMoneyPct ?? 0) - (split.homeBetsPct ?? 0)
     : (split.awayMoneyPct ?? 0) - (split.awayBetsPct ?? 0);
-  return Math.abs(gap) >= 5 ? direction : null;
+  return Math.abs(gap) >= 5 && spreadSignalHasMoneyMajority(split, direction) ? direction : null;
+}
+
+function spreadSignalHasMoneyMajority(
+  split: CfbForwardPlaybookSplit,
+  side: "home" | "away",
+): boolean {
+  const money = side === "home" ? split.homeMoneyPct : split.awayMoneyPct;
+  return money !== null && money >= 50;
+}
+
+function moneylineMoneyMajoritySide(split: CfbForwardPlaybookSplit | null): "home" | "away" | null {
+  if (!split || (split.booksUsed ?? 0) < 8 || split.homeMoneyPct === null || split.awayMoneyPct === null) return null;
+  if (split.homeMoneyPct === split.awayMoneyPct) return null;
+  return split.homeMoneyPct > split.awayMoneyPct ? "home" : "away";
 }
 
 function isFavoriteSpreadSide(side: "home" | "away", homeSpread: number): boolean {

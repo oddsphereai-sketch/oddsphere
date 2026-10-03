@@ -7,6 +7,8 @@ import { withFirstTrackedSplitObservation } from "@/lib/services/splitDisplayMov
 import type { MarketSplitDisplaySection } from "@/lib/types/domain/RecommendationDecision";
 import {
   CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE,
+  CFB_FORWARD_SPREAD_SIGNAL_PREVIOUS_EVIDENCE_SCHEMA_RELEASE,
+  CFB_FORWARD_SPREAD_SIGNAL_PREVIOUS_MEMBER_RELEASE,
   CFB_FORWARD_AVAILABILITY_PREVIOUS_EVIDENCE_SCHEMA_RELEASE,
   CFB_FORWARD_AVAILABILITY_PREVIOUS_MEMBER_RELEASE,
   CFB_FORWARD_SCORE_COHERENCE_PREVIOUS_EVIDENCE_SCHEMA_RELEASE,
@@ -59,6 +61,7 @@ import {
   CFB_V1_BASE_PROBABILITY_RELEASE,
   CFB_V1_BASE_SCORE_ARTIFACT_RELEASE,
   CFB_V1_DECISION_RELEASE,
+  CFB_V1_SPREAD_SIGNAL_PREVIOUS_DECISION_RELEASE,
   CFB_V1_AVAILABILITY_PREVIOUS_DECISION_RELEASE,
   CFB_V1_SCORE_COHERENCE_PREVIOUS_DECISION_RELEASE,
   CFB_V1_PRICE_PREVIOUS_DECISION_RELEASE,
@@ -81,9 +84,9 @@ import { cfbTeamIdentity } from "./cfbTeamIdentity";
 import { CFB_PUBLIC_SCORE_DIRECTION_TOLERANCE_POINTS } from "./footballCrossMarketCoherence";
 
 export const CFB_MEMBER_FIXTURE_RELEASE =
-  "cfb_v1_member_fixture_2026_10_03_r63_spread_signal_continuity" as const;
+  "cfb_v1_member_fixture_2026_10_03_r64_verified_quote_market_flip_continuity" as const;
 export const CFB_PUBLIC_OUTCOME_CONTRACT_RELEASE =
-  "cfb_market_sharp_public_outcome_contract_2026_10_03_r58_spread_signal_continuity" as const;
+  "cfb_market_sharp_public_outcome_contract_2026_10_03_r59_verified_quote_market_flip_continuity" as const;
 export const CFB_CONTEXT_ONLY_QUOTE_CAPTURE_SKEW_MS = 5_000 as const;
 const CFB_MARKET_CONTEXT_MAX_CAPTURE_LAG_MINUTES = 10;
 const CFB_PRE_DIRECTIONAL_MEMBER_RELEASE = "cfb_v1_member_release_2026_08_28_r14_expanded_sharp_budget" as const;
@@ -495,19 +498,48 @@ export function selectLatestCfbMemberEvidenceRows(
       )
     : null;
   const availabilityPreviousAuthority = availabilityPrevious ?? availabilityPreviousBoundary ?? availabilityPreviousLockOverlay ?? scoreCoherencePreviousAuthority;
+  const spreadSignalPrevious = completeRowsForRelease(
+    rows,
+    CFB_FORWARD_SPREAD_SIGNAL_PREVIOUS_EVIDENCE_SCHEMA_RELEASE,
+    CFB_FORWARD_SPREAD_SIGNAL_PREVIOUS_MEMBER_RELEASE,
+    CFB_V1_SPREAD_SIGNAL_PREVIOUS_DECISION_RELEASE,
+  );
+  const spreadSignalPreviousBoundary = availabilityPreviousAuthority
+    ? immutableBoundaryTransitionRows(
+        rows,
+        now,
+        CFB_FORWARD_SPREAD_SIGNAL_PREVIOUS_EVIDENCE_SCHEMA_RELEASE,
+        CFB_FORWARD_SPREAD_SIGNAL_PREVIOUS_MEMBER_RELEASE,
+        CFB_V1_SPREAD_SIGNAL_PREVIOUS_DECISION_RELEASE,
+        availabilityPreviousAuthority,
+      )
+    : null;
+  const spreadSignalPreviousLockOverlay = availabilityPreviousAuthority
+    ? immutableLockOverlayRows(
+        rows,
+        CFB_FORWARD_SPREAD_SIGNAL_PREVIOUS_EVIDENCE_SCHEMA_RELEASE,
+        CFB_FORWARD_SPREAD_SIGNAL_PREVIOUS_MEMBER_RELEASE,
+        CFB_V1_SPREAD_SIGNAL_PREVIOUS_DECISION_RELEASE,
+        availabilityPreviousAuthority,
+      )
+    : null;
+  const spreadSignalPreviousAuthority = spreadSignalPrevious ?? spreadSignalPreviousBoundary ?? spreadSignalPreviousLockOverlay ?? availabilityPreviousAuthority;
   const current = completeRowsForRelease(rows, CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE, CFB_FORWARD_MEMBER_RELEASE, CFB_V1_DECISION_RELEASE);
   if (current) return current;
-  const immutableBoundaryTransition = availabilityPreviousAuthority
+  const immutableBoundaryTransition = spreadSignalPreviousAuthority
     ? immutableBoundaryTransitionRows(
         rows,
         now,
         CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE,
         CFB_FORWARD_MEMBER_RELEASE,
         CFB_V1_DECISION_RELEASE,
-        availabilityPreviousAuthority,
+        spreadSignalPreviousAuthority,
       )
     : null;
   if (immutableBoundaryTransition) return immutableBoundaryTransition;
+  if (spreadSignalPrevious) return spreadSignalPrevious;
+  if (spreadSignalPreviousBoundary) return spreadSignalPreviousBoundary;
+  if (spreadSignalPreviousLockOverlay) return spreadSignalPreviousLockOverlay;
   if (availabilityPrevious) return availabilityPrevious;
   if (availabilityPreviousBoundary) return availabilityPreviousBoundary;
   if (availabilityPreviousLockOverlay) return availabilityPreviousLockOverlay;
@@ -595,7 +627,15 @@ function immutableBoundaryTransitionRows(
   if (!Number.isFinite(responseTime) || missing.some((row) =>
     Date.parse(row.gameStartAt) > responseTime && !isValidImmutableBoundaryT60(row)
   )) return null;
-  return previous.map((row) => currentByGame.get(row.providerGameId) ?? row);
+  return previous.map((row) => {
+    const next = currentByGame.get(row.providerGameId);
+    if (!next) return row;
+    // An immutable lock is terminal. A later release refresh may contribute a
+    // new locked row, but it may never replace that lock with an unlocked row.
+    return isValidImmutableBoundaryT60(row) && !isValidImmutableBoundaryT60(next)
+      ? row
+      : next;
+  });
 }
 
 function immutableLockOverlayRows(

@@ -79,6 +79,7 @@ import {
   buildCfbMarketSharpAwareForecast,
 } from "../lib/services/football/cfbMarketSharpAwareShadow";
 import { CFB_SHARP_API_SPLITS_RELEASE } from "../lib/services/football/cfbSharpApiSplits";
+import { retainLatestCfbNamedBookMarkets } from "../lib/services/football/cfbSharpApiOdds";
 import { fetchBalldontlieNcaafQuarterbacks } from "../lib/services/football/balldontlieNcaafQuarterbacks";
 import { ingestCfbFinalScores } from "../lib/services/football/cfbScoreIngestService";
 import {
@@ -399,10 +400,19 @@ const namedBookOutlookBundle = publishCfbForwardDecisionBundle(
   }),
   null,
   null,
-  currentBooks[0]!,
+  { spread: currentBooks[0]!, total: currentBooks[0]! },
 );
 assert.equal(namedBookOutlookBundle.marketOutlooks?.spread?.source, "authoritative_pmf_at_named_book_line", "a verified named-book line must keep a covered Spread prediction available");
 assert.equal(namedBookOutlookBundle.marketOutlooks?.total?.source, "authoritative_pmf_at_named_book_line", "a verified named-book line must keep a covered Total prediction available");
+
+const retainedNamedBooks = retainLatestCfbNamedBookMarkets(
+  [{ ...currentBooks[0]!, observedAt: "2026-10-03T10:00:00.000Z", moneyline: currentBooks[0]!.moneyline, spread: null, total: null }],
+  [{ ...currentBooks[0]!, observedAt: "2026-10-03T08:00:00.000Z" }],
+);
+assert.equal(retainedNamedBooks.length, 1, "quote retention must not duplicate one sportsbook");
+assert.deepEqual(retainedNamedBooks[0]?.spread, currentBooks[0]!.spread, "a later omission must retain the last verified paired Spread quote");
+assert.deepEqual(retainedNamedBooks[0]?.total, currentBooks[0]!.total, "a later omission must retain the last verified paired Total quote");
+assert.deepEqual(retainedNamedBooks[0]?.moneyline, currentBooks[0]!.moneyline, "a fresh verified Moneyline must supersede history");
 
 const noMoneylineBooks = currentBooks.map((currentBook) => ({ ...currentBook, moneyline: null }));
 const marketScopedBundle = buildCfbV1DecisionBundle({

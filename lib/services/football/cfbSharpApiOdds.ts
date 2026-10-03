@@ -345,6 +345,67 @@ export function mergeCfbNamedBooks(primary: NcaafBookOdds[], fallback: NcaafBook
     first.sportsbook.localeCompare(second.sportsbook));
 }
 
+/**
+ * Preserve the latest verified paired quote independently for each sportsbook
+ * and market. A provider cycle that omits one market must not erase an earlier
+ * verified quote, while a newer quote for that same market always wins.
+ */
+export function retainLatestCfbNamedBookMarkets(
+  current: NcaafBookOdds[],
+  history: NcaafBookOdds[],
+): NcaafBookOdds[] {
+  const grouped = new Map<string, NcaafBookOdds[]>();
+  for (const book of [...history, ...current]) {
+    const key = normalize(book.sportsbook);
+    if (!key) continue;
+    grouped.set(key, [...(grouped.get(key) ?? []), book]);
+  }
+  return [...grouped.values()].map((books) => {
+    const latest = [...books].sort((first, second) =>
+      Date.parse(second.observedAt) - Date.parse(first.observedAt))[0]!;
+    const moneylineBook = latestBookForMarket(books, "moneyline");
+    const spreadBook = latestBookForMarket(books, "spread");
+    const totalBook = latestBookForMarket(books, "total");
+    const selected = [moneylineBook, spreadBook, totalBook].filter((book): book is NcaafBookOdds => book !== null);
+    const observedAt = selected.map((book) => Date.parse(book.observedAt)).filter(Number.isFinite);
+    return {
+      ...latest,
+      observedAt: new Date(Math.max(...observedAt, Date.parse(latest.observedAt))).toISOString(),
+      moneyline: moneylineBook?.moneyline ?? null,
+      spread: spreadBook?.spread ?? null,
+      total: totalBook?.total ?? null,
+      marketObservedAt: {
+        ...(moneylineBook ? { moneyline: marketObservedAt(moneylineBook, "moneyline") } : {}),
+        ...(spreadBook ? { spread: marketObservedAt(spreadBook, "spread") } : {}),
+        ...(totalBook ? { total: marketObservedAt(totalBook, "total") } : {}),
+      },
+      marketSelection: {
+        ...(moneylineBook?.marketSelection?.moneyline ? { moneyline: moneylineBook.marketSelection.moneyline } : {}),
+        ...(spreadBook?.marketSelection?.spread ? { spread: spreadBook.marketSelection.spread } : {}),
+        ...(totalBook?.marketSelection?.total ? { total: totalBook.marketSelection.total } : {}),
+      },
+      marketQuotes: mergeMarketQuotes([], books.flatMap((book) => book.marketQuotes ?? [])),
+    };
+  }).sort((first, second) =>
+    Number(second.targetEligible !== false) - Number(first.targetEligible !== false) ||
+    bookCompleteness(second) - bookCompleteness(first) ||
+    Date.parse(second.observedAt) - Date.parse(first.observedAt) ||
+    first.sportsbook.localeCompare(second.sportsbook));
+}
+
+function latestBookForMarket(
+  books: NcaafBookOdds[],
+  market: "moneyline" | "spread" | "total",
+): NcaafBookOdds | null {
+  return books.filter((book) => book[market] !== null).sort((first, second) =>
+    Date.parse(marketObservedAt(second, market)) - Date.parse(marketObservedAt(first, market)) ||
+    Date.parse(second.observedAt) - Date.parse(first.observedAt))[0] ?? null;
+}
+
+function marketObservedAt(book: NcaafBookOdds, market: "moneyline" | "spread" | "total"): string {
+  return book.marketObservedAt?.[market] ?? book.observedAt;
+}
+
 export function preferredCfbTargetBook(books: NcaafBookOdds[]): NcaafBookOdds | null {
   return [...books].filter((book) => book.targetEligible !== false).sort((first, second) =>
     bookCompleteness(second) - bookCompleteness(first) ||

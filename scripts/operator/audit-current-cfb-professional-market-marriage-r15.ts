@@ -18,7 +18,7 @@ import {
   applyCfbMarketSharpAwareGrades,
   buildCfbMarketSharpAwareForecast,
 } from "../../lib/services/football/cfbMarketSharpAwareShadow";
-import { preferredCfbTargetBook } from "../../lib/services/football/cfbSharpApiOdds";
+import { preferredCfbTargetBook, retainLatestCfbNamedBookMarkets } from "../../lib/services/football/cfbSharpApiOdds";
 import {
   cfbMarketAnchorHealthHolds,
   publishCfbForwardDecisionBundle,
@@ -44,6 +44,8 @@ async function main(): Promise<void> {
   if (!url || !key) throw new Error("Supabase read credentials are required.");
   const now = process.argv.find((value) => value.startsWith("--now="))?.slice(6) ?? new Date().toISOString();
   const settledMode = process.argv.includes("--settled");
+  const compactMode = process.argv.includes("--compact");
+  const focusMatchups = new Set(process.argv.filter((value) => value.startsWith("--matchup=")).map((value) => value.slice(10).toUpperCase()));
   const client = createClient(url, key, { auth: { persistSession: false } });
   const [rows, advanced] = await Promise.all([
     readCfbForwardEvidence({ client, season: 2026 }),
@@ -69,9 +71,13 @@ async function main(): Promise<void> {
     const payload = row.payload;
     const weekly = forecasts.get(payload.game.providerGameId);
     if (!weekly) throw new Error(`Missing forecast ${payload.game.providerGameId}.`);
-    const current = preferredCfbTargetBook(payload.market.currentBooks);
+    const historicalBooks = rows
+      .filter((candidate) => candidate.providerGameId === row.providerGameId && Date.parse(candidate.capturedAt) <= Date.parse(payload.capturedAt))
+      .flatMap((candidate) => candidate.payload.market.currentBooks);
+    const currentBooks = retainLatestCfbNamedBookMarkets(payload.market.currentBooks, historicalBooks);
+    const current = preferredCfbTargetBook(currentBooks);
     const anchor = resolveCfbCanonicalMarketAnchor({
-      books: payload.market.currentBooks,
+      books: currentBooks,
       contextLines: {
         homeSpread: payload.market.playbookLine?.homeSpread ?? null,
         totalLine: payload.market.playbookLine?.total ?? null,
@@ -122,7 +128,7 @@ async function main(): Promise<void> {
             awayTeam: payload.game.away.abbreviation,
             homeTeam: payload.game.home.abbreviation,
             gameStartsAt: payload.game.scheduledStart,
-            comparableCurrentBooks: payload.market.currentBooks,
+            comparableCurrentBooks: currentBooks,
             evaluatedAt: payload.capturedAt,
             healthHolds,
             forecast: baseForecast,
@@ -141,7 +147,7 @@ async function main(): Promise<void> {
       awayTeam: payload.game.away.abbreviation,
       homeTeam: payload.game.home.abbreviation,
       gameStartsAt: payload.game.scheduledStart,
-      comparableCurrentBooks: payload.market.currentBooks,
+      comparableCurrentBooks: currentBooks,
       evaluatedAt: payload.capturedAt,
       healthHolds,
       forecast,
@@ -156,7 +162,10 @@ async function main(): Promise<void> {
       publicSplits,
       operationalOpening,
       current,
-    }) : rawBundle, payload.market.playbookLine, payload.market.espnReferenceLine ?? null, current);
+    }) : rawBundle, payload.market.playbookLine, payload.market.espnReferenceLine ?? null, {
+      spread: preferredCfbTargetBook(currentBooks.filter((book) => book.spread !== null)),
+      total: preferredCfbTargetBook(currentBooks.filter((book) => book.total !== null)),
+    });
     if (Math.abs(candidate.forecast.expectedHomePoints + candidate.forecast.expectedAwayPoints - forecast.expectedTotal) > 1e-8) {
       coherenceFailures.push(payload.game.providerGameId);
     }
@@ -196,13 +205,16 @@ async function main(): Promise<void> {
     demotions: demotions.length,
     sideChanges: sideChanges.length,
     coherenceFailures,
+    ...(compactMode ? {
+      focusRows: comparisons.filter((row) => focusMatchups.has(row.game.toUpperCase())),
+    } : {}),
     ...(settledMode ? {
       resultSummary,
       selectionWeeks1to2: summarizeResults(comparisons.filter((row) => row.week <= 2)),
       confirmationWeeks3to4: summarizeResults(comparisons.filter((row) => row.week >= 3 && row.week <= 4)),
       calibrationDiagnostics: summarizeCalibrationDiagnostics(comparisons),
       tierCandidates: summarizeTierCandidates(comparisons),
-    } : {
+    } : compactMode ? {} : {
       promotionRows: promotions,
       demotionRows: demotions,
       sideChangeRows: sideChanges,
