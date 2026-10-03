@@ -401,8 +401,8 @@ const namedBookOutlookBundle = publishCfbForwardDecisionBundle(
   null,
   currentBooks[0]!,
 );
-assert.equal(namedBookOutlookBundle.marketOutlooks.spread?.source, "authoritative_pmf_at_named_book_line", "a verified named-book line must keep a covered Spread prediction available");
-assert.equal(namedBookOutlookBundle.marketOutlooks.total?.source, "authoritative_pmf_at_named_book_line", "a verified named-book line must keep a covered Total prediction available");
+assert.equal(namedBookOutlookBundle.marketOutlooks?.spread?.source, "authoritative_pmf_at_named_book_line", "a verified named-book line must keep a covered Spread prediction available");
+assert.equal(namedBookOutlookBundle.marketOutlooks?.total?.source, "authoritative_pmf_at_named_book_line", "a verified named-book line must keep a covered Total prediction available");
 
 const noMoneylineBooks = currentBooks.map((currentBook) => ({ ...currentBook, moneyline: null }));
 const marketScopedBundle = buildCfbV1DecisionBundle({
