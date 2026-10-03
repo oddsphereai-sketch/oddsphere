@@ -33,3 +33,21 @@ picks, probabilities, grades, promotions, demotions, and actionable board counts
 The missing-line fixture remains unavailable, and the 15-minute retained-quote fixture proves that
 Moneyline, Spread, and Total predictions stay available without manufacturing a Bet selection or
 grade.
+
+## Verified-quote and schedule follow-up
+
+The live r24 audit found five additional games whose verified price and line were still present but
+whose current evidence row had no saved market outlook. Recomputing their line probability in the
+member reader is rejected: compact evidence intentionally omits the PMF, so a reader-side estimate
+would not be release-pure.
+
+The follow-up instead repairs both legitimate continuity paths. The member reader may reuse an
+already stored legacy market outlook only when its line exactly matches the selected verified
+sportsbook quote. The writer also merges previously verified upcoming games back into refresh
+planning when the current schedule response temporarily omits them, allowing the authoritative
+writer—with the full PMF—to produce current outlooks. Current provider rows remain authoritative;
+started/locked games are not rewritten.
+
+No-write audit on production evidence: 99 games, 71 unlocked capture proposals, 142 evaluated
+markets, 19 Best Angles, 65 Leans, 46 Watchlists, 12 No Plays, 71 exact-price holds, and zero capture
+failures. The grade policy is unchanged. Existing locked rows remain terminal.
