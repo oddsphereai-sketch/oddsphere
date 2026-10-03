@@ -2112,12 +2112,29 @@ The September 21 operational release restored the two bounded daily schedules re
 
 ## NHL regular-season champion (active from 2026-10-01)
 
-- Model: `nhl_regular_2026_r13_price_aware_grades`
-- Calibration: `nhl_regular_calibration_2026_r13_price_aware_grades`
-- Decision: `nhl_regular_decision_2026_r13_price_aware_exact_price`
+- Model: `nhl_regular_2026_r14_best_angle_calibration`
+- Calibration: `nhl_regular_calibration_2026_r14_best_angle_calibration`
+- Decision: `nhl_regular_decision_2026_r14_best_angle_calibration`
 - Public tracking start: `2026-09-29`
 - Official markets: moneyline, total, spread (puck line)
 - Retired release: `nhl_v0_2026_finals`
+
+The October 3 r14 release preserves every r13 score, probability, prediction
+side, market-reading decision, price, stake, writer, lease, schedule, lock,
+tracking row, and member-facing surface. It reserves Moneyline Best Angle for
+at least 70% selected-side probability and a 5-percentage-point exact-price
+edge, and Total Best Angle for at least 65% calibrated selected-side
+probability and the same 5-point exact-price edge. A previously actionable
+Best Angle that misses those stricter confidence requirements remains a Lean;
+no play is removed. The validated puck-line policy and its Watchlist-to-Lean
+promotion remain unchanged.
+
+The exact October 3 production-board replay moves 14 Best Angles / 16 Leans /
+9 Watchlists to 6 / 24 / 9. Eight Best Angles become Leans, while all 30
+actionable markets, all 39 market rows, and every pick remain. Current r13
+settled evidence is only 11 Best Angles and is treated as a warning rather
+than an accuracy estimate: Totals were 2-5 and Moneylines 1-3. Evidence and
+rollback: `docs/model-audits/2026-10-03-nhl-best-angle-calibration-r14.md`.
 
 The October 1 r13 release preserves the r12 independent model, market-reading
 arbitration, coherent projected score, probabilities, and prediction sides. It
