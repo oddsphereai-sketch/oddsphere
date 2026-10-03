@@ -84,11 +84,10 @@ import { cfbTeamIdentity } from "./cfbTeamIdentity";
 import { CFB_PUBLIC_SCORE_DIRECTION_TOLERANCE_POINTS } from "./footballCrossMarketCoherence";
 
 export const CFB_MEMBER_FIXTURE_RELEASE =
-  "cfb_v1_member_fixture_2026_10_03_r64_verified_quote_market_flip_continuity" as const;
+  "cfb_v1_member_fixture_2026_10_03_r65_retained_market_prediction_continuity" as const;
 export const CFB_PUBLIC_OUTCOME_CONTRACT_RELEASE =
-  "cfb_market_sharp_public_outcome_contract_2026_10_03_r59_verified_quote_market_flip_continuity" as const;
+  "cfb_market_sharp_public_outcome_contract_2026_10_03_r60_retained_market_prediction_continuity" as const;
 export const CFB_CONTEXT_ONLY_QUOTE_CAPTURE_SKEW_MS = 5_000 as const;
-const CFB_MARKET_CONTEXT_MAX_CAPTURE_LAG_MINUTES = 10;
 const CFB_PRE_DIRECTIONAL_MEMBER_RELEASE = "cfb_v1_member_release_2026_08_28_r14_expanded_sharp_budget" as const;
 const CFB_PRE_DIRECTIONAL_DECISION_RELEASE = "cfb_v1_daily_edge_decision_2026_08_28_r11_market_scoped_data_quality" as const;
 const CFB_AMBIGUOUS_SCOPE_PREVIOUS_MEMBER_RELEASE = "cfb_v1_member_release_2026_08_28_r19_ambiguous_event_scope" as const;
@@ -1473,7 +1472,7 @@ function buildMarketPrediction(
       reason: "The authoritative game forecast remains available without an offered Moneyline price; no price or grade is fabricated.",
     };
   }
-  if (outlook && currentMarketContextIsFresh(payload, outlook)) {
+  if (outlook && currentMarketContextIsVerified(payload, outlook)) {
     return {
       status: "available",
       label: outlookLabel(payload, outlook),
@@ -1499,7 +1498,7 @@ function buildMarketPrediction(
   };
 }
 
-function currentMarketContextIsFresh(
+function currentMarketContextIsVerified(
   payload: CfbForwardEvidencePayload,
   outlook: CfbForwardMarketOutlook,
 ): boolean {
@@ -1507,7 +1506,7 @@ function currentMarketContextIsFresh(
   const captured = Date.parse(payload.capturedAt);
   const observed = Date.parse(outlook.contextObservedAt);
   if (!Number.isFinite(captured) || !Number.isFinite(observed) || observed > captured) return false;
-  return captured - observed <= CFB_MARKET_CONTEXT_MAX_CAPTURE_LAG_MINUTES * 60_000;
+  return observed <= captured;
 }
 
 function outlookLabel(payload: CfbForwardEvidencePayload, outlook: CfbForwardMarketOutlook): string {

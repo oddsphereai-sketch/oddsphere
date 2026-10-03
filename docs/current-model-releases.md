@@ -190,7 +190,30 @@ Last reviewed: 2026-10-03
 
 ## CFB Daily Edge generalized weekly production release
 
-### Verified-quote, release-transition, and market-flip continuity (r26; writer r86)
+### Retained market-prediction continuity (r26; writer r87)
+
+- Active numerical score / market / decision releases remain
+  `cfb_v1_joint_score_runtime_2026_10_03_r15_verified_quote_market_flip_continuity` /
+  `cfb_market_sharp_aware_candidate_2026_10_03_r24_verified_quote_market_flip_continuity` /
+  `cfb_market_sharp_aware_production_2026_10_03_r26_verified_quote_market_flip_continuity` /
+  `cfb_v1_daily_edge_decision_2026_10_03_r38_verified_quote_market_flip_continuity` /
+  `cfb_v1_exact_price_decision_tuple_2026_10_03_r26_verified_quote_market_flip_continuity`.
+  Grade policy r16 is unchanged.
+- Evidence remains r31. Active member / writer releases are
+  `cfb_v1_member_release_2026_10_03_r44_retained_market_prediction_continuity` /
+  `cfb_forward_evidence_writer_2026_10_03_r87_retained_market_prediction_continuity`.
+  Fixture / outcome / snapshot are r65 / r60 / r24; reader and tracking remain r12 / r33.
+- A verified retained Spread or Total line continues to publish the authoritative PMF prediction
+  at that exact line when a later provider response omits the quote. The real sportsbook, price,
+  line, and original observation time remain intact. Retention does not manufacture an exact-price
+  grade, alter a score, or create a Bet selection.
+- The current 99-game board changes 15 verified retained-line Spread predictions and 15 verified
+  retained-line Total predictions from unavailable to available. Five games without any verified
+  timestamped quote remain unavailable rather than manufacturing market evidence. Numerical
+  forecasts, sides, grades, and actionable board counts are unchanged; locked rows remain terminal
+  and immutable.
+
+### Verified-quote, release-transition, and market-flip continuity (r26; writer r86; superseded member surface)
 
 - Active score / market / decision releases are
   `cfb_v1_joint_score_runtime_2026_10_03_r15_verified_quote_market_flip_continuity` /
