@@ -69,3 +69,16 @@ No-write production-evidence audit: 99 games, 81 release-refresh captures, 148 e
 19 Best Angles, 66 Leans, 48 Watchlists, 15 No Plays, 95 exact-price holds, and zero capture
 failures. Numerical score, decision, and grade-policy releases remain unchanged, and terminal locks
 continue to win over newer rows.
+
+## Display-only context-line follow-up
+
+The live r32 audit restored MCN-LSU, WEB-CP, and EWU-UCD, but UAPB-SOU remained unavailable.
+Its verified Sportzino Spread and Total pair was intentionally marked `targetEligible: false`, so
+the exact-price target selector correctly rejected it; that same selector was also accidentally
+used for PMF line context. The r33 evidence path now selects verified display context separately
+from exact-price target eligibility. The named line may produce a Spread or Total prediction, but
+it still cannot produce a no-vig benchmark, Bet selection, or actionability grade.
+
+The no-write production audit covered 99 games and 133 evaluated markets with zero capture
+failures: 15 Best Angles, 61 Leans, 46 Watchlists, 11 No Plays, and 107 exact-price holds. The
+underlying score, decision, and grade-policy releases are unchanged.

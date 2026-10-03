@@ -61,6 +61,7 @@ import {
   fetchCfbSharpOddsFallbackAttempt,
   planCfbPriorResultReads,
   planCfbTrackingRecordInsert,
+  preferredCfbContextBook,
   publishCfbForwardDecisionBundle,
   retainLatestCfbPlaybookObservation,
   selectQuarterbackTeams,
@@ -500,6 +501,17 @@ assert.equal(oneSidedContextOutlooks.spread?.source, "authoritative_pmf_at_named
 assert.equal(Math.abs(oneSidedContextOutlooks.spread?.line ?? 0), 7.5);
 assert.equal(oneSidedContextOutlooks.total?.source, "authoritative_pmf_at_named_book_line", "a verified one-sided main-line Total quote must support a line-specific PMF outlook without becoming a grade input");
 assert.equal(oneSidedContextOutlooks.total?.line, 47.5);
+const displayOnlyContextBook = { ...oneSidedContextBook, targetEligible: false };
+assert.equal(
+  preferredCfbContextBook([displayOnlyContextBook], "spread"),
+  displayOnlyContextBook,
+  "a verified display-only book may supply PMF line context without becoming an exact-price grading target",
+);
+assert.equal(
+  preferredCfbContextBook([displayOnlyContextBook], "total"),
+  displayOnlyContextBook,
+  "display-only Total context must remain available when exact-price target eligibility is false",
+);
 const nearlyNormalizedForecast = {
   ...fullBundle.forecast,
   pmf: [
