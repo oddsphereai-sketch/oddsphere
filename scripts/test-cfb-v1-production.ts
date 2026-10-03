@@ -1822,6 +1822,11 @@ for (const marketKey of ["moneyline", "total", "first_inning"] as const) {
   assert.equal(market.currentPriceSportsbook, "fanduel", `${marketKey} must retain the verified sportsbook provenance`);
   assert.equal(market.currentPriceObservedAt, observedAt, `${marketKey} must retain the quote's real observation time`);
   assert.equal(market.oddsTrail?.at(-1)?.sportsbook, "fanduel", `${marketKey} retained context must remain a same-book trail`);
+  assert.equal(
+    market.marketPrediction?.status,
+    "available",
+    `${marketKey} must keep its prediction available at the latest verified retained market line`,
+  );
 }
 
 const missingLinePayload = structuredClone(heldPayload);

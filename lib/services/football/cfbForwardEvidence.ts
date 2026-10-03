@@ -73,7 +73,7 @@ export const CFB_FORWARD_INITIAL_EVIDENCE_SCHEMA_RELEASE =
 export const CFB_FORWARD_EVIDENCE_COLLECTOR_RELEASE =
   "cfb_forward_evidence_collector_2026_10_03_r37_verified_quote_market_flip_continuity" as const;
 export const CFB_FORWARD_MEMBER_RELEASE =
-  "cfb_v1_member_release_2026_10_03_r43_verified_quote_market_flip_continuity" as const;
+  "cfb_v1_member_release_2026_10_03_r44_retained_market_prediction_continuity" as const;
 export const CFB_FORWARD_SPREAD_SIGNAL_PREVIOUS_MEMBER_RELEASE =
   "cfb_v1_member_release_2026_10_03_r42_spread_signal_continuity" as const;
 export const CFB_FORWARD_AVAILABILITY_PREVIOUS_MEMBER_RELEASE =
