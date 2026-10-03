@@ -190,6 +190,21 @@ Last reviewed: 2026-09-29
 
 ## CFB Daily Edge generalized weekly production release
 
+### Exact-kickoff duplicate-event disambiguation (writer r84)
+
+- Active named-book fallback / sole writer releases are
+  `cfb_sharpapi_named_book_fallback_2026_10_03_r14_exact_kickoff_disambiguation` /
+  `cfb_forward_evidence_writer_2026_10_03_r84_exact_kickoff_disambiguation`. When the provider
+  publishes duplicate exact-team/date catalog events within the existing 15-minute identity
+  window, one and only one event at the scheduled kickoff may resolve the duplicate. Two events
+  at the same exact kickoff, no exact kickoff, or a stale trusted ID remain ambiguous and trigger
+  no odds request. A still-current previously trusted event ID retains priority.
+- This repairs the confirmed SJSU-Hawaii one-minute duplicate without loosening team, date, or
+  kickoff identity, adding provider calls, or changing model equations, grades, schedules, locks,
+  member copy, labels, layout, or the `prediction_pipeline:cfb` lease. Previously complete games
+  are unchanged. Evidence and rollback:
+  `docs/model-audits/2026-10-03-cfb-exact-kickoff-disambiguation-r84.md`.
+
 ### Verified-quarterback and same-book market continuity (r16; writer r83)
 
 - Active availability / market / grade / decision releases are

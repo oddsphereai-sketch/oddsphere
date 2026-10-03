@@ -2,7 +2,7 @@ import { SharpApiClient, type SharpApiRequestOptions, type SharpApiResponse } fr
 import type { NcaafBookOdds, NcaafGame } from "./balldontlieNcaafSlate";
 
 export const CFB_SHARP_API_ODDS_RELEASE =
-  "cfb_sharpapi_named_book_fallback_2026_09_26_r13_event_failure_isolation" as const;
+  "cfb_sharpapi_named_book_fallback_2026_10_03_r14_exact_kickoff_disambiguation" as const;
 export const CFB_SHARP_FALLBACK_MAX_GAMES = 96 as const;
 export const CFB_SHARP_FALLBACK_MAX_REQUESTS = 192 as const;
 export const CFB_SHARP_FALLBACK_MAX_DURATION_MS = 40_000 as const;
@@ -207,14 +207,18 @@ export async function fetchSharpApiNcaafOddsFallback(args: {
     const trustedCurrentMatch = trustedEventId !== null && uniqueEventMatches.some(([eventId]) => eventId === trustedEventId)
       ? trustedEventId
       : null;
-    if (uniqueEventMatches.length > 1 && trustedCurrentMatch === null) {
+    const exactKickoffMatches = trustedCurrentMatch === null && uniqueEventMatches.length > 1
+      ? uniqueEventMatches.filter(([, event]) => exactSharpEventKickoffIdentity(game, event))
+      : [];
+    const exactKickoffMatch = exactKickoffMatches.length === 1 ? exactKickoffMatches[0]![0] : null;
+    if (uniqueEventMatches.length > 1 && trustedCurrentMatch === null && exactKickoffMatch === null) {
       booksByGame[game.providerGameId] = [];
       displayBooksByGame[game.providerGameId] = [];
       eventIdsByGame[game.providerGameId] = null;
       eventDiscoveryStatusByGame[game.providerGameId] = "ambiguous";
       continue;
     }
-    const eventId = trustedCurrentMatch ?? uniqueEventMatches[0]?.[0] ?? null;
+    const eventId = trustedCurrentMatch ?? exactKickoffMatch ?? uniqueEventMatches[0]?.[0] ?? null;
     if (eventId) {
       if (discoveredEventIds.has(eventId)) {
         throw new Error(`CFB SharpAPI canonical event ${eventId} matched more than one scheduled game.`);
@@ -584,6 +588,14 @@ function strictSharpEventIdentity(game: NcaafGame, event: SharpEventRow): boolea
   if (!Number.isFinite(expected) || !Number.isFinite(actual) || Math.abs(expected - actual) > 15 * 60_000) return false;
   return teamMatches(eventTeam(event, "home"), game.home.name, game.home.abbreviation) &&
     teamMatches(eventTeam(event, "away"), game.away.name, game.away.abbreviation);
+}
+
+function exactSharpEventKickoffIdentity(game: NcaafGame, event: SharpEventRow): boolean {
+  const startsAt = iso(event.start_time ?? event.event_start_time ?? event.commence_time ?? event.scheduled);
+  if (!startsAt) return false;
+  const expected = Date.parse(game.scheduledStart);
+  const actual = Date.parse(startsAt);
+  return Number.isFinite(expected) && Number.isFinite(actual) && expected === actual;
 }
 
 function sharpEventId(event: SharpEventRow): string | null {
