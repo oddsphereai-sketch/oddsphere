@@ -15,7 +15,7 @@ import {
 } from "./cfbV1Decision";
 
 export const CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE =
-  "cfb_forward_evidence_snapshot_2026_10_03_r31_verified_quote_market_flip_continuity" as const;
+  "cfb_forward_evidence_snapshot_2026_10_03_r32_one_sided_context_outlook" as const;
 export const CFB_FORWARD_SPREAD_SIGNAL_PREVIOUS_EVIDENCE_SCHEMA_RELEASE =
   "cfb_forward_evidence_snapshot_2026_10_03_r30_spread_signal_continuity" as const;
 export const CFB_FORWARD_AVAILABILITY_PREVIOUS_EVIDENCE_SCHEMA_RELEASE =
@@ -71,9 +71,9 @@ export const CFB_FORWARD_LEGACY_EVIDENCE_SCHEMA_RELEASE =
 export const CFB_FORWARD_INITIAL_EVIDENCE_SCHEMA_RELEASE =
   "cfb_forward_evidence_snapshot_2026_08_25_r1" as const;
 export const CFB_FORWARD_EVIDENCE_COLLECTOR_RELEASE =
-  "cfb_forward_evidence_collector_2026_10_03_r37_verified_quote_market_flip_continuity" as const;
+  "cfb_forward_evidence_collector_2026_10_03_r38_one_sided_context_outlook" as const;
 export const CFB_FORWARD_MEMBER_RELEASE =
-  "cfb_v1_member_release_2026_10_03_r45_verified_quote_prediction_continuity" as const;
+  "cfb_v1_member_release_2026_10_03_r46_one_sided_context_outlook" as const;
 export const CFB_FORWARD_SPREAD_SIGNAL_PREVIOUS_MEMBER_RELEASE =
   "cfb_v1_member_release_2026_10_03_r42_spread_signal_continuity" as const;
 export const CFB_FORWARD_AVAILABILITY_PREVIOUS_MEMBER_RELEASE =
@@ -413,30 +413,36 @@ export function buildCfbForwardMarketOutlooks(args: {
   const namedTotalBook = args.namedBookLines?.total ?? args.namedBookLine ?? null;
   const namedSpread = namedSpreadBook?.spread ?? null;
   const namedTotal = namedTotalBook?.total ?? null;
+  const namedSpreadQuote = latestMainLineQuote(namedSpreadBook, "spread");
+  const namedTotalQuote = latestMainLineQuote(namedTotalBook, "total");
+  const namedHomeSpread = namedSpread?.homeLine ?? (namedSpreadQuote?.line == null
+    ? null
+    : namedSpreadQuote.side === "home" ? namedSpreadQuote.line : -namedSpreadQuote.line);
+  const namedTotalLine = namedTotal?.line ?? namedTotalQuote?.line ?? null;
   const homeSpread = hasPlaybookSpread
     ? args.playbookLine!.homeSpread
-    : namedSpread?.homeLine ?? args.espnReferenceLine?.homeSpread ?? null;
+    : namedHomeSpread ?? args.espnReferenceLine?.homeSpread ?? null;
   const totalLine = hasPlaybookTotal
     ? args.playbookLine!.total
-    : namedTotal?.line ?? args.espnReferenceLine?.total ?? null;
+    : namedTotalLine ?? args.espnReferenceLine?.total ?? null;
   const spreadObservedAt = hasPlaybookSpread
     ? args.playbookLine!.capturedAt
-    : namedSpread
-      ? namedSpreadBook?.marketObservedAt?.spread ?? namedSpreadBook!.observedAt
+    : namedSpread || namedSpreadQuote
+      ? namedSpreadQuote?.observedAt ?? namedSpreadBook?.marketObservedAt?.spread ?? namedSpreadBook!.observedAt
       : args.espnReferenceLine?.capturedAt ?? null;
   const totalObservedAt = hasPlaybookTotal
     ? args.playbookLine!.capturedAt
-    : namedTotal
-      ? namedTotalBook?.marketObservedAt?.total ?? namedTotalBook!.observedAt
+    : namedTotal || namedTotalQuote
+      ? namedTotalQuote?.observedAt ?? namedTotalBook?.marketObservedAt?.total ?? namedTotalBook!.observedAt
       : args.espnReferenceLine?.capturedAt ?? null;
   const spreadSource = hasPlaybookSpread
     ? "authoritative_pmf_at_playbook_line" as const
-    : namedSpread
+    : namedSpread || namedSpreadQuote
       ? "authoritative_pmf_at_named_book_line" as const
       : "authoritative_pmf_at_espn_opening_line" as const;
   const totalSource = hasPlaybookTotal
     ? "authoritative_pmf_at_playbook_line" as const
-    : namedTotal
+    : namedTotal || namedTotalQuote
       ? "authoritative_pmf_at_named_book_line" as const
       : "authoritative_pmf_at_espn_opening_line" as const;
   if (homeSpread === null && totalLine === null) return { moneyline, spread: null, total: null };
@@ -463,6 +469,15 @@ export function buildCfbForwardMarketOutlooks(args: {
       ? outlook("total", "over", totalLine, total.first, totalSource, totalObservedAt)
       : outlook("total", "under", totalLine, total.second, totalSource, totalObservedAt),
   };
+}
+
+function latestMainLineQuote(
+  book: NcaafBookOdds | null,
+  market: "spread" | "total",
+): NonNullable<NcaafBookOdds["marketQuotes"]>[number] | null {
+  return [...(book?.marketQuotes ?? [])]
+    .filter((quote) => quote.market === market && quote.marketSelection === "main_line" && quote.line !== null && Number.isFinite(quote.line))
+    .sort((first, second) => Date.parse(second.observedAt) - Date.parse(first.observedAt))[0] ?? null;
 }
 
 function spreadOutlook(forecast: CfbV1Forecast, homeSpread: number, observedAt: string, source: CfbForwardMarketOutlook["source"] = "authoritative_pmf_at_playbook_line"): CfbForwardMarketOutlook {

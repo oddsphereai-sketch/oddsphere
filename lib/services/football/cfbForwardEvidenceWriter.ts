@@ -102,7 +102,7 @@ import {
 import type { PlaybookInjuryTeamRow } from "@/lib/providers/playbook/types";
 
 export const CFB_FORWARD_WRITER_RELEASE =
-  "cfb_forward_evidence_writer_2026_10_03_r88_verified_quote_prediction_continuity" as const;
+  "cfb_forward_evidence_writer_2026_10_03_r89_one_sided_context_outlook" as const;
 export const CFB_FORWARD_MAX_QB_TEAMS_PER_RUN = 24 as const;
 export const CFB_FORWARD_MAX_SHARP_FALLBACK_GAMES_PER_RUN = 24 as const;
 export const CFB_FORWARD_MAX_ESPN_PROSPECTIVE_GAMES_PER_RUN = 32 as const;
@@ -558,8 +558,8 @@ export async function runCfbForwardEvidenceWriter(args: {
       bundle: marketAwareDecisions,
       availability: quarterbackAvailability.availability,
     }), playbookLine, espnReferenceLine, {
-      spread: preferredCfbTargetBook(currentBooks.filter((book) => book.spread !== null)),
-      total: preferredCfbTargetBook(currentBooks.filter((book) => book.total !== null)),
+      spread: preferredCfbTargetBook(displayBooks.filter((book) => hasCfbContextLine(book, "spread"))),
+      total: preferredCfbTargetBook(displayBooks.filter((book) => hasCfbContextLine(book, "total"))),
     });
     assertFootballCrossMarketCoherence({
       sport: "cfb",
@@ -744,6 +744,15 @@ export async function runCfbForwardEvidenceWriter(args: {
     ...memberSnapshot,
     ...tracking,
   };
+}
+
+function hasCfbContextLine(book: NcaafBookOdds, market: "spread" | "total"): boolean {
+  if (book[market] !== null) return true;
+  return (book.marketQuotes ?? []).some((quote) =>
+    quote.market === market &&
+    quote.marketSelection === "main_line" &&
+    quote.line !== null &&
+    Number.isFinite(quote.line));
 }
 
 export async function fetchCfbPlaybookRowsAttempt(

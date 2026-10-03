@@ -190,7 +190,31 @@ Last reviewed: 2026-10-03
 
 ## CFB Daily Edge generalized weekly production release
 
-### Verified-quote prediction and schedule continuity (r26; writer r88)
+### One-sided verified context outlook (r26; writer r89)
+
+- Active numerical score / market / decision releases remain
+  `cfb_v1_joint_score_runtime_2026_10_03_r15_verified_quote_market_flip_continuity` /
+  `cfb_market_sharp_aware_candidate_2026_10_03_r24_verified_quote_market_flip_continuity` /
+  `cfb_market_sharp_aware_production_2026_10_03_r26_verified_quote_market_flip_continuity` /
+  `cfb_v1_daily_edge_decision_2026_10_03_r38_verified_quote_market_flip_continuity` /
+  `cfb_v1_exact_price_decision_tuple_2026_10_03_r26_verified_quote_market_flip_continuity`.
+  Grade policy r16 is unchanged.
+- Active evidence / collector / member / writer releases are
+  `cfb_forward_evidence_snapshot_2026_10_03_r32_one_sided_context_outlook` /
+  `cfb_forward_evidence_collector_2026_10_03_r38_one_sided_context_outlook` /
+  `cfb_v1_member_release_2026_10_03_r46_one_sided_context_outlook` /
+  `cfb_forward_evidence_writer_2026_10_03_r89_one_sided_context_outlook`.
+  Fixture / outcome / snapshot are r67 / r62 / r26; reader and tracking remain r12 / r33.
+- A verified one-sided named-book main-line quote may now supply the Spread or Total context line for
+  the authoritative joint PMF. This restores a line-specific prediction while keeping exact-price
+  grading held: one side never becomes a synthetic fair-price pair, grade, or Bet selection.
+- The no-write production-evidence audit retained 99 games, proposed 81 release-refresh captures,
+  and produced 148 evaluated markets with zero capture failures: 19 Best Angles, 66 Leans,
+  48 Watchlists, and 15 No Plays; 95 exact-price markets remained held. The underlying score,
+  decision, and grade-policy releases are unchanged. Terminal locks retain priority over every new
+  release row.
+
+### Verified-quote prediction and schedule continuity (r26; writer r88; superseded evidence surface)
 
 - Active numerical score / market / decision releases remain
   `cfb_v1_joint_score_runtime_2026_10_03_r15_verified_quote_market_flip_continuity` /
