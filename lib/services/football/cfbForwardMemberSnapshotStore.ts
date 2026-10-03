@@ -11,15 +11,15 @@ import {
 } from "./cfbMemberFixture";
 
 export const CFB_FORWARD_MEMBER_SNAPSHOT_RELEASE =
-  "cfb_forward_member_snapshot_2026_10_03_r26_one_sided_context_outlook" as const;
+  "cfb_forward_member_snapshot_2026_10_03_r27_display_context_outlook" as const;
 export const CFB_FORWARD_PREVIOUS_MEMBER_SNAPSHOT_RELEASE =
-  "cfb_forward_member_snapshot_2026_10_03_r25_verified_quote_prediction_continuity" as const;
+  "cfb_forward_member_snapshot_2026_10_03_r26_one_sided_context_outlook" as const;
 export const CFB_PREVIOUS_MEMBER_FIXTURE_RELEASE =
-  "cfb_v1_member_fixture_2026_10_03_r66_verified_quote_prediction_continuity" as const;
+  "cfb_v1_member_fixture_2026_10_03_r67_one_sided_context_outlook" as const;
 export const CFB_PREVIOUS_EVIDENCE_RELEASE =
-  "cfb_forward_evidence_snapshot_2026_10_03_r31_verified_quote_market_flip_continuity" as const;
+  "cfb_forward_evidence_snapshot_2026_10_03_r32_one_sided_context_outlook" as const;
 export const CFB_PREVIOUS_MEMBER_RELEASE =
-  "cfb_v1_member_release_2026_10_03_r45_verified_quote_prediction_continuity" as const;
+  "cfb_v1_member_release_2026_10_03_r46_one_sided_context_outlook" as const;
 export const CFB_MEMBER_SNAPSHOT_READER_RELEASE =
   "cfb_member_snapshot_reader_2026_10_03_r12_verified_quote_market_flip_continuity" as const;
 

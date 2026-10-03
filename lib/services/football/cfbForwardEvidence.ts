@@ -15,7 +15,7 @@ import {
 } from "./cfbV1Decision";
 
 export const CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE =
-  "cfb_forward_evidence_snapshot_2026_10_03_r32_one_sided_context_outlook" as const;
+  "cfb_forward_evidence_snapshot_2026_10_03_r33_display_context_outlook" as const;
 export const CFB_FORWARD_SPREAD_SIGNAL_PREVIOUS_EVIDENCE_SCHEMA_RELEASE =
   "cfb_forward_evidence_snapshot_2026_10_03_r30_spread_signal_continuity" as const;
 export const CFB_FORWARD_AVAILABILITY_PREVIOUS_EVIDENCE_SCHEMA_RELEASE =
@@ -71,9 +71,9 @@ export const CFB_FORWARD_LEGACY_EVIDENCE_SCHEMA_RELEASE =
 export const CFB_FORWARD_INITIAL_EVIDENCE_SCHEMA_RELEASE =
   "cfb_forward_evidence_snapshot_2026_08_25_r1" as const;
 export const CFB_FORWARD_EVIDENCE_COLLECTOR_RELEASE =
-  "cfb_forward_evidence_collector_2026_10_03_r38_one_sided_context_outlook" as const;
+  "cfb_forward_evidence_collector_2026_10_03_r39_display_context_outlook" as const;
 export const CFB_FORWARD_MEMBER_RELEASE =
-  "cfb_v1_member_release_2026_10_03_r46_one_sided_context_outlook" as const;
+  "cfb_v1_member_release_2026_10_03_r47_display_context_outlook" as const;
 export const CFB_FORWARD_SPREAD_SIGNAL_PREVIOUS_MEMBER_RELEASE =
   "cfb_v1_member_release_2026_10_03_r42_spread_signal_continuity" as const;
 export const CFB_FORWARD_AVAILABILITY_PREVIOUS_MEMBER_RELEASE =
