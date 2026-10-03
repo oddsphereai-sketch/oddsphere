@@ -103,7 +103,7 @@ import {
 import type { PlaybookInjuryTeamRow } from "@/lib/providers/playbook/types";
 
 export const CFB_FORWARD_WRITER_RELEASE =
-  "cfb_forward_evidence_writer_2026_10_03_r91_t60_accuracy_lock" as const;
+  "cfb_forward_evidence_writer_2026_10_03_r92_sportsbook_partition_resolution" as const;
 export const CFB_FORWARD_MAX_QB_TEAMS_PER_RUN = 24 as const;
 export const CFB_FORWARD_MAX_SHARP_FALLBACK_GAMES_PER_RUN = 24 as const;
 export const CFB_FORWARD_MAX_ESPN_PROSPECTIVE_GAMES_PER_RUN = 32 as const;
@@ -1004,6 +1004,7 @@ export function cfbForwardReleaseRefreshNeed(rows: CfbForwardStoredEvidence[], n
   const staleUpcoming = [...latest.values()].some((row) =>
     timestamp < Date.parse(row.gameStartAt) - 60 * 60_000 &&
     (row.payload.schemaRelease !== CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE ||
+      row.payload.collectorRelease !== CFB_FORWARD_EVIDENCE_COLLECTOR_RELEASE ||
       row.payload.memberRelease !== CFB_FORWARD_MEMBER_RELEASE ||
       row.payload.decisions.decisionRelease !== CFB_V1_DECISION_RELEASE ||
       row.payload.authoritativeForecast?.release !== CFB_MARKET_SHARP_AWARE_PRODUCTION_RELEASE ||

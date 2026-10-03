@@ -2479,6 +2479,13 @@ currentCaptureEvidence.payload.contextualEvidenceCapture = buildCfbForwardContex
   authoritativeForecast,
   openingBooks: [],
 })!;
+const staleCollectorEvidence = structuredClone(currentCaptureEvidence);
+staleCollectorEvidence.payload.collectorRelease = "cfb_forward_evidence_collector_stale_test" as typeof CFB_FORWARD_EVIDENCE_COLLECTOR_RELEASE;
+assert.deepEqual(
+  cfbForwardReleaseRefreshNeed([staleCollectorEvidence], "2026-08-28T20:00:00.000Z"),
+  { collect: true, reason: "release_refresh_due", cadenceMinutes: 0 },
+  "a newly deployed market-input collector must refresh upcoming games immediately",
+);
 assert.equal(
   cfbForwardReleaseRefreshNeed([currentCaptureEvidence], "2026-08-28T20:00:00.000Z"),
   null,

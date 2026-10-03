@@ -2,10 +2,10 @@ import { SharpApiClient, type SharpApiRequestOptions, type SharpApiResponse } fr
 import type { NcaafBookOdds, NcaafGame } from "./balldontlieNcaafSlate";
 
 export const CFB_SHARP_API_ODDS_RELEASE =
-  "cfb_sharpapi_named_book_fallback_2026_10_03_r14_exact_kickoff_disambiguation" as const;
+  "cfb_sharpapi_named_book_fallback_2026_10_03_r15_sportsbook_partition_resolution" as const;
 export const CFB_SHARP_FALLBACK_MAX_GAMES = 96 as const;
 export const CFB_SHARP_FALLBACK_MAX_REQUESTS = 192 as const;
-export const CFB_SHARP_FALLBACK_MAX_DURATION_MS = 40_000 as const;
+export const CFB_SHARP_FALLBACK_MAX_DURATION_MS = 60_000 as const;
 export const CFB_SHARP_FALLBACK_MAX_ROWS_PER_EVENT = 200 as const;
 export const CFB_SHARP_FALLBACK_MAX_PAGES_PER_EVENT = 4 as const;
 export const CFB_SHARP_FALLBACK_MAX_EVENT_DISCOVERY_PAGES_PER_DATE = 8 as const;
@@ -49,6 +49,9 @@ type SharpEventRow = {
   away_team?: unknown;
   awayTeam?: unknown;
   away?: unknown;
+  book_count?: unknown;
+  books?: unknown;
+  sportsbooks?: unknown;
 };
 
 type Pair = {
@@ -210,7 +213,9 @@ export async function fetchSharpApiNcaafOddsFallback(args: {
     const exactKickoffMatches = trustedCurrentMatch === null && uniqueEventMatches.length > 1
       ? uniqueEventMatches.filter(([, event]) => exactSharpEventKickoffIdentity(game, event))
       : [];
-    const exactKickoffMatch = exactKickoffMatches.length === 1 ? exactKickoffMatches[0]![0] : null;
+    const exactKickoffMatch = exactKickoffMatches.length === 1
+      ? exactKickoffMatches[0]![0]
+      : uniquelyStrongestSharpEventPartition(exactKickoffMatches);
     if (uniqueEventMatches.length > 1 && trustedCurrentMatch === null && exactKickoffMatch === null) {
       booksByGame[game.providerGameId] = [];
       displayBooksByGame[game.providerGameId] = [];
@@ -659,6 +664,41 @@ function exactSharpEventKickoffIdentity(game: NcaafGame, event: SharpEventRow): 
   return Number.isFinite(expected) && Number.isFinite(actual) && expected === actual;
 }
 
+function uniquelyStrongestSharpEventPartition(matches: Array<readonly [string, SharpEventRow]>): string | null {
+  if (matches.length < 2) return null;
+  const ranked = matches
+    .map(([eventId, event]) => ({ eventId, score: sharpEventPartitionScore(event) }))
+    .sort((first, second) => compareSharpEventPartitionScore(second.score, first.score));
+  const winner = ranked[0];
+  const runnerUp = ranked[1];
+  if (!winner || !runnerUp || compareSharpEventPartitionScore(winner.score, runnerUp.score) === 0) return null;
+  return winner.eventId;
+}
+
+function sharpEventPartitionScore(event: SharpEventRow): readonly [number, number, number] {
+  const books = sharpEventBooks(event);
+  const trustedBooks = books.filter((book) => TRUSTED_CONSENSUS_BOOKS.has(book)).length;
+  const targetBooks = books.filter((book) => USER_TARGET_BOOKS.has(book)).length;
+  const declaredBookCount = finite(event.book_count);
+  return [trustedBooks, targetBooks, declaredBookCount !== null && declaredBookCount >= 0 ? declaredBookCount : books.length];
+}
+
+function compareSharpEventPartitionScore(
+  first: readonly [number, number, number],
+  second: readonly [number, number, number],
+): number {
+  return first[0] - second[0] || first[1] - second[1] || first[2] - second[2];
+}
+
+function sharpEventBooks(event: SharpEventRow): string[] {
+  const raw = Array.isArray(event.books) ? event.books : Array.isArray(event.sportsbooks) ? event.sportsbooks : [];
+  return [...new Set(raw.flatMap((book) => {
+    const name = typeof book === "string" ? book : text(record(book).name ?? record(book).sportsbook);
+    const normalized = name ? normalize(name) : "";
+    return normalized ? [normalized] : [];
+  }))];
+}
+
 function sharpEventId(event: SharpEventRow): string | null {
   return identifier(event.id) ?? identifier(event.event_id) ?? identifier(event.eventId);
 }
@@ -678,6 +718,8 @@ function teamMatches(raw: unknown, expectedName: string, abbreviation: string): 
   const abbr = normalizeTeam(abbreviation);
   if (!value || !full || !abbr) return false;
   if (value === full || value === abbr) return true;
+  if (full.startsWith("u") && full.slice(1) === value) return true;
+  if (value.startsWith("u") && value.slice(1) === full) return true;
   return value.length >= 5 && (full.startsWith(value) || value.startsWith(full));
 }
 
