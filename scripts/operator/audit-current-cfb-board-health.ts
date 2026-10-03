@@ -89,6 +89,7 @@ async function main(): Promise<void> {
   const upcomingRows = rows.filter((row) => Date.parse(row.startsAt ?? "") > nowMs);
   const upcomingActionable = upcomingRows.filter((row) => row.grade === "Lean" || row.grade === "Best Angle");
   const missingPrice = rows.filter((row) => row.currentPrice === null);
+  const missingPrediction = rows.filter((row) => row.prediction?.status !== "available" || !row.prediction.label);
   const upcomingMissingPrice = upcomingRows.filter((row) => row.currentPrice === null);
   const zeroTrail = rows.filter((row) => row.trailLength === 0);
   const report = {
@@ -166,6 +167,20 @@ async function main(): Promise<void> {
       zeroTrailByMarket: count(zeroTrail, (row) => row.market),
       missingPriceSample: summaryOnly ? [] : missingPrice.slice(0, 40),
       zeroTrailWithCurrentPriceSample: summaryOnly ? [] : zeroTrail.filter((row) => row.currentPrice !== null).slice(0, 30),
+    },
+    predictionHealth: {
+      unavailable: missingPrediction.length,
+      unavailableByScopeAndMarket: count(missingPrediction, (row) => `${row.scope}:${row.market}`),
+      unavailableRows: missingPrediction.map((row) => ({
+        matchup: row.matchup,
+        startsAt: row.startsAt,
+        scope: row.scope,
+        market: row.market,
+        status: row.prediction?.status ?? "missing",
+        held: row.held,
+        line: row.line,
+        hasCurrentPrice: row.currentPrice !== null,
+      })),
     },
     scoreHealth: {
       expectedMarginAbsBuckets: count(projections, (row) => bucket(Math.abs(row.expectedMarginHome), [1, 2, 3, 6, 10, 14, 21, 28])),

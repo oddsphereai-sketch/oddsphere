@@ -4,7 +4,7 @@ This file is the human-readable production handoff registry. Runtime constants a
 prediction snapshots remain the machine authority. Future model work must start here, verify the
 constants, and preserve the precedence and writer ownership below.
 
-Last reviewed: 2026-09-29
+Last reviewed: 2026-10-03
 
 ## Cross-sport confidence / execution contract
 
@@ -189,6 +189,39 @@ Last reviewed: 2026-09-29
 - Evidence: `docs/model-audits/2026-08-28-football-cross-market-coherence-predeclaration.md`, `docs/model-audits/2026-08-28-football-cross-market-coherence-r19.md`, `docs/model-audits/2026-08-26-football-market-scoped-t60-predeclaration.md`, `docs/model-audits/2026-08-25-nfl-odds-history-reader-repair.md`, `docs/model-audits/2026-08-25-nfl-public-release-transition.md`, `docs/model-audits/2026-08-25-nfl-actionable-grades-production-r9.md`, `docs/model-audits/2026-08-25-nfl-actionable-grades-r9.md`, `docs/model-audits/2026-08-25-nfl-projected-qb-context-r11.md`, `docs/model-audits/2026-08-23-nfl-discrete-drive-joint-r10.md`, and `docs/model-audits/2026-08-23-nfl-v1-comprehensive-outcome.md`.
 
 ## CFB Daily Edge generalized weekly production release
+
+### Spread-signal continuity and covered-market publication (r25; writer r85)
+
+- Active score / market / decision releases are
+  `cfb_v1_joint_score_runtime_2026_10_03_r14_spread_signal_continuity` /
+  `cfb_market_sharp_aware_candidate_2026_10_03_r23_spread_signal_continuity` /
+  `cfb_market_sharp_aware_production_2026_10_03_r25_spread_signal_continuity` /
+  `cfb_v1_daily_edge_decision_2026_10_03_r37_spread_signal_continuity` /
+  `cfb_v1_exact_price_decision_tuple_2026_10_03_r25_spread_signal_continuity`.
+  Grade policy r16 is unchanged.
+- Active evidence / collector / member / writer releases are
+  `cfb_forward_evidence_snapshot_2026_10_03_r30_spread_signal_continuity` /
+  `cfb_forward_evidence_collector_2026_10_03_r36_spread_signal_continuity` /
+  `cfb_v1_member_release_2026_10_03_r42_spread_signal_continuity` /
+  `cfb_forward_evidence_writer_2026_10_03_r85_spread_signal_continuity`.
+  Fixture / outcome / snapshot / reader / tracking are r63 / r58 / r22 / r11 / r32.
+- The existing eight-book, five-percentage-point Playbook spread-arbitration entry remains
+  unchanged. A qualified favorite-side signal now survives a same-direction sub-threshold update
+  for at most 24 hours only when the independent cover disagreement is at least five points. An
+  opposite current direction ends continuity. The score reflection still preserves the independent
+  total and one coherent PMF, score, winner, Spread side, and Total side.
+- A verified current named-book line is now passed to the already-existing market-outlook fallback,
+  so a covered game does not lose its Spread or Total prediction merely because Playbook or ESPN
+  context is absent. This adds no request, writer, schedule, label, copy, or layout.
+- Release-pure replay covers 230 settled games. Weeks 1-2 move Moneyline 82-14 to 84-12 and Spread
+  51-45 to 52-44; Week 3+ remains 109-25 Moneyline and 68-66 Spread with identical margin and
+  team-score MAE. Overall margin MAE improves 13.5545 to 13.3907 and team-score MAE 9.4883 to
+  9.4714. There are no grade-threshold changes, so promotions, demotions, and actionable count are
+  unchanged; this is a side/score continuity correction, not board flattening.
+- Evidence and rollback:
+  `docs/model-audits/2026-10-03-cfb-spread-arbitration-continuity-predeclaration.md` and
+  `docs/model-audits/2026-10-03-cfb-spread-arbitration-continuity-result.md`. Roll back the complete
+  r25/r37/r30/r42/r85 release family together; do not rewrite immutable correct locks.
 
 ### Exact-kickoff duplicate-event disambiguation (writer r84)
 

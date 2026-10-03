@@ -24,6 +24,7 @@ import {
   type CfbForwardMarketHistoryEvidence,
   type CfbForwardOperationalOpening,
   type CfbForwardPublishedDecisionBundle,
+  type CfbForwardPlaybookSplit,
   type CfbForwardStoredEvidence,
   type CfbForwardTeamQuarterbacks,
 } from "./cfbForwardEvidence";
@@ -100,7 +101,7 @@ import {
 import type { PlaybookInjuryTeamRow } from "@/lib/providers/playbook/types";
 
 export const CFB_FORWARD_WRITER_RELEASE =
-  "cfb_forward_evidence_writer_2026_10_03_r84_exact_kickoff_disambiguation" as const;
+  "cfb_forward_evidence_writer_2026_10_03_r85_spread_signal_continuity" as const;
 export const CFB_FORWARD_MAX_QB_TEAMS_PER_RUN = 24 as const;
 export const CFB_FORWARD_MAX_SHARP_FALLBACK_GAMES_PER_RUN = 24 as const;
 export const CFB_FORWARD_MAX_ESPN_PROSPECTIVE_GAMES_PER_RUN = 32 as const;
@@ -420,6 +421,10 @@ export async function runCfbForwardEvidenceWriter(args: {
       playbookEvidence ? normalizeCfbPlaybookSplits(playbookEvidence.splitRow, args.now) : null,
       previousMarket?.playbookSplits ?? null,
     );
+    const priorSpreadSplits = existing
+      .filter((row) => row.providerGameId === plan.game.providerGameId)
+      .map((row) => row.payload.market.playbookSplits?.spread ?? null)
+      .filter((split): split is CfbForwardPlaybookSplit => split !== null);
     const sharpApiSplits = sharpSplitsAttempt.result?.recordsByGame[plan.game.providerGameId] ?? [];
     const sharpApiSplitsStatus = sharpSplitsAttempt.result === null
       ? "request_failed" as const
@@ -452,6 +457,7 @@ export async function runCfbForwardEvidenceWriter(args: {
           sharpSplits: sharpApiSplits,
           playbookLine,
           publicSplits: playbookSplits,
+          priorSpreadSplits,
           evaluatedAt: capturedAt,
         })
       : weeklyForecast.forecast;
@@ -464,6 +470,7 @@ export async function runCfbForwardEvidenceWriter(args: {
           sharpSplits: sharpApiSplits,
           playbookLine,
           publicSplits: playbookSplits,
+          priorSpreadSplits,
           kickoffWeather: weather,
           evaluatedAt: capturedAt,
         })
@@ -531,7 +538,7 @@ export async function runCfbForwardEvidenceWriter(args: {
     const decisions = publishCfbForwardDecisionBundle(applyCfbVerifiedAvailabilityGradeCap({
       bundle: marketAwareDecisions,
       availability: quarterbackAvailability.availability,
-    }), playbookLine, espnReferenceLine);
+    }), playbookLine, espnReferenceLine, current);
     assertFootballCrossMarketCoherence({
       sport: "cfb",
       providerGameId: plan.game.providerGameId,
@@ -979,13 +986,14 @@ export function publishCfbForwardDecisionBundle(
   bundle: ReturnType<typeof buildCfbV1DecisionBundle>,
   playbookLine: CfbForwardEvidencePayload["market"]["playbookLine"],
   espnReferenceLine: CfbForwardEvidencePayload["market"]["espnReferenceLine"] = null,
+  namedBookLine: NcaafBookOdds | null = null,
 ): CfbForwardPublishedDecisionBundle {
   const { pmf: _pmf, ...forecast } = bundle.forecast;
   void _pmf;
   return {
     ...bundle,
     forecast,
-    marketOutlooks: buildCfbForwardMarketOutlooks({ forecast: bundle.forecast, playbookLine, espnReferenceLine }),
+    marketOutlooks: buildCfbForwardMarketOutlooks({ forecast: bundle.forecast, playbookLine, namedBookLine, espnReferenceLine }),
   };
 }
 

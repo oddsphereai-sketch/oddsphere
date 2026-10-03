@@ -388,6 +388,21 @@ assert.equal(
   false,
   "a complete two-sided near-tossup Total cannot be converted into missing evidence",
 );
+const namedBookOutlookBundle = publishCfbForwardDecisionBundle(
+  buildCfbV1DecisionBundle({
+    providerGameId: game.providerGameId,
+    awayTeam: game.away.abbreviation,
+    homeTeam: game.home.abbreviation,
+    gameStartsAt: game.scheduledStart,
+    comparableCurrentBooks: [],
+    forecast: fullBundle.forecast,
+  }),
+  null,
+  null,
+  currentBooks[0]!,
+);
+assert.equal(namedBookOutlookBundle.marketOutlooks?.spread?.source, "authoritative_pmf_at_named_book_line", "a verified named-book line must keep a covered Spread prediction available");
+assert.equal(namedBookOutlookBundle.marketOutlooks?.total?.source, "authoritative_pmf_at_named_book_line", "a verified named-book line must keep a covered Total prediction available");
 
 const noMoneylineBooks = currentBooks.map((currentBook) => ({ ...currentBook, moneyline: null }));
 const marketScopedBundle = buildCfbV1DecisionBundle({
