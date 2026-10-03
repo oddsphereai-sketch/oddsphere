@@ -2,12 +2,12 @@ import { SharpApiClient, type SharpApiRequestOptions, type SharpApiResponse } fr
 import type { NcaafBookOdds, NcaafGame } from "./balldontlieNcaafSlate";
 
 export const CFB_SHARP_API_ODDS_RELEASE =
-  "cfb_sharpapi_named_book_fallback_2026_10_03_r15_sportsbook_partition_resolution" as const;
+  "cfb_sharpapi_named_book_fallback_2026_10_03_r16_five_page_main_market" as const;
 export const CFB_SHARP_FALLBACK_MAX_GAMES = 96 as const;
 export const CFB_SHARP_FALLBACK_MAX_REQUESTS = 192 as const;
 export const CFB_SHARP_FALLBACK_MAX_DURATION_MS = 60_000 as const;
 export const CFB_SHARP_FALLBACK_MAX_ROWS_PER_EVENT = 200 as const;
-export const CFB_SHARP_FALLBACK_MAX_PAGES_PER_EVENT = 4 as const;
+export const CFB_SHARP_FALLBACK_MAX_PAGES_PER_EVENT = 5 as const;
 export const CFB_SHARP_FALLBACK_MAX_EVENT_DISCOVERY_PAGES_PER_DATE = 8 as const;
 
 type Json = Record<string, unknown>;

@@ -395,6 +395,40 @@ const boundedEventFailure = await fetchSharpApiNcaafOddsFallback({
 assert.match(boundedEventFailure.failuresByGame[game.providerGameId] ?? "", new RegExp(`bounded ${CFB_SHARP_FALLBACK_MAX_PAGES_PER_EVENT}-page safety cap`));
 assert.equal(boundedEventFailure.requests, CFB_SHARP_FALLBACK_MAX_PAGES_PER_EVENT + 1, "isolating an oversized event cannot bypass the existing request accounting");
 
+const fivePageEventCalls: SharpApiRequestOptions[] = [];
+const fivePageEvent = await fetchSharpApiNcaafOddsFallback({
+  games: [game],
+  maximumRequests: CFB_SHARP_FALLBACK_MAX_PAGES_PER_EVENT + 1,
+  client: withDiscoveredEvent({
+    async fetch<T>(opts: SharpApiRequestOptions): Promise<SharpApiResponse<T>> {
+      fivePageEventCalls.push(opts);
+      const offset = Number(opts.query?.offset ?? 0);
+      const page = offset / 200;
+      const data = page < 4
+        ? [{ ...sharpRows(expectedEventId)[0] as Record<string, unknown>, timestamp: `2026-08-26T12:11:4${page}.525Z` }]
+        : sharpRows(expectedEventId);
+      return {
+        data: data as T,
+        pagination: {
+          limit: 200,
+          offset,
+          count: data.length,
+          has_more: page < 4,
+          ...(page < 4 ? { next_offset: offset + 200 } : {}),
+        },
+      };
+    },
+  }),
+});
+assert.deepEqual(
+  fivePageEventCalls.map((call) => call.query?.offset ?? 0),
+  [0, 200, 400, 600, 800],
+  "a verified five-page main-market event must be read completely",
+);
+assert.equal(fivePageEvent.eventDiscoveryStatusByGame[game.providerGameId], "matched");
+assert.equal(fivePageEvent.matchedGames, 1);
+assert.equal(fivePageEvent.failuresByGame[game.providerGameId], undefined);
+
 const invalidOffsetFailure = await fetchSharpApiNcaafOddsFallback({
     games: [game],
     maximumRequests: 3,

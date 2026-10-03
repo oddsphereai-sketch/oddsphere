@@ -190,6 +190,36 @@ Last reviewed: 2026-10-03
 
 ## CFB Daily Edge generalized weekly production release
 
+### Five-page Sharp main-market completion (Sharp odds r16; collector r41; writer r93)
+
+- Active Sharp named-book fallback / collector / sole writer releases are
+  `cfb_sharpapi_named_book_fallback_2026_10_03_r16_five_page_main_market` /
+  `cfb_forward_evidence_collector_2026_10_03_r41_five_page_main_market` /
+  `cfb_forward_evidence_writer_2026_10_03_r93_five_page_main_market`. Score, PMF, calibration,
+  market arbitration, grade, member, fixture, snapshot, reader, tracking and presentation releases
+  are unchanged. Writer r93 retains the r91 lock and r92 partition-resolution contracts.
+- SharpAPI currently returns exactly five 200-row pages for GASO-CCU and MRSH-JMU because its
+  `market=main` response also includes hundreds of explicitly marked alternate lines. The former
+  four-page limit isolated those two events and preserved every sibling, but unnecessarily omitted
+  their named-book fallback evidence and marked otherwise successful runs partial.
+- R16 raises only the per-event completion bound from four to five pages. The weekly 24-game and
+  192-request hard caps, 60-second attempt deadline, exact event identity, sportsbook-partition
+  resolver, repeated-page guard, forward-offset validation and fail-closed sixth-page behavior are
+  unchanged. The current remaining-slate reproduction completes and matches 24/24 games in 48
+  requests. Raising the event cap adds at most one odds request for each of the two affected events;
+  the independently paginated event catalog accounts for the remaining dynamic total. No synthetic
+  quote or cross-event merge is permitted.
+- The zero-write production-path replay publishes all 111 outlooks for 37 remaining games with zero
+  capture failures and no Sharp fallback warning. Sixty-five exact-price markets remain evaluated
+  and 46 remain held; the refreshed board is 9 Best Angles / 30 Leans / 23 Watchlists / 3 No Plays.
+  Relative to the immediately preceding r92 production refresh, actionables move 40 to 39 through
+  one Best Angle-to-Watchlist change from the newer captured inputs; no grade rule or threshold is
+  changed. The only remaining health states are genuine missing canonical anchors and Playbook's
+  verified HTTP 404 NCAAF injury endpoint.
+- Evidence and rollback:
+  `docs/model-audits/2026-10-03-cfb-five-page-main-market-r93.md`. Roll back r16/r41/r93 together
+  while preserving append-only evidence and immutable locks.
+
 ### Exact-kickoff sportsbook-partition recovery (Sharp odds r15; collector r40; writer r92)
 
 - Active Sharp named-book fallback / collector / sole writer releases are
