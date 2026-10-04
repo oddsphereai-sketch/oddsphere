@@ -190,6 +190,33 @@ Last reviewed: 2026-10-03
 
 ## CFB Daily Edge generalized weekly production release
 
+### Moneyline market-confirmation grade repair (decision r39; writer r94)
+
+- Active Moneyline grade / decision releases are
+  `cfb_v1_composite_grade_policy_2026_10_04_r17_moneyline_market_confirmation` /
+  `cfb_market_sharp_aware_candidate_2026_10_04_r25_moneyline_market_confirmation` /
+  `cfb_market_sharp_aware_production_2026_10_04_r27_moneyline_market_confirmation` /
+  `cfb_v1_daily_edge_decision_2026_10_04_r39_moneyline_market_confirmation` /
+  `cfb_v1_exact_price_decision_tuple_2026_10_04_r27_moneyline_market_confirmation`.
+  The independent score, joint PMF, probability, selected side, Spread and Total releases remain
+  unchanged.
+- An actionable Moneyline with at least a five-point model-over-market gap is capped at Watchlist
+  unless two independent market channels support it with no resistance. A price-aware favorite
+  Watchlist between -201 and -700 may become only a Lean when model probability is at least 65%
+  and target-excluded market probability is at least 60%. The rule preserves execution state and
+  cannot manufacture EV, Best Angle status, a price, side, score or probability.
+- The release-stamped locked replay moves 111 actionables to 114 through 27 promotions and 24
+  demotions. Current actionables were 78-33, +4.512u and 0.2295 Brier; the candidate subset is
+  96-18, +17.209u and 0.1571 Brier. The exact r38 cohort moves 11-12 to 16-2. These are historical
+  counterfactuals, not guaranteed future performance.
+- Active publication releases are evidence / member / fixture / snapshot / reader / sole writer /
+  tracking r34 / r48 / r70 / r29 / r14 / r94 / r35. The immediately preceding r33 / r47 / r38 and
+  r28 / r69 payloads remain explicitly readable during handoff; locked cards remain immutable.
+  Provider budgets, calls, cadence, the `prediction_pipeline:cfb` lease, copy, labels and layout do
+  not change.
+- Evidence and rollback:
+  `docs/model-audits/2026-10-04-cfb-moneyline-market-confirmation-r39.md`.
+
 ### Five-page Sharp main-market completion (Sharp odds r16; collector r41; writer r93)
 
 - Active Sharp named-book fallback / collector / sole writer releases are
