@@ -572,6 +572,33 @@ const resistedPromotion = applyCfbBalancedPositiveValueRule({
   evaluatedLine: null, sharpDirection: "resistance", publicDirection: "neutral", movementDirection: "neutral", reasonCodes: [],
 });
 assert.equal(resistedPromotion.finalGrade, "Watchlist", "the paired promotion cannot bypass resistance evidence");
+const unconfirmedMoneylineDisagreement = applyCfbBalancedPositiveValueRule({
+  market: "moneyline", finalGrade: "Best Angle", probabilityGrade: "Best Angle", executionStatus: "bet",
+  expectedValue: 0.12, modelProbability: 0.70, marketFairProbability: 0.60, evaluatedPrice: 120,
+  evaluatedLine: null, sharpDirection: "unknown", publicDirection: "neutral", movementDirection: "support", reasonCodes: [],
+});
+assert.equal(unconfirmedMoneylineDisagreement.finalGrade, "Watchlist", "a large Moneyline disagreement cannot remain actionable on one supporting channel");
+assert.equal(unconfirmedMoneylineDisagreement.reasonCodes.includes("moneyline_unconfirmed_model_market_disagreement"), true);
+const confirmedMoneylineDisagreement = applyCfbBalancedPositiveValueRule({
+  market: "moneyline", finalGrade: "Best Angle", probabilityGrade: "Best Angle", executionStatus: "bet",
+  expectedValue: 0.12, modelProbability: 0.70, marketFairProbability: 0.60, evaluatedPrice: 120,
+  evaluatedLine: null, sharpDirection: "support", publicDirection: "neutral", movementDirection: "support", reasonCodes: [],
+});
+assert.equal(confirmedMoneylineDisagreement.finalGrade, "Best Angle", "independent market channels may confirm a real Moneyline disagreement");
+const marketConfirmedFavoriteLean = applyCfbBalancedPositiveValueRule({
+  market: "moneyline", finalGrade: "Watchlist", probabilityGrade: "Best Angle", executionStatus: "shop",
+  expectedValue: -0.08, modelProbability: 0.72, marketFairProbability: 0.68, evaluatedPrice: -550,
+  evaluatedLine: null, sharpDirection: "unknown", publicDirection: "neutral", movementDirection: "resistance", reasonCodes: [],
+});
+assert.equal(marketConfirmedFavoriteLean.finalGrade, "Lean", "a market-confirmed favorite may remain useful as a price-aware parlay Lean");
+assert.equal(marketConfirmedFavoriteLean.executionStatus, "shop", "confidence promotion must not fabricate exact-price value");
+assert.equal(marketConfirmedFavoriteLean.reasonCodes.includes("moneyline_market_confirmed_favorite_lean"), true);
+const prohibitiveFavorite = applyCfbBalancedPositiveValueRule({
+  market: "moneyline", finalGrade: "Watchlist", probabilityGrade: "Best Angle", executionStatus: "shop",
+  expectedValue: -0.08, modelProbability: 0.82, marketFairProbability: 0.78, evaluatedPrice: -800,
+  evaluatedLine: null, sharpDirection: "support", publicDirection: "support", movementDirection: "support", reasonCodes: [],
+});
+assert.equal(prohibitiveFavorite.finalGrade, "Watchlist", "a prohibitive favorite cannot be promoted into the actionable Lean surface");
 const counterSignalPromotion = applyCfbBalancedPositiveValueRule({
   market: "spread", finalGrade: "Watchlist", probabilityGrade: "Watchlist", executionStatus: "bet",
   expectedValue: 0.04, modelProbability: 0.542, marketFairProbability: 0.502, evaluatedPrice: -108,

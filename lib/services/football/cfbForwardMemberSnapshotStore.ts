@@ -11,17 +11,17 @@ import {
 } from "./cfbMemberFixture";
 
 export const CFB_FORWARD_MEMBER_SNAPSHOT_RELEASE =
-  "cfb_forward_member_snapshot_2026_10_03_r28_t60_accuracy_lock" as const;
+  "cfb_forward_member_snapshot_2026_10_04_r29_moneyline_market_confirmation" as const;
 export const CFB_FORWARD_PREVIOUS_MEMBER_SNAPSHOT_RELEASE =
-  "cfb_forward_member_snapshot_2026_10_03_r27_display_context_outlook" as const;
+  "cfb_forward_member_snapshot_2026_10_03_r28_t60_accuracy_lock" as const;
 export const CFB_PREVIOUS_MEMBER_FIXTURE_RELEASE =
-  "cfb_v1_member_fixture_2026_10_03_r68_display_context_outlook" as const;
+  "cfb_v1_member_fixture_2026_10_03_r69_t60_accuracy_lock" as const;
 export const CFB_PREVIOUS_EVIDENCE_RELEASE =
   "cfb_forward_evidence_snapshot_2026_10_03_r33_display_context_outlook" as const;
 export const CFB_PREVIOUS_MEMBER_RELEASE =
   "cfb_v1_member_release_2026_10_03_r47_display_context_outlook" as const;
 export const CFB_MEMBER_SNAPSHOT_READER_RELEASE =
-  "cfb_member_snapshot_reader_2026_10_03_r13_t60_accuracy_lock" as const;
+  "cfb_member_snapshot_reader_2026_10_04_r14_moneyline_market_confirmation" as const;
 
 export const CFB_FORWARD_MEMBER_SNAPSHOT_MAX_JSON_BYTES = 8_000_000;
 export const CFB_FORWARD_MEMBER_SNAPSHOT_MAX_GZIP_BYTES = 1_000_000;

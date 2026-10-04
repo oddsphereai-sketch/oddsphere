@@ -18,13 +18,13 @@ import {
 import { evaluateCfbHolisticConfidence } from "./cfbHolisticConfidenceCandidate";
 
 export const CFB_MARKET_SHARP_AWARE_CANDIDATE_RELEASE =
-  "cfb_market_sharp_aware_candidate_2026_10_03_r24_verified_quote_market_flip_continuity" as const;
+  "cfb_market_sharp_aware_candidate_2026_10_04_r25_moneyline_market_confirmation" as const;
 export const CFB_MARKET_SHARP_AWARE_SHADOW_RELEASE =
   CFB_MARKET_SHARP_AWARE_CANDIDATE_RELEASE;
 export const CFB_MARKET_SHARP_AWARE_PRODUCTION_RELEASE =
-  "cfb_market_sharp_aware_production_2026_10_03_r26_verified_quote_market_flip_continuity" as const;
+  "cfb_market_sharp_aware_production_2026_10_04_r27_moneyline_market_confirmation" as const;
 export const CFB_MARKET_SHARP_AWARE_PREVIOUS_PRODUCTION_RELEASE =
-  "cfb_market_sharp_aware_production_2026_10_02_r24_same_book_qb_availability" as const;
+  "cfb_market_sharp_aware_production_2026_10_03_r26_verified_quote_market_flip_continuity" as const;
 export const CFB_MARKET_SHADOW_WEIGHT = 0 as const;
 export const CFB_SHARP_SIGNED_GAP_THRESHOLD_PP = 10 as const;
 export const CFB_SHARP_FULL_STRENGTH_GAP_PP = 20 as const;
@@ -68,6 +68,11 @@ export const CFB_PROVISIONAL_LARGE_SPREAD_LEAN_MAX_ABS_LINE = 24 as const;
 export const CFB_PROVISIONAL_TOTAL_LEAN_MIN_PROBABILITY = 0.52 as const;
 export const CFB_PROVISIONAL_TOTAL_LEAN_MIN_EDGE_PP = 2 as const;
 export const CFB_PROVISIONAL_TOTAL_LEAN_MIN_EV = 0.015 as const;
+export const CFB_MONEYLINE_UNCONFIRMED_DISAGREEMENT_MIN_GAP_PP = 5 as const;
+export const CFB_MONEYLINE_PARLAY_LEAN_MIN_MODEL_PROBABILITY = 0.65 as const;
+export const CFB_MONEYLINE_PARLAY_LEAN_MIN_MARKET_PROBABILITY = 0.60 as const;
+export const CFB_MONEYLINE_PARLAY_LEAN_MIN_PRICE = -700 as const;
+export const CFB_MONEYLINE_PARLAY_LEAN_MAX_PRICE = -201 as const;
 
 type CanonicalSide = "home" | "away" | "over" | "under";
 export type CfbMarketEvidenceDirection = "support" | "resistance" | "neutral" | "unknown";
@@ -447,6 +452,38 @@ export function applyCfbBalancedPositiveValueRule(args: {
   const actionable = args.finalGrade === "Best Angle" || args.finalGrade === "Lean";
   if (actionable && args.executionStatus === "bet" && (args.expectedValue < -1e-8 || gapPp <= 0)) {
     return { finalGrade: "Watchlist", executionStatus: args.executionStatus, reasonCodes: [...args.reasonCodes, "positive_target_excluded_value_guard"] };
+  }
+
+  const evidenceDirections = [args.sharpDirection, args.publicDirection, args.movementDirection];
+  const marketSupportCount = evidenceDirections.filter((direction) => direction === "support").length;
+  const marketResistanceCount = evidenceDirections.filter((direction) => direction === "resistance").length;
+  const multiChannelMarketConfirmation = marketSupportCount >= 2 && marketResistanceCount === 0;
+  if (
+    actionable &&
+    args.market === "moneyline" &&
+    gapPp >= CFB_MONEYLINE_UNCONFIRMED_DISAGREEMENT_MIN_GAP_PP &&
+    !multiChannelMarketConfirmation
+  ) {
+    return {
+      finalGrade: "Watchlist",
+      executionStatus: args.executionStatus,
+      reasonCodes: [...args.reasonCodes, "moneyline_unconfirmed_model_market_disagreement"],
+    };
+  }
+
+  const marketConfirmedFavoriteLean =
+    args.finalGrade === "Watchlist" &&
+    args.market === "moneyline" &&
+    args.evaluatedPrice >= CFB_MONEYLINE_PARLAY_LEAN_MIN_PRICE &&
+    args.evaluatedPrice <= CFB_MONEYLINE_PARLAY_LEAN_MAX_PRICE &&
+    args.modelProbability >= CFB_MONEYLINE_PARLAY_LEAN_MIN_MODEL_PROBABILITY &&
+    args.marketFairProbability >= CFB_MONEYLINE_PARLAY_LEAN_MIN_MARKET_PROBABILITY;
+  if (marketConfirmedFavoriteLean) {
+    return {
+      finalGrade: "Lean",
+      executionStatus: args.executionStatus,
+      reasonCodes: [...args.reasonCodes, "moneyline_market_confirmed_favorite_lean"],
+    };
   }
 
   const noResistance = args.sharpDirection !== "resistance" && args.publicDirection !== "resistance" && args.movementDirection !== "resistance";
