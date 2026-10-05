@@ -18,7 +18,7 @@ import {
 import type { NflPaidProjectionShadow } from "./balldontlieNflWeeklyProjectionShadow";
 
 export const NFL_TARGET_EXCLUDED_MARKET_OUTCOME_RELEASE =
-  "nfl_target_excluded_market_outcome_2026_09_28_r8_market_marriage" as const;
+  "nfl_target_excluded_market_outcome_2026_10_05_r9_winner_coherence" as const;
 
 export type NflTargetExcludedMarketAnchor = {
   release: typeof NFL_TARGET_EXCLUDED_MARKET_OUTCOME_RELEASE;

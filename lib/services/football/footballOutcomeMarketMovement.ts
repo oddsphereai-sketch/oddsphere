@@ -18,6 +18,8 @@ export type FootballOutcomeMarketMovement = {
   currentObservedAt: string | null;
   homeMarginLineDelta: number | null;
   homeMarginFairProbabilityDeltaPp: number | null;
+  moneylineHomeFairProbabilityDeltaPp: number | null;
+  spreadHomeFairProbabilityDeltaPp: number | null;
   totalLineDelta: number | null;
   overFairProbabilityDeltaPp: number | null;
   homeMarginShiftPoints: number;
@@ -42,6 +44,8 @@ export function readFootballOutcomeMarketMovement(args: {
     currentObservedAt: null,
     homeMarginLineDelta: null,
     homeMarginFairProbabilityDeltaPp: null,
+    moneylineHomeFairProbabilityDeltaPp: null,
+    spreadHomeFairProbabilityDeltaPp: null,
     totalLineDelta: null,
     overFairProbabilityDeltaPp: null,
     homeMarginShiftPoints: 0,
@@ -93,6 +97,8 @@ export function readFootballOutcomeMarketMovement(args: {
     currentObservedAt,
     homeMarginLineDelta,
     homeMarginFairProbabilityDeltaPp,
+    moneylineHomeFairProbabilityDeltaPp: moneylineHomeFairDeltaPp,
+    spreadHomeFairProbabilityDeltaPp: spreadHomeFairDeltaPp,
     totalLineDelta,
     overFairProbabilityDeltaPp,
     homeMarginShiftPoints,

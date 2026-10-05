@@ -46,11 +46,15 @@ import { nflFootballEvidenceStats } from "./footballMemberEvidence";
 import type { NflRegularSharpMarket, NflRegularSharpSplit } from "./sharpApiNflSplits";
 
 export const NFL_WEEK_ONE_HELD_MEMBER_FIXTURE_RELEASE =
-  "nfl_weekly_member_fixture_2026_10_02_r36_spread_grade_calibration" as const;
+  "nfl_weekly_member_fixture_2026_10_05_r37_winner_coherence" as const;
 
 const NFL_PRECEDING_MEMBER_RELEASE =
-  "nfl_v1_member_release_2026_09_29_r24_joint_moneyline_coherence" as const;
+  "nfl_v1_member_release_2026_10_02_r25_spread_grade_calibration" as const;
 const NFL_PRECEDING_DECISION_RELEASE =
+  "nfl_v1_daily_edge_decision_2026_10_02_r27_spread_grade_calibration" as const;
+const NFL_JOINT_MONEYLINE_PRECEDING_MEMBER_RELEASE =
+  "nfl_v1_member_release_2026_09_29_r24_joint_moneyline_coherence" as const;
+const NFL_JOINT_MONEYLINE_PRECEDING_DECISION_RELEASE =
   "nfl_v1_daily_edge_decision_2026_09_29_r26_joint_moneyline_coherence" as const;
 const NFL_MARKET_MARRIAGE_PRECEDING_MEMBER_RELEASE =
   "nfl_v1_member_release_2026_09_28_r23_market_marriage" as const;
@@ -217,6 +221,9 @@ function latestCompleteRows(rows: NflForwardStoredEvidence[]): Array<NflForwardS
     (row.payload.decisions.modelPromotionStatus === NFL_PRECEDING_MEMBER_RELEASE &&
       row.payload.decisions.evaluatedBets.every((decision) =>
         decision.decisionRelease === NFL_PRECEDING_DECISION_RELEASE)) ||
+    (row.payload.decisions.modelPromotionStatus === NFL_JOINT_MONEYLINE_PRECEDING_MEMBER_RELEASE &&
+      row.payload.decisions.evaluatedBets.every((decision) =>
+        decision.decisionRelease === NFL_JOINT_MONEYLINE_PRECEDING_DECISION_RELEASE)) ||
     (row.payload.decisions.modelPromotionStatus === NFL_MARKET_MARRIAGE_PRECEDING_MEMBER_RELEASE &&
       row.payload.decisions.evaluatedBets.every((decision) =>
         decision.decisionRelease === NFL_MARKET_MARRIAGE_PRECEDING_DECISION_RELEASE)) ||
