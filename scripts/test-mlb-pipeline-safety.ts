@@ -104,8 +104,8 @@ const fiLayers = buildMlbModelLayerVersions("first_inning", {});
 check("missing model env stamps resolved v2_2", layers.runtime_env.automodel_version === "v2_2");
 check("missing FI env stamps resolved fi_v2", layers.runtime_env.first_inning_model_version === "fi_v2");
 check(
-  "grade policy stamps the r89 Total action recalibration",
-  layers.grade_policy === "mlb_public_grade_policy_v58_total_action_recalibration_2026_09_24",
+  "grade policy stamps the r90 corroborated Total opposition release",
+  layers.grade_policy === "mlb_public_grade_policy_v59_corroborated_total_opposition_2026_10_05",
 );
 check(
   "FI r85 stamps the scoped independent-only uncertainty correction without changing the full-game tuple",
@@ -128,23 +128,23 @@ check(
     layers.calibration_version === MLB_PUBLIC_CALIBRATION_VERSION,
 );
 check(
-  "MLB r89 stamps the Total action recalibration while preserving the r88 probability head and unrelated heads",
-  MLB_DAILY_EDGE_DECISION_RELEASE_ID === "mlb_daily_edge_decision_2026_09_24_r89_total_action_recalibration" &&
-    MLB_MODEL_LAYER_VERSION_SCHEMA === "mlb_model_layer_versions_v18_official_tbd_bullpen_eligibility" &&
-    layers.rule_bundle_version === "mlb_daily_edge_rule_bundle_v74_total_action_recalibration_2026_09_24" &&
+  "MLB r90 stamps corroborated Total opposition while preserving unrelated heads",
+  MLB_DAILY_EDGE_DECISION_RELEASE_ID === "mlb_daily_edge_decision_2026_10_05_r90_corroborated_total_opposition" &&
+    MLB_MODEL_LAYER_VERSION_SCHEMA === "mlb_model_layer_versions_v19_corroborated_total_opposition" &&
+    layers.rule_bundle_version === "mlb_daily_edge_rule_bundle_v75_corroborated_total_opposition_2026_10_05" &&
     layers.total_market_support_lean === "total_sharpapi_money_over_tickets_support_lean_v2_under_only_2026_09_04" &&
-    layers.calibration_version === "mlb_public_calibration_v35_total_action_recalibration_2026_09_24" &&
-    layers.projection_core === "mlb_projection_core_v2_5_market_total_preserve_margin_2026_09_26" &&
+    layers.calibration_version === "mlb_public_calibration_v36_corroborated_total_opposition_2026_10_05" &&
+    layers.projection_core === "mlb_projection_core_v2_6_corroborated_total_opposition_preserve_margin_2026_10_05" &&
     layers.market_input_snapshot === "mlb_market_input_snapshot_v3_current_line_pagination_2026_09_08" &&
     layers.moneyline_probability_head === "mlb_moneyline_structural_coherence_probability_v3_2026_09_02" &&
-    layers.total_probability_head === "mlb_total_regime_calibrated_probability_v4_trailing90_2026_09_19" &&
+    layers.total_probability_head === "mlb_total_regime_calibrated_probability_v5_corroborated_opposition_2026_10_05" &&
     layers.coherent_market_price_map === "mlb_coherent_market_price_map_v1_2026_09_01" &&
-    layers.market_calibration_policy === "mlb_model_market_calibration_v4_totals_regime_2026_09_19" &&
+    layers.market_calibration_policy === "mlb_model_market_calibration_v5_corroborated_total_opposition_2026_10_05" &&
     layers.moneyline_action_promotion_stability === "daily_edge_action_promotion_stability_2026_08_29_r1" &&
     layers.source_aware_split_pair_selector === "mlb_source_aware_split_pair_selector_v2_recency_coherent_2026_08_31" &&
     layers.moneyline_evaluation_price_policy === "mlb_ml_fresh_coherent_best_playable_price_same_book_movement_v4_sharp_source_recovery_2026_09_01" &&
     layers.moneyline_sharp_price_source === "mlb_sharp_moneyline_source_v2_targeted_complete_pair_recovery_2026_09_01" &&
-    layers.correction_policy === "mlb_prediction_corrections_v24_full_game_publication_coherence_2026_09_02" &&
+    layers.correction_policy === "mlb_prediction_corrections_v25_corroborated_total_opposition_2026_10_05" &&
     layers.first_inning_probability_head === "mlb_first_inning_fi_v6_evaluated_quote_exclusion_2026_09_02" &&
     layers.first_inning_market_price_map === "mlb_first_inning_named_book_price_map_v1_2026_09_01" &&
     layers.first_inning_market_calibration_policy === "mlb_first_inning_market_calibration_v3_evaluated_quote_exclusion_2026_09_02" &&
