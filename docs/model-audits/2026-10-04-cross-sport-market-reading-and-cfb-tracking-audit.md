@@ -1,4 +1,4 @@
-# Cross-sport market-reading and CFB tracking audit
+# Sport-specific market-reading and CFB tracking audit
 
 ## Scope
 
@@ -10,6 +10,11 @@ lock, or tracking row.
 The audit deliberately evaluates each sport's own released contract. A cross-sport market weight
 would violate the product boundary: evidence that is predictive for one sport or market is not
 assumed predictive for another.
+
+The October 5 r2 CFB audit extension also evaluates corroborated, CFB-only evidence patterns
+(same-book movement with sharp money, public money divergence, and reverse-line movement) against
+the authoritative locked CFB forecast and its score-axis error. It does not reuse another sport's
+thresholds, weights, or flip policy.
 
 ## CFB tracking integrity
 
