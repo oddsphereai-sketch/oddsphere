@@ -17,6 +17,8 @@ import { flipRecommendationConfidence } from "./flipConfidence";
 
 export const TOTALS_MEAN_FLIP_RULE_ID = "totals_mean_side_selector_v2_2026_07_11";
 export const TOTALS_MARKET_OPPOSED_FLIP_RULE_ID = "totals_market_opposed_public_conflict_v1_2026_07_11";
+export const MLB_TOTAL_CORROBORATED_OPPOSITION_RULE_ID =
+  "mlb_total_corroborated_opposition_v1_2026_10_05";
 export const TOTALS_MID_EDGE_FLIP_RULE_ID = "totals_mid_edge_inversion_v1_2026_07_20";
 export const TOTALS_MID_EDGE_MIN_PCT = 3;
 export const TOTALS_MID_EDGE_MAX_PCT_EXCLUSIVE = 5;
@@ -87,6 +89,50 @@ export type TotalsMarketOpposedFlipResult =
     }
   | { action: "standdown"; reason: string }
   | { action: "none" };
+
+export type MlbTotalCorroboratedOppositionInput = {
+  predictedSide: OuSide | null;
+  /** Probability for the independent model's selected side. */
+  modelProb: number | null;
+  /** Target-excluded no-vig probability for the selected side. */
+  marketProb: number | null;
+  /** A continuous same-sportsbook price trail must move against the pick. */
+  sameBookMovementDirection: "toward_pick" | "against_pick" | "neutral" | "unknown" | null;
+  /** Retail money/ticket divergence in favor of the opposite side. */
+  opposingPublicSplitConflict: boolean;
+  /** Sport-owned internal market read captured before the result. */
+  internalSharpDirection: string | null;
+  originalConfidence: number | null;
+  overOdds: number | null;
+  underOdds: number | null;
+  line: number | null;
+  /** Authoritative MLB Total head used for the selected-side decision. */
+  projectedTotal: number | null;
+  projectedHomeScore: number | null;
+  projectedAwayScore: number | null;
+  maxModelProb?: number;
+};
+
+export type MlbTotalCorroboratedOppositionResult =
+  | {
+      action: "flip";
+      rule_id: typeof MLB_TOTAL_CORROBORATED_OPPOSITION_RULE_ID;
+      originalSide: OuSide;
+      flippedSide: OuSide;
+      flippedOdds: number;
+      originalModelProb: number;
+      rawOppositeModelProb: number;
+      correctedModelProb: number;
+      flippedMarketProb: number;
+      flippedEdgePp: number;
+      recommendationConfidence: number;
+      correctedHomeScore: number;
+      correctedAwayScore: number;
+      correctedTotal: number;
+      scoreAdjustment: "retained_already_coherent" | "reflected_across_line";
+      corroboration: Array<"opposing_public_money_conflict" | "internal_sharp_resistance">;
+    }
+  | { action: "none"; reason: string };
 
 export type TotalsMidEdgeFlipInput = {
   currentSide: OuSide | null;
@@ -190,6 +236,95 @@ export function resolveTotalsMarketOpposedFlip(
     flippedMarketProb,
     flippedEdgePp: round1((flippedSideModelProb - flippedMarketProb) * 100),
     recommendationConfidence: flipRecommendationConfidence(i.originalConfidence),
+  };
+}
+
+/**
+ * MLB-only downstream arbitration for a narrowly validated Total failure mode.
+ *
+ * This is intentionally not a generic market follower. The independent side
+ * remains authoritative unless all of the following pre-result facts agree:
+ * modest model conviction, an opposing no-vig price, an adverse continuous
+ * same-book price trail, and a second independent public/sharp corroborator.
+ * A real opposite-side quote and enough score information to rebuild one
+ * coherent projection are mandatory.
+ */
+export function resolveMlbTotalCorroboratedOpposition(
+  i: MlbTotalCorroboratedOppositionInput,
+): MlbTotalCorroboratedOppositionResult {
+  const maxModelProb = i.maxModelProb ?? TOTALS_MARKET_OPPOSED_MAX_MODEL_PROB;
+  if (i.predictedSide !== "over" && i.predictedSide !== "under") {
+    return { action: "none", reason: "unsupported_side" };
+  }
+  if (i.modelProb === null || i.marketProb === null) {
+    return { action: "none", reason: "missing_probability" };
+  }
+  if (!Number.isFinite(i.modelProb) || !Number.isFinite(i.marketProb)) {
+    return { action: "none", reason: "invalid_probability" };
+  }
+  if (i.modelProb > maxModelProb) return { action: "none", reason: "model_conviction_above_cap" };
+  if (i.marketProb >= 0.5) return { action: "none", reason: "two_sided_price_does_not_oppose_pick" };
+  if (i.sameBookMovementDirection !== "against_pick") {
+    return { action: "none", reason: "no_adverse_same_book_price_move" };
+  }
+
+  const corroboration: Array<"opposing_public_money_conflict" | "internal_sharp_resistance"> = [];
+  if (i.opposingPublicSplitConflict) corroboration.push("opposing_public_money_conflict");
+  if (i.internalSharpDirection === "market_resistance") corroboration.push("internal_sharp_resistance");
+  if (corroboration.length === 0) return { action: "none", reason: "missing_independent_corroboration" };
+
+  const flippedSide: OuSide = i.predictedSide === "over" ? "under" : "over";
+  const flippedOdds = flippedSide === "over" ? i.overOdds : i.underOdds;
+  if (flippedOdds === null || !Number.isFinite(flippedOdds)) {
+    return { action: "none", reason: "missing_opposite_price" };
+  }
+  if (
+    i.line === null || !Number.isFinite(i.line) ||
+    i.projectedTotal === null || !Number.isFinite(i.projectedTotal) ||
+    i.projectedHomeScore === null || !Number.isFinite(i.projectedHomeScore) ||
+    i.projectedAwayScore === null || !Number.isFinite(i.projectedAwayScore)
+  ) {
+    return { action: "none", reason: "missing_score_reconciliation_input" };
+  }
+
+  const rawTotal = i.projectedTotal;
+  const alreadyCoherent = flippedSide === "over" ? rawTotal > i.line : rawTotal < i.line;
+  let correctedTotal = alreadyCoherent ? rawTotal : (2 * i.line) - rawTotal;
+  correctedTotal = round1(correctedTotal);
+  if (flippedSide === "over" && correctedTotal <= i.line) correctedTotal = round1(i.line + 0.1);
+  if (flippedSide === "under" && correctedTotal >= i.line) correctedTotal = round1(Math.max(0, i.line - 0.1));
+
+  const rawHomeMargin = i.projectedHomeScore - i.projectedAwayScore;
+  let correctedHomeScore = round1(Math.max(0, (correctedTotal + rawHomeMargin) / 2));
+  const correctedAwayScore = round1(Math.max(0, correctedTotal - correctedHomeScore));
+  // Keep the displayed score sum exact after one-decimal rounding.
+  correctedHomeScore = round1(Math.max(0, correctedTotal - correctedAwayScore));
+
+  const rawOppositeModelProb = 1 - i.modelProb;
+  // The correction layer is a pre-result meta-model, not a claim that the raw
+  // independent opposite probability exceeded 50%. Its 38-20 retrospective
+  // cohort supports a conservative 55%-to-original-strength public estimate.
+  const correctedModelProb = Math.max(0.55, Math.min(0.6, i.modelProb));
+  const flippedMarketProb = 1 - i.marketProb;
+  const flippedEdgePp = round1((correctedModelProb - flippedMarketProb) * 100);
+
+  return {
+    action: "flip",
+    rule_id: MLB_TOTAL_CORROBORATED_OPPOSITION_RULE_ID,
+    originalSide: i.predictedSide,
+    flippedSide,
+    flippedOdds,
+    originalModelProb: i.modelProb,
+    rawOppositeModelProb,
+    correctedModelProb,
+    flippedMarketProb,
+    flippedEdgePp,
+    recommendationConfidence: Math.round(correctedModelProb * 100),
+    correctedHomeScore,
+    correctedAwayScore,
+    correctedTotal: round1(correctedHomeScore + correctedAwayScore),
+    scoreAdjustment: alreadyCoherent ? "retained_already_coherent" : "reflected_across_line",
+    corroboration,
   };
 }
 

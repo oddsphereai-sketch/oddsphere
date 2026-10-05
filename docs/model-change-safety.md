@@ -5,6 +5,40 @@ inputs, probabilities, projections, grades, promotions/demotions, calibration, p
 or stakes. It exists to prevent mixed model eras, competing writers, accidental board
 flattening, and load spikes.
 
+## Owner-approved provisional exception: MLB corroborated Total opposition r90
+
+On 2026-10-05 Daniel Mengel explicitly directed Oddsphere to repair sport-specific
+market reading across every Daily Edge model without blindly following the
+market, flattening boards, or changing member copy, labels, or layout. This
+exception is limited to the MLB r90 release and the opened retrospective
+evidence documented in
+`docs/model-audits/2026-10-05-mlb-corroborated-total-opposition-predeclaration.md`
+and its paired result.
+
+R90 leaves the independent MLB model primary. A future unlocked full-game Total
+may select the priced opposite side only when independent confidence is at most
+57.5%, the target-excluded two-sided no-vig price favors the opposite side, a
+continuous same-sportsbook price trail moves materially against the pick, and
+either an opposing money-versus-ticket pattern or the MLB-owned internal sharp
+resistance independently corroborates it. Missing evidence is neutral; books
+cannot be crossed; no Moneyline, first-inning, player-prop, or other-sport rule
+is changed. The score Total is retained when already coherent with the
+corrected side and otherwise reflected across the listed line while preserving
+the independent team margin. One score, side, probability, quote, and grade
+must remain coherent.
+
+The owner acknowledges that the 58-row archive is opened retrospective
+evidence, not an untouched holdout or a guaranteed future hit rate. The fixed
+selector improved direction from 20-38 to 38-20 and improved Total MAE in each
+of four chronological segments. It adds no provider call, writer, schedule,
+database loop, copy, label, or layout. The correction cannot promote a Best
+Angle and remains subject to ordinary exact-price and grade gates. The October
+5 current-board replay has zero qualifying rows and therefore zero same-input
+side, promotion, demotion, or actionable-count changes. Publication still
+requires focused and full model-change tests, current-main integration safety,
+protected PR checks, and live release/coverage/coherence verification. Prior
+locks remain immutable.
+
 ## Owner-approved emergency exception: CFB verified-QB and same-book continuity r16
 
 On 2026-10-02 Daniel Mengel reported that Delaware quarterback Nick Minicucci

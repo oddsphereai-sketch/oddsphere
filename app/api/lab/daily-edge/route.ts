@@ -38,6 +38,7 @@ import { generateSignalSummary } from "@/lib/services/signalSummaryGenerator";
 import { resolveMlInversionFlip } from "@/lib/services/mlInversionFlip";
 import { snapshotHasFinalSideCorrection } from "@/lib/services/finalSideDecision";
 import {
+  resolveMlbTotalCorroboratedOpposition,
   resolveTotalsMarketOpposedFlip,
   resolveTotalsMeanFlip,
 } from "@/lib/services/totalsMeanFlip";
@@ -2281,7 +2282,36 @@ function buildGameDto(
       (typeof pred.predicted_away_score === "number" && typeof pred.predicted_home_score === "number"
         ? pred.predicted_away_score + pred.predicted_home_score
         : null);
-    const ouFlip = resolveTotalsMeanFlip({
+    const totalRegimeCalibrationApplied =
+      readRecordObject(v22.total_regime_calibration)?.applied === true;
+    const ouSameBookDirection = resolveMarketAwareLineDirection(
+      ouLines,
+      openLinesByGameMarket.get(`${row.id}::total::${pred.predicted_ou_side ?? "null"}`) ?? [],
+      pred.predicted_ou_side,
+      true,
+    );
+    const initialOuPublicSplitConflict = hasOpposingPublicMoneyConflict(signals, "total", pred.predicted_ou_side);
+    const ouCorroboratedOpposition = totalRegimeCalibrationApplied
+      ? resolveMlbTotalCorroboratedOpposition({
+          predictedSide:
+            pred.predicted_ou_side === "over" || pred.predicted_ou_side === "under"
+              ? pred.predicted_ou_side
+              : null,
+          modelProb: num(v22.ou_model_prob),
+          marketProb: num(v22.ou_market_prob),
+          sameBookMovementDirection: ouSameBookDirection,
+          opposingPublicSplitConflict: initialOuPublicSplitConflict,
+          internalSharpDirection: pred.ou_market_signal,
+          originalConfidence: pred.ou_confidence,
+          overOdds: pickPriceRow(ouLines, "over")?.odds_american ?? null,
+          underOdds: pickPriceRow(ouLines, "under")?.odds_american ?? null,
+          line: betLineForOu,
+          projectedTotal: scoreSumForOu,
+          projectedHomeScore: pred.predicted_home_score,
+          projectedAwayScore: pred.predicted_away_score,
+        })
+      : { action: "none" as const, reason: "not_regime_calibrated_total" };
+    const ouFlip = totalRegimeCalibrationApplied ? { action: "none" as const } : resolveTotalsMeanFlip({
       predictedSide: pred.predicted_ou_side === "over" || pred.predicted_ou_side === "under" ? pred.predicted_ou_side : null,
       line: betLineForOu,
       projectedTotal: scoreSumForOu,
@@ -2292,9 +2322,8 @@ function buildGameDto(
       underOdds: pickPriceRow(ouLines, "under")?.odds_american ?? null,
       reconciliationDivergence: ouRecon !== null && ouRecon.mean_probability_divergence === true,
     });
-    const initialOuPublicSplitConflict = hasOpposingPublicMoneyConflict(signals, "total", pred.predicted_ou_side);
     if (lockedOu === undefined) {
-    const ouMarketFlip = ouFlip.action === "none"
+    const ouMarketFlip = ouFlip.action === "none" && !totalRegimeCalibrationApplied
       ? resolveTotalsMarketOpposedFlip({
           predictedSide: pred.predicted_ou_side === "over" || pred.predicted_ou_side === "under" ? pred.predicted_ou_side : null,
           modelProb: num(v22.ou_model_prob),
@@ -2305,7 +2334,23 @@ function buildGameDto(
           underOdds: pickPriceRow(ouLines, "under")?.odds_american ?? null,
         })
       : { action: "none" as const };
-    if (ouFlip.action === "flip") {
+    if (ouCorroboratedOpposition.action === "flip") {
+      (pred as unknown as { predicted_ou_side: string | null }).predicted_ou_side =
+        ouCorroboratedOpposition.flippedSide;
+      (pred as unknown as { ou_confidence: number | null }).ou_confidence =
+        ouCorroboratedOpposition.recommendationConfidence;
+      (pred as unknown as { predicted_home_score: number | null }).predicted_home_score =
+        ouCorroboratedOpposition.correctedHomeScore;
+      (pred as unknown as { predicted_away_score: number | null }).predicted_away_score =
+        ouCorroboratedOpposition.correctedAwayScore;
+      (sp as Record<string, unknown>).ou_flip = {
+        flipped: true,
+        rule_id: ouCorroboratedOpposition.rule_id,
+        corroboration: ouCorroboratedOpposition.corroboration,
+        corrected_projected_total: ouCorroboratedOpposition.correctedTotal,
+      };
+      ouFlippedPreLock = true;
+    } else if (ouFlip.action === "flip") {
       (pred as unknown as { predicted_ou_side: string | null }).predicted_ou_side = ouFlip.meanSide;
       (pred as unknown as { ou_confidence: number | null }).ou_confidence = ouFlip.recommendationConfidence;
       // Marker so standDownTotalsOnDivergence shows the flip instead of No Play.
@@ -2318,7 +2363,7 @@ function buildGameDto(
       (sp as Record<string, unknown>).ou_flip = { flipped: true };
       ouFlippedPreLock = true;
     }
-    if (!ouFlippedPreLock && ouFlip.action !== "standdown") {
+    if (!ouFlippedPreLock && !totalRegimeCalibrationApplied && ouFlip.action !== "standdown") {
       const ouMarketAwareCorrection = resolveMlbMarketAwareSideCorrection({
         market: "total",
         side: pred.predicted_ou_side,
@@ -2445,12 +2490,24 @@ function buildGameDto(
     ouPick: ouSide === "over" || ouSide === "under" ? ouSide : null,
     line: totalLine,
   });
-  const totalModelProjection =
+  const totalCorrectionProjectionValue = pred.sport_specific === null
+    ? null
+    : readRecordObject(
+        (pred.sport_specific as Record<string, unknown>).mlb_total_corroborated_opposition,
+      )?.corrected_projected_total ??
+      readRecordObject((pred.sport_specific as Record<string, unknown>).ou_flip)
+        ?.corrected_projected_total;
+  const totalCorrectionProjection =
+    typeof totalCorrectionProjectionValue === "number" && Number.isFinite(totalCorrectionProjectionValue)
+      ? totalCorrectionProjectionValue
+      : null;
+  const totalModelProjection = totalCorrectionProjection ?? (
     row.sport === "mlb" &&
     pred.sport_specific !== null &&
     typeof ((pred.sport_specific as Record<string, unknown>).v2_2_audit as Record<string, unknown> | undefined)?.posterior_total === "number"
       ? (((pred.sport_specific as Record<string, unknown>).v2_2_audit as Record<string, unknown>).posterior_total as number)
-      : displayProjection.total;
+      : displayProjection.total
+  );
 
   // ── NRFI ──
   //
@@ -6250,23 +6307,24 @@ function resolveMarketAwareLineDirection(
   linesCurrent: LineRow[],
   lineOpenCandidates: LineHistoryRow[],
   pickSide: string | null,
+  requireSameBook = false,
 ): MarketAwareLineDirection {
   if (pickSide === null) return "unknown";
   const current = pickPriceRow(linesCurrent, pickSide as Side);
   if (current === null || current.odds_american === null) return "unknown";
-  const opener =
-    lineOpenCandidates.find(
+  const sameBookOpener = lineOpenCandidates.find(
       (candidate) =>
         candidate.sportsbook === current.sportsbook &&
         candidate.odds_american !== null &&
         !isBlockedSportsbook(candidate.sportsbook),
-    ) ??
-    lineOpenCandidates.find(
+    ) ?? null;
+  const opener = sameBookOpener ?? (requireSameBook
+    ? null
+    : lineOpenCandidates.find(
       (candidate) =>
         candidate.odds_american !== null &&
         !isBlockedSportsbook(candidate.sportsbook),
-    ) ??
-    null;
+    ) ?? null);
   if (opener?.odds_american === null || opener?.odds_american === undefined) return "unknown";
   const openImplied = americanToImpliedProb(opener.odds_american);
   const currentImplied = americanToImpliedProb(current.odds_american);

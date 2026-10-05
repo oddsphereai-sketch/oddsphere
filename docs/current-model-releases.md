@@ -4,7 +4,7 @@ This file is the human-readable production handoff registry. Runtime constants a
 prediction snapshots remain the machine authority. Future model work must start here, verify the
 constants, and preserve the precedence and writer ownership below.
 
-Last reviewed: 2026-10-03
+Last reviewed: 2026-10-05
 
 ## Cross-sport confidence / execution contract
 
@@ -1157,22 +1157,44 @@ changed; only deterministic settlement of existing locked rows is affected.
 ## MLB champion
 
 - Projection runtime: resolved automodel `v2_2`
-- Projection core: `mlb_projection_core_v2_5_market_total_preserve_margin_2026_09_26`
+- Projection core: `mlb_projection_core_v2_6_corroborated_total_opposition_preserve_margin_2026_10_05`
 - First-inning runtime: `fi_v2` with FI-scoped release `mlb_first_inning_release_2026_09_04_r85_independent_uncertainty` and probability head `mlb_first_inning_fi_v10_independent_uncertainty_target_excluded_2026_09_04`. r85 retains r84's pre-r61 65% independent / 35% target-excluded multi-book posterior and its 48%-52% corroborated uncertainty band. When the evaluated quote is the sole accepted pair, the forecast remains independent-only and now requires the independent probability to clear 55% NRFI or 55% YRFI; otherwise it is a genuine null-side Toss-Up. The evaluated quote remains exact-price economics only. Full-game tuples, probabilities, grades, the sole writer/lease, providers, query budgets, locks, tracking, and settlement are unchanged.
-- Public calibration: `mlb_public_calibration_v35_total_action_recalibration_2026_09_24`
-- Decision release: `mlb_daily_edge_decision_2026_09_24_r89_total_action_recalibration`
-- Rule bundle: `mlb_daily_edge_rule_bundle_v74_total_action_recalibration_2026_09_24`
+- Public calibration: `mlb_public_calibration_v36_corroborated_total_opposition_2026_10_05`
+- Decision release: `mlb_daily_edge_decision_2026_10_05_r90_corroborated_total_opposition`
+- Rule bundle: `mlb_daily_edge_rule_bundle_v75_corroborated_total_opposition_2026_10_05`
 - Market input snapshot: `mlb_market_input_snapshot_v3_current_line_pagination_2026_09_08`
-- Grade policy: `mlb_public_grade_policy_v58_total_action_recalibration_2026_09_24`
-- Correction policy: `mlb_prediction_corrections_v24_full_game_publication_coherence_2026_09_02`
+- Grade policy: `mlb_public_grade_policy_v59_corroborated_total_opposition_2026_10_05`
+- Correction policy: `mlb_prediction_corrections_v25_corroborated_total_opposition_2026_10_05`
 - Tracking contract: `member_facing_lock_v8_priority_retry_minute_cadence_2026_08_11`
 - Lock coherence: `mlb_lock_coherence_2026_09_02_r3_failed_economics_tuple`
 - Machine registry: `lib/automodel/mlbModelLayerVersions.ts`
 - Authoritative member-facing writer: `lib/services/predictionRecordService.ts`
 
+The October 5 r90 release keeps the independent MLB model primary and repairs
+one release-specific full-game Total market-reading gap. A future unlocked row
+can flip only when model confidence is at most 57.5%, a target-excluded
+two-sided no-vig pair favors the other side, a continuous same-book price trail
+moves against the pick, and either an opposing money-versus-ticket pattern or
+the existing MLB internal sharp-resistance signal independently corroborates
+it. Missing evidence is neutral and books are never crossed. The corrected
+side must have a real quote. Its one-decimal team scores retain the independent
+margin and either retain an already-coherent Total or reflect the Total across
+the listed line, keeping score, side, probability, and price coherent.
+
+On 58 opened retrospective rows the fixed selector moved direction from 20-38
+to 38-20 and improved Total MAE in all four chronological blocks. This is
+provisional evidence, not a guaranteed hit rate. The rule cannot promote a Best
+Angle and still passes through the ordinary exact-price/grade gates. The
+October 5 current-board replay has no qualifying MLB row, so same-input current
+board side changes, promotions, demotions, and actionable-count changes are
+0/0/0/0. No provider call, schedule, writer, lease, stake, member copy, label,
+or layout changes. Evidence and rollback are in
+`docs/model-audits/2026-10-05-mlb-corroborated-total-opposition-predeclaration.md`
+and its paired result.
+
 The October 1 official-slate continuity repair changes no MLB formula, probability
 head, grade threshold, stake, or member presentation. The model-layer schema advances
-to `mlb_model_layer_versions_v18_official_tbd_bullpen_eligibility` and stamps input
+through r90 to `mlb_model_layer_versions_v19_corroborated_total_opposition` while retaining input
 eligibility policy `mlb_input_eligibility_v1_official_tbd_starter_neutral_bullpen_2026_10_01`.
 When a successful
 MLB Stats schedule response is available, unmatched lower-authority conditional games

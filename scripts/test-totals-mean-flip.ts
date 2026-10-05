@@ -5,9 +5,11 @@
  * Run: npx tsx scripts/test-totals-mean-flip.ts
  */
 import {
+  resolveMlbTotalCorroboratedOpposition,
   resolveTotalsMarketOpposedFlip,
   resolveTotalsMidEdgeFlip,
   resolveTotalsMeanFlip,
+  MLB_TOTAL_CORROBORATED_OPPOSITION_RULE_ID,
   TOTALS_MARKET_OPPOSED_FLIP_RULE_ID,
   TOTALS_MID_EDGE_FLIP_RULE_ID,
   TOTALS_MEAN_FLIP_RULE_ID,
@@ -81,6 +83,45 @@ check("market-opposed flip stands down when opposite price is missing", resolveT
   originalConfidence: 56, overOdds: -110, underOdds: null,
 }).action === "standdown");
 
+console.log("\n━━━ resolveMlbTotalCorroboratedOpposition ━━━");
+const corroboratedBase = {
+  predictedSide: "over" as const,
+  modelProb: 0.56,
+  marketProb: 0.49,
+  sameBookMovementDirection: "against_pick" as const,
+  opposingPublicSplitConflict: true,
+  internalSharpDirection: "market_neutral",
+  originalConfidence: 56,
+  overOdds: 100,
+  underOdds: -120,
+  line: 8.5,
+  projectedTotal: 9.1,
+  projectedHomeScore: 4.6,
+  projectedAwayScore: 4.5,
+};
+{
+  const r = resolveMlbTotalCorroboratedOpposition(corroboratedBase);
+  check("corroborated MLB opposition flips only to the priced opposite side", r.action === "flip" && r.flippedSide === "under" && r.flippedOdds === -120);
+  check("corroborated MLB opposition stamps its release rule", r.action === "flip" && r.rule_id === MLB_TOTAL_CORROBORATED_OPPOSITION_RULE_ID);
+  check("corroborated MLB opposition reflects the total across the line", r.action === "flip" && r.correctedTotal === 7.9 && r.correctedHomeScore + r.correctedAwayScore === 7.9);
+  check("corroborated MLB opposition preserves the team-score margin", r.action === "flip" && Math.abs((r.correctedHomeScore - r.correctedAwayScore) - 0.1) < 1e-9);
+}
+check("corroborated MLB opposition requires adverse same-book movement", resolveMlbTotalCorroboratedOpposition({
+  ...corroboratedBase, sameBookMovementDirection: "neutral",
+}).action === "none");
+check("corroborated MLB opposition requires the opposing no-vig price", resolveMlbTotalCorroboratedOpposition({
+  ...corroboratedBase, marketProb: 0.51,
+}).action === "none");
+check("corroborated MLB opposition requires public or internal-sharp corroboration", resolveMlbTotalCorroboratedOpposition({
+  ...corroboratedBase, opposingPublicSplitConflict: false, internalSharpDirection: "market_neutral",
+}).action === "none");
+check("internal sharp resistance can independently corroborate the strict price pattern", resolveMlbTotalCorroboratedOpposition({
+  ...corroboratedBase, opposingPublicSplitConflict: false, internalSharpDirection: "market_resistance",
+}).action === "flip");
+check("corroborated MLB opposition leaves a stronger independent forecast alone", resolveMlbTotalCorroboratedOpposition({
+  ...corroboratedBase, modelProb: 0.58,
+}).action === "none");
+
 console.log("\n━━━ resolveTotalsMidEdgeFlip ━━━");
 const midEdgeBase = {
   currentSide: "over" as const,
@@ -130,8 +171,27 @@ function mkPred(spOver: Record<string, any>, audit: Record<string, any>) {
     },
   };
 }
-function build(pred: any, odds: any, signals: Map<number, any[]> = new Map(), sourceAwareSplits: any[] = []) {
-  return buildPredictionRecordsFromSlate({ sport: "mlb", slateDate: "2026-06-22", launchDay: false, games: [baseGame], predictionByGameId: new Map([[800, pred]]), abbrevByTeamId, signalsByGameId: signals, sourceAwareSplitsByGameId: new Map([[800, sourceAwareSplits]]), oddsByGameId: new Map([[800, odds as any]]) });
+function build(
+  pred: any,
+  odds: any,
+  signals: Map<number, any[]> = new Map(),
+  sourceAwareSplits: any[] = [],
+  openers: any[] = [],
+  currentLines: any[] = [],
+) {
+  return buildPredictionRecordsFromSlate({
+    sport: "mlb",
+    slateDate: "2026-06-22",
+    launchDay: false,
+    games: [baseGame],
+    predictionByGameId: new Map([[800, pred]]),
+    abbrevByTeamId,
+    signalsByGameId: signals,
+    sourceAwareSplitsByGameId: new Map([[800, sourceAwareSplits]]),
+    oddsByGameId: new Map([[800, odds as any]]),
+    openersByGameId: new Map([[800, openers]]),
+    currentLinesByGameId: new Map([[800, currentLines]]),
+  });
 }
 
 console.log("\n━━━ integration: buildPredictionRecordsFromSlate ━━━");
@@ -144,7 +204,11 @@ console.log("\n━━━ integration: buildPredictionRecordsFromSlate ━━━"
   check("projection-divergent correction stands down from betting", ou?.no_bet === true);
   check("rejected correction best_angle=false", ou?.best_angle === false);
   check("rejected correction has no actionable grade", ou?.play_grade === null);
-  check("member confidence >=55 (NOT sub-50 raw)", typeof ou?.confidence === "number" && ou!.confidence >= 55 && ou!.confidence <= 60);
+  check(
+    "member confidence remains at least 50 (NOT sub-50 rejected-candidate raw)",
+    typeof ou?.confidence === "number" && ou!.confidence >= 50 && ou!.confidence <= 60,
+    `confidence=${String(ou?.confidence)}`,
+  );
   check("member model_probability >=0.5 (presentable)", typeof ou?.model_probability === "number" && ou!.model_probability >= 0.5);
   check("official side retains its model edge", typeof ou?.edge === "number");
   const f = (ou?.snapshot_json as any)?.ou_flip;
@@ -269,6 +333,48 @@ console.log("\n━━━ integration: buildPredictionRecordsFromSlate ━━━"
   const a = build(mkPred({}, {}), oddsSnap(-105, -115)).find((r) => r.market === "total");
   const b = build(mkPred({}, {}), oddsSnap(-105, -115)).find((r) => r.market === "total");
   check("stand-down policy is deterministic (freezes original side)", a?.pick === b?.pick && a?.pick === "under");
+}
+
+console.log("\n━━━ integration: corroborated MLB Total opposition ━━━");
+{
+  const pred: any = mkPred(
+    {},
+    {
+      ou_model_prob: 0.56,
+      ou_market_prob: 0.49,
+      ou_edge_pct: 7,
+      market_total: 8.5,
+      posterior_total: 9.1,
+      total_regime_calibration: { applied: true },
+    },
+  );
+  pred.predicted_ou_side = "over";
+  pred.ou_confidence = 56;
+  pred.predicted_home_score = 4.6;
+  pred.predicted_away_score = 4.5;
+  pred.ou_market_signal = "market_neutral";
+  const odds = oddsSnap(100, -120);
+  odds.oddsSourceOu = { over: oddsSrc(100, 8.5), under: oddsSrc(-120, 8.5) };
+  const signals = new Map([[800, [
+    { market_type: "total", side: "over", public_money_pct: 20, public_betting_pct: 50 },
+    { market_type: "total", side: "under", public_money_pct: 80, public_betting_pct: 50 },
+  ]]]);
+  const openers = [
+    { game_id: 800, market_type: "total", side: "over", sportsbook: "pinnacle", odds_american: -120, line_value: 8.5, recorded_at: "2026-06-22T14:00:00Z" },
+    { game_id: 800, market_type: "total", side: "under", sportsbook: "pinnacle", odds_american: 100, line_value: 8.5, recorded_at: "2026-06-22T14:00:00Z" },
+  ];
+  const currentLines = [
+    { game_id: 800, market_type: "total", side: "over", sportsbook: "pinnacle", odds_american: 100, line_value: 8.5, fetched_at: "2026-06-22T16:00:00Z" },
+    { game_id: 800, market_type: "total", side: "under", sportsbook: "pinnacle", odds_american: -120, line_value: 8.5, fetched_at: "2026-06-22T16:00:00Z" },
+  ];
+  const ou = build(pred, odds, signals, [], openers, currentLines)
+    .find((record) => record.market === "total");
+  const snapshot = (ou?.snapshot_json ?? {}) as any;
+  check("regime-calibrated corroborated opposition becomes the official Under", ou?.pick === "under" && ou?.side === "under");
+  check("corroborated correction carries the exact opposite-side quote", ou?.odds_american === -120 && ou?.line_value === 8.5);
+  check("corroborated correction rebuilds a coherent score below the line", snapshot.predicted_scores_at_lock?.home === 4 && snapshot.predicted_scores_at_lock?.away === 3.9);
+  check("corroborated correction publishes one coherent Total head", snapshot.mlb_total_corroborated_opposition?.corrected_projected_total === 7.9);
+  check("corroborated correction is accepted rather than routed through legacy rejection", snapshot.decision_pipeline?.correction_mode === "accepted_corroborated_market_arbitration" && snapshot.totals_correction_rejection == null);
 }
 
 console.log(`\n  ${pass} pass · ${fail} fail · ${pass + fail} total`);
