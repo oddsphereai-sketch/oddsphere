@@ -26,6 +26,7 @@ import {
   getContextOnlyDisplayMarkets,
   assertOfficialTrackingMarket,
 } from "../lib/config/officialTrackingMarkets";
+import { isPublicallyTracked, officialTrackingStart } from "../lib/config/officialTrackingStart";
 
 let pass = 0;
 let fail = 0;
@@ -58,6 +59,9 @@ check("NHL spread (puck-line) officially tracked", isOfficiallyTrackedMarket("nh
 check("NHL spread (puck-line) is not context-only", isContextOnlyDisplayMarket("nhl", "spread") === false);
 check("NHL first_inning NOT officially tracked", isOfficiallyTrackedMarket("nhl", "first_inning") === false);
 const trackingRouteSource = readFileSync(new URL("../app/api/lab/tracking/route.ts", import.meta.url), "utf8");
+const trackingFoundationRouteSource = readFileSync(new URL("../app/api/lab/tracking-foundation/route.ts", import.meta.url), "utf8");
+const snapshotKeySource = readFileSync(new URL("../lib/services/labResponseSnapshots.ts", import.meta.url), "utf8");
+const nbaWriterSource = readFileSync(new URL("../lib/services/nba/buildNbaPredictionRecords.ts", import.meta.url), "utf8");
 check(
   "NHL tracking page exposes the official puck-line category",
   /nhl:\s*\["ML",\s*"O\/U",\s*"Spread"\]/.test(trackingRouteSource),
@@ -118,6 +122,21 @@ check("CONTEXT_ONLY_DISPLAY_MARKETS.nba = [spread]",
   JSON.stringify(CONTEXT_ONLY_DISPLAY_MARKETS.nba) === JSON.stringify(["spread"]));
 check("CONTEXT_ONLY_DISPLAY_MARKETS.nhl is empty",
   JSON.stringify(CONTEXT_ONLY_DISPLAY_MARKETS.nhl) === JSON.stringify([]));
+check("NBA official tracking begins on the 2026-27 regular-season opener",
+  officialTrackingStart("nba") === "2026-10-20");
+check("NBA preseason is excluded from public tracking",
+  isPublicallyTracked("nba", "2026-10-19") === false);
+check("NBA regular-season opener is included in public tracking",
+  isPublicallyTracked("nba", "2026-10-20") === true);
+check("NBA prediction writer refuses pre-regular-season slates before running the pipeline",
+  /if \(!isPublicallyTracked\("nba", opts\.slateDate\)\) return result;[\s\S]{0,240}buildNbaDailyEdgePipeline/.test(nbaWriterSource));
+check("legacy-compatible tracking route applies the official boundary before aggregation",
+  /const publiclyTrackedRows = allRows\.filter\([\s\S]{0,180}isPublicallyTracked/.test(trackingRouteSource) &&
+  /buildAllTime\(publiclyTrackedRows\)/.test(trackingRouteSource));
+check("tracking caches are release-bumped so preseason counts cannot survive deployment",
+  trackingFoundationRouteSource.includes("member-tracking-aggregate-v5-nba-regular-season-boundary") &&
+  snapshotKeySource.includes("tracking-foundation-r2-nba-regular-season-boundary") &&
+  snapshotKeySource.includes("tracking::all::nba-regular-season-boundary-r1"));
 
 // assertOfficialTrackingMarket — happy path doesn't throw
 let assertHappyOk = true;

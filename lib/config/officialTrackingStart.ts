@@ -16,7 +16,8 @@
 import type { Sport } from "@/lib/types/domain/Sport";
 
 export const OFFICIAL_TRACKING_START: Partial<Record<Sport, string>> = {
-  // MLB / NBA / soccer already track via their existing launch handling.
+  // MLB / soccer continue to use their existing launch handling.
+  nba: "2026-10-20", // NBA regular-season opener — preseason is permanently excluded
   wnba: "2026-06-24", // WNBA launch — public lifetime starts 0-0 from this date, no backfill
   nfl: "2026-09-09", // NFL Week 1 opener in the ET slate convention; preseason is permanently excluded
   cfb: "2026-08-29", // CFB opening-week launch — forward-only, no historical backfill
@@ -25,10 +26,10 @@ export const OFFICIAL_TRACKING_START: Partial<Record<Sport, string>> = {
 
 /**
  * Sports that use the launch-boundary system. ONLY these are gated by
- * isPublicallyTracked — every other sport (MLB/NBA/NHL/soccer) keeps its
+ * isPublicallyTracked — every other sport (MLB/soccer) keeps its
  * existing tracking behavior untouched (always returns true below).
  */
-const BOUNDARIED_SPORTS = new Set<Sport>(["wnba", "nfl", "cfb", "nhl"]);
+const BOUNDARIED_SPORTS = new Set<Sport>(["nba", "wnba", "nfl", "cfb", "nhl"]);
 
 /** The official public-tracking start date for a sport, or null if not launched. */
 export function officialTrackingStart(sport: Sport): string | null {
@@ -38,7 +39,7 @@ export function officialTrackingStart(sport: Sport): string | null {
 /**
  * Whether a (sport, slate_date) record may appear in the PUBLIC lifetime tally.
  * Non-boundaried sports → always true (no behavior change). Boundaried sports
- * (WNBA/NFL/CFB/NHL) → only on/after their official start, and never before it's
+ * (NBA/WNBA/NFL/CFB/NHL) → only on/after their official start, and never before it's
  * set. Public records therefore begin at each approved launch boundary with
  * no historical backfill.
  */
