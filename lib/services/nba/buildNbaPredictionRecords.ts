@@ -306,11 +306,11 @@ export async function createNbaPredictionRecords(
     errors: [],
   };
 
-  // Public NBA prediction records begin with the regular season. Keeping this
-  // guard in the sole writer prevents a cron retry, manual refresh, or stale
-  // preseason slate from recreating rows that the member tracker must exclude.
-  // Game/line ingestion may still run before launch for operational rehearsal;
-  // it just cannot create official public-tracking predictions.
+  // Keep the sole writer on the same season-eligibility contract as the member
+  // tracker. Valid prior-season postseason history stays public, while a cron
+  // retry, manual refresh, or stale slate inside the offseason/preseason window
+  // cannot create official public-tracking predictions. Game/line ingestion may
+  // still run during that window for operational rehearsal.
   if (!isPublicallyTracked("nba", opts.slateDate)) return result;
 
   // Run the same NBA pipeline that powers the member Daily Edge so

@@ -33,14 +33,14 @@ export function dailyEdgeSnapshotKey(input: DailyEdgeSnapshotKeyInput): string {
 }
 
 export function trackingSnapshotKey(): string {
-  return "tracking::all::nba-regular-season-boundary-r1";
+  return "tracking::all::nba-preseason-only-window-r2";
 }
 
 export function trackingFoundationSnapshotKey(input: {
   sport?: string | null;
   date: string;
 }): string {
-  return ["tracking-foundation-r2-nba-regular-season-boundary", input.sport ?? "all", input.date].join("::");
+  return ["tracking-foundation-r3-nba-preseason-only-window", input.sport ?? "all", input.date].join("::");
 }
 
 export async function readLabResponseSnapshot<T extends LabResponseSnapshotPayload>(

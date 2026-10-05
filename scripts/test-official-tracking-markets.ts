@@ -122,21 +122,23 @@ check("CONTEXT_ONLY_DISPLAY_MARKETS.nba = [spread]",
   JSON.stringify(CONTEXT_ONLY_DISPLAY_MARKETS.nba) === JSON.stringify(["spread"]));
 check("CONTEXT_ONLY_DISPLAY_MARKETS.nhl is empty",
   JSON.stringify(CONTEXT_ONLY_DISPLAY_MARKETS.nhl) === JSON.stringify([]));
-check("NBA official tracking begins on the 2026-27 regular-season opener",
-  officialTrackingStart("nba") === "2026-10-20");
+check("NBA retains its existing public history rather than receiving a new launch boundary",
+  officialTrackingStart("nba") === null);
+check("NBA prior-season postseason remains in public lifetime tracking",
+  isPublicallyTracked("nba", "2026-06-13") === true);
 check("NBA preseason is excluded from public tracking",
   isPublicallyTracked("nba", "2026-10-19") === false);
 check("NBA regular-season opener is included in public tracking",
   isPublicallyTracked("nba", "2026-10-20") === true);
-check("NBA prediction writer refuses pre-regular-season slates before running the pipeline",
+check("NBA prediction writer refuses excluded preseason-window slates before running the pipeline",
   /if \(!isPublicallyTracked\("nba", opts\.slateDate\)\) return result;[\s\S]{0,240}buildNbaDailyEdgePipeline/.test(nbaWriterSource));
-check("legacy-compatible tracking route applies the official boundary before aggregation",
+check("legacy-compatible tracking route applies official eligibility before aggregation",
   /const publiclyTrackedRows = allRows\.filter\([\s\S]{0,180}isPublicallyTracked/.test(trackingRouteSource) &&
   /buildAllTime\(publiclyTrackedRows\)/.test(trackingRouteSource));
 check("tracking caches are release-bumped so preseason counts cannot survive deployment",
-  trackingFoundationRouteSource.includes("member-tracking-aggregate-v5-nba-regular-season-boundary") &&
-  snapshotKeySource.includes("tracking-foundation-r2-nba-regular-season-boundary") &&
-  snapshotKeySource.includes("tracking::all::nba-regular-season-boundary-r1"));
+  trackingFoundationRouteSource.includes("member-tracking-aggregate-v6-nba-preseason-only-window") &&
+  snapshotKeySource.includes("tracking-foundation-r3-nba-preseason-only-window") &&
+  snapshotKeySource.includes("tracking::all::nba-preseason-only-window-r2"));
 
 // assertOfficialTrackingMarket — happy path doesn't throw
 let assertHappyOk = true;
