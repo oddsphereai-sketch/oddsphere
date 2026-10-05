@@ -31,6 +31,23 @@ type ResultRow = {
   authoritativeAxisError: number;
   signalFlipAxisError: number;
 };
+type CombinedEvidenceRow = {
+  gameId: string;
+  date: string;
+  market: Market;
+  source: string;
+  pattern: string;
+  side: Side;
+  result: "win" | "loss" | "push";
+  authoritativeSide: Side;
+  authoritativeResult: "win" | "loss" | "push";
+  disagreesWithAuthoritative: boolean;
+  authoritativeAxisError: number;
+  signalFlipAxisError: number;
+  authoritativeAxis: number;
+  actualAxis: number;
+  marketBoundary: number;
+};
 type GameResult = {
   external_id: string | number;
   status: string | null;
@@ -201,6 +218,48 @@ function summarize(rows: ResultRow[]) {
   }));
 }
 
+function summarizeCombined(rows: CombinedEvidenceRow[]) {
+  const groups = new Map<string, CombinedEvidenceRow[]>();
+  for (const row of rows) {
+    const key = `${row.pattern}:${row.source}:${row.market}`;
+    groups.set(key, [...(groups.get(key) ?? []), row]);
+  }
+  return Object.fromEntries([...groups].sort(([left], [right]) => left.localeCompare(right)).map(([key, values]) => {
+    const resolved = values.filter((row) => row.result !== "push");
+    const disagreements = values.filter((row) => row.disagreesWithAuthoritative);
+    const byDate = Object.fromEntries([...new Set(values.map((row) => row.date))].sort().map((date) => {
+      const dated = values.filter((row) => row.date === date);
+      const datedResolved = dated.filter((row) => row.result !== "push");
+      const datedDisagreements = dated.filter((row) => row.disagreesWithAuthoritative);
+      return [date, {
+        resolved: datedResolved.length,
+        wins: datedResolved.filter((row) => row.result === "win").length,
+        authoritativeDisagreements: datedDisagreements.length,
+        authoritativeCorrections: datedDisagreements.filter((row) => row.result === "win" && row.authoritativeResult === "loss").length,
+        authoritativeHarms: datedDisagreements.filter((row) => row.result === "loss" && row.authoritativeResult === "win").length,
+      }];
+    }));
+    return [key, {
+      games: new Set(values.map((row) => row.gameId)).size,
+      resolved: resolved.length,
+      wins: resolved.filter((row) => row.result === "win").length,
+      losses: resolved.filter((row) => row.result === "loss").length,
+      pushes: values.length - resolved.length,
+      authoritativeDisagreements: disagreements.length,
+      authoritativeCorrections: disagreements.filter((row) => row.result === "win" && row.authoritativeResult === "loss").length,
+      authoritativeHarms: disagreements.filter((row) => row.result === "loss" && row.authoritativeResult === "win").length,
+      authoritativeAxisMaeOnDisagreements: disagreements.length
+        ? disagreements.reduce((sum, row) => sum + row.authoritativeAxisError, 0) / disagreements.length
+        : null,
+      signalFlipAxisMaeOnDisagreements: disagreements.length
+        ? disagreements.reduce((sum, row) => sum + row.signalFlipAxisError, 0) / disagreements.length
+        : null,
+      dates: [...new Set(values.map((row) => row.date))].sort(),
+      byDate,
+    }];
+  }));
+}
+
 async function main(): Promise<void> {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -246,6 +305,7 @@ async function main(): Promise<void> {
   }
 
   const rows: ResultRow[] = [];
+  const combinedRows: CombinedEvidenceRow[] = [];
   for (const [key, value] of latest) {
     const [gameId, source, marketValue] = key.split(":");
     const market = marketValue as Market;
@@ -313,8 +373,66 @@ async function main(): Promise<void> {
     }
   }
 
+  const authoritativeFamilies = new Map<string, {
+    source: string;
+    capture: CfbForwardContextCapture;
+    family: CfbForwardContextFamily;
+    gameStartAt: string;
+    authoritativeForecast: { expectedMarginHome: number; expectedTotal: number };
+  }>();
+  for (const source of SOURCES) {
+    for (const [key, value] of latest) {
+      const [gameId, rowSource, marketValue] = key.split(":");
+      if (rowSource !== source) continue;
+      const identity = `${gameId}:${marketValue}`;
+      if (!authoritativeFamilies.has(identity)) authoritativeFamilies.set(identity, { source, ...value });
+    }
+  }
+  for (const [identity, value] of authoritativeFamilies) {
+    const [gameId, marketValue] = identity.split(":");
+    const market = marketValue as Market;
+    const result = results.get(gameId!);
+    if (!result || !isFinal(result) || !Number.isFinite(result.away_score) || !Number.isFinite(result.home_score)) continue;
+    const movement = movementSide(market, value.family);
+    if (!movement) continue;
+    const sharp = splitSide(value.capture.markets[market].sharp);
+    const publicMoney = splitSide(value.capture.markets[market].public);
+    const publicTickets = publicTicketSide(value.capture.markets[market].public);
+    const rlm = publicTickets && publicTickets !== movement ? movement : null;
+    const patterns: Array<[string, Side]> = [];
+    if (sharp && sharp === movement) patterns.push(["movement_and_sharp", movement]);
+    if (publicMoney && publicMoney === movement) patterns.push(["movement_and_public_money_gap", movement]);
+    if (rlm) patterns.push(["reverse_line_movement", rlm]);
+    if (sharp && publicMoney && sharp === publicMoney) patterns.push(["sharp_and_public_money_gap", sharp]);
+    if (sharp && publicMoney && sharp === publicMoney && sharp === movement) patterns.push(["movement_sharp_and_public_money_gap", movement]);
+    const authoritativeSide = independentSide(market, value.authoritativeForecast, value.family[5]);
+    const authoritativeResult = settle({ market, side: authoritativeSide, current: value.family[5], awayScore: result.away_score!, homeScore: result.home_score! });
+    const axisErrors = scoreAxisErrors({ market, forecast: value.authoritativeForecast, current: value.family[5], awayScore: result.away_score!, homeScore: result.home_score! });
+    const authoritativeAxis = market === "total" ? value.authoritativeForecast.expectedTotal : value.authoritativeForecast.expectedMarginHome;
+    const actualAxis = market === "total" ? result.home_score! + result.away_score! : result.home_score! - result.away_score!;
+    const marketBoundary = market === "moneyline" ? 0 : market === "spread" ? -(value.family[5][3] ?? 0) : value.family[5][3] ?? authoritativeAxis;
+    for (const [pattern, side] of patterns) {
+      combinedRows.push({
+        gameId: gameId!,
+        date: value.gameStartAt.slice(0, 10),
+        market,
+        source: value.source,
+        pattern,
+        side,
+        result: settle({ market, side, current: value.family[5], awayScore: result.away_score!, homeScore: result.home_score! }),
+        authoritativeSide,
+        authoritativeResult,
+        disagreesWithAuthoritative: side !== authoritativeSide,
+        authoritativeAxis,
+        actualAxis,
+        marketBoundary,
+        ...axisErrors,
+      });
+    }
+  }
+
   console.log(JSON.stringify({
-    release: "cfb_sharp_market_reading_select_audit_2026_09_26_r1",
+    release: "cfb_sharp_market_reading_select_audit_2026_10_05_r2_combined_sport_specific_evidence",
     mode: "select_only_zero_writes_zero_provider_calls",
     evidenceRows: evidence.length,
     settledGames: [...results.values()].filter((row) => isFinal(row) && Number.isFinite(row.away_score) && Number.isFinite(row.home_score)).length,
@@ -322,6 +440,8 @@ async function main(): Promise<void> {
     evaluatedSignals: rows.length,
     captureReleases: [...new Set([...latest.values()].map((value) => value.capture.release))].sort(),
     summary: summarize(rows),
+    combinedSummary: summarizeCombined(combinedRows),
+    combinedDisagreements: combinedRows.filter((row) => row.disagreesWithAuthoritative),
   }, null, 2));
 }
 
