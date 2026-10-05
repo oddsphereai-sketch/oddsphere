@@ -13,7 +13,9 @@ async function main(): Promise<void> {
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!url || !key) throw new Error("Supabase read credentials are required.");
   const client = createClient(url, key, { auth: { persistSession: false } });
-  const record = await readNflPlayerPropsSnapshotRecord({ client, season: 2026, week: 3 });
+  const season = Number(process.argv.find((value) => value.startsWith("--season="))?.slice(9) ?? "2026");
+  const week = Number(process.argv.find((value) => value.startsWith("--week="))?.slice(7) ?? "4");
+  const record = await readNflPlayerPropsSnapshotRecord({ client, season, week });
   if (!record) throw new Error("NFL player-props snapshot is unavailable.");
   const rows = record.snapshot.memberDecisions;
   const incoherent = rows.filter((row) => row.market !== "anytime_td" && row.projection !== null && (
@@ -26,6 +28,8 @@ async function main(): Promise<void> {
     readOnly: true,
     writes: 0,
     generatedAt: record.generatedAt,
+    season,
+    week,
     snapshotRelease: record.snapshot.release,
     boardRelease: record.snapshot.board.release,
     memberRows: rows.length,
