@@ -94,7 +94,7 @@ import {
 } from "./balldontlieNflWeeklyProjectionShadow";
 
 export const NFL_FORWARD_WRITER_RELEASE =
-  "nfl_forward_evidence_writer_2026_10_02_r52_spread_grade_calibration" as const;
+  "nfl_forward_evidence_writer_2026_10_05_r53_winner_coherence" as const;
 
 export type NflForwardWriterResult = {
   writerRelease: typeof NFL_FORWARD_WRITER_RELEASE;

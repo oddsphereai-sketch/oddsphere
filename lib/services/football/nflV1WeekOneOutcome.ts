@@ -26,17 +26,17 @@ export const NFL_V1_OUTCOME_PROBABILITY_RELEASE =
 export const NFL_V1_REPRESENTATIVE_SCORE_POLICY_RELEASE =
   "nfl_v1_representative_score_2026_08_23_r2" as const;
 export const NFL_V1_WEEKLY_OUTCOME_MODEL_RELEASE =
-  "nfl_v1_weekly_paid_team_score_2026_09_28_r10_market_marriage" as const;
+  "nfl_v1_weekly_paid_team_score_2026_10_05_r11_winner_coherence" as const;
 export const NFL_V1_WEEKLY_OUTCOME_DISTRIBUTION_RELEASE =
-  "nfl_pooled_discrete_residual_distribution_2026_09_28_r9_total_direction_coherence" as const;
+  "nfl_pooled_discrete_residual_distribution_2026_10_05_r10_winner_coherence" as const;
 export const NFL_V1_WEEKLY_OUTCOME_PROBABILITY_RELEASE =
-  "nfl_v1_weekly_pooled_discrete_probability_2026_09_28_r9_total_direction_coherence" as const;
+  "nfl_v1_weekly_pooled_discrete_probability_2026_10_05_r10_winner_coherence" as const;
 export const NFL_V1_MARKET_EVIDENCE_OUTCOME_RELEASE =
-  "nfl_v1_market_evidence_outcome_2026_09_28_r10_market_marriage" as const;
+  "nfl_v1_market_evidence_outcome_2026_10_05_r11_winner_coherence" as const;
 export const NFL_V1_MARKET_EVIDENCE_REPRESENTATIVE_SCORE_RELEASE =
-  "nfl_v1_market_evidence_representative_score_2026_09_28_r9_market_marriage" as const;
+  "nfl_v1_market_evidence_representative_score_2026_10_05_r10_winner_coherence" as const;
 export const NFL_V1_PAID_TEAM_SCORE_MODEL_RELEASE =
-  "nfl_v1_paid_team_score_model_2026_09_28_r2_market_marriage" as const;
+  "nfl_v1_paid_team_score_model_2026_10_05_r3_winner_coherence" as const;
 export const NFL_V1_WEEKLY_RAW_SIGNAL_RELEASE =
   "nfl_weekly_raw_signal_2026_09_27_r3_pressure_direction" as const;
 export const NFL_V1_WEEKLY_REPRESENTATIVE_SCORE_CENTER_WEIGHT = 0.2 as const;
@@ -50,6 +50,11 @@ export const NFL_V1_PRICED_NEUTRAL_TOTAL_RELEASE =
   "nfl_v1_priced_neutral_total_2026_09_20_r1" as const;
 export const NFL_V1_OPENING_MARKET_SPREAD_DIRECTION_RELEASE =
   "nfl_v1_opening_market_spread_direction_2026_09_21_r1" as const;
+export const NFL_V1_CROSS_MARKET_WINNER_COHERENCE_RELEASE =
+  "nfl_v1_cross_market_winner_coherence_2026_10_05_r1" as const;
+export const NFL_V1_MONEYLINE_PRICE_MOVE_MINIMUM_PP = 1 as const;
+export const NFL_V1_MONEYLINE_PUBLIC_GAP_MINIMUM_PP = 8 as const;
+export const NFL_V1_MONEYLINE_SHARP_GAP_MINIMUM_PP = 10 as const;
 
 type DiscreteDistribution = {
   values: number[];
@@ -81,7 +86,8 @@ export type NflV1WeekOneOutcomeForecast = {
       | "nfl_target_excluded_market_outcome_2026_09_25_r5_current_season_raw_signal"
       | "nfl_target_excluded_market_outcome_2026_09_27_r6_pressure_direction"
       | "nfl_target_excluded_market_outcome_2026_09_28_r7_paid_team_score"
-      | "nfl_target_excluded_market_outcome_2026_09_28_r8_market_marriage";
+      | "nfl_target_excluded_market_outcome_2026_09_28_r8_market_marriage"
+      | "nfl_target_excluded_market_outcome_2026_10_05_r9_winner_coherence";
     status: "target_excluded_market" | "incumbent_fallback";
     reason: "stable_complete_tuple" | "insufficient_or_unstable_target_free_evidence";
     marginFamilyCount: number | null;
@@ -113,6 +119,7 @@ export type NflV1WeekOneOutcomeForecast = {
     sharp: { homeMarginGapPp: number | null; overTotalGapPp: number | null; homeMarginShiftPoints: number; totalShiftPoints: number };
     publicConsensus: { homeMarginGapPp: number | null; overTotalGapPp: number | null; homeMarginShiftPoints: number; totalShiftPoints: number };
     movement: FootballOutcomeMarketMovement;
+    winnerCoherence?: NflV1CrossMarketWinnerCoherence;
     spreadDirection?: {
       release: typeof NFL_V1_OPENING_MARKET_SPREAD_DIRECTION_RELEASE;
       status: "available" | "unavailable";
@@ -153,6 +160,21 @@ export type NflV1WeekOneOutcomeForecast = {
     weakHomeMarginReversalRejected: boolean;
     weakTotalReversalRejected: boolean;
   };
+};
+
+export type NflV1CrossMarketWinnerCoherence = {
+  release: typeof NFL_V1_CROSS_MARKET_WINNER_COHERENCE_RELEASE;
+  status: "not_required" | "authorized" | "rejected";
+  independentHomeMargin: number;
+  proposedHomeMargin: number;
+  finalHomeMargin: number;
+  moneylineHomeFairProbabilityDeltaPp: number | null;
+  publicMoneylineGapPp: number | null;
+  sharpMoneylineGapPp: number | null;
+  priceSupportsProposedWinner: boolean;
+  publicSupportsProposedWinner: boolean;
+  sharpSupportsProposedWinner: boolean;
+  sharpVeto: boolean;
 };
 
 type Artifact = {
@@ -321,6 +343,7 @@ export function buildNflMarketEvidenceOutcomeForecast(args: {
     freshCircaGap(args.sharpSplits?.moneyline, "home", evaluatedAt),
   );
   const sharpTotalGap = freshCircaGap(args.sharpSplits?.total, "over", evaluatedAt);
+  const sharpMoneylineGap = freshCircaGap(args.sharpSplits?.moneyline, "home", evaluatedAt);
   const publicMarginGap = playbookLineMatches(args.playbookLine?.homeSpread, args.current.spread.homeLine)
     ? firstFinite(
         freshPublicGap(args.playbookSplits?.spread, "home", evaluatedAt),
@@ -330,6 +353,7 @@ export function buildNflMarketEvidenceOutcomeForecast(args: {
   const publicTotalGap = playbookLineMatches(args.playbookLine?.total, args.current.total.line)
     ? freshPublicGap(args.playbookSplits?.total, "over", evaluatedAt)
     : null;
+  const publicMoneylineGap = freshPublicGap(args.playbookSplits?.moneyline, "home", evaluatedAt);
   const movement = readFootballOutcomeMarketMovement({
     opening: args.operationalOpening?.quote ?? null,
     current: args.weeklyRawSignal || args.paidTeamScore
@@ -472,11 +496,19 @@ export function buildNflMarketEvidenceOutcomeForecast(args: {
         nonNegative: false,
       })
     : guardedMargin.mean;
-  const finalHomeMargin = spreadDirection?.status === "available" && args.current.spread
+  const proposedHomeMargin = spreadDirection?.status === "available" && args.current.spread
     ? spreadDirection.side === "home"
       ? Math.max(orientedHomeMargin, -args.current.spread.homeLine + 0.001)
       : Math.min(orientedHomeMargin, -args.current.spread.homeLine - 0.001)
     : orientedHomeMargin;
+  const winnerCoherence = resolveNflCrossMarketWinnerCoherence({
+    independentHomeMargin: calibratedHomeMargin,
+    proposedHomeMargin,
+    moneylineHomeFairProbabilityDeltaPp: movement.moneylineHomeFairProbabilityDeltaPp,
+    publicMoneylineGapPp: publicMoneylineGap,
+    sharpMoneylineGapPp: sharpMoneylineGap,
+  });
+  const finalHomeMargin = winnerCoherence.finalHomeMargin;
   const finalTotal = totalDirection?.status === "available"
     ? totalDirection.side === "over"
       ? guardedTotal.mean >= args.current.total.line
@@ -534,6 +566,7 @@ export function buildNflMarketEvidenceOutcomeForecast(args: {
         totalShiftPoints: publicTotalShiftPoints,
       },
       movement,
+      winnerCoherence,
       ...(spreadDirection ? { spreadDirection } : {}),
       ...(totalDirection ? { totalDirection } : {}),
       calibratedCore: {
@@ -558,6 +591,56 @@ export function buildNflMarketEvidenceOutcomeForecast(args: {
       weakHomeMarginReversalRejected: guardedMargin.reversalRejected,
       weakTotalReversalRejected: guardedTotal.reversalRejected,
     },
+  };
+}
+
+export function resolveNflCrossMarketWinnerCoherence(args: {
+  independentHomeMargin: number;
+  proposedHomeMargin: number;
+  moneylineHomeFairProbabilityDeltaPp: number | null;
+  publicMoneylineGapPp: number | null;
+  sharpMoneylineGapPp: number | null;
+}): NflV1CrossMarketWinnerCoherence {
+  const independentDirection = Math.sign(args.independentHomeMargin);
+  const proposedDirection = Math.sign(args.proposedHomeMargin);
+  const crossesWinner = independentDirection !== 0 && proposedDirection !== 0 &&
+    independentDirection !== proposedDirection;
+  const supports = (value: number | null, minimum: number) =>
+    value !== null && Number.isFinite(value) && proposedDirection * value >= minimum;
+  const opposes = (value: number | null, minimum: number) =>
+    value !== null && Number.isFinite(value) && proposedDirection * value <= -minimum;
+  const priceSupportsProposedWinner = crossesWinner && supports(
+    args.moneylineHomeFairProbabilityDeltaPp,
+    NFL_V1_MONEYLINE_PRICE_MOVE_MINIMUM_PP,
+  );
+  const publicSupportsProposedWinner = crossesWinner && supports(
+    args.publicMoneylineGapPp,
+    NFL_V1_MONEYLINE_PUBLIC_GAP_MINIMUM_PP,
+  );
+  const sharpSupportsProposedWinner = crossesWinner && supports(
+    args.sharpMoneylineGapPp,
+    NFL_V1_MONEYLINE_SHARP_GAP_MINIMUM_PP,
+  );
+  const sharpVeto = crossesWinner && opposes(
+    args.sharpMoneylineGapPp,
+    NFL_V1_MONEYLINE_SHARP_GAP_MINIMUM_PP,
+  );
+  const authorized = crossesWinner && priceSupportsProposedWinner && !sharpVeto &&
+    (sharpSupportsProposedWinner || publicSupportsProposedWinner);
+  const status = !crossesWinner ? "not_required" : authorized ? "authorized" : "rejected";
+  return {
+    release: NFL_V1_CROSS_MARKET_WINNER_COHERENCE_RELEASE,
+    status,
+    independentHomeMargin: args.independentHomeMargin,
+    proposedHomeMargin: args.proposedHomeMargin,
+    finalHomeMargin: status === "rejected" ? args.independentHomeMargin : args.proposedHomeMargin,
+    moneylineHomeFairProbabilityDeltaPp: args.moneylineHomeFairProbabilityDeltaPp,
+    publicMoneylineGapPp: args.publicMoneylineGapPp,
+    sharpMoneylineGapPp: args.sharpMoneylineGapPp,
+    priceSupportsProposedWinner,
+    publicSupportsProposedWinner,
+    sharpSupportsProposedWinner,
+    sharpVeto,
   };
 }
 

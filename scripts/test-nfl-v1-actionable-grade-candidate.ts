@@ -35,6 +35,7 @@ import {
   NFL_V1_RESIDUAL_HEAD_LOGIT_WEIGHT,
   NFL_V1_SHARP_SPLIT_MAX_SHIFT_POINTS,
   NFL_V1_WEAK_EVIDENCE_REVERSAL_MINIMUM_ADVANTAGE,
+  resolveNflCrossMarketWinnerCoherence,
   NFL_V1_WEEKLY_OUTCOME_MODEL_RELEASE,
   NFL_V1_WEEKLY_RAW_MARGIN_MARKET_WEIGHT,
   NFL_V1_WEEKLY_RAW_SIGNAL_RELEASE,
@@ -347,8 +348,8 @@ const weeklyBase = getNflV1WeekOneOutcomeForecast({
   homeTeam,
   weeklyFallback: { projectedHomeMargin: 4.25, marketTotal: 44.5 },
 });
-assert.equal(NFL_V1_WEEKLY_OUTCOME_MODEL_RELEASE, "nfl_v1_weekly_paid_team_score_2026_09_28_r10_market_marriage");
-assert.equal(NFL_V1_MARKET_EVIDENCE_REPRESENTATIVE_SCORE_RELEASE, "nfl_v1_market_evidence_representative_score_2026_09_28_r9_market_marriage");
+assert.equal(NFL_V1_WEEKLY_OUTCOME_MODEL_RELEASE, "nfl_v1_weekly_paid_team_score_2026_10_05_r11_winner_coherence");
+assert.equal(NFL_V1_MARKET_EVIDENCE_REPRESENTATIVE_SCORE_RELEASE, "nfl_v1_market_evidence_representative_score_2026_10_05_r10_winner_coherence");
 assert.equal(NFL_V1_WEEKLY_REPRESENTATIVE_SCORE_CENTER_WEIGHT, 0.2);
 const representativeMargin = weeklyBase.representativeHomeScore - weeklyBase.representativeAwayScore;
 const representativeTotal = weeklyBase.representativeHomeScore + weeklyBase.representativeAwayScore;
@@ -398,7 +399,7 @@ const circaAway = buildNflMarketEvidenceOutcomeForecast({
   sharpSplits: sharpSplitSet({ homeMoneyPct: 20, homeBetsPct: 70 }),
   evaluatedAt,
 });
-assert.equal(NFL_V1_MARKET_EVIDENCE_OUTCOME_RELEASE, "nfl_v1_market_evidence_outcome_2026_09_28_r10_market_marriage");
+assert.equal(NFL_V1_MARKET_EVIDENCE_OUTCOME_RELEASE, "nfl_v1_market_evidence_outcome_2026_10_05_r11_winner_coherence");
 assert.equal(NFL_V1_MARKET_WEIGHT, 0.75);
 assert.equal(NFL_V1_SHARP_SPLIT_MAX_SHIFT_POINTS, 1.5);
 assert.equal(NFL_V1_PUBLIC_SPLIT_MAX_SHIFT_POINTS, 0.75);
@@ -407,16 +408,45 @@ assert.equal(NFL_V1_WEAK_EVIDENCE_REVERSAL_MINIMUM_ADVANTAGE, 0.025);
 assert.ok(marketOnly.homeWinProbability > marketOnly.awayWinProbability);
 assert.equal(marketOnly.marketEvidence?.combinedHomeMarginShiftPoints, 0);
 assert.equal(marketOnly.marketEvidence?.combinedTotalShiftPoints, 0);
-assert.ok(circaAway.awayWinProbability > circaAway.homeWinProbability);
+assert.ok(circaAway.homeWinProbability > circaAway.awayWinProbability);
 assert.ok(
-  circaAway.expectedHomeScore - circaAway.expectedAwayScore <
-  marketOnly.expectedHomeScore - marketOnly.expectedAwayScore,
-  "fresh Circa money-over-bets resistance must move the forecast toward the away side",
+  Math.abs(
+    (circaAway.expectedHomeScore - circaAway.expectedAwayScore) -
+    (marketOnly.expectedHomeScore - marketOnly.expectedAwayScore)
+  ) < 0.1,
+  "an uncorroborated winner reversal must return to the independent calibrated margin",
 );
 assert.ok(
-  circaAway.expectedHomeScore - circaAway.expectedAwayScore < 0,
-  "opposing lower-strength public evidence must not reverse a qualifying Circa direction",
+  circaAway.marketEvidence?.winnerCoherence?.status === "rejected",
+  "a split-only margin signal must not silently replace the independent Moneyline winner",
 );
+const rejectedWinnerFlip = resolveNflCrossMarketWinnerCoherence({
+  independentHomeMargin: 2.5,
+  proposedHomeMargin: -3.5,
+  moneylineHomeFairProbabilityDeltaPp: -2,
+  publicMoneylineGapPp: -5,
+  sharpMoneylineGapPp: null,
+});
+assert.equal(rejectedWinnerFlip.status, "rejected");
+assert.equal(rejectedWinnerFlip.finalHomeMargin, 2.5);
+const authorizedWinnerFlip = resolveNflCrossMarketWinnerCoherence({
+  independentHomeMargin: 2.5,
+  proposedHomeMargin: -3.5,
+  moneylineHomeFairProbabilityDeltaPp: -2,
+  publicMoneylineGapPp: -9,
+  sharpMoneylineGapPp: null,
+});
+assert.equal(authorizedWinnerFlip.status, "authorized");
+assert.equal(authorizedWinnerFlip.finalHomeMargin, -3.5);
+const vetoedWinnerFlip = resolveNflCrossMarketWinnerCoherence({
+  independentHomeMargin: 2.5,
+  proposedHomeMargin: -3.5,
+  moneylineHomeFairProbabilityDeltaPp: -2,
+  publicMoneylineGapPp: -9,
+  sharpMoneylineGapPp: 12,
+});
+assert.equal(vetoedWinnerFlip.status, "rejected");
+assert.equal(vetoedWinnerFlip.sharpVeto, true);
 const weakPublicMarketOnly = buildNflMarketEvidenceOutcomeForecast({
   baseForecast: weeklyBase,
   footballHomeMargin: 4.25,
@@ -479,10 +509,10 @@ assert.ok(marketOnlyBundle.evaluatedBets.find((decision) => decision.market === 
 assert.ok(["Best Angle", "Lean", "Watchlist", "No Play"].includes(
   marketOnlyBundle.evaluatedBets.find((decision) => decision.market === "moneyline")!.grade,
 ));
-assert.equal(circaAwayBundle.evaluatedBets.find((decision) => decision.market === "moneyline")?.side, awayTeam);
-assert.equal(circaAwayBundle.outcomeConfidence.find((decision) => decision.market === "moneyline")?.likelySide, awayTeam);
-assert.ok(circaAway.expectedAwayScore > circaAway.expectedHomeScore);
-assert.ok(circaAway.awayWinProbability > 0.5);
+assert.equal(circaAwayBundle.evaluatedBets.find((decision) => decision.market === "moneyline")?.side, homeTeam);
+assert.equal(circaAwayBundle.outcomeConfidence.find((decision) => decision.market === "moneyline")?.likelySide, homeTeam);
+assert.ok(circaAway.expectedHomeScore > circaAway.expectedAwayScore);
+assert.ok(circaAway.homeWinProbability > 0.5);
 assert.ok(["Best Angle", "Lean", "Watchlist", "No Play"].includes(
   circaAwayBundle.evaluatedBets.find((decision) => decision.market === "spread")!.grade,
 ));
@@ -865,12 +895,10 @@ const directionProbability = nflV1WeekOneLineProbabilities({
 }).spread;
 assert.equal(directionCandidate.marketEvidence?.spreadDirection?.status, "available");
 assert.equal(directionCandidate.marketEvidence?.spreadDirection?.reason, "move_away");
-assert.ok(directionProbability.awayCoverProbability > directionProbability.homeCoverProbability);
-assert.equal(
-  Math.abs(directionProbability.homeCoverProbability - 0.5).toFixed(6),
-  Math.abs(directionCandidate.marketEvidence!.spreadDirection!.preOrientationHomeCoverProbability - 0.5).toFixed(6),
-  "direction arbitration must flip incumbent conviction rather than flatten it",
-);
+assert.equal(directionCandidate.marketEvidence?.winnerCoherence?.status, "rejected");
+assert.ok(directionProbability.homeCoverProbability > directionProbability.awayCoverProbability);
+assert.ok(directionCandidate.expectedHomeScore > directionCandidate.expectedAwayScore,
+  "Spread-only movement must not replace the independent Moneyline winner");
 const mismatchedOpening = buildNflMarketEvidenceOutcomeForecast({
   baseForecast: weeklyBase,
   footballHomeMargin: 4.25,

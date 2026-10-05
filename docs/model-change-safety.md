@@ -5,6 +5,33 @@ inputs, probabilities, projections, grades, promotions/demotions, calibration, p
 or stakes. It exists to prevent mixed model eras, competing writers, accidental board
 flattening, and load spikes.
 
+## Owner-approved provisional exception: NFL cross-market winner coherence r28
+
+On 2026-10-05 Daniel Mengel explicitly directed Oddsphere to repair the sport-specific market
+reader across every Daily Edge model without blindly following the market, flattening boards, or
+changing member copy, labels, or layout. This exception is limited to the NFL r28 release and the
+release-pure forward evidence documented in
+`docs/model-audits/2026-10-05-nfl-cross-market-winner-coherence-r28-predeclaration.md` and its paired
+result.
+
+R28 leaves the paid independent score primary. Spread evidence may continue to correct the Spread
+and rebuild the joint score, but it may cross zero and replace the Moneyline winner only when
+Moneyline-specific same-book price movement and a source-qualified Moneyline money-minus-ticket gap
+corroborate that winner, with named sharp opposition retaining a veto. Missing evidence cannot
+authorize a winner flip. Total behavior is unchanged. One joint distribution remains authoritative
+for expected score, representative score, Moneyline, Spread, Total, probabilities, and downstream
+exact-price grades.
+
+The owner acknowledges that the 14-game r27 forward cohort is small and does not guarantee future
+performance. The exact 42-market replay improves Moneyline from 8-6 to 10-4, Spread excluding two
+pushes from 6-6 to 9-3, team-score MAE from 5.6509 to 5.5307, and margin MAE from 7.5731 to 5.7677.
+Total remains 9-5 and its side, probability, grade, projected Total, and MAE remain unchanged. The
+candidate has zero actionable promotions, zero demotions, and identical grade/actionable counts, so
+it does not flatten the board. It adds no provider call, database loop, writer, schedule, stake,
+copy, label, or layout. Publication still requires focused and full model-change tests,
+current-main integration safety, protected PR checks, and live release/coverage/coherence
+verification. Prior locks remain immutable.
+
 ## Owner-approved provisional exception: MLB corroborated Total opposition r90
 
 On 2026-10-05 Daniel Mengel explicitly directed Oddsphere to repair sport-specific
