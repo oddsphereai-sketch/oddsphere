@@ -162,6 +162,7 @@ import {
 } from "../../../../lib/services/publicSplitsDisplayOverlay";
 import type { MarketDecision, MarketSplitDisplaySection } from "@/lib/types/domain/RecommendationDecision";
 import { populateDailyEdgeDraftKingsFallback } from "@/lib/providers/draftkings/draftKingsNetworkSplits";
+import { isPublicallyTracked } from "@/lib/config/officialTrackingStart";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -6700,6 +6701,26 @@ export async function GET(request: Request) {
     : sport === "soccer" || sport === "ucl"
       ? currentSoccerBoardDate()
       : currentSlateDate(sport);
+
+  // NBA may continue ingesting and rehearsing during preseason, but its
+  // member board launches with the regular season. Enforce that boundary
+  // before the response-snapshot fast path so a cached preseason payload
+  // cannot leak cards onto a tab that correctly says there are no games.
+  // The closed window preserves valid prior-season history while allowing
+  // the 2026-27 board to turn on automatically at the October 20 opener.
+  if (sport === "nba" && !isPublicallyTracked("nba", requestedDate)) {
+    return Response.json({
+      as_of: new Date().toISOString(),
+      sport,
+      date: requestedDate,
+      requested_date: requestedDate,
+      fallback_used: false,
+      slateState: "no_data",
+      slate_status: null,
+      last_slate_update_at: null,
+      games: [],
+    } satisfies DailyEdgeResponse, { headers: DAILY_EDGE_NO_STORE_HEADERS });
+  }
 
   // Champions League reads are snapshot-only. Persisted rows stay
   // sport="soccer" for the shared writer/grader, while this legacy URL key

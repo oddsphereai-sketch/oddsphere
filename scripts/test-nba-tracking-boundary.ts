@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { isPublicallyTracked } from "../lib/config/officialTrackingStart";
 import { createNbaPredictionRecords } from "../lib/services/nba/buildNbaPredictionRecords";
 
@@ -17,7 +18,39 @@ assert.equal(isPublicallyTracked("nba", "2026-10-04"), false);
 assert.equal(isPublicallyTracked("nba", "2026-10-19"), false);
 assert.equal(isPublicallyTracked("nba", "2026-10-20"), true);
 
+const dailyEdgeRouteSource = readFileSync(
+  new URL("../app/api/lab/daily-edge/route.ts", import.meta.url),
+  "utf8",
+);
+const nbaMemberBoundaryIndex = dailyEdgeRouteSource.indexOf(
+  'sport === "nba" && !isPublicallyTracked("nba", requestedDate)',
+);
+const responseSnapshotIndex = dailyEdgeRouteSource.indexOf(
+  'url.searchParams.get("snapshotBypass") !== "true"',
+);
+assert.ok(nbaMemberBoundaryIndex >= 0, "NBA member route must enforce the regular-season boundary");
+assert.ok(
+  responseSnapshotIndex >= 0 && nbaMemberBoundaryIndex < responseSnapshotIndex,
+  "NBA member boundary must run before cached response snapshots are read",
+);
+
 async function main(): Promise<void> {
+  const { GET: readDailyEdge } = await import("../app/api/lab/daily-edge/route");
+  const preseasonResponse = await readDailyEdge(
+    new Request("https://example.test/api/lab/daily-edge?sport=nba&date=2026-10-05"),
+  );
+  const preseasonBody = await preseasonResponse.json() as {
+    sport: string;
+    date: string;
+    games: unknown[];
+    slateState: string;
+  };
+  assert.equal(preseasonResponse.status, 200);
+  assert.equal(preseasonBody.sport, "nba");
+  assert.equal(preseasonBody.date, "2026-10-05");
+  assert.equal(preseasonBody.slateState, "no_data");
+  assert.deepEqual(preseasonBody.games, []);
+
   const result = await createNbaPredictionRecords({
     slateDate: "2026-10-04",
     apply: true,
