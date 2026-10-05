@@ -31,7 +31,7 @@
 
 import { supabase } from "@/lib/db/supabase";
 import { applyProductionSourceFilter } from "@/lib/db/productionFilter";
-import { officialTrackingStart } from "@/lib/config/officialTrackingStart";
+import { isPublicallyTracked, officialTrackingStart } from "@/lib/config/officialTrackingStart";
 import type { Sport } from "@/lib/types/domain/Sport";
 import type {
   AllTimeAggregate,
@@ -663,15 +663,23 @@ export async function GET(request: Request) {
     }
   }
 
+  // Apply the same official launch boundary used by the modern tracking
+  // aggregate. This legacy-compatible route still reads prediction_results,
+  // so it needs its own final guard to prevent preseason rows (notably NBA)
+  // from leaking through an old result or cached refresh path.
+  const publiclyTrackedRows = allRows.filter((row) =>
+    isPublicallyTracked(row.sport as Sport, row.game_date),
+  );
+
   const body: TrackingResponse = {
     as_of: new Date().toISOString(),
-    sportOrder: determineSportOrder(allRows),
-    yesterdayRecap: buildYesterdayRecap(allRows),
-    weeklyAggregate: buildWeekly(allRows),
-    last30Days: buildLast30Days(allRows),
-    allTimeAggregate: buildAllTime(allRows),
-    streak: buildStreak(allRows),
-    tallies: buildTallies(allRows),
+    sportOrder: determineSportOrder(publiclyTrackedRows),
+    yesterdayRecap: buildYesterdayRecap(publiclyTrackedRows),
+    weeklyAggregate: buildWeekly(publiclyTrackedRows),
+    last30Days: buildLast30Days(publiclyTrackedRows),
+    allTimeAggregate: buildAllTime(publiclyTrackedRows),
+    streak: buildStreak(publiclyTrackedRows),
+    tallies: buildTallies(publiclyTrackedRows),
   };
 
   // `todayUtc` referenced for parity with other routes' header — not used

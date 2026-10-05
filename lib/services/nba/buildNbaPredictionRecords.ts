@@ -47,6 +47,7 @@ import type {
 import type { NbaGameIntelligence } from "./nbaMarketIntelligence";
 import type { PredictionRecordRow, TrackedMarketV17 } from "../../types/domain/Tracking";
 import type { RecommendationGrade } from "./nbaMarketReview";
+import { isPublicallyTracked } from "../../config/officialTrackingStart";
 import {
   CONTEXT_SNAPSHOT_NOTE,
   type NbaSpreadDisplayedContext,
@@ -304,6 +305,13 @@ export async function createNbaPredictionRecords(
     skippedLocked: 0,
     errors: [],
   };
+
+  // Public NBA prediction records begin with the regular season. Keeping this
+  // guard in the sole writer prevents a cron retry, manual refresh, or stale
+  // preseason slate from recreating rows that the member tracker must exclude.
+  // Game/line ingestion may still run before launch for operational rehearsal;
+  // it just cannot create official public-tracking predictions.
+  if (!isPublicallyTracked("nba", opts.slateDate)) return result;
 
   // Run the same NBA pipeline that powers the member Daily Edge so
   // tracking matches what users saw. The pipeline is read-only.
