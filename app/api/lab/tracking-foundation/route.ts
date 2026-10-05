@@ -64,7 +64,7 @@ const loadSharedTrackingAggregate = unstable_cache(
       includeLaunchDay: false,
     });
   },
-  ["member-tracking-aggregate-v5-nba-regular-season-boundary"],
+  ["member-tracking-aggregate-v6-nba-preseason-only-window"],
   { revalidate: TRACKING_RESPONSE_CACHE_TTL_MS / 1000, tags: ["member-tracking-aggregate"] },
 );
 

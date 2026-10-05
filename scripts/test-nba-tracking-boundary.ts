@@ -10,6 +10,10 @@ const noDbClient = {
   },
 };
 
+assert.equal(isPublicallyTracked("nba", "2026-06-08"), true);
+assert.equal(isPublicallyTracked("nba", "2026-06-13"), true);
+assert.equal(isPublicallyTracked("nba", "2026-07-01"), false);
+assert.equal(isPublicallyTracked("nba", "2026-10-04"), false);
 assert.equal(isPublicallyTracked("nba", "2026-10-19"), false);
 assert.equal(isPublicallyTracked("nba", "2026-10-20"), true);
 
@@ -28,7 +32,7 @@ async function main(): Promise<void> {
   assert.equal(result.proposed.length, 0);
   assert.equal(result.errors.length, 0);
 
-  console.log("NBA regular-season tracking boundary tests passed.");
+  console.log("NBA preseason-only tracking window tests passed.");
 }
 
 void main().catch((error) => {

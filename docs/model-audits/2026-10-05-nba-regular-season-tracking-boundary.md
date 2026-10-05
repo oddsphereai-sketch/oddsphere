@@ -1,5 +1,9 @@
 # NBA regular-season tracking boundary
 
+> Superseded by `nba_tracking_window_2026_10_05_r2_preseason_only`. The r1
+> boundary was over-broad because it also hid valid June 2026 postseason
+> history. R2 preserves those rows and excludes only July 1 through October 19.
+
 ## Scope
 
 This release corrects public NBA tracking without changing the NBA model or member product.
