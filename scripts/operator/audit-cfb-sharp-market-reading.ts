@@ -4,7 +4,7 @@
 
 import { loadEnvConfig } from "@next/env";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
-import { readCfbForwardEvidence } from "../../lib/services/football/cfbForwardEvidenceStore";
+import { readCfbForwardWriterEvidence } from "../../lib/services/football/cfbForwardEvidenceStore";
 import type {
   CfbForwardContextCapture,
   CfbForwardContextFamily,
@@ -22,6 +22,14 @@ type ResultRow = {
   source: string;
   side: Side;
   result: "win" | "loss" | "push";
+  independentSide: Side;
+  independentResult: "win" | "loss" | "push";
+  disagreesWithIndependent: boolean;
+  authoritativeSide: Side;
+  authoritativeResult: "win" | "loss" | "push";
+  disagreesWithAuthoritative: boolean;
+  authoritativeAxisError: number;
+  signalFlipAxisError: number;
 };
 type GameResult = {
   external_id: string | number;
@@ -85,6 +93,17 @@ function publicTicketSide(value: readonly unknown[] | null): Side | null {
   return firstTickets > secondTickets ? "first" : "second";
 }
 
+function independentSide(
+  market: Market,
+  forecast: { expectedMarginHome: number; expectedTotal: number },
+  current: CfbForwardContextFamily[5],
+): Side {
+  if (market === "moneyline") return forecast.expectedMarginHome < 0 ? "first" : "second";
+  const line = current[3] ?? 0;
+  if (market === "spread") return -forecast.expectedMarginHome > line ? "first" : "second";
+  return forecast.expectedTotal > line ? "first" : "second";
+}
+
 function settle(args: {
   market: Market;
   side: Side;
@@ -103,6 +122,23 @@ function settle(args: {
     : args.awayScore + args.homeScore - line;
   if (Math.abs(firstScore) < 1e-9) return "push";
   return (args.side === "first") === (firstScore > 0) ? "win" : "loss";
+}
+
+function scoreAxisErrors(args: {
+  market: Market;
+  forecast: { expectedMarginHome: number; expectedTotal: number };
+  current: CfbForwardContextFamily[5];
+  awayScore: number;
+  homeScore: number;
+}): { authoritativeAxisError: number; signalFlipAxisError: number } {
+  const marginMarket = args.market === "moneyline" || args.market === "spread";
+  const expected = marginMarket ? args.forecast.expectedMarginHome : args.forecast.expectedTotal;
+  const actual = marginMarket ? args.homeScore - args.awayScore : args.homeScore + args.awayScore;
+  const boundary = args.market === "moneyline" ? 0 : args.market === "spread" ? -(args.current[3] ?? 0) : args.current[3] ?? expected;
+  return {
+    authoritativeAxisError: Math.abs(expected - actual),
+    signalFlipAxisError: Math.abs((2 * boundary - expected) - actual),
+  };
 }
 
 async function readResults(client: SupabaseClient, ids: string[]): Promise<Map<string, GameResult>> {
@@ -127,6 +163,18 @@ function summarize(rows: ResultRow[]) {
   return Object.fromEntries([...groups].sort(([left], [right]) => left.localeCompare(right)).map(([key, values]) => {
     const resolved = values.filter((row) => row.result !== "push");
     const wins = resolved.filter((row) => row.result === "win").length;
+    const byDate = Object.fromEntries([...new Set(values.map((row) => row.date))].sort().map((date) => {
+      const dated = values.filter((row) => row.date === date);
+      const datedResolved = dated.filter((row) => row.result !== "push");
+      return [date, {
+        resolved: datedResolved.length,
+        wins: datedResolved.filter((row) => row.result === "win").length,
+        authoritativeDisagreements: dated.filter((row) => row.disagreesWithAuthoritative).length,
+        authoritativeCorrections: dated.filter((row) => row.disagreesWithAuthoritative && row.result === "win" && row.authoritativeResult === "loss").length,
+        authoritativeHarms: dated.filter((row) => row.disagreesWithAuthoritative && row.result === "loss" && row.authoritativeResult === "win").length,
+      }];
+    }));
+    const authoritativeDisagreements = values.filter((row) => row.disagreesWithAuthoritative);
     return [key, {
       games: new Set(values.map((row) => row.gameId)).size,
       resolved: resolved.length,
@@ -134,7 +182,21 @@ function summarize(rows: ResultRow[]) {
       losses: resolved.length - wins,
       pushes: values.length - resolved.length,
       accuracy: resolved.length ? wins / resolved.length : null,
+      disagreements: values.filter((row) => row.disagreesWithIndependent).length,
+      disagreementResolved: values.filter((row) => row.disagreesWithIndependent && row.result !== "push").length,
+      corrections: values.filter((row) => row.disagreesWithIndependent && row.result === "win" && row.independentResult === "loss").length,
+      harms: values.filter((row) => row.disagreesWithIndependent && row.result === "loss" && row.independentResult === "win").length,
+      authoritativeDisagreements: authoritativeDisagreements.length,
+      authoritativeCorrections: values.filter((row) => row.disagreesWithAuthoritative && row.result === "win" && row.authoritativeResult === "loss").length,
+      authoritativeHarms: values.filter((row) => row.disagreesWithAuthoritative && row.result === "loss" && row.authoritativeResult === "win").length,
+      authoritativeAxisMaeOnDisagreements: authoritativeDisagreements.length
+        ? authoritativeDisagreements.reduce((sum, row) => sum + row.authoritativeAxisError, 0) / authoritativeDisagreements.length
+        : null,
+      signalFlipAxisMaeOnDisagreements: authoritativeDisagreements.length
+        ? authoritativeDisagreements.reduce((sum, row) => sum + row.signalFlipAxisError, 0) / authoritativeDisagreements.length
+        : null,
       dates: [...new Set(values.map((row) => row.date))].sort(),
+      byDate,
     }];
   }));
 }
@@ -144,9 +206,19 @@ async function main(): Promise<void> {
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!url || !key) throw new Error("Supabase read credentials are required.");
   const client = createClient(url, key, { auth: { persistSession: false } });
-  const evidence = await readCfbForwardEvidence({ client, season: 2026 });
+  // The writer reader first selects the authoritative current/transition and
+  // immutable T-60 rows, then fetches only those bounded payloads. Pulling the
+  // complete season of multi-megabyte JSON payloads through PostgREST makes
+  // this read-only audit fail before it can evaluate a single signal.
+  const evidence = (await readCfbForwardWriterEvidence({ client, season: 2026 })).evidence;
   const results = await readResults(client, [...new Set(evidence.map((row) => row.providerGameId))]);
-  const latest = new Map<string, { capture: CfbForwardContextCapture; family: CfbForwardContextFamily; gameStartAt: string }>();
+  const latest = new Map<string, {
+    capture: CfbForwardContextCapture;
+    family: CfbForwardContextFamily;
+    gameStartAt: string;
+    forecast: { expectedMarginHome: number; expectedTotal: number };
+    authoritativeForecast: { expectedMarginHome: number; expectedTotal: number };
+  }>();
   for (const row of evidence) {
     const capture = row.payload.contextualEvidenceCapture;
     if (!capture || Date.parse(row.capturedAt) >= Date.parse(row.gameStartAt)) continue;
@@ -156,7 +228,19 @@ async function main(): Promise<void> {
         if (!family || family[5][0] > row.gameStartAt || movementSide(market, family) === null) continue;
         const key = `${row.providerGameId}:${source}:${market}`;
         const prior = latest.get(key);
-        if (!prior || prior.capture.capturedAt < capture.capturedAt) latest.set(key, { capture, family, gameStartAt: row.gameStartAt });
+        if (!prior || prior.capture.capturedAt < capture.capturedAt) {
+          const forecast = row.payload.independentForecast ?? row.payload.decisions.forecast;
+          latest.set(key, {
+            capture,
+            family,
+            gameStartAt: row.gameStartAt,
+            forecast: { expectedMarginHome: forecast.expectedMarginHome, expectedTotal: forecast.expectedTotal },
+            authoritativeForecast: {
+              expectedMarginHome: row.payload.decisions.forecast.expectedMarginHome,
+              expectedTotal: row.payload.decisions.forecast.expectedTotal,
+            },
+          });
+        }
       }
     }
   }
@@ -169,16 +253,28 @@ async function main(): Promise<void> {
     if (!result || !isFinal(result) || !Number.isFinite(result.away_score) || !Number.isFinite(result.home_score)) continue;
     const side = movementSide(market, value.family);
     if (!side) continue;
+    const baseIndependentSide = independentSide(market, value.forecast, value.family[5]);
+    const independentResult = settle({ market, side: baseIndependentSide, current: value.family[5], awayScore: result.away_score!, homeScore: result.home_score! });
+    const baseAuthoritativeSide = independentSide(market, value.authoritativeForecast, value.family[5]);
+    const authoritativeResult = settle({ market, side: baseAuthoritativeSide, current: value.family[5], awayScore: result.away_score!, homeScore: result.home_score! });
+    const axisErrors = scoreAxisErrors({ market, forecast: value.authoritativeForecast, current: value.family[5], awayScore: result.away_score!, homeScore: result.home_score! });
     const base = {
       gameId: gameId!,
       date: value.gameStartAt.slice(0, 10),
       market,
       source: source!,
+      independentSide: baseIndependentSide,
+      independentResult,
+      authoritativeSide: baseAuthoritativeSide,
+      authoritativeResult,
+      ...axisErrors,
     };
     rows.push({
       ...base,
       channel: "movement",
       side,
+      disagreesWithIndependent: side !== baseIndependentSide,
+      disagreesWithAuthoritative: side !== baseAuthoritativeSide,
       result: settle({ market, side, current: value.family[5], awayScore: result.away_score!, homeScore: result.home_score! }),
     });
     const publicTickets = publicTicketSide(value.capture.markets[market].public);
@@ -187,6 +283,8 @@ async function main(): Promise<void> {
         ...base,
         channel: "rlm",
         side,
+        disagreesWithIndependent: side !== baseIndependentSide,
+        disagreesWithAuthoritative: side !== baseAuthoritativeSide,
         result: settle({ market, side, current: value.family[5], awayScore: result.away_score!, homeScore: result.home_score! }),
       });
     }
@@ -197,6 +295,8 @@ async function main(): Promise<void> {
         ...base,
         channel: `split_${String(sharp?.[1] ?? "unknown")}`,
         side: sharpSide,
+        disagreesWithIndependent: sharpSide !== baseIndependentSide,
+        disagreesWithAuthoritative: sharpSide !== baseAuthoritativeSide,
         result: settle({ market, side: sharpSide, current: value.family[5], awayScore: result.away_score!, homeScore: result.home_score! }),
       });
     }
@@ -206,6 +306,8 @@ async function main(): Promise<void> {
         ...base,
         channel: "split_public",
         side: publicSide,
+        disagreesWithIndependent: publicSide !== baseIndependentSide,
+        disagreesWithAuthoritative: publicSide !== baseAuthoritativeSide,
         result: settle({ market, side: publicSide, current: value.family[5], awayScore: result.away_score!, homeScore: result.home_score! }),
       });
     }
