@@ -69,6 +69,7 @@ export type EplPreviewBuildOptions = {
     deriveCoherentOutcome: typeof deriveEplCoherentMarketOutcome;
     deriveMatchResultDecision: typeof deriveEplMatchResultDecision;
     derivePreviewGrade: typeof deriveEplPreviewGrade;
+    useCoherentMatchResultForecast?: boolean;
     selectMatchResultSide?: (prediction: EplShadowSlateMatch["prediction"]) => {
       release: string;
       side: EplMatchResultSide;
@@ -573,8 +574,10 @@ function gameDto(match: EplShadowSlateMatch, sharp: EplSharpFixtureMarket, captu
   const currentTotalVectors = eplCurrentBookVectors(sharp, "total", capturedAt);
   const evaluatedTotalCanonicalBook = canonicalEplBook(total?.sportsbook ?? null);
   const coherentOutcome = authorities.deriveCoherentOutcome({
+    matchId: match.id,
     independentLambdaHome: match.prediction.lambdaHome,
     independentLambdaAway: match.prediction.lambdaAway,
+    openingOdds: match.openingOdds,
     totalVectors: currentTotalVectors,
     evaluatedMatchResultCanonicalBook: canonicalEplBook(mr?.sportsbook ?? null),
     evaluatedTotalCanonicalBook,
@@ -583,8 +586,20 @@ function gameDto(match: EplShadowSlateMatch, sharp: EplSharpFixtureMarket, captu
     decisionAt: capturedAt,
     kickoff: match.kickoff,
   });
-  const forecastArbitration = authorities.selectMatchResultSide?.(match.prediction) ?? (() => {
-    const probabilities = match.prediction.probabilities;
+  const coherentMatchResult = coherentOutcome.markets.match_result;
+  const forecastPrediction = authorities.useCoherentMatchResultForecast
+    ? {
+        ...match.prediction,
+        probabilities: {
+          ...match.prediction.probabilities,
+          home: coherentMatchResult.home,
+          draw: coherentMatchResult.draw,
+          away: coherentMatchResult.away,
+        },
+      }
+    : match.prediction;
+  const forecastArbitration = authorities.selectMatchResultSide?.(forecastPrediction) ?? (() => {
+    const probabilities = forecastPrediction.probabilities;
     const side = (["home", "draw", "away"] as const).reduce(
       (best, candidate) => probabilities[candidate] > probabilities[best] ? candidate : best,
       "home",
@@ -597,6 +612,7 @@ function gameDto(match: EplShadowSlateMatch, sharp: EplSharpFixtureMarket, captu
   const goalOutlookProbabilities = coherentOutcome.markets;
   const p = {
     ...clubP,
+    ...(authorities.useCoherentMatchResultForecast ? coherentMatchResult : {}),
     over25: coherentOutcome.markets.total.over,
     under25: coherentOutcome.markets.total.under,
     bttsYes: coherentOutcome.markets.btts.yes,

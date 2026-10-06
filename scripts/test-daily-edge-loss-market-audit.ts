@@ -172,6 +172,29 @@ const titleCaseLean = compactAuditRow({
 assert.equal(titleCaseLean.actionable, true, "actionable grade matching must be case-insensitive");
 assert.equal(titleCaseLean.competition, "english_premier_league", "competition identity must survive compaction");
 
+const nhlBestSignal = compactAuditRow({
+  id: 66,
+  sport: "nhl",
+  slate_date: "2026-10-05",
+  matchup: "AWAY @ HOME",
+  market: "moneyline",
+  pick: "HOME",
+  side: "home",
+  line_value: null,
+  odds_american: -120,
+  model_probability: 0.58,
+  market_probability: 0.545,
+  edge: 3.5,
+  play_grade: "best_signal",
+  no_bet: false,
+  no_bet_reason: null,
+  held: false,
+  locked_at: "2026-10-05T23:00:00.000Z",
+  snapshot_json: { model_release: "nhl_regular_2026_r14_best_angle_calibration" },
+  prediction_grades: { result: "win", win: true, loss: false },
+});
+assert.equal(nhlBestSignal.actionable, true, "NHL persisted Best Angle grade tokens must remain actionable in cross-sport loss audits");
+
 const totalEvidence = compactAuditRow({
   id: 7,
   sport: "mlb",

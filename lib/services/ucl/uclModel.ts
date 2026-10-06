@@ -9,7 +9,7 @@ import type { UclCompetitionContext } from "./uclCompetitionContext";
 import { regulationScore } from "./uclCompetitionContext";
 import { UCL_PREVIEW_GRADE_RELEASE } from "./uclPreviewGrade";
 
-export const UCL_MODEL_RELEASE = "ucl_goals_coherent_2026_09_03_r6_authenticated_match_stats_manifest" as const;
+export const UCL_MODEL_RELEASE = "ucl_goals_coherent_2026_10_06_r7_target_excluded_opening_market_score" as const;
 export const UCL_CALIBRATION_RELEASE = UCL_PREVIEW_GRADE_RELEASE;
 export { UCL_COHERENT_MARKET_OUTCOME_RELEASE } from "./uclCoherentMarketOutcome";
 export { UCL_COHERENT_MARKET_OUTCOME_RELEASE as UCL_COHERENT_OUTCOME_RELEASE } from "./uclCoherentMarketOutcome";
