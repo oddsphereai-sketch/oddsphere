@@ -19,6 +19,8 @@ async function main(): Promise<void> {
     throw new Error("BALLDONTLIE_API_KEY, SHARPAPI_KEY, and PLAYBOOK_API_KEY are required.");
   }
   const now = process.argv.find((value) => value.startsWith("--now="))?.slice(6) ?? new Date().toISOString();
+  const matchupArg = process.argv.find((value) => value.startsWith("--matchup="))?.slice(10) ?? "SJSU@USC";
+  const matchups = matchupArg.split(",").map((value) => value.trim().toUpperCase()).filter(Boolean);
   const window = activeCfbWeeklyWindow(now);
   const slate = await fetchBalldontlieNcaafSlate({
     season: 2026,
@@ -27,16 +29,15 @@ async function main(): Promise<void> {
     apiKey: balldontlieApiKey,
   });
   const games = eligibleCfbWeeklyGames(slate.games, window);
-  const target = games.find((game) => game.away.abbreviation === "SJSU" && game.home.abbreviation === "USC");
-  if (!target) throw new Error("Strict SJSU-USC game identity was not present in the current weekly slate.");
+  const targets = matchups.map((matchup) => {
+    const target = games.find((game) => `${game.away.abbreviation}@${game.home.abbreviation}`.toUpperCase() === matchup);
+    if (!target) throw new Error(`Strict ${matchup} game identity was not present in the current weekly slate.`);
+    return target;
+  });
   const [sharp, playbookResult] = await Promise.all([
-    fetchSharpApiNcaafOddsFallback({ games: [target], apiKey: sharpApiKey, maximumRequests: 16 }),
+    fetchSharpApiNcaafOddsFallback({ games: targets, apiKey: sharpApiKey, maximumRequests: Math.min(64, 8 + targets.length * 5) }),
     new PlaybookClient(playbookApiKey).lines("ncaaf"),
   ]);
-  const playbookRow = (playbookResult.body.data ?? []).find((row) => matchCfbPlaybookRow(target, row));
-  const playbookLine = playbookRow ? normalizeCfbPlaybookLine(playbookRow, now) : null;
-  const bdlBooks = slate.currentOddsAllBooksByGame[target.providerGameId] ?? [];
-  const sharpBooks = sharp.displayBooksByGame[target.providerGameId] ?? [];
   console.log(JSON.stringify({
     release: "cfb_paid_book_coverage_audit_2026_08_28_r21",
     readOnly: true,
@@ -48,17 +49,23 @@ async function main(): Promise<void> {
       playbook: 1,
     },
     slate: { games: games.length, markets: games.length * 3 },
-    target: {
-      providerGameId: target.providerGameId,
-      matchup: `${target.away.abbreviation}@${target.home.abbreviation}`,
-      startsAt: target.scheduledStart,
-      balldontlie: summarizeBooks(bdlBooks),
-      sharpapi: {
-        eventId: sharp.eventIdsByGame[target.providerGameId],
-        ...summarizeBooks(sharpBooks),
-      },
-      playbook: playbookLine,
-    },
+    targets: targets.map((target) => {
+      const playbookRow = (playbookResult.body.data ?? []).find((row) => matchCfbPlaybookRow(target, row));
+      const playbookLine = playbookRow ? normalizeCfbPlaybookLine(playbookRow, now) : null;
+      return {
+        providerGameId: target.providerGameId,
+        matchup: `${target.away.abbreviation}@${target.home.abbreviation}`,
+        startsAt: target.scheduledStart,
+        balldontlie: summarizeBooks(slate.currentOddsAllBooksByGame[target.providerGameId] ?? []),
+        sharpapi: {
+          eventId: sharp.eventIdsByGame[target.providerGameId],
+          discoveryStatus: sharp.eventDiscoveryStatusByGame[target.providerGameId],
+          failure: sharp.failuresByGame[target.providerGameId] ?? null,
+          ...summarizeBooks(sharp.displayBooksByGame[target.providerGameId] ?? []),
+        },
+        playbook: playbookLine,
+      };
+    }),
   }, null, 2));
 }
 

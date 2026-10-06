@@ -219,11 +219,13 @@ Last reviewed: 2026-10-06
 
 ## CFB Daily Edge generalized weekly production release
 
-### Missing-price forecast continuity, hourly freshness and bounded fallback rotation (collector r43; writer r96)
+### Zero-price fallback priority and monotonic snapshot publication (collector r44; writer r97; snapshot r30)
 
 - Active collector / sole writer releases are
-  `cfb_forward_evidence_collector_2026_10_06_r43_hourly_market_freshness` /
-  `cfb_forward_evidence_writer_2026_10_06_r96_hourly_market_freshness`; shared presentation is
+  `cfb_forward_evidence_collector_2026_10_06_r44_zero_price_fallback_priority` /
+  `cfb_forward_evidence_writer_2026_10_06_r97_zero_price_fallback_priority`; compact snapshot /
+  reader are `cfb_forward_member_snapshot_2026_10_06_r30_monotonic_publication_time` /
+  `cfb_member_snapshot_reader_2026_10_06_r15_monotonic_publication_time`; shared presentation is
   `daily_edge_member_presentation_2026_10_06_r23_cfb_score_outlook_continuity`.
   Independent score, PMF, probabilities, market arbitration, decisions, grades, fixture, compact
   snapshot, lock and tracking releases remain unchanged.
@@ -233,16 +235,24 @@ Last reviewed: 2026-10-06
   now retain the authoritative score-derived projected margin/total instead of showing an
   unavailable label. All 62 exact-price contracts remain No Play; no price or betting line is
   inferred.
-- The existing 24-game SharpAPI fallback budget prioritizes rows deferred by the prior bounded
-  cycle before retrying already-attempted rows. The 192-request ceiling, one
+- Within the existing 24-game SharpAPI fallback budget, games with zero verified paired prices are
+  attempted before games that already have a price but need broader consensus. Prior-cycle
+  deferrals still rotate first within the same coverage tier. The 192-request ceiling, one
   `prediction_pipeline:cfb` lease and single append path remain unchanged. Every unlocked game is
   now collected at least hourly instead of waiting six hours early in the week. If Playbook or
   SharpAPI temporarily omits a previously verified exact-game line/split observation, the writer
   retains it with its original timestamp until fresher evidence silently replaces it; existing
   sport-specific freshness gates still exclude old evidence from forecast arbitration.
+- Snapshot `publishedAt` is now the later of writer start and the newest included provider
+  observation, so a response received during a run cannot create a negative publication lag or an
+  apparently pre-published source. The immediately preceding r29 snapshot remains the sole reader
+  fallback during deployment; fixture, evidence, member, prediction, grade, lock and tracking
+  releases are unchanged.
 - Board impact is zero promotions, zero demotions and zero exact-tuple changes. Evidence and
   rollback are recorded in
   `docs/model-audits/2026-10-06-cfb-missing-price-forecast-continuity-predeclaration.md`.
+  The priority and timestamp repair is documented in
+  `docs/model-audits/2026-10-06-cfb-zero-price-fallback-priority.md`.
 
 ### Moneyline market-confirmation grade repair (decision r39; writer r94)
 

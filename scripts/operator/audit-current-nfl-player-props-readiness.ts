@@ -20,6 +20,14 @@ const client = createClient(supabaseUrl, supabaseKey, { auth: { persistSession: 
 const record = await readNflPlayerPropsSnapshotRecord({ client, season, week });
 if (!record) throw new Error(`NFL props snapshot is unavailable for ${season} Week ${week}.`);
 const snapshot = record.snapshot;
+const memberRows = snapshot.memberDecisions;
+const memberScopes = new Map<string, typeof memberRows>();
+for (const row of memberRows) {
+  const key = [row.gameId, row.playerName.toLowerCase().replace(/[^a-z0-9]/g, ""), row.team, row.market].join("|");
+  memberScopes.set(key, [...(memberScopes.get(key) ?? []), row]);
+}
+const duplicateMemberLineScopes = [...memberScopes.entries()].filter(([, scopeRows]) =>
+  new Set(scopeRows.map((row) => row.line)).size > 1);
 const rows = snapshot.board.decisions.map((row) => ({
   market: row.market,
   side: row.side,
@@ -71,6 +79,13 @@ const report = {
   oldestUnlockedQuoteAgeMinutes: oldestUnlockedAgeMinutes,
   release: snapshot.release,
   rows: rows.length,
+  memberRows: memberRows.length,
+  memberMarketScopes: memberScopes.size,
+  duplicateMemberLineScopes: duplicateMemberLineScopes.length,
+  duplicateMemberLineExamples: duplicateMemberLineScopes.slice(0, 10).map(([scope, scopeRows]) => ({
+    scope,
+    lines: [...new Set(scopeRows.map((row) => row.line))].sort((a, b) => a - b),
+  })),
   grades: counts(rows),
   candidateGrades: Object.fromEntries(
     ["Best Angle", "Lean", "Watchlist", "No Play", "Held"].map((grade) => [grade, rows.filter((row) => row.candidateGrade === grade).length]),
@@ -125,6 +140,10 @@ console.log(JSON.stringify(process.argv.includes("--summary") ? {
   generatedAgeMinutes: report.generatedAgeMinutes,
   oldestUnlockedQuoteAgeMinutes: report.oldestUnlockedQuoteAgeMinutes,
   rows: report.rows,
+  memberRows: report.memberRows,
+  memberMarketScopes: report.memberMarketScopes,
+  duplicateMemberLineScopes: report.duplicateMemberLineScopes,
+  duplicateMemberLineExamples: report.duplicateMemberLineExamples,
   grades: report.grades,
   candidateGrades: report.candidateGrades,
   candidateImpact: report.candidateImpact,

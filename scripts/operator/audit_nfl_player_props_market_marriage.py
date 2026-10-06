@@ -135,6 +135,56 @@ def disagreement(rows: list[dict[str, Any]], evidence_field: str) -> dict[str, A
     }
 
 
+def chronological_game_split(rows: list[dict[str, Any]]) -> dict[str, list[dict[str, Any]]]:
+    ordered_games = sorted(
+        {str(row["gameId"]): str(row["lockAt"]) for row in rows}.items(),
+        key=lambda item: (item[1], item[0]),
+    )
+    midpoint = max(1, len(ordered_games) // 2)
+    selection_games = {game for game, _ in ordered_games[:midpoint]}
+    confirmation_games = {game for game, _ in ordered_games[midpoint:]}
+    return {
+        "selection": [row for row in rows if str(row["gameId"]) in selection_games],
+        "confirmation": [row for row in rows if str(row["gameId"]) in confirmation_games],
+    }
+
+
+def weight_tournament(rows: list[dict[str, Any]]) -> dict[str, Any]:
+    candidates = (0.0, 0.1, 0.2, 0.35, 0.5, 0.75, 1.0)
+    periods = chronological_game_split(rows)
+    result: dict[str, Any] = {"games": {
+        period: len({str(row["gameId"]) for row in period_rows})
+        for period, period_rows in periods.items()
+    }, "byMarket": {}}
+    for market in sorted({str(row["market"]) for row in rows}):
+        selection = [row for row in periods["selection"] if row["market"] == market]
+        confirmation = [row for row in periods["confirmation"] if row["market"] == market]
+        scored = []
+        for weight in candidates:
+            field = f"chronological_blend_{weight:g}"
+            for row in rows:
+                row[field] = sigmoid((1 - weight) * logit(float(row["marketProbability"])) + weight * logit(float(row["rawProbability"])))
+            scored.append((weight, metrics(selection, field)))
+        selected_weight, selected_metrics = min(
+            scored,
+            key=lambda item: (float(item[1]["brier"]), -float(item[1]["directionAccuracy"]), item[0]),
+        )
+        selected_field = f"chronological_blend_{selected_weight:g}"
+        incumbent_selection = metrics(selection, "finalProbability")
+        incumbent_confirmation = metrics(confirmation, "finalProbability")
+        candidate_confirmation = metrics(confirmation, selected_field)
+        result["byMarket"][market] = {
+            "selectedModelWeight": selected_weight,
+            "selection": {"incumbent": incumbent_selection, "candidate": selected_metrics},
+            "confirmation": {"incumbent": incumbent_confirmation, "candidate": candidate_confirmation},
+            "confirmationPass": (
+                candidate_confirmation["brier"] <= incumbent_confirmation["brier"]
+                and candidate_confirmation["directionAccuracy"] >= incumbent_confirmation["directionAccuracy"]
+            ),
+        }
+    return result
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--input", type=pathlib.Path, default=DEFAULT_INPUT)
@@ -162,6 +212,7 @@ def main() -> None:
             "retailDisagreement": disagreement(rows, "retailProbability"),
             "movementDisagreement": disagreement(rows, "movementProbability"),
         },
+        "chronologicalWeightTournament": weight_tournament(rows),
         "byMarket": {},
     }
     for market in markets:

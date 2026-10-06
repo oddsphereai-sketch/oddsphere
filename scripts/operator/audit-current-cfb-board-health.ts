@@ -77,6 +77,7 @@ async function main(): Promise<void> {
       source: dto.currentPriceSportsbook ?? dto.marketSource,
       quality: dto.marketDataQuality,
       trailLength: dto.oddsTrail?.length ?? 0,
+      reviewFlags: dto.reviewFlags ?? [],
     };
   }));
   const projections = games.map((game) => {
@@ -171,11 +172,16 @@ async function main(): Promise<void> {
       missingFbsInvolved: summaryOnly ? missingPrice.filter((row) => row.scope === "fbs_involved").length : missingPrice.filter((row) => row.scope === "fbs_involved"),
       upcomingMissingCurrentPrice: upcomingMissingPrice.length,
       upcomingMissingCurrentPriceByScopeAndMarket: count(upcomingMissingPrice, (row) => `${row.scope}:${row.market}`),
+      upcomingMissingReviewFlags: count(
+        upcomingMissingPrice.flatMap((row) => row.reviewFlags),
+        (flag) => flag,
+      ),
       upcomingMissingPriceSample: upcomingMissingPrice.map((row) => ({
         matchup: row.matchup,
         startsAt: row.startsAt,
         scope: row.scope,
         market: row.market,
+        reviewFlags: row.reviewFlags,
       })),
       zeroTrail: zeroTrail.length,
       zeroTrailByMarket: count(zeroTrail, (row) => row.market),

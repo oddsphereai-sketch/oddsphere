@@ -11,17 +11,17 @@ import {
 } from "./cfbMemberFixture";
 
 export const CFB_FORWARD_MEMBER_SNAPSHOT_RELEASE =
-  "cfb_forward_member_snapshot_2026_10_04_r29_moneyline_market_confirmation" as const;
+  "cfb_forward_member_snapshot_2026_10_06_r30_monotonic_publication_time" as const;
 export const CFB_FORWARD_PREVIOUS_MEMBER_SNAPSHOT_RELEASE =
-  "cfb_forward_member_snapshot_2026_10_03_r28_t60_accuracy_lock" as const;
+  "cfb_forward_member_snapshot_2026_10_04_r29_moneyline_market_confirmation" as const;
 export const CFB_PREVIOUS_MEMBER_FIXTURE_RELEASE =
-  "cfb_v1_member_fixture_2026_10_03_r69_t60_accuracy_lock" as const;
+  "cfb_v1_member_fixture_2026_10_04_r70_moneyline_market_confirmation" as const;
 export const CFB_PREVIOUS_EVIDENCE_RELEASE =
-  "cfb_forward_evidence_snapshot_2026_10_03_r33_display_context_outlook" as const;
+  "cfb_forward_evidence_snapshot_2026_10_04_r34_moneyline_market_confirmation" as const;
 export const CFB_PREVIOUS_MEMBER_RELEASE =
-  "cfb_v1_member_release_2026_10_03_r47_display_context_outlook" as const;
+  "cfb_v1_member_release_2026_10_04_r48_moneyline_market_confirmation" as const;
 export const CFB_MEMBER_SNAPSHOT_READER_RELEASE =
-  "cfb_member_snapshot_reader_2026_10_04_r14_moneyline_market_confirmation" as const;
+  "cfb_member_snapshot_reader_2026_10_06_r15_monotonic_publication_time" as const;
 
 export const CFB_FORWARD_MEMBER_SNAPSHOT_MAX_JSON_BYTES = 8_000_000;
 export const CFB_FORWARD_MEMBER_SNAPSHOT_MAX_GZIP_BYTES = 1_000_000;
@@ -101,6 +101,11 @@ export function buildCfbForwardMemberSnapshot(input: {
   if (!/^[a-f0-9]{64}$/.test(input.fixture.provenance.sourceChecksum)) {
     throw new Error("CFB compact member snapshot source checksum is invalid.");
   }
+  const requestedPublishedAt = Date.parse(input.publishedAt);
+  const sourceCapturedAt = Date.parse(input.fixture.capturedAt);
+  if (!Number.isFinite(requestedPublishedAt) || !Number.isFinite(sourceCapturedAt)) {
+    throw new Error("CFB compact member snapshot timestamps are invalid.");
+  }
   return {
     snapshotRelease: CFB_FORWARD_MEMBER_SNAPSHOT_RELEASE,
     evidenceRelease: CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE,
@@ -108,7 +113,7 @@ export function buildCfbForwardMemberSnapshot(input: {
     fixtureRelease: CFB_MEMBER_FIXTURE_RELEASE,
     season: input.season,
     sourceCapturedAt: input.fixture.capturedAt,
-    publishedAt: new Date(input.publishedAt).toISOString(),
+    publishedAt: new Date(Math.max(requestedPublishedAt, sourceCapturedAt)).toISOString(),
     sourceChecksum: input.fixture.provenance.sourceChecksum,
     fixture: input.fixture,
   };

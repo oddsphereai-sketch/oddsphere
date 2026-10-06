@@ -34,6 +34,11 @@ type MarketAuditRow = {
   candidateGrade: string;
   incumbentProbability: number;
   candidateProbability: number;
+  candidateMarketFairProbability: number;
+  candidateExpectedValue: number;
+  candidateEdgePercentagePoints: number;
+  candidateLine: number | null;
+  candidatePrice: number;
   incumbentResult: Result;
   candidateResult: Result;
   winnerCoherence: unknown;
@@ -111,6 +116,31 @@ function summarize(rows: MarketAuditRow[], prefix: "incumbent" | "candidate") {
       rows.filter((row) => rowGrade(row) === grade).length,
     ])),
   };
+}
+
+function summarizeByGrade(rows: MarketAuditRow[], prefix: "incumbent" | "candidate") {
+  const rowResult = (row: MarketAuditRow) => prefix === "incumbent" ? row.incumbentResult : row.candidateResult;
+  const rowGrade = (row: MarketAuditRow) => prefix === "incumbent" ? row.incumbentGrade : row.candidateGrade;
+  return Object.fromEntries(["Best Angle", "Lean", "Watchlist", "No Play"].map((grade) => {
+    const selected = rows.filter((row) => rowGrade(row) === grade && rowResult(row) !== "push");
+    const wins = selected.filter((row) => rowResult(row) === "win").length;
+    return [grade, {
+      settled: selected.length,
+      wins,
+      losses: selected.length - wins,
+      accuracy: selected.length ? wins / selected.length : null,
+      byMarket: Object.fromEntries((["moneyline", "spread", "total"] as Market[]).map((market) => {
+        const marketRows = selected.filter((row) => row.market === market);
+        const marketWins = marketRows.filter((row) => rowResult(row) === "win").length;
+        return [market, {
+          settled: marketRows.length,
+          wins: marketWins,
+          losses: marketRows.length - marketWins,
+          accuracy: marketRows.length ? marketWins / marketRows.length : null,
+        }];
+      })),
+    }];
+  }));
 }
 
 function scoreSummary(games: GameAuditRow[], prefix: "incumbent" | "candidate") {
@@ -262,6 +292,11 @@ async function main() {
         candidateGrade: candidate.grade,
         incumbentProbability: incumbent.modelProbability,
         candidateProbability: candidate.modelProbability,
+        candidateMarketFairProbability: candidate.marketFairProbability,
+        candidateExpectedValue: candidate.expectedValue,
+        candidateEdgePercentagePoints: 100 * (candidate.modelProbability - candidate.marketFairProbability),
+        candidateLine: candidate.evaluatedQuote.line,
+        candidatePrice: candidate.evaluatedQuote.price,
         incumbentResult,
         candidateResult,
         winnerCoherence: resolved.outcome.marketEvidence?.winnerCoherence ?? null,
@@ -303,10 +338,15 @@ async function main() {
       candidate: scoreSummary(games, "candidate"),
     },
     byMarket,
+    byGrade: {
+      incumbent: summarizeByGrade(marketRows, "incumbent"),
+      candidate: summarizeByGrade(marketRows, "candidate"),
+    },
     totalInvariant: games.every((row) => row.totalUnchanged),
     changedGames: games.filter((row) =>
       Math.abs(row.incumbentAway - row.candidateAway) > 1e-9 ||
       Math.abs(row.incumbentHome - row.candidateHome) > 1e-9),
+    marketRows,
   };
   console.log(JSON.stringify(report, null, 2));
 }
