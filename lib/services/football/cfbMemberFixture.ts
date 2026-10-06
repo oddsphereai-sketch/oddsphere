@@ -88,7 +88,7 @@ import { cfbTeamIdentity } from "./cfbTeamIdentity";
 import { CFB_PUBLIC_SCORE_DIRECTION_TOLERANCE_POINTS } from "./footballCrossMarketCoherence";
 
 export const CFB_MEMBER_FIXTURE_RELEASE =
-  "cfb_v1_member_fixture_2026_10_04_r70_moneyline_market_confirmation" as const;
+  "cfb_v1_member_fixture_2026_10_06_r71_midweek_board_coverage" as const;
 export const CFB_PUBLIC_OUTCOME_CONTRACT_RELEASE =
   "cfb_market_sharp_public_outcome_contract_2026_10_04_r64_moneyline_market_confirmation" as const;
 export const CFB_CONTEXT_ONLY_QUOTE_CAPTURE_SKEW_MS = 5_000 as const;
@@ -175,7 +175,7 @@ export function buildCfbMemberFixture(
     capturedAt,
     snapshot: { as_of: capturedAt, sport: "cfb", date, requested_date: date, fallback_used: false, slateState: "today_draft_only", slate_status: "cfb_week_one_model_live", last_slate_update_at: capturedAt, games },
     history: {},
-    week: { label: selectedWindows.map(({ window }) => window.boardStartDate === "2026-08-27" ? "Opening Week" : `Week of ${shortDate(window.boardStartDate)}`).join(" + ") },
+    week: { label: selectedWindows.map(({ window }) => window.boardStartDate === "2026-08-25" ? "Opening Week" : `Week of ${shortDate(window.boardStartDate)}`).join(" + ") },
     provenance: {
       sourceChecksum,
       openingCoverageGames: latest.filter((row) => row.payload.market.operationalOpening !== null).length,

@@ -219,16 +219,25 @@ Last reviewed: 2026-10-06
 
 ## CFB Daily Edge generalized weekly production release
 
-### Zero-price fallback priority and monotonic snapshot publication (collector r44; writer r97; snapshot r30)
+### Tuesday-through-Monday midweek coverage (window r5; collector r45; writer r98; fixture r71; snapshot r31)
 
-- Active collector / sole writer releases are
-  `cfb_forward_evidence_collector_2026_10_06_r44_zero_price_fallback_priority` /
-  `cfb_forward_evidence_writer_2026_10_06_r97_zero_price_fallback_priority`; compact snapshot /
-  reader are `cfb_forward_member_snapshot_2026_10_06_r30_monotonic_publication_time` /
-  `cfb_member_snapshot_reader_2026_10_06_r15_monotonic_publication_time`; shared presentation is
+- Active weekly window / collector / sole writer releases are
+  `cfb_weekly_window_2026_10_06_r5_midweek_board_coverage` /
+  `cfb_forward_evidence_collector_2026_10_06_r45_midweek_board_coverage` /
+  `cfb_forward_evidence_writer_2026_10_06_r98_midweek_board_coverage`; member fixture / compact
+  snapshot / reader are `cfb_v1_member_fixture_2026_10_06_r71_midweek_board_coverage` /
+  `cfb_forward_member_snapshot_2026_10_06_r31_midweek_board_coverage` /
+  `cfb_member_snapshot_reader_2026_10_06_r16_midweek_board_coverage`; shared presentation is
   `daily_edge_member_presentation_2026_10_06_r23_cfb_score_outlook_continuity`.
-  Independent score, PMF, probabilities, market arbitration, decisions, grades, fixture, compact
-  snapshot, lock and tracking releases remain unchanged.
+  Independent score, PMF, probabilities, market arbitration, decisions, grades, lock and tracking
+  releases remain unchanged.
+- The authoritative product week now covers Tuesday through Monday Eastern instead of dropping
+  Tuesday and Wednesday FBS games from an otherwise complete weekly board. Sunday lookahead still
+  preserves the active board while seeding only the adjacent next window. The provider query keeps
+  the same bounded eight-date UTC-safe maximum; the writer, sport-scoped lease, model, market
+  reader, T-60 lock and tracking paths are unchanged. Southern Miss at Troy, Jacksonville State at
+  Kennesaw State, and New Mexico State at Florida International are the production acceptance
+  cases for the October 6-12 window.
 - The current 86-game slate has complete model scores and winner forecasts. Playbook presently
   supplies complete Moneyline, Spread and Total rows for all 55 FBS-involved games; 31 visible
   FCS-only games do not yet have a verified Spread or Total quote. Those 62 prediction surfaces
@@ -253,6 +262,8 @@ Last reviewed: 2026-10-06
   `docs/model-audits/2026-10-06-cfb-missing-price-forecast-continuity-predeclaration.md`.
   The priority and timestamp repair is documented in
   `docs/model-audits/2026-10-06-cfb-zero-price-fallback-priority.md`.
+  Midweek coverage evidence and rollback are documented in
+  `docs/model-audits/2026-10-06-cfb-midweek-board-coverage.md`.
 
 ### Moneyline market-confirmation grade repair (decision r39; writer r94)
 
