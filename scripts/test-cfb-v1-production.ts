@@ -1649,6 +1649,59 @@ assert.ok(Math.abs((heldGame.markets.first_inning.modelProb ?? 0) - heldProbabil
 assert.ok(Math.abs((heldGame.markets.total.modelProb ?? 0) - heldProbabilities.total.over) < 1e-12, "Held Total must retain the same-PMF probability at the Playbook context line");
 assert.equal(heldGame.markets.first_inning.line, -7.5);
 assert.equal(heldGame.markets.total.line, 47.5);
+
+const freshSharpCapturedAt = new Date(Date.parse(observedAt) + 60 * 60_000).toISOString();
+const staleDisplayBook: NcaafBookOdds = {
+  ...book("rebet", -425, 320, -7.5, -119, -101, 47.5, -114, -106),
+  provider: "sharpapi",
+  targetEligible: false,
+};
+const circaOpening: NcaafBookOdds = {
+  ...book("circa", -405, 330, -7.5, -110, -110, 47.5, -110, -110),
+  provider: "sharpapi",
+  targetEligible: false,
+};
+const circaCurrent: NcaafBookOdds = {
+  ...book("circa", -400, 325, -7, -105, -115, 47.5, -110, -110),
+  observedAt: freshSharpCapturedAt,
+  provider: "sharpapi",
+  targetEligible: false,
+};
+const freshSharpContextPayload = structuredClone(heldPayload);
+freshSharpContextPayload.capturedAt = freshSharpCapturedAt;
+freshSharpContextPayload.cutoffAt = freshSharpCapturedAt;
+freshSharpContextPayload.market.displayBooks = [staleDisplayBook];
+freshSharpContextPayload.contextualEvidenceCapture = buildCfbForwardContextCapture({
+  payload: freshSharpContextPayload,
+  captureCurrentBooks: [circaCurrent],
+  independentForecast: forecast,
+  independentRelease: CFB_V1_WEEKLY_RUNTIME_RELEASE,
+  authoritativeForecast: forecast,
+  openingBooks: [circaOpening],
+})!;
+const freshSharpContextGame = buildCfbMemberFixture([{
+  ...evidence,
+  id: "fresh-sharp-context-held-row",
+  stage: "unlocked",
+  capturedAt: freshSharpCapturedAt,
+  payloadSha256: hashCfbForwardEvidencePayload(freshSharpContextPayload),
+  payload: freshSharpContextPayload,
+}], "2026-08-29T15:10:00.000Z").snapshot.games[0]!;
+for (const marketKey of ["moneyline", "total", "first_inning"] as const) {
+  const market = freshSharpContextGame.markets[marketKey];
+  assert.equal(market.held, true, `${marketKey} fresh sharp context cannot manufacture an exact-price grade`);
+  assert.equal(market.pick, null, `${marketKey} fresh sharp context cannot manufacture a Bet selection`);
+  assert.equal(market.priceAmerican, null, `${marketKey} fresh sharp context cannot become the evaluated price`);
+  assert.equal(market.currentPriceSportsbook, "circa", `${marketKey} must prefer the fresher verified sharp-book pair over stale display fallback`);
+  assert.equal(market.oddsTrail?.at(0)?.sportsbook, "circa", `${marketKey} opening trail must remain same-book`);
+  assert.equal(market.oddsTrail?.at(-1)?.sportsbook, "circa", `${marketKey} current trail must remain same-book`);
+  assert.equal(market.oddsTrail?.at(0)?.observedAt, observedAt, `${marketKey} must retain the real sharp-book opening timestamp`);
+  assert.equal(market.oddsTrail?.at(-1)?.observedAt, freshSharpCapturedAt, `${marketKey} must retain the real sharp-book current timestamp`);
+}
+assert.equal(freshSharpContextGame.markets.moneyline.currentPriceAmerican, -400);
+assert.equal(freshSharpContextGame.markets.first_inning.currentPriceAmerican, -105);
+assert.equal(freshSharpContextGame.markets.first_inning.oddsTrail?.at(-1)?.line, -7);
+assert.equal(freshSharpContextGame.markets.total.currentPriceAmerican, -110);
 assert.deepEqual(heldGame.markets.first_inning.marketPrediction, {
   status: "available",
   label: heldProbabilities.spread.home >= heldProbabilities.spread.away ? "TCU -7.5" : "UNC +7.5",

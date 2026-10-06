@@ -45,11 +45,30 @@ function decisionIdentity(row: AuditMarketRow) {
     market: row.market,
     pick: market?.pick ?? null,
     held: market?.held ?? null,
-    line: market?.line ?? null,
+    marketPrediction: market?.marketPrediction ?? null,
     modelProb: market?.modelProb ?? null,
     marketFairProb: market?.marketFairProb ?? null,
     priceAmerican: market?.priceAmerican ?? null,
     currentPriceAmerican: market?.currentPriceAmerican ?? null,
+    grade: market?.grade ?? null,
+    rawGrade: market?.rawGrade ?? null,
+    finalGrade: market?.finalGrade ?? null,
+    verdict: market?.verdict ?? null,
+    actionabilityLabel: market?.actionabilityLabel ?? null,
+  };
+}
+
+function forecastAndGradeIdentity(row: AuditMarketRow) {
+  const market = row.value;
+  return {
+    gameId: row.gameId,
+    market: row.market,
+    pick: market?.pick ?? null,
+    held: market?.held ?? null,
+    marketPrediction: market?.marketPrediction ?? null,
+    modelProb: market?.modelProb ?? null,
+    marketFairProb: market?.marketFairProb ?? null,
+    priceAmerican: market?.priceAmerican ?? null,
     grade: market?.grade ?? null,
     rawGrade: market?.rawGrade ?? null,
     finalGrade: market?.finalGrade ?? null,
@@ -70,10 +89,20 @@ async function main() {
   const beforeRows = markets(before.fixture);
   const candidateRows = markets(candidateFixture);
   const beforeIdentity = new Map(beforeRows.map((row) => [`${row.gameId}:${row.market}`, decisionIdentity(row)]));
+  const beforeForecastAndGradeIdentity = new Map(beforeRows.map((row) => [
+    `${row.gameId}:${row.market}`,
+    forecastAndGradeIdentity(row),
+  ]));
   const changedDecisions = candidateRows.flatMap((row) => {
     const key = `${row.gameId}:${row.market}`;
     const prior = beforeIdentity.get(key);
     const next = decisionIdentity(row);
+    return JSON.stringify(prior) === JSON.stringify(next) ? [] : [{ key, prior, next }];
+  });
+  const changedForecastsAndGrades = candidateRows.flatMap((row) => {
+    const key = `${row.gameId}:${row.market}`;
+    const prior = beforeForecastAndGradeIdentity.get(key);
+    const next = forecastAndGradeIdentity(row);
     return JSON.stringify(prior) === JSON.stringify(next) ? [] : [{ key, prior, next }];
   });
   const multiPoint = (rows: AuditMarketRow[]) => rows.filter((row) => (row.value?.oddsTrail?.length ?? 0) >= 2).length;
@@ -92,6 +121,9 @@ async function main() {
         return [market, {
           pick: value.pick,
           grade: value.verdict.label,
+          line: value.line,
+          modelProb: value.modelProb,
+          marketPrediction: value.marketPrediction,
           sportsbook: value.currentPriceSportsbook,
           price: value.currentPriceAmerican,
           trail: value.oddsTrail,
@@ -140,6 +172,8 @@ async function main() {
     },
     changedDecisionCount: changedDecisions.length,
     changedDecisionSample: changedDecisions.slice(0, 10),
+    changedForecastAndGradeCount: changedForecastsAndGrades.length,
+    changedForecastAndGradeSample: changedForecastsAndGrades.slice(0, 10),
     focusGames,
     focusCaptures,
   }, null, 2));
