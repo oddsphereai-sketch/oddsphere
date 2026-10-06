@@ -103,7 +103,7 @@ import {
 import type { PlaybookInjuryTeamRow } from "@/lib/providers/playbook/types";
 
 export const CFB_FORWARD_WRITER_RELEASE =
-  "cfb_forward_evidence_writer_2026_10_04_r94_moneyline_market_confirmation" as const;
+  "cfb_forward_evidence_writer_2026_10_06_r96_hourly_market_freshness" as const;
 export const CFB_FORWARD_MAX_QB_TEAMS_PER_RUN = 24 as const;
 export const CFB_FORWARD_MAX_SHARP_FALLBACK_GAMES_PER_RUN = 24 as const;
 export const CFB_FORWARD_MAX_ESPN_PROSPECTIVE_GAMES_PER_RUN = 32 as const;
@@ -309,6 +309,7 @@ export async function runCfbForwardEvidenceWriter(args: {
   const sharpFallbackGames = need.reason === "reference_line_completion_due" ? [] : selectCfbSharpFallbackGames({
     games: sharpFallbackCandidates,
     trustedEventIdsByGame: trustedSharpEventIdsByGame,
+    latestByGame,
     maximum: CFB_FORWARD_MAX_SHARP_FALLBACK_GAMES_PER_RUN,
   });
   const sharpFallbackGameIds = new Set(sharpFallbackGames.map((game) => game.providerGameId));
@@ -445,10 +446,18 @@ export async function runCfbForwardEvidenceWriter(args: {
       previousMarket?.playbookSplits ?? null,
     );
     const priorSpreadSplits = captureHistorySpreadSplitsByGame.get(plan.game.providerGameId) ?? [];
-    const sharpApiSplits = sharpSplitsAttempt.result?.recordsByGame[plan.game.providerGameId] ?? [];
+    const freshSharpApiSplits = sharpSplitsAttempt.result?.recordsByGame[plan.game.providerGameId] ?? [];
+    // A provider omission must not erase the last verified fallback. Preserve
+    // its original timestamp so the existing sport-specific freshness gates
+    // can exclude it from forecast arbitration after 120 minutes while the
+    // member split section remains continuous until a fresher observation
+    // silently replaces it.
+    const sharpApiSplits = freshSharpApiSplits.length > 0
+      ? freshSharpApiSplits
+      : previousMarket?.sharpApiSplits ?? [];
     const sharpApiSplitsStatus = sharpSplitsAttempt.result === null
       ? "request_failed" as const
-      : sharpApiSplits.length > 0
+      : freshSharpApiSplits.length > 0
         ? "matched" as const
         : "event_not_published" as const;
     const capturedAt = latestCfbPayloadTimestamp({
@@ -797,14 +806,22 @@ export function trustedCfbSharpEventIdsByGame(rows: CfbForwardStoredEvidence[]):
 export function selectCfbSharpFallbackGames(args: {
   games: NcaafGame[];
   trustedEventIdsByGame: Readonly<Record<string, string>>;
+  latestByGame?: ReadonlyMap<string, CfbForwardStoredEvidence>;
   maximum: number;
 }): NcaafGame[] {
   if (!Number.isInteger(args.maximum) || args.maximum < 0) {
     throw new Error("CFB SharpAPI fallback game budget must be a nonnegative integer.");
   }
+  const attemptPriority = (game: NcaafGame): number => {
+    if (!args.latestByGame) return args.trustedEventIdsByGame[game.providerGameId] ? 1 : 0;
+    const payload = args.latestByGame?.get(game.providerGameId)?.payload;
+    if (!payload || payload.coverage.availabilityWarnings.includes("sharpapi_odds_fallback_deferred")) return 0;
+    if (!args.trustedEventIdsByGame[game.providerGameId]) return 1;
+    return 2;
+  };
   return [...new Map(args.games.map((game) => [game.providerGameId, game])).values()]
     .sort((first, second) =>
-      Number(Boolean(args.trustedEventIdsByGame[first.providerGameId])) - Number(Boolean(args.trustedEventIdsByGame[second.providerGameId])) ||
+      attemptPriority(first) - attemptPriority(second) ||
       Date.parse(first.scheduledStart) - Date.parse(second.scheduledStart) ||
       first.providerGameId.localeCompare(second.providerGameId))
     .slice(0, args.maximum);

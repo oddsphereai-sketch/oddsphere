@@ -94,7 +94,7 @@ import {
 } from "./balldontlieNflWeeklyProjectionShadow";
 
 export const NFL_FORWARD_WRITER_RELEASE =
-  "nfl_forward_evidence_writer_2026_10_05_r53_winner_coherence" as const;
+  "nfl_forward_evidence_writer_2026_10_06_r54_hourly_market_freshness" as const;
 
 export type NflForwardWriterResult = {
   writerRelease: typeof NFL_FORWARD_WRITER_RELEASE;
@@ -336,10 +336,18 @@ export async function runNflForwardEvidenceWriter(args: {
     const awayDepth = depthForTeam(plan.game.away.abbreviation, rosters.byTeam, previous, "away");
     const homeDepth = depthForTeam(plan.game.home.abbreviation, rosters.byTeam, previous, "home");
     const playbookLine = linesByGame[plan.game.providerGameId]
-      ? normalizePlaybookLine(capturedAt, linesByGame[plan.game.providerGameId]!) : null;
+      ? normalizePlaybookLine(capturedAt, linesByGame[plan.game.providerGameId]!)
+      : previous?.payload.market.playbookLine ?? null;
     const playbookSplits = splitsByGame[plan.game.providerGameId]
-      ? normalizePlaybookSplits(capturedAt, splitsByGame[plan.game.providerGameId]!) : null;
-    const sharpSplits = sharpResult.splitsByGame[plan.game.providerGameId] ?? null;
+      ? normalizePlaybookSplits(capturedAt, splitsByGame[plan.game.providerGameId]!)
+      : previous?.payload.market.playbookSplits ?? null;
+    // Preserve the last verified observation with its original provider time.
+    // The NFL market reader already ignores split evidence older than two
+    // hours, so retention protects continuity without treating old evidence as
+    // a fresh forecast input.
+    const sharpSplits = sharpResult.splitsByGame[plan.game.providerGameId]
+      ?? previous?.payload.market.sharpApiSplits
+      ?? null;
     const injuries = availabilityByGame.get(plan.game.providerGameId) ??
       latestVerifiedInjuriesForGame(historicalExisting, plan.game.providerGameId);
     const weather = weatherByGame.get(plan.game.providerGameId)!.snapshot;

@@ -1927,8 +1927,8 @@ assert.equal(missingSpreadMarket.marketPrediction?.status, "market_data_unavaila
 assert.equal(missingSpreadMarket.marketPrediction?.label, null);
 assert.equal(
   dailyEdgeOutcomeForecastLabel({ game: missingLineMember.snapshot.games[0]!, market: missingSpreadMarket, marketKey: "first_inning", sport: "cfb" }),
-  "Spread prediction unavailable",
-  "missing current Spread data must not present projected margin as a line-specific prediction",
+  `Projected margin TCU ${(forecast.expectedHomePoints - forecast.expectedAwayPoints).toFixed(1)}`,
+  "missing current Spread data must retain the score-derived projected margin without inventing a market line",
 );
 
 const noTotalBooks = currentBooks.map((currentBook) => ({ ...currentBook, total: null }));
@@ -2477,7 +2477,7 @@ const openingPlan = planCfbForwardEvidenceCaptures({ games: [game], existing: []
 assert.deepEqual(openingPlan.map((row) => row.stage), ["opening"]);
 assert.equal(determineCfbForwardCollectionNeed({ existing: [], now: observedAt }).reason, "opening_seed");
 const farFutureNeed = determineCfbForwardCollectionNeed({ existing: [evidenceAt("opening", "2026-08-25T16:00:00.000Z")], now: "2026-08-25T17:00:00.000Z" });
-assert.deepEqual(farFutureNeed, { collect: false, reason: "cadence_not_due", cadenceMinutes: 360 }, "CFB games beyond 48 hours retain the six-hour refresh cadence");
+assert.deepEqual(farFutureNeed, { collect: true, reason: "unlocked_refresh_due", cadenceMinutes: 60 }, "CFB games refresh hourly even beyond 48 hours so available market data cannot wait six hours");
 const within48HourlyNeed = determineCfbForwardCollectionNeed({ existing: [evidenceAt("opening", "2026-08-27T19:00:00.000Z")], now: "2026-08-27T20:00:00.000Z" });
 assert.deepEqual(within48HourlyNeed, { collect: true, reason: "unlocked_refresh_due", cadenceMinutes: 60 }, "CFB refreshes hourly once kickoff is within 48 hours");
 const exact48HourlyNeed = determineCfbForwardCollectionNeed({ existing: [evidenceAt("opening", "2026-08-27T15:00:00.000Z")], now: "2026-08-27T16:00:00.000Z" });
@@ -2523,12 +2523,12 @@ const mixedCadencePlans = planCfbForwardEvidenceCaptures({
   existing: [evidenceAt("opening", "2026-08-28T19:00:00.000Z"), farEvidence],
   capturedAt: "2026-08-28T20:00:00.000Z",
 });
-assert.deepEqual(mixedCadencePlans.map((plan) => plan.game.providerGameId), [game.providerGameId], "an hourly near game cannot force a game beyond 48 hours onto the hourly provider cadence");
+assert.deepEqual(mixedCadencePlans.map((plan) => plan.game.providerGameId), [game.providerGameId, farGame.providerGameId], "every unlocked CFB game receives the same hourly provider freshness cadence");
 const mixedCollectionNeed = determineCfbForwardCollectionNeed({
   existing: [evidenceAt("opening", "2026-08-28T19:30:00.000Z"), { ...farEvidence, capturedAt: "2026-08-28T13:00:00.000Z", payload: { ...farEvidence.payload, capturedAt: "2026-08-28T13:00:00.000Z" } }],
   now: "2026-08-28T20:00:00.000Z",
 });
-assert.deepEqual(mixedCollectionNeed, { collect: true, reason: "unlocked_refresh_due", cadenceMinutes: 360 }, "a due distant game cannot be masked by a newer near-game observation");
+assert.deepEqual(mixedCollectionNeed, { collect: true, reason: "unlocked_refresh_due", cadenceMinutes: 60 }, "a due distant game cannot be masked by a newer near-game observation");
 const deferredReferenceEvidence = structuredClone(farEvidence);
 deferredReferenceEvidence.payload.schemaRelease = CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE;
 deferredReferenceEvidence.payload.memberRelease = CFB_FORWARD_MEMBER_RELEASE;
@@ -2721,6 +2721,37 @@ const fallbackSelection = selectCfbSharpFallbackGames({
 assert.equal(fallbackSelection.length, 24, "week-ahead enrichment must remain inside its per-run exact-game budget");
 assert.deepEqual(fallbackSelection.slice(0, 20).map((value) => value.providerGameId), Array.from({ length: 20 }, (_, index) => String(index + 11)), "games without retained canonical identities must rotate ahead of already-enriched games");
 assert.equal(fallbackSelection.some((value) => value.providerGameId === "1"), true, "remaining capacity may refresh an already-enriched game after every unseeded game is selected");
+const latestFallbackAttempts = new Map<string, CfbForwardStoredEvidence>(Array.from({ length: 30 }, (_, index) => {
+  const providerGameId = String(index + 1);
+  const deferred = index >= 24;
+  const rowPayload = structuredClone(payload);
+  rowPayload.game.providerGameId = providerGameId;
+  rowPayload.coverage.availabilityWarnings = deferred
+    ? [...rowPayload.coverage.availabilityWarnings, "sharpapi_odds_fallback_deferred"]
+    : rowPayload.coverage.availabilityWarnings.filter((warning) => warning !== "sharpapi_odds_fallback_deferred");
+  return [providerGameId, {
+    ...evidence,
+    id: `fallback-attempt-${providerGameId}`,
+    providerGameId,
+    payloadSha256: hashCfbForwardEvidencePayload(rowPayload),
+    payload: rowPayload,
+  }];
+}));
+const rotatedFallbackSelection = selectCfbSharpFallbackGames({
+  games: Array.from({ length: 30 }, (_, index) => ({
+    ...game,
+    providerGameId: String(index + 1),
+    scheduledStart: new Date(Date.parse(game.scheduledStart) + index * 60_000).toISOString(),
+  })),
+  trustedEventIdsByGame: {},
+  latestByGame: latestFallbackAttempts,
+  maximum: 24,
+});
+assert.deepEqual(
+  rotatedFallbackSelection.slice(0, 6).map((value) => value.providerGameId),
+  ["25", "26", "27", "28", "29", "30"],
+  "deferred missing-price games must rotate ahead of games already attempted by the bounded fallback",
+);
 const isolatedSharpNetworkFailure = await fetchCfbSharpOddsFallbackAttempt(
   { games: [game], apiKey: "test" },
   (async () => { throw new Error("SharpAPI network error on /events: fetch failed"); }) as Parameters<typeof fetchCfbSharpOddsFallbackAttempt>[1],

@@ -434,9 +434,9 @@ const unavailableFootballSpreadLabel = dailyEdgeOutcomeForecastLabel({
   sport: "cfb",
 });
 check(
-  "football Spread with no current market line does not present projected margin as a line-specific prediction",
-  unavailableFootballSpreadLabel === DAILY_EDGE_SPREAD_UNAVAILABLE_LABEL &&
-    isDailyEdgeOutcomeForecastHealthError(unavailableFootballSpreadLabel),
+  "football Spread with no current market line retains the model-owned projected margin without inventing a market line",
+  unavailableFootballSpreadLabel === "Projected margin ARI 0.9" &&
+    !isDailyEdgeOutcomeForecastHealthError(unavailableFootballSpreadLabel),
 );
 const unavailableFootballTotalLabel = dailyEdgeOutcomeForecastLabel({
   game: { ...chcTotalForecastGame, sport: "cfb" },
@@ -445,9 +445,9 @@ const unavailableFootballTotalLabel = dailyEdgeOutcomeForecastLabel({
   sport: "cfb",
 });
 check(
-  "football Total with no current market line does not present projected total as a line-specific prediction",
-  unavailableFootballTotalLabel === DAILY_EDGE_TOTAL_UNAVAILABLE_LABEL &&
-    isDailyEdgeOutcomeForecastHealthError(unavailableFootballTotalLabel),
+  "football Total with no current market line retains the model-owned projected total without inventing an Over or Under",
+  unavailableFootballTotalLabel === "Projected total 8.3" &&
+    !isDailyEdgeOutcomeForecastHealthError(unavailableFootballTotalLabel),
 );
 check(
   "defensive Forecast unavailable copy is classified as a high health error",
@@ -552,8 +552,8 @@ check(
     candidateDailyEdgeSource.includes('{ key: "no_play", label: "No Play" }'),
 );
 check(
-  "CFB member cadence copy matches six-hour beyond 48 hours, hourly inside 48 hours, and event-triggered T-60 behavior",
-  (candidateMemberPageSource.match(/six-hour beyond 48h · hourly inside 48h · T-60 lock/g) ?? []).length === 2 &&
+  "CFB member cadence copy matches hourly evidence and event-triggered T-60 behavior",
+  (candidateMemberPageSource.match(/hourly evidence · T-60 lock/g) ?? []).length === 2 &&
     !candidateMemberPageSource.includes("CFB · Opening Week · evidence temporarily unavailable\",\n                previousHref: null,\n                nextHref: null,\n                displayGameCount: 0,\n                asOf: snapshot.as_of,\n                cadenceLabel: \"six-hour early evidence · hourly inside 48h · 15-minute T-60 checks"),
 );
 
@@ -1023,11 +1023,11 @@ const nflSplitSection = {
   lastUpdated: nflSplitCapturedAt,
 };
 check(
-  "NFL split freshness honors its six-hour early-week collection contract",
+  "NFL retained split age stays internally measurable before its display-continuity window",
   !marketSplitSectionIsStale(nflSplitSection, Date.parse("2026-08-25T17:36:00.000Z")),
 );
 check(
-  "NFL split freshness becomes stale after its declared collection window",
+  "NFL retained split age stays internally measurable after its display-continuity window",
   marketSplitSectionIsStale(nflSplitSection, Date.parse("2026-08-25T21:37:00.000Z")),
 );
 const candidateSource = readFileSync(
@@ -1036,6 +1036,18 @@ const candidateSource = readFileSync(
 );
 const nflMemberFixtureSource = readFileSync(
   "lib/services/football/nflWeekOneHeldMemberFixture.ts",
+  "utf8",
+);
+const cfbMemberFixtureSource = readFileSync(
+  "lib/services/football/cfbMemberFixture.ts",
+  "utf8",
+);
+const responseCoherenceSource = readFileSync(
+  "app/lab/lib/dailyEdgeResponseCoherence.ts",
+  "utf8",
+);
+const legacyDailyEdgeShellSource = readFileSync(
+  "app/lab/components/daily-edge/DailyEdgeShell.tsx",
   "utf8",
 );
 const footballEvidenceSource = readFileSync(
@@ -1432,6 +1444,17 @@ check(
     candidateSource.includes("!silentNamedBook ? <p"),
 );
 check(
+  "complete retained sharp-book pairs remain member-visible regardless of internal age",
+  !responseCoherenceSource.includes("too old to present as current") &&
+    !cfbMemberFixtureSource.includes('status: sharp.rows.some((row) => row.isStale) ? "stale" : "complete"') &&
+    !nflMemberFixtureSource.includes('status: isStale ? "stale" : "complete"'),
+);
+check(
+  "no Daily Edge renderer adds a stale-only timestamp under retained split values",
+  !legacyDailyEdgeShellSource.includes("showStaleStamp") &&
+    !legacyDailyEdgeShellSource.includes("stale-but-valid values"),
+);
+check(
   "legacy consensus divergence is relabeled instead of being shown as sharp money",
   candidateSource.includes('if (/sharp money/i.test(rawChip))') &&
     candidateSource.includes("Consensus money split leans against our side") &&
@@ -1469,11 +1492,13 @@ check(
     currentOnlyTotalMovement.sportsbook === "onexbet",
 );
 check(
-  "MLB Sharp panels expose complete, provider-limited, pending, and stale states",
+  "MLB Sharp panels keep complete retained rows visible while missing rows remain explicit",
   dailyEdgeApiSource.includes('status: "complete"') &&
     dailyEdgeApiSource.includes('status: "provider_limited"') &&
     dailyEdgeApiSource.includes('status: "pending"') &&
-    dailyEdgeApiSource.includes('status: "stale"') &&
+    !dailyEdgeApiSource.includes("retained only as historical context") &&
+    dailyEdgeApiSource.includes("const freshestFallback = fallbackCandidates[0] ?? null") &&
+    dailyEdgeApiSource.includes("sectionObservedAtMs(freshestFallback) > sectionObservedAtMs(sharpBook)") &&
     candidateDailyEdgeSource.includes('availabilityStatus === "provider_limited" ? "Limited"') &&
     candidateDailyEdgeSource.includes("No verified split yet") &&
     !candidateDailyEdgeSource.includes('availabilityStatus === "pending" ? "Awaiting provider data"'),
@@ -1686,7 +1711,7 @@ check(
 check(
   "a context-only CFB line never promises missing sportsbook odds",
   DAILY_EDGE_MEMBER_PRESENTATION_RELEASE_ID ===
-    "daily_edge_member_presentation_2026_08_31_r22_cfb_public_consensus_market_input" &&
+    "daily_edge_member_presentation_2026_10_06_r23_cfb_score_outlook_continuity" &&
     candidateSource.includes("Sportsbook odds unavailable") &&
     candidateSource.includes("Consensus line only") &&
     candidateSource.includes("No eligible named-book American price was captured") &&

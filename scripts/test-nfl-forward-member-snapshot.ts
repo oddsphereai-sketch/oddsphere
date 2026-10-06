@@ -76,7 +76,7 @@ const audit = auditNflForwardMemberSnapshot({ snapshot: auditedSnapshot, now: ne
 assert.equal(audit.healthy, true);
 assert.equal(audit.metrics.games, 1);
 assert.equal(audit.metrics.predictions, 3);
-assert.equal(audit.metrics.maximumSourceAgeMinutes, 390, "far-window evidence follows the six-hour cadence");
+assert.equal(audit.metrics.maximumSourceAgeMinutes, 90, "provider health follows the hourly source-evidence contract");
 assert.equal(audit.metrics.grades.Lean, 1);
 
 const lockedTerminalFixture = {
@@ -126,9 +126,9 @@ const pastAndFarFutureAudit = auditNflForwardMemberSnapshot({
   }),
   now: new Date("2026-09-01T13:30:00.000Z"),
 });
-assert.equal(pastAndFarFutureAudit.metrics.maximumSourceAgeMinutes, 390,
-  "completed games cannot force far-window upcoming evidence onto the near-kickoff cadence");
-assert.equal(pastAndFarFutureAudit.healthy, true);
+assert.equal(pastAndFarFutureAudit.metrics.maximumSourceAgeMinutes, 90,
+  "far-window games cannot hide a stalled hourly source refresh");
+assert.equal(pastAndFarFutureAudit.healthy, false);
 assert.equal(
   nflFlatBoardWarning({ grades: { Lean: 1, "No Play": 39, Watchlist: 8 }, predictions: 48 }),
   "the current weekly slate is materially flat: 1/48 actionable and 39 No Play grades",

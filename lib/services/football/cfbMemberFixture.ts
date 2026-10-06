@@ -1114,7 +1114,7 @@ function sharpBookAvailability(
   movementRows: CfbForwardMarketHistoryEvidence[] = [],
 ): NonNullable<MarketEdgeDto["sharpBookAvailability"]> {
   const sharp = buildSharpBookSplitSection(payload, market, movementRows);
-  if (sharp) return { status: sharp.rows.some((row) => row.isStale) ? "stale" : "complete", message: "Verified sharp splits are available for this game and market.", lastUpdated: sharp.lastUpdated };
+  if (sharp) return { status: "complete", message: "Verified sharp splits are available for this game and market.", lastUpdated: sharp.lastUpdated };
   const records = sourceSpecificSplitRecords(payload, movementRows);
   const latest = records.reduce<string | null>((value, record) => value === null || record.capturedAt > value ? record.capturedAt : value, null);
   if (payload.market.sharpApiSplitsStatus === "request_failed") {

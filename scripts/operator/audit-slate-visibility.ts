@@ -22,6 +22,7 @@
  *   npm run audit:slate-visibility -- --json
  */
 import { supabase } from "../../lib/db/supabase";
+import { isPublicallyTracked } from "../../lib/config/officialTrackingStart";
 
 const SPORTS = ["mlb", "nba", "nhl", "soccer", "ucl"] as const;
 type AuditSport = (typeof SPORTS)[number];
@@ -55,7 +56,7 @@ type SportReport = {
   games: number;
   draft_games: number;
   prediction_records: number;
-  status: "ok" | "no_fixtures" | "HIGH_empty_slate" | "HIGH_unpublished_slate";
+  status: "ok" | "no_fixtures" | "excluded_window" | "HIGH_empty_slate" | "HIGH_unpublished_slate";
 };
 
 async function checkSport(sport: AuditSport, date: string): Promise<SportReport> {
@@ -91,6 +92,7 @@ async function checkSport(sport: AuditSport, date: string): Promise<SportReport>
 
   let status: SportReport["status"];
   if (games === 0) status = "no_fixtures";
+  else if (sport === "nba" && !isPublicallyTracked("nba", date)) status = "excluded_window";
   else if (prs === 0) status = "HIGH_empty_slate";
   else if (draftCount === games) status = "HIGH_unpublished_slate";
   else status = "ok";
@@ -122,6 +124,8 @@ async function main(): Promise<void> {
             ? "  HIGH (draft)"
             : r.status === "no_fixtures"
               ? "  (none)"
+              : r.status === "excluded_window"
+                ? "  (official window closed)"
               : "  OK";
       console.log(
         `  ${r.sport.padEnd(7)}  games=${String(r.games).padStart(3)}  draft=${String(r.draft_games).padStart(3)}  prs=${String(r.prediction_records).padStart(4)}  ${tag}`,

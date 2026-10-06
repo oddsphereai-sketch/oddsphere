@@ -75,7 +75,7 @@ export const CFB_FORWARD_LEGACY_EVIDENCE_SCHEMA_RELEASE =
 export const CFB_FORWARD_INITIAL_EVIDENCE_SCHEMA_RELEASE =
   "cfb_forward_evidence_snapshot_2026_08_25_r1" as const;
 export const CFB_FORWARD_EVIDENCE_COLLECTOR_RELEASE =
-  "cfb_forward_evidence_collector_2026_10_03_r41_five_page_main_market" as const;
+  "cfb_forward_evidence_collector_2026_10_06_r43_hourly_market_freshness" as const;
 export const CFB_FORWARD_MEMBER_RELEASE =
   "cfb_v1_member_release_2026_10_04_r48_moneyline_market_confirmation" as const;
 export const CFB_FORWARD_MARKET_CONFIRMATION_PREVIOUS_MEMBER_RELEASE =
@@ -346,10 +346,13 @@ export type CfbForwardCapturePlan = {
 };
 
 const T60_MS = 60 * 60_000;
-const HOURLY_CADENCE_HORIZON_MS = 48 * 60 * 60_000;
-
-function unlockedCadenceMinutes(startsAt: number, now: number): 60 | 360 {
-  return startsAt - now <= HOURLY_CADENCE_HORIZON_MS ? 60 : 360;
+function unlockedCadenceMinutes(_startsAt: number, _now: number): 60 {
+  // Market lines, prices, and splits can become available at any point after
+  // the weekly slate opens. The former six-hour early-week cadence let the member
+  // snapshot lag a provider that had already published a usable quote. Keep
+  // the existing single writer and provider budgets, but require one complete
+  // observation at least hourly for every unlocked game.
+  return 60;
 }
 
 export function planCfbForwardEvidenceCaptures(args: {
@@ -394,7 +397,7 @@ export function determineCfbForwardCollectionNeed(args: {
   if (new Set(args.existing.filter((row) => row.stage === "opening").map((row) => row.providerGameId)).size < expected) {
     return { collect: true, reason: "opening_incomplete", cadenceMinutes: null };
   }
-  const upcoming: Array<{ startsAt: number; latest: number; cadenceMinutes: 60 | 360 }> = [];
+  const upcoming: Array<{ startsAt: number; latest: number; cadenceMinutes: 60 }> = [];
   for (const rows of byGame.values()) {
     const latest = [...rows].sort((a, b) => Date.parse(b.capturedAt) - Date.parse(a.capturedAt))[0]!;
     const startsAt = timestamp(latest.gameStartAt, "stored gameStartAt");

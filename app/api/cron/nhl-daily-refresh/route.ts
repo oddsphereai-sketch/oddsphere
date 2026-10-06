@@ -49,7 +49,7 @@ import { supabase } from "@/lib/db/supabase";
 
 const NHL_CRON_ENV = "NHL_CRON_ENABLED";
 const NHL_PREDS_ENV = "NHL_PREDICTIONS_DB_WRITES_ENABLED";
-const NHL_DAILY_REFRESH_RELEASE = "nhl_daily_refresh_schedule_2026_09_30_r6_overnight_slate_readiness";
+const NHL_DAILY_REFRESH_RELEASE = "nhl_daily_refresh_schedule_2026_10_06_r7_intraday_market_freshness";
 
 /**
  * Returns the MoneyPuck-style season start-year for a given UTC date.
@@ -66,6 +66,7 @@ function nhlSeasonStartYearFromDate(date: Date = new Date()): number {
 }
 
 export async function GET(request: Request): Promise<Response> {
+  const intraday = new URL(request.url).searchParams.get("intraday") === "true";
   return cronHandler(
     request,
     "nhl_daily_refresh",
@@ -97,6 +98,7 @@ export async function GET(request: Request): Promise<Response> {
       const stepDetails: Record<string, unknown> = {
         refresh_release: NHL_DAILY_REFRESH_RELEASE,
         slate_date_et: slateDate,
+        mode: intraday ? "intraday_market" : "daily_full",
       };
 
       // Step 1 — seed NHL games + teams for today's ET slate.
@@ -162,7 +164,9 @@ export async function GET(request: Request): Promise<Response> {
       // falls back to the completed prior season during opening-week lag.
       const season = nhlSeasonStartYearFromDate(new Date());
       let teamStatsWritten = 0;
-      try {
+      if (intraday) {
+        stepDetails.team_stats = { skipped: true, reason: "daily_full_only" };
+      } else try {
         let sourceSeason = season;
         let currentError: string | null = null;
         let teamStats;
@@ -191,7 +195,9 @@ export async function GET(request: Request): Promise<Response> {
         stepDetails.team_stats = { error: error instanceof Error ? error.message : String(error) };
       }
       let goalieStatsWritten = 0;
-      try {
+      if (intraday) {
+        stepDetails.goalie_stats = { skipped: true, reason: "daily_full_only" };
+      } else try {
         let sourceSeason = season;
         let currentError: string | null = null;
         let goalieStats;

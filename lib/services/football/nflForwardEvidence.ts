@@ -24,7 +24,7 @@ export const NFL_FORWARD_EVIDENCE_PRIOR_SCHEMA_RELEASE =
 export const NFL_FORWARD_EVIDENCE_LEGACY_SCHEMA_RELEASE =
   "nfl_forward_evidence_snapshot_2026_08_22_r2_multibook" as const;
 export const NFL_FORWARD_EVIDENCE_COLLECTOR_RELEASE =
-  "nfl_forward_evidence_collector_2026_09_28_r16_injury_continuity" as const;
+  "nfl_forward_evidence_collector_2026_10_06_r17_hourly_market_freshness" as const;
 
 export type NflForwardEvidenceStage = "opening" | "unlocked" | "t60";
 
@@ -377,7 +377,10 @@ export function determineNflForwardCollectionNeed(args: {
       : { collect: false, reason: "opening_follow_up_wait", cadenceMinutes: NFL_OPENING_FOLLOW_UP_CADENCE_MINUTES };
   }
   const nextStart = Math.min(...upcomingOutsideT60);
-  const cadenceMinutes = nextStart - now <= 48 * 60 * 60_000 ? 60 : 360;
+  // Lines, prices, and splits can publish well before the 48-hour window.
+  // Re-publishing an old source snapshot every 15 minutes hid that gap, so
+  // every unlocked slate now receives a real provider collection each hour.
+  const cadenceMinutes = 60;
   return now - latest >= cadenceMinutes * 60_000
     ? { collect: true, reason: "unlocked_refresh_due", cadenceMinutes }
     : { collect: false, reason: "cadence_not_due", cadenceMinutes };

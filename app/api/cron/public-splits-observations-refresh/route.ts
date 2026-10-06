@@ -24,7 +24,10 @@ import { refreshDailyEdgeResponseSnapshot } from "@/lib/services/labResponseSnap
 import { runScheduledMarketIntelligenceV2Collection } from "@/lib/services/marketIntelligenceV2/scheduledCollection";
 
 const ENV = "PUBLIC_SPLITS_OBSERVATIONS_ENABLED";
-const SPORTS: Sport[] = ["mlb", "wnba", "nhl"];
+// NBA is observe-only until its sport-specific audit promotes the capability.
+// Capturing it now prevents opening-night validation from starting with no
+// provider history; the capability registry still blocks display/model use.
+const SPORTS: Sport[] = ["mlb", "wnba", "nhl", "nba"];
 
 export async function GET(request: Request): Promise<Response> {
   return cronHandlerPerSport(

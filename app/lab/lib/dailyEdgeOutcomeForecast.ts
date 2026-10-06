@@ -15,7 +15,7 @@ export function isDailyEdgeOutcomeForecastHealthError(label: string): boolean {
 export function dailyEdgeMarketPredictionProvenanceLabel(market: MarketEdgeDto): string | null {
   const prediction = market.marketPrediction;
   if (!prediction) return null;
-  if (prediction.status === "market_data_unavailable") return "Current market prediction unavailable";
+  if (prediction.status === "market_data_unavailable") return null;
   if (prediction.source === "playbook_consensus") {
     return "Consensus prediction line · context only, not an available sportsbook offer";
   }
@@ -68,8 +68,8 @@ function compactNumber(value: number): string {
 }
 
 function projectedScore(game: DailyEdgeGameDto): string | null {
-  const away = game.projected?.away;
-  const home = game.projected?.home;
+  const away = game.footballProjection?.expectedAwayPoints ?? game.projected?.away;
+  const home = game.footballProjection?.expectedHomePoints ?? game.projected?.home;
   if (!Number.isFinite(away) || !Number.isFinite(home)) return null;
   return `${game.awayTeam} ${compactNumber(away)}–${compactNumber(home)} ${game.homeTeam}`;
 }
@@ -90,10 +90,6 @@ export function dailyEdgeOutcomeForecastLabel(input: {
   if (market.marketPrediction?.status === "available" && market.marketPrediction.label) {
     return market.marketPrediction.label;
   }
-  if (market.marketPrediction?.status === "market_data_unavailable" && (sport === "nfl" || sport === "cfb")) {
-    if (marketKey === "total") return DAILY_EDGE_TOTAL_UNAVAILABLE_LABEL;
-    if (marketKey === "first_inning") return DAILY_EDGE_SPREAD_UNAVAILABLE_LABEL;
-  }
   if (market.pick) {
     if (marketKey === "total" && market.line !== null && !/\d/.test(market.pick)) {
       return `${market.pick} ${compactNumber(market.line)}`;
@@ -103,8 +99,10 @@ export function dailyEdgeOutcomeForecastLabel(input: {
 
   if (marketKey === "total") {
     const modelTotal = market.modelTotal ?? (
-      Number.isFinite(game.projected?.away) && Number.isFinite(game.projected?.home)
-        ? game.projected.away + game.projected.home
+      Number.isFinite(game.footballProjection?.expectedAwayPoints) && Number.isFinite(game.footballProjection?.expectedHomePoints)
+        ? game.footballProjection!.expectedAwayPoints + game.footballProjection!.expectedHomePoints
+        : Number.isFinite(game.projected?.away) && Number.isFinite(game.projected?.home)
+          ? game.projected.away + game.projected.home
         : null
     );
     if (modelTotal !== null && Number.isFinite(modelTotal)) {
@@ -146,9 +144,11 @@ export function dailyEdgeOutcomeForecastLabel(input: {
   }
 
   if (marketKey === "first_inning" && sport !== "mlb") {
-    const margin = Math.abs(game.projected.home - game.projected.away);
+    const away = game.footballProjection?.expectedAwayPoints ?? game.projected.away;
+    const home = game.footballProjection?.expectedHomePoints ?? game.projected.home;
+    const margin = Math.abs(home - away);
     if (Number.isFinite(margin) && margin > 0) {
-      const leader = game.projected.home > game.projected.away ? game.homeTeam : game.awayTeam;
+      const leader = home > away ? game.homeTeam : game.awayTeam;
       return `Projected margin ${leader} ${compactNumber(margin)}`;
     }
   }

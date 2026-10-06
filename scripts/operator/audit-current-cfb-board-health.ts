@@ -4,6 +4,10 @@
 
 import { loadEnvConfig } from "@next/env";
 import { createClient } from "@supabase/supabase-js";
+import {
+  dailyEdgeOutcomeForecastLabel,
+  isDailyEdgeOutcomeForecastHealthError,
+} from "../../app/lab/lib/dailyEdgeOutcomeForecast";
 import { readCfbForwardMemberSnapshot } from "../../lib/services/football/cfbForwardMemberSnapshotStore";
 
 loadEnvConfig(process.cwd());
@@ -59,6 +63,12 @@ async function main(): Promise<void> {
       market,
       grade: dto.verdict.label,
       prediction: dto.marketPrediction,
+      presentedPrediction: dailyEdgeOutcomeForecastLabel({
+        game,
+        market: dto,
+        marketKey: market === "spread" ? "first_inning" : market,
+        sport: "cfb",
+      }),
       pick: dto.pick,
       held: dto.held,
       line: dto.line,
@@ -90,6 +100,7 @@ async function main(): Promise<void> {
   const upcomingActionable = upcomingRows.filter((row) => row.grade === "Lean" || row.grade === "Best Angle");
   const missingPrice = rows.filter((row) => row.currentPrice === null);
   const missingPrediction = rows.filter((row) => row.prediction?.status !== "available" || !row.prediction.label);
+  const presentationHealthErrors = rows.filter((row) => isDailyEdgeOutcomeForecastHealthError(row.presentedPrediction));
   const upcomingMissingPrice = upcomingRows.filter((row) => row.currentPrice === null);
   const zeroTrail = rows.filter((row) => row.trailLength === 0);
   const report = {
@@ -105,6 +116,9 @@ async function main(): Promise<void> {
       sourceCapturedAt: snapshot.sourceCapturedAt,
       publishedAt: snapshot.publishedAt,
       ageMinutes: (nowMs - Date.parse(snapshot.publishedAt)) / 60_000,
+      sourceAgeMinutes: (nowMs - Date.parse(snapshot.sourceCapturedAt)) / 60_000,
+      publicationLagMinutes: (Date.parse(snapshot.publishedAt) - Date.parse(snapshot.sourceCapturedAt)) / 60_000,
+      sourceFreshWithinHourlyContract: nowMs - Date.parse(snapshot.sourceCapturedAt) <= 90 * 60_000,
       games: games.length,
       markets: rows.length,
       provenance: snapshot.fixture.provenance,
@@ -180,6 +194,12 @@ async function main(): Promise<void> {
         held: row.held,
         line: row.line,
         hasCurrentPrice: row.currentPrice !== null,
+      })),
+      memberPresentationHealthErrors: presentationHealthErrors.length,
+      memberPresentationHealthErrorRows: presentationHealthErrors.map((row) => ({
+        matchup: row.matchup,
+        market: row.market,
+        label: row.presentedPrediction,
       })),
     },
     scoreHealth: {

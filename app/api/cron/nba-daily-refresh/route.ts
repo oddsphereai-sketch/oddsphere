@@ -47,7 +47,7 @@ import { refreshNbaTeamRatings } from "@/lib/services/nba/refreshNbaTeamRatingsS
 import { refreshNbaLines } from "@/lib/services/nba/refreshNbaLinesService";
 
 const NBA_CRON_ENV = "NBA_CRON_ENABLED";
-const NBA_DAILY_REFRESH_RELEASE = "nba_daily_refresh_schedule_2026_09_21_r1";
+const NBA_DAILY_REFRESH_RELEASE = "nba_daily_refresh_schedule_2026_10_06_r2_intraday_market_freshness";
 
 /**
  * NBA-ratings season convention: Basketball Reference uses the END-year
@@ -71,6 +71,7 @@ function dashedToEspnDate(dashed: string): string | undefined {
 }
 
 export async function GET(request: Request): Promise<Response> {
+  const intraday = new URL(request.url).searchParams.get("intraday") === "true";
   return cronHandler(
     request,
     "nba_daily_refresh",
@@ -115,6 +116,7 @@ export async function GET(request: Request): Promise<Response> {
         refresh_release: NBA_DAILY_REFRESH_RELEASE,
         slate_date_et: etDateDashed,
         ratings_season: season,
+        mode: intraday ? "intraday_market" : "daily_full",
       };
 
       // ─── Step 1: seedNbaGames ─────────────────────────────────────
@@ -151,15 +153,25 @@ export async function GET(request: Request): Promise<Response> {
       if (seedResult.errors.length > 0) partial = true;
 
       // ─── Step 2: refreshNbaTeamRatings ────────────────────────────
-      console.log(
-        `[nba-daily-refresh] step=ratings  season=${season}  include_playoffs=true`,
-      );
-      const ratingsResult = await refreshNbaTeamRatings({
-        season,
-        includePlayoffs: true,
-        dryRun: false,
-        logger: stepLog("ratings"),
-      });
+      console.log(`[nba-daily-refresh] step=ratings  season=${season}  mode=${intraday ? "skip" : "full"}`);
+      const ratingsResult = intraday
+        ? {
+            mode: "skipped" as const,
+            teamsInDb: 0,
+            seasonFetchStatus: "skipped" as const,
+            seasonRowsParsed: 0,
+            playoffFetchStatus: "skipped" as const,
+            playoffRowsParsed: 0,
+            payloadsBuilt: 0,
+            written: 0,
+            errors: [] as string[],
+          }
+        : await refreshNbaTeamRatings({
+            season,
+            includePlayoffs: true,
+            dryRun: false,
+            logger: stepLog("ratings"),
+          });
       stepDetails.ratings = {
         mode: ratingsResult.mode,
         teamsInDb: ratingsResult.teamsInDb,
@@ -175,10 +187,10 @@ export async function GET(request: Request): Promise<Response> {
       // Hard failure: no NBA teams in DB. Service 1 should have just
       // populated them; if Service 2 still sees zero, something is
       // structurally wrong.
-      if (ratingsResult.mode === "no-teams") {
+      if (!intraday && ratingsResult.mode === "no-teams") {
         throw new Error("ratings step returned mode=no-teams (no NBA teams resident in DB after seed step)");
       }
-      if (ratingsResult.seasonFetchStatus === "failed") partial = true;
+      if (!intraday && ratingsResult.seasonFetchStatus === "failed") partial = true;
       if (ratingsResult.errors.length > 0) partial = true;
 
       // ─── Step 3: refreshNbaLines ──────────────────────────────────

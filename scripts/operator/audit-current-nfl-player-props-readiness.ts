@@ -1,11 +1,14 @@
 import { loadEnvConfig } from "@next/env";
 import { createClient } from "@supabase/supabase-js";
 import { readNflPlayerPropsSnapshotRecord } from "../../lib/services/football/nflPlayerPropsSnapshotStore";
+import { resolveNflForwardWeek } from "../../lib/services/football/nflForwardWeekSelection";
 
 loadEnvConfig(process.cwd());
 
-const season = Number(process.argv.find((value) => value.startsWith("--season="))?.slice(9) ?? 2026);
-const week = Number(process.argv.find((value) => value.startsWith("--week="))?.slice(7) ?? 1);
+const season = Number(process.argv.find((value) => value.startsWith("--season="))?.slice(9) ?? process.env.NFL_FORWARD_SEASON ?? 2026);
+const configuredWeek = Number(process.env.NFL_FORWARD_WEEK ?? 1);
+const week = Number(process.argv.find((value) => value.startsWith("--week="))?.slice(7)
+  ?? resolveNflForwardWeek({ season, configuredWeek, now: new Date() }));
 const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
 if (!url || !key) throw new Error("Supabase read credentials are required.");
@@ -34,6 +37,13 @@ const rows = snapshot.board.decisions.map((row) => ({
   divergencePp: 100 * Math.abs(row.rawModelProbability - row.marketProbability),
   openingAvailable: row.bookEvidence.some((book) => book.openingAmericanPrice !== null && book.openingObservedAt !== null),
 }));
+const unlockedObservedAt = snapshot.board.decisions
+  .filter((row) => row.state === "unlocked")
+  .map((row) => Date.parse(row.observedAt))
+  .filter(Number.isFinite);
+const oldestUnlockedAgeMinutes = unlockedObservedAt.length > 0
+  ? Math.max(0, Math.round((Date.now() - Math.min(...unlockedObservedAt)) / 60_000))
+  : null;
 const divergences = rows.map((row) => row.divergencePp).sort((a, b) => a - b);
 const counts = (values: typeof rows) => Object.fromEntries(
   ["Best Angle", "Lean", "Watchlist", "No Play", "Held"].map((grade) => [grade, values.filter((row) => row.grade === grade).length]),
@@ -57,6 +67,8 @@ const report = {
   season,
   week,
   generatedAt: record.generatedAt,
+  generatedAgeMinutes: Math.max(0, Math.round((Date.now() - Date.parse(record.generatedAt)) / 60_000)),
+  oldestUnlockedQuoteAgeMinutes: oldestUnlockedAgeMinutes,
   release: snapshot.release,
   rows: rows.length,
   grades: counts(rows),
@@ -110,6 +122,8 @@ const report = {
 console.log(JSON.stringify(process.argv.includes("--summary") ? {
   readOnly: report.readOnly,
   generatedAt: report.generatedAt,
+  generatedAgeMinutes: report.generatedAgeMinutes,
+  oldestUnlockedQuoteAgeMinutes: report.oldestUnlockedQuoteAgeMinutes,
   rows: report.rows,
   grades: report.grades,
   candidateGrades: report.candidateGrades,

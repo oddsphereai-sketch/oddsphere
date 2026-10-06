@@ -4,7 +4,7 @@ This file is the human-readable production handoff registry. Runtime constants a
 prediction snapshots remain the machine authority. Future model work must start here, verify the
 constants, and preserve the precedence and writer ownership below.
 
-Last reviewed: 2026-10-05
+Last reviewed: 2026-10-06
 
 ## Cross-sport confidence / execution contract
 
@@ -68,10 +68,32 @@ Last reviewed: 2026-10-05
   labels. Its audit boundary and rollback are recorded in
   `docs/model-audits/2026-09-26-cfb-market-reading-marriage-predeclaration.md`.
 
+## Cross-sport market-freshness ownership (2026-10-06)
+
+- NHL daily refresh release is `nhl_daily_refresh_schedule_2026_10_06_r7_intraday_market_freshness`.
+  The existing leased `nhl_daily_refresh` writer now has a lightweight intraday mode every 30
+  minutes during the active window: it seeds the slate, refreshes exact lines, syncs provider-
+  separated splits, recomputes unlocked predictions, and republishes the coherent Daily Edge
+  snapshot. Expensive team/goalie refreshes remain daily. No second writer, member copy, label,
+  threshold, grade policy, stake, or lock rule is added.
+- NBA daily refresh release is `nba_daily_refresh_schedule_2026_10_06_r2_intraday_market_freshness`.
+  Its existing writer now refreshes seed/lines every 30 minutes while the expensive ratings scrape
+  remains daily. NBA Playbook splits enter the existing provider-separated observation table in
+  audit-only mode; the capability registry still forbids display or model use until NBA-specific
+  validation clears it.
+- The operator readiness audit now measures the newest line and split age per game and reports
+  games with no line, rather than treating a recent snapshot publish time as proof of fresh source
+  evidence. This is operational detection only and changes no prediction.
+- Member continuity is fail-open for the last verified prediction, line, price and complete split
+  pair: source age remains internal and never removes those values or adds a stale badge, warning
+  or replacement label. MLB keeps current Circa primary, silently uses the newest complete approved
+  named-book fallback when Circa stops updating, and otherwise retains the last complete Circa pair.
+  Display fallback rows remain excluded from recommendation arbitration.
+
 ## Cross-sport prediction-accuracy denominator contract (2026-09-04)
 
 - Public W-L accuracy counts every immutable locked prediction that has a real side, including Watchlist and No Play. Best Angle and Lean remain separate actionable-only cuts. Exact-price ROI remains separate and excludes null-price records. The aggregate contract is `tracking_aggregate_v9_append_only_correction_precedence_2026_09_14`; an append-only correction explicitly supersedes its erroneous original before grade/actionability precedence is evaluated. Unlocked records from every sport remain outside public accuracy while they can still change.
-- NFL tracking record / sole writer are `nfl_official_tracking_record_2026_09_28_r16_market_marriage` / `nfl_forward_evidence_writer_2026_10_05_r53_winner_coherence`. An eligible T-60 payload emits all three immutable forecast markets. The sole writer now retains the newest verified injury payload only for the exact same provider game when a later availability response is empty; it retains provider timestamp/provenance and adds no call. Collector `nfl_forward_evidence_collector_2026_09_28_r16_injury_continuity`, fixture `nfl_weekly_member_fixture_2026_10_05_r37_winner_coherence`, and compact snapshot `nfl_forward_member_snapshot_2026_10_05_r29_winner_coherence` expose authoritative expected-score means at one decimal for newly captured evidence while preserving older valid locks unchanged. Tracking serialization is downstream of member-snapshot publication, so a tracking-only failure cannot suppress a valid lock. The bounded recovery path may serialize an already-published immutable T-60 tuple only when direction agreement with its own score distribution is the sole failed invariant; it preserves the exact pregame side, line, price, probability, grade, timestamp, and evidence hash and cannot recompute a prediction. A complete side-bearing forecast without a coherent exact-price tuple is stored as a non-Held No Play with null price/market probability/edge/EV; it counts for prediction accuracy but cannot enter Best Angle, Lean, stake, or ROI. A complete three-market forecast manifest remains eligible even when all three exact-price tuples disappear at lock. Null-side forecasts, all other internal-coherence failures, and true whole-game health failures remain ineligible. The regular slate adapter `balldontlie_nfl_regular_slate_2026_09_28_r4_opening_timestamp_capture` retains the complete verified schedule when current odds have disappeared for completed games and retains provider `opened_at` timestamps; current rows still require `updated_at`. Only a due game's invalid forecast is isolated by the writer. Week selector `nfl_forward_week_selection_2026_09_28_r2_completed_slate_rollover` keeps the configured/calendar week as an operator floor, protects every represented Monday game, and may advance an already-completed Sunday-only slate after the established 2 a.m. ET board boundary. A release-transition board may retain r25, r24, r23, r22, r21, r20 and r18 rows only when each row independently proves a complete on-time immutable T-60 tuple; an unlocked preceding row remains ineligible and the stale stored tracking boolean is not trusted. After a new weekly opening wave, the sole writer performs one 15-minute follow-up capture before returning to the established six-hour/hourly/T-60 cadence. The writer reads only current publication authority in bounded pages rather than scanning superseded large JSON rows. Capture-only Circa/Pinnacle/Bookmaker landmarks persist in context release `nfl_daily_edge_forward_context_capture_2026_09_28_r6_paid_team_score_activation`; verified same-book line movement can perform a genuine Spread or Total direction correction, while a Spread-driven outright-winner change requires Moneyline-specific same-book price movement and source-qualified Moneyline split corroboration. Named sharp splits and lower-trust Playbook fallback splits remain source-separated internal context. Locked T-60 rows remain immutable.
+- NFL tracking record / sole writer are `nfl_official_tracking_record_2026_09_28_r16_market_marriage` / `nfl_forward_evidence_writer_2026_10_06_r54_hourly_market_freshness`. An eligible T-60 payload emits all three immutable forecast markets. The sole writer retains the newest verified injury payload and the latest verified Playbook line/splits and named sharp split set only for the exact same provider game when a later provider response omits them; original timestamps/provenance are preserved, so sport-specific freshness gates cannot treat continuity as new evidence. Collector `nfl_forward_evidence_collector_2026_10_06_r17_hourly_market_freshness`, fixture `nfl_weekly_member_fixture_2026_10_05_r37_winner_coherence`, and compact snapshot `nfl_forward_member_snapshot_2026_10_05_r29_winner_coherence` expose authoritative expected-score means at one decimal for newly captured evidence while preserving older valid locks unchanged. Every unlocked game is collected at least hourly; the former six-hour far-slate window is removed, and health rejects source evidence older than 90 minutes even if the compact member snapshot was republished recently. Tracking serialization is downstream of member-snapshot publication, so a tracking-only failure cannot suppress a valid lock. The bounded recovery path may serialize an already-published immutable T-60 tuple only when direction agreement with its own score distribution is the sole failed invariant; it preserves the exact pregame side, line, price, probability, grade, timestamp, and evidence hash and cannot recompute a prediction. A complete side-bearing forecast without a coherent exact-price tuple is stored as a non-Held No Play with null price/market probability/edge/EV; it counts for prediction accuracy but cannot enter Best Angle, Lean, stake, or ROI. A complete three-market forecast manifest remains eligible even when all three exact-price tuples disappear at lock. Null-side forecasts, all other internal-coherence failures, and true whole-game health failures remain ineligible. The regular slate adapter `balldontlie_nfl_regular_slate_2026_09_28_r4_opening_timestamp_capture` retains the complete verified schedule when current odds have disappeared for completed games and retains provider `opened_at` timestamps; current rows still require `updated_at`. Only a due game's invalid forecast is isolated by the writer. Week selector `nfl_forward_week_selection_2026_09_28_r2_completed_slate_rollover` keeps the configured/calendar week as an operator floor, protects every represented Monday game, and may advance an already-completed Sunday-only slate after the established 2 a.m. ET board boundary. A release-transition board may retain r25, r24, r23, r22, r21, r20 and r18 rows only when each row independently proves a complete on-time immutable T-60 tuple; an unlocked preceding row remains ineligible and the stale stored tracking boolean is not trusted. The writer reads only current publication authority in bounded pages rather than scanning superseded large JSON rows. Capture-only Circa/Pinnacle/Bookmaker landmarks persist in context release `nfl_daily_edge_forward_context_capture_2026_09_28_r6_paid_team_score_activation`; verified same-book line movement can perform a genuine Spread or Total direction correction, while a Spread-driven outright-winner change requires Moneyline-specific same-book price movement and source-qualified Moneyline split corroboration. Named sharp splits and lower-trust Playbook fallback splits remain source-separated internal context. Locked T-60 rows remain immutable.
 - WNBA prediction-record contract is `wnba_prediction_record_contract_v8_exact_price_denominator_2026_09_19`. A side-bearing ML, Total, or Spread forecast no longer disappears solely because its exact price or current decision tuple is unavailable; it becomes the same accuracy-only Held No Play shape. A complete exact-price tuple now retains that quote's break-even probability as the economic denominator when the stricter target-excluded fair probability is unavailable, while preserving the latter as null with its original provenance. Null-side forecasts, invalid team identity, release mismatch, and unverified game identity remain withheld. Existing locked records are immutable.
 - The September 4 denominator release changed no forecast, side, probability, grade policy, actionable count, stake, provider query, schedule, lease, or database schema. Evidence and rollback: `docs/model-audits/2026-09-04-cross-sport-complete-tracking-denominators.md`. The September 19 WNBA r8 change is limited to its explicitly versioned economic denominator handoff described below.
 
@@ -196,6 +218,31 @@ Last reviewed: 2026-10-05
 - Evidence: `docs/model-audits/2026-08-28-football-cross-market-coherence-predeclaration.md`, `docs/model-audits/2026-08-28-football-cross-market-coherence-r19.md`, `docs/model-audits/2026-08-26-football-market-scoped-t60-predeclaration.md`, `docs/model-audits/2026-08-25-nfl-odds-history-reader-repair.md`, `docs/model-audits/2026-08-25-nfl-public-release-transition.md`, `docs/model-audits/2026-08-25-nfl-actionable-grades-production-r9.md`, `docs/model-audits/2026-08-25-nfl-actionable-grades-r9.md`, `docs/model-audits/2026-08-25-nfl-projected-qb-context-r11.md`, `docs/model-audits/2026-08-23-nfl-discrete-drive-joint-r10.md`, and `docs/model-audits/2026-08-23-nfl-v1-comprehensive-outcome.md`.
 
 ## CFB Daily Edge generalized weekly production release
+
+### Missing-price forecast continuity, hourly freshness and bounded fallback rotation (collector r43; writer r96)
+
+- Active collector / sole writer releases are
+  `cfb_forward_evidence_collector_2026_10_06_r43_hourly_market_freshness` /
+  `cfb_forward_evidence_writer_2026_10_06_r96_hourly_market_freshness`; shared presentation is
+  `daily_edge_member_presentation_2026_10_06_r23_cfb_score_outlook_continuity`.
+  Independent score, PMF, probabilities, market arbitration, decisions, grades, fixture, compact
+  snapshot, lock and tracking releases remain unchanged.
+- The current 86-game slate has complete model scores and winner forecasts. Playbook presently
+  supplies complete Moneyline, Spread and Total rows for all 55 FBS-involved games; 31 visible
+  FCS-only games do not yet have a verified Spread or Total quote. Those 62 prediction surfaces
+  now retain the authoritative score-derived projected margin/total instead of showing an
+  unavailable label. All 62 exact-price contracts remain No Play; no price or betting line is
+  inferred.
+- The existing 24-game SharpAPI fallback budget prioritizes rows deferred by the prior bounded
+  cycle before retrying already-attempted rows. The 192-request ceiling, one
+  `prediction_pipeline:cfb` lease and single append path remain unchanged. Every unlocked game is
+  now collected at least hourly instead of waiting six hours early in the week. If Playbook or
+  SharpAPI temporarily omits a previously verified exact-game line/split observation, the writer
+  retains it with its original timestamp until fresher evidence silently replaces it; existing
+  sport-specific freshness gates still exclude old evidence from forecast arbitration.
+- Board impact is zero promotions, zero demotions and zero exact-tuple changes. Evidence and
+  rollback are recorded in
+  `docs/model-audits/2026-10-06-cfb-missing-price-forecast-continuity-predeclaration.md`.
 
 ### Moneyline market-confirmation grade repair (decision r39; writer r94)
 
@@ -1309,7 +1356,7 @@ and Total markets as unavailable. The correction restores authentic named-book
 price inputs only; it does not fabricate a price, alter a locked record, or add a
 second writer.
 
-Shared member presentation release: `daily_edge_member_presentation_2026_08_28_r15_football_unavailable_prediction_copy`.
+Shared member presentation release: `daily_edge_member_presentation_2026_10_06_r23_cfb_score_outlook_continuity`.
 Internal operational holds remain high-severity health/recovery state, but the
 member board, filters, cards, headlines, and Bet Grade surface them as No Play
 with an explicit incomplete-evidence reason. The response reports evaluated
@@ -1323,16 +1370,15 @@ probability, forecast side, exact price, writer grade, action, stake, tracking
 row, lease, or lock behavior. On prediction surfaces, a missing directional
 market side on a legacy snapshot falls back to the model-native output (for
 example, `Projected total 8.3` or the projected score) rather than the Bet
-Grade label. An explicit football market-prediction health failure never uses
-that fallback. No Play appears only in Bet Grade surfaces.
+Grade label. A football market-prediction health failure caused only by a missing verified line now
+uses that same score-derived fallback instead of erasing the model outlook. It shows projected
+margin or projected total, never a fabricated sportsbook line, Over/Under side, price, edge, EV,
+actionability or grade. No Play appears only in Bet Grade surfaces.
 The r6 football reader presents five market-specific primary drivers before a
 disclosure containing every remaining verified row, and moves injury and
-availability reporting below those drivers as explicit context. When an NFL
-Spread or an explicit CFB market-prediction contract has no directional
-prediction, the prediction surface now says `Spread prediction unavailable`
-instead of repurposing projected scoring margin as a bettable spread side;
-an explicitly unavailable CFB Total similarly fails closed. These are
-presentation-only changes: model
+availability reporting below those drivers as explicit context. When a verified Spread or Total
+line exists, its released line-specific prediction remains authoritative and wins over the
+score-derived fallback. These are presentation-only changes: model
 probabilities, projected scores, exact lines and prices, grades, stakes,
 tracking rows, writers, leases, and locks are unchanged.
 The r8 presentation contract removes three false reader implications without
