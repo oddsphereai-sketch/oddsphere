@@ -116,6 +116,19 @@ function cronConfigsForSport(sport: Sport): CronCfg[] {
       { data_source: "pregame_sweep", per_sport: true, cadence_minutes: 30, frontline: false },
     ];
   }
+  if (sport === "nba") {
+    return [
+      { data_source: "nba_daily_refresh", per_sport: true, cadence_minutes: 30, frontline: true },
+      { data_source: "tracking_refresh", per_sport: true, cadence_minutes: 120, frontline: true },
+    ];
+  }
+  if (sport === "nhl") {
+    return [
+      { data_source: "nhl_daily_refresh", per_sport: true, cadence_minutes: 30, frontline: true },
+      { data_source: "public_splits_observations_refresh", per_sport: true, cadence_minutes: 30, frontline: true },
+      { data_source: "tracking_refresh", per_sport: true, cadence_minutes: 120, frontline: true },
+    ];
+  }
   if (sport === "soccer") {
     return [
       { data_source: "epl_daily_refresh", per_sport: true, cadence_minutes: 30, frontline: true },

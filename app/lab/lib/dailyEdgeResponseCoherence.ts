@@ -66,36 +66,15 @@ function expectedTrailBook(market: MarketEdgeDto, locked: boolean): string | nul
   return expectedCurrentBook(market, locked);
 }
 
-function sectionIsStale(section: MarketSplitDisplaySection | null, nowMs: number): boolean {
-  if (!section) return false;
-  if (section.rows.some((row) => row.isStale === true)) return true;
-  const latest = section.lastUpdated ?? section.rows
-    .map((row) => row.freshnessCheckedAt ?? row.observedAt)
-    .filter((value): value is string => Boolean(value))
-    .sort()
-    .at(-1) ?? null;
-  if (!latest) return false;
-  const latestMs = Date.parse(latest);
-  return Number.isFinite(latestMs) && nowMs - latestMs > 75 * 60_000;
-}
-
 function fallbackSharpAvailability(
   marketKey: DailyEdgeCoherenceIssue["market"],
   section: MarketSplitDisplaySection | null,
-  nowMs: number,
 ): NonNullable<MarketEdgeDto["sharpBookAvailability"]> {
   if (marketKey === "first_inning") {
     return {
       status: "unavailable",
       message: "The current provider does not offer verified first-inning Sharp-book split percentages.",
       lastUpdated: null,
-    };
-  }
-  if (sectionIsStale(section, nowMs)) {
-    return {
-      status: "stale",
-      message: "The last authentic Sharp-book observation is too old to present as current.",
-      lastUpdated: section?.lastUpdated ?? null,
     };
   }
   if (section?.rows.length === 2 && section.rows.every((row) => row.moneyPct !== null && row.betsPct !== null)) {
@@ -205,14 +184,12 @@ export function finalizeDailyEdgeResponseCoherence(body: DailyEdgeResponse): Dai
   }
   body.memberPresentation = buildDailyEdgeMemberPresentation(body);
   if (body.sport !== "mlb") return body;
-  const nowMs = Date.parse(body.as_of) || Date.now();
   for (const game of body.games) {
     for (const marketKey of ["moneyline", "total", "first_inning"] as const) {
       const market = game.markets[marketKey];
       market.sharpBookAvailability ??= fallbackSharpAvailability(
         marketKey,
         market.recommendationDecision?.sharpBookSplits ?? null,
-        nowMs,
       );
 
       const reasons: string[] = [];

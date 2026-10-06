@@ -730,7 +730,7 @@ function nflSourceSplitEvidence(
       sharp: section,
       sportsbook: null,
       availability: {
-        status: isStale ? "stale" : "complete",
+        status: "complete",
         message: "Strictly matched Circa split evidence is available for this game and market.",
         lastUpdated: observedAt,
       },

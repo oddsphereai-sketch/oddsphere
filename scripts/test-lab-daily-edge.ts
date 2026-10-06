@@ -406,7 +406,7 @@ section("Market Pulse presentation coherence");
     check("starter repair targets exact flagged game IDs instead of a full-slate prefix", healthRepairSource.includes("externalIdsFilter: uniqueEligibleExternalIds") && healthRepairSource.includes("limit: uniqueEligibleExternalIds.length") && !healthRepairSource.includes("limit: Math.max(1, args.report.gameCount)"));
     check("Daily Edge repair republishes the coherent member snapshot before post-repair health", healthRepairSource.includes("refreshDailyEdgeResponseSnapshot") && healthRepairSource.includes('source: "daily_edge_data_health_repair"') && healthRepairSource.indexOf("await refreshDailyEdgeResponseSnapshot") < healthRepairSource.indexOf("if (args.postRepairMonitor)"));
     check("Daily Edge repair targets missing ML and total market evidence", ['finding.code === "evidence_blocked"', 'finding.code === "actionable_price_missing"', 'finding.code === "actionable_edge_missing"', 'finding.code === "total_price_missing"'].every((needle) => healthRepairSource.includes(needle)));
-    check("refresh pill follows each live league's actual cron", refreshStatusSource.includes('data_source: "nfl_forward_evidence"') && refreshStatusSource.includes('data_source: "cfb_forward_evidence"') && refreshStatusSource.includes('data_source: "wnba_daily_refresh"') && refreshStatusSource.includes('cadence_minutes: 30') && refreshStatusSource.includes('data_source: "soccer_daily_refresh"') && refreshStatusSource.includes('cadence_minutes: 60') && refreshStatusSource.includes("cronConfigsForSport(effectiveSport)"));
+    check("refresh pill follows each live league's actual cron", refreshStatusSource.includes('data_source: "nfl_forward_evidence"') && refreshStatusSource.includes('data_source: "cfb_forward_evidence"') && refreshStatusSource.includes('data_source: "wnba_daily_refresh"') && refreshStatusSource.includes('data_source: "nba_daily_refresh"') && refreshStatusSource.includes('data_source: "nhl_daily_refresh"') && refreshStatusSource.includes('data_source: "public_splits_observations_refresh"') && refreshStatusSource.includes('cadence_minutes: 30') && refreshStatusSource.includes('data_source: "soccer_daily_refresh"') && refreshStatusSource.includes('cadence_minutes: 60') && refreshStatusSource.includes("cronConfigsForSport(effectiveSport)"));
     check("visible Under line drop is classified as market support", dailyEdgeTest.visibleTotalPointMarketReadScore("Under", 9.5, 8.5) === 3);
     check("visible Over line drop is classified as market resistance", dailyEdgeTest.visibleTotalPointMarketReadScore("Over", 9.5, 8.5) === -3);
     check("flat total line remains projection-led when price is also flat", dailyEdgeTest.visibleTotalPointMarketReadScore("Under", 8.5, 8.5) === null);
@@ -500,7 +500,12 @@ section("Market Pulse presentation coherence");
     const result = sections.get("13579::total");
     check("complete DraftKings percentages render under their own fallback source label", result?.sportsbook?.label === "DraftKings Splits" && result.sportsbook.rows.length === 2);
     check("DraftKings tickets and handle remain attached to the correct sides", result?.sportsbook?.rows[0]?.betsPct === 57 && result.sportsbook.rows[0]?.moneyPct === 20 && result.sportsbook.rows[1]?.betsPct === 43 && result.sportsbook.rows[1]?.moneyPct === 80);
-    check("valid DraftKings percentages never rehabilitate invalid Circa endpoints", result?.sharpBook === null && result.sharpAvailability.status === "provider_limited");
+    check(
+      "invalid Circa endpoints do not block a complete DraftKings display fallback",
+      result?.sharpBook === null &&
+        result.sportsbook?.label === "DraftKings Splits" &&
+        result.sharpAvailability.status === "complete",
+    );
   }
   {
     const observedNow = new Date().toISOString();

@@ -282,7 +282,7 @@ export default async function CandidateDailyEdgePage({
               previousHref: null,
               nextHref: null,
               asOf: snapshot.as_of,
-              cadenceLabel: "six-hour early evidence · hourly inside 48h · 15-minute T-60 checks",
+              cadenceLabel: "hourly evidence · 15-minute T-60 checks",
             }
           : nflWeekOneEvidenceEnabled
             ? {
@@ -291,7 +291,7 @@ export default async function CandidateDailyEdgePage({
                 nextHref: null,
                 displayGameCount: 0,
                 asOf: snapshot.as_of,
-                cadenceLabel: "six-hour early evidence · hourly inside 48h · 15-minute T-60 checks",
+                cadenceLabel: "hourly evidence · 15-minute T-60 checks",
               }
           : cfbFixture
             ? {
@@ -299,7 +299,7 @@ export default async function CandidateDailyEdgePage({
                 previousHref: null,
                 nextHref: null,
                 asOf: snapshot.as_of,
-                cadenceLabel: "six-hour beyond 48h · hourly inside 48h · T-60 lock",
+                cadenceLabel: "hourly evidence · T-60 lock",
               }
           : cfbEnabled
             ? {
@@ -309,7 +309,7 @@ export default async function CandidateDailyEdgePage({
                 displayGameCount: 0,
                 unavailable: true,
                 asOf: snapshot.as_of,
-                cadenceLabel: "six-hour beyond 48h · hourly inside 48h · T-60 lock",
+                cadenceLabel: "hourly evidence · T-60 lock",
               }
           : eplRequested && eplEnabled
             ? { label: `Weekly Premier League slate · ${snapshot.games.length} matches`, previousHref: null, nextHref: null }

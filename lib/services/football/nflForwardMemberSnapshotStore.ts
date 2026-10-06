@@ -445,13 +445,10 @@ export function auditNflForwardMemberSnapshot(input: {
     game.markets.total,
     game.markets.first_inning,
   ]);
-  const upcomingStarts = games
-    .map((game) => Date.parse(game.gameStartAt ?? game.scheduledLockAt))
-    .filter((startsAt) => Number.isFinite(startsAt) && startsAt > nowMs);
-  const soonestStart = upcomingStarts.length ? Math.min(...upcomingStarts) : Number.POSITIVE_INFINITY;
-  const maximumSourceAgeMinutes = Number.isFinite(soonestStart) && soonestStart - nowMs <= 48 * 60 * 60 * 1000
-    ? 90
-    : 390;
+  // The collector now refreshes every unlocked game hourly. Auditing a
+  // six-hour far-window here would let a compact republish hide a stalled
+  // provider collection, so health uses one source-age contract everywhere.
+  const maximumSourceAgeMinutes = 90;
   const ageMinutes = (value: string): number | null => {
     const parsed = Date.parse(value);
     return Number.isFinite(parsed) ? Math.max(0, (nowMs - parsed) / 60_000) : null;

@@ -1878,16 +1878,32 @@ function buildSourceAwareSplitSectionsFromRows(
       : null;
     const completeFallback = (section: MarketSplitDisplaySection | null): MarketSplitDisplaySection | null =>
       section?.rows.length === 2
-        && section.rows.every((row) => row.moneyPct !== null && row.betsPct !== null && row.isStale !== true)
+        && section.rows.every((row) => row.moneyPct !== null && row.betsPct !== null)
         ? section
         : null;
-    // Circa is always the primary source. DraftKings is the first fallback
-    // because SharpAPI currently supplies both ticket and handle shares there;
-    // BetMGM is eligible only if it independently supplies the same complete
-    // two-sided pair. Neither fallback is passed into recommendationDecision.
-    const sportsbook = sharpBook === null || sharpBook.rows.some((row) => row.isStale === true)
-      ? completeFallback(draftKingsCandidate) ?? completeFallback(betMgmCandidate)
-      : null;
+    const sectionObservedAtMs = (section: MarketSplitDisplaySection | null): number => {
+      const observedAt = section?.lastUpdated ?? section?.rows
+        .map((row) => row.observedAt)
+        .filter((value): value is string => Boolean(value))
+        .sort()
+        .at(-1) ?? null;
+      const observedAtMs = observedAt === null ? Number.NaN : Date.parse(observedAt);
+      return Number.isFinite(observedAtMs) ? observedAtMs : Number.NEGATIVE_INFINITY;
+    };
+    const fallbackCandidates = [completeFallback(draftKingsCandidate), completeFallback(betMgmCandidate)]
+      .filter((section): section is MarketSplitDisplaySection => section !== null)
+      .sort((left, right) => sectionObservedAtMs(right) - sectionObservedAtMs(left));
+    const freshestFallback = fallbackCandidates[0] ?? null;
+    // Current Circa remains primary. If it stops updating, the newest complete
+    // approved named-book pair silently fills the same member section; when no
+    // fresher fallback exists, the last complete Circa pair stays visible.
+    // Display fallback rows never enter recommendationDecision.
+    const sportsbook = sharpBook === null
+      ? freshestFallback
+      : sharpBook.rows.some((row) => row.isStale === true)
+          && sectionObservedAtMs(freshestFallback) > sectionObservedAtMs(sharpBook)
+        ? freshestFallback
+        : null;
     const rawSharpRows = rows.filter(
       (row) => row.provider === "sharpapi"
         && (row.source_book === "circa" || row.source_type === "sharp_adjacent_book"),
@@ -1897,21 +1913,12 @@ function buildSourceAwareSplitSectionsFromRows(
       .filter((value): value is string => typeof value === "string" && value.length > 0)
       .sort()
       .at(-1) ?? null;
-    const sharpLastUpdatedMs = sharpLastUpdated === null ? Number.NaN : Date.parse(sharpLastUpdated);
-    const sharpIsStale = Number.isFinite(sharpLastUpdatedMs)
-      ? (Date.now() - sharpLastUpdatedMs) / 60_000 > SOURCE_AWARE_SPLIT_STALE_AGE_MINUTES
-      : false;
-    const sharpAvailability: NonNullable<MarketEdgeDto["sharpBookAvailability"]> = sharpIsStale
-      ? {
-          status: "stale",
-          message: "The last SharpAPI market snapshot is stale and is retained only as historical context.",
-          lastUpdated: sharpLastUpdated,
-        }
-      : sharpBook !== null
+    const displayedSharp = sportsbook ?? sharpBook;
+    const sharpAvailability: NonNullable<MarketEdgeDto["sharpBookAvailability"]> = displayedSharp !== null
         ? {
             status: "complete",
-            message: "Complete two-sided Circa money and ticket percentages are available.",
-            lastUpdated: sharpBook.lastUpdated,
+            message: "Complete two-sided named-book money and ticket percentages are available.",
+            lastUpdated: displayedSharp.lastUpdated,
           }
         : rawSharpRows.length > 0
           ? {
@@ -3091,12 +3098,12 @@ function buildGameDto(
   ml.sportsbookSplits = mlSourceAwareSplits?.sportsbook ?? null;
   total.sportsbookSplits = totalSourceAwareSplits?.sportsbook ?? null;
   ml.sharpBookAvailability = mlSourceAwareSplits?.sharpAvailability ?? {
-    status: mlSharpBookSplits?.rows.some((split) => split.isStale === true) ? "stale" : mlSharpBookSplits ? "provider_limited" : "pending",
+    status: mlSharpBookSplits?.rows.length ? "provider_limited" : "pending",
     message: mlSharpBookSplits?.signal ?? "Sharp-book split data has not arrived from SharpAPI for this market yet.",
     lastUpdated: mlSharpBookSplits?.lastUpdated ?? null,
   };
   total.sharpBookAvailability = totalSourceAwareSplits?.sharpAvailability ?? {
-    status: totalSharpBookSplits?.rows.some((split) => split.isStale === true) ? "stale" : totalSharpBookSplits ? "provider_limited" : "pending",
+    status: totalSharpBookSplits?.rows.length ? "provider_limited" : "pending",
     message: totalSharpBookSplits?.signal ?? "Sharp-book split data has not arrived from SharpAPI for this market yet.",
     lastUpdated: totalSharpBookSplits?.lastUpdated ?? null,
   };
