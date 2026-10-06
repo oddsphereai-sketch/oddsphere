@@ -6,6 +6,7 @@ import type { NflPlayerPropsForecastTrend } from "@/lib/services/football/nflPla
 import { nflPlayerPropsCanonicalMarketScopeKey } from "@/lib/services/football/nflPlayerPropsCanonicalLine";
 import { PlayerPropReaderDialog } from "./PlayerPropReaderDialog";
 import {
+  hasComparableNflPlayerPropsOpening,
   nflPlayerPropsAvailabilityAgeLabel,
   nflPlayerPropsTouchdownPlayerKey,
   resolveNflPlayerPropsActionableForecast,
@@ -196,7 +197,13 @@ function SideQuote({ row, prediction, selectedKey, onSelect, card = false }: { r
 function PropReader({ row, onClose }: { row: Row; onClose: () => void }) {
   const comparisons = [...(row.bookEvidence ?? [{ sportsbook: row.sportsbook, provider: row.provider, americanPrice: row.americanPrice, observedAt: row.observedAt, openingObservedAt: null, openingLine: null, openingAmericanPrice: null }])].sort((a, b) => b.americanPrice - a.americanPrice);
   const selectedBook = comparisons.find((value) => normalizeBook(value.sportsbook) === normalizeBook(row.sportsbook) && value.provider === row.provider) ?? null;
-  const hasMovement = Boolean(selectedBook?.openingObservedAt && selectedBook.openingAmericanPrice !== null);
+  const hasMovement = selectedBook ? hasComparableNflPlayerPropsOpening({
+    market: row.market,
+    line: row.line,
+    openingObservedAt: selectedBook.openingObservedAt,
+    openingLine: selectedBook.openingLine,
+    openingAmericanPrice: selectedBook.openingAmericanPrice,
+  }) : false;
   const independentConfirmationMissing = row.healthHolds.includes("independent_same_line_confirmation_missing");
   return <PlayerPropReaderDialog ariaLabel={`${row.playerName} prop details`} title={row.playerName} leading={<NflTeamBadge team={row.team} size="small" />} onClose={onClose}><div className="grid min-w-0 gap-4 p-4 sm:p-6 lg:grid-cols-2">
     <div className="min-w-0 lg:col-span-2"><ReaderPanel title="Prop Summary"><div className="flex items-start justify-between gap-4"><div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><span className="text-sm text-gray-500">{matchup(row)} · {label(row.market)} · starts {fullGameTime(row.scheduledStart)}</span>{row.state === "locked" ? <LockBadge lockedAt={row.lockAt} /> : null}</div><p className="mt-3 text-3xl font-black text-white">{selection(row)} <span className="text-emerald-300">{price(row.americanPrice)}</span></p><p className="mt-1 text-xs text-gray-500">{book(row.sportsbook)} · {provider(row.provider)} · price observed {localTime(row.observedAt)}</p></div><GradeBadge grade={row.grade} /></div>{independentConfirmationMissing ? <section className="mt-4 rounded-lg border border-sky-400/25 bg-sky-400/[0.055] p-3.5"><p className="text-[9px] font-black uppercase tracking-wider text-sky-200">Independent same-line confirmation pending</p><p className="mt-2 text-xs leading-5 text-gray-300">The projection and exact current price are complete, but another sportsbook has not posted this identical line. The read remains No Play until that confirmation exists.</p></section> : null}<AvailabilityCallout row={row} /></ReaderPanel></div>
@@ -332,10 +339,16 @@ function price(value: number): string { return value > 0 ? `+${value}` : String(
 function impliedProbability(value: number): number { return value > 0 ? 100 / (value + 100) : Math.abs(value) / (Math.abs(value) + 100); }
 function quoteMovement(row: Row): string | null {
   const evidence = row.bookEvidence?.find((value) => normalizeBook(value.sportsbook) === normalizeBook(row.sportsbook) && value.provider === row.provider);
-  if (!evidence?.openingObservedAt || evidence.openingAmericanPrice === null) return null;
+  if (!evidence || !hasComparableNflPlayerPropsOpening({
+    market: row.market,
+    line: row.line,
+    openingObservedAt: evidence.openingObservedAt,
+    openingLine: evidence.openingLine,
+    openingAmericanPrice: evidence.openingAmericanPrice,
+  })) return null;
   const opening = evidence.openingLine !== null && evidence.openingLine !== row.line
-    ? `${evidence.openingLine} ${price(evidence.openingAmericanPrice)}`
-    : price(evidence.openingAmericanPrice);
+    ? `${evidence.openingLine} ${price(evidence.openingAmericanPrice!)}`
+    : price(evidence.openingAmericanPrice!);
   const current = evidence.openingLine !== null && evidence.openingLine !== row.line
     ? `${row.line} ${price(row.americanPrice)}`
     : price(row.americanPrice);

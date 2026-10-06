@@ -1,12 +1,26 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import {
+  hasComparableNflPlayerPropsOpening,
   nflPlayerPropsAvailabilityAgeLabel,
   resolveNflPlayerPropsPrediction,
   resolveNflPlayerPropsActionableForecast,
   selectNflPlayerPropsOverForecasts,
   selectNflPlayerPropsTouchdownScorers,
 } from "../app/player-props/lib/nflPlayerPropsPresentation";
+
+assert.equal(hasComparableNflPlayerPropsOpening({
+  market: "anytime_td", line: 0.5, openingObservedAt: "2026-10-06T12:00:00.000Z",
+  openingLine: 2, openingAmericanPrice: 7500,
+}), false, "a different touchdown ladder cannot masquerade as an Anytime TD opening");
+assert.equal(hasComparableNflPlayerPropsOpening({
+  market: "anytime_td", line: 0.5, openingObservedAt: "2026-10-06T12:00:00.000Z",
+  openingLine: 0.5, openingAmericanPrice: 550,
+}), true, "a genuine same-line Anytime TD opening remains eligible");
+assert.equal(hasComparableNflPlayerPropsOpening({
+  market: "passing_yards", line: 249.5, openingObservedAt: "2026-10-06T12:00:00.000Z",
+  openingLine: 247.5, openingAmericanPrice: -110,
+}), true, "ordinary prop line movement remains visible");
 import {
   attachNflPlayerPropsClosingPrice,
   buildNflPlayerPropsMemberSnapshot,

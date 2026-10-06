@@ -3,6 +3,20 @@ type NflPlayerPropsAvailabilityTimestamps = {
   reportUpdatedAt: string | null;
 };
 
+export const NFL_PLAYER_PROPS_PRESENTATION_RELEASE =
+  "nfl_player_props_presentation_2026_10_06_r1_touchdown_opening_integrity" as const;
+
+export function hasComparableNflPlayerPropsOpening(args: {
+  market: string;
+  line: number;
+  openingObservedAt: string | null;
+  openingLine: number | null;
+  openingAmericanPrice: number | null;
+}): boolean {
+  if (!args.openingObservedAt || args.openingAmericanPrice === null) return false;
+  return args.market !== "anytime_td" || args.openingLine === args.line;
+}
+
 export type NflPlayerPropsPredictionOutcome = "over" | "under" | "yes" | "no";
 
 export type NflPlayerPropsPrediction<T> = {
