@@ -75,17 +75,28 @@ function n(v: unknown): number | null {
   return typeof v === "number" && Number.isFinite(v) ? v : null;
 }
 
-function isPlausibleDisplayedAmericanOdds(sport: string, american: number | null): boolean {
+function isPlausibleDisplayedAmericanOdds(
+  sport: string,
+  slot: string,
+  american: number | null,
+): boolean {
   if (isDisplayableAmericanOdds(american)) return true;
-  // WNBA favorite prices can legitimately exceed the generic streaming guard
-  // (the 2026-07-28 MIN market was -1400 to -1800 across independent books).
-  // This only prevents the read-only coherence audit from calling a verified
-  // consensus price corrupt; it does not admit the price into any model input.
-  return sport === "wnba" &&
+  // Heavy favorites can legitimately exceed the generic streaming guard in
+  // several sports (for example, WNBA and three-way soccer moneylines). This
+  // audit-only allowance does not admit a price into a model or provider
+  // pipeline; source-chain and same-market coherence are checked separately.
+  const market = marketLabel(sport, slot);
+  const isTeamWinnerMarket = market === "moneyline" || market === "1x2";
+  const extendedMaximum = sport === "cfb"
+    ? 100_000
+    : sport === "nfl" || sport === "soccer" || sport === "ucl"
+      ? 10_000
+      : 2_500;
+  return isTeamWinnerMarket &&
     american !== null &&
     Number.isInteger(american) &&
     Math.abs(american) >= 100 &&
-    Math.abs(american) <= 2500;
+    Math.abs(american) <= extendedMaximum;
 }
 
 function implied(american: number | null): number | null {
@@ -104,6 +115,14 @@ function readDirection(label: unknown): Direction {
   if (lower.includes("support")) return "support";
   if (lower.includes("resistance")) return "resistance";
   return "neutral";
+}
+
+function isProjectionLedRead(label: unknown): boolean {
+  const normalized = String(label ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/[\s_-]+/g, " ");
+  return normalized === "projection led";
 }
 
 function sharpDirection(summary: unknown): Direction {
@@ -312,7 +331,7 @@ export function auditDailyEdgeBoards(
           ["readCurrent", n(read?.movement?.currentPrice)],
         ] as const;
         for (const [field, value] of displayedOdds) {
-          if (!isPlausibleDisplayedAmericanOdds(sport, value) && value !== null) {
+          if (!isPlausibleDisplayedAmericanOdds(sport, slot, value) && value !== null) {
             push("implausible_displayed_american_odds", sport, game, slot, market, { field, value });
           }
         }
@@ -356,7 +375,7 @@ export function auditDailyEdgeBoards(
             lineCurrent: market.lastMoveLineNext ?? null,
           });
         }
-        if (read !== null && readDir === "neutral" && visibleDir !== "neutral") {
+        if (read !== null && isProjectionLedRead(read.label) && visibleDir !== "neutral") {
           push("projection_led_contradicts_visible_trail", sport, game, slot, market, {
             readLabel: read?.label ?? null,
             visibleDirection: visibleDir,
@@ -463,7 +482,9 @@ export function auditDailyEdgeBoards(
               displayReason.includes("toss-up") ||
               displayReason.includes("no actionable side") ||
               displayReason.includes("coin-flip"));
-          if (!neutralFirstInningDecision && (capReasons.length === 0 || !displayReason.includes("because"))) {
+          const hasExplicitCapReason = capReasons.some((reason) =>
+            typeof reason === "string" && reason.trim().length > 0);
+          if (!neutralFirstInningDecision && !hasExplicitCapReason && !displayReason.includes("because")) {
             push("no_play_positive_edge_needs_explanation", sport, game, slot, market, {
               modelMarketGapPct: market.modelMarketGapPct,
               capReasons,

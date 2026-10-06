@@ -68,6 +68,20 @@ function board(market: Record<string, unknown>) {
 
 {
   const result = auditDailyEdgeBoards({
+    cfb: board({
+      priceAmerican: -12_000,
+      lineOpenAmerican: -50_000,
+      marketReadV2: null,
+    }),
+  });
+  check(
+    "verified CFB moneyline extremes remain audit-visible",
+    !result.summary.issueCounts.implausible_displayed_american_odds,
+  );
+}
+
+{
+  const result = auditDailyEdgeBoards({
     mlb: board({
       priceAmerican: -177,
       lineOpenAmerican: -225,
@@ -148,6 +162,34 @@ function board(market: Record<string, unknown>) {
     }),
   });
   check("first-to-lock visible support cannot be projection-led", result.summary.issueCounts.projection_led_contradicts_visible_trail === 1);
+}
+
+{
+  const result = auditDailyEdgeBoards({
+    mlb: board({
+      priceAmerican: -133,
+      lineOpenAmerican: -127,
+      marketReadV2: { label: "Movement history limited", sourceSummary: {}, movement: { currentPrice: -133 } },
+    }),
+  });
+  check(
+    "limited-history neutral copy is not misclassified as projection-led",
+    !result.summary.issueCounts.projection_led_contradicts_visible_trail,
+  );
+}
+
+{
+  const result = auditDailyEdgeBoards({
+    ucl: board({
+      priceAmerican: -1400,
+      lineOpenAmerican: -1500,
+      marketReadV2: null,
+    }),
+  });
+  check(
+    "legitimate heavy-favorite prices remain audit-visible",
+    !result.summary.issueCounts.implausible_displayed_american_odds,
+  );
 }
 
 {
@@ -580,6 +622,25 @@ function board(market: Record<string, unknown>) {
     }),
   });
   check("Positive-edge No Play with cap reason passes", !result.summary.issueCounts.no_play_positive_edge_needs_explanation);
+}
+
+{
+  const result = auditDailyEdgeBoards({
+    ucl: board({
+      grade: null,
+      verdict: { key: "no_play" },
+      modelMarketGapPct: 24,
+      capReasons: [
+        "No Play: the model and market differ by more than 20 percentage points, so the forecast is held for calibration review.",
+      ],
+      displayReason: "The club model and coherent three-way book disagree.",
+      marketReadV2: null,
+    }),
+  });
+  check(
+    "explicit calibration-review cap explains a positive-edge No Play",
+    !result.summary.issueCounts.no_play_positive_edge_needs_explanation,
+  );
 }
 
 {

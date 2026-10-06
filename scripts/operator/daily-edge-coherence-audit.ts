@@ -39,6 +39,16 @@ async function main(): Promise<void> {
 }
 
 async function fetchLocalBoards(): Promise<Record<string, Row>> {
+  const token = process.env.DAILY_EDGE_AUDIT_TOKEN || process.env.CRON_SECRET || null;
+  if (token) {
+    const { GET: deepAuditGet } = await import("../../app/api/internal/daily-edge-deep-audit/route");
+    const response = await deepAuditGet(new Request("http://localhost/api/internal/daily-edge-deep-audit", {
+      headers: { authorization: `Bearer ${token}` },
+    }));
+    const payload = await response.json().catch(() => null) as { boards?: Record<string, Row> } | null;
+    if (payload?.boards) return payload.boards;
+  }
+
   const { GET: dailyEdgeGet } = await import("../../app/api/lab/daily-edge/route");
   const out: Record<string, Row> = {};
   for (const sport of DAILY_EDGE_DEEP_AUDIT_SPORTS) {
