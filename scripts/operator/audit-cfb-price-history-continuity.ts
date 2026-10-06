@@ -81,6 +81,40 @@ async function main() {
     const labels = new Set((row.value?.oddsTrail ?? []).map((stop) => stop.label));
     return (labels.has("open") || labels.has("first")) && (labels.has("current") || labels.has("locked"));
   }).length;
+  const focusIds = new Set(["458385", "457738", "457739"]);
+  const focusGames = candidateFixture.snapshot.games
+    .filter((game) => focusIds.has(String(game.id).replace(/^cfb-/, "")))
+    .map((game) => ({
+      providerGameId: String(game.id).replace(/^cfb-/, ""),
+      matchup: `${game.awayTeam}@${game.homeTeam}`,
+      markets: Object.fromEntries((["moneyline", "spread", "total"] as const).map((market) => {
+        const value = market === "spread" ? game.markets.first_inning : game.markets[market];
+        return [market, {
+          pick: value.pick,
+          grade: value.verdict.label,
+          sportsbook: value.currentPriceSportsbook,
+          price: value.currentPriceAmerican,
+          trail: value.oddsTrail,
+        }];
+      })),
+    }));
+  const focusCaptures = writer.evidence
+    .filter((row) => focusIds.has(row.providerGameId))
+    .sort((first, second) => Date.parse(second.capturedAt) - Date.parse(first.capturedAt))
+    .filter((row, index, rows) => rows.findIndex((candidate) => candidate.providerGameId === row.providerGameId) === index)
+    .map((row) => ({
+      providerGameId: row.providerGameId,
+      capturedAt: row.capturedAt,
+      markets: Object.fromEntries((["moneyline", "spread", "total"] as const).map((market) => [
+        market,
+        row.payload.contextualEvidenceCapture?.markets[market].families.map((family) => ({
+          sportsbook: family[0],
+          provider: family[1],
+          opening: family[4],
+          current: family[5],
+        })) ?? [],
+      ])),
+    }));
   console.log(JSON.stringify({
     audit: "cfb_price_history_release_continuity_2026_09_19_r1",
     generatedAt: now,
@@ -106,6 +140,8 @@ async function main() {
     },
     changedDecisionCount: changedDecisions.length,
     changedDecisionSample: changedDecisions.slice(0, 10),
+    focusGames,
+    focusCaptures,
   }, null, 2));
 }
 

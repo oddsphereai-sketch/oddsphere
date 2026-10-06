@@ -219,6 +219,30 @@ Last reviewed: 2026-10-06
 
 ## CFB Daily Edge generalized weekly production release
 
+### Evaluated-book opening trail repair (fixture r72; snapshot r32; reader r17)
+
+- Active member fixture / compact snapshot / reader releases are
+  `cfb_v1_member_fixture_2026_10_06_r72_evaluated_book_opening_trails` /
+  `cfb_forward_member_snapshot_2026_10_06_r32_evaluated_book_opening_trails` /
+  `cfb_member_snapshot_reader_2026_10_06_r17_evaluated_book_opening_trails`. The evidence schema,
+  collector, sole writer, independent model, market reader, decisions, grades, locks and tracking
+  remain unchanged.
+- The exact-price shopper may evaluate a different named book from the one representative
+  provider opening used for forecast arbitration. The member history reader now projects only the
+  compact per-market opening-family arrays already stored in the forward context capture and uses
+  the evaluated sportsbook's own opening. It does not load full historical forecast payloads and
+  never mixes books. The exact graded quote remains the terminal point.
+- The live 89-game candidate restores complete opening-to-current trails for Jacksonville State at
+  Kennesaw State Spread and New Mexico State at Florida International Spread and Total. Complete
+  multi-point trails rise 165→168. Predictions, probabilities, expected scores, sides, exact
+  quotes, grades, actionability, locks and tracking are byte-identical: zero promotions, zero
+  demotions and zero changed decision identities. Southern Miss at Troy remains an honest
+  current-only SharpAPI context quote because neither primary provider nor stored history has yet
+  supplied an earlier same-book point; no opening is inferred.
+- Evidence and rollback are recorded in
+  `docs/model-audits/2026-10-06-cfb-evaluated-book-opening-trails.md`. Roll back fixture/snapshot/
+  reader to r71/r31/r16; no evidence or tracking row requires reversal.
+
 ### Tuesday-through-Monday midweek coverage (window r5; collector r45; writer r98; fixture r71; snapshot r31)
 
 - Active weekly window / collector / sole writer releases are

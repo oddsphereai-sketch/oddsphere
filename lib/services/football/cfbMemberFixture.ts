@@ -88,7 +88,7 @@ import { cfbTeamIdentity } from "./cfbTeamIdentity";
 import { CFB_PUBLIC_SCORE_DIRECTION_TOLERANCE_POINTS } from "./footballCrossMarketCoherence";
 
 export const CFB_MEMBER_FIXTURE_RELEASE =
-  "cfb_v1_member_fixture_2026_10_06_r71_midweek_board_coverage" as const;
+  "cfb_v1_member_fixture_2026_10_06_r72_evaluated_book_opening_trails" as const;
 export const CFB_PUBLIC_OUTCOME_CONTRACT_RELEASE =
   "cfb_market_sharp_public_outcome_contract_2026_10_04_r64_moneyline_market_confirmation" as const;
 export const CFB_CONTEXT_ONLY_QUOTE_CAPTURE_SKEW_MS = 5_000 as const;
@@ -1620,6 +1620,32 @@ function buildSameBookTrail(args: {
     }
     candidates.push(stop);
   };
+
+  // The compact forward-context capture retains the opening landmark for
+  // every evaluated/consensus book family. `providerOpening` below is only
+  // the single representative book used by forecast arbitration, so relying
+  // on it alone leaves a one-point member trail whenever exact-price shopping
+  // selects a different book. Restore the selected book's own opening here;
+  // this is presentation-only and cannot alter the immutable decision tuple.
+  for (const row of args.rows) {
+    const family = row.payload.contextualEvidenceCapture?.markets[args.market].families.find(
+      (candidate) => normalizeBook(candidate[0]) === sportsbook,
+    );
+    const opening = family?.[4] ?? null;
+    if (!family || !opening) continue;
+    const [observedAt, , freshness, homeOrTotalLine, firstPrice, secondPrice] = opening;
+    if (freshness === "x") continue;
+    const selected = args.side === "away" || args.side === "over"
+      ? { american: firstPrice, line: args.market === "spread" && homeOrTotalLine !== null ? -homeOrTotalLine : homeOrTotalLine }
+      : { american: secondPrice, line: homeOrTotalLine };
+    append({
+      ...selected,
+      observedAt,
+      sportsbook: family[0],
+      source: family[1] === "b" ? "provider_opening" : "line_history",
+      label: family[1] === "b" ? "open" : "first",
+    });
+  }
 
   for (const row of args.rows) {
     const opening = row.payload.market.providerOpening;

@@ -2084,6 +2084,43 @@ for (const decision of productionBundle.evaluatedBets) {
   assert.equal(market.actionabilityLabel, decision.grade, `${decision.market} movement display cannot alter the grade`);
   assert.ok(Date.parse(oddsTrail[0]!.observedAt!) < Date.parse(oddsTrail.at(-1)!.observedAt!), `${decision.market} trail must be chronological`);
 }
+
+const selectedBookOpeningPayload = structuredClone(payload);
+selectedBookOpeningPayload.contextualEvidenceCapture = buildCfbForwardContextCapture({
+  payload: selectedBookOpeningPayload,
+  independentForecast: forecast,
+  independentRelease: CFB_V1_WEEKLY_RUNTIME_RELEASE,
+  authoritativeForecast,
+  openingBooks: earlierBooks,
+})!;
+const selectedBookOpeningEvidence: CfbForwardStoredEvidence = {
+  ...evidence,
+  id: "test-row-selected-book-openings",
+  payloadSha256: hashCfbForwardEvidencePayload(selectedBookOpeningPayload),
+  payload: selectedBookOpeningPayload,
+};
+const selectedBookOpeningGame = buildCfbMemberFixture([selectedBookOpeningEvidence]).snapshot.games[0]!;
+for (const decision of productionBundle.evaluatedBets) {
+  const market = decision.market === "spread"
+    ? selectedBookOpeningGame.markets.first_inning
+    : selectedBookOpeningGame.markets[decision.market];
+  const selectedSide = decision.market === "total"
+    ? /^over\b/i.test(decision.side) ? "over" : "under"
+    : decision.side.startsWith(game.home.abbreviation) ? "home" : "away";
+  const earlierBook = earlierBooks.find((candidate) => normalizeSportsbook(candidate.sportsbook) === normalizeSportsbook(decision.evaluatedQuote.sportsbook));
+  assert.ok(earlierBook, `${decision.market} evaluated book must have a captured opening landmark`);
+  const expectedOpening = selectedQuote(earlierBook, decision.market, selectedSide);
+  assert.deepEqual(
+    market.oddsTrail?.map((stop) => ({ price: stop.american, line: stop.line, at: stop.observedAt, book: normalizeSportsbook(stop.sportsbook ?? "") })),
+    [
+      { price: expectedOpening.price, line: expectedOpening.line, at: earlierAt, book: normalizeSportsbook(decision.evaluatedQuote.sportsbook) },
+      { price: decision.evaluatedQuote.price, line: decision.evaluatedQuote.line, at: decision.evaluatedQuote.observedAt, book: normalizeSportsbook(decision.evaluatedQuote.sportsbook) },
+    ],
+    `${decision.market} must restore its evaluated book opening from the compact all-book capture`,
+  );
+  assert.equal(market.pick, decision.side, `${decision.market} opening restoration cannot change the prediction side`);
+  assert.equal(market.actionabilityLabel, decision.grade, `${decision.market} opening restoration cannot change the grade`);
+}
 assert.notEqual(member.provenance.sourceChecksum, movementMember.provenance.sourceChecksum, "historical evidence must contribute to the member checksum");
 assert.equal(movementGame.markets.moneyline.moneyPctObservedAt, payload.market.playbookSplits?.moneyline.capturedAt, "split freshness must come from the authoritative latest row");
 assert.equal(movementGame.markets.total.moneyPctObservedAt, payload.market.playbookSplits?.total.capturedAt, "Total split freshness must remain market-specific");
@@ -2902,6 +2939,9 @@ const projectedMarketHistoryRow = {
   operational_opening: earlierEvidence.payload.market.operationalOpening,
   playbook_splits: earlierEvidence.payload.market.playbookSplits,
   sharp_api_splits: earlierEvidence.payload.market.sharpApiSplits,
+  context_moneyline_families: selectedBookOpeningPayload.contextualEvidenceCapture?.markets.moneyline.families ?? null,
+  context_spread_families: selectedBookOpeningPayload.contextualEvidenceCapture?.markets.spread.families ?? null,
+  context_total_families: selectedBookOpeningPayload.contextualEvidenceCapture?.markets.total.families ?? null,
 };
 let marketHistorySelect = "";
 let marketHistoryReleaseFilter: string[] = [];
@@ -2946,8 +2986,14 @@ const marketHistoryRows = await readCfbForwardMarketHistory({
 });
 assert.equal(marketHistoryRows.length, 3, "member movement history must survive compatible prediction-release bumps");
 assert.deepEqual(marketHistoryRows[0]!.payload.market.currentBooks, earlierEvidence.payload.market.currentBooks);
+assert.deepEqual(
+  marketHistoryRows[0]!.payload.contextualEvidenceCapture?.markets.spread.families,
+  selectedBookOpeningPayload.contextualEvidenceCapture?.markets.spread.families,
+  "the compact movement reader must retain evaluated-book opening landmarks without loading the full historical payload",
+);
 assert.deepEqual(marketHistoryReleaseFilter, [...CFB_FORWARD_MARKET_HISTORY_COMPATIBLE_RELEASES]);
 assert.match(marketHistorySelect, /current_books:payload->market->currentBooks/);
+assert.match(marketHistorySelect, /context_spread_families:payload->contextualEvidenceCapture->markets->spread->families/);
 assert.doesNotMatch(marketHistorySelect, /(?:^|,)payload(?:,|$)/, "the recurring movement reader must never select the full historical payload");
 
 const scoreReadClient = {

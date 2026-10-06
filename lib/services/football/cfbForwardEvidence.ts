@@ -334,6 +334,13 @@ export type CfbForwardMarketHistoryEvidence = Pick<
       CfbForwardEvidencePayload["market"],
       "current" | "currentBooks" | "providerOpening" | "operationalOpening" | "playbookSplits" | "sharpApiSplits"
     >;
+    contextualEvidenceCapture?: {
+      markets: {
+        moneyline: Pick<CfbForwardContextCapture["markets"]["moneyline"], "families">;
+        spread: Pick<CfbForwardContextCapture["markets"]["spread"], "families">;
+        total: Pick<CfbForwardContextCapture["markets"]["total"], "families">;
+      };
+    };
   };
 };
 
