@@ -18,6 +18,10 @@ import {
   NFL_PUBLISHED_TRACKING_CORRECTION_MODEL_VERSION,
   NFL_PUBLISHED_TRACKING_CORRECTION_RELEASE,
 } from "../lib/services/football/nflPublishedTrackingCorrection";
+import {
+  NHL_REGULAR_CALIBRATION_RELEASE,
+  NHL_REGULAR_MODEL_RELEASE,
+} from "../lib/automodel/nhlRegularModelV1";
 
 let pass = 0;
 let fail = 0;
@@ -59,6 +63,20 @@ check("locked WNBA rows are tracking-eligible", isTrackingRecordEligible(trackin
 check("unlocked NFL rows are excluded from official tracking", !isTrackingRecordEligible(trackingRecord("nfl", null)));
 check("unlocked CFB rows are excluded from official tracking", !isTrackingRecordEligible(trackingRecord("cfb", null)));
 check("unlocked NBA rows are excluded from official tracking", !isTrackingRecordEligible(trackingRecord("nba", null)));
+const nhlTrackingRecord = (model_version: string, calibration_version: string, external_id = 2026020046) => ({
+  ...trackingRecord("nhl", "2026-10-06T22:00:00Z"),
+  external_id,
+  model_version,
+  calibration_version,
+} as PredictionRecordRow);
+check(
+  "retired NHL r1 rows are excluded from official tracking",
+  !isTrackingRecordEligible(nhlTrackingRecord("nhl_regular_2026_r1", "nhl_regular_calibration_2026_r1")),
+);
+check(
+  "current NHL regular-season rows are tracking-eligible",
+  isTrackingRecordEligible(nhlTrackingRecord(NHL_REGULAR_MODEL_RELEASE, NHL_REGULAR_CALIBRATION_RELEASE)),
+);
 const eplRecord = (locked_at: string | null, id = 1, created_at = "2026-08-19T12:00:00Z") => ({
   ...trackingRecord("soccer", locked_at),
   id,
