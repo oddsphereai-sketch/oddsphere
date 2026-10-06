@@ -1,7 +1,7 @@
 import type { NcaafGame } from "./balldontlieNcaafSlate";
 
 export const CFB_WEEKLY_WINDOW_RELEASE =
-  "cfb_weekly_window_2026_09_07_r4_overlapping_week_ahead" as const;
+  "cfb_weekly_window_2026_10_06_r5_midweek_board_coverage" as const;
 
 export type CfbWeeklyWindow = {
   release: typeof CFB_WEEKLY_WINDOW_RELEASE;
@@ -13,8 +13,8 @@ export type CfbWeeklyWindow = {
 };
 
 /**
- * CFB's product week is the Thursday-through-Monday game window selected by
- * the preceding Tuesday in America/New_York. The provider query includes the
+ * CFB's product week is the Tuesday-through-Monday game window selected in
+ * America/New_York. The provider query includes the
  * following UTC date so a Monday-night Eastern kickoff cannot be lost at UTC
  * midnight; eligibility is then rechecked against the Eastern board dates.
  */
@@ -25,27 +25,26 @@ export function activeCfbWeeklyWindow(now: string | Date): CfbWeeklyWindow {
   const anchor = dateAtUtcNoon(easternDate);
   const daysSinceTuesday = (anchor.getUTCDay() - 2 + 7) % 7;
   const tuesday = addDays(anchor, -daysSinceTuesday);
-  const thursday = addDays(tuesday, 2);
   const monday = addDays(tuesday, 6);
   return {
     release: CFB_WEEKLY_WINDOW_RELEASE,
     easternWeekStartsOn: "tuesday",
-    boardStartDate: isoDate(thursday),
+    boardStartDate: isoDate(tuesday),
     boardEndDate: isoDate(monday),
-    providerQueryStartDate: isoDate(thursday),
+    providerQueryStartDate: isoDate(tuesday),
     providerQueryEndDate: isoDate(addDays(monday, 1)),
   };
 }
 
 export function nextCfbWeeklyWindow(window: CfbWeeklyWindow): CfbWeeklyWindow {
-  const thursday = addDays(dateAtUtcNoon(window.boardStartDate), 7);
+  const tuesday = addDays(dateAtUtcNoon(window.boardStartDate), 7);
   const monday = addDays(dateAtUtcNoon(window.boardEndDate), 7);
   return {
     release: CFB_WEEKLY_WINDOW_RELEASE,
     easternWeekStartsOn: "tuesday",
-    boardStartDate: isoDate(thursday),
+    boardStartDate: isoDate(tuesday),
     boardEndDate: isoDate(monday),
-    providerQueryStartDate: isoDate(thursday),
+    providerQueryStartDate: isoDate(tuesday),
     providerQueryEndDate: isoDate(addDays(monday, 1)),
   };
 }
@@ -59,7 +58,7 @@ type CfbWeeklyEvidenceRow = {
 /**
  * Keep the Tuesday-anchored window while any captured game can still play.
  * Once the authoritative opening wave is complete and every captured kickoff
- * has passed, expose the next Thursday-through-Monday window immediately.
+ * has passed, expose the next Tuesday-through-Monday window immediately.
  * Requiring complete evidence prevents a missing Monday game from being
  * mistaken for a finished slate.
  */
@@ -94,7 +93,7 @@ export function resolveCfbForwardWindow(args: {
 }
 
 /**
- * Keep the active Thursday-through-Monday board visible while beginning the
+ * Keep the active Tuesday-through-Monday board visible while beginning the
  * next verified weekly board on Sunday. This overlap is deliberately limited
  * to two adjacent windows and requires a complete current opening wave, so a
  * partial provider response cannot manufacture an early rollover.
@@ -114,7 +113,7 @@ export function resolveCfbVisibleWindows(args: {
 
   const instant = typeof args.now === "string" ? new Date(args.now) : new Date(args.now.getTime());
   const easternDate = dateInTimeZone(instant, "America/New_York");
-  const overlapStarts = isoDate(addDays(dateAtUtcNoon(active.boardStartDate), 3));
+  const overlapStarts = isoDate(addDays(dateAtUtcNoon(active.boardStartDate), 5));
   return easternDate >= overlapStarts ? [primary, nextCfbWeeklyWindow(active)] : [primary];
 }
 

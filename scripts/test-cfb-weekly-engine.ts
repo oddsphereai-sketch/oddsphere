@@ -34,14 +34,25 @@ assert.equal(latestCfbPayloadTimestamp({
 }), "2026-08-28T20:10:09.511Z", "the immutable capture/evaluation time must include provider observations received after run start");
 assert.deepEqual(
   { start: openingWindow.boardStartDate, end: openingWindow.boardEndDate, queryEnd: openingWindow.providerQueryEndDate },
-  { start: "2026-08-27", end: "2026-08-31", queryEnd: "2026-09-01" },
+  { start: "2026-08-25", end: "2026-08-31", queryEnd: "2026-09-01" },
 );
 const weekOneWindow = activeCfbWeeklyWindow("2026-09-01T12:00:00.000Z");
 assert.deepEqual(
   { start: weekOneWindow.boardStartDate, end: weekOneWindow.boardEndDate, queryEnd: weekOneWindow.providerQueryEndDate },
-  { start: "2026-09-03", end: "2026-09-07", queryEnd: "2026-09-08" },
+  { start: "2026-09-01", end: "2026-09-07", queryEnd: "2026-09-08" },
 );
-assert.equal(activeCfbWeeklyWindow("2026-10-20T12:00:00.000Z").boardStartDate, "2026-10-22", "future weeks cannot depend on launch IDs");
+assert.equal(activeCfbWeeklyWindow("2026-10-20T12:00:00.000Z").boardStartDate, "2026-10-20", "future weeks cannot depend on launch IDs");
+const midweekGames = [
+  game({ id: "southern-miss-troy", start: "2026-10-07T00:00:00.000Z", awayName: "Southern Miss Golden Eagles", homeName: "Troy Trojans", awayAbbreviation: "USM", homeAbbreviation: "TROY" }),
+  game({ id: "jacksonville-state-kennesaw", start: "2026-10-07T23:00:00.000Z", awayName: "Jacksonville State Gamecocks", homeName: "Kennesaw State Owls", awayAbbreviation: "JVST", homeAbbreviation: "KENN" }),
+  game({ id: "new-mexico-state-fiu", start: "2026-10-07T23:30:00.000Z", awayName: "New Mexico State Aggies", homeName: "Florida International Panthers", awayAbbreviation: "NMSU", homeAbbreviation: "FIU" }),
+];
+const octoberSixWindow = activeCfbWeeklyWindow("2026-10-06T16:00:00.000Z");
+assert.deepEqual(
+  eligibleCfbWeeklyGames(midweekGames, octoberSixWindow).map((row) => row.providerGameId),
+  midweekGames.map((row) => row.providerGameId),
+  "Tuesday and Wednesday FBS games must remain in the same authoritative weekly board as Thursday-through-Monday games",
+);
 
 const frozen = getCfbV1Forecasts();
 assert.equal(frozen.length, 8);
@@ -170,7 +181,7 @@ assert.deepEqual(
 );
 assert.equal(
   resolveCfbForwardWindow({ now: "2026-08-30T15:30:00.000Z", evidence: openingRows, advanceWithoutNextEvidence: true }).boardStartDate,
-  "2026-09-03",
+  "2026-09-01",
   "a complete captured slate with no future kickoff must reveal the week-ahead board before Tuesday",
 );
 assert.equal(
@@ -181,20 +192,20 @@ assert.equal(
       return evidenceRow(monday, getCfbV1ForecastForGame({ game: monday }).forecast, 3, "monday-future");
     })(),
   ] }).boardStartDate,
-  "2026-08-27",
+  "2026-08-25",
   "a captured future Monday game must keep the current board active",
 );
 assert.equal(
   resolveCfbForwardWindow({ now: "2026-08-30T15:30:00.000Z", evidence: [openingRows[0]!] }).boardStartDate,
-  "2026-08-27",
+  "2026-08-25",
   "an incomplete opening wave cannot trigger an early rollover",
 );
 const earlyWeekOneMember = buildCfbMemberFixture([...openingRows, ...weekOneRows], "2026-08-30T15:30:00.000Z");
 assert.deepEqual(earlyWeekOneMember.snapshot.games.map((value) => value.id).sort(), ["cfb-fcs-at-fbs", "cfb-week-one-new-id"]);
-assert.equal(earlyWeekOneMember.week.label, "Week of Sep 3");
+assert.equal(earlyWeekOneMember.week.label, "Week of Sep 1");
 const weekOneMember = buildCfbMemberFixture([...openingRows, ...weekOneRows], "2026-09-01T16:00:00.000Z");
 assert.deepEqual(weekOneMember.snapshot.games.map((value) => value.id).sort(), ["cfb-fcs-at-fbs", "cfb-week-one-new-id"]);
-assert.equal(weekOneMember.week.label, "Week of Sep 3");
+assert.equal(weekOneMember.week.label, "Week of Sep 1");
 
 const mondayTail = game({ id: "monday-tail", start: "2026-08-31T23:30:00.000Z", awayName: "Alabama Crimson Tide", homeName: "Clemson Tigers" });
 const overlapCurrentRows = [
@@ -212,7 +223,7 @@ const visibleOverlap = resolveCfbVisibleWindows({
 });
 assert.deepEqual(
   visibleOverlap.map((window) => window.boardStartDate),
-  ["2026-08-27", "2026-09-03"],
+  ["2026-08-25", "2026-09-01"],
   "Sunday lookahead must preserve the current Monday tail and expose only the adjacent next window",
 );
 const overlapMember = buildCfbMemberFixture([...overlapCurrentRows, ...weekOneRows], "2026-08-30T15:30:00.000Z");
@@ -221,13 +232,13 @@ assert.deepEqual(
   [...overlapCurrentRows, ...weekOneRows].map((row) => `cfb-${row.providerGameId}`).sort(),
   "the member fixture must combine two independently complete adjacent waves without mixing their slate counts",
 );
-assert.equal(overlapMember.week.label, "Opening Week + Week of Sep 3");
+assert.equal(overlapMember.week.label, "Opening Week + Week of Sep 1");
 assert.deepEqual(
   resolveCfbVisibleWindows({ now: "2026-08-29T15:30:00.000Z", evidence: overlapCurrentRows }).map((window) => window.boardStartDate),
-  ["2026-08-27"],
+  ["2026-08-25"],
   "Saturday must remain a single-window board",
 );
-assert.equal(nextCfbWeeklyWindow(visibleOverlap[1]!).boardStartDate, "2026-09-10");
+assert.equal(nextCfbWeeklyWindow(visibleOverlap[1]!).boardStartDate, "2026-09-08");
 
 const ordinaryCurrent = { name: "current", need: { collect: true, reason: "unlocked_refresh_due", cadenceMinutes: 60 } };
 const openingNext = { name: "next", need: { collect: true, reason: "opening_seed", cadenceMinutes: null } };
