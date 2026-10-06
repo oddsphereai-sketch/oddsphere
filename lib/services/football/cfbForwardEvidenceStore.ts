@@ -35,6 +35,7 @@ import {
   type CfbForwardMarketHistoryEvidence,
   type CfbForwardStoredEvidence,
 } from "./cfbForwardEvidence";
+import type { CfbForwardContextFamily } from "./cfbForwardEvidenceCapture";
 
 type StoredRow = {
   id: string;
@@ -73,6 +74,9 @@ type StoredMarketHistoryRow = {
   operational_opening: CfbForwardEvidencePayload["market"]["operationalOpening"];
   playbook_splits: CfbForwardEvidencePayload["market"]["playbookSplits"];
   sharp_api_splits: CfbForwardEvidencePayload["market"]["sharpApiSplits"];
+  context_moneyline_families: CfbForwardContextFamily[] | null;
+  context_spread_families: CfbForwardContextFamily[] | null;
+  context_total_families: CfbForwardContextFamily[] | null;
 };
 
 export type CfbForwardEvidenceMetadata = Pick<CfbForwardStoredEvidence, "providerGameId" | "capturedAt" | "gameStartAt">;
@@ -132,6 +136,9 @@ export async function readCfbForwardMarketHistory(args: {
           "operational_opening:payload->market->operationalOpening",
           "playbook_splits:payload->market->playbookSplits",
           "sharp_api_splits:payload->market->sharpApiSplits",
+          "context_moneyline_families:payload->contextualEvidenceCapture->markets->moneyline->families",
+          "context_spread_families:payload->contextualEvidenceCapture->markets->spread->families",
+          "context_total_families:payload->contextualEvidenceCapture->markets->total->families",
         ].join(","))
         .eq("season", args.season)
         .in("evidence_release", [...CFB_FORWARD_MARKET_HISTORY_COMPATIBLE_RELEASES])
@@ -347,6 +354,16 @@ function normalizeMarketHistoryRow(row: StoredMarketHistoryRow): CfbForwardMarke
   ) {
     throw new Error(`CFB market history ${row.id} violates the immutable payload identity contract.`);
   }
+  const contextFamilies: NonNullable<CfbForwardMarketHistoryEvidence["payload"]["contextualEvidenceCapture"]>["markets"] | null =
+    Array.isArray(row.context_moneyline_families) ||
+    Array.isArray(row.context_spread_families) ||
+    Array.isArray(row.context_total_families)
+      ? {
+          moneyline: { families: row.context_moneyline_families ?? [] },
+          spread: { families: row.context_spread_families ?? [] },
+          total: { families: row.context_total_families ?? [] },
+        }
+      : null;
   return {
     id: row.id,
     providerGameId: row.provider_game_id,
@@ -363,6 +380,7 @@ function normalizeMarketHistoryRow(row: StoredMarketHistoryRow): CfbForwardMarke
         playbookSplits: row.playbook_splits ?? null,
         sharpApiSplits: row.sharp_api_splits ?? null,
       },
+      ...(contextFamilies ? { contextualEvidenceCapture: { markets: contextFamilies } } : {}),
     },
   };
 }
