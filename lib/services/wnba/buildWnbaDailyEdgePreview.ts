@@ -921,7 +921,7 @@ export function computeWnbaPrediction(
     spreadConsensus !== null &&
     Math.abs(spreadConsensus.line - fixedSpreadLine) < 0.01;
   const marketInputs = marketCore._distribution_inputs;
-  const spreadDesiredMean = spreadMarketAuthorityQualified && spreadConsensus !== null
+  const marketCenteredSpreadMean = spreadMarketAuthorityQualified && spreadConsensus !== null
     ? (() => {
         const marketImpliedMargin = -spreadConsensus.line;
         return marketImpliedMargin + 0.25 * (marketInputs.rawModelMargin - marketImpliedMargin);
@@ -934,23 +934,35 @@ export function computeWnbaPrediction(
     ? 0
     : Math.sign(candidateMlMarketHomeProbability - 0.5);
   const spreadMarketWinnerSign = spreadConsensus === null ? 0 : Math.sign(-spreadConsensus.line);
-  const spreadDesiredMeanSign = Math.sign(spreadDesiredMean);
+  const marketCenteredSpreadMeanSign = Math.sign(marketCenteredSpreadMean);
   const crossMarketContradiction =
     mlAlternativesQualified &&
     spreadMarketAuthorityQualified &&
     mlMarketWinnerSign !== 0 &&
     (
       spreadMarketWinnerSign !== 0 && spreadMarketWinnerSign !== mlMarketWinnerSign ||
-      spreadDesiredMeanSign !== 0 && spreadDesiredMeanSign !== mlMarketWinnerSign
+      marketCenteredSpreadMeanSign !== 0 && marketCenteredSpreadMeanSign !== mlMarketWinnerSign
     );
-  const core = crossMarketContradiction ? independent : marketCore;
+  const marketCrossesWinnerBoundary =
+    spreadMarketAuthorityQualified &&
+    (marketCenteredSpreadMean >= 0) !== (independentInputs.rawModelMargin >= 0);
+  const marketCrossesSpreadBoundary =
+    spreadMarketAuthorityQualified &&
+    fixedSpreadLine !== null &&
+    (marketCenteredSpreadMean + fixedSpreadLine >= 0) !==
+      (independentInputs.rawModelMargin + fixedSpreadLine >= 0);
+  const qualifiedDecisionBoundaryCrossing =
+    !crossMarketContradiction &&
+    spreadMarketAuthorityQualified &&
+    (marketCrossesWinnerBoundary || marketCrossesSpreadBoundary);
+  const core = qualifiedDecisionBoundaryCrossing ? marketCore : independent;
   const inputs = core._distribution_inputs;
-  const distribution = crossMarketContradiction
-    ? independentDistribution
-    : buildWnbaCoherentNormalMarginDistribution({
-        mean: spreadDesiredMean,
+  const distribution = qualifiedDecisionBoundaryCrossing
+    ? buildWnbaCoherentNormalMarginDistribution({
+        mean: marketCenteredSpreadMean,
         standardDeviation: inputs.sigM,
-      });
+      })
+    : independentDistribution;
   const spreadSideForPrice = fixedSpreadLine === null
     ? null
     : wnbaMarginProbabilityAbove(distribution, -fixedSpreadLine) >= 0.5 ? "home" : "away";
@@ -967,16 +979,16 @@ export function computeWnbaPrediction(
     distribution,
     decision: spreadDecision,
     forecastMarketLine:
-      !crossMarketContradiction &&
-      spreadMarketAuthorityQualified &&
+      qualifiedDecisionBoundaryCrossing &&
       distribution.kind !== "independent_normal_fallback"
         ? fixedSpreadLine
         : null,
   };
   const mlSideKey = distribution.positiveProbability >= 0.5 ? "home" : "away";
   const mlEvaluated = fixedMlPair === null ? null : wnbaPairRowForSide(fixedMlPair, mlSideKey);
-  const mlMarketAuthorityQualified = mlAlternativesQualified && !crossMarketContradiction;
-  const mlMarketHomeProbability = mlMarketAuthorityQualified
+  const mlMarketEvidenceQualified = mlAlternativesQualified && !crossMarketContradiction;
+  const mlMarketAuthorityQualified = mlMarketEvidenceQualified && qualifiedDecisionBoundaryCrossing;
+  const mlMarketHomeProbability = mlMarketEvidenceQualified
     ? candidateMlMarketHomeProbability
     : null;
   const mlPickedProbability = mlSideKey === "home"
@@ -1120,6 +1132,9 @@ export function computeWnbaPrediction(
   if (totalLine === null) flags.push("no_fresh_complete_total_pair");
   if (!mlAlternativesQualified) flags.push("moneyline_independent_fallback");
   if (crossMarketContradiction) flags.push("cross_market_contradiction_independent_fallback");
+  if (spreadMarketAuthorityQualified && !crossMarketContradiction && !qualifiedDecisionBoundaryCrossing) {
+    flags.push("qualified_market_no_decision_boundary_crossing");
+  }
   if (distribution.kind === "independent_normal_fallback") flags.push(`margin_distribution_${distribution.fallbackReason}`);
 
   try {
@@ -1193,7 +1208,11 @@ export function computeWnbaPrediction(
         moneyline_market_interpretation_count: mlMarketAuthorityQualified ? 1 : 0,
         cross_market_context_regime: crossMarketContradiction
           ? "cross_market_contradictory_independent_fallback"
-          : "compatible_or_insufficient",
+          : qualifiedDecisionBoundaryCrossing
+            ? "qualified_decision_boundary_arbitration"
+            : "independent_first_no_decision_boundary_crossing",
+        market_crosses_winner_boundary: marketCrossesWinnerBoundary,
+        market_crosses_spread_boundary: marketCrossesSpreadBoundary,
         moneyline_final_picked_probability: mlPickedProbability,
         moneyline_market_picked_probability: mlMarketPickedProbability,
         moneyline_final_edge_pp: mlMarketPickedProbability === null
@@ -1269,6 +1288,7 @@ export function computeWnbaPrediction(
           source_class: pair.sourceClass,
           source_family: pair.sourceFamily,
         })),
+        market_evidence_qualified: mlMarketEvidenceQualified,
         market_authority_qualified: mlMarketAuthorityQualified,
         unavailable_reason: crossMarketContradiction
           ? "cross_market_contradiction"

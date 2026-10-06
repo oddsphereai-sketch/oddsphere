@@ -2682,10 +2682,10 @@ board impact, and rollback gates are in
 
 ## WNBA champion
 
-- Model: `wnba_v1_5_coherent_expected_margin`
-- Distribution: `wnba_coherent_normal_2026_09_29_v7`
+- Model: `wnba_v1_6_independent_first_decision_crossing`
+- Distribution: `wnba_coherent_normal_2026_10_06_v8_independent_first_decision_crossing`
 - Calibration schema: `wnba_core_calibration_v4_single_market_entry`
-- Grade policy: `wnba_grade_policy_v10_coherent_expected_margin_2026_09_29`
+- Grade policy: `wnba_grade_policy_v11_independent_first_decision_crossing_2026_10_06`
 - Decision-tuple contract: `wnba_decision_tuple_v4_single_market_entry_2026_09_03`
 - Prediction-record contract: `wnba_prediction_record_contract_v8_exact_price_denominator_2026_09_19`
 - Machine registry: `lib/automodel/wnbaChampionRuntime.ts`
@@ -2750,11 +2750,41 @@ demotion, zero promotions, with the existing symmetric exact-price promotion
 paths retained. Evidence and rollback are recorded in
 `docs/model-audits/2026-09-29-wnba-score-prediction-coherence.md`.
 
+The October 6 v1.6/v8/v11 release removes the remaining continuous 25%
+independent / 75% market-implied Spread center. The independent coherent margin
+is now the exact default. Complete, fresh, target-excluded evidence from at
+least two independently classified source families may use the already
+qualified market center only when it crosses the independent winner or exact
+Spread decision boundary and the Moneyline/Spread market story is not
+contradictory. Evidence that agrees without crossing remains available for
+price economics, grading and audit but has zero forecast effect. A qualified
+crossing regenerates Moneyline probability, Spread probability and both decimal
+team scores from one coherent margin distribution; the independent Total head
+is byte/number-identical. The evaluated sportsbook never enters forecast
+evidence.
+
+The predeclared release-pure replay contained 42 settled forward games. Against
+the v1.5 incumbent, the selected rule improved margin MAE from 11.8459 to
+11.5658 and team-score MAE from 8.6589 to 8.6273 while preserving 33/42 winner
+and 26/41 non-push Spread accuracy. On the untouched final 14-game chronological
+block it improved incumbent margin MAE from 12.3143 to 11.7627 and team-score
+MAE from 9.2547 to 9.1274 while preserving 9/14 winner and 10/14 Spread
+accuracy. Only seven of 42 forecasts used market arbitration instead of all 42.
+Same-book movement-only challengers were rejected because the stored movement
+sample was too sparse and worsened directional accuracy. The October 6 live
+slate contains zero WNBA games, so same-input board impact is zero promotions,
+zero demotions and zero side changes; structural exact-price fixtures continue
+to prove both promotion and demotion paths. No copy, label, layout, stake,
+provider, schedule, writer, lease, lock or tracking-boundary behavior changes.
+Evidence and rollback gates are in
+`docs/model-audits/2026-10-06-wnba-independent-first-decision-crossing-result.md`.
+
 One versioned margin distribution preserves the final Moneyline win probability, expected
 margin, and incumbent variance; Spread probabilities come from that same CDF, the independent
 Total distribution supplies the total head, and decimal team scores are the algebraic
-total/margin decomposition. Spread retains the established 25/75 center only when qualified
-target-excluded line evidence exists. Spread and Total can clear the former Watchlist caps only
+total/margin decomposition. Spread is independent-first; the former 25/75 center is considered
+only for a qualified, non-contradictory winner or exact-Spread decision-boundary crossing.
+Spread and Total can clear the former Watchlist caps only
 when the established strength rules agree with a final-model probability edge over the evaluated
 quote's break-even probability and at least 2% exact-price EV. Qualified target-excluded evidence
 may move or corroborate the forecast, but a missing alternative set cannot suppress an

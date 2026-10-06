@@ -4,13 +4,14 @@ import {
   WNBA_EMERGENCY_TOTAL_FORMULA_VERSION,
 } from "./wnbaCoreModelCalibration";
 
-export const EXPECTED_WNBA_MODEL_VERSION = "wnba_v1_5_coherent_expected_margin" as const;
+export const EXPECTED_WNBA_MODEL_VERSION =
+  "wnba_v1_6_independent_first_decision_crossing" as const;
 export const EXPECTED_WNBA_DISTRIBUTION_VERSION =
-  "wnba_coherent_normal_2026_09_29_v7" as const;
+  "wnba_coherent_normal_2026_10_06_v8_independent_first_decision_crossing" as const;
 export const EXPECTED_WNBA_CALIBRATION_SCHEMA_VERSION =
   "wnba_core_calibration_v4_single_market_entry" as const;
 export const EXPECTED_WNBA_GRADE_POLICY_VERSION =
-  "wnba_grade_policy_v10_coherent_expected_margin_2026_09_29" as const;
+  "wnba_grade_policy_v11_independent_first_decision_crossing_2026_10_06" as const;
 export const EXPECTED_WNBA_FORMULA_VERSIONS = {
   total_recommendation: WNBA_EMERGENCY_TOTAL_FORMULA_VERSION,
   spread_recommendation: WNBA_EMERGENCY_SPREAD_FORMULA_VERSION,
