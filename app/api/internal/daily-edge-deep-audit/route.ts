@@ -1,9 +1,10 @@
 import { validateCronAuth } from "@/lib/cron/auth";
-import { auditDailyEdgeBoards } from "@/lib/services/dailyEdgeDeepAudit";
+import {
+  auditDailyEdgeBoards,
+  DAILY_EDGE_DEEP_AUDIT_SPORTS,
+} from "@/lib/services/dailyEdgeDeepAudit";
 
 export const maxDuration = 60;
-
-const SPORTS = ["mlb", "wnba", "soccer"] as const;
 
 export async function GET(request: Request): Promise<Response> {
   const auth = validateCronAuth(request);
@@ -13,10 +14,10 @@ export async function GET(request: Request): Promise<Response> {
   const origin = new URL(request.url).origin;
   const boards: Record<string, unknown> = {};
 
-  for (const sport of SPORTS) {
+  await Promise.all(DAILY_EDGE_DEEP_AUDIT_SPORTS.map(async (sport) => {
     const response = await dailyEdgeGet(new Request(`${origin}/api/lab/daily-edge?sport=${sport}`));
     boards[sport] = await response.json();
-  }
+  }));
 
   const result = auditDailyEdgeBoards(boards as Record<string, Record<string, unknown>>);
   return Response.json({

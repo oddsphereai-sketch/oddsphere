@@ -1,5 +1,16 @@
 import { isDisplayableAmericanOdds } from "../streaming/oddsSanity";
 
+export const DAILY_EDGE_DEEP_AUDIT_SPORTS = [
+  "mlb",
+  "wnba",
+  "soccer",
+  "ucl",
+  "nfl",
+  "cfb",
+  "nhl",
+  "nba",
+] as const;
+
 type Row = Record<string, any>;
 
 export type DailyEdgeAuditSeverity = "critical" | "warning";
@@ -107,9 +118,10 @@ function matchup(game: Row): string {
 }
 
 function marketLabel(sport: string, slot: string): string {
-  if (sport === "wnba" && slot === "first_inning") return "spread";
-  if (sport === "soccer" && slot === "first_inning") return "btts";
-  if (sport === "soccer" && slot === "moneyline") return "1x2";
+  if (["wnba", "nba", "nhl", "nfl", "cfb"].includes(sport) && slot === "first_inning") return "spread";
+  if ((sport === "soccer" || sport === "ucl") && slot === "first_inning") return "btts";
+  if ((sport === "soccer" || sport === "ucl") && slot === "moneyline") return "1x2";
+  if ((sport === "soccer" || sport === "ucl") && slot === "spread") return "double_chance";
   return slot;
 }
 
@@ -220,7 +232,9 @@ function actionFor(reason: string): string {
 function shouldAuditMarket(sport: string, slot: string): boolean {
   if (sport === "mlb") return slot === "moneyline" || slot === "total" || slot === "first_inning";
   if (sport === "wnba") return slot === "moneyline" || slot === "total" || slot === "first_inning";
-  if (sport === "soccer") return slot === "moneyline" || slot === "total" || slot === "first_inning";
+  if (sport === "soccer" || sport === "ucl") {
+    return slot === "moneyline" || slot === "total" || slot === "first_inning" || slot === "spread";
+  }
   return true;
 }
 

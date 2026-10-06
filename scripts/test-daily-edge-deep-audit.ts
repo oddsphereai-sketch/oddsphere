@@ -1,4 +1,7 @@
-import { auditDailyEdgeBoards } from "../lib/services/dailyEdgeDeepAudit";
+import {
+  auditDailyEdgeBoards,
+  DAILY_EDGE_DEEP_AUDIT_SPORTS,
+} from "../lib/services/dailyEdgeDeepAudit";
 import { normalizeDailyEdgeActionability } from "../lib/services/dailyEdgeActionability";
 
 let failures = 0;
@@ -10,6 +13,12 @@ function check(name: string, cond: boolean, detail?: string): void {
     console.log(`✓ ${name}`);
   }
 }
+
+check(
+  "deep audit covers every Daily Edge model individually",
+  JSON.stringify(DAILY_EDGE_DEEP_AUDIT_SPORTS) ===
+    JSON.stringify(["mlb", "wnba", "soccer", "ucl", "nfl", "cfb", "nhl", "nba"]),
+);
 
 function board(market: Record<string, unknown>) {
   return {
@@ -611,6 +620,52 @@ function board(market: Record<string, unknown>) {
   check(
     "Locked actionable FI still fails when its displayed price drifts",
     result.summary.issueCounts.locked_price_not_frozen === 1,
+  );
+}
+
+{
+  const cfbBoard: any = board({});
+  cfbBoard.games[0]!.markets = {
+    first_inning: {
+      pick: "TROY -10.5",
+      grade: "market_watch",
+      verdict: { key: "watchlist" },
+      priceAmerican: -110,
+      lineOpenAmerican: -110,
+      lastMovePrevAmerican: -110,
+      lastMoveNextAmerican: -110,
+      lastMoveLinePrev: -10.5,
+      lastMoveLineNext: -11,
+      marketReadV2: {
+        label: "Market Support",
+        sourceSummary: {},
+        movement: { currentPrice: -110 },
+      },
+    },
+  };
+  const result = auditDailyEdgeBoards({ cfb: cfbBoard });
+  check(
+    "CFB first_inning transport slot is audited as Spread movement",
+    !result.summary.issueCounts.directional_read_without_visible_move &&
+      !result.summary.issueCounts.market_read_direction_wrong_for_visible_trail,
+  );
+}
+
+{
+  const uclBoard: any = board({});
+  uclBoard.games[0]!.markets = {
+    spread: {
+      pick: "BOS or Draw",
+      grade: "market_watch",
+      verdict: { key: "watchlist" },
+      priceAmerican: null,
+      recommendationConfidence: 40,
+    },
+  };
+  const result = auditDailyEdgeBoards({ ucl: uclBoard });
+  check(
+    "UCL spread transport slot is audited as Double Chance",
+    result.issues.some((issue) => issue.market === "double_chance"),
   );
 }
 
