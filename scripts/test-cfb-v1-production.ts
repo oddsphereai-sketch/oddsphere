@@ -716,6 +716,17 @@ const compactMemberSnapshot = buildCfbForwardMemberSnapshot({
 assert.equal(compactMemberSnapshot.snapshotRelease, CFB_FORWARD_MEMBER_SNAPSHOT_RELEASE);
 assert.equal(compactMemberSnapshot.fixture, member, "the fast snapshot preserves the authoritative fixture byte-for-byte");
 assert.equal(compactMemberSnapshot.sourceChecksum, member.provenance.sourceChecksum);
+const providerAfterRunStart = new Date(Date.parse(lockedAt) + 45_000).toISOString();
+const monotonicSnapshot = buildCfbForwardMemberSnapshot({
+  fixture: { ...member, capturedAt: providerAfterRunStart },
+  season: 2026,
+  publishedAt: lockedAt,
+});
+assert.equal(
+  monotonicSnapshot.publishedAt,
+  providerAfterRunStart,
+  "snapshot publication time cannot precede the newest provider observation included in that snapshot",
+);
 const compactMemberEnvelope = encodeCfbForwardMemberSnapshotPayload(compactMemberSnapshot);
 assert.equal(compactMemberEnvelope.encoding, "gzip-base64");
 assert.ok(
@@ -2721,6 +2732,27 @@ const fallbackSelection = selectCfbSharpFallbackGames({
 assert.equal(fallbackSelection.length, 24, "week-ahead enrichment must remain inside its per-run exact-game budget");
 assert.deepEqual(fallbackSelection.slice(0, 20).map((value) => value.providerGameId), Array.from({ length: 20 }, (_, index) => String(index + 11)), "games without retained canonical identities must rotate ahead of already-enriched games");
 assert.equal(fallbackSelection.some((value) => value.providerGameId === "1"), true, "remaining capacity may refresh an already-enriched game after every unseeded game is selected");
+const zeroPricePriorityGames = Array.from({ length: 30 }, (_, index) => ({
+  ...game,
+  providerGameId: String(index + 1),
+  scheduledStart: new Date(Date.parse(game.scheduledStart) + index * 60_000).toISOString(),
+}));
+const partialCoverageBook = {
+  ...payload.market.currentBooks[0]!,
+  spread: null,
+  total: null,
+};
+const zeroPricePrioritySelection = selectCfbSharpFallbackGames({
+  games: zeroPricePriorityGames,
+  trustedEventIdsByGame: Object.fromEntries(Array.from({ length: 6 }, (_, index) => [String(index + 25), `trusted-zero-${index + 25}`])),
+  currentBooksByGame: Object.fromEntries(Array.from({ length: 24 }, (_, index) => [String(index + 1), [{ ...partialCoverageBook, providerGameId: String(index + 1) }]])),
+  maximum: 6,
+});
+assert.deepEqual(
+  zeroPricePrioritySelection.map((value) => value.providerGameId),
+  ["25", "26", "27", "28", "29", "30"],
+  "games with zero paired prices must be attempted before priced games that merely need broader consensus",
+);
 const latestFallbackAttempts = new Map<string, CfbForwardStoredEvidence>(Array.from({ length: 30 }, (_, index) => {
   const providerGameId = String(index + 1);
   const deferred = index >= 24;

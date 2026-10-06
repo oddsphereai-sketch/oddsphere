@@ -103,7 +103,7 @@ import {
 import type { PlaybookInjuryTeamRow } from "@/lib/providers/playbook/types";
 
 export const CFB_FORWARD_WRITER_RELEASE =
-  "cfb_forward_evidence_writer_2026_10_06_r96_hourly_market_freshness" as const;
+  "cfb_forward_evidence_writer_2026_10_06_r97_zero_price_fallback_priority" as const;
 export const CFB_FORWARD_MAX_QB_TEAMS_PER_RUN = 24 as const;
 export const CFB_FORWARD_MAX_SHARP_FALLBACK_GAMES_PER_RUN = 24 as const;
 export const CFB_FORWARD_MAX_ESPN_PROSPECTIVE_GAMES_PER_RUN = 32 as const;
@@ -310,6 +310,7 @@ export async function runCfbForwardEvidenceWriter(args: {
     games: sharpFallbackCandidates,
     trustedEventIdsByGame: trustedSharpEventIdsByGame,
     latestByGame,
+    currentBooksByGame: slate.currentOddsComparableBooksByGame,
     maximum: CFB_FORWARD_MAX_SHARP_FALLBACK_GAMES_PER_RUN,
   });
   const sharpFallbackGameIds = new Set(sharpFallbackGames.map((game) => game.providerGameId));
@@ -807,6 +808,7 @@ export function selectCfbSharpFallbackGames(args: {
   games: NcaafGame[];
   trustedEventIdsByGame: Readonly<Record<string, string>>;
   latestByGame?: ReadonlyMap<string, CfbForwardStoredEvidence>;
+  currentBooksByGame?: Readonly<Record<string, NcaafBookOdds[]>>;
   maximum: number;
 }): NcaafGame[] {
   if (!Number.isInteger(args.maximum) || args.maximum < 0) {
@@ -819,8 +821,14 @@ export function selectCfbSharpFallbackGames(args: {
     if (!args.trustedEventIdsByGame[game.providerGameId]) return 1;
     return 2;
   };
+  const pairedMarketCoverage = (game: NcaafGame): number => {
+    const books = args.currentBooksByGame?.[game.providerGameId] ?? [];
+    return (["moneyline", "spread", "total"] as const)
+      .filter((market) => books.some((book) => book[market] !== null)).length;
+  };
   return [...new Map(args.games.map((game) => [game.providerGameId, game])).values()]
     .sort((first, second) =>
+      pairedMarketCoverage(first) - pairedMarketCoverage(second) ||
       attemptPriority(first) - attemptPriority(second) ||
       Date.parse(first.scheduledStart) - Date.parse(second.scheduledStart) ||
       first.providerGameId.localeCompare(second.providerGameId))
