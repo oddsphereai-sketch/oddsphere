@@ -240,6 +240,7 @@ export function summarizeMlbPropsForecastTelemetry(args: {
     actionableDataGateFailureRows: rows.filter(actionableRowFailsDataGate).length,
     actionableProjectionSideContradictionRows: forecastRows.filter((row) =>
       ACTIONABLE_GRADES.has(row.playGrade)
+      && !(row.market === "batter_home_runs" && row.offerContract === "milestone")
       && checkProjectionSideIntegrity({
         side: row.side,
         line: row.line,

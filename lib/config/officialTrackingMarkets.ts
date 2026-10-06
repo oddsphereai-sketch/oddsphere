@@ -12,7 +12,7 @@
  *   2. Internal audit / lock provenance — UNIVERSAL.
  *      Every displayed model output must be captured at lock for the
  *      auditor. This includes context-only markets that are shown but
- *      NOT publicly tracked (e.g., NBA spread, NHL puck-line).
+ *      NOT publicly tracked (currently NBA spread).
  *
  * This module covers (1) only. The internal audit substrate
  * (`displayed_context_markets`) is a separate P1 follow-up.
@@ -42,8 +42,9 @@
  *     markets).
  *
  * NEVER:
- *   • Add NBA spread or NHL puck-line to OFFICIAL_TRACKING_MARKETS
- *     without explicit product approval.
+ *   • Add NBA spread to OFFICIAL_TRACKING_MARKETS without explicit product
+ *     approval. NHL puck-line has already completed that launch and is
+ *     officially tracked as `spread`.
  *   • Remove MLB first_inning, NBA total, or any other entry below
  *     without an intentional product decision.
  *   • Pollute prediction_records with markets that are not in
@@ -102,8 +103,8 @@ export const OFFICIAL_TRACKING_MARKETS: Readonly<
  * categories.
  *
  * Each entry is a string rather than `TrackedMarketV17` because some
- * context-only markets (e.g., NBA spread, NHL puck-line — both stored
- * via the `first_inning` DTO slot) intentionally do not align 1:1 with
+ * context-only markets (currently NBA spread, stored via the
+ * `first_inning` DTO slot) intentionally do not align 1:1 with
  * the public tracking enum. See `DailyEdgeShell.tsx` for the UI label
  * mapping.
  */

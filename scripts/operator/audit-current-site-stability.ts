@@ -47,8 +47,6 @@ import { computeTrackingAggregate } from "@/lib/services/trackingAggregateServic
 import { isFinalFiGradeCoherent } from "@/lib/services/dailyEdge/fiGradeCoherence";
 import {
   getOfficialTrackingMarkets,
-  getContextOnlyDisplayMarkets,
-  isOfficiallyTrackedMarket,
 } from "@/lib/config/officialTrackingMarkets";
 import { readFileSync, writeFileSync, existsSync } from "node:fs";
 import { resolve } from "node:path";
@@ -98,12 +96,6 @@ const OFFICIAL_TRACKING: Record<ActiveSport, ReadonlyArray<string>> = {
   mlb: getOfficialTrackingMarkets("mlb"),
   nba: getOfficialTrackingMarkets("nba"),
   nhl: getOfficialTrackingMarkets("nhl"),
-};
-
-const CONTEXT_ONLY_DISPLAYED: Record<ActiveSport, ReadonlyArray<string>> = {
-  mlb: getContextOnlyDisplayMarkets("mlb"),
-  nba: getContextOnlyDisplayMarkets("nba"),
-  nhl: getContextOnlyDisplayMarkets("nhl"),
 };
 
 // MLB substrate (signal_rows_at_lock + lines_at_lock + framework_grades_at_lock +
@@ -215,14 +207,16 @@ async function check1RegistryIntegrity(): Promise<Issue[]> {
     });
   }
 
-  // INFO — note context-only markets
+  // INFO — note context-only markets from the current registry. NHL puck line
+  // was intentionally promoted to official tracking and must not be audited
+  // as context-only here.
   pushIssue(issues, {
     code: "REGISTRY_CONTEXT_ONLY_NOTE",
     severity: "INFO",
     sport: null,
-    affected: { details: "NBA spread + NHL puck-line are context-only displayed markets, not public tracked markets" },
+    affected: { details: "NBA spread is context-only; NHL puck-line is officially tracked" },
     user_facing_impact: "None — confirmation that context-only is the intended product direction",
-    recommended_fix: "n/a — see commit 29dc76e + memory feedback-public-tracking-vs-internal-audit",
+    recommended_fix: "n/a — registry is authoritative",
     auto_fixable: false,
     operator_approval_required: false,
   });
@@ -253,14 +247,15 @@ async function check2ContextOnlyDisplay(): Promise<Issue[]> {
 
   // Expected UI patterns (post commit 29dc76e):
   // - marketKeysFor returns all 3 for every sport
-  // - marketShortLabelFor appends "*" for NBA / NHL first_inning slot
+  // - marketShortLabelFor appends "*" only for context-only NBA spread;
+  //   official NHL puck line renders without an asterisk
   // - CONTEXT_ONLY_FOOTNOTE constant exists
   // - isContextOnlyMarket helper exists
   const requiredPatterns: Array<{ pattern: RegExp; label: string }> = [
     { pattern: /function isContextOnlyMarket\(/, label: "isContextOnlyMarket helper" },
     { pattern: /CONTEXT_ONLY_FOOTNOTE/, label: "CONTEXT_ONLY_FOOTNOTE constant" },
     { pattern: /Model context · Not part of official tracking/, label: "footnote sentence" },
-    { pattern: /if \(sport === "nhl"\) return "PL\*"/, label: 'NHL puck-line "PL*" label' },
+    { pattern: /if \(sport === "nhl"\) return "PL"/, label: 'official NHL puck-line "PL" label' },
     { pattern: /if \(sport === "nba"\) return "Sprd\*"/, label: 'NBA spread "Sprd*" label' },
   ];
 
@@ -302,9 +297,9 @@ async function check2ContextOnlyDisplay(): Promise<Issue[]> {
   // Replaces the previous CONTEXT_SNAPSHOT_DEFERRED WARN with strict
   // checks that fire HIGH on contract violations and INFO on pre-rollout
   // records. The substrate is the auditable record of what the Sprd* /
-  // PL* chip rendered at lock time (NBA spread / NHL puck-line — both
-  // context-only display markets per the public-tracking-vs-internal-
-  // audit rule).
+  // Sprd* chip rendered at lock time (NBA spread is context-only per the
+  // public-tracking-vs-internal-audit rule). NHL puck line is officially
+  // tracked and therefore does not use this substrate contract.
   //
   // The rollout timestamp below is the exact AuthorDate of Commit A
   // (57fa211 "P1-2 Commit A — displayed_context_markets substrate
@@ -318,7 +313,7 @@ async function check2ContextOnlyDisplay(): Promise<Issue[]> {
   // Checks:
   //   A. CONTEXT_SNAPSHOT_MISSING        — HIGH (post-rollout, no substrate)
   //   B. CONTEXT_SNAPSHOT_LEAKED_TRACKED — HIGH (substrate.official_tracked === true)
-  //   C. CONTEXT_SNAPSHOT_BAD_LABEL      — HIGH (display_label != "Sprd*" / "PL*")
+  //   C. CONTEXT_SNAPSHOT_BAD_LABEL      — HIGH (display_label != "Sprd*")
   //   D. CONTEXT_PUBLIC_TRACKING_POLLUTION — HIGH (spread row in prediction_records)
   //      (Replaces CONTEXT_LEAKED_TO_TRACKING from pre-v15.4.)
   //   E. CONTEXT_SNAPSHOT_PRE_ROLLOUT    — INFO (pre-rollout records, expected absence)
@@ -326,7 +321,7 @@ async function check2ContextOnlyDisplay(): Promise<Issue[]> {
 
   const CONTEXT_SUBSTRATE_ROLLOUT_ISO = "2026-06-10T18:26:01Z"; // Commit A 57fa211 AuthorDate
 
-  for (const sport of ["nba", "nhl"] as const) {
+  for (const sport of ["nba"] as const) {
     const { data: prs } = await supabase
       .from("prediction_records")
       .select("id, game_id, market, locked_at, created_at, snapshot_json")
@@ -371,7 +366,7 @@ async function check2ContextOnlyDisplay(): Promise<Issue[]> {
                 `but snapshot_json.displayed_context_markets.spread is missing`,
             },
             user_facing_impact:
-              `${sport.toUpperCase()} card may render the ${sport === "nhl" ? "PL*" : "Sprd*"} chip without an auditable locked substrate`,
+              `${sport.toUpperCase()} card may render the Sprd* chip without an auditable locked substrate`,
             recommended_fix:
               `Re-run the ${sport.toUpperCase()} writer (createNbaPredictionRecords / writeNhlPredictionRecords) ` +
               "for this slate; the post-Commit-A writer chains substrate population on every cycle.",
@@ -399,7 +394,7 @@ async function check2ContextOnlyDisplay(): Promise<Issue[]> {
             details: `pr.id=${r.id} substrate has official_tracked=true — routing bug; context-only markets must always have official_tracked=false`,
           },
           user_facing_impact:
-            `${sport.toUpperCase()} context-only ${sport === "nhl" ? "puck-line" : "spread"} substrate falsely claims official tracking; could pollute aggregations downstream`,
+            `${sport.toUpperCase()} context-only spread substrate falsely claims official tracking; could pollute aggregations downstream`,
           recommended_fix:
             "Investigate the writer that produced this row; the context-only substrate must hard-set official_tracked=false in DisplayedContextMarketBase. Remove or repair the offending row.",
           auto_fixable: false,
@@ -408,7 +403,7 @@ async function check2ContextOnlyDisplay(): Promise<Issue[]> {
       }
 
       // C. CONTEXT_SNAPSHOT_BAD_LABEL
-      const expectedLabel = sport === "nba" ? "Sprd*" : "PL*";
+      const expectedLabel = "Sprd*";
       if (sub!.display_label !== expectedLabel) {
         pushIssue(issues, {
           code: "CONTEXT_SNAPSHOT_BAD_LABEL",
@@ -464,11 +459,11 @@ async function check2ContextOnlyDisplay(): Promise<Issue[]> {
   }
 
   // D. CONTEXT_PUBLIC_TRACKING_POLLUTION — was CONTEXT_LEAKED_TO_TRACKING.
-  // Renamed per P1-2 Commit B spec; same semantics. Fires when NBA/NHL
+  // Renamed per P1-2 Commit B spec; same semantics. Fires when NBA
   // prediction_records contains a public market="spread" row, which
   // would mean the writer leaked a context-only market into the
   // officially tracked substrate.
-  for (const sport of ["nba", "nhl"] as const) {
+  for (const sport of ["nba"] as const) {
     const { data: prs } = await supabase
       .from("prediction_records")
       .select("id, market")
@@ -484,9 +479,9 @@ async function check2ContextOnlyDisplay(): Promise<Issue[]> {
           details: `${prs?.length} prediction_records row(s) with sport=${sport}, market=spread`,
         },
         user_facing_impact:
-          `${sport.toUpperCase()} context-only ${sport === "nhl" ? "puck-line" : "spread"} leaked into public tracking substrate`,
+          `${sport.toUpperCase()} context-only spread leaked into public tracking substrate`,
         recommended_fix:
-          `Remove these rows AND audit the writer that inserted them. ${sport.toUpperCase()} ${sport === "nhl" ? "puck-line" : "spread"} must NEVER appear in prediction_records without explicit product launch approval.`,
+          `Remove these rows AND audit the writer that inserted them. ${sport.toUpperCase()} spread must NEVER appear in prediction_records without explicit product launch approval.`,
         auto_fixable: false,
         operator_approval_required: true,
       });
@@ -848,7 +843,7 @@ async function check4LockSnapshotCompleteness(): Promise<Issue[]> {
                 : "Card may render fields that are not in the locked snapshot — risk of post-lock drift or inconsistent reader",
           recommended_fix:
             sport === "nhl"
-              ? "P1 — extend NHL buildSnapshot to include flat predicted_*_score, data_integrity, and displayed_context_markets per Phase 6 §E"
+              ? "P1 — extend NHL buildSnapshot to include flat predicted_*_score and data_integrity per Phase 6 §E"
               : "Investigate the writer (buildSnapshot) for the affected sport; backfill if safe and source-backed",
           auto_fixable: false,
           operator_approval_required: sport !== "nhl",
@@ -1325,6 +1320,7 @@ async function check8RefreshCronHealth(): Promise<Issue[]> {
 const KNOWN_WRITER_PLAY_GRADES = new Set<string>([
   // Mapped to "best_angle"
   "best_angle",
+  "best_signal",
   // Mapped to "lean"
   "lean",
   // Mapped to "watchlist"

@@ -26,6 +26,7 @@ import {
   buildNhlDailyEdgeResponse,
   type NhlAdapterGameInput,
   type NhlPerMarketBest,
+  type NhlWriterVerdicts,
 } from "./adaptNhlToDailyEdgeResponse";
 import {
   fetchBdlNhlRosters,
@@ -49,7 +50,29 @@ import { buildNhlTwoSidedPriceTrail } from "./nhlPriceTrail";
 import { canonicalizeNhlLineRows } from "./nhlLineBoard";
 
 export const NHL_DAILY_EDGE_READER_RELEASE =
-  "nhl_daily_edge_reader_2026_09_30_r10_playbook_identity_repair" as const;
+  "nhl_daily_edge_reader_2026_10_06_r11_grade_tracking_parity" as const;
+
+export function nhlVerdictFromStoredDecision(
+  playGrade: string | null,
+  noBet: boolean | null,
+): NhlModelOutput["moneyline"]["verdict"] {
+  if (noBet === true) return "pass";
+  switch (playGrade) {
+    case "best_angle":
+    case "best_signal":
+      return "best_angle";
+    case "lean":
+    case "model_only":
+      return "lean";
+    case "watchlist":
+    case "market_watch":
+    case "market_aligned":
+    case "provisional":
+      return "watchlist";
+    default:
+      return "pass";
+  }
+}
 
 /**
  * Bucket SharpAPI NHL opportunities by `"AWAY@HOME"` matchup key (normalized
@@ -218,7 +241,7 @@ export async function buildNhlDailyEdgeAdapted(date: string): Promise<DailyEdgeR
   // separate live read below; the prediction tuple comes from the sole writer.
   const { data: recordsData } = await supabase
     .from("prediction_records")
-    .select("game_id, locked_at, model_version, snapshot_json")
+    .select("game_id, market, play_grade, no_bet, locked_at, model_version, snapshot_json")
     .eq("sport", "nhl")
     .in("model_version", [...NHL_REGULAR_TRANSITION_MODEL_RELEASES])
     .in("game_id", games.map((g) => g.id));
@@ -233,6 +256,9 @@ export async function buildNhlDailyEdgeAdapted(date: string): Promise<DailyEdgeR
   const incoherentPayloadReleaseGames = new Set<string>();
   for (const r of ((recordsData ?? []) as Array<{
     game_id: number;
+    market: string;
+    play_grade: string | null;
+    no_bet: boolean | null;
     locked_at: string | null;
     model_version: string;
     snapshot_json: unknown;
@@ -280,6 +306,28 @@ export async function buildNhlDailyEdgeAdapted(date: string): Promise<DailyEdgeR
     if (incoherentPayloadReleaseGames.has(`${gameId}:${payload.modelVersion}`)) {
       predictionPayloadByGame.delete(gameId);
     }
+  }
+  const writerVerdictsByGame = new Map<number, NhlWriterVerdicts>();
+  for (const r of ((recordsData ?? []) as Array<{
+    game_id: number;
+    market: string;
+    play_grade: string | null;
+    no_bet: boolean | null;
+    locked_at: string | null;
+    model_version: string;
+  }>)) {
+    const payload = predictionPayloadByGame.get(r.game_id);
+    if (!payload || r.model_version !== payload.modelVersion) continue;
+    if ((payload.lockedAt !== null) !== (r.locked_at !== null)) continue;
+    const key = r.market === "spread"
+      ? "puckline"
+      : r.market === "moneyline" || r.market === "total"
+        ? r.market
+        : null;
+    if (key === null) continue;
+    const gameVerdicts = writerVerdictsByGame.get(r.game_id) ?? {};
+    gameVerdicts[key] = nhlVerdictFromStoredDecision(r.play_grade, r.no_bet);
+    writerVerdictsByGame.set(r.game_id, gameVerdicts);
   }
 
   // Per-game pipeline.
@@ -582,6 +630,7 @@ export async function buildNhlDailyEdgeAdapted(date: string): Promise<DailyEdgeR
         puckLineMarketLine,
         splits: splitsEvent,
         lockedAt: lockedByGame.get(g.id) ?? null,
+        writerVerdicts: writerVerdictsByGame.get(g.id),
       };
       dtos.push(adaptNhlGameToDto(input));
     } catch (e) {
