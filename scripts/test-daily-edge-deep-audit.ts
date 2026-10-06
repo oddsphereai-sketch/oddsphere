@@ -73,6 +73,47 @@ function board(market: Record<string, unknown>) {
 {
   const result = auditDailyEdgeBoards({
     mlb: board({
+      priceAmerican: -325,
+      currentPriceAmerican: -125,
+      lineOpenAmerican: -325,
+      oddsTrail: [
+        { label: "first", american: -120 },
+        { label: "current", american: -125 },
+      ],
+      lastMovePrevAmerican: -120,
+      lastMoveNextAmerican: -125,
+      marketReadV2: { label: "Market Support", sourceSummary: {}, movement: { firstTrackedPrice: -120, currentPrice: -125 } },
+    }),
+  });
+  check(
+    "unlocked audit compares movement to the current quote instead of the evaluated price",
+    !result.summary.issueCounts.source_chain_previous_not_current &&
+      !result.summary.issueCounts.market_read_uses_hidden_price,
+  );
+}
+
+{
+  const result = auditDailyEdgeBoards({
+    mlb: board({
+      priceAmerican: -110,
+      currentPriceAmerican: -125,
+      lineOpenAmerican: -110,
+      lastMovePrevAmerican: -110,
+      lastMoveNextAmerican: -125,
+      evidenceCoherence: { status: "limited", reasonCodes: ["market_read_price_mismatch"], note: "Incompatible movement withheld." },
+      marketReadV2: { label: "Movement history limited", sourceSummary: {}, movement: { firstTrackedPrice: null, currentPrice: -125 } },
+    }),
+  });
+  check(
+    "per-market limited evidence is not reclassified as a directional contradiction",
+    !result.summary.issueCounts.projection_led_contradicts_visible_trail &&
+      !result.summary.issueCounts.market_read_direction_wrong_for_visible_trail,
+  );
+}
+
+{
+  const result = auditDailyEdgeBoards({
+    mlb: board({
       priceAmerican: -135,
       lineOpenAmerican: -126,
       marketReadV2: { label: "Market Resistance", sourceSummary: {}, movement: { currentPrice: -135 } },
@@ -574,7 +615,9 @@ function board(market: Record<string, unknown>) {
 }
 
 {
-  const lockedBoard: any = board({});
+  const lockedBoard = board({}) as unknown as {
+    games: Array<{ lockState: string; markets: Record<string, unknown> }>;
+  };
   lockedBoard.games[0]!.lockState = "locked";
   lockedBoard.games[0]!.markets = {
     first_inning: {
@@ -595,7 +638,9 @@ function board(market: Record<string, unknown>) {
 }
 
 {
-  const lockedBoard: any = board({});
+  const lockedBoard = board({}) as unknown as {
+    games: Array<{ lockState: string; markets: Record<string, unknown> }>;
+  };
   lockedBoard.games[0]!.lockState = "locked";
   lockedBoard.games[0]!.markets = {
     first_inning: {
