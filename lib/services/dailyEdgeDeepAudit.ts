@@ -484,7 +484,13 @@ export function auditDailyEdgeBoards(
               displayReason.includes("coin-flip"));
           const hasExplicitCapReason = capReasons.some((reason) =>
             typeof reason === "string" && reason.trim().length > 0);
-          if (!neutralFirstInningDecision && !hasExplicitCapReason && !displayReason.includes("because")) {
+          const hasExplicitEconomicExplanation =
+            displayReason.includes("because") ||
+            displayReason.includes("too thin") ||
+            displayReason.includes("not enough value") ||
+            displayReason.includes("does not leave enough value") ||
+            displayReason.includes("doesn't leave enough value");
+          if (!neutralFirstInningDecision && !hasExplicitCapReason && !hasExplicitEconomicExplanation) {
             push("no_play_positive_edge_needs_explanation", sport, game, slot, market, {
               modelMarketGapPct: market.modelMarketGapPct,
               capReasons,

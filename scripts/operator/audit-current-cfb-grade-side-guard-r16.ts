@@ -11,6 +11,7 @@ import {
   cfbV1LineProbabilities,
   getCfbV1Forecast,
   type CfbV1ExactPriceDecision,
+  type CfbV1Forecast,
   type CfbV1Grade,
   type CfbV1Market,
 } from "../../lib/services/football/cfbV1Decision";
@@ -36,23 +37,32 @@ async function main(): Promise<void> {
   const games = [...latest.values()].sort((first, second) => first.gameStartAt.localeCompare(second.gameStartAt)).map((row) => {
     const payload = row.payload;
     const healthHolds = payload.coverage.healthHolds ?? [];
-    const bundle = buildCfbV1DecisionBundle({
-      providerGameId: payload.game.providerGameId,
-      awayTeam: payload.game.away.abbreviation,
-      homeTeam: payload.game.home.abbreviation,
-      gameStartsAt: payload.game.scheduledStart,
-      comparableCurrentBooks: payload.market.currentBooks,
-      evaluatedAt: payload.capturedAt,
-      healthHolds,
-      forecast: getCfbV1Forecast(payload.game.providerGameId),
-      contextLines: { homeSpread: payload.market.playbookLine?.homeSpread ?? null, totalLine: payload.market.playbookLine?.total ?? null },
-    });
+    const forecast = exactArtifactForecast(payload.game.providerGameId);
+    const bundle = forecast
+      ? buildCfbV1DecisionBundle({
+        providerGameId: payload.game.providerGameId,
+        awayTeam: payload.game.away.abbreviation,
+        homeTeam: payload.game.home.abbreviation,
+        gameStartsAt: payload.game.scheduledStart,
+        comparableCurrentBooks: payload.market.currentBooks,
+        evaluatedAt: payload.capturedAt,
+        healthHolds,
+        forecast,
+        contextLines: { homeSpread: payload.market.playbookLine?.homeSpread ?? null, totalLine: payload.market.playbookLine?.total ?? null },
+      })
+      : null;
     const old = new Map(payload.decisions.evaluatedBets.map((decision) => [decision.market, decision]));
-    const candidate = new Map(bundle.evaluatedBets.map((decision) => [decision.market, decision]));
+    const candidate = bundle
+      ? new Map(bundle.evaluatedBets.map((decision) => [decision.market, decision]))
+      : old;
     const markets = MARKETS.map((market) => {
       const prior = old.get(market) ?? null;
       const next = candidate.get(market) ?? null;
-      if (next) assertPmfSide(bundle.forecast, next, payload.game.away.abbreviation, payload.game.home.abbreviation);
+      if (next && bundle) {
+        assertPmfSide(bundle.forecast, next, payload.game.away.abbreviation, payload.game.home.abbreviation);
+      } else if (next) {
+        assertStoredDecisionProbability(next);
+      }
       return {
         market,
         prior: summary(prior),
@@ -65,6 +75,7 @@ async function main(): Promise<void> {
     return {
       matchup: `${payload.game.away.abbreviation}@${payload.game.home.abbreviation}`,
       capturedAt: payload.capturedAt,
+      storedProbabilityFallback: forecast === null,
       expectedScore: `${payload.decisions.forecast.expectedAwayPoints.toFixed(1)}-${payload.decisions.forecast.expectedHomePoints.toFixed(1)}`,
       markets,
     };
@@ -73,7 +84,7 @@ async function main(): Promise<void> {
   const prior = marketRows.flatMap((row) => row.prior ? [row.prior] : []);
   const candidate = marketRows.flatMap((row) => row.candidate ? [row.candidate] : []);
   console.log(JSON.stringify({
-    release: "cfb_current_grade_side_guard_replay_2026_08_27_r16",
+    release: "cfb_current_grade_side_guard_replay_2026_10_06_r17_stored_probability_continuity",
     readOnly: true,
     providerCalls: 0,
     writes: 0,
@@ -87,6 +98,7 @@ async function main(): Promise<void> {
     actionablePromotions: marketRows.filter((row) => row.actionablePromotion).length,
     actionableDemotions: marketRows.filter((row) => row.actionableDemotion).length,
     changedSides: marketRows.filter((row) => row.sideChanged).length,
+    storedProbabilityFallbackGames: games.filter((game) => game.storedProbabilityFallback).length,
     gamesDetail: games,
   }, null, 2));
 }
@@ -113,7 +125,7 @@ function counts(rows: Array<Record<string, unknown>>): Record<CfbV1Grade, number
 function actionable(grade: unknown): boolean { return grade === "Best Angle" || grade === "Lean"; }
 
 function assertPmfSide(
-  forecast: ReturnType<typeof getCfbV1Forecast>,
+  forecast: CfbV1Forecast,
   decision: CfbV1ExactPriceDecision,
   away: string,
   home: string,
@@ -132,6 +144,21 @@ function assertPmfSide(
       ? probabilities.spread.home >= probabilities.spread.away ? home : away
       : probabilities.total.over >= probabilities.total.under ? "Over" : "Under";
   if (!decision.side.startsWith(selected)) throw new Error(`${forecast.providerGameId} ${decision.market} grade side contradicts PMF.`);
+}
+
+function exactArtifactForecast(providerGameId: string): CfbV1Forecast | null {
+  try {
+    return getCfbV1Forecast(providerGameId);
+  } catch (error) {
+    if (error instanceof Error && error.message.includes("has no qualified forecast")) return null;
+    throw error;
+  }
+}
+
+function assertStoredDecisionProbability(decision: CfbV1ExactPriceDecision): void {
+  if (decision.forecastProbability < 0.5 - 1e-12 || decision.modelProbability < 0.5 - 1e-12) {
+    throw new Error(`${decision.providerGameId} ${decision.market} selected side is below 50% in its stored release-pure decision tuple.`);
+  }
 }
 
 main().catch((error) => {
