@@ -13,11 +13,13 @@
 
 import { readStringFlag } from "./_cliCommon";
 import { signWhopSession, WHOP_SESSION_COOKIE_NAME } from "../../lib/auth/whopSession";
-import { auditDailyEdgeBoards } from "../../lib/services/dailyEdgeDeepAudit";
+import {
+  auditDailyEdgeBoards,
+  DAILY_EDGE_DEEP_AUDIT_SPORTS,
+} from "../../lib/services/dailyEdgeDeepAudit";
 
 type Row = Record<string, any>;
 
-const SPORTS = ["mlb", "wnba", "soccer"] as const;
 const argv = process.argv.slice(2);
 const baseUrl = readStringFlag(argv, "--base-url")?.replace(/\/+$/, "") ?? null;
 const failOnCritical = !argv.includes("--no-fail");
@@ -39,7 +41,7 @@ async function main(): Promise<void> {
 async function fetchLocalBoards(): Promise<Record<string, Row>> {
   const { GET: dailyEdgeGet } = await import("../../app/api/lab/daily-edge/route");
   const out: Record<string, Row> = {};
-  for (const sport of SPORTS) {
+  for (const sport of DAILY_EDGE_DEEP_AUDIT_SPORTS) {
     const response = await dailyEdgeGet(new Request(`http://localhost/api/lab/daily-edge?sport=${sport}`));
     out[sport] = await response.json() as Row;
   }
@@ -55,15 +57,13 @@ async function fetchProductionBoards(url: string): Promise<Record<string, Row>> 
         "cache-control": "no-cache",
       },
     });
-    if (response.ok) {
-      const payload = await response.json() as { boards?: Record<string, Row>; result?: unknown };
-      if (payload.boards) return payload.boards;
-    }
+    const payload = await response.json().catch(() => null) as { boards?: Record<string, Row>; result?: unknown } | null;
+    if (payload?.boards) return payload.boards;
   }
 
   const authCookie = await betaCookieForBaseUrl(url);
   const out: Record<string, Row> = {};
-  for (const sport of SPORTS) {
+  await Promise.all(DAILY_EDGE_DEEP_AUDIT_SPORTS.map(async (sport) => {
     const response = await fetch(`${url}/api/lab/daily-edge?sport=${sport}`, {
       headers: {
         "cache-control": "no-cache",
@@ -75,7 +75,7 @@ async function fetchProductionBoards(url: string): Promise<Record<string, Row>> 
       throw new Error(`Production Daily Edge ${sport} failed: ${response.status} ${text.slice(0, 200)}`);
     }
     out[sport] = await response.json() as Row;
-  }
+  }));
   return out;
 }
 
