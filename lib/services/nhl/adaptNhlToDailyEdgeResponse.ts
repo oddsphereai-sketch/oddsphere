@@ -263,6 +263,8 @@ function gradeFromVerdict(v: NhlVerdictKey): Grade | null {
   }
 }
 
+export type NhlWriterVerdicts = Partial<Record<"moneyline" | "total" | "puckline", NhlVerdictKey>>;
+
 function sharpReadFromSplits(
   model: NhlModelOutput,
   splits: SharpNhlSplitsEvent | null,
@@ -322,8 +324,9 @@ function logoFor(abbr: string): string {
 function buildPredictionDto(
   market: NhlModelOutput["moneyline"],
   priceComplete = true,
+  writerVerdict?: NhlVerdictKey,
 ): DailyEdgePredictionDto {
-  const verdict = priceComplete ? market.verdict : "pass";
+  const verdict = priceComplete ? (writerVerdict ?? market.verdict) : "pass";
   return {
     pick: market.pick,
     confidence: market.confidence,
@@ -338,9 +341,10 @@ function buildTotalDto(
   market: NhlModelOutput["total"],
   marketLine: number | null,
   priceComplete = true,
+  writerVerdict?: NhlVerdictKey,
 ): DailyEdgeTotalPredictionDto {
   return {
-    ...buildPredictionDto(market, priceComplete && marketLine !== null),
+    ...buildPredictionDto(market, priceComplete && marketLine !== null, writerVerdict),
     // 2026-06-14: the displayed line is the MARKET consensus line — the same
     // value the pick label "OVER {marketLine}" is built from. It used to be
     // set to the model's expected_total_goals (a 5.879-style projection),
@@ -358,10 +362,11 @@ function buildMarketEdge(opts: {
   bundle: NhlPerMarketBest;
   publicSplits: MarketEdgeDto["publicSplits"];
   keyStats: KeyStatRow[];
+  writerVerdict?: NhlVerdictKey;
 }): MarketEdgeDto {
-  const { market, slot, modelTotal, marketLine, bundle, publicSplits, keyStats } = opts;
+  const { market, slot, modelTotal, marketLine, bundle, publicSplits, keyStats, writerVerdict } = opts;
   const priceComplete = bundle.priceAmerican !== null && (slot === "ml" || marketLine !== null);
-  const effectiveVerdict: NhlVerdictKey = priceComplete ? market.verdict : "pass";
+  const effectiveVerdict: NhlVerdictKey = priceComplete ? (writerVerdict ?? market.verdict) : "pass";
   const verdict = verdictKeyMap(effectiveVerdict);
   const held = effectiveVerdict === "pass";
   // For Total, the model's `model_market_gap_pct` is in GOAL units
@@ -475,6 +480,8 @@ export type NhlAdapterGameInput = {
   splits: ResolvedNhlSplitsEvent | null;
   /** locked_at from prediction_records, if any. Null when not yet written. */
   lockedAt: string | null;
+  /** Price-aware writer decisions for the exact persisted model release. */
+  writerVerdicts?: NhlWriterVerdicts;
 };
 
 export function adaptNhlGameToDto(input: NhlAdapterGameInput): DailyEdgeGameDto {
@@ -483,7 +490,7 @@ export function adaptNhlGameToDto(input: NhlAdapterGameInput): DailyEdgeGameDto 
   const projectedAway = model.projected_away_goals;
 
   const headlineVerdict: NhlVerdictKey = input.mlBundle.priceAmerican !== null
-    ? model.moneyline.verdict
+    ? (input.writerVerdicts?.moneyline ?? model.moneyline.verdict)
     : "pass";
   const verdict = verdictKeyMap(headlineVerdict);
   const lockState: "open" | "locking" | "locked" =
@@ -513,10 +520,10 @@ export function adaptNhlGameToDto(input: NhlAdapterGameInput): DailyEdgeGameDto 
     homeStarter: null,
     awayStarter: null,
     predictions: {
-      ml: buildPredictionDto(model.moneyline, input.mlBundle.priceAmerican !== null),
-      total: buildTotalDto(model.total, input.marketTotalLine, input.totalBundle.priceAmerican !== null),
+      ml: buildPredictionDto(model.moneyline, input.mlBundle.priceAmerican !== null, input.writerVerdicts?.moneyline),
+      total: buildTotalDto(model.total, input.marketTotalLine, input.totalBundle.priceAmerican !== null, input.writerVerdicts?.total),
       // Puck-line read piggybacks the shared third-market prediction slot.
-      nrfi: buildPredictionDto(model.puck_line, input.puckLineBundle.priceAmerican !== null && input.puckLineMarketLine !== null),
+      nrfi: buildPredictionDto(model.puck_line, input.puckLineBundle.priceAmerican !== null && input.puckLineMarketLine !== null, input.writerVerdicts?.puckline),
     },
     markets: (() => {
       const mlPickIsHome = model.moneyline.pick.startsWith(input.homeAbbr);
@@ -531,6 +538,7 @@ export function adaptNhlGameToDto(input: NhlAdapterGameInput): DailyEdgeGameDto 
           bundle: input.mlBundle,
           publicSplits: buildPublicSplits("ml", mlPickIsHome, false, input.splits, input.homeAbbr, input.awayAbbr),
           keyStats: buildKeyStats("ml", input.snapshot, model),
+          writerVerdict: input.writerVerdicts?.moneyline,
         }),
         total: buildMarketEdge({
           market: model.total,
@@ -540,6 +548,7 @@ export function adaptNhlGameToDto(input: NhlAdapterGameInput): DailyEdgeGameDto 
           bundle: input.totalBundle,
           publicSplits: buildPublicSplits("total", false, totalPickIsOver, input.splits, input.homeAbbr, input.awayAbbr),
           keyStats: buildKeyStats("total", input.snapshot, model),
+          writerVerdict: input.writerVerdicts?.total,
         }),
         // first_inning slot carries the official puck-line read for NHL.
         first_inning: buildMarketEdge({
@@ -550,6 +559,7 @@ export function adaptNhlGameToDto(input: NhlAdapterGameInput): DailyEdgeGameDto 
           bundle: input.puckLineBundle,
           publicSplits: buildPublicSplits("puckline", plPickIsHome, false, input.splits, input.homeAbbr, input.awayAbbr),
           keyStats: buildKeyStats("puckline", input.snapshot, model),
+          writerVerdict: input.writerVerdicts?.puckline,
         }),
       };
     })(),

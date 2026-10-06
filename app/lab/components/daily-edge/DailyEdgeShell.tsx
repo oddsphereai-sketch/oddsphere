@@ -108,9 +108,9 @@ const MARKET_LONG_LABEL: Record<MarketKey, string> = {
 // lib/config/officialTrackingMarkets.ts so the UI, the auditor, and
 // any future writer guards share one source of truth. The
 // `first_inning` DTO slot is the UI delivery channel; the registry's
-// `CONTEXT_ONLY_DISPLAY_MARKETS` records "spread" for NBA / NHL
-// because that is the underlying market_type those slots represent
-// (NHL puck-line is stored under market_type="spread" in `lines`).
+// `CONTEXT_ONLY_DISPLAY_MARKETS` records "spread" for NBA because that
+// is the underlying market_type its slot represents. NHL puck line uses
+// the same DTO slot but is now an officially tracked spread market.
 function isContextOnlyMarket(market: MarketKey, sport: Sport): boolean {
   if (market !== "first_inning") return false;
   // The first_inning DTO slot is a context-only display IF the
@@ -119,7 +119,7 @@ function isContextOnlyMarket(market: MarketKey, sport: Sport): boolean {
 }
 function marketShortLabelFor(market: MarketKey, sport: Sport): string {
   if (market === "first_inning") {
-    if (sport === "nhl") return "PL*";
+    if (sport === "nhl") return "PL";
     if (sport === "nba") return "Sprd*";
     if (sport === "wnba") return "Sprd"; // WNBA spread is a publicly-tracked market (no context-only *)
     // The soccer first_inning slot carries the BTTS market (the btts

@@ -9,6 +9,8 @@
  * Markets graded:
  *   • moneyline (pick side wins)
  *   • total (over/under vs total goals; push if equal to integer line)
+ *   • spread (official NHL puck line; selected-team score differential
+ *     plus its signed line)
  *
  * Scope:
  *   • Reads:  prediction_records (sport='nhl'), games (NHL FINAL).
@@ -55,7 +57,7 @@ type FinalGame = {
   away_score: number | null;
 };
 
-function gradeMoneyline(
+export function gradeMoneyline(
   side: string | null,
   homeScore: number | null,
   awayScore: number | null,
@@ -68,19 +70,38 @@ function gradeMoneyline(
   return "pending";
 }
 
-function gradeTotal(
+export function gradeTotal(
   side: string | null,
   lineValue: number | null,
   homeScore: number | null,
   awayScore: number | null,
 ): GradeResult {
-  if (side === null || lineValue === null || homeScore === null || awayScore === null) return "pending";
+  if (homeScore === null || awayScore === null) return "pending";
+  if (lineValue === null) return "pending";
+  if (side === null) return "pending";
   const total = homeScore + awayScore;
   if (total === lineValue) return "push";
   const wentOver = total > lineValue;
   if (side === "over") return wentOver ? "win" : "loss";
   if (side === "under") return wentOver ? "loss" : "win";
   return "pending";
+}
+
+export function gradeSpread(
+  side: string | null,
+  lineValue: number | null,
+  homeScore: number | null,
+  awayScore: number | null,
+): GradeResult {
+  if (homeScore === null || awayScore === null) return "pending";
+  if (lineValue === null) return "void";
+  if (side !== "home" && side !== "away") return "pending";
+  const selectedMargin = side === "home"
+    ? homeScore - awayScore
+    : awayScore - homeScore;
+  const adjusted = selectedMargin + lineValue;
+  if (adjusted === 0) return "push";
+  return adjusted > 0 ? "win" : "loss";
 }
 
 export async function gradeNhlPredictions(opts: GradeNhlOptions): Promise<GradeNhlResult> {
@@ -149,6 +170,8 @@ export async function gradeNhlPredictions(opts: GradeNhlOptions): Promise<GradeN
       result = gradeMoneyline(r.side, g.home_score, g.away_score);
     } else if (r.market === "total") {
       result = gradeTotal(r.side, r.line_value, g.home_score, g.away_score);
+    } else if (r.market === "spread") {
+      result = gradeSpread(r.side, r.line_value, g.home_score, g.away_score);
     }
     if (result === "pending") continue;
 

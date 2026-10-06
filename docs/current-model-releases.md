@@ -2390,6 +2390,27 @@ grades, stakes, locks, tracking, board count, promotions, demotions, and
 actionable count are unchanged. Evidence and rollback:
 `docs/model-audits/2026-09-30-nhl-playbook-split-identity-r10.md`.
 
+The October 6 r11 reader release
+`nhl_daily_edge_reader_2026_10_06_r11_grade_tracking_parity` preserves every
+r14 forecast, projected score, probability, exact-price decision, price-aware
+grade, stake, lock, split source, and market-reading equation. It repairs two
+deterministic publication/tracking gaps. First, the NHL Daily Edge reader now
+consumes each market's price-aware writer decision and translates an actionable
+NHL `model_only` storage token to the same Lean
+grade already used by official tracking; `no_bet=true` still resolves to No
+Play, and other sports retain their existing token meanings. It also accepts
+the NHL writer's `best_signal` token as Best Angle. Second, the NHL settlement
+service grades the already-official `spread` records as signed puck lines,
+including pushes, rather than leaving them pending. The member puck-line chip
+therefore no longer carries the obsolete context-only asterisk. This release
+does not rewrite a locked prediction, add a market, change board count, or
+introduce copy or labels. The ordinary settlement job may now settle previously
+pending official puck-line records from their immutable locked tuple and
+official final score. Forecast promotions/demotions are 0/0 because the writer
+decisions are unchanged; the reader now truthfully renders those decisions.
+Evidence:
+`docs/model-audits/2026-10-06-remaining-sport-market-reading-result.md`.
+
 Only NHL game type `02` is eligible for the reader, writer, and public tracking.
 The September 22 game type `01` rows are preseason audit evidence and never enter
 member tracking. The independent runtime exactly replays the release-pure 2026
