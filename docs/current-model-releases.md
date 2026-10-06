@@ -219,6 +219,30 @@ Last reviewed: 2026-10-06
 
 ## CFB Daily Edge generalized weekly production release
 
+### Fresh sharp-context held price map (fixture r73; snapshot r33; reader r18)
+
+- Active member fixture / compact snapshot / reader releases are
+  `cfb_v1_member_fixture_2026_10_06_r73_fresh_sharp_context_price_map` /
+  `cfb_forward_member_snapshot_2026_10_06_r33_fresh_sharp_context_price_map` /
+  `cfb_member_snapshot_reader_2026_10_06_r18_fresh_sharp_context_price_map`. The evidence schema,
+  collector, sole writer, independent model, market reader, decisions, grades, locks and tracking
+  remain unchanged.
+- When the bounded full SharpAPI odds fallback is deliberately deferred, the same writer row can
+  still contain a fresher complete Circa, Pinnacle or Bookmaker pair in its compact forward-context
+  capture. Held-market price maps now consider those verified pairs alongside retained display
+  books. This is presentation-only fallback selection: it cannot become an evaluated quote, create
+  a pick, clear a hold, change a forecast, or alter a Bet grade.
+- Read-only production replay keeps **89 games / 267 market forecasts** and the exact existing
+  **12 Best Angles / 77 Leans / 66 Watchlists / 112 No Plays**. There are zero forecast, side,
+  probability, score, evaluated-price, grade, actionability, lock or tracking changes and therefore
+  zero promotions and zero demotions. Only Southern Miss at Troy's three held-market display rows
+  move from older Rebet context to fresher Circa context. Its honest same-book trails are Moneyline
+  `-405 → -400`, Spread `Troy -10.5 (-110) → Troy -10 (-105)`, and Total `51.5 (-110) → 51.5
+  (-110)` at distinct verified timestamps. Complete opening/first-to-current trails rise 168→171.
+- No provider request, cadence, user-facing copy, label or warning was added. Evidence and rollback
+  are recorded in `docs/model-audits/2026-10-06-cfb-fresh-sharp-context-price-map.md`. Roll back
+  fixture/snapshot/reader to r72/r32/r17; no stored evidence or tracking row requires reversal.
+
 ### Evaluated-book opening trail repair (fixture r72; snapshot r32; reader r17)
 
 - Active member fixture / compact snapshot / reader releases are

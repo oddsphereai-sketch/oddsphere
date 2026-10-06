@@ -57,6 +57,7 @@ import {
   type CfbForwardStoredEvidence,
 } from "./cfbForwardEvidence";
 import { readCfbForwardEvidence } from "./cfbForwardEvidenceStore";
+import { cfbForwardContextSharpHistoryBooks } from "./cfbForwardEvidenceCapture";
 import {
   CFB_V1_CALIBRATION_RELEASE,
   CFB_V1_BASE_DISTRIBUTION_RELEASE,
@@ -88,7 +89,7 @@ import { cfbTeamIdentity } from "./cfbTeamIdentity";
 import { CFB_PUBLIC_SCORE_DIRECTION_TOLERANCE_POINTS } from "./footballCrossMarketCoherence";
 
 export const CFB_MEMBER_FIXTURE_RELEASE =
-  "cfb_v1_member_fixture_2026_10_06_r72_evaluated_book_opening_trails" as const;
+  "cfb_v1_member_fixture_2026_10_06_r73_fresh_sharp_context_price_map" as const;
 export const CFB_PUBLIC_OUTCOME_CONTRACT_RELEASE =
   "cfb_market_sharp_public_outcome_contract_2026_10_04_r64_moneyline_market_confirmation" as const;
 export const CFB_CONTEXT_ONLY_QUOTE_CAPTURE_SKEW_MS = 5_000 as const;
@@ -1300,7 +1301,18 @@ function currentDisplayQuote(
   const capturedAt = Date.parse(payload.capturedAt);
   const startsAt = Date.parse(payload.game.scheduledStart);
   if (!Number.isFinite(capturedAt) || !Number.isFinite(startsAt)) return null;
-  const candidates = (payload.market.displayBooks ?? payload.market.currentBooks)
+  // The bounded context capture can contain a fresher Circa/Pinnacle pair than
+  // the retained display-book array when the full SharpAPI odds fallback is
+  // deferred by the slate request budget. Those pairs already feed the
+  // internal market context; make them eligible for the held-market price map
+  // as well so the member surface does not prefer an older fallback quote.
+  // Target-book exact-price decisions remain unchanged and continue to use the
+  // immutable evaluated quote path above this presentation-only fallback.
+  const displayBooks = [
+    ...(payload.market.displayBooks ?? payload.market.currentBooks),
+    ...cfbForwardContextSharpHistoryBooks(payload.contextualEvidenceCapture),
+  ];
+  const candidates = displayBooks
     .flatMap((book): CfbCurrentDisplayQuote[] => {
       const displayQuote = marketQuoteFor(book, market, side);
       const quote = displayQuote ? { price: displayQuote.price, line: displayQuote.line } : null;
