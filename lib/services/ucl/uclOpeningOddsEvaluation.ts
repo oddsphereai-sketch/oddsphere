@@ -3,18 +3,11 @@ import { buildUclCompetitionContexts, regulationScore } from "./uclCompetitionCo
 import { partitionUclChronologicalMatches } from "./uclChronologicalEvaluation";
 import { fitAndPredictUcl, joinUclMatchStats } from "./uclModel";
 import { assertFrozenUclHistoricalStats } from "./uclChronologicalManifest";
+import { canonicalUclOpeningOdds, type CompleteUclOpening } from "./uclOpeningOdds";
+
+export { canonicalUclOpeningOdds } from "./uclOpeningOdds";
 
 type ResultSide = "home" | "draw" | "away";
-type CompleteOpening = {
-  id: number;
-  matchId: number;
-  vendor: string;
-  openedAt: string | null;
-  updatedAt: string | null;
-  prices: Record<ResultSide, number>;
-  noVig: Record<ResultSide, number>;
-};
-
 type EvaluatedRow = {
   matchId: number;
   side: ResultSide;
@@ -30,10 +23,6 @@ type EvaluatedRow = {
 const PROBABILITY_FLOORS = [0.4, 0.45, 0.5, 0.55, 0.6, 0.65] as const;
 const EV_FLOORS = [0, 0.02, 0.04, 0.06, 0.08] as const;
 
-function validAmerican(value: number | null): value is number {
-  return typeof value === "number" && Number.isFinite(value) && Math.abs(value) >= 100;
-}
-
 function decimalOdds(value: number): number {
   return value > 0 ? 1 + value / 100 : 1 + 100 / Math.abs(value);
 }
@@ -42,52 +31,11 @@ function implied(value: number): number {
   return 1 / decimalOdds(value);
 }
 
-function openingTime(row: CompleteOpening): number {
-  const value = Date.parse(row.openedAt ?? row.updatedAt ?? "");
-  return Number.isFinite(value) ? value : Number.POSITIVE_INFINITY;
-}
-
-export function canonicalUclOpeningOdds(rows: BdlUclOdds[]): Map<number, CompleteOpening[]> {
-  const byId = new Map<number, BdlUclOdds>();
-  for (const row of rows) {
-    const prior = byId.get(row.id);
-    if (prior && JSON.stringify(prior) !== JSON.stringify(row)) {
-      throw new Error(`conflicting duplicate UCL opening-odds provider ID ${row.id}`);
-    }
-    if (!prior) byId.set(row.id, row);
-  }
-  const byMatchVendor = new Map<string, CompleteOpening>();
-  for (const row of byId.values()) {
-    const vendor = row.vendor.trim();
-    if (!vendor || !validAmerican(row.moneyline_home_odds) || !validAmerican(row.moneyline_draw_odds) || !validAmerican(row.moneyline_away_odds)) continue;
-    const prices = { home: row.moneyline_home_odds, draw: row.moneyline_draw_odds, away: row.moneyline_away_odds };
-    const raw = { home: implied(prices.home), draw: implied(prices.draw), away: implied(prices.away) };
-    const total = raw.home + raw.draw + raw.away;
-    const candidate: CompleteOpening = {
-      id: row.id,
-      matchId: row.match_id,
-      vendor,
-      openedAt: row.opened_at ?? null,
-      updatedAt: row.updated_at,
-      prices,
-      noVig: { home: raw.home / total, draw: raw.draw / total, away: raw.away / total },
-    };
-    const key = `${row.match_id}:${vendor.toLowerCase()}`;
-    const prior = byMatchVendor.get(key);
-    if (!prior || openingTime(candidate) < openingTime(prior) || (openingTime(candidate) === openingTime(prior) && candidate.id < prior.id)) {
-      byMatchVendor.set(key, candidate);
-    }
-  }
-  const byMatch = new Map<number, CompleteOpening[]>();
-  for (const row of byMatchVendor.values()) byMatch.set(row.matchId, [...(byMatch.get(row.matchId) ?? []), row]);
-  return byMatch;
-}
-
 function forecastSide(probabilities: Record<ResultSide, number>): ResultSide {
   return (["home", "draw", "away"] as const).reduce((best, side) => probabilities[side] > probabilities[best] ? side : best, "home");
 }
 
-function evaluatedRows(matches: BdlUclMatch[], all: BdlUclMatch[], stats: BdlUclTeamMatchStats[], openings: Map<number, CompleteOpening[]>): EvaluatedRow[] {
+function evaluatedRows(matches: BdlUclMatch[], all: BdlUclMatch[], stats: BdlUclTeamMatchStats[], openings: Map<number, CompleteUclOpening[]>): EvaluatedRow[] {
   const training = joinUclMatchStats(all, stats);
   const contexts = buildUclCompetitionContexts(all);
   return matches.flatMap((match): EvaluatedRow[] => {

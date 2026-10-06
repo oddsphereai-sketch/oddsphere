@@ -52,6 +52,7 @@ export async function buildUclDailyEdgePreview(slate: UclSlate, options: UclPrev
       deriveCoherentOutcome: deriveUclCoherentMarketOutcome,
       deriveMatchResultDecision: deriveUclMatchResultDecision,
       derivePreviewGrade: deriveUclPreviewGrade,
+      useCoherentMatchResultForecast: true,
       selectMatchResultSide: (prediction) => {
         const probabilities = prediction.probabilities;
         const side = (["home", "draw", "away"] as const).reduce(

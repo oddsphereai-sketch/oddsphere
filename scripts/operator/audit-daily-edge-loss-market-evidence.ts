@@ -184,7 +184,10 @@ export function compactAuditRow(row: PredictionRecord) {
     noBet: row.no_bet === true,
     noBetReason: row.no_bet_reason,
     held: row.held === true,
-    actionable: row.no_bet !== true && ["best_angle", "lean"].includes(normalizedGrade(row.play_grade)),
+    actionable: row.no_bet !== true && (
+      ["best_angle", "lean"].includes(normalizedGrade(row.play_grade))
+      || row.sport === "nhl" && ["best_signal", "model_only"].includes(normalizedGrade(row.play_grade))
+    ),
     result: resultOf(row),
     actualTotal: number(settledGrade?.actual_total),
     release: decisionRelease(snapshot),

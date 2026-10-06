@@ -5,6 +5,7 @@ import {
   type ScoreDistribution,
 } from "@/lib/services/soccer/dixonColes";
 import { deriveSoccerMarketProbabilities } from "@/lib/services/soccer/soccerMarketProbabilities";
+import type { BdlEplOdds } from "@/lib/providers/real_api/BallDontLieEplProvider";
 import type { EplForwardBookVector } from "./eplForwardEvidenceCapture";
 
 export const EPL_COHERENT_MARKET_OUTCOME_RELEASE =
@@ -22,11 +23,13 @@ type GateReason =
   | "eligible_total_alternatives_correlated"
   | "eligible_total_alternatives_not_unanimous"
   | "total_target_not_bracketed"
-  | "tilted_pmf_invalid";
+  | "tilted_pmf_invalid"
+  | "eligible_opening_match_result_alternatives_below_2"
+  | "opening_match_result_crossing_not_qualified";
 
 export type EplCoherentMarketOutcome = {
   release: string;
-  source: "independent_club_pmf" | "target_excluded_total_tilt";
+  source: "independent_club_pmf" | "target_excluded_total_tilt" | "target_excluded_opening_match_result_log_pool";
   joint: ScoreDistribution;
   markets: ReturnType<typeof deriveSoccerMarketProbabilities>;
   expectedGoals: { home: number; away: number };
@@ -209,8 +212,10 @@ function vectorEligibility(input: {
 }
 
 export function deriveEplCoherentMarketOutcome(input: {
+  matchId?: number;
   independentLambdaHome: number;
   independentLambdaAway: number;
+  openingOdds?: BdlEplOdds[];
   totalVectors: EplForwardBookVector[];
   evaluatedMatchResultCanonicalBook: string | null;
   evaluatedTotalCanonicalBook: string | null;

@@ -13,6 +13,11 @@ import { isCurrentUclTrackingRelease, isTrackingRecordEligible, isUclTrackingRec
 import { getOfficialTrackingMarkets } from "../lib/config/officialTrackingMarkets";
 import { evaluateUclPublicationCoverage, mergeVerifiedUclLocksIntoLastKnownGood, uclPriceCollapseIsRecovered } from "../lib/services/ucl/uclPublicationReadiness";
 import { canonicalUclOpeningOdds } from "../lib/services/ucl/uclOpeningOddsEvaluation";
+import {
+  deriveUclOpeningMarketScoreArbitration,
+  UCL_OPENING_MARKET_SCORE_ARBITRATION_RELEASE,
+} from "../lib/services/ucl/uclOpeningMarketScoreArbitration";
+import { deriveUclCoherentMarketOutcome } from "../lib/services/ucl/uclCoherentMarketOutcome";
 import type { PredictionRecordRow } from "../lib/types/domain/Tracking";
 import {
   assertFrozenUclChronologicalManifest,
@@ -180,6 +185,62 @@ assert.throws(() => canonicalUclOpeningOdds([
   { id: 700, match_id: 91, vendor: "fanduel", moneyline_home_odds: 125, moneyline_draw_odds: 230, moneyline_away_odds: 220, opened_at: null, updated_at: "2025-01-01T12:00:00Z" },
   { id: 700, match_id: 91, vendor: "fanduel", moneyline_home_odds: 130, moneyline_draw_odds: 230, moneyline_away_odds: 220, opened_at: null, updated_at: "2025-01-01T12:00:00Z" },
 ]), /conflicting duplicate/);
+
+// The UCL forecast marriage remains independent-first, excludes the exact
+// evaluated book, needs two alternative complete books, and returns one
+// coherent score distribution rather than a disconnected side override.
+const independentOnly = deriveUclOpeningMarketScoreArbitration({
+  matchId: 91,
+  independentLambdaHome: 1.2,
+  independentLambdaAway: 1.1,
+  openingOdds: [],
+  evaluatedMatchResultCanonicalBook: "fanduel",
+});
+assert.equal(independentOnly.release, UCL_OPENING_MARKET_SCORE_ARBITRATION_RELEASE);
+assert.equal(independentOnly.applied, false);
+assert.equal(independentOnly.source, "independent_club_pmf");
+assert.ok(Math.abs(independentOnly.lambdaHome - 1.2) < 1e-12);
+assert.ok(Math.abs(independentOnly.lambdaAway - 1.1) < 1e-12);
+
+const openingArbitration = deriveUclOpeningMarketScoreArbitration({
+  matchId: 91,
+  independentLambdaHome: 1.2,
+  independentLambdaAway: 1.1,
+  evaluatedMatchResultCanonicalBook: "FanDuel",
+  openingOdds: [
+    { id: 801, match_id: 91, vendor: "FanDuel", moneyline_home_odds: 400, moneyline_draw_odds: 300, moneyline_away_odds: -180, opened_at: "2025-01-01T10:00:00Z", updated_at: "2025-01-01T10:00:00Z" },
+    { id: 802, match_id: 91, vendor: "DraftKings", moneyline_home_odds: 410, moneyline_draw_odds: 300, moneyline_away_odds: -185, opened_at: "2025-01-01T10:00:00Z", updated_at: "2025-01-01T10:00:00Z" },
+    { id: 803, match_id: 91, vendor: "BetMGM", moneyline_home_odds: 400, moneyline_draw_odds: 310, moneyline_away_odds: -180, opened_at: "2025-01-01T10:00:00Z", updated_at: "2025-01-01T10:00:00Z" },
+  ],
+});
+assert.equal(openingArbitration.applied, true);
+assert.equal(openingArbitration.source, "target_excluded_opening_match_result_log_pool");
+assert.deepEqual(openingArbitration.eligibleAlternativeBooks, ["betmgm", "draftkings"]);
+assert.equal(openingArbitration.inactiveOpeningBooks.some((row) => row.book === "fanduel" && row.reason === "evaluated_canonical_book_excluded"), true);
+assert.equal(openingArbitration.finalSide, "away", "qualified target-excluded market evidence may correct the independent side rather than merely nudge it");
+assert.ok(Math.abs(openingArbitration.lambdaHome + openingArbitration.lambdaAway - 2.3) < 1e-9, "arbitration preserves the independent expected total");
+assert.ok(Math.abs(Object.values(openingArbitration.probabilities).reduce((sum, value) => sum + value, 0) - 1) < 1e-12);
+const coherentOpeningOutcome = deriveUclCoherentMarketOutcome({
+  matchId: 91,
+  independentLambdaHome: 1.2,
+  independentLambdaAway: 1.1,
+  openingOdds: [
+    { id: 811, match_id: 91, vendor: "FanDuel", moneyline_home_odds: 400, moneyline_draw_odds: 300, moneyline_away_odds: -180, opened_at: "2025-01-01T10:00:00Z", updated_at: "2025-01-01T10:00:00Z" },
+    { id: 812, match_id: 91, vendor: "DraftKings", moneyline_home_odds: 410, moneyline_draw_odds: 300, moneyline_away_odds: -185, opened_at: "2025-01-01T10:00:00Z", updated_at: "2025-01-01T10:00:00Z" },
+    { id: 813, match_id: 91, vendor: "BetMGM", moneyline_home_odds: 400, moneyline_draw_odds: 310, moneyline_away_odds: -180, opened_at: "2025-01-01T10:00:00Z", updated_at: "2025-01-01T10:00:00Z" },
+  ],
+  totalVectors: [],
+  evaluatedMatchResultCanonicalBook: "fanduel",
+  evaluatedTotalCanonicalBook: null,
+  evaluatedBttsCanonicalBook: null,
+  providerEventId: null,
+  decisionAt: "2025-01-01T12:00:00Z",
+  kickoff: "2025-01-02T20:00:00Z",
+});
+assert.equal(coherentOpeningOutcome.source, "target_excluded_opening_match_result_log_pool");
+assert.equal((["home", "draw", "away"] as const).reduce((best, side) => coherentOpeningOutcome.markets.match_result[side] > coherentOpeningOutcome.markets.match_result[best] ? side : best, "home"), "away");
+assert.ok(Math.abs(coherentOpeningOutcome.expectedGoals.home + coherentOpeningOutcome.expectedGoals.away - 2.3) < 1e-4, "displayed PMF total stays within numerical truncation tolerance of the preserved independent total");
+assert.equal(coherentOpeningOutcome.audit.maximumMatchResultResidual < 1e-12, true);
 assert.deepEqual(
   { train: UCL_CHRONOLOGICAL_MANIFEST.train, calibration: UCL_CHRONOLOGICAL_MANIFEST.calibration, holdout: UCL_CHRONOLOGICAL_MANIFEST.holdout, cutoff: UCL_CHRONOLOGICAL_MANIFEST.cutoff },
   { train: 185, calibration: 126, holdout: 63, cutoff: "2026-01-28T20:00:00.000Z" },
