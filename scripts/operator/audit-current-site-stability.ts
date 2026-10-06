@@ -43,11 +43,15 @@
  */
 
 import { supabase } from "@/lib/db/supabase";
-import { computeTrackingAggregate } from "@/lib/services/trackingAggregateService";
+import {
+  computeTrackingAggregate,
+  isTrackingRecordEligible,
+} from "@/lib/services/trackingAggregateService";
 import { isFinalFiGradeCoherent } from "@/lib/services/dailyEdge/fiGradeCoherence";
 import {
   getOfficialTrackingMarkets,
 } from "@/lib/config/officialTrackingMarkets";
+import type { PredictionRecordRow } from "@/lib/types/domain/Tracking";
 import { readFileSync, writeFileSync, existsSync } from "node:fs";
 import { resolve } from "node:path";
 
@@ -990,7 +994,7 @@ async function check6GradingTracking(): Promise<Issue[]> {
 
     const { data: prs } = await supabase
       .from("prediction_records")
-      .select("id, market, game_id, locked_at, slate_date")
+      .select("id, external_id, market, game_id, locked_at, slate_date, model_version, calibration_version")
       .eq("sport", sport)
       .in("game_id", games.map((g) => g.id))
       .not("locked_at", "is", null);
@@ -1006,6 +1010,11 @@ async function check6GradingTracking(): Promise<Issue[]> {
     }
 
     for (const pr of prs ?? []) {
+      // Audit the same immutable cohort the member tracking aggregate uses.
+      // In particular, NHL has retired transition releases and preseason game
+      // types that may retain harmless pending placeholders but are explicitly
+      // ineligible for public tracking.
+      if (!isTrackingRecordEligible({ ...pr, sport } as PredictionRecordRow)) continue;
       const g = gradeByPr.get(pr.id);
       const isTracked = OFFICIAL_TRACKING[sport].includes(pr.market);
       if (!isTracked) continue;
