@@ -626,6 +626,25 @@ function board(market: Record<string, unknown>) {
 
 {
   const result = auditDailyEdgeBoards({
+    mlb: board({
+      pick: "NRFI",
+      grade: "market_watch",
+      verdict: { key: "no_play" },
+      modelMarketGapPct: 3.4,
+      capReasons: [],
+      displayReason: null,
+      guidedGuide: "At -177, the FI edge is too thin to make NRFI actionable.",
+      marketReadV2: { label: "No Clear Signal", sourceSummary: {}, movement: { currentPrice: -177 } },
+    }),
+  });
+  check(
+    "explicit exact-price thin-edge explanation satisfies the No Play audit",
+    !result.summary.issueCounts.no_play_positive_edge_needs_explanation,
+  );
+}
+
+{
+  const result = auditDailyEdgeBoards({
     ucl: board({
       grade: null,
       verdict: { key: "no_play" },
