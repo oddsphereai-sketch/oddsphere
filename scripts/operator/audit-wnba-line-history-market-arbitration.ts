@@ -16,6 +16,7 @@ type Side = "home" | "away";
 type Candidate =
   | "incumbent"
   | "independent"
+  | "cross_qualified_decision"
   | "cross_originator"
   | "cross_two_books"
   | "cross_originator_or_two"
@@ -172,6 +173,7 @@ function qualifies(game: Game, candidate: Candidate): boolean {
   const crossesSpread = independentSpread !== null && incumbentSpread !== independentSpread;
   const crossesWinner = (game.incumbentMargin >= 0) !== (game.independentMargin >= 0);
   if (!crossesSpread && !crossesWinner) return false;
+  if (candidate === "cross_qualified_decision") return true;
   const marketSide = crossesWinner ? (game.incumbentMargin >= 0 ? "home" : "away") : incumbentSpread;
   if (marketSide === null) return false;
   const support = game.movements.filter((move) => move.direction === marketSide);
@@ -308,6 +310,7 @@ async function main(): Promise<void> {
   const candidates: Candidate[] = [
     "incumbent",
     "independent",
+    "cross_qualified_decision",
     "cross_originator",
     "cross_two_books",
     "cross_originator_or_two",

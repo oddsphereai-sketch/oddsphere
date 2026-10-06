@@ -333,11 +333,12 @@ async function main(): Promise<void> {
     writes: 0,
     provider_calls: 0,
     archive_split_rows: archiveRows.length,
-    fixed_candidate: {
-      rule: "independent default; reflect across the exact spread boundary only when target-excluded same-book movement and source-aware money-minus-ticket evidence agree against the independent cover side",
-      movement_minimum: "0.5 spread point or 1pp no-vig probability",
-      split_minimum: "10pp money-minus-ticket gap",
+    selected_candidate: {
+      id: "qualified_any_decision_crossing",
+      rule: "independent default; use the already-qualified target-excluded center only when it crosses the winner or exact spread decision boundary",
       minimum_target_excluded_books: 2,
+      continuous_market_centering: false,
+      total_head_changed: false,
     },
     evidence,
     line_identity_samples: games.slice(0, 8).map((game) => ({

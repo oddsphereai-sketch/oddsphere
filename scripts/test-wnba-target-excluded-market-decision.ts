@@ -471,13 +471,38 @@ assert.equal(
 );
 assert.equal(
   coldStartQualified.model.components.moneyline_market_interpretation_count,
-  1,
-  "qualified target-excluded Moneyline evidence enters exactly once",
+  0,
+  "qualified evidence does not continuously nudge a forecast that crosses no winner or Spread boundary",
 );
-assert.notEqual(
+assert.equal(
   coldStartQualified.model.final_home_win_prob,
   coldStartIndependent.model.final_home_win_prob,
-  "qualified market context can still change the coherent margin distribution",
+  "non-crossing qualified market context preserves the exact independent coherent probability",
+);
+assert.equal(
+  coldStartQualified.model.margin,
+  coldStartIndependent.model.margin,
+  "non-crossing qualified market context preserves the exact independent margin",
+);
+assert.equal(
+  coldStartQualified.model.components.cross_market_context_regime,
+  "independent_first_no_decision_boundary_crossing",
+  "the audit records why qualified evidence stood down from forecast authority",
+);
+assert.equal(
+  coldStartQualified.target_excluded_market_decision.moneyline.market_evidence_qualified,
+  true,
+  "qualified target-excluded evidence remains available for price and audit context",
+);
+assert.equal(
+  coldStartQualified.target_excluded_market_decision.moneyline.market_authority_qualified,
+  false,
+  "non-crossing evidence is not mislabeled as forecast authority",
+);
+assert.equal(
+  coldStartQualified.target_excluded_market_decision.spread.forecast_used_target_excluded_market,
+  false,
+  "non-crossing qualified evidence is retained without continuously centering the Spread forecast",
 );
 assert.equal(
   coldStartQualified.model.total,
@@ -590,6 +615,21 @@ assert.equal(
   compatibleFlip.model.components.moneyline_market_interpretation_count,
   1,
   "the legitimate side flip still uses exactly one dynamic market interpretation",
+);
+assert.equal(
+  compatibleFlip.model.components.cross_market_context_regime,
+  "qualified_decision_boundary_arbitration",
+  "a real winner-boundary crossing records the sport-specific arbitration regime",
+);
+assert.equal(
+  compatibleFlip.target_excluded_market_decision.spread.forecast_used_target_excluded_market,
+  true,
+  "a real decision-boundary crossing is allowed to alter the coherent forecast distribution",
+);
+assert.equal(
+  compatibleFlip.model.total,
+  coldStartIndependent.model.total,
+  "winner arbitration leaves the independent Total head byte/number-identical",
 );
 assert.equal(
   compatibleFlip.target_excluded_market_decision.moneyline.evaluated?.side,
