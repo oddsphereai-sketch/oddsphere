@@ -51,12 +51,17 @@ import {
   SLATE_CYCLE_RESPONSE_SNAPSHOT_BUDGET_MS,
   type SlateCyclePostludeStageTelemetry,
 } from "@/lib/cron/slateCyclePostludeBudget";
+import {
+  isMlbRolloverSeedWindow,
+  MLB_DAILY_REFRESH_SCHEDULE_RELEASE,
+} from "@/lib/dates/slateDate";
 
 export const maxDuration = 300; // Vercel Pro — full slate cycle can take ~3-5 min
 
 export async function GET(request: Request) {
   const routeStartedAtMs = Date.now();
   const date = parseDateFromUrl(request);
+  const rolloverSeed = new URL(request.url).searchParams.get("rollover") === "true";
   // R-19 Phase 5d — resolve intraday-mode flag from query OR env.
   // Morning cron entries omit ?intraday; afternoon/evening entries
   // pass ?intraday=true so G3 (in-progress games) becomes per-game
@@ -73,6 +78,19 @@ export async function GET(request: Request) {
     "slate_cycle_automation",
     sports,
     async ({ sport }) => {
+      if (rolloverSeed && !isMlbRolloverSeedWindow()) {
+        return {
+          records_updated: 0,
+          api_calls_made: 0,
+          partial: false,
+          details: {
+            schedule_release: MLB_DAILY_REFRESH_SCHEDULE_RELEASE,
+            mode: "rollover_seed",
+            skipped: true,
+            reason: "outside_03_et_window",
+          },
+        };
+      }
       assertMlbChampionRuntime();
       // Hard gate #2 — orchestrator-skip-confirmation. Missing → return
       // a structured blocked report. No provider calls. No DB I/O. The
@@ -89,6 +107,7 @@ export async function GET(request: Request) {
       }
 
       const report = await runSlateCycleAutomated({ sport, date, intradayMode });
+      const coreLifecycle = summarizeSlateCycleCoreLifecycle(report);
       const budgetAfterCore = assessSlateCyclePostludeBudget({
         routeStartedAtMs,
         nowMs: Date.now(),
@@ -105,7 +124,7 @@ export async function GET(request: Request) {
       let marketIntelligenceTelemetry: SlateCyclePostludeStageTelemetry;
       let responseSnapshotTelemetry: SlateCyclePostludeStageTelemetry;
 
-      if (budgetAfterCore.canRun) {
+      if (budgetAfterCore.canRun && !coreLifecycle.incomplete) {
         const marketIntelligenceStartedAtMs = Date.now();
         marketIntelligenceV2 = await runScheduledMarketIntelligenceV2Collection({
           supabase,
@@ -124,7 +143,11 @@ export async function GET(request: Request) {
           nowMs: Date.now(),
           requiredWorkMs: SLATE_CYCLE_RESPONSE_SNAPSHOT_BUDGET_MS,
         });
-        if (budgetBeforeSnapshot.canRun) {
+        const memberPipelineReady =
+          !coreLifecycle.incomplete &&
+          (report.ui_safe || report.bdl_game_count === 0) &&
+          marketIntelligenceV2.errors.length === 0;
+        if (budgetBeforeSnapshot.canRun && memberPipelineReady) {
           const responseSnapshotStartedAtMs = Date.now();
           responseSnapshot = await refreshDailyEdgeResponseSnapshot({
             sport,
@@ -140,19 +163,25 @@ export async function GET(request: Request) {
           responseSnapshotTelemetry = {
             status: "deferred",
             elapsed_ms: 0,
-            deferred_reason: "insufficient_time_after_market_intelligence",
+            deferred_reason: budgetBeforeSnapshot.canRun
+              ? "incomplete_member_pipeline"
+              : "insufficient_time_after_market_intelligence",
           };
         }
       } else {
         marketIntelligenceTelemetry = {
           status: "deferred",
           elapsed_ms: 0,
-          deferred_reason: "insufficient_time_after_core_orchestrator",
+          deferred_reason: coreLifecycle.incomplete
+            ? "incomplete_core_orchestrator"
+            : "insufficient_time_after_core_orchestrator",
         };
         responseSnapshotTelemetry = {
           status: "deferred",
           elapsed_ms: 0,
-          deferred_reason: "insufficient_time_after_core_orchestrator",
+          deferred_reason: coreLifecycle.incomplete
+            ? "incomplete_core_orchestrator"
+            : "insufficient_time_after_core_orchestrator",
         };
       }
 
@@ -160,13 +189,15 @@ export async function GET(request: Request) {
       // cron-handler return shape. `records_updated` is the sum across
       // every step that wrote, including committed work from a truthful
       // partial step, mirroring morning-slate's accounting.
-      const coreLifecycle = summarizeSlateCycleCoreLifecycle(report);
       let recordsWritten = coreLifecycle.recordsWritten;
       let apiCalls = coreLifecycle.apiCalls;
       recordsWritten += marketIntelligenceV2?.recordsUpdated ?? 0;
       apiCalls += marketIntelligenceV2?.apiCallsMade ?? 0;
 
-      const incomplete = coreLifecycle.incomplete || (marketIntelligenceV2?.errors.length ?? 0) > 0;
+      const incomplete = coreLifecycle.incomplete
+        || (marketIntelligenceV2?.errors.length ?? 0) > 0
+        || responseSnapshot === null
+        || responseSnapshot.ok === false;
       return {
         records_updated: recordsWritten,
         api_calls_made: apiCalls,
@@ -177,10 +208,18 @@ export async function GET(request: Request) {
           ? [
               ...(coreLifecycle.errorMessage ? [coreLifecycle.errorMessage] : []),
               ...(marketIntelligenceV2?.errors ?? []),
+              ...(responseSnapshot?.ok === false && responseSnapshot.error
+                ? [responseSnapshot.error]
+                : []),
+              ...(responseSnapshot === null && responseSnapshotTelemetry.deferred_reason
+                ? [responseSnapshotTelemetry.deferred_reason]
+                : []),
             ].slice(0, 5).join(" | ").slice(0, 1500)
           : null,
         details: {
           ...report,
+          schedule_release: MLB_DAILY_REFRESH_SCHEDULE_RELEASE,
+          mode: rolloverSeed ? "rollover_seed" : intradayMode ? "intraday_market" : "daily_full",
           market_intelligence_v2: marketIntelligenceV2,
           response_snapshot: responseSnapshot,
           postlude_timing: buildSlateCyclePostludeTiming({
