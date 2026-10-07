@@ -258,9 +258,9 @@ const source = readFileSync("lib/services/wnba/buildWnbaPredictionRecords.ts", "
 const vercel = JSON.parse(readFileSync("vercel.json", "utf8")) as {
   crons?: Array<{ path?: string; schedule?: string }>;
 };
-const wnbaSchedules = (vercel.crons ?? []).filter((entry) => entry.path === "/api/cron/wnba-daily-refresh");
+const wnbaSchedules = (vercel.crons ?? []).filter((entry) => entry.path?.startsWith("/api/cron/wnba-daily-refresh"));
 assert.ok(wnbaSchedules.length > 0);
-assert.ok(wnbaSchedules.every((entry) => entry.schedule?.startsWith("23,53 ")));
+assert.ok(wnbaSchedules.every((entry) => /^(23|23,53) /.test(entry.schedule ?? "")));
 assert.equal(normalizeWnbaActionPromotionCycle("2026-08-29T19:23:00.000Z"), "2026-08-29T19:23:00.000Z");
 assert.equal(normalizeWnbaActionPromotionCycle("2026-08-29T19:52:59.999Z"), "2026-08-29T19:23:00.000Z");
 assert.equal(normalizeWnbaActionPromotionCycle("2026-08-29T19:53:00.000Z"), "2026-08-29T19:53:00.000Z");

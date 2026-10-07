@@ -67,11 +67,15 @@
     },
     {
       "path": "/api/cron/wnba-daily-refresh",
-      "schedule": "23,53 13-23 * * *"
+      "schedule": "23 11 * * *"
     },
     {
-      "path": "/api/cron/wnba-daily-refresh",
-      "schedule": "23,53 0-3 * * *"
+      "path": "/api/cron/wnba-daily-refresh?intraday=true",
+      "schedule": "23 4-10,12 * * *"
+    },
+    {
+      "path": "/api/cron/wnba-daily-refresh?intraday=true",
+      "schedule": "23,53 0-3,13-23 * * *"
     },
     {
       "path": "/api/cron/nba-daily-refresh",

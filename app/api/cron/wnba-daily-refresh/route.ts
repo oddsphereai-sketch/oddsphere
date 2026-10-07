@@ -1,7 +1,11 @@
 /**
- * WNBA Phase 2 — Stage 1 Step 5: hourly WNBA daily-refresh cron.
+ * WNBA Phase 2 — state-aware WNBA daily-refresh cron.
  *
- * Runs the DB-backed loop for the upcoming WNBA slate, in order:
+ * Full mode prepares today..+2 once daily. Intraday mode limits date-scoped
+ * work to today's ET slate while preserving the same authoritative writer,
+ * providers, model, tracking records, and member snapshot.
+ *
+ * Runs the DB-backed loop in order:
  *   1. seedWnbaGames    → upsert teams + games (sport='wnba') for today..+2
  *   2. refreshWnbaLines → SharpAPI odds → lines / line_history / sharp_signals
  *                          + real tip times (games.game_date)
@@ -37,6 +41,7 @@ import {
 } from "@/lib/cron/wnbaDailyRefreshTelemetry";
 
 const WNBA_CRON_ENV = "WNBA_CRON_ENABLED";
+const WNBA_DAILY_REFRESH_RELEASE = "wnba_daily_refresh_schedule_2026_10_07_r1_readiness_gated_cadence";
 export const maxDuration = 300;
 
 function slateDateOffset(days: number): string {
@@ -44,6 +49,7 @@ function slateDateOffset(days: number): string {
 }
 
 export async function GET(request: Request): Promise<Response> {
+  const intraday = new URL(request.url).searchParams.get("intraday") === "true";
   return cronHandler(
     request,
     "wnba_daily_refresh",
@@ -60,7 +66,12 @@ export async function GET(request: Request): Promise<Response> {
       const log = (label: string) => (msg: string) => console.log(`[wnba-daily-refresh:${label}] ${msg}`);
       const errors: string[] = [];
       const stageErrors: WnbaDailyRefreshStageError[] = [];
-      const details: Record<string, unknown> = {};
+      const slateOffsets = intraday ? [0] : [0, 1, 2];
+      const details: Record<string, unknown> = {
+        refresh_release: WNBA_DAILY_REFRESH_RELEASE,
+        mode: intraday ? "intraday_current_slate" : "daily_full_three_day_seed",
+        slate_offsets: slateOffsets,
+      };
       const addStageErrors = (stage: string, messages: readonly string[]): void => {
         errors.push(...messages);
         stageErrors.push(...messages.map((message) => ({ stage, message })));
@@ -73,7 +84,7 @@ export async function GET(request: Request): Promise<Response> {
 
       // ─── Step 1: seed the upcoming slate window (today..+2) ─────────
       let teamsUpserted = 0, gamesUpserted = 0;
-      for (const n of [0, 1, 2]) {
+      for (const n of slateOffsets) {
         const slate = slateDateOffset(n);
         try {
           const s = await seedWnbaGames({ supabase, slateDate: slate, apply: true, logger: log("seed") });
@@ -105,7 +116,7 @@ export async function GET(request: Request): Promise<Response> {
       // running during rollout.
       let publicSplitsUpdated = 0, publicSplitsInserted = 0;
       if (process.env.PLAYBOOK_API_KEY) {
-        for (const n of [0, 1, 2]) {
+        for (const n of slateOffsets) {
           const slate = slateDateOffset(n);
           try {
             const p = await refreshWnbaPlaybookSplits({ supabase, slateDate: slate, apply: true, logger: log("splits") });
@@ -137,7 +148,7 @@ export async function GET(request: Request): Promise<Response> {
       // in tracking-refresh after final scores land.
       let predictionRecordsWritten = 0, predictionRecordsLockedSkipped = 0;
       const recordDetails: Array<Record<string, unknown>> = [];
-      for (const n of [0, 1, 2]) {
+      for (const n of slateOffsets) {
         const slate = slateDateOffset(n);
         try {
           const r = await buildWnbaPredictionRecords({
@@ -168,8 +179,12 @@ export async function GET(request: Request): Promise<Response> {
       // ─── Step 5: Market Intelligence v2 collection substrate ───────
       // Member-facing v2 UI remains gated elsewhere. This keeps WNBA evidence
       // fresh for validation without restoring the old broad sport cron set.
+      // Only source/model/record errors gate member publication. Market
+      // Intelligence v2 is an audit substrate and cannot hide an otherwise
+      // coherent board during its own outage.
+      const memberPipelineHealthy = errors.length === 0;
       const marketIntelligenceRuns = [];
-      for (const n of [0, 1, 2]) {
+      for (const n of slateOffsets) {
         const slate = slateDateOffset(n);
         const run = await runScheduledMarketIntelligenceV2Collection({
           supabase,
@@ -194,12 +209,21 @@ export async function GET(request: Request): Promise<Response> {
       };
       details.marketIntelligenceV2 = marketIntelligenceV2;
 
-      const dailyEdgeSnapshot = await refreshDailyEdgeResponseSnapshot({
-        sport: "wnba",
-        date: currentSlateDate("wnba"),
-        source: "wnba_daily_refresh",
-      });
+      const dailyEdgeSnapshot = memberPipelineHealthy
+        ? await refreshDailyEdgeResponseSnapshot({
+            sport: "wnba",
+            date: currentSlateDate("wnba"),
+            source: "wnba_daily_refresh",
+          })
+        : {
+            ok: false,
+            skipped: true,
+            error: "incomplete_member_pipeline",
+          };
       details.dailyEdgeSnapshot = dailyEdgeSnapshot;
+      if (!dailyEdgeSnapshot.ok && !("skipped" in dailyEdgeSnapshot)) {
+        addStageErrors("response-snapshot", [dailyEdgeSnapshot.error ?? "unknown snapshot error"]);
+      }
 
       const recordsUpdated = teamsUpserted + gamesUpserted + linesWritten + lineHistoryWritten + sharpSignalsWritten + publicSplitsUpdated + publicSplitsInserted + predictionsWritten + predictionRecordsWritten + marketIntelligenceV2.recordsUpdated + (dailyEdgeSnapshot.ok ? 1 : 0);
       console.log(`[wnba-daily-refresh] done — teams:${teamsUpserted} games:${gamesUpserted} lines:${linesWritten} history:${lineHistoryWritten} signals:${sharpSignalsWritten} pubSplits:${publicSplitsUpdated + publicSplitsInserted} predictions:${predictionsWritten} records:${predictionRecordsWritten} marketIntel:${marketIntelligenceV2.recordsUpdated} lockedSkipped:${skippedLocked}/${predictionRecordsLockedSkipped} errors:${errors.length}`);

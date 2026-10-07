@@ -2778,6 +2778,15 @@ board impact, and rollback gates are in
   `wnba_daily_edge_reader_2026_10_07_r1_current_quote_market_read_coherence`
 - Scheduled owner: `/api/cron/wnba-daily-refresh` under the WNBA-scoped shared
   `prediction_pipeline` lease
+- Operational refresh release:
+  `wnba_daily_refresh_schedule_2026_10_07_r1_readiness_gated_cadence`
+- Operational cadence: one three-day full preparation at `23 11 * * *`;
+  current-slate intraday work hourly at `23 4-10,12 * * *` and every 30
+  minutes at `23,53 0-3,13-23 * * *`. The default member board changes at
+  03:00 America/New_York only after the incoming snapshot exists. A partial
+  incoming cycle silently retains the prior complete board. Evidence and
+  rollback:
+  `docs/model-audits/2026-10-07-wnba-readiness-gated-cadence-predeclaration.md`.
 
 The September 3 v1.4/v6/v9 release retains the v1.3 removal of evaluated-book self-validation from Moneyline,
 Spread, and Total. Complete paired evidence must be fresh, predecision, prestart, same-book,
