@@ -26,7 +26,7 @@ import {
 import { assertMarketScopedFootballDecisions, FOOTBALL_MARKET_SCOPED_T60_TRACKING_RELEASE } from "./footballMarketScopedTracking";
 
 export const CFB_OFFICIAL_TRACKING_RECORD_RELEASE =
-  "cfb_official_tracking_record_2026_10_04_r35_moneyline_market_confirmation" as const;
+  "cfb_official_tracking_record_2026_10_06_r36_held_t60_accuracy_lock" as const;
 
 export function cfbTrackingMarketsForPayload(payload: CfbForwardEvidencePayload): CfbV1Market[] {
   const markets = new Set<CfbV1Market>(payload.decisions.evaluatedBets.map((decision) => decision.market));

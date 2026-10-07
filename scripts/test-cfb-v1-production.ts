@@ -2338,6 +2338,38 @@ assert.deepEqual(candidateTrackingMarkets(accuracyLockCandidates[0]!), ["moneyli
 const accuracyLockFixture = buildCfbMemberFixture([publishedT60AccuracyStored], "2026-08-29T15:20:00.000Z");
 assert.equal(accuracyLockFixture.snapshot.games[0]!.lockState, "locked", "a coherent on-time T-60 prediction card must freeze even when exact-price economics remain held");
 assert.equal(accuracyLockFixture.snapshot.games[0]!.lockedAt, publishedT60AccuracyPayload.capturedAt);
+const namedQuoteHeldT60AccuracyPayload = structuredClone(publishedT60AccuracyPayload) as CfbForwardEvidencePayload;
+namedQuoteHeldT60AccuracyPayload.authoritativeForecast = {
+  ...namedQuoteHeldT60AccuracyPayload.authoritativeForecast!,
+  status: "market_sharp_applied",
+  marketWeight: 0.75,
+};
+namedQuoteHeldT60AccuracyPayload.coverage.healthHolds = [];
+namedQuoteHeldT60AccuracyPayload.decisions.heldMarkets = (["moneyline", "spread", "total"] as const).map((market) => ({
+  market,
+  reason: "named_target_quote_unavailable",
+  reasonCodes: ["named_target_quote_unavailable" as const],
+}));
+assert.equal(
+  isCfbPublishedT60AccuracyLockPayload(namedQuoteHeldT60AccuracyPayload),
+  true,
+  "a complete on-time T-60 forecast must freeze before kickoff when only the exact target quote is unavailable",
+);
+const namedQuoteHeldCandidates = cfbTrackingCandidatesForRun([{
+  ...publishedT60AccuracyStored,
+  id: "named-quote-held-t60-accuracy-lock",
+  payload: namedQuoteHeldT60AccuracyPayload,
+}], [], "2026-08-29T15:20:00.000Z");
+assert.equal(namedQuoteHeldCandidates.length, 1);
+assert.equal(namedQuoteHeldCandidates[0]!.mode, "published_t60_accuracy_lock");
+assert.deepEqual(candidateTrackingMarkets(namedQuoteHeldCandidates[0]!), ["moneyline", "spread", "total"]);
+const namedQuoteHeldFixture = buildCfbMemberFixture([{
+  ...publishedT60AccuracyStored,
+  id: "named-quote-held-t60-member-lock",
+  payload: namedQuoteHeldT60AccuracyPayload,
+}], "2026-08-29T15:20:00.000Z");
+assert.equal(namedQuoteHeldFixture.snapshot.games[0]!.lockState, "locked");
+assert.equal(namedQuoteHeldFixture.snapshot.games[0]!.lockedAt, namedQuoteHeldT60AccuracyPayload.capturedAt);
 assert.equal(isCfbPublishedT60AccuracyLockPayload({
   ...publishedT60AccuracyPayload,
   coverage: { ...publishedT60AccuracyPayload.coverage, healthHolds: ["authoritative_market_anchor_unavailable", "away_model_team_profile_unavailable"] },
