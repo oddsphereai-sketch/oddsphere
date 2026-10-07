@@ -9,6 +9,8 @@ import {
   writeNflPlayerPropsCurrentSeasonState,
 } from "@/lib/services/football/nflPlayerPropsCurrentSeasonState";
 import { runNflPlayerPropsProductionWriter } from "@/lib/services/football/nflPlayerPropsProductionWriter";
+import { planNflPlayerPropsRefresh } from "@/lib/services/football/nflPlayerPropsCadence";
+import { readNflPlayerPropsSnapshot } from "@/lib/services/football/nflPlayerPropsSnapshotStore";
 import { resolveNflForwardWeek, resolveNflOperationalWeek } from "@/lib/services/football/nflForwardWeekSelection";
 
 export const maxDuration = 300;
@@ -80,7 +82,25 @@ export async function GET(request: Request): Promise<Response> {
     });
     let playerProps: Awaited<ReturnType<typeof runNflPlayerPropsProductionWriter>> | null = null;
     let playerPropsError: string | null = null;
-    if (process.env.NFL_PLAYER_PROPS_ENABLED === "true") {
+    const playerPropsEnabled = process.env.NFL_PLAYER_PROPS_ENABLED === "true";
+    let playerPropsCadence: ReturnType<typeof planNflPlayerPropsRefresh> | null = null;
+    let playerPropsCadenceError: string | null = null;
+    if (playerPropsEnabled) {
+      try {
+        playerPropsCadence = planNflPlayerPropsRefresh({
+          now: cycleNow,
+          previous: await readNflPlayerPropsSnapshot({ client: supabase, season, week }),
+        });
+      } catch (error) {
+        // A cadence lookup failure must not suppress either the NFL Daily Edge
+        // publication or the props recovery attempt. The writer retains its
+        // own complete-snapshot/LKG contract and remains inside this route's
+        // shared NFL lease.
+        playerPropsCadenceError = error instanceof Error ? error.message : String(error);
+        playerPropsCadence = planNflPlayerPropsRefresh({ now: cycleNow, previous: null });
+      }
+    }
+    if (playerPropsEnabled && playerPropsCadence?.run) {
       try {
         playerProps = await runNflPlayerPropsProductionWriter({
           client: supabase,
@@ -130,7 +150,9 @@ export async function GET(request: Request): Promise<Response> {
         tracking_records_proposed: result.trackingRecordsProposed,
         tracking_records_inserted: result.trackingRecordsInserted,
         tracking_records_existing: result.trackingRecordsExisting,
-        player_props_enabled: process.env.NFL_PLAYER_PROPS_ENABLED === "true",
+        player_props_enabled: playerPropsEnabled,
+        player_props_cadence: playerPropsCadence,
+        player_props_cadence_error: playerPropsCadenceError,
         player_props: playerProps,
         player_props_error: playerPropsError,
       },
