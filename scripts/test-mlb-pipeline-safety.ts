@@ -130,7 +130,7 @@ check(
 check(
   "MLB r90 stamps corroborated Total opposition while preserving unrelated heads",
   MLB_DAILY_EDGE_DECISION_RELEASE_ID === "mlb_daily_edge_decision_2026_10_05_r90_corroborated_total_opposition" &&
-    MLB_MODEL_LAYER_VERSION_SCHEMA === "mlb_model_layer_versions_v19_corroborated_total_opposition" &&
+    MLB_MODEL_LAYER_VERSION_SCHEMA === "mlb_model_layer_versions_v20_projected_lineup_continuity" &&
     layers.rule_bundle_version === "mlb_daily_edge_rule_bundle_v75_corroborated_total_opposition_2026_10_05" &&
     layers.total_market_support_lean === "total_sharpapi_money_over_tickets_support_lean_v2_under_only_2026_09_04" &&
     layers.calibration_version === "mlb_public_calibration_v36_corroborated_total_opposition_2026_10_05" &&
@@ -152,9 +152,9 @@ check(
     layers.schedule_time_policy === "mlb_official_schedule_time_v1_2026_07_30",
 );
 check(
-  "MLB layer stamp records the official-TBD starter-neutral eligibility policy",
+  "MLB layer stamp records projected-lineup continuity eligibility",
   layers.input_eligibility_policy ===
-    "mlb_input_eligibility_v1_official_tbd_starter_neutral_bullpen_2026_10_01",
+    "mlb_input_eligibility_v2_projected_lineup_last_verified_continuity_2026_10_07",
 );
 const strongWinnerResistanceLean = resolveMlStrongWinnerResistanceLean({
   blocked: false,
