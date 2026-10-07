@@ -10,10 +10,8 @@ from __future__ import annotations
 
 import argparse
 import hashlib
-import importlib.util
 import json
 import pathlib
-import sys
 from typing import Any
 
 
@@ -29,20 +27,17 @@ MARKET_FILES = {
     "receptions": "nflPlayerPropsRuntimeMarketReceptions.json",
     "receiving_yards": "nflPlayerPropsRuntimeMarketReceivingYards.json",
 }
-PORTABLE_RELEASE = "nfl_player_props_runtime_2026_10_07_r7_mean_quintile_calibration"
-MODEL_RELEASE = "nfl_player_props_distribution_model_2026_10_07_r16_mean_quintile_calibration"
-CALIBRATION_RELEASE = "nfl_player_props_distribution_calibration_2026_10_07_r18_mean_quintile_calibration"
-DECISION_RELEASE = "nfl_player_props_decision_2026_10_07_r21_mean_quintile_calibration"
-
-
-def load_module(name: str, path: pathlib.Path) -> Any:
-    spec = importlib.util.spec_from_file_location(name, path)
-    if not spec or not spec.loader:
-        raise RuntimeError(f"cannot load {path}")
-    value = importlib.util.module_from_spec(spec)
-    sys.modules[name] = value
-    spec.loader.exec_module(value)
-    return value
+PORTABLE_RELEASE = "nfl_player_props_runtime_2026_10_07_r7_market_selective_mean_quintile"
+MODEL_RELEASE = "nfl_player_props_distribution_model_2026_10_07_r16_market_selective_mean_quintile"
+CALIBRATION_RELEASE = "nfl_player_props_distribution_calibration_2026_10_07_r18_market_selective_mean_quintile"
+DECISION_RELEASE = "nfl_player_props_decision_2026_10_07_r21_market_selective_mean_quintile"
+PROMOTED_MARKETS = {
+    "passing_attempts",
+    "passing_yards",
+    "rushing_attempts",
+    "rushing_yards",
+    "receiving_yards",
+}
 
 
 def sha256(path: pathlib.Path) -> str:
@@ -62,6 +57,19 @@ def write_json(path: pathlib.Path, value: Any) -> None:
     path.write_text(json.dumps(value, separators=(",", ":"), allow_nan=False) + "\n", encoding="utf-8")
 
 
+def portable_distribution(value: dict[str, Any]) -> dict[str, Any]:
+    """Remove redundant percentile grids; the scorer only needs sorted residuals."""
+    result = {key: item for key, item in value.items() if key != "probabilities"}
+    if "fallback" in result:
+        result["fallback"] = portable_distribution(result["fallback"])
+    if "buckets" in result:
+        result["buckets"] = [
+            {**bucket, "distribution": portable_distribution(bucket["distribution"])}
+            for bucket in result["buckets"]
+        ]
+    return result
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--report", type=pathlib.Path, default=DEFAULT_REPORT)
@@ -69,10 +77,6 @@ def main() -> None:
     parser.add_argument("--output-dir", type=pathlib.Path, required=True)
     args = parser.parse_args()
 
-    exporter = load_module(
-        "props_distribution_exporter",
-        ROOT / "scripts/operator/export_nfl_player_props_runtime_artifact.py",
-    )
     report = json.loads(args.report.read_text(encoding="utf-8"))
     if report.get("release") != "nfl_player_props_distribution_conditioning_tournament_2026_10_07_r1":
         raise RuntimeError("NFL props distribution-conditioning report release mismatch")
@@ -91,10 +95,16 @@ def main() -> None:
     artifact_checks: dict[str, Any] = {}
     for market, filename in MARKET_FILES.items():
         source_path = args.input_dir / filename
+        preceding_sha256 = sha256(source_path)
         source = json.loads(source_path.read_text(encoding="utf-8"))
+        promoted = market in PROMOTED_MARKETS
         candidate = {
             **source,
-            "distribution": exporter.portable_distribution(report["productionDistributions"][market]),
+            "distribution": (
+                portable_distribution(report["productionDistributions"][market])
+                if promoted
+                else source["distribution"]
+            ),
         }
         if canonical(candidate["model"]) != canonical(source["model"]):
             raise RuntimeError(f"NFL props point model changed for {market}")
@@ -105,13 +115,15 @@ def main() -> None:
         write_json(output_path, candidate)
         artifact_checks[market] = {
             "pointModelByteIdentical": True,
-            "precedingSha256": sha256(source_path),
+            "meanQuintilePromoted": promoted,
+            "precedingSha256": preceding_sha256,
             "candidateSha256": sha256(output_path),
             "bucketCount": len(candidate["distribution"].get("buckets", [])),
         }
 
     core_name = "nflPlayerPropsRuntime.json"
     core_source_path = args.input_dir / core_name
+    preceding_core_sha256 = sha256(core_source_path)
     core = json.loads(core_source_path.read_text(encoding="utf-8"))
     candidate_core = {
         **core,
@@ -134,7 +146,7 @@ def main() -> None:
     write_json(core_output_path, candidate_core)
     manifest = {
         "release": "nfl_player_props_distribution_conditioning_export_2026_10_07_r1",
-        "sourceReport": str(args.report),
+        "sourceReport": str(args.report.resolve().relative_to(ROOT)),
         "sourceReportSha256": sha256(args.report),
         "historicalFeatureSha256": report["historicalFeatureSha256"],
         "releases": {
@@ -144,9 +156,12 @@ def main() -> None:
             "decision": DECISION_RELEASE,
         },
         "pointModelsByteIdentical": True,
+        "promotedMarkets": sorted(PROMOTED_MARKETS),
+        "deferredMarkets": sorted(set(MARKET_FILES) - PROMOTED_MARKETS),
+        "deferredReason": "Exact Week 4 same-board replay rejected harmful actionable transitions for passing_completions and receptions.",
         "marketArtifacts": artifact_checks,
         "core": {
-            "precedingSha256": sha256(core_source_path),
+            "precedingSha256": preceding_core_sha256,
             "candidateSha256": sha256(core_output_path),
         },
     }

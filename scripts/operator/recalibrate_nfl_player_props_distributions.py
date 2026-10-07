@@ -78,7 +78,7 @@ def bucketed_empirical_distribution(
         lower = float(edges[index])
         upper = float(edges[index + 1])
         mask = (means >= lower) & (means <= upper if index == len(edges) - 2 else means < upper)
-        if int(mask.sum()) < minimum_rows:
+        if int(mask.sum()) < max(minimum_rows, 100):
             distribution = global_distribution
         else:
             distribution = empirical_distribution(residuals[mask], grid_size)
