@@ -1,5 +1,28 @@
 # Model change safety protocol
 
+## Owner-approved provisional exception: NBA independent-first regular-season r1
+
+On 2026-10-06 Daniel Mengel explicitly directed Oddsphere to prepare the NBA regular-season model with
+a strong sport-specific independent projection, coherent downstream market interpretation, exact-price
+grades and reliable locking, without changing member copy, labels or layout. This exception is limited
+to the r1 bundle documented in
+`docs/model-audits/2026-10-06-nba-independent-first-regular-season-r1.md`.
+
+R1 fixes the wrong October season identity, regular games running playoff context, contaminated
+early-season counts, signed-spread cover inversion, cross-book/cross-line no-vig construction, and NBA's
+missing bounded T-60 refresh/coherence gate. The independent score is no longer continuously averaged
+toward the market. Exact-line market evidence may select Spread/Total direction and price economics, but
+no market score correction or split-only flip is active without chronological confirmation. Moneyline
+and Total remain official; Spread retains its existing context-only surface. Missing exact-price evidence
+cannot create an actionable grade, and any T-60 incoherence defers lock rather than freezing a bad tuple.
+
+The owner acknowledges that the 1,230-game 2025-26 confirmation result validates the prior-only
+independent architecture rather than every current runtime feature, and that the empty October 6
+regular-season board provides no current-slate hit-rate estimate. Zero current games means zero
+promotions, demotions, or actionable-count change; this cannot be used to flatten the October 20 board.
+Publication still requires focused tests, full model-change verification, current-main integration
+safety, protected PR checks, and deployed runtime/cron/lock verification. Prior locks remain immutable.
+
 This is the required release checklist for any change that can affect predictions, model
 inputs, probabilities, projections, grades, promotions/demotions, calibration, prices used,
 or stakes. It exists to prevent mixed model eras, competing writers, accidental board

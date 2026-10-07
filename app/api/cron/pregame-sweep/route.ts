@@ -67,6 +67,15 @@ import {
   assessNhlLockCoherence,
   NHL_LOCK_COHERENCE_RELEASE,
 } from "@/lib/services/nhl/nhlLockCoherence";
+import { refreshNbaLines } from "@/lib/services/nba/refreshNbaLinesService";
+import {
+  createNbaPredictionRecords,
+} from "@/lib/services/nba/buildNbaPredictionRecords";
+import {
+  assessNbaLockCoherence,
+  NBA_LOCK_COHERENCE_RELEASE,
+} from "@/lib/services/nba/nbaLockCoherence";
+import { NBA_PREDICTION_RECORD_RELEASE } from "@/lib/automodel/nba/nbaChampionRuntime";
 import {
   loadLatestMlbPropsBoardSnapshot,
   loadLatestMlbPropsGameLockSchedule,
@@ -169,6 +178,25 @@ async function loadSlateCandidates(
     for (const row of (predictionRows ?? []) as Array<{ game_id: number; locked_at: string | null }>) {
       lockByGame.set(row.game_id, row.locked_at);
     }
+    if (sport === "nba") {
+      const { data: nbaRows, error: nbaError } = await supabase
+        .from("prediction_records")
+        .select("game_id, market, locked_at")
+        .in("game_id", gameIds)
+        .eq("sport", "nba")
+        .eq("model_version", NBA_PREDICTION_RECORD_RELEASE)
+        .in("market", ["moneyline", "total"]);
+      if (nbaError) {
+        throw new Error(`pregame-sweep NBA lock lookup failed: ${nbaError.message}`);
+      }
+      for (const gameId of gameIds) {
+        const rows = (nbaRows ?? []).filter((row) => row.game_id === gameId);
+        const locked = rows.length === 2 && rows.every((row) => row.locked_at !== null)
+          ? rows.map((row) => row.locked_at as string).sort()[0]!
+          : null;
+        lockByGame.set(gameId, locked);
+      }
+    }
   }
   return games.map((r) => ({
     game_id: r.id,
@@ -210,6 +238,44 @@ async function applyLocks(
   // predicate guarantees the row stays untouched when already
   // locked, regardless of partition mis-classification.
   for (const g of games) {
+    if (sport === "nba") {
+      const { data: lockedRows, error: nbaLockError } = await supabase
+        .from("prediction_records")
+        .update({ locked_at: lockedAt })
+        .eq("game_id", g.game_id)
+        .eq("sport", "nba")
+        .eq("model_version", NBA_PREDICTION_RECORD_RELEASE)
+        .in("market", ["moneyline", "total"])
+        .is("locked_at", null)
+        .select("id, market");
+      if (nbaLockError || (lockedRows ?? []).length !== 2) {
+        errors.push(
+          `game_id=${g.game_id}: NBA official-market lock failed: ${nbaLockError?.message ?? `updated ${(lockedRows ?? []).length}/2 rows`}`,
+        );
+        continue;
+      }
+      lockedCount++;
+      const { error: nbaAuditError } = await supabase.from("admin_audit_log").insert({
+        action_type: "prediction_records.lock",
+        target_table: "prediction_records",
+        target_id: g.game_id,
+        before_state: { locked_at: null },
+        after_state: {
+          sport,
+          date,
+          game_id: g.game_id,
+          external_id: g.external_id,
+          game_date: g.game_date,
+          markets: ["moneyline", "total"],
+          model_version: NBA_PREDICTION_RECORD_RELEASE,
+          locked_at: lockedAt,
+        },
+        source_type: "real_api",
+      });
+      if (nbaAuditError) errors.push(`game_id=${g.game_id}: NBA lock audit failed: ${nbaAuditError.message}`);
+      else auditCount++;
+      continue;
+    }
     const { error: updErr } = await supabase
       .from("game_predictions")
       .update({ locked_at: lockedAt })
@@ -419,6 +485,7 @@ export async function GET(request: Request) {
       let preLockSignals: Awaited<ReturnType<typeof linesService.refreshSharpSignals>> | null = null;
       let nhlPreLockLines: Awaited<ReturnType<typeof refreshNhlLines>> | null = null;
       let nhlPreLockSplits: Awaited<ReturnType<typeof syncPublicSplitsObservations>> | null = null;
+      let nbaPreLockLines: Awaited<ReturnType<typeof refreshNbaLines>> | null = null;
       let marketIntelligenceV2: ScheduledMarketIntelligenceV2Result | null = null;
 
       // Fresh market data must exist BEFORE the T-60 model pass. The scheduled
@@ -514,6 +581,18 @@ export async function GET(request: Request) {
         });
         records += nhlPreLockSplits.upserted;
       }
+      if (partition.entering_lock.length > 0 && sport === "nba") {
+        const sharpApiKey = process.env.SHARPAPI_KEY;
+        if (!sharpApiKey) throw new Error("SHARPAPI_KEY missing from NBA T-60 refresh");
+        nbaPreLockLines = await refreshNbaLines({
+          slateDate: date,
+          sharpApiKey,
+          dryRun: false,
+          externalIdsFilter: partition.entering_lock.map((game) => game.external_id),
+        });
+        records += nbaPreLockLines.linesWritten + nbaPreLockLines.lineHistoryWritten;
+        apiCalls += 1;
+      }
 
       // ── 2. Final pre-lock auto-model pass for ENTERING_LOCK games ───
       // We use respectLocks=false because these games aren't locked YET
@@ -565,6 +644,35 @@ export async function GET(request: Request) {
           );
         }
       }
+      if (partition.entering_lock.length > 0 && sport === "nba") {
+        const enteringExternalIds = partition.entering_lock.map((game) => game.external_id);
+        try {
+          const result = await createNbaPredictionRecords({
+            slateDate: date,
+            apply: true,
+            launchDay: false,
+            deferLock: true,
+            externalIdsFilter: enteringExternalIds,
+            supabase,
+          });
+          enteringLockModelResult = {
+            attempted: enteringExternalIds.length,
+            successful: result.errors.length === 0 ? result.scanned : 0,
+            errors: result.errors.map((error) => `${error.market}: ${error.reason}`),
+          };
+          records += result.insertedCount + result.updatedCount;
+          if (result.errors.length > 0 || result.scanned !== enteringExternalIds.length) {
+            for (const externalId of enteringExternalIds) failedEnteringLockExternalIds.add(externalId);
+          }
+        } catch (error) {
+          enteringLockRefreshThrew = true;
+          enteringLockModelResult = {
+            attempted: enteringExternalIds.length,
+            successful: 0,
+            errors: [error instanceof Error ? error.message : String(error)],
+          };
+        }
+      }
       if (partition.entering_lock.length > 0 && sport === "nhl") {
         const externalIds = partition.entering_lock.map((game) => game.external_id);
         try {
@@ -599,7 +707,7 @@ export async function GET(request: Request) {
       // sync must describe the same recommendation before either row can be
       // frozen. A sync failure or stale member row blocks only that game from
       // locking; the next sweep can retry after the underlying issue clears.
-      const requiresFinalModelRefresh = sport === "mlb" || sport === "nhl";
+      const requiresFinalModelRefresh = sport === "mlb" || sport === "nhl" || sport === "nba";
       const modelEligibleGames = !requiresFinalModelRefresh
         ? partition.entering_lock
         : enteringLockRefreshThrew
@@ -716,6 +824,45 @@ export async function GET(request: Request) {
           };
         }
       }
+      if (modelEligibleGames.length > 0 && sport === "nba") {
+        const enteringGameIds = modelEligibleGames.map((game) => game.game_id);
+        try {
+          const { data: storedRows, error: storedError } = await supabase
+            .from("prediction_records")
+            .select("game_id, market, pick, line_value, model_version, locked_at, snapshot_json")
+            .eq("sport", "nba")
+            .eq("slate_date", date)
+            .eq("model_version", NBA_PREDICTION_RECORD_RELEASE)
+            .in("game_id", enteringGameIds)
+            .is("locked_at", null);
+          if (storedError) throw new Error(storedError.message);
+          const assessment = assessNbaLockCoherence({
+            gameIds: enteringGameIds,
+            rows: storedRows ?? [],
+          });
+          lockCoherence = {
+            release: NBA_LOCK_COHERENCE_RELEASE,
+            checked: assessment.checked,
+            coherent: assessment.coherentGameIds.length,
+            blocked_game_ids: [
+              ...modelDeferredGames.map((game) => game.game_id),
+              ...assessment.blockedGameIds,
+            ],
+            errors: assessment.errors,
+          };
+          const coherentIds = new Set(assessment.coherentGameIds);
+          gamesReadyForLock = modelEligibleGames.filter((game) => coherentIds.has(game.game_id));
+        } catch (error) {
+          gamesReadyForLock = [];
+          lockCoherence = {
+            release: NBA_LOCK_COHERENCE_RELEASE,
+            checked: modelEligibleGames.length,
+            coherent: 0,
+            blocked_game_ids: partition.entering_lock.map((game) => game.game_id),
+            errors: [`NBA lock coherence check failed closed: ${error instanceof Error ? error.message : String(error)}`],
+          };
+        }
+      }
 
       // ── 3. Apply locks (set locked_at + audit) ──────────────────────
       // MLB locks only games that passed the model/member-record coherence
@@ -804,7 +951,8 @@ export async function GET(request: Request) {
           ...(nhlPreLockLines?.errors ?? []),
           ...(nhlPreLockSplits?.errors ?? []),
         ];
-        const lockOnlyHasErrors = anyErrors || nhlRefreshErrors.length > 0;
+        const nbaRefreshErrors = nbaPreLockLines?.errors ?? [];
+        const lockOnlyHasErrors = anyErrors || nhlRefreshErrors.length > 0 || nbaRefreshErrors.length > 0;
         return {
           records_updated: records,
           api_calls_made: apiCalls,
@@ -820,6 +968,7 @@ export async function GET(request: Request) {
                 ...(propsLockSweep.error ? [`MLB props lock sweep: ${propsLockSweep.error}`] : []),
                 ...(marketIntelligenceV2?.errors ?? []),
                 ...nhlRefreshErrors,
+                ...nbaRefreshErrors,
               ].slice(0, 5).join(" | ").slice(0, 1500)
             : null,
           details: {
@@ -854,13 +1003,17 @@ export async function GET(request: Request) {
               nhl_line_history_written: nhlPreLockLines?.lineHistoryWritten ?? 0,
               nhl_splits_upserted: nhlPreLockSplits?.upserted ?? 0,
               nhl_ran_before_t60_model: nhlPreLockLines !== null,
+              nba_lines_written: nbaPreLockLines?.linesWritten ?? 0,
+              nba_line_history_written: nbaPreLockLines?.lineHistoryWritten ?? 0,
+              nba_ran_before_t60_model: nbaPreLockLines !== null,
             },
             errors_count:
               lockResult.errors.length +
               enteringLockModelResult.errors.length +
               lockCoherence.errors.length +
               (marketIntelligenceV2?.errors.length ?? 0) +
-              nhlRefreshErrors.length,
+              nhlRefreshErrors.length +
+              nbaRefreshErrors.length,
             steps_skipped: [
               "lines_refresh",
               "sharp_signals_refresh",

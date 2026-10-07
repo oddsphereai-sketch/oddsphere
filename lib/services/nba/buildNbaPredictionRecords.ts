@@ -5,13 +5,10 @@
  * Edge (so tracked picks match what users saw) and writes one
  * `prediction_records` row per non-held market.
  *
- * Scope (V1):
- *   • Markets: `moneyline` and `total` ONLY.
- *   • Spread (the NBA pipeline's `intel.spread`) is intentionally NOT
- *     written. The adapter exposes it through the `first_inning` slot
- *     for UI compatibility, but tracking uses real-market semantics
- *     and we're skipping spread tracking until calibration data
- *     justifies it.
+ * Scope:
+ *   • Official markets: moneyline and total.
+ *   • Spread remains the existing context-only member surface until a
+ *     forward release clears its own calibration gate.
  *   • No NRFI / YRFI / FI — those are MLB-only concepts.
  *
  * Idempotency:
@@ -48,6 +45,7 @@ import type { NbaGameIntelligence } from "./nbaMarketIntelligence";
 import type { PredictionRecordRow, TrackedMarketV17 } from "../../types/domain/Tracking";
 import type { RecommendationGrade } from "./nbaMarketReview";
 import { isPublicallyTracked } from "../../config/officialTrackingStart";
+import { NBA_PREDICTION_RECORD_RELEASE } from "../../automodel/nba/nbaChampionRuntime";
 import {
   CONTEXT_SNAPSHOT_NOTE,
   type NbaSpreadDisplayedContext,
@@ -58,7 +56,7 @@ const LOCK_MINUTES_BEFORE_TIP = 60;
 
 /** Model version tag — must be stable across passes for the unique key
  * to dedupe properly. v0 is the active NBA model (nbaAutoModelV1). */
-const NBA_MODEL_VERSION = "nba_v0_2026";
+export const NBA_PREDICTION_RECORD_MODEL_VERSION = NBA_PREDICTION_RECORD_RELEASE;
 
 export type CreateNbaRecordsOptions = {
   slateDate: string;
@@ -66,6 +64,10 @@ export type CreateNbaRecordsOptions = {
   apply: boolean;
   /** Used to tag launch-day records the admin UI may want to exclude. */
   launchDay: boolean;
+  /** T-60 sweep writes the final tuple first, verifies it, then locks atomically. */
+  deferLock?: boolean;
+  /** Optional bounded write scope for games entering the lock window. */
+  externalIdsFilter?: readonly number[];
   supabase: SupabaseClient;
 };
 
@@ -135,13 +137,6 @@ function shouldBeLocked(tipIsoUtc: string | null, now: Date): boolean {
   return now.getTime() >= lockBoundaryMs;
 }
 
-/**
- * P1-2 Commit A — build the displayed_context_markets.spread substrate
- * for NBA. Sport-side mirror of what the slate card / reader renders
- * as the `Sprd*` chip. The substrate is internal-only — it does NOT
- * create a prediction_record row and does NOT join into public
- * tracking. See lib/types/domain/DisplayedContextMarket.ts.
- */
 function buildNbaSpreadDisplayedContext(opts: {
   spreadIntel: MarketIntelligence;
   predictedSpreadHome: number;
@@ -160,11 +155,9 @@ function buildNbaSpreadDisplayedContext(opts: {
     s.model_prob_on_pick !== null && s.market_no_vig_prob_pick !== null
       ? (s.model_prob_on_pick - s.market_no_vig_prob_pick) * 100
       : s.edge_prob_pp;
-  const verdict =
-    s.pick_side === null
-      ? "held"
-      : (s.grade as NbaSpreadDisplayedContext["verdict"]);
-
+  const verdict = s.pick_side === null
+    ? "held"
+    : (s.grade as NbaSpreadDisplayedContext["verdict"]);
   return {
     market: "spread",
     display_label: "Sprd*",
@@ -172,8 +165,7 @@ function buildNbaSpreadDisplayedContext(opts: {
     context_only: true,
     displayed_at_lock: s.pick_side !== null,
     pick: s.pick_side !== null ? s.pick_label : null,
-    side:
-      s.pick_side === "home" || s.pick_side === "away" ? s.pick_side : null,
+    side: s.pick_side === "home" || s.pick_side === "away" ? s.pick_side : null,
     line: s.consensus_line,
     odds_american: s.current_price.odds_american,
     sportsbook: s.current_price.sportsbook,
@@ -186,9 +178,7 @@ function buildNbaSpreadDisplayedContext(opts: {
       lines_observed_count: opts.bookCount,
       open_to_current_movement: null,
     },
-    model_projection: {
-      predicted_spread_home: opts.predictedSpreadHome,
-    },
+    model_projection: { predicted_spread_home: opts.predictedSpreadHome },
     snapshot_note: CONTEXT_SNAPSHOT_NOTE,
     captured_at: opts.capturedAt,
   };
@@ -199,9 +189,6 @@ function buildSnapshot(opts: {
   matchup: string;
   market: "moneyline" | "total";
   intel: MarketIntelligence;
-  // P1-2 Commit A — full game intel so the spread context substrate
-  // can be written onto both ML and Total rows (per-row replication so
-  // the auditor can lookup by (game_id, market) on either tracked row).
   gameIntelligence: NbaGameIntelligence;
   dataQualityTier: string | null;
   sources: {
@@ -220,7 +207,6 @@ function buildSnapshot(opts: {
     total: number;
     spread_home: number;
   };
-  // P1-2 Commit A — timestamp for the displayed_context_markets capture.
   capturedAt: string;
 }): Record<string, unknown> {
   // Compact snapshot — enough context for post-grade audits but no
@@ -238,7 +224,7 @@ function buildSnapshot(opts: {
   //     surface it explicitly.
   return {
     sport: "nba",
-    model_version: NBA_MODEL_VERSION,
+    model_version: NBA_PREDICTION_RECORD_MODEL_VERSION,
     as_of: opts.dto.as_of,
     matchup: opts.matchup,
     market: opts.market,
@@ -274,10 +260,6 @@ function buildSnapshot(opts: {
       has_splits: opts.sources.has_splits,
       has_opportunities: opts.sources.has_opportunities,
     },
-    // P1-2 Commit A — internal-only substrate for the displayed
-    // context-only `Sprd*` chip. Same block written on ML + Total rows
-    // for join robustness. Does NOT create a public tracking row for
-    // spread; see lib/types/domain/DisplayedContextMarket.ts.
     displayed_context_markets: {
       spread: buildNbaSpreadDisplayedContext({
         spreadIntel: opts.gameIntelligence.spread,
@@ -328,8 +310,12 @@ export async function createNbaPredictionRecords(
   }
   const { nbaDto, dbIdByExternalId } = pipelineResult;
 
-  result.scanned = nbaDto.games.length;
-  if (nbaDto.games.length === 0) return result;
+  const externalFilter = opts.externalIdsFilter === undefined ? null : new Set(opts.externalIdsFilter);
+  const games = externalFilter === null
+    ? nbaDto.games
+    : nbaDto.games.filter((game) => externalFilter.has(game.game_external_id));
+  result.scanned = games.length;
+  if (games.length === 0) return result;
 
   // Pull existing rows for this slate so we can dedupe + respect locks.
   const { data: existingRows, error: exErr } = await opts.supabase
@@ -337,7 +323,7 @@ export async function createNbaPredictionRecords(
     .select("id, game_id, market, model_version, locked_at")
     .eq("sport", "nba")
     .eq("slate_date", opts.slateDate)
-    .eq("model_version", NBA_MODEL_VERSION);
+    .eq("model_version", NBA_PREDICTION_RECORD_MODEL_VERSION);
   if (exErr) {
     result.errors.push({
       game_id: null,
@@ -361,7 +347,7 @@ export async function createNbaPredictionRecords(
   const toInsert: PredictionRecordRow[] = [];
   const toUpdate: Array<{ id: number; payload: Partial<PredictionRecordRow> }> = [];
 
-  for (const g of nbaDto.games) {
+  for (const g of games) {
     const game_id = dbIdByExternalId.get(g.game_external_id);
     if (game_id === undefined) {
       result.errors.push({
@@ -372,7 +358,7 @@ export async function createNbaPredictionRecords(
       continue;
     }
     const matchup = `${g.away_abbr}@${g.home_abbr}`;
-    const lockNow = shouldBeLocked(g.tip_iso_utc, now);
+    const lockNow = opts.deferLock !== true && shouldBeLocked(g.tip_iso_utc, now);
 
     const perGameSources = g.intelligence.sources;
     const dataQualityTier = g.data_quality_tier ?? null;
@@ -436,8 +422,8 @@ export async function createNbaPredictionRecords(
         line_value: market === "total" ? intel.consensus_line : null,
         odds_american: intel.current_price.odds_american,
         odds_decimal: null,
-        model_used: "nbaAutoModelV2_grounded",
-        model_version: NBA_MODEL_VERSION,
+        model_used: "nbaAutoModelV2_independent_first",
+        model_version: NBA_PREDICTION_RECORD_MODEL_VERSION,
         prediction_source: "nba_daily_edge",
         confidence: intel.effective_confidence,
         model_probability: intel.model_prob_on_pick,

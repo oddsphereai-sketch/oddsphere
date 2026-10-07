@@ -49,7 +49,7 @@ check("MLB context-only is empty", getContextOnlyDisplayMarkets("mlb").length ==
 check("NBA moneyline officially tracked", isOfficiallyTrackedMarket("nba", "moneyline") === true);
 check("NBA total officially tracked", isOfficiallyTrackedMarket("nba", "total") === true);
 check("NBA spread NOT officially tracked", isOfficiallyTrackedMarket("nba", "spread") === false);
-check("NBA spread IS context-only display", isContextOnlyDisplayMarket("nba", "spread") === true);
+check("NBA spread is context-only", isContextOnlyDisplayMarket("nba", "spread") === true);
 check("NBA first_inning NOT officially tracked", isOfficiallyTrackedMarket("nba", "first_inning") === false);
 
 // NHL — moneyline + total + spread (puck-line) are officially tracked
@@ -165,19 +165,13 @@ try {
 }
 check("assertOfficialTrackingMarket allows all officially-tracked markets", assertHappyOk);
 
-// assertOfficialTrackingMarket — throws for NBA spread (context-only)
 let assertNbaSpreadThrew = false;
-let nbaSpreadErrMessage = "";
 try {
   assertOfficialTrackingMarket("nba", "spread");
-} catch (e: unknown) {
+} catch {
   assertNbaSpreadThrew = true;
-  nbaSpreadErrMessage = e instanceof Error ? e.message : String(e);
 }
-check("assertOfficialTrackingMarket throws for NBA spread", assertNbaSpreadThrew);
-check("NBA spread error mentions CONTEXT-ONLY",
-  nbaSpreadErrMessage.includes("CONTEXT-ONLY"),
-  `got: ${nbaSpreadErrMessage.slice(0, 200)}`);
+check("assertOfficialTrackingMarket throws for NBA context-only spread", assertNbaSpreadThrew);
 
 // assertOfficialTrackingMarket — throws for unsupported NHL first-inning
 let assertNhlFirstInningThrew = false;

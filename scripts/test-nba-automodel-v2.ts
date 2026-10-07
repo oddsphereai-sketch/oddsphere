@@ -311,6 +311,37 @@ section("Test 10: distribution helper sanity");
   assert(Math.abs((prob.total_over_prob ?? 0) - 0.5) < 1e-3, "total over 50/50 at zero edge");
 }
 
+section("Test 11: signed sportsbook spread is converted to cover threshold");
+{
+  const homeSevenVsMinusFive = computeNbaMarketProbabilities({
+    projected_home_margin: 7,
+    projected_total: 225,
+    market_spread_home: -5,
+    market_total: 225,
+    margin_sd_base: 12,
+    total_sd_base: 20,
+  });
+  assert((homeSevenVsMinusFive.spread_home_cover_prob ?? 0) > 0.5, "home projected by 7 covers home -5 more often than not");
+  const homeThreeVsMinusFive = computeNbaMarketProbabilities({
+    projected_home_margin: 3,
+    projected_total: 225,
+    market_spread_home: -5,
+    market_total: 225,
+    margin_sd_base: 12,
+    total_sd_base: 20,
+  });
+  assert((homeThreeVsMinusFive.spread_home_cover_prob ?? 1) < 0.5, "home projected by 3 fails home -5 more often than not");
+  const awayByTwoVsHomePlusFive = computeNbaMarketProbabilities({
+    projected_home_margin: -2,
+    projected_total: 225,
+    market_spread_home: 5,
+    market_total: 225,
+    margin_sd_base: 12,
+    total_sd_base: 20,
+  });
+  assert((awayByTwoVsHomePlusFive.spread_home_cover_prob ?? 0) > 0.5, "home projected down 2 covers home +5 more often than not");
+}
+
 // ─── Final report ──────────────────────────────────────────────
 void __NBA_AUTOMODEL_V2_TEST__;
 console.log("");
