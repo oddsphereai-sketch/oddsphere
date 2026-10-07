@@ -76,7 +76,9 @@ const decision: NflPlayerPropsRuntimeDecision = {
   },
   participationProbability: 0.9, rawModelProbability: 0.61, marketProbability: 0.5, finalProbability: 0.53,
   probabilityEdge: 0.03, expectedValue: 0.11, grade: "Best Angle", marketMovement: "neutral", healthHolds: [], provisional: false,
-  modelRelease: "model", calibrationRelease: "calibration", decisionRelease: "decision",
+  modelRelease: NFL_PLAYER_PROPS_MODEL_RELEASE,
+  calibrationRelease: NFL_PLAYER_PROPS_CALIBRATION_RELEASE,
+  decisionRelease: NFL_PLAYER_PROPS_DECISION_RELEASE,
 };
 function board(row: NflPlayerPropsRuntimeDecision): NflPlayerPropsRuntimeBoard {
   return {
@@ -122,9 +124,9 @@ function boardRows(rows: NflPlayerPropsRuntimeDecision[]): NflPlayerPropsRuntime
 }
 
 const unlocked = reconcileNflPlayerPropsProductionSnapshot({ season: 2026, week: 1, evaluatedAt: "2026-08-25T12:00:00.000Z", nextBoard: board(decision) });
-assert.equal(NFL_PLAYER_PROPS_PRODUCTION_CANDIDATE_RELEASE, "nfl_player_props_member_2026_10_07_r31_discrete_market_arbitration");
-assert.equal(NFL_PLAYER_PROPS_WRITER_RELEASE, "nfl_player_props_writer_2026_10_07_r36_discrete_market_arbitration");
-assert.equal(NFL_PLAYER_PROPS_TRACKING_RELEASE, "nfl_player_props_tracking_2026_10_07_r19_discrete_market_arbitration");
+assert.equal(NFL_PLAYER_PROPS_PRODUCTION_CANDIDATE_RELEASE, "nfl_player_props_member_2026_10_07_r32_release_coherent_continuity");
+assert.equal(NFL_PLAYER_PROPS_WRITER_RELEASE, "nfl_player_props_writer_2026_10_07_r37_release_coherent_continuity");
+assert.equal(NFL_PLAYER_PROPS_TRACKING_RELEASE, "nfl_player_props_tracking_2026_10_07_r20_release_coherent_continuity");
 assert.equal(NFL_PLAYER_PROPS_SETTLEMENT_RELEASE, "nfl_player_props_settlement_2026_08_25_r3_bounded_finality");
 assert.equal(NFL_PLAYER_PROPS_PRODUCTION_INCLUDE_OPENINGS, true, "production records same-book opening context for movement and CLV interpretation");
 assert.equal(NFL_PLAYER_PROPS_PRODUCTION_COLLECTION_CALL_MAXIMUM, 51, "slate/current+opening props/player identity/Sharp pagination is explicitly bounded");
@@ -296,6 +298,45 @@ const partialProviderCycle = reconcileNflPlayerPropsProductionSnapshot({
 assert.equal(partialProviderCycle.memberDecisions.length, 2, "a partial successful provider cycle retains an omitted still-fresh outcome");
 assert.equal(partialProviderCycle.lifecycle.retainedStillFreshUnlocked, 1);
 assert.equal(partialProviderCycle.memberDecisions.find((row) => row.gameId === "game-omitted")?.observedAt, omittedGame.observedAt);
+
+const precedingTouchdown = {
+  ...omittedGame,
+  gameId: "game-preceding-touchdown",
+  market: "anytime_td" as const,
+  side: "yes" as const,
+  line: 0.5,
+  decisionRelease: "nfl_player_props_decision_2026_09_29_r19_injury_feed_continuity",
+  modelRelease: "nfl_player_props_anytime_td_model_2026_08_25_r3_shared_context",
+  calibrationRelease: "nfl_player_props_anytime_td_calibration_2026_08_25_r3_shared_context",
+};
+const precedingReceptions = {
+  ...omittedGame,
+  gameId: "game-preceding-receptions",
+  market: "receptions" as const,
+  decisionRelease: "nfl_player_props_decision_2026_09_29_r19_injury_feed_continuity",
+  modelRelease: NFL_PLAYER_PROPS_MODEL_RELEASE,
+  calibrationRelease: "nfl_player_props_distribution_calibration_2026_09_29_r16_injury_feed_continuity",
+};
+const precedingReleaseSnapshot = reconcileNflPlayerPropsProductionSnapshot({
+  season: 2026,
+  week: 1,
+  evaluatedAt: "2026-08-25T12:00:00.000Z",
+  nextBoard: boardRows([precedingTouchdown, precedingReceptions]),
+});
+const coherentContinuity = reconcileNflPlayerPropsProductionSnapshot({
+  season: 2026,
+  week: 1,
+  evaluatedAt: "2026-08-25T12:30:00.000Z",
+  previous: precedingReleaseSnapshot,
+  nextBoard: emptyBoard(),
+});
+assert.equal(coherentContinuity.memberDecisions.length, 1,
+  "only an unchanged-market preceding-release row may bridge one still-fresh unlocked provider omission");
+assert.equal(coherentContinuity.memberDecisions[0]?.gameId, precedingTouchdown.gameId);
+assert.equal(coherentContinuity.memberDecisions[0]?.decisionRelease, NFL_PLAYER_PROPS_DECISION_RELEASE,
+  "an unlocked retained row is stamped into the current decision family instead of mixing releases");
+assert.equal(coherentContinuity.memberDecisions[0]?.modelRelease, precedingTouchdown.modelRelease,
+  "the unchanged touchdown model identity remains truthful");
 
 const replacementLineCycle = reconcileNflPlayerPropsProductionSnapshot({
   season: 2026,

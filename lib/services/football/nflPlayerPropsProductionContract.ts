@@ -1,4 +1,6 @@
 import {
+  NFL_PLAYER_PROPS_CALIBRATION_RELEASE,
+  NFL_PLAYER_PROPS_DECISION_RELEASE,
   nflPlayerPropsRuntimePolicy,
   type NflPlayerPropsRuntimeBoard,
   type NflPlayerPropsRuntimeDecision,
@@ -13,9 +15,11 @@ import { addDaysToSlate, computeSlateDate } from "@/lib/dates/slateDate";
 import { selectNflPlayerPropsCanonicalLines } from "./nflPlayerPropsCanonicalLine";
 
 export const NFL_PLAYER_PROPS_PRODUCTION_CANDIDATE_RELEASE =
-  "nfl_player_props_member_2026_10_07_r31_discrete_market_arbitration" as const;
+  "nfl_player_props_member_2026_10_07_r32_release_coherent_continuity" as const;
 export const NFL_PLAYER_PROPS_MEMBER_LIFECYCLE_RELEASE =
-  "nfl_player_props_member_lifecycle_2026_10_07_r14_discrete_market_arbitration" as const;
+  "nfl_player_props_member_lifecycle_2026_10_07_r15_release_coherent_continuity" as const;
+const NFL_PLAYER_PROPS_PRECEDING_DECISION_RELEASE =
+  "nfl_player_props_decision_2026_09_29_r19_injury_feed_continuity" as const;
 export const NFL_PLAYER_PROPS_BOARD_ROLLOVER_HOUR_ET = 2 as const;
 export const NFL_PLAYER_PROPS_WRITER_LEASE_GROUP = "prediction_pipeline:nfl" as const;
 
@@ -119,8 +123,11 @@ export function reconcileNflPlayerPropsProductionSnapshot(args: {
       // Preserve a missing outcome only while its exact quote remains inside
       // the existing production freshness window. A current row in the same
       // game/player/market/side scope always wins, including a changed line.
-      decisions.push(prior);
-      retainedStillFreshUnlocked += 1;
+      const retained = releaseCoherentRetainedUnlockedDecision(prior);
+      if (retained) {
+        decisions.push(retained);
+        retainedStillFreshUnlocked += 1;
+      }
     }
   }
   const mergedEvidence = mergeNflPlayerPropsMarketEvidenceCaptures({
@@ -164,6 +171,23 @@ export function reconcileNflPlayerPropsProductionSnapshot(args: {
     // scope while preserving every previously locked member row exactly.
     memberDecisions: derivedMemberDecisions.filter((row) => selectedMemberKeys.has(decisionKey(row))),
     lifecycle: { recomputedUnlocked, retainedStillFreshUnlocked, frozenAtLock, retainedPreviouslyLocked },
+  };
+}
+
+function releaseCoherentRetainedUnlockedDecision(
+  prior: NflPlayerPropsRuntimeDecision,
+): NflPlayerPropsRuntimeDecision | null {
+  if (prior.decisionRelease === NFL_PLAYER_PROPS_DECISION_RELEASE) return prior;
+  if (prior.decisionRelease !== NFL_PLAYER_PROPS_PRECEDING_DECISION_RELEASE) return null;
+  // The October 7 behavior change is receptions-only. A still-fresh omitted
+  // row from an unchanged market may retain its exact values, but it must be
+  // stamped into the current decision family so an unlocked member board can
+  // never present a mixed release. Receptions must be freshly recomputed.
+  if (prior.market === "receptions") return null;
+  return {
+    ...prior,
+    decisionRelease: NFL_PLAYER_PROPS_DECISION_RELEASE,
+    ...(prior.market === "anytime_td" ? {} : { calibrationRelease: NFL_PLAYER_PROPS_CALIBRATION_RELEASE }),
   };
 }
 
