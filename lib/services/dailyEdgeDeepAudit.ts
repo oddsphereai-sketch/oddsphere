@@ -187,12 +187,14 @@ function pointDirection(slot: string, pick: string | null, prev: number | null, 
 }
 
 function visibleDirection(sport: string, slot: string, market: Row): Direction {
-  const lineDir = pointDirection(
-    marketLabel(sport, slot),
-    market.pick ?? null,
-    n(market.lastMoveLinePrev),
-    n(market.lastMoveLineNext),
-  );
+  const marketName = marketLabel(sport, slot);
+  const previousLine = n(market.lastMoveLinePrev);
+  const currentLine = n(market.lastMoveLineNext);
+  const lineDir = sport === "wnba" && marketName === "spread" && previousLine !== null && currentLine !== null
+    ? Math.abs(currentLine - previousLine) < 0.01
+      ? "neutral"
+      : currentLine > previousLine ? "support" : "resistance"
+    : pointDirection(marketName, market.pick ?? null, previousLine, currentLine);
   if (lineDir !== "neutral") return lineDir;
   return priceDirection(effectiveOpenAmerican(market), effectiveTerminalAmerican(market));
 }
@@ -209,9 +211,12 @@ function effectiveOpenAmerican(market: Row): number | null {
 }
 
 function effectiveTerminalAmerican(market: Row): number | null {
-  return n(market.priceAmerican) ??
-    n(market.lockedLineAmerican) ??
-    n(market.marketReadV2?.movement?.currentPrice);
+  const locked = market.lockedLineAt != null ||
+    n(market.lockedLineAmerican) !== null ||
+    market.priceUnavailableAtLock === true;
+  return locked
+    ? n(market.lockedLineAmerican) ?? n(market.priceAmerican) ?? n(market.marketReadV2?.movement?.currentPrice)
+    : n(market.currentPriceAmerican) ?? n(market.marketReadV2?.movement?.currentPrice) ?? n(market.priceAmerican);
 }
 
 function issueSeverity(reason: string): DailyEdgeAuditSeverity {

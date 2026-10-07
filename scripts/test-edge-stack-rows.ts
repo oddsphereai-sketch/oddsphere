@@ -549,6 +549,35 @@ function testUnchangedRows() {
     fiLineMove?.evidence === "First seen -120 · Previous -116 · Current -114" && fiLineMove.tone === "amber",
     `got ${fiLineMove?.evidence ?? "missing"} / ${fiLineMove?.tone ?? "missing"}`,
   );
+
+  const currentQuoteRows = buildEdgeStackRows("moneyline", baseMarket({
+    pick: "GS",
+    lineOpenAmerican: -115,
+    priceAmerican: -124,
+    currentPriceAmerican: -128,
+    currentPriceSportsbook: "fanduel",
+  }));
+  const currentQuoteMove = currentQuoteRows.find((r) => r.label === "Line Move");
+  check(
+    `Unlocked Line Move ends at the current quote while the grade price remains separate`,
+    currentQuoteMove?.evidence === "First seen -115 · Current -128",
+    `got ${currentQuoteMove?.evidence ?? "missing"}`,
+  );
+
+  const lockedQuoteRows = buildEdgeStackRows("moneyline", baseMarket({
+    pick: "GS",
+    lineOpenAmerican: -115,
+    priceAmerican: -124,
+    currentPriceAmerican: -128,
+    lockedLineAmerican: -124,
+    lockedLineAt: "2026-10-07T03:50:00.000Z",
+  }));
+  const lockedQuoteMove = lockedQuoteRows.find((r) => r.label === "Line Move");
+  check(
+    `Locked Line Move remains frozen at the lock quote`,
+    lockedQuoteMove?.evidence === "First seen -115 · Current -124 · Locked -124",
+    `got ${lockedQuoteMove?.evidence ?? "missing"}`,
+  );
 }
 
 // ─── Runner ──────────────────────────────────────────────────────────

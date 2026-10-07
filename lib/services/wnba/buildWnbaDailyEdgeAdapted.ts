@@ -73,6 +73,9 @@ const WNBA_ADAPTED_RESPONSE_STALE_MS = Number(
   process.env.WNBA_ADAPTED_RESPONSE_STALE_MS ?? 15 * 60 * 1000,
 );
 
+export const WNBA_DAILY_EDGE_READER_RELEASE =
+  "wnba_daily_edge_reader_2026_10_07_r1_current_quote_market_read_coherence" as const;
+
 type WnbaAdaptedResponseCacheEntry = {
   body: DailyEdgeResponse;
   expiresAt: number;
@@ -1096,12 +1099,16 @@ function priceTrailMovementRead(
   pick: string | null,
   trail: WnbaPriceTrail | undefined,
   generatedAt: string | null,
+  lockedAt: string | null = null,
 ): MarketReadV2Dto | null {
   if (!trail?.coherent || pick === null) return null;
   let direction: "support" | "resistance" | null = null;
   let strength = 0;
   let firstLine: number | null = null;
   let currentLine: number | null = null;
+  const visibleCurrent = lockedAt
+    ? trail.current
+    : trail.currentQuote ?? trail.movementCurrent ?? trail.current;
 
   if (slot !== "ml") {
     // For totals/spreads, the point line is the market direction. Juice can
@@ -1134,11 +1141,10 @@ function priceTrailMovementRead(
 
   if (direction === null) {
     const firstProb = impliedProb(trail.open);
-    // The market read must resolve against the same terminal price rendered on
-    // the card. For a locked game, `trail.current` is the frozen prediction
-    // price while `movementCurrent` is merely the last pre-lock history row;
-    // using the latter makes the narrative cite a hidden, different price.
-    const visibleCurrent = trail.current;
+    // Unlocked movement must end at the same current, same-book quote exposed
+    // by the reader. The immutable evaluated price remains separate for grade
+    // economics. Once locked, the frozen prediction price is authoritative and
+    // a later live quote must never rewrite the historical market read.
     const currentProb = impliedProb(visibleCurrent);
     if (firstProb !== null && currentProb !== null && trail.open !== null && visibleCurrent !== null) {
       const delta = currentProb - firstProb;
@@ -1165,7 +1171,7 @@ function priceTrailMovementRead(
       firstTrackedLine: firstLine,
       firstTrackedPrice: trail.open,
       currentLine,
-      currentPrice: trail.current,
+      currentPrice: visibleCurrent,
       directionRelativeToPick: direction,
       observedAt: generatedAt,
     },
@@ -1186,6 +1192,7 @@ function withVisiblePriceTrailMarketRead(opts: {
   trail?: WnbaPriceTrail;
   lineTrail?: WnbaPriceTrail;
   generatedAt: string | null;
+  lockedAt?: string | null;
 }): MarketReadV2Dto | null {
   // Totals and spreads are point-line markets. Prefer their dedicated
   // same-book line trail when the number moved; price-only movement at the
@@ -1194,7 +1201,13 @@ function withVisiblePriceTrailMarketRead(opts: {
   const directionalTrail = opts.slot !== "ml" && opts.lineTrail?.coherent
     ? opts.lineTrail
     : opts.trail;
-  const trailRead = priceTrailMovementRead(opts.slot, opts.pick, directionalTrail, opts.generatedAt);
+  const trailRead = priceTrailMovementRead(
+    opts.slot,
+    opts.pick,
+    directionalTrail,
+    opts.generatedAt,
+    opts.lockedAt ?? null,
+  );
   if (!trailRead) {
     const projectionLed = projectionLedMarketRead(opts.existing, {
       evidenceAsOf: opts.generatedAt,
@@ -1361,9 +1374,10 @@ function buildMarket(opts: {
     modelProbPick === null || marketFairProbPick === null
       ? null
       : +((modelProbPick - marketFairProbPick) * 100).toFixed(1);
-  const recommendationConfidence =
-    held
-      ? null
+  const recommendationConfidence = held
+    ? null
+    : opts.gradePolicyVersion === EXPECTED_WNBA_GRADE_POLICY_VERSION
+      ? confPct
       : modelMarketGapPct !== null && modelMarketGapPct < 0
         ? Math.min(confPct ?? 0, 40)
         : confPct;
@@ -1561,6 +1575,7 @@ function adaptGame(
     pick: game.moneyline.side,
     trail: game.pickedPrices?.ml,
     generatedAt: game.lockedAt ?? asOf,
+    lockedAt: game.lockedAt ?? null,
   });
   const ml = buildMarket({
     slot: "ml",
@@ -1599,6 +1614,7 @@ function adaptGame(
     trail: game.pickedPrices?.total,
     lineTrail: game.pickedPrices?.totalLine,
     generatedAt: game.lockedAt ?? asOf,
+    lockedAt: game.lockedAt ?? null,
   });
   const total = buildMarket({
     slot: "total",
@@ -1655,6 +1671,7 @@ function adaptGame(
     trail: game.pickedPrices?.spread,
     lineTrail: game.pickedPrices?.spreadLine,
     generatedAt: game.lockedAt ?? asOf,
+    lockedAt: game.lockedAt ?? null,
   });
   const spread = buildMarket({
     slot: "spread",

@@ -289,6 +289,52 @@ assert.equal(
   "Market Pulse follows the WNBA spread line tracker instead of a flat current-number price trail",
 );
 
+const unlockedMoneylineRead = __WNBA_DAILY_EDGE_ADAPTER_TEST__.priceTrailMovementRead(
+  "ml",
+  "GS",
+  {
+    current: -124,
+    currentQuote: -128,
+    movementCurrent: -128,
+    open: -115,
+    previous: -130,
+    coherent: true,
+    sportsbook: "fanduel",
+  },
+  "2026-10-07T03:53:18.691Z",
+);
+assert.equal(
+  unlockedMoneylineRead?.movement?.currentPrice,
+  -128,
+  "an unlocked WNBA market read ends at the visible current same-book quote rather than the immutable grade price",
+);
+assert.equal(
+  unlockedMoneylineRead?.movement?.directionRelativeToPick,
+  "support",
+  "the unlocked movement direction is computed from opening to the current same-book quote",
+);
+
+const lockedMoneylineRead = __WNBA_DAILY_EDGE_ADAPTER_TEST__.priceTrailMovementRead(
+  "ml",
+  "GS",
+  {
+    current: -124,
+    currentQuote: -128,
+    movementCurrent: -128,
+    open: -115,
+    previous: -130,
+    coherent: true,
+    sportsbook: "fanduel",
+  },
+  "2026-10-07T03:53:18.691Z",
+  "2026-10-07T03:50:00.000Z",
+);
+assert.equal(
+  lockedMoneylineRead?.movement?.currentPrice,
+  -124,
+  "a locked WNBA market read remains frozen at the immutable lock price",
+);
+
 const boardBefore = ["Lean", "Watchlist", "Watchlist", "Watchlist", "Watchlist", "Watchlist", "Lean", "Watchlist", "Lean"];
 const boardAfter = [...boardBefore];
 assert.deepEqual(boardAfter, boardBefore, "fallback changes no picks or grades");

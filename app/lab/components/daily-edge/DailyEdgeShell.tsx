@@ -431,14 +431,17 @@ function isLockedMarket(market: MarketEdgeDto): boolean {
 
 function displayPriceAmerican(market: MarketEdgeDto): number | null {
   if (isLockedMarket(market)) return market.priceAmerican;
-  return market.bestAvailablePriceAmerican ?? market.priceAmerican;
+  return market.bestAvailablePriceAmerican ?? market.currentPriceAmerican ?? market.priceAmerican;
 }
 
 function displayPriceBook(market: MarketEdgeDto): string | null {
   if (isLockedMarket(market)) return null;
-  return market.bestAvailablePriceAmerican === null || market.bestAvailablePriceAmerican === undefined
-    ? null
-    : market.bestAvailableSportsbook ?? null;
+  if (market.bestAvailablePriceAmerican !== null && market.bestAvailablePriceAmerican !== undefined) {
+    return market.bestAvailableSportsbook ?? null;
+  }
+  return market.currentPriceAmerican !== null && market.currentPriceAmerican !== undefined
+    ? market.currentPriceSportsbook ?? null
+    : null;
 }
 
 function formatFiMarketBoard(board: MarketEdgeDto["fiMarketBoard"] | undefined | null): string | null {
@@ -1981,7 +1984,9 @@ function EdgeStackClean({ market, marketData }: { market: MarketKey; marketData:
   const oddsTrailPrev = marketData.lastMovePrevAmerican ?? fiBoardTrail?.prev ?? null;
   const marketLocked = isLockedMarket(marketData);
   const oddsTrailCurrent =
-    marketData.priceAmerican ??
+    (marketLocked
+      ? marketData.lockedLineAmerican ?? marketData.priceAmerican
+      : marketData.currentPriceAmerican ?? marketData.priceAmerican) ??
     marketData.marketReadV2?.movement?.currentPrice ??
     fiBoardTrail?.current ??
     null;
