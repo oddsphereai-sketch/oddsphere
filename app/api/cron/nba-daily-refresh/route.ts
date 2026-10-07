@@ -1,13 +1,15 @@
 /**
  * Phase 7K Step 4 — NBA daily refresh cron route.
  *
- * Runs the three NBA service extractions in sequence for today's ET
+ * Runs the NBA service extractions and publishes the prepared ET board:
  * sports-day:
  *   1. seedNbaGames           → upserts teams + games for the slate.
  *   2. refreshNbaTeamRatings  → scrapes Basketball Reference and
  *                                upserts nba_team_ratings.
  *   3. refreshNbaLines        → fetches SharpAPI /odds and upserts
  *                                `lines` + appends `line_history`.
+ *   4. response snapshot      → computes the existing authoritative member
+ *                                DTO and publishes the date readiness key.
  *
  * Auth: cronHandler validates the CRON_SECRET bearer token. The route
  * also requires NBA_CRON_ENABLED=true in the env. When NOT enabled, the
@@ -32,12 +34,14 @@
  *
  * records_updated tallies useful writes only:
  *   teamsUpserted + ratings.written + linesWritten + lineHistoryWritten
+ *   + a successfully published response snapshot.
  *
  * Scope (unchanged from Services 1–3):
  *   • Writes: teams, games, nba_team_ratings, lines, line_history.
  *   • Reads:  ESPN scoreboard, BBR HTML, SharpAPI /odds, our DB.
  *   • NEVER writes any MLB row. NEVER writes prediction_records /
- *     tracking. NEVER logs SHARPAPI_KEY.
+ *     tracking. Snapshot publication reuses the existing NBA model and
+ *     member adapter under the shared NBA prediction lease. NEVER logs keys.
  */
 
 import { cronHandler } from "@/lib/cron/runCron";
@@ -45,9 +49,10 @@ import { currentSlateDate } from "@/lib/dates/slateDate";
 import { seedNbaGames } from "@/lib/services/nba/seedNbaGamesService";
 import { refreshNbaTeamRatings } from "@/lib/services/nba/refreshNbaTeamRatingsService";
 import { refreshNbaLines } from "@/lib/services/nba/refreshNbaLinesService";
+import { refreshDailyEdgeResponseSnapshot } from "@/lib/services/labResponseSnapshotWriter";
 
 const NBA_CRON_ENV = "NBA_CRON_ENABLED";
-const NBA_DAILY_REFRESH_RELEASE = "nba_daily_refresh_schedule_2026_10_06_r2_intraday_market_freshness";
+const NBA_DAILY_REFRESH_RELEASE = "nba_daily_refresh_schedule_2026_10_07_r3_readiness_gated_rollover";
 
 /**
  * NBA-ratings season convention: Basketball Reference uses the END-year
@@ -142,11 +147,21 @@ export async function GET(request: Request): Promise<Response> {
       // nothing to attach to; no point firing the BBR scrape or
       // SharpAPI hit.
       if (seedResult.mode === "no-events") {
+        const responseSnapshot = await refreshDailyEdgeResponseSnapshot({
+          sport: "nba",
+          date: etDateDashed,
+          source: "nba_daily_refresh_empty_slate",
+        });
         return {
-          records_updated: 0,
+          records_updated: responseSnapshot.ok ? 1 : 0,
+          partial: !responseSnapshot.ok,
+          error_message: responseSnapshot.ok
+            ? null
+            : `NBA empty-slate snapshot publish failed: ${responseSnapshot.error ?? "unknown error"}`,
           details: {
             ...stepDetails,
             outcome: "no_nba_today",
+            response_snapshot: responseSnapshot,
           },
         };
       }
@@ -218,20 +233,45 @@ export async function GET(request: Request): Promise<Response> {
       };
       if (linesResult.errors.length > 0) partial = true;
 
+      // The date-keyed response snapshot is the readiness boundary for the
+      // 3 AM ET member rollover. A partial source cycle must not replace the
+      // prior complete board; the next scheduled run retries the same date.
+      const responseSnapshot = partial
+        ? null
+        : await refreshDailyEdgeResponseSnapshot({
+            sport: "nba",
+            date: etDateDashed,
+            source: "nba_daily_refresh",
+          });
+      stepDetails.response_snapshot = responseSnapshot ?? {
+        skipped: true,
+        reason: "incomplete_source_cycle",
+      };
+      if (responseSnapshot?.ok === false) partial = true;
+
       // ─── records_updated: tally useful writes only ────────────────
       const recordsUpdated =
         seedResult.teamsUpserted +
         seedResult.gamesUpserted +
         ratingsResult.written +
         linesResult.linesWritten +
-        linesResult.lineHistoryWritten;
+        linesResult.lineHistoryWritten +
+        (responseSnapshot?.ok ? 1 : 0);
 
       return {
         records_updated: recordsUpdated,
         partial,
+        error_message: responseSnapshot?.ok === false
+          ? `NBA response snapshot publish failed: ${responseSnapshot.error ?? "unknown error"}`
+          : null,
         details: stepDetails,
       };
     },
-    { sport: "nba" },
+    {
+      sport: "nba",
+      leaseGroup: "prediction_pipeline",
+      requireLease: true,
+      lockMinutes: 10,
+    },
   );
 }

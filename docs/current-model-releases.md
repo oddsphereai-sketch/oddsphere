@@ -76,11 +76,16 @@ Last reviewed: 2026-10-07
   separated splits, recomputes unlocked predictions, and republishes the coherent Daily Edge
   snapshot. Expensive team/goalie refreshes remain daily. No second writer, member copy, label,
   threshold, grade policy, stake, or lock rule is added.
-- NBA daily refresh release is `nba_daily_refresh_schedule_2026_10_06_r2_intraday_market_freshness`.
-  Its existing writer now refreshes seed/lines every 30 minutes while the expensive ratings scrape
-  remains daily. NBA Playbook splits enter the existing provider-separated observation table in
-  audit-only mode; the capability registry still forbids display or model use until NBA-specific
-  validation clears it.
+- NBA daily refresh release is `nba_daily_refresh_schedule_2026_10_07_r3_readiness_gated_rollover`.
+  Its existing writer refreshes seed/lines and publishes the coherent date-keyed member snapshot
+  while the expensive ratings scrape remains daily. The default member board changes dates at
+  03:00 America/New_York only after the incoming snapshot exists; a failed incoming cycle silently
+  retains the last published prior board, and an explicit date never falls back. The writer uses
+  the existing `prediction_pipeline:nba` lease. NBA Playbook splits remain in the provider-separated
+  observation table in audit-only mode; the capability registry still forbids display or model use
+  until NBA-specific validation clears it. No model, probability, side, projection, grade, stake,
+  tracking, copy, label, or layout changes. Evidence and rollback:
+  `docs/model-audits/2026-10-07-nba-readiness-gated-rollover-predeclaration.md`.
 - The operator readiness audit now measures the newest line and split age per game and reports
   games with no line, rather than treating a recent snapshot publish time as proof of fresh source
   evidence. This is operational detection only and changes no prediction.
@@ -2425,14 +2430,14 @@ limitations: `docs/model-audits/2026-10-06-nba-independent-first-regular-season-
 
 ## NBA/NHL operational refresh schedules
 
-- NBA refresh release: `nba_daily_refresh_schedule_2026_09_21_r1`
-- NBA schedule: `/api/cron/nba-daily-refresh` once daily at `30 13 * * *`, fail closed unless `NBA_CRON_ENABLED=true`
+- NBA refresh release: `nba_daily_refresh_schedule_2026_10_07_r3_readiness_gated_rollover`
+- NBA schedule: stable-input refresh once daily at `30 11 * * *`; volatile seed/line/snapshot refresh hourly at `12 6-10,12 * * *` and every 30 minutes at `12,42 0-5,13-23 * * *`; all writes fail closed unless `NBA_CRON_ENABLED=true`
 - NBA public-tracking eligibility: `nba_tracking_window_2026_10_05_r2_preseason_only`; valid prior-season history remains eligible, dates `2026-07-01` through `2026-10-19` are excluded, and the 2026-27 regular season is eligible from `2026-10-20`
 - NBA member-board eligibility: `nba_member_board_window_2026_10_05_r1_preseason_snapshot_guard`; the member API returns an empty slate inside the same closed preseason window before consulting response snapshots, while regular-season model behavior begins unchanged on `2026-10-20`
 - NHL refresh release: `nhl_daily_refresh_schedule_2026_10_07_r8_complete_multibook_market_ingestion`
 - NHL schedule: `/api/cron/nhl-daily-refresh` once daily at `45 7 * * *`, fail closed unless `NHL_CRON_ENABLED=true`
 
-The September 21 operational release restored the two bounded daily schedules removed by the emergency cron pause. NBA remains on that schedule contract. The October 5 r2 NBA tracking-window correction preserves valid 2025-26 postseason history, excludes only the July 1 through October 19 offseason/preseason window from both member aggregate paths, and refuses to create NBA prediction records inside that window. Game, line, and score ingestion may continue for operational rehearsal, but preseason activity cannot affect public wins, losses, category records, recaps, or streaks. The paired member-board r1 guard applies that identical closed window before the Daily Edge response-snapshot fast path, preventing a cached rehearsal slate from rendering preseason cards beneath the already-correct `No games today` navigation state. It retains prior-season access and automatically permits the 2026-27 regular-season board on October 20. For identical regular-season input, the repair changes zero sides, projections, probabilities, prices, grades, promotions, demotions, or actionable counts. This supersedes the over-broad r1 start-boundary implementation, which incorrectly hid valid June rows. The change does not alter an NBA prediction, projection, side, probability, grade, stake, price, member copy, label, layout, provider call, schedule, or lease. NHL's September 29 complete-slate release resolves exact provider events before requesting odds, retains the existing route gates and sport-scoped lease, and reports incomplete two-sided game-market coverage as partial rather than silently healthy. The September 30 r6 schedule moves that same single bounded NHL refresh from 13:45 UTC to 07:45 UTC after a three-game regular-season slate remained absent during the member morning. The 03:45 EDT / 02:45 EST execution is an overnight rollover, adds no second refresh, provider call cycle, writer, or lease, and gives the existing data-health cycle time to detect a failed seed before members wake. The r10 T-60 path remains the authoritative final market refresh and lock owner.
+The October 7 NBA operational release replaces the long overnight writer gap with separated stable and volatile work. The existing route remains authoritative, joins the NBA prediction lease before publishing, and prepares a date-keyed snapshot ahead of the DST-safe 03:00 ET member cutover. A failed incoming run leaves the prior complete board in place without member copy or labels. The October 5 r2 NBA tracking-window correction preserves valid 2025-26 postseason history, excludes only the July 1 through October 19 offseason/preseason window from both member aggregate paths, and refuses to create NBA prediction records inside that window. Game, line, and score ingestion may continue for operational rehearsal, but preseason activity cannot affect public wins, losses, category records, recaps, or streaks. The paired member-board r1 guard applies that identical closed window before the Daily Edge response-snapshot fast path, preventing a cached rehearsal slate from rendering preseason cards beneath the already-correct `No games today` navigation state. It retains prior-season access and automatically permits the 2026-27 regular-season board on October 20. For identical regular-season input, the rollover release changes zero sides, projections, probabilities, prices, grades, promotions, demotions, or actionable counts. NHL's September 29 complete-slate release resolves exact provider events before requesting odds, retains the existing route gates and sport-scoped lease, and reports incomplete two-sided game-market coverage as partial rather than silently healthy. The September 30 r6 schedule moves that same single bounded NHL refresh from 13:45 UTC to 07:45 UTC after a three-game regular-season slate remained absent during the member morning. The 03:45 EDT / 02:45 EST execution is an overnight rollover, adds no second refresh, provider call cycle, writer, or lease, and gives the existing data-health cycle time to detect a failed seed before members wake. The r10 T-60 path remains the authoritative final market refresh and lock owner.
 
 ## NHL regular-season champion (active from 2026-10-01)
 

@@ -75,11 +75,15 @@
     },
     {
       "path": "/api/cron/nba-daily-refresh",
-      "schedule": "30 13 * * *"
+      "schedule": "30 11 * * *"
     },
     {
       "path": "/api/cron/nba-daily-refresh?intraday=true",
-      "schedule": "15,45 0-3,13-23 * * *"
+      "schedule": "12 6-10,12 * * *"
+    },
+    {
+      "path": "/api/cron/nba-daily-refresh?intraday=true",
+      "schedule": "12,42 0-5,13-23 * * *"
     },
     {
       "path": "/api/cron/nhl-daily-refresh",
