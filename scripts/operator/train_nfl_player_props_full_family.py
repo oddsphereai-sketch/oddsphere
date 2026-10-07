@@ -26,8 +26,8 @@ from sklearn.metrics import mean_absolute_error, mean_squared_error
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 DEFAULT_MANIFEST = pathlib.Path(
-    "/private/tmp/oddsphere-nfl-player-props-joint-qb-r3/football-research/cache/"
-    "nfl-player-props-history/nfl_player_props_2016_2025_r1.manifest.json"
+    "football-research/cache/nfl-player-props-history/"
+    "nfl_player_props_2016_2025_r1.manifest.json"
 )
 DEFAULT_OUTPUT_ROOT = pathlib.Path("football-research/cache/nfl-player-props-full-family")
 SEED = 20260928

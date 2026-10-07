@@ -26,8 +26,11 @@ from sklearn.metrics import mean_absolute_error, mean_squared_error
 
 BASELINE_PATH = pathlib.Path("scripts/operator/tournament_nfl_player_props_baseline.py")
 DEFAULT_MANIFEST = pathlib.Path(
-    "/private/tmp/oddsphere-nfl-player-props-joint-qb-r3/football-research/cache/"
-    "nfl-player-props-history/nfl_player_props_2016_2025_r1.manifest.json"
+    "football-research/cache/nfl-player-props-history/"
+    "nfl_player_props_2016_2025_r1.manifest.json"
+)
+SOURCE_MANIFEST = pathlib.Path(
+    "football-research/cache/nflverse/real-model-r1/manifest.json"
 )
 DEFAULT_OUTPUT = pathlib.Path(
     "football-research/cache/nfl-player-props-matchup/"
@@ -53,11 +56,7 @@ def load_baseline() -> Any:
 def source_files(manifest: dict[str, Any], dataset: str) -> list[pathlib.Path]:
     source = pathlib.Path(str(manifest["sourceManifestSha256"]))
     del source  # checksum is already verified by the historical builder
-    root = pathlib.Path(
-        "/private/tmp/oddsphere-nfl-player-props-joint-qb-r3/football-research/cache/"
-        "nflverse/real-model-r1/manifest.json"
-    )
-    rows = json.loads(root.read_text(encoding="utf-8"))["files"]
+    rows = json.loads(SOURCE_MANIFEST.read_text(encoding="utf-8"))["files"]
     return [pathlib.Path(item["filename"]) for item in rows
             if item["dataset"] == dataset and 2016 <= int(item["season"]) <= 2025]
 

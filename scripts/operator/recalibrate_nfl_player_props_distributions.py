@@ -65,8 +65,11 @@ def bucketed_empirical_distribution(
     means: np.ndarray,
     grid_size: int,
     minimum_rows: int,
+    bucket_count: int = 4,
 ) -> dict[str, Any]:
-    edges = np.unique(np.quantile(means, [0.0, 0.25, 0.5, 0.75, 1.0]))
+    if bucket_count < 2:
+        raise ValueError("empirical residual bucket count must be at least two")
+    edges = np.unique(np.quantile(means, np.linspace(0.0, 1.0, bucket_count + 1)))
     if len(edges) < 3:
         return empirical_distribution(residuals, grid_size)
     global_distribution = empirical_distribution(residuals, grid_size)
