@@ -2,7 +2,7 @@
 
 /** SELECT-only same-board replay for an NFL props release. */
 
-import { readFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 import { loadEnvConfig } from "@next/env";
 import { createClient } from "@supabase/supabase-js";
 import {
@@ -106,6 +106,17 @@ async function main(): Promise<void> {
   });
   const incumbentRows = scoreReplay(true);
   const candidateRows = scoreReplay(false);
+  const decisionOutput = process.argv.find((value) => value.startsWith("--decision-output="))?.slice(18);
+  if (decisionOutput) {
+    await writeFile(decisionOutput, JSON.stringify({
+      release: "nfl_player_props_exact_board_decision_dump_2026_10_07_r1",
+      replayWeek,
+      readOnly: true,
+      writes: 0,
+      providerCalls: 0,
+      rows: candidateRows,
+    }, null, 2) + "\n", "utf8");
+  }
   const preceding = new Map(incumbentRows.map((row) => [decisionKey(row), row]));
   const candidate = new Map(candidateRows.map((row) => [decisionKey(row), row]));
   let matched = 0; let projectionChanges = 0; let forecastSideChanges = 0;
