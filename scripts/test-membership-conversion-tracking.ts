@@ -221,11 +221,41 @@ const metadata = analyticsMetadataFromCookies(
   "_ga=GA1.1.123.456; _ga_ABC123=GS2.1.s123$o1$g1$t123$j60$l0$h0",
   "G-ABC123",
 );
-assert.equal(metadata.oddsphere_ga_client_id, "GA1.1.123.456");
-assert.match(String(metadata.oddsphere_ga_session_id), /^GS2/);
+assert.equal(metadata.oddsphere_ga_client_id, "123.456");
+assert.equal(metadata.oddsphere_ga_session_id, "123");
+assert.equal(analyticsMetadataFromCookies(
+  "_ga=GA1.1.123.456; _ga_ABC123=GS1.1.123.1.1.456.0.0.0", "G-ABC123",
+).oddsphere_ga_session_id, "123");
+assert.equal(analyticsMetadataFromCookies(
+  "_ga=GA1.1.123.456; _ga_ABC123=GS2.1.o1$s123$g1", "G-ABC123",
+).oddsphere_ga_session_id, "123", "GS2 fields need not be positional");
+for (const session of ["GS2.1.s123$s456", "GS2.1.sbad", "GS3.1.s123", "0", "-1", "1.5", "9007199254740992"]) {
+  assert.equal(analyticsMetadataFromCookies(
+    `_ga=GA1.1.123.456; _ga_ABC123=${session}`, "G-ABC123",
+  ).oddsphere_ga_session_id, undefined, `reject malformed session: ${session}`);
+}
+assert.deepEqual(analyticsMetadataFromCookies("_ga=broken", "G-ABC123"), {});
+assert.deepEqual(analyticsMetadataFromCookies(null, "G-ABC123"), {});
+assert.equal(analyticsMetadataFromCookies(
+  "_ga=GA1.1.123.456; _ga_ABC123=GS2.1.s123%24o1", "G-ABC123",
+).oddsphere_ga_session_id, "123");
 
 process.env.GOOGLE_ANALYTICS_MEASUREMENT_ID = "G-ABC123";
 const gaTrial = buildGoogleAnalyticsEvent({ ...trial, metadata }, "x".repeat(32));
+assert.equal(gaTrial.client_id, "123.456");
+assert.equal((gaTrial.events[0].params as Record<string, unknown>).session_id, "123");
+const legacyTrial = buildGoogleAnalyticsEvent({ ...trial, metadata: {
+  oddsphere_ga_measurement_id: "G-ABC123",
+  oddsphere_ga_client_id: "GA1.1.123.456",
+  oddsphere_ga_session_id: "GS2.1.s123$o1",
+}}, "x".repeat(32));
+assert.equal(legacyTrial.client_id, gaTrial.client_id, "unsent older attribution rows normalize without a DB rewrite");
+assert.equal((legacyTrial.events[0].params as Record<string, unknown>).session_id, "123");
+const wrongStream = buildGoogleAnalyticsEvent({ ...trial, metadata: {
+  ...metadata, oddsphere_ga_measurement_id: "G-OTHER",
+}}, "x".repeat(32));
+assert.notEqual(wrongStream.client_id, "123.456");
+assert.equal((wrongStream.events[0].params as Record<string, unknown>).session_id, undefined);
 assert.equal(gaTrial.events[0].name, TRIAL_CONVERSION_EVENT);
 assert.equal((gaTrial.events[0].params as Record<string, unknown>).trial_days, 7);
 const gaPayment = buildGoogleAnalyticsEvent(payment, "x".repeat(32));
