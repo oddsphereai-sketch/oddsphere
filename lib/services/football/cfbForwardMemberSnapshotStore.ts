@@ -11,17 +11,17 @@ import {
 } from "./cfbMemberFixture";
 
 export const CFB_FORWARD_MEMBER_SNAPSHOT_RELEASE =
-  "cfb_forward_member_snapshot_2026_10_07_r36_fcs_price_public_injury_continuity" as const;
+  "cfb_forward_member_snapshot_2026_10_07_r37_release_wave_completeness" as const;
 export const CFB_FORWARD_PREVIOUS_MEMBER_SNAPSHOT_RELEASE =
-  "cfb_forward_member_snapshot_2026_10_07_r35_price_qb_continuity" as const;
+  "cfb_forward_member_snapshot_2026_10_07_r36_fcs_price_public_injury_continuity" as const;
 export const CFB_PREVIOUS_MEMBER_FIXTURE_RELEASE =
-  "cfb_v1_member_fixture_2026_10_07_r75_price_qb_continuity" as const;
+  "cfb_v1_member_fixture_2026_10_07_r76_fcs_price_public_injury_continuity" as const;
 export const CFB_PREVIOUS_EVIDENCE_RELEASE =
-  "cfb_forward_evidence_snapshot_2026_10_07_r35_price_qb_continuity" as const;
+  "cfb_forward_evidence_snapshot_2026_10_07_r36_fcs_price_public_injury_continuity" as const;
 export const CFB_PREVIOUS_MEMBER_RELEASE =
-  "cfb_v1_member_release_2026_10_07_r49_price_qb_continuity" as const;
+  "cfb_v1_member_release_2026_10_07_r50_fcs_price_public_injury_continuity" as const;
 export const CFB_MEMBER_SNAPSHOT_READER_RELEASE =
-  "cfb_member_snapshot_reader_2026_10_07_r21_fcs_price_public_injury_continuity" as const;
+  "cfb_member_snapshot_reader_2026_10_07_r22_release_wave_completeness" as const;
 
 export const CFB_FORWARD_MEMBER_SNAPSHOT_MAX_JSON_BYTES = 8_000_000;
 export const CFB_FORWARD_MEMBER_SNAPSHOT_MAX_GZIP_BYTES = 1_000_000;

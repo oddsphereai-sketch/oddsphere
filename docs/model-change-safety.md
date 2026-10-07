@@ -1,5 +1,22 @@
 # Model change safety protocol
 
+## Owner-approved correctness exception: CFB release-wave completeness r37
+
+On 2026-10-07 Daniel Mengel explicitly directed Oddsphere to use all valid paid odds, reject isolated
+off-market representative prices, preserve correct price movement, and get the repaired CFB board
+live without changing copy or labels. This exception is limited to the publication-count correction
+documented in `docs/model-audits/2026-10-07-cfb-release-wave-completeness-r37.md`.
+
+R37 does not change a prediction, probability, projection, side, price, grade, stake, provider
+hierarchy, market-reader rule, request budget, schedule, lock, tracking definition, copy, label or
+layout. It prevents a completed lifecycle-only game from inflating the expected size of a new
+evidence wave. Existing current-release membership remains sticky across partial refreshes and a
+newly planned game is added once, so genuine capture failures still fail closed. The paid Sharp/CFBD
+context captured by r36 can therefore reach the member snapshot while exchange-only quotes remain
+target-excluded. Same-book opening/prior/current continuity and representative-price outlier guards
+remain unchanged. Publication still requires focused tests, full model verification, current-main
+integration safety, protected PR checks, and post-deploy release/reader/lock/tracking verification.
+
 ## Owner-approved provisional exception: NFL settlement-aligned Rushing Attempts r1
 
 On 2026-10-07 Daniel Mengel explicitly authorized productionizing only the
