@@ -6,6 +6,7 @@ import { PlaybookReadBroker } from "@/lib/providers/playbook/playbookReadBroker"
 import type { PlaybookLineGame, PlaybookSplitGame } from "@/lib/providers/playbook/types";
 import {
   fetchBalldontlieNflSlateAvailability,
+  mergeNflAvailabilityWithPrior,
   NFL_INJURY_MAX_PAGES,
 } from "./balldontlieNflAvailability";
 import { fetchBalldontlieNflRegularSlate, type NflPreviewBookOdds, type NflPreviewGame } from "./balldontlieNflPreviewSlate";
@@ -94,7 +95,7 @@ import {
 } from "./balldontlieNflWeeklyProjectionShadow";
 
 export const NFL_FORWARD_WRITER_RELEASE =
-  "nfl_forward_evidence_writer_2026_10_06_r54_hourly_market_freshness" as const;
+  "nfl_forward_evidence_writer_2026_10_07_r55_injury_continuity" as const;
 
 export type NflForwardWriterResult = {
   writerRelease: typeof NFL_FORWARD_WRITER_RELEASE;
@@ -348,8 +349,10 @@ export async function runNflForwardEvidenceWriter(args: {
     const sharpSplits = sharpResult.splitsByGame[plan.game.providerGameId]
       ?? previous?.payload.market.sharpApiSplits
       ?? null;
-    const injuries = availabilityByGame.get(plan.game.providerGameId) ??
-      latestVerifiedInjuriesForGame(historicalExisting, plan.game.providerGameId);
+    const injuries = mergeNflAvailabilityWithPrior(
+      availabilityByGame.get(plan.game.providerGameId) ?? null,
+      latestVerifiedInjuriesForGame(historicalExisting, plan.game.providerGameId),
+    );
     const weather = weatherByGame.get(plan.game.providerGameId)!.snapshot;
     const paidProjectionShadow = paidProjectionShadows[plan.game.providerGameId];
     const rosterAndDepth = awayDepth.roster.length > 0 && homeDepth.roster.length > 0;

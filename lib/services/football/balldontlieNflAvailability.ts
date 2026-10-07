@@ -134,8 +134,9 @@ function normalizeNflInjuryTeams(
   rows: BdlNflInjuryRow[],
   requestedTeams: ReadonlySet<string>,
 ): DailyEdgeTeamAvailability[] {
-  const teams = new Map<string, DailyEdgeTeamAvailability>();
-  const playerKeys = new Map<string, Set<string>>();
+  const teams = new Map<string, Omit<DailyEdgeTeamAvailability, "players"> & {
+    playersByKey: Map<string, DailyEdgeAvailabilityPlayer>;
+  }>();
 
   for (const row of rows) {
     const abbreviation = stringValue(row.player?.team?.abbreviation)?.toUpperCase() ?? null;
@@ -153,22 +154,71 @@ function normalizeNflInjuryTeams(
     const team = teams.get(abbreviation) ?? {
       abbreviation,
       teamName: stringValue(row.player?.team?.full_name) ?? abbreviation,
-      players: [],
+      playersByKey: new Map<string, DailyEdgeAvailabilityPlayer>(),
     };
     const dedupeKey = player.name.toLowerCase();
-    const seen = playerKeys.get(abbreviation) ?? new Set<string>();
-    if (!seen.has(dedupeKey)) {
-      team.players.push(player);
-      seen.add(dedupeKey);
+    const incumbent = team.playersByKey.get(dedupeKey);
+    if (!incumbent || reportTime(player) > reportTime(incumbent)) {
+      team.playersByKey.set(dedupeKey, player);
     }
     teams.set(abbreviation, team);
-    playerKeys.set(abbreviation, seen);
   }
 
   return [...teams.values()].map((team) => ({
-    ...team,
-    players: [...team.players].sort((first, second) => Date.parse(second.reportedAt ?? "") - Date.parse(first.reportedAt ?? "")),
+    abbreviation: team.abbreviation,
+    teamName: team.teamName,
+    players: [...team.playersByKey.values()].sort((first, second) => reportTime(second) - reportTime(first)),
   }));
+}
+
+function reportTime(player: DailyEdgeAvailabilityPlayer): number {
+  const parsed = Date.parse(player.reportedAt ?? "");
+  return Number.isFinite(parsed) ? parsed : Number.NEGATIVE_INFINITY;
+}
+
+/**
+ * A provider omission is not an authoritative healthy/cleared report. Preserve
+ * the last verified exact-game team unit until the provider publishes a newer
+ * non-empty unit. This is internal continuity only: original timestamps and
+ * provider provenance are retained and no row is relabeled as fresh.
+ */
+export function mergeNflAvailabilityWithPrior(
+  current: DailyEdgeGameAvailability | null,
+  prior: DailyEdgeGameAvailability | null,
+): DailyEdgeGameAvailability | null {
+  if (current === null) return prior;
+  if (prior === null || !sameAvailabilityGame(current, prior)) {
+    return current.teams.some((team) => team.players.length > 0) ? current : null;
+  }
+
+  const priorByTeam = new Map(prior.teams.map((team) => [team.abbreviation, team]));
+  const teams = current.teams.map((team) =>
+    team.players.length > 0 ? team : priorByTeam.get(team.abbreviation) ?? team,
+  );
+  if (!teams.some((team) => team.players.length > 0)) return prior;
+
+  return {
+    ...current,
+    reportUpdatedAt: latestAvailabilityReportTime(teams) ?? prior.reportUpdatedAt,
+    teams,
+  };
+}
+
+function sameAvailabilityGame(
+  current: DailyEdgeGameAvailability,
+  prior: DailyEdgeGameAvailability,
+): boolean {
+  return current.eventId === prior.eventId &&
+    current.awayTeam === prior.awayTeam &&
+    current.homeTeam === prior.homeTeam;
+}
+
+function latestAvailabilityReportTime(teams: DailyEdgeTeamAvailability[]): string | null {
+  return teams
+    .flatMap((team) => team.players)
+    .map((player) => player.reportedAt)
+    .filter((value): value is string => value !== null && Number.isFinite(Date.parse(value)))
+    .sort((first, second) => Date.parse(second) - Date.parse(first))[0] ?? null;
 }
 
 function emptyTeam(abbreviation: string): DailyEdgeTeamAvailability {
