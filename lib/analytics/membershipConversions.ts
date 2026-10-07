@@ -230,6 +230,35 @@ export function verifyWhopWebhook(input: {
   return false;
 }
 
+/** Accept normalized IDs or known cookie formats; never forward cookie envelopes.
+ * Cookie formats are not a stable Google API, so unknown formats fail closed.
+ * Also normalize older private attribution rows when building their event.
+ */
+function analyticsClientId(value: unknown): string | null {
+  if (typeof value !== "string" || value.length > 128) return null;
+  const normalized = value.replace(/^GA\d+\.\d+\./, "");
+  return /^\d+\.\d+$/.test(normalized) ? normalized : null;
+}
+
+function analyticsSessionId(value: unknown): string | null {
+  if (typeof value !== "string" || value.length > 256) return null;
+  let normalized = value;
+  if (value.startsWith("GS1.")) {
+    normalized = /^GS1\.\d+\.(\d+)(?:\.\d+)*$/.exec(value)?.[1] ?? "";
+  } else if (value.startsWith("GS2.")) {
+    const body = /^GS2\.\d+\.(.+)$/.exec(value)?.[1];
+    const fields = body?.split("$");
+    const starts = fields?.filter((field) => field.startsWith("s"));
+    normalized = fields?.every((field) => /^[a-z]\d+$/.test(field)) && starts?.length === 1
+      ? starts[0].slice(1)
+      : "";
+  }
+  const number = Number(normalized);
+  return /^\d+$/.test(normalized) && Number.isSafeInteger(number) && number > 0
+    ? normalized
+    : null;
+}
+
 export function analyticsMetadataFromCookies(
   cookieHeader: string | null,
   measurementId: string | undefined,
@@ -248,8 +277,8 @@ export function analyticsMetadataFromCookies(
     }
   }
   const streamCookie = `_ga_${measurementId.replace(/^G-/, "").replace(/[^A-Za-z0-9]/g, "")}`;
-  const clientId = cookies.get("_ga");
-  const sessionId = cookies.get(streamCookie);
+  const clientId = analyticsClientId(cookies.get("_ga"));
+  const sessionId = analyticsSessionId(cookies.get(streamCookie));
   const metadata: JsonRecord = {};
   if (clientId) metadata.oddsphere_ga_client_id = clientId.slice(0, 128);
   if (sessionId) metadata.oddsphere_ga_session_id = sessionId.slice(0, 256);
@@ -270,8 +299,9 @@ export function buildGoogleAnalyticsEvent(candidate: ConversionCandidate, salt: 
   const measurementId = text(candidate.metadata.oddsphere_ga_measurement_id);
   const configuredMeasurementId = process.env.GOOGLE_ANALYTICS_MEASUREMENT_ID;
   const metadataMatches = measurementId !== null && measurementId === configuredMeasurementId;
-  const attributedClientId = metadataMatches ? text(candidate.metadata.oddsphere_ga_client_id) : null;
-  const attributedSessionId = metadataMatches ? text(candidate.metadata.oddsphere_ga_session_id) : null;
+  const attributedClientId = metadataMatches ? analyticsClientId(candidate.metadata.oddsphere_ga_client_id) : null;
+  // A session without its matching browser client cannot provide attribution.
+  const attributedSessionId = attributedClientId ? analyticsSessionId(candidate.metadata.oddsphere_ga_session_id) : null;
   const clientId = attributedClientId ?? fallbackClientId(candidate.membershipId, salt);
   const userIdValue = candidate.whopUserId
     ? stableAnalyticsId(candidate.whopUserId, salt)
