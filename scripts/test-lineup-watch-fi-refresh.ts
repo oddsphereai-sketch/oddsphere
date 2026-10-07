@@ -46,10 +46,19 @@ check(
 );
 
 check(
-  "lineup service overlays official MLB lineups after provider refresh",
+  "projected lineup persistence requires a complete unit and publishes before cleanup",
+  LINEUP_SERVICE.includes("selectCompleteProjectedLineupUnits") &&
+    LINEUP_SERVICE.includes('.upsert(unit.rows, { onConflict: "game_id,team_id,player_id" })') &&
+    LINEUP_SERVICE.indexOf('.upsert(unit.rows, { onConflict: "game_id,team_id,player_id" })') <
+      LINEUP_SERVICE.indexOf(".not(\"player_id\", \"in\"") &&
+    LINEUP_SERVICE.includes('.eq("is_confirmed", false)'),
+);
+
+check(
+  "lineup service overlays official MLB lineups after safe projected persistence",
   LINEUP_SERVICE.includes("refreshMlbOfficialLineups") &&
     LINEUP_SERVICE.indexOf("officialMlb = await refreshMlbOfficialLineups") >
-      LINEUP_SERVICE.indexOf('supabase.from("lineups").insert(allRows)'),
+      LINEUP_SERVICE.indexOf("selectCompleteProjectedLineupUnits"),
 );
 
 check(

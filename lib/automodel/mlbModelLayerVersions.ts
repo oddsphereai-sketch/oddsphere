@@ -13,7 +13,7 @@ import { resolveFirstInningModelVersion } from "./firstInningModelVersion";
 
 export type MlbModelLayerMarket = "moneyline" | "total" | "first_inning";
 
-export const MLB_MODEL_LAYER_VERSION_SCHEMA = "mlb_model_layer_versions_v19_corroborated_total_opposition";
+export const MLB_MODEL_LAYER_VERSION_SCHEMA = "mlb_model_layer_versions_v20_projected_lineup_continuity";
 export const MLB_PUBLIC_CALIBRATION_VERSION = "mlb_public_calibration_v36_corroborated_total_opposition_2026_10_05";
 export const MLB_DAILY_EDGE_DECISION_RELEASE_ID = "mlb_daily_edge_decision_2026_10_05_r90_corroborated_total_opposition";
 export const MLB_DAILY_EDGE_RULE_BUNDLE_VERSION = "mlb_daily_edge_rule_bundle_v75_corroborated_total_opposition_2026_10_05";
@@ -47,7 +47,7 @@ export const MLB_MODEL_LAYER_VERSION_IDS = {
   correction_policy: "mlb_prediction_corrections_v25_corroborated_total_opposition_2026_10_05",
   tracking_contract: "member_facing_lock_v8_priority_retry_minute_cadence_2026_08_11",
   schedule_time_policy: "mlb_official_schedule_time_v1_2026_07_30",
-  input_eligibility_policy: "mlb_input_eligibility_v1_official_tbd_starter_neutral_bullpen_2026_10_01",
+  input_eligibility_policy: "mlb_input_eligibility_v2_projected_lineup_last_verified_continuity_2026_10_07",
 } as const;
 
 const MLB_FIRST_INNING_SCOPED_VERSION_IDS = {

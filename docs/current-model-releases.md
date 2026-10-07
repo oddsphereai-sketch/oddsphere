@@ -1308,12 +1308,28 @@ changed; only deterministic settlement of existing locked rows is affected.
 - Decision release: `mlb_daily_edge_decision_2026_10_05_r90_corroborated_total_opposition`
 - Rule bundle: `mlb_daily_edge_rule_bundle_v75_corroborated_total_opposition_2026_10_05`
 - Market input snapshot: `mlb_market_input_snapshot_v3_current_line_pagination_2026_09_08`
+- Model-layer schema: `mlb_model_layer_versions_v20_projected_lineup_continuity`
+- Input eligibility: `mlb_input_eligibility_v2_projected_lineup_last_verified_continuity_2026_10_07`
 - Grade policy: `mlb_public_grade_policy_v59_corroborated_total_opposition_2026_10_05`
 - Correction policy: `mlb_prediction_corrections_v25_corroborated_total_opposition_2026_10_05`
 - Tracking contract: `member_facing_lock_v8_priority_retry_minute_cadence_2026_08_11`
 - Lock coherence: `mlb_lock_coherence_2026_09_02_r3_failed_economics_tuple`
 - Machine registry: `lib/automodel/mlbModelLayerVersions.ts`
 - Authoritative member-facing writer: `lib/services/predictionRecordService.ts`
+
+The October 7 projected-lineup continuity release changes no projection formula,
+probability head, side selector, price, grade, stake, member copy, label, layout,
+writer, lease, schedule, or provider-call count. A projected provider response may
+replace one game/team lineup only after at least eight distinct mapped batters and
+eight distinct batting positions are present for that exact team. The complete
+unit is upserted before stale projected rows are removed; an empty, malformed, or
+partially mapped response preserves the prior verified unit. A team with an
+already complete official lineup is never downgraded by projected data. Complete
+input produces the same lineup rows and therefore zero side, promotion, demotion,
+or actionable-count changes. The outage/partial fixtures intentionally preserve
+the preceding board rather than manufacturing a new one from missing data.
+Locked historical tuples remain immutable. Evidence and rollback are in
+`docs/model-audits/2026-10-07-mlb-projected-lineup-continuity.md`.
 
 The October 5 r90 release keeps the independent MLB model primary and repairs
 one release-specific full-game Total market-reading gap. A future unlocked row

@@ -2,9 +2,9 @@
  * lineupService — pull confirmed lineups for tonight's games via the stats
  * provider and write them to the lineups table.
  *
- * Strategy: DELETE existing lineup rows for tonight's games before INSERT.
- * This naturally handles scratches (a player in DB but missing from new
- * provider response is just absent after the refresh — implicit scratch).
+ * Strategy: publish a complete mapped team replacement before removing stale
+ * projected rows. Empty or partial provider responses retain the last verified
+ * lineup, and projected data never replaces an already confirmed team unit.
  *
  * Idempotent: re-running produces the same state.
  */
@@ -15,6 +15,11 @@ import type { Sport } from "../types/domain/Sport";
 import type { CronHandlerResult } from "../cron/runCron";
 import { loadGameIdMap, loadPlayerBdlIdMap, loadTeamIdMap } from "./_idMaps";
 import { refreshMlbOfficialLineups } from "./mlbOfficialLineupService";
+import {
+  lineupTeamKey,
+  selectCompleteProjectedLineupUnits,
+  type ProjectedLineupPersistenceRow,
+} from "./projectedLineupContinuity";
 
 export type LineupRefreshOptions = {
   deadlineAtMs?: number;
@@ -78,10 +83,33 @@ export const lineupService = {
       teamsByGame.set(g.id as number, new Set([g.home_team_id as number, g.away_team_id as number]));
     }
 
-    const allRows: Array<Record<string, unknown>> = [];
+    const { data: confirmedRows, error: confirmedRowsErr } = await supabase
+      .from("lineups")
+      .select("game_id, team_id, player_id, batting_position")
+      .in("game_id", gameIds)
+      .eq("is_confirmed", true);
+    if (confirmedRowsErr) {
+      throw new Error(`lineupService.refreshLineups confirmed query failed: ${confirmedRowsErr.message}`);
+    }
+    const confirmedBattersByTeam = new Map<string, Set<number>>();
+    for (const row of confirmedRows ?? []) {
+      const battingPosition = Number(row.batting_position);
+      if (!Number.isInteger(battingPosition) || battingPosition < 1 || battingPosition > 9) continue;
+      const key = lineupTeamKey(Number(row.game_id), Number(row.team_id));
+      const players = confirmedBattersByTeam.get(key) ?? new Set<number>();
+      players.add(Number(row.player_id));
+      confirmedBattersByTeam.set(key, players);
+    }
+    const confirmedTeamKeys = new Set(
+      [...confirmedBattersByTeam.entries()]
+        .filter(([, playerIds]) => playerIds.size >= 8)
+        .map(([key]) => key),
+    );
+
+    const allRows: ProjectedLineupPersistenceRow[] = [];
     let apiCalls = 0;
     const skipped: SkipEntry[] = [];
-    const refreshedGameIds: number[] = [];
+    let providerGamesRead = 0;
     let deadlineStage: string | null = null;
 
     for (const [extGameId, dbGameId] of gameIdByExternal) {
@@ -91,7 +119,7 @@ export const lineupService = {
       }
       const lineupRecs = await stats.getLineups(extGameId);
       apiCalls++;
-      refreshedGameIds.push(dbGameId);
+      providerGamesRead++;
       const expectedTeams = teamsByGame.get(dbGameId) ?? new Set<number>();
       for (const l of lineupRecs) {
         const teamId = teamIdByExternal.get(l.team_external_id);
@@ -125,20 +153,33 @@ export const lineupService = {
       }
     }
 
-    if (refreshedGameIds.length > 0) {
-      const { error: delErr } = await supabase
+    const selected = selectCompleteProjectedLineupUnits({
+      rows: allRows,
+      expectedTeamIdsByGame: teamsByGame,
+      confirmedTeamKeys,
+    });
+    let projectedRowsWritten = 0;
+    for (const unit of selected.units) {
+      // Publish the complete replacement first. If cleanup fails, the next
+      // cycle may briefly see extra projected rows but never an empty lineup.
+      const { error: upsertErr } = await supabase
+        .from("lineups")
+        .upsert(unit.rows, { onConflict: "game_id,team_id,player_id" });
+      if (upsertErr) {
+        throw new Error(`lineupService.refreshLineups upsert failed: ${upsertErr.message}`);
+      }
+      projectedRowsWritten += unit.rows.length;
+
+      const retainedPlayerIds = unit.rows.map((row) => row.player_id);
+      const { error: deleteErr } = await supabase
         .from("lineups")
         .delete()
-        .in("game_id", refreshedGameIds);
-      if (delErr) {
-        throw new Error(`lineupService.refreshLineups delete failed: ${delErr.message}`);
-      }
-
-      if (allRows.length > 0) {
-        const { error } = await supabase.from("lineups").insert(allRows);
-        if (error) {
-          throw new Error(`lineupService.refreshLineups insert failed: ${error.message}`);
-        }
+        .eq("game_id", unit.gameId)
+        .eq("team_id", unit.teamId)
+        .eq("is_confirmed", false)
+        .not("player_id", "in", `(${retainedPlayerIds.join(",")})`);
+      if (deleteErr) {
+        throw new Error(`lineupService.refreshLineups stale cleanup failed: ${deleteErr.message}`);
       }
     }
 
@@ -158,24 +199,30 @@ export const lineupService = {
     }
 
     return {
-      records_updated: allRows.length + (officialMlb?.records_updated ?? 0),
+      records_updated: projectedRowsWritten + (officialMlb?.records_updated ?? 0),
       api_calls_made: apiCalls + (officialMlb?.api_calls_made ?? 0),
       details:
-        skipped.length > 0 || officialMlb !== null
+        skipped.length > 0 ||
+        officialMlb !== null ||
+        selected.incompleteTeamKeys.length > 0 ||
+        selected.confirmedTeamKeys.length > 0
           ? {
               skipped_by_reason: skipByReason,
               sample_skipped: skipped.slice(0, 10),
               official_mlb_lineups: officialMlb?.details ?? null,
+              projected_complete_teams: selected.units.length,
+              projected_incomplete_teams_retained: selected.incompleteTeamKeys.length,
+              projected_confirmed_teams_retained: selected.confirmedTeamKeys.length,
               deadline_reached: deadlineStage !== null,
               deadline_stage: deadlineStage,
-              deferred_games: Math.max(0, gameIds.length - refreshedGameIds.length),
+              deferred_games: Math.max(0, gameIds.length - providerGamesRead),
             }
           : deadlineStage === null
             ? undefined
             : {
                 deadline_reached: true,
                 deadline_stage: deadlineStage,
-                deferred_games: Math.max(0, gameIds.length - refreshedGameIds.length),
+                deferred_games: Math.max(0, gameIds.length - providerGamesRead),
                 official_mlb_lineups: null,
               },
     };
