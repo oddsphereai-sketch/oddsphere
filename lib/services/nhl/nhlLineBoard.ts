@@ -69,6 +69,48 @@ function hasComplement<T extends NhlCanonicalLineRow>(row: T, rows: readonly T[]
   return false;
 }
 
+function impliedProbability(american: number): number {
+  return american > 0
+    ? 100 / (american + 100)
+    : -american / (-american + 100);
+}
+
+/** NHL's full-game Moneyline, Total, and puck line are two-way markets. A
+ * provider occasionally labels a regulation/three-way quote as `moneyline`
+ * while omitting the draw (for example both teams at plus money). Such a pair
+ * is complete by side name but is not a coherent two-way price and must not
+ * drive consensus, best-price grading, or movement. The same bounded hold
+ * check also rejects malformed promotional pairs without excluding normal
+ * sharp, retail, exchange, or heavily favored two-way markets. */
+function hasCoherentComplement<T extends NhlCanonicalLineRow>(row: T, rows: readonly T[]): boolean {
+  const candidates = rows.filter((candidate) => {
+    if (candidate.odds_american === null) return false;
+    if (row.market_type === "moneyline") {
+      return (row.side === "home" && candidate.side === "away")
+        || (row.side === "away" && candidate.side === "home");
+    }
+    if (row.market_type === "total") {
+      return ((row.side === "over" && candidate.side === "under")
+        || (row.side === "under" && candidate.side === "over"))
+        && row.line_value !== null
+        && candidate.line_value !== null
+        && Math.abs(row.line_value - candidate.line_value) < 0.01;
+    }
+    if (row.market_type === "spread") {
+      return ((row.side === "home" && candidate.side === "away")
+        || (row.side === "away" && candidate.side === "home"))
+        && row.line_value !== null
+        && candidate.line_value !== null
+        && Math.abs(row.line_value + candidate.line_value) < 0.01;
+    }
+    return false;
+  });
+  return candidates.some((candidate) => {
+    const twoWayHold = impliedProbability(row.odds_american!) + impliedProbability(candidate.odds_american!);
+    return twoWayHold >= 0.94 && twoWayHold <= 1.20;
+  });
+}
+
 /**
  * Collapse a provider snapshot to one deterministic quote per
  * book/market/side/line and retain only complete two-sided pairs. A partial
@@ -107,5 +149,7 @@ export function canonicalizeNhlLineRows<T extends NhlCanonicalLineRow>(
     group.push(row);
     byBookMarket.set(key, group);
   }
-  return [...byBookMarket.values()].flatMap((group) => group.filter((row) => hasComplement(row, group)));
+  return [...byBookMarket.values()].flatMap((group) => group.filter((row) => (
+    hasComplement(row, group) && hasCoherentComplement(row, group)
+  )));
 }

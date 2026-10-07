@@ -1,5 +1,39 @@
 # Model change safety protocol
 
+## Owner-approved correctness exception: NHL complete-market ingestion and NFL exact-quote labels
+
+On 2026-10-07 Daniel Mengel directed Oddsphere to repair confirmed live odds/price
+mapping gaps immediately, specifically including Eagles–Jaguars, while preserving
+the existing product surface and completing the all-sport data-health audit. This
+exception is limited to the NHL r15 ingestion family and the NFL r38/r30 reader
+publication documented in
+`docs/model-audits/2026-10-07-nhl-complete-multibook-market-ingestion-r15.md`
+and `docs/model-audits/2026-10-07-nfl-exact-quote-label-coherence-r38.md`.
+
+NHL r15 replaces the incomplete generic event page with three bounded exact-event,
+full-game market scopes: Moneyline, puck line, and Total. A two-way hold check
+rejects regulation/three-way or malformed pairs mislabeled as full-game markets.
+The exact October 7 replay restores 18–19 coherent books and 112–118 canonical rows
+per game while preserving all three scores, nine prediction sides, nine grades,
+and five actionables. Promotions: zero; demotions: zero. It does not add a writer,
+schedule, lease, database loop, member copy, label, layout, stake, grade rule, or
+model coefficient. Prior locked releases remain immutable.
+
+NFL r38/r30 derives the displayed Spread or Total label from the same evaluated
+sportsbook line that owns its displayed price. The current 15-game / 45-market
+replay repairs nine mismatched labels, including JAX -7 to BetMGM JAX -7.5 at
+-105, and produces zero unmatched book/line/price tuples. Scores, sides,
+probabilities, prices, grades, and the 18-actionable board are unchanged;
+promotions and demotions are both zero. The decision/model releases and sole
+writer remain unchanged. No copy, label taxonomy, layout, provider call, schedule,
+lease, stake, lock, or tracking rule changes.
+
+Publication still requires focused tests, full model-change verification, a clean
+latest-main protected PR, integration safety, and live release/coverage/reader
+proof. Hold or roll back on a mixed release, missing current game/market, malformed
+two-way pair, unmatched displayed tuple, board-count drift, writer overlap, lock
+failure, or reader failure; never rewrite an existing immutable lock.
+
 ## Owner-approved correctness exception: WNBA current-quote reader coherence r1
 
 On 2026-10-07 Daniel Mengel directed Oddsphere to continue the full live-model

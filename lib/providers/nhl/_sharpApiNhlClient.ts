@@ -24,6 +24,9 @@
 
 const SHARP_API_BASE = "https://api.sharpapi.io/api/v1";
 
+export const NHL_SHARP_ODDS_COLLECTOR_RELEASE =
+  "nhl_sharp_odds_collector_2026_10_07_r3_complete_market_scopes" as const;
+
 export type SharpNhlOddsRow = {
   id?: string;
   event_id?: string;
@@ -155,38 +158,32 @@ export async function fetchSharpNhlEvents(
 
 const NHL_GAME_MARKETS = ["moneyline", "puck_line", "total_goals"] as const;
 
-function presentGameMarkets(rows: SharpNhlOddsRow[]): Set<string> {
-  return new Set(rows
-    .filter((row) => row.home_team?.trim() && row.away_team?.trim())
-    .filter((row) => !/\bperiod\b/i.test(`${row.home_team} ${row.away_team}`))
-    .map((row) => row.market_type ?? ""));
-}
-
-/** Fetch one exact event. A single 200-row event page normally contains all
- * three full-game markets. Any absent game market is retried directly, so
- * props cannot crowd a required line off the response. */
+/** Fetch one exact event through three bounded full-game market scopes.
+ *
+ * The provider's unfiltered event response is ordered across all game and
+ * player markets. Seeing one Moneyline or Total pair on that first page does
+ * not mean the full named-book market is present: on the 2026-10-07 slate the
+ * generic page exposed only Bally Bet for those markets while 19-21 complete
+ * books were available through the market-specific endpoints. Always using
+ * the three exact scopes is both bounded and complete, and avoids paging
+ * through unrelated props.
+ */
 export async function fetchSharpNhlEventOdds(
   eventId: string,
   apiKey: string,
   logger?: (msg: string) => void,
 ): Promise<SharpNhlOddsRow[]> {
   const log = logger ?? (() => {});
-  const first = await fetchSharpPage<SharpNhlOddsRow>("odds", {
-    event_id: eventId,
-    limit: "200",
-  }, apiKey);
-  const rows = [...first.data];
-  const present = presentGameMarkets(rows);
-  for (const market of NHL_GAME_MARKETS) {
-    if (present.has(market)) continue;
-    const fallback = await fetchSharpPage<SharpNhlOddsRow>("odds", {
+  const scoped = await Promise.all(NHL_GAME_MARKETS.map(async (market) => {
+    const response = await fetchSharpPage<SharpNhlOddsRow>("odds", {
       event_id: eventId,
       market_type: market,
       limit: "200",
     }, apiKey);
-    rows.push(...fallback.data);
-    log(`SharpAPI NHL event ${eventId}: recovered ${market} with ${fallback.data.length} rows`);
-  }
+    log(`SharpAPI NHL event ${eventId}: ${market} returned ${response.data.length} rows`);
+    return response.data;
+  }));
+  const rows = scoped.flat();
   const unique = new Map<string, SharpNhlOddsRow>();
   for (const row of rows) {
     const key = row.id ?? [

@@ -46,10 +46,11 @@ import { refreshNhlGoalieStats } from "@/lib/services/nhl/refreshNhlGoalieStatsS
 import { syncPublicSplitsObservations } from "@/lib/services/syncPublicSplitsObservations";
 import { refreshDailyEdgeResponseSnapshot } from "@/lib/services/labResponseSnapshotWriter";
 import { supabase } from "@/lib/db/supabase";
+import { NHL_SHARP_ODDS_COLLECTOR_RELEASE } from "@/lib/providers/nhl/_sharpApiNhlClient";
 
 const NHL_CRON_ENV = "NHL_CRON_ENABLED";
 const NHL_PREDS_ENV = "NHL_PREDICTIONS_DB_WRITES_ENABLED";
-const NHL_DAILY_REFRESH_RELEASE = "nhl_daily_refresh_schedule_2026_10_06_r7_intraday_market_freshness";
+const NHL_DAILY_REFRESH_RELEASE = "nhl_daily_refresh_schedule_2026_10_07_r8_complete_multibook_market_ingestion";
 
 /**
  * Returns the MoneyPuck-style season start-year for a given UTC date.
@@ -97,6 +98,7 @@ export async function GET(request: Request): Promise<Response> {
       let partial = false;
       const stepDetails: Record<string, unknown> = {
         refresh_release: NHL_DAILY_REFRESH_RELEASE,
+        odds_collector_release: NHL_SHARP_ODDS_COLLECTOR_RELEASE,
         slate_date_et: slateDate,
         mode: intraday ? "intraday_market" : "daily_full",
       };

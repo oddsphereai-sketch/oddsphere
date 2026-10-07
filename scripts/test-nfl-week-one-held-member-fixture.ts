@@ -40,6 +40,36 @@ const weekOneSlate = [
 const rows = Array.from({ length: 16 }, (_, index) => syntheticRow(index + 1));
 const fixture = buildNflWeekOneHeldMemberFixture(rows);
 
+const exactQuoteLabelRows = structuredClone(rows);
+const exactQuoteLabelPayload = exactQuoteLabelRows[0]!.payload as NflForwardEvidencePayload;
+exactQuoteLabelPayload.market.current.spread!.homeLine += 0.5;
+exactQuoteLabelPayload.market.current.spread!.awayLine -= 0.5;
+exactQuoteLabelPayload.market.current.total!.line += 1;
+const exactQuoteLabelFixture = buildNflWeekOneHeldMemberFixture(exactQuoteLabelRows);
+const exactQuoteLabelGame = exactQuoteLabelFixture.snapshot.games.find(
+  (game) => game.id === `nfl-${exactQuoteLabelPayload.game.providerGameId}`,
+)!;
+const exactSpreadDecision = exactQuoteLabelPayload.decisions.evaluatedBets.find(
+  (decision) => decision.market === "spread",
+)!;
+const exactTotalDecision = exactQuoteLabelPayload.decisions.evaluatedBets.find(
+  (decision) => decision.market === "total",
+)!;
+assert.ok(exactQuoteLabelGame.markets.first_inning.pick);
+assert.ok(exactQuoteLabelGame.markets.total.pick);
+assert.equal(
+  Number(exactQuoteLabelGame.markets.first_inning.pick.match(/[-+]?\d+(?:\.\d+)?$/)?.[0]),
+  exactSpreadDecision.evaluatedQuote.line,
+  "the published Spread label must use the exact evaluated sportsbook line, not the representative-book line",
+);
+assert.equal(
+  Number(exactQuoteLabelGame.markets.total.pick.match(/\d+(?:\.\d+)?$/)?.[0]),
+  exactTotalDecision.evaluatedQuote.line,
+  "the published Total label must use the exact evaluated sportsbook line, not the representative-book line",
+);
+assert.equal(exactQuoteLabelGame.markets.first_inning.currentPriceAmerican, exactSpreadDecision.evaluatedQuote.price);
+assert.equal(exactQuoteLabelGame.markets.total.currentPriceAmerican, exactTotalDecision.evaluatedQuote.price);
+
 const releaseTransitionRows = rows.map((row, index) => {
   const copy = structuredClone(row) as NflForwardStoredEvidence & { payload: NflForwardEvidencePayload };
   if (index === 0) return copy;

@@ -419,6 +419,8 @@ const canonicalLines = canonicalizeNhlLineRows([
   { game_id: 1, market_type: "total", sportsbook: "circa", side: "over", line_value: 6.5, odds_american: -105, source_timestamp: "2026-09-29T14:00:00.000Z" },
   { game_id: 1, market_type: "total", sportsbook: "circa", side: "under", line_value: 6.5, odds_american: -115, source_timestamp: "2026-09-29T14:00:00.000Z" },
   { game_id: 1, market_type: "spread", sportsbook: "saba", side: "home", line_value: -1.5, odds_american: 130, source_timestamp: "2026-09-29T14:00:00.000Z" },
+  { game_id: 1, market_type: "moneyline", sportsbook: "onexbet", side: "home", line_value: null, odds_american: 106, source_timestamp: "2026-09-29T14:00:00.000Z" },
+  { game_id: 1, market_type: "moneyline", sportsbook: "onexbet", side: "away", line_value: null, odds_american: 212, source_timestamp: "2026-09-29T14:00:00.000Z" },
 ]);
 assert.deepEqual(
   canonicalLines.filter((row) => row.market_type === "moneyline").map((row) => row.odds_american).sort((a, b) => a! - b!),
@@ -427,6 +429,7 @@ assert.deepEqual(
 );
 assert.equal(canonicalLines.filter((row) => row.market_type === "total").length, 2, "a complete exact-line total pair is retained");
 assert.equal(canonicalLines.filter((row) => row.market_type === "spread").length, 0, "an incomplete one-sided refresh cannot enter the price board");
+assert.equal(canonicalLines.filter((row) => row.sportsbook === "onexbet").length, 0, "a mislabeled three-way/regulation pair cannot become a full-game NHL price");
 assert.equal(normalizeNhlTeamName("MTL Canadiens"), "MTL");
 assert.equal(normalizeNhlTeamName("NYR Rangers"), "NYR");
 assert.deepEqual(selectMainNhlPuckLinePair([
@@ -660,7 +663,8 @@ assert.match(writer, /\.from\("prediction_grades"\)[\s\S]*?\.eq\("result", "pend
 assert.match(writer, /\.is\("locked_at", null\)[\s\S]*?\.in\("model_version", \[\.\.\.supersededReleases\]\)/, "writer never retires a locked transition row");
 assert.match(linesProvider, /fetchSharpNhlEvents/, "NHL resolves exact events before fetching odds");
 assert.match(linesProvider, /event_id: eventId/, "NHL odds retrieval is event-scoped instead of scanning an incomplete league slice");
-assert.match(linesProvider, /recovered \$\{market\}/, "an event-scoped missing market gets a targeted recovery call");
+assert.match(linesProvider, /Promise\.all\(NHL_GAME_MARKETS\.map/, "all three full-game NHL market scopes are fetched directly");
+assert.doesNotMatch(linesProvider, /presentGameMarkets/, "one stray book can no longer masquerade as complete NHL market coverage");
 assert.match(linesRefresh, /incomplete SharpAPI \$\{market\} coverage/, "a refresh cannot silently call an incomplete five-game board healthy");
 assert.match(bdlProvider, /searchParams\.append\("seasons\[\]", String\(season\)\)/, "NHL roster fetch uses the provider's documented season-array filter");
 assert.match(writer, /fetchBdlNhlRosters\([\s\S]*for \(const g of games\)/, "current rosters are loaded once at slate scope before the per-game writer loop");
