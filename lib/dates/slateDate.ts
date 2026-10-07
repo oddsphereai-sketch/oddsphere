@@ -89,8 +89,8 @@ export function computeSlateDate(sport: Sport, input: Date | string): string {
  * Today's slate date in the sport's anchor timezone.
  * Equivalent to computeSlateDate(sport, new Date()).
  */
-export function currentSlateDate(sport: Sport): string {
-  return computeSlateDate(sport, new Date());
+export function currentSlateDate(sport: Sport, now: Date = new Date()): string {
+  return computeSlateDate(sport, now);
 }
 
 /**
@@ -138,18 +138,54 @@ export function isSlateDate(v: string | null | undefined): v is string {
 export const SOCCER_BOARD_ROLL_HOUR = 2; // ET
 
 /**
+ * North-American Daily Edge boards change member-facing dates at 3 AM ET.
+ * Stored game slate dates keep their ordinary ET calendar identity; this is
+ * display/read routing only, allowing overnight writers to prepare the next
+ * date before members leave the completed board.
+ */
+export const DAILY_EDGE_BOARD_ROLL_HOUR_ET = 3;
+
+export function currentDailyEdgeBoardDate(sport: Sport, now: Date = new Date()): string {
+  if (sport === "soccer" || sport === "ucl") return currentSoccerBoardDate(now);
+  const today = currentSlateDate(sport, now);
+  const etHour = hourInTimeZone(now, "America/New_York");
+  return etHour < DAILY_EDGE_BOARD_ROLL_HOUR_ET ? addDaysToSlate(today, -1) : today;
+}
+
+/**
+ * During a default-date rollover, the member reader may retain yesterday's
+ * already-published board until today's authoritative snapshot exists. An
+ * explicit date request never receives this silent continuity fallback.
+ */
+export function previousReadyBoardDate(input: {
+  sport: Sport;
+  requestedDate: string;
+  now?: Date;
+}): string | null {
+  const now = input.now ?? new Date();
+  if (input.sport === "soccer" || input.sport === "ucl") return null;
+  const today = currentSlateDate(input.sport, now);
+  if (input.requestedDate !== today) return null;
+  return addDaysToSlate(today, -1);
+}
+
+/**
  * The soccer/WC board's default "today" — the ET slate date, but not rolled to
  * the new day until SOCCER_BOARD_ROLL_HOUR (2 AM ET). Before 2 AM ET it returns
  * the previous day so late-night / midnight matches stay on the board.
  */
 export function currentSoccerBoardDate(now: Date = new Date()): string {
-  const etHour = Number(
+  const etHour = hourInTimeZone(now, "America/New_York");
+  const today = computeSlateDate("soccer", now);
+  return etHour < SOCCER_BOARD_ROLL_HOUR ? addDaysToSlate(today, -1) : today;
+}
+
+function hourInTimeZone(now: Date, timeZone: string): number {
+  return Number(
     new Intl.DateTimeFormat("en-US", {
-      timeZone: "America/New_York",
+      timeZone,
       hour: "2-digit",
       hourCycle: "h23",
     }).format(now),
   );
-  const today = computeSlateDate("soccer", now);
-  return etHour < SOCCER_BOARD_ROLL_HOUR ? addDaysToSlate(today, -1) : today;
 }

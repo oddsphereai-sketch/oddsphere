@@ -76,7 +76,13 @@ import type {
   MarketSignal,
   SignalType,
 } from "@/lib/types/domain/Grade";
-import { currentSlateDate, currentSoccerBoardDate, isSlateDate } from "@/lib/dates/slateDate";
+import {
+  currentDailyEdgeBoardDate,
+  currentSlateDate,
+  currentSoccerBoardDate,
+  isSlateDate,
+  previousReadyBoardDate,
+} from "@/lib/dates/slateDate";
 import { BOOK_PRIORITY, bookPriorityRank } from "@/lib/config/bookPriority";
 import { selectBestCoherentPlayablePrice } from "@/lib/services/dailyEdge/bestPlayablePrice";
 import { determineSlateState } from "@/lib/services/dailyEdgeSlateResolution";
@@ -6703,11 +6709,14 @@ export async function GET(request: Request) {
   // slate in the sport's anchor timezone (ET for North American, London for UCL).
   // Soccer/WC board: the default "today" doesn't roll until 2 AM ET
   // (currentSoccerBoardDate) so midnight matches stay on the board overnight.
-  const requestedDate = isSlateDate(dateParam)
+  const explicitDate = isSlateDate(dateParam);
+  const requestedDate = explicitDate
     ? dateParam
     : sport === "soccer" || sport === "ucl"
       ? currentSoccerBoardDate()
-      : currentSlateDate(sport);
+      : sport === "nba"
+        ? currentDailyEdgeBoardDate(sport)
+        : currentSlateDate(sport);
 
   // NBA may continue ingesting and rehearsing during preseason, but its
   // member board launches with the regular season. Enforce that boundary
@@ -6769,7 +6778,7 @@ export async function GET(request: Request) {
   // publish an indexed, last-known-good response snapshot after model/market
   // refreshes. The explicit bypass is reserved for those writers.
   if (url.searchParams.get("snapshotBypass") !== "true") {
-    const { dailyEdgeSnapshotKey, readLabResponseSnapshot } = await import(
+    const { dailyEdgeSnapshotKey, readLabResponseSnapshot, readLatestLabResponseSnapshot } = await import(
       "@/lib/services/labResponseSnapshots"
     );
     const snapshotKey = dailyEdgeSnapshotKey({ sport, requestedDate, allowStale, copyPreview });
@@ -6777,11 +6786,31 @@ export async function GET(request: Request) {
     const staleSnapshot = freshSnapshot
       ? null
       : await readLabResponseSnapshot<DailyEdgeResponse>(snapshotKey, "stale");
-    const snapshot = freshSnapshot ?? staleSnapshot;
+    let snapshot = freshSnapshot ?? staleSnapshot;
+    let rolloverFallback = false;
+    if (!snapshot && !explicitDate && sport === "nba") {
+      const fallbackDate = previousReadyBoardDate({ sport, requestedDate });
+      if (fallbackDate) {
+        const fallbackKey = dailyEdgeSnapshotKey({
+          sport,
+          requestedDate: fallbackDate,
+          allowStale,
+          copyPreview,
+        });
+        const fallbackSnapshot = await readLatestLabResponseSnapshot<DailyEdgeResponse>(fallbackKey);
+        if (
+          fallbackSnapshot?.payload.memberPresentation?.releaseId ===
+          DAILY_EDGE_MEMBER_PRESENTATION_RELEASE_ID
+        ) {
+          snapshot = fallbackSnapshot;
+          rolloverFallback = true;
+        }
+      }
+    }
     const presentationOutdated =
       snapshot?.payload.memberPresentation?.releaseId !==
       DAILY_EDGE_MEMBER_PRESENTATION_RELEASE_ID;
-    const recoveredPayload = staleSnapshot || presentationOutdated
+    const recoveredPayload = !rolloverFallback && (staleSnapshot || presentationOutdated)
       ? await recoverExpiredDailyEdgeSnapshot(snapshotKey, url)
       : null;
     const payload = recoveredPayload ?? snapshot?.payload ?? null;
