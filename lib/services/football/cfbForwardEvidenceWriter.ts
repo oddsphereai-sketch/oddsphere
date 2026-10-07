@@ -40,6 +40,7 @@ import {
   CFB_MARKET_SHADOW_WEIGHT,
   CFB_MARKET_SHARP_AWARE_CANDIDATE_RELEASE,
   CFB_MARKET_SHARP_AWARE_PREVIOUS_PRODUCTION_RELEASE,
+  CFB_MARKET_SHARP_AWARE_PRICE_QB_PREVIOUS_PRODUCTION_RELEASE,
   CFB_MARKET_SHARP_AWARE_PRODUCTION_RELEASE,
   type CfbMarketSharpAwareForecast,
 } from "./cfbMarketSharpAwareShadow";
@@ -61,6 +62,10 @@ import {
   fetchCfbEspnReferenceLines,
   type CfbEspnReferenceResult,
 } from "./cfbEspnReferenceLine";
+import {
+  CFB_ESPN_CURRENT_ODDS_MAX_GAMES_PER_RUN,
+  fetchCfbEspnCurrentOdds,
+} from "./cfbEspnCurrentOdds";
 import { activeCfbWeeklyWindow, eligibleCfbWeeklyGames, isGameInCfbWeeklyWindow, resolveCfbVisibleWindows, type CfbWeeklyWindow } from "./cfbWeeklyWindow";
 import {
   CFB_SHARP_API_ODDS_RELEASE,
@@ -103,10 +108,11 @@ import {
 import type { PlaybookInjuryTeamRow } from "@/lib/providers/playbook/types";
 
 export const CFB_FORWARD_WRITER_RELEASE =
-  "cfb_forward_evidence_writer_2026_10_06_r99_held_t60_accuracy_lock" as const;
+  "cfb_forward_evidence_writer_2026_10_07_r100_price_qb_continuity" as const;
 export const CFB_FORWARD_MAX_QB_TEAMS_PER_RUN = 24 as const;
 export const CFB_FORWARD_MAX_SHARP_FALLBACK_GAMES_PER_RUN = 24 as const;
 export const CFB_FORWARD_MAX_ESPN_PROSPECTIVE_GAMES_PER_RUN = 32 as const;
+export const CFB_FORWARD_MAX_ESPN_CURRENT_ODDS_GAMES_PER_RUN = CFB_ESPN_CURRENT_ODDS_MAX_GAMES_PER_RUN;
 export const CFB_FORWARD_RESULTS_BATCH_SIZE = 100 as const;
 export const CFB_FORWARD_MAX_PRIOR_GAME_IDS = 1200 as const;
 
@@ -229,6 +235,8 @@ export async function runCfbForwardEvidenceWriter(args: {
   playbookApiKey: string;
   sharpApiKey: string;
   weatherProvider?: IWeatherProvider | null;
+  /** Read-only operator evidence hook. Never used by the production route. */
+  auditPayloads?: (payloads: readonly CfbForwardEvidencePayload[]) => void;
 }): Promise<CfbForwardWriterResult> {
   const writerEvidence = await readCfbForwardWriterEvidence({ client: args.client, season: args.season });
   const allExisting = writerEvidence.evidence;
@@ -297,7 +305,7 @@ export async function runCfbForwardEvidenceWriter(args: {
   });
   const teams = [...new Map(games.flatMap((game) => [[game.away.id, game.away] as const, [game.home.id, game.home] as const])).values()];
   const priorQuarterbacks = latestQuarterbacksByTeam(allExisting);
-  const quarterbackTeams = selectQuarterbackTeams({ plans, teams, priorQuarterbacks, maximum: CFB_FORWARD_MAX_QB_TEAMS_PER_RUN });
+  const quarterbackTeams = selectQuarterbackTeams({ plans, teams, priorQuarterbacks, maximum: CFB_FORWARD_MAX_QB_TEAMS_PER_RUN, now: args.now });
   const plannedGames = [...new Map(plans.map((plan) => [plan.game.providerGameId, plan.game])).values()];
   const weeklyForecasts = getCfbV1WeeklyForecasts({
     games,
@@ -314,7 +322,11 @@ export async function runCfbForwardEvidenceWriter(args: {
     maximum: CFB_FORWARD_MAX_SHARP_FALLBACK_GAMES_PER_RUN,
   });
   const sharpFallbackGameIds = new Set(sharpFallbackGames.map((game) => game.providerGameId));
-  const [linesAttempt, splitsAttempt, venueWeatherAttempt, injuryAttempt, quarterbacks, sharpFallbackAttempt, sharpSplitsAttempt, circaAttempt] = await Promise.all([
+  const espnCurrentOddsGames = plannedGames.filter((game) =>
+    (game.away.fbs || game.home.fbs) &&
+    cfbBooksNeedSharpFallback(slate.currentOddsComparableBooksByGame[game.providerGameId] ?? []),
+  );
+  const [linesAttempt, splitsAttempt, venueWeatherAttempt, injuryAttempt, quarterbacks, sharpFallbackAttempt, sharpSplitsAttempt, circaAttempt, espnCurrentOddsAttempt] = await Promise.all([
     fetchCfbPlaybookRowsAttempt(() => playbook.lines("ncaaf")),
     fetchCfbPlaybookRowsAttempt(() => playbook.splits("ncaaf")),
     playbook.venueWeather("ncaaf")
@@ -332,9 +344,17 @@ export async function runCfbForwardEvidenceWriter(args: {
         result: null,
         requests: FOOTBALL_SHARP_PRICE_CAPTURE_BOOKS.length * FOOTBALL_SHARP_PRICE_CAPTURE_MAX_PAGES_PER_BOOK,
       })),
+    fetchCfbEspnCurrentOdds({
+      games: espnCurrentOddsGames,
+      capturedAt: args.now,
+      maximumGames: CFB_FORWARD_MAX_ESPN_CURRENT_ODDS_GAMES_PER_RUN,
+    }).then((result) => ({ result, error: null })).catch((error: unknown) => ({
+      result: null,
+      error: splitRequestError(error),
+    })),
   ]);
   const sharpFallback = sharpFallbackAttempt.result;
-  const quarterbackContext = new Map([...priorQuarterbacks, ...quarterbacks.byTeamId]);
+  const quarterbackContext = retainLatestNonemptyCfbQuarterbacks(priorQuarterbacks, quarterbacks.byTeamId);
   const lines = linesAttempt.rows;
   const splits = splitsAttempt.rows;
   const espnReferenceCandidates = plannedGames.filter((game) => {
@@ -397,7 +417,11 @@ export async function runCfbForwardEvidenceWriter(args: {
   const { payloads, captureFailures } = buildCfbForwardPayloadsWithIsolation(plans, (plan): CfbForwardEvidencePayload => {
     const sharpBooks = sharpFallback.booksByGame[plan.game.providerGameId] ?? [];
     const sharpDisplayBooks = sharpFallback.displayBooksByGame[plan.game.providerGameId] ?? [];
-    const freshCurrentBooks = mergeCfbNamedBooks(slate.currentOddsComparableBooksByGame[plan.game.providerGameId] ?? [], sharpBooks);
+    const espnCurrentBooks = espnCurrentOddsAttempt.result?.booksByGame[plan.game.providerGameId] ?? [];
+    const freshCurrentBooks = mergeCfbNamedBooks(
+      mergeCfbNamedBooks(slate.currentOddsComparableBooksByGame[plan.game.providerGameId] ?? [], espnCurrentBooks),
+      sharpBooks,
+    );
     const currentBooks = retainLatestCfbNamedBookMarkets(
       freshCurrentBooks,
       captureHistoryBooksByGame.get(plan.game.providerGameId) ?? [],
@@ -684,11 +708,11 @@ export async function runCfbForwardEvidenceWriter(args: {
         balldontlieSlate: slate.providerRequests + priorResults.providerRequests,
         balldontlieQuarterbacks: quarterbacks.providerRequests,
         playbook: 4,
-        espnReference: espnReferenceAttempt.result.requests,
+        espnReference: espnReferenceAttempt.result.requests + (espnCurrentOddsAttempt.result?.requests ?? 0),
         sharpApiOdds: sharpFallback.requests + circaAttempt.requests,
         sharpApiSplits: 1,
         weather: weatherRequests,
-        totalMaximum: slate.providerRequests + priorResults.providerRequests + quarterbacks.providerRequests + sharpFallback.requests + circaAttempt.requests + weatherRequests + espnReferenceAttempt.result.requests + advancedState.requests + 5,
+        totalMaximum: slate.providerRequests + priorResults.providerRequests + quarterbacks.providerRequests + sharpFallback.requests + circaAttempt.requests + weatherRequests + espnReferenceAttempt.result.requests + (espnCurrentOddsAttempt.result?.requests ?? 0) + advancedState.requests + 5,
       },
     };
     const contextualEvidenceCapture = buildCfbForwardContextCapture({
@@ -710,6 +734,7 @@ export async function runCfbForwardEvidenceWriter(args: {
       ...(contextualEvidenceCapture ? { contextualEvidenceCapture } : {}),
     };
   });
+  args.auditPayloads?.(payloads);
   const write = await appendCfbForwardEvidence({ client: args.client, runId: args.runId, payloads, apply: args.apply });
   const tracking = await writeOfficialTracking({
     client: args.client,
@@ -736,13 +761,14 @@ export async function runCfbForwardEvidenceWriter(args: {
     publishedWatchlists: decisions.filter((row) => row.grade === "Watchlist").length,
     publishedNoPlays: decisions.filter((row) => row.grade === "No Play").length,
     heldMarkets: payloads.reduce((sum, payload) => sum + payload.decisions.heldMarkets.length, 0),
-    apiCallsMaximum: slate.providerRequests + priorResults.providerRequests + quarterbacks.providerRequests + sharpFallback.requests + weatherRequests + espnReferenceAttempt.result.requests + advancedState.requests + tracking.trackingProviderRequests + 5,
+    apiCallsMaximum: slate.providerRequests + priorResults.providerRequests + quarterbacks.providerRequests + sharpFallback.requests + circaAttempt.requests + weatherRequests + espnReferenceAttempt.result.requests + (espnCurrentOddsAttempt.result?.requests ?? 0) + advancedState.requests + tracking.trackingProviderRequests + 5,
     healthHolds: [...new Set([
       ...payloads.flatMap((payload) => payload.coverage.healthHolds),
       ...(sharpFallbackAttempt.error ? ["sharpapi_odds_fallback_request_failed"] : []),
       ...(sharpFallbackCandidates.length > sharpFallbackGames.length ? ["sharpapi_odds_fallback_deferred"] : []),
       ...(espnReferenceAttempt.error ? ["espn_reference_line_request_failed"] : []),
       ...(espnReferenceCandidates.length > espnReferenceGames.length ? ["espn_reference_line_deferred"] : []),
+      ...(espnCurrentOddsAttempt.error ? ["espn_current_odds_request_failed"] : []),
       ...(linesAttempt.error ? ["playbook_lines_request_failed"] : []),
       ...(splitsAttempt.error ? ["playbook_splits_request_failed"] : []),
       ...(injuryAttempt.error ? ["playbook_injuries_request_failed"] : []),
@@ -991,22 +1017,43 @@ export function selectQuarterbackTeams(args: {
   teams: NcaafGame["home"][];
   priorQuarterbacks: Map<number, CfbForwardTeamQuarterbacks>;
   maximum: number;
+  now: string;
 }): NcaafGame["home"][] {
   if (!Number.isInteger(args.maximum) || args.maximum < 0) throw new Error("CFB quarterback team budget must be a nonnegative integer.");
+  const nowMs = Date.parse(args.now);
+  if (!Number.isFinite(nowMs)) throw new Error("CFB quarterback refresh time must be valid.");
   const byId = new Map(args.teams.map((team) => [team.id, team]));
-  const candidates = new Map<number, { team: NcaafGame["home"]; priority: number; startsAt: number }>();
+  const candidates = new Map<number, { team: NcaafGame["home"]; priority: number; startsAt: number; capturedAt: number }>();
   for (const plan of args.plans) {
     for (const team of [plan.game.away, plan.game.home]) {
-      // The active roster is immutable capture context. Availability updates
-      // select a different quarterback from that retained roster without
-      // opening a second provider-fetch path at T-60.
-      if (args.priorQuarterbacks.get(team.id)?.activeQuarterbacks.length) continue;
+      const prior = args.priorQuarterbacks.get(team.id);
+      const priorCapturedAt = Date.parse(prior?.capturedAt ?? "");
+      const priorIsNonempty = (prior?.activeQuarterbacks.length ?? 0) > 0;
+      const dueAtT60 = plan.stage === "t60" && (!Number.isFinite(priorCapturedAt) || priorCapturedAt < Date.parse(plan.game.scheduledStart) - 75 * 60_000);
+      const dueByAge = !priorIsNonempty || !Number.isFinite(priorCapturedAt) || nowMs - priorCapturedAt >= 24 * 60 * 60_000;
+      if (!dueAtT60 && !dueByAge) continue;
       const priority = plan.stage === "t60" ? 0 : plan.stage === "opening" ? 1 : 2;
       const current = candidates.get(team.id);
-      if (!current || priority < current.priority || Date.parse(plan.game.scheduledStart) < current.startsAt) candidates.set(team.id, { team: byId.get(team.id) ?? team, priority, startsAt: Date.parse(plan.game.scheduledStart) });
+      const capturedAt = Number.isFinite(priorCapturedAt) ? priorCapturedAt : Number.NEGATIVE_INFINITY;
+      if (!current || priority < current.priority || capturedAt < current.capturedAt || Date.parse(plan.game.scheduledStart) < current.startsAt) {
+        candidates.set(team.id, { team: byId.get(team.id) ?? team, priority, startsAt: Date.parse(plan.game.scheduledStart), capturedAt });
+      }
     }
   }
-  return [...candidates.values()].sort((first, second) => first.priority - second.priority || first.startsAt - second.startsAt || first.team.id - second.team.id).slice(0, args.maximum).map((value) => value.team);
+  return [...candidates.values()].sort((first, second) =>
+    first.priority - second.priority || first.capturedAt - second.capturedAt || first.startsAt - second.startsAt || first.team.id - second.team.id,
+  ).slice(0, args.maximum).map((value) => value.team);
+}
+
+export function retainLatestNonemptyCfbQuarterbacks(
+  previous: Map<number, CfbForwardTeamQuarterbacks>,
+  fresh: Map<number, CfbForwardTeamQuarterbacks>,
+): Map<number, CfbForwardTeamQuarterbacks> {
+  const retained = new Map(previous);
+  for (const [teamId, value] of fresh) {
+    if (value.activeQuarterbacks.length > 0 || !retained.has(teamId)) retained.set(teamId, value);
+  }
+  return retained;
 }
 
 function latestQuarterbacksByTeam(rows: CfbForwardStoredEvidence[]): Map<number, CfbForwardTeamQuarterbacks> {
@@ -1213,7 +1260,7 @@ function isEligiblePublishedPregameRecoveryPayload(payload: CfbForwardEvidencePa
     (String(payload.schemaRelease) === CFB_FORWARD_PRICE_PREVIOUS_EVIDENCE_SCHEMA_RELEASE && String(payload.memberRelease) === CFB_FORWARD_PRICE_PREVIOUS_MEMBER_RELEASE)) &&
     payload.decisions.decisionRelease === CFB_V1_DECISION_RELEASE &&
     payload.decisions.publicationEnabled &&
-    (release === CFB_MARKET_SHARP_AWARE_PRODUCTION_RELEASE || release === CFB_MARKET_SHARP_AWARE_PREVIOUS_PRODUCTION_RELEASE) &&
+    (release === CFB_MARKET_SHARP_AWARE_PRODUCTION_RELEASE || release === CFB_MARKET_SHARP_AWARE_PRICE_QB_PREVIOUS_PRODUCTION_RELEASE || release === CFB_MARKET_SHARP_AWARE_PREVIOUS_PRODUCTION_RELEASE) &&
     Boolean(payload.decisions.marketOutlooks);
 }
 

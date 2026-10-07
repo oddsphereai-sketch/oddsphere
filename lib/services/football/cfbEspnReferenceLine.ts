@@ -150,8 +150,8 @@ function normalizeOpeningLine(payload: JsonRecord, providerEventId: string, capt
 }
 
 function matchEvent(game: NcaafGame, events: EspnEvent[]): EspnEvent | string {
-  const awayId = teamId(game.away.abbreviation);
-  const homeId = teamId(game.home.abbreviation);
+  const awayId = espnCfbTeamId(game.away.abbreviation);
+  const homeId = espnCfbTeamId(game.home.abbreviation);
   if (!awayId || !homeId) return "espn_team_identity_unavailable";
   const matches = events.filter((event) => {
     const pair = eventPair(event);
@@ -164,7 +164,7 @@ function matchEvent(game: NcaafGame, events: EspnEvent[]): EspnEvent | string {
     : matches.length === 0 ? "strict_event_not_found" : "strict_event_ambiguous";
 }
 
-function teamId(abbreviation: string): string | null {
+export function espnCfbTeamId(abbreviation: string): string | null {
   if (ESPN_TEAM_ID_OVERRIDES[abbreviation]) return ESPN_TEAM_ID_OVERRIDES[abbreviation]!;
   const identity = (CFB_TEAM_IDENTITIES as Record<string, { logoUrl?: string }>)[abbreviation];
   return identity?.logoUrl?.match(/\/(\d+)\.png$/)?.[1] ?? null;

@@ -228,6 +228,40 @@ Last reviewed: 2026-10-07
 
 ## CFB Daily Edge generalized weekly production release
 
+### FBS current-price and quarterback-context continuity (writer r100; fixture r75; snapshot r35; tracking r37)
+
+- Active evidence / collector / member / market reader / decision / sole writer are
+  `cfb_forward_evidence_snapshot_2026_10_07_r35_price_qb_continuity` /
+  `cfb_forward_evidence_collector_2026_10_07_r46_price_qb_continuity` /
+  `cfb_v1_member_release_2026_10_07_r49_price_qb_continuity` /
+  `cfb_market_sharp_aware_production_2026_10_07_r28_price_qb_continuity` /
+  `cfb_v1_daily_edge_decision_2026_10_07_r40_price_qb_continuity` /
+  `cfb_forward_evidence_writer_2026_10_07_r100_price_qb_continuity`. Member fixture / outcome /
+  compact snapshot / reader / tracking are r75 / r65 / r35 / r20 / r37. The immediately preceding
+  r34 / r48 / r27 / r39 / r74 / r34 family remains the explicit transition authority for already
+  captured and immutable T-60 rows.
+- For an FBS-involved game whose paid BALLDONTLIE board is incomplete, the existing writer may make
+  one bounded ESPN scoreboard request per slate date and accept only a strict team-and-kickoff match
+  with a coherent paired current DraftKings Moneyline, Spread, or Total. Paid and retained named-book
+  evidence retains precedence; an incomplete or malformed fallback market remains unavailable. The
+  fallback is limited to 32 games and seven dates per run and adds no writer, schedule, database loop,
+  copy, label, layout, or inferred price.
+- The October 7 production acceptance case is ODU at Appalachian State. The current board was missing
+  exactly its three FBS-involved prices while ESPN/DraftKings published all three paired markets. The
+  zero-write candidate restores Moneyline `+295 / -375`, Spread `ODU +9.5 -105 / APP -9.5 -115`, and
+  the currently published paired Total. Because one book cannot satisfy target-excluded consensus,
+  all three markets remain held from exact-price grading: zero actionable promotions, zero actionable
+  demotions, and zero board flattening. The other 90 missing prices are 30-31 FCS-only market rows not
+  currently published by BALLDONTLIE or ESPN and remain honestly unavailable rather than fabricated.
+- Active-quarterback roster context now refreshes at least every 24 hours and at T-60 within the
+  existing 24-team bound. An empty refresh cannot erase the last nonempty verified roster. Playbook's
+  NCAAF injury endpoint still returns no usable report; this release does not relabel active-roster or
+  ESPN leader status as an injury designation. A complete timestamped injury feed still requires a
+  configured provider that actually publishes NCAAF availability.
+- Evidence and rollback:
+  `docs/model-audits/2026-10-07-cfb-price-qb-continuity-predeclaration.md`. Roll back the complete
+  r35/r49/r28/r40/r100/r75/r65/r35/r20/r37 family together while preserving immutable locks.
+
 ### Held-price T-60 accuracy lock (writer r99; fixture r74; snapshot r34; tracking r36)
 
 - Active sole writer / member fixture / compact snapshot / reader / tracking releases are

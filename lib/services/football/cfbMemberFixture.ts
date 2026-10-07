@@ -7,6 +7,8 @@ import { withFirstTrackedSplitObservation } from "@/lib/services/splitDisplayMov
 import type { MarketSplitDisplaySection } from "@/lib/types/domain/RecommendationDecision";
 import {
   CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE,
+  CFB_FORWARD_PRICE_QB_PREVIOUS_EVIDENCE_SCHEMA_RELEASE,
+  CFB_FORWARD_PRICE_QB_PREVIOUS_MEMBER_RELEASE,
   CFB_FORWARD_MARKET_CONFIRMATION_PREVIOUS_EVIDENCE_SCHEMA_RELEASE,
   CFB_FORWARD_MARKET_CONFIRMATION_PREVIOUS_MEMBER_RELEASE,
   CFB_FORWARD_SPREAD_SIGNAL_PREVIOUS_EVIDENCE_SCHEMA_RELEASE,
@@ -65,6 +67,7 @@ import {
   CFB_V1_BASE_PROBABILITY_RELEASE,
   CFB_V1_BASE_SCORE_ARTIFACT_RELEASE,
   CFB_V1_DECISION_RELEASE,
+  CFB_V1_PRICE_QB_PREVIOUS_DECISION_RELEASE,
   CFB_V1_MARKET_CONFIRMATION_PREVIOUS_DECISION_RELEASE,
   CFB_V1_SPREAD_SIGNAL_PREVIOUS_DECISION_RELEASE,
   CFB_V1_AVAILABILITY_PREVIOUS_DECISION_RELEASE,
@@ -89,9 +92,9 @@ import { cfbTeamIdentity } from "./cfbTeamIdentity";
 import { CFB_PUBLIC_SCORE_DIRECTION_TOLERANCE_POINTS } from "./footballCrossMarketCoherence";
 
 export const CFB_MEMBER_FIXTURE_RELEASE =
-  "cfb_v1_member_fixture_2026_10_06_r74_held_t60_accuracy_lock" as const;
+  "cfb_v1_member_fixture_2026_10_07_r75_price_qb_continuity" as const;
 export const CFB_PUBLIC_OUTCOME_CONTRACT_RELEASE =
-  "cfb_market_sharp_public_outcome_contract_2026_10_04_r64_moneyline_market_confirmation" as const;
+  "cfb_market_sharp_public_outcome_contract_2026_10_07_r65_price_qb_continuity" as const;
 export const CFB_CONTEXT_ONLY_QUOTE_CAPTURE_SKEW_MS = 5_000 as const;
 const CFB_PRE_DIRECTIONAL_MEMBER_RELEASE = "cfb_v1_member_release_2026_08_28_r14_expanded_sharp_budget" as const;
 const CFB_PRE_DIRECTIONAL_DECISION_RELEASE = "cfb_v1_daily_edge_decision_2026_08_28_r11_market_scoped_data_quality" as const;
@@ -554,19 +557,46 @@ export function selectLatestCfbMemberEvidenceRows(
       )
     : null;
   const marketConfirmationPreviousAuthority = marketConfirmationPrevious ?? marketConfirmationPreviousBoundary ?? marketConfirmationPreviousLockOverlay ?? spreadSignalPreviousAuthority;
+  const priceQbPrevious = completeRowsForRelease(
+    rows,
+    CFB_FORWARD_PRICE_QB_PREVIOUS_EVIDENCE_SCHEMA_RELEASE,
+    CFB_FORWARD_PRICE_QB_PREVIOUS_MEMBER_RELEASE,
+    CFB_V1_PRICE_QB_PREVIOUS_DECISION_RELEASE,
+  );
+  const priceQbPreviousBoundary = marketConfirmationPreviousAuthority
+    ? immutableBoundaryTransitionRows(
+        rows,
+        now,
+        CFB_FORWARD_PRICE_QB_PREVIOUS_EVIDENCE_SCHEMA_RELEASE,
+        CFB_FORWARD_PRICE_QB_PREVIOUS_MEMBER_RELEASE,
+        CFB_V1_PRICE_QB_PREVIOUS_DECISION_RELEASE,
+        marketConfirmationPreviousAuthority,
+      )
+    : null;
+  const priceQbPreviousLockOverlay = marketConfirmationPreviousAuthority
+    ? immutableLockOverlayRows(
+        rows,
+        CFB_FORWARD_PRICE_QB_PREVIOUS_EVIDENCE_SCHEMA_RELEASE,
+        CFB_FORWARD_PRICE_QB_PREVIOUS_MEMBER_RELEASE,
+        CFB_V1_PRICE_QB_PREVIOUS_DECISION_RELEASE,
+        marketConfirmationPreviousAuthority,
+      )
+    : null;
+  const priceQbPreviousAuthority = priceQbPrevious ?? priceQbPreviousBoundary ?? priceQbPreviousLockOverlay ?? marketConfirmationPreviousAuthority;
   const current = completeRowsForRelease(rows, CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE, CFB_FORWARD_MEMBER_RELEASE, CFB_V1_DECISION_RELEASE);
   if (current) return current;
-  const immutableBoundaryTransition = marketConfirmationPreviousAuthority
+  const immutableBoundaryTransition = priceQbPreviousAuthority
     ? immutableBoundaryTransitionRows(
         rows,
         now,
         CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE,
         CFB_FORWARD_MEMBER_RELEASE,
         CFB_V1_DECISION_RELEASE,
-        marketConfirmationPreviousAuthority,
+        priceQbPreviousAuthority,
       )
     : null;
   if (immutableBoundaryTransition) return immutableBoundaryTransition;
+  if (priceQbPrevious) return priceQbPrevious;
   if (marketConfirmationPrevious) return marketConfirmationPrevious;
   if (marketConfirmationPreviousBoundary) return marketConfirmationPreviousBoundary;
   if (marketConfirmationPreviousLockOverlay) return marketConfirmationPreviousLockOverlay;
