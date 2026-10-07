@@ -29,15 +29,15 @@ import {
 export const NFL_PLAYER_PROPS_PORTABLE_ARTIFACT_RELEASE =
   "nfl_player_props_runtime_2026_09_29_r6_full_family_matchup" as const;
 export const NFL_PLAYER_PROPS_RUNTIME_RELEASE =
-  "nfl_player_props_runtime_2026_09_29_r20_injury_feed_continuity" as const;
+  "nfl_player_props_runtime_2026_10_07_r21_discrete_market_arbitration" as const;
 export const NFL_PLAYER_PROPS_BOARD_RELEASE =
-  "nfl_player_props_board_2026_09_29_r23_injury_feed_continuity" as const;
+  "nfl_player_props_board_2026_10_07_r24_discrete_market_arbitration" as const;
 export const NFL_PLAYER_PROPS_DECISION_RELEASE =
-  "nfl_player_props_decision_2026_09_29_r19_injury_feed_continuity" as const;
+  "nfl_player_props_decision_2026_10_07_r20_discrete_market_arbitration" as const;
 export const NFL_PLAYER_PROPS_MODEL_RELEASE =
   "nfl_player_props_distribution_model_2026_09_29_r15_injury_feed_continuity" as const;
 export const NFL_PLAYER_PROPS_CALIBRATION_RELEASE =
-  "nfl_player_props_distribution_calibration_2026_09_29_r16_injury_feed_continuity" as const;
+  "nfl_player_props_distribution_calibration_2026_10_07_r17_discrete_market_arbitration" as const;
 export const NFL_PLAYER_PROPS_PASSING_MARKET_RELEASE =
   "nfl_player_props_market_residual_calibration_2026_09_03_r8_single_application" as const;
 export const NFL_PLAYER_PROPS_MARKET_COHERENT_PROJECTION_RELEASE =
@@ -61,6 +61,7 @@ export const NFL_PLAYER_PROPS_MAXIMUM_RAW_MARKET_DIVERGENCE = 0.48 as const;
 export const NFL_PLAYER_PROPS_MATERIAL_PRICE_MOVEMENT_PP = 0.025 as const;
 export const NFL_PLAYER_PROPS_HARD_AVAILABILITY_MAX_GAME_AGE_DAYS = 6 as const;
 export const NFL_PLAYER_PROPS_MARKET_ROLE_MINIMUM_BOOKS = 2 as const;
+export const NFL_PLAYER_PROPS_RECEPTIONS_MARKET_FLIP_MINIMUM_EDGE = 0.05 as const;
 
 type TreeNode = {
   value: number; featureIndex: number; threshold: number; missingGoToLeft: boolean;
@@ -338,6 +339,23 @@ export function nflPlayerPropsProjectionRange(
 
 export function nflPlayerPropsResidualProbability(model: number, market: number, weight: number): number {
   return sigmoid(logit(market) + weight * (logit(model) - logit(market)));
+}
+
+export function nflPlayerPropsDiscreteMarketArbitration(args: {
+  propMarket: NflPlayerPropMarket;
+  rawOverProbability: number;
+  marketOverProbability: number;
+  independentBooks: number;
+  incumbentFinalOverProbability: number;
+}): number {
+  if (args.independentBooks <= 0) return args.rawOverProbability;
+  if (args.propMarket !== "receptions") return args.incumbentFinalOverProbability;
+  const directionsDisagree = (args.rawOverProbability >= 0.5) !== (args.marketOverProbability >= 0.5);
+  if (!directionsDisagree) return args.incumbentFinalOverProbability;
+  if (Math.abs(args.marketOverProbability - 0.5) >= NFL_PLAYER_PROPS_RECEPTIONS_MARKET_FLIP_MINIMUM_EDGE) {
+    return args.marketOverProbability;
+  }
+  return args.incumbentFinalOverProbability;
 }
 
 export function nflPlayerPropsExpectedValue(probability: number, americanPrice: number): number {
@@ -708,6 +726,7 @@ export function buildNflPlayerPropsRuntimeBoard(args: {
   evaluatedAt: string;
   captureMarketEvidence?: boolean;
   auditPrecedingPassingYardsOnly?: boolean;
+  auditIncumbentMarketArbitration?: boolean;
 }): NflPlayerPropsRuntimeBoard {
   const evaluatedAt = Date.parse(args.evaluatedAt);
   if (!Number.isFinite(evaluatedAt)) throw new Error("NFL props runtime board evaluatedAt is invalid.");
@@ -829,11 +848,20 @@ export function buildNflPlayerPropsRuntimeBoard(args: {
         : averagePresent(others.map((value) => value.over)) ?? rawOver;
     // The QB point head already incorporates this target-excluded market set.
     // Applying the residual head again would grant the same evidence two votes.
-    const finalOver = passingProjection?.evidence
+    const incumbentFinalOver = passingProjection?.evidence
       ? rawOver
       : independentBooks > 0
         ? nflPlayerPropsResidualProbability(rawOver, marketOver, policy.marketResidualWeight)
         : rawOver;
+    const finalOver = passingProjection?.evidence || args.auditIncumbentMarketArbitration === true
+      ? incumbentFinalOver
+      : nflPlayerPropsDiscreteMarketArbitration({
+          propMarket: offer.market,
+          rawOverProbability: rawOver,
+          marketOverProbability: marketOver,
+          independentBooks,
+          incumbentFinalOverProbability: incumbentFinalOver,
+        });
     if (!(finalOver > 0 && finalOver < 1)) {
       // Provider catalogs can contain a syntactically complete line outside
       // the empirical residual support (for example, a receptions offer that
