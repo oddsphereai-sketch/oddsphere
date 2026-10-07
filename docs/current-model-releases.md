@@ -2381,6 +2381,29 @@ The tracking follow-up is recorded in
 The paired live-slate replay is recorded in
 `docs/model-audits/2026-08-11-daily-edge-fi-probable-availability-r27.md`.
 
+## NBA regular-season champion (active from 2026-10-20)
+
+- Model / prediction record: `nba_v2_independent_first_2026_10_06_r1`
+- Market marriage: `nba_market_marriage_2026_10_06_r1_independent_first`
+- Grade policy: `nba_grade_policy_2026_10_06_r1_coherent_exact_price`
+- Lock coherence: `nba_lock_coherence_2026_10_06_r1_official_and_context_tuple`
+- Official markets: moneyline and total; Spread remains the existing context-only card market
+
+The October 6 r1 release corrects NBA season identity, excludes unfinished/preseason rows from the
+early-season sample, uses the regular-season context outside the playoffs, and replaces the old
+continuous market-grounded score with the independent possession/efficiency/Four-Factors score. A
+regressed prior-season handoff owns October-November until current-season evidence accumulates. Market
+evidence remains downstream for exact-line probability, coherent same-book fair-price economics and
+grades. Spread and Total are solved at the exact displayed consensus line; books or handicap points are
+never crossed to fabricate a no-vig pair. Missing selected-side price/fair evidence cannot create an
+actionable grade. No unvalidated NBA score flip is active.
+
+The existing pregame sweep now performs a bounded final NBA line refresh and sole-writer pass at T-60,
+verifies a coherent current-release Moneyline/Total tuple plus the captured context Spread, and only then
+locks both official rows. Prior locks remain immutable. The board stays closed through October 19 and
+opens automatically on October 20 without member copy, label, or layout changes. Evidence and explicit
+limitations: `docs/model-audits/2026-10-06-nba-independent-first-regular-season-r1.md`.
+
 ## NBA/NHL operational refresh schedules
 
 - NBA refresh release: `nba_daily_refresh_schedule_2026_09_21_r1`

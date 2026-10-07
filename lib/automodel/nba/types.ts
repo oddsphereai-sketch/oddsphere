@@ -18,6 +18,8 @@
  * Pure type definitions + small constants. No logic, no DB, no network.
  */
 
+import { NBA_MODEL_RELEASE } from "./nbaChampionRuntime";
+
 // ─────────────────────────────────────────────────────────────
 // Stage execution (mirrors MLB's ModelStage so the operator script
 // and admin UI can share the same shape if we ever fold them).
@@ -208,6 +210,8 @@ export type NbaGameSnapshot = {
   slate_date: string;
   /** ISO 8601 game start time. */
   game_time_iso: string | null;
+  /** Provider-derived competition phase; absent only in legacy fixtures. */
+  season_type?: "regular" | "postseason";
   home_team: NbaTeamSnapshot;
   away_team: NbaTeamSnapshot;
   home_injuries: NbaPlayerInjury[];
@@ -342,6 +346,6 @@ export const NBA_MODEL_VERSION = "auto_v0a_nba_internal_preview";
  * grade, confidence, model edge, market support/conflict,
  * injury/data-quality cautions.
  */
-export const NBA_MODEL_VERSION_V1 = "auto_v1_research_prior";
+export const NBA_MODEL_VERSION_V1 = NBA_MODEL_RELEASE;
 
 export type NbaModelVersion = "v0" | "v1";

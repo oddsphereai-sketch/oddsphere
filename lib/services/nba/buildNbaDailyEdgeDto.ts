@@ -147,7 +147,7 @@ function composeQuickRead(intel: NbaGameIntelligence, snapshot: NbaGameSnapshot)
  * Customer-facing rendering must NEVER surface these tokens.
  */
 export type NbaAdminModelBadge = {
-  /** Always "v1 · research-prior · calibration pending" for this build. */
+  /** Internal-only active-release label. */
   label: string;
   /** Flagged audit deltas (e.g. spread Δ > 2pt vs v0). Empty when none. */
   audit_flags: string[];
@@ -297,7 +297,7 @@ function buildAdminModelBadge(
   if (!("model_version_v1" in prediction)) return null;
   const v1 = prediction;
   return {
-    label: "v1 · research-prior · calibration pending",
+    label: "NBA independent-first r1 · chronological audit",
     audit_flags: v1.v0_v1_delta.flagged,
     home_playoff_weight: v1.v1_breakdown.home_recency.playoff_weight,
     away_playoff_weight: v1.v1_breakdown.away_recency.playoff_weight,

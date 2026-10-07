@@ -1,5 +1,5 @@
 /**
- * Phase 7C — NBA v1 active preview model.
+ * NBA independent-first production model.
  *
  * Pure function. No DB, no network. Composes:
  *
@@ -14,13 +14,10 @@
  *   Step 9 — market as benchmark (no blending into score)
  *   Step 10 — per-market grading (handled by service layer + nbaMarketReview)
  *
- * v0 preservation: `runNbaAutoModelV1` (the existing v0 orchestrator)
- * is untouched. The API route calls both, surfaces v1 as the active
- * preview projection, and exposes v0 in the audit/comparison script.
+ * `runNbaAutoModelV1` is retained only to populate the internal comparison
+ * audit. It cannot replace this model's score, probability, side, or grade.
  *
- * ⚠ ADMIN/AUDIT-ONLY TERMINOLOGY in all logs and outputs labeled
- * "v1", "research-prior", "calibration pending". Member-facing UI
- * must never surface these tokens (see types.ts NBA_MODEL_VERSION_V1).
+ * Internal comparison metadata must never surface in the member product.
  */
 
 import { runNbaAutoModelV1 } from "./nbaAutoModelV1";
@@ -409,7 +406,7 @@ export type NbaModelV1Output = NbaAutoModelOutput & {
   /** ADMIN/AUDIT-ONLY: marks this output as the v1 research-prior model. */
   model_version_v1: typeof NBA_MODEL_VERSION_V1;
   /** ADMIN/AUDIT-ONLY: research priors not yet backtested. */
-  calibration_status: "pending";
+  calibration_status: "chronological_audit";
   v1_breakdown: NbaModelV1Breakdown;
   v1_probabilities: NbaMarketProbabilities;
   /**
@@ -479,7 +476,7 @@ export function runNbaAutoModelV2(
   stage: NbaModelStage,
   opts: { isPlayoffs?: boolean; bookCount?: number } = {},
 ): NbaModelV1Output {
-  const isPlayoffs = opts.isPlayoffs ?? true;
+  const isPlayoffs = opts.isPlayoffs ?? (snap.season_type === "postseason");
   const notes: string[] = [];
 
   // Step 4 first (blend feeds Steps 1-3)
@@ -540,8 +537,10 @@ export function runNbaAutoModelV2(
   const awayPoints = awayPointsRaw - context.hca_pts / 2 - context.rest_diff_pts;
   const projectedTotal = homePoints + awayPoints;
   const projectedHomeMargin = homePoints - awayPoints;
-  // Spread is HOME-perspective negative-when-favored, like market convention.
-  const projectedSpreadHome = -projectedHomeMargin;
+  // Public model-output convention is home margin (positive = home projected
+  // winner), matching the legacy DTO contract. The market-intelligence
+  // boundary converts it to sportsbook convention exactly once.
+  const projectedSpreadHome = projectedHomeMargin;
 
   // Step 8 — distribution → independent probabilities (per market)
   const tier = deriveTier(snap);
@@ -699,7 +698,7 @@ export function runNbaAutoModelV2(
       provisional: true,
     },
     model_version_v1: NBA_MODEL_VERSION_V1,
-    calibration_status: "pending",
+    calibration_status: "chronological_audit",
     v1_breakdown: {
       pace_home_blended: homeBlend.pace,
       pace_away_blended: awayBlend.pace,

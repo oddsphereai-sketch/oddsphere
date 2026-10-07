@@ -9,13 +9,14 @@ import { usesProductShell } from "@/lib/navigation/productShellRoutes";
 
 export default function Navbar() {
   const pathname = usePathname();
+  const currentPathname = pathname ?? "";
   const isPublicExperiencePreview =
-    pathname === "/dev/homepage-preview" || pathname === "/dev/login-preview";
+    currentPathname === "/dev/homepage-preview" || currentPathname === "/dev/login-preview";
 
   // 6.2a: hide the public marketing Navbar on premium + admin shells. /lab/*
   // gets its own LabAppNav (app-style header); /admin/* uses its scoped chrome.
   // This way the marketing chrome only ever appears on actual marketing pages.
-  if (usesProductShell(pathname)) {
+  if (usesProductShell(currentPathname)) {
     return null;
   }
 
@@ -59,7 +60,7 @@ export default function Navbar() {
           </Link>
           <div className="flex items-center space-x-0.5 sm:space-x-2">
             {navLinks.map((link) => {
-              const isActive = pathname === link.href;
+              const isActive = currentPathname === link.href;
               const baseClasses =
                 "items-center px-2 sm:px-3 py-2 rounded-md text-xs sm:text-sm font-medium transition-colors focus-visible:outline-none focus-visible:bg-gray-800 focus-visible:text-white";
               const mobileVisibility =

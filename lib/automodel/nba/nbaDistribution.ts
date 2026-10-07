@@ -59,7 +59,7 @@ export type NbaMarketProbabilities = {
   ml_away_win_prob: number;
   /**
    * P(home covers the market spread). The market spread is HOME-perspective
-   * (negative = home favored). Cover = (home_margin - market_spread_home) > 0.
+   * (negative = home favored). Cover = (home_margin + market_spread_home) > 0.
    * If market_spread_home is null → null.
    */
   spread_home_cover_prob: number | null;
@@ -111,14 +111,15 @@ export function computeNbaMarketProbabilities(
   );
   const mlAway = clamp01(1 - mlHome);
 
-  // Spread: P(home covers) = P(home_margin > market_spread_home).
-  // market_spread_home is negative when home is favored; cover means
-  // realized margin exceeds the spread line.
+  // Spread: P(home covers) = P(home_margin + home_line > 0).
+  // A home -5 must win by more than five; a home +5 can lose by fewer than
+  // five. The previous threshold used the signed sportsbook line directly
+  // and therefore inverted this requirement away from pick'em.
   let spreadHomeCover: number | null = null;
   let spreadAwayCover: number | null = null;
   if (input.market_spread_home !== null) {
     spreadHomeCover = clamp01(
-      1 - normalCdf((input.market_spread_home - input.projected_home_margin) / marginSd),
+      1 - normalCdf((-input.market_spread_home - input.projected_home_margin) / marginSd),
     );
     spreadAwayCover = clamp01(1 - spreadHomeCover);
   }

@@ -51,6 +51,8 @@ export type RefreshNbaLinesOptions = {
   sharpApiKey: string;
   /** false = perform DB writes; true = dry-run (read-only). */
   dryRun: boolean;
+  /** Optional bounded T-60 refresh; absent means the full slate. */
+  externalIdsFilter?: readonly number[];
   /** Sink for human-readable progress lines. Default no-op. */
   logger?: (msg: string) => void;
 };
@@ -313,7 +315,9 @@ export async function refreshNbaLines(
   const errors: string[] = [];
 
   // 1. Load NBA games for the ET slate-date.
-  const games = await loadNbaGamesForSlateDate(opts.slateDate);
+  const allGames = await loadNbaGamesForSlateDate(opts.slateDate);
+  const filter = opts.externalIdsFilter === undefined ? null : new Set(opts.externalIdsFilter);
+  const games = filter === null ? allGames : allGames.filter((game) => filter.has(game.external_id));
   log(`NBA games on slate ${opts.slateDate}: ${games.length}`);
   if (games.length === 0) {
     log(

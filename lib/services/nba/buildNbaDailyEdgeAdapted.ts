@@ -11,7 +11,7 @@
  * Pipeline:
  *   1. Build NBA feature snapshots (DB-only) for the ET slate window
  *   2. Resolve injuries via ESPN (best-effort)
- *   3. Run v0 model (runNbaAutoModelV1) per game
+ *   3. Run the independent-first NBA model per game
  *   4. Pull lines + splits + opportunities (lines from DB; splits + opps
  *      live via SharpAPI if SHARPAPI_KEY is set, else gracefully missing)
  *   5. Compose per-game NbaDailyEdgeGameDto
@@ -27,8 +27,12 @@
 import { isBlockedSportsbook } from "../../config/blockedSportsbooks";
 import { buildNbaFeatureSnapshotsWithProvenance } from "./featureSnapshot";
 import { fetchEspnNbaInjuries } from "./espnNbaInjuries";
-import { runNbaAutoModelV1 } from "../../automodel/nba/nbaAutoModelV1";
-import { applyNbaGroundingOverlay } from "./applyNbaGrounding";
+import { runNbaAutoModelV2 } from "../../automodel/nba/nbaAutoModelV2";
+import { buildNbaMarketConsensus } from "../../automodel/nba/nbaMarketConsensus";
+import {
+  assertNbaChampionRuntime,
+  NBA_MARKET_MARRIAGE_RELEASE,
+} from "../../automodel/nba/nbaChampionRuntime";
 import { etSlateDateToUtcWindow } from "./etSlateDate";
 import {
   buildNbaDailyEdgeGameDto,
@@ -40,6 +44,8 @@ import {
   matchSplitsRow,
   type NbaSplitsRow,
 } from "./nbaSplitsClient";
+
+assertNbaChampionRuntime();
 import {
   fetchNbaOpportunities,
   matchOpportunitiesForGame,
@@ -253,36 +259,14 @@ export async function buildNbaDailyEdgePipeline(date: string): Promise<NbaDailyE
     const prov = provenanceByGame.get(s.game_external_id);
     if (prov === undefined) return [];
     const lines = linesByExtId.get(s.game_external_id) ?? [];
-    // v0 active. v1 stays parked as research.
-    const pred = runNbaAutoModelV1(s, "t60_locked");
+    const pred = runNbaAutoModelV2(s, "t60_locked", {
+      bookCount: new Set(lines.map((line) => line.sportsbook)).size,
+    });
     const splitsRow = matchSplitsRow(
       splits,
       s.home_team.abbreviation,
       s.away_team.abbreviation,
     );
-    // 2026-06-10 UI honesty fix: demote tier when public splits absent.
-    // The model's deriveTier (nbaAutoModelV1.ts:77-86) computes tier from
-    // ratings + market + injuries — splits are NOT in the calc. Without
-    // this override, a card with `has_splits=false` still gets tier="high"
-    // which (a) lets gradeNbaMarket return raw confidence + best_angle
-    // eligibility, and (b) makes the persisted snapshot claim "high data
-    // quality" while a key data source is missing.
-    //
-    // When splits are missing, downgrade tier from "high" → "medium" so:
-    //   • gradeNbaMarket applies confidence cap (52)
-    //   • best_angle eligibility blocked (requires tier="high")
-    //   • snapshot.data_integrity.data_quality_tier reads "medium" honestly
-    //
-    // Pick direction is unchanged — only confidence/grade label downgrade.
-    // "low"/"fallback"/"medium" tiers stay as-is (downgrade-only, never
-    // promote).
-    if (splitsRow === null && pred.audit.data_quality_tier === "high") {
-      pred.audit.data_quality_tier = "medium";
-      pred.audit.model_integrity_notes = [
-        ...pred.audit.model_integrity_notes,
-        "data_quality_tier downgraded high → medium: public splits unavailable for this matchup.",
-      ];
-    }
     const gameOpps = matchOpportunitiesForGame(
       opportunities,
       s.home_team.abbreviation,
@@ -296,11 +280,44 @@ export async function buildNbaDailyEdgePipeline(date: string): Promise<NbaDailyE
       splitsRow,
       opportunities: gameOpps,
     });
-    // NBA-P0 — overlay V2 + multi-book consensus + grounding onto the DTO
-    // (projection + ML/total intel) and attach the audit substrate. This is
-    // what makes the card grounded-but-autonomous instead of single-book V1.
-    const groundingAudit = applyNbaGroundingOverlay(dto, s, lines, "t60_locked", splitsRow);
-    dto.grounding_audit = groundingAudit as unknown as Record<string, unknown>;
+    // Internal-only market-marriage audit. The score remains independent-first;
+    // robust same-book market evidence still informs exact-price economics and
+    // grades through buildNbaGameIntelligence. No unvalidated continuous market
+    // blend or split-only flip is allowed to rewrite the score.
+    const consensus = buildNbaMarketConsensus(lines
+      .filter((line) => line.side !== null && (line.market_type === "moneyline" || line.market_type === "spread" || line.market_type === "total"))
+      .map((line) => ({
+        sportsbook: line.sportsbook,
+        market_type: line.market_type as "moneyline" | "spread" | "total",
+        side: line.side!,
+        line_value: line.line_value,
+        odds_american: line.odds_american,
+      })));
+    dto.grounding_audit = {
+      release: NBA_MARKET_MARRIAGE_RELEASE,
+      independent_primary: true,
+      independent_projection: {
+        home_score: pred.predicted_home_score,
+        away_score: pred.predicted_away_score,
+        total: pred.predicted_total,
+        margin_home: pred.predicted_home_score - pred.predicted_away_score,
+      },
+      market_consensus: {
+        home_moneyline_probability: consensus.mlHomeNoVig,
+        spread_home: consensus.spreadHome,
+        total: consensus.totalLine,
+        strength: consensus.consensusStrength,
+        accepted_books: {
+          moneyline: consensus.mlAcceptedBooks,
+          spread: consensus.spreadAcceptedBooks,
+          total: consensus.totalAcceptedBooks,
+        },
+      },
+      forecast_correction: {
+        applied: false,
+        reason: "no NBA forecast correction has cleared chronological validation",
+      },
+    };
     return [dto];
   });
 

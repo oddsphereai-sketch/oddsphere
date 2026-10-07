@@ -38,6 +38,11 @@ import type {
   NbaSplitsTotal,
 } from "./nbaSplitsClient";
 import type { NbaOpportunity } from "./nbaOpportunitiesClient";
+import {
+  buildNbaMarketConsensus,
+  type NbaMarketConsensus,
+} from "../../automodel/nba/nbaMarketConsensus";
+import { computeNbaMarketProbabilities } from "../../automodel/nba/nbaDistribution";
 
 // ─── Raw per-book line row (subset of `lines` table columns) ───────
 
@@ -198,9 +203,14 @@ function bestPriceFor(
   lines: NbaLineRow[],
   market: "moneyline" | "spread" | "total",
   side: "home" | "away" | "over" | "under",
+  targetLine: number | null = null,
 ): { row: NbaLineRow | null; perBook: PerBookOdds[] } {
   const matches = lines
-    .filter((l) => l.market_type === market && l.side === side)
+    .filter((l) =>
+      l.market_type === market &&
+      l.side === side &&
+      (targetLine === null || (l.line_value !== null && Math.abs(l.line_value - targetLine) < 0.01))
+    )
     .map((l) => ({
       sportsbook: l.sportsbook,
       side: side,
@@ -213,12 +223,62 @@ function bestPriceFor(
   let best: NbaLineRow | null = null;
   for (const l of lines) {
     if (l.market_type !== market || l.side !== side) continue;
+    if (targetLine !== null && (l.line_value === null || Math.abs(l.line_value - targetLine) >= 0.01)) continue;
     if (l.odds_american === null) continue;
     if (best === null || (l.odds_american > (best.odds_american ?? -Infinity))) {
       best = l;
     }
   }
   return { row: best, perBook: matches };
+}
+
+/**
+ * Fair-price reference built only from complete two-sided quotes at one book
+ * and one exact line. This prevents a favorable execution price at one book
+ * from being de-vigged against the opposing price or a different handicap at
+ * another book.
+ */
+export function coherentNoVigReference(opts: {
+  lines: ReadonlyArray<NbaLineRow>;
+  market: "moneyline" | "spread" | "total";
+  pickSide: "home" | "away" | "over" | "under";
+  pickLine: number | null;
+}): { probability: number | null; books: string[] } {
+  const otherSide = opts.pickSide === "home" ? "away"
+    : opts.pickSide === "away" ? "home"
+    : opts.pickSide === "over" ? "under" : "over";
+  const byBook = new Map<string, { pick: NbaLineRow | null; other: NbaLineRow | null }>();
+  for (const line of opts.lines) {
+    if (line.market_type !== opts.market || line.odds_american === null) continue;
+    const expectedLine = opts.market === "moneyline" ? null
+      : opts.market === "spread" && opts.pickLine !== null && line.side === otherSide ? -opts.pickLine
+      : opts.pickLine;
+    if (
+      opts.market !== "moneyline" &&
+      (expectedLine === null || line.line_value === null || Math.abs(line.line_value - expectedLine) >= 0.01)
+    ) continue;
+    const pair = byBook.get(line.sportsbook) ?? { pick: null, other: null };
+    if (line.side === opts.pickSide) pair.pick = line;
+    if (line.side === otherSide) pair.other = line;
+    byBook.set(line.sportsbook, pair);
+  }
+  const probabilities: Array<{ book: string; probability: number }> = [];
+  for (const [book, pair] of byBook) {
+    if (pair.pick?.odds_american === null || pair.pick?.odds_american === undefined) continue;
+    if (pair.other?.odds_american === null || pair.other?.odds_american === undefined) continue;
+    const noVig = noVigPair({
+      sideAAmerican: pair.pick.odds_american,
+      sideBAmerican: pair.other.odds_american,
+    });
+    if (noVig) probabilities.push({ book, probability: noVig.sideA });
+  }
+  if (probabilities.length === 0) return { probability: null, books: [] };
+  const sorted = probabilities.map((row) => row.probability).sort((a, b) => a - b);
+  const middle = Math.floor(sorted.length / 2);
+  const probability = sorted.length % 2 === 1
+    ? sorted[middle]!
+    : (sorted[middle - 1]! + sorted[middle]!) / 2;
+  return { probability, books: probabilities.map((row) => row.book).sort() };
 }
 
 function earliestFetchedAt(lines: NbaLineRow[]): string | null {
@@ -228,6 +288,45 @@ function earliestFetchedAt(lines: NbaLineRow[]): string | null {
     if (earliest === null || l.fetched_at < earliest) earliest = l.fetched_at;
   }
   return earliest;
+}
+
+function exactLineProbability(opts: {
+  prediction: NbaAutoModelOutput;
+  spreadHome: number | null;
+  total: number | null;
+}): {
+  mlHome: number;
+  spreadHome: number | null;
+  totalOver: number | null;
+  cap: number;
+} | null {
+  const candidate = opts.prediction as NbaAutoModelOutput & {
+    v1_probabilities?: { margin_sd_used: number; total_sd_used: number };
+    v1_breakdown?: { applied_caps: Array<{ cap: number }> };
+  };
+  if (!candidate.v1_probabilities) return null;
+  const probabilities = computeNbaMarketProbabilities({
+    projected_home_margin: opts.prediction.predicted_home_score - opts.prediction.predicted_away_score,
+    projected_total: opts.prediction.predicted_total,
+    market_spread_home: opts.spreadHome,
+    market_total: opts.total,
+    margin_sd_base: candidate.v1_probabilities.margin_sd_used,
+    total_sd_base: candidate.v1_probabilities.total_sd_used,
+  });
+  const caps = [
+    opts.prediction.audit.confidence_ceiling,
+    ...(candidate.v1_breakdown?.applied_caps.map((entry) => entry.cap) ?? []),
+  ];
+  return {
+    mlHome: probabilities.ml_home_win_prob,
+    spreadHome: probabilities.spread_home_cover_prob,
+    totalOver: probabilities.total_over_prob,
+    cap: Math.min(...caps),
+  };
+}
+
+function confidenceFromProbability(probability: number, cap: number): number {
+  return Math.round(Math.max(50, Math.min(cap, Math.max(probability, 1 - probability) * 100)) * 10) / 10;
 }
 
 function uniqueBooks(lines: NbaLineRow[]): string[] {
@@ -277,6 +376,7 @@ function buildMl(
   snapshot: NbaGameSnapshot,
   prediction: NbaAutoModelOutput,
   lines: NbaLineRow[],
+  consensus: NbaMarketConsensus,
   splitsRow: NbaSplitsRow | null,
   opps: NbaOpportunity[],
 ): MarketIntelligence {
@@ -292,15 +392,18 @@ function buildMl(
   const pickOdds = pickBest.row?.odds_american ?? null;
   const otherOdds = otherBest.row?.odds_american ?? null;
 
-  const noVig = noVigPair({ sideAAmerican: pickOdds, sideBAmerican: otherOdds });
-  const noVigPick = noVig === null ? null : noVig.sideA;
+  const noVigPick = pickSide === "home" ? consensus.mlHomeNoVig : consensus.mlAwayNoVig;
 
-  const modelConf = prediction.ml_confidence;
-  const modelHomeProb =
+  const exact = exactLineProbability({ prediction, spreadHome: null, total: null });
+  const modelHomeProb = exact?.mlHome ?? (
     prediction.predicted_ml_winner === "home"
-      ? modelConf / 100
-      : 1 - modelConf / 100;
+      ? prediction.ml_confidence / 100
+      : 1 - prediction.ml_confidence / 100
+  );
   const modelProbOnPick = pickSide === "home" ? modelHomeProb : 1 - modelHomeProb;
+  const modelConf = exact === null
+    ? prediction.ml_confidence
+    : confidenceFromProbability(modelProbOnPick, exact.cap);
 
   let band: MarketConflictBand;
   let edgePp: number | null;
@@ -316,7 +419,7 @@ function buildMl(
   const grade = gradeNbaMarket({
     pick: pickSide,
     confidence: modelConf,
-    band,
+    band: pickOdds === null || noVigPick === null ? "market_unavailable" : band,
     edge: edgePp === null ? 0 : edgePp / 100,
     dataQualityTier: prediction.audit.data_quality_tier,
     injuriesKnown:
@@ -388,22 +491,33 @@ function buildSpread(
   snapshot: NbaGameSnapshot,
   prediction: NbaAutoModelOutput,
   lines: NbaLineRow[],
+  consensus: NbaMarketConsensus,
   splitsRow: NbaSplitsRow | null,
   opps: NbaOpportunity[],
 ): MarketIntelligence {
-  const pickSide = prediction.predicted_spread_side;
-  const pickBest = bestPriceFor(lines, "spread", pickSide);
+  const lineHomeFromMarket = consensus.spreadHome;
+  const exact = exactLineProbability({ prediction, spreadHome: lineHomeFromMarket, total: null });
+  const pickSide: "home" | "away" = exact?.spreadHome === null || exact?.spreadHome === undefined
+    ? prediction.predicted_spread_side
+    : exact.spreadHome >= 0.5 ? "home" : "away";
+  const pickTargetLine = lineHomeFromMarket === null
+    ? null
+    : pickSide === "home" ? lineHomeFromMarket : -lineHomeFromMarket;
+  const pickBest = bestPriceFor(lines, "spread", pickSide, pickTargetLine);
   const otherSide = pickSide === "home" ? "away" : "home";
-  const otherBest = bestPriceFor(lines, "spread", otherSide);
+  const otherBest = bestPriceFor(lines, "spread", otherSide, pickTargetLine === null ? null : -pickTargetLine);
   const pickOdds = pickBest.row?.odds_american ?? null;
   const otherOdds = otherBest.row?.odds_american ?? null;
-  const pickLine = pickBest.row?.line_value ?? null;
+  const pickLine = pickTargetLine;
 
-  const noVig = noVigPair({ sideAAmerican: pickOdds, sideBAmerican: otherOdds });
-  const noVigPick = noVig === null ? null : noVig.sideA;
+  const noVigPick = coherentNoVigReference({ lines, market: "spread", pickSide, pickLine }).probability;
 
-  const modelConf = prediction.spread_confidence;
-  const lineHomeFromMarket = pickSide === "home" ? pickLine : pickLine === null ? null : -pickLine;
+  const modelProb = exact?.spreadHome === null || exact?.spreadHome === undefined
+    ? prediction.spread_confidence / 100
+    : pickSide === "home" ? exact.spreadHome : 1 - exact.spreadHome;
+  const modelConf = exact === null
+    ? prediction.spread_confidence
+    : confidenceFromProbability(modelProb, exact.cap);
   // CONVENTION BOUNDARY (2026-06-10 bug fix):
   // `blendPosterior` produces `posterior_spread = home_score - away_score`
   // so its `predicted_spread_home` is POSITIVE when home wins (model convention).
@@ -436,7 +550,7 @@ function buildSpread(
   const grade = gradeNbaMarket({
     pick: pickSide,
     confidence: modelConf,
-    band,
+    band: pickOdds === null || noVigPick === null ? "market_unavailable" : band,
     edge: edgePoints === null ? 0 : edgePoints / 10,
     dataQualityTier: prediction.audit.data_quality_tier,
     injuriesKnown:
@@ -494,7 +608,7 @@ function buildSpread(
     opp_warnings: opp?.warnings ?? [],
     opp_possibly_stale: opp?.possibly_stale ?? false,
     model_confidence: modelConf,
-    model_prob_on_pick: modelConf / 100,
+    model_prob_on_pick: modelProb,
     edge_prob_pp: null,
     edge_points: edgePoints,
     conflict_band: band,
@@ -516,21 +630,28 @@ function buildTotal(
   snapshot: NbaGameSnapshot,
   prediction: NbaAutoModelOutput,
   lines: NbaLineRow[],
+  consensus: NbaMarketConsensus,
   splitsRow: NbaSplitsRow | null,
   opps: NbaOpportunity[],
 ): MarketIntelligence {
-  const pickSide = prediction.predicted_total_side;
-  const pickBest = bestPriceFor(lines, "total", pickSide);
+  const line = consensus.totalLine;
+  const exact = exactLineProbability({ prediction, spreadHome: null, total: line });
+  const pickSide: "over" | "under" = exact?.totalOver === null || exact?.totalOver === undefined
+    ? prediction.predicted_total_side
+    : exact.totalOver >= 0.5 ? "over" : "under";
+  const pickBest = bestPriceFor(lines, "total", pickSide, line);
   const otherSide = pickSide === "over" ? "under" : "over";
-  const otherBest = bestPriceFor(lines, "total", otherSide);
+  const otherBest = bestPriceFor(lines, "total", otherSide, line);
   const pickOdds = pickBest.row?.odds_american ?? null;
   const otherOdds = otherBest.row?.odds_american ?? null;
-  const line = pickBest.row?.line_value ?? otherBest.row?.line_value ?? null;
+  const noVigPick = coherentNoVigReference({ lines, market: "total", pickSide, pickLine: line }).probability;
 
-  const noVig = noVigPair({ sideAAmerican: pickOdds, sideBAmerican: otherOdds });
-  const noVigPick = noVig === null ? null : noVig.sideA;
-
-  const modelConf = prediction.total_confidence;
+  const modelProb = exact?.totalOver === null || exact?.totalOver === undefined
+    ? prediction.total_confidence / 100
+    : pickSide === "over" ? exact.totalOver : 1 - exact.totalOver;
+  const modelConf = exact === null
+    ? prediction.total_confidence
+    : confidenceFromProbability(modelProb, exact.cap);
   const modelTotal = prediction.predicted_total;
   let band: MarketConflictBand;
   let edgePoints: number | null;
@@ -546,7 +667,7 @@ function buildTotal(
   const grade = gradeNbaMarket({
     pick: pickSide,
     confidence: modelConf,
-    band,
+    band: pickOdds === null || noVigPick === null ? "market_unavailable" : band,
     edge: edgePoints === null ? 0 : edgePoints / 15,
     dataQualityTier: prediction.audit.data_quality_tier,
     injuriesKnown:
@@ -598,7 +719,7 @@ function buildTotal(
     opp_warnings: opp?.warnings ?? [],
     opp_possibly_stale: opp?.possibly_stale ?? false,
     model_confidence: modelConf,
-    model_prob_on_pick: modelConf / 100,
+    model_prob_on_pick: modelProb,
     edge_prob_pp: null,
     edge_points: edgePoints,
     conflict_band: band,
@@ -626,9 +747,18 @@ export function buildNbaGameIntelligence(opts: {
   opportunities: NbaOpportunity[];
   injuriesSource: "espn" | "none";
 }): NbaGameIntelligence {
-  const ml = buildMl(opts.snapshot, opts.prediction, opts.lines, opts.splitsRow, opts.opportunities);
-  const spread = buildSpread(opts.snapshot, opts.prediction, opts.lines, opts.splitsRow, opts.opportunities);
-  const total = buildTotal(opts.snapshot, opts.prediction, opts.lines, opts.splitsRow, opts.opportunities);
+  const consensus = buildNbaMarketConsensus(opts.lines
+    .filter((line) => line.side !== null && (line.market_type === "moneyline" || line.market_type === "spread" || line.market_type === "total"))
+    .map((line) => ({
+      sportsbook: line.sportsbook,
+      market_type: line.market_type as "moneyline" | "spread" | "total",
+      side: line.side!,
+      line_value: line.line_value,
+      odds_american: line.odds_american,
+    })));
+  const ml = buildMl(opts.snapshot, opts.prediction, opts.lines, consensus, opts.splitsRow, opts.opportunities);
+  const spread = buildSpread(opts.snapshot, opts.prediction, opts.lines, consensus, opts.splitsRow, opts.opportunities);
+  const total = buildTotal(opts.snapshot, opts.prediction, opts.lines, consensus, opts.splitsRow, opts.opportunities);
 
   const books = uniqueBooks(opts.lines);
   const sources: SourceBadges = {

@@ -92,7 +92,9 @@ export function applyNbaGroundingOverlay(
   splitsRow: NbaSplitsRow | null = null,
 ): NbaGroundingAudit {
   // 1 — raw V2.
-  const v2 = runNbaAutoModelV2(snapshot, stage, { isPlayoffs: true });
+  const v2 = runNbaAutoModelV2(snapshot, stage, {
+    isPlayoffs: snapshot.season_type === "postseason",
+  });
   const rawMargin = v2.predicted_home_score - v2.predicted_away_score;
 
   // 2 — clean consensus from ALL books.

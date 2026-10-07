@@ -15,13 +15,13 @@
  *   • Best-effort series context: queries finished prior NBA games
  *     between the same team pair to derive game_number / series score.
  *
- * Ratings selection: prefer `season_type='playoffs'` row when present
- * (small-sample but most relevant for Finals), else fall back to
- * `season_type='regular'`. Both are stored separately in the table; the
- * builder reads both and picks the better one per team.
+ * Ratings selection is competition-phase aware. Regular-season slates use a
+ * regressed previous-season/current-season handoff; postseason slates may use
+ * the current postseason pack with regular-season fallback.
  */
 
 import { supabase } from "../../db/supabase";
+import { isPublicallyTracked } from "../../config/officialTrackingStart";
 import { deriveSeriesContext, type PriorGameInput } from "../../automodel/nba/seriesContext";
 import type {
   NbaDataQuality,
@@ -41,6 +41,10 @@ type GameRow = {
   home_team_id: number | null;
   away_team_id: number | null;
   game_date: string;
+  slate_date: string;
+  season_type: string | null;
+  postseason: boolean | null;
+  status: string | null;
   home_score: number | null;
   away_score: number | null;
 };
@@ -62,7 +66,7 @@ type LineRow = {
 };
 
 // Phase 7B / 7C — nba_team_ratings row shape. v20 added Four Factors columns.
-type NbaTeamRatingsRow = {
+export type NbaTeamRatingsRow = {
   team_id: number;
   season: number;
   season_type: "regular" | "playoffs";
@@ -184,14 +188,96 @@ export async function buildNbaFeatureSnapshotsWithProvenance(
 
 const PRIOR_WINDOW_DAYS = 30;
 
-function pickBestRatingsRow(
-  rows: NbaTeamRatingsRow[],
-): NbaTeamRatingsRow | null {
-  if (rows.length === 0) return null;
-  const playoffRow = rows.find((r) => r.season_type === "playoffs");
-  if (playoffRow !== undefined) return playoffRow;
-  const regularRow = rows.find((r) => r.season_type === "regular");
-  return regularRow ?? rows[0];
+export const NBA_EARLY_SEASON_PRIOR_CARRY = 0.6;
+export const NBA_EARLY_SEASON_CURRENT_SAMPLE_K = 8;
+
+/** Basketball Reference keys an NBA season by its END year. */
+export function nbaRatingsSeasonForSlateDate(date: string): number {
+  const year = Number.parseInt(date.slice(0, 4), 10);
+  const month = Number.parseInt(date.slice(5, 7), 10);
+  if (!Number.isFinite(year) || !Number.isFinite(month)) {
+    throw new Error(`invalid NBA slate date: ${date}`);
+  }
+  return month >= 10 ? year + 1 : year;
+}
+
+const NBA_RATING_BASELINES = {
+  off_rating: 114.5,
+  def_rating: 114.5,
+  net_rating: 0,
+  pace: 99.5,
+} as const;
+
+function blendEarlySeasonValue(args: {
+  current: number | null;
+  previous: number | null;
+  baseline: number;
+  currentGames: number;
+}): number | null {
+  const prior = args.previous === null
+    ? args.baseline
+    : args.baseline + NBA_EARLY_SEASON_PRIOR_CARRY * (args.previous - args.baseline);
+  if (args.current === null || args.currentGames <= 0) {
+    return args.previous === null ? null : prior;
+  }
+  const currentWeight = args.currentGames / (args.currentGames + NBA_EARLY_SEASON_CURRENT_SAMPLE_K);
+  return currentWeight * args.current + (1 - currentWeight) * prior;
+}
+
+/**
+ * Early-season Bayesian handoff. Previous-season strength is regressed 40%
+ * toward league average before current results receive increasing authority.
+ * From December onward the current season row is authoritative.
+ */
+export function blendNbaRegularSeasonRatings(args: {
+  current: NbaTeamRatingsRow | undefined;
+  previous: NbaTeamRatingsRow | undefined;
+  currentGames: number;
+  slateDate: string;
+  ratingsSeason: number;
+}): NbaTeamRatingsRow | undefined {
+  const { current, previous } = args;
+  if (!current && !previous) return undefined;
+  const month = Number.parseInt(args.slateDate.slice(5, 7), 10);
+  const currentPopulated = current !== undefined && [
+    current.off_rating,
+    current.def_rating,
+    current.net_rating,
+    current.pace,
+  ].some((value) => value !== null);
+  if (month >= 12 && currentPopulated) return current;
+  const pickFactor = (key: keyof Pick<NbaTeamRatingsRow,
+    "off_efg_pct" | "off_tov_pct" | "off_orb_pct" | "off_ft_rate" |
+    "def_efg_pct" | "def_tov_pct" | "def_drb_pct" | "def_ft_rate_allowed"
+  >): number | null => {
+    const cur = current?.[key] ?? null;
+    const prior = previous?.[key] ?? null;
+    if (cur === null) return prior;
+    if (prior === null || args.currentGames <= 0) return cur;
+    const weight = args.currentGames / (args.currentGames + NBA_EARLY_SEASON_CURRENT_SAMPLE_K);
+    return weight * cur + (1 - weight) * prior;
+  };
+  const template = current ?? previous!;
+  return {
+    ...template,
+    season: args.ratingsSeason,
+    season_type: "regular",
+    off_rating: blendEarlySeasonValue({ current: current?.off_rating ?? null, previous: previous?.off_rating ?? null, baseline: NBA_RATING_BASELINES.off_rating, currentGames: args.currentGames }),
+    def_rating: blendEarlySeasonValue({ current: current?.def_rating ?? null, previous: previous?.def_rating ?? null, baseline: NBA_RATING_BASELINES.def_rating, currentGames: args.currentGames }),
+    net_rating: blendEarlySeasonValue({ current: current?.net_rating ?? null, previous: previous?.net_rating ?? null, baseline: NBA_RATING_BASELINES.net_rating, currentGames: args.currentGames }),
+    pace: blendEarlySeasonValue({ current: current?.pace ?? null, previous: previous?.pace ?? null, baseline: NBA_RATING_BASELINES.pace, currentGames: args.currentGames }),
+    off_efg_pct: pickFactor("off_efg_pct"),
+    off_tov_pct: pickFactor("off_tov_pct"),
+    off_orb_pct: pickFactor("off_orb_pct"),
+    off_ft_rate: pickFactor("off_ft_rate"),
+    def_efg_pct: pickFactor("def_efg_pct"),
+    def_tov_pct: pickFactor("def_tov_pct"),
+    def_drb_pct: pickFactor("def_drb_pct"),
+    def_ft_rate_allowed: pickFactor("def_ft_rate_allowed"),
+    source: `${template.source}:early-season-prior`,
+    source_url: current?.source_url ?? previous!.source_url,
+    fetched_at: current?.fetched_at ?? previous!.fetched_at,
+  };
 }
 
 function provenanceFromRow(
@@ -234,7 +320,7 @@ async function runBuild(
   const { data: gameRows, error: gamesErr } = await supabase
     .from("games")
     .select(
-      "id, external_id, sport, home_team_id, away_team_id, game_date, home_score, away_score",
+      "id, external_id, sport, home_team_id, away_team_id, game_date, slate_date, season_type, postseason, status, home_score, away_score",
     )
     .eq("sport", "nba")
     .gte("game_date", startISO)
@@ -293,11 +379,12 @@ async function runBuild(
   const { data: priorRows, error: priorErr } = await supabase
     .from("games")
     .select(
-      "id, external_id, sport, home_team_id, away_team_id, game_date, home_score, away_score",
+      "id, external_id, sport, home_team_id, away_team_id, game_date, slate_date, season_type, postseason, status, home_score, away_score",
     )
     .eq("sport", "nba")
     .gte("game_date", priorStartISO)
     .lt("game_date", startISO)
+    .eq("status", "STATUS_FINAL")
     .not("home_score", "is", null)
     .not("away_score", "is", null);
   if (priorErr !== null) {
@@ -306,11 +393,11 @@ async function runBuild(
   const priorGames: GameRow[] = (priorRows ?? []) as GameRow[];
 
   // 4b) NBA team ratings (Phase 7B v19 / Phase 7C v20 — Four Factors).
-  // Pulls both regular + playoffs rows for the slate teams' season.
-  // v0 uses pickBestRatingsRow (playoff preferred) as before; v1 uses
-  // the regularByTeam + playoffByTeam packs separately for shrinkage.
-  const slateSeason = Number.parseInt(date.slice(0, 4), 10);
-  const ratingsByTeam = new Map<number, NbaTeamRatingsRow>();
+  // Pull both the previous/current regular-season rows and the current
+  // postseason row. October-November regular-season slates use a regressed
+  // prior-season handoff; postseason games use the postseason pack when it
+  // exists and otherwise fall back to the regular-season pack.
+  const slateSeason = nbaRatingsSeasonForSlateDate(date);
   const regularByTeam = new Map<number, NbaTeamRatingsRow>();
   const playoffByTeam = new Map<number, NbaTeamRatingsRow>();
   if (teamIds.size > 0 && Number.isFinite(slateSeason)) {
@@ -320,7 +407,7 @@ async function runBuild(
         "team_id, season, season_type, off_rating, def_rating, net_rating, pace, off_efg_pct, off_tov_pct, off_orb_pct, off_ft_rate, def_efg_pct, def_tov_pct, def_drb_pct, def_ft_rate_allowed, source, source_url, fetched_at",
       )
       .in("team_id", Array.from(teamIds))
-      .eq("season", slateSeason);
+      .in("season", [slateSeason - 1, slateSeason]);
     if (ratingsErr !== null) {
       // Non-fatal: missing/erroring ratings → null fields, fallback tier.
       // Log but continue. (Includes the case where v20 migration hasn't
@@ -331,17 +418,28 @@ async function runBuild(
         `buildNbaFeatureSnapshots: nba_team_ratings query failed (continuing with null ratings): ${ratingsErr.message}`,
       );
     }
-    const rowsByTeam = new Map<number, NbaTeamRatingsRow[]>();
+    const currentRegular = new Map<number, NbaTeamRatingsRow>();
+    const previousRegular = new Map<number, NbaTeamRatingsRow>();
     for (const r of (ratingsRows ?? []) as NbaTeamRatingsRow[]) {
-      const arr = rowsByTeam.get(r.team_id) ?? [];
-      arr.push(r);
-      rowsByTeam.set(r.team_id, arr);
-      if (r.season_type === "regular") regularByTeam.set(r.team_id, r);
-      else if (r.season_type === "playoffs") playoffByTeam.set(r.team_id, r);
+      if (r.season === slateSeason && r.season_type === "regular") currentRegular.set(r.team_id, r);
+      else if (r.season === slateSeason - 1 && r.season_type === "regular") previousRegular.set(r.team_id, r);
+      else if (r.season === slateSeason && r.season_type === "playoffs") playoffByTeam.set(r.team_id, r);
     }
-    for (const [teamId, rows] of rowsByTeam) {
-      const best = pickBestRatingsRow(rows);
-      if (best !== null) ratingsByTeam.set(teamId, best);
+    for (const teamId of teamIds) {
+      const currentGames = priorGames.filter((game) =>
+        game.status === "STATUS_FINAL" &&
+        game.season_type === "regular" &&
+        isPublicallyTracked("nba", game.slate_date) &&
+        (game.home_team_id === teamId || game.away_team_id === teamId)
+      ).length;
+      const blended = blendNbaRegularSeasonRatings({
+        current: currentRegular.get(teamId),
+        previous: previousRegular.get(teamId),
+        currentGames,
+        slateDate: date,
+        ratingsSeason: slateSeason,
+      });
+      if (blended) regularByTeam.set(teamId, blended);
     }
   }
 
@@ -402,8 +500,9 @@ async function runBuild(
     // Phase 7C: ALSO hydrate the separate regular-season and playoff
     // rating packs (with Four Factors). v0 keeps reading the single
     // `off_rating` etc. fields (back-compat). v1 reads the dual packs.
-    const homeRatingsRow = ratingsByTeam.get(homeTeam.id) ?? null;
-    const awayRatingsRow = ratingsByTeam.get(awayTeam.id) ?? null;
+    const isPostseason = g.postseason === true || g.season_type === "postseason";
+    const homeRatingsRow = (isPostseason ? playoffByTeam.get(homeTeam.id) : undefined) ?? regularByTeam.get(homeTeam.id) ?? null;
+    const awayRatingsRow = (isPostseason ? playoffByTeam.get(awayTeam.id) : undefined) ?? regularByTeam.get(awayTeam.id) ?? null;
 
     // Compute per-team playoff sample size from prior NBA games involving
     // each team (finished, with scores) — used by v1 shrinkage.
@@ -537,6 +636,7 @@ async function runBuild(
       game_external_id: g.external_id,
       slate_date: date,
       game_time_iso: g.game_date ?? null,
+      season_type: isPostseason ? "postseason" : "regular",
       home_team: homeTeamSnap,
       away_team: awayTeamSnap,
       home_injuries: homeInjuries,
