@@ -10,7 +10,7 @@ import {
   type CfbForwardStoredEvidence,
   type CfbForwardTeamQuarterbacks,
 } from "../lib/services/football/cfbForwardEvidence";
-import { CFB_FORWARD_MAX_QB_TEAMS_PER_RUN, latestCfbPayloadTimestamp, planCfbPriorResultReads, selectCfbForwardCollectionWindow, selectCfbModelCoveredWeeklyGames, selectQuarterbackTeams } from "../lib/services/football/cfbForwardEvidenceWriter";
+import { CFB_FORWARD_MAX_QB_TEAMS_PER_RUN, latestCfbPayloadTimestamp, planCfbPriorResultReads, retainLatestNonemptyCfbQuarterbacks, selectCfbForwardCollectionWindow, selectCfbModelCoveredWeeklyGames, selectQuarterbackTeams } from "../lib/services/football/cfbForwardEvidenceWriter";
 import { buildCfbMemberFixture } from "../lib/services/football/cfbMemberFixture";
 import {
   CFB_MARKET_SHARP_AWARE_CANDIDATE_RELEASE,
@@ -146,12 +146,14 @@ const qbPlans = Array.from({ length: 20 }, (_, index) => {
   return { game: value, stage: index === 19 ? "t60" as const : "opening" as const };
 });
 const qbTeams = qbPlans.flatMap((plan) => [plan.game.away, plan.game.home]);
-const selectedQbTeams = selectQuarterbackTeams({ plans: qbPlans, teams: qbTeams, priorQuarterbacks: new Map(), maximum: CFB_FORWARD_MAX_QB_TEAMS_PER_RUN });
+const selectedQbTeams = selectQuarterbackTeams({ plans: qbPlans, teams: qbTeams, priorQuarterbacks: new Map(), maximum: CFB_FORWARD_MAX_QB_TEAMS_PER_RUN, now: "2026-09-05T09:00:00.000Z" });
 assert.equal(selectedQbTeams.length, 24);
 assert.ok(selectedQbTeams.some((team) => team.id === qbPlans[19]!.game.away.id));
 assert.ok(selectedQbTeams.some((team) => team.id === qbPlans[19]!.game.home.id), "T-60 teams must outrank opening context inside the hard budget");
 const prior = new Map<number, CfbForwardTeamQuarterbacks>([[qbPlans[19]!.game.away.id, quarterbacks(qbPlans[19]!.game.away)]]);
-assert.equal(selectQuarterbackTeams({ plans: qbPlans, teams: qbTeams, priorQuarterbacks: prior, maximum: CFB_FORWARD_MAX_QB_TEAMS_PER_RUN }).some((team) => team.id === qbPlans[19]!.game.away.id), false, "previous immutable QB context must be reused rather than re-requested");
+assert.equal(selectQuarterbackTeams({ plans: qbPlans, teams: qbTeams, priorQuarterbacks: prior, maximum: CFB_FORWARD_MAX_QB_TEAMS_PER_RUN, now: "2026-09-05T09:00:00.000Z" }).some((team) => team.id === qbPlans[19]!.game.away.id), true, "stale T-60 QB context must be refreshed rather than frozen from an earlier capture");
+const emptyFreshQuarterbacks = new Map<number, CfbForwardTeamQuarterbacks>([[qbPlans[19]!.game.away.id, { ...quarterbacks(qbPlans[19]!.game.away), capturedAt: "2026-09-05T09:00:00.000Z", expectedStartingQuarterback: null, activeQuarterbacks: [], starterStatus: "unknown", projectionMethod: "no_active_quarterback" }]]);
+assert.equal(retainLatestNonemptyCfbQuarterbacks(prior, emptyFreshQuarterbacks).get(qbPlans[19]!.game.away.id)?.activeQuarterbacks.length, 1, "an empty refresh must retain the last verified nonempty QB roster");
 
 const openingRows = frozen.slice(0, 2).map((forecast, index) => evidenceRow(game({ id: forecast.providerGameId, start: forecast.gameStartsAt, awayName: forecast.awayTeam, homeName: forecast.homeTeam }), forecast, 2, `opening-${index}`));
 const weekOneRows = [weekOneGame, fcs].map((value, index) => evidenceRow(value, getCfbV1ForecastForGame({ game: value }).forecast, 2, `week-one-${index}`));

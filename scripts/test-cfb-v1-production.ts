@@ -232,8 +232,8 @@ const priorQuarterbacks = new Map([
   [66, verifiedAvailability.home],
   [99, { ...verifiedAvailability.away, expectedStartingQuarterback: verifiedAvailability.home.activeQuarterbacks[0]!, activeQuarterbacks: [verifiedAvailability.home.activeQuarterbacks[0]!] }],
 ]);
-assert.equal(selectQuarterbackTeams({ plans: [{ game: delawareAvailabilityGame, stage: "unlocked" }], teams: [delawareAvailabilityGame.away, delawareAvailabilityGame.home], priorQuarterbacks, maximum: 2 }).length, 0, "unlocked refreshes must reuse bounded current roster evidence");
-assert.equal(selectQuarterbackTeams({ plans: [{ game: delawareAvailabilityGame, stage: "t60" }], teams: [delawareAvailabilityGame.away, delawareAvailabilityGame.home], priorQuarterbacks, maximum: 2 }).length, 0, "T-60 availability updates must reuse immutable roster context rather than open a second provider-fetch path");
+assert.equal(selectQuarterbackTeams({ plans: [{ game: delawareAvailabilityGame, stage: "unlocked" }], teams: [delawareAvailabilityGame.away, delawareAvailabilityGame.home], priorQuarterbacks, maximum: 2, now: "2026-08-25T16:10:00.000Z" }).length, 0, "recent unlocked roster evidence must remain inside the 24-hour refresh boundary");
+assert.equal(selectQuarterbackTeams({ plans: [{ game: delawareAvailabilityGame, stage: "t60" }], teams: [delawareAvailabilityGame.away, delawareAvailabilityGame.home], priorQuarterbacks, maximum: 2, now: lockedAt }).length, 2, "T-60 must refresh both teams when retained roster context predates the final availability window");
 
 const correctedPriorReads = planCfbPriorResultReads({
   before: "2026-09-08",

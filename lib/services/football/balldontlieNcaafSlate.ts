@@ -37,7 +37,7 @@ export type NcaafBookOdds = {
   sportsbook: string;
   observedAt: string;
   /** Price-feed provenance. Older immutable rows omit this and are BALLDONTLIE by contract. */
-  provider?: "balldontlie" | "sharpapi";
+  provider?: "balldontlie" | "sharpapi" | "espn";
   /** Exact upstream event identity when a secondary named-book feed is used. */
   providerEventId?: string;
   /** False keeps a named book in the leave-one-out consensus without offering it as the user-facing target. */

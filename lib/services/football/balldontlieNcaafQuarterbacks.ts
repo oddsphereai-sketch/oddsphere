@@ -1,7 +1,7 @@
 import type { CfbForwardQuarterback, CfbForwardTeamQuarterbacks } from "./cfbForwardEvidence";
 
 export const BALLDONTLIE_NCAAF_QUARTERBACK_RELEASE =
-  "balldontlie_ncaaf_active_qb_context_2026_08_25_r2_team_scoped" as const;
+  "balldontlie_ncaaf_active_qb_context_2026_10_07_r3_refresh_continuity" as const;
 
 export const BALLDONTLIE_NCAAF_ACTIVE_ROSTER_PAGES_PER_TEAM = 2 as const;
 export const BALLDONTLIE_NCAAF_QB_STATS_PAGE_BUDGET = 2 as const;

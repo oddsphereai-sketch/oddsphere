@@ -17,6 +17,8 @@ import {
 } from "./cfbV1Decision";
 
 export const CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE =
+  "cfb_forward_evidence_snapshot_2026_10_07_r35_price_qb_continuity" as const;
+export const CFB_FORWARD_PRICE_QB_PREVIOUS_EVIDENCE_SCHEMA_RELEASE =
   "cfb_forward_evidence_snapshot_2026_10_04_r34_moneyline_market_confirmation" as const;
 export const CFB_FORWARD_MARKET_CONFIRMATION_PREVIOUS_EVIDENCE_SCHEMA_RELEASE =
   "cfb_forward_evidence_snapshot_2026_10_03_r33_display_context_outlook" as const;
@@ -75,8 +77,10 @@ export const CFB_FORWARD_LEGACY_EVIDENCE_SCHEMA_RELEASE =
 export const CFB_FORWARD_INITIAL_EVIDENCE_SCHEMA_RELEASE =
   "cfb_forward_evidence_snapshot_2026_08_25_r1" as const;
 export const CFB_FORWARD_EVIDENCE_COLLECTOR_RELEASE =
-  "cfb_forward_evidence_collector_2026_10_06_r45_midweek_board_coverage" as const;
+  "cfb_forward_evidence_collector_2026_10_07_r46_price_qb_continuity" as const;
 export const CFB_FORWARD_MEMBER_RELEASE =
+  "cfb_v1_member_release_2026_10_07_r49_price_qb_continuity" as const;
+export const CFB_FORWARD_PRICE_QB_PREVIOUS_MEMBER_RELEASE =
   "cfb_v1_member_release_2026_10_04_r48_moneyline_market_confirmation" as const;
 export const CFB_FORWARD_MARKET_CONFIRMATION_PREVIOUS_MEMBER_RELEASE =
   "cfb_v1_member_release_2026_10_03_r47_display_context_outlook" as const;
@@ -290,7 +294,7 @@ export type CfbForwardEvidencePayload = {
   coverage: {
     currentOdds: boolean;
     comparableCurrentBookCount: number;
-    currentOddsProviders: Array<"balldontlie" | "sharpapi">;
+    currentOddsProviders: Array<"balldontlie" | "sharpapi" | "espn">;
     sharpApiOddsFallback: boolean;
     targetExcludedConsensusReady: boolean;
     operationalOpening: boolean;
