@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import rushingAttemptsArtifact from "../lib/services/football/modelArtifacts/nflPlayerPropsRuntimeMarketRushingAttempts.json";
 import {
   NFL_PLAYER_PROPS_BOARD_RELEASE,
   NFL_PLAYER_PROPS_CALIBRATION_RELEASE,
@@ -6,6 +7,7 @@ import {
   NFL_PLAYER_PROPS_MODEL_RELEASE,
   NFL_PLAYER_PROPS_MARKET_COHERENT_PROJECTION_RELEASE,
   NFL_PLAYER_PROPS_QB_ROLE_FLOORS,
+  NFL_PLAYER_PROPS_PORTABLE_ARTIFACT_RELEASE,
   NFL_PLAYER_PROPS_RUNTIME_RELEASE,
   nflPlayerPropsExpectedValue,
   nflPlayerPropsExpectedStarterPassingProjection,
@@ -31,11 +33,21 @@ import {
 } from "../lib/services/football/nflPlayerPropsRuntime";
 import type { NflPlayerPropsExactOffer } from "../lib/services/football/nflPlayerPropsMarketBoard";
 
-assert.equal(NFL_PLAYER_PROPS_RUNTIME_RELEASE, "nfl_player_props_runtime_2026_10_07_r22_market_selective_mean_quintile");
-assert.equal(NFL_PLAYER_PROPS_BOARD_RELEASE, "nfl_player_props_board_2026_10_07_r25_market_selective_mean_quintile");
-assert.equal(NFL_PLAYER_PROPS_MODEL_RELEASE, "nfl_player_props_distribution_model_2026_10_07_r16_market_selective_mean_quintile");
-assert.equal(NFL_PLAYER_PROPS_CALIBRATION_RELEASE, "nfl_player_props_distribution_calibration_2026_10_07_r18_market_selective_mean_quintile");
-assert.equal(NFL_PLAYER_PROPS_DECISION_RELEASE, "nfl_player_props_decision_2026_10_07_r21_market_selective_mean_quintile");
+assert.equal(NFL_PLAYER_PROPS_PORTABLE_ARTIFACT_RELEASE, "nfl_player_props_runtime_2026_10_07_r8_settlement_aligned_rushing_attempts");
+assert.equal(NFL_PLAYER_PROPS_RUNTIME_RELEASE, "nfl_player_props_runtime_2026_10_07_r23_settlement_aligned_rushing_attempts");
+assert.equal(NFL_PLAYER_PROPS_BOARD_RELEASE, "nfl_player_props_board_2026_10_07_r26_settlement_aligned_rushing_attempts");
+assert.equal(NFL_PLAYER_PROPS_MODEL_RELEASE, "nfl_player_props_distribution_model_2026_10_07_r17_settlement_aligned_rushing_attempts");
+assert.equal(NFL_PLAYER_PROPS_CALIBRATION_RELEASE, "nfl_player_props_distribution_calibration_2026_10_07_r19_settlement_aligned_rushing_attempts");
+assert.equal(NFL_PLAYER_PROPS_DECISION_RELEASE, "nfl_player_props_decision_2026_10_07_r22_settlement_aligned_rushing_attempts");
+assert.equal(rushingAttemptsArtifact.model.kind, "weighted_blend");
+assert.deepEqual(rushingAttemptsArtifact.model.components.map((component) => component.weight), [0.25, 0.75],
+  "the released Rushing Attempts head is the frozen 25% incumbent / 75% settlement-aligned blend");
+assert.ok(rushingAttemptsArtifact.model.components.every((component) =>
+  !component.model.featureNames.includes("participated")),
+"the settlement outcome filter is never exposed to current-game inference as a feature");
+assert.equal(rushingAttemptsArtifact.distribution.family, "empirical_residual_mean_bucket");
+assert.equal(rushingAttemptsArtifact.distribution.buckets.length, 5,
+  "the released point head carries its matching five-bucket out-of-sample residual distribution");
 assert.deepEqual(NFL_PLAYER_PROPS_QB_ROLE_FLOORS, { confirmedStarter: 0.9, projectedStarter: 0.75 });
 const priorGameInactive = {
   name: "Case Keenum", status: "Inactive", detail: "Inactive for the preceding game", position: "QB",

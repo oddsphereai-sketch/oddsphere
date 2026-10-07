@@ -15,11 +15,11 @@ import { addDaysToSlate, computeSlateDate } from "@/lib/dates/slateDate";
 import { selectNflPlayerPropsCanonicalLines } from "./nflPlayerPropsCanonicalLine";
 
 export const NFL_PLAYER_PROPS_PRODUCTION_CANDIDATE_RELEASE =
-  "nfl_player_props_member_2026_10_07_r33_market_selective_mean_quintile" as const;
+  "nfl_player_props_member_2026_10_07_r34_settlement_aligned_rushing_attempts" as const;
 export const NFL_PLAYER_PROPS_MEMBER_LIFECYCLE_RELEASE =
-  "nfl_player_props_member_lifecycle_2026_10_07_r16_market_selective_mean_quintile" as const;
+  "nfl_player_props_member_lifecycle_2026_10_07_r17_settlement_aligned_rushing_attempts" as const;
 const NFL_PLAYER_PROPS_PRECEDING_DECISION_RELEASE =
-  "nfl_player_props_decision_2026_10_07_r20_discrete_market_arbitration" as const;
+  "nfl_player_props_decision_2026_10_07_r21_market_selective_mean_quintile" as const;
 export const NFL_PLAYER_PROPS_BOARD_ROLLOVER_HOUR_ET = 2 as const;
 export const NFL_PLAYER_PROPS_WRITER_LEASE_GROUP = "prediction_pipeline:nfl" as const;
 
@@ -179,10 +179,11 @@ function releaseCoherentRetainedUnlockedDecision(
 ): NflPlayerPropsRuntimeDecision | null {
   if (prior.decisionRelease === NFL_PLAYER_PROPS_DECISION_RELEASE) return prior;
   if (prior.decisionRelease !== NFL_PLAYER_PROPS_PRECEDING_DECISION_RELEASE) return null;
-  // The market-selective release changes the ordinary-market calibration
-  // family. Only Anytime TD is behavior-identical and may bridge one
-  // still-fresh partial provider cycle. Ordinary rows must be freshly
-  // recomputed rather than relabeled under a release that did not score them.
+  // The settlement-aligned release changes the rushing-attempts point model.
+  // Keep the established conservative continuity boundary: only Anytime TD is
+  // behavior-identical and may bridge one still-fresh partial provider cycle.
+  // Ordinary rows must be freshly recomputed rather than relabeled under a
+  // release that did not score them.
   if (prior.market !== "anytime_td") return null;
   return {
     ...prior,

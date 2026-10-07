@@ -1,0 +1,28 @@
+{
+  "release": "nfl_player_props_conditional_rushing_attempts_export_2026_10_07_r1",
+  "market": "rushing_attempts",
+  "targetPopulation": "official_participation_only",
+  "currentInferenceUsesParticipationOutcome": false,
+  "historicalFeatureSha256": "f80b1479ca27ddf91c256ff791bcd6dea1f435fd6248a95f1f63665b4c8cd8bd",
+  "sourceReport": "football-research/cache/nfl-player-props-projection-accuracy/nfl_player_props_conditional_rushing_attempts_export_r1.json",
+  "sourceReportSha256": "5f02f1e9814618f7c4570b7f22fc0b50f8a1300523931141b3d4e2a79b7ab563",
+  "sourceArtifactSha256": "62d4106e2e026d593f767c7e9044e866eff087263e013a687783fec1d8452754",
+  "candidateArtifactSha256": "8ba171fe49c1ff87d50d3cc05fa52c2c77a4a7f84b8efc9f53766c8801249c02",
+  "weights": {
+    "incumbent": 0.25,
+    "settlementAligned": 0.75
+  },
+  "calibration": {
+    "rows": 3745,
+    "buckets": 5,
+    "sourceSeasons": [2023, 2024]
+  },
+  "releases": {
+    "portable": "nfl_player_props_runtime_2026_10_07_r8_settlement_aligned_rushing_attempts",
+    "runtime": "nfl_player_props_runtime_2026_10_07_r23_settlement_aligned_rushing_attempts",
+    "model": "nfl_player_props_distribution_model_2026_10_07_r17_settlement_aligned_rushing_attempts",
+    "calibration": "nfl_player_props_distribution_calibration_2026_10_07_r19_settlement_aligned_rushing_attempts",
+    "decision": "nfl_player_props_decision_2026_10_07_r22_settlement_aligned_rushing_attempts",
+    "board": "nfl_player_props_board_2026_10_07_r26_settlement_aligned_rushing_attempts"
+  }
+}
