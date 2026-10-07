@@ -24,6 +24,9 @@ async function main(): Promise<void> {
   assert.match(routeSource, /export async function GET\(/, "the route must retain GET");
   assert.match(routeSource, /export const POST = GET;/, "the route must retain the POST alias");
   assert.match(routeSource, /export const maxDuration = 300;/, "the route must retain its duration config");
+  assert.match(routeSource, /intraday \? \[0\] : \[0, 1, 2\]/, "intraday work must stay current-slate scoped");
+  assert.match(routeSource, /const memberPipelineHealthy = errors\.length === 0;/, "member publication must require a complete source/model/record cycle");
+  assert.match(routeSource, /incomplete_member_pipeline/, "a partial incoming cycle must retain the prior ready snapshot");
 
   assert.equal(
     summarizeWnbaDailyRefreshErrors([]),

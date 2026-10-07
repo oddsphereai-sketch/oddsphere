@@ -21,6 +21,8 @@ assert.ok(scheduled("/api/cron/lineup-watch"), "lineup-watch is scheduled");
 assert.ok(scheduled("/api/cron/pregame-sweep?lockOnly=true"), "targeted lock sweep is scheduled");
 assert.ok(scheduled("/api/cron/public-splits-observations-refresh"), "public-splits refresh is scheduled");
 assert.ok(scheduled("/api/cron/tracking-refresh"), "tracking refresh is scheduled");
+assert.ok(scheduled("/api/cron/wnba-daily-refresh"), "WNBA's gated three-day seed writer is scheduled");
+assert.ok(scheduled("/api/cron/wnba-daily-refresh?intraday=true"), "WNBA's authoritative writer has a current-slate intraday mode");
 assert.ok(scheduled("/api/cron/nba-daily-refresh"), "NBA's gated daily seed/ratings/lines writer is scheduled");
 assert.ok(scheduled("/api/cron/nba-daily-refresh?intraday=true"), "NBA's authoritative writer has an intraday market refresh");
 assert.ok(scheduled("/api/cron/nhl-daily-refresh"), "NHL's gated daily seed/lines/predictions writer is scheduled");
@@ -137,6 +139,18 @@ assert.match(source("app/api/cron/mlb-player-props-refresh/route.ts"), /refreshM
 const coldSlateSchedules = crons.filter((cron) => cron.path === "/api/cron/slate-cycle").map((cron) => cron.schedule);
 assert.ok(coldSlateSchedules.includes("5 8,10-12 * * *"), "cold slate schedule includes the 11:05 UTC freshness run");
 assert.ok(crons.some((cron) => cron.path === "/api/cron/tracking-refresh" && cron.schedule === "33 * * * *"), "Tracking publishes hourly");
+assert.deepEqual(
+  crons.filter((cron) => cron.path === "/api/cron/wnba-daily-refresh").map((cron) => cron.schedule),
+  ["23 11 * * *"],
+  "WNBA performs one staggered three-day seed each day",
+);
+assert.deepEqual(
+  crons.filter((cron) => cron.path === "/api/cron/wnba-daily-refresh?intraday=true").map((cron) => cron.schedule),
+  ["23 4-10,12 * * *", "23,53 0-3,13-23 * * *"],
+  "WNBA refreshes the current slate hourly overnight and every 30 minutes in the active window",
+);
+assert.match(source("app/api/cron/wnba-daily-refresh/route.ts"), /intraday \? \[0\] : \[0, 1, 2\]/, "WNBA separates the daily future seed from current-slate volatile work");
+assert.match(source("app/api/cron/wnba-daily-refresh/route.ts"), /wnba_daily_refresh_schedule_2026_10_07_r1_readiness_gated_cadence/, "WNBA exposes its immutable readiness-gated cadence release");
 assert.deepEqual(
   crons.filter((cron) => cron.path === "/api/cron/nba-daily-refresh").map((cron) => cron.schedule),
   ["30 11 * * *"],

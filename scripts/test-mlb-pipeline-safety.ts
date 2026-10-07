@@ -632,8 +632,9 @@ check(
 );
 check(
   "WNBA refreshes are offset from five-minute MLB lock sweeps",
-  vercelSource.includes('"23,53 13-23 * * *"') &&
-    vercelSource.includes('"23,53 0-3 * * *"') &&
+  vercelSource.includes('"23 11 * * *"') &&
+    vercelSource.includes('"23 4-10,12 * * *"') &&
+    vercelSource.includes('"23,53 0-3,13-23 * * *"') &&
     !vercelSource.includes('"20,50 13-23 * * *"') &&
     !vercelSource.includes('"20,50 0-3 * * *"'),
 );

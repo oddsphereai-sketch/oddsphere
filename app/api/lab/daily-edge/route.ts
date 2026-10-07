@@ -6714,7 +6714,7 @@ export async function GET(request: Request) {
     ? dateParam
     : sport === "soccer" || sport === "ucl"
       ? currentSoccerBoardDate()
-      : sport === "nba" || sport === "nhl"
+      : sport === "nba" || sport === "nhl" || sport === "wnba"
         ? currentDailyEdgeBoardDate(sport)
         : currentSlateDate(sport);
 
@@ -6788,7 +6788,7 @@ export async function GET(request: Request) {
       : await readLabResponseSnapshot<DailyEdgeResponse>(snapshotKey, "stale");
     let snapshot = freshSnapshot ?? staleSnapshot;
     let rolloverFallback = false;
-    const readinessGatedRollover = sport === "nba" || sport === "nhl";
+    const readinessGatedRollover = sport === "nba" || sport === "nhl" || sport === "wnba";
     if (!snapshot && !explicitDate && readinessGatedRollover) {
       const fallbackDate = previousReadyBoardDate({ sport, requestedDate });
       if (fallbackDate) {

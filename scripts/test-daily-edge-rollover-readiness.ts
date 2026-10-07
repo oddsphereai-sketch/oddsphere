@@ -19,6 +19,8 @@ assert.equal(currentDailyEdgeBoardDate("nba", new Date("2026-12-15T07:59:00.000Z
 assert.equal(currentDailyEdgeBoardDate("nba", new Date("2026-12-15T08:00:00.000Z")), "2026-12-15");
 assert.equal(currentDailyEdgeBoardDate("nhl", new Date("2026-12-15T07:59:00.000Z")), "2026-12-14");
 assert.equal(currentDailyEdgeBoardDate("nhl", new Date("2026-12-15T08:00:00.000Z")), "2026-12-15");
+assert.equal(currentDailyEdgeBoardDate("wnba", new Date("2026-12-15T07:59:00.000Z")), "2026-12-14");
+assert.equal(currentDailyEdgeBoardDate("wnba", new Date("2026-12-15T08:00:00.000Z")), "2026-12-15");
 
 // DST transitions stay tied to the local 03:00 boundary rather than a fixed
 // UTC hour. The spring missing hour and fall repeated hour cannot advance the
@@ -43,12 +45,17 @@ assert.equal(previousReadyBoardDate({
   requestedDate: "2026-12-15",
   now: new Date("2026-12-15T08:05:00.000Z"),
 }), "2026-12-14");
+assert.equal(previousReadyBoardDate({
+  sport: "wnba",
+  requestedDate: "2026-12-15",
+  now: new Date("2026-12-15T08:05:00.000Z"),
+}), "2026-12-14");
 
 const routeSource = readFileSync(new URL("../app/api/lab/daily-edge/route.ts", import.meta.url), "utf8");
 assert.match(routeSource, /sport === "nba"[\s\S]*currentDailyEdgeBoardDate\(sport\)/,
-  "NBA and NHL default to the 3 AM ET member board date");
-assert.match(routeSource, /sport === "nba" \|\| sport === "nhl"/,
-  "NBA and NHL share only the board-date readiness primitive, not a writer or model");
+  "NBA, NHL, and WNBA default to the 3 AM ET member board date");
+assert.match(routeSource, /sport === "nba" \|\| sport === "nhl" \|\| sport === "wnba"/,
+  "NBA, NHL, and WNBA share only the board-date readiness primitive, not a writer or model");
 assert.match(routeSource, /!snapshot && !explicitDate && readinessGatedRollover/,
   "only a default-date readiness-gated read may retain the previous ready board");
 assert.match(routeSource, /readLatestLabResponseSnapshot<DailyEdgeResponse>\(fallbackKey\)/,
@@ -56,4 +63,4 @@ assert.match(routeSource, /readLatestLabResponseSnapshot<DailyEdgeResponse>\(fal
 assert.match(routeSource, /fallbackSnapshot\?\.payload\.memberPresentation\?\.releaseId ===[\s\S]*DAILY_EDGE_MEMBER_PRESENTATION_RELEASE_ID/,
   "rollover continuity cannot restore a superseded member presentation release");
 
-console.log("PASS NBA/NHL Daily Edge rollover is DST-safe, readiness-gated, and explicit-date preserving");
+console.log("PASS NBA/NHL/WNBA Daily Edge rollover is DST-safe, readiness-gated, and explicit-date preserving");
