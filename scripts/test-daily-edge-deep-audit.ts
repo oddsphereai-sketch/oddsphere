@@ -95,6 +95,28 @@ function board(market: Record<string, unknown>) {
 
 {
   const result = auditDailyEdgeBoards({
+    wnba: board({
+      priceAmerican: -124,
+      currentPriceAmerican: -128,
+      lineOpenAmerican: -115,
+      lastMovePrevAmerican: -130,
+      lastMoveNextAmerican: -128,
+      marketReadV2: {
+        label: "Slight Market Support",
+        sourceSummary: {},
+        movement: { firstTrackedPrice: -115, currentPrice: -128 },
+      },
+    }),
+  });
+  check(
+    "WNBA audit compares an unlocked trail to the current quote rather than the immutable grade price",
+    !result.summary.issueCounts.source_chain_previous_not_current &&
+      !result.summary.issueCounts.market_read_uses_hidden_price,
+  );
+}
+
+{
+  const result = auditDailyEdgeBoards({
     mlb: board({
       priceAmerican: -135,
       lineOpenAmerican: -126,
@@ -728,6 +750,39 @@ function board(market: Record<string, unknown>) {
     "CFB first_inning transport slot is audited as Spread movement",
     !result.summary.issueCounts.directional_read_without_visible_move &&
       !result.summary.issueCounts.market_read_direction_wrong_for_visible_trail,
+  );
+}
+
+
+{
+  const wnbaBoard: any = board({});
+  wnbaBoard.games[0]!.markets = {
+    first_inning: {
+      pick: "ATL -1.5",
+      grade: "best_signal",
+      verdict: { key: "best_angle" },
+      priceAmerican: -110,
+      currentPriceAmerican: -110,
+      lineOpenAmerican: -114,
+      lastMoveLinePrev: -2.5,
+      lastMoveLineNext: -1.5,
+      recommendationConfidence: 68,
+      marketReadV2: {
+        label: "Strong Market Support",
+        sourceSummary: {},
+        movement: {
+          firstTrackedLine: -2.5,
+          currentLine: -1.5,
+          firstTrackedPrice: -114,
+          currentPrice: -110,
+        },
+      },
+    },
+  };
+  const result = auditDailyEdgeBoards({ wnba: wnbaBoard });
+  check(
+    "WNBA selected-side spread relief from -2.5 to -1.5 is correctly audited as support",
+    !result.summary.issueCounts.market_read_direction_wrong_for_visible_trail,
   );
 }
 

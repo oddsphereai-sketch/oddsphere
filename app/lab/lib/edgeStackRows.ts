@@ -100,6 +100,9 @@ function effectivePriceTrail(marketData: MarketEdgeDto): {
     };
   }
   const movement = marketData.marketReadV2?.movement ?? null;
+  const locked = marketData.lockedLineAt != null ||
+    marketData.lockedLineAmerican != null ||
+    marketData.priceUnavailableAtLock === true;
   const numberChanged =
     marketData.lastMoveLinePrev != null &&
     marketData.lastMoveLineNext != null &&
@@ -107,7 +110,9 @@ function effectivePriceTrail(marketData: MarketEdgeDto): {
   return {
     open: marketData.lineOpenAmerican ?? movement?.firstTrackedPrice ?? null,
     previous: numberChanged ? null : marketData.lastMovePrevAmerican ?? null,
-    current: marketData.priceAmerican ?? movement?.currentPrice ?? null,
+    current: locked
+      ? marketData.lockedLineAmerican ?? marketData.priceAmerican ?? movement?.currentPrice ?? null
+      : marketData.currentPriceAmerican ?? movement?.currentPrice ?? marketData.priceAmerican ?? null,
     locked: marketData.lockedLineAmerican ?? null,
   };
 }

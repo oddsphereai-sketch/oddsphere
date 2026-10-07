@@ -1,5 +1,30 @@
 # Model change safety protocol
 
+## Owner-approved correctness exception: WNBA current-quote reader coherence r1
+
+On 2026-10-07 Daniel Mengel directed Oddsphere to continue the full live-model
+health audit, repair any confirmed market-reading defect, preserve the existing
+member product, and avoid new copy, labels, score changes, or board flattening.
+This exception is limited to the WNBA reader release documented in
+`docs/model-audits/2026-10-07-wnba-current-quote-market-read-coherence.md`.
+
+The writer's released score, side, probability, evaluated price, grade, stake,
+lock, and tracking tuple remain authoritative and unchanged. For unlocked
+cards, the movement panel and market read now end at the reader's current
+same-book quote while the evaluated price remains separately available for
+grade economics. Locked cards continue to use the immutable lock quote. The
+current grade-policy reader uses the writer's released outcome confidence for
+the recommendation-strength display instead of applying a second reader-only
+cap against a different target-excluded denominator. The cross-sport audit also
+recognizes that a selected WNBA spread moving from -2.5 to -1.5 supports that
+selected side.
+
+The exact two-game production-input replay preserves all six sides, scores,
+probabilities, grades, and prices used for grading. Promotions: zero;
+demotions: zero; actionable count: four to four. The same deep audit moves from
+eight critical findings to zero. No provider call, writer, schedule, database
+write, model coefficient, copy, label, or layout changes.
+
 ## Owner-approved provisional exception: NBA independent-first regular-season r1
 
 On 2026-10-06 Daniel Mengel explicitly directed Oddsphere to prepare the NBA regular-season model with

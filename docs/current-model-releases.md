@@ -2737,6 +2737,8 @@ board impact, and rollback gates are in
 - Authoritative model writer: `lib/services/wnba/runWnbaModel.ts`
 - Tracking writer: `lib/services/wnba/buildWnbaPredictionRecords.ts`
 - Member reader: `lib/services/wnba/buildWnbaDailyEdgeAdapted.ts`
+- Member-reader release:
+  `wnba_daily_edge_reader_2026_10_07_r1_current_quote_market_read_coherence`
 - Scheduled owner: `/api/cron/wnba-daily-refresh` under the WNBA-scoped shared
   `prediction_pipeline` lease
 
@@ -2823,6 +2825,19 @@ to prove both promotion and demotion paths. No copy, label, layout, stake,
 provider, schedule, writer, lease, lock or tracking-boundary behavior changes.
 Evidence and rollback gates are in
 `docs/model-audits/2026-10-06-wnba-independent-first-decision-crossing-result.md`.
+
+The October 7 member-reader coherence release changes no WNBA model output,
+prediction, probability, score, grade, stake, lock, or tracking tuple. Unlocked
+market reads and movement trails now terminate at the same current same-book
+quote displayed to members, while the writer's evaluated quote remains the
+separate immutable grade price. Locked cards remain frozen at their lock quote.
+The reader no longer applies a second negative-gap confidence cap to a current
+v11 exact-price grade, and the deep audit uses the selected-side WNBA spread
+sign convention. On the exact two-game live input the release preserves all
+six market decisions, produces zero promotions and zero demotions, keeps four
+actionables, and reduces the production deep-audit findings from eight to zero.
+Evidence and rollback gates are in
+`docs/model-audits/2026-10-07-wnba-current-quote-market-read-coherence.md`.
 
 One versioned margin distribution preserves the final Moneyline win probability, expected
 margin, and incumbent variance; Spread probabilities come from that same CDF, the independent
