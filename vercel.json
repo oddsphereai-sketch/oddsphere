@@ -2,8 +2,12 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "crons": [
     {
+      "path": "/api/cron/slate-cycle?rollover=true",
+      "schedule": "5 7,8 * * *"
+    },
+    {
       "path": "/api/cron/slate-cycle",
-      "schedule": "5 8,10-12 * * *"
+      "schedule": "5 10-12 * * *"
     },
     {
       "path": "/api/cron/slate-cycle?intraday=true",

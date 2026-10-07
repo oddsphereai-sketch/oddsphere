@@ -137,7 +137,15 @@ assert.match(source("app/api/cron/tracking-refresh/route.ts"), /refreshTrackingR
 assert.match(source("app/api/cron/mlb-player-props-refresh/route.ts"), /refreshMlbPropsBoard/, "Player Props has one canonical board refresh");
 
 const coldSlateSchedules = crons.filter((cron) => cron.path === "/api/cron/slate-cycle").map((cron) => cron.schedule);
-assert.ok(coldSlateSchedules.includes("5 8,10-12 * * *"), "cold slate schedule includes the 11:05 UTC freshness run");
+assert.deepEqual(coldSlateSchedules, ["5 10-12 * * *"], "MLB full follow-up cycles remain staggered after the rollover seed");
+assert.deepEqual(
+  crons.filter((cron) => cron.path === "/api/cron/slate-cycle?rollover=true").map((cron) => cron.schedule),
+  ["5 7,8 * * *"],
+  "MLB receives two UTC opportunities while the route admits only the one that is 03:05 ET",
+);
+assert.match(source("app/api/cron/slate-cycle/route.ts"), /isMlbRolloverSeedWindow/, "MLB rollover seed is DST-gated in the route");
+assert.match(source("app/api/cron/slate-cycle/route.ts"), /incomplete_member_pipeline/, "an incomplete MLB cycle cannot replace the ready member snapshot");
+assert.match(source("app/api/cron/slate-cycle/route.ts"), /mlb_daily_refresh_schedule_2026_10_07_r1_readiness_gated_rollover|MLB_DAILY_REFRESH_SCHEDULE_RELEASE/, "MLB exposes its immutable readiness-gated schedule release");
 assert.ok(crons.some((cron) => cron.path === "/api/cron/tracking-refresh" && cron.schedule === "33 * * * *"), "Tracking publishes hourly");
 assert.deepEqual(
   crons.filter((cron) => cron.path === "/api/cron/wnba-daily-refresh").map((cron) => cron.schedule),

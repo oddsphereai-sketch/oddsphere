@@ -145,6 +145,18 @@ export const SOCCER_BOARD_ROLL_HOUR = 2; // ET
  */
 export const DAILY_EDGE_BOARD_ROLL_HOUR_ET = 3;
 
+export const MLB_DAILY_REFRESH_SCHEDULE_RELEASE =
+  "mlb_daily_refresh_schedule_2026_10_07_r1_readiness_gated_rollover" as const;
+
+/**
+ * Vercel cron expressions are UTC-only. Scheduling the MLB rollover seed at
+ * both 07:05Z and 08:05Z and admitting only local 03:00 keeps the refresh at
+ * 03:05 ET across daylight-saving changes without doubling provider work.
+ */
+export function isMlbRolloverSeedWindow(now: Date = new Date()): boolean {
+  return hourInTimeZone(now, "America/New_York") === DAILY_EDGE_BOARD_ROLL_HOUR_ET;
+}
+
 export function currentDailyEdgeBoardDate(sport: Sport, now: Date = new Date()): string {
   if (sport === "soccer" || sport === "ucl") return currentSoccerBoardDate(now);
   const today = currentSlateDate(sport, now);
