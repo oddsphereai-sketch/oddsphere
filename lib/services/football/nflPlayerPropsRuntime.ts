@@ -27,17 +27,17 @@ import {
 } from "./nflPlayerPropsMarketEvidenceCapture";
 
 export const NFL_PLAYER_PROPS_PORTABLE_ARTIFACT_RELEASE =
-  "nfl_player_props_runtime_2026_10_07_r7_market_selective_mean_quintile" as const;
+  "nfl_player_props_runtime_2026_10_07_r8_settlement_aligned_rushing_attempts" as const;
 export const NFL_PLAYER_PROPS_RUNTIME_RELEASE =
-  "nfl_player_props_runtime_2026_10_07_r22_market_selective_mean_quintile" as const;
+  "nfl_player_props_runtime_2026_10_07_r23_settlement_aligned_rushing_attempts" as const;
 export const NFL_PLAYER_PROPS_BOARD_RELEASE =
-  "nfl_player_props_board_2026_10_07_r25_market_selective_mean_quintile" as const;
+  "nfl_player_props_board_2026_10_07_r26_settlement_aligned_rushing_attempts" as const;
 export const NFL_PLAYER_PROPS_DECISION_RELEASE =
-  "nfl_player_props_decision_2026_10_07_r21_market_selective_mean_quintile" as const;
+  "nfl_player_props_decision_2026_10_07_r22_settlement_aligned_rushing_attempts" as const;
 export const NFL_PLAYER_PROPS_MODEL_RELEASE =
-  "nfl_player_props_distribution_model_2026_10_07_r16_market_selective_mean_quintile" as const;
+  "nfl_player_props_distribution_model_2026_10_07_r17_settlement_aligned_rushing_attempts" as const;
 export const NFL_PLAYER_PROPS_CALIBRATION_RELEASE =
-  "nfl_player_props_distribution_calibration_2026_10_07_r18_market_selective_mean_quintile" as const;
+  "nfl_player_props_distribution_calibration_2026_10_07_r19_settlement_aligned_rushing_attempts" as const;
 export const NFL_PLAYER_PROPS_PASSING_MARKET_RELEASE =
   "nfl_player_props_market_residual_calibration_2026_09_03_r8_single_application" as const;
 export const NFL_PLAYER_PROPS_MARKET_COHERENT_PROJECTION_RELEASE =

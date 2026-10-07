@@ -129,6 +129,16 @@ def resolved_metrics(
     }
 
 
+def resolved_metrics_by_market(
+    rows: list[dict[str, Any]],
+    outcomes: dict[str, tuple[float, bool]],
+) -> dict[str, dict[str, Any]]:
+    return {
+        market: resolved_metrics([row for row in rows if row["market"] == market], outcomes)
+        for market in sorted({str(row["market"]) for row in rows if row["market"] != "anytime_td"})
+    }
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--incumbent", type=pathlib.Path, required=True)
@@ -190,12 +200,14 @@ def main() -> None:
             "actionable": sum(actionable(row) for row in incumbent),
             "markets": market_counts(incumbent),
             "resolved": resolved_metrics(incumbent, outcomes),
+            "resolvedByMarket": resolved_metrics_by_market(incumbent, outcomes),
         },
         "candidate": {
             "grades": grade_counts(candidate),
             "actionable": sum(actionable(row) for row in candidate),
             "markets": market_counts(candidate),
             "resolved": resolved_metrics(candidate, outcomes),
+            "resolvedByMarket": resolved_metrics_by_market(candidate, outcomes),
         },
         "changeExamples": [transition(before, after) for before, after in changes if (
             before["finalProbability"] != after["finalProbability"]
