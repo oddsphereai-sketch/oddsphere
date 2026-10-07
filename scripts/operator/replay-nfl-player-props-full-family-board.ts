@@ -1,6 +1,6 @@
 #!/usr/bin/env tsx
 
-/** SELECT-only Week 3 same-board replay for the full-family NFL props release. */
+/** SELECT-only same-board replay for an NFL props release. */
 
 import { readFile } from "node:fs/promises";
 import { loadEnvConfig } from "@next/env";
@@ -47,12 +47,14 @@ type ReplayRow = {
 
 async function main(): Promise<void> {
   const replay = JSON.parse(await readFile(INPUT, "utf8")) as { rows: ReplayRow[] };
-  const sourceRows = replay.rows.filter((row) => row.week === 3 && row.evidence?.books.length);
+  const replayWeek = Number(process.argv.find((value) => value.startsWith("--week="))?.slice(7) ?? "3");
+  const sourceRows = replay.rows.filter((row) => row.week === replayWeek && row.evidence?.books.length);
+  if (sourceRows.length === 0) throw new Error(`NFL player-props replay contains no Week ${replayWeek} rows with evidence.`);
   const url = requiredEnv("NEXT_PUBLIC_SUPABASE_URL");
   const key = requiredEnv("SUPABASE_SERVICE_ROLE_KEY");
   const client = createClient(url, key, { auth: { persistSession: false } });
   const [evidence, currentState] = await Promise.all([
-    readNflForwardEvidence({ client, season: 2026, week: 3 }),
+    readNflForwardEvidence({ client, season: 2026, week: replayWeek }),
     readNflPlayerPropsCurrentSeasonState({ client, season: 2026 }),
   ]);
   if (!currentState) throw new Error("NFL player-props current-season state is unavailable.");
@@ -61,7 +63,7 @@ async function main(): Promise<void> {
   const games: NflPlayerPropGameIdentity[] = [...gameIds].flatMap((gameId) => {
     const payload = gamePayloads.get(gameId);
     return payload ? [{
-      season: 2026, week: 3, phase: "regular" as const, providerGameId: gameId,
+      season: 2026, week: replayWeek, phase: "regular" as const, providerGameId: gameId,
       scheduledStart: payload.game.scheduledStart,
       homeTeam: payload.game.home.abbreviation, awayTeam: payload.game.away.abbreviation,
       homeTeamName: payload.game.home.name, awayTeamName: payload.game.away.name,
@@ -79,17 +81,18 @@ async function main(): Promise<void> {
   };
   const stateThroughWeekTwo = {
     ...currentState,
-    completeThroughWeek: Math.min(currentState.completeThroughWeek, 2),
-    games: currentState.games.filter((row) => row.week < 3),
-    teamStats: currentState.teamStats.filter((row) => row.week < 3),
-    stats: currentState.stats.filter((row) => row.week < 3),
+    completeThroughWeek: Math.min(currentState.completeThroughWeek, replayWeek - 1),
+    games: currentState.games.filter((row) => row.week < replayWeek),
+    teamStats: currentState.teamStats.filter((row) => row.week < replayWeek),
+    stats: currentState.stats.filter((row) => row.week < replayWeek),
   };
   const features = buildNflPlayerPropsRuntimeFeatureRows({
     snapshot: eligibleSnapshot, context, currentSeasonState: stateThroughWeekTwo,
   });
   const offers = exactOffers(sourceRows, new Map(games.map((game) => [game.providerGameId, game.scheduledStart])))
     .filter((offer) => eligible.has(offer.canonicalGameId));
-  const candidateRows = [...new Set(offers.map((offer) => offer.canonicalGameId))].flatMap((gameId) => {
+  const gameIdsForReplay = [...new Set(offers.map((offer) => offer.canonicalGameId))];
+  const scoreReplay = (auditIncumbentMarketArbitration: boolean) => gameIdsForReplay.flatMap((gameId) => {
     const gameOffers = offers.filter((offer) => offer.canonicalGameId === gameId);
     const lockAt = gameOffers[0]?.lockAt;
     if (!lockAt) return [];
@@ -98,9 +101,12 @@ async function main(): Promise<void> {
       features: features.filter((feature) => feature.gameId === gameId),
       evaluatedAt: lockAt,
       captureMarketEvidence: false,
+      auditIncumbentMarketArbitration,
     }).decisions;
   });
-  const preceding = new Map(sourceRows.map((row) => [decisionKey(row), row]));
+  const incumbentRows = scoreReplay(true);
+  const candidateRows = scoreReplay(false);
+  const preceding = new Map(incumbentRows.map((row) => [decisionKey(row), row]));
   const candidate = new Map(candidateRows.map((row) => [decisionKey(row), row]));
   let matched = 0; let projectionChanges = 0; let forecastSideChanges = 0;
   let promotions = 0; let demotions = 0; let precedingActionables = 0; let candidateActionables = 0;
@@ -123,12 +129,13 @@ async function main(): Promise<void> {
     if (beforeForecast !== afterForecast) forecastSideChanges += 1;
     byMarket[before.market] = market;
   }
-  const accuracy = compareForecastAccuracy(sourceRows, candidateRows);
+  const accuracy = compareForecastAccuracy(sourceRows, incumbentRows, candidateRows);
   console.log(JSON.stringify({
-    release: "nfl_player_props_full_family_same_board_replay_2026_09_29_r1",
+    release: "nfl_player_props_discrete_market_arbitration_same_board_replay_2026_10_07_r1",
     readOnly: true, writes: 0, providerCalls: 0,
+    replayWeek,
     sourceRows: sourceRows.length, evidenceRows: evidence.length, offers: offers.length,
-    featureRows: features.length, candidateRows: candidateRows.length, matched,
+    featureRows: features.length, incumbentRows: incumbentRows.length, candidateRows: candidateRows.length, matched,
     projectionChanges, forecastSideChanges, promotions, demotions,
     precedingActionables, candidateActionables, byMarket,
     accuracy,
@@ -136,44 +143,108 @@ async function main(): Promise<void> {
   }, null, 2));
 }
 
-function compareForecastAccuracy(source: ReplayRow[], candidate: Array<{
+type ReplayDecision = {
   gameId: string; playerName: string; market: NflPlayerPropMarket; line: number;
-  side: "over" | "under" | "yes"; finalProbability: number; grade: NflPlayerPropsGrade;
-}>): Record<string, unknown> {
+  side: "over" | "under" | "yes"; finalProbability: number; grade: NflPlayerPropsGrade; americanPrice: number;
+};
+type AccuracyAccumulator = {
+  rows: number; precedingWins: number; candidateWins: number;
+  precedingActionableRows: number; precedingActionableWins: number; candidateActionableRows: number; candidateActionableWins: number;
+  precedingBrierSum: number; candidateBrierSum: number; precedingLogLossSum: number; candidateLogLossSum: number;
+  precedingProbabilitySum: number; candidateProbabilitySum: number; outcomeSum: number;
+  precedingActionableUnits: number; candidateActionableUnits: number;
+};
+
+function compareForecastAccuracy(source: ReplayRow[], incumbent: ReplayDecision[], candidate: ReplayDecision[]): Record<string, unknown> {
   const sourceGroups = groupByIdentity(source.filter((row) => row.market !== "anytime_td"));
+  const incumbentGroups = groupByIdentity(incumbent.filter((row) => row.market !== "anytime_td"));
   const candidateGroups = groupByIdentity(candidate.filter((row) => row.market !== "anytime_td"));
-  const markets: Record<string, { rows: number; precedingWins: number; candidateWins: number; precedingActionableRows: number; precedingActionableWins: number; candidateActionableRows: number; candidateActionableWins: number }> = {};
-  for (const [identity, beforeRows] of sourceGroups) {
+  const markets: Record<string, AccuracyAccumulator> = {};
+  for (const [identity, sourceIdentityRows] of sourceGroups) {
+    const beforeRows = incumbentGroups.get(identity);
     const afterRows = candidateGroups.get(identity); if (!afterRows?.length) continue;
-    const actual = beforeRows.find((row) => row.actual !== null)?.actual;
-    if (actual === null || actual === undefined || beforeRows.some((row) => row.push)) continue;
+    if (!beforeRows?.length) continue;
+    const actual = sourceIdentityRows.find((row) => row.actual !== null)?.actual;
+    if (actual === null || actual === undefined || sourceIdentityRows.some((row) => row.push)) continue;
     const before = beforeRows.find((row) => row.side === "over") ?? beforeRows[0]!;
     const after = afterRows.find((row) => row.side === "over") ?? afterRows[0]!;
     const beforeOver = before.side === "over" ? before.finalProbability >= 0.5 : before.finalProbability < 0.5;
     const afterOver = after.side === "over" ? after.finalProbability >= 0.5 : after.finalProbability < 0.5;
     const overWon = actual > before.line;
-    const market = markets[before.market] ?? { rows: 0, precedingWins: 0, candidateWins: 0, precedingActionableRows: 0, precedingActionableWins: 0, candidateActionableRows: 0, candidateActionableWins: 0 };
+    const outcome = Number(overWon);
+    const beforeOverProbability = before.side === "over" ? before.finalProbability : 1 - before.finalProbability;
+    const afterOverProbability = after.side === "over" ? after.finalProbability : 1 - after.finalProbability;
+    const market = markets[before.market] ?? emptyAccuracyAccumulator();
     market.rows += 1;
     market.precedingWins += Number(beforeOver === overWon);
     market.candidateWins += Number(afterOver === overWon);
-    const beforeActionable = beforeRows.some((row) => actionable(row.grade));
-    const afterActionable = afterRows.some((row) => actionable(row.grade));
+    market.precedingBrierSum += (beforeOverProbability - outcome) ** 2;
+    market.candidateBrierSum += (afterOverProbability - outcome) ** 2;
+    market.precedingLogLossSum += binaryLogLoss(beforeOverProbability, outcome);
+    market.candidateLogLossSum += binaryLogLoss(afterOverProbability, outcome);
+    market.precedingProbabilitySum += beforeOverProbability;
+    market.candidateProbabilitySum += afterOverProbability;
+    market.outcomeSum += outcome;
+    const beforeActionableRow = beforeRows.find((row) => actionable(row.grade));
+    const afterActionableRow = afterRows.find((row) => actionable(row.grade));
+    const beforeActionable = beforeActionableRow !== undefined;
+    const afterActionable = afterActionableRow !== undefined;
     market.precedingActionableRows += Number(beforeActionable);
     market.precedingActionableWins += Number(beforeActionable && beforeOver === overWon);
     market.candidateActionableRows += Number(afterActionable);
     market.candidateActionableWins += Number(afterActionable && afterOver === overWon);
+    if (beforeActionableRow) market.precedingActionableUnits += decisionUnits(beforeActionableRow, overWon);
+    if (afterActionableRow) market.candidateActionableUnits += decisionUnits(afterActionableRow, overWon);
     markets[before.market] = market;
   }
-  const overall = Object.values(markets).reduce((sum, row) => ({
-    rows: sum.rows + row.rows,
-    precedingWins: sum.precedingWins + row.precedingWins,
-    candidateWins: sum.candidateWins + row.candidateWins,
-    precedingActionableRows: sum.precedingActionableRows + row.precedingActionableRows,
-    precedingActionableWins: sum.precedingActionableWins + row.precedingActionableWins,
-    candidateActionableRows: sum.candidateActionableRows + row.candidateActionableRows,
-    candidateActionableWins: sum.candidateActionableWins + row.candidateActionableWins,
-  }), { rows: 0, precedingWins: 0, candidateWins: 0, precedingActionableRows: 0, precedingActionableWins: 0, candidateActionableRows: 0, candidateActionableWins: 0 });
-  return { overall, byMarket: markets };
+  const overall = Object.values(markets).reduce((sum, row) => addAccuracy(sum, row), emptyAccuracyAccumulator());
+  return {
+    overall: finalizeAccuracy(overall),
+    byMarket: Object.fromEntries(Object.entries(markets).map(([market, values]) => [market, finalizeAccuracy(values)])),
+  };
+}
+
+function emptyAccuracyAccumulator(): AccuracyAccumulator {
+  return {
+    rows: 0, precedingWins: 0, candidateWins: 0,
+    precedingActionableRows: 0, precedingActionableWins: 0, candidateActionableRows: 0, candidateActionableWins: 0,
+    precedingBrierSum: 0, candidateBrierSum: 0, precedingLogLossSum: 0, candidateLogLossSum: 0,
+    precedingProbabilitySum: 0, candidateProbabilitySum: 0, outcomeSum: 0,
+    precedingActionableUnits: 0, candidateActionableUnits: 0,
+  };
+}
+function addAccuracy(first: AccuracyAccumulator, second: AccuracyAccumulator): AccuracyAccumulator {
+  return Object.fromEntries(Object.keys(first).map((key) => [key,
+    first[key as keyof AccuracyAccumulator] + second[key as keyof AccuracyAccumulator]])) as AccuracyAccumulator;
+}
+function finalizeAccuracy(values: AccuracyAccumulator): Record<string, number> {
+  const divisor = Math.max(1, values.rows);
+  return {
+    rows: values.rows,
+    precedingWins: values.precedingWins,
+    candidateWins: values.candidateWins,
+    precedingBrier: values.precedingBrierSum / divisor,
+    candidateBrier: values.candidateBrierSum / divisor,
+    precedingLogLoss: values.precedingLogLossSum / divisor,
+    candidateLogLoss: values.candidateLogLossSum / divisor,
+    precedingCalibrationGap: Math.abs(values.precedingProbabilitySum / divisor - values.outcomeSum / divisor),
+    candidateCalibrationGap: Math.abs(values.candidateProbabilitySum / divisor - values.outcomeSum / divisor),
+    precedingActionableRows: values.precedingActionableRows,
+    precedingActionableWins: values.precedingActionableWins,
+    precedingActionableUnits: values.precedingActionableUnits,
+    candidateActionableRows: values.candidateActionableRows,
+    candidateActionableWins: values.candidateActionableWins,
+    candidateActionableUnits: values.candidateActionableUnits,
+  };
+}
+function binaryLogLoss(probability: number, outcome: number): number {
+  const bounded = Math.min(0.999999, Math.max(0.000001, probability));
+  return -(outcome * Math.log(bounded) + (1 - outcome) * Math.log(1 - bounded));
+}
+function decisionUnits(row: ReplayDecision, overWon: boolean): number {
+  const won = row.side === "over" ? overWon : !overWon;
+  if (!won) return -1;
+  return row.americanPrice < 0 ? 100 / Math.abs(row.americanPrice) : row.americanPrice / 100;
 }
 
 function groupByIdentity<T extends { gameId: string; playerName: string; market: string; line: number }>(rows: T[]): Map<string, T[]> {
@@ -200,6 +271,7 @@ function featureObservations(rows: ReplayRow[], timestamp: string): NflPlayerPro
 }
 
 function observationSnapshot(games: NflPlayerPropGameIdentity[], observations: NflPlayerPropPriceObservation[], timestamp: string): NflPlayerPropsObservationSnapshot {
+  const week = games[0]?.week ?? 0;
   return {
     schemaRelease: "nfl_player_props_research_schema_2026_08_20_r4",
     snapshotRelease: NFL_PLAYER_PROPS_PROVIDER_SNAPSHOT_RELEASE,
@@ -207,7 +279,7 @@ function observationSnapshot(games: NflPlayerPropGameIdentity[], observations: N
     calibrationRelease: "nfl_player_props_calibration_unfit_2026_08_20_r1",
     decisionRelease: "nfl_player_props_decision_unfit_2026_08_20_r1",
     mode: "local_observe_only", actionable: false, generatedAt: timestamp, fetchedAt: timestamp,
-    season: 2026, week: 3, phase: "regular", games, observations,
+    season: 2026, week, phase: "regular", games, observations,
     providerCoverage: {}, providerRequests: {}, collectionComplete: true, modelingReady: false, healthFindings: [],
   };
 }

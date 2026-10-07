@@ -9,6 +9,7 @@ import {
   NFL_PLAYER_PROPS_RUNTIME_RELEASE,
   nflPlayerPropsExpectedValue,
   nflPlayerPropsExpectedStarterPassingProjection,
+  nflPlayerPropsDiscreteMarketArbitration,
   gradeNflPlayerPropsTouchdownCandidate,
   nflPlayerPropsMarketImpliedCenter,
   nflPlayerPropsCoherentPosteriorDistribution,
@@ -30,8 +31,8 @@ import {
 } from "../lib/services/football/nflPlayerPropsRuntime";
 import type { NflPlayerPropsExactOffer } from "../lib/services/football/nflPlayerPropsMarketBoard";
 
-assert.equal(NFL_PLAYER_PROPS_RUNTIME_RELEASE, "nfl_player_props_runtime_2026_09_29_r20_injury_feed_continuity");
-assert.equal(NFL_PLAYER_PROPS_BOARD_RELEASE, "nfl_player_props_board_2026_09_29_r23_injury_feed_continuity");
+assert.equal(NFL_PLAYER_PROPS_RUNTIME_RELEASE, "nfl_player_props_runtime_2026_10_07_r21_discrete_market_arbitration");
+assert.equal(NFL_PLAYER_PROPS_BOARD_RELEASE, "nfl_player_props_board_2026_10_07_r24_discrete_market_arbitration");
 assert.deepEqual(NFL_PLAYER_PROPS_QB_ROLE_FLOORS, { confirmedStarter: 0.9, projectedStarter: 0.75 });
 const priorGameInactive = {
   name: "Case Keenum", status: "Inactive", detail: "Inactive for the preceding game", position: "QB",
@@ -78,6 +79,26 @@ assert.equal(NFL_PLAYER_PROPS_MARKET_COHERENT_PROJECTION_RELEASE,
 
 const residual = nflPlayerPropsResidualProbability(0.7, 0.5, 0.2);
 assert.ok(residual > 0.5 && residual < 0.7);
+assert.equal(nflPlayerPropsDiscreteMarketArbitration({
+  propMarket: "receiving_yards", rawOverProbability: 0.58, marketOverProbability: 0.43,
+  independentBooks: 2, incumbentFinalOverProbability: 0.54,
+}), 0.54, "receiving yards preserves the incumbent arbitration after its discrete candidate failed exact replay");
+assert.equal(nflPlayerPropsDiscreteMarketArbitration({
+  propMarket: "receiving_yards", rawOverProbability: 0.58, marketOverProbability: 0.54,
+  independentBooks: 2, incumbentFinalOverProbability: 0.56,
+}), 0.56, "receiving yards remains unchanged when directions agree");
+assert.equal(nflPlayerPropsDiscreteMarketArbitration({
+  propMarket: "receptions", rawOverProbability: 0.58, marketOverProbability: 0.46,
+  independentBooks: 2, incumbentFinalOverProbability: 0.54,
+}), 0.54, "receptions rejects weak market disagreement without changing the incumbent posterior");
+assert.equal(nflPlayerPropsDiscreteMarketArbitration({
+  propMarket: "receptions", rawOverProbability: 0.58, marketOverProbability: 0.44,
+  independentBooks: 2, incumbentFinalOverProbability: 0.54,
+}), 0.44, "receptions accepts a corroborated complete market flip");
+assert.equal(nflPlayerPropsDiscreteMarketArbitration({
+  propMarket: "rushing_yards", rawOverProbability: 0.58, marketOverProbability: 0.42,
+  independentBooks: 2, incumbentFinalOverProbability: 0.53,
+}), 0.53, "unvalidated markets preserve incumbent arbitration exactly");
 assert.ok(nflPlayerPropsExpectedValue(0.55, -110) > 0);
 assert.ok(nflPlayerPropsExpectedValue(0.45, -110) < 0);
 

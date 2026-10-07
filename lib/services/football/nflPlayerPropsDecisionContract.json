@@ -1,7 +1,7 @@
 {
-  "decisionRelease": "nfl_player_props_decision_2026_09_29_r19_injury_feed_continuity",
+  "decisionRelease": "nfl_player_props_decision_2026_10_07_r20_discrete_market_arbitration",
   "modelRelease": "nfl_player_props_distribution_model_2026_09_29_r15_injury_feed_continuity",
-  "calibrationRelease": "nfl_player_props_distribution_calibration_2026_09_29_r16_injury_feed_continuity",
+  "calibrationRelease": "nfl_player_props_distribution_calibration_2026_10_07_r17_discrete_market_arbitration",
   "touchdownModelRelease": "nfl_player_props_anytime_td_model_2026_08_25_r3_shared_context",
   "touchdownCalibrationRelease": "nfl_player_props_anytime_td_calibration_2026_08_25_r3_shared_context",
   "marketBoardRelease": "nfl_player_props_exact_market_board_2026_09_01_r2_cross_line_opening",
@@ -50,6 +50,13 @@
     "preservesIndependentProjectionAsEvidence": true,
     "evaluatedQuoteIsEconomicsOnly": true,
     "actionableSideMustMatchPosterior": true
+  },
+  "discreteMarketArbitration": {
+    "default": "incumbent_market_specific_posterior",
+    "receivingYards": "unchanged_after_candidate_rejection",
+    "receptions": "full_target_excluded_market_flip_on_direction_disagreement_and_five_point_market_conviction",
+    "evaluatedBookExcluded": true,
+    "continuousCrossMarketWeighting": false
   },
   "volumeAndYardage": {
     "watchlist": {"minimumEv": 0.0, "minimumProbabilityEdge": 0.0},
