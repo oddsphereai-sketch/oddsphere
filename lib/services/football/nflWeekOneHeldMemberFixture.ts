@@ -46,7 +46,7 @@ import { nflFootballEvidenceStats } from "./footballMemberEvidence";
 import type { NflRegularSharpMarket, NflRegularSharpSplit } from "./sharpApiNflSplits";
 
 export const NFL_WEEK_ONE_HELD_MEMBER_FIXTURE_RELEASE =
-  "nfl_weekly_member_fixture_2026_10_05_r37_winner_coherence" as const;
+  "nfl_weekly_member_fixture_2026_10_07_r38_exact_quote_label_coherence" as const;
 
 const NFL_PRECEDING_MEMBER_RELEASE =
   "nfl_v1_member_release_2026_10_02_r25_spread_grade_calibration" as const;
@@ -1010,8 +1010,20 @@ function applyPublishedDecision(
     : decision.side === input.payload.game.home.abbreviation;
   const selectedSide = selectedPrimary ? input.primarySide : input.opposingSide;
   const opposingSide = selectedPrimary ? input.opposingSide : input.primarySide;
-  const selectedLabel = selectedPrimary ? input.primaryLabel : input.opposingLabel;
-  const opposingLabel = selectedPrimary ? input.opposingLabel : input.primaryLabel;
+  let primaryLabel = input.primaryLabel;
+  let opposingLabel = input.opposingLabel;
+  if (decision.evaluatedQuote.line !== null && input.slot === "total") {
+    primaryLabel = `Over ${marketNumber(decision.evaluatedQuote.line)}`;
+    opposingLabel = `Under ${marketNumber(decision.evaluatedQuote.line)}`;
+  } else if (decision.evaluatedQuote.line !== null && input.slot === "spread") {
+    const homeLine = selectedPrimary
+      ? decision.evaluatedQuote.line
+      : -decision.evaluatedQuote.line;
+    primaryLabel = `${input.payload.game.home.abbreviation} ${signed(homeLine)}`;
+    opposingLabel = `${input.payload.game.away.abbreviation} ${signed(-homeLine)}`;
+  }
+  const selectedLabel = selectedPrimary ? primaryLabel : opposingLabel;
+  const opposingSelectedLabel = selectedPrimary ? opposingLabel : primaryLabel;
   const oddsTrail = buildSameBookTrail({
     rows: input.movementRows,
     sportsbook: decision.evaluatedQuote.sportsbook,
@@ -1111,7 +1123,7 @@ function applyPublishedDecision(
     lineTrail: input.slot === "moneyline" ? [] : oddsTrail,
     opposingOddsTrail: {
       side: opposingSide,
-      label: opposingLabel,
+      label: opposingSelectedLabel,
       stops: opposingStops,
     },
     marketInterpretation: null,
