@@ -7,6 +7,7 @@ import type { CfbKickoffWeatherSnapshot } from "./cfbKickoffWeather";
 import type { CfbForwardContextCapture } from "./cfbForwardEvidenceCapture";
 import type { CfbEspnReferenceLine } from "./cfbEspnReferenceLine";
 import type { CfbVerifiedQuarterbackAvailability } from "./cfbVerifiedAvailability";
+import type { DailyEdgeGameAvailability } from "@/lib/services/dailyEdge/gameAvailability";
 import {
   CFB_T60_MAX_CAPTURE_LAG_MINUTES,
   CFB_V1_DECISION_RELEASE,
@@ -17,6 +18,8 @@ import {
 } from "./cfbV1Decision";
 
 export const CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE =
+  "cfb_forward_evidence_snapshot_2026_10_07_r36_fcs_price_public_injury_continuity" as const;
+export const CFB_FORWARD_FCS_PRICE_PREVIOUS_EVIDENCE_SCHEMA_RELEASE =
   "cfb_forward_evidence_snapshot_2026_10_07_r35_price_qb_continuity" as const;
 export const CFB_FORWARD_PRICE_QB_PREVIOUS_EVIDENCE_SCHEMA_RELEASE =
   "cfb_forward_evidence_snapshot_2026_10_04_r34_moneyline_market_confirmation" as const;
@@ -77,8 +80,10 @@ export const CFB_FORWARD_LEGACY_EVIDENCE_SCHEMA_RELEASE =
 export const CFB_FORWARD_INITIAL_EVIDENCE_SCHEMA_RELEASE =
   "cfb_forward_evidence_snapshot_2026_08_25_r1" as const;
 export const CFB_FORWARD_EVIDENCE_COLLECTOR_RELEASE =
-  "cfb_forward_evidence_collector_2026_10_07_r46_price_qb_continuity" as const;
+  "cfb_forward_evidence_collector_2026_10_07_r47_fcs_price_public_injury_continuity" as const;
 export const CFB_FORWARD_MEMBER_RELEASE =
+  "cfb_v1_member_release_2026_10_07_r50_fcs_price_public_injury_continuity" as const;
+export const CFB_FORWARD_FCS_PRICE_PREVIOUS_MEMBER_RELEASE =
   "cfb_v1_member_release_2026_10_07_r49_price_qb_continuity" as const;
 export const CFB_FORWARD_PRICE_QB_PREVIOUS_MEMBER_RELEASE =
   "cfb_v1_member_release_2026_10_04_r48_moneyline_market_confirmation" as const;
@@ -181,14 +186,19 @@ export type CfbForwardTeamQuarterbacks = {
 };
 
 export type CfbForwardPlaybookLine = {
-  provider: "playbook";
+  provider: "playbook" | "collegefootballdata";
   capturedAt: string;
   sourceTier: string | null;
+  sportsbook?: string;
+  providerEventId?: string;
   homeMoneyline: number | null;
   awayMoneyline: number | null;
   homeSpread: number | null;
   awaySpread: number | null;
   total: number | null;
+  homeSpreadOpen?: number | null;
+  awaySpreadOpen?: number | null;
+  totalOpen?: number | null;
 };
 
 export type CfbForwardPlaybookSplit = {
@@ -266,7 +276,9 @@ export type CfbForwardEvidencePayload = {
     home: CfbForwardTeamQuarterbacks;
   };
   availability: {
-    injuryStatus: "provider_unavailable";
+    injuryStatus: "provider_unavailable" | "verified_report";
+    /** Complete selected paid-or-fallback matchup report retained for the existing member panel. */
+    report?: DailyEdgeGameAvailability | null;
     /** Source-attributed operator evidence; absent only on compatible earlier releases. */
     verifiedQuarterback?: CfbVerifiedQuarterbackAvailability | null;
     weatherStatus: CfbKickoffWeatherSnapshot["status"] | "venue_weather_unavailable";
@@ -294,7 +306,7 @@ export type CfbForwardEvidencePayload = {
   coverage: {
     currentOdds: boolean;
     comparableCurrentBookCount: number;
-    currentOddsProviders: Array<"balldontlie" | "sharpapi" | "espn">;
+    currentOddsProviders: Array<"balldontlie" | "sharpapi" | "espn" | "collegefootballdata">;
     sharpApiOddsFallback: boolean;
     targetExcludedConsensusReady: boolean;
     operationalOpening: boolean;
@@ -312,6 +324,9 @@ export type CfbForwardEvidencePayload = {
     balldontlieSlate: number;
     balldontlieQuarterbacks: number;
     playbook: number;
+    publicReference?: number;
+    collegeFootballData?: number;
+    officialAvailability?: number;
     espnReference?: number;
     sharpApiOdds: number;
     sharpApiSplits?: number;
@@ -342,7 +357,7 @@ export type CfbForwardMarketHistoryEvidence = Pick<
   payload: {
     market: Pick<
       CfbForwardEvidencePayload["market"],
-      "current" | "currentBooks" | "providerOpening" | "operationalOpening" | "playbookSplits" | "sharpApiSplits"
+      "current" | "currentBooks" | "displayBooks" | "providerOpening" | "operationalOpening" | "playbookSplits" | "sharpApiSplits"
     >;
     contextualEvidenceCapture?: {
       markets: {

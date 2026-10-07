@@ -3,6 +3,8 @@ import { computeSlateDate } from "@/lib/dates/slateDate";
 import type { PredictionRecordRow } from "@/lib/types/domain/Tracking";
 import {
   CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE,
+  CFB_FORWARD_FCS_PRICE_PREVIOUS_EVIDENCE_SCHEMA_RELEASE,
+  CFB_FORWARD_FCS_PRICE_PREVIOUS_MEMBER_RELEASE,
   CFB_FORWARD_PRICE_QB_PREVIOUS_EVIDENCE_SCHEMA_RELEASE,
   CFB_FORWARD_PRICE_QB_PREVIOUS_MEMBER_RELEASE,
   CFB_FORWARD_PRICE_PREVIOUS_EVIDENCE_SCHEMA_RELEASE,
@@ -16,6 +18,7 @@ import {
   CFB_T60_MAX_CAPTURE_LAG_MINUTES,
   CFB_V1_CALIBRATION_RELEASE,
   CFB_V1_DECISION_RELEASE,
+  CFB_V1_FCS_PRICE_PREVIOUS_DECISION_RELEASE,
   CFB_V1_PRICE_QB_PREVIOUS_DECISION_RELEASE,
   type CfbV1Market,
 } from "./cfbV1Decision";
@@ -24,13 +27,14 @@ import type { CfbEspnReferenceLine } from "./cfbEspnReferenceLine";
 import type { NcaafBookOdds } from "./balldontlieNcaafSlate";
 import {
   CFB_MARKET_SHARP_AWARE_PREVIOUS_PRODUCTION_RELEASE,
+  CFB_MARKET_SHARP_AWARE_FCS_PRICE_PREVIOUS_PRODUCTION_RELEASE,
   CFB_MARKET_SHARP_AWARE_PRICE_QB_PREVIOUS_PRODUCTION_RELEASE,
   CFB_MARKET_SHARP_AWARE_PRODUCTION_RELEASE,
 } from "./cfbMarketSharpAwareShadow";
 import { assertMarketScopedFootballDecisions, FOOTBALL_MARKET_SCOPED_T60_TRACKING_RELEASE } from "./footballMarketScopedTracking";
 
 export const CFB_OFFICIAL_TRACKING_RECORD_RELEASE =
-  "cfb_official_tracking_record_2026_10_07_r37_price_qb_continuity" as const;
+  "cfb_official_tracking_record_2026_10_07_r38_fcs_price_public_injury_continuity" as const;
 
 export function cfbTrackingMarketsForPayload(payload: CfbForwardEvidencePayload): CfbV1Market[] {
   const markets = new Set<CfbV1Market>(payload.decisions.evaluatedBets.map((decision) => decision.market));
@@ -476,13 +480,15 @@ function assertCfbPublishedPregameRecoveryPayload(payload: CfbForwardEvidencePay
   const capturedAt = Date.parse(payload.capturedAt);
   const gameStart = Date.parse(payload.game.scheduledStart);
   const supportedForecastRelease = forecastRelease === CFB_MARKET_SHARP_AWARE_PRODUCTION_RELEASE ||
+    forecastRelease === CFB_MARKET_SHARP_AWARE_FCS_PRICE_PREVIOUS_PRODUCTION_RELEASE ||
     forecastRelease === CFB_MARKET_SHARP_AWARE_PRICE_QB_PREVIOUS_PRODUCTION_RELEASE ||
     forecastRelease === CFB_MARKET_SHARP_AWARE_PREVIOUS_PRODUCTION_RELEASE;
   if (
     !((String(payload.schemaRelease) === CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE && String(payload.memberRelease) === CFB_FORWARD_MEMBER_RELEASE) ||
+      (String(payload.schemaRelease) === CFB_FORWARD_FCS_PRICE_PREVIOUS_EVIDENCE_SCHEMA_RELEASE && String(payload.memberRelease) === CFB_FORWARD_FCS_PRICE_PREVIOUS_MEMBER_RELEASE) ||
       (String(payload.schemaRelease) === CFB_FORWARD_PRICE_QB_PREVIOUS_EVIDENCE_SCHEMA_RELEASE && String(payload.memberRelease) === CFB_FORWARD_PRICE_QB_PREVIOUS_MEMBER_RELEASE) ||
       (String(payload.schemaRelease) === CFB_FORWARD_PRICE_PREVIOUS_EVIDENCE_SCHEMA_RELEASE && String(payload.memberRelease) === CFB_FORWARD_PRICE_PREVIOUS_MEMBER_RELEASE)) ||
-    (payload.decisions.decisionRelease !== CFB_V1_DECISION_RELEASE && payload.decisions.decisionRelease !== CFB_V1_PRICE_QB_PREVIOUS_DECISION_RELEASE) ||
+    (payload.decisions.decisionRelease !== CFB_V1_DECISION_RELEASE && payload.decisions.decisionRelease !== CFB_V1_FCS_PRICE_PREVIOUS_DECISION_RELEASE && payload.decisions.decisionRelease !== CFB_V1_PRICE_QB_PREVIOUS_DECISION_RELEASE) ||
     !payload.decisions.publicationEnabled ||
     !supportedForecastRelease ||
     !Number.isFinite(capturedAt) ||

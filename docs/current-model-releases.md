@@ -228,6 +228,47 @@ Last reviewed: 2026-10-07
 
 ## CFB Daily Edge generalized weekly production release
 
+### FCS price hierarchy and official-report continuity (writer r103; fixture r76; snapshot r36; tracking r38)
+
+- Active evidence / collector / member / market reader / decision / sole writer are
+  `cfb_forward_evidence_snapshot_2026_10_07_r36_fcs_price_public_injury_continuity` /
+  `cfb_forward_evidence_collector_2026_10_07_r47_fcs_price_public_injury_continuity` /
+  `cfb_v1_member_release_2026_10_07_r50_fcs_price_public_injury_continuity` /
+  `cfb_market_sharp_aware_production_2026_10_07_r29_fcs_price_public_injury_continuity` /
+  `cfb_v1_daily_edge_decision_2026_10_07_r41_fcs_price_public_injury_continuity` /
+  `cfb_forward_evidence_writer_2026_10_07_r103_paid_sharp_cfbd_price_hierarchy`.
+  Member fixture / outcome / compact snapshot / reader / tracking are r76 / r66 / r36 / r21 / r38.
+  The immediately preceding r35 / r49 / r28 / r40 / r75 / r35 family remains the explicit
+  transition authority for already-captured and immutable T-60 rows.
+- Current quote authority is ordered and source-preserving: paid BALLDONTLIE books, bounded exact-
+  event SharpAPI named books, then CFBD named DraftKings/Bovada rows. A lower source fills absence
+  but never replaces the same named book from a higher source in the same capture. Stored same-book
+  evidence survives temporary omission, and a later higher-priority quote silently resumes
+  authority. No anonymous line or synthetic price is accepted.
+- SharpAPI's exact-event Novig and SX Bet pairs may supply display/line context only. They remain
+  excluded from sportsbook consensus, canonical market anchors, exact-price grading, actionability,
+  movement arbitration and opening-price authority. Kalshi remains excluded because provider rows
+  have exhibited inverted team sides; Polymarket remains excluded because question-shaped identity
+  is not equivalent to a conventional game market.
+- CFBD makes one exact season/week request at most every six hours for FCS-only gaps. Its free-tier
+  request ceiling is therefore at most 124 calls in a 31-day month. It supplies real Moneyline prices
+  and provider-reported current/open Spread and Total lines, but never fabricates the missing Spread
+  or Total prices. The production `CFBD_API_KEY` is a sensitive server environment value.
+- The exact October 7 zero-write replay retained complete paired sportsbook pricing for all 57
+  FBS-involved games. For 31 FCS-only games, paired sportsbook coverage remains honestly 2 / 1 / 0
+  Moneyline / Spread / Total, while paid Sharp exchange context increases line-specific prediction
+  coverage from 31 / 1 / 0 to 31 / 14 / 29. The two remaining Total and 17 remaining Spread gaps
+  have no acceptable provider line; none is fabricated. FCS exact-price decisions remain 0
+  evaluated / 93 held: 0 promotions, 0 demotions, and no hidden board flattening.
+- Official SEC, ACC, Big Ten, and Big 12 reports now populate the existing injury panel only after
+  exact date/team matching, behind Playbook, with last-verified continuity. They are display evidence
+  in this release and cannot alter a projection or grade; blanket report-driven demotion is not
+  authorized without a release-pure paired-promotion validation. No copy, label, layout, writer,
+  lease, lock, settlement, or tracking-definition change is included.
+- Evidence and rollback:
+  `docs/model-audits/2026-10-07-cfb-fcs-price-public-injury-continuity-result.md`. Roll back the
+  complete r36/r50/r29/r41/r103/r76/r66/r36/r21/r38 family together while preserving immutable locks.
+
 ### FBS current-price and quarterback-context continuity (writer r100; fixture r75; snapshot r35; tracking r37)
 
 - Active evidence / collector / member / market reader / decision / sole writer are

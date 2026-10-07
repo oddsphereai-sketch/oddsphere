@@ -2,6 +2,7 @@ import type { NcaafGame } from "./balldontlieNcaafSlate";
 import type { CfbForwardTeamQuarterbacks } from "./cfbForwardEvidence";
 import type { CfbV1DecisionBundle, CfbV1Grade } from "./cfbV1Decision";
 import type { PlaybookInjuryTeamRow } from "@/lib/providers/playbook/types";
+import type { DailyEdgeGameAvailability, DailyEdgeAvailabilityPlayer } from "@/lib/services/dailyEdge/gameAvailability";
 
 export const CFB_VERIFIED_AVAILABILITY_RELEASE =
   "cfb_verified_availability_2026_10_02_r1_source_attributed_likely_out" as const;
@@ -111,6 +112,53 @@ export function playbookCfbQuarterbackAvailability(args: {
   return null;
 }
 
+export function reportedCfbQuarterbackAvailability(args: {
+  game: NcaafGame;
+  away: CfbForwardTeamQuarterbacks;
+  home: CfbForwardTeamQuarterbacks;
+  report: DailyEdgeGameAvailability | null;
+  capturedAt: string;
+  previousEvidence?: CfbVerifiedQuarterbackAvailability | null;
+}): CfbVerifiedQuarterbackAvailability | null {
+  if (!args.report || args.report.eventId !== args.game.providerGameId) return null;
+  for (const quarterbacks of [args.away, args.home]) {
+    const expected = quarterbacks.expectedStartingQuarterback;
+    if (!expected) continue;
+    const team = args.report.teams.find((candidate) => normalizeName(candidate.abbreviation) === normalizeName(quarterbacks.team));
+    if (!team) continue;
+    const prior = args.previousEvidence?.teamId === quarterbacks.teamId ? args.previousEvidence : null;
+    const targets = [expected.name, ...(prior ? [prior.unavailablePlayerName] : [])];
+    const reported = team.players.filter((player) =>
+      player.position?.toUpperCase() === "QB" && targets.some((target) => reportedNameMatches(player, target))
+    );
+    if (reported.length !== 1) continue;
+    const player = reported[0]!;
+    const designation = injuryDesignation(player.status);
+    if (!designation) continue;
+    const affectedMatches = quarterbacks.activeQuarterbacks.filter((quarterback) => reportedNameMatches(player, quarterback.name));
+    const affected = affectedMatches.length === 1 ? affectedMatches[0]! : expected;
+    const replacement = designation === "out" || designation === "doubtful"
+      ? quarterbacks.activeQuarterbacks.find((quarterback) => quarterback.playerId !== affected.playerId)
+      : affected;
+    if (!replacement) continue;
+    return {
+      release: CFB_VERIFIED_AVAILABILITY_RELEASE,
+      providerGameId: args.game.providerGameId,
+      teamId: quarterbacks.teamId,
+      team: quarterbacks.team,
+      unavailablePlayerId: affected.playerId,
+      unavailablePlayerName: affected.name,
+      replacementPlayerId: replacement.playerId,
+      replacementPlayerName: replacement.name,
+      designation,
+      sourceAuthority: args.report.source === "Playbook" ? "official_provider" : "credentialed_report",
+      observedAt: validIso(player.reportedAt) ?? validIso(args.report.reportUpdatedAt) ?? new Date(args.capturedAt).toISOString(),
+      sources: [{ publisher: args.report.source, url: args.report.sourceUrl ?? "https://api.playbook-api.com/v1/injuries" }],
+    };
+  }
+  return null;
+}
+
 export function applyVerifiedCfbQuarterbackAvailability(args: {
   game: NcaafGame;
   away: CfbForwardTeamQuarterbacks;
@@ -202,11 +250,25 @@ function teamMatches(row: PlaybookInjuryTeamRow, quarterbacks: CfbForwardTeamQua
 
 function injuryDesignation(value: string | null): CfbVerifiedQuarterbackAvailability["designation"] | null {
   const normalized = normalizeName(value ?? "");
-  if (normalized.includes("inactive") || normalized.includes("out")) return "out";
+  if (normalized.includes("inactive") || normalized.includes("out") || normalized === "ir" || normalized.includes("injuredreserve")) return "out";
   if (normalized.includes("doubtful")) return "doubtful";
   if (normalized.includes("questionable") || normalized.includes("gametimedecision")) return "questionable";
   if (normalized.includes("available") || normalized.includes("active") || normalized.includes("healthy") || normalized.includes("cleared")) return "available";
   return null;
+}
+
+function reportedNameMatches(player: DailyEdgeAvailabilityPlayer, rosterName: string): boolean {
+  const reported = normalizeName(player.name);
+  const roster = normalizeName(rosterName);
+  if (reported === roster) return true;
+  const reportedParts = player.name.trim().toLowerCase().replace(/[^a-z0-9.' -]+/g, "").split(/\s+/).filter(Boolean);
+  const rosterParts = rosterName.trim().toLowerCase().replace(/[^a-z0-9.' -]+/g, "").split(/\s+/).filter(Boolean);
+  if (reportedParts.length < 2 || rosterParts.length < 2) return false;
+  const reportedInitial = reportedParts[0]!.replace(/[^a-z]/g, "").slice(0, 1);
+  const rosterInitial = rosterParts[0]!.replace(/[^a-z]/g, "").slice(0, 1);
+  const reportedLast = reportedParts.at(-1)!.replace(/[^a-z0-9]/g, "");
+  const rosterLast = rosterParts.at(-1)!.replace(/[^a-z0-9]/g, "");
+  return reportedInitial.length === 1 && reportedInitial === rosterInitial && reportedLast.length >= 3 && reportedLast === rosterLast;
 }
 
 function validIso(value: string | null | undefined): string | null {

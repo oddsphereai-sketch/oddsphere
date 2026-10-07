@@ -171,6 +171,38 @@ const underdogHome = normalizeSharpRows({
 assert.equal(underdogHome[0]?.spread?.homeLine, 3.5, "Sharp spread normalization must preserve which team is the underdog");
 assert.equal(underdogHome[0]?.spread?.awayLine, -3.5);
 
+const exchangeContextRows = [
+  row(expectedEventId, "novig", "point_spread", "home", -7.5, -110, "2026-08-26T12:13:00.000Z"),
+  row(expectedEventId, "novig", "point_spread", "away", 7.5, -110, "2026-08-26T12:13:00.000Z"),
+  row(expectedEventId, "novig", "total_points", "over", 52.5, -110, "2026-08-26T12:13:00.000Z"),
+  row(expectedEventId, "novig", "total_points", "under", 52.5, -110, "2026-08-26T12:13:00.000Z"),
+  row(expectedEventId, "sx_bet", "moneyline", "home", null, -300, "2026-08-26T12:13:00.000Z"),
+  row(expectedEventId, "sx_bet", "moneyline", "away", null, 245, "2026-08-26T12:13:00.000Z"),
+  row(expectedEventId, "kalshi", "point_spread", "home", -7.5, -110, "2026-08-26T12:13:00.000Z"),
+  row(expectedEventId, "kalshi", "point_spread", "away", 7.5, -110, "2026-08-26T12:13:00.000Z"),
+  row(expectedEventId, "polymarket", "total_points", "over", 52.5, -110, "2026-08-26T12:13:00.000Z"),
+  row(expectedEventId, "polymarket", "total_points", "under", 52.5, -110, "2026-08-26T12:13:00.000Z"),
+];
+const exchangeContext = normalizeSharpRows({ game, eventId: expectedEventId, rows: exchangeContextRows });
+assert.deepEqual(exchangeContext.map((book) => book.sportsbook), ["novig", "sxbet"]);
+assert.equal(exchangeContext.every((book) => book.targetEligible === false), true, "exchange context must never become an exact-price target");
+assert.equal(exchangeContext.find((book) => book.sportsbook === "novig")?.spread?.homeLine, -7.5);
+assert.equal(exchangeContext.find((book) => book.sportsbook === "novig")?.total?.line, 52.5);
+assert.equal(exchangeContext.find((book) => book.sportsbook === "sxbet")?.moneyline?.homePrice, -300);
+assert.equal(exchangeContext.some((book) => book.sportsbook === "kalshi" || book.sportsbook === "polymarket"), false, "blocked/question-shaped markets must remain excluded");
+const exchangeOnlyFetch = await fetchSharpApiNcaafOddsFallback({
+  games: [game],
+  maximumRequests: 2,
+  client: withDiscoveredEvent({
+    async fetch<T>(): Promise<SharpApiResponse<T>> {
+      return { data: exchangeContextRows as T, pagination: { has_more: false } };
+    },
+  }),
+});
+assert.equal(exchangeOnlyFetch.booksByGame[game.providerGameId]?.length, 0, "exchange rows cannot enter sportsbook consensus or exact-price grading");
+assert.deepEqual(exchangeOnlyFetch.displayBooksByGame[game.providerGameId]?.map((book) => book.sportsbook), ["novig", "sxbet"]);
+assert.equal(exchangeOnlyFetch.matchedGames, 0, "display-only context cannot report a conventional sportsbook match");
+
 const bundle = buildCfbV1DecisionBundle({
   providerGameId: game.providerGameId,
   awayTeam: game.away.abbreviation,

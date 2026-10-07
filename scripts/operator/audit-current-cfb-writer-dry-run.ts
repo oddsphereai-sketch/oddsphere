@@ -30,6 +30,7 @@ async function main(): Promise<void> {
     balldontlieApiKey,
     playbookApiKey,
     sharpApiKey,
+    collegeFootballDataApiKey: process.env.CFBD_API_KEY ?? null,
     weatherProvider: null,
     auditPayloads: (payloads) => {
       focusedPayloads = focusMatchup

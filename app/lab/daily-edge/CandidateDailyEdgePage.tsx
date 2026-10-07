@@ -222,6 +222,9 @@ export default async function CandidateDailyEdgePage({
   // card when Circa is absent. Provider identity stays in the DTO for audit;
   // predictions, recommendations, grades, and member-facing copy are untouched.
   await populateDailyEdgeDraftKingsFallback(snapshot, uclRequested ? "ucl" : sport);
+  // Retain the established prop identifier because shared football reader
+  // regression tests treat it as part of the page contract. CFB uses the same
+  // existing availability surface when its fixture is active.
   const visibleNflAvailability = nflFixture
     ? Object.fromEntries(
         snapshot.games.flatMap((game) => {
@@ -229,7 +232,14 @@ export default async function CandidateDailyEdgePage({
           return availability ? [[game.id, availability]] : [];
         }),
       )
-    : undefined;
+    : cfbFixture
+      ? Object.fromEntries(
+          snapshot.games.flatMap((game) => {
+            const availability = cfbFixture.availability?.[game.id];
+            return availability ? [[game.id, availability]] : [];
+          }),
+        )
+      : undefined;
   const historyRead: [
     Awaited<ReturnType<typeof loadTeamHistory>>,
     Awaited<ReturnType<typeof loadPitcherFirstInningHistory>>,
