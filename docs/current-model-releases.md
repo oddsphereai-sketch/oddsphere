@@ -228,7 +228,39 @@ Last reviewed: 2026-10-07
 
 ## CFB Daily Edge generalized weekly production release
 
-### FCS price hierarchy and official-report continuity (writer r103; fixture r76; snapshot r36; tracking r38)
+### Release-wave completeness over retained terminal games (writer r104; fixture r77; snapshot r37; tracking r38)
+
+- Active evidence / collector / member / market reader / decision / sole writer are
+  `cfb_forward_evidence_snapshot_2026_10_07_r37_release_wave_completeness` /
+  `cfb_forward_evidence_collector_2026_10_07_r48_release_wave_completeness` /
+  `cfb_v1_member_release_2026_10_07_r51_release_wave_completeness` /
+  `cfb_market_sharp_aware_production_2026_10_07_r29_fcs_price_public_injury_continuity` /
+  `cfb_v1_daily_edge_decision_2026_10_07_r41_fcs_price_public_injury_continuity` /
+  `cfb_forward_evidence_writer_2026_10_07_r104_release_wave_completeness`.
+  Member fixture / outcome / compact snapshot / reader / tracking are r77 / r67 / r37 / r22 / r38.
+  The immediately preceding r36 / r50 / r29 / r41 / r76 / r36 family remains the explicit
+  transition authority and movement-history source.
+- A new evidence release now defines its expected slate from the unique games that actually have a
+  capture plan. Lifecycle-only games retained for tracking after they become final do not inflate a
+  new release's completeness denominator. Later partial refreshes retain all games already present
+  in that release and add a newly scheduled game once. A genuine capture failure therefore still
+  leaves the release incomplete and fail-closed.
+- This repairs the October 7 handoff in which the completed USM-Troy game remained in the writer's
+  lifecycle set but correctly had no new prediction capture. The r36 writer produced 88 valid rows
+  with an expected count of 89, so the compact reader retained the older r35 board even though the
+  new paid Sharp/CFBD context was stored. R37 expects the 88-game active capture wave and publishes
+  those same model/market decisions. Forecast equations, probabilities, sides, prices, grades,
+  stakes, schedules, locks, tracking definitions, provider budgets, copy, labels and layout are
+  unchanged.
+- Same-book opening/prior/current history remains release-spanning and source-preserving. The paid
+  exchange context remains visible but target-excluded, and representative-price selection retains
+  its paired-quote, source-priority and isolated-outlier protections. Existing immutable T-60 rows
+  and official tracking remain untouched.
+- Evidence and rollback:
+  `docs/model-audits/2026-10-07-cfb-release-wave-completeness-r37.md`. Roll back the complete
+  r37/r51/r104/r77/r67/r37/r22 publication family to r36 while preserving immutable locks.
+
+### Prior FCS price hierarchy and official-report continuity (writer r103; fixture r76; snapshot r36; tracking r38)
 
 - Active evidence / collector / member / market reader / decision / sole writer are
   `cfb_forward_evidence_snapshot_2026_10_07_r36_fcs_price_public_injury_continuity` /

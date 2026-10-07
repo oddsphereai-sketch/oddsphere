@@ -12,6 +12,8 @@ import { normalizeCfbPlaybookLine, normalizeCfbPlaybookSplits, resolveCfbPlayboo
 import {
   CFB_FORWARD_EVIDENCE_COLLECTOR_RELEASE,
   CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE,
+  CFB_FORWARD_RELEASE_WAVE_PREVIOUS_EVIDENCE_SCHEMA_RELEASE,
+  CFB_FORWARD_RELEASE_WAVE_PREVIOUS_MEMBER_RELEASE,
   CFB_FORWARD_FCS_PRICE_PREVIOUS_EVIDENCE_SCHEMA_RELEASE,
   CFB_FORWARD_FCS_PRICE_PREVIOUS_MEMBER_RELEASE,
   CFB_FORWARD_PRICE_PREVIOUS_EVIDENCE_SCHEMA_RELEASE,
@@ -125,7 +127,7 @@ import {
 import type { PlaybookInjuryTeamRow } from "@/lib/providers/playbook/types";
 
 export const CFB_FORWARD_WRITER_RELEASE =
-  "cfb_forward_evidence_writer_2026_10_07_r103_paid_sharp_cfbd_price_hierarchy" as const;
+  "cfb_forward_evidence_writer_2026_10_07_r104_release_wave_completeness" as const;
 export const CFB_FORWARD_MAX_QB_TEAMS_PER_RUN = 24 as const;
 export const CFB_FORWARD_MAX_SHARP_FALLBACK_GAMES_PER_RUN = 32 as const;
 export const CFB_FORWARD_MAX_ESPN_PROSPECTIVE_GAMES_PER_RUN = 32 as const;
@@ -313,6 +315,7 @@ export async function runCfbForwardEvidenceWriter(args: {
     const memberSnapshot = await refreshCompactMemberSnapshot({ client: args.client, existing: allExisting, marketHistory, payloads: [], season: args.season, now: args.now, apply: args.apply });
     return emptyResult("capture_plan_empty", tracking, memberSnapshot);
   }
+  const releaseSlateGameCount = cfbForwardReleaseSlateGameCount({ existing, plans });
   const playbook = new PlaybookReadBroker(args.playbookApiKey);
   const priorResults = await fetchPriorCompletedGames({ rows: writerEvidence.metadata, before: window.boardStartDate, apiKey: args.balldontlieApiKey });
   const advancedState = await loadCfbCurrentAdvancedState({
@@ -745,7 +748,7 @@ export async function runCfbForwardEvidenceWriter(args: {
       runId: args.runId,
       season: args.season,
       week: plan.game.providerWeek,
-      slateGameCount: games.length,
+      slateGameCount: releaseSlateGameCount,
       stage: plan.stage,
       captureTiming: plan.captureTiming,
       capturedAt,
@@ -1027,6 +1030,29 @@ export function selectCfbModelCoveredWeeklyGames(args: {
     (Date.parse(game.scheduledStart) > nowMs || existingIds.has(game.providerGameId)) &&
     cfbV1WeeklyGameProfileCoverage(game).supported
   );
+}
+
+/**
+ * A release wave is complete when every game represented by that release has
+ * one latest row. Games retained only for lock/tracking lifecycle (for example,
+ * a completed game from the prior night) are not part of a brand-new wave
+ * unless they actually have a capture plan. Later partial refreshes retain the
+ * already-published release membership and add genuinely new planned games.
+ */
+export function cfbForwardReleaseSlateGameCount(args: {
+  existing: CfbForwardStoredEvidence[];
+  plans: Array<Pick<CfbForwardCapturePlan, "game">>;
+}): number {
+  const gameIds = new Set(
+    args.existing
+      .filter((row) =>
+        row.payload.schemaRelease === CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE &&
+        row.payload.memberRelease === CFB_FORWARD_MEMBER_RELEASE)
+      .map((row) => row.providerGameId),
+  );
+  for (const plan of args.plans) gameIds.add(plan.game.providerGameId);
+  if (gameIds.size === 0) throw new Error("CFB release wave cannot publish an empty slate.");
+  return gameIds.size;
 }
 
 export function planCfbPriorResultReads(args: {
@@ -1432,6 +1458,7 @@ function isEligibleOfficialTrackingPayload(payload: CfbForwardEvidencePayload): 
 function isEligiblePublishedPregameRecoveryPayload(payload: CfbForwardEvidencePayload): boolean {
   const release = payload.authoritativeForecast?.release as string | undefined;
   return ((String(payload.schemaRelease) === CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE && String(payload.memberRelease) === CFB_FORWARD_MEMBER_RELEASE) ||
+    (String(payload.schemaRelease) === CFB_FORWARD_RELEASE_WAVE_PREVIOUS_EVIDENCE_SCHEMA_RELEASE && String(payload.memberRelease) === CFB_FORWARD_RELEASE_WAVE_PREVIOUS_MEMBER_RELEASE) ||
     (String(payload.schemaRelease) === CFB_FORWARD_FCS_PRICE_PREVIOUS_EVIDENCE_SCHEMA_RELEASE && String(payload.memberRelease) === CFB_FORWARD_FCS_PRICE_PREVIOUS_MEMBER_RELEASE) ||
     (String(payload.schemaRelease) === CFB_FORWARD_PRICE_PREVIOUS_EVIDENCE_SCHEMA_RELEASE && String(payload.memberRelease) === CFB_FORWARD_PRICE_PREVIOUS_MEMBER_RELEASE)) &&
     (payload.decisions.decisionRelease === CFB_V1_DECISION_RELEASE || payload.decisions.decisionRelease === CFB_V1_FCS_PRICE_PREVIOUS_DECISION_RELEASE) &&

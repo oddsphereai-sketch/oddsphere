@@ -10,7 +10,7 @@ import {
   type CfbForwardStoredEvidence,
   type CfbForwardTeamQuarterbacks,
 } from "../lib/services/football/cfbForwardEvidence";
-import { CFB_FORWARD_MAX_QB_TEAMS_PER_RUN, latestCfbPayloadTimestamp, planCfbPriorResultReads, retainLatestNonemptyCfbQuarterbacks, selectCfbForwardCollectionWindow, selectCfbModelCoveredWeeklyGames, selectQuarterbackTeams } from "../lib/services/football/cfbForwardEvidenceWriter";
+import { CFB_FORWARD_MAX_QB_TEAMS_PER_RUN, cfbForwardReleaseSlateGameCount, latestCfbPayloadTimestamp, planCfbPriorResultReads, retainLatestNonemptyCfbQuarterbacks, selectCfbForwardCollectionWindow, selectCfbModelCoveredWeeklyGames, selectQuarterbackTeams } from "../lib/services/football/cfbForwardEvidenceWriter";
 import { buildCfbMemberFixture } from "../lib/services/football/cfbMemberFixture";
 import {
   CFB_MARKET_SHARP_AWARE_CANDIDATE_RELEASE,
@@ -130,6 +130,25 @@ assert.deepEqual(
 );
 const supportedFcsForecast = getCfbV1ForecastForGame({ game: supportedFcs }).forecast;
 const supportedFcsEvidence = evidenceRow(supportedFcs, supportedFcsForecast, 1, "supported-fcs-opening");
+const priorReleaseTerminal = structuredClone(supportedFcsEvidence);
+priorReleaseTerminal.payload.schemaRelease = "cfb_forward_evidence_snapshot_prior_release" as typeof CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE;
+priorReleaseTerminal.payload.memberRelease = "cfb_v1_member_release_prior_release" as typeof CFB_FORWARD_MEMBER_RELEASE;
+assert.equal(
+  cfbForwardReleaseSlateGameCount({
+    existing: [priorReleaseTerminal],
+    plans: [{ game: weekOneGame }, { game: supportedFcs }],
+  }),
+  2,
+  "a completed lifecycle row retained only from a prior release cannot inflate a brand-new publication wave",
+);
+assert.equal(
+  cfbForwardReleaseSlateGameCount({
+    existing: [supportedFcsEvidence],
+    plans: [{ game: supportedFcs }, { game: weekOneGame }],
+  }),
+  2,
+  "a partial refresh must retain current release membership and add a genuinely new planned game exactly once",
+);
 assert.deepEqual(
   selectCfbModelCoveredWeeklyGames({ games: [supportedFcs], existing: [supportedFcsEvidence], now: "2026-09-05T19:00:00.000Z", window: weekOneWindow }).map((row) => row.providerGameId),
   ["supported-fcs"],
