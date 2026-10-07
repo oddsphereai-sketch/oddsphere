@@ -2,11 +2,14 @@ import { createHash } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { DailyEdgeGameDto, DailyEdgePredictionDto, MarketEdgeDto, OddsTrailStopDto } from "@/app/lab/lib/labTypes";
 import type { PreviewHistoryByTeam } from "@/app/dev/experience-preview/ActualDailyEdgePreview";
+import type { DailyEdgeGameAvailability } from "@/lib/services/dailyEdge/gameAvailability";
 import { buildRecommendationDecision } from "@/lib/services/recommendationDecision";
 import { withFirstTrackedSplitObservation } from "@/lib/services/splitDisplayMovement";
 import type { MarketSplitDisplaySection } from "@/lib/types/domain/RecommendationDecision";
 import {
   CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE,
+  CFB_FORWARD_FCS_PRICE_PREVIOUS_EVIDENCE_SCHEMA_RELEASE,
+  CFB_FORWARD_FCS_PRICE_PREVIOUS_MEMBER_RELEASE,
   CFB_FORWARD_PRICE_QB_PREVIOUS_EVIDENCE_SCHEMA_RELEASE,
   CFB_FORWARD_PRICE_QB_PREVIOUS_MEMBER_RELEASE,
   CFB_FORWARD_MARKET_CONFIRMATION_PREVIOUS_EVIDENCE_SCHEMA_RELEASE,
@@ -67,6 +70,7 @@ import {
   CFB_V1_BASE_PROBABILITY_RELEASE,
   CFB_V1_BASE_SCORE_ARTIFACT_RELEASE,
   CFB_V1_DECISION_RELEASE,
+  CFB_V1_FCS_PRICE_PREVIOUS_DECISION_RELEASE,
   CFB_V1_PRICE_QB_PREVIOUS_DECISION_RELEASE,
   CFB_V1_MARKET_CONFIRMATION_PREVIOUS_DECISION_RELEASE,
   CFB_V1_SPREAD_SIGNAL_PREVIOUS_DECISION_RELEASE,
@@ -92,9 +96,9 @@ import { cfbTeamIdentity } from "./cfbTeamIdentity";
 import { CFB_PUBLIC_SCORE_DIRECTION_TOLERANCE_POINTS } from "./footballCrossMarketCoherence";
 
 export const CFB_MEMBER_FIXTURE_RELEASE =
-  "cfb_v1_member_fixture_2026_10_07_r75_price_qb_continuity" as const;
+  "cfb_v1_member_fixture_2026_10_07_r76_fcs_price_public_injury_continuity" as const;
 export const CFB_PUBLIC_OUTCOME_CONTRACT_RELEASE =
-  "cfb_market_sharp_public_outcome_contract_2026_10_07_r65_price_qb_continuity" as const;
+  "cfb_market_sharp_public_outcome_contract_2026_10_07_r66_fcs_price_public_injury_continuity" as const;
 export const CFB_CONTEXT_ONLY_QUOTE_CAPTURE_SKEW_MS = 5_000 as const;
 const CFB_PRE_DIRECTIONAL_MEMBER_RELEASE = "cfb_v1_member_release_2026_08_28_r14_expanded_sharp_budget" as const;
 const CFB_PRE_DIRECTIONAL_DECISION_RELEASE = "cfb_v1_daily_edge_decision_2026_08_28_r11_market_scoped_data_quality" as const;
@@ -133,6 +137,7 @@ export type CfbMemberFixture = {
   capturedAt: string;
   snapshot: { as_of: string; sport: "cfb"; date: string; requested_date: string; fallback_used: false; slateState: "today_draft_only"; slate_status: string; last_slate_update_at: string; games: DailyEdgeGameDto[] };
   history: PreviewHistoryByTeam;
+  availability: Record<string, DailyEdgeGameAvailability>;
   week: { label: string };
   provenance: { sourceChecksum: string; openingCoverageGames: number; splitCoverageGames: number; sharpSplitCoverageGames: number; quarterbackCoverageGames: number; currentOddsGames: number };
   tracking: { trackingEligible: boolean; reason: string };
@@ -179,6 +184,10 @@ export function buildCfbMemberFixture(
     capturedAt,
     snapshot: { as_of: capturedAt, sport: "cfb", date, requested_date: date, fallback_used: false, slateState: "today_draft_only", slate_status: "cfb_week_one_model_live", last_slate_update_at: capturedAt, games },
     history: {},
+    availability: Object.fromEntries(latest.flatMap((row) => {
+      const report = row.payload.availability.report;
+      return report ? [[row.providerGameId, report] as const] : [];
+    })),
     week: { label: selectedWindows.map(({ window }) => window.boardStartDate === "2026-08-25" ? "Opening Week" : `Week of ${shortDate(window.boardStartDate)}`).join(" + ") },
     provenance: {
       sourceChecksum,
@@ -583,19 +592,48 @@ export function selectLatestCfbMemberEvidenceRows(
       )
     : null;
   const priceQbPreviousAuthority = priceQbPrevious ?? priceQbPreviousBoundary ?? priceQbPreviousLockOverlay ?? marketConfirmationPreviousAuthority;
+  const fcsPricePrevious = completeRowsForRelease(
+    rows,
+    CFB_FORWARD_FCS_PRICE_PREVIOUS_EVIDENCE_SCHEMA_RELEASE,
+    CFB_FORWARD_FCS_PRICE_PREVIOUS_MEMBER_RELEASE,
+    CFB_V1_FCS_PRICE_PREVIOUS_DECISION_RELEASE,
+  );
+  const fcsPricePreviousBoundary = priceQbPreviousAuthority
+    ? immutableBoundaryTransitionRows(
+        rows,
+        now,
+        CFB_FORWARD_FCS_PRICE_PREVIOUS_EVIDENCE_SCHEMA_RELEASE,
+        CFB_FORWARD_FCS_PRICE_PREVIOUS_MEMBER_RELEASE,
+        CFB_V1_FCS_PRICE_PREVIOUS_DECISION_RELEASE,
+        priceQbPreviousAuthority,
+      )
+    : null;
+  const fcsPricePreviousLockOverlay = priceQbPreviousAuthority
+    ? immutableLockOverlayRows(
+        rows,
+        CFB_FORWARD_FCS_PRICE_PREVIOUS_EVIDENCE_SCHEMA_RELEASE,
+        CFB_FORWARD_FCS_PRICE_PREVIOUS_MEMBER_RELEASE,
+        CFB_V1_FCS_PRICE_PREVIOUS_DECISION_RELEASE,
+        priceQbPreviousAuthority,
+      )
+    : null;
+  const fcsPricePreviousAuthority = fcsPricePrevious ?? fcsPricePreviousBoundary ?? fcsPricePreviousLockOverlay ?? priceQbPreviousAuthority;
   const current = completeRowsForRelease(rows, CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE, CFB_FORWARD_MEMBER_RELEASE, CFB_V1_DECISION_RELEASE);
   if (current) return current;
-  const immutableBoundaryTransition = priceQbPreviousAuthority
+  const immutableBoundaryTransition = fcsPricePreviousAuthority
     ? immutableBoundaryTransitionRows(
         rows,
         now,
         CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE,
         CFB_FORWARD_MEMBER_RELEASE,
         CFB_V1_DECISION_RELEASE,
-        priceQbPreviousAuthority,
+        fcsPricePreviousAuthority,
       )
     : null;
   if (immutableBoundaryTransition) return immutableBoundaryTransition;
+  if (fcsPricePrevious) return fcsPricePrevious;
+  if (fcsPricePreviousBoundary) return fcsPricePreviousBoundary;
+  if (fcsPricePreviousLockOverlay) return fcsPricePreviousLockOverlay;
   if (priceQbPrevious) return priceQbPrevious;
   if (marketConfirmationPrevious) return marketConfirmationPrevious;
   if (marketConfirmationPreviousBoundary) return marketConfirmationPreviousBoundary;

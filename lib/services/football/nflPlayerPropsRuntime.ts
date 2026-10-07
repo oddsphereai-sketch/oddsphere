@@ -183,7 +183,7 @@ export type NflPlayerPropsRuntimeFeatureRow = {
   } | null;
   availability: {
     listed: boolean; status: string | null; detail: string | null; reportedAt: string | null;
-    reportUpdatedAt: string | null; source: "ESPN" | "Playbook" | "BALLDONTLIE";
+    reportUpdatedAt: string | null; source: "ESPN" | "Playbook" | "BALLDONTLIE" | "Conference";
   };
   features: Record<string, number | null>;
 };

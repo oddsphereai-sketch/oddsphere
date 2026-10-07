@@ -12,6 +12,8 @@ import { normalizeCfbPlaybookLine, normalizeCfbPlaybookSplits, resolveCfbPlayboo
 import {
   CFB_FORWARD_EVIDENCE_COLLECTOR_RELEASE,
   CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE,
+  CFB_FORWARD_FCS_PRICE_PREVIOUS_EVIDENCE_SCHEMA_RELEASE,
+  CFB_FORWARD_FCS_PRICE_PREVIOUS_MEMBER_RELEASE,
   CFB_FORWARD_PRICE_PREVIOUS_EVIDENCE_SCHEMA_RELEASE,
   CFB_FORWARD_MEMBER_RELEASE,
   isCfbPublishedT60AccuracyLockPayload,
@@ -30,7 +32,7 @@ import {
   type CfbForwardTeamQuarterbacks,
 } from "./cfbForwardEvidence";
 import { appendCfbForwardEvidence, readCfbForwardMarketHistory, readCfbForwardWriterEvidence, type CfbForwardEvidenceMetadata } from "./cfbForwardEvidenceStore";
-import { buildCfbV1DecisionBundle, CFB_T60_MAX_CAPTURE_LAG_MINUTES, CFB_V1_DECISION_RELEASE, getCfbV1ForecastForGame, type CfbV1Forecast, type CfbV1Market } from "./cfbV1Decision";
+import { buildCfbV1DecisionBundle, CFB_T60_MAX_CAPTURE_LAG_MINUTES, CFB_V1_DECISION_RELEASE, CFB_V1_FCS_PRICE_PREVIOUS_DECISION_RELEASE, getCfbV1ForecastForGame, type CfbV1Forecast, type CfbV1Market } from "./cfbV1Decision";
 import { CFB_V1_WEEKLY_RUNTIME_RELEASE, cfbV1WeeklyGameProfileCoverage, getCfbV1WeeklyForecasts } from "./cfbV1WeeklyForecast";
 import { loadCfbCurrentAdvancedState } from "./cfbCurrentAdvancedState";
 import { resolveCfbCanonicalMarketAnchor } from "./cfbMarketInformedOutcome";
@@ -39,6 +41,7 @@ import {
   buildCfbMarketSharpAwareForecast,
   CFB_MARKET_SHADOW_WEIGHT,
   CFB_MARKET_SHARP_AWARE_CANDIDATE_RELEASE,
+  CFB_MARKET_SHARP_AWARE_FCS_PRICE_PREVIOUS_PRODUCTION_RELEASE,
   CFB_MARKET_SHARP_AWARE_PREVIOUS_PRODUCTION_RELEASE,
   CFB_MARKET_SHARP_AWARE_PRICE_QB_PREVIOUS_PRODUCTION_RELEASE,
   CFB_MARKET_SHARP_AWARE_PRODUCTION_RELEASE,
@@ -63,16 +66,28 @@ import {
   type CfbEspnReferenceResult,
 } from "./cfbEspnReferenceLine";
 import {
+  CFB_COLLEGE_FOOTBALL_DATA_REFRESH_MINUTES,
+  fetchCfbCollegeFootballDataLines,
+  type CfbCollegeFootballDataLinesResult,
+} from "./cfbCollegeFootballDataLines";
+import {
   CFB_ESPN_CURRENT_ODDS_MAX_GAMES_PER_RUN,
   fetchCfbEspnCurrentOdds,
 } from "./cfbEspnCurrentOdds";
+import { buildCfbGameAvailability } from "./cfbGameAvailability";
+import {
+  CFB_OFFICIAL_CONFERENCE_AVAILABILITY_PREGAME_REFRESH_MINUTES,
+  CFB_OFFICIAL_CONFERENCE_AVAILABILITY_REFRESH_MINUTES,
+  fetchCfbOfficialConferenceAvailability,
+  type CfbOfficialConferenceAvailabilityResult,
+} from "./cfbOfficialConferenceAvailability";
 import { activeCfbWeeklyWindow, eligibleCfbWeeklyGames, isGameInCfbWeeklyWindow, resolveCfbVisibleWindows, type CfbWeeklyWindow } from "./cfbWeeklyWindow";
 import {
   CFB_SHARP_API_ODDS_RELEASE,
   CFB_SHARP_FALLBACK_MAX_REQUESTS,
+  buildCfbNamedBookPriceHierarchy,
   cfbBooksNeedSharpFallback,
   fetchSharpApiNcaafOddsFallback,
-  mergeCfbNamedBooks,
   preferredCfbTargetBook,
   retainLatestCfbNamedBookMarkets,
   type CfbSharpApiOddsResult,
@@ -104,13 +119,15 @@ import {
   applyCfbVerifiedAvailabilityGradeCap,
   applyVerifiedCfbQuarterbackAvailability,
   playbookCfbQuarterbackAvailability,
+  reportedCfbQuarterbackAvailability,
+  type CfbVerifiedQuarterbackAvailability,
 } from "./cfbVerifiedAvailability";
 import type { PlaybookInjuryTeamRow } from "@/lib/providers/playbook/types";
 
 export const CFB_FORWARD_WRITER_RELEASE =
-  "cfb_forward_evidence_writer_2026_10_07_r100_price_qb_continuity" as const;
+  "cfb_forward_evidence_writer_2026_10_07_r103_paid_sharp_cfbd_price_hierarchy" as const;
 export const CFB_FORWARD_MAX_QB_TEAMS_PER_RUN = 24 as const;
-export const CFB_FORWARD_MAX_SHARP_FALLBACK_GAMES_PER_RUN = 24 as const;
+export const CFB_FORWARD_MAX_SHARP_FALLBACK_GAMES_PER_RUN = 32 as const;
 export const CFB_FORWARD_MAX_ESPN_PROSPECTIVE_GAMES_PER_RUN = 32 as const;
 export const CFB_FORWARD_MAX_ESPN_CURRENT_ODDS_GAMES_PER_RUN = CFB_ESPN_CURRENT_ODDS_MAX_GAMES_PER_RUN;
 export const CFB_FORWARD_RESULTS_BATCH_SIZE = 100 as const;
@@ -234,6 +251,7 @@ export async function runCfbForwardEvidenceWriter(args: {
   balldontlieApiKey: string;
   playbookApiKey: string;
   sharpApiKey: string;
+  collegeFootballDataApiKey?: string | null;
   weatherProvider?: IWeatherProvider | null;
   /** Read-only operator evidence hook. Never used by the production route. */
   auditPayloads?: (payloads: readonly CfbForwardEvidencePayload[]) => void;
@@ -307,26 +325,84 @@ export async function runCfbForwardEvidenceWriter(args: {
   const priorQuarterbacks = latestQuarterbacksByTeam(allExisting);
   const quarterbackTeams = selectQuarterbackTeams({ plans, teams, priorQuarterbacks, maximum: CFB_FORWARD_MAX_QB_TEAMS_PER_RUN, now: args.now });
   const plannedGames = [...new Map(plans.map((plan) => [plan.game.providerGameId, plan.game])).values()];
+  const officialAvailabilityDue = shouldFetchCfbOfficialConferenceAvailability({
+    games: plannedGames,
+    existing: allExisting,
+    now: args.now,
+    force: need.reason === "release_refresh_due" || need.reason === "opening_seed",
+  });
+  const officialAvailabilityPromise = officialAvailabilityDue
+    ? fetchCfbOfficialConferenceAvailability({ games: plannedGames, capturedAt: args.now })
+        .then((result) => ({ result, error: null }))
+        .catch((error: unknown) => ({ result: null, error: splitRequestError(error) }))
+    : Promise.resolve({ result: null as CfbOfficialConferenceAvailabilityResult | null, error: null as string | null });
   const weeklyForecasts = getCfbV1WeeklyForecasts({
     games,
     completedGames: priorResults.games,
     advancedGames: advancedState.state?.games ?? [],
   });
   const trustedSharpEventIdsByGame = trustedCfbSharpEventIdsByGame(existing);
-  const sharpFallbackCandidates = plannedGames.filter((game) => cfbBooksNeedSharpFallback(slate.currentOddsComparableBooksByGame[game.providerGameId] ?? []));
+  const paidCurrentBooksByGame = Object.fromEntries(plannedGames.map((game) => [
+    game.providerGameId,
+    slate.currentOddsComparableBooksByGame[game.providerGameId] ?? [],
+  ]));
+  const sharpFallbackCandidates = plannedGames.filter((game) =>
+    cfbBooksNeedSharpFallback(paidCurrentBooksByGame[game.providerGameId] ?? []));
   const sharpFallbackGames = need.reason === "reference_line_completion_due" ? [] : selectCfbSharpFallbackGames({
     games: sharpFallbackCandidates,
     trustedEventIdsByGame: trustedSharpEventIdsByGame,
     latestByGame,
-    currentBooksByGame: slate.currentOddsComparableBooksByGame,
+    currentBooksByGame: paidCurrentBooksByGame,
     maximum: CFB_FORWARD_MAX_SHARP_FALLBACK_GAMES_PER_RUN,
   });
   const sharpFallbackGameIds = new Set(sharpFallbackGames.map((game) => game.providerGameId));
+  const sharpFallbackPromise = fetchCfbSharpOddsFallbackAttempt({
+    games: sharpFallbackGames,
+    apiKey: args.sharpApiKey,
+    trustedEventIdsByGame: trustedSharpEventIdsByGame,
+  });
+  const collegeFootballDataGames = plannedGames.filter((game) => !game.away.fbs && !game.home.fbs);
+  const collegeFootballDataDue = Boolean(args.collegeFootballDataApiKey) && shouldFetchCfbCollegeFootballDataLines({
+    games: collegeFootballDataGames,
+    existing: allExisting,
+    now: args.now,
+    force: need.reason === "release_refresh_due" || need.reason === "opening_seed",
+  });
+  const collegeFootballDataAttempt = collegeFootballDataDue
+      ? await fetchCfbCollegeFootballDataLines({
+        games: collegeFootballDataGames,
+        capturedAt: args.now,
+        apiKey: args.collegeFootballDataApiKey!,
+      }).then((result) => ({ result, error: null })).catch((error: unknown) => ({
+        result: null,
+        error: splitRequestError(error),
+      }))
+    : { result: null as CfbCollegeFootballDataLinesResult | null, error: null as string | null };
+  const sharpFallbackAttempt = await sharpFallbackPromise;
+  const sharpFallback = sharpFallbackAttempt.result;
+  const paidAndSharpBooksByGame = Object.fromEntries(plannedGames.map((game) => [
+    game.providerGameId,
+    buildCfbNamedBookPriceHierarchy(
+      paidCurrentBooksByGame[game.providerGameId] ?? [],
+      sharpFallback.booksByGame[game.providerGameId] ?? [],
+    ),
+  ]));
+  const paidSharpAndCollegeFootballDataBooksByGame = Object.fromEntries(plannedGames.map((game) => [
+    game.providerGameId,
+    buildCfbNamedBookPriceHierarchy(
+      paidAndSharpBooksByGame[game.providerGameId] ?? [],
+      collegeFootballDataAttempt.result?.moneylineBooksByGame[game.providerGameId] ?? [],
+    ),
+  ]));
+  const primaryCurrentBooksByGame = Object.fromEntries(plannedGames.map((game) => [
+    game.providerGameId,
+    paidSharpAndCollegeFootballDataBooksByGame[game.providerGameId] ?? [],
+  ]));
   const espnCurrentOddsGames = plannedGames.filter((game) =>
     (game.away.fbs || game.home.fbs) &&
-    cfbBooksNeedSharpFallback(slate.currentOddsComparableBooksByGame[game.providerGameId] ?? []),
+    cfbBooksNeedSharpFallback(primaryCurrentBooksByGame[game.providerGameId] ?? []),
   );
-  const [linesAttempt, splitsAttempt, venueWeatherAttempt, injuryAttempt, quarterbacks, sharpFallbackAttempt, sharpSplitsAttempt, circaAttempt, espnCurrentOddsAttempt] = await Promise.all([
+  const [linesAttempt, splitsAttempt, venueWeatherAttempt, injuryAttempt, quarterbacks, sharpSplitsAttempt, circaAttempt, espnCurrentOddsAttempt, officialAvailabilityAttempt] = await Promise.all([
     fetchCfbPlaybookRowsAttempt(() => playbook.lines("ncaaf")),
     fetchCfbPlaybookRowsAttempt(() => playbook.splits("ncaaf")),
     playbook.venueWeather("ncaaf")
@@ -334,7 +410,6 @@ export async function runCfbForwardEvidenceWriter(args: {
       .catch((error: unknown) => ({ rows: [] as unknown[], error: splitRequestError(error) })),
     fetchCfbPlaybookRowsAttempt(() => playbook.injuries("ncaaf")),
     fetchBalldontlieNcaafQuarterbacks({ teams: quarterbackTeams.map((team) => ({ id: team.id, abbreviation: team.abbreviation })), previousSeason: args.season - 1, capturedAt: args.now, apiKey: args.balldontlieApiKey }),
-    fetchCfbSharpOddsFallbackAttempt({ games: sharpFallbackGames, apiKey: args.sharpApiKey, trustedEventIdsByGame: trustedSharpEventIdsByGame }),
     fetchCfbSharpApiSplits({ games, apiKey: args.sharpApiKey })
       .then((result) => ({ result, error: null }))
       .catch((error: unknown) => ({ result: null, error: splitRequestError(error) })),
@@ -352,8 +427,8 @@ export async function runCfbForwardEvidenceWriter(args: {
       result: null,
       error: splitRequestError(error),
     })),
+    officialAvailabilityPromise,
   ]);
-  const sharpFallback = sharpFallbackAttempt.result;
   const quarterbackContext = retainLatestNonemptyCfbQuarterbacks(priorQuarterbacks, quarterbacks.byTeamId);
   const lines = linesAttempt.rows;
   const splits = splitsAttempt.rows;
@@ -394,11 +469,16 @@ export async function runCfbForwardEvidenceWriter(args: {
   const weatherRequests = [...weatherByGame.values()].reduce((sum, value) => sum + value.requests, 0);
   const priorOpening = firstOpenings(existing);
   const captureHistoryBooksByGame = new Map<string, NcaafBookOdds[]>();
+  const captureHistoryDisplayBooksByGame = new Map<string, NcaafBookOdds[]>();
   const captureHistorySpreadSplitsByGame = new Map<string, CfbForwardPlaybookSplit[]>();
   for (const row of marketHistory) {
     captureHistoryBooksByGame.set(row.providerGameId, [
       ...(captureHistoryBooksByGame.get(row.providerGameId) ?? []),
       ...row.payload.market.currentBooks,
+    ]);
+    captureHistoryDisplayBooksByGame.set(row.providerGameId, [
+      ...(captureHistoryDisplayBooksByGame.get(row.providerGameId) ?? []),
+      ...(row.payload.market.displayBooks ?? row.payload.market.currentBooks),
     ]);
     const spread = row.payload.market.playbookSplits?.spread ?? null;
     if (spread) {
@@ -413,22 +493,33 @@ export async function runCfbForwardEvidenceWriter(args: {
     books.push(...row.payload.market.currentBooks);
     books.push(...cfbForwardContextSharpHistoryBooks(row.payload.contextualEvidenceCapture));
     captureHistoryBooksByGame.set(row.providerGameId, books);
+    const displayBooks = captureHistoryDisplayBooksByGame.get(row.providerGameId) ?? [];
+    displayBooks.push(...(row.payload.market.displayBooks ?? row.payload.market.currentBooks));
+    displayBooks.push(...cfbForwardContextSharpHistoryBooks(row.payload.contextualEvidenceCapture));
+    captureHistoryDisplayBooksByGame.set(row.providerGameId, displayBooks);
   }
   const { payloads, captureFailures } = buildCfbForwardPayloadsWithIsolation(plans, (plan): CfbForwardEvidencePayload => {
     const sharpBooks = sharpFallback.booksByGame[plan.game.providerGameId] ?? [];
     const sharpDisplayBooks = sharpFallback.displayBooksByGame[plan.game.providerGameId] ?? [];
     const espnCurrentBooks = espnCurrentOddsAttempt.result?.booksByGame[plan.game.providerGameId] ?? [];
-    const freshCurrentBooks = mergeCfbNamedBooks(
-      mergeCfbNamedBooks(slate.currentOddsComparableBooksByGame[plan.game.providerGameId] ?? [], espnCurrentBooks),
-      sharpBooks,
+    const freshCurrentBooks = buildCfbNamedBookPriceHierarchy(
+      primaryCurrentBooksByGame[plan.game.providerGameId] ?? [],
+      espnCurrentBooks,
     );
     const currentBooks = retainLatestCfbNamedBookMarkets(
       freshCurrentBooks,
       captureHistoryBooksByGame.get(plan.game.providerGameId) ?? [],
     );
-    const displayBooks = mergeCfbNamedBooks(
-      mergeCfbNamedBooks(slate.currentOddsAllBooksByGame[plan.game.providerGameId] ?? [], sharpDisplayBooks),
+    const freshDisplayBooks = buildCfbNamedBookPriceHierarchy(
+      slate.currentOddsAllBooksByGame[plan.game.providerGameId] ?? [],
+      sharpDisplayBooks,
+      collegeFootballDataAttempt.result?.moneylineBooksByGame[plan.game.providerGameId] ?? [],
       currentBooks,
+      espnCurrentBooks,
+    );
+    const displayBooks = retainLatestCfbNamedBookMarkets(
+      freshDisplayBooks,
+      captureHistoryDisplayBooksByGame.get(plan.game.providerGameId) ?? [],
     );
     const current = preferredCfbTargetBook(currentBooks);
     const providerOpening = slate.openingOddsByGame[plan.game.providerGameId] ?? null;
@@ -439,6 +530,14 @@ export async function runCfbForwardEvidenceWriter(args: {
     const baseAwayQuarterbacks = requiredQuarterbacks(quarterbackContext, plan.game.away.id, plan.game.away.abbreviation, args.now);
     const baseHomeQuarterbacks = requiredQuarterbacks(quarterbackContext, plan.game.home.id, plan.game.home.abbreviation, args.now);
     const previousVerifiedAvailability = latestByGame.get(plan.game.providerGameId)?.payload.availability.verifiedQuarterback ?? null;
+    const previousInjuryReport = latestByGame.get(plan.game.providerGameId)?.payload.availability.report ?? null;
+    const injuryReport = buildCfbGameAvailability({
+      game: plan.game,
+      capturedAt: args.now,
+      playbookRows: injuryAttempt.rows as PlaybookInjuryTeamRow[],
+      conferenceReport: officialAvailabilityAttempt.result?.reportsByGame[plan.game.providerGameId] ?? null,
+      previous: previousInjuryReport,
+    });
     const freshProviderAvailability = playbookCfbQuarterbackAvailability({
       game: plan.game,
       away: baseAwayQuarterbacks,
@@ -447,8 +546,22 @@ export async function runCfbForwardEvidenceWriter(args: {
       capturedAt: args.now,
       previousEvidence: previousVerifiedAvailability,
     });
-    const retainedProviderAvailability = freshProviderAvailability ??
-      (previousVerifiedAvailability?.sourceAuthority === "official_provider" ? previousVerifiedAvailability : null);
+    const freshReportedAvailability = reportedCfbQuarterbackAvailability({
+      game: plan.game,
+      away: baseAwayQuarterbacks,
+      home: baseHomeQuarterbacks,
+      // Conference reports provide honest continuity in the existing injury
+      // panel, but are not model inputs until a release-pure promotion and
+      // demotion replay validates that authority. Paid Playbook evidence keeps
+      // the existing production projection and grade behavior.
+      report: injuryReport?.source === "Playbook" ? injuryReport : null,
+      capturedAt: args.now,
+      previousEvidence: previousVerifiedAvailability,
+    });
+    const retainedProviderAvailability = retainCfbVerifiedAvailability(
+      freshProviderAvailability ?? freshReportedAvailability,
+      previousVerifiedAvailability,
+    );
     const quarterbackAvailability = applyVerifiedCfbQuarterbackAvailability({
       game: plan.game,
       away: baseAwayQuarterbacks,
@@ -460,8 +573,13 @@ export async function runCfbForwardEvidenceWriter(args: {
     const weather = weatherByGame.get(plan.game.providerGameId)!.snapshot;
     const playbookEvidence = resolveCfbPlaybookEvidence({ game: plan.game, lines, splits });
     const previousMarket = latestByGame.get(plan.game.providerGameId)?.payload.market ?? null;
+    const collegeFootballDataLine = collegeFootballDataAttempt.result?.contextLineByGame[plan.game.providerGameId] ?? null;
     const playbookLine = retainLatestCfbPlaybookObservation(
-      playbookEvidence ? normalizeCfbPlaybookLine(playbookEvidence.lineRow, args.now) : null,
+      playbookEvidence
+        ? normalizeCfbPlaybookLine(playbookEvidence.lineRow, args.now)
+        : collegeFootballDataLine
+          ? { ...collegeFootballDataLine, sourceTier: "named_book_line" }
+          : null,
       previousMarket?.playbookLine ?? null,
     );
     const espnReferenceLine = espnReferenceAttempt.result.linesByGame[plan.game.providerGameId] ??
@@ -650,12 +768,15 @@ export async function runCfbForwardEvidenceWriter(args: {
       },
       quarterbacks: { away: awayQuarterbacks, home: homeQuarterbacks },
       availability: {
-        injuryStatus: "provider_unavailable",
+        injuryStatus: injuryReport ? "verified_report" : "provider_unavailable",
+        report: injuryReport,
         verifiedQuarterback: quarterbackAvailability.availability,
         weatherStatus: weather.status,
         weather,
         note: quarterbackAvailability.availability
           ? `Source-attributed quarterback availability captured by ${quarterbackAvailability.availability.sourceAuthority}.`
+          : injuryReport
+            ? "A verified matchup injury report is stored; no listed expected-quarterback absence was uniquely matched."
           : venueWeatherAttempt.error
             ? `Timestamped NCAAF injury reports remain unavailable. Kickoff weather venue metadata was unavailable: ${venueWeatherAttempt.error}`
             : "Timestamped NCAAF injury reports remain unavailable. Kickoff weather uses exact Playbook venue identity and the configured game-time forecast provider when available.",
@@ -682,7 +803,7 @@ export async function runCfbForwardEvidenceWriter(args: {
         playbookSplits: playbookSplits !== null,
         sharpApiSplits: sharpApiSplits.length > 0,
         activeQuarterbacks: awayQuarterbacks.activeQuarterbacks.length > 0 && homeQuarterbacks.activeQuarterbacks.length > 0,
-        injuries: quarterbackAvailability.availability !== null,
+        injuries: injuryReport !== null,
         weather: weather.status === "forecast_available" || weather.status === "controlled_indoor",
         healthHolds,
         availabilityWarnings: [
@@ -694,7 +815,7 @@ export async function runCfbForwardEvidenceWriter(args: {
             ? ["sharpapi_odds_fallback_deferred"]
             : []),
           "quarterback_starter_projected_not_confirmed",
-          ...(quarterbackAvailability.availability ? [] : ["injury_feed_unavailable"]),
+          ...(injuryReport ? [] : ["injury_feed_unavailable"]),
           ...(weather.status === "forecast_available" || weather.status === "controlled_indoor" ? [] : [`venue_weather_${weather.status}`]),
           ...(sharpApiSplitsStatus === "request_failed" ? ["sharpapi_splits_request_failed"] : sharpApiSplitsStatus === "event_not_published" ? ["sharpapi_splits_event_not_published"] : []),
           ...(sharpBooks.length > 0 ? ["sharpapi_named_book_price_fallback"] : []),
@@ -708,11 +829,14 @@ export async function runCfbForwardEvidenceWriter(args: {
         balldontlieSlate: slate.providerRequests + priorResults.providerRequests,
         balldontlieQuarterbacks: quarterbacks.providerRequests,
         playbook: 4,
+        publicReference: 0,
+        collegeFootballData: collegeFootballDataAttempt.result?.requests ?? 0,
+        officialAvailability: officialAvailabilityAttempt.result?.requests ?? 0,
         espnReference: espnReferenceAttempt.result.requests + (espnCurrentOddsAttempt.result?.requests ?? 0),
         sharpApiOdds: sharpFallback.requests + circaAttempt.requests,
         sharpApiSplits: 1,
         weather: weatherRequests,
-        totalMaximum: slate.providerRequests + priorResults.providerRequests + quarterbacks.providerRequests + sharpFallback.requests + circaAttempt.requests + weatherRequests + espnReferenceAttempt.result.requests + (espnCurrentOddsAttempt.result?.requests ?? 0) + advancedState.requests + 5,
+        totalMaximum: slate.providerRequests + priorResults.providerRequests + quarterbacks.providerRequests + sharpFallback.requests + circaAttempt.requests + weatherRequests + espnReferenceAttempt.result.requests + (espnCurrentOddsAttempt.result?.requests ?? 0) + (collegeFootballDataAttempt.result?.requests ?? 0) + (officialAvailabilityAttempt.result?.requests ?? 0) + advancedState.requests + 5,
       },
     };
     const contextualEvidenceCapture = buildCfbForwardContextCapture({
@@ -761,7 +885,7 @@ export async function runCfbForwardEvidenceWriter(args: {
     publishedWatchlists: decisions.filter((row) => row.grade === "Watchlist").length,
     publishedNoPlays: decisions.filter((row) => row.grade === "No Play").length,
     heldMarkets: payloads.reduce((sum, payload) => sum + payload.decisions.heldMarkets.length, 0),
-    apiCallsMaximum: slate.providerRequests + priorResults.providerRequests + quarterbacks.providerRequests + sharpFallback.requests + circaAttempt.requests + weatherRequests + espnReferenceAttempt.result.requests + (espnCurrentOddsAttempt.result?.requests ?? 0) + advancedState.requests + tracking.trackingProviderRequests + 5,
+    apiCallsMaximum: slate.providerRequests + priorResults.providerRequests + quarterbacks.providerRequests + sharpFallback.requests + circaAttempt.requests + weatherRequests + espnReferenceAttempt.result.requests + (espnCurrentOddsAttempt.result?.requests ?? 0) + (collegeFootballDataAttempt.result?.requests ?? 0) + advancedState.requests + tracking.trackingProviderRequests + 5,
     healthHolds: [...new Set([
       ...payloads.flatMap((payload) => payload.coverage.healthHolds),
       ...(sharpFallbackAttempt.error ? ["sharpapi_odds_fallback_request_failed"] : []),
@@ -769,6 +893,7 @@ export async function runCfbForwardEvidenceWriter(args: {
       ...(espnReferenceAttempt.error ? ["espn_reference_line_request_failed"] : []),
       ...(espnReferenceCandidates.length > espnReferenceGames.length ? ["espn_reference_line_deferred"] : []),
       ...(espnCurrentOddsAttempt.error ? ["espn_current_odds_request_failed"] : []),
+      ...(collegeFootballDataAttempt.error ? ["college_football_data_lines_request_failed"] : []),
       ...(linesAttempt.error ? ["playbook_lines_request_failed"] : []),
       ...(splitsAttempt.error ? ["playbook_splits_request_failed"] : []),
       ...(injuryAttempt.error ? ["playbook_injuries_request_failed"] : []),
@@ -1056,6 +1181,17 @@ export function retainLatestNonemptyCfbQuarterbacks(
   return retained;
 }
 
+export function retainCfbVerifiedAvailability(
+  fresh: CfbVerifiedQuarterbackAvailability | null,
+  previous: CfbVerifiedQuarterbackAvailability | null,
+): CfbVerifiedQuarterbackAvailability | null {
+  if (!fresh) return previous;
+  if (!previous) return fresh;
+  if (fresh.sourceAuthority === "official_provider") return fresh;
+  if (previous.sourceAuthority === "official_provider") return previous;
+  return Date.parse(fresh.observedAt) >= Date.parse(previous.observedAt) ? fresh : previous;
+}
+
 function latestQuarterbacksByTeam(rows: CfbForwardStoredEvidence[]): Map<number, CfbForwardTeamQuarterbacks> {
   const result = new Map<number, CfbForwardTeamQuarterbacks>();
   for (const row of [...rows].sort((first, second) => Date.parse(first.capturedAt) - Date.parse(second.capturedAt))) {
@@ -1064,6 +1200,45 @@ function latestQuarterbacksByTeam(rows: CfbForwardStoredEvidence[]): Map<number,
     }
   }
   return result;
+}
+
+export function shouldFetchCfbOfficialConferenceAvailability(args: {
+  games: NcaafGame[];
+  existing: CfbForwardStoredEvidence[];
+  now: string;
+  force?: boolean;
+}): boolean {
+  if (args.games.length === 0) return false;
+  if (args.force) return true;
+  const nowMs = Date.parse(args.now);
+  if (!Number.isFinite(nowMs)) return false;
+  const pregame = args.games.some((game) => {
+    const untilStart = Date.parse(game.scheduledStart) - nowMs;
+    return untilStart > 0 && untilStart <= 3 * 60 * 60_000;
+  });
+  const minimumMinutes = pregame
+    ? CFB_OFFICIAL_CONFERENCE_AVAILABILITY_PREGAME_REFRESH_MINUTES
+    : CFB_OFFICIAL_CONFERENCE_AVAILABILITY_REFRESH_MINUTES;
+  const lastFetch = args.existing
+    .filter((row) => (row.payload.requestBudget.officialAvailability ?? 0) > 0)
+    .reduce((latest, row) => Math.max(latest, Date.parse(row.capturedAt) || 0), 0);
+  return lastFetch === 0 || nowMs - lastFetch >= minimumMinutes * 60_000;
+}
+
+export function shouldFetchCfbCollegeFootballDataLines(args: {
+  games: NcaafGame[];
+  existing: CfbForwardStoredEvidence[];
+  now: string;
+  force?: boolean;
+}): boolean {
+  if (args.games.length === 0) return false;
+  if (args.force) return true;
+  const nowMs = Date.parse(args.now);
+  if (!Number.isFinite(nowMs)) return false;
+  const lastFetch = args.existing
+    .filter((row) => (row.payload.requestBudget.collegeFootballData ?? 0) > 0)
+    .reduce((latest, row) => Math.max(latest, Date.parse(row.capturedAt) || 0), 0);
+  return lastFetch === 0 || nowMs - lastFetch >= CFB_COLLEGE_FOOTBALL_DATA_REFRESH_MINUTES * 60_000;
 }
 
 export function cfbForwardReleaseRefreshNeed(rows: CfbForwardStoredEvidence[], now: string): { collect: true; reason: string; cadenceMinutes: number } | null {
@@ -1257,10 +1432,11 @@ function isEligibleOfficialTrackingPayload(payload: CfbForwardEvidencePayload): 
 function isEligiblePublishedPregameRecoveryPayload(payload: CfbForwardEvidencePayload): boolean {
   const release = payload.authoritativeForecast?.release as string | undefined;
   return ((String(payload.schemaRelease) === CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE && String(payload.memberRelease) === CFB_FORWARD_MEMBER_RELEASE) ||
+    (String(payload.schemaRelease) === CFB_FORWARD_FCS_PRICE_PREVIOUS_EVIDENCE_SCHEMA_RELEASE && String(payload.memberRelease) === CFB_FORWARD_FCS_PRICE_PREVIOUS_MEMBER_RELEASE) ||
     (String(payload.schemaRelease) === CFB_FORWARD_PRICE_PREVIOUS_EVIDENCE_SCHEMA_RELEASE && String(payload.memberRelease) === CFB_FORWARD_PRICE_PREVIOUS_MEMBER_RELEASE)) &&
-    payload.decisions.decisionRelease === CFB_V1_DECISION_RELEASE &&
+    (payload.decisions.decisionRelease === CFB_V1_DECISION_RELEASE || payload.decisions.decisionRelease === CFB_V1_FCS_PRICE_PREVIOUS_DECISION_RELEASE) &&
     payload.decisions.publicationEnabled &&
-    (release === CFB_MARKET_SHARP_AWARE_PRODUCTION_RELEASE || release === CFB_MARKET_SHARP_AWARE_PRICE_QB_PREVIOUS_PRODUCTION_RELEASE || release === CFB_MARKET_SHARP_AWARE_PREVIOUS_PRODUCTION_RELEASE) &&
+    (release === CFB_MARKET_SHARP_AWARE_PRODUCTION_RELEASE || release === CFB_MARKET_SHARP_AWARE_FCS_PRICE_PREVIOUS_PRODUCTION_RELEASE || release === CFB_MARKET_SHARP_AWARE_PRICE_QB_PREVIOUS_PRODUCTION_RELEASE || release === CFB_MARKET_SHARP_AWARE_PREVIOUS_PRODUCTION_RELEASE) &&
     Boolean(payload.decisions.marketOutlooks);
 }
 

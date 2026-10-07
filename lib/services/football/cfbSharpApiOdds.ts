@@ -2,7 +2,7 @@ import { SharpApiClient, type SharpApiRequestOptions, type SharpApiResponse } fr
 import type { NcaafBookOdds, NcaafGame } from "./balldontlieNcaafSlate";
 
 export const CFB_SHARP_API_ODDS_RELEASE =
-  "cfb_sharpapi_named_book_fallback_2026_10_03_r16_five_page_main_market" as const;
+  "cfb_sharpapi_named_book_fallback_2026_10_07_r17_exchange_context_isolation" as const;
 export const CFB_SHARP_FALLBACK_MAX_GAMES = 96 as const;
 export const CFB_SHARP_FALLBACK_MAX_REQUESTS = 192 as const;
 export const CFB_SHARP_FALLBACK_MAX_DURATION_MS = 60_000 as const;
@@ -91,6 +91,21 @@ const TRUSTED_CONSENSUS_BOOKS = new Set([
   "rebet",
   "sportzino",
   "thescorebet",
+]);
+
+/**
+ * SharpAPI normalizes betting exchanges into the same row schema as
+ * sportsbooks. Novig and SX Bet can provide a verified main line when no
+ * conventional book publishes a small-school game, but an exchange quote is
+ * never a sportsbook consensus constituent or an exact-price grading target.
+ * Kalshi remains globally blocked because the provider has emitted inverted
+ * team sides, and Polymarket remains excluded because its question-shaped
+ * event identity is not equivalent to a conventional game market.
+ */
+const DISPLAY_CONTEXT_BOOKS = new Set([
+  ...TRUSTED_CONSENSUS_BOOKS,
+  "novig",
+  "sxbet",
 ]);
 
 const USER_TARGET_BOOKS = new Set([
@@ -278,7 +293,9 @@ export async function fetchSharpApiNcaafOddsFallback(args: {
         }
         const books = normalizeSharpRows({ game, eventId, rows });
         acceptedDisplay = books;
-        accepted = books.filter((book) => bookCompleteness(book) > 0);
+        accepted = books.filter((book) =>
+          TRUSTED_CONSENSUS_BOOKS.has(normalize(book.sportsbook)) && bookCompleteness(book) > 0
+        );
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         if (!message.startsWith(`CFB SharpAPI event ${eventId} `)) throw error;
@@ -348,6 +365,33 @@ export function mergeCfbNamedBooks(primary: NcaafBookOdds[], fallback: NcaafBook
     bookCompleteness(second) - bookCompleteness(first) ||
     Date.parse(second.observedAt) - Date.parse(first.observedAt) ||
     first.sportsbook.localeCompare(second.sportsbook));
+}
+
+/**
+ * Add fallback sportsbooks only when the primary hierarchy has no observation
+ * for that exact book. This prevents a later-captured public/reference source
+ * from displacing a paid-provider quote merely because its timestamp is newer.
+ */
+export function addCfbFallbackBooksWithoutReplacement(
+  primary: NcaafBookOdds[],
+  fallback: NcaafBookOdds[],
+): NcaafBookOdds[] {
+  const primaryNames = new Set(primary.map((book) => normalize(book.sportsbook)));
+  return mergeCfbNamedBooks(
+    primary,
+    fallback.filter((book) => !primaryNames.has(normalize(book.sportsbook))),
+  );
+}
+
+/** Merge provider tiers from highest to lowest authority without allowing a
+ * lower tier to replace an already-selected named sportsbook. */
+export function buildCfbNamedBookPriceHierarchy(
+  ...tiers: NcaafBookOdds[][]
+): NcaafBookOdds[] {
+  return tiers.reduce<NcaafBookOdds[]>(
+    (selected, tier) => addCfbFallbackBooksWithoutReplacement(selected, tier),
+    [],
+  );
 }
 
 /**
@@ -440,7 +484,7 @@ export function normalizeSharpRows(args: { game: NcaafGame; eventId: string; row
       : row.is_alternate_line === true && row.is_main_line !== true && market !== "moneyline"
         ? "coherent_paired_alternate" as const
         : null;
-    if (!market || !marketSelection || !TRUSTED_CONSENSUS_BOOKS.has(sportsbook) || !side || price === null || !observedAt || !startsAt) continue;
+    if (!market || !marketSelection || !DISPLAY_CONTEXT_BOOKS.has(sportsbook) || !side || price === null || !observedAt || !startsAt) continue;
     if (!strictGameIdentity(args.game, row, startsAt)) continue;
     if (!validSide(market, side)) continue;
     const rawLine = market === "moneyline" ? null : finite(row.line);
@@ -761,4 +805,4 @@ function americanPrice(value: unknown): number | null { const parsed = finite(va
 function iso(value: unknown): string | null { const parsed = text(value); return parsed && Number.isFinite(Date.parse(parsed)) ? new Date(parsed).toISOString() : null; }
 function latest(first: string, second: string): string { return Date.parse(first) >= Date.parse(second) ? first : second; }
 
-export const __TEST__ = { TRUSTED_CONSENSUS_BOOKS, USER_TARGET_BOOKS, strictGameIdentity, strictSharpEventIdentity, teamMatches, marketHasThreeSameLineBooks, record };
+export const __TEST__ = { DISPLAY_CONTEXT_BOOKS, TRUSTED_CONSENSUS_BOOKS, USER_TARGET_BOOKS, strictGameIdentity, strictSharpEventIdentity, teamMatches, marketHasThreeSameLineBooks, record };
