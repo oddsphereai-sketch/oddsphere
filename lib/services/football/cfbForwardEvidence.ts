@@ -133,6 +133,14 @@ export function isCfbPublishedT60AccuracyLockPayload(payload: CfbForwardEvidence
       outlook.independentProbability >= 0 &&
       outlook.independentProbability <= 1 &&
       Boolean(outlook.side));
+  const accuracyOnlyHold = (
+    payload.coverage.healthHolds.length === 1 &&
+    payload.coverage.healthHolds[0] === "authoritative_market_anchor_unavailable" &&
+    payload.authoritativeForecast?.status === "market_anchor_unavailable_hold"
+  ) || (
+    payload.coverage.healthHolds.length === 0 &&
+    payload.authoritativeForecast?.status === "market_sharp_applied"
+  );
   return payload.schemaRelease === CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE &&
     payload.memberRelease === CFB_FORWARD_MEMBER_RELEASE &&
     payload.decisions.decisionRelease === CFB_V1_DECISION_RELEASE &&
@@ -144,9 +152,7 @@ export function isCfbPublishedT60AccuracyLockPayload(payload: CfbForwardEvidence
     !payload.decisions.trackingEnabled &&
     payload.decisions.evaluatedBets.length === 0 &&
     payload.decisions.heldMarkets.length === 3 &&
-    payload.coverage.healthHolds.length === 1 &&
-    payload.coverage.healthHolds[0] === "authoritative_market_anchor_unavailable" &&
-    payload.authoritativeForecast?.status === "market_anchor_unavailable_hold" &&
+    accuracyOnlyHold &&
     completeOutlooks;
 }
 

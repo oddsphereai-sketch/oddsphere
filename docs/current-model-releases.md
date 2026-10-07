@@ -219,6 +219,25 @@ Last reviewed: 2026-10-06
 
 ## CFB Daily Edge generalized weekly production release
 
+### Held-price T-60 accuracy lock (writer r99; fixture r74; snapshot r34; tracking r36)
+
+- Active sole writer / member fixture / compact snapshot / reader / tracking releases are
+  `cfb_forward_evidence_writer_2026_10_06_r99_held_t60_accuracy_lock` /
+  `cfb_v1_member_fixture_2026_10_06_r74_held_t60_accuracy_lock` /
+  `cfb_forward_member_snapshot_2026_10_06_r34_held_t60_accuracy_lock` /
+  `cfb_member_snapshot_reader_2026_10_06_r19_held_t60_accuracy_lock` /
+  `cfb_official_tracking_record_2026_10_06_r36_held_t60_accuracy_lock`.
+- A complete, on-time T-60 forecast with all three exact-price decisions held solely because a
+  permitted target quote is unavailable now freezes at T-60. It produces the same three
+  accuracy-only No Play rows already supported by the recovery path; it never reconstructs
+  price, edge, EV, grade, actionability, or stake. Any model-input health hold remains ineligible.
+- Southern Miss at Troy supplied the production acceptance case: its complete T-60 forecast was
+  captured at `2026-10-06T23:10:04.623Z`; all three accuracy rows were recovered idempotently at
+  kickoff with that immutable timestamp. Same-input board impact is zero forecast, score,
+  probability, side, price, grade, promotion, demotion, or actionable-count changes. No provider
+  call, cadence, copy, label, layout, writer, table, or lease was added. Evidence and rollback:
+  `docs/model-audits/2026-10-06-cfb-held-t60-accuracy-lock.md`.
+
 ### Fresh sharp-context held price map (fixture r73; snapshot r33; reader r18)
 
 - Active member fixture / compact snapshot / reader releases are
