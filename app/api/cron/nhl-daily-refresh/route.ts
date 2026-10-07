@@ -50,7 +50,7 @@ import { NHL_SHARP_ODDS_COLLECTOR_RELEASE } from "@/lib/providers/nhl/_sharpApiN
 
 const NHL_CRON_ENV = "NHL_CRON_ENABLED";
 const NHL_PREDS_ENV = "NHL_PREDICTIONS_DB_WRITES_ENABLED";
-const NHL_DAILY_REFRESH_RELEASE = "nhl_daily_refresh_schedule_2026_10_07_r8_complete_multibook_market_ingestion";
+const NHL_DAILY_REFRESH_RELEASE = "nhl_daily_refresh_schedule_2026_10_07_r9_readiness_gated_rollover";
 
 /**
  * Returns the MoneyPuck-style season start-year for a given UTC date.
@@ -120,9 +120,22 @@ export async function GET(request: Request): Promise<Response> {
       };
 
       if (seedResult.mode === "no-events") {
+        const responseSnapshot = await refreshDailyEdgeResponseSnapshot({
+          sport: "nhl",
+          date: slateDate,
+          source: "nhl_daily_refresh_empty_slate",
+        });
         return {
-          records_updated: 0,
-          details: { ...stepDetails, outcome: "no_nhl_today" },
+          records_updated: responseSnapshot.ok ? 1 : 0,
+          partial: !responseSnapshot.ok,
+          error_message: responseSnapshot.ok
+            ? null
+            : `NHL empty-slate snapshot publish failed: ${responseSnapshot.error ?? "unknown error"}`,
+          details: {
+            ...stepDetails,
+            outcome: "no_nhl_today",
+            response_snapshot: responseSnapshot,
+          },
         };
       }
       if (seedResult.errors.length > 0) partial = true;
@@ -298,14 +311,20 @@ export async function GET(request: Request): Promise<Response> {
       // Publish only a coherent reader snapshot. The writer itself filters
       // preseason games, so preparation runs cannot leak preseason cards or
       // tracking rows into the regular-season product.
-      const responseSnapshot = predictionsResult.errors.length === 0
+      // The date-keyed response snapshot is the readiness boundary for the
+      // 3 AM ET member rollover. Any partial source cycle retains the prior
+      // complete board and retries on the next scheduled writer run.
+      const responseSnapshot = !partial && predictionsResult.errors.length === 0
         ? await refreshDailyEdgeResponseSnapshot({
             sport: "nhl",
             date: slateDate,
             source: "nhl_daily_refresh",
           })
         : null;
-      stepDetails.response_snapshot = responseSnapshot;
+      stepDetails.response_snapshot = responseSnapshot ?? {
+        skipped: true,
+        reason: "incomplete_source_cycle",
+      };
       if (responseSnapshot?.ok === false) partial = true;
 
       const recordsUpdated =
@@ -322,6 +341,9 @@ export async function GET(request: Request): Promise<Response> {
       return {
         records_updated: recordsUpdated,
         partial,
+        error_message: responseSnapshot?.ok === false
+          ? `NHL response snapshot publish failed: ${responseSnapshot.error ?? "unknown error"}`
+          : null,
         details: stepDetails,
       };
     },
