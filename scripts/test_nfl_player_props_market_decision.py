@@ -41,9 +41,9 @@ assert contract["promotionPolicy"]["receptions"] == {"bestAngle": True, "lean": 
 assert all(policy == {"bestAngle": True, "lean": True, "watchlist": True} for policy in contract["promotionPolicy"].values())
 assert contract["ownerApprovedForwardException"] is True
 assert lanes.RELEASE == "nfl_player_props_actionable_lane_evidence_2026_08_25_r3_production_release"
-assert decision["decisionRelease"] == "nfl_player_props_decision_2026_10_07_r21_market_selective_mean_quintile"
-assert decision["modelRelease"] == "nfl_player_props_distribution_model_2026_10_07_r16_market_selective_mean_quintile"
-assert decision["calibrationRelease"] == "nfl_player_props_distribution_calibration_2026_10_07_r18_market_selective_mean_quintile"
+assert decision["decisionRelease"] == "nfl_player_props_decision_2026_10_07_r22_settlement_aligned_rushing_attempts"
+assert decision["modelRelease"] == "nfl_player_props_distribution_model_2026_10_07_r17_settlement_aligned_rushing_attempts"
+assert decision["calibrationRelease"] == "nfl_player_props_distribution_calibration_2026_10_07_r19_settlement_aligned_rushing_attempts"
 assert decision["quarterbackPassingProjection"]["marketWeight"] == 0.9
 assert decision["quarterbackPassingProjection"]["recentRoleWeight"] == 0.1
 assert decision["quarterbackPassingProjection"]["singleBookMayAuthorizeAction"] is False

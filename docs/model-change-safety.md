@@ -1,5 +1,41 @@
 # Model change safety protocol
 
+## Owner-approved provisional exception: NFL settlement-aligned Rushing Attempts r1
+
+On 2026-10-07 Daniel Mengel explicitly authorized productionizing only the
+validated settlement-aligned Rushing Attempts head from the coordinated NFL
+Player Props projection-accuracy research. This exception is limited to the
+release family and evidence documented in
+`docs/model-audits/2026-10-07-nfl-player-props-projection-accuracy-predeclaration.md`
+and its paired result. The rejected Rushing Yards, Receiving Yards, Passing
+Attempts, Passing Completions, Passing Yards, and Receptions candidates must
+not be revived by this release.
+
+The released Rushing Attempts head is a frozen 25% incumbent / 75% model fit
+only on historical player-games with official participation, matching the
+population that can settle as a wager. Historical participation is a target
+population filter, never a current-game feature. Its empirical residual
+distribution is refit on the same candidate's out-of-sample 2023-2024 errors.
+Every other point head, threshold, grade rule, market arbitration, exact-price
+rule, alternate-line policy, target-book exclusion, stake, writer, provider
+budget, cadence, lock, settlement rule, copy, label, and layout is unchanged.
+
+The 2025 holdout improves MAE 3.13553→3.05408, RMSE 4.37183→4.14461,
+bias -0.90974→-0.22787, CRPS 2.23959→2.16308, and NLL 2.68314→2.64071;
+all four chronological MAE segments improve and the game-clustered 95% MAE
+delta interval is [-0.12807, -0.03601]. On the release-pure 720-row Week 4
+board, only Rushing Attempts changes: direction improves 38/62→41/62, with
+zero promotions and one demotion of a settled losing Lean. Across all resolved
+ordinary scopes, direction improves 162/291→165/291 and units improve
++0.196→+1.196. This is historical evidence, not a guaranteed future result.
+
+Publication still requires focused tests, full model-change verification, a
+clean latest-main protected PR, integration safety, and post-merge live
+release/writer/lease/coverage/reader checks. Existing locks retain their exact
+stored legacy payload and release tuple. Roll back the complete new release
+family and the Rushing Attempts shard together; never recompute or relabel a
+locked row.
+
 ## Owner-approved correctness exception: NHL complete-market ingestion and NFL exact-quote labels
 
 On 2026-10-07 Daniel Mengel directed Oddsphere to repair confirmed live odds/price

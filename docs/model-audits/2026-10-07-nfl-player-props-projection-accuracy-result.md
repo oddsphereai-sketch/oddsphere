@@ -2,12 +2,13 @@
 
 Date: 2026-10-07
 Starting production base: `ad49470ed05d8345bd785d0b2ccd9a094151364b`
+Production integration base: `40a6b0c51006627163b007aafb20a1055049863d`
 Historical feature SHA-256: `f80b1479ca27ddf91c256ff791bcd6dea1f435fd6248a95f1f63665b4c8cd8bd`
 
 ## Decision
 
-Advance only the settlement-aligned Rushing Attempts candidate to release
-coordination. Do not advance Rushing Yards, Receiving Yards, Passing Attempts,
+Productionize only the settlement-aligned Rushing Attempts candidate. Do not
+advance Rushing Yards, Receiving Yards, Passing Attempts,
 Passing Completions, Passing Yards, or Receptions. Do not change a threshold,
 grade rule, alternate-line policy, target-excluded market rule, stake, member
 surface, writer, lease, cadence, provider budget, lock, or settlement rule.
@@ -19,12 +20,12 @@ a pregame model input. The residual distribution is refit on the candidate's
 out-of-sample 2023-2024 residuals. The exported research shard changes only the
 Rushing Attempts point model and its matching empirical residual distribution.
 
-No production artifact or release constant is changed by this research branch.
-No release number is reserved. Publication remains blocked until the separately
-coordinating NFL Player Props task receives the result and confirms that its
-latest work does not overlap. The task-message safety review rejected the
-coordination payload containing internal model metrics, so this branch must not
-be published or merged as a workaround.
+The coordinating task explicitly authorized this productionization after the
+research commit was complete. The release changes the tracked Rushing Attempts
+portable shard and the complete model/calibration/decision/runtime/board/member/
+writer/tracking release family. No rejected market artifact is changed. The
+production branch was created from exact latest `origin/main` and remains a
+pull-request candidate; merge and live deployment remain outside this audit.
 
 ## Root cause of the Under-heavy forecast board
 
@@ -157,10 +158,10 @@ is mutable; the artifact-to-artifact delta is controlled.
 
 ## Publication and rollback boundary
 
-If coordination authorizes publication, the production change is limited to
-the Rushing Attempts portable shard and the corresponding model/calibration/
-runtime/board/decision/member release identifiers plus the current release
-registry. Existing locked rows must retain their stored legacy projection,
+The authorized production change is limited to the Rushing Attempts portable
+shard and the corresponding model/calibration/runtime/board/decision/member/
+writer/tracking release identifiers plus release provenance. Existing locked
+rows retain their stored legacy projection,
 probability, side, grade, price, evidence, and release tuple. The sole
 `prediction_pipeline:nfl` lease and writer remain authoritative.
 
@@ -187,6 +188,20 @@ shard together; never reinterpret or overwrite an existing locked payload.
 - `scripts/test-nfl-player-props-market-evidence-capture.ts` passed bounded
   evidence retention.
 
-Full `verify:model-change`, fresh-main integration safety, protected PR checks,
-and live deployment verification were not run because no production release is
-being published from this uncoordinated research branch.
+Production-branch verification completed from the final tracked shard:
+
+- Fresh same-input Week 4 incumbent/candidate replays each reconstructed 720
+  rows, 1,115 offers, and 249 feature rows with zero provider calls or writes;
+  the comparison reproduced 124 Rushing Attempts changes, 13 forecast-side
+  changes, zero promotions, one demotion, and 162/291→165/291 direction.
+- Fresh same-input frozen-current incumbent/candidate replays each reconstructed
+  760 rows; the comparison reproduced 38 Rushing Attempts row changes across
+  19 scopes, 12 row-level forecast-side changes, zero promotions, and one
+  demotion.
+- Portable parity, production lifecycle/T-60/immutable-lock, snapshot, exact
+  market-board, TypeScript, and Python compilation checks passed.
+- `npm run verify:model-change` passed the complete repository suite.
+
+Fresh-main integration safety and pull-request status are recorded in the pull
+request. Live deployment verification remains required after merge and cannot
+be claimed by this branch.
