@@ -8,6 +8,8 @@ import { withFirstTrackedSplitObservation } from "@/lib/services/splitDisplayMov
 import type { MarketSplitDisplaySection } from "@/lib/types/domain/RecommendationDecision";
 import {
   CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE,
+  CFB_FORWARD_GAP_FALLBACK_PREVIOUS_EVIDENCE_SCHEMA_RELEASE,
+  CFB_FORWARD_GAP_FALLBACK_PREVIOUS_MEMBER_RELEASE,
   CFB_FORWARD_RELEASE_WAVE_PREVIOUS_EVIDENCE_SCHEMA_RELEASE,
   CFB_FORWARD_RELEASE_WAVE_PREVIOUS_MEMBER_RELEASE,
   CFB_FORWARD_FCS_PRICE_PREVIOUS_EVIDENCE_SCHEMA_RELEASE,
@@ -72,6 +74,7 @@ import {
   CFB_V1_BASE_PROBABILITY_RELEASE,
   CFB_V1_BASE_SCORE_ARTIFACT_RELEASE,
   CFB_V1_DECISION_RELEASE,
+  CFB_V1_GAP_FALLBACK_PREVIOUS_DECISION_RELEASE,
   CFB_V1_FCS_PRICE_PREVIOUS_DECISION_RELEASE,
   CFB_V1_PRICE_QB_PREVIOUS_DECISION_RELEASE,
   CFB_V1_MARKET_CONFIRMATION_PREVIOUS_DECISION_RELEASE,
@@ -98,9 +101,9 @@ import { cfbTeamIdentity } from "./cfbTeamIdentity";
 import { CFB_PUBLIC_SCORE_DIRECTION_TOLERANCE_POINTS } from "./footballCrossMarketCoherence";
 
 export const CFB_MEMBER_FIXTURE_RELEASE =
-  "cfb_v1_member_fixture_2026_10_07_r77_release_wave_completeness" as const;
+  "cfb_v1_member_fixture_2026_10_08_r78_the_odds_api_fcs_gap_fallback" as const;
 export const CFB_PUBLIC_OUTCOME_CONTRACT_RELEASE =
-  "cfb_market_sharp_public_outcome_contract_2026_10_07_r67_release_wave_completeness" as const;
+  "cfb_market_sharp_public_outcome_contract_2026_10_08_r68_the_odds_api_fcs_gap_fallback" as const;
 export const CFB_CONTEXT_ONLY_QUOTE_CAPTURE_SKEW_MS = 5_000 as const;
 const CFB_PRE_DIRECTIONAL_MEMBER_RELEASE = "cfb_v1_member_release_2026_08_28_r14_expanded_sharp_budget" as const;
 const CFB_PRE_DIRECTIONAL_DECISION_RELEASE = "cfb_v1_daily_edge_decision_2026_08_28_r11_market_scoped_data_quality" as const;
@@ -624,7 +627,7 @@ export function selectLatestCfbMemberEvidenceRows(
     rows,
     CFB_FORWARD_RELEASE_WAVE_PREVIOUS_EVIDENCE_SCHEMA_RELEASE,
     CFB_FORWARD_RELEASE_WAVE_PREVIOUS_MEMBER_RELEASE,
-    CFB_V1_DECISION_RELEASE,
+    CFB_V1_GAP_FALLBACK_PREVIOUS_DECISION_RELEASE,
   );
   const releaseWavePreviousBoundary = fcsPricePreviousAuthority
     ? immutableBoundaryTransitionRows(
@@ -632,7 +635,7 @@ export function selectLatestCfbMemberEvidenceRows(
         now,
         CFB_FORWARD_RELEASE_WAVE_PREVIOUS_EVIDENCE_SCHEMA_RELEASE,
         CFB_FORWARD_RELEASE_WAVE_PREVIOUS_MEMBER_RELEASE,
-        CFB_V1_DECISION_RELEASE,
+        CFB_V1_GAP_FALLBACK_PREVIOUS_DECISION_RELEASE,
         fcsPricePreviousAuthority,
       )
     : null;
@@ -641,24 +644,53 @@ export function selectLatestCfbMemberEvidenceRows(
         rows,
         CFB_FORWARD_RELEASE_WAVE_PREVIOUS_EVIDENCE_SCHEMA_RELEASE,
         CFB_FORWARD_RELEASE_WAVE_PREVIOUS_MEMBER_RELEASE,
-        CFB_V1_DECISION_RELEASE,
+        CFB_V1_GAP_FALLBACK_PREVIOUS_DECISION_RELEASE,
         fcsPricePreviousAuthority,
       )
     : null;
   const releaseWavePreviousAuthority = releaseWavePrevious ?? releaseWavePreviousBoundary ?? releaseWavePreviousLockOverlay ?? fcsPricePreviousAuthority;
+  const gapFallbackPrevious = completeRowsForRelease(
+    rows,
+    CFB_FORWARD_GAP_FALLBACK_PREVIOUS_EVIDENCE_SCHEMA_RELEASE,
+    CFB_FORWARD_GAP_FALLBACK_PREVIOUS_MEMBER_RELEASE,
+    CFB_V1_GAP_FALLBACK_PREVIOUS_DECISION_RELEASE,
+  );
+  const gapFallbackPreviousBoundary = releaseWavePreviousAuthority
+    ? immutableBoundaryTransitionRows(
+        rows,
+        now,
+        CFB_FORWARD_GAP_FALLBACK_PREVIOUS_EVIDENCE_SCHEMA_RELEASE,
+        CFB_FORWARD_GAP_FALLBACK_PREVIOUS_MEMBER_RELEASE,
+        CFB_V1_GAP_FALLBACK_PREVIOUS_DECISION_RELEASE,
+        releaseWavePreviousAuthority,
+      )
+    : null;
+  const gapFallbackPreviousLockOverlay = releaseWavePreviousAuthority
+    ? immutableLockOverlayRows(
+        rows,
+        CFB_FORWARD_GAP_FALLBACK_PREVIOUS_EVIDENCE_SCHEMA_RELEASE,
+        CFB_FORWARD_GAP_FALLBACK_PREVIOUS_MEMBER_RELEASE,
+        CFB_V1_GAP_FALLBACK_PREVIOUS_DECISION_RELEASE,
+        releaseWavePreviousAuthority,
+      )
+    : null;
+  const gapFallbackPreviousAuthority = gapFallbackPrevious ?? gapFallbackPreviousBoundary ?? gapFallbackPreviousLockOverlay ?? releaseWavePreviousAuthority;
   const current = completeRowsForRelease(rows, CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE, CFB_FORWARD_MEMBER_RELEASE, CFB_V1_DECISION_RELEASE);
   if (current) return current;
-  const immutableBoundaryTransition = releaseWavePreviousAuthority
+  const immutableBoundaryTransition = gapFallbackPreviousAuthority
     ? immutableBoundaryTransitionRows(
         rows,
         now,
         CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE,
         CFB_FORWARD_MEMBER_RELEASE,
         CFB_V1_DECISION_RELEASE,
-        releaseWavePreviousAuthority,
+        gapFallbackPreviousAuthority,
       )
     : null;
   if (immutableBoundaryTransition) return immutableBoundaryTransition;
+  if (gapFallbackPrevious) return gapFallbackPrevious;
+  if (gapFallbackPreviousBoundary) return gapFallbackPreviousBoundary;
+  if (gapFallbackPreviousLockOverlay) return gapFallbackPreviousLockOverlay;
   if (releaseWavePrevious) return releaseWavePrevious;
   if (releaseWavePreviousBoundary) return releaseWavePreviousBoundary;
   if (releaseWavePreviousLockOverlay) return releaseWavePreviousLockOverlay;
@@ -889,6 +921,7 @@ function buildGame(row: CfbForwardStoredEvidence, movementRows: CfbForwardMarket
   const headline = [moneyline, total, spread].sort((a, b) => verdictRank(b.verdict.key) - verdictRank(a.verdict.key))[0]!;
   const primaryForecast = payload.decisions.forecast;
   const independentForecast = (payload.schemaRelease === CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE ||
+    payload.schemaRelease === CFB_FORWARD_GAP_FALLBACK_PREVIOUS_EVIDENCE_SCHEMA_RELEASE ||
     payload.schemaRelease === CFB_FORWARD_AVAILABILITY_PREVIOUS_EVIDENCE_SCHEMA_RELEASE ||
     payload.schemaRelease === CFB_FORWARD_SCORE_COHERENCE_PREVIOUS_EVIDENCE_SCHEMA_RELEASE ||
     payload.schemaRelease === CFB_FORWARD_WEATHER_PREVIOUS_EVIDENCE_SCHEMA_RELEASE ||
@@ -989,6 +1022,7 @@ function assertCfbPublicPredictionCoherence(args: {
   }
   if (
     (args.payload.schemaRelease === CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE ||
+      args.payload.schemaRelease === CFB_FORWARD_GAP_FALLBACK_PREVIOUS_EVIDENCE_SCHEMA_RELEASE ||
       args.payload.schemaRelease === CFB_FORWARD_SCORE_COHERENCE_PREVIOUS_EVIDENCE_SCHEMA_RELEASE ||
       args.payload.schemaRelease === CFB_FORWARD_WEATHER_PREVIOUS_EVIDENCE_SCHEMA_RELEASE ||
       args.payload.schemaRelease === CFB_FORWARD_IDENTITY_PREVIOUS_EVIDENCE_SCHEMA_RELEASE) &&

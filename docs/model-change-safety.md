@@ -1,5 +1,31 @@
 # Model change safety protocol
 
+## Owner-approved correctness exception: CFB paid FCS odds-gap fallback r38
+
+On 2026-10-08 Daniel Mengel explicitly approved a lock-preserving production repair that uses the
+paid The Odds API feed for current live and future CFB games while leaving completed games and valid
+immutable tracking results untouched. This exception is limited to the release family and evidence
+documented in `docs/model-audits/2026-10-08-cfb-the-odds-api-fcs-gap-fallback-r38.md`.
+
+R38 adds one bounded FCS-only named-book fallback after BALLDONTLIE, SharpAPI and CFBD. Exact event
+orientation, team identity, kickoff proximity, two-sided price/line coherence and provider timestamp
+checks are mandatory. A lower-priority quote fills only an absent named book and never replaces the
+same book from a higher-priority provider. The current slate receives a one-time historical snapshot
+recovery; those rows are retained internally as first-observed context rather than mislabeled as a
+provider opening. Subsequent current pulls are hourly only while an upcoming FCS price gap exists,
+with a hard weekly request ceiling and protected credit reserve. No copy, label, layout, stake,
+independent-score equation, market-reading rule, writer, lease, lock definition or tracking
+denominator changes.
+
+The exact zero-write October 8 replay moves current paired Moneyline / Spread / Total coverage from
+59 / 58 / 57 of 88 games to 85 / 84 / 84 of 86 upcoming games. Within the 31-game FCS-only cohort,
+coverage moves from 2 / 1 / 0 to 30 / 29 / 29. Montana–Northern Arizona remains honestly unavailable.
+Actionables remain 91 with zero promotions and zero demotions because target-excluded comparison
+requirements remain unchanged. Valid r37 and r36 locks remain authoritative during the release
+transition; unlocked games alone advance to r38. Publication still requires focused tests, the full
+CFB production suite, full model-change verification, current-main integration safety, protected PR
+checks and post-deploy writer/lease/release/coverage/reader/lock/tracking verification.
+
 ## Owner-approved correctness exception: CFB release-wave completeness r37
 
 On 2026-10-07 Daniel Mengel explicitly directed Oddsphere to use all valid paid odds, reject isolated

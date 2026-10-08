@@ -240,6 +240,41 @@ Last reviewed: 2026-10-08
 
 ## CFB Daily Edge generalized weekly production release
 
+### Paid FCS named-book odds-gap fallback (writer r105; fixture r78; snapshot r38; tracking r39)
+
+- Active evidence / collector / member / market reader / decision / sole writer are
+  `cfb_forward_evidence_snapshot_2026_10_08_r38_the_odds_api_fcs_gap_fallback` /
+  `cfb_forward_evidence_collector_2026_10_08_r49_the_odds_api_fcs_gap_fallback` /
+  `cfb_v1_member_release_2026_10_08_r52_the_odds_api_fcs_gap_fallback` /
+  `cfb_market_sharp_aware_production_2026_10_08_r30_the_odds_api_fcs_gap_fallback` /
+  `cfb_v1_daily_edge_decision_2026_10_08_r42_the_odds_api_fcs_gap_fallback` /
+  `cfb_forward_evidence_writer_2026_10_08_r105_the_odds_api_fcs_gap_fallback`.
+  Member fixture / outcome / compact snapshot / reader / tracking are r78 / r68 / r38 / r23 / r39.
+  R37 and r36 remain explicit transition authorities for valid immutable locks and recovery.
+- Current quote authority remains BALLDONTLIE, then bounded exact-event SharpAPI named books, then
+  CFBD, then the paid The Odds API FCS feed. The last tier fills an absent FanDuel, DraftKings or
+  Rebet book only; it cannot replace the same book from a higher tier. Strict away/home orientation,
+  exact canonical team identity, kickoff proximity, complete two-sided pairs, market timestamps and
+  pregame chronology are mandatory.
+- The October 9–11 transition slate may perform two bounded historical-snapshot calls to recover the
+  earliest retained same-book context. That quote is stored as first-observed context, never falsely
+  labeled a provider opening. Future slates use the real primary-provider opening where available and
+  otherwise retain the earliest verified observation. Current pulls are one sport-level request, at
+  most hourly while an upcoming FCS price gap exists, forced once at T-60 when due, capped at 176
+  ordinary and 192 total weekly pulls, and protected by a 5,000-credit reserve.
+- The exact October 8 zero-write replay moves paired Moneyline / Spread / Total coverage from
+  59 / 58 / 57 of 88 games to 85 / 84 / 84 of 86 upcoming games. FCS-only coverage moves from
+  2 / 1 / 0 of 31 to 30 / 29 / 29; Montana–Northern Arizona remains unavailable rather than
+  fabricated. Actionables remain 91 with zero promotions and zero demotions because existing
+  target-excluded comparison requirements continue to control exact-price actionability.
+- Independent score equations, market arbitration, probability and grade thresholds, stakes, copy,
+  labels, layout, the sole `prediction_pipeline:cfb` lease, immutable T-60 definitions and tracking
+  denominators are unchanged. Valid older locks and tracking results remain authoritative; only
+  unlocked/current and future games advance to r38.
+- Evidence and rollback:
+  `docs/model-audits/2026-10-08-cfb-the-odds-api-fcs-gap-fallback-r38.md`. Roll back the complete
+  r38/r52/r105/r78/r68/r38/r23/r39 family to r37 without rewriting a lock or tracking result.
+
 ### Release-wave completeness over retained terminal games (writer r104; fixture r77; snapshot r37; tracking r38)
 
 - Active evidence / collector / member / market reader / decision / sole writer are
