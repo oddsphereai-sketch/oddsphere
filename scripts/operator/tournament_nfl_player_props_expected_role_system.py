@@ -207,6 +207,7 @@ def rate_prediction(
     test: pd.DataFrame,
     lower: float,
     upper: float,
+    exposure_weighted: bool = False,
 ) -> np.ndarray:
     train = frame[
         frame["season"].lt(season)
@@ -215,7 +216,10 @@ def rate_prediction(
         & frame["participated"].eq(1)
     ].copy()
     rate = (train[numerator] / train[denominator]).clip(lower, upper)
-    fitted = model("squared_error").fit(train[features], rate.to_numpy(float))
+    sample_weight = train[denominator].to_numpy(float) if exposure_weighted else None
+    fitted = model("squared_error").fit(
+        train[features], rate.to_numpy(float), sample_weight=sample_weight,
+    )
     return np.clip(np.asarray(fitted.predict(test[features]), dtype=float), lower, upper)
 
 
@@ -235,6 +239,7 @@ def passing_predictions(
     team_features: list[str],
     player_features: list[str],
     test: pd.DataFrame,
+    exposure_weighted: bool = False,
 ) -> dict[str, np.ndarray]:
     leaders = lead_passer_rows(frame)
     training = leaders[leaders["season"].lt(season) & leaders["passing_attempts"].gt(0)].copy()
@@ -252,12 +257,17 @@ def passing_predictions(
 
     completion_train = training[training["passing_attempts"].ge(5)].copy()
     completion_rate = (completion_train["passing_completions"] / completion_train["passing_attempts"]).clip(0.30, 0.85)
-    completion_model = model("squared_error").fit(completion_train[player_features], completion_rate)
+    efficiency_weight = completion_train["passing_attempts"].to_numpy(float) if exposure_weighted else None
+    completion_model = model("squared_error").fit(
+        completion_train[player_features], completion_rate, sample_weight=efficiency_weight,
+    )
     predicted_completion_rate = np.clip(
         np.asarray(completion_model.predict(test[player_features]), dtype=float), 0.30, 0.85,
     )
     ypa = (completion_train["passing_yards"] / completion_train["passing_attempts"]).clip(2.0, 14.0)
-    ypa_model = model("absolute_error").fit(completion_train[player_features], ypa)
+    ypa_model = model("absolute_error").fit(
+        completion_train[player_features], ypa, sample_weight=efficiency_weight,
+    )
     predicted_ypa = np.clip(np.asarray(ypa_model.predict(test[player_features]), dtype=float), 2.0, 14.0)
     return {
         "passing_attempts": attempts,
@@ -274,7 +284,10 @@ def role_predictions(
     player_features: list[str],
     test_rows: dict[str, pd.DataFrame],
     known_active_row_ids: set[str] | None = None,
+    efficiency_mode: str = "foundation",
 ) -> dict[str, np.ndarray]:
+    if efficiency_mode not in {"foundation", "exposure_weighted", "decomposed_receiving"}:
+        raise ValueError(f"unsupported efficiency mode: {efficiency_mode}")
     outputs: dict[str, np.ndarray] = {}
     for market, budget_target, share_target, numerator, denominator, lower, upper in (
         ("rushing_attempts", "rushing_attempts", "expected_role_rush_share", None, None, 0.0, 0.0),
@@ -297,10 +310,20 @@ def role_predictions(
             opportunity = np.clip(budget * share, 0.0, None)
             if numerator is None or denominator is None:
                 value = opportunity
+            elif market == "receiving_yards" and efficiency_mode == "decomposed_receiving":
+                catch_rate = rate_prediction(
+                    frame, season, player_features, "receptions", "targets",
+                    group, subset, 0.0, 1.0, True,
+                )
+                yards_per_reception = rate_prediction(
+                    frame, season, player_features, "receiving_yards", "receptions",
+                    group, subset, 0.0, 40.0, True,
+                )
+                value = opportunity * catch_rate * yards_per_reception
             else:
                 rate = rate_prediction(
                     frame, season, player_features, numerator, denominator,
-                    group, subset, lower, upper,
+                    group, subset, lower, upper, efficiency_mode != "foundation",
                 )
                 value = opportunity * rate
             prediction[mask] = value
