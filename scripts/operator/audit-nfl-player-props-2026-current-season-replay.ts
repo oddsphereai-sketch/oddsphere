@@ -4,6 +4,7 @@
 
 import { loadEnvConfig } from "@next/env";
 import { createClient } from "@supabase/supabase-js";
+import { writeFileSync } from "node:fs";
 import {
   readNflPlayerPropsCurrentSeasonState,
   type NflPlayerPropsCurrentSeasonState,
@@ -54,7 +55,9 @@ type LedgerRow = {
 type ReplayRow = {
   week: number;
   gameId: string;
+  providerPlayerId: string | null;
   playerName: string;
+  team: string | null;
   market: string;
   line: number;
   side: Decision["side"];
@@ -128,7 +131,9 @@ async function main(): Promise<void> {
     replay.push({
       week: game.week,
       gameId: row.provider_game_id,
+      providerPlayerId: row.provider_player_id ?? decision.providerPlayerId,
       playerName: row.player_name,
+      team: stat?.team ?? null,
       market: row.market,
       line: Number(row.line),
       side: row.side,
@@ -155,6 +160,15 @@ async function main(): Promise<void> {
   }
 
   const canonical = canonicalize(replay);
+  const outputIndex = process.argv.indexOf("--output");
+  const outputPath = outputIndex >= 0 ? process.argv[outputIndex + 1] : undefined;
+  if (outputPath) {
+    writeFileSync(outputPath, JSON.stringify({
+      release: "nfl_player_props_2026_locked_replay_rows_2026_10_08_r1",
+      readOnlySource: true,
+      rows: canonical,
+    }, null, 2) + "\n", "utf8");
+  }
   const canonicalProbability = canonical.filter((row) => row.raw !== null);
   const probabilityBootstrap = clusterBootstrap(canonicalProbability, (rows) => {
     const raw = brier(rows, "raw");

@@ -263,6 +263,19 @@ def main() -> None:
     projection_frames: list[pd.DataFrame] = []
     for market in MARKETS:
         chosen = frozen[market]
+        if chosen:
+            for season, phase in ((2024, "selection"), (2025, "confirmation")):
+                historical = evaluation_rows[market][season]
+                history_rows = historical[[
+                    "row_id", "season", "week", "game_id", "team", "opponent", "player_id",
+                    "player_name", "position", market,
+                ]].copy().rename(columns={market: "actual"})
+                history_rows["market"] = market
+                history_rows["phase"] = phase
+                history_rows["candidate_name"] = chosen
+                history_rows["candidate_projection"] = predictions[market][chosen][season]
+                history_rows["released_projection"] = reference[market][season]
+                projection_frames.append(history_rows)
         test = candidate_frame[
             candidate_eligible[market]
             & candidate_frame["participated"].eq(1)
@@ -290,11 +303,10 @@ def main() -> None:
         ]
         output_rows = test[columns].copy()
         output_rows["market"] = market
+        output_rows["phase"] = "holdout"
         output_rows["candidate_name"] = chosen
-        output_rows["candidate_group"] = group
-        output_rows["candidate_kind"] = kind
-        output_rows["frozen_blend_weight"] = weight
-        output_rows["candidate_raw_projection"] = candidate_prediction
+        output_rows["candidate_projection"] = candidate_prediction if weight == 1.0 else np.nan
+        output_rows["released_projection"] = np.nan
         projection_frames.append(output_rows.rename(columns={market: "actual"}))
         report[market]["currentSeason"] = {
             "rows": int(len(test)),
