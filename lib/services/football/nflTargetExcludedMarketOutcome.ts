@@ -16,9 +16,10 @@ import {
   type NflV1WeekOneOutcomeForecast,
 } from "./nflV1WeekOneOutcome";
 import type { NflPaidProjectionShadow } from "./balldontlieNflWeeklyProjectionShadow";
+import type { NflNamedMarketSequenceAuthority } from "./nflNamedMarketSequence";
 
 export const NFL_TARGET_EXCLUDED_MARKET_OUTCOME_RELEASE =
-  "nfl_target_excluded_market_outcome_2026_10_05_r9_winner_coherence" as const;
+  "nfl_target_excluded_market_outcome_2026_10_08_r10_named_sequence" as const;
 
 export type NflTargetExcludedMarketAnchor = {
   release: typeof NFL_TARGET_EXCLUDED_MARKET_OUTCOME_RELEASE;
@@ -63,6 +64,7 @@ export function resolveNflTargetExcludedProduction(args: {
   };
   paidTeamScore?: Pick<NflPaidProjectionShadow,
     "release" | "providerCollectedAt" | "projectedHomeMargin" | "projectedTotal">;
+  namedSequenceAuthority?: NflNamedMarketSequenceAuthority;
 }): {
   outcome: NflV1WeekOneOutcomeForecast;
   production: NflV1ActionableGradeBundle;
@@ -143,6 +145,7 @@ export function resolveNflTargetExcludedProduction(args: {
       movementCurrent: targetFreeMovementCurrent(args.current, excluded),
       weeklyRawSignal: args.weeklyRawSignal,
       paidTeamScore: args.paidTeamScore,
+      namedSequenceAuthority: args.namedSequenceAuthority,
       evaluatedAt: args.evaluatedAt,
     });
     const productionCandidate = buildProduction(outcomeCandidate);
