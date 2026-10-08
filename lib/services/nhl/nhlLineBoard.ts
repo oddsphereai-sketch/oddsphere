@@ -9,6 +9,15 @@ export type NhlCanonicalLineRow = {
   source_timestamp?: string | null;
 };
 
+export type NhlSelectedPriceQuote = {
+  market_type: "moneyline" | "total" | "spread";
+  sportsbook: string;
+  side: "home" | "away" | "over" | "under";
+  line_value: number | null;
+  odds_american: number;
+  observed_at: string | null;
+};
+
 function normalizedBook(value: string): string {
   return value.trim().toLowerCase().replace(/[^a-z0-9]/g, "");
 }
@@ -152,4 +161,92 @@ export function canonicalizeNhlLineRows<T extends NhlCanonicalLineRow>(
   return [...byBookMarket.values()].flatMap((group) => group.filter((row) => (
     hasComplement(row, group) && hasCoherentComplement(row, group)
   )));
+}
+
+/**
+ * Select one complete, exact NHL quote tuple. Price, sportsbook, side, line,
+ * and observation time travel together so the writer and reader cannot map a
+ * price from one book onto another book or line. The bounded median guard is
+ * the same protection the member reader historically applied to promotional
+ * or isolated off-market prices; keeping it here gives the sole writer and
+ * reader one authoritative selection path.
+ */
+export function selectNhlBestPriceQuote<T extends NhlCanonicalLineRow>(args: {
+  rows: readonly T[];
+  market: "moneyline" | "total" | "spread";
+  side: "home" | "away" | "over" | "under";
+  line: number | null;
+}): NhlSelectedPriceQuote | null {
+  const candidates = canonicalizeNhlLineRows(args.rows).filter((row) => (
+    row.market_type === args.market
+    && row.side === args.side
+    && row.odds_american !== null
+    && (args.market === "moneyline"
+      || (args.line !== null && row.line_value !== null && Math.abs(row.line_value - args.line) < 0.01))
+  ));
+  if (candidates.length === 0) return null;
+
+  let eligible = candidates;
+  if (candidates.length >= 3) {
+    const center = median(candidates.map((row) => row.odds_american!));
+    const guarded = candidates.filter((row) => Math.abs(row.odds_american! - center) <= 50);
+    if (guarded.length > 0) eligible = guarded;
+  }
+
+  const selected = [...eligible].sort((left, right) => (
+    right.odds_american! - left.odds_american!
+    || normalizedBook(left.sportsbook).localeCompare(normalizedBook(right.sportsbook))
+    || observationTime(right) - observationTime(left)
+  ))[0]!;
+  return {
+    market_type: args.market,
+    sportsbook: selected.sportsbook,
+    side: selected.side as NhlSelectedPriceQuote["side"],
+    line_value: args.market === "moneyline" ? null : selected.line_value,
+    odds_american: selected.odds_american!,
+    observed_at: selected.source_timestamp ?? selected.observed_at ?? null,
+  };
+}
+
+/**
+ * Resolve display metadata for an immutable locked row. The record's stored
+ * price/side/line always win. A stored evaluated quote supplies its book when
+ * present; legacy releases may recover only the book identity from their own
+ * frozen line snapshot. Mutable current lines are intentionally ineligible.
+ */
+export function resolveNhlLockedPriceQuote(args: {
+  market: "moneyline" | "total" | "spread";
+  side: "home" | "away" | "over" | "under";
+  line: number | null;
+  price: number | null;
+  lockedAt: string | null;
+  evaluatedQuote?: NhlSelectedPriceQuote | null;
+  frozenLines: readonly NhlCanonicalLineRow[];
+}): NhlSelectedPriceQuote | null {
+  if (args.price === null) return null;
+  const exact = (row: NhlCanonicalLineRow): boolean => (
+    row.market_type === args.market
+    && row.side === args.side
+    && row.odds_american === args.price
+    && (args.market === "moneyline"
+      || (args.line !== null && row.line_value !== null && Math.abs(row.line_value - args.line) < 0.01))
+  );
+  const evaluated = args.evaluatedQuote;
+  const legacyMatches = [...args.frozenLines].filter(exact);
+  const source = evaluated && exact(evaluated)
+    ? evaluated
+    : legacyMatches.length === 1
+      ? legacyMatches[0]!
+      : null;
+  const sourceTimestamp = source && "source_timestamp" in source
+    ? source.source_timestamp
+    : null;
+  return {
+    market_type: args.market,
+    sportsbook: source?.sportsbook ?? "",
+    side: args.side,
+    line_value: args.market === "moneyline" ? null : args.line,
+    odds_american: args.price,
+    observed_at: sourceTimestamp ?? source?.observed_at ?? args.lockedAt,
+  };
 }

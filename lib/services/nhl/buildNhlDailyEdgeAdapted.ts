@@ -47,10 +47,38 @@ import { resolvedNhlSplitsByGame, type ResolvedNhlSplitsEvent } from "./nhlResol
 import { loadNhlRegularStateForSlate } from "./loadNhlRegularState";
 import { isBlockedSportsbook } from "../../config/blockedSportsbooks";
 import { buildNhlTwoSidedPriceTrail } from "./nhlPriceTrail";
-import { canonicalizeNhlLineRows } from "./nhlLineBoard";
+import {
+  canonicalizeNhlLineRows,
+  resolveNhlLockedPriceQuote,
+  selectNhlBestPriceQuote,
+  type NhlCanonicalLineRow,
+  type NhlSelectedPriceQuote,
+} from "./nhlLineBoard";
 
 export const NHL_DAILY_EDGE_READER_RELEASE =
-  "nhl_daily_edge_reader_2026_10_06_r11_grade_tracking_parity" as const;
+  "nhl_daily_edge_reader_2026_10_08_r12_locked_price_mapping" as const;
+
+type NhlStoredSnapshot = {
+  model_output?: NhlModelOutput;
+  feature_inputs?: NhlFeatureSnapshot;
+  evaluated_quotes?: Partial<Record<"moneyline" | "total" | "spread", NhlSelectedPriceQuote | null>>;
+  market_at_lock?: { lines_snapshot?: NhlCanonicalLineRow[] };
+  captured_at?: string | null;
+};
+
+type NhlStoredRecord = {
+  game_id: number;
+  market: string;
+  pick: string | null;
+  side: string | null;
+  line_value: number | null;
+  odds_american: number | null;
+  play_grade: string | null;
+  no_bet: boolean | null;
+  locked_at: string | null;
+  model_version: string;
+  snapshot_json: unknown;
+};
 
 export function nhlVerdictFromStoredDecision(
   playGrade: string | null,
@@ -237,11 +265,12 @@ export async function buildNhlDailyEdgeAdapted(date: string): Promise<DailyEdgeR
   // Read the writer-owned active-release tuple for both unlocked and locked
   // games. Recomputing an unlocked r6 card without the writer's persisted
   // opponent-adjusted state silently falls back to r5 scoring and can publish
-  // a different score under the r6 deployment. Current lines/prices remain a
-  // separate live read below; the prediction tuple comes from the sole writer.
+  // a different score under the r6 deployment. Unlocked lines/prices remain a
+  // separate live read below; locked rows use only their stored prediction and
+  // frozen quote tuple from the sole writer.
   const { data: recordsData } = await supabase
     .from("prediction_records")
-    .select("game_id, market, play_grade, no_bet, locked_at, model_version, snapshot_json")
+    .select("game_id, market, pick, side, line_value, odds_american, play_grade, no_bet, locked_at, model_version, snapshot_json")
     .eq("sport", "nhl")
     .in("model_version", [...NHL_REGULAR_TRANSITION_MODEL_RELEASES])
     .in("game_id", games.map((g) => g.id));
@@ -252,26 +281,17 @@ export async function buildNhlDailyEdgeAdapted(date: string): Promise<DailyEdgeR
     lockedAt: string | null;
     identity: string;
     modelVersion: string;
+    storedSnapshot: NhlStoredSnapshot;
   }>();
   const incoherentPayloadReleaseGames = new Set<string>();
-  for (const r of ((recordsData ?? []) as Array<{
-    game_id: number;
-    market: string;
-    play_grade: string | null;
-    no_bet: boolean | null;
-    locked_at: string | null;
-    model_version: string;
-    snapshot_json: unknown;
-  }>)) {
+  const storedRecords = (recordsData ?? []) as NhlStoredRecord[];
+  for (const r of storedRecords) {
     const existing = lockedByGame.get(r.game_id);
     // Prefer non-null locked_at over null when multiple rows exist for a game.
     if (existing === undefined || (existing === null && r.locked_at !== null)) {
       lockedByGame.set(r.game_id, r.locked_at);
     }
-    const payload = r.snapshot_json as {
-      model_output?: NhlModelOutput;
-      feature_inputs?: NhlFeatureSnapshot;
-    } | null;
+    const payload = r.snapshot_json as NhlStoredSnapshot | null;
     if (
       payload?.model_output
       && payload.feature_inputs
@@ -299,6 +319,7 @@ export async function buildNhlDailyEdgeAdapted(date: string): Promise<DailyEdgeR
         lockedAt: r.locked_at,
         identity,
         modelVersion: r.model_version,
+        storedSnapshot: payload,
       });
     }
   }
@@ -308,14 +329,8 @@ export async function buildNhlDailyEdgeAdapted(date: string): Promise<DailyEdgeR
     }
   }
   const writerVerdictsByGame = new Map<number, NhlWriterVerdicts>();
-  for (const r of ((recordsData ?? []) as Array<{
-    game_id: number;
-    market: string;
-    play_grade: string | null;
-    no_bet: boolean | null;
-    locked_at: string | null;
-    model_version: string;
-  }>)) {
+  const selectedRecordsByGame = new Map<number, Map<"moneyline" | "total" | "spread", NhlStoredRecord>>();
+  for (const r of storedRecords) {
     const payload = predictionPayloadByGame.get(r.game_id);
     if (!payload || r.model_version !== payload.modelVersion) continue;
     if ((payload.lockedAt !== null) !== (r.locked_at !== null)) continue;
@@ -328,6 +343,11 @@ export async function buildNhlDailyEdgeAdapted(date: string): Promise<DailyEdgeR
     const gameVerdicts = writerVerdictsByGame.get(r.game_id) ?? {};
     gameVerdicts[key] = nhlVerdictFromStoredDecision(r.play_grade, r.no_bet);
     writerVerdictsByGame.set(r.game_id, gameVerdicts);
+    if (r.market === "moneyline" || r.market === "total" || r.market === "spread") {
+      const gameRecords = selectedRecordsByGame.get(r.game_id) ?? new Map();
+      gameRecords.set(r.market, r);
+      selectedRecordsByGame.set(r.game_id, gameRecords);
+    }
   }
 
   // Per-game pipeline.
@@ -394,63 +414,22 @@ export async function buildNhlDailyEdgeAdapted(date: string): Promise<DailyEdgeR
         line_value: number | null;
         odds_american: number | null; recorded_at: string | null;
       }>);
+      const selectedRecords = selectedRecordsByGame.get(g.id);
+      const isLocked = storedPayload?.lockedAt !== null && storedPayload?.lockedAt !== undefined;
+      const lockCutoff = isLocked ? Date.parse(storedPayload.lockedAt!) : Number.POSITIVE_INFINITY;
+      const eligibleHistory = history.filter((row) => {
+        if (!isLocked) return true;
+        const observed = Date.parse(row.recorded_at ?? "");
+        return Number.isFinite(observed) && observed <= lockCutoff;
+      });
+      const frozenLines = (storedPayload?.storedSnapshot.market_at_lock?.lines_snapshot ?? []).map((line) => ({
+        ...line,
+        observed_at: line.observed_at
+          ?? storedPayload?.storedSnapshot.captured_at
+          ?? storedPayload?.lockedAt
+          ?? null,
+      }));
 
-      /**
-       * Find the best-price (highest American odds) row for the picked
-       * side and exact displayed line. Exact line matching prevents a total
-       * or puck-line pick from borrowing a more attractive alternate-line
-       * price under the same side token.
-       *
-       * Boost / promotional-price filter: some books (e.g. fliff) ingest
-       * with both their main line and a heavily-boosted promotional
-       * line tagged identically. When 3+ candidates are available,
-       * compute the median and drop anything more than
-       * BOOST_OUTLIER_THRESHOLD American points away — that catches
-       * boosts (often 100+ pp off) while leaving normal book-to-book
-       * variance (typically < 20 pp) intact. With 1-2 candidates we
-       * have no robust median, so we take what's available.
-       *
-       * For ML, line_value is not part of the identity. Totals and spreads
-       * must match `targetLine` exactly.
-       */
-      const BOOST_OUTLIER_THRESHOLD = 50; // American points
-      function bestPriceFor(
-        market: string,
-        side: string,
-        targetLine: number | null,
-      ): { price: number | null; book: string | null; observedAt: string | null } {
-        const candidates = lines.filter((l) => {
-          if (l.market_type !== market || l.side !== side) return false;
-          if (l.odds_american === null) return false;
-          if (market === "moneyline") return true;
-          return targetLine !== null && l.line_value !== null && Math.abs(l.line_value - targetLine) < 0.01;
-        });
-        if (candidates.length === 0) return { price: null, book: null, observedAt: null };
-
-        let filtered = candidates;
-        if (candidates.length >= 3) {
-          const sorted = [...candidates].sort((a, b) => a.odds_american! - b.odds_american!);
-          const median = sorted[Math.floor(sorted.length / 2)]!.odds_american!;
-          filtered = candidates.filter(
-            (c) => Math.abs(c.odds_american! - median) <= BOOST_OUTLIER_THRESHOLD,
-          );
-          // Defensive: if the filter somehow drops everything (shouldn't
-          // happen since the median itself passes), fall back to raw.
-          if (filtered.length === 0) filtered = candidates;
-        }
-
-        let bestPrice: number | null = null;
-        let bestBook: string | null = null;
-        let observedAt: string | null = null;
-        for (const c of filtered) {
-          if (bestPrice === null || c.odds_american! > bestPrice) {
-            bestPrice = c.odds_american!;
-            bestBook = c.sportsbook;
-            observedAt = c.fetched_at;
-          }
-        }
-        return { price: bestPrice, book: bestBook, observedAt };
-      }
       /**
        * Open-price for the line-move row. Honest apples-to-apples:
        * returns the first-observed price FROM THE SAME book that is
@@ -466,7 +445,7 @@ export async function buildNhlDailyEdgeAdapted(date: string): Promise<DailyEdgeR
         targetLine: number | null,
       ): number | null {
         if (targetBook === null) return null;
-        const row = history.find((h) => {
+        const row = eligibleHistory.find((h) => {
           if (h.market_type !== market || h.side !== side) return false;
           if (h.sportsbook !== targetBook) return false;
           if (h.odds_american === null) return false;
@@ -477,13 +456,19 @@ export async function buildNhlDailyEdgeAdapted(date: string): Promise<DailyEdgeR
       }
 
       const mlPickIsHome = model.moneyline.pick.startsWith(homeAbbr);
-      const mlSide = mlPickIsHome ? "home" : "away";
-      const mlBest = bestPriceFor("moneyline", mlSide, null);
+      const lockedMl = isLocked ? selectedRecords?.get("moneyline") : undefined;
+      const mlSide = lockedMl?.side === "home" || lockedMl?.side === "away"
+        ? lockedMl.side
+        : mlPickIsHome ? "home" : "away";
 
-      const marketTotalLine = snapshot.market.market_total_line;
       const totalPickIsOver = model.total.pick.startsWith("OVER");
-      const totalSide = totalPickIsOver ? "over" : "under";
-      const totalBest = bestPriceFor("total", totalSide, marketTotalLine);
+      const lockedTotal = isLocked ? selectedRecords?.get("total") : undefined;
+      const totalSide = lockedTotal?.side === "over" || lockedTotal?.side === "under"
+        ? lockedTotal.side
+        : totalPickIsOver ? "over" : "under";
+      const marketTotalLine = isLocked && lockedTotal
+        ? lockedTotal.line_value
+        : snapshot.market.market_total_line;
       // 2026-06-14: the displayed market line MUST be the exact value the
       // model's pick label was built from. nhlRegularModelV1 builds
       // "OVER {snap.market.market_total_line}" — so read the same field here
@@ -500,26 +485,70 @@ export async function buildNhlDailyEdgeAdapted(date: string): Promise<DailyEdgeR
       // "{ABBR} +1.5" (taking points). The line_value sign on the
       // matching row will mirror this.
       const plPickIsHome = model.puck_line.pick.startsWith(homeAbbr);
-      const plSide = plPickIsHome ? "home" : "away";
-      const predictedPuckLine = model.puck_line.puck_line_value;
-      const plLineEntries = lines.filter((l) =>
-        l.market_type === "spread"
-        && l.side === plSide
-        && l.line_value !== null
-        && Math.abs(l.line_value - predictedPuckLine) < 0.01
-      );
-      const plBest = bestPriceFor("spread", plSide, predictedPuckLine);
-      const puckLineMarketLine = plLineEntries.find((l) => l.line_value !== null)?.line_value ?? null;
+      const lockedSpread = isLocked ? selectedRecords?.get("spread") : undefined;
+      const plSide = lockedSpread?.side === "home" || lockedSpread?.side === "away"
+        ? lockedSpread.side
+        : plPickIsHome ? "home" : "away";
+      const predictedPuckLine = isLocked && lockedSpread?.line_value !== null && lockedSpread?.line_value !== undefined
+        ? lockedSpread.line_value
+        : model.puck_line.puck_line_value;
 
-      const liveTrailRows = lines.map((line) => ({
+      const quoteRows: NhlCanonicalLineRow[] = (isLocked ? frozenLines : lines).map((line) => ({
         market_type: line.market_type,
         sportsbook: line.sportsbook,
         side: line.side,
         line_value: line.line_value,
         odds_american: line.odds_american,
-        observed_at: line.fetched_at,
+        observed_at: line.observed_at ?? null,
+        source_timestamp: "source_timestamp" in line ? line.source_timestamp ?? null : null,
       }));
-      const historyTrailRows = history
+      const lockedQuotes = storedPayload?.storedSnapshot.evaluated_quotes;
+      const mlQuote = lockedMl
+        ? resolveNhlLockedPriceQuote({
+          market: "moneyline",
+          side: mlSide,
+          line: null,
+          price: lockedMl.odds_american,
+          lockedAt: storedPayload?.lockedAt ?? null,
+          evaluatedQuote: lockedQuotes?.moneyline ?? null,
+          frozenLines,
+        })
+        : selectNhlBestPriceQuote({ rows: quoteRows, market: "moneyline", side: mlSide, line: null });
+      const totalQuote = lockedTotal
+        ? resolveNhlLockedPriceQuote({
+          market: "total",
+          side: totalSide,
+          line: marketTotalLine,
+          price: lockedTotal.odds_american,
+          lockedAt: storedPayload?.lockedAt ?? null,
+          evaluatedQuote: lockedQuotes?.total ?? null,
+          frozenLines,
+        })
+        : marketTotalLine === null
+          ? null
+          : selectNhlBestPriceQuote({ rows: quoteRows, market: "total", side: totalSide, line: marketTotalLine });
+      const puckLineQuote = lockedSpread
+        ? resolveNhlLockedPriceQuote({
+          market: "spread",
+          side: plSide,
+          line: predictedPuckLine,
+          price: lockedSpread.odds_american,
+          lockedAt: storedPayload?.lockedAt ?? null,
+          evaluatedQuote: lockedQuotes?.spread ?? null,
+          frozenLines,
+        })
+        : selectNhlBestPriceQuote({ rows: quoteRows, market: "spread", side: plSide, line: predictedPuckLine });
+      const puckLineMarketLine = puckLineQuote?.line_value ?? (lockedSpread?.line_value ?? null);
+
+      const liveTrailRows = quoteRows.map((line) => ({
+        market_type: line.market_type,
+        sportsbook: line.sportsbook,
+        side: line.side,
+        line_value: line.line_value,
+        odds_american: line.odds_american,
+        observed_at: line.observed_at ?? null,
+      }));
+      const historyTrailRows = eligibleHistory
         .filter((row) => !isBlockedSportsbook(row.sportsbook))
         .map((row) => ({
           market_type: row.market_type,
@@ -537,7 +566,7 @@ export async function buildNhlDailyEdgeAdapted(date: string): Promise<DailyEdgeR
         opposingSide: mlSide === "home" ? "away" : "home",
         selectedLine: null,
         opposingLine: null,
-        preferredBook: mlBest.book,
+        preferredBook: mlQuote?.sportsbook || null,
       });
       const totalTrail = buildNhlTwoSidedPriceTrail({
         live: liveTrailRows,
@@ -547,7 +576,7 @@ export async function buildNhlDailyEdgeAdapted(date: string): Promise<DailyEdgeR
         opposingSide: totalSide === "over" ? "under" : "over",
         selectedLine: marketTotalLine,
         opposingLine: marketTotalLine,
-        preferredBook: totalBest.book,
+        preferredBook: totalQuote?.sportsbook || null,
       });
       const puckLineTrail = buildNhlTwoSidedPriceTrail({
         live: liveTrailRows,
@@ -557,20 +586,23 @@ export async function buildNhlDailyEdgeAdapted(date: string): Promise<DailyEdgeR
         opposingSide: plSide === "home" ? "away" : "home",
         selectedLine: predictedPuckLine,
         opposingLine: -predictedPuckLine,
-        preferredBook: plBest.book,
+        preferredBook: puckLineQuote?.sportsbook || null,
       });
 
-      const oppsForGame = oppsByMatchup.get(`${awayAbbr}@${homeAbbr}`) ?? [];
+      // Locked cards render only their immutable stored tuple. Live
+      // opportunities remain eligible for unlocked cards but cannot replace
+      // a lock-time price denominator or its book association.
+      const oppsForGame = isLocked ? [] : (oppsByMatchup.get(`${awayAbbr}@${homeAbbr}`) ?? []);
 
       const mlOpp = findOpportunityForPick(oppsForGame, "ml", mlPickIsHome, false);
       const totalOpp = findOpportunityForPick(oppsForGame, "total", false, totalPickIsOver);
       const puckLineOpp = findOpportunityForPick(oppsForGame, "puckline", plPickIsHome, false);
 
       const mlBundle: NhlPerMarketBest = {
-        priceAmerican: mlBest.price,
-        sportsbook: mlBest.book,
-        openAmerican: mlTrail.selected[0]?.american ?? openPriceForSameBook("moneyline", mlSide, mlBest.book, null),
-        observedAt: mlBest.observedAt,
+        priceAmerican: mlQuote?.odds_american ?? null,
+        sportsbook: mlQuote?.sportsbook || null,
+        openAmerican: mlTrail.selected[0]?.american ?? openPriceForSameBook("moneyline", mlSide, mlQuote?.sportsbook || null, null),
+        observedAt: mlQuote?.observed_at ?? null,
         oddsTrail: mlTrail.selected,
         lineTrail: mlTrail.line,
         opposingOddsTrail: {
@@ -582,10 +614,10 @@ export async function buildNhlDailyEdgeAdapted(date: string): Promise<DailyEdgeR
         fairProbability: mlOpp?.fair_probability ?? null,
       };
       const totalBundle: NhlPerMarketBest = {
-        priceAmerican: totalBest.price,
-        sportsbook: totalBest.book,
-        openAmerican: totalTrail.selected[0]?.american ?? openPriceForSameBook("total", totalSide, totalBest.book, marketTotalLine),
-        observedAt: totalBest.observedAt,
+        priceAmerican: totalQuote?.odds_american ?? null,
+        sportsbook: totalQuote?.sportsbook || null,
+        openAmerican: totalTrail.selected[0]?.american ?? openPriceForSameBook("total", totalSide, totalQuote?.sportsbook || null, marketTotalLine),
+        observedAt: totalQuote?.observed_at ?? null,
         oddsTrail: totalTrail.selected,
         lineTrail: totalTrail.line,
         opposingOddsTrail: {
@@ -597,10 +629,10 @@ export async function buildNhlDailyEdgeAdapted(date: string): Promise<DailyEdgeR
         fairProbability: totalOpp?.fair_probability ?? null,
       };
       const puckLineBundle: NhlPerMarketBest = {
-        priceAmerican: plBest.price,
-        sportsbook: plBest.book,
-        openAmerican: puckLineTrail.selected[0]?.american ?? openPriceForSameBook("spread", plSide, plBest.book, predictedPuckLine),
-        observedAt: plBest.observedAt,
+        priceAmerican: puckLineQuote?.odds_american ?? null,
+        sportsbook: puckLineQuote?.sportsbook || null,
+        openAmerican: puckLineTrail.selected[0]?.american ?? openPriceForSameBook("spread", plSide, puckLineQuote?.sportsbook || null, predictedPuckLine),
+        observedAt: puckLineQuote?.observed_at ?? null,
         oddsTrail: puckLineTrail.selected,
         lineTrail: puckLineTrail.line,
         opposingOddsTrail: {
@@ -629,7 +661,7 @@ export async function buildNhlDailyEdgeAdapted(date: string): Promise<DailyEdgeR
         marketTotalLine,
         puckLineMarketLine,
         splits: splitsEvent,
-        lockedAt: lockedByGame.get(g.id) ?? null,
+        lockedAt: storedPayload?.lockedAt ?? lockedByGame.get(g.id) ?? null,
         writerVerdicts: writerVerdictsByGame.get(g.id),
       };
       dtos.push(adaptNhlGameToDto(input));

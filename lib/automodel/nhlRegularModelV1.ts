@@ -2,11 +2,12 @@ import type { BdlNhlTeamMetrics } from "../providers/nhl/_ballDontLieNhlClient";
 import type { NhlCalibratedTeamState } from "./nhlRegularPriors2026";
 import type { NhlRosterPrior } from "./nhlRosterPrior2026";
 
-export const NHL_REGULAR_MODEL_RELEASE = "nhl_regular_2026_r15_complete_multibook_market_ingestion" as const;
-export const NHL_REGULAR_CALIBRATION_RELEASE = "nhl_regular_calibration_2026_r15_complete_multibook_market_ingestion" as const;
-export const NHL_REGULAR_DECISION_RELEASE = "nhl_regular_decision_2026_r15_complete_multibook_market_ingestion" as const;
+export const NHL_REGULAR_MODEL_RELEASE = "nhl_regular_2026_r16_exact_quote_price_mapping" as const;
+export const NHL_REGULAR_CALIBRATION_RELEASE = "nhl_regular_calibration_2026_r16_exact_quote_price_mapping" as const;
+export const NHL_REGULAR_DECISION_RELEASE = "nhl_regular_decision_2026_r16_exact_quote_price_mapping" as const;
 export const NHL_REGULAR_TRANSITION_MODEL_RELEASES = [
   NHL_REGULAR_MODEL_RELEASE,
+  "nhl_regular_2026_r15_complete_multibook_market_ingestion",
   "nhl_regular_2026_r14_best_angle_calibration",
   "nhl_regular_2026_r13_price_aware_grades",
   "nhl_regular_2026_r12_roster_discrete_market_read",
@@ -16,6 +17,7 @@ export const NHL_REGULAR_TRANSITION_MODEL_RELEASES = [
 ] as const;
 export const NHL_REGULAR_TRANSITION_CALIBRATION_RELEASES = [
   NHL_REGULAR_CALIBRATION_RELEASE,
+  "nhl_regular_calibration_2026_r15_complete_multibook_market_ingestion",
   "nhl_regular_calibration_2026_r14_best_angle_calibration",
   "nhl_regular_calibration_2026_r13_price_aware_grades",
   "nhl_regular_calibration_2026_r12_roster_discrete_market_read",

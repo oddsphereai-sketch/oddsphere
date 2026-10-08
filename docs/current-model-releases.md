@@ -2704,12 +2704,29 @@ The October 7 NBA operational release replaces the long overnight writer gap wit
 
 ## NHL regular-season champion (active from 2026-10-01)
 
-- Model: `nhl_regular_2026_r15_complete_multibook_market_ingestion`
-- Calibration: `nhl_regular_calibration_2026_r15_complete_multibook_market_ingestion`
-- Decision: `nhl_regular_decision_2026_r15_complete_multibook_market_ingestion`
+- Model: `nhl_regular_2026_r16_exact_quote_price_mapping`
+- Calibration: `nhl_regular_calibration_2026_r16_exact_quote_price_mapping`
+- Decision: `nhl_regular_decision_2026_r16_exact_quote_price_mapping`
+- Reader: `nhl_daily_edge_reader_2026_10_08_r12_locked_price_mapping`
 - Public tracking start: `2026-09-29`
 - Official markets: moneyline, total, spread (puck line)
 - Retired release: `nhl_v0_2026_finals`
+
+The October 8 r16 correctness release gives the sole writer and member reader
+one shared exact-quote selector. It accepts only a complete two-sided exact
+market/line pair, rejects an isolated price more than 50 American points from
+the candidate median when at least three books exist, and carries the selected
+sportsbook, side, line, price, and observation time as one tuple. Future locks
+persist that tuple in the existing snapshot. Reader r12 renders a locked row
+from its stored prediction and frozen quote only; a later mutable odds refresh
+cannot change its displayed price or sportsbook. Legacy locks remain byte-for-
+byte unchanged, and an ambiguous unstored legacy sportsbook is left unknown
+rather than invented. The October 8 zero-write board replay preserves all 24
+locked market records and produces six unlocked future records with zero side,
+score, probability, grade, promotion, demotion, or actionable-count changes.
+No provider call, schedule, lease, member copy, label, layout, coefficient,
+threshold, stake, or tracking rule changes. Evidence and rollback:
+`docs/model-audits/2026-10-08-nhl-exact-quote-price-mapping-r16.md`.
 
 The October 7 r15 correctness release uses three bounded exact-event full-game
 market scopes so a single partial generic response can no longer suppress the

@@ -1,5 +1,25 @@
 # Model change safety protocol
 
+## Owner-approved correctness exception: NHL exact-quote price mapping r16
+
+On 2026-10-08 Daniel Mengel explicitly directed Oddsphere to preserve the
+already locked NHL game and repair future NHL price mapping so the defect cannot
+recur. This exception is limited to the release family and evidence documented
+in `docs/model-audits/2026-10-08-nhl-exact-quote-price-mapping-r16.md`.
+
+R16 does not tune a forecast, probability, side, grade, threshold, stake, or
+market-reading coefficient. It replaces separate writer and reader price
+selection with one exact market/side/line selector, freezes the complete chosen
+quote tuple for future locks, and requires the reader to honor that frozen tuple
+after lock. Existing locked payloads remain immutable. A legacy lock may recover
+a sportsbook only when its own frozen snapshot contains one unique exact match;
+an ambiguous missing book is never fabricated. The zero-write current-board
+replay preserves 24 locked rows and changes none of the six unlocked sides,
+scores, probabilities, grades, promotions, demotions, or actionable counts.
+Publication still requires the focused NHL suite, full model-change verification,
+current-main integration safety, protected PR checks, and post-deploy release,
+writer, lease, coverage, reader, and lock verification.
+
 ## Owner-approved correctness exception: CFB paid FCS odds-gap fallback r38
 
 On 2026-10-08 Daniel Mengel explicitly approved a lock-preserving production repair that uses the
