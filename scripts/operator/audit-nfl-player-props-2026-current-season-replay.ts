@@ -242,6 +242,7 @@ async function main(): Promise<void> {
   const rawFinalInterval = report.gameClusterBootstrap95.independentMinusFinalBrier;
   const rawMarketInterval = report.gameClusterBootstrap95.independentMinusMarketBrier;
   report.interpretationContract.probabilityDirectionallySupported = raw !== null && market !== null && final !== null
+    && rawFinalInterval.upper !== null && rawMarketInterval.upper !== null
     && raw < market && raw < final && rawFinalInterval.upper < 0 && rawMarketInterval.upper < 0;
   console.log(JSON.stringify(report, null, 2));
 }
