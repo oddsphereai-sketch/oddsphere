@@ -4,6 +4,8 @@ Date: 2026-10-08
 Starting production base: `e998e5211b634f0fd3f3dae776300f97137e6010`  
 Status: frozen before candidate implementation
 
+Paired result: `2026-10-08-nfl-player-props-expected-role-system-result.md`
+
 ## Diagnosed failure
 
 The preceding availability candidate improved average independent error but failed the exact 2026
@@ -68,4 +70,3 @@ A market can advance only if it:
    `prediction_pipeline:nfl` lease.
 
 Failing markets remain unchanged. Existing locked payloads are never recomputed or reinterpreted.
-
