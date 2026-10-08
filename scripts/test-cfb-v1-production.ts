@@ -3134,6 +3134,88 @@ const scoreProviderUrl = new URL(scoreProviderUrls[0]!);
 assert.deepEqual(scoreProviderUrl.searchParams.getAll("dates[]"), ["2026-08-29"], "CFB settlement must use the supported UTC dates filter");
 assert.equal(scoreProviderUrl.searchParams.has("game_ids[]"), false, "the NCAAF games collection does not support game_ids[]");
 
+const fallbackScoreClient = {
+  from(table: string) {
+    const query = {
+      select() { return query; },
+      eq() { return query; },
+      in() { return query; },
+      then(resolve: (value: unknown) => unknown) {
+        if (table === "games") {
+          return Promise.resolve(resolve({
+            data: [{
+              id: 9002,
+              external_id: 457739,
+              game_date: "2026-10-07T23:30:00.000Z",
+              status: "scheduled",
+              home_score: null,
+              away_score: null,
+              home_team_id: 101,
+              away_team_id: 102,
+            }],
+            error: null,
+          }));
+        }
+        assert.equal(table, "teams");
+        return Promise.resolve(resolve({
+          data: [
+            { id: 101, abbreviation: "FIU" },
+            { id: 102, abbreviation: "NMSU" },
+          ],
+          error: null,
+        }));
+      },
+    };
+    return query;
+  },
+} as unknown as SupabaseClient;
+const fallbackScoreUrls: string[] = [];
+const fallbackScoreIngest = await ingestCfbFinalScores({
+  supabase: fallbackScoreClient,
+  slateDate: "2026-10-07",
+  apply: false,
+  apiKey: "test",
+  now: "2026-10-08T05:00:00.000Z",
+  fetchImpl: (async (input) => {
+    const url = input instanceof Request ? input.url : String(input);
+    fallbackScoreUrls.push(url);
+    if (url.includes("api.balldontlie.io")) {
+      return Response.json({ data: [], meta: { next_cursor: null } });
+    }
+    const group = new URL(url).searchParams.get("groups");
+    return Response.json({ events: group === "80" ? [{
+      id: "401871066",
+      date: "2026-10-08T00:04:00.000Z",
+      status: { type: { completed: true, state: "post", name: "STATUS_FINAL" } },
+      competitions: [{ competitors: [
+        { homeAway: "home", score: "22", team: { id: "2229" } },
+        { homeAway: "away", score: "3", team: { id: "166" } },
+      ] }],
+    }] : [] });
+  }) as typeof fetch,
+});
+assert.equal(fallbackScoreIngest.providerRequests, 3, "a missing primary final may use one bounded two-group ESPN slate read");
+assert.equal(fallbackScoreIngest.updatedCount, 1, "the strict official-score fallback must make the omitted final settleable");
+assert.equal(fallbackScoreIngest.errors.length, 0);
+assert.equal(fallbackScoreUrls.filter((url) => url.includes("api.balldontlie.io")).length, 1);
+assert.equal(fallbackScoreUrls.filter((url) => url.includes("site.api.espn.com")).length, 2);
+
+const pregameFallbackUrls: string[] = [];
+const pregameFallbackIngest = await ingestCfbFinalScores({
+  supabase: fallbackScoreClient,
+  slateDate: "2026-10-07",
+  apply: false,
+  apiKey: "test",
+  now: "2026-10-07T23:00:00.000Z",
+  fetchImpl: (async (input) => {
+    const url = input instanceof Request ? input.url : String(input);
+    pregameFallbackUrls.push(url);
+    return Response.json({ data: [], meta: { next_cursor: null } });
+  }) as typeof fetch,
+});
+assert.equal(pregameFallbackIngest.providerRequests, 1, "an upcoming game must remain on the primary path only");
+assert.equal(pregameFallbackUrls.filter((url) => url.includes("site.api.espn.com")).length, 0, "the score fallback must not read an upcoming slate");
+
 const route = readFileSync(path.resolve("app/api/cron/cfb-forward-evidence/route.ts"), "utf8");
 assert.match(route, /member_snapshot_updated: result\.memberSnapshotUpdated/, "the existing CFB cron must report compact snapshot health truthfully");
 assert.match(route, /member_snapshot_error: result\.memberSnapshotError/, "the existing CFB cron must expose isolated snapshot publication failures");

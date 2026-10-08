@@ -4,9 +4,21 @@ This file is the human-readable production handoff registry. Runtime constants a
 prediction snapshots remain the machine authority. Future model work must start here, verify the
 constants, and preserve the precedence and writer ownership below.
 
-Last reviewed: 2026-10-07
+Last reviewed: 2026-10-08
 
 ## Cross-sport confidence / execution contract
+
+- October 8 CFB settlement continuity: postgame score ingest release is
+  `cfb_score_ingest_2026_10_08_r3_official_score_fallback`. BALLDONTLIE remains
+  primary. When an exact tracked game is omitted or remains non-final, the same
+  tracking cycle performs one bounded ESPN slate read no earlier than five hours
+  after scheduled kickoff and accepts a final only after strict canonical
+  away/home identity, kickoff-within-90-minutes, unique event, completed status,
+  and valid integer-score checks. The October 7
+  NMSU–FIU omission is thereby settled as FIU 22–3. Existing locked predictions,
+  model releases, sides, prices, lines, grades, stakes, copy, labels, and layout
+  are unchanged. Evidence and rollback:
+  `docs/model-audits/2026-10-08-cfb-official-score-fallback.md`.
 
 - Shared contract `daily_edge_confidence_execution_contract_2026_09_04_r2_recommendation_resolution` keeps a
   sport-owned continuous confidence score independent of exact-price execution, supplies optional

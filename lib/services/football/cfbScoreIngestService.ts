@@ -1,8 +1,10 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { fetchBalldontlieNcaafResultsForDates } from "./balldontlieNcaafSlate";
+import { fetchCfbEspnFinalScores } from "./cfbEspnScoreFallback";
 
 export const CFB_SCORE_INGEST_RELEASE =
-  "cfb_score_ingest_2026_08_30_r2_supported_date_filter" as const;
+  "cfb_score_ingest_2026_10_08_r3_official_score_fallback" as const;
+export const CFB_SCORE_FALLBACK_MIN_POST_KICKOFF_MS = 5 * 60 * 60_000;
 
 export type CfbScoreIngestResult = {
   release: typeof CFB_SCORE_INGEST_RELEASE;
@@ -21,7 +23,11 @@ type TrackedCfbGame = {
   status: string | null;
   home_score: number | null;
   away_score: number | null;
+  home_team_id: number;
+  away_team_id: number;
 };
+
+type TrackedTeam = { id: number; abbreviation: string | null };
 
 /** Exact-provider-id CFB score ingest. T-60 record creation remains writer-owned. */
 export async function ingestCfbFinalScores(args: {
@@ -30,6 +36,7 @@ export async function ingestCfbFinalScores(args: {
   apply: boolean;
   apiKey?: string;
   fetchImpl?: typeof fetch;
+  now?: Date | string;
 }): Promise<CfbScoreIngestResult> {
   const result: CfbScoreIngestResult = {
     release: CFB_SCORE_INGEST_RELEASE,
@@ -42,7 +49,7 @@ export async function ingestCfbFinalScores(args: {
   };
   const { data, error } = await args.supabase
     .from("games")
-    .select("id,external_id,game_date,status,home_score,away_score")
+    .select("id,external_id,game_date,status,home_score,away_score,home_team_id,away_team_id")
     .eq("sport", "cfb")
     .eq("slate_date", args.slateDate);
   if (error) throw new Error(`CFB score ingest game read failed: ${error.message}`);
@@ -61,13 +68,60 @@ export async function ingestCfbFinalScores(args: {
   });
   result.providerRequests = provider.providerRequests;
   const providerById = new Map(provider.games.map((game) => [Number(game.providerGameId), game]));
-  for (const dbGame of dbGames) {
+  const nowMs = args.now instanceof Date
+    ? args.now.getTime()
+    : typeof args.now === "string"
+      ? Date.parse(args.now)
+      : Date.now();
+  if (!Number.isFinite(nowMs)) throw new Error("CFB score ingest received an invalid current time.");
+  const fallbackGames = dbGames.filter((dbGame) => {
     const game = providerById.get(dbGame.external_id);
-    if (!game) {
-      result.errors.push({ reason: `game ${dbGame.external_id}: exact BALLDONTLIE NCAAF result row unavailable` });
+    const kickoffMs = Date.parse(dbGame.game_date ?? "");
+    const postgameEligible = Number.isFinite(kickoffMs) && nowMs >= kickoffMs + CFB_SCORE_FALLBACK_MIN_POST_KICKOFF_MS;
+    return postgameEligible && (!game || normalizeStatus(game.status) !== "final");
+  });
+  let espnFinalsByGame: Record<string, { homeScore: number; awayScore: number }> = {};
+  let espnFailuresByGame: Record<string, string> = {};
+  if (fallbackGames.length > 0) {
+    const teamIds = [...new Set(fallbackGames.flatMap((game) => [game.home_team_id, game.away_team_id]))];
+    const { data: teamData, error: teamError } = await args.supabase
+      .from("teams")
+      .select("id,abbreviation")
+      .in("id", teamIds);
+    if (teamError) throw new Error(`CFB score fallback team read failed: ${teamError.message}`);
+    const abbreviationById = new Map(((teamData ?? []) as TrackedTeam[]).map((team) => [team.id, team.abbreviation]));
+    const candidates = fallbackGames.flatMap((game) => {
+      const awayAbbreviation = abbreviationById.get(game.away_team_id);
+      const homeAbbreviation = abbreviationById.get(game.home_team_id);
+      if (!awayAbbreviation || !homeAbbreviation || !game.game_date) return [];
+      return [{
+        providerGameId: String(game.external_id),
+        scheduledStart: game.game_date,
+        awayAbbreviation,
+        homeAbbreviation,
+      }];
+    });
+    try {
+      const espn = await fetchCfbEspnFinalScores({ games: candidates, fetchImpl: args.fetchImpl });
+      result.providerRequests += espn.requests;
+      espnFinalsByGame = espn.finalsByGame;
+      espnFailuresByGame = espn.failuresByGame;
+    } catch (error) {
+      for (const game of fallbackGames) {
+        espnFailuresByGame[String(game.external_id)] = error instanceof Error ? error.message : String(error);
+      }
+    }
+  }
+  for (const dbGame of dbGames) {
+    const primary = providerById.get(dbGame.external_id);
+    const primaryStatus = primary ? normalizeStatus(primary.status) : null;
+    const fallback = primaryStatus === "final" ? null : espnFinalsByGame[String(dbGame.external_id)];
+    if (!primary && !fallback) {
+      const fallbackReason = espnFailuresByGame[String(dbGame.external_id)] ?? "fallback_not_attempted";
+      result.errors.push({ reason: `game ${dbGame.external_id}: exact BALLDONTLIE NCAAF result row unavailable; ESPN ${fallbackReason}` });
       continue;
     }
-    const status = normalizeStatus(game.status);
+    const status = fallback ? "final" : primaryStatus!;
     if (status === "in_progress") {
       result.inProgressCount += 1;
       continue;
@@ -77,8 +131,8 @@ export async function ingestCfbFinalScores(args: {
       continue;
     }
     const voidStatus = status === "postponed" || status === "canceled";
-    const homeScore = game.homeScore;
-    const awayScore = game.awayScore;
+    const homeScore = fallback?.homeScore ?? primary!.homeScore;
+    const awayScore = fallback?.awayScore ?? primary!.awayScore;
     if (status === "final" && !validFinalScore(homeScore, awayScore)) {
       result.errors.push({ reason: `game ${dbGame.external_id}: final status has an invalid score` });
       continue;
