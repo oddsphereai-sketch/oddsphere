@@ -94,7 +94,8 @@ def main() -> None:
         }
 
     locked = replay[replay["market"].isin(markets)].copy()
-    diagnostic = projections[projections["phase"].eq("diagnostic")]
+    replay_phase = "locked_replay" if projections["phase"].eq("locked_replay").any() else "diagnostic"
+    diagnostic = projections[projections["phase"].eq(replay_phase)]
     joined = locked.merge(
         diagnostic[[
             "week", "market", "normalized_player", "component_projection",
