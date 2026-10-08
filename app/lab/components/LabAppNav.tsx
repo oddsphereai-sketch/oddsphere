@@ -25,6 +25,7 @@
 
 import Link, { useLinkStatus } from "next/link";
 import { usePathname } from "next/navigation";
+import AddToHomeScreenGuide from "./AddToHomeScreenGuide";
 import RefreshIndicator from "./RefreshIndicator";
 import { useSportSelection } from "../hooks/useSportSelection";
 import { DAILY_EDGE_REVIEW_SLATES } from "../lib/dailyEdgeReviewSlates";
@@ -173,10 +174,13 @@ export default function LabAppNav() {
           </div>
         </div>
 
-        {/* Mobile-only: RefreshIndicator stacks below the row so the pill stays
-            thumb-reachable without horizontal scroll. */}
-        <div className="sm:hidden pb-2 -mt-1 flex justify-end">
-          {isPrivatePreview ? <PreviewStatus /> : <RefreshIndicator sport={sport} />}
+        {/* Mobile-only utility row. It wraps instead of shrinking either
+            control so enlarged text and narrow screens remain usable. */}
+        <div className="-mt-1 flex flex-wrap items-start justify-between gap-x-2 gap-y-1 pb-2 sm:hidden">
+          <AddToHomeScreenGuide />
+          <div className="ml-auto shrink-0">
+            {isPrivatePreview ? <PreviewStatus /> : <RefreshIndicator sport={sport} />}
+          </div>
         </div>
       </div>
     </header>
