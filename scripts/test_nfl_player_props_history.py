@@ -40,4 +40,37 @@ before = features[features["week"].le(3)][cols].reset_index(drop=True)
 after = changed_features[changed_features["week"].le(3)][cols].reset_index(drop=True)
 pd.testing.assert_frame_equal(before, after)
 
-print("NFL player-props history: shifted feature and future-outcome leakage checks passed")
+team = pd.DataFrame([
+    {
+        "season": 2025, "week": 1, "game_id": "2025_01_A_B", "team": "A", "opponent": "B",
+        "team_pass_attempts": 10.0, "team_offensive_plays": 50.0,
+    },
+    {
+        "season": 2025, "week": 1, "game_id": "2025_01_A_B", "team": "B", "opponent": "A",
+        "team_pass_attempts": 20.0, "team_offensive_plays": 60.0,
+    },
+    {
+        "season": 2025, "week": 2, "game_id": "2025_02_A_B", "team": "A", "opponent": "B",
+        "team_pass_attempts": 30.0, "team_offensive_plays": 70.0,
+    },
+    {
+        "season": 2025, "week": 2, "game_id": "2025_02_A_B", "team": "B", "opponent": "A",
+        "team_pass_attempts": 40.0, "team_offensive_plays": 80.0,
+    },
+])
+legacy_team, team_columns = module.add_team_prior_features(team)
+corrected_team, corrected_team_columns = module.add_opponent_team_prior_features(team)
+assert team_columns == corrected_team_columns
+feature = "prior_opponent_allowed_pass_attempts_ewm"
+assert legacy_team[(legacy_team["team"] == "A") & (legacy_team["week"] == 2)].iloc[0][feature] == 20.0
+assert corrected_team[(corrected_team["team"] == "A") & (corrected_team["week"] == 2)].iloc[0][feature] == 10.0
+assert pd.isna(corrected_team[(corrected_team["team"] == "A") & (corrected_team["week"] == 1)].iloc[0][feature])
+
+try:
+    module.add_team_prior_features(team, opponent_identity="unknown")
+except ValueError:
+    pass
+else:
+    raise AssertionError("invalid opponent identity must fail closed")
+
+print("NFL player-props history: shifted features, opponent identity, and leakage checks passed")
