@@ -25,7 +25,7 @@ ROOT = pathlib.Path(__file__).resolve().parents[2]
 DEFAULT_BASE_MANIFEST = ROOT / "football-research/cache/nflverse/real-model-r1/manifest.json"
 DEFAULT_EXTERNAL_MANIFEST = ROOT / "football-research/cache/nfl-player-props-external/manifest.json"
 DEFAULT_OUTPUT_ROOT = ROOT / "football-research/cache/nfl-player-props-external/features"
-RELEASE = "nfl_player_props_external_features_2016_2026_2026_10_08_r1"
+RELEASE = "nfl_player_props_external_features_2016_2026_2026_10_08_r2"
 EWM_ALPHA = 0.35
 
 NGS_METRICS = {
@@ -255,6 +255,23 @@ def pbp_state_features(paths: list[pathlib.Path]) -> tuple[pd.DataFrame, list[st
     return output.drop(columns="opponent"), [*own_names, *allowed_names]
 
 
+def game_environment_features(paths: list[pathlib.Path]) -> tuple[pd.DataFrame, list[str]]:
+    games = read_columns(paths, ["season", "week", "season_type", "game_id", "roof", "temp", "wind"])
+    games = games[games["season_type"].fillna("").eq("REG")].drop_duplicates("game_id").copy()
+    games["external_environment_temperature_f"] = pd.to_numeric(games["temp"], errors="coerce")
+    games["external_environment_wind_mph"] = pd.to_numeric(games["wind"], errors="coerce")
+    roof = games["roof"].fillna("").astype(str).str.lower()
+    games["external_environment_outdoor"] = roof.str.contains("outdoors|outdoor|open").astype(float)
+    games["external_environment_fixed_roof"] = roof.str.contains("dome|closed").astype(float)
+    names = [
+        "external_environment_temperature_f",
+        "external_environment_wind_mph",
+        "external_environment_outdoor",
+        "external_environment_fixed_roof",
+    ]
+    return games[["season", "week", "game_id", *names]], names
+
+
 def ngs_features(spine: pd.DataFrame, files: dict[tuple[str, int | None], pathlib.Path]) -> tuple[pd.DataFrame, list[str]]:
     output = pd.DataFrame(index=spine.index)
     names: list[str] = []
@@ -337,6 +354,10 @@ def main() -> None:
     args = parser.parse_args()
 
     history = load_module("props_external_history", ROOT / "scripts/operator/build_nfl_player_props_history.py")
+    position = load_module(
+        "props_external_position",
+        ROOT / "scripts/operator/tournament_nfl_player_props_position_matchup.py",
+    )
     contract = json.loads((ROOT / "lib/services/football/nflPlayerPropsHistoricalContract.json").read_text())
     base_files, base_manifest_sha = verified_files(args.base_manifest)
     external_files, external_manifest_sha = verified_files(args.external_manifest)
@@ -360,6 +381,16 @@ def main() -> None:
     pbp_paths = [paths[("pbp", season)] for season in range(2016, args.current_season + 1)]
     state_rows, state_names = pbp_state_features(pbp_paths)
     frame = frame.merge(state_rows, on=["season", "week", "game_id", "team"], how="left", validate="many_to_one", sort=False)
+    position_rows, position_names = position.position_matchup_features(frame)
+    frame = position.attach_position_features(frame, position_rows)
+    environment_rows, environment_names = game_environment_features(pbp_paths)
+    frame = frame.merge(
+        environment_rows,
+        on=["season", "week", "game_id"],
+        how="left",
+        validate="many_to_one",
+        sort=False,
+    )
     ngs, ngs_names = ngs_features(frame, external_files)
     pfr, pfr_names = pfr_features(frame, external_files, args.current_season)
     ftn, ftn_names = ftn_player_features(frame, external_files, pbp_paths, args.current_season)
@@ -370,7 +401,7 @@ def main() -> None:
     frame["dataset_release"] = RELEASE
     feature_groups = {
         "base": list(diagnostics["modelFeatureColumns"]),
-        "state": state_names,
+        "state": [*state_names, *position_names, *environment_names],
         "pfr": pfr_names,
         "ftn": ftn_names,
         "ngs": ngs_names,
@@ -386,8 +417,8 @@ def main() -> None:
         raise RuntimeError("external feature matrix changed row identity")
 
     args.output_root.mkdir(parents=True, exist_ok=True)
-    feature_path = args.output_root / "nfl_player_props_external_features_2016_2026_r1.parquet"
-    manifest_path = args.output_root / "nfl_player_props_external_features_2016_2026_r1.manifest.json"
+    feature_path = args.output_root / "nfl_player_props_external_features_2016_2026_r2.parquet"
+    manifest_path = args.output_root / "nfl_player_props_external_features_2016_2026_r2.manifest.json"
     frame.sort_values(keys).to_parquet(feature_path, index=False)
     coverage = {
         group: {
