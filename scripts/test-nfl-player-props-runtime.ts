@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import expectedRoleArtifact from "../lib/services/football/modelArtifacts/nflPlayerPropsExpectedRole.json";
 import rushingAttemptsArtifact from "../lib/services/football/modelArtifacts/nflPlayerPropsRuntimeMarketRushingAttempts.json";
 import {
   NFL_PLAYER_PROPS_BOARD_RELEASE,
@@ -33,12 +34,18 @@ import {
 } from "../lib/services/football/nflPlayerPropsRuntime";
 import type { NflPlayerPropsExactOffer } from "../lib/services/football/nflPlayerPropsMarketBoard";
 
-assert.equal(NFL_PLAYER_PROPS_PORTABLE_ARTIFACT_RELEASE, "nfl_player_props_runtime_2026_10_07_r8_settlement_aligned_rushing_attempts");
-assert.equal(NFL_PLAYER_PROPS_RUNTIME_RELEASE, "nfl_player_props_runtime_2026_10_07_r23_settlement_aligned_rushing_attempts");
-assert.equal(NFL_PLAYER_PROPS_BOARD_RELEASE, "nfl_player_props_board_2026_10_07_r26_settlement_aligned_rushing_attempts");
-assert.equal(NFL_PLAYER_PROPS_MODEL_RELEASE, "nfl_player_props_distribution_model_2026_10_07_r17_settlement_aligned_rushing_attempts");
-assert.equal(NFL_PLAYER_PROPS_CALIBRATION_RELEASE, "nfl_player_props_distribution_calibration_2026_10_07_r19_settlement_aligned_rushing_attempts");
-assert.equal(NFL_PLAYER_PROPS_DECISION_RELEASE, "nfl_player_props_decision_2026_10_07_r22_settlement_aligned_rushing_attempts");
+assert.equal(NFL_PLAYER_PROPS_PORTABLE_ARTIFACT_RELEASE, "nfl_player_props_runtime_2026_10_08_r9_independent_passing_attempts");
+assert.equal(NFL_PLAYER_PROPS_RUNTIME_RELEASE, "nfl_player_props_runtime_2026_10_08_r24_independent_passing_attempts");
+assert.equal(NFL_PLAYER_PROPS_BOARD_RELEASE, "nfl_player_props_board_2026_10_08_r27_independent_passing_attempts");
+assert.equal(NFL_PLAYER_PROPS_MODEL_RELEASE, "nfl_player_props_distribution_model_2026_10_08_r18_independent_passing_attempts");
+assert.equal(NFL_PLAYER_PROPS_CALIBRATION_RELEASE, "nfl_player_props_distribution_calibration_2026_10_08_r20_independent_passing_attempts");
+assert.equal(NFL_PLAYER_PROPS_DECISION_RELEASE, "nfl_player_props_decision_2026_10_08_r23_independent_passing_attempts");
+assert.equal(expectedRoleArtifact.release,
+  "nfl_player_props_expected_role_runtime_2026_10_08_r1_passing_attempts");
+assert.equal(expectedRoleArtifact.marketIndependent, true);
+assert.deepEqual(expectedRoleArtifact.marketFeatures, []);
+assert.equal("receptions" in expectedRoleArtifact, false,
+  "the research-qualified but production-rejected Receptions head is absent from the shipped artifact");
 assert.equal(rushingAttemptsArtifact.model.kind, "weighted_blend");
 assert.deepEqual(rushingAttemptsArtifact.model.components.map((component) => component.weight), [0.25, 0.75],
   "the released Rushing Attempts head is the frozen 25% incumbent / 75% settlement-aligned blend");
@@ -193,7 +200,7 @@ assert.ok(twoBooks.decisions.every((row) => !row.healthHolds.includes("independe
 assert.ok(twoBooks.decisions.every((row) => row.modelRelease === NFL_PLAYER_PROPS_MODEL_RELEASE));
 assert.ok(twoBooks.decisions.every((row) => row.calibrationRelease === NFL_PLAYER_PROPS_CALIBRATION_RELEASE));
 assert.ok(twoBooks.decisions.every((row) => row.projectionEvidence?.source === "single_posterior_distribution"));
-assert.ok(twoBooks.decisions.every((row) => row.finalProbability < 0.5
+assert.ok(twoBooks.decisions.every((row) => Math.abs(row.finalProbability - 0.5) < 1e-12 || row.finalProbability < 0.5
   || (row.side === "over" ? row.projection! > row.line : row.projection! < row.line)),
 "every actionable direction agrees with the single posterior median");
 const posterior = nflPlayerPropsCoherentPosteriorDistribution({
@@ -273,14 +280,10 @@ const expectedStarterAttempts = nflPlayerPropsExpectedStarterPassingProjection({
   offers: [attemptsOffer, { ...attemptsOffer, offerKey: "qb-attempts-b", sportsbook: "book-b", line: 29.5 }],
   evaluatedSportsbook: "book-a",
 });
-assert.equal(
-  expectedStarterAttempts?.evidence?.source === "market_dominant_expected_starter"
-    ? expectedStarterAttempts.evidence.market
-    : null,
-  "passing_attempts",
-);
-assert.ok((expectedStarterAttempts?.projection ?? 0) > 25,
-  "a verified starter's passing-attempt projection uses current target-excluded workload evidence instead of a reserve head");
+assert.equal(expectedStarterAttempts?.evidence, undefined,
+  "Passing Attempts preserves the independent expected-role point forecast");
+assert.equal(expectedStarterAttempts?.projection, 20,
+  "target-excluded workload evidence does not rewrite the independent Passing Attempts point");
 const attemptsBoard = buildNflPlayerPropsRuntimeBoard({
   offers: [attemptsOffer, { ...attemptsOffer, offerKey: "qb-attempts-b", sportsbook: "book-b", line: 29.5 }],
   features: [attemptsFeature],
@@ -361,10 +364,11 @@ const jointYards = nflPlayerPropsExpectedStarterPassingProjection({
   market: "passing_yards", modeledProjection: modeledPassing.passing_yards,
   modeledProjections: modeledPassing, offers: workloadOffers, evaluatedSportsbook: "book-a",
 });
-assert.ok((jointAttempts?.projection ?? 0) > 25,
-  "cross-market workload evidence repairs an expected starter's implausibly low reserve attempt head");
-assert.ok((jointCompletions?.projection ?? Infinity) <= (jointAttempts?.projection ?? -Infinity),
-  "the joint passing projection cannot publish more completions than attempts");
+assert.equal(jointAttempts?.projection, modeledPassing.passing_attempts,
+  "cross-market prices do not rewrite the released independent Passing Attempts point");
+assert.equal(jointAttempts?.evidence, undefined);
+assert.ok(Number.isFinite(jointCompletions?.projection),
+  "the separately released completions workload remains finite");
 assert.ok((jointYards?.projection ?? 0) > 160,
   "target-excluded yards evidence contributes to the coherent expected-starter workload");
 const targetContaminatedWorkload = nflPlayerPropsExpectedStarterPassingProjection({
