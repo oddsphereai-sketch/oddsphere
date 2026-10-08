@@ -67,10 +67,12 @@ forecast. It uses the independent forecast, source-separated same-book line and 
 named-versus-retail disagreement, reversals, timing, and named/fallback/public split provenance and
 acceleration. It does not target the market center and does not use a generic cross-sport weight.
 
-The fixed release candidate treats the three markets differently:
+The best audited candidate treats the three markets differently:
 
-- Moneyline and Spread use a heavily regularized continuous margin correction. The independent
-  forecast remains primary; ordinary market resistance is not an automatic reversal.
+- Moneyline and Spread use a heavily regularized continuous margin correction only when a real
+  movement sequence, reversal or split observation exists. The independent forecast remains
+  primary; confirmation, resistance and a true side crossing are distinct outcomes. A crossing is
+  allowed to flip the prediction, while same-side evidence may still improve the score axis.
 - Total keeps the released score axis unless the continuous evidence posterior crosses the current
   Total side. A qualifying cross reflects the full score conviction to the other side instead of
   producing a cosmetic nudge or a line-hugging score.
@@ -89,19 +91,29 @@ Total. This is an evidence-presence contract, not a movement-size threshold.
 With that rule, the earlier September 25–27 block remains four Total corrections and zero harms.
 The October 2–4 block becomes three Total corrections and zero harms: Total moves from 35-32 to
 38-29, while Total MAE improves from 14.1662 to 13.6603. Moneyline remains 61-33 to 62-32 and Spread
-37-28-1 to 38-27-1; margin MAE remains 13.1208 to 12.9144. The three-game October 7 micro-holdout
+37-28-1 to 38-27-1; margin MAE improves from 13.1208 to 12.9144. The three-game October 7 micro-holdout
 has no directional changes; margin MAE improves from 9.0211 to 8.9522. Because the evidence-authority
 rule was discovered during exact confirmation review, those improved October figures are opened
 diagnostic evidence, not a newly untouched holdout.
+
+A four-way comparison rejected the idea that the version making the fewest changes must be best.
+Evidence-gated continuous margin adjustment improves margin and team-score MAE in development,
+confirmation and the October 7 micro-holdout while preserving the directional gains. Continuous
+Total adjustment is rejected: its October confirmation Total MAE worsens from 14.1662 to 15.0976
+and one score-axis change reaches 52.7 points. The winning architecture is therefore continuous
+evidence-conditioned margin plus evidence-backed, side-crossing Total correction.
 
 An exact official-lock integrity comparison was also run separately. It improved confirmation
 Moneyline 61-33 to 63-31 and Total 34-30 to 36-28, left Spread 33-30-1 unchanged, and improved all
 three score-error measures. Those later records are not used to select or inflate the candidate.
 
 A deliberately harsher date-by-date refit exposed an important failure mode: retraining after every
-small slate can chase the immediately preceding results and made October 3 Total flips worse. That
-behavior is rejected. Any eventual artifact must be release-frozen through its evaluation slate and
-may be retrained only in a newly identified, release-separated cycle.
+small slate can chase the immediately preceding results. Across 216 date-forward games, the candidate
+improves Spread from 70-58-3 to 71-57-3 and Total from 72-65 to 79-58, while reducing margin MAE
+12.4221 to 12.3019 and team-score MAE 9.3259 to 9.2480. But a refit after only four October 2 games
+made the October 3 Total interventions one correction and four harms. That behavior is rejected.
+The artifact must be release-frozen through the complete weekly slate and may be retrained only in
+a newly identified, release-separated cycle.
 
 Evidence regimes are not interchangeable. In the confirmation block, released Moneyline picks won
 24-14 when the continuous evidence confirmed them and 36-17 when it resisted them; blanket
@@ -119,21 +131,34 @@ Angles with resistance went 0-3 for -3 units, while confirmed Total Leans went 4
 Those cells identify a real calibration concern, but the small counts do not by themselves authorize
 a production demotion. Any demotion still requires a paired, exact-price promotion replay.
 
-The current 86-game board was also replayed without writes. The candidate changes zero Moneyline
-sides and zero Spread sides. It identifies four weekend Total side changes (WAKE-NCSU, UGA-ALA,
-SC-FLA and MISS-VAN), with no change to the October 8 game. There are no negative score outputs.
-The compact stored evidence does not retain the writer's full joint PMF, so only 46 of 86 reconstructed
-games reproduced every existing grade, exact price and probability within the strict audit tolerance.
-Accordingly, the audit does not claim exact current-board promotion/demotion counts and does not
-authorize those four live changes yet. Exact no-flattening proof must run inside the sole writer from
-its in-memory full PMF.
+The current 86-game board was replayed inside the sole writer from its exact in-memory PMF, with zero
+writes. All 86 baseline games reproduce the existing grades, prices and probabilities within the
+strict audit tolerance. The candidate has no negative scores, adjusts the margin axis in 84 games,
+and classifies evidence across the whole board rather than only changed cards: Moneyline contains
+44 confirmation and 41 resistance regimes; Spread contains 28 confirmation and 26 resistance
+regimes; Total contains 19 confirmation, 30 resistance and five raw crossing regimes. Four Totals
+cross the final side: WAKE-NCSU, SC-FLA, MISS-VAN and UGA-ALA. The fresh exact replay has zero
+Moneyline flips and zero Spread flips.
 
-This candidate is not live. The October 7 holdout contains only three games, the evidence-authority
-rule is outcome-informed diagnostic work, and the exact current-board promotion/demotion replay is
-still required. Under the model-change safety contract, no authoritative score, side or grade can
-change yet. The next gate is a full current-board PMF and exact-price replay inside the sole writer,
-followed by release-separated forward evidence proving coherent probabilities and paired promotions
-and demotions without flattening the board.
+Best Angle counts remain unchanged. One Spread Lean becomes Watchlist, one Spread No Play becomes
+Watchlist, and one Total Watchlist becomes No Play. Best Angle plus Lean count moves from 92 to 91;
+there is no hidden board flattening beyond the one Spread Lean demotion. Two Total Best Angles and
+one Total Lean retain their grades while changing sides.
+
+Missing splits are not an automatic No Play. The exact board contains three actionable Spreads and
+six actionable Totals without eligible split evidence; no Spread No Play and only one Total No Play
+lack splits, and no grade reason code treats missing splits as resistance. The larger apparent No Play
+block is 32 Held games. Removing only the canonical-anchor global hold recovers zero exact-price
+decisions: 30-31 of those markets still lack two target-excluded books at the identical line, while
+one or two lack a target quote. This is a target-excluded consensus coverage limitation, not a split
+gate. The independent side and projected score remain available, but an exact-price Lean is not
+manufactured without a defensible market denominator.
+
+This candidate is not live. The October 7 holdout contains only three games and the evidence-authority
+rule is outcome-informed diagnostic work. The exact replay satisfies coherence and board-shape gates,
+but it does not create a new untouched performance sample. Under the model-change safety contract,
+the candidate remains audit-only until an owner-approved provisional exception or release-separated
+forward evidence authorizes a new model release.
 
 The unrestricted strong-conflict Total row has a material correction advantage and improves
 reflected Total error (14.51 to 12.68 points on disagreements), but its paired one-sided correction
@@ -175,10 +200,11 @@ not reliably create excess returns:
 ## Production decision
 
 Do not apply a generic market weight, capped cosmetic nudge, RLM flip, named-book flip or consensus
-flip. Do not change CFB live grades or flatten the board from this result. Keep the active release
-intact and evaluate the frozen strong-conflict Total rule prospectively after additional settled
-dates. A future candidate must regenerate one coherent PMF so expected score, representative score,
-Moneyline, Spread, Total and exact-price grading cannot contradict one another.
+flip. The best audited candidate is the evidence-gated continuous margin reader paired with the
+evidence-backed Total side-correction reader. It must be frozen for the full slate and regenerate one
+coherent PMF so expected score, representative score, Moneyline, Spread, Total and exact-price grades
+cannot contradict one another. Keep the active release intact until the provisional-release gate is
+explicitly satisfied.
 
 The audit remains reproducible with
 `scripts/operator/audit-cfb-2026-sharp-sequence-tournament.ts`.

@@ -70,6 +70,7 @@ import {
   preferredCfbContextBook,
   publishCfbForwardDecisionBundle,
   retainLatestCfbPlaybookObservation,
+  runCfbForwardEvidenceWriter,
   selectQuarterbackTeams,
   selectCfbSharpFallbackGames,
   selectCfbEspnReferenceGames,
@@ -3441,6 +3442,23 @@ assert.match(trackingRefresh, /sport === "cfb"/);
 assert.match(trackingRefresh, /ingestCfbFinalScores/);
 const trackingRoute = readFileSync(path.resolve("app/api/cron/tracking-refresh/route.ts"), "utf8");
 assert.match(trackingRoute, /"nfl", "cfb"/);
+
+await assert.rejects(
+  runCfbForwardEvidenceWriter({
+    client: {} as SupabaseClient,
+    season: 2026,
+    runId: "audit-override-must-never-write",
+    now: "2026-10-08T12:00:00.000Z",
+    apply: true,
+    balldontlieApiKey: "unused",
+    playbookApiKey: "unused",
+    sharpApiKey: "unused",
+    auditWindowStartDate: "2026-10-05",
+    auditForceUnlocked: true,
+  }),
+  /audit planning overrides are forbidden when apply=true/,
+  "read-only CFB audit planning overrides must fail before any production read or write",
+);
 
 console.log("CFB v1 production contract: PMF coherence, representative score, exact-price grades, compact evidence, T-60 tracking, provider normalization, one writer, and normal reader passed.");
 

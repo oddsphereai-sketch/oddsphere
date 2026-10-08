@@ -36,7 +36,7 @@ import {
   type CfbForwardTeamQuarterbacks,
 } from "./cfbForwardEvidence";
 import { appendCfbForwardEvidence, readCfbForwardMarketHistory, readCfbForwardWriterEvidence, type CfbForwardEvidenceMetadata } from "./cfbForwardEvidenceStore";
-import { buildCfbV1DecisionBundle, CFB_T60_MAX_CAPTURE_LAG_MINUTES, CFB_V1_DECISION_RELEASE, CFB_V1_GAP_FALLBACK_PREVIOUS_DECISION_RELEASE, CFB_V1_FCS_PRICE_PREVIOUS_DECISION_RELEASE, getCfbV1ForecastForGame, type CfbV1Forecast, type CfbV1Market } from "./cfbV1Decision";
+import { buildCfbV1DecisionBundle, CFB_T60_MAX_CAPTURE_LAG_MINUTES, CFB_V1_DECISION_RELEASE, CFB_V1_GAP_FALLBACK_PREVIOUS_DECISION_RELEASE, CFB_V1_FCS_PRICE_PREVIOUS_DECISION_RELEASE, getCfbV1ForecastForGame, type CfbV1DecisionBundle, type CfbV1Forecast, type CfbV1Market } from "./cfbV1Decision";
 import { CFB_V1_WEEKLY_RUNTIME_RELEASE, cfbV1WeeklyGameProfileCoverage, getCfbV1WeeklyForecasts } from "./cfbV1WeeklyForecast";
 import { loadCfbCurrentAdvancedState } from "./cfbCurrentAdvancedState";
 import { resolveCfbCanonicalMarketAnchor } from "./cfbMarketInformedOutcome";
@@ -183,6 +183,12 @@ export type CfbForwardCaptureFailure = {
   error: string;
 };
 
+export type CfbForwardAuditForecast = {
+  providerGameId: string;
+  payload: CfbForwardEvidencePayload;
+  decisionBundle: CfbV1DecisionBundle;
+};
+
 /**
  * Movement is evidence only when the opening and current quote come from the
  * same sportsbook. The execution quote remains independently price-shopped.
@@ -270,7 +276,16 @@ export async function runCfbForwardEvidenceWriter(args: {
   weatherProvider?: IWeatherProvider | null;
   /** Read-only operator evidence hook. Never used by the production route. */
   auditPayloads?: (payloads: readonly CfbForwardEvidencePayload[]) => void;
+  /** Read-only operator hook retaining the in-memory PMF. Never used by the production route. */
+  auditForecasts?: (forecasts: readonly CfbForwardAuditForecast[]) => void;
+  /** Read-only operator window override. Rejected whenever apply=true. */
+  auditWindowStartDate?: string;
+  /** Read-only operator cadence override. Rejected whenever apply=true. */
+  auditForceUnlocked?: boolean;
 }): Promise<CfbForwardWriterResult> {
+  if (args.apply && (args.auditWindowStartDate || args.auditForceUnlocked)) {
+    throw new Error("CFB audit planning overrides are forbidden when apply=true.");
+  }
   const writerEvidence = await readCfbForwardWriterEvidence({ client: args.client, season: args.season });
   const allExisting = writerEvidence.evidence;
   const windows = resolveCfbVisibleWindows({ now: args.now, evidence: allExisting });
@@ -289,7 +304,9 @@ export async function runCfbForwardEvidenceWriter(args: {
     const need = cfbForwardReleaseRefreshNeed(existing, args.now) ?? ordinaryNeed;
     return { window, existing, lockPlanningExisting, need };
   });
-  const selected = selectCfbForwardCollectionWindow(states);
+  const selected = args.auditWindowStartDate
+    ? states.find((state) => state.window.boardStartDate === args.auditWindowStartDate) ?? null
+    : selectCfbForwardCollectionWindow(states);
   if (!selected) {
     const tracking = await writeOfficialTracking({
       client: args.client,
@@ -311,11 +328,13 @@ export async function runCfbForwardEvidenceWriter(args: {
     games,
     existing: lockPlanningExisting,
     capturedAt: args.now,
-    ...(need.reason === "release_refresh_due" || need.reason === "reference_line_completion_due" || need.reason === "provider_seed_due"
+    ...(args.auditForceUnlocked || need.reason === "release_refresh_due" || need.reason === "reference_line_completion_due" || need.reason === "provider_seed_due"
       ? { unlockedCadenceMinutesOverride: 0 }
       : {}),
   });
-  const plans = need.reason === "reference_line_completion_due"
+  const plans = args.auditForceUnlocked
+    ? plannedCaptures
+    : need.reason === "reference_line_completion_due"
     ? plannedCaptures.filter((plan) => cfbReferenceCompletionNeeded(latestByGame.get(plan.game.providerGameId), args.now))
     : need.reason === "provider_seed_due"
       ? plannedCaptures.filter((plan) => cfbTheOddsApiProviderSeedNeeded(latestByGame.get(plan.game.providerGameId), args.now))
@@ -569,6 +588,7 @@ export async function runCfbForwardEvidenceWriter(args: {
     displayBooks.push(...cfbForwardContextSharpHistoryBooks(row.payload.contextualEvidenceCapture));
     captureHistoryDisplayBooksByGame.set(row.providerGameId, displayBooks);
   }
+  const auditForecasts: CfbForwardAuditForecast[] = [];
   const { payloads, captureFailures } = buildCfbForwardPayloadsWithIsolation(plans, (plan): CfbForwardEvidencePayload => {
     const sharpBooks = sharpFallback.booksByGame[plan.game.providerGameId] ?? [];
     const sharpDisplayBooks = sharpFallback.displayBooksByGame[plan.game.providerGameId] ?? [];
@@ -784,10 +804,11 @@ export async function runCfbForwardEvidenceWriter(args: {
           current: movementCurrent,
         })
       : decisionBundle;
-    const decisions = publishCfbForwardDecisionBundle(applyCfbVerifiedAvailabilityGradeCap({
+    const fullDecisionBundle = applyCfbVerifiedAvailabilityGradeCap({
       bundle: marketAwareDecisions,
       availability: quarterbackAvailability.availability,
-    }), playbookLine, espnReferenceLine, {
+    });
+    const decisions = publishCfbForwardDecisionBundle(fullDecisionBundle, playbookLine, espnReferenceLine, {
       spread: preferredCfbContextBook(displayBooks, "spread"),
       total: preferredCfbContextBook(displayBooks, "total"),
     });
@@ -942,12 +963,19 @@ export async function runCfbForwardEvidenceWriter(args: {
         ...(captureHistoryBooksByGame.get(plan.game.providerGameId) ?? []),
       ],
     });
-    return {
+    const completedPayload = {
       ...payload,
       ...(contextualEvidenceCapture ? { contextualEvidenceCapture } : {}),
     };
+    auditForecasts.push({
+      providerGameId: plan.game.providerGameId,
+      payload: completedPayload,
+      decisionBundle: fullDecisionBundle,
+    });
+    return completedPayload;
   });
   args.auditPayloads?.(payloads);
+  args.auditForecasts?.(auditForecasts);
   const write = await appendCfbForwardEvidence({ client: args.client, runId: args.runId, payloads, apply: args.apply });
   const tracking = await writeOfficialTracking({
     client: args.client,
