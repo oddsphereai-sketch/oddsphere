@@ -80,6 +80,31 @@ class ExternalFeatureLeakageTests(unittest.TestCase):
         self.assertEqual(attached.loc[2, "external_test_metric_avg3"], 15.0)
         self.assertLess(attached.loc[2, "external_test_metric_ewm"], 20.0)
 
+    def test_environment_is_pregame_context(self) -> None:
+        # The helper reads one row per game and does not derive any feature from
+        # the game's plays or outcomes.
+        source = pd.DataFrame(
+            {
+                "season": [2026],
+                "week": [1],
+                "season_type": ["REG"],
+                "game_id": ["G1"],
+                "roof": ["outdoors"],
+                "temp": [42],
+                "wind": [18],
+            }
+        )
+        original = TARGET.read_columns
+        TARGET.read_columns = lambda _paths, _columns: source.copy()
+        try:
+            attached, names = TARGET.game_environment_features([pathlib.Path("unused")])
+        finally:
+            TARGET.read_columns = original
+        self.assertEqual(attached.loc[0, "external_environment_temperature_f"], 42)
+        self.assertEqual(attached.loc[0, "external_environment_wind_mph"], 18)
+        self.assertEqual(attached.loc[0, "external_environment_outdoor"], 1.0)
+        self.assertIn("external_environment_fixed_roof", names)
+
 
 if __name__ == "__main__":
     unittest.main()
