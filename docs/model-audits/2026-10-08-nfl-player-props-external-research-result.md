@@ -12,9 +12,10 @@ the point model, but none of the tested families passed the complete current-sea
 distribution, actionable-retention, and price-evidence gates. No projection, probability, grade,
 stake, lock, writer, release identifier, or member surface changed.
 
-The strongest new result was a component model for Rushing Yards and Receptions. It improved the old
-independent point head on the matched 2026 locked subset, but not the published/market-informed point
-or probability benchmarks, and its game-clustered interval still included zero. That is useful model
+The strongest new result was the depth-aware component model for Rushing Attempts, Rushing Yards,
+and Receptions. It covered every corresponding 2026 locked scope and improved both MAE and RMSE over
+the old independent point head, but not the published/market-informed point or probability
+benchmarks, and its game-clustered interval still narrowly included zero. That is useful model
 progress, not production evidence.
 
 ## External methods and inputs actually tested
@@ -63,9 +64,9 @@ audits had already inspected the season.
 | Passing Attempts | MAE 8.68→7.56 in 2024; 8.43→7.67 in 2025 | freeze state + NGS Poisson candidate |
 | Passing Completions | 5.87→5.20; 5.65→5.14 | freeze state + pressure Poisson candidate |
 | Passing Yards | 67.85→61.12; 66.63→60.87 | freeze full-external absolute-error candidate |
-| Rushing Attempts | 3.154→3.135 in 2024; 3.054→3.073 in 2025 | reject |
-| Rushing Yards | 19.04→18.91; 18.56→18.50 | freeze 75% component hierarchy |
-| Receptions | 1.533→1.517; 1.460→1.455 | freeze 75% component hierarchy |
+| Rushing Attempts | 3.154→3.136 in 2024; 3.054→3.051 in 2025 | freeze 75% depth-role hierarchy |
+| Rushing Yards | 19.04→18.92; 18.56→18.42 | freeze 75% depth-role hierarchy |
+| Receptions | 1.533→1.514; 1.460→1.455 | freeze 75% depth-role hierarchy |
 | Receiving Yards | 19.96→19.89; 19.52→19.69 | reject |
 
 The Rushing Yards and Receptions hierarchy forecasts team rush/target volume, forecasts the player's
@@ -108,6 +109,26 @@ By market, the candidate improved Receptions MAE from 2.215 to 2.041 and Rushing
 to 17.891, but neither beat the corresponding published point (1.916 and 16.762). The point model is
 moving in the correct direction; the distribution and product gates are not.
 
+### Depth-role follow-up
+
+The final follow-up added exact-week depth role for 2016-2024 and the latest timestamped pregame
+snapshot for 2025-2026. It also trained the role-share component on active career-first/team-first
+appearances instead of requiring prior player history.
+
+- All 99 locked Rushing Attempts, Rushing Yards, and Receptions scopes matched; the eight scopes
+  missed by the preceding hierarchy gained a projection.
+- Candidate MAE improved from 6.689 to 6.354 and RMSE from 13.553 to 12.747 versus the locked
+  independent point.
+- The published point remained better at 6.057 MAE and 12.161 RMSE.
+- Direction accuracy improved from 48.5% to 49.5%, and actionable-direction retention was 90.9%.
+- Candidate Brier improved substantially over the old independent probability (0.2808 versus
+  0.3189) but remained worse than the market (0.2493) and published final probability (0.2525).
+- The game-clustered 95% interval for candidate-minus-independent MAE was `[-0.771, 0.050]`. The
+  upper endpoint is close to zero but still fails the predeclared significance gate.
+
+This result fixes the identified cold-start coverage failure and makes the independent point model
+materially better on these three families. It does not solve actionable probability calibration.
+
 ## Market reading result
 
 Market reading remains a separate diagnostic rather than an input to the independent projection.
@@ -122,25 +143,27 @@ it should not silently rewrite the independent forecast.
 
 ## What is still missing
 
-1. **Point-in-time role and availability.** The public depth-chart source is now cached for
-   2016-2026, and 2025+ rows include observation timestamps. It was discovered after the frozen
-   tournaments and was not backfit into their results. This is the next safe source for starter,
-   backup, slot/rank, and role-change evidence at the exact lock time.
-2. **Cold-start and promoted-player priors.** Nine exact scopes across the two replays lacked enough
-   prior player history. Depth rank plus position/team priors must cover rookies, backups, and newly
-   promoted players without falling straight back to the market.
+1. **Historical offered-board evidence for probability calibration.** The exact archive retains
+   actionables, not Weeks 1-3 full boards with both sides and exact prices. The depth-role point model
+   is better, but its empirical residual distribution assigns 67.3% average confidence to a subset
+   that won 48.5%. The smallest required addition is a timestamped pre-lock snapshot of every offered
+   player/market/line, both side prices, representative-book identity, and the independent point for
+   a later untouched window. That permits selection-aware calibration and symmetric promotions.
+2. **Timestamped availability and teammate redistribution.** Depth role fixed the coverage gap, but
+   official injury/practice status and inactive/limited/expanded states still need exact observation
+   timestamps so vacated carries and targets can be reassigned without hindsight.
 3. **Routes, alignment, and assignment-level matchups.** Public in-season data does not provide a
    complete pregame route-participation, OL/DL assignment, or CB/WR coverage feed. Aggregate pressure,
    box, and position-bucket proxies are useful but are not equivalent. A licensed feed should be
    evaluated if these features are required in production.
-4. **Teammate redistribution.** The hierarchy needs timestamped inactive/limited/expanded states and
-   explicit vacated carry/target redistribution, not only shifted participation and snap history.
-5. **Full-board preservation.** Every offered candidate and both sides/prices must be snapshotted at
-   lock. Without it, symmetric promotion/demotion and units cannot be reconstructed for Weeks 1-3.
+4. **An untouched confirmation window.** The current four weeks were opened by multiple audits. The
+   next stored full-board window must be frozen before outcomes and evaluated without candidate
+   selection or threshold changes.
 
 ## Release decision
 
-No production model change is authorized. The next shadow release should add lock-time depth/role
-features and cold-start priors, preserve a complete current board, and evaluate on a later untouched
-window. The current independent model should remain separate from market reading, while the product
-may display market movement as timestamped context with no unsupported “sharp” claim.
+No production model change is authorized. The depth-role point candidate should remain shadowed while
+the product begins preserving complete pre-lock boards and timestamped availability, then evaluates
+selection-aware probability calibration on a later untouched window. This is now the specific data
+dependency blocking a safe release. The independent model should remain separate from market reading,
+while the product may display movement as timestamped context with no unsupported “sharp” claim.
