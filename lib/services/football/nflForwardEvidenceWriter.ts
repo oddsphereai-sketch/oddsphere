@@ -7,7 +7,7 @@ import type { PlaybookLineGame, PlaybookSplitGame } from "@/lib/providers/playbo
 import {
   fetchBalldontlieNflSlateAvailability,
   mergeNflAvailabilityWithPrior,
-  NFL_INJURY_MAX_PAGES,
+  nflAvailabilityRequestBudgetMaximum,
 } from "./balldontlieNflAvailability";
 import { fetchBalldontlieNflRegularSlate, type NflPreviewBookOdds, type NflPreviewGame } from "./balldontlieNflPreviewSlate";
 import { fetchBalldontlieNflTeamDepthSnapshots } from "./balldontlieNflRoster";
@@ -95,7 +95,7 @@ import {
 } from "./balldontlieNflWeeklyProjectionShadow";
 
 export const NFL_FORWARD_WRITER_RELEASE =
-  "nfl_forward_evidence_writer_2026_10_07_r55_injury_continuity" as const;
+  "nfl_forward_evidence_writer_2026_10_08_r56_game_designation_continuity" as const;
 
 export type NflForwardWriterResult = {
   writerRelease: typeof NFL_FORWARD_WRITER_RELEASE;
@@ -214,6 +214,14 @@ export async function runNflForwardEvidenceWriter(args: {
     .flatMap((plan) => [plan.game.away.id, plan.game.home.id]));
   const criticalTeams = slate.games.flatMap((game) => [game.away, game.home])
     .filter((team, index, rows) => criticalTeamIds.has(team.id) && rows.findIndex((row) => row.id === team.id) === index);
+  const availabilityMatchups = slate.games.map((game) => ({
+    id: game.providerGameId,
+    awayTeam: game.away.abbreviation,
+    homeTeam: game.home.abbreviation,
+    awayTeamId: game.away.id,
+    homeTeamId: game.home.id,
+  }));
+  const availabilityRequestsMaximum = nflAvailabilityRequestBudgetMaximum(availabilityMatchups);
 
   const playbook = new PlaybookReadBroker(args.playbookApiKey);
   const storedPaidProjectionShadows = latestStoredPaidProjectionShadows(historicalExisting);
@@ -230,13 +238,12 @@ export async function runNflForwardEvidenceWriter(args: {
       capturedAt: args.now,
       apiKey: args.balldontlieApiKey,
     }),
-    fetchBalldontlieNflSlateAvailability(slate.games.map((game) => ({
-      id: game.providerGameId,
-      awayTeam: game.away.abbreviation,
-      homeTeam: game.home.abbreviation,
-      awayTeamId: game.away.id,
-      homeTeamId: game.home.id,
-    })), { apiKey: args.balldontlieApiKey }),
+    fetchBalldontlieNflSlateAvailability(availabilityMatchups, {
+      apiKey: args.balldontlieApiKey,
+      season: args.season,
+      week: args.week,
+      seasonType: 2,
+    }),
     playbook.lines("nfl").then((result) => result.body.data ?? []).catch(() => null),
     playbook.splits("nfl").then((result) => result.body.data ?? []).catch(() => null),
     fetchSharpApiNflSplits({ apiKey: args.sharpApiKey, games: slate.games, capturedAt: args.now })
@@ -293,7 +300,7 @@ export async function runNflForwardEvidenceWriter(args: {
     ...(paidProjectionFetch?.byGame ?? {}),
   };
   const paidProjectionRequestsMaximum = paidProjectionRefreshDue ? NFL_PAID_PROJECTION_MAX_PAGES : 0;
-  const apiCallsMaximum = slate.providerRequests + rosters.requests + NFL_INJURY_MAX_PAGES + paidProjectionRequestsMaximum
+  const apiCallsMaximum = slate.providerRequests + rosters.requests + availabilityRequestsMaximum + paidProjectionRequestsMaximum
     + 2 + sharpResult.requests + circaAttempt.requests + weatherRequests;
   const captureHistoryBooksByGame = new Map<string, NflPreviewBookOdds[]>();
   for (const row of historicalExisting) {
@@ -546,7 +553,7 @@ export async function runNflForwardEvidenceWriter(args: {
       },
       requestBudget: {
         balldontlieSlate: slate.providerRequests, balldontlieRoster: rosters.requests,
-        balldontlieInjuriesMaximum: NFL_INJURY_MAX_PAGES, playbook: 2,
+        balldontlieInjuriesMaximum: availabilityRequestsMaximum, playbook: 2,
         balldontlieWeeklyProjectionsMaximum: paidProjectionRequestsMaximum,
         sharpApi: sharpResult.requests + circaAttempt.requests,
         weather: weatherRequests, totalMaximum: apiCallsMaximum,

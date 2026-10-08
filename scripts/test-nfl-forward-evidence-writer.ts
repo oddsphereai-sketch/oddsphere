@@ -339,7 +339,7 @@ assert.match(writer, /currentBooks/);
 assert.match(writer, /comparableCurrentBooks/);
 assert.match(writer, /multibook_consensus_unavailable/);
 assert.doesNotMatch(writer, /readLegacyNflForwardEvidence|readPriorNflForwardEvidence|readPreviousNflForwardEvidence/, "the live writer must not scan superseded large JSON releases");
-assert.match(writer, /nfl_forward_evidence_writer_2026_10_07_r55_injury_continuity/);
+assert.match(writer, /nfl_forward_evidence_writer_2026_10_08_r56_game_designation_continuity/);
 assert.match(writer, /mergeNflAvailabilityWithPrior/);
 assert.match(
   writer,
@@ -366,7 +366,7 @@ assert.match(targetExcluded, /const marginExcluded = excluded\.margin\.includes\
 assert.match(targetExcluded, /const totalExcluded = excluded\.total\.includes\(family\)/);
 assert.match(targetExcluded, /spread: marginExcluded \? null : current\.spread/);
 assert.match(targetExcluded, /total: totalExcluded \? null : current\.total/);
-assert.match(writer, /NFL_INJURY_MAX_PAGES/);
+assert.match(writer, /nflAvailabilityRequestBudgetMaximum/);
 assert.match(writer, /publicScoreDirectionTolerancePoints: NFL_PUBLIC_SCORE_DIRECTION_TOLERANCE_POINTS/);
 assert.match(writer, /decisionSideProbabilityConvention: "exclude_push"/);
 const nflSlateSource = readFileSync(path.resolve("lib/services/football/balldontlieNflPreviewSlate.ts"), "utf8");
