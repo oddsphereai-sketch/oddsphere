@@ -44,7 +44,7 @@ import {
 } from "./nflPlayerPropsPrediction";
 
 export const NFL_PLAYER_PROPS_WRITER_RELEASE =
-  "nfl_player_props_writer_2026_10_08_r43_independent_passing_yards" as const;
+  "nfl_player_props_writer_2026_10_08_r44_independent_rushing_yards" as const;
 export const NFL_PLAYER_PROPS_PRODUCTION_INCLUDE_OPENINGS = true as const;
 export const NFL_PLAYER_PROPS_PRODUCTION_COLLECTION_CALL_MAXIMUM = (
   1
@@ -86,6 +86,15 @@ export type NflPlayerPropsCandidateImpact = {
   demotions: number;
   precedingActionables: number;
   candidateActionables: number;
+  byMarket: Record<string, {
+    matchedRows: number;
+    projectionChanges: number;
+    forecastSideChanges: number;
+    promotions: number;
+    demotions: number;
+    precedingActionables: number;
+    candidateActionables: number;
+  }>;
 };
 
 export type NflPlayerPropsWriterResult = {
@@ -250,7 +259,7 @@ export async function runNflPlayerPropsProductionWriter(args: {
         offers,
         features,
         evaluatedAt: args.now,
-        auditPrecedingPassingYardsOnly: true,
+        auditPrecedingRushingYardsOnly: true,
       }),
       previous,
     }),
@@ -341,6 +350,30 @@ function compareNflPlayerPropsCandidateImpact(
     if (!actionable(prior.grade) && actionable(next.grade)) promotions += 1;
     if (actionable(prior.grade) && !actionable(next.grade)) demotions += 1;
   }
+  const markets = [...new Set([
+    ...preceding.memberDecisions.map((row) => row.market),
+    ...candidate.memberDecisions.map((row) => row.market),
+  ])].sort();
+  const byMarket = Object.fromEntries(markets.map((market) => {
+    const prior = preceding.memberDecisions.filter((row) => row.market === market);
+    const next = candidate.memberDecisions.filter((row) => row.market === market);
+    const priorByKey = new Map(prior.map((row) => [rowKey(row), row]));
+    const changes = next.flatMap((row) => {
+      const previous = priorByKey.get(rowKey(row));
+      return previous ? [[previous, row] as const] : [];
+    });
+    return [market, {
+      matchedRows: changes.length,
+      projectionChanges: changes.filter(([first, second]) => first.projection !== second.projection).length,
+      forecastSideChanges: changes.filter(([first, second]) => first.side !== "yes"
+        && first.projection !== null && second.projection !== null
+        && (first.projection > first.line) !== (second.projection > second.line)).length,
+      promotions: changes.filter(([first, second]) => !actionable(first.grade) && actionable(second.grade)).length,
+      demotions: changes.filter(([first, second]) => actionable(first.grade) && !actionable(second.grade)).length,
+      precedingActionables: prior.filter((row) => actionable(row.grade)).length,
+      candidateActionables: next.filter((row) => actionable(row.grade)).length,
+    }];
+  }));
   return {
     matchedRows,
     addedRows: [...candidateRows.keys()].filter((key) => !precedingRows.has(key)).length,
@@ -351,5 +384,6 @@ function compareNflPlayerPropsCandidateImpact(
     demotions,
     precedingActionables: preceding.memberDecisions.filter((row) => actionable(row.grade)).length,
     candidateActionables: candidate.memberDecisions.filter((row) => actionable(row.grade)).length,
+    byMarket,
   };
 }
