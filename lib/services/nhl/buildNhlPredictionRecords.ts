@@ -41,7 +41,11 @@
 
 import { supabase } from "../../db/supabase";
 import { isBlockedSportsbook } from "../../config/blockedSportsbooks";
-import { canonicalizeNhlLineRows } from "./nhlLineBoard";
+import {
+  canonicalizeNhlLineRows,
+  selectNhlBestPriceQuote,
+  type NhlSelectedPriceQuote,
+} from "./nhlLineBoard";
 import {
   buildNhlFeatureSnapshot,
   nhlGameTypeFromExternalId,
@@ -149,7 +153,9 @@ function buildSnapshotJson(opts: {
     side: string;
     line_value: number | null;
     odds_american: number | null;
+    observed_at?: string | null;
   }>;
+  evaluatedQuotes: Record<"moneyline" | "total" | "spread", NhlSelectedPriceQuote | null>;
   goalieAssumption: {
     home: { player_external_id?: number; player_name?: string; source: string };
     away: { player_external_id?: number; player_name?: string; source: string };
@@ -178,6 +184,8 @@ function buildSnapshotJson(opts: {
         : null,
       lines_snapshot: opts.marketLines,
     },
+    evaluated_quotes: opts.evaluatedQuotes,
+    captured_at: opts.capturedAt,
     goalie_assumption: opts.goalieAssumption,
     locked_at_iso: opts.lockedAtIso,
     lock_source: opts.lockSource,
@@ -322,7 +330,7 @@ export async function writeNhlPredictionRecords(
       // can verify what the PL* chip showed at lock.
       const { data: linesData } = await supabase
         .from("lines")
-        .select("market_type, sportsbook, side, line_value, odds_american")
+        .select("market_type, sportsbook, side, line_value, odds_american, fetched_at")
         .eq("game_id", g.id)
         .is("player_id", null)
         .in("market_type", ["moneyline", "total", "spread"]);
@@ -333,7 +341,11 @@ export async function writeNhlPredictionRecords(
       const lines = canonicalizeNhlLineRows(((linesData as Array<{
         market_type: string; sportsbook: string; side: string;
         line_value: number | null; odds_american: number | null;
-      }> | null) ?? []).filter((l) => !isBlockedSportsbook(l.sportsbook)));
+        fetched_at: string | null;
+      }> | null) ?? []).filter((l) => !isBlockedSportsbook(l.sportsbook)).map((line) => ({
+        ...line,
+        observed_at: line.fetched_at,
+      })));
 
       const matchup = `${awayAbbr} @ ${homeAbbr}`;
 
@@ -366,6 +378,7 @@ export async function writeNhlPredictionRecords(
         side: "home" | "away" | "over" | "under";
         priceAmerican: number | null;
         lineValue: number | null;
+        quote: NhlSelectedPriceQuote | null;
       }> = [];
 
       // Phase 7L Step 7 — persist every market including Pass/No-Play
@@ -384,16 +397,19 @@ export async function writeNhlPredictionRecords(
           ? model.expected_goal_diff >= 0
           : model.moneyline.pick.startsWith(homeAbbr);
         const pickSide = pickIsHome ? "home" : "away";
-        const mlLines = lines.filter((l) => l.market_type === "moneyline" && l.side === pickSide);
-        const bestPrice = mlLines.length > 0
-          ? mlLines.map((l) => l.odds_american).filter((x): x is number => x !== null).reduce((max, p) => p > max ? p : max, -99999)
-          : null;
+        const quote = selectNhlBestPriceQuote({
+          rows: lines,
+          market: "moneyline",
+          side: pickSide,
+          line: null,
+        });
         marketsToWrite.push({
           market: "moneyline",
           modelMarket: model.moneyline,
           side: pickSide,
-          priceAmerican: bestPrice === -99999 ? null : bestPrice,
+          priceAmerican: quote?.odds_american ?? null,
           lineValue: null,
+          quote,
         });
         if (mlIsPass) recordsSkippedPass += 1; // counter still tracks pass frequency
       }
@@ -406,21 +422,19 @@ export async function writeNhlPredictionRecords(
           ? marketLine === null || model.expected_total_goals > marketLine
           : model.total.pick.startsWith("OVER");
         const totalSide = pickIsOver ? "over" : "under";
-        const totalLines = lines.filter((l) => (
-          l.market_type === "total" && l.side === totalSide && (
-            marketLine === null || (l.line_value !== null && Math.abs(l.line_value - marketLine) < 0.01)
-          )
-        ));
-        const bestPrice = totalLines.length > 0
-          ? totalLines.map((l) => l.odds_american).filter((x): x is number => x !== null).reduce((max, p) => p > max ? p : max, -99999)
-          : null;
-        const lineValue = totalLines.find((l) => l.line_value !== null)?.line_value ?? null;
+        const quote = marketLine === null ? null : selectNhlBestPriceQuote({
+          rows: lines,
+          market: "total",
+          side: totalSide,
+          line: marketLine,
+        });
         marketsToWrite.push({
           market: "total",
           modelMarket: model.total,
           side: totalSide,
-          priceAmerican: bestPrice === -99999 ? null : bestPrice,
-          lineValue,
+          priceAmerican: quote?.odds_american ?? null,
+          lineValue: quote?.line_value ?? marketLine,
+          quote,
         });
         if (totalIsPass) recordsSkippedPass += 1;
       }
@@ -429,20 +443,19 @@ export async function writeNhlPredictionRecords(
         const pickIsHome = model.puck_line.pick.startsWith(homeAbbr);
         const side = pickIsHome ? "home" : "away";
         const lineValue = model.puck_line.puck_line_value;
-        const spreadLines = lines.filter((line) => (
-          line.market_type === "spread" && line.side === side && line.line_value !== null &&
-          Math.abs(line.line_value - lineValue) < 0.01
-        ));
-        const bestPrice = spreadLines.length > 0
-          ? spreadLines.map((line) => line.odds_american).filter((price): price is number => price !== null)
-              .reduce((max, price) => price > max ? price : max, -99999)
-          : null;
+        const quote = selectNhlBestPriceQuote({
+          rows: lines,
+          market: "spread",
+          side,
+          line: lineValue,
+        });
         marketsToWrite.push({
           market: "spread",
           modelMarket: model.puck_line,
           side,
-          priceAmerican: bestPrice === -99999 ? null : bestPrice,
+          priceAmerican: quote?.odds_american ?? null,
           lineValue,
+          quote,
         });
         if (spreadIsPass) recordsSkippedPass += 1;
       }
@@ -480,6 +493,11 @@ export async function writeNhlPredictionRecords(
       const snapshotJson = buildSnapshotJson({
         model: pricedModel,
         marketLines: lines,
+        evaluatedQuotes: {
+          moneyline: marketsToWrite.find((entry) => entry.market === "moneyline")?.quote ?? null,
+          total: marketsToWrite.find((entry) => entry.market === "total")?.quote ?? null,
+          spread: marketsToWrite.find((entry) => entry.market === "spread")?.quote ?? null,
+        },
         goalieAssumption,
         featureInputs: snapshot,
         lockedAtIso,
