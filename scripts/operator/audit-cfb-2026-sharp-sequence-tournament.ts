@@ -17,6 +17,19 @@ import type {
 } from "../../lib/services/football/cfbForwardEvidence";
 import { matchesCfbForwardEvidencePayloadHash } from "../../lib/services/football/cfbForwardEvidence";
 import type { CfbSharpApiSplitRecord } from "../../lib/services/football/cfbSharpApiSplits";
+import { readCfbCurrentAdvancedState } from "../../lib/services/football/cfbCurrentAdvancedState";
+import { getCfbV1WeeklyForecasts } from "../../lib/services/football/cfbV1WeeklyForecast";
+import { resolveCfbCanonicalMarketAnchor } from "../../lib/services/football/cfbMarketInformedOutcome";
+import {
+  applyCfbMarketSharpAwareGrades,
+  buildCfbMarketSharpAwareForecast,
+  summarizePmf,
+  tiltCfbMarginWithinTotals,
+  tiltCfbTotalWithinMargins,
+} from "../../lib/services/football/cfbMarketSharpAwareShadow";
+import { applyCfbVerifiedAvailabilityGradeCap } from "../../lib/services/football/cfbVerifiedAvailability";
+import { buildCfbV1DecisionBundle, type CfbV1Forecast } from "../../lib/services/football/cfbV1Decision";
+import { isGameInCfbWeeklyWindow, resolveCfbVisibleWindows } from "../../lib/services/football/cfbWeeklyWindow";
 
 loadEnvConfig(process.cwd());
 
@@ -41,6 +54,8 @@ type Game = {
   independent: Forecast;
   authoritative: Forecast;
   targetLines: Record<Market, number | null>;
+  targetGrades: Record<Market, string>;
+  targetPrices: Record<Market, number | null>;
   awayScore: number;
   homeScore: number;
   histories: CfbForwardMarketHistoryEvidence[];
@@ -175,6 +190,22 @@ async function readEvidenceByHashes(client: SupabaseClient, hashes: string[]): P
         payload: row.payload,
       });
     }
+  }
+  return output;
+}
+
+async function readMarketHistoryBatched(
+  client: SupabaseClient,
+  providerGameIds: string[],
+  batchSize = 20,
+): Promise<CfbForwardMarketHistoryEvidence[]> {
+  const output: CfbForwardMarketHistoryEvidence[] = [];
+  for (let index = 0; index < providerGameIds.length; index += batchSize) {
+    output.push(...await readCfbForwardMarketHistory({
+      client,
+      season: 2026,
+      providerGameIds: providerGameIds.slice(index, index + batchSize),
+    }));
   }
   return output;
 }
@@ -661,12 +692,33 @@ function posteriorResidualAxis(row: ResidualRow, axis: "margin" | "total", model
   return active + strength * (alternative - active);
 }
 
+function hasObservedMarketReadingEvidence(features: Record<string, number>, market: "spread" | "total"): boolean {
+  const movementKeys = [
+    `${market}_all_axis_move`,
+    `${market}_all_probability_move`,
+    `${market}_named_axis_move`,
+    `${market}_named_probability_move`,
+    `${market}_retail_axis_move`,
+    `${market}_retail_probability_move`,
+  ];
+  const sequenceKeys = [
+    `${market}_all_reversal_count`,
+    `${market}_named_reversal_count`,
+    `${market}_retail_reversal_count`,
+  ];
+  const splitKeys = ["split_named_sharp", "split_fallback", "split_public"];
+  return movementKeys.some((key) => Math.abs(features[key] ?? 0) > 1e-12) ||
+    sequenceKeys.some((key) => (features[key] ?? 0) > 0) ||
+    splitKeys.some((key) => features[key] !== undefined);
+}
+
 function posteriorFlipOnlyAxis(row: ResidualRow, axis: "margin" | "total", model: RidgeModel, evidenceScale = 1): number {
   const market = axis === "margin" ? "spread" : "total";
   const features = axis === "margin" ? row.marginFeatures : row.totalFeatures;
   const boundary = features[`${market}_all_current_axis`];
   const active = axis === "margin" ? row.game.authoritative.expectedMarginHome : row.game.authoritative.expectedTotal;
   if (boundary === undefined) return active;
+  if (!hasObservedMarketReadingEvidence(features, market)) return active;
   const proposed = posteriorResidualAxis(row, axis, model, evidenceScale);
   if (lineWinner(proposed, boundary) === lineWinner(active, boundary)) return active;
   return 2 * boundary - active;
@@ -868,23 +920,103 @@ function evidenceRegimeSummary(
         : evidenceDistanceDelta < -1e-9
           ? "resistance"
           : "neutral";
-    return [{ regime, activeCorrect: activeSide === actualSide, finalCorrect: finalSide === actualSide, evidenceDistanceDelta }];
+    const activeResult = actualSide === "push" ? "push" : activeSide === actualSide ? "win" : "loss";
+    const finalResult = actualSide === "push" ? "push" : finalSide === actualSide ? "win" : "loss";
+    return [{
+      regime,
+      grade: row.game.targetGrades[market],
+      price: row.game.targetPrices[market],
+      activeResult,
+      finalResult,
+      evidenceDistanceDelta,
+    }];
   });
-  return Object.fromEntries(["confirmation", "resistance", "flip", "neutral"].map((regime) => {
-    const selected = classified.filter((row) => row.regime === regime);
-    const activeWins = selected.filter((row) => row.activeCorrect).length;
-    const finalWins = selected.filter((row) => row.finalCorrect).length;
-    return [regime, {
+  const summarize = (selected: typeof classified) => {
+    const activeWins = selected.filter((row) => row.activeResult === "win").length;
+    const activeLosses = selected.filter((row) => row.activeResult === "loss").length;
+    const activePushes = selected.filter((row) => row.activeResult === "push").length;
+    const finalWins = selected.filter((row) => row.finalResult === "win").length;
+    const finalLosses = selected.filter((row) => row.finalResult === "loss").length;
+    const finalPushes = selected.filter((row) => row.finalResult === "push").length;
+    const priced = selected.filter((row): row is typeof row & { price: number } => row.price !== null && Number.isFinite(row.price));
+    const activeUnits = priced.reduce((units, row) => row.activeResult === "push"
+      ? units
+      : row.activeResult === "loss"
+        ? units - 1
+        : units + (row.price > 0 ? row.price / 100 : 100 / Math.abs(row.price)), 0);
+    return {
       games: selected.length,
       activeWins,
-      activeLosses: selected.length - activeWins,
-      activeAccuracy: selected.length ? activeWins / selected.length : null,
+      activeLosses,
+      activePushes,
+      activeAccuracy: activeWins + activeLosses ? activeWins / (activeWins + activeLosses) : null,
+      pricedGames: priced.length,
+      activeUnits,
+      activeRoi: priced.length ? activeUnits / priced.length : null,
       finalWins,
-      finalLosses: selected.length - finalWins,
-      finalAccuracy: selected.length ? finalWins / selected.length : null,
+      finalLosses,
+      finalPushes,
+      finalAccuracy: finalWins + finalLosses ? finalWins / (finalWins + finalLosses) : null,
       meanEvidenceDistanceDelta: average(selected.map((row) => row.evidenceDistanceDelta)),
+    };
+  };
+  return Object.fromEntries(["confirmation", "resistance", "flip", "neutral"].map((regime) => {
+    const selected = classified.filter((row) => row.regime === regime);
+    return [regime, {
+      ...summarize(selected),
+      byGrade: Object.fromEntries(["Best Angle", "Lean", "Watchlist", "No Play", "Held"].map((grade) =>
+        [grade, summarize(selected.filter((row) => row.grade === grade))])),
     }];
   }));
+}
+
+function evidenceFlipDetails(
+  rows: ResidualRow[],
+  market: Market,
+  model: RidgeModel,
+  activePrediction: (row: ResidualRow) => number,
+  rawEvidencePrediction: (row: ResidualRow) => number,
+  finalPrediction: (row: ResidualRow) => number,
+) {
+  const axis = market === "total" ? "total" : "margin";
+  return rows.flatMap((row) => {
+    const line = market === "moneyline" ? 0 : row.game.targetLines[market];
+    if (line === null) return [];
+    const boundary = market === "spread" ? -line : line;
+    const actual = market === "total" ? row.actualTotal : row.actualMargin;
+    const active = activePrediction(row);
+    const raw = rawEvidencePrediction(row);
+    const final = finalPrediction(row);
+    const activeSide = lineWinner(active, boundary);
+    const rawSide = lineWinner(raw, boundary);
+    if (rawSide === activeSide) return [];
+    const finalSide = lineWinner(final, boundary);
+    const actualSide = lineWinner(actual, boundary);
+    const features = axis === "total" ? row.totalFeatures : row.marginFeatures;
+    return [{
+      game: `${row.game.awayTeam}@${row.game.homeTeam}`,
+      date: row.game.date,
+      grade: row.game.targetGrades[market],
+      line,
+      boundary,
+      active,
+      raw,
+      final,
+      actual,
+      activeSide,
+      rawSide,
+      finalSide,
+      actualSide,
+      posterior: predictPosterior(model, features),
+      prior: model.prior ?? null,
+      result: finalSide === actualSide && activeSide !== actualSide
+        ? "correction"
+        : activeSide === actualSide && finalSide !== actualSide
+          ? "harm"
+          : "unchanged_or_push_transition",
+      features,
+    }];
+  });
 }
 
 function runCombinedMarketReaderTournament(games: Game[]) {
@@ -926,6 +1058,11 @@ function runCombinedMarketReaderTournament(games: Game[]) {
         moneyline: evidenceRegimeSummary(testing, "moneyline", activeMargin, candidateMargin, candidateMargin),
         spread: evidenceRegimeSummary(testing, "spread", activeMargin, candidateMargin, candidateMargin),
         total: evidenceRegimeSummary(testing, "total", activeTotal, rawEvidenceTotal, candidateTotal),
+      },
+      flipDetails: {
+        moneyline: evidenceFlipDetails(testing, "moneyline", marginModel, activeMargin, candidateMargin, candidateMargin),
+        spread: evidenceFlipDetails(testing, "spread", marginModel, activeMargin, candidateMargin, candidateMargin),
+        total: evidenceFlipDetails(testing, "total", totalModel, activeTotal, rawEvidenceTotal, candidateTotal),
       },
       coherence: {
         negativeTeamScores: candidateScores.filter((score) => score.home < 0 || score.away < 0).length,
@@ -1124,6 +1261,263 @@ function exportCombinedMarketReaderArtifact(games: Game[]) {
     selectionProtocol: "configurations_frozen_before_confirmation_then_refit_on_all_pregame_lock_boundary_rows",
     margin: { lambda: 1000, evidenceScale: 1, model: fitPosterior(rows, "margin", 1000) },
     total: { lambda: 30, evidenceScale: 1, mode: "full_reflection_only_when_continuous_posterior_crosses_market_side", model: fitPosterior(rows, "total", 30) },
+  };
+}
+
+function currentBoardMarketReaderCandidate(
+  trainingGames: Game[],
+  rows: CfbForwardStoredEvidence[],
+  historiesByGame: Map<string, CfbForwardMarketHistoryEvidence[]>,
+  fullForecasts: Map<string, CfbV1Forecast>,
+) {
+  const training = trainingGames.map((game): ResidualRow => ({
+    game,
+    marginFeatures: residualFeatures(game, "margin", false),
+    totalFeatures: constrainedMarketFeatures(game, "total"),
+    actualMargin: game.homeScore - game.awayScore,
+    actualTotal: game.homeScore + game.awayScore,
+  }));
+  const marginModel = fitPosterior(training, "margin", 1000);
+  const totalModel = fitPosterior(training, "total", 30);
+  const games = rows.flatMap((stored) => {
+    const histories = (historiesByGame.get(stored.providerGameId) ?? [])
+      .filter((history) => Date.parse(history.capturedAt) <= Date.parse(stored.capturedAt))
+      .sort((first, second) => Date.parse(first.capturedAt) - Date.parse(second.capturedAt));
+    if (histories.length === 0) return [];
+    const independent = stored.payload.independentForecast ?? stored.payload.decisions.forecast;
+    const authoritative = stored.payload.decisions.forecast;
+    const spreadDecision = stored.payload.decisions.evaluatedBets.find((decision) => decision.market === "spread") ?? null;
+    const totalDecision = stored.payload.decisions.evaluatedBets.find((decision) => decision.market === "total") ?? null;
+    const selectedSpreadLine = spreadDecision?.evaluatedQuote.line ?? null;
+    const homeSpreadLine = selectedSpreadLine === null || !spreadDecision
+      ? null
+      : isHomeDecisionSide(spreadDecision.side, stored.payload.game.home.abbreviation)
+        ? selectedSpreadLine
+        : -selectedSpreadLine;
+    const game: Game = {
+      gameId: stored.providerGameId,
+      date: stored.gameStartAt.slice(0, 10),
+      kickoffAt: stored.gameStartAt,
+      awayTeam: stored.payload.game.away.abbreviation,
+      homeTeam: stored.payload.game.home.abbreviation,
+      awayFbs: stored.payload.game.away.fbs,
+      homeFbs: stored.payload.game.home.fbs,
+      awayConferenceId: stored.payload.game.away.conferenceId,
+      homeConferenceId: stored.payload.game.home.conferenceId,
+      independent: { expectedMarginHome: independent.expectedMarginHome, expectedTotal: independent.expectedTotal },
+      authoritative: { expectedMarginHome: authoritative.expectedMarginHome, expectedTotal: authoritative.expectedTotal },
+      targetLines: { moneyline: null, spread: homeSpreadLine, total: totalDecision?.evaluatedQuote.line ?? null },
+      targetGrades: Object.fromEntries(MARKETS.map((market) => [
+        market,
+        stored.payload.decisions.evaluatedBets.find((decision) => decision.market === market)?.grade ?? "Held",
+      ])) as Record<Market, string>,
+      targetPrices: Object.fromEntries(MARKETS.map((market) => [
+        market,
+        stored.payload.decisions.evaluatedBets.find((decision) => decision.market === market)?.evaluatedQuote.price ?? null,
+      ])) as Record<Market, number | null>,
+      awayScore: 0,
+      homeScore: 0,
+      histories,
+    };
+    const residual: ResidualRow = {
+      game,
+      marginFeatures: residualFeatures(game, "margin", false),
+      totalFeatures: constrainedMarketFeatures(game, "total"),
+      actualMargin: 0,
+      actualTotal: 0,
+    };
+    const activeMargin = authoritative.expectedMarginHome;
+    const activeTotal = authoritative.expectedTotal;
+    const rawMargin = posteriorResidualAxis(residual, "margin", marginModel, 1);
+    const rawTotal = posteriorResidualAxis(residual, "total", totalModel, 1);
+    const candidateMargin = rawMargin;
+    const candidateTotal = posteriorFlipOnlyAxis(residual, "total", totalModel, 1);
+    const reconstructedActive = fullForecasts.get(stored.providerGameId);
+    if (!reconstructedActive) return [];
+    const alignedMarginPmf = tiltCfbMarginWithinTotals(
+      reconstructedActive.pmf,
+      authoritative.expectedMarginHome - reconstructedActive.expectedMarginHome,
+    );
+    const alignedMargin = summarizePmf(alignedMarginPmf);
+    const alignedActivePmf = tiltCfbTotalWithinMargins(
+      alignedMarginPmf,
+      authoritative.expectedTotal - alignedMargin.expectedTotal,
+    );
+    const alignedActiveSummary = summarizePmf(alignedActivePmf);
+    const alignedActive: CfbV1Forecast = {
+      ...reconstructedActive,
+      ...alignedActiveSummary,
+      pmf: alignedActivePmf,
+    };
+    const marginAdjustedPmf = tiltCfbMarginWithinTotals(
+      alignedActive.pmf,
+      candidateMargin - alignedActive.expectedMarginHome,
+    );
+    const marginAdjusted = summarizePmf(marginAdjustedPmf);
+    const candidatePmf = tiltCfbTotalWithinMargins(
+      marginAdjustedPmf,
+      candidateTotal - marginAdjusted.expectedTotal,
+    );
+    const candidateSummary = summarizePmf(candidatePmf);
+    const candidateForecast: CfbV1Forecast = {
+      ...reconstructedActive,
+      ...candidateSummary,
+      pmf: candidatePmf,
+    };
+    const fixedEvaluatedSportsbookByMarket = Object.fromEntries(stored.payload.decisions.evaluatedBets.map((decision) =>
+      [decision.market, decision.evaluatedQuote.sportsbook]));
+    const decisionBundleFor = (forecast: CfbV1Forecast) => applyCfbVerifiedAvailabilityGradeCap({
+      bundle: applyCfbMarketSharpAwareGrades({
+        bundle: buildCfbV1DecisionBundle({
+          providerGameId: stored.providerGameId,
+          awayTeam: game.awayTeam,
+          homeTeam: game.homeTeam,
+          gameStartsAt: stored.gameStartAt,
+          comparableCurrentBooks: stored.payload.market.currentBooks,
+          stage: stored.stage === "t60" && stored.payload.coverage.healthHolds.length === 0 ? "t60_locked" : "unlocked",
+          evaluatedAt: stored.capturedAt,
+          lockedAt: stored.stage === "t60" && stored.payload.coverage.healthHolds.length === 0 ? stored.capturedAt : null,
+          healthHolds: stored.payload.coverage.healthHolds,
+          forecast,
+          contextLines: {
+            homeSpread: stored.payload.market.playbookLine?.homeSpread ?? null,
+            totalLine: stored.payload.market.playbookLine?.total ?? null,
+          },
+          fixedEvaluatedSportsbookByMarket,
+        }),
+        homeTeam: game.homeTeam,
+        sharpSplits: stored.payload.market.sharpApiSplits ?? [],
+        playbookLine: stored.payload.market.playbookLine,
+        publicSplits: stored.payload.market.playbookSplits,
+        operationalOpening: stored.payload.market.operationalOpening,
+        current: stored.payload.market.current,
+      }),
+      availability: stored.payload.availability.verifiedQuarterback ?? null,
+    });
+    const baselineBundle = decisionBundleFor(alignedActive);
+    const candidateBundle = decisionBundleFor(candidateForecast);
+    const replayChecks = MARKETS.map((market) => {
+      const activeDecision = stored.payload.decisions.evaluatedBets.find((item) => item.market === market) ?? null;
+      const baselineDecision = baselineBundle.evaluatedBets.find((item) => item.market === market) ?? null;
+      return {
+        market,
+        gradeMatches: (activeDecision?.grade ?? "Held") === (baselineDecision?.grade ?? "Held"),
+        priceMatches: (activeDecision?.evaluatedQuote.price ?? null) === (baselineDecision?.evaluatedQuote.price ?? null),
+        probabilityDifference: activeDecision && baselineDecision
+          ? Math.abs(activeDecision.modelProbability - baselineDecision.modelProbability)
+          : activeDecision === baselineDecision ? 0 : Number.POSITIVE_INFINITY,
+      };
+    });
+    const exactReplayValid = replayChecks.every((check) =>
+      check.gradeMatches && check.priceMatches && check.probabilityDifference <= 0.002);
+    const score = {
+      away: candidateSummary.expectedAwayPoints,
+      home: candidateSummary.expectedHomePoints,
+    };
+    const regime = (market: Market, raw: number) => {
+      const line = market === "moneyline" ? 0 : game.targetLines[market];
+      if (line === null) return "unpriced";
+      const boundary = market === "spread" ? -line : line;
+      const active = market === "total" ? activeTotal : activeMargin;
+      if (lineWinner(raw, boundary) !== lineWinner(active, boundary)) return "flip_candidate";
+      const distanceDelta = Math.abs(raw - boundary) - Math.abs(active - boundary);
+      return distanceDelta > 1e-9 ? "confirmation" : distanceDelta < -1e-9 ? "resistance" : "neutral";
+    };
+    const markets = Object.fromEntries(MARKETS.map((market) => {
+      const line = game.targetLines[market];
+      const activeAxis = market === "total" ? activeTotal : activeMargin;
+      const rawAxis = market === "total" ? rawTotal : rawMargin;
+      const candidateAxis = market === "total" ? candidateTotal : candidateMargin;
+      const activeSide = sideAt({ expectedMarginHome: activeMargin, expectedTotal: activeTotal }, market, line);
+      const candidateSide = sideAt({ expectedMarginHome: candidateMargin, expectedTotal: candidateTotal }, market, line);
+      const decision = stored.payload.decisions.evaluatedBets.find((item) => item.market === market) ?? null;
+      const candidateDecision = candidateBundle.evaluatedBets.find((item) => item.market === market) ?? null;
+      const activeGrade = decision?.grade ?? "Held";
+      const candidateGrade = exactReplayValid ? candidateDecision?.grade ?? "Held" : activeGrade;
+      return [market, {
+        line,
+        regime: regime(market, rawAxis),
+        activeAxis,
+        rawEvidenceAxis: rawAxis,
+        candidateAxis,
+        activeSide,
+        candidateSide,
+        sideChanged: activeSide !== candidateSide,
+        activeGrade,
+        candidateGrade,
+        gradeChanged: activeGrade !== candidateGrade,
+        activeProbability: decision?.modelProbability ?? null,
+        candidateProbability: candidateDecision?.modelProbability ?? null,
+        activePrice: decision?.evaluatedQuote.price ?? null,
+        candidatePrice: candidateDecision?.evaluatedQuote.price ?? null,
+      }];
+    }));
+    return [{
+      gameId: stored.providerGameId,
+      matchup: `${game.awayTeam}@${game.homeTeam}`,
+      startsAt: stored.gameStartAt,
+      capturedAt: stored.capturedAt,
+      activeScore: { away: authoritative.expectedAwayPoints, home: authoritative.expectedHomePoints },
+      candidateScore: score,
+      reconstruction: {
+        marginDifference: reconstructedActive.expectedMarginHome - authoritative.expectedMarginHome,
+        totalDifference: reconstructedActive.expectedTotal - authoritative.expectedTotal,
+        alignedMarginDifference: alignedActive.expectedMarginHome - authoritative.expectedMarginHome,
+        alignedTotalDifference: alignedActive.expectedTotal - authoritative.expectedTotal,
+      },
+      exactReplayValid,
+      replayChecks,
+      negativeCandidateScore: score.away < 0 || score.home < 0,
+      markets,
+    }];
+  });
+  const marketRows = MARKETS.flatMap((market) => games.map((game) => ({ game, market, value: game.markets[market] as {
+    regime: string; sideChanged: boolean; activeGrade: string; candidateGrade: string; gradeChanged: boolean;
+  } })));
+  const gradeRank = (grade: string) => ({ Held: 0, "No Play": 1, Watchlist: 2, Lean: 3, "Best Angle": 4 })[grade] ?? 0;
+  return {
+    release: "cfb_complete_market_reader_current_board_candidate_2026_10_08_r1",
+    mode: "select_only_zero_writes_zero_provider_calls",
+    artifact: "cfb_market_reader_artifact_2026_10_08_r1",
+    trainedGames: training.length,
+    boardGames: games.length,
+    negativeCandidateScores: games.filter((game) => game.negativeCandidateScore).length,
+    exactGradeReplayGames: games.filter((game) => game.exactReplayValid).length,
+    invalidGradeReplayGames: games.filter((game) => !game.exactReplayValid).map((game) => ({
+      matchup: game.matchup,
+      startsAt: game.startsAt,
+      checks: game.replayChecks,
+    })),
+    maximumAbsoluteReconstructionDifference: Math.max(0, ...games.flatMap((game) => [
+      Math.abs(game.reconstruction.marginDifference),
+      Math.abs(game.reconstruction.totalDifference),
+    ])),
+    reconstructionMismatches: games.filter((game) =>
+      Math.abs(game.reconstruction.marginDifference) > 1e-6 || Math.abs(game.reconstruction.totalDifference) > 1e-6)
+      .map((game) => ({ matchup: game.matchup, startsAt: game.startsAt, ...game.reconstruction })),
+    marketSummary: Object.fromEntries(MARKETS.map((market) => {
+      const selected = marketRows.filter((row) => row.market === market);
+      return [market, {
+        priced: selected.filter((row) => row.value.regime !== "unpriced").length,
+        sideChanges: selected.filter((row) => row.value.sideChanged).length,
+        gradeChanges: selected.filter((row) => row.value.gradeChanged).length,
+        promotions: selected.filter((row) => gradeRank(row.value.candidateGrade) > gradeRank(row.value.activeGrade)).length,
+        demotions: selected.filter((row) => gradeRank(row.value.candidateGrade) < gradeRank(row.value.activeGrade)).length,
+        activeGrades: Object.fromEntries(["Best Angle", "Lean", "Watchlist", "No Play", "Held"].map((grade) =>
+          [grade, selected.filter((row) => row.value.activeGrade === grade).length])),
+        candidateGrades: Object.fromEntries(["Best Angle", "Lean", "Watchlist", "No Play", "Held"].map((grade) =>
+          [grade, selected.filter((row) => row.value.candidateGrade === grade).length])),
+        regimes: Object.fromEntries(["confirmation", "resistance", "flip_candidate", "neutral", "unpriced"].map((regime) =>
+          [regime, selected.filter((row) => row.value.regime === regime).length])),
+        changedActiveGrades: Object.fromEntries(["Best Angle", "Lean", "Watchlist", "No Play", "Held"].map((grade) =>
+          [grade, selected.filter((row) => row.value.sideChanged && row.value.activeGrade === grade).length])),
+      }];
+    })),
+    changes: games.flatMap((game) => MARKETS.flatMap((market) => {
+      const value = game.markets[market] as { sideChanged: boolean; gradeChanged: boolean };
+      return value.sideChanged || value.gradeChanged ? [{ matchup: game.matchup, startsAt: game.startsAt, market, ...value }] : [];
+    })),
+    games,
   };
 }
 
@@ -1527,7 +1921,78 @@ async function main(): Promise<void> {
     return;
   }
   const games: Game[] = [];
-  for (const row of latest.values()) { const result = results.get(row.providerGameId); const histories = byGame.get(row.providerGameId) ?? []; if (!isFinal(result) || !histories.length) continue; const independent = row.payload.independentForecast ?? row.payload.decisions.forecast; const authoritative = row.payload.decisions.forecast; const spreadDecision = row.payload.decisions.evaluatedBets.find((decision) => decision.market === "spread") ?? null; const totalDecision = row.payload.decisions.evaluatedBets.find((decision) => decision.market === "total") ?? null; const selectedSpreadLine = spreadDecision?.evaluatedQuote.line ?? null; const homeSpreadLine = selectedSpreadLine === null || !spreadDecision ? null : isHomeDecisionSide(spreadDecision.side, row.payload.game.home.abbreviation) ? selectedSpreadLine : -selectedSpreadLine; games.push({ gameId: row.providerGameId, date: row.gameStartAt.slice(0, 10), kickoffAt: row.gameStartAt, awayTeam: row.payload.game.away.abbreviation, homeTeam: row.payload.game.home.abbreviation, awayFbs: row.payload.game.away.fbs, homeFbs: row.payload.game.home.fbs, awayConferenceId: row.payload.game.away.conferenceId, homeConferenceId: row.payload.game.home.conferenceId, independent: { expectedMarginHome: independent.expectedMarginHome, expectedTotal: independent.expectedTotal }, authoritative: { expectedMarginHome: authoritative.expectedMarginHome, expectedTotal: authoritative.expectedTotal }, targetLines: { moneyline: null, spread: homeSpreadLine, total: totalDecision?.evaluatedQuote.line ?? null }, awayScore: result.away_score!, homeScore: result.home_score!, histories: histories.sort((a, b) => Date.parse(a.capturedAt) - Date.parse(b.capturedAt)) }); }
+  for (const row of latest.values()) { const result = results.get(row.providerGameId); const histories = byGame.get(row.providerGameId) ?? []; if (!isFinal(result) || !histories.length) continue; const independent = row.payload.independentForecast ?? row.payload.decisions.forecast; const authoritative = row.payload.decisions.forecast; const spreadDecision = row.payload.decisions.evaluatedBets.find((decision) => decision.market === "spread") ?? null; const totalDecision = row.payload.decisions.evaluatedBets.find((decision) => decision.market === "total") ?? null; const selectedSpreadLine = spreadDecision?.evaluatedQuote.line ?? null; const homeSpreadLine = selectedSpreadLine === null || !spreadDecision ? null : isHomeDecisionSide(spreadDecision.side, row.payload.game.home.abbreviation) ? selectedSpreadLine : -selectedSpreadLine; games.push({ gameId: row.providerGameId, date: row.gameStartAt.slice(0, 10), kickoffAt: row.gameStartAt, awayTeam: row.payload.game.away.abbreviation, homeTeam: row.payload.game.home.abbreviation, awayFbs: row.payload.game.away.fbs, homeFbs: row.payload.game.home.fbs, awayConferenceId: row.payload.game.away.conferenceId, homeConferenceId: row.payload.game.home.conferenceId, independent: { expectedMarginHome: independent.expectedMarginHome, expectedTotal: independent.expectedTotal }, authoritative: { expectedMarginHome: authoritative.expectedMarginHome, expectedTotal: authoritative.expectedTotal }, targetLines: { moneyline: null, spread: homeSpreadLine, total: totalDecision?.evaluatedQuote.line ?? null }, targetGrades: Object.fromEntries(MARKETS.map((market) => [market, row.payload.decisions.evaluatedBets.find((decision) => decision.market === market)?.grade ?? "Held"])) as Record<Market, string>, targetPrices: Object.fromEntries(MARKETS.map((market) => [market, row.payload.decisions.evaluatedBets.find((decision) => decision.market === market)?.evaluatedQuote.price ?? null])) as Record<Market, number | null>, awayScore: result.away_score!, homeScore: result.home_score!, histories: histories.sort((a, b) => Date.parse(a.capturedAt) - Date.parse(b.capturedAt)) }); }
+  if (process.argv.includes("--current-board-candidate")) {
+    const now = Date.now();
+    const currentRows = [...latest.values()].filter((row) => Date.parse(row.gameStartAt) > now);
+    const currentHistory = await readMarketHistoryBatched(client, currentRows.map((row) => row.providerGameId));
+    const currentByGame = new Map<string, CfbForwardMarketHistoryEvidence[]>();
+    for (const row of currentHistory) currentByGame.set(row.providerGameId, [...(currentByGame.get(row.providerGameId) ?? []), row]);
+    const advancedState = await readCfbCurrentAdvancedState({ client, season: 2026 });
+    const weekly = new Map<string, { forecast: CfbV1Forecast }>();
+    const windows = resolveCfbVisibleWindows({ now: new Date(now).toISOString(), evidence: writer.evidence });
+    for (const window of windows) {
+      const windowRows = currentRows.filter((row) => isGameInCfbWeeklyWindow({ scheduledStart: row.gameStartAt }, window));
+      if (windowRows.length === 0) continue;
+      const completedGames = [...latest.values()].flatMap((row) => {
+        const result = results.get(row.providerGameId);
+        return isFinal(result) && row.gameStartAt.slice(0, 10) < window.boardStartDate
+          ? [{ ...row.payload.game, awayScore: result.away_score!, homeScore: result.home_score! }]
+          : [];
+      });
+      for (const [gameId, forecastResult] of getCfbV1WeeklyForecasts({
+        games: windowRows.map((row) => row.payload.game),
+        completedGames,
+        advancedGames: advancedState?.games ?? [],
+      })) weekly.set(gameId, forecastResult);
+    }
+    const fullForecasts = new Map<string, CfbV1Forecast>();
+    for (const row of currentRows) {
+      const base = weekly.get(row.providerGameId)?.forecast;
+      if (!base) continue;
+      const anchor = resolveCfbCanonicalMarketAnchor({
+        books: row.payload.market.currentBooks,
+        contextLines: {
+          homeSpread: row.payload.market.playbookLine?.homeSpread ?? null,
+          totalLine: row.payload.market.playbookLine?.total ?? null,
+        },
+      });
+      if (!anchor) {
+        fullForecasts.set(row.providerGameId, base);
+        continue;
+      }
+      const priorSpreadSplits = (currentByGame.get(row.providerGameId) ?? []).flatMap((historyRow) =>
+        historyRow.payload.market.playbookSplits?.spread ? [historyRow.payload.market.playbookSplits.spread] : []);
+      fullForecasts.set(row.providerGameId, buildCfbMarketSharpAwareForecast({
+        independentForecast: base,
+        anchor,
+        current: row.payload.market.current,
+        operationalOpening: row.payload.market.operationalOpening,
+        sharpSplits: row.payload.market.sharpApiSplits ?? [],
+        playbookLine: row.payload.market.playbookLine,
+        publicSplits: row.payload.market.playbookSplits,
+        priorSpreadSplits,
+        kickoffWeather: row.payload.availability.weather ?? null,
+        evaluatedAt: row.capturedAt,
+      }));
+    }
+    const report = currentBoardMarketReaderCandidate(games, currentRows, currentByGame, fullForecasts);
+    console.log(JSON.stringify(process.argv.includes("--compact") ? {
+      release: report.release,
+      mode: report.mode,
+      artifact: report.artifact,
+      trainedGames: report.trainedGames,
+      boardGames: report.boardGames,
+      negativeCandidateScores: report.negativeCandidateScores,
+      exactGradeReplayGames: report.exactGradeReplayGames,
+      invalidGradeReplayGames: report.invalidGradeReplayGames,
+      maximumAbsoluteReconstructionDifference: report.maximumAbsoluteReconstructionDifference,
+      reconstructionMismatches: report.reconstructionMismatches,
+      marketSummary: report.marketSummary,
+      changes: report.changes,
+    } : report, null, 2));
+    return;
+  }
   if (process.argv.includes("--dates")) {
     console.log(JSON.stringify({
       release: "cfb_2026_sharp_sequence_tournament_2026_10_08_r1",

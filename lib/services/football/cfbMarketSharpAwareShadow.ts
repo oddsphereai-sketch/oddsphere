@@ -814,7 +814,7 @@ function isFavoriteSpreadSide(side: "home" | "away", homeSpread: number): boolea
   return homeSpread < 0 ? side === "home" : homeSpread > 0 ? side === "away" : false;
 }
 
-function tiltCfbMarginWithinTotals(
+export function tiltCfbMarginWithinTotals(
   pmf: CfbV1Forecast["pmf"],
   marginShiftPoints: number,
 ): CfbV1Forecast["pmf"] {
@@ -871,7 +871,7 @@ function exponentiallyTiltedMarginMean(cells: CfbV1Forecast["pmf"], lambda: numb
   return weightedTotal / weight;
 }
 
-function tiltCfbTotalWithinMargins(
+export function tiltCfbTotalWithinMargins(
   pmf: CfbV1Forecast["pmf"],
   totalShiftPoints: number,
 ): CfbV1Forecast["pmf"] {
@@ -955,7 +955,7 @@ function mixPmfs(
     .sort((first, second) => first.home - second.home || first.away - second.away);
 }
 
-function summarizePmf(pmf: CfbV1Forecast["pmf"]): Pick<CfbV1Forecast,
+export function summarizePmf(pmf: CfbV1Forecast["pmf"]): Pick<CfbV1Forecast,
   "expectedAwayPoints" | "expectedHomePoints" | "expectedMarginHome" | "expectedTotal" |
   "homeWinProbability" | "representativeScore" | "interval80"> {
   const expectedHomePoints = pmf.reduce((sum, cell) => sum + cell.home * cell.probability, 0);

@@ -78,13 +78,21 @@ The fixed release candidate treats the three markets differently:
   score, Moneyline, Spread and Total cannot be assembled from contradictory axes.
 
 The configuration was selected on games through September 27, then frozen before the October 2–4
-confirmation block. On the 94-game confirmation block it changed Moneyline once (one correction,
-zero harms), Spread once (one correction, zero harms), and Total four times (three corrections, one
-harm). Margin MAE improved from 13.1208 to 12.9144, Total MAE from 14.1662 to 13.7135, and per-team
-score MAE from 10.0903 to 9.8353. Moneyline improved 61-33 to 62-32, Spread 37-28-1 to 38-27-1,
-and Total 35-32 to 37-30. The earlier September 25–27 selection block produced four Total
-corrections and zero harms. The three-game October 7 micro-holdout had no directional changes;
-margin MAE improved from 9.0211 to 8.9522.
+confirmation block. The first continuous version changed Moneyline once (one correction, zero
+harms), Spread once (one correction, zero harms), and Total four times (three corrections, one
+harm). Exact intervention review then found that the harmful Total flip had no observed line move,
+price move, reversal or split evidence; it was using static disagreement with the posted line as
+if it were market reading. Every corrected Total flip had an actual sequence, split observation or
+both. A structural authority rule now prevents a static line alone from overturning the independent
+Total. This is an evidence-presence contract, not a movement-size threshold.
+
+With that rule, the earlier September 25–27 block remains four Total corrections and zero harms.
+The October 2–4 block becomes three Total corrections and zero harms: Total moves from 35-32 to
+38-29, while Total MAE improves from 14.1662 to 13.6603. Moneyline remains 61-33 to 62-32 and Spread
+37-28-1 to 38-27-1; margin MAE remains 13.1208 to 12.9144. The three-game October 7 micro-holdout
+has no directional changes; margin MAE improves from 9.0211 to 8.9522. Because the evidence-authority
+rule was discovered during exact confirmation review, those improved October figures are opened
+diagnostic evidence, not a newly untouched holdout.
 
 An exact official-lock integrity comparison was also run separately. It improved confirmation
 Moneyline 61-33 to 63-31 and Total 34-30 to 36-28, left Spread 33-30-1 unchanged, and improved all
@@ -101,11 +109,31 @@ resistance demotion or reversal would therefore be wrong. Total resistance was l
 (12-15), while actual Total side-crossings finished 3-1 versus 1-3 for the released sides. This is
 why confirmation, resistance and correction remain market-specific inputs rather than one threshold.
 
-This candidate is not live. The October 7 holdout contains only three games and the exact current-board
-promotion/demotion replay is still required. Under the model-change safety contract, that means no
-authoritative score, side or grade can be changed yet. The next gate is a full current-board PMF and
-exact-price replay proving coherent probabilities and paired promotions/demotions without flattening
-the board.
+Grade-conditioned evidence makes the distinction sharper. In the October confirmation block,
+Moneyline Best Angles that resisted the evidence went 3-5 for -2.813 units, while resistance-level
+Watchlists went 16-1 for +1.496 units. The latter are mostly price-sensitive winner calls, so their
+high hit rate is not permission to erase the existing price-tier ceiling. Spread Leans remained
+positive both when confirmed (7-4, +2.542 units) and when resistant (17-13, +2.826 units), so a
+generic Spread resistance demotion would discard useful independent-model decisions. Total Best
+Angles with resistance went 0-3 for -3 units, while confirmed Total Leans went 4-2 for +1.704 units.
+Those cells identify a real calibration concern, but the small counts do not by themselves authorize
+a production demotion. Any demotion still requires a paired, exact-price promotion replay.
+
+The current 86-game board was also replayed without writes. The candidate changes zero Moneyline
+sides and zero Spread sides. It identifies four weekend Total side changes (WAKE-NCSU, UGA-ALA,
+SC-FLA and MISS-VAN), with no change to the October 8 game. There are no negative score outputs.
+The compact stored evidence does not retain the writer's full joint PMF, so only 46 of 86 reconstructed
+games reproduced every existing grade, exact price and probability within the strict audit tolerance.
+Accordingly, the audit does not claim exact current-board promotion/demotion counts and does not
+authorize those four live changes yet. Exact no-flattening proof must run inside the sole writer from
+its in-memory full PMF.
+
+This candidate is not live. The October 7 holdout contains only three games, the evidence-authority
+rule is outcome-informed diagnostic work, and the exact current-board promotion/demotion replay is
+still required. Under the model-change safety contract, no authoritative score, side or grade can
+change yet. The next gate is a full current-board PMF and exact-price replay inside the sole writer,
+followed by release-separated forward evidence proving coherent probabilities and paired promotions
+and demotions without flattening the board.
 
 The unrestricted strong-conflict Total row has a material correction advantage and improves
 reflected Total error (14.51 to 12.68 points on disagreements), but its paired one-sided correction
@@ -137,6 +165,7 @@ when it is unexplained by already-public inputs, while generic reverse-line and 
 not reliably create excess returns:
 
 - [Informed trading in college football betting markets](https://ideas.repec.org/a/taf/apfiec/v15y2005i3p143-152.html)
+- [The degree of inefficiency in football betting markets](https://www.sciencedirect.com/science/article/pii/0304405X9190034H)
 - [Reverse line movement in college football totals](https://ideas.repec.org/a/spr/jecfin/v43y2019i4d10.1007_s12197-019-09479-3.html)
 - [Weather and NCAA football totals](https://ideas.repec.org/a/taf/apeclt/v31y2024i8p779-782.html)
 - [Joint spread and team-total censoring](https://papers.ssrn.com/sol3/papers.cfm?abstract_id=4197428)
