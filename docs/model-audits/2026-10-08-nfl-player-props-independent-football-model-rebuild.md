@@ -238,6 +238,20 @@ projection, side, probability, grade, and representative line must remain mathem
 8. **Evaluate licensed tracking data separately.** Buy or integrate it only if historical/live
    coverage supports the same assignment features in training and inference.
 
+## Tested architecture evidence
+
+Two chronological opportunity-budget candidates were tested after this diagnosis. The first
+normalized the released direct player scores to independent team pass/rush/target budgets. The
+second fit active-only opportunity scores, weighted teammates with shifted participation priors,
+and conditioned the evaluated settled player active. Neither produced a candidate that both
+selected in 2023 and confirmed in 2024 for any market. Both remained logically coherent, with zero
+negative projections and zero completions above attempts.
+
+This falsifies the simplistic version of the hierarchy, not the hierarchy itself. It shows that
+normalization must come after better role-state and opportunity-share estimation; it cannot repair
+weak or stale inputs. The detailed result is in
+`2026-10-08-nfl-player-props-active-roster-opportunity-result.md`.
+
 ## Acceptance gates
 
 A candidate is eligible for production only when all of the following hold:
