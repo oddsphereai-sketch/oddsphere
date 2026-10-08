@@ -632,6 +632,8 @@ assert.match(candidatePage, /readCachedNflForwardMemberSnapshot/);
 assert.match(candidatePage, /readNflForwardMemberSnapshot/);
 assert.match(candidatePage, /revalidate: 15/);
 assert.match(candidatePage, /initialAvailability=\{visibleNflAvailability\}/);
+assert.match(candidatePage, /game\.id\.startsWith\("cfb-"\) \? game\.id\.slice\(4\) : game\.id/);
+assert.match(candidatePage, /cfbFixture\.availability\?\.\[providerGameId\]/);
 assert.match(candidatePage, /readCurrentNflWeekOneHeldMemberFixture/);
 assert.doesNotMatch(candidatePage, /nflWeekOneEvidenceBoard=\{/);
 assert.doesNotMatch(candidatePage, /nflPublishedMemberSnapshotStore|readCurrentNflPublishedMemberSnapshot/);
