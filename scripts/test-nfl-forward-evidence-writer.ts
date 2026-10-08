@@ -236,6 +236,27 @@ const currentContextCaptureFollowUp: NflForwardStoredEvidence = {
     },
   } as unknown as NflForwardEvidencePayload,
 };
+const staleCollectorReleaseFollowUp: NflForwardStoredEvidence = {
+  ...currentContextCaptureFollowUp,
+  payload: {
+    ...currentContextCaptureFollowUp.payload,
+    collectorRelease: "nfl_forward_evidence_collector_2026_10_06_r17_hourly_market_freshness",
+  } as unknown as NflForwardEvidencePayload,
+};
+assert.deepEqual(
+  determineNflForwardCollectionNeed({
+    existing: [completeCurrentReleaseOpening, staleCollectorReleaseFollowUp],
+    now: beforeCadence,
+    requiredPublicRelease: {
+      memberRelease: NFL_V1_ACTIONABLE_GRADE_MEMBER_RELEASE,
+      decisionRelease: NFL_V1_ACTIONABLE_GRADE_DECISION_RELEASE,
+      evaluatedBetCount: 3,
+      contextCaptureRelease: NFL_FORWARD_CONTEXT_CAPTURE_RELEASE,
+      collectorRelease: NFL_FORWARD_EVIDENCE_COLLECTOR_RELEASE,
+    },
+  }),
+  { collect: true, reason: "collector_release_refresh_due", cadenceMinutes: 0 },
+);
 assert.equal(
   determineNflForwardCollectionNeed({
     existing: [completeCurrentReleaseOpening, currentContextCaptureFollowUp],
@@ -245,6 +266,7 @@ assert.equal(
       decisionRelease: NFL_V1_ACTIONABLE_GRADE_DECISION_RELEASE,
       evaluatedBetCount: 3,
       contextCaptureRelease: NFL_FORWARD_CONTEXT_CAPTURE_RELEASE,
+      collectorRelease: NFL_FORWARD_EVIDENCE_COLLECTOR_RELEASE,
     },
   }).reason,
   "cadence_not_due",
