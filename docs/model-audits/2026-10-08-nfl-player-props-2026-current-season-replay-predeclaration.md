@@ -20,11 +20,18 @@ must not be blended into the four-week ledger metrics.
 
 ## Frozen comparisons
 
-For every outcome-matched, non-push locked decision, compare:
+For every outcome-matched, non-push locked decision whose stored point projection was independent,
+compare:
 
 1. `rawModelProbability`: the independent model probability for the locked side;
 2. `marketProbability`: the market-implied probability stored at lock;
 3. `finalProbability`: the published model/market probability stored at lock.
+
+`rawModelProbability` is not assumed to be independent merely because of its field name. A row
+whose stored `projectionEvidence.source` is `market_dominant_expected_starter` must be excluded
+from the independent-probability comparison because its point center already contained the
+released 90% market / 10% role marriage before the probability was derived. Those rows remain in
+the all-published accuracy and point-projection views, and the audit must report their count.
 
 Primary probability endpoints are Brier score and log loss. Secondary endpoints are side accuracy,
 mean forecast probability, observed win rate, and calibration gap. Results must be reported both

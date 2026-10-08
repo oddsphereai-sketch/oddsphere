@@ -18,7 +18,10 @@ No live projection, probability, grade, selection, stake, or release changed.
 - Stored 2026 state: 64 final games through Week 4, with 4,173 player-game stat rows.
 - Immutable locked ledger: 209 exact actionable records covering 47 games.
 - Canonical accuracy view: 207 game/player/market/line/side scopes after removing two duplicate
-  sportsbook copies.
+  sportsbook copies. Of those, 183 have a genuinely independent stored raw probability.
+- The other 24 canonical scopes are QB workload rows whose stored point center used the released
+  `market_dominant_expected_starter` path (90% market / 10% role). They remain in published and
+  point-projection results but are excluded from independent-probability comparisons.
 - Outcome matching: 209/209 records matched; 0 locked-payload errors and 0 disagreements with the
   151 already settled ledger records.
 - The other 58 ledger records remain pending and unchanged. Stored current-season stats supplied a
@@ -32,31 +35,32 @@ No live projection, probability, grade, selection, stake, or release changed.
 
 ## Independent probability versus market and published final
 
-Canonical scopes had a 107-100 record, or 51.69% directional accuracy.
+The exact independent-probability cohort had a 91-92 record, or 49.73% directional accuracy. The
+complete 207-scope published cohort had a 107-100 record, or 51.69%.
 
 | Probability source | Mean forecast | Observed win rate | Calibration gap | Brier | Log loss |
 |---|---:|---:|---:|---:|---:|
-| Independent raw | 72.66% | 51.69% | 20.97 pp | 0.30482 | 0.83033 |
-| Market | 50.45% | 51.69% | 1.24 pp | 0.24946 | 0.69209 |
-| Published final | 56.08% | 51.69% | 4.39 pp | 0.25082 | 0.69504 |
+| Independent raw | 74.81% | 49.73% | 25.08 pp | 0.31339 | 0.85102 |
+| Market, same 183 rows | 50.56% | 49.73% | 0.83 pp | 0.24916 | 0.69147 |
+| Published final, same 183 rows | 56.06% | 49.73% | 6.33 pp | 0.25231 | 0.69799 |
 
 Lower Brier and log loss are better. The game-cluster bootstrap difference for independent minus
-published-final Brier was `+0.05534` with a 95% interval of `[+0.02158, +0.09092]`. Independent
-minus market was `+0.05676`, interval `[+0.01414, +0.10192]`. Both intervals exclude zero in the
+published-final Brier was `+0.06223` with a 95% interval of `[+0.02298, +0.10587]`. Independent
+minus market was `+0.06551`, interval `[+0.01617, +0.12144]`. Both intervals exclude zero in the
 wrong direction for independence.
 
-The result repeated in every completed week:
+The result repeated in every completed week on the clean independent cohort:
 
-| Week | Scopes | Independent Brier | Market Brier | Published Brier |
+| Week | Clean scopes | Independent Brier | Market Brier | Published Brier |
 |---|---:|---:|---:|---:|
 | 1 | 6 | 0.36023 | 0.25695 | 0.26676 |
-| 2 | 89 | 0.30119 | 0.24833 | 0.25019 |
-| 3 | 67 | 0.30416 | 0.25246 | 0.24966 |
-| 4 | 45 | 0.30558 | 0.24625 | 0.25168 |
+| 2 | 83 | 0.30570 | 0.24852 | 0.25101 |
+| 3 | 63 | 0.31185 | 0.25264 | 0.25389 |
+| 4 | 31 | 0.32803 | 0.24228 | 0.24979 |
 
 The predeclared residual-weight diagnostic was monotonic in the wrong direction: market-only
-weight `0.00` had Brier `0.24946`; the current-style `0.20` diagnostic had `0.25186`; `0.50` had
-`0.26572`; and independent-only `1.00` had `0.30482`. This is in-sample diagnosis, not a new
+weight `0.00` had Brier `0.24916`; the current-style `0.20` diagnostic had `0.25231`; `0.50` had
+`0.26853`; and independent-only `1.00` had `0.31339`. This is in-sample diagnosis, not a new
 weight-selection result.
 
 ## Point-projection accuracy
@@ -74,16 +78,18 @@ interval was `[-0.05, +5.87]`, so the point difference is directionally unfavora
 precise. The independent MAE was worse in all four completed weeks, failing the predeclared point
 promotion gate.
 
-Only two narrow cells were directionally encouraging, and neither is large enough for a release:
+Only one narrow point cell was directionally encouraging, and it is not large enough for a
+release: passing-attempts independent MAE was `9.2854` versus published `9.3443`, across only 16
+scopes.
 
-- Passing-yards independent probability: Brier `0.22012` versus published `0.23205` and market
-  `0.24879`, but only 14 scopes in 9 games.
-- Passing-attempts independent point MAE: `9.2854` versus published `9.3443`, only 16 scopes.
+The earlier apparent passing-yards probability improvement was not valid independent evidence:
+12 of its 14 scopes used the market-dominant QB point center. The clean independent subset has only
+two observations from one game and cannot support any conclusion.
 
-The largest repair needs are visible by market. Independent Brier was `0.40659` for passing
-completions, `0.32981` for receptions, `0.31802` for rushing yards, and `0.30091` for receiving
-yards. Independent point projections also carried an aggregate negative bias, especially in the
-receiving markets.
+The largest repair needs are visible by market. On exact independent rows, Brier was `0.45419` for
+passing completions (five rows), `0.32981` for receptions, `0.31802` for rushing yards, and
+`0.30091` for receiving yards. Independent point projections also carried an aggregate negative
+bias, especially in the receiving markets.
 
 ## Market movement
 
@@ -106,28 +112,29 @@ complete Pinnacle feed or another historical sharp-book designation.
 
 ## What changes in the work plan
 
-1. **Probability calibration is the first independent-model repair.** The raw models should stop
-   emitting 70%+ selected-side confidence on cohorts winning near 52%. Recalibration must be
-   market-specific and trained walk-forward; it cannot be a blanket global shrink chosen on these
-   same outcomes.
-2. **Point models need market-specific bias repair.** Passing completions, receptions, receiving
-   yards, rushing attempts, and rushing yards need their own workload, participation, matchup, and
-   dispersion audits. The aggregate negative bias argues against a single shared correction.
-3. **Market movement becomes a separate shadow reader.** Preserve the independent projection,
-   then test paired rules—supportive movement promotion and adverse movement demotion—without
-   rewriting the model probability. Do not auto-flip a pick from this sample.
-4. **Retain every future T-60 full board and movement timeline.** The missing Weeks 1-3 full-board
-   snapshots prevent a fair all-offer replay. Week 5 onward should preserve the complete decision
-   universe, including No Plays, so selection accuracy and calibration can be evaluated without
-   survivorship bias.
-5. **Use Week 5 as the next untouched confirmation window.** The current Week 5 release has no
-   settled outcomes. Freeze any candidate rules before settlement, then score independent point,
-   independent probability, market, final, movement support/adverse, promotions, demotions, and
-   board-count impact by release.
+1. **Repair target population and participation before tuning matchup weights.** Historical
+   training included many roster/game zero rows that production settlement would void rather than
+   grade. Model active/full/limited participation explicitly, then model production conditional on
+   role.
+2. **Rebuild opportunity as a team hierarchy.** Forecast team plays and dropbacks/rushes, then
+   allocate routes, targets, catches, and carries coherently so player shares cannot exceed the team
+   budget.
+3. **Refresh real current-season matchup inputs.** The runtime currently refreshes basic box-score
+   rates but leaves advanced EPA, explosive-rate, air-yard, YAC, CPOE, and snap-share inputs at the
+   through-2025 artifact values. Those features cannot be treated as current 2026 matchup evidence.
+4. **Calibrate each market-specific distribution.** Count props, yardage props, and rare-event
+   touchdowns need different conditional distributions and walk-forward calibration. A blanket
+   global shrink chosen on these outcomes is not authorized.
+5. **Keep market movement as a separate shadow reader.** Preserve the independent forecast, then
+   test paired supportive-movement promotions and adverse-movement demotions. Do not auto-flip a
+   pick from this sample.
+6. **Retain every future T-60 full board.** Week 5 onward must preserve the full decision universe,
+   including No Plays, so selection accuracy and calibration can be evaluated without survivorship
+   bias.
 
-The practical conclusion is: keep the market as a safety rail today, but stop treating the blend
-as the modeling solution. The independent model has a measurable calibration and point-center
-problem; that is now the primary engineering target.
+The practical conclusion is: keep the market as a safety rail today, but stop treating the blend as
+the modeling solution. The independent model has measurable target, opportunity, matchup-currency,
+distribution, and calibration problems; those are now the primary engineering targets.
 
 ## Reproduction
 
