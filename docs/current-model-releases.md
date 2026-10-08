@@ -240,7 +240,7 @@ Last reviewed: 2026-10-08
 
 ## CFB Daily Edge generalized weekly production release
 
-### Paid FCS named-book odds-gap fallback (writer r105; fixture r78; snapshot r38; tracking r39)
+### Paid FCS named-book odds-gap fallback (writer r106; fixture r78; snapshot r38; tracking r39)
 
 - Active evidence / collector / member / market reader / decision / sole writer are
   `cfb_forward_evidence_snapshot_2026_10_08_r38_the_odds_api_fcs_gap_fallback` /
@@ -248,7 +248,7 @@ Last reviewed: 2026-10-08
   `cfb_v1_member_release_2026_10_08_r52_the_odds_api_fcs_gap_fallback` /
   `cfb_market_sharp_aware_production_2026_10_08_r30_the_odds_api_fcs_gap_fallback` /
   `cfb_v1_daily_edge_decision_2026_10_08_r42_the_odds_api_fcs_gap_fallback` /
-  `cfb_forward_evidence_writer_2026_10_08_r105_the_odds_api_fcs_gap_fallback`.
+  `cfb_forward_evidence_writer_2026_10_08_r106_immediate_the_odds_api_seed`.
   Member fixture / outcome / compact snapshot / reader / tracking are r78 / r68 / r38 / r23 / r39.
   R37 and r36 remain explicit transition authorities for valid immutable locks and recovery.
 - Current quote authority remains BALLDONTLIE, then bounded exact-event SharpAPI named books, then
@@ -262,6 +262,11 @@ Last reviewed: 2026-10-08
   otherwise retain the earliest verified observation. Current pulls are one sport-level request, at
   most hourly while an upcoming FCS price gap exists, forced once at T-60 when due, capped at 176
   ordinary and 192 total weekly pulls, and protected by a 5,000-credit reserve.
+- Writer r106 closes the deployment-transition seed gap: when an unlocked FCS price gap has no
+  recorded paid-provider attempt or verified paid-provider book, the existing leased writer runs
+  one immediate FCS-only seed instead of waiting for the ordinary hourly game-capture boundary. A
+  success or failure is recorded in the existing request budget, so the trigger cannot repeat;
+  subsequent updates remain hourly and T-60 under the same ceilings. It adds no writer or timer.
 - The exact October 8 zero-write replay moves paired Moneyline / Spread / Total coverage from
   59 / 58 / 57 of 88 games to 85 / 84 / 84 of 86 upcoming games. FCS-only coverage moves from
   2 / 1 / 0 of 31 to 30 / 29 / 29; Montana–Northern Arizona remains unavailable rather than
@@ -273,7 +278,9 @@ Last reviewed: 2026-10-08
   unlocked/current and future games advance to r38.
 - Evidence and rollback:
   `docs/model-audits/2026-10-08-cfb-the-odds-api-fcs-gap-fallback-r38.md`. Roll back the complete
-  r38/r52/r105/r78/r68/r38/r23/r39 family to r37 without rewriting a lock or tracking result.
+  r38/r52/r106/r78/r68/r38/r23/r39 family to r37 without rewriting a lock or tracking result.
+  The immediate-seed scheduling amendment is documented in
+  `docs/model-audits/2026-10-08-cfb-immediate-paid-provider-seed-r106-predeclaration.md`.
 
 ### Release-wave completeness over retained terminal games (writer r104; fixture r77; snapshot r37; tracking r38)
 

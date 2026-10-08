@@ -139,7 +139,7 @@ import {
 import type { PlaybookInjuryTeamRow } from "@/lib/providers/playbook/types";
 
 export const CFB_FORWARD_WRITER_RELEASE =
-  "cfb_forward_evidence_writer_2026_10_08_r105_the_odds_api_fcs_gap_fallback" as const;
+  "cfb_forward_evidence_writer_2026_10_08_r106_immediate_the_odds_api_seed" as const;
 export const CFB_FORWARD_MAX_QB_TEAMS_PER_RUN = 24 as const;
 export const CFB_FORWARD_MAX_SHARP_FALLBACK_GAMES_PER_RUN = 32 as const;
 export const CFB_FORWARD_MAX_ESPN_PROSPECTIVE_GAMES_PER_RUN = 32 as const;
@@ -311,11 +311,15 @@ export async function runCfbForwardEvidenceWriter(args: {
     games,
     existing: lockPlanningExisting,
     capturedAt: args.now,
-    ...(need.reason === "release_refresh_due" || need.reason === "reference_line_completion_due" ? { unlockedCadenceMinutesOverride: 0 } : {}),
+    ...(need.reason === "release_refresh_due" || need.reason === "reference_line_completion_due" || need.reason === "provider_seed_due"
+      ? { unlockedCadenceMinutesOverride: 0 }
+      : {}),
   });
   const plans = need.reason === "reference_line_completion_due"
     ? plannedCaptures.filter((plan) => cfbReferenceCompletionNeeded(latestByGame.get(plan.game.providerGameId), args.now))
-    : plannedCaptures;
+    : need.reason === "provider_seed_due"
+      ? plannedCaptures.filter((plan) => cfbTheOddsApiProviderSeedNeeded(latestByGame.get(plan.game.providerGameId), args.now))
+      : plannedCaptures;
   if (plans.length === 0) {
     const tracking = await writeOfficialTracking({
       client: args.client,
@@ -1369,9 +1373,24 @@ export function cfbForwardReleaseRefreshNeed(rows: CfbForwardStoredEvidence[], n
       row.payload.decisions.evaluatedBets.length + row.payload.decisions.heldMarkets.length !== 3)
   );
   if (staleUpcoming) return { collect: true, reason: "release_refresh_due", cadenceMinutes: 0 };
+  if ([...latest.values()].some((row) => cfbTheOddsApiProviderSeedNeeded(row, now))) {
+    return { collect: true, reason: "provider_seed_due", cadenceMinutes: 0 };
+  }
   return [...latest.values()].some((row) => cfbReferenceCompletionNeeded(row, now))
     ? { collect: true, reason: "reference_line_completion_due", cadenceMinutes: 0 }
     : null;
+}
+
+export function cfbTheOddsApiProviderSeedNeeded(row: CfbForwardStoredEvidence | undefined, now: string): boolean {
+  if (!row) return false;
+  const nowMs = Date.parse(now);
+  const startsAt = Date.parse(row.gameStartAt);
+  if (!Number.isFinite(nowMs) || !Number.isFinite(startsAt) || nowMs >= startsAt) return false;
+  if (row.payload.game.away.fbs || row.payload.game.home.fbs) return false;
+  if ((row.payload.requestBudget.theOddsApi ?? 0) > 0) return false;
+  const books = [...row.payload.market.currentBooks, ...(row.payload.market.displayBooks ?? [])];
+  if (books.some((book) => book.provider === "theoddsapi")) return false;
+  return cfbBooksNeedSharpFallback(row.payload.market.currentBooks);
 }
 
 export function cfbReferenceCompletionNeeded(row: CfbForwardStoredEvidence | undefined, now: string): boolean {
