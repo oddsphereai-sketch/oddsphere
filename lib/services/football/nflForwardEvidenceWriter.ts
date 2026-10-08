@@ -160,6 +160,7 @@ export async function runNflForwardEvidenceWriter(args: {
       decisionRelease: NFL_V1_ACTIONABLE_GRADE_DECISION_RELEASE,
       evaluatedBetCount: 3,
       contextCaptureRelease: NFL_FORWARD_CONTEXT_CAPTURE_RELEASE,
+      collectorRelease: NFL_FORWARD_EVIDENCE_COLLECTOR_RELEASE,
     },
   });
   if (!need.collect) {

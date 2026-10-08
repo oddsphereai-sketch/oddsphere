@@ -9,6 +9,7 @@ Owner direction: restore verified injury reports for tonight and future NFL game
 - Sole authoritative writer: the existing leased `nflForwardEvidenceWriter` under `prediction_pipeline:nfl`.
 - Preceding writer / inference context: `nfl_forward_evidence_writer_2026_10_07_r55_injury_continuity` / `nfl_player_props_inference_context_2026_09_29_r7_injury_feed_continuity`.
 - Candidate writer / inference context: `nfl_forward_evidence_writer_2026_10_08_r56_game_designation_continuity` / `nfl_player_props_inference_context_2026_10_08_r8_game_designation_continuity`.
+- Candidate collector: `nfl_forward_evidence_collector_2026_10_08_r18_game_designation_continuity`.
 - The evidence schema, independent score model, probability/calibration/decision/grade releases, target exclusion, stake, cadence, lock, settlement, tracking denominator, member fixture/snapshot, copy, labels, and layout do not change.
 
 ## Confirmed failure
@@ -26,6 +27,7 @@ The paid BALLDONTLIE `player_designations` endpoint is the correct primary sourc
 5. If the designation endpoint fails, is malformed, exceeds its bounded pagination, or omits an exact game/team, silently fall back to the legacy `player_injuries` feed. The legacy fallback now uses the same bounded team batching, so a ten-page league total can no longer erase the slate.
 6. Merge the result with the newest verified exact-game prior payload. A failed, empty, or partial later response cannot clear a previously verified team unit or relabel it as fresh.
 7. Existing valid T-60 locks remain immutable. Newly verified availability may affect only future unlocked computation through the already released injury/role paths.
+8. An unlocked row written by an older collector release triggers one immediate capture through the same writer and lease, then returns to the established hourly cadence. A deployed input repair therefore cannot remain hidden behind a recently written superseded snapshot, and no forced timestamp, row deletion, alternate writer, or lock mutation is needed.
 
 ## Load and failure bounds
 

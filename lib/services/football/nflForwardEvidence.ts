@@ -24,7 +24,7 @@ export const NFL_FORWARD_EVIDENCE_PRIOR_SCHEMA_RELEASE =
 export const NFL_FORWARD_EVIDENCE_LEGACY_SCHEMA_RELEASE =
   "nfl_forward_evidence_snapshot_2026_08_22_r2_multibook" as const;
 export const NFL_FORWARD_EVIDENCE_COLLECTOR_RELEASE =
-  "nfl_forward_evidence_collector_2026_10_06_r17_hourly_market_freshness" as const;
+  "nfl_forward_evidence_collector_2026_10_08_r18_game_designation_continuity" as const;
 
 export type NflForwardEvidenceStage = "opening" | "unlocked" | "t60";
 
@@ -319,6 +319,7 @@ export function determineNflForwardCollectionNeed(args: {
     decisionRelease: string;
     evaluatedBetCount: number;
     contextCaptureRelease?: string;
+    collectorRelease?: string;
   };
 }): { collect: boolean; reason: string; cadenceMinutes: number | null } {
   const now = validTimestamp(args.now, "now");
@@ -330,6 +331,7 @@ export function determineNflForwardCollectionNeed(args: {
   const upcomingOutsideT60: number[] = [];
   let publicReleaseRefreshDue = false;
   let contextCaptureReleaseRefreshDue = false;
+  let collectorReleaseRefreshDue = false;
   for (const rows of byGame.values()) {
     const latestRow = [...rows].sort((first, second) => Date.parse(second.capturedAt) - Date.parse(first.capturedAt))[0]!;
     const startsAt = validTimestamp(latestRow.gameStartAt, "stored gameStartAt");
@@ -356,6 +358,10 @@ export function determineNflForwardCollectionNeed(args: {
               args.requiredPublicRelease.contextCaptureRelease) {
           contextCaptureReleaseRefreshDue = true;
         }
+        if (args.requiredPublicRelease.collectorRelease &&
+            latestRow.payload.collectorRelease !== args.requiredPublicRelease.collectorRelease) {
+          collectorReleaseRefreshDue = true;
+        }
       }
     }
   }
@@ -365,6 +371,9 @@ export function determineNflForwardCollectionNeed(args: {
   }
   if (contextCaptureReleaseRefreshDue) {
     return { collect: true, reason: "context_capture_release_refresh_due", cadenceMinutes: 0 };
+  }
+  if (collectorReleaseRefreshDue) {
+    return { collect: true, reason: "collector_release_refresh_due", cadenceMinutes: 0 };
   }
   const latest = Math.max(...args.existing.map((row) => validTimestamp(row.capturedAt, "stored capturedAt")));
   const openingFollowUpIncomplete = [...byGame.values()].some((rows) => {
