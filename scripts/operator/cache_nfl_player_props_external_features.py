@@ -19,7 +19,7 @@ import urllib.request
 from dataclasses import dataclass
 
 
-CACHE_RELEASE = "nfl_player_props_external_source_cache_2026_10_08_r1"
+CACHE_RELEASE = "nfl_player_props_external_source_cache_2026_10_08_r2_depth_charts"
 BASE = "https://github.com/nflverse/nflverse-data/releases/download"
 DEFAULT_ROOT = pathlib.Path("football-research/cache/nfl-player-props-external")
 
@@ -60,6 +60,15 @@ def sources(current_season: int) -> list[Source]:
         )
         for stat_type in ("pass", "rush", "rec", "def")
         for season in range(2018, current_season + 1)
+    )
+    rows.extend(
+        Source(
+            dataset="depth_charts",
+            season=season,
+            url=f"{BASE}/depth_charts/depth_charts_{season}.parquet",
+            relative_path=pathlib.Path("depth_charts") / f"{season}.parquet",
+        )
+        for season in range(2016, current_season + 1)
     )
     current_patterns = {
         "pbp": "pbp/play_by_play_{season}.parquet",
@@ -193,7 +202,7 @@ def main() -> None:
     manifest_path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
     print(f"manifest: {manifest_path}")
     print(f"verified files: {len(files)}; unavailable: {len(failures)}")
-    required = {"ngs_passing", "ngs_receiving", "ngs_rushing", "ftn_charting", "pbp", "player_stats", "team_stats"}
+    required = {"ngs_passing", "ngs_receiving", "ngs_rushing", "ftn_charting", "depth_charts", "pbp", "player_stats", "team_stats"}
     failed_required = sorted(required.intersection({str(item["dataset"]) for item in failures}))
     if failed_required:
         raise SystemExit(f"required external research sources unavailable: {', '.join(failed_required)}")
@@ -201,4 +210,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-
