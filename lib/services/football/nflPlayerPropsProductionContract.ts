@@ -15,9 +15,9 @@ import { addDaysToSlate, computeSlateDate } from "@/lib/dates/slateDate";
 import { selectNflPlayerPropsCanonicalLines } from "./nflPlayerPropsCanonicalLine";
 
 export const NFL_PLAYER_PROPS_PRODUCTION_CANDIDATE_RELEASE =
-  "nfl_player_props_member_2026_10_08_r37_independent_passing_yards" as const;
+  "nfl_player_props_member_2026_10_08_r38_independent_rushing_yards" as const;
 export const NFL_PLAYER_PROPS_MEMBER_LIFECYCLE_RELEASE =
-  "nfl_player_props_member_lifecycle_2026_10_08_r20_independent_passing_yards" as const;
+  "nfl_player_props_member_lifecycle_2026_10_08_r21_independent_rushing_yards" as const;
 const NFL_PLAYER_PROPS_PRECEDING_DECISION_RELEASE =
   "nfl_player_props_decision_2026_10_07_r21_market_selective_mean_quintile" as const;
 export const NFL_PLAYER_PROPS_BOARD_ROLLOVER_HOUR_ET = 2 as const;

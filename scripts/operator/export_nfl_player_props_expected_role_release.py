@@ -24,12 +24,13 @@ DEFAULT_OUTPUT = ROOT / "lib/services/football/modelArtifacts/nflPlayerPropsExpe
 DEFAULT_DISTRIBUTION = ROOT / "football-research/cache/nfl-player-props-external/tournament/nfl_player_props_independent_distribution_release_r1.json"
 DEFAULT_COMPLETIONS_DISTRIBUTION = ROOT / "football-research/cache/nfl-player-props-external/tournament/nfl_player_props_passing_completions_distribution_r1.json"
 DEFAULT_PASSING_YARDS_DISTRIBUTION = ROOT / "football-research/cache/nfl-player-props-external/tournament/nfl_player_props_passing_yards_distribution_r1.json"
+DEFAULT_RUSHING_YARDS_DISTRIBUTION = ROOT / "football-research/cache/nfl-player-props-external/tournament/nfl_player_props_rushing_yards_distribution_r1.json"
 RUNTIME = ROOT / "lib/services/football/modelArtifacts/nflPlayerPropsRuntime.json"
-RELEASE = "nfl_player_props_expected_role_runtime_2026_10_08_r3_passing_yards"
-PORTABLE_RELEASE = "nfl_player_props_runtime_2026_10_08_r11_independent_passing_yards"
-MODEL_RELEASE = "nfl_player_props_distribution_model_2026_10_08_r20_independent_passing_yards"
-CALIBRATION_RELEASE = "nfl_player_props_distribution_calibration_2026_10_08_r22_independent_passing_yards"
-DECISION_RELEASE = "nfl_player_props_decision_2026_10_08_r25_independent_passing_yards"
+RELEASE = "nfl_player_props_expected_role_runtime_2026_10_08_r4_rushing_yards"
+PORTABLE_RELEASE = "nfl_player_props_runtime_2026_10_08_r12_independent_rushing_yards"
+MODEL_RELEASE = "nfl_player_props_distribution_model_2026_10_08_r21_independent_rushing_yards"
+CALIBRATION_RELEASE = "nfl_player_props_distribution_calibration_2026_10_08_r23_independent_rushing_yards"
+DECISION_RELEASE = "nfl_player_props_decision_2026_10_08_r26_independent_rushing_yards"
 
 
 def load(name: str, path: pathlib.Path) -> Any:
@@ -85,6 +86,8 @@ def optimize_existing(path: pathlib.Path) -> None:
         payload["passingCompletions"]["completionRateModel"],
         payload["passingYards"]["yardsPerAttemptModel"],
         payload["passingYards"]["yardsPerCompletionModel"],
+        *(value for group in payload.get("rushingYards", {}).get("groups", {}).values()
+          for value in (group["budgetModel"], group["shareModel"], group["participationModel"], group["yardsPerCarryModel"])),
     ]
     for value in models:
         if not str(value["kind"]).startswith("compact_hgb_"):
@@ -131,16 +134,18 @@ def optimize_existing(path: pathlib.Path) -> None:
         identity: [[feature_index[name], value] for name, value in state.items() if name in allowed and value is not None]
         for identity, state in payload["playerStateUpdates"].items()
     }
-    passing_state_indexes = {
+    active_state_indexes = {
         index for index, name in enumerate(payload["playerStateFeatureNames"])
         if name in {
             "prior_passing_attempts_lag1", "prior_passing_attempts_avg3",
             "prior_passing_attempts_season_avg",
+            "prior_rushing_attempts_lag1", "prior_rushing_attempts_avg3",
+            "prior_rushing_attempts_season_avg",
         }
     }
     player_states = {
         name: state for name, state in payload.pop("playerStateUpdates").items()
-        if any(index in passing_state_indexes and value > 0 for index, value in state)
+        if any(index in active_state_indexes and value > 0 for index, value in state)
     }
     payload.pop("receptions", None)
     payload["release"] = RELEASE
@@ -177,6 +182,7 @@ def main() -> None:
     parser.add_argument("--distribution", type=pathlib.Path, default=DEFAULT_DISTRIBUTION)
     parser.add_argument("--completions-distribution", type=pathlib.Path, default=DEFAULT_COMPLETIONS_DISTRIBUTION)
     parser.add_argument("--passing-yards-distribution", type=pathlib.Path, default=DEFAULT_PASSING_YARDS_DISTRIBUTION)
+    parser.add_argument("--rushing-yards-distribution", type=pathlib.Path, default=DEFAULT_RUSHING_YARDS_DISTRIBUTION)
     parser.add_argument("--external-manifest", type=pathlib.Path)
     parser.add_argument("--injury-root", type=pathlib.Path)
     parser.add_argument("--optimize-existing", action="store_true")
@@ -281,6 +287,37 @@ def main() -> None:
         yardage_train[yardage_features], yards_per_completion.to_numpy(float),
         sample_weight=yardage_train["passing_completions"].to_numpy(float),
     )
+    rushing_groups = foundation.group_table(training, team_features)
+    rushing_yards_models: dict[str, dict[str, Any]] = {}
+    for group in ("QB", "BACK", "WR"):
+        group_budget = rushing_groups[rushing_groups["expected_role_group"].eq(group)].copy()
+        population = training[training["expected_role_group"].eq(group)].copy()
+        active = population[population["participated"].eq(1)].copy()
+        efficiency = active[active["rushing_attempts"].gt(0)].copy()
+        if len(group_budget) < 100 or len(active) < 100 or len(efficiency) < 100:
+            continue
+        budget_model = foundation.model("poisson").fit(
+            group_budget[team_features], group_budget["rushing_attempts"].to_numpy(float),
+        )
+        share_model = foundation.model("squared_error").fit(
+            active[player_features], active["expected_role_rush_share"].fillna(0.0).to_numpy(float),
+        )
+        participation_model = foundation.HistGradientBoostingClassifier(
+            max_iter=140, max_leaf_nodes=15, learning_rate=0.04,
+            min_samples_leaf=35, l2_regularization=12.0, random_state=foundation.SEED,
+        ).fit(population[player_features], population["participated"].to_numpy(int))
+        yards_per_carry = (efficiency["rushing_yards"] / efficiency["rushing_attempts"]).clip(0.0, 15.0)
+        yards_per_carry_model = foundation.model("squared_error").fit(
+            efficiency[player_features], yards_per_carry.to_numpy(float),
+        )
+        rushing_yards_models[group] = {
+            "budgetModel": compact_model(exporter, budget_model, team_features),
+            "shareModel": compact_model(exporter, share_model, player_features),
+            "participationModel": compact_model(exporter, participation_model, player_features, classifier=True),
+            "yardsPerCarryModel": compact_model(exporter, yards_per_carry_model, player_features),
+        }
+    if set(rushing_yards_models) != {"QB", "BACK", "WR"}:
+        raise RuntimeError(f"incomplete Rushing Yards group models: {sorted(rushing_yards_models)}")
 
     existing_expected_role = json.loads(args.output.read_text(encoding="utf-8"))
     passing_attempts_probability = existing_expected_role["passingAttempts"]["probability"]
@@ -314,6 +351,23 @@ def main() -> None:
         "challengerQualified": probability_challenger_qualified,
         "incumbentRetained": not probability_challenger_qualified,
     }
+    rushing_yards_distribution = json.loads(args.rushing_yards_distribution.read_text(encoding="utf-8"))
+    rushing_yards_artifact = rushing_yards_distribution["artifact"]
+    rushing_probability_challenger_qualified = bool(rushing_yards_artifact["passes"])
+    if not rushing_probability_challenger_qualified and rushing_yards_distribution.get("selected") is not None:
+        raise RuntimeError("rejected Rushing Yards distribution cannot be exported as an incumbent fallback")
+    rushing_yards_probability = {
+        "foundationDistribution": rushing_yards_artifact["referenceDistribution"],
+        "challengerDistribution": rushing_yards_artifact["challengerDistribution"]
+        if rushing_probability_challenger_qualified else rushing_yards_artifact["referenceDistribution"],
+        "challengerWeight": rushing_yards_artifact["challengerWeight"]
+        if rushing_probability_challenger_qualified else 0.0,
+        "probabilityCalibration": rushing_yards_artifact["probabilityCalibration"]
+        if rushing_probability_challenger_qualified else None,
+        "passes": True,
+        "challengerQualified": rushing_probability_challenger_qualified,
+        "incumbentRetained": not rushing_probability_challenger_qualified,
+    }
 
     passing_budget_portable = compact_model(exporter, team_budget, team_features)
     passer_share_portable = compact_model(exporter, passer_share, player_features)
@@ -325,6 +379,7 @@ def main() -> None:
         passing_budget_portable, passer_share_portable,
         completion_share_portable, completion_rate_portable,
         yards_per_attempt_portable, yards_per_completion_portable,
+        *(value for group in rushing_yards_models.values() for value in group.values()),
     ]
     state_features = list(dict.fromkeys(
         feature for value in all_models for feature in model_features(value)
@@ -334,9 +389,9 @@ def main() -> None:
     used_player_features = [
         name for name in state_features if name in set(player_features) | set(completion_features) | set(yardage_features)
     ]
-    passing_population = training[training["position"].eq("QB")]
-    for player_name, rows in passing_population.groupby(
-        passing_population["player_name"].map(foundation.normalize_player), observed=True,
+    role_population = training[training["position"].isin(["QB", "RB", "FB", "WR"])]
+    for player_name, rows in role_population.groupby(
+        role_population["player_name"].map(foundation.normalize_player), observed=True,
     ):
         if not player_name:
             continue
@@ -366,6 +421,7 @@ def main() -> None:
             ).encode("utf-8")).hexdigest(),
             "passingCompletionsTournament": foundation.sha256_file(args.completions_distribution),
             "passingYardsTournament": foundation.sha256_file(args.passing_yards_distribution),
+            "rushingYardsTournament": foundation.sha256_file(args.rushing_yards_distribution),
         },
         "featureNames": state_features,
         "passingAttempts": {
@@ -396,6 +452,15 @@ def main() -> None:
             "yardsPerCompletionUpper": 24.0,
             "componentWeights": {"attempt": 0.0, "completion": 1.0},
             "probability": passing_yards_probability,
+        },
+        "rushingYards": {
+            "blendWeight": 0.75,
+            "shareLower": 0.0,
+            "shareUpper": 1.0,
+            "yardsPerCarryLower": 0.0,
+            "yardsPerCarryUpper": 15.0,
+            "groups": rushing_yards_models,
+            "probability": rushing_yards_probability,
         },
         "playerStateUpdates": player_updates,
         "teamStateUpdates": team_updates,
