@@ -34,20 +34,31 @@ import {
 } from "../lib/services/football/nflPlayerPropsRuntime";
 import type { NflPlayerPropsExactOffer } from "../lib/services/football/nflPlayerPropsMarketBoard";
 
-assert.equal(NFL_PLAYER_PROPS_PORTABLE_ARTIFACT_RELEASE, "nfl_player_props_runtime_2026_10_08_r10_independent_passing_completions");
-assert.equal(NFL_PLAYER_PROPS_RUNTIME_RELEASE, "nfl_player_props_runtime_2026_10_08_r25_independent_passing_completions");
-assert.equal(NFL_PLAYER_PROPS_BOARD_RELEASE, "nfl_player_props_board_2026_10_08_r28_independent_passing_completions");
-assert.equal(NFL_PLAYER_PROPS_MODEL_RELEASE, "nfl_player_props_distribution_model_2026_10_08_r19_independent_passing_completions");
-assert.equal(NFL_PLAYER_PROPS_CALIBRATION_RELEASE, "nfl_player_props_distribution_calibration_2026_10_08_r21_independent_passing_completions");
-assert.equal(NFL_PLAYER_PROPS_DECISION_RELEASE, "nfl_player_props_decision_2026_10_08_r24_independent_passing_completions");
+assert.equal(NFL_PLAYER_PROPS_PORTABLE_ARTIFACT_RELEASE, "nfl_player_props_runtime_2026_10_08_r11_independent_passing_yards");
+assert.equal(NFL_PLAYER_PROPS_RUNTIME_RELEASE, "nfl_player_props_runtime_2026_10_08_r26_independent_passing_yards");
+assert.equal(NFL_PLAYER_PROPS_BOARD_RELEASE, "nfl_player_props_board_2026_10_08_r29_independent_passing_yards");
+assert.equal(NFL_PLAYER_PROPS_MODEL_RELEASE, "nfl_player_props_distribution_model_2026_10_08_r20_independent_passing_yards");
+assert.equal(NFL_PLAYER_PROPS_CALIBRATION_RELEASE, "nfl_player_props_distribution_calibration_2026_10_08_r22_independent_passing_yards");
+assert.equal(NFL_PLAYER_PROPS_DECISION_RELEASE, "nfl_player_props_decision_2026_10_08_r25_independent_passing_yards");
 assert.equal(expectedRoleArtifact.release,
-  "nfl_player_props_expected_role_runtime_2026_10_08_r2_passing_completions");
+  "nfl_player_props_expected_role_runtime_2026_10_08_r3_passing_yards");
 assert.equal(expectedRoleArtifact.marketIndependent, true);
 assert.deepEqual(expectedRoleArtifact.marketFeatures, []);
 assert.equal("receptions" in expectedRoleArtifact, false,
   "the research-qualified but production-rejected Receptions head is absent from the shipped artifact");
 assert.equal(expectedRoleArtifact.passingCompletions.blendWeight, 0.75);
 assert.equal(expectedRoleArtifact.passingCompletions.probability.challengerWeight, 0.5);
+assert.equal(expectedRoleArtifact.passingYards.blendWeight, 1);
+assert.deepEqual(expectedRoleArtifact.passingYards.componentWeights, { attempt: 0, completion: 1 });
+assert.equal(expectedRoleArtifact.passingYards.probability.challengerWeight, 0,
+  "the failed probability challenger cannot displace the incumbent independent probability head");
+assert.equal(expectedRoleArtifact.passingYards.probability.challengerQualified, false);
+assert.equal(expectedRoleArtifact.passingYards.probability.incumbentRetained, true);
+assert.equal(
+  nflPlayerPropsOverProbability("passing_yards", 100, 225.5, { foundationProjection: 240, position: "QB" }),
+  nflPlayerPropsOverProbability("passing_yards", 400, 225.5, { foundationProjection: 240, position: "QB" }),
+  "the rejected Passing Yards probability challenger has zero influence on the retained independent head",
+);
 assert.equal(nflPlayerPropsRuntimeMarketPolicy("passing_completions")?.weight, 1,
   "Passing Completions keeps market evidence downstream instead of blending it into the model probability");
 assert.equal(rushingAttemptsArtifact.model.kind, "weighted_blend");
@@ -80,7 +91,7 @@ verifyNflPlayerPropsRuntimeParity(1e-9);
 const receiving = nflPlayerPropsRuntimeMarketPolicy("receiving_yards");
 assert.deepEqual(receiving, { weight: 0.2, qualified: false }, "historical lane qualification remains truthful under the owner-approved forward exception");
 assert.equal(nflPlayerPropsRuntimeMarketPolicy("receptions")?.qualified, true);
-assert.equal(nflPlayerPropsRuntimeMarketPolicy("passing_yards")?.qualified, false);
+assert.deepEqual(nflPlayerPropsRuntimeMarketPolicy("passing_yards"), { weight: 1, qualified: true });
 assert.deepEqual(nflPlayerPropsTouchdownPolicy(), { weight: 0.2, actionable: true, requiresSharpReference: true });
 assert.equal(nflPlayerPropsProductionMarketLane("receiving_yards")?.lean, true);
 assert.equal(nflPlayerPropsProductionMarketLane("receptions")?.lean, true);
@@ -253,15 +264,10 @@ const expectedStarterProjection = nflPlayerPropsExpectedStarterPassingProjection
   offers: [passingOffer, { ...passingOffer, offerKey: "qb-book-b", sportsbook: "book-b", line: 226.5 }],
   evaluatedSportsbook: "book-a",
 });
-assert.ok(expectedStarterProjection, "a matching expected starter receives the market-dominant passing projection");
-assert.equal(expectedStarterProjection?.evidence?.source, "market_dominant_expected_starter");
-if (expectedStarterProjection?.evidence.source !== "market_dominant_expected_starter") throw new Error("passing projection evidence narrowed incorrectly");
-const expectedStarterEvidence = expectedStarterProjection.evidence;
-assert.equal(expectedStarterEvidence.books, 1);
-assert.equal(expectedStarterEvidence.market, "passing_yards");
-assert.equal(expectedStarterEvidence.roleProjection, 235);
-assert.ok((expectedStarterProjection?.projection ?? 0) > 205 && (expectedStarterProjection?.projection ?? 999) < 240,
-  "the repaired projection is market-realistic while retaining bounded recent-role context");
+assert.ok(expectedStarterProjection, "a matching expected starter receives the independent passing projection");
+assert.equal(expectedStarterProjection?.projection, 235);
+assert.equal(expectedStarterProjection?.evidence, undefined,
+  "Passing Yards market observations remain downstream and cannot rewrite the independent point");
 const attemptsFeature = {
   ...quarterbackFeature,
   features: {
@@ -374,8 +380,9 @@ assert.equal(jointAttempts?.evidence, undefined);
 assert.equal(jointCompletions?.projection, modeledPassing.passing_completions,
   "cross-market prices do not rewrite the released independent Passing Completions point");
 assert.equal(jointCompletions?.evidence, undefined);
-assert.ok((jointYards?.projection ?? 0) > 160,
-  "target-excluded yards evidence contributes to the coherent expected-starter workload");
+assert.equal(jointYards?.projection, modeledPassing.passing_yards,
+  "cross-market prices do not rewrite the released independent Passing Yards point");
+assert.equal(jointYards?.evidence, undefined);
 const targetContaminatedWorkload = nflPlayerPropsExpectedStarterPassingProjection({
   feature: { ...attemptsFeature, features: { ...attemptsFeature.features, prior_participations: 0 } },
   market: "passing_attempts", modeledProjection: modeledPassing.passing_attempts,
@@ -422,8 +429,8 @@ const crossLinePassing = buildNflPlayerPropsRuntimeBoard({
   evaluatedAt: "2026-08-25T12:01:00.000Z",
 });
 const targetOver = crossLinePassing.decisions.find((row) => row.sportsbook === "book-a" && row.side === "over");
-assert.equal(targetOver?.grade, "Watchlist",
-  "transported target-excluded evidence can repair a passing forecast without authorizing an unvalidated action");
+assert.equal(targetOver?.grade, "No Play",
+  "cross-line market evidence cannot manufacture a Passing Yards model signal");
 assert.equal(targetOver?.passingMarketEvidence?.source, "target_book_excluded_cross_line_transport");
 assert.equal(targetOver?.modelRelease, NFL_PLAYER_PROPS_MODEL_RELEASE);
 assert.equal(targetOver?.calibrationRelease, NFL_PLAYER_PROPS_CALIBRATION_RELEASE);

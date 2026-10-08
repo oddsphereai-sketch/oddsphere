@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Export the frozen independent Passing Attempts and Completions release.
+"""Export the frozen independent Passing Attempts, Completions, and Yards release.
 
 The research tournament also qualified a Receptions challenger, but its current
 board implementation failed the anti-flattening gate. This exporter ships only
@@ -23,12 +23,13 @@ ROOT = pathlib.Path(__file__).resolve().parents[2]
 DEFAULT_OUTPUT = ROOT / "lib/services/football/modelArtifacts/nflPlayerPropsExpectedRole.json"
 DEFAULT_DISTRIBUTION = ROOT / "football-research/cache/nfl-player-props-external/tournament/nfl_player_props_independent_distribution_release_r1.json"
 DEFAULT_COMPLETIONS_DISTRIBUTION = ROOT / "football-research/cache/nfl-player-props-external/tournament/nfl_player_props_passing_completions_distribution_r1.json"
+DEFAULT_PASSING_YARDS_DISTRIBUTION = ROOT / "football-research/cache/nfl-player-props-external/tournament/nfl_player_props_passing_yards_distribution_r1.json"
 RUNTIME = ROOT / "lib/services/football/modelArtifacts/nflPlayerPropsRuntime.json"
-RELEASE = "nfl_player_props_expected_role_runtime_2026_10_08_r2_passing_completions"
-PORTABLE_RELEASE = "nfl_player_props_runtime_2026_10_08_r10_independent_passing_completions"
-MODEL_RELEASE = "nfl_player_props_distribution_model_2026_10_08_r19_independent_passing_completions"
-CALIBRATION_RELEASE = "nfl_player_props_distribution_calibration_2026_10_08_r21_independent_passing_completions"
-DECISION_RELEASE = "nfl_player_props_decision_2026_10_08_r24_independent_passing_completions"
+RELEASE = "nfl_player_props_expected_role_runtime_2026_10_08_r3_passing_yards"
+PORTABLE_RELEASE = "nfl_player_props_runtime_2026_10_08_r11_independent_passing_yards"
+MODEL_RELEASE = "nfl_player_props_distribution_model_2026_10_08_r20_independent_passing_yards"
+CALIBRATION_RELEASE = "nfl_player_props_distribution_calibration_2026_10_08_r22_independent_passing_yards"
+DECISION_RELEASE = "nfl_player_props_decision_2026_10_08_r25_independent_passing_yards"
 
 
 def load(name: str, path: pathlib.Path) -> Any:
@@ -82,6 +83,8 @@ def optimize_existing(path: pathlib.Path) -> None:
         payload["passingAttempts"]["budgetModel"], payload["passingAttempts"]["shareModel"],
         payload["passingCompletions"]["shareModel"],
         payload["passingCompletions"]["completionRateModel"],
+        payload["passingYards"]["yardsPerAttemptModel"],
+        payload["passingYards"]["yardsPerCompletionModel"],
     ]
     for value in models:
         if not str(value["kind"]).startswith("compact_hgb_"):
@@ -173,6 +176,9 @@ def main() -> None:
     parser.add_argument("--output", type=pathlib.Path, default=DEFAULT_OUTPUT)
     parser.add_argument("--distribution", type=pathlib.Path, default=DEFAULT_DISTRIBUTION)
     parser.add_argument("--completions-distribution", type=pathlib.Path, default=DEFAULT_COMPLETIONS_DISTRIBUTION)
+    parser.add_argument("--passing-yards-distribution", type=pathlib.Path, default=DEFAULT_PASSING_YARDS_DISTRIBUTION)
+    parser.add_argument("--external-manifest", type=pathlib.Path)
+    parser.add_argument("--injury-root", type=pathlib.Path)
     parser.add_argument("--optimize-existing", action="store_true")
     args = parser.parse_args()
 
@@ -185,12 +191,14 @@ def main() -> None:
     external = load("expected_role_export_external", ROOT / "scripts/operator/tournament_nfl_player_props_external_features.py")
     exporter = load("expected_role_export_portable", ROOT / "scripts/operator/export_nfl_player_props_runtime_artifact.py")
 
-    manifest = json.loads(foundation.DEFAULT_EXTERNAL_MANIFEST.read_text(encoding="utf-8"))
+    external_manifest = args.external_manifest or foundation.DEFAULT_EXTERNAL_MANIFEST
+    injury_root = args.injury_root or foundation.DEFAULT_INJURY_ROOT
+    manifest = json.loads(external_manifest.read_text(encoding="utf-8"))
     feature_path = pathlib.Path(manifest["featureFile"])
     if foundation.sha256_file(feature_path) != manifest["featureFileSha256"] or manifest.get("marketFeatures") != []:
         raise RuntimeError("expected-role feature safety contract mismatch")
     frame, injury_metadata, availability_groups = availability.injury_features(
-        pd.read_parquet(feature_path), foundation.DEFAULT_INJURY_ROOT,
+        pd.read_parquet(feature_path), injury_root,
     )
     frame = foundation.add_role_shares(frame)
     groups = {name: list(values) for name, values in manifest["featureGroups"].items()}
@@ -213,6 +221,12 @@ def main() -> None:
         *availability_groups["combined"],
     ]))
     completion_features = [name for name in completion_features if name in frame.columns]
+    yardage_features = list(dict.fromkeys([
+        *external.relevant_features("passing_yards", groups)["state"],
+        *groups.get("depth", []),
+        *availability_groups["combined"],
+    ]))
+    yardage_features = [name for name in yardage_features if name in frame.columns]
     team_features = [
         name for name in [*groups["base"], *groups["state"]]
         if name == "is_home" or name.startswith((
@@ -220,8 +234,8 @@ def main() -> None:
             "external_state_opponent_", "external_environment_",
         ))
     ]
-    frame[[*dict.fromkeys([*player_features, *completion_features, *team_features])]] = frame[
-        [*dict.fromkeys([*player_features, *completion_features, *team_features])]
+    frame[[*dict.fromkeys([*player_features, *completion_features, *yardage_features, *team_features])]] = frame[
+        [*dict.fromkeys([*player_features, *completion_features, *yardage_features, *team_features])]
     ].replace([np.inf, -np.inf], np.nan)
     training = frame[frame["season"].lt(2026)].copy()
     teams = foundation.team_table(training, team_features)
@@ -252,6 +266,21 @@ def main() -> None:
         completion_train[completion_features], completion_rate.to_numpy(float),
         sample_weight=completion_train["passing_attempts"].to_numpy(float),
     )
+    yardage_train = leaders[
+        leaders["passing_attempts"].ge(5)
+        & leaders["passing_completions"].ge(1)
+        & leaders["participated"].eq(1)
+    ].copy()
+    yards_per_attempt = (yardage_train["passing_yards"] / yardage_train["passing_attempts"]).clip(2.0, 14.0)
+    yards_per_completion = (yardage_train["passing_yards"] / yardage_train["passing_completions"]).clip(4.0, 24.0)
+    yards_per_attempt_model = foundation.model("squared_error").fit(
+        yardage_train[yardage_features], yards_per_attempt.to_numpy(float),
+        sample_weight=yardage_train["passing_attempts"].to_numpy(float),
+    )
+    yards_per_completion_model = foundation.model("squared_error").fit(
+        yardage_train[yardage_features], yards_per_completion.to_numpy(float),
+        sample_weight=yardage_train["passing_completions"].to_numpy(float),
+    )
 
     existing_expected_role = json.loads(args.output.read_text(encoding="utf-8"))
     passing_attempts_probability = existing_expected_role["passingAttempts"]["probability"]
@@ -268,14 +297,34 @@ def main() -> None:
         "probabilityCalibration": completion_artifact["probabilityCalibration"],
         "passes": True,
     }
+    passing_yards_distribution = json.loads(args.passing_yards_distribution.read_text(encoding="utf-8"))
+    passing_yards_artifact = passing_yards_distribution["artifact"]
+    probability_challenger_qualified = bool(passing_yards_artifact["passes"])
+    if not probability_challenger_qualified and passing_yards_distribution.get("selected") is not None:
+        raise RuntimeError("rejected Passing Yards distribution cannot be exported as an incumbent fallback")
+    passing_yards_probability = {
+        "foundationDistribution": passing_yards_artifact["referenceDistribution"],
+        "challengerDistribution": passing_yards_artifact["challengerDistribution"]
+        if probability_challenger_qualified else passing_yards_artifact["referenceDistribution"],
+        "challengerWeight": passing_yards_artifact["challengerWeight"]
+        if probability_challenger_qualified else 0.0,
+        "probabilityCalibration": passing_yards_artifact["probabilityCalibration"]
+        if probability_challenger_qualified else None,
+        "passes": True,
+        "challengerQualified": probability_challenger_qualified,
+        "incumbentRetained": not probability_challenger_qualified,
+    }
 
     passing_budget_portable = compact_model(exporter, team_budget, team_features)
     passer_share_portable = compact_model(exporter, passer_share, player_features)
     completion_share_portable = compact_model(exporter, completion_share, completion_features)
     completion_rate_portable = compact_model(exporter, completion_rate_model, completion_features)
+    yards_per_attempt_portable = compact_model(exporter, yards_per_attempt_model, yardage_features)
+    yards_per_completion_portable = compact_model(exporter, yards_per_completion_model, yardage_features)
     all_models = [
         passing_budget_portable, passer_share_portable,
         completion_share_portable, completion_rate_portable,
+        yards_per_attempt_portable, yards_per_completion_portable,
     ]
     state_features = list(dict.fromkeys(
         feature for value in all_models for feature in model_features(value)
@@ -283,7 +332,7 @@ def main() -> None:
     runtime = json.loads(RUNTIME.read_text(encoding="utf-8"))
     player_updates: dict[str, dict[str, float | None]] = {}
     used_player_features = [
-        name for name in state_features if name in set(player_features) | set(completion_features)
+        name for name in state_features if name in set(player_features) | set(completion_features) | set(yardage_features)
     ]
     passing_population = training[training["position"].eq("QB")]
     for player_name, rows in passing_population.groupby(
@@ -310,12 +359,13 @@ def main() -> None:
         "marketIndependent": True,
         "marketFeatures": [],
         "sourceChecksums": {
-            "externalManifest": foundation.sha256_file(foundation.DEFAULT_EXTERNAL_MANIFEST),
+            "externalManifest": foundation.sha256_file(external_manifest),
             "externalFeatures": manifest["featureFileSha256"],
             "passingAttemptsProbability": hashlib.sha256(json.dumps(
                 passing_attempts_probability, sort_keys=True, separators=(",", ":"),
             ).encode("utf-8")).hexdigest(),
             "passingCompletionsTournament": foundation.sha256_file(args.completions_distribution),
+            "passingYardsTournament": foundation.sha256_file(args.passing_yards_distribution),
         },
         "featureNames": state_features,
         "passingAttempts": {
@@ -336,6 +386,17 @@ def main() -> None:
             "completionRateUpper": 0.85,
             "probability": completion_probability,
         },
+        "passingYards": {
+            "blendWeight": 1.0,
+            "yardsPerAttemptModel": yards_per_attempt_portable,
+            "yardsPerCompletionModel": yards_per_completion_portable,
+            "yardsPerAttemptLower": 2.0,
+            "yardsPerAttemptUpper": 14.0,
+            "yardsPerCompletionLower": 4.0,
+            "yardsPerCompletionUpper": 24.0,
+            "componentWeights": {"attempt": 0.0, "completion": 1.0},
+            "probability": passing_yards_probability,
+        },
         "playerStateUpdates": player_updates,
         "teamStateUpdates": team_updates,
         "opponentStateUpdates": opponent_updates,
@@ -353,11 +414,11 @@ def main() -> None:
     runtime["decision"]["calibrationRelease"] = CALIBRATION_RELEASE
     runtime["sourceChecksums"]["expectedRoleArtifact"] = foundation.sha256_file(args.output)
     RUNTIME.write_text(json.dumps(runtime, separators=(",", ":"), allow_nan=False) + "\n", encoding="utf-8")
-    for market in ("PassingAttempts", "PassingCompletions"):
+    for market in ("PassingAttempts", "PassingCompletions", "PassingYards"):
         path = RUNTIME.with_name(f"nflPlayerPropsRuntimeMarket{market}.json")
         values = json.loads(path.read_text(encoding="utf-8"))
-        values["marketResidualWeight"] = 1.0 if market == "PassingCompletions" else 0.0
-        values["marketResidualQualified"] = market == "PassingCompletions"
+        values["marketResidualWeight"] = 1.0 if market in {"PassingCompletions", "PassingYards"} else 0.0
+        values["marketResidualQualified"] = market in {"PassingCompletions", "PassingYards"}
         path.write_text(json.dumps(values, separators=(",", ":"), allow_nan=False) + "\n", encoding="utf-8")
     print(json.dumps({
         "output": str(args.output), "release": RELEASE, "bytes": args.output.stat().st_size,
