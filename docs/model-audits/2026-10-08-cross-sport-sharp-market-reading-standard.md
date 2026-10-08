@@ -1,10 +1,131 @@
 # Market-tape reading playbook and model-by-model intervention audit
 
 Date: 2026-10-08
-Production base: `1240e7ee3d1fd2544f227ee4c5a4d365b333af3e`
+Production base: `8d5639ff12bda65f5e50061d102873578c5acb2e`
 Scope: each active Daily Edge model, MLB Player Props and NFL Player Props
 Behavioral decision: audit and evidence-capture changes only; no live prediction, probability,
 projection, side, grade, stake, writer, lock or tracking behavior changes
+
+## Product objective: one expert forecast, not two competing opinions
+
+OddSphere's target product is not an independent projection with a market note attached, and it is
+not a market-following system with model decoration. Each sport owns two separately auditable
+information sources:
+
+1. an outcome-blind independent distribution built from sport and participant information; and
+2. a target-excluded market distribution plus a timestamped tape describing how that distribution
+   was discovered.
+
+They must be reconciled into one final joint distribution. The displayed projection, representative
+score, win/cover/total probabilities, picks and exact-price grades must all be derived from that same
+distribution. The independent layer remains separately stored so the product can measure whether the
+market repaired or damaged it. The market layer remains separately stored so a model cannot claim an
+independent edge that was copied from the price it is being evaluated against.
+
+The combination is learned **per sport, market, release and decision window**. A valid candidate may
+use a log-probability pool, a coherent PMF tilt, or a residual model, but its weights and interaction
+terms must be selected chronologically and confirmed on untouched or prospective data. Money/ticket
+splits, movement, leader/follower order and news attribution are not independent point bonuses. They
+describe evidence quality and market state, and therefore may change the learned trust placed in the
+market only when that use wins its own validation.
+
+## Upset awareness: required meaning
+
+An upset is an outcome in the underdog tail of a forecast distribution. It is not a synonym for an
+underdog bet, a public fade, reverse-line movement or a dramatic narrative. OddSphere needs to
+publish and evaluate three distinct objects:
+
+- **Official winner:** the side with greater than 50% final win probability (or the highest
+  probability in a three-way market).
+- **Upset probability:** the final probability that the market-defined underdog wins outright,
+  regardless of which side remains the official winner.
+- **Upset alert:** a separately calibrated state indicating that the underdog tail is materially
+  larger than its fair market baseline or ordinary cohort. An alert does not flip the pick and does
+  not by itself authorize a wager.
+
+This distinction matters. A market underdog moving from 18% to 29% can become meaningfully more live
+without becoming the predicted winner. Calling it the winner would discard 71% of the distribution;
+ignoring the tail would discard useful information.
+
+### What the independent distribution must capture
+
+The mean score or margin is insufficient. Each sport must estimate the shape and uncertainty that
+put mass into the underdog tail:
+
+- basketball: possessions/pace, shot-profile and shooting uncertainty, turnover and offensive-
+  rebound opportunity, free-throw rate, lineup continuity, injuries, depth, venue and rest;
+- football: possessions, explosive-play and turnover dispersion, sack/pressure and quarterback
+  uncertainty, weather/roof, special teams, pace/game-script interaction and lineup availability;
+- baseball: starter/bullpen and lineup uncertainty, run-environment dispersion and park/weather;
+- hockey: goalie/roster state, shot and finishing variance, special teams and overtime treatment;
+- soccer: goal intensities, low-score dependence, draw mass, lineup/competition context and the
+  full discrete score distribution; and
+- player props: a category-specific empirical or count distribution, participation/role uncertainty
+  and correlated game/player tails. “Upset” here means a line-exceedance or role surprise rather
+  than a team-underdog winner.
+
+These are hypotheses until the feature exists before the decision and improves chronological
+probability or distribution scores. No feature earns authority merely because it explains a famous
+upset after the fact.
+
+### What the market tape may add
+
+An upset-aware market read asks whether qualified discovery increases underdog probability, not
+whether the underdog attracted a large money percentage. Useful states include an originator moving
+the underdog first, independent followers adopting the move, favorite resistance, a key-number or
+winner-boundary cross, persistence through the decision window and no material buyback. The same
+facts in reverse can reduce the underdog tail. A retail-only drift, a stale opener, a post-news move
+the independent model already consumed, or an un-timestamped split is not a second signal.
+
+Because bookmaker and bettor biases differ by sport, market, price band and era, there is no global
+underdog coefficient. Published college-basketball and college-football moneyline evidence has found
+longshots overpriced on average, while other sports/markets have shown different or opposite
+patterns. Every favorite/underdog calibration must therefore be re-estimated by the exact production
+population rather than imported as folklore.
+
+### Required upset-aware validation
+
+For every candidate release, report the independent, fair-market and final distributions on the
+same timestamped rows and measure:
+
+- Brier score and log loss overall and by fair underdog-probability band;
+- calibration intercept/slope and reliability by underdog band;
+- CRPS or ranked/discrete distribution score plus margin/team-score error where a full score
+  distribution exists;
+- outright-upset probability calibration separately from spread-cover accuracy;
+- official winner corrections, harms and net rescues when the final distribution crosses the
+  winner boundary;
+- probability improvements and degradations when it does not cross;
+- upset-alert precision, recall and calibration at predeclared thresholds;
+- performance by decision window, market state, source family, liquidity proxy, favorite size,
+  venue and season phase; and
+- closing-line value and realized returns only as secondary execution diagnostics, never substitutes
+  for forecast accuracy.
+
+The candidate must beat both the independent model and the fair-market benchmark on untouched or
+prospective data, or establish a clearly bounded sleeve where the combination does. A global average
+cannot hide a badly miscalibrated longshot tail. Selection, calibration and confirmation rows must
+remain separate, and the final comparison must be release-pure.
+
+## Upset-readiness audit by model
+
+| Model | Current upset/tail foundation | Market marriage | Missing before it is complete | Decision |
+| --- | --- | --- | --- | --- |
+| MLB full game | Coherent score/probability layers exist, but the released market correction is Total-specific | r90 can correct a narrowly qualified low-confidence Total | No release-pure Moneyline underdog-band calibration or qualified-tape winner study | Keep r90; shadow Moneyline upset calibration only |
+| MLB first inning | Binary NRFI/YRFI distribution; team upset is not applicable | Target-excluded posterior exists | Checkpoint-specific tail calibration and settled movement attribution by NRFI/YRFI | Compare weights in shadow; no generic movement flip |
+| WNBA | Coherent margin/winner output with limited crossing evidence | Narrow two-source boundary arbitration | Matchup-specific variance and active-release underdog-band evidence are sparse | Retain provisional crossing; collect, do not expand |
+| NBA | Normal margin/total layer exists | Market is downstream only | Margin SD is a research prior with only limited-book/injury inflation; no team-specific volatility or predecision combined-tail validation | Highest-priority predecision upset/65-35 shadow study |
+| NFL | Joint outcome logic and strict cross-market winner coherence exist | r28 can change a winner with Moneyline corroboration and no sharp veto | Upset calibration by spread/price band and sequence-qualified leader/follower/buyback state | Retain r28; add banded prospective audit |
+| CFB | Full score/PMF architecture and broad matchup inputs exist | Validated Playbook Spread lane; generic named-book/RLM lanes remain non-authoritative | Outright-upset calibration is not isolated, especially FCS/FBS, large favorites and sparse-liquidity games | Keep lanes separate; validate upset tail by cohort |
+| CBB | No active Daily Edge champion, official tracking market or verified market-input release | None | Entire independent distribution, roster/injury system, price/tape coverage, release-pure backtest and forward confirmation | Launch-readiness program; never clone NBA/CFB coefficients |
+| NHL | Discrete Poisson joint score distribution exists | Small price sanity input plus a very strict one-row-confirmed flip | Current-era underdog calibration by goalie/price band and a larger qualified-tape cohort | Retain strict rule; collect current-era tape |
+| EPL | Bivariate-Poisson/Dixon-Coles PMF explicitly represents home/draw/away tails | Target-excluded Total tilt preserves result mass; movement is audit-only | Result-tail recalibration after confirmed lineups and price-band/source analysis | Keep Total tilt; shadow result-tape layer |
+| UCL | Coherent discrete score PMF and three-way probabilities exist | Qualified opening 1X2 log pool | No intraday/post-lineup path; confirmation contained no side flips | Retain calibration rule; collect path before expansion |
+| NFL Player Props | Category-specific empirical distributions; Attempts and Completions now have market-free independent heads | Market remains downstream except separately released family rules | Tail calibration and tape effects must be re-evaluated for all eight families under the October 8 releases | Preserve releases; never transfer a family rule |
+| MLB Player Props | Per-category posterior and exact-quote coherence exist | Full posterior beats both components on Brier | Movement/split rescue value is not isolated by category; correlated player/game tails need clustered evaluation | Preserve posterior; audit each category prospectively |
+
+This table is an authority audit, not a claim that a missing layer should be activated. “Missing”
+means the model needs a predeclared shadow study, not an immediate production coefficient.
 
 ## Correction to the first audit framing
 
@@ -453,6 +574,15 @@ The active product contains Anytime TD, Passing Attempts, Passing Completions, P
 Rushing Attempts, Rushing Yards, Receptions and Receiving Yards. They cannot share a generic prop
 market coefficient.
 
+**Current release reconciliation.** Production advanced after the first audit draft. The October 8
+Passing Attempts and Passing Completions heads are now explicitly market-free independent point and
+probability models. Target-book-excluded market evidence remains downstream for disagreement, edge,
+exact-price economics and movement support; it cannot rewrite either independent head. The other
+families retain their own recorded production heads. This is stronger source separation, but it does
+not validate an upset/tail or movement rule for either passing family. All future comparisons in this
+report must use the October 8 Passing Completions release family as the active cohort and must not
+blend its locks with preceding releases.
+
 **Published posterior.** On 183 genuinely independent 2026 actionable scopes, the raw independent
 probability was severely overconfident: 49.73% direction, 0.31339 Brier and 0.85102 log loss. The
 same-row market was 0.24916 / 0.69147 and the published model/market marriage was 0.25231 / 0.69799.
@@ -524,6 +654,29 @@ Doubles Under, Batter Strikeouts Over or H+R+RBI Under selection sleeves to othe
 - Levitt showed that sportsbooks may shade prices to exploit bettor preferences rather than merely
   clear equal action. A quote is an information-rich price, not ground truth:
   <https://doi.org/10.1111/j.1468-0297.2004.00207.x>.
+- Berkowitz, Depken and Gandar studied 21,888 college-basketball and 4,423 college-football games
+  and found favorite-longshot bias in those fixed-odds Moneyline populations. Heavy-favorite returns
+  were close to break-even, which the authors interpret as efficiency within transaction costs. This
+  is direct evidence against a universal “be more upset-aware by boosting dogs” rule:
+  <https://doi.org/10.1016/j.qref.2015.11.011>.
+- Gandar and collaborators' NCAA basketball work used 18,208 games with opening/closing Spread and
+  Total plus closing Moneyline evidence and found that price/line information is market-specific;
+  the three markets cannot be treated as interchangeable upset signals:
+  <https://doi.org/10.1016/j.finmar.2015.06.003>.
+- Yuan and collaborators describe NCAA tournament forecasting as a high-variance, scarce-data
+  problem with serious overfit and data-contamination risk, and combine multiple modelers rather
+  than relying on a single upset heuristic. That supports chronological ensembles and explicit
+  uncertainty, not retrospective “Cinderella” features:
+  <https://doi.org/10.1515/jqas-2014-0056>.
+- Egidi, Pauli and Torelli combine historical team information and de-vigged bookmaker odds inside
+  one hierarchical score model. Their construction illustrates the correct product shape: reconcile
+  the two information sources into one score distribution and evaluate the resulting probabilities,
+  instead of publishing contradictory model and market picks:
+  <https://doi.org/10.1177/1471082X18798414>.
+- NFL point-spread-to-win-probability research reinforces that an upset is a probability implied by
+  the whole margin distribution; no spread guarantees an outcome, and nonlinear calibration is
+  required in the tails:
+  <https://doi.org/10.1287/ited.2019.0230ca>.
 
 The common conclusion is conditional: markets aggregate valuable information, but information
 content varies by source, liquidity, time, sport, market and path. None of this literature validates
