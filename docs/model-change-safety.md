@@ -1,5 +1,26 @@
 # Model change safety protocol
 
+## Owner-approved correctness exception: NHL pregame coverage gate r10
+
+On 2026-10-08 Daniel Mengel directed Oddsphere to fix the NHL future price-
+mapping path without altering the already locked game. Post-deploy verification
+proved that SharpAPI had withdrawn six pregame spread/Total scopes from four
+already-live, fully locked games, and the slate-wide completeness gate was
+therefore withholding the repaired snapshot for two later games. This exception
+is limited to the operational release and evidence documented in
+`docs/model-audits/2026-10-08-nhl-pregame-coverage-gate-r10.md`.
+
+R10 requires complete pregame market coverage for every scheduled or unknown-
+state game and for any non-pregame game without a complete three-market lock,
+exactly as before. It does not request or validate newly withdrawn pregame
+scopes for games explicitly live, final, canceled, or postponed only after all
+three official markets are locked. Their stored lock remains authoritative.
+This changes no model, probability, projection, prediction side, selected
+price, grade, stake, lock, tracking rule,
+member copy, label, or layout. Publication requires the focused NHL suite, full
+model-change verification, current-main integration safety, protected PR checks,
+and post-deploy route/release/coverage/snapshot/lock verification.
+
 ## Owner-approved correctness exception: NHL exact-quote price mapping r16
 
 On 2026-10-08 Daniel Mengel explicitly directed Oddsphere to preserve the

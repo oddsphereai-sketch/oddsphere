@@ -28,6 +28,7 @@ import {
 import { normalizeNhlTeamName, type NhlTeamAbbrev } from "../../providers/nhl/_teamNameNormalizer";
 import { flagOpenersInHistoryPayload } from "../_lineHistoryOpenerHelper";
 import { canonicalizeNhlLineRows } from "./nhlLineBoard";
+import { requiresNhlPregameMarketCoverage } from "./nhlPregameCoverage";
 
 export type RefreshNhlLinesOptions = {
   /** ET sports-day in YYYY-MM-DD. Filters games.slate_date directly. */
@@ -58,6 +59,7 @@ type GameRow = {
   home_team_id: number | null;
   away_team_id: number | null;
   game_date: string;
+  status: string | null;
 };
 
 type TeamRow = { id: number; abbreviation: string };
@@ -155,11 +157,34 @@ function normalizeSide(
 async function loadNhlGamesForSlateDate(slateDate: string): Promise<GameRow[]> {
   const { data, error } = await supabase
     .from("games")
-    .select("id, external_id, home_team_id, away_team_id, game_date")
+    .select("id, external_id, home_team_id, away_team_id, game_date, status")
     .eq("sport", "nhl")
     .eq("slate_date", slateDate);
   if (error !== null) throw new Error(`load NHL games failed: ${error.message}`);
   return ((data as unknown) ?? []) as GameRow[];
+}
+
+async function loadFullyLockedNhlGameIds(gameIds: number[]): Promise<Set<number>> {
+  if (gameIds.length === 0) return new Set();
+  const { data, error } = await supabase
+    .from("prediction_records")
+    .select("game_id, market, locked_at")
+    .eq("sport", "nhl")
+    .in("game_id", gameIds)
+    .in("market", ["moneyline", "total", "spread"])
+    .not("locked_at", "is", null);
+  if (error !== null) throw new Error(`load NHL locked coverage failed: ${error.message}`);
+  const marketsByGame = new Map<number, Set<string>>();
+  for (const row of data ?? []) {
+    const markets = marketsByGame.get(Number(row.game_id)) ?? new Set<string>();
+    markets.add(String(row.market));
+    marketsByGame.set(Number(row.game_id), markets);
+  }
+  return new Set(
+    [...marketsByGame]
+      .filter(([, markets]) => ["moneyline", "total", "spread"].every((market) => markets.has(market)))
+      .map(([gameId]) => gameId),
+  );
 }
 
 async function loadNhlTeams(): Promise<TeamRow[]> {
@@ -248,6 +273,11 @@ export async function refreshNhlLines(
   const games = (await loadNhlGamesForSlateDate(opts.slateDate)).filter((game) => (
     requestedExternalIds === null || requestedExternalIds.has(game.external_id)
   ));
+  const fullyLockedGameIds = await loadFullyLockedNhlGameIds(games.map((game) => game.id));
+  const pregameGames = games.filter((game) => requiresNhlPregameMarketCoverage(
+    game.status,
+    fullyLockedGameIds.has(game.id),
+  ));
   log(`NHL games on slate ${opts.slateDate}: ${games.length}`);
   if (games.length === 0) {
     log(`(no NHL games in DB for slate_date ${opts.slateDate}; run seed-nhl-games.ts first)`);
@@ -273,7 +303,7 @@ export async function refreshNhlLines(
     gameAbbrs.set(g.id, { home: homeAbbr, away: awayAbbr });
   }
 
-  const sharpApiDates = sharpApiDatesForGames(games);
+  const sharpApiDates = sharpApiDatesForGames(pregameGames);
   log(`SharpAPI event dates (UTC): ${sharpApiDates.join(", ")}`);
   const events: SharpNhlEvent[] = [];
   for (const date of sharpApiDates) {
@@ -284,7 +314,7 @@ export async function refreshNhlLines(
     }
   }
   const oddsRows: SharpNhlOddsRow[] = [];
-  for (const game of games) {
+  for (const game of pregameGames) {
     const abbrs = gameAbbrs.get(game.id);
     if (!abbrs) {
       errors.push(`game_id=${game.id}: canonical NHL teams unavailable`);
@@ -375,7 +405,7 @@ export async function refreshNhlLines(
     gameMarkets.set(payload.market_type, sides);
     coverage.set(payload.game_id, gameMarkets);
   }
-  for (const game of games) {
+  for (const game of pregameGames) {
     const gameMarkets = coverage.get(game.id);
     for (const market of ["moneyline", "spread", "total"] as const) {
       const expectedSides = market === "total" ? ["over", "under"] : ["home", "away"];
