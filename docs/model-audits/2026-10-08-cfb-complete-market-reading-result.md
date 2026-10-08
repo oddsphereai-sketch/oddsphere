@@ -1,6 +1,7 @@
 # CFB complete market-reading audit — result
 
-Status: SELECT-only research completed against retained 2026 pregame evidence. No production
+Status: SELECT-only research against retained 2026 pregame evidence. The initial discrete-signal
+tournament is complete and a continuous market-reader candidate remains under release-gate review. No production
 prediction, score, probability, grade, stake, lock, tracking row, writer, cadence, provider hierarchy,
 copy, label or layout changed.
 
@@ -57,6 +58,54 @@ Zero candidates passed all frozen gates.
 | Total, named plus two retail line books agree | 52 | 27-25 | 30-22 | 15-18 | 13-12 | 1-1 | Reject |
 | Total, two retail line books agree against a strong independent opinion | 43 | 26-17 | 16-27 | 25-15 | 10-3 | no qualifying game | Prospective only |
 | Total, held two-retail-line agreement against a strong independent opinion | 27 | 17-10 | 10-17 | 16-9 | 6-2 | no qualifying game | Prospective only |
+
+## Continuous evidence follow-up
+
+The failed discrete rules were not the end of the audit. A second, CFB-specific architecture now
+models the probability that the evidence-supported counterfactual will be closer than the released
+forecast. It uses the independent forecast, source-separated same-book line and paired-price paths,
+named-versus-retail disagreement, reversals, timing, and named/fallback/public split provenance and
+acceleration. It does not target the market center and does not use a generic cross-sport weight.
+
+The fixed release candidate treats the three markets differently:
+
+- Moneyline and Spread use a heavily regularized continuous margin correction. The independent
+  forecast remains primary; ordinary market resistance is not an automatic reversal.
+- Total keeps the released score axis unless the continuous evidence posterior crosses the current
+  Total side. A qualifying cross reflects the full score conviction to the other side instead of
+  producing a cosmetic nudge or a line-hugging score.
+- The final home and away scores are derived once from the final margin and Total, so the displayed
+  score, Moneyline, Spread and Total cannot be assembled from contradictory axes.
+
+The configuration was selected on games through September 27, then frozen before the October 2–4
+confirmation block. On the 94-game confirmation block it changed Moneyline once (one correction,
+zero harms), Spread once (one correction, zero harms), and Total four times (three corrections, one
+harm). Margin MAE improved from 13.1208 to 12.9144, Total MAE from 14.1662 to 13.7135, and per-team
+score MAE from 10.0903 to 9.8353. Moneyline improved 61-33 to 62-32, Spread 37-28-1 to 38-27-1,
+and Total 35-32 to 37-30. The earlier September 25–27 selection block produced four Total
+corrections and zero harms. The three-game October 7 micro-holdout had no directional changes;
+margin MAE improved from 9.0211 to 8.9522.
+
+An exact official-lock integrity comparison was also run separately. It improved confirmation
+Moneyline 61-33 to 63-31 and Total 34-30 to 36-28, left Spread 33-30-1 unchanged, and improved all
+three score-error measures. Those later records are not used to select or inflate the candidate.
+
+A deliberately harsher date-by-date refit exposed an important failure mode: retraining after every
+small slate can chase the immediately preceding results and made October 3 Total flips worse. That
+behavior is rejected. Any eventual artifact must be release-frozen through its evaluation slate and
+may be retrained only in a newly identified, release-separated cycle.
+
+Evidence regimes are not interchangeable. In the confirmation block, released Moneyline picks won
+24-14 when the continuous evidence confirmed them and 36-17 when it resisted them; blanket
+resistance demotion or reversal would therefore be wrong. Total resistance was less trustworthy
+(12-15), while actual Total side-crossings finished 3-1 versus 1-3 for the released sides. This is
+why confirmation, resistance and correction remain market-specific inputs rather than one threshold.
+
+This candidate is not live. The October 7 holdout contains only three games and the exact current-board
+promotion/demotion replay is still required. Under the model-change safety contract, that means no
+authoritative score, side or grade can be changed yet. The next gate is a full current-board PMF and
+exact-price replay proving coherent probabilities and paired promotions/demotions without flattening
+the board.
 
 The unrestricted strong-conflict Total row has a material correction advantage and improves
 reflected Total error (14.51 to 12.68 points on disagreements), but its paired one-sided correction

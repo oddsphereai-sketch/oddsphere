@@ -10,9 +10,12 @@ import {
 } from "../../lib/services/football/cfbForwardEvidenceStore";
 import type { CfbForwardContextFamily } from "../../lib/services/football/cfbForwardEvidenceCapture";
 import type {
+  CfbForwardEvidencePayload,
   CfbForwardMarketHistoryEvidence,
   CfbForwardPlaybookSplit,
+  CfbForwardStoredEvidence,
 } from "../../lib/services/football/cfbForwardEvidence";
+import { matchesCfbForwardEvidencePayloadHash } from "../../lib/services/football/cfbForwardEvidence";
 import type { CfbSharpApiSplitRecord } from "../../lib/services/football/cfbSharpApiSplits";
 
 loadEnvConfig(process.cwd());
@@ -25,9 +28,52 @@ type FinalGame = { external_id: string | number; status: string | null; away_sco
 type Forecast = { expectedMarginHome: number; expectedTotal: number };
 type Move = { source: string; sourceClass: "named" | "retail"; side: Side; channel: "line" | "price"; magnitude: number; firstAt: string; lastAt: string; line: number | null; keyCross: boolean; reversed: boolean; priceBeforeLine: boolean };
 type SplitRead = { provenance: "named_sharp" | "fallback" | "public"; side: Side; gapPp: number; firstAt: string; lastAt: string; moneyAccelerationPp: number | null };
-type Game = { gameId: string; date: string; kickoffAt: string; independent: Forecast; authoritative: Forecast; targetLines: Record<Market, number | null>; awayScore: number; homeScore: number; histories: CfbForwardMarketHistoryEvidence[] };
+type Game = {
+  gameId: string;
+  date: string;
+  kickoffAt: string;
+  awayTeam: string;
+  homeTeam: string;
+  awayFbs: boolean;
+  homeFbs: boolean;
+  awayConferenceId: number | null;
+  homeConferenceId: number | null;
+  independent: Forecast;
+  authoritative: Forecast;
+  targetLines: Record<Market, number | null>;
+  awayScore: number;
+  homeScore: number;
+  histories: CfbForwardMarketHistoryEvidence[];
+};
 type Signal = { candidate: string; game: Game; market: Market; source: string; side: Side; line: number | null };
 type Evaluation = { candidate: string; market: Market; gameId: string; date: string; block: Block; source: string; result: Result; authoritativeResult: Result; disagrees: boolean; correction: boolean; harm: boolean; authoritativeAxisError: number; reflectedAxisError: number };
+type Trail = {
+  source: string;
+  sourceClass: "named" | "retail";
+  openingAxis: number | null;
+  currentAxis: number | null;
+  openingProbability: number;
+  currentProbability: number;
+  moveCount: number;
+  reversalCount: number;
+  firstMoveAt: string | null;
+};
+type ResidualRow = {
+  game: Game;
+  marginFeatures: Record<string, number>;
+  totalFeatures: Record<string, number>;
+  actualMargin: number;
+  actualTotal: number;
+};
+type RidgeModel = { names: string[]; means: number[]; scales: number[]; beta: number[]; prior?: number };
+type ResidualConfig = { lambda: number; weight: number; threshold: number };
+type LockedPredictionRow = {
+  id: number;
+  external_id: string | number;
+  market: string;
+  locked_at: string;
+  snapshot_json: Record<string, unknown> | null;
+};
 
 const MARKETS: Market[] = ["moneyline", "spread", "total"];
 const NAMED = new Set(["circa", "pinnacle", "bookmaker"]);
@@ -53,6 +99,82 @@ async function readResults(client: SupabaseClient, ids: string[]): Promise<Map<s
     const { data, error } = await client.from("games").select("external_id,status,away_score,home_score").eq("sport", "cfb").in("external_id", ids.slice(index, index + 150));
     if (error) throw new Error(`CFB result read failed: ${error.message}`);
     for (const row of (data ?? []) as FinalGame[]) output.set(String(row.external_id), row);
+  }
+  return output;
+}
+
+async function readOfficialLockSelections(client: SupabaseClient): Promise<{
+  byGame: Map<string, { payloadSha256: string; lockedAt: string }>;
+  incompatibleGames: Array<{ gameId: string; hashes: string[] }>;
+}> {
+  const rows: LockedPredictionRow[] = [];
+  for (let from = 0; from < 10_000; from += 500) {
+    const { data, error } = await client.from("prediction_records")
+      .select("id,external_id,market,locked_at,snapshot_json")
+      .eq("sport", "cfb")
+      .gte("slate_date", "2026-09-19")
+      .not("locked_at", "is", null)
+      .order("id", { ascending: true })
+      .range(from, from + 499);
+    if (error) throw new Error(`CFB official lock read failed: ${error.message}`);
+    const page = (data ?? []) as LockedPredictionRow[];
+    rows.push(...page);
+    if (page.length < 500) break;
+  }
+  const superseded = new Set(rows.flatMap((row) => {
+    const value = row.snapshot_json?.supersedes_prediction_record_id;
+    return typeof value === "number" && Number.isFinite(value) ? [value] : [];
+  }));
+  const current = rows.filter((row) => !superseded.has(row.id) && MARKETS.includes(row.market as Market));
+  const grouped = new Map<string, LockedPredictionRow[]>();
+  for (const row of current) grouped.set(String(row.external_id), [...(grouped.get(String(row.external_id)) ?? []), row]);
+  const byGame = new Map<string, { payloadSha256: string; lockedAt: string }>();
+  const incompatibleGames: Array<{ gameId: string; hashes: string[] }> = [];
+  for (const [gameId, gameRows] of grouped) {
+    const hashes = [...new Set(gameRows.flatMap((row) => {
+      const value = row.snapshot_json?.evidence_payload_sha256;
+      return typeof value === "string" && value ? [value] : [];
+    }))];
+    if (hashes.length !== 1) {
+      incompatibleGames.push({ gameId, hashes });
+      continue;
+    }
+    const lockedAt = gameRows.map((row) => row.locked_at).sort().at(-1)!;
+    byGame.set(gameId, { payloadSha256: hashes[0]!, lockedAt });
+  }
+  return { byGame, incompatibleGames };
+}
+
+async function readEvidenceByHashes(client: SupabaseClient, hashes: string[]): Promise<CfbForwardStoredEvidence[]> {
+  type Row = {
+    id: string;
+    provider_game_id: string;
+    stage: string;
+    captured_at: string;
+    game_start_at: string;
+    payload_sha256: string;
+    payload: CfbForwardEvidencePayload;
+  };
+  const output: CfbForwardStoredEvidence[] = [];
+  for (let index = 0; index < hashes.length; index += 50) {
+    const { data, error } = await client.from("cfb_forward_evidence_snapshots")
+      .select("id,provider_game_id,stage,captured_at,game_start_at,payload_sha256,payload")
+      .in("payload_sha256", hashes.slice(index, index + 50));
+    if (error) throw new Error(`CFB official evidence read failed: ${error.message}`);
+    for (const row of (data ?? []) as Row[]) {
+      if (!matchesCfbForwardEvidencePayloadHash(row.payload, row.payload_sha256)) {
+        throw new Error(`CFB official evidence ${row.id} checksum mismatch.`);
+      }
+      output.push({
+        id: row.id,
+        providerGameId: row.provider_game_id,
+        stage: row.payload.stage,
+        capturedAt: row.payload.capturedAt,
+        gameStartAt: new Date(row.game_start_at).toISOString(),
+        payloadSha256: row.payload_sha256,
+        payload: row.payload,
+      });
+    }
   }
   return output;
 }
@@ -195,17 +317,1293 @@ function oneSidedCorrectionPValue(corrections: number, harms: number): number | 
   return probability;
 }
 
+function median(values: number[]): number | null {
+  const finite = values.filter(Number.isFinite).sort((a, b) => a - b);
+  if (!finite.length) return null;
+  const middle = Math.floor(finite.length / 2);
+  return finite.length % 2 ? finite[middle]! : (finite[middle - 1]! + finite[middle]!) / 2;
+}
+
+function average(values: number[]): number | null {
+  const finite = values.filter(Number.isFinite);
+  return finite.length ? finite.reduce((sum, value) => sum + value, 0) / finite.length : null;
+}
+
+function standardDeviation(values: number[]): number | null {
+  const mean = average(values);
+  if (mean === null || values.length < 2) return values.length ? 0 : null;
+  return Math.sqrt(values.reduce((sum, value) => sum + (value - mean) ** 2, 0) / (values.length - 1));
+}
+
+function axisValue(market: Market, landmark: CfbForwardContextFamily[5]): number | null {
+  if (market === "moneyline") return null;
+  if (landmark[3] === null) return null;
+  return market === "spread" ? -landmark[3] : landmark[3];
+}
+
+function probabilityValue(market: Market, landmark: CfbForwardContextFamily[5]): number {
+  const first = fairFirst(landmark);
+  return market === "total" ? first : 1 - first;
+}
+
+function marketTrails(histories: CfbForwardMarketHistoryEvidence[], market: Market): Trail[] {
+  const bySource = new Map<string, Array<{ opening: CfbForwardContextFamily[4]; current: CfbForwardContextFamily[5] }>>();
+  for (const history of histories) {
+    for (const family of families(history, market)) {
+      const source = canonical(family[0]);
+      bySource.set(source, [...(bySource.get(source) ?? []), { opening: family[4], current: family[5] }]);
+    }
+  }
+  return [...bySource.entries()].flatMap(([source, observations]): Trail[] => {
+    const ordered = observations.sort((a, b) => Date.parse(a.current[0]) - Date.parse(b.current[0]));
+    const first = ordered[0];
+    const last = ordered.at(-1);
+    if (!first || !last) return [];
+    const opening = ordered.flatMap((row) => row.opening ? [row.opening] : []).sort((a, b) => Date.parse(a[0]) - Date.parse(b[0]))[0] ?? first.current;
+    const deltas: number[] = [];
+    for (let index = 1; index < ordered.length; index += 1) {
+      const prior = ordered[index - 1]!.current;
+      const current = ordered[index]!.current;
+      const priorValue = market === "moneyline" ? probabilityValue(market, prior) : axisValue(market, prior);
+      const currentValue = market === "moneyline" ? probabilityValue(market, current) : axisValue(market, current);
+      if (priorValue !== null && currentValue !== null && Math.abs(currentValue - priorValue) > 1e-9) deltas.push(currentValue - priorValue);
+    }
+    let reversalCount = 0;
+    for (let index = 1; index < deltas.length; index += 1) if (Math.sign(deltas[index]!) !== Math.sign(deltas[index - 1]!)) reversalCount += 1;
+    return [{
+      source,
+      sourceClass: NAMED.has(source) ? "named" : "retail",
+      openingAxis: axisValue(market, opening),
+      currentAxis: axisValue(market, last.current),
+      openingProbability: probabilityValue(market, opening),
+      currentProbability: probabilityValue(market, last.current),
+      moveCount: deltas.length,
+      reversalCount,
+      firstMoveAt: deltas.length ? ordered[1]?.current[0] ?? last.current[0] : null,
+    }];
+  });
+}
+
+function signedSplit(read: SplitRead, axis: "margin" | "total"): number {
+  const positive = axis === "margin" ? read.side === "second" : read.side === "first";
+  return (positive ? 1 : -1) * Math.abs(read.gapPp);
+}
+
+function addTrailFeatures(
+  output: Record<string, number>,
+  prefix: string,
+  trails: Trail[],
+  kickoffAt: string,
+  detailed: boolean,
+): void {
+  for (const sourceClass of ["all", "named", "retail"] as const) {
+    const selected = sourceClass === "all" ? trails : trails.filter((trail) => trail.sourceClass === sourceClass);
+    const currentAxis = median(selected.flatMap((trail) => trail.currentAxis === null ? [] : [trail.currentAxis]));
+    const openingAxis = median(selected.flatMap((trail) => trail.openingAxis === null ? [] : [trail.openingAxis]));
+    const currentProbability = median(selected.map((trail) => trail.currentProbability));
+    const openingProbability = median(selected.map((trail) => trail.openingProbability));
+    if (currentAxis !== null) output[`${prefix}_${sourceClass}_current_axis`] = currentAxis;
+    if (openingAxis !== null) output[`${prefix}_${sourceClass}_opening_axis`] = openingAxis;
+    if (currentAxis !== null && openingAxis !== null) output[`${prefix}_${sourceClass}_axis_move`] = currentAxis - openingAxis;
+    if (currentProbability !== null) output[`${prefix}_${sourceClass}_current_probability`] = currentProbability;
+    if (openingProbability !== null) output[`${prefix}_${sourceClass}_opening_probability`] = openingProbability;
+    if (currentProbability !== null && openingProbability !== null) output[`${prefix}_${sourceClass}_probability_move`] = currentProbability - openingProbability;
+    output[`${prefix}_${sourceClass}_source_count`] = selected.length;
+    output[`${prefix}_${sourceClass}_move_count`] = selected.reduce((sum, trail) => sum + trail.moveCount, 0);
+    output[`${prefix}_${sourceClass}_reversal_count`] = selected.reduce((sum, trail) => sum + trail.reversalCount, 0);
+    output[`${prefix}_${sourceClass}_late_6h_count`] = selected.filter((trail) => trail.firstMoveAt && (Date.parse(kickoffAt) - Date.parse(trail.firstMoveAt)) / 60_000 <= 360).length;
+  }
+  if (!detailed) return;
+  const axisDispersion = standardDeviation(trails.flatMap((trail) => trail.currentAxis === null ? [] : [trail.currentAxis]));
+  const probabilityDispersion = standardDeviation(trails.map((trail) => trail.currentProbability));
+  if (axisDispersion !== null) output[`${prefix}_current_axis_dispersion`] = axisDispersion;
+  if (probabilityDispersion !== null) output[`${prefix}_current_probability_dispersion`] = probabilityDispersion;
+  for (const source of ["circa", "pinnacle", "bookmaker"] as const) {
+    const trail = trails.find((candidate) => candidate.source === source);
+    if (!trail) continue;
+    if (trail.currentAxis !== null) output[`${prefix}_${source}_current_axis`] = trail.currentAxis;
+    if (trail.openingAxis !== null) output[`${prefix}_${source}_opening_axis`] = trail.openingAxis;
+    if (trail.currentAxis !== null && trail.openingAxis !== null) output[`${prefix}_${source}_axis_move`] = trail.currentAxis - trail.openingAxis;
+    output[`${prefix}_${source}_current_probability`] = trail.currentProbability;
+    output[`${prefix}_${source}_probability_move`] = trail.currentProbability - trail.openingProbability;
+    output[`${prefix}_${source}_move_count`] = trail.moveCount;
+    output[`${prefix}_${source}_reversal_count`] = trail.reversalCount;
+  }
+  const named = trails.filter((trail) => trail.sourceClass === "named");
+  const retail = trails.filter((trail) => trail.sourceClass === "retail");
+  const namedAxisMove = average(named.flatMap((trail) => trail.currentAxis === null || trail.openingAxis === null ? [] : [trail.currentAxis - trail.openingAxis]));
+  const retailAxisMove = average(retail.flatMap((trail) => trail.currentAxis === null || trail.openingAxis === null ? [] : [trail.currentAxis - trail.openingAxis]));
+  const namedProbabilityMove = average(named.map((trail) => trail.currentProbability - trail.openingProbability));
+  const retailProbabilityMove = average(retail.map((trail) => trail.currentProbability - trail.openingProbability));
+  if (namedAxisMove !== null && retailAxisMove !== null) output[`${prefix}_named_retail_axis_move_interaction`] = namedAxisMove * retailAxisMove;
+  if (namedProbabilityMove !== null && retailProbabilityMove !== null) output[`${prefix}_named_retail_probability_move_interaction`] = namedProbabilityMove * retailProbabilityMove;
+  const firstNamed = named.flatMap((trail) => trail.firstMoveAt ? [{ source: trail.source, at: Date.parse(trail.firstMoveAt) }] : []).sort((a, b) => a.at - b.at)[0];
+  const firstRetail = retail.flatMap((trail) => trail.firstMoveAt ? [{ at: Date.parse(trail.firstMoveAt) }] : []).sort((a, b) => a.at - b.at)[0];
+  if (firstNamed) output[`${prefix}_named_leader_${firstNamed.source}`] = 1;
+  if (firstNamed && firstRetail) output[`${prefix}_named_lead_minutes`] = (firstRetail.at - firstNamed.at) / 60_000;
+}
+
+function rawSplitFeatures(histories: CfbForwardMarketHistoryEvidence[], market: Market, axis: "margin" | "total"): Record<string, number> {
+  const output: Record<string, number> = {};
+  const buckets = new Map<string, Array<{ at: string; signedGap: number; signedMoney: number; signedTickets: number; provenance: string }>>();
+  for (const history of histories) {
+    const publicSplit = history.payload.market.playbookSplits?.[market] ?? null;
+    if (publicSplit) {
+      const firstMoney = market === "total" ? publicSplit.overMoneyPct : publicSplit.awayMoneyPct;
+      const firstTickets = market === "total" ? publicSplit.overBetsPct : publicSplit.awayBetsPct;
+      const secondMoney = market === "total" ? publicSplit.underMoneyPct : publicSplit.homeMoneyPct;
+      const secondTickets = market === "total" ? publicSplit.underBetsPct : publicSplit.homeBetsPct;
+      if ([firstMoney, firstTickets, secondMoney, secondTickets].every((value) => value !== null)) {
+        const sign = axis === "margin" ? -1 : 1;
+        const signedMoney = sign * (firstMoney! - secondMoney!);
+        const signedTickets = sign * (firstTickets! - secondTickets!);
+        buckets.set("public", [...(buckets.get("public") ?? []), { at: publicSplit.capturedAt, signedGap: signedMoney - signedTickets, signedMoney, signedTickets, provenance: "public" }]);
+      }
+    }
+    for (const record of history.payload.market.sharpApiSplits ?? []) {
+      const value = market === "total" ? record.total : market === "moneyline" ? record.moneyline : record.spread;
+      if (!value) continue;
+      const first = market === "total" ? value.over : value.away;
+      const second = market === "total" ? value.under : value.home;
+      const sign = axis === "margin" ? -1 : 1;
+      const signedMoney = sign * (first.moneyPct - second.moneyPct);
+      const signedTickets = sign * (first.ticketsPct - second.ticketsPct);
+      const provenance = record.sportsbook === "circa" && record.sourceSemantics === "sharp_adjacent" ? "named_sharp" : `fallback_${canonical(record.sportsbook)}`;
+      buckets.set(provenance, [...(buckets.get(provenance) ?? []), { at: record.capturedAt, signedGap: signedMoney - signedTickets, signedMoney, signedTickets, provenance }]);
+    }
+  }
+  for (const [provenance, values] of buckets) {
+    const ordered = values.sort((a, b) => Date.parse(a.at) - Date.parse(b.at));
+    const first = ordered[0]!;
+    const last = ordered.at(-1)!;
+    output[`raw_split_${provenance}_gap`] = last.signedGap;
+    output[`raw_split_${provenance}_money`] = last.signedMoney;
+    output[`raw_split_${provenance}_tickets`] = last.signedTickets;
+    output[`raw_split_${provenance}_gap_change`] = last.signedGap - first.signedGap;
+    output[`raw_split_${provenance}_money_change`] = last.signedMoney - first.signedMoney;
+    output[`raw_split_${provenance}_observations`] = ordered.length;
+  }
+  return output;
+}
+
+function residualFeatures(game: Game, axis: "margin" | "total", detailed = true): Record<string, number> {
+  const output: Record<string, number> = {
+    independent_margin: game.independent.expectedMarginHome,
+    independent_margin_abs: Math.abs(game.independent.expectedMarginHome),
+    independent_total: game.independent.expectedTotal,
+    both_fbs: Number(game.awayFbs && game.homeFbs),
+    fbs_mismatch: Number(game.awayFbs !== game.homeFbs),
+    same_conference: Number(game.awayConferenceId !== null && game.awayConferenceId === game.homeConferenceId),
+  };
+  const primaryMarket: Market = axis === "margin" ? "spread" : "total";
+  const primaryTrails = marketTrails(game.histories, primaryMarket);
+  addTrailFeatures(output, primaryMarket, primaryTrails, game.kickoffAt, detailed);
+  if (axis === "margin") addTrailFeatures(output, "moneyline", marketTrails(game.histories, "moneyline"), game.kickoffAt, detailed);
+  const primaryCurrent = median(primaryTrails.flatMap((trail) => trail.currentAxis === null ? [] : [trail.currentAxis]));
+  const primaryOpening = median(primaryTrails.flatMap((trail) => trail.openingAxis === null ? [] : [trail.openingAxis]));
+  const independent = axis === "margin" ? game.independent.expectedMarginHome : game.independent.expectedTotal;
+  if (primaryCurrent !== null) output.market_disagreement = primaryCurrent - independent;
+  if (primaryOpening !== null) output.opening_disagreement = primaryOpening - independent;
+  if (primaryCurrent !== null && primaryOpening !== null) output.market_path = primaryCurrent - primaryOpening;
+  const reads = splitReads(game.histories, primaryMarket);
+  for (const provenance of ["named_sharp", "fallback", "public"] as const) {
+    const selected = reads.filter((read) => read.provenance === provenance);
+    const signed = average(selected.map((read) => signedSplit(read, axis)));
+    const acceleration = average(selected.flatMap((read) => read.moneyAccelerationPp === null ? [] : [Math.sign(signedSplit(read, axis)) * Math.abs(read.moneyAccelerationPp)]));
+    if (signed !== null) output[`split_${provenance}`] = signed;
+    if (acceleration !== null) output[`split_${provenance}_acceleration`] = acceleration;
+    output[`split_${provenance}_count`] = selected.length;
+    if (signed !== null && output.market_path !== undefined) output[`split_${provenance}_path_alignment`] = signed * output.market_path;
+    if (signed !== null && output.market_disagreement !== undefined) output[`split_${provenance}_disagreement_alignment`] = signed * output.market_disagreement;
+  }
+  if (detailed) Object.assign(output, rawSplitFeatures(game.histories, primaryMarket, axis));
+  const namedCurrent = output[`${primaryMarket}_named_current_axis`];
+  const retailCurrent = output[`${primaryMarket}_retail_current_axis`];
+  if (namedCurrent !== undefined && retailCurrent !== undefined) output.named_retail_axis_gap = namedCurrent - retailCurrent;
+  const namedMove = output[`${primaryMarket}_named_axis_move`];
+  const retailMove = output[`${primaryMarket}_retail_axis_move`];
+  if (namedMove !== undefined && retailMove !== undefined) output.named_retail_move_product = namedMove * retailMove;
+  return output;
+}
+
+function solveLinear(matrix: number[][], vector: number[]): number[] {
+  const augmented = matrix.map((row, index) => [...row, vector[index]!]);
+  for (let column = 0; column < matrix.length; column += 1) {
+    let pivot = column;
+    for (let row = column + 1; row < matrix.length; row += 1) if (Math.abs(augmented[row]![column]!) > Math.abs(augmented[pivot]![column]!)) pivot = row;
+    [augmented[column], augmented[pivot]] = [augmented[pivot]!, augmented[column]!];
+    const divisor = augmented[column]![column]!;
+    if (Math.abs(divisor) < 1e-12) continue;
+    for (let entry = column; entry <= matrix.length; entry += 1) augmented[column]![entry] /= divisor;
+    for (let row = 0; row < matrix.length; row += 1) {
+      if (row === column) continue;
+      const factor = augmented[row]![column]!;
+      for (let entry = column; entry <= matrix.length; entry += 1) augmented[row]![entry] -= factor * augmented[column]![entry]!;
+    }
+  }
+  return augmented.map((row, index) => Number.isFinite(row[matrix.length]!) ? row[matrix.length]! : index === 0 ? average(vector) ?? 0 : 0);
+}
+
+function fitRidge(rows: ResidualRow[], axis: "margin" | "total", lambda: number): RidgeModel {
+  const featureKey = axis === "margin" ? "marginFeatures" : "totalFeatures";
+  const names = [...new Set(rows.flatMap((row) => Object.keys(row[featureKey])))].sort();
+  const means = names.map((name) => average(rows.flatMap((row) => row[featureKey][name] === undefined ? [] : [row[featureKey][name]!])) ?? 0);
+  const scales = names.map((name, index) => {
+    const values = rows.flatMap((row) => row[featureKey][name] === undefined ? [] : [row[featureKey][name]!]);
+    const mean = means[index]!;
+    const variance = values.length > 1 ? values.reduce((sum, value) => sum + (value - mean) ** 2, 0) / (values.length - 1) : 0;
+    return Math.sqrt(variance) || 1;
+  });
+  const x = rows.map((row) => [1, ...names.map((name, index) => ((row[featureKey][name] ?? means[index]!) - means[index]!) / scales[index]!) ]);
+  const y = rows.map((row) => axis === "margin" ? row.actualMargin - row.game.independent.expectedMarginHome : row.actualTotal - row.game.independent.expectedTotal);
+  const size = names.length + 1;
+  const xtx = Array.from({ length: size }, () => Array.from({ length: size }, () => 0));
+  const xty = Array.from({ length: size }, () => 0);
+  for (let row = 0; row < x.length; row += 1) for (let first = 0; first < size; first += 1) {
+    xty[first] += x[row]![first]! * y[row]!;
+    for (let second = 0; second < size; second += 1) xtx[first]![second] += x[row]![first]! * x[row]![second]!;
+  }
+  for (let index = 1; index < size; index += 1) xtx[index]![index] += lambda;
+  return { names, means, scales, beta: solveLinear(xtx, xty) };
+}
+
+function predictRidge(model: RidgeModel, features: Record<string, number>): number {
+  return model.beta[0]! + model.names.reduce((sum, name, index) => sum + model.beta[index + 1]! * (((features[name] ?? model.means[index]!) - model.means[index]!) / model.scales[index]!), 0);
+}
+
+function sigmoid(value: number): number {
+  if (value >= 0) return 1 / (1 + Math.exp(-Math.min(value, 35)));
+  const exponential = Math.exp(Math.max(value, -35));
+  return exponential / (1 + exponential);
+}
+
+function fitPosterior(
+  rows: ResidualRow[],
+  axis: "margin" | "total",
+  lambda: number,
+): RidgeModel {
+  const market = axis === "margin" ? "spread" : "total";
+  const featureKey = axis === "margin" ? "marginFeatures" : "totalFeatures";
+  const eligible = rows.filter((row) => row[featureKey][`${market}_all_current_axis`] !== undefined);
+  const names = [...new Set(eligible.flatMap((row) => Object.keys(row[featureKey])))].sort();
+  const means = names.map((name) => average(eligible.flatMap((row) => row[featureKey][name] === undefined ? [] : [row[featureKey][name]!])) ?? 0);
+  const scales = names.map((name, index) => {
+    const values = eligible.flatMap((row) => row[featureKey][name] === undefined ? [] : [row[featureKey][name]!]);
+    const mean = means[index]!;
+    const variance = values.length > 1 ? values.reduce((sum, value) => sum + (value - mean) ** 2, 0) / (values.length - 1) : 0;
+    return Math.sqrt(variance) || 1;
+  });
+  const x = eligible.map((row) => [1, ...names.map((name, index) => ((row[featureKey][name] ?? means[index]!) - means[index]!) / scales[index]!) ]);
+  const y = eligible.map((row) => {
+    const active = axis === "margin" ? row.game.authoritative.expectedMarginHome : row.game.authoritative.expectedTotal;
+    const actual = axis === "margin" ? row.actualMargin : row.actualTotal;
+    const boundary = row[featureKey][`${market}_all_current_axis`]!;
+    const alternative = 2 * boundary - active;
+    return Math.abs(alternative - actual) < Math.abs(active - actual) ? 1 : 0;
+  });
+  const beta = Array.from({ length: names.length + 1 }, () => 0);
+  const prevalence = Math.min(0.99, Math.max(0.01, (average(y) ?? 0.5)));
+  beta[0] = Math.log(prevalence / (1 - prevalence));
+  for (let iteration = 0; iteration < 30; iteration += 1) {
+    const size = beta.length;
+    const hessian = Array.from({ length: size }, () => Array.from({ length: size }, () => 0));
+    const gradient = Array.from({ length: size }, () => 0);
+    for (let row = 0; row < x.length; row += 1) {
+      const probability = sigmoid(x[row]!.reduce((sum, value, index) => sum + value * beta[index]!, 0));
+      const weight = Math.max(1e-6, probability * (1 - probability));
+      for (let first = 0; first < size; first += 1) {
+        gradient[first] += x[row]![first]! * (y[row]! - probability);
+        for (let second = 0; second < size; second += 1) hessian[first]![second] += x[row]![first]! * weight * x[row]![second]!;
+      }
+    }
+    for (let index = 1; index < beta.length; index += 1) {
+      hessian[index]![index] += lambda;
+      gradient[index] -= lambda * beta[index]!;
+    }
+    const step = solveLinear(hessian, gradient);
+    let largest = 0;
+    for (let index = 0; index < beta.length; index += 1) { beta[index] += step[index]!; largest = Math.max(largest, Math.abs(step[index]!)); }
+    if (largest < 1e-7) break;
+  }
+  return { names, means, scales, beta, prior: prevalence };
+}
+
+function predictPosterior(model: RidgeModel, features: Record<string, number>): number {
+  return sigmoid(model.beta[0]! + model.names.reduce((sum, name, index) => sum + model.beta[index + 1]! * (((features[name] ?? model.means[index]!) - model.means[index]!) / model.scales[index]!), 0));
+}
+
+function posteriorAxis(row: ResidualRow, axis: "margin" | "total", model: RidgeModel): number {
+  const market = axis === "margin" ? "spread" : "total";
+  const features = axis === "margin" ? row.marginFeatures : row.totalFeatures;
+  const boundary = features[`${market}_all_current_axis`];
+  const active = axis === "margin" ? row.game.authoritative.expectedMarginHome : row.game.authoritative.expectedTotal;
+  if (boundary === undefined) return active;
+  const alternative = 2 * boundary - active;
+  const probability = predictPosterior(model, features);
+  return (1 - probability) * active + probability * alternative;
+}
+
+function logit(value: number): number {
+  const bounded = Math.min(1 - 1e-6, Math.max(1e-6, value));
+  return Math.log(bounded / (1 - bounded));
+}
+
+function posteriorResidualAxis(row: ResidualRow, axis: "margin" | "total", model: RidgeModel, evidenceScale = 1): number {
+  const market = axis === "margin" ? "spread" : "total";
+  const features = axis === "margin" ? row.marginFeatures : row.totalFeatures;
+  const boundary = features[`${market}_all_current_axis`];
+  const active = axis === "margin" ? row.game.authoritative.expectedMarginHome : row.game.authoritative.expectedTotal;
+  if (boundary === undefined) return active;
+  const alternative = 2 * boundary - active;
+  const posterior = predictPosterior(model, features);
+  const prior = model.prior ?? 0.5;
+  const strength = Math.tanh(evidenceScale * (logit(posterior) - logit(prior)));
+  return active + strength * (alternative - active);
+}
+
+function posteriorFlipOnlyAxis(row: ResidualRow, axis: "margin" | "total", model: RidgeModel, evidenceScale = 1): number {
+  const market = axis === "margin" ? "spread" : "total";
+  const features = axis === "margin" ? row.marginFeatures : row.totalFeatures;
+  const boundary = features[`${market}_all_current_axis`];
+  const active = axis === "margin" ? row.game.authoritative.expectedMarginHome : row.game.authoritative.expectedTotal;
+  if (boundary === undefined) return active;
+  const proposed = posteriorResidualAxis(row, axis, model, evidenceScale);
+  if (lineWinner(proposed, boundary) === lineWinner(active, boundary)) return active;
+  return 2 * boundary - active;
+}
+
+function constrainedMarketFeatures(game: Game, axis: "margin" | "total"): Record<string, number> {
+  const raw = residualFeatures(game, axis, false);
+  const market = axis === "margin" ? "spread" : "total";
+  const names = [
+    axis === "margin" ? "independent_margin" : "independent_total",
+    "independent_margin_abs",
+    "both_fbs",
+    "fbs_mismatch",
+    "same_conference",
+    "market_disagreement",
+    "opening_disagreement",
+    "market_path",
+    `${market}_all_current_axis`,
+    `${market}_all_axis_move`,
+    `${market}_all_probability_move`,
+    `${market}_all_reversal_count`,
+    `${market}_all_late_6h_count`,
+    `${market}_named_axis_move`,
+    `${market}_named_probability_move`,
+    `${market}_named_reversal_count`,
+    `${market}_named_late_6h_count`,
+    `${market}_retail_axis_move`,
+    `${market}_retail_probability_move`,
+    `${market}_retail_reversal_count`,
+    `${market}_retail_late_6h_count`,
+    "named_retail_axis_gap",
+    "named_retail_move_product",
+    "split_named_sharp",
+    "split_named_sharp_acceleration",
+    "split_named_sharp_path_alignment",
+    "split_fallback",
+    "split_fallback_acceleration",
+    "split_fallback_path_alignment",
+    "split_public",
+    "split_public_acceleration",
+    "split_public_path_alignment",
+  ];
+  return Object.fromEntries(names.flatMap((name) => raw[name] === undefined ? [] : [[name, raw[name]!]]));
+}
+
+function runConstrainedPosteriorResidualTournament(games: Game[]) {
+  const rows: ResidualRow[] = games.map((game) => ({
+    game,
+    marginFeatures: constrainedMarketFeatures(game, "margin"),
+    totalFeatures: constrainedMarketFeatures(game, "total"),
+    actualMargin: game.homeScore - game.awayScore,
+    actualTotal: game.homeScore + game.awayScore,
+  }));
+  const selectionTrain = rows.filter((row) => row.game.date <= "2026-09-20");
+  const selection = rows.filter((row) => row.game.date >= "2026-09-25" && row.game.date <= "2026-09-27");
+  const confirmation = rows.filter((row) => row.game.date >= "2026-10-02" && row.game.date <= "2026-10-04");
+  const microHoldout = rows.filter((row) => row.game.date >= "2026-10-07");
+  const configs = [10, 30, 100, 300, 1000, 3000].flatMap((lambda) =>
+    [0.1, 0.25, 0.5, 0.75, 1].map((evidenceScale) => ({ lambda, evidenceScale })));
+  const baselineSelection = residualMetrics(selection, (row) => row.game.authoritative.expectedMarginHome, (row) => row.game.authoritative.expectedTotal);
+  const totalCandidates = configs.map((config) => {
+    const model = fitPosterior(selectionTrain, "total", config.lambda);
+    const metrics = residualMetrics(selection, (row) => row.game.authoritative.expectedMarginHome, (row) => posteriorFlipOnlyAxis(row, "total", model, config.evidenceScale));
+    const improvesBoth = metrics.totalMae <= baselineSelection.totalMae &&
+      (metrics.total.accuracy ?? 0) > (baselineSelection.total.accuracy ?? 0);
+    return { config, metrics, improvesBoth, objective: metrics.totalMae + 6 * (1 - (metrics.total.accuracy ?? 0)) };
+  }).sort((a, b) => Number(b.improvesBoth) - Number(a.improvesBoth) ||
+    (a.improvesBoth && b.improvesBoth ? a.metrics.totalMae - b.metrics.totalMae : a.objective - b.objective) ||
+    a.metrics.totalMae - b.metrics.totalMae);
+  const selectedTotal = totalCandidates[0]!;
+  const fitRows = [...selectionTrain, ...selection];
+  const totalModel = fitPosterior(fitRows, "total", selectedTotal.config.lambda);
+  const totalPrediction = (row: ResidualRow) => posteriorFlipOnlyAxis(row, "total", totalModel, selectedTotal.config.evidenceScale);
+  const evaluateBlock = (blockRows: ResidualRow[]) => ({
+    active: residualMetrics(blockRows, (row) => row.game.authoritative.expectedMarginHome, (row) => row.game.authoritative.expectedTotal),
+    independent: residualMetrics(blockRows, (row) => row.game.independent.expectedMarginHome, (row) => row.game.independent.expectedTotal),
+    candidate: residualMetrics(blockRows, (row) => row.game.authoritative.expectedMarginHome, totalPrediction),
+  });
+  return {
+    release: "cfb_constrained_total_market_log_odds_residual_tournament_2026_10_08_r1",
+    mode: "select_only_zero_writes_zero_provider_calls",
+    architecture: "continuous_cfb_specific_evidence_posterior_with_full_conviction_preserving_flip_at_natural_side_boundary",
+    split: { selectionTrain: selectionTrain.length, selection: selection.length, confirmation: confirmation.length, microHoldout: microHoldout.length },
+    selectedTotal,
+    selectionBaseline: baselineSelection,
+    confirmation: evaluateBlock(confirmation),
+    microHoldout: evaluateBlock(microHoldout),
+    topTotalCandidates: totalCandidates.slice(0, 8),
+    featureCount: fitPosterior(fitRows, "total", selectedTotal.config.lambda).names.length,
+  };
+}
+
+function runConstrainedContinuousResidualTournament(games: Game[]) {
+  const rows: ResidualRow[] = games.map((game) => ({
+    game,
+    marginFeatures: constrainedMarketFeatures(game, "margin"),
+    totalFeatures: constrainedMarketFeatures(game, "total"),
+    actualMargin: game.homeScore - game.awayScore,
+    actualTotal: game.homeScore + game.awayScore,
+  }));
+  const selectionTrain = rows.filter((row) => row.game.date <= "2026-09-20");
+  const selection = rows.filter((row) => row.game.date >= "2026-09-25" && row.game.date <= "2026-09-27");
+  const confirmation = rows.filter((row) => row.game.date >= "2026-10-02" && row.game.date <= "2026-10-04");
+  const microHoldout = rows.filter((row) => row.game.date >= "2026-10-07");
+  const configs = [10, 30, 100, 300, 1000, 3000].flatMap((lambda) =>
+    [0.1, 0.25, 0.5, 0.75, 1].map((residualScale) => ({ lambda, residualScale })));
+  const baselineSelection = residualMetrics(selection, (row) => row.game.independent.expectedMarginHome, (row) => row.game.independent.expectedTotal);
+  const totalCandidates = configs.map((config) => {
+    const model = fitRidge(selectionTrain, "total", config.lambda);
+    const totalPrediction = (row: ResidualRow) => row.game.independent.expectedTotal + config.residualScale * predictRidge(model, row.totalFeatures);
+    const metrics = residualMetrics(selection, (row) => row.game.independent.expectedMarginHome, totalPrediction);
+    return { config, metrics, objective: metrics.totalMae + 6 * (1 - (metrics.total.accuracy ?? 0)) };
+  }).sort((a, b) => a.objective - b.objective || a.metrics.totalMae - b.metrics.totalMae);
+  const selectedTotal = totalCandidates[0]!;
+  const fitRows = [...selectionTrain, ...selection];
+  const totalModel = fitRidge(fitRows, "total", selectedTotal.config.lambda);
+  const totalPrediction = (row: ResidualRow) => row.game.independent.expectedTotal + selectedTotal.config.residualScale * predictRidge(totalModel, row.totalFeatures);
+  const evaluateBlock = (blockRows: ResidualRow[]) => ({
+    active: residualMetrics(blockRows, (row) => row.game.authoritative.expectedMarginHome, (row) => row.game.authoritative.expectedTotal),
+    independent: residualMetrics(blockRows, (row) => row.game.independent.expectedMarginHome, (row) => row.game.independent.expectedTotal),
+    candidate: residualMetrics(blockRows, (row) => row.game.independent.expectedMarginHome, totalPrediction),
+  });
+  return {
+    release: "cfb_constrained_total_continuous_residual_tournament_2026_10_08_r1",
+    mode: "select_only_zero_writes_zero_provider_calls",
+    architecture: "continuous_regularized_independent_score_error_from_cfb_specific_market_evidence_no_market_target_no_thresholds",
+    split: { selectionTrain: selectionTrain.length, selection: selection.length, confirmation: confirmation.length, microHoldout: microHoldout.length },
+    selectedTotal,
+    selectionBaseline: baselineSelection,
+    confirmation: evaluateBlock(confirmation),
+    microHoldout: evaluateBlock(microHoldout),
+    topTotalCandidates: totalCandidates.slice(0, 8),
+    featureCount: totalModel.names.length,
+  };
+}
+
+function interventionSummary(
+  rows: ResidualRow[],
+  market: Market,
+  activePrediction: (row: ResidualRow) => number,
+  candidatePrediction: (row: ResidualRow) => number,
+) {
+  const eligible = rows.flatMap((row) => {
+    const line = market === "moneyline" ? 0 : row.game.targetLines[market];
+    if (line === null) return [];
+    const boundary = market === "spread" ? -line : line;
+    const actual = market === "total" ? row.actualTotal : row.actualMargin;
+    const active = activePrediction(row);
+    const candidate = candidatePrediction(row);
+    const activeSide = lineWinner(active, boundary);
+    const candidateSide = lineWinner(candidate, boundary);
+    const actualSide = lineWinner(actual, boundary);
+    return [{
+      changed: activeSide !== candidateSide,
+      correction: activeSide !== candidateSide && candidateSide === actualSide && activeSide !== actualSide,
+      harm: activeSide !== candidateSide && activeSide === actualSide && candidateSide !== actualSide,
+      activeDistance: Math.abs(active - boundary),
+      candidateDistance: Math.abs(candidate - boundary),
+      shift: candidate - active,
+    }];
+  });
+  const changed = eligible.filter((row) => row.changed);
+  return {
+    eligible: eligible.length,
+    flips: changed.length,
+    corrections: changed.filter((row) => row.correction).length,
+    harms: changed.filter((row) => row.harm).length,
+    meanAbsoluteShift: average(eligible.map((row) => Math.abs(row.shift))),
+    maximumAbsoluteShift: Math.max(0, ...eligible.map((row) => Math.abs(row.shift))),
+    meanActiveDistanceFromLine: average(eligible.map((row) => row.activeDistance)),
+    meanCandidateDistanceFromLine: average(eligible.map((row) => row.candidateDistance)),
+  };
+}
+
+function evidenceRegimeSummary(
+  rows: ResidualRow[],
+  market: Market,
+  activePrediction: (row: ResidualRow) => number,
+  rawEvidencePrediction: (row: ResidualRow) => number,
+  finalPrediction: (row: ResidualRow) => number,
+) {
+  const classified = rows.flatMap((row) => {
+    const line = market === "moneyline" ? 0 : row.game.targetLines[market];
+    if (line === null) return [];
+    const boundary = market === "spread" ? -line : line;
+    const actual = market === "total" ? row.actualTotal : row.actualMargin;
+    const active = activePrediction(row);
+    const raw = rawEvidencePrediction(row);
+    const final = finalPrediction(row);
+    const activeSide = lineWinner(active, boundary);
+    const rawSide = lineWinner(raw, boundary);
+    const finalSide = lineWinner(final, boundary);
+    const actualSide = lineWinner(actual, boundary);
+    const evidenceDistanceDelta = Math.abs(raw - boundary) - Math.abs(active - boundary);
+    const regime = rawSide !== activeSide
+      ? "flip"
+      : evidenceDistanceDelta > 1e-9
+        ? "confirmation"
+        : evidenceDistanceDelta < -1e-9
+          ? "resistance"
+          : "neutral";
+    return [{ regime, activeCorrect: activeSide === actualSide, finalCorrect: finalSide === actualSide, evidenceDistanceDelta }];
+  });
+  return Object.fromEntries(["confirmation", "resistance", "flip", "neutral"].map((regime) => {
+    const selected = classified.filter((row) => row.regime === regime);
+    const activeWins = selected.filter((row) => row.activeCorrect).length;
+    const finalWins = selected.filter((row) => row.finalCorrect).length;
+    return [regime, {
+      games: selected.length,
+      activeWins,
+      activeLosses: selected.length - activeWins,
+      activeAccuracy: selected.length ? activeWins / selected.length : null,
+      finalWins,
+      finalLosses: selected.length - finalWins,
+      finalAccuracy: selected.length ? finalWins / selected.length : null,
+      meanEvidenceDistanceDelta: average(selected.map((row) => row.evidenceDistanceDelta)),
+    }];
+  }));
+}
+
+function runCombinedMarketReaderTournament(games: Game[]) {
+  const rows: ResidualRow[] = games.map((game) => ({
+    game,
+    marginFeatures: residualFeatures(game, "margin", false),
+    totalFeatures: constrainedMarketFeatures(game, "total"),
+    actualMargin: game.homeScore - game.awayScore,
+    actualTotal: game.homeScore + game.awayScore,
+  }));
+  const developmentTrain = rows.filter((row) => row.game.date <= "2026-09-20");
+  const developmentTest = rows.filter((row) => row.game.date >= "2026-09-25" && row.game.date <= "2026-09-27");
+  const confirmation = rows.filter((row) => row.game.date >= "2026-10-02" && row.game.date <= "2026-10-04");
+  const microHoldout = rows.filter((row) => row.game.date >= "2026-10-07");
+  const evaluateFold = (training: ResidualRow[], testing: ResidualRow[]) => {
+    const marginModel = fitPosterior(training, "margin", 1000);
+    const totalModel = fitPosterior(training, "total", 30);
+    const activeMargin = (row: ResidualRow) => row.game.authoritative.expectedMarginHome;
+    const activeTotal = (row: ResidualRow) => row.game.authoritative.expectedTotal;
+    const candidateMargin = (row: ResidualRow) => posteriorResidualAxis(row, "margin", marginModel, 1);
+    const rawEvidenceTotal = (row: ResidualRow) => posteriorResidualAxis(row, "total", totalModel, 1);
+    const candidateTotal = (row: ResidualRow) => posteriorFlipOnlyAxis(row, "total", totalModel, 1);
+    const candidateScores = testing.map((row) => {
+      const margin = candidateMargin(row);
+      const total = candidateTotal(row);
+      return { home: (total + margin) / 2, away: (total - margin) / 2 };
+    });
+    return {
+      trainingGames: training.length,
+      testingGames: testing.length,
+      active: residualMetrics(testing, activeMargin, activeTotal),
+      candidate: residualMetrics(testing, candidateMargin, candidateTotal),
+      interventions: {
+        moneyline: interventionSummary(testing, "moneyline", activeMargin, candidateMargin),
+        spread: interventionSummary(testing, "spread", activeMargin, candidateMargin),
+        total: interventionSummary(testing, "total", activeTotal, candidateTotal),
+      },
+      evidenceRegimes: {
+        moneyline: evidenceRegimeSummary(testing, "moneyline", activeMargin, candidateMargin, candidateMargin),
+        spread: evidenceRegimeSummary(testing, "spread", activeMargin, candidateMargin, candidateMargin),
+        total: evidenceRegimeSummary(testing, "total", activeTotal, rawEvidenceTotal, candidateTotal),
+      },
+      coherence: {
+        negativeTeamScores: candidateScores.filter((score) => score.home < 0 || score.away < 0).length,
+        minimumTeamScore: Math.min(...candidateScores.flatMap((score) => [score.home, score.away])),
+        maximumTeamScore: Math.max(...candidateScores.flatMap((score) => [score.home, score.away])),
+      },
+    };
+  };
+  return {
+    release: "cfb_combined_independent_market_reader_tournament_2026_10_08_r1",
+    mode: "select_only_zero_writes_zero_provider_calls",
+    architecture: {
+      margin: "continuous_log_odds_evidence_relative_to_historical_prior_no_market_center_gravity",
+      total: "continuous_evidence_posterior_with_full_conviction_preserving_flip_at_natural_side_boundary",
+      score: "single_home_away_pair_derived_from_final_margin_and_total",
+    },
+    fixedDevelopmentSelectedConfiguration: {
+      margin: { lambda: 1000, evidenceScale: 1 },
+      total: { lambda: 30, evidenceScale: 1 },
+    },
+    rollingOrigin: {
+      development: evaluateFold(developmentTrain, developmentTest),
+      confirmation: evaluateFold([...developmentTrain, ...developmentTest], confirmation),
+      microHoldout: evaluateFold([...developmentTrain, ...developmentTest, ...confirmation], microHoldout),
+    },
+  };
+}
+
+type ForwardPrediction = {
+  date: string;
+  gameId: string;
+  row: ResidualRow;
+  activeMargin: number;
+  activeTotal: number;
+  candidateMargin: number;
+  candidateTotal: number;
+};
+
+function forwardMetrics(rows: ForwardPrediction[], candidate: boolean) {
+  const predictions = rows.map((prediction) => ({
+    row: prediction.row,
+    margin: candidate ? prediction.candidateMargin : prediction.activeMargin,
+    total: candidate ? prediction.candidateTotal : prediction.activeTotal,
+  }));
+  const marginMae = average(predictions.map(({ row, margin }) => Math.abs(margin - row.actualMargin))) ?? 0;
+  const totalMae = average(predictions.map(({ row, total }) => Math.abs(total - row.actualTotal))) ?? 0;
+  const teamScoreMae = average(predictions.flatMap(({ row, margin, total }) => {
+    const home = (total + margin) / 2;
+    const away = (total - margin) / 2;
+    return [Math.abs(home - row.game.homeScore), Math.abs(away - row.game.awayScore)];
+  })) ?? 0;
+  const moneyline = accuracy(predictions.map(({ row, margin }) => ({ predicted: winner(margin), actual: winner(row.actualMargin) })));
+  const spread = accuracy(predictions.filter(({ row }) => row.game.targetLines.spread !== null).map(({ row, margin }) => ({
+    predicted: lineWinner(margin, -(row.game.targetLines.spread ?? 0)),
+    actual: lineWinner(row.actualMargin, -(row.game.targetLines.spread ?? 0)),
+  })));
+  const total = accuracy(predictions.filter(({ row }) => row.game.targetLines.total !== null).map(({ row, total: predictedTotal }) => ({
+    predicted: lineWinner(predictedTotal, row.game.targetLines.total ?? predictedTotal),
+    actual: lineWinner(row.actualTotal, row.game.targetLines.total ?? row.actualTotal),
+  })));
+  return { games: rows.length, marginMae, totalMae, teamScoreMae, moneyline, spread, total };
+}
+
+function predictionMetricDelta(rows: ForwardPrediction[]) {
+  const active = forwardMetrics(rows, false);
+  const candidate = forwardMetrics(rows, true);
+  return {
+    marginMaeReduction: active.marginMae - candidate.marginMae,
+    totalMaeReduction: active.totalMae - candidate.totalMae,
+    teamScoreMaeReduction: active.teamScoreMae - candidate.teamScoreMae,
+    moneylineAccuracyDelta: (candidate.moneyline.accuracy ?? 0) - (active.moneyline.accuracy ?? 0),
+    spreadAccuracyDelta: (candidate.spread.accuracy ?? 0) - (active.spread.accuracy ?? 0),
+    totalAccuracyDelta: (candidate.total.accuracy ?? 0) - (active.total.accuracy ?? 0),
+  };
+}
+
+function deterministicRandom(seed: number): () => number {
+  let state = seed >>> 0;
+  return () => {
+    state ^= state << 13;
+    state ^= state >>> 17;
+    state ^= state << 5;
+    return (state >>> 0) / 4_294_967_296;
+  };
+}
+
+function percentile(values: number[], probability: number): number | null {
+  if (values.length === 0) return null;
+  const ordered = [...values].sort((first, second) => first - second);
+  const position = Math.max(0, Math.min(ordered.length - 1, Math.floor(probability * (ordered.length - 1))));
+  return ordered[position]!;
+}
+
+function clusteredBootstrap(rows: ForwardPrediction[], iterations = 5000) {
+  const dates = [...new Set(rows.map((row) => row.date))].sort();
+  const byDate = new Map(dates.map((date) => [date, rows.filter((row) => row.date === date)] as const));
+  const random = deterministicRandom(0xcfb2026);
+  const samples = Array.from({ length: iterations }, () => {
+    const sampled = Array.from({ length: dates.length }, (_, sampleIndex) => {
+      const date = dates[Math.floor(random() * dates.length)]!;
+      return (byDate.get(date) ?? []).map((row) => ({ ...row, gameId: `${sampleIndex}:${row.gameId}` }));
+    }).flat();
+    return predictionMetricDelta(sampled);
+  });
+  const summarize = (key: keyof ReturnType<typeof predictionMetricDelta>) => {
+    const values = samples.map((sample) => sample[key]);
+    return {
+      observed: predictionMetricDelta(rows)[key],
+      confidence90: [percentile(values, 0.05), percentile(values, 0.95)],
+      confidence95: [percentile(values, 0.025), percentile(values, 0.975)],
+      probabilityPositive: values.filter((value) => value > 0).length / values.length,
+    };
+  };
+  return Object.fromEntries(([
+    "marginMaeReduction",
+    "totalMaeReduction",
+    "teamScoreMaeReduction",
+    "moneylineAccuracyDelta",
+    "spreadAccuracyDelta",
+    "totalAccuracyDelta",
+  ] as const).map((key) => [key, summarize(key)]));
+}
+
+function runCombinedMarketReaderStability(games: Game[]) {
+  const rows: ResidualRow[] = games.map((game) => ({
+    game,
+    marginFeatures: residualFeatures(game, "margin", false),
+    totalFeatures: constrainedMarketFeatures(game, "total"),
+    actualMargin: game.homeScore - game.awayScore,
+    actualTotal: game.homeScore + game.awayScore,
+  }));
+  const dates = [...new Set(rows.map((row) => row.game.date))].sort();
+  const forward: ForwardPrediction[] = [];
+  const folds = dates.flatMap((date) => {
+    const training = rows.filter((row) => row.game.date < date);
+    const testing = rows.filter((row) => row.game.date === date);
+    if (training.length < 80 || testing.length === 0) return [];
+    const marginModel = fitPosterior(training, "margin", 1000);
+    const totalModel = fitPosterior(training, "total", 30);
+    const predictions = testing.map((row): ForwardPrediction => ({
+      date,
+      gameId: row.game.gameId,
+      row,
+      activeMargin: row.game.authoritative.expectedMarginHome,
+      activeTotal: row.game.authoritative.expectedTotal,
+      candidateMargin: posteriorResidualAxis(row, "margin", marginModel, 1),
+      candidateTotal: posteriorFlipOnlyAxis(row, "total", totalModel, 1),
+    }));
+    forward.push(...predictions);
+    return [{
+      date,
+      trainingGames: training.length,
+      testingGames: testing.length,
+      active: residualMetrics(testing, (row) => row.game.authoritative.expectedMarginHome, (row) => row.game.authoritative.expectedTotal),
+      candidate: residualMetrics(
+        testing,
+        (row) => predictions.find((prediction) => prediction.gameId === row.game.gameId)!.candidateMargin,
+        (row) => predictions.find((prediction) => prediction.gameId === row.game.gameId)!.candidateTotal,
+      ),
+      interventions: {
+        moneyline: interventionSummary(testing, "moneyline", (row) => row.game.authoritative.expectedMarginHome, (row) => predictions.find((prediction) => prediction.gameId === row.game.gameId)!.candidateMargin),
+        spread: interventionSummary(testing, "spread", (row) => row.game.authoritative.expectedMarginHome, (row) => predictions.find((prediction) => prediction.gameId === row.game.gameId)!.candidateMargin),
+        total: interventionSummary(testing, "total", (row) => row.game.authoritative.expectedTotal, (row) => predictions.find((prediction) => prediction.gameId === row.game.gameId)!.candidateTotal),
+      },
+    }];
+  });
+  return {
+    release: "cfb_combined_independent_market_reader_stability_2026_10_08_r1",
+    mode: "select_only_zero_writes_zero_provider_calls",
+    method: "fixed_configuration_expanding_window_by_slate_date_with_date_cluster_bootstrap",
+    fixedConfiguration: { margin: { lambda: 1000, evidenceScale: 1 }, total: { lambda: 30, evidenceScale: 1, mode: "flip_only" } },
+    eligibleDates: dates,
+    evaluatedDates: folds.map((fold) => fold.date),
+    evaluatedGames: forward.length,
+    folds,
+    aggregate: {
+      active: forwardMetrics(forward, false),
+      candidate: forwardMetrics(forward, true),
+      bootstrap: clusteredBootstrap(forward),
+    },
+  };
+}
+
+function exportCombinedMarketReaderArtifact(games: Game[]) {
+  const rows: ResidualRow[] = games.map((game) => ({
+    game,
+    marginFeatures: residualFeatures(game, "margin", false),
+    totalFeatures: constrainedMarketFeatures(game, "total"),
+    actualMargin: game.homeScore - game.awayScore,
+    actualTotal: game.homeScore + game.awayScore,
+  }));
+  return {
+    release: "cfb_market_reader_artifact_2026_10_08_r1",
+    trainedThrough: [...games.map((game) => game.date)].sort().at(-1),
+    games: rows.length,
+    selectionProtocol: "configurations_frozen_before_confirmation_then_refit_on_all_pregame_lock_boundary_rows",
+    margin: { lambda: 1000, evidenceScale: 1, model: fitPosterior(rows, "margin", 1000) },
+    total: { lambda: 30, evidenceScale: 1, mode: "full_reflection_only_when_continuous_posterior_crosses_market_side", model: fitPosterior(rows, "total", 30) },
+  };
+}
+
+function runPosteriorResidualTournament(games: Game[]) {
+  const rows: ResidualRow[] = games.map((game) => ({
+    game,
+    marginFeatures: residualFeatures(game, "margin", false),
+    totalFeatures: residualFeatures(game, "total", false),
+    actualMargin: game.homeScore - game.awayScore,
+    actualTotal: game.homeScore + game.awayScore,
+  }));
+  const selectionTrain = rows.filter((row) => row.game.date <= "2026-09-20");
+  const selection = rows.filter((row) => row.game.date >= "2026-09-25" && row.game.date <= "2026-09-27");
+  const confirmation = rows.filter((row) => row.game.date >= "2026-10-02" && row.game.date <= "2026-10-04");
+  const microHoldout = rows.filter((row) => row.game.date >= "2026-10-07");
+  const configs = [1, 3, 10, 30, 100, 300, 1000, 3000].flatMap((lambda) => [0.25, 0.5, 0.75, 1, 1.5].map((evidenceScale) => ({ lambda, evidenceScale })));
+  const baselineSelection = residualMetrics(selection, (row) => row.game.authoritative.expectedMarginHome, (row) => row.game.authoritative.expectedTotal);
+  const marginCandidates = configs.map((config) => {
+    const model = fitPosterior(selectionTrain, "margin", config.lambda);
+    const metrics = residualMetrics(selection, (row) => posteriorResidualAxis(row, "margin", model, config.evidenceScale), (row) => row.game.authoritative.expectedTotal);
+    return { config, metrics, objective: metrics.marginMae + 4 * (1 - (metrics.moneyline.accuracy ?? 0)) + 4 * (1 - (metrics.spread.accuracy ?? 0)) };
+  }).sort((a, b) => a.objective - b.objective);
+  const totalCandidates = configs.map((config) => {
+    const model = fitPosterior(selectionTrain, "total", config.lambda);
+    const metrics = residualMetrics(selection, (row) => row.game.authoritative.expectedMarginHome, (row) => posteriorResidualAxis(row, "total", model, config.evidenceScale));
+    return { config, metrics, objective: metrics.totalMae + 6 * (1 - (metrics.total.accuracy ?? 0)) };
+  }).sort((a, b) => a.objective - b.objective);
+  const selectedMargin = marginCandidates[0]!;
+  const selectedTotal = totalCandidates[0]!;
+  const fitRows = [...selectionTrain, ...selection];
+  const marginModel = fitPosterior(fitRows, "margin", selectedMargin.config.lambda);
+  const totalModel = fitPosterior(fitRows, "total", selectedTotal.config.lambda);
+  const marginPrediction = (row: ResidualRow) => posteriorResidualAxis(row, "margin", marginModel, selectedMargin.config.evidenceScale);
+  const totalPrediction = (row: ResidualRow) => posteriorResidualAxis(row, "total", totalModel, selectedTotal.config.evidenceScale);
+  const evaluateBlock = (blockRows: ResidualRow[]) => ({
+    active: residualMetrics(blockRows, (row) => row.game.authoritative.expectedMarginHome, (row) => row.game.authoritative.expectedTotal),
+    candidate: residualMetrics(blockRows, marginPrediction, totalPrediction),
+  });
+  return {
+    release: "cfb_market_log_odds_residual_tournament_2026_10_08_r1",
+    mode: "select_only_zero_writes_zero_provider_calls",
+    architecture: "continuous_log_odds_evidence_relative_to_historical_prior_no_market_center_gravity_no_thresholds",
+    split: { selectionTrain: selectionTrain.length, selection: selection.length, confirmation: confirmation.length, microHoldout: microHoldout.length },
+    selected: { margin: selectedMargin, total: selectedTotal },
+    selectionBaseline: baselineSelection,
+    confirmation: evaluateBlock(confirmation),
+    microHoldout: evaluateBlock(microHoldout),
+    allMarginCandidates: marginCandidates,
+    allTotalCandidates: totalCandidates,
+  };
+}
+
+function runPosteriorTournament(games: Game[], detailed = true) {
+  const rows: ResidualRow[] = games.map((game) => ({
+    game,
+    marginFeatures: residualFeatures(game, "margin", detailed),
+    totalFeatures: residualFeatures(game, "total", detailed),
+    actualMargin: game.homeScore - game.awayScore,
+    actualTotal: game.homeScore + game.awayScore,
+  }));
+  const selectionTrain = rows.filter((row) => row.game.date <= "2026-09-20");
+  const selection = rows.filter((row) => row.game.date >= "2026-09-25" && row.game.date <= "2026-09-27");
+  const confirmation = rows.filter((row) => row.game.date >= "2026-10-02" && row.game.date <= "2026-10-04");
+  const microHoldout = rows.filter((row) => row.game.date >= "2026-10-07");
+  const lambdas = [1, 3, 10, 30, 100, 300, 1000, 3000];
+  const baselineSelection = residualMetrics(selection, (row) => row.game.authoritative.expectedMarginHome, (row) => row.game.authoritative.expectedTotal);
+  const marginCandidates = lambdas.map((lambda) => {
+    const model = fitPosterior(selectionTrain, "margin", lambda);
+    const metrics = residualMetrics(selection, (row) => posteriorAxis(row, "margin", model), (row) => row.game.authoritative.expectedTotal);
+    const mlHarm = Math.max(0, (baselineSelection.moneyline.accuracy ?? 0) - (metrics.moneyline.accuracy ?? 0));
+    const spreadHarm = Math.max(0, (baselineSelection.spread.accuracy ?? 0) - (metrics.spread.accuracy ?? 0));
+    return { lambda, metrics, objective: metrics.marginMae + 100 * (mlHarm + spreadHarm), noDirectionalHarm: mlHarm === 0 && spreadHarm === 0 };
+  }).sort((a, b) => Number(b.noDirectionalHarm) - Number(a.noDirectionalHarm) || a.objective - b.objective);
+  const totalCandidates = lambdas.map((lambda) => {
+    const model = fitPosterior(selectionTrain, "total", lambda);
+    const metrics = residualMetrics(selection, (row) => row.game.authoritative.expectedMarginHome, (row) => posteriorAxis(row, "total", model));
+    const totalHarm = Math.max(0, (baselineSelection.total.accuracy ?? 0) - (metrics.total.accuracy ?? 0));
+    return { lambda, metrics, objective: metrics.totalMae + 100 * totalHarm, noDirectionalHarm: totalHarm === 0 };
+  }).sort((a, b) => Number(b.noDirectionalHarm) - Number(a.noDirectionalHarm) || a.objective - b.objective);
+  const selectedMargin = marginCandidates[0]!;
+  const selectedTotal = totalCandidates[0]!;
+  const fitRows = [...selectionTrain, ...selection];
+  const marginModel = fitPosterior(fitRows, "margin", selectedMargin.lambda);
+  const totalModel = fitPosterior(fitRows, "total", selectedTotal.lambda);
+  const candidateMargin = (row: ResidualRow) => posteriorAxis(row, "margin", marginModel);
+  const candidateTotal = (row: ResidualRow) => posteriorAxis(row, "total", totalModel);
+  const interventions = (blockRows: ResidualRow[], market: Market) => blockRows.flatMap((row) => {
+    const activeAxis = market === "total" ? row.game.authoritative.expectedTotal : row.game.authoritative.expectedMarginHome;
+    const candidateAxis = market === "total" ? candidateTotal(row) : candidateMargin(row);
+    const actualAxis = market === "total" ? row.actualTotal : row.actualMargin;
+    const boundary = market === "moneyline" ? 0 : market === "spread" ? -(row.game.targetLines.spread ?? Number.NaN) : row.game.targetLines.total ?? Number.NaN;
+    if (!Number.isFinite(boundary)) return [];
+    const activeSide = lineWinner(activeAxis, boundary);
+    const candidateSide = lineWinner(candidateAxis, boundary);
+    if (activeSide === candidateSide) return [];
+    const actualSide = lineWinner(actualAxis, boundary);
+    const features = market === "total" ? row.totalFeatures : row.marginFeatures;
+    const model = market === "total" ? totalModel : marginModel;
+    return [{
+      game: `${row.game.awayTeam}@${row.game.homeTeam}`,
+      date: row.game.date,
+      line: boundary,
+      activeAxis,
+      candidateAxis,
+      actualAxis,
+      posterior: predictPosterior(model, features),
+      result: candidateSide === actualSide ? "correction" : activeSide === actualSide ? "harm" : "push_transition",
+      marketPath: features.market_path ?? null,
+      marketDisagreement: features.market_disagreement ?? null,
+      namedMoves: features[`${market === "moneyline" ? "spread" : market}_named_move_count`] ?? 0,
+      retailMoves: features[`${market === "moneyline" ? "spread" : market}_retail_move_count`] ?? 0,
+      reversals: (features[`${market === "moneyline" ? "spread" : market}_all_reversal_count`] ?? 0),
+      namedSplit: features.split_named_sharp ?? null,
+      fallbackSplit: features.split_fallback ?? null,
+      publicSplit: features.split_public ?? null,
+      bothFbs: row.game.awayFbs && row.game.homeFbs,
+      sameConference: row.game.awayConferenceId !== null && row.game.awayConferenceId === row.game.homeConferenceId,
+    }];
+  });
+  const evaluateBlock = (blockRows: ResidualRow[]) => ({
+    active: residualMetrics(blockRows, (row) => row.game.authoritative.expectedMarginHome, (row) => row.game.authoritative.expectedTotal),
+    candidate: residualMetrics(blockRows, candidateMargin, candidateTotal),
+    posterior: {
+      margin: {
+        mean: average(blockRows.map((row) => predictPosterior(marginModel, row.marginFeatures))),
+        min: Math.min(...blockRows.map((row) => predictPosterior(marginModel, row.marginFeatures))),
+        max: Math.max(...blockRows.map((row) => predictPosterior(marginModel, row.marginFeatures))),
+      },
+      total: {
+        mean: average(blockRows.map((row) => predictPosterior(totalModel, row.totalFeatures))),
+        min: Math.min(...blockRows.map((row) => predictPosterior(totalModel, row.totalFeatures))),
+        max: Math.max(...blockRows.map((row) => predictPosterior(totalModel, row.totalFeatures))),
+      },
+    },
+  });
+  return {
+    release: "cfb_market_hypothesis_posterior_tournament_2026_10_08_r1",
+    mode: "select_only_zero_writes_zero_provider_calls",
+    architecture: "continuous_regularized_active_vs_market_counterfactual_posterior_no_thresholds",
+    featureSet: detailed ? "continuous_source_identity_and_raw_splits" : "coarse_provenance_aggregates",
+    split: { selectionTrain: selectionTrain.length, selection: selection.length, confirmation: confirmation.length, microHoldout: microHoldout.length },
+    selected: { margin: selectedMargin, total: selectedTotal },
+    selectionBaseline: baselineSelection,
+    confirmation: evaluateBlock(confirmation),
+    confirmationInterventions: Object.fromEntries(MARKETS.map((market) => [market, interventions(confirmation, market)])),
+    microHoldout: evaluateBlock(microHoldout),
+    allMarginCandidates: marginCandidates,
+    allTotalCandidates: totalCandidates,
+  };
+}
+
+type JointModel = RidgeModel;
+type JointConfig = { lambda: number; winnerWeight: number; lineWeight: number };
+
+function fitJointModel(rows: ResidualRow[], axis: "margin" | "total", config: JointConfig): JointModel {
+  const featureKey = axis === "margin" ? "marginFeatures" : "totalFeatures";
+  const names = [...new Set(rows.flatMap((row) => Object.keys(row[featureKey])))].sort();
+  const means = names.map((name) => average(rows.flatMap((row) => row[featureKey][name] === undefined ? [] : [row[featureKey][name]!])) ?? 0);
+  const scales = names.map((name, index) => {
+    const values = rows.flatMap((row) => row[featureKey][name] === undefined ? [] : [row[featureKey][name]!]);
+    const mean = means[index]!;
+    const variance = values.length > 1 ? values.reduce((sum, value) => sum + (value - mean) ** 2, 0) / (values.length - 1) : 0;
+    return Math.sqrt(variance) || 1;
+  });
+  const x = rows.map((row) => [1, ...names.map((name, index) => ((row[featureKey][name] ?? means[index]!) - means[index]!) / scales[index]!) ]);
+  const active = rows.map((row) => axis === "margin" ? row.game.authoritative.expectedMarginHome : row.game.authoritative.expectedTotal);
+  const actual = rows.map((row) => axis === "margin" ? row.actualMargin : row.actualTotal);
+  const residualScale = Math.sqrt(average(actual.map((value, index) => (value - active[index]!) ** 2)) ?? 1) || 1;
+  const directionalScale = axis === "margin" ? 7 : 10;
+  const beta = Array.from({ length: names.length + 1 }, () => 0);
+  const firstMoment = Array.from({ length: beta.length }, () => 0);
+  const secondMoment = Array.from({ length: beta.length }, () => 0);
+  for (let iteration = 1; iteration <= 500; iteration += 1) {
+    const gradient = Array.from({ length: beta.length }, () => 0);
+    for (let rowIndex = 0; rowIndex < rows.length; rowIndex += 1) {
+      const prediction = active[rowIndex]! + x[rowIndex]!.reduce((sum, value, index) => sum + value * beta[index]!, 0);
+      let derivative = 2 * (prediction - actual[rowIndex]!) / (residualScale ** 2);
+      if (axis === "margin" && config.winnerWeight > 0 && actual[rowIndex] !== 0) {
+        const direction = Math.sign(actual[rowIndex]!);
+        derivative += config.winnerWeight * (-direction / directionalScale) * sigmoid(-direction * prediction / directionalScale);
+      }
+      const line = axis === "margin" ? rows[rowIndex]!.game.targetLines.spread : rows[rowIndex]!.game.targetLines.total;
+      if (line !== null && config.lineWeight > 0) {
+        const boundary = axis === "margin" ? -line : line;
+        const difference = actual[rowIndex]! - boundary;
+        if (difference !== 0) {
+          const direction = Math.sign(difference);
+          derivative += config.lineWeight * (-direction / directionalScale) * sigmoid(-direction * (prediction - boundary) / directionalScale);
+        }
+      }
+      for (let index = 0; index < beta.length; index += 1) gradient[index] += derivative * x[rowIndex]![index]! / rows.length;
+    }
+    for (let index = 1; index < beta.length; index += 1) gradient[index] += config.lambda * beta[index]! / rows.length;
+    const learningRate = 0.02;
+    for (let index = 0; index < beta.length; index += 1) {
+      firstMoment[index] = 0.9 * firstMoment[index]! + 0.1 * gradient[index]!;
+      secondMoment[index] = 0.999 * secondMoment[index]! + 0.001 * gradient[index]! ** 2;
+      const correctedFirst = firstMoment[index]! / (1 - 0.9 ** iteration);
+      const correctedSecond = secondMoment[index]! / (1 - 0.999 ** iteration);
+      beta[index] -= learningRate * correctedFirst / (Math.sqrt(correctedSecond) + 1e-8);
+    }
+  }
+  return { names, means, scales, beta };
+}
+
+function predictJoint(model: JointModel, row: ResidualRow, axis: "margin" | "total"): number {
+  const features = axis === "margin" ? row.marginFeatures : row.totalFeatures;
+  const active = axis === "margin" ? row.game.authoritative.expectedMarginHome : row.game.authoritative.expectedTotal;
+  return active + model.beta[0]! + model.names.reduce((sum, name, index) => sum + model.beta[index + 1]! * (((features[name] ?? model.means[index]!) - model.means[index]!) / model.scales[index]!), 0);
+}
+
+function runJointTournament(games: Game[]) {
+  const rows: ResidualRow[] = games.map((game) => ({
+    game,
+    marginFeatures: residualFeatures(game, "margin"),
+    totalFeatures: residualFeatures(game, "total"),
+    actualMargin: game.homeScore - game.awayScore,
+    actualTotal: game.homeScore + game.awayScore,
+  }));
+  const selectionTrain = rows.filter((row) => row.game.date <= "2026-09-20");
+  const selection = rows.filter((row) => row.game.date >= "2026-09-25" && row.game.date <= "2026-09-27");
+  const confirmation = rows.filter((row) => row.game.date >= "2026-10-02" && row.game.date <= "2026-10-04");
+  const microHoldout = rows.filter((row) => row.game.date >= "2026-10-07");
+  const marginConfigs: JointConfig[] = [1, 10, 30].flatMap((lambda) =>
+    [0.25, 1, 2].flatMap((winnerWeight) => [0.25, 1, 2].map((lineWeight) => ({ lambda, winnerWeight, lineWeight }))));
+  const totalConfigs: JointConfig[] = [1, 10, 30].flatMap((lambda) =>
+    [0.5, 1, 2].map((lineWeight) => ({ lambda, winnerWeight: 0, lineWeight })));
+  const baselineSelection = residualMetrics(selection, (row) => row.game.authoritative.expectedMarginHome, (row) => row.game.authoritative.expectedTotal);
+  const marginCandidates = marginConfigs.map((config) => {
+    const model = fitJointModel(selectionTrain, "margin", config);
+    const metrics = residualMetrics(selection, (row) => predictJoint(model, row, "margin"), (row) => row.game.authoritative.expectedTotal);
+    const mlError = 1 - (metrics.moneyline.accuracy ?? 0);
+    const spreadError = 1 - (metrics.spread.accuracy ?? 0);
+    return { config, metrics, objective: metrics.marginMae + 4 * mlError + 4 * spreadError };
+  }).sort((a, b) => a.objective - b.objective || a.metrics.marginMae - b.metrics.marginMae);
+  const totalCandidates = totalConfigs.map((config) => {
+    const model = fitJointModel(selectionTrain, "total", config);
+    const metrics = residualMetrics(selection, (row) => row.game.authoritative.expectedMarginHome, (row) => predictJoint(model, row, "total"));
+    return { config, metrics, objective: metrics.totalMae + 6 * (1 - (metrics.total.accuracy ?? 0)) };
+  }).sort((a, b) => a.objective - b.objective || a.metrics.totalMae - b.metrics.totalMae);
+  const selectedMargin = marginCandidates[0]!;
+  const selectedTotal = totalCandidates[0]!;
+  const fitRows = [...selectionTrain, ...selection];
+  const marginModel = fitJointModel(fitRows, "margin", selectedMargin.config);
+  const totalModel = fitJointModel(fitRows, "total", selectedTotal.config);
+  const marginPrediction = (row: ResidualRow) => predictJoint(marginModel, row, "margin");
+  const totalPrediction = (row: ResidualRow) => predictJoint(totalModel, row, "total");
+  const evaluateBlock = (blockRows: ResidualRow[]) => ({
+    active: residualMetrics(blockRows, (row) => row.game.authoritative.expectedMarginHome, (row) => row.game.authoritative.expectedTotal),
+    candidate: residualMetrics(blockRows, marginPrediction, totalPrediction),
+  });
+  return {
+    release: "cfb_market_joint_score_direction_tournament_2026_10_08_r1",
+    mode: "select_only_zero_writes_zero_provider_calls",
+    architecture: "continuous_regularized_score_error_plus_directional_likelihood_no_market_center_target_no_thresholds",
+    split: { selectionTrain: selectionTrain.length, selection: selection.length, confirmation: confirmation.length, microHoldout: microHoldout.length },
+    selected: { margin: selectedMargin, total: selectedTotal },
+    selectionBaseline: baselineSelection,
+    confirmation: evaluateBlock(confirmation),
+    microHoldout: evaluateBlock(microHoldout),
+    topMarginCandidates: marginCandidates.slice(0, 8),
+    topTotalCandidates: totalCandidates.slice(0, 8),
+  };
+}
+
+function winner(value: number): "home" | "away" | "push" { return Math.abs(value) < 1e-9 ? "push" : value > 0 ? "home" : "away"; }
+function lineWinner(value: number, boundary: number): "first" | "second" | "push" { const delta = value - boundary; return Math.abs(delta) < 1e-9 ? "push" : delta > 0 ? "first" : "second"; }
+function accuracy(pairs: Array<{ predicted: string; actual: string }>): { wins: number; losses: number; pushes: number; accuracy: number | null } {
+  const resolved = pairs.filter((pair) => pair.actual !== "push" && pair.predicted !== "push");
+  const wins = resolved.filter((pair) => pair.predicted === pair.actual).length;
+  return { wins, losses: resolved.length - wins, pushes: pairs.length - resolved.length, accuracy: resolved.length ? wins / resolved.length : null };
+}
+
+function residualMetrics(rows: ResidualRow[], marginPrediction: (row: ResidualRow) => number, totalPrediction: (row: ResidualRow) => number) {
+  const predictions = rows.map((row) => ({ row, margin: marginPrediction(row), total: totalPrediction(row) }));
+  const marginMae = average(predictions.map(({ row, margin }) => Math.abs(margin - row.actualMargin))) ?? 0;
+  const totalMae = average(predictions.map(({ row, total }) => Math.abs(total - row.actualTotal))) ?? 0;
+  const teamScoreMae = average(predictions.flatMap(({ row, margin, total }) => {
+    const home = (total + margin) / 2; const away = (total - margin) / 2;
+    return [Math.abs(home - row.game.homeScore), Math.abs(away - row.game.awayScore)];
+  })) ?? 0;
+  const moneyline = accuracy(predictions.map(({ row, margin }) => ({ predicted: winner(margin), actual: winner(row.actualMargin) })));
+  const spreadRows = predictions.filter(({ row }) => row.game.targetLines.spread !== null);
+  const spread = accuracy(spreadRows.map(({ row, margin }) => ({ predicted: lineWinner(margin, -(row.game.targetLines.spread ?? 0)), actual: lineWinner(row.actualMargin, -(row.game.targetLines.spread ?? 0)) })));
+  const totalRows = predictions.filter(({ row }) => row.game.targetLines.total !== null);
+  const total = accuracy(totalRows.map(({ row, total }) => ({ predicted: lineWinner(total, row.game.targetLines.total ?? total), actual: lineWinner(row.actualTotal, row.game.targetLines.total ?? row.actualTotal) })));
+  return { games: rows.length, marginMae, totalMae, teamScoreMae, moneyline, spread, total };
+}
+
+function runResidualTournament(games: Game[]) {
+  const rows: ResidualRow[] = games.map((game) => ({
+    game,
+    marginFeatures: residualFeatures(game, "margin"),
+    totalFeatures: residualFeatures(game, "total"),
+    actualMargin: game.homeScore - game.awayScore,
+    actualTotal: game.homeScore + game.awayScore,
+  }));
+  const selectionTrain = rows.filter((row) => row.game.date <= "2026-09-20");
+  const selection = rows.filter((row) => row.game.date >= "2026-09-25" && row.game.date <= "2026-09-27");
+  const confirmation = rows.filter((row) => row.game.date >= "2026-10-02" && row.game.date <= "2026-10-04");
+  const microHoldout = rows.filter((row) => row.game.date >= "2026-10-07");
+  const configs: ResidualConfig[] = [1, 3, 10, 30, 100, 300, 1000].flatMap((lambda) =>
+    [0.25, 0.5, 0.75, 1].flatMap((weight) => [0, 1, 2, 3, 5, 7, 10].map((threshold) => ({ lambda, weight, threshold }))));
+  const marginModels = new Map([...new Set(configs.map((config) => config.lambda))].map((lambda) => [lambda, fitRidge(selectionTrain, "margin", lambda)]));
+  const totalModels = new Map([...new Set(configs.map((config) => config.lambda))].map((lambda) => [lambda, fitRidge(selectionTrain, "total", lambda)]));
+  const baselineSelection = residualMetrics(selection, (row) => row.game.authoritative.expectedMarginHome, (row) => row.game.authoritative.expectedTotal);
+  const gated = (row: ResidualRow, axis: "margin" | "total", config: ResidualConfig, model: RidgeModel) => {
+    const independent = axis === "margin" ? row.game.independent.expectedMarginHome : row.game.independent.expectedTotal;
+    const active = axis === "margin" ? row.game.authoritative.expectedMarginHome : row.game.authoritative.expectedTotal;
+    const raw = independent + config.weight * predictRidge(model, axis === "margin" ? row.marginFeatures : row.totalFeatures);
+    return Math.abs(raw - active) >= config.threshold ? raw : active;
+  };
+  const marginCandidates = configs.map((config) => {
+    const model = marginModels.get(config.lambda)!;
+    const metrics = residualMetrics(selection, (row) => gated(row, "margin", config, model), (row) => row.game.authoritative.expectedTotal);
+    const mlHarm = Math.max(0, (baselineSelection.moneyline.accuracy ?? 0) - (metrics.moneyline.accuracy ?? 0));
+    const spreadHarm = Math.max(0, (baselineSelection.spread.accuracy ?? 0) - (metrics.spread.accuracy ?? 0));
+    return { config, metrics, objective: metrics.marginMae + 100 * (mlHarm + spreadHarm), strict: mlHarm === 0 && spreadHarm === 0 && metrics.marginMae <= baselineSelection.marginMae };
+  }).sort((a, b) => Number(b.strict) - Number(a.strict) || a.objective - b.objective || a.metrics.marginMae - b.metrics.marginMae);
+  const totalCandidates = configs.map((config) => {
+    const model = totalModels.get(config.lambda)!;
+    const metrics = residualMetrics(selection, (row) => row.game.authoritative.expectedMarginHome, (row) => gated(row, "total", config, model));
+    const totalHarm = Math.max(0, (baselineSelection.total.accuracy ?? 0) - (metrics.total.accuracy ?? 0));
+    return { config, metrics, objective: metrics.totalMae + 100 * totalHarm, strict: totalHarm === 0 && metrics.totalMae <= baselineSelection.totalMae };
+  }).sort((a, b) => Number(b.strict) - Number(a.strict) || a.objective - b.objective || a.metrics.totalMae - b.metrics.totalMae);
+  const selectedMargin = marginCandidates[0]!;
+  const selectedTotal = totalCandidates[0]!;
+  const fitRows = [...selectionTrain, ...selection];
+  const marginModel = fitRidge(fitRows, "margin", selectedMargin.config.lambda);
+  const totalModel = fitRidge(fitRows, "total", selectedTotal.config.lambda);
+  const candidatePredictions = {
+    margin: (row: ResidualRow) => gated(row, "margin", selectedMargin.config, marginModel),
+    total: (row: ResidualRow) => gated(row, "total", selectedTotal.config, totalModel),
+  };
+  const evaluateBlock = (blockRows: ResidualRow[]) => ({
+    active: residualMetrics(blockRows, (row) => row.game.authoritative.expectedMarginHome, (row) => row.game.authoritative.expectedTotal),
+    independent: residualMetrics(blockRows, (row) => row.game.independent.expectedMarginHome, (row) => row.game.independent.expectedTotal),
+    candidate: residualMetrics(blockRows, candidatePredictions.margin, candidatePredictions.total),
+  });
+  return {
+    release: "cfb_market_residual_tournament_2026_10_08_r1",
+    mode: "select_only_zero_writes_zero_provider_calls",
+    split: { selectionTrain: selectionTrain.length, selection: selection.length, confirmation: confirmation.length, microHoldout: microHoldout.length },
+    selected: {
+      margin: { ...selectedMargin, metrics: undefined },
+      total: { ...selectedTotal, metrics: undefined },
+      combinedSelectionMetrics: residualMetrics(selection, candidatePredictions.margin, candidatePredictions.total),
+    },
+    baselines: { selection: baselineSelection },
+    confirmation: evaluateBlock(confirmation),
+    microHoldout: evaluateBlock(microHoldout),
+    topMarginSelectionCandidates: marginCandidates.slice(0, 10),
+    topTotalSelectionCandidates: totalCandidates.slice(0, 10),
+    featureCounts: { margin: marginModel.names.length, total: totalModel.names.length },
+  };
+}
+
 async function main(): Promise<void> {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL; const key = process.env.SUPABASE_SERVICE_ROLE_KEY; if (!url || !key) throw new Error("Supabase read credentials are required.");
   const client = createClient(url, key, { auth: { persistSession: false } });
-  const writer = await readCfbForwardWriterEvidence({ client, season: 2026 }); const results = await readResults(client, [...new Set(writer.evidence.map((row) => row.providerGameId))]);
+  const writer = await readCfbForwardWriterEvidence({ client, season: 2026 });
+  const officialLocks = process.argv.includes("--official-locks") ? await readOfficialLockSelections(client) : null;
+  const evidencePool = officialLocks
+    ? await readEvidenceByHashes(client, [...officialLocks.byGame.values()].map((lock) => lock.payloadSha256))
+    : writer.evidence;
+  const results = await readResults(client, [...new Set(evidencePool.map((row) => row.providerGameId))]);
   const latest = new Map<string, typeof writer.evidence[number]>();
-  for (const row of writer.evidence) { if (Date.parse(row.capturedAt) >= Date.parse(row.gameStartAt)) continue; const prior = latest.get(row.providerGameId); if (!prior || Date.parse(row.capturedAt) > Date.parse(prior.capturedAt)) latest.set(row.providerGameId, row); }
+  if (officialLocks) {
+    const byHash = new Map(evidencePool.map((row) => [row.payloadSha256, row] as const));
+    for (const [gameId, lock] of officialLocks.byGame) {
+      const row = byHash.get(lock.payloadSha256);
+      if (row && row.providerGameId === gameId) latest.set(gameId, row);
+    }
+  } else {
+    for (const row of writer.evidence) { if (Date.parse(row.capturedAt) >= Date.parse(row.gameStartAt)) continue; const prior = latest.get(row.providerGameId); if (!prior || Date.parse(row.capturedAt) > Date.parse(prior.capturedAt)) latest.set(row.providerGameId, row); }
+  }
   const settledIds = [...latest.values()].filter((row) => isFinal(results.get(row.providerGameId))).map((row) => row.providerGameId);
   const history = await readCfbForwardMarketHistory({ client, season: 2026, providerGameIds: settledIds }); const byGame = new Map<string, CfbForwardMarketHistoryEvidence[]>();
-  for (const row of history) if (Date.parse(row.capturedAt) < Date.parse(row.gameStartAt)) byGame.set(row.providerGameId, [...(byGame.get(row.providerGameId) ?? []), row]);
+  for (const row of history) {
+    const cutoff = officialLocks?.byGame.get(row.providerGameId)?.lockedAt ?? row.gameStartAt;
+    if (Date.parse(row.capturedAt) <= Date.parse(cutoff)) byGame.set(row.providerGameId, [...(byGame.get(row.providerGameId) ?? []), row]);
+  }
+  if (process.argv.includes("--capture-audit")) {
+    const selected = [...latest.values()].filter((row) => isFinal(results.get(row.providerGameId)));
+    const leadMinutes = selected.map((row) => (Date.parse(row.gameStartAt) - Date.parse(row.capturedAt)) / 60_000);
+    console.log(JSON.stringify({
+      release: "cfb_market_reader_capture_integrity_2026_10_08_r1",
+      source: officialLocks ? "official_prediction_record_payload" : "latest_pregame_writer_payload",
+      officialLockGames: officialLocks?.byGame.size ?? null,
+      incompatibleOfficialLockGames: officialLocks?.incompatibleGames ?? [],
+      selectedGames: selected.length,
+      byStage: Object.fromEntries([...new Set(selected.map((row) => row.stage))].sort().map((stage) => [stage, selected.filter((row) => row.stage === stage).length])),
+      leadMinutes: {
+        minimum: Math.min(...leadMinutes),
+        median: median(leadMinutes),
+        maximum: Math.max(...leadMinutes),
+        insideFiftyMinutes: leadMinutes.filter((minutes) => minutes < 50).length,
+        insideZeroMinutes: leadMinutes.filter((minutes) => minutes <= 0).length,
+      },
+    }, null, 2));
+    return;
+  }
   const games: Game[] = [];
-  for (const row of latest.values()) { const result = results.get(row.providerGameId); const histories = byGame.get(row.providerGameId) ?? []; if (!isFinal(result) || !histories.length) continue; const independent = row.payload.independentForecast ?? row.payload.decisions.forecast; const authoritative = row.payload.decisions.forecast; const spreadDecision = row.payload.decisions.evaluatedBets.find((decision) => decision.market === "spread") ?? null; const totalDecision = row.payload.decisions.evaluatedBets.find((decision) => decision.market === "total") ?? null; const selectedSpreadLine = spreadDecision?.evaluatedQuote.line ?? null; const homeSpreadLine = selectedSpreadLine === null || !spreadDecision ? null : isHomeDecisionSide(spreadDecision.side, row.payload.game.home.abbreviation) ? selectedSpreadLine : -selectedSpreadLine; games.push({ gameId: row.providerGameId, date: row.gameStartAt.slice(0, 10), kickoffAt: row.gameStartAt, independent: { expectedMarginHome: independent.expectedMarginHome, expectedTotal: independent.expectedTotal }, authoritative: { expectedMarginHome: authoritative.expectedMarginHome, expectedTotal: authoritative.expectedTotal }, targetLines: { moneyline: null, spread: homeSpreadLine, total: totalDecision?.evaluatedQuote.line ?? null }, awayScore: result.away_score!, homeScore: result.home_score!, histories: histories.sort((a, b) => Date.parse(a.capturedAt) - Date.parse(b.capturedAt)) }); }
+  for (const row of latest.values()) { const result = results.get(row.providerGameId); const histories = byGame.get(row.providerGameId) ?? []; if (!isFinal(result) || !histories.length) continue; const independent = row.payload.independentForecast ?? row.payload.decisions.forecast; const authoritative = row.payload.decisions.forecast; const spreadDecision = row.payload.decisions.evaluatedBets.find((decision) => decision.market === "spread") ?? null; const totalDecision = row.payload.decisions.evaluatedBets.find((decision) => decision.market === "total") ?? null; const selectedSpreadLine = spreadDecision?.evaluatedQuote.line ?? null; const homeSpreadLine = selectedSpreadLine === null || !spreadDecision ? null : isHomeDecisionSide(spreadDecision.side, row.payload.game.home.abbreviation) ? selectedSpreadLine : -selectedSpreadLine; games.push({ gameId: row.providerGameId, date: row.gameStartAt.slice(0, 10), kickoffAt: row.gameStartAt, awayTeam: row.payload.game.away.abbreviation, homeTeam: row.payload.game.home.abbreviation, awayFbs: row.payload.game.away.fbs, homeFbs: row.payload.game.home.fbs, awayConferenceId: row.payload.game.away.conferenceId, homeConferenceId: row.payload.game.home.conferenceId, independent: { expectedMarginHome: independent.expectedMarginHome, expectedTotal: independent.expectedTotal }, authoritative: { expectedMarginHome: authoritative.expectedMarginHome, expectedTotal: authoritative.expectedTotal }, targetLines: { moneyline: null, spread: homeSpreadLine, total: totalDecision?.evaluatedQuote.line ?? null }, awayScore: result.away_score!, homeScore: result.home_score!, histories: histories.sort((a, b) => Date.parse(a.capturedAt) - Date.parse(b.capturedAt)) }); }
+  if (process.argv.includes("--dates")) {
+    console.log(JSON.stringify({
+      release: "cfb_2026_sharp_sequence_tournament_2026_10_08_r1",
+      mode: "select_only_zero_writes_zero_provider_calls",
+      settledGames: games.length,
+      byDate: Object.fromEntries([...new Set(games.map((game) => game.date))].sort().map((date) => [date, games.filter((game) => game.date === date).length])),
+    }, null, 2));
+    return;
+  }
+  if (process.argv.includes("--residual-model")) {
+    console.log(JSON.stringify(runResidualTournament(games), null, 2));
+    return;
+  }
+  if (process.argv.includes("--posterior-model")) {
+    console.log(JSON.stringify(runPosteriorTournament(games), null, 2));
+    return;
+  }
+  if (process.argv.includes("--posterior-model-coarse")) {
+    console.log(JSON.stringify(runPosteriorTournament(games, false), null, 2));
+    return;
+  }
+  if (process.argv.includes("--posterior-residual-model")) {
+    const report = runPosteriorResidualTournament(games);
+    console.log(JSON.stringify(process.argv.includes("--compact") ? {
+      release: report.release,
+      mode: report.mode,
+      architecture: report.architecture,
+      split: report.split,
+      selected: report.selected,
+      selectionBaseline: report.selectionBaseline,
+      confirmation: report.confirmation,
+      microHoldout: report.microHoldout,
+    } : report, null, 2));
+    return;
+  }
+  if (process.argv.includes("--constrained-total-model")) {
+    console.log(JSON.stringify(runConstrainedPosteriorResidualTournament(games), null, 2));
+    return;
+  }
+  if (process.argv.includes("--constrained-total-residual")) {
+    console.log(JSON.stringify(runConstrainedContinuousResidualTournament(games), null, 2));
+    return;
+  }
+  if (process.argv.includes("--combined-market-reader")) {
+    console.log(JSON.stringify(runCombinedMarketReaderTournament(games), null, 2));
+    return;
+  }
+  if (process.argv.includes("--combined-market-reader-stability")) {
+    const report = runCombinedMarketReaderStability(games);
+    console.log(JSON.stringify(process.argv.includes("--compact") ? {
+      release: report.release,
+      mode: report.mode,
+      method: report.method,
+      fixedConfiguration: report.fixedConfiguration,
+      eligibleDates: report.eligibleDates,
+      evaluatedDates: report.evaluatedDates,
+      evaluatedGames: report.evaluatedGames,
+      aggregate: report.aggregate,
+      byDate: Object.fromEntries(report.folds.map((fold) => [fold.date, {
+        trainingGames: fold.trainingGames,
+        testingGames: fold.testingGames,
+        active: fold.active,
+        candidate: fold.candidate,
+        interventions: fold.interventions,
+      }])),
+    } : report, null, 2));
+    return;
+  }
+  if (process.argv.includes("--export-market-reader-artifact")) {
+    console.log(JSON.stringify(exportCombinedMarketReaderArtifact(games), null, 2));
+    return;
+  }
+  if (process.argv.includes("--joint-model")) {
+    console.log(JSON.stringify(runJointTournament(games), null, 2));
+    return;
+  }
   const signals: Signal[] = [];
   for (const game of games) for (const market of MARKETS) {
     const line = targetLine(game, market); if (market !== "moneyline" && line === null) continue;
