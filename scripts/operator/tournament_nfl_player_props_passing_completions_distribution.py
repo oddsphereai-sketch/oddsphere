@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Robust threshold-distribution tournament for independent Passing Completions."""
+"""Robust threshold-distribution tournament for an independent player-prop head."""
 
 from __future__ import annotations
 
@@ -37,6 +37,8 @@ def load(name: str, path: pathlib.Path) -> Any:
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--openings", required=True, type=pathlib.Path)
+    parser.add_argument("--market", default="passing_completions")
+    parser.add_argument("--release")
     parser.add_argument("--point-rows", type=pathlib.Path, default=POINT_ROWS)
     parser.add_argument("--locked-replay", type=pathlib.Path, default=LOCKED_REPLAY)
     parser.add_argument("--output", type=pathlib.Path, default=OUTPUT)
@@ -55,8 +57,14 @@ def main() -> None:
         "pc_distribution_baseline",
         ROOT / "scripts/operator/tournament_nfl_player_props_baseline.py",
     )
-    tournament.MARKETS = ("passing_completions",)
-    tournament.COUNT_MARKETS.add("passing_completions")
+    market = args.market
+    label = market.replace("_", " ").title()
+    release = args.release or f"nfl_player_props_{market}_distribution_2026_10_08_r1"
+    tournament.MARKETS = (market,)
+    if market in {"passing_attempts", "passing_completions", "rushing_attempts", "receptions"}:
+        tournament.COUNT_MARKETS.add(market)
+    else:
+        tournament.COUNT_MARKETS.discard(market)
     contract = json.loads((ROOT / "lib/services/football/nflPlayerPropsCalibrationContract.json").read_text())
     grid = int(contract["empiricalQuantileGridSize"])
     minimum = int(contract["minimumBucketRows"])
@@ -64,8 +72,8 @@ def main() -> None:
     points = pd.read_parquet(args.point_rows)
     selection = points[points["phase"].eq("selection")].copy()
     confirmation = points[points["phase"].eq("confirmation")].copy()
-    selection["market"] = "passing_completions"
-    confirmation["market"] = "passing_completions"
+    selection["market"] = market
+    confirmation["market"] = market
     selection["normalized_player"] = selection["player_name"].map(tournament.normalize_player)
     confirmation["normalized_player"] = confirmation["player_name"].map(tournament.normalize_player)
     thresholds, opening_report = tournament.opening_thresholds(args.openings, confirmation)
@@ -78,24 +86,24 @@ def main() -> None:
     history = history[history["actual"].ne(history["line"])].copy()
     history["outcome_over"] = history["actual"].gt(history["line"]).astype(float)
     if len(history) < 500:
-        raise RuntimeError(f"Passing Completions threshold join is too small: {len(history)}")
+        raise RuntimeError(f"{label} threshold join is too small: {len(history)}")
 
     reference_fit = selection["reference_projection"].to_numpy(float)
     candidate_fit = selection["candidate_projection"].to_numpy(float)
     reference_confirmation = confirmation["reference_projection"].to_numpy(float)
     candidate_confirmation = confirmation["candidate_projection"].to_numpy(float)
     reference_candidates = tournament.fit_foundation_candidates(
-        "passing_completions", selection, reference_fit, conditioning, baseline, grid, minimum,
+        market, selection, reference_fit, conditioning, baseline, grid, minimum,
     )
     candidate_distributions = tournament.fit_candidates(
-        "passing_completions", selection, candidate_fit, conditioning, baseline, grid, minimum,
+        market, selection, candidate_fit, conditioning, baseline, grid, minimum,
     )
     confirmation_index = confirmation.set_index("row_id")
     history["reference_projection"] = confirmation_index.loc[history["row_id"], "reference_projection"].to_numpy(float)
     history["candidate_projection"] = confirmation_index.loc[history["row_id"], "candidate_projection"].to_numpy(float)
     oof = history["week"].ge(7).to_numpy()
     if int(oof.sum()) < 100:
-        raise RuntimeError("Passing Completions robust threshold cohort is too small")
+        raise RuntimeError(f"{label} robust threshold cohort is too small")
 
     distribution_metrics = {
         name: tournament.distribution_metrics(
@@ -174,7 +182,7 @@ def main() -> None:
             and float(value["worstBrierBlockDelta"]) <= 0.005
         ):
             eligible.append(name)
-    selected_name = min(
+    ranked_eligible = sorted(
         eligible,
         key=lambda name: (
             float(candidates[name]["worstBrierBlockDelta"]),
@@ -183,36 +191,17 @@ def main() -> None:
             0 if candidates[name]["calibration"] == "identity" else 1,
             -float(candidates[name]["validation"]["directionAccuracy"]),
         ),
-    ) if eligible else None
-    selected = candidates[selected_name] if selected_name else None
+    )
 
     combined = pd.concat([selection, confirmation], ignore_index=True)
     reference_final = tournament.fit_foundation_candidates(
-        "passing_completions", combined, combined["reference_projection"].to_numpy(float),
+        market, combined, combined["reference_projection"].to_numpy(float),
         conditioning, baseline, grid, minimum,
     )[reference_name]
-    challenger_name = str(selected["distribution"]) if selected else reference_name
-    challenger_final = tournament.refit_selected(
-        "passing_completions", challenger_name, combined,
-        combined["candidate_projection"].to_numpy(float), conditioning, baseline, grid, minimum,
-    )
     full_reference = tournament.over_probability(
         reference_final, history, history["reference_projection"].to_numpy(float),
         history["line"].to_numpy(float), conditioning,
     )
-    full_candidate = tournament.over_probability(
-        challenger_final, history, history["candidate_projection"].to_numpy(float),
-        history["line"].to_numpy(float), conditioning,
-    )
-    selected_weight = float(selected["challengerWeight"]) if selected else 0.0
-    mixed = (1.0 - selected_weight) * full_reference + selected_weight * full_candidate
-    calibration = (
-        tournament.fit_logistic(mixed, history["outcome_over"].to_numpy(float))
-        if selected and selected["calibration"] == "logistic" else None
-    )
-    history["reference_over_probability"] = full_reference
-    history["candidate_over_probability"] = tournament.apply_logistic(mixed, calibration)
-
     locked = points[points["phase"].eq("locked_replay")].copy()
     locked = locked[locked["actual"].ne(locked["line"])].copy()
     locked["outcome_over"] = locked["actual"].gt(locked["line"]).astype(float)
@@ -220,19 +209,66 @@ def main() -> None:
         reference_final, locked, locked["reference_projection"].to_numpy(float),
         locked["line"].to_numpy(float), conditioning,
     )
-    locked_challenger = tournament.over_probability(
-        challenger_final, locked, locked["candidate_projection"].to_numpy(float),
-        locked["line"].to_numpy(float), conditioning,
-    )
-    locked_candidate = tournament.apply_logistic(
-        (1.0 - selected_weight) * locked_reference + selected_weight * locked_challenger,
-        calibration,
-    )
-    locked["reference_over_probability"] = locked_reference
-    locked["candidate_over_probability"] = locked_candidate
     locked_reference_metrics = tournament.probability_metrics(
         locked["outcome_over"].to_numpy(float), locked_reference,
     )
+    selected_name = None
+    selected = None
+    challenger_final = reference_final
+    selected_weight = 0.0
+    calibration = None
+    full_candidate = full_reference
+    locked_candidate = locked_reference
+    # The exact current-season replay is a predeclared fail-closed release gate,
+    # not a source of point or probability features. Preserve the historical
+    # ranking and take the first historically qualified candidate that also
+    # avoids an exact replay regression.
+    for candidate_name in ranked_eligible:
+        value = candidates[candidate_name]
+        candidate_distribution = tournament.refit_selected(
+            market, str(value["distribution"]), combined,
+            combined["candidate_projection"].to_numpy(float), conditioning, baseline, grid, minimum,
+        )
+        candidate_full = tournament.over_probability(
+            candidate_distribution, history, history["candidate_projection"].to_numpy(float),
+            history["line"].to_numpy(float), conditioning,
+        )
+        candidate_weight = float(value["challengerWeight"])
+        candidate_mixed = (1.0 - candidate_weight) * full_reference + candidate_weight * candidate_full
+        candidate_calibration = (
+            tournament.fit_logistic(candidate_mixed, history["outcome_over"].to_numpy(float))
+            if value["calibration"] == "logistic" else None
+        )
+        candidate_locked_distribution = tournament.over_probability(
+            candidate_distribution, locked, locked["candidate_projection"].to_numpy(float),
+            locked["line"].to_numpy(float), conditioning,
+        )
+        candidate_locked = tournament.apply_logistic(
+            (1.0 - candidate_weight) * locked_reference + candidate_weight * candidate_locked_distribution,
+            candidate_calibration,
+        )
+        candidate_locked_metrics = tournament.probability_metrics(
+            locked["outcome_over"].to_numpy(float), candidate_locked,
+        )
+        candidate_replay_passes = bool(
+            candidate_locked_metrics["brier"] <= locked_reference_metrics["brier"]
+            and candidate_locked_metrics["logLoss"] <= locked_reference_metrics["logLoss"]
+            and candidate_locked_metrics["directionAccuracy"] >= locked_reference_metrics["directionAccuracy"]
+        )
+        value["locked2026"] = {"metrics": candidate_locked_metrics, "passes": candidate_replay_passes}
+        if selected_name is None and candidate_replay_passes:
+            selected_name = candidate_name
+            selected = value
+            challenger_final = candidate_distribution
+            selected_weight = candidate_weight
+            calibration = candidate_calibration
+            full_candidate = candidate_full
+            locked_candidate = candidate_locked
+    mixed = (1.0 - selected_weight) * full_reference + selected_weight * full_candidate
+    history["reference_over_probability"] = full_reference
+    history["candidate_over_probability"] = tournament.apply_logistic(mixed, calibration)
+    locked["reference_over_probability"] = locked_reference
+    locked["candidate_over_probability"] = locked_candidate
     locked_candidate_metrics = tournament.probability_metrics(
         locked["outcome_over"].to_numpy(float), locked_candidate,
     )
@@ -242,10 +278,11 @@ def main() -> None:
         and locked_candidate_metrics["logLoss"] <= locked_reference_metrics["logLoss"]
         and locked_candidate_metrics["directionAccuracy"] >= locked_reference_metrics["directionAccuracy"]
     )
+    challenger_name = str(selected["distribution"]) if selected else reference_name
     args.rows.parent.mkdir(parents=True, exist_ok=True)
     pd.concat([history.assign(phase="historical_threshold"), locked], ignore_index=True).to_parquet(args.rows, index=False)
     output = {
-        "release": "nfl_player_props_passing_completions_distribution_2026_10_08_r1",
+        "release": release,
         "generatedAt": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         "researchOnly": True,
         "marketIndependent": True,
@@ -258,6 +295,13 @@ def main() -> None:
         "selectedValidation": selected["validation"] if selected else None,
         "selectedBlocks": selected["blocks"] if selected else None,
         "candidateCount": len(candidates),
+        "historicallyEligibleRanking": ranked_eligible,
+        "historicallyEligibleReplay": {
+            name: candidates[name].get("locked2026") for name in ranked_eligible
+        },
+        "historicallyEligibleCandidates": {
+            name: candidates[name] for name in ranked_eligible
+        },
         "locked2026": {
             "rows": int(len(locked)),
             "reference": locked_reference_metrics,
