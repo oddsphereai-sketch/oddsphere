@@ -18,13 +18,13 @@ import {
 import { evaluateCfbHolisticConfidence } from "./cfbHolisticConfidenceCandidate";
 
 export const CFB_MARKET_SHARP_AWARE_CANDIDATE_RELEASE =
-  "cfb_market_sharp_aware_candidate_2026_10_08_r28_the_odds_api_fcs_gap_fallback" as const;
+  "cfb_market_sharp_aware_candidate_2026_10_08_r29_independent_price_spread_lane" as const;
 export const CFB_MARKET_SHARP_AWARE_SHADOW_RELEASE =
   CFB_MARKET_SHARP_AWARE_CANDIDATE_RELEASE;
 export const CFB_MARKET_SHARP_AWARE_PRODUCTION_RELEASE =
-  "cfb_market_sharp_aware_production_2026_10_08_r30_the_odds_api_fcs_gap_fallback" as const;
+  "cfb_market_sharp_aware_production_2026_10_08_r31_independent_price_spread_lane" as const;
 export const CFB_MARKET_SHARP_AWARE_GAP_FALLBACK_PREVIOUS_PRODUCTION_RELEASE =
-  "cfb_market_sharp_aware_production_2026_10_07_r29_fcs_price_public_injury_continuity" as const;
+  "cfb_market_sharp_aware_production_2026_10_08_r30_the_odds_api_fcs_gap_fallback" as const;
 export const CFB_MARKET_SHARP_AWARE_FCS_PRICE_PREVIOUS_PRODUCTION_RELEASE =
   "cfb_market_sharp_aware_production_2026_10_07_r28_price_qb_continuity" as const;
 export const CFB_MARKET_SHARP_AWARE_PRICE_QB_PREVIOUS_PRODUCTION_RELEASE =
@@ -79,6 +79,7 @@ export const CFB_MONEYLINE_PARLAY_LEAN_MIN_MODEL_PROBABILITY = 0.65 as const;
 export const CFB_MONEYLINE_PARLAY_LEAN_MIN_MARKET_PROBABILITY = 0.60 as const;
 export const CFB_MONEYLINE_PARLAY_LEAN_MIN_PRICE = -700 as const;
 export const CFB_MONEYLINE_PARLAY_LEAN_MAX_PRICE = -201 as const;
+export const CFB_INDEPENDENT_PRICE_SPREAD_LEAN_MIN_MODEL_PROBABILITY = 0.58 as const;
 
 type CanonicalSide = "home" | "away" | "over" | "under";
 export type CfbMarketEvidenceDirection = "support" | "resistance" | "neutral" | "unknown";
@@ -433,6 +434,39 @@ export function applyCfbMarketSharpAwareGrades(args: {
           executionStatus: balanced.executionStatus,
           reasonCodes: balanced.reasonCodes,
         },
+      };
+    }),
+  };
+}
+
+/**
+ * A missing full-game market anchor is not the same thing as missing exact
+ * price evidence for every individual market. When the independent forecast
+ * can still be priced against a verified target-excluded consensus, retain
+ * those decisions for prediction/tracking. Historical selection and untouched
+ * confirmation authorize only the high-probability Spread Lean lane; every
+ * other would-be actionable grade is capped at Watchlist.
+ */
+export function applyCfbIndependentPriceCorroborationLane(args: {
+  bundle: CfbV1DecisionBundle;
+  enabled: boolean;
+}): CfbV1DecisionBundle {
+  if (!args.enabled) return args.bundle;
+  return {
+    ...args.bundle,
+    evaluatedBets: args.bundle.evaluatedBets.map((decision) => {
+      const authorizedSpreadLean = decision.market === "spread" &&
+        decision.grade === "Lean" &&
+        decision.modelProbability >= CFB_INDEPENDENT_PRICE_SPREAD_LEAN_MIN_MODEL_PROBABILITY;
+      const actionable = decision.grade === "Best Angle" || decision.grade === "Lean";
+      if (authorizedSpreadLean || !actionable) return decision;
+      return {
+        ...decision,
+        grade: "Watchlist" as const,
+        gradeAdjustment: decision.gradeAdjustment ? {
+          ...decision.gradeAdjustment,
+          reasonCodes: [...decision.gradeAdjustment.reasonCodes, "independent_price_lane_actionability_cap"],
+        } : null,
       };
     }),
   };
@@ -814,7 +848,7 @@ function isFavoriteSpreadSide(side: "home" | "away", homeSpread: number): boolea
   return homeSpread < 0 ? side === "home" : homeSpread > 0 ? side === "away" : false;
 }
 
-function tiltCfbMarginWithinTotals(
+export function tiltCfbMarginWithinTotals(
   pmf: CfbV1Forecast["pmf"],
   marginShiftPoints: number,
 ): CfbV1Forecast["pmf"] {
@@ -871,7 +905,7 @@ function exponentiallyTiltedMarginMean(cells: CfbV1Forecast["pmf"], lambda: numb
   return weightedTotal / weight;
 }
 
-function tiltCfbTotalWithinMargins(
+export function tiltCfbTotalWithinMargins(
   pmf: CfbV1Forecast["pmf"],
   totalShiftPoints: number,
 ): CfbV1Forecast["pmf"] {
@@ -955,7 +989,7 @@ function mixPmfs(
     .sort((first, second) => first.home - second.home || first.away - second.away);
 }
 
-function summarizePmf(pmf: CfbV1Forecast["pmf"]): Pick<CfbV1Forecast,
+export function summarizePmf(pmf: CfbV1Forecast["pmf"]): Pick<CfbV1Forecast,
   "expectedAwayPoints" | "expectedHomePoints" | "expectedMarginHome" | "expectedTotal" |
   "homeWinProbability" | "representativeScore" | "interval80"> {
   const expectedHomePoints = pmf.reduce((sum, cell) => sum + cell.home * cell.probability, 0);

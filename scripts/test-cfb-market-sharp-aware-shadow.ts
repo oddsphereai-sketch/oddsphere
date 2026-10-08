@@ -4,6 +4,7 @@ import {
   CFB_MARKET_SHARP_AWARE_CANDIDATE_RELEASE,
   CFB_MARKET_SHARP_AWARE_PRODUCTION_RELEASE,
   annotateCfbCrossMarketGradeCoherence,
+  applyCfbIndependentPriceCorroborationLane,
   applyCfbMarketSharpAwareGrades,
   buildCfbMarketEvidenceGradeShadow,
   buildCfbMarketSharpAwareForecast,
@@ -368,6 +369,36 @@ const productionAdjusted = applyCfbMarketSharpAwareGrades({
 assert.equal(productionAdjusted.evaluatedBets[0]?.grade, "Watchlist", "the writer uses the price-independent confidence score");
 assert.equal(productionAdjusted.evaluatedBets[0]?.gradeAdjustment?.release, CFB_MARKET_SHARP_AWARE_PRODUCTION_RELEASE);
 assert.equal(productionAdjusted.evaluatedBets[0]?.gradeAdjustment?.executionStatus, "bet");
+
+const independentPriceLane = applyCfbIndependentPriceCorroborationLane({
+  enabled: true,
+  bundle: {
+    ...baseBundle,
+    evaluatedBets: [
+      { ...moneyline, market: "moneyline", grade: "Best Angle" },
+      { ...moneyline, market: "spread", side: "TCU -4", grade: "Lean", modelProbability: 0.58, evaluatedQuote: { ...moneyline.evaluatedQuote, line: -4 } },
+      { ...moneyline, market: "total", side: "Over 48.5", grade: "Lean", modelProbability: 0.72, evaluatedQuote: { ...moneyline.evaluatedQuote, line: 48.5 } },
+    ],
+  },
+});
+assert.deepEqual(
+  independentPriceLane.evaluatedBets.map((decision) => decision.grade),
+  ["Watchlist", "Lean", "Watchlist"],
+  "anchorless exact-price evidence authorizes only the predeclared 58% Spread Lean lane",
+);
+const belowIndependentPriceLane = applyCfbIndependentPriceCorroborationLane({
+  enabled: true,
+  bundle: {
+    ...baseBundle,
+    evaluatedBets: [{ ...moneyline, market: "spread", side: "TCU -4", grade: "Lean", modelProbability: 0.579999, evaluatedQuote: { ...moneyline.evaluatedQuote, line: -4 } }],
+  },
+});
+assert.equal(belowIndependentPriceLane.evaluatedBets[0]?.grade, "Watchlist", "the no-anchor Spread lane must not round into qualification");
+assert.equal(
+  applyCfbIndependentPriceCorroborationLane({ enabled: false, bundle: baseBundle }),
+  baseBundle,
+  "the production path remains byte-for-byte unchanged while the audit switch is disabled",
+);
 
 const abbreviationMapped = applyCfbMarketSharpAwareGrades({
   homeTeam: "UVA",

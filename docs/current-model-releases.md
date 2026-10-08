@@ -240,6 +240,50 @@ Last reviewed: 2026-10-08
 
 ## CFB Daily Edge generalized weekly production release
 
+### Independent-price market completion and bounded Spread Lean lane (writer r107; fixture r79; snapshot r39; tracking r40)
+
+- Active evidence / collector / member / market reader / decision / sole writer are
+  `cfb_forward_evidence_snapshot_2026_10_08_r39_independent_price_spread_lane` /
+  `cfb_forward_evidence_collector_2026_10_08_r50_independent_price_spread_lane` /
+  `cfb_v1_member_release_2026_10_08_r53_independent_price_spread_lane` /
+  `cfb_market_sharp_aware_production_2026_10_08_r31_independent_price_spread_lane` /
+  `cfb_v1_daily_edge_decision_2026_10_08_r43_independent_price_spread_lane` /
+  `cfb_forward_evidence_writer_2026_10_08_r107_independent_price_spread_lane`.
+  Grade/calibration / fixture / outcome / compact snapshot / reader / tracking are r21/r18 / r79 /
+  r69 / r39 / r24 / r40. R38 remains the explicit reader transition authority for valid prior rows
+  and immutable locks.
+- Missing public or sharp splits are neutral evidence, never a global health hold. When the canonical
+  complete-game anchor is unavailable but an individual market still has a verified target quote and
+  target-excluded same-line named-book consensus, the independent PMF remains prediction authority and
+  that market now publishes its real side, price and ordinary grade. Missing exact-price evidence remains
+  Held; negative economics may remain No Play. No side, probability, score, PMF, stake, copy, label or
+  layout is fabricated or changed by this completion path.
+- Anchorless Best Angles and Moneyline/Total actionability are not authorized. An anchorless actionable
+  candidate is capped at Watchlist except for a Spread already graded Lean by the existing exact-price
+  and sport-specific market-evidence policy with model probability at least 58%. That lane is capped at
+  Lean and cannot become Best Angle. It does not require splits and does not treat their absence as either
+  support or resistance.
+- Chronological FCS reconstruction selected the lane on September 19–27 at 25-9 (+14.31u) and retained it
+  on untouched October 3–4 confirmation at 10-7 (+2.10u), for 35-16 (+16.41u) combined. The rejected broad
+  unlock went 20-24 (-7.48u) on confirmation; confirmation Best Angles were 6-13, so the broad rule and
+  anchorless Best Angle path remain disabled. Moneyline lacked the predeclared minimum selection sample,
+  while Total Lean candidates were 3-5 in selection.
+- The paired exact 86-game current-board replay moves 163 evaluated / 95 Held markets to 242 / 16. Counts
+  move from 15 Best Angles / 79 Leans / 55 Watchlists / 14 No Plays to 14 / 96 / 115 / 17. Seventy-nine
+  Held slots gain exact decisions; 18 formerly Held Spreads become Leans, while the bounded caps leave net
+  actionability +16. Reconstructed forecast means are byte-equivalent, no negative score is created, and
+  all writes remained disabled during acceptance.
+- The paid FCS fallback still makes one three-credit sport-level request, now asking for ten supported
+  books. FanDuel, DraftKings and Rebet retain execution and market-reading eligibility. BetMGM, BetRivers,
+  Caesars, Fanatics, theScore Bet, BetOnline and Bally Bet are target-excluded consensus only: they cannot
+  become the evaluated quote, score/side anchor, opening authority or movement signal. The provider,
+  cadence, weekly limits and 5,000-credit reserve are unchanged. Identical ordered market-history reads
+  are partitioned into 25-game batches to avoid the observed 86-game statement timeout.
+- The existing `prediction_pipeline:cfb` lease, one writer, hourly/T-60 cadence, immutable lock boundary,
+  settlement and tracking denominator remain authoritative. Evidence and rollback are in
+  `docs/model-audits/2026-10-08-cfb-multi-book-gap-fill-predeclaration.md`. Roll back the complete
+  r39/r53/r31/r43/r107/r79/r69/r39/r24/r40 family to r38 without rewriting any lock or result.
+
 ### Paid FCS named-book odds-gap fallback (writer r106; fixture r78; snapshot r38; tracking r39)
 
 - Active evidence / collector / member / market reader / decision / sole writer are

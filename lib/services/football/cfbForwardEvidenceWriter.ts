@@ -36,11 +36,12 @@ import {
   type CfbForwardTeamQuarterbacks,
 } from "./cfbForwardEvidence";
 import { appendCfbForwardEvidence, readCfbForwardMarketHistory, readCfbForwardWriterEvidence, type CfbForwardEvidenceMetadata } from "./cfbForwardEvidenceStore";
-import { buildCfbV1DecisionBundle, CFB_T60_MAX_CAPTURE_LAG_MINUTES, CFB_V1_DECISION_RELEASE, CFB_V1_GAP_FALLBACK_PREVIOUS_DECISION_RELEASE, CFB_V1_FCS_PRICE_PREVIOUS_DECISION_RELEASE, getCfbV1ForecastForGame, type CfbV1Forecast, type CfbV1Market } from "./cfbV1Decision";
+import { buildCfbV1DecisionBundle, CFB_T60_MAX_CAPTURE_LAG_MINUTES, CFB_V1_DECISION_RELEASE, CFB_V1_GAP_FALLBACK_PREVIOUS_DECISION_RELEASE, CFB_V1_FCS_PRICE_PREVIOUS_DECISION_RELEASE, getCfbV1ForecastForGame, type CfbV1DecisionBundle, type CfbV1Forecast, type CfbV1Market } from "./cfbV1Decision";
 import { CFB_V1_WEEKLY_RUNTIME_RELEASE, cfbV1WeeklyGameProfileCoverage, getCfbV1WeeklyForecasts } from "./cfbV1WeeklyForecast";
 import { loadCfbCurrentAdvancedState } from "./cfbCurrentAdvancedState";
 import { resolveCfbCanonicalMarketAnchor } from "./cfbMarketInformedOutcome";
 import {
+  applyCfbIndependentPriceCorroborationLane,
   applyCfbMarketSharpAwareGrades,
   buildCfbMarketSharpAwareForecast,
   CFB_MARKET_SHADOW_WEIGHT,
@@ -139,7 +140,7 @@ import {
 import type { PlaybookInjuryTeamRow } from "@/lib/providers/playbook/types";
 
 export const CFB_FORWARD_WRITER_RELEASE =
-  "cfb_forward_evidence_writer_2026_10_08_r106_immediate_the_odds_api_seed" as const;
+  "cfb_forward_evidence_writer_2026_10_08_r107_independent_price_spread_lane" as const;
 export const CFB_FORWARD_MAX_QB_TEAMS_PER_RUN = 24 as const;
 export const CFB_FORWARD_MAX_SHARP_FALLBACK_GAMES_PER_RUN = 32 as const;
 export const CFB_FORWARD_MAX_ESPN_PROSPECTIVE_GAMES_PER_RUN = 32 as const;
@@ -183,6 +184,12 @@ export type CfbForwardCaptureFailure = {
   error: string;
 };
 
+export type CfbForwardAuditForecast = {
+  providerGameId: string;
+  payload: CfbForwardEvidencePayload;
+  decisionBundle: CfbV1DecisionBundle;
+};
+
 /**
  * Movement is evidence only when the opening and current quote come from the
  * same sportsbook. The execution quote remains independently price-shopped.
@@ -194,7 +201,7 @@ export function currentCfbMovementContextBook(
   const openingBook = operationalOpening?.quote.sportsbook.trim().toLowerCase() ?? "";
   if (!openingBook) return null;
   return books
-    .filter((book) => book.sportsbook.trim().toLowerCase() === openingBook)
+    .filter((book) => book.marketReadingEligible !== false && book.sportsbook.trim().toLowerCase() === openingBook)
     .sort((first, second) => Date.parse(second.observedAt) - Date.parse(first.observedAt))[0] ?? null;
 }
 
@@ -270,7 +277,20 @@ export async function runCfbForwardEvidenceWriter(args: {
   weatherProvider?: IWeatherProvider | null;
   /** Read-only operator evidence hook. Never used by the production route. */
   auditPayloads?: (payloads: readonly CfbForwardEvidencePayload[]) => void;
+  /** Read-only operator hook retaining the in-memory PMF. Never used by the production route. */
+  auditForecasts?: (forecasts: readonly CfbForwardAuditForecast[]) => void;
+  /** Read-only operator window override. Rejected whenever apply=true. */
+  auditWindowStartDate?: string;
+  /** Read-only operator cadence override. Rejected whenever apply=true. */
+  auditForceUnlocked?: boolean;
+  /** Read-only provider replay override. Rejected whenever apply=true. */
+  auditForceTheOddsApi?: boolean;
+  /** Read-only rollback comparison. Rejected whenever apply=true. */
+  auditDisableIndependentPriceLane?: boolean;
 }): Promise<CfbForwardWriterResult> {
+  if (args.apply && (args.auditWindowStartDate || args.auditForceUnlocked || args.auditForceTheOddsApi || args.auditDisableIndependentPriceLane)) {
+    throw new Error("CFB audit planning overrides are forbidden when apply=true.");
+  }
   const writerEvidence = await readCfbForwardWriterEvidence({ client: args.client, season: args.season });
   const allExisting = writerEvidence.evidence;
   const windows = resolveCfbVisibleWindows({ now: args.now, evidence: allExisting });
@@ -289,7 +309,9 @@ export async function runCfbForwardEvidenceWriter(args: {
     const need = cfbForwardReleaseRefreshNeed(existing, args.now) ?? ordinaryNeed;
     return { window, existing, lockPlanningExisting, need };
   });
-  const selected = selectCfbForwardCollectionWindow(states);
+  const selected = args.auditWindowStartDate
+    ? states.find((state) => state.window.boardStartDate === args.auditWindowStartDate) ?? null
+    : selectCfbForwardCollectionWindow(states);
   if (!selected) {
     const tracking = await writeOfficialTracking({
       client: args.client,
@@ -311,11 +333,13 @@ export async function runCfbForwardEvidenceWriter(args: {
     games,
     existing: lockPlanningExisting,
     capturedAt: args.now,
-    ...(need.reason === "release_refresh_due" || need.reason === "reference_line_completion_due" || need.reason === "provider_seed_due"
+    ...(args.auditForceUnlocked || need.reason === "release_refresh_due" || need.reason === "reference_line_completion_due" || need.reason === "provider_seed_due"
       ? { unlockedCadenceMinutesOverride: 0 }
       : {}),
   });
-  const plans = need.reason === "reference_line_completion_due"
+  const plans = args.auditForceUnlocked
+    ? plannedCaptures
+    : need.reason === "reference_line_completion_due"
     ? plannedCaptures.filter((plan) => cfbReferenceCompletionNeeded(latestByGame.get(plan.game.providerGameId), args.now))
     : need.reason === "provider_seed_due"
       ? plannedCaptures.filter((plan) => cfbTheOddsApiProviderSeedNeeded(latestByGame.get(plan.game.providerGameId), args.now))
@@ -444,7 +468,7 @@ export async function runCfbForwardEvidenceWriter(args: {
     now: args.now,
     forceT60: plans.some((plan) =>
       plan.stage === "t60" && theOddsApiGapGames.some((game) => game.providerGameId === plan.game.providerGameId)),
-    forceOpeningSeed: theOddsApiGapGames.some((game) =>
+    forceOpeningSeed: args.auditForceTheOddsApi || theOddsApiGapGames.some((game) =>
       !existing.some((row) =>
         row.providerGameId === game.providerGameId &&
         ((row.payload.requestBudget.theOddsApi ?? 0) > 0 ||
@@ -569,6 +593,7 @@ export async function runCfbForwardEvidenceWriter(args: {
     displayBooks.push(...cfbForwardContextSharpHistoryBooks(row.payload.contextualEvidenceCapture));
     captureHistoryDisplayBooksByGame.set(row.providerGameId, displayBooks);
   }
+  const auditForecasts: CfbForwardAuditForecast[] = [];
   const { payloads, captureFailures } = buildCfbForwardPayloadsWithIsolation(plans, (plan): CfbForwardEvidencePayload => {
     const sharpBooks = sharpFallback.booksByGame[plan.game.providerGameId] ?? [];
     const sharpDisplayBooks = sharpFallback.displayBooksByGame[plan.game.providerGameId] ?? [];
@@ -733,6 +758,11 @@ export async function runCfbForwardEvidenceWriter(args: {
       ...(weeklyForecast.featureHealth.homeProfile === "neutral_imputation" ? ["home_model_team_profile_unavailable"] : []),
       ...cfbMarketAnchorHealthHolds(outcomeAnchor),
     ];
+    const independentPriceLaneEnabled = !args.auditDisableIndependentPriceLane && !outcomeAnchor &&
+      healthHolds.every((hold) => hold === "authoritative_market_anchor_unavailable");
+    const decisionHealthHolds = independentPriceLaneEnabled
+      ? healthHolds.filter((hold) => hold !== "authoritative_market_anchor_unavailable")
+      : healthHolds;
     const fixedEvaluatedSportsbookByMarket = outcomeAnchor && weather.independentTotalAdjustmentPoints < 0
       ? Object.fromEntries(applyCfbMarketSharpAwareGrades({
           bundle: buildCfbV1DecisionBundle({
@@ -741,10 +771,10 @@ export async function runCfbForwardEvidenceWriter(args: {
             homeTeam: plan.game.home.abbreviation,
             gameStartsAt: plan.game.scheduledStart,
             comparableCurrentBooks: currentBooks,
-            stage: plan.stage === "t60" && healthHolds.length === 0 ? "t60_locked" : "unlocked",
+            stage: plan.stage === "t60" && decisionHealthHolds.length === 0 ? "t60_locked" : "unlocked",
             evaluatedAt: capturedAt,
-            lockedAt: plan.stage === "t60" && healthHolds.length === 0 ? capturedAt : null,
-            healthHolds,
+            lockedAt: plan.stage === "t60" && decisionHealthHolds.length === 0 ? capturedAt : null,
+            healthHolds: decisionHealthHolds,
             forecast: forecastWithoutWeather,
             contextLines: { homeSpread: playbookLine?.homeSpread ?? null, totalLine: playbookLine?.total ?? null },
           }),
@@ -762,10 +792,10 @@ export async function runCfbForwardEvidenceWriter(args: {
       homeTeam: plan.game.home.abbreviation,
       gameStartsAt: plan.game.scheduledStart,
       comparableCurrentBooks: currentBooks,
-      stage: plan.stage === "t60" && healthHolds.length === 0 ? "t60_locked" : "unlocked",
+      stage: plan.stage === "t60" && decisionHealthHolds.length === 0 ? "t60_locked" : "unlocked",
       evaluatedAt: capturedAt,
-      lockedAt: plan.stage === "t60" && healthHolds.length === 0 ? capturedAt : null,
-      healthHolds,
+      lockedAt: plan.stage === "t60" && decisionHealthHolds.length === 0 ? capturedAt : null,
+      healthHolds: decisionHealthHolds,
       forecast,
       contextLines: {
         homeSpread: playbookLine?.homeSpread ?? null,
@@ -773,7 +803,7 @@ export async function runCfbForwardEvidenceWriter(args: {
       },
       fixedEvaluatedSportsbookByMarket,
     });
-    const marketAwareDecisions = outcomeAnchor
+    const marketAwareDecisions = outcomeAnchor || independentPriceLaneEnabled
       ? applyCfbMarketSharpAwareGrades({
           bundle: decisionBundle,
           homeTeam: plan.game.home.abbreviation,
@@ -784,10 +814,18 @@ export async function runCfbForwardEvidenceWriter(args: {
           current: movementCurrent,
         })
       : decisionBundle;
-    const decisions = publishCfbForwardDecisionBundle(applyCfbVerifiedAvailabilityGradeCap({
+    const availabilityAwareDecisionBundle = applyCfbVerifiedAvailabilityGradeCap({
       bundle: marketAwareDecisions,
       availability: quarterbackAvailability.availability,
-    }), playbookLine, espnReferenceLine, {
+    });
+    const fullDecisionBundle = applyCfbIndependentPriceCorroborationLane({
+      bundle: availabilityAwareDecisionBundle,
+      enabled: independentPriceLaneEnabled,
+    });
+    const publishedHealthHolds = independentPriceLaneEnabled && fullDecisionBundle.evaluatedBets.length > 0
+      ? decisionHealthHolds
+      : healthHolds;
+    const decisions = publishCfbForwardDecisionBundle(fullDecisionBundle, playbookLine, espnReferenceLine, {
       spread: preferredCfbContextBook(displayBooks, "spread"),
       total: preferredCfbContextBook(displayBooks, "total"),
     });
@@ -861,7 +899,7 @@ export async function runCfbForwardEvidenceWriter(args: {
       decisions,
       independentForecast: compactForecast(weeklyForecast.forecast),
       authoritativeForecast: {
-        status: outcomeAnchor ? "market_sharp_applied" : "market_anchor_unavailable_hold",
+        status: outcomeAnchor || fullDecisionBundle.evaluatedBets.length > 0 ? "market_sharp_applied" : "market_anchor_unavailable_hold",
         release: CFB_MARKET_SHARP_AWARE_PRODUCTION_RELEASE,
         candidateRelease: CFB_MARKET_SHARP_AWARE_CANDIDATE_RELEASE,
         marketWeight: outcomeAnchor ? CFB_MARKET_SHADOW_WEIGHT : 0,
@@ -882,7 +920,7 @@ export async function runCfbForwardEvidenceWriter(args: {
         activeQuarterbacks: awayQuarterbacks.activeQuarterbacks.length > 0 && homeQuarterbacks.activeQuarterbacks.length > 0,
         injuries: injuryReport !== null,
         weather: weather.status === "forecast_available" || weather.status === "controlled_indoor",
-        healthHolds,
+        healthHolds: publishedHealthHolds,
         availabilityWarnings: [
           ...(sharpFallback.eventDiscoveryStatusByGame[plan.game.providerGameId] === "ambiguous" ? ["sharpapi_canonical_event_ambiguous"] : []),
           ...(sharpFallback.failuresByGame[plan.game.providerGameId]
@@ -942,12 +980,19 @@ export async function runCfbForwardEvidenceWriter(args: {
         ...(captureHistoryBooksByGame.get(plan.game.providerGameId) ?? []),
       ],
     });
-    return {
+    const completedPayload = {
       ...payload,
       ...(contextualEvidenceCapture ? { contextualEvidenceCapture } : {}),
     };
+    auditForecasts.push({
+      providerGameId: plan.game.providerGameId,
+      payload: completedPayload,
+      decisionBundle: fullDecisionBundle,
+    });
+    return completedPayload;
   });
   args.auditPayloads?.(payloads);
+  args.auditForecasts?.(auditForecasts);
   const write = await appendCfbForwardEvidence({ client: args.client, runId: args.runId, payloads, apply: args.apply });
   const tracking = await writeOfficialTracking({
     client: args.client,

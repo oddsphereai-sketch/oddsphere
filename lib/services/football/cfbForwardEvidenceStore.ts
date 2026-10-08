@@ -91,7 +91,11 @@ export const CFB_FORWARD_EVIDENCE_MAX_ROWS = 50_000 as const;
 export const CFB_FORWARD_WRITER_PAYLOAD_BATCH_SIZE = 100 as const;
 export const CFB_FORWARD_MARKET_HISTORY_PAGE_SIZE = 1_000 as const;
 export const CFB_FORWARD_MARKET_HISTORY_MAX_ROWS = 12_000 as const;
-export const CFB_FORWARD_MARKET_HISTORY_GAME_BATCH_SIZE = 100 as const;
+// Keep the JSON projection query below Supabase's statement-timeout cliff as
+// the append-only evidence table grows. This changes query partitioning only;
+// row identity, ordering, compatible releases and the 12k total bound remain
+// unchanged.
+export const CFB_FORWARD_MARKET_HISTORY_GAME_BATCH_SIZE = 25 as const;
 export const CFB_FORWARD_MARKET_HISTORY_COMPATIBLE_RELEASES = [
   CFB_FORWARD_MARKET_HISTORY_BASE_EVIDENCE_SCHEMA_RELEASE,
   CFB_FORWARD_SPREAD_PREVIOUS_EVIDENCE_SCHEMA_RELEASE,

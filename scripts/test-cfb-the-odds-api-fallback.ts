@@ -5,6 +5,7 @@ import { buildCfbNamedBookPriceHierarchy, retainLatestCfbNamedBookMarkets } from
 import {
   CFB_THE_ODDS_API_CREDIT_RESERVE,
   CFB_THE_ODDS_API_CREDITS_PER_PULL,
+  CFB_THE_ODDS_API_BOOKMAKERS,
   CFB_THE_ODDS_API_HISTORICAL_CREDITS_PER_PULL,
   CFB_THE_ODDS_API_ORDINARY_WEEKLY_PULL_LIMIT,
   CFB_THE_ODDS_API_WEEKLY_PULL_LIMIT,
@@ -25,9 +26,10 @@ const response = await fetchCfbTheOddsApiFallback({
   fetchImpl: async (input) => {
     const url = new URL(String(input));
     assert.equal(url.searchParams.get("markets"), "h2h,spreads,totals");
-    assert.equal(url.searchParams.get("bookmakers"), "fanduel,draftkings,rebet");
+    assert.equal(url.searchParams.get("bookmakers"), CFB_THE_ODDS_API_BOOKMAKERS);
     return new Response(JSON.stringify([
-      event("e-liu", "LIU Sharks", "Duquesne Dukes", liu.scheduledStart),
+      event("e-liu", "LIU Sharks", "Duquesne Dukes", liu.scheduledStart, capturedAt,
+        ["fanduel", "betrivers", "williamhill_us", "betonlineag"]),
       // Reversed orientation must not match The Citadel.
       event("e-cit-wrong", "VMI Keydets", "Citadel Bulldogs", citadel.scheduledStart),
     ]), {
@@ -53,6 +55,10 @@ assert.equal(book.sportsbook, "fanduel");
 assert.deepEqual(book.moneyline, { awayPrice: 210, homePrice: -260 });
 assert.deepEqual(book.spread, { awayLine: 6.5, awayPrice: -108, homeLine: -6.5, homePrice: -112 });
 assert.deepEqual(book.total, { line: 48.5, overPrice: -105, underPrice: -115 });
+assert.equal(response.booksByGame["g-liu"]?.find((candidate) => candidate.sportsbook === "betrivers")?.targetEligible, false);
+assert.equal(response.booksByGame["g-liu"]?.find((candidate) => candidate.sportsbook === "caesars")?.targetEligible, false);
+assert.equal(response.booksByGame["g-liu"]?.find((candidate) => candidate.sportsbook === "betonline")?.targetEligible, false);
+assert.equal(response.booksByGame["g-liu"]?.find((candidate) => candidate.sportsbook === "betrivers")?.marketReadingEligible, false);
 
 const paidDraftKings = {
   ...book,
@@ -103,7 +109,7 @@ const historical = await fetchCfbTheOddsApiHistoricalOpenings({
     const url = new URL(String(input));
     assert.match(url.pathname, /\/historical\/sports\/americanfootball_ncaaf_fcs\/odds$/);
     assert.equal(url.searchParams.get("markets"), "h2h,spreads,totals");
-    assert.equal(url.searchParams.get("bookmakers"), "fanduel,draftkings,rebet");
+    assert.equal(url.searchParams.get("bookmakers"), CFB_THE_ODDS_API_BOOKMAKERS);
     const first = url.searchParams.get("date") === "2026-10-07T12:00:00Z";
     return new Response(JSON.stringify({
       timestamp: first ? "2026-10-07T11:55:36.000Z" : "2026-10-07T18:40:36.000Z",
@@ -233,23 +239,30 @@ function game(providerGameId: string, awayName: string, homeName: string, schedu
   };
 }
 
-function event(id: string, away: string, home: string, commenceTime: string, observedAt = capturedAt): unknown {
+function event(
+  id: string,
+  away: string,
+  home: string,
+  commenceTime: string,
+  observedAt = capturedAt,
+  bookKeys: string[] = ["fanduel"],
+): unknown {
   return {
     id,
     sport_key: "americanfootball_ncaaf_fcs",
     commence_time: commenceTime,
     away_team: away,
     home_team: home,
-    bookmakers: [{
-      key: "fanduel",
-      title: "FanDuel",
+    bookmakers: bookKeys.map((key) => ({
+      key,
+      title: key,
       last_update: observedAt,
       markets: [
         { key: "h2h", last_update: observedAt, outcomes: [{ name: away, price: 210 }, { name: home, price: -260 }] },
         { key: "spreads", last_update: observedAt, outcomes: [{ name: away, price: -108, point: 6.5 }, { name: home, price: -112, point: -6.5 }] },
         { key: "totals", last_update: observedAt, outcomes: [{ name: "Over", price: -105, point: 48.5 }, { name: "Under", price: -115, point: 48.5 }] },
       ],
-    }],
+    })),
   };
 }
 
