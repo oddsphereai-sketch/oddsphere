@@ -63,7 +63,8 @@ type ReplayRow = {
   ledgerResult: LedgerRow["result"];
   actual: number;
   outcome: 0 | 1;
-  raw: number;
+  raw: number | null;
+  rawProvenance: "locked_independent" | "unavailable_market_dominant_point";
   marketProbability: number;
   final: number;
   independentProjection: number | null;
@@ -136,7 +137,12 @@ async function main(): Promise<void> {
       ledgerResult: row.result,
       actual,
       outcome,
-      raw: clampProbability(decision.rawModelProbability),
+      raw: decision.projectionEvidence?.source === "market_dominant_expected_starter"
+        ? null
+        : clampProbability(decision.rawModelProbability),
+      rawProvenance: decision.projectionEvidence?.source === "market_dominant_expected_starter"
+        ? "unavailable_market_dominant_point"
+        : "locked_independent",
       marketProbability: clampProbability(decision.marketProbability),
       final: clampProbability(decision.finalProbability),
       independentProjection: independentProjection(decision),
@@ -149,7 +155,8 @@ async function main(): Promise<void> {
   }
 
   const canonical = canonicalize(replay);
-  const probabilityBootstrap = clusterBootstrap(canonical, (rows) => {
+  const canonicalProbability = canonical.filter((row) => row.raw !== null);
+  const probabilityBootstrap = clusterBootstrap(canonicalProbability, (rows) => {
     const raw = brier(rows, "raw");
     const market = brier(rows, "marketProbability");
     const final = brier(rows, "final");
@@ -178,6 +185,8 @@ async function main(): Promise<void> {
       coveredGames: new Set(ledger.map((row) => row.provider_game_id)).size,
       outcomeMatchedExactRecords: replay.length,
       outcomeMatchedCanonicalScopes: canonical.length,
+      exactIndependentProbabilityScopes: canonicalProbability.length,
+      marketDominantRawProbabilityScopesExcluded: canonical.length - canonicalProbability.length,
       malformedLockedPayloads,
       unmatchedOutcomes,
       researchMatchedPending,
@@ -195,8 +204,8 @@ async function main(): Promise<void> {
     byDecisionRelease: groupSummary(canonical, (row) => row.decisionRelease),
     movement: movementSummary(canonical),
     residualWeightDiagnosticInSample: Object.fromEntries(WEIGHTS.map((weight) => [weight.toFixed(2), probabilitySummary(
-      canonical,
-      (row) => residualProbability(row.marketProbability, row.raw, weight),
+      canonicalProbability,
+      (row) => residualProbability(row.marketProbability, Number(row.raw), weight),
     )])),
     gameClusterBootstrap95: {
       resamples: 4000,
@@ -222,13 +231,16 @@ async function main(): Promise<void> {
 }
 
 function summarize(rows: ReplayRow[]) {
+  const probabilityRows = rows.filter((row) => row.raw !== null);
   return {
     records: rows.length,
     games: new Set(rows.map((row) => row.gameId)).size,
     probability: {
-      raw: probabilitySummary(rows, (row) => row.raw),
-      market: probabilitySummary(rows, (row) => row.marketProbability),
-      final: probabilitySummary(rows, (row) => row.final),
+      excludedMarketDominantRawRows: rows.length - probabilityRows.length,
+      raw: probabilitySummary(probabilityRows, (row) => Number(row.raw)),
+      market: probabilitySummary(probabilityRows, (row) => row.marketProbability),
+      final: probabilitySummary(probabilityRows, (row) => row.final),
+      allPublishedRows: probabilitySummary(rows, (row) => row.final),
     },
     point: pointSummary(rows),
   };
@@ -365,7 +377,7 @@ function residualProbability(market: number, independent: number, weight: number
 }
 
 function brier(rows: ReplayRow[], field: "raw" | "marketProbability" | "final"): number {
-  return mean(rows.map((row) => (row[field] - row.outcome) ** 2));
+  return mean(rows.map((row) => (Number(row[field]) - row.outcome) ** 2));
 }
 
 function mae(rows: ReplayRow[], field: "independentProjection" | "publishedProjection"): number {
