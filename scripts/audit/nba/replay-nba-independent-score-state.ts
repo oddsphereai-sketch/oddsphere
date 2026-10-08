@@ -52,11 +52,25 @@ type Metric = {
   totalDecisions: number;
 };
 
+type TransitionMetric = {
+  winnerSideChanges: number;
+  winnerCorrections: number;
+  winnerHarms: number;
+  spreadSideChanges: number;
+  spreadCorrections: number;
+  spreadHarms: number;
+  totalSideChanges: number;
+  totalCorrections: number;
+  totalHarms: number;
+};
+
 type Report = {
   independent: Metric;
   marketGrounded65: Metric;
+  marketGrounded65Transitions: TransitionMetric;
   marketBenchmark: Metric;
   crossing: Record<string, Metric>;
+  crossingTransitions: Record<string, TransitionMetric>;
 };
 
 const CROSSING_THRESHOLDS = [0.52, 0.55, 0.58, 0.6, 0.62, 0.65] as const;
@@ -144,6 +158,65 @@ function blankMetric(): Metric {
   };
 }
 
+function blankTransitionMetric(): TransitionMetric {
+  return {
+    winnerSideChanges: 0,
+    winnerCorrections: 0,
+    winnerHarms: 0,
+    spreadSideChanges: 0,
+    spreadCorrections: 0,
+    spreadHarms: 0,
+    totalSideChanges: 0,
+    totalCorrections: 0,
+    totalHarms: 0,
+  };
+}
+
+function addTransition(
+  metric: TransitionMetric,
+  game: Game,
+  independentHome: number,
+  independentAway: number,
+  candidateHome: number,
+  candidateAway: number,
+): void {
+  const actualMargin = game.actualHome - game.actualAway;
+  const actualTotal = game.actualHome + game.actualAway;
+  const independentMargin = independentHome - independentAway;
+  const candidateMargin = candidateHome - candidateAway;
+  const independentTotal = independentHome + independentAway;
+  const candidateTotal = candidateHome + candidateAway;
+  const observe = (
+    independentSignal: number,
+    candidateSignal: number,
+    actualSignal: number,
+    keys: readonly [keyof TransitionMetric, keyof TransitionMetric, keyof TransitionMetric],
+  ) => {
+    const independentSide = Math.sign(independentSignal);
+    const candidateSide = Math.sign(candidateSignal);
+    const actualSide = Math.sign(actualSignal);
+    if (independentSide === 0 || candidateSide === 0 || actualSide === 0 || independentSide === candidateSide) return;
+    metric[keys[0]] += 1;
+    if (independentSide !== actualSide && candidateSide === actualSide) metric[keys[1]] += 1;
+    if (independentSide === actualSide && candidateSide !== actualSide) metric[keys[2]] += 1;
+  };
+  observe(independentMargin, candidateMargin, actualMargin, [
+    "winnerSideChanges", "winnerCorrections", "winnerHarms",
+  ]);
+  observe(
+    independentMargin - game.marketHomeMargin,
+    candidateMargin - game.marketHomeMargin,
+    actualMargin - game.marketHomeMargin,
+    ["spreadSideChanges", "spreadCorrections", "spreadHarms"],
+  );
+  observe(
+    independentTotal - game.marketTotal,
+    candidateTotal - game.marketTotal,
+    actualTotal - game.marketTotal,
+    ["totalSideChanges", "totalCorrections", "totalHarms"],
+  );
+}
+
 function addMetric(
   metric: Metric,
   game: Game,
@@ -213,8 +286,12 @@ function replay(games: readonly Game[], parameters: Parameters): Map<number, Rep
     const report = reports.get(game.season) ?? {
       independent: blankMetric(),
       marketGrounded65: blankMetric(),
+      marketGrounded65Transitions: blankTransitionMetric(),
       marketBenchmark: blankMetric(),
       crossing: Object.fromEntries(CROSSING_THRESHOLDS.map((threshold) => [String(threshold), blankMetric()])),
+      crossingTransitions: Object.fromEntries(
+        CROSSING_THRESHOLDS.map((threshold) => [String(threshold), blankTransitionMetric()]),
+      ),
     };
     reports.set(game.season, report);
     addMetric(report.independent, game, projectedHome, projectedAway);
@@ -223,11 +300,21 @@ function replay(games: readonly Game[], parameters: Parameters): Map<number, Rep
     const independentTotal = projectedHome + projectedAway;
     const groundedMargin = 0.65 * independentMargin + 0.35 * game.marketHomeMargin;
     const groundedTotal = 0.65 * independentTotal + 0.35 * game.marketTotal;
+    const groundedHome = (groundedTotal + groundedMargin) / 2;
+    const groundedAway = (groundedTotal - groundedMargin) / 2;
     addMetric(
       report.marketGrounded65,
       game,
-      (groundedTotal + groundedMargin) / 2,
-      (groundedTotal - groundedMargin) / 2,
+      groundedHome,
+      groundedAway,
+    );
+    addTransition(
+      report.marketGrounded65Transitions,
+      game,
+      projectedHome,
+      projectedAway,
+      groundedHome,
+      groundedAway,
     );
     addMetric(
       report.marketBenchmark,
@@ -244,11 +331,21 @@ function replay(games: readonly Game[], parameters: Parameters): Map<number, Rep
       const finalMargin = winnerDisagrees && marketFavoriteProbability >= threshold
         ? game.marketHomeMargin
         : independentMargin;
+      const crossingHome = (independentTotal + finalMargin) / 2;
+      const crossingAway = (independentTotal - finalMargin) / 2;
       addMetric(
         report.crossing[String(threshold)]!,
         game,
-        (independentTotal + finalMargin) / 2,
-        (independentTotal - finalMargin) / 2,
+        crossingHome,
+        crossingAway,
+      );
+      addTransition(
+        report.crossingTransitions[String(threshold)]!,
+        game,
+        projectedHome,
+        projectedAway,
+        crossingHome,
+        crossingAway,
       );
     }
 
@@ -327,7 +424,9 @@ const selectedReport = Object.fromEntries(
     {
       independent: finalize(report.independent),
       selectedDecisionCrossing: finalize(report.crossing[String(selectedCrossingThreshold)]!),
+      selectedDecisionCrossingTransitions: report.crossingTransitions[String(selectedCrossingThreshold)]!,
       incumbentMarketGrounded65: finalize(report.marketGrounded65),
+      incumbentMarketGrounded65Transitions: report.marketGrounded65Transitions,
       closingMarketBenchmark: finalize(report.marketBenchmark),
     },
   ]),

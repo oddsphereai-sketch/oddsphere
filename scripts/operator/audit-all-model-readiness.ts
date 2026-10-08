@@ -19,6 +19,7 @@
 
 import { supabase } from "../../lib/db/supabase";
 import { isPublicallyTracked } from "../../lib/config/officialTrackingStart";
+import { loadCompleteCurrentGameLines } from "../../lib/services/currentGameLineReader";
 import { readBoolFlag, readStringFlag, todayUTC } from "./_cliCommon";
 
 type Sport = "mlb" | "wnba" | "soccer" | "nba" | "nhl";
@@ -193,12 +194,19 @@ async function auditSport(sport: Sport, date: string): Promise<SportReport> {
     };
   }
 
-  const { data: linesRaw, error: linesErr } = await supabase
-    .from("lines")
-    .select("game_id,market_type,fetched_at")
-    .in("game_id", gameIds)
-    .in("market_type", [...LINE_MARKETS[sport]]);
-  if (linesErr) notes.push(`lines query failed: ${linesErr.message}`);
+  const linesRaw: DbMarketRow[] = [];
+  try {
+    for (const gameId of gameIds) {
+      linesRaw.push(...await loadCompleteCurrentGameLines({
+        client: supabase,
+        gameIds: [gameId],
+        marketTypes: LINE_MARKETS[sport],
+        context: `all-model readiness ${sport} ${date} game ${gameId}`,
+      }));
+    }
+  } catch (error) {
+    notes.push(error instanceof Error ? error.message : `lines query failed: ${String(error)}`);
+  }
 
   const { data: sigRaw, error: sigErr } = await supabase
     .from("sharp_signals")
