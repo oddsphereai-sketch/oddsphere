@@ -255,7 +255,18 @@ def add_player_prior_features(rows: pd.DataFrame, metrics: list[str]) -> tuple[p
     return result.drop(columns=["_prior_active_count", "_prior_season_active_count"]), feature_columns
 
 
-def add_team_prior_features(team: pd.DataFrame) -> tuple[pd.DataFrame, list[str]]:
+def add_team_prior_features(
+    team: pd.DataFrame,
+    opponent_identity: str = "legacy_self",
+) -> tuple[pd.DataFrame, list[str]]:
+    """Build shifted team histories with an explicit opponent-identity mode.
+
+    The legacy mode is retained solely to reproduce the r1 historical dataset.
+    New research must request ``actual_opponent`` so allowed histories are
+    attached to the defense the offense will face rather than its own defense.
+    """
+    if opponent_identity not in {"legacy_self", "actual_opponent"}:
+        raise ValueError(f"unsupported opponent identity: {opponent_identity}")
     result = team.sort_values(["team", "season", "week", "game_id"]).copy()
     metrics = [column for column in result.columns if column.startswith("team_")]
     own_columns: list[str] = []
@@ -269,12 +280,12 @@ def add_team_prior_features(team: pd.DataFrame) -> tuple[pd.DataFrame, list[str]
         result[name] = group.transform(lambda values: values.shift(1).ewm(alpha=EWM_ALPHA, adjust=False).mean())
         own_columns.append(name)
     own = result[["season", "week", "game_id", "team", *own_columns]]
-    allowed = team.rename(columns={"team": "offense", "opponent": "team"}).sort_values(["team", "season", "week", "game_id"]).copy()
+    allowed = team.rename(columns={"team": "offense", "opponent": "defense"}).sort_values(["defense", "season", "week", "game_id"]).copy()
     defense_columns: list[str] = []
     for metric in metrics:
         allowed_metric = metric.replace("team_", "allowed_", 1)
         allowed[allowed_metric] = allowed[metric]
-        group = allowed.groupby("team", sort=False, observed=True)[allowed_metric]
+        group = allowed.groupby("defense", sort=False, observed=True)[allowed_metric]
         for window in (3, 5):
             name = f"prior_opponent_{allowed_metric}_avg{window}"
             allowed[name] = group.transform(lambda values, size=window: shifted_rolling(values, size))
@@ -282,7 +293,20 @@ def add_team_prior_features(team: pd.DataFrame) -> tuple[pd.DataFrame, list[str]
         name = f"prior_opponent_{allowed_metric}_ewm"
         allowed[name] = group.transform(lambda values: values.shift(1).ewm(alpha=EWM_ALPHA, adjust=False).mean())
         defense_columns.append(name)
-    return own.merge(allowed[["season", "week", "game_id", "team", *defense_columns]], on=["season", "week", "game_id", "team"], validate="one_to_one"), [*own_columns, *defense_columns]
+    defense_key = "defense" if opponent_identity == "legacy_self" else "offense"
+    allowed_for_join = allowed[["season", "week", "game_id", defense_key, *defense_columns]].rename(
+        columns={defense_key: "team"},
+    )
+    return own.merge(
+        allowed_for_join,
+        on=["season", "week", "game_id", "team"],
+        validate="one_to_one",
+    ), [*own_columns, *defense_columns]
+
+
+def add_opponent_team_prior_features(team: pd.DataFrame) -> tuple[pd.DataFrame, list[str]]:
+    """Return shifted base histories keyed to the actual opponent defense."""
+    return add_team_prior_features(team, opponent_identity="actual_opponent")
 
 
 def build_dataset(pbp: pd.DataFrame, rosters: pd.DataFrame, snaps: pd.DataFrame, injuries: pd.DataFrame, player_stats: pd.DataFrame, team_stats: pd.DataFrame, contract: dict[str, Any]) -> tuple[pd.DataFrame, dict[str, Any]]:

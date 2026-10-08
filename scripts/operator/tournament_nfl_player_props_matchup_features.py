@@ -115,7 +115,24 @@ def team_game_metrics(manifest: dict[str, Any]) -> pd.DataFrame:
     return rows[["season", "week", "game_id", "team", "opponent", *metrics]]
 
 
-def add_shifted_team_features(rows: pd.DataFrame) -> tuple[pd.DataFrame, list[str]]:
+def add_shifted_team_features(
+    rows: pd.DataFrame,
+    opponent_identity: str = "legacy_self",
+) -> tuple[pd.DataFrame, list[str]]:
+    """Build pregame team and defense histories without leaking the current game.
+
+    ``legacy_self`` preserves the original tournament/export behavior for exact
+    reproducibility. It keys allowed metrics by the offensive team's identity,
+    so the resulting ``matchup_opponent_allowed_*`` columns actually describe
+    that team's own defense. ``actual_opponent`` keys those same shifted states
+    by the offense on the source row and therefore attaches the defense of the
+    opponent the player will face.
+
+    New research must request ``actual_opponent`` explicitly until a validated
+    release promotes the corrected identity through the full runtime pipeline.
+    """
+    if opponent_identity not in {"legacy_self", "actual_opponent"}:
+        raise ValueError(f"unsupported opponent identity: {opponent_identity}")
     identity = ["season", "week", "game_id", "team"]
     metrics = [c for c in rows.columns if c not in {*identity, "opponent"}]
     own = rows.sort_values(["team", "season", "week", "game_id"]).copy()
@@ -129,10 +146,10 @@ def add_shifted_team_features(rows: pd.DataFrame) -> tuple[pd.DataFrame, list[st
         name = f"matchup_team_{metric}_ewm"
         own[name] = group.transform(lambda x: x.shift(1).ewm(alpha=0.35, adjust=False).mean())
         own_features.append(name)
-    defense = rows.rename(columns={"team": "offense", "opponent": "team"}).sort_values(["team", "season", "week", "game_id"]).copy()
+    defense = rows.rename(columns={"team": "offense", "opponent": "defense"}).sort_values(["defense", "season", "week", "game_id"]).copy()
     defense_features: list[str] = []
     for metric in metrics:
-        group = defense.groupby("team", observed=True)[metric]
+        group = defense.groupby("defense", observed=True)[metric]
         for window in (3, 5):
             name = f"matchup_opponent_allowed_{metric}_avg{window}"
             defense[name] = group.transform(lambda x, w=window: x.shift(1).rolling(w, min_periods=1).mean())
@@ -140,10 +157,19 @@ def add_shifted_team_features(rows: pd.DataFrame) -> tuple[pd.DataFrame, list[st
         name = f"matchup_opponent_allowed_{metric}_ewm"
         defense[name] = group.transform(lambda x: x.shift(1).ewm(alpha=0.35, adjust=False).mean())
         defense_features.append(name)
+    defense_key = "defense" if opponent_identity == "legacy_self" else "offense"
+    defense_for_join = defense[["season", "week", "game_id", defense_key, *defense_features]].rename(
+        columns={defense_key: "team"},
+    )
     joined = own[[*identity, *own_features]].merge(
-        defense[[*identity, *defense_features]], on=identity, validate="one_to_one"
+        defense_for_join, on=identity, validate="one_to_one"
     )
     return joined, [*own_features, *defense_features]
+
+
+def add_opponent_shifted_team_features(rows: pd.DataFrame) -> tuple[pd.DataFrame, list[str]]:
+    """Return shifted features keyed to the actual opponent defense."""
+    return add_shifted_team_features(rows, opponent_identity="actual_opponent")
 
 
 def game_environment(manifest: dict[str, Any]) -> tuple[pd.DataFrame, list[str]]:
