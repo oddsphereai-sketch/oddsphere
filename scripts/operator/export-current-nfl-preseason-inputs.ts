@@ -2,7 +2,10 @@ import { createHash } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fetchBalldontlieNflPreviewSlate } from "../../lib/services/football/balldontlieNflPreviewSlate";
-import { fetchBalldontlieNflSlateAvailability } from "../../lib/services/football/balldontlieNflAvailability";
+import {
+  fetchBalldontlieNflSlateAvailability,
+  nflAvailabilityRequestBudgetMaximum,
+} from "../../lib/services/football/balldontlieNflAvailability";
 
 const INPUT_RELEASE = "nfl_preseason_current_provider_inputs_2026_08_19_r2" as const;
 
@@ -13,15 +16,18 @@ async function main() {
     throw new Error("--product-week must be 1, 2, or 3");
   }
   const slate = await fetchBalldontlieNflPreviewSlate({ season: 2026, productWeek });
-  const availabilityRows = await fetchBalldontlieNflSlateAvailability(
-    slate.games.map((game) => ({
+  const availabilityMatchups = slate.games.map((game) => ({
       id: `nfl-${game.providerGameId}`,
       awayTeam: game.away.abbreviation,
       homeTeam: game.home.abbreviation,
       awayTeamId: game.away.id,
       homeTeamId: game.home.id,
-    })),
-  );
+  }));
+  const availabilityRows = await fetchBalldontlieNflSlateAvailability(availabilityMatchups, {
+    season: 2026,
+    week: slate.providerWeek,
+    seasonType: 1,
+  });
   if (availabilityRows === null) throw new Error("BALLDONTLIE preseason injury snapshot is unavailable.");
   const body = {
     inputRelease: INPUT_RELEASE,
@@ -30,7 +36,7 @@ async function main() {
     availability: Object.fromEntries(availabilityRows.map((row) => [row.eventId, row])),
     requestBudget: {
       slateRequests: slate.providerRequests,
-      injuryRequestsMaximum: 4,
+      injuryRequestsMaximum: nflAvailabilityRequestBudgetMaximum(availabilityMatchups),
     },
   };
   const payload = `${JSON.stringify(body, null, 2)}\n`;

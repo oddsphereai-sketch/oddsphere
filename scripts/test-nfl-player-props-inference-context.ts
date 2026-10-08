@@ -110,7 +110,7 @@ function evidence(
   } as unknown as NflForwardStoredEvidence;
 }
 
-assert.equal(NFL_PLAYER_PROPS_INFERENCE_CONTEXT_RELEASE, "nfl_player_props_inference_context_2026_09_29_r7_injury_feed_continuity");
+assert.equal(NFL_PLAYER_PROPS_INFERENCE_CONTEXT_RELEASE, "nfl_player_props_inference_context_2026_10_08_r8_game_designation_continuity");
 const context = buildNflPlayerPropsInferenceContextFromForwardEvidence({
   snapshot,
   capturedAt: "2026-08-25T12:00:00.000Z",

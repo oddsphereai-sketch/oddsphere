@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import {
   fetchBalldontlieNflSlateAvailability,
-  NFL_INJURY_MAX_PAGES,
+  nflAvailabilityRequestBudgetMaximum,
   type NflAvailabilityMatchup,
 } from "./balldontlieNflAvailability";
 import {
@@ -23,7 +23,7 @@ import type { DailyEdgeGameAvailability } from "../dailyEdge/gameAvailability";
 import type { NflPlayerPropsObservationSnapshot } from "./nflPlayerPropsContract";
 
 export const NFL_PLAYER_PROPS_INFERENCE_CONTEXT_RELEASE =
-  "nfl_player_props_inference_context_2026_09_29_r7_injury_feed_continuity" as const;
+  "nfl_player_props_inference_context_2026_10_08_r8_game_designation_continuity" as const;
 
 export type NflPlayerPropsExcludedGame = {
   canonicalGameId: string;
@@ -94,7 +94,14 @@ export async function collectNflPlayerPropsInferenceContext(args: {
     awayTeamId: teams.get(game.awayTeam)!.id,
     homeTeamId: teams.get(game.homeTeam)!.id,
   }));
-  const availability = await fetchBalldontlieNflSlateAvailability(matchupArgs, { apiKey, fetchImpl });
+  const availabilityRequestsMaximum = nflAvailabilityRequestBudgetMaximum(matchupArgs);
+  const availability = await fetchBalldontlieNflSlateAvailability(matchupArgs, {
+    apiKey,
+    fetchImpl,
+    season: args.snapshot.season,
+    week: args.snapshot.week,
+    seasonType: args.snapshot.phase === "preseason" ? 1 : args.snapshot.phase === "postseason" ? 3 : 2,
+  });
   if (!availability) throw new Error("NFL props context injury collection is unavailable.");
   const mainMarket = await fetchBalldontlieNflRegularSlate({ season: args.snapshot.season, week: args.snapshot.week, apiKey, fetchImpl });
   const byGame = new Map(availability.map((game) => [game.eventId, game]));
@@ -123,7 +130,7 @@ export async function collectNflPlayerPropsInferenceContext(args: {
     phase: args.snapshot.phase,
     games,
     excludedGames: [],
-    requestBudget: { teams: 1, rosters: depth.requests, injuriesMaximum: NFL_INJURY_MAX_PAGES, mainMarket: mainMarket.providerRequests, totalMaximum: 1 + depth.requests + NFL_INJURY_MAX_PAGES + mainMarket.providerRequests },
+    requestBudget: { teams: 1, rosters: depth.requests, injuriesMaximum: availabilityRequestsMaximum, mainMarket: mainMarket.providerRequests, totalMaximum: 1 + depth.requests + availabilityRequestsMaximum + mainMarket.providerRequests },
     coverage: {
       games: games.length,
       teams: selectedTeams.length,

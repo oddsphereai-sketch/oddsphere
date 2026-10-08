@@ -2,7 +2,10 @@ import { createHash } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fetchBalldontlieNflRegularSlate } from "../../lib/services/football/balldontlieNflPreviewSlate";
-import { fetchBalldontlieNflSlateAvailability } from "../../lib/services/football/balldontlieNflAvailability";
+import {
+  fetchBalldontlieNflSlateAvailability,
+  nflAvailabilityRequestBudgetMaximum,
+} from "../../lib/services/football/balldontlieNflAvailability";
 
 const INPUT_RELEASE = "nfl_regular_current_provider_inputs_2026_08_19_r1" as const;
 const ROSTER_CONCURRENCY = 4;
@@ -41,16 +44,19 @@ async function main() {
       rosters[team.abbreviation] = body.data.filter((row): row is RosterRow => row !== null && typeof row === "object");
     }));
   }
-  const availabilityRows = await fetchBalldontlieNflSlateAvailability(
-    slate.games.map((game) => ({
+  const availabilityMatchups = slate.games.map((game) => ({
       id: `nfl-${game.providerGameId}`,
       awayTeam: game.away.abbreviation,
       homeTeam: game.home.abbreviation,
       awayTeamId: game.away.id,
       homeTeamId: game.home.id,
-    })),
-    { apiKey },
-  );
+  }));
+  const availabilityRows = await fetchBalldontlieNflSlateAvailability(availabilityMatchups, {
+    apiKey,
+    season: 2026,
+    week,
+    seasonType: 2,
+  });
   if (availabilityRows === null) throw new Error("BALLDONTLIE regular-season injury snapshot is unavailable.");
   const body = {
     inputRelease: INPUT_RELEASE,
@@ -61,7 +67,7 @@ async function main() {
     requestBudget: {
       slateRequests: slate.providerRequests,
       rosterRequests,
-      injuryRequestsMaximum: 4,
+      injuryRequestsMaximum: nflAvailabilityRequestBudgetMaximum(availabilityMatchups),
       rosterConcurrency: ROSTER_CONCURRENCY,
     },
   };
