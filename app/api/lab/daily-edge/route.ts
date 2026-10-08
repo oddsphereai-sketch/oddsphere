@@ -3926,8 +3926,12 @@ function readFiV2Audit(sp: Record<string, unknown> | null): {
 
 function fiBoardSportsbookFromReason(reason: string | null): string | null {
   if (!reason) return null;
-  const match = reason.match(/^fi_market_ok_(.+)$/);
-  return match?.[1] ?? null;
+  const legacyMatch = reason.match(/^fi_market_ok_(.+)$/);
+  if (legacyMatch?.[1]) return legacyMatch[1];
+  const targetExcludedMatch = reason.match(
+    /^fi_target_excluded_consensus_\d+_movement_\d+_evaluation_(.+)$/,
+  );
+  return targetExcludedMatch?.[1] ?? null;
 }
 
 function fiBoardHistorySide(args: {
@@ -6665,6 +6669,7 @@ export const __TEST__ = {
   buildPersistedOddsTrail,
   selectTwoSidedMovementReference,
   terminalOddsMoveFromTrail,
+  fiBoardSportsbookFromReason,
   fiBoardHistorySide,
   readLockedSnapshotSportsbook,
   GRADE_RANK,

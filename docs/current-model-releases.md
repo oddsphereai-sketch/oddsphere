@@ -423,7 +423,7 @@ Last reviewed: 2026-10-08
   snapshot / reader are `cfb_v1_member_fixture_2026_10_06_r71_midweek_board_coverage` /
   `cfb_forward_member_snapshot_2026_10_06_r31_midweek_board_coverage` /
   `cfb_member_snapshot_reader_2026_10_06_r16_midweek_board_coverage`; shared presentation is
-  `daily_edge_member_presentation_2026_10_06_r23_cfb_score_outlook_continuity`.
+  `daily_edge_member_presentation_2026_10_08_r24_mlb_fi_opening_continuity`.
   Independent score, PMF, probabilities, market arbitration, decisions, grades, lock and tracking
   releases remain unchanged.
 - The authoritative product week now covers Tuesday through Monday Eastern instead of dropping
@@ -1435,6 +1435,17 @@ changed; only deterministic settlement of existing locked rows is affected.
 
 - Operational cadence / rollover: `mlb_daily_refresh_schedule_2026_10_07_r1_readiness_gated_rollover`. The default member board changes ET dates at 03:00 and silently retains the prior complete date-keyed snapshot until the new date publishes successfully. The existing sole leased slate writer receives DST-safe 03:05 ET seed opportunities: Vercel invokes at 07:05Z and 08:05Z, while the route admits only the invocation whose New York hour is 03 and makes zero provider calls on the other. Current-season pitching and batting remain guarded by their existing successful once-per-slate-day markers; later full and intraday cycles reuse them. Partial core work, failed Market Intelligence, or a failed response-snapshot write cannot replace the prior complete board. Prediction formulas, market interpretation, sides, scores, probabilities, grades, stakes, locks, tracking, member copy, labels, and layout are unchanged. Evidence: `docs/model-audits/2026-10-07-mlb-readiness-gated-rollover-cadence.md`.
 
+- October 8 first-inning opening continuity advances the shared member presentation release to
+  `daily_edge_member_presentation_2026_10_08_r24_mlb_fi_opening_continuity`. The FI market model
+  already consumes coherent target-excluded current/opening pairs and same-book movement before
+  producing its posterior. The member reader now recognizes that current target-excluded reason
+  format when resolving the evaluated sportsbook, so its existing same-book `line_history` rows
+  populate NRFI and YRFI Opening/Prior instead of appearing blank. Legacy reason parsing remains
+  supported; books are never crossed. Predictions, post-market probabilities, scores, sides,
+  exact current prices, grades, actionability, locks, tracking, providers, query counts, copy,
+  labels, and layout are unchanged. Promotions, demotions, and changed decisions are 0 / 0 / 0.
+  Evidence and rollback: `docs/model-audits/2026-10-08-mlb-fi-opening-continuity.md`.
+
 - Projection runtime: resolved automodel `v2_2`
 - Projection core: `mlb_projection_core_v2_6_corroborated_total_opposition_preserve_margin_2026_10_05`
 - First-inning runtime: `fi_v2` with FI-scoped release `mlb_first_inning_release_2026_09_04_r85_independent_uncertainty` and probability head `mlb_first_inning_fi_v10_independent_uncertainty_target_excluded_2026_09_04`. r85 retains r84's pre-r61 65% independent / 35% target-excluded multi-book posterior and its 48%-52% corroborated uncertainty band. When the evaluated quote is the sole accepted pair, the forecast remains independent-only and now requires the independent probability to clear 55% NRFI or 55% YRFI; otherwise it is a genuine null-side Toss-Up. The evaluated quote remains exact-price economics only. Full-game tuples, probabilities, grades, the sole writer/lease, providers, query budgets, locks, tracking, and settlement are unchanged.
@@ -1597,7 +1608,7 @@ and Total markets as unavailable. The correction restores authentic named-book
 price inputs only; it does not fabricate a price, alter a locked record, or add a
 second writer.
 
-Shared member presentation release: `daily_edge_member_presentation_2026_10_06_r23_cfb_score_outlook_continuity`.
+Shared member presentation release: `daily_edge_member_presentation_2026_10_08_r24_mlb_fi_opening_continuity`.
 Internal operational holds remain high-severity health/recovery state, but the
 member board, filters, cards, headlines, and Bet Grade surface them as No Play
 with an explicit incomplete-evidence reason. The response reports evaluated

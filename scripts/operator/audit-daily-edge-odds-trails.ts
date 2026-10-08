@@ -1,5 +1,5 @@
 /** READ ONLY. Verify every displayed Daily Edge price/line stop against persisted market rows. */
-import { GET as getDailyEdge } from "../../app/api/lab/daily-edge/route";
+import { GET as getDailyEdge, __TEST__ as dailyEdgeTest } from "../../app/api/lab/daily-edge/route";
 import { supabase } from "../../lib/db/supabase";
 
 // The audit intentionally inspects heterogeneous JSON/SQL rows from several schemas.
@@ -165,9 +165,9 @@ async function main() {
         if (sport === "mlb" && key === "first_inning" && market.fiMarketBoard) {
           const board = market.fiMarketBoard as Row;
           const rawSource = String(board.source ?? "");
-          const sportsbook = rawSource.startsWith("fi_market_ok_")
-            ? rawSource.replace(/^fi_market_ok_/, "").replaceAll(" ", "_").toLowerCase()
-            : null;
+          const sportsbook = dailyEdgeTest.fiBoardSportsbookFromReason(rawSource)
+            ?.replaceAll(" ", "_")
+            .toLowerCase() ?? null;
           if (!close(board.line, 0.5)) failures.push(`${sport}/${game.id}/first_inning: board line is not 0.5`);
           if (sportsbook === null) failures.push(`${sport}/${game.id}/first_inning: named sportsbook missing`);
           for (const field of ["nrfiAmerican", "yrfiAmerican", "nrfiOpenAmerican", "yrfiOpenAmerican", "nrfiPreviousAmerican", "yrfiPreviousAmerican"]) {

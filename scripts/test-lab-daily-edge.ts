@@ -476,6 +476,20 @@ section("Market Pulse presentation coherence");
       lineValue: 0.5,
     });
     check("FI half-run history excludes 1.5-run alternate prices", fiHalfRunHistory.openAmerican === -110 && fiHalfRunHistory.previousAmerican === -110);
+    check(
+      "legacy FI market reason preserves its evaluation sportsbook",
+      dailyEdgeTest.fiBoardSportsbookFromReason("fi_market_ok_ballybet") === "ballybet",
+    );
+    check(
+      "target-excluded FI market reason preserves its evaluation sportsbook",
+      dailyEdgeTest.fiBoardSportsbookFromReason(
+        "fi_target_excluded_consensus_1_movement_1_evaluation_ballybet",
+      ) === "ballybet",
+    );
+    check(
+      "malformed FI market reason cannot name a sportsbook",
+      dailyEdgeTest.fiBoardSportsbookFromReason("fi_target_excluded_consensus_bad") === null,
+    );
   }
 
   section("Source-aware split sections");
