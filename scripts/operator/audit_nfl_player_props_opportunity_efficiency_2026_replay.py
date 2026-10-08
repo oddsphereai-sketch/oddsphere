@@ -24,6 +24,10 @@ def main() -> None:
     parser.add_argument("--tournament", type=pathlib.Path, default=DEFAULT_TOURNAMENT)
     parser.add_argument("--replay", type=pathlib.Path, default=DEFAULT_REPLAY)
     parser.add_argument("--output", type=pathlib.Path, default=DEFAULT_OUTPUT)
+    parser.add_argument(
+        "--release",
+        default="nfl_player_props_opportunity_efficiency_2026_locked_replay_2026_10_08_r2_depth_role",
+    )
     args = parser.parse_args()
 
     utility = load("props_hierarchy_replay_utility", ROOT / "scripts/operator/audit_nfl_player_props_external_2026_replay.py")
@@ -126,7 +130,7 @@ def main() -> None:
     outcome = matched["outcome"].to_numpy(float)
     raw_available = matched["raw"].notna().to_numpy()
     report: dict[str, Any] = {
-        "release": "nfl_player_props_opportunity_efficiency_2026_locked_replay_2026_10_08_r2_depth_role",
+        "release": args.release,
         "generatedAt": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         "researchOnly": True,
         "marketIndependent": True,

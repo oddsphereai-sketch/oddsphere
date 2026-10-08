@@ -23,9 +23,11 @@ assert {f"ngs_{name}" for name in ("passing", "receiving", "rushing")} <= {row.d
 assert {("ftn_charting", season) for season in range(2022, 2027)} <= keys
 assert {(f"pfr_{name}", season) for name in ("pass", "rush", "rec", "def") for season in range(2018, 2027)} <= keys
 assert {("depth_charts", season) for season in range(2016, 2027)} <= keys
-assert {(name, 2026) for name in ("pbp", "weekly_rosters", "snap_counts", "injuries", "player_stats", "team_stats")} <= keys
+assert {("injuries", season) for season in range(2016, 2027)} <= keys
+assert {(name, 2026) for name in ("pbp", "weekly_rosters", "snap_counts", "player_stats", "team_stats")} <= keys
 assert all(row.url.startswith("https://github.com/nflverse/nflverse-data/releases/download/") for row in rows)
 assert all("nextgen_stats/ngs_" in row.url for row in rows if row.dataset.startswith("ngs_"))
 assert all("ftn_charting/ftn_charting_" in row.url for row in rows if row.dataset == "ftn_charting")
 assert all("depth_charts/depth_charts_" in row.url for row in rows if row.dataset == "depth_charts")
+assert all("injuries/injuries_" in row.url for row in rows if row.dataset == "injuries")
 print("NFL player props external cache source inventory tests passed.")
