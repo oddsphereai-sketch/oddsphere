@@ -20,20 +20,22 @@ export const CFB_V1_BASE_REPRESENTATIVE_SCORE_RELEASE =
 const CFB_V1_BASE_GRADE_POLICY_RELEASE =
   "cfb_v1_composite_grade_policy_2026_09_04_r9_evidence_identity_continuity" as const;
 export const CFB_V1_SCORE_ARTIFACT_RELEASE =
-  "cfb_v1_joint_score_runtime_2026_10_07_r17_fcs_price_public_injury_continuity" as const;
+  "cfb_v1_joint_score_runtime_2026_10_08_r18_the_odds_api_fcs_gap_fallback" as const;
 export const CFB_V1_MODEL_RELEASE =
-  "cfb_v1_professional_score_model_2026_10_07_r16_fcs_price_public_injury_continuity" as const;
+  "cfb_v1_professional_score_model_2026_10_08_r17_the_odds_api_fcs_gap_fallback" as const;
 export const CFB_V1_DISTRIBUTION_RELEASE =
-  "cfb_v1_professional_joint_distribution_2026_10_07_r14_fcs_price_public_injury_continuity" as const;
+  "cfb_v1_professional_joint_distribution_2026_10_08_r15_the_odds_api_fcs_gap_fallback" as const;
 export const CFB_V1_PROBABILITY_RELEASE =
-  "cfb_v1_professional_joint_probability_2026_10_07_r18_fcs_price_public_injury_continuity" as const;
+  "cfb_v1_professional_joint_probability_2026_10_08_r19_the_odds_api_fcs_gap_fallback" as const;
 export const CFB_V1_REPRESENTATIVE_SCORE_RELEASE =
-  "cfb_v1_professional_reachable_score_2026_10_07_r14_fcs_price_public_injury_continuity" as const;
+  "cfb_v1_professional_reachable_score_2026_10_08_r15_the_odds_api_fcs_gap_fallback" as const;
 export const CFB_V1_CALIBRATION_RELEASE =
-  "cfb_v1_exact_price_calibration_2026_10_07_r16_fcs_price_public_injury_continuity" as const;
+  "cfb_v1_exact_price_calibration_2026_10_08_r17_the_odds_api_fcs_gap_fallback" as const;
 export const CFB_V1_GRADE_POLICY_RELEASE =
-  "cfb_v1_composite_grade_policy_2026_10_07_r19_fcs_price_public_injury_continuity" as const;
+  "cfb_v1_composite_grade_policy_2026_10_08_r20_the_odds_api_fcs_gap_fallback" as const;
 export const CFB_V1_DECISION_RELEASE =
+  "cfb_v1_daily_edge_decision_2026_10_08_r42_the_odds_api_fcs_gap_fallback" as const;
+export const CFB_V1_GAP_FALLBACK_PREVIOUS_DECISION_RELEASE =
   "cfb_v1_daily_edge_decision_2026_10_07_r41_fcs_price_public_injury_continuity" as const;
 export const CFB_V1_FCS_PRICE_PREVIOUS_DECISION_RELEASE =
   "cfb_v1_daily_edge_decision_2026_10_07_r40_price_qb_continuity" as const;
@@ -58,7 +60,7 @@ export const CFB_V1_GRADE_PREVIOUS_DECISION_RELEASE =
 const CFB_V1_POLICY_SOURCE_DECISION_RELEASE =
   "cfb_v1_daily_edge_decision_2026_09_04_r28_evidence_identity_continuity" as const;
 export const CFB_V1_DECISION_SCHEMA_RELEASE =
-  "cfb_v1_exact_price_decision_tuple_2026_10_07_r29_fcs_price_public_injury_continuity" as const;
+  "cfb_v1_exact_price_decision_tuple_2026_10_08_r30_the_odds_api_fcs_gap_fallback" as const;
 export const CFB_SPREAD_COUNTER_SIGNAL_MIN_EXCLUSIVE = 0.53 as const;
 export const CFB_SPREAD_COUNTER_SIGNAL_MAX_INCLUSIVE = 0.55 as const;
 export const CFB_T60_TARGET_MINUTES = 60 as const;
@@ -128,7 +130,7 @@ export type CfbV1ExactPriceDecision = {
   edgePercentagePoints: number;
   expectedValue: number;
   evaluatedQuote: {
-    provider: "balldontlie" | "sharpapi" | "espn" | "collegefootballdata";
+    provider: "balldontlie" | "sharpapi" | "espn" | "collegefootballdata" | "theoddsapi";
     sportsbook: string;
     line: number | null;
     price: number;

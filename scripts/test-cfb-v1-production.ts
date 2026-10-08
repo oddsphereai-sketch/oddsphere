@@ -11,6 +11,10 @@ import { dailyEdgeOutcomeForecastLabel } from "../app/lab/lib/dailyEdgeOutcomeFo
 import {
   CFB_FORWARD_EVIDENCE_COLLECTOR_RELEASE,
   CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE,
+  CFB_FORWARD_GAP_FALLBACK_PREVIOUS_EVIDENCE_SCHEMA_RELEASE,
+  CFB_FORWARD_GAP_FALLBACK_PREVIOUS_MEMBER_RELEASE,
+  CFB_FORWARD_RELEASE_WAVE_PREVIOUS_EVIDENCE_SCHEMA_RELEASE,
+  CFB_FORWARD_RELEASE_WAVE_PREVIOUS_MEMBER_RELEASE,
   CFB_FORWARD_MARKET_HISTORY_BASE_EVIDENCE_SCHEMA_RELEASE,
   CFB_FORWARD_PRICE_PREVIOUS_EVIDENCE_SCHEMA_RELEASE,
   CFB_FORWARD_PRICE_PREVIOUS_MEMBER_RELEASE,
@@ -74,6 +78,7 @@ import { resolveCfbCanonicalMarketAnchor } from "../lib/services/football/cfbMar
 import {
   CFB_MARKET_SHADOW_WEIGHT,
   CFB_MARKET_SHARP_AWARE_CANDIDATE_RELEASE,
+  CFB_MARKET_SHARP_AWARE_GAP_FALLBACK_PREVIOUS_PRODUCTION_RELEASE,
   CFB_MARKET_SHARP_AWARE_PREVIOUS_PRODUCTION_RELEASE,
   CFB_MARKET_SHARP_AWARE_PRODUCTION_RELEASE,
   applyCfbMarketSharpAwareGrades,
@@ -99,6 +104,7 @@ import { SharpApiClientError } from "../lib/providers/real_api/_sharpApiClient";
 import {
   CFB_T60_MAX_CAPTURE_LAG_MINUTES,
   CFB_V1_DECISION_RELEASE,
+  CFB_V1_GAP_FALLBACK_PREVIOUS_DECISION_RELEASE,
   CFB_V1_PRICE_PREVIOUS_DECISION_RELEASE,
   CFB_V1_HOLISTIC_PREVIOUS_DECISION_RELEASE,
   CFB_V1_CONTINUITY_PREVIOUS_DECISION_RELEASE,
@@ -685,6 +691,156 @@ const evidence: CfbForwardStoredEvidence = {
   payloadSha256: hashCfbForwardEvidencePayload(payload),
   payload,
 };
+
+function releaseTransitionPayload(args: {
+  providerGameId: string;
+  gameStartsAt: string;
+  capturedAt: string;
+  stage: "unlocked" | "t60";
+  schemaRelease: string;
+  memberRelease: string;
+  decisionRelease: string;
+  forecastRelease: string;
+}): CfbForwardEvidencePayload {
+  const next = structuredClone(payload) as CfbForwardEvidencePayload;
+  next.schemaRelease = args.schemaRelease as typeof next.schemaRelease;
+  next.memberRelease = args.memberRelease as typeof next.memberRelease;
+  next.slateGameCount = 2;
+  next.stage = args.stage;
+  next.captureTiming = "on_time";
+  next.capturedAt = args.capturedAt;
+  next.cutoffAt = args.stage === "t60" ? new Date(Date.parse(args.gameStartsAt) - 60 * 60_000).toISOString() : null;
+  next.t60LagMinutes = args.stage === "t60" ? 10 : null;
+  next.game.providerGameId = args.providerGameId;
+  next.game.scheduledStart = args.gameStartsAt;
+  next.market.currentBooks = next.market.currentBooks.map((book) => ({ ...book, providerGameId: args.providerGameId }));
+  next.market.current = next.market.currentBooks[0] ?? null;
+  if (next.market.providerOpening) next.market.providerOpening.providerGameId = args.providerGameId;
+  if (next.market.operationalOpening) next.market.operationalOpening.quote.providerGameId = args.providerGameId;
+  next.decisions.decisionRelease = args.decisionRelease as typeof next.decisions.decisionRelease;
+  next.decisions.trackingEnabled = args.stage === "t60";
+  next.decisions.forecast.providerGameId = args.providerGameId;
+  next.decisions.forecast.gameStartsAt = args.gameStartsAt;
+  next.decisions.evaluatedBets = next.decisions.evaluatedBets.map((decision) => ({
+    ...decision,
+    providerGameId: args.providerGameId,
+    gameStartsAt: args.gameStartsAt,
+    decisionRelease: args.decisionRelease,
+    stage: args.stage === "t60" ? "t60_locked" : "unlocked",
+    evaluatedAt: args.capturedAt,
+    lockedAt: args.stage === "t60" ? args.capturedAt : null,
+    evaluatedQuote: { ...decision.evaluatedQuote, providerGameId: args.providerGameId, observedAt: args.capturedAt },
+  })) as unknown as typeof next.decisions.evaluatedBets;
+  if (next.independentForecast) {
+    next.independentForecast.providerGameId = args.providerGameId;
+    next.independentForecast.gameStartsAt = args.gameStartsAt;
+  }
+  if (next.authoritativeForecast) next.authoritativeForecast.release = args.forecastRelease;
+  return next;
+}
+
+const transitionLockedGameId = "release-transition-locked";
+const transitionUnlockedGameId = "release-transition-unlocked";
+const transitionGameStart = "2026-10-10T19:00:00.000Z";
+const priorLockedPayload = releaseTransitionPayload({
+  providerGameId: transitionLockedGameId,
+  gameStartsAt: transitionGameStart,
+  capturedAt: "2026-10-10T18:10:00.000Z",
+  stage: "t60",
+  schemaRelease: CFB_FORWARD_GAP_FALLBACK_PREVIOUS_EVIDENCE_SCHEMA_RELEASE,
+  memberRelease: CFB_FORWARD_GAP_FALLBACK_PREVIOUS_MEMBER_RELEASE,
+  decisionRelease: CFB_V1_GAP_FALLBACK_PREVIOUS_DECISION_RELEASE,
+  forecastRelease: CFB_MARKET_SHARP_AWARE_GAP_FALLBACK_PREVIOUS_PRODUCTION_RELEASE,
+});
+const priorUnlockedPayload = releaseTransitionPayload({
+  providerGameId: transitionUnlockedGameId,
+  gameStartsAt: transitionGameStart,
+  capturedAt: "2026-10-10T16:00:00.000Z",
+  stage: "unlocked",
+  schemaRelease: CFB_FORWARD_GAP_FALLBACK_PREVIOUS_EVIDENCE_SCHEMA_RELEASE,
+  memberRelease: CFB_FORWARD_GAP_FALLBACK_PREVIOUS_MEMBER_RELEASE,
+  decisionRelease: CFB_V1_GAP_FALLBACK_PREVIOUS_DECISION_RELEASE,
+  forecastRelease: CFB_MARKET_SHARP_AWARE_GAP_FALLBACK_PREVIOUS_PRODUCTION_RELEASE,
+});
+const currentUnlockedPayload = releaseTransitionPayload({
+  providerGameId: transitionUnlockedGameId,
+  gameStartsAt: transitionGameStart,
+  capturedAt: "2026-10-10T17:00:00.000Z",
+  stage: "unlocked",
+  schemaRelease: CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE,
+  memberRelease: CFB_FORWARD_MEMBER_RELEASE,
+  decisionRelease: CFB_V1_DECISION_RELEASE,
+  forecastRelease: CFB_MARKET_SHARP_AWARE_PRODUCTION_RELEASE,
+});
+const lockPreservingReleaseSelection = selectLatestCfbMemberEvidenceRows([
+  {
+    ...evidence,
+    id: "release-transition-prior-lock",
+    providerGameId: transitionLockedGameId,
+    stage: "t60",
+    capturedAt: priorLockedPayload.capturedAt,
+    gameStartAt: transitionGameStart,
+    payloadSha256: hashCfbForwardEvidencePayload(priorLockedPayload),
+    payload: priorLockedPayload,
+  },
+  {
+    ...evidence,
+    id: "release-transition-prior-unlocked",
+    providerGameId: transitionUnlockedGameId,
+    stage: "unlocked",
+    capturedAt: priorUnlockedPayload.capturedAt,
+    gameStartAt: transitionGameStart,
+    payloadSha256: hashCfbForwardEvidencePayload(priorUnlockedPayload),
+    payload: priorUnlockedPayload,
+  },
+  {
+    ...evidence,
+    id: "release-transition-current-unlocked",
+    providerGameId: transitionUnlockedGameId,
+    stage: "unlocked",
+    capturedAt: currentUnlockedPayload.capturedAt,
+    gameStartAt: transitionGameStart,
+    payloadSha256: hashCfbForwardEvidencePayload(currentUnlockedPayload),
+    payload: currentUnlockedPayload,
+  },
+], "2026-10-10T17:05:00.000Z");
+assert.equal(lockPreservingReleaseSelection.length, 2);
+assert.equal(
+  lockPreservingReleaseSelection.find((row) => row.providerGameId === transitionLockedGameId)?.id,
+  "release-transition-prior-lock",
+  "a completed prior-release lock must remain immutable while unlocked games advance to the odds-gap release",
+);
+assert.equal(
+  lockPreservingReleaseSelection.find((row) => row.providerGameId === transitionUnlockedGameId)?.id,
+  "release-transition-current-unlocked",
+  "the odds-gap release must take over current unlocked games without waiting for settled locks to be rewritten",
+);
+
+const releaseWaveCompatibilityPayloads = [transitionLockedGameId, transitionUnlockedGameId].map((providerGameId, index) => releaseTransitionPayload({
+  providerGameId,
+  gameStartsAt: transitionGameStart,
+  capturedAt: new Date(Date.parse("2026-10-10T16:00:00.000Z") + index * 1_000).toISOString(),
+  stage: "unlocked",
+  schemaRelease: CFB_FORWARD_RELEASE_WAVE_PREVIOUS_EVIDENCE_SCHEMA_RELEASE,
+  memberRelease: CFB_FORWARD_RELEASE_WAVE_PREVIOUS_MEMBER_RELEASE,
+  decisionRelease: CFB_V1_GAP_FALLBACK_PREVIOUS_DECISION_RELEASE,
+  forecastRelease: CFB_MARKET_SHARP_AWARE_GAP_FALLBACK_PREVIOUS_PRODUCTION_RELEASE,
+}));
+const releaseWaveCompatibilitySelection = selectLatestCfbMemberEvidenceRows(releaseWaveCompatibilityPayloads.map((releasePayload, index) => ({
+  ...evidence,
+  id: `release-wave-compatibility-${index}`,
+  providerGameId: releasePayload.game.providerGameId,
+  stage: "unlocked" as const,
+  capturedAt: releasePayload.capturedAt,
+  gameStartAt: transitionGameStart,
+  payloadSha256: hashCfbForwardEvidencePayload(releasePayload),
+  payload: releasePayload,
+})), "2026-10-10T17:05:00.000Z");
+assert.deepEqual(
+  releaseWaveCompatibilitySelection.map((row) => row.id).sort(),
+  ["release-wave-compatibility-0", "release-wave-compatibility-1"],
+  "the immediately preceding complete wave must remain readable with its actual r41 decision tuple",
+);
 const trustedSharpEventId = "ncaaf_northcarolinatarheels_tcuhornedfrogs_2026-08-29_b2";
 const trustedSharpPayload = structuredClone(payload);
 trustedSharpPayload.market.currentBooks = [{

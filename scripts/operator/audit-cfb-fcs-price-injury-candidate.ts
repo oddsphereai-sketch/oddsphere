@@ -41,6 +41,7 @@ async function main(): Promise<void> {
     playbookApiKey,
     sharpApiKey,
     collegeFootballDataApiKey: process.env.CFBD_API_KEY ?? null,
+    theOddsApiKey: process.env.THE_ODDS_API_KEY ?? null,
     weatherProvider: null,
     auditPayloads: (payloads) => { after = payloads; },
   });
@@ -65,7 +66,7 @@ async function main(): Promise<void> {
   });
   const compact = process.argv.includes("--compact");
   console.log(JSON.stringify({
-    release: "cfb_fcs_price_official_injury_candidate_2026_10_07_r1",
+    release: "cfb_the_odds_api_gap_fallback_candidate_2026_10_08_r1",
     mode: "live_provider_select_only_zero_writes",
     now,
     window: { start: window.boardStartDate, end: window.boardEndDate },
