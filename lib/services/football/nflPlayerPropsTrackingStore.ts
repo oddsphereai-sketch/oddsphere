@@ -4,7 +4,7 @@ import { buildNflPlayerPropsTrackingRows } from "./nflPlayerPropsProductionContr
 import type { NflPlayerPropsObservationSnapshot } from "./nflPlayerPropsContract";
 
 export const NFL_PLAYER_PROPS_TRACKING_RELEASE =
-  "nfl_player_props_tracking_2026_10_07_r22_settlement_aligned_rushing_attempts" as const;
+  "nfl_player_props_tracking_2026_10_08_r23_independent_passing_attempts" as const;
 
 export async function writeLockedNflPlayerPropsTracking(args: {
   client: SupabaseClient;
