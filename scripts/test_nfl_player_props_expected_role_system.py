@@ -41,12 +41,14 @@ def test_position_group_shares_are_conserved() -> None:
     grouped = result.groupby("expected_role_group", observed=True)
     rush = grouped["expected_role_rush_share"].sum()
     targets = grouped["expected_role_target_share"].sum()
+    team_targets = result["expected_team_target_share"].sum()
     assert rush["BACK"] == 1.0
     assert rush["WR"] == 1.0
     assert rush["TE"] == 0.0
     assert targets["BACK"] == 1.0
     assert targets["WR"] == 1.0
     assert targets["TE"] == 1.0
+    assert team_targets == 1.0
 
 
 if __name__ == "__main__":

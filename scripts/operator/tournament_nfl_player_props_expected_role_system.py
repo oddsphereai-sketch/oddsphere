@@ -94,11 +94,17 @@ def add_role_shares(frame: pd.DataFrame) -> pd.DataFrame:
     keys = ["season", "week", "game_id", "team", "expected_role_group"]
     rush_total = result.groupby(keys, observed=True)["rushing_attempts"].transform("sum")
     target_total = result.groupby(keys, observed=True)["targets"].transform("sum")
+    team_target_total = result.groupby(
+        ["season", "week", "game_id", "team"], observed=True,
+    )["targets"].transform("sum")
     result["expected_role_rush_share"] = np.where(
         rush_total.gt(0), result["rushing_attempts"] / rush_total, 0.0,
     )
     result["expected_role_target_share"] = np.where(
         target_total.gt(0), result["targets"] / target_total, 0.0,
+    )
+    result["expected_team_target_share"] = np.where(
+        team_target_total.gt(0), result["targets"] / team_target_total, 0.0,
     )
     return result
 
@@ -194,6 +200,54 @@ def normalized_share_prediction(
     if missing.any():
         fallback = np.clip(np.asarray(fitted.predict(test.loc[missing, features]), dtype=float), 0.0, 1.0)
         values[missing.to_numpy()] = fallback
+    return values
+
+
+def normalized_team_target_share_prediction(
+    frame: pd.DataFrame,
+    season: int,
+    features: list[str],
+    test: pd.DataFrame,
+    known_active_row_ids: set[str] | None = None,
+) -> np.ndarray:
+    receiver_groups = {"BACK", "WR", "TE"}
+    population = frame[
+        frame["season"].lt(season) & frame["expected_role_group"].isin(receiver_groups)
+    ].copy()
+    active = population[population["participated"].eq(1)].copy()
+    share_model = model("squared_error").fit(
+        active[features], active["expected_team_target_share"].fillna(0.0).to_numpy(float),
+    )
+    participation_model = HistGradientBoostingClassifier(
+        max_iter=140,
+        max_leaf_nodes=15,
+        learning_rate=0.04,
+        min_samples_leaf=35,
+        l2_regularization=12.0,
+        random_state=SEED,
+    ).fit(population[features], population["participated"].to_numpy(int))
+    roster = frame[
+        frame["season"].eq(season)
+        & frame["expected_role_group"].isin(receiver_groups)
+        & (frame["external_depth_listed"].eq(1) | frame["prior_participations"].fillna(0).gt(0))
+    ].copy()
+    active_probability = np.asarray(participation_model.predict_proba(roster[features])[:, 1], dtype=float)
+    active_ids = known_active_row_ids if known_active_row_ids is not None else set(test["row_id"])
+    active_probability[roster["row_id"].isin(active_ids).to_numpy()] = 1.0
+    conditional_share = np.clip(np.asarray(share_model.predict(roster[features]), dtype=float), 0.0, 1.0)
+    roster["raw_expected_share"] = active_probability * conditional_share
+    denominator = roster.groupby(["game_id", "team"], observed=True)["raw_expected_share"].transform("sum")
+    roster["normalized_expected_share"] = np.where(
+        denominator.gt(0), roster["raw_expected_share"] / denominator, 0.0,
+    )
+    by_row = roster.set_index("row_id")["normalized_expected_share"]
+    values = by_row.reindex(test["row_id"]).to_numpy(float)
+    missing = np.isnan(values)
+    if missing.any():
+        fallback = np.clip(
+            np.asarray(share_model.predict(test.loc[missing, features]), dtype=float), 0.0, 1.0,
+        )
+        values[missing] = fallback
     return values
 
 
