@@ -105,6 +105,30 @@ class ExternalFeatureLeakageTests(unittest.TestCase):
         self.assertEqual(attached.loc[0, "external_environment_outdoor"], 1.0)
         self.assertIn("external_environment_fixed_roof", names)
 
+    def test_timestamped_depth_uses_latest_pregame_snapshot(self) -> None:
+        depth = pd.DataFrame(
+            {
+                "dt": ["2026-09-10T07:00:00Z", "2026-09-10T07:00:00Z", "2026-09-14T07:00:00Z"],
+                "team": ["BUF", "BUF", "BUF"],
+                "gsis_id": ["P1", "P2", "P2"],
+                "pos_slot": [9, 9, 9],
+                "pos_rank": [1, 2, 1],
+            }
+        )
+        games = pd.DataFrame(
+            {
+                "season": [2026], "week": [1], "game_id": ["G1"], "team": ["BUF"],
+                "kickoff": [pd.Timestamp("2026-09-13T17:00:00Z")],
+            }
+        )
+        attached = TARGET.timestamped_depth_features(depth, games)
+        assert set(attached["player_id"]) == {"P1", "P2"}
+        p1 = attached[attached["player_id"].eq("P1")].iloc[0]
+        p2 = attached[attached["player_id"].eq("P2")].iloc[0]
+        self.assertEqual(p1["external_depth_starter"], 1.0)
+        self.assertEqual(p2["external_depth_slot_rank"], 2.0)
+        self.assertGreater(p1["external_depth_snapshot_age_hours"], 0.0)
+
 
 if __name__ == "__main__":
     unittest.main()
