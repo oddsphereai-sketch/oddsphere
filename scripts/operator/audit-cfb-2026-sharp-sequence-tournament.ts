@@ -305,6 +305,32 @@ async function main(): Promise<void> {
   const dedupedSignals = dedupeSignals(signals);
   const evaluations = dedupedSignals.map(evaluate);
   const summary = summarize(evaluations);
+  const requestedContains = process.argv.find((value) => value.startsWith("--contains="))?.slice(11) ?? null;
+  if (requestedContains !== null) {
+    console.log(JSON.stringify({
+      release: "cfb_2026_sharp_sequence_tournament_2026_10_08_r1",
+      mode: "select_only_zero_writes_zero_provider_calls",
+      matches: Object.fromEntries(Object.entries(summary).filter(([key]) => key.includes(requestedContains))),
+    }, null, 2));
+    return;
+  }
+  const requestedCorrections = process.argv.find((value) => value.startsWith("--corrections="))?.slice(14) ?? null;
+  const requestedHarms = process.argv.find((value) => value.startsWith("--harms="))?.slice(8) ?? null;
+  if (requestedCorrections !== null || requestedHarms !== null) {
+    const corrections = requestedCorrections === null ? null : Number(requestedCorrections);
+    const harms = requestedHarms === null ? null : Number(requestedHarms);
+    console.log(JSON.stringify({
+      release: "cfb_2026_sharp_sequence_tournament_2026_10_08_r1",
+      mode: "select_only_zero_writes_zero_provider_calls",
+      matches: Object.fromEntries(Object.entries(summary).filter(([, value]) => {
+        const partitions = [value.overall, ...Object.values(value.byBlock)];
+        return partitions.some((partition) =>
+          (corrections === null || partition.corrections === corrections) &&
+          (harms === null || partition.harms === harms));
+      })),
+    }, null, 2));
+    return;
+  }
   const requestedCandidate = process.argv.find((value) => value.startsWith("--candidate="))?.slice(12) ?? null;
   if (requestedCandidate) {
     const selected = evaluations.filter((row) => `${row.market}:${row.candidate}` === requestedCandidate);
@@ -316,7 +342,14 @@ async function main(): Promise<void> {
       overall,
       oneSidedCorrectionPValue: oneSidedCorrectionPValue(overall.corrections, overall.harms),
       byDate: Object.fromEntries(overall.dates.map((date) => [date, metrics(selected.filter((row) => row.date === date))])),
-      sources: Object.fromEntries([...new Set(selected.map((row) => row.source))].sort().map((source) => [source, metrics(selected.filter((row) => row.source === source))])),
+      sources: Object.fromEntries([...new Set(selected.map((row) => row.source))].sort().map((source) => {
+        const sourceRows = selected.filter((row) => row.source === source);
+        return [source, {
+          overall: metrics(sourceRows),
+          byBlock: Object.fromEntries((["development", "confirmation", "holdout"] as const).map((block) =>
+            [block, metrics(sourceRows.filter((row) => row.block === block))])),
+        }];
+      })),
     }, null, 2));
     return;
   }
