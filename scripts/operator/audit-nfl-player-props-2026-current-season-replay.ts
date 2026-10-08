@@ -63,6 +63,7 @@ type ReplayRow = {
   side: Decision["side"];
   sportsbook: string;
   decisionRelease: string;
+  lockedAt: string;
   ledgerResult: LedgerRow["result"];
   actual: number;
   outcome: 0 | 1;
@@ -139,6 +140,7 @@ async function main(): Promise<void> {
       side: row.side,
       sportsbook: row.sportsbook,
       decisionRelease: row.decision_release,
+      lockedAt: row.locked_at,
       ledgerResult: row.result,
       actual,
       outcome,
