@@ -35,7 +35,7 @@ function base(over: Partial<MarketInterpretationInput> = {}): MarketInterpretati
     openAmerican: 120, currentAmerican: -110,
     splits: { pickBetsPct: 35, pickMoneyPct: 40, observedAtIso: "2026-06-16T17:55:00Z", isStale: false },
   }));
-  check("RLM favor → chip", r.chipLabel === "Sharp reverse move our way" && r.chipTone === "emerald");
+  check("RLM favor → cautious chip", r.chipLabel === "Public-opposed move our way" && r.chipTone === "emerald");
   check("RLM favor → flag", r.flags.includes("reverse_line_movement"));
 }
 // 4. Reverse movement AGAINST us: public heavy on pick, line moved away.
@@ -44,7 +44,7 @@ function base(over: Partial<MarketInterpretationInput> = {}): MarketInterpretati
     openAmerican: -170, currentAmerican: -150,
     splits: { pickBetsPct: 72, pickMoneyPct: 68, observedAtIso: "2026-06-16T17:55:00Z", isStale: false },
   }));
-  check("RLM against → chip", r.chipLabel === "Reverse move against our side" && r.chipTone === "amber");
+  check("RLM against → cautious chip", r.chipLabel === "Public-opposed move against us" && r.chipTone === "amber");
   check("RLM against → flag", r.flags.includes("reverse_line_movement"));
 }
 // 5. Public-heavy but unconfirmed by the line (overall flat).
@@ -53,7 +53,7 @@ function base(over: Partial<MarketInterpretationInput> = {}): MarketInterpretati
     openAmerican: -120, currentAmerican: -120,
     splits: { pickBetsPct: 70, pickMoneyPct: 70, observedAtIso: "2026-06-16T17:55:00Z", isStale: false },
   }));
-  check("public-heavy unconfirmed → chip", r.chipLabel === "Public-heavy, sharp unconfirmed" && r.chipTone === "amber");
+  check("public-heavy unconfirmed → chip", r.chipLabel === "Public-heavy, price unconfirmed" && r.chipTone === "amber");
   check("public-heavy unconfirmed → flag", r.flags.includes("public_heavy_unconfirmed"));
 }
 // 5a. Split-ish public reads should not be overstated as public-heavy.
@@ -62,38 +62,38 @@ function base(over: Partial<MarketInterpretationInput> = {}): MarketInterpretati
     openAmerican: -120, currentAmerican: -120,
     splits: { pickBetsPct: 53, pickMoneyPct: 57, observedAtIso: "2026-06-16T17:55:00Z", isStale: false },
   }));
-  check("modest public split → no public-heavy chip", r.chipLabel !== "Public-heavy, sharp unconfirmed");
+  check("modest public split → no public-heavy chip", r.chipLabel !== "Public-heavy, price unconfirmed");
   check("modest public split → no public-heavy flag", !r.flags.includes("public_heavy_unconfirmed"));
 }
-// 5b. Sharp money AGAINST our pick (17192-like: 82% tickets, 38% money on us →
-//     money piled on the OTHER side). Must NOT read as "unconfirmed".
+// 5b. Reported-money divergence AGAINST our pick (17192-like: 82% tickets,
+//     38% money on us). It must not claim bettor identity.
 {
   const r = interpretMarket(base({
     openAmerican: -120, currentAmerican: -120,
     splits: { pickBetsPct: 82, pickMoneyPct: 38, observedAtIso: "2026-06-16T17:55:00Z", isStale: false },
   }));
-  check("sharp money against → chip", r.chipLabel === "Sharp money against our side" && r.chipTone === "amber");
-  check("sharp money against → flag", r.flags.includes("sharp_money_against"));
-  check("sharp money against → NOT mislabeled unconfirmed", !r.flags.includes("public_heavy_unconfirmed"));
+  check("reported money against → chip", r.chipLabel === "Reported money divergence against us" && r.chipTone === "amber");
+  check("legacy reported-money-against flag remains compatible", r.flags.includes("sharp_money_against"));
+  check("reported money against → NOT mislabeled unconfirmed", !r.flags.includes("public_heavy_unconfirmed"));
 }
-// 5c. Sharp money WITH our pick (17179-like: money heavier than tickets on us).
+// 5c. Reported-money divergence WITH our pick.
 {
   const r = interpretMarket(base({
     openAmerican: -120, currentAmerican: -120,
     splits: { pickBetsPct: 75, pickMoneyPct: 97, observedAtIso: "2026-06-16T17:55:00Z", isStale: false },
   }));
-  check("sharp money with → chip", r.chipLabel === "Sharp money on our side" && r.chipTone === "emerald");
-  check("sharp money with → flag", r.flags.includes("sharp_money_with"));
+  check("reported money with → chip", r.chipLabel === "Reported money divergence our way" && r.chipTone === "emerald");
+  check("legacy reported-money-with flag remains compatible", r.flags.includes("sharp_money_with"));
 }
-// 5c-2. Split-derived sharp support must not override actual price resistance.
+// 5c-2. Split-derived reported-money support must not override price resistance.
 {
   const r = interpretMarket(base({
     openAmerican: -170, currentAmerican: -150,
     splits: { pickBetsPct: 45, pickMoneyPct: 65, observedAtIso: "2026-06-16T17:55:00Z", isStale: false },
   }));
-  check("sharp split + price resistance → mixed chip", r.chipLabel === "Mixed market signal" && r.chipTone === "gray");
-  check("sharp split + price resistance → conflict flag", r.flags.includes("market_signal_conflict"));
-  check("sharp split + price resistance → still tracks moved against", r.flags.includes("moved_against"));
+  check("reported split + price resistance → mixed chip", r.chipLabel === "Mixed market signal" && r.chipTone === "gray");
+  check("reported split + price resistance → conflict flag", r.flags.includes("market_signal_conflict"));
+  check("reported split + price resistance → still tracks moved against", r.flags.includes("moved_against"));
 }
 // 5d. Public-heavy but money still MAJORITY on us (17181-like: bets 81, money 65)
 //     → no strong sharp read either way → still honestly "unconfirmed".
@@ -102,8 +102,8 @@ function base(over: Partial<MarketInterpretationInput> = {}): MarketInterpretati
     openAmerican: -120, currentAmerican: -120,
     splits: { pickBetsPct: 81, pickMoneyPct: 65, observedAtIso: "2026-06-16T17:55:00Z", isStale: false },
   }));
-  check("public-heavy, money-majority → unconfirmed (not false sharp)", r.chipLabel === "Public-heavy, sharp unconfirmed");
-  check("public-heavy, money-majority → no sharp flags", !r.flags.includes("sharp_money_against") && !r.flags.includes("sharp_money_with"));
+  check("public-heavy, money-majority → price unconfirmed", r.chipLabel === "Public-heavy, price unconfirmed");
+  check("public-heavy, money-majority → no reported-divergence flags", !r.flags.includes("sharp_money_against") && !r.flags.includes("sharp_money_with"));
 }
 // 6. Splits stale (otherwise quiet).
 {
@@ -122,6 +122,7 @@ function base(over: Partial<MarketInterpretationInput> = {}): MarketInterpretati
   }));
   check("money/public divergence → flag", r.flags.includes("money_public_divergence"));
   check("divergence detail present", r.detail.some((d) => d.includes("diverge")));
+  check("divergence detail does not claim sharp identity", r.detail.every((d) => !d.toLowerCase().includes("sharp")));
 }
 // 8. Consensus vs isolated last move.
 {

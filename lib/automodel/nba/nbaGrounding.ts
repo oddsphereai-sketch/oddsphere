@@ -39,7 +39,8 @@ export interface NbaGroundingInput {
   /**
    * Consensus moneyline splits by side (fractions 0–1), for the smart-money
    * guard. The pick side is decided inside this fn, so we take both sides and
-   * derive "sharp money fading the pick" here. Null/missing ⇒ unobserved ⇒ not
+   * derive "reported handle under-indexing tickets" here. Null/missing ⇒
+   * unobserved ⇒ not
    * against (the SharpAPI Finals coverage gap must not manufacture a signal).
    */
   splitsMl?: {
@@ -99,7 +100,8 @@ const LEAN_MIN_EDGE_PP = 2.0;
 const MARKET_ALIGNED_EDGE_PP = 1.0;
 // Qualified Best Angle (no empirical-calibration lock; gated on confirmation):
 //   positive edge in [BA_MIN, BA_MAX] + high tier + injuries known + multi-book
-//   consensus + market confirms the pick side + sharp money NOT fading it.
+//   consensus + market confirms the pick side + reported handle is not
+//   materially under-indexing ticket share.
 // BA_MAX guards an implausibly large edge from masquerading as a "best" bet.
 const BA_MIN_EDGE_PP = 3.5;
 const BA_MAX_EDGE_PP = 8.0;
@@ -169,8 +171,9 @@ export function groundNbaPrediction(input: NbaGroundingInput): NbaGroundingResul
     input.consensusHomeMlNoVig === null ? null : mlPick === "home" ? input.consensusHomeMlNoVig : 1 - input.consensusHomeMlNoVig;
   const mlEdgePct = marketPickProb === null ? null : round1((mlPickProb - marketPickProb) * 100);
 
-  // 5b — smart-money guard for the PICK side (now that the pick is known).
-  // Sharp money is "against" when handle under-indexes bets on our pick by ≥5pp.
+  // 5b — reported-handle guard for the PICK side (now that the pick is known).
+  // The snapshot is "against" when handle under-indexes tickets on our pick by
+  // at least 5pp. This does not establish bettor identity or causal timing.
   const sm = input.splitsMl ?? null;
   const pickBets = sm === null ? null : mlPick === "home" ? sm.betsHome : sm.betsAway;
   const pickHandle = sm === null ? null : mlPick === "home" ? sm.handleHome : sm.handleAway;
@@ -217,7 +220,8 @@ export function groundNbaPrediction(input: NbaGroundingInput): NbaGroundingResul
       input.consensusStrength === "multi_book";
     // Best Angle adds: the market itself favors the pick side (no-vig ≥ 50%),
     // the edge is POSITIVE (model finds value, not the market over-pricing our
-    // side) and within a plausible band, and sharp money is NOT fading it.
+    // side) and within a plausible band, and reported handle is not materially
+    // under-indexing tickets.
     const signedEdge = mlEdgePct ?? 0;
     const marketConfirmsPick = marketPickProb !== null && marketPickProb >= 0.5;
     const smartMoneyAgainst = smartMoneyAgainstPick;
@@ -225,7 +229,7 @@ export function groundNbaPrediction(input: NbaGroundingInput): NbaGroundingResul
     const qualifiesBA = qualifiesLean && edgeInBaBand && marketConfirmsPick && !smartMoneyAgainst;
 
     const smartMoneyNote = splitsObserved
-      ? smartMoneyAgainst ? "sharp money fading pick" : "sharp money not against"
+      ? smartMoneyAgainst ? "reported handle trails ticket share" : "reported handle does not trail ticket share"
       : "splits unobserved";
 
     if (qualifiesBA) {
@@ -237,7 +241,7 @@ export function groundNbaPrediction(input: NbaGroundingInput): NbaGroundingResul
         !marketConfirmsPick ? "market favors other side"
         : signedEdge < BA_MIN_EDGE_PP ? `edge below Best Angle bar (${BA_MIN_EDGE_PP}pp)`
         : signedEdge > BA_MAX_EDGE_PP ? `edge implausibly large (>${BA_MAX_EDGE_PP}pp)`
-        : smartMoneyAgainst ? "sharp money fading pick" : "";
+        : smartMoneyAgainst ? "reported handle trails ticket share" : "";
       gradeRationale = `edge ${mlEdgePct}pp, high tier, ${consensusLabel} — Lean${baBlock ? ` (not Best Angle: ${baBlock})` : ""}`;
     } else {
       playGrade = "watch";

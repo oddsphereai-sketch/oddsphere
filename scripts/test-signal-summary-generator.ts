@@ -9,8 +9,7 @@
  *   • Brand voice rule compliance (no exclamation, no capper words,
  *     Pinnacle cited, quantified data)
  *   • Per-grade composers fire on the right (grade × evidence) combos
- *   • Fallback for true no-signal cases — "No actionable sharp signals
- *     detected on this pick."
+ *   • Fallback for true no-evidence cases — neutral, factual copy
  *   • Market-specific label formatting (ML / total / first_inning_total)
  *
  * The seed slate's actual signals (WSH @ ATL, MIL @ CHC, NYM @ PHI,
@@ -142,8 +141,8 @@ function main() {
       text.includes("Steam across 4 books")
     );
     check(
-      'mentions sharp money vs public (template 1 detail)',
-      text.includes("Sharp money") && text.includes("public bets")
+      'reports money-vs-ticket percentages without asserting bettor identity',
+      text.includes("Reported money") && text.includes("tickets") && !text.includes("Sharp money")
     );
     assertBrandVoice("Template 1 brand voice", text);
   }
@@ -257,8 +256,8 @@ function main() {
       text.includes("+4.2%") && text.includes("on Over") && text.includes("confirms")
     );
     check(
-      'mentions "Sharp money 65% on Over vs public 53%"',
-      text.includes("Sharp money 65% on Over vs public 53%")
+      'mentions "Reported money 65% on Over vs tickets 53%" without a sharp-money claim',
+      text.includes("Reported money 65% on Over vs tickets 53%") && !text.includes("Sharp money")
     );
     assertBrandVoice("Template 4 brand voice", text);
   }
@@ -328,8 +327,11 @@ function main() {
     console.log(`  public_smoke → "${text}"`);
     check("public_smoke → CAUTION header", text.startsWith("CAUTION · "));
     check(
-      "public_smoke mentions 'public bets' + 'no sharp confirmation'",
-      text.includes("public bets") && text.includes("sharp")
+      "public_smoke describes reported tickets + missing independent price confirmation",
+      text.includes("reported tickets") &&
+        text.includes("independent price confirmation") &&
+        !text.includes("smart money") &&
+        !text.includes("recreational")
     );
   }
 
@@ -366,8 +368,8 @@ function main() {
     );
     console.log(`  market_watch (no evidence) → "${text}"`);
     check(
-      "market_watch with no evidence → 'No actionable sharp signals detected' (Flag B1 fallback)",
-      text === "No actionable sharp signals detected on this pick."
+      "market_watch with no evidence → neutral no-evidence fallback",
+      text === "No qualifying market evidence is available on this pick."
     );
   }
 
@@ -383,7 +385,7 @@ function main() {
     );
     check(
       "null grade → fallback honest-neutral copy",
-      text === "No actionable sharp signals detected on this pick."
+      text === "No qualifying market evidence is available on this pick."
     );
   }
 

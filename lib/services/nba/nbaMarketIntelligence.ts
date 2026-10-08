@@ -59,8 +59,8 @@ export type NbaLineRow = {
 
 export type SplitsDivergence =
   | "none"           // |handle - bets| < 5pp
-  | "mild_sharp"     // 5–10pp; money outpaces bets
-  | "strong_sharp"   // ≥10pp; sharp money signal
+  | "mild_sharp"     // legacy identifier: 5–10pp; money outpaces bets
+  | "strong_sharp"   // legacy identifier: ≥10pp; bettor identity unverified
   | "mild_square"    // 5–10pp; bets outpace money — public-heavy
   | "strong_square"; // ≥10pp; clearly public-heavy
 

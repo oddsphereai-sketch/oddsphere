@@ -1,7 +1,7 @@
 # Market-tape reading playbook and model-by-model intervention audit
 
 Date: 2026-10-08
-Production base: `0af428981cdbbee281d88b95c229d7e356b07161`
+Production base: `1240e7ee3d1fd2544f227ee4c5a4d365b333af3e`
 Scope: each active Daily Edge model, MLB Player Props and NFL Player Props
 Behavioral decision: audit and evidence-capture changes only; no live prediction, probability,
 projection, side, grade, stake, writer, lock or tracking behavior changes
@@ -44,6 +44,60 @@ are no longer treated as the main result.
 - **No new live rule is justified by this audit.** Several shadow studies are justified, especially
   an NBA predecision score blend and model-specific intermediate tape capture. The existing MLB
   Total rule should remain narrowly scoped. Generic movement/RLM rules should remain disabled.
+
+## Direct answer and remediation status
+
+OddSphere does **not** yet read the complete market tape correctly across every model. It usually
+knows a current split, an opening/current price and sometimes a last move. It does not consistently
+prove the causal sequence “split changed, originator moved, independent books followed, move held,
+no buyback” before using or describing the evidence. Percentage-only money/ticket feeds also do not
+prove bettor identity, absolute wager volume or that professional action caused a move.
+
+This audit therefore separates three states that older code sometimes conflated:
+
+1. **Reported split divergence:** money percentage differs from ticket percentage. This suggests a
+   different average reported wager inside that provider sample; it is not proof of sharp money.
+2. **Public-opposed movement:** ticket share and price direction oppose one another. This is an RLM
+   candidate; it is not proof that informed bettors caused the move.
+3. **Sequence-qualified price discovery:** a coherent originator moves, an independent source family
+   follows inside the model's window, the move persists to the decision, and any required split
+   divergence existed before the move. Even this proves a market-information sequence, not bettor
+   identity.
+
+Immediate correctness fixes in this branch:
+
+- Soccer's market chip no longer calls a percentage gap “sharp money” or a public-opposed endpoint
+  “respected money.” It reports the observed facts and states that cause/identity are unverified.
+- Shared market summaries no longer relabel money percentage as sharp money.
+- MLB's existing opposing-split Caution gate now names exactly what it measures—reported money
+  versus tickets—while preserving its previously validated behavior.
+- NBA split descriptions and grade rationale now say reported-handle divergence rather than bettor
+  identity. Existing grade behavior is unchanged pending a release-pure grade audit.
+- NFL/CFB split attribution now retains provider-update and fetch timestamps and explicitly records
+  that wager-volume denominators and bettor identity are unavailable.
+- A new outcome-blind tape qualifier proves chronology, originator/follower order, persistence,
+  buyback/reversal, split timing and identity before setting `sequenceQualified`. It cannot choose a
+  pick or grade; each model must earn separate authority through settled evidence.
+
+### Model-specific gap and repair
+
+| Model | What is currently missing or overstated | Repair path |
+| --- | --- | --- |
+| MLB full game | r90 validates a same-book endpoint and corroborator but does not prove split arrival before the move, follower order or buyback | Keep r90 live and narrow; attach the new sequence classification in shadow and separate split-backed from internal-resistance results |
+| MLB first inning | Posterior weighting uses market level, not the full open/intermediate/lineup/T-60 path; movement is mainly display context | Shadow weights at each baseball checkpoint and prohibit movement authority until path-state corrections beat harms |
+| WNBA | Boundary arbitration uses source-family count, but actual same-book path and split coverage are too sparse to establish timing | Preserve the narrow crossing; collect active-release intermediate paths and keep all movement/split challengers shadow-only |
+| NBA | Legacy split semantics called handle-minus-tickets “sharp,” while the promising 65/35 study used close rather than predecision tape | Correct terminology now; replay the blend from target-excluded T-24/T-6/T-90/T-60 paths before changing scores or grades |
+| NFL | Opening/unlocked/T-60 evidence is strong, but winner arbitration does not yet prove leader/follower order, split-change timing or buyback | Apply sequence qualification separately to Moneyline, Spread and Total; retain r28 until the stricter shadow has settled volume |
+| CFB | The validated Playbook Spread lane is useful, but generic Circa/Pinnacle movement and RLM were being discussed as though “sharp book” meant correct | Retain only the released Playbook rule; require sequence-qualified named-book paths for every other market and keep their current authority disabled |
+| NHL | Current discrete flip combines movement and splits but the archive cannot establish modern steam velocity, ordering or buyback | Keep the strict sparse rule; add current-era intermediate named-book snapshots before granting broader authority |
+| EPL | Target-excluded Total consensus helps, but the generic display overstated split/RLM certainty and movement gating worsened results | Correct the member language now; keep consensus tilt and movement disabled as a forecast gate |
+| UCL | r7 uses corroborated openings, not an intraday path; confirmation contained no side flips | Keep probability calibration; capture post-lineup/prelock paths before describing or using continuation/RLM |
+| NFL Player Props | Open-to-lock and cross-market movement exist, but named originators/followers and split volumes are sparse; eight families differ | Keep only the Receptions correction; sequence-test every family separately and never transfer its rule |
+| MLB Player Props | Target exclusion and posterior coherence are good, but settled movement/split corrections are not isolated by category | Preserve the whole posterior; add per-category path-state intervention accounting before any movement-specific authority |
+
+No prediction-changing repair is authorized merely because the new classifier is stricter. A model
+must first show, on its own release-pure settled rows, that the stricter sequence improves proper
+scores/projection error and produces more corrections than harms without hiding board-count damage.
 
 ## 1. What a sharp market reader actually observes
 

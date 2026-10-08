@@ -335,15 +335,16 @@ function buildSharpSignals(game: NbaDailyEdgeGameDto, capability: NbaMarketSigna
     if (intelMkt.splits.pick_side === null) return;
     const div = intelMkt.splits.pick_side.divergence;
     if (div === "none") return;
-    const isSharp = div.startsWith("strong_sharp") || div.startsWith("mild_sharp");
-    const cat: SharpSignalCategory = isSharp ? "handle_gap" : "no_signal";
+    const handleLeadsTickets = div === "strong_sharp" || div === "mild_sharp";
+    const cat: SharpSignalCategory = handleLeadsTickets ? "handle_gap" : "no_signal";
+    const magnitude = div.startsWith("strong") ? "strong" : "moderate";
     out.push({
       market: label,
       category: cat,
-      description: isSharp
-        ? `${label}: money outpaces bets on our pick (${div.replace("_", " ")}).`
-        : `${label}: bets outpace money on our pick (${div.replace("_", " ")}); do not auto-fade.`,
-      direction: isSharp ? "positive" : "neutral",
+      description: handleLeadsTickets
+        ? `${label}: reported money outpaces tickets on our pick (${magnitude} divergence; bettor identity unverified).`
+        : `${label}: tickets outpace reported money on our pick (${magnitude} divergence); do not auto-fade.`,
+      direction: handleLeadsTickets ? "positive" : "neutral",
     });
   };
   divRow("ML", intel.ml);

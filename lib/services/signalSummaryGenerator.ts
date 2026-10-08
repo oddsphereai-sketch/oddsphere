@@ -32,7 +32,7 @@
  *   Brand voice rules per framework:
  *     • Plain English first, jargon second
  *     • Cite Pinnacle as the de-vig reference
- *     • Describe public action factually ("public bets" / "public action")
+ *     • Describe reported ticket/handle percentages factually
  *     • No exclamation points
  *     • No capper words (LOCK, SMASH, FADE, HAMMER, etc.)
  *     • Quantify (book counts, percentages, EV)
@@ -144,15 +144,16 @@ function oppositeSideLabel(
 }
 
 /**
- * "Sharp money X% vs public bets Y%" fragment. Returns null when the row
- * has insufficient public-data to compute. Framework brand voice: factual
- * description, no "the public is wrong" framing.
+ * Reported money-vs-ticket fragment. Returns null when the row has
+ * insufficient public data. Percentages alone do not establish bettor
+ * identity, wager volume, or causal timing, so member copy must not call this
+ * "sharp money."
  */
 function publicMoneyFragment(signal: MarketSignalSource): string | null {
   if (signal.public_betting_pct === null || signal.public_money_pct === null) {
     return null;
   }
-  return `Sharp money ${formatPct(signal.public_money_pct, 0)}% vs public bets ${formatPct(signal.public_betting_pct, 0)}%`;
+  return `Reported money ${formatPct(signal.public_money_pct, 0)}% vs tickets ${formatPct(signal.public_betting_pct, 0)}%`;
 }
 
 // ─── Per-grade composers ──────────────────────────────────────────────────
@@ -161,12 +162,12 @@ function publicMoneyFragment(signal: MarketSignalSource): string | null {
  * Compose text for `best_signal` and `sharp_confirmed` grades. The Best
  * Signal / Sharp Confirmed bars guarantee aligned strong-tier signal(s);
  * we lead with whichever strong signal fires (steam > RLM > EV > sharp
- * money divergence priority for the lead sentence; remaining signals
+ * reported split divergence priority for the lead sentence; remaining signals
  * become the supporting detail sentence).
  *
  * Framework template 1 (verbatim shape):
  *   "STRONG · Pinnacle EV +3.2% on PHI ML, confirmed by steam across 4
- *    books (detected 11:45 AM ET). Sharp money 65% vs public bets 53%."
+ *    books (detected 11:45 AM ET). Reported money 65% vs tickets 53%."
  *
  * When only moderate-tier signals fired (e.g., 2× moderate path), use
  * MODERATE header per framework template 2 brand voice extrapolation.
@@ -220,8 +221,8 @@ function composeConfirmed(
   } else if (evidence.sharpDivergence?.aligned) {
     const pubMoney = publicMoneyFragment(signal);
     lead = pubMoney
-      ? `${pubMoney} — sharp money diverges from public action on ${pick}.`
-      : `Sharp money divergence supports ${pick}.`;
+      ? `${pubMoney} — reported money diverges from ticket share on ${pick}.`
+      : `Reported money divergence supports ${pick}.`;
   } else {
     // Defensive: bar passed but no aligned signal — shouldn't reach here.
     lead = `Sharp signals support ${pick}.`;
@@ -233,7 +234,7 @@ function composeConfirmed(
   }
   // Include public/money divergence detail when not already in the lead.
   const pubMoney = publicMoneyFragment(signal);
-  if (pubMoney && !lead.includes("Sharp money")) {
+  if (pubMoney && !lead.includes("Reported money")) {
     details.push(pubMoney);
   }
 
@@ -258,13 +259,13 @@ function composeMarketLed(
     const books = signal.steam_books_count ?? 0;
     const lead = `Steam across ${books} books moves toward ${pick}; model edge is light.`;
     const pubMoney = publicMoneyFragment(signal);
-    const detail = pubMoney && !lead.includes("Sharp money") ? ` ${pubMoney}.` : "";
+    const detail = pubMoney && !lead.includes("Reported money") ? ` ${pubMoney}.` : "";
     return `STRONG · ${lead}${detail}`.trim();
   }
   if (evidence.rlm?.aligned) {
     const lead = `Reverse line movement toward ${pick}; model edge is light.`;
     const pubMoney = publicMoneyFragment(signal);
-    const detail = pubMoney && !lead.includes("Sharp money") ? ` ${pubMoney}.` : "";
+    const detail = pubMoney && !lead.includes("Reported money") ? ` ${pubMoney}.` : "";
     return `STRONG · ${lead}${detail}`.trim();
   }
   if (evidence.ev?.aligned) {
@@ -279,14 +280,14 @@ function composeMarketLed(
     return `STRONG · ${lead}`.trim();
   }
   if (evidence.sharpDivergence?.aligned) {
-    const lead = `Sharp money divergence favors ${pick}; model edge is light.`;
+    const lead = `Reported money divergence favors ${pick}; model edge is light.`;
     const pubMoney = publicMoneyFragment(signal);
-    const detail = pubMoney && !lead.includes("Sharp money") ? ` ${pubMoney}.` : "";
+    const detail = pubMoney && !lead.includes("Reported money") ? ` ${pubMoney}.` : "";
     return `STRONG · ${lead}${detail}`.trim();
   }
   const lead = `Market moves toward ${pick}; model edge is light.`;
   const pubMoney = publicMoneyFragment(signal);
-  const detail = pubMoney && !lead.includes("Sharp money") ? ` ${pubMoney}.` : "";
+  const detail = pubMoney && !lead.includes("Reported money") ? ` ${pubMoney}.` : "";
   return `STRONG · ${lead}${detail}`.trim();
 }
 
@@ -319,7 +320,7 @@ function composeSharpConflict(
     evidence.sharpDivergence &&
     !evidence.sharpDivergence.aligned
   ) {
-    lead = `Sharp money divergence opposing the model's ${pickRef} pick.`;
+    lead = `Reported money divergence opposing the model's ${pickRef} pick.`;
   } else {
     // Defensive — bar shouldn't pass without an opposing primary.
     lead = `Sharp signals oppose the model's ${pickRef} pick.`;
@@ -333,7 +334,7 @@ function composeSharpConflict(
   }
   if (signal.public_betting_pct !== null && signal.public_money_pct !== null) {
     details.push(
-      `Sharp money ${formatPct(signal.public_money_pct, 0)}% on ${oppSide} vs public ${formatPct(signal.public_betting_pct, 0)}%`
+      `Reported money ${formatPct(signal.public_money_pct, 0)}% on ${oppSide} vs tickets ${formatPct(signal.public_betting_pct, 0)}%`
     );
   }
 
@@ -343,14 +344,9 @@ function composeSharpConflict(
 }
 
 /**
- * Compose text for `public_smoke` grade. Framework §"Public Smoke":
- * "heavy public action with no supporting sharp signals. Pure recreational
- * action." Member-facing tone: "the crowd loves this, but no smart money is
- * showing up."
- *
- * Brand voice extrapolation — framework doesn't give a verbatim public
- * smoke template; this text follows the brand voice rules (factual
- * description of public action; no "the public is wrong" framing).
+ * Compose factual text for the legacy `public_smoke` grade. Ticket/money
+ * percentages do not prove bettor type, so the label must describe only the
+ * reported split and available price confirmation.
  */
 function composePublicSmoke(
   modelSide: Side,
@@ -360,20 +356,20 @@ function composePublicSmoke(
 ): string {
   const pick = pickLabel(market_type, modelSide, ctx);
   const pubBets = formatPct(signal.public_betting_pct, 0);
-  return `CAUTION · ${pubBets}% of public bets on ${pick}; money tracks tickets and no sharp confirmation. Recreational action without sharp support.`;
+  return `CAUTION · ${pubBets}% of reported tickets on ${pick}; reported money tracks ticket share, with no independent price confirmation in this evidence row.`;
 }
 
 /**
  * Compose text for `market_watch` grade. Three sub-shapes:
  *   • Opposing EV-only (framework template 3 — the MIL @ CHC case):
  *       "WATCH · Pinnacle fair value opposes the model's Under pick —
- *        +5.4% EV on Over. No confirming steam or sharp money divergence
+ *        +5.4% EV on Over. No confirming steam or reported-money divergence
  *        on the opposing side."
  *   • Aligned EV-only (framework template 2):
  *       "MODERATE · Pinnacle fair value supports PHI ML — +2.1% EV.
- *        No confirming steam or sharp money divergence."
+ *        No confirming steam or reported-money divergence."
  *   • Genuine no-actionable-signal: framework brand voice extrapolation
- *     ("No actionable sharp signals detected on this pick.")
+ *     ("No qualifying market evidence is available on this pick.")
  */
 function composeMarketWatch(
   modelSide: Side,
@@ -410,7 +406,7 @@ function composeMarketWatch(
   }
 
   // Genuine "no actionable signal" — fall back to honest neutral text.
-  return "No actionable sharp signals detected on this pick.";
+  return "No qualifying market evidence is available on this pick.";
 }
 
 /**
@@ -436,8 +432,7 @@ function composeModelOnly(
  * Generate framework-aligned text for one signal row.
  *
  * Returns the description string to render in the signal row's middle
- * column. Fallback for true no-signal-detected case is "No actionable
- * sharp signals detected on this pick." per Flag B1.
+ * column. Fallback for a true no-evidence case is intentionally neutral.
  */
 export function generateSignalSummary(
   modelSide: Side,
@@ -477,6 +472,6 @@ export function generateSignalSummary(
     default:
       // No grade derived — model didn't pick this market, or grade not
       // computed. Honest fallback.
-      return "No actionable sharp signals detected on this pick.";
+      return "No qualifying market evidence is available on this pick.";
   }
 }

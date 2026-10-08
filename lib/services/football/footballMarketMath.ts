@@ -33,6 +33,11 @@ export type FootballPublicRead = {
     sportsbook: string | null;
     booksUsed: number | null;
     observedAt: string;
+    sourceUpdatedAt: string | null;
+    fetchedAt: string;
+    /** Current football feeds expose percentages, not wager-count/handle denominators. */
+    volumeDenominatorsAvailable: false;
+    bettorIdentityVerified: false;
   } | null;
 };
 
@@ -215,6 +220,10 @@ function splitAttribution(row: FootballSplitObservation): NonNullable<FootballPu
     sportsbook: row.sportsbook,
     booksUsed: row.booksUsed,
     observedAt: row.observedAt,
+    sourceUpdatedAt: row.sourceUpdatedAt,
+    fetchedAt: row.fetchedAt,
+    volumeDenominatorsAvailable: false,
+    bettorIdentityVerified: false,
   };
 }
 

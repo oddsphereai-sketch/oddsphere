@@ -223,12 +223,12 @@ export function NbaMarketTracker({
           )}
           {intel.splits.sharp_signal_side === "pick" && (
             <span className="px-2 py-0.5 rounded bg-violet-500/15 border border-violet-500/35 text-violet-200">
-              sharp money on our pick
+              reported money leads tickets on our pick
             </span>
           )}
           {intel.splits.sharp_signal_side === "other" && (
             <span className="px-2 py-0.5 rounded bg-violet-500/15 border border-violet-500/35 text-violet-200">
-              sharp money on other side
+              reported money leads tickets on other side
             </span>
           )}
         </div>
