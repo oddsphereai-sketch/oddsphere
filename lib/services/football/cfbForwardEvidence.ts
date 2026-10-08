@@ -18,9 +18,9 @@ import {
 } from "./cfbV1Decision";
 
 export const CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE =
-  "cfb_forward_evidence_snapshot_2026_10_08_r38_the_odds_api_fcs_gap_fallback" as const;
+  "cfb_forward_evidence_snapshot_2026_10_08_r39_independent_price_spread_lane" as const;
 export const CFB_FORWARD_GAP_FALLBACK_PREVIOUS_EVIDENCE_SCHEMA_RELEASE =
-  "cfb_forward_evidence_snapshot_2026_10_07_r37_release_wave_completeness" as const;
+  "cfb_forward_evidence_snapshot_2026_10_08_r38_the_odds_api_fcs_gap_fallback" as const;
 export const CFB_FORWARD_RELEASE_WAVE_PREVIOUS_EVIDENCE_SCHEMA_RELEASE =
   "cfb_forward_evidence_snapshot_2026_10_07_r36_fcs_price_public_injury_continuity" as const;
 export const CFB_FORWARD_FCS_PRICE_PREVIOUS_EVIDENCE_SCHEMA_RELEASE =
@@ -84,11 +84,11 @@ export const CFB_FORWARD_LEGACY_EVIDENCE_SCHEMA_RELEASE =
 export const CFB_FORWARD_INITIAL_EVIDENCE_SCHEMA_RELEASE =
   "cfb_forward_evidence_snapshot_2026_08_25_r1" as const;
 export const CFB_FORWARD_EVIDENCE_COLLECTOR_RELEASE =
-  "cfb_forward_evidence_collector_2026_10_08_r49_the_odds_api_fcs_gap_fallback" as const;
+  "cfb_forward_evidence_collector_2026_10_08_r50_independent_price_spread_lane" as const;
 export const CFB_FORWARD_MEMBER_RELEASE =
-  "cfb_v1_member_release_2026_10_08_r52_the_odds_api_fcs_gap_fallback" as const;
+  "cfb_v1_member_release_2026_10_08_r53_independent_price_spread_lane" as const;
 export const CFB_FORWARD_GAP_FALLBACK_PREVIOUS_MEMBER_RELEASE =
-  "cfb_v1_member_release_2026_10_07_r51_release_wave_completeness" as const;
+  "cfb_v1_member_release_2026_10_08_r52_the_odds_api_fcs_gap_fallback" as const;
 export const CFB_FORWARD_RELEASE_WAVE_PREVIOUS_MEMBER_RELEASE =
   "cfb_v1_member_release_2026_10_07_r50_fcs_price_public_injury_continuity" as const;
 export const CFB_FORWARD_FCS_PRICE_PREVIOUS_MEMBER_RELEASE =

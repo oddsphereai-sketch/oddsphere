@@ -2300,7 +2300,7 @@ async function main(): Promise<void> {
         auditWindowStartDate: auditWindow.window.boardStartDate,
         auditForceUnlocked: true,
         auditForceTheOddsApi: true,
-        auditIndependentPriceLane: process.argv.includes("--independent-price-lane"),
+        auditDisableIndependentPriceLane: process.argv.includes("--disable-independent-price-lane"),
         auditForecasts: (forecasts) => { auditForecasts = forecasts; },
       });
       currentRows = auditForecasts.map((row, index) => ({

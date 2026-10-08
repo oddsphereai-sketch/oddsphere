@@ -140,7 +140,7 @@ import {
 import type { PlaybookInjuryTeamRow } from "@/lib/providers/playbook/types";
 
 export const CFB_FORWARD_WRITER_RELEASE =
-  "cfb_forward_evidence_writer_2026_10_08_r106_immediate_the_odds_api_seed" as const;
+  "cfb_forward_evidence_writer_2026_10_08_r107_independent_price_spread_lane" as const;
 export const CFB_FORWARD_MAX_QB_TEAMS_PER_RUN = 24 as const;
 export const CFB_FORWARD_MAX_SHARP_FALLBACK_GAMES_PER_RUN = 32 as const;
 export const CFB_FORWARD_MAX_ESPN_PROSPECTIVE_GAMES_PER_RUN = 32 as const;
@@ -285,10 +285,10 @@ export async function runCfbForwardEvidenceWriter(args: {
   auditForceUnlocked?: boolean;
   /** Read-only provider replay override. Rejected whenever apply=true. */
   auditForceTheOddsApi?: boolean;
-  /** Read-only independent-price lane replay. Rejected whenever apply=true. */
-  auditIndependentPriceLane?: boolean;
+  /** Read-only rollback comparison. Rejected whenever apply=true. */
+  auditDisableIndependentPriceLane?: boolean;
 }): Promise<CfbForwardWriterResult> {
-  if (args.apply && (args.auditWindowStartDate || args.auditForceUnlocked || args.auditForceTheOddsApi || args.auditIndependentPriceLane)) {
+  if (args.apply && (args.auditWindowStartDate || args.auditForceUnlocked || args.auditForceTheOddsApi || args.auditDisableIndependentPriceLane)) {
     throw new Error("CFB audit planning overrides are forbidden when apply=true.");
   }
   const writerEvidence = await readCfbForwardWriterEvidence({ client: args.client, season: args.season });
@@ -758,7 +758,7 @@ export async function runCfbForwardEvidenceWriter(args: {
       ...(weeklyForecast.featureHealth.homeProfile === "neutral_imputation" ? ["home_model_team_profile_unavailable"] : []),
       ...cfbMarketAnchorHealthHolds(outcomeAnchor),
     ];
-    const independentPriceLaneEnabled = Boolean(args.auditIndependentPriceLane) && !outcomeAnchor &&
+    const independentPriceLaneEnabled = !args.auditDisableIndependentPriceLane && !outcomeAnchor &&
       healthHolds.every((hold) => hold === "authoritative_market_anchor_unavailable");
     const decisionHealthHolds = independentPriceLaneEnabled
       ? healthHolds.filter((hold) => hold !== "authoritative_market_anchor_unavailable")

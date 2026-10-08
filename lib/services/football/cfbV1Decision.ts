@@ -30,13 +30,13 @@ export const CFB_V1_PROBABILITY_RELEASE =
 export const CFB_V1_REPRESENTATIVE_SCORE_RELEASE =
   "cfb_v1_professional_reachable_score_2026_10_08_r15_the_odds_api_fcs_gap_fallback" as const;
 export const CFB_V1_CALIBRATION_RELEASE =
-  "cfb_v1_exact_price_calibration_2026_10_08_r17_the_odds_api_fcs_gap_fallback" as const;
+  "cfb_v1_exact_price_calibration_2026_10_08_r18_independent_price_spread_lane" as const;
 export const CFB_V1_GRADE_POLICY_RELEASE =
-  "cfb_v1_composite_grade_policy_2026_10_08_r20_the_odds_api_fcs_gap_fallback" as const;
+  "cfb_v1_composite_grade_policy_2026_10_08_r21_independent_price_spread_lane" as const;
 export const CFB_V1_DECISION_RELEASE =
-  "cfb_v1_daily_edge_decision_2026_10_08_r42_the_odds_api_fcs_gap_fallback" as const;
+  "cfb_v1_daily_edge_decision_2026_10_08_r43_independent_price_spread_lane" as const;
 export const CFB_V1_GAP_FALLBACK_PREVIOUS_DECISION_RELEASE =
-  "cfb_v1_daily_edge_decision_2026_10_07_r41_fcs_price_public_injury_continuity" as const;
+  "cfb_v1_daily_edge_decision_2026_10_08_r42_the_odds_api_fcs_gap_fallback" as const;
 export const CFB_V1_FCS_PRICE_PREVIOUS_DECISION_RELEASE =
   "cfb_v1_daily_edge_decision_2026_10_07_r40_price_qb_continuity" as const;
 export const CFB_V1_PRICE_QB_PREVIOUS_DECISION_RELEASE =
@@ -60,7 +60,7 @@ export const CFB_V1_GRADE_PREVIOUS_DECISION_RELEASE =
 const CFB_V1_POLICY_SOURCE_DECISION_RELEASE =
   "cfb_v1_daily_edge_decision_2026_09_04_r28_evidence_identity_continuity" as const;
 export const CFB_V1_DECISION_SCHEMA_RELEASE =
-  "cfb_v1_exact_price_decision_tuple_2026_10_08_r30_the_odds_api_fcs_gap_fallback" as const;
+  "cfb_v1_exact_price_decision_tuple_2026_10_08_r31_independent_price_spread_lane" as const;
 export const CFB_SPREAD_COUNTER_SIGNAL_MIN_EXCLUSIVE = 0.53 as const;
 export const CFB_SPREAD_COUNTER_SIGNAL_MAX_INCLUSIVE = 0.55 as const;
 export const CFB_T60_TARGET_MINUTES = 60 as const;

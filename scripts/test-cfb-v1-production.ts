@@ -3456,7 +3456,7 @@ await assert.rejects(
     auditWindowStartDate: "2026-10-05",
     auditForceUnlocked: true,
     auditForceTheOddsApi: true,
-    auditIndependentPriceLane: true,
+    auditDisableIndependentPriceLane: true,
   }),
   /audit planning overrides are forbidden when apply=true/,
   "read-only CFB audit planning overrides must fail before any production read or write",

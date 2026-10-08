@@ -2,7 +2,7 @@
 
 Date: 2026-10-08
 
-Status: audit-only candidate; historical lane and exact current-board replay completed; production wiring pending explicit owner approval after safety review
+Status: owner-approved production candidate after historical qualification and exact current-board replay
 
 ## Problem
 
@@ -46,6 +46,10 @@ The audit also exposed intermittent statement timeouts when the sole writer proj
 history for the complete 86-game board in one large `IN` query. The candidate partitions the same
 bounded, ordered, release-compatible read into 25-game batches. It does not change selected rows or
 add provider calls; exact replay must prove byte-equivalent input history and complete successfully.
+
+The owner approved the bounded lane after reviewing its 18 current-board Spread promotions and
+confirmed that recovered non-actionable markets may publish as Watchlist. The approval does not
+authorize broad actionability, a Best Angle exception, fabricated prices, or member-facing copy.
 
 ## Publication gate
 
