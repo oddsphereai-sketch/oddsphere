@@ -235,7 +235,13 @@ export default async function CandidateDailyEdgePage({
     : cfbFixture
       ? Object.fromEntries(
           snapshot.games.flatMap((game) => {
-            const availability = cfbFixture.availability?.[game.id];
+            // Stored CFB fixtures retain the provider game id as the
+            // availability key, while member game DTOs use the `cfb-` prefix.
+            // Resolve both forms so verified reports reach the existing panel
+            // during the compact-snapshot transition.
+            const providerGameId = game.id.startsWith("cfb-") ? game.id.slice(4) : game.id;
+            const availability = cfbFixture.availability?.[game.id] ??
+              cfbFixture.availability?.[providerGameId];
             return availability ? [[game.id, availability]] : [];
           }),
         )
