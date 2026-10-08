@@ -57,6 +57,7 @@ import {
   buildCfbForwardPayloadsWithIsolation,
   candidateTrackingMarkets,
   cfbForwardReleaseRefreshNeed,
+  cfbTheOddsApiProviderSeedNeeded,
   cfbReferenceCompletionNeeded,
   cfbMarketAnchorHealthHolds,
   currentCfbMovementContextBook,
@@ -2807,6 +2808,24 @@ assert.equal(
   null,
   "a current contextual capture must return to the ordinary bounded collection cadence",
 );
+const unseededFcsEvidence = structuredClone(currentCaptureEvidence);
+unseededFcsEvidence.payload.game.away.fbs = false;
+unseededFcsEvidence.payload.game.home.fbs = false;
+unseededFcsEvidence.payload.market.currentBooks = [];
+unseededFcsEvidence.payload.market.displayBooks = [];
+unseededFcsEvidence.payload.requestBudget.theOddsApi = 0;
+assert.equal(cfbTheOddsApiProviderSeedNeeded(unseededFcsEvidence, "2026-08-28T20:00:00.000Z"), true);
+assert.deepEqual(
+  cfbForwardReleaseRefreshNeed([unseededFcsEvidence], "2026-08-28T20:00:00.000Z"),
+  { collect: true, reason: "provider_seed_due", cadenceMinutes: 0 },
+  "an unlocked FCS price gap must receive one immediate paid-provider seed before ordinary hourly cadence",
+);
+const attemptedFcsEvidence = structuredClone(unseededFcsEvidence);
+attemptedFcsEvidence.payload.requestBudget.theOddsApi = 1;
+assert.equal(cfbTheOddsApiProviderSeedNeeded(attemptedFcsEvidence, "2026-08-28T20:00:00.000Z"), false, "a recorded provider attempt prevents repeat seeding");
+assert.equal(cfbForwardReleaseRefreshNeed([attemptedFcsEvidence], "2026-08-28T20:00:00.000Z"), null);
+assert.equal(cfbTheOddsApiProviderSeedNeeded(unseededFcsEvidence, unseededFcsEvidence.gameStartAt), false, "a started game can never enter the immediate seed path");
+assert.equal(cfbTheOddsApiProviderSeedNeeded(currentCaptureEvidence, "2026-08-28T20:00:00.000Z"), false, "FBS games remain outside the FCS fallback seed");
 const mixedCadencePlans = planCfbForwardEvidenceCaptures({
   games: [game, farGame],
   existing: [evidenceAt("opening", "2026-08-28T19:00:00.000Z"), farEvidence],
@@ -2997,6 +3016,7 @@ const evidenceAppendIndex = writerSource.lastIndexOf("appendCfbForwardEvidence("
 assert.ok(quarterbackCollectionIndex >= 0 && evidenceAppendIndex > quarterbackCollectionIndex, "the writer must finish bounded QB collection before its sole evidence append");
 assert.match(writerSource, /const need = cfbForwardReleaseRefreshNeed\(existing, args\.now\) \?\? ordinaryNeed;/, "an incomplete current release must take planning priority over ordinary cadence and T-60 reasons");
 assert.match(writerSource, /contextualEvidenceCapture\?\.release !== CFB_FORWARD_CONTEXT_CAPTURE_RELEASE/, "a new evidence-only capture release must seed without waiting for ordinary far-slate cadence");
+assert.match(writerSource, /need\.reason === "provider_seed_due"/, "the sole leased writer must admit the one-time paid-provider seed through its existing capture planner");
 assert.ok(sharpFallbackIndex >= 0 && evidenceAppendIndex > sharpFallbackIndex, "the writer must finish bounded SharpAPI exact-event fallback before its sole evidence append");
 const fallbackSelection = selectCfbSharpFallbackGames({
   games: Array.from({ length: 30 }, (_, index) => ({
