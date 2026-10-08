@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""Export the frozen Passing Attempts expected-role production release.
+"""Export the frozen independent Passing Attempts and Completions release.
 
 The research tournament also qualified a Receptions challenger, but its current
-board implementation failed the anti-flattening gate. This exporter therefore
-ships only the approved Passing Attempts head into the existing TypeScript batch
-scorer; it does not create a second writer.
+board implementation failed the anti-flattening gate. This exporter ships only
+approved heads into the existing TypeScript batch scorer; it does not create a
+second writer.
 """
 
 from __future__ import annotations
@@ -22,12 +22,13 @@ import pandas as pd
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 DEFAULT_OUTPUT = ROOT / "lib/services/football/modelArtifacts/nflPlayerPropsExpectedRole.json"
 DEFAULT_DISTRIBUTION = ROOT / "football-research/cache/nfl-player-props-external/tournament/nfl_player_props_independent_distribution_release_r1.json"
+DEFAULT_COMPLETIONS_DISTRIBUTION = ROOT / "football-research/cache/nfl-player-props-external/tournament/nfl_player_props_passing_completions_distribution_r1.json"
 RUNTIME = ROOT / "lib/services/football/modelArtifacts/nflPlayerPropsRuntime.json"
-RELEASE = "nfl_player_props_expected_role_runtime_2026_10_08_r1_passing_attempts"
-PORTABLE_RELEASE = "nfl_player_props_runtime_2026_10_08_r9_independent_passing_attempts"
-MODEL_RELEASE = "nfl_player_props_distribution_model_2026_10_08_r18_independent_passing_attempts"
-CALIBRATION_RELEASE = "nfl_player_props_distribution_calibration_2026_10_08_r20_independent_passing_attempts"
-DECISION_RELEASE = "nfl_player_props_decision_2026_10_08_r23_independent_passing_attempts"
+RELEASE = "nfl_player_props_expected_role_runtime_2026_10_08_r2_passing_completions"
+PORTABLE_RELEASE = "nfl_player_props_runtime_2026_10_08_r10_independent_passing_completions"
+MODEL_RELEASE = "nfl_player_props_distribution_model_2026_10_08_r19_independent_passing_completions"
+CALIBRATION_RELEASE = "nfl_player_props_distribution_calibration_2026_10_08_r21_independent_passing_completions"
+DECISION_RELEASE = "nfl_player_props_decision_2026_10_08_r24_independent_passing_completions"
 
 
 def load(name: str, path: pathlib.Path) -> Any:
@@ -79,6 +80,8 @@ def optimize_existing(path: pathlib.Path) -> None:
     prior_player_features = list(payload.get("playerStateFeatureNames", payload.get("featureNames", [])))
     models = [
         payload["passingAttempts"]["budgetModel"], payload["passingAttempts"]["shareModel"],
+        payload["passingCompletions"]["shareModel"],
+        payload["passingCompletions"]["completionRateModel"],
     ]
     for value in models:
         if not str(value["kind"]).startswith("compact_hgb_"):
@@ -169,6 +172,7 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--output", type=pathlib.Path, default=DEFAULT_OUTPUT)
     parser.add_argument("--distribution", type=pathlib.Path, default=DEFAULT_DISTRIBUTION)
+    parser.add_argument("--completions-distribution", type=pathlib.Path, default=DEFAULT_COMPLETIONS_DISTRIBUTION)
     parser.add_argument("--optimize-existing", action="store_true")
     args = parser.parse_args()
 
@@ -203,6 +207,12 @@ def main() -> None:
         *availability_groups["combined"],
     ]))
     player_features = [name for name in player_features if name in frame.columns]
+    completion_features = list(dict.fromkeys([
+        *external.relevant_features("passing_completions", groups)["full_external"],
+        *groups.get("depth", []),
+        *availability_groups["combined"],
+    ]))
+    completion_features = [name for name in completion_features if name in frame.columns]
     team_features = [
         name for name in [*groups["base"], *groups["state"]]
         if name == "is_home" or name.startswith((
@@ -210,8 +220,8 @@ def main() -> None:
             "external_state_opponent_", "external_environment_",
         ))
     ]
-    frame[[*dict.fromkeys([*player_features, *team_features])]] = frame[
-        [*dict.fromkeys([*player_features, *team_features])]
+    frame[[*dict.fromkeys([*player_features, *completion_features, *team_features])]] = frame[
+        [*dict.fromkeys([*player_features, *completion_features, *team_features])]
     ].replace([np.inf, -np.inf], np.nan)
     training = frame[frame["season"].lt(2026)].copy()
     teams = foundation.team_table(training, team_features)
@@ -229,21 +239,52 @@ def main() -> None:
     passer_share = foundation.model("squared_error").fit(
         passing_train[player_features], passing_train["lead_pass_share"].clip(0.50, 1.0),
     )
+    completion_share = foundation.model("squared_error").fit(
+        passing_train[completion_features], passing_train["lead_pass_share"].clip(0.50, 1.0),
+    )
+    completion_train = leaders[
+        leaders["passing_attempts"].ge(5) & leaders["participated"].eq(1)
+    ].copy()
+    completion_rate = (
+        completion_train["passing_completions"] / completion_train["passing_attempts"]
+    ).clip(0.30, 0.85)
+    completion_rate_model = foundation.model("squared_error").fit(
+        completion_train[completion_features], completion_rate.to_numpy(float),
+        sample_weight=completion_train["passing_attempts"].to_numpy(float),
+    )
 
-    distribution = json.loads(args.distribution.read_text(encoding="utf-8"))
-    selected = distribution["selectedArtifacts"]
-    if not selected["passing_attempts"]["passes"]:
+    existing_expected_role = json.loads(args.output.read_text(encoding="utf-8"))
+    passing_attempts_probability = existing_expected_role["passingAttempts"]["probability"]
+    if not passing_attempts_probability["passes"]:
         raise RuntimeError("selected Passing Attempts distribution is not release qualified")
+    completions_distribution = json.loads(args.completions_distribution.read_text(encoding="utf-8"))
+    completion_artifact = completions_distribution["artifact"]
+    if not completion_artifact["passes"]:
+        raise RuntimeError("selected Passing Completions distribution is not release qualified")
+    completion_probability = {
+        "foundationDistribution": completion_artifact["referenceDistribution"],
+        "challengerDistribution": completion_artifact["challengerDistribution"],
+        "challengerWeight": completion_artifact["challengerWeight"],
+        "probabilityCalibration": completion_artifact["probabilityCalibration"],
+        "passes": True,
+    }
 
     passing_budget_portable = compact_model(exporter, team_budget, team_features)
     passer_share_portable = compact_model(exporter, passer_share, player_features)
-    all_models = [passing_budget_portable, passer_share_portable]
+    completion_share_portable = compact_model(exporter, completion_share, completion_features)
+    completion_rate_portable = compact_model(exporter, completion_rate_model, completion_features)
+    all_models = [
+        passing_budget_portable, passer_share_portable,
+        completion_share_portable, completion_rate_portable,
+    ]
     state_features = list(dict.fromkeys(
         feature for value in all_models for feature in model_features(value)
     ))
     runtime = json.loads(RUNTIME.read_text(encoding="utf-8"))
     player_updates: dict[str, dict[str, float | None]] = {}
-    used_player_features = [name for name in state_features if name in player_features]
+    used_player_features = [
+        name for name in state_features if name in set(player_features) | set(completion_features)
+    ]
     passing_population = training[training["position"].eq("QB")]
     for player_name, rows in passing_population.groupby(
         passing_population["player_name"].map(foundation.normalize_player), observed=True,
@@ -271,7 +312,10 @@ def main() -> None:
         "sourceChecksums": {
             "externalManifest": foundation.sha256_file(foundation.DEFAULT_EXTERNAL_MANIFEST),
             "externalFeatures": manifest["featureFileSha256"],
-            "distributionTournament": foundation.sha256_file(args.distribution),
+            "passingAttemptsProbability": hashlib.sha256(json.dumps(
+                passing_attempts_probability, sort_keys=True, separators=(",", ":"),
+            ).encode("utf-8")).hexdigest(),
+            "passingCompletionsTournament": foundation.sha256_file(args.completions_distribution),
         },
         "featureNames": state_features,
         "passingAttempts": {
@@ -280,7 +324,17 @@ def main() -> None:
             "shareModel": passer_share_portable,
             "shareLower": 0.50,
             "shareUpper": 1.0,
-            "probability": selected["passing_attempts"],
+            "probability": passing_attempts_probability,
+        },
+        "passingCompletions": {
+            "blendWeight": 0.75,
+            "shareModel": completion_share_portable,
+            "shareLower": 0.50,
+            "shareUpper": 1.0,
+            "completionRateModel": completion_rate_portable,
+            "completionRateLower": 0.30,
+            "completionRateUpper": 0.85,
+            "probability": completion_probability,
         },
         "playerStateUpdates": player_updates,
         "teamStateUpdates": team_updates,
@@ -299,11 +353,11 @@ def main() -> None:
     runtime["decision"]["calibrationRelease"] = CALIBRATION_RELEASE
     runtime["sourceChecksums"]["expectedRoleArtifact"] = foundation.sha256_file(args.output)
     RUNTIME.write_text(json.dumps(runtime, separators=(",", ":"), allow_nan=False) + "\n", encoding="utf-8")
-    for market in ("PassingAttempts",):
+    for market in ("PassingAttempts", "PassingCompletions"):
         path = RUNTIME.with_name(f"nflPlayerPropsRuntimeMarket{market}.json")
         values = json.loads(path.read_text(encoding="utf-8"))
-        values["marketResidualWeight"] = 0.0
-        values["marketResidualQualified"] = False
+        values["marketResidualWeight"] = 1.0 if market == "PassingCompletions" else 0.0
+        values["marketResidualQualified"] = market == "PassingCompletions"
         path.write_text(json.dumps(values, separators=(",", ":"), allow_nan=False) + "\n", encoding="utf-8")
     print(json.dumps({
         "output": str(args.output), "release": RELEASE, "bytes": args.output.stat().st_size,
