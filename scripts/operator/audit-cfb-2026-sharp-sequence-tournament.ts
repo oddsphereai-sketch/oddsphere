@@ -21,6 +21,8 @@ import type { CfbSharpApiSplitRecord } from "../../lib/services/football/cfbShar
 import { readCfbCurrentAdvancedState } from "../../lib/services/football/cfbCurrentAdvancedState";
 import { getCfbV1WeeklyForecasts } from "../../lib/services/football/cfbV1WeeklyForecast";
 import { resolveCfbCanonicalMarketAnchor } from "../../lib/services/football/cfbMarketInformedOutcome";
+import { buildCfbNamedBookPriceHierarchy } from "../../lib/services/football/cfbSharpApiOdds";
+import { fetchCfbTheOddsApiHistoricalOpenings } from "../../lib/services/football/cfbTheOddsApiFallback";
 import {
   applyCfbMarketSharpAwareGrades,
   buildCfbMarketSharpAwareForecast,
@@ -319,6 +321,28 @@ function isHomeDecisionSide(side: string, homeTeam: string): boolean {
   return side === "home" || side === homeTeam || side.startsWith(`${homeTeam} `);
 }
 function settle(game: Game, market: Market, side: Side, line: number | null): Result { const value = market === "moneyline" ? game.awayScore - game.homeScore : market === "spread" ? game.awayScore - game.homeScore - (line ?? 0) : game.awayScore + game.homeScore - (line ?? 0); if (Math.abs(value) < 1e-9) return "push"; return (value > 0 ? "first" : "second") === side ? "win" : "loss"; }
+function settleExactDecision(args: {
+  market: Market;
+  side: string;
+  line: number | null;
+  awayTeam: string;
+  awayScore: number;
+  homeScore: number;
+}): Result {
+  let value: number;
+  if (args.market === "moneyline") {
+    value = args.side === args.awayTeam ? args.awayScore - args.homeScore : args.homeScore - args.awayScore;
+  } else if (args.market === "spread") {
+    const selectedAway = args.side.startsWith(`${args.awayTeam} `);
+    value = selectedAway
+      ? args.awayScore + (args.line ?? 0) - args.homeScore
+      : args.homeScore + (args.line ?? 0) - args.awayScore;
+  } else {
+    const total = args.awayScore + args.homeScore;
+    value = args.side.startsWith("Over ") ? total - (args.line ?? 0) : (args.line ?? 0) - total;
+  }
+  return Math.abs(value) < 1e-9 ? "push" : value > 0 ? "win" : "loss";
+}
 function dedupeSignals(signals: Signal[]): Signal[] {
   const retained = new Map<string, Signal>();
   for (const signal of signals) {
@@ -2035,6 +2059,210 @@ async function main(): Promise<void> {
   }
   const games: Game[] = [];
   for (const row of latest.values()) { const result = results.get(row.providerGameId); const histories = byGame.get(row.providerGameId) ?? []; if (!isFinal(result) || !histories.length) continue; const independent = row.payload.independentForecast ?? row.payload.decisions.forecast; const authoritative = row.payload.decisions.forecast; const spreadDecision = row.payload.decisions.evaluatedBets.find((decision) => decision.market === "spread") ?? null; const totalDecision = row.payload.decisions.evaluatedBets.find((decision) => decision.market === "total") ?? null; const selectedSpreadLine = spreadDecision?.evaluatedQuote.line ?? null; const homeSpreadLine = selectedSpreadLine === null || !spreadDecision ? null : isHomeDecisionSide(spreadDecision.side, row.payload.game.home.abbreviation) ? selectedSpreadLine : -selectedSpreadLine; games.push({ gameId: row.providerGameId, date: row.gameStartAt.slice(0, 10), kickoffAt: row.gameStartAt, awayTeam: row.payload.game.away.abbreviation, homeTeam: row.payload.game.home.abbreviation, awayFbs: row.payload.game.away.fbs, homeFbs: row.payload.game.home.fbs, awayConferenceId: row.payload.game.away.conferenceId, homeConferenceId: row.payload.game.home.conferenceId, independent: { expectedMarginHome: independent.expectedMarginHome, expectedTotal: independent.expectedTotal }, authoritative: { expectedMarginHome: authoritative.expectedMarginHome, expectedTotal: authoritative.expectedTotal }, targetLines: { moneyline: null, spread: homeSpreadLine, total: totalDecision?.evaluatedQuote.line ?? null }, targetGrades: Object.fromEntries(MARKETS.map((market) => [market, row.payload.decisions.evaluatedBets.find((decision) => decision.market === market)?.grade ?? "Held"])) as Record<Market, string>, targetPrices: Object.fromEntries(MARKETS.map((market) => [market, row.payload.decisions.evaluatedBets.find((decision) => decision.market === market)?.evaluatedQuote.price ?? null])) as Record<Market, number | null>, awayScore: result.away_score!, homeScore: result.home_score!, histories: histories.sort((a, b) => Date.parse(a.capturedAt) - Date.parse(b.capturedAt)) }); }
+  if (process.argv.includes("--fcs-historical-plan")) {
+    const fcs = games.filter((game) => !game.awayFbs && !game.homeFbs);
+    const kickoffGroups = [...new Map(fcs.map((game) => [game.kickoffAt, fcs.filter((candidate) => candidate.kickoffAt === game.kickoffAt)])).entries()]
+      .sort(([first], [second]) => Date.parse(first) - Date.parse(second));
+    console.log(JSON.stringify({
+      settledFcsGames: fcs.length,
+      kickoffGroups: kickoffGroups.length,
+      historicalCreditsAtThirtyPerGroup: kickoffGroups.length * 30,
+      groups: kickoffGroups.map(([kickoffAt, group]) => ({
+        kickoffAt,
+        snapshotAt: new Date(Date.parse(kickoffAt) - 60 * 60_000).toISOString(),
+        games: group.length,
+      })),
+    }, null, 2));
+    return;
+  }
+  if (process.argv.includes("--fcs-historical-grade-audit")) {
+    const apiKey = process.env.THE_ODDS_API_KEY;
+    if (!apiKey) throw new Error("The Odds API key is required for the FCS historical grade audit.");
+    const fromDate = process.argv.find((value) => value.startsWith("--from-date="))?.split("=")[1] ?? null;
+    const toDate = process.argv.find((value) => value.startsWith("--to-date="))?.split("=")[1] ?? null;
+    const fcsRows = [...latest.values()].filter((row) => {
+      const result = results.get(row.providerGameId);
+      return isFinal(result) && !row.payload.game.away.fbs && !row.payload.game.home.fbs &&
+        (!fromDate || row.gameStartAt.slice(0, 10) >= fromDate) &&
+        (!toDate || row.gameStartAt.slice(0, 10) <= toDate);
+    });
+    const completedGames = [...latest.values()].flatMap((row) => {
+      const result = results.get(row.providerGameId);
+      return isFinal(result) ? [{
+        ...row.payload.game,
+        awayScore: result.away_score!,
+        homeScore: result.home_score!,
+      }] : [];
+    });
+    const advancedState = await readCfbCurrentAdvancedState({ client, season: 2026 });
+    const weeklyForecasts = getCfbV1WeeklyForecasts({
+      games: fcsRows.map((row) => row.payload.game),
+      completedGames,
+      advancedGames: advancedState?.games ?? [],
+    });
+    const groups = [...new Map(fcsRows.map((row) => [
+      row.gameStartAt,
+      fcsRows.filter((candidate) => candidate.gameStartAt === row.gameStartAt),
+    ])).entries()].sort(([first], [second]) => Date.parse(first) - Date.parse(second));
+    const historicalBooks = new Map<string, ReturnType<typeof buildCfbNamedBookPriceHierarchy>>();
+    let creditsUsed = 0;
+    let creditsRemaining: number | null = null;
+    let requests = 0;
+    for (const [kickoffAt, rows] of groups) {
+      const snapshotAt = new Date(Date.parse(kickoffAt) - 60 * 60_000).toISOString();
+      const response = await fetchCfbTheOddsApiHistoricalOpenings({
+        games: rows.map((row) => row.payload.game),
+        apiKey,
+        snapshotDates: [snapshotAt],
+      });
+      requests += response.requests;
+      creditsUsed += response.creditsUsed;
+      creditsRemaining = response.creditsRemaining ?? creditsRemaining;
+      for (const row of rows) {
+        historicalBooks.set(row.providerGameId, response.booksByGame[row.providerGameId] ?? []);
+      }
+    }
+    const decisions = fcsRows.flatMap((row) => {
+      const result = results.get(row.providerGameId)!;
+      const added = historicalBooks.get(row.providerGameId) ?? [];
+      const comparableCurrentBooks = buildCfbNamedBookPriceHierarchy(row.payload.market.currentBooks, added);
+      const evaluatedAt = new Date(Date.parse(row.gameStartAt) - 60 * 60_000).toISOString();
+      const weeklyForecast = weeklyForecasts.get(row.providerGameId);
+      if (!weeklyForecast) throw new Error(`Historical FCS forecast missing for ${row.providerGameId}.`);
+      const fixedEvaluatedSportsbookByMarket = Object.fromEntries(row.payload.decisions.evaluatedBets.map((decision) =>
+        [decision.market, decision.evaluatedQuote.sportsbook]));
+      const bundle = applyCfbVerifiedAvailabilityGradeCap({
+        bundle: applyCfbMarketSharpAwareGrades({
+          bundle: buildCfbV1DecisionBundle({
+            providerGameId: row.providerGameId,
+            awayTeam: row.payload.game.away.abbreviation,
+            homeTeam: row.payload.game.home.abbreviation,
+            gameStartsAt: row.gameStartAt,
+            comparableCurrentBooks,
+            stage: "t60_locked",
+            evaluatedAt,
+            lockedAt: evaluatedAt,
+            healthHolds: row.payload.coverage.healthHolds.filter((hold) => hold !== "authoritative_market_anchor_unavailable"),
+            forecast: weeklyForecast.forecast,
+            contextLines: {
+              homeSpread: row.payload.market.playbookLine?.homeSpread ?? null,
+              totalLine: row.payload.market.playbookLine?.total ?? null,
+            },
+            fixedEvaluatedSportsbookByMarket,
+          }),
+          homeTeam: row.payload.game.home.abbreviation,
+          sharpSplits: row.payload.market.sharpApiSplits ?? [],
+          playbookLine: row.payload.market.playbookLine,
+          publicSplits: row.payload.market.playbookSplits,
+          operationalOpening: row.payload.market.operationalOpening,
+          current: currentCfbMovementContextBook(comparableCurrentBooks, row.payload.market.operationalOpening),
+        }),
+        availability: row.payload.availability.verifiedQuarterback ?? null,
+      });
+      return bundle.evaluatedBets.flatMap((decision) => {
+        const previouslyHeld = !row.payload.decisions.evaluatedBets.some((existing) => existing.market === decision.market);
+        if (!previouslyHeld) return [];
+        const outcome = settleExactDecision({
+          market: decision.market,
+          side: decision.side,
+          line: decision.evaluatedQuote.line,
+          awayTeam: row.payload.game.away.abbreviation,
+          awayScore: result.away_score!,
+          homeScore: result.home_score!,
+        });
+        return [{
+          providerGameId: row.providerGameId,
+          date: row.gameStartAt.slice(0, 10),
+          matchup: `${row.payload.game.away.abbreviation}@${row.payload.game.home.abbreviation}`,
+          market: decision.market,
+          grade: decision.grade,
+          side: decision.side,
+          price: decision.evaluatedQuote.price,
+          modelProbability: decision.modelProbability,
+          edgePercentagePoints: decision.edgePercentagePoints,
+          expectedValue: decision.expectedValue,
+          outcome,
+          units: outcome === "push" ? 0 : outcome === "loss" ? -1 : decision.evaluatedQuote.price > 0
+            ? decision.evaluatedQuote.price / 100
+            : 100 / -decision.evaluatedQuote.price,
+          consensusBooks: decision.consensus.books,
+          consensusBookCount: decision.consensus.books.length,
+          splitAvailable: decision.gradeAdjustment !== null && (
+            decision.gradeAdjustment.sharpDirection !== "unknown" || decision.gradeAdjustment.publicDirection !== "unknown"
+          ),
+          movementAvailable: decision.gradeAdjustment !== null && decision.gradeAdjustment.movementDirection !== "unknown",
+          movementDirection: decision.gradeAdjustment?.movementDirection ?? "unknown",
+        }];
+      });
+    });
+    const summary = (rows: typeof decisions) => {
+      const resolved = rows.filter((row) => row.outcome !== "push");
+      return {
+        rows: rows.length,
+        wins: resolved.filter((row) => row.outcome === "win").length,
+        losses: resolved.filter((row) => row.outcome === "loss").length,
+        pushes: rows.length - resolved.length,
+        hitRate: resolved.length === 0 ? null : resolved.filter((row) => row.outcome === "win").length / resolved.length,
+        units: rows.reduce((sum, row) => sum + row.units, 0),
+      };
+    };
+    const laneVariants = [
+      { id: "lean_base", eligible: (row: typeof decisions[number]) => row.grade === "Lean" },
+      { id: "lean_price_300", eligible: (row: typeof decisions[number]) => row.grade === "Lean" && row.price >= -300 && row.price <= 300 },
+      { id: "lean_supporting_move", eligible: (row: typeof decisions[number]) => row.grade === "Lean" && row.movementDirection === "support" },
+      { id: "lean_price_300_supporting_move", eligible: (row: typeof decisions[number]) => row.grade === "Lean" && row.price >= -300 && row.price <= 300 && row.movementDirection === "support" },
+      { id: "lean_three_books", eligible: (row: typeof decisions[number]) => row.grade === "Lean" && row.consensusBookCount >= 3 },
+      { id: "lean_three_books_price_300", eligible: (row: typeof decisions[number]) => row.grade === "Lean" && row.consensusBookCount >= 3 && row.price >= -300 && row.price <= 300 },
+      { id: "lean_probability_58", eligible: (row: typeof decisions[number]) => row.grade === "Lean" && row.modelProbability >= 0.58 },
+      { id: "lean_probability_58_price_300", eligible: (row: typeof decisions[number]) => row.grade === "Lean" && row.modelProbability >= 0.58 && row.price >= -300 && row.price <= 300 },
+    ];
+    const laneTournament = Object.fromEntries(MARKETS.map((market) => {
+      const marketRows = decisions.filter((row) => row.market === market);
+      const variants = laneVariants.map((variant) => {
+        const selection = marketRows.filter((row) => row.date <= "2026-09-27" && variant.eligible(row));
+        const confirmation = marketRows.filter((row) => row.date >= "2026-10-03" && variant.eligible(row));
+        return { id: variant.id, selection: summary(selection), confirmation: summary(confirmation) };
+      });
+      const selected = variants.filter((variant) =>
+        variant.selection.rows >= 10 &&
+        (variant.selection.hitRate ?? 0) >= 0.55 &&
+        variant.selection.units > 0
+      ).sort((first, second) =>
+        second.selection.units - first.selection.units ||
+        (second.selection.hitRate ?? 0) - (first.selection.hitRate ?? 0) ||
+        second.selection.rows - first.selection.rows ||
+        first.id.localeCompare(second.id)
+      )[0] ?? null;
+      return [market, { selected, variants }];
+    }));
+    console.log(JSON.stringify({
+      release: "cfb_fcs_independent_price_corroboration_historical_audit_2026_10_08_r1",
+      mode: "historical_provider_read_only_zero_writes",
+      settledFcsGames: fcsRows.length,
+      kickoffGroups: groups.length,
+      requests,
+      creditsUsed,
+      creditsRemaining,
+      historicalMatchedGames: [...historicalBooks.values()].filter((books) => books.length > 0).length,
+      recoveredMarkets: decisions.length,
+      byMarket: Object.fromEntries(MARKETS.map((market) => [market, summary(decisions.filter((row) => row.market === market))])),
+      byGrade: Object.fromEntries(["Best Angle", "Lean", "Watchlist", "No Play"].map((grade) => [grade, summary(decisions.filter((row) => row.grade === grade))])),
+      byMarketGrade: Object.fromEntries(MARKETS.map((market) => [market,
+        Object.fromEntries(["Best Angle", "Lean", "Watchlist", "No Play"].map((grade) => [grade,
+          summary(decisions.filter((row) => row.market === market && row.grade === grade))]))])),
+      byMarketMovement: Object.fromEntries(MARKETS.map((market) => [market, {
+        present: summary(decisions.filter((row) => row.market === market && row.movementAvailable)),
+        absent: summary(decisions.filter((row) => row.market === market && !row.movementAvailable)),
+      }])),
+      byDate: Object.fromEntries([...new Set(decisions.map((row) => row.date))].sort().map((date) => [date, summary(decisions.filter((row) => row.date === date))])),
+      actionable: summary(decisions.filter((row) => row.grade === "Best Angle" || row.grade === "Lean")),
+      actionableWithoutSplits: summary(decisions.filter((row) =>
+        (row.grade === "Best Angle" || row.grade === "Lean") && !row.splitAvailable)),
+      laneTournament,
+      ...(process.argv.includes("--details") ? { decisions } : {}),
+    }, null, 2));
+    return;
+  }
   if (process.argv.includes("--current-board-candidate") || process.argv.includes("--current-board-exact-writer")) {
     const now = Date.now();
     const nowIso = new Date(now).toISOString();
@@ -2042,6 +2270,7 @@ async function main(): Promise<void> {
     let writerDryRun: Awaited<ReturnType<typeof runCfbForwardEvidenceWriter>> | null = null;
     let auditForecasts: readonly CfbForwardAuditForecast[] = [];
     let currentRows: CfbForwardStoredEvidence[] = [...latest.values()].filter((row) => Date.parse(row.gameStartAt) > now);
+    const storedCurrentRows = new Map(currentRows.map((row) => [row.providerGameId, row]));
     if (exactWriter) {
       const balldontlieApiKey = process.env.BALLDONTLIE_API_KEY;
       const playbookApiKey = process.env.PLAYBOOK_API_KEY;
@@ -2070,6 +2299,8 @@ async function main(): Promise<void> {
         weatherProvider: null,
         auditWindowStartDate: auditWindow.window.boardStartDate,
         auditForceUnlocked: true,
+        auditForceTheOddsApi: true,
+        auditIndependentPriceLane: process.argv.includes("--independent-price-lane"),
         auditForecasts: (forecasts) => { auditForecasts = forecasts; },
       });
       currentRows = auditForecasts.map((row, index) => ({
@@ -2163,6 +2394,36 @@ async function main(): Promise<void> {
       fullForecasts,
       exactWriter ? "live_provider_select_only_zero_writes" : undefined,
     );
+    const writerInputChanges = exactWriter ? currentRows.flatMap((row) => {
+      const stored = storedCurrentRows.get(row.providerGameId);
+      if (!stored) return [];
+      return MARKETS.flatMap((market) => {
+        const before = stored.payload.decisions.evaluatedBets.find((decision) => decision.market === market) ?? null;
+        const after = row.payload.decisions.evaluatedBets.find((decision) => decision.market === market) ?? null;
+        const beforeGrade = before?.grade ?? "Held";
+        const afterGrade = after?.grade ?? "Held";
+        if (beforeGrade === afterGrade && before?.side === after?.side && before?.evaluatedQuote.sportsbook === after?.evaluatedQuote.sportsbook) return [];
+        return [{
+          providerGameId: row.providerGameId,
+          matchup: `${row.payload.game.away.abbreviation}@${row.payload.game.home.abbreviation}`,
+          market,
+          beforeGrade,
+          afterGrade,
+          beforeSide: before?.side ?? null,
+          afterSide: after?.side ?? null,
+          beforeSportsbook: before?.evaluatedQuote.sportsbook ?? null,
+          afterSportsbook: after?.evaluatedQuote.sportsbook ?? null,
+        }];
+      });
+    }) : [];
+    const actionable = (grade: string) => grade === "Best Angle" || grade === "Lean";
+    const writerInputDelta = exactWriter ? {
+      changes: writerInputChanges,
+      heldRecovered: writerInputChanges.filter((change) => change.beforeGrade === "Held" && change.afterGrade !== "Held").length,
+      recoveredActionables: writerInputChanges.filter((change) => change.beforeGrade === "Held" && actionable(change.afterGrade)).length,
+      actionablePromotions: writerInputChanges.filter((change) => !actionable(change.beforeGrade) && actionable(change.afterGrade)).length,
+      actionableDemotions: writerInputChanges.filter((change) => actionable(change.beforeGrade) && !actionable(change.afterGrade)).length,
+    } : null;
     const summaryOnly = process.argv.includes("--summary-only");
     const output = process.argv.includes("--compact") ? {
       release: report.release,
@@ -2175,6 +2436,7 @@ async function main(): Promise<void> {
       exactGradeReplayGames: report.exactGradeReplayGames,
       maximumAbsoluteReconstructionDifference: report.maximumAbsoluteReconstructionDifference,
       marketSummary: report.marketSummary,
+      ...(writerInputDelta ? { writerInputDelta } : {}),
       ...(!summaryOnly ? {
         invalidGradeReplayGames: report.invalidGradeReplayGames,
         reconstructionMismatches: report.reconstructionMismatches,

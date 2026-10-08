@@ -3,9 +3,10 @@ import type { CfbForwardStoredEvidence } from "./cfbForwardEvidence";
 import { activeCfbWeeklyWindow, isGameInCfbWeeklyWindow } from "./cfbWeeklyWindow";
 
 export const CFB_THE_ODDS_API_FALLBACK_RELEASE =
-  "cfb_the_odds_api_fcs_fallback_2026_10_08_r1_strict_gap_fill" as const;
+  "cfb_the_odds_api_fcs_fallback_2026_10_08_r2_multi_book_gap_fill" as const;
 export const CFB_THE_ODDS_API_SPORT_KEY = "americanfootball_ncaaf_fcs" as const;
-export const CFB_THE_ODDS_API_BOOKMAKERS = "fanduel,draftkings,rebet" as const;
+export const CFB_THE_ODDS_API_BOOKMAKERS =
+  "fanduel,draftkings,rebet,betmgm,betrivers,williamhill_us,fanatics,espnbet,betonlineag,ballybet" as const;
 export const CFB_THE_ODDS_API_CREDITS_PER_PULL = 3 as const;
 export const CFB_THE_ODDS_API_HISTORICAL_CREDITS_PER_PULL = 30 as const;
 export const CFB_THE_ODDS_API_ORDINARY_WEEKLY_PULL_LIMIT = 176 as const;
@@ -240,8 +241,8 @@ export function shouldFetchCfbTheOddsApiFallback(args: {
 
 function normalizeBook(args: { game: NcaafGame; eventId: string; book: JsonRecord }): NcaafBookOdds[] {
   const key = text(args.book.key)?.toLowerCase() ?? "";
-  const sportsbook = key === "fanduel" ? "fanduel" : key === "draftkings" ? "draftkings" : key === "rebet" ? "rebet" : null;
-  if (!sportsbook) return [];
+  const identity = THE_ODDS_API_BOOK_IDENTITIES[key];
+  if (!identity) return [];
   const markets = array(args.book.markets).map(record);
   const moneyline = normalizeMoneyline(args.game, markets);
   const spread = normalizeSpread(args.game, markets);
@@ -256,11 +257,12 @@ function normalizeBook(args: { game: NcaafGame; eventId: string; book: JsonRecor
   if (!observedAt) return [];
   return [{
     providerGameId: args.game.providerGameId,
-    sportsbook,
+    sportsbook: identity.sportsbook,
     observedAt,
     provider: "theoddsapi",
     providerEventId: args.eventId,
-    targetEligible: true,
+    targetEligible: identity.targetEligible,
+    marketReadingEligible: identity.marketReadingEligible,
     marketSelection: {
       ...(moneyline ? { moneyline: "main_line" as const } : {}),
       ...(spread ? { spread: "main_line" as const } : {}),
@@ -272,6 +274,23 @@ function normalizeBook(args: { game: NcaafGame; eventId: string; book: JsonRecor
     total,
   }];
 }
+
+const THE_ODDS_API_BOOK_IDENTITIES: Readonly<Record<string, {
+  sportsbook: string;
+  targetEligible: boolean;
+  marketReadingEligible: boolean;
+}>> = {
+  fanduel: { sportsbook: "fanduel", targetEligible: true, marketReadingEligible: true },
+  draftkings: { sportsbook: "draftkings", targetEligible: true, marketReadingEligible: true },
+  rebet: { sportsbook: "rebet", targetEligible: true, marketReadingEligible: true },
+  betmgm: { sportsbook: "betmgm", targetEligible: false, marketReadingEligible: false },
+  betrivers: { sportsbook: "betrivers", targetEligible: false, marketReadingEligible: false },
+  williamhill_us: { sportsbook: "caesars", targetEligible: false, marketReadingEligible: false },
+  fanatics: { sportsbook: "fanatics", targetEligible: false, marketReadingEligible: false },
+  espnbet: { sportsbook: "thescorebet", targetEligible: false, marketReadingEligible: false },
+  betonlineag: { sportsbook: "betonline", targetEligible: false, marketReadingEligible: false },
+  ballybet: { sportsbook: "ballybet", targetEligible: false, marketReadingEligible: false },
+};
 
 function normalizeMoneyline(game: NcaafGame, markets: JsonRecord[]): NcaafBookOdds["moneyline"] {
   const outcomes = marketOutcomes(markets, "h2h");

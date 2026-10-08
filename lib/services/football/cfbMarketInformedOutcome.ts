@@ -52,6 +52,7 @@ export function resolveCfbCanonicalMarketAnchor(args: {
 }): CfbCanonicalMarketAnchor | null {
   const complete = args.books.filter((book) =>
     book.targetEligible !== false &&
+    book.marketReadingEligible !== false &&
     isConventionalBook(book.sportsbook) &&
     book.spread !== null &&
     book.total !== null
@@ -233,6 +234,7 @@ function distinctNonTargetBooks(
   return new Set(books
     .filter((book) =>
       book.targetEligible === false &&
+      book.marketReadingEligible !== false &&
       isConventionalBook(book.sportsbook) &&
       predicate(book)
     )

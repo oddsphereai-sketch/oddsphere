@@ -79,6 +79,7 @@ export const CFB_MONEYLINE_PARLAY_LEAN_MIN_MODEL_PROBABILITY = 0.65 as const;
 export const CFB_MONEYLINE_PARLAY_LEAN_MIN_MARKET_PROBABILITY = 0.60 as const;
 export const CFB_MONEYLINE_PARLAY_LEAN_MIN_PRICE = -700 as const;
 export const CFB_MONEYLINE_PARLAY_LEAN_MAX_PRICE = -201 as const;
+export const CFB_INDEPENDENT_PRICE_SPREAD_LEAN_MIN_MODEL_PROBABILITY = 0.58 as const;
 
 type CanonicalSide = "home" | "away" | "over" | "under";
 export type CfbMarketEvidenceDirection = "support" | "resistance" | "neutral" | "unknown";
@@ -433,6 +434,39 @@ export function applyCfbMarketSharpAwareGrades(args: {
           executionStatus: balanced.executionStatus,
           reasonCodes: balanced.reasonCodes,
         },
+      };
+    }),
+  };
+}
+
+/**
+ * A missing full-game market anchor is not the same thing as missing exact
+ * price evidence for every individual market. When the independent forecast
+ * can still be priced against a verified target-excluded consensus, retain
+ * those decisions for prediction/tracking. Historical selection and untouched
+ * confirmation authorize only the high-probability Spread Lean lane; every
+ * other would-be actionable grade is capped at Watchlist.
+ */
+export function applyCfbIndependentPriceCorroborationLane(args: {
+  bundle: CfbV1DecisionBundle;
+  enabled: boolean;
+}): CfbV1DecisionBundle {
+  if (!args.enabled) return args.bundle;
+  return {
+    ...args.bundle,
+    evaluatedBets: args.bundle.evaluatedBets.map((decision) => {
+      const authorizedSpreadLean = decision.market === "spread" &&
+        decision.grade === "Lean" &&
+        decision.modelProbability >= CFB_INDEPENDENT_PRICE_SPREAD_LEAN_MIN_MODEL_PROBABILITY;
+      const actionable = decision.grade === "Best Angle" || decision.grade === "Lean";
+      if (authorizedSpreadLean || !actionable) return decision;
+      return {
+        ...decision,
+        grade: "Watchlist" as const,
+        gradeAdjustment: decision.gradeAdjustment ? {
+          ...decision.gradeAdjustment,
+          reasonCodes: [...decision.gradeAdjustment.reasonCodes, "independent_price_lane_actionability_cap"],
+        } : null,
       };
     }),
   };

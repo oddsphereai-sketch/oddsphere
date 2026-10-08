@@ -76,6 +76,29 @@ const underCorroboratedTarget = resolveCfbCanonicalMarketAnchor({
 });
 assert.equal(underCorroboratedTarget?.source, "playbook_context");
 
+const gradeOnlyCorroboratorsDoNotAuthorScore = resolveCfbCanonicalMarketAnchor({
+  books: [
+    book("fanduel", -4, 48.5),
+    book("betrivers", -4, 48.5, false, false),
+    book("caesars", -4, 48.5, false, false),
+  ],
+  contextLines: { homeSpread: -3.5, totalLine: 49.5 },
+});
+assert.equal(gradeOnlyCorroboratorsDoNotAuthorScore?.source, "playbook_context");
+const gradeOnlyDecision = buildCfbV1DecisionBundle({
+  providerGameId: "457159",
+  awayTeam: "HAW",
+  homeTeam: "STAN",
+  gameStartsAt: "2026-08-29T23:00:00.000Z",
+  comparableCurrentBooks: [
+    book("fanduel", -4, 48.5),
+    book("betrivers", -4, 48.5, false, false),
+    book("caesars", -4, 48.5, false, false),
+  ],
+  evaluatedAt: observedAt,
+});
+assert.equal(gradeOnlyDecision.evaluatedBets.length, 3, "grade-only books may corroborate an independent target without authoring the score");
+
 const beforeBundle = buildCfbV1DecisionBundle({
   providerGameId: "457159",
   awayTeam: "HAW",
@@ -102,6 +125,7 @@ function book(
   homeSpread: number,
   totalLine: number,
   targetEligible = true,
+  marketReadingEligible = true,
 ): NcaafBookOdds {
   return {
     providerGameId: "457159",
@@ -109,6 +133,7 @@ function book(
     observedAt,
     provider: "balldontlie",
     targetEligible,
+    marketReadingEligible,
     moneyline: { homePrice: -180, awayPrice: 155 },
     spread: { homeLine: homeSpread, homePrice: -110, awayLine: -homeSpread, awayPrice: -110 },
     total: { line: totalLine, overPrice: -110, underPrice: -110 },
