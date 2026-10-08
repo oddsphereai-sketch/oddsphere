@@ -25,7 +25,7 @@ ROOT = pathlib.Path(__file__).resolve().parents[2]
 DEFAULT_BASE_MANIFEST = ROOT / "football-research/cache/nflverse/real-model-r1/manifest.json"
 DEFAULT_EXTERNAL_MANIFEST = ROOT / "football-research/cache/nfl-player-props-external/manifest.json"
 DEFAULT_OUTPUT_ROOT = ROOT / "football-research/cache/nfl-player-props-external/features"
-RELEASE = "nfl_player_props_external_features_2016_2026_2026_10_08_r2"
+RELEASE = "nfl_player_props_external_features_2016_2026_2026_10_08_r3_depth_role"
 EWM_ALPHA = 0.35
 
 NGS_METRICS = {
@@ -272,6 +272,114 @@ def game_environment_features(paths: list[pathlib.Path]) -> tuple[pd.DataFrame, 
     return games[["season", "week", "game_id", *names]], names
 
 
+def timestamped_depth_features(depth: pd.DataFrame, games: pd.DataFrame) -> pd.DataFrame:
+    values = depth[depth["gsis_id"].notna() & depth["dt"].notna()].copy()
+    values["dt"] = pd.to_datetime(values["dt"], utc=True, errors="coerce")
+    values["pos_rank"] = pd.to_numeric(values["pos_rank"], errors="coerce")
+    values["pos_slot"] = pd.to_numeric(values["pos_slot"], errors="coerce")
+    values = values.sort_values(["dt", "team", "pos_slot", "pos_rank", "gsis_id"])
+    values["external_depth_slot_rank"] = (
+        values.groupby(["dt", "team", "pos_slot"], observed=True).cumcount() + 1
+    ).astype(float)
+    values["external_depth_overall_rank"] = values["pos_rank"]
+    values["external_depth_starter"] = values["external_depth_slot_rank"].eq(1).astype(float)
+    values["_dt_ns"] = values["dt"].astype("int64")
+    snapshots = np.sort(values["_dt_ns"].unique())
+    selected: list[pd.DataFrame] = []
+    for row in games.itertuples(index=False):
+        location = np.searchsorted(snapshots, row.kickoff.value, side="right") - 1
+        if location < 0:
+            continue
+        snapshot_ns = int(snapshots[location])
+        snapshot = pd.Timestamp(snapshot_ns, tz="UTC")
+        team = values[values["_dt_ns"].eq(snapshot_ns) & values["team"].eq(row.team)].copy()
+        if team.empty:
+            continue
+        team["season"] = row.season
+        team["week"] = row.week
+        team["game_id"] = row.game_id
+        team["external_depth_snapshot_age_hours"] = (row.kickoff - snapshot).total_seconds() / 3600.0
+        selected.append(team)
+    if not selected:
+        return pd.DataFrame()
+    output = pd.concat(selected, ignore_index=True)
+    output["external_depth_listed"] = 1.0
+    output = output.rename(columns={"gsis_id": "player_id"})
+    columns = [
+        "season", "week", "game_id", "team", "player_id", "external_depth_listed",
+        "external_depth_slot_rank", "external_depth_overall_rank", "external_depth_starter",
+        "external_depth_snapshot_age_hours",
+    ]
+    return output[columns].drop_duplicates(["season", "week", "game_id", "team", "player_id"])
+
+
+def depth_features(
+    frame: pd.DataFrame,
+    files: dict[tuple[str, int | None], pathlib.Path],
+    pbp_paths: list[pathlib.Path],
+    current_season: int,
+) -> tuple[pd.DataFrame, list[str]]:
+    names = [
+        "external_depth_listed", "external_depth_slot_rank", "external_depth_overall_rank",
+        "external_depth_starter", "external_depth_snapshot_age_hours",
+    ]
+    historical: list[pd.DataFrame] = []
+    for season in range(2016, min(current_season, 2024) + 1):
+        source = read_columns(
+            [files[("depth_charts", season)]],
+            ["season", "week", "game_type", "club_code", "gsis_id", "formation", "depth_team"],
+        )
+        source = source[
+            source["game_type"].fillna("REG").eq("REG")
+            & source["formation"].fillna("").str.lower().eq("offense")
+            & source["gsis_id"].notna()
+        ].copy()
+        source["team"] = source["club_code"].replace({"LAR": "LA", "WSH": "WAS", "OAK": "LV", "SD": "LAC", "STL": "LA"})
+        source["player_id"] = source["gsis_id"].astype(str)
+        source["external_depth_slot_rank"] = pd.to_numeric(source["depth_team"], errors="coerce")
+        source["external_depth_overall_rank"] = source["external_depth_slot_rank"]
+        source["external_depth_starter"] = source["external_depth_slot_rank"].eq(1).astype(float)
+        source["external_depth_listed"] = 1.0
+        source["external_depth_snapshot_age_hours"] = np.nan
+        historical.append(
+            source[["season", "week", "team", "player_id", *names]]
+            .sort_values(["season", "week", "team", "player_id", "external_depth_slot_rank"])
+            .drop_duplicates(["season", "week", "team", "player_id"])
+        )
+
+    recent_rows: list[pd.DataFrame] = []
+    if current_season >= 2025:
+        game_source = read_columns(
+            pbp_paths,
+            ["season", "week", "season_type", "game_id", "start_time", "home_team", "away_team"],
+        )
+        game_source = game_source[game_source["season_type"].fillna("").eq("REG")].drop_duplicates("game_id")
+        start = pd.to_datetime(game_source["start_time"], errors="coerce")
+        game_source["kickoff"] = start.dt.tz_localize("America/New_York", ambiguous="NaT", nonexistent="shift_forward").dt.tz_convert("UTC")
+        home = game_source[["season", "week", "game_id", "kickoff", "home_team"]].rename(columns={"home_team": "team"})
+        away = game_source[["season", "week", "game_id", "kickoff", "away_team"]].rename(columns={"away_team": "team"})
+        games = pd.concat([home, away], ignore_index=True)
+        games["team"] = games["team"].replace({"LAR": "LA", "WSH": "WAS", "OAK": "LV", "SD": "LAC", "STL": "LA"})
+        for season in range(2025, current_season + 1):
+            source = read_columns(
+                [files[("depth_charts", season)]],
+                ["dt", "team", "gsis_id", "pos_grp", "pos_slot", "pos_rank"],
+            )
+            source = source[source["pos_grp"].fillna("").eq("3WR 1TE")].copy()
+            attached = timestamped_depth_features(source, games[games["season"].eq(season)])
+            if not attached.empty:
+                recent_rows.append(attached)
+
+    old = pd.concat(historical, ignore_index=True)
+    old_rows = frame[frame["season"].le(2024)][["season", "week", "game_id", "team", "player_id"]].merge(
+        old, on=["season", "week", "team", "player_id"], how="left", validate="many_to_one",
+    )
+    combined = pd.concat([old_rows, *recent_rows], ignore_index=True)
+    keys = ["season", "week", "game_id", "team", "player_id"]
+    combined = combined.sort_values(keys).drop_duplicates(keys)
+    return frame[keys].merge(combined, on=keys, how="left", validate="one_to_one")[names], names
+
+
 def ngs_features(spine: pd.DataFrame, files: dict[tuple[str, int | None], pathlib.Path]) -> tuple[pd.DataFrame, list[str]]:
     output = pd.DataFrame(index=spine.index)
     names: list[str] = []
@@ -394,7 +502,8 @@ def main() -> None:
     ngs, ngs_names = ngs_features(frame, external_files)
     pfr, pfr_names = pfr_features(frame, external_files, args.current_season)
     ftn, ftn_names = ftn_player_features(frame, external_files, pbp_paths, args.current_season)
-    frame = frame.join(ngs).join(pfr).join(ftn)
+    depth, depth_names = depth_features(frame, external_files, pbp_paths, args.current_season)
+    frame = frame.join(ngs).join(pfr).join(ftn).join(depth)
     # This shadow matrix has materially different semantics from the historical
     # base artifact. Never publish it under the prior dataset/schema identity.
     frame["schema_release"] = RELEASE
@@ -405,6 +514,7 @@ def main() -> None:
         "pfr": pfr_names,
         "ftn": ftn_names,
         "ngs": ngs_names,
+        "depth": depth_names,
     }
     all_features = [name for group in feature_groups.values() for name in group]
     if len(all_features) != len(set(all_features)):
@@ -417,8 +527,8 @@ def main() -> None:
         raise RuntimeError("external feature matrix changed row identity")
 
     args.output_root.mkdir(parents=True, exist_ok=True)
-    feature_path = args.output_root / "nfl_player_props_external_features_2016_2026_r2.parquet"
-    manifest_path = args.output_root / "nfl_player_props_external_features_2016_2026_r2.manifest.json"
+    feature_path = args.output_root / "nfl_player_props_external_features_2016_2026_r3.parquet"
+    manifest_path = args.output_root / "nfl_player_props_external_features_2016_2026_r3.manifest.json"
     frame.sort_values(keys).to_parquet(feature_path, index=False)
     coverage = {
         group: {
