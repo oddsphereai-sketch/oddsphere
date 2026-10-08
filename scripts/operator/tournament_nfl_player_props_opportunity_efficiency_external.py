@@ -19,10 +19,10 @@ from sklearn.ensemble import HistGradientBoostingRegressor
 
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
-DEFAULT_EXTERNAL_MANIFEST = ROOT / "football-research/cache/nfl-player-props-external/features/nfl_player_props_external_features_2016_2026_r2.manifest.json"
+DEFAULT_EXTERNAL_MANIFEST = ROOT / "football-research/cache/nfl-player-props-external/features/nfl_player_props_external_features_2016_2026_r3.manifest.json"
 DEFAULT_HISTORY_MANIFEST = ROOT / "football-research/cache/nfl-player-props-history/nfl_player_props_2016_2025_r1.manifest.json"
-DEFAULT_OUTPUT = ROOT / "football-research/cache/nfl-player-props-external/tournament/nfl_player_props_opportunity_efficiency_external_r1.json"
-DEFAULT_PROJECTIONS = ROOT / "football-research/cache/nfl-player-props-external/tournament/nfl_player_props_opportunity_efficiency_2026_projections_r1.parquet"
+DEFAULT_OUTPUT = ROOT / "football-research/cache/nfl-player-props-external/tournament/nfl_player_props_opportunity_efficiency_external_r2_depth_role.json"
+DEFAULT_PROJECTIONS = ROOT / "football-research/cache/nfl-player-props-external/tournament/nfl_player_props_opportunity_efficiency_2026_projections_r2_depth_role.parquet"
 MARKETS = ("rushing_attempts", "rushing_yards", "receptions", "receiving_yards")
 RELEASE_MARKETS = (
     "passing_attempts", "passing_completions", "passing_yards",
@@ -116,7 +116,6 @@ def share_predictions(
         frame["season"].lt(season)
         & frame["participated"].eq(1)
         & frame["position"].isin(positions)
-        & frame["prior_roster_game_rows"].ge(1)
     ]
     fitted = model("squared_error").fit(train[features], train[share].to_numpy(float))
     return np.clip(np.asarray(fitted.predict(test[features]), dtype=float), 0.0, 1.0)
@@ -200,7 +199,7 @@ def relevant_external_features(market: str, groups: dict[str, list[str]]) -> lis
             name for name in [*groups["pfr"], *groups["ftn"], *groups["ngs"]]
             if name.startswith(("external_pfr_rec_", "external_ftn_receiver_", "external_ngs_receiving_"))
         ]
-    return list(dict.fromkeys([*base, *state, *external]))
+    return list(dict.fromkeys([*base, *state, *external, *groups.get("depth", [])]))
 
 
 def main() -> None:
@@ -293,7 +292,7 @@ def main() -> None:
         )
         for market in MARKETS:
             for weight in WEIGHTS:
-                name = f"hierarchy_blend_{int(weight * 100)}"
+                name = f"depth_hierarchy_blend_{int(weight * 100)}"
                 candidates[market].setdefault(name, {})[season] = np.clip(
                     (1.0 - weight) * reference[market][season] + weight * architecture[market], 0.0, None,
                 )
@@ -336,9 +335,10 @@ def main() -> None:
     print("hierarchy identities frozen; opening diagnostic 2026 Weeks 1-4...", flush=True)
     diagnostic_rows = {
         market: frame[
-            candidate_eligible[market]
-            & frame["participated"].eq(1)
+            frame["participated"].eq(1)
             & frame["season"].eq(2026)
+            & frame["position"].isin(contract["markets"][market]["positions"])
+            & (candidate_eligible[market] | frame["external_depth_listed"].eq(1))
         ].copy()
         for market in MARKETS
     }
@@ -349,7 +349,7 @@ def main() -> None:
     for market in MARKETS:
         chosen = frozen[market]
         if chosen:
-            weight = float(chosen.removeprefix("hierarchy_blend_")) / 100.0
+            weight = float(chosen.rsplit("_", 1)[-1]) / 100.0
             # The exact released component is available only in locked records;
             # report pure hierarchy diagnostics here when a blend was frozen.
             raw = architecture_2026[market]
@@ -367,7 +367,7 @@ def main() -> None:
         chosen = frozen[market]
         if not chosen:
             continue
-        weight = float(chosen.removeprefix("hierarchy_blend_")) / 100.0
+        weight = float(chosen.rsplit("_", 1)[-1]) / 100.0
         for season, phase in ((2024, "selection"), (2025, "confirmation")):
             rows = evaluation_rows[market][season]
             values = rows[[
@@ -401,7 +401,7 @@ def main() -> None:
     projections.to_parquet(args.projections, index=False)
 
     output = {
-        "release": "nfl_player_props_opportunity_efficiency_external_2026_10_08_r1",
+        "release": "nfl_player_props_opportunity_efficiency_external_2026_10_08_r2_depth_role",
         "generatedAt": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         "researchOnly": True,
         "marketFeatures": [],

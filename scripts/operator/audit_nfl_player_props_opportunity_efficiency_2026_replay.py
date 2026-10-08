@@ -14,9 +14,9 @@ import pandas as pd
 
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
-DEFAULT_TOURNAMENT = ROOT / "football-research/cache/nfl-player-props-external/tournament/nfl_player_props_opportunity_efficiency_external_r1.json"
+DEFAULT_TOURNAMENT = ROOT / "football-research/cache/nfl-player-props-external/tournament/nfl_player_props_opportunity_efficiency_external_r2_depth_role.json"
 DEFAULT_REPLAY = ROOT / "football-research/cache/nfl-player-props-external/tournament/nfl_player_props_2026_locked_replay_rows_r1.json"
-DEFAULT_OUTPUT = ROOT / "football-research/cache/nfl-player-props-external/tournament/nfl_player_props_opportunity_efficiency_2026_replay_r1.json"
+DEFAULT_OUTPUT = ROOT / "football-research/cache/nfl-player-props-external/tournament/nfl_player_props_opportunity_efficiency_2026_replay_r2_depth_role.json"
 
 
 def main() -> None:
@@ -38,8 +38,8 @@ def main() -> None:
     replay_payload = json.loads(args.replay.read_text(encoding="utf-8"))
     replay = pd.DataFrame(replay_payload["rows"])
     markets = [market for market, candidate in tournament["frozenCandidates"].items() if candidate]
-    if markets != ["rushing_yards", "receptions"]:
-        raise RuntimeError(f"unexpected frozen hierarchy markets: {markets}")
+    if not markets:
+        raise RuntimeError("depth-role tournament froze no candidate markets")
     replay["normalized_player"] = replay["playerName"].map(utility.normalize)
     projections["normalized_player"] = projections["player_name"].map(utility.normalize)
 
@@ -126,7 +126,7 @@ def main() -> None:
     outcome = matched["outcome"].to_numpy(float)
     raw_available = matched["raw"].notna().to_numpy()
     report: dict[str, Any] = {
-        "release": "nfl_player_props_opportunity_efficiency_2026_locked_replay_2026_10_08_r1",
+        "release": "nfl_player_props_opportunity_efficiency_2026_locked_replay_2026_10_08_r2_depth_role",
         "generatedAt": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         "researchOnly": True,
         "marketIndependent": True,
