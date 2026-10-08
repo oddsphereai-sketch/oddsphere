@@ -50,7 +50,7 @@ import { NHL_SHARP_ODDS_COLLECTOR_RELEASE } from "@/lib/providers/nhl/_sharpApiN
 
 const NHL_CRON_ENV = "NHL_CRON_ENABLED";
 const NHL_PREDS_ENV = "NHL_PREDICTIONS_DB_WRITES_ENABLED";
-const NHL_DAILY_REFRESH_RELEASE = "nhl_daily_refresh_schedule_2026_10_07_r9_readiness_gated_rollover";
+const NHL_DAILY_REFRESH_RELEASE = "nhl_daily_refresh_schedule_2026_10_08_r10_pregame_coverage_gate";
 
 /**
  * Returns the MoneyPuck-style season start-year for a given UTC date.

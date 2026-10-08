@@ -82,7 +82,7 @@ Last reviewed: 2026-10-08
 
 ## Cross-sport market-freshness ownership (2026-10-06)
 
-- NHL daily refresh release is `nhl_daily_refresh_schedule_2026_10_07_r9_readiness_gated_rollover`.
+- NHL daily refresh release is `nhl_daily_refresh_schedule_2026_10_08_r10_pregame_coverage_gate`.
   The existing leased `nhl_daily_refresh` writer now has a lightweight intraday mode every 30
   minutes during the active window: it seeds the slate, refreshes exact lines, syncs provider-
   separated splits, recomputes unlocked predictions, and republishes the coherent Daily Edge
@@ -2697,10 +2697,24 @@ limitations: `docs/model-audits/2026-10-06-nba-independent-first-regular-season-
 - NBA schedule: stable-input refresh once daily at `30 11 * * *`; volatile seed/line/snapshot refresh hourly at `12 6-10,12 * * *` and every 30 minutes at `12,42 0-5,13-23 * * *`; all writes fail closed unless `NBA_CRON_ENABLED=true`
 - NBA public-tracking eligibility: `nba_tracking_window_2026_10_05_r2_preseason_only`; valid prior-season history remains eligible, dates `2026-07-01` through `2026-10-19` are excluded, and the 2026-27 regular season is eligible from `2026-10-20`
 - NBA member-board eligibility: `nba_member_board_window_2026_10_05_r1_preseason_snapshot_guard`; the member API returns an empty slate inside the same closed preseason window before consulting response snapshots, while regular-season model behavior begins unchanged on `2026-10-20`
-- NHL refresh release: `nhl_daily_refresh_schedule_2026_10_07_r9_readiness_gated_rollover`
+- NHL refresh release: `nhl_daily_refresh_schedule_2026_10_08_r10_pregame_coverage_gate`
 - NHL schedule: stable-input refresh once daily at `45 11 * * *`; volatile seed/line/split/prediction/snapshot refresh hourly at `18 6-10 * * *` and every 30 minutes at `18,48 0-5,12-23 * * *`; all writes fail closed unless `NHL_CRON_ENABLED=true`
 
 The October 7 NBA operational release replaces the long overnight writer gap with separated stable and volatile work. The existing route remains authoritative, joins the NBA prediction lease before publishing, and prepares a date-keyed snapshot ahead of the DST-safe 03:00 ET member cutover. A failed incoming run leaves the prior complete board in place without member copy or labels. The October 5 r2 NBA tracking-window correction preserves valid 2025-26 postseason history, excludes only the July 1 through October 19 offseason/preseason window from both member aggregate paths, and refuses to create NBA prediction records inside that window. Game, line, and score ingestion may continue for operational rehearsal, but preseason activity cannot affect public wins, losses, category records, recaps, or streaks. The paired member-board r1 guard applies that identical closed window before the Daily Edge response-snapshot fast path, preventing a cached rehearsal slate from rendering preseason cards beneath the already-correct `No games today` navigation state. It retains prior-season access and automatically permits the 2026-27 regular season board on October 20. For identical regular-season input, the rollover release changes zero sides, projections, probabilities, prices, grades, promotions, demotions, or actionable counts. NHL's October 7 readiness release preserves the existing complete-slate model and writer, separates daily team/goalie inputs from its volatile cadence, prepares the incoming date before the same DST-safe 03:00 ET cutover, and retains the prior complete board when the incoming source cycle is partial. A verified empty date is publishable readiness. The existing sport lease and r10 T-60 final market/lock owner remain authoritative. For identical regular-season input, the rollover release changes zero sides, projections, probabilities, prices, grades, promotions, demotions, or actionable counts.
+
+The October 8 NHL r10 operational release applies the completeness gate only
+to games still in a pregame state or lacking a complete three-market lock.
+Live, final, canceled, or postponed games with complete immutable stored locks
+are omitted from new pregame odds calls; a provider withdrawing their pregame
+spread or Total after puck drop therefore
+cannot block fresh prices and a coherent snapshot for later games on the same
+slate. Unknown or scheduled states, and any non-pregame game without a complete
+lock, still require complete coverage and fail closed. The October 8 exact
+production replay changes the six incomplete-scope errors on four already-live,
+fully locked games to zero while retaining full
+three-market pricing for both upcoming games. Predictions, prices, grades,
+locks, tracking, copy, labels, and layout are unchanged. Evidence and rollback:
+`docs/model-audits/2026-10-08-nhl-pregame-coverage-gate-r10.md`.
 
 ## NHL regular-season champion (active from 2026-10-01)
 

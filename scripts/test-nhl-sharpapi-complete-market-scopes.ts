@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { fetchSharpNhlEventOdds } from "../lib/providers/nhl/_sharpApiNhlClient";
+import { requiresNhlPregameMarketCoverage } from "../lib/services/nhl/nhlPregameCoverage";
 
 const originalFetch = globalThis.fetch;
 const requestedMarkets: string[] = [];
@@ -50,6 +51,13 @@ globalThis.fetch = async (input) => {
 };
 
 async function main(): Promise<void> {
+  assert.equal(requiresNhlPregameMarketCoverage("scheduled", true), true);
+  assert.equal(requiresNhlPregameMarketCoverage(null, true), true, "an unknown state fails closed to the pregame coverage gate");
+  assert.equal(requiresNhlPregameMarketCoverage("LIVE", false), true, "a missing live lock still requires complete coverage");
+  assert.equal(requiresNhlPregameMarketCoverage("LIVE", true), false);
+  assert.equal(requiresNhlPregameMarketCoverage("IN_PROGRESS", true), false);
+  assert.equal(requiresNhlPregameMarketCoverage("FINAL", true), false);
+  assert.equal(requiresNhlPregameMarketCoverage("POSTPONED", true), false);
   try {
     const rows = await fetchSharpNhlEventOdds("nhl-event-1", "test-token");
     assert.deepEqual(
