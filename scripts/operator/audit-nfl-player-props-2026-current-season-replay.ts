@@ -4,6 +4,7 @@
 
 import { loadEnvConfig } from "@next/env";
 import { createClient } from "@supabase/supabase-js";
+import { writeFileSync } from "node:fs";
 import {
   readNflPlayerPropsCurrentSeasonState,
   type NflPlayerPropsCurrentSeasonState,
@@ -54,12 +55,15 @@ type LedgerRow = {
 type ReplayRow = {
   week: number;
   gameId: string;
+  providerPlayerId: string | null;
   playerName: string;
+  team: string | null;
   market: string;
   line: number;
   side: Decision["side"];
   sportsbook: string;
   decisionRelease: string;
+  lockedAt: string;
   ledgerResult: LedgerRow["result"];
   actual: number;
   outcome: 0 | 1;
@@ -128,12 +132,15 @@ async function main(): Promise<void> {
     replay.push({
       week: game.week,
       gameId: row.provider_game_id,
+      providerPlayerId: row.provider_player_id ?? decision.providerPlayerId,
       playerName: row.player_name,
+      team: stat?.team ?? null,
       market: row.market,
       line: Number(row.line),
       side: row.side,
       sportsbook: row.sportsbook,
       decisionRelease: row.decision_release,
+      lockedAt: row.locked_at,
       ledgerResult: row.result,
       actual,
       outcome,
@@ -155,6 +162,15 @@ async function main(): Promise<void> {
   }
 
   const canonical = canonicalize(replay);
+  const outputIndex = process.argv.indexOf("--output");
+  const outputPath = outputIndex >= 0 ? process.argv[outputIndex + 1] : undefined;
+  if (outputPath) {
+    writeFileSync(outputPath, JSON.stringify({
+      release: "nfl_player_props_2026_locked_replay_rows_2026_10_08_r1",
+      readOnlySource: true,
+      rows: canonical,
+    }, null, 2) + "\n", "utf8");
+  }
   const canonicalProbability = canonical.filter((row) => row.raw !== null);
   const probabilityBootstrap = clusterBootstrap(canonicalProbability, (rows) => {
     const raw = brier(rows, "raw");
@@ -226,6 +242,7 @@ async function main(): Promise<void> {
   const rawFinalInterval = report.gameClusterBootstrap95.independentMinusFinalBrier;
   const rawMarketInterval = report.gameClusterBootstrap95.independentMinusMarketBrier;
   report.interpretationContract.probabilityDirectionallySupported = raw !== null && market !== null && final !== null
+    && rawFinalInterval.upper !== null && rawMarketInterval.upper !== null
     && raw < market && raw < final && rawFinalInterval.upper < 0 && rawMarketInterval.upper < 0;
   console.log(JSON.stringify(report, null, 2));
 }
