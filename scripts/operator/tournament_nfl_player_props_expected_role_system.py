@@ -94,11 +94,17 @@ def add_role_shares(frame: pd.DataFrame) -> pd.DataFrame:
     keys = ["season", "week", "game_id", "team", "expected_role_group"]
     rush_total = result.groupby(keys, observed=True)["rushing_attempts"].transform("sum")
     target_total = result.groupby(keys, observed=True)["targets"].transform("sum")
+    team_target_total = result.groupby(
+        ["season", "week", "game_id", "team"], observed=True,
+    )["targets"].transform("sum")
     result["expected_role_rush_share"] = np.where(
         rush_total.gt(0), result["rushing_attempts"] / rush_total, 0.0,
     )
     result["expected_role_target_share"] = np.where(
         target_total.gt(0), result["targets"] / target_total, 0.0,
+    )
+    result["expected_team_target_share"] = np.where(
+        team_target_total.gt(0), result["targets"] / team_target_total, 0.0,
     )
     return result
 
@@ -197,6 +203,54 @@ def normalized_share_prediction(
     return values
 
 
+def normalized_team_target_share_prediction(
+    frame: pd.DataFrame,
+    season: int,
+    features: list[str],
+    test: pd.DataFrame,
+    known_active_row_ids: set[str] | None = None,
+) -> np.ndarray:
+    receiver_groups = {"BACK", "WR", "TE"}
+    population = frame[
+        frame["season"].lt(season) & frame["expected_role_group"].isin(receiver_groups)
+    ].copy()
+    active = population[population["participated"].eq(1)].copy()
+    share_model = model("squared_error").fit(
+        active[features], active["expected_team_target_share"].fillna(0.0).to_numpy(float),
+    )
+    participation_model = HistGradientBoostingClassifier(
+        max_iter=140,
+        max_leaf_nodes=15,
+        learning_rate=0.04,
+        min_samples_leaf=35,
+        l2_regularization=12.0,
+        random_state=SEED,
+    ).fit(population[features], population["participated"].to_numpy(int))
+    roster = frame[
+        frame["season"].eq(season)
+        & frame["expected_role_group"].isin(receiver_groups)
+        & (frame["external_depth_listed"].eq(1) | frame["prior_participations"].fillna(0).gt(0))
+    ].copy()
+    active_probability = np.asarray(participation_model.predict_proba(roster[features])[:, 1], dtype=float)
+    active_ids = known_active_row_ids if known_active_row_ids is not None else set(test["row_id"])
+    active_probability[roster["row_id"].isin(active_ids).to_numpy()] = 1.0
+    conditional_share = np.clip(np.asarray(share_model.predict(roster[features]), dtype=float), 0.0, 1.0)
+    roster["raw_expected_share"] = active_probability * conditional_share
+    denominator = roster.groupby(["game_id", "team"], observed=True)["raw_expected_share"].transform("sum")
+    roster["normalized_expected_share"] = np.where(
+        denominator.gt(0), roster["raw_expected_share"] / denominator, 0.0,
+    )
+    by_row = roster.set_index("row_id")["normalized_expected_share"]
+    values = by_row.reindex(test["row_id"]).to_numpy(float)
+    missing = np.isnan(values)
+    if missing.any():
+        fallback = np.clip(
+            np.asarray(share_model.predict(test.loc[missing, features]), dtype=float), 0.0, 1.0,
+        )
+        values[missing] = fallback
+    return values
+
+
 def rate_prediction(
     frame: pd.DataFrame,
     season: int,
@@ -207,6 +261,7 @@ def rate_prediction(
     test: pd.DataFrame,
     lower: float,
     upper: float,
+    exposure_weighted: bool = False,
 ) -> np.ndarray:
     train = frame[
         frame["season"].lt(season)
@@ -215,7 +270,10 @@ def rate_prediction(
         & frame["participated"].eq(1)
     ].copy()
     rate = (train[numerator] / train[denominator]).clip(lower, upper)
-    fitted = model("squared_error").fit(train[features], rate.to_numpy(float))
+    sample_weight = train[denominator].to_numpy(float) if exposure_weighted else None
+    fitted = model("squared_error").fit(
+        train[features], rate.to_numpy(float), sample_weight=sample_weight,
+    )
     return np.clip(np.asarray(fitted.predict(test[features]), dtype=float), lower, upper)
 
 
@@ -235,6 +293,7 @@ def passing_predictions(
     team_features: list[str],
     player_features: list[str],
     test: pd.DataFrame,
+    exposure_weighted: bool = False,
 ) -> dict[str, np.ndarray]:
     leaders = lead_passer_rows(frame)
     training = leaders[leaders["season"].lt(season) & leaders["passing_attempts"].gt(0)].copy()
@@ -252,12 +311,17 @@ def passing_predictions(
 
     completion_train = training[training["passing_attempts"].ge(5)].copy()
     completion_rate = (completion_train["passing_completions"] / completion_train["passing_attempts"]).clip(0.30, 0.85)
-    completion_model = model("squared_error").fit(completion_train[player_features], completion_rate)
+    efficiency_weight = completion_train["passing_attempts"].to_numpy(float) if exposure_weighted else None
+    completion_model = model("squared_error").fit(
+        completion_train[player_features], completion_rate, sample_weight=efficiency_weight,
+    )
     predicted_completion_rate = np.clip(
         np.asarray(completion_model.predict(test[player_features]), dtype=float), 0.30, 0.85,
     )
     ypa = (completion_train["passing_yards"] / completion_train["passing_attempts"]).clip(2.0, 14.0)
-    ypa_model = model("absolute_error").fit(completion_train[player_features], ypa)
+    ypa_model = model("absolute_error").fit(
+        completion_train[player_features], ypa, sample_weight=efficiency_weight,
+    )
     predicted_ypa = np.clip(np.asarray(ypa_model.predict(test[player_features]), dtype=float), 2.0, 14.0)
     return {
         "passing_attempts": attempts,
@@ -274,7 +338,10 @@ def role_predictions(
     player_features: list[str],
     test_rows: dict[str, pd.DataFrame],
     known_active_row_ids: set[str] | None = None,
+    efficiency_mode: str = "foundation",
 ) -> dict[str, np.ndarray]:
+    if efficiency_mode not in {"foundation", "exposure_weighted", "decomposed_receiving"}:
+        raise ValueError(f"unsupported efficiency mode: {efficiency_mode}")
     outputs: dict[str, np.ndarray] = {}
     for market, budget_target, share_target, numerator, denominator, lower, upper in (
         ("rushing_attempts", "rushing_attempts", "expected_role_rush_share", None, None, 0.0, 0.0),
@@ -297,10 +364,20 @@ def role_predictions(
             opportunity = np.clip(budget * share, 0.0, None)
             if numerator is None or denominator is None:
                 value = opportunity
+            elif market == "receiving_yards" and efficiency_mode == "decomposed_receiving":
+                catch_rate = rate_prediction(
+                    frame, season, player_features, "receptions", "targets",
+                    group, subset, 0.0, 1.0, True,
+                )
+                yards_per_reception = rate_prediction(
+                    frame, season, player_features, "receiving_yards", "receptions",
+                    group, subset, 0.0, 40.0, True,
+                )
+                value = opportunity * catch_rate * yards_per_reception
             else:
                 rate = rate_prediction(
                     frame, season, player_features, numerator, denominator,
-                    group, subset, lower, upper,
+                    group, subset, lower, upper, efficiency_mode != "foundation",
                 )
                 value = opportunity * rate
             prediction[mask] = value
