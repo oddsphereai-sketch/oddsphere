@@ -1,9 +1,42 @@
 # CFB complete market-reading audit — result
 
-Status: SELECT-only research against retained 2026 pregame evidence. The initial discrete-signal
-tournament is complete and a continuous market-reader candidate remains under release-gate review. No production
-prediction, score, probability, grade, stake, lock, tracking row, writer, cadence, provider hierarchy,
-copy, label or layout changed.
+Status: corrected target-excluded replay complete; owner-approved provisional release implemented
+for production review. No locked historical payload is changed or reinterpreted.
+
+## October 9 integrity correction and corrected result
+
+The first replay read every retained family from
+`contextualEvidenceCapture.markets[market].families`. That was wrong. The predeclared audit
+contract required every historical decision to be evaluated only against
+`targetExcludedFamilies`, so the book supplying the exact evaluated quote could not confirm
+itself. Capture stored the correct exclusion list, but the audit extractor failed to apply it.
+
+The bounded history reader also had to be corrected to load the stored target-exclusion arrays; an
+intermediate all-zero result came from an empty projected set and is not evidence. The extractor now
+intersects retained families with the stored target-exclusion list, the reader projects those lists,
+and focused regression tests prove that the evaluated family is removed.
+
+The fully corrected replays produced:
+
+- 303 settled official-lock games, 10,525 history rows, 30,411 raw and 18,707 deduplicated
+  target-excluded signals. Two Spread retail-line patterns pass the frozen discrete gates; neither is
+  installed as an automatic flip.
+- 220 expanding-window games: margin MAE improves 12.5084 to 12.3999, Total MAE 13.0826 to
+  12.9169, and team-score MAE 9.3914 to 9.2827.
+- Moneyline moves from 167-53 to 166-54, Spread from 72-60-3 to 73-59-3, and Total from 74-67 to
+  82-59. The date-cluster bootstrap probability of a positive Total accuracy delta is 0.969; the
+  95% interval reaches zero. Moneyline's one-result loss is explicitly retained rather than hidden.
+- The live-input sole-writer dry run contains 82 games, no negative projected score, five Total side
+  changes, zero Moneyline or Spread side changes, and exact zero baseline reconstruction error on
+  76 grade-replayable games.
+- Candidate-only board shape is balanced: Moneyline has two promotions and one demotion, Spread one
+  promotion and two demotions, and Total no grade changes. Actionable count therefore stays flat.
+  The live provider refresh itself would create two actionable promotions and four demotions; that
+  separate price/coverage delta is reported and is not attributed to the market reader.
+
+The original self-confirming run below remains an audit trail, but its counts are superseded. The
+release artifact was regenerated from the corrected 303-game target-excluded set, and production
+uses the same target-exclusion contract.
 
 ## Bottom line
 
@@ -44,7 +77,7 @@ market resistance to splits and independent-model conflict strength.
 
 This is intentionally not a generic cross-sport coefficient or a market-consensus anchor.
 
-## Fixed-gate result
+## Superseded preliminary fixed-gate result (invalid target inclusion)
 
 Zero candidates passed all frozen gates.
 
@@ -59,7 +92,7 @@ Zero candidates passed all frozen gates.
 | Total, two retail line books agree against a strong independent opinion | 43 | 26-17 | 16-27 | 25-15 | 10-3 | no qualifying game | Prospective only |
 | Total, held two-retail-line agreement against a strong independent opinion | 27 | 17-10 | 10-17 | 16-9 | 6-2 | no qualifying game | Prospective only |
 
-## Continuous evidence follow-up
+## Preliminary continuous evidence follow-up
 
 The failed discrete rules were not the end of the audit. A second, CFB-specific architecture now
 models the probability that the evidence-supported counterfactual will be closer than the released
@@ -154,11 +187,11 @@ one or two lack a target quote. This is a target-excluded consensus coverage lim
 gate. The independent side and projected score remain available, but an exact-price Lean is not
 manufactured without a defensible market denominator.
 
-This candidate is not live. The October 7 holdout contains only three games and the evidence-authority
-rule is outcome-informed diagnostic work. The exact replay satisfies coherence and board-shape gates,
-but it does not create a new untouched performance sample. Under the model-change safety contract,
-the candidate remains audit-only until an owner-approved provisional exception or release-separated
-forward evidence authorizes a new model release.
+At the time of the preliminary run, this candidate was not live. The October 7 holdout contained
+only three games and the evidence-authority rule was outcome-informed diagnostic work. The exact
+replay satisfied coherence and board-shape gates but did not create a new untouched performance
+sample. The owner subsequently approved the provisional exception; the corrected target-excluded
+replay above is the release-authorizing evidence.
 
 The unrestricted strong-conflict Total row has a material correction advantage and improves
 reflected Total error (14.51 to 12.68 points on disagreements), but its paired one-sided correction
@@ -199,12 +232,18 @@ not reliably create excess returns:
 
 ## Production decision
 
-Do not apply a generic market weight, capped cosmetic nudge, RLM flip, named-book flip or consensus
-flip. The best audited candidate is the evidence-gated continuous margin reader paired with the
-evidence-backed Total side-correction reader. It must be frozen for the full slate and regenerate one
-coherent PMF so expected score, representative score, Moneyline, Spread, Total and exact-price grades
-cannot contradict one another. Keep the active release intact until the provisional-release gate is
-explicitly satisfied.
+Release the corrected, owner-approved provisional reader through the sole CFB writer. Do not apply a
+generic market weight, capped cosmetic nudge, RLM flip, named-book flip or consensus flip.
+
+Moneyline and Spread evidence may continuously move the shared margin axis only when a genuine
+target-excluded movement, reversal or split observation exists. Total remains unchanged unless the
+continuous posterior crosses the target-excluded market side, at which point the score distribution
+fully reflects the opposite conviction. The final home/away score is regenerated from one PMF, so
+the displayed score, Moneyline, Spread, Total and probabilities stay coherent. Missing splits alone
+never create a No Play.
+
+This is a provisional evidence-backed release, not proof of permanent edge. Evaluate future locked
+performance by the new release identifier and never blend it with the October 8 release.
 
 The audit remains reproducible with
 `scripts/operator/audit-cfb-2026-sharp-sequence-tournament.ts`.

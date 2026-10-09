@@ -18,10 +18,12 @@ import {
 import { evaluateCfbHolisticConfidence } from "./cfbHolisticConfidenceCandidate";
 
 export const CFB_MARKET_SHARP_AWARE_CANDIDATE_RELEASE =
-  "cfb_market_sharp_aware_candidate_2026_10_08_r29_independent_price_spread_lane" as const;
+  "cfb_market_sharp_aware_candidate_2026_10_09_r30_complete_market_reader" as const;
 export const CFB_MARKET_SHARP_AWARE_SHADOW_RELEASE =
   CFB_MARKET_SHARP_AWARE_CANDIDATE_RELEASE;
 export const CFB_MARKET_SHARP_AWARE_PRODUCTION_RELEASE =
+  "cfb_market_sharp_aware_production_2026_10_09_r32_complete_market_reader" as const;
+export const CFB_MARKET_SHARP_AWARE_COMPLETE_READER_PREVIOUS_PRODUCTION_RELEASE =
   "cfb_market_sharp_aware_production_2026_10_08_r31_independent_price_spread_lane" as const;
 export const CFB_MARKET_SHARP_AWARE_GAP_FALLBACK_PREVIOUS_PRODUCTION_RELEASE =
   "cfb_market_sharp_aware_production_2026_10_08_r30_the_odds_api_fcs_gap_fallback" as const;

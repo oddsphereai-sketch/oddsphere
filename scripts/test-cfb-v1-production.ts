@@ -3204,6 +3204,9 @@ const projectedMarketHistoryRow = {
   context_moneyline_families: selectedBookOpeningPayload.contextualEvidenceCapture?.markets.moneyline.families ?? null,
   context_spread_families: selectedBookOpeningPayload.contextualEvidenceCapture?.markets.spread.families ?? null,
   context_total_families: selectedBookOpeningPayload.contextualEvidenceCapture?.markets.total.families ?? null,
+  context_moneyline_target_excluded_families: selectedBookOpeningPayload.contextualEvidenceCapture?.markets.moneyline.targetExcludedFamilies ?? null,
+  context_spread_target_excluded_families: selectedBookOpeningPayload.contextualEvidenceCapture?.markets.spread.targetExcludedFamilies ?? null,
+  context_total_target_excluded_families: selectedBookOpeningPayload.contextualEvidenceCapture?.markets.total.targetExcludedFamilies ?? null,
 };
 let marketHistorySelect = "";
 let marketHistoryReleaseFilter: string[] = [];
@@ -3253,9 +3256,15 @@ assert.deepEqual(
   selectedBookOpeningPayload.contextualEvidenceCapture?.markets.spread.families,
   "the compact movement reader must retain evaluated-book opening landmarks without loading the full historical payload",
 );
+assert.deepEqual(
+  marketHistoryRows[0]!.payload.contextualEvidenceCapture?.markets.spread.targetExcludedFamilies,
+  selectedBookOpeningPayload.contextualEvidenceCapture?.markets.spread.targetExcludedFamilies,
+  "the compact movement reader must retain the stored target-exclusion contract",
+);
 assert.deepEqual(marketHistoryReleaseFilter, [...CFB_FORWARD_MARKET_HISTORY_COMPATIBLE_RELEASES]);
 assert.match(marketHistorySelect, /current_books:payload->market->currentBooks/);
 assert.match(marketHistorySelect, /context_spread_families:payload->contextualEvidenceCapture->markets->spread->families/);
+assert.match(marketHistorySelect, /context_spread_target_excluded_families:payload->contextualEvidenceCapture->markets->spread->targetExcludedFamilies/);
 assert.doesNotMatch(marketHistorySelect, /(?:^|,)payload(?:,|$)/, "the recurring movement reader must never select the full historical payload");
 
 const scoreReadClient = {

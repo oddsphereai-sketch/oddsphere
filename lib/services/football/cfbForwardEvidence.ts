@@ -18,6 +18,8 @@ import {
 } from "./cfbV1Decision";
 
 export const CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE =
+  "cfb_forward_evidence_snapshot_2026_10_09_r40_complete_market_reader" as const;
+export const CFB_FORWARD_COMPLETE_READER_PREVIOUS_EVIDENCE_SCHEMA_RELEASE =
   "cfb_forward_evidence_snapshot_2026_10_08_r39_independent_price_spread_lane" as const;
 export const CFB_FORWARD_GAP_FALLBACK_PREVIOUS_EVIDENCE_SCHEMA_RELEASE =
   "cfb_forward_evidence_snapshot_2026_10_08_r38_the_odds_api_fcs_gap_fallback" as const;
@@ -84,8 +86,10 @@ export const CFB_FORWARD_LEGACY_EVIDENCE_SCHEMA_RELEASE =
 export const CFB_FORWARD_INITIAL_EVIDENCE_SCHEMA_RELEASE =
   "cfb_forward_evidence_snapshot_2026_08_25_r1" as const;
 export const CFB_FORWARD_EVIDENCE_COLLECTOR_RELEASE =
-  "cfb_forward_evidence_collector_2026_10_08_r50_independent_price_spread_lane" as const;
+  "cfb_forward_evidence_collector_2026_10_09_r51_complete_market_reader" as const;
 export const CFB_FORWARD_MEMBER_RELEASE =
+  "cfb_v1_member_release_2026_10_09_r54_complete_market_reader" as const;
+export const CFB_FORWARD_COMPLETE_READER_PREVIOUS_MEMBER_RELEASE =
   "cfb_v1_member_release_2026_10_08_r53_independent_price_spread_lane" as const;
 export const CFB_FORWARD_GAP_FALLBACK_PREVIOUS_MEMBER_RELEASE =
   "cfb_v1_member_release_2026_10_08_r52_the_odds_api_fcs_gap_fallback" as const;
@@ -304,6 +308,11 @@ export type CfbForwardEvidencePayload = {
     release: string;
     candidateRelease: string;
     marketWeight: number;
+    completeMarketReaderRelease?: string;
+    completeMarketReaderArtifactRelease?: string;
+    marketReaderMarginShiftPoints?: number;
+    marketReaderTotalShiftPoints?: number;
+    marketReaderTotalSideFlipped?: boolean;
     weatherIndependentTotalAdjustmentPoints?: number;
     weatherAuthoritativeTotalAdjustmentPoints?: number;
   };
@@ -385,9 +394,9 @@ export type CfbForwardMarketHistoryEvidence = Pick<
     >;
     contextualEvidenceCapture?: {
       markets: {
-        moneyline: Pick<CfbForwardContextCapture["markets"]["moneyline"], "families">;
-        spread: Pick<CfbForwardContextCapture["markets"]["spread"], "families">;
-        total: Pick<CfbForwardContextCapture["markets"]["total"], "families">;
+        moneyline: Pick<CfbForwardContextCapture["markets"]["moneyline"], "families" | "targetExcludedFamilies">;
+        spread: Pick<CfbForwardContextCapture["markets"]["spread"], "families" | "targetExcludedFamilies">;
+        total: Pick<CfbForwardContextCapture["markets"]["total"], "families" | "targetExcludedFamilies">;
       };
     };
   };

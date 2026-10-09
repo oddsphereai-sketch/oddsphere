@@ -277,6 +277,19 @@ Last reviewed: 2026-10-09
 
 ## CFB Daily Edge generalized weekly production release
 
+- October 9 CFB complete target-excluded market reader:
+  `cfb_forward_evidence_snapshot_2026_10_09_r40_complete_market_reader` /
+  `cfb_forward_evidence_collector_2026_10_09_r51_complete_market_reader` /
+  `cfb_v1_member_release_2026_10_09_r54_complete_market_reader` /
+  `cfb_market_sharp_aware_production_2026_10_09_r32_complete_market_reader` /
+  `cfb_v1_daily_edge_decision_2026_10_09_r44_complete_market_reader` /
+  `cfb_forward_evidence_writer_2026_10_09_r108_complete_market_reader`.
+  The frozen artifact is `cfb_market_reader_artifact_2026_10_08_r1`, trained on 303 corrected
+  target-excluded official-lock games. Moneyline/Spread evidence may move the shared margin
+  continuously; Total moves only on an evidence-backed posterior side crossing. The sole writer
+  regenerates one coherent PMF and records both axis shifts and the artifact release. Immutable
+  October 8 and earlier snapshots retain their exact stored projections and decisions.
+
 ### Independent-price market completion and bounded Spread Lean lane (writer r107; fixture r79; snapshot r39; tracking r40)
 
 - Active evidence / collector / member / market reader / decision / sole writer are
