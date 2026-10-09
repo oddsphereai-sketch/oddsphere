@@ -33,7 +33,11 @@ import {
 import { replayNhlRegularState } from "../lib/automodel/nhlRegularState";
 import { replayNhlOpponentAdjustedState } from "../lib/services/nhl/loadNhlOpponentAdjustedState";
 import { buildNhlTwoSidedPriceTrail } from "../lib/services/nhl/nhlPriceTrail";
-import { canonicalizeNhlLineRows } from "../lib/services/nhl/nhlLineBoard";
+import {
+  canonicalizeNhlLineRows,
+  resolveNhlLockedPriceQuote,
+  selectNhlBestPriceQuote,
+} from "../lib/services/nhl/nhlLineBoard";
 import { assessNhlLockCoherence } from "../lib/services/nhl/nhlLockCoherence";
 import { __NHL_ADAPTER_TEST__ } from "../lib/services/nhl/adaptNhlToDailyEdgeResponse";
 
@@ -430,6 +434,57 @@ assert.deepEqual(
 assert.equal(canonicalLines.filter((row) => row.market_type === "total").length, 2, "a complete exact-line total pair is retained");
 assert.equal(canonicalLines.filter((row) => row.market_type === "spread").length, 0, "an incomplete one-sided refresh cannot enter the price board");
 assert.equal(canonicalLines.filter((row) => row.sportsbook === "onexbet").length, 0, "a mislabeled three-way/regulation pair cannot become a full-game NHL price");
+const exactQuote = selectNhlBestPriceQuote({
+  rows: [
+    { game_id: 2, market_type: "total", sportsbook: "pinnacle", side: "over", line_value: 6.5, odds_american: -108, observed_at: "2026-10-08T20:00:00.000Z" },
+    { game_id: 2, market_type: "total", sportsbook: "pinnacle", side: "under", line_value: 6.5, odds_american: -112, observed_at: "2026-10-08T20:00:00.000Z" },
+    { game_id: 2, market_type: "total", sportsbook: "circa", side: "over", line_value: 6.5, odds_american: -105, observed_at: "2026-10-08T20:00:00.000Z" },
+    { game_id: 2, market_type: "total", sportsbook: "circa", side: "under", line_value: 6.5, odds_american: -115, observed_at: "2026-10-08T20:00:00.000Z" },
+    { game_id: 2, market_type: "total", sportsbook: "promo", side: "over", line_value: 6.5, odds_american: 160, observed_at: "2026-10-08T20:00:00.000Z" },
+    { game_id: 2, market_type: "total", sportsbook: "promo", side: "under", line_value: 6.5, odds_american: -300, observed_at: "2026-10-08T20:00:00.000Z" },
+  ],
+  market: "total",
+  side: "over",
+  line: 6.5,
+});
+assert.deepEqual(
+  exactQuote,
+  {
+    market_type: "total",
+    sportsbook: "circa",
+    side: "over",
+    line_value: 6.5,
+    odds_american: -105,
+    observed_at: "2026-10-08T20:00:00.000Z",
+  },
+  "writer and reader share one exact quote selector and reject an isolated promotional price",
+);
+const immutableLockedQuote = resolveNhlLockedPriceQuote({
+  market: "moneyline",
+  side: "home",
+  line: null,
+  price: -133,
+  lockedAt: "2026-10-08T22:00:00.000Z",
+  evaluatedQuote: null,
+  frozenLines: [
+    { market_type: "moneyline", sportsbook: "novig", side: "home", line_value: null, odds_american: -133, observed_at: "2026-10-08T21:59:00.000Z" },
+    { market_type: "moneyline", sportsbook: "novig", side: "away", line_value: null, odds_american: 118, observed_at: "2026-10-08T21:59:00.000Z" },
+  ],
+});
+assert.equal(immutableLockedQuote?.odds_american, -133, "the stored locked price remains authoritative");
+assert.equal(immutableLockedQuote?.sportsbook, "novig", "legacy locks recover book identity only from their own frozen snapshot");
+assert.equal(resolveNhlLockedPriceQuote({
+  market: "moneyline",
+  side: "home",
+  line: null,
+  price: -133,
+  lockedAt: "2026-10-08T22:00:00.000Z",
+  evaluatedQuote: null,
+  frozenLines: [
+    { market_type: "moneyline", sportsbook: "novig", side: "home", line_value: null, odds_american: -133 },
+    { market_type: "moneyline", sportsbook: "polymarket", side: "home", line_value: null, odds_american: -133 },
+  ],
+})?.sportsbook, "", "an unstored ambiguous legacy sportsbook is not fabricated");
 assert.equal(normalizeNhlTeamName("MTL Canadiens"), "MTL");
 assert.equal(normalizeNhlTeamName("NYR Rangers"), "NYR");
 assert.deepEqual(selectMainNhlPuckLinePair([
@@ -642,13 +697,15 @@ const bdlProvider = readFileSync(new URL("../lib/providers/nhl/_ballDontLieNhlCl
 const linesRefresh = readFileSync(new URL("../lib/services/nhl/refreshNhlLinesService.ts", import.meta.url), "utf8");
 assert.match(writer, /nhlGameTypeFromExternalId\(game\.external_id\) === 2/);
 assert.match(reader, /nhlGameTypeFromExternalId\(game\.external_id\) === 2/);
-assert.match(reader, /bestPriceFor\("total", totalSide, marketTotalLine\)/, "reader prices the exact predicted total line");
-assert.match(reader, /Math\.abs\(l\.line_value - predictedPuckLine\) < 0\.01/, "reader prices the exact predicted puck line");
+assert.match(reader, /selectNhlBestPriceQuote\(\{ rows: quoteRows, market: "total", side: totalSide, line: marketTotalLine \}\)/, "reader prices the exact predicted total line through the shared quote selector");
+assert.match(reader, /selectNhlBestPriceQuote\(\{ rows: quoteRows, market: "spread", side: plSide, line: predictedPuckLine \}\)/, "reader prices the exact predicted puck line through the shared quote selector");
 assert.match(reader, /predictionPayloadByGame/, "reader preserves the writer-owned active-release tuple before and after lock");
 assert.match(reader, /writerVerdictsByGame/, "reader carries the price-aware writer decision for every NHL market");
 assert.match(reader, /nhlVerdictFromStoredDecision/, "reader maps the writer's immutable storage token instead of recomputing the grade");
 assert.match(reader, /NHL_REGULAR_TRANSITION_MODEL_RELEASES/, "reader preserves an already-locked prior-release tuple during deployment");
-assert.match(reader, /nhl_daily_edge_reader_2026_10_06_r11_grade_tracking_parity/, "reader release records NHL member-grade and tracking parity");
+assert.match(reader, /nhl_daily_edge_reader_2026_10_08_r12_locked_price_mapping/, "reader release records immutable NHL price mapping");
+assert.match(reader, /resolveNhlLockedPriceQuote/, "reader renders the stored locked price tuple instead of mutable current odds");
+assert.match(writer, /evaluated_quotes/, "writer freezes the selected price, book, side, and line together");
 assert.match(pregameSweep, /externalIdsFilter:\s*externalIds/, "T-60 writer refreshes only the games entering the lock window");
 assert.match(pregameSweep, /deferLock:\s*true/, "T-60 writer defers locking until the coherence gate passes");
 assert.match(reader, /incoherentPayloadReleaseGames/, "reader quarantines incoherence by release instead of hiding a valid prior lock");
