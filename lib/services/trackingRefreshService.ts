@@ -55,6 +55,10 @@ import { ingestWnbaFinalScores } from "./wnba/ingestWnbaFinalScores";
 import { ingestNflFinalScores } from "./football/nflScoreIngestService";
 import { ingestCfbFinalScores } from "./football/cfbScoreIngestService";
 import { currentSlateDate } from "../dates/slateDate";
+import {
+  discoverStalePendingRepairDates,
+  TRACKING_SETTLEMENT_CONTRACT_VERSION,
+} from "./trackingSettlementRepairService";
 
 export type TrackingRefreshOptions = {
   /**
@@ -91,6 +95,7 @@ export type TrackingRefreshPerDate = {
 };
 
 export type TrackingRefreshSummary = {
+  settlementContractVersion: string;
   apply: boolean;
   startedAtIso: string;
   finishedAtIso: string;
@@ -105,6 +110,16 @@ export type TrackingRefreshSummary = {
     errors: number;
   };
   globalErrors: string[];
+  stalePendingRepair: {
+    datesDiscovered: string[];
+    datesProcessed: number;
+    providerRowsUpdated: number;
+    gradesUpserted: number;
+    pendingGradesScanned: number;
+    candidateRecords: number;
+    eligibleRecords: number;
+    errors: string[];
+  };
 };
 
 /**
@@ -204,6 +219,7 @@ export async function runTrackingRefresh(
   const startedAtIso = new Date().toISOString();
   const t0 = Date.now();
   const summary: TrackingRefreshSummary = {
+    settlementContractVersion: TRACKING_SETTLEMENT_CONTRACT_VERSION,
     apply: opts.apply,
     startedAtIso,
     finishedAtIso: "",
@@ -218,6 +234,16 @@ export async function runTrackingRefresh(
       errors: 0,
     },
     globalErrors: [],
+    stalePendingRepair: {
+      datesDiscovered: [],
+      datesProcessed: 0,
+      providerRowsUpdated: 0,
+      gradesUpserted: 0,
+      pendingGradesScanned: 0,
+      candidateRecords: 0,
+      eligibleRecords: 0,
+      errors: [],
+    },
   };
 
   for (const date of opts.dates) {
@@ -579,6 +605,63 @@ export async function runTrackingRefresh(
     summary.totals.errors += perDate.errors.length;
     summary.perDate.push(perDate);
   }
+
+  // Repair historical rows that aged out of the ordinary
+  // yesterday/today/tomorrow window. For MLB only, each selected date gets one
+  // authoritative MLB Stats schedule/linescore read before grading. That lets
+  // old postponed games become void and lets completed rows recover missing
+  // full-game/FI results. No prediction_record decision field is rewritten.
+  const oldestNormalDate = [...opts.dates].sort()[0];
+  if (oldestNormalDate) {
+    try {
+      const discovery = await discoverStalePendingRepairDates({
+        supabase: opts.supabase,
+        sport,
+        beforeDate: oldestNormalDate,
+      });
+      summary.stalePendingRepair.datesDiscovered = discovery.dates;
+      summary.stalePendingRepair.pendingGradesScanned = discovery.pendingGradesScanned;
+      summary.stalePendingRepair.candidateRecords = discovery.candidateRecords;
+      summary.stalePendingRepair.eligibleRecords = discovery.eligibleRecords;
+      summary.stalePendingRepair.errors.push(...discovery.errors);
+
+      for (const slateDate of discovery.dates) {
+        if (sport === "mlb") {
+          const ingest = await ingestMlbLinescores({
+            date: slateDate,
+            apply: opts.apply,
+            supabase: opts.supabase,
+          });
+          summary.stalePendingRepair.providerRowsUpdated += ingest.updatedCount;
+          summary.stalePendingRepair.errors.push(
+            ...ingest.errors.map((error) => `${slateDate}: linescore ${error.reason}`),
+          );
+        }
+
+        const grade = await gradePredictionsForSlate({
+          sport,
+          slateDate,
+          apply: opts.apply,
+          supabase: opts.supabase,
+          source: "auto_score_ingest",
+        });
+        summary.stalePendingRepair.datesProcessed++;
+        summary.stalePendingRepair.gradesUpserted += grade.upsertedCount;
+        summary.stalePendingRepair.errors.push(
+          ...grade.errors.map((error) =>
+            `${slateDate}: record=${error.prediction_record_id ?? "?"} ${error.reason}`),
+        );
+      }
+    } catch (error) {
+      summary.stalePendingRepair.errors.push(
+        error instanceof Error ? error.message : String(error),
+      );
+    }
+  }
+  summary.totals.linescores_updated += summary.stalePendingRepair.providerRowsUpdated;
+  summary.totals.grades_upserted += summary.stalePendingRepair.gradesUpserted;
+  summary.totals.errors += summary.stalePendingRepair.errors.length;
+  summary.globalErrors.push(...summary.stalePendingRepair.errors);
 
   summary.finishedAtIso = new Date().toISOString();
   summary.durationMs = Date.now() - t0;
