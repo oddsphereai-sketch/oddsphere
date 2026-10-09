@@ -220,6 +220,32 @@ export interface PlaybookInjuryPlayer {
   [k: string]: unknown;
 }
 
+export interface PlaybookDocumentedInjuryPlayer {
+  player?: string | null;
+  status?: string | null;
+  injury?: string | null;
+  details?: string | null;
+  updated?: string | null;
+  [k: string]: unknown;
+}
+
+export interface PlaybookDocumentedInjuryTeamRow {
+  team?: string | null;
+  abbr?: string | null;
+  injuries?: PlaybookDocumentedInjuryPlayer[];
+  [k: string]: unknown;
+}
+
+/** Current public /v1/injuries response shape documented by Playbook. */
+export interface PlaybookDocumentedInjuriesResponse {
+  league?: string | null;
+  last_updated?: string | null;
+  updatedAt?: string | null;
+  reportDate?: string | null;
+  requestsRemaining?: number;
+  teams?: PlaybookDocumentedInjuryTeamRow[];
+}
+
 export interface PlaybookInjuryTeamRow {
   teamAbbr?: string | null;
   teamId?: string | null;
@@ -227,6 +253,8 @@ export interface PlaybookInjuryTeamRow {
   players?: PlaybookInjuryPlayer[];
   updatedAt?: string | null;
   reportDate?: string | null;
+  /** False until a newly observed provider contract completes release-pure model validation. */
+  modelAuthorityEligible?: boolean;
   [k: string]: unknown;
 }
 

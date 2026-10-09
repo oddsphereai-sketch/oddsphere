@@ -25,8 +25,8 @@ export type CfbPlaybookMatchedEvidence = {
 export function matchCfbPlaybookRow(game: NcaafGame, value: unknown): boolean {
   const row = record(value);
   const start = String(row.startTime ?? row.startTimeEst ?? "");
-  return teamMatches(row.homeTeamName ?? row.homeTeam, game.home) &&
-    teamMatches(row.awayTeamName ?? row.awayTeam, game.away) &&
+  return matchCfbPlaybookTeam(row.homeTeamName ?? row.homeTeam, game.home) &&
+    matchCfbPlaybookTeam(row.awayTeamName ?? row.awayTeam, game.away) &&
     Number.isFinite(Date.parse(start)) &&
     Math.abs(Date.parse(start) - Date.parse(game.scheduledStart)) <= 3 * 60 * 60_000;
 }
@@ -83,7 +83,7 @@ export function normalizeCfbPlaybookSplits(value: unknown, capturedAt: string): 
   return [moneyline, spread, normalizedTotal].some((market) => Object.entries(market).some(([key, item]) => key.endsWith("Pct") && typeof item === "number")) ? { moneyline, spread, total: normalizedTotal } : null;
 }
 
-function teamMatches(value: unknown, team: NcaafTeam): boolean {
+export function matchCfbPlaybookTeam(value: unknown, team: NcaafTeam): boolean {
   const candidate = normalize(typeof value === "string" ? value : "");
   if (!candidate) return false;
   return [team.name, team.abbreviation, ...(CFB_PLAYBOOK_ALIASES_BY_BDL_TEAM_ID[team.id] ?? [])]
@@ -105,4 +105,4 @@ function text(value: unknown): string | null { return typeof value === "string" 
 function number(value: unknown): number | null { const parsed = typeof value === "number" ? value : typeof value === "string" && value.trim() ? Number(value) : Number.NaN; return Number.isFinite(parsed) ? parsed : null; }
 function integer(value: unknown): number | null { const parsed = number(value); return parsed !== null && Number.isInteger(parsed) ? parsed : null; }
 
-export const __TEST__ = { CFB_PLAYBOOK_ALIASES_BY_BDL_TEAM_ID, playbookEventId, teamMatches };
+export const __TEST__ = { CFB_PLAYBOOK_ALIASES_BY_BDL_TEAM_ID, playbookEventId, teamMatches: matchCfbPlaybookTeam };

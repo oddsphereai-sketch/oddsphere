@@ -43,6 +43,33 @@ const matched = matchSharpApiNflSplitRows([game], [{ date: "2026-09-09", rows: [
 assert.equal(matched[game.providerGameId]?.total.underBetsPct, 43);
 assert.equal(matched[game.providerGameId]?.moneyline.sourceSportsbook, "circa");
 
+const providerPrefixedNames = {
+  ...row,
+  away_team: "NE Patriots",
+  home_team: "SEA Seahawks",
+};
+assert.equal(
+  matchSharpApiNflSplitRows(
+    [game],
+    [{ date: "2026-09-09", rows: [providerPrefixedNames] }],
+    "2026-08-21T17:01:00Z",
+  )[game.providerGameId]?.moneyline.sourceSportsbook,
+  "circa",
+  "provider abbreviation-plus-nickname identities must match exactly",
+);
+
+const ramsGame: NflPreviewGame = {
+  ...game,
+  providerGameId: "week1-buf-lar",
+  away: { id: 3, abbreviation: "BUF", name: "Buffalo Bills" },
+  home: { id: 4, abbreviation: "LAR", name: "Los Angeles Rams" },
+};
+assert.ok(matchSharpApiNflSplitRows(
+  [ramsGame],
+  [{ date: "2026-09-09", rows: [{ ...row, away_team: "BUF Bills", home_team: "LA Rams" }] }],
+  "2026-08-21T17:01:00Z",
+)[ramsGame.providerGameId], "provider LA Rams identity must map only to LAR");
+
 const draftKings = { ...row, sportsbook: "draftkings", fetched_at: "2026-08-21T17:02:00Z" };
 const betMgm = { ...row, sportsbook: "betmgm", fetched_at: "2026-08-21T17:03:00Z" };
 assert.equal(

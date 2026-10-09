@@ -11,7 +11,7 @@ import type {
 } from "./types";
 
 export const PLAYBOOK_REQUEST_EFFICIENCY_RELEASE =
-  "playbook_request_efficiency_2026_09_26_r1_shared_fresh_reads" as const;
+  "playbook_request_efficiency_2026_10_09_r2_injury_contract_continuity" as const;
 
 export const PLAYBOOK_CURRENT_CACHE_SECONDS = 10 * 60;
 export const PLAYBOOK_HISTORY_CACHE_SECONDS = 24 * 60 * 60;
@@ -55,7 +55,7 @@ const cachedVenueWeather = unstable_cache(
 );
 
 const cachedInjuries = unstable_cache(
-  async (league: string) => productionClient(2_500).injuries(league),
+  async (league: string) => productionClient(10_000).injuries(league),
   [PLAYBOOK_REQUEST_EFFICIENCY_RELEASE, "injuries"],
   { revalidate: PLAYBOOK_INJURIES_CACHE_SECONDS, tags: ["playbook-injuries"] },
 );
@@ -149,10 +149,10 @@ export class PlaybookReadBroker {
   }
 
   injuries(league: PlaybookLeague | string): Promise<PlaybookResult<PlaybookInjuriesResponse>> {
-    const normalized = String(league).toLowerCase();
-    return this.read(`injuries:${normalized}`, () => this.sharedOrDirect(
-      () => cachedInjuries(normalized),
-      () => this.direct.injuries(normalized),
+    const canonical = String(league).trim().toUpperCase();
+    return this.read(`injuries:${canonical.toLowerCase()}`, () => this.sharedOrDirect(
+      () => cachedInjuries(canonical),
+      () => this.direct.injuries(canonical),
     ));
   }
 }

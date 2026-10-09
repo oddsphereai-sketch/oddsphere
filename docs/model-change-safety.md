@@ -1,5 +1,41 @@
 # Model change safety protocol
 
+## Owner-approved correctness exception: football provider-feed continuity
+
+On 2026-10-09 Daniel Mengel explicitly approved publishing the completed
+football provider-feed continuity repair before beginning the WNBA audit. This
+exception is limited to the NFL r30 provider-feed-continuity release family,
+the CFB r58 report-continuity publication family, and the evidence documented
+in
+`docs/model-audits/2026-10-09-football-provider-feed-continuity-predeclaration.md`
+and its paired result.
+
+The NFL correction accepts only exact SharpAPI abbreviation-plus-nickname team
+identities, including explicit LA-to-LAR and WAS-to-WSH mappings; it does not
+authorize fuzzy matching or loosen professional market authority. The reviewed
+current-board comparison restores complete split evidence for six additional
+games without changing a score, side, probability, grade, promotion, demotion,
+stake, or board count.
+
+The CFB correction requests the documented uppercase Playbook league, accepts
+both documented and legacy response contracts, uses the injury-specific
+timeout, preserves provider timestamps, and retains the newest verified
+per-game report across omission, failure, and older replay. Newly normalized
+documented-contract rows remain report-only until a live credential-backed
+audit separately qualifies their player identity and board impact; this
+exception does not authorize them to alter scores, probabilities, sides,
+grades, promotions, demotions, or stakes. Existing previously qualified legacy
+rows retain their prior authority. Locked records remain immutable.
+
+Publication still requires a clean latest-main candidate, integration-safety
+verification, protected PR checks, merge, and post-deploy proof of the live
+release identifiers, sole writers and leases, cron health, Playbook report
+coverage and continuity, SharpAPI match coverage, board coherence, and
+unchanged locks. Roll back the complete new publication family to its immediate
+predecessor on malformed provider data, mixed releases, writer overlap, reader
+mismatch, hidden board collapse, prediction/projection contradiction, or lock
+mutation.
+
 ## Owner-approved provisional exception: NHL professional Total reconciliation r17
 
 On 2026-10-09 Daniel Mengel explicitly approved publishing the completed NHL

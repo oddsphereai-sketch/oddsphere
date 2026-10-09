@@ -10,7 +10,7 @@ import {
 } from "./nflMarketState";
 
 export const NFL_PROFESSIONAL_MARKET_AUTHORITY_RELEASE =
-  "nfl_professional_market_authority_2026_10_09_r3_stable_target_excluded_hierarchy" as const;
+  "nfl_professional_market_authority_2026_10_09_r4_provider_feed_continuity" as const;
 
 type Market = "moneyline" | "spread" | "total";
 type Side = NflMarketStateSide;

@@ -59,6 +59,7 @@ import {
   CFB_FORWARD_TRANSITION_PREVIOUS_EVIDENCE_SCHEMA_RELEASE,
   CFB_FORWARD_TRANSITION_PREVIOUS_MEMBER_RELEASE,
   CFB_FORWARD_MEMBER_RELEASE,
+  CFB_FORWARD_PROVIDER_FEED_PREVIOUS_MEMBER_RELEASE,
   isCfbPublishedT60AccuracyLockPayload,
   CFB_FORWARD_PUBLICATION_PREVIOUS_MEMBER_RELEASE,
   type CfbForwardMarketOutlook,
@@ -104,9 +105,9 @@ import { cfbTeamIdentity } from "./cfbTeamIdentity";
 import { CFB_PUBLIC_SCORE_DIRECTION_TOLERANCE_POINTS } from "./footballCrossMarketCoherence";
 
 export const CFB_MEMBER_FIXTURE_RELEASE =
-  "cfb_v1_member_fixture_2026_10_09_r83_joint_moneyline_spread_reconciliation" as const;
+  "cfb_v1_member_fixture_2026_10_09_r84_provider_feed_continuity" as const;
 export const CFB_PUBLIC_OUTCOME_CONTRACT_RELEASE =
-  "cfb_market_sharp_public_outcome_contract_2026_10_09_r73_joint_moneyline_spread_reconciliation" as const;
+  "cfb_market_sharp_public_outcome_contract_2026_10_09_r74_provider_feed_continuity" as const;
 export const CFB_CONTEXT_ONLY_QUOTE_CAPTURE_SKEW_MS = 5_000 as const;
 const CFB_PRE_DIRECTIONAL_MEMBER_RELEASE = "cfb_v1_member_release_2026_08_28_r14_expanded_sharp_budget" as const;
 const CFB_PRE_DIRECTIONAL_DECISION_RELEASE = "cfb_v1_daily_edge_decision_2026_08_28_r11_market_scoped_data_quality" as const;
@@ -704,19 +705,48 @@ export function selectLatestCfbMemberEvidenceRows(
       )
     : null;
   const completeReaderPreviousAuthority = completeReaderPrevious ?? completeReaderPreviousBoundary ?? completeReaderPreviousLockOverlay ?? gapFallbackPreviousAuthority;
+  const providerFeedPrevious = completeRowsForRelease(
+    rows,
+    CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE,
+    CFB_FORWARD_PROVIDER_FEED_PREVIOUS_MEMBER_RELEASE,
+    CFB_V1_DECISION_RELEASE,
+  );
+  const providerFeedPreviousBoundary = completeReaderPreviousAuthority
+    ? immutableBoundaryTransitionRows(
+        rows,
+        now,
+        CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE,
+        CFB_FORWARD_PROVIDER_FEED_PREVIOUS_MEMBER_RELEASE,
+        CFB_V1_DECISION_RELEASE,
+        completeReaderPreviousAuthority,
+      )
+    : null;
+  const providerFeedPreviousLockOverlay = completeReaderPreviousAuthority
+    ? immutableLockOverlayRows(
+        rows,
+        CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE,
+        CFB_FORWARD_PROVIDER_FEED_PREVIOUS_MEMBER_RELEASE,
+        CFB_V1_DECISION_RELEASE,
+        completeReaderPreviousAuthority,
+      )
+    : null;
+  const providerFeedPreviousAuthority = providerFeedPrevious ?? providerFeedPreviousBoundary ?? providerFeedPreviousLockOverlay ?? completeReaderPreviousAuthority;
   const current = completeRowsForRelease(rows, CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE, CFB_FORWARD_MEMBER_RELEASE, CFB_V1_DECISION_RELEASE);
   if (current) return current;
-  const immutableBoundaryTransition = completeReaderPreviousAuthority
+  const immutableBoundaryTransition = providerFeedPreviousAuthority
     ? immutableBoundaryTransitionRows(
         rows,
         now,
         CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE,
         CFB_FORWARD_MEMBER_RELEASE,
         CFB_V1_DECISION_RELEASE,
-        completeReaderPreviousAuthority,
+        providerFeedPreviousAuthority,
       )
     : null;
   if (immutableBoundaryTransition) return immutableBoundaryTransition;
+  if (providerFeedPrevious) return providerFeedPrevious;
+  if (providerFeedPreviousBoundary) return providerFeedPreviousBoundary;
+  if (providerFeedPreviousLockOverlay) return providerFeedPreviousLockOverlay;
   if (gapFallbackPrevious) return gapFallbackPrevious;
   if (gapFallbackPreviousBoundary) return gapFallbackPreviousBoundary;
   if (gapFallbackPreviousLockOverlay) return gapFallbackPreviousLockOverlay;

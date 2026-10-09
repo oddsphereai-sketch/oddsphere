@@ -1,6 +1,7 @@
 import type { PlaybookInjuryTeamRow } from "@/lib/providers/playbook/types";
 import type { DailyEdgeGameAvailability, DailyEdgeTeamAvailability } from "@/lib/services/dailyEdge/gameAvailability";
 import type { NcaafGame } from "./balldontlieNcaafSlate";
+import { matchCfbPlaybookTeam } from "./cfbPlaybookEvidence";
 
 export function buildCfbGameAvailability(args: {
   game: NcaafGame;
@@ -29,7 +30,16 @@ function buildPlaybookAvailability(game: NcaafGame, rows: PlaybookInjuryTeamRow[
   const home = exactPlaybookTeam(game.home, rows);
   if (!away || !home) return null;
   const teams = [toPlaybookTeam(game.away, away), toPlaybookTeam(game.home, home)];
-  const timestamps = teams.flatMap((team) => team.players.map((player) => player.reportedAt)).filter((value): value is string => value !== null);
+  const timestamps = [
+    away.updatedAt,
+    away.reportDate,
+    home.updatedAt,
+    home.reportDate,
+    ...teams.flatMap((team) => team.players.map((player) => player.reportedAt)),
+  ].flatMap((value) => {
+    const timestamp = validIso(value);
+    return timestamp ? [timestamp] : [];
+  });
   return {
     eventId: game.providerGameId,
     awayTeam: game.away.abbreviation,
@@ -44,7 +54,10 @@ function buildPlaybookAvailability(game: NcaafGame, rows: PlaybookInjuryTeamRow[
 }
 
 function exactPlaybookTeam(team: NcaafGame["away"], rows: PlaybookInjuryTeamRow[]): PlaybookInjuryTeamRow | null {
-  const matches = rows.filter((row) => String(row.teamId ?? "") === String(team.id) || normalize(row.teamAbbr ?? "") === normalize(team.abbreviation));
+  const matches = rows.filter((row) =>
+    String(row.teamId ?? "") === String(team.id) ||
+    matchCfbPlaybookTeam(row.teamAbbr, team) ||
+    matchCfbPlaybookTeam(row.teamName, team));
   return matches.length === 1 ? matches[0]! : null;
 }
 
@@ -65,4 +78,3 @@ function latestIso(values: string[]): string | null {
   return values.sort((first, second) => Date.parse(second) - Date.parse(first))[0] ?? null;
 }
 function validIso(value: string | null | undefined): string | null { return value && Number.isFinite(Date.parse(value)) ? new Date(value).toISOString() : null; }
-function normalize(value: string): string { return value.toLowerCase().replace(/[^a-z0-9]+/g, ""); }

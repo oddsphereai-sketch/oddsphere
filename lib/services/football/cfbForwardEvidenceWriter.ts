@@ -22,6 +22,7 @@ import {
   CFB_FORWARD_FCS_PRICE_PREVIOUS_MEMBER_RELEASE,
   CFB_FORWARD_PRICE_PREVIOUS_EVIDENCE_SCHEMA_RELEASE,
   CFB_FORWARD_MEMBER_RELEASE,
+  CFB_FORWARD_PROVIDER_FEED_PREVIOUS_MEMBER_RELEASE,
   isCfbPublishedT60AccuracyLockPayload,
   CFB_FORWARD_PRICE_PREVIOUS_MEMBER_RELEASE,
   hashCfbForwardEvidencePayload,
@@ -150,7 +151,7 @@ import {
 import type { PlaybookInjuryTeamRow } from "@/lib/providers/playbook/types";
 
 export const CFB_FORWARD_WRITER_RELEASE =
-  "cfb_forward_evidence_writer_2026_10_09_r111_joint_moneyline_spread_reconciliation" as const;
+  "cfb_forward_evidence_writer_2026_10_09_r112_provider_feed_continuity" as const;
 export const CFB_FORWARD_MAX_QB_TEAMS_PER_RUN = 24 as const;
 export const CFB_FORWARD_MAX_SHARP_FALLBACK_GAMES_PER_RUN = 32 as const;
 export const CFB_FORWARD_MAX_ESPN_PROSPECTIVE_GAMES_PER_RUN = 32 as const;
@@ -1677,6 +1678,7 @@ function isEligibleOfficialTrackingPayload(payload: CfbForwardEvidencePayload): 
 function isEligiblePublishedPregameRecoveryPayload(payload: CfbForwardEvidencePayload): boolean {
   const release = payload.authoritativeForecast?.release as string | undefined;
   return ((String(payload.schemaRelease) === CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE && String(payload.memberRelease) === CFB_FORWARD_MEMBER_RELEASE) ||
+    (String(payload.schemaRelease) === CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE && String(payload.memberRelease) === CFB_FORWARD_PROVIDER_FEED_PREVIOUS_MEMBER_RELEASE) ||
     (String(payload.schemaRelease) === CFB_FORWARD_COMPLETE_READER_PREVIOUS_EVIDENCE_SCHEMA_RELEASE && String(payload.memberRelease) === CFB_FORWARD_COMPLETE_READER_PREVIOUS_MEMBER_RELEASE) ||
     (String(payload.schemaRelease) === CFB_FORWARD_GAP_FALLBACK_PREVIOUS_EVIDENCE_SCHEMA_RELEASE && String(payload.memberRelease) === CFB_FORWARD_GAP_FALLBACK_PREVIOUS_MEMBER_RELEASE) ||
     (String(payload.schemaRelease) === CFB_FORWARD_RELEASE_WAVE_PREVIOUS_EVIDENCE_SCHEMA_RELEASE && String(payload.memberRelease) === CFB_FORWARD_RELEASE_WAVE_PREVIOUS_MEMBER_RELEASE) ||

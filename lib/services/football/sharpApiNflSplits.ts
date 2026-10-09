@@ -5,7 +5,7 @@ import {
 import type { NflPreviewGame } from "./balldontlieNflPreviewSlate";
 
 export const NFL_SHARP_API_SPLITS_RELEASE =
-  "nfl_sharpapi_splits_2026_09_16_r1_league_contract" as const;
+  "nfl_sharpapi_splits_2026_10_09_r2_provider_team_prefix_identity" as const;
 
 export type NflRegularSharpMarket = "moneyline" | "spread" | "total";
 
@@ -198,8 +198,23 @@ function nflRow(row: SharpApiNflSplitRow): boolean {
 function sameNflTeam(value: unknown, abbreviation: string, displayName: string): boolean {
   if (typeof value !== "string") return false;
   const observed = normalize(value);
-  const aliases = [abbreviation, displayName, ...(TEAM_ALIASES[abbreviation.toUpperCase()] ?? [])];
+  const teamAliases = TEAM_ALIASES[abbreviation.toUpperCase()] ?? [];
+  const providerPrefixAliases = [abbreviation, ...teamCodeAliases(abbreviation)];
+  const aliases = [
+    abbreviation,
+    displayName,
+    ...teamAliases,
+    ...providerPrefixAliases.flatMap((prefix) => teamAliases.map((alias) => `${prefix} ${alias}`)),
+  ];
   return aliases.some((alias) => normalize(alias) === observed);
+}
+
+function teamCodeAliases(abbreviation: string): string[] {
+  switch (abbreviation.toUpperCase()) {
+    case "LAR": return ["LA"];
+    case "WSH": return ["WAS"];
+    default: return [];
+  }
 }
 
 function rowDateMatches(row: SharpApiNflSplitRow, expectedDate: string): boolean {

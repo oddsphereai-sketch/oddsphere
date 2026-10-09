@@ -98,7 +98,7 @@ import {
 } from "./balldontlieNflWeeklyProjectionShadow";
 
 export const NFL_FORWARD_WRITER_RELEASE =
-  "nfl_forward_evidence_writer_2026_10_09_r59_professional_market_authority" as const;
+  "nfl_forward_evidence_writer_2026_10_09_r60_provider_feed_continuity" as const;
 
 export type NflForwardWriterResult = {
   writerRelease: typeof NFL_FORWARD_WRITER_RELEASE;
@@ -149,6 +149,10 @@ export async function runNflForwardEvidenceWriter(args: {
   playbookApiKey: string;
   sharpApiKey: string;
   weatherProvider: IWeatherProvider | null;
+  /** Read-only audit hook; never persists or mutates a payload. */
+  auditPayloads?: (payloads: NflForwardEvidencePayload[]) => void;
+  /** Test/audit-only provider injection; production always uses the default fetcher. */
+  sharpSplitsFetcher?: typeof fetchSharpApiNflSplits;
 }): Promise<NflForwardWriterResult> {
   // Publication and planning need the complete current release only. Loading
   // superseded large JSON releases added no current fixture authority and can
@@ -250,7 +254,11 @@ export async function runNflForwardEvidenceWriter(args: {
     }),
     playbook.lines("nfl").then((result) => result.body.data ?? []).catch(() => null),
     playbook.splits("nfl").then((result) => result.body.data ?? []).catch(() => null),
-    fetchSharpApiNflSplits({ apiKey: args.sharpApiKey, games: slate.games, capturedAt: args.now })
+    (args.sharpSplitsFetcher ?? fetchSharpApiNflSplits)({
+      apiKey: args.sharpApiKey,
+      games: slate.games,
+      capturedAt: args.now,
+    })
       .catch(() => ({
         splitsByGame: {} as Record<string, NflRegularSharpSplitSet>,
         requests: 1,
@@ -639,6 +647,7 @@ export async function runNflForwardEvidenceWriter(args: {
     }
   });
 
+  args.auditPayloads?.(payloads);
   const write = await appendNflForwardEvidence({ client: args.client, runId: args.runId, payloads, apply: args.apply });
   const memberSnapshot = await refreshCompactMemberSnapshot({
     client: args.client,

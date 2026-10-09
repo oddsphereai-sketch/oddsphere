@@ -205,6 +205,13 @@ const playbookAvailability = playbookCfbQuarterbackAvailability({
 });
 assert.equal(playbookAvailability?.designation, "out");
 assert.equal(playbookAvailability?.sourceAuthority, "official_provider");
+assert.equal(playbookCfbQuarterbackAvailability({
+  game: delawareAvailabilityGame,
+  away: verifiedAvailability.away,
+  home: { ...verifiedAvailability.home, expectedStartingQuarterback: verifiedAvailability.home.activeQuarterbacks[0]! },
+  injuryRows: [{ teamAbbr: "DEL", updatedAt: "2026-10-02T18:00:00.000Z", modelAuthorityEligible: false, players: [{ name: "Nick Minicucci", status: "Out", reason: "Knee" }] }],
+  capturedAt: "2026-10-02T18:01:00.000Z",
+}), null, "a newly normalized provider contract must remain display-only until its live board impact is validated");
 assert.equal(verifiedCfbQuarterbackAvailability("457727", playbookAvailability)?.designation, "out", "fresh provider status must supersede the credentialed likely-out report");
 const availablePlaybookAvailability = playbookCfbQuarterbackAvailability({
   game: delawareAvailabilityGame,

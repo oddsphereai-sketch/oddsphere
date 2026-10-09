@@ -74,7 +74,8 @@ export function playbookCfbQuarterbackAvailability(args: {
   for (const quarterbacks of [args.away, args.home]) {
     const expected = quarterbacks.expectedStartingQuarterback;
     if (!expected) continue;
-    const teamRow = args.injuryRows.find((row) => teamMatches(row, quarterbacks));
+    const teamRow = args.injuryRows.find((row) =>
+      row.modelAuthorityEligible !== false && teamMatches(row, quarterbacks));
     const prior = args.previousEvidence?.teamId === quarterbacks.teamId
       ? args.previousEvidence
       : verifiedCfbQuarterbackAvailability(args.game.providerGameId)?.teamId === quarterbacks.teamId
