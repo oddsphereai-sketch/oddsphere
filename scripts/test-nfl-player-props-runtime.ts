@@ -35,18 +35,24 @@ import {
 } from "../lib/services/football/nflPlayerPropsRuntime";
 import type { NflPlayerPropsExactOffer } from "../lib/services/football/nflPlayerPropsMarketBoard";
 
-assert.equal(NFL_PLAYER_PROPS_PORTABLE_ARTIFACT_RELEASE, "nfl_player_props_runtime_2026_10_08_r12_independent_rushing_yards");
-assert.equal(NFL_PLAYER_PROPS_RUNTIME_RELEASE, "nfl_player_props_runtime_2026_10_08_r27_independent_rushing_yards");
-assert.equal(NFL_PLAYER_PROPS_BOARD_RELEASE, "nfl_player_props_board_2026_10_08_r30_independent_rushing_yards");
-assert.equal(NFL_PLAYER_PROPS_MODEL_RELEASE, "nfl_player_props_distribution_model_2026_10_08_r21_independent_rushing_yards");
-assert.equal(NFL_PLAYER_PROPS_CALIBRATION_RELEASE, "nfl_player_props_distribution_calibration_2026_10_08_r23_independent_rushing_yards");
-assert.equal(NFL_PLAYER_PROPS_DECISION_RELEASE, "nfl_player_props_decision_2026_10_08_r26_independent_rushing_yards");
+assert.equal(NFL_PLAYER_PROPS_PORTABLE_ARTIFACT_RELEASE, "nfl_player_props_runtime_2026_10_08_r13_independent_receptions");
+assert.equal(NFL_PLAYER_PROPS_RUNTIME_RELEASE, "nfl_player_props_runtime_2026_10_08_r28_independent_receptions");
+assert.equal(NFL_PLAYER_PROPS_BOARD_RELEASE, "nfl_player_props_board_2026_10_08_r31_independent_receptions");
+assert.equal(NFL_PLAYER_PROPS_MODEL_RELEASE, "nfl_player_props_distribution_model_2026_10_08_r22_independent_receptions");
+assert.equal(NFL_PLAYER_PROPS_CALIBRATION_RELEASE, "nfl_player_props_distribution_calibration_2026_10_08_r24_independent_receptions");
+assert.equal(NFL_PLAYER_PROPS_DECISION_RELEASE, "nfl_player_props_decision_2026_10_08_r27_independent_receptions");
 assert.equal(expectedRoleArtifact.release,
-  "nfl_player_props_expected_role_runtime_2026_10_08_r4_rushing_yards");
+  "nfl_player_props_expected_role_runtime_2026_10_08_r5_receptions");
 assert.equal(expectedRoleArtifact.marketIndependent, true);
 assert.deepEqual(expectedRoleArtifact.marketFeatures, []);
-assert.equal("receptions" in expectedRoleArtifact, false,
-  "the research-qualified but production-rejected Receptions head is absent from the shipped artifact");
+assert.equal("receptions" in expectedRoleArtifact, true,
+  "the independently qualified Receptions head is present in the shipped artifact");
+assert.equal(expectedRoleArtifact.receptions.blendWeight, 0.5);
+assert.deepEqual(Object.keys(expectedRoleArtifact.receptions.groups).sort(), ["BACK", "TE", "WR"]);
+assert.equal(expectedRoleArtifact.receptions.probability.challengerWeight, 0,
+  "the board-flattening Receptions probability challenger cannot displace the incumbent head");
+assert.equal(expectedRoleArtifact.receptions.probability.challengerQualified, false);
+assert.equal(expectedRoleArtifact.receptions.probability.incumbentRetained, true);
 assert.equal(expectedRoleArtifact.passingCompletions.blendWeight, 0.75);
 assert.equal(expectedRoleArtifact.passingCompletions.probability.challengerWeight, 0.5);
 assert.equal(expectedRoleArtifact.passingYards.blendWeight, 1);
@@ -121,6 +127,35 @@ for (const row of rushingRoleRows) {
   assert.ok(Number.isFinite(score.projections.rushing_yards));
   assert.ok(Number.isFinite(score.foundationProjections?.rushing_yards));
 }
+const receivingRoleRows = [
+  { playerName: "Receiver One", position: "WR", propOffered: true, targetShare: 0.24 },
+  { playerName: "Tight End Two", position: "TE", propOffered: false, targetShare: 0.17 },
+  { playerName: "Back Three", position: "RB", propOffered: false, targetShare: 0.11 },
+].map((receiver, index) => ({
+  gameId: "receiving-role-game", playerName: receiver.playerName, team: "NE", opponent: "NYJ",
+  position: receiver.position, featureAsOf: "2026-10-08T12:00:00.000Z", roleFingerprint: `receiver-${index}`,
+  scoreEligible: true, healthHolds: [], propOffered: receiver.propOffered,
+  teamImpliedPoints: 21, teamImpliedTouchdowns: 3, expectedQuarterback: null,
+  availability: {
+    listed: false, status: null, detail: null, reportedAt: null, reportUpdatedAt: null,
+    source: "BALLDONTLIE" as const,
+  },
+  features: { [`position_${receiver.position.toLowerCase()}`]: 1, is_home: 1 },
+  expectedRoleFeatures: {
+    [`position_${receiver.position.toLowerCase()}`]: 1, is_home: 1, external_depth_listed: 1,
+    prior_targets_avg3: 7 - index * 2, prior_target_share_avg3: receiver.targetShare,
+    prior_receptions_avg3: 4.5 - index,
+  },
+}));
+const receivingRoleScores = scoreNflPlayerPropsRuntimeFeatureRows(receivingRoleRows);
+let changedReceptions = 0;
+for (const row of receivingRoleRows) {
+  const score = receivingRoleScores.get(`${row.gameId}|${row.playerName.toLowerCase().replace(/[^a-z0-9]/g, "")}`)!;
+  assert.ok(Number.isFinite(score.projections.receptions));
+  assert.ok(Number.isFinite(score.foundationProjections?.receptions));
+  changedReceptions += Number(score.projections.receptions !== score.foundationProjections?.receptions);
+}
+assert.ok(changedReceptions > 0, "the released roster-normalized Receptions point head is active");
 
 const receiving = nflPlayerPropsRuntimeMarketPolicy("receiving_yards");
 assert.deepEqual(receiving, { weight: 0.2, qualified: false }, "historical lane qualification remains truthful under the owner-approved forward exception");
@@ -207,7 +242,7 @@ assert.ok(oneBook.decisions.every((row) => row.marketProbability === row.rawMode
 "an evaluation-only ordinary quote falls back to the independent player distribution");
 assert.equal(oneBook.diagnostics.unavailableNoIndependentBenchmark, 2);
 const outOfSupport = buildNflPlayerPropsRuntimeBoard({
-  offers: [{ ...baseOffer, offerKey: "provider-outlier", line: 22.5 }],
+  offers: [{ ...baseOffer, offerKey: "provider-outlier", market: "receiving_yards", line: 999.5 }],
   features: [feature],
   evaluatedAt: "2026-08-25T12:01:00.000Z",
 });
