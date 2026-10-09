@@ -2,7 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Sport } from "../types/domain/Sport";
 
 export const TRACKING_SETTLEMENT_CONTRACT_VERSION =
-  "tracking_settlement_v5_mlb_provider_catchup_2026_10_09";
+  "tracking_settlement_v6_missing_grade_cfb_provider_catchup_2026_10_09";
 
 const MAX_PENDING_GRADES_SCANNED = 1_000;
 const MAX_REPAIR_DATES_PER_RUN = 3;
@@ -26,6 +26,7 @@ type CandidateGame = {
 export type StalePendingRepairDiscovery = {
   dates: string[];
   pendingGradesScanned: number;
+  missingGradesScanned: number;
   candidateRecords: number;
   eligibleRecords: number;
   errors: string[];
@@ -57,9 +58,10 @@ function isVoidStatus(status: string | null): boolean {
 
 /**
  * Choose historical slates where an existing pending grade can now settle.
- * The default remains database-only. MLB may explicitly include incomplete
- * stored outcomes because its caller performs one authoritative slate read
- * before grading. The date count is capped so refresh cost stays predictable.
+ * The default remains database-only. MLB and CFB may explicitly include
+ * incomplete stored outcomes because their callers perform one authoritative
+ * slate read before grading. The date count is capped so refresh cost stays
+ * predictable.
  */
 export function selectStalePendingRepairDates(args: {
   records: readonly PendingRecordCandidate[];
@@ -67,8 +69,8 @@ export function selectStalePendingRepairDates(args: {
   beforeDate: string;
   maxDates?: number;
   /**
-   * MLB can recover a historical terminal state and linescore from its
-   * authoritative schedule endpoint. Other sports remain database-only so a
+   * MLB and CFB can recover a historical terminal state from their existing
+   * authoritative score providers. Other sports remain database-only so a
    * generic repair pass never invents or broadens provider work.
    */
   includeIncompleteOutcomes?: boolean;
@@ -99,6 +101,7 @@ export async function discoverStalePendingRepairDates(args: {
   const result: StalePendingRepairDiscovery = {
     dates: [],
     pendingGradesScanned: 0,
+    missingGradesScanned: 0,
     candidateRecords: 0,
     eligibleRecords: 0,
     errors: [],
@@ -108,7 +111,7 @@ export async function discoverStalePendingRepairDates(args: {
   // query selected the first 1,000 pending grades across every sport, then
   // filtered them to the requested sport. A busy cross-sport ledger could
   // therefore starve older MLB rows forever even though they were repairable.
-  let recordsQuery = args.supabase
+  let pendingRecordsQuery = args.supabase
     .from("prediction_records")
     .select("id, game_id, slate_date, market, prediction_grades!inner(result)")
     .eq("sport", args.sport)
@@ -116,12 +119,52 @@ export async function discoverStalePendingRepairDates(args: {
     .lt("slate_date", args.beforeDate)
     .order("id", { ascending: true })
     .limit(MAX_PENDING_GRADES_SCANNED);
-  if (args.sport === "mlb") recordsQuery = recordsQuery.not("locked_at", "is", null);
-  const { data: recordRows, error: recordError } = await recordsQuery;
-  if (recordError) {
-    result.errors.push(`candidate records fetch: ${recordError.message}`);
+  if (args.sport === "mlb" || args.sport === "cfb") {
+    pendingRecordsQuery = pendingRecordsQuery.not("locked_at", "is", null);
+  }
+  const { data: pendingRecordRows, error: pendingRecordError } = await pendingRecordsQuery;
+  if (pendingRecordError) {
+    result.errors.push(`candidate pending records fetch: ${pendingRecordError.message}`);
     return result;
   }
+
+  result.pendingGradesScanned = pendingRecordRows?.length ?? 0;
+
+  // A locked record with no prediction_grades row is also member-visible as
+  // pending. That was the September CFB failure mode: the result provider was
+  // missed, no pending grade row was ever inserted, and the old discovery
+  // could therefore never find the record. Restrict this anti-join to the two
+  // sports with a bounded authoritative historical provider catch-up.
+  let missingRecordRows: typeof pendingRecordRows = [];
+  if (args.sport === "mlb" || args.sport === "cfb") {
+    const missingQuery = await args.supabase
+      .from("prediction_records")
+      .select("id, game_id, slate_date, market, prediction_grades!left(result)")
+      .eq("sport", args.sport)
+      .not("locked_at", "is", null)
+      .lt("slate_date", args.beforeDate)
+      // PostgREST anti-join: filter on the embedded resource itself. Filtering
+      // `prediction_grades.result IS NULL` would retain every parent row while
+      // merely emptying the embedded child, falsely classifying graded rows.
+      .is("prediction_grades", null)
+      .order("id", { ascending: true })
+      .limit(MAX_PENDING_GRADES_SCANNED);
+    if (missingQuery.error) {
+      result.errors.push(`candidate missing-grade records fetch: ${missingQuery.error.message}`);
+      return result;
+    }
+    missingRecordRows = missingQuery.data ?? [];
+    result.missingGradesScanned = missingRecordRows.length;
+  }
+
+  const recordRows = Array.from(
+    new Map(
+      [...(pendingRecordRows ?? []), ...(missingRecordRows ?? [])]
+        .map((row) => [Number(row.id), row] as const),
+    ).values(),
+  )
+    .sort((a, b) => Number(a.id) - Number(b.id))
+    .slice(0, MAX_PENDING_GRADES_SCANNED);
 
   const records = (recordRows ?? []).map((row) => ({
     id: Number(row.id),
@@ -129,7 +172,6 @@ export async function discoverStalePendingRepairDates(args: {
     slate_date: String(row.slate_date),
     market: String(row.market),
   })) as PendingRecordCandidate[];
-  result.pendingGradesScanned = records.length;
   result.candidateRecords = records.length;
   if (records.length === 0) return result;
 
@@ -151,7 +193,7 @@ export async function discoverStalePendingRepairDates(args: {
     records,
     games,
     beforeDate: args.beforeDate,
-    includeIncompleteOutcomes: args.sport === "mlb",
+    includeIncompleteOutcomes: args.sport === "mlb" || args.sport === "cfb",
   });
   result.dates = selected.dates;
   result.eligibleRecords = selected.eligibleRecords;

@@ -32,7 +32,7 @@ console.log("━━━ computeRefreshDates (yesterday/today/tomorrow) ━━━"
 check(
   "settlement repair contract is versioned",
   TRACKING_SETTLEMENT_CONTRACT_VERSION ===
-    "tracking_settlement_v5_mlb_provider_catchup_2026_10_09",
+    "tracking_settlement_v6_missing_grade_cfb_provider_catchup_2026_10_09",
 );
 
 {
@@ -159,6 +159,7 @@ check("undefined existing → upsert allowed", shouldUpsertGrade({ existingResul
 
 const gradingSource = readFileSync(new URL("../lib/services/predictionGradingService.ts", import.meta.url), "utf8");
 const trackingCronSource = readFileSync(new URL("../app/api/cron/tracking-refresh/route.ts", import.meta.url), "utf8");
+const settlementRepairSource = readFileSync(new URL("../lib/services/trackingSettlementRepairService.ts", import.meta.url), "utf8");
 const healthCronSource = readFileSync(new URL("../app/api/cron/daily-edge-data-health/route.ts", import.meta.url), "utf8");
 const soccerCronSource = readFileSync(new URL("../app/api/cron/soccer-daily-refresh/route.ts", import.meta.url), "utf8");
 const dailyEdgeShellSource = readFileSync(new URL("../app/lab/components/daily-edge/DailyEdgeShell.tsx", import.meta.url), "utf8");
@@ -179,6 +180,17 @@ check(
   "tracking refresh exposes the versioned bounded stale-pending repair",
   trackingCronSource.includes("settlementContractVersion: summary.settlementContractVersion") &&
     trackingCronSource.includes("stalePendingRepair: summary.stalePendingRepair"),
+);
+check(
+  "CFB historical settlement catch-up uses the existing official score ingester",
+  trackingCronSource.includes("stalePendingRepair: summary.stalePendingRepair") &&
+    readFileSync(new URL("../lib/services/trackingRefreshService.ts", import.meta.url), "utf8")
+      .includes('else if (sport === "cfb") {\n          const ingest = await ingestCfbFinalScores'),
+);
+check(
+  "missing-grade discovery uses the embedded-resource anti-join",
+  settlementRepairSource.includes('.is("prediction_grades", null)') &&
+    !settlementRepairSource.includes('.is("prediction_grades.result", null)'),
 );
 check(
   "World Cup provider/model refresh is unscheduled during offseason",
