@@ -1,6 +1,6 @@
 # NFL Daily Edge named-market sequence audit and r27 candidate
 
-Status: implementation and verification candidate; publication requires explicit owner approval.
+Status: owner approved for publication on 2026-10-09; pull-request, required-check, merge, and live verification remain pending.
 
 Date: 2026-10-08
 
