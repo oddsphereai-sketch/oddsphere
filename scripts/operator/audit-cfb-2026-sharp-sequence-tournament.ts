@@ -1937,6 +1937,10 @@ function runProfessionalConfigurationAudit(games: Game[], candidateBase: "active
       id: "selected_reconciliation_and_total",
       args: { marginFeatureMode: "reconciliation", marginLambda: 1000, marginEvidenceScale: 1, totalLambda: 30, totalEvidenceScale: 1, totalReflectionStrength: 1, changeMargin: true, changeTotal: true },
     },
+    {
+      id: "selected_joint_moneyline_spread_and_total",
+      args: { marginFeatureMode: "reconciliation_moneyline", marginLambda: 1000, marginEvidenceScale: 1, totalLambda: 30, totalEvidenceScale: 1, totalReflectionStrength: 1, changeMargin: true, changeTotal: true },
+    },
   ] as const;
   const details = Object.fromEntries(detailConfigs.map(({ id, args }) => {
     const audit = professionalAuditSummary(walkForward(args));
@@ -1996,6 +2000,10 @@ function runProfessionalConfigurationAudit(games: Game[], candidateBase: "active
     detailConfigs.find((config) => config.id === "selected_reconciliation_and_total")!.args,
     corroboratedWinnerGames,
   );
+  const jointCorroboratedWinnerRows = walkForward(
+    detailConfigs.find((config) => config.id === "selected_joint_moneyline_spread_and_total")!.args,
+    corroboratedWinnerGames,
+  );
   return {
     release: `cfb_professional_market_reader_configuration_audit_2026_10_09_r1_${candidateBase}_base`,
     mode: "select_only_zero_writes_zero_provider_calls",
@@ -2013,6 +2021,12 @@ function runProfessionalConfigurationAudit(games: Game[], candidateBase: "active
       id: "spread_only_legacy_layer_cannot_reverse_outright_winner_without_moneyline_corroboration",
       blocks: configurationBlockSummary(corroboratedWinnerRows),
       professionalAudit: professionalAuditSummary(corroboratedWinnerRows),
+    },
+    jointCorroboratedWinnerPolicy: {
+      id: "joint_moneyline_spread_reader_after_uncorroborated_legacy_winner_suppression",
+      blocks: configurationBlockSummary(jointCorroboratedWinnerRows),
+      professionalAudit: professionalAuditSummary(jointCorroboratedWinnerRows),
+      bootstrap: clusteredBootstrap(jointCorroboratedWinnerRows),
     },
     details,
   };
@@ -3780,6 +3794,18 @@ async function main(): Promise<void> {
         changedWinnerCalls: policy.professionalAudit.upsetEvaluation.changedWinnerCalls,
       },
     });
+    if (process.argv.includes("--joint-final-candidate")) {
+      console.log(JSON.stringify({
+        release: report.release,
+        selection: "fixed_lambda_1000_scale_1_from_predeclared_reader_authority_not_retuned_on_confirmation",
+        baseline: compactPolicy(report.corroboratedWinnerPolicy),
+        jointMoneylineSpread: {
+          ...compactPolicy(report.jointCorroboratedWinnerPolicy),
+          bootstrap: report.jointCorroboratedWinnerPolicy.bootstrap,
+        },
+      }, null, 2));
+      return;
+    }
     if (process.argv.includes("--corroborated-only")) {
       console.log(JSON.stringify(compactPolicy(report.corroboratedWinnerPolicy), null, 2));
       return;
