@@ -40,9 +40,7 @@
  */
 
 import { supabase } from "../../db/supabase";
-import { isBlockedSportsbook } from "../../config/blockedSportsbooks";
 import {
-  canonicalizeNhlLineRows,
   selectNhlBestPriceQuote,
   type NhlSelectedPriceQuote,
 } from "./nhlLineBoard";
@@ -52,11 +50,12 @@ import {
   nhlSeasonStartYearFromExternalId,
 } from "./featureSnapshot";
 import {
-  nhlRegularModelV1,
   NHL_REGULAR_CALIBRATION_RELEASE,
+  NHL_REGULAR_DECISION_RELEASE,
   NHL_REGULAR_MODEL_RELEASE,
   NHL_REGULAR_TRANSITION_MODEL_RELEASES,
   resolveNhlPriceAwareVerdict,
+  type NhlFeatureSnapshot,
   type NhlModelOutput,
 } from "../../automodel/nhlRegularModelV1";
 import {
@@ -73,6 +72,7 @@ import type { PredictionRecordRow } from "../../types/domain/Tracking";
 import { resolvedNhlSplitsByGame, type ResolvedNhlSplitsEvent } from "./nhlResolvedSplits";
 import { loadNhlRegularStateForSlate } from "./loadNhlRegularState";
 import { loadNhlOpponentAdjustedState } from "./loadNhlOpponentAdjustedState";
+import { buildNhlRegularMarketAwareForecast } from "./nhlTargetExcludedTotalMarket";
 
 const LOCK_MINUTES_BEFORE_PUCK_DROP = 60;
 
@@ -160,7 +160,7 @@ function buildSnapshotJson(opts: {
     home: { player_external_id?: number; player_name?: string; source: string };
     away: { player_external_id?: number; player_name?: string; source: string };
   };
-  featureInputs: unknown;
+  featureInputs: NhlFeatureSnapshot;
   lockedAtIso: string | null;
   lockSource: "live" | "locked";
   // P1-2 Commit A — needed to build the PL* substrate.
@@ -170,6 +170,7 @@ function buildSnapshotJson(opts: {
   return {
     model_version: NHL_REGULAR_MODEL_RELEASE,
     calibration_version: NHL_REGULAR_CALIBRATION_RELEASE,
+    decision_version: NHL_REGULAR_DECISION_RELEASE,
     model_output: opts.model,
     feature_inputs: opts.featureInputs,
     market_at_lock: {
@@ -182,6 +183,8 @@ function buildSnapshotJson(opts: {
       total_line: opts.model.total.model_market_gap_pct !== null
         ? opts.model.expected_total_goals - opts.model.total.model_market_gap_pct
         : null,
+      target_excluded_total_read: opts.featureInputs.market.target_excluded_total_read ?? null,
+      target_exclusion_status: opts.featureInputs.market.target_exclusion_status ?? "unavailable",
       lines_snapshot: opts.marketLines,
     },
     evaluated_quotes: opts.evaluatedQuotes,
@@ -298,7 +301,7 @@ export async function writeNhlPredictionRecords(
       const homeAbbr = g.home_team_id !== null ? teamById.get(g.home_team_id)?.abbreviation ?? "?" : "?";
       const awayAbbr = g.away_team_id !== null ? teamById.get(g.away_team_id)?.abbreviation ?? "?" : "?";
       const split = splitsByGame.get(g.id) ?? null;
-      const { snapshot, meta } = await buildNhlFeatureSnapshot({
+      const built = await buildNhlFeatureSnapshot({
         gameId: g.id,
         season: featureSeason,
         homeGoalieExternalId: opts.homeGoalieExternalId,
@@ -320,32 +323,19 @@ export async function writeNhlPredictionRecords(
           totalSplitConfidence: split?.internal_resolution?.total?.confidence ?? "none",
         },
       });
-      const model = nhlRegularModelV1(snapshot);
+      const marketAware = buildNhlRegularMarketAwareForecast({
+        snapshot: built.snapshot,
+        currentRows: built.meta.market_lines,
+        historyRows: built.meta.market_history_lines,
+      });
+      const snapshot = marketAware.snapshot;
+      const model = marketAware.model;
+      const meta = built.meta;
 
-      // Fetch lines snapshot for the snapshot_json. P1-2 Commit A —
-      // additionally fetch "spread" lines (NHL puck-line is stored as
-      // market_type="spread" in `lines`). These don't generate a
-      // public tracking row — they only populate the internal
-      // displayed_context_markets.spread substrate so the auditor
-      // can verify what the PL* chip showed at lock.
-      const { data: linesData } = await supabase
-        .from("lines")
-        .select("market_type, sportsbook, side, line_value, odds_american, fetched_at")
-        .eq("game_id", g.id)
-        .is("player_id", null)
-        .in("market_type", ["moneyline", "total", "spread"]);
-      // #39 — drop blocked books (fliff, kalshi) at the load point so the
-      // "best odds" (max) selections below for ML / total / puck-line can
-      // never pick a corrupted blocked-book price (e.g. fliff's flipped
-      // +385 on a -205 favorite would otherwise win the max).
-      const lines = canonicalizeNhlLineRows(((linesData as Array<{
-        market_type: string; sportsbook: string; side: string;
-        line_value: number | null; odds_american: number | null;
-        fetched_at: string | null;
-      }> | null) ?? []).filter((l) => !isBlockedSportsbook(l.sportsbook)).map((line) => ({
-        ...line,
-        observed_at: line.fetched_at,
-      })));
+      // The feature builder and model consume the same canonical quote board.
+      // Reusing it here prevents a mid-run refresh from changing the price
+      // target after the target-excluded Total read has already been solved.
+      const lines = meta.market_lines;
 
       const matchup = `${awayAbbr} @ ${homeAbbr}`;
 

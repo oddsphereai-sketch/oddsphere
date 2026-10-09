@@ -2,11 +2,12 @@ import type { BdlNhlTeamMetrics } from "../providers/nhl/_ballDontLieNhlClient";
 import type { NhlCalibratedTeamState } from "./nhlRegularPriors2026";
 import type { NhlRosterPrior } from "./nhlRosterPrior2026";
 
-export const NHL_REGULAR_MODEL_RELEASE = "nhl_regular_2026_r16_exact_quote_price_mapping" as const;
-export const NHL_REGULAR_CALIBRATION_RELEASE = "nhl_regular_calibration_2026_r16_exact_quote_price_mapping" as const;
-export const NHL_REGULAR_DECISION_RELEASE = "nhl_regular_decision_2026_r16_exact_quote_price_mapping" as const;
+export const NHL_REGULAR_MODEL_RELEASE = "nhl_regular_2026_r17_target_excluded_total_reconciliation" as const;
+export const NHL_REGULAR_CALIBRATION_RELEASE = "nhl_regular_calibration_2026_r17_target_excluded_total_reconciliation" as const;
+export const NHL_REGULAR_DECISION_RELEASE = "nhl_regular_decision_2026_r17_target_excluded_total_reconciliation" as const;
 export const NHL_REGULAR_TRANSITION_MODEL_RELEASES = [
   NHL_REGULAR_MODEL_RELEASE,
+  "nhl_regular_2026_r16_exact_quote_price_mapping",
   "nhl_regular_2026_r15_complete_multibook_market_ingestion",
   "nhl_regular_2026_r14_best_angle_calibration",
   "nhl_regular_2026_r13_price_aware_grades",
@@ -17,6 +18,7 @@ export const NHL_REGULAR_TRANSITION_MODEL_RELEASES = [
 ] as const;
 export const NHL_REGULAR_TRANSITION_CALIBRATION_RELEASES = [
   NHL_REGULAR_CALIBRATION_RELEASE,
+  "nhl_regular_calibration_2026_r16_exact_quote_price_mapping",
   "nhl_regular_calibration_2026_r15_complete_multibook_market_ingestion",
   "nhl_regular_calibration_2026_r14_best_angle_calibration",
   "nhl_regular_calibration_2026_r13_price_aware_grades",
@@ -93,6 +95,19 @@ export type NhlModelTeam = {
   current_season_games?: number;
 };
 
+export type NhlTargetExcludedTotalRead = {
+  exact_line: number;
+  over_probability: number;
+  complete_book_count: number;
+  named_book_count: number;
+  excluded_sportsbook: string;
+  excluded_sportsbook_family: string;
+  included_sportsbook_families: string[];
+  stable_sequence_direction: "over" | "under" | null;
+  stable_sequence_source_class: "named" | "broad" | "none";
+  stable_sequence_sources: string[];
+};
+
 export type NhlModelMarket = {
   market_home_prob: number | null;
   best_home_ml_prob: number | null;
@@ -115,6 +130,8 @@ export type NhlModelMarket = {
   ml_split_confidence: "high" | "medium" | "low" | "none";
   total_split_source: "playbook" | "sharpapi" | null;
   total_split_confidence: "high" | "medium" | "low" | "none";
+  target_excluded_total_read?: NhlTargetExcludedTotalRead | null;
+  target_exclusion_status?: "stable" | "unavailable" | "cycle_fail_closed";
 };
 
 export type NhlFeatureSnapshot = {
@@ -165,6 +182,13 @@ export type NhlModelOutput = {
     split_movement_goals: number;
     market_decision: "independent" | "confirmed" | "flipped";
     market_target_home_probability: number | null;
+    total_market_authority: number;
+    total_market_target_goals: number | null;
+    total_market_target_over_probability: number | null;
+    total_market_complete_books: number;
+    total_market_named_books: number;
+    total_market_excluded_sportsbook: string | null;
+    total_market_sequence_direction: "over" | "under" | null;
     roster_prior_active: boolean;
   };
   independent_goal_diff: number;
@@ -369,6 +393,28 @@ function probabilityBelow(distribution: ReadonlyMap<number, number>, line: numbe
   return probability;
 }
 
+function conditionalOverProbability(distribution: ReadonlyMap<number, number>, line: number): number {
+  const over = probabilityAbove(distribution, line);
+  const under = probabilityBelow(distribution, line);
+  return over + under <= 0 ? 0.5 : over / (over + under);
+}
+
+function totalForOverProbability(line: number, targetProbability: number): number | null {
+  const at = (totalGoals: number) => conditionalOverProbability(
+    jointDistribution(totalGoals / 2, totalGoals / 2).total,
+    line,
+  );
+  let low = 3.5;
+  let high = 9;
+  if (targetProbability < at(low) || targetProbability > at(high)) return null;
+  for (let iteration = 0; iteration < 60; iteration += 1) {
+    const middle = (low + high) / 2;
+    if (at(middle) < targetProbability) low = middle;
+    else high = middle;
+  }
+  return (low + high) / 2;
+}
+
 function marketSideCorroborated(market: NhlModelMarket, marketHome: boolean): boolean {
   if (market.market_book_count < 2) return false;
   if (market.ml_split_confidence !== "high" && market.ml_split_confidence !== "medium") return false;
@@ -469,7 +515,7 @@ export function nhlRegularModelV1(snapshot: NhlFeatureSnapshot): NhlModelOutput 
       8,
     )
     : independentTotal;
-  const expectedTotal = clamp(opponentAdjustedIndependentTotal + totalMovement, 4.5, 8);
+  const incumbentExpectedTotal = clamp(opponentAdjustedIndependentTotal + totalMovement, 4.5, 8);
   const activeExpectedTotal = clamp(independentTotal + totalMovement, 4.5, 8);
   const independentDistribution = jointDistribution(
     Math.max(0, (activeExpectedTotal + independentGoalDiff) / 2),
@@ -488,12 +534,45 @@ export function nhlRegularModelV1(snapshot: NhlFeatureSnapshot): NhlModelOutput 
       : "independent";
   const marketTargetHomeProbability = shouldFlip ? marketHome : null;
   const coherentIndependentGoalDiff = hasOpponentAdjustedState
-    ? goalDiffForHomeWin(expectedTotal, independentDistribution.homeWin) ?? independentGoalDiff
+    ? goalDiffForHomeWin(incumbentExpectedTotal, independentDistribution.homeWin) ?? independentGoalDiff
     : independentGoalDiff;
   const flippedGoalDiff = marketTargetHomeProbability === null
     ? null
-    : goalDiffForHomeWin(expectedTotal, marketTargetHomeProbability);
-  const expectedGoalDiff = flippedGoalDiff ?? coherentIndependentGoalDiff;
+    : goalDiffForHomeWin(incumbentExpectedTotal, marketTargetHomeProbability);
+  const incumbentGoalDiff = flippedGoalDiff ?? coherentIndependentGoalDiff;
+  const incumbentDistribution = jointDistribution(
+    Math.max(0, (incumbentExpectedTotal + incumbentGoalDiff) / 2),
+    Math.max(0, (incumbentExpectedTotal - incumbentGoalDiff) / 2),
+  );
+  const totalRead = snapshot.market.target_excluded_total_read ?? null;
+  const readMatchesLine = totalRead !== null
+    && marketTotal !== null
+    && Math.abs(totalRead.exact_line - marketTotal) < 0.01
+    && totalRead.complete_book_count >= 2;
+  const marketTargetTotal = readMatchesLine
+    ? totalForOverProbability(marketTotal!, totalRead.over_probability)
+    : null;
+  const totalDirection = marketTargetTotal === null || Math.abs(marketTargetTotal - incumbentExpectedTotal) < 0.03
+    ? null
+    : marketTargetTotal > incumbentExpectedTotal ? "over" as const : "under" as const;
+  let totalMarketAuthority = marketTargetTotal === null ? 0 : totalRead!.named_book_count > 0 ? 1 : 0.8;
+  if (
+    totalDirection !== null
+    && totalRead?.stable_sequence_direction !== null
+    && totalRead?.stable_sequence_direction !== totalDirection
+  ) {
+    totalMarketAuthority *= 0.65;
+  }
+  const expectedTotal = marketTargetTotal === null
+    ? incumbentExpectedTotal
+    : clamp(
+      incumbentExpectedTotal + totalMarketAuthority * (marketTargetTotal - incumbentExpectedTotal),
+      4.5,
+      8,
+    );
+  const expectedGoalDiff = marketTargetTotal === null
+    ? incumbentGoalDiff
+    : goalDiffForHomeWin(expectedTotal, incumbentDistribution.homeWin) ?? incumbentGoalDiff;
   const projectedHome = Math.max(0, (expectedTotal + expectedGoalDiff) / 2);
   const projectedAway = Math.max(0, (expectedTotal - expectedGoalDiff) / 2);
   const finalDistribution = jointDistribution(projectedHome, projectedAway);
@@ -510,7 +589,12 @@ export function nhlRegularModelV1(snapshot: NhlFeatureSnapshot): NhlModelOutput 
   const totalGap = marketTotal === null ? null : expectedTotal - marketTotal;
   const overProbability = marketTotal === null ? 0.5 : probabilityAbove(finalDistribution.total, marketTotal);
   const underProbability = marketTotal === null ? 0.5 : probabilityBelow(finalDistribution.total, marketTotal);
-  const totalPickOver = overProbability >= underProbability;
+  const incumbentOverProbability = marketTotal === null ? 0.5 : probabilityAbove(incumbentDistribution.total, marketTotal);
+  const incumbentUnderProbability = marketTotal === null ? 0.5 : probabilityBelow(incumbentDistribution.total, marketTotal);
+  const incumbentTotalPickOver = incumbentOverProbability >= incumbentUnderProbability;
+  const totalPickOver = Math.abs(overProbability - underProbability) < 1e-12
+    ? incumbentTotalPickOver
+    : overProbability >= underProbability;
   const nonPushProbability = overProbability + underProbability;
   const rawTotalProbability = nonPushProbability <= 0
     ? 0.5
@@ -560,6 +644,13 @@ export function nhlRegularModelV1(snapshot: NhlFeatureSnapshot): NhlModelOutput 
       split_movement_goals: 0,
       market_decision: marketDecision,
       market_target_home_probability: marketTargetHomeProbability,
+      total_market_authority: totalMarketAuthority,
+      total_market_target_goals: marketTargetTotal,
+      total_market_target_over_probability: readMatchesLine ? totalRead.over_probability : null,
+      total_market_complete_books: readMatchesLine ? totalRead.complete_book_count : 0,
+      total_market_named_books: readMatchesLine ? totalRead.named_book_count : 0,
+      total_market_excluded_sportsbook: readMatchesLine ? totalRead.excluded_sportsbook : null,
+      total_market_sequence_direction: readMatchesLine ? totalRead.stable_sequence_direction : null,
       roster_prior_active: rosterPriorActive,
     },
     independent_goal_diff: independentGoalDiff,
@@ -584,7 +675,12 @@ export function nhlRegularModelV1(snapshot: NhlFeatureSnapshot): NhlModelOutput 
       confidence: totalProbability,
       verdict: totalVerdict(totalGap),
       model_market_gap_pct: totalGap,
-      notes: [`Independent ${opponentAdjustedIndependentTotal.toFixed(2)}; final projection ${expectedTotal.toFixed(2)}${marketTotal === null ? "" : ` vs ${marketTotal.toFixed(1)}`}.`],
+      notes: [
+        `Independent ${opponentAdjustedIndependentTotal.toFixed(2)}; final projection ${expectedTotal.toFixed(2)}${marketTotal === null ? "" : ` vs ${marketTotal.toFixed(1)}`}.`,
+        ...(marketTargetTotal === null
+          ? []
+          : [`Target-excluded ${totalRead!.complete_book_count}-book Total read (${totalRead!.named_book_count} named) reconciled at ${(totalMarketAuthority * 100).toFixed(0)}% authority.`]),
+      ],
     },
     puck_line: {
       pick: pucklinePick,
