@@ -5,10 +5,14 @@
 On 2026-10-09 Daniel Mengel explicitly approved publishing the completed
 football provider-feed continuity repair before beginning the WNBA audit. This
 exception is limited to the NFL r30 provider-feed-continuity release family,
-the CFB r58 report-continuity publication family, and the evidence documented
+the CFB r58 report-continuity family and its r59 CFB-identity plus started-game
+board-retention correction, and the evidence documented
 in
 `docs/model-audits/2026-10-09-football-provider-feed-continuity-predeclaration.md`
-and its paired result.
+and its paired result plus
+`docs/model-audits/2026-10-09-playbook-cfb-league-identity-live-correction.md`
+and
+`docs/model-audits/2026-10-09-cfb-started-game-board-retention.md`.
 
 The NFL correction accepts only exact SharpAPI abbreviation-plus-nickname team
 identities, including explicit LA-to-LAR and WAS-to-WSH mappings; it does not
@@ -17,7 +21,11 @@ current-board comparison restores complete split evidence for six additional
 games without changing a score, side, probability, grade, promotion, demotion,
 stake, or board count.
 
-The CFB correction requests the documented uppercase Playbook league, accepts
+The first live credential-backed r58 cycle proved the intended release, sole
+lease, member snapshot, board coverage, and unchanged locks while returning
+`playbook_injuries_request_failed`. The provider's current league-convention
+contract names college football `CFB`, not Oddsphere's internal `ncaaf`; r59
+therefore translates only the injuries request to documented `CFB`, accepts
 both documented and legacy response contracts, uses the injury-specific
 timeout, preserves provider timestamps, and retains the newest verified
 per-game report across omission, failure, and older replay. Newly normalized
@@ -26,6 +34,17 @@ audit separately qualifies their player identity and board impact; this
 exception does not authorize them to alter scores, probabilities, sides,
 grades, promotions, demotions, or stakes. Existing previously qualified legacy
 rows retain their prior authority. Locked records remain immutable.
+
+The same live cycle exposed a separate board-lifecycle defect: a release first
+published after kickoff could form a complete smaller wave without a game that
+already had an immutable T-60 record, causing the member board to contract at
+kickoff. R59 may carry that exact stored T-60 row through the shared 03:00 ET
+Daily Edge rollover. It must not reconstruct or change any locked field, retain
+an unlocked or unhealthy row, create a duplicate, or keep the prior board date
+after rollover. Credential-backed reconstruction identifies two legitimate
+same-day immutable locks—Florida A&M-Alabama State and Florida State-Louisville—
+so the reviewed current-board expectation is 80 to 82 games, zero
+prediction/grade changes, and zero promotions or demotions.
 
 Publication still requires a clean latest-main candidate, integration-safety
 verification, protected PR checks, merge, and post-deploy proof of the live

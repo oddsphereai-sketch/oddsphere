@@ -213,7 +213,7 @@ export class PlaybookClient {
   }
 
   injuries(league: PlaybookLeague | string): Promise<PlaybookResult<PlaybookInjuriesResponse>> {
-    const canonicalLeague = String(league).trim().toUpperCase();
+    const canonicalLeague = canonicalPlaybookInjuryLeague(league);
     return this.get<PlaybookDocumentedInjuriesResponse | PlaybookInjuriesResponse>("/v1/injuries", {
       league: canonicalLeague,
     }).then((result) => ({
@@ -228,6 +228,15 @@ export class PlaybookClient {
   // add typed methods under the
   // `o-mlb-playbook-context` ticket once each path is confirmed. Until then
   // callers can use get<T>(path) directly for one-off probing.
+}
+
+export function canonicalPlaybookInjuryLeague(league: PlaybookLeague | string): string {
+  const normalized = String(league).trim().toUpperCase();
+  // Playbook's current league convention names college football CFB even
+  // though its legacy lines/splits feeds and Oddsphere's internal sport name
+  // use NCAAF. Keep the translation endpoint-scoped so the already-working
+  // legacy market endpoints are not reinterpreted.
+  return normalized === "NCAAF" ? "CFB" : normalized;
 }
 
 export function normalizePlaybookInjuriesResponse(
