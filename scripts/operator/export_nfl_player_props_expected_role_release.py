@@ -21,14 +21,16 @@ ROOT = pathlib.Path(__file__).resolve().parents[2]
 DEFAULT_OUTPUT = ROOT / "lib/services/football/modelArtifacts/nflPlayerPropsExpectedRole.json"
 DEFAULT_RECEPTIONS_TOURNAMENT = ROOT / "football-research/cache/nfl-player-props-external/tournament/nfl_player_props_receptions_r1.json"
 DEFAULT_RECEPTIONS_DISTRIBUTION = ROOT / "football-research/cache/nfl-player-props-external/tournament/nfl_player_props_receptions_distribution_r1.json"
+DEFAULT_RECEIVING_YARDS_TOURNAMENT = ROOT / "football-research/cache/nfl-player-props-external/tournament/nfl_player_props_receiving_yards_r1.json"
+DEFAULT_RECEIVING_YARDS_DISTRIBUTION = ROOT / "football-research/cache/nfl-player-props-external/tournament/nfl_player_props_receiving_yards_distribution_r1.json"
 RUNTIME = ROOT / "lib/services/football/modelArtifacts/nflPlayerPropsRuntime.json"
-RELEASE = "nfl_player_props_expected_role_runtime_2026_10_08_r5_receptions"
-PORTABLE_RELEASE = "nfl_player_props_runtime_2026_10_08_r13_independent_receptions"
-MODEL_RELEASE = "nfl_player_props_distribution_model_2026_10_08_r22_independent_receptions"
-CALIBRATION_RELEASE = "nfl_player_props_distribution_calibration_2026_10_08_r24_independent_receptions"
-DECISION_RELEASE = "nfl_player_props_decision_2026_10_08_r27_independent_receptions"
-PRECEDING_RELEASE = "nfl_player_props_expected_role_runtime_2026_10_08_r4_rushing_yards"
-PRECEDING_SHA256 = "2cb4b78cce338995b4df08b769022be63088af896e0f7ddf6cc943397caede5d"
+RELEASE = "nfl_player_props_expected_role_runtime_2026_10_09_r6_receiving_yards"
+PORTABLE_RELEASE = "nfl_player_props_runtime_2026_10_09_r14_independent_receiving_yards"
+MODEL_RELEASE = "nfl_player_props_distribution_model_2026_10_09_r23_independent_receiving_yards"
+CALIBRATION_RELEASE = "nfl_player_props_distribution_calibration_2026_10_09_r25_independent_receiving_yards"
+DECISION_RELEASE = "nfl_player_props_decision_2026_10_09_r28_independent_receiving_yards"
+PRECEDING_RELEASE = "nfl_player_props_expected_role_runtime_2026_10_08_r5_receptions"
+PRECEDING_SHA256 = "9bd45ccab5fc57d61ea908f52eb89ff3926866b3bd3479bbffef64a10ab61001"
 
 
 def load(name: str, path: pathlib.Path) -> Any:
@@ -91,6 +93,8 @@ def optimize_existing(path: pathlib.Path) -> None:
         payload["receptions"]["teamParticipationModel"],
         *(value for group in payload.get("receptions", {}).get("groups", {}).values()
           for value in (group["catchRateModel"],)),
+        *([payload["receivingYards"]["yardsPerTargetModel"]]
+          if "receivingYards" in payload else []),
     ]
     for value in models:
         if not str(value["kind"]).startswith("compact_hgb_"):
@@ -185,6 +189,8 @@ def main() -> None:
     parser.add_argument("--output", type=pathlib.Path, default=DEFAULT_OUTPUT)
     parser.add_argument("--receptions-tournament", type=pathlib.Path, default=DEFAULT_RECEPTIONS_TOURNAMENT)
     parser.add_argument("--receptions-distribution", type=pathlib.Path, default=DEFAULT_RECEPTIONS_DISTRIBUTION)
+    parser.add_argument("--receiving-yards-tournament", type=pathlib.Path, default=DEFAULT_RECEIVING_YARDS_TOURNAMENT)
+    parser.add_argument("--receiving-yards-distribution", type=pathlib.Path, default=DEFAULT_RECEIVING_YARDS_DISTRIBUTION)
     parser.add_argument("--external-manifest", type=pathlib.Path)
     parser.add_argument("--injury-root", type=pathlib.Path)
     parser.add_argument("--optimize-existing", action="store_true")
@@ -351,6 +357,22 @@ def main() -> None:
         }
     if set(receptions_models) != {"BACK", "WR", "TE"}:
         raise RuntimeError(f"incomplete Receptions group models: {sorted(receptions_models)}")
+    receiving_yards_train = training[
+        training["expected_role_group"].eq("WR")
+        & training["participated"].eq(1)
+        & training["targets"].gt(0)
+    ].copy()
+    if len(receiving_yards_train) < 100:
+        raise RuntimeError("incomplete Receiving Yards WR efficiency population")
+    receiving_yards_per_target = (
+        receiving_yards_train["receiving_yards"] / receiving_yards_train["targets"]
+    ).clip(0.0, 30.0)
+    receiving_yards_per_target_model = foundation.model("squared_error").fit(
+        receiving_yards_train[player_features], receiving_yards_per_target.to_numpy(float),
+    )
+    receiving_yards_per_target_portable = compact_model(
+        exporter, receiving_yards_per_target_model, player_features,
+    )
     team_target_budget_portable = compact_model(exporter, team_target_budget_model, team_features)
     team_target_share_portable = compact_model(exporter, team_target_share_model, player_features)
     team_target_participation_portable = compact_model(
@@ -396,6 +418,15 @@ def main() -> None:
         "challengerQualified": False,
         "incumbentRetained": True,
     }
+    receiving_yards_tournament = json.loads(args.receiving_yards_tournament.read_text(encoding="utf-8"))
+    if receiving_yards_tournament.get("selected") != "wr_direct_blend_50":
+        raise RuntimeError("unexpected Receiving Yards point candidate")
+    receiving_yards_distribution = json.loads(args.receiving_yards_distribution.read_text(encoding="utf-8"))
+    receiving_yards_distribution_artifact = receiving_yards_distribution["selectedArtifacts"]["receiving_yards"]
+    if receiving_yards_distribution_artifact.get("passes"):
+        raise RuntimeError("Receiving Yards probability challenger unexpectedly passed")
+    if float(receiving_yards_distribution_artifact.get("challengerWeight", -1.0)) != 0.0:
+        raise RuntimeError("Receiving Yards rejected probability challenger has nonzero authority")
 
     passing_budget_portable = compact_model(exporter, team_budget, team_features)
     passer_share_portable = compact_model(exporter, passer_share, player_features)
@@ -410,6 +441,7 @@ def main() -> None:
         *(value for group in rushing_yards_models.values() for value in group.values()),
         team_target_budget_portable, team_target_share_portable, team_target_participation_portable,
         *(value for group in receptions_models.values() for value in group.values()),
+        receiving_yards_per_target_portable,
     ]
     state_features = list(dict.fromkeys(
         feature for value in all_models for feature in model_features(value)
@@ -431,6 +463,7 @@ def main() -> None:
             team_target_budget_portable, team_target_share_portable,
             team_target_participation_portable,
             *(item for group in receptions_models.values() for item in group.values()),
+            receiving_yards_per_target_portable,
         ) for feature in model_features(value)
     )
     own_names = [name for name in state_features if name in team_features and (name == "is_home" or "_team_" in name or name.startswith("external_environment_"))]
@@ -476,6 +509,8 @@ def main() -> None:
             "precedingExpectedRoleArtifact": PRECEDING_SHA256,
             "receptionsTournament": foundation.sha256_file(args.receptions_tournament),
             "receptionsDistributionTournament": foundation.sha256_file(args.receptions_distribution),
+            "receivingYardsTournament": foundation.sha256_file(args.receiving_yards_tournament),
+            "receivingYardsDistributionTournament": foundation.sha256_file(args.receiving_yards_distribution),
         },
         "featureNames": state_features,
         "passingAttempts": {
@@ -527,6 +562,13 @@ def main() -> None:
             "teamParticipationModel": team_target_participation_portable,
             "groups": receptions_models,
             "probability": receptions_probability,
+        },
+        "receivingYards": {
+            "blendWeight": 0.50,
+            "positions": ["WR"],
+            "yardsPerTargetLower": 0.0,
+            "yardsPerTargetUpper": 30.0,
+            "yardsPerTargetModel": receiving_yards_per_target_portable,
         },
         "playerStateUpdates": player_updates,
         "teamStateUpdates": team_updates,

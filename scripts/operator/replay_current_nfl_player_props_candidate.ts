@@ -109,7 +109,7 @@ async function main(): Promise<void> {
   const offers = exactOffers(frozen.memberDecisions, capture)
     .filter((offer) => eligible.has(offer.canonicalGameId));
   const gameIds = [...new Set(offers.map((offer) => offer.canonicalGameId))];
-  const candidate = gameIds.flatMap((gameId) => {
+  const build = (auditPrecedingReceivingYardsOnly: boolean) => gameIds.flatMap((gameId) => {
     const gameOffers = offers.filter((offer) => offer.canonicalGameId === gameId);
     return buildNflPlayerPropsRuntimeBoard({
       offers: gameOffers,
@@ -117,21 +117,26 @@ async function main(): Promise<void> {
       evaluatedAt: frozen.board.evaluatedAt,
       captureMarketEvidence: false,
       auditIncumbentMarketArbitration: false,
+      auditPrecedingReceivingYardsOnly,
     }).decisions;
   }) as CandidateDecision[];
+  const control = build(true);
+  const candidate = build(false);
 
   const retained = new Set(capture.i.map((identity) => identity[0]));
   const incumbent = frozen.memberDecisions.filter((row) => row.marketEvidenceId && retained.has(row.marketEvidenceId));
-  const comparison = compare(incumbent, candidate);
+  const comparison = compare(control, candidate);
+  const storedSnapshotComparison = compare(incumbent, candidate);
   const result = {
-    release: "nfl_player_props_current_snapshot_candidate_replay_2026_10_07_r1",
+    release: "nfl_player_props_current_snapshot_candidate_replay_2026_10_09_r2_same_input_control",
     readOnly: true, writes: 0, providerCalls: 0,
     sourceSnapshot: input,
     season: frozen.season, week: frozen.week, evaluatedAt: frozen.board.evaluatedAt,
     evidenceIdentitiesObserved: capture.n, evidenceIdentitiesRetained: capture.k,
     forwardEvidenceRows: evidence.length, offers: offers.length, featureRows: features.length,
-    incumbentRows: incumbent.length, candidateRows: candidate.length,
+    incumbentRows: incumbent.length, controlRows: control.length, candidateRows: candidate.length,
     comparison,
+    storedSnapshotComparison,
     rows: candidate,
   };
   await writeFile(output, JSON.stringify(result, null, 2) + "\n", "utf8");
@@ -169,6 +174,7 @@ function compare(incumbent: FrozenDecision[], candidate: CandidateDecision[]): R
     probabilityChanges: changes.filter(([first, second]) => first.finalProbability !== second.finalProbability).length,
     forecastSideChanges: changes.filter(([first, second]) => forecastSide(first) !== forecastSide(second)).length,
     gradeChanges: changes.filter(([first, second]) => first.grade !== second.grade).length,
+    gradeChangeDetails: changes.filter(([first, second]) => first.grade !== second.grade).map(transition),
     promotions: promotions.length,
     demotions: demotions.length,
     promotionDetails: promotions.map(transition),

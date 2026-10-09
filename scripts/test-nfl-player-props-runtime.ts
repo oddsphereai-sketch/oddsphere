@@ -35,14 +35,14 @@ import {
 } from "../lib/services/football/nflPlayerPropsRuntime";
 import type { NflPlayerPropsExactOffer } from "../lib/services/football/nflPlayerPropsMarketBoard";
 
-assert.equal(NFL_PLAYER_PROPS_PORTABLE_ARTIFACT_RELEASE, "nfl_player_props_runtime_2026_10_08_r13_independent_receptions");
-assert.equal(NFL_PLAYER_PROPS_RUNTIME_RELEASE, "nfl_player_props_runtime_2026_10_08_r28_independent_receptions");
-assert.equal(NFL_PLAYER_PROPS_BOARD_RELEASE, "nfl_player_props_board_2026_10_08_r31_independent_receptions");
-assert.equal(NFL_PLAYER_PROPS_MODEL_RELEASE, "nfl_player_props_distribution_model_2026_10_08_r22_independent_receptions");
-assert.equal(NFL_PLAYER_PROPS_CALIBRATION_RELEASE, "nfl_player_props_distribution_calibration_2026_10_08_r24_independent_receptions");
-assert.equal(NFL_PLAYER_PROPS_DECISION_RELEASE, "nfl_player_props_decision_2026_10_08_r27_independent_receptions");
+assert.equal(NFL_PLAYER_PROPS_PORTABLE_ARTIFACT_RELEASE, "nfl_player_props_runtime_2026_10_09_r14_independent_receiving_yards");
+assert.equal(NFL_PLAYER_PROPS_RUNTIME_RELEASE, "nfl_player_props_runtime_2026_10_09_r29_independent_receiving_yards");
+assert.equal(NFL_PLAYER_PROPS_BOARD_RELEASE, "nfl_player_props_board_2026_10_09_r32_independent_receiving_yards");
+assert.equal(NFL_PLAYER_PROPS_MODEL_RELEASE, "nfl_player_props_distribution_model_2026_10_09_r23_independent_receiving_yards");
+assert.equal(NFL_PLAYER_PROPS_CALIBRATION_RELEASE, "nfl_player_props_distribution_calibration_2026_10_09_r25_independent_receiving_yards");
+assert.equal(NFL_PLAYER_PROPS_DECISION_RELEASE, "nfl_player_props_decision_2026_10_09_r28_independent_receiving_yards");
 assert.equal(expectedRoleArtifact.release,
-  "nfl_player_props_expected_role_runtime_2026_10_08_r5_receptions");
+  "nfl_player_props_expected_role_runtime_2026_10_09_r6_receiving_yards");
 assert.equal(expectedRoleArtifact.marketIndependent, true);
 assert.deepEqual(expectedRoleArtifact.marketFeatures, []);
 assert.equal("receptions" in expectedRoleArtifact, true,
@@ -53,6 +53,10 @@ assert.equal(expectedRoleArtifact.receptions.probability.challengerWeight, 0,
   "the board-flattening Receptions probability challenger cannot displace the incumbent head");
 assert.equal(expectedRoleArtifact.receptions.probability.challengerQualified, false);
 assert.equal(expectedRoleArtifact.receptions.probability.incumbentRetained, true);
+assert.equal(expectedRoleArtifact.receivingYards.blendWeight, 0.5);
+assert.deepEqual(expectedRoleArtifact.receivingYards.positions, ["WR"]);
+assert.equal(expectedRoleArtifact.receivingYards.yardsPerTargetLower, 0);
+assert.equal(expectedRoleArtifact.receivingYards.yardsPerTargetUpper, 30);
 assert.equal(expectedRoleArtifact.passingCompletions.blendWeight, 0.75);
 assert.equal(expectedRoleArtifact.passingCompletions.probability.challengerWeight, 0.5);
 assert.equal(expectedRoleArtifact.passingYards.blendWeight, 1);
@@ -149,13 +153,25 @@ const receivingRoleRows = [
 }));
 const receivingRoleScores = scoreNflPlayerPropsRuntimeFeatureRows(receivingRoleRows);
 let changedReceptions = 0;
+let changedReceivingYards = 0;
 for (const row of receivingRoleRows) {
   const score = receivingRoleScores.get(`${row.gameId}|${row.playerName.toLowerCase().replace(/[^a-z0-9]/g, "")}`)!;
   assert.ok(Number.isFinite(score.projections.receptions));
   assert.ok(Number.isFinite(score.foundationProjections?.receptions));
   changedReceptions += Number(score.projections.receptions !== score.foundationProjections?.receptions);
+  if (row.position === "WR") {
+    assert.ok(Number.isFinite(score.foundationProjections?.receiving_yards));
+    changedReceivingYards += Number(
+      score.projections.receiving_yards !== score.foundationProjections?.receiving_yards,
+    );
+  } else {
+    assert.equal(score.foundationProjections?.receiving_yards, undefined,
+      "the Receiving Yards point challenger cannot modify RB or TE projections");
+  }
 }
 assert.ok(changedReceptions > 0, "the released roster-normalized Receptions point head is active");
+assert.equal(changedReceivingYards, 1,
+  "the released Receiving Yards point head changes the WR row and only the WR row");
 
 const receiving = nflPlayerPropsRuntimeMarketPolicy("receiving_yards");
 assert.deepEqual(receiving, { weight: 0.2, qualified: false }, "historical lane qualification remains truthful under the owner-approved forward exception");
