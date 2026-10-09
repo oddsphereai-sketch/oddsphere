@@ -116,6 +116,7 @@ export type TrackingRefreshSummary = {
     providerRowsUpdated: number;
     gradesUpserted: number;
     pendingGradesScanned: number;
+    missingGradesScanned: number;
     candidateRecords: number;
     eligibleRecords: number;
     errors: string[];
@@ -240,6 +241,7 @@ export async function runTrackingRefresh(
       providerRowsUpdated: 0,
       gradesUpserted: 0,
       pendingGradesScanned: 0,
+      missingGradesScanned: 0,
       candidateRecords: 0,
       eligibleRecords: 0,
       errors: [],
@@ -607,10 +609,11 @@ export async function runTrackingRefresh(
   }
 
   // Repair historical rows that aged out of the ordinary
-  // yesterday/today/tomorrow window. For MLB only, each selected date gets one
-  // authoritative MLB Stats schedule/linescore read before grading. That lets
-  // old postponed games become void and lets completed rows recover missing
-  // full-game/FI results. No prediction_record decision field is rewritten.
+  // yesterday/today/tomorrow window. MLB and CFB selected dates use their
+  // existing authoritative score provider before grading. That lets old
+  // postponed games become void, lets completed rows recover missing results,
+  // and creates grades for locked records whose grade row was never written.
+  // No prediction_record decision field is rewritten.
   const oldestNormalDate = [...opts.dates].sort()[0];
   if (oldestNormalDate) {
     try {
@@ -621,6 +624,7 @@ export async function runTrackingRefresh(
       });
       summary.stalePendingRepair.datesDiscovered = discovery.dates;
       summary.stalePendingRepair.pendingGradesScanned = discovery.pendingGradesScanned;
+      summary.stalePendingRepair.missingGradesScanned = discovery.missingGradesScanned;
       summary.stalePendingRepair.candidateRecords = discovery.candidateRecords;
       summary.stalePendingRepair.eligibleRecords = discovery.eligibleRecords;
       summary.stalePendingRepair.errors.push(...discovery.errors);
@@ -635,6 +639,16 @@ export async function runTrackingRefresh(
           summary.stalePendingRepair.providerRowsUpdated += ingest.updatedCount;
           summary.stalePendingRepair.errors.push(
             ...ingest.errors.map((error) => `${slateDate}: linescore ${error.reason}`),
+          );
+        } else if (sport === "cfb") {
+          const ingest = await ingestCfbFinalScores({
+            supabase: opts.supabase,
+            slateDate,
+            apply: opts.apply,
+          });
+          summary.stalePendingRepair.providerRowsUpdated += ingest.updatedCount;
+          summary.stalePendingRepair.errors.push(
+            ...ingest.errors.map((error) => `${slateDate}: cfb-final-scores ${error.reason}`),
           );
         }
 
@@ -658,7 +672,11 @@ export async function runTrackingRefresh(
       );
     }
   }
-  summary.totals.linescores_updated += summary.stalePendingRepair.providerRowsUpdated;
+  if (sport === "mlb") {
+    summary.totals.linescores_updated += summary.stalePendingRepair.providerRowsUpdated;
+  } else if (sport === "cfb") {
+    summary.totals.final_scores_updated += summary.stalePendingRepair.providerRowsUpdated;
+  }
   summary.totals.grades_upserted += summary.stalePendingRepair.gradesUpserted;
   summary.totals.errors += summary.stalePendingRepair.errors.length;
   summary.globalErrors.push(...summary.stalePendingRepair.errors);
