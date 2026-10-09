@@ -46,8 +46,16 @@ import { nflFootballEvidenceStats } from "./footballMemberEvidence";
 import type { NflRegularSharpMarket, NflRegularSharpSplit } from "./sharpApiNflSplits";
 
 export const NFL_WEEK_ONE_HELD_MEMBER_FIXTURE_RELEASE =
-  "nfl_weekly_member_fixture_2026_10_08_r39_named_sequence" as const;
+  "nfl_weekly_member_fixture_2026_10_09_r41_professional_market_authority" as const;
 
+const NFL_MARKET_STATE_PRECEDING_MEMBER_RELEASE =
+  "nfl_v1_member_release_2026_10_09_r28_market_state_identity" as const;
+const NFL_MARKET_STATE_PRECEDING_DECISION_RELEASE =
+  "nfl_v1_daily_edge_decision_2026_10_09_r30_market_state_identity" as const;
+const NFL_NAMED_SEQUENCE_PRECEDING_MEMBER_RELEASE =
+  "nfl_v1_member_release_2026_10_08_r27_named_sequence" as const;
+const NFL_NAMED_SEQUENCE_PRECEDING_DECISION_RELEASE =
+  "nfl_v1_daily_edge_decision_2026_10_08_r29_named_sequence" as const;
 const NFL_PRECEDING_MEMBER_RELEASE =
   "nfl_v1_member_release_2026_10_05_r26_winner_coherence" as const;
 const NFL_PRECEDING_DECISION_RELEASE =
@@ -222,6 +230,12 @@ function latestCompleteRows(rows: NflForwardStoredEvidence[]): Array<NflForwardS
     row.payload.decisions.evaluatedBets.every((decision) =>
       decision.decisionRelease === NFL_V1_ACTIONABLE_GRADE_DECISION_RELEASE);
   const isPreviousAuthority = (row: NflForwardStoredEvidence & { payload: NflForwardEvidencePayload }) =>
+    (row.payload.decisions.modelPromotionStatus === NFL_MARKET_STATE_PRECEDING_MEMBER_RELEASE &&
+      row.payload.decisions.evaluatedBets.every((decision) =>
+        decision.decisionRelease === NFL_MARKET_STATE_PRECEDING_DECISION_RELEASE)) ||
+    (row.payload.decisions.modelPromotionStatus === NFL_NAMED_SEQUENCE_PRECEDING_MEMBER_RELEASE &&
+      row.payload.decisions.evaluatedBets.every((decision) =>
+        decision.decisionRelease === NFL_NAMED_SEQUENCE_PRECEDING_DECISION_RELEASE)) ||
     (row.payload.decisions.modelPromotionStatus === NFL_PRECEDING_MEMBER_RELEASE &&
       row.payload.decisions.evaluatedBets.every((decision) =>
         decision.decisionRelease === NFL_PRECEDING_DECISION_RELEASE)) ||

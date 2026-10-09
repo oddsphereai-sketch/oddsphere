@@ -349,6 +349,10 @@ assert.doesNotMatch(
   "the sole writer must not bypass target-excluded outcome resolution with the legacy direct grade builder",
 );
 assert.match(writer, /resolveNflTargetExcludedProduction/);
+assert.equal((writer.match(/buildNflProfessionalMarketAuthority\(\{/g) ?? []).length, 1,
+  "professional authority must be built only inside the evaluated-family exclusion loop");
+assert.equal((writer.match(/buildNflNamedMarketSequenceAuthority\(\{/g) ?? []).length, 1,
+  "named authority must be built only inside the evaluated-family exclusion loop");
 assert.match(writer, /forecastTargetExclusion: resolved\.targetExclusion/);
 assert.match(writer, /outcomeForecast: outcome/);
 assert.match(writer, /evaluatedBets: production\.evaluatedBets/);
@@ -361,7 +365,7 @@ assert.match(writer, /currentBooks/);
 assert.match(writer, /comparableCurrentBooks/);
 assert.match(writer, /multibook_consensus_unavailable/);
 assert.doesNotMatch(writer, /readLegacyNflForwardEvidence|readPriorNflForwardEvidence|readPreviousNflForwardEvidence/, "the live writer must not scan superseded large JSON releases");
-assert.match(writer, /nfl_forward_evidence_writer_2026_10_08_r57_named_sequence/);
+assert.match(writer, /nfl_forward_evidence_writer_2026_10_09_r59_professional_market_authority/);
 assert.match(writer, /mergeNflAvailabilityWithPrior/);
 assert.match(
   writer,

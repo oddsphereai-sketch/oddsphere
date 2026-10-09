@@ -64,6 +64,7 @@ import {
   nflForwardContextSharpHistoryBooks,
 } from "./nflForwardEvidenceCapture";
 import { buildNflNamedMarketSequenceAuthority } from "./nflNamedMarketSequence";
+import { buildNflProfessionalMarketAuthority } from "./nflProfessionalMarketAuthority";
 import {
   captureBooksWithSharpBooks,
   fetchSharpApiNflSharpOdds,
@@ -97,7 +98,7 @@ import {
 } from "./balldontlieNflWeeklyProjectionShadow";
 
 export const NFL_FORWARD_WRITER_RELEASE =
-  "nfl_forward_evidence_writer_2026_10_08_r57_named_sequence" as const;
+  "nfl_forward_evidence_writer_2026_10_09_r59_professional_market_authority" as const;
 
 export type NflForwardWriterResult = {
   writerRelease: typeof NFL_FORWARD_WRITER_RELEASE;
@@ -384,20 +385,13 @@ export async function runNflForwardEvidenceWriter(args: {
       spread: currentContextMarket("spread"),
       total: currentContextMarket("total"),
     };
-    const namedSequenceAuthority = buildNflNamedMarketSequenceAuthority({
-      evaluatedAt: capturedAt,
-      snapshots: [
-        ...historicalExisting.flatMap((row) =>
-          row.providerGameId === plan.game.providerGameId && row.capturedAt <= capturedAt && row.payload.contextualEvidenceCapture
-            ? [{ capturedAt: row.capturedAt, markets: row.payload.contextualEvidenceCapture.markets }]
-            : []),
-        { capturedAt, markets: currentContextMarkets },
-      ],
-      current,
-      playbookLine,
-      playbookSplits,
-      sharpSplits,
-    });
+    const namedSequenceSnapshots = [
+      ...historicalExisting.flatMap((row) =>
+        row.providerGameId === plan.game.providerGameId && row.capturedAt <= capturedAt && row.payload.contextualEvidenceCapture
+          ? [{ capturedAt: row.capturedAt, markets: row.payload.contextualEvidenceCapture.markets }]
+          : []),
+      { capturedAt, markets: currentContextMarkets },
+    ];
     const injuries = mergeNflAvailabilityWithPrior(
       availabilityByGame.get(plan.game.providerGameId) ?? null,
       latestVerifiedInjuriesForGame(historicalExisting, plan.game.providerGameId),
@@ -478,7 +472,6 @@ export async function runNflForwardEvidenceWriter(args: {
             directionHomeMarginCorrection: weeklyRawSignal.directionHomeMarginCorrection,
           } : undefined,
           paidTeamScore: paidProjectionShadow,
-          namedSequenceAuthority,
           evaluatedAt: capturedAt,
         })
       : baseOutcome;
@@ -506,7 +499,25 @@ export async function runNflForwardEvidenceWriter(args: {
         directionHomeMarginCorrection: weeklyRawSignal.directionHomeMarginCorrection,
       } : undefined,
       paidTeamScore: paidProjectionShadow,
-      namedSequenceAuthority,
+      namedSequenceAuthorityFactory: (excludedFamiliesByMarket) => buildNflNamedMarketSequenceAuthority({
+        evaluatedAt: capturedAt,
+        snapshots: namedSequenceSnapshots,
+        current,
+        playbookLine,
+        playbookSplits,
+        sharpSplits,
+        excludedFamiliesByMarket,
+        minimumFollowerSources: 2,
+      }),
+      professionalMarketAuthorityFactory: (excludedFamiliesByMarket) => buildNflProfessionalMarketAuthority({
+        evaluatedAt: capturedAt,
+        snapshots: namedSequenceSnapshots,
+        current,
+        playbookLine,
+        playbookSplits,
+        sharpSplits,
+        excludedFamiliesByMarket,
+      }),
     });
     const { outcome, production } = resolved;
     assertFootballCrossMarketCoherence({

@@ -15,12 +15,16 @@ import {
   type NflForwardOperationalOpening,
   type NflForwardStoredEvidence,
 } from "@/lib/services/football/nflForwardEvidence";
-import type { NflForwardContextFamily } from "@/lib/services/football/nflForwardEvidenceCapture";
 import { readNflForwardEvidence } from "@/lib/services/football/nflForwardEvidenceStore";
 import {
   buildNflNamedMarketSequenceAuthority,
   type NflNamedMarketSequenceAuthority,
 } from "@/lib/services/football/nflNamedMarketSequence";
+import { buildNflMarketState } from "@/lib/services/football/nflMarketState";
+import {
+  buildNflProfessionalMarketAuthority,
+  type NflProfessionalMarketAuthority,
+} from "@/lib/services/football/nflProfessionalMarketAuthority";
 
 type Market = "moneyline" | "spread" | "total";
 type Result = "win" | "loss" | "push";
@@ -37,6 +41,8 @@ type Variant = {
   direction: boolean;
   tieredCenterWeights?: readonly [isolated: number, corroborated: number, strong: number];
   namedSequenceAuthority?: boolean;
+  exactSequenceExclusion?: boolean;
+  professionalMarketAuthority?: boolean;
 };
 type Side = -1 | 1;
 type AuthorityRead = { side: Side | null; tier: 0 | 1 | 2 | 3; families: string[]; conflicts: string[] };
@@ -67,14 +73,62 @@ const VARIANTS: Record<string, Variant> = {
   tieredCenterBalanced: { publicSplits: false, sharpSplits: false, direction: true, tieredCenterWeights: [0.15, 0.45, 0.8] },
   tieredCenterAggressive: { publicSplits: false, sharpSplits: false, direction: true, tieredCenterWeights: [0.25, 0.6, 1] },
   namedSequenceOverride: { publicSplits: true, sharpSplits: true, direction: true, namedSequenceAuthority: true },
+  marketStateIdentityOnly: { publicSplits: true, sharpSplits: true, direction: true, namedSequenceAuthority: true,
+    exactSequenceExclusion: true },
+  professionalMarketReader: { publicSplits: true, sharpSplits: true, direction: true, professionalMarketAuthority: true },
 };
-
-function canonical(value: string): string {
-  return value.toLowerCase().replace(/[^a-z0-9]+/g, "");
-}
 
 function namedSequenceAuthority(game: Game): NflNamedMarketSequenceAuthority {
   return buildNflNamedMarketSequenceAuthority({
+    evaluatedAt: game.payload.capturedAt,
+    snapshots: game.histories.flatMap((row) => row.payload.contextualEvidenceCapture
+      ? [{ capturedAt: row.capturedAt, markets: row.payload.contextualEvidenceCapture.markets }]
+      : []),
+    current: game.payload.market.current,
+    playbookLine: game.payload.market.playbookLine,
+    playbookSplits: game.payload.market.playbookSplits,
+    sharpSplits: game.payload.market.sharpApiSplits,
+  });
+}
+
+function targetExcludedNamedSequenceAuthority(
+  game: Game,
+  excludedFamiliesByMarket: Record<Market, string[]>,
+): NflNamedMarketSequenceAuthority {
+  return buildNflNamedMarketSequenceAuthority({
+    evaluatedAt: game.payload.capturedAt,
+    snapshots: game.histories.flatMap((row) => row.payload.contextualEvidenceCapture
+      ? [{ capturedAt: row.capturedAt, markets: row.payload.contextualEvidenceCapture.markets }]
+      : []),
+    current: game.payload.market.current,
+    playbookLine: game.payload.market.playbookLine,
+    playbookSplits: game.payload.market.playbookSplits,
+    sharpSplits: game.payload.market.sharpApiSplits,
+    excludedFamiliesByMarket,
+    minimumFollowerSources: 2,
+  });
+}
+
+function professionalMarketAuthority(
+  game: Game,
+  excludedFamiliesByMarket?: Record<Market, string[]>,
+): NflProfessionalMarketAuthority {
+  return buildNflProfessionalMarketAuthority({
+    evaluatedAt: game.payload.capturedAt,
+    snapshots: game.histories.flatMap((row) => row.payload.contextualEvidenceCapture
+      ? [{ capturedAt: row.capturedAt, markets: row.payload.contextualEvidenceCapture.markets }]
+      : []),
+    current: game.payload.market.current,
+    playbookLine: game.payload.market.playbookLine,
+    playbookSplits: game.payload.market.playbookSplits,
+    sharpSplits: game.payload.market.sharpApiSplits,
+    excludedFamiliesByMarket,
+  });
+}
+
+function marketState(game: Game, market: Market) {
+  return buildNflMarketState({
+    market,
     evaluatedAt: game.payload.capturedAt,
     snapshots: game.histories.flatMap((row) => row.payload.contextualEvidenceCapture
       ? [{ capturedAt: row.capturedAt, markets: row.payload.contextualEvidenceCapture.markets }]
@@ -259,6 +313,7 @@ function replay(game: Game, variant: Variant): Replay {
     ? tieredPaidProjection(game, variant.tieredCenterWeights)
     : payload.paidProjectionShadow;
   const sequenceAuthority = variant.namedSequenceAuthority ? namedSequenceAuthority(game) : undefined;
+  const professionalAuthority = variant.professionalMarketAuthority ? professionalMarketAuthority(game) : undefined;
   const opening: NflForwardOperationalOpening | null = variant.direction ? payload.market.operationalOpening : null;
   const publicSplits = variant.publicSplits ? payload.market.playbookSplits : null;
   const sharpSplits = variant.sharpSplits ? payload.market.sharpApiSplits : null;
@@ -296,6 +351,7 @@ function replay(game: Game, variant: Variant): Replay {
         movementCurrent: variant.direction ? payload.market.current : null,
         paidTeamScore,
         namedSequenceAuthority: sequenceAuthority,
+        professionalMarketAuthority: professionalAuthority,
         evaluatedAt: payload.capturedAt,
       })
     : base;
@@ -318,6 +374,13 @@ function replay(game: Game, variant: Variant): Replay {
     totalDirectionCandidate: variant.direction,
     paidTeamScore,
     namedSequenceAuthority: sequenceAuthority,
+    namedSequenceAuthorityFactory: variant.exactSequenceExclusion
+      ? (excludedFamiliesByMarket) => targetExcludedNamedSequenceAuthority(game, excludedFamiliesByMarket)
+      : undefined,
+    professionalMarketAuthority: professionalAuthority,
+    professionalMarketAuthorityFactory: variant.professionalMarketAuthority
+      ? (excludedFamiliesByMarket) => professionalMarketAuthority(game, excludedFamiliesByMarket)
+      : undefined,
   });
   return { game, forecast: resolved.outcome, decisions: resolved.production.evaluatedBets };
 }
@@ -559,7 +622,7 @@ async function main() {
     if (typeof hash === "string") byHash.set(hash, [...(byHash.get(hash) ?? []), record]);
   }
   const hashes = [...byHash.keys()];
-  const history = (await Promise.all([3, 4].map((week) => readNflForwardEvidence({ client: supabase, season: 2026, week })))).flat();
+  const history = (await Promise.all([3, 4, 5].map((week) => readNflForwardEvidence({ client: supabase, season: 2026, week })))).flat();
   const evidenceRead = await supabase.from("nfl_forward_evidence_snapshots").select("payload_sha256,payload").in("payload_sha256", hashes);
   if (evidenceRead.error) throw new Error(evidenceRead.error.message);
   const games = (evidenceRead.data ?? []).flatMap((row): Game[] => {
@@ -577,9 +640,10 @@ async function main() {
         candidate.providerGameId === payload.game.providerGameId && candidate.capturedAt <= payload.capturedAt),
     }];
   }).sort((a, b) => a.payload.game.scheduledStart.localeCompare(b.payload.game.scheduledStart));
-  if (games.length < 17) throw new Error(`Expected at least 17 paid-projection games; got ${games.length}.`);
+  if (games.length < 18) throw new Error(`Expected at least 18 paid-projection games; got ${games.length}.`);
   const replays = Object.fromEntries(Object.entries(VARIANTS).map(([name, variant]) => [name, games.map((game) => replay(game, variant))]));
   const current = replays.current!;
+  const marketStateIdentity = replays.marketStateIdentityOnly!;
   const report = {
     release: "nfl_2026_paid_reconciliation_component_tournament_r1",
     readOnly: true,
@@ -590,6 +654,10 @@ async function main() {
       summary: summarize(rows),
       versusCurrent: name === "current" ? null : compare(current, rows),
       forecastVersusCurrent: name === "current" ? null : compareForecasts(current, rows),
+      versusMarketStateIdentity: name !== "professionalMarketReader" ? null : compare(marketStateIdentity, rows),
+      forecastVersusMarketStateIdentity: name !== "professionalMarketReader"
+        ? null
+        : compareForecasts(marketStateIdentity, rows),
     }])),
     constrainedProjectionSensitivity: [0, 0.25, 0.5, 0.75].map((strength) =>
       constrainedProjectionSummary(current, strength)),
@@ -601,11 +669,44 @@ async function main() {
     })), null, 2));
     return;
   }
+  if (process.argv.includes("--professional-authority")) {
+    console.log(JSON.stringify(games.map((game) => ({
+      game: `${game.payload.game.away.abbreviation}@${game.payload.game.home.abbreviation}`,
+      authority: professionalMarketAuthority(game, {
+        moneyline: [game.payload.decisions.evaluatedBets.find((decision) => decision.market === "moneyline")?.evaluatedQuote.sportsbook ?? game.payload.market.current.sportsbook],
+        spread: [game.payload.decisions.evaluatedBets.find((decision) => decision.market === "spread")?.evaluatedQuote.sportsbook ?? game.payload.market.current.sportsbook],
+        total: [game.payload.decisions.evaluatedBets.find((decision) => decision.market === "total")?.evaluatedQuote.sportsbook ?? game.payload.market.current.sportsbook],
+      }),
+    })), null, 2));
+    return;
+  }
+  if (process.env.NFL_MARKET_AUDIT_STATE_ONLY === "1") {
+    console.log(JSON.stringify(games.map((game) => ({
+      game: `${game.payload.game.away.abbreviation}@${game.payload.game.home.abbreviation}`,
+      state: Object.fromEntries(MARKETS.map((market) => [market, marketState(game, market)])),
+    })), null, 2));
+    return;
+  }
   if (process.env.NFL_MARKET_AUDIT_CANDIDATE_ONLY === "1") {
     console.log(JSON.stringify({
       current: report.variants.current,
       namedSequenceOverride: report.variants.namedSequenceOverride,
     }, null, 2));
+    return;
+  }
+  if (process.env.NFL_MARKET_AUDIT_R29_ONLY === "1") {
+    const names = [
+      "current",
+      "namedSequenceOverride",
+      "marketStateIdentityOnly",
+      "professionalMarketReader",
+    ];
+    console.log(JSON.stringify(Object.fromEntries(names.map((name) => [name, report.variants[name]])), null, 2));
+    return;
+  }
+  if (process.argv.includes("--professional")) {
+    const names = ["current", "marketStateIdentityOnly", "professionalMarketReader"];
+    console.log(JSON.stringify(Object.fromEntries(names.map((name) => [name, report.variants[name]])), null, 2));
     return;
   }
   if (process.env.NFL_MARKET_AUDIT_SUMMARY_ONLY === "1") {
