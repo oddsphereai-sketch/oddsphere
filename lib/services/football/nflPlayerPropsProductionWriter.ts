@@ -13,6 +13,7 @@ import {
   NFL_PLAYER_PROPS_CALIBRATION_RELEASE,
   NFL_PLAYER_PROPS_DECISION_RELEASE,
   NFL_PLAYER_PROPS_MODEL_RELEASE,
+  nflPlayerPropsRuntimePolicy,
   verifyNflPlayerPropsRuntimeParity,
 } from "./nflPlayerPropsRuntime";
 import {
@@ -42,9 +43,14 @@ import {
   selectNflPlayerPropsOverForecasts,
   selectNflPlayerPropsTouchdownScorers,
 } from "./nflPlayerPropsPrediction";
+import {
+  captureNflPlayerPropsMarketObserver,
+  captureNflPlayerPropsMarketObserverSafely,
+  type NflPlayerPropsMarketObserverSafeResult,
+} from "./nflPlayerPropsMarketObserverStore";
 
 export const NFL_PLAYER_PROPS_WRITER_RELEASE =
-  "nfl_player_props_writer_2026_10_09_r46_independent_receiving_yards" as const;
+  "nfl_player_props_writer_2026_10_09_r47_market_observer_capture" as const;
 export const NFL_PLAYER_PROPS_PRODUCTION_INCLUDE_OPENINGS = true as const;
 export const NFL_PLAYER_PROPS_PRODUCTION_COLLECTION_CALL_MAXIMUM = (
   1
@@ -122,6 +128,7 @@ export type NflPlayerPropsWriterResult = {
   apiCallsMaximum: number;
   healthFindings: string[];
   forecastTelemetry: NflPlayerPropsForecastTelemetry;
+  marketObserverCapture: NflPlayerPropsMarketObserverSafeResult | null;
   candidateImpact?: NflPlayerPropsCandidateImpact;
   liveImpact?: NflPlayerPropsCandidateImpact;
 };
@@ -281,6 +288,19 @@ export async function runNflPlayerPropsProductionWriter(args: {
   const settlement = args.apply
     ? await settleNflPlayerPropsRecords({ client: args.client, apiKey: args.ballDontLieApiKey, now: args.now, fetchImpl: args.fetchImpl })
     : { pending: 0, eligible: 0, eligibleGames: 0, processedGames: 0, deferredGames: 0, recordReadLimitReached: false, settled: 0, apiCalls: 0 };
+  // Capture is deliberately last and failure-isolated. The authoritative
+  // member snapshot, immutable lock/tracking rows, closing prices, and
+  // settlement have all completed before this internal research write runs.
+  const marketObserverCapture = args.apply
+    ? await captureNflPlayerPropsMarketObserverSafely(() => captureNflPlayerPropsMarketObserver({
+      client: args.client,
+      snapshot,
+      currentMarketEvidence: nextBoard.marketEvidence,
+      evaluatedAt: args.now,
+      maximumLockQuoteAgeHours: nflPlayerPropsRuntimePolicy().maximumQuoteAgeHours,
+      writerRelease: NFL_PLAYER_PROPS_WRITER_RELEASE,
+    }))
+    : null;
   const providerRequests = Object.values(collection.snapshot.providerRequests).reduce((sum, value) => sum + (value ?? 0), 0);
   if (providerRequests > NFL_PLAYER_PROPS_PRODUCTION_COLLECTION_CALL_MAXIMUM) {
     throw new Error(`NFL player props collection exceeded its ${NFL_PLAYER_PROPS_PRODUCTION_COLLECTION_CALL_MAXIMUM}-call production budget.`);
@@ -313,6 +333,7 @@ export async function runNflPlayerPropsProductionWriter(args: {
     settledRecords: settlement.settled,
     apiCallsMaximum,
     forecastTelemetry: summarizeNflPlayerPropsForecastTelemetry(snapshot),
+    marketObserverCapture,
     ...(candidateImpact ? { candidateImpact } : {}),
     ...(liveImpact ? { liveImpact } : {}),
     healthFindings: [...new Set([
@@ -320,6 +341,7 @@ export async function runNflPlayerPropsProductionWriter(args: {
       ...context.healthHolds,
       ...(settlement.deferredGames > 0 ? [`NFL_PLAYER_PROPS_SETTLEMENT_GAMES_DEFERRED:${settlement.deferredGames}`] : []),
       ...(settlement.recordReadLimitReached ? ["NFL_PLAYER_PROPS_SETTLEMENT_RECORD_READ_LIMIT_REACHED"] : []),
+      ...(marketObserverCapture?.error ? ["NFL_PLAYER_PROPS_MARKET_OBSERVER_CAPTURE_FAILED"] : []),
     ])].sort(),
   };
 }

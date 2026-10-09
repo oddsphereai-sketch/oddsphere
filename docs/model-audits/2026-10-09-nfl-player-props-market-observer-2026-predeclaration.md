@@ -74,3 +74,37 @@ forecast.
 
 No writer, cadence, T-60, lock, fallback, provider call, model release, grade, stake, copy, label,
 layout, or stored record is changed by this audit.
+
+## Prospective capture-only continuation
+
+The missing prospective evidence will be collected by the existing production writer only after
+its authoritative coherent member snapshot has written successfully. The capture is an internal,
+separately keyed research record. It consumes only the already-built exact offers, decisions, and
+market-evidence tuples from that writer cycle and must make zero additional provider requests.
+
+The immutable unit is one exact game / provider player (plus exact name) / prop family / canonical
+line / sportsbook / source class / observation landmark. It retains the evaluated target-side mask,
+the sportsbook's paired Over and Under prices (or the actually supplied Yes price for Anytime TD),
+the observed and fetched timestamps, scheduled start, T-60 lock, player position, and the model,
+calibration, decision, writer, and capture release stamps. A provider opening is retained only when
+the provider supplied a real `openingObservedAt`, opening line, and complete opening price tuple.
+First observed is never renamed as provider opening. No cross-book pair may be constructed.
+
+The prospective landmarks are:
+
+- true provider opening, while the game remains unlocked;
+- the first coherent observation at or after T-24 and before T-23;
+- the first coherent observation at or after T-6 and before T-5; and
+- the first coherent T-60 lock observation before kickoff.
+
+T-60 is the product lock, so there is no distinct post-T-60/pre-lock interval to manufacture. A
+later close can be added only if the provider and product later retain a genuine separately timed
+pre-lock close. Captured rows are append-only by deterministic identity: later cycles may add a
+missing book or landmark but may not replace an existing row, and nothing is added after kickoff.
+
+The store must enforce deterministic row, decoded-byte, and gzip-byte ceilings; source-time
+ordering; complete same-book prices; idempotent replay; and an exact release/schema checksum. A
+corrupt, oversized, failed, or unavailable capture is telemetry-only. It may not fail the writer,
+change or delay a prediction/member/locked snapshot, mutate a locked record, alter a probability,
+side, grade, stake, or board count, or affect tracking and settlement. Focused tests must prove
+these isolation, immutability, timestamp, identity, and size properties before publication.

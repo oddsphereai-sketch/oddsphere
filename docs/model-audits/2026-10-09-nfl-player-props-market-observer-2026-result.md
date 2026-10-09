@@ -9,7 +9,8 @@ families clears the frozen audit gate. Same-book opening-to-T-60 movement remain
 truthfully labeled context, but it has not earned authority over the independent forecast.
 
 This result changes no production model, probability, projection, side, grade, stake, board row,
-lock, tracking record, writer, schedule, provider call, copy, label, or layout.
+lock, tracking record, schedule, provider call, copy, label, or layout. The prospective continuation
+below changes only the writer release and adds a failure-isolated internal research snapshot.
 
 ## Exact scope
 
@@ -79,6 +80,29 @@ official outcome. Target/execution movement and target-excluded sharp/retail obs
 separate. This requires no new per-card provider loop if the existing slate-level capture persists
 the fields it already sees.
 
+## Prospective capture implementation
+
+Writer `nfl_player_props_writer_2026_10_09_r47_market_observer_capture` now appends the missing
+forward evidence to the separate internal key
+`nfl::player-props-market-observer::<season>::<week>`. It runs only after the coherent member
+snapshot, locked tracking rows, closing-price update, and settlement have completed. It consumes
+the already-built bounded market-evidence tuples and makes zero additional provider requests.
+
+For every canonical complete-board identity, it can retain each same-book true provider opening,
+T-24, T-6, and T-60/lock tuple with exact player/game/family/line, target-side mask, paired prices,
+source class, position, provider observation/fetch times, and model/capture releases. Provider
+opening requires a real opening timestamp, line, and complete opening prices. Missing opening is
+reported as missing and never replaced with first observed. T-60 is the product lock, so no
+post-T-60/pre-lock close is fabricated.
+
+Rows are deterministic and append-only. Same-cycle replay writes nothing; a later conflict keeps
+the first stored landmark; later cycles may only add a missing book or landmark. No row is added
+after kickoff. The store rejects source-time reversal, incomplete price pairs, stale retained lock
+quotes, corrupt checksums, more than 24,000 rows, more than 32 MB decoded JSON, or more than 2 MB
+gzip. Capture read/write/size failures return telemetry and the health finding
+`NFL_PLAYER_PROPS_MARKET_OBSERVER_CAPTURE_FAILED`; they cannot fail or mutate the already-completed
+production outputs.
+
 ## Next validation
 
 For each prop family independently:
@@ -101,6 +125,8 @@ than assume that movement is predictive. Every other family retains its own null
 ```bash
 python3 scripts/operator/audit_nfl_player_props_2026_market_observer_by_prop.py \
   --output /private/tmp/nfl-player-props-market-observer-r1.json
+
+npx tsx scripts/test-nfl-player-props-market-observer-store.ts
 ```
 
 Input release: `nfl_player_props_2026_locked_replay_rows_2026_10_08_r1`  
