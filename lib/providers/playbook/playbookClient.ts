@@ -23,6 +23,7 @@
 import type {
   PlaybookHealth,
   PlaybookInjuriesResponse,
+  PlaybookDocumentedInjuriesResponse,
   PlaybookLeague,
   PlaybookLinesResponse,
   PlaybookMe,
@@ -212,7 +213,13 @@ export class PlaybookClient {
   }
 
   injuries(league: PlaybookLeague | string): Promise<PlaybookResult<PlaybookInjuriesResponse>> {
-    return this.get<PlaybookInjuriesResponse>("/v1/injuries", { league });
+    const canonicalLeague = String(league).trim().toUpperCase();
+    return this.get<PlaybookDocumentedInjuriesResponse | PlaybookInjuriesResponse>("/v1/injuries", {
+      league: canonicalLeague,
+    }).then((result) => ({
+      ...result,
+      body: normalizePlaybookInjuriesResponse(result.body),
+    }));
   }
 
   // NOTE: Playbook also exposes context endpoints (teams, recent
@@ -221,4 +228,59 @@ export class PlaybookClient {
   // add typed methods under the
   // `o-mlb-playbook-context` ticket once each path is confirmed. Until then
   // callers can use get<T>(path) directly for one-off probing.
+}
+
+export function normalizePlaybookInjuriesResponse(
+  value: PlaybookDocumentedInjuriesResponse | PlaybookInjuriesResponse,
+): PlaybookInjuriesResponse {
+  if (Array.isArray((value as PlaybookInjuriesResponse).data)) {
+    return value as PlaybookInjuriesResponse;
+  }
+  const documented = value as PlaybookDocumentedInjuriesResponse;
+  const responseUpdatedAt = validPlaybookTimestamp(documented.last_updated) ??
+    validPlaybookTimestamp(documented.updatedAt);
+  const data = (documented.teams ?? []).flatMap((team) => {
+    const teamName = playbookText(team.team);
+    const teamAbbr = playbookText(team.abbr);
+    if (!teamName && !teamAbbr) return [];
+    const players = (team.injuries ?? []).flatMap((injury) => {
+      const name = playbookText(injury.player);
+      const status = playbookText(injury.status);
+      if (!name || !status) return [];
+      const detail = playbookText(injury.details) ?? playbookText(injury.injury);
+      return [{
+        name,
+        status,
+        reason: detail,
+      }];
+    });
+    const playerUpdatedAt = (team.injuries ?? [])
+      .map((injury) => validPlaybookTimestamp(injury.updated))
+      .filter((timestamp): timestamp is string => timestamp !== null)
+      .sort((first, second) => Date.parse(second) - Date.parse(first))[0] ?? null;
+    return [{
+      teamAbbr,
+      teamName,
+      players,
+      updatedAt: playerUpdatedAt ?? responseUpdatedAt,
+      reportDate: playbookText(documented.reportDate),
+      modelAuthorityEligible: false,
+    }];
+  });
+  return {
+    count: data.length,
+    requestsRemaining: documented.requestsRemaining,
+    reportDate: playbookText(documented.reportDate),
+    updatedAt: responseUpdatedAt,
+    data,
+  };
+}
+
+function playbookText(value: unknown): string | null {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function validPlaybookTimestamp(value: unknown): string | null {
+  const text = playbookText(value);
+  return text && Number.isFinite(Date.parse(text)) ? new Date(text).toISOString() : null;
 }

@@ -28,15 +28,15 @@ export const NFL_V1_OUTCOME_PROBABILITY_RELEASE =
 export const NFL_V1_REPRESENTATIVE_SCORE_POLICY_RELEASE =
   "nfl_v1_representative_score_2026_08_23_r2" as const;
 export const NFL_V1_WEEKLY_OUTCOME_MODEL_RELEASE =
-  "nfl_v1_weekly_paid_team_score_2026_10_09_r14_professional_market_authority" as const;
+  "nfl_v1_weekly_paid_team_score_2026_10_09_r15_provider_feed_continuity" as const;
 export const NFL_V1_WEEKLY_OUTCOME_DISTRIBUTION_RELEASE =
-  "nfl_pooled_discrete_residual_distribution_2026_10_09_r13_professional_market_authority" as const;
+  "nfl_pooled_discrete_residual_distribution_2026_10_09_r14_provider_feed_continuity" as const;
 export const NFL_V1_WEEKLY_OUTCOME_PROBABILITY_RELEASE =
-  "nfl_v1_weekly_pooled_discrete_probability_2026_10_09_r13_professional_market_authority" as const;
+  "nfl_v1_weekly_pooled_discrete_probability_2026_10_09_r14_provider_feed_continuity" as const;
 export const NFL_V1_MARKET_EVIDENCE_OUTCOME_RELEASE =
-  "nfl_v1_market_evidence_outcome_2026_10_09_r14_professional_market_authority" as const;
+  "nfl_v1_market_evidence_outcome_2026_10_09_r15_provider_feed_continuity" as const;
 export const NFL_V1_MARKET_EVIDENCE_REPRESENTATIVE_SCORE_RELEASE =
-  "nfl_v1_market_evidence_representative_score_2026_10_09_r13_professional_market_authority" as const;
+  "nfl_v1_market_evidence_representative_score_2026_10_09_r14_provider_feed_continuity" as const;
 export const NFL_V1_PAID_TEAM_SCORE_MODEL_RELEASE =
   "nfl_v1_paid_team_score_model_2026_10_08_r4_named_sequence" as const;
 export const NFL_V1_WEEKLY_RAW_SIGNAL_RELEASE =
@@ -51,11 +51,11 @@ export const NFL_V1_WEAK_EVIDENCE_REVERSAL_MINIMUM_ADVANTAGE = 0.025 as const;
 export const NFL_V1_PRICED_NEUTRAL_TOTAL_RELEASE =
   "nfl_v1_priced_neutral_total_2026_09_20_r1" as const;
 export const NFL_V1_OPENING_MARKET_SPREAD_DIRECTION_RELEASE =
-  "nfl_v1_opening_market_spread_direction_2026_10_09_r3_professional_market_authority" as const;
+  "nfl_v1_opening_market_spread_direction_2026_10_09_r4_provider_feed_continuity" as const;
 export const NFL_V1_OPENING_MARKET_TOTAL_DIRECTION_RELEASE =
-  "nfl_v1_opening_market_total_direction_2026_10_09_r3_professional_market_authority" as const;
+  "nfl_v1_opening_market_total_direction_2026_10_09_r4_provider_feed_continuity" as const;
 export const NFL_V1_CROSS_MARKET_WINNER_COHERENCE_RELEASE =
-  "nfl_v1_cross_market_winner_coherence_2026_10_09_r4_professional_market_authority" as const;
+  "nfl_v1_cross_market_winner_coherence_2026_10_09_r5_provider_feed_continuity" as const;
 export const NFL_V1_MONEYLINE_PRICE_MOVE_MINIMUM_PP = 1 as const;
 export const NFL_V1_MONEYLINE_PUBLIC_GAP_MINIMUM_PP = 8 as const;
 export const NFL_V1_MONEYLINE_SHARP_GAP_MINIMUM_PP = 10 as const;
@@ -94,7 +94,7 @@ export type NflV1WeekOneOutcomeForecast = {
       | "nfl_target_excluded_market_outcome_2026_10_05_r9_winner_coherence"
       | "nfl_target_excluded_market_outcome_2026_10_08_r10_named_sequence"
       | "nfl_target_excluded_market_outcome_2026_10_09_r11_market_state_identity"
-      | "nfl_target_excluded_market_outcome_2026_10_09_r12_professional_market_authority";
+      | "nfl_target_excluded_market_outcome_2026_10_09_r13_provider_feed_continuity";
     status: "target_excluded_market" | "incumbent_fallback";
     reason: "stable_complete_tuple" | "insufficient_or_unstable_target_free_evidence";
     marginFamilyCount: number | null;

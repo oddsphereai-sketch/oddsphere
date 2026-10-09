@@ -20,7 +20,7 @@ import type { NflNamedMarketSequenceAuthority } from "./nflNamedMarketSequence";
 import type { NflProfessionalMarketAuthority } from "./nflProfessionalMarketAuthority";
 
 export const NFL_TARGET_EXCLUDED_MARKET_OUTCOME_RELEASE =
-  "nfl_target_excluded_market_outcome_2026_10_09_r12_professional_market_authority" as const;
+  "nfl_target_excluded_market_outcome_2026_10_09_r13_provider_feed_continuity" as const;
 
 export type NflTargetExcludedMarketAnchor = {
   release: typeof NFL_TARGET_EXCLUDED_MARKET_OUTCOME_RELEASE;

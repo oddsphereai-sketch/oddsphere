@@ -11,17 +11,25 @@ import {
 } from "./cfbMemberFixture";
 
 export const CFB_FORWARD_MEMBER_SNAPSHOT_RELEASE =
-  "cfb_forward_member_snapshot_2026_10_09_r43_joint_moneyline_spread_reconciliation" as const;
+  "cfb_forward_member_snapshot_2026_10_09_r44_provider_feed_continuity" as const;
 export const CFB_FORWARD_PREVIOUS_MEMBER_SNAPSHOT_RELEASE =
-  "cfb_forward_member_snapshot_2026_10_08_r39_independent_price_spread_lane" as const;
+  "cfb_forward_member_snapshot_2026_10_09_r43_joint_moneyline_spread_reconciliation" as const;
 export const CFB_PREVIOUS_MEMBER_FIXTURE_RELEASE =
-  "cfb_v1_member_fixture_2026_10_08_r79_independent_price_spread_lane" as const;
+  "cfb_v1_member_fixture_2026_10_09_r83_joint_moneyline_spread_reconciliation" as const;
 export const CFB_PREVIOUS_EVIDENCE_RELEASE =
-  "cfb_forward_evidence_snapshot_2026_10_08_r39_independent_price_spread_lane" as const;
+  "cfb_forward_evidence_snapshot_2026_10_09_r43_joint_moneyline_spread_reconciliation" as const;
 export const CFB_PREVIOUS_MEMBER_RELEASE =
-  "cfb_v1_member_release_2026_10_08_r53_independent_price_spread_lane" as const;
+  "cfb_v1_member_release_2026_10_09_r57_joint_moneyline_spread_reconciliation" as const;
 export const CFB_MEMBER_SNAPSHOT_READER_RELEASE =
-  "cfb_member_snapshot_reader_2026_10_09_r28_joint_moneyline_spread_reconciliation" as const;
+  "cfb_member_snapshot_reader_2026_10_09_r29_provider_feed_continuity" as const;
+const CFB_COMPLETE_READER_PREVIOUS_MEMBER_SNAPSHOT_RELEASE =
+  "cfb_forward_member_snapshot_2026_10_08_r39_independent_price_spread_lane" as const;
+const CFB_COMPLETE_READER_PREVIOUS_MEMBER_FIXTURE_RELEASE =
+  "cfb_v1_member_fixture_2026_10_08_r79_independent_price_spread_lane" as const;
+const CFB_COMPLETE_READER_PREVIOUS_EVIDENCE_RELEASE =
+  "cfb_forward_evidence_snapshot_2026_10_08_r39_independent_price_spread_lane" as const;
+const CFB_COMPLETE_READER_PREVIOUS_MEMBER_RELEASE =
+  "cfb_v1_member_release_2026_10_08_r53_independent_price_spread_lane" as const;
 
 export const CFB_FORWARD_MEMBER_SNAPSHOT_MAX_JSON_BYTES = 8_000_000;
 export const CFB_FORWARD_MEMBER_SNAPSHOT_MAX_GZIP_BYTES = 1_000_000;
@@ -60,6 +68,12 @@ const SUPPORTED_MEMBER_SNAPSHOT_RELEASES = [
     fixtureRelease: CFB_PREVIOUS_MEMBER_FIXTURE_RELEASE,
     evidenceRelease: CFB_PREVIOUS_EVIDENCE_RELEASE,
     memberRelease: CFB_PREVIOUS_MEMBER_RELEASE,
+  },
+  {
+    snapshotRelease: CFB_COMPLETE_READER_PREVIOUS_MEMBER_SNAPSHOT_RELEASE,
+    fixtureRelease: CFB_COMPLETE_READER_PREVIOUS_MEMBER_FIXTURE_RELEASE,
+    evidenceRelease: CFB_COMPLETE_READER_PREVIOUS_EVIDENCE_RELEASE,
+    memberRelease: CFB_COMPLETE_READER_PREVIOUS_MEMBER_RELEASE,
   },
 ] as const;
 

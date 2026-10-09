@@ -9,11 +9,13 @@ import {
   isPlaybookPregameCandidate,
   selectPlaybookObservationGames,
 } from "../lib/services/syncPublicSplitsObservations";
+import { normalizePlaybookInjuriesResponse } from "../lib/providers/playbook/playbookClient";
 
 const originalFetch = globalThis.fetch;
 const originalApiKey = process.env.PLAYBOOK_API_KEY;
 let calls = 0;
 let failNext = false;
+const seenUrls: URL[] = [];
 
 globalThis.fetch = async (input) => {
   calls += 1;
@@ -22,6 +24,7 @@ globalThis.fetch = async (input) => {
     return new Response(JSON.stringify({ error: "temporary" }), { status: 503 });
   }
   const url = new URL(String(input));
+  seenUrls.push(url);
   return new Response(JSON.stringify({
     league: url.searchParams.get("league"),
     count: 0,
@@ -44,10 +47,15 @@ try {
   await broker.splits("mlb");
   assert.equal(calls, 3, "different endpoint/league keys must remain isolated");
 
+  const injuries = await broker.injuries("ncaaf");
+  assert.equal(calls, 4);
+  assert.equal(injuries.body.data.length, 0);
+  assert.equal(seenUrls.at(-1)?.searchParams.get("league"), "NCAAF", "injury requests must use Playbook's canonical league identity");
+
   failNext = true;
   await assert.rejects(() => broker.splitsHistory("wnba", "2026-09-20"));
   await broker.splitsHistory("wnba", "2026-09-20");
-  assert.equal(calls, 5, "a failed read must not poison the in-flight cache");
+  assert.equal(calls, 6, "a failed read must not poison the in-flight cache");
 
   process.env.PLAYBOOK_API_KEY = "unit-test-key";
   const sharedLeague = `unit-${Date.now()}`;
@@ -60,6 +68,35 @@ try {
   assert.equal(playbookSplitsReadMode("2026-09-27", "2026-09-26"), "current");
   assert.equal(playbookSplitsReadMode("2026-09-25", "2026-09-26"), "history");
   assert.ok(PLAYBOOK_CURRENT_CACHE_SECONDS < 15 * 60, "current cache must stay inside split freshness");
+
+  const normalizedInjuries = normalizePlaybookInjuriesResponse({
+    league: "NCAAF",
+    last_updated: "2026-10-09T18:00:00Z",
+    teams: [{
+      team: "Florida State Seminoles",
+      abbr: "FSU",
+      injuries: [{
+        player: "Example Quarterback",
+        status: "Questionable",
+        injury: "Shoulder",
+        details: "Limited in practice",
+        updated: "2026-10-09T17:30:00Z",
+      }],
+    }],
+  });
+  assert.deepEqual(normalizedInjuries.data, [{
+    teamAbbr: "FSU",
+    teamName: "Florida State Seminoles",
+    players: [{ name: "Example Quarterback", status: "Questionable", reason: "Limited in practice" }],
+    updatedAt: "2026-10-09T17:30:00.000Z",
+    reportDate: null,
+    modelAuthorityEligible: false,
+  }]);
+  assert.equal(normalizePlaybookInjuriesResponse({
+    league: "NCAAF",
+    updatedAt: "2026-10-09T18:15:00Z",
+    teams: [{ team: "Empty Team", abbr: "EMP", injuries: [] }],
+  }).data[0]?.updatedAt, "2026-10-09T18:15:00.000Z", "documented updatedAt sync metadata must remain supported");
 
   const now = new Date("2026-09-26T16:00:00Z");
   assert.equal(isPlaybookPregameCandidate({

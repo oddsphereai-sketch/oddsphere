@@ -149,6 +149,40 @@ const playbook = buildCfbGameAvailability({
 });
 assert.equal(playbook?.source, "Playbook", "the paid Playbook report must retain source precedence");
 
+const retainedAfterOmission = buildCfbGameAvailability({
+  game,
+  capturedAt: "2026-10-08T00:00:00.000Z",
+  playbookRows: [],
+  conferenceReport: null,
+  previous: playbook,
+});
+assert.deepEqual(retainedAfterOmission, playbook, "a later provider omission must not erase the last verified report");
+
+const retainedAgainstOlderReplay = buildCfbGameAvailability({
+  game,
+  capturedAt: "2026-10-08T00:00:00.000Z",
+  playbookRows: [
+    { teamAbbr: "ALP", teamName: "Alpha Wolves", updatedAt: "2026-10-07T22:00:00.000Z", players: [{ name: "Alex Able", status: "Questionable" }] },
+    { teamAbbr: "BET", teamName: "Beta Bears", updatedAt: "2026-10-07T22:00:00.000Z", players: [] },
+  ],
+  conferenceReport: null,
+  previous: playbook,
+});
+assert.deepEqual(retainedAgainstOlderReplay, playbook, "an older provider report must not replace newer retained evidence");
+
+const verifiedClearReport = buildCfbGameAvailability({
+  game,
+  capturedAt: "2026-10-08T02:30:00.000Z",
+  playbookRows: [
+    { teamAbbr: "ALP", teamName: "Alpha Wolves", updatedAt: "2026-10-08T02:00:00.000Z", players: [] },
+    { teamAbbr: "BET", teamName: "Beta Bears", updatedAt: "2026-10-08T02:00:00.000Z", players: [] },
+  ],
+  conferenceReport: null,
+  previous: playbook,
+});
+assert.equal(verifiedClearReport?.reportUpdatedAt, "2026-10-08T02:00:00.000Z", "empty current team reports must retain the provider sync timestamp");
+assert.equal(verifiedClearReport?.teams.every((team) => team.players.length === 0), true, "a newer verified clear report may replace prior injuries");
+
 assert.equal(shouldFetchCfbOfficialConferenceAvailability({ games: [game], existing: [], now: "2026-10-07T16:00:00.000Z" }), true);
 assert.equal(shouldFetchCfbOfficialConferenceAvailability({
   games: [game],
