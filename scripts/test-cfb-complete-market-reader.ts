@@ -3,6 +3,7 @@ import {
   applyCfbCompleteMarketReader,
   CFB_COMPLETE_MARKET_READER_ARTIFACT_RELEASE,
   CFB_COMPLETE_MARKET_READER_RELEASE,
+  resolveCfbSupportAwareTotalFlip,
 } from "../lib/services/football/cfbCompleteMarketReader";
 import type { CfbForwardMarketReaderObservation } from "../lib/services/football/cfbForwardEvidenceCapture";
 import { summarizePmf } from "../lib/services/football/cfbMarketSharpAwareShadow";
@@ -98,7 +99,22 @@ assert.ok(Math.abs(independent.forecast.expectedTotal -
   (independent.forecast.expectedHomePoints + independent.forecast.expectedAwayPoints)) < 1e-9);
 assert.ok(Math.abs(independent.forecast.pmf.reduce((sum, cell) => sum + cell.probability, 0) - 1) < 1e-9);
 assert.ok(independent.forecast.expectedAwayPoints >= 0 && independent.forecast.expectedHomePoints >= 0);
-assert.match(CFB_COMPLETE_MARKET_READER_RELEASE, /target_excluded_sequence/);
-assert.equal(CFB_COMPLETE_MARKET_READER_ARTIFACT_RELEASE, "cfb_market_reader_artifact_2026_10_08_r1");
+assert.match(CFB_COMPLETE_MARKET_READER_RELEASE, /support_aware_reconciliation/);
+assert.equal(CFB_COMPLETE_MARKET_READER_ARTIFACT_RELEASE, "cfb_market_reader_artifact_2026_10_09_r3_support_aware_reconciliation");
 
-console.log("CFB complete market-reader target exclusion and score-coherence tests passed.");
+assert.equal(resolveCfbSupportAwareTotalFlip({
+  active: 57,
+  boundary: 60,
+  proposed: 62,
+  maximumChronologicalActiveMarketDistance: 4,
+}), 63, "inside chronological support, the validated full reflection remains authoritative");
+const containedExtrapolation = resolveCfbSupportAwareTotalFlip({
+  active: 45,
+  boundary: 60,
+  proposed: 75,
+  maximumChronologicalActiveMarketDistance: 4,
+});
+assert.ok(containedExtrapolation > 60, "support containment must never veto a qualified side flip");
+assert.ok(containedExtrapolation < 75, "out-of-support projection reflection must decay continuously");
+
+console.log("CFB professional market-reader target exclusion, no-split, and score-coherence tests passed.");

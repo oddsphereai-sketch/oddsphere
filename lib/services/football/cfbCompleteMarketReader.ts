@@ -17,9 +17,9 @@ import {
 import type { CfbV1Forecast } from "./cfbV1Decision";
 
 export const CFB_COMPLETE_MARKET_READER_RELEASE =
-  "cfb_complete_market_reader_2026_10_09_r1_target_excluded_sequence" as const;
+  "cfb_complete_market_reader_2026_10_09_r3_support_aware_reconciliation" as const;
 export const CFB_COMPLETE_MARKET_READER_ARTIFACT_RELEASE =
-  "cfb_market_reader_artifact_2026_10_08_r1" as const;
+  "cfb_market_reader_artifact_2026_10_09_r3_support_aware_reconciliation" as const;
 
 type Market = "moneyline" | "spread" | "total";
 type Axis = "margin" | "total";
@@ -36,7 +36,11 @@ type Artifact = {
   trainedThrough: string;
   games: number;
   margin: { evidenceScale: number; model: RidgeModel };
-  total: { evidenceScale: number; model: RidgeModel };
+  total: {
+    evidenceScale: number;
+    reflectionSupport: { maximumChronologicalActiveMarketDistance: number };
+    model: RidgeModel;
+  };
 };
 type Observation = {
   capturedAt: string;
@@ -59,6 +63,8 @@ type SplitRead = {
   provenance: "named_sharp" | "fallback" | "public";
   side: Side;
   gapPp: number;
+  moneyPct: number;
+  ticketsPct: number;
   moneyAccelerationPp: number | null;
 };
 
@@ -102,7 +108,11 @@ export function applyCfbCompleteMarketReader(args: {
     kickoffAt: args.kickoffAt,
     observations,
   };
-  const marginFeatures = residualFeatures(base, "margin");
+  const marginFeatures = reconciliationMarginFeatures(
+    residualFeatures(base, "margin"),
+    args.forecast.expectedMarginHome,
+    args.independentForecast.expectedMarginHome,
+  );
   const totalFeatures = constrainedMarketFeatures(residualFeatures(base, "total"), "total");
   const marginEvidenceAvailable = hasObservedAxisEvidence(marginFeatures, "margin");
   const totalEvidenceAvailable = hasObservedAxisEvidence(totalFeatures, "total");
@@ -115,7 +125,15 @@ export function applyCfbCompleteMarketReader(args: {
   const totalBoundary = totalFeatures.total_all_current_axis;
   const totalSideFlipped = totalBoundary !== undefined &&
     lineWinner(proposedTotal, totalBoundary) !== lineWinner(args.forecast.expectedTotal, totalBoundary);
-  const finalTotal = totalSideFlipped ? 2 * totalBoundary! - args.forecast.expectedTotal : args.forecast.expectedTotal;
+  const finalTotal = totalSideFlipped
+    ? resolveCfbSupportAwareTotalFlip({
+      active: args.forecast.expectedTotal,
+      boundary: totalBoundary!,
+      proposed: proposedTotal,
+      maximumChronologicalActiveMarketDistance:
+        ARTIFACT.total.reflectionSupport.maximumChronologicalActiveMarketDistance,
+    })
+    : args.forecast.expectedTotal;
 
   const marginPmf = tiltCfbMarginWithinTotals(
     args.forecast.pmf,
@@ -137,10 +155,32 @@ export function applyCfbCompleteMarketReader(args: {
   };
 }
 
+export function resolveCfbSupportAwareTotalFlip(args: {
+  active: number;
+  boundary: number;
+  proposed: number;
+  maximumChronologicalActiveMarketDistance: number;
+}): number {
+  const reflected = 2 * args.boundary - args.active;
+  const activeMarketDistance = Math.abs(args.active - args.boundary);
+  const support = args.maximumChronologicalActiveMarketDistance;
+  if (activeMarketDistance <= support) return reflected;
+
+  const proposedDirection = Math.sign(args.proposed - args.boundary);
+  const supportedProposed = args.boundary + proposedDirection * Math.min(
+    Math.abs(args.proposed - args.boundary),
+    support,
+  );
+  const reflectionWeight = Math.exp(-(activeMarketDistance - support) / support);
+  return reflectionWeight * reflected + (1 - reflectionWeight) * supportedProposed;
+}
+
 function assertArtifact(): void {
   if (
     ARTIFACT.release !== CFB_COMPLETE_MARKET_READER_ARTIFACT_RELEASE ||
-    ARTIFACT.games !== 303 ||
+    ARTIFACT.games !== 301 ||
+    !Number.isFinite(ARTIFACT.total.reflectionSupport.maximumChronologicalActiveMarketDistance) ||
+    ARTIFACT.total.reflectionSupport.maximumChronologicalActiveMarketDistance <= 0 ||
     ARTIFACT.margin.model.beta.length !== ARTIFACT.margin.model.names.length + 1 ||
     ARTIFACT.total.model.beta.length !== ARTIFACT.total.model.names.length + 1
   ) {
@@ -290,42 +330,60 @@ function playbookSide(split: CfbForwardPlaybookSplit, market: Market): {
   side: Side;
   gap: number;
   money: number;
+  tickets: number;
 } | null {
   if (market === "total") {
     if ([split.overMoneyPct, split.overBetsPct, split.underMoneyPct, split.underBetsPct].some((value) => value === null)) return null;
     const first = split.overMoneyPct! - split.overBetsPct!;
     const second = split.underMoneyPct! - split.underBetsPct!;
-    return Math.max(Math.abs(first), Math.abs(second)) >= 8
-      ? { side: first >= second ? "first" : "second", gap: first >= second ? first : second, money: first >= second ? split.overMoneyPct! : split.underMoneyPct! }
-      : null;
+    if (Math.max(Math.abs(first), Math.abs(second)) < 1e-9) return null;
+    return {
+      side: first >= second ? "first" : "second",
+      gap: first >= second ? first : second,
+      money: first >= second ? split.overMoneyPct! : split.underMoneyPct!,
+      tickets: first >= second ? split.overBetsPct! : split.underBetsPct!,
+    };
   }
   if ([split.awayMoneyPct, split.awayBetsPct, split.homeMoneyPct, split.homeBetsPct].some((value) => value === null)) return null;
   const first = split.awayMoneyPct! - split.awayBetsPct!;
   const second = split.homeMoneyPct! - split.homeBetsPct!;
-  return Math.max(Math.abs(first), Math.abs(second)) >= 8
-    ? { side: first >= second ? "first" : "second", gap: first >= second ? first : second, money: first >= second ? split.awayMoneyPct! : split.homeMoneyPct! }
-    : null;
+  if (Math.max(Math.abs(first), Math.abs(second)) < 1e-9) return null;
+  return {
+    side: first >= second ? "first" : "second",
+    gap: first >= second ? first : second,
+    money: first >= second ? split.awayMoneyPct! : split.homeMoneyPct!,
+    tickets: first >= second ? split.awayBetsPct! : split.homeBetsPct!,
+  };
 }
 
 function sharpSide(record: CfbSharpApiSplitRecord, market: Market): {
   side: Side;
   gap: number;
   money: number;
+  tickets: number;
 } | null {
   if (market === "total" && record.total) {
     const first = splitGap(record.total.over);
     const second = splitGap(record.total.under);
-    return Math.max(Math.abs(first), Math.abs(second)) >= 10
-      ? { side: first >= second ? "first" : "second", gap: first >= second ? first : second, money: first >= second ? record.total.over.moneyPct : record.total.under.moneyPct }
-      : null;
+    if (Math.max(Math.abs(first), Math.abs(second)) < 1e-9) return null;
+    return {
+      side: first >= second ? "first" : "second",
+      gap: first >= second ? first : second,
+      money: first >= second ? record.total.over.moneyPct : record.total.under.moneyPct,
+      tickets: first >= second ? record.total.over.ticketsPct : record.total.under.ticketsPct,
+    };
   }
   const value = market === "moneyline" ? record.moneyline : record.spread;
   if (!value) return null;
   const first = splitGap(value.away);
   const second = splitGap(value.home);
-  return Math.max(Math.abs(first), Math.abs(second)) >= 10
-    ? { side: first >= second ? "first" : "second", gap: first >= second ? first : second, money: first >= second ? value.away.moneyPct : value.home.moneyPct }
-    : null;
+  if (Math.max(Math.abs(first), Math.abs(second)) < 1e-9) return null;
+  return {
+    side: first >= second ? "first" : "second",
+    gap: first >= second ? first : second,
+    money: first >= second ? value.away.moneyPct : value.home.moneyPct,
+    tickets: first >= second ? value.away.ticketsPct : value.home.ticketsPct,
+  };
 }
 
 function splitReads(observations: Observation[], market: Market): SplitRead[] {
@@ -334,6 +392,7 @@ function splitReads(observations: Observation[], market: Market): SplitRead[] {
     side: Side;
     gap: number;
     money: number;
+    tickets: number;
     provenance: SplitRead["provenance"];
   }>>();
   for (const observation of observations) {
@@ -373,6 +432,8 @@ function splitReads(observations: Observation[], market: Market): SplitRead[] {
       provenance: last.provenance,
       side: last.side,
       gapPp: last.gap,
+      moneyPct: last.money,
+      ticketsPct: last.tickets,
       moneyAccelerationPp: last.side === firstComparable.side ? last.money - firstComparable.money : null,
     }];
   });
@@ -417,9 +478,19 @@ function residualFeatures(args: {
   for (const provenance of ["named_sharp", "fallback", "public"] as const) {
     const selected = reads.filter((read) => read.provenance === provenance);
     const signed = average(selected.map((read) => signedSplit(read, axis)));
+    const signedMoneyMajority = average(selected.map((read) => {
+      const positive = axis === "margin" ? read.side === "second" : read.side === "first";
+      return (positive ? 1 : -1) * (read.moneyPct - 50);
+    }));
+    const signedTicketMajority = average(selected.map((read) => {
+      const positive = axis === "margin" ? read.side === "second" : read.side === "first";
+      return (positive ? 1 : -1) * (read.ticketsPct - 50);
+    }));
     const acceleration = average(selected.flatMap((read) =>
       read.moneyAccelerationPp === null ? [] : [Math.sign(signedSplit(read, axis)) * Math.abs(read.moneyAccelerationPp)]));
     if (signed !== null) output[`split_${provenance}`] = signed;
+    if (signedMoneyMajority !== null) output[`split_${provenance}_money_majority`] = signedMoneyMajority;
+    if (signedTicketMajority !== null) output[`split_${provenance}_ticket_majority`] = signedTicketMajority;
     if (acceleration !== null) output[`split_${provenance}_acceleration`] = acceleration;
     output[`split_${provenance}_count`] = selected.length;
     if (signed !== null && output.market_path !== undefined) {
@@ -438,6 +509,29 @@ function residualFeatures(args: {
   const retailMove = output[`${primaryMarket}_retail_axis_move`];
   if (namedMove !== undefined && retailMove !== undefined) {
     output.named_retail_move_product = namedMove * retailMove;
+  }
+  return output;
+}
+
+function reconciliationMarginFeatures(
+  raw: Record<string, number>,
+  activeMargin: number,
+  independentMargin: number,
+): Record<string, number> {
+  const output = { ...raw };
+  const legacyShift = activeMargin - independentMargin;
+  output.active_margin = activeMargin;
+  output.legacy_margin_shift = legacyShift;
+  output.legacy_margin_shift_abs = Math.abs(legacyShift);
+  output.legacy_moneyline_side_changed = Number(lineWinner(activeMargin, 0) !== lineWinner(independentMargin, 0));
+  const current = output.spread_all_current_axis;
+  if (current !== undefined) {
+    output.active_market_disagreement = current - activeMargin;
+    output.active_market_disagreement_abs = Math.abs(current - activeMargin);
+    output.independent_market_disagreement_abs = Math.abs(current - independentMargin);
+    output.legacy_market_distance_change = Math.abs(current - activeMargin) - Math.abs(current - independentMargin);
+    output.legacy_spread_side_changed = Number(lineWinner(activeMargin, current) !== lineWinner(independentMargin, current));
+    output.legacy_reflection_signature = legacyShift * (current - independentMargin);
   }
   return output;
 }
@@ -469,12 +563,18 @@ function constrainedMarketFeatures(raw: Record<string, number>, axis: Axis): Rec
     "named_retail_axis_gap",
     "named_retail_move_product",
     "split_named_sharp",
+    "split_named_sharp_money_majority",
+    "split_named_sharp_ticket_majority",
     "split_named_sharp_acceleration",
     "split_named_sharp_path_alignment",
     "split_fallback",
+    "split_fallback_money_majority",
+    "split_fallback_ticket_majority",
     "split_fallback_acceleration",
     "split_fallback_path_alignment",
     "split_public",
+    "split_public_money_majority",
+    "split_public_ticket_majority",
     "split_public_acceleration",
     "split_public_path_alignment",
   ];

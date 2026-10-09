@@ -1,7 +1,8 @@
 # CFB complete market-reading audit — result
 
-Status: corrected target-excluded replay complete; owner-approved provisional release implemented
-for production review. No locked historical payload is changed or reinterpreted.
+Status: superseded audit checkpoint. It was never owner-approved or published. No locked historical
+payload is changed or reinterpreted. The professional reconciliation candidate and its approval
+status are documented in `2026-10-09-cfb-professional-market-reconciliation-result.md`.
 
 ## October 9 integrity correction and corrected result
 
@@ -190,8 +191,8 @@ manufactured without a defensible market denominator.
 At the time of the preliminary run, this candidate was not live. The October 7 holdout contained
 only three games and the evidence-authority rule was outcome-informed diagnostic work. The exact
 replay satisfied coherence and board-shape gates but did not create a new untouched performance
-sample. The owner subsequently approved the provisional exception; the corrected target-excluded
-replay above is the release-authorizing evidence.
+sample. The checkpoint was not approved. Its corrected target-excluded replay became input to the
+later professional reconciliation audit; it is not release-authorizing evidence by itself.
 
 The unrestricted strong-conflict Total row has a material correction advantage and improves
 reflected Total error (14.51 to 12.68 points on disagreements), but its paired one-sided correction
@@ -230,9 +231,9 @@ not reliably create excess returns:
 - [Nonmonotonic market-sequence response](https://ideas.repec.org/a/inm/ormnsc/v70y2024i12p8583-8611.html)
 - [Key-number demand discontinuities and returns](https://ideas.repec.org/a/eee/finlet/v104y2026ics154461232600721x.html)
 
-## Production decision
+## Superseded proposed production decision
 
-Release the corrected, owner-approved provisional reader through the sole CFB writer. Do not apply a
+This proposal was not approved or published. Do not apply a
 generic market weight, capped cosmetic nudge, RLM flip, named-book flip or consensus flip.
 
 Moneyline and Spread evidence may continuously move the shared margin axis only when a genuine
@@ -242,8 +243,7 @@ fully reflects the opposite conviction. The final home/away score is regenerated
 the displayed score, Moneyline, Spread, Total and probabilities stay coherent. Missing splits alone
 never create a No Play.
 
-This is a provisional evidence-backed release, not proof of permanent edge. Evaluate future locked
-performance by the new release identifier and never blend it with the October 8 release.
+The later candidate requires explicit owner approval and a clean pull request before publication.
 
 The audit remains reproducible with
 `scripts/operator/audit-cfb-2026-sharp-sequence-tournament.ts`.

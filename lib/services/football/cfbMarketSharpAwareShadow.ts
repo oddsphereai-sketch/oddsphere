@@ -18,11 +18,11 @@ import {
 import { evaluateCfbHolisticConfidence } from "./cfbHolisticConfidenceCandidate";
 
 export const CFB_MARKET_SHARP_AWARE_CANDIDATE_RELEASE =
-  "cfb_market_sharp_aware_candidate_2026_10_09_r30_complete_market_reader" as const;
+  "cfb_market_sharp_aware_candidate_2026_10_09_r32_support_aware_reconciliation" as const;
 export const CFB_MARKET_SHARP_AWARE_SHADOW_RELEASE =
   CFB_MARKET_SHARP_AWARE_CANDIDATE_RELEASE;
 export const CFB_MARKET_SHARP_AWARE_PRODUCTION_RELEASE =
-  "cfb_market_sharp_aware_production_2026_10_09_r32_complete_market_reader" as const;
+  "cfb_market_sharp_aware_production_2026_10_09_r34_support_aware_reconciliation" as const;
 export const CFB_MARKET_SHARP_AWARE_COMPLETE_READER_PREVIOUS_PRODUCTION_RELEASE =
   "cfb_market_sharp_aware_production_2026_10_08_r31_independent_price_spread_lane" as const;
 export const CFB_MARKET_SHARP_AWARE_GAP_FALLBACK_PREVIOUS_PRODUCTION_RELEASE =
@@ -34,6 +34,7 @@ export const CFB_MARKET_SHARP_AWARE_PRICE_QB_PREVIOUS_PRODUCTION_RELEASE =
 export const CFB_MARKET_SHARP_AWARE_PREVIOUS_PRODUCTION_RELEASE =
   "cfb_market_sharp_aware_production_2026_10_03_r26_verified_quote_market_flip_continuity" as const;
 export const CFB_MARKET_SHADOW_WEIGHT = 0 as const;
+export const CFB_LEGACY_SPLIT_ARBITRATION_MONEYLINE_DOMINANT_BAND_POINTS = 2.5 as const;
 export const CFB_SHARP_SIGNED_GAP_THRESHOLD_PP = 10 as const;
 export const CFB_SHARP_FULL_STRENGTH_GAP_PP = 20 as const;
 export const CFB_SHARP_MAX_MARGIN_SHIFT_POINTS = 1.5 as const;
@@ -809,6 +810,13 @@ function applyValidatedSpreadArbitration(
   const independentSide = forecast.expectedMarginHome + anchor.homeSpread >= 0 ? "home" : "away";
   if (signalSide === independentSide) return forecast.pmf.map((cell) => ({ ...cell }));
   const targetMargin = -2 * anchor.homeSpread - forecast.expectedMarginHome;
+  const changesOutrightWinner = Math.sign(targetMargin) !== Math.sign(forecast.expectedMarginHome);
+  if (
+    Math.abs(anchor.homeSpread) < CFB_LEGACY_SPLIT_ARBITRATION_MONEYLINE_DOMINANT_BAND_POINTS &&
+    changesOutrightWinner
+  ) {
+    return forecast.pmf.map((cell) => ({ ...cell }));
+  }
   return tiltCfbMarginWithinTotals(forecast.pmf, targetMargin - forecast.expectedMarginHome);
 }
 

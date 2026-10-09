@@ -277,18 +277,28 @@ Last reviewed: 2026-10-09
 
 ## CFB Daily Edge generalized weekly production release
 
-- October 9 CFB complete target-excluded market reader:
-  `cfb_forward_evidence_snapshot_2026_10_09_r40_complete_market_reader` /
-  `cfb_forward_evidence_collector_2026_10_09_r51_complete_market_reader` /
-  `cfb_v1_member_release_2026_10_09_r54_complete_market_reader` /
-  `cfb_market_sharp_aware_production_2026_10_09_r32_complete_market_reader` /
-  `cfb_v1_daily_edge_decision_2026_10_09_r44_complete_market_reader` /
-  `cfb_forward_evidence_writer_2026_10_09_r108_complete_market_reader`.
-  The frozen artifact is `cfb_market_reader_artifact_2026_10_08_r1`, trained on 303 corrected
-  target-excluded official-lock games. Moneyline/Spread evidence may move the shared margin
-  continuously; Total moves only on an evidence-backed posterior side crossing. The sole writer
-  regenerates one coherent PMF and records both axis shifts and the artifact release. Immutable
-  October 8 and earlier snapshots retain their exact stored projections and decisions.
+- October 9 CFB professional market-reconciliation candidate (not live; awaiting owner approval):
+  `cfb_forward_evidence_snapshot_2026_10_09_r42_support_aware_reconciliation` /
+  `cfb_forward_evidence_collector_2026_10_09_r53_support_aware_reconciliation` /
+  `cfb_v1_member_release_2026_10_09_r56_support_aware_reconciliation` /
+  `cfb_market_sharp_aware_production_2026_10_09_r34_support_aware_reconciliation` /
+  `cfb_v1_daily_edge_decision_2026_10_09_r46_support_aware_reconciliation` /
+  `cfb_forward_evidence_writer_2026_10_09_r110_support_aware_reconciliation`.
+  Fixture / outcome / compact snapshot / reader / tracking are
+  `cfb_v1_member_fixture_2026_10_09_r82_support_aware_reconciliation` /
+  `cfb_market_sharp_public_outcome_contract_2026_10_09_r72_support_aware_reconciliation` /
+  `cfb_forward_member_snapshot_2026_10_09_r42_support_aware_reconciliation` /
+  `cfb_member_snapshot_reader_2026_10_09_r27_support_aware_reconciliation` /
+  `cfb_official_tracking_record_2026_10_09_r43_support_aware_reconciliation`.
+  The frozen artifact is `cfb_market_reader_artifact_2026_10_09_r3_support_aware_reconciliation`,
+  trained through October 8 on 301 target-excluded pregame records. It removes 8pp/10pp split cliffs,
+  keeps money percentage, ticket percentage, their difference and change separate, reconciles the
+  legacy market shift against the independent projection, and preserves one coherent PMF. Total-side
+  flips keep their chronologically validated full-conviction projection inside observed support; beyond
+  that range, reflection authority decays continuously toward the fitted posterior with its edge bounded
+  by the observed support. This contains extrapolation without blocking a flip or imposing an evidence
+  cutoff. Missing split feeds remain neutral. Historical locked payloads retain exact reader precedence. Evidence
+  and limitations: `docs/model-audits/2026-10-09-cfb-professional-market-reconciliation-result.md`.
 
 ### Independent-price market completion and bounded Spread Lean lane (writer r107; fixture r79; snapshot r39; tracking r40)
 
