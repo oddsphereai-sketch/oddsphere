@@ -426,7 +426,16 @@ function puckLineBreakEvenProbabilities(
  */
 export async function buildNhlFeatureSnapshot(
   opts: BuildSnapshotOptions,
-): Promise<{ snapshot: NhlFeatureSnapshot; meta: { home_goalie?: string; away_goalie?: string; market_line?: number | null } }> {
+): Promise<{
+  snapshot: NhlFeatureSnapshot;
+  meta: {
+    home_goalie?: string;
+    away_goalie?: string;
+    market_line?: number | null;
+    market_lines: DbLineRow[];
+    market_history_lines: DbLineRow[];
+  };
+}> {
   const log = opts.logger ?? (() => {});
 
   // 1. Game row.
@@ -688,6 +697,8 @@ export async function buildNhlFeatureSnapshot(
       ml_split_confidence: opts.marketEvidence?.mlSplitConfidence ?? "none",
       total_split_source: opts.marketEvidence?.totalSplitSource ?? null,
       total_split_confidence: opts.marketEvidence?.totalSplitConfidence ?? "none",
+      target_excluded_total_read: null,
+      target_exclusion_status: "unavailable",
     },
     series: {
       series_abbrev: seriesAbbrev,
@@ -705,6 +716,8 @@ export async function buildNhlFeatureSnapshot(
       home_goalie: homeGoalie?.player_name,
       away_goalie: awayGoalie?.player_name,
       market_line: marketTotalLine,
+      market_lines: lines,
+      market_history_lines: historyLines,
     },
   };
 }

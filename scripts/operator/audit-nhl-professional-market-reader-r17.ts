@@ -8,7 +8,18 @@
  */
 
 import { supabase } from "../../lib/db/supabase";
-import { NHL_REGULAR_TRANSITION_MODEL_RELEASES } from "../../lib/automodel/nhlRegularModelV1";
+
+const AUDITED_INCUMBENT_MODEL_RELEASE = "nhl_regular_2026_r16_exact_quote_price_mapping";
+const AUDITED_TRANSITION_MODEL_RELEASES = [
+  AUDITED_INCUMBENT_MODEL_RELEASE,
+  "nhl_regular_2026_r15_complete_multibook_market_ingestion",
+  "nhl_regular_2026_r14_best_angle_calibration",
+  "nhl_regular_2026_r13_price_aware_grades",
+  "nhl_regular_2026_r12_roster_discrete_market_read",
+  "nhl_regular_2026_r10_t60_market_refresh",
+  "nhl_regular_2026_r9_source_aware_market_read",
+  "nhl_regular_2026_r7_runtime_parity",
+] as const;
 
 type Market = "moneyline" | "spread" | "total";
 type Side = -1 | 1;
@@ -429,14 +440,14 @@ function completeLockedPairs(game: Game, market: Market): LockedPair[] {
   return [...new Map(result.map((pair) => [`${pair.book}|${pair.line ?? "ml"}`, pair])).values()];
 }
 
-function targetExcludedLockedPairs(game: Game, market: Market): LockedPair[] {
-  const evaluated = game.evaluatedBooks[market];
+function targetExcludedLockedPairs(game: Game, market: Market, excludedBook?: string | null): LockedPair[] {
+  const evaluated = excludedBook ?? game.evaluatedBooks[market];
   return completeLockedPairs(game, market).filter((pair) => !evaluated || pair.book !== evaluated);
 }
 
-function lockedBoard(game: Game, market: Market): MarketBoard | null {
+function lockedBoard(game: Game, market: Market, excludedBook?: string | null): MarketBoard | null {
   const targetLine = market === "spread" ? game.homePuckLine : market === "total" ? game.totalLine : null;
-  const pairs = targetExcludedLockedPairs(game, market).filter((pair) => (
+  const pairs = targetExcludedLockedPairs(game, market, excludedBook).filter((pair) => (
     targetLine === null || (pair.line !== null && Math.abs(pair.line - targetLine) < 0.01)
   ));
   const probability = median(pairs.map((pair) => pair.firstProbability));
@@ -488,14 +499,15 @@ function splitSupport(game: Game, market: "moneyline" | "total", direction: Side
   return 0;
 }
 
-const reconciliationInputCache = new Map<number, ReconciliationInputs>();
+const reconciliationInputCache = new Map<string, ReconciliationInputs>();
 
-function reconciliationInputs(game: Game): ReconciliationInputs {
-  const cached = reconciliationInputCache.get(game.id);
+function reconciliationInputs(game: Game, excludedTotalBook?: string | null): ReconciliationInputs {
+  const cacheKey = `${game.id}|${excludedTotalBook ?? game.evaluatedBooks.total ?? "none"}`;
+  const cached = reconciliationInputCache.get(cacheKey);
   if (cached) return cached;
   const ml = lockedBoard(game, "moneyline");
   const puck = lockedBoard(game, "spread");
-  const totalBoard = lockedBoard(game, "total");
+  const totalBoard = lockedBoard(game, "total", excludedTotalBook);
   const mlMargin = ml === null ? null : goalDiffForProbability(
     game.independentTotal,
     ml.probability,
@@ -517,12 +529,16 @@ function reconciliationInputs(game: Game): ReconciliationInputs {
       : marginTargets.reduce((sum, target) => sum + target, 0) / marginTargets.length,
     marketTotal: totalBoard === null ? null : totalForOverProbability(game.totalLine, totalBoard.probability),
   };
-  reconciliationInputCache.set(game.id, value);
+  reconciliationInputCache.set(cacheKey, value);
   return value;
 }
 
-function reconcile(game: Game, candidate: Candidate): ReconciledForecast {
-  const { ml, puck, totalBoard, mlMargin, puckMargin, marketMargin, marketTotal } = reconciliationInputs(game);
+function reconcileWithExcludedTotalBook(
+  game: Game,
+  candidate: Candidate,
+  excludedTotalBook?: string | null,
+): ReconciledForecast {
+  const { ml, puck, totalBoard, mlMargin, puckMargin, marketMargin, marketTotal } = reconciliationInputs(game, excludedTotalBook);
   const baseMargin = candidate.base === "incumbent" ? game.finalMargin : game.independentMargin;
   const baseTotal = candidate.base === "incumbent" ? game.finalTotal : game.independentTotal;
 
@@ -604,6 +620,42 @@ function reconcile(game: Game, candidate: Candidate): ReconciledForecast {
     marketTotal,
     mlPuckAgreement: crossAgreement,
   };
+}
+
+function bestLockedBook(game: Game, market: Market, side: Side): string | null {
+  const targetLine = market === "spread" ? game.homePuckLine : market === "total" ? game.totalLine : null;
+  const candidates = completeLockedPairs(game, market)
+    .filter((pair) => targetLine === null || (pair.line !== null && Math.abs(pair.line - targetLine) < 0.01))
+    .map((pair) => ({
+      book: pair.book,
+      odds: side === 1 ? pair.firstOdds : pair.secondOdds,
+    }));
+  if (candidates.length === 0) return null;
+  let eligible = candidates;
+  if (candidates.length >= 3) {
+    const center = median(candidates.map((candidate) => candidate.odds));
+    const guarded = center === null ? [] : candidates.filter((candidate) => Math.abs(candidate.odds - center) <= 50);
+    if (guarded.length > 0) eligible = guarded;
+  }
+  return [...eligible].sort((left, right) => right.odds - left.odds || left.book.localeCompare(right.book))[0]!.book;
+}
+
+function reconcile(game: Game, candidate: Candidate): ReconciledForecast {
+  let excludedBook = game.evaluatedBooks.total ?? null;
+  let forecast = reconcileWithExcludedTotalBook(game, candidate, excludedBook);
+  if (candidate.totalWeight === 0) return forecast;
+  const visited = new Set<string>();
+  for (let iteration = 0; iteration < 6; iteration += 1) {
+    const side = forecast.sides.total;
+    const targetBook = bestLockedBook(game, "total", side);
+    if (!targetBook || targetBook === excludedBook) return forecast;
+    const state = `${side}|${targetBook}`;
+    if (visited.has(state)) return reconcileWithExcludedTotalBook(game, { ...candidate, totalWeight: 0 }, null);
+    visited.add(state);
+    excludedBook = targetBook;
+    forecast = reconcileWithExcludedTotalBook(game, candidate, excludedBook);
+  }
+  return reconcileWithExcludedTotalBook(game, { ...candidate, totalWeight: 0 }, null);
 }
 
 function completePoints(rows: readonly LineRow[], market: Market): Map<string, QuotePoint[]> {
@@ -1435,7 +1487,7 @@ async function main(): Promise<void> {
   const { data, error } = await supabase.from("prediction_records")
     .select("id,game_id,slate_date,game_date,matchup,market,pick,side,line_value,odds_american,model_probability,play_grade,no_bet,locked_at,model_version,snapshot_json,prediction_grades:prediction_grades!prediction_record_id(result,actual_home_score,actual_away_score,actual_total)")
     .eq("sport", "nhl")
-    .in("model_version", [...NHL_REGULAR_TRANSITION_MODEL_RELEASES])
+    .in("model_version", [...AUDITED_TRANSITION_MODEL_RELEASES])
     .not("locked_at", "is", null)
     .in("market", MARKETS)
     .order("game_date", { ascending: true });
@@ -1450,7 +1502,7 @@ async function main(): Promise<void> {
   const { data: currentData, error: currentError } = await supabase.from("prediction_records")
     .select("id,game_id,slate_date,game_date,matchup,market,pick,side,line_value,odds_american,model_probability,play_grade,no_bet,locked_at,model_version,snapshot_json,prediction_grades:prediction_grades!prediction_record_id(result,actual_home_score,actual_away_score,actual_total)")
     .eq("sport", "nhl")
-    .eq("model_version", NHL_REGULAR_TRANSITION_MODEL_RELEASES[0])
+    .eq("model_version", AUDITED_INCUMBENT_MODEL_RELEASE)
     .gte("slate_date", "2026-10-09")
     .in("market", MARKETS)
     .order("game_date", { ascending: true });
@@ -1739,6 +1791,47 @@ async function main(): Promise<void> {
     },
     losses: lossRows,
   };
+  if (process.argv.includes("--compact")) {
+    const compactGradeImpact = (games: readonly Game[]) => {
+      const summary = historicalGradeImpact(games, fullBreadthTotalCandidate);
+      return {
+        promotions: summary.promotions,
+        demotions: summary.demotions,
+        actionableBefore: summary.actionableBefore,
+        actionableAfter: summary.actionableAfter,
+        actionableBeforePerformance: summary.actionableBeforePerformance,
+        actionableAfterPerformance: summary.actionableAfterPerformance,
+      };
+    };
+    const current = report.currentBoard.fullBreadthTotalCandidate;
+    const currentBoardSummary = {
+      games: current.games,
+      markets: current.markets,
+      sideChanges: current.sideChanges,
+      gradeChanges: current.gradeChanges,
+      actionableBefore: current.actionableBefore,
+      actionableAfter: current.actionableAfter,
+      gradeCounts: current.gradeCounts,
+    };
+    console.log(JSON.stringify({
+      release: report.release,
+      readOnly: report.readOnly,
+      writes: report.writes,
+      cohort: report.cohort,
+      incumbent: report.incumbent,
+      selectedCandidate: fullBreadthTotalCandidate,
+      selection: compactCandidateSummary(candidateSummary(selection, fullBreadthTotalCandidate)),
+      confirmation: compactCandidateSummary(candidateSummary(confirmation, fullBreadthTotalCandidate)),
+      full: compactCandidateSummary(candidateSummary(provisional, fullBreadthTotalCandidate)),
+      gradeImpact: {
+        selection: compactGradeImpact(selection),
+        confirmation: compactGradeImpact(confirmation),
+        full: compactGradeImpact(provisional),
+      },
+      currentBoard: currentBoardSummary,
+    }, null, 2));
+    return;
+  }
   console.log(JSON.stringify(report, null, 2));
 }
 

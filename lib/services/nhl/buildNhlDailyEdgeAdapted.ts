@@ -17,7 +17,6 @@ import {
 import {
   NHL_REGULAR_MODEL_RELEASE,
   NHL_REGULAR_TRANSITION_MODEL_RELEASES,
-  nhlRegularModelV1,
   type NhlFeatureSnapshot,
   type NhlModelOutput,
 } from "../../automodel/nhlRegularModelV1";
@@ -54,9 +53,10 @@ import {
   type NhlCanonicalLineRow,
   type NhlSelectedPriceQuote,
 } from "./nhlLineBoard";
+import { buildNhlRegularMarketAwareForecast } from "./nhlTargetExcludedTotalMarket";
 
 export const NHL_DAILY_EDGE_READER_RELEASE =
-  "nhl_daily_edge_reader_2026_10_08_r12_locked_price_mapping" as const;
+  "nhl_daily_edge_reader_2026_10_09_r13_target_excluded_total_reconciliation" as const;
 
 type NhlStoredSnapshot = {
   model_output?: NhlModelOutput;
@@ -376,8 +376,13 @@ export async function buildNhlDailyEdgeAdapted(date: string): Promise<DailyEdgeR
         },
       });
       const storedPayload = predictionPayloadByGame.get(g.id);
-      const snapshot = storedPayload?.snapshot ?? built.snapshot;
-      const model = storedPayload?.model ?? nhlRegularModelV1(snapshot);
+      const marketAware = storedPayload ? null : buildNhlRegularMarketAwareForecast({
+        snapshot: built.snapshot,
+        currentRows: built.meta.market_lines,
+        historyRows: built.meta.market_history_lines,
+      });
+      const snapshot = storedPayload?.snapshot ?? marketAware!.snapshot;
+      const model = storedPayload?.model ?? marketAware!.model;
 
       // Pull lines once for ML + Total + Spread (NHL puck-line is
       // stored under market_type="spread" in our lines table, same

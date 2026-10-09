@@ -2,7 +2,10 @@
 
 ## Decision status
 
-Audit complete. No production behavior has changed in this branch.
+Audit complete and owner-approved for production on October 9. The r17
+implementation is prepared on the paired release branch; this document does
+not claim that production is live until the protected merge and post-deploy
+checks succeed.
 
 The incumbent NHL Moneyline reader remains the selected winner/margin path.
 The audit rejects a generic Moneyline or puck-line blend, rejects public-split
@@ -10,8 +13,7 @@ projection nudges, and identifies one production-eligible candidate: a
 target-excluded exact-price Total reconciliation that preserves the incumbent
 Moneyline probability and rebuilds one coherent score distribution.
 
-Proposed release, subject to owner approval and the complete production safety
-process:
+Approved release, subject to the complete production safety process:
 
 - model: `nhl_regular_2026_r17_target_excluded_total_reconciliation`
 - calibration: `nhl_regular_calibration_2026_r17_target_excluded_total_reconciliation`
@@ -122,6 +124,12 @@ For each exact evaluated Total:
    probabilities, score, and grades from it. An economically neutral 50/50 Total
    preserves the incumbent side rather than producing a floating-point flip.
 
+The production-parity pass closes the circular target-book edge case: if the
+Total side changes and the best evaluated price moves to another sportsbook,
+the read is recomputed excluding that final sportsbook. The side/book pair must
+reach a fixed point; a cycle or incomplete remainder fails closed to the
+incumbent forecast. The results below include this final safeguard.
+
 These are evidence-quality requirements and continuous reconciliation, not one
 arbitrary flip threshold. The Total may move substantially when the complete
 price board implies it should.
@@ -132,19 +140,21 @@ price board implies it should.
 
 | Metric | incumbent | candidate |
 | --- | ---: | ---: |
-| Total record | 21-23-1 | **23-21-1** |
-| Total accuracy | 47.73% | **52.27%** |
-| Total Brier | 0.27088 | **0.26142** |
-| Total log loss | 0.73808 | **0.71765** |
-| Exact-price units, all Total sides | -4.75u | **-1.35u** |
-| Total corrections / harms | — | **3 / 1** |
-| Net side corrections | — | **+2** |
-| Team-score MAE | 1.61033 | **1.60512** |
-| Margin MAE | 2.27887 | **2.27551** |
-| Total MAE | **2.03584** | 2.04391 |
+| Total record | 21-23-1 | **22-22-1** |
+| Total accuracy | 47.73% | **50.00%** |
+| Total Brier | 0.27088 | **0.26338** |
+| Total log loss | 0.73808 | **0.72139** |
+| Exact-price units, all Total sides | -4.75u | **-3.13u** |
+| Total corrections / harms | — | **2 / 1** |
+| Total net side corrections | — | **+1** |
+| Coherent puck correction / harm | — | **1 / 0** |
+| Team-score MAE | 1.61033 | **1.59991** |
+| Margin MAE | 2.27887 | **2.27756** |
+| Total MAE | **2.03584** | 2.05233 |
 
-The candidate pays a 0.008-goal Total-MAE tradeoff in selection while improving
-direction, calibration, return, team-score MAE, and margin MAE.
+The candidate pays a 0.016-goal Total-MAE tradeoff in selection while improving
+Total direction, calibration, return, team-score MAE, and margin MAE. The one
+coherent puck correction keeps the full selection net at plus two.
 
 ### Later confirmation — 20 games
 
@@ -152,14 +162,14 @@ direction, calibration, return, team-score MAE, and margin MAE.
 | --- | ---: | ---: |
 | Total record | 6-14 | **9-11** |
 | Total accuracy | 30.00% | **45.00%** |
-| Total Brier | 0.31334 | **0.25802** |
-| Total log loss | 0.82562 | **0.70929** |
+| Total Brier | 0.31334 | **0.26416** |
+| Total log loss | 0.82562 | **0.72186** |
 | Exact-price units, all Total sides | -7.86u | **-2.37u** |
 | Total corrections / harms | — | **4 / 1** |
 | Net side corrections | — | **+3** |
-| Team-score MAE | 1.38469 | **1.32915** |
-| Margin MAE | 2.21885 | **2.20576** |
-| Total MAE | 1.95629 | **1.61941** |
+| Team-score MAE | 1.38469 | **1.33064** |
+| Margin MAE | 2.21885 | **2.20838** |
+| Total MAE | 1.95629 | **1.64864** |
 
 ### Complete 65-game audit
 
@@ -167,25 +177,26 @@ direction, calibration, return, team-score MAE, and margin MAE.
 | --- | ---: | ---: |
 | Moneyline | **41-24** | **41-24** |
 | Moneyline Brier | **0.223523** | **0.223523** |
-| puck line | **36-29** | **36-29** |
-| Total | 27-37-1 | **32-32-1** |
-| Total accuracy | 42.19% | **50.00%** |
-| Total Brier | 0.28415 | **0.26036** |
-| Total log loss | 0.76544 | **0.71504** |
-| Exact-price units, all Total sides | -12.61u | **-3.72u** |
-| Total side changes | — | 9 |
-| Total corrections / harms | — | **7 / 2** |
-| Net side corrections | — | **+5** |
-| puck side changes / corrections / harms | — | 2 / 1 / 1 |
-| Team-score MAE | 1.54090 | **1.52021** |
-| Margin MAE | 2.26040 | **2.25405** |
-| Total MAE | 2.01136 | **1.91330** |
+| puck line | 36-29 | **37-28** |
+| Total | 27-37-1 | **31-33-1** |
+| Total accuracy | 42.19% | **48.44%** |
+| Total Brier | 0.28415 | **0.26362** |
+| Total log loss | 0.76544 | **0.72154** |
+| Exact-price units, all Total sides | -12.61u | **-5.49u** |
+| Total side changes | — | 8 |
+| Total corrections / harms | — | **6 / 2** |
+| Total net side corrections | — | **+4** |
+| puck side changes / corrections / harms | — | **1 / 1 / 0** |
+| Combined net side corrections | — | **+5** |
+| Team-score MAE | 1.54090 | **1.51706** |
+| Margin MAE | 2.26040 | **2.25628** |
+| Total MAE | 2.01136 | **1.92811** |
 | Upset recall | 29.63% | 29.63% |
 
-The puck-side changes are the coherent consequence of preserving winner
-probability while changing the event-rate distribution. They are net neutral;
-Moneyline side, probability, calibration, exact-price return, and upset recall
-remain unchanged.
+The puck-side change is the coherent consequence of preserving winner
+probability while changing the event-rate distribution; it corrects one loss
+without a harm. Moneyline side, probability, calibration, exact-price return,
+and upset recall remain unchanged.
 
 ## Loss review
 
@@ -195,12 +206,12 @@ Every incumbent loss was reviewed at its lock.
   opposing market price evidence, but the broader rule that would follow those
   signals produced more harms than corrections; one was mixed. No additional
   qualified Moneyline correction survived.
-- puck line: the coherent Total candidate corrected one loss and caused one
-  offsetting side harm; five other losses had market disagreement that did not
-  justify a stable new rule.
-- Total: the candidate corrected seven incumbent losses. Nineteen losses were
-  also market-consensus misses, nine had disagreement insufficient to cross the
-  coherent final boundary, and two were mixed.
+- puck line: the coherent Total candidate corrected one incumbent loss without
+  causing an offsetting side harm. Other losses either had no qualified Total
+  read or did not cross the coherent puck boundary.
+- Total: the candidate corrected six incumbent losses. Remaining losses were
+  either also market-consensus misses or had disagreement insufficient to cross
+  the coherent final boundary.
 
 This is not a claim that the market predicts every game. The retained harms are
 WPG-DET and FLA-LAK: both complete, target-excluded Total boards supported Over,
@@ -211,14 +222,14 @@ reported denominator.
 
 Applying the same current r16 grade policy before and after the score change:
 
-- full cohort: 149 to 133 actionables, six promotions and 25 demotions;
-- actionable hit rate: 53.38% to **56.82%**;
-- actionable exact-price return: -11.26u to **-3.45u**;
-- later confirmation: 40 to 39 actionables, four promotions and six demotions;
-- later actionable hit rate: 50.00% to **58.97%**;
-- later actionable return: -4.15u to **+2.06u**.
+- full cohort: 149 to 137 actionables, six promotions and 20 demotions;
+- actionable hit rate: 53.38% to **55.88%**;
+- actionable exact-price return: -11.26u to **-5.27u**;
+- later confirmation: 40 to 40 actionables, four promotions and five demotions;
+- later actionable hit rate: 50.00% to **57.50%**;
+- later actionable return: -4.15u to **+1.06u**.
 
-The board becomes more selective but is not flat: 133 of 195 historical market
+The board becomes more selective but is not flat: 137 of 195 historical market
 slots remain actionable. Promotions and demotions come from the same symmetric
 score/probability/price rules; there is no quota and no demotion-only override.
 
@@ -230,14 +241,15 @@ no Moneyline side or Moneyline-grade change.
 
 | Game | incumbent score (away-home) | candidate score (away-home) | material change |
 | --- | ---: | ---: | --- |
-| NYR @ WSH | 3.40-3.03 | 3.14-2.79 | score/probabilities only; picks and grades unchanged |
-| PIT @ CBJ | 2.49-3.31 | 2.97-3.86 | **Under 6.5 -> Over 6.5**; Lean remains Lean |
-| SEA @ DET | 2.26-3.46 | 2.54-3.81 | score/probabilities only; DET Best Angle preserved |
+| NYR @ WSH | 3.40-3.03 | 3.07-2.73 | score/probabilities only; picks and grades unchanged |
+| PIT @ CBJ | 2.49-3.31 | 2.96-3.85 | **Under 6.5 -> Over 6.5**; Lean remains Lean |
+| SEA @ DET | 2.26-3.46 | 2.53-3.80 | score/probabilities only; DET Best Angle preserved |
 | ANA @ WPG | 3.33-2.93 | 3.48-3.08 | Under 6.5 Lean -> Watchlist; side unchanged |
 
 For PIT-CBJ, the target-excluded Total board contains 19 complete books,
-including two named books. Its median Over probability is 52.38%; removing each
-book in turn leaves the Over side unchanged (52.38% to 52.45%). The side change
+including two named books. Its median Over probability is 52.17%; removing each
+book in turn leaves the Over side unchanged (52.17% in the final captured
+board). The side change
 is therefore not caused by one book, one split, or one hard threshold.
 
 Current grade distribution moves from one Best Angle / nine Leans / two
@@ -246,16 +258,15 @@ fully populated and 75% actionable.
 
 ## Remaining substrate repairs
 
-The candidate can work without splits today. A complete professional evidence
-record should still add, in the same or a separately reviewed non-behavioral
-release:
+The candidate works without splits today. The production implementation closes
+the audit's target-exclusion provenance gap by freezing the excluded family,
+included families, exact line, median probability, book counts, and stable
+sequence decision in the prediction snapshot. Remaining capture work is:
 
 1. append-only, timestamped split observations rather than a single mutable
    current row;
 2. frozen spread-split values, source, confidence, and observation timestamp;
-3. the exact target-excluded Total families and median/sequence decision in the
-   immutable prediction snapshot;
-4. explicit full-sequence leader/follower, reversal, persistence, and buyback
+3. explicit full-sequence leader/follower, reversal, persistence, and buyback
    fields so future audits do not have to reconstruct them from raw rows.
 
 These repairs do not authorize split projection influence. They make future
@@ -263,7 +274,7 @@ decisions replayable.
 
 ## Production gate
 
-If approved, implementation must:
+The approved implementation must:
 
 1. advance the complete r17 model/calibration/decision and registry family;
 2. retain the sole NHL writer and `prediction_pipeline:nhl` lease;

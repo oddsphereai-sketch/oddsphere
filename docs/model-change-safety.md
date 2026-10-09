@@ -1,5 +1,54 @@
 # Model change safety protocol
 
+## Owner-approved provisional exception: NHL professional Total reconciliation r17
+
+On 2026-10-09 Daniel Mengel explicitly approved publishing the completed NHL
+professional market-reader audit and requested live-play spot checks after the
+release. This exception is limited to the release family and evidence documented
+in
+`docs/model-audits/2026-10-09-nhl-professional-market-reader-predeclaration.md`
+and its paired result.
+
+R17 preserves the validated r16 Moneyline arbitration and uses the incumbent
+score distribution as its starting opinion. For the exact evaluated Total it
+excludes the evaluated sportsbook family, requires at least two other complete
+over/under pairs at that exact line, de-vigs each pair, and reconciles the score
+to the median Over probability. If the reconciled side changes the best
+evaluated sportsbook, the exclusion is repeated until the final side/book pair
+is stable; a cycle or incomplete remainder fails closed to r16. A named-book pair grants full authority; a
+broad-retail-only board grants 80%; a stable named or broad sequence opposing
+the endpoint reduces authority to 65% of that value. Missing sequence is
+neutral. Public splits cannot move the projection because the historical NHL
+split substrate is not append-only or timestamp-complete. The goal margin is
+re-solved after the Total changes so the validated incumbent Moneyline
+probability is preserved, and one joint distribution owns the score, all three
+sides, probabilities, and grades.
+
+The release-pure 65-game transition audit changes eight Totals with six
+corrections and two harms, moving Total direction from 27-37-1 to 31-33-1,
+Total Brier from 0.28415 to 0.26362, exact-price all-Total return from -12.61u
+to -5.49u, and team/margin/Total MAE from 1.54090/2.26040/2.01136 to
+1.51706/2.25628/1.92811. Moneyline remains exactly 41-24 with identical
+probability and calibration. One coherent puck-side change corrects one loss
+without a harm, preserving a combined plus-five net side result. Applying the
+unchanged r16 grade policy moves the full board from 149 to 137 actionables
+through six promotions and 20 demotions; actionable accuracy improves from
+53.38% to 55.88% and exact-price return from -11.26u to -5.27u. The later
+20-game segment improves Total direction from 6-14 to 9-11 and actionable
+return from -4.15u to +1.06u. These are historical
+results, not promised future performance.
+
+The exact October 9 rehearsal moves 10 to nine of 12 markets actionable, with
+one Total side change, one grade change, and no Moneyline side or grade changes.
+The complete historical board contains six promotions and 20 demotions. Existing
+locked rows remain immutable. Publication still requires focused NHL tests,
+full model-change verification, latest-main integration safety, protected PR
+checks, and post-deploy proof of the live release, sole writer/lease, board
+coverage, snapshot evidence, reader coherence, and unchanged legacy locks.
+Roll back the complete r17 family to r16 for future unlocked computations on
+any mixed release, target-exclusion failure, score/pick contradiction, hidden
+board collapse, writer overlap, reader mismatch, or lock mutation.
+
 ## Owner-approved provisional exception: NFL professional market authority r29
 
 On 2026-10-09 Daniel Mengel explicitly directed Oddsphere to replace the NFL

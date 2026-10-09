@@ -2790,13 +2790,50 @@ locks, tracking, copy, labels, and layout are unchanged. Evidence and rollback:
 
 ## NHL regular-season champion (active from 2026-10-01)
 
-- Model: `nhl_regular_2026_r16_exact_quote_price_mapping`
-- Calibration: `nhl_regular_calibration_2026_r16_exact_quote_price_mapping`
-- Decision: `nhl_regular_decision_2026_r16_exact_quote_price_mapping`
-- Reader: `nhl_daily_edge_reader_2026_10_08_r12_locked_price_mapping`
+- Model: `nhl_regular_2026_r17_target_excluded_total_reconciliation`
+- Calibration: `nhl_regular_calibration_2026_r17_target_excluded_total_reconciliation`
+- Decision: `nhl_regular_decision_2026_r17_target_excluded_total_reconciliation`
+- Reader: `nhl_daily_edge_reader_2026_10_09_r13_target_excluded_total_reconciliation`
 - Public tracking start: `2026-09-29`
 - Official markets: moneyline, total, spread (puck line)
 - Retired release: `nhl_v0_2026_finals`
+
+The October 9 r17 professional market-reader release preserves the validated
+r16 Moneyline arbitration and makes the Total score responsive to the complete
+exact-line price board. The evaluated sportsbook family is removed before
+forming the evidence board; at least two other complete over/under pairs are
+required. Each pair is de-vigged, their median Over probability is mapped to a
+Poisson Total mean, and that market target receives full authority with a
+named-book pair or 80% with broad retail confirmation only. A stable named or
+broad sequence moving against the endpoint reduces authority by 35%; missing
+sequence is neutral. Public splits remain visible but do not move the score
+because NHL's historical split observations cannot yet prove exact T-60
+freshness. The goal margin is re-solved so r16 Moneyline probability is
+preserved, then one joint distribution owns the final score, Moneyline,
+puck-line, Total, probabilities, and grades.
+
+If a side change moves the best evaluated price to another sportsbook, the
+target exclusion is recomputed until the final side and excluded sportsbook
+reach a fixed point; a cycle or incomplete remainder fails closed to r16.
+
+Across the chronological 65-game audit, Total direction moves from 27-37-1 to
+31-33-1 through six corrections and two harms; Total Brier improves from
+0.28415 to 0.26362 and Total MAE from 2.01136 to 1.92811. One coherent puck
+change adds one correction and no harm, retaining a combined plus-five net side
+result. Moneyline remains exactly 41-24 with identical probability and
+calibration. The unchanged grade policy moves 149 to 137 actionables through
+six promotions and 20 demotions, while actionable accuracy moves from 53.38%
+to 55.88%. The later 20-game segment improves Total direction from 6-14 to
+9-11 and actionable exact-price return from -4.15u to +1.06u. The October 9
+current-board rehearsal retains nine of 12 markets actionable, with one Total
+side change, one grade change, and no Moneyline change. Existing locks retain
+their exact stored r7-r16 payload and release identity. Evidence and rollback:
+`docs/model-audits/2026-10-09-nhl-professional-market-reader-result.md`.
+
+Reader r13 preserves stored writer snapshots as the authority before and after
+lock. Only the no-record fallback invokes the same fixed-point target-excluded
+calculation as the writer, preventing a cold read from displaying a different
+score or side while the ordinary r17 tuple is being published.
 
 The October 8 r16 correctness release gives the sole writer and member reader
 one shared exact-quote selector. It accepts only a complete two-sided exact

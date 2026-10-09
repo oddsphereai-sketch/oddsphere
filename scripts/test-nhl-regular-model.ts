@@ -40,6 +40,10 @@ import {
 } from "../lib/services/nhl/nhlLineBoard";
 import { assessNhlLockCoherence } from "../lib/services/nhl/nhlLockCoherence";
 import { __NHL_ADAPTER_TEST__ } from "../lib/services/nhl/adaptNhlToDailyEdgeResponse";
+import {
+  buildNhlRegularMarketAwareForecast,
+  buildNhlTargetExcludedTotalRead,
+} from "../lib/services/nhl/nhlTargetExcludedTotalMarket";
 
 assert.equal(resolveNhlPriceAwareVerdict("moneyline", "best_angle", -175, 0.70), "best_angle");
 assert.equal(resolveNhlPriceAwareVerdict("moneyline", "best_angle", -110, 0.69), "lean", "Moneyline Best Angle requires 70% outcome confidence");
@@ -183,6 +187,49 @@ const base: NhlFeatureSnapshot = {
 };
 
 const result = nhlRegularModelV1(base);
+const targetExcludedRead = {
+  exact_line: 6.5,
+  over_probability: 0.59,
+  complete_book_count: 4,
+  named_book_count: 2,
+  excluded_sportsbook: "DraftKings",
+  excluded_sportsbook_family: "draftkings",
+  included_sportsbook_families: ["betmgm", "circa", "pinnacle", "fanduel"],
+  stable_sequence_direction: null,
+  stable_sequence_source_class: "none" as const,
+  stable_sequence_sources: [],
+};
+const reconciledTotal = nhlRegularModelV1({
+  ...base,
+  market: { ...base.market, target_excluded_total_read: targetExcludedRead },
+});
+assert.notEqual(reconciledTotal.expected_total_goals, result.expected_total_goals, "qualified target-excluded Total prices move the final score mean");
+assert.ok(Math.abs(reconciledTotal.moneyline.probability - result.moneyline.probability) < 1e-12, "Total reconciliation preserves the incumbent Moneyline probability exactly");
+assert.equal(reconciledTotal.moneyline.pick, result.moneyline.pick, "Total reconciliation cannot invent a different winner");
+assert.ok(Math.abs(reconciledTotal.projected_home_goals + reconciledTotal.projected_away_goals - reconciledTotal.expected_total_goals) < 1e-12);
+assert.ok(Math.abs(reconciledTotal.projected_home_goals - reconciledTotal.projected_away_goals - reconciledTotal.expected_goal_diff) < 1e-12);
+assert.equal(reconciledTotal.layers.total_market_authority, 1, "a named-book pair gives the qualified Total board full authority");
+const opposedTotalSequence = nhlRegularModelV1({
+  ...base,
+  market: {
+    ...base.market,
+    target_excluded_total_read: {
+      ...targetExcludedRead,
+      stable_sequence_direction: "under",
+      stable_sequence_source_class: "named",
+      stable_sequence_sources: ["circa", "pinnacle"],
+    },
+  },
+});
+assert.equal(opposedTotalSequence.layers.total_market_authority, 0.65, "stable opposing sequence reduces rather than vetoes endpoint authority");
+const retailOnlyTotal = nhlRegularModelV1({
+  ...base,
+  market: {
+    ...base.market,
+    target_excluded_total_read: { ...targetExcludedRead, named_book_count: 0 },
+  },
+});
+assert.equal(retailOnlyTotal.layers.total_market_authority, 0.8, "broad retail-only confirmation retains graduated authority");
 const strongRosterPrior = {
   gameScore: 1.9,
   ixg: 0.8,
@@ -459,6 +506,69 @@ assert.deepEqual(
   },
   "writer and reader share one exact quote selector and reject an isolated promotional price",
 );
+const targetExcludedRows = [
+  { market_type: "total", sportsbook: "DraftKings", side: "over", line_value: 6.5, odds_american: 110, observed_at: "2026-10-09T18:00:00.000Z" },
+  { market_type: "total", sportsbook: "DraftKings", side: "under", line_value: 6.5, odds_american: 110, observed_at: "2026-10-09T18:00:00.000Z" },
+  { market_type: "total", sportsbook: "Circa", side: "over", line_value: 6.5, odds_american: -125, observed_at: "2026-10-09T18:00:00.000Z" },
+  { market_type: "total", sportsbook: "Circa", side: "under", line_value: 6.5, odds_american: 105, observed_at: "2026-10-09T18:00:00.000Z" },
+  { market_type: "total", sportsbook: "Pinnacle", side: "over", line_value: 6.5, odds_american: -120, observed_at: "2026-10-09T18:00:00.000Z" },
+  { market_type: "total", sportsbook: "Pinnacle", side: "under", line_value: 6.5, odds_american: 100, observed_at: "2026-10-09T18:00:00.000Z" },
+  { market_type: "total", sportsbook: "Kalshi", side: "over", line_value: 6.5, odds_american: 100, observed_at: "2026-10-09T18:00:00.000Z" },
+  { market_type: "total", sportsbook: "Kalshi", side: "under", line_value: 6.5, odds_american: 100, observed_at: "2026-10-09T18:00:00.000Z" },
+];
+const pureTotalRead = buildNhlTargetExcludedTotalRead({
+  currentRows: targetExcludedRows,
+  historyRows: [],
+  totalLine: 6.5,
+  excludedSportsbook: "DraftKings",
+});
+assert.equal(pureTotalRead?.complete_book_count, 2, "the evaluated sportsbook family is removed before consensus is formed");
+assert.equal(pureTotalRead?.named_book_count, 2);
+assert.ok(!pureTotalRead?.included_sportsbook_families.includes("kalshi"), "blocked exchange rows cannot influence Total consensus");
+assert.ok((pureTotalRead?.over_probability ?? 0) > 0.5, "both Total prices, not only the posted number, determine market direction");
+assert.equal(buildNhlTargetExcludedTotalRead({
+  currentRows: targetExcludedRows.slice(0, 4),
+  historyRows: [],
+  totalLine: 6.5,
+  excludedSportsbook: "DraftKings",
+}), null, "one remaining sportsbook is not professional consensus");
+const twoPassForecast = buildNhlRegularMarketAwareForecast({
+  snapshot: base,
+  currentRows: targetExcludedRows,
+  historyRows: [],
+});
+assert.equal(twoPassForecast.targetExcludedTotalRead?.excluded_sportsbook_family, "pinnacle", "the final price target is excluded after a side change moves the guarded best quote");
+assert.equal(twoPassForecast.snapshot.market.target_excluded_total_read, twoPassForecast.targetExcludedTotalRead);
+assert.ok(Math.abs(twoPassForecast.model.moneyline.probability - twoPassForecast.seedModel.moneyline.probability) < 1e-12);
+const sideChangingTargetRows = [
+  { market_type: "total", sportsbook: "sx_bet", side: "over", line_value: 6.5, odds_american: -140, observed_at: "2026-10-09T18:00:00.000Z" },
+  { market_type: "total", sportsbook: "sx_bet", side: "under", line_value: 6.5, odds_american: 115, observed_at: "2026-10-09T18:00:00.000Z" },
+  { market_type: "total", sportsbook: "betonline", side: "over", line_value: 6.5, odds_american: -105, observed_at: "2026-10-09T18:00:00.000Z" },
+  { market_type: "total", sportsbook: "betonline", side: "under", line_value: 6.5, odds_american: -115, observed_at: "2026-10-09T18:00:00.000Z" },
+  { market_type: "total", sportsbook: "circa", side: "over", line_value: 6.5, odds_american: -135, observed_at: "2026-10-09T18:00:00.000Z" },
+  { market_type: "total", sportsbook: "circa", side: "under", line_value: 6.5, odds_american: 115, observed_at: "2026-10-09T18:00:00.000Z" },
+  { market_type: "total", sportsbook: "pinnacle", side: "over", line_value: 6.5, odds_american: -130, observed_at: "2026-10-09T18:00:00.000Z" },
+  { market_type: "total", sportsbook: "pinnacle", side: "under", line_value: 6.5, odds_american: 110, observed_at: "2026-10-09T18:00:00.000Z" },
+];
+const fixedPointForecast = buildNhlRegularMarketAwareForecast({
+  snapshot: base,
+  currentRows: sideChangingTargetRows,
+  historyRows: [],
+});
+assert.notEqual(fixedPointForecast.seedModel.total.pick, fixedPointForecast.model.total.pick, "a qualified exact-price board can flip the Total side");
+assert.equal(fixedPointForecast.targetExclusionStatus, "stable");
+const fixedPointSide = fixedPointForecast.model.total.pick.startsWith("OVER") ? "over" : "under";
+const fixedPointQuote = selectNhlBestPriceQuote({
+  rows: sideChangingTargetRows,
+  market: "total",
+  side: fixedPointSide,
+  line: 6.5,
+});
+assert.equal(
+  fixedPointQuote?.sportsbook.toLowerCase().replace(/[^a-z0-9]/g, ""),
+  fixedPointForecast.targetExcludedTotalRead?.excluded_sportsbook_family,
+  "a changed Total side is recomputed until its final evaluated sportsbook is the excluded target",
+);
 const immutableLockedQuote = resolveNhlLockedPriceQuote({
   market: "moneyline",
   side: "home",
@@ -703,13 +813,13 @@ assert.match(reader, /predictionPayloadByGame/, "reader preserves the writer-own
 assert.match(reader, /writerVerdictsByGame/, "reader carries the price-aware writer decision for every NHL market");
 assert.match(reader, /nhlVerdictFromStoredDecision/, "reader maps the writer's immutable storage token instead of recomputing the grade");
 assert.match(reader, /NHL_REGULAR_TRANSITION_MODEL_RELEASES/, "reader preserves an already-locked prior-release tuple during deployment");
-assert.match(reader, /nhl_daily_edge_reader_2026_10_08_r12_locked_price_mapping/, "reader release records immutable NHL price mapping");
+assert.match(reader, /nhl_daily_edge_reader_2026_10_09_r13_target_excluded_total_reconciliation/, "reader release records the target-excluded fallback while preserving immutable NHL price mapping");
 assert.match(reader, /resolveNhlLockedPriceQuote/, "reader renders the stored locked price tuple instead of mutable current odds");
 assert.match(writer, /evaluated_quotes/, "writer freezes the selected price, book, side, and line together");
 assert.match(pregameSweep, /externalIdsFilter:\s*externalIds/, "T-60 writer refreshes only the games entering the lock window");
 assert.match(pregameSweep, /deferLock:\s*true/, "T-60 writer defers locking until the coherence gate passes");
 assert.match(reader, /incoherentPayloadReleaseGames/, "reader quarantines incoherence by release instead of hiding a valid prior lock");
-assert.match(reader, /const model = storedPayload\?\.model \?\? nhlRegularModelV1\(snapshot\)/, "reader cannot silently recompute an unlocked r6 card without its persisted matchup state");
+assert.match(reader, /const marketAware = storedPayload \? null : buildNhlRegularMarketAwareForecast/, "reader fallback uses the same target-excluded NHL model path as the sole writer");
 assert.match(reader, /incoherentPayloadReleaseGames/, "reader rejects internally inconsistent sibling market snapshots");
 assert.ok(cron.indexOf("syncPublicSplitsObservations") < cron.indexOf("writeNhlPredictionRecords({"), "persistent splits refresh precedes the only NHL writer");
 assert.match(cron, /leaseGroup: "prediction_pipeline"/);
