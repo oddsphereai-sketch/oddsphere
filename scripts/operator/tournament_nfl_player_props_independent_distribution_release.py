@@ -668,10 +668,11 @@ def main() -> None:
             "foundationDistribution": foundation_final,
             "challengerDistributionName": selected_distribution_name,
             "challengerDistribution": challenger_final,
-            "challengerWeight": chosen_weight,
-            "probabilityCalibration": final_calibration,
+            "challengerWeight": chosen_weight if replay_pass else 0.0,
+            "probabilityCalibration": final_calibration if replay_pass else None,
             "selection": selected_name,
             "passes": replay_pass,
+            "incumbentRetained": not replay_pass,
         }
 
     locked_all = pd.concat(locked_outputs, ignore_index=True)

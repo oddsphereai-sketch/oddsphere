@@ -1,3 +1,4 @@
+import { writeFile } from "node:fs/promises";
 import { loadEnvConfig } from "@next/env";
 import { createClient } from "@supabase/supabase-js";
 import { readNflPlayerPropsSnapshotRecord } from "../../lib/services/football/nflPlayerPropsSnapshotStore";
@@ -9,6 +10,7 @@ const season = Number(process.argv.find((value) => value.startsWith("--season=")
 const configuredWeek = Number(process.env.NFL_FORWARD_WEEK ?? 1);
 const week = Number(process.argv.find((value) => value.startsWith("--week="))?.slice(7)
   ?? resolveNflForwardWeek({ season, configuredWeek, now: new Date() }));
+const snapshotOutput = process.argv.find((value) => value.startsWith("--snapshot-output="))?.slice(18);
 const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
 if (!url || !key) throw new Error("Supabase read credentials are required.");
@@ -134,6 +136,9 @@ const report = {
     pendingMissingClosingPrice: (tracking ?? []).filter((row) => row.result === "pending" && row.closing_price === null).length,
   },
 };
+if (snapshotOutput) {
+  await writeFile(snapshotOutput, JSON.stringify(record, null, 2) + "\n", "utf8");
+}
 console.log(JSON.stringify(process.argv.includes("--summary") ? {
   readOnly: report.readOnly,
   generatedAt: report.generatedAt,
