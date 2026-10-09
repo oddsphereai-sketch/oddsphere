@@ -316,7 +316,10 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--output", type=pathlib.Path)
     parser.add_argument("--r2-only", action="store_true")
+    parser.add_argument("--r3-only", action="store_true")
     args = parser.parse_args()
+    if args.r2_only and args.r3_only:
+        raise SystemExit("choose only one bounded redesign")
     manifest = json.loads(EXTERNAL_MANIFEST.read_text(encoding="utf-8"))
     feature_path = pathlib.Path(manifest["featureFile"])
     if sha256_file(feature_path) != manifest["featureFileSha256"]:
@@ -325,8 +328,11 @@ def main() -> None:
     pbp = read_pbp()
     market_context = market_context_from_pbp(pbp)
     frame, touchdown_features = add_touchdown_features(frame, pbp, market_context)
-    frame = freeze_non_runtime_touchdown_opportunity(frame)
+    released_frame = freeze_non_runtime_touchdown_opportunity(frame)
+    if not args.r3_only:
+        frame = released_frame
     frame, relative_features = add_model_features(frame)
+    released_frame, _ = add_model_features(released_frame)
     frame["team_key"] = frame["game_id"].astype(str) + "|" + frame["team"].astype(str)
     team_td = frame.groupby(["season", "week", "game_id", "team"], observed=True)["touchdowns"].transform("sum")
     frame["team_touchdowns"] = team_td
@@ -350,9 +356,16 @@ def main() -> None:
         Candidate("market_free_direct_hierarchy_50", role_features, blend=True),
         Candidate("market_free_incumbent_team_budget", base_features, hierarchical=True, incumbent_player=True),
         Candidate("market_free_incumbent_direct_hierarchy_50", base_features, blend=True, incumbent_player=True),
+        Candidate("market_free_current_opportunity_team_budget", role_features, hierarchical=True),
     ]
     if args.r2_only:
         candidates = [candidate for candidate in candidates if candidate.name.startswith("market_free_incumbent_") and candidate.name != "market_free_incumbent_hgb"]
+    if args.r3_only:
+        candidates = [candidate for candidate in candidates if candidate.name in {
+            "market_free_incumbent_team_budget",
+            "market_free_incumbent_direct_hierarchy_50",
+            "market_free_current_opportunity_team_budget",
+        }]
     eligible = frame["prior_participations"].ge(1) & frame["position"].isin(POSITIONS)
 
     selection_rows = frame[eligible & frame["season"].eq(2023)]
@@ -360,8 +373,10 @@ def main() -> None:
     selection = {}
     for candidate in candidates:
         selection[candidate.name] = probability_metrics(selection_rows["anytime_td"].to_numpy(int), fit_predict_raw(candidate, selection_train, selection_rows))
-    r2_names = {"market_free_incumbent_team_budget", "market_free_incumbent_direct_hierarchy_50"}
-    selected_name = min(r2_names, key=lambda name: (selection[name]["brier"], selection[name]["logLoss"], -selection[name]["auc"]))
+    redesign_names = {candidate.name for candidate in candidates} if args.r2_only or args.r3_only else {
+        "market_free_incumbent_team_budget", "market_free_incumbent_direct_hierarchy_50"
+    }
+    selected_name = min(redesign_names, key=lambda name: (selection[name]["brier"], selection[name]["logLoss"], -selection[name]["auc"]))
 
     results: dict[str, Any] = {}
     predictions_2026: dict[str, np.ndarray] = {}
@@ -394,7 +409,7 @@ def main() -> None:
         }
 
     incumbent_artifact = json.loads(TOUCHDOWN_ARTIFACT.read_text(encoding="utf-8"))
-    incumbent_frame = rows_2026.copy()
+    incumbent_frame = released_frame.loc[rows_2026.index].copy()
     required = list(incumbent_artifact["model"]["featureNames"])
     missing = [name for name in required if name not in incumbent_frame]
     if missing:
@@ -418,8 +433,8 @@ def main() -> None:
         results[name]["confirmation2026Weeks2To4"] = probability_metrics(rows_2026.loc[weeks_2_4, "anytime_td"].to_numpy(int), probability[weeks_2_4])
 
     result = {
-        "auditRelease": "nfl_player_props_anytime_td_independent_2026_10_09_r2" if args.r2_only else "nfl_player_props_anytime_td_independent_2026_10_09_r1",
-        "predeclaration": "docs/model-audits/2026-10-09-nfl-player-props-anytime-touchdown-predeclaration.md",
+        "auditRelease": "nfl_player_props_anytime_td_independent_2026_10_09_r3" if args.r3_only else "nfl_player_props_anytime_td_independent_2026_10_09_r2" if args.r2_only else "nfl_player_props_anytime_td_independent_2026_10_09_r1",
+        "predeclaration": "docs/model-audits/2026-10-09-nfl-player-props-anytime-touchdown-r3-data-contract-predeclaration.md" if args.r3_only else "docs/model-audits/2026-10-09-nfl-player-props-anytime-touchdown-r2-predeclaration.md" if args.r2_only else "docs/model-audits/2026-10-09-nfl-player-props-anytime-touchdown-predeclaration.md",
         "inputs": {
             "externalFeatureRelease": manifest["release"], "externalFeatureSha256": manifest["featureFileSha256"],
             "historicalPbpManifestSha256": sha256_file(HISTORICAL_MANIFEST), "current2026PbpSha256": sha256_file(CURRENT_PBP),
