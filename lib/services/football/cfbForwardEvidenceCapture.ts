@@ -115,6 +115,55 @@ export type CfbForwardContextCapture = {
   bytes: number;
 };
 
+export type CfbForwardMarketReaderObservation = {
+  capturedAt: string;
+  markets: Record<Market, {
+    families: CfbForwardContextFamily[];
+    targetExcludedFamilies: string[];
+  }>;
+  playbookSplits: CfbForwardEvidencePayload["market"]["playbookSplits"];
+  sharpApiSplits: CfbSharpApiSplitRecord[];
+};
+
+/**
+ * Builds the compact, target-excluded observation consumed by the score
+ * reader before the immutable payload is assembled.
+ */
+export function buildCfbForwardMarketReaderObservation(args: {
+  capturedAt: string;
+  currentBooks: NcaafBookOdds[];
+  openingBooks: NcaafBookOdds[];
+  operationalOpening: NcaafBookOdds | null;
+  decisions: CfbV1ExactPriceDecision[];
+  homeTeam: string;
+  playbookSplits: CfbForwardEvidencePayload["market"]["playbookSplits"];
+  sharpApiSplits: CfbSharpApiSplitRecord[];
+}): CfbForwardMarketReaderObservation {
+  const decisions = new Map(args.decisions.map((decision) => [decision.market, decision]));
+  return {
+    capturedAt: args.capturedAt,
+    markets: Object.fromEntries((["moneyline", "spread", "total"] as const).map((market) => {
+      const value = buildMarket({
+        market,
+        capturedAt: args.capturedAt,
+        currentBooks: args.currentBooks,
+        openingBooks: args.openingBooks,
+        operationalOpening: args.operationalOpening,
+        decision: decisions.get(market) ?? null,
+        homeTeam: args.homeTeam,
+        publicEvidence: args.playbookSplits?.[market] ?? null,
+        sharpEvidence: selectSharp(args.sharpApiSplits, market),
+      });
+      return [market, {
+        families: value.families,
+        targetExcludedFamilies: value.targetExcludedFamilies,
+      }];
+    })) as CfbForwardMarketReaderObservation["markets"],
+    playbookSplits: args.playbookSplits,
+    sharpApiSplits: args.sharpApiSplits,
+  };
+}
+
 export function buildCfbForwardContextCapture(args: {
   payload: CfbForwardEvidencePayload;
   /** Capture-only books; never used by the production decision path. */

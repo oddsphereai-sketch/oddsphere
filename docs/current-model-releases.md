@@ -277,6 +277,32 @@ Last reviewed: 2026-10-09
 
 ## CFB Daily Edge generalized weekly production release
 
+- October 9 CFB professional joint Moneyline/Spread market-reconciliation release:
+  `cfb_forward_evidence_snapshot_2026_10_09_r43_joint_moneyline_spread_reconciliation` /
+  `cfb_forward_evidence_collector_2026_10_09_r54_joint_moneyline_spread_reconciliation` /
+  `cfb_v1_member_release_2026_10_09_r57_joint_moneyline_spread_reconciliation` /
+  `cfb_market_sharp_aware_production_2026_10_09_r35_joint_moneyline_spread_reconciliation` /
+  `cfb_v1_daily_edge_decision_2026_10_09_r47_joint_moneyline_spread_reconciliation` /
+  `cfb_forward_evidence_writer_2026_10_09_r111_joint_moneyline_spread_reconciliation`.
+  Fixture / outcome / compact snapshot / reader / tracking are
+  `cfb_v1_member_fixture_2026_10_09_r83_joint_moneyline_spread_reconciliation` /
+  `cfb_market_sharp_public_outcome_contract_2026_10_09_r73_joint_moneyline_spread_reconciliation` /
+  `cfb_forward_member_snapshot_2026_10_09_r43_joint_moneyline_spread_reconciliation` /
+  `cfb_member_snapshot_reader_2026_10_09_r28_joint_moneyline_spread_reconciliation` /
+  `cfb_official_tracking_record_2026_10_09_r44_joint_moneyline_spread_reconciliation`.
+  The frozen artifact is `cfb_market_reader_artifact_2026_10_09_r4_joint_moneyline_spread_reconciliation`,
+  trained through October 8 on 301 target-excluded pregame records. It removes 8pp/10pp split cliffs,
+  keeps money percentage, ticket percentage, their difference and change separate, reconciles the
+  legacy market shift against the independent projection, explicitly models Moneyline/Spread split and
+  price-movement agreement or resistance, and preserves one coherent PMF. Total-side
+  flips keep their chronologically validated full-conviction projection inside observed support; beyond
+  that range, reflection authority decays continuously toward the fitted posterior with its edge bounded
+  by the observed support. This contains extrapolation without blocking a flip or imposing an evidence
+  cutoff. Missing split feeds remain neutral. The 218-game chronological replay remains 168–50
+  Moneyline, 73–57–3 Spread and 82–57 Total; the joint reader preserves every directional intervention
+  while reducing margin MAE from 12.3108 to 12.2948. Historical locked payloads retain exact reader precedence. Evidence
+  and limitations: `docs/model-audits/2026-10-09-cfb-professional-market-reconciliation-result.md`.
+
 ### Independent-price market completion and bounded Spread Lean lane (writer r107; fixture r79; snapshot r39; tracking r40)
 
 - Active evidence / collector / member / market reader / decision / sole writer are

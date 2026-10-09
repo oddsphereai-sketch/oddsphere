@@ -12,6 +12,8 @@ import { normalizeCfbPlaybookLine, normalizeCfbPlaybookSplits, resolveCfbPlayboo
 import {
   CFB_FORWARD_EVIDENCE_COLLECTOR_RELEASE,
   CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE,
+  CFB_FORWARD_COMPLETE_READER_PREVIOUS_EVIDENCE_SCHEMA_RELEASE,
+  CFB_FORWARD_COMPLETE_READER_PREVIOUS_MEMBER_RELEASE,
   CFB_FORWARD_GAP_FALLBACK_PREVIOUS_EVIDENCE_SCHEMA_RELEASE,
   CFB_FORWARD_GAP_FALLBACK_PREVIOUS_MEMBER_RELEASE,
   CFB_FORWARD_RELEASE_WAVE_PREVIOUS_EVIDENCE_SCHEMA_RELEASE,
@@ -36,7 +38,7 @@ import {
   type CfbForwardTeamQuarterbacks,
 } from "./cfbForwardEvidence";
 import { appendCfbForwardEvidence, readCfbForwardMarketHistory, readCfbForwardWriterEvidence, type CfbForwardEvidenceMetadata } from "./cfbForwardEvidenceStore";
-import { buildCfbV1DecisionBundle, CFB_T60_MAX_CAPTURE_LAG_MINUTES, CFB_V1_DECISION_RELEASE, CFB_V1_GAP_FALLBACK_PREVIOUS_DECISION_RELEASE, CFB_V1_FCS_PRICE_PREVIOUS_DECISION_RELEASE, getCfbV1ForecastForGame, type CfbV1DecisionBundle, type CfbV1Forecast, type CfbV1Market } from "./cfbV1Decision";
+import { buildCfbV1DecisionBundle, CFB_T60_MAX_CAPTURE_LAG_MINUTES, CFB_V1_COMPLETE_READER_PREVIOUS_DECISION_RELEASE, CFB_V1_DECISION_RELEASE, CFB_V1_GAP_FALLBACK_PREVIOUS_DECISION_RELEASE, CFB_V1_FCS_PRICE_PREVIOUS_DECISION_RELEASE, getCfbV1ForecastForGame, type CfbV1DecisionBundle, type CfbV1Forecast, type CfbV1Market } from "./cfbV1Decision";
 import { CFB_V1_WEEKLY_RUNTIME_RELEASE, cfbV1WeeklyGameProfileCoverage, getCfbV1WeeklyForecasts } from "./cfbV1WeeklyForecast";
 import { loadCfbCurrentAdvancedState } from "./cfbCurrentAdvancedState";
 import { resolveCfbCanonicalMarketAnchor } from "./cfbMarketInformedOutcome";
@@ -46,6 +48,7 @@ import {
   buildCfbMarketSharpAwareForecast,
   CFB_MARKET_SHADOW_WEIGHT,
   CFB_MARKET_SHARP_AWARE_CANDIDATE_RELEASE,
+  CFB_MARKET_SHARP_AWARE_COMPLETE_READER_PREVIOUS_PRODUCTION_RELEASE,
   CFB_MARKET_SHARP_AWARE_GAP_FALLBACK_PREVIOUS_PRODUCTION_RELEASE,
   CFB_MARKET_SHARP_AWARE_FCS_PRICE_PREVIOUS_PRODUCTION_RELEASE,
   CFB_MARKET_SHARP_AWARE_PREVIOUS_PRODUCTION_RELEASE,
@@ -117,9 +120,15 @@ import {
 } from "./footballCrossMarketCoherence";
 import {
   buildCfbForwardContextCapture,
+  buildCfbForwardMarketReaderObservation,
   CFB_FORWARD_CONTEXT_CAPTURE_RELEASE,
   cfbForwardContextSharpHistoryBooks,
 } from "./cfbForwardEvidenceCapture";
+import {
+  applyCfbCompleteMarketReader,
+  CFB_COMPLETE_MARKET_READER_ARTIFACT_RELEASE,
+  CFB_COMPLETE_MARKET_READER_RELEASE,
+} from "./cfbCompleteMarketReader";
 import {
   captureBooksWithSharpBooks,
   fetchSharpApiNcaafSharpOdds,
@@ -141,7 +150,7 @@ import {
 import type { PlaybookInjuryTeamRow } from "@/lib/providers/playbook/types";
 
 export const CFB_FORWARD_WRITER_RELEASE =
-  "cfb_forward_evidence_writer_2026_10_09_r108_odds_history_continuity" as const;
+  "cfb_forward_evidence_writer_2026_10_09_r111_joint_moneyline_spread_reconciliation" as const;
 export const CFB_FORWARD_MAX_QB_TEAMS_PER_RUN = 24 as const;
 export const CFB_FORWARD_MAX_SHARP_FALLBACK_GAMES_PER_RUN = 32 as const;
 export const CFB_FORWARD_MAX_ESPN_PROSPECTIVE_GAMES_PER_RUN = 32 as const;
@@ -288,8 +297,10 @@ export async function runCfbForwardEvidenceWriter(args: {
   auditForceTheOddsApi?: boolean;
   /** Read-only rollback comparison. Rejected whenever apply=true. */
   auditDisableIndependentPriceLane?: boolean;
+  /** Read-only baseline replay. Rejected whenever apply=true. */
+  auditDisableCompleteMarketReader?: boolean;
 }): Promise<CfbForwardWriterResult> {
-  if (args.apply && (args.auditWindowStartDate || args.auditForceUnlocked || args.auditForceTheOddsApi || args.auditDisableIndependentPriceLane)) {
+  if (args.apply && (args.auditWindowStartDate || args.auditForceUnlocked || args.auditForceTheOddsApi || args.auditDisableIndependentPriceLane || args.auditDisableCompleteMarketReader)) {
     throw new Error("CFB audit planning overrides are forbidden when apply=true.");
   }
   const writerEvidence = await readCfbForwardWriterEvidence({ client: args.client, season: args.season });
@@ -565,7 +576,12 @@ export async function runCfbForwardEvidenceWriter(args: {
   const captureHistoryBooksByGame = new Map<string, NcaafBookOdds[]>();
   const captureHistoryDisplayBooksByGame = new Map<string, NcaafBookOdds[]>();
   const captureHistorySpreadSplitsByGame = new Map<string, CfbForwardPlaybookSplit[]>();
+  const marketHistoryByGame = new Map<string, CfbForwardMarketHistoryEvidence[]>();
   for (const row of marketHistory) {
+    marketHistoryByGame.set(row.providerGameId, [
+      ...(marketHistoryByGame.get(row.providerGameId) ?? []),
+      row,
+    ]);
     captureHistoryBooksByGame.set(row.providerGameId, [
       ...(captureHistoryBooksByGame.get(row.providerGameId) ?? []),
       ...row.payload.market.currentBooks,
@@ -734,7 +750,7 @@ export async function runCfbForwardEvidenceWriter(args: {
           evaluatedAt: capturedAt,
         })
       : weeklyForecast.forecast;
-    const forecast = outcomeAnchor && weather.independentTotalAdjustmentPoints < 0
+    const baseForecast = outcomeAnchor && weather.independentTotalAdjustmentPoints < 0
       ? buildCfbMarketSharpAwareForecast({
           independentForecast: weeklyForecast.forecast,
           anchor: outcomeAnchor,
@@ -749,7 +765,7 @@ export async function runCfbForwardEvidenceWriter(args: {
         })
       : forecastWithoutWeather;
     const weatherAdjustment = outcomeAnchor
-      ? (forecast as CfbMarketSharpAwareForecast).weatherAdjustment
+      ? (baseForecast as CfbMarketSharpAwareForecast).weatherAdjustment
       : null;
     const healthHolds = [
       ...(plan.stage === "t60" && (effectiveT60LagMinutes ?? Infinity) > CFB_T60_MAX_CAPTURE_LAG_MINUTES ? ["t60_capture_late"] : []),
@@ -785,6 +801,60 @@ export async function runCfbForwardEvidenceWriter(args: {
           current: movementCurrent,
         }).evaluatedBets.map((decision) => [decision.market, decision.evaluatedQuote.sportsbook]))
       : undefined;
+    const readerSeedBundle = buildCfbV1DecisionBundle({
+      providerGameId: plan.game.providerGameId,
+      awayTeam: plan.game.away.abbreviation,
+      homeTeam: plan.game.home.abbreviation,
+      gameStartsAt: plan.game.scheduledStart,
+      comparableCurrentBooks: currentBooks,
+      stage: plan.stage === "t60" && decisionHealthHolds.length === 0 ? "t60_locked" : "unlocked",
+      evaluatedAt: capturedAt,
+      lockedAt: plan.stage === "t60" && decisionHealthHolds.length === 0 ? capturedAt : null,
+      healthHolds: decisionHealthHolds,
+      forecast: baseForecast,
+      contextLines: {
+        homeSpread: playbookLine?.homeSpread ?? null,
+        totalLine: playbookLine?.total ?? null,
+      },
+      fixedEvaluatedSportsbookByMarket,
+    });
+    const captureCurrentBooks = captureBooksWithSharpBooks(
+      currentBooks,
+      circaAttempt.result?.booksByGame[plan.game.providerGameId] ?? [],
+    );
+    const captureOpeningBooks = [
+      ...(slate.openingOddsComparableBooksByGame[plan.game.providerGameId] ?? []),
+      ...(theOddsApiHistoricalOpeningAttempt.result?.booksByGame[plan.game.providerGameId] ?? []),
+      ...(captureHistoryBooksByGame.get(plan.game.providerGameId) ?? []),
+    ];
+    const marketReader = args.auditDisableCompleteMarketReader ? {
+      forecast: baseForecast,
+      marginShiftPoints: 0,
+      totalShiftPoints: 0,
+      totalSideFlipped: false,
+      marginEvidenceAvailable: false,
+      totalEvidenceAvailable: false,
+    } : applyCfbCompleteMarketReader({
+      forecast: baseForecast,
+      independentForecast: weeklyForecast.forecast,
+      histories: marketHistoryByGame.get(plan.game.providerGameId) ?? [],
+      currentObservation: buildCfbForwardMarketReaderObservation({
+        capturedAt,
+        currentBooks: captureCurrentBooks,
+        openingBooks: captureOpeningBooks,
+        operationalOpening: operationalOpening?.quote ?? null,
+        decisions: readerSeedBundle.evaluatedBets,
+        homeTeam: plan.game.home.abbreviation,
+        playbookSplits,
+        sharpApiSplits,
+      }),
+      kickoffAt: plan.game.scheduledStart,
+      awayFbs: plan.game.away.fbs,
+      homeFbs: plan.game.home.fbs,
+      awayConferenceId: plan.game.away.conferenceId,
+      homeConferenceId: plan.game.home.conferenceId,
+    });
+    const forecast = marketReader.forecast;
     const decisionBundle = buildCfbV1DecisionBundle({
       providerGameId: plan.game.providerGameId,
       awayTeam: plan.game.away.abbreviation,
@@ -902,6 +972,11 @@ export async function runCfbForwardEvidenceWriter(args: {
         release: CFB_MARKET_SHARP_AWARE_PRODUCTION_RELEASE,
         candidateRelease: CFB_MARKET_SHARP_AWARE_CANDIDATE_RELEASE,
         marketWeight: outcomeAnchor ? CFB_MARKET_SHADOW_WEIGHT : 0,
+        completeMarketReaderRelease: CFB_COMPLETE_MARKET_READER_RELEASE,
+        completeMarketReaderArtifactRelease: CFB_COMPLETE_MARKET_READER_ARTIFACT_RELEASE,
+        marketReaderMarginShiftPoints: marketReader.marginShiftPoints,
+        marketReaderTotalShiftPoints: marketReader.totalShiftPoints,
+        marketReaderTotalSideFlipped: marketReader.totalSideFlipped,
         weatherIndependentTotalAdjustmentPoints: weatherAdjustment?.appliedIndependentTotalShiftPoints ?? 0,
         weatherAuthoritativeTotalAdjustmentPoints: weatherAdjustment?.authoritativeExpectedTotalShiftPoints ?? 0,
       },
@@ -970,18 +1045,11 @@ export async function runCfbForwardEvidenceWriter(args: {
     };
     const contextualEvidenceCapture = buildCfbForwardContextCapture({
       payload,
-      captureCurrentBooks: captureBooksWithSharpBooks(
-        payload.market.currentBooks,
-        circaAttempt.result?.booksByGame[plan.game.providerGameId] ?? [],
-      ),
+      captureCurrentBooks,
       independentForecast: weeklyForecast.forecast,
       independentRelease: CFB_V1_WEEKLY_RUNTIME_RELEASE,
       authoritativeForecast: forecast,
-      openingBooks: [
-        ...(slate.openingOddsComparableBooksByGame[plan.game.providerGameId] ?? []),
-        ...(theOddsApiHistoricalOpeningAttempt.result?.booksByGame[plan.game.providerGameId] ?? []),
-        ...(captureHistoryBooksByGame.get(plan.game.providerGameId) ?? []),
-      ],
+      openingBooks: captureOpeningBooks,
     });
     const completedPayload = {
       ...payload,
@@ -1609,13 +1677,14 @@ function isEligibleOfficialTrackingPayload(payload: CfbForwardEvidencePayload): 
 function isEligiblePublishedPregameRecoveryPayload(payload: CfbForwardEvidencePayload): boolean {
   const release = payload.authoritativeForecast?.release as string | undefined;
   return ((String(payload.schemaRelease) === CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE && String(payload.memberRelease) === CFB_FORWARD_MEMBER_RELEASE) ||
+    (String(payload.schemaRelease) === CFB_FORWARD_COMPLETE_READER_PREVIOUS_EVIDENCE_SCHEMA_RELEASE && String(payload.memberRelease) === CFB_FORWARD_COMPLETE_READER_PREVIOUS_MEMBER_RELEASE) ||
     (String(payload.schemaRelease) === CFB_FORWARD_GAP_FALLBACK_PREVIOUS_EVIDENCE_SCHEMA_RELEASE && String(payload.memberRelease) === CFB_FORWARD_GAP_FALLBACK_PREVIOUS_MEMBER_RELEASE) ||
     (String(payload.schemaRelease) === CFB_FORWARD_RELEASE_WAVE_PREVIOUS_EVIDENCE_SCHEMA_RELEASE && String(payload.memberRelease) === CFB_FORWARD_RELEASE_WAVE_PREVIOUS_MEMBER_RELEASE) ||
     (String(payload.schemaRelease) === CFB_FORWARD_FCS_PRICE_PREVIOUS_EVIDENCE_SCHEMA_RELEASE && String(payload.memberRelease) === CFB_FORWARD_FCS_PRICE_PREVIOUS_MEMBER_RELEASE) ||
     (String(payload.schemaRelease) === CFB_FORWARD_PRICE_PREVIOUS_EVIDENCE_SCHEMA_RELEASE && String(payload.memberRelease) === CFB_FORWARD_PRICE_PREVIOUS_MEMBER_RELEASE)) &&
-    (payload.decisions.decisionRelease === CFB_V1_DECISION_RELEASE || payload.decisions.decisionRelease === CFB_V1_GAP_FALLBACK_PREVIOUS_DECISION_RELEASE || payload.decisions.decisionRelease === CFB_V1_FCS_PRICE_PREVIOUS_DECISION_RELEASE) &&
+    (payload.decisions.decisionRelease === CFB_V1_DECISION_RELEASE || payload.decisions.decisionRelease === CFB_V1_COMPLETE_READER_PREVIOUS_DECISION_RELEASE || payload.decisions.decisionRelease === CFB_V1_GAP_FALLBACK_PREVIOUS_DECISION_RELEASE || payload.decisions.decisionRelease === CFB_V1_FCS_PRICE_PREVIOUS_DECISION_RELEASE) &&
     payload.decisions.publicationEnabled &&
-    (release === CFB_MARKET_SHARP_AWARE_PRODUCTION_RELEASE || release === CFB_MARKET_SHARP_AWARE_GAP_FALLBACK_PREVIOUS_PRODUCTION_RELEASE || release === CFB_MARKET_SHARP_AWARE_FCS_PRICE_PREVIOUS_PRODUCTION_RELEASE || release === CFB_MARKET_SHARP_AWARE_PRICE_QB_PREVIOUS_PRODUCTION_RELEASE || release === CFB_MARKET_SHARP_AWARE_PREVIOUS_PRODUCTION_RELEASE) &&
+    (release === CFB_MARKET_SHARP_AWARE_PRODUCTION_RELEASE || release === CFB_MARKET_SHARP_AWARE_COMPLETE_READER_PREVIOUS_PRODUCTION_RELEASE || release === CFB_MARKET_SHARP_AWARE_GAP_FALLBACK_PREVIOUS_PRODUCTION_RELEASE || release === CFB_MARKET_SHARP_AWARE_FCS_PRICE_PREVIOUS_PRODUCTION_RELEASE || release === CFB_MARKET_SHARP_AWARE_PRICE_QB_PREVIOUS_PRODUCTION_RELEASE || release === CFB_MARKET_SHARP_AWARE_PREVIOUS_PRODUCTION_RELEASE) &&
     Boolean(payload.decisions.marketOutlooks);
 }
 

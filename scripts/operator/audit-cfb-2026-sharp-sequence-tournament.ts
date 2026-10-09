@@ -5,6 +5,7 @@
 import { loadEnvConfig } from "@next/env";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { randomUUID } from "node:crypto";
+import { writeFileSync } from "node:fs";
 import {
   readCfbForwardMarketHistory,
   readCfbForwardWriterEvidence,
@@ -38,6 +39,8 @@ import {
   runCfbForwardEvidenceWriter,
   type CfbForwardAuditForecast,
 } from "../../lib/services/football/cfbForwardEvidenceWriter";
+import { targetExcludedCfbContextFamilies } from "./cfb-sharp-sequence-audit-helpers";
+import { applyCfbCompleteMarketReader } from "../../lib/services/football/cfbCompleteMarketReader";
 
 loadEnvConfig(process.cwd());
 
@@ -46,9 +49,14 @@ type Side = "first" | "second";
 type Result = "win" | "loss" | "push";
 type Block = "development" | "confirmation" | "holdout";
 type FinalGame = { external_id: string | number; status: string | null; away_score: number | null; home_score: number | null };
-type Forecast = { expectedMarginHome: number; expectedTotal: number };
+type Forecast = {
+  expectedMarginHome: number;
+  expectedTotal: number;
+  homeWinProbability?: number;
+  pmf?: Array<{ home: number; away: number; probability: number }>;
+};
 type Move = { source: string; sourceClass: "named" | "retail"; side: Side; channel: "line" | "price"; magnitude: number; firstAt: string; lastAt: string; line: number | null; keyCross: boolean; reversed: boolean; priceBeforeLine: boolean };
-type SplitRead = { provenance: "named_sharp" | "fallback" | "public"; side: Side; gapPp: number; firstAt: string; lastAt: string; moneyAccelerationPp: number | null };
+type SplitRead = { provenance: "named_sharp" | "fallback" | "public"; side: Side; gapPp: number; moneyPct: number; ticketsPct: number; firstAt: string; lastAt: string; moneyAccelerationPp: number | null };
 type Game = {
   gameId: string;
   date: string;
@@ -80,6 +88,7 @@ type Trail = {
   moveCount: number;
   reversalCount: number;
   firstMoveAt: string | null;
+  lastMoveAt: string | null;
 };
 type ResidualRow = {
   game: Game;
@@ -102,6 +111,7 @@ const MARKETS: Market[] = ["moneyline", "spread", "total"];
 const NAMED = new Set(["circa", "pinnacle", "bookmaker"]);
 const SHARP_CURRENT_MINUTES = 120;
 const MONEY_ACCELERATION_PP = 5;
+const TOTAL_REFLECTION_CHRONOLOGICAL_SUPPORT_POINTS = 3.675883412119532;
 
 const SOURCE_PRIORITY = new Map([
   ["circa", 0],
@@ -114,7 +124,7 @@ function implied(price: number): number { return price < 0 ? -price / (-price + 
 function fairFirst(landmark: CfbForwardContextFamily[5]): number { const first = implied(landmark[4]); const second = implied(landmark[5]); return first / (first + second); }
 function blockFor(date: string): Block { return date <= "2026-09-27" ? "development" : date <= "2026-10-04" ? "confirmation" : "holdout"; }
 function isFinal(row: FinalGame | undefined): row is FinalGame { return Boolean(row && ["final", "completed", "post"].includes(row.status?.trim().toLowerCase() ?? "") && Number.isFinite(row.away_score) && Number.isFinite(row.home_score)); }
-function families(history: CfbForwardMarketHistoryEvidence, market: Market): CfbForwardContextFamily[] { return history.payload.contextualEvidenceCapture?.markets[market].families ?? []; }
+function families(history: CfbForwardMarketHistoryEvidence, market: Market): CfbForwardContextFamily[] { return targetExcludedCfbContextFamilies(history, market); }
 
 async function readResults(client: SupabaseClient, ids: string[]): Promise<Map<string, FinalGame>> {
   const output = new Map<string, FinalGame>();
@@ -255,25 +265,28 @@ function marketMoves(histories: CfbForwardMarketHistoryEvidence[], market: Marke
 }
 
 function splitGap(side: { moneyPct: number; ticketsPct: number }): number { return side.moneyPct - side.ticketsPct; }
-function playbookSide(split: CfbForwardPlaybookSplit, market: Market): { side: Side; gap: number; money: number } | null {
+function playbookSide(split: CfbForwardPlaybookSplit, market: Market): { side: Side; gap: number; money: number; tickets: number } | null {
   if (market === "total") {
     if ([split.overMoneyPct, split.overBetsPct, split.underMoneyPct, split.underBetsPct].some((value) => value === null)) return null;
     const first = split.overMoneyPct! - split.overBetsPct!; const second = split.underMoneyPct! - split.underBetsPct!;
-    return Math.max(Math.abs(first), Math.abs(second)) >= 8 ? { side: first >= second ? "first" : "second", gap: first >= second ? first : second, money: first >= second ? split.overMoneyPct! : split.underMoneyPct! } : null;
+    if (Math.max(Math.abs(first), Math.abs(second)) < 1e-9) return null;
+    return { side: first >= second ? "first" : "second", gap: first >= second ? first : second, money: first >= second ? split.overMoneyPct! : split.underMoneyPct!, tickets: first >= second ? split.overBetsPct! : split.underBetsPct! };
   }
   if ([split.awayMoneyPct, split.awayBetsPct, split.homeMoneyPct, split.homeBetsPct].some((value) => value === null)) return null;
   const first = split.awayMoneyPct! - split.awayBetsPct!; const second = split.homeMoneyPct! - split.homeBetsPct!;
-  return Math.max(Math.abs(first), Math.abs(second)) >= 8 ? { side: first >= second ? "first" : "second", gap: first >= second ? first : second, money: first >= second ? split.awayMoneyPct! : split.homeMoneyPct! } : null;
+  if (Math.max(Math.abs(first), Math.abs(second)) < 1e-9) return null;
+  return { side: first >= second ? "first" : "second", gap: first >= second ? first : second, money: first >= second ? split.awayMoneyPct! : split.homeMoneyPct!, tickets: first >= second ? split.awayBetsPct! : split.homeBetsPct! };
 }
-function sharpSide(record: CfbSharpApiSplitRecord, market: Market): { side: Side; gap: number; money: number } | null {
-  if (market === "total" && record.total) { const first = splitGap(record.total.over); const second = splitGap(record.total.under); return Math.max(Math.abs(first), Math.abs(second)) >= 10 ? { side: first >= second ? "first" : "second", gap: first >= second ? first : second, money: first >= second ? record.total.over.moneyPct : record.total.under.moneyPct } : null; }
+function sharpSide(record: CfbSharpApiSplitRecord, market: Market): { side: Side; gap: number; money: number; tickets: number } | null {
+  if (market === "total" && record.total) { const first = splitGap(record.total.over); const second = splitGap(record.total.under); if (Math.max(Math.abs(first), Math.abs(second)) < 1e-9) return null; return { side: first >= second ? "first" : "second", gap: first >= second ? first : second, money: first >= second ? record.total.over.moneyPct : record.total.under.moneyPct, tickets: first >= second ? record.total.over.ticketsPct : record.total.under.ticketsPct }; }
   const value = market === "moneyline" ? record.moneyline : record.spread;
   if (!value) return null; const first = splitGap(value.away); const second = splitGap(value.home);
-  return Math.max(Math.abs(first), Math.abs(second)) >= 10 ? { side: first >= second ? "first" : "second", gap: first >= second ? first : second, money: first >= second ? value.away.moneyPct : value.home.moneyPct } : null;
+  if (Math.max(Math.abs(first), Math.abs(second)) < 1e-9) return null;
+  return { side: first >= second ? "first" : "second", gap: first >= second ? first : second, money: first >= second ? value.away.moneyPct : value.home.moneyPct, tickets: first >= second ? value.away.ticketsPct : value.home.ticketsPct };
 }
 
 function splitReads(histories: CfbForwardMarketHistoryEvidence[], market: Market): SplitRead[] {
-  const buckets = new Map<string, Array<{ at: string; side: Side; gap: number; money: number; provenance: SplitRead["provenance"] }>>();
+  const buckets = new Map<string, Array<{ at: string; side: Side; gap: number; money: number; tickets: number; provenance: SplitRead["provenance"] }>>();
   for (const history of histories) {
     const publicSplit = history.payload.market.playbookSplits?.[market] ?? null;
     const publicRead = publicSplit ? playbookSide(publicSplit, market) : null;
@@ -289,7 +302,7 @@ function splitReads(histories: CfbForwardMarketHistoryEvidence[], market: Market
     const unique = [...new Map(values.sort((a, b) => Date.parse(a.at) - Date.parse(b.at)).map((value) => [`${value.at}:${value.side}:${value.gap}:${value.money}`, value])).values()];
     const first = unique[0]; const last = unique.at(-1); if (!first || !last) return [];
     const firstComparable = unique.find((value) => value.side === last.side) ?? first;
-    return [{ provenance: last.provenance, side: last.side, gapPp: last.gap, firstAt: first.at, lastAt: last.at, moneyAccelerationPp: last.side === firstComparable.side ? last.money - firstComparable.money : null }];
+    return [{ provenance: last.provenance, side: last.side, gapPp: last.gap, moneyPct: last.money, ticketsPct: last.tickets, firstAt: first.at, lastAt: last.at, moneyAccelerationPp: last.side === firstComparable.side ? last.money - firstComparable.money : null }];
   });
 }
 
@@ -422,12 +435,16 @@ function marketTrails(histories: CfbForwardMarketHistoryEvidence[], market: Mark
     if (!first || !last) return [];
     const opening = ordered.flatMap((row) => row.opening ? [row.opening] : []).sort((a, b) => Date.parse(a[0]) - Date.parse(b[0]))[0] ?? first.current;
     const deltas: number[] = [];
+    const deltaTimes: string[] = [];
     for (let index = 1; index < ordered.length; index += 1) {
       const prior = ordered[index - 1]!.current;
       const current = ordered[index]!.current;
       const priorValue = market === "moneyline" ? probabilityValue(market, prior) : axisValue(market, prior);
       const currentValue = market === "moneyline" ? probabilityValue(market, current) : axisValue(market, current);
-      if (priorValue !== null && currentValue !== null && Math.abs(currentValue - priorValue) > 1e-9) deltas.push(currentValue - priorValue);
+      if (priorValue !== null && currentValue !== null && Math.abs(currentValue - priorValue) > 1e-9) {
+        deltas.push(currentValue - priorValue);
+        deltaTimes.push(current[0]);
+      }
     }
     let reversalCount = 0;
     for (let index = 1; index < deltas.length; index += 1) if (Math.sign(deltas[index]!) !== Math.sign(deltas[index - 1]!)) reversalCount += 1;
@@ -441,6 +458,7 @@ function marketTrails(histories: CfbForwardMarketHistoryEvidence[], market: Mark
       moveCount: deltas.length,
       reversalCount,
       firstMoveAt: deltas.length ? ordered[1]?.current[0] ?? last.current[0] : null,
+      lastMoveAt: deltaTimes.at(-1) ?? null,
     }];
   });
 }
@@ -502,6 +520,17 @@ function addTrailFeatures(
   const firstRetail = retail.flatMap((trail) => trail.firstMoveAt ? [{ at: Date.parse(trail.firstMoveAt) }] : []).sort((a, b) => a.at - b.at)[0];
   if (firstNamed) output[`${prefix}_named_leader_${firstNamed.source}`] = 1;
   if (firstNamed && firstRetail) output[`${prefix}_named_lead_minutes`] = (firstRetail.at - firstNamed.at) / 60_000;
+  for (const sourceClass of ["named", "retail"] as const) {
+    const selected = sourceClass === "named" ? named : retail;
+    const firstMinutes = median(selected.flatMap((trail) => trail.firstMoveAt
+      ? [(Date.parse(kickoffAt) - Date.parse(trail.firstMoveAt)) / 60_000]
+      : []));
+    const lastMinutes = median(selected.flatMap((trail) => trail.lastMoveAt
+      ? [(Date.parse(kickoffAt) - Date.parse(trail.lastMoveAt)) / 60_000]
+      : []));
+    if (firstMinutes !== null) output[`${prefix}_${sourceClass}_first_move_minutes_to_kickoff`] = firstMinutes;
+    if (lastMinutes !== null) output[`${prefix}_${sourceClass}_last_move_minutes_to_kickoff`] = lastMinutes;
+  }
 }
 
 function rawSplitFeatures(histories: CfbForwardMarketHistoryEvidence[], market: Market, axis: "margin" | "total"): Record<string, number> {
@@ -573,8 +602,18 @@ function residualFeatures(game: Game, axis: "margin" | "total", detailed = true)
   for (const provenance of ["named_sharp", "fallback", "public"] as const) {
     const selected = reads.filter((read) => read.provenance === provenance);
     const signed = average(selected.map((read) => signedSplit(read, axis)));
+    const signedMoneyMajority = average(selected.map((read) => {
+      const positive = axis === "margin" ? read.side === "second" : read.side === "first";
+      return (positive ? 1 : -1) * (read.moneyPct - 50);
+    }));
+    const signedTicketMajority = average(selected.map((read) => {
+      const positive = axis === "margin" ? read.side === "second" : read.side === "first";
+      return (positive ? 1 : -1) * (read.ticketsPct - 50);
+    }));
     const acceleration = average(selected.flatMap((read) => read.moneyAccelerationPp === null ? [] : [Math.sign(signedSplit(read, axis)) * Math.abs(read.moneyAccelerationPp)]));
     if (signed !== null) output[`split_${provenance}`] = signed;
+    if (signedMoneyMajority !== null) output[`split_${provenance}_money_majority`] = signedMoneyMajority;
+    if (signedTicketMajority !== null) output[`split_${provenance}_ticket_majority`] = signedTicketMajority;
     if (acceleration !== null) output[`split_${provenance}_acceleration`] = acceleration;
     output[`split_${provenance}_count`] = selected.length;
     if (signed !== null && output.market_path !== undefined) output[`split_${provenance}_path_alignment`] = signed * output.market_path;
@@ -772,7 +811,30 @@ function posteriorFlipOnlyAxis(row: ResidualRow, axis: "margin" | "total", model
   if (!hasObservedMarketReadingEvidence(features, market)) return active;
   const proposed = posteriorResidualAxis(row, axis, model, evidenceScale);
   if (lineWinner(proposed, boundary) === lineWinner(active, boundary)) return active;
-  return 2 * boundary - active;
+  const reflected = 2 * boundary - active;
+  if (axis !== "total") return reflected;
+  const activeMarketDistance = Math.abs(active - boundary);
+  if (activeMarketDistance <= TOTAL_REFLECTION_CHRONOLOGICAL_SUPPORT_POINTS) return reflected;
+  const proposedDirection = Math.sign(proposed - boundary);
+  const supportedProposed = boundary + proposedDirection * Math.min(
+    Math.abs(proposed - boundary),
+    TOTAL_REFLECTION_CHRONOLOGICAL_SUPPORT_POINTS,
+  );
+  const reflectionWeight = Math.exp(
+    -(activeMarketDistance - TOTAL_REFLECTION_CHRONOLOGICAL_SUPPORT_POINTS) /
+      TOTAL_REFLECTION_CHRONOLOGICAL_SUPPORT_POINTS,
+  );
+  return reflectionWeight * reflected + (1 - reflectionWeight) * supportedProposed;
+}
+
+function posteriorProjectionFlipOnlyAxis(row: ResidualRow, axis: "margin" | "total", model: RidgeModel, evidenceScale = 1): number {
+  const market = axis === "margin" ? "spread" : "total";
+  const features = axis === "margin" ? row.marginFeatures : row.totalFeatures;
+  const boundary = features[`${market}_all_current_axis`];
+  const active = axis === "margin" ? row.game.authoritative.expectedMarginHome : row.game.authoritative.expectedTotal;
+  if (boundary === undefined || !hasObservedMarketReadingEvidence(features, market)) return active;
+  const proposed = posteriorResidualAxis(row, axis, model, evidenceScale);
+  return lineWinner(proposed, boundary) === lineWinner(active, boundary) ? active : proposed;
 }
 
 function posteriorMarginDirectionalAxis(row: ResidualRow, model: RidgeModel, evidenceScale = 1): number {
@@ -815,16 +877,155 @@ function constrainedMarketFeatures(game: Game, axis: "margin" | "total"): Record
     "named_retail_axis_gap",
     "named_retail_move_product",
     "split_named_sharp",
+    "split_named_sharp_money_majority",
+    "split_named_sharp_ticket_majority",
     "split_named_sharp_acceleration",
     "split_named_sharp_path_alignment",
     "split_fallback",
+    "split_fallback_money_majority",
+    "split_fallback_ticket_majority",
     "split_fallback_acceleration",
     "split_fallback_path_alignment",
     "split_public",
+    "split_public_money_majority",
+    "split_public_ticket_majority",
     "split_public_acceleration",
     "split_public_path_alignment",
   ];
   return Object.fromEntries(names.flatMap((name) => raw[name] === undefined ? [] : [[name, raw[name]!]]));
+}
+
+function professionalMarginFeatures(game: Game): Record<string, number> {
+  const output = constrainedMarketFeatures(game, "margin");
+  const broad = residualFeatures(game, "margin", false);
+  for (const name of [
+    "moneyline_all_current_probability",
+    "moneyline_all_opening_probability",
+    "moneyline_all_probability_move",
+    "moneyline_all_reversal_count",
+    "moneyline_all_late_6h_count",
+    "moneyline_named_probability_move",
+    "moneyline_named_reversal_count",
+    "moneyline_named_late_6h_count",
+    "moneyline_retail_probability_move",
+    "moneyline_retail_reversal_count",
+    "moneyline_retail_late_6h_count",
+  ]) if (broad[name] !== undefined) output[name] = broad[name]!;
+  const moneylineReads = splitReads(game.histories, "moneyline");
+  for (const provenance of ["named_sharp", "fallback", "public"] as const) {
+    const selected = moneylineReads.filter((read) => read.provenance === provenance);
+    const signed = average(selected.map((read) => signedSplit(read, "margin")));
+    const signedMoneyMajority = average(selected.map((read) => {
+      const positive = read.side === "second";
+      return (positive ? 1 : -1) * (read.moneyPct - 50);
+    }));
+    const signedTicketMajority = average(selected.map((read) => {
+      const positive = read.side === "second";
+      return (positive ? 1 : -1) * (read.ticketsPct - 50);
+    }));
+    const acceleration = average(selected.flatMap((read) => read.moneyAccelerationPp === null
+      ? []
+      : [Math.sign(signedSplit(read, "margin")) * Math.abs(read.moneyAccelerationPp)]));
+    if (signed !== null) output[`moneyline_split_${provenance}`] = signed;
+    if (signedMoneyMajority !== null) output[`moneyline_split_${provenance}_money_majority`] = signedMoneyMajority;
+    if (signedTicketMajority !== null) output[`moneyline_split_${provenance}_ticket_majority`] = signedTicketMajority;
+    if (acceleration !== null) output[`moneyline_split_${provenance}_acceleration`] = acceleration;
+    output[`moneyline_split_${provenance}_count`] = selected.length;
+    const spreadSplit = output[`split_${provenance}`];
+    if (signed !== null && spreadSplit !== undefined) {
+      output[`cross_market_split_${provenance}_product`] = signed * spreadSplit;
+      output[`cross_market_split_${provenance}_agreement`] = Math.sign(signed) === Math.sign(spreadSplit) ? 1 : -1;
+    }
+  }
+  const spreadMove = output.spread_all_axis_move;
+  const moneylineMove = output.moneyline_all_probability_move;
+  if (spreadMove !== undefined && moneylineMove !== undefined) {
+    output.cross_market_move_product = spreadMove * moneylineMove;
+    output.cross_market_move_agreement = Math.sign(spreadMove) === Math.sign(moneylineMove) ? 1 : -1;
+  }
+  const currentSpread = output.spread_all_current_axis;
+  if (currentSpread !== undefined) {
+    output.short_spread_3 = Number(Math.abs(currentSpread) <= 3);
+    output.short_spread_7 = Number(Math.abs(currentSpread) <= 7);
+    if (moneylineMove !== undefined) output.short_spread_3_moneyline_move = output.short_spread_3 * moneylineMove;
+    for (const provenance of ["named_sharp", "fallback", "public"] as const) {
+      const moneylineSplit = output[`moneyline_split_${provenance}`];
+      const spreadSplit = output[`split_${provenance}`];
+      if (moneylineSplit !== undefined) output[`short_spread_3_moneyline_split_${provenance}`] = output.short_spread_3 * moneylineSplit;
+      if (spreadSplit !== undefined) output[`short_spread_3_spread_split_${provenance}`] = output.short_spread_3 * spreadSplit;
+    }
+  }
+  return output;
+}
+
+function spreadKeyCrossFeatures(game: Game): Record<string, number> {
+  const output: Record<string, number> = {};
+  const trails = marketTrails(game.histories, "spread");
+  const keys = [-14, -10, -7, -3, 0, 3, 7, 10, 14];
+  let crossings = 0;
+  let namedCrossings = 0;
+  for (const trail of trails) {
+    if (trail.openingAxis === null || trail.currentAxis === null) continue;
+    const openingAxis = trail.openingAxis;
+    const currentAxis = trail.currentAxis;
+    const crossed = keys.filter((key) =>
+      (openingAxis < key && currentAxis >= key) ||
+      (openingAxis > key && currentAxis <= key));
+    crossings += crossed.length;
+    if (trail.sourceClass === "named") namedCrossings += crossed.length;
+    if (crossed.includes(0)) output.spread_pickem_cross = Math.sign(currentAxis - openingAxis);
+  }
+  output.spread_key_cross_count = crossings;
+  output.spread_named_key_cross_count = namedCrossings;
+  return output;
+}
+
+function professionalReconciliationMarginFeatures(
+  game: Game,
+  detail: "moneyline" | "full",
+): Record<string, number> {
+  const output = {
+    ...reconciliationMarginFeatures(game),
+    ...professionalMarginFeatures(game),
+  };
+  if (detail === "moneyline") return output;
+
+  const detailed = residualFeatures(game, "margin", true);
+  for (const [name, value] of Object.entries(detailed)) {
+    if (
+      /^(moneyline|spread)_(circa|pinnacle|bookmaker)_/.test(name) ||
+      /^(moneyline|spread)_current_(axis|probability)_dispersion$/.test(name) ||
+      /^(moneyline|spread)_named_(leader_|lead_minutes|first_move_minutes_to_kickoff|last_move_minutes_to_kickoff)/.test(name) ||
+      /^(moneyline|spread)_retail_(first_move_minutes_to_kickoff|last_move_minutes_to_kickoff)/.test(name)
+    ) output[name] = value;
+  }
+  Object.assign(output, spreadKeyCrossFeatures(game));
+  const moneylineRawSplits = rawSplitFeatures(game.histories, "moneyline", "margin");
+  for (const [name, value] of Object.entries(moneylineRawSplits)) {
+    output[`moneyline_${name}`] = value;
+  }
+  return output;
+}
+
+function reconciliationMarginFeatures(game: Game): Record<string, number> {
+  const output = residualFeatures(game, "margin", false);
+  const active = game.authoritative.expectedMarginHome;
+  const independent = game.independent.expectedMarginHome;
+  const legacyShift = active - independent;
+  output.active_margin = active;
+  output.legacy_margin_shift = legacyShift;
+  output.legacy_margin_shift_abs = Math.abs(legacyShift);
+  output.legacy_moneyline_side_changed = Number(winner(active) !== winner(independent));
+  const current = output.spread_all_current_axis;
+  if (current !== undefined) {
+    output.active_market_disagreement = current - active;
+    output.active_market_disagreement_abs = Math.abs(current - active);
+    output.independent_market_disagreement_abs = Math.abs(current - independent);
+    output.legacy_market_distance_change = Math.abs(current - active) - Math.abs(current - independent);
+    output.legacy_spread_side_changed = Number(lineWinner(active, current) !== lineWinner(independent, current));
+    output.legacy_reflection_signature = legacyShift * (current - independent);
+  }
+  return output;
 }
 
 function runConstrainedPosteriorResidualTournament(games: Game[]) {
@@ -1204,7 +1405,194 @@ function forwardMetrics(rows: ForwardPrediction[], candidate: boolean) {
     predicted: lineWinner(predictedTotal, row.game.targetLines.total ?? predictedTotal),
     actual: lineWinner(row.actualTotal, row.game.targetLines.total ?? row.actualTotal),
   })));
-  return { games: rows.length, marginMae, totalMae, teamScoreMae, moneyline, spread, total };
+  const probability = probabilityMetrics(rows, candidate);
+  return { games: rows.length, marginMae, totalMae, teamScoreMae, moneyline, spread, total, probability };
+}
+
+function probabilityMetrics(rows: ForwardPrediction[], candidate: boolean) {
+  const observations = rows.flatMap((prediction) => {
+    const basePmf = prediction.row.game.authoritative.pmf;
+    if (!basePmf?.length) return [];
+    let pmf = basePmf;
+    if (candidate) {
+      const marginAdjusted = tiltCfbMarginWithinTotals(
+        pmf,
+        prediction.candidateMargin - prediction.activeMargin,
+      );
+      const marginSummary = summarizePmf(marginAdjusted);
+      pmf = tiltCfbTotalWithinMargins(
+        marginAdjusted,
+        prediction.candidateTotal - marginSummary.expectedTotal,
+      );
+    }
+    return MARKETS.flatMap((market) => {
+      const line = market === "moneyline" ? 0 : prediction.row.game.targetLines[market];
+      if (line === null) return [];
+      const boundary = market === "spread" ? -line : line;
+      const actual = market === "total" ? prediction.row.actualTotal : prediction.row.actualMargin;
+      const actualSide = lineWinner(actual, boundary);
+      if (actualSide === "push") return [];
+      let first = 0;
+      let second = 0;
+      for (const point of pmf) {
+        const value = market === "total" ? point.home + point.away : point.home - point.away;
+        const side = lineWinner(value, boundary);
+        if (side === "first") first += point.probability;
+        else if (side === "second") second += point.probability;
+      }
+      if (first + second <= 0) return [];
+      const probabilityFirst = Math.min(1 - 1e-9, Math.max(1e-9, first / (first + second)));
+      const outcomeFirst = actualSide === "first" ? 1 : 0;
+      return [{
+        market,
+        probabilityFirst,
+        outcomeFirst,
+        brier: (probabilityFirst - outcomeFirst) ** 2,
+        logLoss: -(outcomeFirst * Math.log(probabilityFirst) + (1 - outcomeFirst) * Math.log(1 - probabilityFirst)),
+      }];
+    });
+  });
+  return Object.fromEntries(MARKETS.map((market) => {
+    const selected = observations.filter((row) => row.market === market);
+    return [market, {
+      games: selected.length,
+      brier: average(selected.map((row) => row.brier)),
+      logLoss: average(selected.map((row) => row.logLoss)),
+      meanProbabilityFirst: average(selected.map((row) => row.probabilityFirst)),
+      realizedFirstRate: average(selected.map((row) => row.outcomeFirst)),
+    }];
+  }));
+}
+
+function professionalInterventionLedger(rows: ForwardPrediction[]) {
+  return rows.flatMap((prediction) => MARKETS.flatMap((market) => {
+    const line = market === "moneyline" ? 0 : prediction.row.game.targetLines[market];
+    if (line === null) return [];
+    const boundary = market === "spread" ? -line : line;
+    const actual = market === "total" ? prediction.row.actualTotal : prediction.row.actualMargin;
+    const active = market === "total" ? prediction.activeTotal : prediction.activeMargin;
+    const candidate = market === "total" ? prediction.candidateTotal : prediction.candidateMargin;
+    const activeSide = lineWinner(active, boundary);
+    const candidateSide = lineWinner(candidate, boundary);
+    const actualSide = lineWinner(actual, boundary);
+    const activeResult = actualSide === "push" || activeSide === "push"
+      ? "push"
+      : activeSide === actualSide ? "win" : "loss";
+    const candidateResult = actualSide === "push" || candidateSide === "push"
+      ? "push"
+      : candidateSide === actualSide ? "win" : "loss";
+    const changed = activeSide !== candidateSide;
+    const classification = !changed
+      ? activeResult === "loss" ? "preserved_loss" : activeResult === "win" ? "preserved_win" : "preserved_push"
+      : activeResult === "loss" && candidateResult === "win" ? "correction"
+        : activeResult === "win" && candidateResult === "loss" ? "harm"
+          : "push_transition";
+    const features = market === "total" ? prediction.row.totalFeatures : prediction.row.marginFeatures;
+    const observedEvidence = Object.fromEntries(Object.entries(features)
+      .filter(([, value]) => Math.abs(value) > 1e-9)
+      .sort(([first], [second]) => first.localeCompare(second)));
+    return [{
+      date: prediction.date,
+      gameId: prediction.gameId,
+      matchup: `${prediction.row.game.awayTeam}@${prediction.row.game.homeTeam}`,
+      market,
+      grade: prediction.row.game.targetGrades[market],
+      storedEvaluatedPrice: prediction.row.game.targetPrices[market],
+      line: market === "moneyline" ? null : line,
+      active,
+      candidate,
+      actual,
+      shift: candidate - active,
+      activeSide,
+      candidateSide,
+      actualSide,
+      activeResult,
+      candidateResult,
+      changed,
+      classification,
+      score: `${prediction.row.game.awayScore}-${prediction.row.game.homeScore}`,
+      observedEvidence,
+    }];
+  }));
+}
+
+function professionalUpsetSummary(rows: ForwardPrediction[]) {
+  const classified = rows.flatMap((prediction) => {
+    const homeSpread = prediction.row.game.targetLines.spread;
+    if (homeSpread === null || Math.abs(homeSpread) < 1e-9) return [];
+    const underdog = homeSpread < 0 ? "away" : "home";
+    const actualWinner = winner(prediction.row.actualMargin);
+    const activeWinner = winner(prediction.activeMargin);
+    const candidateWinner = winner(prediction.candidateMargin);
+    return [{
+      date: prediction.date,
+      gameId: prediction.gameId,
+      matchup: `${prediction.row.game.awayTeam}@${prediction.row.game.homeTeam}`,
+      homeSpread,
+      shortSpread: Math.abs(homeSpread) <= 3,
+      underdog,
+      actualWinner,
+      activeWinner,
+      candidateWinner,
+      actualUpset: actualWinner === underdog,
+      activeUpsetCall: activeWinner === underdog,
+      candidateUpsetCall: candidateWinner === underdog,
+      changedWinner: activeWinner !== candidateWinner,
+      activeMargin: prediction.activeMargin,
+      candidateMargin: prediction.candidateMargin,
+      actualMargin: prediction.row.actualMargin,
+    }];
+  });
+  const summarize = (selected: typeof classified, candidate: boolean) => {
+    const callKey = candidate ? "candidateUpsetCall" : "activeUpsetCall";
+    const calls = selected.filter((row) => row[callKey]);
+    const actual = selected.filter((row) => row.actualUpset);
+    const correct = calls.filter((row) => row.actualUpset);
+    return {
+      games: selected.length,
+      actualUpsets: actual.length,
+      upsetCalls: calls.length,
+      correctUpsetCalls: correct.length,
+      precision: calls.length ? correct.length / calls.length : null,
+      recall: actual.length ? correct.length / actual.length : null,
+    };
+  };
+  return {
+    all: { active: summarize(classified, false), candidate: summarize(classified, true) },
+    shortSpread: {
+      active: summarize(classified.filter((row) => row.shortSpread), false),
+      candidate: summarize(classified.filter((row) => row.shortSpread), true),
+    },
+    changedWinnerCalls: classified.filter((row) => row.changedWinner),
+    missedActualUpsets: classified.filter((row) => row.actualUpset && !row.candidateUpsetCall),
+  };
+}
+
+function professionalAuditSummary(rows: ForwardPrediction[]) {
+  const ledger = professionalInterventionLedger(rows);
+  const summarizeMarket = (market: Market) => {
+    const selected = ledger.filter((row) => row.market === market);
+    const activeLosses = selected.filter((row) => row.activeResult === "loss");
+    return {
+      games: selected.length,
+      activeLosses: activeLosses.length,
+      correctedLosses: activeLosses.filter((row) => row.classification === "correction").length,
+      preservedLosses: activeLosses.filter((row) => row.classification === "preserved_loss").length,
+      corrections: selected.filter((row) => row.classification === "correction").length,
+      harms: selected.filter((row) => row.classification === "harm").length,
+      flips: selected.filter((row) => row.changed).length,
+    };
+  };
+  return {
+    byMarket: Object.fromEntries(MARKETS.map((market) => [market, summarizeMarket(market)])),
+    interventionLedger: ledger.filter((row) => row.changed),
+    incumbentLossLedger: ledger.filter((row) => row.activeResult === "loss"),
+    upsetEvaluation: professionalUpsetSummary(rows),
+    exactPriceEvaluation: {
+      status: "not_claimed",
+      reason: "Historical snapshots retain the incumbent evaluated quote, not a guaranteed executable quote for the opposite side after every candidate flip.",
+    },
+  };
 }
 
 function predictionMetricDelta(rows: ForwardPrediction[]) {
@@ -1327,24 +1715,526 @@ function runCombinedMarketReaderStability(games: Game[]) {
       candidate: forwardMetrics(forward, true),
       bootstrap: clusteredBootstrap(forward),
     },
+    professionalAudit: professionalAuditSummary(forward),
   };
 }
 
-function exportCombinedMarketReaderArtifact(games: Game[]) {
+function runTotalProjectionModeAudit(games: Game[]) {
   const rows: ResidualRow[] = games.map((game) => ({
     game,
-    marginFeatures: residualFeatures(game, "margin", false),
+    marginFeatures: reconciliationMarginFeatures(game),
     totalFeatures: constrainedMarketFeatures(game, "total"),
     actualMargin: game.homeScore - game.awayScore,
     actualTotal: game.homeScore + game.awayScore,
   }));
+  const dates = [...new Set(rows.map((row) => row.game.date))].sort();
+  const evaluate = (mode: "reflection" | "posterior_projection") => {
+    const forward = dates.flatMap((date) => {
+      const training = rows.filter((row) => row.game.date < date);
+      const testing = rows.filter((row) => row.game.date === date);
+      if (training.length < 80 || testing.length === 0) return [];
+      const totalModel = fitPosterior(training, "total", 30);
+      return testing.map((row): ForwardPrediction => ({
+        date,
+        gameId: row.game.gameId,
+        row,
+        activeMargin: row.game.authoritative.expectedMarginHome,
+        activeTotal: row.game.authoritative.expectedTotal,
+        candidateMargin: row.game.authoritative.expectedMarginHome,
+        candidateTotal: mode === "reflection"
+          ? posteriorFlipOnlyAxis(row, "total", totalModel, 1)
+          : posteriorProjectionFlipOnlyAxis(row, "total", totalModel, 1),
+      }));
+    });
+    return {
+      mode,
+      blocks: configurationBlockSummary(forward),
+      professionalAudit: professionalAuditSummary(forward),
+      bootstrap: clusteredBootstrap(forward),
+    };
+  };
   return {
-    release: "cfb_market_reader_artifact_2026_10_08_r1",
+    release: "cfb_total_projection_mode_audit_2026_10_09_r1",
+    method: "fixed_side_decision_expanding_window_comparison_of_reflection_and_fitted_posterior_projection",
+    reflection: evaluate("reflection"),
+    posteriorProjection: evaluate("posterior_projection"),
+  };
+}
+
+function configurationBlockSummary(rows: ForwardPrediction[]) {
+  const summarize = (selected: ForwardPrediction[]) => {
+    const audit = professionalAuditSummary(selected);
+    return {
+      games: selected.length,
+      active: forwardMetrics(selected, false),
+      candidate: forwardMetrics(selected, true),
+      byMarket: audit.byMarket,
+      upset: {
+        all: audit.upsetEvaluation.all,
+        shortSpread: audit.upsetEvaluation.shortSpread,
+      },
+    };
+  };
+  return {
+    development: summarize(rows.filter((row) => row.date <= "2026-09-27")),
+    confirmation: summarize(rows.filter((row) => row.date >= "2026-10-02" && row.date <= "2026-10-04")),
+    microHoldout: summarize(rows.filter((row) => row.date >= "2026-10-07")),
+    all: summarize(rows),
+  };
+}
+
+function runProfessionalConfigurationAudit(games: Game[], candidateBase: "active" | "independent" = "active") {
+  type MarginFeatureMode =
+    | "broad"
+    | "constrained"
+    | "cross_market"
+    | "reconciliation"
+    | "reconciliation_moneyline"
+    | "reconciliation_full";
+  const originalByGame = new Map(games.map((game) => [game.gameId, game]));
+  const modelingGames = candidateBase === "independent"
+    ? games.map((game) => ({ ...game, authoritative: game.independent }))
+    : games;
+  const buildRows = (marginFeatureMode: MarginFeatureMode, sourceGames = modelingGames): ResidualRow[] => sourceGames.map((game) => ({
+    game,
+    marginFeatures: marginFeatureMode === "reconciliation_full"
+      ? professionalReconciliationMarginFeatures(game, "full")
+      : marginFeatureMode === "reconciliation_moneyline"
+        ? professionalReconciliationMarginFeatures(game, "moneyline")
+        : marginFeatureMode === "reconciliation"
+      ? reconciliationMarginFeatures(game)
+      : marginFeatureMode === "cross_market"
+        ? professionalMarginFeatures(game)
+        : marginFeatureMode === "constrained"
+          ? constrainedMarketFeatures(game, "margin")
+          : residualFeatures(game, "margin", false),
+    totalFeatures: constrainedMarketFeatures(game, "total"),
+    actualMargin: game.homeScore - game.awayScore,
+    actualTotal: game.homeScore + game.awayScore,
+  }));
+  const dates = [...new Set(games.map((game) => game.date))].sort();
+  const walkForward = (args: {
+    marginFeatureMode: MarginFeatureMode;
+    marginLambda: number;
+    marginEvidenceScale: number;
+    totalLambda: number;
+    totalEvidenceScale: number;
+    totalReflectionStrength: number;
+    changeMargin: boolean;
+    changeTotal: boolean;
+  }, sourceGames = modelingGames): ForwardPrediction[] => {
+    const rows = buildRows(args.marginFeatureMode, sourceGames);
+    return dates.flatMap((date) => {
+      const training = rows.filter((row) => row.game.date < date);
+      const testing = rows.filter((row) => row.game.date === date);
+      if (training.length < 80 || testing.length === 0) return [];
+      const marginModel = args.changeMargin ? fitPosterior(training, "margin", args.marginLambda) : null;
+      const totalModel = args.changeTotal ? fitPosterior(training, "total", args.totalLambda) : null;
+      return testing.map((row): ForwardPrediction => {
+        const originalGame = originalByGame.get(row.game.gameId)!;
+        const activeMargin = originalGame.authoritative.expectedMarginHome;
+        const activeTotal = originalGame.authoritative.expectedTotal;
+        const candidateBaseMargin = row.game.authoritative.expectedMarginHome;
+        const candidateBaseTotal = row.game.authoritative.expectedTotal;
+        const reflectedTotal = totalModel
+          ? posteriorFlipOnlyAxis(row, "total", totalModel, args.totalEvidenceScale)
+          : candidateBaseTotal;
+        return {
+          date,
+          gameId: row.game.gameId,
+          row: { ...row, game: originalGame },
+          activeMargin,
+          activeTotal,
+          candidateMargin: marginModel
+            ? posteriorObservedEvidenceAxis(row, "margin", marginModel, args.marginEvidenceScale)
+            : activeMargin,
+          candidateTotal: args.changeTotal
+            ? candidateBaseTotal + args.totalReflectionStrength * (reflectedTotal - candidateBaseTotal)
+            : activeTotal,
+        };
+      });
+    });
+  };
+  const margin = ([
+    "broad",
+    "constrained",
+    "cross_market",
+    "reconciliation",
+    "reconciliation_moneyline",
+    "reconciliation_full",
+  ] as const).flatMap((marginFeatureMode) =>
+    [100, 300, 1000, 3000].flatMap((marginLambda) =>
+      [0.25, 0.5, 0.75, 1, 1.25].map((marginEvidenceScale) => {
+        const rows = walkForward({
+          marginFeatureMode,
+          marginLambda,
+          marginEvidenceScale,
+          totalLambda: 30,
+          totalEvidenceScale: 1,
+          totalReflectionStrength: 0,
+          changeMargin: true,
+          changeTotal: false,
+        });
+        return {
+          id: `${marginFeatureMode}_lambda_${marginLambda}_scale_${marginEvidenceScale}`,
+          config: { marginFeatureMode, marginLambda, marginEvidenceScale },
+          blocks: configurationBlockSummary(rows),
+        };
+      })));
+  const total = [10, 30, 100, 300].flatMap((totalLambda) =>
+    [0.5, 0.75, 1, 1.25].flatMap((totalEvidenceScale) =>
+      [0.55, 0.75, 1].map((totalReflectionStrength) => {
+        const rows = walkForward({
+          marginFeatureMode: "broad",
+          marginLambda: 1000,
+          marginEvidenceScale: 0,
+          totalLambda,
+          totalEvidenceScale,
+          totalReflectionStrength,
+          changeMargin: false,
+          changeTotal: true,
+        });
+        return {
+          id: `lambda_${totalLambda}_evidence_${totalEvidenceScale}_reflection_${totalReflectionStrength}`,
+          config: { totalLambda, totalEvidenceScale, totalReflectionStrength },
+          blocks: configurationBlockSummary(rows),
+        };
+      })));
+  const detailConfigs = [
+    {
+      id: "broad_lambda_1000_scale_0.75",
+      args: { marginFeatureMode: "broad", marginLambda: 1000, marginEvidenceScale: 0.75, totalLambda: 30, totalEvidenceScale: 1, totalReflectionStrength: 0, changeMargin: true, changeTotal: false },
+    },
+    {
+      id: "constrained_lambda_100_scale_0.5",
+      args: { marginFeatureMode: "constrained", marginLambda: 100, marginEvidenceScale: 0.5, totalLambda: 30, totalEvidenceScale: 1, totalReflectionStrength: 0, changeMargin: true, changeTotal: false },
+    },
+    {
+      id: "cross_market_lambda_300_scale_0.75",
+      args: { marginFeatureMode: "cross_market", marginLambda: 300, marginEvidenceScale: 0.75, totalLambda: 30, totalEvidenceScale: 1, totalReflectionStrength: 0, changeMargin: true, changeTotal: false },
+    },
+    {
+      id: "reconciliation_lambda_300_scale_0.75",
+      args: { marginFeatureMode: "reconciliation", marginLambda: 300, marginEvidenceScale: 0.75, totalLambda: 30, totalEvidenceScale: 1, totalReflectionStrength: 0, changeMargin: true, changeTotal: false },
+    },
+    {
+      id: "reconciliation_lambda_1000_scale_1",
+      args: { marginFeatureMode: "reconciliation", marginLambda: 1000, marginEvidenceScale: 1, totalLambda: 30, totalEvidenceScale: 1, totalReflectionStrength: 0, changeMargin: true, changeTotal: false },
+    },
+    {
+      id: "reconciliation_moneyline_lambda_1000_scale_1",
+      args: { marginFeatureMode: "reconciliation_moneyline", marginLambda: 1000, marginEvidenceScale: 1, totalLambda: 30, totalEvidenceScale: 1, totalReflectionStrength: 0, changeMargin: true, changeTotal: false },
+    },
+    {
+      id: "reconciliation_full_lambda_1000_scale_1",
+      args: { marginFeatureMode: "reconciliation_full", marginLambda: 1000, marginEvidenceScale: 1, totalLambda: 30, totalEvidenceScale: 1, totalReflectionStrength: 0, changeMargin: true, changeTotal: false },
+    },
+    {
+      id: "total_lambda_30_evidence_1_reflection_1",
+      args: { marginFeatureMode: "broad", marginLambda: 1000, marginEvidenceScale: 0, totalLambda: 30, totalEvidenceScale: 1, totalReflectionStrength: 1, changeMargin: false, changeTotal: true },
+    },
+    {
+      id: "selected_reconciliation_and_total",
+      args: { marginFeatureMode: "reconciliation", marginLambda: 1000, marginEvidenceScale: 1, totalLambda: 30, totalEvidenceScale: 1, totalReflectionStrength: 1, changeMargin: true, changeTotal: true },
+    },
+    {
+      id: "selected_joint_moneyline_spread_and_total",
+      args: { marginFeatureMode: "reconciliation_moneyline", marginLambda: 1000, marginEvidenceScale: 1, totalLambda: 30, totalEvidenceScale: 1, totalReflectionStrength: 1, changeMargin: true, changeTotal: true },
+    },
+  ] as const;
+  const details = Object.fromEntries(detailConfigs.map(({ id, args }) => {
+    const audit = professionalAuditSummary(walkForward(args));
+    return [id, {
+      interventions: audit.interventionLedger,
+      changedWinnerCalls: audit.upsetEvaluation.changedWinnerCalls,
+    }];
+  }));
+  const selectedCombinedRows = walkForward(detailConfigs.find((config) => config.id === "selected_reconciliation_and_total")!.args);
+  const legacyShortSpreadPolicies = [1.5, 2.5, 3, 3.5, 7].flatMap((maximumSpread) =>
+    [0.5, 0.75, 1].map((independentRestorationStrength) => {
+      const rows = selectedCombinedRows.map((row): ForwardPrediction => {
+        const spread = row.row.game.targetLines.spread;
+        const independentMargin = row.row.game.independent.expectedMarginHome;
+        const legacyChangedWinner = winner(row.activeMargin) !== winner(independentMargin);
+        const eligible = spread !== null && Math.abs(spread) <= maximumSpread && legacyChangedWinner;
+        return {
+          ...row,
+          candidateMargin: eligible
+            ? row.candidateMargin + independentRestorationStrength * (independentMargin - row.candidateMargin)
+            : row.candidateMargin,
+        };
+      });
+      return {
+        id: `legacy_short_spread_${maximumSpread}_restore_${independentRestorationStrength}`,
+        config: { maximumSpread, independentRestorationStrength },
+        blocks: configurationBlockSummary(rows),
+        professionalAudit: professionalAuditSummary(rows),
+      };
+    }));
+  const guardedNearPickemPolicies = [0.5, 1, 1.5, 2, 2.5, 3, 3.5].map((maximumSpread) => {
+    const guardedGames = modelingGames.map((game) => {
+      const spread = game.targetLines.spread;
+      const legacyChangedWinner = winner(game.authoritative.expectedMarginHome) !== winner(game.independent.expectedMarginHome);
+      const guarded = spread !== null && Math.abs(spread) <= maximumSpread && legacyChangedWinner;
+      return guarded ? {
+        ...game,
+        authoritative: {
+          ...game.authoritative,
+          expectedMarginHome: game.independent.expectedMarginHome,
+        },
+      } : game;
+    });
+    const rows = walkForward(
+      detailConfigs.find((config) => config.id === "selected_reconciliation_and_total")!.args,
+      guardedGames,
+    );
+    return {
+      id: `guarded_legacy_near_pickem_${maximumSpread}`,
+      config: { maximumSpread },
+      blocks: configurationBlockSummary(rows),
+      professionalAudit: professionalAuditSummary(rows),
+    };
+  });
+  const jointGuardedNearPickemPolicies = [2.5].map((maximumSpread) => {
+    const guardedGames = modelingGames.map((game) => {
+      const spread = game.targetLines.spread;
+      const legacyChangedWinner = winner(game.authoritative.expectedMarginHome) !== winner(game.independent.expectedMarginHome);
+      const guarded = spread !== null && Math.abs(spread) < maximumSpread && legacyChangedWinner;
+      return guarded ? {
+        ...game,
+        authoritative: {
+          ...game.authoritative,
+          expectedMarginHome: game.independent.expectedMarginHome,
+        },
+      } : game;
+    });
+    const rows = walkForward(
+      detailConfigs.find((config) => config.id === "selected_joint_moneyline_spread_and_total")!.args,
+      guardedGames,
+    );
+    return {
+      id: `joint_moneyline_spread_guarded_legacy_near_pickem_${maximumSpread}`,
+      config: { maximumSpread, comparison: "strictly_less_than" },
+      blocks: configurationBlockSummary(rows),
+      professionalAudit: professionalAuditSummary(rows),
+      bootstrap: clusteredBootstrap(rows),
+    };
+  });
+  const corroboratedWinnerGames = modelingGames.map(suppressUncorroboratedLegacyWinnerFlip);
+  const corroboratedWinnerRows = walkForward(
+    detailConfigs.find((config) => config.id === "selected_reconciliation_and_total")!.args,
+    corroboratedWinnerGames,
+  );
+  const jointCorroboratedWinnerRows = walkForward(
+    detailConfigs.find((config) => config.id === "selected_joint_moneyline_spread_and_total")!.args,
+    corroboratedWinnerGames,
+  );
+  return {
+    release: `cfb_professional_market_reader_configuration_audit_2026_10_09_r1_${candidateBase}_base`,
+    mode: "select_only_zero_writes_zero_provider_calls",
+    protocol: `configuration_neighborhoods_compared_on_development_then_read_on_confirmation_and_micro_holdout_without_refitting_configuration_candidate_base_${candidateBase}`,
+    margin,
+    total,
+    selectedCombined: {
+      blocks: configurationBlockSummary(selectedCombinedRows),
+      bootstrap: clusteredBootstrap(selectedCombinedRows),
+      professionalAudit: professionalAuditSummary(selectedCombinedRows),
+    },
+    legacyShortSpreadPolicies,
+    guardedNearPickemPolicies,
+    jointGuardedNearPickemPolicies,
+    corroboratedWinnerPolicy: {
+      id: "spread_only_legacy_layer_cannot_reverse_outright_winner_without_moneyline_corroboration",
+      blocks: configurationBlockSummary(corroboratedWinnerRows),
+      professionalAudit: professionalAuditSummary(corroboratedWinnerRows),
+    },
+    jointCorroboratedWinnerPolicy: {
+      id: "joint_moneyline_spread_reader_after_uncorroborated_legacy_winner_suppression",
+      blocks: configurationBlockSummary(jointCorroboratedWinnerRows),
+      professionalAudit: professionalAuditSummary(jointCorroboratedWinnerRows),
+      bootstrap: clusteredBootstrap(jointCorroboratedWinnerRows),
+    },
+    details,
+  };
+}
+
+function runProfessionalLossAudit(games: Game[]) {
+  const rows: ResidualRow[] = games.map((game) => ({
+    game,
+    marginFeatures: professionalReconciliationMarginFeatures(game, "moneyline"),
+    totalFeatures: constrainedMarketFeatures(game, "total"),
+    actualMargin: game.homeScore - game.awayScore,
+    actualTotal: game.homeScore + game.awayScore,
+  }));
+  const dates = [...new Set(rows.map((row) => row.game.date))].sort();
+  const forward = dates.flatMap((date) => {
+    const training = rows.filter((row) => row.game.date < date);
+    const testing = rows.filter((row) => row.game.date === date);
+    if (training.length < 80 || testing.length === 0) return [];
+    const marginModel = fitPosterior(training, "margin", 1000);
+    const totalModel = fitPosterior(training, "total", 30);
+    return testing.map((row): ForwardPrediction => ({
+      date,
+      gameId: row.game.gameId,
+      row,
+      activeMargin: row.game.authoritative.expectedMarginHome,
+      activeTotal: row.game.authoritative.expectedTotal,
+      candidateMargin: posteriorObservedEvidenceAxis(row, "margin", marginModel, 1),
+      candidateTotal: posteriorFlipOnlyAxis(row, "total", totalModel, 1),
+    }));
+  });
+  const ledger = professionalInterventionLedger(forward);
+  const losses = ledger.filter((row) => row.activeResult === "loss").map((entry) => {
+    const prediction = forward.find((row) => row.gameId === entry.gameId)!;
+    const features = entry.market === "total" ? prediction.row.totalFeatures : prediction.row.marginFeatures;
+    const axis = entry.market === "total" ? "total" : "margin";
+    const observed = hasObservedAxisMarketReadingEvidence(features, axis);
+    const activeError = Math.abs(entry.active - entry.actual);
+    const candidateError = Math.abs(entry.candidate - entry.actual);
+    const improvement = activeError - candidateError;
+    const category = entry.classification === "correction"
+      ? "corrected_by_selected_reader"
+      : !observed
+        ? "no_usable_sequence_warning"
+        : Math.abs(entry.shift) < 1e-9
+          ? "observed_evidence_but_no_selected_adjustment"
+          : improvement > 1e-9
+            ? "signal_toward_outcome_but_not_enough_to_flip"
+            : improvement < -1e-9
+              ? "signal_away_from_outcome"
+              : "signal_axis_neutral";
+    return { ...entry, observedSequenceEvidence: observed, activeError, candidateError, errorReduction: improvement, category };
+  });
+  const summarize = (selected: typeof losses) => ({
+    losses: selected.length,
+    meanAxisErrorReduction: average(selected.map((row) => row.errorReduction)),
+    categories: Object.fromEntries([...new Set(selected.map((row) => row.category))].sort().map((category) =>
+      [category, selected.filter((row) => row.category === category).length])),
+    withSplits: selected.filter((row) => Object.keys(row.observedEvidence).some((name) => name.startsWith("split_"))).length,
+    withNamedMovement: selected.filter((row) => Object.keys(row.observedEvidence).some((name) => name.includes("_named_") && name.includes("move"))).length,
+  });
+  const upset = professionalUpsetSummary(forward);
+  const missedUpsetEvidence = upset.missedActualUpsets.map((missed) => {
+    const prediction = forward.find((row) => row.gameId === missed.gameId)!;
+    const features = prediction.row.marginFeatures;
+    const selectedFeatureNames = [
+      "active_margin",
+      "independent_margin",
+      "legacy_margin_shift",
+      "legacy_margin_shift_abs",
+      "legacy_moneyline_side_changed",
+      "legacy_spread_side_changed",
+      "spread_all_opening_axis",
+      "spread_all_current_axis",
+      "spread_all_axis_move",
+      "spread_all_probability_move",
+      "spread_all_reversal_count",
+      "spread_named_axis_move",
+      "spread_named_probability_move",
+      "spread_named_reversal_count",
+      "spread_retail_axis_move",
+      "spread_retail_probability_move",
+      "spread_retail_reversal_count",
+      "moneyline_all_probability_move",
+      "moneyline_all_reversal_count",
+      "moneyline_named_probability_move",
+      "moneyline_named_reversal_count",
+      "moneyline_retail_probability_move",
+      "moneyline_retail_reversal_count",
+      "split_named_sharp",
+      "split_fallback",
+      "split_public",
+    ];
+    return {
+      ...missed,
+      targetSpreadHome: prediction.row.game.targetLines.spread,
+      marketEvidence: Object.fromEntries(selectedFeatureNames.flatMap((name) =>
+        features[name] === undefined ? [] : [[name, features[name]!]])),
+    };
+  });
+  return {
+    release: "cfb_professional_market_reader_loss_audit_2026_10_09_r1",
+    mode: "select_only_zero_writes_zero_provider_calls",
+    selectedConfiguration: {
+      margin: { featureSet: "reconciliation_target_excluded_sequence", lambda: 1000, evidenceScale: 1 },
+      total: { featureSet: "constrained_target_excluded_sequence", lambda: 30, evidenceScale: 1, reflectionStrength: 1 },
+    },
+    evaluatedGames: forward.length,
+    overall: summarize(losses),
+    byMarket: Object.fromEntries(MARKETS.map((market) => [market, summarize(losses.filter((row) => row.market === market))])),
+    byGrade: Object.fromEntries(["Best Angle", "Lean", "Watchlist", "No Play", "Held"].map((grade) =>
+      [grade, summarize(losses.filter((row) => row.grade === grade))])),
+    losses,
+    upsetEvaluation: upset,
+    missedUpsetEvidence,
+  };
+}
+
+function latestPublicMoneylineMajority(game: Game): "home" | "away" | null {
+  const split = game.histories
+    .flatMap((history) => history.payload.market.playbookSplits?.moneyline
+      ? [history.payload.market.playbookSplits.moneyline]
+      : [])
+    .filter((candidate) => Date.parse(candidate.capturedAt) <= Date.parse(game.kickoffAt))
+    .sort((first, second) => Date.parse(first.capturedAt) - Date.parse(second.capturedAt))
+    .at(-1);
+  if (!split || split.homeMoneyPct === null || split.awayMoneyPct === null) return null;
+  if (Math.abs(split.homeMoneyPct - split.awayMoneyPct) < 1e-9) return null;
+  return split.homeMoneyPct > split.awayMoneyPct ? "home" : "away";
+}
+
+function suppressUncorroboratedLegacyWinnerFlip(game: Game): Game {
+  const activeWinner = winner(game.authoritative.expectedMarginHome);
+  const independentWinner = winner(game.independent.expectedMarginHome);
+  if (activeWinner === "push" || independentWinner === "push") return game;
+  if (activeWinner === independentWinner || latestPublicMoneylineMajority(game) === activeWinner) return game;
+  return {
+    ...game,
+    authoritative: {
+      ...game.authoritative,
+      expectedMarginHome: game.independent.expectedMarginHome,
+    },
+  };
+}
+
+function exportCombinedMarketReaderArtifact(games: Game[]) {
+  const guardedGames = games.map((game) => {
+    const spread = game.targetLines.spread;
+    const legacyChangedWinner = winner(game.authoritative.expectedMarginHome) !== winner(game.independent.expectedMarginHome);
+    const moneylineDominantBand = spread !== null && Math.abs(spread) < 2.5;
+    return moneylineDominantBand && legacyChangedWinner ? {
+      ...game,
+      authoritative: {
+        ...game.authoritative,
+        expectedMarginHome: game.independent.expectedMarginHome,
+      },
+    } : game;
+  });
+  const rows: ResidualRow[] = guardedGames.map((game) => ({
+    game,
+    marginFeatures: professionalReconciliationMarginFeatures(game, "moneyline"),
+    totalFeatures: constrainedMarketFeatures(game, "total"),
+    actualMargin: game.homeScore - game.awayScore,
+    actualTotal: game.homeScore + game.awayScore,
+  }));
+  const marginModel = fitPosterior(rows, "margin", 1000);
+  const totalModel = fitPosterior(rows, "total", 30);
+  return {
+    release: "cfb_market_reader_artifact_2026_10_09_r4_joint_moneyline_spread_reconciliation",
     trainedThrough: [...games.map((game) => game.date)].sort().at(-1),
     games: rows.length,
     selectionProtocol: "configurations_frozen_before_confirmation_then_refit_on_all_pregame_lock_boundary_rows",
-    margin: { lambda: 1000, evidenceScale: 1, mode: "continuous_only_with_observed_movement_or_split_evidence", model: fitPosterior(rows, "margin", 1000) },
-    total: { lambda: 30, evidenceScale: 1, mode: "full_reflection_only_when_continuous_posterior_crosses_market_side", model: fitPosterior(rows, "total", 30) },
+    margin: { lambda: 1000, evidenceScale: 1, mode: "joint_moneyline_spread_professional_reconciliation_continuous_only_with_observed_movement_or_split_evidence", model: marginModel },
+    total: {
+      lambda: 30,
+      evidenceScale: 1,
+      mode: "full_reflection_inside_chronological_support_then_continuous_extrapolation_decay",
+      reflectionSupport: {
+        method: "maximum_active_market_distance_among_chronologically_evaluated_total_flips",
+        maximumChronologicalActiveMarketDistance: TOTAL_REFLECTION_CHRONOLOGICAL_SUPPORT_POINTS,
+      },
+      model: totalModel,
+    },
   };
 }
 
@@ -1357,7 +2247,7 @@ function currentBoardMarketReaderCandidate(
 ) {
   const training = trainingGames.map((game): ResidualRow => ({
     game,
-    marginFeatures: residualFeatures(game, "margin", false),
+    marginFeatures: professionalReconciliationMarginFeatures(game, "moneyline"),
     totalFeatures: constrainedMarketFeatures(game, "total"),
     actualMargin: game.homeScore - game.awayScore,
     actualTotal: game.homeScore + game.awayScore,
@@ -1389,8 +2279,18 @@ function currentBoardMarketReaderCandidate(
       homeFbs: stored.payload.game.home.fbs,
       awayConferenceId: stored.payload.game.away.conferenceId,
       homeConferenceId: stored.payload.game.home.conferenceId,
-      independent: { expectedMarginHome: independent.expectedMarginHome, expectedTotal: independent.expectedTotal },
-      authoritative: { expectedMarginHome: authoritative.expectedMarginHome, expectedTotal: authoritative.expectedTotal },
+      independent: {
+        expectedMarginHome: independent.expectedMarginHome,
+        expectedTotal: independent.expectedTotal,
+        homeWinProbability: independent.homeWinProbability,
+        pmf: "pmf" in independent ? independent.pmf as Forecast["pmf"] : undefined,
+      },
+      authoritative: {
+        expectedMarginHome: authoritative.expectedMarginHome,
+        expectedTotal: authoritative.expectedTotal,
+        homeWinProbability: authoritative.homeWinProbability,
+        pmf: "pmf" in authoritative ? authoritative.pmf as Forecast["pmf"] : undefined,
+      },
       targetLines: { moneyline: null, spread: homeSpreadLine, total: totalDecision?.evaluatedQuote.line ?? null },
       targetGrades: Object.fromEntries(MARKETS.map((market) => [
         market,
@@ -1406,7 +2306,7 @@ function currentBoardMarketReaderCandidate(
     };
     const residual: ResidualRow = {
       game,
-      marginFeatures: residualFeatures(game, "margin", false),
+      marginFeatures: professionalReconciliationMarginFeatures(game, "moneyline"),
       totalFeatures: constrainedMarketFeatures(game, "total"),
       actualMargin: 0,
       actualTotal: 0,
@@ -1449,6 +2349,37 @@ function currentBoardMarketReaderCandidate(
       ...candidateSummary,
       pmf: candidatePmf,
     };
+    const capture = stored.payload.contextualEvidenceCapture;
+    const runtimeCandidate = capture ? applyCfbCompleteMarketReader({
+      forecast: alignedActive,
+      independentForecast: independent,
+      histories: histories.slice(0, -1),
+      currentObservation: {
+        capturedAt: stored.capturedAt,
+        markets: {
+          moneyline: {
+            families: capture.markets.moneyline.families,
+            targetExcludedFamilies: capture.markets.moneyline.targetExcludedFamilies,
+          },
+          spread: {
+            families: capture.markets.spread.families,
+            targetExcludedFamilies: capture.markets.spread.targetExcludedFamilies,
+          },
+          total: {
+            families: capture.markets.total.families,
+            targetExcludedFamilies: capture.markets.total.targetExcludedFamilies,
+          },
+        },
+        playbookSplits: stored.payload.market.playbookSplits,
+        sharpApiSplits: stored.payload.market.sharpApiSplits ?? [],
+      },
+      kickoffAt: stored.gameStartAt,
+      awayFbs: game.awayFbs,
+      homeFbs: game.homeFbs,
+      awayConferenceId: game.awayConferenceId,
+      homeConferenceId: game.homeConferenceId,
+    }) : null;
+    const effectiveCandidateForecast = runtimeCandidate?.forecast ?? candidateForecast;
     const fixedEvaluatedSportsbookByMarket = Object.fromEntries(stored.payload.decisions.evaluatedBets.map((decision) =>
       [decision.market, decision.evaluatedQuote.sportsbook]));
     const decisionBundleFor = (forecast: CfbV1Forecast, healthHolds: string[]) => applyCfbVerifiedAvailabilityGradeCap({
@@ -1485,7 +2416,7 @@ function currentBoardMarketReaderCandidate(
     const baselineBundle = decisionBundleFor(alignedActive, stored.payload.coverage.healthHolds);
     const candidateHealthHolds = stored.payload.coverage.healthHolds
       .filter((hold) => hold !== "authoritative_market_anchor_unavailable");
-    const candidateBundle = decisionBundleFor(candidateForecast, candidateHealthHolds);
+    const candidateBundle = decisionBundleFor(effectiveCandidateForecast, candidateHealthHolds);
     const replayChecks = MARKETS.map((market) => {
       const activeDecision = stored.payload.decisions.evaluatedBets.find((item) => item.market === market) ?? null;
       const baselineDecision = baselineBundle.evaluatedBets.find((item) => item.market === market) ?? null;
@@ -1501,8 +2432,8 @@ function currentBoardMarketReaderCandidate(
     const exactReplayValid = replayChecks.every((check) =>
       check.gradeMatches && check.priceMatches && check.probabilityDifference <= 0.002);
     const score = {
-      away: candidateSummary.expectedAwayPoints,
-      home: candidateSummary.expectedHomePoints,
+      away: effectiveCandidateForecast.expectedAwayPoints,
+      home: effectiveCandidateForecast.expectedHomePoints,
     };
     const regime = (market: Market, raw: number) => {
       const line = market === "moneyline" ? 0 : game.targetLines[market];
@@ -1517,18 +2448,26 @@ function currentBoardMarketReaderCandidate(
       const line = game.targetLines[market];
       const activeAxis = market === "total" ? activeTotal : activeMargin;
       const rawAxis = market === "total" ? rawTotal : rawMargin;
-      const candidateAxis = market === "total" ? candidateTotal : candidateMargin;
+      const candidateAxis = market === "total"
+        ? effectiveCandidateForecast.expectedTotal
+        : effectiveCandidateForecast.expectedMarginHome;
       const activeSide = sideAt({ expectedMarginHome: activeMargin, expectedTotal: activeTotal }, market, line);
       const candidateSide = sideAt({ expectedMarginHome: candidateMargin, expectedTotal: candidateTotal }, market, line);
       const decision = stored.payload.decisions.evaluatedBets.find((item) => item.market === market) ?? null;
       const candidateDecision = candidateBundle.evaluatedBets.find((item) => item.market === market) ?? null;
       const candidateHeldMarket = candidateBundle.heldMarkets.find((item) => item.market === market) ?? null;
+      const runtimeBaselineDecision = baselineBundle.evaluatedBets.find((item) => item.market === market) ?? null;
       const activeGrade = decision?.grade ?? "Held";
       const candidateGrade = exactReplayValid ? candidateDecision?.grade ?? "Held" : activeGrade;
+      const runtimeBaselineGrade = runtimeBaselineDecision?.grade ?? "Held";
+      const runtimeCandidateGrade = candidateDecision?.grade ?? "Held";
       const candidateAdjustment = exactReplayValid ? candidateDecision?.gradeAdjustment ?? null : decision?.gradeAdjustment ?? null;
       const evidenceAvailable = market === "total"
         ? hasObservedAxisMarketReadingEvidence(residual.totalFeatures, "total")
         : hasObservedAxisMarketReadingEvidence(residual.marginFeatures, "margin");
+      const observedEvidence = Object.fromEntries(Object.entries(
+        market === "total" ? residual.totalFeatures : residual.marginFeatures,
+      ).filter(([, featureValue]) => Math.abs(featureValue) > 1e-9));
       const splitEvidenceAvailable = candidateAdjustment !== null && (
         candidateAdjustment.sharpDirection !== "unknown" || candidateAdjustment.publicDirection !== "unknown"
       );
@@ -1537,6 +2476,7 @@ function currentBoardMarketReaderCandidate(
         line,
         regime: regime(market, rawAxis),
         evidenceAvailable,
+        observedEvidence,
         splitEvidenceAvailable,
         movementEvidenceAvailable,
         activeAxis,
@@ -1549,6 +2489,9 @@ function currentBoardMarketReaderCandidate(
         activeGrade,
         candidateGrade,
         gradeChanged: activeGrade !== candidateGrade,
+        runtimeBaselineGrade,
+        runtimeCandidateGrade,
+        runtimeGradeChanged: runtimeBaselineGrade !== runtimeCandidateGrade,
         activeProbability: decision?.modelProbability ?? null,
         candidateProbability: candidateDecision?.modelProbability ?? null,
         activePrice: decision?.evaluatedQuote.price ?? null,
@@ -1570,6 +2513,16 @@ function currentBoardMarketReaderCandidate(
         alignedMarginDifference: alignedActive.expectedMarginHome - authoritative.expectedMarginHome,
         alignedTotalDifference: alignedActive.expectedTotal - authoritative.expectedTotal,
       },
+      runtimeParityDifference: runtimeCandidate ? Math.max(
+        Math.abs(runtimeCandidate.forecast.expectedMarginHome - effectiveCandidateForecast.expectedMarginHome),
+        Math.abs(runtimeCandidate.forecast.expectedTotal - effectiveCandidateForecast.expectedTotal),
+      ) : null,
+      runtimeParity: runtimeCandidate ? {
+        auditMargin: effectiveCandidateForecast.expectedMarginHome,
+        runtimeMargin: runtimeCandidate.forecast.expectedMarginHome,
+        auditTotal: effectiveCandidateForecast.expectedTotal,
+        runtimeTotal: runtimeCandidate.forecast.expectedTotal,
+      } : null,
       exactReplayValid,
       replayChecks,
       negativeCandidateScore: score.away < 0 || score.home < 0,
@@ -1580,13 +2533,13 @@ function currentBoardMarketReaderCandidate(
   const marketRows = MARKETS.flatMap((market) => games.map((game) => ({ game, market, value: game.markets[market] as {
     regime: string; evidenceAvailable: boolean; splitEvidenceAvailable: boolean; movementEvidenceAvailable: boolean; axisShift: number;
     sideChanged: boolean; activeGrade: string; candidateGrade: string; gradeChanged: boolean; candidateReasonCodes: string[];
-    candidateHeldReasonCodes: string[];
+    runtimeBaselineGrade: string; runtimeCandidateGrade: string; runtimeGradeChanged: boolean; candidateHeldReasonCodes: string[];
   } })));
   const gradeRank = (grade: string) => ({ Held: 0, "No Play": 1, Watchlist: 2, Lean: 3, "Best Angle": 4 })[grade] ?? 0;
   return {
-    release: "cfb_complete_market_reader_current_board_candidate_2026_10_08_r1",
+    release: "cfb_professional_market_reconciliation_current_board_candidate_2026_10_09_r3",
     mode,
-    artifact: "cfb_market_reader_artifact_2026_10_08_r1",
+    artifact: "cfb_market_reader_artifact_2026_10_09_r4_joint_moneyline_spread_reconciliation",
     trainedGames: training.length,
     boardGames: games.length,
     anchorHoldGames: games.filter((game) => game.anchorHoldRemoved).length,
@@ -1601,6 +2554,19 @@ function currentBoardMarketReaderCandidate(
       Math.abs(game.reconstruction.marginDifference),
       Math.abs(game.reconstruction.totalDifference),
     ])),
+    maximumAbsoluteAlignedReconstructionDifference: Math.max(0, ...games.flatMap((game) => [
+      Math.abs(game.reconstruction.alignedMarginDifference),
+      Math.abs(game.reconstruction.alignedTotalDifference),
+    ])),
+    maximumRuntimeParityDifference: Math.max(0, ...games.flatMap((game) =>
+      game.runtimeParityDifference === null ? [] : [game.runtimeParityDifference])),
+    runtimeParityMismatches: games.filter((game) => (game.runtimeParityDifference ?? 0) > 1e-9)
+      .map((game) => ({
+        matchup: game.matchup,
+        startsAt: game.startsAt,
+        difference: game.runtimeParityDifference,
+        ...game.runtimeParity,
+      })),
     reconstructionMismatches: games.filter((game) =>
       Math.abs(game.reconstruction.marginDifference) > 1e-6 || Math.abs(game.reconstruction.totalDifference) > 1e-6)
       .map((game) => ({ matchup: game.matchup, startsAt: game.startsAt, ...game.reconstruction })),
@@ -1630,6 +2596,19 @@ function currentBoardMarketReaderCandidate(
           [grade, selected.filter((row) => row.value.activeGrade === grade).length])),
         candidateGrades: Object.fromEntries(["Best Angle", "Lean", "Watchlist", "No Play", "Held"].map((grade) =>
           [grade, selected.filter((row) => row.value.candidateGrade === grade).length])),
+        currentRuntimeAblation: {
+          baselineGrades: Object.fromEntries(["Best Angle", "Lean", "Watchlist", "No Play", "Held"].map((grade) =>
+            [grade, selected.filter((row) => row.value.runtimeBaselineGrade === grade).length])),
+          candidateGrades: Object.fromEntries(["Best Angle", "Lean", "Watchlist", "No Play", "Held"].map((grade) =>
+            [grade, selected.filter((row) => row.value.runtimeCandidateGrade === grade).length])),
+          gradeChanges: selected.filter((row) => row.value.runtimeGradeChanged).length,
+          actionablePromotions: selected.filter((row) =>
+            !["Best Angle", "Lean"].includes(row.value.runtimeBaselineGrade) &&
+            ["Best Angle", "Lean"].includes(row.value.runtimeCandidateGrade)).length,
+          actionableDemotions: selected.filter((row) =>
+            ["Best Angle", "Lean"].includes(row.value.runtimeBaselineGrade) &&
+            !["Best Angle", "Lean"].includes(row.value.runtimeCandidateGrade)).length,
+        },
         regimes: Object.fromEntries(["confirmation", "resistance", "flip_candidate", "neutral", "unpriced"].map((regime) =>
           [regime, selected.filter((row) => row.value.regime === regime).length])),
         evidenceByRegime: Object.fromEntries(["confirmation", "resistance", "flip_candidate", "neutral", "unpriced"].map((regime) =>
@@ -1651,7 +2630,7 @@ function currentBoardMarketReaderCandidate(
       }];
     })),
     changes: games.flatMap((game) => MARKETS.flatMap((market) => {
-      const value = game.markets[market] as { sideChanged: boolean; gradeChanged: boolean };
+      const value = game.markets[market];
       return value.sideChanged || value.gradeChanged ? [{ matchup: game.matchup, startsAt: game.startsAt, market, ...value }] : [];
     })),
     games,
@@ -2058,7 +3037,199 @@ async function main(): Promise<void> {
     return;
   }
   const games: Game[] = [];
-  for (const row of latest.values()) { const result = results.get(row.providerGameId); const histories = byGame.get(row.providerGameId) ?? []; if (!isFinal(result) || !histories.length) continue; const independent = row.payload.independentForecast ?? row.payload.decisions.forecast; const authoritative = row.payload.decisions.forecast; const spreadDecision = row.payload.decisions.evaluatedBets.find((decision) => decision.market === "spread") ?? null; const totalDecision = row.payload.decisions.evaluatedBets.find((decision) => decision.market === "total") ?? null; const selectedSpreadLine = spreadDecision?.evaluatedQuote.line ?? null; const homeSpreadLine = selectedSpreadLine === null || !spreadDecision ? null : isHomeDecisionSide(spreadDecision.side, row.payload.game.home.abbreviation) ? selectedSpreadLine : -selectedSpreadLine; games.push({ gameId: row.providerGameId, date: row.gameStartAt.slice(0, 10), kickoffAt: row.gameStartAt, awayTeam: row.payload.game.away.abbreviation, homeTeam: row.payload.game.home.abbreviation, awayFbs: row.payload.game.away.fbs, homeFbs: row.payload.game.home.fbs, awayConferenceId: row.payload.game.away.conferenceId, homeConferenceId: row.payload.game.home.conferenceId, independent: { expectedMarginHome: independent.expectedMarginHome, expectedTotal: independent.expectedTotal }, authoritative: { expectedMarginHome: authoritative.expectedMarginHome, expectedTotal: authoritative.expectedTotal }, targetLines: { moneyline: null, spread: homeSpreadLine, total: totalDecision?.evaluatedQuote.line ?? null }, targetGrades: Object.fromEntries(MARKETS.map((market) => [market, row.payload.decisions.evaluatedBets.find((decision) => decision.market === market)?.grade ?? "Held"])) as Record<Market, string>, targetPrices: Object.fromEntries(MARKETS.map((market) => [market, row.payload.decisions.evaluatedBets.find((decision) => decision.market === market)?.evaluatedQuote.price ?? null])) as Record<Market, number | null>, awayScore: result.away_score!, homeScore: result.home_score!, histories: histories.sort((a, b) => Date.parse(a.capturedAt) - Date.parse(b.capturedAt)) }); }
+  for (const row of latest.values()) {
+    const result = results.get(row.providerGameId);
+    const histories = byGame.get(row.providerGameId) ?? [];
+    if (!isFinal(result) || !histories.length) continue;
+    const independent = row.payload.independentForecast ?? row.payload.decisions.forecast;
+    const authoritative = row.payload.decisions.forecast;
+    const spreadDecision = row.payload.decisions.evaluatedBets.find((decision) => decision.market === "spread") ?? null;
+    const totalDecision = row.payload.decisions.evaluatedBets.find((decision) => decision.market === "total") ?? null;
+    const selectedSpreadLine = spreadDecision?.evaluatedQuote.line ?? null;
+    const homeSpreadLine = selectedSpreadLine === null || !spreadDecision
+      ? null
+      : isHomeDecisionSide(spreadDecision.side, row.payload.game.home.abbreviation)
+        ? selectedSpreadLine
+        : -selectedSpreadLine;
+    games.push({
+      gameId: row.providerGameId,
+      date: row.gameStartAt.slice(0, 10),
+      kickoffAt: row.gameStartAt,
+      awayTeam: row.payload.game.away.abbreviation,
+      homeTeam: row.payload.game.home.abbreviation,
+      awayFbs: row.payload.game.away.fbs,
+      homeFbs: row.payload.game.home.fbs,
+      awayConferenceId: row.payload.game.away.conferenceId,
+      homeConferenceId: row.payload.game.home.conferenceId,
+      independent: {
+        expectedMarginHome: independent.expectedMarginHome,
+        expectedTotal: independent.expectedTotal,
+        homeWinProbability: independent.homeWinProbability,
+        pmf: "pmf" in independent ? independent.pmf as Forecast["pmf"] : undefined,
+      },
+      authoritative: {
+        expectedMarginHome: authoritative.expectedMarginHome,
+        expectedTotal: authoritative.expectedTotal,
+        homeWinProbability: authoritative.homeWinProbability,
+        pmf: "pmf" in authoritative ? authoritative.pmf as Forecast["pmf"] : undefined,
+      },
+      targetLines: {
+        moneyline: null,
+        spread: homeSpreadLine,
+        total: totalDecision?.evaluatedQuote.line ?? null,
+      },
+      targetGrades: Object.fromEntries(MARKETS.map((market) => [
+        market,
+        row.payload.decisions.evaluatedBets.find((decision) => decision.market === market)?.grade ?? "Held",
+      ])) as Record<Market, string>,
+      targetPrices: Object.fromEntries(MARKETS.map((market) => [
+        market,
+        row.payload.decisions.evaluatedBets.find((decision) => decision.market === market)?.evaluatedQuote.price ?? null,
+      ])) as Record<Market, number | null>,
+      awayScore: result.away_score!,
+      homeScore: result.home_score!,
+      histories: histories.sort((first, second) => Date.parse(first.capturedAt) - Date.parse(second.capturedAt)),
+    });
+  }
+  const requestedGame = process.argv.find((value) => value.startsWith("--game="))?.slice(7) ?? null;
+  if (process.argv.includes("--stored-playbook-coverage")) {
+    const latestPlaybookByGame = games.map((game) => {
+      const observations = game.histories.flatMap((history) => {
+        const splits = history.payload.market.playbookSplits;
+        if (!splits) return [];
+        const markets = MARKETS.filter((market) => splits[market] !== null);
+        return markets.length ? [{ capturedAt: history.capturedAt, markets }] : [];
+      }).sort((first, second) => Date.parse(first.capturedAt) - Date.parse(second.capturedAt));
+      return { gameId: game.gameId, latest: observations.at(-1) ?? null };
+    });
+    const captured = latestPlaybookByGame.filter((row) => row.latest !== null);
+    console.log(JSON.stringify({
+      release: "cfb_stored_playbook_coverage_2026_10_09_r1",
+      mode: "select_only_zero_writes_zero_provider_calls",
+      settledGames: games.length,
+      gamesWithStoredPlaybookSplits: captured.length,
+      latestCapturedAt: captured.map((row) => row.latest!.capturedAt).sort().at(-1) ?? null,
+      byMarket: Object.fromEntries(MARKETS.map((market) => [market,
+        captured.filter((row) => row.latest!.markets.includes(market)).length])),
+    }, null, 2));
+    return;
+  }
+  if (requestedGame) {
+    const game = games.find((candidate) =>
+      candidate.gameId === requestedGame ||
+      `${candidate.awayTeam}@${candidate.homeTeam}`.toLowerCase() === requestedGame.toLowerCase());
+    if (!game) throw new Error(`CFB audit game ${requestedGame} was not found in the selected evidence set.`);
+    const stored = latest.get(game.gameId)!;
+    const training = games.filter((candidate) => candidate.date < game.date).map((candidate): ResidualRow => ({
+      game: candidate,
+      marginFeatures: residualFeatures(candidate, "margin", false),
+      totalFeatures: constrainedMarketFeatures(candidate, "total"),
+      actualMargin: candidate.homeScore - candidate.awayScore,
+      actualTotal: candidate.homeScore + candidate.awayScore,
+    }));
+    const row: ResidualRow = {
+      game,
+      marginFeatures: residualFeatures(game, "margin", false),
+      totalFeatures: constrainedMarketFeatures(game, "total"),
+      actualMargin: game.homeScore - game.awayScore,
+      actualTotal: game.homeScore + game.awayScore,
+    };
+    const marginModel = fitPosterior(training, "margin", 1000);
+    const totalModel = fitPosterior(training, "total", 30);
+    const rawMargin = posteriorResidualAxis(row, "margin", marginModel, 1);
+    const candidateMargin = posteriorObservedEvidenceAxis(row, "margin", marginModel, 1);
+    const rawTotal = posteriorResidualAxis(row, "total", totalModel, 1);
+    const candidateTotal = posteriorFlipOnlyAxis(row, "total", totalModel, 1);
+    const independentBaseTraining = training.map((candidate) => ({
+      ...candidate,
+      game: { ...candidate.game, authoritative: candidate.game.independent },
+    }));
+    const independentBaseRow: ResidualRow = {
+      ...row,
+      game: { ...row.game, authoritative: row.game.independent },
+    };
+    const independentBaseMarginModel = fitPosterior(independentBaseTraining, "margin", 1000);
+    const independentBaseTotalModel = fitPosterior(independentBaseTraining, "total", 30);
+    const independentBaseRawMargin = posteriorResidualAxis(independentBaseRow, "margin", independentBaseMarginModel, 1);
+    const independentBaseCandidateMargin = posteriorObservedEvidenceAxis(independentBaseRow, "margin", independentBaseMarginModel, 1);
+    const independentBaseRawTotal = posteriorResidualAxis(independentBaseRow, "total", independentBaseTotalModel, 1);
+    const independentBaseCandidateTotal = posteriorFlipOnlyAxis(independentBaseRow, "total", independentBaseTotalModel, 1);
+    console.log(JSON.stringify({
+      release: "cfb_game_market_sequence_review_2026_10_09_r1",
+      mode: "select_only_zero_writes_zero_provider_calls",
+      source: officialLocks ? "official_locked_payload" : "latest_pregame_payload",
+      game: {
+        providerGameId: game.gameId,
+        matchup: `${game.awayTeam}@${game.homeTeam}`,
+        kickoffAt: game.kickoffAt,
+        final: { away: game.awayScore, home: game.homeScore },
+        actualMarginHome: row.actualMargin,
+        actualTotal: row.actualTotal,
+      },
+      lock: {
+        capturedAt: stored.capturedAt,
+        stage: stored.stage,
+        schemaRelease: stored.payload.schemaRelease,
+        memberRelease: stored.payload.memberRelease,
+        decisionRelease: stored.payload.decisions.decisionRelease,
+      },
+      forecasts: {
+        independent: game.independent,
+        released: game.authoritative,
+        correctedTargetExcludedReader: {
+          trainingGames: training.length,
+          rawMargin,
+          candidateMargin,
+          marginShift: candidateMargin - game.authoritative.expectedMarginHome,
+          rawTotal,
+          candidateTotal,
+          totalShift: candidateTotal - game.authoritative.expectedTotal,
+        },
+        independentBaseTargetExcludedReader: {
+          trainingGames: independentBaseTraining.length,
+          rawMargin: independentBaseRawMargin,
+          candidateMargin: independentBaseCandidateMargin,
+          marginShift: independentBaseCandidateMargin - game.independent.expectedMarginHome,
+          rawTotal: independentBaseRawTotal,
+          candidateTotal: independentBaseCandidateTotal,
+          totalShift: independentBaseCandidateTotal - game.independent.expectedTotal,
+        },
+      },
+      releasedDecisions: stored.payload.decisions.evaluatedBets.map((decision) => ({
+        market: decision.market,
+        side: decision.side,
+        grade: decision.grade,
+        modelProbability: decision.modelProbability,
+        evaluatedQuote: decision.evaluatedQuote,
+        gradeAdjustment: decision.gradeAdjustment,
+      })),
+      sequence: Object.fromEntries(MARKETS.map((market) => [market, {
+        movements: marketMoves(game.histories, market),
+        splits: splitReads(game.histories, market),
+        observations: game.histories.map((history) => ({
+          capturedAt: history.capturedAt,
+          families: families(history, market).map((family) => ({
+            family: family[0],
+            sourceClass: family[2],
+            opening: family[4],
+            current: family[5],
+          })),
+          public: history.payload.market.playbookSplits?.[market] ?? null,
+          sharp: (history.payload.market.sharpApiSplits ?? []).map((record) => ({
+            capturedAt: record.capturedAt,
+            sportsbook: record.sportsbook,
+            sourceSemantics: record.sourceSemantics,
+            market: market === "moneyline" ? record.moneyline : market === "spread" ? record.spread : record.total,
+          })),
+        })),
+      }])),
+      features: {
+        margin: row.marginFeatures,
+        total: row.totalFeatures,
+      },
+    }, null, 2));
+    return;
+  }
   if (process.argv.includes("--fcs-historical-plan")) {
     const fcs = games.filter((game) => !game.awayFbs && !game.homeFbs);
     const kickoffGroups = [...new Map(fcs.map((game) => [game.kickoffAt, fcs.filter((candidate) => candidate.kickoffAt === game.kickoffAt)])).entries()]
@@ -2301,6 +3472,7 @@ async function main(): Promise<void> {
         auditForceUnlocked: true,
         auditForceTheOddsApi: true,
         auditDisableIndependentPriceLane: process.argv.includes("--disable-independent-price-lane"),
+        auditDisableCompleteMarketReader: true,
         auditForecasts: (forecasts) => { auditForecasts = forecasts; },
       });
       currentRows = auditForecasts.map((row, index) => ({
@@ -2425,6 +3597,36 @@ async function main(): Promise<void> {
       actionableDemotions: writerInputChanges.filter((change) => actionable(change.beforeGrade) && !actionable(change.afterGrade)).length,
     } : null;
     const summaryOnly = process.argv.includes("--summary-only");
+    if (process.argv.includes("--interventions-only")) {
+      console.log(JSON.stringify({
+        release: report.release,
+        mode: report.mode,
+        artifact: report.artifact,
+        boardGames: report.boardGames,
+        interventions: report.changes.map((change) => ({
+          matchup: change.matchup,
+          startsAt: change.startsAt,
+          market: change.market,
+          line: change.line,
+          regime: change.regime,
+          evidenceAvailable: change.evidenceAvailable,
+          observedEvidence: change.observedEvidence,
+          splitEvidenceAvailable: change.splitEvidenceAvailable,
+          movementEvidenceAvailable: change.movementEvidenceAvailable,
+          activeAxis: change.activeAxis,
+          rawEvidenceAxis: change.rawEvidenceAxis,
+          candidateAxis: change.candidateAxis,
+          axisShift: change.axisShift,
+          activeSide: change.activeSide,
+          candidateSide: change.candidateSide,
+          activeGrade: change.activeGrade,
+          candidateGrade: change.candidateGrade,
+          candidateReasonCodes: change.candidateReasonCodes,
+          candidateHeldReasonCodes: change.candidateHeldReasonCodes,
+        })),
+      }, null, 2));
+      return;
+    }
     const output = process.argv.includes("--compact") ? {
       release: report.release,
       mode: report.mode,
@@ -2435,6 +3637,9 @@ async function main(): Promise<void> {
       negativeCandidateScores: report.negativeCandidateScores,
       exactGradeReplayGames: report.exactGradeReplayGames,
       maximumAbsoluteReconstructionDifference: report.maximumAbsoluteReconstructionDifference,
+      maximumAbsoluteAlignedReconstructionDifference: report.maximumAbsoluteAlignedReconstructionDifference,
+      maximumRuntimeParityDifference: report.maximumRuntimeParityDifference,
+      runtimeParityMismatches: report.runtimeParityMismatches,
       marketSummary: report.marketSummary,
       ...(writerInputDelta ? { writerInputDelta } : {}),
       ...(!summaryOnly ? {
@@ -2508,6 +3713,23 @@ async function main(): Promise<void> {
     } : report, null, 2));
     return;
   }
+  if (process.argv.includes("--combined-market-reader-independent-base")) {
+    const independentBaseGames = games.map((game) => ({ ...game, authoritative: game.independent }));
+    const report = runCombinedMarketReaderTournament(independentBaseGames);
+    console.log(JSON.stringify(process.argv.includes("--compact") ? {
+      release: `${report.release}_independent_base_counterfactual`,
+      mode: report.mode,
+      architecture: report.architecture,
+      fixedDevelopmentSelectedConfiguration: report.fixedDevelopmentSelectedConfiguration,
+      rollingOrigin: Object.fromEntries(Object.entries(report.rollingOrigin).map(([block, value]) => [block, {
+        trainingGames: value.trainingGames,
+        testingGames: value.testingGames,
+        active: value.active,
+        variants: value.variants,
+      }])),
+    } : report, null, 2));
+    return;
+  }
   if (process.argv.includes("--combined-market-reader-stability")) {
     const report = runCombinedMarketReaderStability(games);
     console.log(JSON.stringify(process.argv.includes("--compact") ? {
@@ -2519,6 +3741,7 @@ async function main(): Promise<void> {
       evaluatedDates: report.evaluatedDates,
       evaluatedGames: report.evaluatedGames,
       aggregate: report.aggregate,
+      professionalAudit: report.professionalAudit,
       byDate: Object.fromEntries(report.folds.map((fold) => [fold.date, {
         trainingGames: fold.trainingGames,
         testingGames: fold.testingGames,
@@ -2529,8 +3752,199 @@ async function main(): Promise<void> {
     } : report, null, 2));
     return;
   }
+  if (process.argv.includes("--professional-configuration-audit")) {
+    const report = runProfessionalConfigurationAudit(
+      games,
+      process.argv.includes("--independent-base") ? "independent" : "active",
+    );
+    if (process.argv.includes("--moneyline-feature-audit")) {
+      const summarizeBlock = (block: (typeof report.margin)[number]["blocks"][keyof (typeof report.margin)[number]["blocks"]]) => ({
+        games: block.games,
+        active: {
+          marginMae: block.active.marginMae,
+          moneyline: block.active.moneyline,
+          spread: block.active.spread,
+        },
+        candidate: {
+          marginMae: block.candidate.marginMae,
+          moneyline: block.candidate.moneyline,
+          spread: block.candidate.spread,
+        },
+        interventions: {
+          moneyline: block.byMarket.moneyline,
+          spread: block.byMarket.spread,
+        },
+        upset: block.upset,
+      });
+      const summarizeEntry = (entry: (typeof report.margin)[number]) => ({
+        id: entry.id,
+        config: entry.config,
+        blocks: Object.fromEntries(Object.entries(entry.blocks).map(([name, block]) => [name, summarizeBlock(block)])),
+      });
+      const objective = (entry: (typeof report.margin)[number]) => {
+        const metrics = entry.blocks.development.candidate;
+        return metrics.marginMae +
+          4 * (1 - (metrics.moneyline.accuracy ?? 0)) +
+          4 * (1 - (metrics.spread.accuracy ?? 0));
+      };
+      const modes = [...new Set(report.margin.map((entry) => entry.config.marginFeatureMode))];
+      const selectedByDevelopment = modes.map((mode) => {
+        const selected = report.margin
+          .filter((entry) => entry.config.marginFeatureMode === mode)
+          .sort((a, b) => objective(a) - objective(b) || a.blocks.development.candidate.marginMae - b.blocks.development.candidate.marginMae)[0]!;
+        return {
+          mode,
+          selectedOn: "development_only",
+          objective: objective(selected),
+          ...summarizeEntry(selected),
+        };
+      });
+      const fixedScaleOne = report.margin.filter((entry) =>
+        entry.config.marginLambda === 1000 && entry.config.marginEvidenceScale === 1);
+      console.log(JSON.stringify({
+        release: report.release,
+        protocol: report.protocol,
+        purpose: "audit_joint_moneyline_spread_features_without_using_confirmation_or_micro_holdout_for_selection",
+        selectedByDevelopment,
+        fixedScaleOne: fixedScaleOne.map(summarizeEntry),
+      }, null, 2));
+      return;
+    }
+    const compactPolicy = (policy: typeof report.corroboratedWinnerPolicy) => ({
+      id: policy.id,
+      blocks: policy.blocks,
+      byMarket: policy.professionalAudit.byMarket,
+      upset: {
+        all: policy.professionalAudit.upsetEvaluation.all,
+        shortSpread: policy.professionalAudit.upsetEvaluation.shortSpread,
+        changedWinnerCalls: policy.professionalAudit.upsetEvaluation.changedWinnerCalls,
+      },
+    });
+    if (process.argv.includes("--joint-final-candidate")) {
+      const summarizePolicy = (policy: {
+        id: string;
+        blocks: ReturnType<typeof configurationBlockSummary>;
+        professionalAudit: ReturnType<typeof professionalAuditSummary>;
+      }) => ({
+        id: policy.id,
+        development: policy.blocks.development.candidate,
+        confirmation: policy.blocks.confirmation.candidate,
+        microHoldout: policy.blocks.microHoldout.candidate,
+        all: policy.blocks.all.candidate,
+        byMarket: policy.professionalAudit.byMarket,
+        upset: {
+          all: policy.professionalAudit.upsetEvaluation.all,
+          shortSpread: policy.professionalAudit.upsetEvaluation.shortSpread,
+          changedWinnerCalls: policy.professionalAudit.upsetEvaluation.changedWinnerCalls,
+        },
+      });
+      const baselineExactExportGuard = report.guardedNearPickemPolicies.find((policy) => policy.config.maximumSpread === 2)!;
+      const jointExactExportGuard = report.jointGuardedNearPickemPolicies[0]!;
+      console.log(JSON.stringify({
+        release: report.release,
+        selection: "fixed_lambda_1000_scale_1_from_predeclared_reader_authority_not_retuned_on_confirmation",
+        guardSemantics: "artifact uses absolute spread strictly below 2.5; on the observed half-point ladder this equals at-most-2.0",
+        baseline: summarizePolicy(baselineExactExportGuard),
+        jointMoneylineSpread: {
+          ...summarizePolicy(jointExactExportGuard),
+          bootstrap: jointExactExportGuard.bootstrap,
+        },
+        guardLadder: report.guardedNearPickemPolicies.map((policy) => ({
+          maximumSpread: policy.config.maximumSpread,
+          all: policy.blocks.all.candidate,
+          byMarket: policy.professionalAudit.byMarket,
+        })),
+      }, null, 2));
+      return;
+    }
+    if (process.argv.includes("--corroborated-only")) {
+      console.log(JSON.stringify(compactPolicy(report.corroboratedWinnerPolicy), null, 2));
+      return;
+    }
+    if (process.argv.includes("--total-flips-only")) {
+      const interventions = report.selectedCombined.professionalAudit.interventionLedger
+        .filter((row) => row.market === "total");
+      const buckets = [
+        { id: "active_distance_0_to_3", minimum: 0, maximum: 3 },
+        { id: "active_distance_3_to_7", minimum: 3, maximum: 7 },
+        { id: "active_distance_7_plus", minimum: 7, maximum: Number.POSITIVE_INFINITY },
+      ].map((bucket) => {
+        const rows = interventions.filter((row) => {
+          const distance = Math.abs(row.active - (row.line ?? row.active));
+          return distance >= bucket.minimum && distance < bucket.maximum;
+        });
+        return {
+          id: bucket.id,
+          flips: rows.length,
+          corrections: rows.filter((row) => row.classification === "correction").length,
+          harms: rows.filter((row) => row.classification === "harm").length,
+          meanAbsoluteShift: average(rows.map((row) => Math.abs(row.shift))),
+          maximumAbsoluteShift: Math.max(0, ...rows.map((row) => Math.abs(row.shift))),
+        };
+      });
+      console.log(JSON.stringify({
+        release: report.release,
+        policy: "selected_reconciliation_and_total",
+        total: report.selectedCombined.professionalAudit.byMarket.total,
+        buckets,
+        interventions,
+      }, null, 2));
+      return;
+    }
+    console.log(JSON.stringify(process.argv.includes("--compact") ? {
+      release: report.release,
+      mode: report.mode,
+      protocol: report.protocol,
+      selectedCombined: {
+        blocks: report.selectedCombined.blocks,
+        byMarket: report.selectedCombined.professionalAudit.byMarket,
+        upset: {
+          all: report.selectedCombined.professionalAudit.upsetEvaluation.all,
+          shortSpread: report.selectedCombined.professionalAudit.upsetEvaluation.shortSpread,
+          changedWinnerCalls: report.selectedCombined.professionalAudit.upsetEvaluation.changedWinnerCalls,
+        },
+      },
+      corroboratedWinnerPolicy: compactPolicy(report.corroboratedWinnerPolicy),
+    } : report, null, 2));
+    return;
+  }
+  if (process.argv.includes("--total-projection-mode-audit")) {
+    const report = runTotalProjectionModeAudit(games);
+    const compact = (result: typeof report.reflection) => ({
+      mode: result.mode,
+      blocks: result.blocks,
+      byMarket: result.professionalAudit.byMarket,
+      bootstrap: result.bootstrap,
+    });
+    console.log(JSON.stringify({
+      release: report.release,
+      method: report.method,
+      reflection: compact(report.reflection),
+      posteriorProjection: compact(report.posteriorProjection),
+    }, null, 2));
+    return;
+  }
+  if (process.argv.includes("--professional-loss-audit")) {
+    console.log(JSON.stringify(runProfessionalLossAudit(games), null, 2));
+    return;
+  }
   if (process.argv.includes("--export-market-reader-artifact")) {
-    console.log(JSON.stringify(exportCombinedMarketReaderArtifact(games), null, 2));
+    const artifact = exportCombinedMarketReaderArtifact(games);
+    if (process.argv.includes("--write-market-reader-artifact")) {
+      writeFileSync(
+        "lib/services/football/modelArtifacts/cfbCompleteMarketReaderArtifact.json",
+        `${JSON.stringify(artifact, null, 2)}\n`,
+        "utf8",
+      );
+      console.log(JSON.stringify({
+        release: artifact.release,
+        trainedThrough: artifact.trainedThrough,
+        games: artifact.games,
+        wrote: "lib/services/football/modelArtifacts/cfbCompleteMarketReaderArtifact.json",
+      }, null, 2));
+      return;
+    }
+    console.log(JSON.stringify(artifact, null, 2));
     return;
   }
   if (process.argv.includes("--joint-model")) {
