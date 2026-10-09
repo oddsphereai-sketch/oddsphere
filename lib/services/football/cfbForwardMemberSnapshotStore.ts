@@ -11,17 +11,25 @@ import {
 } from "./cfbMemberFixture";
 
 export const CFB_FORWARD_MEMBER_SNAPSHOT_RELEASE =
-  "cfb_forward_member_snapshot_2026_10_09_r44_provider_feed_continuity" as const;
+  "cfb_forward_member_snapshot_2026_10_09_r45_provider_continuity_board_retention" as const;
 export const CFB_FORWARD_PREVIOUS_MEMBER_SNAPSHOT_RELEASE =
-  "cfb_forward_member_snapshot_2026_10_09_r43_joint_moneyline_spread_reconciliation" as const;
+  "cfb_forward_member_snapshot_2026_10_09_r44_provider_feed_continuity" as const;
 export const CFB_PREVIOUS_MEMBER_FIXTURE_RELEASE =
-  "cfb_v1_member_fixture_2026_10_09_r83_joint_moneyline_spread_reconciliation" as const;
+  "cfb_v1_member_fixture_2026_10_09_r84_provider_feed_continuity" as const;
 export const CFB_PREVIOUS_EVIDENCE_RELEASE =
   "cfb_forward_evidence_snapshot_2026_10_09_r43_joint_moneyline_spread_reconciliation" as const;
 export const CFB_PREVIOUS_MEMBER_RELEASE =
-  "cfb_v1_member_release_2026_10_09_r57_joint_moneyline_spread_reconciliation" as const;
+  "cfb_v1_member_release_2026_10_09_r58_provider_feed_continuity" as const;
 export const CFB_MEMBER_SNAPSHOT_READER_RELEASE =
-  "cfb_member_snapshot_reader_2026_10_09_r29_provider_feed_continuity" as const;
+  "cfb_member_snapshot_reader_2026_10_09_r30_provider_continuity_board_retention" as const;
+const CFB_PROVIDER_FEED_PREVIOUS_MEMBER_SNAPSHOT_RELEASE =
+  "cfb_forward_member_snapshot_2026_10_09_r43_joint_moneyline_spread_reconciliation" as const;
+const CFB_PROVIDER_FEED_PREVIOUS_MEMBER_FIXTURE_RELEASE =
+  "cfb_v1_member_fixture_2026_10_09_r83_joint_moneyline_spread_reconciliation" as const;
+const CFB_PROVIDER_FEED_PREVIOUS_EVIDENCE_RELEASE =
+  "cfb_forward_evidence_snapshot_2026_10_09_r43_joint_moneyline_spread_reconciliation" as const;
+const CFB_PROVIDER_FEED_PREVIOUS_MEMBER_RELEASE =
+  "cfb_v1_member_release_2026_10_09_r57_joint_moneyline_spread_reconciliation" as const;
 const CFB_COMPLETE_READER_PREVIOUS_MEMBER_SNAPSHOT_RELEASE =
   "cfb_forward_member_snapshot_2026_10_08_r39_independent_price_spread_lane" as const;
 const CFB_COMPLETE_READER_PREVIOUS_MEMBER_FIXTURE_RELEASE =
@@ -68,6 +76,12 @@ const SUPPORTED_MEMBER_SNAPSHOT_RELEASES = [
     fixtureRelease: CFB_PREVIOUS_MEMBER_FIXTURE_RELEASE,
     evidenceRelease: CFB_PREVIOUS_EVIDENCE_RELEASE,
     memberRelease: CFB_PREVIOUS_MEMBER_RELEASE,
+  },
+  {
+    snapshotRelease: CFB_PROVIDER_FEED_PREVIOUS_MEMBER_SNAPSHOT_RELEASE,
+    fixtureRelease: CFB_PROVIDER_FEED_PREVIOUS_MEMBER_FIXTURE_RELEASE,
+    evidenceRelease: CFB_PROVIDER_FEED_PREVIOUS_EVIDENCE_RELEASE,
+    memberRelease: CFB_PROVIDER_FEED_PREVIOUS_MEMBER_RELEASE,
   },
   {
     snapshotRelease: CFB_COMPLETE_READER_PREVIOUS_MEMBER_SNAPSHOT_RELEASE,

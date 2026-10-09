@@ -1,6 +1,6 @@
 import { unstable_cache } from "next/cache";
 
-import { PlaybookClient, type PlaybookResult } from "./playbookClient";
+import { canonicalPlaybookInjuryLeague, PlaybookClient, type PlaybookResult } from "./playbookClient";
 import type {
   PlaybookInjuriesResponse,
   PlaybookLeague,
@@ -11,7 +11,7 @@ import type {
 } from "./types";
 
 export const PLAYBOOK_REQUEST_EFFICIENCY_RELEASE =
-  "playbook_request_efficiency_2026_10_09_r2_injury_contract_continuity" as const;
+  "playbook_request_efficiency_2026_10_09_r3_cfb_league_identity" as const;
 
 export const PLAYBOOK_CURRENT_CACHE_SECONDS = 10 * 60;
 export const PLAYBOOK_HISTORY_CACHE_SECONDS = 24 * 60 * 60;
@@ -149,7 +149,7 @@ export class PlaybookReadBroker {
   }
 
   injuries(league: PlaybookLeague | string): Promise<PlaybookResult<PlaybookInjuriesResponse>> {
-    const canonical = String(league).trim().toUpperCase();
+    const canonical = canonicalPlaybookInjuryLeague(league);
     return this.read(`injuries:${canonical.toLowerCase()}`, () => this.sharedOrDirect(
       () => cachedInjuries(canonical),
       () => this.direct.injuries(canonical),

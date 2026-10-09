@@ -9,7 +9,10 @@ import {
   isPlaybookPregameCandidate,
   selectPlaybookObservationGames,
 } from "../lib/services/syncPublicSplitsObservations";
-import { normalizePlaybookInjuriesResponse } from "../lib/providers/playbook/playbookClient";
+import {
+  canonicalPlaybookInjuryLeague,
+  normalizePlaybookInjuriesResponse,
+} from "../lib/providers/playbook/playbookClient";
 
 const originalFetch = globalThis.fetch;
 const originalApiKey = process.env.PLAYBOOK_API_KEY;
@@ -50,7 +53,9 @@ try {
   const injuries = await broker.injuries("ncaaf");
   assert.equal(calls, 4);
   assert.equal(injuries.body.data.length, 0);
-  assert.equal(seenUrls.at(-1)?.searchParams.get("league"), "NCAAF", "injury requests must use Playbook's canonical league identity");
+  assert.equal(seenUrls.at(-1)?.searchParams.get("league"), "CFB", "injury requests must translate the internal NCAAF identity to Playbook's documented CFB identity");
+  assert.equal(canonicalPlaybookInjuryLeague("cfb"), "CFB");
+  assert.equal(canonicalPlaybookInjuryLeague("nfl"), "NFL");
 
   failNext = true;
   await assert.rejects(() => broker.splitsHistory("wnba", "2026-09-20"));

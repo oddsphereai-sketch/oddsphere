@@ -4,7 +4,12 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { gzipSync } from "node:zlib";
 import { isPublicallyTracked } from "../lib/config/officialTrackingStart";
-import { buildCfbMemberFixture as buildCfbMemberFixtureAtTime, CFB_MEMBER_FIXTURE_RELEASE, selectLatestCfbMemberEvidenceRows } from "../lib/services/football/cfbMemberFixture";
+import {
+  buildCfbMemberFixture as buildCfbMemberFixtureAtTime,
+  CFB_MEMBER_FIXTURE_RELEASE,
+  retainCfbMemberLockedGamesForBoardDate,
+  selectLatestCfbMemberEvidenceRows,
+} from "../lib/services/football/cfbMemberFixture";
 import { cfbTeamIdentity } from "../lib/services/football/cfbTeamIdentity";
 import { finalizeDailyEdgeResponseCoherence } from "../app/lab/lib/dailyEdgeResponseCoherence";
 import { dailyEdgeOutcomeForecastLabel } from "../app/lab/lib/dailyEdgeOutcomeForecast";
@@ -972,6 +977,24 @@ assert.equal(member.snapshot.games.length, 1);
 assert.equal(member.fixtureRelease, CFB_MEMBER_FIXTURE_RELEASE);
 assert.equal(member.snapshot.games[0]!.lockState, "locked", "only a fully valid immutable T-60 tuple is labeled locked");
 assert.equal(member.snapshot.games[0]!.lockedAt, lockedAt);
+assert.deepEqual(
+  retainCfbMemberLockedGamesForBoardDate({
+    selected: [],
+    evidence: [evidence],
+    now: "2026-08-30T06:59:59.000Z",
+  }).map((row) => row.id),
+  [evidence.id],
+  "a valid locked game must remain on the member board through 02:59:59 ET after its game date",
+);
+assert.deepEqual(
+  retainCfbMemberLockedGamesForBoardDate({
+    selected: [],
+    evidence: [evidence],
+    now: "2026-08-30T07:00:00.000Z",
+  }),
+  [],
+  "the prior-date locked game may leave the member board at the shared 03:00 ET rollover",
+);
 
 const latePayload = structuredClone(payload);
 latePayload.capturedAt = "2026-08-29T15:52:00.000Z";
@@ -1002,6 +1025,15 @@ const unlockedRow: CfbForwardStoredEvidence = {
   payload: unlockedPayload,
   payloadSha256: hashCfbForwardEvidencePayload(unlockedPayload),
 };
+assert.deepEqual(
+  retainCfbMemberLockedGamesForBoardDate({
+    selected: [],
+    evidence: [unlockedRow],
+    now: "2026-08-30T06:59:59.000Z",
+  }),
+  [],
+  "an unlocked historical row must never be resurrected by board-date retention",
+);
 assert.equal(
   buildCfbMemberFixtureAtTime([unlockedRow], "2026-08-29T15:20:00.000Z").snapshot.games[0]!.lockState,
   "locking",
@@ -3412,6 +3444,7 @@ assert.equal(pregameFallbackUrls.filter((url) => url.includes("site.api.espn.com
 const route = readFileSync(path.resolve("app/api/cron/cfb-forward-evidence/route.ts"), "utf8");
 assert.match(route, /member_snapshot_updated: result\.memberSnapshotUpdated/, "the existing CFB cron must report compact snapshot health truthfully");
 assert.match(route, /member_snapshot_error: result\.memberSnapshotError/, "the existing CFB cron must expose isolated snapshot publication failures");
+assert.match(route, /provider_errors: result\.providerErrors/, "the CFB cron must expose redacted provider failure diagnostics for live continuity verification");
 assert.match(route, /leaseGroup: "prediction_pipeline"/);
 assert.match(route, /requireLease: true/);
 assert.match(route, /runCfbForwardEvidenceWriter/);

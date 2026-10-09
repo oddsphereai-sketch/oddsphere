@@ -22,6 +22,7 @@ import {
   CFB_FORWARD_FCS_PRICE_PREVIOUS_MEMBER_RELEASE,
   CFB_FORWARD_PRICE_PREVIOUS_EVIDENCE_SCHEMA_RELEASE,
   CFB_FORWARD_MEMBER_RELEASE,
+  CFB_FORWARD_INJURY_CONTRACT_PREVIOUS_MEMBER_RELEASE,
   CFB_FORWARD_PROVIDER_FEED_PREVIOUS_MEMBER_RELEASE,
   isCfbPublishedT60AccuracyLockPayload,
   CFB_FORWARD_PRICE_PREVIOUS_MEMBER_RELEASE,
@@ -151,7 +152,7 @@ import {
 import type { PlaybookInjuryTeamRow } from "@/lib/providers/playbook/types";
 
 export const CFB_FORWARD_WRITER_RELEASE =
-  "cfb_forward_evidence_writer_2026_10_09_r112_provider_feed_continuity" as const;
+  "cfb_forward_evidence_writer_2026_10_09_r113_provider_continuity_board_retention" as const;
 export const CFB_FORWARD_MAX_QB_TEAMS_PER_RUN = 24 as const;
 export const CFB_FORWARD_MAX_SHARP_FALLBACK_GAMES_PER_RUN = 32 as const;
 export const CFB_FORWARD_MAX_ESPN_PROSPECTIVE_GAMES_PER_RUN = 32 as const;
@@ -175,6 +176,12 @@ export type CfbForwardWriterResult = {
   heldMarkets: number;
   apiCallsMaximum: number;
   healthHolds: string[];
+  providerErrors: {
+    playbookLines: string | null;
+    playbookSplits: string | null;
+    playbookInjuries: string | null;
+    sharpApiSplits: string | null;
+  };
   captureFailures: CfbForwardCaptureFailure[];
   publicationAttempted: boolean;
   memberSnapshotAttempted: boolean;
@@ -1109,6 +1116,12 @@ export async function runCfbForwardEvidenceWriter(args: {
       ...(tracking.trackingError ? ["official_tracking_incomplete"] : []),
       ...(captureFailures.length > 0 ? ["game_capture_failed"] : []),
     ])],
+    providerErrors: {
+      playbookLines: linesAttempt.error,
+      playbookSplits: splitsAttempt.error,
+      playbookInjuries: injuryAttempt.error,
+      sharpApiSplits: sharpSplitsAttempt.error,
+    },
     captureFailures,
     publicationAttempted: true,
     ...memberSnapshot,
@@ -1678,6 +1691,7 @@ function isEligibleOfficialTrackingPayload(payload: CfbForwardEvidencePayload): 
 function isEligiblePublishedPregameRecoveryPayload(payload: CfbForwardEvidencePayload): boolean {
   const release = payload.authoritativeForecast?.release as string | undefined;
   return ((String(payload.schemaRelease) === CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE && String(payload.memberRelease) === CFB_FORWARD_MEMBER_RELEASE) ||
+    (String(payload.schemaRelease) === CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE && String(payload.memberRelease) === CFB_FORWARD_INJURY_CONTRACT_PREVIOUS_MEMBER_RELEASE) ||
     (String(payload.schemaRelease) === CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE && String(payload.memberRelease) === CFB_FORWARD_PROVIDER_FEED_PREVIOUS_MEMBER_RELEASE) ||
     (String(payload.schemaRelease) === CFB_FORWARD_COMPLETE_READER_PREVIOUS_EVIDENCE_SCHEMA_RELEASE && String(payload.memberRelease) === CFB_FORWARD_COMPLETE_READER_PREVIOUS_MEMBER_RELEASE) ||
     (String(payload.schemaRelease) === CFB_FORWARD_GAP_FALLBACK_PREVIOUS_EVIDENCE_SCHEMA_RELEASE && String(payload.memberRelease) === CFB_FORWARD_GAP_FALLBACK_PREVIOUS_MEMBER_RELEASE) ||
@@ -1968,5 +1982,5 @@ async function upsertGames(client: SupabaseClient, payloads: CfbForwardEvidenceP
 function normalizeStatus(value: string): string { const normalized = value.toLowerCase(); return normalized === "final" ? "final" : normalized === "in_progress" ? "in_progress" : normalized === "postponed" || normalized === "canceled" ? normalized : "scheduled"; }
 
 function emptyResult(reason: string, tracking: TrackingResult, memberSnapshot: MemberSnapshotResult): CfbForwardWriterResult {
-  return { writerRelease: CFB_FORWARD_WRITER_RELEASE, collected: false, collectionReason: reason, proposed: 0, inserted: 0, games: 0, stages: { opening: 0, unlocked: 0, t60: 0 }, publishedEvaluations: 0, publishedBestAngles: 0, publishedLeans: 0, publishedWatchlists: 0, publishedNoPlays: 0, heldMarkets: 0, apiCallsMaximum: tracking.trackingProviderRequests, healthHolds: tracking.trackingError ? ["official_tracking_incomplete"] : [], captureFailures: [], publicationAttempted: false, ...memberSnapshot, ...tracking };
+  return { writerRelease: CFB_FORWARD_WRITER_RELEASE, collected: false, collectionReason: reason, proposed: 0, inserted: 0, games: 0, stages: { opening: 0, unlocked: 0, t60: 0 }, publishedEvaluations: 0, publishedBestAngles: 0, publishedLeans: 0, publishedWatchlists: 0, publishedNoPlays: 0, heldMarkets: 0, apiCallsMaximum: tracking.trackingProviderRequests, healthHolds: tracking.trackingError ? ["official_tracking_incomplete"] : [], providerErrors: { playbookLines: null, playbookSplits: null, playbookInjuries: null, sharpApiSplits: null }, captureFailures: [], publicationAttempted: false, ...memberSnapshot, ...tracking };
 }

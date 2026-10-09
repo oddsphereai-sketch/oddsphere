@@ -3,6 +3,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { DailyEdgeGameDto, DailyEdgePredictionDto, MarketEdgeDto, OddsTrailStopDto } from "@/app/lab/lib/labTypes";
 import type { PreviewHistoryByTeam } from "@/app/dev/experience-preview/ActualDailyEdgePreview";
 import type { DailyEdgeGameAvailability } from "@/lib/services/dailyEdge/gameAvailability";
+import { computeSlateDate, currentDailyEdgeBoardDate } from "@/lib/dates/slateDate";
 import { buildRecommendationDecision } from "@/lib/services/recommendationDecision";
 import { withFirstTrackedSplitObservation } from "@/lib/services/splitDisplayMovement";
 import type { MarketSplitDisplaySection } from "@/lib/types/domain/RecommendationDecision";
@@ -59,6 +60,7 @@ import {
   CFB_FORWARD_TRANSITION_PREVIOUS_EVIDENCE_SCHEMA_RELEASE,
   CFB_FORWARD_TRANSITION_PREVIOUS_MEMBER_RELEASE,
   CFB_FORWARD_MEMBER_RELEASE,
+  CFB_FORWARD_INJURY_CONTRACT_PREVIOUS_MEMBER_RELEASE,
   CFB_FORWARD_PROVIDER_FEED_PREVIOUS_MEMBER_RELEASE,
   isCfbPublishedT60AccuracyLockPayload,
   CFB_FORWARD_PUBLICATION_PREVIOUS_MEMBER_RELEASE,
@@ -105,9 +107,11 @@ import { cfbTeamIdentity } from "./cfbTeamIdentity";
 import { CFB_PUBLIC_SCORE_DIRECTION_TOLERANCE_POINTS } from "./footballCrossMarketCoherence";
 
 export const CFB_MEMBER_FIXTURE_RELEASE =
-  "cfb_v1_member_fixture_2026_10_09_r84_provider_feed_continuity" as const;
+  "cfb_v1_member_fixture_2026_10_09_r85_provider_continuity_board_retention" as const;
 export const CFB_PUBLIC_OUTCOME_CONTRACT_RELEASE =
-  "cfb_market_sharp_public_outcome_contract_2026_10_09_r74_provider_feed_continuity" as const;
+  "cfb_market_sharp_public_outcome_contract_2026_10_09_r75_provider_continuity_board_retention" as const;
+export const CFB_MEMBER_GAME_LIFECYCLE_RELEASE =
+  "cfb_member_game_lifecycle_2026_10_09_r1_3am_locked_game_retention" as const;
 export const CFB_CONTEXT_ONLY_QUOTE_CAPTURE_SKEW_MS = 5_000 as const;
 const CFB_PRE_DIRECTIONAL_MEMBER_RELEASE = "cfb_v1_member_release_2026_08_28_r14_expanded_sharp_budget" as const;
 const CFB_PRE_DIRECTIONAL_DECISION_RELEASE = "cfb_v1_daily_edge_decision_2026_08_28_r11_market_scoped_data_quality" as const;
@@ -164,7 +168,15 @@ export function buildCfbMemberFixture(
   const windows = resolveCfbVisibleWindows({ now, evidence: rows });
   const selectedWindows = windows.flatMap((window) => {
     const evidence = rows.filter((row) => isGameInCfbWeeklyWindow({ scheduledStart: row.gameStartAt }, window));
-    return evidence.length === 0 ? [] : [{ window, evidence, latest: selectLatestCfbMemberEvidenceRows(evidence, now) }];
+    return evidence.length === 0 ? [] : [{
+      window,
+      evidence,
+      latest: retainCfbMemberLockedGamesForBoardDate({
+        selected: selectLatestCfbMemberEvidenceRows(evidence, now),
+        evidence,
+        now,
+      }),
+    }];
   });
   if (selectedWindows.length === 0) throw new Error("CFB forward evidence has no visible weekly window.");
   const visibleWindows = selectedWindows.map((value) => value.window);
@@ -208,6 +220,36 @@ export function buildCfbMemberFixture(
     },
     tracking: { trackingEligible: trackingGames > 0, reason: trackingGames > 0 ? `${trackingGames} game${trackingGames === 1 ? " has" : "s have"} a valid immutable T-60 exact-price tuple.` : "Official CFB tracking begins game by game only after a valid T-60 lock; unlocked grades are not counted yet." },
   };
+}
+
+/**
+ * A release deployed after kickoff may have no new capture plan for an already
+ * locked game. Keep the exact immutable T-60 payload on the member board until
+ * the shared 03:00 ET Daily Edge rollover instead of letting the shorter new
+ * release wave erase it at kickoff.
+ */
+export function retainCfbMemberLockedGamesForBoardDate(args: {
+  selected: CfbForwardStoredEvidence[];
+  evidence: CfbForwardStoredEvidence[];
+  now: string;
+}): CfbForwardStoredEvidence[] {
+  const instant = new Date(args.now);
+  if (!Number.isFinite(instant.getTime())) throw new Error("CFB member game retention requires a valid timestamp.");
+  const boardDate = currentDailyEdgeBoardDate("cfb", instant);
+  const selectedIds = new Set(args.selected.map((row) => row.providerGameId));
+  const retained = new Map<string, CfbForwardStoredEvidence>();
+  for (const row of args.evidence) {
+    if (
+      selectedIds.has(row.providerGameId) ||
+      computeSlateDate("cfb", row.gameStartAt) !== boardDate ||
+      !isValidImmutableBoundaryT60(row)
+    ) continue;
+    const current = retained.get(row.providerGameId);
+    if (!current || Date.parse(row.capturedAt) > Date.parse(current.capturedAt)) {
+      retained.set(row.providerGameId, row);
+    }
+  }
+  return [...args.selected, ...retained.values()];
 }
 
 function movementRowsForGame(
@@ -731,19 +773,48 @@ export function selectLatestCfbMemberEvidenceRows(
       )
     : null;
   const providerFeedPreviousAuthority = providerFeedPrevious ?? providerFeedPreviousBoundary ?? providerFeedPreviousLockOverlay ?? completeReaderPreviousAuthority;
+  const injuryContractPrevious = completeRowsForRelease(
+    rows,
+    CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE,
+    CFB_FORWARD_INJURY_CONTRACT_PREVIOUS_MEMBER_RELEASE,
+    CFB_V1_DECISION_RELEASE,
+  );
+  const injuryContractPreviousBoundary = providerFeedPreviousAuthority
+    ? immutableBoundaryTransitionRows(
+        rows,
+        now,
+        CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE,
+        CFB_FORWARD_INJURY_CONTRACT_PREVIOUS_MEMBER_RELEASE,
+        CFB_V1_DECISION_RELEASE,
+        providerFeedPreviousAuthority,
+      )
+    : null;
+  const injuryContractPreviousLockOverlay = providerFeedPreviousAuthority
+    ? immutableLockOverlayRows(
+        rows,
+        CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE,
+        CFB_FORWARD_INJURY_CONTRACT_PREVIOUS_MEMBER_RELEASE,
+        CFB_V1_DECISION_RELEASE,
+        providerFeedPreviousAuthority,
+      )
+    : null;
+  const injuryContractPreviousAuthority = injuryContractPrevious ?? injuryContractPreviousBoundary ?? injuryContractPreviousLockOverlay ?? providerFeedPreviousAuthority;
   const current = completeRowsForRelease(rows, CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE, CFB_FORWARD_MEMBER_RELEASE, CFB_V1_DECISION_RELEASE);
   if (current) return current;
-  const immutableBoundaryTransition = providerFeedPreviousAuthority
+  const immutableBoundaryTransition = injuryContractPreviousAuthority
     ? immutableBoundaryTransitionRows(
         rows,
         now,
         CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE,
         CFB_FORWARD_MEMBER_RELEASE,
         CFB_V1_DECISION_RELEASE,
-        providerFeedPreviousAuthority,
+        injuryContractPreviousAuthority,
       )
     : null;
   if (immutableBoundaryTransition) return immutableBoundaryTransition;
+  if (injuryContractPrevious) return injuryContractPrevious;
+  if (injuryContractPreviousBoundary) return injuryContractPreviousBoundary;
+  if (injuryContractPreviousLockOverlay) return injuryContractPreviousLockOverlay;
   if (providerFeedPrevious) return providerFeedPrevious;
   if (providerFeedPreviousBoundary) return providerFeedPreviousBoundary;
   if (providerFeedPreviousLockOverlay) return providerFeedPreviousLockOverlay;
