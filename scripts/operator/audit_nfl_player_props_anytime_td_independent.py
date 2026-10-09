@@ -417,6 +417,28 @@ def main() -> None:
     incumbent_raw = predict_portable(incumbent_artifact["model"], incumbent_frame)
     logit = np.log(np.clip(incumbent_raw, 1e-5, 1 - 1e-5) / np.clip(1 - incumbent_raw, 1e-5, 1))
     incumbent_2026 = expit(float(incumbent_artifact["calibrator"]["intercept"]) + float(incumbent_artifact["calibrator"]["coefficient"]) * logit)
+    baseline_isolation: dict[str, Any] | None = None
+    if args.r3_only:
+        opportunity_columns = [
+            "prior_redzone_opportunity_avg5", "prior_redzone_opportunity_ewm",
+            "prior_goal_line_opportunity_avg5", "prior_goal_line_opportunity_ewm",
+        ]
+        current_opportunity = rows_2026[opportunity_columns].to_numpy(float)
+        released_opportunity = incumbent_frame[opportunity_columns].to_numpy(float)
+        changed_rows = int(np.any(~np.isclose(current_opportunity, released_opportunity, equal_nan=True), axis=1).sum())
+        if changed_rows == 0:
+            raise RuntimeError("r3 baseline isolation failed: challenger and released opportunity cohorts are identical")
+        released_metrics = probability_metrics(rows_2026["anytime_td"].to_numpy(int), incumbent_2026)
+        expected_brier = 0.07656638690188602
+        expected_log_loss = 0.2585023173322117
+        if abs(float(released_metrics["brier"]) - expected_brier) > 1e-12 or abs(float(released_metrics["logLoss"]) - expected_log_loss) > 1e-12:
+            raise RuntimeError("r3 baseline isolation failed: released portable baseline fingerprint changed")
+        baseline_isolation = {
+            "releasedOpportunityFrozen": True,
+            "challengerRowsWithCurrentOpportunityChange": changed_rows,
+            "releasedBrierFingerprint": expected_brier,
+            "releasedLogLossFingerprint": expected_log_loss,
+        }
     incumbent_report = {
         "confirmation2026": probability_metrics(rows_2026["anytime_td"].to_numpy(int), incumbent_2026),
         "confirmation2026ByWeek": {str(int(week)): probability_metrics(group["anytime_td"].to_numpy(int), incumbent_2026[rows_2026.index.get_indexer(group.index)]) for week, group in rows_2026.groupby("week", observed=True)},
@@ -439,6 +461,7 @@ def main() -> None:
             "externalFeatureRelease": manifest["release"], "externalFeatureSha256": manifest["featureFileSha256"],
             "historicalPbpManifestSha256": sha256_file(HISTORICAL_MANIFEST), "current2026PbpSha256": sha256_file(CURRENT_PBP),
             "releasedTouchdownArtifactSha256": sha256_file(TOUCHDOWN_ARTIFACT), "marketFeatures": manifest["marketFeatures"],
+            "releasedBaselineIsolation": baseline_isolation,
         },
         "chronology": {"train": "2016-2022", "selection": 2023, "calibrationAndPolicy": 2024, "holdout": 2025, "ownerPriorityConfirmation": "2026 Weeks 1-4"},
         "eligibleRows": {str(year): int((eligible & frame["season"].eq(year)).sum()) for year in (2023, 2024, 2025, 2026)},
