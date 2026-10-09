@@ -19,6 +19,24 @@ Every model audit has two layers:
 A generic cross-product rule may not replace the sport-and-market profile. A sport-specific rule may not
 waive the common certification.
 
+## Governing product objective
+
+OddsSphere optimizes the **final combined forecast**, not the independent model or market reader in
+isolation. The independent model supplies an original opinion; the market reader may confirm it, move it,
+or reverse it. One final distribution must then own the displayed score or projection, prediction side,
+probability, price evaluation, grade, and stake.
+
+Among candidates that satisfy evidence integrity, target exclusion, time safety, lock immutability, and
+forecast coherence, production selection favors the candidate with the greatest defensible **net
+predictive value**. Net predictive value includes additional correct sides minus newly created wrong
+sides, exact-price return, probability accuracy, projection error, actionable-grade performance, upset
+recognition, and useful board coverage. It is not synonymous with zero retrospective harms.
+
+A candidate may lose some decisions and still be superior when it corrects materially more decisions,
+improves the final forecast, and does not create unacceptable calibration, price, stability, or board
+damage. Conversely, a zero-harm candidate does not win automatically when it achieves that result only by
+changing almost nothing. The audit must expose both the gain and the cost.
+
 ## Required audit populations
 
 The audit must keep these populations separate:
@@ -105,9 +123,58 @@ For each historical independent release, the audit must separately identify:
 - projection movement: the score or point projection changes enough to remain coherent with the final side.
 
 The final projection, side, probability, price, grade, and stake must come from one coherent distribution.
-A flipped side may not inherit the original side's confidence by mirroring it around 50 percent. Any
-demotion rule must be paired with a tested promotion rule, and both must report the exact board-count
-effect.
+A flipped side may not inherit the original side's confidence by mirroring it around 50 percent **without
+an explicit calibration challenge**. The audit must compare the full-strength mapping with price-anchored,
+shrunk, or otherwise evidence-supported alternatives and report probability, direction, projection, return,
+upset, and board tradeoffs. Retaining magnitude is allowed only when that complete comparison supports it;
+it is never justified merely because the side flipped. Any demotion rule must be paired with a tested
+promotion rule, and both must report the exact board-count effect.
+
+The audit must publish two separate comparisons:
+
+1. **independent-to-final**, which measures the complete value and harm created by the full market-aware
+   product; and
+2. **incumbent-to-candidate**, which measures only the incremental effect of the proposed release.
+
+An incremental comparison may not be presented as the total amount of market reading. A candidate that
+adds four corrections to an incumbent that already makes twenty market-driven changes is a different
+product from one that makes only four changes in total.
+
+## Candidate-selection contract
+
+Evidence validity and product safety are hard constraints. Predictive tradeoffs are selection criteria,
+not automatic vetoes. Every candidate table must therefore report, by market and in total:
+
+- side changes, corrections, harms, net corrections, and correction-to-harm ratio;
+- final W-L-push and improvement over independent-only and the incumbent;
+- exact-price units for every decision and for actionables;
+- Brier score, log loss, calibration, score/projection MAE, and bias where defined;
+- promotions, demotions, actionables, actionable record, and board-count change;
+- upset precision and recall where an outright-winner market exists;
+- results by chronological segment, independent release, evidence-coverage regime, source class, and
+  meaningful sport-specific market state;
+- row-level ledgers for every changed side or grade.
+
+No universal maximum harm count or minimum change count is allowed. A nonzero harm count is acceptable
+when the complete evidence shows greater net predictive value. A candidate must not be rejected merely
+because a narrower rule has zero harms, and it must not be accepted merely because an aggressive rule has
+the highest opened-sample hit rate. When candidates trade direction accuracy against probability,
+projection, price, or board quality, the audit records the tradeoff and selects the Pareto-efficient option
+that best serves the declared product objective.
+
+Candidate selection is lexicographic:
+
+1. reject any candidate with leakage, post-lock evidence, fabricated provenance, lock mutation, incoherent
+   final outputs, competing writers, or materially unsafe operations;
+2. among valid candidates, prefer positive and stable net predictive value over independent-only and the
+   incumbent;
+3. use probability calibration, exact-price return, projection error, chronological stability, and board
+   utility to distinguish candidates with similar net side value;
+4. prefer less unnecessary churn only when predictive value is materially equivalent—not as a substitute
+   for predictive improvement.
+
+The same selection contract applies to every OddsSphere model. Sport profiles determine which signals and
+relationships are valid; they do not redefine success as safety or zero changes.
 
 ## Loss, upset, and conflict review
 
@@ -172,7 +239,8 @@ A model is complete only when:
 - every required output above exists and reconciles to row-level evidence;
 - selected production behavior improves the declared predictive and product objective on the eligible
   evidence without hidden release blending or target leakage;
-- corrections and promotions are not achieved through disproportionate harms or an unusably flat board;
+- corrections and promotions deliver positive net predictive value without unacceptable calibration,
+  price, stability, operational, or board damage;
 - final picks, probabilities, projections, and grades are coherent;
 - every changed decision can be explained from evidence available at its lock;
 - rejected candidates cannot remain reachable in the production path;

@@ -119,10 +119,29 @@ move the projected score materially, but one final joint distribution must own s
 Total, probabilities, and grades.
 
 Market direction and conviction are separate. A contrary side cannot inherit the independent side's
-probability by reflection around 50%. The selected-side probability must be supported by target-excluded
-price and validated residual market evidence. Moneyline and Spread may jointly authorize an outright
-winner change; Spread alone may not silently rewrite Moneyline. Total never borrows side authority from
-winner markets.
+probability by reflection around 50% as an untested assumption. Full-strength reflection must be challenged
+against price-anchored and graduated shrink alternatives on direction, Brier/log loss, exact-price return,
+projection error, upset recognition, and board utility. It may survive only when the complete NFL comparison
+supports it and the tradeoff is disclosed. Moneyline and Spread may jointly authorize an outright winner
+change; Spread alone may not silently rewrite Moneyline. Total never borrows side authority from winner
+markets.
+
+NFL selection uses the common net-predictive-value contract. A market rule is not disqualified because it
+creates a harm, and a zero-harm rule is not preferred merely for being quieter. The full independent-to-
+final replay must show whether Moneyline, Spread, and Total market interaction collectively corrects more
+sides than it harms, improves exact-price and actionable performance where claimed, and preserves a useful
+board. Incremental release changes are reported separately so they cannot understate the market reader's
+total influence.
+
+The selected/evaluated book and the target-excluded market serve different roles. Same-book opening-to-
+lock movement is legitimate lower-tier evidence about the offered contract and may move the final NFL
+projection. It cannot certify itself as independent sharp-market corroboration. Stronger authority must be
+rebuilt after excluding the evaluated family. The audit therefore compares the complete hierarchy—not a
+choice between reading the target book and ignoring it.
+
+When two valid candidates have materially equal net side value, NFL uses probability calibration, exact-
+price units, team/margin/Total MAE, upset precision and recall, chronological stability, and board utility
+as tie-breakers. Fewer changes is preferred only when the added changes are net-neutral churn.
 
 No signal ships merely because it sounds sharp or improves an opened aggregate. Publication requires:
 

@@ -3,6 +3,7 @@ import {
   buildNflNamedMarketSequenceAuthority,
   NFL_NAMED_MARKET_SEQUENCE_RELEASE,
 } from "@/lib/services/football/nflNamedMarketSequence";
+import type { NflForwardPlaybookSplitSet } from "@/lib/services/football/nflForwardEvidence";
 import type { NflForwardContextFamily } from "@/lib/services/football/nflForwardEvidenceCapture";
 import type { NflRegularSharpSplitSet } from "@/lib/services/football/sharpApiNflSplits";
 

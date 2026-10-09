@@ -112,10 +112,93 @@ counts. The rehearsal proposes 14 unlocked payloads and inserts zero rows. Becau
 are live rather than a frozen common input, this is an operational board/coverage proof, not an additional
 performance comparison.
 
+## Net-predictive-value requalification and loss audit
+
+The original advancement gate emphasized seven incremental corrections and zero harms versus the stored
+historical product. That comparison is valid but incomplete: the stored product was already market-aware.
+At the owner's direction, the candidate was requalified against the independent paid-score forecast and
+under the common net-predictive-value objective before publication.
+
+### Complete market contribution on the exact 18 paid-score games
+
+| Measure | Independent paid score | Existing market-aware product | r29 professional reader |
+|---|---:|---:|---:|
+| Moneyline decisions | 10-7 | 11-6 | 11-6 |
+| Spread decisions | 6-9-2 | 11-4-2 | 11-4-2 |
+| Total decisions | 8-9 | 10-7 | 11-6 |
+| Full-board exact-price units | -6.1361 | +9.4513 | +11.3772 |
+| Actionable board | 12 (7-5) | 23 (15-8) | 24 (16-8) |
+| Actionable exact-price units | +1.8895 | +6.2958 | +7.2217 |
+| Team-score MAE | 6.1192 | 6.4862 | 6.4020 |
+| Margin MAE | 9.2302 | 8.2639 | 8.0955 |
+| Total MAE | 9.3163 | 10.0353 | 9.8787 |
+| Upset precision / recall | 66.7% / 22.2% | 75.0% / 33.3% | 75.0% / 33.3% |
+
+From independent to r29, Moneyline produces one correction and zero harms, Spread seven corrections and
+two harms, and Total seven corrections and four harms: 15 corrections, six harms, and **+9 net corrected
+sides**. This is the proper answer to whether the market reader changes enough decisions to matter. R29 is
+not a four-change product; the smaller seven-change table above measures only its incremental difference
+from eleven historical market-aware release eras.
+
+The tradeoff is explicit. R29 improves sides, exact-price results, actionable performance, margin MAE, and
+upset recognition versus independent-only, but independent-only has lower team-score and Total MAE. Total
+Brier/log loss also move from 0.242012/0.676619 independent-only to 0.258922/0.711868 under r29; Moneyline
+Brier is effectively flat but slightly worse, while Spread Brier improves materially. The selected product
+therefore has stronger decision and price performance on this opened sample, not a universal calibration
+win. Future immutable locks must continue to report both dimensions.
+
+### Every r29 decision loss reviewed
+
+The exact replay contains 16 settled decision losses: six Moneylines, four Spreads, and six Totals. Each was
+classified from evidence available at lock, not from a postgame story:
+
+| Loss class | Count | Meaning |
+|---|---:|---|
+| Lower-tier market confirmation lost | 4 | The available market supported the final side, but no professional override was applied and the side lost. |
+| Market-induced side harm | 6 | Market integration replaced a winning independent side with a losing final side. |
+| Market promotion loss | 2 | The side stayed the same but market evidence made the losing decision actionable. |
+| No usable market correction | 1 | Neither captured market hierarchy nor the candidate supplied a defensible opposite read. |
+| Qualified market signal lost | 1 | A properly qualified signal supported the final side and still lost. |
+| Unqualified contrary signal available | 2 | One lower-tier clue opposed the final side, but it lacked authority and broader evidence supported the loser. |
+
+The review found **no recurring qualified opposite-side signal that production ignored**. The two contrary
+Moneyline clues were isolated selected-book movement in GB-TB and TB-DAL; named consensus or the available
+flow evidence supported the final losing side, so promoting either clue after the result would be
+hindsight. Several losses were genuine false signals rather than missed reads: LAR-PHI and DEN-SF Totals
+had broad, named, target-excluded support that simply lost.
+
+The real caution cluster is conviction under disagreement, especially Totals. JAX-CIN, LAR-PHI, DEN-SF,
+and TB-DAL were market-induced Total harms. TB-DAL included opposing Caesars and DraftKings movement plus
+book disagreement; PIT-CLE was promoted from Watchlist to a losing Best Angle under disagreement. That is
+not enough to install a blanket disagreement veto: the NE-BUF Total correction also carried opposing books
+and disagreement, and that qualified flip repaired a loss. The production rule therefore preserves the
+continuous conflict evidence and avoids a hindsight cutoff.
+
+### Confidence-strength challenge
+
+Because a direction flip and its conviction are separate questions, the audit challenged the existing
+full-strength mapping against 0%, 25%, 50%, and 75% retention of the independent distance from 50% on a
+market flip. These were sensitivity candidates, not production releases.
+
+| Flip-strength candidate | Actionables | Actionable record | Full-board units | Actionable units | Margin MAE | Upset precision / recall |
+|---|---:|---:|---:|---:|---:|---:|
+| 0% | 21 | 14-7 | +5.5066 | +6.2602 | 8.5341 | 66.7% / 22.2% |
+| 25% | 20 | 14-6 | +9.3772 | +7.2602 | 8.4283 | 66.7% / 22.2% |
+| 50% | 20 | 14-6 | +9.3772 | +7.2602 | 8.3046 | 66.7% / 22.2% |
+| 75% | 23 | 15-8 | +9.3772 | +6.2217 | 8.1958 | 66.7% / 22.2% |
+| 100% / selected r29 | 24 | 16-8 | +11.3772 | +7.2217 | 8.0955 | 75.0% / 33.3% |
+
+The 25% and 50% candidates narrowly exceed r29 actionable units by 0.0385, but lose two actionables, two
+full-board units, the qualified ATL-NO Moneyline correction, upset recall, and projection accuracy. The
+complete product objective therefore selects full strength. The blanket conservative alternative is
+rejected and has no production path. This is not proof that 100% is a permanent universal coefficient;
+it is the strongest Pareto-efficient option among the tested NFL candidates on the available evidence.
+
 ## Certification verdict and limitations
 
-NFL r29 passes the candidate's direction, score-error, Brier, side-harm, board-count, cross-market coherence,
-target-exclusion, and locked-reader gates on the available data. The audit and production both call
+NFL r29 passes the candidate's incremental direction, score-error, Brier, side-harm, board-count,
+cross-market coherence, target-exclusion, and locked-reader gates versus r28 on the available data. The
+full independent-to-final calibration tradeoff remains disclosed above. The audit and production both call
 `buildNflProfessionalMarketAuthority`; there is no parallel scoring rule.
 
 ### Final pass / unverifiable matrix
