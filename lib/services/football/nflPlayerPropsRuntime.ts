@@ -44,17 +44,17 @@ import {
 } from "./nflPlayerPropsMarketEvidenceCapture";
 
 export const NFL_PLAYER_PROPS_PORTABLE_ARTIFACT_RELEASE =
-  "nfl_player_props_runtime_2026_10_08_r12_independent_rushing_yards" as const;
+  "nfl_player_props_runtime_2026_10_08_r13_independent_receptions" as const;
 export const NFL_PLAYER_PROPS_RUNTIME_RELEASE =
-  "nfl_player_props_runtime_2026_10_08_r27_independent_rushing_yards" as const;
+  "nfl_player_props_runtime_2026_10_08_r28_independent_receptions" as const;
 export const NFL_PLAYER_PROPS_BOARD_RELEASE =
-  "nfl_player_props_board_2026_10_08_r30_independent_rushing_yards" as const;
+  "nfl_player_props_board_2026_10_08_r31_independent_receptions" as const;
 export const NFL_PLAYER_PROPS_DECISION_RELEASE =
-  "nfl_player_props_decision_2026_10_08_r26_independent_rushing_yards" as const;
+  "nfl_player_props_decision_2026_10_08_r27_independent_receptions" as const;
 export const NFL_PLAYER_PROPS_MODEL_RELEASE =
-  "nfl_player_props_distribution_model_2026_10_08_r21_independent_rushing_yards" as const;
+  "nfl_player_props_distribution_model_2026_10_08_r22_independent_receptions" as const;
 export const NFL_PLAYER_PROPS_CALIBRATION_RELEASE =
-  "nfl_player_props_distribution_calibration_2026_10_08_r23_independent_rushing_yards" as const;
+  "nfl_player_props_distribution_calibration_2026_10_08_r24_independent_receptions" as const;
 export const NFL_PLAYER_PROPS_PASSING_MARKET_RELEASE =
   "nfl_player_props_market_residual_calibration_2026_09_03_r8_single_application" as const;
 export const NFL_PLAYER_PROPS_MARKET_COHERENT_PROJECTION_RELEASE =
@@ -230,7 +230,7 @@ const artifact = {
 } as unknown as RuntimeArtifact;
 const jointArtifact = jointArtifactJson as unknown as JointRuntimeArtifact;
 const expectedRoleArtifact = expectedRoleArtifactJson as unknown as {
-  release: "nfl_player_props_expected_role_runtime_2026_10_08_r4_rushing_yards";
+  release: "nfl_player_props_expected_role_runtime_2026_10_08_r5_receptions";
   featureNames: string[];
   passingAttempts: {
     budgetModel: PortableModel; shareModel: PortableModel; shareLower: number; shareUpper: number;
@@ -267,6 +267,20 @@ const expectedRoleArtifact = expectedRoleArtifactJson as unknown as {
     }>;
     probability: ProbabilityRelease;
   };
+  receptions: {
+    blendWeight: number;
+    shareLower: number;
+    shareUpper: number;
+    catchRateLower: number;
+    catchRateUpper: number;
+    teamBudgetModel: PortableModel;
+    teamShareModel: PortableModel;
+    teamParticipationModel: PortableModel;
+    groups: Record<"BACK" | "WR" | "TE", {
+      catchRateModel: PortableModel;
+    }>;
+    probability: ProbabilityRelease;
+  };
   playerStateShards: 16;
   playerStateFeatureNames: string[];
   teamStateUpdates: Record<string, Record<string, number | null>>;
@@ -278,7 +292,7 @@ if (artifact.runtimeRelease !== NFL_PLAYER_PROPS_PORTABLE_ARTIFACT_RELEASE) {
 if (jointArtifact.release !== "nfl_player_props_joint_runtime_2026_09_29_r2_full_family_matchup") {
   throw new Error("NFL player props joint runtime artifact release mismatch.");
 }
-if (expectedRoleArtifact.release !== "nfl_player_props_expected_role_runtime_2026_10_08_r4_rushing_yards") {
+if (expectedRoleArtifact.release !== "nfl_player_props_expected_role_runtime_2026_10_08_r5_receptions") {
   throw new Error("NFL player props expected-role artifact release mismatch.");
 }
 
@@ -512,6 +526,50 @@ export function scoreNflPlayerPropsRuntimeFeatureRows(
       );
     }
   }
+  const receivingTeams = new Map<string, NflPlayerPropsRuntimeFeatureRow[]>();
+  for (const row of rows) {
+    const group = expectedRoleGroup(row.position);
+    if (group !== "BACK" && group !== "WR" && group !== "TE") continue;
+    const key = `${row.gameId}|${row.team}`;
+    receivingTeams.set(key, [...(receivingTeams.get(key) ?? []), row]);
+  }
+  for (const members of receivingTeams.values()) {
+    const head = expectedRoleArtifact.receptions;
+    const teamRawShares = members.map((row) => {
+      const modelFeatures = row.expectedRoleFeatures ?? row.features;
+      const participation = row.propOffered
+        ? 1
+        : clamp(sigmoid(predict(head.teamParticipationModel, modelFeatures)), 0, 1);
+      return participation * clamp(
+        predict(head.teamShareModel, modelFeatures), head.shareLower, head.shareUpper,
+      );
+    });
+    const teamDenominator = teamRawShares.reduce((sum, value) => sum + value, 0);
+    for (let index = 0; index < members.length; index += 1) {
+      const row = members[index]!;
+      const group = expectedRoleGroup(row.position);
+      if (group !== "BACK" && group !== "WR" && group !== "TE") continue;
+      const models = head.groups[group];
+      const modelFeatures = row.expectedRoleFeatures ?? row.features;
+      const score = scores.get(`${row.gameId}|${normalizeName(row.playerName)}`)!;
+      const foundationReceptions = score.projections.receptions;
+      score.foundationProjections = {
+        ...score.foundationProjections,
+        receptions: foundationReceptions,
+      };
+      const teamShare = teamDenominator > 0
+        ? teamRawShares[index]! / teamDenominator
+        : clamp(predict(head.teamShareModel, modelFeatures), head.shareLower, head.shareUpper);
+      const catchRate = clamp(
+        predict(models.catchRateModel, modelFeatures), head.catchRateLower, head.catchRateUpper,
+      );
+      const component = Math.max(0, predict(head.teamBudgetModel, modelFeatures))
+        * teamShare * catchRate;
+      score.projections.receptions = Math.max(0,
+        (1 - head.blendWeight) * foundationReceptions + head.blendWeight * component,
+      );
+    }
+  }
 
   return scores;
 }
@@ -525,14 +583,16 @@ export function nflPlayerPropsOverProbability(
   const component = artifact.markets[market];
   if (!component) throw new Error(`NFL props runtime market is unsupported: ${market}`);
   if (market === "passing_attempts" || market === "passing_completions"
-    || market === "passing_yards" || market === "rushing_yards") {
+    || market === "passing_yards" || market === "rushing_yards" || market === "receptions") {
     const release = market === "passing_attempts"
       ? expectedRoleArtifact.passingAttempts.probability
       : market === "passing_completions"
         ? expectedRoleArtifact.passingCompletions.probability
         : market === "passing_yards"
           ? expectedRoleArtifact.passingYards.probability
-          : expectedRoleArtifact.rushingYards.probability;
+          : market === "rushing_yards"
+            ? expectedRoleArtifact.rushingYards.probability
+            : expectedRoleArtifact.receptions.probability;
     const foundationProjection = context?.foundationProjection ?? projection;
     const foundation = releasedDistributionOverProbability(
       release.foundationDistribution, foundationProjection, line, context?.position ?? null,
@@ -546,6 +606,16 @@ export function nflPlayerPropsOverProbability(
       + release.probabilityCalibration.slope * logit(clamp(mixed, 1e-5, 1 - 1e-5));
     return sigmoid(calibrated);
   }
+  return incumbentNflPlayerPropsOverProbability(market, projection, line);
+}
+
+function incumbentNflPlayerPropsOverProbability(
+  market: string,
+  projection: number,
+  line: number,
+): number {
+  const component = artifact.markets[market];
+  if (!component) throw new Error(`NFL props runtime market is unsupported: ${market}`);
   const selected = selectEmpiricalDistribution(component.distribution, projection);
   const target = line - Math.max(projection, 1e-6);
   const residuals = selected.residualQuantiles;
@@ -1089,6 +1159,7 @@ export function buildNflPlayerPropsRuntimeBoard(args: {
   captureMarketEvidence?: boolean;
   auditPrecedingPassingYardsOnly?: boolean;
   auditPrecedingRushingYardsOnly?: boolean;
+  auditPrecedingReceptionsOnly?: boolean;
   auditIncumbentMarketArbitration?: boolean;
 }): NflPlayerPropsRuntimeBoard {
   const evaluatedAt = Date.parse(args.evaluatedAt);
@@ -1198,15 +1269,19 @@ export function buildNflPlayerPropsRuntimeBoard(args: {
     const projection = passingProjection?.projection
       ?? (args.auditPrecedingRushingYardsOnly && offer.market === "rushing_yards"
         ? scored.foundationProjections?.rushing_yards ?? scored.projections.rushing_yards!
+        : args.auditPrecedingReceptionsOnly && offer.market === "receptions"
+          ? scored.foundationProjections?.receptions ?? scored.projections.receptions!
         : scored.projections[offer.market]!);
     const decisionScore = passingProjection ? {
       ...scored,
       participationProbability: nflPlayerPropsStarterAdjustedParticipationProbability(feature, scored.participationProbability),
     } : scored;
-    const rawOver = nflPlayerPropsOverProbability(offer.market, projection, offer.line, {
-      foundationProjection: scored.foundationProjections?.[offer.market],
-      position: feature.position,
-    });
+    const rawOver = args.auditPrecedingReceptionsOnly && offer.market === "receptions"
+      ? incumbentNflPlayerPropsOverProbability(offer.market, projection, offer.line)
+      : nflPlayerPropsOverProbability(offer.market, projection, offer.line, {
+          foundationProjection: scored.foundationProjections?.[offer.market],
+          position: feature.position,
+        });
     const independentPassingOffers = passingWorkloadMarket
       ? (passingMarketGroups.get(passingPlayerKey(offer)) ?? [])
           .filter((candidate) => candidate.market === passingWorkloadMarket

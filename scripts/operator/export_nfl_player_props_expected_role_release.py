@@ -1,10 +1,8 @@
 #!/usr/bin/env python3
-"""Export the frozen independent Passing Attempts, Completions, and Yards release.
+"""Export the frozen independent expected-role player-props release.
 
-The research tournament also qualified a Receptions challenger, but its current
-board implementation failed the anti-flattening gate. This exporter ships only
-approved heads into the existing TypeScript batch scorer; it does not create a
-second writer.
+Approved market-specific heads share the existing TypeScript batch scorer and
+the sole leased writer.  No sportsbook feature enters this artifact.
 """
 
 from __future__ import annotations
@@ -21,16 +19,16 @@ import numpy as np
 import pandas as pd
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 DEFAULT_OUTPUT = ROOT / "lib/services/football/modelArtifacts/nflPlayerPropsExpectedRole.json"
-DEFAULT_DISTRIBUTION = ROOT / "football-research/cache/nfl-player-props-external/tournament/nfl_player_props_independent_distribution_release_r1.json"
-DEFAULT_COMPLETIONS_DISTRIBUTION = ROOT / "football-research/cache/nfl-player-props-external/tournament/nfl_player_props_passing_completions_distribution_r1.json"
-DEFAULT_PASSING_YARDS_DISTRIBUTION = ROOT / "football-research/cache/nfl-player-props-external/tournament/nfl_player_props_passing_yards_distribution_r1.json"
-DEFAULT_RUSHING_YARDS_DISTRIBUTION = ROOT / "football-research/cache/nfl-player-props-external/tournament/nfl_player_props_rushing_yards_distribution_r1.json"
+DEFAULT_RECEPTIONS_TOURNAMENT = ROOT / "football-research/cache/nfl-player-props-external/tournament/nfl_player_props_receptions_r1.json"
+DEFAULT_RECEPTIONS_DISTRIBUTION = ROOT / "football-research/cache/nfl-player-props-external/tournament/nfl_player_props_receptions_distribution_r1.json"
 RUNTIME = ROOT / "lib/services/football/modelArtifacts/nflPlayerPropsRuntime.json"
-RELEASE = "nfl_player_props_expected_role_runtime_2026_10_08_r4_rushing_yards"
-PORTABLE_RELEASE = "nfl_player_props_runtime_2026_10_08_r12_independent_rushing_yards"
-MODEL_RELEASE = "nfl_player_props_distribution_model_2026_10_08_r21_independent_rushing_yards"
-CALIBRATION_RELEASE = "nfl_player_props_distribution_calibration_2026_10_08_r23_independent_rushing_yards"
-DECISION_RELEASE = "nfl_player_props_decision_2026_10_08_r26_independent_rushing_yards"
+RELEASE = "nfl_player_props_expected_role_runtime_2026_10_08_r5_receptions"
+PORTABLE_RELEASE = "nfl_player_props_runtime_2026_10_08_r13_independent_receptions"
+MODEL_RELEASE = "nfl_player_props_distribution_model_2026_10_08_r22_independent_receptions"
+CALIBRATION_RELEASE = "nfl_player_props_distribution_calibration_2026_10_08_r24_independent_receptions"
+DECISION_RELEASE = "nfl_player_props_decision_2026_10_08_r27_independent_receptions"
+PRECEDING_RELEASE = "nfl_player_props_expected_role_runtime_2026_10_08_r4_rushing_yards"
+PRECEDING_SHA256 = "2cb4b78cce338995b4df08b769022be63088af896e0f7ddf6cc943397caede5d"
 
 
 def load(name: str, path: pathlib.Path) -> Any:
@@ -88,6 +86,11 @@ def optimize_existing(path: pathlib.Path) -> None:
         payload["passingYards"]["yardsPerCompletionModel"],
         *(value for group in payload.get("rushingYards", {}).get("groups", {}).values()
           for value in (group["budgetModel"], group["shareModel"], group["participationModel"], group["yardsPerCarryModel"])),
+        payload["receptions"]["teamBudgetModel"],
+        payload["receptions"]["teamShareModel"],
+        payload["receptions"]["teamParticipationModel"],
+        *(value for group in payload.get("receptions", {}).get("groups", {}).values()
+          for value in (group["catchRateModel"],)),
     ]
     for value in models:
         if not str(value["kind"]).startswith("compact_hgb_"):
@@ -141,13 +144,14 @@ def optimize_existing(path: pathlib.Path) -> None:
             "prior_passing_attempts_season_avg",
             "prior_rushing_attempts_lag1", "prior_rushing_attempts_avg3",
             "prior_rushing_attempts_season_avg",
+            "prior_targets_lag1", "prior_targets_avg3", "prior_targets_season_avg",
+            "prior_receptions_lag1", "prior_receptions_avg3", "prior_receptions_season_avg",
         }
     }
     player_states = {
         name: state for name, state in payload.pop("playerStateUpdates").items()
         if any(index in active_state_indexes and value > 0 for index, value in state)
     }
-    payload.pop("receptions", None)
     payload["release"] = RELEASE
     shard_paths: list[pathlib.Path] = []
     for index in range(16):
@@ -179,10 +183,8 @@ def optimize_existing(path: pathlib.Path) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--output", type=pathlib.Path, default=DEFAULT_OUTPUT)
-    parser.add_argument("--distribution", type=pathlib.Path, default=DEFAULT_DISTRIBUTION)
-    parser.add_argument("--completions-distribution", type=pathlib.Path, default=DEFAULT_COMPLETIONS_DISTRIBUTION)
-    parser.add_argument("--passing-yards-distribution", type=pathlib.Path, default=DEFAULT_PASSING_YARDS_DISTRIBUTION)
-    parser.add_argument("--rushing-yards-distribution", type=pathlib.Path, default=DEFAULT_RUSHING_YARDS_DISTRIBUTION)
+    parser.add_argument("--receptions-tournament", type=pathlib.Path, default=DEFAULT_RECEPTIONS_TOURNAMENT)
+    parser.add_argument("--receptions-distribution", type=pathlib.Path, default=DEFAULT_RECEPTIONS_DISTRIBUTION)
     parser.add_argument("--external-manifest", type=pathlib.Path)
     parser.add_argument("--injury-root", type=pathlib.Path)
     parser.add_argument("--optimize-existing", action="store_true")
@@ -319,54 +321,80 @@ def main() -> None:
     if set(rushing_yards_models) != {"QB", "BACK", "WR"}:
         raise RuntimeError(f"incomplete Rushing Yards group models: {sorted(rushing_yards_models)}")
 
+    receiver_groups = {"BACK", "WR", "TE"}
+    receiver_population = training[training["expected_role_group"].isin(receiver_groups)].copy()
+    receiver_active = receiver_population[receiver_population["participated"].eq(1)].copy()
+    team_target_budget_model = foundation.model("poisson").fit(
+        teams[team_features], teams["team_targets"].to_numpy(float),
+    )
+    team_target_share_model = foundation.model("squared_error").fit(
+        receiver_active[player_features],
+        receiver_active["expected_team_target_share"].fillna(0.0).to_numpy(float),
+    )
+    team_target_participation_model = foundation.HistGradientBoostingClassifier(
+        max_iter=140, max_leaf_nodes=15, learning_rate=0.04,
+        min_samples_leaf=35, l2_regularization=12.0, random_state=foundation.SEED,
+    ).fit(receiver_population[player_features], receiver_population["participated"].to_numpy(int))
+    receptions_models: dict[str, dict[str, Any]] = {}
+    for group in ("BACK", "WR", "TE"):
+        population = training[training["expected_role_group"].eq(group)].copy()
+        active = population[population["participated"].eq(1)].copy()
+        efficiency = active[active["targets"].gt(0)].copy()
+        if len(active) < 100 or len(efficiency) < 100:
+            continue
+        catch_rate = (efficiency["receptions"] / efficiency["targets"]).clip(0.0, 1.0)
+        catch_rate_model = foundation.model("squared_error").fit(
+            efficiency[player_features], catch_rate.to_numpy(float),
+        )
+        receptions_models[group] = {
+            "catchRateModel": compact_model(exporter, catch_rate_model, player_features),
+        }
+    if set(receptions_models) != {"BACK", "WR", "TE"}:
+        raise RuntimeError(f"incomplete Receptions group models: {sorted(receptions_models)}")
+    team_target_budget_portable = compact_model(exporter, team_target_budget_model, team_features)
+    team_target_share_portable = compact_model(exporter, team_target_share_model, player_features)
+    team_target_participation_portable = compact_model(
+        exporter, team_target_participation_model, player_features, classifier=True,
+    )
+
     existing_expected_role = json.loads(args.output.read_text(encoding="utf-8"))
+    if existing_expected_role.get("release") not in {PRECEDING_RELEASE, RELEASE}:
+        raise RuntimeError("expected-role artifact is neither the frozen predecessor nor this release")
+    if existing_expected_role.get("release") == PRECEDING_RELEASE \
+            and foundation.sha256_file(args.output) != PRECEDING_SHA256:
+        raise RuntimeError("frozen preceding expected-role artifact checksum mismatch")
     passing_attempts_probability = existing_expected_role["passingAttempts"]["probability"]
     if not passing_attempts_probability["passes"]:
         raise RuntimeError("selected Passing Attempts distribution is not release qualified")
-    completions_distribution = json.loads(args.completions_distribution.read_text(encoding="utf-8"))
-    completion_artifact = completions_distribution["artifact"]
-    if not completion_artifact["passes"]:
-        raise RuntimeError("selected Passing Completions distribution is not release qualified")
-    completion_probability = {
-        "foundationDistribution": completion_artifact["referenceDistribution"],
-        "challengerDistribution": completion_artifact["challengerDistribution"],
-        "challengerWeight": completion_artifact["challengerWeight"],
-        "probabilityCalibration": completion_artifact["probabilityCalibration"],
+    completion_probability = existing_expected_role["passingCompletions"]["probability"]
+    passing_yards_probability = existing_expected_role["passingYards"]["probability"]
+    rushing_yards_probability = existing_expected_role["rushingYards"]["probability"]
+    for name, probability in (
+        ("Passing Completions", completion_probability),
+        ("Passing Yards", passing_yards_probability),
+        ("Rushing Yards", rushing_yards_probability),
+    ):
+        if not probability["passes"]:
+            raise RuntimeError(f"preceding {name} distribution is not release qualified")
+    receptions_tournament = json.loads(args.receptions_tournament.read_text(encoding="utf-8"))
+    if receptions_tournament.get("selected") != "team_target_blend_50":
+        raise RuntimeError("unexpected Receptions point candidate")
+    receptions_distribution = json.loads(args.receptions_distribution.read_text(encoding="utf-8"))
+    receptions_artifact = receptions_distribution["artifact"]
+    if not receptions_artifact["passes"]:
+        raise RuntimeError("selected Receptions distribution is not release qualified")
+    receptions_probability = {
+        "foundationDistribution": receptions_artifact["referenceDistribution"],
+        # The historical/exact-replay challenger improved probability scoring but
+        # demoted every incumbent Receptions actionable on the current board.
+        # Keep the qualified point head while retaining the preceding probability
+        # semantics exactly; a flatter board is not a valid release improvement.
+        "challengerDistribution": receptions_artifact["referenceDistribution"],
+        "challengerWeight": 0.0,
+        "probabilityCalibration": None,
         "passes": True,
-    }
-    passing_yards_distribution = json.loads(args.passing_yards_distribution.read_text(encoding="utf-8"))
-    passing_yards_artifact = passing_yards_distribution["artifact"]
-    probability_challenger_qualified = bool(passing_yards_artifact["passes"])
-    if not probability_challenger_qualified and passing_yards_distribution.get("selected") is not None:
-        raise RuntimeError("rejected Passing Yards distribution cannot be exported as an incumbent fallback")
-    passing_yards_probability = {
-        "foundationDistribution": passing_yards_artifact["referenceDistribution"],
-        "challengerDistribution": passing_yards_artifact["challengerDistribution"]
-        if probability_challenger_qualified else passing_yards_artifact["referenceDistribution"],
-        "challengerWeight": passing_yards_artifact["challengerWeight"]
-        if probability_challenger_qualified else 0.0,
-        "probabilityCalibration": passing_yards_artifact["probabilityCalibration"]
-        if probability_challenger_qualified else None,
-        "passes": True,
-        "challengerQualified": probability_challenger_qualified,
-        "incumbentRetained": not probability_challenger_qualified,
-    }
-    rushing_yards_distribution = json.loads(args.rushing_yards_distribution.read_text(encoding="utf-8"))
-    rushing_yards_artifact = rushing_yards_distribution["artifact"]
-    rushing_probability_challenger_qualified = bool(rushing_yards_artifact["passes"])
-    if not rushing_probability_challenger_qualified and rushing_yards_distribution.get("selected") is not None:
-        raise RuntimeError("rejected Rushing Yards distribution cannot be exported as an incumbent fallback")
-    rushing_yards_probability = {
-        "foundationDistribution": rushing_yards_artifact["referenceDistribution"],
-        "challengerDistribution": rushing_yards_artifact["challengerDistribution"]
-        if rushing_probability_challenger_qualified else rushing_yards_artifact["referenceDistribution"],
-        "challengerWeight": rushing_yards_artifact["challengerWeight"]
-        if rushing_probability_challenger_qualified else 0.0,
-        "probabilityCalibration": rushing_yards_artifact["probabilityCalibration"]
-        if rushing_probability_challenger_qualified else None,
-        "passes": True,
-        "challengerQualified": rushing_probability_challenger_qualified,
-        "incumbentRetained": not rushing_probability_challenger_qualified,
+        "challengerQualified": False,
+        "incumbentRetained": True,
     }
 
     passing_budget_portable = compact_model(exporter, team_budget, team_features)
@@ -380,27 +408,53 @@ def main() -> None:
         completion_share_portable, completion_rate_portable,
         yards_per_attempt_portable, yards_per_completion_portable,
         *(value for group in rushing_yards_models.values() for value in group.values()),
+        team_target_budget_portable, team_target_share_portable, team_target_participation_portable,
+        *(value for group in receptions_models.values() for value in group.values()),
     ]
     state_features = list(dict.fromkeys(
         feature for value in all_models for feature in model_features(value)
     ))
     runtime = json.loads(RUNTIME.read_text(encoding="utf-8"))
     player_updates: dict[str, dict[str, float | None]] = {}
-    used_player_features = [
-        name for name in state_features if name in set(player_features) | set(completion_features) | set(yardage_features)
-    ]
-    role_population = training[training["position"].isin(["QB", "RB", "FB", "WR"])]
+    passing_state_features = set(
+        feature for value in (
+            passing_budget_portable, passer_share_portable, completion_share_portable,
+            completion_rate_portable, yards_per_attempt_portable, yards_per_completion_portable,
+        ) for feature in model_features(value)
+    )
+    rushing_state_features = set(
+        feature for group in rushing_yards_models.values()
+        for value in group.values() for feature in model_features(value)
+    )
+    receiving_state_features = set(
+        feature for value in (
+            team_target_budget_portable, team_target_share_portable,
+            team_target_participation_portable,
+            *(item for group in receptions_models.values() for item in group.values()),
+        ) for feature in model_features(value)
+    )
+    own_names = [name for name in state_features if name in team_features and (name == "is_home" or "_team_" in name or name.startswith("external_environment_"))]
+    allowed_names = [name for name in state_features if name in team_features and "_opponent_" in name]
+    global_state_features = set(own_names) | set(allowed_names)
+    role_population = training[training["position"].isin(["QB", "RB", "FB", "WR", "TE"])]
     for player_name, rows in role_population.groupby(
         role_population["player_name"].map(foundation.normalize_player), observed=True,
     ):
         if not player_name:
             continue
         latest = rows.sort_values(["season", "week", "game_id"]).iloc[-1]
-        player_updates[str(player_name)] = clean(latest, used_player_features)
+        position = str(latest["position"])
+        used_player_features = set()
+        if position == "QB":
+            used_player_features.update(passing_state_features)
+        if position in {"QB", "RB", "FB", "WR"}:
+            used_player_features.update(rushing_state_features)
+        if position in {"RB", "FB", "WR", "TE"}:
+            used_player_features.update(receiving_state_features)
+        used_player_features.difference_update(global_state_features)
+        player_updates[str(player_name)] = clean(latest, sorted(used_player_features))
     team_updates: dict[str, dict[str, float | None]] = {}
     opponent_updates: dict[str, dict[str, float | None]] = {}
-    own_names = [name for name in state_features if name in team_features and (name == "is_home" or "_team_" in name or name.startswith("external_environment_"))]
-    allowed_names = [name for name in state_features if name in team_features and "_opponent_" in name]
     for team, rows in training.groupby("team", observed=True):
         latest = rows.sort_values(["season", "week", "game_id"]).iloc[-1]
         team_updates[str(team)] = clean(latest, own_names)
@@ -419,9 +473,9 @@ def main() -> None:
             "passingAttemptsProbability": hashlib.sha256(json.dumps(
                 passing_attempts_probability, sort_keys=True, separators=(",", ":"),
             ).encode("utf-8")).hexdigest(),
-            "passingCompletionsTournament": foundation.sha256_file(args.completions_distribution),
-            "passingYardsTournament": foundation.sha256_file(args.passing_yards_distribution),
-            "rushingYardsTournament": foundation.sha256_file(args.rushing_yards_distribution),
+            "precedingExpectedRoleArtifact": PRECEDING_SHA256,
+            "receptionsTournament": foundation.sha256_file(args.receptions_tournament),
+            "receptionsDistributionTournament": foundation.sha256_file(args.receptions_distribution),
         },
         "featureNames": state_features,
         "passingAttempts": {
@@ -461,6 +515,18 @@ def main() -> None:
             "yardsPerCarryUpper": 15.0,
             "groups": rushing_yards_models,
             "probability": rushing_yards_probability,
+        },
+        "receptions": {
+            "blendWeight": 0.50,
+            "shareLower": 0.0,
+            "shareUpper": 1.0,
+            "catchRateLower": 0.0,
+            "catchRateUpper": 1.0,
+            "teamBudgetModel": team_target_budget_portable,
+            "teamShareModel": team_target_share_portable,
+            "teamParticipationModel": team_target_participation_portable,
+            "groups": receptions_models,
+            "probability": receptions_probability,
         },
         "playerStateUpdates": player_updates,
         "teamStateUpdates": team_updates,
