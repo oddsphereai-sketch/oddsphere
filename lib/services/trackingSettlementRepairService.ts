@@ -2,7 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Sport } from "../types/domain/Sport";
 
 export const TRACKING_SETTLEMENT_CONTRACT_VERSION =
-  "tracking_settlement_v4_epl_completed_status_2026_08_22";
+  "tracking_settlement_v5_mlb_provider_catchup_2026_10_09";
 
 const MAX_PENDING_GRADES_SCANNED = 1_000;
 const MAX_REPAIR_DATES_PER_RUN = 3;
@@ -56,21 +56,29 @@ function isVoidStatus(status: string | null): boolean {
 }
 
 /**
- * Choose historical slates where an existing pending grade can now settle
- * from data already stored in `games`. This intentionally performs no score
- * provider calls and is capped so the normal refresh remains predictable.
+ * Choose historical slates where an existing pending grade can now settle.
+ * The default remains database-only. MLB may explicitly include incomplete
+ * stored outcomes because its caller performs one authoritative slate read
+ * before grading. The date count is capped so refresh cost stays predictable.
  */
 export function selectStalePendingRepairDates(args: {
   records: readonly PendingRecordCandidate[];
   games: readonly CandidateGame[];
   beforeDate: string;
   maxDates?: number;
+  /**
+   * MLB can recover a historical terminal state and linescore from its
+   * authoritative schedule endpoint. Other sports remain database-only so a
+   * generic repair pass never invents or broadens provider work.
+   */
+  includeIncompleteOutcomes?: boolean;
 }): { dates: string[]; eligibleRecords: number } {
   const gameById = new Map(args.games.map((game) => [game.id, game]));
   const eligible = args.records.filter((record) => {
     if (record.slate_date >= args.beforeDate) return false;
     const game = gameById.get(record.game_id);
     if (!game) return false;
+    if (args.includeIncompleteOutcomes === true) return true;
     if (record.market === "first_inning") {
       return game.first_inning_runs !== null || isVoidStatus(game.status);
     }
@@ -96,38 +104,32 @@ export async function discoverStalePendingRepairDates(args: {
     errors: [],
   };
 
-  const { data: gradeRows, error: gradeError } = await args.supabase
-    .from("prediction_grades")
-    .select("prediction_record_id")
-    .eq("result", "pending")
-    .order("prediction_record_id", { ascending: true })
+  // Filter by sport before applying the bounded limit. The former two-step
+  // query selected the first 1,000 pending grades across every sport, then
+  // filtered them to the requested sport. A busy cross-sport ledger could
+  // therefore starve older MLB rows forever even though they were repairable.
+  let recordsQuery = args.supabase
+    .from("prediction_records")
+    .select("id, game_id, slate_date, market, prediction_grades!inner(result)")
+    .eq("sport", args.sport)
+    .eq("prediction_grades.result", "pending")
+    .lt("slate_date", args.beforeDate)
+    .order("id", { ascending: true })
     .limit(MAX_PENDING_GRADES_SCANNED);
-  if (gradeError) {
-    result.errors.push(`pending grades fetch: ${gradeError.message}`);
+  if (args.sport === "mlb") recordsQuery = recordsQuery.not("locked_at", "is", null);
+  const { data: recordRows, error: recordError } = await recordsQuery;
+  if (recordError) {
+    result.errors.push(`candidate records fetch: ${recordError.message}`);
     return result;
   }
 
-  const recordIds = ((gradeRows ?? []) as Array<{ prediction_record_id: number }>)
-    .map((row) => row.prediction_record_id);
-  result.pendingGradesScanned = recordIds.length;
-  if (recordIds.length === 0) return result;
-
-  const records: PendingRecordCandidate[] = [];
-  for (const idChunk of chunks(recordIds, QUERY_CHUNK_SIZE)) {
-    let query = args.supabase
-      .from("prediction_records")
-      .select("id, game_id, slate_date, market")
-      .in("id", idChunk)
-      .eq("sport", args.sport)
-      .lt("slate_date", args.beforeDate);
-    if (args.sport === "mlb") query = query.not("locked_at", "is", null);
-    const { data, error } = await query;
-    if (error) {
-      result.errors.push(`candidate records fetch: ${error.message}`);
-      return result;
-    }
-    records.push(...((data ?? []) as PendingRecordCandidate[]));
-  }
+  const records = (recordRows ?? []).map((row) => ({
+    id: Number(row.id),
+    game_id: Number(row.game_id),
+    slate_date: String(row.slate_date),
+    market: String(row.market),
+  })) as PendingRecordCandidate[];
+  result.pendingGradesScanned = records.length;
   result.candidateRecords = records.length;
   if (records.length === 0) return result;
 
@@ -149,6 +151,7 @@ export async function discoverStalePendingRepairDates(args: {
     records,
     games,
     beforeDate: args.beforeDate,
+    includeIncompleteOutcomes: args.sport === "mlb",
   });
   result.dates = selected.dates;
   result.eligibleRecords = selected.eligibleRecords;

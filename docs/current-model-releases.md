@@ -4,9 +4,24 @@ This file is the human-readable production handoff registry. Runtime constants a
 prediction snapshots remain the machine authority. Future model work must start here, verify the
 constants, and preserve the precedence and writer ownership below.
 
-Last reviewed: 2026-10-08
+Last reviewed: 2026-10-09
 
 ## Cross-sport confidence / execution contract
+
+- October 9 MLB tracking settlement continuity is
+  `tracking_settlement_v5_mlb_provider_catchup_2026_10_09`. The hourly tracking
+  orchestrator again runs the bounded historical-pending repair that had become
+  disconnected from the active refresh path. Pending discovery is sport-scoped
+  before its 1,000-row bound. For at most three older MLB slate dates per run,
+  it performs one authoritative MLB Stats schedule/linescore read before the
+  existing deterministic grader, allowing missed final scores and official
+  postponed/canceled states to settle after they age out of the normal
+  yesterday/today/tomorrow window. The production cleanup resolved 28 stale
+  rows across ten dates: 25 records tied to nine postponed games became void,
+  and three MIL–STL July 7 records settled from the official final and first
+  inning. Locked predictions, sides, lines, prices, probabilities, play grades,
+  stakes, releases, and member presentation remain unchanged. Evidence and
+  rollback: `docs/model-audits/2026-10-09-mlb-pending-tracking-settlement-continuity.md`.
 
 - October 8 CFB settlement continuity: postgame score ingest release is
   `cfb_score_ingest_2026_10_08_r3_official_score_fallback`. BALLDONTLIE remains

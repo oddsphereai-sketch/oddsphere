@@ -32,7 +32,7 @@ console.log("━━━ computeRefreshDates (yesterday/today/tomorrow) ━━━"
 check(
   "settlement repair contract is versioned",
   TRACKING_SETTLEMENT_CONTRACT_VERSION ===
-    "tracking_settlement_v4_epl_completed_status_2026_08_22",
+    "tracking_settlement_v5_mlb_provider_catchup_2026_10_09",
 );
 
 {
@@ -53,6 +53,24 @@ check(
   });
   check("only historical terminal candidates are selected", JSON.stringify(selected.dates) === JSON.stringify(["2026-07-01"]));
   check("final first-inning rows wait for inning data", selected.eligibleRecords === 1);
+}
+
+{
+  const selected = selectStalePendingRepairDates({
+    beforeDate: "2026-10-08",
+    includeIncompleteOutcomes: true,
+    records: [
+      { id: 1, game_id: 11, slate_date: "2026-07-17", market: "moneyline" },
+      { id: 2, game_id: 11, slate_date: "2026-07-17", market: "first_inning" },
+    ],
+    games: [
+      { id: 11, status: "STATUS_SCHEDULED", home_score: null, away_score: null, first_inning_runs: null },
+    ],
+  });
+  check(
+    "MLB provider catch-up selects historical pending rows even when stored outcomes are incomplete",
+    JSON.stringify(selected.dates) === JSON.stringify(["2026-07-17"]) && selected.eligibleRecords === 2,
+  );
 }
 
 {
@@ -156,6 +174,11 @@ check(
   "successful grade writes immediately invalidate the member Tracking aggregate",
   trackingCronSource.includes('revalidateTag("member-tracking-aggregate", { expire: 0 })') &&
     trackingCronSource.includes("summary.totals.grades_upserted > 0"),
+);
+check(
+  "tracking refresh exposes the versioned bounded stale-pending repair",
+  trackingCronSource.includes("settlementContractVersion: summary.settlementContractVersion") &&
+    trackingCronSource.includes("stalePendingRepair: summary.stalePendingRepair"),
 );
 check(
   "World Cup provider/model refresh is unscheduled during offseason",
