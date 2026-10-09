@@ -34,23 +34,6 @@ function moneylineFamily(source: string, currentHomePrice: number, currentAwayPr
   ];
 }
 
-function splits(homeMoneyPct: number, homeBetsPct: number): NflForwardPlaybookSplitSet {
-  const value = {
-    provider: "playbook" as const,
-    capturedAt: EVALUATED,
-    booksUsed: 6,
-    homeMoneyPct,
-    awayMoneyPct: 100 - homeMoneyPct,
-    homeBetsPct,
-    awayBetsPct: 100 - homeBetsPct,
-    overMoneyPct: homeMoneyPct,
-    underMoneyPct: 100 - homeMoneyPct,
-    overBetsPct: homeBetsPct,
-    underBetsPct: 100 - homeBetsPct,
-  };
-  return { moneyline: value, spread: value, total: value };
-}
-
 function sharp(homeMoneyPct: number, homeBetsPct: number): NflRegularSharpSplitSet {
   const value = {
     provider: "sharpapi" as const,
@@ -113,6 +96,14 @@ assert.equal(sharpConfirmed.totalSide, null, "Total sequence remains audit-only 
 const opposingSharp = authority({ spread: namedHomeSpread, sharp: sharp(35, 55) });
 assert.equal(opposingSharp.spreadSide, null);
 assert.equal(opposingSharp.reads.spread.reason, "opposing_fresh_split");
+
+const namedLeadWithOpposingRetail = authority({
+  spread: [...namedHomeSpread, family("fanduel", -3, -2.5)],
+  sharp: sharp(65, 45),
+});
+assert.equal(namedLeadWithOpposingRetail.spreadSide, "home",
+  "an opposing retail quote is preserved as disagreement but cannot veto two named leaders plus named flow");
+assert.equal(namedLeadWithOpposingRetail.reads.spread.resistance, "book_disagreement");
 
 const twoRetailFollowers = authority({
   spread: [...namedHomeSpread, family("fanduel", -3, -4, FOLLOW), family("draftkings", -3, -4, FOLLOW)],

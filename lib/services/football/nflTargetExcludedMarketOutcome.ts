@@ -17,9 +17,10 @@ import {
 } from "./nflV1WeekOneOutcome";
 import type { NflPaidProjectionShadow } from "./balldontlieNflWeeklyProjectionShadow";
 import type { NflNamedMarketSequenceAuthority } from "./nflNamedMarketSequence";
+import type { NflProfessionalMarketAuthority } from "./nflProfessionalMarketAuthority";
 
 export const NFL_TARGET_EXCLUDED_MARKET_OUTCOME_RELEASE =
-  "nfl_target_excluded_market_outcome_2026_10_08_r10_named_sequence" as const;
+  "nfl_target_excluded_market_outcome_2026_10_09_r12_professional_market_authority" as const;
 
 export type NflTargetExcludedMarketAnchor = {
   release: typeof NFL_TARGET_EXCLUDED_MARKET_OUTCOME_RELEASE;
@@ -38,6 +39,8 @@ type NflEvaluatedTargetFamilies = {
   margin: string[];
   total: string[];
 };
+
+export type NflNamedSequenceExcludedFamilies = Record<"moneyline" | "spread" | "total", string[]>;
 
 export function resolveNflTargetExcludedProduction(args: {
   providerGameId: string;
@@ -65,6 +68,13 @@ export function resolveNflTargetExcludedProduction(args: {
   paidTeamScore?: Pick<NflPaidProjectionShadow,
     "release" | "providerCollectedAt" | "projectedHomeMargin" | "projectedTotal">;
   namedSequenceAuthority?: NflNamedMarketSequenceAuthority;
+  namedSequenceAuthorityFactory?: (
+    excludedFamiliesByMarket: NflNamedSequenceExcludedFamilies,
+  ) => NflNamedMarketSequenceAuthority;
+  professionalMarketAuthority?: NflProfessionalMarketAuthority;
+  professionalMarketAuthorityFactory?: (
+    excludedFamiliesByMarket: NflNamedSequenceExcludedFamilies,
+  ) => NflProfessionalMarketAuthority;
 }): {
   outcome: NflV1WeekOneOutcomeForecast;
   production: NflV1ActionableGradeBundle;
@@ -129,6 +139,20 @@ export function resolveNflTargetExcludedProduction(args: {
       },
       total: { ...args.current.total, line: anchor.total },
     };
+    const namedSequenceAuthority = args.namedSequenceAuthorityFactory
+      ? args.namedSequenceAuthorityFactory({
+          moneyline: excluded.margin,
+          spread: excluded.margin,
+          total: excluded.total,
+        })
+      : args.namedSequenceAuthority;
+    const professionalMarketAuthority = args.professionalMarketAuthorityFactory
+      ? args.professionalMarketAuthorityFactory({
+          moneyline: excluded.margin,
+          spread: excluded.margin,
+          total: excluded.total,
+        })
+      : args.professionalMarketAuthority;
     const outcomeCandidate = buildNflMarketEvidenceOutcomeForecast({
       baseForecast: args.baseOutcome,
       footballHomeMargin: args.shadowMoneyline.footballProjection.projectedHomeMargin,
@@ -145,7 +169,8 @@ export function resolveNflTargetExcludedProduction(args: {
       movementCurrent: targetFreeMovementCurrent(args.current, excluded),
       weeklyRawSignal: args.weeklyRawSignal,
       paidTeamScore: args.paidTeamScore,
-      namedSequenceAuthority: args.namedSequenceAuthority,
+      namedSequenceAuthority,
+      professionalMarketAuthority,
       evaluatedAt: args.evaluatedAt,
     });
     const productionCandidate = buildProduction(outcomeCandidate);

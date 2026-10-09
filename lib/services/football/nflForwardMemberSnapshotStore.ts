@@ -10,7 +10,23 @@ import {
 } from "./nflV1ActionableGradeCandidate";
 
 export const NFL_FORWARD_MEMBER_SNAPSHOT_RELEASE =
+  "nfl_forward_member_snapshot_2026_10_09_r33_professional_market_authority" as const;
+const NFL_MARKET_STATE_PREVIOUS_SNAPSHOT_RELEASE =
+  "nfl_forward_member_snapshot_2026_10_09_r32_market_state_identity" as const;
+const NFL_MARKET_STATE_PREVIOUS_FIXTURE_RELEASE =
+  "nfl_weekly_member_fixture_2026_10_09_r40_market_state_identity" as const;
+const NFL_MARKET_STATE_PREVIOUS_MEMBER_RELEASE =
+  "nfl_v1_member_release_2026_10_09_r28_market_state_identity" as const;
+const NFL_MARKET_STATE_PREVIOUS_DECISION_RELEASE =
+  "nfl_v1_daily_edge_decision_2026_10_09_r30_market_state_identity" as const;
+const NFL_NAMED_SEQUENCE_RELEASE_PREVIOUS_SNAPSHOT_RELEASE =
   "nfl_forward_member_snapshot_2026_10_08_r31_named_sequence" as const;
+const NFL_NAMED_SEQUENCE_RELEASE_PREVIOUS_FIXTURE_RELEASE =
+  "nfl_weekly_member_fixture_2026_10_08_r39_named_sequence" as const;
+const NFL_NAMED_SEQUENCE_RELEASE_PREVIOUS_MEMBER_RELEASE =
+  "nfl_v1_member_release_2026_10_08_r27_named_sequence" as const;
+const NFL_NAMED_SEQUENCE_RELEASE_PREVIOUS_DECISION_RELEASE =
+  "nfl_v1_daily_edge_decision_2026_10_08_r29_named_sequence" as const;
 const NFL_NAMED_SEQUENCE_PREVIOUS_SNAPSHOT_RELEASE =
   "nfl_forward_member_snapshot_2026_10_07_r30_exact_quote_label_coherence" as const;
 const NFL_NAMED_SEQUENCE_PREVIOUS_FIXTURE_RELEASE =
@@ -142,6 +158,8 @@ const NFL_RAW_SIGNAL_PREVIOUS_FIXTURE_RELEASE =
 const NFL_NONPUSH_PREVIOUS_FIXTURE_RELEASE =
   "nfl_weekly_member_fixture_2026_09_21_r26_locked_transition_continuity" as const;
 const NFL_FORWARD_PREVIOUS_MEMBER_SNAPSHOT_RELEASES = [
+  NFL_MARKET_STATE_PREVIOUS_SNAPSHOT_RELEASE,
+  NFL_NAMED_SEQUENCE_RELEASE_PREVIOUS_SNAPSHOT_RELEASE,
   NFL_NAMED_SEQUENCE_PREVIOUS_SNAPSHOT_RELEASE,
   NFL_EXACT_QUOTE_LABEL_PREVIOUS_SNAPSHOT_RELEASE,
   NFL_SPREAD_GRADE_PREVIOUS_SNAPSHOT_RELEASE,
@@ -236,6 +254,8 @@ function nflForwardMemberSnapshotKeyForRelease(
   snapshotRelease: string,
 ): string {
   const current = snapshotRelease === NFL_FORWARD_MEMBER_SNAPSHOT_RELEASE;
+  const marketStatePrevious = snapshotRelease === NFL_MARKET_STATE_PREVIOUS_SNAPSHOT_RELEASE;
+  const namedSequenceReleasePrevious = snapshotRelease === NFL_NAMED_SEQUENCE_RELEASE_PREVIOUS_SNAPSHOT_RELEASE;
   const namedSequencePrevious = snapshotRelease === NFL_NAMED_SEQUENCE_PREVIOUS_SNAPSHOT_RELEASE;
   const exactQuoteLabelPrevious = snapshotRelease === NFL_EXACT_QUOTE_LABEL_PREVIOUS_SNAPSHOT_RELEASE;
   const spreadGradePrevious = snapshotRelease === NFL_SPREAD_GRADE_PREVIOUS_SNAPSHOT_RELEASE;
@@ -261,6 +281,10 @@ function nflForwardMemberSnapshotKeyForRelease(
     snapshotRelease,
     current
       ? NFL_WEEK_ONE_HELD_MEMBER_FIXTURE_RELEASE
+      : marketStatePrevious
+        ? NFL_MARKET_STATE_PREVIOUS_FIXTURE_RELEASE
+      : namedSequenceReleasePrevious
+        ? NFL_NAMED_SEQUENCE_RELEASE_PREVIOUS_FIXTURE_RELEASE
       : namedSequencePrevious
         ? NFL_NAMED_SEQUENCE_PREVIOUS_FIXTURE_RELEASE
       : exactQuoteLabelPrevious
@@ -298,6 +322,10 @@ function nflForwardMemberSnapshotKeyForRelease(
               : NFL_PREVIOUS_FIXTURE_RELEASE,
     current
       ? NFL_V1_ACTIONABLE_GRADE_MEMBER_RELEASE
+      : marketStatePrevious
+        ? NFL_MARKET_STATE_PREVIOUS_MEMBER_RELEASE
+      : namedSequenceReleasePrevious
+        ? NFL_NAMED_SEQUENCE_RELEASE_PREVIOUS_MEMBER_RELEASE
       : namedSequencePrevious
         ? NFL_NAMED_SEQUENCE_PREVIOUS_MEMBER_RELEASE
       : exactQuoteLabelPrevious
@@ -333,6 +361,10 @@ function nflForwardMemberSnapshotKeyForRelease(
             : NFL_PREVIOUS_MEMBER_RELEASE,
     current
       ? NFL_V1_ACTIONABLE_GRADE_DECISION_RELEASE
+      : marketStatePrevious
+        ? NFL_MARKET_STATE_PREVIOUS_DECISION_RELEASE
+      : namedSequenceReleasePrevious
+        ? NFL_NAMED_SEQUENCE_RELEASE_PREVIOUS_DECISION_RELEASE
       : namedSequencePrevious
         ? NFL_NAMED_SEQUENCE_PREVIOUS_DECISION_RELEASE
       : exactQuoteLabelPrevious
@@ -456,7 +488,7 @@ export async function readNflForwardMemberSnapshot(input: {
     if (!data) continue;
     const snapshot = validateNflForwardMemberSnapshot((data as SnapshotRow).payload, input);
     if (!snapshot || Date.parse(now) - Date.parse(snapshot.publishedAt) > SNAPSHOT_CONTINUITY_MS) continue;
-    return { ...snapshot, snapshotRelease: NFL_FORWARD_MEMBER_SNAPSHOT_RELEASE };
+    return snapshot;
   }
   return null;
 }
@@ -548,6 +580,16 @@ function validateNflForwardMemberSnapshot(
     decisionRelease === NFL_V1_ACTIONABLE_GRADE_DECISION_RELEASE &&
     fixtureRelease === NFL_WEEK_ONE_HELD_MEMBER_FIXTURE_RELEASE &&
     heldMemberFixtureRelease === NFL_WEEK_ONE_HELD_MEMBER_FIXTURE_RELEASE;
+  const marketStatePreviousContract =
+    memberRelease === NFL_MARKET_STATE_PREVIOUS_MEMBER_RELEASE &&
+    decisionRelease === NFL_MARKET_STATE_PREVIOUS_DECISION_RELEASE &&
+    fixtureRelease === NFL_MARKET_STATE_PREVIOUS_FIXTURE_RELEASE &&
+    heldMemberFixtureRelease === NFL_MARKET_STATE_PREVIOUS_FIXTURE_RELEASE;
+  const namedSequenceReleasePreviousContract =
+    memberRelease === NFL_NAMED_SEQUENCE_RELEASE_PREVIOUS_MEMBER_RELEASE &&
+    decisionRelease === NFL_NAMED_SEQUENCE_RELEASE_PREVIOUS_DECISION_RELEASE &&
+    fixtureRelease === NFL_NAMED_SEQUENCE_RELEASE_PREVIOUS_FIXTURE_RELEASE &&
+    heldMemberFixtureRelease === NFL_NAMED_SEQUENCE_RELEASE_PREVIOUS_FIXTURE_RELEASE;
   const namedSequencePreviousContract =
     memberRelease === NFL_NAMED_SEQUENCE_PREVIOUS_MEMBER_RELEASE &&
     decisionRelease === NFL_NAMED_SEQUENCE_PREVIOUS_DECISION_RELEASE &&
@@ -646,7 +688,7 @@ function validateNflForwardMemberSnapshot(
   if (
     ![NFL_FORWARD_MEMBER_SNAPSHOT_RELEASE, ...NFL_FORWARD_PREVIOUS_MEMBER_SNAPSHOT_RELEASES].includes(snapshot.snapshotRelease as typeof NFL_FORWARD_MEMBER_SNAPSHOT_RELEASE) ||
     snapshot.evidenceRelease !== NFL_FORWARD_EVIDENCE_SCHEMA_RELEASE ||
-    (!currentContract && !namedSequencePreviousContract && !exactQuoteLabelPreviousContract && !spreadGradePreviousContract && !jointMoneylinePreviousContract && !marketMarriagePreviousContract && !paidScorePreviousContract && !pressureDirectionPreviousContract && !currentSeasonPreviousContract && !rawSignalPreviousContract && !scorePreviousContract && !nonpushPreviousContract && !openingDirectionPreviousContract && !lockedTransitionPreviousContract && !mlTotalPreviousContract && !injuryPaginationPreviousContract && !onePointPreviousContract && !openingFollowUpPreviousContract && !predictionOwnedPreviousContract && !previousContract) ||
+    (!currentContract && !marketStatePreviousContract && !namedSequenceReleasePreviousContract && !namedSequencePreviousContract && !exactQuoteLabelPreviousContract && !spreadGradePreviousContract && !jointMoneylinePreviousContract && !marketMarriagePreviousContract && !paidScorePreviousContract && !pressureDirectionPreviousContract && !currentSeasonPreviousContract && !rawSignalPreviousContract && !scorePreviousContract && !nonpushPreviousContract && !openingDirectionPreviousContract && !lockedTransitionPreviousContract && !mlTotalPreviousContract && !injuryPaginationPreviousContract && !onePointPreviousContract && !openingFollowUpPreviousContract && !predictionOwnedPreviousContract && !previousContract) ||
     snapshot.season !== expected.season ||
     snapshot.week !== expected.week ||
     snapshot.fixture?.week?.week !== expected.week ||

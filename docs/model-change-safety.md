@@ -1,5 +1,68 @@
 # Model change safety protocol
 
+## Owner-approved provisional exception: NFL professional market authority r29
+
+On 2026-10-09 Daniel Mengel explicitly directed Oddsphere to replace the NFL
+Daily Edge market reader with a professional, sport-specific implementation,
+allow qualified market evidence to move or flip the projected score, avoid a
+shadow-only delay, preserve useful board coverage, and publish the correction
+after a complete audit. This exception is limited to the release family and
+evidence documented in
+`docs/model-audits/2026-10-09-nfl-professional-market-authority-r29-predeclaration.md`
+and its paired result.
+
+R29 keeps the paid independent score as the starting opinion and adds one
+target-family-excluded authority shared by audit and production. It distinguishes
+number movement, no-vig price movement, hold, chronology, persistence, reversal,
+buyback, source class, split provenance and freshness, resistance, and NFL key
+numbers. A Spread override requires aligned number and price movement plus
+qualifying aligned flow. A Moneyline winner change additionally requires the
+separately qualified Spread to agree. A Total override requires either two
+stable aligned named-book number moves or five stable aligned retail moves with
+zero opposition and target-excluded selected/all-book confirmation. One rebuilt
+joint distribution owns the final score, all three sides, probabilities, and
+grades. Unknown handle, ticket count, bet size, limits, origin, and suspension
+lifecycle remain explicitly unavailable rather than inferred.
+
+The owner-directed audit necessarily opened the 65 Weeks 1-5 locks and the 18
+paid-score locks during development, so this is not an untouched holdout and no
+future hit rate is promised. Against each lock's own historical release, the
+final leakage-safe candidate changes one Moneyline, two Spreads, and four Totals:
+seven corrections and zero harms. Moneyline moves 38-27 to 39-26, Spread
+36-27-2 to 38-25-2, and Total 32-32-1 to 36-28-1; team, margin, and Total MAE
+move 7.5999/10.0970/10.9755 to 7.5096/9.9467/10.8666. On the exact r28
+comparison, the actionable board moves 23 to 24 through one promotion, zero
+demotions, and one Total side correction with zero harms. The zero-write current
+rehearsal retains 18 actionables across all 42 evaluations. Existing locked
+snapshots retain their exact stored payload and release identity.
+
+The subsequent owner-directed net-value requalification compares the complete
+market-aware product with the independent paid-score forecast, not only r29 with
+the already market-aware incumbent. Across the exact 18 paid-score games, r29
+creates 15 side corrections and six harms versus independent-only (+9 net):
+Moneyline 1/0, Spread 7/2, and Total 7/4. The full decision board moves from
+-6.1361 to +11.3772 exact-price units; actionables move from 12 at 7-5 and
++1.8895 units to 24 at 16-8 and +7.2217 units. Margin MAE and upset recognition
+improve, while independent-only retains lower team-score/Total MAE and better
+Total Brier/log loss. Those tradeoffs are mandatory forward monitoring fields,
+not hidden failures or guarantees.
+
+Every r29 decision loss was reviewed at its lock. No recurring qualified
+opposite-side signal was ignored; the repeated weakness was Total conviction in
+some disagreement states, alongside genuine false steam. A graduated 0/25/50/75%
+market-flip-strength challenge was rejected because each alternative lost full-
+board return, useful coverage, the qualified ATL-NO correction, upset recall, or
+projection accuracy versus the selected full-strength candidate. The rejected
+sensitivity paths are audit-only and are not reachable in production. The paired
+result records the complete loss taxonomy and candidate table.
+
+Publication still requires focused tests, full model-change verification,
+current-main integration safety, protected PR checks, and post-deploy proof of
+the live release, sole writer/lease, provider coverage, board counts, snapshot,
+reader, and lock coherence. Roll back the complete r29 family to r28 for future
+unlocked computations on any mixed release, target-exclusion failure, board
+collapse, lock mutation, writer overlap, or reader mismatch.
+
 ## Owner-approved correctness exception: NHL pregame coverage gate r10
 
 On 2026-10-08 Daniel Mengel directed Oddsphere to fix the NHL future price-

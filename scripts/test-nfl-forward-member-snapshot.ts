@@ -207,6 +207,80 @@ async function main() {
   assert.deepEqual(read, snapshot);
   assert.equal(JSON.stringify(read?.fixture), JSON.stringify(fixture));
 
+  const marketStatePreviousSnapshotRelease = "nfl_forward_member_snapshot_2026_10_09_r32_market_state_identity";
+  const marketStatePreviousFixtureRelease = "nfl_weekly_member_fixture_2026_10_09_r40_market_state_identity";
+  const marketStatePreviousPayload = {
+    ...snapshot,
+    snapshotRelease: marketStatePreviousSnapshotRelease,
+    memberRelease: "nfl_v1_member_release_2026_10_09_r28_market_state_identity",
+    decisionRelease: "nfl_v1_daily_edge_decision_2026_10_09_r30_market_state_identity",
+    fixtureRelease: marketStatePreviousFixtureRelease,
+    fixture: {
+      ...fixture,
+      heldMemberFixtureRelease: marketStatePreviousFixtureRelease,
+    },
+  };
+  storedKey = [
+    "nfl",
+    "daily-edge",
+    2026,
+    1,
+    marketStatePreviousSnapshotRelease,
+    marketStatePreviousFixtureRelease,
+    marketStatePreviousPayload.memberRelease,
+    marketStatePreviousPayload.decisionRelease,
+  ].join("::");
+  storedPayload = marketStatePreviousPayload;
+  const marketStateContinuityRead = await readNflForwardMemberSnapshot({
+    client,
+    season: 2026,
+    week: 1,
+    now: "2026-08-27T12:02:00.000Z",
+  });
+  assert.equal(marketStateContinuityRead?.snapshotRelease, marketStatePreviousSnapshotRelease);
+  assert.equal(marketStateContinuityRead?.fixtureRelease, marketStatePreviousFixtureRelease);
+  assert.equal(marketStateContinuityRead?.memberRelease, marketStatePreviousPayload.memberRelease);
+  assert.equal(marketStateContinuityRead?.decisionRelease, marketStatePreviousPayload.decisionRelease);
+  assert.equal(JSON.stringify(marketStateContinuityRead?.fixture), JSON.stringify(marketStatePreviousPayload.fixture),
+    "the previous locked member fixture must retain exact stored precedence");
+
+  const namedSequencePreviousSnapshotRelease = "nfl_forward_member_snapshot_2026_10_08_r31_named_sequence";
+  const namedSequencePreviousFixtureRelease = "nfl_weekly_member_fixture_2026_10_08_r39_named_sequence";
+  const namedSequencePreviousPayload = {
+    ...snapshot,
+    snapshotRelease: namedSequencePreviousSnapshotRelease,
+    memberRelease: "nfl_v1_member_release_2026_10_08_r27_named_sequence",
+    decisionRelease: "nfl_v1_daily_edge_decision_2026_10_08_r29_named_sequence",
+    fixtureRelease: namedSequencePreviousFixtureRelease,
+    fixture: {
+      ...fixture,
+      heldMemberFixtureRelease: namedSequencePreviousFixtureRelease,
+    },
+  };
+  storedKey = [
+    "nfl",
+    "daily-edge",
+    2026,
+    1,
+    namedSequencePreviousSnapshotRelease,
+    namedSequencePreviousFixtureRelease,
+    namedSequencePreviousPayload.memberRelease,
+    namedSequencePreviousPayload.decisionRelease,
+  ].join("::");
+  storedPayload = namedSequencePreviousPayload;
+  const namedSequenceContinuityRead = await readNflForwardMemberSnapshot({
+    client,
+    season: 2026,
+    week: 1,
+    now: "2026-08-27T12:02:00.000Z",
+  });
+  assert.equal(namedSequenceContinuityRead?.snapshotRelease, namedSequencePreviousSnapshotRelease);
+  assert.equal(namedSequenceContinuityRead?.fixtureRelease, namedSequencePreviousFixtureRelease);
+  assert.equal(namedSequenceContinuityRead?.memberRelease, namedSequencePreviousPayload.memberRelease);
+  assert.equal(namedSequenceContinuityRead?.decisionRelease, namedSequencePreviousPayload.decisionRelease);
+  assert.equal(JSON.stringify(namedSequenceContinuityRead?.fixture), JSON.stringify(namedSequencePreviousPayload.fixture),
+    "the r27 locked member fixture must retain exact stored precedence");
+
   const pressureDirectionPreviousSnapshotRelease = "nfl_forward_member_snapshot_2026_09_27_r22_pressure_direction";
   const pressureDirectionPreviousFixtureRelease = "nfl_weekly_member_fixture_2026_09_27_r30_pressure_direction";
   const pressureDirectionPreviousPayload = {
@@ -237,7 +311,7 @@ async function main() {
     week: 1,
     now: "2026-08-27T12:02:00.000Z",
   });
-  assert.equal(pressureDirectionContinuityRead?.snapshotRelease, NFL_FORWARD_MEMBER_SNAPSHOT_RELEASE);
+  assert.equal(pressureDirectionContinuityRead?.snapshotRelease, pressureDirectionPreviousSnapshotRelease);
   assert.equal(pressureDirectionContinuityRead?.fixtureRelease, pressureDirectionPreviousFixtureRelease);
 
   const currentSeasonPreviousSnapshotRelease = "nfl_forward_member_snapshot_2026_09_25_r21_current_season_raw_signal";
@@ -270,7 +344,7 @@ async function main() {
     week: 1,
     now: "2026-08-27T12:02:00.000Z",
   });
-  assert.equal(currentSeasonContinuityRead?.snapshotRelease, NFL_FORWARD_MEMBER_SNAPSHOT_RELEASE);
+  assert.equal(currentSeasonContinuityRead?.snapshotRelease, currentSeasonPreviousSnapshotRelease);
   assert.equal(currentSeasonContinuityRead?.fixtureRelease, currentSeasonPreviousFixtureRelease);
 
   const rawSignalPreviousSnapshotRelease = "nfl_forward_member_snapshot_2026_09_25_r20_marginal_likelihood_score";
@@ -303,7 +377,7 @@ async function main() {
     week: 1,
     now: "2026-08-27T12:02:00.000Z",
   });
-  assert.equal(rawSignalContinuityRead?.snapshotRelease, NFL_FORWARD_MEMBER_SNAPSHOT_RELEASE);
+  assert.equal(rawSignalContinuityRead?.snapshotRelease, rawSignalPreviousSnapshotRelease);
   assert.equal(rawSignalContinuityRead?.fixtureRelease, rawSignalPreviousFixtureRelease);
 
   const scorePreviousSnapshotRelease = "nfl_forward_member_snapshot_2026_09_22_r19_nonpush_side_alignment";
@@ -336,7 +410,7 @@ async function main() {
     week: 1,
     now: "2026-08-27T12:02:00.000Z",
   });
-  assert.equal(scoreContinuityRead?.snapshotRelease, NFL_FORWARD_MEMBER_SNAPSHOT_RELEASE);
+  assert.equal(scoreContinuityRead?.snapshotRelease, scorePreviousSnapshotRelease);
   assert.equal(scoreContinuityRead?.fixtureRelease, scorePreviousFixtureRelease);
 
   const openingDirectionPreviousSnapshotRelease = "nfl_forward_member_snapshot_2026_09_21_r17_opening_market_direction";
@@ -369,7 +443,7 @@ async function main() {
     week: 1,
     now: "2026-08-27T12:02:00.000Z",
   });
-  assert.equal(openingDirectionContinuityRead?.snapshotRelease, NFL_FORWARD_MEMBER_SNAPSHOT_RELEASE);
+  assert.equal(openingDirectionContinuityRead?.snapshotRelease, openingDirectionPreviousSnapshotRelease);
   assert.equal(openingDirectionContinuityRead?.fixtureRelease, openingDirectionPreviousFixtureRelease);
 
   const lockedTransitionPreviousSnapshotRelease = "nfl_forward_member_snapshot_2026_09_20_r16_locked_transition";
@@ -402,7 +476,7 @@ async function main() {
     week: 1,
     now: "2026-08-27T12:02:00.000Z",
   });
-  assert.equal(lockedTransitionContinuityRead?.snapshotRelease, NFL_FORWARD_MEMBER_SNAPSHOT_RELEASE);
+  assert.equal(lockedTransitionContinuityRead?.snapshotRelease, lockedTransitionPreviousSnapshotRelease);
   assert.equal(lockedTransitionContinuityRead?.fixtureRelease, lockedTransitionPreviousFixtureRelease);
 
   const mlTotalPreviousSnapshotRelease = "nfl_forward_member_snapshot_2026_09_20_r15_ml_total_coherence";
@@ -435,7 +509,7 @@ async function main() {
     week: 1,
     now: "2026-08-27T12:02:00.000Z",
   });
-  assert.equal(mlTotalContinuityRead?.snapshotRelease, NFL_FORWARD_MEMBER_SNAPSHOT_RELEASE);
+  assert.equal(mlTotalContinuityRead?.snapshotRelease, mlTotalPreviousSnapshotRelease);
   assert.equal(mlTotalContinuityRead?.fixtureRelease, mlTotalPreviousFixtureRelease);
 
   const injuryPreviousSnapshotRelease = "nfl_forward_member_snapshot_2026_09_16_r14_injury_pagination";
@@ -468,7 +542,7 @@ async function main() {
     week: 1,
     now: "2026-08-27T12:02:00.000Z",
   });
-  assert.equal(injuryContinuityRead?.snapshotRelease, NFL_FORWARD_MEMBER_SNAPSHOT_RELEASE);
+  assert.equal(injuryContinuityRead?.snapshotRelease, injuryPreviousSnapshotRelease);
   assert.equal(injuryContinuityRead?.fixtureRelease, injuryPreviousFixtureRelease);
 
   const onePointPreviousSnapshotRelease = "nfl_forward_member_snapshot_2026_09_15_r12_one_point_pmf_boundary";
@@ -501,7 +575,7 @@ async function main() {
     week: 1,
     now: "2026-08-27T12:02:00.000Z",
   });
-  assert.equal(onePointContinuityRead?.snapshotRelease, NFL_FORWARD_MEMBER_SNAPSHOT_RELEASE);
+  assert.equal(onePointContinuityRead?.snapshotRelease, onePointPreviousSnapshotRelease);
   assert.equal(onePointContinuityRead?.fixtureRelease, onePointPreviousFixtureRelease);
 
   const previousSnapshotRelease = "nfl_forward_member_snapshot_2026_09_14_r10_prediction_owned_side";
@@ -534,7 +608,7 @@ async function main() {
     week: 1,
     now: "2026-08-27T12:02:00.000Z",
   });
-  assert.equal(continuityRead?.snapshotRelease, NFL_FORWARD_MEMBER_SNAPSHOT_RELEASE);
+  assert.equal(continuityRead?.snapshotRelease, previousSnapshotRelease);
   assert.equal(continuityRead?.fixtureRelease, previousFixtureRelease);
   assert.equal(continuityRead?.fixture.heldMemberFixtureRelease, previousFixtureRelease);
 

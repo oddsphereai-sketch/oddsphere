@@ -62,6 +62,15 @@ function namedSequenceAuthority(args: {
   moneylineSide?: "home" | "away" | null;
   spreadSide?: "home" | "away" | null;
 }): NflNamedMarketSequenceAuthority {
+  const metadata = {
+    namedLeadCompletedAt: null,
+    followerDelaysMinutes: [] as number[],
+    resistance: "none" as const,
+    sharpSplitSource: null,
+    stateRelease: "nfl_market_state_2026_10_09_r1_truthful_signal_identity" as const,
+    numberMoveSources: [] as string[],
+    priceOnlyMoveSources: [] as string[],
+  };
   const unavailable = {
     status: "unavailable" as const,
     side: null,
@@ -69,6 +78,7 @@ function namedSequenceAuthority(args: {
     namedSources: [],
     followerSources: [],
     firstNamedMoveAt: null,
+    ...metadata,
   };
   const read = (side: "home" | "away" | null) => side ? {
     status: "qualified" as const,
@@ -77,6 +87,7 @@ function namedSequenceAuthority(args: {
     namedSources: ["circa", "pinnacle"],
     followerSources: ["fanduel", "draftkings", "caesars"],
     firstNamedMoveAt: "2026-08-25T09:00:00.000Z",
+    ...metadata,
   } : unavailable;
   return {
     release: NFL_NAMED_MARKET_SEQUENCE_RELEASE,
@@ -184,6 +195,7 @@ const pricedNeutralProbability = nflV1WeekOneLineProbabilities({
 }).total.overProbability;
 assert.ok(Math.abs(pricedNeutralProbability - pricedNeutralAnchor.totalOverFairProbability) < 0.000002);
 
+const observedSequenceExclusions: Array<Record<"moneyline" | "spread" | "total", string[]>> = [];
 const targetExcludedProduction = resolveNflTargetExcludedProduction({
   providerGameId,
   awayTeam,
@@ -210,6 +222,10 @@ const targetExcludedProduction = resolveNflTargetExcludedProduction({
   playbookLine: null,
   playbookSplits: null,
   sharpSplits: null,
+  namedSequenceAuthorityFactory: (excludedFamiliesByMarket) => {
+    observedSequenceExclusions.push(excludedFamiliesByMarket);
+    return namedSequenceAuthority({});
+  },
 });
 assert.equal(targetExcludedProduction.targetExclusion.status, "target_excluded_market");
 assert.equal(targetExcludedProduction.production.evaluatedBets.length, 3);
@@ -222,6 +238,11 @@ for (const decision of targetExcludedProduction.production.evaluatedBets) {
     : targetExcludedProduction.targetExclusion.marginExcludedSportsbooks;
   assert.ok(excluded.includes(family), `final ${decision.market} target must be recorded as excluded`);
 }
+assert.ok(observedSequenceExclusions.length > 0, "named authority must be rebuilt inside target exclusion");
+assert.ok(observedSequenceExclusions.every((value) =>
+  value.moneyline.length > 0 && value.spread.length > 0 && value.total.length > 0 &&
+  JSON.stringify(value.moneyline) === JSON.stringify(value.spread)),
+"each evaluated target family must be removed from the corresponding sequence authority");
 const targetExcludedFallback = resolveNflTargetExcludedProduction({
   providerGameId,
   awayTeam,
@@ -386,8 +407,8 @@ const weeklyBase = getNflV1WeekOneOutcomeForecast({
   homeTeam,
   weeklyFallback: { projectedHomeMargin: 4.25, marketTotal: 44.5 },
 });
-assert.equal(NFL_V1_WEEKLY_OUTCOME_MODEL_RELEASE, "nfl_v1_weekly_paid_team_score_2026_10_08_r12_named_sequence");
-assert.equal(NFL_V1_MARKET_EVIDENCE_REPRESENTATIVE_SCORE_RELEASE, "nfl_v1_market_evidence_representative_score_2026_10_08_r11_named_sequence");
+assert.equal(NFL_V1_WEEKLY_OUTCOME_MODEL_RELEASE, "nfl_v1_weekly_paid_team_score_2026_10_09_r14_professional_market_authority");
+assert.equal(NFL_V1_MARKET_EVIDENCE_REPRESENTATIVE_SCORE_RELEASE, "nfl_v1_market_evidence_representative_score_2026_10_09_r13_professional_market_authority");
 assert.equal(NFL_V1_WEEKLY_REPRESENTATIVE_SCORE_CENTER_WEIGHT, 0.2);
 const representativeMargin = weeklyBase.representativeHomeScore - weeklyBase.representativeAwayScore;
 const representativeTotal = weeklyBase.representativeHomeScore + weeklyBase.representativeAwayScore;
@@ -437,7 +458,7 @@ const circaAway = buildNflMarketEvidenceOutcomeForecast({
   sharpSplits: sharpSplitSet({ homeMoneyPct: 20, homeBetsPct: 70 }),
   evaluatedAt,
 });
-assert.equal(NFL_V1_MARKET_EVIDENCE_OUTCOME_RELEASE, "nfl_v1_market_evidence_outcome_2026_10_08_r12_named_sequence");
+assert.equal(NFL_V1_MARKET_EVIDENCE_OUTCOME_RELEASE, "nfl_v1_market_evidence_outcome_2026_10_09_r14_professional_market_authority");
 assert.equal(NFL_V1_MARKET_WEIGHT, 0.75);
 assert.equal(NFL_V1_SHARP_SPLIT_MAX_SHIFT_POINTS, 1.5);
 assert.equal(NFL_V1_PUBLIC_SPLIT_MAX_SHIFT_POINTS, 0.75);

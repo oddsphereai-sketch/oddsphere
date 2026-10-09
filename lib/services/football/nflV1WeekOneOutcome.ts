@@ -15,6 +15,7 @@ import {
   type FootballOutcomeMarketMovement,
 } from "./footballOutcomeMarketMovement";
 import type { NflNamedMarketSequenceAuthority } from "./nflNamedMarketSequence";
+import type { NflProfessionalMarketAuthority } from "./nflProfessionalMarketAuthority";
 
 export const NFL_V1_WEEK_ONE_OUTCOME_ARTIFACT_RELEASE =
   "nfl_v1_week_one_outcome_artifact_2026_08_23_r2_discrete_joint" as const;
@@ -27,15 +28,15 @@ export const NFL_V1_OUTCOME_PROBABILITY_RELEASE =
 export const NFL_V1_REPRESENTATIVE_SCORE_POLICY_RELEASE =
   "nfl_v1_representative_score_2026_08_23_r2" as const;
 export const NFL_V1_WEEKLY_OUTCOME_MODEL_RELEASE =
-  "nfl_v1_weekly_paid_team_score_2026_10_08_r12_named_sequence" as const;
+  "nfl_v1_weekly_paid_team_score_2026_10_09_r14_professional_market_authority" as const;
 export const NFL_V1_WEEKLY_OUTCOME_DISTRIBUTION_RELEASE =
-  "nfl_pooled_discrete_residual_distribution_2026_10_08_r11_named_sequence" as const;
+  "nfl_pooled_discrete_residual_distribution_2026_10_09_r13_professional_market_authority" as const;
 export const NFL_V1_WEEKLY_OUTCOME_PROBABILITY_RELEASE =
-  "nfl_v1_weekly_pooled_discrete_probability_2026_10_08_r11_named_sequence" as const;
+  "nfl_v1_weekly_pooled_discrete_probability_2026_10_09_r13_professional_market_authority" as const;
 export const NFL_V1_MARKET_EVIDENCE_OUTCOME_RELEASE =
-  "nfl_v1_market_evidence_outcome_2026_10_08_r12_named_sequence" as const;
+  "nfl_v1_market_evidence_outcome_2026_10_09_r14_professional_market_authority" as const;
 export const NFL_V1_MARKET_EVIDENCE_REPRESENTATIVE_SCORE_RELEASE =
-  "nfl_v1_market_evidence_representative_score_2026_10_08_r11_named_sequence" as const;
+  "nfl_v1_market_evidence_representative_score_2026_10_09_r13_professional_market_authority" as const;
 export const NFL_V1_PAID_TEAM_SCORE_MODEL_RELEASE =
   "nfl_v1_paid_team_score_model_2026_10_08_r4_named_sequence" as const;
 export const NFL_V1_WEEKLY_RAW_SIGNAL_RELEASE =
@@ -50,9 +51,11 @@ export const NFL_V1_WEAK_EVIDENCE_REVERSAL_MINIMUM_ADVANTAGE = 0.025 as const;
 export const NFL_V1_PRICED_NEUTRAL_TOTAL_RELEASE =
   "nfl_v1_priced_neutral_total_2026_09_20_r1" as const;
 export const NFL_V1_OPENING_MARKET_SPREAD_DIRECTION_RELEASE =
-  "nfl_v1_opening_market_spread_direction_2026_09_21_r1" as const;
+  "nfl_v1_opening_market_spread_direction_2026_10_09_r3_professional_market_authority" as const;
+export const NFL_V1_OPENING_MARKET_TOTAL_DIRECTION_RELEASE =
+  "nfl_v1_opening_market_total_direction_2026_10_09_r3_professional_market_authority" as const;
 export const NFL_V1_CROSS_MARKET_WINNER_COHERENCE_RELEASE =
-  "nfl_v1_cross_market_winner_coherence_2026_10_08_r2_named_sequence" as const;
+  "nfl_v1_cross_market_winner_coherence_2026_10_09_r4_professional_market_authority" as const;
 export const NFL_V1_MONEYLINE_PRICE_MOVE_MINIMUM_PP = 1 as const;
 export const NFL_V1_MONEYLINE_PUBLIC_GAP_MINIMUM_PP = 8 as const;
 export const NFL_V1_MONEYLINE_SHARP_GAP_MINIMUM_PP = 10 as const;
@@ -89,7 +92,9 @@ export type NflV1WeekOneOutcomeForecast = {
       | "nfl_target_excluded_market_outcome_2026_09_28_r7_paid_team_score"
       | "nfl_target_excluded_market_outcome_2026_09_28_r8_market_marriage"
       | "nfl_target_excluded_market_outcome_2026_10_05_r9_winner_coherence"
-      | "nfl_target_excluded_market_outcome_2026_10_08_r10_named_sequence";
+      | "nfl_target_excluded_market_outcome_2026_10_08_r10_named_sequence"
+      | "nfl_target_excluded_market_outcome_2026_10_09_r11_market_state_identity"
+      | "nfl_target_excluded_market_outcome_2026_10_09_r12_professional_market_authority";
     status: "target_excluded_market" | "incumbent_fallback";
     reason: "stable_complete_tuple" | "insufficient_or_unstable_target_free_evidence";
     marginFamilyCount: number | null;
@@ -122,12 +127,14 @@ export type NflV1WeekOneOutcomeForecast = {
     publicConsensus: { homeMarginGapPp: number | null; overTotalGapPp: number | null; homeMarginShiftPoints: number; totalShiftPoints: number };
     movement: FootballOutcomeMarketMovement;
     namedSequence?: NflNamedMarketSequenceAuthority;
+    professionalMarketAuthority?: NflProfessionalMarketAuthority;
     winnerCoherence?: NflV1CrossMarketWinnerCoherence;
     spreadDirection?: {
       release: typeof NFL_V1_OPENING_MARKET_SPREAD_DIRECTION_RELEASE;
       status: "available" | "unavailable";
       side: "home" | "away" | null;
-      reason: "move_home" | "move_away" | "flat_price" | "named_sequence_home" | "named_sequence_away" | null;
+      reason: "move_home" | "move_away" | "flat_price" | "named_sequence_home" | "named_sequence_away" |
+        "professional_market_home" | "professional_market_away" | null;
       openingHomeLine: number | null;
       currentHomeLine: number | null;
       homeFairProbability: number | null;
@@ -135,10 +142,11 @@ export type NflV1WeekOneOutcomeForecast = {
       orientedHomeCoverProbability: number;
     };
     totalDirection?: {
-      release: "nfl_v1_opening_market_total_direction_2026_09_28_r2";
+      release: typeof NFL_V1_OPENING_MARKET_TOTAL_DIRECTION_RELEASE;
       status: "available" | "unavailable";
       side: "over" | "under" | null;
-      reason: "move_over" | "move_under" | "named_sequence_over" | "named_sequence_under" | null;
+      reason: "move_over" | "move_under" | "named_sequence_over" | "named_sequence_under" |
+        "professional_market_over" | "professional_market_under" | null;
       totalLineDelta: number | null;
       preOrientationOverProbability: number;
       orientedOverProbability: number;
@@ -306,6 +314,7 @@ export function buildNflMarketEvidenceOutcomeForecast(args: {
   paidTeamScore?: Pick<NflPaidProjectionShadow,
     "release" | "providerCollectedAt" | "projectedHomeMargin" | "projectedTotal">;
   namedSequenceAuthority?: NflNamedMarketSequenceAuthority;
+  professionalMarketAuthority?: NflProfessionalMarketAuthority;
   evaluatedAt: string;
 }): NflV1WeekOneOutcomeForecast {
   if (!args.current.spread || !args.current.total) return args.baseForecast;
@@ -476,7 +485,9 @@ export function buildNflMarketEvidenceOutcomeForecast(args: {
           args.current.spread.awayPrice,
         ),
         preOrientationHomeCoverProbability,
-        namedSequenceSide: args.namedSequenceAuthority?.spreadSide ?? null,
+        namedSequenceSide: args.professionalMarketAuthority?.spreadSide ?? args.namedSequenceAuthority?.spreadSide ?? null,
+        professionalAuthority: args.professionalMarketAuthority?.spreadSide !== null &&
+          args.professionalMarketAuthority?.spreadSide !== undefined,
         evaluatedAt: args.evaluatedAt,
       })
     : null;
@@ -490,7 +501,9 @@ export function buildNflMarketEvidenceOutcomeForecast(args: {
     ? orientNflTotalProbabilityToOpeningMarket({
         movement,
         preOrientationOverProbability,
-        namedSequenceSide: args.namedSequenceAuthority?.totalSide ?? null,
+        namedSequenceSide: args.professionalMarketAuthority?.totalSide ?? args.namedSequenceAuthority?.totalSide ?? null,
+        professionalAuthority: args.professionalMarketAuthority?.totalSide !== null &&
+          args.professionalMarketAuthority?.totalSide !== undefined,
       })
     : null;
   const orientedHomeMargin = spreadDirection?.status === "available"
@@ -513,11 +526,12 @@ export function buildNflMarketEvidenceOutcomeForecast(args: {
     moneylineHomeFairProbabilityDeltaPp: movement.moneylineHomeFairProbabilityDeltaPp,
     publicMoneylineGapPp: publicMoneylineGap,
     sharpMoneylineGapPp: sharpMoneylineGap,
-    namedSequenceCrossMarketConfirmed:
-      args.namedSequenceAuthority?.moneylineSide !== null &&
-      args.namedSequenceAuthority?.moneylineSide !== undefined &&
-      args.namedSequenceAuthority.moneylineSide === args.namedSequenceAuthority.spreadSide &&
-      (args.namedSequenceAuthority.moneylineSide === "home" ? proposedHomeMargin > 0 : proposedHomeMargin < 0),
+    namedSequenceCrossMarketConfirmed: (() => {
+      const authority = args.professionalMarketAuthority ?? args.namedSequenceAuthority;
+      return authority?.moneylineSide !== null && authority?.moneylineSide !== undefined &&
+        authority.moneylineSide === authority.spreadSide &&
+        (authority.moneylineSide === "home" ? proposedHomeMargin > 0 : proposedHomeMargin < 0);
+    })(),
   });
   const finalHomeMargin = winnerCoherence.finalHomeMargin;
   const finalTotal = totalDirection?.status === "available"
@@ -578,6 +592,7 @@ export function buildNflMarketEvidenceOutcomeForecast(args: {
       },
       movement,
       ...(args.namedSequenceAuthority ? { namedSequence: args.namedSequenceAuthority } : {}),
+      ...(args.professionalMarketAuthority ? { professionalMarketAuthority: args.professionalMarketAuthority } : {}),
       winnerCoherence,
       ...(spreadDirection ? { spreadDirection } : {}),
       ...(totalDirection ? { totalDirection } : {}),
@@ -664,10 +679,11 @@ function orientNflTotalProbabilityToOpeningMarket(args: {
   movement: FootballOutcomeMarketMovement;
   preOrientationOverProbability: number;
   namedSequenceSide: "over" | "under" | null;
+  professionalAuthority: boolean;
 }): NonNullable<NonNullable<NflV1WeekOneOutcomeForecast["marketEvidence"]>["totalDirection"]> {
   const delta = args.movement.totalLineDelta;
   const unavailable = () => ({
-    release: "nfl_v1_opening_market_total_direction_2026_09_28_r2" as const,
+    release: NFL_V1_OPENING_MARKET_TOTAL_DIRECTION_RELEASE,
     status: "unavailable" as const,
     side: null,
     reason: null,
@@ -678,10 +694,12 @@ function orientNflTotalProbabilityToOpeningMarket(args: {
   if (args.namedSequenceSide) {
     const side = args.namedSequenceSide;
     return {
-      release: "nfl_v1_opening_market_total_direction_2026_09_28_r2",
+      release: NFL_V1_OPENING_MARKET_TOTAL_DIRECTION_RELEASE,
       status: "available",
       side,
-      reason: side === "over" ? "named_sequence_over" as const : "named_sequence_under" as const,
+      reason: args.professionalAuthority
+        ? side === "over" ? "professional_market_over" as const : "professional_market_under" as const
+        : side === "over" ? "named_sequence_over" as const : "named_sequence_under" as const,
       totalLineDelta: delta,
       preOrientationOverProbability: args.preOrientationOverProbability,
       orientedOverProbability: side === "over"
@@ -697,7 +715,7 @@ function orientNflTotalProbabilityToOpeningMarket(args: {
     ? Math.max(args.preOrientationOverProbability, 1 - args.preOrientationOverProbability)
     : Math.min(args.preOrientationOverProbability, 1 - args.preOrientationOverProbability);
   return {
-    release: "nfl_v1_opening_market_total_direction_2026_09_28_r2",
+    release: NFL_V1_OPENING_MARKET_TOTAL_DIRECTION_RELEASE,
     status: "available",
     side,
     reason: side === "over" ? "move_over" : "move_under",
@@ -713,6 +731,7 @@ function orientNflSpreadProbabilityToOpeningMarket(args: {
   homeFairProbability: number;
   preOrientationHomeCoverProbability: number;
   namedSequenceSide: "home" | "away" | null;
+  professionalAuthority: boolean;
   evaluatedAt: string;
 }): NonNullable<NonNullable<NflV1WeekOneOutcomeForecast["marketEvidence"]>["spreadDirection"]> {
   const unavailable = () => ({
@@ -744,7 +763,9 @@ function orientNflSpreadProbabilityToOpeningMarket(args: {
       ? "away" as const
       : args.homeFairProbability >= 0.5 ? "home" as const : "away" as const);
   const reason = args.namedSequenceSide
-    ? args.namedSequenceSide === "home" ? "named_sequence_home" as const : "named_sequence_away" as const
+    ? args.professionalAuthority
+      ? args.namedSequenceSide === "home" ? "professional_market_home" as const : "professional_market_away" as const
+      : args.namedSequenceSide === "home" ? "named_sequence_home" as const : "named_sequence_away" as const
     : movement <= -0.5
     ? "move_home" as const
     : movement >= 0.5
