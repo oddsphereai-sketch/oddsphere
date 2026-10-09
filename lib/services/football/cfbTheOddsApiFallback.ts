@@ -1,5 +1,5 @@
 import type { NcaafBookOdds, NcaafGame } from "./balldontlieNcaafSlate";
-import type { CfbForwardStoredEvidence } from "./cfbForwardEvidence";
+import type { CfbForwardMarketHistoryEvidence, CfbForwardStoredEvidence } from "./cfbForwardEvidence";
 import { activeCfbWeeklyWindow, isGameInCfbWeeklyWindow } from "./cfbWeeklyWindow";
 
 export const CFB_THE_ODDS_API_FALLBACK_RELEASE =
@@ -193,6 +193,7 @@ export async function fetchCfbTheOddsApiFallback(args: {
 export function shouldFetchCfbTheOddsApiFallback(args: {
   games: NcaafGame[];
   existing: CfbForwardStoredEvidence[];
+  attemptHistory?: CfbForwardMarketHistoryEvidence[];
   now: string;
   forceT60?: boolean;
   forceOpeningSeed?: boolean;
@@ -200,17 +201,25 @@ export function shouldFetchCfbTheOddsApiFallback(args: {
   const nowMs = Date.parse(args.now);
   const upcoming = args.games.filter((game) => Date.parse(game.scheduledStart) > nowMs);
   const weeklyWindow = activeCfbWeeklyWindow(args.now);
-  const attempts = [...new Set(args.existing
-    .filter((row) =>
-      (row.payload.requestBudget.theOddsApi ?? 0) > 0 &&
-      isGameInCfbWeeklyWindow({ scheduledStart: row.capturedAt }, weeklyWindow))
-    .map((row) => row.capturedAt))]
+  const attemptRows = args.attemptHistory ?? args.existing;
+  const attempts = [...new Set(attemptRows
+    .flatMap((row) => (row.payload.requestBudget?.theOddsApiCurrent ?? 0) > 0
+      ? [row.payload.requestBudget?.theOddsApiCurrentAttemptedAt ?? row.capturedAt]
+      : [])
+    .filter((attemptedAt) => isGameInCfbWeeklyWindow({ scheduledStart: attemptedAt }, weeklyWindow)))]
     .map(Date.parse)
     .filter(Number.isFinite)
     .sort((a, b) => b - a);
-  const remainingRows = args.existing
-    .flatMap((row) => Number.isInteger(row.payload.requestBudget.theOddsApiRemainingCredits)
-      ? [{ capturedAt: Date.parse(row.capturedAt), remaining: row.payload.requestBudget.theOddsApiRemainingCredits! }]
+  const remainingRows = attemptRows
+    .flatMap((row) => Number.isInteger(row.payload.requestBudget?.theOddsApiRemainingCredits)
+      ? [{
+          capturedAt: Date.parse(
+            row.payload.requestBudget?.theOddsApiCurrentAttemptedAt ??
+            row.payload.requestBudget?.theOddsApiHistoricalAttemptedAt ??
+            row.capturedAt,
+          ),
+          remaining: row.payload.requestBudget!.theOddsApiRemainingCredits!,
+        }]
       : [])
     .sort((a, b) => b.capturedAt - a.capturedAt);
   const lastRemainingCredits = remainingRows[0]?.remaining ?? null;
@@ -237,6 +246,31 @@ export function shouldFetchCfbTheOddsApiFallback(args: {
     return { fetch: false, reason: "cadence_not_due", cadenceMinutes, weeklyPulls: attempts.length, lastRemainingCredits };
   }
   return { fetch: true, reason: latest === 0 ? "opening_gap_seed" : "gap_refresh_due", cadenceMinutes, weeklyPulls: attempts.length, lastRemainingCredits };
+}
+
+/** Historical recovery is a one-time bridge for the r38 transition slate.
+ * A verified operational opening from any provider already satisfies the
+ * product requirement, and a recorded historical attempt prevents an
+ * unavailable archive row from burning another 30-60 credits every cycle. */
+export function shouldFetchCfbTheOddsApiHistoricalOpening(args: {
+  game: NcaafGame;
+  existing: CfbForwardStoredEvidence[];
+  attemptHistory?: CfbForwardMarketHistoryEvidence[];
+  evidenceRelease: string;
+}): boolean {
+  const scheduledAt = Date.parse(args.game.scheduledStart);
+  const belongsToR38TransitionSlate = scheduledAt >= Date.parse("2026-10-09T00:00:00.000Z") &&
+    scheduledAt < Date.parse("2026-10-12T00:00:00.000Z");
+  if (!belongsToR38TransitionSlate) return false;
+  const currentReleaseRows = args.existing.filter((row) =>
+    row.providerGameId === args.game.providerGameId &&
+    row.payload.schemaRelease === args.evidenceRelease);
+  if (currentReleaseRows.some((row) => row.payload.market.operationalOpening !== null)) return false;
+  const attemptRows = args.attemptHistory ?? currentReleaseRows;
+  return !attemptRows.some((row) =>
+    row.providerGameId === args.game.providerGameId &&
+    row.payload.schemaRelease === args.evidenceRelease &&
+    (row.payload.requestBudget?.theOddsApiHistorical ?? 0) > 0);
 }
 
 function normalizeBook(args: { game: NcaafGame; eventId: string; book: JsonRecord }): NcaafBookOdds[] {

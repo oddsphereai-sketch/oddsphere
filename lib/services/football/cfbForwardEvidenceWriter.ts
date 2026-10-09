@@ -82,6 +82,7 @@ import {
   fetchCfbTheOddsApiFallback,
   fetchCfbTheOddsApiHistoricalOpenings,
   shouldFetchCfbTheOddsApiFallback,
+  shouldFetchCfbTheOddsApiHistoricalOpening,
   type CfbTheOddsApiFallbackResult,
   type CfbTheOddsApiHistoricalOpeningResult,
 } from "./cfbTheOddsApiFallback";
@@ -140,7 +141,7 @@ import {
 import type { PlaybookInjuryTeamRow } from "@/lib/providers/playbook/types";
 
 export const CFB_FORWARD_WRITER_RELEASE =
-  "cfb_forward_evidence_writer_2026_10_08_r107_independent_price_spread_lane" as const;
+  "cfb_forward_evidence_writer_2026_10_09_r108_odds_history_continuity" as const;
 export const CFB_FORWARD_MAX_QB_TEAMS_PER_RUN = 24 as const;
 export const CFB_FORWARD_MAX_SHARP_FALLBACK_GAMES_PER_RUN = 32 as const;
 export const CFB_FORWARD_MAX_ESPN_PROSPECTIVE_GAMES_PER_RUN = 32 as const;
@@ -441,16 +442,13 @@ export async function runCfbForwardEvidenceWriter(args: {
   const theOddsApiGapGames = plannedGames.filter((game) =>
     !game.away.fbs && !game.home.fbs &&
     cfbBooksNeedSharpFallback(paidSharpAndCollegeFootballDataBooksByGame[game.providerGameId] ?? []));
-  const theOddsApiHistoricalOpeningGames = theOddsApiGapGames.filter((game) => {
-    const scheduledAt = Date.parse(game.scheduledStart);
-    const belongsToR38TransitionSlate = scheduledAt >= Date.parse("2026-10-09T00:00:00.000Z") &&
-      scheduledAt < Date.parse("2026-10-12T00:00:00.000Z");
-    const recoveredInCurrentRelease = existing.some((row) =>
-      row.providerGameId === game.providerGameId &&
-      row.payload.schemaRelease === CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE &&
-      row.payload.market.operationalOpening?.quote.provider === "theoddsapi");
-    return belongsToR38TransitionSlate && !recoveredInCurrentRelease;
-  });
+  const theOddsApiHistoricalOpeningGames = theOddsApiGapGames.filter((game) =>
+    shouldFetchCfbTheOddsApiHistoricalOpening({
+      game,
+      existing,
+      attemptHistory: marketHistory,
+      evidenceRelease: CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE,
+    }));
   const theOddsApiHistoricalOpeningAttempt = args.theOddsApiKey && theOddsApiHistoricalOpeningGames.length > 0
     ? await fetchCfbTheOddsApiHistoricalOpenings({
         games: theOddsApiHistoricalOpeningGames,
@@ -465,6 +463,7 @@ export async function runCfbForwardEvidenceWriter(args: {
   const theOddsApiNeed = shouldFetchCfbTheOddsApiFallback({
     games: theOddsApiGapGames,
     existing,
+    attemptHistory: marketHistory,
     now: args.now,
     forceT60: plans.some((plan) =>
       plan.stage === "t60" && theOddsApiGapGames.some((game) => game.providerGameId === plan.game.providerGameId)),
@@ -948,6 +947,10 @@ export async function runCfbForwardEvidenceWriter(args: {
         publicReference: 0,
         collegeFootballData: collegeFootballDataAttempt.result?.requests ?? 0,
         theOddsApi: theOddsApiHistoricalOpeningAttempt.requests + theOddsApiAttempt.requests,
+        theOddsApiCurrent: theOddsApiAttempt.requests,
+        theOddsApiCurrentAttemptedAt: theOddsApiAttempt.requests > 0 ? args.now : null,
+        theOddsApiHistorical: theOddsApiHistoricalOpeningAttempt.requests,
+        theOddsApiHistoricalAttemptedAt: theOddsApiHistoricalOpeningAttempt.requests > 0 ? args.now : null,
         theOddsApiCredits:
           (theOddsApiHistoricalOpeningAttempt.result?.creditsUsed ??
             (theOddsApiHistoricalOpeningAttempt.requests * CFB_THE_ODDS_API_HISTORICAL_CREDITS_PER_PULL)) +

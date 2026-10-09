@@ -285,7 +285,7 @@ Last reviewed: 2026-10-09
   `cfb_v1_member_release_2026_10_08_r53_independent_price_spread_lane` /
   `cfb_market_sharp_aware_production_2026_10_08_r31_independent_price_spread_lane` /
   `cfb_v1_daily_edge_decision_2026_10_08_r43_independent_price_spread_lane` /
-  `cfb_forward_evidence_writer_2026_10_08_r107_independent_price_spread_lane`.
+  `cfb_forward_evidence_writer_2026_10_09_r108_odds_history_continuity`.
   Grade/calibration / fixture / outcome / compact snapshot / reader / tracking are r21/r18 / r79 /
   r69 / r39 / r24 / r40. R38 remains the explicit reader transition authority for valid prior rows
   and immutable locks.
@@ -315,7 +315,10 @@ Last reviewed: 2026-10-09
   Caesars, Fanatics, theScore Bet, BetOnline and Bally Bet are target-excluded consensus only: they cannot
   become the evaluated quote, score/side anchor, opening authority or movement signal. The provider,
   cadence, weekly limits and 5,000-credit reserve are unchanged. Identical ordered market-history reads
-  are partitioned into 25-game batches to avoid the observed 86-game statement timeout.
+  are partitioned into 10-game batches after a live 25-game batch still intermittently exceeded the
+  database statement timeout. Current-price and historical-opening request counters are now separate,
+  so a transition-only historical lookup cannot postpone an hourly live-price refresh. Historical
+  recovery also stops once any verified operational opening exists, or after its one recorded attempt.
 - The existing `prediction_pipeline:cfb` lease, one writer, hourly/T-60 cadence, immutable lock boundary,
   settlement and tracking denominator remain authoritative. Evidence and rollback are in
   `docs/model-audits/2026-10-08-cfb-multi-book-gap-fill-predeclaration.md`. Roll back the complete

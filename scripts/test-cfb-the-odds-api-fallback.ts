@@ -12,6 +12,7 @@ import {
   fetchCfbTheOddsApiFallback,
   fetchCfbTheOddsApiHistoricalOpenings,
   shouldFetchCfbTheOddsApiFallback,
+  shouldFetchCfbTheOddsApiHistoricalOpening,
 } from "../lib/services/football/cfbTheOddsApiFallback";
 
 const capturedAt = "2026-10-08T12:00:00.000Z";
@@ -177,6 +178,41 @@ const hourlyDue = shouldFetchCfbTheOddsApiFallback({
 assert.equal(hourlyDue.fetch, true);
 assert.equal(hourlyDue.reason, "gap_refresh_due");
 
+const historicalOnlyDoesNotPostponeCurrent = shouldFetchCfbTheOddsApiFallback({
+  games: [liu],
+  existing: [],
+  attemptHistory: [historyStored("2026-10-08T11:59:00.000Z", 19_993, { current: 0, historical: 2 })],
+  now: capturedAt,
+});
+assert.equal(historicalOnlyDoesNotPostponeCurrent.fetch, true);
+assert.equal(historicalOnlyDoesNotPostponeCurrent.reason, "opening_gap_seed");
+
+const compactHistoryCurrentAttemptControlsCadence = shouldFetchCfbTheOddsApiFallback({
+  games: [liu],
+  existing: [],
+  attemptHistory: [historyStored("2026-10-08T11:59:00.000Z", 19_993, { current: 1, historical: 0 })],
+  now: capturedAt,
+});
+assert.equal(compactHistoryCurrentAttemptControlsCadence.fetch, false);
+assert.equal(compactHistoryCurrentAttemptControlsCadence.reason, "cadence_not_due");
+
+assert.equal(shouldFetchCfbTheOddsApiHistoricalOpening({
+  game: liu,
+  existing: [],
+  evidenceRelease: "current-release",
+}), true);
+assert.equal(shouldFetchCfbTheOddsApiHistoricalOpening({
+  game: liu,
+  existing: [historicalStored({ operationalOpening: { quote: { provider: "collegefootballdata" } }, historicalRequests: 0 })],
+  evidenceRelease: "current-release",
+}), false, "a valid opening from another provider already satisfies opening continuity");
+assert.equal(shouldFetchCfbTheOddsApiHistoricalOpening({
+  game: liu,
+  existing: [historicalStored({ operationalOpening: null, historicalRequests: 0 })],
+  attemptHistory: [historyStored("2026-10-08T11:59:00.000Z", 19_993, { current: 0, historical: 2 })],
+  evidenceRelease: "current-release",
+}), false, "an unavailable historical archive is attempted only once per transition release");
+
 const priorWeekAttemptsDoNotConsumeThisWeek = shouldFetchCfbTheOddsApiFallback({
   games: [liu],
   existing: [
@@ -266,11 +302,68 @@ function event(
   };
 }
 
-function stored(at: string, remaining: number): CfbForwardStoredEvidence {
+function stored(
+  at: string,
+  remaining: number,
+  requests: { current?: number; historical?: number } = { current: 1 },
+): CfbForwardStoredEvidence {
   return {
     capturedAt: at,
-    payload: { requestBudget: { theOddsApi: 1, theOddsApiRemainingCredits: remaining } },
+    payload: { requestBudget: {
+      theOddsApi: (requests.current ?? 0) + (requests.historical ?? 0),
+      theOddsApiCurrent: requests.current ?? 0,
+      theOddsApiCurrentAttemptedAt: (requests.current ?? 0) > 0 ? at : null,
+      theOddsApiHistorical: requests.historical ?? 0,
+      theOddsApiHistoricalAttemptedAt: (requests.historical ?? 0) > 0 ? at : null,
+      theOddsApiRemainingCredits: remaining,
+    } },
   } as unknown as CfbForwardStoredEvidence;
+}
+
+function historicalStored(args: { operationalOpening: unknown; historicalRequests: number }): CfbForwardStoredEvidence {
+  return {
+    providerGameId: liu.providerGameId,
+    payload: {
+      schemaRelease: "current-release",
+      market: { operationalOpening: args.operationalOpening },
+      requestBudget: { theOddsApiHistorical: args.historicalRequests },
+    },
+  } as unknown as CfbForwardStoredEvidence;
+}
+
+function historyStored(
+  at: string,
+  remaining: number,
+  requests: { current: number; historical: number },
+) {
+  return {
+    id: `history-${at}`,
+    providerGameId: liu.providerGameId,
+    stage: "unlocked",
+    capturedAt: at,
+    gameStartAt: liu.scheduledStart,
+    payloadSha256: "0".repeat(64),
+    payload: {
+      schemaRelease: "current-release",
+      market: {
+        current: null,
+        currentBooks: [],
+        displayBooks: [],
+        providerOpening: null,
+        operationalOpening: null,
+        playbookSplits: null,
+        sharpApiSplits: [],
+      },
+      requestBudget: {
+        theOddsApi: requests.current + requests.historical,
+        theOddsApiCurrent: requests.current,
+        theOddsApiCurrentAttemptedAt: requests.current > 0 ? at : null,
+        theOddsApiHistorical: requests.historical,
+        theOddsApiHistoricalAttemptedAt: requests.historical > 0 ? at : null,
+        theOddsApiRemainingCredits: remaining,
+      },
+    },
+  } as never;
 }
 
 main().catch((error) => {
