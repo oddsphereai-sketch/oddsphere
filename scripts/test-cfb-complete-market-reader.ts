@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import {
   applyCfbCompleteMarketReader,
   CFB_COMPLETE_MARKET_READER_ARTIFACT_RELEASE,
@@ -99,8 +100,20 @@ assert.ok(Math.abs(independent.forecast.expectedTotal -
   (independent.forecast.expectedHomePoints + independent.forecast.expectedAwayPoints)) < 1e-9);
 assert.ok(Math.abs(independent.forecast.pmf.reduce((sum, cell) => sum + cell.probability, 0) - 1) < 1e-9);
 assert.ok(independent.forecast.expectedAwayPoints >= 0 && independent.forecast.expectedHomePoints >= 0);
-assert.match(CFB_COMPLETE_MARKET_READER_RELEASE, /support_aware_reconciliation/);
-assert.equal(CFB_COMPLETE_MARKET_READER_ARTIFACT_RELEASE, "cfb_market_reader_artifact_2026_10_09_r3_support_aware_reconciliation");
+assert.match(CFB_COMPLETE_MARKET_READER_RELEASE, /joint_moneyline_spread_reconciliation/);
+assert.equal(CFB_COMPLETE_MARKET_READER_ARTIFACT_RELEASE, "cfb_market_reader_artifact_2026_10_09_r4_joint_moneyline_spread_reconciliation");
+const artifact = JSON.parse(readFileSync(
+  new URL("../lib/services/football/modelArtifacts/cfbCompleteMarketReaderArtifact.json", import.meta.url),
+  "utf8",
+)) as { margin: { model: { names: string[] } } };
+assert.ok(
+  artifact.margin.model.names.some((name) => name.startsWith("moneyline_split_")),
+  "the frozen margin reader must retain Moneyline split evidence",
+);
+assert.ok(
+  artifact.margin.model.names.some((name) => name.startsWith("cross_market_")),
+  "the frozen margin reader must model Moneyline/Spread agreement and resistance",
+);
 
 assert.equal(resolveCfbSupportAwareTotalFlip({
   active: 57,

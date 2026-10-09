@@ -1,7 +1,8 @@
 # CFB professional market-reconciliation audit — candidate result
 
-Status: audit complete; the support-aware candidate is implemented, while the final joint
-Moneyline/Spread enhancement is validated but **not implemented or live and awaits explicit owner approval**.
+Status: audit complete; the owner-approved support-aware joint Moneyline/Spread implementation is
+complete and is the production publication candidate. Publication and post-merge live verification
+remain mandatory before it may be called live.
 All database work was read-only. No locked projection, pick, grade, price, stake, or evidence payload
 was rewritten.
 
@@ -94,7 +95,7 @@ to 70–60–3. Per-book leadership, price-before-line sequencing, exact move ti
 buyback therefore remain observed audit context; they do not receive unvalidated automatic projection
 authority. This is deliberate evidence calibration, not omission or generic threshold following.
 
-The requested production change is consequently narrow: retain separate Moneyline money, tickets,
+The approved production change is consequently narrow: retain separate Moneyline money, tickets,
 gap, and acceleration features; combine them continuously with Spread splits and price/line movement;
 let agreement strengthen and disagreement resist the posterior; keep missing splits neutral; and keep
 the already validated authority level. It does not authorize the rejected aggressive or maximum-detail
@@ -110,11 +111,11 @@ variants.
   has no authority.
 - Missing SharpAPI splits do not disable the reader. Book movement, paired prices, no-vig movement,
   public evidence, and the independent-versus-market relationship continue to work.
-- The exact stored-input board replay covers 81 games with zero runtime/artifact mismatches and zero
-  negative scores. The all-81-game same-current-runtime A/B keeps Best Angle plus Lean counts flat at
-  140→140: Moneyline has two promotions and one demotion, Spread has one demotion, and Total has one
-  promotion and one demotion. Eleven Moneylines, 23 Spreads, and 31 Totals remain actionable without
-  eligible split evidence. The separate stored-release parity lane is exact for 22 games; older stored
+- The final exact stored-input board replay covers 81 games with zero runtime/artifact mismatches and
+  zero negative scores. The all-81-game same-current-runtime A/B moves Best Angle plus Lean counts from
+  138→139: Moneyline has two actionable promotions, Spread has one actionable demotion, and Total has
+  no net actionable change. Fourteen Moneylines, 24 Spreads, and 31 Totals remain actionable without
+  eligible split evidence. The separate stored-release parity lane remains release-scoped; older stored
   releases remain immutable and are not mislabeled as current-runtime parity.
 - The sole `prediction_pipeline:cfb` lease, writer path, T-60 lock priority, and immutable reader
   precedence remain unchanged.

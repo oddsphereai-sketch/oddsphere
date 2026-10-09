@@ -17,9 +17,9 @@ import {
 import type { CfbV1Forecast } from "./cfbV1Decision";
 
 export const CFB_COMPLETE_MARKET_READER_RELEASE =
-  "cfb_complete_market_reader_2026_10_09_r3_support_aware_reconciliation" as const;
+  "cfb_complete_market_reader_2026_10_09_r4_joint_moneyline_spread_reconciliation" as const;
 export const CFB_COMPLETE_MARKET_READER_ARTIFACT_RELEASE =
-  "cfb_market_reader_artifact_2026_10_09_r3_support_aware_reconciliation" as const;
+  "cfb_market_reader_artifact_2026_10_09_r4_joint_moneyline_spread_reconciliation" as const;
 
 type Market = "moneyline" | "spread" | "total";
 type Axis = "margin" | "total";
@@ -108,10 +108,11 @@ export function applyCfbCompleteMarketReader(args: {
     kickoffAt: args.kickoffAt,
     observations,
   };
-  const marginFeatures = reconciliationMarginFeatures(
+  const marginFeatures = professionalReconciliationMarginFeatures(
     residualFeatures(base, "margin"),
     args.forecast.expectedMarginHome,
     args.independentForecast.expectedMarginHome,
+    observations,
   );
   const totalFeatures = constrainedMarketFeatures(residualFeatures(base, "total"), "total");
   const marginEvidenceAvailable = hasObservedAxisEvidence(marginFeatures, "margin");
@@ -532,6 +533,66 @@ function reconciliationMarginFeatures(
     output.legacy_market_distance_change = Math.abs(current - activeMargin) - Math.abs(current - independentMargin);
     output.legacy_spread_side_changed = Number(lineWinner(activeMargin, current) !== lineWinner(independentMargin, current));
     output.legacy_reflection_signature = legacyShift * (current - independentMargin);
+  }
+  return output;
+}
+
+function professionalReconciliationMarginFeatures(
+  raw: Record<string, number>,
+  activeMargin: number,
+  independentMargin: number,
+  observations: Observation[],
+): Record<string, number> {
+  const output = reconciliationMarginFeatures(raw, activeMargin, independentMargin);
+  const moneylineReads = splitReads(observations, "moneyline");
+  for (const provenance of ["named_sharp", "fallback", "public"] as const) {
+    const selected = moneylineReads.filter((read) => read.provenance === provenance);
+    const signed = average(selected.map((read) => signedSplit(read, "margin")));
+    const signedMoneyMajority = average(selected.map((read) => {
+      const positive = read.side === "second";
+      return (positive ? 1 : -1) * (read.moneyPct - 50);
+    }));
+    const signedTicketMajority = average(selected.map((read) => {
+      const positive = read.side === "second";
+      return (positive ? 1 : -1) * (read.ticketsPct - 50);
+    }));
+    const acceleration = average(selected.flatMap((read) => read.moneyAccelerationPp === null
+      ? []
+      : [Math.sign(signedSplit(read, "margin")) * Math.abs(read.moneyAccelerationPp)]));
+    if (signed !== null) output[`moneyline_split_${provenance}`] = signed;
+    if (signedMoneyMajority !== null) output[`moneyline_split_${provenance}_money_majority`] = signedMoneyMajority;
+    if (signedTicketMajority !== null) output[`moneyline_split_${provenance}_ticket_majority`] = signedTicketMajority;
+    if (acceleration !== null) output[`moneyline_split_${provenance}_acceleration`] = acceleration;
+    output[`moneyline_split_${provenance}_count`] = selected.length;
+    const spreadSplit = output[`split_${provenance}`];
+    if (signed !== null && spreadSplit !== undefined) {
+      output[`cross_market_split_${provenance}_product`] = signed * spreadSplit;
+      output[`cross_market_split_${provenance}_agreement`] = Math.sign(signed) === Math.sign(spreadSplit) ? 1 : -1;
+    }
+  }
+  const spreadMove = output.spread_all_axis_move;
+  const moneylineMove = output.moneyline_all_probability_move;
+  if (spreadMove !== undefined && moneylineMove !== undefined) {
+    output.cross_market_move_product = spreadMove * moneylineMove;
+    output.cross_market_move_agreement = Math.sign(spreadMove) === Math.sign(moneylineMove) ? 1 : -1;
+  }
+  const currentSpread = output.spread_all_current_axis;
+  if (currentSpread !== undefined) {
+    output.short_spread_3 = Number(Math.abs(currentSpread) <= 3);
+    output.short_spread_7 = Number(Math.abs(currentSpread) <= 7);
+    if (moneylineMove !== undefined) {
+      output.short_spread_3_moneyline_move = output.short_spread_3 * moneylineMove;
+    }
+    for (const provenance of ["named_sharp", "fallback", "public"] as const) {
+      const moneylineSplit = output[`moneyline_split_${provenance}`];
+      const spreadSplit = output[`split_${provenance}`];
+      if (moneylineSplit !== undefined) {
+        output[`short_spread_3_moneyline_split_${provenance}`] = output.short_spread_3 * moneylineSplit;
+      }
+      if (spreadSplit !== undefined) {
+        output[`short_spread_3_spread_split_${provenance}`] = output.short_spread_3 * spreadSplit;
+      }
+    }
   }
   return output;
 }

@@ -2061,7 +2061,7 @@ function runProfessionalConfigurationAudit(games: Game[], candidateBase: "active
 function runProfessionalLossAudit(games: Game[]) {
   const rows: ResidualRow[] = games.map((game) => ({
     game,
-    marginFeatures: reconciliationMarginFeatures(game),
+    marginFeatures: professionalReconciliationMarginFeatures(game, "moneyline"),
     totalFeatures: constrainedMarketFeatures(game, "total"),
     actualMargin: game.homeScore - game.awayScore,
     actualTotal: game.homeScore + game.awayScore,
@@ -2212,7 +2212,7 @@ function exportCombinedMarketReaderArtifact(games: Game[]) {
   });
   const rows: ResidualRow[] = guardedGames.map((game) => ({
     game,
-    marginFeatures: reconciliationMarginFeatures(game),
+    marginFeatures: professionalReconciliationMarginFeatures(game, "moneyline"),
     totalFeatures: constrainedMarketFeatures(game, "total"),
     actualMargin: game.homeScore - game.awayScore,
     actualTotal: game.homeScore + game.awayScore,
@@ -2220,11 +2220,11 @@ function exportCombinedMarketReaderArtifact(games: Game[]) {
   const marginModel = fitPosterior(rows, "margin", 1000);
   const totalModel = fitPosterior(rows, "total", 30);
   return {
-    release: "cfb_market_reader_artifact_2026_10_09_r3_support_aware_reconciliation",
+    release: "cfb_market_reader_artifact_2026_10_09_r4_joint_moneyline_spread_reconciliation",
     trainedThrough: [...games.map((game) => game.date)].sort().at(-1),
     games: rows.length,
     selectionProtocol: "configurations_frozen_before_confirmation_then_refit_on_all_pregame_lock_boundary_rows",
-    margin: { lambda: 1000, evidenceScale: 1, mode: "professional_reconciliation_continuous_only_with_observed_movement_or_split_evidence", model: marginModel },
+    margin: { lambda: 1000, evidenceScale: 1, mode: "joint_moneyline_spread_professional_reconciliation_continuous_only_with_observed_movement_or_split_evidence", model: marginModel },
     total: {
       lambda: 30,
       evidenceScale: 1,
@@ -2247,7 +2247,7 @@ function currentBoardMarketReaderCandidate(
 ) {
   const training = trainingGames.map((game): ResidualRow => ({
     game,
-    marginFeatures: reconciliationMarginFeatures(game),
+    marginFeatures: professionalReconciliationMarginFeatures(game, "moneyline"),
     totalFeatures: constrainedMarketFeatures(game, "total"),
     actualMargin: game.homeScore - game.awayScore,
     actualTotal: game.homeScore + game.awayScore,
@@ -2306,7 +2306,7 @@ function currentBoardMarketReaderCandidate(
     };
     const residual: ResidualRow = {
       game,
-      marginFeatures: reconciliationMarginFeatures(game),
+      marginFeatures: professionalReconciliationMarginFeatures(game, "moneyline"),
       totalFeatures: constrainedMarketFeatures(game, "total"),
       actualMargin: 0,
       actualTotal: 0,
@@ -2539,7 +2539,7 @@ function currentBoardMarketReaderCandidate(
   return {
     release: "cfb_professional_market_reconciliation_current_board_candidate_2026_10_09_r3",
     mode,
-    artifact: "cfb_market_reader_artifact_2026_10_09_r3_support_aware_reconciliation",
+    artifact: "cfb_market_reader_artifact_2026_10_09_r4_joint_moneyline_spread_reconciliation",
     trainedGames: training.length,
     boardGames: games.length,
     anchorHoldGames: games.filter((game) => game.anchorHoldRemoved).length,
