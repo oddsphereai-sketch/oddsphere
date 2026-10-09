@@ -335,6 +335,14 @@ export type CfbForwardEvidencePayload = {
     publicReference?: number;
     collegeFootballData?: number;
     theOddsApi?: number;
+    /** Current sport-level odds pulls. Kept separate so historical-opening
+     * recovery cannot postpone the hourly live-price cadence. */
+    theOddsApiCurrent?: number;
+    theOddsApiCurrentAttemptedAt?: string | null;
+    /** Historical opening-snapshot pulls. These are transition-only and must
+     * not be counted as a current-price refresh. */
+    theOddsApiHistorical?: number;
+    theOddsApiHistoricalAttemptedAt?: string | null;
     theOddsApiCredits?: number;
     theOddsApiRemainingCredits?: number | null;
     officialAvailability?: number;
@@ -366,9 +374,14 @@ export type CfbForwardMarketHistoryEvidence = Pick<
   "id" | "providerGameId" | "stage" | "capturedAt" | "gameStartAt" | "payloadSha256"
 > & {
   payload: {
+    schemaRelease?: CfbForwardEvidencePayload["schemaRelease"];
     market: Pick<
       CfbForwardEvidencePayload["market"],
       "current" | "currentBooks" | "displayBooks" | "providerOpening" | "operationalOpening" | "playbookSplits" | "sharpApiSplits"
+    >;
+    requestBudget?: Pick<
+      CfbForwardEvidencePayload["requestBudget"],
+      "theOddsApi" | "theOddsApiCurrent" | "theOddsApiCurrentAttemptedAt" | "theOddsApiHistorical" | "theOddsApiHistoricalAttemptedAt" | "theOddsApiCredits" | "theOddsApiRemainingCredits"
     >;
     contextualEvidenceCapture?: {
       markets: {

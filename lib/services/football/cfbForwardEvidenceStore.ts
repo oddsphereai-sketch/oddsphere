@@ -79,6 +79,7 @@ type StoredMarketHistoryRow = {
   operational_opening: CfbForwardEvidencePayload["market"]["operationalOpening"];
   playbook_splits: CfbForwardEvidencePayload["market"]["playbookSplits"];
   sharp_api_splits: CfbForwardEvidencePayload["market"]["sharpApiSplits"];
+  request_budget: CfbForwardMarketHistoryEvidence["payload"]["requestBudget"] | null;
   context_moneyline_families: CfbForwardContextFamily[] | null;
   context_spread_families: CfbForwardContextFamily[] | null;
   context_total_families: CfbForwardContextFamily[] | null;
@@ -95,7 +96,7 @@ export const CFB_FORWARD_MARKET_HISTORY_MAX_ROWS = 12_000 as const;
 // the append-only evidence table grows. This changes query partitioning only;
 // row identity, ordering, compatible releases and the 12k total bound remain
 // unchanged.
-export const CFB_FORWARD_MARKET_HISTORY_GAME_BATCH_SIZE = 25 as const;
+export const CFB_FORWARD_MARKET_HISTORY_GAME_BATCH_SIZE = 10 as const;
 export const CFB_FORWARD_MARKET_HISTORY_COMPATIBLE_RELEASES = [
   CFB_FORWARD_MARKET_HISTORY_BASE_EVIDENCE_SCHEMA_RELEASE,
   CFB_FORWARD_SPREAD_PREVIOUS_EVIDENCE_SCHEMA_RELEASE,
@@ -150,6 +151,7 @@ export async function readCfbForwardMarketHistory(args: {
           "operational_opening:payload->market->operationalOpening",
           "playbook_splits:payload->market->playbookSplits",
           "sharp_api_splits:payload->market->sharpApiSplits",
+          "request_budget:payload->requestBudget",
           "context_moneyline_families:payload->contextualEvidenceCapture->markets->moneyline->families",
           "context_spread_families:payload->contextualEvidenceCapture->markets->spread->families",
           "context_total_families:payload->contextualEvidenceCapture->markets->total->families",
@@ -391,6 +393,7 @@ function normalizeMarketHistoryRow(row: StoredMarketHistoryRow): CfbForwardMarke
     gameStartAt,
     payloadSha256: row.payload_sha256,
     payload: {
+      schemaRelease: row.payload_schema_release as CfbForwardEvidencePayload["schemaRelease"],
       market: {
         current: row.current ?? null,
         currentBooks: row.current_books,
@@ -400,6 +403,7 @@ function normalizeMarketHistoryRow(row: StoredMarketHistoryRow): CfbForwardMarke
         playbookSplits: row.playbook_splits ?? null,
         sharpApiSplits: row.sharp_api_splits ?? null,
       },
+      ...(row.request_budget ? { requestBudget: row.request_budget } : {}),
       ...(contextFamilies ? { contextualEvidenceCapture: { markets: contextFamilies } } : {}),
     },
   };
