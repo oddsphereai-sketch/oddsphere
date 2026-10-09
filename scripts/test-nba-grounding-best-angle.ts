@@ -5,7 +5,7 @@
  * qualification gate parallel to the WC model:
  *   positive edge in [3.5, 8.0]pp + high tier + injuries known + true
  *   multi-book consensus + market favors the pick side (no-vig ≥ 50%) +
- *   sharp money NOT fading the pick (consensus handle vs bets).
+ *   reported handle NOT materially trailing ticket share.
  *
  * Pure logic. Run: npx tsx scripts/test-nba-grounding-best-angle.ts
  */
@@ -47,15 +47,15 @@ ok("base edge is positive and in the BA band [3.5,8]", b.mlEdgePct !== null && b
 ok("qualified (high/multi-book/market-confirms/no-fade) ⇒ Best Angle", b.playGrade === "best_angle", b.playGrade);
 ok("rationale notes splits unobserved", b.gradeRationale.includes("splits unobserved"));
 
-// 2 — sharp money FADING the pick ⇒ demoted to Lean.
+// 2 — reported handle materially trailing tickets ⇒ demoted to Lean.
 const fade = groundNbaPrediction(base({ splitsMl: { betsHome: 0.6, handleHome: 0.48, betsAway: 0.4, handleAway: 0.52 } }));
-ok("sharp money fading pick ⇒ Lean (not Best Angle)", fade.playGrade === "lean", `${fade.playGrade} :: ${fade.gradeRationale}`);
-ok("fade rationale explains why not BA", fade.gradeRationale.includes("sharp money fading"));
+ok("reported handle trailing tickets ⇒ Lean (not Best Angle)", fade.playGrade === "lean", `${fade.playGrade} :: ${fade.gradeRationale}`);
+ok("fade rationale explains why not BA", fade.gradeRationale.includes("reported handle trails ticket share"));
 
-// 3 — sharp money WITH the pick (handle out-indexes bets) ⇒ still Best Angle.
+// 3 — reported handle out-indexes tickets ⇒ still Best Angle.
 const withSharp = groundNbaPrediction(base({ splitsMl: { betsHome: 0.5, handleHome: 0.62, betsAway: 0.5, handleAway: 0.38 } }));
-ok("sharp money WITH pick ⇒ Best Angle", withSharp.playGrade === "best_angle", withSharp.playGrade);
-ok("with-sharp rationale notes not against", withSharp.gradeRationale.includes("sharp money not against"));
+ok("reported handle WITH pick ⇒ Best Angle", withSharp.playGrade === "best_angle", withSharp.playGrade);
+ok("rationale reports that handle does not trail tickets", withSharp.gradeRationale.includes("reported handle does not trail ticket share"));
 
 // 4 — market favors the OTHER side (no-vig < 0.5) ⇒ Lean, never Best Angle.
 const contra = groundNbaPrediction(base({ consensusHomeMlNoVig: 0.46 }));

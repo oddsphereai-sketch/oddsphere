@@ -55,7 +55,7 @@ import {
 import {
   deriveVerdict,
   VERDICT_LABEL,
-  isStrongOpposingSharpMoney,
+  isStrongOpposingReportedMoney,
   type Verdict,
 } from "@/lib/services/verdictDerivation";
 import {
@@ -956,8 +956,8 @@ function applyHighConvictionTotalPromotion(
 }
 
 /**
- * Downgrade a positive pick (Best Angle / Lean) to Caution on STRONG opposing
- * sharp money — EXCEPT for a flipped/corrected market, which is exempt from this
+ * Downgrade a positive pick (Best Angle / Lean) to Caution on a strong opposing
+ * reported-money split — EXCEPT for a flipped/corrected market, which is exempt from this
  * one downgrade (the flip already fades the divergent signal; cautioning on the
  * same opposing money double-counts it). Exported as the testable seam. Only
  * this downgrade is gated — all other Caution reasons live in `base`.
@@ -970,7 +970,7 @@ export function applyOpposingMoneyCaution<W>(
   market: "moneyline" | "total" | "first_inning",
 ): { key: MarketVerdict; label: string; warning: W } {
   if (
-    isStrongOpposingSharpMoney(pickMoneyPct, pickBetsPct) &&
+    isStrongOpposingReportedMoney(pickMoneyPct, pickBetsPct) &&
     (base.key === "best_angle" || base.key === "lean") &&
     !marketWasCorrected(sportSpecific, market)
   ) {

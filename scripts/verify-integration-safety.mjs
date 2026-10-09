@@ -4,9 +4,16 @@ import { execFileSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import path from "node:path";
 
+const GIT_OUTPUT_BUFFER_BYTES = 64 * 1024 * 1024;
+
 function git(args, cwd, allowFailure = false) {
   try {
-    return execFileSync("git", args, { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trimEnd();
+    return execFileSync("git", args, {
+      cwd,
+      encoding: "utf8",
+      maxBuffer: GIT_OUTPUT_BUFFER_BYTES,
+      stdio: ["ignore", "pipe", "pipe"],
+    }).trimEnd();
   } catch (error) {
     if (allowFailure) return null;
     const detail = error?.stderr?.toString().trim() || error?.message || "git command failed";

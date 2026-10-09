@@ -167,17 +167,17 @@ export function NbaPublicSplitsPanel({
         <div className="flex gap-1.5 flex-wrap">
           {ml.splits.sharp_signal_side !== "none" && (
             <span className={`px-1.5 py-0.5 rounded border ${DIVERGENCE_TINT[ml.splits.pick_side?.divergence ?? "none"].bg} ${DIVERGENCE_TINT[ml.splits.pick_side?.divergence ?? "none"].text}`}>
-              ML: {ml.splits.sharp_signal_side === "pick" ? "money on our pick" : "money on the other side"}
+              ML: {ml.splits.sharp_signal_side === "pick" ? "money leads tickets on our pick" : "money leads tickets on the other side"}
             </span>
           )}
           {spread.splits.sharp_signal_side !== "none" && (
             <span className={`px-1.5 py-0.5 rounded border ${DIVERGENCE_TINT[spread.splits.pick_side?.divergence ?? "none"].bg} ${DIVERGENCE_TINT[spread.splits.pick_side?.divergence ?? "none"].text}`}>
-              Spread: {spread.splits.sharp_signal_side === "pick" ? "money on our pick" : "money on the other side"}
+              Spread: {spread.splits.sharp_signal_side === "pick" ? "money leads tickets on our pick" : "money leads tickets on the other side"}
             </span>
           )}
           {total.splits.sharp_signal_side !== "none" && (
             <span className={`px-1.5 py-0.5 rounded border ${DIVERGENCE_TINT[total.splits.pick_side?.divergence ?? "none"].bg} ${DIVERGENCE_TINT[total.splits.pick_side?.divergence ?? "none"].text}`}>
-              Total: {total.splits.sharp_signal_side === "pick" ? "money on our pick" : "money on the other side"}
+              Total: {total.splits.sharp_signal_side === "pick" ? "money leads tickets on our pick" : "money leads tickets on the other side"}
             </span>
           )}
         </div>

@@ -70,6 +70,10 @@ const splits: FootballSplitObservation[] = [
 const publicRead = deriveFootballPublicRead(splits, 65);
 assert.equal(publicRead.publicSide, "home");
 assert.equal(publicRead.moneyTicketGap, -7);
+assert.equal(publicRead.attribution?.sourceUpdatedAt, "2026-08-19T12:59:00Z");
+assert.equal(publicRead.attribution?.fetchedAt, "2026-08-19T13:00:01Z");
+assert.equal(publicRead.attribution?.volumeDenominatorsAvailable, false);
+assert.equal(publicRead.attribution?.bettorIdentityVerified, false);
 assert.equal(publicRead.attribution?.booksUsed, 8);
 const rlm = classifyReverseLineMovement({
   publicRead,

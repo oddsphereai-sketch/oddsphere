@@ -147,28 +147,25 @@ export function deriveVerdict(input: VerdictInput): Verdict {
 }
 
 /**
- * Opposing-sharp-money Caution (2026-06-16). Caution is exactly for
- * "the market/sharp money says our pick may be wrong-side." When the OPPOSITE
- * side of our pick holds a clear sharp-money majority, a positive verdict
- * (Best Angle / Lean) is downgraded to Caution.
+ * Reported opposing-money Caution (2026-06-16).
  *
- * Bar (deliberately HIGH so Caution stays rare/meaningful, not flooding the
- * board): the opposite side holds ≥60% of the money AND ≥20pp more money than
- * tickets (sharp money piling against us, not just public noise). Tiered above
- * the chip's ≥15pp "Sharp money against our side" amber warning — a mild lean
- * shows the chip but only STRONG opposition triggers Caution.
+ * This is a validated split-pattern warning, not proof of professional bettor
+ * identity. The opposite side must hold ≥60% of reported money and at least
+ * 20pp more reported money than tickets. Price-path confirmation is evaluated
+ * elsewhere; this helper must never be described as a verified sharp-money
+ * detector.
  *
- * Inputs are the PICKED side's money/ticket shares (0..100). Pure.
+ * Inputs are the PICKED side's reported money/ticket shares (0..100). Pure.
  */
-export const OPPOSING_SHARP_MONEY_SHARE = 60;
-export const OPPOSING_SHARP_MONEY_CAUTION_GAP_PP = 20;
+export const OPPOSING_REPORTED_MONEY_SHARE = 60;
+export const OPPOSING_REPORTED_MONEY_CAUTION_GAP_PP = 20;
 
-export function isStrongOpposingSharpMoney(
+export function isStrongOpposingReportedMoney(
   pickMoneyPct: number | null,
   pickBetsPct: number | null,
 ): boolean {
   if (pickMoneyPct === null || pickBetsPct === null) return false;
   const oppMoneyShare = 100 - pickMoneyPct;
   const oppOverTicketsGap = pickBetsPct - pickMoneyPct; // = oppMoney − oppBets
-  return oppMoneyShare >= OPPOSING_SHARP_MONEY_SHARE && oppOverTicketsGap >= OPPOSING_SHARP_MONEY_CAUTION_GAP_PP;
+  return oppMoneyShare >= OPPOSING_REPORTED_MONEY_SHARE && oppOverTicketsGap >= OPPOSING_REPORTED_MONEY_CAUTION_GAP_PP;
 }

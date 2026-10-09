@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import {
   collectBoundedCurrentGameLineRows,
   type CurrentGameLineRow,
@@ -39,6 +41,26 @@ async function main(): Promise<void> {
   await assert.rejects(
     () => collectBoundedCurrentGameLineRows(async () => [], { pageSize: 0, maxRows: 1_000 }),
     /page size must be a positive integer/,
+  );
+
+  const allModelReadinessSource = readFileSync(
+    path.resolve("scripts/operator/audit-all-model-readiness.ts"),
+    "utf8",
+  );
+  assert.match(
+    allModelReadinessSource,
+    /loadCompleteCurrentGameLines\(\{/,
+    "the cross-sport readiness audit must not truncate line-rich slates at PostgREST's default row cap",
+  );
+  assert.match(
+    allModelReadinessSource,
+    /for \(const gameId of gameIds\)[\s\S]{0,350}gameIds: \[gameId\]/,
+    "the readiness audit must page each game independently so a line-rich slate cannot exhaust the bounded reader before later games",
+  );
+  assert.doesNotMatch(
+    allModelReadinessSource,
+    /from\("lines"\)[\s\S]{0,250}select\("game_id,market_type,fetched_at"\)/,
+    "the cross-sport readiness audit must not restore an unpaginated direct lines query",
   );
 
   console.log("Current game-line pagination tests passed.");

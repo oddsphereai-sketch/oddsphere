@@ -148,6 +148,7 @@ function round(value: number | null): number | null {
 function summarize(rows: readonly Settled[], candidate: Candidate) {
   const evaluated = rows.map((row) => {
     const { result, marketQualified, movement } = candidateOutcome(row, candidate);
+    const independent = outcome(row, []);
     const actualTotal = row.actualHome + row.actualAway;
     const actualOver = actualTotal > 2.5;
     const actualBtts = row.actualHome > 0 && row.actualAway > 0;
@@ -155,11 +156,14 @@ function summarize(rows: readonly Settled[], candidate: Candidate) {
     const predictedResult = (["home", "draw", "away"] as const).reduce((best, side) =>
       result.markets.match_result[side] > result.markets.match_result[best] ? side : best, "home");
     const predictedOver = result.markets.total.over >= 0.5;
+    const independentOver = independent.markets.total.over >= 0.5;
     const predictedBtts = result.markets.btts.yes >= 0.5;
     return {
       totalAbs: Math.abs(result.expectedGoals.home + result.expectedGoals.away - actualTotal),
       teamAbs: (Math.abs(result.expectedGoals.home - row.actualHome) + Math.abs(result.expectedGoals.away - row.actualAway)) / 2,
       totalCorrect: predictedOver === actualOver,
+      independentTotalCorrect: independentOver === actualOver,
+      totalSideChanged: predictedOver !== independentOver,
       bttsCorrect: predictedBtts === actualBtts,
       resultCorrect: predictedResult === actualResult,
       totalBrier: (result.markets.total.over - Number(actualOver)) ** 2,
@@ -176,6 +180,11 @@ function summarize(rows: readonly Settled[], candidate: Candidate) {
     total_mae: round(mean(evaluated.map((row) => row.totalAbs))),
     match_result_accuracy: `${evaluated.filter((row) => row.resultCorrect).length}/${evaluated.length}`,
     total_accuracy: `${evaluated.filter((row) => row.totalCorrect).length}/${evaluated.length}`,
+    total_side_changes: evaluated.filter((row) => row.totalSideChanged).length,
+    total_corrections: evaluated.filter((row) =>
+      row.totalSideChanged && row.totalCorrect && !row.independentTotalCorrect).length,
+    total_harms: evaluated.filter((row) =>
+      row.totalSideChanged && !row.totalCorrect && row.independentTotalCorrect).length,
     total_brier: round(mean(evaluated.map((row) => row.totalBrier))),
     btts_accuracy: `${evaluated.filter((row) => row.bttsCorrect).length}/${evaluated.length}`,
     btts_brier: round(mean(evaluated.map((row) => row.bttsBrier))),
