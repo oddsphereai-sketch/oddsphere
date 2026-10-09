@@ -6,7 +6,7 @@ import type { NflRegularSharpSplit } from "./sharpApiNflSplits";
 import type { NflV1WeekOneOutcomeForecast } from "./nflV1WeekOneOutcome";
 
 export const NFL_FORWARD_CONTEXT_CAPTURE_RELEASE =
-  "nfl_daily_edge_forward_context_capture_2026_09_28_r6_paid_team_score_activation" as const;
+  "nfl_daily_edge_forward_context_capture_2026_10_08_r7_named_sequence" as const;
 export const NFL_FORWARD_CONTEXT_CAPTURE_SCHEMA = "nflfec3" as const;
 export const NFL_FORWARD_CONTEXT_CAPTURE_MAX_FAMILIES_PER_MARKET = 8 as const;
 export const NFL_FORWARD_CONTEXT_CAPTURE_MAX_PROVENANCE_RECORDS_PER_MARKET = 2 as const;
@@ -68,8 +68,8 @@ export type NflForwardContextMarket = {
 export type NflForwardContextCapture = {
   release: typeof NFL_FORWARD_CONTEXT_CAPTURE_RELEASE;
   schema: typeof NFL_FORWARD_CONTEXT_CAPTURE_SCHEMA;
-  mode: "capture_only";
-  productionDecisionEffect: false;
+  mode: "market_sequence_and_capture";
+  productionDecisionEffect: true;
   gameId: string;
   capturedAt: string;
   releases: {
@@ -114,9 +114,9 @@ export type NflForwardContextCapture = {
 
 export function buildNflForwardContextCapture(args: {
   payload: NflForwardEvidencePayload;
-  /** Capture-only books; never used by the production decision path. */
+  /** Named and retail chronology used by the bounded sequence reader and retained for audit. */
   captureCurrentBooks?: NflPreviewBookOdds[];
-  /** Capture-only prior landmarks; never used by the production decision path. */
+  /** Prior same-book landmarks used by the bounded sequence reader and retained for audit. */
   openingBooks?: NflPreviewBookOdds[];
   independentForecast: NflV1WeekOneOutcomeForecast;
   independentTargetFree: boolean;
@@ -127,7 +127,7 @@ export function buildNflForwardContextCapture(args: {
     const decisions = new Map(args.payload.decisions.evaluatedBets.map((row) => [row.market, row]));
     const markets = Object.fromEntries((["moneyline", "spread", "total"] as const).map((market) => [
       market,
-      buildMarket({
+      buildNflForwardContextMarket({
         market,
         capturedAt: args.payload.capturedAt,
         currentBooks: args.captureCurrentBooks ?? args.payload.market.comparableCurrentBooks,
@@ -144,8 +144,8 @@ export function buildNflForwardContextCapture(args: {
     const capture = withBytes({
       release: NFL_FORWARD_CONTEXT_CAPTURE_RELEASE,
       schema: NFL_FORWARD_CONTEXT_CAPTURE_SCHEMA,
-      mode: "capture_only" as const,
-      productionDecisionEffect: false as const,
+      mode: "market_sequence_and_capture" as const,
+      productionDecisionEffect: true as const,
       gameId: args.payload.game.providerGameId,
       capturedAt: args.payload.capturedAt,
       releases: {
@@ -191,7 +191,7 @@ export function buildNflForwardContextCapture(args: {
   }
 }
 
-function buildMarket(args: {
+export function buildNflForwardContextMarket(args: {
   market: Market;
   capturedAt: string;
   currentBooks: NflPreviewBookOdds[];

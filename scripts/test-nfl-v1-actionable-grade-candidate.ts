@@ -47,12 +47,50 @@ import {
   resolveNflTargetExcludedMarketAnchor,
   resolveNflTargetExcludedProduction,
 } from "../lib/services/football/nflTargetExcludedMarketOutcome";
+import {
+  NFL_NAMED_MARKET_SEQUENCE_RELEASE,
+  type NflNamedMarketSequenceAuthority,
+} from "../lib/services/football/nflNamedMarketSequence";
 
 const providerGameId = "1392216";
 const awayTeam = "NE";
 const homeTeam = "SEA";
 const gameStartsAt = "2026-09-10T00:20:00.000Z";
 const evaluatedAt = "2026-08-25T11:21:34.519Z";
+
+function namedSequenceAuthority(args: {
+  moneylineSide?: "home" | "away" | null;
+  spreadSide?: "home" | "away" | null;
+}): NflNamedMarketSequenceAuthority {
+  const unavailable = {
+    status: "unavailable" as const,
+    side: null,
+    reason: "insufficient_named_sources" as const,
+    namedSources: [],
+    followerSources: [],
+    firstNamedMoveAt: null,
+  };
+  const read = (side: "home" | "away" | null) => side ? {
+    status: "qualified" as const,
+    side,
+    reason: "named_lead_retail_follow" as const,
+    namedSources: ["circa", "pinnacle"],
+    followerSources: ["fanduel", "draftkings", "caesars"],
+    firstNamedMoveAt: "2026-08-25T09:00:00.000Z",
+  } : unavailable;
+  return {
+    release: NFL_NAMED_MARKET_SEQUENCE_RELEASE,
+    evaluatedAt,
+    moneylineSide: args.moneylineSide ?? null,
+    spreadSide: args.spreadSide ?? null,
+    totalSide: null,
+    reads: {
+      moneyline: read(args.moneylineSide ?? null),
+      spread: read(args.spreadSide ?? null),
+      total: { ...unavailable, reason: "not_validated_for_production" },
+    },
+  };
+}
 const current = quote("fanduel", -108, -112, -110, -110);
 const comparableCurrentBooks = [
   current,
@@ -348,8 +386,8 @@ const weeklyBase = getNflV1WeekOneOutcomeForecast({
   homeTeam,
   weeklyFallback: { projectedHomeMargin: 4.25, marketTotal: 44.5 },
 });
-assert.equal(NFL_V1_WEEKLY_OUTCOME_MODEL_RELEASE, "nfl_v1_weekly_paid_team_score_2026_10_05_r11_winner_coherence");
-assert.equal(NFL_V1_MARKET_EVIDENCE_REPRESENTATIVE_SCORE_RELEASE, "nfl_v1_market_evidence_representative_score_2026_10_05_r10_winner_coherence");
+assert.equal(NFL_V1_WEEKLY_OUTCOME_MODEL_RELEASE, "nfl_v1_weekly_paid_team_score_2026_10_08_r12_named_sequence");
+assert.equal(NFL_V1_MARKET_EVIDENCE_REPRESENTATIVE_SCORE_RELEASE, "nfl_v1_market_evidence_representative_score_2026_10_08_r11_named_sequence");
 assert.equal(NFL_V1_WEEKLY_REPRESENTATIVE_SCORE_CENTER_WEIGHT, 0.2);
 const representativeMargin = weeklyBase.representativeHomeScore - weeklyBase.representativeAwayScore;
 const representativeTotal = weeklyBase.representativeHomeScore + weeklyBase.representativeAwayScore;
@@ -399,7 +437,7 @@ const circaAway = buildNflMarketEvidenceOutcomeForecast({
   sharpSplits: sharpSplitSet({ homeMoneyPct: 20, homeBetsPct: 70 }),
   evaluatedAt,
 });
-assert.equal(NFL_V1_MARKET_EVIDENCE_OUTCOME_RELEASE, "nfl_v1_market_evidence_outcome_2026_10_05_r11_winner_coherence");
+assert.equal(NFL_V1_MARKET_EVIDENCE_OUTCOME_RELEASE, "nfl_v1_market_evidence_outcome_2026_10_08_r12_named_sequence");
 assert.equal(NFL_V1_MARKET_WEIGHT, 0.75);
 assert.equal(NFL_V1_SHARP_SPLIT_MAX_SHIFT_POINTS, 1.5);
 assert.equal(NFL_V1_PUBLIC_SPLIT_MAX_SHIFT_POINTS, 0.75);
@@ -447,6 +485,25 @@ const vetoedWinnerFlip = resolveNflCrossMarketWinnerCoherence({
 });
 assert.equal(vetoedWinnerFlip.status, "rejected");
 assert.equal(vetoedWinnerFlip.sharpVeto, true);
+const sequenceAuthorizedWinnerFlip = resolveNflCrossMarketWinnerCoherence({
+  independentHomeMargin: 2.5,
+  proposedHomeMargin: -3.5,
+  moneylineHomeFairProbabilityDeltaPp: null,
+  publicMoneylineGapPp: null,
+  sharpMoneylineGapPp: null,
+  namedSequenceCrossMarketConfirmed: true,
+});
+assert.equal(sequenceAuthorizedWinnerFlip.status, "authorized");
+assert.equal(sequenceAuthorizedWinnerFlip.finalHomeMargin, -3.5);
+const sequenceVetoedWinnerFlip = resolveNflCrossMarketWinnerCoherence({
+  independentHomeMargin: 2.5,
+  proposedHomeMargin: -3.5,
+  moneylineHomeFairProbabilityDeltaPp: null,
+  publicMoneylineGapPp: null,
+  sharpMoneylineGapPp: 12,
+  namedSequenceCrossMarketConfirmed: true,
+});
+assert.equal(sequenceVetoedWinnerFlip.status, "rejected", "opposing fresh sharp flow remains a winner-flip veto");
 const weakPublicMarketOnly = buildNflMarketEvidenceOutcomeForecast({
   baseForecast: weeklyBase,
   footballHomeMargin: 4.25,
@@ -647,6 +704,37 @@ assert.ok(Math.abs(paidMarriage.expectedHomeScore + paidMarriage.expectedAwaySco
   "failed Total movement/split evidence must not overwrite the paid independent Total center");
 assert.equal(paidMarriage.homeWinProbability > 0.5,
   paidMarriage.expectedHomeScore > paidMarriage.expectedAwayScore);
+
+const paidNamedSequenceAway = buildNflMarketEvidenceOutcomeForecast({
+  baseForecast: paidBase,
+  footballHomeMargin: 4.25,
+  current,
+  operationalOpening: {
+    quote: {
+      ...current,
+      observedAt: "2026-08-25T09:00:00.000Z",
+      spread: { ...current.spread!, awayLine: 1.5, homeLine: -1.5 },
+    },
+  },
+  movementCurrent: current,
+  playbookLine: null,
+  playbookSplits: null,
+  sharpSplits: null,
+  spreadDirectionCandidate: true,
+  totalDirectionCandidate: true,
+  paidTeamScore,
+  namedSequenceAuthority: namedSequenceAuthority({ spreadSide: "away" }),
+  evaluatedAt,
+});
+const paidNamedSequenceMargin = paidNamedSequenceAway.expectedHomeScore - paidNamedSequenceAway.expectedAwayScore;
+assert.equal(paidNamedSequenceAway.marketEvidence?.namedSequence?.release, NFL_NAMED_MARKET_SEQUENCE_RELEASE);
+assert.equal(paidNamedSequenceAway.marketEvidence?.spreadDirection?.reason, "named_sequence_away");
+assert.ok(paidNamedSequenceMargin < -current.spread!.homeLine,
+  "qualified named sequence must move the projected score across the current Spread");
+assert.ok(paidNamedSequenceMargin > 0,
+  "Spread-only sequence evidence must preserve the independent outright winner");
+assert.ok(Math.abs(paidNamedSequenceAway.expectedHomeScore + paidNamedSequenceAway.expectedAwayScore - 44) < 0.1,
+  "a Spread sequence correction must preserve the independent Total");
 
 const paidTotalMoveOver = buildNflMarketEvidenceOutcomeForecast({
   baseForecast: paidBase,

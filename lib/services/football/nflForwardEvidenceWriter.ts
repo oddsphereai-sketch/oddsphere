@@ -59,9 +59,11 @@ import {
 } from "./nflTargetExcludedMarketOutcome";
 import {
   buildNflForwardContextCapture,
+  buildNflForwardContextMarket,
   NFL_FORWARD_CONTEXT_CAPTURE_RELEASE,
   nflForwardContextSharpHistoryBooks,
 } from "./nflForwardEvidenceCapture";
+import { buildNflNamedMarketSequenceAuthority } from "./nflNamedMarketSequence";
 import {
   captureBooksWithSharpBooks,
   fetchSharpApiNflSharpOdds,
@@ -95,7 +97,7 @@ import {
 } from "./balldontlieNflWeeklyProjectionShadow";
 
 export const NFL_FORWARD_WRITER_RELEASE =
-  "nfl_forward_evidence_writer_2026_10_08_r56_game_designation_continuity" as const;
+  "nfl_forward_evidence_writer_2026_10_08_r57_named_sequence" as const;
 
 export type NflForwardWriterResult = {
   writerRelease: typeof NFL_FORWARD_WRITER_RELEASE;
@@ -357,6 +359,45 @@ export async function runNflForwardEvidenceWriter(args: {
     const sharpSplits = sharpResult.splitsByGame[plan.game.providerGameId]
       ?? previous?.payload.market.sharpApiSplits
       ?? null;
+    const contextCurrentBooks = captureBooksWithSharpBooks(
+      comparableCurrentBooks,
+      circaAttempt.result?.booksByGame[plan.game.providerGameId] ?? [],
+    );
+    const contextOpeningBooks = [
+      ...comparableProviderOpeningBooks,
+      ...(captureHistoryBooksByGame.get(plan.game.providerGameId) ?? []),
+    ];
+    const currentContextMarket = (market: "moneyline" | "spread" | "total") =>
+      buildNflForwardContextMarket({
+        market,
+        capturedAt,
+        currentBooks: contextCurrentBooks,
+        openingBooks: contextOpeningBooks,
+        operationalOpening: opening.quote,
+        decision: null,
+        homeTeam: plan.game.home.abbreviation,
+        publicEvidence: playbookSplits?.[market] ?? null,
+        sharpEvidence: sharpSplits?.[market] ?? null,
+      });
+    const currentContextMarkets = {
+      moneyline: currentContextMarket("moneyline"),
+      spread: currentContextMarket("spread"),
+      total: currentContextMarket("total"),
+    };
+    const namedSequenceAuthority = buildNflNamedMarketSequenceAuthority({
+      evaluatedAt: capturedAt,
+      snapshots: [
+        ...historicalExisting.flatMap((row) =>
+          row.providerGameId === plan.game.providerGameId && row.capturedAt <= capturedAt && row.payload.contextualEvidenceCapture
+            ? [{ capturedAt: row.capturedAt, markets: row.payload.contextualEvidenceCapture.markets }]
+            : []),
+        { capturedAt, markets: currentContextMarkets },
+      ],
+      current,
+      playbookLine,
+      playbookSplits,
+      sharpSplits,
+    });
     const injuries = mergeNflAvailabilityWithPrior(
       availabilityByGame.get(plan.game.providerGameId) ?? null,
       latestVerifiedInjuriesForGame(historicalExisting, plan.game.providerGameId),
@@ -437,6 +478,7 @@ export async function runNflForwardEvidenceWriter(args: {
             directionHomeMarginCorrection: weeklyRawSignal.directionHomeMarginCorrection,
           } : undefined,
           paidTeamScore: paidProjectionShadow,
+          namedSequenceAuthority,
           evaluatedAt: capturedAt,
         })
       : baseOutcome;
@@ -464,6 +506,7 @@ export async function runNflForwardEvidenceWriter(args: {
         directionHomeMarginCorrection: weeklyRawSignal.directionHomeMarginCorrection,
       } : undefined,
       paidTeamScore: paidProjectionShadow,
+      namedSequenceAuthority,
     });
     const { outcome, production } = resolved;
     assertFootballCrossMarketCoherence({
@@ -563,14 +606,8 @@ export async function runNflForwardEvidenceWriter(args: {
     const hasTargetFreePrior = Boolean(paidProjectionShadow) || hasNflV1WeekOneOutcomeForecast(plan.game.providerGameId);
     const contextualEvidenceCapture = buildNflForwardContextCapture({
       payload,
-      captureCurrentBooks: captureBooksWithSharpBooks(
-        payload.market.comparableCurrentBooks,
-        circaAttempt.result?.booksByGame[plan.game.providerGameId] ?? [],
-      ),
-      openingBooks: [
-        ...payload.market.comparableProviderOpeningBooks,
-        ...(captureHistoryBooksByGame.get(plan.game.providerGameId) ?? []),
-      ],
+      captureCurrentBooks: contextCurrentBooks,
+      openingBooks: contextOpeningBooks,
       independentForecast: baseOutcome,
       independentTargetFree: hasTargetFreePrior,
       independentRelease: hasTargetFreePrior
