@@ -207,6 +207,12 @@ inputs, probabilities, projections, grades, promotions/demotions, calibration, p
 or stakes. It exists to prevent mixed model eras, competing writers, accidental board
 flattening, and load spikes.
 
+Every market-reader audit or change must also satisfy
+[`docs/sharp-market-reading-standard.md`](sharp-market-reading-standard.md). The shared standard defines
+evidence identity, chronology, interpretation states, independent-model marriage, upset awareness,
+exact-price actionability, anti-flat-board acceptance, and the required sport-specific adapter. It does
+not authorize one generic cross-sport weight or threshold.
+
 ## Owner-approved provisional exception: NFL cross-market winner coherence r28
 
 On 2026-10-05 Daniel Mengel explicitly directed Oddsphere to repair the sport-specific market

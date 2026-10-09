@@ -44,8 +44,9 @@ async function main() {
     ? stored.filter((row) => row.capturedAt === capturedAt)
       .sort((first, second) => first.payload.game.scheduledStart.localeCompare(second.payload.game.scheduledStart))
     : latestRows(stored);
-  if (selected.length !== 16) {
-    throw new Error(`Expected 16 Week ${week} games${capturedAt ? ` at ${capturedAt}` : ""}; received ${selected.length}.`);
+  const expectedGames = Math.max(0, ...selected.map((row) => row.payload.slateGameCount));
+  if (selected.length !== expectedGames) {
+    throw new Error(`Expected ${expectedGames} Week ${week} games${capturedAt ? ` at ${capturedAt}` : ""}; received ${selected.length}.`);
   }
 
   const candidateFixtureRows: NflForwardStoredEvidence[] = [];
@@ -312,7 +313,10 @@ async function main() {
     };
     });
   });
-  if (rows.length !== 48) throw new Error(`NFL candidate produced ${rows.length}/48 decisions.`);
+  const expectedDecisions = expectedGames * 3;
+  if (rows.length !== expectedDecisions) {
+    throw new Error(`NFL candidate produced ${rows.length}/${expectedDecisions} decisions.`);
+  }
   const previousGrades = count(rows.map((row) => row.previousGrade));
   const grades = count(rows.map((row) => row.grade));
   const previousByMarket = Object.fromEntries(["moneyline", "spread", "total"].map((market) => [
