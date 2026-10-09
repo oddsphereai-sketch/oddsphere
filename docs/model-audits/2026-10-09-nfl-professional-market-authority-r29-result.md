@@ -118,6 +118,38 @@ NFL r29 passes the candidate's direction, score-error, Brier, side-harm, board-c
 target-exclusion, and locked-reader gates on the available data. The audit and production both call
 `buildNflProfessionalMarketAuthority`; there is no parallel scoring rule.
 
+### Final pass / unverifiable matrix
+
+| Requirement | Status | Evidence or boundary |
+|---|---|---|
+| NFL-specific research and market ontology | **Pass** | The NFL profile separates number, no-vig price, hold, timing, source class, key crossings, resistance, and related-market semantics. |
+| Exact event/book/market/side/time provenance | **Pass** | All 65 locks have at least one honest trail in every market; 289 book-level trails are scored per market. |
+| Named-book chronology | **Pass where captured** | Weeks 3-5 provide 32 games with two named trails; Weeks 1-2 predate that capture and are not backfilled. |
+| Weeks 1-2 named-sequence behavior | **Unverifiable** | The needed two-named-book history was not stored. Those weeks contribute only to signal families their evidence can honestly support. |
+| Splits and flow identity | **Pass where captured** | Moneyline/Spread/Total have 21/17/16 named-book split rows and 9/14/26 public-consensus rows. Percentages are never relabeled as dollars, counts, bet size, limits, or bettor identity. |
+| Absolute handle, ticket count, bet size, limits, origin, suspension lifecycle | **Unverifiable / unavailable** | Providers do not supply these fields. Runtime marks them unavailable and gives them no authority. |
+| Same-book number, price, hold, order, persistence, reversal, buyback, breadth, timing, magnitude, and key-crossing analysis | **Pass** | Each family is scored separately across retail/named class, timing and magnitude bins; the audit records 44/20/23 buybacks and 19/47/38 reversals at book-row level for Moneyline/Spread/Total, plus 68 Spread key-crossing rows. |
+| Raw movement as a universal sharp signal | **Fail; correctly rejected** | Unfiltered movement is not consistently beneficial. Production does not follow it blindly and requires market-specific corroboration. |
+| Target-family exclusion | **Pass** | Authority is constructed only inside the evaluated-family exclusion loop. CAR-CLE was removed from credited results when its broad confirmation depended on the target family. |
+| Moneyline/Spread interaction | **Pass on available development evidence** | Standalone Moneyline has three corrections and one harm; requiring separately qualified Spread agreement reduces the applied policy to one correction and zero harms. |
+| Total authority | **Pass on available development evidence** | Four applied corrections and zero harms across 65 locks; standalone qualified Total is 10-4 at +5.1686 exact-price units. The sample is small and selected. |
+| Projection/pick/probability/grade coherence | **Pass** | One rebuilt joint distribution owns final score, all three sides, probabilities, and grades. |
+| Release-pure independent/market interaction | **Pass** | All 65 games retain their historical independent release; 11 release eras are reported separately before aggregation. |
+| Loss, upset, correction, harm, promotion, demotion, and conflict review | **Pass** | The audit contains 149 loss/conflict ledger rows and 20 joint Moneyline/Spread rows, plus every applied change. |
+| Upset-awareness improvement | **Unverifiable** | On the exact 18-lock replay, upset precision/recall remain 75%/33.3%. R29 does not regress them, but this release does not prove a new upset edge. |
+| Final-hour movement after the member lock | **Unavailable by product contract** | T-60 locks are immutable. Post-lock evidence is prohibited from changing a published forecast; r29 makes no claim that final-hour movement is predictive. |
+| Pristine untouched forward hit rate | **Unverifiable** | The historical outcomes were opened during development. The figures reject bad rules and prove deterministic integration, not a guaranteed future rate. |
+| Current-board utility | **Pass operationally** | Zero-write Week 5 produces all 42 evaluations, 18 actionables, and zero held games; the exact historical board moves 23 to 24 with one promotion and zero demotions. |
+| Locked writer/reader immutability | **Pass** | r28/r27 snapshots retain exact stored payload and release identity; regression tests cover writer immutability and reader precedence. |
+| One writer, sport lease, bounded load | **Pass** | The existing writer and `prediction_pipeline:nfl` lease remain authoritative; no new schedule, writer, or per-card call path is added. |
+| Focused and full model safety | **Pass** | NFL production tests, TypeScript, scoped lint, and `npm run verify:model-change` pass; integration safety passes against current `origin/main`. |
+| Protected PR and live runtime proof | **Pending** | The branch is pushed, but no PR has been submitted or merged. It is not live until required checks and post-deploy release/writer/reader/lock verification pass. |
+
+The correct overall label is therefore **provisional professional production candidate**, not “proven
+bulletproof winner.” It is professional in evidence identity, chronology, market interpretation, target
+exclusion, coherent projection construction, and failure behavior. Its long-run predictive lift remains a
+forward result that only future immutable locks can establish.
+
 The product is not omniscient. It cannot read evidence the providers do not supply, and the current cohort
 is too small and too opened to support a bulletproof accuracy guarantee. The professional standard therefore
 requires the same missingness report, release-pure loss ledger, exact target exclusion, current-release
