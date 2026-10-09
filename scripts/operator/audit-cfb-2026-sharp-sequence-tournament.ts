@@ -1995,6 +1995,31 @@ function runProfessionalConfigurationAudit(games: Game[], candidateBase: "active
       professionalAudit: professionalAuditSummary(rows),
     };
   });
+  const jointGuardedNearPickemPolicies = [2.5].map((maximumSpread) => {
+    const guardedGames = modelingGames.map((game) => {
+      const spread = game.targetLines.spread;
+      const legacyChangedWinner = winner(game.authoritative.expectedMarginHome) !== winner(game.independent.expectedMarginHome);
+      const guarded = spread !== null && Math.abs(spread) < maximumSpread && legacyChangedWinner;
+      return guarded ? {
+        ...game,
+        authoritative: {
+          ...game.authoritative,
+          expectedMarginHome: game.independent.expectedMarginHome,
+        },
+      } : game;
+    });
+    const rows = walkForward(
+      detailConfigs.find((config) => config.id === "selected_joint_moneyline_spread_and_total")!.args,
+      guardedGames,
+    );
+    return {
+      id: `joint_moneyline_spread_guarded_legacy_near_pickem_${maximumSpread}`,
+      config: { maximumSpread, comparison: "strictly_less_than" },
+      blocks: configurationBlockSummary(rows),
+      professionalAudit: professionalAuditSummary(rows),
+      bootstrap: clusteredBootstrap(rows),
+    };
+  });
   const corroboratedWinnerGames = modelingGames.map(suppressUncorroboratedLegacyWinnerFlip);
   const corroboratedWinnerRows = walkForward(
     detailConfigs.find((config) => config.id === "selected_reconciliation_and_total")!.args,
@@ -2017,6 +2042,7 @@ function runProfessionalConfigurationAudit(games: Game[], candidateBase: "active
     },
     legacyShortSpreadPolicies,
     guardedNearPickemPolicies,
+    jointGuardedNearPickemPolicies,
     corroboratedWinnerPolicy: {
       id: "spread_only_legacy_layer_cannot_reverse_outright_winner_without_moneyline_corroboration",
       blocks: configurationBlockSummary(corroboratedWinnerRows),
@@ -3795,14 +3821,39 @@ async function main(): Promise<void> {
       },
     });
     if (process.argv.includes("--joint-final-candidate")) {
+      const summarizePolicy = (policy: {
+        id: string;
+        blocks: ReturnType<typeof configurationBlockSummary>;
+        professionalAudit: ReturnType<typeof professionalAuditSummary>;
+      }) => ({
+        id: policy.id,
+        development: policy.blocks.development.candidate,
+        confirmation: policy.blocks.confirmation.candidate,
+        microHoldout: policy.blocks.microHoldout.candidate,
+        all: policy.blocks.all.candidate,
+        byMarket: policy.professionalAudit.byMarket,
+        upset: {
+          all: policy.professionalAudit.upsetEvaluation.all,
+          shortSpread: policy.professionalAudit.upsetEvaluation.shortSpread,
+          changedWinnerCalls: policy.professionalAudit.upsetEvaluation.changedWinnerCalls,
+        },
+      });
+      const baselineExactExportGuard = report.guardedNearPickemPolicies.find((policy) => policy.config.maximumSpread === 2)!;
+      const jointExactExportGuard = report.jointGuardedNearPickemPolicies[0]!;
       console.log(JSON.stringify({
         release: report.release,
         selection: "fixed_lambda_1000_scale_1_from_predeclared_reader_authority_not_retuned_on_confirmation",
-        baseline: compactPolicy(report.corroboratedWinnerPolicy),
+        guardSemantics: "artifact uses absolute spread strictly below 2.5; on the observed half-point ladder this equals at-most-2.0",
+        baseline: summarizePolicy(baselineExactExportGuard),
         jointMoneylineSpread: {
-          ...compactPolicy(report.jointCorroboratedWinnerPolicy),
-          bootstrap: report.jointCorroboratedWinnerPolicy.bootstrap,
+          ...summarizePolicy(jointExactExportGuard),
+          bootstrap: jointExactExportGuard.bootstrap,
         },
+        guardLadder: report.guardedNearPickemPolicies.map((policy) => ({
+          maximumSpread: policy.config.maximumSpread,
+          all: policy.blocks.all.candidate,
+          byMarket: policy.professionalAudit.byMarket,
+        })),
       }, null, 2));
       return;
     }

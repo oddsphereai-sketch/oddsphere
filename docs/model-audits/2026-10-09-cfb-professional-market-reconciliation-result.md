@@ -1,6 +1,7 @@
 # CFB professional market-reconciliation audit — candidate result
 
-Status: audit and candidate implementation complete; **not live and awaiting explicit owner approval**.
+Status: audit complete; the support-aware candidate is implemented, while the final joint
+Moneyline/Spread enhancement is validated but **not implemented or live and awaits explicit owner approval**.
 All database work was read-only. No locked projection, pick, grade, price, stake, or evidence payload
 was rewritten.
 
@@ -69,6 +70,36 @@ Historical locked payloads do not retain the complete PMF or a guaranteed execut
 quote for every candidate flip. Brier/log-loss and exact-price ROI for those flips are therefore not
 claimed or reconstructed. That limitation is preserved rather than papered over.
 
+## Final joint Moneyline/Spread challenge
+
+The final outside-in review found one remaining modeling gap: the margin reader used Moneyline price
+movement, but did not explicitly model Moneyline money share, ticket share, split change, or their
+agreement/resistance with the Spread split and Spread movement. Those features were added to the
+read-only tournament and tested under the exact production path: the same strictly-below-2.5 legacy
+near-pick'em guard, the same fixed lambda and evidence authority, and the same Total reader.
+
+The support-aware baseline and clean joint reader have identical directional results, intervention
+counts, and upset calls: Moneyline 168–50, Spread 73–57–3, Total 82–57; four Moneyline corrections and
+one harm, two Spread corrections and zero harms, and sixteen Total corrections and seven harms. The
+joint reader lowers margin MAE from 12.3108 to 12.2948 and team-score MAE from 9.1910 to 9.1878. Its
+confirmation Moneyline/Spread records remain 62–32 and 38–27–1, and its five-game opened micro-holdout
+remains 4–1 and 3–1. The date-cluster bootstrap estimates a positive margin-MAE reduction in 97.82% of
+resamples; the 95% interval is 0.0111 to 0.8252 points. This is uncertainty evidence, not a promised
+future return.
+
+More aggressive versions were rejected. Letting the development block choose stronger joint authority
+produced 24 Spread flips (13 corrections, 11 harms) and worsened Moneyline to 164–54. The maximum-detail
+book/timing/key-cross version lowered average margin error but worsened Moneyline to 162–56 and Spread
+to 70–60–3. Per-book leadership, price-before-line sequencing, exact move timing, key crossings, and
+buyback therefore remain observed audit context; they do not receive unvalidated automatic projection
+authority. This is deliberate evidence calibration, not omission or generic threshold following.
+
+The requested production change is consequently narrow: retain separate Moneyline money, tickets,
+gap, and acceleration features; combine them continuously with Spread splits and price/line movement;
+let agreement strengthen and disagreement resist the posterior; keep missing splits neutral; and keep
+the already validated authority level. It does not authorize the rejected aggressive or maximum-detail
+variants.
+
 ## Product and safety behavior
 
 - Margin and Total changes are applied to the joint score PMF before scores, probabilities, sides,
@@ -106,6 +137,7 @@ reverse-line movement and mechanical following are not stable standalone edges:
 - [Reverse line movement in college football totals](https://ideas.repec.org/a/spr/jecfin/v43y2019i4d10.1007_s12197-019-09479-3.html)
 - [College football bettors and the wisdom of crowds](https://dialnet.unirioja.es/servlet/articulo?codigo=7186574)
 - [Intraperiod line changes and forecast accuracy](https://onlinelibrary.wiley.com/doi/abs/10.1111/0022-1082.155346)
+- [Joint team-total and point-spread information for predicting college-football scores](https://doi.org/10.1177/15270025221148991)
 
 The reproducible read-only audit is
 `scripts/operator/audit-cfb-2026-sharp-sequence-tournament.ts`.
