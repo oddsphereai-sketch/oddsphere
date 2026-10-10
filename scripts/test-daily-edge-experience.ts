@@ -85,6 +85,10 @@ const dailyEdgeApiSource = readFileSync(
   "app/api/lab/daily-edge/route.ts",
   "utf8",
 );
+const candidatePageSource = readFileSync(
+  "app/dev/experience-preview/previewData.ts",
+  "utf8",
+);
 const legacyDailyEdgeSource = readFileSync(
   "app/lab/components/daily-edge/DailyEdgeShell.tsx",
   "utf8",
@@ -822,6 +826,30 @@ check(
     dailyEdgeApiSource.includes("A stale snapshot is still the intentionally retained last-known-good"),
 );
 check(
+  "daily-sport member pages read the sole-writer snapshot without cold-loading the full assembler",
+  candidatePageSource.includes("export async function loadPublishedDailyEdgeSnapshot") &&
+    candidatePageSource.includes("readLabResponseSnapshot<DailyEdgeResponse>(snapshotKey, \"fresh\")") &&
+    candidatePageSource.includes("readLabResponseSnapshot<DailyEdgeResponse>(snapshotKey, \"stale\")") &&
+    candidatePageSource.includes('await import("@/app/api/lab/daily-edge/route")') &&
+    candidatePageSource.includes("finalizeDailyEdgeResponseCoherence(structuredClone(selected.payload))") &&
+    !candidatePageSource.includes('import { GET as getDailyEdge } from "@/app/api/lab/daily-edge/route"') &&
+    candidateMemberPageSource.includes("loadPublishedDailyEdgeSnapshot(sport)") &&
+    candidateMemberPageSource.includes('sport === "mlb" || sport === "nba" || sport === "nhl" || sport === "wnba"'),
+);
+check(
+  "an adapted-sport snapshot missing only derived presentation metadata remains a fast immutable read",
+  dailyEdgeApiSource.includes("if (snapshot && !snapshot.payload.memberPresentation)") &&
+    dailyEdgeApiSource.includes("buildDailyEdgeMemberPresentation(snapshot.payload)") &&
+    dailyEdgeApiSource.includes("explicit older") &&
+    dailyEdgeApiSource.includes("const recoveredPayload = !rolloverFallback && presentationOutdated"),
+);
+check(
+  "a cold daily-sport read failure cannot be mislabeled as a no-games slate",
+  candidateDailyEdgeSource.includes('displaySnapshot.slateState === "temporarily_unavailable"') &&
+    candidateDailyEdgeSource.includes("function DailySlateEvidenceUnavailable") &&
+    candidateDailyEdgeSource.includes("this does not mean today has no games"),
+);
+check(
   "source-aware loading protects current Sharp rows from the per-event history cap",
   dailyEdgeApiSource.includes("const [currentSharpResult, ...historyResults]") &&
     dailyEdgeApiSource.includes('.eq("provider", "sharpapi")') &&
@@ -1061,10 +1089,6 @@ const footballEvidenceSource = readFileSync(
   "utf8",
 );
 const sportSwitchSource = readFileSync("app/lab/lib/dailyEdgeSportSwitch.ts", "utf8");
-const candidatePageSource = readFileSync(
-  "app/dev/experience-preview/previewData.ts",
-  "utf8",
-);
 const availabilityRouteSource = readFileSync(
   "app/api/lab/daily-edge-availability/route.ts",
   "utf8",

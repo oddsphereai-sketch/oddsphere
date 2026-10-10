@@ -1,8 +1,20 @@
 import { unstable_cache } from "next/cache";
-import { GET as getDailyEdge } from "@/app/api/lab/daily-edge/route";
 import type { DailyEdgeResponse, SlateState } from "@/app/lab/lib/labTypes";
+import { DAILY_EDGE_MEMBER_PRESENTATION_RELEASE_ID } from "@/app/lab/lib/dailyEdgeMarketPresentation";
+import { finalizeDailyEdgeResponseCoherence } from "@/app/lab/lib/dailyEdgeResponseCoherence";
 import type { Sport } from "@/lib/types/domain/Sport";
 import { supabase } from "@/lib/db/supabase";
+import {
+  currentDailyEdgeBoardDate,
+  currentSlateDate,
+  currentSoccerBoardDate,
+  previousReadyBoardDate,
+} from "@/lib/dates/slateDate";
+import {
+  dailyEdgeSnapshotKey,
+  readLabResponseSnapshot,
+  readLatestLabResponseSnapshot,
+} from "@/lib/services/labResponseSnapshots";
 import type {
   PreviewHistoryByTeam,
   PreviewPitcherFirstInningByGame,
@@ -21,11 +33,72 @@ export async function loadDailyEdgeSnapshot(
   // The founder hub can explicitly request a fresh, read-only contract
   // assembly for in-season slates so new additive DTO evidence can be reviewed
   // before the stored member snapshot is republished at cutover.
+  // Keep the full contract assembler out of the member page's cold-start
+  // module graph. It is intentionally loaded only by explicit preview/review
+  // callers and the scheduled snapshot writer.
+  const { GET: getDailyEdge } = await import("@/app/api/lab/daily-edge/route");
   const response = await getDailyEdge(
     new Request(`http://localhost/api/lab/daily-edge?${params.toString()}`),
   );
   if (!response.ok) throw new Error(`Daily Edge snapshot unavailable (${response.status})`);
   return (await response.json()) as DailyEdgeResponse;
+}
+
+function publishedDailyEdgeDate(sport: Sport, explicitDate?: string): string {
+  if (explicitDate) return explicitDate;
+  if (sport === "soccer" || sport === "ucl") return currentSoccerBoardDate();
+  if (sport === "mlb" || sport === "nba" || sport === "nhl" || sport === "wnba") {
+    return currentDailyEdgeBoardDate(sport);
+  }
+  return currentSlateDate(sport);
+}
+
+/**
+ * Read the sole-writer member artifact directly instead of importing and
+ * invoking the full Daily Edge assembler inside a page request. This keeps a
+ * cold NHL server function from spending the page's eight-second availability
+ * budget loading every model/provider dependency before it reaches the stored
+ * 14-game response.
+ */
+export async function loadPublishedDailyEdgeSnapshot(
+  sport: Sport,
+  date?: string,
+): Promise<DailyEdgeResponse> {
+  const requestedDate = publishedDailyEdgeDate(sport, date);
+  const snapshotKey = dailyEdgeSnapshotKey({
+    sport,
+    requestedDate,
+    allowStale: false,
+    copyPreview: false,
+  });
+  const fresh = await readLabResponseSnapshot<DailyEdgeResponse>(snapshotKey, "fresh");
+  const stored = fresh ?? await readLabResponseSnapshot<DailyEdgeResponse>(snapshotKey, "stale");
+  let selected = stored;
+
+  if (!selected && !date && (sport === "mlb" || sport === "nba" || sport === "nhl" || sport === "wnba")) {
+    const fallbackDate = previousReadyBoardDate({ sport, requestedDate });
+    if (fallbackDate) {
+      selected = await readLatestLabResponseSnapshot<DailyEdgeResponse>(dailyEdgeSnapshotKey({
+        sport,
+        requestedDate: fallbackDate,
+        allowStale: false,
+        copyPreview: false,
+      }));
+    }
+  }
+
+  if (!selected) {
+    throw new Error(`Published Daily Edge snapshot unavailable (${sport} ${requestedDate})`);
+  }
+  const storedPresentationRelease = selected.payload.memberPresentation?.releaseId;
+  if (storedPresentationRelease && storedPresentationRelease !== DAILY_EDGE_MEMBER_PRESENTATION_RELEASE_ID) {
+    throw new Error(`Published Daily Edge snapshot contract is outdated (${sport} ${requestedDate})`);
+  }
+  // Older adapted-sport writers did not persist the derived presentation
+  // envelope. Rebuild only that read-time envelope on an isolated payload;
+  // the stored game, lock, projection, probability, pick, grade, and evidence
+  // tuples remain untouched and authoritative.
+  return finalizeDailyEdgeResponseCoherence(structuredClone(selected.payload));
 }
 
 export const loadCachedFreshContractSnapshot = unstable_cache(

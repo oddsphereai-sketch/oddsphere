@@ -3,6 +3,7 @@ import type { DailyEdgeResponse } from "@/app/lab/lib/labTypes";
 import {
   emptyPreviewSnapshot,
   loadDailyEdgeSnapshot,
+  loadPublishedDailyEdgeSnapshot,
   loadPitcherFirstInningHistory,
   loadTeamHistory,
 } from "@/app/dev/experience-preview/previewData";
@@ -199,10 +200,13 @@ export default async function CandidateDailyEdgePage({
   } else if (eplRequested || uclRequested) {
     snapshot = emptyPreviewSnapshot(sport);
   } else {
+    const publishedSnapshotOnly = sport === "mlb" || sport === "nba" || sport === "nhl" || sport === "wnba";
     const result = await readMemberDataWithDeadline({
       label: `${sport}-daily-edge-snapshot`,
       fallback: emptyPreviewSnapshot(sport, "temporarily_unavailable"),
-      read: () => loadDailyEdgeSnapshot(sport),
+      read: () => publishedSnapshotOnly
+        ? loadPublishedDailyEdgeSnapshot(sport)
+        : loadDailyEdgeSnapshot(sport),
     });
     snapshot = result.value;
     snapshotUnavailable = result.unavailable;

@@ -101,7 +101,10 @@ import type {
   SharpSignalDto,
   SharpStatus,
 } from "@/app/lab/lib/labTypes";
-import { finalizeDailyEdgeResponseCoherence } from "@/app/lab/lib/dailyEdgeResponseCoherence";
+import {
+  buildDailyEdgeMemberPresentation,
+  finalizeDailyEdgeResponseCoherence,
+} from "@/app/lab/lib/dailyEdgeResponseCoherence";
 import { DAILY_EDGE_MEMBER_PRESENTATION_RELEASE_ID } from "@/app/lab/lib/dailyEdgeMarketPresentation";
 import {
   marketVerdictFor,
@@ -6812,6 +6815,14 @@ export async function GET(request: Request) {
           rolloverFallback = true;
         }
       }
+    }
+    // NBA/WNBA/NHL adapted-sport snapshots historically omitted only the
+    // derived member-presentation envelope. That omission is not permission
+    // to reject and synchronously rebuild an otherwise complete immutable
+    // game payload. Fill the count/release envelope in memory; explicit older
+    // release ids still fail closed and recover through the established path.
+    if (snapshot && !snapshot.payload.memberPresentation) {
+      snapshot.payload.memberPresentation = buildDailyEdgeMemberPresentation(snapshot.payload);
     }
     const presentationOutdated =
       snapshot?.payload.memberPresentation?.releaseId !==
