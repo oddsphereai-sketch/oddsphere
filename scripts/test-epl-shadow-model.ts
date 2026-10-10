@@ -486,7 +486,7 @@ assert.match(lockRoute, /findEplGamesEnteringLock/);
 assert.match(lockRoute, /predictions\.priorTuplesLocked[\s\S]*prior_priced_tuples_locked:\s*predictions\.priorTuplesLocked/, "fallback locks must count as writes and remain visible in cron telemetry");
 assert.match(memberStore, /current-week/);
 assert.match(memberStore, /readLatestLabResponseSnapshot/, "EPL reads need a bounded emergency fallback when a valid weekly snapshot outlives its cache deadline");
-assert.match(memberStore, /epl_member_snapshot_lifecycle_2026_09_20_r3_verified_locked_record_reconstruction/, "EPL continuity behavior must carry its own immutable lifecycle release");
+assert.match(memberStore, /epl_member_snapshot_lifecycle_2026_10_10_r4_cross_release_locked_record_reconstruction/, "EPL continuity behavior must carry its own immutable lifecycle release");
 for (const route of [refreshRoute, lockRoute]) {
   assert.match(route, /reconstructVerifiedEplLockedGames/, "every EPL publisher must reconstruct due locked games from the verified four-market DB cohort");
   assert.match(route, /authoritativeLockedProviderIds:\s*lockVerification\.completeProviderIds/, "only DB-verified locked games may replace a prior locked member card");

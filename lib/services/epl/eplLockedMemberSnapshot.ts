@@ -109,37 +109,56 @@ export async function reconstructVerifiedEplLockedGames(input: {
     .not("locked_at", "is", null);
   if (error) throw new Error(`verify EPL all-market locks: ${error.message}`);
 
-  const rowsByProvider = new Map<number, Map<string, EplLockedRecord>>();
+  const cohortsByProvider = new Map<number, Map<string, Map<string, EplLockedRecord>>>();
   for (const row of (data ?? []) as EplLockedRecord[]) {
     const providerId = row.external_id - EPL_EXTERNAL_ID_OFFSET;
     const snapshot = row.snapshot_json as Record<string, unknown> | null;
     const capturedMarket = memberMarketAtCapture(row);
-    const exactAuthority = row.model_version === input.modelRelease
-      && row.calibration_version === input.calibrationRelease
+    // A locked row remains authoritative under the release that created it.
+    // A later unlocked calibration must never make that immutable cohort
+    // unreadable or require it to masquerade as the new release.
+    const exactAuthority = row.model_version === snapshot?.model_release
+      && row.calibration_version === snapshot?.calibration_release
       && snapshot?.competition === EPL_COMPETITION;
     if (!row.locked_at || !exactAuthority || !capturedMarket || !memberMarketMatchesRecord(capturedMarket, row)) continue;
-    const marketRows = rowsByProvider.get(providerId) ?? new Map<string, EplLockedRecord>();
+    const releaseKey = `${row.model_version}\u0000${row.calibration_version}`;
+    const cohorts = cohortsByProvider.get(providerId) ?? new Map<string, Map<string, EplLockedRecord>>();
+    const marketRows = cohorts.get(releaseKey) ?? new Map<string, EplLockedRecord>();
     const existing = marketRows.get(row.market);
     if (!existing || Date.parse(row.locked_at) > Date.parse(existing.locked_at ?? "")) {
       marketRows.set(row.market, row);
     }
-    rowsByProvider.set(providerId, marketRows);
+    cohorts.set(releaseKey, marketRows);
+    cohortsByProvider.set(providerId, cohorts);
   }
 
-  const completeProviderIds = providerIds.filter((providerId) => {
-    const rows = rowsByProvider.get(providerId);
-    if (!rows || !EPL_LOCK_MARKETS.every((market) => rows.has(market))) return false;
-    const projections = EPL_LOCK_MARKETS.map((market) => memberProjectionAtCapture(rows.get(market)!));
-    return projections.every((projection) => projection !== null)
-      && projections.every((projection) => canonicalJson(projection) === canonicalJson(projections[0]));
-  });
+  const selectedRowsByProvider = new Map<number, Map<string, EplLockedRecord>>();
+  for (const providerId of providerIds) {
+    const completeCohorts = [...(cohortsByProvider.get(providerId)?.values() ?? [])]
+      .filter((rows) => {
+        if (!EPL_LOCK_MARKETS.every((market) => rows.has(market))) return false;
+        const projections = EPL_LOCK_MARKETS.map((market) => memberProjectionAtCapture(rows.get(market)!));
+        return projections.every((projection) => projection !== null)
+          && projections.every((projection) => canonicalJson(projection) === canonicalJson(projections[0]));
+      })
+      // The first complete immutable lock is the public record. A later release
+      // may coexist in storage, but cannot supersede an earlier valid cohort.
+      .sort((left, right) => {
+        const leftLockedAt = Math.max(...[...left.values()].map((row) => Date.parse(row.locked_at ?? "")));
+        const rightLockedAt = Math.max(...[...right.values()].map((row) => Date.parse(row.locked_at ?? "")));
+        return leftLockedAt - rightLockedAt;
+      });
+    if (completeCohorts[0]) selectedRowsByProvider.set(providerId, completeCohorts[0]);
+  }
+
+  const completeProviderIds = providerIds.filter((providerId) => selectedRowsByProvider.has(providerId));
   const complete = new Set(completeProviderIds);
   const lockedResponse: DailyEdgeResponse = {
     ...input.response,
     games: input.response.games.map((game) => {
       const providerId = Number(game.external_id);
       if (!complete.has(providerId)) return game;
-      const rows = rowsByProvider.get(providerId)!;
+      const rows = selectedRowsByProvider.get(providerId)!;
       const captured = (market: typeof EPL_LOCK_MARKETS[number]) => memberMarketAtCapture(rows.get(market)!)!;
       const anchor = rows.get("match_result")!;
       const anchorSnapshot = anchor.snapshot_json as Record<string, unknown>;

@@ -48,6 +48,8 @@ function record(marketName: keyof typeof captured, id: number) {
     locked_at: "2026-09-20T12:01:02.873Z",
     snapshot_json: {
       competition: EPL_COMPETITION,
+      model_release: modelRelease,
+      calibration_release: calibrationRelease,
       member_market_at_capture: value,
       member_projection_at_capture: projection,
       model_provenance: { release: modelRelease },
@@ -117,6 +119,38 @@ assert.equal(verified.lockedResponse.games[0]?.soccerDoubleChanceMarket?.current
 assert.equal(verified.lockedResponse.games[0]?.markets.total.currentPriceAmerican, -188);
 assert.equal(verified.lockedResponse.games[0]?.markets.first_inning.currentPriceAmerican, -211);
 assert.deepEqual(verified.lockedResponse.games[0]?.soccerProjection, projection);
+
+const crossReleaseVerified = await reconstructVerifiedEplLockedGames({
+  providerIds: [providerId],
+  modelRelease: "test-epl-model-next",
+  calibrationRelease: "test-epl-calibration-next",
+  response,
+}, verificationClient(rows));
+assert.deepEqual(crossReleaseVerified.completeProviderIds, [providerId]);
+assert.deepEqual(crossReleaseVerified.incompleteProviderIds, []);
+assert.equal(crossReleaseVerified.lockedResponse.games[0]?.markets.moneyline.currentPriceAmerican, 127);
+assert.equal(crossReleaseVerified.lockedResponse.games[0]?.markets.total.currentPriceAmerican, -188);
+
+const nextReleaseRows = rows.slice(2).map((row, index) => ({
+  ...row,
+  id: 100 + index,
+  model_version: "test-epl-model-next",
+  calibration_version: "test-epl-calibration-next",
+  snapshot_json: {
+    ...row.snapshot_json,
+    model_release: "test-epl-model-next",
+    calibration_release: "test-epl-calibration-next",
+  },
+}));
+const mixedIncomplete = await reconstructVerifiedEplLockedGames({
+  providerIds: [providerId],
+  modelRelease: "test-epl-model-next",
+  calibrationRelease: "test-epl-calibration-next",
+  response,
+}, verificationClient([...rows.slice(0, 2), ...nextReleaseRows]));
+assert.deepEqual(mixedIncomplete.completeProviderIds, []);
+assert.deepEqual(mixedIncomplete.incompleteProviderIds, [providerId]);
+assert.equal(mixedIncomplete.lockedResponse.games[0]?.markets.moneyline.currentPriceAmerican, null);
 
 const incomplete = await reconstructVerifiedEplLockedGames({
   providerIds: [providerId], modelRelease, calibrationRelease, response,
