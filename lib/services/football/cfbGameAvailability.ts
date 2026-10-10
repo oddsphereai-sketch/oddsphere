@@ -1,7 +1,31 @@
 import type { PlaybookInjuryTeamRow } from "@/lib/providers/playbook/types";
 import type { DailyEdgeGameAvailability, DailyEdgeTeamAvailability } from "@/lib/services/dailyEdge/gameAvailability";
 import type { NcaafGame } from "./balldontlieNcaafSlate";
+import type { CfbForwardStoredEvidence } from "./cfbForwardEvidence";
 import { matchCfbPlaybookTeam } from "./cfbPlaybookEvidence";
+
+/**
+ * Select the newest verified exact-game report from the complete bounded
+ * evidence history. The newest evidence row is allowed to have no report: a
+ * failed or omitted provider refresh must not erase an older verified report.
+ */
+export function latestVerifiedCfbGameAvailabilityByGame(
+  rows: readonly CfbForwardStoredEvidence[],
+): Map<string, DailyEdgeGameAvailability> {
+  const latest = new Map<string, { report: DailyEdgeGameAvailability; reportAt: number; capturedAt: number }>();
+  for (const row of rows) {
+    const report = row.payload.availability.report ?? null;
+    if (!report || report.eventId !== row.providerGameId || report.teams.length !== 2) continue;
+    const reportAt = timestamp(report.reportUpdatedAt) ?? timestamp(report.reportDate) ?? timestamp(row.capturedAt);
+    const capturedAt = timestamp(row.capturedAt);
+    if (reportAt === null || capturedAt === null) continue;
+    const current = latest.get(row.providerGameId);
+    if (!current || reportAt > current.reportAt || (reportAt === current.reportAt && capturedAt > current.capturedAt)) {
+      latest.set(row.providerGameId, { report, reportAt, capturedAt });
+    }
+  }
+  return new Map([...latest].map(([gameId, selected]) => [gameId, selected.report]));
+}
 
 export function buildCfbGameAvailability(args: {
   game: NcaafGame;
@@ -76,5 +100,9 @@ function toPlaybookTeam(team: NcaafGame["away"], row: PlaybookInjuryTeamRow): Da
 
 function latestIso(values: string[]): string | null {
   return values.sort((first, second) => Date.parse(second) - Date.parse(first))[0] ?? null;
+}
+function timestamp(value: string | null | undefined): number | null {
+  const parsed = Date.parse(value ?? "");
+  return Number.isFinite(parsed) ? parsed : null;
 }
 function validIso(value: string | null | undefined): string | null { return value && Number.isFinite(Date.parse(value)) ? new Date(value).toISOString() : null; }

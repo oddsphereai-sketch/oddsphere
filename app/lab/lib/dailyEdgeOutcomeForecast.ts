@@ -17,10 +17,10 @@ export function dailyEdgeMarketPredictionProvenanceLabel(market: MarketEdgeDto):
   if (!prediction) return null;
   if (prediction.status === "market_data_unavailable") return null;
   if (prediction.source === "playbook_consensus") {
-    return "Consensus prediction line · context only, not an available sportsbook offer";
+    return "Prediction uses the consensus reference line · displayed sportsbook price is graded separately";
   }
   if (prediction.source === "model_at_context_line") {
-    return "Model prediction at the current context line · not an available sportsbook offer";
+    return "Prediction uses the displayed line as scoring context · sportsbook price is graded separately";
   }
   if (prediction.source === "model_at_exact_book_line") {
     return "Model prediction at the displayed exact sportsbook line";

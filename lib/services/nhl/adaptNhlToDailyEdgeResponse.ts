@@ -386,6 +386,10 @@ function buildMarketEdge(opts: {
         : null;
   const marketImpliedDecimal =
     bundle.priceAmerican !== null ? americanToImplied(bundle.priceAmerican) : null;
+  const whyLine = market.notes.join(" ") || (held ? "The model is passing this market." : `The NHL projection favors ${market.pick}.`);
+  const riskLine = priceComplete
+    ? "The Bet Grade is tied to this exact line and price; a materially worse number can remove the edge."
+    : "A complete current sportsbook quote is required before this market can become actionable.";
   return {
     pick: market.pick,
     confidence: market.confidence,
@@ -396,9 +400,9 @@ function buildMarketEdge(opts: {
     held,
     verdict: { key: verdict, label: verdictLabelFromKey(verdict) },
     guidedGuide: held ? "Model is not picking this market tonight." : `Model lean: ${market.pick}`,
-    guidedWatchOut: market.notes[0] ?? "",
-    whyLine: market.notes.slice(1).join(" ") || (market.notes[0] ?? ""),
-    riskLine: "",
+    guidedWatchOut: riskLine,
+    whyLine,
+    riskLine,
     modelProb: market.probability,
     marketFairProb: fairProb,
     pinnacleEvPct: bundle.pinnacleEvPct,

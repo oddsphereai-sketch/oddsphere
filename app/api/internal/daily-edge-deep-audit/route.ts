@@ -61,6 +61,13 @@ async function loadAuditBoard(sport: Sport, origin: string): Promise<unknown> {
     const published = await loadPublishedFootballBoard(sport);
     if (published) return published;
   }
+  if (sport === "soccer") {
+    const { readCurrentEplMemberSnapshot } = await import(
+      "@/lib/services/epl/eplMemberSnapshotStore"
+    );
+    const published = await readCurrentEplMemberSnapshot();
+    if (published) return structuredClone(published);
+  }
 
   const { GET: dailyEdgeGet } = await import("@/app/api/lab/daily-edge/route");
   const response = await dailyEdgeGet(new Request(`${origin}/api/lab/daily-edge?sport=${sport}`));

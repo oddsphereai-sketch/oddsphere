@@ -412,6 +412,8 @@ assert.match(previewReader, /Market-informed goal outlook/);
 assert.match(previewReader, /Context · separate heads/);
 assert.match(previewReader, /Same model · Match Result/);
 assert.match(previewReader, /Recovered from Match Result head/);
+assert.match(previewReader, /const boardScoreMarketKey:[\s\S]*?matchResultScoreOutlook\(game, game\.markets\.moneyline\)[\s\S]*?\? "moneyline"/, "the compact soccer card must lead with the Match Result score head even when Total or BTTS has the strongest grade");
+assert.match(previewReader, /boardScoreMarketKey === "moneyline" \? "Mode" : "Illustration"/, "the compact card must label the Match Result modal score as the mode rather than a market-specific illustration");
 assert.match(previewReader, /projection\.matchResultOutlook\s*\?\?\s*lockedLegacyScoreOutlook\(game\)\s*\?\?/, "an immutable legacy lock score must win before a probability reconstruction");
 assert.match(previewReader, /Exact value stored at lock/);
 assert.match(previewReader, /This is the exact score projection stored in the immutable member snapshot at lock/);

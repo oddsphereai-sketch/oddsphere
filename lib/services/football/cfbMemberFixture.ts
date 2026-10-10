@@ -61,6 +61,7 @@ import {
   CFB_FORWARD_TRANSITION_PREVIOUS_MEMBER_RELEASE,
   CFB_FORWARD_MEMBER_RELEASE,
   CFB_FORWARD_INJURY_CONTRACT_PREVIOUS_MEMBER_RELEASE,
+  CFB_FORWARD_PROVIDER_CONTINUITY_PREVIOUS_MEMBER_RELEASE,
   CFB_FORWARD_PROVIDER_FEED_PREVIOUS_MEMBER_RELEASE,
   isCfbPublishedT60AccuracyLockPayload,
   CFB_FORWARD_PUBLICATION_PREVIOUS_MEMBER_RELEASE,
@@ -107,9 +108,9 @@ import { cfbTeamIdentity } from "./cfbTeamIdentity";
 import { CFB_PUBLIC_SCORE_DIRECTION_TOLERANCE_POINTS } from "./footballCrossMarketCoherence";
 
 export const CFB_MEMBER_FIXTURE_RELEASE =
-  "cfb_v1_member_fixture_2026_10_09_r85_provider_continuity_board_retention" as const;
+  "cfb_v1_member_fixture_2026_10_10_r86_last_known_injury_report_continuity" as const;
 export const CFB_PUBLIC_OUTCOME_CONTRACT_RELEASE =
-  "cfb_market_sharp_public_outcome_contract_2026_10_09_r75_provider_continuity_board_retention" as const;
+  "cfb_market_sharp_public_outcome_contract_2026_10_10_r76_last_known_injury_report_continuity" as const;
 export const CFB_MEMBER_GAME_LIFECYCLE_RELEASE =
   "cfb_member_game_lifecycle_2026_10_09_r1_3am_locked_game_retention" as const;
 export const CFB_CONTEXT_ONLY_QUOTE_CAPTURE_SKEW_MS = 5_000 as const;
@@ -799,19 +800,48 @@ export function selectLatestCfbMemberEvidenceRows(
       )
     : null;
   const injuryContractPreviousAuthority = injuryContractPrevious ?? injuryContractPreviousBoundary ?? injuryContractPreviousLockOverlay ?? providerFeedPreviousAuthority;
+  const providerContinuityPrevious = completeRowsForRelease(
+    rows,
+    CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE,
+    CFB_FORWARD_PROVIDER_CONTINUITY_PREVIOUS_MEMBER_RELEASE,
+    CFB_V1_DECISION_RELEASE,
+  );
+  const providerContinuityPreviousBoundary = injuryContractPreviousAuthority
+    ? immutableBoundaryTransitionRows(
+        rows,
+        now,
+        CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE,
+        CFB_FORWARD_PROVIDER_CONTINUITY_PREVIOUS_MEMBER_RELEASE,
+        CFB_V1_DECISION_RELEASE,
+        injuryContractPreviousAuthority,
+      )
+    : null;
+  const providerContinuityPreviousLockOverlay = injuryContractPreviousAuthority
+    ? immutableLockOverlayRows(
+        rows,
+        CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE,
+        CFB_FORWARD_PROVIDER_CONTINUITY_PREVIOUS_MEMBER_RELEASE,
+        CFB_V1_DECISION_RELEASE,
+        injuryContractPreviousAuthority,
+      )
+    : null;
+  const providerContinuityPreviousAuthority = providerContinuityPrevious ?? providerContinuityPreviousBoundary ?? providerContinuityPreviousLockOverlay ?? injuryContractPreviousAuthority;
   const current = completeRowsForRelease(rows, CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE, CFB_FORWARD_MEMBER_RELEASE, CFB_V1_DECISION_RELEASE);
   if (current) return current;
-  const immutableBoundaryTransition = injuryContractPreviousAuthority
+  const immutableBoundaryTransition = providerContinuityPreviousAuthority
     ? immutableBoundaryTransitionRows(
         rows,
         now,
         CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE,
         CFB_FORWARD_MEMBER_RELEASE,
         CFB_V1_DECISION_RELEASE,
-        injuryContractPreviousAuthority,
+        providerContinuityPreviousAuthority,
       )
     : null;
   if (immutableBoundaryTransition) return immutableBoundaryTransition;
+  if (providerContinuityPrevious) return providerContinuityPrevious;
+  if (providerContinuityPreviousBoundary) return providerContinuityPreviousBoundary;
+  if (providerContinuityPreviousLockOverlay) return providerContinuityPreviousLockOverlay;
   if (injuryContractPrevious) return injuryContractPrevious;
   if (injuryContractPreviousBoundary) return injuryContractPreviousBoundary;
   if (injuryContractPreviousLockOverlay) return injuryContractPreviousLockOverlay;

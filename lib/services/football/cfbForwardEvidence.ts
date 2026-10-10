@@ -86,8 +86,10 @@ export const CFB_FORWARD_LEGACY_EVIDENCE_SCHEMA_RELEASE =
 export const CFB_FORWARD_INITIAL_EVIDENCE_SCHEMA_RELEASE =
   "cfb_forward_evidence_snapshot_2026_08_25_r1" as const;
 export const CFB_FORWARD_EVIDENCE_COLLECTOR_RELEASE =
-  "cfb_forward_evidence_collector_2026_10_09_r56_provider_continuity_board_retention" as const;
+  "cfb_forward_evidence_collector_2026_10_10_r57_last_known_injury_report_continuity" as const;
 export const CFB_FORWARD_MEMBER_RELEASE =
+  "cfb_v1_member_release_2026_10_10_r60_last_known_injury_report_continuity" as const;
+export const CFB_FORWARD_PROVIDER_CONTINUITY_PREVIOUS_MEMBER_RELEASE =
   "cfb_v1_member_release_2026_10_09_r59_provider_continuity_board_retention" as const;
 export const CFB_FORWARD_INJURY_CONTRACT_PREVIOUS_MEMBER_RELEASE =
   "cfb_v1_member_release_2026_10_09_r58_provider_feed_continuity" as const;

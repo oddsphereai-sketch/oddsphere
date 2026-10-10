@@ -375,7 +375,7 @@ check(
 check(
   "consensus prediction line is explicitly contextual rather than an available sportsbook offer",
   dailyEdgeMarketPredictionProvenanceLabel(footballSpreadMarketPrediction) ===
-    "Consensus prediction line · context only, not an available sportsbook offer",
+    "Prediction uses the consensus reference line · displayed sportsbook price is graded separately",
 );
 const opposingFootballTotalAxes = {
   ...structuredClone(chcTotalForecastMarket),
@@ -1427,7 +1427,7 @@ check(
     candidateSource.includes('chip: "Split sources disagree"') &&
     candidateSource.includes("Public consensus money leans") &&
     candidateSource.includes("sharp-book split snapshot leans") &&
-    candidateSource.includes("effectively flat"),
+    candidateSource.includes("no meaningful directional edge was verified"),
 );
 check(
   "retained split values keep freshness internal without member-facing stale or historical copy",
@@ -1711,7 +1711,7 @@ check(
 check(
   "a context-only CFB line never promises missing sportsbook odds",
   DAILY_EDGE_MEMBER_PRESENTATION_RELEASE_ID ===
-    "daily_edge_member_presentation_2026_10_08_r24_mlb_fi_opening_continuity" &&
+    "daily_edge_member_presentation_2026_10_10_r25_cross_sport_copy_coherence" &&
     candidateSource.includes("Sportsbook odds unavailable") &&
     candidateSource.includes("Consensus line only") &&
     candidateSource.includes("No eligible named-book American price was captured") &&

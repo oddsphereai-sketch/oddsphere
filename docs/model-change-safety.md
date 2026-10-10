@@ -1,5 +1,36 @@
 # Model change safety protocol
 
+## Owner-approved correctness exception: CFB last-known injury-report continuity
+
+On 2026-10-10 Daniel Mengel explicitly directed Oddsphere to stop a failed or
+omitted College Football injury refresh from making the last verified report
+disappear, to update when a genuinely newer report arrives, and to publish the
+repair without disturbing the professional market reader. This exception is
+limited to the release family and evidence in
+`docs/model-audits/2026-10-10-cfb-last-known-injury-report-continuity.md`.
+
+The sole CFB writer may select the newest verified report for the exact same
+provider game from its already bounded evidence history rather than consulting
+only the newest row. A later null, failed, omitted, or older refresh cannot
+erase it; a newer verified report, including a verified clear report, replaces
+it while retaining the provider's original timestamp. Missing evidence remains
+unavailable, and team/game identity may not be inferred. The independent model,
+professional market reader, prices, probabilities, grades, stakes, cadence,
+sole writer, and shared `prediction_pipeline:cfb` lease are unchanged. A
+credential-backed replay proved that Playbook's CFB lines and splits work while
+`/v1/injuries` returns HTTP 404 for CFB, so the writer no longer makes that
+unsupported request; its bounded maximum falls by one. The existing
+official-conference collector remains the current injury source. Existing
+locked records remain immutable.
+
+Publication requires the focused CFB suite, full model-change verification,
+same-input board-impact reporting, current-main integration safety, protected
+PR checks, and post-deploy proof of the release tuple, sole lease, board and
+score coherence, provider/report status, retained timestamps, and unchanged
+locks. Roll back future unlocked publication to the October 9 r59 family on a
+mixed release, identity mismatch, newer-report suppression, board collapse,
+writer overlap, reader failure, or lock mutation.
+
 ## Owner-approved correctness exception: football provider-feed continuity
 
 On 2026-10-09 Daniel Mengel explicitly approved publishing the completed

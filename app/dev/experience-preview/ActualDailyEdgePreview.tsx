@@ -1713,7 +1713,7 @@ function coherentMovementSummary(market: MarketEdgeDto, movement: CoherentMoveme
   }
   const line = movement.currentLine ?? market.line;
   const lineCopy = line === null ? "" : ` at ${formatNumber(line)}`;
-  if (direction === "neutral") return `${book}moved from ${formatAmerican(movement.open)} to ${formatAmerican(movement.current)}${lineCopy}; effectively flat.`;
+  if (direction === "neutral") return `${book}moved from ${formatAmerican(movement.open)} to ${formatAmerican(movement.current)}${lineCopy}; no meaningful directional edge was verified.`;
   return `${book}moved from ${formatAmerican(movement.open)} to ${formatAmerican(movement.current)}${lineCopy}, ${direction === "support" ? "toward" : "against"} our side.`;
 }
 
@@ -2506,7 +2506,17 @@ function BoardGameCard({ game, sport, headlineMarket, active, activeMarket, sele
   };
   const headlineVerdict = dailyEdgePresentationVerdict(headline);
   const soccerMoneylineScoreRefreshing = headlineKey === "moneyline" && Boolean(game.soccerProjection && !matchResultScoreOutlook(game, headline));
-  const soccerScore = game.soccerProjection && !soccerMoneylineScoreRefreshing ? soccerScoreContext(game, headlineKey, headline) : null;
+  // The compact game card must summarize the authoritative Match Result head,
+  // even when BTTS or Total happens to be the strongest Bet Grade. Otherwise
+  // an illustrative market-specific scenario can look like the game's primary
+  // score prediction (for example 2-1 while the 1X2 mode is actually 1-1).
+  const boardScoreMarketKey: MarketKey = game.soccerProjection && matchResultScoreOutlook(game, game.markets.moneyline)
+    ? "moneyline"
+    : headlineKey;
+  const boardScoreMarket = boardScoreMarketKey === "moneyline" ? game.markets.moneyline : headline;
+  const soccerScore = game.soccerProjection && !soccerMoneylineScoreRefreshing
+    ? soccerScoreContext(game, boardScoreMarketKey, boardScoreMarket)
+    : null;
   const footballOutcome = sport === "nfl" || sport === "cfb" ? footballOutcomeContext(game) : null;
   const footballExpectedAway = game.footballProjection?.expectedAwayPoints ?? null;
   const footballExpectedHome = game.footballProjection?.expectedHomePoints ?? null;
@@ -2544,8 +2554,8 @@ function BoardGameCard({ game, sport, headlineMarket, active, activeMarket, sele
         {sport === "soccer" && headlineKey === "moneyline" && headline.soccerMatchResultContext ? <div className="mt-2 rounded-lg border border-sky-400/12 bg-sky-400/[0.025] px-2.5 py-2"><div className="grid grid-cols-3 gap-2 text-center">{([{ key: "away", label: game.awayTeam }, { key: "draw", label: "Draw" }, { key: "home", label: game.homeTeam }] as const).map((outcome) => <div key={outcome.key}><p className="truncate text-[7px] font-black uppercase tracking-wider text-gray-600">{outcome.label}</p><p className={`font-mono text-[10px] font-black ${outcome.key === headline.soccerMatchResultContext?.displayed_side ? "text-sky-200" : "text-gray-300"}`}>{(headline.soccerMatchResultContext!.model[outcome.key] * 100).toFixed(1)}%</p></div>)}</div></div> : null}
         {sport !== "cfb" ? <p className="mt-3 line-clamp-2 text-[12px] leading-relaxed text-gray-400">{footballOutcome ? headline.held ? dailyEdgeHeldGuide(headline) : `The ${game.footballOnlyProjection ? "primary market-informed outcome forecast" : "discrete football model"} favors ${footballOutcome.winner}; the ${headlineVerdict.label} Bet grade separately evaluates the exact ${marketLabelFor(headlineKey, sport)} price.` : currentAwareGuidedGuide(headline, game.decisionLine)}</p> : null}
         <div className="mt-3 flex items-baseline gap-2">
-          <span className="text-[9px] font-black uppercase tracking-wider text-gray-600">{soccerScore ? headlineKey === "moneyline" ? "Result score outlook" : "Goal outlook" : sport === "nfl" || sport === "cfb" ? "Expected score" : "Proj"}</span>
-          {projectionIsUnavailable(game) ? <span className="text-[12px] font-bold text-amber-200/75">No model score available</span> : soccerMoneylineScoreRefreshing ? <span className="text-[12px] font-bold text-amber-200/75">Refreshing · conflicting goals context withheld</span> : <span className="text-[12px] text-gray-400">{game.awayTeam} <strong className="text-[13px] text-white">{footballExpectedAway === null ? formatNumber(soccerScore?.expectedGoals.away ?? game.projected.away) : footballExpectedAway.toFixed(1)}</strong> <span className="mx-1 text-gray-700">·</span> {game.homeTeam} <strong className="text-[13px] text-white">{footballExpectedHome === null ? formatNumber(soccerScore?.expectedGoals.home ?? game.projected.home) : footballExpectedHome.toFixed(1)}</strong>{(sport === "nfl" || sport === "cfb") && footballExpectedAway !== null && footballExpectedHome !== null ? <span className="ml-2 text-[9px] text-gray-600">Representative {game.projected.away}–{game.projected.home}</span> : soccerScore?.scenario ? <span className="ml-2 text-[9px] text-gray-600">{headlineKey === "moneyline" ? "Mode" : "Illustration"} {soccerScore.scenario.away}–{soccerScore.scenario.home}</span> : null}</span>}
+          <span className="text-[9px] font-black uppercase tracking-wider text-gray-600">{soccerScore ? boardScoreMarketKey === "moneyline" ? "Result score outlook" : "Goal outlook" : sport === "nfl" || sport === "cfb" ? "Expected score" : "Proj"}</span>
+          {projectionIsUnavailable(game) ? <span className="text-[12px] font-bold text-amber-200/75">No model score available</span> : soccerMoneylineScoreRefreshing ? <span className="text-[12px] font-bold text-amber-200/75">Refreshing · conflicting goals context withheld</span> : <span className="text-[12px] text-gray-400">{game.awayTeam} <strong className="text-[13px] text-white">{footballExpectedAway === null ? formatNumber(soccerScore?.expectedGoals.away ?? game.projected.away) : footballExpectedAway.toFixed(1)}</strong> <span className="mx-1 text-gray-700">·</span> {game.homeTeam} <strong className="text-[13px] text-white">{footballExpectedHome === null ? formatNumber(soccerScore?.expectedGoals.home ?? game.projected.home) : footballExpectedHome.toFixed(1)}</strong>{(sport === "nfl" || sport === "cfb") && footballExpectedAway !== null && footballExpectedHome !== null ? <span className="ml-2 text-[9px] text-gray-600">Representative {game.projected.away}–{game.projected.home}</span> : soccerScore?.scenario ? <span className="ml-2 text-[9px] text-gray-600">{boardScoreMarketKey === "moneyline" ? "Mode" : "Illustration"} {soccerScore.scenario.away}–{soccerScore.scenario.home}</span> : null}</span>}
         </div>
         <div className="mt-auto pt-3">
           <div className="flex items-center justify-between gap-1 overflow-hidden text-[9px] font-black uppercase tracking-[0.06em]">
