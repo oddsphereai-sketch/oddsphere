@@ -5,6 +5,7 @@
  * or writes.
  */
 import { supabase } from "../../lib/db/supabase";
+import { EXPECTED_WNBA_MODEL_VERSION } from "../../lib/automodel/wnbaChampionRuntime";
 import {
   readWnbaForwardEvidenceCapture,
   WNBA_FORWARD_EVIDENCE_CAPTURE_KEY,
@@ -305,7 +306,7 @@ async function main(): Promise<void> {
     earlier_block: games.slice(0, games.length - finalSize),
     final_chronological_block: games.slice(games.length - finalSize),
     all_opened_forward: games,
-    active_release_only: games.filter((game) => game.release === "wnba_v1_5_coherent_expected_margin"),
+    active_release_only: games.filter((game) => game.release === EXPECTED_WNBA_MODEL_VERSION),
   };
   const candidates: Candidate[] = [
     "incumbent",

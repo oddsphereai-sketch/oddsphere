@@ -411,8 +411,8 @@ assert.equal(
 );
 assert.equal(
   (writerSource.match(/\.from\(/g) ?? []).length,
-  7,
-  "natural capture preserves the incumbent seven-query writer surface",
+  8,
+  "natural capture adds only the source-aware split read to the incumbent writer surface",
 );
 assert.equal(
   (writerSource.match(/\.from\("game_predictions"\)/g) ?? []).length,
@@ -421,19 +421,21 @@ assert.equal(
 );
 assert.equal(
   writerSource.includes("recorded_at, is_opener"),
-  false,
-  "capture does not widen the incumbent history query for provider-opener metadata",
+  true,
+  "capture freezes provider-opener metadata from the complete paginated history read",
 );
 assert.equal(
   writerSource.includes("public_money_pct, computed_at"),
-  false,
-  "capture does not widen the incumbent public query for provenance metadata",
+  true,
+  "capture freezes the public-signal computation timestamp",
 );
-assert.doesNotMatch(
+assert.match(
   writerSource,
   /\.from\("market_split_observations_v2"\)/,
-  "natural capture adds no source-aware database query",
+  "natural capture freezes source-aware split provenance before prediction",
 );
+assert.match(writerSource, /readPaginatedRows<Record<string, unknown>>/);
+assert.match(writerSource, /sourceAwareRowsTruncated: sourceAwareRead\.truncated/);
 assert.doesNotMatch(
   captureSource,
   /payload_bytes = byteLength\([^\n]+\);\s*\n\s*[^\n]*payload_bytes = byteLength/,

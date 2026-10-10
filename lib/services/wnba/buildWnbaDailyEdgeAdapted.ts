@@ -74,7 +74,7 @@ const WNBA_ADAPTED_RESPONSE_STALE_MS = Number(
 );
 
 export const WNBA_DAILY_EDGE_READER_RELEASE =
-  "wnba_daily_edge_reader_2026_10_07_r1_current_quote_market_read_coherence" as const;
+  "wnba_daily_edge_reader_2026_10_09_r2_provenance_qualified_market_context" as const;
 
 type WnbaAdaptedResponseCacheEntry = {
   body: DailyEdgeResponse;
