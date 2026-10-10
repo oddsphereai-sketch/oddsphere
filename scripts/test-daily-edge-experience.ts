@@ -816,6 +816,12 @@ check(
       dailyEdgeRouteSource.indexOf("isDailyEdgeExperienceCandidateEnabled()"),
 );
 check(
+  "member Daily Edge serves a contract-current stale snapshot without synchronously rebuilding the board",
+  dailyEdgeApiSource.includes("const recoveredPayload = !rolloverFallback && presentationOutdated") &&
+    !dailyEdgeApiSource.includes("(staleSnapshot || presentationOutdated)") &&
+    dailyEdgeApiSource.includes("A stale snapshot is still the intentionally retained last-known-good"),
+);
+check(
   "source-aware loading protects current Sharp rows from the per-event history cap",
   dailyEdgeApiSource.includes("const [currentSharpResult, ...historyResults]") &&
     dailyEdgeApiSource.includes('.eq("provider", "sharpapi")') &&

@@ -6816,7 +6816,15 @@ export async function GET(request: Request) {
     const presentationOutdated =
       snapshot?.payload.memberPresentation?.releaseId !==
       DAILY_EDGE_MEMBER_PRESENTATION_RELEASE_ID;
-    const recoveredPayload = !rolloverFallback && (staleSnapshot || presentationOutdated)
+    // A stale snapshot is still the intentionally retained last-known-good
+    // member board. Serve it immediately and let the scheduled sole writer
+    // publish the next snapshot. Rebuilding the full board synchronously here
+    // made NHL navigation block during the predictable gap between the
+    // 20-minute freshness TTL and its 30-minute publisher cadence; the page's
+    // member-data deadline could then win the race and render an empty state
+    // until a reload. Contract-outdated or cold-miss reads still recover so a
+    // legacy payload is never rendered under current member semantics.
+    const recoveredPayload = !rolloverFallback && presentationOutdated
       ? await recoverExpiredDailyEdgeSnapshot(snapshotKey, url)
       : null;
     const payload = recoveredPayload ?? snapshot?.payload ?? null;
