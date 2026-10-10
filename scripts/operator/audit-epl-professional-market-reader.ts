@@ -181,7 +181,7 @@ async function main() {
     .eq("snapshot_key", "soccer::english_premier_league::current-week")
     .single();
   if (snapshotError) throw snapshotError;
-  const currentRows = ((snapshot.payload as any).games ?? []).flatMap((row: any) => {
+  const currentRows: AuditRow[] = ((snapshot.payload as any).games ?? []).flatMap((row: any) => {
     const value = replay(row);
     return value ? [value] : [];
   });
