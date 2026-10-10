@@ -361,7 +361,7 @@ export default function ActualDailyEdgePreview({
   }, [displaySnapshot.date, displaySnapshot.games, embeddedSample, sport]);
 
   if (!game) {
-    return <div className="space-y-5 pb-16"><SlateHeader snapshot={displaySnapshot} sport={sport} onSportChange={switchSport} onSportPrefetch={prefetchSport} soccerCompetition={soccerCompetition} weeklySlate={renderedWeeklySlate} reviewMode={reviewMode} activePreviewSports={activePreviewSports} />{nflWeekOneEvidenceBoard ? <NflWeekOneEvidenceMonitor board={nflWeekOneEvidenceBoard} /> : sport === "nfl" && renderedWeeklySlate ? <NflEvidenceUnavailable label={renderedWeeklySlate.label} /> : renderedWeeklySlate?.unavailable ? <WeeklySlateEvidenceUnavailable sport={sport} /> : <EmptyPreview sport={sport} displayLabel={soccerCompetition?.label} />}</div>;
+    return <div className="space-y-5 pb-16"><SlateHeader snapshot={displaySnapshot} sport={sport} onSportChange={switchSport} onSportPrefetch={prefetchSport} soccerCompetition={soccerCompetition} weeklySlate={renderedWeeklySlate} reviewMode={reviewMode} activePreviewSports={activePreviewSports} />{nflWeekOneEvidenceBoard ? <NflWeekOneEvidenceMonitor board={nflWeekOneEvidenceBoard} /> : sport === "nfl" && renderedWeeklySlate ? <NflEvidenceUnavailable label={renderedWeeklySlate.label} /> : renderedWeeklySlate?.unavailable ? <WeeklySlateEvidenceUnavailable sport={sport} /> : displaySnapshot.slateState === "temporarily_unavailable" ? <DailySlateEvidenceUnavailable sport={sport} displayLabel={soccerCompetition?.label} /> : <EmptyPreview sport={sport} displayLabel={soccerCompetition?.label} />}</div>;
   }
 
   const market = game.markets[marketKey];
@@ -2607,6 +2607,11 @@ function boardVerdictText(verdict: string): string {
 function EmptyPreview({ sport, displayLabel }: { sport: Sport; displayLabel?: string }) {
   const label = displayLabel ?? sportLabel(sport);
   return <section className="rounded-2xl border border-violet-400/15 bg-gradient-to-br from-violet-500/[0.05] to-gray-950/60 p-10 text-center"><span className="inline-flex rounded-full border border-violet-400/20 bg-violet-400/[0.06] px-3 py-1 text-[8px] font-black uppercase tracking-wider text-violet-200">Model available</span><p className="mt-4 text-[9px] font-black uppercase tracking-wider text-gray-500">{label} · Daily Edge</p><h2 className="mt-2 text-2xl font-black text-white">No {label} games today</h2><p className="mx-auto mt-2 max-w-xl text-sm leading-relaxed text-gray-500">The {label} model remains part of OddSphere. There is no current slate to analyze, so the board correctly stays empty instead of showing games from an older date.</p></section>;
+}
+
+function DailySlateEvidenceUnavailable({ sport, displayLabel }: { sport: Sport; displayLabel?: string }) {
+  const label = displayLabel ?? sportLabel(sport);
+  return <section className="rounded-2xl border border-amber-300/20 bg-gradient-to-br from-amber-400/[0.07] to-gray-950/70 p-10 text-center"><span className="inline-flex rounded-full border border-amber-300/25 bg-amber-300/[0.07] px-3 py-1 text-[8px] font-black uppercase tracking-wider text-amber-200">Board refreshing</span><p className="mt-4 text-[9px] font-black uppercase tracking-wider text-gray-500">{label} · Daily Edge</p><h2 className="mt-2 text-2xl font-black text-white">The current {label} board is temporarily unavailable</h2><p className="mx-auto mt-2 max-w-2xl text-sm leading-relaxed text-gray-500">A current published slate could not be loaded for this request. Refresh in a moment; this does not mean today has no games.</p></section>;
 }
 
 function WeeklySlateEvidenceUnavailable({ sport }: { sport: Sport }) {
