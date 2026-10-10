@@ -28,7 +28,7 @@ import {
 } from "../lib/automodel/wnbaChampionRuntime";
 import { gradePrediction } from "../lib/services/predictionGrader";
 import { resolveWnbaMoneylineSide } from "../lib/services/wnba/wnbaTeams";
-import { applyPublicMarketContext } from "../lib/services/publicMarketContext";
+import { observeWnbaPublicMarketContext } from "../lib/services/wnba/wnbaPublicMarketContext";
 import {
   resolveWnbaReaderEconomicDenominator,
   resolveWnbaReaderGrade,
@@ -297,21 +297,19 @@ check(
 );
 check(
   "WNBA total/spread public money cannot create action from a Watchlist",
-  applyPublicMarketContext({
+  observeWnbaPublicMarketContext({
     grade: "Watchlist",
     picked: { public_betting_pct: 50, public_money_pct: 65 },
     opposite: { public_betting_pct: 50, public_money_pct: 35 },
-    minGradeForBoost: "Best Angle",
-    maxBoostGrade: "Best Angle",
   }).gradeAfter === "Watchlist",
 );
 check(
-  "WNBA moneyline retains its established public-money promotion behavior",
-  applyPublicMarketContext({
+  "WNBA moneyline records unverified split support without promoting the pick",
+  observeWnbaPublicMarketContext({
     grade: "Watchlist",
     picked: { public_betting_pct: 50, public_money_pct: 65 },
     opposite: { public_betting_pct: 50, public_money_pct: 35 },
-  }).gradeAfter === "Lean",
+  }).gradeAfter === "Watchlist",
 );
 const spreadAgreementPromotion = resolveWnbaSpreadEloStatAgreementLean({
   grade: "Watchlist",

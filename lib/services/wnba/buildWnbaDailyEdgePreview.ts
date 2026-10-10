@@ -18,6 +18,7 @@
 import { isRealWnbaTeam, wnbaAbbr } from "./wnbaTeams";
 import { selectMainTotalLine } from "@/lib/services/selectMainTotalLine";
 import { applyPublicMarketContext, type PublicMarketContext, type PublicMarketSignal } from "@/lib/services/publicMarketContext";
+import { observeWnbaPublicMarketContext } from "./wnbaPublicMarketContext";
 import {
   buildWnbaCoreModelCalibrationAudit,
   type WnbaCoreModelCalibrationInput,
@@ -1007,15 +1008,12 @@ export function computeWnbaPrediction(
       (inputs.modelP >= 0.5) !== (mlMarketHomeProbability >= 0.5),
     marketReliability: inputs.marketRel,
   });
-  const rawMlPublicContext = applyPublicMarketContext({
+  const mlPublicContext = observeWnbaPublicMarketContext({
     grade: mlGradeBase,
     picked: publicSignals.moneyline?.[mlSideKey] ?? null,
     opposite: publicSignals.moneyline?.[mlSideKey === "home" ? "away" : "home"] ?? null,
   });
-  const mlGrade = mlGradeBase === "Watchlist" && rawMlPublicContext.gradeAfter === "Lean"
-    ? "Watchlist"
-    : rawMlPublicContext.gradeAfter;
-  const mlPublicContext = { ...rawMlPublicContext, gradeAfter: mlGrade };
+  const mlGrade = mlPublicContext.gradeAfter;
 
   const spreadLine = spreadDecision.line;
   const pCoverHome = spreadLine === null
@@ -1029,12 +1027,10 @@ export function computeWnbaPrediction(
     evaluatedPriceAmerican: spreadDecision.evaluated?.priceAmerican ?? null,
     pointEdge: spreadPointEdge,
   });
-  const spreadPublicContext = spreadSideKey === null ? null : applyPublicMarketContext({
+  const spreadPublicContext = spreadSideKey === null ? null : observeWnbaPublicMarketContext({
     grade: spreadValue.grade,
     picked: publicSignals.spread?.[spreadSideKey] ?? null,
     opposite: publicSignals.spread?.[spreadSideKey === "home" ? "away" : "home"] ?? null,
-    minGradeForBoost: "Best Angle",
-    maxBoostGrade: "Best Angle",
   });
   const spreadEvidenceBookCount = crossMarketContradiction
     ? 0
@@ -1087,12 +1083,10 @@ export function computeWnbaPrediction(
     evaluatedPriceAmerican: totalDecision.evaluated?.priceAmerican ?? null,
     pointEdge: totalPointEdge,
   });
-  const totalPublicContext = totalSideKey === null ? null : applyPublicMarketContext({
+  const totalPublicContext = totalSideKey === null ? null : observeWnbaPublicMarketContext({
     grade: totalValue.grade,
     picked: publicSignals.total?.[totalSideKey] ?? null,
     opposite: publicSignals.total?.[totalSideKey === "over" ? "under" : "over"] ?? null,
-    minGradeForBoost: "Best Angle",
-    maxBoostGrade: "Best Angle",
   });
   const totalGrade = totalLine === null ? null : totalPublicContext?.gradeAfter ?? totalValue.grade;
 

@@ -316,7 +316,7 @@ check("champion runtime refuses an explicit old model", (() => {
 })());
 check(
   "WNBA model family is single-sourced",
-  EXPECTED_WNBA_MODEL_VERSION === "wnba_v1_6_independent_first_decision_crossing",
+  EXPECTED_WNBA_MODEL_VERSION === "wnba_v1_7_professional_market_evidence",
 );
 check(
   "WNBA distribution version is explicit",
@@ -326,7 +326,7 @@ check(
 check(
   "WNBA independent-first decision-crossing grade policy is immutable",
   EXPECTED_WNBA_GRADE_POLICY_VERSION ===
-    "wnba_grade_policy_v11_independent_first_decision_crossing_2026_10_06",
+    "wnba_grade_policy_v12_provenance_qualified_market_context_2026_10_09",
 );
 const wnbaModelSource = readFileSync("lib/services/wnba/buildWnbaDailyEdgePreview.ts", "utf8");
 const wnbaModelWriterSource = readFileSync("lib/services/wnba/runWnbaModel.ts", "utf8");

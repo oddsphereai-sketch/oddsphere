@@ -32,6 +32,7 @@ import {
   WNBA_FORWARD_EVIDENCE_CAPTURE_KEY,
   type WnbaForwardEvidenceLineRow,
   type WnbaForwardEvidencePublicSignalRow,
+  type WnbaForwardEvidenceSourceSplitRow,
   type WnbaIndependentModelEvidence,
 } from "./wnbaForwardEvidenceCapture";
 
@@ -43,6 +44,25 @@ function isBeforeLockWindow(gameDate: unknown, nowMs: number): boolean {
   if (typeof gameDate !== "string") return false;
   const startMs = Date.parse(gameDate);
   return Number.isFinite(startMs) && startMs - nowMs > LOCK_WINDOW_MS;
+}
+
+type PageError = { message: string };
+
+async function readPaginatedRows<T>(args: {
+  page: (from: number, to: number) => PromiseLike<{ data: T[] | null; error: PageError | null }>;
+  maxRows: number;
+  pageSize?: number;
+}): Promise<{ rows: T[]; truncated: boolean; error: string | null }> {
+  const pageSize = args.pageSize ?? 1000;
+  const rows: T[] = [];
+  for (let from = 0; from < args.maxRows; from += pageSize) {
+    const result = await args.page(from, from + pageSize - 1);
+    if (result.error) return { rows, truncated: false, error: result.error.message };
+    const pageRows = result.data ?? [];
+    rows.push(...pageRows);
+    if (pageRows.length < pageSize) return { rows, truncated: false, error: null };
+  }
+  return { rows, truncated: true, error: null };
 }
 
 export type RunWnbaModelResult = {
@@ -89,22 +109,48 @@ export async function runWnbaModel(opts: {
   const { data: lineRows } = gameIds.length
     ? await supabase.from("lines").select("game_id, market_type, side, sportsbook, line_value, odds_american, fetched_at").in("game_id", gameIds).is("player_id", null)
     : { data: [] as Record<string, unknown>[] };
-  const { data: historyRows } = gameIds.length
-    ? await supabase
-        .from("line_history")
-        .select("game_id, market_type, side, sportsbook, line_value, odds_american, recorded_at")
-        .in("game_id", gameIds)
-        .in("market_type", ["moneyline", "total", "spread"])
-        .not("odds_american", "is", null)
-        .order("recorded_at", { ascending: false })
-    : { data: [] as Record<string, unknown>[] };
+  const historyRead = gameIds.length
+    ? await readPaginatedRows<Record<string, unknown>>({
+        maxRows: 100_000,
+        page: (from, to) => supabase
+          .from("line_history")
+          .select("game_id, market_type, side, sportsbook, line_value, odds_american, recorded_at, is_opener")
+          .in("game_id", gameIds)
+          .in("market_type", ["moneyline", "total", "spread"])
+          .not("odds_american", "is", null)
+          .order("recorded_at", { ascending: false })
+          .order("game_id", { ascending: true })
+          .range(from, to),
+      })
+    : { rows: [] as Record<string, unknown>[], truncated: false, error: null };
+  if (historyRead.error) errors.push(`line_history read: ${historyRead.error}`);
+  const historyRows = historyRead.rows;
   const { data: publicSignalRows } = gameIds.length
     ? await supabase
         .from("sharp_signals")
-        .select("game_id, market_type, side, public_betting_pct, public_money_pct")
+        .select("game_id, market_type, side, public_betting_pct, public_money_pct, computed_at")
         .in("game_id", gameIds)
         .in("market_type", ["moneyline", "total", "spread"])
     : { data: [] as Record<string, unknown>[] };
+  const externalIds = [...new Set(games
+    .map((game) => game.external_id)
+    .filter((value): value is string | number => typeof value === "string" || typeof value === "number")
+    .map(String))];
+  const sourceAwareRead = externalIds.length
+    ? await readPaginatedRows<WnbaForwardEvidenceSourceSplitRow>({
+        maxRows: 50_000,
+        page: (from, to) => supabase
+          .from("market_split_observations_v2")
+          .select("canonical_event_id, canonical_market_id, market_type, selection_key, provider, source_book, source_type, bets_pct, money_pct, market_line, market_price, split_line_basis, books_used, provider_event_id, source_observed_at, fetched_at, source_timestamp_verified, minutes_to_start, ingestion_run_id")
+          .eq("league", "wnba")
+          .in("canonical_event_id", externalIds)
+          .in("market_type", ["moneyline", "total", "spread"])
+          .order("fetched_at", { ascending: false })
+          .order("canonical_event_id", { ascending: true })
+          .range(from, to),
+      })
+    : { rows: [] as WnbaForwardEvidenceSourceSplitRow[], truncated: false, error: null };
+  if (sourceAwareRead.error) errors.push(`market_split_observations_v2 read: ${sourceAwareRead.error}`);
 
   const linesByGame = new Map<number, Record<string, unknown>[]>();
   for (const l of lineRows ?? []) {
@@ -118,7 +164,7 @@ export async function runWnbaModel(opts: {
   const historyByGame = new Map<number, Record<string, unknown>[]>();
   const captureHistoryByGame = new Map<number, WnbaForwardEvidenceLineRow[]>();
   const seenHistory = new Set<string>();
-  for (const h of historyRows ?? []) {
+  for (const h of historyRows) {
     const gid = h.game_id as number;
     const captureRows = captureHistoryByGame.get(gid) ?? [];
     captureRows.push(h as WnbaForwardEvidenceLineRow);
@@ -128,6 +174,15 @@ export async function runWnbaModel(opts: {
     seenHistory.add(key);
     if (!historyByGame.has(gid)) historyByGame.set(gid, []);
     historyByGame.get(gid)!.push(h);
+  }
+
+  const sourceAwareByExternalId = new Map<string, WnbaForwardEvidenceSourceSplitRow[]>();
+  for (const row of sourceAwareRead.rows) {
+    const externalId = String(row.canonical_event_id ?? "");
+    if (!externalId) continue;
+    const rows = sourceAwareByExternalId.get(externalId) ?? [];
+    rows.push(row);
+    sourceAwareByExternalId.set(externalId, rows);
   }
 
   const hydrateLineOnlyRows = (gid: number, currentRows: Record<string, unknown>[]): Record<string, unknown>[] => {
@@ -425,11 +480,15 @@ export async function runWnbaModel(opts: {
           trustedBooks: SHARP_BOOKS,
           currentRows: (linesByGame.get(g.id as number) ?? []) as WnbaForwardEvidenceLineRow[],
           historyRows: captureHistoryByGame.get(g.id as number) ?? [],
-          historyRowsTruncated: (historyRows ?? []).length >= 1000,
+          historyRowsTruncated: historyRead.truncated,
           publicSignalRows: publicSignalRowsByGame.get(g.id as number) ?? [],
-          sourceAwareSplitRows: [],
-          sourceAwareRowsTruncated: false,
-          sourceAwareUnavailableReason: "not_present_in_incumbent_wnba_writer_result_sets",
+          sourceAwareSplitRows: sourceAwareByExternalId.get(String(g.external_id ?? "")) ?? [],
+          sourceAwareRowsTruncated: sourceAwareRead.truncated,
+          sourceAwareUnavailableReason: sourceAwareRead.error
+            ? "source_aware_split_query_failed"
+            : (sourceAwareByExternalId.get(String(g.external_id ?? "")) ?? []).length === 0
+              ? "no_source_aware_split_rows_for_game"
+              : null,
           decisionTuples,
           independentModel: independentEvidence.value,
           championOutput: {

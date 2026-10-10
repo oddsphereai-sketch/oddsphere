@@ -3174,10 +3174,10 @@ board impact, and rollback gates are in
 
 ## WNBA champion
 
-- Model: `wnba_v1_6_independent_first_decision_crossing`
+- Model: `wnba_v1_7_professional_market_evidence`
 - Distribution: `wnba_coherent_normal_2026_10_06_v8_independent_first_decision_crossing`
 - Calibration schema: `wnba_core_calibration_v4_single_market_entry`
-- Grade policy: `wnba_grade_policy_v11_independent_first_decision_crossing_2026_10_06`
+- Grade policy: `wnba_grade_policy_v12_provenance_qualified_market_context_2026_10_09`
 - Decision-tuple contract: `wnba_decision_tuple_v4_single_market_entry_2026_09_03`
 - Prediction-record contract: `wnba_prediction_record_contract_v8_exact_price_denominator_2026_09_19`
 - Machine registry: `lib/automodel/wnbaChampionRuntime.ts`
@@ -3185,7 +3185,7 @@ board impact, and rollback gates are in
 - Tracking writer: `lib/services/wnba/buildWnbaPredictionRecords.ts`
 - Member reader: `lib/services/wnba/buildWnbaDailyEdgeAdapted.ts`
 - Member-reader release:
-  `wnba_daily_edge_reader_2026_10_07_r1_current_quote_market_read_coherence`
+  `wnba_daily_edge_reader_2026_10_09_r2_provenance_qualified_market_context`
 - Scheduled owner: `/api/cron/wnba-daily-refresh` under the WNBA-scoped shared
   `prediction_pipeline` lease
 - Operational refresh release:
@@ -3197,6 +3197,20 @@ board impact, and rollback gates are in
   incoming cycle silently retains the prior complete board. Evidence and
   rollback:
   `docs/model-audits/2026-10-07-wnba-readiness-gated-cadence-predeclaration.md`.
+
+The October 9 v1.7/v12/r2 candidate preserves v1.6's independent-first,
+target-book-excluded Moneyline/Spread crossing rule and its coherent score
+distribution. It repairs the evidence substrate: `line_history` is paginated
+oldest-to-newest across the complete result rather than silently accepting the
+server's newest-page cap; provider-opener metadata and `sharp_signals.computed_at`
+are frozen; and the source-aware split archive is joined by canonical WNBA event
+before every future unlocked decision. Generic money/ticket thresholds no longer
+promote, demote, or veto a WNBA grade when source observation time and sharp-book
+lineage are unverified. Those rows remain visible in the audit payload as
+observation-only context, and missing splits remain neutral. Existing locked rows
+remain byte-authoritative and are never recomputed. Predeclaration, complete loss
+review, rejected candidates, board impact, and rollback gates are recorded in
+`docs/model-audits/2026-10-09-wnba-professional-market-evidence-predeclaration.md`.
 
 The September 3 v1.4/v6/v9 release retains the v1.3 removal of evaluated-book self-validation from Moneyline,
 Spread, and Total. Complete paired evidence must be fresh, predecision, prestart, same-book,
