@@ -696,6 +696,8 @@ export const ML_CLEAN_TIGHT_EDGE_MIN_EDGE_PCT = 0.5;
 export const ML_CLEAN_TIGHT_EDGE_MIN_PRICE_EXCLUSIVE = -220;
 export const ML_CLEAN_TIGHT_EDGE_MAX_ABS_PROJECTION_GAP_EXCLUSIVE = 0.75;
 export const ML_TIGHT_MARKET_PRICE_BEST_ANGLE_RULE_ID = "ml_tight_market_price_best_angle_v1_2026_07_20";
+export const ML_TIGHT_MARKET_PRICE_LEAN_RULE_ID =
+  "ml_tight_market_price_negative_exact_value_lean_v1_2026_10_09";
 export const ML_GENERIC_LEAN_POSITIVE_EV_RULE_ID = "ml_generic_lean_positive_ev_v1_2026_07_25";
 export const ML_MID_PRICE_ESTABLISHED_PRICE_BEST_ANGLE_RULE_ID = "ml_mid_price_established_price_best_angle_v1_2026_07_25";
 export const ML_MID_PRICE_NEAR_MARKET_LEAN_RULE_ID = "ml_mid_price_near_market_lean_v1_2026_07_25";
@@ -733,8 +735,12 @@ export const ML_MARKET_LED_MOVEMENT_MIN_MAGNITUDE_PP = 1.5;
 export const ML_MARKET_LED_MOVEMENT_MAX_MONEY_OVER_TICKETS_GAP_EXCLUSIVE = 10;
 export const ML_NEUTRAL_CONSENSUS_RULE_ID =
   "ml_sharpapi_consensus_grade_continuity_v2_2026_08_13";
+export const ML_NEUTRAL_CONSENSUS_PRICE_CAPPED_LEAN_RULE_ID =
+  "ml_sharpapi_neutral_consensus_negative_exact_value_lean_v1_2026_10_09";
 export const MLB_ML_CONFIDENCE_VALUE_CONTEXT_LEAN_RULE_ID =
   "mlb_ml_confidence_value_context_lean_v1_2026_08_17";
+export const MLB_ML_CONFIDENCE_VALUE_CONTEXT_BEST_ANGLE_RULE_ID =
+  "mlb_ml_confidence_value_context_best_angle_v1_2026_10_09";
 export const MLB_ML_CONFIDENCE_VALUE_CONTEXT_MIN_MODEL_PROB = 0.60;
 export const MLB_ML_CONFIDENCE_VALUE_CONTEXT_MIN_OFFERED_EDGE_PP = -3;
 export const MLB_TOTAL_CONFIDENCE_VALUE_CONTEXT_LEAN_RULE_ID =
@@ -905,12 +911,19 @@ function resolveMlCleanTightEdgeBestAngle(args: {
 export function resolveMlTightMarketPriceBestAngle(args: {
   blocked: boolean;
   side: string | null;
+  modelProb: number | null;
   edgePct: number | null;
   oddsAmerican: number | null;
   lineDirection: "toward_pick" | "against_pick" | "neutral" | "unknown" | null;
   publicSplitConflict: boolean;
-}): { bestAngle: boolean; reason: string | null } {
-  const qualified =
+}): {
+  bestAngle: boolean;
+  lean: boolean;
+  exactPriceEdgePp: number | null;
+  reason: string | null;
+} {
+  const exactPriceEdgePp = offeredPriceEdgePp(args.modelProb, args.oddsAmerican);
+  const directionallyQualified =
     !args.blocked &&
     (args.side === "home" || args.side === "away") &&
     args.edgePct !== null &&
@@ -923,9 +936,17 @@ export function resolveMlTightMarketPriceBestAngle(args: {
     args.oddsAmerican <= ML_TIGHT_MARKET_PRICE_MAX_ODDS &&
     args.lineDirection !== "against_pick" &&
     !args.publicSplitConflict;
+  const bestAngle = directionallyQualified && exactPriceEdgePp !== null && exactPriceEdgePp >= 0;
+  const lean = directionallyQualified && exactPriceEdgePp !== null && exactPriceEdgePp < 0;
   return {
-    bestAngle: qualified,
-    reason: qualified ? ML_TIGHT_MARKET_PRICE_BEST_ANGLE_RULE_ID : null,
+    bestAngle,
+    lean,
+    exactPriceEdgePp,
+    reason: bestAngle
+      ? ML_TIGHT_MARKET_PRICE_BEST_ANGLE_RULE_ID
+      : lean
+        ? ML_TIGHT_MARKET_PRICE_LEAN_RULE_ID
+        : null,
   };
 }
 
@@ -2351,11 +2372,20 @@ export function applyMlbNeutralConsensusGrades(records: PredictionRecordRow[]): 
       validatedSplit.betsPct >= ML_NEUTRAL_CONSENSUS_BEST_ANGLE_MIN_BETS_PCT &&
       validatedSplit.moneyPct >= ML_NEUTRAL_CONSENSUS_BEST_ANGLE_MIN_MONEY_PCT;
     if (!strongConsensus) return record;
-    const bestAngle = movement.direction === "neutral";
+    const exactPriceEdgePp = offeredPriceEdgePp(
+      record.model_probability,
+      record.odds_american,
+    );
+    const bestAngle =
+      movement.direction === "neutral" &&
+      exactPriceEdgePp !== null &&
+      exactPriceEdgePp >= 0;
     const grade = bestAngle ? "best_angle" : "lean";
     const ruleId = bestAngle
       ? ML_NEUTRAL_CONSENSUS_RULE_ID
-      : ML_CONSENSUS_SUPPORT_CONTINUITY_LEAN_RULE_ID;
+      : movement.direction === "neutral"
+        ? ML_NEUTRAL_CONSENSUS_PRICE_CAPPED_LEAN_RULE_ID
+        : ML_CONSENSUS_SUPPORT_CONTINUITY_LEAN_RULE_ID;
     return {
       ...record,
       play_grade: grade,
@@ -2379,13 +2409,16 @@ export function applyMlbNeutralConsensusGrades(records: PredictionRecordRow[]): 
           movement_direction: movement.direction,
           picked_bets_pct: validatedSplit.betsPct,
           picked_money_pct: validatedSplit.moneyPct,
+          exact_price_edge_pp: exactPriceEdgePp,
           best_angle_minimum_bets_pct: ML_NEUTRAL_CONSENSUS_BEST_ANGLE_MIN_BETS_PCT,
           best_angle_minimum_money_pct: ML_NEUTRAL_CONSENSUS_BEST_ANGLE_MIN_MONEY_PCT,
           split_provider: "sharpapi",
           model_probability_context_only: record.model_probability,
           validation_note: bestAngle
-            ? "Correction-safe high-quality MLB Moneylines with neutral movement, a -200 through +200 price, and at least 70% selected-side SharpAPI tickets and money retain the validated Best Angle tier."
-            : "The same 70/70 SharpAPI support with movement toward the pick is graded Lean for continuity: 40-18 overall, while the previously nonactionable incremental cohort went 24-8 and was positive in train, validation, and holdout. Favorable movement does not preserve Best Angle status.",
+            ? "Correction-safe high-quality MLB Moneylines with neutral movement, a non-negative exact offered-price edge, and at least 70% selected-side SharpAPI tickets and money retain the validated Best Angle tier."
+            : movement.direction === "neutral"
+              ? "Verified 70/70 neutral consensus remains actionable, but a negative exact offered-price edge caps the public tier at Lean."
+              : "The same 70/70 SharpAPI support with movement toward the pick is graded Lean for continuity: 40-18 overall, while the previously nonactionable incremental cohort went 24-8 and was positive in train, validation, and holdout. Favorable movement does not preserve Best Angle status.",
         },
       },
     };
@@ -2676,7 +2709,12 @@ export function resolveMlbMoneylineConfidenceValueContextLean(args: {
   sameSideProjectionGap: number | null;
   lineDirection: MlbGradeLineDirection;
   publicSplitConflict: boolean;
-}): { lean: boolean; offeredPriceEdgePp: number | null; reason: string | null } {
+}): {
+  lean: boolean;
+  bestAngle: boolean;
+  offeredPriceEdgePp: number | null;
+  reason: string | null;
+} {
   const priceEdgePp = offeredPriceEdgePp(args.modelProbability, args.oddsAmerican);
   const directionalMarket =
     args.lineDirection === "toward_pick" || args.lineDirection === "against_pick";
@@ -2693,8 +2731,13 @@ export function resolveMlbMoneylineConfidenceValueContextLean(args: {
     !args.publicSplitConflict;
   return {
     lean,
+    // The released cohort already combines a strong independent side,
+    // exact-price tolerance, score coherence, observed same-book direction,
+    // and no split conflict. The release-separated audit supports the
+    // strongest public tier without widening any of those gates.
+    bestAngle: lean,
     offeredPriceEdgePp: priceEdgePp,
-    reason: lean ? MLB_ML_CONFIDENCE_VALUE_CONTEXT_LEAN_RULE_ID : null,
+    reason: lean ? MLB_ML_CONFIDENCE_VALUE_CONTEXT_BEST_ANGLE_RULE_ID : null,
   };
 }
 
@@ -3895,6 +3938,7 @@ function buildMlRecord(
       mlMarketSideCorrected ||
       mlCleanTightEdgeBestAngle.bestAngle,
     side: finalMlPick,
+    modelProb: finalMlModelProb,
     edgePct: finalMlEdge,
     oddsAmerican: finalMlOdds,
     lineDirection: finalMlLineDirection,
@@ -3908,7 +3952,8 @@ function buildMlRecord(
         mlPickCalibrated ||
         mlMarketSideCorrected ||
         mlCleanTightEdgeBestAngle.bestAngle ||
-        mlTightMarketPriceBestAngle.bestAngle,
+        mlTightMarketPriceBestAngle.bestAngle ||
+        mlTightMarketPriceBestAngle.lean,
       side: finalMlPick,
       edgePct: finalMlEdge,
       oddsAmerican: finalMlOdds,
@@ -3923,10 +3968,13 @@ function buildMlRecord(
   const mlModelBestAngleRetained = mlBest.bestAngle;
   const mlCalibratedBestAngle =
     mlModelBestAngleRetained ||
+    mlConfidenceValueContextLean.bestAngle ||
     mlCleanTightEdgeBestAngle.bestAngle ||
     mlTightMarketPriceBestAngle.bestAngle ||
     mlMidPriceEstablishedPriceBestAngle.bestAngle;
   const mlCleanTightEdgePromoted = !mlBest.bestAngle && mlCleanTightEdgeBestAngle.bestAngle;
+  const mlConfidenceValueContextBestAnglePromoted =
+    !mlBest.bestAngle && mlConfidenceValueContextLean.bestAngle;
   const mlTightMarketPricePromoted = !mlBest.bestAngle && mlTightMarketPriceBestAngle.bestAngle;
   const mlMidPriceEstablishedPricePromoted =
     !mlBest.bestAngle && mlMidPriceEstablishedPriceBestAngle.bestAngle;
@@ -4023,6 +4071,7 @@ function buildMlRecord(
           : mlModelLeanRetained ||
               mlStrongWinnerResistanceLean.lean ||
               mlConfidenceValueContextLean.lean ||
+              mlTightMarketPriceBestAngle.lean ||
               mlLeanEligible ||
               mlMidPriceNearMarketLean.lean ||
               mlMarketDivergenceLean.lean
@@ -4060,6 +4109,8 @@ function buildMlRecord(
       ? null
       : mlFinalBestAngle && mlModelBestAngleRetained
         ? ML_CALIBRATED_MODEL_BEST_ANGLE_PATH_ID
+        : mlConfidenceValueContextBestAnglePromoted
+          ? MLB_ML_CONFIDENCE_VALUE_CONTEXT_BEST_ANGLE_RULE_ID
         : mlCleanTightEdgePromoted
           ? ML_CLEAN_TIGHT_EDGE_BEST_ANGLE_RULE_ID
           : mlTightMarketPricePromoted
@@ -4070,6 +4121,8 @@ function buildMlRecord(
                 ? ML_STRONG_WINNER_RESISTANCE_LEAN_RULE_ID
                 : mlConfidenceValueContextLean.lean
                   ? MLB_ML_CONFIDENCE_VALUE_CONTEXT_LEAN_RULE_ID
+                  : mlTightMarketPriceBestAngle.lean
+                    ? ML_TIGHT_MARKET_PRICE_LEAN_RULE_ID
                   : mlMidPriceNearMarketLean.lean
                     ? ML_MID_PRICE_NEAR_MARKET_LEAN_RULE_ID
                     : mlMarketDivergenceLean.lean
@@ -4179,7 +4232,9 @@ function buildMlRecord(
               ? "calibrated_model"
               : mlTrueInversionActionable ||
                   mlCleanTightEdgePromoted ||
+                  mlConfidenceValueContextBestAnglePromoted ||
                   mlTightMarketPricePromoted ||
+                  mlTightMarketPriceBestAngle.lean ||
                   mlMidPriceEstablishedPricePromoted ||
                   mlStrongWinnerResistanceLean.lean ||
                   mlConfidenceValueContextLean.lean ||
@@ -4210,8 +4265,18 @@ function buildMlRecord(
           : null,
         clean_tight_edge_promotion: mlCleanTightEdgePromoted,
         clean_tight_edge_promotion_rule_id: mlCleanTightEdgePromoted ? ML_CLEAN_TIGHT_EDGE_BEST_ANGLE_RULE_ID : null,
+        confidence_value_context_best_angle_promotion:
+          mlConfidenceValueContextBestAnglePromoted,
+        confidence_value_context_best_angle_rule_id:
+          mlConfidenceValueContextBestAnglePromoted
+            ? MLB_ML_CONFIDENCE_VALUE_CONTEXT_BEST_ANGLE_RULE_ID
+            : null,
         tight_market_price_promotion: mlTightMarketPricePromoted,
         tight_market_price_promotion_rule_id: mlTightMarketPricePromoted ? ML_TIGHT_MARKET_PRICE_BEST_ANGLE_RULE_ID : null,
+        tight_market_price_negative_exact_value_lean:
+          mlTightMarketPriceBestAngle.lean,
+        tight_market_price_exact_price_edge_pp:
+          mlTightMarketPriceBestAngle.exactPriceEdgePp,
         mid_price_established_price_promotion: mlMidPriceEstablishedPricePromoted,
         mid_price_established_price_promotion_rule_id:
           mlMidPriceEstablishedPricePromoted
@@ -4288,8 +4353,9 @@ function buildMlRecord(
         : null,
       ml_confidence_value_context_lean: mlConfidenceValueContextLean.lean
         ? {
-            rule_id: MLB_ML_CONFIDENCE_VALUE_CONTEXT_LEAN_RULE_ID,
-            action: "promote_or_retain_as_lean",
+            rule_id: MLB_ML_CONFIDENCE_VALUE_CONTEXT_BEST_ANGLE_RULE_ID,
+            prior_rule_id: MLB_ML_CONFIDENCE_VALUE_CONTEXT_LEAN_RULE_ID,
+            action: "promote_to_best_angle",
             model_probability: finalMlModelProb,
             minimum_model_probability: MLB_ML_CONFIDENCE_VALUE_CONTEXT_MIN_MODEL_PROB,
             odds_american: finalMlOdds,
@@ -4301,7 +4367,7 @@ function buildMlRecord(
             public_split_conflict: finalMlPublicSplitConflict,
             signed_market_resistance: mlSignedMarketResistance.standDown,
             validation_note:
-              "Release-separated replay of unchanged MLB Moneyline sides: the coherent confidence, exact-price, projection, and directional-market cohort went 39-16 overall, 11-4 in development, 11-4 in validation, and 17-8 in holdout. Incremental nonactions went 28-12. Public/sharp conflict and signed resistance outside the separately validated strong-winner exception remain blockers; the rule never changes the predicted side or creates a Best Angle.",
+              "Opened release-separated replay of unchanged MLB Moneyline sides: the existing coherent confidence, exact-price tolerance, projection, and directional-market cohort went 46-15, +9.795u and remained positive in every chronological block. R91 changes only its public tier and never changes the predicted side.",
           }
         : null,
       ml_mid_price_near_market_lean_promotion: mlMidPriceNearMarketLean.lean
@@ -4435,10 +4501,26 @@ function buildMlRecord(
             max_odds_inclusive: ML_TIGHT_MARKET_PRICE_MAX_ODDS,
             line_direction: finalMlLineDirection,
             public_split_conflict: finalMlPublicSplitConflict,
+            exact_price_edge_pp: mlTightMarketPriceBestAngle.exactPriceEdgePp,
             validation_note:
-              "Chronological MLB replay through 2026-07-19: clean uncorrected moneylines within 1pp of market at -131..-160 went 11-3, 9-5, and 11-1 across three windows (31-9, +12.81u).",
+              "R91 retains Best Angle only when the incumbent clean tight-price sleeve also has non-negative exact offered-price edge.",
           }
         : null,
+      ml_tight_market_price_negative_exact_value_lean:
+        mlTightMarketPriceBestAngle.lean
+          ? {
+              rule_id: ML_TIGHT_MARKET_PRICE_LEAN_RULE_ID,
+              prior_rule_id: ML_TIGHT_MARKET_PRICE_BEST_ANGLE_RULE_ID,
+              action: "retain_as_lean",
+              exact_price_edge_pp: mlTightMarketPriceBestAngle.exactPriceEdgePp,
+              edge_pct: finalMlEdge,
+              odds_american: finalMlOdds,
+              line_direction: finalMlLineDirection,
+              public_split_conflict: finalMlPublicSplitConflict,
+              validation_note:
+                "The opened 74-row sleeve was 44-30 but approximately break-even at actual prices; negative exact-value rows retain actionability but no longer receive the strongest tier.",
+            }
+          : null,
       champion_candidate_correction: mlChampionStandDownReason === null
         ? null
         : {

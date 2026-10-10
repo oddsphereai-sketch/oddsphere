@@ -16,6 +16,7 @@ import {
   snapshotHasTrueMoneylineInversion,
 } from "../lib/services/finalSideDecision";
 import {
+  MLB_ML_CONFIDENCE_VALUE_CONTEXT_BEST_ANGLE_RULE_ID,
   MLB_ML_CONFIDENCE_VALUE_CONTEXT_LEAN_RULE_ID,
   ML_STRONG_WINNER_RESISTANCE_LEAN_RULE_ID,
   MLB_TOTAL_CONFIDENCE_VALUE_CONTEXT_LEAN_RULE_ID,
@@ -104,8 +105,8 @@ const fiLayers = buildMlbModelLayerVersions("first_inning", {});
 check("missing model env stamps resolved v2_2", layers.runtime_env.automodel_version === "v2_2");
 check("missing FI env stamps resolved fi_v2", layers.runtime_env.first_inning_model_version === "fi_v2");
 check(
-  "grade policy stamps the r90 corroborated Total opposition release",
-  layers.grade_policy === "mlb_public_grade_policy_v59_corroborated_total_opposition_2026_10_05",
+  "grade policy stamps the r91 professional Moneyline tiering release",
+  layers.grade_policy === "mlb_public_grade_policy_v60_professional_moneyline_tiering_2026_10_09",
 );
 check(
   "FI r85 stamps the scoped independent-only uncertainty correction without changing the full-game tuple",
@@ -128,15 +129,17 @@ check(
     layers.calibration_version === MLB_PUBLIC_CALIBRATION_VERSION,
 );
 check(
-  "MLB r90 stamps corroborated Total opposition while preserving unrelated heads",
-  MLB_DAILY_EDGE_DECISION_RELEASE_ID === "mlb_daily_edge_decision_2026_10_05_r90_corroborated_total_opposition" &&
+  "MLB r91 stamps professional Moneyline tiering while preserving unrelated heads",
+  MLB_DAILY_EDGE_DECISION_RELEASE_ID === "mlb_daily_edge_decision_2026_10_09_r91_professional_moneyline_tiering" &&
     MLB_MODEL_LAYER_VERSION_SCHEMA === "mlb_model_layer_versions_v20_projected_lineup_continuity" &&
-    layers.rule_bundle_version === "mlb_daily_edge_rule_bundle_v75_corroborated_total_opposition_2026_10_05" &&
+    layers.rule_bundle_version === "mlb_daily_edge_rule_bundle_v76_professional_moneyline_tiering_2026_10_09" &&
     layers.total_market_support_lean === "total_sharpapi_money_over_tickets_support_lean_v2_under_only_2026_09_04" &&
-    layers.calibration_version === "mlb_public_calibration_v36_corroborated_total_opposition_2026_10_05" &&
+    layers.calibration_version === "mlb_public_calibration_v37_professional_moneyline_tiering_2026_10_09" &&
     layers.projection_core === "mlb_projection_core_v2_6_corroborated_total_opposition_preserve_margin_2026_10_05" &&
     layers.market_input_snapshot === "mlb_market_input_snapshot_v3_current_line_pagination_2026_09_08" &&
     layers.moneyline_probability_head === "mlb_moneyline_structural_coherence_probability_v3_2026_09_02" &&
+    layers.moneyline_confidence_value_context_lean === "mlb_ml_confidence_value_context_best_angle_v1_2026_10_09" &&
+    layers.moneyline_neutral_consensus_grade === "ml_sharpapi_consensus_grade_continuity_v3_exact_price_tier_2026_10_09" &&
     layers.total_probability_head === "mlb_total_regime_calibrated_probability_v5_corroborated_opposition_2026_10_05" &&
     layers.coherent_market_price_map === "mlb_coherent_market_price_map_v1_2026_09_01" &&
     layers.market_calibration_policy === "mlb_model_market_calibration_v5_corroborated_total_opposition_2026_10_05" &&
@@ -199,9 +202,12 @@ const mlConfidenceValueLean = resolveMlbMoneylineConfidenceValueContextLean({
   publicSplitConflict: false,
 });
 check(
-  "ML confidence/value/context hierarchy keeps a coherent expensive favorite as Lean",
+  "ML confidence/value/context hierarchy promotes a coherent expensive favorite to Best Angle",
   mlConfidenceValueLean.lean &&
-    mlConfidenceValueLean.reason === MLB_ML_CONFIDENCE_VALUE_CONTEXT_LEAN_RULE_ID,
+    mlConfidenceValueLean.bestAngle &&
+    mlConfidenceValueLean.reason === MLB_ML_CONFIDENCE_VALUE_CONTEXT_BEST_ANGLE_RULE_ID &&
+    MLB_ML_CONFIDENCE_VALUE_CONTEXT_LEAN_RULE_ID ===
+      "mlb_ml_confidence_value_context_lean_v1_2026_08_17",
 );
 check(
   "ML confidence/value/context hierarchy blocks a neutral market and excessive offered-price gap",
