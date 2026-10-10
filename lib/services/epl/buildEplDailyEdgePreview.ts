@@ -700,7 +700,7 @@ function gameDto(match: EplShadowSlateMatch, sharp: EplSharpFixtureMarket, captu
           earliest_market_quote: earliestEplMarketQuote(`${match.id}:match_result:${side}`),
         })),
       } : null,
-      soccerGradeContext: { calibration_label: mrGrade.verdict.key === "best_angle" ? "Validated 65% winner-confidence path with market agreement and price above -250" : mrGrade.verdict.key === "lean" ? "Validated 55% winner-confidence path with market agreement and price above -300" : "EPL accuracy-first hierarchy", model_pct: p[resultSide] * 100, market_pct: mr?.probabilities[resultSide] === undefined ? null : mr.probabilities[resultSide]! * 100, edge_pp: mrEdge, grade_reason: mrGrade.reasons.join(" "), miscalibration_flag: mrGrade.candidateTier === "caution" },
+      soccerGradeContext: { calibration_label: mrGrade.verdict.key === "best_angle" ? "Validated 65% winner-confidence path with market agreement and positive exact value" : mrGrade.verdict.key === "lean" ? "Validated confidence path with exact-price tier arbitration" : "EPL accuracy-first hierarchy", model_pct: p[resultSide] * 100, market_pct: mr?.probabilities[resultSide] === undefined ? null : mr.probabilities[resultSide]! * 100, edge_pp: mrEdge, grade_reason: mrGrade.reasons.join(" "), miscalibration_flag: mrGrade.candidateTier === "caution" },
     },
   });
   const dcProbabilities = {

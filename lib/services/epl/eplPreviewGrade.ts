@@ -1,6 +1,6 @@
 import type { Grade } from "@/lib/types/domain/Grade";
 
-export const EPL_PREVIEW_GRADE_RELEASE = "epl_grade_policy_2026_10_01_v24_accuracy_first" as const;
+export const EPL_PREVIEW_GRADE_RELEASE = "epl_grade_policy_2026_10_10_v25_exact_match_result_price_tiering" as const;
 
 export type EplPreviewMarket = "match_result" | "double_chance" | "total" | "btts";
 export type EplPreviewGrade = {
@@ -114,6 +114,7 @@ export function deriveEplMatchResultDecision(input: {
   const forecastEdge = edges[forecastSide];
   const valuePrice = input.prices[valueSide];
   const forecastPrice = input.prices[forecastSide];
+  const forecastExactEv = exactPriceExpectedValue(input.model[forecastSide], forecastPrice);
   const maxAbsoluteGap = Math.max(...Object.values(edges).map(Math.abs));
   const base = { release: EPL_PREVIEW_GRADE_RELEASE } as const;
 
@@ -124,16 +125,25 @@ export function deriveEplMatchResultDecision(input: {
     return { selectedSide: forecastSide, forecastSide, valueSide, grade: { ...base, verdict: { key: "no_play", label: "No Play" }, grade: null, recommendationScore: 18, candidateTier: "data_hold", reasons: ["No Play: the model and market differ by more than 20 percentage points, so the forecast is held for calibration review."] } };
   }
   if (!input.promotedProxy && input.model[forecastSide] >= 0.65 && marketFavorite === forecastSide && forecastPrice > -250) {
-    return { selectedSide: forecastSide, forecastSide, valueSide, grade: { ...base, verdict: { key: "best_angle", label: "Best Angle" }, grade: "best_signal", recommendationScore: 82, candidateTier: "best_angle", reasons: ["The forecast clears the validated 65% winner-confidence floor, agrees with the market favorite, and remains below the premium-price cap."] } };
+    if (forecastExactEv > 0) {
+      return { selectedSide: forecastSide, forecastSide, valueSide, grade: { ...base, verdict: { key: "best_angle", label: "Best Angle" }, grade: "best_signal", recommendationScore: 82, candidateTier: "best_angle", reasons: ["The forecast clears the validated 65% winner-confidence floor, agrees with the market favorite, and has positive exact forecast-side expected value."] } };
+    }
+    return { selectedSide: forecastSide, forecastSide, valueSide, grade: { ...base, verdict: { key: "lean", label: "Lean" }, grade: "model_only", recommendationScore: 60, candidateTier: "lean", reasons: ["The forecast clears the validated Best Angle accuracy path, but nonpositive exact forecast-side expected value caps the betting tier at Lean."] } };
   }
   if (!input.promotedProxy && input.model[forecastSide] >= 0.55 && marketFavorite === forecastSide && forecastPrice > -300) {
-    return { selectedSide: forecastSide, forecastSide, valueSide, grade: { ...base, verdict: { key: "lean", label: "Lean" }, grade: "model_only", recommendationScore: 62, candidateTier: "lean", reasons: ["The forecast clears the validated 55% winner-confidence floor and agrees with the market favorite at an eligible price."] } };
+    if (forecastExactEv > 0) {
+      return { selectedSide: forecastSide, forecastSide, valueSide, grade: { ...base, verdict: { key: "lean", label: "Lean" }, grade: "model_only", recommendationScore: 62, candidateTier: "lean", reasons: ["The forecast clears the validated 55% winner-confidence floor, agrees with the market favorite, and has positive exact forecast-side expected value."] } };
+    }
+    return { selectedSide: forecastSide, forecastSide, valueSide, grade: { ...base, verdict: { key: "watchlist", label: "Watchlist" }, grade: "market_watch", recommendationScore: 42, candidateTier: "watchlist", reasons: ["The likely result remains intact, but nonpositive exact forecast-side expected value caps the betting tier at Watchlist."] } };
   }
   if ((input.model[forecastSide] >= 0.7 || !input.promotedProxy && input.model[forecastSide] >= 0.65) && marketFavorite === forecastSide && forecastPrice <= -300) {
     const reason = input.promotedProxy
       ? "High-confidence winner at a short price; one club uses a promoted-team proxy."
       : "High-confidence winner at a short price.";
-    return { selectedSide: forecastSide, forecastSide, valueSide, grade: { ...base, verdict: { key: "lean", label: "Lean" }, grade: "model_only", recommendationScore: input.promotedProxy ? 54 : 58, candidateTier: "lean", reasons: [reason] } };
+    if (forecastExactEv > 0) {
+      return { selectedSide: forecastSide, forecastSide, valueSide, grade: { ...base, verdict: { key: "lean", label: "Lean" }, grade: "model_only", recommendationScore: input.promotedProxy ? 54 : 58, candidateTier: "lean", reasons: [`${reason} The exact forecast-side price remains positive value.`] } };
+    }
+    return { selectedSide: forecastSide, forecastSide, valueSide, grade: { ...base, verdict: { key: "watchlist", label: "Watchlist" }, grade: "market_watch", recommendationScore: 42, candidateTier: "watchlist", reasons: [`${reason} Nonpositive exact forecast-side expected value caps the betting tier at Watchlist.`] } };
   }
   if ((!input.promotedProxy && valueSide === forecastSide && forecastEdge >= 5 && forecastPrice > -300)
     || (!input.promotedProxy && input.model[forecastSide] >= 0.5 && marketFavorite === forecastSide && forecastPrice > -300)
