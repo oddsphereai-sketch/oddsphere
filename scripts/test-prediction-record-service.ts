@@ -49,6 +49,9 @@ import {
   ML_MID_PRICE_ESTABLISHED_PRICE_BEST_ANGLE_RULE_ID,
   ML_MID_PRICE_NEAR_MARKET_LEAN_RULE_ID,
   ML_TIGHT_MARKET_PRICE_BEST_ANGLE_RULE_ID,
+  ML_TIGHT_MARKET_PRICE_LEAN_RULE_ID,
+  ML_NEUTRAL_CONSENSUS_PRICE_CAPPED_LEAN_RULE_ID,
+  MLB_ML_CONFIDENCE_VALUE_CONTEXT_BEST_ANGLE_RULE_ID,
   resolveMlMidPriceEstablishedPriceBestAngle,
   resolveMlMidPriceNearMarketLean,
   resolveMlMarketDivergenceLean,
@@ -267,6 +270,7 @@ console.log("━━━ MLB tight market-price Best Angle resolver ━━━");
 const tightMarketPriceBase = {
   blocked: false,
   side: "home",
+  modelProb: 0.62,
   edgePct: 0.5,
   oddsAmerican: -145,
   lineDirection: "neutral" as const,
@@ -276,6 +280,16 @@ check("clean -131..-160 moneyline within 1pp promotes", resolveMlTightMarketPric
 check("-160 price boundary promotes", resolveMlTightMarketPriceBestAngle({ ...tightMarketPriceBase, oddsAmerican: -160 }).bestAngle === true);
 check("-131 price boundary promotes", resolveMlTightMarketPriceBestAngle({ ...tightMarketPriceBase, oddsAmerican: -131 }).bestAngle === true);
 check("edge -1 boundary promotes", resolveMlTightMarketPriceBestAngle({ ...tightMarketPriceBase, edgePct: -1 }).bestAngle === true);
+const negativeExactValueTight = resolveMlTightMarketPriceBestAngle({
+  ...tightMarketPriceBase,
+  modelProb: 0.58,
+});
+check(
+  "tight market-price negative exact value remains Lean instead of Best Angle",
+  negativeExactValueTight.bestAngle === false &&
+    negativeExactValueTight.lean === true &&
+    negativeExactValueTight.reason === ML_TIGHT_MARKET_PRICE_LEAN_RULE_ID,
+);
 check("edge +1 upper boundary does not promote", resolveMlTightMarketPriceBestAngle({ ...tightMarketPriceBase, edgePct: 1 }).bestAngle === false);
 check("movement against pick blocks promotion", resolveMlTightMarketPriceBestAngle({ ...tightMarketPriceBase, lineDirection: "against_pick" }).bestAngle === false);
 check("opposing split conflict blocks promotion", resolveMlTightMarketPriceBestAngle({ ...tightMarketPriceBase, publicSplitConflict: true }).bestAngle === false);
@@ -679,21 +693,29 @@ console.log("\n━━━ MLB sharp portfolio top-one Lean integration ━━━"
   );
   const neutralConsensus = applyMlbNeutralConsensusGrades([
     portfolioRecord(10, "STRONG@CONSENSUS", -185, 0.51, 90, 97, "neutral"),
-    portfolioRecord(11, "LOWER@CONSENSUS", -130, 0.51, 60, 58, "neutral"),
-    portfolioRecord(12, "BELOW@CONSENSUS", -130, 0.60, 54, 90, "neutral"),
-    portfolioRecord(13, "MOVING@CONSENSUS", -130, 0.60, 90, 90, "toward_pick", "sharpapi", 2),
+    portfolioRecord(11, "VALUE@CONSENSUS", -130, 0.60, 90, 97, "neutral"),
+    portfolioRecord(12, "LOWER@CONSENSUS", -130, 0.51, 60, 58, "neutral"),
+    portfolioRecord(13, "BELOW@CONSENSUS", -130, 0.60, 54, 90, "neutral"),
+    portfolioRecord(14, "MOVING@CONSENSUS", -130, 0.60, 90, 90, "toward_pick", "sharpapi", 2),
   ]);
   check(
-    "70/70 neutral SharpAPI consensus promotes to Best Angle",
-    neutralConsensus[0]?.play_grade === "best_angle" && neutralConsensus[0]?.best_angle === true &&
-      (neutralConsensus[0]?.snapshot_json as any)?.decision_pipeline?.action_rule_id === ML_NEUTRAL_CONSENSUS_RULE_ID,
+    "70/70 neutral SharpAPI consensus with negative exact value is capped at Lean",
+    neutralConsensus[0]?.play_grade === "lean" && neutralConsensus[0]?.best_angle === false &&
+      (neutralConsensus[0]?.snapshot_json as any)?.decision_pipeline?.action_rule_id ===
+        ML_NEUTRAL_CONSENSUS_PRICE_CAPPED_LEAN_RULE_ID,
   );
-  check("lower neutral-consensus bands do not borrow strength from the 70/70 tier", neutralConsensus[1]?.play_grade === "market_aligned");
-  check("neutral consensus requires both ticket and money floors", neutralConsensus[2]?.play_grade === "market_aligned");
+  check(
+    "70/70 neutral SharpAPI consensus with non-negative exact value promotes to Best Angle",
+    neutralConsensus[1]?.play_grade === "best_angle" && neutralConsensus[1]?.best_angle === true &&
+      (neutralConsensus[1]?.snapshot_json as any)?.decision_pipeline?.action_rule_id ===
+        ML_NEUTRAL_CONSENSUS_RULE_ID,
+  );
+  check("lower neutral-consensus bands do not borrow strength from the 70/70 tier", neutralConsensus[2]?.play_grade === "market_aligned");
+  check("neutral consensus requires both ticket and money floors", neutralConsensus[3]?.play_grade === "market_aligned");
   check(
     "70/70 consensus steps down only to Lean when price movement turns favorable",
-    neutralConsensus[3]?.play_grade === "lean" && neutralConsensus[3]?.best_angle === false &&
-      (neutralConsensus[3]?.snapshot_json as any)?.decision_pipeline?.action_rule_id ===
+    neutralConsensus[4]?.play_grade === "lean" && neutralConsensus[4]?.best_angle === false &&
+      (neutralConsensus[4]?.snapshot_json as any)?.decision_pipeline?.action_rule_id ===
         ML_CONSENSUS_SUPPORT_CONTINUITY_LEAN_RULE_ID,
   );
 }
@@ -1141,7 +1163,7 @@ console.log("\n━━━ MLB tight market-price Best Angle integration ━━━
   const tightMarketMlPred = {
     ...basePrediction,
     predicted_ml_winner: "home",
-    ml_confidence: 59,
+    ml_confidence: 60,
     predicted_home_score: 4.8,
     predicted_away_score: 4.2,
     sport_specific: {
@@ -1151,8 +1173,8 @@ console.log("\n━━━ MLB tight market-price Best Angle integration ━━━
       ml_best_angle_eligible: false,
       v2_2_audit: {
         ml_play_grade: "market_aligned",
-        ml_model_prob: 0.59,
-        ml_market_prob: 0.585,
+        ml_model_prob: 0.60,
+        ml_market_prob: 0.595,
         ml_edge_pct: 0.5,
         posterior_home_diff: 0.6,
       },
@@ -1251,6 +1273,79 @@ console.log("\n━━━ MLB tight market-price Best Angle integration ━━━
       && moneylineIncompleteSnapshot?.decision_pipeline?.grade_source === null
       && moneylineIncompleteSnapshot?.best_angle_resolution?.final_best_angle === false
       && moneylineIncompleteSnapshot?.ml_grade_recalibration?.final_best_angle === false,
+  );
+}
+
+console.log("\n━━━ MLB confidence/value/context Best Angle integration ━━━");
+{
+  const confidenceValuePred = {
+    ...basePrediction,
+    predicted_ml_winner: "home",
+    ml_confidence: 64,
+    predicted_home_score: 5.1,
+    predicted_away_score: 4.2,
+    sport_specific: {
+      ...v21SportSpecific,
+      hold_picks: [],
+      ml_play_grade: "market_aligned",
+      ml_best_angle_eligible: false,
+      v2_2_audit: {
+        ml_play_grade: "market_aligned",
+        ml_model_prob: 0.64,
+        ml_market_prob: 0.645,
+        ml_edge_pct: -0.5,
+        posterior_home_diff: 0.9,
+      },
+    },
+  };
+  const oddsByGameId = new Map([
+    [14771, {
+      mlHomeOdds: -182,
+      mlAwayOdds: 158,
+      ouOverOdds: -110,
+      ouUnderOdds: -110,
+      oddsSourceMl: {
+        home: { source: "lines" as const, book: "pinnacle", odds: -182, line: null, observedAt: "2026-06-06T16:00:00Z" },
+        away: { source: "lines" as const, book: "pinnacle", odds: 158, line: null, observedAt: "2026-06-06T16:00:00Z" },
+      },
+      oddsSourceOu: {
+        over: { source: "lines" as const, book: "pinnacle", odds: -110, line: 8.5, observedAt: "2026-06-06T16:00:00Z" },
+        under: { source: "lines" as const, book: "pinnacle", odds: -110, line: 8.5, observedAt: "2026-06-06T16:00:00Z" },
+      },
+    }],
+  ]);
+  const records = buildPredictionRecordsFromSlate({
+    sport: "mlb",
+    slateDate: "2026-06-06",
+    launchDay: false,
+    games: [baseGame],
+    predictionByGameId: new Map([[14771, confidenceValuePred]]),
+    abbrevByTeamId,
+    oddsByGameId,
+    openersByGameId: new Map([[14771, [
+      { game_id: 14771, market_type: "moneyline", side: "home", sportsbook: "pinnacle", odds_american: -190, line_value: null, recorded_at: "2026-06-06T12:00:00Z" },
+    ]]]),
+    currentLinesByGameId: new Map([[14771, [
+      { game_id: 14771, market_type: "moneyline", side: "home", sportsbook: "pinnacle", odds_american: -182, line_value: null, fetched_at: "2026-06-06T16:00:00Z" },
+      { game_id: 14771, market_type: "moneyline", side: "away", sportsbook: "pinnacle", odds_american: 158, line_value: null, fetched_at: "2026-06-06T16:00:00Z" },
+    ]]]),
+    signalsByGameId: new Map(),
+  });
+  const ml = records.find((record) => record.market === "moneyline")!;
+  const snapshot = ml.snapshot_json as any;
+  check(
+    "confidence/value/context cohort promotes to Best Angle without changing the model side",
+    ml.pick === "home" && ml.play_grade === "best_angle" && ml.best_angle === true,
+  );
+  check(
+    "confidence/value/context Best Angle stamps the r91 action rule",
+    snapshot?.decision_pipeline?.action_rule_id ===
+      MLB_ML_CONFIDENCE_VALUE_CONTEXT_BEST_ANGLE_RULE_ID,
+  );
+  check(
+    "confidence/value/context tier change preserves projected-score coherence",
+    snapshot?.predicted_scores_at_lock?.home === 5.1 &&
+      snapshot?.predicted_scores_at_lock?.away === 4.2,
   );
 }
 

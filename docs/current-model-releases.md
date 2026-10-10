@@ -1657,18 +1657,36 @@ changed; only deterministic settlement of existing locked rows is affected.
 - Projection runtime: resolved automodel `v2_2`
 - Projection core: `mlb_projection_core_v2_6_corroborated_total_opposition_preserve_margin_2026_10_05`
 - First-inning runtime: `fi_v2` with FI-scoped release `mlb_first_inning_release_2026_09_04_r85_independent_uncertainty` and probability head `mlb_first_inning_fi_v10_independent_uncertainty_target_excluded_2026_09_04`. r85 retains r84's pre-r61 65% independent / 35% target-excluded multi-book posterior and its 48%-52% corroborated uncertainty band. When the evaluated quote is the sole accepted pair, the forecast remains independent-only and now requires the independent probability to clear 55% NRFI or 55% YRFI; otherwise it is a genuine null-side Toss-Up. The evaluated quote remains exact-price economics only. Full-game tuples, probabilities, grades, the sole writer/lease, providers, query budgets, locks, tracking, and settlement are unchanged.
-- Public calibration: `mlb_public_calibration_v36_corroborated_total_opposition_2026_10_05`
-- Decision release: `mlb_daily_edge_decision_2026_10_05_r90_corroborated_total_opposition`
-- Rule bundle: `mlb_daily_edge_rule_bundle_v75_corroborated_total_opposition_2026_10_05`
+- Public calibration: `mlb_public_calibration_v37_professional_moneyline_tiering_2026_10_09`
+- Decision release: `mlb_daily_edge_decision_2026_10_09_r91_professional_moneyline_tiering`
+- Rule bundle: `mlb_daily_edge_rule_bundle_v76_professional_moneyline_tiering_2026_10_09`
 - Market input snapshot: `mlb_market_input_snapshot_v3_current_line_pagination_2026_09_08`
 - Model-layer schema: `mlb_model_layer_versions_v20_projected_lineup_continuity`
 - Input eligibility: `mlb_input_eligibility_v2_projected_lineup_last_verified_continuity_2026_10_07`
-- Grade policy: `mlb_public_grade_policy_v59_corroborated_total_opposition_2026_10_05`
+- Grade policy: `mlb_public_grade_policy_v60_professional_moneyline_tiering_2026_10_09`
 - Correction policy: `mlb_prediction_corrections_v25_corroborated_total_opposition_2026_10_05`
 - Tracking contract: `member_facing_lock_v8_priority_retry_minute_cadence_2026_08_11`
 - Lock coherence: `mlb_lock_coherence_2026_09_02_r3_failed_economics_tuple`
 - Machine registry: `lib/automodel/mlbModelLayerVersions.ts`
 - Authoritative member-facing writer: `lib/services/predictionRecordService.ts`
+
+The October 9 r91 release changes only future unlocked MLB Moneyline tier
+arbitration. The already released confidence/value/score/market cohort advances
+from Lean to Best Angle without widening any evidence gate: it still requires a
+60%-plus independent selected-side probability, bounded exact-price friction,
+a projected-score margin on that side, observed same-book directional
+movement, no public-split conflict, no unresolved correction/cap state, and
+complete Moneyline data. Its opened release-separated replay was 46-15,
++9.795u and positive in each declared chronological block. The older
+tight-market-price sleeve remains actionable but requires non-negative exact
+offered-price edge for Best Angle; otherwise it is Lean. The neutral 70/70
+SharpAPI consensus sleeve follows the same strongest-tier price rule. No side,
+probability, price, projected score, Total, first-inning decision, stake,
+provider, schedule, writer, lease, lock, copy, label, or layout changes. The
+opened loss audit explicitly rejects a broad adverse-movement Moneyline flip:
+the incumbent side went 6-2 and its opposite-side counterfactual went 2-6.
+Evidence and rollback are in
+`docs/model-audits/2026-10-09-mlb-professional-moneyline-tiering-r91-predeclaration.md`.
 
 The October 7 projected-lineup continuity release changes no projection formula,
 probability head, side selector, price, grade, stake, member copy, label, layout,
