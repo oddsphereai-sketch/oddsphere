@@ -694,6 +694,27 @@ function board(market: Record<string, unknown>) {
 }
 
 {
+  const legacyLockedBoard: any = board({});
+  legacyLockedBoard.games[0]!.lockState = "locked";
+  legacyLockedBoard.games[0]!.lockedAt = "2026-10-10T10:31:23.263Z";
+  legacyLockedBoard.games[0]!.markets = {
+    moneyline: {
+      pick: "ARS",
+      grade: "best_signal",
+      verdict: { key: "best_angle" },
+      priceAmerican: -223,
+      currentPriceAmerican: -223,
+      recommendationConfidence: 68,
+    },
+  };
+  const result = auditDailyEdgeBoards({ soccer: legacyLockedBoard });
+  check(
+    "Legacy EPL locked snapshots without the optional dedicated lock field do not create a false price-drift critical",
+    !result.summary.issueCounts.locked_price_not_frozen,
+  );
+}
+
+{
   const lockedBoard: any = board({});
   lockedBoard.games[0]!.lockState = "locked";
   lockedBoard.games[0]!.markets = {

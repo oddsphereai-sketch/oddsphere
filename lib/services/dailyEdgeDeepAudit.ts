@@ -511,8 +511,8 @@ export function auditDailyEdgeBoards(
           market.priceAmerican === null;
         if (
           game.lockState === "locked" &&
-          market.lockedLineAmerican !== null &&
-          market.priceAmerican !== market.lockedLineAmerican &&
+          n(market.lockedLineAmerican) !== null &&
+          n(market.priceAmerican) !== n(market.lockedLineAmerican) &&
           !neutralLockedFirstInning
         ) {
           push("locked_price_not_frozen", sport, game, slot, market, {
