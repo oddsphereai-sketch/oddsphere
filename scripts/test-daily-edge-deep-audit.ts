@@ -3,6 +3,7 @@ import {
   DAILY_EDGE_DEEP_AUDIT_SPORTS,
 } from "../lib/services/dailyEdgeDeepAudit";
 import { normalizeDailyEdgeActionability } from "../lib/services/dailyEdgeActionability";
+import { readFileSync } from "node:fs";
 
 let failures = 0;
 function check(name: string, cond: boolean, detail?: string): void {
@@ -18,6 +19,14 @@ check(
   "deep audit covers every Daily Edge model individually",
   JSON.stringify(DAILY_EDGE_DEEP_AUDIT_SPORTS) ===
     JSON.stringify(["mlb", "wnba", "soccer", "ucl", "nfl", "cfb", "nhl", "nba"]),
+);
+
+const deepAuditRoute = readFileSync("app/api/internal/daily-edge-deep-audit/route.ts", "utf8");
+check(
+  "EPL deep audit reads the same immutable member snapshot as the site",
+  deepAuditRoute.includes('sport === "soccer"') &&
+    deepAuditRoute.includes("readCurrentEplMemberSnapshot") &&
+    deepAuditRoute.indexOf("readCurrentEplMemberSnapshot") < deepAuditRoute.indexOf("dailyEdgeGet"),
 );
 
 function board(market: Record<string, unknown>) {

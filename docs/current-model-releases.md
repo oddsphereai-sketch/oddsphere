@@ -4,9 +4,22 @@ This file is the human-readable production handoff registry. Runtime constants a
 prediction snapshots remain the machine authority. Future model work must start here, verify the
 constants, and preserve the precedence and writer ownership below.
 
-Last reviewed: 2026-10-09
+Last reviewed: 2026-10-10
 
 ## Cross-sport confidence / execution contract
+
+- October 10 shared reader-copy release is
+  `daily_edge_member_presentation_2026_10_10_r25_cross_sport_copy_coherence`.
+  It makes clear that a context/reference line and the displayed exact
+  sportsbook price have different jobs instead of claiming the visible price
+  is unavailable; describes sub-threshold price movement as having no verified
+  directional edge instead of literally flat; gives NHL Why and Risk distinct
+  text; and makes compact EPL/UCL cards lead with the Match Result modal score
+  even when Total or BTTS has the strongest Bet Grade. The deep-audit route now
+  reads the exact EPL member snapshot used by the site, eliminating false
+  missing/blocked-price findings without altering any locked payload. No model,
+  probability, projection, side, exact quote, grade, actionability, stake,
+  writer, provider, schedule, lease, lock, or tracking behavior changes.
 
 - October 9 MLB tracking settlement continuity is
   `tracking_settlement_v5_mlb_provider_catchup_2026_10_09`. The hourly tracking
@@ -284,8 +297,11 @@ Last reviewed: 2026-10-09
 
 ## CFB Daily Edge generalized weekly production release
 
+- October 10 last-known injury-report continuity correction: evidence schema, independent model, probability, calibration, decision, grade, exact-price, tracking, professional market-reader, stake, cadence, sole writer, and `prediction_pipeline:cfb` lease remain unchanged. The writer now selects the newest verified exact-game injury report across its already bounded evidence history, so a newer failed/omitted refresh row cannot hide valid earlier evidence; a genuinely newer verified report or verified clear report still replaces it. Original provider timestamps and exact team/game identity are preserved, missing evidence remains unavailable, and locked rows remain immutable. A credential-backed replay proved Playbook CFB lines/splits but returned HTTP 404 for `/v1/injuries`; production therefore stops making that unsupported request, lowers its bounded Playbook request maximum from four to three, and continues to update CFB injury reports from the existing official-conference collector. Collector / member are `cfb_forward_evidence_collector_2026_10_10_r57_last_known_injury_report_continuity` / `cfb_v1_member_release_2026_10_10_r60_last_known_injury_report_continuity`.
+- Sole writer / fixture / outcome / compact snapshot / reader are `cfb_forward_evidence_writer_2026_10_10_r114_last_known_injury_report_continuity` / `cfb_v1_member_fixture_2026_10_10_r86_last_known_injury_report_continuity` / `cfb_market_sharp_public_outcome_contract_2026_10_10_r76_last_known_injury_report_continuity` / `cfb_forward_member_snapshot_2026_10_10_r46_last_known_injury_report_continuity` / `cfb_member_snapshot_reader_2026_10_10_r31_last_known_injury_report_continuity`. The October 9 r59/r113/r85/r75/r45/r30 family is the immediate rollback; r58 and r57 remain readable behind it for immutable locks. Evidence and gates: `docs/model-audits/2026-10-10-cfb-last-known-injury-report-continuity.md`.
+
 - October 9 provider-continuity and started-game retention correction: evidence schema, availability authority, calibration, grade, decision, tuple, tracking, professional score, and market-reader releases remain the October 9 joint-reconciliation family. Collector / member are `cfb_forward_evidence_collector_2026_10_09_r56_provider_continuity_board_retention` / `cfb_v1_member_release_2026_10_09_r59_provider_continuity_board_retention`.
-- Playbook injury requests translate Oddsphere's internal `ncaaf` identity to the provider's documented uppercase `CFB` identity and normalize both the current `teams[].injuries[]` contract and the legacy `data[].players[]` contract. The newest verified per-game report survives a failed, omitted, empty, or older refresh. Newly normalized documented-contract rows are report-only in this release and cannot change projections or grades until their live payload and exact board impact are validated; existing qualified legacy rows retain their prior exact-quarterback authority. The independent score, joint PMF, market-reader artifact, market-reading rules, provider request count, cadence, one writer, and `prediction_pipeline:cfb` lease are unchanged.
+- The earlier Playbook CFB injury adapter remains readable for immutable historical rows, but a live credential-backed October 10 replay proved that the provider's `/v1/injuries` product returns HTTP 404 for CFB even while its CFB lines and splits succeed. The writer no longer polls that unsupported route. The newest verified exact-game report from the official-conference collector—or any already-stored qualified legacy Playbook report—survives a failed, omitted, empty, or older refresh. Conference rows remain report-only and cannot change projections or grades; existing qualified legacy rows retain their prior exact-quarterback authority. The independent score, joint PMF, market-reader artifact, market-reading rules, cadence, one writer, and `prediction_pipeline:cfb` lease are unchanged.
 - Sole writer / fixture / outcome / compact snapshot / reader are `cfb_forward_evidence_writer_2026_10_09_r113_provider_continuity_board_retention` / `cfb_v1_member_fixture_2026_10_09_r85_provider_continuity_board_retention` / `cfb_market_sharp_public_outcome_contract_2026_10_09_r75_provider_continuity_board_retention` / `cfb_forward_member_snapshot_2026_10_09_r45_provider_continuity_board_retention` / `cfb_member_snapshot_reader_2026_10_09_r30_provider_continuity_board_retention`; tracking remains `cfb_official_tracking_record_2026_10_09_r44_joint_moneyline_spread_reconciliation`. The r58/r44 provider-continuity family is the immediate immutable-lock predecessor, the r57/r43 joint-reconciliation family remains readable behind it, and the prior r39 snapshot remains readable behind both. Production proved the first repair's release, lease, snapshot, and lock continuity while exposing the `NCAAF` request failure and post-kickoff release-wave contractions that removed locked FAMU-ALST and FSU-LOU. R59 corrects the provider identity and carries exact immutable locked games through the shared 03:00 ET Daily Edge rollover. Evidence, gates, and rollback: `docs/model-audits/2026-10-09-football-provider-feed-continuity-predeclaration.md`, `docs/model-audits/2026-10-09-football-provider-feed-continuity-result.md`, `docs/model-audits/2026-10-09-playbook-cfb-league-identity-live-correction.md`, and `docs/model-audits/2026-10-09-cfb-started-game-board-retention.md`.
 
 - October 9 CFB professional joint Moneyline/Spread market-reconciliation release:

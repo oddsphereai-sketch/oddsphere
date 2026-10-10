@@ -23,6 +23,7 @@ import {
   CFB_FORWARD_PRICE_PREVIOUS_EVIDENCE_SCHEMA_RELEASE,
   CFB_FORWARD_MEMBER_RELEASE,
   CFB_FORWARD_INJURY_CONTRACT_PREVIOUS_MEMBER_RELEASE,
+  CFB_FORWARD_PROVIDER_CONTINUITY_PREVIOUS_MEMBER_RELEASE,
   CFB_FORWARD_PROVIDER_FEED_PREVIOUS_MEMBER_RELEASE,
   isCfbPublishedT60AccuracyLockPayload,
   CFB_FORWARD_PRICE_PREVIOUS_MEMBER_RELEASE,
@@ -95,7 +96,7 @@ import {
   CFB_ESPN_CURRENT_ODDS_MAX_GAMES_PER_RUN,
   fetchCfbEspnCurrentOdds,
 } from "./cfbEspnCurrentOdds";
-import { buildCfbGameAvailability } from "./cfbGameAvailability";
+import { buildCfbGameAvailability, latestVerifiedCfbGameAvailabilityByGame } from "./cfbGameAvailability";
 import {
   CFB_OFFICIAL_CONFERENCE_AVAILABILITY_PREGAME_REFRESH_MINUTES,
   CFB_OFFICIAL_CONFERENCE_AVAILABILITY_REFRESH_MINUTES,
@@ -152,7 +153,7 @@ import {
 import type { PlaybookInjuryTeamRow } from "@/lib/providers/playbook/types";
 
 export const CFB_FORWARD_WRITER_RELEASE =
-  "cfb_forward_evidence_writer_2026_10_09_r113_provider_continuity_board_retention" as const;
+  "cfb_forward_evidence_writer_2026_10_10_r114_last_known_injury_report_continuity" as const;
 export const CFB_FORWARD_MAX_QB_TEAMS_PER_RUN = 24 as const;
 export const CFB_FORWARD_MAX_SHARP_FALLBACK_GAMES_PER_RUN = 32 as const;
 export const CFB_FORWARD_MAX_ESPN_PROSPECTIVE_GAMES_PER_RUN = 32 as const;
@@ -349,6 +350,7 @@ export async function runCfbForwardEvidenceWriter(args: {
   const games = selectCfbModelCoveredWeeklyGames({ games: slate.games, existing, now: args.now, window });
   if (games.length === 0) throw new Error(`CFB authoritative weekly window ${window.boardStartDate}..${window.boardEndDate} has no eligible model-covered games.`);
   const latestByGame = latestCfbEvidenceByGame(existing);
+  const latestVerifiedInjuryReportByGame = latestVerifiedCfbGameAvailabilityByGame(existing);
   const plannedCaptures = planCfbForwardEvidenceCaptures({
     games,
     existing: lockPlanningExisting,
@@ -515,13 +517,18 @@ export async function runCfbForwardEvidenceWriter(args: {
     (game.away.fbs || game.home.fbs) &&
     cfbBooksNeedSharpFallback(primaryCurrentBooksByGame[game.providerGameId] ?? []),
   );
-  const [linesAttempt, splitsAttempt, venueWeatherAttempt, injuryAttempt, quarterbacks, sharpSplitsAttempt, circaAttempt, espnCurrentOddsAttempt, officialAvailabilityAttempt] = await Promise.all([
+  // Playbook's live CFB lines/splits/weather products are available, but its
+  // /v1/injuries endpoint returns HTTP 404 for the documented CFB league
+  // identity. Do not turn an unsupported product into a recurring partial
+  // writer failure. CFB injuries come from the existing official-conference
+  // collector, with exact-game last-known continuity below.
+  const injuryAttempt = { rows: [] as unknown[], error: null as string | null };
+  const [linesAttempt, splitsAttempt, venueWeatherAttempt, quarterbacks, sharpSplitsAttempt, circaAttempt, espnCurrentOddsAttempt, officialAvailabilityAttempt] = await Promise.all([
     fetchCfbPlaybookRowsAttempt(() => playbook.lines("ncaaf")),
     fetchCfbPlaybookRowsAttempt(() => playbook.splits("ncaaf")),
     playbook.venueWeather("ncaaf")
       .then((result) => ({ rows: result.body.data ?? [], error: null }))
       .catch((error: unknown) => ({ rows: [] as unknown[], error: splitRequestError(error) })),
-    fetchCfbPlaybookRowsAttempt(() => playbook.injuries("ncaaf")),
     fetchBalldontlieNcaafQuarterbacks({ teams: quarterbackTeams.map((team) => ({ id: team.id, abbreviation: team.abbreviation })), previousSeason: args.season - 1, capturedAt: args.now, apiKey: args.balldontlieApiKey }),
     fetchCfbSharpApiSplits({ games, apiKey: args.sharpApiKey })
       .then((result) => ({ result, error: null }))
@@ -655,7 +662,7 @@ export async function runCfbForwardEvidenceWriter(args: {
     const baseAwayQuarterbacks = requiredQuarterbacks(quarterbackContext, plan.game.away.id, plan.game.away.abbreviation, args.now);
     const baseHomeQuarterbacks = requiredQuarterbacks(quarterbackContext, plan.game.home.id, plan.game.home.abbreviation, args.now);
     const previousVerifiedAvailability = latestByGame.get(plan.game.providerGameId)?.payload.availability.verifiedQuarterback ?? null;
-    const previousInjuryReport = latestByGame.get(plan.game.providerGameId)?.payload.availability.report ?? null;
+    const previousInjuryReport = latestVerifiedInjuryReportByGame.get(plan.game.providerGameId) ?? null;
     const injuryReport = buildCfbGameAvailability({
       game: plan.game,
       capturedAt: args.now,
@@ -663,6 +670,7 @@ export async function runCfbForwardEvidenceWriter(args: {
       conferenceReport: officialAvailabilityAttempt.result?.reportsByGame[plan.game.providerGameId] ?? null,
       previous: previousInjuryReport,
     });
+    const usingLastKnownInjuryReport = previousInjuryReport !== null && injuryReport === previousInjuryReport;
     const freshProviderAvailability = playbookCfbQuarterbackAvailability({
       game: plan.game,
       away: baseAwayQuarterbacks,
@@ -1013,6 +1021,11 @@ export async function runCfbForwardEvidenceWriter(args: {
             : []),
           "quarterback_starter_projected_not_confirmed",
           ...(injuryReport ? [] : ["injury_feed_unavailable"]),
+          ...(usingLastKnownInjuryReport ? [
+            injuryAttempt.error
+              ? "injury_feed_refresh_failed_using_last_known_report"
+              : "injury_feed_omitted_using_last_known_report",
+          ] : []),
           ...(weather.status === "forecast_available" || weather.status === "controlled_indoor" ? [] : [`venue_weather_${weather.status}`]),
           ...(sharpApiSplitsStatus === "request_failed" ? ["sharpapi_splits_request_failed"] : sharpApiSplitsStatus === "event_not_published" ? ["sharpapi_splits_event_not_published"] : []),
           ...(sharpBooks.length > 0 ? ["sharpapi_named_book_price_fallback"] : []),
@@ -1026,7 +1039,7 @@ export async function runCfbForwardEvidenceWriter(args: {
       requestBudget: {
         balldontlieSlate: slate.providerRequests + priorResults.providerRequests,
         balldontlieQuarterbacks: quarterbacks.providerRequests,
-        playbook: 4,
+        playbook: 3,
         publicReference: 0,
         collegeFootballData: collegeFootballDataAttempt.result?.requests ?? 0,
         theOddsApi: theOddsApiHistoricalOpeningAttempt.requests + theOddsApiAttempt.requests,
@@ -1048,7 +1061,7 @@ export async function runCfbForwardEvidenceWriter(args: {
         sharpApiOdds: sharpFallback.requests + circaAttempt.requests,
         sharpApiSplits: 1,
         weather: weatherRequests,
-        totalMaximum: slate.providerRequests + priorResults.providerRequests + quarterbacks.providerRequests + sharpFallback.requests + circaAttempt.requests + weatherRequests + espnReferenceAttempt.result.requests + (espnCurrentOddsAttempt.result?.requests ?? 0) + (collegeFootballDataAttempt.result?.requests ?? 0) + theOddsApiHistoricalOpeningAttempt.requests + theOddsApiAttempt.requests + (officialAvailabilityAttempt.result?.requests ?? 0) + advancedState.requests + 5,
+        totalMaximum: slate.providerRequests + priorResults.providerRequests + quarterbacks.providerRequests + sharpFallback.requests + circaAttempt.requests + weatherRequests + espnReferenceAttempt.result.requests + (espnCurrentOddsAttempt.result?.requests ?? 0) + (collegeFootballDataAttempt.result?.requests ?? 0) + theOddsApiHistoricalOpeningAttempt.requests + theOddsApiAttempt.requests + (officialAvailabilityAttempt.result?.requests ?? 0) + advancedState.requests + 4,
       },
     };
     const contextualEvidenceCapture = buildCfbForwardContextCapture({
@@ -1098,7 +1111,7 @@ export async function runCfbForwardEvidenceWriter(args: {
     publishedWatchlists: decisions.filter((row) => row.grade === "Watchlist").length,
     publishedNoPlays: decisions.filter((row) => row.grade === "No Play").length,
     heldMarkets: payloads.reduce((sum, payload) => sum + payload.decisions.heldMarkets.length, 0),
-    apiCallsMaximum: slate.providerRequests + priorResults.providerRequests + quarterbacks.providerRequests + sharpFallback.requests + circaAttempt.requests + weatherRequests + espnReferenceAttempt.result.requests + (espnCurrentOddsAttempt.result?.requests ?? 0) + (collegeFootballDataAttempt.result?.requests ?? 0) + theOddsApiHistoricalOpeningAttempt.requests + theOddsApiAttempt.requests + advancedState.requests + tracking.trackingProviderRequests + 5,
+    apiCallsMaximum: slate.providerRequests + priorResults.providerRequests + quarterbacks.providerRequests + sharpFallback.requests + circaAttempt.requests + weatherRequests + espnReferenceAttempt.result.requests + (espnCurrentOddsAttempt.result?.requests ?? 0) + (collegeFootballDataAttempt.result?.requests ?? 0) + theOddsApiHistoricalOpeningAttempt.requests + theOddsApiAttempt.requests + advancedState.requests + tracking.trackingProviderRequests + 4,
     healthHolds: [...new Set([
       ...payloads.flatMap((payload) => payload.coverage.healthHolds),
       ...(sharpFallbackAttempt.error ? ["sharpapi_odds_fallback_request_failed"] : []),
@@ -1691,6 +1704,7 @@ function isEligibleOfficialTrackingPayload(payload: CfbForwardEvidencePayload): 
 function isEligiblePublishedPregameRecoveryPayload(payload: CfbForwardEvidencePayload): boolean {
   const release = payload.authoritativeForecast?.release as string | undefined;
   return ((String(payload.schemaRelease) === CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE && String(payload.memberRelease) === CFB_FORWARD_MEMBER_RELEASE) ||
+    (String(payload.schemaRelease) === CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE && String(payload.memberRelease) === CFB_FORWARD_PROVIDER_CONTINUITY_PREVIOUS_MEMBER_RELEASE) ||
     (String(payload.schemaRelease) === CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE && String(payload.memberRelease) === CFB_FORWARD_INJURY_CONTRACT_PREVIOUS_MEMBER_RELEASE) ||
     (String(payload.schemaRelease) === CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE && String(payload.memberRelease) === CFB_FORWARD_PROVIDER_FEED_PREVIOUS_MEMBER_RELEASE) ||
     (String(payload.schemaRelease) === CFB_FORWARD_COMPLETE_READER_PREVIOUS_EVIDENCE_SCHEMA_RELEASE && String(payload.memberRelease) === CFB_FORWARD_COMPLETE_READER_PREVIOUS_MEMBER_RELEASE) ||

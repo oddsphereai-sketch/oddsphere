@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { fetchCfbCollegeFootballDataLines } from "../lib/services/football/cfbCollegeFootballDataLines";
-import { buildCfbGameAvailability } from "../lib/services/football/cfbGameAvailability";
+import { buildCfbGameAvailability, latestVerifiedCfbGameAvailabilityByGame } from "../lib/services/football/cfbGameAvailability";
 import { parseCfbOfficialConferenceAvailability } from "../lib/services/football/cfbOfficialConferenceAvailability";
 import { shouldFetchCfbCollegeFootballDataLines, shouldFetchCfbOfficialConferenceAvailability } from "../lib/services/football/cfbForwardEvidenceWriter";
 import { addCfbFallbackBooksWithoutReplacement, buildCfbNamedBookPriceHierarchy } from "../lib/services/football/cfbSharpApiOdds";
@@ -183,6 +184,42 @@ const verifiedClearReport = buildCfbGameAvailability({
 assert.equal(verifiedClearReport?.reportUpdatedAt, "2026-10-08T02:00:00.000Z", "empty current team reports must retain the provider sync timestamp");
 assert.equal(verifiedClearReport?.teams.every((team) => team.players.length === 0), true, "a newer verified clear report may replace prior injuries");
 
+const selectedAcrossFailedRefresh = latestVerifiedCfbGameAvailabilityByGame([
+  {
+    providerGameId: game.providerGameId,
+    capturedAt: "2026-10-07T23:30:00.000Z",
+    payload: { availability: { report: playbook } },
+  },
+  {
+    providerGameId: game.providerGameId,
+    capturedAt: "2026-10-08T00:00:00.000Z",
+    payload: { availability: { report: null } },
+  },
+] as never);
+assert.deepEqual(
+  selectedAcrossFailedRefresh.get(game.providerGameId),
+  playbook,
+  "a newer evidence row with a failed or omitted injury refresh must not hide the last verified exact-game report",
+);
+
+const selectedAfterVerifiedUpdate = latestVerifiedCfbGameAvailabilityByGame([
+  {
+    providerGameId: game.providerGameId,
+    capturedAt: "2026-10-07T23:30:00.000Z",
+    payload: { availability: { report: playbook } },
+  },
+  {
+    providerGameId: game.providerGameId,
+    capturedAt: "2026-10-08T02:30:00.000Z",
+    payload: { availability: { report: verifiedClearReport } },
+  },
+] as never);
+assert.deepEqual(
+  selectedAfterVerifiedUpdate.get(game.providerGameId),
+  verifiedClearReport,
+  "a genuinely newer verified report must replace the retained last-known report",
+);
+
 assert.equal(shouldFetchCfbOfficialConferenceAvailability({ games: [game], existing: [], now: "2026-10-07T16:00:00.000Z" }), true);
 assert.equal(shouldFetchCfbOfficialConferenceAvailability({
   games: [game],
@@ -206,6 +243,14 @@ assert.equal(shouldFetchCfbCollegeFootballDataLines({
   now: "2026-10-07T22:00:00.000Z",
   existing: [{ capturedAt: "2026-10-07T16:00:00.000Z", payload: { requestBudget: { collegeFootballData: 1 } } }] as never,
 }), true, "CFBD must be capped at one season/week request per six hours");
+
+const writerSource = readFileSync("lib/services/football/cfbForwardEvidenceWriter.ts", "utf8");
+assert.doesNotMatch(
+  writerSource,
+  /playbook\.injuries\("ncaaf"\)/,
+  "the CFB writer must not poll Playbook's unsupported /v1/injuries endpoint",
+);
+assert.match(writerSource, /playbook: 3,/, "the declared CFB Playbook request budget must exclude the unsupported injury request");
 
 console.log("CFB FCS price and official injury continuity tests passed.");
 }
