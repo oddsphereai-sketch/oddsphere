@@ -9,6 +9,7 @@ import { withFirstTrackedSplitObservation } from "@/lib/services/splitDisplayMov
 import type { MarketSplitDisplaySection } from "@/lib/types/domain/RecommendationDecision";
 import {
   CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE,
+  CFB_FORWARD_MARKET_READER_PREVIOUS_EVIDENCE_SCHEMA_RELEASE,
   CFB_FORWARD_COMPLETE_READER_PREVIOUS_EVIDENCE_SCHEMA_RELEASE,
   CFB_FORWARD_COMPLETE_READER_PREVIOUS_MEMBER_RELEASE,
   CFB_FORWARD_GAP_FALLBACK_PREVIOUS_EVIDENCE_SCHEMA_RELEASE,
@@ -60,6 +61,7 @@ import {
   CFB_FORWARD_TRANSITION_PREVIOUS_EVIDENCE_SCHEMA_RELEASE,
   CFB_FORWARD_TRANSITION_PREVIOUS_MEMBER_RELEASE,
   CFB_FORWARD_MEMBER_RELEASE,
+  CFB_FORWARD_MARKET_READER_PREVIOUS_MEMBER_RELEASE,
   CFB_FORWARD_INJURY_CONTRACT_PREVIOUS_MEMBER_RELEASE,
   CFB_FORWARD_PROVIDER_CONTINUITY_PREVIOUS_MEMBER_RELEASE,
   CFB_FORWARD_PROVIDER_FEED_PREVIOUS_MEMBER_RELEASE,
@@ -80,6 +82,7 @@ import {
   CFB_V1_BASE_PROBABILITY_RELEASE,
   CFB_V1_BASE_SCORE_ARTIFACT_RELEASE,
   CFB_V1_DECISION_RELEASE,
+  CFB_V1_MARKET_READER_PREVIOUS_DECISION_RELEASE,
   CFB_V1_COMPLETE_READER_PREVIOUS_DECISION_RELEASE,
   CFB_V1_GAP_FALLBACK_PREVIOUS_DECISION_RELEASE,
   CFB_V1_FCS_PRICE_PREVIOUS_DECISION_RELEASE,
@@ -108,9 +111,9 @@ import { cfbTeamIdentity } from "./cfbTeamIdentity";
 import { CFB_PUBLIC_SCORE_DIRECTION_TOLERANCE_POINTS } from "./footballCrossMarketCoherence";
 
 export const CFB_MEMBER_FIXTURE_RELEASE =
-  "cfb_v1_member_fixture_2026_10_10_r86_last_known_injury_report_continuity" as const;
+  "cfb_v1_member_fixture_2026_10_11_r87_consensus_authority_split_specialization" as const;
 export const CFB_PUBLIC_OUTCOME_CONTRACT_RELEASE =
-  "cfb_market_sharp_public_outcome_contract_2026_10_10_r76_last_known_injury_report_continuity" as const;
+  "cfb_market_sharp_public_outcome_contract_2026_10_11_r77_consensus_authority_split_specialization" as const;
 export const CFB_MEMBER_GAME_LIFECYCLE_RELEASE =
   "cfb_member_game_lifecycle_2026_10_09_r1_3am_locked_game_retention" as const;
 export const CFB_CONTEXT_ONLY_QUOTE_CAPTURE_SKEW_MS = 5_000 as const;
@@ -750,95 +753,125 @@ export function selectLatestCfbMemberEvidenceRows(
   const completeReaderPreviousAuthority = completeReaderPrevious ?? completeReaderPreviousBoundary ?? completeReaderPreviousLockOverlay ?? gapFallbackPreviousAuthority;
   const providerFeedPrevious = completeRowsForRelease(
     rows,
-    CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE,
+    CFB_FORWARD_MARKET_READER_PREVIOUS_EVIDENCE_SCHEMA_RELEASE,
     CFB_FORWARD_PROVIDER_FEED_PREVIOUS_MEMBER_RELEASE,
-    CFB_V1_DECISION_RELEASE,
+    CFB_V1_MARKET_READER_PREVIOUS_DECISION_RELEASE,
   );
   const providerFeedPreviousBoundary = completeReaderPreviousAuthority
     ? immutableBoundaryTransitionRows(
         rows,
         now,
-        CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE,
+        CFB_FORWARD_MARKET_READER_PREVIOUS_EVIDENCE_SCHEMA_RELEASE,
         CFB_FORWARD_PROVIDER_FEED_PREVIOUS_MEMBER_RELEASE,
-        CFB_V1_DECISION_RELEASE,
+        CFB_V1_MARKET_READER_PREVIOUS_DECISION_RELEASE,
         completeReaderPreviousAuthority,
       )
     : null;
   const providerFeedPreviousLockOverlay = completeReaderPreviousAuthority
     ? immutableLockOverlayRows(
         rows,
-        CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE,
+        CFB_FORWARD_MARKET_READER_PREVIOUS_EVIDENCE_SCHEMA_RELEASE,
         CFB_FORWARD_PROVIDER_FEED_PREVIOUS_MEMBER_RELEASE,
-        CFB_V1_DECISION_RELEASE,
+        CFB_V1_MARKET_READER_PREVIOUS_DECISION_RELEASE,
         completeReaderPreviousAuthority,
       )
     : null;
   const providerFeedPreviousAuthority = providerFeedPrevious ?? providerFeedPreviousBoundary ?? providerFeedPreviousLockOverlay ?? completeReaderPreviousAuthority;
   const injuryContractPrevious = completeRowsForRelease(
     rows,
-    CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE,
+    CFB_FORWARD_MARKET_READER_PREVIOUS_EVIDENCE_SCHEMA_RELEASE,
     CFB_FORWARD_INJURY_CONTRACT_PREVIOUS_MEMBER_RELEASE,
-    CFB_V1_DECISION_RELEASE,
+    CFB_V1_MARKET_READER_PREVIOUS_DECISION_RELEASE,
   );
   const injuryContractPreviousBoundary = providerFeedPreviousAuthority
     ? immutableBoundaryTransitionRows(
         rows,
         now,
-        CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE,
+        CFB_FORWARD_MARKET_READER_PREVIOUS_EVIDENCE_SCHEMA_RELEASE,
         CFB_FORWARD_INJURY_CONTRACT_PREVIOUS_MEMBER_RELEASE,
-        CFB_V1_DECISION_RELEASE,
+        CFB_V1_MARKET_READER_PREVIOUS_DECISION_RELEASE,
         providerFeedPreviousAuthority,
       )
     : null;
   const injuryContractPreviousLockOverlay = providerFeedPreviousAuthority
     ? immutableLockOverlayRows(
         rows,
-        CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE,
+        CFB_FORWARD_MARKET_READER_PREVIOUS_EVIDENCE_SCHEMA_RELEASE,
         CFB_FORWARD_INJURY_CONTRACT_PREVIOUS_MEMBER_RELEASE,
-        CFB_V1_DECISION_RELEASE,
+        CFB_V1_MARKET_READER_PREVIOUS_DECISION_RELEASE,
         providerFeedPreviousAuthority,
       )
     : null;
   const injuryContractPreviousAuthority = injuryContractPrevious ?? injuryContractPreviousBoundary ?? injuryContractPreviousLockOverlay ?? providerFeedPreviousAuthority;
   const providerContinuityPrevious = completeRowsForRelease(
     rows,
-    CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE,
+    CFB_FORWARD_MARKET_READER_PREVIOUS_EVIDENCE_SCHEMA_RELEASE,
     CFB_FORWARD_PROVIDER_CONTINUITY_PREVIOUS_MEMBER_RELEASE,
-    CFB_V1_DECISION_RELEASE,
+    CFB_V1_MARKET_READER_PREVIOUS_DECISION_RELEASE,
   );
   const providerContinuityPreviousBoundary = injuryContractPreviousAuthority
     ? immutableBoundaryTransitionRows(
         rows,
         now,
-        CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE,
+        CFB_FORWARD_MARKET_READER_PREVIOUS_EVIDENCE_SCHEMA_RELEASE,
         CFB_FORWARD_PROVIDER_CONTINUITY_PREVIOUS_MEMBER_RELEASE,
-        CFB_V1_DECISION_RELEASE,
+        CFB_V1_MARKET_READER_PREVIOUS_DECISION_RELEASE,
         injuryContractPreviousAuthority,
       )
     : null;
   const providerContinuityPreviousLockOverlay = injuryContractPreviousAuthority
     ? immutableLockOverlayRows(
         rows,
-        CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE,
+        CFB_FORWARD_MARKET_READER_PREVIOUS_EVIDENCE_SCHEMA_RELEASE,
         CFB_FORWARD_PROVIDER_CONTINUITY_PREVIOUS_MEMBER_RELEASE,
-        CFB_V1_DECISION_RELEASE,
+        CFB_V1_MARKET_READER_PREVIOUS_DECISION_RELEASE,
         injuryContractPreviousAuthority,
       )
     : null;
   const providerContinuityPreviousAuthority = providerContinuityPrevious ?? providerContinuityPreviousBoundary ?? providerContinuityPreviousLockOverlay ?? injuryContractPreviousAuthority;
+  const marketReaderPrevious = completeRowsForRelease(
+    rows,
+    CFB_FORWARD_MARKET_READER_PREVIOUS_EVIDENCE_SCHEMA_RELEASE,
+    CFB_FORWARD_MARKET_READER_PREVIOUS_MEMBER_RELEASE,
+    CFB_V1_MARKET_READER_PREVIOUS_DECISION_RELEASE,
+  );
+  const marketReaderPreviousBoundary = providerContinuityPreviousAuthority
+    ? immutableBoundaryTransitionRows(
+        rows,
+        now,
+        CFB_FORWARD_MARKET_READER_PREVIOUS_EVIDENCE_SCHEMA_RELEASE,
+        CFB_FORWARD_MARKET_READER_PREVIOUS_MEMBER_RELEASE,
+        CFB_V1_MARKET_READER_PREVIOUS_DECISION_RELEASE,
+        providerContinuityPreviousAuthority,
+      )
+    : null;
+  const marketReaderPreviousLockOverlay = providerContinuityPreviousAuthority
+    ? immutableLockOverlayRows(
+        rows,
+        CFB_FORWARD_MARKET_READER_PREVIOUS_EVIDENCE_SCHEMA_RELEASE,
+        CFB_FORWARD_MARKET_READER_PREVIOUS_MEMBER_RELEASE,
+        CFB_V1_MARKET_READER_PREVIOUS_DECISION_RELEASE,
+        providerContinuityPreviousAuthority,
+      )
+    : null;
+  const marketReaderPreviousAuthority = marketReaderPrevious ?? marketReaderPreviousBoundary ??
+    marketReaderPreviousLockOverlay ?? providerContinuityPreviousAuthority;
   const current = completeRowsForRelease(rows, CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE, CFB_FORWARD_MEMBER_RELEASE, CFB_V1_DECISION_RELEASE);
   if (current) return current;
-  const immutableBoundaryTransition = providerContinuityPreviousAuthority
+  const immutableBoundaryTransition = marketReaderPreviousAuthority
     ? immutableBoundaryTransitionRows(
         rows,
         now,
         CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE,
         CFB_FORWARD_MEMBER_RELEASE,
         CFB_V1_DECISION_RELEASE,
-        providerContinuityPreviousAuthority,
+        marketReaderPreviousAuthority,
       )
     : null;
   if (immutableBoundaryTransition) return immutableBoundaryTransition;
+  if (marketReaderPrevious) return marketReaderPrevious;
+  if (marketReaderPreviousBoundary) return marketReaderPreviousBoundary;
+  if (marketReaderPreviousLockOverlay) return marketReaderPreviousLockOverlay;
   if (providerContinuityPrevious) return providerContinuityPrevious;
   if (providerContinuityPreviousBoundary) return providerContinuityPreviousBoundary;
   if (providerContinuityPreviousLockOverlay) return providerContinuityPreviousLockOverlay;

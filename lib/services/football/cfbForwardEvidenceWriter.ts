@@ -153,7 +153,7 @@ import {
 import type { PlaybookInjuryTeamRow } from "@/lib/providers/playbook/types";
 
 export const CFB_FORWARD_WRITER_RELEASE =
-  "cfb_forward_evidence_writer_2026_10_10_r114_last_known_injury_report_continuity" as const;
+  "cfb_forward_evidence_writer_2026_10_11_r115_consensus_authority_split_specialization" as const;
 export const CFB_FORWARD_MAX_QB_TEAMS_PER_RUN = 24 as const;
 export const CFB_FORWARD_MAX_SHARP_FALLBACK_GAMES_PER_RUN = 32 as const;
 export const CFB_FORWARD_MAX_ESPN_PROSPECTIVE_GAMES_PER_RUN = 32 as const;
@@ -834,6 +834,16 @@ export async function runCfbForwardEvidenceWriter(args: {
       },
       fixedEvaluatedSportsbookByMarket,
     });
+    const readerSpreadDecision = readerSeedBundle.evaluatedBets.find((decision) => decision.market === "spread") ?? null;
+    const readerSpreadLine = readerSpreadDecision?.evaluatedQuote.line ?? null;
+    const readerHomeSpread = readerSpreadLine === null || readerSpreadDecision === null
+      ? null
+      : readerSpreadDecision.side === plan.game.home.abbreviation ||
+          readerSpreadDecision.side.startsWith(`${plan.game.home.abbreviation} `)
+        ? readerSpreadLine
+        : -readerSpreadLine;
+    const readerTotalLine = readerSeedBundle.evaluatedBets.find((decision) => decision.market === "total")
+      ?.evaluatedQuote.line ?? null;
     const captureCurrentBooks = captureBooksWithSharpBooks(
       currentBooks,
       circaAttempt.result?.booksByGame[plan.game.providerGameId] ?? [],
@@ -869,6 +879,10 @@ export async function runCfbForwardEvidenceWriter(args: {
       homeFbs: plan.game.home.fbs,
       awayConferenceId: plan.game.away.conferenceId,
       homeConferenceId: plan.game.home.conferenceId,
+      evaluatedLines: {
+        homeSpread: readerHomeSpread,
+        total: readerTotalLine,
+      },
     });
     const forecast = marketReader.forecast;
     const decisionBundle = buildCfbV1DecisionBundle({
