@@ -4,7 +4,6 @@ import {
   applyCfbCompleteMarketReader,
   CFB_COMPLETE_MARKET_READER_ARTIFACT_RELEASE,
   CFB_COMPLETE_MARKET_READER_RELEASE,
-  resolveCfbSupportAwareTotalFlip,
 } from "../lib/services/football/cfbCompleteMarketReader";
 import type { CfbForwardMarketReaderObservation } from "../lib/services/football/cfbForwardEvidenceCapture";
 import { summarizePmf } from "../lib/services/football/cfbMarketSharpAwareShadow";
@@ -36,7 +35,12 @@ const landmark = (
   firstPrice: number,
   secondPrice: number,
 ) => [observedAt, 30, "f", line, firstPrice, secondPrice] as const;
-const observation = (allowed: string[]): CfbForwardMarketReaderObservation => ({
+const observation = (
+  allowed: string[],
+  fallbackTotal = false,
+  spreadOpening = 3,
+  spreadCurrent = 6,
+): CfbForwardMarketReaderObservation => ({
   capturedAt: "2026-10-10T22:00:00.000Z",
   markets: {
     moneyline: {
@@ -50,8 +54,8 @@ const observation = (allowed: string[]): CfbForwardMarketReaderObservation => ({
     spread: {
       families: [[
         "circa", "s", "c", null,
-        landmark("2026-10-10T12:00:00.000Z", 3, -110, -110),
-        landmark("2026-10-10T22:00:00.000Z", 6, -110, -110),
+        landmark("2026-10-10T12:00:00.000Z", spreadOpening, -110, -110),
+        landmark("2026-10-10T22:00:00.000Z", spreadCurrent, -110, -110),
       ]],
       targetExcludedFamilies: allowed,
     },
@@ -65,7 +69,21 @@ const observation = (allowed: string[]): CfbForwardMarketReaderObservation => ({
     },
   },
   playbookSplits: null,
-  sharpApiSplits: [],
+  sharpApiSplits: fallbackTotal ? [{
+    release: "cfb_sharpapi_splits_2026_08_30_r2_full_week_capacity",
+    providerGameId: "reader-test",
+    providerEventId: "reader-test-event",
+    sportsbook: "draftkings",
+    sourceSemantics: "public_recreational",
+    capturedAt: "2026-10-10T22:00:00.000Z",
+    moneyline: null,
+    spread: null,
+    total: {
+      line: 48,
+      over: { moneyPct: 65, ticketsPct: 55 },
+      under: { moneyPct: 35, ticketsPct: 45 },
+    },
+  }] : [],
 });
 const common = {
   forecast,
@@ -76,6 +94,7 @@ const common = {
   homeFbs: true,
   awayConferenceId: 1,
   homeConferenceId: 2,
+  evaluatedLines: { homeSpread: -3, total: 48 },
 };
 
 const excluded = applyCfbCompleteMarketReader({
@@ -92,7 +111,7 @@ const independent = applyCfbCompleteMarketReader({
   currentObservation: observation(["circa"]),
 });
 assert.equal(independent.marginEvidenceAvailable, true);
-assert.equal(independent.totalEvidenceAvailable, true);
+assert.equal(independent.totalEvidenceAvailable, false);
 assert.ok(Math.abs(independent.marginShiftPoints) > 1e-6, "target-excluded movement must be allowed to move the score axis");
 assert.ok(Math.abs(independent.forecast.expectedMarginHome -
   (independent.forecast.expectedHomePoints - independent.forecast.expectedAwayPoints)) < 1e-9);
@@ -100,34 +119,55 @@ assert.ok(Math.abs(independent.forecast.expectedTotal -
   (independent.forecast.expectedHomePoints + independent.forecast.expectedAwayPoints)) < 1e-9);
 assert.ok(Math.abs(independent.forecast.pmf.reduce((sum, cell) => sum + cell.probability, 0) - 1) < 1e-9);
 assert.ok(independent.forecast.expectedAwayPoints >= 0 && independent.forecast.expectedHomePoints >= 0);
-assert.match(CFB_COMPLETE_MARKET_READER_RELEASE, /joint_moneyline_spread_reconciliation/);
-assert.equal(CFB_COMPLETE_MARKET_READER_ARTIFACT_RELEASE, "cfb_market_reader_artifact_2026_10_09_r4_joint_moneyline_spread_reconciliation");
+
+const staticConsensus = applyCfbCompleteMarketReader({
+  ...common,
+  currentObservation: observation(["circa"], false, 6, 6),
+});
+assert.equal(staticConsensus.marginEvidenceAvailable, true);
+assert.ok(
+  Math.abs(staticConsensus.marginShiftPoints) > 1e-6,
+  "a static target-excluded consensus must retain authority without movement or splits",
+);
+
+const keyThreeUpset = applyCfbCompleteMarketReader({
+  ...common,
+  currentObservation: observation(["circa"], false, 3, 3),
+});
+assert.ok(
+  Math.abs(keyThreeUpset.forecast.expectedMarginHome - forecast.expectedMarginHome) < 1e-9,
+  "an independent upset must survive the empirically retained football key-three band",
+);
+assert.match(CFB_COMPLETE_MARKET_READER_RELEASE, /consensus_authority_split_specialization/);
+assert.equal(CFB_COMPLETE_MARKET_READER_ARTIFACT_RELEASE, "cfb_market_reader_artifact_2026_10_11_r5_consensus_authority_split_specialization");
 const artifact = JSON.parse(readFileSync(
   new URL("../lib/services/football/modelArtifacts/cfbCompleteMarketReaderArtifact.json", import.meta.url),
   "utf8",
-)) as { margin: { model: { names: string[] } } };
-assert.ok(
-  artifact.margin.model.names.some((name) => name.startsWith("moneyline_split_")),
-  "the frozen margin reader must retain Moneyline split evidence",
-);
-assert.ok(
-  artifact.margin.model.names.some((name) => name.startsWith("cross_market_")),
-  "the frozen margin reader must model Moneyline/Spread agreement and resistance",
-);
+)) as {
+  margin: { baseConsensusAuthority: number; minimumResolvedSpreadEdgePoints: number };
+  total: { splitProvenance: string; reflectionAuthority: number };
+};
+assert.equal(artifact.margin.baseConsensusAuthority, 0.5);
+assert.equal(artifact.margin.minimumResolvedSpreadEdgePoints, 1);
+assert.equal(artifact.total.splitProvenance, "fallback");
+assert.equal(artifact.total.reflectionAuthority, 1);
 
-assert.equal(resolveCfbSupportAwareTotalFlip({
-  active: 57,
-  boundary: 60,
-  proposed: 62,
-  maximumChronologicalActiveMarketDistance: 4,
-}), 63, "inside chronological support, the validated full reflection remains authoritative");
-const containedExtrapolation = resolveCfbSupportAwareTotalFlip({
-  active: 45,
-  boundary: 60,
-  proposed: 75,
-  maximumChronologicalActiveMarketDistance: 4,
+const totalReflection = applyCfbCompleteMarketReader({
+  ...common,
+  currentObservation: observation(["circa"], true),
 });
-assert.ok(containedExtrapolation > 60, "support containment must never veto a qualified side flip");
-assert.ok(containedExtrapolation < 75, "out-of-support projection reflection must decay continuously");
+assert.equal(totalReflection.totalEvidenceAvailable, true);
+assert.equal(totalReflection.totalSideFlipped, true);
+assert.ok(totalReflection.forecast.expectedTotal > 48, "fallback Total flow must be able to reflect an Under baseline to Over");
+assert.ok(Math.abs(totalReflection.forecast.expectedTotal -
+  (totalReflection.forecast.expectedHomePoints + totalReflection.forecast.expectedAwayPoints)) < 1e-9);
+const reflectedOverProbability = totalReflection.forecast.pmf.reduce((sum, cell) => {
+  const total = cell.home + cell.away;
+  return sum + (total > 48 ? cell.probability : total === 48 ? 0.5 * cell.probability : 0);
+}, 0);
+assert.ok(
+  reflectedOverProbability > 0.5,
+  "the final PMF—not only its mean score—must agree with the fallback Total read",
+);
 
-console.log("CFB professional market-reader target exclusion, no-split, and score-coherence tests passed.");
+console.log("CFB static-consensus, key-three, target-exclusion, fallback-Total, and score-coherence tests passed.");

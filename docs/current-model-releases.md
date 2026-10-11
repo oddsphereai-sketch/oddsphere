@@ -297,6 +297,40 @@ Last reviewed: 2026-10-10
 
 ## CFB Daily Edge generalized weekly production release
 
+- October 11 CFB accuracy-incident replacement: the active professional reader is
+  `cfb_complete_market_reader_2026_10_11_r5_consensus_authority_split_specialization`
+  with frozen artifact
+  `cfb_market_reader_artifact_2026_10_11_r5_consensus_authority_split_specialization`.
+  Target-book-excluded current Spread consensus now has continuous authority even when its
+  opening and current numbers are equal and no split feed is present; disagreement increases
+  that authority smoothly, the empirically retained football key-three upset band remains an
+  independent-model exception, and an exact-line Spread side change requires one resolved point.
+  Fallback sportsbook splits are not treated as verified sharp money: the 2026 provenance replay
+  rejected their blanket Moneyline/Spread use and retained them only for Total-side specialization.
+  Missing Spread consensus or missing Total splits remains neutral. One final PMF owns the score,
+  winner, Spread, Total, probabilities, and grades; the evaluated book is excluded from the
+  forecast and enters only the exact-price decision.
+- Runtime / independent model / distribution / probability / reachable score / calibration /
+  grade / decision are
+  `cfb_v1_joint_score_runtime_2026_10_11_r23_consensus_authority_split_specialization` /
+  `cfb_v1_professional_score_model_2026_10_11_r22_consensus_authority_split_specialization` /
+  `cfb_v1_professional_joint_distribution_2026_10_11_r20_consensus_authority_split_specialization` /
+  `cfb_v1_professional_joint_probability_2026_10_11_r24_consensus_authority_split_specialization` /
+  `cfb_v1_professional_reachable_score_2026_10_11_r20_consensus_authority_split_specialization` /
+  `cfb_v1_exact_price_calibration_2026_10_11_r23_consensus_authority_split_specialization` /
+  `cfb_v1_composite_grade_policy_2026_10_11_r26_consensus_authority_split_specialization` /
+  `cfb_v1_daily_edge_decision_2026_10_11_r48_consensus_authority_split_specialization`.
+  Production reader / tuple / evidence / member / writer are
+  `cfb_market_sharp_aware_production_2026_10_11_r36_consensus_authority_split_specialization` /
+  `cfb_v1_exact_price_decision_tuple_2026_10_11_r36_consensus_authority_split_specialization` /
+  `cfb_forward_evidence_snapshot_2026_10_11_r44_consensus_authority_split_specialization` /
+  `cfb_v1_member_release_2026_10_11_r61_consensus_authority_split_specialization` /
+  `cfb_forward_evidence_writer_2026_10_11_r115_consensus_authority_split_specialization`.
+  Fixture / outcome / compact snapshot / reader / tracking are r87 / r77 / r47 / r32 / r45 with
+  the same suffix. The October 10 r60/r114/r86/r76/r46/r31 release remains the immediate immutable
+  reader fallback. Locked records retain stored-payload precedence. Evidence, board impact,
+  limitations, and rollback: `docs/model-audits/2026-10-11-cfb-accuracy-incident-result.md`.
+
 - October 10 last-known injury-report continuity correction: evidence schema, independent model, probability, calibration, decision, grade, exact-price, tracking, professional market-reader, stake, cadence, sole writer, and `prediction_pipeline:cfb` lease remain unchanged. The writer now selects the newest verified exact-game injury report across its already bounded evidence history, so a newer failed/omitted refresh row cannot hide valid earlier evidence; a genuinely newer verified report or verified clear report still replaces it. Original provider timestamps and exact team/game identity are preserved, missing evidence remains unavailable, and locked rows remain immutable. A credential-backed replay proved Playbook CFB lines/splits but returned HTTP 404 for `/v1/injuries`; production therefore stops making that unsupported request, lowers its bounded Playbook request maximum from four to three, and continues to update CFB injury reports from the existing official-conference collector. Collector / member are `cfb_forward_evidence_collector_2026_10_10_r57_last_known_injury_report_continuity` / `cfb_v1_member_release_2026_10_10_r60_last_known_injury_report_continuity`.
 - Sole writer / fixture / outcome / compact snapshot / reader are `cfb_forward_evidence_writer_2026_10_10_r114_last_known_injury_report_continuity` / `cfb_v1_member_fixture_2026_10_10_r86_last_known_injury_report_continuity` / `cfb_market_sharp_public_outcome_contract_2026_10_10_r76_last_known_injury_report_continuity` / `cfb_forward_member_snapshot_2026_10_10_r46_last_known_injury_report_continuity` / `cfb_member_snapshot_reader_2026_10_10_r31_last_known_injury_report_continuity`. The October 9 r59/r113/r85/r75/r45/r30 family is the immediate rollback; r58 and r57 remain readable behind it for immutable locks. Evidence and gates: `docs/model-audits/2026-10-10-cfb-last-known-injury-report-continuity.md`.
 

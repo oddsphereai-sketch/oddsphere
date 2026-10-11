@@ -17,29 +17,31 @@ import {
 import type { CfbV1Forecast } from "./cfbV1Decision";
 
 export const CFB_COMPLETE_MARKET_READER_RELEASE =
-  "cfb_complete_market_reader_2026_10_09_r4_joint_moneyline_spread_reconciliation" as const;
+  "cfb_complete_market_reader_2026_10_11_r5_consensus_authority_split_specialization" as const;
 export const CFB_COMPLETE_MARKET_READER_ARTIFACT_RELEASE =
-  "cfb_market_reader_artifact_2026_10_09_r4_joint_moneyline_spread_reconciliation" as const;
+  "cfb_market_reader_artifact_2026_10_11_r5_consensus_authority_split_specialization" as const;
 
 type Market = "moneyline" | "spread" | "total";
 type Axis = "margin" | "total";
 type Side = "first" | "second";
-type RidgeModel = {
-  names: string[];
-  means: number[];
-  scales: number[];
-  beta: number[];
-  prior: number;
-};
 type Artifact = {
   release: string;
   trainedThrough: string;
   games: number;
-  margin: { evidenceScale: number; model: RidgeModel };
+  selectionProtocol: string;
+  margin: {
+    baseConsensusAuthority: number;
+    maximumAdditionalConsensusAuthority: number;
+    disagreementScalePoints: number;
+    upsetRetention: {
+      minimumAbsoluteConsensusMargin: number;
+      maximumAbsoluteConsensusMargin: number;
+    };
+    minimumResolvedSpreadEdgePoints: number;
+  };
   total: {
-    evidenceScale: number;
-    reflectionSupport: { maximumChronologicalActiveMarketDistance: number };
-    model: RidgeModel;
+    splitProvenance: "fallback";
+    reflectionAuthority: number;
   };
 };
 type Observation = {
@@ -90,6 +92,10 @@ export function applyCfbCompleteMarketReader(args: {
   homeFbs: boolean;
   awayConferenceId: number | null;
   homeConferenceId: number | null;
+  evaluatedLines: {
+    homeSpread: number | null;
+    total: number | null;
+  };
 }): CfbCompleteMarketReaderResult {
   assertArtifact();
   const observations = [
@@ -108,44 +114,65 @@ export function applyCfbCompleteMarketReader(args: {
     kickoffAt: args.kickoffAt,
     observations,
   };
-  const marginFeatures = professionalReconciliationMarginFeatures(
-    residualFeatures(base, "margin"),
-    args.forecast.expectedMarginHome,
-    args.independentForecast.expectedMarginHome,
-    observations,
-  );
-  const totalFeatures = constrainedMarketFeatures(residualFeatures(base, "total"), "total");
-  const marginEvidenceAvailable = hasObservedAxisEvidence(marginFeatures, "margin");
-  const totalEvidenceAvailable = hasObservedAxisEvidence(totalFeatures, "total");
-  const proposedMargin = marginEvidenceAvailable
-    ? posteriorResidualAxis(args.forecast.expectedMarginHome, marginFeatures, "margin", ARTIFACT.margin.model, ARTIFACT.margin.evidenceScale)
-    : args.forecast.expectedMarginHome;
-  const proposedTotal = totalEvidenceAvailable
-    ? posteriorResidualAxis(args.forecast.expectedTotal, totalFeatures, "total", ARTIFACT.total.model, ARTIFACT.total.evidenceScale)
-    : args.forecast.expectedTotal;
-  const totalBoundary = totalFeatures.total_all_current_axis;
-  const totalSideFlipped = totalBoundary !== undefined &&
-    lineWinner(proposedTotal, totalBoundary) !== lineWinner(args.forecast.expectedTotal, totalBoundary);
-  const finalTotal = totalSideFlipped
-    ? resolveCfbSupportAwareTotalFlip({
-      active: args.forecast.expectedTotal,
-      boundary: totalBoundary!,
-      proposed: proposedTotal,
-      maximumChronologicalActiveMarketDistance:
-        ARTIFACT.total.reflectionSupport.maximumChronologicalActiveMarketDistance,
-    })
-    : args.forecast.expectedTotal;
+  const marginFeatures = residualFeatures(base, "margin");
+  const marketMargin = marginFeatures.spread_all_current_axis;
+  const marginEvidenceAvailable = marketMargin !== undefined;
+  const independentMargin = args.independentForecast.expectedMarginHome;
+  const disagreement = marketMargin === undefined ? 0 : Math.abs(marketMargin - independentMargin);
+  const consensusAuthority = ARTIFACT.margin.baseConsensusAuthority +
+    ARTIFACT.margin.maximumAdditionalConsensusAuthority *
+      Math.tanh(disagreement / ARTIFACT.margin.disagreementScalePoints);
+  const anchoredMargin = marketMargin === undefined
+    ? independentMargin
+    : independentMargin + consensusAuthority * (marketMargin - independentMargin);
+  const retainIndependentUpset = marketMargin !== undefined &&
+    lineWinner(independentMargin, 0) !== lineWinner(marketMargin, 0) &&
+    Math.abs(marketMargin) >= ARTIFACT.margin.upsetRetention.minimumAbsoluteConsensusMargin &&
+    Math.abs(marketMargin) <= ARTIFACT.margin.upsetRetention.maximumAbsoluteConsensusMargin;
+  const upsetAwareMargin = retainIndependentUpset ? independentMargin : anchoredMargin;
+  const spreadBoundary = args.evaluatedLines.homeSpread === null
+    ? null
+    : -args.evaluatedLines.homeSpread;
+  const unresolvedSpreadCrossing = spreadBoundary !== null &&
+    lineWinner(upsetAwareMargin, spreadBoundary) !== lineWinner(args.forecast.expectedMarginHome, spreadBoundary) &&
+    Math.abs(upsetAwareMargin - spreadBoundary) < ARTIFACT.margin.minimumResolvedSpreadEdgePoints;
+  const proposedMargin = unresolvedSpreadCrossing
+    ? args.forecast.expectedMarginHome
+    : upsetAwareMargin;
 
+  const fallbackTotalSide = consensusSplitSide(observations, "total", ARTIFACT.total.splitProvenance);
+  const totalBoundary = args.evaluatedLines.total;
+  const totalEvidenceAvailable = totalBoundary !== null && fallbackTotalSide !== null;
+  const independentTotal = args.independentForecast.expectedTotal;
+  const proposedTotal = !totalEvidenceAvailable ||
+      lineWinner(independentTotal, totalBoundary!) === fallbackTotalSide
+    ? independentTotal
+    : independentTotal + ARTIFACT.total.reflectionAuthority *
+      (2 * totalBoundary! - 2 * independentTotal);
   const marginPmf = tiltCfbMarginWithinTotals(
     args.forecast.pmf,
     proposedMargin - args.forecast.expectedMarginHome,
   );
   const marginSummary = summarizePmf(marginPmf);
-  const finalPmf = tiltCfbTotalWithinMargins(
+  const initialTotalPmf = tiltCfbTotalWithinMargins(
     marginPmf,
-    finalTotal - marginSummary.expectedTotal,
+    proposedTotal - marginSummary.expectedTotal,
   );
+  const desiredTotalSide = totalBoundary === null
+    ? null
+    : fallbackTotalSide ?? lineWinner(independentTotal, totalBoundary);
+  const finalPmf = totalBoundary !== null && desiredTotalSide !== null && desiredTotalSide !== "push"
+    ? alignTotalPmfSide({
+      basePmf: marginPmf,
+      initialPmf: initialTotalPmf,
+      initialTargetTotal: proposedTotal,
+      boundary: totalBoundary,
+      side: desiredTotalSide,
+    })
+    : initialTotalPmf;
   const summary = summarizePmf(finalPmf);
+  const totalSideFlipped = totalBoundary !== null &&
+    pmfTotalSide(finalPmf, totalBoundary) !== pmfTotalSide(args.forecast.pmf, totalBoundary);
   return {
     forecast: { ...args.forecast, ...summary, pmf: finalPmf },
     marginShiftPoints: summary.expectedMarginHome - args.forecast.expectedMarginHome,
@@ -156,37 +183,79 @@ export function applyCfbCompleteMarketReader(args: {
   };
 }
 
-export function resolveCfbSupportAwareTotalFlip(args: {
-  active: number;
-  boundary: number;
-  proposed: number;
-  maximumChronologicalActiveMarketDistance: number;
-}): number {
-  const reflected = 2 * args.boundary - args.active;
-  const activeMarketDistance = Math.abs(args.active - args.boundary);
-  const support = args.maximumChronologicalActiveMarketDistance;
-  if (activeMarketDistance <= support) return reflected;
+function pmfTotalSide(
+  pmf: CfbV1Forecast["pmf"],
+  boundary: number,
+): Side | "push" {
+  let over = 0;
+  let under = 0;
+  for (const cell of pmf) {
+    const total = cell.home + cell.away;
+    if (total > boundary) over += cell.probability;
+    else if (total < boundary) under += cell.probability;
+    else {
+      over += 0.5 * cell.probability;
+      under += 0.5 * cell.probability;
+    }
+  }
+  return Math.abs(over - under) < 1e-12 ? "push" : over > under ? "first" : "second";
+}
 
-  const proposedDirection = Math.sign(args.proposed - args.boundary);
-  const supportedProposed = args.boundary + proposedDirection * Math.min(
-    Math.abs(args.proposed - args.boundary),
-    support,
+function alignTotalPmfSide(args: {
+  basePmf: CfbV1Forecast["pmf"];
+  initialPmf: CfbV1Forecast["pmf"];
+  initialTargetTotal: number;
+  boundary: number;
+  side: Side;
+}): CfbV1Forecast["pmf"] {
+  if (pmfTotalSide(args.initialPmf, args.boundary) === args.side) return args.initialPmf;
+  const base = summarizePmf(args.basePmf);
+  const totals = args.basePmf.map((cell) => cell.home + cell.away);
+  const extreme = args.side === "first"
+    ? Math.max(...totals) - 1e-6
+    : Math.min(...totals) + 1e-6;
+  const atTarget = (target: number) => tiltCfbTotalWithinMargins(
+    args.basePmf,
+    target - base.expectedTotal,
   );
-  const reflectionWeight = Math.exp(-(activeMarketDistance - support) / support);
-  return reflectionWeight * reflected + (1 - reflectionWeight) * supportedProposed;
+  const extremePmf = atTarget(extreme);
+  if (pmfTotalSide(extremePmf, args.boundary) !== args.side) return args.initialPmf;
+  let unresolved = args.initialTargetTotal;
+  let resolved = extreme;
+  for (let iteration = 0; iteration < 40; iteration += 1) {
+    const midpoint = (unresolved + resolved) / 2;
+    const candidate = atTarget(midpoint);
+    if (pmfTotalSide(candidate, args.boundary) === args.side) resolved = midpoint;
+    else unresolved = midpoint;
+  }
+  return atTarget(resolved);
 }
 
 function assertArtifact(): void {
   if (
     ARTIFACT.release !== CFB_COMPLETE_MARKET_READER_ARTIFACT_RELEASE ||
-    ARTIFACT.games !== 301 ||
-    !Number.isFinite(ARTIFACT.total.reflectionSupport.maximumChronologicalActiveMarketDistance) ||
-    ARTIFACT.total.reflectionSupport.maximumChronologicalActiveMarketDistance <= 0 ||
-    ARTIFACT.margin.model.beta.length !== ARTIFACT.margin.model.names.length + 1 ||
-    ARTIFACT.total.model.beta.length !== ARTIFACT.total.model.names.length + 1
+    ARTIFACT.games !== 373 ||
+    ARTIFACT.margin.baseConsensusAuthority !== 0.5 ||
+    ARTIFACT.margin.maximumAdditionalConsensusAuthority !== 0.25 ||
+    ARTIFACT.margin.disagreementScalePoints !== 7 ||
+    ARTIFACT.margin.minimumResolvedSpreadEdgePoints !== 1 ||
+    ARTIFACT.total.splitProvenance !== "fallback" ||
+    ARTIFACT.total.reflectionAuthority !== 1
   ) {
     throw new Error("CFB complete market-reader artifact contract mismatch.");
   }
+}
+
+function consensusSplitSide(
+  observations: Observation[],
+  market: Market,
+  provenance: SplitRead["provenance"],
+): Side | null {
+  const reads = splitReads(observations, market).filter((read) => read.provenance === provenance);
+  if (reads.length === 0) return null;
+  const vote = reads.reduce((sum, read) =>
+    sum + (read.side === "second" ? 1 : -1) * Math.max(Math.abs(read.gapPp), 1), 0);
+  return Math.abs(vote) < 1e-9 ? null : vote > 0 ? "second" : "first";
 }
 
 function observationFromHistory(history: CfbForwardMarketHistoryEvidence): Observation {
@@ -512,192 +581,6 @@ function residualFeatures(args: {
     output.named_retail_move_product = namedMove * retailMove;
   }
   return output;
-}
-
-function reconciliationMarginFeatures(
-  raw: Record<string, number>,
-  activeMargin: number,
-  independentMargin: number,
-): Record<string, number> {
-  const output = { ...raw };
-  const legacyShift = activeMargin - independentMargin;
-  output.active_margin = activeMargin;
-  output.legacy_margin_shift = legacyShift;
-  output.legacy_margin_shift_abs = Math.abs(legacyShift);
-  output.legacy_moneyline_side_changed = Number(lineWinner(activeMargin, 0) !== lineWinner(independentMargin, 0));
-  const current = output.spread_all_current_axis;
-  if (current !== undefined) {
-    output.active_market_disagreement = current - activeMargin;
-    output.active_market_disagreement_abs = Math.abs(current - activeMargin);
-    output.independent_market_disagreement_abs = Math.abs(current - independentMargin);
-    output.legacy_market_distance_change = Math.abs(current - activeMargin) - Math.abs(current - independentMargin);
-    output.legacy_spread_side_changed = Number(lineWinner(activeMargin, current) !== lineWinner(independentMargin, current));
-    output.legacy_reflection_signature = legacyShift * (current - independentMargin);
-  }
-  return output;
-}
-
-function professionalReconciliationMarginFeatures(
-  raw: Record<string, number>,
-  activeMargin: number,
-  independentMargin: number,
-  observations: Observation[],
-): Record<string, number> {
-  const output = reconciliationMarginFeatures(raw, activeMargin, independentMargin);
-  const moneylineReads = splitReads(observations, "moneyline");
-  for (const provenance of ["named_sharp", "fallback", "public"] as const) {
-    const selected = moneylineReads.filter((read) => read.provenance === provenance);
-    const signed = average(selected.map((read) => signedSplit(read, "margin")));
-    const signedMoneyMajority = average(selected.map((read) => {
-      const positive = read.side === "second";
-      return (positive ? 1 : -1) * (read.moneyPct - 50);
-    }));
-    const signedTicketMajority = average(selected.map((read) => {
-      const positive = read.side === "second";
-      return (positive ? 1 : -1) * (read.ticketsPct - 50);
-    }));
-    const acceleration = average(selected.flatMap((read) => read.moneyAccelerationPp === null
-      ? []
-      : [Math.sign(signedSplit(read, "margin")) * Math.abs(read.moneyAccelerationPp)]));
-    if (signed !== null) output[`moneyline_split_${provenance}`] = signed;
-    if (signedMoneyMajority !== null) output[`moneyline_split_${provenance}_money_majority`] = signedMoneyMajority;
-    if (signedTicketMajority !== null) output[`moneyline_split_${provenance}_ticket_majority`] = signedTicketMajority;
-    if (acceleration !== null) output[`moneyline_split_${provenance}_acceleration`] = acceleration;
-    output[`moneyline_split_${provenance}_count`] = selected.length;
-    const spreadSplit = output[`split_${provenance}`];
-    if (signed !== null && spreadSplit !== undefined) {
-      output[`cross_market_split_${provenance}_product`] = signed * spreadSplit;
-      output[`cross_market_split_${provenance}_agreement`] = Math.sign(signed) === Math.sign(spreadSplit) ? 1 : -1;
-    }
-  }
-  const spreadMove = output.spread_all_axis_move;
-  const moneylineMove = output.moneyline_all_probability_move;
-  if (spreadMove !== undefined && moneylineMove !== undefined) {
-    output.cross_market_move_product = spreadMove * moneylineMove;
-    output.cross_market_move_agreement = Math.sign(spreadMove) === Math.sign(moneylineMove) ? 1 : -1;
-  }
-  const currentSpread = output.spread_all_current_axis;
-  if (currentSpread !== undefined) {
-    output.short_spread_3 = Number(Math.abs(currentSpread) <= 3);
-    output.short_spread_7 = Number(Math.abs(currentSpread) <= 7);
-    if (moneylineMove !== undefined) {
-      output.short_spread_3_moneyline_move = output.short_spread_3 * moneylineMove;
-    }
-    for (const provenance of ["named_sharp", "fallback", "public"] as const) {
-      const moneylineSplit = output[`moneyline_split_${provenance}`];
-      const spreadSplit = output[`split_${provenance}`];
-      if (moneylineSplit !== undefined) {
-        output[`short_spread_3_moneyline_split_${provenance}`] = output.short_spread_3 * moneylineSplit;
-      }
-      if (spreadSplit !== undefined) {
-        output[`short_spread_3_spread_split_${provenance}`] = output.short_spread_3 * spreadSplit;
-      }
-    }
-  }
-  return output;
-}
-
-function constrainedMarketFeatures(raw: Record<string, number>, axis: Axis): Record<string, number> {
-  const market = axis === "margin" ? "spread" : "total";
-  const names = [
-    axis === "margin" ? "independent_margin" : "independent_total",
-    "independent_margin_abs",
-    "both_fbs",
-    "fbs_mismatch",
-    "same_conference",
-    "market_disagreement",
-    "opening_disagreement",
-    "market_path",
-    `${market}_all_current_axis`,
-    `${market}_all_axis_move`,
-    `${market}_all_probability_move`,
-    `${market}_all_reversal_count`,
-    `${market}_all_late_6h_count`,
-    `${market}_named_axis_move`,
-    `${market}_named_probability_move`,
-    `${market}_named_reversal_count`,
-    `${market}_named_late_6h_count`,
-    `${market}_retail_axis_move`,
-    `${market}_retail_probability_move`,
-    `${market}_retail_reversal_count`,
-    `${market}_retail_late_6h_count`,
-    "named_retail_axis_gap",
-    "named_retail_move_product",
-    "split_named_sharp",
-    "split_named_sharp_money_majority",
-    "split_named_sharp_ticket_majority",
-    "split_named_sharp_acceleration",
-    "split_named_sharp_path_alignment",
-    "split_fallback",
-    "split_fallback_money_majority",
-    "split_fallback_ticket_majority",
-    "split_fallback_acceleration",
-    "split_fallback_path_alignment",
-    "split_public",
-    "split_public_money_majority",
-    "split_public_ticket_majority",
-    "split_public_acceleration",
-    "split_public_path_alignment",
-  ];
-  return Object.fromEntries(names.flatMap((name) => raw[name] === undefined ? [] : [[name, raw[name]!]]));
-}
-
-function sigmoid(value: number): number {
-  if (value >= 0) return 1 / (1 + Math.exp(-Math.min(value, 35)));
-  const exponential = Math.exp(Math.max(value, -35));
-  return exponential / (1 + exponential);
-}
-
-function logit(value: number): number {
-  const bounded = Math.min(1 - 1e-6, Math.max(1e-6, value));
-  return Math.log(bounded / (1 - bounded));
-}
-
-function predictPosterior(model: RidgeModel, features: Record<string, number>): number {
-  return sigmoid(model.beta[0]! + model.names.reduce((sum, name, index) =>
-    sum + model.beta[index + 1]! *
-      (((features[name] ?? model.means[index]!) - model.means[index]!) / model.scales[index]!), 0));
-}
-
-function posteriorResidualAxis(
-  active: number,
-  features: Record<string, number>,
-  axis: Axis,
-  model: RidgeModel,
-  evidenceScale: number,
-): number {
-  const market = axis === "margin" ? "spread" : "total";
-  const boundary = features[`${market}_all_current_axis`];
-  if (boundary === undefined) return active;
-  const alternative = 2 * boundary - active;
-  const strength = Math.tanh(evidenceScale * (logit(predictPosterior(model, features)) - logit(model.prior)));
-  return active + strength * (alternative - active);
-}
-
-function hasObservedMarketEvidence(features: Record<string, number>, market: Market): boolean {
-  const movementKeys = [
-    `${market}_all_axis_move`,
-    `${market}_all_probability_move`,
-    `${market}_named_axis_move`,
-    `${market}_named_probability_move`,
-    `${market}_retail_axis_move`,
-    `${market}_retail_probability_move`,
-  ];
-  const sequenceKeys = [
-    `${market}_all_reversal_count`,
-    `${market}_named_reversal_count`,
-    `${market}_retail_reversal_count`,
-  ];
-  const splitKeys = ["split_named_sharp", "split_fallback", "split_public"];
-  return movementKeys.some((key) => Math.abs(features[key] ?? 0) > 1e-12) ||
-    sequenceKeys.some((key) => (features[key] ?? 0) > 0) ||
-    splitKeys.some((key) => features[key] !== undefined);
-}
-
-function hasObservedAxisEvidence(features: Record<string, number>, axis: Axis): boolean {
-  return axis === "total"
-    ? hasObservedMarketEvidence(features, "total")
-    : hasObservedMarketEvidence(features, "spread") || hasObservedMarketEvidence(features, "moneyline");
 }
 
 function lineWinner(value: number, boundary: number): Side | "push" {

@@ -9,6 +9,7 @@ import { readCfbForwardEvidence } from "../../lib/services/football/cfbForwardEv
 import {
   buildCfbV1DecisionBundle,
   type CfbV1ExactPriceDecision,
+  type CfbV1Forecast,
   type CfbV1Grade,
   type CfbV1Market,
 } from "../../lib/services/football/cfbV1Decision";
@@ -31,11 +32,16 @@ const MARKETS: CfbV1Market[] = ["moneyline", "spread", "total"];
 type AuditRow = {
   game: string;
   providerGameId: string;
+  date: string;
   week: number;
   market: CfbV1Market;
   previous: ReturnType<typeof compact>;
+  base: ReturnType<typeof compact>;
   candidate: ReturnType<typeof compact>;
   result: "win" | "loss" | "push" | null;
+  independentResult: "win" | "loss" | "push" | null;
+  competitionCohort: "both_fbs" | "fbs_fcs" | "both_fcs";
+  profileHealth: "matched" | "neutral_imputation";
 };
 
 async function main(): Promise<void> {
@@ -170,15 +176,28 @@ async function main(): Promise<void> {
       coherenceFailures.push(payload.game.providerGameId);
     }
     const previous = new Map(payload.decisions.evaluatedBets.map((decision) => [decision.market, decision]));
+    const base = new Map(rawBundle.evaluatedBets.map((decision) => [decision.market, decision]));
     const currentDecisions = new Map(candidate.evaluatedBets.map((decision) => [decision.market, decision]));
+    const outcome = findOutcome(payload.game, advanced.games);
     for (const market of MARKETS) comparisons.push({
       game: `${payload.game.away.abbreviation}@${payload.game.home.abbreviation}`,
       providerGameId: payload.game.providerGameId,
+      date: easternDate(payload.game.scheduledStart),
       week: payload.game.providerWeek,
       market,
       previous: compact(previous.get(market)),
+      base: compact(base.get(market)),
       candidate: compact(currentDecisions.get(market)),
-      result: settle(currentDecisions.get(market), payload.game.home.abbreviation, findOutcome(payload.game, advanced.games)),
+      result: settle(currentDecisions.get(market), payload.game.home.abbreviation, outcome),
+      independentResult: settleIndependent(currentDecisions.get(market), weekly.forecast, payload.game.home.abbreviation, outcome),
+      competitionCohort: payload.game.away.fbs && payload.game.home.fbs
+        ? "both_fbs"
+        : payload.game.away.fbs || payload.game.home.fbs
+          ? "fbs_fcs"
+          : "both_fcs",
+      profileHealth: weekly.featureHealth.awayProfile === "matched" && weekly.featureHealth.homeProfile === "matched"
+        ? "matched"
+        : "neutral_imputation",
     });
   }
 
@@ -214,6 +233,9 @@ async function main(): Promise<void> {
       confirmationWeeks3to4: summarizeResults(comparisons.filter((row) => row.week >= 3 && row.week <= 4)),
       calibrationDiagnostics: summarizeCalibrationDiagnostics(comparisons),
       tierCandidates: summarizeTierCandidates(comparisons),
+      gradeAuthorityCandidates: summarizeGradeAuthorityCandidates(comparisons),
+      actionabilityGrid: summarizeActionabilityGrid(comparisons),
+      rootCauseCohorts: summarizeRootCauseCohorts(comparisons),
     } : compactMode ? {} : {
       promotionRows: promotions,
       demotionRows: demotions,
@@ -239,7 +261,17 @@ function compact(decision: CfbV1ExactPriceDecision | undefined) {
     publicDirection: decision.gradeAdjustment?.publicDirection ?? "unknown",
     movementDirection: decision.gradeAdjustment?.movementDirection ?? "unknown",
     executionStatus: decision.gradeAdjustment?.executionStatus ?? null,
+    reasonCodes: decision.gradeAdjustment?.reasonCodes ?? [],
   } : null;
+}
+
+function easternDate(value: string): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/New_York",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date(value));
 }
 
 function rank(grade: CfbV1Grade | undefined): number { return grade === "Best Angle" ? 4 : grade === "Lean" ? 3 : grade === "Watchlist" ? 2 : grade === "No Play" ? 1 : 0; }
@@ -279,6 +311,38 @@ function settle(decision: CfbV1ExactPriceDecision | undefined, homeTeam: string,
     value = /^over\b/i.test(decision.side) ? delta : -delta;
   }
   return Math.abs(value) < 1e-9 ? "push" : value > 0 ? "win" : "loss";
+}
+
+function settleIndependent(
+  decision: CfbV1ExactPriceDecision | undefined,
+  forecast: CfbV1Forecast,
+  homeTeam: string,
+  outcome: Awaited<ReturnType<typeof fetchCfbCurrentAdvancedState>>["games"][number] | null,
+): "win" | "loss" | "push" | null {
+  if (!decision || !outcome) return null;
+  const home = decision.side.startsWith(homeTeam);
+  const homeSpread = decision.market === "spread" ? (home ? decision.evaluatedQuote.line! : -decision.evaluatedQuote.line!) : null;
+  const selectedSide = decision.market === "moneyline"
+    ? forecast.expectedMarginHome >= 0 ? homeTeam : "away"
+    : decision.market === "spread"
+      ? forecast.expectedMarginHome + homeSpread! >= 0
+        ? homeTeam
+        : "away"
+      : forecast.expectedTotal >= decision.evaluatedQuote.line! ? "Over" : "Under";
+  const selectedHome = selectedSide === homeTeam;
+  const independentLine = decision.market === "spread"
+    ? selectedHome ? homeSpread! : -homeSpread!
+    : decision.evaluatedQuote.line;
+  const independentDecision = {
+    ...decision,
+    evaluatedQuote: { ...decision.evaluatedQuote, line: independentLine },
+    side: decision.market === "total"
+      ? `${selectedSide} ${decision.evaluatedQuote.line}`
+      : selectedSide === homeTeam
+        ? `${homeTeam}${decision.market === "spread" ? ` ${independentLine}` : ""}`
+        : `away${decision.market === "spread" ? ` ${independentLine}` : ""}`,
+  };
+  return settle(independentDecision, homeTeam, outcome);
 }
 
 function summarizeResults(rows: AuditRow[]) {
@@ -418,6 +482,246 @@ function summarizeTierCandidate(rows: AuditRow[], policy: TierCandidate) {
       bestAngle: summarize(best.filter((row) => row.market === market)),
       lean: summarize(lean.filter((row) => row.market === market)),
     }])),
+  };
+}
+
+type GradeAuthorityPolicy = "current" | "base" | "base_plus_supported_promotion" | "base_plus_multichannel_promotion";
+
+function summarizeGradeAuthorityCandidates(rows: AuditRow[]) {
+  const settled = rows.filter((row) => row.result !== null && row.candidate !== null);
+  const policies: GradeAuthorityPolicy[] = [
+    "current",
+    "base",
+    "base_plus_supported_promotion",
+    "base_plus_multichannel_promotion",
+  ];
+  const segments = {
+    selection: (row: AuditRow) => row.date <= "2026-09-20",
+    confirmation: (row: AuditRow) => row.date >= "2026-09-21" && row.date <= "2026-10-04",
+    preCrisisHoldout: (row: AuditRow) => row.date >= "2026-10-05" && row.date <= "2026-10-09",
+    october10Holdout: (row: AuditRow) => row.date >= "2026-10-10",
+  };
+  return Object.fromEntries(policies.map((policy) => [policy, {
+    all: gradeAuthorityMetrics(settled, policy),
+    segments: Object.fromEntries(Object.entries(segments).map(([name, eligible]) => [
+      name,
+      gradeAuthorityMetrics(settled.filter(eligible), policy),
+    ])),
+  }]));
+}
+
+function gradeAuthorityEligible(row: AuditRow, policy: GradeAuthorityPolicy): boolean {
+  const currentActionable = actionable(row.candidate?.grade);
+  if (policy === "current") return currentActionable;
+  const baseActionable = actionable(row.base?.grade);
+  if (policy === "base") return baseActionable;
+  if (baseActionable) return true;
+  if (!currentActionable || !row.candidate) return false;
+
+  const directions = [
+    row.candidate.sharpDirection,
+    row.candidate.publicDirection,
+    row.candidate.movementDirection,
+  ];
+  const support = directions.filter((direction) => direction === "support").length;
+  const resistance = directions.filter((direction) => direction === "resistance").length;
+  const reasonCodes = row.candidate.reasonCodes;
+  const explicitPromotion = reasonCodes.includes("balanced_positive_value_promotion")
+    || reasonCodes.includes("moneyline_market_confirmed_favorite_lean");
+  if (!explicitPromotion || resistance > 0) return false;
+  return policy === "base_plus_supported_promotion" ? support >= 1 : support >= 2;
+}
+
+function gradeAuthorityMetrics(rows: AuditRow[], policy: GradeAuthorityPolicy) {
+  const selected = rows.filter((row) => gradeAuthorityEligible(row, policy));
+  const summarize = (subset: AuditRow[]) => {
+    const wins = subset.filter((row) => row.result === "win").length;
+    const losses = subset.filter((row) => row.result === "loss").length;
+    const pushes = subset.filter((row) => row.result === "push").length;
+    const decided = wins + losses;
+    const units = subset.reduce((sum, row) => {
+      if (row.result === "push") return sum;
+      if (row.result === "loss") return sum - 1;
+      const price = row.candidate?.price ?? -110;
+      return sum + (price < 0 ? 100 / Math.abs(price) : price / 100);
+    }, 0);
+    return {
+      rows: subset.length,
+      wins,
+      losses,
+      pushes,
+      accuracy: decided > 0 ? wins / decided : null,
+      units,
+      roi: decided > 0 ? units / decided : null,
+    };
+  };
+  return {
+    actionable: summarize(selected),
+    byMarket: Object.fromEntries(MARKETS.map((market) => [market, summarize(selected.filter((row) => row.market === market))])),
+    promotions: rows.filter((row) => !actionable(row.candidate?.grade) && gradeAuthorityEligible(row, policy)).length,
+    demotions: rows.filter((row) => actionable(row.candidate?.grade) && !gradeAuthorityEligible(row, policy)).length,
+  };
+}
+
+type ActionabilityGridPolicy = {
+  market: CfbV1Market;
+  probability: number;
+  edgePp: number;
+  expectedValue: number;
+  support: number;
+  resistance: number;
+  maximumAbsLine: number | null;
+};
+
+function summarizeActionabilityGrid(rows: AuditRow[]) {
+  const settled = rows.filter((row) => row.result !== null && row.candidate !== null);
+  const values = {
+    probability: [0.52, 0.54, 0.55, 0.56, 0.575, 0.60, 0.625, 0.65, 0.675],
+    edgePp: [0, 2, 3, 4, 5, 7.5, 10],
+    expectedValue: [0, 0.01, 0.02, 0.03, 0.05, 0.075, 0.10],
+    support: [0, 1, 2],
+    resistance: [0, 1],
+  };
+  return Object.fromEntries(MARKETS.map((market) => {
+    const maximumAbsLines = market === "spread" ? [10, 17, 24, null] : [null];
+    const policies: ActionabilityGridPolicy[] = [];
+    for (const probability of values.probability)
+      for (const edgePp of values.edgePp)
+        for (const expectedValue of values.expectedValue)
+          for (const support of values.support)
+            for (const resistance of values.resistance)
+              for (const maximumAbsLine of maximumAbsLines)
+                policies.push({ market, probability, edgePp, expectedValue, support, resistance, maximumAbsLine });
+
+    const selectionRows = settled.filter((row) => row.market === market && row.date <= "2026-09-20");
+    const confirmationRows = settled.filter((row) => row.market === market && row.date >= "2026-09-21" && row.date <= "2026-10-04");
+    const minimum = market === "moneyline" ? 8 : 16;
+    const evaluated = policies.flatMap((policy) => {
+      const selection = actionabilityGridMetrics(selectionRows, policy);
+      const confirmation = actionabilityGridMetrics(confirmationRows, policy);
+      if (selection.rows < minimum || confirmation.rows < minimum) return [];
+      return [{
+        policy,
+        selection,
+        confirmation,
+        robustRoi: Math.min(selection.roi ?? -Infinity, confirmation.roi ?? -Infinity),
+        developmentRoi: ((selection.units + confirmation.units) / Math.max(1, selection.decided + confirmation.decided)),
+      }];
+    }).sort((left, right) =>
+      right.robustRoi - left.robustRoi ||
+      right.developmentRoi - left.developmentRoi ||
+      (right.selection.rows + right.confirmation.rows) - (left.selection.rows + left.confirmation.rows));
+
+    const deduped = [...new Map(evaluated.map((entry) => [
+      [entry.policy.probability, entry.policy.edgePp, entry.policy.expectedValue, entry.policy.support, entry.policy.resistance, entry.policy.maximumAbsLine].join("|"),
+      entry,
+    ])).values()].slice(0, 12).map((entry) => ({
+      ...entry,
+      preCrisisHoldout: actionabilityGridMetrics(
+        settled.filter((row) => row.market === market && row.date >= "2026-10-05" && row.date <= "2026-10-09"),
+        entry.policy,
+      ),
+      october10Holdout: actionabilityGridMetrics(
+        settled.filter((row) => row.market === market && row.date >= "2026-10-10"),
+        entry.policy,
+      ),
+      boardImpact: actionabilityGridBoardImpact(settled.filter((row) => row.market === market), entry.policy),
+    }));
+    return [market, deduped];
+  }));
+}
+
+function actionabilityGridEligible(row: AuditRow, policy: ActionabilityGridPolicy): boolean {
+  const decision = row.candidate;
+  if (!decision || decision.executionStatus !== "bet") return false;
+  const edgePp = 100 * (decision.modelProbability - decision.marketFairProbability);
+  const directions = [decision.sharpDirection, decision.publicDirection, decision.movementDirection];
+  const support = directions.filter((direction) => direction === "support").length;
+  const resistance = directions.filter((direction) => direction === "resistance").length;
+  if (decision.modelProbability < policy.probability || edgePp < policy.edgePp || decision.expectedValue < policy.expectedValue) return false;
+  if (support < policy.support || resistance > policy.resistance) return false;
+  if (policy.market === "moneyline") return decision.price >= -700 && decision.price <= 500;
+  if (decision.price < -140 || decision.price > 140) return false;
+  return policy.maximumAbsLine === null || decision.line === null || Math.abs(decision.line) <= policy.maximumAbsLine;
+}
+
+function actionabilityGridMetrics(rows: AuditRow[], policy: ActionabilityGridPolicy) {
+  const selected = rows.filter((row) => actionabilityGridEligible(row, policy));
+  const wins = selected.filter((row) => row.result === "win").length;
+  const losses = selected.filter((row) => row.result === "loss").length;
+  const pushes = selected.filter((row) => row.result === "push").length;
+  const decided = wins + losses;
+  const units = selected.reduce((sum, row) => {
+    if (row.result === "push") return sum;
+    if (row.result === "loss") return sum - 1;
+    const price = row.candidate?.price ?? -110;
+    return sum + (price < 0 ? 100 / Math.abs(price) : price / 100);
+  }, 0);
+  return { rows: selected.length, wins, losses, pushes, decided, units, roi: decided > 0 ? units / decided : null };
+}
+
+function actionabilityGridBoardImpact(rows: AuditRow[], policy: ActionabilityGridPolicy) {
+  return {
+    incumbentActionable: rows.filter((row) => actionable(row.candidate?.grade)).length,
+    candidateActionable: rows.filter((row) => actionabilityGridEligible(row, policy)).length,
+    promotions: rows.filter((row) => !actionable(row.candidate?.grade) && actionabilityGridEligible(row, policy)).length,
+    demotions: rows.filter((row) => actionable(row.candidate?.grade) && !actionabilityGridEligible(row, policy)).length,
+  };
+}
+
+function summarizeRootCauseCohorts(rows: AuditRow[]) {
+  const settled = rows.filter((row) => row.result !== null && row.independentResult !== null);
+  const summarizeSet = (selected: AuditRow[]) => Object.fromEntries(MARKETS.map((market) => [
+    market,
+    rootCauseMetrics(selected.filter((row) => row.market === market)),
+  ]));
+  const cohorts = ["both_fbs", "fbs_fcs", "both_fcs"] as const;
+  const health = ["matched", "neutral_imputation"] as const;
+  return {
+    all: summarizeSet(settled),
+    october10: summarizeSet(settled.filter((row) => row.date >= "2026-10-10")),
+    byCompetition: Object.fromEntries(cohorts.map((cohort) => [cohort, {
+      all: summarizeSet(settled.filter((row) => row.competitionCohort === cohort)),
+      october10: summarizeSet(settled.filter((row) => row.competitionCohort === cohort && row.date >= "2026-10-10")),
+    }])),
+    byProfileHealth: Object.fromEntries(health.map((state) => [state, {
+      all: summarizeSet(settled.filter((row) => row.profileHealth === state)),
+      october10: summarizeSet(settled.filter((row) => row.profileHealth === state && row.date >= "2026-10-10")),
+    }])),
+  };
+}
+
+function rootCauseMetrics(rows: AuditRow[]) {
+  const finalWins = rows.filter((row) => row.result === "win").length;
+  const finalLosses = rows.filter((row) => row.result === "loss").length;
+  const finalPushes = rows.filter((row) => row.result === "push").length;
+  const independentWins = rows.filter((row) => row.independentResult === "win").length;
+  const independentLosses = rows.filter((row) => row.independentResult === "loss").length;
+  const independentPushes = rows.filter((row) => row.independentResult === "push").length;
+  const actionableRows = rows.filter((row) => actionable(row.candidate?.grade));
+  const actionableWins = actionableRows.filter((row) => row.result === "win").length;
+  const actionableLosses = actionableRows.filter((row) => row.result === "loss").length;
+  const actionablePushes = actionableRows.filter((row) => row.result === "push").length;
+  const units = actionableRows.reduce((sum, row) => {
+    if (row.result === "push") return sum;
+    if (row.result === "loss") return sum - 1;
+    const price = row.candidate?.price ?? -110;
+    return sum + (price < 0 ? 100 / Math.abs(price) : price / 100);
+  }, 0);
+  return {
+    rows: rows.length,
+    independent: { wins: independentWins, losses: independentLosses, pushes: independentPushes },
+    final: { wins: finalWins, losses: finalLosses, pushes: finalPushes },
+    corrections: rows.filter((row) => row.independentResult === "loss" && row.result === "win").length,
+    harms: rows.filter((row) => row.independentResult === "win" && row.result === "loss").length,
+    actionable: {
+      rows: actionableRows.length,
+      wins: actionableWins,
+      losses: actionableLosses,
+      pushes: actionablePushes,
+      units,
+      roi: actionableWins + actionableLosses > 0 ? units / (actionableWins + actionableLosses) : null,
+    },
   };
 }
 
