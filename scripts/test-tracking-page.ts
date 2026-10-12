@@ -232,13 +232,15 @@ check(
     !/key=\{`\$\{row\.sport\}-\$\{row\.market\}-\$\{row\.source\}`\} className="rounded-lg border/.test(PAGE),
 );
 check(
-  "Alternate history uses a concise graded-date header and dedicated baseline row",
+  "Alternate history combines the graded-date and baseline into one metadata row",
   /row\.original\.settled\.toLocaleString\(\)\} graded · \{coverage\}/.test(PAGE) &&
-    /border-b border-white\/\[0\.07\][\s\S]{0,260}Original lines/.test(PAGE),
+    /gap-x-4 gap-y-1[\s\S]{0,900}>Baseline<\/span>/.test(PAGE),
 );
 check(
-  "Alternate baseline copy cannot be mistaken for the Moneyline market",
-  PAGE.includes(">Original lines</span>") && !PAGE.includes(">Main line</span>"),
+  "Alternate baseline is metadata rather than a third line option",
+  PAGE.includes(">Baseline</span>") &&
+    !PAGE.includes(">Original lines</span>") &&
+    !PAGE.includes(">Main line</span>"),
 );
 check(
   "Lifetime Tracking preserves honest historical/live source labels",
