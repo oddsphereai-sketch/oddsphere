@@ -214,8 +214,8 @@ check(
 );
 check(
   "Alternate line levels remain single-column on desktop and mobile",
-  /function AlternateLinePerformanceRows[\s\S]{0,2600}grid grid-cols-1 gap-2/.test(PAGE) &&
-    !/function AlternateLinePerformanceRows[\s\S]{0,2600}sm:grid-cols-2/.test(PAGE),
+  /function AlternateLinePerformanceRows[\s\S]{0,3600}grid grid-cols-1 gap-2/.test(PAGE) &&
+    !/function AlternateLinePerformanceRows[\s\S]{0,3600}sm:grid-cols-2/.test(PAGE),
 );
 check(
   "Each alternate line level keeps its approved full-width bordered box",
@@ -225,6 +225,16 @@ check(
   "Alternate line cards and labels have stronger neutral contrast",
   /border border-slate-400\/30 bg-slate-950\/35/.test(PAGE) &&
     /min-w-\[96px\][\s\S]{0,200}border border-slate-300\/35 bg-slate-300\/\[0\.12\]/.test(PAGE),
+);
+check(
+  "Alternate history removes the redundant nested panel while preserving adjustment cards",
+  /key=\{`\$\{row\.sport\}-\$\{row\.market\}-\$\{row\.source\}`\}>/.test(PAGE) &&
+    !/key=\{`\$\{row\.sport\}-\$\{row\.market\}-\$\{row\.source\}`\} className="rounded-lg border/.test(PAGE),
+);
+check(
+  "Alternate history uses a concise graded-date header and dedicated baseline row",
+  /row\.original\.settled\.toLocaleString\(\)\} graded · \{coverage\}/.test(PAGE) &&
+    /border-b border-white\/\[0\.07\][\s\S]{0,260}Main line/.test(PAGE),
 );
 check(
   "Lifetime Tracking preserves honest historical/live source labels",
