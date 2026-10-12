@@ -234,7 +234,11 @@ check(
 check(
   "Alternate history uses a concise graded-date header and dedicated baseline row",
   /row\.original\.settled\.toLocaleString\(\)\} graded · \{coverage\}/.test(PAGE) &&
-    /border-b border-white\/\[0\.07\][\s\S]{0,260}Main line/.test(PAGE),
+    /border-b border-white\/\[0\.07\][\s\S]{0,260}Original lines/.test(PAGE),
+);
+check(
+  "Alternate baseline copy cannot be mistaken for the Moneyline market",
+  PAGE.includes(">Original lines</span>") && !PAGE.includes(">Main line</span>"),
 );
 check(
   "Lifetime Tracking preserves honest historical/live source labels",

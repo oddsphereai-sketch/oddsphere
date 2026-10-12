@@ -971,7 +971,7 @@ function AlternateLinePerformanceRows({
                 </p>
               </div>
               <div className="mb-2.5 flex items-center justify-between gap-3 border-b border-white/[0.07] px-1 pb-2.5 tabular-nums">
-                <span className="text-[10px] font-black uppercase tracking-[0.11em] text-gray-400">Main line</span>
+                <span className="text-[10px] font-black uppercase tracking-[0.11em] text-gray-400">Original lines</span>
                 <div className="text-right">
                   <span className="text-[12px] font-extrabold text-gray-200">{alternateRecord(row.original)}</span>
                   {row.original.winPct !== null ? <span className="ml-2 text-[11px] font-bold text-gray-400">{row.original.winPct.toFixed(1)}%</span> : null}
