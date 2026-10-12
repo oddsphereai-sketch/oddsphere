@@ -2540,9 +2540,10 @@ function BoardGameCard({ game, sport, headlineMarket, active, activeMarket, sele
       <div className="flex flex-1 flex-col p-5 sm:p-6">
         <div className="grid gap-3">
           <CompactMatchupIdentity game={game} sport={sport} />
-          <div className="flex min-h-8 items-center gap-2">
+          <div className="flex min-h-8 flex-wrap items-center gap-2">
             <VerdictBadge market={headline} large />
-            {finalScore ? <span className="rounded-full border border-white/[0.10] bg-white/[0.05] px-2 py-1 text-[9px] font-black uppercase tracking-wider text-gray-300">Final · {game.awayTeam} {finalScore.away}–{finalScore.home} {game.homeTeam}</span> : <><DailyEdgeGameStartTime game={game} className="text-[10px] text-gray-500" /><LockBadge lockState={game.lockState} lockedAt={game.lockedAt} scheduledLockAt={game.scheduledLockAt} className="font-black uppercase tracking-wider text-emerald-300" /></>}
+            {finalScore ? <span className="rounded-full border border-white/[0.10] bg-white/[0.05] px-2 py-1 text-[9px] font-black uppercase tracking-wider text-gray-300">Final · {game.awayTeam} {finalScore.away}–{finalScore.home} {game.homeTeam}</span> : <DailyEdgeGameStartTime game={game} className="text-[10px] text-gray-500" />}
+            <LockBadge lockState={game.lockState} lockedAt={game.lockedAt} scheduledLockAt={game.scheduledLockAt} className="font-black uppercase tracking-wider text-emerald-300" />
           </div>
         </div>
         <div className="mt-5 flex flex-wrap items-baseline gap-2">

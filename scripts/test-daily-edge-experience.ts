@@ -716,7 +716,7 @@ check(
 check(
   "candidate slate cards reserve a consistent row for Bet grade and time",
   candidateDailyEdgeSource.includes('className="grid gap-3"') &&
-    candidateDailyEdgeSource.includes('className="flex min-h-8 items-center gap-2"') &&
+    candidateDailyEdgeSource.includes('className="flex min-h-8 flex-wrap items-center gap-2"') &&
     !candidateDailyEdgeSource.includes('className="flex flex-wrap items-center justify-between gap-3">\n          <div className="flex min-w-0 items-center gap-2.5"'),
 );
 check(
@@ -1222,9 +1222,10 @@ check(
 );
 check(
   "candidate visibly renders authoritative lock state on board and reader surfaces",
-  candidateSource.includes('import { LockBadge }') &&
+    candidateSource.includes('import { LockBadge }') &&
     candidateSource.includes("minute lock checks") &&
     (candidateSource.match(/<LockBadge/g) ?? []).length === 4 &&
+    /finalScore \? <span className="rounded-full[\s\S]*?<\/span> : <DailyEdgeGameStartTime game=\{game\}[\s\S]*?\/>\}\s*<LockBadge lockState=\{game\.lockState\}/.test(candidateSource) &&
     labTypesSource.includes('"open" | "locking" | "locked" | "missed"') &&
     lockBadgeSource.includes('"LOCK MISSED"') &&
     lockBadgeSource.includes('"LOCKED"') &&
