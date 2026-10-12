@@ -48,7 +48,7 @@ console.log(`\n━━━ tracking page tests (6B.2e — design reset) ━━━\
 
 check(
   "Homepage current tracking converts the canonical 0..1 hit rate to a display percentage",
-  PUBLIC_TRACKING_SUMMARY.includes("currentSnapshot.payload.allTimeAggregate.hitRate * 1_000) / 10"),
+  PUBLIC_TRACKING_SUMMARY.includes("visible.current.allTimeAggregate.hitRate * 1_000) / 10"),
 );
 check(
   "Homepage uses the same public-safe category snapshot as member Tracking",
@@ -191,6 +191,19 @@ check(
     /LifetimeTrackingBoard[\s\S]{0,900}<CategoryTrackingBoard/.test(PAGE),
 );
 check(
+  "Alternate line performance stays nested inside the existing sport tracking panels",
+  /function CategoryTrackingBoard[\s\S]{0,4200}<AlternateLinePerformanceRows/.test(PAGE) &&
+    PAGE.includes("Alternate Line Performance"),
+);
+check(
+  "Alternate line help states that prices are excluded",
+  PAGE.includes("Same tracked picks, graded with the line moved in the prediction&apos;s favor. Prices are not included."),
+);
+check(
+  "Alternate adjustment labels use neutral slate styling while results retain green emphasis",
+  /adjustment\.label[\s\S]{0,800}border-slate-400[\s\S]{0,1000}text-emerald-300/.test(PAGE),
+);
+check(
   "Lifetime Tracking preserves honest historical/live source labels",
   /lifetimeSourceLabel[\s\S]{0,500}Lifetime · live \+\$\{record\.live_decided_contribution\}[\s\S]{0,300}Since launch/.test(PAGE),
 );
@@ -247,7 +260,7 @@ check(
 );
 check(
   "Lifetime merge labels live-only categories 'since_launch' so members don't read them as all-time",
-  /buildLifetimeRecords[\s\S]{0,3000}source_type:\s*"since_launch"/.test(PAGE),
+  /buildLifetimeRecords[\s\S]{0,5000}source_type:\s*"since_launch"/.test(PAGE),
 );
 check(
   "Merge math: mergedWins = baseline.lifetime_wins + liveWins",
@@ -267,7 +280,7 @@ check(
 );
 check(
   "Lifetime Tracking explains MLB auto-update + maintained other sports",
-  /Active models update automatically as games grade[\s\S]{0,200}Premier League results are tracked separately from World Cup history/.test(PAGE),
+  /Active models update automatically as games grade[\s\S]{0,240}Premier League, Champions League, and World Cup releases remain separate/.test(PAGE),
 );
 check(
   "Premier League has its own competition-scoped tracking label",
@@ -488,6 +501,7 @@ check("API surfaces yesterday",                   TRACKING_RESPONSE_PATH.include
 check("API surfaces thisWeek",                    TRACKING_RESPONSE_PATH.includes("thisWeek: result.thisWeek"));
 check("API surfaces recentPicks",                 TRACKING_RESPONSE_PATH.includes("recentPicks: result.recentPicks"));
 check("API surfaces recentlySettled (6B.21)",     TRACKING_RESPONSE_PATH.includes("recentlySettled: result.recentlySettled"));
+check("API surfaces future-updating alternate-line performance", TRACKING_RESPONSE_PATH.includes("alternateLinePerformance: result.alternateLinePerformance"));
 check("API does not expose raw audit fields",     !/sport_specific|fi_v2_audit|v2_2_audit|snapshot_json/.test(API));
 check(
   "member tracking reads a cron-published fast snapshot before the expensive aggregate",
@@ -499,8 +513,9 @@ check(
   "Tracking cutover primer is read-only unless explicitly applied",
   TRACKING_PRIMER.includes('process.argv.includes("--apply")') &&
     TRACKING_PRIMER.includes("buildTrackingFoundationSnapshotBody") &&
-    TRACKING_PRIMER.includes("No snapshot was written") &&
-    TRACKING_PRIMER.includes("refreshTrackingFoundationResponseSnapshot"),
+  TRACKING_PRIMER.includes("No snapshot was written") &&
+    TRACKING_PRIMER.includes("refreshTrackingFoundationResponseSnapshot") &&
+    TRACKING_PRIMER.includes('"alternateLinePerformance"'),
 );
 check(
   "background Tracking snapshot builds have a cron-safe budget while member requests still fail fast",
@@ -525,7 +540,7 @@ check(
 check(
   "API shares the five-minute aggregate cache across server instances",
   API.includes("unstable_cache") &&
-    API.includes('"member-tracking-aggregate-v1"') &&
+    API.includes('"member-tracking-aggregate-v7-alternate-line-performance"') &&
     API.includes("TRACKING_RESPONSE_CACHE_TTL_MS / 1000"),
 );
 check(

@@ -42,6 +42,11 @@ import {
   NHL_REGULAR_TRANSITION_MODEL_RELEASES,
 } from "../automodel/nhlRegularModelV1";
 import { nhlGameTypeFromExternalId } from "./nhl/nhlScheduleIdentity";
+import {
+  buildAlternateLineCategories,
+  type AlternateLinePerformance,
+  type AlternateLineSourceRow,
+} from "./tracking/alternateLinePerformance";
 
 export type AggregateKey =
   | "all"
@@ -79,7 +84,12 @@ export type DimensionRow<K extends string = string> = {
 export type TrackingDisplaySport = TrackedSport | "epl";
 
 export const TRACKING_AGGREGATE_CONTRACT_VERSION =
-  "tracking_aggregate_v12_nhl_member_grade_parity_2026_10_01" as const;
+  "tracking_aggregate_v13_alternate_line_performance_2026_10_12" as const;
+
+const UCL_PRIOR_ALT_LINE_MODEL_RELEASE =
+  "ucl_goals_coherent_2026_09_03_r6_authenticated_match_stats_manifest" as const;
+const UCL_PRIOR_ALT_LINE_CALIBRATION_RELEASE =
+  "ucl_grade_policy_2026_09_03_r6_owner_approved_epl_v23_transfer" as const;
 
 /**
  * Sport+market joint split with the Best Angle / Lean cuts most members
@@ -190,6 +200,9 @@ export type TrackingAggregateResult = {
    * remain slate_date-bucketed and are unchanged.
    */
   recentlySettled: RecentlySettledPickRow[];
+  /** Read-only counterfactual grading of the same locked spread/total picks
+   * after moving the locked line in the selected side's favor. */
+  alternateLinePerformance: AlternateLinePerformance;
   baselines: TrackingBaselineRow[];
   tablesInitialized: boolean;
 };
@@ -679,6 +692,11 @@ export async function computeTrackingAggregate(opts: {
   competition?: string;
   excludeCompetition?: string;
 }): Promise<TrackingAggregateResult> {
+  const today = opts.to ?? new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" });
+  const weekFrom = shiftDate(today, -6);
+  const TRACKING_LAUNCH_DATE = "2026-06-07";
+  const trailing30From = shiftDate(today, -29);
+  const monthFrom = trailing30From > TRACKING_LAUNCH_DATE ? trailing30From : TRACKING_LAUNCH_DATE;
   const result: TrackingAggregateResult = {
     rowsConsidered: 0,
     rowsCounted: 0,
@@ -699,6 +717,12 @@ export async function computeTrackingAggregate(opts: {
     dailyTrend: [],
     recentPicks: [],
     recentlySettled: [],
+    alternateLinePerformance: {
+      weekly: { from: weekFrom, to: today, rows: [] },
+      monthly: { from: monthFrom, to: today, rows: [] },
+      lifetime: { from: opts.from ?? TRACKING_LAUNCH_DATE, to: today, rows: [] },
+      archives: [],
+    },
     baselines: [],
     tablesInitialized: true,
   };
@@ -757,6 +781,20 @@ export async function computeTrackingAggregate(opts: {
     isPublicallyTracked(r.sport, r.slate_date) && isCurrentUclTrackingRelease(r),
   );
 
+  // UCL's prior locked release is useful line-level history, but it must never
+  // be blended into the active release. Keep only the explicitly identified
+  // r6 manifest and surface it as a separately labeled lifetime archive.
+  const priorUclManifest = filterCompleteUclTrackingCohorts(
+    launchFiltered.filter((record) =>
+      isPublicallyTracked(record.sport, record.slate_date)
+      && isUclTrackingRecord(record)
+      && record.model_version === UCL_PRIOR_ALT_LINE_MODEL_RELEASE
+      && record.calibration_version === UCL_PRIOR_ALT_LINE_CALIBRATION_RELEASE,
+    ),
+  ).filter(isTrackingRecordEligible);
+  const priorUclRecords = dedupePredictionRecordsForTracking(priorUclManifest)
+    .filter((record) => !isTossUp(record));
+
   // W-L accuracy counts EVERY prediction that has a side. `no_bet` is a GUIDANCE
   // signal ("we don't advise betting this"), NOT a tracking exclusion — a
   // stand-down total or model-wrong-side ML is still a graded right/wrong call
@@ -770,10 +808,11 @@ export async function computeTrackingAggregate(opts: {
   const trackingEligible = filterCompleteUclTrackingCohorts(publicStartFiltered).filter(isTrackingRecordEligible);
   const records = dedupePredictionRecordsForTracking(trackingEligible).filter((r) => !isTossUp(r));
   result.rowsCounted = records.length;
-  if (records.length === 0) return result;
 
-  // Grades — load only for the relevant record ids
-  const recordIds = records.map((r) => r.id).filter((x): x is number => x !== undefined);
+  // Grades — load only for current-release and separately labeled archive ids.
+  const recordIds = [...records, ...priorUclRecords]
+    .map((r) => r.id)
+    .filter((x): x is number => x !== undefined);
   const grades = await fetchGradesForRecordIds(opts.supabase, recordIds);
   const gradeByRecordId = new Map<number, PredictionGradeRow>(
     grades.map((g) => [g.prediction_record_id, g]),
@@ -783,6 +822,42 @@ export async function computeTrackingAggregate(opts: {
     record: r,
     grade: r.id !== undefined ? gradeByRecordId.get(r.id) ?? null : null,
   }));
+  const priorUclRows: AlternateLineSourceRow[] = priorUclRecords.map((record) => ({
+    record,
+    grade: record.id !== undefined ? gradeByRecordId.get(record.id) ?? null : null,
+    displaySport: "ucl",
+  }));
+  const alternateRows: AlternateLineSourceRow[] = rows.map((row) => ({
+    ...row,
+    displaySport: trackingDisplaySport(row.record),
+  }));
+  result.alternateLinePerformance = {
+    weekly: {
+      from: weekFrom,
+      to: today,
+      rows: buildAlternateLineCategories(alternateRows, { from: weekFrom, to: today }),
+    },
+    monthly: {
+      from: monthFrom,
+      to: today,
+      rows: buildAlternateLineCategories(alternateRows, { from: monthFrom, to: today }),
+    },
+    lifetime: {
+      from: opts.from ?? TRACKING_LAUNCH_DATE,
+      to: today,
+      rows: buildAlternateLineCategories(alternateRows, {
+        from: opts.from ?? TRACKING_LAUNCH_DATE,
+        to: today,
+      }),
+    },
+    archives: buildAlternateLineCategories(priorUclRows, {
+      from: opts.from ?? TRACKING_LAUNCH_DATE,
+      to: today,
+      source: "prior_release",
+      sourceLabel: "Prior locked release",
+    }),
+  };
+  if (records.length === 0) return result;
 
   // Overall
   for (const row of rows) accumulate(result.overall, row);
@@ -911,9 +986,7 @@ export async function computeTrackingAggregate(opts: {
   // the real ET calendar day — slate_date is ET-anchored so we must
   // match its timezone or the page would show "yesterday" as the day
   // after the latest pick at certain hours of the night.
-  const today = opts.to ?? new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" });
   const yesterdayDate = shiftDate(today, -1);
-  const weekFrom = shiftDate(today, -6);
 
   // Yesterday slice
   const yesterdayRows = rows.filter((r) =>
@@ -943,9 +1016,6 @@ export async function computeTrackingAggregate(opts: {
   // and grows day-by-day until the trailing-30-day window naturally catches up
   // (~30 days post-launch). Never extend the window before launch — there's no
   // data there and the label would be misleading.
-  const TRACKING_LAUNCH_DATE = "2026-06-07";
-  const trailing30From = shiftDate(today, -29);
-  const monthFrom = trailing30From > TRACKING_LAUNCH_DATE ? trailing30From : TRACKING_LAUNCH_DATE;
   const monthRows = rows.filter((r) => r.record.slate_date >= monthFrom && r.record.slate_date <= today);
   result.thisMonth.from = monthFrom;
   result.thisMonth.to = today;

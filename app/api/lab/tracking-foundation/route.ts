@@ -64,7 +64,7 @@ const loadSharedTrackingAggregate = unstable_cache(
       includeLaunchDay: false,
     });
   },
-  ["member-tracking-aggregate-v6-nba-preseason-only-window"],
+  ["member-tracking-aggregate-v7-alternate-line-performance"],
   { revalidate: TRACKING_RESPONSE_CACHE_TTL_MS / 1000, tags: ["member-tracking-aggregate"] },
 );
 
@@ -138,7 +138,10 @@ export async function GET(request: Request) {
     const snapshotKey = trackingFoundationSnapshotKey({ sport, date: today });
     const snapshot = await readLabResponseSnapshot<Record<string, unknown>>(snapshotKey, "fresh")
       ?? await readLabResponseSnapshot<Record<string, unknown>>(snapshotKey, "stale");
-    if (snapshot) {
+    // Snapshots created before alternate-line tracking existed are safe but
+    // incomplete. Bypass them once so the deployed reader cannot hide the new
+    // section until the next scheduled snapshot refresh.
+    if (snapshot && snapshot.payload.alternateLinePerformance !== undefined) {
       return trackingJson(snapshot.payload, {
         cacheStatus: snapshot.cacheState === "DB_SNAPSHOT" ? "hit" : "stale",
       });

@@ -14,7 +14,7 @@ async function main(): Promise<void> {
   const startedAt = Date.now();
   const body = await buildTrackingFoundationSnapshotBody();
 
-  const required = ["overall", "bySportMarket", "yesterday", "thisWeek", "recentPicks", "recentlySettled"];
+  const required = ["overall", "bySportMarket", "yesterday", "thisWeek", "recentPicks", "recentlySettled", "alternateLinePerformance"];
   const missing = required.filter((key) => body[key] === undefined || body[key] === null);
   if (missing.length > 0) throw new Error(`Tracking snapshot is missing: ${missing.join(", ")}`);
   if (body.tablesInitialized !== true) throw new Error("Tracking tables are not initialized.");
