@@ -870,6 +870,8 @@ function CategoryTrackingBoard({
         {sportKeys.map((sport) => {
           const mainRows = mainGroups.find((group) => group.sport === sport)?.rows ?? [];
           const sportAlternateRows = alternateGroups.find((group) => group.sport === sport)?.rows ?? [];
+          const mainMarkets = new Set(mainRows.map((row) => row.market));
+          const unmatchedAlternateRows = sportAlternateRows.filter((row) => !mainMarkets.has(row.market));
           const theme = sportTheme(sport);
           const categoryCount = new Set([
             ...mainRows.map((row) => row.market),
@@ -883,19 +885,35 @@ function CategoryTrackingBoard({
           >
             <SportGroupHeader sport={sport} count={categoryCount} />
             {mainRows.length > 0 ? (
-              <CategoryBars
-                rows={mainRows.map((row) => ({
-                  label: prettyMarket(row.market),
-                  sublabel: row.detail !== undefined
-                    ? `${shortMarket(row.market)} · ${row.detail}`
-                    : shortMarket(row.market),
-                  metrics: row.metrics,
-                }))}
-                emptyBody={`${prettySport(sport)} results appear once this window has graded picks.`}
-              />
+              <div className="space-y-4">
+                {mainRows.map((row, index) => {
+                  const matchingAlternateRows = sportAlternateRows.filter((alternate) => alternate.market === row.market);
+                  return (
+                    <div
+                      key={`${sport}-${row.market}`}
+                      data-tracking-market={row.market}
+                      className={index > 0 ? "border-t border-white/[0.08] pt-4" : undefined}
+                    >
+                      <CategoryBars
+                        rows={[{
+                          label: prettyMarket(row.market),
+                          sublabel: row.detail !== undefined
+                            ? `${shortMarket(row.market)} · ${row.detail}`
+                            : shortMarket(row.market),
+                          metrics: row.metrics,
+                        }]}
+                        emptyBody={`${prettySport(sport)} ${prettyMarket(row.market)} results appear once this window has graded picks.`}
+                      />
+                      {matchingAlternateRows.length > 0 ? (
+                        <AlternateLinePerformanceRows rows={matchingAlternateRows} embedded />
+                      ) : null}
+                    </div>
+                  );
+                })}
+              </div>
             ) : null}
-            {sportAlternateRows.length > 0 ? (
-              <AlternateLinePerformanceRows rows={sportAlternateRows} />
+            {unmatchedAlternateRows.length > 0 ? (
+              <AlternateLinePerformanceRows rows={unmatchedAlternateRows} />
             ) : null}
           </section>
           );
@@ -914,11 +932,19 @@ function alternateRecord(metrics: AlternateLineMetrics): string {
   return `${metrics.wins}-${metrics.losses}${metrics.pushes > 0 ? `-${metrics.pushes}` : ""}`;
 }
 
-function AlternateLinePerformanceRows({ rows }: { rows: AlternateLineCategory[] }) {
+function AlternateLinePerformanceRows({
+  rows,
+  embedded = false,
+}: {
+  rows: AlternateLineCategory[];
+  embedded?: boolean;
+}) {
   return (
-    <div className="mt-4 border-t border-white/[0.06] pt-4">
+    <div className={embedded ? "mt-3" : "mt-4 border-t border-white/[0.06] pt-4"}>
       <div className="mb-3 flex items-center gap-2">
-        <p className="text-[10px] font-black uppercase tracking-[0.16em] text-gray-400">Alternate Line Performance</p>
+        <p className="text-[10px] font-black uppercase tracking-[0.16em] text-gray-400">
+          {embedded ? "Alternate lines" : "Alternate Line Performance"}
+        </p>
         <details className="group relative">
           <summary
             aria-label="How alternate line performance is calculated"
@@ -940,7 +966,7 @@ function AlternateLinePerformanceRows({ rows }: { rows: AlternateLineCategory[] 
             <div key={`${row.sport}-${row.market}-${row.source}`} className="rounded-lg border border-white/[0.05] bg-black/[0.10] p-3">
               <div className="mb-2.5 flex flex-wrap items-baseline justify-between gap-2">
                 <div>
-                  <p className="text-[12px] font-bold text-gray-200">{alternateMarketLabel(row.sport, row.market)}</p>
+                  {!embedded ? <p className="text-[12px] font-bold text-gray-200">{alternateMarketLabel(row.sport, row.market)}</p> : null}
                   <p className="mt-0.5 text-[9.5px] font-bold uppercase tracking-[0.12em] text-gray-500">
                     {row.sourceLabel} · {coverage} · {row.original.settled.toLocaleString()} settled
                   </p>

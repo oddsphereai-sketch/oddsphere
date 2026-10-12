@@ -168,7 +168,10 @@ function metrics(outcomes: AlternateLineOutcome[]): AlternateLineMetrics {
     losses,
     pushes,
     settled: wins + losses + pushes,
-    winPct: decided > 0 ? Math.round((wins / decided) * 1000) / 10 : null,
+    // Preserve two decimals in the response and let each surface choose its
+    // display precision. This matches the main tracking aggregate so an
+    // identical record cannot render as 53.9% above and 53.8% below.
+    winPct: decided > 0 ? Math.round((wins / decided) * 10000) / 100 : null,
   };
 }
 
@@ -243,4 +246,3 @@ export function buildAlternateLineCategories(
     .filter((row): row is AlternateLineCategory => row !== null)
     .sort((a, b) => a.sport.localeCompare(b.sport) || a.market.localeCompare(b.market));
 }
-
