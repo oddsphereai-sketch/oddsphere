@@ -204,6 +204,15 @@ check(
   /adjustment\.label[\s\S]{0,800}border-slate-400[\s\S]{0,1000}text-emerald-300/.test(PAGE),
 );
 check(
+  "Alternate line levels remain single-column on desktop and mobile",
+  /function AlternateLinePerformanceRows[\s\S]{0,2600}grid grid-cols-1 gap-2/.test(PAGE) &&
+    !/function AlternateLinePerformanceRows[\s\S]{0,2600}sm:grid-cols-2/.test(PAGE),
+);
+check(
+  "Each alternate line level keeps its approved full-width bordered box",
+  /adjustment\.label[\s\S]{0,700}w-full rounded-lg border border-white/.test(PAGE),
+);
+check(
   "Lifetime Tracking preserves honest historical/live source labels",
   /lifetimeSourceLabel[\s\S]{0,500}Lifetime · live \+\$\{record\.live_decided_contribution\}[\s\S]{0,300}Since launch/.test(PAGE),
 );
