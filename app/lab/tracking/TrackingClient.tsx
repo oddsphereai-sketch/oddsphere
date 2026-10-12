@@ -978,13 +978,16 @@ function AlternateLinePerformanceRows({
               </div>
               <div className="grid grid-cols-1 gap-2">
                 {row.adjustments.map((adjustment) => (
-                  <div key={adjustment.label} className="w-full rounded-lg border border-white/[0.045] bg-white/[0.014] px-3 py-2.5">
+                  <div
+                    key={adjustment.label}
+                    className="w-full rounded-lg border border-slate-400/30 bg-slate-950/35 px-3.5 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]"
+                  >
                     <div className="flex items-center justify-between gap-3">
-                      <span className="rounded-md border border-slate-400/20 bg-slate-300/[0.07] px-2 py-1 text-[9px] font-black uppercase tracking-[0.12em] text-slate-200">
+                      <span className="inline-flex min-w-[96px] items-center justify-center rounded-md border border-slate-300/35 bg-slate-300/[0.12] px-2.5 py-1.5 text-[10px] font-black uppercase tracking-[0.11em] text-slate-100 shadow-sm">
                         {adjustment.label}
                       </span>
                       <div className="text-right tabular-nums">
-                        <span className="text-[12px] font-extrabold text-gray-100">{alternateRecord(adjustment.metrics)}</span>
+                        <span className="text-[13px] font-extrabold text-gray-100">{alternateRecord(adjustment.metrics)}</span>
                         {adjustment.metrics.winPct !== null ? (
                           <span className="ml-2 text-[11px] font-extrabold text-emerald-300/95">{adjustment.metrics.winPct.toFixed(1)}%</span>
                         ) : null}

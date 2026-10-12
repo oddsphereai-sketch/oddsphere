@@ -219,7 +219,12 @@ check(
 );
 check(
   "Each alternate line level keeps its approved full-width bordered box",
-  /adjustment\.label[\s\S]{0,700}w-full rounded-lg border border-white/.test(PAGE),
+  /adjustment\.label[\s\S]{0,700}w-full rounded-lg border border-slate-400\/30/.test(PAGE),
+);
+check(
+  "Alternate line cards and labels have stronger neutral contrast",
+  /border border-slate-400\/30 bg-slate-950\/35/.test(PAGE) &&
+    /min-w-\[96px\][\s\S]{0,200}border border-slate-300\/35 bg-slate-300\/\[0\.12\]/.test(PAGE),
 );
 check(
   "Lifetime Tracking preserves honest historical/live source labels",
