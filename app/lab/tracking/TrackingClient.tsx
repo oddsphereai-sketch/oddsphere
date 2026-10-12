@@ -964,17 +964,17 @@ function AlternateLinePerformanceRows({
             : `${fmtShortDate(row.coverageFrom)} → ${fmtShortDate(row.coverageTo)}`;
           return (
             <div key={`${row.sport}-${row.market}-${row.source}`}>
-              <div className="mb-2.5 flex flex-wrap items-baseline justify-between gap-2 px-0.5">
-                {!embedded ? <p className="text-[12px] font-bold text-gray-200">{alternateMarketLabel(row.sport, row.market)}</p> : null}
-                <p className="text-[9.5px] font-bold uppercase tracking-[0.12em] text-gray-500">
-                  {row.original.settled.toLocaleString()} graded · {coverage}
-                </p>
-              </div>
-              <div className="mb-2.5 flex items-center justify-between gap-3 border-b border-white/[0.07] px-1 pb-2.5 tabular-nums">
-                <span className="text-[10px] font-black uppercase tracking-[0.11em] text-gray-400">Original lines</span>
-                <div className="text-right">
-                  <span className="text-[12px] font-extrabold text-gray-200">{alternateRecord(row.original)}</span>
-                  {row.original.winPct !== null ? <span className="ml-2 text-[11px] font-bold text-gray-400">{row.original.winPct.toFixed(1)}%</span> : null}
+              <div className="mb-2.5 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 px-0.5">
+                <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+                  {!embedded ? <p className="text-[12px] font-bold text-gray-200">{alternateMarketLabel(row.sport, row.market)}</p> : null}
+                  <p className="text-[9.5px] font-bold uppercase tracking-[0.12em] text-gray-500">
+                    {row.original.settled.toLocaleString()} graded · {coverage}
+                  </p>
+                </div>
+                <div className="text-right text-[9.5px] tabular-nums text-gray-500">
+                  <span className="font-black uppercase tracking-[0.1em]">Baseline</span>
+                  <span className="ml-2 font-extrabold text-gray-300">{alternateRecord(row.original)}</span>
+                  {row.original.winPct !== null ? <span className="ml-1.5 font-bold text-gray-400">{row.original.winPct.toFixed(1)}%</span> : null}
                 </div>
               </div>
               <div className="grid grid-cols-1 gap-2">
