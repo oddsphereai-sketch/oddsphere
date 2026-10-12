@@ -77,6 +77,7 @@ export async function GET(request: Request) {
       // capacity monitoring misleading and obscured the actual write load.
       records_updated: result.published
         ? 2 + result.tracking.entriesLocked + result.tracking.closingPricesUpdated
+          + (result.privateTrackingCapture?.written ? 1 : 0)
         : 0,
       api_calls_made: result.providerCalls.balldontlie,
       partial: !result.published || trackingFailed,
@@ -101,6 +102,7 @@ export async function GET(request: Request) {
           lineups: result.providerCalls.balldontlieLineups,
         },
         tracking: result.tracking,
+        privateTracking: result.privateTrackingCapture,
         lastKnownGoodPreserved: !result.published && result.usedPreviousSnapshot,
       },
     };
