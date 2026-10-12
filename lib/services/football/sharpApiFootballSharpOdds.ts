@@ -5,9 +5,10 @@ import {
 } from "@/lib/providers/real_api/_sharpApiClient";
 import type { NcaafBookOdds, NcaafGame } from "./balldontlieNcaafSlate";
 import type { NflPreviewBookOdds, NflPreviewGame } from "./balldontlieNflPreviewSlate";
+import { cfbProviderTeamMatches } from "./cfbProviderTeamIdentity";
 
 export const FOOTBALL_SHARP_PRICE_CAPTURE_RELEASE =
-  "football_sharp_price_capture_2026_09_24_r1" as const;
+  "football_sharp_price_capture_2026_10_12_r2_cfb_central_team_identity" as const;
 export const FOOTBALL_SHARP_PRICE_CAPTURE_MAX_PAGES_PER_BOOK = 12 as const;
 export const FOOTBALL_SHARP_PRICE_CAPTURE_PAGE_SIZE = 200 as const;
 export const FOOTBALL_SHARP_PRICE_CAPTURE_TIMEOUT_MS = 20_000 as const;
@@ -121,7 +122,7 @@ async function fetchFootballSharpOdds(args: {
     booksByGame[game.providerGameId] = [];
     for (const sportsbook of FOOTBALL_SHARP_PRICE_CAPTURE_BOOKS) {
       const matchingEventIds = [...new Set(rows
-        .filter((row) => normalize(text(row.sportsbook) ?? "") === sportsbook && strictGameIdentity(game, row))
+        .filter((row) => normalize(text(row.sportsbook) ?? "") === sportsbook && strictGameIdentity(game, row, args.league))
         .map((row) => identifier(row.event_id))
         .filter((value): value is string => value !== null))];
       if (matchingEventIds.length !== 1) continue;
@@ -129,7 +130,7 @@ async function fetchFootballSharpOdds(args: {
       const claim = `${sportsbook}:${eventId}`;
       if (claimedEvents.has(claim)) throw new Error(`${args.league} ${sportsbook} event ${eventId} matched multiple games.`);
       claimedEvents.add(claim);
-      const book = buildBook(game, eventId, sportsbook, rows);
+      const book = buildBook(game, eventId, sportsbook, rows, args.league);
       if (book) booksByGame[game.providerGameId]!.push(book);
     }
   }
@@ -202,10 +203,16 @@ async function fetchBookPages(args: {
   return { rows, requests };
 }
 
-function buildBook(game: FootballGame, eventId: string, sportsbook: SharpBook, rows: Json[]): CapturedBook | null {
+function buildBook(
+  game: FootballGame,
+  eventId: string,
+  sportsbook: SharpBook,
+  rows: Json[],
+  league: "nfl" | "ncaaf" = "nfl",
+): CapturedBook | null {
   const latest = new Map<string, Quote>();
   for (const row of rows) {
-    if (identifier(row.event_id) !== eventId || !strictGameIdentity(game, row)) continue;
+    if (identifier(row.event_id) !== eventId || !strictGameIdentity(game, row, league)) continue;
     if (normalize(text(row.sportsbook) ?? "") !== sportsbook) continue;
     if (row.is_live === true || row.is_active === false || row.is_stale_pregame_price === true || row.is_player_prop === true) continue;
     if (row.is_main_line !== true || row.is_alternate_line === true) continue;
@@ -266,13 +273,16 @@ function toNcaafBook(book: CapturedBook): NcaafBookOdds {
   };
 }
 
-function strictGameIdentity(game: FootballGame, row: Json): boolean {
+function strictGameIdentity(game: FootballGame, row: Json, league: "nfl" | "ncaaf" = "nfl"): boolean {
   const startsAt = iso(row.event_start_time);
   if (!startsAt) return false;
   const expected = Date.parse(game.scheduledStart);
   const actual = Date.parse(startsAt);
   if (!Number.isFinite(expected) || !Number.isFinite(actual) || Math.abs(expected - actual) > 15 * 60_000) return false;
-  return teamMatches(row.home_team, game.home.name, game.home.abbreviation) && teamMatches(row.away_team, game.away.name, game.away.abbreviation);
+  const matches = league === "ncaaf"
+    ? (raw: unknown, name: string, abbreviation: string) => cfbProviderTeamMatches({ observed: raw, expectedName: name, abbreviation })
+    : teamMatches;
+  return matches(row.home_team, game.home.name, game.home.abbreviation) && matches(row.away_team, game.away.name, game.away.abbreviation);
 }
 
 function teamMatches(raw: unknown, expectedName: string, abbreviation: string): boolean {

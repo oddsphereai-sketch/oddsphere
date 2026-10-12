@@ -3,7 +3,7 @@ import type { MarketSplitDisplaySection } from "@/lib/types/domain/Recommendatio
 import type { Sport } from "@/lib/types/domain/Sport";
 import { normalizeMlbTeamName } from "@/lib/providers/real_api/_teamNameNormalizer";
 import { normalizeNhlTeamName } from "@/lib/providers/nhl/_teamNameNormalizer";
-import { cfbTeamIdentity } from "@/lib/services/football/cfbTeamIdentity";
+import { cfbProviderTeamMatches } from "@/lib/services/football/cfbProviderTeamIdentity";
 import {
   populateDailyEdgeSharpApiCurrentSplits,
   sanitizeRetainedSharpSplitPresentation,
@@ -25,6 +25,8 @@ const DRAFTKINGS_NETWORK_TIMEOUT_MS = 6_000;
 const DRAFTKINGS_NETWORK_PAGE_SIZE = 10;
 const DRAFTKINGS_NETWORK_CACHE_TAG = "draftkings-network-splits-complete";
 const DRAFTKINGS_NETWORK_DURABLE_RELEASE =
+  "draftkings_network_splits_2026_10_12_r3_cfb_central_team_identity" as const;
+const DRAFTKINGS_NETWORK_PREVIOUS_DURABLE_RELEASE =
   "draftkings_network_splits_2026_09_20_r2_durable_last_known_good" as const;
 const DRAFTKINGS_NETWORK_DURABLE_TTL_MS = 5 * 60 * 1000;
 const DRAFTKINGS_NETWORK_DURABLE_STALE_MS = 10 * 24 * 60 * 60 * 1000;
@@ -116,16 +118,6 @@ const NFL_PROVIDER_ALIASES: Record<string, readonly string[]> = {
   TEN: ["tennessee titans", "ten titans"], WSH: ["washington commanders", "was commanders", "wsh commanders"],
 };
 
-const CFB_PROVIDER_ALIASES: Record<string, readonly string[]> = {
-  APP: ["appalachian state", "app state"],
-  CONN: ["connecticut", "uconn"],
-  MIA: ["miami fl", "miami florida"],
-  "M-OH": ["miami oh", "miami ohio"],
-  NCST: ["nc state", "north carolina state"],
-  NCSU: ["nc state", "north carolina state"],
-  UL: ["louisiana", "louisiana lafayette"],
-};
-
 type FetchLike = (input: string | URL | Request, init?: RequestInit) => Promise<Response>;
 
 export async function fetchDraftKingsNetworkSplits(args: {
@@ -215,8 +207,11 @@ const readCachedDraftKingsNetworkSplits = unstable_cache(
   },
 );
 
-function durableSnapshotKey(sport: Sport): string {
-  return `daily-edge::draftkings-network-splits::${sport}::${DRAFTKINGS_NETWORK_DURABLE_RELEASE}`;
+function durableSnapshotKey(
+  sport: Sport,
+  release: typeof DRAFTKINGS_NETWORK_DURABLE_RELEASE | typeof DRAFTKINGS_NETWORK_PREVIOUS_DURABLE_RELEASE = DRAFTKINGS_NETWORK_DURABLE_RELEASE,
+): string {
+  return `daily-edge::draftkings-network-splits::${sport}::${release}`;
 }
 
 async function readDurableDraftKingsNetworkSplits(
@@ -224,7 +219,10 @@ async function readDurableDraftKingsNetworkSplits(
 ): Promise<DraftKingsNetworkSplitFeed | null> {
   const { readLatestLabResponseSnapshot, upsertLabResponseSnapshot } = await import("@/lib/services/labResponseSnapshots");
   const stored = await readLatestLabResponseSnapshot<Record<string, unknown>>(durableSnapshotKey(sport));
-  const previous = validateDurableDraftKingsNetworkSplitFeed(stored?.payload, sport);
+  const previousStored = stored ?? await readLatestLabResponseSnapshot<Record<string, unknown>>(
+    durableSnapshotKey(sport, DRAFTKINGS_NETWORK_PREVIOUS_DURABLE_RELEASE),
+  );
+  const previous = validateDurableDraftKingsNetworkSplitFeed(previousStored?.payload, sport);
   try {
     const current = await fetchDraftKingsNetworkSplits({ sport });
     // The provider can return a successful HTML shell with no usable games.
@@ -510,6 +508,9 @@ function providerTeamMatches(
   abbreviation: string,
   displayName?: string | null,
 ): boolean {
+  if (sport === "cfb") {
+    return cfbProviderTeamMatches({ observed: providerName, abbreviation, expectedName: displayName });
+  }
   if (sport === "mlb") {
     const provider = normalizeMlbTeamName(providerName);
     const target = normalizeMlbTeamName(abbreviation) ?? normalizeMlbTeamName(displayName ?? "");
@@ -524,16 +525,11 @@ function providerTeamMatches(
   }
   const provider = cleanName(providerName).replace(/\s+\d+(?:\s+\d+)*$/, "");
   const abbr = cleanName(abbreviation);
-  const identityDisplay = sport === "cfb" ? cfbTeamIdentity(abbreviation)?.displayName ?? "" : "";
-  const display = cleanName(displayName ?? identityDisplay);
+  const display = cleanName(displayName ?? "");
   if (!provider || !abbr) return false;
   if (sport === "nfl") {
     return [abbreviation, ...(NFL_PROVIDER_ALIASES[abbreviation.toUpperCase()] ?? [])]
       .some((alias) => providerIdentityMatches(provider, cleanName(alias)));
-  }
-  if (sport === "cfb") {
-    const aliases = CFB_PROVIDER_ALIASES[abbreviation.toUpperCase()] ?? [];
-    if (aliases.some((alias) => providerIdentityMatches(provider, cleanName(alias)))) return true;
   }
   const providerTokens = new Set(provider.split(" "));
   if (provider === abbr || providerTokens.has(abbr)) return true;

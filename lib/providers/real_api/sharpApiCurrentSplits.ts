@@ -2,12 +2,13 @@ import type { DailyEdgeGameDto, DailyEdgeResponse } from "@/app/lab/lib/labTypes
 import { normalizeMlbTeamName } from "@/lib/providers/real_api/_teamNameNormalizer";
 import { normalizeNhlTeamName } from "@/lib/providers/nhl/_teamNameNormalizer";
 import { SharpApiClient } from "@/lib/providers/real_api/_sharpApiClient";
-import { cfbTeamIdentity } from "@/lib/services/football/cfbTeamIdentity";
+import { cfbProviderTeamMatches } from "@/lib/services/football/cfbProviderTeamIdentity";
 import type { MarketSplitDisplaySection } from "@/lib/types/domain/RecommendationDecision";
 import type { Sport } from "@/lib/types/domain/Sport";
 import { unstable_cache } from "next/cache";
 
-const CURRENT_SPLITS_RELEASE = "sharpapi_current_splits_2026_09_20_r1_durable_overlay" as const;
+const CURRENT_SPLITS_RELEASE = "sharpapi_current_splits_2026_10_12_r2_cfb_central_team_identity" as const;
+const PREVIOUS_CURRENT_SPLITS_RELEASE = "sharpapi_current_splits_2026_09_20_r1_durable_overlay" as const;
 const CURRENT_SPLITS_TTL_MS = 5 * 60 * 1000;
 const CURRENT_SPLITS_STALE_MS = 10 * 24 * 60 * 60 * 1000;
 const CURRENT_SPLITS_TIMEOUT_MS = 4_000;
@@ -20,7 +21,7 @@ type NamedBook = "circa" | "draftkings" | "consensus" | "betmgm";
 
 type SharpApiCurrentSplitFeed = {
   source: "sharpapi_current_splits";
-  release: typeof CURRENT_SPLITS_RELEASE;
+  release: typeof CURRENT_SPLITS_RELEASE | typeof PREVIOUS_CURRENT_SPLITS_RELEASE;
   sport: SupportedSport;
   fetchedAt: string;
   rows: Json[];
@@ -75,8 +76,11 @@ const NFL_ALIASES: Record<string, readonly string[]> = {
   WSH: ["washington commanders", "commanders"],
 };
 
-function snapshotKey(sport: SupportedSport): string {
-  return `daily-edge::sharpapi-current-splits::${sport}::${CURRENT_SPLITS_RELEASE}`;
+function snapshotKey(
+  sport: SupportedSport,
+  release: typeof CURRENT_SPLITS_RELEASE | typeof PREVIOUS_CURRENT_SPLITS_RELEASE = CURRENT_SPLITS_RELEASE,
+): string {
+  return `daily-edge::sharpapi-current-splits::${sport}::${release}`;
 }
 
 function supportedSport(sport: Sport): sport is SupportedSport {
@@ -96,7 +100,10 @@ async function readDurableCurrentSplits(sport: SupportedSport): Promise<SharpApi
   const validatedFresh = validateSharpApiCurrentSplitFeed(fresh?.payload, sport);
   if (validatedFresh) return validatedFresh;
   const stored = await readLatestLabResponseSnapshot<Record<string, unknown>>(key);
-  const validatedStored = validateSharpApiCurrentSplitFeed(stored?.payload, sport);
+  const previousStored = stored ?? await readLatestLabResponseSnapshot<Record<string, unknown>>(
+    snapshotKey(sport, PREVIOUS_CURRENT_SPLITS_RELEASE),
+  );
+  const validatedStored = validateSharpApiCurrentSplitFeed(previousStored?.payload, sport);
 
   const apiKey = process.env.SHARPAPI_KEY;
   if (apiKey) {
@@ -148,7 +155,7 @@ export function validateSharpApiCurrentSplitFeed(
   const fetchedAt = timestamp(value.fetchedAt);
   if (
     value.source !== "sharpapi_current_splits" ||
-    value.release !== CURRENT_SPLITS_RELEASE ||
+    (value.release !== CURRENT_SPLITS_RELEASE && value.release !== PREVIOUS_CURRENT_SPLITS_RELEASE) ||
     value.sport !== sport ||
     fetchedAt === null ||
     !Array.isArray(value.rows) ||
@@ -518,17 +525,15 @@ function teamMatches(sport: SupportedSport, raw: unknown, abbreviation: string, 
     const expected = normalizeNhlTeamName(abbreviation) ?? normalizeNhlTeamName(displayName);
     return observed !== null && expected !== null && observed === expected;
   }
+  if (sport === "cfb") {
+    return cfbProviderTeamMatches({ observed: raw, abbreviation, expectedName: displayName });
+  }
   const observed = normalizeTeam(raw);
-  const identityName = sport === "cfb" ? cfbTeamIdentity(abbreviation)?.displayName ?? "" : "";
-  const aliases = [abbreviation, displayName ?? "", identityName];
+  const aliases = [abbreviation, displayName ?? ""];
   if (sport === "nfl") aliases.push(...(NFL_ALIASES[abbreviation.toUpperCase()] ?? []));
   return aliases.some((alias) => {
     const expected = normalizeTeam(alias);
-    return expected.length > 0 && (
-      observed === expected ||
-      (sport === "cfb" && Math.min(observed.length, expected.length) >= 5 &&
-        (observed.startsWith(expected) || expected.startsWith(observed)))
-    );
+    return expected.length > 0 && observed === expected;
   });
 }
 

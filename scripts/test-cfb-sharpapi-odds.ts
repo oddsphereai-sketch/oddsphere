@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import "./test-cfb-provider-team-identity";
 import type { SharpApiRequestOptions, SharpApiResponse } from "../lib/providers/real_api/_sharpApiClient";
 import type { NcaafGame } from "../lib/services/football/balldontlieNcaafSlate";
 import {

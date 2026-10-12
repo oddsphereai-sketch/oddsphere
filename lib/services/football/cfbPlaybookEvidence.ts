@@ -1,5 +1,6 @@
 import type { NcaafGame, NcaafTeam } from "./balldontlieNcaafSlate";
 import type { CfbForwardPlaybookLine, CfbForwardPlaybookSplit, CfbForwardPlaybookSplitSet } from "./cfbForwardEvidence";
+import { cfbProviderTeamMatches } from "./cfbProviderTeamIdentity";
 
 type JsonRecord = Record<string, unknown>;
 
@@ -86,6 +87,7 @@ export function normalizeCfbPlaybookSplits(value: unknown, capturedAt: string): 
 export function matchCfbPlaybookTeam(value: unknown, team: NcaafTeam): boolean {
   const candidate = normalize(typeof value === "string" ? value : "");
   if (!candidate) return false;
+  if (cfbProviderTeamMatches({ observed: value, abbreviation: team.abbreviation, expectedName: team.name })) return true;
   return [team.name, team.abbreviation, ...(CFB_PLAYBOOK_ALIASES_BY_BDL_TEAM_ID[team.id] ?? [])]
     .some((identity) => normalize(identity) === candidate);
 }

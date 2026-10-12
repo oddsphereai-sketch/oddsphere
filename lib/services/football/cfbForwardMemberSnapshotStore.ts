@@ -11,17 +11,17 @@ import {
 } from "./cfbMemberFixture";
 
 export const CFB_FORWARD_MEMBER_SNAPSHOT_RELEASE =
-  "cfb_forward_member_snapshot_2026_10_11_r47_consensus_authority_split_specialization" as const;
+  "cfb_forward_member_snapshot_2026_10_12_r48_provider_team_identity_consensus_authority_split_specialization" as const;
 export const CFB_FORWARD_PREVIOUS_MEMBER_SNAPSHOT_RELEASE =
-  "cfb_forward_member_snapshot_2026_10_10_r46_last_known_injury_report_continuity" as const;
+  "cfb_forward_member_snapshot_2026_10_11_r47_consensus_authority_split_specialization" as const;
 export const CFB_PREVIOUS_MEMBER_FIXTURE_RELEASE =
-  "cfb_v1_member_fixture_2026_10_10_r86_last_known_injury_report_continuity" as const;
+  "cfb_v1_member_fixture_2026_10_11_r87_consensus_authority_split_specialization" as const;
 export const CFB_PREVIOUS_EVIDENCE_RELEASE =
-  "cfb_forward_evidence_snapshot_2026_10_09_r43_joint_moneyline_spread_reconciliation" as const;
+  "cfb_forward_evidence_snapshot_2026_10_11_r44_consensus_authority_split_specialization" as const;
 export const CFB_PREVIOUS_MEMBER_RELEASE =
-  "cfb_v1_member_release_2026_10_10_r60_last_known_injury_report_continuity" as const;
+  "cfb_v1_member_release_2026_10_11_r61_consensus_authority_split_specialization" as const;
 export const CFB_MEMBER_SNAPSHOT_READER_RELEASE =
-  "cfb_member_snapshot_reader_2026_10_11_r32_consensus_authority_split_specialization" as const;
+  "cfb_member_snapshot_reader_2026_10_12_r33_provider_team_identity_consensus_authority_split_specialization" as const;
 const CFB_PROVIDER_CONTINUITY_PREVIOUS_MEMBER_SNAPSHOT_RELEASE =
   "cfb_forward_member_snapshot_2026_10_09_r45_provider_continuity_board_retention" as const;
 const CFB_PROVIDER_CONTINUITY_PREVIOUS_MEMBER_FIXTURE_RELEASE =

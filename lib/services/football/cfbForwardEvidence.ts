@@ -18,6 +18,8 @@ import {
 } from "./cfbV1Decision";
 
 export const CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE =
+  "cfb_forward_evidence_snapshot_2026_10_12_r45_provider_team_identity_consensus_authority_split_specialization" as const;
+export const CFB_FORWARD_PROVIDER_IDENTITY_PREVIOUS_EVIDENCE_SCHEMA_RELEASE =
   "cfb_forward_evidence_snapshot_2026_10_11_r44_consensus_authority_split_specialization" as const;
 export const CFB_FORWARD_MARKET_READER_PREVIOUS_EVIDENCE_SCHEMA_RELEASE =
   "cfb_forward_evidence_snapshot_2026_10_09_r43_joint_moneyline_spread_reconciliation" as const;
@@ -90,6 +92,8 @@ export const CFB_FORWARD_INITIAL_EVIDENCE_SCHEMA_RELEASE =
 export const CFB_FORWARD_EVIDENCE_COLLECTOR_RELEASE =
   "cfb_forward_evidence_collector_2026_10_10_r57_last_known_injury_report_continuity" as const;
 export const CFB_FORWARD_MEMBER_RELEASE =
+  "cfb_v1_member_release_2026_10_12_r62_provider_team_identity_consensus_authority_split_specialization" as const;
+export const CFB_FORWARD_PROVIDER_IDENTITY_PREVIOUS_MEMBER_RELEASE =
   "cfb_v1_member_release_2026_10_11_r61_consensus_authority_split_specialization" as const;
 export const CFB_FORWARD_MARKET_READER_PREVIOUS_MEMBER_RELEASE =
   "cfb_v1_member_release_2026_10_10_r60_last_known_injury_report_continuity" as const;

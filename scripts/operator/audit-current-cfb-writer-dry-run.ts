@@ -19,7 +19,9 @@ async function main(): Promise<void> {
   if (!url || !serviceKey || !balldontlieApiKey || !playbookApiKey || !sharpApiKey) {
     throw new Error("CFB dry replay requires the configured Supabase and provider credentials.");
   }
-  const focusMatchup = process.argv.find((value) => value.startsWith("--matchup="))?.slice(10).toUpperCase() ?? null;
+  const focusMatchups = new Set(process.argv
+    .filter((value) => value.startsWith("--matchup="))
+    .map((value) => value.slice(10).toUpperCase()));
   let focusedPayloads: readonly CfbForwardEvidencePayload[] = [];
   const result = await runCfbForwardEvidenceWriter({
     client: createClient(url, serviceKey, { auth: { persistSession: false } }),
@@ -33,10 +35,11 @@ async function main(): Promise<void> {
     collegeFootballDataApiKey: process.env.CFBD_API_KEY ?? null,
     weatherProvider: null,
     auditPayloads: (payloads) => {
-      focusedPayloads = focusMatchup
-        ? payloads.filter((payload) => `${payload.game.away.abbreviation}@${payload.game.home.abbreviation}`.toUpperCase() === focusMatchup)
+      focusedPayloads = focusMatchups.size > 0
+        ? payloads.filter((payload) => focusMatchups.has(`${payload.game.away.abbreviation}@${payload.game.home.abbreviation}`.toUpperCase()))
         : [];
     },
+    auditForceUnlocked: process.argv.includes("--force-unlocked"),
   });
   console.log(JSON.stringify({
     audit: "cfb_writer_live_provider_dry_run_2026_09_26_r1",
@@ -58,6 +61,18 @@ async function main(): Promise<void> {
         spread: book.spread,
         total: book.total,
       })),
+      sharpApiSplits: (payload.market.sharpApiSplits ?? []).map((split) => ({
+        sportsbook: split.sportsbook,
+        sourceSemantics: split.sourceSemantics,
+        capturedAt: split.capturedAt,
+        hasMoneyline: split.moneyline !== null,
+        hasSpread: split.spread !== null,
+        hasTotal: split.total !== null,
+        moneyline: split.moneyline,
+        spread: split.spread,
+        total: split.total,
+      })),
+      hasPlaybookSplits: payload.market.playbookSplits !== null,
       evaluated: payload.decisions.evaluatedBets.map((decision) => ({
         market: decision.market,
         side: decision.side,

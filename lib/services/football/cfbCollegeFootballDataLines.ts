@@ -1,7 +1,8 @@
 import type { NcaafBookOdds, NcaafGame } from "./balldontlieNcaafSlate";
+import { cfbProviderTeamMatches } from "./cfbProviderTeamIdentity";
 
 export const CFB_COLLEGE_FOOTBALL_DATA_LINES_RELEASE =
-  "cfb_college_football_data_lines_2026_10_07_r1_strict_week_named_book" as const;
+  "cfb_college_football_data_lines_2026_10_12_r2_central_team_identity" as const;
 export const CFB_COLLEGE_FOOTBALL_DATA_REFRESH_MINUTES = 360 as const;
 export const CFB_COLLEGE_FOOTBALL_DATA_MAX_REQUESTS_PER_RUN = 1 as const;
 export const CFB_COLLEGE_FOOTBALL_DATA_TIMEOUT_MS = 8_000 as const;
@@ -175,15 +176,14 @@ function strictGameMatch(game: NcaafGame, row: JsonRecord): boolean {
   const week = integer(row.week);
   const startAt = Date.parse(text(row.startDate) ?? "");
   return season === game.season && week === game.providerWeek &&
-    teamMatches(game.away.name, text(row.awayTeam)) && teamMatches(game.home.name, text(row.homeTeam)) &&
+    teamMatches(game.away.name, game.away.abbreviation, text(row.awayTeam)) &&
+    teamMatches(game.home.name, game.home.abbreviation, text(row.homeTeam)) &&
     Number.isFinite(startAt) && Math.abs(startAt - Date.parse(game.scheduledStart)) <= 3 * 60 * 60_000;
 }
 
-function teamMatches(providerName: string, cfbdName: string | null): boolean {
+function teamMatches(providerName: string, abbreviation: string, cfbdName: string | null): boolean {
   if (!cfbdName) return false;
-  const provider = normalize(providerName);
-  const cfbd = normalize(cfbdName);
-  return provider === cfbd || (cfbd.length >= 3 && provider.startsWith(cfbd));
+  return cfbProviderTeamMatches({ observed: cfbdName, abbreviation, expectedName: providerName });
 }
 
 function record(value: unknown): JsonRecord { return value !== null && typeof value === "object" && !Array.isArray(value) ? value as JsonRecord : {}; }
