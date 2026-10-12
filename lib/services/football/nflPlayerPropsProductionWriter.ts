@@ -55,21 +55,21 @@ import {
 } from "./nflPlayerPropsPrivateTrackingStore";
 
 export const NFL_PLAYER_PROPS_WRITER_RELEASE =
-  "nfl_player_props_writer_2026_10_12_r48_private_full_tracking" as const;
+  "nfl_player_props_writer_2026_10_12_r49_regular_season_identity_capacity" as const;
 export const NFL_PLAYER_PROPS_PRODUCTION_INCLUDE_OPENINGS = true as const;
 export const NFL_PLAYER_PROPS_PRODUCTION_COLLECTION_CALL_MAXIMUM = (
   1
   + 2 * NFL_PLAYER_PROPS_COLLECTION_LIMITS.maxGames
   + Math.ceil(NFL_PLAYER_PROPS_COLLECTION_LIMITS.maxPlayerIdentities / NFL_PLAYER_PROPS_COLLECTION_LIMITS.playerIdentityBatchSize)
   + NFL_PLAYER_PROPS_COLLECTION_LIMITS.maxSharpPages
-) as 51;
+) as 53;
 export const NFL_PLAYER_PROPS_PRODUCTION_INCREMENTAL_CALL_MAXIMUM = (
   NFL_PLAYER_PROPS_PRODUCTION_COLLECTION_CALL_MAXIMUM
   + NFL_PLAYER_PROPS_CURRENT_SEASON_GAMES_PAGE_MAXIMUM
   + NFL_PLAYER_PROPS_CURRENT_SEASON_STATS_PAGE_MAXIMUM
   + NFL_PLAYER_PROPS_CURRENT_SEASON_TEAM_STATS_PAGE_MAXIMUM
   + NFL_PLAYER_PROPS_SETTLEMENT_MAX_GAMES_PER_CYCLE
-) as 101;
+) as 103;
 
 export type NflPlayerPropsForecastTelemetry = {
   forecastPolicy: "target_excluded_single_posterior_exact_price_downstream";
@@ -114,6 +114,7 @@ export type NflPlayerPropsWriterResult = {
   contextSource: "nfl_forward_evidence";
   published: boolean;
   observations: number;
+  playerIdentities: number;
   exactOffers: number;
   featureRows: number;
   scoreEligibleFeatures: number;
@@ -332,6 +333,7 @@ export async function runNflPlayerPropsProductionWriter(args: {
     contextSource: context.source,
     published: args.apply,
     observations: collection.snapshot.observations.length,
+    playerIdentities: collection.snapshot.providerCoverage.balldontlie?.playersWithProviderIdentity ?? 0,
     exactOffers: offers.length,
     featureRows: features.length,
     scoreEligibleFeatures: features.filter((row) => row.scoreEligible).length,
