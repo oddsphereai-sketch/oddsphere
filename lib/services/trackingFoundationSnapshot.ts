@@ -76,6 +76,7 @@ export function trackingFoundationResponseBody(
     dailyTrend: result.dailyTrend,
     recentPicks: result.recentPicks,
     recentlySettled: result.recentlySettled,
+    alternateLinePerformance: result.alternateLinePerformance,
     tablesInitialized: result.tablesInitialized,
     freshTrackingStarted: result.overall.picks > 0,
     generatedAt: new Date().toISOString(),

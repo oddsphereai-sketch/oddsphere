@@ -95,6 +95,32 @@ type BaselineRow = {
   lifetime_pct: number;
 };
 
+type AlternateLineMetrics = {
+  wins: number;
+  losses: number;
+  pushes: number;
+  settled: number;
+  winPct: number | null;
+};
+
+type AlternateLineCategory = {
+  sport: string;
+  market: "spread" | "total";
+  source: "current_release" | "prior_release";
+  sourceLabel: string;
+  coverageFrom: string;
+  coverageTo: string;
+  original: AlternateLineMetrics;
+  adjustments: Array<{ delta: number; label: string; metrics: AlternateLineMetrics }>;
+  excludedRows: number;
+};
+
+type AlternateLineWindow = {
+  from: string;
+  to: string;
+  rows: AlternateLineCategory[];
+};
+
 type TrackingResponse = {
   sport: string;
   baselines: BaselineRow[];
@@ -108,6 +134,12 @@ type TrackingResponse = {
   thisMonth?: { from: string; to: string; overall: Metrics; bySportMarket: SportMarketBucket[] };
   recentPicks?: RecentPickRow[];
   recentlySettled?: RecentlySettledRow[];
+  alternateLinePerformance?: {
+    weekly: AlternateLineWindow;
+    monthly: AlternateLineWindow;
+    lifetime: AlternateLineWindow;
+    archives: AlternateLineCategory[];
+  };
   tablesInitialized: boolean;
   freshTrackingStarted: boolean;
   generatedAt?: string;
@@ -491,6 +523,13 @@ export default function LabTrackingPage({
     () => buildLifetimeRecords(data?.bySportMarket ?? [], data?.baselines ?? []),
     [data],
   );
+  const alternateLineRows = useMemo(() => {
+    const alternate = data?.alternateLinePerformance;
+    if (!alternate) return [];
+    if (trackWindow === "weekly") return alternate.weekly.rows;
+    if (trackWindow === "monthly") return alternate.monthly.rows;
+    return [...alternate.lifetime.rows, ...alternate.archives];
+  }, [data, trackWindow]);
   // Best Angles still derived from live joint sport+market buckets —
   // it's strictly a live concept (premium tier), so we don't fall
   // back to baselines here.
@@ -547,7 +586,7 @@ export default function LabTrackingPage({
         <WindowTabs active={trackWindow} onChange={setTrackWindow} />
         <div className="mt-3.5">
           {trackWindow === "lifetime" ? (
-            <LifetimeTrackingBoard records={lifetimeRecords} />
+            <LifetimeTrackingBoard records={lifetimeRecords} alternateRows={alternateLineRows} />
           ) : (
             <CategoryTrackingBoard
               rows={(trackWindow === "weekly" ? weekRows : monthRows).map((b) => ({
@@ -555,6 +594,7 @@ export default function LabTrackingPage({
                 market: b.market,
                 metrics: b.metrics,
               }))}
+              alternateRows={alternateLineRows}
               emptyBody={
                 trackWindow === "weekly"
                   ? "Weekly category comparison appears once this week's picks have graded."
@@ -773,7 +813,13 @@ function lifetimeSourceLabel(record: LifetimeRecord): string {
   return record.sport === "ucl" ? "Historical archive · aggregate-only legacy import" : "Lifetime";
 }
 
-function LifetimeTrackingBoard({ records }: { records: LifetimeRecord[] }) {
+function LifetimeTrackingBoard({
+  records,
+  alternateRows,
+}: {
+  records: LifetimeRecord[];
+  alternateRows: AlternateLineCategory[];
+}) {
   return (
     <>
       <CategoryTrackingBoard
@@ -783,6 +829,7 @@ function LifetimeTrackingBoard({ records }: { records: LifetimeRecord[] }) {
           detail: lifetimeSourceLabel(record),
           metrics: record.metrics,
         }))}
+        alternateRows={alternateRows}
         emptyBody="Lifetime records appear here as predictions settle and sport tracking comes online."
       />
       <p className="mt-3 text-[11px] leading-relaxed text-gray-500">
@@ -799,38 +846,140 @@ type CategoryTrackingRow = {
   metrics: Metrics;
 };
 
-function CategoryTrackingBoard({ rows, emptyBody }: { rows: CategoryTrackingRow[]; emptyBody: string }) {
-  const groups = groupBySport(rows);
+function CategoryTrackingBoard({
+  rows,
+  alternateRows = [],
+  emptyBody,
+}: {
+  rows: CategoryTrackingRow[];
+  alternateRows?: AlternateLineCategory[];
+  emptyBody: string;
+}) {
+  const mainGroups = groupBySport(rows);
+  const alternateGroups = groupBySport(alternateRows);
+  const sportKeys = Array.from(new Set([
+    ...mainGroups.map((group) => group.sport),
+    ...alternateGroups.map((group) => group.sport),
+  ])).sort((a, b) => (SPORT_ORDER[a] ?? 99) - (SPORT_ORDER[b] ?? 99));
 
-  if (groups.length === 0) return <Card><Empty body={emptyBody} /></Card>;
+  if (sportKeys.length === 0) return <Card><Empty body={emptyBody} /></Card>;
 
   return (
     <Card>
       <div className="space-y-3">
-        {groups.map((group) => {
-          const theme = sportTheme(group.sport);
+        {sportKeys.map((sport) => {
+          const mainRows = mainGroups.find((group) => group.sport === sport)?.rows ?? [];
+          const sportAlternateRows = alternateGroups.find((group) => group.sport === sport)?.rows ?? [];
+          const theme = sportTheme(sport);
+          const categoryCount = new Set([
+            ...mainRows.map((row) => row.market),
+            ...sportAlternateRows.map((row) => row.market),
+          ]).size;
           return (
           <section
-            key={group.sport}
+            key={sport}
             className="rounded-xl border p-3.5 sm:p-4"
             style={{ borderColor: theme.border, background: theme.surface }}
           >
-            <SportGroupHeader sport={group.sport} count={group.rows.length} />
-            <CategoryBars
-              rows={group.rows.map((row) => ({
-                label: prettyMarket(row.market),
-                sublabel: row.detail !== undefined
-                  ? `${shortMarket(row.market)} · ${row.detail}`
-                  : shortMarket(row.market),
-                metrics: row.metrics,
-              }))}
-              emptyBody={`${prettySport(group.sport)} results appear once this window has graded picks.`}
-            />
+            <SportGroupHeader sport={sport} count={categoryCount} />
+            {mainRows.length > 0 ? (
+              <CategoryBars
+                rows={mainRows.map((row) => ({
+                  label: prettyMarket(row.market),
+                  sublabel: row.detail !== undefined
+                    ? `${shortMarket(row.market)} · ${row.detail}`
+                    : shortMarket(row.market),
+                  metrics: row.metrics,
+                }))}
+                emptyBody={`${prettySport(sport)} results appear once this window has graded picks.`}
+              />
+            ) : null}
+            {sportAlternateRows.length > 0 ? (
+              <AlternateLinePerformanceRows rows={sportAlternateRows} />
+            ) : null}
           </section>
           );
         })}
       </div>
     </Card>
+  );
+}
+
+function alternateMarketLabel(sport: string, market: AlternateLineCategory["market"]): string {
+  if (sport === "nhl" && market === "spread") return "Puck Line";
+  return prettyMarket(market);
+}
+
+function alternateRecord(metrics: AlternateLineMetrics): string {
+  return `${metrics.wins}-${metrics.losses}${metrics.pushes > 0 ? `-${metrics.pushes}` : ""}`;
+}
+
+function AlternateLinePerformanceRows({ rows }: { rows: AlternateLineCategory[] }) {
+  return (
+    <div className="mt-4 border-t border-white/[0.06] pt-4">
+      <div className="mb-3 flex items-center gap-2">
+        <p className="text-[10px] font-black uppercase tracking-[0.16em] text-gray-400">Alternate Line Performance</p>
+        <details className="group relative">
+          <summary
+            aria-label="How alternate line performance is calculated"
+            className="flex h-4 w-4 cursor-pointer list-none items-center justify-center rounded-full border border-slate-400/25 bg-slate-300/[0.06] text-[9px] font-black text-slate-300 marker:content-none"
+          >
+            ?
+          </summary>
+          <p className="absolute left-0 top-6 z-20 w-64 rounded-lg border border-white/[0.10] bg-[#111722] p-3 text-[11px] font-medium normal-case leading-relaxed tracking-normal text-gray-300 shadow-2xl">
+            Same tracked picks, graded with the line moved in the prediction&apos;s favor. Prices are not included.
+          </p>
+        </details>
+      </div>
+      <div className="space-y-3">
+        {rows.map((row) => {
+          const coverage = row.coverageFrom === row.coverageTo
+            ? fmtShortDate(row.coverageFrom)
+            : `${fmtShortDate(row.coverageFrom)} → ${fmtShortDate(row.coverageTo)}`;
+          return (
+            <div key={`${row.sport}-${row.market}-${row.source}`} className="rounded-lg border border-white/[0.05] bg-black/[0.10] p-3">
+              <div className="mb-2.5 flex flex-wrap items-baseline justify-between gap-2">
+                <div>
+                  <p className="text-[12px] font-bold text-gray-200">{alternateMarketLabel(row.sport, row.market)}</p>
+                  <p className="mt-0.5 text-[9.5px] font-bold uppercase tracking-[0.12em] text-gray-500">
+                    {row.sourceLabel} · {coverage} · {row.original.settled.toLocaleString()} settled
+                  </p>
+                </div>
+                <div className="text-[10.5px] tabular-nums text-gray-500">
+                  Main line <span className="ml-1 font-bold text-gray-300">{alternateRecord(row.original)}</span>
+                  {row.original.winPct !== null ? <span className="ml-1.5 text-gray-400">{row.original.winPct.toFixed(1)}%</span> : null}
+                </div>
+              </div>
+              <div className="grid gap-2 sm:grid-cols-2">
+                {row.adjustments.map((adjustment) => (
+                  <div key={adjustment.label} className="rounded-lg border border-white/[0.045] bg-white/[0.014] px-3 py-2.5">
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="rounded-md border border-slate-400/20 bg-slate-300/[0.07] px-2 py-1 text-[9px] font-black uppercase tracking-[0.12em] text-slate-200">
+                        {adjustment.label}
+                      </span>
+                      <div className="text-right tabular-nums">
+                        <span className="text-[12px] font-extrabold text-gray-100">{alternateRecord(adjustment.metrics)}</span>
+                        {adjustment.metrics.winPct !== null ? (
+                          <span className="ml-2 text-[11px] font-extrabold text-emerald-300/95">{adjustment.metrics.winPct.toFixed(1)}%</span>
+                        ) : null}
+                      </div>
+                    </div>
+                    <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-white/[0.04]">
+                      {adjustment.metrics.winPct !== null ? (
+                        <div
+                          className="h-full rounded-full bg-gradient-to-r from-emerald-500 to-emerald-300"
+                          style={{ width: `${Math.min(100, adjustment.metrics.winPct)}%` }}
+                        />
+                      ) : null}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
   );
 }
 
