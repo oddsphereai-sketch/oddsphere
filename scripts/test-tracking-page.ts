@@ -168,7 +168,7 @@ check("Page order: Yesterday → Tracking by category → Best Angles → Latest
 
 // ── This Week uses the single CategoryBars chart, not multiple ──────
 
-check("Tracking by category section uses the grouped CategoryBars chart", /Tracking by category[\s\S]{0,1800}CategoryTrackingBoard/.test(PAGE) && /function CategoryTrackingBoard[\s\S]{0,1800}<CategoryBars/.test(PAGE));
+check("Tracking by category section uses the grouped CategoryBars chart", /Tracking by category[\s\S]{0,1800}CategoryTrackingBoard/.test(PAGE) && /function CategoryTrackingBoard[\s\S]{0,4200}<CategoryBars/.test(PAGE));
 check("CategoryBars chart component exists", CHARTS.includes("export function CategoryBars"));
 check(
   "CategoryBars renders progress-bar rows",
@@ -194,6 +194,15 @@ check(
   "Alternate line performance stays nested inside the existing sport tracking panels",
   /function CategoryTrackingBoard[\s\S]{0,4200}<AlternateLinePerformanceRows/.test(PAGE) &&
     PAGE.includes("Alternate Line Performance"),
+);
+check(
+  "Each market renders its own alternate history directly beneath the matching main-line record",
+  /mainRows\.map\(\(row, index\)[\s\S]{0,2200}data-tracking-market=\{row\.market\}[\s\S]{0,1800}matchingAlternateRows[\s\S]{0,500}<AlternateLinePerformanceRows rows=\{matchingAlternateRows\} embedded/.test(PAGE),
+);
+check(
+  "Matched alternate lines are not repeated in a detached sport-level block",
+  /unmatchedAlternateRows = sportAlternateRows\.filter\(\(row\) => !mainMarkets\.has\(row\.market\)\)/.test(PAGE) &&
+    /<AlternateLinePerformanceRows rows=\{unmatchedAlternateRows\}/.test(PAGE),
 );
 check(
   "Alternate line help states that prices are excluded",

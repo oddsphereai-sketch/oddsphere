@@ -118,6 +118,23 @@ check("Same-sample main line preserves stored grades", total?.original.losses ==
 check("Favorable +3 Total regrade converts both test losses", total?.adjustments[0]?.metrics.wins === 2);
 check("NFL Spread exposes +3 and +6 point records", spreadCategory?.adjustments.map((row) => row.label).join(",") === "+3 POINTS,+6 POINTS");
 
+const roundingRows = Array.from({ length: 13 }, (_, index) => {
+  const won = index < 7;
+  const roundingRecord = record({ id: 100 + index, side: "under", pick: "Under 45.5", line_value: 45.5 });
+  const roundingGrade = grade({
+    prediction_record_id: 100 + index,
+    result: won ? "win" : "loss",
+    win: won,
+    loss: !won,
+    actual_home_score: won ? 20 : 30,
+    actual_away_score: 20,
+    actual_total: won ? 40 : 50,
+  });
+  return { record: roundingRecord, grade: roundingGrade, displaySport: "nfl" };
+});
+const roundedCategory = buildAlternateLineCategories(roundingRows, { from: "2026-10-05", to: "2026-10-12" })[0];
+check("Alternate and main tracking use the same percentage precision", roundedCategory?.original.winPct === 53.85);
+
 const mismatchedGrade = grade({ result: "win", win: true, loss: false });
 const mismatch = buildAlternateLineCategories([
   { record: over, grade: mismatchedGrade, displaySport: "nfl" },
@@ -141,4 +158,3 @@ check("UCL prior release remains explicitly labeled and separate", ucl[0]?.sourc
 
 console.log(`\n${passed} passed · ${failed} failed`);
 if (failed > 0) process.exit(1);
-
