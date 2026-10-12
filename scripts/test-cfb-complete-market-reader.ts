@@ -8,6 +8,7 @@ import {
 import type { CfbForwardMarketReaderObservation } from "../lib/services/football/cfbForwardEvidenceCapture";
 import { summarizePmf } from "../lib/services/football/cfbMarketSharpAwareShadow";
 import type { CfbV1Forecast } from "../lib/services/football/cfbV1Decision";
+import { CFB_SHARP_API_SPLITS_RELEASE } from "../lib/services/football/cfbSharpApiSplits";
 
 const pmf = [
   { home: 17, away: 14, probability: 0.08 },
@@ -70,7 +71,7 @@ const observation = (
   },
   playbookSplits: null,
   sharpApiSplits: fallbackTotal ? [{
-    release: "cfb_sharpapi_splits_2026_08_30_r2_full_week_capacity",
+    release: CFB_SHARP_API_SPLITS_RELEASE,
     providerGameId: "reader-test",
     providerEventId: "reader-test-event",
     sportsbook: "draftkings",

@@ -1,9 +1,10 @@
 import type { NcaafBookOdds, NcaafGame } from "./balldontlieNcaafSlate";
 import type { CfbForwardMarketHistoryEvidence, CfbForwardStoredEvidence } from "./cfbForwardEvidence";
 import { activeCfbWeeklyWindow, isGameInCfbWeeklyWindow } from "./cfbWeeklyWindow";
+import { cfbProviderTeamMatches } from "./cfbProviderTeamIdentity";
 
 export const CFB_THE_ODDS_API_FALLBACK_RELEASE =
-  "cfb_the_odds_api_fcs_fallback_2026_10_08_r2_multi_book_gap_fill" as const;
+  "cfb_the_odds_api_fcs_fallback_2026_10_12_r3_central_team_identity" as const;
 export const CFB_THE_ODDS_API_SPORT_KEY = "americanfootball_ncaaf_fcs" as const;
 export const CFB_THE_ODDS_API_BOOKMAKERS =
   "fanduel,draftkings,rebet,betmgm,betrivers,williamhill_us,fanatics,espnbet,betonlineag,ballybet" as const;
@@ -328,8 +329,8 @@ const THE_ODDS_API_BOOK_IDENTITIES: Readonly<Record<string, {
 
 function normalizeMoneyline(game: NcaafGame, markets: JsonRecord[]): NcaafBookOdds["moneyline"] {
   const outcomes = marketOutcomes(markets, "h2h");
-  const home = uniqueTeamOutcome(outcomes, game.home.name);
-  const away = uniqueTeamOutcome(outcomes, game.away.name);
+  const home = uniqueTeamOutcome(outcomes, game.home.name, game.home.abbreviation);
+  const away = uniqueTeamOutcome(outcomes, game.away.name, game.away.abbreviation);
   const homePrice = american(home?.price);
   const awayPrice = american(away?.price);
   return homePrice !== null && awayPrice !== null ? { homePrice, awayPrice } : null;
@@ -337,8 +338,8 @@ function normalizeMoneyline(game: NcaafGame, markets: JsonRecord[]): NcaafBookOd
 
 function normalizeSpread(game: NcaafGame, markets: JsonRecord[]): NcaafBookOdds["spread"] {
   const outcomes = marketOutcomes(markets, "spreads");
-  const home = uniqueTeamOutcome(outcomes, game.home.name);
-  const away = uniqueTeamOutcome(outcomes, game.away.name);
+  const home = uniqueTeamOutcome(outcomes, game.home.name, game.home.abbreviation);
+  const away = uniqueTeamOutcome(outcomes, game.away.name, game.away.abbreviation);
   const homeLine = finite(home?.point);
   const awayLine = finite(away?.point);
   const homePrice = american(home?.price);
@@ -366,8 +367,14 @@ function marketOutcomes(markets: JsonRecord[], key: string): JsonRecord[] {
   return matches.length === 1 ? array(matches[0]!.outcomes).map(record) : [];
 }
 
-function uniqueTeamOutcome(outcomes: JsonRecord[], team: string): JsonRecord | null {
-  const matches = outcomes.filter((outcome) => teamMatches(team, text(outcome.name)));
+function uniqueTeamOutcome(outcomes: JsonRecord[], team: string, abbreviation: string): JsonRecord | null {
+  const matches = outcomes.filter((outcome) => {
+    const name = text(outcome.name);
+    return name !== null && (
+      cfbProviderTeamMatches({ observed: name, abbreviation, expectedName: team }) ||
+      canonicalTeam(team) === canonicalTeam(name)
+    );
+  });
   return matches.length === 1 ? matches[0]! : null;
 }
 
@@ -379,7 +386,8 @@ function uniqueNamedOutcome(outcomes: JsonRecord[], side: string): JsonRecord | 
 function strictEventMatch(game: NcaafGame, event: JsonRecord): boolean {
   const startAt = Date.parse(text(event.commence_time) ?? "");
   return Number.isFinite(startAt) && Math.abs(startAt - Date.parse(game.scheduledStart)) <= 3 * 60 * 60_000 &&
-    teamMatches(game.home.name, text(event.home_team)) && teamMatches(game.away.name, text(event.away_team));
+    teamMatches(game.home.name, game.home.abbreviation, text(event.home_team)) &&
+    teamMatches(game.away.name, game.away.abbreviation, text(event.away_team));
 }
 
 const TEAM_ALIASES = new Map<string, string>([
@@ -391,9 +399,9 @@ const TEAM_ALIASES = new Map<string, string>([
   ["williamandmarytribe", "williammarytribe"],
 ].map(([name, canonical]) => [normalize(name), normalize(canonical)]));
 
-function teamMatches(first: string, second: string | null): boolean {
+function teamMatches(first: string, abbreviation: string, second: string | null): boolean {
   if (!second) return false;
-  return canonicalTeam(first) === canonicalTeam(second);
+  return cfbProviderTeamMatches({ observed: second, abbreviation, expectedName: first }) || canonicalTeam(first) === canonicalTeam(second);
 }
 
 function canonicalTeam(value: string): string {

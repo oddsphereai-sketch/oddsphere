@@ -297,6 +297,38 @@ Last reviewed: 2026-10-10
 
 ## CFB Daily Edge generalized weekly production release
 
+- October 12 provider-team identity correction: the active professional reader is
+  `cfb_complete_market_reader_2026_10_12_r6_provider_team_identity_consensus_authority_split_specialization`; its coefficient artifact
+  remains the frozen `cfb_market_reader_artifact_2026_10_11_r5_consensus_authority_split_specialization`.
+  A single abbreviation-scoped CFB identity resolver now owns SharpAPI named-book odds,
+  SharpAPI current and stored splits, sharp-book evidence capture, DraftKings Network splits,
+  Playbook evidence, CollegeFootballData lines, and The Odds API FCS fallback matching.
+  Explicit provider aliases recover App State/Appalachian State and the other verified current-
+  slate variants; non-explicit prefix completion is accepted only when unique across the full
+  supported CFB catalog. This rejects ambiguous Florida, Alabama, and Miami cross-team matches.
+  The market reader, frozen coefficients, thresholds, lock timing, stake policy, and missing-
+  evidence neutrality are unchanged; recovered verified evidence may affect only unlocked and
+  future outputs through the existing production path. Stored locked payloads retain exact
+  precedence and are not migrated or rewritten.
+- Runtime / independent model / distribution / probability / reachable score / calibration /
+  grade / decision are `cfb_v1_joint_score_runtime_2026_10_12_r24_provider_team_identity_consensus_authority_split_specialization` /
+  `cfb_v1_professional_score_model_2026_10_12_r23_provider_team_identity_consensus_authority_split_specialization` /
+  `cfb_v1_professional_joint_distribution_2026_10_12_r21_provider_team_identity_consensus_authority_split_specialization` /
+  `cfb_v1_professional_joint_probability_2026_10_12_r25_provider_team_identity_consensus_authority_split_specialization` /
+  `cfb_v1_professional_reachable_score_2026_10_12_r21_provider_team_identity_consensus_authority_split_specialization` /
+  `cfb_v1_exact_price_calibration_2026_10_12_r24_provider_team_identity_consensus_authority_split_specialization` /
+  `cfb_v1_composite_grade_policy_2026_10_12_r27_provider_team_identity_consensus_authority_split_specialization` /
+  `cfb_v1_daily_edge_decision_2026_10_12_r49_provider_team_identity_consensus_authority_split_specialization`. Production reader /
+  tuple / evidence / member / writer are `cfb_market_sharp_aware_production_2026_10_12_r37_provider_team_identity_consensus_authority_split_specialization` /
+  `cfb_v1_exact_price_decision_tuple_2026_10_12_r37_provider_team_identity_consensus_authority_split_specialization` /
+  `cfb_forward_evidence_snapshot_2026_10_12_r45_provider_team_identity_consensus_authority_split_specialization` /
+  `cfb_v1_member_release_2026_10_12_r62_provider_team_identity_consensus_authority_split_specialization` /
+  `cfb_forward_evidence_writer_2026_10_12_r116_provider_team_identity_consensus_authority_split_specialization`. Fixture / outcome /
+  compact snapshot / reader / tracking are r88 / r78 / r48 / r33 / r46 with the same suffix.
+  The October 11 family remains the immediate immutable reader fallback. Evidence, gates, board
+  impact, and rollback: `docs/model-audits/2026-10-12-cfb-provider-team-identity-predeclaration.md`
+  and `docs/model-audits/2026-10-12-cfb-provider-team-identity-result.md`.
+
 - October 11 CFB accuracy-incident replacement: the active professional reader is
   `cfb_complete_market_reader_2026_10_11_r5_consensus_authority_split_specialization`
   with frozen artifact

@@ -111,9 +111,9 @@ import { cfbTeamIdentity } from "./cfbTeamIdentity";
 import { CFB_PUBLIC_SCORE_DIRECTION_TOLERANCE_POINTS } from "./footballCrossMarketCoherence";
 
 export const CFB_MEMBER_FIXTURE_RELEASE =
-  "cfb_v1_member_fixture_2026_10_11_r87_consensus_authority_split_specialization" as const;
+  "cfb_v1_member_fixture_2026_10_12_r88_provider_team_identity_consensus_authority_split_specialization" as const;
 export const CFB_PUBLIC_OUTCOME_CONTRACT_RELEASE =
-  "cfb_market_sharp_public_outcome_contract_2026_10_11_r77_consensus_authority_split_specialization" as const;
+  "cfb_market_sharp_public_outcome_contract_2026_10_12_r78_provider_team_identity_consensus_authority_split_specialization" as const;
 export const CFB_MEMBER_GAME_LIFECYCLE_RELEASE =
   "cfb_member_game_lifecycle_2026_10_09_r1_3am_locked_game_retention" as const;
 export const CFB_CONTEXT_ONLY_QUOTE_CAPTURE_SKEW_MS = 5_000 as const;

@@ -1,8 +1,9 @@
 import { SharpApiClient, type SharpApiRequestOptions, type SharpApiResponse } from "@/lib/providers/real_api/_sharpApiClient";
 import type { NcaafBookOdds, NcaafGame } from "./balldontlieNcaafSlate";
+import { cfbProviderTeamMatches } from "./cfbProviderTeamIdentity";
 
 export const CFB_SHARP_API_ODDS_RELEASE =
-  "cfb_sharpapi_named_book_fallback_2026_10_07_r17_exchange_context_isolation" as const;
+  "cfb_sharpapi_named_book_fallback_2026_10_12_r18_central_team_identity" as const;
 export const CFB_SHARP_FALLBACK_MAX_GAMES = 96 as const;
 export const CFB_SHARP_FALLBACK_MAX_REQUESTS = 192 as const;
 export const CFB_SHARP_FALLBACK_MAX_DURATION_MS = 60_000 as const;
@@ -757,14 +758,7 @@ function eventTeam(event: SharpEventRow, side: "home" | "away"): unknown {
 }
 
 function teamMatches(raw: unknown, expectedName: string, abbreviation: string): boolean {
-  const value = normalizeTeam(raw);
-  const full = normalizeTeam(expectedName);
-  const abbr = normalizeTeam(abbreviation);
-  if (!value || !full || !abbr) return false;
-  if (value === full || value === abbr) return true;
-  if (full.startsWith("u") && full.slice(1) === value) return true;
-  if (value.startsWith("u") && value.slice(1) === full) return true;
-  return value.length >= 5 && (full.startsWith(value) || value.startsWith(full));
+  return cfbProviderTeamMatches({ observed: raw, expectedName, abbreviation });
 }
 
 function marketHasThreeSameLineBooks(books: NcaafBookOdds[], market: "moneyline" | "spread" | "total"): boolean {
@@ -786,10 +780,6 @@ function validSide(market: Pair["market"], side: string): boolean {
 
 function bookCompleteness(book: NcaafBookOdds): number {
   return Number(Boolean(book.moneyline)) + Number(Boolean(book.spread)) + Number(Boolean(book.total));
-}
-
-function normalizeTeam(value: unknown): string {
-  return text(value)?.replace(/^\s*\(\d+\)\s*/, "").normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "") ?? "";
 }
 
 function easternDate(value: string): string {

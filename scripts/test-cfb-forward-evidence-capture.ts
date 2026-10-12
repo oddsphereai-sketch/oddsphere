@@ -11,6 +11,7 @@ import {
   cfbForwardContextSharpHistoryBooks,
 } from "../lib/services/football/cfbForwardEvidenceCapture";
 import type { CfbV1Forecast } from "../lib/services/football/cfbV1Decision";
+import { CFB_SHARP_API_SPLITS_RELEASE } from "../lib/services/football/cfbSharpApiSplits";
 
 const capturedAt = "2026-09-01T23:00:00.000Z";
 const openedAt = "2026-09-01T12:00:00.000Z";
@@ -86,7 +87,7 @@ function payload(gameIndex = 0): CfbForwardEvidencePayload {
     overMoneyPct: 53, underMoneyPct: 47, overBetsPct: 43, underBetsPct: 57,
   } as const;
   const sharp = (sportsbook: "circa" | "draftkings", sourceSemantics: "sharp_adjacent" | "public_recreational") => ({
-    release: "cfb_sharpapi_splits_2026_08_30_r2_full_week_capacity" as const,
+    release: CFB_SHARP_API_SPLITS_RELEASE,
     providerGameId: gameId, providerEventId: `sharp-${sportsbook}-${gameIndex + 1}`,
     sportsbook, sourceSemantics, capturedAt,
     moneyline: { away: { ticketsPct: 44, moneyPct: 40 }, home: { ticketsPct: 56, moneyPct: 60 } },

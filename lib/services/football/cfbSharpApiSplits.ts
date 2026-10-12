@@ -1,8 +1,9 @@
 import { SharpApiClient, type SharpApiRequestOptions, type SharpApiResponse } from "@/lib/providers/real_api/_sharpApiClient";
 import type { NcaafGame } from "./balldontlieNcaafSlate";
+import { cfbProviderTeamMatches } from "./cfbProviderTeamIdentity";
 
 export const CFB_SHARP_API_SPLITS_RELEASE =
-  "cfb_sharpapi_splits_2026_08_30_r2_full_week_capacity" as const;
+  "cfb_sharpapi_splits_2026_10_12_r3_central_team_identity" as const;
 export const CFB_SHARP_API_SPLITS_MAX_GAMES = 128 as const;
 export const CFB_SHARP_API_SPLITS_MAX_ROWS = 200 as const;
 
@@ -171,12 +172,7 @@ function acceptedGameDates(scheduledStart: string): Set<string> {
 }
 
 function teamMatches(raw: unknown, expectedName: string, abbreviation: string): boolean {
-  const value = normalizeTeam(raw);
-  const full = normalizeTeam(expectedName);
-  const abbr = normalizeTeam(abbreviation);
-  if (!value || !full || !abbr) return false;
-  if (value === full || value === abbr) return true;
-  return value.length >= 5 && (full.startsWith(value) || value.startsWith(full));
+  return cfbProviderTeamMatches({ observed: raw, expectedName, abbreviation });
 }
 
 function record(value: unknown): Json {
@@ -210,10 +206,6 @@ function iso(value: unknown): string | null {
 
 function normalize(value: string): string {
   return value.toLowerCase().replace(/[^a-z0-9]+/g, "");
-}
-
-function normalizeTeam(value: unknown): string {
-  return text(value)?.replace(/^\s*\(\d+\)\s*/, "").normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "") ?? "";
 }
 
 export const __TEST__ = { strictSplitIdentity, teamMatches, normalizeSplitRow };

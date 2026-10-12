@@ -17,7 +17,7 @@ import {
 import type { CfbV1Forecast } from "./cfbV1Decision";
 
 export const CFB_COMPLETE_MARKET_READER_RELEASE =
-  "cfb_complete_market_reader_2026_10_11_r5_consensus_authority_split_specialization" as const;
+  "cfb_complete_market_reader_2026_10_12_r6_provider_team_identity_consensus_authority_split_specialization" as const;
 export const CFB_COMPLETE_MARKET_READER_ARTIFACT_RELEASE =
   "cfb_market_reader_artifact_2026_10_11_r5_consensus_authority_split_specialization" as const;
 
