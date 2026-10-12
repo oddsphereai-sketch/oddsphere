@@ -48,9 +48,14 @@ import {
   captureNflPlayerPropsMarketObserverSafely,
   type NflPlayerPropsMarketObserverSafeResult,
 } from "./nflPlayerPropsMarketObserverStore";
+import {
+  captureNflPlayerPropsPrivateTracking,
+  captureNflPlayerPropsPrivateTrackingSafely,
+  type NflPlayerPropsPrivateTrackingSafeResult,
+} from "./nflPlayerPropsPrivateTrackingStore";
 
 export const NFL_PLAYER_PROPS_WRITER_RELEASE =
-  "nfl_player_props_writer_2026_10_09_r47_market_observer_capture" as const;
+  "nfl_player_props_writer_2026_10_12_r48_private_full_tracking" as const;
 export const NFL_PLAYER_PROPS_PRODUCTION_INCLUDE_OPENINGS = true as const;
 export const NFL_PLAYER_PROPS_PRODUCTION_COLLECTION_CALL_MAXIMUM = (
   1
@@ -129,6 +134,7 @@ export type NflPlayerPropsWriterResult = {
   healthFindings: string[];
   forecastTelemetry: NflPlayerPropsForecastTelemetry;
   marketObserverCapture: NflPlayerPropsMarketObserverSafeResult | null;
+  privateTrackingCapture: NflPlayerPropsPrivateTrackingSafeResult | null;
   candidateImpact?: NflPlayerPropsCandidateImpact;
   liveImpact?: NflPlayerPropsCandidateImpact;
 };
@@ -288,7 +294,7 @@ export async function runNflPlayerPropsProductionWriter(args: {
   const settlement = args.apply
     ? await settleNflPlayerPropsRecords({ client: args.client, apiKey: args.ballDontLieApiKey, now: args.now, fetchImpl: args.fetchImpl })
     : { pending: 0, eligible: 0, eligibleGames: 0, processedGames: 0, deferredGames: 0, recordReadLimitReached: false, settled: 0, apiCalls: 0 };
-  // Capture is deliberately last and failure-isolated. The authoritative
+  // Research captures are deliberately after production and failure-isolated. The authoritative
   // member snapshot, immutable lock/tracking rows, closing prices, and
   // settlement have all completed before this internal research write runs.
   const marketObserverCapture = args.apply
@@ -298,6 +304,17 @@ export async function runNflPlayerPropsProductionWriter(args: {
       currentMarketEvidence: nextBoard.marketEvidence,
       evaluatedAt: args.now,
       maximumLockQuoteAgeHours: nflPlayerPropsRuntimePolicy().maximumQuoteAgeHours,
+      writerRelease: NFL_PLAYER_PROPS_WRITER_RELEASE,
+    }))
+    : null;
+  // The private diagnostic archive is also last and failure-isolated. It
+  // records every already-locked decision, including No Plays and alternate
+  // lines, without changing the public board or the official actionable ledger.
+  const privateTrackingCapture = args.apply
+    ? await captureNflPlayerPropsPrivateTrackingSafely(() => captureNflPlayerPropsPrivateTracking({
+      client: args.client,
+      snapshot,
+      evaluatedAt: args.now,
       writerRelease: NFL_PLAYER_PROPS_WRITER_RELEASE,
     }))
     : null;
@@ -334,6 +351,7 @@ export async function runNflPlayerPropsProductionWriter(args: {
     apiCallsMaximum,
     forecastTelemetry: summarizeNflPlayerPropsForecastTelemetry(snapshot),
     marketObserverCapture,
+    privateTrackingCapture,
     ...(candidateImpact ? { candidateImpact } : {}),
     ...(liveImpact ? { liveImpact } : {}),
     healthFindings: [...new Set([
@@ -342,6 +360,7 @@ export async function runNflPlayerPropsProductionWriter(args: {
       ...(settlement.deferredGames > 0 ? [`NFL_PLAYER_PROPS_SETTLEMENT_GAMES_DEFERRED:${settlement.deferredGames}`] : []),
       ...(settlement.recordReadLimitReached ? ["NFL_PLAYER_PROPS_SETTLEMENT_RECORD_READ_LIMIT_REACHED"] : []),
       ...(marketObserverCapture?.error ? ["NFL_PLAYER_PROPS_MARKET_OBSERVER_CAPTURE_FAILED"] : []),
+      ...(privateTrackingCapture?.error ? ["NFL_PLAYER_PROPS_PRIVATE_TRACKING_CAPTURE_FAILED"] : []),
     ])].sort(),
   };
 }

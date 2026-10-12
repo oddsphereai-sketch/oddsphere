@@ -135,6 +135,10 @@ import {
 } from "./marketEvidenceCapture";
 import { applyMlbPropsPriceConfidenceCeilings } from "./priceConfidencePolicy";
 import { shouldRetainMlbPropOffer } from "./offerRetention";
+import {
+  captureMlbPropsPrivateTracking,
+  type MlbPropsPrivateTrackingCaptureResult,
+} from "./privateTrackingStore";
 
 type RefreshArgs = {
   slateDate: string;
@@ -181,6 +185,7 @@ export type MlbPropsBoardRefreshResult = {
   snapshot: MlbPropsBoardSnapshot;
   forecastTelemetry: MlbPropsForecastTelemetry;
   tracking: MlbPropsTrackingSyncResult;
+  privateTrackingCapture: MlbPropsPrivateTrackingCaptureResult | null;
   providerCalls: {
     balldontlie: number;
     balldontlieOdds: number;
@@ -426,7 +431,7 @@ export async function refreshMlbPropsBoard(args: RefreshArgs): Promise<MlbPropsB
     })
     : null;
 
-  const decisionProps = applyValidatedHomeRunPortfolioPromotions(applyValidatedValuePortfolioPromotions(compactMemberBoardRows(attachMlbPropOddsMovement(buildDashboardRows({
+  const expandedDecisionProps = attachMlbPropOddsMovement(buildDashboardRows({
     mappedOdds,
     identities,
     probablePitchers,
@@ -435,7 +440,10 @@ export async function refreshMlbPropsBoard(args: RefreshArgs): Promise<MlbPropsB
     scoringCandidates: scoring?.summary.sampleCandidates ?? [],
     marketContexts,
     asOfTimestamp,
-  }), openingOdds, previous), asOfTimestamp)));
+  }), openingOdds, previous);
+  const decisionProps = applyValidatedHomeRunPortfolioPromotions(applyValidatedValuePortfolioPromotions(
+    compactMemberBoardRows(expandedDecisionProps, asOfTimestamp),
+  ));
   // Expected-count calibration is intentionally applied only after every
   // probability, side, grade, actionability, and stake decision is complete.
   const calibratedProps = decisionProps.map((row) => {
@@ -549,6 +557,7 @@ export async function refreshMlbPropsBoard(args: RefreshArgs): Promise<MlbPropsB
       snapshot,
       forecastTelemetry,
       tracking: disabledTrackingResult(),
+      privateTrackingCapture: null,
       providerCalls: {
         balldontlie: balldontlieCalls,
         ...providerCalls,
@@ -571,6 +580,17 @@ export async function refreshMlbPropsBoard(args: RefreshArgs): Promise<MlbPropsB
       error: error instanceof Error ? error.message : String(error),
     };
   }
+  // Additive research capture only: retain the last successful pre-T60 full
+  // provider ladder while the public member board remains compact main-line
+  // best-price rows. Failure cannot block the authoritative board or locks.
+  const privateTrackingCapture = await captureMlbPropsPrivateTracking({
+    sourceOdds,
+    publishedRows: props,
+    slateDate: args.slateDate,
+    evaluatedAt: asOfTimestamp,
+    sourceSnapshotId: snapshot.snapshotId,
+    modelRelease: MLB_PROPS_MODEL_RELEASE_ID,
+  });
   // Publish the small, indexed member read models after lock reconciliation.
   // A failure here must not discard the canonical scoring snapshot; readers
   // retain the previous last-known-good member snapshot and the next refresh
@@ -592,6 +612,7 @@ export async function refreshMlbPropsBoard(args: RefreshArgs): Promise<MlbPropsB
     snapshot,
     forecastTelemetry,
     tracking,
+    privateTrackingCapture,
     providerCalls: {
       balldontlie: balldontlieCalls,
       ...providerCalls,
