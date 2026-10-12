@@ -885,14 +885,14 @@ function CategoryTrackingBoard({
           >
             <SportGroupHeader sport={sport} count={categoryCount} />
             {mainRows.length > 0 ? (
-              <div className="space-y-4">
+              <div className="space-y-5">
                 {mainRows.map((row, index) => {
                   const matchingAlternateRows = sportAlternateRows.filter((alternate) => alternate.market === row.market);
                   return (
                     <div
                       key={`${sport}-${row.market}`}
                       data-tracking-market={row.market}
-                      className={index > 0 ? "border-t border-white/[0.08] pt-4" : undefined}
+                      className={index > 0 ? "border-t border-white/[0.08] pt-5" : undefined}
                     >
                       <CategoryBars
                         rows={[{
@@ -957,23 +957,24 @@ function AlternateLinePerformanceRows({
           </p>
         </details>
       </div>
-      <div className="space-y-3">
+      <div className="space-y-4">
         {rows.map((row) => {
           const coverage = row.coverageFrom === row.coverageTo
             ? fmtShortDate(row.coverageFrom)
             : `${fmtShortDate(row.coverageFrom)} → ${fmtShortDate(row.coverageTo)}`;
           return (
-            <div key={`${row.sport}-${row.market}-${row.source}`} className="rounded-lg border border-white/[0.05] bg-black/[0.10] p-3">
-              <div className="mb-2.5 flex flex-wrap items-baseline justify-between gap-2">
-                <div>
-                  {!embedded ? <p className="text-[12px] font-bold text-gray-200">{alternateMarketLabel(row.sport, row.market)}</p> : null}
-                  <p className="mt-0.5 text-[9.5px] font-bold uppercase tracking-[0.12em] text-gray-500">
-                    {row.sourceLabel} · {coverage} · {row.original.settled.toLocaleString()} settled
-                  </p>
-                </div>
-                <div className="text-[10.5px] tabular-nums text-gray-500">
-                  Main line <span className="ml-1 font-bold text-gray-300">{alternateRecord(row.original)}</span>
-                  {row.original.winPct !== null ? <span className="ml-1.5 text-gray-400">{row.original.winPct.toFixed(1)}%</span> : null}
+            <div key={`${row.sport}-${row.market}-${row.source}`}>
+              <div className="mb-2.5 flex flex-wrap items-baseline justify-between gap-2 px-0.5">
+                {!embedded ? <p className="text-[12px] font-bold text-gray-200">{alternateMarketLabel(row.sport, row.market)}</p> : null}
+                <p className="text-[9.5px] font-bold uppercase tracking-[0.12em] text-gray-500">
+                  {row.original.settled.toLocaleString()} graded · {coverage}
+                </p>
+              </div>
+              <div className="mb-2.5 flex items-center justify-between gap-3 border-b border-white/[0.07] px-1 pb-2.5 tabular-nums">
+                <span className="text-[10px] font-black uppercase tracking-[0.11em] text-gray-400">Main line</span>
+                <div className="text-right">
+                  <span className="text-[12px] font-extrabold text-gray-200">{alternateRecord(row.original)}</span>
+                  {row.original.winPct !== null ? <span className="ml-2 text-[11px] font-bold text-gray-400">{row.original.winPct.toFixed(1)}%</span> : null}
                 </div>
               </div>
               <div className="grid grid-cols-1 gap-2">
