@@ -37,7 +37,7 @@ assert.equal(canonicalNflPlayerPropMarket("player_total_receptions"), "reception
 assert.equal(canonicalNflPlayerPropMarket("player_total_rush_attempts"), "rushing_attempts");
 assert.equal(canonicalNflPlayerPropMarket("player_rushing_+_receiving_yards"), "rushing_receiving_yards");
 assert.equal(canonicalNflPlayerPropMarket("unknown_fun_prop"), null);
-assert.equal(NFL_PLAYER_PROPS_PROVIDER_SNAPSHOT_RELEASE, "nfl_player_props_provider_observation_2026_09_21_r10_receiving_market_integrity");
+assert.equal(NFL_PLAYER_PROPS_PROVIDER_SNAPSHOT_RELEASE, "nfl_player_props_provider_observation_2026_10_12_r11_regular_season_identity_capacity");
 assert.deepEqual(NFL_PLAYER_PROPS_PHASE_ONE_MARKETS, [
   "passing_attempts",
   "passing_completions",
@@ -218,9 +218,9 @@ function bdlTwoWay(id: number, vendor: string, propType: string, line: number) {
     updated_at: "2026-09-09T18:00:00Z",
   };
 }
-assert.equal(NFL_PLAYER_PROPS_COLLECTION_LIMITS.maxPlayerIdentities, 512);
+assert.equal(NFL_PLAYER_PROPS_COLLECTION_LIMITS.maxPlayerIdentities, 768);
 assert.equal(NFL_PLAYER_PROPS_COLLECTION_LIMITS.maxPlayerIdentitiesPerGame, 64);
-const capacityRows = Array.from({ length: 475 }, (_, index) => ({
+const capacityRows = Array.from({ length: 613 }, (_, index) => ({
   providerEventId: `game-${Math.floor(index / 32)}`,
   providerPlayerId: `player-${index}`,
 }));
@@ -230,16 +230,16 @@ assert.deepEqual(
     capacityRows[0]!,
   ]),
   capacityRows.map((row) => row.providerPlayerId),
-  "the observed 475-player Week 1 slate is accepted with exact deduplicated identity order",
+  "the observed 613-player regular-season slate is accepted with exact deduplicated identity order",
 );
 assert.throws(
   () => __NFL_PLAYER_PROPS_COLLECTOR_TEST__.collectBoundedPlayerIdentities(
-    Array.from({ length: 513 }, (_, index) => ({
+    Array.from({ length: 769 }, (_, index) => ({
       providerEventId: `game-${Math.floor(index / 32)}`,
       providerPlayerId: `player-${index}`,
     })),
   ),
-  /opened at 513 players/,
+  /opened at 769 players/,
   "aggregate identity contamination remains fail-closed",
 );
 assert.throws(

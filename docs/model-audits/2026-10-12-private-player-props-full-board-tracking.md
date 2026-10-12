@@ -118,7 +118,7 @@ the normal promotion/demotion, board-count and live-release safety gates.
 
 ## Runtime identifiers
 
-- NFL sole writer candidate: `nfl_player_props_writer_2026_10_12_r48_private_full_tracking`
+- NFL sole writer at release: `nfl_player_props_writer_2026_10_12_r48_private_full_tracking`; current additive availability successor: `nfl_player_props_writer_2026_10_12_r49_regular_season_identity_capacity`
 - Private capture: `nfl_player_props_private_tracking_2026_10_12_r1_full_locked_board`
 - Private schema: `nfl_player_props_private_tracking_history_v1`
 - Private key: `nfl::player-props-private-tracking::<season>::<week>`
