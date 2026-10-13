@@ -26,6 +26,7 @@ import {
   CFB_FORWARD_PROVIDER_CONTINUITY_PREVIOUS_MEMBER_RELEASE,
   CFB_FORWARD_PROVIDER_FEED_PREVIOUS_MEMBER_RELEASE,
   isCfbPublishedT60AccuracyLockPayload,
+  isCfbPreT60PublishedPayloadRecovery,
   CFB_FORWARD_PRICE_PREVIOUS_MEMBER_RELEASE,
   hashCfbForwardEvidencePayload,
   buildCfbForwardMarketOutlooks,
@@ -1705,6 +1706,7 @@ function latestPayloadFirst(first: CfbForwardEvidencePayload, second: CfbForward
 }
 
 function isEligibleOfficialTrackingPayload(payload: CfbForwardEvidencePayload): boolean {
+  if (isCfbPreT60PublishedPayloadRecovery(payload)) return true;
   return payload.schemaRelease === CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE &&
     payload.memberRelease === CFB_FORWARD_MEMBER_RELEASE &&
     payload.decisions.decisionRelease === CFB_V1_DECISION_RELEASE &&
@@ -1745,6 +1747,7 @@ export function cfbLockPlanningEvidence(rows: CfbForwardStoredEvidence[]): CfbFo
 }
 
 export function isValidImmutableT60(payload: CfbForwardEvidencePayload): boolean {
+  if (isCfbPreT60PublishedPayloadRecovery(payload)) return true;
   const lag = payload.t60LagMinutes ?? Infinity;
   return payload.stage === "t60" &&
     payload.captureTiming === "on_time" &&

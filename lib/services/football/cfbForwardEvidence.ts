@@ -377,7 +377,43 @@ export type CfbForwardEvidencePayload = {
     weather?: number;
     totalMaximum: number;
   };
+  /** Internal-only provenance for a boundary recovered from the exact last
+   * member-published pre-cutoff payload after a provider kickoff-time defect.
+   * It never changes or reconstructs prediction economics. */
+  lockRecovery?: {
+    release: "cfb_pre_t60_published_payload_recovery_2026_10_13_r1";
+    sourcePayloadSha256: string;
+    sourceCapturedAt: string;
+    recoveredAt: string;
+    reason: "provider_kickoff_time_changed_during_t60_cycle";
+  };
 };
+
+export function isCfbPreT60PublishedPayloadRecovery(payload: CfbForwardEvidencePayload): boolean {
+  const recovery = payload.lockRecovery;
+  const cutoffAt = Date.parse(payload.cutoffAt ?? "");
+  const capturedAt = Date.parse(payload.capturedAt);
+  const sourceCapturedAt = Date.parse(recovery?.sourceCapturedAt ?? "");
+  const gameStartsAt = Date.parse(payload.game.scheduledStart);
+  return recovery?.release === "cfb_pre_t60_published_payload_recovery_2026_10_13_r1" &&
+    recovery.reason === "provider_kickoff_time_changed_during_t60_cycle" &&
+    /^[a-f0-9]{64}$/.test(recovery.sourcePayloadSha256) &&
+    payload.stage === "unlocked" &&
+    payload.captureTiming === "on_time" &&
+    payload.t60LagMinutes === 0 &&
+    Number.isFinite(cutoffAt) && Number.isFinite(capturedAt) && capturedAt === cutoffAt &&
+    Number.isFinite(sourceCapturedAt) && sourceCapturedAt <= cutoffAt &&
+    Number.isFinite(gameStartsAt) && cutoffAt === gameStartsAt - 60 * 60_000 &&
+    payload.coverage.healthHolds.length === 0 &&
+    payload.decisions.publicationEnabled && payload.decisions.trackingEnabled &&
+    payload.decisions.evaluatedBets.length === 3 &&
+    payload.decisions.evaluatedBets.every((decision) =>
+      decision.stage === "t60_locked" &&
+      decision.lockedAt === payload.capturedAt &&
+      decision.evaluatedAt === payload.capturedAt &&
+      Date.parse(decision.evaluatedQuote.observedAt) <= sourceCapturedAt
+    );
+}
 
 export type CfbForwardStoredEvidence = {
   id: string;
