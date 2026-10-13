@@ -17,9 +17,9 @@ export const NFL_V1_PRODUCTION_MODEL_RELEASE =
 export const NFL_V1_PRODUCTION_CALIBRATION_RELEASE =
   "nfl_v1_daily_edge_calibration_2026_10_09_r26_provider_feed_continuity" as const;
 export const NFL_V1_PRODUCTION_DECISION_RELEASE =
-  "nfl_v1_daily_edge_decision_2026_10_09_r32_provider_feed_continuity" as const;
+  "nfl_v1_daily_edge_decision_2026_10_13_r33_moneyline_price_tier" as const;
 export const NFL_V1_GRADE_POLICY_RELEASE =
-  "nfl_v1_grade_policy_2026_10_09_r32_provider_feed_continuity" as const;
+  "nfl_v1_grade_policy_2026_10_13_r33_moneyline_price_tier" as const;
 export const NFL_V1_MEMBER_RELEASE =
   "nfl_v1_member_release_2026_10_09_r30_provider_feed_continuity" as const;
 

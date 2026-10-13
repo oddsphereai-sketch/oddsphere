@@ -148,9 +148,15 @@ Last reviewed: 2026-10-10
 
 ## NFL Daily Edge generalized weekly production release
 
+### Exact-price Moneyline tier (r33 candidate)
+
+- Active member / model / calibration remain `nfl_v1_member_release_2026_10_09_r30_provider_feed_continuity` / `nfl_v1_daily_edge_model_2026_10_09_r27_provider_feed_continuity` / `nfl_v1_daily_edge_calibration_2026_10_09_r26_provider_feed_continuity`; decision / grade advance to `nfl_v1_daily_edge_decision_2026_10_13_r33_moneyline_price_tier` / `nfl_v1_grade_policy_2026_10_13_r33_moneyline_price_tier`.
+- Future unlocked Moneylines below -200 may remain positive-value Leans but cannot be Best Angles. The current 14-game board keeps 25 actionables while Baltimore -225 and Buffalo -275 move Best Angle to Lean. Sides, probabilities, projected scores, prices, stakes, locks, tracking, market-reading authority, providers, cadence, writer, fixture, and compact snapshot releases are unchanged.
+- The r34 compact reader tries the r33 decision key first and explicitly retains the preceding r32 decision key, preserving the exact stored board during rollout. Evidence, gates, result, and rollback: `docs/model-audits/2026-10-13-daily-edge-cushion-actionability-predeclaration.md` and `docs/model-audits/2026-10-13-daily-edge-cushion-actionability-result.md`.
+
 ### Provider feed continuity (r30 candidate)
 
-- Active member / model / calibration / decision / grade are `nfl_v1_member_release_2026_10_09_r30_provider_feed_continuity` / `nfl_v1_daily_edge_model_2026_10_09_r27_provider_feed_continuity` / `nfl_v1_daily_edge_calibration_2026_10_09_r26_provider_feed_continuity` / `nfl_v1_daily_edge_decision_2026_10_09_r32_provider_feed_continuity` / `nfl_v1_grade_policy_2026_10_09_r32_provider_feed_continuity`. Weekly outcome / distribution / probability / representative score are `nfl_v1_weekly_paid_team_score_2026_10_09_r15_provider_feed_continuity` / `nfl_pooled_discrete_residual_distribution_2026_10_09_r14_provider_feed_continuity` / `nfl_v1_weekly_pooled_discrete_probability_2026_10_09_r14_provider_feed_continuity` / `nfl_v1_market_evidence_representative_score_2026_10_09_r14_provider_feed_continuity`. Market outcome / Spread / Total / target exclusion are `nfl_v1_market_evidence_outcome_2026_10_09_r15_provider_feed_continuity` / `nfl_v1_spread_market_direction_2026_10_09_r15_provider_feed_continuity` / `nfl_v1_total_market_evidence_2026_10_09_r11_provider_feed_continuity` / `nfl_target_excluded_market_outcome_2026_10_09_r13_provider_feed_continuity`.
+- The r30 provider-continuity predecessor member / model / calibration / decision / grade are `nfl_v1_member_release_2026_10_09_r30_provider_feed_continuity` / `nfl_v1_daily_edge_model_2026_10_09_r27_provider_feed_continuity` / `nfl_v1_daily_edge_calibration_2026_10_09_r26_provider_feed_continuity` / `nfl_v1_daily_edge_decision_2026_10_09_r32_provider_feed_continuity` / `nfl_v1_grade_policy_2026_10_09_r32_provider_feed_continuity`. Weekly outcome / distribution / probability / representative score are `nfl_v1_weekly_paid_team_score_2026_10_09_r15_provider_feed_continuity` / `nfl_pooled_discrete_residual_distribution_2026_10_09_r14_provider_feed_continuity` / `nfl_v1_weekly_pooled_discrete_probability_2026_10_09_r14_provider_feed_continuity` / `nfl_v1_market_evidence_representative_score_2026_10_09_r14_provider_feed_continuity`. Market outcome / Spread / Total / target exclusion are `nfl_v1_market_evidence_outcome_2026_10_09_r15_provider_feed_continuity` / `nfl_v1_spread_market_direction_2026_10_09_r15_provider_feed_continuity` / `nfl_v1_total_market_evidence_2026_10_09_r11_provider_feed_continuity` / `nfl_target_excluded_market_outcome_2026_10_09_r13_provider_feed_continuity`.
 - The professional r29 market-reading rules, thresholds, score reconciliation, exact-price grading, and board policy are unchanged. The adapter now recognizes only SharpAPI's exact documented/provider-observed abbreviation-plus-nickname NFL identities, including explicit LA-to-LAR and WAS-to-WSH aliases. It does not add fuzzy matching or infer missing handle/ticket evidence.
 - The October 9 zero-write current-board comparison restores complete SharpAPI split evidence from 1 of 15 to 7 of 15 games. Six games gain valid evidence; projected scores, all three prediction sides, probabilities, grades, promotions, demotions, and the 18-actionable board are identical because none of the restored rows clears the existing professional authority rules. This current-slate result is not a promise that a future qualified row will remain neutral.
 - Publication set is writer / collector / fixture / compact snapshot `nfl_forward_evidence_writer_2026_10_09_r60_provider_feed_continuity` / `nfl_forward_evidence_collector_2026_10_09_r19_provider_feed_continuity` / `nfl_weekly_member_fixture_2026_10_09_r42_provider_feed_continuity` / `nfl_forward_member_snapshot_2026_10_09_r34_provider_feed_continuity`. The complete r29 family remains the immediate immutable-lock predecessor. Evidence, gates, and rollback: `docs/model-audits/2026-10-09-football-provider-feed-continuity-predeclaration.md` and `docs/model-audits/2026-10-09-football-provider-feed-continuity-result.md`.
@@ -297,6 +303,8 @@ Last reviewed: 2026-10-10
 
 ## CFB Daily Edge generalized weekly production release
 
+- October 13 exact-price actionability candidate: grade / decision / market-reader candidate / production advance to `cfb_v1_composite_grade_policy_2026_10_13_r28_exact_price_actionability` / `cfb_v1_daily_edge_decision_2026_10_13_r50_exact_price_actionability` / `cfb_market_sharp_aware_candidate_2026_10_13_r36_exact_price_actionability` / `cfb_market_sharp_aware_production_2026_10_13_r38_exact_price_actionability`. A future unlocked Lean or Best Angle must have positive target-excluded probability edge and nonnegative EV at its exact evaluated quote. Missing injury reports or split feeds remain neutral and can coexist with an actionable selection; a missing exact price remains a held/no-price decision. On the 99-game current board, 36 `Shop / no_bet` Moneylines lose misleading actionable labels while the executable board remains 55 to 55. Best Angle / Lean / Watchlist / No Play move 18 / 73 / 58 / 148 to 16 / 39 / 94 / 148. Sides, probabilities, scores, prices, stakes, and locks are unchanged. The preceding r49/r27/r37 family remains explicitly readable with exact locked precedence. Evidence, gates, result, and rollback: `docs/model-audits/2026-10-13-daily-edge-cushion-actionability-predeclaration.md` and `docs/model-audits/2026-10-13-daily-edge-cushion-actionability-result.md`.
+
 - October 12 provider-team identity correction: the active professional reader is
   `cfb_complete_market_reader_2026_10_12_r6_provider_team_identity_consensus_authority_split_specialization`; its coefficient artifact
   remains the frozen `cfb_market_reader_artifact_2026_10_11_r5_consensus_authority_split_specialization`.
@@ -317,15 +325,15 @@ Last reviewed: 2026-10-10
   `cfb_v1_professional_joint_probability_2026_10_12_r25_provider_team_identity_consensus_authority_split_specialization` /
   `cfb_v1_professional_reachable_score_2026_10_12_r21_provider_team_identity_consensus_authority_split_specialization` /
   `cfb_v1_exact_price_calibration_2026_10_12_r24_provider_team_identity_consensus_authority_split_specialization` /
-  `cfb_v1_composite_grade_policy_2026_10_12_r27_provider_team_identity_consensus_authority_split_specialization` /
-  `cfb_v1_daily_edge_decision_2026_10_12_r49_provider_team_identity_consensus_authority_split_specialization`. Production reader /
-  tuple / evidence / member / writer are `cfb_market_sharp_aware_production_2026_10_12_r37_provider_team_identity_consensus_authority_split_specialization` /
+  `cfb_v1_composite_grade_policy_2026_10_13_r28_exact_price_actionability` /
+  `cfb_v1_daily_edge_decision_2026_10_13_r50_exact_price_actionability`. Production reader /
+  tuple / evidence / member / writer are `cfb_market_sharp_aware_production_2026_10_13_r38_exact_price_actionability` /
   `cfb_v1_exact_price_decision_tuple_2026_10_12_r37_provider_team_identity_consensus_authority_split_specialization` /
   `cfb_forward_evidence_snapshot_2026_10_12_r45_provider_team_identity_consensus_authority_split_specialization` /
   `cfb_v1_member_release_2026_10_12_r62_provider_team_identity_consensus_authority_split_specialization` /
   `cfb_forward_evidence_writer_2026_10_12_r116_provider_team_identity_consensus_authority_split_specialization`. Fixture / outcome /
   compact snapshot / reader / tracking are r88 / r78 / r48 / r33 / r46 with the same suffix.
-  The October 11 family remains the immediate immutable reader fallback. Evidence, gates, board
+  The October 12 r49/r27/r37 family remains the immediate immutable reader fallback. Evidence, gates, board
   impact, and rollback: `docs/model-audits/2026-10-12-cfb-provider-team-identity-predeclaration.md`
   and `docs/model-audits/2026-10-12-cfb-provider-team-identity-result.md`.
 

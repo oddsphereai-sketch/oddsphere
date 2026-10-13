@@ -11,6 +11,7 @@ import type { DailyEdgeGameAvailability } from "@/lib/services/dailyEdge/gameAva
 import {
   CFB_T60_MAX_CAPTURE_LAG_MINUTES,
   CFB_V1_DECISION_RELEASE,
+  CFB_V1_EXACT_PRICE_ACTIONABILITY_PREVIOUS_DECISION_RELEASE,
   cfbV1LineProbabilities,
   type CfbV1DecisionBundle,
   type CfbV1Forecast,
@@ -178,7 +179,8 @@ export function isCfbPublishedT60AccuracyLockPayload(payload: CfbForwardEvidence
   );
   return payload.schemaRelease === CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE &&
     payload.memberRelease === CFB_FORWARD_MEMBER_RELEASE &&
-    payload.decisions.decisionRelease === CFB_V1_DECISION_RELEASE &&
+    (payload.decisions.decisionRelease === CFB_V1_DECISION_RELEASE ||
+      payload.decisions.decisionRelease === CFB_V1_EXACT_PRICE_ACTIONABILITY_PREVIOUS_DECISION_RELEASE) &&
     payload.stage === "t60" &&
     payload.captureTiming === "on_time" &&
     lag !== null && Number.isFinite(lag) && lag >= 0 && lag <= CFB_T60_MAX_CAPTURE_LAG_MINUTES &&

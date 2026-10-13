@@ -85,6 +85,7 @@ import { resolveCfbCanonicalMarketAnchor } from "../lib/services/football/cfbMar
 import {
   CFB_MARKET_SHADOW_WEIGHT,
   CFB_MARKET_SHARP_AWARE_CANDIDATE_RELEASE,
+  CFB_MARKET_SHARP_AWARE_EXACT_PRICE_PREVIOUS_PRODUCTION_RELEASE,
   CFB_MARKET_SHARP_AWARE_GAP_FALLBACK_PREVIOUS_PRODUCTION_RELEASE,
   CFB_MARKET_SHARP_AWARE_PREVIOUS_PRODUCTION_RELEASE,
   CFB_MARKET_SHARP_AWARE_PRODUCTION_RELEASE,
@@ -111,6 +112,8 @@ import { SharpApiClientError } from "../lib/providers/real_api/_sharpApiClient";
 import {
   CFB_T60_MAX_CAPTURE_LAG_MINUTES,
   CFB_V1_DECISION_RELEASE,
+  CFB_V1_EXACT_PRICE_ACTIONABILITY_PREVIOUS_DECISION_RELEASE,
+  CFB_V1_EXACT_PRICE_ACTIONABILITY_PREVIOUS_GRADE_POLICY_RELEASE,
   CFB_V1_GAP_FALLBACK_PREVIOUS_DECISION_RELEASE,
   CFB_V1_PRICE_PREVIOUS_DECISION_RELEASE,
   CFB_V1_HOLISTIC_PREVIOUS_DECISION_RELEASE,
@@ -610,9 +613,16 @@ const marketConfirmedFavoriteLean = applyCfbBalancedPositiveValueRule({
   expectedValue: -0.08, modelProbability: 0.72, marketFairProbability: 0.68, evaluatedPrice: -550,
   evaluatedLine: null, sharpDirection: "unknown", publicDirection: "neutral", movementDirection: "resistance", reasonCodes: [],
 });
-assert.equal(marketConfirmedFavoriteLean.finalGrade, "Lean", "a market-confirmed favorite may remain useful as a price-aware parlay Lean");
+assert.equal(marketConfirmedFavoriteLean.finalGrade, "Watchlist", "a negative-value quote cannot be presented as an actionable parlay Lean");
 assert.equal(marketConfirmedFavoriteLean.executionStatus, "shop", "confidence promotion must not fabricate exact-price value");
-assert.equal(marketConfirmedFavoriteLean.reasonCodes.includes("moneyline_market_confirmed_favorite_lean"), true);
+assert.equal(marketConfirmedFavoriteLean.reasonCodes.includes("moneyline_market_confirmed_favorite_lean"), false);
+const positiveMarketConfirmedFavoriteLean = applyCfbBalancedPositiveValueRule({
+  market: "moneyline", finalGrade: "Watchlist", probabilityGrade: "Best Angle", executionStatus: "bet",
+  expectedValue: 0.03, modelProbability: 0.72, marketFairProbability: 0.68, evaluatedPrice: -250,
+  evaluatedLine: null, sharpDirection: "unknown", publicDirection: "neutral", movementDirection: "resistance", reasonCodes: [],
+});
+assert.equal(positiveMarketConfirmedFavoriteLean.finalGrade, "Lean", "a positive-value market-confirmed favorite retains the paired promotion path");
+assert.equal(positiveMarketConfirmedFavoriteLean.reasonCodes.includes("moneyline_market_confirmed_favorite_lean"), true);
 const prohibitiveFavorite = applyCfbBalancedPositiveValueRule({
   market: "moneyline", finalGrade: "Watchlist", probabilityGrade: "Best Angle", executionStatus: "shop",
   expectedValue: -0.08, modelProbability: 0.82, marketFairProbability: 0.78, evaluatedPrice: -800,
@@ -977,6 +987,37 @@ assert.equal(member.snapshot.games.length, 1);
 assert.equal(member.fixtureRelease, CFB_MEMBER_FIXTURE_RELEASE);
 assert.equal(member.snapshot.games[0]!.lockState, "locked", "only a fully valid immutable T-60 tuple is labeled locked");
 assert.equal(member.snapshot.games[0]!.lockedAt, lockedAt);
+const previousExactPricePayload: CfbForwardEvidencePayload = {
+  ...evidence.payload,
+  decisions: {
+    ...evidence.payload.decisions,
+    decisionRelease: CFB_V1_EXACT_PRICE_ACTIONABILITY_PREVIOUS_DECISION_RELEASE as unknown as typeof evidence.payload.decisions.decisionRelease,
+    policyRelease: CFB_V1_EXACT_PRICE_ACTIONABILITY_PREVIOUS_GRADE_POLICY_RELEASE as unknown as typeof evidence.payload.decisions.policyRelease,
+    evaluatedBets: evidence.payload.decisions.evaluatedBets.map((decision) => ({
+      ...decision,
+      decisionRelease: CFB_V1_EXACT_PRICE_ACTIONABILITY_PREVIOUS_DECISION_RELEASE as unknown as typeof decision.decisionRelease,
+      policyRelease: CFB_V1_EXACT_PRICE_ACTIONABILITY_PREVIOUS_GRADE_POLICY_RELEASE as unknown as typeof decision.policyRelease,
+      ...(decision.gradeAdjustment ? {
+        gradeAdjustment: {
+          ...decision.gradeAdjustment,
+          release: CFB_MARKET_SHARP_AWARE_EXACT_PRICE_PREVIOUS_PRODUCTION_RELEASE as unknown as typeof decision.gradeAdjustment.release,
+        },
+      } : {}),
+    })),
+  },
+  authoritativeForecast: evidence.payload.authoritativeForecast ? {
+    ...evidence.payload.authoritativeForecast,
+    release: CFB_MARKET_SHARP_AWARE_EXACT_PRICE_PREVIOUS_PRODUCTION_RELEASE as unknown as typeof evidence.payload.authoritativeForecast.release,
+  } : undefined,
+};
+const previousExactPriceFixture = buildCfbMemberFixture([{
+  ...evidence,
+  id: "previous-exact-price-actionability",
+  payloadSha256: hashCfbForwardEvidencePayload(previousExactPricePayload),
+  payload: previousExactPricePayload,
+}]);
+assert.equal(previousExactPriceFixture.snapshot.games.length, 1, "the immediately preceding exact-price release must remain readable during rollout");
+assert.equal(previousExactPriceFixture.snapshot.games[0]!.lockState, "locked", "the preceding locked payload must retain exact reader precedence");
 assert.deepEqual(
   retainCfbMemberLockedGamesForBoardDate({
     selected: [],

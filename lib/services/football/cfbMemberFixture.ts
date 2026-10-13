@@ -82,6 +82,8 @@ import {
   CFB_V1_BASE_PROBABILITY_RELEASE,
   CFB_V1_BASE_SCORE_ARTIFACT_RELEASE,
   CFB_V1_DECISION_RELEASE,
+  CFB_V1_EXACT_PRICE_ACTIONABILITY_PREVIOUS_DECISION_RELEASE,
+  CFB_V1_EXACT_PRICE_ACTIONABILITY_PREVIOUS_GRADE_POLICY_RELEASE,
   CFB_V1_MARKET_READER_PREVIOUS_DECISION_RELEASE,
   CFB_V1_COMPLETE_READER_PREVIOUS_DECISION_RELEASE,
   CFB_V1_GAP_FALLBACK_PREVIOUS_DECISION_RELEASE,
@@ -106,7 +108,7 @@ import {
 } from "./cfbV1Decision";
 import { isGameInCfbWeeklyWindow, resolveCfbVisibleWindows } from "./cfbWeeklyWindow";
 import { cfbFootballEvidenceStats } from "./footballMemberEvidence";
-import { CFB_MARKET_SHARP_AWARE_PRODUCTION_RELEASE } from "./cfbMarketSharpAwareShadow";
+import { CFB_MARKET_SHARP_AWARE_EXACT_PRICE_PREVIOUS_PRODUCTION_RELEASE, CFB_MARKET_SHARP_AWARE_PRODUCTION_RELEASE } from "./cfbMarketSharpAwareShadow";
 import { cfbTeamIdentity } from "./cfbTeamIdentity";
 import { CFB_PUBLIC_SCORE_DIRECTION_TOLERANCE_POINTS } from "./footballCrossMarketCoherence";
 
@@ -856,19 +858,27 @@ export function selectLatestCfbMemberEvidenceRows(
     : null;
   const marketReaderPreviousAuthority = marketReaderPrevious ?? marketReaderPreviousBoundary ??
     marketReaderPreviousLockOverlay ?? providerContinuityPreviousAuthority;
+  const exactPriceActionabilityPrevious = completeRowsForRelease(
+    rows,
+    CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE,
+    CFB_FORWARD_MEMBER_RELEASE,
+    CFB_V1_EXACT_PRICE_ACTIONABILITY_PREVIOUS_DECISION_RELEASE,
+  );
   const current = completeRowsForRelease(rows, CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE, CFB_FORWARD_MEMBER_RELEASE, CFB_V1_DECISION_RELEASE);
   if (current) return current;
-  const immutableBoundaryTransition = marketReaderPreviousAuthority
+  const exactPriceActionabilityAuthority = exactPriceActionabilityPrevious ?? marketReaderPreviousAuthority;
+  const immutableBoundaryTransition = exactPriceActionabilityAuthority
     ? immutableBoundaryTransitionRows(
         rows,
         now,
         CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE,
         CFB_FORWARD_MEMBER_RELEASE,
         CFB_V1_DECISION_RELEASE,
-        marketReaderPreviousAuthority,
+        exactPriceActionabilityAuthority,
       )
     : null;
   if (immutableBoundaryTransition) return immutableBoundaryTransition;
+  if (exactPriceActionabilityPrevious) return exactPriceActionabilityPrevious;
   if (marketReaderPrevious) return marketReaderPrevious;
   if (marketReaderPreviousBoundary) return marketReaderPreviousBoundary;
   if (marketReaderPreviousLockOverlay) return marketReaderPreviousLockOverlay;
@@ -1042,6 +1052,13 @@ function latestValidRowsForRelease(
   memberRelease: string,
   decisionRelease: string,
 ): { values: CfbForwardStoredEvidence[]; expected: number } | null {
+  const exactPricePrevious = decisionRelease === CFB_V1_EXACT_PRICE_ACTIONABILITY_PREVIOUS_DECISION_RELEASE;
+  const expectedProductionRelease = exactPricePrevious
+    ? CFB_MARKET_SHARP_AWARE_EXACT_PRICE_PREVIOUS_PRODUCTION_RELEASE
+    : CFB_MARKET_SHARP_AWARE_PRODUCTION_RELEASE;
+  const expectedPolicyRelease = exactPricePrevious
+    ? CFB_V1_EXACT_PRICE_ACTIONABILITY_PREVIOUS_GRADE_POLICY_RELEASE
+    : CFB_V1_GRADE_POLICY_RELEASE;
   const latest = new Map<string, CfbForwardStoredEvidence>();
   for (const row of rows) {
     if (row.payload.schemaRelease !== schemaRelease || row.payload.memberRelease !== memberRelease) continue;
@@ -1057,17 +1074,17 @@ function latestValidRowsForRelease(
     row.payload.decisions.decisionRelease !== decisionRelease ||
     row.payload.decisions.evaluatedBets.some((decision) => decision.decisionRelease !== decisionRelease) ||
     (schemaRelease === CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE && (
-      row.payload.authoritativeForecast?.release !== CFB_MARKET_SHARP_AWARE_PRODUCTION_RELEASE ||
+      row.payload.authoritativeForecast?.release !== expectedProductionRelease ||
       !row.payload.independentForecast ||
       row.payload.decisions.modelRelease !== CFB_V1_MODEL_RELEASE ||
-      row.payload.decisions.policyRelease !== CFB_V1_GRADE_POLICY_RELEASE ||
+      row.payload.decisions.policyRelease !== expectedPolicyRelease ||
       row.payload.decisions.evaluatedBets.some((decision) =>
         decision.modelRelease !== CFB_V1_MODEL_RELEASE ||
         decision.distributionRelease !== CFB_V1_DISTRIBUTION_RELEASE ||
         decision.probabilityRelease !== CFB_V1_PROBABILITY_RELEASE ||
         decision.calibrationRelease !== CFB_V1_CALIBRATION_RELEASE ||
-        decision.policyRelease !== CFB_V1_GRADE_POLICY_RELEASE ||
-        decision.gradeAdjustment?.release !== CFB_MARKET_SHARP_AWARE_PRODUCTION_RELEASE
+        decision.policyRelease !== expectedPolicyRelease ||
+        decision.gradeAdjustment?.release !== expectedProductionRelease
       )
     ))
   )) return null;
