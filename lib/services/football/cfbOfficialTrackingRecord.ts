@@ -23,6 +23,7 @@ import {
   CFB_FORWARD_PRICE_PREVIOUS_MEMBER_RELEASE,
   buildCfbForwardMarketOutlooks,
   hashCfbForwardEvidencePayload,
+  isCfbPreT60PublishedPayloadRecovery,
   type CfbForwardEvidencePayload,
 } from "./cfbForwardEvidence";
 import {
@@ -566,7 +567,7 @@ function assertCfbTrackingPayload(payload: CfbForwardEvidencePayload): void {
     payload.authoritativeForecast.status !== "market_sharp_applied" ||
     !payload.decisions.publicationEnabled ||
     !payload.decisions.trackingEnabled ||
-    payload.stage !== "t60" ||
+    (payload.stage !== "t60" && !isCfbPreT60PublishedPayloadRecovery(payload)) ||
     payload.captureTiming !== "on_time" ||
     payload.t60LagMinutes === null ||
     payload.t60LagMinutes < 0 ||

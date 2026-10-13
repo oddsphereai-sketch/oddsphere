@@ -66,6 +66,7 @@ import {
   CFB_FORWARD_PROVIDER_CONTINUITY_PREVIOUS_MEMBER_RELEASE,
   CFB_FORWARD_PROVIDER_FEED_PREVIOUS_MEMBER_RELEASE,
   isCfbPublishedT60AccuracyLockPayload,
+  isCfbPreT60PublishedPayloadRecovery,
   CFB_FORWARD_PUBLICATION_PREVIOUS_MEMBER_RELEASE,
   type CfbForwardMarketOutlook,
   type CfbForwardEvidencePayload,
@@ -1027,6 +1028,7 @@ function immutableLockOverlayRows(
 }
 
 function isValidImmutableBoundaryT60(row: CfbForwardStoredEvidence): boolean {
+  if (isCfbPreT60PublishedPayloadRecovery(row.payload)) return true;
   const lag = row.payload.t60LagMinutes;
   const officialLock = row.stage === "t60" &&
     row.payload.stage === "t60" &&
@@ -1063,7 +1065,12 @@ function latestValidRowsForRelease(
   for (const row of rows) {
     if (row.payload.schemaRelease !== schemaRelease || row.payload.memberRelease !== memberRelease) continue;
     const current = latest.get(row.providerGameId);
-    if (!current || Date.parse(row.capturedAt) > Date.parse(current.capturedAt)) latest.set(row.providerGameId, row);
+    const rowIsRecovery = isCfbPreT60PublishedPayloadRecovery(row.payload);
+    const currentIsRecovery = current ? isCfbPreT60PublishedPayloadRecovery(current.payload) : false;
+    if (!current || (rowIsRecovery && !currentIsRecovery) ||
+      (rowIsRecovery === currentIsRecovery && Date.parse(row.capturedAt) > Date.parse(current.capturedAt))) {
+      latest.set(row.providerGameId, row);
+    }
   }
   const values = [...latest.values()];
   if (values.length === 0) return null;

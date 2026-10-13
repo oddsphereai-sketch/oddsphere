@@ -42,6 +42,7 @@ import {
   buildCfbForwardMarketOutlooks,
   determineCfbForwardCollectionNeed,
   hashCfbForwardEvidencePayload,
+  isCfbPreT60PublishedPayloadRecovery,
   isCfbPublishedT60AccuracyLockPayload,
   matchesCfbForwardEvidencePayloadHash,
   planCfbForwardEvidenceCaptures,
@@ -2424,6 +2425,57 @@ assert.equal(tracking.every((row) => row.locked_at === lockedAt), true);
 assert.equal(tracking.every((row) => row.model_version === CFB_V1_DECISION_RELEASE), true);
 assert.equal(tracking.every((row) => row.snapshot_json && !("pmf" in (row.snapshot_json.forecast as Record<string, unknown>))), true);
 assert.equal(tracking.every((row) => row.snapshot_json?.football_market_scoped_tracking_release === FOOTBALL_MARKET_SCOPED_T60_TRACKING_RELEASE), true);
+
+const recoveryCutoffAt = new Date(Date.parse(game.scheduledStart) - 60 * 60_000).toISOString();
+const recoverySourceCapturedAt = new Date(Date.parse(recoveryCutoffAt) - 10 * 60_000).toISOString();
+const recoveredPayload: CfbForwardEvidencePayload = {
+  ...structuredClone(payload),
+  stage: "unlocked",
+  capturedAt: recoveryCutoffAt,
+  cutoffAt: recoveryCutoffAt,
+  captureTiming: "on_time",
+  t60LagMinutes: 0,
+  decisions: {
+    ...structuredClone(payload.decisions),
+    trackingEnabled: true,
+    evaluatedBets: payload.decisions.evaluatedBets.map((decision) => ({
+      ...structuredClone(decision),
+      stage: "t60_locked",
+      evaluatedAt: recoveryCutoffAt,
+      lockedAt: recoveryCutoffAt,
+      evaluatedQuote: { ...decision.evaluatedQuote, observedAt: recoverySourceCapturedAt },
+    })),
+  },
+  lockRecovery: {
+    release: "cfb_pre_t60_published_payload_recovery_2026_10_13_r1",
+    sourcePayloadSha256: hashCfbForwardEvidencePayload(payload),
+    sourceCapturedAt: recoverySourceCapturedAt,
+    recoveredAt: new Date(Date.parse(recoveryCutoffAt) + 30 * 60_000).toISOString(),
+    reason: "provider_kickoff_time_changed_during_t60_cycle",
+  },
+};
+assert.equal(isCfbPreT60PublishedPayloadRecovery(recoveredPayload), true);
+const recoveredTracking = buildCfbOfficialTrackingRecords({ payload: recoveredPayload, gameId: 9001 });
+assert.deepEqual(
+  recoveredTracking.map((row) => ({ market: row.market, pick: row.pick, grade: row.play_grade, lockedAt: row.locked_at })),
+  tracking.map((row) => ({ market: row.market, pick: row.pick, grade: row.play_grade, lockedAt: recoveryCutoffAt })),
+  "a pre-T60 published-payload recovery must preserve the exact locked decisions",
+);
+const invalidLatePayload: CfbForwardEvidencePayload = {
+  ...structuredClone(payload),
+  stage: "t60",
+  capturedAt: new Date(Date.parse(lockedAt) + 25 * 60_000).toISOString(),
+  captureTiming: "on_time",
+  t60LagMinutes: 25,
+  decisions: { ...structuredClone(payload.decisions), trackingEnabled: false, evaluatedBets: [] },
+  coverage: { ...structuredClone(payload.coverage), healthHolds: ["t60_capture_late"] },
+};
+const recoveredFixture = buildCfbMemberFixture([
+  { ...evidence, id: "recovered-lock", stage: "unlocked", capturedAt: recoveryCutoffAt, payload: recoveredPayload, payloadSha256: hashCfbForwardEvidencePayload(recoveredPayload) },
+  { ...evidence, id: "invalid-late-lock", stage: "t60", capturedAt: invalidLatePayload.capturedAt, payload: invalidLatePayload, payloadSha256: hashCfbForwardEvidencePayload(invalidLatePayload) },
+]);
+assert.equal(recoveredFixture.snapshot.games[0]?.lockState, "locked", "a valid recovery must outrank a later empty capture");
+assert.equal(recoveredFixture.snapshot.games[0]?.lockedAt, recoveryCutoffAt);
 
 const marginalNegativeEvDecision = {
   ...payload.decisions.evaluatedBets[0]!,
