@@ -6,7 +6,8 @@ import {
 import { deriveSoccerMarketProbabilities } from "@/lib/services/soccer/soccerMarketProbabilities";
 import type { BdlEplMatch, BdlEplTeamMatchStats } from "@/lib/providers/real_api/BallDontLieEplProvider";
 
-export const EPL_SHADOW_MODEL_RELEASE = "epl_goals_coherent_2026_10_01_r19_draw_arbitration" as const;
+export const EPL_SHADOW_MODEL_RELEASE = "epl_goals_coherent_2026_10_13_r20_coherent_total_margin_matchup" as const;
+export const EPL_BASELINE_MODEL_RELEASE = "epl_goals_coherent_2026_10_01_r19_draw_arbitration" as const;
 export const EPL_SHADOW_CALIBRATION_RELEASE = "epl_grade_policy_2026_10_10_v25_exact_match_result_price_tiering" as const;
 export const EPL_DRAW_ARBITRATION_RELEASE = "epl_draw_arbitration_2026_10_01_r1" as const;
 
@@ -52,7 +53,7 @@ export type EplTeamStrength = {
 };
 
 export type EplShadowFit = {
-  release: typeof EPL_SHADOW_MODEL_RELEASE;
+  release: typeof EPL_BASELINE_MODEL_RELEASE;
   calibrationRelease: typeof EPL_SHADOW_CALIBRATION_RELEASE;
   trainedThrough: string;
   trainingMatches: number;
@@ -227,7 +228,7 @@ export function fitEplShadowModel(
   };
 
   return {
-    release: EPL_SHADOW_MODEL_RELEASE,
+    release: EPL_BASELINE_MODEL_RELEASE,
     calibrationRelease: EPL_SHADOW_CALIBRATION_RELEASE,
     trainedThrough,
     trainingMatches: matches.filter((match) => Date.parse(match.date) < asOf).length,
@@ -298,7 +299,7 @@ export function predictEplMatch(fit: EplShadowFit, homeTeamId: number, awayTeamI
   }
   const limited = home.source === "promoted_proxy" || away.source === "promoted_proxy";
   return {
-    release: EPL_SHADOW_MODEL_RELEASE,
+    release: EPL_BASELINE_MODEL_RELEASE,
     calibrationRelease: EPL_SHADOW_CALIBRATION_RELEASE,
     lambdaHome,
     lambdaAway,

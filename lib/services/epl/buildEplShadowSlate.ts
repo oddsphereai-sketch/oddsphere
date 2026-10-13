@@ -9,11 +9,10 @@ import {
   type BdlEplTeamMatchStats,
 } from "@/lib/providers/real_api/BallDontLieEplProvider";
 import {
-  fitEplShadowModel,
   joinEplMatchStats,
-  predictEplMatch,
   type EplShadowPrediction,
 } from "./eplShadowModel";
+import { fitEplProfessionalScoreModel, predictEplProfessionalMatch } from "./eplProfessionalScoreModel";
 import { readEplHistoricalFoundation, writeEplHistoricalFoundation } from "./eplHistoricalFoundationStore";
 import { recentComparableEplMatches } from "./eplEvidence";
 import { selectEplDefaultRound } from "./eplSlateLifecycle";
@@ -257,7 +256,7 @@ async function buildEplShadowSlateUncached(requestedRound?: number): Promise<Epl
   const currentMoneylineOddsByMatch = new Map<number, BdlEplOdds[]>();
   for (const row of currentMoneylineOdds) currentMoneylineOddsByMatch.set(row.match_id, [...(currentMoneylineOddsByMatch.get(row.match_id) ?? []), row]);
   const firstKickoff = roundMatches[0]?.date ?? new Date().toISOString();
-  const fit = fitEplShadowModel(foundation.trainingMatches, firstKickoff);
+  const fit = fitEplProfessionalScoreModel(foundation.trainingMatches, foundation.teamStats, firstKickoff);
   const standingByTeam = new Map(priorStandings.map((row) => [row.team.id, row]));
   const formByMatchTeam = new Map(pregameForms.map((row) => [`${row.match_id}:${row.team_id}`, row]));
   const injuriesByTeam = new Map<number, BdlEplPlayerInjury[]>();
@@ -279,12 +278,12 @@ async function buildEplShadowSlateUncached(requestedRound?: number): Promise<Epl
       homeScore: match.home_score,
       awayScore: match.away_score,
       venue: match.venue_name,
-      prediction: predictEplMatch(fit, match.home_team_id, match.away_team_id),
+      prediction: predictEplProfessionalMatch(fit, match.home_team_id, match.away_team_id),
       currentMoneylineOdds: currentMoneylineOddsByMatch.get(match.id) ?? [],
       openingOdds: openingOddsByMatch.get(match.id) ?? [],
       modelUncertainty: {
-        homeEffectiveMatches: fit.strengths.get(match.home_team_id)?.effectiveMatches ?? 0,
-        awayEffectiveMatches: fit.strengths.get(match.away_team_id)?.effectiveMatches ?? 0,
+        homeEffectiveMatches: fit.factors.get(match.home_team_id)?.effectiveMatches ?? 0,
+        awayEffectiveMatches: fit.factors.get(match.away_team_id)?.effectiveMatches ?? 0,
       },
       evidence: {
         home: teamEvidence({ teamId: match.home_team_id, matches: foundation.trainingMatches, stats: foundation.teamStats, standing: standingByTeam.get(match.home_team_id) ?? null, providerForm: formByMatchTeam.get(`${match.id}:${match.home_team_id}`) ?? null, injuries: injuriesByTeam.get(match.home_team_id) ?? [], startersPosted: startersByMatchTeam.get(`${match.id}:${match.home_team_id}`) ?? 0 }),
@@ -316,10 +315,10 @@ async function buildEplShadowSlateUncached(requestedRound?: number): Promise<Epl
     availableRounds: rounds,
     matches,
     generatedAt: new Date().toISOString(),
-    trainedThrough: fit.trainedThrough,
-    trainingMatches: fit.trainingMatches,
-    modelRelease: fit.release,
-    calibrationRelease: fit.calibrationRelease,
+    trainedThrough: fit.incumbent.trainedThrough,
+    trainingMatches: fit.incumbent.trainingMatches,
+    modelRelease: fit.modelRelease,
+    calibrationRelease: fit.incumbent.calibrationRelease,
     recentHistory,
     providerHealth: {
       fixtures: "ready",

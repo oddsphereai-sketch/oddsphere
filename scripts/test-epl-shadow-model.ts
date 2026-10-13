@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { EPL_DRAW_ARBITRATION_RELEASE, EPL_SHADOW_MODEL_RELEASE, fitEplShadowModel, predictEplMatch, reconcileEplProjectedGoalsWithResult, selectEplMatchResultSide, type EplTrainingMatch } from "../lib/services/epl/eplShadowModel";
+import { EPL_BASELINE_MODEL_RELEASE, EPL_DRAW_ARBITRATION_RELEASE, EPL_SHADOW_MODEL_RELEASE, fitEplShadowModel, predictEplMatch, reconcileEplProjectedGoalsWithResult, selectEplMatchResultSide, type EplTrainingMatch } from "../lib/services/epl/eplShadowModel";
 import { bdlMoneylineRead, canonicalEplLineHistoryTimestamp, compactEplStoredPriceHistory, earliestEplMarketQuote, forecastAnchoredDoubleChanceSide, hydrateEplStoredPriceHistory, trackedPrice } from "../lib/services/epl/buildEplDailyEdgePreview";
 import { deriveEplMatchResultDecision, deriveEplPreviewGrade, EPL_PREVIEW_GRADE_RELEASE } from "../lib/services/epl/eplPreviewGrade";
 import { calibratedEplGoalProjection, calibratedEplTotalOverProbability, EPL_MATCH_RESULT_SCORE_READER_RELEASE, exactLockedEplScoreOutlook, impliedEplBttsYesProbability, impliedEplGoalsMarketDistribution, impliedEplMatchResultScoreOutlook } from "../lib/services/epl/eplDerivedMarketForecast";
@@ -93,11 +93,12 @@ const comparableHistory = recentComparableEplMatches([
 assert.deepEqual(comparableHistory.map((row) => row.id), [92, 91], "reader evidence must exclude stale EPL seasons for returning clubs");
 
 const fit = fitEplShadowModel(training, "2026-01-01T00:00:00Z");
-assert.equal(fit.release, EPL_SHADOW_MODEL_RELEASE);
+assert.equal(fit.release, EPL_BASELINE_MODEL_RELEASE);
 assert.equal(fit.trainingMatches, training.length);
 assert.ok(fit.trainedThrough.startsWith("2025-09-05"));
 
 const prediction = predictEplMatch(fit, 1, 2);
+assert.equal(prediction.release, EPL_BASELINE_MODEL_RELEASE, "the retained r19 Total component must not impersonate the r20 production release");
 const resultSum = prediction.probabilities.home + prediction.probabilities.draw + prediction.probabilities.away;
 assert.ok(Math.abs(resultSum - 1) < 1e-9, `1X2 probabilities sum to ${resultSum}`);
 assert.ok(Math.abs(prediction.probabilities.over25 + prediction.probabilities.under25 - 1) < 1e-9);
@@ -282,7 +283,7 @@ assert.equal(forecastAnchoredDoubleChanceSide("home", { home: 0.72, draw: 0.19, 
 assert.equal(forecastAnchoredDoubleChanceSide("away", { home: 0.18, draw: 0.24, away: 0.58 }), "away_or_draw", "an away forecast must be covered by away or draw");
 assert.equal(forecastAnchoredDoubleChanceSide("draw", { home: 0.34, draw: 0.38, away: 0.28 }), "home_or_draw", "a draw forecast should pair with the more likely club");
 assert.equal(forecastAnchoredDoubleChanceSide("draw", { home: 0.27, draw: 0.4, away: 0.33 }), "away_or_draw", "a draw forecast should pair with the more likely club");
-assert.equal(EPL_SHADOW_MODEL_RELEASE, "epl_goals_coherent_2026_10_01_r19_draw_arbitration");
+assert.equal(EPL_SHADOW_MODEL_RELEASE, "epl_goals_coherent_2026_10_13_r20_coherent_total_margin_matchup");
 assert.equal(EPL_PREVIEW_GRADE_RELEASE, "epl_grade_policy_2026_10_10_v25_exact_match_result_price_tiering");
 const lockedMarkets = { moneyline: { pick: "ARS" }, total: { pick: "Over" }, first_inning: { pick: "No" } } as unknown as DailyEdgeGameDto["markets"];
 const refreshedMarkets = { moneyline: { pick: "COV" }, total: { pick: "Under" }, first_inning: { pick: "Yes" } } as unknown as DailyEdgeGameDto["markets"];
