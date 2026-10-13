@@ -11,6 +11,8 @@ import {
 
 export const NFL_FORWARD_MEMBER_SNAPSHOT_RELEASE =
   "nfl_forward_member_snapshot_2026_10_09_r34_provider_feed_continuity" as const;
+const NFL_PRICE_TIER_PREVIOUS_DECISION_RELEASE =
+  "nfl_v1_daily_edge_decision_2026_10_09_r32_provider_feed_continuity" as const;
 const NFL_PROFESSIONAL_PREVIOUS_SNAPSHOT_RELEASE =
   "nfl_forward_member_snapshot_2026_10_09_r33_professional_market_authority" as const;
 const NFL_PROFESSIONAL_PREVIOUS_FIXTURE_RELEASE =
@@ -417,6 +419,19 @@ function nflForwardMemberSnapshotKeyForRelease(
   ].join("::");
 }
 
+function nflForwardMemberSnapshotKeyForPreviousCurrentDecision(input: { season: number; week: number }): string {
+  return [
+    "nfl",
+    "daily-edge",
+    input.season,
+    input.week,
+    NFL_FORWARD_MEMBER_SNAPSHOT_RELEASE,
+    NFL_WEEK_ONE_HELD_MEMBER_FIXTURE_RELEASE,
+    NFL_V1_ACTIONABLE_GRADE_MEMBER_RELEASE,
+    NFL_PRICE_TIER_PREVIOUS_DECISION_RELEASE,
+  ].join("::");
+}
+
 export function buildNflForwardMemberSnapshot(input: {
   fixture: NflWeekOneHeldMemberFixture;
   season: number;
@@ -490,12 +505,17 @@ export async function readNflForwardMemberSnapshot(input: {
   now?: string;
 }): Promise<NflForwardMemberSnapshot | null> {
   const now = input.now ? new Date(input.now).toISOString() : new Date().toISOString();
-  const releases = [NFL_FORWARD_MEMBER_SNAPSHOT_RELEASE, ...NFL_FORWARD_PREVIOUS_MEMBER_SNAPSHOT_RELEASES];
-  for (const release of releases) {
+  const snapshotKeys = [
+    nflForwardMemberSnapshotKeyForRelease(input, NFL_FORWARD_MEMBER_SNAPSHOT_RELEASE),
+    nflForwardMemberSnapshotKeyForPreviousCurrentDecision(input),
+    ...NFL_FORWARD_PREVIOUS_MEMBER_SNAPSHOT_RELEASES.map((release) =>
+      nflForwardMemberSnapshotKeyForRelease(input, release)),
+  ];
+  for (const snapshotKey of snapshotKeys) {
     const { data, error } = await input.client
       .from("lab_response_snapshots")
       .select("payload,generated_at,expires_at,stale_until")
-      .eq("snapshot_key", nflForwardMemberSnapshotKeyForRelease(input, release))
+      .eq("snapshot_key", snapshotKey)
       .maybeSingle();
     if (error) {
       if (TABLE_MISSING_RE.test(error.message)) return null;
@@ -593,7 +613,8 @@ function validateNflForwardMemberSnapshot(
   const heldMemberFixtureRelease = snapshot.fixture?.heldMemberFixtureRelease as string | undefined;
   const currentContract =
     memberRelease === NFL_V1_ACTIONABLE_GRADE_MEMBER_RELEASE &&
-    decisionRelease === NFL_V1_ACTIONABLE_GRADE_DECISION_RELEASE &&
+    (decisionRelease === NFL_V1_ACTIONABLE_GRADE_DECISION_RELEASE ||
+      decisionRelease === NFL_PRICE_TIER_PREVIOUS_DECISION_RELEASE) &&
     fixtureRelease === NFL_WEEK_ONE_HELD_MEMBER_FIXTURE_RELEASE &&
     heldMemberFixtureRelease === NFL_WEEK_ONE_HELD_MEMBER_FIXTURE_RELEASE;
   const professionalPreviousContract =

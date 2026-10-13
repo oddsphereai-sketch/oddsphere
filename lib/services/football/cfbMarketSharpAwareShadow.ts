@@ -18,10 +18,12 @@ import {
 import { evaluateCfbHolisticConfidence } from "./cfbHolisticConfidenceCandidate";
 
 export const CFB_MARKET_SHARP_AWARE_CANDIDATE_RELEASE =
-  "cfb_market_sharp_aware_candidate_2026_10_12_r35_provider_team_identity_consensus_authority_split_specialization" as const;
+  "cfb_market_sharp_aware_candidate_2026_10_13_r36_exact_price_actionability" as const;
 export const CFB_MARKET_SHARP_AWARE_SHADOW_RELEASE =
   CFB_MARKET_SHARP_AWARE_CANDIDATE_RELEASE;
 export const CFB_MARKET_SHARP_AWARE_PRODUCTION_RELEASE =
+  "cfb_market_sharp_aware_production_2026_10_13_r38_exact_price_actionability" as const;
+export const CFB_MARKET_SHARP_AWARE_EXACT_PRICE_PREVIOUS_PRODUCTION_RELEASE =
   "cfb_market_sharp_aware_production_2026_10_12_r37_provider_team_identity_consensus_authority_split_specialization" as const;
 export const CFB_MARKET_SHARP_AWARE_MARKET_READER_PREVIOUS_PRODUCTION_RELEASE =
   "cfb_market_sharp_aware_production_2026_10_09_r35_joint_moneyline_spread_reconciliation" as const;
@@ -495,7 +497,10 @@ export function applyCfbBalancedPositiveValueRule(args: {
 }): { finalGrade: CfbV1Grade; executionStatus: "bet" | "shop"; reasonCodes: string[] } {
   const gapPp = (args.modelProbability - args.marketFairProbability) * 100;
   const actionable = args.finalGrade === "Best Angle" || args.finalGrade === "Lean";
-  if (actionable && args.executionStatus === "bet" && (args.expectedValue < -1e-8 || gapPp <= 0)) {
+  // A confidence read may remain useful when the attached quote should be
+  // shopped, but the member-facing Lean / Best Angle ladder is a wager ladder.
+  // Never leave a nonpositive exact-price tuple in an actionable display tier.
+  if (actionable && (args.expectedValue < -1e-8 || gapPp <= 0)) {
     return { finalGrade: "Watchlist", executionStatus: args.executionStatus, reasonCodes: [...args.reasonCodes, "positive_target_excluded_value_guard"] };
   }
 
@@ -522,7 +527,9 @@ export function applyCfbBalancedPositiveValueRule(args: {
     args.evaluatedPrice >= CFB_MONEYLINE_PARLAY_LEAN_MIN_PRICE &&
     args.evaluatedPrice <= CFB_MONEYLINE_PARLAY_LEAN_MAX_PRICE &&
     args.modelProbability >= CFB_MONEYLINE_PARLAY_LEAN_MIN_MODEL_PROBABILITY &&
-    args.marketFairProbability >= CFB_MONEYLINE_PARLAY_LEAN_MIN_MARKET_PROBABILITY;
+    args.marketFairProbability >= CFB_MONEYLINE_PARLAY_LEAN_MIN_MARKET_PROBABILITY &&
+    args.expectedValue >= 0 &&
+    gapPp > 0;
   if (marketConfirmedFavoriteLean) {
     return {
       finalGrade: "Lean",

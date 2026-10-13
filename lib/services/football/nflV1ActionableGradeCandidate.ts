@@ -35,6 +35,7 @@ export const NFL_V1_MARKET_EVIDENCE_TOTAL_MODEL_RELEASE =
 
 export const NFL_V1_MONEYLINE_BEST_ANGLE_MINIMUM_EXPECTED_VALUE = 0.02 as const;
 export const NFL_V1_MONEYLINE_BEST_ANGLE_MINIMUM_EDGE_PERCENTAGE_POINTS = 4.0 as const;
+export const NFL_V1_MONEYLINE_BEST_ANGLE_MINIMUM_AMERICAN_PRICE = -200 as const;
 export const NFL_V1_SPREAD_BEST_ANGLE_MINIMUM_PROBABILITY = 0.59 as const;
 export const NFL_V1_SPREAD_BEST_ANGLE_MINIMUM_EXPECTED_VALUE = 0.04 as const;
 export const NFL_V1_TOTAL_BEST_ANGLE_MINIMUM_PROBABILITY = 0.535 as const;
@@ -122,7 +123,7 @@ export function buildNflV1ActionableGradeBundle(args: {
     decisionRelease: NFL_V1_ACTIONABLE_GRADE_DECISION_RELEASE,
     lockedAt,
   };
-  const moneylineGrade = bestAngleEligible(currentMoneyline)
+  const moneylineGrade = nflMoneylineBestAngleEligible(currentMoneyline)
     ? "Best Angle"
     : currentMoneyline.grade;
   const moneyline = buildNflRegularEvaluatedBetDecision({
@@ -189,8 +190,12 @@ function emptyBundle(
   };
 }
 
-function bestAngleEligible(current: NflRegularEvaluatedBetDecision): boolean {
+export function nflMoneylineBestAngleEligible(current: Pick<
+  NflRegularEvaluatedBetDecision,
+  "grade" | "expectedValue" | "modelProbability" | "marketFairProbability" | "evaluatedQuote"
+>): boolean {
   return current.grade === "Lean" &&
+    current.evaluatedQuote.price >= NFL_V1_MONEYLINE_BEST_ANGLE_MINIMUM_AMERICAN_PRICE &&
     current.expectedValue >= NFL_V1_MONEYLINE_BEST_ANGLE_MINIMUM_EXPECTED_VALUE &&
     100 * (current.modelProbability - current.marketFairProbability) >=
       NFL_V1_MONEYLINE_BEST_ANGLE_MINIMUM_EDGE_PERCENTAGE_POINTS;

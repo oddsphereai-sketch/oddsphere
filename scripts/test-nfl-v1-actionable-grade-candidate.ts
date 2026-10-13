@@ -18,6 +18,7 @@ import {
 import {
   buildNflV1ActionableGradeBundle,
   gradeNflV1SpreadTotalMarket,
+  nflMoneylineBestAngleEligible,
   NFL_V1_ACTIONABLE_GRADE_DECISION_RELEASE,
   NFL_V1_EVENT_CONTAINED_SPREAD_MODEL_RELEASE,
   NFL_V1_MARKET_EVIDENCE_TOTAL_MODEL_RELEASE,
@@ -57,6 +58,19 @@ const awayTeam = "NE";
 const homeTeam = "SEA";
 const gameStartsAt = "2026-09-10T00:20:00.000Z";
 const evaluatedAt = "2026-08-25T11:21:34.519Z";
+
+const pricedMoneyline = {
+  grade: "Lean" as const,
+  expectedValue: 0.04,
+  modelProbability: 0.76,
+  marketFairProbability: 0.70,
+  evaluatedQuote: { sportsbook: "unit", line: null, price: -275, observedAt: evaluatedAt },
+};
+assert.equal(nflMoneylineBestAngleEligible(pricedMoneyline), false, "a -275 moneyline remains Lean even with positive model value");
+assert.equal(nflMoneylineBestAngleEligible({
+  ...pricedMoneyline,
+  evaluatedQuote: { ...pricedMoneyline.evaluatedQuote, price: -200 },
+}), true, "a -200 moneyline can reach Best Angle when the value and edge gates pass");
 
 function namedSequenceAuthority(args: {
   moneylineSide?: "home" | "away" | null;

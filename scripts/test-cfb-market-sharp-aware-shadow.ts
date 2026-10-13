@@ -5,6 +5,7 @@ import {
   CFB_MARKET_SHARP_AWARE_PRODUCTION_RELEASE,
   annotateCfbCrossMarketGradeCoherence,
   applyCfbIndependentPriceCorroborationLane,
+  applyCfbBalancedPositiveValueRule,
   applyCfbMarketSharpAwareGrades,
   buildCfbMarketEvidenceGradeShadow,
   buildCfbMarketSharpAwareForecast,
@@ -16,6 +17,43 @@ import { buildCfbV1DecisionBundle, getCfbV1Forecast } from "../lib/services/foot
 import { resolveCfbCanonicalMarketAnchor } from "../lib/services/football/cfbMarketInformedOutcome";
 
 const observedAt = "2026-08-28T12:00:00.000Z";
+
+const negativeShop = applyCfbBalancedPositiveValueRule({
+  market: "moneyline",
+  finalGrade: "Lean",
+  probabilityGrade: "Lean",
+  executionStatus: "shop",
+  expectedValue: -0.02,
+  modelProbability: 0.72,
+  marketFairProbability: 0.74,
+  evaluatedPrice: -275,
+  evaluatedLine: null,
+  sharpDirection: "support",
+  publicDirection: "support",
+  movementDirection: "neutral",
+  reasonCodes: ["displayed_quote_shop"],
+});
+assert.equal(negativeShop.finalGrade, "Watchlist", "a negative-EV Shop cannot remain member-actionable");
+assert.equal(negativeShop.executionStatus, "shop", "the economics guard does not mislabel a Shop as a Bet");
+assert.equal(negativeShop.reasonCodes.includes("positive_target_excluded_value_guard"), true);
+
+const positiveFavoritePromotion = applyCfbBalancedPositiveValueRule({
+  market: "moneyline",
+  finalGrade: "Watchlist",
+  probabilityGrade: "Watchlist",
+  executionStatus: "bet",
+  expectedValue: 0.015,
+  modelProbability: 0.68,
+  marketFairProbability: 0.65,
+  evaluatedPrice: -250,
+  evaluatedLine: null,
+  sharpDirection: "support",
+  publicDirection: "support",
+  movementDirection: "neutral",
+  reasonCodes: [],
+});
+assert.equal(positiveFavoritePromotion.finalGrade, "Lean", "a positive-value market-confirmed favorite retains the paired Lean path");
+assert.equal(positiveFavoritePromotion.reasonCodes.includes("moneyline_market_confirmed_favorite_lean"), true);
 const books = [
   book("draftkings", -4, 48.5),
   book("fanduel", -4, 48.5),
