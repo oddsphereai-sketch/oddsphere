@@ -83,9 +83,9 @@ function matchesImmutableTuple(actual: UclLockedRecord, expected: PredictionReco
     && canonicalJson(actual.snapshot_json) === canonicalJson(expected.snapshot_json);
 }
 
-function numberEqual(left: number | null | undefined, right: number | null | undefined): boolean {
+function numberEqual(left: number | null | undefined, right: number | null | undefined, tolerance = 1e-9): boolean {
   if (left == null || right == null) return left == null && right == null;
-  return Math.abs(left - right) < 1e-9;
+  return Math.abs(left - right) <= tolerance;
 }
 
 function memberMarketAtCapture(row: UclLockedRecord): MarketEdgeDto | null {
@@ -105,10 +105,13 @@ function memberMarketMatchesRecord(market: MarketEdgeDto, row: UclLockedRecord):
     && (selectedSide === row.side || (selectedSide === null && row.side === null))
     && numberEqual(market.currentPriceAmerican, row.odds_american)
     && numberEqual(market.priceAmerican, row.odds_american)
-    && numberEqual(market.modelProb, row.model_probability)
-    && numberEqual(market.marketFairProb, row.market_probability)
-    && numberEqual(market.modelMarketGapPct, row.edge)
-    && numberEqual(market.pinnacleEvPct, row.expected_value == null ? null : row.expected_value * 100)
+    // prediction_records intentionally stores rounded NUMERIC scalars while
+    // member_market_at_capture preserves full precision. Compare only within
+    // each column's declared storage quantum; never widen beyond one half-step.
+    && numberEqual(market.modelProb, row.model_probability, 0.0000005)
+    && numberEqual(market.marketFairProb, row.market_probability, 0.0000005)
+    && numberEqual(market.modelMarketGapPct, row.edge, 0.0005)
+    && numberEqual(market.pinnacleEvPct, row.expected_value == null ? null : row.expected_value * 100, 0.005)
     && numberEqual(expectedLine, row.line_value)
     && market.verdict.label === row.play_grade
     && row.best_angle === (verdict === "best_angle")
@@ -123,6 +126,24 @@ function memberProjectionAtCapture(row: UclLockedRecord): DailyEdgeResponse["gam
   return projection && typeof projection === "object"
     ? projection as DailyEdgeResponse["games"][number]["soccerProjection"]
     : null;
+}
+
+function snapshotAuthorityMatchesRow(row: UclLockedRecord): boolean {
+  const snapshot = row.snapshot_json as Record<string, unknown> | null;
+  return snapshot?.competition === UCL_COMPETITION
+    && snapshot.model_release === row.model_version
+    && snapshot.calibration_release === row.calibration_version;
+}
+
+function lockedCohortKey(row: UclLockedRecord): string {
+  return `${row.model_version}\u0000${row.calibration_version}`;
+}
+
+function lockedCohortIsComplete(rows: Map<string, UclLockedRecord> | undefined): rows is Map<string, UclLockedRecord> {
+  if (!rows || !UCL_LOCK_MARKETS.every((market) => rows.has(market))) return false;
+  const projections = UCL_LOCK_MARKETS.map((market) => memberProjectionAtCapture(rows.get(market)!));
+  return projections.every((projection) => projection !== null)
+    && projections.every((projection) => canonicalJson(projection) === canonicalJson(projections[0]));
 }
 
 /** Proves the immutable DB record is complete before a whole game can be
@@ -145,28 +166,47 @@ export async function verifyUclAllMarketLocks(input: {
   if (error) throw new Error(`verify UCL all-market locks: ${error.message}`);
   const expectedByKey = new Map(input.expectedRows.map((row) => [`${row.external_id}:${row.market}`, row]));
   const writerLockedIds = new Set(input.writerLockedRecordIds);
-  const rowsByProvider = new Map<number, Map<string, UclLockedRecord>>();
+  const cohortsByProvider = new Map<number, Map<string, Map<string, UclLockedRecord>>>();
   for (const row of (data ?? []) as UclLockedRecord[]) {
     const providerId = row.external_id - UCL_EXTERNAL_ID_OFFSET;
-    const snapshot = row.snapshot_json as Record<string, unknown> | null;
-    const exactAuthority = row.model_version === input.modelRelease
-      && row.calibration_version === input.calibrationRelease
-      && snapshot?.competition === UCL_COMPETITION;
+    const currentAuthority = row.model_version === input.modelRelease
+      && row.calibration_version === input.calibrationRelease;
     const expected = expectedByKey.get(`${row.external_id}:${row.market}`);
-    const exactIdentity = writerLockedIds.has(row.id) || (expected !== undefined && matchesImmutableTuple(row, expected));
+    const currentIdentity = currentAuthority
+      && (writerLockedIds.has(row.id) || (expected !== undefined && matchesImmutableTuple(row, expected)));
+    // A prior release may already own the immutable T-60 cohort. Its stored
+    // capture is authoritative when all four rows agree with their own release
+    // stamps and scalar tuple; a later reader release must never replace it.
+    const legacyIdentity = !currentAuthority && snapshotAuthorityMatchesRow(row);
     const capturedMarket = memberMarketAtCapture(row);
-    if (!row.locked_at || !exactAuthority || !exactIdentity || !capturedMarket || !memberMarketMatchesRecord(capturedMarket, row)) continue;
-    const map = rowsByProvider.get(providerId) ?? new Map<string, UclLockedRecord>();
-    map.set(row.market, row);
-    rowsByProvider.set(providerId, map);
+    if (!row.locked_at || !snapshotAuthorityMatchesRow(row) || (!currentIdentity && !legacyIdentity)
+      || !capturedMarket || !memberMarketMatchesRecord(capturedMarket, row)) continue;
+    const cohorts = cohortsByProvider.get(providerId) ?? new Map<string, Map<string, UclLockedRecord>>();
+    const cohort = cohorts.get(lockedCohortKey(row)) ?? new Map<string, UclLockedRecord>();
+    cohort.set(row.market, row);
+    cohorts.set(lockedCohortKey(row), cohort);
+    cohortsByProvider.set(providerId, cohorts);
   }
-  const completeProviderIds = providerIds.filter((id) => {
-    const rows = rowsByProvider.get(id);
-    if (!rows || !UCL_LOCK_MARKETS.every((market) => rows.has(market))) return false;
-    const projections = UCL_LOCK_MARKETS.map((market) => memberProjectionAtCapture(rows.get(market)!));
-    return projections.every((projection) => projection !== null)
-      && projections.every((projection) => canonicalJson(projection) === canonicalJson(projections[0]));
-  });
+  const currentCohortKey = `${input.modelRelease}\u0000${input.calibrationRelease}`;
+  const rowsByProvider = new Map<number, Map<string, UclLockedRecord>>();
+  for (const providerId of providerIds) {
+    const cohorts = cohortsByProvider.get(providerId);
+    if (!cohorts) continue;
+    const current = cohorts.get(currentCohortKey);
+    if (lockedCohortIsComplete(current)) {
+      rowsByProvider.set(providerId, current);
+      continue;
+    }
+    const legacy = [...cohorts.values()]
+      .filter(lockedCohortIsComplete)
+      .sort((left, right) => {
+        const leftLocked = Math.max(...[...left.values()].map((row) => Date.parse(row.locked_at ?? "")));
+        const rightLocked = Math.max(...[...right.values()].map((row) => Date.parse(row.locked_at ?? "")));
+        return rightLocked - leftLocked;
+      })[0];
+    if (legacy) rowsByProvider.set(providerId, legacy);
+  }
+  const completeProviderIds = providerIds.filter((id) => rowsByProvider.has(id));
   const complete = new Set(completeProviderIds);
   const lockedResponse: DailyEdgeResponse = {
     ...input.response,

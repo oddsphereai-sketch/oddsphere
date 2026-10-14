@@ -130,6 +130,41 @@ const wrongCompetition = four.map((row) => row.market === "btts" ? { ...row, sna
 assert.deepEqual((await verifyUclAllMarketLocks(lockInput, lockVerificationClient(wrongCompetition))).incompleteProviderIds, [34]);
 const wrongTuple = four.map((row) => row.market === "btts" ? { ...row, odds_american: -999 } : row);
 assert.deepEqual((await verifyUclAllMarketLocks(lockInput, lockVerificationClient(wrongTuple))).incompleteProviderIds, [34]);
+const legacyModelRelease = "ucl_legacy_model_release";
+const legacyCalibrationRelease = "ucl_legacy_calibration_release";
+const legacyFour = four.map((row) => ({
+  ...row,
+  model_version: legacyModelRelease,
+  calibration_version: legacyCalibrationRelease,
+  model_probability: row.model_probability == null ? null : Number(row.model_probability.toFixed(6)),
+  market_probability: row.market_probability == null ? null : Number(row.market_probability.toFixed(6)),
+  edge: row.edge == null ? null : Number(row.edge.toFixed(3)),
+  expected_value: row.expected_value == null ? null : Number(row.expected_value.toFixed(4)),
+  snapshot_json: {
+    ...(row.snapshot_json ?? {}),
+    model_release: legacyModelRelease,
+    calibration_release: legacyCalibrationRelease,
+  },
+}));
+const legacyVerified = await verifyUclAllMarketLocks(lockInput, lockVerificationClient(legacyFour));
+assert.deepEqual(legacyVerified.completeProviderIds, [34], "a complete prior-release lock cohort remains the authoritative member record");
+assert.equal(legacyVerified.lockedResponse.games[0]?.markets.total.currentPriceAmerican, -115, "the reader renders the exact prior-release captured price");
+const legacyOutsideStoragePrecision = legacyFour.map((row) => row.market === "total" ? { ...row, edge: (row.edge ?? 0) + 0.001 } : row);
+assert.deepEqual(
+  (await verifyUclAllMarketLocks(lockInput, lockVerificationClient(legacyOutsideStoragePrecision))).incompleteProviderIds,
+  [34],
+  "a scalar difference larger than the database storage quantum cannot pass legacy verification",
+);
+const mixedLegacyRelease = legacyFour.map((row) => row.market === "btts" ? {
+  ...row,
+  model_version: "ucl_other_legacy_model",
+  snapshot_json: { ...(row.snapshot_json ?? {}), model_release: "ucl_other_legacy_model" },
+} : row);
+assert.deepEqual(
+  (await verifyUclAllMarketLocks(lockInput, lockVerificationClient(mixedLegacyRelease))).incompleteProviderIds,
+  [34],
+  "rows from different legacy releases cannot be combined into a synthetic lock cohort",
+);
 for (const [field, value] of [
   ["pick", "under"],
   ["best_angle", true],
