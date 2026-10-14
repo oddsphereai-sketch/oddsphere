@@ -33,6 +33,9 @@ import type { EplForwardBookVector } from "../lib/services/epl/eplForwardEvidenc
 import { bivariatePoissonScoreDistribution } from "../lib/services/soccer/dixonColes";
 import { deriveSoccerMarketProbabilities } from "../lib/services/soccer/soccerMarketProbabilities";
 import { deriveUclEloConsensusJoint } from "../lib/services/ucl/uclEloConsensus";
+import { applyUclStoredQuoteFallback, UCL_STORED_QUOTE_FALLBACK_ENDPOINT, UCL_STORED_QUOTE_FALLBACK_RELEASE } from "../lib/services/ucl/uclStoredQuoteFallback";
+import type { EplSharpFixtureMarket, EplSharpOddsRecord } from "../lib/providers/real_api/SharpApiEplMarketProvider";
+import type { EplStoredPriceObservation } from "../lib/services/epl/buildEplDailyEdgePreview";
 
 function match(overrides: Partial<BdlUclMatch> & Pick<BdlUclMatch, "id" | "home_team_id" | "away_team_id" | "date">): BdlUclMatch {
   return {
@@ -52,6 +55,59 @@ function match(overrides: Partial<BdlUclMatch> & Pick<BdlUclMatch, "id" | "home_
 }
 
 async function main() {
+
+// A transient missing UCL market may recover only from a complete, exact
+// same-book stored tuple. Fresh complete provider data always wins, and the
+// recovered availability row cannot impersonate current-event forecast input.
+const sharpRow = (overrides: Partial<EplSharpOddsRecord>): EplSharpOddsRecord => ({
+  market: "total",
+  selection: "over",
+  line: 2.5,
+  odds_american: -110,
+  odds_decimal: 1.909,
+  sportsbook: "fanduel",
+  provider: "sharpapi",
+  provider_endpoint: "/odds?event_id=current",
+  fetched_at: "2026-10-14T16:50:00Z",
+  provider_event_id: "current",
+  fetched_at_source: "provider",
+  ...overrides,
+});
+const stored = (overrides: Partial<EplStoredPriceObservation>): EplStoredPriceObservation => ({
+  providerId: 991,
+  market: "total",
+  side: "over",
+  line: 2.5,
+  american: -145,
+  sportsbook: "pinnacle",
+  recordedAt: "2026-10-14T16:30:00Z",
+  isOpener: false,
+  ...overrides,
+});
+const partialFixture: EplSharpFixtureMarket = {
+  eventId: "current",
+  odds: [sharpRow({ selection: "over" })],
+  splits: [],
+  splitsState: "unavailable",
+};
+const recoveredFixture = applyUclStoredQuoteFallback({
+  fixture: partialFixture,
+  providerId: 991,
+  history: [
+    stored({ side: "over", american: -145, recordedAt: "2026-10-14T16:20:00Z" }),
+    stored({ side: "under", american: 125, recordedAt: "2026-10-14T16:20:00Z" }),
+    stored({ side: "over", american: -150, recordedAt: "2026-10-14T16:30:00Z" }),
+  ],
+});
+const recoveredTotal = recoveredFixture.odds.filter((row) => row.provider_endpoint === UCL_STORED_QUOTE_FALLBACK_ENDPOINT);
+assert.deepEqual(recoveredTotal.map((row) => [row.selection, row.odds_american]), [["over", -150], ["under", 125]], "stored continuity rebuilds the latest complete same-book tuple across verified captures");
+assert.equal(recoveredTotal.every((row) => row.provider_event_id === null && row.persistable === false), true, "stored rows are availability-only and cannot masquerade as current provider evidence");
+assert.match(UCL_STORED_QUOTE_FALLBACK_RELEASE, /complete_same_book/);
+const completeFixture: EplSharpFixtureMarket = {
+  ...partialFixture,
+  odds: [sharpRow({ selection: "over", odds_american: -105 }), sharpRow({ selection: "under", odds_american: -115 })],
+};
+assert.equal(applyUclStoredQuoteFallback({ fixture: completeFixture, providerId: 991, history: [stored({ side: "over" }), stored({ side: "under" })] }), completeFixture, "a complete current provider market wins without stored augmentation");
 
 // Provider product/auth identity: dedicated UCL v1, no invented league id.
 const calls: Array<{ url: string; auth: string | null }> = [];
@@ -586,7 +642,9 @@ assert.match(uclPreviewSource, /deriveUclMatchResultDecision/);
 assert.match(uclPreviewSource, /deriveUclPreviewGrade/);
 assert.match(uclPreviewSource, /fixtureLoadConcurrency:\s*1/, "UCL bounds provider fan-out independently of EPL");
 assert.match(uclPreviewSource, /maxFixtureRecoveryLoads:\s*slate\.matches\.length/, "every incomplete UCL fixture is eligible for one bounded recovery load");
+assert.match(uclPreviewSource, /finalizeFixtureMarket:[\s\S]*applyUclStoredQuoteFallback/, "UCL applies durable quote recovery only after the shared bounded provider retry");
 assert.match(sharedSoccerBuilder, /options\.fixtureLoadConcurrency === undefined[\s\S]*Math\.min\(3, slate\.matches\.length\)/, "shared soccer keeps its existing three-fixture default unless a competition overrides it");
+assert.match(sharedSoccerBuilder, /row\.persistable === false/, "stored availability rows cannot be re-recorded as fresh provider observations");
 assert.doesNotMatch(uclTransferredGradeSource, /deriveEplPreviewGrade|deriveEplMatchResultDecision|from ["'].*eplPreviewGrade/, "the transferred UCL grade authority is frozen and cannot drift with EPL runtime edits");
 assert.match(uclTransferredGradeSource, /positive exact forecast-side expected value/, "actionable transfers retain exact-price EV gating");
 assert.match(uclPreviewSource, /awayTeamLogo:\s*uclTeamLogo\(game\.awayTeam\)[\s\S]*awayTeamPrimaryColor:\s*awayAsset\?\.primaryColor/);

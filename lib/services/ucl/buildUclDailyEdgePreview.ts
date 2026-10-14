@@ -14,6 +14,7 @@ import type { UclSlate } from "./buildUclSlate";
 import { deriveUclCoherentMarketOutcome, UCL_COHERENT_MARKET_OUTCOME_RELEASE } from "./uclCoherentMarketOutcome";
 import { deriveUclMatchResultDecision, deriveUclPreviewGrade } from "./uclPreviewGrade";
 import { uclTeamAsset, uclTeamLogo } from "./uclTeamAssets";
+import { applyUclStoredQuoteFallback, UCL_STORED_QUOTE_FALLBACK_RELEASE } from "./uclStoredQuoteFallback";
 
 export { hydrateEplPriceHistory as hydrateUclPriceHistory, hydrateEplStoredPriceHistory as hydrateUclStoredPriceHistory };
 export type UclStoredPriceObservation = EplStoredPriceObservation;
@@ -23,7 +24,7 @@ export type UclPreviewBuildOptions = Pick<EplPreviewBuildOptions, "captureAllBoo
 function marketContext(market: MarketEdgeDto): MarketEdgeDto {
   return {
     ...market,
-    reviewFlags: [...market.reviewFlags.filter((flag) => !flag.startsWith("epl_")), UCL_CALIBRATION_RELEASE],
+    reviewFlags: [...market.reviewFlags.filter((flag) => !flag.startsWith("epl_")), UCL_CALIBRATION_RELEASE, UCL_STORED_QUOTE_FALLBACK_RELEASE],
     soccerGradeContext: market.soccerGradeContext ? {
       ...market.soccerGradeContext,
       calibration_label: "UCL-owned EPL v23 grade transfer · exact-price EV required",
@@ -51,6 +52,11 @@ export async function buildUclDailyEdgePreview(slate: UclSlate, options: UclPrev
     // retains its existing concurrency and recovery defaults.
     fixtureLoadConcurrency: 1,
     maxFixtureRecoveryLoads: slate.matches.length,
+    finalizeFixtureMarket: (fixture, match) => applyUclStoredQuoteFallback({
+      fixture,
+      providerId: match.id,
+      history: options.storedPriceHistory ?? [],
+    }),
     competitionLabel: "Champions League",
     authorities: {
       gradeRelease: UCL_CALIBRATION_RELEASE,

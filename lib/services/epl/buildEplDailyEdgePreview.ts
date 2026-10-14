@@ -64,6 +64,7 @@ export type EplPreviewBuildOptions = {
   skipForwardEvidence?: boolean;
   maxFixtureRecoveryLoads?: number;
   fixtureLoadConcurrency?: number;
+  finalizeFixtureMarket?: (fixture: EplSharpFixtureMarket, match: EplShadowSlateMatch) => EplSharpFixtureMarket;
   competitionLabel?: string;
   authorities?: {
     gradeRelease: string;
@@ -444,6 +445,7 @@ function allBookPriceObservations(
     if (providerId === undefined) return;
     const groups = new Map<string, NormalizedSoccerOddsRecord[]>();
     for (const row of fixture.odds) {
+      if (row.persistable === false) continue;
       if (row.odds_american === null || !Number.isFinite(row.odds_american) || !row.sportsbook) continue;
       if (row.market === "total" && row.line !== 2.5) continue;
       const key = `${row.market}:${bookKey(row.sportsbook)}:${row.market === "total" ? row.line : "main"}`;
@@ -1025,6 +1027,11 @@ export async function buildEplDailyEdgePreview(slate: EplShadowSlate, options: E
       const recovery = await provider.loadFixture({ home: match.homeTeam.short_name, away: match.awayTeam.short_name, kickoff: match.kickoff })
         .catch(() => ({ eventId: null, odds: [], splits: [], splitsState: "error" as const }));
       markets[index] = mergeRecoveredFixture(markets[index], recovery);
+    }
+  }
+  if (options.finalizeFixtureMarket) {
+    for (let index = 0; index < markets.length; index += 1) {
+      markets[index] = options.finalizeFixtureMarket(markets[index], slate.matches[index]!);
     }
   }
   const date = slate.matches[0]?.kickoff.slice(0, 10) ?? new Date().toISOString().slice(0, 10);
