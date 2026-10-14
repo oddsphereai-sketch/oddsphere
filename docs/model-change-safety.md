@@ -1,5 +1,31 @@
 # Model change safety protocol
 
+## Owner-approved provisional exception: CFB correct-QB final-winner coordinator
+
+On 2026-10-14 Daniel Mengel directed Oddsphere to close the validated
+audit-to-runtime parity gap and publish the richer-stat College Football model if
+the corrected runtime reproduced the backtest, preserved fallbacks and immutable
+locks, and passed board/grade verification. This exception is limited to the r2
+coordinator and evidence in
+`docs/model-audits/2026-10-14-cfb-correct-qb-final-winner-coordinator.md`.
+
+The incumbent independent joint PMF and professional market reader remain the
+starting authorities. The frozen coordinator may change a future unlocked winner
+only on a smooth combined-probability boundary crossing using correct-QB,
+opponent-adjusted matchup, recent-form, and target-book-excluded market features.
+It must then rebuild one coherent PMF for projected score, winner, Moneyline,
+Spread, probabilities, and grades. Missing splits are neutral/missing; missing
+prices hold the wager but not the projection; missing team identity, runtime
+failure, or selection cycling returns the incumbent forecast unchanged. It may
+not drop a game, create a second writer, bypass the shared
+`prediction_pipeline:cfb` lease, or mutate a stored lock.
+
+The selected historical candidate improves net accuracy while accepting two
+Moneyline harms in the broader replay; zero harms is not the optimization goal.
+The exact current-board rehearsal retains 62 actionables with three promotions
+and two demotions. Publication and rollback gates are the ones recorded in the
+paired audit document.
+
 ## Owner-approved correctness exception: CFB last-known injury-report continuity
 
 On 2026-10-10 Daniel Mengel explicitly directed Oddsphere to stop a failed or

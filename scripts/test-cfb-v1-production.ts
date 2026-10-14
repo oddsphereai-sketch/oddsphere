@@ -16,6 +16,8 @@ import { dailyEdgeOutcomeForecastLabel } from "../app/lab/lib/dailyEdgeOutcomeFo
 import {
   CFB_FORWARD_EVIDENCE_COLLECTOR_RELEASE,
   CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE,
+  CFB_FORWARD_FINAL_WINNER_PREVIOUS_EVIDENCE_SCHEMA_RELEASE,
+  CFB_FORWARD_FINAL_WINNER_PREVIOUS_MEMBER_RELEASE,
   CFB_FORWARD_GAP_FALLBACK_PREVIOUS_EVIDENCE_SCHEMA_RELEASE,
   CFB_FORWARD_GAP_FALLBACK_PREVIOUS_MEMBER_RELEASE,
   CFB_FORWARD_RELEASE_WAVE_PREVIOUS_EVIDENCE_SCHEMA_RELEASE,
@@ -86,6 +88,7 @@ import { resolveCfbCanonicalMarketAnchor } from "../lib/services/football/cfbMar
 import {
   CFB_MARKET_SHADOW_WEIGHT,
   CFB_MARKET_SHARP_AWARE_CANDIDATE_RELEASE,
+  CFB_MARKET_SHARP_AWARE_FINAL_WINNER_PREVIOUS_PRODUCTION_RELEASE,
   CFB_MARKET_SHARP_AWARE_EXACT_PRICE_PREVIOUS_PRODUCTION_RELEASE,
   CFB_MARKET_SHARP_AWARE_GAP_FALLBACK_PREVIOUS_PRODUCTION_RELEASE,
   CFB_MARKET_SHARP_AWARE_PREVIOUS_PRODUCTION_RELEASE,
@@ -113,6 +116,7 @@ import { SharpApiClientError } from "../lib/providers/real_api/_sharpApiClient";
 import {
   CFB_T60_MAX_CAPTURE_LAG_MINUTES,
   CFB_V1_DECISION_RELEASE,
+  CFB_V1_FINAL_WINNER_PREVIOUS_DECISION_RELEASE,
   CFB_V1_EXACT_PRICE_ACTIONABILITY_PREVIOUS_DECISION_RELEASE,
   CFB_V1_EXACT_PRICE_ACTIONABILITY_PREVIOUS_GRADE_POLICY_RELEASE,
   CFB_V1_GAP_FALLBACK_PREVIOUS_DECISION_RELEASE,
@@ -990,6 +994,8 @@ assert.equal(member.snapshot.games[0]!.lockState, "locked", "only a fully valid 
 assert.equal(member.snapshot.games[0]!.lockedAt, lockedAt);
 const previousExactPricePayload: CfbForwardEvidencePayload = {
   ...evidence.payload,
+  schemaRelease: CFB_FORWARD_FINAL_WINNER_PREVIOUS_EVIDENCE_SCHEMA_RELEASE as unknown as typeof evidence.payload.schemaRelease,
+  memberRelease: CFB_FORWARD_FINAL_WINNER_PREVIOUS_MEMBER_RELEASE as unknown as typeof evidence.payload.memberRelease,
   decisions: {
     ...evidence.payload.decisions,
     decisionRelease: CFB_V1_EXACT_PRICE_ACTIONABILITY_PREVIOUS_DECISION_RELEASE as unknown as typeof evidence.payload.decisions.decisionRelease,
@@ -1019,6 +1025,42 @@ const previousExactPriceFixture = buildCfbMemberFixture([{
 }]);
 assert.equal(previousExactPriceFixture.snapshot.games.length, 1, "the immediately preceding exact-price release must remain readable during rollout");
 assert.equal(previousExactPriceFixture.snapshot.games[0]!.lockState, "locked", "the preceding locked payload must retain exact reader precedence");
+const previousFinalWinnerPayload: CfbForwardEvidencePayload = {
+  ...structuredClone(previousExactPricePayload),
+  decisions: {
+    ...structuredClone(previousExactPricePayload.decisions),
+    decisionRelease: CFB_V1_FINAL_WINNER_PREVIOUS_DECISION_RELEASE as unknown as typeof evidence.payload.decisions.decisionRelease,
+    policyRelease: evidence.payload.decisions.policyRelease,
+    evaluatedBets: previousExactPricePayload.decisions.evaluatedBets.map((decision) => ({
+      ...decision,
+      decisionRelease: CFB_V1_FINAL_WINNER_PREVIOUS_DECISION_RELEASE as unknown as typeof decision.decisionRelease,
+      policyRelease: evidence.payload.decisions.policyRelease,
+      ...(decision.gradeAdjustment ? {
+        gradeAdjustment: {
+          ...decision.gradeAdjustment,
+          release: CFB_MARKET_SHARP_AWARE_FINAL_WINNER_PREVIOUS_PRODUCTION_RELEASE as unknown as typeof decision.gradeAdjustment.release,
+        },
+      } : {}),
+    })),
+  },
+  authoritativeForecast: previousExactPricePayload.authoritativeForecast ? {
+    ...previousExactPricePayload.authoritativeForecast,
+    release: CFB_MARKET_SHARP_AWARE_FINAL_WINNER_PREVIOUS_PRODUCTION_RELEASE as unknown as typeof previousExactPricePayload.authoritativeForecast.release,
+  } : undefined,
+};
+const previousFinalWinnerFixture = buildCfbMemberFixture([{
+  ...evidence,
+  id: "previous-final-winner",
+  payloadSha256: hashCfbForwardEvidencePayload(previousFinalWinnerPayload),
+  payload: previousFinalWinnerPayload,
+}]);
+assert.equal(previousFinalWinnerFixture.snapshot.games.length, 1, "the immediately preceding final-winner release must remain readable during rollout");
+assert.equal(previousFinalWinnerFixture.snapshot.games[0]!.lockState, "locked", "the preceding final-winner locked payload must retain exact reader precedence");
+assert.equal(
+  previousFinalWinnerFixture.snapshot.games[0]!.footballProjection!.homeWinProbability,
+  previousFinalWinnerPayload.decisions.forecast.homeWinProbability,
+  "the reader must render the exact stored locked win probability without reconstruction",
+);
 assert.deepEqual(
   retainCfbMemberLockedGamesForBoardDate({
     selected: [],

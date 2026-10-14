@@ -11,17 +11,25 @@ import {
 } from "./cfbMemberFixture";
 
 export const CFB_FORWARD_MEMBER_SNAPSHOT_RELEASE =
-  "cfb_forward_member_snapshot_2026_10_12_r48_provider_team_identity_consensus_authority_split_specialization" as const;
+  "cfb_forward_member_snapshot_2026_10_14_r49_correct_qb_final_winner_coordinator" as const;
 export const CFB_FORWARD_PREVIOUS_MEMBER_SNAPSHOT_RELEASE =
-  "cfb_forward_member_snapshot_2026_10_11_r47_consensus_authority_split_specialization" as const;
+  "cfb_forward_member_snapshot_2026_10_12_r48_provider_team_identity_consensus_authority_split_specialization" as const;
 export const CFB_PREVIOUS_MEMBER_FIXTURE_RELEASE =
-  "cfb_v1_member_fixture_2026_10_11_r87_consensus_authority_split_specialization" as const;
+  "cfb_v1_member_fixture_2026_10_12_r88_provider_team_identity_consensus_authority_split_specialization" as const;
 export const CFB_PREVIOUS_EVIDENCE_RELEASE =
-  "cfb_forward_evidence_snapshot_2026_10_11_r44_consensus_authority_split_specialization" as const;
+  "cfb_forward_evidence_snapshot_2026_10_12_r45_provider_team_identity_consensus_authority_split_specialization" as const;
 export const CFB_PREVIOUS_MEMBER_RELEASE =
-  "cfb_v1_member_release_2026_10_11_r61_consensus_authority_split_specialization" as const;
+  "cfb_v1_member_release_2026_10_12_r62_provider_team_identity_consensus_authority_split_specialization" as const;
 export const CFB_MEMBER_SNAPSHOT_READER_RELEASE =
-  "cfb_member_snapshot_reader_2026_10_12_r33_provider_team_identity_consensus_authority_split_specialization" as const;
+  "cfb_member_snapshot_reader_2026_10_14_r34_correct_qb_final_winner_coordinator" as const;
+const CFB_PROVIDER_IDENTITY_PREVIOUS_MEMBER_SNAPSHOT_RELEASE =
+  "cfb_forward_member_snapshot_2026_10_11_r47_consensus_authority_split_specialization" as const;
+const CFB_PROVIDER_IDENTITY_PREVIOUS_MEMBER_FIXTURE_RELEASE =
+  "cfb_v1_member_fixture_2026_10_11_r87_consensus_authority_split_specialization" as const;
+const CFB_PROVIDER_IDENTITY_PREVIOUS_EVIDENCE_RELEASE =
+  "cfb_forward_evidence_snapshot_2026_10_11_r44_consensus_authority_split_specialization" as const;
+const CFB_PROVIDER_IDENTITY_PREVIOUS_MEMBER_RELEASE =
+  "cfb_v1_member_release_2026_10_11_r61_consensus_authority_split_specialization" as const;
 const CFB_PROVIDER_CONTINUITY_PREVIOUS_MEMBER_SNAPSHOT_RELEASE =
   "cfb_forward_member_snapshot_2026_10_09_r45_provider_continuity_board_retention" as const;
 const CFB_PROVIDER_CONTINUITY_PREVIOUS_MEMBER_FIXTURE_RELEASE =
@@ -92,6 +100,12 @@ const SUPPORTED_MEMBER_SNAPSHOT_RELEASES = [
     fixtureRelease: CFB_PREVIOUS_MEMBER_FIXTURE_RELEASE,
     evidenceRelease: CFB_PREVIOUS_EVIDENCE_RELEASE,
     memberRelease: CFB_PREVIOUS_MEMBER_RELEASE,
+  },
+  {
+    snapshotRelease: CFB_PROVIDER_IDENTITY_PREVIOUS_MEMBER_SNAPSHOT_RELEASE,
+    fixtureRelease: CFB_PROVIDER_IDENTITY_PREVIOUS_MEMBER_FIXTURE_RELEASE,
+    evidenceRelease: CFB_PROVIDER_IDENTITY_PREVIOUS_EVIDENCE_RELEASE,
+    memberRelease: CFB_PROVIDER_IDENTITY_PREVIOUS_MEMBER_RELEASE,
   },
   {
     snapshotRelease: CFB_PROVIDER_CONTINUITY_PREVIOUS_MEMBER_SNAPSHOT_RELEASE,
