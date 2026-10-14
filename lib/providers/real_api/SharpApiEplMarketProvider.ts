@@ -13,7 +13,7 @@ import type { SharpApiOddsRow } from "./SharpApiSoccerOddsProvider";
 export const SHARP_EPL_LEAGUE = "england_-_premier_league" as const;
 export const SHARP_UCL_LEAGUE = "uefa_-_champions_league" as const;
 export const UCL_SHARP_MARKET_IDENTITY_RELEASE =
-  "ucl_sharp_market_identity_2026_10_14_r2_bounded_partial_market_recovery" as const;
+  "ucl_sharp_market_identity_2026_10_14_r3_durable_quote_continuity" as const;
 const SHARP_MARKET_TYPE = {
   match_result: "moneyline",
   double_chance: "double_chance",
@@ -34,6 +34,9 @@ type SharpEvent = {
 
 export type EplSharpOddsRecord = NormalizedSoccerOddsRecord & {
   fetched_at_source: "provider" | "oddsphere_capture";
+  /** False only for a durable availability fallback that already exists in
+   * line_history and must not be re-recorded as a newly observed quote. */
+  persistable?: boolean;
 };
 
 export type EplSharpFixtureMarket = {
