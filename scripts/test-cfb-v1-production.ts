@@ -2584,6 +2584,48 @@ const priorT60Stored: CfbForwardStoredEvidence = {
   payloadSha256: "tracking-backfill-fixture",
   payload: marketScopedPayload,
 };
+const previousReleaseRecoveredPayload = structuredClone(recoveredPayload) as CfbForwardEvidencePayload;
+previousReleaseRecoveredPayload.game.providerGameId = "457759";
+previousReleaseRecoveredPayload.schemaRelease = CFB_FORWARD_FINAL_WINNER_PREVIOUS_EVIDENCE_SCHEMA_RELEASE as typeof previousReleaseRecoveredPayload.schemaRelease;
+previousReleaseRecoveredPayload.memberRelease = CFB_FORWARD_FINAL_WINNER_PREVIOUS_MEMBER_RELEASE as typeof previousReleaseRecoveredPayload.memberRelease;
+previousReleaseRecoveredPayload.decisions.decisionRelease = CFB_V1_FINAL_WINNER_PREVIOUS_DECISION_RELEASE as typeof previousReleaseRecoveredPayload.decisions.decisionRelease;
+previousReleaseRecoveredPayload.authoritativeForecast!.release = CFB_MARKET_SHARP_AWARE_FINAL_WINNER_PREVIOUS_PRODUCTION_RELEASE as unknown as NonNullable<typeof previousReleaseRecoveredPayload.authoritativeForecast>["release"];
+previousReleaseRecoveredPayload.decisions.evaluatedBets = previousReleaseRecoveredPayload.decisions.evaluatedBets.map((decision) => ({
+  ...decision,
+  providerGameId: previousReleaseRecoveredPayload.game.providerGameId,
+  decisionRelease: CFB_V1_FINAL_WINNER_PREVIOUS_DECISION_RELEASE as typeof decision.decisionRelease,
+}));
+const previousReleaseRecoveredStored: CfbForwardStoredEvidence = {
+  id: "previous-release-recovered-lock",
+  providerGameId: previousReleaseRecoveredPayload.game.providerGameId,
+  stage: previousReleaseRecoveredPayload.stage,
+  capturedAt: previousReleaseRecoveredPayload.capturedAt,
+  gameStartAt: previousReleaseRecoveredPayload.game.scheduledStart,
+  payloadSha256: hashCfbForwardEvidencePayload(previousReleaseRecoveredPayload),
+  payload: previousReleaseRecoveredPayload,
+};
+const mixedReleaseTrackingCandidates = cfbTrackingCandidatesForRun(
+  [previousReleaseRecoveredStored, priorT60Stored],
+  [],
+  new Date(Date.parse(game.scheduledStart) + 60_000).toISOString(),
+);
+assert.deepEqual(
+  mixedReleaseTrackingCandidates.map((candidate) => ({
+    providerGameId: candidate.payload.game.providerGameId,
+    mode: candidate.mode,
+  })),
+  [
+    { providerGameId: marketScopedPayload.game.providerGameId, mode: "official_t60" },
+    { providerGameId: previousReleaseRecoveredPayload.game.providerGameId, mode: "published_pregame_accuracy_recovery" },
+  ],
+  "a previous-release published lock must remain a recovery candidate and cannot abort a current official T-60 lock",
+);
+assert.doesNotThrow(() => {
+  for (const candidate of mixedReleaseTrackingCandidates) {
+    if (candidate.mode === "official_t60") buildCfbOfficialTrackingRecords({ payload: candidate.payload, gameId: 9001 });
+    else buildCfbPublishedPregameRecoveryRecords({ payload: candidate.payload, gameId: 9001 });
+  }
+}, "mixed current and legacy lock candidates must remain independently buildable");
 const ordinaryRefreshPayload = { ...marketScopedPayload, stage: "unlocked" as const, capturedAt: "2026-08-29T15:20:00.000Z" };
 assert.deepEqual(
   cfbTrackingCandidatesForRun([priorT60Stored], [ordinaryRefreshPayload], "2026-08-29T15:20:00.000Z")

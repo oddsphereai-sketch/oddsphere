@@ -58,7 +58,7 @@ import {
 import { assertMarketScopedFootballDecisions, FOOTBALL_MARKET_SCOPED_T60_TRACKING_RELEASE } from "./footballMarketScopedTracking";
 
 export const CFB_OFFICIAL_TRACKING_RECORD_RELEASE =
-  "cfb_official_tracking_record_2026_10_14_r47_correct_qb_final_winner_coordinator" as const;
+  "cfb_official_tracking_record_2026_10_14_r48_legacy_recovery_candidate_isolation" as const;
 
 export function cfbTrackingMarketsForPayload(payload: CfbForwardEvidencePayload): CfbV1Market[] {
   const markets = new Set<CfbV1Market>(payload.decisions.evaluatedBets.map((decision) => decision.market));
@@ -564,7 +564,7 @@ function formatLine(value: number): string {
   return value > 0 ? `+${value}` : String(value);
 }
 
-function assertCfbTrackingPayload(payload: CfbForwardEvidencePayload): void {
+export function isEligibleCfbOfficialTrackingPayload(payload: CfbForwardEvidencePayload): boolean {
   if (
     payload.schemaRelease !== CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE ||
     payload.memberRelease !== CFB_FORWARD_MEMBER_RELEASE ||
@@ -579,11 +579,11 @@ function assertCfbTrackingPayload(payload: CfbForwardEvidencePayload): void {
     payload.t60LagMinutes < 0 ||
     payload.t60LagMinutes > CFB_T60_MAX_CAPTURE_LAG_MINUTES
   ) {
-    throw new Error("CFB tracking records require an eligible on-time T-60 evidence payload.");
+    return false;
   }
   const capturedAt = Date.parse(payload.capturedAt);
   const gameStartsAt = Date.parse(payload.game.scheduledStart);
-  const coherent = Number.isFinite(capturedAt) && Number.isFinite(gameStartsAt) &&
+  return Number.isFinite(capturedAt) && Number.isFinite(gameStartsAt) &&
     payload.decisions.evaluatedBets.every((decision) =>
       decision.providerGameId === payload.game.providerGameId &&
       decision.stage === "t60_locked" &&
@@ -595,7 +595,12 @@ function assertCfbTrackingPayload(payload: CfbForwardEvidencePayload): void {
       decision.modelRelease === payload.decisions.modelRelease &&
       decision.policyRelease === payload.decisions.policyRelease &&
       decision.decisionRelease === payload.decisions.decisionRelease);
-  if (!coherent) throw new Error("CFB tracking decision tuple is not coherent with its frozen evidence payload.");
+}
+
+function assertCfbTrackingPayload(payload: CfbForwardEvidencePayload): void {
+  if (!isEligibleCfbOfficialTrackingPayload(payload)) {
+    throw new Error("CFB tracking records require an eligible on-time T-60 evidence payload.");
+  }
 }
 
 export function cfbProviderIntegerId(value: string, label: string): number { return providerIntegerId(value, label); }
