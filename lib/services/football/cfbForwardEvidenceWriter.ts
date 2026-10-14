@@ -74,6 +74,7 @@ import {
   cfbProviderIntegerId,
   cfbTrackingMarketsForPayload,
   cfbDisplayedLineRecoveryBook,
+  isEligibleCfbOfficialTrackingPayload,
 } from "./cfbOfficialTrackingRecord";
 import {
   CFB_ESPN_REFERENCE_LINE_RELEASE,
@@ -163,7 +164,7 @@ import {
 import type { PlaybookInjuryTeamRow } from "@/lib/providers/playbook/types";
 
 export const CFB_FORWARD_WRITER_RELEASE =
-  "cfb_forward_evidence_writer_2026_10_14_r117_correct_qb_final_winner_coordinator" as const;
+  "cfb_forward_evidence_writer_2026_10_14_r118_legacy_recovery_candidate_isolation" as const;
 export const CFB_FORWARD_MAX_QB_TEAMS_PER_RUN = 24 as const;
 export const CFB_FORWARD_MAX_SHARP_FALLBACK_GAMES_PER_RUN = 32 as const;
 export const CFB_FORWARD_MAX_ESPN_PROSPECTIVE_GAMES_PER_RUN = 32 as const;
@@ -1791,16 +1792,7 @@ function latestPayloadFirst(first: CfbForwardEvidencePayload, second: CfbForward
 }
 
 function isEligibleOfficialTrackingPayload(payload: CfbForwardEvidencePayload): boolean {
-  if (isCfbPreT60PublishedPayloadRecovery(payload)) return true;
-  return payload.schemaRelease === CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE &&
-    payload.memberRelease === CFB_FORWARD_MEMBER_RELEASE &&
-    payload.decisions.decisionRelease === CFB_V1_DECISION_RELEASE &&
-    payload.authoritativeForecast?.release === CFB_MARKET_SHARP_AWARE_PRODUCTION_RELEASE &&
-    payload.decisions.trackingEnabled &&
-    payload.stage === "t60" &&
-    payload.captureTiming === "on_time" &&
-    (payload.t60LagMinutes ?? Infinity) >= 0 &&
-    (payload.t60LagMinutes ?? Infinity) <= CFB_T60_MAX_CAPTURE_LAG_MINUTES;
+  return isEligibleCfbOfficialTrackingPayload(payload);
 }
 
 function isEligiblePublishedPregameRecoveryPayload(payload: CfbForwardEvidencePayload): boolean {

@@ -303,6 +303,19 @@ Last reviewed: 2026-10-10
 
 ## CFB Daily Edge generalized weekly production release
 
+- October 14 legacy-recovery lock isolation correction: sole writer / official
+  tracking advance to
+  `cfb_forward_evidence_writer_2026_10_14_r118_legacy_recovery_candidate_isolation` /
+  `cfb_official_tracking_record_2026_10_14_r48_legacy_recovery_candidate_isolation`.
+  The writer and tracking builder now share one complete current-release T-60
+  eligibility predicate. A valid immutable prior-release recovery remains
+  readable and trackable through the accuracy-only recovery path; it can no
+  longer be mislabeled as a current-release official lock and abort later valid
+  locks. No stored payload is changed. Forecasts, PMFs, projected scores, sides,
+  probabilities, prices, grades, actionability, stakes, provider calls, cadence,
+  member copy, and layout are unchanged. Evidence and rollback:
+  `docs/model-audits/2026-10-14-cfb-legacy-recovery-lock-isolation.md`.
+
 - October 14 correct-QB final-winner coordinator candidate: the incumbent
   independent joint PMF and professional market reader remain the starting
   forecast. Frozen coordinator
@@ -323,9 +336,10 @@ Last reviewed: 2026-10-10
   `cfb_v1_exact_price_calibration_2026_10_14_r25_correct_qb_final_winner_coordinator` /
   `cfb_v1_composite_grade_policy_2026_10_13_r28_exact_price_actionability` /
   `cfb_v1_daily_edge_decision_2026_10_14_r51_correct_qb_final_winner_coordinator`.
-  Production reader / tuple / evidence / member / writer are r39 / r38 / r46 /
-  r63 / r117 with the same correct-QB final-winner suffix; fixture / outcome /
-  compact snapshot / reader / tracking are r89 / r79 / r49 / r34 / r47. The r50
+  Production reader / tuple / evidence / member remain r39 / r38 / r46 / r63
+  with the correct-QB final-winner suffix; the sole writer is the r118
+  legacy-recovery isolation release above. Fixture / outcome /
+  compact snapshot / reader / tracking are r89 / r79 / r49 / r34 / r48. The r50
   and r49 locked decision layers retain exact stored precedence. Historical,
   parity, current-board, gate, and rollback evidence:
   `docs/model-audits/2026-10-14-cfb-correct-qb-final-winner-coordinator.md`.
