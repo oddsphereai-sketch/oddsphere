@@ -490,7 +490,23 @@ const collapsedPriceCoverage = evaluateUclPublicationCoverage(
 );
 assert.match(collapsedPriceCoverage.errors.join(";"), /current-price coverage collapsed 4->0.*last-known-good/i, "a transient all-price outage cannot replace a priced UCL member snapshot");
 assert.equal(collapsedPriceCoverage.priceCollapse, true);
+assert.equal(collapsedPriceCoverage.unlockedPriceRegressions, 4);
 assert.deepEqual(collapsedPriceCoverage.hardErrors, [], "price collapse alone still permits the T60 writer/verifier path");
+const partialPriceCoverage = evaluateUclPublicationCoverage(
+  { matches: [{ id: 1, status: "scheduled" }] } as never,
+  { games: [{ external_id: 1, lockState: "open", lockedAt: null, soccerProjection: { goalOutlookProbabilities: { home: 0.4, draw: 0.3, away: 0.3, over25: 0.55, under25: 0.45, bttsYes: 0.52, bttsNo: 0.48 } }, markets: { moneyline: pricedMarket, total: heldMarket, first_inning: pricedMarket }, soccerDoubleChanceMarket: pricedMarket }] } as never,
+  { games: [{ external_id: 1, markets: { moneyline: pricedMarket, total: pricedMarket, first_inning: pricedMarket }, soccerDoubleChanceMarket: pricedMarket }] } as never,
+);
+assert.equal(partialPriceCoverage.priceCollapse, false);
+assert.equal(partialPriceCoverage.unlockedPriceRegressions, 1);
+assert.match(partialPriceCoverage.errors.join(";"), /unlocked current-price coverage regressed for 1 market.*last-known-good/i, "one transient unlocked omission cannot replace its prior complete member snapshot");
+assert.deepEqual(partialPriceCoverage.hardErrors, [], "partial quote regression preserves the member LKG without blocking the ordinary writer evidence path");
+const lockedPartialPriceCoverage = evaluateUclPublicationCoverage(
+  { matches: [{ id: 1, status: "in_progress" }] } as never,
+  { games: [{ external_id: 1, lockState: "locked", lockedAt: "2026-10-14T15:47:34.921Z", soccerProjection: { goalOutlookProbabilities: { home: 0.4, draw: 0.3, away: 0.3, over25: 0.55, under25: 0.45, bttsYes: 0.52, bttsNo: 0.48 } }, markets: { moneyline: pricedMarket, total: heldMarket, first_inning: pricedMarket }, soccerDoubleChanceMarket: pricedMarket }] } as never,
+  { games: [{ external_id: 1, markets: { moneyline: pricedMarket, total: pricedMarket, first_inning: pricedMarket }, soccerDoubleChanceMarket: pricedMarket }] } as never,
+);
+assert.equal(lockedPartialPriceCoverage.unlockedPriceRegressions, 0, "provider removal after an immutable lock is handled by lock reconstruction, not the unlocked continuity gate");
 const priorPriceCard = { external_id: 1, awayTeam: "AWY", homeTeam: "HOM", markets: { moneyline: pricedMarket, total: pricedMarket, first_inning: pricedMarket }, soccerDoubleChanceMarket: pricedMarket };
 const freshHeldCard = { ...priorPriceCard, markets: { moneyline: heldMarket, total: heldMarket, first_inning: heldMarket }, soccerDoubleChanceMarket: heldMarket };
 const verifiedLockedCard = { ...priorPriceCard, lockState: "locked", lockedAt: "2026-09-08T16:45:00Z" };

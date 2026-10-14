@@ -11,6 +11,7 @@ export type UclPublicationCoverage = {
   heldMarkets: number;
   nonpositiveEvActionables: number;
   priceCollapse: boolean;
+  unlockedPriceRegressions: number;
   hardErrors: string[];
   errors: string[];
   warnings: string[];
@@ -26,6 +27,7 @@ export function evaluateUclPublicationCoverage(
 ): UclPublicationCoverage {
   const activeIds = new Set(slate.matches.filter((match) => match.status !== "final").map((match) => String(match.id)));
   const games = response.games.filter((game) => activeIds.has(String(game.external_id)));
+  const previousById = new Map(previousResponse?.games.map((game) => [String(game.external_id), game]) ?? []);
   const markets = games.flatMap((game): MarketEdgeDto[] => [
     game.markets.moneyline,
     game.soccerDoubleChanceMarket,
@@ -58,6 +60,20 @@ export function evaluateUclPublicationCoverage(
       || Math.abs(probabilities.bttsYes + probabilities.bttsNo - 1) > 1e-9;
   }).length;
   const priceCollapse = previousSelectedCurrent > 0 && selectedCurrent === 0;
+  const unlockedPriceRegressions = games.reduce((count, game) => {
+    if (game.lockState === "locked" || game.lockedAt) return count;
+    const previous = previousById.get(String(game.external_id));
+    if (!previous) return count;
+    const currentMarkets = [game.markets.moneyline, game.soccerDoubleChanceMarket, game.markets.total, game.markets.first_inning];
+    const previousMarkets = [previous.markets.moneyline, previous.soccerDoubleChanceMarket, previous.markets.total, previous.markets.first_inning];
+    return count + currentMarkets.reduce((inside, market, index) => inside + (
+      previousMarkets[index]?.currentPriceAmerican !== null
+        && previousMarkets[index]?.currentPriceAmerican !== undefined
+        && (market?.currentPriceAmerican === null || market?.currentPriceAmerican === undefined)
+        ? 1
+        : 0
+    ), 0);
+  }, 0);
   const hardErrors = [
     ...(slate.providerHealth?.uclHistory.status === "degraded" ? [`UCL provider history degraded: ${slate.providerHealth.uclHistory.strategy}${slate.providerHealth.uclHistory.error ? ` (${slate.providerHealth.uclHistory.error})` : ""}; preserving last-known-good member snapshot`] : []),
     ...(games.length === activeIds.size ? [] : [`fixture/model coverage ${games.length}/${activeIds.size}`]),
@@ -69,14 +85,16 @@ export function evaluateUclPublicationCoverage(
     ...hardErrors,
     ...(priceCollapse
       ? [`current-price coverage collapsed ${previousSelectedCurrent}->0; preserving last-known-good member snapshot`]
-      : []),
+      : unlockedPriceRegressions > 0
+        ? [`unlocked current-price coverage regressed for ${unlockedPriceRegressions} market(s); preserving last-known-good member snapshot`]
+        : []),
   ];
   const warnings = [
     ...(slate.providerHealth?.uclHistory.contractDeviation ? [`UCL provider contract deviation: ${slate.providerHealth.uclHistory.contractDeviation}`] : []),
     ...(selectedCurrent === selectedExpected ? [] : [`selected current-price coverage ${selectedCurrent}/${selectedExpected}; missing markets held`]),
     ...(outcomeCurrent === outcomeExpected ? [] : [`outcome price-board coverage ${outcomeCurrent}/${outcomeExpected}; missing outcomes held`]),
   ];
-  return { activeFixtures: activeIds.size, responseFixtures: games.length, selectedCurrent, selectedExpected, outcomeCurrent, outcomeExpected, heldMarkets, nonpositiveEvActionables, priceCollapse, hardErrors, errors, warnings };
+  return { activeFixtures: activeIds.size, responseFixtures: games.length, selectedCurrent, selectedExpected, outcomeCurrent, outcomeExpected, heldMarkets, nonpositiveEvActionables, priceCollapse, unlockedPriceRegressions, hardErrors, errors, warnings };
 }
 
 /** On a same-cohort all-price outage, retain every non-due LKG card while
