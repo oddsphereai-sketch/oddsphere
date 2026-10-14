@@ -1,6 +1,6 @@
 import { BallDontLieUclProvider } from "../../lib/providers/real_api/BallDontLieUclProvider";
 import { evaluateUclChronologically } from "../../lib/services/ucl/uclChronologicalEvaluation";
-import { UCL_CALIBRATION_RELEASE, UCL_MODEL_RELEASE } from "../../lib/services/ucl/uclModel";
+import { UCL_BASELINE_MODEL_RELEASE, UCL_CALIBRATION_RELEASE } from "../../lib/services/ucl/uclModel";
 
 async function main() {
   const apiKey = process.env.BALLDONTLIE_API_KEY;
@@ -15,7 +15,7 @@ async function main() {
     mode: "read_only",
     providerContract: "balldontlie_ucl_v1_empirical_singular_season_cohorts_return_validated",
     providerHistory: history.telemetry,
-    releases: { model: UCL_MODEL_RELEASE, calibration: UCL_CALIBRATION_RELEASE },
+    releases: { model: UCL_BASELINE_MODEL_RELEASE, calibration: UCL_CALIBRATION_RELEASE },
     returnedSeasons: Object.fromEntries([...new Set(matches.map((match) => match.season))].sort().map((season) => [season, matches.filter((match) => match.season === season).length])),
     statsRows: stats.length,
     ...evaluation,

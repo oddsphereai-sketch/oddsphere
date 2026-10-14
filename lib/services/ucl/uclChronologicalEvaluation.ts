@@ -1,6 +1,6 @@
 import type { BdlUclMatch, BdlUclTeamMatchStats } from "@/lib/providers/real_api/BallDontLieUclProvider";
 import { buildUclCompetitionContexts, regulationScore } from "./uclCompetitionContext";
-import { fitAndPredictUcl, joinUclMatchStats } from "./uclModel";
+import { fitAndPredictUclBaseline, joinUclMatchStats } from "./uclModel";
 import { deriveUclMatchResultDecision, deriveUclPreviewGrade } from "./uclPreviewGrade";
 import { assertFrozenUclChronologicalManifest, assertFrozenUclHistoricalStats, regulationFinalUclRows, UCL_CHRONOLOGICAL_MANIFEST } from "./uclChronologicalManifest";
 
@@ -38,7 +38,7 @@ function scoreBlock(rows: BdlUclMatch[], all: BdlUclMatch[], stats: BdlUclTeamMa
     const settled = regulationScore(match).score;
     const context = contexts.get(match.id);
     if (!settled || !context) continue;
-    const prediction = fitAndPredictUcl({ training, match, history: all, context });
+    const prediction = fitAndPredictUclBaseline({ training, match, history: all, context });
     const actual = actualResult(settled.home, settled.away);
     const forecast = (["home", "draw", "away"] as const).reduce((best, side) =>
       prediction.probabilities[side] > prediction.probabilities[best] ? side : best, "home");

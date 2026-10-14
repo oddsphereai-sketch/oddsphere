@@ -18,6 +18,11 @@ import { readUclHistoricalFoundation, writeUclHistoricalFoundation } from "./ucl
 import { resolveUclFeatureFlags } from "./uclFeatureFlags";
 import { assertFrozenUclHistoricalInputs } from "./uclChronologicalManifest";
 import { computeSlateDate } from "@/lib/dates/slateDate";
+import {
+  loadUclEloStrengthFoundation,
+  uclEloPair,
+  type UclEloStrengthFoundationPayload,
+} from "./uclEloStrengthFoundation";
 
 export const UCL_CURRENT_SEASON = 2026;
 const UCL_TRAINING_SEASONS = [2024, 2025] as const;
@@ -32,6 +37,7 @@ type Foundation = {
   teamStats: BdlUclTeamMatchStats[];
   statsCoverage: number;
   providerHistory: UclHistoryProviderHealth;
+  eloStrength: UclEloStrengthFoundationPayload;
 };
 
 export type UclHistoryProviderHealth = {
@@ -105,6 +111,12 @@ async function loadFoundation(provider: BallDontLieUclProvider): Promise<Foundat
     const currentStats = completed.length ? await provider.listTeamMatchStats(completed.map((match) => match.id)) : [];
     const trainingMatches = [...prior.trainingMatches, ...joinUclMatchStats(completed, currentStats)];
     const teamStats = [...prior.teamStats, ...currentStats];
+    const teamNames = new Map(teams.map((team) => [team.id, team.name]));
+    const eloStrength = await loadUclEloStrengthFoundation({
+      uclMatches: [...prior.historyMatches, ...completed],
+      teamNames,
+      allowWrite: resolveUclFeatureFlags().foundationWrites,
+    });
     const xgMatches = trainingMatches.filter((match) => match.home_xg !== null && match.away_xg !== null).length;
     return {
       teams,
@@ -114,6 +126,7 @@ async function loadFoundation(provider: BallDontLieUclProvider): Promise<Foundat
       teamStats,
       statsCoverage: trainingMatches.length ? xgMatches / trainingMatches.length : 0,
       providerHistory: prior.providerHistory,
+      eloStrength,
     };
   })().catch((error) => { if (foundationCache?.promise === promise) foundationCache = null; throw error; });
   foundationCache = { expiresAt: Date.now() + CURRENT_FOUNDATION_TTL_MS, promise };
@@ -273,7 +286,13 @@ async function buildUclSlateUncached(requestedMatchweek?: number, selectionNow =
       homeScore: score?.home ?? null,
       awayScore: score?.away ?? null,
       venue: match.venue_name,
-      prediction: fitAndPredictUcl({ training: foundation.trainingMatches, match, history: foundation.historyMatches, context }),
+      prediction: fitAndPredictUcl({
+        training: foundation.trainingMatches,
+        match,
+        history: foundation.historyMatches,
+        context,
+        elo: uclEloPair(foundation.eloStrength, homeTeam.name, awayTeam.name),
+      }),
       currentMoneylineOdds: currentByMatch.get(match.id) ?? [],
       openingOdds: openingByMatch.get(match.id) ?? [],
       modelUncertainty: { homeEffectiveMatches: 0, awayEffectiveMatches: 0 },

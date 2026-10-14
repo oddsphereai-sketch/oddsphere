@@ -2,6 +2,7 @@ import {
   bivariatePoissonScoreDistribution,
   medianTotalFromDistribution,
   mostLikelyTotalFromDistribution,
+  type ScoreDistribution,
 } from "@/lib/services/soccer/dixonColes";
 import { deriveSoccerMarketProbabilities } from "@/lib/services/soccer/soccerMarketProbabilities";
 import type { BdlEplMatch, BdlEplTeamMatchStats } from "@/lib/providers/real_api/BallDontLieEplProvider";
@@ -95,6 +96,7 @@ export type EplShadowPrediction = {
   homeStrengthSource: EplTeamStrength["source"];
   awayStrengthSource: EplTeamStrength["source"];
   confidence: "standard" | "limited";
+  coherentJoint?: ScoreDistribution;
 };
 
 /**

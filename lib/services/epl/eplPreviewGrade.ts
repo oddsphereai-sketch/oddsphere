@@ -93,6 +93,10 @@ export function deriveEplMatchResultDecision(input: {
   prices: Record<EplMatchResultSide, number> | null;
   promotedProxy: boolean;
   forecastSide?: EplMatchResultSide;
+  marketReader?: {
+    consensusLeader: EplMatchResultSide | null;
+    evaluatedLeader: EplMatchResultSide | null;
+  };
 }): { selectedSide: EplMatchResultSide; forecastSide: EplMatchResultSide; valueSide: EplMatchResultSide | null; grade: EplPreviewGrade } {
   const forecastSide = input.forecastSide ?? maxSide(input.model);
   if (!input.market || !input.prices) {

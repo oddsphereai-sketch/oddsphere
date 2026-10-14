@@ -1,7 +1,7 @@
 import type { BdlUclMatch, BdlUclOdds, BdlUclTeamMatchStats } from "@/lib/providers/real_api/BallDontLieUclProvider";
 import { buildUclCompetitionContexts, regulationScore } from "./uclCompetitionContext";
 import { partitionUclChronologicalMatches } from "./uclChronologicalEvaluation";
-import { fitAndPredictUcl, joinUclMatchStats } from "./uclModel";
+import { fitAndPredictUclBaseline, joinUclMatchStats } from "./uclModel";
 import { assertFrozenUclHistoricalStats } from "./uclChronologicalManifest";
 import { canonicalUclOpeningOdds, type CompleteUclOpening } from "./uclOpeningOdds";
 
@@ -43,7 +43,7 @@ function evaluatedRows(matches: BdlUclMatch[], all: BdlUclMatch[], stats: BdlUcl
     const context = contexts.get(match.id);
     const books = openings.get(match.id) ?? [];
     if (!score || !context || !books.length) return [];
-    const prediction = fitAndPredictUcl({ training, match, history: all, context });
+    const prediction = fitAndPredictUclBaseline({ training, match, history: all, context });
     const side = forecastSide(prediction.probabilities);
     const selected = [...books].sort((left, right) => right.prices[side] - left.prices[side]
       || left.vendor.toLowerCase().localeCompare(right.vendor.toLowerCase()) || left.id - right.id)[0]!;

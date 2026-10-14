@@ -572,13 +572,16 @@ function gameDto(match: EplShadowSlateMatch, sharp: EplSharpFixtureMarket, captu
   const dc = coherentRead(sharp.odds, "double_chance", ["home_or_draw", "away_or_draw", "home_or_away"], null, 2);
   const total = totalRead(sharp.odds);
   const btts = coherentRead(sharp.odds, "btts", ["yes", "no"]);
+  const currentMatchResultVectors = eplCurrentBookVectors(sharp, "match_result", capturedAt);
   const currentTotalVectors = eplCurrentBookVectors(sharp, "total", capturedAt);
   const evaluatedTotalCanonicalBook = canonicalEplBook(total?.sportsbook ?? null);
   const coherentOutcome = authorities.deriveCoherentOutcome({
     matchId: match.id,
     independentLambdaHome: match.prediction.lambdaHome,
     independentLambdaAway: match.prediction.lambdaAway,
+    independentJoint: match.prediction.coherentJoint,
     openingOdds: match.openingOdds,
+    matchResultVectors: currentMatchResultVectors,
     totalVectors: currentTotalVectors,
     evaluatedMatchResultCanonicalBook: canonicalEplBook(mr?.sportsbook ?? null),
     evaluatedTotalCanonicalBook,
@@ -625,6 +628,13 @@ function gameDto(match: EplShadowSlateMatch, sharp: EplSharpFixtureMarket, captu
     prices: mr ? { home: mr.prices.home!, draw: mr.prices.draw!, away: mr.prices.away! } : null,
     promotedProxy: match.prediction.homeStrengthSource === "promoted_proxy" || match.prediction.awayStrengthSource === "promoted_proxy",
     forecastSide,
+    marketReader: {
+      consensusLeader: coherentOutcome.audit.matchResultReader?.consensusLeader ?? null,
+      evaluatedLeader: mr ? (["home", "draw", "away"] as const).reduce(
+        (best, side) => mr.probabilities[side]! > mr.probabilities[best]! ? side : best,
+        "home",
+      ) : null,
+    },
   });
   const resultSide = mrDecision.selectedSide;
   const resultPick = resultSide === "home" ? match.homeTeam.abbreviation : resultSide === "away" ? match.awayTeam.abbreviation : "Draw";
