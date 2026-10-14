@@ -13,7 +13,7 @@ import type { SharpApiOddsRow } from "./SharpApiSoccerOddsProvider";
 export const SHARP_EPL_LEAGUE = "england_-_premier_league" as const;
 export const SHARP_UCL_LEAGUE = "uefa_-_champions_league" as const;
 export const UCL_SHARP_MARKET_IDENTITY_RELEASE =
-  "ucl_sharp_market_identity_2026_10_14_r1_full_current_slate" as const;
+  "ucl_sharp_market_identity_2026_10_14_r2_bounded_partial_market_recovery" as const;
 const SHARP_MARKET_TYPE = {
   match_result: "moneyline",
   double_chance: "double_chance",

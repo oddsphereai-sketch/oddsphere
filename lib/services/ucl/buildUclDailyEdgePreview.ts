@@ -45,7 +45,12 @@ export async function buildUclDailyEdgePreview(slate: UclSlate, options: UclPrev
     cacheNamespace: "ucl",
     cacheIdentity: `${slate.boardDate}:${slate.matches.map((match) => `${match.id}@${match.kickoff}`).join(",")}`,
     skipForwardEvidence: true,
-    maxFixtureRecoveryLoads: 0,
+    // Sharp's UCL market endpoint can return a transient partial bucket when
+    // several fixtures fan out at once. Keep UCL fixture assembly sequential,
+    // then retry only fixtures whose four-market board is incomplete. EPL
+    // retains its existing concurrency and recovery defaults.
+    fixtureLoadConcurrency: 1,
+    maxFixtureRecoveryLoads: slate.matches.length,
     competitionLabel: "Champions League",
     authorities: {
       gradeRelease: UCL_CALIBRATION_RELEASE,

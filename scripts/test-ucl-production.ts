@@ -514,6 +514,9 @@ assert.doesNotMatch(uclModelSource, /fitEplShadowModel|predictEplMatch|joinEplMa
 assert.match(uclPreviewSource, /deriveUclCoherentMarketOutcome/);
 assert.match(uclPreviewSource, /deriveUclMatchResultDecision/);
 assert.match(uclPreviewSource, /deriveUclPreviewGrade/);
+assert.match(uclPreviewSource, /fixtureLoadConcurrency:\s*1/, "UCL bounds provider fan-out independently of EPL");
+assert.match(uclPreviewSource, /maxFixtureRecoveryLoads:\s*slate\.matches\.length/, "every incomplete UCL fixture is eligible for one bounded recovery load");
+assert.match(sharedSoccerBuilder, /options\.fixtureLoadConcurrency === undefined[\s\S]*Math\.min\(3, slate\.matches\.length\)/, "shared soccer keeps its existing three-fixture default unless a competition overrides it");
 assert.doesNotMatch(uclTransferredGradeSource, /deriveEplPreviewGrade|deriveEplMatchResultDecision|from ["'].*eplPreviewGrade/, "the transferred UCL grade authority is frozen and cannot drift with EPL runtime edits");
 assert.match(uclTransferredGradeSource, /positive exact forecast-side expected value/, "actionable transfers retain exact-price EV gating");
 assert.match(uclPreviewSource, /awayTeamLogo:\s*uclTeamLogo\(game\.awayTeam\)[\s\S]*awayTeamPrimaryColor:\s*awayAsset\?\.primaryColor/);
