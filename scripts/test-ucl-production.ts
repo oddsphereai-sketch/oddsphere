@@ -271,6 +271,11 @@ assert.throws(() => assertFrozenUclHistoryTelemetry({ ...providerTelemetry, rows
 assert.equal(uclTeamsMatch("Internazionale Milano", "Inter Milan"), true);
 assert.equal(uclTeamsMatch("Paris Saint-Germain", "PSG"), true);
 assert.equal(uclTeamsMatch("Slavia Praha", "Slavia Prague"), true);
+assert.equal(uclTeamsMatch("Manchester City", "Man City"), true);
+assert.equal(uclTeamsMatch("Real Betis", "Betis"), true);
+assert.equal(uclTeamsMatch("FK Shakhtar Donetsk", "Shakhtar"), true);
+assert.equal(uclTeamsMatch("Slovan Bratislava", "S Bratislava"), true);
+assert.equal(uclTeamsMatch("VfB Stuttgart", "Stuttgart"), true);
 assert.equal(uclTeamsMatch("Inter", "Inter Club d’Escaldes"), false, "UCL identity never accepts arbitrary substring clubs");
 assert.equal(uclTeamsMatch("", "Inter"), false, "blank futures shells cannot match a fixture");
 assert.equal(uclTeamsMatch("Inter", "AC Milan"), false);
