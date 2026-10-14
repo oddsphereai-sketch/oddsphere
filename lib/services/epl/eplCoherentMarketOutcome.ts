@@ -25,11 +25,12 @@ type GateReason =
   | "total_target_not_bracketed"
   | "tilted_pmf_invalid"
   | "eligible_opening_match_result_alternatives_below_2"
-  | "opening_match_result_crossing_not_qualified";
+  | "opening_match_result_crossing_not_qualified"
+  | "eligible_late_match_result_alternatives_below_2";
 
 export type EplCoherentMarketOutcome = {
   release: string;
-  source: "independent_club_pmf" | "target_excluded_total_tilt" | "target_excluded_opening_match_result_log_pool";
+  source: "independent_club_pmf" | "target_excluded_total_tilt" | "target_excluded_opening_match_result_log_pool" | "target_excluded_late_match_result_log_pool";
   joint: ScoreDistribution;
   markets: ReturnType<typeof deriveSoccerMarketProbabilities>;
   expectedGoals: { home: number; away: number };
@@ -53,13 +54,21 @@ export type EplCoherentMarketOutcome = {
       familyBasis: "named_originator_identity" | "provider_non_originator_conservative_family";
     }>;
     correlationState: "independent_exact_quote_signatures" | "correlated_or_indeterminate";
-    movementRole: "captured_for_audit_not_forecast_input";
+    movementRole: "captured_for_audit_not_forecast_input" | "late_consensus_forecast_input";
     evaluatedQuoteRole: "economics_and_grade_only";
     inactiveVectors: Array<{ identity: string; reason: string }>;
     targetOverProbability: number | null;
     totalProbabilityResidual: number;
     maximumMatchResultResidual: number;
     gateReasons: GateReason[];
+    matchResultReader?: {
+      consensus: Record<MatchResultSide, number> | null;
+      consensusLeader: MatchResultSide | null;
+      eligibleBooks: string[];
+      agreement: number;
+      dispersion: number;
+      authority: number;
+    };
   };
 };
 
@@ -215,7 +224,9 @@ export function deriveEplCoherentMarketOutcome(input: {
   matchId?: number;
   independentLambdaHome: number;
   independentLambdaAway: number;
+  independentJoint?: ScoreDistribution;
   openingOdds?: BdlEplOdds[];
+  matchResultVectors?: EplForwardBookVector[];
   totalVectors: EplForwardBookVector[];
   evaluatedMatchResultCanonicalBook: string | null;
   evaluatedTotalCanonicalBook: string | null;

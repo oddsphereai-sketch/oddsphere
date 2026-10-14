@@ -8,8 +8,11 @@ import {
 import type { UclCompetitionContext } from "./uclCompetitionContext";
 import { regulationScore } from "./uclCompetitionContext";
 import { UCL_PREVIEW_GRADE_RELEASE } from "./uclPreviewGrade";
+import { deriveUclEloConsensusJoint, uclJointExpectedGoals } from "./uclEloConsensus";
+import type { UclEloPair } from "./uclEloStrengthFoundation";
 
-export const UCL_MODEL_RELEASE = "ucl_goals_coherent_2026_10_06_r7_target_excluded_opening_market_score" as const;
+export const UCL_MODEL_RELEASE = "ucl_goals_coherent_2026_10_14_r8u_elo_late_consensus" as const;
+export const UCL_BASELINE_MODEL_RELEASE = "ucl_goals_coherent_2026_10_06_r7_target_excluded_opening_market_score" as const;
 export const UCL_CALIBRATION_RELEASE = UCL_PREVIEW_GRADE_RELEASE;
 export { UCL_COHERENT_MARKET_OUTCOME_RELEASE } from "./uclCoherentMarketOutcome";
 export { UCL_COHERENT_MARKET_OUTCOME_RELEASE as UCL_COHERENT_OUTCOME_RELEASE } from "./uclCoherentMarketOutcome";
@@ -56,7 +59,7 @@ export type UclPrediction = EplShadowPrediction & {
     homeMultiplier: number;
     awayMultiplier: number;
     neutralVenue: boolean;
-    strengthPrior: "shared_ucl_cross_league_scale";
+    strengthPrior: "local_public_elo_consensus" | "shared_ucl_cross_league_scale";
   };
 };
 
@@ -219,9 +222,10 @@ function fatigueMultiplier(restDays: number | null, matchesLast14: number): numb
   return shortRest * congestion;
 }
 
-function summarize(lambdaHome: number, lambdaAway: number): Omit<EplShadowPrediction,
+function summarize(lambdaHome: number, lambdaAway: number, coherentJoint?: ReturnType<typeof bivariatePoissonScoreDistribution>): Omit<EplShadowPrediction,
   "release" | "calibrationRelease" | "homeStrengthSource" | "awayStrengthSource" | "confidence"> {
-  const joint = bivariatePoissonScoreDistribution(lambdaHome, lambdaAway, UCL_MODEL_CONFIG.dixonColesTau);
+  const joint = coherentJoint ?? bivariatePoissonScoreDistribution(lambdaHome, lambdaAway, UCL_MODEL_CONFIG.dixonColesTau);
+  const expected = uclJointExpectedGoals(joint);
   const markets = deriveSoccerMarketProbabilities({ joint, totalLine: 2.5 });
   const over25 = markets.total.over;
   const bttsYes = markets.btts.yes;
@@ -243,9 +247,9 @@ function summarize(lambdaHome: number, lambdaAway: number): Omit<EplShadowPredic
     }
   }
   return {
-    lambdaHome,
-    lambdaAway,
-    expectedTotal: lambdaHome + lambdaAway,
+    lambdaHome: expected.home,
+    lambdaAway: expected.away,
+    expectedTotal: expected.home + expected.away,
     likelyScore,
     representativeScore,
     medianTotal: medianTotalFromDistribution(joint),
@@ -260,15 +264,21 @@ function summarize(lambdaHome: number, lambdaAway: number): Omit<EplShadowPredic
       bttsNo: 1 - bttsYes,
     },
     rawDerivedProbabilities: { over25: markets.total.over, bttsYes: markets.btts.yes },
+    coherentJoint,
   };
 }
 
-export function fitAndPredictUcl(input: {
+type UclPredictionInput = {
   training: EplTrainingMatch[];
   match: BdlUclMatch;
   history: BdlUclMatch[];
   context: UclCompetitionContext;
-}): UclPrediction {
+};
+
+function fitAndPredictUclInternal(
+  input: UclPredictionInput & { elo?: UclEloPair },
+  release: typeof UCL_MODEL_RELEASE | typeof UCL_BASELINE_MODEL_RELEASE,
+) {
   const fit = fitUclModel(input.training, input.match.date);
   const baseline = predictUclBaseline(fit, input.match.home_team_id, input.match.away_team_id);
   const rest = buildUclTravelRestContext(input.match, input.history);
@@ -276,10 +286,14 @@ export function fitAndPredictUcl(input: {
   const homeMultiplier = fatigueMultiplier(rest.homeRestDays, rest.homeMatchesLast14Days) * neutralMultiplier;
   const awayMultiplier = fatigueMultiplier(rest.awayRestDays, rest.awayMatchesLast14Days)
     * (rest.awayTravelKm !== null && rest.awayTravelKm >= 2_000 ? 0.96 : 1);
+  const lambdaHome = Math.max(0.2, baseline.lambdaHome * homeMultiplier);
+  const lambdaAway = Math.max(0.2, baseline.lambdaAway * awayMultiplier);
+  const baseJoint = bivariatePoissonScoreDistribution(lambdaHome, lambdaAway, UCL_MODEL_CONFIG.dixonColesTau);
+  const coherentJoint = input.elo ? deriveUclEloConsensusJoint(baseJoint, input.elo) : undefined;
   return {
-    release: UCL_MODEL_RELEASE,
+    release,
     calibrationRelease: UCL_CALIBRATION_RELEASE,
-    ...summarize(Math.max(0.2, baseline.lambdaHome * homeMultiplier), Math.max(0.2, baseline.lambdaAway * awayMultiplier)),
+    ...summarize(lambdaHome, lambdaAway, coherentJoint),
     homeStrengthSource: baseline.homeStrengthSource,
     awayStrengthSource: baseline.awayStrengthSource,
     confidence: baseline.confidence,
@@ -288,7 +302,24 @@ export function fitAndPredictUcl(input: {
       homeMultiplier,
       awayMultiplier,
       neutralVenue: input.context.neutralVenue === true,
-      strengthPrior: "shared_ucl_cross_league_scale",
+      strengthPrior: input.elo ? "local_public_elo_consensus" as const : "shared_ucl_cross_league_scale" as const,
     },
   };
+}
+
+/** Production callers pass the authenticated Elo pair and receive r8u. The
+ * no-Elo overload exists only for release-pure legacy audit compatibility and
+ * returns the r7 baseline instead of mis-stamping old logic as the active model. */
+export function fitAndPredictUcl(input: UclPredictionInput & { elo: UclEloPair }): UclPrediction;
+export function fitAndPredictUcl(input: UclPredictionInput): ReturnType<typeof fitAndPredictUclInternal>;
+export function fitAndPredictUcl(input: UclPredictionInput & { elo?: UclEloPair }) {
+  return input.elo
+    ? fitAndPredictUclInternal(input, UCL_MODEL_RELEASE)
+    : fitAndPredictUclInternal(input, UCL_BASELINE_MODEL_RELEASE);
+}
+
+/** Historical r7 comparator only. Production must use fitAndPredictUcl with
+ * an authenticated Elo foundation and cannot silently fall back to this path. */
+export function fitAndPredictUclBaseline(input: UclPredictionInput) {
+  return fitAndPredictUclInternal(input, UCL_BASELINE_MODEL_RELEASE);
 }

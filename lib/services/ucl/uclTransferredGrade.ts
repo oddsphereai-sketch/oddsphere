@@ -1,7 +1,7 @@
 import type { Grade } from "@/lib/types/domain/Grade";
 
 export const UCL_PREVIEW_GRADE_RELEASE =
-  "ucl_grade_policy_2026_10_14_r9_bounded_partial_market_recovery" as const;
+  "ucl_grade_policy_2026_10_14_r10_agreement_probability_band" as const;
 
 export type UclPreviewMarket = "match_result" | "double_chance" | "total" | "btts";
 export type UclPreviewGrade = {
@@ -91,10 +91,27 @@ export function deriveUclMatchResultDecision(input: {
   market: Record<MatchResultSide, number> | null;
   prices: Record<MatchResultSide, number> | null;
   promotedProxy: boolean;
+  forecastSide?: MatchResultSide;
+  marketReader?: {
+    consensusLeader: MatchResultSide | null;
+    evaluatedLeader: MatchResultSide | null;
+  };
 }) {
-  const forecastSide = maximum(input.model);
+  const forecastSide = input.forecastSide ?? maximum(input.model);
+  const base = { release: UCL_PREVIEW_GRADE_RELEASE } as const;
   if (!input.market || !input.prices) {
-    return { selectedSide: forecastSide, forecastSide, valueSide: null, grade: deriveUclPreviewGrade({ market: "match_result", edgePp: null, priceAmerican: null, coherentMarket: false, promotedProxy: input.promotedProxy }) };
+    return {
+      selectedSide: forecastSide,
+      forecastSide,
+      valueSide: null,
+      grade: deriveUclPreviewGrade({
+        market: "match_result",
+        edgePp: null,
+        priceAmerican: null,
+        coherentMarket: false,
+        promotedProxy: input.promotedProxy,
+      }),
+    };
   }
 
   const edges = {
@@ -103,41 +120,63 @@ export function deriveUclMatchResultDecision(input: {
     away: (input.model.away - input.market.away) * 100,
   };
   const valueSide = maximum(edges);
-  const marketFavorite = maximum(input.market);
-  const valueEdge = edges[valueSide];
-  const forecastEdge = edges[forecastSide];
-  const valuePrice = input.prices[valueSide];
-  const forecastPrice = input.prices[forecastSide];
-  const forecastExpectedValue = exactPriceExpectedValue(input.model[forecastSide], forecastPrice);
-  const maxAbsoluteGap = Math.max(...Object.values(edges).map(Math.abs));
-  const base = { release: UCL_PREVIEW_GRADE_RELEASE } as const;
+  const probability = input.model[forecastSide];
+  const price = input.prices[forecastSide];
+  const lateAgrees = input.marketReader?.consensusLeader === forecastSide;
+  const evaluatedAgrees = input.marketReader?.evaluatedLeader === forecastSide;
+  const qualifies = probability >= 0.60
+    && probability < 0.70
+    && lateAgrees
+    && evaluatedAgrees
+    && price > -600;
 
-  if (maxAbsoluteGap > 20) {
-    return { selectedSide: forecastSide, forecastSide, valueSide, grade: { ...base, verdict: { key: "no_play" as const, label: "No Play" }, grade: null, recommendationScore: 18, candidateTier: "data_hold" as const, reasons: ["No Play: the model and market differ by more than 20 percentage points, so the forecast is held for calibration review."] } };
+  if (qualifies) {
+    return {
+      selectedSide: forecastSide,
+      forecastSide,
+      valueSide,
+      grade: {
+        ...base,
+        verdict: { key: "lean" as const, label: "Lean" },
+        grade: "model_only" as const,
+        recommendationScore: Math.round(60 + (probability - 0.60) * 100),
+        candidateTier: "lean" as const,
+        reasons: ["The fixed UCL forecast is in the validated winner-confidence band and both target-excluded consensus and the evaluated book agree."],
+      },
+    };
   }
-  if (!input.promotedProxy && valueSide === forecastSide && forecastEdge >= 5 && forecastPrice > -300 && forecastExpectedValue > 0) {
-    return { selectedSide: forecastSide, forecastSide, valueSide, grade: { ...base, verdict: { key: "best_angle" as const, label: "Best Angle" }, grade: "best_signal" as const, recommendationScore: 82, candidateTier: "best_angle" as const, reasons: ["The most likely result clears the transferred 5-point de-vigged value floor and has positive exact forecast-side expected value."] } };
+
+  if (probability >= 0.50 && lateAgrees && evaluatedAgrees && price > -600) {
+    return {
+      selectedSide: forecastSide,
+      forecastSide,
+      valueSide,
+      grade: {
+        ...base,
+        verdict: { key: "watchlist" as const, label: "Watchlist" },
+        grade: "market_watch" as const,
+        recommendationScore: 42,
+        candidateTier: "watchlist" as const,
+        reasons: ["The forecast and both market directions agree, but the result does not clear the validated 60% to 70% Lean band."],
+      },
+    };
   }
-  if (!input.promotedProxy && input.model[forecastSide] >= 0.5 && marketFavorite === forecastSide && forecastPrice > -300 && forecastExpectedValue > 0) {
-    return { selectedSide: forecastSide, forecastSide, valueSide, grade: { ...base, verdict: { key: "lean" as const, label: "Lean" }, grade: "model_only" as const, recommendationScore: 62, candidateTier: "lean" as const, reasons: ["The model assigns at least 50% to the same regulation winner favored by the market, and the exact forecast-side price has positive expected value."] } };
-  }
-  if ((input.model[forecastSide] >= 0.7 || (!input.promotedProxy && input.model[forecastSide] >= 0.65)) && marketFavorite === forecastSide && forecastPrice <= -300 && forecastExpectedValue > 0) {
-    const reason = input.promotedProxy ? "High-confidence winner with positive exact-price expected value; one club uses a sparse cross-league prior." : "High-confidence winner at a short price with positive exact-price expected value.";
-    return { selectedSide: forecastSide, forecastSide, valueSide, grade: { ...base, verdict: { key: "lean" as const, label: "Lean" }, grade: "model_only" as const, recommendationScore: input.promotedProxy ? 54 : 58, candidateTier: "lean" as const, reasons: [reason] } };
-  }
-  if ((!input.promotedProxy && valueSide === forecastSide && forecastEdge >= 5 && forecastPrice > -300)
-    || (!input.promotedProxy && input.model[forecastSide] >= 0.5 && marketFavorite === forecastSide && forecastPrice > -300)
-    || ((input.model[forecastSide] >= 0.7 || (!input.promotedProxy && input.model[forecastSide] >= 0.65)) && marketFavorite === forecastSide && forecastPrice <= -300)) {
-    return { selectedSide: forecastSide, forecastSide, valueSide, grade: { ...base, verdict: { key: "watchlist" as const, label: "Watchlist" }, grade: "market_watch" as const, recommendationScore: 42, candidateTier: "watchlist" as const, reasons: ["The forecast clears a transferred confidence or gap threshold, but its exact price does not have positive expected value."] } };
-  }
-  if (input.model[forecastSide] >= 0.55 && marketFavorite === forecastSide && forecastPrice <= -300) {
-    return { selectedSide: forecastSide, forecastSide, valueSide, grade: { ...base, verdict: { key: "watchlist" as const, label: "Watchlist" }, grade: "market_watch" as const, recommendationScore: 42, candidateTier: "watchlist" as const, reasons: ["The model and market agree on the likely regulation winner, but the expensive quote and sub-65% model probability keep it at Watchlist."] } };
-  }
-  if (forecastPrice <= -300) {
-    return { selectedSide: forecastSide, forecastSide, valueSide, grade: { ...base, verdict: { key: "no_play" as const, label: "No Play" }, grade: null, recommendationScore: 20, candidateTier: "market_aligned" as const, reasons: ["No Play at the current price: the favorite does not clear the high-confidence threshold required to surface an expensive winner forecast."] } };
-  }
-  if (forecastEdge >= 2 && forecastPrice > -300) {
-    return { selectedSide: forecastSide, forecastSide, valueSide, grade: { ...base, verdict: { key: "watchlist" as const, label: "Watchlist" }, grade: "market_watch" as const, recommendationScore: 42, candidateTier: "watchlist" as const, reasons: ["The most likely result clears the transferred monitoring floor but not the Best Angle threshold."] } };
-  }
-  return { selectedSide: forecastSide, forecastSide, valueSide, grade: { ...base, verdict: { key: "no_play" as const, label: "No Play" }, grade: null, recommendationScore: 20, candidateTier: "market_aligned" as const, reasons: [valueSide !== forecastSide && valueEdge >= 2 && valuePrice > -300 ? "No Play: another outcome has the stronger price value, but it does not replace the model's most likely result." : "No Play: the most likely result does not clear a transferred promotion path."] } };
+
+  return {
+    selectedSide: forecastSide,
+    forecastSide,
+    valueSide,
+    grade: {
+      ...base,
+      verdict: { key: "no_play" as const, label: "No Play" },
+      grade: null,
+      recommendationScore: 20,
+      candidateTier: "market_aligned" as const,
+      reasons: [
+        price <= -600
+          ? "No Play: the current Match Result quote is outside the validated UCL Lean price range."
+          : "No Play: this result does not satisfy the validated UCL forecast-and-market agreement lane.",
+      ],
+    },
+  };
 }

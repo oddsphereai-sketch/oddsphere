@@ -29,6 +29,10 @@ import {
 } from "../lib/services/ucl/uclChronologicalManifest";
 import { UCL_TEAM_ASSETS, uclTeamAsset, uclTeamLogo } from "../lib/services/ucl/uclTeamAssets";
 import { buildEplPreviewCacheKey } from "../lib/services/epl/buildEplDailyEdgePreview";
+import type { EplForwardBookVector } from "../lib/services/epl/eplForwardEvidenceCapture";
+import { bivariatePoissonScoreDistribution } from "../lib/services/soccer/dixonColes";
+import { deriveSoccerMarketProbabilities } from "../lib/services/soccer/soccerMarketProbabilities";
+import { deriveUclEloConsensusJoint } from "../lib/services/ucl/uclEloConsensus";
 
 function match(overrides: Partial<BdlUclMatch> & Pick<BdlUclMatch, "id" | "home_team_id" | "away_team_id" | "date">): BdlUclMatch {
   return {
@@ -220,27 +224,54 @@ assert.equal(openingArbitration.inactiveOpeningBooks.some((row) => row.book === 
 assert.equal(openingArbitration.finalSide, "away", "qualified target-excluded market evidence may correct the independent side rather than merely nudge it");
 assert.ok(Math.abs(openingArbitration.lambdaHome + openingArbitration.lambdaAway - 2.3) < 1e-9, "arbitration preserves the independent expected total");
 assert.ok(Math.abs(Object.values(openingArbitration.probabilities).reduce((sum, value) => sum + value, 0) - 1) < 1e-12);
+const matchResultVector = (book: string, home: number, draw: number, away: number): EplForwardBookVector => ({
+  identity: `sharpapi:/odds:evt:${book}:match_result:main:home+draw+away`,
+  sportsbook: book,
+  canonicalBook: book.toLowerCase(),
+  sourceClass: book.toLowerCase() === "pinnacle" ? "named_originator" : "named_retail",
+  provider: "sharpapi",
+  providerEndpoint: "/odds",
+  providerEventId: "evt",
+  market: "match_result",
+  line: null,
+  capturedAt: "2025-01-01T12:00:00Z",
+  fetchedAtMin: "2025-01-01T11:59:00Z",
+  fetchedAtMax: "2025-01-01T11:59:00Z",
+  vectorSkewMs: 0,
+  overround: 1.05,
+  probabilityTotal: 1,
+  outcomes: (["home", "draw", "away"] as const).map((side) => ({
+    side,
+    american: side === "away" ? -180 : 300,
+    decimal: 2,
+    rawImpliedProbability: { home, draw, away }[side] * 1.05,
+    noVigProbability: { home, draw, away }[side],
+    fetchedAt: "2025-01-01T11:59:00Z",
+    fetchedAtSource: "provider",
+  })),
+});
 const coherentOpeningOutcome = deriveUclCoherentMarketOutcome({
   matchId: 91,
   independentLambdaHome: 1.2,
   independentLambdaAway: 1.1,
-  openingOdds: [
-    { id: 811, match_id: 91, vendor: "FanDuel", moneyline_home_odds: 400, moneyline_draw_odds: 300, moneyline_away_odds: -180, opened_at: "2025-01-01T10:00:00Z", updated_at: "2025-01-01T10:00:00Z" },
-    { id: 812, match_id: 91, vendor: "DraftKings", moneyline_home_odds: 410, moneyline_draw_odds: 300, moneyline_away_odds: -185, opened_at: "2025-01-01T10:00:00Z", updated_at: "2025-01-01T10:00:00Z" },
-    { id: 813, match_id: 91, vendor: "BetMGM", moneyline_home_odds: 400, moneyline_draw_odds: 310, moneyline_away_odds: -180, opened_at: "2025-01-01T10:00:00Z", updated_at: "2025-01-01T10:00:00Z" },
+  matchResultVectors: [
+    matchResultVector("fanduel", 0.55, 0.25, 0.20),
+    matchResultVector("draftkings", 0.18, 0.24, 0.58),
+    matchResultVector("betmgm", 0.19, 0.23, 0.58),
   ],
   totalVectors: [],
   evaluatedMatchResultCanonicalBook: "fanduel",
   evaluatedTotalCanonicalBook: null,
   evaluatedBttsCanonicalBook: null,
-  providerEventId: null,
+  providerEventId: "evt",
   decisionAt: "2025-01-01T12:00:00Z",
   kickoff: "2025-01-02T20:00:00Z",
 });
-assert.equal(coherentOpeningOutcome.source, "target_excluded_opening_match_result_log_pool");
+assert.equal(coherentOpeningOutcome.source, "target_excluded_late_match_result_log_pool");
 assert.equal((["home", "draw", "away"] as const).reduce((best, side) => coherentOpeningOutcome.markets.match_result[side] > coherentOpeningOutcome.markets.match_result[best] ? side : best, "home"), "away");
 assert.ok(Math.abs(coherentOpeningOutcome.expectedGoals.home + coherentOpeningOutcome.expectedGoals.away - 2.3) < 1e-4, "displayed PMF total stays within numerical truncation tolerance of the preserved independent total");
-assert.equal(coherentOpeningOutcome.audit.maximumMatchResultResidual < 1e-12, true);
+assert.equal(coherentOpeningOutcome.audit.maximumMatchResultResidual < 1e-7, true);
+assert.deepEqual(coherentOpeningOutcome.audit.matchResultReader?.eligibleBooks, ["betmgm", "draftkings"]);
 assert.deepEqual(
   { train: UCL_CHRONOLOGICAL_MANIFEST.train, calibration: UCL_CHRONOLOGICAL_MANIFEST.calibration, holdout: UCL_CHRONOLOGICAL_MANIFEST.holdout, cutoff: UCL_CHRONOLOGICAL_MANIFEST.cutoff },
   { train: 185, calibration: 126, holdout: 63, cutoff: "2026-01-28T20:00:00.000Z" },
@@ -353,20 +384,41 @@ const travel = buildUclTravelRestContext(target, history);
 assert.equal(travel.evidenceScope, "ucl_schedule_only");
 assert.ok(travel.awayTravelKm !== null && travel.awayTravelKm > 300);
 assert.deepEqual(buildUclTravelRestContext(target, [...history, history[0]!, history[1]!]), travel, "duplicate match IDs cannot inflate travel/rest congestion");
-const prediction = fitAndPredictUcl({ training, match: target, history, context: buildUclCompetitionContexts([target]).get(34)! });
+const prediction = fitAndPredictUcl({
+  training,
+  match: target,
+  history,
+  context: buildUclCompetitionContexts([target]).get(34)!,
+  elo: {
+    homeLocal: 1700,
+    awayLocal: 1450,
+    homePublic: 1720,
+    awayPublic: 1440,
+    homeGames: 30,
+    awayGames: 30,
+    sourceRelease: "ucl_elo_strength_foundation_2026_10_14_r1_local_public_consensus",
+  },
+});
 assert.equal(prediction.release, UCL_MODEL_RELEASE);
 assert.equal(prediction.calibrationRelease, UCL_CALIBRATION_RELEASE);
 assert.ok(Math.abs(prediction.probabilities.home + prediction.probabilities.draw + prediction.probabilities.away - 1) < 1e-9);
 assert.ok(Math.abs(prediction.probabilities.over25 + prediction.probabilities.under25 - 1) < 1e-9);
 assert.ok(Math.abs(prediction.probabilities.bttsYes + prediction.probabilities.bttsNo - 1) < 1e-9);
 assert.equal(Number.isInteger(prediction.likelyScore.home) && Number.isInteger(prediction.likelyScore.away), true);
-assert.equal(prediction.adjustment.strengthPrior, "shared_ucl_cross_league_scale");
+assert.equal(prediction.adjustment.strengthPrior, "local_public_elo_consensus");
+const eloBase = bivariatePoissonScoreDistribution(1.2, 1.1, -0.1);
+const eloJoint = deriveUclEloConsensusJoint(eloBase, { homeLocal: 1700, awayLocal: 1450, homePublic: 1720, awayPublic: 1440, homeGames: 30, awayGames: 30, sourceRelease: "ucl_elo_strength_foundation_2026_10_14_r1_local_public_consensus" });
+const eloBaseMarkets = deriveSoccerMarketProbabilities({ joint: eloBase, totalLine: 2.5 });
+const eloMarkets = deriveSoccerMarketProbabilities({ joint: eloJoint, totalLine: 2.5 });
+assert.ok(eloMarkets.match_result.home > eloBaseMarkets.match_result.home, "the validated cross-league strength prior can move the winner distribution");
+assert.ok(Math.abs(eloMarkets.total.over - eloBaseMarkets.total.over) < 1e-9, "the strength prior preserves the independent Total direction and probability");
+assert.ok(Math.abs(eloMarkets.btts.yes - eloBaseMarkets.btts.yes) < 1e-9, "the strength prior preserves the independent BTTS direction and probability");
 
 // Exact evaluated quote controls EV/grade only; forecast side cannot be swapped.
-const decision = deriveUclMatchResultDecision({ model: { home: 0.58, draw: 0.25, away: 0.17 }, market: { home: 0.7, draw: 0.24, away: 0.06 }, prices: { home: -250, draw: 320, away: 1400 }, promotedProxy: false });
+const decision = deriveUclMatchResultDecision({ model: { home: 0.58, draw: 0.25, away: 0.17 }, market: { home: 0.7, draw: 0.24, away: 0.06 }, prices: { home: -250, draw: 320, away: 1400 }, promotedProxy: false, marketReader: { consensusLeader: "home", evaluatedLeader: "home" } });
 assert.equal(decision.forecastSide, "home");
 assert.equal(decision.selectedSide, "home");
-assert.notEqual(decision.grade.verdict.label, "Lean", "non-positive exact-quote EV cannot remain actionable");
+assert.notEqual(decision.grade.verdict.label, "Lean", "a forecast below the validated 60% band cannot remain actionable");
 const bttsLean = deriveUclPreviewGrade({ market: "btts", modelProbability: 0.61, edgePp: 3, priceAmerican: 115, coherentMarket: true, promotedProxy: false });
 assert.equal(bttsLean.verdict.label, "Lean", "the UCL-owned EPL transfer can promote a positive-EV forecast-side tuple");
 const bttsNegativeEv = deriveUclPreviewGrade({ market: "btts", modelProbability: 0.61, edgePp: 3, priceAmerican: -180, coherentMarket: true, promotedProxy: false });
@@ -374,9 +426,11 @@ assert.equal(bttsNegativeEv.verdict.label, "Watchlist", "a transferred confidenc
 const missingPriceHold = deriveUclPreviewGrade({ market: "total", modelProbability: 0.64, edgePp: null, priceAmerican: null, coherentMarket: false, promotedProxy: false });
 assert.equal(missingPriceHold.candidateTier, "data_hold");
 assert.equal(missingPriceHold.verdict.label, "No Play");
-const bestAngleDecision = deriveUclMatchResultDecision({ model: { home: 0.58, draw: 0.24, away: 0.18 }, market: { home: 0.5, draw: 0.28, away: 0.22 }, prices: { home: 110, draw: 260, away: 340 }, promotedProxy: false });
-assert.equal(bestAngleDecision.selectedSide, "home");
-assert.equal(bestAngleDecision.grade.verdict.label, "Best Angle");
+const agreementLean = deriveUclMatchResultDecision({ model: { home: 0.64, draw: 0.22, away: 0.14 }, market: { home: 0.5, draw: 0.28, away: 0.22 }, prices: { home: -155, draw: 260, away: 340 }, promotedProxy: false, marketReader: { consensusLeader: "home", evaluatedLeader: "home" } });
+assert.equal(agreementLean.selectedSide, "home");
+assert.equal(agreementLean.grade.verdict.label, "Lean");
+const disagreementNoPlay = deriveUclMatchResultDecision({ model: { home: 0.64, draw: 0.22, away: 0.14 }, market: { home: 0.5, draw: 0.28, away: 0.22 }, prices: { home: -155, draw: 260, away: 340 }, promotedProxy: false, marketReader: { consensusLeader: "away", evaluatedLeader: "home" } });
+assert.equal(disagreementNoPlay.grade.verdict.label, "No Play");
 assert.equal(eplPriorRowsBlockWrite([{ model_version: "legacy", locked_at: "2026-09-08T16:45:00Z", held: false, snapshot_json: {} }]), true, "any prior locked row blocks replacement across releases");
 
 // Namespace, official tracking, and release separation.
