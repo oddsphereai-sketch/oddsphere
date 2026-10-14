@@ -303,6 +303,33 @@ Last reviewed: 2026-10-10
 
 ## CFB Daily Edge generalized weekly production release
 
+- October 14 correct-QB final-winner coordinator candidate: the incumbent
+  independent joint PMF and professional market reader remain the starting
+  forecast. Frozen coordinator
+  `cfb_final_winner_coordinator_2026_10_14_r2_correct_qb_target_excluded_smooth_net_accuracy`
+  may alter a future unlocked winner only when its bounded combined probability
+  crosses 50%, after exact evaluated-book-family exclusion. It uses corrected QB
+  EPA volume, opponent-adjusted and recent-three matchup features, personnel,
+  rest, and provenance-separated market evidence; missing fields remain modeled
+  missingness. One rebuilt PMF keeps the final score, winner, Moneyline, Spread,
+  probabilities, and grades coherent. Missing profiles, runtime failure, or a
+  book-selection cycle fall back unchanged; missing prices hold only the wager.
+- Runtime / model / distribution / probability / reachable score / calibration /
+  grade / decision are `cfb_v1_joint_score_runtime_2026_10_14_r25_correct_qb_final_winner_coordinator` /
+  `cfb_v1_professional_score_model_2026_10_14_r24_correct_qb_final_winner_coordinator` /
+  `cfb_v1_professional_joint_distribution_2026_10_14_r22_correct_qb_final_winner_coordinator` /
+  `cfb_v1_professional_joint_probability_2026_10_14_r26_correct_qb_final_winner_coordinator` /
+  `cfb_v1_professional_reachable_score_2026_10_14_r22_correct_qb_final_winner_coordinator` /
+  `cfb_v1_exact_price_calibration_2026_10_14_r25_correct_qb_final_winner_coordinator` /
+  `cfb_v1_composite_grade_policy_2026_10_13_r28_exact_price_actionability` /
+  `cfb_v1_daily_edge_decision_2026_10_14_r51_correct_qb_final_winner_coordinator`.
+  Production reader / tuple / evidence / member / writer are r39 / r38 / r46 /
+  r63 / r117 with the same correct-QB final-winner suffix; fixture / outcome /
+  compact snapshot / reader / tracking are r89 / r79 / r49 / r34 / r47. The r50
+  and r49 locked decision layers retain exact stored precedence. Historical,
+  parity, current-board, gate, and rollback evidence:
+  `docs/model-audits/2026-10-14-cfb-correct-qb-final-winner-coordinator.md`.
+
 - October 13 exact-price actionability candidate: grade / decision / market-reader candidate / production advance to `cfb_v1_composite_grade_policy_2026_10_13_r28_exact_price_actionability` / `cfb_v1_daily_edge_decision_2026_10_13_r50_exact_price_actionability` / `cfb_market_sharp_aware_candidate_2026_10_13_r36_exact_price_actionability` / `cfb_market_sharp_aware_production_2026_10_13_r38_exact_price_actionability`. A future unlocked Lean or Best Angle must have positive target-excluded probability edge and nonnegative EV at its exact evaluated quote. Missing injury reports or split feeds remain neutral and can coexist with an actionable selection; a missing exact price remains a held/no-price decision. On the 99-game current board, 36 `Shop / no_bet` Moneylines lose misleading actionable labels while the executable board remains 55 to 55. Best Angle / Lean / Watchlist / No Play move 18 / 73 / 58 / 148 to 16 / 39 / 94 / 148. Sides, probabilities, scores, prices, stakes, and locks are unchanged. The preceding r49/r27/r37 family remains explicitly readable with exact locked precedence. Evidence, gates, result, and rollback: `docs/model-audits/2026-10-13-daily-edge-cushion-actionability-predeclaration.md` and `docs/model-audits/2026-10-13-daily-edge-cushion-actionability-result.md`.
 
 - October 12 provider-team identity correction: the active professional reader is

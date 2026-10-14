@@ -11,6 +11,7 @@ import type { DailyEdgeGameAvailability } from "@/lib/services/dailyEdge/gameAva
 import {
   CFB_T60_MAX_CAPTURE_LAG_MINUTES,
   CFB_V1_DECISION_RELEASE,
+  CFB_V1_FINAL_WINNER_PREVIOUS_DECISION_RELEASE,
   CFB_V1_EXACT_PRICE_ACTIONABILITY_PREVIOUS_DECISION_RELEASE,
   cfbV1LineProbabilities,
   type CfbV1DecisionBundle,
@@ -19,6 +20,8 @@ import {
 } from "./cfbV1Decision";
 
 export const CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE =
+  "cfb_forward_evidence_snapshot_2026_10_14_r46_correct_qb_final_winner_coordinator" as const;
+export const CFB_FORWARD_FINAL_WINNER_PREVIOUS_EVIDENCE_SCHEMA_RELEASE =
   "cfb_forward_evidence_snapshot_2026_10_12_r45_provider_team_identity_consensus_authority_split_specialization" as const;
 export const CFB_FORWARD_PROVIDER_IDENTITY_PREVIOUS_EVIDENCE_SCHEMA_RELEASE =
   "cfb_forward_evidence_snapshot_2026_10_11_r44_consensus_authority_split_specialization" as const;
@@ -93,6 +96,8 @@ export const CFB_FORWARD_INITIAL_EVIDENCE_SCHEMA_RELEASE =
 export const CFB_FORWARD_EVIDENCE_COLLECTOR_RELEASE =
   "cfb_forward_evidence_collector_2026_10_10_r57_last_known_injury_report_continuity" as const;
 export const CFB_FORWARD_MEMBER_RELEASE =
+  "cfb_v1_member_release_2026_10_14_r63_correct_qb_final_winner_coordinator" as const;
+export const CFB_FORWARD_FINAL_WINNER_PREVIOUS_MEMBER_RELEASE =
   "cfb_v1_member_release_2026_10_12_r62_provider_team_identity_consensus_authority_split_specialization" as const;
 export const CFB_FORWARD_PROVIDER_IDENTITY_PREVIOUS_MEMBER_RELEASE =
   "cfb_v1_member_release_2026_10_11_r61_consensus_authority_split_specialization" as const;
@@ -180,7 +185,8 @@ export function isCfbPublishedT60AccuracyLockPayload(payload: CfbForwardEvidence
   return payload.schemaRelease === CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE &&
     payload.memberRelease === CFB_FORWARD_MEMBER_RELEASE &&
     (payload.decisions.decisionRelease === CFB_V1_DECISION_RELEASE ||
-      payload.decisions.decisionRelease === CFB_V1_EXACT_PRICE_ACTIONABILITY_PREVIOUS_DECISION_RELEASE) &&
+      (payload.decisions.decisionRelease === CFB_V1_FINAL_WINNER_PREVIOUS_DECISION_RELEASE ||
+        payload.decisions.decisionRelease === CFB_V1_EXACT_PRICE_ACTIONABILITY_PREVIOUS_DECISION_RELEASE)) &&
     payload.stage === "t60" &&
     payload.captureTiming === "on_time" &&
     lag !== null && Number.isFinite(lag) && lag >= 0 && lag <= CFB_T60_MAX_CAPTURE_LAG_MINUTES &&
@@ -329,6 +335,15 @@ export type CfbForwardEvidencePayload = {
     marketReaderMarginShiftPoints?: number;
     marketReaderTotalShiftPoints?: number;
     marketReaderTotalSideFlipped?: boolean;
+    finalWinnerCoordinatorRelease?: string;
+    finalWinnerCoordinatorArtifactRelease?: string;
+    finalWinnerCoordinatorApplied?: boolean;
+    finalWinnerCoordinatorReason?: "winner_boundary_cross" | "same_winner_side" | "team_profile_unavailable" | "runtime_fallback" | "target_book_cycle_fallback";
+    finalWinnerCoordinatorAuthority?: number;
+    finalWinnerCoordinatorLearnedHomeWinProbability?: number | null;
+    finalWinnerCoordinatorCombinedHomeWinProbability?: number;
+    finalWinnerCoordinatorTargetMarginHome?: number | null;
+    finalWinnerCoordinatorFeatureSnapshot?: Record<string, number | null> | null;
     weatherIndependentTotalAdjustmentPoints?: number;
     weatherAuthoritativeTotalAdjustmentPoints?: number;
   };
