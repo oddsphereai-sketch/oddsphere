@@ -12,6 +12,8 @@ import type { SharpApiOddsRow } from "./SharpApiSoccerOddsProvider";
 
 export const SHARP_EPL_LEAGUE = "england_-_premier_league" as const;
 export const SHARP_UCL_LEAGUE = "uefa_-_champions_league" as const;
+export const UCL_SHARP_MARKET_IDENTITY_RELEASE =
+  "ucl_sharp_market_identity_2026_10_14_r1_full_current_slate" as const;
 const SHARP_MARKET_TYPE = {
   match_result: "moneyline",
   double_chance: "double_chance",
@@ -96,6 +98,8 @@ const TEAM_ALIASES: Record<string, string[]> = {
 };
 
 const UCL_TEAM_ALIASES: Record<string, string[]> = {
+  manchestercity: ["mancity"],
+  mancity: ["manchestercity"],
   internazionalemilano: ["inter", "intermilan", "internazionale"],
   internazionale: ["inter", "intermilan", "internazionalemilano"],
   intermilan: ["inter", "internazionale", "internazionalemilano"],
@@ -118,6 +122,17 @@ const UCL_TEAM_ALIASES: Record<string, string[]> = {
   olympiacosfc: ["olympiacos"],
   borussiadortmund: ["dortmund"],
   borussiamonchengladbach: ["monchengladbach"],
+  realbetis: ["betis"],
+  betis: ["realbetis"],
+  fkshakhtardonetsk: ["shakhtar", "shakhtardonetsk"],
+  shakhtardonetsk: ["shakhtar", "fkshakhtardonetsk"],
+  shakhtar: ["shakhtardonetsk", "fkshakhtardonetsk"],
+  slovanbratislava: ["sbratislava", "skslovanbratislava"],
+  skslovanbratislava: ["sbratislava", "slovanbratislava"],
+  sbratislava: ["slovanbratislava", "skslovanbratislava"],
+  vfbstuttgart: ["stuttgart", "vfbstuttgart1893"],
+  vfbstuttgart1893: ["stuttgart", "vfbstuttgart"],
+  stuttgart: ["vfbstuttgart", "vfbstuttgart1893"],
 };
 
 function key(value: string): string {
