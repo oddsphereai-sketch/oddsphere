@@ -63,6 +63,7 @@ export type EplPreviewBuildOptions = {
   cacheIdentity?: string;
   skipForwardEvidence?: boolean;
   maxFixtureRecoveryLoads?: number;
+  fixtureLoadConcurrency?: number;
   competitionLabel?: string;
   authorities?: {
     gradeRelease: string;
@@ -996,7 +997,10 @@ export async function buildEplDailyEdgePreview(slate: EplShadowSlate, options: E
         : { eventId: null, odds: [], splits: [], splitsState: "error" as const };
     }
   }
-  await Promise.all(Array.from({ length: Math.min(3, slate.matches.length) }, () => worker()));
+  const fixtureLoadConcurrency = options.fixtureLoadConcurrency === undefined
+    ? Math.min(3, slate.matches.length)
+    : Math.max(1, Math.min(slate.matches.length, Math.floor(options.fixtureLoadConcurrency)));
+  await Promise.all(Array.from({ length: fixtureLoadConcurrency }, () => worker()));
   if (provider) {
     // Sharp occasionally returns a partial duplicate-event bucket from a
     // serverless region even when an immediate independent request is
