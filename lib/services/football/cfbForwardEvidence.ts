@@ -199,6 +199,50 @@ export function isCfbPublishedT60AccuracyLockPayload(payload: CfbForwardEvidence
     completeOutlooks;
 }
 
+/**
+ * A provider/writer incident can miss the ordinary on-time T-60 tolerance but
+ * still leave one append-only, pre-kickoff T-60 payload that was actually
+ * published to members and later persisted as accuracy-only tracking. Keep
+ * that boundary distinct from an official on-time T-60 lock internally while
+ * allowing the member reader to freeze at the payload's real capture time.
+ *
+ * This predicate is intentionally current-release and fail-closed. It cannot
+ * reinterpret an unlocked row, a post-kickoff row, an actionable decision, or
+ * any late payload with additional health failures as a recovered lock.
+ */
+export function isCfbPublishedLateT60RecoveryPayload(payload: CfbForwardEvidencePayload): boolean {
+  const lag = payload.t60LagMinutes;
+  const capturedAt = Date.parse(payload.capturedAt);
+  const gameStartsAt = Date.parse(payload.game.scheduledStart);
+  const outlooks = payload.decisions.marketOutlooks;
+  const completeOutlooks = outlooks !== undefined &&
+    outlooks.moneyline !== null &&
+    outlooks.spread !== null && outlooks.spread.line !== null &&
+    outlooks.total !== null && outlooks.total.line !== null &&
+    ([outlooks.moneyline, outlooks.spread, outlooks.total] as const).every((outlook) =>
+      Number.isFinite(outlook.independentProbability) &&
+      outlook.independentProbability >= 0 &&
+      outlook.independentProbability <= 1 &&
+      Boolean(outlook.side));
+  const heldMarkets = new Set(payload.decisions.heldMarkets.map((market) => market.market));
+  return payload.schemaRelease === CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE &&
+    payload.memberRelease === CFB_FORWARD_MEMBER_RELEASE &&
+    payload.decisions.decisionRelease === CFB_V1_DECISION_RELEASE &&
+    payload.stage === "t60" &&
+    payload.captureTiming === "on_time" &&
+    lag !== null && Number.isFinite(lag) && lag > CFB_T60_MAX_CAPTURE_LAG_MINUTES &&
+    Number.isFinite(capturedAt) && Number.isFinite(gameStartsAt) && capturedAt < gameStartsAt &&
+    payload.coverage.healthHolds.length === 1 &&
+    payload.coverage.healthHolds[0] === "t60_capture_late" &&
+    payload.authoritativeForecast?.status === "market_sharp_applied" &&
+    payload.decisions.publicationEnabled &&
+    !payload.decisions.trackingEnabled &&
+    payload.decisions.evaluatedBets.length === 0 &&
+    heldMarkets.size === 3 &&
+    (["moneyline", "spread", "total"] as const).every((market) => heldMarkets.has(market)) &&
+    completeOutlooks;
+}
+
 export type CfbForwardQuarterback = {
   playerId: string;
   name: string;

@@ -45,6 +45,7 @@ import {
   determineCfbForwardCollectionNeed,
   hashCfbForwardEvidencePayload,
   isCfbPreT60PublishedPayloadRecovery,
+  isCfbPublishedLateT60RecoveryPayload,
   isCfbPublishedT60AccuracyLockPayload,
   matchesCfbForwardEvidencePayloadHash,
   planCfbForwardEvidenceCaptures,
@@ -1094,6 +1095,45 @@ const lateRow: CfbForwardStoredEvidence = {
 const lateFixture = buildCfbMemberFixtureAtTime([lateRow], "2026-08-29T16:05:00.000Z");
 assert.equal(lateFixture.snapshot.games[0]!.lockState, "missed", "a late or unhealthy T-60 attempt must never be represented as locked");
 assert.equal(lateFixture.snapshot.games[0]!.lockedAt, null);
+
+const latePublishedRecoveryPayload = structuredClone(latePayload);
+latePublishedRecoveryPayload.decisions = {
+  ...latePublishedRecoveryPayload.decisions,
+  evaluatedBets: [],
+  heldMarkets: (["moneyline", "spread", "total"] as const).map((market) => ({
+    market,
+    reason: "T-60 capture arrived outside the official tolerance.",
+  })),
+  trackingEnabled: false,
+};
+const latePublishedRecoveryRow: CfbForwardStoredEvidence = {
+  ...lateRow,
+  id: "late-published-recovery-row",
+  payload: latePublishedRecoveryPayload,
+  payloadSha256: hashCfbForwardEvidencePayload(latePublishedRecoveryPayload),
+};
+assert.equal(
+  isCfbPublishedLateT60RecoveryPayload(latePublishedRecoveryPayload),
+  true,
+  "a current-release immutable pregame T-60 row held only for late capture is a truthful member recovery boundary",
+);
+const latePublishedRecoveryFixture = buildCfbMemberFixtureAtTime(
+  [latePublishedRecoveryRow],
+  "2026-08-29T16:05:00.000Z",
+);
+assert.equal(latePublishedRecoveryFixture.snapshot.games[0]!.lockState, "locked");
+assert.equal(
+  latePublishedRecoveryFixture.snapshot.games[0]!.lockedAt,
+  latePublishedRecoveryPayload.capturedAt,
+  "the member card must show the actual late pregame capture time rather than the scheduled T-60 cutoff",
+);
+const malformedLateRecoveryPayload = structuredClone(latePublishedRecoveryPayload);
+malformedLateRecoveryPayload.coverage.healthHolds.push("market_data_unavailable");
+assert.equal(
+  isCfbPublishedLateT60RecoveryPayload(malformedLateRecoveryPayload),
+  false,
+  "an additional health failure cannot be relabeled as a recovered member lock",
+);
 
 const unlockedPayload = structuredClone(payload);
 unlockedPayload.stage = "unlocked";
