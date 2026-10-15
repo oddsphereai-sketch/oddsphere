@@ -12,7 +12,17 @@ import {
   type PredictionRecordRow,
 } from "../lib/types/domain/Tracking";
 import { readFileSync } from "node:fs";
-import { dedupePredictionRecordsForTracking, effectiveTrackingPlayGrade, filterCompleteUclTrackingCohorts, isCurrentUclTrackingRelease, isTrackingPlayGradeCutEligible, isTrackingRecordEligible, TRACKING_AGGREGATE_CONTRACT_VERSION, trackingDisplaySport } from "../lib/services/trackingAggregateService";
+import {
+  dedupePredictionRecordsForTracking,
+  effectiveTrackingPlayGrade,
+  filterCompleteUclTrackingCohorts,
+  isCurrentUclTrackingRelease,
+  isTrackingPlayGradeCutEligible,
+  isTrackingRecordEligible,
+  selectTrackingRecordsByScope,
+  TRACKING_AGGREGATE_CONTRACT_VERSION,
+  trackingDisplaySport,
+} from "../lib/services/trackingAggregateService";
 import { UCL_CALIBRATION_RELEASE, UCL_MODEL_RELEASE } from "../lib/services/ucl/uclModel";
 import {
   NFL_PUBLISHED_TRACKING_CORRECTION_MODEL_VERSION,
@@ -88,7 +98,7 @@ const eplRecord = (locked_at: string | null, id = 1, created_at = "2026-08-19T12
   competition: "english_premier_league",
   snapshot_json: null,
 } as PredictionRecordRow);
-check("tracking aggregate contract includes alternate-line performance", TRACKING_AGGREGATE_CONTRACT_VERSION === "tracking_aggregate_v13_alternate_line_performance_2026_10_12");
+check("tracking aggregate contract preserves UCL calendar results across releases", TRACKING_AGGREGATE_CONTRACT_VERSION === "tracking_aggregate_v14_ucl_calendar_release_continuity_2026_10_15");
 check("unlocked EPL row is excluded from official tracking", !isTrackingRecordEligible(eplRecord(null)));
 check("locked EPL row is officially tracking-eligible", isTrackingRecordEligible(eplRecord("2026-08-21T18:00:00Z")));
 check("EPL receives a separate member-facing competition key", trackingDisplaySport(eplRecord("2026-08-21T18:00:00Z")) === "epl");
@@ -107,6 +117,48 @@ const completeUcl = uclMarkets.map((market, index) => ({ ...uclRecord, id: 500 +
 check("partial UCL DB lock cannot enter tracking", filterCompleteUclTrackingCohorts(completeUcl.slice(0, 3)).length === 0);
 check("complete four-market UCL DB lock enters tracking", filterCompleteUclTrackingCohorts(completeUcl).length === 4);
 check("one held manifest row still proves atomic completeness before held-row exclusion", filterCompleteUclTrackingCohorts(completeUcl.map((row) => row.market === "total" ? { ...row, held: true } : row)).length === 4);
+const priorReleaseUcl = completeUcl.map((row, index) => ({
+  ...row,
+  id: 600 + index,
+  game_id: 30000002,
+  external_id: 30000002,
+  slate_date: "2026-10-13",
+  model_version: "ucl_prior_release",
+  calibration_version: "ucl_prior_calibration",
+} as PredictionRecordRow));
+const currentReleaseUcl = completeUcl.map((row, index) => ({
+  ...row,
+  id: 700 + index,
+  game_id: 30000003,
+  external_id: 30000003,
+  slate_date: "2026-10-14",
+} as PredictionRecordRow));
+const heldPriorReleaseUcl = priorReleaseUcl.map((row, index) => ({
+  ...row,
+  id: 800 + index,
+  game_id: 30000004,
+  external_id: 30000004,
+  held: row.market === "total",
+} as PredictionRecordRow));
+const uclTrackingScopes = selectTrackingRecordsByScope([
+  ...priorReleaseUcl,
+  ...currentReleaseUcl,
+  ...heldPriorReleaseUcl,
+]);
+check(
+  "UCL calendar tracking retains exact locked predictions after a release transition",
+  uclTrackingScopes.calendarRecords.length === 11
+    && uclTrackingScopes.calendarRecords.some((row) => row.model_version === "ucl_prior_release"),
+);
+check(
+  "UCL current-model tracking remains release-pure",
+  uclTrackingScopes.currentReleaseRecords.length === 4
+    && uclTrackingScopes.currentReleaseRecords.every((row) => row.model_version === UCL_MODEL_RELEASE),
+);
+check(
+  "UCL held null-side manifest rows remain excluded from calendar accuracy",
+  uclTrackingScopes.calendarRecords.every((row) => row.held !== true),
+);
 const canonicalEpl = dedupePredictionRecordsForTracking([
   eplRecord(null, 10, "2026-08-19T11:00:00Z"),
   eplRecord("2026-08-21T18:00:00Z", 11, "2026-08-19T12:00:00Z"),
