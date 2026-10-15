@@ -1,0 +1,235 @@
+# NBA professional model r2 — current architecture audit
+
+Date: 2026-10-15
+
+Status: research and data capture only. No production score, pick, probability,
+grade, stake, lock, reader, writer, or tracking behavior is changed by this
+audit.
+
+## Current champion and measured baseline
+
+- Model: `nba_v2_independent_first_2026_10_06_r1`
+- Market marriage: `nba_market_marriage_2026_10_06_r1_independent_first`
+- Grade policy: `nba_grade_policy_2026_10_06_r1_coherent_exact_price`
+- Official tracked markets: Moneyline and Total
+- Context-only market: Spread
+- Sole writer: the existing NBA prediction-record path under the shared
+  `prediction_pipeline:nba` lease
+
+The published 2025-26 chronological confirmation baseline contains 1,230
+games: 9.6001 team-score MAE, 10.9252 margin MAE, 15.6065 Total MAE, 64.80%
+winner accuracy, 48.55% Spread direction, and 49.82% Total direction. That
+replay validates the prior-only independent architecture, not complete runtime
+parity, exact-price economics, or the current market reader.
+
+## What the runtime actually uses
+
+The independent score consumes season-level offensive rating, defensive
+rating, pace, Four Factors, a prior-season early-year handoff, home-court
+advantage, and a bounded rest differential. A normal distribution with fixed
+base margin and Total standard deviations supplies Moneyline, exact-spread,
+and exact-Total probabilities.
+
+The current market layer builds coherent two-sided no-vig references from the
+same sportsbook and exact line, rejects obvious cross-market contradictions,
+selects the best evaluated price, and compares the independent forecast with
+the consensus. Public split and opportunity payloads are retained as context.
+They do not currently alter the score, side, probability, or grade.
+
+## Confirmed gaps
+
+1. Player availability is not a score input. An Out or unknown designation
+   caps confidence but applies zero player-value or expected-minutes impact.
+2. Recent form is absent from the production snapshot. Both teams'
+   `recent_form_10g_net_rating` fields are explicitly null.
+3. The score has no expected-rotation, roster-continuity, trade, on/off,
+   adjusted-plus-minus, usage redistribution, or replacement-level layer.
+4. Matchup style is shallow. Shot zones, rim and three-point profiles,
+   transition, half-court play types, switching, drives, passing, rebounding,
+   hustle, and foul pressure are not production inputs.
+5. Schedule context stops at basic rest. Travel distance, time-zone change,
+   altitude, road-trip position, and compressed multi-game travel are absent.
+6. The distribution uses fixed uncertainty. It does not condition variance or
+   tails on pace, three-point attempt share, lineup uncertainty, team
+   volatility, or favorite size.
+7. The score equation is additive and hand-weighted. No chronological runtime-
+   parity tournament has yet proved that its coefficients or interaction
+   structure are the best available candidate.
+8. The market reader has no authoritative same-book opening/prior/current
+   sequence. Its stored card truthfully says `First observed tracking only —
+   no opener available`.
+9. Money-versus-ticket splits are displayed context only. Source quality,
+   persistence, reversal, buyback, resistance, and target-book-excluded
+   confirmation are not used in an NBA-specific decision rule.
+10. Spread remains context-only and has no release-pure official performance
+    record. It cannot be promoted merely because a richer score model exists.
+
+## GOAT evidence now proved available
+
+A trial-safe contract capture verified finalized game identity and scores,
+player box scores, player-game advanced V2 rows with tracking/hustle/matchup
+fields, and timestamped opening Moneyline/Spread/Total quotes. The sample is
+explicitly ineligible for model selection or price claims. Complete immutable
+season packages and their checksums are required before the tournament runs.
+
+BALLDONTLIE team-season feature families are useful as prior-season or live
+current-state context. A completed full-season aggregate may not be applied
+backward to an earlier game in that same season. Historical rolling features
+must instead be reconstructed from player-game rows that existed before the
+forecast cutoff.
+
+## Research-informed design constraints
+
+External research is an input to candidate design, not permission to import a
+coefficient into production. The following findings define tests the
+chronological tournament must run:
+
+- Four Factors remain a principled efficiency decomposition, but their
+  nonlinear interaction and opponent-relative form should be tested rather
+  than represented only by fixed additive weights. A recent derivation using
+  NBA data from 2000 through 2025 reports that shooting, turnovers, rebounding,
+  and free throws jointly determine team efficiency
+  ([Poropudas and Halme](https://arxiv.org/abs/2305.13032)).
+- Player value must be estimated conditional on the other players on court.
+  Win-probability adjusted player impact and lineup-combination research both
+  warn against treating a player's box-score average as a context-free point
+  adjustment
+  ([Deshpande and Jensen](https://arxiv.org/abs/1604.03186),
+  [Martonosi, Gonzalez, and Oshiro](https://arxiv.org/abs/2303.04963)).
+- Schedule stress is multidimensional. Rest, travel direction and distance,
+  time-zone change, and trip sequence are separate candidate features, not a
+  single back-to-back flag
+  ([Charest et al.](https://pmc.ncbi.nlm.nih.gov/articles/PMC8636381/),
+  [Esteves et al.](https://pubmed.ncbi.nlm.nih.gov/32172667/)).
+- A season-level NBA study found a negative association between games missed
+  and winning percentage, but its retrospective correlational design cannot
+  identify the effect of one star missing one game
+  ([Podlog et al.](https://pubmed.ncbi.nlm.nih.gov/24908360/)).
+- The most directly relevant betting study examined 10,555 games from
+  1996-97 through 2004-05. It found that higher-value absences moved lines
+  against the affected team, that most opening-line bias disappeared by the
+  close, and that slight overreaction was not sufficient to beat commission.
+  The age of the sample and changed injury-reporting and betting environment
+  require a modern replication rather than direct adoption
+  ([Dare, Dennis, and Paul](https://doi.org/10.1016/j.frl.2015.02.004)).
+
+These findings support a layered model: stable team strength, opponent and
+style interaction, expected rotation and minutes, schedule/travel state,
+current-form residuals, and conditional uncertainty. None may become a live
+feature merely because it is intuitively plausible; each must improve the
+frozen chronological evaluation without a hidden subgroup or calibration
+regression.
+
+## Acute player-absence experiment
+
+The model must not encode `star out = automatic loss` or a generic fixed-point
+penalty. It must distinguish at least:
+
+1. the player's pre-absence impact and expected minutes;
+2. the expected replacement rotation and replacement quality;
+3. usage, shot-profile, rebounding, turnover, and pace redistribution;
+4. lineup continuity and how often the available unit has played together;
+5. the first game or two of an unexpected absence versus an established
+   multi-game rotation;
+6. injury-report certainty and the time at which the status became knowable;
+7. opponent matchup, venue, rest, travel, and season phase; and
+8. increased outcome uncertainty even when the mean score adjustment is
+   small.
+
+The proposed short-absence response or market-overreaction effect is a
+predeclared hypothesis, not a narrative override. The event study will compare
+the first, second, third-to-fifth, and later missed games against a
+pregame-matched baseline. Matching and/or regression controls must use only
+information available at the forecast cutoff: prior team strength, player
+impact, replacement quality, home/away, opponent, rest/travel, and opening
+market probability. Results will report home score, away score, margin, Total,
+winner probability, and calibration residuals—not raw win percentage alone.
+
+We will separately test whether the opening market overprices an acute absence
+and whether any difference remains at the actionable decision timestamp after
+vig. A positive result must repeat out of sample and improve the joint score
+distribution; otherwise the feature is rejected. Long absences may affect the
+stable roster-strength state, while acute absences may affect minutes,
+interactions, and variance. Combining those mechanisms into one injury number
+is prohibited.
+
+## Independent score tournament
+
+The tournament keeps score construction independent of the evaluated book and
+compares, at minimum:
+
+- dynamic adjusted-rating and pace baseline;
+- schedule-aware baseline;
+- rolling Four-Factors and volatility candidate;
+- rotation/player-impact candidate;
+- richer shot-profile and play-type residual candidates when point-in-time
+  coverage permits;
+- direct team-score heads versus coherent margin/Total heads;
+- simple linear regularization versus nonlinear candidates with materially
+  bounded complexity.
+
+Seasons before 2024-25 fit parameters, 2024-25 selects architecture and
+regularization, and 2025-26 is opened once for confirmation. Rolling-origin
+folds supplement, but never replace, the frozen chronological blocks.
+
+The candidate must beat the published r1 baseline on team-score MAE and may not
+hide a material regression in margin, Total, winner calibration, early-season
+performance, or board coverage. Statistical uncertainty is game-clustered.
+One aggregate win is insufficient: results are segmented by month, rest state,
+injury certainty, projected pace, favorite size, and home/away status.
+
+## Upset-aware evaluation
+
+An upset is evaluated against a timestamp-valid, de-vigged pregame market
+favorite; the independent score does not consume that label. Reporting must
+include:
+
+- underdog win recall and false-upset rate;
+- Brier score and log loss by favorite-probability band;
+- favorite and underdog calibration curves;
+- large-favorite misses and corrected upsets, with no cherry-picked deletion;
+- margin residuals by favorite size;
+- candidate-versus-r1 corrections and harms for every changed winner.
+
+An upset-specific head may be used only as a calibrated residual or mixture
+component that improves untouched probability metrics. It cannot force a dog
+quota, flip a winner from narrative evidence, or create incoherent score,
+Spread, Total, and Moneyline outputs.
+
+## Market-reader qualification
+
+Market evidence remains downstream and source-separated. Historical validation
+requires timestamped same-book opening/prior/current observations, exact-line
+identity for Spread and Total, two-sided no-vig pairs, target-book exclusion,
+and a documented decision cutoff. Opening odds alone may evaluate opening-line
+value but cannot stand in for T-60 prices, closing-line value, or movement.
+
+Candidate correction rules must be discrete, reproducible, reversible, and
+derived from the independent base exactly once. Missing sequence or splits are
+unavailable, never neutral evidence. Public consensus splits cannot be called
+sharp action unless provider provenance proves that claim. One final joint
+distribution must own expected score, representative score, Moneyline,
+Spread, Total, probabilities, and exact-price decisions.
+
+## Production gate
+
+No r2 live release is authorized until all of the following are true:
+
+1. Complete historical inputs and checksums pass the leakage and identity
+   gates.
+2. Independent selection and confirmation results beat the declared baselines
+   without a hidden subgroup collapse.
+3. Moneyline, Spread, and Total probabilities are calibrated at the exact
+   evaluated lines.
+4. Exact-price units, ROI, coverage, and CLV claims use recoverable pregame
+   timestamps and are reported separately from score-only evidence.
+5. Every actionable demotion is paired with a tested eligible promotion and
+   the full board impact is reported.
+6. Opening-night rehearsal proves complete feature, injury, price, release,
+   writer, lease, reader, and T-60 lock coherence.
+7. All affected releases advance together; existing locked rows remain byte-
+   for-byte authoritative.
+
+If those gates do not clear by October 20, r1 remains the production fallback
+and r2 continues forward validation. The deadline does not convert incomplete
+evidence into a professional model.

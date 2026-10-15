@@ -84,6 +84,7 @@ for season_index, season in enumerate((2023, 2024, 2025)):
             "away_top8MinutesShare_5": 0.91,
             "home_rotationMinutesEntropy_5": 2.2,
             "away_rotationMinutesEntropy_5": 2.2,
+            "evaluation_opening_market_home_probability": 0.65 if home_off >= away_off else 0.35,
             "target_home_score": home_score,
             "target_away_score": away_score,
             "target_home_margin": margin,
@@ -121,7 +122,10 @@ with tempfile.TemporaryDirectory(prefix="nba-tournament-test-") as temporary:
     assert report["selected"]["featureCount"] > 0
     assert report["confirmation"]["games"] == 48
     assert report["publishedR1DirectlyComparable"] is False
+    assert report["confirmation"]["upsetEvaluation"]["games"] == 48
     assert len(predictions) == 48
-    assert not any(name.startswith("target_") for name in tournament.feature_catalog(tournament.validate(tournament.read_jsonl(features)))["all_declared"])
+    selected_features = tournament.feature_catalog(tournament.validate(tournament.read_jsonl(features)))["all_declared"]
+    assert not any(name.startswith("target_") for name in selected_features)
+    assert "evaluation_opening_market_home_probability" not in selected_features
 
 print("NBA professional tournament chronological and promotion-boundary tests passed.")

@@ -51,6 +51,11 @@ IDENTITY = [
     "home_team",
     "away_team",
 ]
+EVALUATION_ONLY = [
+    # Optional timestamp-valid market benchmark. This may segment and score
+    # independent forecasts, but it is never eligible to enter a feature set.
+    "evaluation_opening_market_home_probability",
+]
 
 
 def parse_args() -> argparse.Namespace:
@@ -91,6 +96,13 @@ def validate(frame: pd.DataFrame) -> pd.DataFrame:
     frame = frame.sort_values(["feature_cutoff", "game_id"]).reset_index(drop=True)
     for target in TARGETS:
         frame[target] = pd.to_numeric(frame[target], errors="raise")
+    for column in EVALUATION_ONLY:
+        if column not in frame:
+            continue
+        frame[column] = pd.to_numeric(frame[column], errors="coerce")
+        present = frame[column].dropna()
+        if (present <= 0).any() or (present >= 1).any():
+            raise ValueError(f"NBA evaluation probability {column} must be strictly between zero and one")
     if not np.allclose(
         frame["target_home_score"] - frame["target_away_score"],
         frame["target_home_margin"],
@@ -107,7 +119,7 @@ def validate(frame: pd.DataFrame) -> pd.DataFrame:
 def feature_catalog(frame: pd.DataFrame) -> dict[str, list[str]]:
     numeric = [
         column for column in frame.columns
-        if column not in IDENTITY + TARGETS and pd.api.types.is_numeric_dtype(frame[column])
+        if column not in IDENTITY + TARGETS + EVALUATION_ONLY and pd.api.types.is_numeric_dtype(frame[column])
     ]
 
     def chosen(tokens: tuple[str, ...]) -> list[str]:
@@ -189,6 +201,47 @@ def metrics(frame: pd.DataFrame, home: np.ndarray, away: np.ndarray, sigma: floa
                 "meanProbability": float(probabilities[keep].mean()),
                 "winRate": float(outcomes[keep].mean()),
             })
+    upset = None
+    market_column = "evaluation_opening_market_home_probability"
+    if market_column in frame:
+        market_home = frame[market_column].to_numpy(float)
+        available = np.isfinite(market_home) & (market_home != 0.5)
+        if available.any():
+            favorite_home = market_home[available] > 0.5
+            actual_home_win = outcomes[available] > 0.5
+            predicted_home_win = probabilities[available] >= 0.5
+            actual_upset = actual_home_win != favorite_home
+            predicted_upset = predicted_home_win != favorite_home
+            correct_upsets = actual_upset & predicted_upset & (predicted_home_win == actual_home_win)
+            false_upsets = predicted_upset & ~actual_upset
+            favorite_strength = np.maximum(market_home[available], 1 - market_home[available])
+            strength_bands = []
+            for lower, upper in ((0.5, 0.6), (0.6, 0.7), (0.7, 0.8), (0.8, 1.0)):
+                keep = (favorite_strength >= lower) & (favorite_strength < upper)
+                if keep.any():
+                    strength_bands.append({
+                        "lower": lower,
+                        "upper": upper,
+                        "games": int(keep.sum()),
+                        "actualUpsets": int(actual_upset[keep].sum()),
+                        "predictedUpsets": int(predicted_upset[keep].sum()),
+                        "winnerAccuracy": float((predicted_home_win[keep] == actual_home_win[keep]).mean()),
+                        "homeWinBrier": float(np.square(probabilities[available][keep] - actual_home_win[keep]).mean()),
+                    })
+            upset = {
+                "benchmark": "opening_market_no_vig_evaluation_only",
+                "games": int(available.sum()),
+                "actualUpsets": int(actual_upset.sum()),
+                "predictedUpsets": int(predicted_upset.sum()),
+                "correctUpsets": int(correct_upsets.sum()),
+                "underdogWinRecall": (
+                    float(correct_upsets.sum() / actual_upset.sum()) if actual_upset.any() else None
+                ),
+                "falseUpsetRate": (
+                    float(false_upsets.sum() / predicted_upset.sum()) if predicted_upset.any() else None
+                ),
+                "favoriteStrengthBands": strength_bands,
+            }
     return {
         "games": int(len(frame)),
         "teamScoreMae": float((np.abs(home - actual_home).mean() + np.abs(away - actual_away).mean()) / 2),
@@ -203,6 +256,7 @@ def metrics(frame: pd.DataFrame, home: np.ndarray, away: np.ndarray, sigma: floa
         "meanPredictedHomeWinProbability": float(probabilities.mean()),
         "homeWinRate": float(outcomes.mean()),
         "calibration": calibration,
+        "upsetEvaluation": upset,
     }
 
 

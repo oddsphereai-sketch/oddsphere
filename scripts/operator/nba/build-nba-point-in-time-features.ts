@@ -9,6 +9,10 @@ import {
   normalizeNbaHistoricalGame,
   normalizeNbaHistoricalPlayerBox,
 } from "../../../lib/services/nba/nbaPointInTimeFeatures";
+import {
+  nbaOpeningHomeProbabilityByGame,
+  normalizeNbaHistoricalOpeningOdds,
+} from "../../../lib/services/nba/nbaHistoricalOpeningMarket";
 
 function values(name: string): string[] {
   const output: string[] = [];
@@ -59,6 +63,7 @@ async function main(): Promise<void> {
   const sourceManifests: Record<string, unknown>[] = [];
   const rawGames: Record<string, unknown>[] = [];
   const rawBoxes: Record<string, unknown>[] = [];
+  const rawOpeningOdds: Record<string, unknown>[] = [];
   for (const input of inputs) {
     const manifest = await json(path.join(input, "manifest.json"));
     if (manifest.scoreBacktestEligible !== true) {
@@ -67,6 +72,14 @@ async function main(): Promise<void> {
     sourceManifests.push(manifest);
     rawGames.push(...await jsonl(path.join(input, "games.jsonl")));
     rawBoxes.push(...await jsonl(path.join(input, "box.jsonl")));
+    if (manifest.exactOpeningPriceBacktestEligible === true) {
+      const datasets = manifest.datasets as Record<string, Record<string, unknown>> | undefined;
+      const openingFile = datasets?.opening_odds?.file;
+      if (typeof openingFile !== "string" || openingFile.length === 0) {
+        throw new Error(`${input} claims exact opening-price eligibility without an opening-odds file.`);
+      }
+      rawOpeningOdds.push(...await jsonl(path.join(input, openingFile)));
+    }
   }
 
   const games = uniqueById(rawGames.map(normalizeNbaHistoricalGame), (row) => row.gameId, "NBA game");
@@ -76,7 +89,19 @@ async function main(): Promise<void> {
   if (outOfScopeBoxes.length > 0) {
     throw new Error(`NBA feature build found ${outOfScopeBoxes.length} box rows outside the exact game set.`);
   }
-  const featureRows = buildNbaPointInTimeFeatures({ games, boxes });
+  const openingRows = uniqueById(
+    rawOpeningOdds.map(normalizeNbaHistoricalOpeningOdds),
+    (row) => row.rowId,
+    "NBA opening-odds row",
+  );
+  const openingProbabilityByGame = nbaOpeningHomeProbabilityByGame({
+    rows: openingRows,
+    gameStartById: new Map(games.map((game) => [game.gameId, game.startTime])),
+  });
+  const featureRows = buildNbaPointInTimeFeatures({ games, boxes }).map((row) => ({
+    ...row,
+    evaluation_opening_market_home_probability: openingProbabilityByGame.get(row.game_id) ?? null,
+  }));
   if (featureRows.length !== games.length) throw new Error("NBA feature build did not emit exactly one row per game.");
 
   const capturedAt = new Date().toISOString();
@@ -92,7 +117,7 @@ async function main(): Promise<void> {
   await writeFile(`${outputFile}.tmp`, body, "utf8");
   await rename(`${outputFile}.tmp`, outputFile);
   const featureNames = Object.keys(featureRows[0] ?? {}).filter((key) =>
-    !key.startsWith("target_") && !["release", "game_id", "season", "feature_cutoff", "home_team_id", "away_team_id", "home_team", "away_team"].includes(key));
+    !key.startsWith("target_") && !key.startsWith("evaluation_") && !["release", "game_id", "season", "feature_cutoff", "home_team_id", "away_team_id", "home_team", "away_team"].includes(key));
   const manifest = {
     release: NBA_POINT_IN_TIME_FEATURE_RELEASE,
     builtAt: capturedAt,
@@ -100,6 +125,8 @@ async function main(): Promise<void> {
     sourceSeasons: sourceManifests.map((item) => item.season),
     games: games.length,
     playerBoxRows: boxes.length,
+    openingOddsRows: openingRows.length,
+    openingMoneylineGames: openingProbabilityByGame.size,
     featureCount: featureNames.length,
     featureNames,
     chronologicalContract: "Each feature row is emitted before its own finalized outcome updates state.",
