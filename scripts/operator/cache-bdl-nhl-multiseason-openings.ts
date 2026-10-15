@@ -3,7 +3,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 const BASE_URL = "https://api.balldontlie.io/nhl/v1";
-const SEASONS = [2023, 2024, 2025] as const;
+const DEFAULT_SEASONS = [2023, 2024, 2025] as const;
 const MAX_GAME_PAGES = 20;
 const MAX_ODDS_PAGES_PER_BATCH = 10;
 const GAME_ID_BATCH_SIZE = 40;
@@ -67,9 +67,15 @@ async function fetchOpenings(gameIds: number[], apiKey: string): Promise<Opening
 async function main(): Promise<void> {
   const apiKey = process.env.BALLDONTLIE_API_KEY;
   if (!apiKey) throw new Error("BALLDONTLIE_API_KEY is required");
+  const requestedSeasons = process.argv.find((arg) => arg.startsWith("--seasons="))
+    ?.slice("--seasons=".length)
+    .split(",")
+    .map((value) => Number.parseInt(value, 10))
+    .filter(Number.isFinite);
+  const seasons = requestedSeasons?.length ? requestedSeasons : [...DEFAULT_SEASONS];
   const games: Game[] = [];
   const openingOdds: Opening[] = [];
-  for (const season of SEASONS) {
+  for (const season of seasons) {
     const seasonGames = await fetchGames(season, apiKey);
     if (seasonGames.length !== 1312) throw new Error(`Expected 1,312 games for ${season}; received ${seasonGames.length}`);
     games.push(...seasonGames);
@@ -78,7 +84,7 @@ async function main(): Promise<void> {
     }
     console.log(`season ${season}: games=${seasonGames.length}, cumulative openings=${openingOdds.length}`);
   }
-  const cache = { provider: "BALLDONTLIE NHL", fetched_at: new Date().toISOString(), seasons: [...SEASONS], odds_seasons: [...SEASONS], games, opening_odds: openingOdds };
+  const cache = { provider: "BALLDONTLIE NHL", fetched_at: new Date().toISOString(), seasons, odds_seasons: seasons, games, opening_odds: openingOdds };
   const manifest = {
     release: "bdl_nhl_multiseason_openings_2026_09_29_r1",
     game_count: games.length,

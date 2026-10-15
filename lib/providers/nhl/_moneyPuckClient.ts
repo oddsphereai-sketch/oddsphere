@@ -21,6 +21,7 @@
 const MONEYPUCK_BASE = "https://moneypuck.com/moneypuck/playerData/seasonSummary";
 const MONEYPUCK_TEAM_GAMES_BASE = "https://moneypuck.com/moneypuck/playerData/teamGameByGame";
 const USER_AGENT = "oddsphere/1.0 (NHL model ingest)";
+const MONEYPUCK_RETRYABLE_STATUSES = new Set([429, 500, 502, 503, 504]);
 
 export type MoneyPuckSeasonType = "regular" | "playoffs";
 export type MoneyPuckSituation = "all" | "5on5" | "4on5" | "5on4" | "other";
@@ -69,15 +70,61 @@ export type MoneyPuckTeamGameRow = {
   team_abbr: string;
   opponent_abbr: string;
   home_or_away: "HOME" | "AWAY";
+  goals_for: number;
+  goals_against: number;
   x_goals_for: number;
+  x_goals_against: number;
+  shots_on_goal_for: number;
+  shots_on_goal_against: number;
+  five_x_goals_for: number;
+  five_x_goals_against: number;
+  pp_x_goals_for: number;
+  pk_x_goals_against: number;
+  dzone_giveaways_for: number;
 };
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function retryAfterMs(response: Response): number | null {
+  const value = response.headers.get("retry-after");
+  if (value === null) return null;
+  const seconds = Number(value);
+  if (Number.isFinite(seconds)) return Math.max(0, seconds * 1_000);
+  const date = Date.parse(value);
+  return Number.isFinite(date) ? Math.max(0, date - Date.now()) : null;
+}
+
+async function fetchMoneyPuckTeamGameResource(url: string): Promise<Response> {
+  const attempts = 4;
+  let lastStatus: number | null = null;
+  let lastError: Error | null = null;
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    try {
+      const response = await fetch(url, {
+        headers: { "User-Agent": USER_AGENT },
+        signal: AbortSignal.timeout(12_000),
+      });
+      lastStatus = response.status;
+      if (response.ok || response.status === 404 || !MONEYPUCK_RETRYABLE_STATUSES.has(response.status)) {
+        return response;
+      }
+      if (attempt < attempts - 1) {
+        await sleep(retryAfterMs(response) ?? 1_000 * (2 ** attempt));
+      }
+    } catch (error) {
+      lastError = error as Error;
+      if (attempt < attempts - 1) await sleep(1_000 * (2 ** attempt));
+    }
+  }
+  if (lastError !== null) throw lastError;
+  throw new Error(`MoneyPuck request failed after ${attempts} attempts: HTTP ${lastStatus ?? "unknown"}`);
+}
 
 export async function fetchMoneyPuckTeamGameDirectory(season: number): Promise<string[]> {
   const url = `${MONEYPUCK_TEAM_GAMES_BASE}/${season}/regular/`;
-  const res = await fetch(url, {
-    headers: { "User-Agent": USER_AGENT },
-    signal: AbortSignal.timeout(12_000),
-  });
+  const res = await fetchMoneyPuckTeamGameResource(url);
   if (res.status === 404) return [];
   if (!res.ok) throw new Error(`MoneyPuck team-game directory ${season} failed: HTTP ${res.status}`);
   const html = await res.text();
@@ -287,15 +334,25 @@ export async function fetchMoneyPuckTeamGames(
 ): Promise<MoneyPuckTeamGameRow[] | null> {
   const team = teamAbbr.trim().toUpperCase();
   const url = `${MONEYPUCK_TEAM_GAMES_BASE}/${season}/regular/${encodeURIComponent(team)}.csv`;
-  const res = await fetch(url, {
-    headers: { "User-Agent": USER_AGENT },
-    signal: AbortSignal.timeout(12_000),
-  });
+  const res = await fetchMoneyPuckTeamGameResource(url);
   if (res.status === 404) return null;
   if (!res.ok) {
     throw new Error(`MoneyPuck team games ${season}/${team} failed: HTTP ${res.status}`);
   }
   const text = await res.text();
+  return parseMoneyPuckTeamGamesCsv(season, team, text);
+}
+
+/**
+ * MoneyPuck's 2026-27 team-game files derive season identity from the path and
+ * no longer repeat a `season` column in every row. Older files still include
+ * it. Accept both contracts while refusing an explicitly mismatched row.
+ */
+export function parseMoneyPuckTeamGamesCsv(
+  season: number,
+  team: string,
+  text: string,
+): MoneyPuckTeamGameRow[] {
   const { header, rows } = parseCsv(text);
   const ixGame = colIndex(header, "gameId");
   const ixSeason = colIndex(header, "season");
@@ -305,26 +362,66 @@ export async function fetchMoneyPuckTeamGames(
   const ixVenue = colIndex(header, "home_or_away");
   const ixPosition = colIndex(header, "position");
   const ixSituation = colIndex(header, "situation");
+  const ixGoals = colIndex(header, "goalsFor");
+  const ixGoalsAgainst = colIndex(header, "goalsAgainst");
   const ixXg = colIndex(header, "xGoalsFor");
-  if ([ixGame, ixSeason, ixDate, ixTeam, ixOpponent, ixVenue, ixPosition, ixSituation, ixXg].some((index) => index < 0)) {
+  const ixXgAgainst = colIndex(header, "xGoalsAgainst");
+  const ixSog = colIndex(header, "shotsOnGoalFor");
+  const ixSogAgainst = colIndex(header, "shotsOnGoalAgainst");
+  const ixDzone = colIndex(header, "dZoneGiveawaysFor");
+  if ([
+    ixGame, ixDate, ixTeam, ixOpponent, ixVenue, ixPosition, ixSituation,
+    ixGoals, ixGoalsAgainst, ixXg, ixXgAgainst, ixSog, ixSogAgainst, ixDzone,
+  ].some((index) => index < 0)) {
     throw new Error(`MoneyPuck team games ${season}/${team} header is incomplete`);
   }
-  const out: MoneyPuckTeamGameRow[] = [];
+  const grouped = new Map<number, Map<string, string[]>>();
   for (const row of rows) {
-    if (row[ixPosition] !== "Team Level" || row[ixSituation] !== "all") continue;
+    if (row[ixPosition] !== "Team Level") continue;
     const gameId = parseNullableInt(row[ixGame]);
-    const rowSeason = parseNullableInt(row[ixSeason]);
-    const xGoals = parseNullableNumber(row[ixXg]);
+    const rowSeason = ixSeason < 0 ? season : parseNullableInt(row[ixSeason]);
+    const situation = row[ixSituation];
+    if (
+      gameId === null || rowSeason !== season
+      || String(row[ixTeam] ?? "").trim().toUpperCase() !== team
+      || !situation || !["all", "5on5", "5on4", "4on5"].includes(situation)
+    ) continue;
+    const situations = grouped.get(gameId) ?? new Map<string, string[]>();
+    situations.set(situation, row);
+    grouped.set(gameId, situations);
+  }
+
+  const numberAt = (row: string[] | undefined, index: number, fallback: number): number => (
+    index < 0 ? fallback : parseNullableNumber(row?.[index]) ?? fallback
+  );
+  const out: MoneyPuckTeamGameRow[] = [];
+  for (const [gameId, situations] of grouped) {
+    const row = situations.get("all");
+    if (!row) continue;
     const venue = row[ixVenue];
-    if (gameId === null || rowSeason !== season || xGoals === null || (venue !== "HOME" && venue !== "AWAY")) continue;
+    const xGoals = parseNullableNumber(row[ixXg]);
+    if (xGoals === null || (venue !== "HOME" && venue !== "AWAY")) continue;
+    const five = situations.get("5on5");
+    const power = situations.get("5on4");
+    const penalty = situations.get("4on5");
     out.push({
       game_id: gameId,
-      season: rowSeason,
+      season,
       game_date: String(row[ixDate] ?? ""),
       team_abbr: String(row[ixTeam] ?? "").trim().toUpperCase(),
       opponent_abbr: String(row[ixOpponent] ?? "").trim().toUpperCase(),
       home_or_away: venue,
+      goals_for: numberAt(row, ixGoals, 0),
+      goals_against: numberAt(row, ixGoalsAgainst, 0),
       x_goals_for: xGoals,
+      x_goals_against: numberAt(row, ixXgAgainst, 3.05),
+      shots_on_goal_for: numberAt(row, ixSog, 30),
+      shots_on_goal_against: numberAt(row, ixSogAgainst, 30),
+      five_x_goals_for: numberAt(five, ixXg, 2.35),
+      five_x_goals_against: numberAt(five, ixXgAgainst, 2.35),
+      pp_x_goals_for: numberAt(power, ixXg, 0.52),
+      pk_x_goals_against: numberAt(penalty, ixXgAgainst, 0.52),
+      dzone_giveaways_for: numberAt(row, ixDzone, 5),
     });
   }
   return out;

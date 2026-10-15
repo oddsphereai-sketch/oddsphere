@@ -24,6 +24,7 @@ import {
 } from "../lib/services/nhl/featureSnapshot";
 import { aggregateNhlRosterPrior, normalizeNhlPlayerName } from "../lib/automodel/nhlRosterPrior2026";
 import { normalizeNhlTeamName } from "../lib/providers/nhl/_teamNameNormalizer";
+import { parseMoneyPuckTeamGamesCsv } from "../lib/providers/nhl/_moneyPuckClient";
 import { sportsInSeasonToday } from "../lib/cron/seasons";
 import type { PredictionRecordRow } from "../lib/types/domain/Tracking";
 import {
@@ -31,6 +32,7 @@ import {
   matchPlaybookSplitsToSlateGames,
 } from "../lib/services/syncPublicSplitsObservations";
 import { replayNhlRegularState } from "../lib/automodel/nhlRegularState";
+import { openingNhlFastState } from "../lib/automodel/nhlFastState2026";
 import { replayNhlOpponentAdjustedState } from "../lib/services/nhl/loadNhlOpponentAdjustedState";
 import { buildNhlTwoSidedPriceTrail } from "../lib/services/nhl/nhlPriceTrail";
 import {
@@ -44,6 +46,71 @@ import {
   buildNhlRegularMarketAwareForecast,
   buildNhlTargetExcludedTotalRead,
 } from "../lib/services/nhl/nhlTargetExcludedTotalMarket";
+
+const currentMoneyPuckTeamGame = parseMoneyPuckTeamGamesCsv(
+  2026,
+  "ANA",
+  [
+    "gameId,playerTeam,opposingTeam,home_or_away,gameDate,position,situation,goalsFor,goalsAgainst,xGoalsFor,xGoalsAgainst,shotsOnGoalFor,shotsOnGoalAgainst,dZoneGiveawaysFor",
+    "2026020021,ANA,VGK,AWAY,20261002,Team Level,all,3,2,2.731,2.4,31,28,4",
+  ].join("\n"),
+);
+assert.deepEqual(currentMoneyPuckTeamGame, [{
+  game_id: 2026020021,
+  season: 2026,
+  game_date: "20261002",
+  team_abbr: "ANA",
+  opponent_abbr: "VGK",
+  home_or_away: "AWAY",
+  goals_for: 3,
+  goals_against: 2,
+  x_goals_for: 2.731,
+  x_goals_against: 2.4,
+  shots_on_goal_for: 31,
+  shots_on_goal_against: 28,
+  five_x_goals_for: 2.35,
+  five_x_goals_against: 2.35,
+  pp_x_goals_for: 0.52,
+  pk_x_goals_against: 0.52,
+  dzone_giveaways_for: 4,
+}], "current MoneyPuck team-game files derive season from their validated path");
+assert.equal(
+  parseMoneyPuckTeamGamesCsv(
+    2025,
+    "ANA",
+    [
+      "gameId,season,playerTeam,opposingTeam,home_or_away,gameDate,position,situation,goalsFor,goalsAgainst,xGoalsFor,xGoalsAgainst,shotsOnGoalFor,shotsOnGoalAgainst,dZoneGiveawaysFor",
+      "2025020021,2025,ANA,VGK,AWAY,20251002,Team Level,all,3,2,2.5,2.3,30,29,4",
+      "2024020021,2024,ANA,VGK,AWAY,20241002,Team Level,all,5,1,9.9,1.2,40,20,2",
+    ].join("\n"),
+  ).length,
+  1,
+  "legacy MoneyPuck rows retain explicit-season validation",
+);
+assert.throws(
+  () => parseMoneyPuckTeamGamesCsv(
+    2026,
+    "ANA",
+    [
+      "gameId,playerTeam,opposingTeam,home_or_away,gameDate,position,situation,xGoalsFor",
+      "2026020021,ANA,VGK,AWAY,20261002,Team Level,all,2.731",
+    ].join("\n"),
+  ),
+  /header is incomplete/,
+  "the fast-state parser fails closed when a required feature column disappears",
+);
+assert.equal(
+  parseMoneyPuckTeamGamesCsv(
+    2026,
+    "ANA",
+    [
+      "gameId,playerTeam,opposingTeam,home_or_away,gameDate,position,situation,goalsFor,goalsAgainst,xGoalsFor,xGoalsAgainst,shotsOnGoalFor,shotsOnGoalAgainst,dZoneGiveawaysFor",
+      "2026020021,VGK,ANA,HOME,20261002,Team Level,all,3,2,2.5,2.3,30,29,4",
+    ].join("\n"),
+  ).length,
+  0,
+  "a team file cannot contribute another team's row",
+);
 
 assert.equal(resolveNhlPriceAwareVerdict("moneyline", "best_angle", -175, 0.70), "best_angle");
 assert.equal(resolveNhlPriceAwareVerdict("moneyline", "best_angle", -110, 0.69), "lean", "Moneyline Best Angle requires 70% outcome confidence");
@@ -187,6 +254,52 @@ const base: NhlFeatureSnapshot = {
 };
 
 const result = nhlRegularModelV1(base);
+const openingFastState = openingNhlFastState();
+const fastParity = nhlRegularModelV1({
+  ...base,
+  home: {
+    ...base.home,
+    abbreviation: "CAR",
+    rest_days: null,
+    fast_state: openingFastState.get("CAR")!,
+    current_season_games: 0,
+  },
+  away: {
+    ...base.away,
+    abbreviation: "FLA",
+    rest_days: null,
+    fast_state: openingFastState.get("FLA")!,
+    current_season_games: 0,
+  },
+  market: {
+    ...base.market,
+    market_home_prob: null,
+    best_home_ml_prob: null,
+    best_away_ml_prob: null,
+    market_open_home_prob: null,
+    market_total_line: null,
+    market_open_total_line: null,
+    same_book_home_prob_move: null,
+    same_book_total_move: null,
+    market_home_puck_prob: null,
+    market_away_puck_prob: null,
+    market_book_count: 0,
+    ml_home_bets_pct: null,
+    ml_home_money_pct: null,
+    ml_split_confidence: "none",
+  },
+});
+assert.equal(fastParity.layers.fast_state_direct_active, true);
+assert.equal(fastParity.layers.roster_prior_active, false);
+assert.ok(Math.abs(fastParity.independent_total_goals - 6.2666935768328305) < 1e-12, "runtime opening total exactly matches the frozen research candidate");
+assert.ok(Math.abs(fastParity.independent_goal_diff - 0.9040606999127336) < 1e-12, `runtime opening margin ${fastParity.independent_goal_diff} exactly matches the frozen research candidate`);
+assert.ok(Math.abs(fastParity.moneyline.probability - 0.6529311045797345) < 1e-12, `runtime opening probability ${fastParity.moneyline.probability} exactly matches the frozen research candidate`);
+const fastAfterWindow = nhlRegularModelV1({
+  ...base,
+  home: { ...base.home, fast_state: openingFastState.get("FLA")!, current_season_games: 10 },
+  away: { ...base.away, fast_state: openingFastState.get("BOS")!, current_season_games: 10 },
+});
+assert.equal(fastAfterWindow.layers.fast_state_direct_active, false, "the qualified opening model cannot leak past a team's tenth game");
 const targetExcludedRead = {
   exact_line: 6.5,
   over_probability: 0.59,
@@ -742,16 +855,19 @@ assert.notEqual(stateAfter.elo, stateBefore.elo);
 assert.notEqual(stateAfter.goalsFor, stateBefore.goalsFor);
 const openingAdjusted = replayNhlOpponentAdjustedState([], "2026-09-29");
 const replayedAdjusted = replayNhlOpponentAdjustedState([
-  { game_id: 2026020001, season: 2026, game_date: "20260929", team_abbr: "BOS", opponent_abbr: "FLA", home_or_away: "HOME", x_goals_for: 4.2 },
-  { game_id: 2026020001, season: 2026, game_date: "20260929", team_abbr: "FLA", opponent_abbr: "BOS", home_or_away: "AWAY", x_goals_for: 1.8 },
+  { game_id: 2026020001, season: 2026, game_date: "20260929", team_abbr: "BOS", opponent_abbr: "FLA", home_or_away: "HOME", goals_for: 4, goals_against: 2, x_goals_for: 4.2, x_goals_against: 1.8, shots_on_goal_for: 34, shots_on_goal_against: 27, five_x_goals_for: 3.1, five_x_goals_against: 1.4, pp_x_goals_for: 1.1, pk_x_goals_against: 0.2, dzone_giveaways_for: 4 },
+  { game_id: 2026020001, season: 2026, game_date: "20260929", team_abbr: "FLA", opponent_abbr: "BOS", home_or_away: "AWAY", goals_for: 2, goals_against: 4, x_goals_for: 1.8, x_goals_against: 4.2, shots_on_goal_for: 27, shots_on_goal_against: 34, five_x_goals_for: 1.4, five_x_goals_against: 3.1, pp_x_goals_for: 0.2, pk_x_goals_against: 1.1, dzone_giveaways_for: 7 },
 ], "2026-09-30");
 const noLeakAdjusted = replayNhlOpponentAdjustedState([
-  { game_id: 2026020001, season: 2026, game_date: "20260929", team_abbr: "BOS", opponent_abbr: "FLA", home_or_away: "HOME", x_goals_for: 4.2 },
-  { game_id: 2026020001, season: 2026, game_date: "20260929", team_abbr: "FLA", opponent_abbr: "BOS", home_or_away: "AWAY", x_goals_for: 1.8 },
+  { game_id: 2026020001, season: 2026, game_date: "20260929", team_abbr: "BOS", opponent_abbr: "FLA", home_or_away: "HOME", goals_for: 4, goals_against: 2, x_goals_for: 4.2, x_goals_against: 1.8, shots_on_goal_for: 34, shots_on_goal_against: 27, five_x_goals_for: 3.1, five_x_goals_against: 1.4, pp_x_goals_for: 1.1, pk_x_goals_against: 0.2, dzone_giveaways_for: 4 },
+  { game_id: 2026020001, season: 2026, game_date: "20260929", team_abbr: "FLA", opponent_abbr: "BOS", home_or_away: "AWAY", goals_for: 2, goals_against: 4, x_goals_for: 1.8, x_goals_against: 4.2, shots_on_goal_for: 27, shots_on_goal_against: 34, five_x_goals_for: 1.4, five_x_goals_against: 3.1, pp_x_goals_for: 0.2, pk_x_goals_against: 1.1, dzone_giveaways_for: 7 },
 ], "2026-09-29");
 assert.equal(replayedAdjusted.gamesApplied, 1);
+assert.deepEqual([...replayedAdjusted.gameIdsApplied], [2026020001]);
 assert.notDeepEqual(replayedAdjusted.states.get("BOS"), openingAdjusted.states.get("BOS"));
+assert.notDeepEqual(replayedAdjusted.fastStates.get("BOS"), openingAdjusted.fastStates.get("BOS"));
 assert.deepEqual(noLeakAdjusted.states.get("BOS"), openingAdjusted.states.get("BOS"), "same-day outcomes never leak into a pregame slate");
+assert.deepEqual(noLeakAdjusted.fastStates.get("BOS"), openingAdjusted.fastStates.get("BOS"), "same-day outcomes never leak into the fast pregame state");
 
 const trackingBase = {
   sport: "nhl",
@@ -813,7 +929,11 @@ assert.match(reader, /predictionPayloadByGame/, "reader preserves the writer-own
 assert.match(reader, /writerVerdictsByGame/, "reader carries the price-aware writer decision for every NHL market");
 assert.match(reader, /nhlVerdictFromStoredDecision/, "reader maps the writer's immutable storage token instead of recomputing the grade");
 assert.match(reader, /NHL_REGULAR_TRANSITION_MODEL_RELEASES/, "reader preserves an already-locked prior-release tuple during deployment");
-assert.match(reader, /nhl_daily_edge_reader_2026_10_09_r13_target_excluded_total_reconciliation/, "reader release records the target-excluded fallback while preserving immutable NHL price mapping");
+assert.match(reader, /nhl_daily_edge_reader_2026_10_15_r14_fast_state_direct_probability/, "reader release records the fast-state candidate while preserving immutable NHL price mapping");
+assert.match(writer, /select\("external_id"\)/, "writer verifies exact settled-game replay identities instead of count parity");
+assert.match(reader, /select\("external_id"\)/, "reader verifies the same exact settled-game replay identities");
+assert.match(reader, /r\.locked_at !== null \|\| !replayComplete/, "reader preserves a stored transition predecessor while fresh replay evidence is incomplete");
+assert.match(reader, /!storedPayload && openingWindow && !model\.layers\.fast_state_direct_active/, "reader cannot synthesize an r18 opening-window forecast without fast-state evidence");
 assert.match(reader, /resolveNhlLockedPriceQuote/, "reader renders the stored locked price tuple instead of mutable current odds");
 assert.match(writer, /evaluated_quotes/, "writer freezes the selected price, book, side, and line together");
 assert.match(pregameSweep, /externalIdsFilter:\s*externalIds/, "T-60 writer refreshes only the games entering the lock window");
