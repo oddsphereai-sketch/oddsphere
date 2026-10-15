@@ -5,9 +5,12 @@ Status: research contract; no production promotion authorized
 
 ## Decision
 
-NBA must not grow a separate interpretation stack. It inherits the repository's strongest shared
-contracts and adds only basketball-specific forecast features and empirically cleared NBA market
-authority. The member card may remain visually simple, while every observation retains provider,
+NBA must not grow a separate interpretation stack, but that does **not** mean forcing its independent
+forecast into another sport's formula or smallest common feature set. It inherits the repository's
+strongest data, validation, calibration, market-evidence, writer, lock, and reporting contracts. Its
+independent forecast remains NBA-specific and retains every defensible signal discovered through
+outside research or internal testing, subject to point-in-time availability and chronological
+validation. The member card may remain visually simple, while every observation retains provider,
 source book, source type, source-observed time, fetched time, exact line, exact price, freshness,
 fallback status, and decision eligibility internally.
 
@@ -25,6 +28,14 @@ The required order is:
 
 Market evidence may confirm, resist, or leave the model-led decision unchanged. It cannot silently
 become a model input, be called "sharp" without provenance, or overwrite a locked public record.
+
+Research is a candidate-generation source, not disposable background. Possession-based scoring,
+opponent-adjusted efficiency, nonlinear Four Factors, pace/style interactions, rest and travel,
+lineup and rotation continuity, player impact, availability duration, early-season priors,
+uncertainty, and upset calibration stay in the tournament whenever the historical feed can reproduce
+them as of the decision timestamp. A candidate is removed for leakage, unreliable identity,
+unavailable runtime inputs, or failed chronological confirmation—not because MLB, NFL, or another
+sport does not use the same feature.
 
 ## Why the published r1 replay was not auditable enough
 
@@ -123,8 +134,11 @@ The work is split into gates so NBA does not start over and does not promote an 
    chronology, source class, freshness, persistence, reversal, buyback, and opposition. No grade effect.
 3. **NBA shadow authority:** validate market-specific NBA thresholds. Unknown or incomplete evidence
    returns unavailable; it never becomes neutral confirmation.
-4. **Independent tournament:** compare the feature-rich score model with rating and published-r1
-   baselines on chronological selection and sealed confirmation seasons. Inspect every error ledger.
+4. **Independent tournament:** translate the outside research into point-in-time NBA candidate
+   features, then compare the feature-rich score model with rating and published-r1 baselines on
+   chronological selection and sealed confirmation seasons. Inspect every error ledger and retain
+   features by out-of-sample contribution, stability, availability, and calibration—not by
+   cross-sport uniformity.
 5. **Combined replay:** evaluate model-only, market-only, confirmation, resistance, and disagreement
    cohorts at the exact decision timestamp and price. Measure calibration, MAE, Brier/log loss,
    spread/total direction, CLV where valid, action counts, promotions, and demotions.
