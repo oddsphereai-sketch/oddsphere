@@ -475,6 +475,25 @@ meaning of "the market." The complete multi-book BDL capture must be
 cross-checked before any source is allowed to select a blend weight or reader
 rule.
 
+### Consensus open-to-close sensitivity
+
+A predeclared chronological sensitivity audit used 2024-25 for rule selection
+and 2025-26 for confirmation. Closing consensus improved Moneyline Brier score
+from 0.20416 to 0.19893 in selection and from 0.19851 to 0.19426 in
+confirmation; log loss also improved in both seasons. Closing consensus was
+modestly closer to the result than opening consensus for both Spread and Total
+in both seasons.
+
+That does not validate a generic movement-following rule. The selection season
+chose following Spread moves of at least three points, but confirmation was
+130-102 (56.03%) with a 95% Wilson lower bound of only 49.60%. Following Total
+moves of at least four points fell from 221-186 (54.30%) in selection to
+164-172 (48.81%) in confirmation. Both rules fail their confirmation gate.
+The evidence supports testing a bounded market anchor; it rejects blindly
+following large moves. Because the source is consensus open/close rather than
+the exact same-book T-60 sequence and price, no live movement-reader rule is
+authorized by this audit.
+
 ## Upset-aware evaluation
 
 An upset is evaluated against a timestamp-valid, de-vigged pregame market
