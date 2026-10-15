@@ -11,6 +11,7 @@ import type { DailyEdgeGameAvailability } from "@/lib/services/dailyEdge/gameAva
 import {
   CFB_T60_MAX_CAPTURE_LAG_MINUTES,
   CFB_V1_DECISION_RELEASE,
+  CFB_V1_COORDINATOR_INTEGRATION_PREVIOUS_DECISION_RELEASE,
   CFB_V1_FINAL_WINNER_PREVIOUS_DECISION_RELEASE,
   CFB_V1_EXACT_PRICE_ACTIONABILITY_PREVIOUS_DECISION_RELEASE,
   cfbV1LineProbabilities,
@@ -20,6 +21,8 @@ import {
 } from "./cfbV1Decision";
 
 export const CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE =
+  "cfb_forward_evidence_snapshot_2026_10_15_r47_full_product_coordinator_compatibility" as const;
+export const CFB_FORWARD_COORDINATOR_INTEGRATION_PREVIOUS_EVIDENCE_SCHEMA_RELEASE =
   "cfb_forward_evidence_snapshot_2026_10_14_r46_correct_qb_final_winner_coordinator" as const;
 export const CFB_FORWARD_FINAL_WINNER_PREVIOUS_EVIDENCE_SCHEMA_RELEASE =
   "cfb_forward_evidence_snapshot_2026_10_12_r45_provider_team_identity_consensus_authority_split_specialization" as const;
@@ -96,6 +99,8 @@ export const CFB_FORWARD_INITIAL_EVIDENCE_SCHEMA_RELEASE =
 export const CFB_FORWARD_EVIDENCE_COLLECTOR_RELEASE =
   "cfb_forward_evidence_collector_2026_10_15_r58_per_game_official_availability_cadence" as const;
 export const CFB_FORWARD_MEMBER_RELEASE =
+  "cfb_v1_member_release_2026_10_15_r64_full_product_coordinator_compatibility" as const;
+export const CFB_FORWARD_COORDINATOR_INTEGRATION_PREVIOUS_MEMBER_RELEASE =
   "cfb_v1_member_release_2026_10_14_r63_correct_qb_final_winner_coordinator" as const;
 export const CFB_FORWARD_FINAL_WINNER_PREVIOUS_MEMBER_RELEASE =
   "cfb_v1_member_release_2026_10_12_r62_provider_team_identity_consensus_authority_split_specialization" as const;
@@ -185,8 +190,54 @@ export function isCfbPublishedT60AccuracyLockPayload(payload: CfbForwardEvidence
   return payload.schemaRelease === CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE &&
     payload.memberRelease === CFB_FORWARD_MEMBER_RELEASE &&
     (payload.decisions.decisionRelease === CFB_V1_DECISION_RELEASE ||
+      payload.decisions.decisionRelease === CFB_V1_COORDINATOR_INTEGRATION_PREVIOUS_DECISION_RELEASE ||
       (payload.decisions.decisionRelease === CFB_V1_FINAL_WINNER_PREVIOUS_DECISION_RELEASE ||
         payload.decisions.decisionRelease === CFB_V1_EXACT_PRICE_ACTIONABILITY_PREVIOUS_DECISION_RELEASE)) &&
+    payload.stage === "t60" &&
+    payload.captureTiming === "on_time" &&
+    lag !== null && Number.isFinite(lag) && lag >= 0 && lag <= CFB_T60_MAX_CAPTURE_LAG_MINUTES &&
+    Number.isFinite(capturedAt) && Number.isFinite(gameStartsAt) && capturedAt < gameStartsAt &&
+    payload.decisions.publicationEnabled &&
+    !payload.decisions.trackingEnabled &&
+    payload.decisions.evaluatedBets.length === 0 &&
+    payload.decisions.heldMarkets.length === 3 &&
+    accuracyOnlyHold &&
+    completeOutlooks;
+}
+
+/**
+ * Preserve accuracy-only locks written by the immediately preceding
+ * coordinator-integration release. Keep this separate from the current-release
+ * predicate above so adding rollout compatibility cannot narrow or reinterpret
+ * any release tuple that predicate already accepts.
+ */
+export function isCfbCoordinatorIntegrationPreviousT60AccuracyLockPayload(
+  payload: CfbForwardEvidencePayload,
+): boolean {
+  const lag = payload.t60LagMinutes;
+  const capturedAt = Date.parse(payload.capturedAt);
+  const gameStartsAt = Date.parse(payload.game.scheduledStart);
+  const outlooks = payload.decisions.marketOutlooks;
+  const completeOutlooks = outlooks !== undefined &&
+    outlooks.moneyline !== null &&
+    outlooks.spread !== null && outlooks.spread.line !== null &&
+    outlooks.total !== null && outlooks.total.line !== null &&
+    ([outlooks.moneyline, outlooks.spread, outlooks.total] as const).every((outlook) =>
+      Number.isFinite(outlook.independentProbability) &&
+      outlook.independentProbability >= 0 &&
+      outlook.independentProbability <= 1 &&
+      Boolean(outlook.side));
+  const accuracyOnlyHold = (
+    payload.coverage.healthHolds.length === 1 &&
+    payload.coverage.healthHolds[0] === "authoritative_market_anchor_unavailable" &&
+    payload.authoritativeForecast?.status === "market_anchor_unavailable_hold"
+  ) || (
+    payload.coverage.healthHolds.length === 0 &&
+    payload.authoritativeForecast?.status === "market_sharp_applied"
+  );
+  return String(payload.schemaRelease) === CFB_FORWARD_COORDINATOR_INTEGRATION_PREVIOUS_EVIDENCE_SCHEMA_RELEASE &&
+    String(payload.memberRelease) === CFB_FORWARD_COORDINATOR_INTEGRATION_PREVIOUS_MEMBER_RELEASE &&
+    String(payload.decisions.decisionRelease) === CFB_V1_COORDINATOR_INTEGRATION_PREVIOUS_DECISION_RELEASE &&
     payload.stage === "t60" &&
     payload.captureTiming === "on_time" &&
     lag !== null && Number.isFinite(lag) && lag >= 0 && lag <= CFB_T60_MAX_CAPTURE_LAG_MINUTES &&
@@ -382,7 +433,8 @@ export type CfbForwardEvidencePayload = {
     finalWinnerCoordinatorRelease?: string;
     finalWinnerCoordinatorArtifactRelease?: string;
     finalWinnerCoordinatorApplied?: boolean;
-    finalWinnerCoordinatorReason?: "winner_boundary_cross" | "same_winner_side" | "team_profile_unavailable" | "runtime_fallback" | "target_book_cycle_fallback";
+    finalWinnerCoordinatorReason?: "winner_boundary_cross" | "same_winner_side" | "team_profile_unavailable" | "runtime_fallback" | "target_book_cycle_fallback" | "full_product_compatibility_hold";
+    finalWinnerCoordinatorWouldApply?: boolean;
     finalWinnerCoordinatorAuthority?: number;
     finalWinnerCoordinatorLearnedHomeWinProbability?: number | null;
     finalWinnerCoordinatorCombinedHomeWinProbability?: number;

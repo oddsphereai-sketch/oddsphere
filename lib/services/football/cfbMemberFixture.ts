@@ -9,6 +9,8 @@ import { withFirstTrackedSplitObservation } from "@/lib/services/splitDisplayMov
 import type { MarketSplitDisplaySection } from "@/lib/types/domain/RecommendationDecision";
 import {
   CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE,
+  CFB_FORWARD_COORDINATOR_INTEGRATION_PREVIOUS_EVIDENCE_SCHEMA_RELEASE,
+  CFB_FORWARD_COORDINATOR_INTEGRATION_PREVIOUS_MEMBER_RELEASE,
   CFB_FORWARD_FINAL_WINNER_PREVIOUS_EVIDENCE_SCHEMA_RELEASE,
   CFB_FORWARD_FINAL_WINNER_PREVIOUS_MEMBER_RELEASE,
   CFB_FORWARD_MARKET_READER_PREVIOUS_EVIDENCE_SCHEMA_RELEASE,
@@ -68,6 +70,7 @@ import {
   CFB_FORWARD_PROVIDER_CONTINUITY_PREVIOUS_MEMBER_RELEASE,
   CFB_FORWARD_PROVIDER_FEED_PREVIOUS_MEMBER_RELEASE,
   hashCfbForwardEvidencePayload,
+  isCfbCoordinatorIntegrationPreviousT60AccuracyLockPayload,
   isCfbPublishedLateT60RecoveryPayload,
   isCfbPublishedT60AccuracyLockPayload,
   isCfbPreT60PublishedPayloadRecovery,
@@ -87,6 +90,7 @@ import {
   CFB_V1_BASE_PROBABILITY_RELEASE,
   CFB_V1_BASE_SCORE_ARTIFACT_RELEASE,
   CFB_V1_DECISION_RELEASE,
+  CFB_V1_COORDINATOR_INTEGRATION_PREVIOUS_DECISION_RELEASE,
   CFB_V1_FINAL_WINNER_PREVIOUS_DECISION_RELEASE,
   CFB_V1_EXACT_PRICE_ACTIONABILITY_PREVIOUS_DECISION_RELEASE,
   CFB_V1_EXACT_PRICE_ACTIONABILITY_PREVIOUS_GRADE_POLICY_RELEASE,
@@ -114,14 +118,14 @@ import {
 } from "./cfbV1Decision";
 import { isGameInCfbWeeklyWindow, resolveCfbVisibleWindows } from "./cfbWeeklyWindow";
 import { cfbFootballEvidenceStats } from "./footballMemberEvidence";
-import { CFB_MARKET_SHARP_AWARE_EXACT_PRICE_PREVIOUS_PRODUCTION_RELEASE, CFB_MARKET_SHARP_AWARE_FINAL_WINNER_PREVIOUS_PRODUCTION_RELEASE, CFB_MARKET_SHARP_AWARE_PRODUCTION_RELEASE } from "./cfbMarketSharpAwareShadow";
+import { CFB_MARKET_SHARP_AWARE_COORDINATOR_INTEGRATION_PREVIOUS_PRODUCTION_RELEASE, CFB_MARKET_SHARP_AWARE_EXACT_PRICE_PREVIOUS_PRODUCTION_RELEASE, CFB_MARKET_SHARP_AWARE_FINAL_WINNER_PREVIOUS_PRODUCTION_RELEASE, CFB_MARKET_SHARP_AWARE_PRODUCTION_RELEASE } from "./cfbMarketSharpAwareShadow";
 import { cfbTeamIdentity } from "./cfbTeamIdentity";
 import { CFB_PUBLIC_SCORE_DIRECTION_TOLERANCE_POINTS } from "./footballCrossMarketCoherence";
 
 export const CFB_MEMBER_FIXTURE_RELEASE =
-  "cfb_v1_member_fixture_2026_10_14_r91_precutoff_card_lock_recovery" as const;
+  "cfb_v1_member_fixture_2026_10_15_r92_full_product_coordinator_compatibility" as const;
 export const CFB_PUBLIC_OUTCOME_CONTRACT_RELEASE =
-  "cfb_market_sharp_public_outcome_contract_2026_10_14_r79_correct_qb_final_winner_coordinator" as const;
+  "cfb_market_sharp_public_outcome_contract_2026_10_15_r80_full_product_coordinator_compatibility" as const;
 export const CFB_MEMBER_GAME_LIFECYCLE_RELEASE =
   "cfb_member_game_lifecycle_2026_10_14_r3_precutoff_card_lock_recovery" as const;
 export const CFB_CONTEXT_ONLY_QUOTE_CAPTURE_SKEW_MS = 5_000 as const;
@@ -991,20 +995,49 @@ export function selectLatestCfbMemberEvidenceRows(
     : null;
   const finalWinnerPrevious = finalWinnerPreviousComplete ?? finalWinnerPreviousBoundary ??
     finalWinnerPreviousLockOverlay;
+  const coordinatorIntegrationPreviousComplete = completeRowsForRelease(
+    rows,
+    CFB_FORWARD_COORDINATOR_INTEGRATION_PREVIOUS_EVIDENCE_SCHEMA_RELEASE,
+    CFB_FORWARD_COORDINATOR_INTEGRATION_PREVIOUS_MEMBER_RELEASE,
+    CFB_V1_COORDINATOR_INTEGRATION_PREVIOUS_DECISION_RELEASE,
+  );
+  const coordinatorIntegrationPreviousBoundary = finalWinnerPrevious
+    ? immutableBoundaryTransitionRows(
+        rows,
+        now,
+        CFB_FORWARD_COORDINATOR_INTEGRATION_PREVIOUS_EVIDENCE_SCHEMA_RELEASE,
+        CFB_FORWARD_COORDINATOR_INTEGRATION_PREVIOUS_MEMBER_RELEASE,
+        CFB_V1_COORDINATOR_INTEGRATION_PREVIOUS_DECISION_RELEASE,
+        finalWinnerPrevious,
+      )
+    : null;
+  const coordinatorIntegrationPreviousLockOverlay = finalWinnerPrevious
+    ? immutableLockOverlayRows(
+        rows,
+        CFB_FORWARD_COORDINATOR_INTEGRATION_PREVIOUS_EVIDENCE_SCHEMA_RELEASE,
+        CFB_FORWARD_COORDINATOR_INTEGRATION_PREVIOUS_MEMBER_RELEASE,
+        CFB_V1_COORDINATOR_INTEGRATION_PREVIOUS_DECISION_RELEASE,
+        finalWinnerPrevious,
+      )
+    : null;
+  const coordinatorIntegrationPrevious = coordinatorIntegrationPreviousComplete ??
+    coordinatorIntegrationPreviousBoundary ?? coordinatorIntegrationPreviousLockOverlay;
   const current = completeRowsForRelease(rows, CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE, CFB_FORWARD_MEMBER_RELEASE, CFB_V1_DECISION_RELEASE);
   if (current) return current;
-  const finalWinnerPreviousAuthority = finalWinnerPrevious ?? exactPriceActionabilityPrevious ?? marketReaderPreviousAuthority;
-  const immutableBoundaryTransition = finalWinnerPreviousAuthority
+  const coordinatorIntegrationPreviousAuthority = coordinatorIntegrationPrevious ?? finalWinnerPrevious ??
+    exactPriceActionabilityPrevious ?? marketReaderPreviousAuthority;
+  const immutableBoundaryTransition = coordinatorIntegrationPreviousAuthority
     ? immutableBoundaryTransitionRows(
         rows,
         now,
         CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE,
         CFB_FORWARD_MEMBER_RELEASE,
         CFB_V1_DECISION_RELEASE,
-        finalWinnerPreviousAuthority,
+        coordinatorIntegrationPreviousAuthority,
       )
     : null;
   if (immutableBoundaryTransition) return immutableBoundaryTransition;
+  if (coordinatorIntegrationPrevious) return coordinatorIntegrationPrevious;
   if (finalWinnerPrevious) return finalWinnerPrevious;
   if (exactPriceActionabilityPrevious) return exactPriceActionabilityPrevious;
   if (marketReaderPrevious) return marketReaderPrevious;
@@ -1173,7 +1206,10 @@ function isValidImmutableBoundaryT60(row: CfbForwardStoredEvidence): boolean {
       decision.lockedAt === row.payload.capturedAt &&
       decision.evaluatedAt === row.payload.capturedAt
     );
-  return officialLock || (row.stage === "t60" && isCfbPublishedT60AccuracyLockPayload(row.payload));
+  return officialLock || (row.stage === "t60" && (
+    isCfbPublishedT60AccuracyLockPayload(row.payload) ||
+    isCfbCoordinatorIntegrationPreviousT60AccuracyLockPayload(row.payload)
+  ));
 }
 
 function latestValidRowsForRelease(
@@ -1182,13 +1218,16 @@ function latestValidRowsForRelease(
   memberRelease: string,
   decisionRelease: string,
 ): { values: CfbForwardStoredEvidence[]; expected: number } | null {
+  const coordinatorIntegrationPrevious = decisionRelease === CFB_V1_COORDINATOR_INTEGRATION_PREVIOUS_DECISION_RELEASE;
   const finalWinnerPrevious = decisionRelease === CFB_V1_FINAL_WINNER_PREVIOUS_DECISION_RELEASE;
   const exactPricePrevious = decisionRelease === CFB_V1_EXACT_PRICE_ACTIONABILITY_PREVIOUS_DECISION_RELEASE;
-  const expectedProductionRelease = finalWinnerPrevious
-    ? CFB_MARKET_SHARP_AWARE_FINAL_WINNER_PREVIOUS_PRODUCTION_RELEASE
-    : exactPricePrevious
-      ? CFB_MARKET_SHARP_AWARE_EXACT_PRICE_PREVIOUS_PRODUCTION_RELEASE
-      : CFB_MARKET_SHARP_AWARE_PRODUCTION_RELEASE;
+  const expectedProductionRelease = coordinatorIntegrationPrevious
+    ? CFB_MARKET_SHARP_AWARE_COORDINATOR_INTEGRATION_PREVIOUS_PRODUCTION_RELEASE
+    : finalWinnerPrevious
+      ? CFB_MARKET_SHARP_AWARE_FINAL_WINNER_PREVIOUS_PRODUCTION_RELEASE
+      : exactPricePrevious
+        ? CFB_MARKET_SHARP_AWARE_EXACT_PRICE_PREVIOUS_PRODUCTION_RELEASE
+        : CFB_MARKET_SHARP_AWARE_PRODUCTION_RELEASE;
   const expectedPolicyRelease = exactPricePrevious
     ? CFB_V1_EXACT_PRICE_ACTIONABILITY_PREVIOUS_GRADE_POLICY_RELEASE
     : CFB_V1_GRADE_POLICY_RELEASE;

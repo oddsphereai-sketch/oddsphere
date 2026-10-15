@@ -16,6 +16,8 @@ import { dailyEdgeOutcomeForecastLabel } from "../app/lab/lib/dailyEdgeOutcomeFo
 import {
   CFB_FORWARD_EVIDENCE_COLLECTOR_RELEASE,
   CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE,
+  CFB_FORWARD_COORDINATOR_INTEGRATION_PREVIOUS_EVIDENCE_SCHEMA_RELEASE,
+  CFB_FORWARD_COORDINATOR_INTEGRATION_PREVIOUS_MEMBER_RELEASE,
   CFB_FORWARD_FINAL_WINNER_PREVIOUS_EVIDENCE_SCHEMA_RELEASE,
   CFB_FORWARD_FINAL_WINNER_PREVIOUS_MEMBER_RELEASE,
   CFB_FORWARD_GAP_FALLBACK_PREVIOUS_EVIDENCE_SCHEMA_RELEASE,
@@ -44,6 +46,7 @@ import {
   buildCfbForwardMarketOutlooks,
   determineCfbForwardCollectionNeed,
   hashCfbForwardEvidencePayload,
+  isCfbCoordinatorIntegrationPreviousT60AccuracyLockPayload,
   isCfbPreT60PublishedPayloadRecovery,
   isCfbPublishedLateT60RecoveryPayload,
   isCfbPublishedT60AccuracyLockPayload,
@@ -97,6 +100,7 @@ import { resolveCfbCanonicalMarketAnchor } from "../lib/services/football/cfbMar
 import {
   CFB_MARKET_SHADOW_WEIGHT,
   CFB_MARKET_SHARP_AWARE_CANDIDATE_RELEASE,
+  CFB_MARKET_SHARP_AWARE_COORDINATOR_INTEGRATION_PREVIOUS_PRODUCTION_RELEASE,
   CFB_MARKET_SHARP_AWARE_FINAL_WINNER_PREVIOUS_PRODUCTION_RELEASE,
   CFB_MARKET_SHARP_AWARE_EXACT_PRICE_PREVIOUS_PRODUCTION_RELEASE,
   CFB_MARKET_SHARP_AWARE_GAP_FALLBACK_PREVIOUS_PRODUCTION_RELEASE,
@@ -124,6 +128,7 @@ import { FOOTBALL_MARKET_SCOPED_T60_TRACKING_RELEASE } from "../lib/services/foo
 import { SharpApiClientError } from "../lib/providers/real_api/_sharpApiClient";
 import {
   CFB_T60_MAX_CAPTURE_LAG_MINUTES,
+  CFB_V1_COORDINATOR_INTEGRATION_PREVIOUS_DECISION_RELEASE,
   CFB_V1_DECISION_RELEASE,
   CFB_V1_FINAL_WINNER_PREVIOUS_DECISION_RELEASE,
   CFB_V1_EXACT_PRICE_ACTIONABILITY_PREVIOUS_DECISION_RELEASE,
@@ -1069,6 +1074,42 @@ assert.equal(
   previousFinalWinnerFixture.snapshot.games[0]!.footballProjection!.homeWinProbability,
   previousFinalWinnerPayload.decisions.forecast.homeWinProbability,
   "the reader must render the exact stored locked win probability without reconstruction",
+);
+const previousCoordinatorIntegrationPayload: CfbForwardEvidencePayload = {
+  ...structuredClone(previousFinalWinnerPayload),
+  schemaRelease: CFB_FORWARD_COORDINATOR_INTEGRATION_PREVIOUS_EVIDENCE_SCHEMA_RELEASE as unknown as typeof evidence.payload.schemaRelease,
+  memberRelease: CFB_FORWARD_COORDINATOR_INTEGRATION_PREVIOUS_MEMBER_RELEASE as unknown as typeof evidence.payload.memberRelease,
+  decisions: {
+    ...structuredClone(previousFinalWinnerPayload.decisions),
+    decisionRelease: CFB_V1_COORDINATOR_INTEGRATION_PREVIOUS_DECISION_RELEASE as unknown as typeof evidence.payload.decisions.decisionRelease,
+    evaluatedBets: previousFinalWinnerPayload.decisions.evaluatedBets.map((decision) => ({
+      ...decision,
+      decisionRelease: CFB_V1_COORDINATOR_INTEGRATION_PREVIOUS_DECISION_RELEASE as unknown as typeof decision.decisionRelease,
+      ...(decision.gradeAdjustment ? {
+        gradeAdjustment: {
+          ...decision.gradeAdjustment,
+          release: CFB_MARKET_SHARP_AWARE_COORDINATOR_INTEGRATION_PREVIOUS_PRODUCTION_RELEASE as unknown as typeof decision.gradeAdjustment.release,
+        },
+      } : {}),
+    })),
+  },
+  authoritativeForecast: previousFinalWinnerPayload.authoritativeForecast ? {
+    ...previousFinalWinnerPayload.authoritativeForecast,
+    release: CFB_MARKET_SHARP_AWARE_COORDINATOR_INTEGRATION_PREVIOUS_PRODUCTION_RELEASE as unknown as typeof previousFinalWinnerPayload.authoritativeForecast.release,
+  } : undefined,
+};
+const previousCoordinatorIntegrationFixture = buildCfbMemberFixture([{
+  ...evidence,
+  id: "previous-coordinator-integration",
+  payloadSha256: hashCfbForwardEvidencePayload(previousCoordinatorIntegrationPayload),
+  payload: previousCoordinatorIntegrationPayload,
+}]);
+assert.equal(previousCoordinatorIntegrationFixture.snapshot.games.length, 1, "the active r51 coordinator release must remain readable during the compatibility rollout");
+assert.equal(previousCoordinatorIntegrationFixture.snapshot.games[0]!.lockState, "locked", "the r51 coordinator locked payload must retain exact reader precedence");
+assert.equal(
+  previousCoordinatorIntegrationFixture.snapshot.games[0]!.footballProjection!.homeWinProbability,
+  previousCoordinatorIntegrationPayload.decisions.forecast.homeWinProbability,
+  "the compatibility release must never reconstruct or reinterpret the stored r51 locked probability",
 );
 assert.deepEqual(
   retainCfbMemberLockedGamesForBoardDate({
@@ -2806,6 +2847,47 @@ const publishedT60AccuracyStored: CfbForwardStoredEvidence = {
   payload: publishedT60AccuracyPayload,
 };
 assert.equal(isCfbPublishedT60AccuracyLockPayload(publishedT60AccuracyPayload), true);
+const previousCoordinatorAccuracyLockPayload: CfbForwardEvidencePayload = {
+  ...structuredClone(publishedT60AccuracyPayload),
+  schemaRelease: CFB_FORWARD_COORDINATOR_INTEGRATION_PREVIOUS_EVIDENCE_SCHEMA_RELEASE as unknown as typeof publishedT60AccuracyPayload.schemaRelease,
+  memberRelease: CFB_FORWARD_COORDINATOR_INTEGRATION_PREVIOUS_MEMBER_RELEASE as unknown as typeof publishedT60AccuracyPayload.memberRelease,
+  decisions: {
+    ...structuredClone(publishedT60AccuracyPayload.decisions),
+    decisionRelease: CFB_V1_COORDINATOR_INTEGRATION_PREVIOUS_DECISION_RELEASE as unknown as typeof publishedT60AccuracyPayload.decisions.decisionRelease,
+  },
+};
+assert.equal(
+  isCfbCoordinatorIntegrationPreviousT60AccuracyLockPayload(previousCoordinatorAccuracyLockPayload),
+  true,
+  "the previous coordinator release's accuracy-only lock must remain immutable and readable",
+);
+assert.equal(
+  isCfbPublishedT60AccuracyLockPayload(previousCoordinatorAccuracyLockPayload),
+  false,
+  "previous-release compatibility must remain separate from the current-release predicate",
+);
+const previousCoordinatorAccuracyLockStored: CfbForwardStoredEvidence = {
+  ...publishedT60AccuracyStored,
+  id: "previous-coordinator-t60-accuracy-lock",
+  payload: previousCoordinatorAccuracyLockPayload,
+};
+const previousCoordinatorAccuracyCandidates = cfbTrackingCandidatesForRun(
+  [previousCoordinatorAccuracyLockStored],
+  [],
+  "2026-08-29T15:20:00.000Z",
+);
+assert.equal(previousCoordinatorAccuracyCandidates.length, 1);
+assert.equal(previousCoordinatorAccuracyCandidates[0]!.mode, "published_t60_accuracy_lock");
+const previousCoordinatorAccuracyFixture = buildCfbMemberFixture(
+  [previousCoordinatorAccuracyLockStored],
+  "2026-08-29T15:20:00.000Z",
+);
+assert.equal(previousCoordinatorAccuracyFixture.snapshot.games[0]!.lockState, "locked");
+assert.equal(
+  previousCoordinatorAccuracyFixture.snapshot.games[0]!.footballProjection!.homeWinProbability,
+  previousCoordinatorAccuracyLockPayload.decisions.forecast.homeWinProbability,
+  "the previous coordinator accuracy-only lock must render its exact stored probability",
+);
 const accuracyLockCandidates = cfbTrackingCandidatesForRun(
   [publishedT60AccuracyStored],
   [],
@@ -3397,6 +3479,11 @@ assert.match(writerSource, /const need = resolveCfbForwardCollectionNeed\(\{[\s\
 assert.match(writerSource, /contextualEvidenceCapture\?\.release !== CFB_FORWARD_CONTEXT_CAPTURE_RELEASE/, "a new evidence-only capture release must seed without waiting for ordinary far-slate cadence");
 assert.match(writerSource, /need\.reason === "provider_seed_due"/, "the sole leased writer must admit the one-time paid-provider seed through its existing capture planner");
 assert.ok(sharpFallbackIndex >= 0 && evidenceAppendIndex > sharpFallbackIndex, "the writer must finish bounded SharpAPI exact-event fallback before its sole evidence append");
+assert.match(writerSource, /const forecast = marketReader\.forecast;/, "the complete professional market reader must remain the final full-product forecast authority");
+assert.match(writerSource, /finalWinnerCoordinatorApplied: false/, "the incompatible final-winner coordinator must not alter future unlocked forecasts");
+assert.match(writerSource, /finalWinnerCoordinatorWouldApply: finalWinnerCoordinator\.applied/, "the held coordinator must retain explicit would-apply telemetry for retraining");
+assert.match(writerSource, /\? "full_product_compatibility_hold"/, "a would-be coordinator cross must be labeled as a full-product compatibility hold");
+assert.doesNotMatch(writerSource, /const forecast = coordinatorTargetBookStable/, "the held coordinator must not retain a hidden forecast-application path");
 const fallbackSelection = selectCfbSharpFallbackGames({
   games: Array.from({ length: 30 }, (_, index) => ({
     ...game,

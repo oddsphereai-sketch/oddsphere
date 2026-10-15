@@ -1,5 +1,28 @@
 # Model change safety protocol
 
+## Owner-directed provisional exception: CFB full-product coordinator compatibility
+
+On 2026-10-15 Daniel Mengel directed Oddsphere to audit the College Football losses, identify why
+the discovered fixes were making the combined model worse, and implement a real model improvement
+rather than another narrow diagnostic. This exception is limited to the compatibility correction
+and evidence in
+`docs/model-audits/2026-10-15-cfb-full-product-coordinator-compatibility.md`.
+
+The independent weekly model and complete professional market reader remain active. The frozen r2
+correct-QB coordinator may continue to evaluate future unlocked games and store its complete
+would-apply diagnostics, but it may not replace the reader forecast in this release. This restriction
+is based on an exact 393-game full-product replay in which coordinator removal improves Moneyline by
+11 wins, proper scoring and score error, while direct Spread and Total remain unchanged and alternate
+Spread results improve. A four-cross 70% gate is rejected because its incremental gain is confined
+to the opened development segment.
+
+Every stored locked payload retains exact reader precedence. The candidate may not create a second
+writer, bypass the `prediction_pipeline:cfb` lease, change evidence cadence, promote unqualified
+conference injury evidence, or suppress diagnostic evidence. Publication requires the focused CFB
+suite, full model-change verification, current-main integration safety, protected PR checks, owner
+approval, and post-deploy proof of release identity, board stability, telemetry, and unchanged locks.
+Rollback restores future unlocked computation to the r51 coordinator family without mutating history.
+
 ## Owner-approved correctness exception: CFB official-availability per-game cadence
 
 On 2026-10-15 Daniel Mengel directed Oddsphere to stop losing future CFB injury evidence before
