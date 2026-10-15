@@ -300,6 +300,16 @@ async function main(): Promise<void> {
   const maxPages = sample ? positiveInteger("--sample-pages") : 1_000;
   const batchSize = positiveInteger("--batch-size", 10);
   if (batchSize > 50) throw new Error("--batch-size must be from 1 through 50.");
+  const boxBatchSize = positiveInteger("--box-batch-size", batchSize);
+  const advancedBatchSize = positiveInteger("--advanced-batch-size", batchSize);
+  const openingOddsBatchSize = positiveInteger("--opening-odds-batch-size", batchSize);
+  for (const [flag, size] of [
+    ["--box-batch-size", boxBatchSize],
+    ["--advanced-batch-size", advancedBatchSize],
+    ["--opening-odds-batch-size", openingOddsBatchSize],
+  ] as const) {
+    if (size > 50) throw new Error(`${flag} must be from 1 through 50.`);
+  }
   const resume = hasFlag("--resume");
   const importedGamesFile = value("--games-file");
   const importedGamesSha256 = value("--games-sha256");
@@ -362,7 +372,8 @@ async function main(): Promise<void> {
 
   if (datasets.includes("box")) {
     const result = await collectExactGameBatches({
-      dataset: "box", gameIds, outputDirectory, batchSize, maxPages, requestIntervalMs, sample, resume,
+      dataset: "box", gameIds, outputDirectory, batchSize: boxBatchSize,
+      maxPages, requestIntervalMs, sample, resume,
     });
     const rows = result.rows;
     const written = await writeJsonl({ outputDirectory, dataset: "box", rows });
@@ -380,7 +391,8 @@ async function main(): Promise<void> {
 
   if (datasets.includes("advanced")) {
     const result = await collectExactGameBatches({
-      dataset: "advanced", gameIds, outputDirectory, batchSize, maxPages, requestIntervalMs, sample, resume,
+      dataset: "advanced", gameIds, outputDirectory, batchSize: advancedBatchSize,
+      maxPages, requestIntervalMs, sample, resume,
     });
     const rows = result.rows;
     const written = await writeJsonl({ outputDirectory, dataset: "advanced", rows });
@@ -408,7 +420,8 @@ async function main(): Promise<void> {
       };
     } else {
       const result = await collectExactGameBatches({
-        dataset: "opening_odds", gameIds, outputDirectory, batchSize, maxPages, requestIntervalMs, sample, resume,
+        dataset: "opening_odds", gameIds, outputDirectory, batchSize: openingOddsBatchSize,
+        maxPages, requestIntervalMs, sample, resume,
       });
       const rows = result.rows;
       const written = await writeJsonl({ outputDirectory, dataset: "opening_odds", rows });
@@ -430,6 +443,11 @@ async function main(): Promise<void> {
     capturedAt,
     season,
     sample,
+    batchSizes: {
+      box: boxBatchSize,
+      advanced: advancedBatchSize,
+      opening_odds: openingOddsBatchSize,
+    },
     scoreBacktestEligible: !sample &&
       manifests.games?.complete === true &&
       manifests.box?.complete === true &&

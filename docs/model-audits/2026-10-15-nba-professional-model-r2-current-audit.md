@@ -145,6 +145,15 @@ and must cover every requested game before the manifest can become score- or
 price-backtest eligible. This is research input collection only and has no
 production reader or model authority.
 
+The active 48-hour GOAT trial truthfully reports a five-request-per-minute
+limit. BALLDONTLIE documents that this is the trial contract and that the same
+key automatically moves to 600 requests per minute after paid conversion. The
+collector therefore supports separate bounded batch sizes per dataset: small
+box-score checkpoints limit loss on interruption, while advanced and opening-
+odds rows can use larger exact-game batches to avoid unnecessary trial-window
+requests. Batch sizes are recorded in the immutable manifest and do not relax
+the per-game coverage gate.
+
 BALLDONTLIE team-season feature families are useful as prior-season or live
 current-state context. A completed full-season aggregate may not be applied
 backward to an earlier game in that same season. Historical rolling features

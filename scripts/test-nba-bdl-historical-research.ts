@@ -125,6 +125,9 @@ async function main(): Promise<void> {
   assert.match(operatorSource, /sample-\$\{capturedAt\.replace/);
   assert.match(operatorSource, /\.capture-checkpoints/);
   assert.match(operatorSource, /--resume/);
+  assert.match(operatorSource, /--advanced-batch-size/);
+  assert.match(operatorSource, /--opening-odds-batch-size/);
+  assert.match(operatorSource, /batchSizes/);
   assert.match(operatorSource, /missing_game_ids/);
   assert.match(operatorSource, /dataset: "box", gameIds/);
   assert.match(operatorSource, /dataset: "advanced", gameIds/);
