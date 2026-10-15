@@ -90,12 +90,32 @@ chronological tournament must run:
   NBA data from 2000 through 2025 reports that shooting, turnovers, rebounding,
   and free throws jointly determine team efficiency
   ([Poropudas and Halme](https://arxiv.org/abs/2305.13032)).
+- More inputs and a more complex learner are not automatically better. One
+  16-season NBA study reported that a single Elo or relative-win-strength
+  feature fit outcomes better than its box-score/Four-Factors alternatives.
+  That is not a universal result, but it requires every rich candidate to beat
+  simple dynamic-rating and home-court baselines on untouched seasons
+  ([Migliorati et al.](https://arxiv.org/abs/2111.09695)).
+- Final team scores are correlated outputs. Published NBA score research has
+  modeled the two scores jointly with bivariate mean regression and derived
+  winner probabilities from that system. Our tournament therefore compares
+  direct team-score heads with coherent margin/Total heads and will reject
+  independently rounded scores that imply inconsistent markets
+  ([Song, Zou, and Shi](https://doi.org/10.1080/03610918.2018.1520878)).
 - Player value must be estimated conditional on the other players on court.
   Win-probability adjusted player impact and lineup-combination research both
   warn against treating a player's box-score average as a context-free point
   adjustment
   ([Deshpande and Jensen](https://arxiv.org/abs/1604.03186),
   [Martonosi, Gonzalez, and Oshiro](https://arxiv.org/abs/2303.04963)).
+- Regularized adjusted plus-minus is useful but not a context-free truth. An
+  empirical assessment found material teammate-complementarity effects still
+  present in player estimates, and modern lineup work emphasizes extreme
+  lineup sparsity. Player impact candidates therefore require shrinkage,
+  replacement/lineup interactions, and out-of-sample testing rather than raw
+  plus-minus or a single public all-in-one number
+  ([Lewis, Lock, and Sexton](https://pmc.ncbi.nlm.nih.gov/articles/PMC7447047/),
+  [Petridis and Pelechrinis](https://arxiv.org/abs/2601.15000)).
 - Schedule stress is multidimensional. Rest, travel direction and distance,
   time-zone change, and trip sequence are separate candidate features, not a
   single back-to-back flag
@@ -112,6 +132,22 @@ chronological tournament must run:
   The age of the sample and changed injury-reporting and betting environment
   require a modern replication rather than direct adoption
   ([Dare, Dennis, and Paul](https://doi.org/10.1016/j.frl.2015.02.004)).
+- Betting decisions require calibrated probabilities, not merely a high winner
+  hit rate. An NBA betting experiment found that model selection by
+  calibration materially outperformed selection by accuracy in its held-out
+  season. We treat its reported returns as study-specific, while adopting the
+  sound evaluation requirement: Brier score, log loss, reliability by price
+  band, and exact-price expected value must gate actionability
+  ([Walsh and Joshi](https://doi.org/10.1016/j.mlwa.2024.100539)). The
+  authors later published a corrigendum after feature-engineering errors
+  changed the reported results while preserving that directional conclusion;
+  this is also a concrete warning that independent leakage tests are mandatory
+  ([corrigendum](https://doi.org/10.1016/j.mlwa.2025.100627)).
+- Opening-to-closing NBA line changes have historically improved the market's
+  forecast and removed opening bias. This supports the independent-first
+  architecture plus a timestamped downstream market reader; it does not
+  justify feeding the evaluated closing line into the independent score
+  ([Gandar et al.](https://doi.org/10.1111/0022-1082.155346)).
 
 These findings support a layered model: stable team strength, opponent and
 style interaction, expected rotation and minutes, schedule/travel state,
@@ -119,6 +155,14 @@ current-form residuals, and conditional uncertainty. None may become a live
 feature merely because it is intuitively plausible; each must improve the
 frozen chronological evaluation without a hidden subgroup or calibration
 regression.
+
+The GOAT tracking candidate now maps prior-game paint, transition,
+second-chance and turnover scoring shares; passing and touches; secondary and
+screen assists; deflections and contests; rim-defense volume and efficiency;
+rebounding chances; player-impact dispersion; usage concentration; and
+distance/speed into five-game, 15-game, and prior-season windows. The raw
+provider fields are not assumed predictive. The tournament decides whether
+each family adds stable score or calibration value beyond the simple baselines.
 
 ## Acute player-absence experiment
 

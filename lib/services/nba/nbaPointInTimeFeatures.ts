@@ -7,7 +7,7 @@
  */
 
 export const NBA_POINT_IN_TIME_FEATURE_RELEASE =
-  "nba_point_in_time_features_2026_10_15_r1" as const;
+  "nba_point_in_time_features_2026_10_15_r2" as const;
 
 export type NbaHistoricalGame = {
   gameId: number;
@@ -42,6 +42,32 @@ export type NbaHistoricalPlayerBox = {
   pf: number;
   points: number;
   plusMinus: number;
+};
+
+export type NbaHistoricalPlayerAdvanced = {
+  rowId: number;
+  gameId: number;
+  teamId: number;
+  playerId: number;
+  period: number;
+  possessions: number | null;
+  estimatedNetRating: number | null;
+  usagePercentage: number | null;
+  pointsPaint: number | null;
+  pointsFastBreak: number | null;
+  pointsSecondChance: number | null;
+  pointsOffTurnovers: number | null;
+  passes: number | null;
+  touches: number | null;
+  secondaryAssists: number | null;
+  screenAssistPoints: number | null;
+  deflections: number | null;
+  contestedShots: number | null;
+  defendedAtRimFga: number | null;
+  defendedAtRimFgm: number | null;
+  reboundChancesTotal: number | null;
+  distance: number | null;
+  speed: number | null;
 };
 
 type TeamBox = {
@@ -83,6 +109,25 @@ type TeamObservation = {
   top3MinutesShare: number;
   top8MinutesShare: number;
   rotationMinutesEntropy: number;
+  pointsPaintShare: number | null;
+  pointsFastBreakShare: number | null;
+  pointsSecondChanceShare: number | null;
+  pointsOffTurnoversShare: number | null;
+  passesPer100: number | null;
+  touchesPer100: number | null;
+  secondaryAssistsPer100: number | null;
+  screenAssistPointsPer100: number | null;
+  deflectionsPer100: number | null;
+  contestedShotsPer100: number | null;
+  defendedAtRimAttemptsPer100: number | null;
+  defendedAtRimFgPct: number | null;
+  reboundChancesPer100: number | null;
+  rotationEstimatedNetRating: number | null;
+  usageWeighted: number | null;
+  usageMax: number | null;
+  usageConcentration: number | null;
+  distancePer48: number | null;
+  speedWeighted: number | null;
 };
 
 type AdjustedRating = { offense: number; defense: number };
@@ -126,6 +171,15 @@ function finite(value: unknown): number | null {
 
 function nonnegative(value: unknown): number | null {
   const number = finite(value);
+  return number !== null && number >= 0 ? number : null;
+}
+
+function optionalFinite(value: unknown): number | null {
+  return value === null || value === undefined || value === "" ? null : finite(value);
+}
+
+function optionalNonnegative(value: unknown): number | null {
+  const number = optionalFinite(value);
   return number !== null && number >= 0 ? number : null;
 }
 
@@ -211,6 +265,45 @@ export function normalizeNbaHistoricalPlayerBox(row: Record<string, unknown>): N
   return normalized as NbaHistoricalPlayerBox;
 }
 
+export function normalizeNbaHistoricalPlayerAdvanced(
+  row: Record<string, unknown>,
+): NbaHistoricalPlayerAdvanced {
+  const game = object(row.game);
+  const team = object(row.team);
+  const player = object(row.player);
+  const identity = {
+    rowId: integer(row.id),
+    gameId: integer(row.game_id) ?? integer(game?.id),
+    teamId: integer(row.team_id) ?? integer(team?.id),
+    playerId: integer(row.player_id) ?? integer(player?.id),
+    period: integer(row.period),
+  };
+  if (Object.values(identity).some((value) => value === null) || identity.period !== 0) {
+    throw new Error("NBA historical feature input contains a malformed full-game advanced row.");
+  }
+  return {
+    ...(identity as { rowId: number; gameId: number; teamId: number; playerId: number; period: number }),
+    possessions: optionalNonnegative(row.possessions),
+    estimatedNetRating: optionalFinite(row.estimated_net_rating ?? row.net_rating),
+    usagePercentage: optionalNonnegative(row.estimated_usage_percentage ?? row.usage_percentage),
+    pointsPaint: optionalNonnegative(row.points_paint),
+    pointsFastBreak: optionalNonnegative(row.points_fast_break),
+    pointsSecondChance: optionalNonnegative(row.points_second_chance),
+    pointsOffTurnovers: optionalNonnegative(row.points_off_turnovers),
+    passes: optionalNonnegative(row.passes),
+    touches: optionalNonnegative(row.touches),
+    secondaryAssists: optionalNonnegative(row.secondary_assists),
+    screenAssistPoints: optionalNonnegative(row.screen_assist_points),
+    deflections: optionalNonnegative(row.deflections),
+    contestedShots: optionalNonnegative(row.contested_shots),
+    defendedAtRimFga: optionalNonnegative(row.defended_at_rim_fga),
+    defendedAtRimFgm: optionalNonnegative(row.defended_at_rim_fgm),
+    reboundChancesTotal: optionalNonnegative(row.rebound_chances_total),
+    distance: optionalNonnegative(row.distance),
+    speed: optionalNonnegative(row.speed),
+  };
+}
+
 function sum(boxes: NbaHistoricalPlayerBox[], key: keyof NbaHistoricalPlayerBox): number {
   return boxes.reduce((total, row) => total + (row[key] as number), 0);
 }
@@ -267,6 +360,127 @@ function rotationFeatures(box: TeamBox): Pick<
   };
 }
 
+function availableSum(
+  rows: NbaHistoricalPlayerAdvanced[],
+  key: keyof NbaHistoricalPlayerAdvanced,
+): number | null {
+  const values = rows.map((row) => row[key]).filter((value): value is number =>
+    typeof value === "number" && Number.isFinite(value));
+  return values.length > 0 ? values.reduce((total, value) => total + value, 0) : null;
+}
+
+function minuteWeighted(
+  rows: NbaHistoricalPlayerAdvanced[],
+  minutesByPlayer: Map<number, number>,
+  key: keyof NbaHistoricalPlayerAdvanced,
+): number | null {
+  const values = rows.flatMap((row) => {
+    const value = row[key];
+    const weight = minutesByPlayer.get(row.playerId) ?? 0;
+    return typeof value === "number" && Number.isFinite(value) && weight > 0 ? [{ value, weight }] : [];
+  });
+  const weight = values.reduce((total, item) => total + item.weight, 0);
+  return weight > 0
+    ? values.reduce((total, item) => total + item.value * item.weight, 0) / weight
+    : null;
+}
+
+function advancedFeatures(args: {
+  rows: NbaHistoricalPlayerAdvanced[];
+  box: TeamBox;
+  possessions: number;
+}): Pick<TeamObservation,
+  | "pointsPaintShare"
+  | "pointsFastBreakShare"
+  | "pointsSecondChanceShare"
+  | "pointsOffTurnoversShare"
+  | "passesPer100"
+  | "touchesPer100"
+  | "secondaryAssistsPer100"
+  | "screenAssistPointsPer100"
+  | "deflectionsPer100"
+  | "contestedShotsPer100"
+  | "defendedAtRimAttemptsPer100"
+  | "defendedAtRimFgPct"
+  | "reboundChancesPer100"
+  | "rotationEstimatedNetRating"
+  | "usageWeighted"
+  | "usageMax"
+  | "usageConcentration"
+  | "distancePer48"
+  | "speedWeighted"
+> {
+  if (args.rows.length === 0) {
+    return {
+      pointsPaintShare: null,
+      pointsFastBreakShare: null,
+      pointsSecondChanceShare: null,
+      pointsOffTurnoversShare: null,
+      passesPer100: null,
+      touchesPer100: null,
+      secondaryAssistsPer100: null,
+      screenAssistPointsPer100: null,
+      deflectionsPer100: null,
+      contestedShotsPer100: null,
+      defendedAtRimAttemptsPer100: null,
+      defendedAtRimFgPct: null,
+      reboundChancesPer100: null,
+      rotationEstimatedNetRating: null,
+      usageWeighted: null,
+      usageMax: null,
+      usageConcentration: null,
+      distancePer48: null,
+      speedWeighted: null,
+    };
+  }
+  const per100 = (value: number | null): number | null =>
+    value === null ? null : 100 * value / args.possessions;
+  const share = (value: number | null): number | null =>
+    value === null || args.box.points <= 0 ? null : value / args.box.points;
+  const minutesByPlayer = new Map(args.box.players.map((row) => [row.playerId, row.minutes]));
+  const usages = args.rows.flatMap((row) => {
+    const weight = minutesByPlayer.get(row.playerId) ?? 0;
+    return row.usagePercentage !== null && weight > 0 ? [{ value: row.usagePercentage, weight }] : [];
+  });
+  const totalUsageWeight = usages.reduce((total, item) => total + item.weight, 0);
+  const usageWeighted = totalUsageWeight > 0
+    ? usages.reduce((total, item) => total + item.value * item.weight, 0) / totalUsageWeight
+    : null;
+  const usageConcentration = usageWeighted === null ? null : Math.sqrt(
+    usages.reduce((total, item) => total + item.weight * (item.value - usageWeighted) ** 2, 0) /
+      totalUsageWeight,
+  );
+  const defendedAtRimFga = availableSum(args.rows, "defendedAtRimFga");
+  const defendedAtRimFgm = availableSum(args.rows, "defendedAtRimFgm");
+  const distance = availableSum(args.rows, "distance");
+  const totalMinutes = args.box.players.reduce((total, row) => total + row.minutes, 0);
+  return {
+    pointsPaintShare: share(availableSum(args.rows, "pointsPaint")),
+    pointsFastBreakShare: share(availableSum(args.rows, "pointsFastBreak")),
+    pointsSecondChanceShare: share(availableSum(args.rows, "pointsSecondChance")),
+    pointsOffTurnoversShare: share(availableSum(args.rows, "pointsOffTurnovers")),
+    passesPer100: per100(availableSum(args.rows, "passes")),
+    touchesPer100: per100(availableSum(args.rows, "touches")),
+    secondaryAssistsPer100: per100(availableSum(args.rows, "secondaryAssists")),
+    screenAssistPointsPer100: per100(availableSum(args.rows, "screenAssistPoints")),
+    deflectionsPer100: per100(availableSum(args.rows, "deflections")),
+    contestedShotsPer100: per100(availableSum(args.rows, "contestedShots")),
+    defendedAtRimAttemptsPer100: per100(defendedAtRimFga),
+    defendedAtRimFgPct: defendedAtRimFga !== null && defendedAtRimFga > 0 && defendedAtRimFgm !== null
+      ? defendedAtRimFgm / defendedAtRimFga
+      : null,
+    reboundChancesPer100: per100(availableSum(args.rows, "reboundChancesTotal")),
+    rotationEstimatedNetRating: minuteWeighted(args.rows, minutesByPlayer, "estimatedNetRating"),
+    usageWeighted,
+    usageMax: usages.length > 0 ? Math.max(...usages.map((item) => item.value)) : null,
+    usageConcentration,
+    distancePer48: totalMinutes > 0 && distance !== null
+      ? distance * 48 / totalMinutes
+      : null,
+    speedWeighted: minuteWeighted(args.rows, minutesByPlayer, "speed"),
+  };
+}
+
 function observation(args: {
   season: number;
   startMs: number;
@@ -275,6 +489,7 @@ function observation(args: {
   team: TeamBox;
   opponent: TeamBox;
   possessions: number;
+  advanced: NbaHistoricalPlayerAdvanced[];
 }): TeamObservation {
   const teamPossessions = possessionEstimate(args.team);
   const opponentPossessions = possessionEstimate(args.opponent);
@@ -294,6 +509,7 @@ function observation(args: {
     opponentOffensiveReboundRate: ratio(args.opponent.oreb, args.opponent.oreb + args.team.dreb),
     opponentFreeThrowRate: ratio(args.opponent.fta, args.opponent.fga),
     ...rotationFeatures(args.team),
+    ...advancedFeatures({ rows: args.advanced, box: args.team, possessions: args.possessions }),
   };
 }
 
@@ -312,7 +528,8 @@ function windowMean(
   key: keyof TeamObservation,
   count: number,
 ): number | null {
-  return mean(observations.slice(-count).map((row) => row[key] as number));
+  return mean(observations.slice(-count).map((row) => row[key]).filter((value): value is number =>
+    typeof value === "number" && Number.isFinite(value)));
 }
 
 function scheduleFeatures(observations: TeamObservation[], startMs: number): Record<string, number | null> {
@@ -360,6 +577,25 @@ function teamFeatures(args: {
     "top3MinutesShare",
     "top8MinutesShare",
     "rotationMinutesEntropy",
+    "pointsPaintShare",
+    "pointsFastBreakShare",
+    "pointsSecondChanceShare",
+    "pointsOffTurnoversShare",
+    "passesPer100",
+    "touchesPer100",
+    "secondaryAssistsPer100",
+    "screenAssistPointsPer100",
+    "deflectionsPer100",
+    "contestedShotsPer100",
+    "defendedAtRimAttemptsPer100",
+    "defendedAtRimFgPct",
+    "reboundChancesPer100",
+    "rotationEstimatedNetRating",
+    "usageWeighted",
+    "usageMax",
+    "usageConcentration",
+    "distancePer48",
+    "speedWeighted",
   ];
   for (const key of keys) {
     values[`${key}_5`] = windowMean(current, key, 5);
@@ -407,6 +643,7 @@ function updateAdjustedRatings(args: {
 export function buildNbaPointInTimeFeatures(args: {
   games: NbaHistoricalGame[];
   boxes: NbaHistoricalPlayerBox[];
+  advanced?: NbaHistoricalPlayerAdvanced[];
 }): NbaPointInTimeFeatureRow[] {
   const games = [...args.games].sort((left, right) =>
     Date.parse(left.startTime) - Date.parse(right.startTime) || left.gameId - right.gameId);
@@ -415,6 +652,12 @@ export function buildNbaPointInTimeFeatures(args: {
     const rows = boxesByGame.get(box.gameId) ?? [];
     rows.push(box);
     boxesByGame.set(box.gameId, rows);
+  }
+  const advancedByGame = new Map<number, NbaHistoricalPlayerAdvanced[]>();
+  for (const advanced of args.advanced ?? []) {
+    const rows = advancedByGame.get(advanced.gameId) ?? [];
+    rows.push(advanced);
+    advancedByGame.set(advanced.gameId, rows);
   }
   const observationsByTeam = new Map<number, TeamObservation[]>();
   const leagueObservations: TeamObservation[] = [];
@@ -445,6 +688,7 @@ export function buildNbaPointInTimeFeatures(args: {
       });
     }
     const gameBoxes = boxesByGame.get(game.gameId) ?? [];
+    const gameAdvanced = advancedByGame.get(game.gameId) ?? [];
     const homeBox = aggregateTeamBox(game.homeTeamId, gameBoxes);
     const awayBox = aggregateTeamBox(game.awayTeamId, gameBoxes);
     const homePossessions = possessionEstimate(homeBox);
@@ -502,6 +746,7 @@ export function buildNbaPointInTimeFeatures(args: {
       team: homeBox,
       opponent: awayBox,
       possessions,
+      advanced: gameAdvanced.filter((row) => row.teamId === game.homeTeamId),
     });
     const awayObservation = observation({
       season: game.season,
@@ -511,6 +756,7 @@ export function buildNbaPointInTimeFeatures(args: {
       team: awayBox,
       opponent: homeBox,
       possessions,
+      advanced: gameAdvanced.filter((row) => row.teamId === game.awayTeamId),
     });
     pendingOutcomes.push({
       availableAtMs: startMs + CONSERVATIVE_RESULT_AVAILABILITY_HOURS * 3_600_000,

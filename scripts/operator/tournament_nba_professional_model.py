@@ -24,8 +24,8 @@ from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 
 
-RELEASE = "nba_professional_tournament_2026_10_15_r1"
-FEATURE_RELEASE = "nba_point_in_time_features_2026_10_15_r1"
+RELEASE = "nba_professional_tournament_2026_10_15_r2"
+FEATURE_RELEASE = "nba_point_in_time_features_2026_10_15_r2"
 R1_CONFIRMATION = {
     "season": 2025,
     "games": 1230,
@@ -130,11 +130,21 @@ def feature_catalog(frame: pd.DataFrame) -> dict[str, list[str]]:
     four_factors = chosen(("efg_", "turnoverRate_", "offensiveReboundRate_", "freeThrowRate_", "opponent"))
     volatility = chosen(("margin_sd_", "total_rating_sd_"))
     rotation = chosen(("rotationPlayers_", "top3MinutesShare_", "top8MinutesShare_", "rotationMinutesEntropy_"))
+    tracking_style = chosen((
+        "pointsPaintShare_", "pointsFastBreakShare_", "pointsSecondChanceShare_",
+        "pointsOffTurnoversShare_", "passesPer100_", "touchesPer100_",
+        "secondaryAssistsPer100_", "screenAssistPointsPer100_", "deflectionsPer100_",
+        "contestedShotsPer100_", "defendedAtRimAttemptsPer100_", "defendedAtRimFgPct_",
+        "reboundChancesPer100_", "rotationEstimatedNetRating_", "usageWeighted_",
+        "usageMax_", "usageConcentration_", "distancePer48_", "speedWeighted_",
+    ))
     groups = {
         "ratings": sorted(set(ratings)),
         "ratings_schedule": sorted(set(ratings + schedule)),
         "four_factors_schedule": sorted(set(ratings + schedule + four_factors + volatility)),
-        "all_declared": sorted(set(ratings + schedule + four_factors + volatility + rotation)),
+        "all_declared": sorted(set(
+            ratings + schedule + four_factors + volatility + rotation + tracking_style
+        )),
     }
     for name, columns in groups.items():
         if not columns:

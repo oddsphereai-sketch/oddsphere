@@ -7,6 +7,7 @@ import {
   buildNbaPointInTimeFeatures,
   NBA_POINT_IN_TIME_FEATURE_RELEASE,
   normalizeNbaHistoricalGame,
+  normalizeNbaHistoricalPlayerAdvanced,
   normalizeNbaHistoricalPlayerBox,
 } from "../../../lib/services/nba/nbaPointInTimeFeatures";
 import {
@@ -63,6 +64,7 @@ async function main(): Promise<void> {
   const sourceManifests: Record<string, unknown>[] = [];
   const rawGames: Record<string, unknown>[] = [];
   const rawBoxes: Record<string, unknown>[] = [];
+  const rawAdvanced: Record<string, unknown>[] = [];
   const rawOpeningOdds: Record<string, unknown>[] = [];
   for (const input of inputs) {
     const manifest = await json(path.join(input, "manifest.json"));
@@ -72,6 +74,7 @@ async function main(): Promise<void> {
     sourceManifests.push(manifest);
     rawGames.push(...await jsonl(path.join(input, "games.jsonl")));
     rawBoxes.push(...await jsonl(path.join(input, "box.jsonl")));
+    rawAdvanced.push(...await jsonl(path.join(input, "advanced.jsonl")));
     if (manifest.exactOpeningPriceBacktestEligible === true) {
       const datasets = manifest.datasets as Record<string, Record<string, unknown>> | undefined;
       const openingFile = datasets?.opening_odds?.file;
@@ -84,11 +87,30 @@ async function main(): Promise<void> {
 
   const games = uniqueById(rawGames.map(normalizeNbaHistoricalGame), (row) => row.gameId, "NBA game");
   const boxes = uniqueById(rawBoxes.map(normalizeNbaHistoricalPlayerBox), (row) => row.rowId, "NBA box row");
+  const advanced = uniqueById(
+    rawAdvanced.map(normalizeNbaHistoricalPlayerAdvanced),
+    (row) => row.rowId,
+    "NBA advanced row",
+  );
   const gameIds = new Set(games.map((game) => game.gameId));
   const outOfScopeBoxes = boxes.filter((row) => !gameIds.has(row.gameId));
   if (outOfScopeBoxes.length > 0) {
     throw new Error(`NBA feature build found ${outOfScopeBoxes.length} box rows outside the exact game set.`);
   }
+  const outOfScopeAdvanced = advanced.filter((row) => !gameIds.has(row.gameId));
+  if (outOfScopeAdvanced.length > 0) {
+    throw new Error(`NBA feature build found ${outOfScopeAdvanced.length} advanced rows outside the exact game set.`);
+  }
+  const advancedTeamsByGame = new Map<number, Set<number>>();
+  for (const row of advanced) {
+    const teams = advancedTeamsByGame.get(row.gameId) ?? new Set<number>();
+    teams.add(row.teamId);
+    advancedTeamsByGame.set(row.gameId, teams);
+  }
+  const gamesWithAdvancedTeamCoverage = games.filter((game) => {
+    const teams = advancedTeamsByGame.get(game.gameId);
+    return teams?.has(game.homeTeamId) === true && teams.has(game.awayTeamId);
+  }).length;
   const openingRows = uniqueById(
     rawOpeningOdds.map(normalizeNbaHistoricalOpeningOdds),
     (row) => row.rowId,
@@ -98,7 +120,7 @@ async function main(): Promise<void> {
     rows: openingRows,
     gameStartById: new Map(games.map((game) => [game.gameId, game.startTime])),
   });
-  const featureRows = buildNbaPointInTimeFeatures({ games, boxes }).map((row) => ({
+  const featureRows = buildNbaPointInTimeFeatures({ games, boxes, advanced }).map((row) => ({
     ...row,
     evaluation_opening_market_home_probability: openingProbabilityByGame.get(row.game_id) ?? null,
   }));
@@ -125,6 +147,9 @@ async function main(): Promise<void> {
     sourceSeasons: sourceManifests.map((item) => item.season),
     games: games.length,
     playerBoxRows: boxes.length,
+    playerAdvancedRows: advanced.length,
+    gamesWithAdvancedTeamCoverage,
+    advancedTeamCoverageRate: games.length > 0 ? gamesWithAdvancedTeamCoverage / games.length : 0,
     openingOddsRows: openingRows.length,
     openingMoneylineGames: openingProbabilityByGame.size,
     featureCount: featureNames.length,

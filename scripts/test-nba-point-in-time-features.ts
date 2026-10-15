@@ -2,7 +2,9 @@ import assert from "node:assert/strict";
 import {
   buildNbaPointInTimeFeatures,
   normalizeNbaHistoricalGame,
+  normalizeNbaHistoricalPlayerAdvanced,
   normalizeNbaHistoricalPlayerBox,
+  type NbaHistoricalPlayerAdvanced,
   type NbaHistoricalGame,
   type NbaHistoricalPlayerBox,
 } from "../lib/services/nba/nbaPointInTimeFeatures";
@@ -27,6 +29,41 @@ function game(args: {
     homeScore: args.homeScore,
     awayScore: args.awayScore,
   };
+}
+
+function teamAdvanced(gameId: number, teamId: number, startRowId: number): NbaHistoricalPlayerAdvanced[] {
+  return Array.from({ length: 5 }, (_, index) => ({
+    rowId: startRowId + index,
+    gameId,
+    teamId,
+    playerId: teamId * 100 + index,
+    period: 0,
+    possessions: 70 - index,
+    estimatedNetRating: teamId === 1 ? 4 - index : -4 + index,
+    usagePercentage: 0.28 - index * 0.025,
+    pointsPaint: 8 + index,
+    pointsFastBreak: 2 + index,
+    pointsSecondChance: 1 + index,
+    pointsOffTurnovers: 2 + index,
+    passes: 35 + index,
+    touches: 50 + index,
+    secondaryAssists: index % 2,
+    screenAssistPoints: index * 2,
+    deflections: 1 + index,
+    contestedShots: 3 + index,
+    defendedAtRimFga: 1 + index,
+    defendedAtRimFgm: index,
+    reboundChancesTotal: 8 + index,
+    distance: 2.5 + index * 0.1,
+    speed: 4 + index * 0.05,
+  }));
+}
+
+function advancedFor(gameRow: NbaHistoricalGame): NbaHistoricalPlayerAdvanced[] {
+  return [
+    ...teamAdvanced(gameRow.gameId, gameRow.homeTeamId, gameRow.gameId * 100),
+    ...teamAdvanced(gameRow.gameId, gameRow.awayTeamId, gameRow.gameId * 100 + 10),
+  ];
 }
 
 function teamBoxes(gameId: number, teamId: number, score: number, startRowId: number): NbaHistoricalPlayerBox[] {
@@ -72,7 +109,8 @@ const second = game({ id: 2, season: 2025, date: "2025-10-21", homeScore: 120, a
 const third = game({ id: 3, season: 2025, date: "2025-10-24", homeScore: 108, awayScore: 112 });
 const games = [third, first, second];
 const boxes = [first, second, third].flatMap(boxesFor);
-const rows = buildNbaPointInTimeFeatures({ games, boxes });
+const advanced = [first, second, third].flatMap(advancedFor);
+const rows = buildNbaPointInTimeFeatures({ games, boxes, advanced });
 
 assert.deepEqual(rows.map((row) => row.game_id), [1, 2, 3], "games must be processed chronologically");
 assert.equal(rows[0]?.home_current_games, 0);
@@ -82,6 +120,7 @@ assert.equal(rows[1]?.home_offRating_5, null);
 assert.equal(typeof rows[1]?.home_offRating_prior, "number");
 assert.equal(rows[2]?.home_current_games, 1);
 assert.equal(typeof rows[2]?.home_offRating_5, "number");
+assert.equal(typeof rows[2]?.home_pointsPaintShare_5, "number");
 assert.equal(rows[2]?.home_games_last_4_days, 1);
 assert.equal(rows[2]?.home_back_to_back, 0);
 
@@ -89,11 +128,28 @@ const changedSecond = { ...second, homeScore: 90, awayScore: 130 };
 const changedRows = buildNbaPointInTimeFeatures({
   games: [first, changedSecond, third],
   boxes,
+  advanced,
 });
 assert.deepEqual(
   withoutTargets(rows[1] as Record<string, unknown>),
   withoutTargets(changedRows[1] as Record<string, unknown>),
   "a game's finalized result must not alter its own pregame features",
+);
+
+const changedAdvanced = advanced.map((row) =>
+  row.gameId === second.gameId && row.teamId === second.homeTeamId
+    ? { ...row, pointsPaint: (row.pointsPaint ?? 0) + 20 }
+    : row);
+const changedAdvancedRows = buildNbaPointInTimeFeatures({ games: [first, second, third], boxes, advanced: changedAdvanced });
+assert.deepEqual(
+  withoutTargets(rows[1] as Record<string, unknown>),
+  withoutTargets(changedAdvancedRows[1] as Record<string, unknown>),
+  "a game's advanced result must not alter its own pregame features",
+);
+assert.notEqual(
+  rows[2]?.home_pointsPaintShare_5,
+  changedAdvancedRows[2]?.home_pointsPaintShare_5,
+  "finalized tracking evidence should affect later games only",
 );
 assert.notEqual(
   rows[2]?.home_offRating_5,
@@ -122,6 +178,7 @@ const simultaneousB = game({
 const simultaneousRows = buildNbaPointInTimeFeatures({
   games: [simultaneousA, simultaneousB],
   boxes: [...boxesFor(simultaneousA), ...boxesFor(simultaneousB)],
+  advanced: [...advancedFor(simultaneousA), ...advancedFor(simultaneousB)],
 });
 assert.equal(simultaneousRows[0]?.league_off_rating, 110);
 assert.equal(
@@ -164,5 +221,32 @@ const normalizedBox = normalizeNbaHistoricalPlayerBox({
   player: { id: 175 },
 });
 assert.equal(normalizedBox.minutes, 30.5);
+const normalizedAdvanced = normalizeNbaHistoricalPlayerAdvanced({
+  id: 51,
+  period: 0,
+  possessions: 72,
+  estimated_net_rating: 5.4,
+  usage_percentage: 0.24,
+  points_paint: 12,
+  points_fast_break: 4,
+  points_second_chance: 2,
+  points_off_turnovers: 3,
+  passes: 40,
+  touches: 61,
+  secondary_assists: 1,
+  screen_assist_points: 4,
+  deflections: 3,
+  contested_shots: 7,
+  defended_at_rim_fga: 4,
+  defended_at_rim_fgm: 2,
+  rebound_chances_total: 16,
+  distance: 2.7,
+  speed: 4.2,
+  game: { id: 10 },
+  team: { id: 21 },
+  player: { id: 175 },
+});
+assert.equal(normalizedAdvanced.usagePercentage, 0.24);
+assert.equal(normalizedAdvanced.defendedAtRimFgm, 2);
 
 console.log("NBA point-in-time feature and no-leakage tests passed.");
