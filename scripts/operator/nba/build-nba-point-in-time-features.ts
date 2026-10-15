@@ -70,6 +70,7 @@ type ReferenceMarketRow = {
 };
 
 type ConsensusOpeningRow = {
+  season: number;
   date: string;
   home: string;
   away: string;
@@ -112,6 +113,7 @@ async function consensusOpeningRows(csvPath: string): Promise<{
   const header = parseCsvLine(lines[0] ?? "");
   const required = [
     "date_et",
+    "season",
     "season_type",
     "stage",
     "home_team",
@@ -140,7 +142,10 @@ async function consensusOpeningRows(csvPath: string): Promise<{
     if (!(homeProbability > 0 && homeProbability < 1) || !Number.isFinite(homeSpread) || !Number.isFinite(total)) {
       throw new Error(`NBA consensus CSV row ${lineNumber + 1} has an invalid opening market.`);
     }
+    const seasonMatch = /^(\d{4})-\d{2}$/.exec(cell(values, "season"));
+    if (!seasonMatch) throw new Error(`NBA consensus CSV row ${lineNumber + 1} has an invalid season.`);
     rows.push({
+      season: Number(seasonMatch[1]),
       date: cell(values, "date_et"),
       home: cell(values, "home_team"),
       away: cell(values, "away_team"),
@@ -262,13 +267,16 @@ async function main(): Promise<void> {
       }
     }
   }
-  const consensusInputs: { path: string; sha256: string; rows: number }[] = [];
+  const consensusInputs: { path: string; sha256: string; rows: number; seasons: number[] }[] = [];
   const consensusByIdentity = new Map<string, ConsensusOpeningRow>();
+  const consensusSeasons = new Set<number>();
   for (const rawPath of values("--reference-consensus-csv")) {
     const csvPath = path.resolve(rawPath);
     const parsed = await consensusOpeningRows(csvPath);
-    consensusInputs.push({ path: csvPath, sha256: parsed.sha256, rows: parsed.rows.length });
+    const seasons = [...new Set(parsed.rows.map((row) => row.season))].sort((left, right) => left - right);
+    consensusInputs.push({ path: csvPath, sha256: parsed.sha256, rows: parsed.rows.length, seasons });
     for (const row of parsed.rows) {
+      consensusSeasons.add(row.season);
       const key = `${row.date}::${row.home}::${row.away}`;
       if (consensusByIdentity.has(key)) throw new Error(`NBA consensus opening contains duplicate ${key}.`);
       consensusByIdentity.set(key, row);
@@ -282,7 +290,7 @@ async function main(): Promise<void> {
     const identity = rawIdentityByGame.get(row.game_id);
     const identityKey = identity ? `${identity.date}::${identity.home}::${identity.away}` : null;
     const consensus = identityKey ? consensusByIdentity.get(identityKey) : undefined;
-    const reference = identityKey
+    const reference = identityKey && !consensusSeasons.has(row.season)
       ? referenceByIdentity.get(identityKey)
       : undefined;
     if (!market && consensus) consensusOpeningMatches += 1;
