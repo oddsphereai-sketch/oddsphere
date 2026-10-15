@@ -183,6 +183,19 @@ with tempfile.TemporaryDirectory(prefix="nba-tournament-test-") as temporary:
     assert report["confirmation"]["openingMarketEvaluation"]["moneyline"]["exactPrice"]["bets"] == 48
     assert report["confirmation"]["openingMarketEvaluation"]["spread"]["exactPrice"]["bets"] == 48
     assert report["confirmation"]["openingMarketEvaluation"]["total"]["exactPrice"]["bets"] == 48
+    assert report["actionableThresholdSelection"]["moneyline"]["selected"] is not None
+    assert report["actionableThresholdSelection"]["spread"]["selected"] is not None
+    assert report["actionableThresholdSelection"]["total"]["selected"] is not None
+    assert report["actionableConfirmation"]["moneyline"]["bets"] >= 0
+    assert report["actionableConfirmation"]["spread"]["bets"] >= 0
+    assert report["actionableConfirmation"]["total"]["bets"] >= 0
+    assert set(report["actionableBenchmarkGates"]) == {
+        "moneylineAccuracyMeetsLifetimeReference",
+        "totalAccuracyMeetsLifetimeReference",
+        "spreadExactPricePositive",
+        "totalExactPricePositive",
+        "moneylineExactPricePositive",
+    }
     assert len(predictions) == 48
     first_prediction = json.loads(predictions[0])
     assert first_prediction["causeAttribution"]["status"] == "not_attributed"

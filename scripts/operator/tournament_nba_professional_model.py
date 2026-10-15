@@ -20,7 +20,7 @@ import numpy as np
 import pandas as pd
 
 
-RELEASE = "nba_professional_tournament_2026_10_15_r12_reference_market_provenance"
+RELEASE = "nba_professional_tournament_2026_10_15_r13_actionable_market_holdout"
 FEATURE_RELEASE = "nba_point_in_time_features_2026_10_15_r6_expanded_advanced"
 R1_CONFIRMATION = {
     "season": 2025,
@@ -29,6 +29,10 @@ R1_CONFIRMATION = {
     "marginMae": 10.9252,
     "totalMae": 15.6065,
     "winnerAccuracy": 0.6480,
+}
+PRODUCT_LIFETIME_REFERENCE = {
+    "moneyline": {"wins": 1395, "bets": 2010, "accuracy": 0.694},
+    "total": {"wins": 706, "bets": 1326, "accuracy": 0.532},
 }
 TARGETS = [
     "target_home_score",
@@ -382,6 +386,133 @@ def exact_price_return(wins: np.ndarray, prices: np.ndarray) -> dict[str, Any]:
         "roi": float(units.mean()),
         "averageAmericanPrice": float(prices.mean()),
     }
+
+
+def wilson_lower_bound(wins: int, bets: int, z: float = 1.96) -> float | None:
+    if bets <= 0:
+        return None
+    rate = wins / bets
+    denominator = 1 + z * z / bets
+    center = rate + z * z / (2 * bets)
+    margin = z * math.sqrt(rate * (1 - rate) / bets + z * z / (4 * bets * bets))
+    return float((center - margin) / denominator)
+
+
+def actionable_candidate_report(
+    frame: pd.DataFrame,
+    home: np.ndarray,
+    away: np.ndarray,
+    margin_sigma: float,
+    total_sigma: float,
+    market: str,
+    threshold: float,
+) -> dict[str, Any]:
+    actual_margin = frame["target_home_margin"].to_numpy(float)
+    actual_total = frame["target_total"].to_numpy(float)
+    predicted_margin = home - away
+    predicted_total = home + away
+    if market == "moneyline":
+        probability = np.clip(normal_cdf(predicted_margin / max(margin_sigma, 1e-6)), 0.001, 0.999)
+        selected_first = probability >= 0.5
+        selected_probability = np.where(selected_first, probability, 1 - probability)
+        first_price = frame["evaluation_opening_moneyline_home_price"].to_numpy(float)
+        second_price = frame["evaluation_opening_moneyline_away_price"].to_numpy(float)
+        price = np.where(selected_first, first_price, second_price)
+        profit = np.where(price > 0, price / 100, 100 / -price)
+        expected_value = selected_probability * profit - (1 - selected_probability)
+        eligible = np.isfinite(price) & (price != 0) & (expected_value >= threshold)
+        wins = selected_first == (actual_margin > 0)
+        selection_rule = "minimum_model_expected_value_at_exact_opening_price"
+    elif market == "spread":
+        line = frame["evaluation_opening_home_spread"].to_numpy(float)
+        probability = np.clip(normal_cdf(
+            (predicted_margin + line) / max(margin_sigma, 1e-6)
+        ), 0.001, 0.999)
+        selected_first = probability >= 0.5
+        selected_probability = np.where(selected_first, probability, 1 - probability)
+        first_price = frame["evaluation_opening_home_spread_price"].to_numpy(float)
+        second_price = frame["evaluation_opening_away_spread_price"].to_numpy(float)
+        price = np.where(selected_first, first_price, second_price)
+        resolved = np.isfinite(line) & ~np.isclose(actual_margin + line, 0.0)
+        eligible = resolved & (selected_probability - 0.5 >= threshold)
+        wins = selected_first == (actual_margin + line > 0)
+        selection_rule = "minimum_calibrated_cover_probability_edge"
+    elif market == "total":
+        line = frame["evaluation_opening_total"].to_numpy(float)
+        probability = np.clip(normal_cdf(
+            (predicted_total - line) / max(total_sigma, 1e-6)
+        ), 0.001, 0.999)
+        selected_first = probability >= 0.5
+        selected_probability = np.where(selected_first, probability, 1 - probability)
+        first_price = frame["evaluation_opening_over_price"].to_numpy(float)
+        second_price = frame["evaluation_opening_under_price"].to_numpy(float)
+        price = np.where(selected_first, first_price, second_price)
+        resolved = np.isfinite(line) & ~np.isclose(actual_total - line, 0.0)
+        eligible = resolved & (selected_probability - 0.5 >= threshold)
+        wins = selected_first == (actual_total > line)
+        selection_rule = "minimum_calibrated_over_under_probability_edge"
+    else:
+        raise ValueError(f"unsupported NBA actionable market {market}")
+    selected_wins = wins[eligible]
+    selected_probability_values = selected_probability[eligible]
+    bets = int(eligible.sum())
+    win_count = int(selected_wins.sum())
+    priced = eligible & np.isfinite(price) & (price != 0)
+    return {
+        "market": market,
+        "selectionRule": selection_rule,
+        "threshold": threshold,
+        "bets": bets,
+        "wins": win_count,
+        "losses": bets - win_count,
+        "accuracy": float(selected_wins.mean()) if bets > 0 else None,
+        "wilson95Lower": wilson_lower_bound(win_count, bets),
+        "brier": float(np.square(selected_probability_values - selected_wins.astype(float)).mean())
+            if bets > 0 else None,
+        "exactPrice": exact_price_return(wins[priced], price[priced]) if priced.any() else None,
+    }
+
+
+def select_actionable_thresholds(
+    frame: pd.DataFrame,
+    home: np.ndarray,
+    away: np.ndarray,
+    margin_sigma: float,
+    total_sigma: float,
+) -> dict[str, Any]:
+    minimum_bets = min(100, max(20, len(frame) // 10))
+    grids = {
+        "moneyline": (0.0, 0.01, 0.02, 0.03, 0.04, 0.05, 0.075, 0.10),
+        "spread": (0.0, 0.01, 0.02, 0.03, 0.04, 0.05, 0.06, 0.08),
+        "total": (0.0, 0.01, 0.02, 0.03, 0.04, 0.05, 0.06, 0.08),
+    }
+    selected: dict[str, Any] = {}
+    for market, thresholds in grids.items():
+        candidates = [
+            actionable_candidate_report(
+                frame, home, away, margin_sigma, total_sigma, market, threshold
+            )
+            for threshold in thresholds
+        ]
+        eligible = [candidate for candidate in candidates if candidate["bets"] >= minimum_bets]
+        if market == "moneyline":
+            eligible.sort(key=lambda item: (
+                -(item["exactPrice"]["roi"] if item["exactPrice"] else -math.inf),
+                -(item["wilson95Lower"] or -math.inf),
+                -item["bets"],
+            ))
+        else:
+            eligible.sort(key=lambda item: (
+                -(item["wilson95Lower"] or -math.inf),
+                -(item["accuracy"] or -math.inf),
+                -item["bets"],
+            ))
+        selected[market] = {
+            "minimumSelectionBets": minimum_bets,
+            "selected": eligible[0] if eligible else None,
+            "candidates": candidates,
+        }
+    return selected
 
 
 def metrics(
@@ -1083,8 +1214,25 @@ def main() -> None:
     selected = eligible_candidates[0] if eligible_candidates else candidates[0]
     selection_gate_passed = bool(eligible_candidates)
 
-    fit = pd.concat([train, selection], ignore_index=True)
     selected_features = groups[selected["group"]]
+    selection_home, selection_away, _ = fit_predict(
+        train,
+        selection,
+        selected_features,
+        dict(selected["model"]),
+        str(selected["architecture"]),
+    )
+    selection_margin_sigma = float(selected["probabilityCalibration"]["marginSigma"])
+    selection_total_sigma = float(selected["probabilityCalibration"]["totalSigma"])
+    actionable_selection = select_actionable_thresholds(
+        selection,
+        selection_home,
+        selection_away,
+        selection_margin_sigma,
+        selection_total_sigma,
+    )
+
+    fit = pd.concat([train, selection], ignore_index=True)
     home, away, _ = fit_predict(
         fit,
         confirmation,
@@ -1099,6 +1247,45 @@ def main() -> None:
         str(selected["architecture"]),
     )
     confirmation_metrics = metrics(confirmation, home, away, margin_sigma, total_sigma)
+    actionable_confirmation = {
+        market: None if details["selected"] is None else actionable_candidate_report(
+            confirmation,
+            home,
+            away,
+            margin_sigma,
+            total_sigma,
+            market,
+            float(details["selected"]["threshold"]),
+        )
+        for market, details in actionable_selection.items()
+    }
+    actionable_benchmark_gates = {
+        "moneylineAccuracyMeetsLifetimeReference": (
+            actionable_confirmation["moneyline"] is not None and
+            actionable_confirmation["moneyline"]["accuracy"] is not None and
+            actionable_confirmation["moneyline"]["accuracy"] >= PRODUCT_LIFETIME_REFERENCE["moneyline"]["accuracy"]
+        ),
+        "totalAccuracyMeetsLifetimeReference": (
+            actionable_confirmation["total"] is not None and
+            actionable_confirmation["total"]["accuracy"] is not None and
+            actionable_confirmation["total"]["accuracy"] >= PRODUCT_LIFETIME_REFERENCE["total"]["accuracy"]
+        ),
+        "spreadExactPricePositive": (
+            actionable_confirmation["spread"] is not None and
+            actionable_confirmation["spread"]["exactPrice"] is not None and
+            actionable_confirmation["spread"]["exactPrice"]["units"] > 0
+        ),
+        "totalExactPricePositive": (
+            actionable_confirmation["total"] is not None and
+            actionable_confirmation["total"]["exactPrice"] is not None and
+            actionable_confirmation["total"]["exactPrice"]["units"] > 0
+        ),
+        "moneylineExactPricePositive": (
+            actionable_confirmation["moneyline"] is not None and
+            actionable_confirmation["moneyline"]["exactPrice"] is not None and
+            actionable_confirmation["moneyline"]["exactPrice"]["units"] > 0
+        ),
+    }
 
     confirmation_baseline_home, confirmation_baseline_away = rating_baseline(confirmation, 2.2)
     confirmation_baseline_margin_sigma, confirmation_baseline_total_sigma, confirmation_baseline_calibration = (
@@ -1230,6 +1417,10 @@ def main() -> None:
         "publishedR1Confirmation": R1_CONFIRMATION,
         "publishedR1DirectlyComparable": r1_comparable,
         "publishedR1Gates": r1_gates,
+        "productLifetimeReference": PRODUCT_LIFETIME_REFERENCE,
+        "actionableThresholdSelection": actionable_selection,
+        "actionableConfirmation": actionable_confirmation,
+        "actionableBenchmarkGates": actionable_benchmark_gates,
         "promotionAuthorized": False,
         "promotionNote": "Score confirmation alone cannot authorize production; market, exact-price, board-impact, runtime, and lock gates remain.",
         "topSelectionCandidates": candidates[:10],

@@ -344,7 +344,7 @@ movement, CLV, split, or market-reader claim. Every row carries that provenance;
 2025-26 BALLDONTLIE timestamped openings take precedence when available.
 
 The executable tournament release is now
-`nba_professional_tournament_2026_10_15_r12_reference_market_provenance`. Its
+`nba_professional_tournament_2026_10_15_r13_actionable_market_holdout`. Its
 predeclared model grid is reproducible with the repository's NumPy runtime:
 closed-form ridge, robust iteratively reweighted Huber ridge, and bounded
 hinge-spline ridge. Feature-family ablations separately test ratings,
@@ -378,6 +378,19 @@ the untouched selection or confirmation season is scored only afterward. Total
 uncertainty likewise comes from those later out-of-fit residuals. This prevents
 in-sample residual shrinkage from manufacturing overconfident Moneyline,
 Spread, or Total probabilities.
+
+The selection season also freezes separate actionable thresholds before the
+confirmation season is opened. Moneyline candidates use minimum calibrated
+expected value at the exact available price. Spread and Total candidates use a
+bounded grid of calibrated probability edges against the listed line, with at
+least 100 selection bets in a full season; their exact-price economics are then
+reported on confirmation wherever prices exist. Thresholds are selected by
+Moneyline ROI or by the 95% Wilson lower bound for Spread/Total accuracy, never
+by confirmation outcomes. Confirmation explicitly tests the product's 69.4%
+Moneyline and 53.2% Total lifetime hit-rate references, while also requiring
+positive exact-price units. The lifetime records are selective product results,
+so they are compared with the frozen actionable subsets—not misrepresented as
+all-game winner accuracy.
 
 ## Upset-aware evaluation
 
