@@ -92,6 +92,12 @@ function isFinalGame(row: Record<string, unknown>): boolean {
   return row.status_state === "final" || row.status === "Final";
 }
 
+function isOfficialRegularSeasonGame(row: Record<string, unknown>): boolean {
+  // The NBA Cup championship is classified as IST by the provider but does
+  // not count in either club's 82-game regular-season record.
+  return row.ist_stage !== "Championship" && row.postseason !== true;
+}
+
 function chunk<T>(values: readonly T[], size: number): T[][] {
   const chunks: T[][] = [];
   for (let index = 0; index < values.length; index += size) chunks.push(values.slice(index, index + size));
@@ -192,8 +198,9 @@ async function main(): Promise<void> {
   const manifests: Partial<Record<NbaBdlHistoricalDataset, DatasetManifest>> = {};
   const gameFetch = await collectBySeasonType({ dataset: "games", season, maxPages, requestIntervalMs });
   const rawGames = stableRows("games", gameFetch.rows);
-  const finalGames = rawGames.filter(isFinalGame);
-  const nonfinalGames = rawGames.length - finalGames.length;
+  const finalGames = rawGames.filter((row) => isFinalGame(row) && isOfficialRegularSeasonGame(row));
+  const nonfinalGames = rawGames.filter((row) => !isFinalGame(row)).length;
+  const nonOfficialRegularGames = rawGames.length - nonfinalGames - finalGames.length;
   if (datasets.includes("games")) {
     const written = await writeJsonl({ outputDirectory, dataset: "games", rows: finalGames });
     manifests.games = {
@@ -201,7 +208,10 @@ async function main(): Promise<void> {
       rows: finalGames.length,
       requests: gameFetch.requests,
       complete: !sample && gameFetch.complete,
-      exclusions: { nonfinal_games: nonfinalGames },
+      exclusions: {
+        nonfinal_games: nonfinalGames,
+        non_official_regular_games: nonOfficialRegularGames,
+      },
     };
   }
   if (finalGames.length === 0) throw new Error(`NBA ${season} capture found no completed regular/IST games.`);

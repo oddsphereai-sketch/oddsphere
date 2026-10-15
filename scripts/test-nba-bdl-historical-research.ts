@@ -100,6 +100,7 @@ async function main(): Promise<void> {
   assert.match(operatorSource, /exactOpeningPriceBacktestEligible/);
   assert.match(operatorSource, /sample\s*\?\s*batches\.slice\(0,\s*1\)/);
   assert.match(operatorSource, /out_of_scope_rows/);
+  assert.match(operatorSource, /row\.ist_stage !== ["']Championship["']/);
   assert.match(operatorSource, /A full NBA research capture must include games, box, advanced, and opening_odds/);
   assert.match(operatorSource, /sample-\$\{capturedAt\.replace/);
 
