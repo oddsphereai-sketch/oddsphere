@@ -150,7 +150,7 @@ export async function refreshTrackingFoundationResponseSnapshot(input: {
       ttlMs: TRACKING_SNAPSHOT_TTL_MS,
       staleMs: TRACKING_SNAPSHOT_STALE_MS,
       source: input.source ?? "cron",
-      payloadVersion: "tracking-foundation-v2-alternate-line-performance",
+      payloadVersion: "tracking-foundation-v3-ucl-calendar-release-continuity",
     });
     if (!write.ok) return { ok: false, snapshotKey, error: write.error };
     return {
