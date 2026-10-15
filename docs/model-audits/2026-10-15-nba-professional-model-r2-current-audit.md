@@ -6,6 +6,67 @@ Status: research and data capture only. No production score, pick, probability,
 grade, stake, lock, reader, writer, or tracking behavior is changed by this
 audit.
 
+## October 15 opening-readiness evidence
+
+A read-only production-data and provider probe on October 15 establishes the
+following launch boundary. These observations are a point-in-time operational
+audit, not a historical backtest:
+
+- The database contained 60 NBA games, 118,585 NBA `line_history` rows, and
+  1,998 rows marked as openers. The volume proves that odds observations are
+  being collected; it does not prove a coherent same-book, exact-line movement
+  sequence is being interpreted.
+- NBA had zero `public_splits_observations` rows and zero `sharp_signals` rows.
+  There is therefore no persisted NBA split history or last-known-good split
+  fallback to validate or restore when the live provider is unavailable.
+- SharpAPI `/splits?league=nba` returned 32 current rows covering 18 event ids.
+  The rows were sportsbook-specific rather than a single consensus: the
+  observed DraftKings rows included ticket and handle shares, while observed
+  BetMGM rows included ticket shares with null handle shares. These records may
+  be useful evidence, but they must retain sportsbook provenance and cannot be
+  collapsed or labeled as generic "sharp money."
+- SharpAPI `/opportunities/ev?league=nba` returned zero rows at the audit
+  timestamp. Opportunity/fair-value data therefore cannot be assumed to be an
+  opening-night fallback.
+- SharpAPI `/splits/history` did return sportsbook-specific NBA history for an
+  October 20 event. BetMGM history exposed ticket shares only; filtering by
+  `sportsbook=draftkings` exposed ticket and handle shares, with observations
+  beginning October 13. The shared Market Intelligence v2 SharpAPI collector
+  currently returns immediately for every sport except MLB, so this recoverable
+  NBA sequence is not being persisted or resolved by the application.
+- The NBA split client reads the live endpoint on demand. A provider failure
+  falls back to no split data; it does not read a persisted NBA last-known-good
+  observation.
+- The shared public-splits capability registry correctly marks NBA
+  `audit_required` and observe-only. The NBA adapter separately treats the
+  mere presence of `SHARPAPI_KEY` as market-signal availability. That conflict
+  must be removed before the card can make authoritative split or sharp-signal
+  claims.
+- The NBA adapter derives `lineOpenAmerican` from the earliest price observed
+  for a side and compares it with a current best price. It does not preserve
+  the opening spread/Total number in that DTO, and the opening and current
+  prices need not be from the same sportsbook. This is not a valid basis for
+  steam, reverse-line-movement, resistance, or buyback classification.
+- The stored official NBA sample contained ten locked `nba_v0_2026` records:
+  five Moneylines and five Totals. Moneyline was 1-4 and Total was 3-2. Only
+  eight records retained predicted scores; across those four games, team-score
+  MAE was 12.90, margin MAE was 13.50, and Total MAE was 19.55. This sample is
+  far too small, belongs to a superseded release, and cannot qualify the
+  current champion.
+
+### Opening-readiness verdict
+
+The NBA data collection substrate is partially live, but the complete model +
+market-reader system is **not qualified for trust** as of this audit. Current
+multi-book, same-line no-vig comparison is usable as a price benchmark. The
+following are not yet qualified: public-split influence, any claim of sharp
+money, open-to-current movement interpretation, reverse line movement, steam,
+resistance/buyback, or release-pure performance for the current champion.
+
+Until the gates below clear, split rows remain provenance-labeled observation
+data, market movement remains unavailable rather than neutral, and no split or
+single-book movement may flip an independent pick or promote a Best Angle.
+
 ## Current champion and measured baseline
 
 - Model: `nba_v2_independent_first_2026_10_06_r1`
