@@ -164,6 +164,38 @@ Last reviewed: 2026-10-15
 
 ## NFL Daily Edge generalized weekly production release
 
+### Personnel-evidence eligibility (r31 candidate)
+
+- Candidate member / model / calibration / decision / grade are
+  `nfl_v1_member_release_2026_10_15_r31_personnel_evidence_eligibility` /
+  `nfl_v1_daily_edge_model_2026_10_09_r27_provider_feed_continuity` /
+  `nfl_v1_daily_edge_calibration_2026_10_09_r26_provider_feed_continuity` /
+  `nfl_v1_daily_edge_decision_2026_10_15_r34_personnel_evidence_eligibility` /
+  `nfl_v1_grade_policy_2026_10_15_r34_personnel_evidence_eligibility`. The forecast model and
+  calibration do not change; this release changes future unlocked decision eligibility only.
+- Missing exact-game injury evidence, a missing expected quarterback, a selected quarterback with
+  no exact historical identity, or an unavailable starter with no healthy identified replacement
+  now withholds all three exact-price decisions for that game. Out/Doubtful status from either the
+  injury report or roster/depth snapshot triggers replacement selection. Projected-but-identified
+  starters remain eligible because the provider does not confirm every pregame starter.
+- Publication set is writer / collector / fixture / compact snapshot
+  `nfl_forward_evidence_writer_2026_10_15_r61_personnel_evidence_eligibility` /
+  `nfl_forward_evidence_collector_2026_10_15_r20_personnel_evidence_eligibility` /
+  `nfl_weekly_member_fixture_2026_10_15_r43_personnel_evidence_eligibility` /
+  `nfl_forward_member_snapshot_2026_10_15_r35_personnel_evidence_eligibility`. The reader retains
+  exact r30/r33 and r30/r32 snapshot and locked-evidence precedence.
+- The October 15 read/provider-only Week 6 rehearsal proposes 14 unlocked rows and writes zero.
+  Twelve games remain eligible. `PIT@TB` is held because the unavailable expected starter resolves
+  to a replacement without an exact historical model identity; `WSH@SF` is held because its
+  exact-game injury report is unavailable. Six market decisions are withheld; relative to the
+  stored baseline those games contained three actionable labels, so the personnel gate has zero
+  promotions and three explicit actionable demotions. Held rows are incomplete evaluations, not
+  wins or evidence of improved accuracy. The local rehearsal lacked a Playbook credential, so
+  split-feed parity is not claimed; Playbook remained unavailable and disclosed during the run.
+- Evidence, gates, and rollback are recorded in
+  `docs/model-audits/2026-10-15-nfl-personnel-evidence-eligibility-predeclaration.md` and
+  `docs/model-audits/2026-10-15-nfl-personnel-evidence-eligibility-result.md`.
+
 ### Exact-price Moneyline tier (r33 candidate)
 
 - Active member / model / calibration remain `nfl_v1_member_release_2026_10_09_r30_provider_feed_continuity` / `nfl_v1_daily_edge_model_2026_10_09_r27_provider_feed_continuity` / `nfl_v1_daily_edge_calibration_2026_10_09_r26_provider_feed_continuity`; decision / grade advance to `nfl_v1_daily_edge_decision_2026_10_13_r33_moneyline_price_tier` / `nfl_v1_grade_policy_2026_10_13_r33_moneyline_price_tier`.
