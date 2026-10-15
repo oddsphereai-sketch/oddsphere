@@ -139,6 +139,7 @@ with tempfile.TemporaryDirectory(prefix="nba-tournament-test-") as temporary:
             "--output", str(output),
             "--selection-season", "2024",
             "--confirmation-season", "2025",
+            "--minimum-games-per-season", "40",
         ]
         tournament.main()
     finally:
@@ -153,6 +154,14 @@ with tempfile.TemporaryDirectory(prefix="nba-tournament-test-") as temporary:
         "trainingSeasons": [2023],
         "selectionSeason": 2024,
         "confirmationSeason": 2025,
+    }
+    assert report["sampleBoundary"] == {
+        "competition": "NBA",
+        "seasonType": "regular_season_only",
+        "preseasonEligible": False,
+        "postseasonEligible": False,
+        "minimumGamesPerSeason": 40,
+        "gamesBySeason": {"2023": 48, "2024": 48, "2025": 48},
     }
     assert report["promotionAuthorized"] is False
     assert isinstance(report["selectionGatePassed"], bool)
@@ -246,5 +255,24 @@ with tempfile.TemporaryDirectory(prefix="nba-tournament-test-") as temporary:
     assert "home_rotation_continuity_5" in selected_features
     assert "away_travel_distance_miles" in selected_features
     assert tournament.feature_catalog(tournament.validate(tournament.read_jsonl(features)))["elo_only"]
+
+    previous = sys.argv
+    partial_rejected = False
+    try:
+        sys.argv = [
+            "tournament_nba_professional_model.py",
+            "--features", str(features),
+            "--output", str(root / "partial-output"),
+            "--selection-season", "2024",
+            "--confirmation-season", "2025",
+            "--minimum-games-per-season", "49",
+        ]
+        try:
+            tournament.main()
+        except ValueError as error:
+            partial_rejected = "refuses partial-season evidence" in str(error)
+    finally:
+        sys.argv = previous
+    assert partial_rejected
 
 print("NBA professional tournament chronological and promotion-boundary tests passed.")

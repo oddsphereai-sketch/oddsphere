@@ -113,6 +113,12 @@ winner correction and harm versus the simple rating baseline. The tournament wri
 artifacts only and hard-codes `promotionAuthorized: false`; score results alone cannot change
 production.
 
+Preseason and postseason are categorically excluded from model selection and
+confirmation. The real tournament defaults to a minimum of 1,200 eligible
+regular-season games in every included season and refuses to run when a season
+is partial. The smaller threshold exposed to the synthetic contract test is
+test scaffolding only and cannot be used in the production evidence command.
+
 The final-product tournament keeps the independent forecast, market-only
 reference, and combined distribution distinct. Within 2024-25, the earlier
 60% selects bounded market-marriage weights for margin and Total and the later

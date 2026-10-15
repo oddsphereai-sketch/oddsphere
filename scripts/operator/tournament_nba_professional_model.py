@@ -79,6 +79,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--output", required=True, type=Path)
     parser.add_argument("--selection-season", type=int)
     parser.add_argument("--confirmation-season", type=int)
+    parser.add_argument("--minimum-games-per-season", type=int, default=1_200)
     return parser.parse_args()
 
 
@@ -1370,6 +1371,8 @@ def rolling_origin_stability(
 def main() -> None:
     args = parse_args()
     frame = validate(read_jsonl(args.features))
+    if args.minimum_games_per_season < 1:
+        raise ValueError("NBA minimum games per season must be positive")
     seasons = sorted(int(value) for value in frame["season"].unique())
     if len(seasons) < 3:
         raise ValueError("NBA tournament requires at least three chronological seasons")
@@ -1382,6 +1385,19 @@ def main() -> None:
     confirmation = frame[frame["season"] == confirmation_season].copy()
     if train.empty or selection.empty or confirmation.empty:
         raise ValueError("NBA tournament has an empty chronological partition")
+    season_counts = {
+        int(season): int(count)
+        for season, count in frame.groupby("season")["game_id"].count().sort_index().items()
+    }
+    undersized = {
+        season: count for season, count in season_counts.items()
+        if count < args.minimum_games_per_season
+    }
+    if undersized:
+        raise ValueError(
+            "NBA tournament refuses partial-season evidence: "
+            f"minimum={args.minimum_games_per_season}, observed={undersized}"
+        )
 
     groups = feature_catalog(frame)
     model_specs = candidate_model_specs()
@@ -1671,6 +1687,14 @@ def main() -> None:
             "trainingSeasons": sorted(int(value) for value in train["season"].unique()),
             "selectionSeason": selection_season,
             "confirmationSeason": confirmation_season,
+        },
+        "sampleBoundary": {
+            "competition": "NBA",
+            "seasonType": "regular_season_only",
+            "preseasonEligible": False,
+            "postseasonEligible": False,
+            "minimumGamesPerSeason": args.minimum_games_per_season,
+            "gamesBySeason": season_counts,
         },
         "selected": selected,
         "selectionGatePassed": selection_gate_passed,
