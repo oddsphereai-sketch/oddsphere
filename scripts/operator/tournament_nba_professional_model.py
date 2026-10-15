@@ -20,8 +20,8 @@ import numpy as np
 import pandas as pd
 
 
-RELEASE = "nba_professional_tournament_2026_10_15_r15_consensus_opening_selection"
-FEATURE_RELEASE = "nba_point_in_time_features_2026_10_15_r8_season_boundary_schedule_reset"
+RELEASE = "nba_professional_tournament_2026_10_15_r16_offseason_strength_regression"
+FEATURE_RELEASE = "nba_point_in_time_features_2026_10_15_r9_offseason_strength_regression"
 R1_CONFIRMATION = {
     "season": 2025,
     "games": 1230,

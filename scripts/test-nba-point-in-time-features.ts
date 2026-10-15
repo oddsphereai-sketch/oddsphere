@@ -127,6 +127,22 @@ assert.equal(rows[1]?.home_travel_distance_miles, null);
 assert.equal(rows[1]?.home_games_last_4_days, 0);
 assert.equal(rows[1]?.home_games_last_7_days, 0);
 assert.equal(rows[1]?.home_consecutive_road_games_before, 0);
+
+const sameSeasonSecond = { ...second, season: first.season };
+const sameSeasonRows = buildNbaPointInTimeFeatures({
+  games: [first, sameSeasonSecond],
+  boxes: [...boxesFor(first), ...boxesFor(sameSeasonSecond)],
+  advanced: [...advancedFor(first), ...advancedFor(sameSeasonSecond)],
+});
+const carriedHomeOffenseDelta = Number(sameSeasonRows[1]?.home_adjusted_offense) -
+  Number(sameSeasonRows[1]?.league_off_rating);
+const regressedHomeOffenseDelta = Number(rows[1]?.home_adjusted_offense) -
+  Number(rows[1]?.league_off_rating);
+assert.ok(Math.abs(carriedHomeOffenseDelta) > 0);
+assert.ok(
+  Math.abs(regressedHomeOffenseDelta - carriedHomeOffenseDelta * 0.75) < 1e-9,
+  "adjusted offense strength must regress toward league average at a season boundary",
+);
 assert.equal(rows[2]?.home_current_games, 1);
 assert.equal(typeof rows[2]?.home_offRating_5, "number");
 assert.equal(typeof rows[2]?.home_pointsPaintShare_5, "number");

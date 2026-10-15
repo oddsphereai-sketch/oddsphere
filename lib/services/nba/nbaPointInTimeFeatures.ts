@@ -7,7 +7,7 @@
  */
 
 export const NBA_POINT_IN_TIME_FEATURE_RELEASE =
-  "nba_point_in_time_features_2026_10_15_r8_season_boundary_schedule_reset" as const;
+  "nba_point_in_time_features_2026_10_15_r9_offseason_strength_regression" as const;
 
 export type NbaHistoricalGame = {
   gameId: number;
@@ -191,6 +191,7 @@ const ELO_INITIAL_RATING = 1500;
 const ELO_HOME_ADVANTAGE = 65;
 const ELO_K_FACTOR = 20;
 const ELO_OFFSEASON_CARRY = 0.75;
+const ADJUSTED_RATING_OFFSEASON_CARRY = 0.75;
 
 type NbaVenue = {
   latitude: number;
@@ -1129,7 +1130,7 @@ export function buildNbaPointInTimeFeatures(args: {
   const eloRatings = new Map<number, EloRating>();
   const pendingOutcomes: PendingOutcome[] = [];
   const output: NbaPointInTimeFeatureRow[] = [];
-  let activeEloSeason: number | null = null;
+  let activeStrengthSeason: number | null = null;
 
   for (const game of games) {
     const startMs = Date.parse(game.startTime);
@@ -1159,16 +1160,22 @@ export function buildNbaPointInTimeFeatures(args: {
         homeMargin: finalized.homeObservation.margin,
       });
     }
-    if (activeEloSeason !== game.season) {
-      if (activeEloSeason !== null) {
+    if (activeStrengthSeason !== game.season) {
+      if (activeStrengthSeason !== null) {
         for (const [teamId, rating] of eloRatings) {
           eloRatings.set(
             teamId,
             ELO_INITIAL_RATING + (rating - ELO_INITIAL_RATING) * ELO_OFFSEASON_CARRY,
           );
         }
+        for (const [teamId, rating] of adjustedRatings) {
+          adjustedRatings.set(teamId, {
+            offense: rating.offense * ADJUSTED_RATING_OFFSEASON_CARRY,
+            defense: rating.defense * ADJUSTED_RATING_OFFSEASON_CARRY,
+          });
+        }
       }
-      activeEloSeason = game.season;
+      activeStrengthSeason = game.season;
     }
     const gameBoxes = boxesByGame.get(game.gameId) ?? [];
     const gameAdvanced = advancedByGame.get(game.gameId) ?? [];

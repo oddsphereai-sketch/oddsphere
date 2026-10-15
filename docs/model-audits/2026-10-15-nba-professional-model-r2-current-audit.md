@@ -275,11 +275,17 @@ uncontested shooting, matchup field-goal defense, screen assists, and offensive
 and defensive rebound chances. Nullable provider fields stay missing and gain
 explicit missingness indicators; they are never filled with a favorable value.
 
-Feature release `nba_point_in_time_features_2026_10_15_r8_season_boundary_schedule_reset`
+Feature release `nba_point_in_time_features_2026_10_15_r9_offseason_strength_regression`
 also adds a dynamic Elo benchmark, explicit offense-versus-opponent-defense
 and Four-Factor matchup edges, prior-game player-minute rotation overlap,
 rolling expected rotation size/concentration, venue-to-venue great-circle
 travel, east/west time-zone direction, road-trip position, and venue altitude.
+Both Elo and recursive opponent-adjusted offense/defense retain 75% of their
+deviation from league average across an offseason. This prevents old roster
+strength from entering opening night at full weight while preserving the
+separate, explicit prior-season windows for the tournament to accept or reject.
+Schedule state resets completely at the season boundary: the offseason is not
+rest, and the prior season's final venue is not an opening-night travel origin.
 Every field is constructed before the predicted game's result becomes
 available, and the mutation test proves that changing a game's final box or
 tracking rows cannot change that game's own feature state. The historical
@@ -359,7 +365,7 @@ movement, CLV, split, or market-reader claim. Every row carries that provenance;
 2025-26 BALLDONTLIE timestamped openings take precedence when available.
 
 The executable tournament release is now
-`nba_professional_tournament_2026_10_15_r15_consensus_opening_selection`. Its
+`nba_professional_tournament_2026_10_15_r16_offseason_strength_regression`. Its
 predeclared model grid is reproducible with the repository's NumPy runtime:
 closed-form ridge, robust iteratively reweighted Huber ridge, and bounded
 hinge-spline ridge. Feature-family ablations separately test ratings,
