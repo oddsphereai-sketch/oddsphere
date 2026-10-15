@@ -20,7 +20,7 @@ import numpy as np
 import pandas as pd
 
 
-RELEASE = "nba_professional_tournament_2026_10_15_r11_exact_price_evaluation"
+RELEASE = "nba_professional_tournament_2026_10_15_r12_reference_market_provenance"
 FEATURE_RELEASE = "nba_point_in_time_features_2026_10_15_r6_expanded_advanced"
 R1_CONFIRMATION = {
     "season": 2025,
@@ -584,6 +584,7 @@ def build_prediction_ledger(
         winner_correct = predicted_home_win == actual_home_win
 
         market_home_probability = finite_float(row.get("evaluation_opening_market_home_probability"))
+        market_provenance = row.get("evaluation_market_provenance")
         moneyline_home_price = finite_float(row.get("evaluation_opening_moneyline_home_price"))
         moneyline_away_price = finite_float(row.get("evaluation_opening_moneyline_away_price"))
         opening_home_spread = finite_float(row.get("evaluation_opening_home_spread"))
@@ -658,6 +659,7 @@ def build_prediction_ledger(
                 "winnerCorrect": winner_correct,
             },
             "openingMarketEvaluationOnly": {
+                "provenance": market_provenance if isinstance(market_provenance, str) else None,
                 "homeWinProbability": market_home_probability,
                 "moneylineHomePrice": moneyline_home_price,
                 "moneylineAwayPrice": moneyline_away_price,

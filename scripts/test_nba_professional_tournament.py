@@ -107,6 +107,7 @@ for season_index, season in enumerate((2023, 2024, 2025)):
             "home_usageConcentration_5": 0.055 + rng.normal(0, 0.004),
             "away_usageConcentration_5": 0.052 + rng.normal(0, 0.004),
             "evaluation_opening_market_home_probability": 0.65 if home_off >= away_off else 0.35,
+            "evaluation_market_provenance": "synthetic_test_only",
             "evaluation_opening_moneyline_home_price": -130,
             "evaluation_opening_moneyline_away_price": 115,
             "evaluation_opening_home_spread": -margin + rng.normal(0, 5),
@@ -189,6 +190,7 @@ with tempfile.TemporaryDirectory(prefix="nba-tournament-test-") as temporary:
     assert first_prediction["auditFeatureState"]
     assert "marginSigned" in first_prediction["error"]
     assert "spreadDirectionCorrect" in first_prediction["openingMarketEvaluationOnly"]
+    assert first_prediction["openingMarketEvaluationOnly"]["provenance"] == "synthetic_test_only"
     assert diagnostics["overall"]["games"] == 48
     assert diagnostics["cohorts"]["calendarMonth"]
     assert diagnostics["cohorts"]["predictedMarginBand"]

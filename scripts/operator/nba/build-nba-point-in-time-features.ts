@@ -1,6 +1,7 @@
 /** Build a leakage-safe feature matrix from complete raw NBA research packages. */
 
 import { createHash } from "node:crypto";
+import { execFileSync } from "node:child_process";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
 import {
@@ -58,6 +59,49 @@ function uniqueById<T>(rows: T[], id: (row: T) => number, label: string): T[] {
   return [...byId.values()].map((item) => item.row);
 }
 
+type ReferenceMarketRow = {
+  Date: string;
+  Home: string;
+  Away: string;
+  OU: number;
+  Spread: number;
+  ML_Home: number;
+  ML_Away: number;
+};
+
+function implied(american: number): number {
+  return american > 0 ? 100 / (american + 100) : -american / (-american + 100);
+}
+
+function referenceRows(sqlitePath: string, season: number): ReferenceMarketRow[] {
+  const table = season === 2023 ? "2023-24" : season === 2024 ? "2024-25" : null;
+  if (!table) return [];
+  const body = execFileSync(
+    "sqlite3",
+    ["-json", sqlitePath, `select Date, Home, Away, OU, Spread, ML_Home, ML_Away from "${table}"`],
+    { encoding: "utf8", maxBuffer: 20 * 1024 * 1024 },
+  );
+  return JSON.parse(body) as ReferenceMarketRow[];
+}
+
+function rawGameIdentity(row: Record<string, unknown>): {
+  gameId: number;
+  date: string;
+  home: string;
+  away: string;
+} {
+  const home = row.home_team as Record<string, unknown> | undefined;
+  const away = row.visitor_team as Record<string, unknown> | undefined;
+  const gameId = Number(row.id);
+  const date = String(row.date ?? "");
+  const homeName = String(home?.full_name ?? "");
+  const awayName = String(away?.full_name ?? "");
+  if (!Number.isInteger(gameId) || !/^\d{4}-\d{2}-\d{2}$/.test(date) || !homeName || !awayName) {
+    throw new Error("NBA raw game is missing reference-market identity.");
+  }
+  return { gameId, date, home: homeName, away: awayName };
+}
+
 async function main(): Promise<void> {
   const inputs = values("--input").map((item) => path.resolve(item));
   if (inputs.length === 0) throw new Error("At least one --input complete NBA research directory is required.");
@@ -86,6 +130,10 @@ async function main(): Promise<void> {
   }
 
   const games = uniqueById(rawGames.map(normalizeNbaHistoricalGame), (row) => row.gameId, "NBA game");
+  const rawIdentityByGame = new Map(rawGames.map((row) => {
+    const identity = rawGameIdentity(row);
+    return [identity.gameId, identity] as const;
+  }));
   const boxes = uniqueById(rawBoxes.map(normalizeNbaHistoricalPlayerBox), (row) => row.rowId, "NBA box row");
   const advanced = uniqueById(
     rawAdvanced.map(normalizeNbaHistoricalPlayerAdvanced),
@@ -120,18 +168,43 @@ async function main(): Promise<void> {
     rows: openingRows,
     gameStartById: new Map(games.map((game) => [game.gameId, game.startTime])),
   });
+  const referenceSqlite = value("--reference-sqlite");
+  const referenceByIdentity = new Map<string, ReferenceMarketRow>();
+  if (referenceSqlite) {
+    for (const season of new Set(games.map((game) => game.season))) {
+      for (const row of referenceRows(path.resolve(referenceSqlite), season)) {
+        const key = `${row.Date}::${row.Home}::${row.Away}`;
+        if (referenceByIdentity.has(key)) throw new Error(`NBA reference market contains duplicate ${key}.`);
+        referenceByIdentity.set(key, row);
+      }
+    }
+  }
+  let referenceMarketMatches = 0;
   const featureRows = buildNbaPointInTimeFeatures({ games, boxes, advanced }).map((row) => {
     const market = openingMarketByGame.get(row.game_id);
+    const identity = rawIdentityByGame.get(row.game_id);
+    const reference = identity
+      ? referenceByIdentity.get(`${identity.date}::${identity.home}::${identity.away}`)
+      : undefined;
+    if (!market && reference) referenceMarketMatches += 1;
+    const home = reference ? implied(Number(reference.ML_Home)) : null;
+    const away = reference ? implied(Number(reference.ML_Away)) : null;
+    const noVigHome = home !== null && away !== null && home + away > 0 ? home / (home + away) : null;
     return {
       ...row,
-      evaluation_opening_market_home_probability: market?.homeWinProbability ?? null,
-      evaluation_opening_moneyline_home_price: market?.homeMoneylinePrice ?? null,
-      evaluation_opening_moneyline_away_price: market?.awayMoneylinePrice ?? null,
-      evaluation_opening_home_spread: market?.homeSpread ?? null,
+      evaluation_market_provenance: market
+        ? "balldontlie_timestamped_opening"
+        : reference
+          ? "public_pregame_reference_timestamp_unknown"
+          : "unavailable",
+      evaluation_opening_market_home_probability: market?.homeWinProbability ?? noVigHome,
+      evaluation_opening_moneyline_home_price: market?.homeMoneylinePrice ?? reference?.ML_Home ?? null,
+      evaluation_opening_moneyline_away_price: market?.awayMoneylinePrice ?? reference?.ML_Away ?? null,
+      evaluation_opening_home_spread: market?.homeSpread ?? (reference ? -Number(reference.Spread) : null),
       evaluation_opening_home_cover_probability: market?.homeCoverProbability ?? null,
       evaluation_opening_home_spread_price: market?.homeSpreadPrice ?? null,
       evaluation_opening_away_spread_price: market?.awaySpreadPrice ?? null,
-      evaluation_opening_total: market?.total ?? null,
+      evaluation_opening_total: market?.total ?? reference?.OU ?? null,
       evaluation_opening_over_probability: market?.overProbability ?? null,
       evaluation_opening_over_price: market?.overPrice ?? null,
       evaluation_opening_under_price: market?.underPrice ?? null,
@@ -170,6 +243,10 @@ async function main(): Promise<void> {
       market.homeSpread !== null && market.homeCoverProbability !== null).length,
     openingTotalGames: [...openingMarketByGame.values()].filter((market) =>
       market.total !== null && market.overProbability !== null).length,
+    referenceMarketMatches,
+    referenceMarketProvenance: referenceSqlite
+      ? "public pregame reference; observation timestamp and source book unknown; evaluation only"
+      : null,
     featureCount: featureNames.length,
     featureNames,
     chronologicalContract: "Each feature row is emitted before its own finalized outcome updates state.",
