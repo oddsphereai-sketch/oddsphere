@@ -137,6 +137,14 @@ fields, and timestamped opening Moneyline/Spread/Total quotes. The sample is
 explicitly ineligible for model selection or price claims. Complete immutable
 season packages and their checksums are required before the tournament runs.
 
+Historical capture release
+`nba_bdl_historical_research_2026_10_15_r2_resumable_game_scoped` replaces the
+fragile season-wide player-stat scan with exact-game batches. Each completed
+batch is written atomically, can be resumed without another provider request,
+and must cover every requested game before the manifest can become score- or
+price-backtest eligible. This is research input collection only and has no
+production reader or model authority.
+
 BALLDONTLIE team-season feature families are useful as prior-season or live
 current-state context. A completed full-season aggregate may not be applied
 backward to an earlier game in that same season. Historical rolling features

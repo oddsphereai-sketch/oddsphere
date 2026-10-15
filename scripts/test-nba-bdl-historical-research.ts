@@ -85,12 +85,12 @@ async function main(): Promise<void> {
 
   const advancedUrl = __NBA_BDL_HISTORICAL_TEST__.buildUrl({
     dataset: "advanced",
-    season: 2025,
-    seasonType: "regular",
+    gameIds: [18446819, 18446820],
   });
   assert.equal(advancedUrl.pathname, "/nba/v2/stats/advanced");
   assert.equal(advancedUrl.searchParams.get("period"), "0");
   assert.equal(advancedUrl.searchParams.has("season_type"), false);
+  assert.deepEqual(advancedUrl.searchParams.getAll("game_ids[]"), ["18446819", "18446820"]);
 
   const operatorSource = readFileSync(
     new URL("operator/nba/capture-nba-goat-historical-research.ts", import.meta.url),
@@ -103,6 +103,11 @@ async function main(): Promise<void> {
   assert.match(operatorSource, /row\.ist_stage !== ["']Championship["']/);
   assert.match(operatorSource, /A full NBA research capture must include games, box, advanced, and opening_odds/);
   assert.match(operatorSource, /sample-\$\{capturedAt\.replace/);
+  assert.match(operatorSource, /\.capture-checkpoints/);
+  assert.match(operatorSource, /--resume/);
+  assert.match(operatorSource, /missing_game_ids/);
+  assert.match(operatorSource, /dataset: "box", gameIds/);
+  assert.match(operatorSource, /dataset: "advanced", gameIds/);
 
   console.log("NBA BALLDONTLIE historical research capture tests passed.");
 }

@@ -8,7 +8,7 @@
  */
 
 export const NBA_BDL_HISTORICAL_RESEARCH_RELEASE =
-  "nba_bdl_historical_research_2026_10_15_r1" as const;
+  "nba_bdl_historical_research_2026_10_15_r2_resumable_game_scoped" as const;
 
 export type NbaBdlHistoricalDataset = "games" | "box" | "advanced" | "opening_odds";
 export type NbaBdlHistoricalSeasonType = "regular" | "ist";

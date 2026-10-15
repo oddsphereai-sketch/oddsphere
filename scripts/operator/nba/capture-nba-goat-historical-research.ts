@@ -11,7 +11,7 @@
  */
 
 import { createHash } from "node:crypto";
-import { mkdir, rename, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
 import {
   fetchNbaBdlHistoricalRows,
@@ -28,6 +28,9 @@ type DatasetManifest = {
   requests: number;
   complete: boolean;
   sha256: string;
+  batches?: number;
+  reused_batches?: number;
+  missing_game_ids?: number[];
   exclusions?: Record<string, number>;
   note?: string;
 };
@@ -43,6 +46,10 @@ const SEASON_TYPES: readonly NbaBdlHistoricalSeasonType[] = ["regular", "ist"];
 function value(name: string): string | undefined {
   const index = process.argv.indexOf(name);
   return index >= 0 ? process.argv[index + 1] : undefined;
+}
+
+function hasFlag(name: string): boolean {
+  return process.argv.includes(name);
 }
 
 function positiveInteger(name: string, fallback?: number): number {
@@ -104,22 +111,45 @@ function chunk<T>(values: readonly T[], size: number): T[][] {
   return chunks;
 }
 
+async function writeAtomicJsonl(
+  absolute: string,
+  rows: readonly Record<string, unknown>[],
+): Promise<{ sha256: string }> {
+  const body = rows.length > 0 ? `${rows.map((row) => JSON.stringify(row)).join("\n")}\n` : "";
+  const temporary = `${absolute}.tmp`;
+  await writeFile(temporary, body, "utf8");
+  await rename(temporary, absolute);
+  return { sha256: createHash("sha256").update(body).digest("hex") };
+}
+
 async function writeJsonl(args: {
   outputDirectory: string;
   dataset: NbaBdlHistoricalDataset;
   rows: Record<string, unknown>[];
 }): Promise<{ file: string; sha256: string }> {
   const filename = `${args.dataset.replace("_", "-")}.jsonl`;
-  const absolute = path.join(args.outputDirectory, filename);
-  const body = args.rows.length > 0 ? `${args.rows.map((row) => JSON.stringify(row)).join("\n")}\n` : "";
-  const temporary = `${absolute}.tmp`;
-  await writeFile(temporary, body, "utf8");
-  await rename(temporary, absolute);
-  return { file: filename, sha256: createHash("sha256").update(body).digest("hex") };
+  const result = await writeAtomicJsonl(path.join(args.outputDirectory, filename), args.rows);
+  return { file: filename, sha256: result.sha256 };
 }
 
-async function collectBySeasonType(args: {
-  dataset: "games" | "box";
+async function readJsonl(absolute: string): Promise<Record<string, unknown>[]> {
+  try {
+    const body = await readFile(absolute, "utf8");
+    if (!body.trim()) return [];
+    return body.trim().split("\n").map((line, index) => {
+      const parsed = JSON.parse(line) as unknown;
+      if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
+        throw new Error(`${absolute}:${index + 1} is not an object.`);
+      }
+      return parsed as Record<string, unknown>;
+    });
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return [];
+    throw error;
+  }
+}
+
+async function collectGamesBySeasonType(args: {
   season: number;
   maxPages: number;
   requestIntervalMs: number;
@@ -127,7 +157,7 @@ async function collectBySeasonType(args: {
   const results: NbaBdlHistoricalFetch[] = [];
   for (const seasonType of SEASON_TYPES) {
     results.push(await fetchNbaBdlHistoricalRows({
-      dataset: args.dataset,
+      dataset: "games",
       season: args.season,
       seasonType,
       maxPages: args.maxPages,
@@ -141,27 +171,96 @@ async function collectBySeasonType(args: {
   };
 }
 
-async function collectOpeningOdds(args: {
+async function collectExactGameBatches(args: {
+  dataset: "box" | "advanced" | "opening_odds";
   gameIds: number[];
+  outputDirectory: string;
+  batchSize: number;
   maxPages: number;
   requestIntervalMs: number;
   sample: boolean;
-}): Promise<{ rows: Record<string, unknown>[]; requests: number; complete: boolean }> {
-  const batches = chunk(args.gameIds, 50);
+  resume: boolean;
+}): Promise<{
+  rows: Record<string, unknown>[];
+  requests: number;
+  complete: boolean;
+  batches: number;
+  reusedBatches: number;
+  missingGameIds: number[];
+}> {
+  const batches = chunk([...args.gameIds].sort((a, b) => a - b), args.batchSize);
   const selectedBatches = args.sample ? batches.slice(0, 1) : batches;
-  const results: NbaBdlHistoricalFetch[] = [];
-  for (const gameIds of selectedBatches) {
-    results.push(await fetchNbaBdlHistoricalRows({
-      dataset: "opening_odds",
-      gameIds,
-      maxPages: args.maxPages,
-      requestIntervalMs: args.requestIntervalMs,
+  const checkpointDirectory = path.join(args.outputDirectory, ".capture-checkpoints", args.dataset);
+  await mkdir(checkpointDirectory, { recursive: true });
+  const rows: Record<string, unknown>[] = [];
+  let requests = 0;
+  let reusedBatches = 0;
+  let allRequestsComplete = true;
+  for (let index = 0; index < selectedBatches.length; index += 1) {
+    const gameIds = selectedBatches[index] ?? [];
+    const identity = createHash("sha256").update(gameIds.join(",")).digest("hex").slice(0, 16);
+    const checkpoint = path.join(
+      checkpointDirectory,
+      `${String(index + 1).padStart(4, "0")}-${identity}.jsonl`,
+    );
+    let batchRows = args.resume ? await readJsonl(checkpoint) : [];
+    let usedCheckpoint = false;
+    if (args.resume && batchRows.length > 0) {
+      const allowed = new Set(gameIds);
+      if (batchRows.some((row) => {
+        const gameId = nbaBdlProviderGameId(row);
+        return gameId === null || !allowed.has(gameId);
+      })) {
+        throw new Error(`NBA ${args.dataset} checkpoint ${checkpoint} contains an out-of-batch game.`);
+      }
+      reusedBatches += 1;
+      usedCheckpoint = true;
+    } else {
+      const result = await fetchNbaBdlHistoricalRows({
+        dataset: args.dataset,
+        gameIds,
+        maxPages: args.maxPages,
+        requestIntervalMs: args.requestIntervalMs,
+      });
+      requests += result.requests;
+      allRequestsComplete = allRequestsComplete && result.complete;
+      if (!result.complete) {
+        throw new Error(
+          `NBA ${args.dataset} batch ${index + 1}/${selectedBatches.length} exceeded its page cap.`,
+        );
+      }
+      const allowed = new Set(gameIds);
+      batchRows = stableRows(args.dataset, result.rows.filter((row) => {
+        const gameId = nbaBdlProviderGameId(row);
+        return gameId !== null && allowed.has(gameId);
+      }));
+      await writeAtomicJsonl(checkpoint, batchRows);
+    }
+    rows.push(...batchRows);
+    console.error(JSON.stringify({
+      dataset: args.dataset,
+      batch: index + 1,
+      batches: selectedBatches.length,
+      games: gameIds.length,
+      rows: batchRows.length,
+      resumed: usedCheckpoint,
     }));
   }
+  const stable = stableRows(args.dataset, rows);
+  const covered = new Set(stable.map(nbaBdlProviderGameId).filter((gameId): gameId is number => gameId !== null));
+  const selectedGameIds = selectedBatches.flat();
+  const missingGameIds = selectedGameIds.filter((gameId) => !covered.has(gameId));
   return {
-    rows: results.flatMap((result) => result.rows),
-    requests: results.reduce((sum, result) => sum + result.requests, 0),
-    complete: !args.sample && selectedBatches.length === batches.length && results.every((result) => result.complete),
+    rows: stable,
+    requests,
+    complete:
+      !args.sample &&
+      selectedBatches.length === batches.length &&
+      allRequestsComplete &&
+      missingGameIds.length === 0,
+    batches: selectedBatches.length,
+    reusedBatches,
+    missingGameIds,
   };
 }
 
@@ -175,6 +274,9 @@ async function main(): Promise<void> {
     throw new Error("A full NBA research capture must include games, box, advanced, and opening_odds.");
   }
   const maxPages = sample ? positiveInteger("--sample-pages") : 1_000;
+  const batchSize = positiveInteger("--batch-size", 10);
+  if (batchSize > 50) throw new Error("--batch-size must be from 1 through 50.");
+  const resume = hasFlag("--resume");
   const requestIntervalMs = Number(
     value("--request-interval-ms") ?? process.env.NBA_BDL_REQUEST_INTERVAL_MS ?? "125",
   );
@@ -196,7 +298,7 @@ async function main(): Promise<void> {
   await mkdir(outputDirectory, { recursive: true });
 
   const manifests: Partial<Record<NbaBdlHistoricalDataset, DatasetManifest>> = {};
-  const gameFetch = await collectBySeasonType({ dataset: "games", season, maxPages, requestIntervalMs });
+  const gameFetch = await collectGamesBySeasonType({ season, maxPages, requestIntervalMs });
   const rawGames = stableRows("games", gameFetch.rows);
   const finalGames = rawGames.filter((row) => isFinalGame(row) && isOfficialRegularSeasonGame(row));
   const nonfinalGames = rawGames.filter((row) => !isFinalGame(row)).length;
@@ -216,44 +318,40 @@ async function main(): Promise<void> {
   }
   if (finalGames.length === 0) throw new Error(`NBA ${season} capture found no completed regular/IST games.`);
   const gameIds = finalGames.map((row) => integer(row.id)).filter((id): id is number => id !== null);
-  const requestedGameIds = new Set(gameIds);
 
   if (datasets.includes("box")) {
-    const result = await collectBySeasonType({ dataset: "box", season, maxPages, requestIntervalMs });
-    const inScope = result.rows.filter((row) => {
-      const gameId = nbaBdlProviderGameId(row);
-      return gameId !== null && requestedGameIds.has(gameId);
+    const result = await collectExactGameBatches({
+      dataset: "box", gameIds, outputDirectory, batchSize, maxPages, requestIntervalMs, sample, resume,
     });
-    const rows = stableRows("box", inScope);
+    const rows = result.rows;
     const written = await writeJsonl({ outputDirectory, dataset: "box", rows });
     manifests.box = {
       ...written,
       rows: rows.length,
       requests: result.requests,
-      complete: !sample && result.complete,
-      exclusions: { out_of_scope_rows: result.rows.length - inScope.length },
+      complete: result.complete,
+      batches: result.batches,
+      reused_batches: result.reusedBatches,
+      missing_game_ids: result.missingGameIds,
+      exclusions: { out_of_scope_rows: 0 },
     };
   }
 
   if (datasets.includes("advanced")) {
-    const result = await fetchNbaBdlHistoricalRows({
-      dataset: "advanced",
-      season,
-      maxPages,
-      requestIntervalMs,
+    const result = await collectExactGameBatches({
+      dataset: "advanced", gameIds, outputDirectory, batchSize, maxPages, requestIntervalMs, sample, resume,
     });
-    const inScope = result.rows.filter((row) => {
-      const gameId = nbaBdlProviderGameId(row);
-      return gameId !== null && requestedGameIds.has(gameId);
-    });
-    const rows = stableRows("advanced", inScope);
+    const rows = result.rows;
     const written = await writeJsonl({ outputDirectory, dataset: "advanced", rows });
     manifests.advanced = {
       ...written,
       rows: rows.length,
       requests: result.requests,
-      complete: !sample && result.complete,
-      exclusions: { out_of_scope_rows: result.rows.length - inScope.length },
+      complete: result.complete,
+      batches: result.batches,
+      reused_batches: result.reusedBatches,
+      missing_game_ids: result.missingGameIds,
+      exclusions: { out_of_scope_rows: 0 },
     };
   }
 
@@ -268,19 +366,20 @@ async function main(): Promise<void> {
         note: "BALLDONTLIE opening odds are available only from the 2025 season onward.",
       };
     } else {
-      const result = await collectOpeningOdds({ gameIds, maxPages, requestIntervalMs, sample });
-      const inScope = result.rows.filter((row) => {
-        const gameId = nbaBdlProviderGameId(row);
-        return gameId !== null && requestedGameIds.has(gameId);
+      const result = await collectExactGameBatches({
+        dataset: "opening_odds", gameIds, outputDirectory, batchSize, maxPages, requestIntervalMs, sample, resume,
       });
-      const rows = stableRows("opening_odds", inScope);
+      const rows = result.rows;
       const written = await writeJsonl({ outputDirectory, dataset: "opening_odds", rows });
       manifests.opening_odds = {
         ...written,
         rows: rows.length,
         requests: result.requests,
         complete: result.complete,
-        exclusions: { out_of_scope_rows: result.rows.length - inScope.length },
+        batches: result.batches,
+        reused_batches: result.reusedBatches,
+        missing_game_ids: result.missingGameIds,
+        exclusions: { out_of_scope_rows: 0 },
       };
     }
   }
