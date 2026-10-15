@@ -71,6 +71,26 @@ async function main(): Promise<void> {
   assert.equal(retried.requests, 2, "provider request accounting must include retries");
   assert.deepEqual(sleeps, [2_000]);
 
+  const networkSleeps: number[] = [];
+  let networkAttempts = 0;
+  const recoveredNetwork = await fetchNbaBdlHistoricalRows({
+    dataset: "games",
+    season: 2025,
+    apiKey: "test-key",
+    maxRetries: 1,
+    requestTimeoutMs: 1_000,
+    sleepImpl: async (milliseconds) => { networkSleeps.push(milliseconds); },
+    fetchImpl: async (_input, init) => {
+      networkAttempts += 1;
+      assert.ok(init?.signal, "historical requests must carry a bounded abort signal");
+      if (networkAttempts === 1) throw new TypeError("fetch failed");
+      return new Response(JSON.stringify({ data: [{ id: 10 }], meta: {} }), { status: 200 });
+    },
+  });
+  assert.equal(recoveredNetwork.requests, 2);
+  assert.equal(networkAttempts, 2);
+  assert.deepEqual(networkSleeps, [1_000]);
+
   await assert.rejects(
     () => fetchNbaBdlHistoricalRows({
       dataset: "opening_odds",

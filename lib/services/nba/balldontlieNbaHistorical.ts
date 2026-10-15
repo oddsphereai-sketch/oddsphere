@@ -37,6 +37,7 @@ const ENDPOINTS: Record<NbaBdlHistoricalDataset, string> = {
 const DEFAULT_MAX_PAGES = 1_000;
 const DEFAULT_PAGE_SIZE = 100;
 const DEFAULT_MAX_RETRIES = 4;
+const DEFAULT_REQUEST_TIMEOUT_MS = 20_000;
 
 function integer(value: unknown): number | null {
   const number = typeof value === "number" ? value : Number(value);
@@ -64,11 +65,25 @@ async function requestPage(args: {
   fetchImpl: typeof fetch;
   sleepImpl: (milliseconds: number) => Promise<void>;
   maxRetries: number;
+  requestTimeoutMs: number;
 }): Promise<{ envelope: PageEnvelope; requests: number }> {
   for (let attempt = 0; attempt <= args.maxRetries; attempt += 1) {
-    const response = await args.fetchImpl(args.url, {
-      headers: { Authorization: args.apiKey, Accept: "application/json" },
-    });
+    let response: Response;
+    try {
+      response = await args.fetchImpl(args.url, {
+        headers: { Authorization: args.apiKey, Accept: "application/json" },
+        signal: AbortSignal.timeout(args.requestTimeoutMs),
+      });
+    } catch (error) {
+      if (attempt === args.maxRetries) {
+        throw new Error(
+          `BALLDONTLIE NBA ${args.url.pathname} request failed after ${attempt + 1} attempts: ` +
+            `${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
+      await args.sleepImpl(Math.min(30_000, 1_000 * 2 ** attempt));
+      continue;
+    }
     const body = await response.text();
     if (response.ok) {
       try {
@@ -121,6 +136,7 @@ export async function fetchNbaBdlHistoricalRows(args: {
   requestIntervalMs?: number;
   maxPages?: number;
   maxRetries?: number;
+  requestTimeoutMs?: number;
 }): Promise<NbaBdlHistoricalFetch> {
   const apiKey = args.apiKey ?? process.env.BALLDONTLIE_API_KEY;
   if (!apiKey) throw new Error("BALLDONTLIE_API_KEY is required for NBA historical research.");
@@ -135,12 +151,16 @@ export async function fetchNbaBdlHistoricalRows(args: {
   }
   const maxPages = args.maxPages ?? DEFAULT_MAX_PAGES;
   const maxRetries = args.maxRetries ?? DEFAULT_MAX_RETRIES;
+  const requestTimeoutMs = args.requestTimeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS;
   const requestIntervalMs = args.requestIntervalMs ?? 0;
   if (!Number.isInteger(maxPages) || maxPages < 1 || maxPages > DEFAULT_MAX_PAGES) {
     throw new Error(`NBA historical maxPages must be an integer from 1 through ${DEFAULT_MAX_PAGES}.`);
   }
   if (!Number.isInteger(maxRetries) || maxRetries < 0 || maxRetries > 8) {
     throw new Error("NBA historical maxRetries must be an integer from 0 through 8.");
+  }
+  if (!Number.isInteger(requestTimeoutMs) || requestTimeoutMs < 1_000 || requestTimeoutMs > 60_000) {
+    throw new Error("NBA historical requestTimeoutMs must be an integer from 1000 through 60000.");
   }
   if (!Number.isFinite(requestIntervalMs) || requestIntervalMs < 0 || requestIntervalMs > 60_000) {
     throw new Error("NBA historical requestIntervalMs must be from 0 through 60000.");
@@ -160,6 +180,7 @@ export async function fetchNbaBdlHistoricalRows(args: {
       fetchImpl,
       sleepImpl,
       maxRetries,
+      requestTimeoutMs,
     });
     requests += pageResult.requests;
     const envelope = pageResult.envelope;
