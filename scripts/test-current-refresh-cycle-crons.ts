@@ -131,6 +131,7 @@ assert.match(source("app/api/cron/pregame-sweep/route.ts"), /refreshDailyEdgeRes
 assert.match(source("app/api/cron/public-splits-observations-refresh/route.ts"), /refreshDailyEdgeResponseSnapshot/, "split changes republish Daily Edge");
 assert.match(source("app/api/cron/public-splits-observations-refresh/route.ts"), /runScheduledMarketIntelligenceV2Collection/, "split refresh retries source-aware MLB splits");
 assert.match(source("app/api/cron/public-splits-observations-refresh/route.ts"), /sport === "mlb" \|\| sport === "nba"/, "split refresh persists NBA per-book v2 observations in audit-only mode");
+assert.match(source("app/api/cron/public-splits-observations-refresh/route.ts"), /slateDateThrough:\s*sport === "nba" \? addDaysToSlate\(slate, 6\) : undefined/, "NBA split capture uses the board's bounded seven-day window in the existing collector call");
 assert.match(source("app/api/cron/public-splits-observations-refresh/route.ts"), /includeSharpApiHistory:\s*true/, "fast split refresh recovers event-specific Sharp history every 15 minutes");
 assert.match(source("app/api/cron/public-splits-observations-refresh/route.ts"), /\["mlb", "wnba", "nhl", "nba"\]/, "NBA Playbook splits are collected in observe-only mode before regular-season activation");
 assert.match(source("lib/services/marketIntelligenceV2/shadowSync.ts"), /path:\s*["']\/events["']/, "Sharp recovery discovers event IDs independently of the league split snapshot");

@@ -30,6 +30,7 @@ export async function runScheduledMarketIntelligenceV2Collection(opts: {
   phase: ScheduledMarketIntelligenceV2Result["phase"];
   now?: Date;
   includeSharpApiHistory?: boolean;
+  slateDateThrough?: string;
 }): Promise<ScheduledMarketIntelligenceV2Result> {
   const config = readMarketIntelligenceV2Config();
   const slateDate = opts.slateDate ?? currentSlateDate(opts.sport);
@@ -56,6 +57,7 @@ export async function runScheduledMarketIntelligenceV2Collection(opts: {
       todayUtc: currentSlateDate(opts.sport),
       now,
       includeSharpApiHistory: opts.includeSharpApiHistory,
+      slateDateThrough: opts.slateDateThrough,
     });
     result.shadow = shadow;
     result.recordsUpdated += shadow.splitObservationsWritten + shadow.priceObservationsWritten;

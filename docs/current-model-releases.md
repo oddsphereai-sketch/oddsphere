@@ -131,8 +131,12 @@ Last reviewed: 2026-10-15
   tracking, copy, label, or layout changes. Evidence and rollback:
   `docs/model-audits/2026-10-07-nba-readiness-gated-rollover-predeclaration.md`.
 - NBA Market Intelligence V2 shadow capture is
-  `market_intelligence_v2_shadow_capture_2026_10_15_r1_nba_per_book_forward`. The existing leased
-  refresh may store exact-date, exact-matchup SharpAPI NBA split rows with their real source book.
+  `market_intelligence_v2_shadow_capture_2026_10_15_r2_nba_rolling_window`. The existing leased
+  refresh may store exact-date, exact-matchup SharpAPI NBA split rows with their real source book
+  for the same bounded seven-day window used by the member schedule. The league-level endpoint is
+  called once per cycle, not once per date; rows outside the window or without an exact canonical
+  date-plus-matchup identity are discarded. Current-day preseason rehearsal remains observable,
+  while future preseason games are excluded from the rolling capture.
   DraftKings ticket/handle observations and BetMGM ticket-only observations remain distinct; no
   row is relabeled as consensus and no missing handle is inferred. NBA provider-history calls stay
   disabled until their per-book contract is implemented, so repeated current snapshots create the
@@ -140,7 +144,8 @@ Last reviewed: 2026-10-15
   probability, market, grade, actionability, stake, lock, tracking, member-display, copy, label, or
   layout authority. The independent model remains NBA-specific; only the evidence and evaluation
   contract is shared across sports. Evidence and rollback:
-  `docs/model-audits/2026-10-15-nba-sharpapi-v2-capture-predeclaration.md`.
+  `docs/model-audits/2026-10-15-nba-sharpapi-v2-capture-predeclaration.md` and
+  `docs/model-audits/2026-10-15-nba-rolling-market-evidence-capture.md`.
 - The operator readiness audit now measures the newest line and split age per game and reports
   games with no line, rather than treating a recent snapshot publish time as proof of fresh source
   evidence. This is operational detection only and changes no prediction.

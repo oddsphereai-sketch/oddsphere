@@ -12,6 +12,7 @@ import {
 import { normalizeMlbTeamName } from "../../providers/real_api/_teamNameNormalizer";
 import { buildGameKey, type NormalizerSport } from "../../providers/playbook/playbookTeamNormalizer";
 import { readMarketIntelligenceV2Config } from "../../config/marketIntelligenceV2";
+import { isPublicallyTracked } from "../../config/officialTrackingStart";
 import { isBlockedSportsbook } from "../../config/blockedSportsbooks";
 import type { Sport } from "../../types/domain/Sport";
 import type {
@@ -74,7 +75,7 @@ const SHARP_HISTORY_RETRY_BUDGET_PER_CYCLE = 8;
 const SHARP_HISTORY_REQUEST_BUDGET_PER_CYCLE = 30;
 
 export const MARKET_INTELLIGENCE_V2_SHADOW_CAPTURE_RELEASE =
-  "market_intelligence_v2_shadow_capture_2026_10_15_r1_nba_per_book_forward";
+  "market_intelligence_v2_shadow_capture_2026_10_15_r2_nba_rolling_window";
 
 export type SharpHistoryFailureClass =
   | "definitive_absence"
@@ -254,6 +255,44 @@ export function selectVerifiedSharpApiCurrentRows(
     const key = marketIntelligenceGameKey(sport, row.away_team, row.home_team);
     return key !== null && currentPairs.has(key);
   });
+}
+
+/**
+ * Select only provider rows whose league, matchup, and provider event date all
+ * agree with one canonical game inside the requested window. This is stricter
+ * than treating a league-level payload as one slate: SharpAPI may return
+ * several upcoming NBA dates in the same response.
+ */
+export function selectVerifiedSharpApiWindowRows(
+  rows: readonly SharpSplitRowWithTeams[],
+  games: readonly Pick<GameRef, "awayAbbr" | "homeAbbr" | "slateDate">[],
+  slateDateFrom: string,
+  slateDateThrough: string,
+  sport: Sport = "nba",
+): SharpSplitRowWithTeams[] {
+  const canonicalGames = new Set(
+    games.flatMap((game) => game.slateDate === null
+      ? []
+      : [`${game.slateDate}|${game.awayAbbr}@${game.homeAbbr}`]),
+  );
+  return rows.filter((row) => {
+    const league = String(row.league ?? "").toLowerCase();
+    if (league && league !== sport) return false;
+    const eventDate = extractEventIdDate(row.event_id);
+    if (eventDate === null || eventDate < slateDateFrom || eventDate > slateDateThrough) return false;
+    const key = marketIntelligenceGameKey(sport, row.away_team, row.home_team);
+    return key !== null && canonicalGames.has(`${eventDate}|${key}`);
+  });
+}
+
+export function selectNbaRollingMarketGames<T extends Pick<GameRef, "slateDate">>(
+  games: readonly T[],
+  anchorDate: string,
+): T[] {
+  return games.filter((game) =>
+    game.slateDate === anchorDate ||
+    (game.slateDate !== null && isPublicallyTracked("nba", game.slateDate)),
+  );
 }
 
 /**
@@ -792,6 +831,7 @@ async function collectSharpApiSplits(opts: {
   now: Date;
   ingestionRunId: string;
   includeHistory: boolean;
+  slateDateThrough?: string;
 }): Promise<{
   fetchedRows: number;
   observations: MarketSplitObservationV2[];
@@ -831,9 +871,27 @@ async function collectSharpApiSplits(opts: {
     opts.slateDate,
     opts.sport,
   );
-  const rejectedPayload = rows.length > 0 && !slateAlignment.aligned;
+  const rollingWindowEnabled =
+    opts.sport === "nba" &&
+    opts.slateDateThrough !== undefined &&
+    opts.slateDateThrough > opts.slateDate;
+  const slateDateThrough = opts.slateDateThrough ?? opts.slateDate;
+  const verifiedWindowRows = rollingWindowEnabled
+    ? selectVerifiedSharpApiWindowRows(
+        rows,
+        opts.games,
+        opts.slateDate,
+        slateDateThrough,
+        opts.sport,
+      )
+    : verifiedCurrentRows;
+  const rejectedPayload = !rollingWindowEnabled && rows.length > 0 && !slateAlignment.aligned;
   const partialPayloadRecovery = rejectedPayload && verifiedCurrentRows.length > 0;
-  const rowsToCollect = rejectedPayload ? verifiedCurrentRows : rows;
+  const rowsToCollect = rollingWindowEnabled
+    ? verifiedWindowRows
+    : rejectedPayload
+      ? verifiedCurrentRows
+      : rows;
   const providerErrors = rejectedPayload
     ? [
         `${partialPayloadRecovery ? "SharpAPI split payload partially recovered" : "SharpAPI split payload rejected by slate alignment"}: ` +
@@ -944,10 +1002,15 @@ async function collectSharpApiSplits(opts: {
   };
   for (const row of rowsToCollect) {
     const rowDate = extractEventIdDate(row.event_id);
-    if (rowDate !== null && rowDate !== opts.slateDate) continue;
+    if (
+      rowDate !== null &&
+      (rowDate < opts.slateDate || rowDate > slateDateThrough)
+    ) continue;
     const key = marketIntelligenceGameKey(opts.sport, row.away_team, row.home_team);
     const providerEventId = row.event_id === undefined || row.event_id === null ? null : String(row.event_id);
-    const pairGames = key ? gamesByKey.get(key) ?? [] : [];
+    const pairGames = key
+      ? (gamesByKey.get(key) ?? []).filter((game) => rowDate === null || game.slateDate === rowDate)
+      : [];
     const matchedGames = findSharpApiSplitGameMatches(pairGames, providerEventId);
     if (matchedGames.length === 0) {
       if (pairGames.length > 1) ambiguousDoubleheaderRowsRejected++;
@@ -1092,6 +1155,16 @@ async function collectSharpApiSplits(opts: {
     errors: providerErrors,
     details: {
       slate_alignment: slateAlignment,
+      rolling_window: rollingWindowEnabled
+        ? {
+            from: opts.slateDate,
+            through: opts.slateDateThrough,
+            canonical_games: opts.games.length,
+            provider_rows_received: rows.length,
+            exact_date_matchup_rows_accepted: verifiedWindowRows.length,
+            rows_excluded: rows.length - verifiedWindowRows.length,
+          }
+        : null,
       stale_or_ambiguous_payload_rejected: rejectedPayload && !partialPayloadRecovery,
       partial_payload_recovery: partialPayloadRecovery,
       partial_rows_accepted: partialPayloadRecovery ? verifiedCurrentRows.length : 0,
@@ -1273,6 +1346,7 @@ export async function syncMarketIntelligenceV2Shadow(opts: {
   playbookApiKey?: string;
   sharpApiKey?: string;
   includeSharpApiHistory?: boolean;
+  slateDateThrough?: string;
   logger?: (message: string) => void;
 }): Promise<MarketIntelligenceV2ShadowSyncResult> {
   const now = opts.now ?? new Date();
@@ -1297,11 +1371,32 @@ export async function syncMarketIntelligenceV2Shadow(opts: {
       : {},
   };
 
-  const games = await loadGames(opts.supabase, opts.sport, opts.slateDate);
+  const loadedGames = opts.slateDateThrough && opts.slateDateThrough > opts.slateDate
+    ? await loadGamesForSlateWindow(
+        opts.supabase,
+        opts.sport,
+        opts.slateDate,
+        opts.slateDateThrough,
+      )
+    : await loadGames(opts.supabase, opts.sport, opts.slateDate);
+  // Preserve current-day preseason rehearsal, but do not let a rolling
+  // forward collector gather future preseason events. Future NBA evidence is
+  // restricted to the regular-season member window.
+  const games = opts.sport === "nba" && opts.slateDateThrough
+    ? selectNbaRollingMarketGames(loadedGames, opts.slateDate)
+    : loadedGames;
   result.gamesLoaded = games.length;
   if (games.length === 0) {
     result.details.empty_slate = true;
     return result;
+  }
+  if (opts.slateDateThrough) {
+    result.details.capture_window = {
+      from: opts.slateDate,
+      through: opts.slateDateThrough,
+      games_loaded: games.length,
+      future_preseason_games_excluded: loadedGames.length - games.length,
+    };
   }
   const playbookGames = opts.sport === "wnba" && opts.slateDate === opts.todayUtc
     ? await loadGamesForSlateWindow(
@@ -1338,6 +1433,7 @@ export async function syncMarketIntelligenceV2Shadow(opts: {
       now,
       ingestionRunId,
       includeHistory: opts.includeSharpApiHistory !== false,
+      slateDateThrough: opts.slateDateThrough,
     }),
     loadPriceObservations({ supabase: opts.supabase, sport: opts.sport, games, now }),
   ]);
