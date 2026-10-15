@@ -1,5 +1,31 @@
 # Model change safety protocol
 
+## Owner-approved correctness exception: NFL personnel-evidence eligibility
+
+On 2026-10-15 Daniel Mengel directed Oddsphere to repair the recurring NFL injury-report and
+quarterback-authority failure before continuing model optimization. This exception is limited to
+the fail-closed eligibility correction and evidence in
+`docs/model-audits/2026-10-15-nfl-personnel-evidence-eligibility-predeclaration.md`.
+
+For future unlocked rows, the sole NFL writer must withhold every exact-price decision for a game
+when its exact-game injury report, expected starting quarterback, or selected quarterback's
+historical model identity is unavailable. An Out or Doubtful designation from either the verified
+injury report or the current depth-chart snapshot must remove that quarterback from the expected
+starter role; a replacement is eligible only when it is available and has an exact historical
+match. Projected-versus-confirmed status remains visible context because the provider does not
+currently confirm every starter, but it cannot conceal a missing or unmatched identity. The
+independent projection may remain stored for diagnostics while the member decision list is empty
+and the hold reasons are persisted.
+
+This exception changes no forecast coefficient, score, side, price, market-reader rule, stake,
+provider request cadence, writer topology, or locked payload. Existing locks retain exact reader
+precedence. Publication requires focused personnel and immutable-reader tests, full model-change
+verification, a same-input board-impact report with promotion/demotion counts, current-main
+integration safety, protected PR checks, and post-deploy proof of release identity, evidence
+coverage, sole writer/lease, board coherence, and unchanged locks. Roll back the complete new
+decision/member/collector/writer release family if a verified healthy game is held, an unavailable
+or unmatched quarterback becomes actionable, the board silently contracts, or a lock changes.
+
 ## Owner-directed provisional exception: CFB full-product coordinator compatibility
 
 On 2026-10-15 Daniel Mengel directed Oddsphere to audit the College Football losses, identify why

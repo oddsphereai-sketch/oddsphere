@@ -201,6 +201,8 @@ const DIVISIONS: readonly (readonly string[])[] = [
 ];
 const BLOCKING_COVERAGE_REASONS = new Set([
   "roster_depth_unavailable",
+  "expected_quarterback_unavailable",
+  "injury_report_unavailable",
   "multibook_consensus_unavailable",
   "r6_leave_one_out_consensus_unavailable",
   "t60_capture_late",
@@ -241,8 +243,15 @@ export function buildNflR6ShadowMoneylineDecision(args: {
     !awayQb.matched ? "away_quarterback_history_unmatched" : null,
     !homeQb.matched ? "home_quarterback_history_unmatched" : null,
   ]);
+  const quarterbackBlockingReasons = uniqueSorted([
+    awayQb.name === null ? "away_expected_quarterback_unavailable" : null,
+    homeQb.name === null ? "home_expected_quarterback_unavailable" : null,
+    awayQb.name !== null && !awayQb.matched ? "away_quarterback_history_unmatched" : null,
+    homeQb.name !== null && !homeQb.matched ? "home_quarterback_history_unmatched" : null,
+  ]);
   const blockingReasons = uniqueSorted([
     ...args.coverageHealthHolds.filter((reason) => BLOCKING_COVERAGE_REASONS.has(reason)),
+    ...quarterbackBlockingReasons,
     !Number.isFinite(startsAt) || evaluatedTime >= startsAt ? "decision_not_pregame" : null,
     args.stage === "t60" && !t60Valid ? "t60_capture_late" : null,
   ]);
@@ -359,11 +368,17 @@ function availabilityAdjustedQuarterbackDepth(
   injuries: DailyEdgeGameAvailability | null,
 ): NflForwardTeamDepthSnapshot {
   const starter = depth.expectedStartingQuarterback?.name?.trim();
-  if (!starter || !injuries) return depth;
-  const team = injuries.teams.find((entry) => normalizeTeam(entry.abbreviation) === normalizeTeam(depth.team));
-  const report = team?.players.find((player) => playerKey(player.name) === playerKey(starter));
-  const status = report ? injuryStatus(report.status) : "";
-  if (status !== "out" && status !== "doubtful") return depth;
+  if (!starter) return depth;
+  const team = injuries?.teams.find((entry) => normalizeTeam(entry.abbreviation) === normalizeTeam(depth.team));
+  const reportStatuses = new Map((team?.players ?? []).map((player) => [
+    playerKey(player.name),
+    injuryStatus(player.status),
+  ]));
+  const starterStatus = strongestInjuryStatus(
+    injuryStatus(depth.expectedStartingQuarterback?.injuryStatus),
+    reportStatuses.get(playerKey(starter)) ?? "",
+  );
+  if (starterStatus !== "out" && starterStatus !== "doubtful") return depth;
   const unavailable = new Set((team?.players ?? [])
     .filter((player) => {
       const value = injuryStatus(player.status);
@@ -373,6 +388,13 @@ function availabilityAdjustedQuarterbackDepth(
   const replacement = depth.quarterbackDepth
     .filter((player) => playerKey(player.name) !== playerKey(starter))
     .filter((player) => !unavailable.has(playerKey(player.name)))
+    .filter((player) => {
+      const status = strongestInjuryStatus(
+        injuryStatus(player.injuryStatus),
+        reportStatuses.get(playerKey(player.name)) ?? "",
+      );
+      return status !== "out" && status !== "doubtful";
+    })
     .sort((first, second) => (first.depthRank ?? 99) - (second.depthRank ?? 99))[0] ?? null;
   return {
     ...depth,
@@ -715,12 +737,18 @@ function normalizeScheduleName(value: string): string {
     .filter((token) => token && !["jr", "sr", "ii", "iii", "iv", "v"].includes(token)).join(" ");
 }
 
-function injuryStatus(value: string): string {
-  const status = value.toLowerCase().trim();
-  if (["ir", "out", "pup", "nfi", "suspend"].some((token) => status.includes(token))) return "out";
+function injuryStatus(value: string | null | undefined): string {
+  const status = value?.toLowerCase().trim() ?? "";
+  if (status === "o") return "out";
+  if (status === "d") return "doubtful";
+  if (["ir", "out", "inactive", "did not play", "pup", "nfi", "suspend"].some((token) => status.includes(token))) return "out";
   if (status.includes("doubtful")) return "doubtful";
   if (status.includes("questionable") || status === "q") return "questionable";
   return "";
+}
+
+function strongestInjuryStatus(first: string, second: string): string {
+  return statusSeverity(first) >= statusSeverity(second) ? first : second;
 }
 
 function statusSeverity(status: string): number {

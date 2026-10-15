@@ -46,14 +46,14 @@ const game: NflPreviewGame = {
   home: { id: 2, abbreviation: "KC", name: "Kansas City Chiefs" },
 };
 
-function player(name: string, team: string, rank: number) {
+function player(name: string, team: string, rank: number, injuryStatus: string | null = null) {
   return {
     playerId: `${team}-${rank}`,
     name,
     position: "QB",
     depth: `QB${rank}`,
     depthRank: rank,
-    injuryStatus: null,
+    injuryStatus,
     explicitStarter: rank === 1,
   };
 }
@@ -153,7 +153,7 @@ const injuredQuarterback = buildNflR6ShadowMoneylineDecision({
       {
         abbreviation: "BUF",
         teamName: "Buffalo Bills",
-        players: [{ name: "Josh Allen", status: "Out", detail: null, position: "QB", reportedAt: availability.reportUpdatedAt }],
+        players: [{ name: "Josh Allen", status: "Inactive", detail: null, position: "QB", reportedAt: availability.reportUpdatedAt }],
       },
       availability.teams[1]!,
     ],
@@ -165,8 +165,78 @@ const injuredQuarterback = buildNflR6ShadowMoneylineDecision({
 });
 assert.equal(injuredQuarterback.health.blockingReasons.length, 0);
 assert.equal(injuredQuarterback.quarterbackContext.away.name, "Mitchell Trubisky");
+assert.equal(injuredQuarterback.quarterbackContext.away.historyMatched, true);
 assert.ok(injuredQuarterback.modelProbability !== null);
 assert.equal(injuredQuarterback.health.blockingReasons.includes("r6_runtime_outside_2026_week1"), false);
+
+const rosterStatusQuarterback = buildNflR6ShadowMoneylineDecision({
+  game: { ...game, providerWeek: 2 },
+  opening,
+  comparableCurrentBooks: books,
+  startersAndDepth: {
+    away: {
+      ...depth("BUF", "Josh Allen"),
+      expectedStartingQuarterback: player("Josh Allen", "BUF", 1, "O"),
+      quarterbackDepth: [player("Josh Allen", "BUF", 1, "O"), player("Mitchell Trubisky", "BUF", 2)],
+      roster: [player("Josh Allen", "BUF", 1, "O"), player("Mitchell Trubisky", "BUF", 2)],
+    },
+    home: depth("KC", "Patrick Mahomes"),
+  },
+  injuries: availability,
+  stage: "unlocked",
+  capturedAt: "2026-09-01T12:00:00.000Z",
+  t60LagMinutes: null,
+  coverageHealthHolds: [],
+});
+assert.equal(rosterStatusQuarterback.quarterbackContext.away.name, "Mitchell Trubisky");
+assert.equal(rosterStatusQuarterback.quarterbackContext.away.historyMatched, true);
+assert.equal(rosterStatusQuarterback.health.blockingReasons.length, 0);
+
+const unmatchedReplacement = buildNflR6ShadowMoneylineDecision({
+  game: { ...game, providerWeek: 2 },
+  opening,
+  comparableCurrentBooks: books,
+  startersAndDepth: {
+    away: {
+      ...depth("BUF", "Josh Allen"),
+      expectedStartingQuarterback: player("Josh Allen", "BUF", 1, "Out"),
+      quarterbackDepth: [player("Josh Allen", "BUF", 1, "Out"), player("Unmatched Backup", "BUF", 2)],
+      roster: [player("Josh Allen", "BUF", 1, "Out"), player("Unmatched Backup", "BUF", 2)],
+    },
+    home: depth("KC", "Patrick Mahomes"),
+  },
+  injuries: availability,
+  stage: "unlocked",
+  capturedAt: "2026-09-01T12:00:00.000Z",
+  t60LagMinutes: null,
+  coverageHealthHolds: [],
+});
+assert.equal(unmatchedReplacement.quarterbackContext.away.name, "Unmatched Backup");
+assert.equal(unmatchedReplacement.grade, "Held");
+assert.ok(unmatchedReplacement.health.blockingReasons.includes("away_quarterback_history_unmatched"));
+
+const unavailableReplacement = buildNflR6ShadowMoneylineDecision({
+  game: { ...game, providerWeek: 2 },
+  opening,
+  comparableCurrentBooks: books,
+  startersAndDepth: {
+    away: {
+      ...depth("BUF", "Josh Allen"),
+      expectedStartingQuarterback: player("Josh Allen", "BUF", 1, "Out"),
+      quarterbackDepth: [player("Josh Allen", "BUF", 1, "Out"), player("Mitchell Trubisky", "BUF", 2, "D")],
+      roster: [player("Josh Allen", "BUF", 1, "Out"), player("Mitchell Trubisky", "BUF", 2, "D")],
+    },
+    home: depth("KC", "Patrick Mahomes"),
+  },
+  injuries: availability,
+  stage: "unlocked",
+  capturedAt: "2026-09-01T12:00:00.000Z",
+  t60LagMinutes: null,
+  coverageHealthHolds: [],
+});
+assert.equal(unavailableReplacement.quarterbackContext.away.name, null);
+assert.equal(unavailableReplacement.grade, "Held");
+assert.ok(unavailableReplacement.health.blockingReasons.includes("away_expected_quarterback_unavailable"));
 
 const missingInjuryReport = buildNflR6ShadowMoneylineDecision({
   game: { ...game, providerWeek: 2 },
@@ -179,9 +249,27 @@ const missingInjuryReport = buildNflR6ShadowMoneylineDecision({
   t60LagMinutes: null,
   coverageHealthHolds: ["injury_report_unavailable"],
 });
-assert.equal(missingInjuryReport.health.blockingReasons.length, 0, "missing injury context preserves the football projection");
-assert.ok(missingInjuryReport.health.contextReasons.includes("injury_report_unavailable"));
+assert.equal(missingInjuryReport.grade, "Held");
+assert.ok(missingInjuryReport.health.blockingReasons.includes("injury_report_unavailable"));
 assert.ok(missingInjuryReport.modelProbability !== null);
+
+const missingExpectedQuarterback = buildNflR6ShadowMoneylineDecision({
+  game: { ...game, providerWeek: 2 },
+  opening,
+  comparableCurrentBooks: books,
+  startersAndDepth: {
+    away: { ...depth("BUF", "Josh Allen"), expectedStartingQuarterback: null, starterStatus: "unknown" },
+    home: depth("KC", "Patrick Mahomes"),
+  },
+  injuries: availability,
+  stage: "unlocked",
+  capturedAt: "2026-09-01T12:00:00.000Z",
+  t60LagMinutes: null,
+  coverageHealthHolds: ["expected_quarterback_unavailable"],
+});
+assert.equal(missingExpectedQuarterback.grade, "Held");
+assert.ok(missingExpectedQuarterback.health.blockingReasons.includes("expected_quarterback_unavailable"));
+assert.ok(missingExpectedQuarterback.health.blockingReasons.includes("away_expected_quarterback_unavailable"));
 
 const onTimeT60 = buildNflR6ShadowMoneylineDecision({
   game,
@@ -230,7 +318,8 @@ assert.equal(falsifiedLagT60.lockedAt, null);
 assert.ok(falsifiedLagT60.health.blockingReasons.includes("t60_capture_late"));
 
 const writer = readFileSync(path.resolve("lib/services/football/nflForwardEvidenceWriter.ts"), "utf8");
-assert.match(writer, /nfl_forward_evidence_writer_2026_10_09_r60_provider_feed_continuity/);
+assert.match(writer, /nfl_forward_evidence_writer_2026_10_15_r61_personnel_evidence_eligibility/);
+assert.match(writer, /\.\.\.shadowMoneyline\.health\.blockingReasons/);
 assert.equal((writer.match(/readNflPlayerPropsCurrentSeasonState\(/g) ?? []).length, 1);
 assert.match(writer, /buildNflWeeklyPossessionMargin/);
 assert.match(writer, /buildNflR6ShadowMoneylineDecision/);

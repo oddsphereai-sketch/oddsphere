@@ -207,6 +207,40 @@ async function main() {
   assert.deepEqual(read, snapshot);
   assert.equal(JSON.stringify(read?.fixture), JSON.stringify(fixture));
 
+  const personnelPreviousSnapshotRelease = "nfl_forward_member_snapshot_2026_10_09_r34_provider_feed_continuity";
+  const personnelPreviousFixtureRelease = "nfl_weekly_member_fixture_2026_10_09_r42_provider_feed_continuity";
+  const personnelPreviousPayload = {
+    ...snapshot,
+    snapshotRelease: personnelPreviousSnapshotRelease,
+    memberRelease: "nfl_v1_member_release_2026_10_09_r30_provider_feed_continuity",
+    decisionRelease: "nfl_v1_daily_edge_decision_2026_10_13_r33_moneyline_price_tier",
+    fixtureRelease: personnelPreviousFixtureRelease,
+    fixture: {
+      ...fixture,
+      heldMemberFixtureRelease: personnelPreviousFixtureRelease,
+    },
+  };
+  storedKey = [
+    "nfl",
+    "daily-edge",
+    2026,
+    1,
+    personnelPreviousSnapshotRelease,
+    personnelPreviousFixtureRelease,
+    personnelPreviousPayload.memberRelease,
+    personnelPreviousPayload.decisionRelease,
+  ].join("::");
+  storedPayload = personnelPreviousPayload;
+  const personnelContinuityRead = await readNflForwardMemberSnapshot({
+    client,
+    season: 2026,
+    week: 1,
+    now: "2026-08-27T12:02:00.000Z",
+  });
+  assert.equal(personnelContinuityRead?.snapshotRelease, personnelPreviousSnapshotRelease);
+  assert.equal(personnelContinuityRead?.fixture.heldMemberFixtureRelease, personnelPreviousFixtureRelease);
+  assert.equal(JSON.stringify(personnelContinuityRead?.fixture), JSON.stringify(personnelPreviousPayload.fixture));
+
   const marketStatePreviousSnapshotRelease = "nfl_forward_member_snapshot_2026_10_09_r32_market_state_identity";
   const marketStatePreviousFixtureRelease = "nfl_weekly_member_fixture_2026_10_09_r40_market_state_identity";
   const marketStatePreviousPayload = {
