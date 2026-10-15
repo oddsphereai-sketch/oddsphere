@@ -275,7 +275,7 @@ uncontested shooting, matchup field-goal defense, screen assists, and offensive
 and defensive rebound chances. Nullable provider fields stay missing and gain
 explicit missingness indicators; they are never filled with a favorable value.
 
-Feature release `nba_point_in_time_features_2026_10_15_r9_offseason_strength_regression`
+Feature release `nba_point_in_time_features_2026_10_15_r10_exact_price_provenance`
 also adds a dynamic Elo benchmark, explicit offense-versus-opponent-defense
 and Four-Factor matchup edges, prior-game player-minute rotation overlap,
 rolling expected rotation size/concentration, venue-to-venue great-circle
@@ -365,7 +365,7 @@ movement, CLV, split, or market-reader claim. Every row carries that provenance;
 2025-26 BALLDONTLIE timestamped openings take precedence when available.
 
 The executable tournament release is now
-`nba_professional_tournament_2026_10_15_r17_actionable_sample_floor`. Its
+`nba_professional_tournament_2026_10_15_r18_exact_price_provenance`. Its
 predeclared model grid is reproducible with the repository's NumPy runtime:
 closed-form ridge, robust iteratively reweighted Huber ridge, and bounded
 hinge-spline ridge. Feature-family ablations separately test ratings,
@@ -412,6 +412,13 @@ Moneyline and 53.2% Total lifetime hit-rate references, while also requiring
 positive exact-price units. The lifetime records are selective product results,
 so they are compared with the frozen actionable subsets—not misrepresented as
 all-game winner accuracy.
+
+Every exact historical price now retains the side-specific sportsbook that
+supplied it. The confirmation report discloses sportsbook counts and coverage
+for each priced result, and the row-level ledger retains the exact book beside
+each Moneyline, Spread, and Total price. A numeric quote without recoverable
+book provenance may remain descriptive but cannot silently satisfy an
+authoritative exact-price gate.
 
 The r14 tournament now evaluates three separately named lanes: independent
 scores, the market-only score reference, and the final combined distribution.

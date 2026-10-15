@@ -20,8 +20,8 @@ import numpy as np
 import pandas as pd
 
 
-RELEASE = "nba_professional_tournament_2026_10_15_r17_actionable_sample_floor"
-FEATURE_RELEASE = "nba_point_in_time_features_2026_10_15_r9_offseason_strength_regression"
+RELEASE = "nba_professional_tournament_2026_10_15_r18_exact_price_provenance"
+FEATURE_RELEASE = "nba_point_in_time_features_2026_10_15_r10_exact_price_provenance"
 R1_CONFIRMATION = {
     "season": 2025,
     "games": 1230,
@@ -376,9 +376,20 @@ def normal_cdf(values: np.ndarray) -> np.ndarray:
     return 0.5 * (1.0 + erf(values / math.sqrt(2.0)))
 
 
-def exact_price_return(wins: np.ndarray, prices: np.ndarray) -> dict[str, Any]:
+def exact_price_return(
+    wins: np.ndarray,
+    prices: np.ndarray,
+    sportsbooks: np.ndarray | None = None,
+) -> dict[str, Any]:
     profits = np.where(prices > 0, prices / 100, 100 / -prices)
     units = np.where(wins, profits, -1.0)
+    book_counts: dict[str, int] = {}
+    if sportsbooks is not None:
+        for raw in sportsbooks:
+            book = str(raw).strip().lower() if isinstance(raw, str) else ""
+            key = book if book else "unavailable"
+            book_counts[key] = book_counts.get(key, 0) + 1
+    priced_with_book = sum(value for key, value in book_counts.items() if key != "unavailable")
     return {
         "bets": int(len(units)),
         "wins": int(wins.sum()),
@@ -386,6 +397,10 @@ def exact_price_return(wins: np.ndarray, prices: np.ndarray) -> dict[str, Any]:
         "units": float(units.sum()),
         "roi": float(units.mean()),
         "averageAmericanPrice": float(prices.mean()),
+        "sportsbookCoverage": (
+            float(priced_with_book / len(prices)) if len(prices) > 0 and sportsbooks is not None else None
+        ),
+        "sportsbooks": dict(sorted(book_counts.items())),
     }
 
 
@@ -422,7 +437,14 @@ def actionable_candidate_report(
         )
         first_price = frame["evaluation_opening_moneyline_home_price"].to_numpy(float)
         second_price = frame["evaluation_opening_moneyline_away_price"].to_numpy(float)
+        first_book = frame.get(
+            "evaluation_opening_moneyline_home_sportsbook", pd.Series(None, index=frame.index)
+        ).to_numpy(object)
+        second_book = frame.get(
+            "evaluation_opening_moneyline_away_sportsbook", pd.Series(None, index=frame.index)
+        ).to_numpy(object)
         price = np.where(selected_first, first_price, second_price)
+        sportsbook = np.where(selected_first, first_book, second_book)
         eligible = (
             np.isfinite(market_home_probability)
             & (selected_probability - selected_market_probability >= threshold)
@@ -438,7 +460,14 @@ def actionable_candidate_report(
         selected_probability = np.where(selected_first, probability, 1 - probability)
         first_price = frame["evaluation_opening_home_spread_price"].to_numpy(float)
         second_price = frame["evaluation_opening_away_spread_price"].to_numpy(float)
+        first_book = frame.get(
+            "evaluation_opening_home_spread_sportsbook", pd.Series(None, index=frame.index)
+        ).to_numpy(object)
+        second_book = frame.get(
+            "evaluation_opening_away_spread_sportsbook", pd.Series(None, index=frame.index)
+        ).to_numpy(object)
         price = np.where(selected_first, first_price, second_price)
+        sportsbook = np.where(selected_first, first_book, second_book)
         resolved = np.isfinite(line) & ~np.isclose(actual_margin + line, 0.0)
         eligible = resolved & (selected_probability - 0.5 >= threshold)
         wins = selected_first == (actual_margin + line > 0)
@@ -452,7 +481,14 @@ def actionable_candidate_report(
         selected_probability = np.where(selected_first, probability, 1 - probability)
         first_price = frame["evaluation_opening_over_price"].to_numpy(float)
         second_price = frame["evaluation_opening_under_price"].to_numpy(float)
+        first_book = frame.get(
+            "evaluation_opening_over_sportsbook", pd.Series(None, index=frame.index)
+        ).to_numpy(object)
+        second_book = frame.get(
+            "evaluation_opening_under_sportsbook", pd.Series(None, index=frame.index)
+        ).to_numpy(object)
         price = np.where(selected_first, first_price, second_price)
+        sportsbook = np.where(selected_first, first_book, second_book)
         resolved = np.isfinite(line) & ~np.isclose(actual_total - line, 0.0)
         eligible = resolved & (selected_probability - 0.5 >= threshold)
         wins = selected_first == (actual_total > line)
@@ -475,7 +511,9 @@ def actionable_candidate_report(
         "wilson95Lower": wilson_lower_bound(win_count, bets),
         "brier": float(np.square(selected_probability_values - selected_wins.astype(float)).mean())
             if bets > 0 else None,
-        "exactPrice": exact_price_return(wins[priced], price[priced]) if priced.any() else None,
+        "exactPrice": exact_price_return(
+            wins[priced], price[priced], sportsbook[priced]
+        ) if priced.any() else None,
     }
 
 
@@ -598,15 +636,22 @@ def metrics(
     if home_price_column in frame and away_price_column in frame:
         home_price = frame[home_price_column].to_numpy(float)
         away_price = frame[away_price_column].to_numpy(float)
+        home_book = frame.get(
+            "evaluation_opening_moneyline_home_sportsbook", pd.Series(None, index=frame.index)
+        ).to_numpy(object)
+        away_book = frame.get(
+            "evaluation_opening_moneyline_away_sportsbook", pd.Series(None, index=frame.index)
+        ).to_numpy(object)
         selected_home = probabilities >= 0.5
         price = np.where(selected_home, home_price, away_price)
+        sportsbook = np.where(selected_home, home_book, away_book)
         available = np.isfinite(price) & (price != 0)
         if available.any():
             wins = selected_home[available] == (outcomes[available] > 0.5)
             market_evaluation["moneyline"] = {
                 "games": int(available.sum()),
                 "directionAccuracy": float(wins.mean()),
-                "exactPrice": exact_price_return(wins, price[available]),
+                "exactPrice": exact_price_return(wins, price[available], sportsbook[available]),
             }
     spread_column = "evaluation_opening_home_spread"
     if spread_column in frame:
@@ -620,14 +665,23 @@ def metrics(
             selected_home = model_probability >= 0.5
             home_price = frame["evaluation_opening_home_spread_price"].to_numpy(float)[available]
             away_price = frame["evaluation_opening_away_spread_price"].to_numpy(float)[available]
+            home_book = frame.get(
+                "evaluation_opening_home_spread_sportsbook", pd.Series(None, index=frame.index)
+            ).to_numpy(object)[available]
+            away_book = frame.get(
+                "evaluation_opening_away_spread_sportsbook", pd.Series(None, index=frame.index)
+            ).to_numpy(object)[available]
             selected_price = np.where(selected_home, home_price, away_price)
+            selected_book = np.where(selected_home, home_book, away_book)
             priced = np.isfinite(selected_price) & (selected_price != 0)
             wins = selected_home[priced] == (outcome[priced] > 0.5)
             market_evaluation["spread"] = {
                 "games": int(available.sum()),
                 "directionAccuracy": float(((model_probability >= 0.5) == (outcome > 0.5)).mean()),
                 "brier": float(np.square(model_probability - outcome).mean()),
-                "exactPrice": exact_price_return(wins, selected_price[priced]) if priced.any() else None,
+                "exactPrice": exact_price_return(
+                    wins, selected_price[priced], selected_book[priced]
+                ) if priced.any() else None,
             }
     total_column = "evaluation_opening_total"
     if total_column in frame:
@@ -641,14 +695,23 @@ def metrics(
             selected_over = model_probability >= 0.5
             over_price = frame["evaluation_opening_over_price"].to_numpy(float)[available]
             under_price = frame["evaluation_opening_under_price"].to_numpy(float)[available]
+            over_book = frame.get(
+                "evaluation_opening_over_sportsbook", pd.Series(None, index=frame.index)
+            ).to_numpy(object)[available]
+            under_book = frame.get(
+                "evaluation_opening_under_sportsbook", pd.Series(None, index=frame.index)
+            ).to_numpy(object)[available]
             selected_price = np.where(selected_over, over_price, under_price)
+            selected_book = np.where(selected_over, over_book, under_book)
             priced = np.isfinite(selected_price) & (selected_price != 0)
             wins = selected_over[priced] == (outcome[priced] > 0.5)
             market_evaluation["total"] = {
                 "games": int(available.sum()),
                 "directionAccuracy": float(((model_probability >= 0.5) == (outcome > 0.5)).mean()),
                 "brier": float(np.square(model_probability - outcome).mean()),
-                "exactPrice": exact_price_return(wins, selected_price[priced]) if priced.any() else None,
+                "exactPrice": exact_price_return(
+                    wins, selected_price[priced], selected_book[priced]
+                ) if priced.any() else None,
             }
     return {
         "games": int(len(frame)),
@@ -953,12 +1016,18 @@ def build_prediction_ledger(
         market_provenance = row.get("evaluation_market_provenance")
         moneyline_home_price = finite_float(row.get("evaluation_opening_moneyline_home_price"))
         moneyline_away_price = finite_float(row.get("evaluation_opening_moneyline_away_price"))
+        moneyline_home_sportsbook = row.get("evaluation_opening_moneyline_home_sportsbook")
+        moneyline_away_sportsbook = row.get("evaluation_opening_moneyline_away_sportsbook")
         opening_home_spread = finite_float(row.get("evaluation_opening_home_spread"))
         opening_home_spread_price = finite_float(row.get("evaluation_opening_home_spread_price"))
         opening_away_spread_price = finite_float(row.get("evaluation_opening_away_spread_price"))
+        opening_home_spread_sportsbook = row.get("evaluation_opening_home_spread_sportsbook")
+        opening_away_spread_sportsbook = row.get("evaluation_opening_away_spread_sportsbook")
         opening_total = finite_float(row.get("evaluation_opening_total"))
         opening_over_price = finite_float(row.get("evaluation_opening_over_price"))
         opening_under_price = finite_float(row.get("evaluation_opening_under_price"))
+        opening_over_sportsbook = row.get("evaluation_opening_over_sportsbook")
+        opening_under_sportsbook = row.get("evaluation_opening_under_sportsbook")
         spread_edge = None if opening_home_spread is None else predicted_margin + opening_home_spread
         spread_result = None if opening_home_spread is None else actual_margin + opening_home_spread
         total_edge = None if opening_total is None else predicted_total - opening_total
@@ -1028,13 +1097,19 @@ def build_prediction_ledger(
                 "provenance": market_provenance if isinstance(market_provenance, str) else None,
                 "homeWinProbability": market_home_probability,
                 "moneylineHomePrice": moneyline_home_price,
+                "moneylineHomeSportsbook": moneyline_home_sportsbook if isinstance(moneyline_home_sportsbook, str) else None,
                 "moneylineAwayPrice": moneyline_away_price,
+                "moneylineAwaySportsbook": moneyline_away_sportsbook if isinstance(moneyline_away_sportsbook, str) else None,
                 "homeSpread": opening_home_spread,
                 "homeSpreadPrice": opening_home_spread_price,
+                "homeSpreadSportsbook": opening_home_spread_sportsbook if isinstance(opening_home_spread_sportsbook, str) else None,
                 "awaySpreadPrice": opening_away_spread_price,
+                "awaySpreadSportsbook": opening_away_spread_sportsbook if isinstance(opening_away_spread_sportsbook, str) else None,
                 "total": opening_total,
                 "overPrice": opening_over_price,
+                "overSportsbook": opening_over_sportsbook if isinstance(opening_over_sportsbook, str) else None,
                 "underPrice": opening_under_price,
+                "underSportsbook": opening_under_sportsbook if isinstance(opening_under_sportsbook, str) else None,
                 "spreadModelSide": None if spread_edge is None else ("home" if spread_edge > 0 else "away"),
                 "spreadResultSide": None if spread_result is None or math.isclose(spread_result, 0) else ("home" if spread_result > 0 else "away"),
                 "spreadDirectionCorrect": None if spread_edge is None or spread_result is None or math.isclose(spread_result, 0) else (spread_edge > 0) == (spread_result > 0),
@@ -1566,16 +1641,19 @@ def main() -> None:
         "spreadExactPricePositive": (
             actionable_confirmation["spread"] is not None and
             actionable_confirmation["spread"]["exactPrice"] is not None and
+            actionable_confirmation["spread"]["exactPrice"]["sportsbookCoverage"] == 1.0 and
             actionable_confirmation["spread"]["exactPrice"]["units"] > 0
         ),
         "totalExactPricePositive": (
             actionable_confirmation["total"] is not None and
             actionable_confirmation["total"]["exactPrice"] is not None and
+            actionable_confirmation["total"]["exactPrice"]["sportsbookCoverage"] == 1.0 and
             actionable_confirmation["total"]["exactPrice"]["units"] > 0
         ),
         "moneylineExactPricePositive": (
             actionable_confirmation["moneyline"] is not None and
             actionable_confirmation["moneyline"]["exactPrice"] is not None and
+            actionable_confirmation["moneyline"]["exactPrice"]["sportsbookCoverage"] == 1.0 and
             actionable_confirmation["moneyline"]["exactPrice"]["units"] > 0
         ),
     }

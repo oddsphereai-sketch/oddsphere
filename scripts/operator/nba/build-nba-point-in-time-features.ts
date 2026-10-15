@@ -310,15 +310,21 @@ async function main(): Promise<void> {
           : "unavailable",
       evaluation_opening_market_home_probability: market?.homeWinProbability ?? consensus?.homeProbability ?? noVigHome,
       evaluation_opening_moneyline_home_price: market?.homeMoneylinePrice ?? (consensus ? null : reference?.ML_Home) ?? null,
+      evaluation_opening_moneyline_home_sportsbook: market?.homeMoneylineSportsbook ?? null,
       evaluation_opening_moneyline_away_price: market?.awayMoneylinePrice ?? (consensus ? null : reference?.ML_Away) ?? null,
+      evaluation_opening_moneyline_away_sportsbook: market?.awayMoneylineSportsbook ?? null,
       evaluation_opening_home_spread: market?.homeSpread ?? consensus?.homeSpread ?? (reference ? -Number(reference.Spread) : null),
       evaluation_opening_home_cover_probability: market?.homeCoverProbability ?? null,
       evaluation_opening_home_spread_price: market?.homeSpreadPrice ?? null,
+      evaluation_opening_home_spread_sportsbook: market?.homeSpreadSportsbook ?? null,
       evaluation_opening_away_spread_price: market?.awaySpreadPrice ?? null,
+      evaluation_opening_away_spread_sportsbook: market?.awaySpreadSportsbook ?? null,
       evaluation_opening_total: market?.total ?? consensus?.total ?? reference?.OU ?? null,
       evaluation_opening_over_probability: market?.overProbability ?? null,
       evaluation_opening_over_price: market?.overPrice ?? null,
+      evaluation_opening_over_sportsbook: market?.overSportsbook ?? null,
       evaluation_opening_under_price: market?.underPrice ?? null,
+      evaluation_opening_under_sportsbook: market?.underSportsbook ?? null,
     };
   });
   if (featureRows.length !== games.length) throw new Error("NBA feature build did not emit exactly one row per game.");

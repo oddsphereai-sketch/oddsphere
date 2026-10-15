@@ -109,15 +109,21 @@ for season_index, season in enumerate((2023, 2024, 2025)):
             "evaluation_opening_market_home_probability": 0.65 if home_off >= away_off else 0.35,
             "evaluation_market_provenance": "synthetic_test_only",
             "evaluation_opening_moneyline_home_price": -130,
+            "evaluation_opening_moneyline_home_sportsbook": "syntheticbook",
             "evaluation_opening_moneyline_away_price": 115,
+            "evaluation_opening_moneyline_away_sportsbook": "syntheticbook",
             "evaluation_opening_home_spread": -margin + rng.normal(0, 5),
             "evaluation_opening_home_cover_probability": 0.5,
             "evaluation_opening_home_spread_price": -110,
+            "evaluation_opening_home_spread_sportsbook": "syntheticbook",
             "evaluation_opening_away_spread_price": -110,
+            "evaluation_opening_away_spread_sportsbook": "syntheticbook",
             "evaluation_opening_total": total + rng.normal(0, 8),
             "evaluation_opening_over_probability": 0.5,
             "evaluation_opening_over_price": -110,
+            "evaluation_opening_over_sportsbook": "syntheticbook",
             "evaluation_opening_under_price": -110,
+            "evaluation_opening_under_sportsbook": "syntheticbook",
             "target_home_score": home_score,
             "target_away_score": away_score,
             "target_home_margin": margin,
@@ -215,6 +221,10 @@ with tempfile.TemporaryDirectory(prefix="nba-tournament-test-") as temporary:
     assert report["confirmation"]["openingMarketEvaluation"]["spread"]["exactPrice"]["bets"] == 48
     assert report["confirmation"]["openingMarketEvaluation"]["total"]["exactPrice"]["bets"] == 48
     for market in ("moneyline", "spread", "total"):
+        exact = report["confirmation"]["openingMarketEvaluation"][market]["exactPrice"]
+        assert exact["sportsbookCoverage"] == 1.0
+        assert exact["sportsbooks"] == {"syntheticbook": 48}
+    for market in ("moneyline", "spread", "total"):
         assert report["actionableThresholdSelection"][market]["minimumSelectionBets"] == 20
         threshold = report["actionableThresholdSelection"][market]["selected"]
         confirmation = report["actionableConfirmation"][market]
@@ -257,6 +267,9 @@ with tempfile.TemporaryDirectory(prefix="nba-tournament-test-") as temporary:
     assert "marginSigned" in first_prediction["error"]
     assert "spreadDirectionCorrect" in first_prediction["openingMarketEvaluationOnly"]
     assert first_prediction["openingMarketEvaluationOnly"]["provenance"] == "synthetic_test_only"
+    assert first_prediction["openingMarketEvaluationOnly"]["moneylineHomeSportsbook"] == "syntheticbook"
+    assert first_prediction["openingMarketEvaluationOnly"]["homeSpreadSportsbook"] == "syntheticbook"
+    assert first_prediction["openingMarketEvaluationOnly"]["overSportsbook"] == "syntheticbook"
     assert diagnostics["overall"]["games"] == 48
     assert diagnostics["cohorts"]["calendarMonth"]
     assert diagnostics["cohorts"]["predictedMarginBand"]

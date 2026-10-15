@@ -19,15 +19,21 @@ export type NbaHistoricalOpeningOdds = {
 export type NbaHistoricalOpeningMarket = {
   homeWinProbability: number | null;
   homeMoneylinePrice: number | null;
+  homeMoneylineSportsbook: string | null;
   awayMoneylinePrice: number | null;
+  awayMoneylineSportsbook: string | null;
   homeSpread: number | null;
   homeCoverProbability: number | null;
   homeSpreadPrice: number | null;
+  homeSpreadSportsbook: string | null;
   awaySpreadPrice: number | null;
+  awaySpreadSportsbook: string | null;
   total: number | null;
   overProbability: number | null;
   overPrice: number | null;
+  overSportsbook: string | null;
   underPrice: number | null;
+  underSportsbook: string | null;
 };
 
 function integer(value: unknown): number | null {
@@ -87,6 +93,7 @@ export function normalizeNbaHistoricalOpeningOdds(
 }
 
 type ExactLineCandidate = {
+  vendor: string;
   line: number;
   probability: number;
   firstPrice: number;
@@ -97,7 +104,9 @@ function exactLineConsensus(candidates: ExactLineCandidate[]): {
   line: number;
   probability: number;
   firstPrice: number;
+  firstSportsbook: string;
   secondPrice: number;
+  secondSportsbook: string;
 } | null {
   if (candidates.length === 0) return null;
   const lineMedian = median(candidates.map((item) => item.line));
@@ -112,11 +121,17 @@ function exactLineConsensus(candidates: ExactLineCandidate[]): {
     right.length - left.length ||
     Math.abs(left[0]!.line - lineMedian) - Math.abs(right[0]!.line - lineMedian) ||
     left[0]!.line - right[0]!.line)[0]!;
+  const bestFirst = [...selected].sort((left, right) =>
+    right.firstPrice - left.firstPrice || left.vendor.localeCompare(right.vendor))[0]!;
+  const bestSecond = [...selected].sort((left, right) =>
+    right.secondPrice - left.secondPrice || left.vendor.localeCompare(right.vendor))[0]!;
   return {
     line: selected[0]!.line,
     probability: median(selected.map((item) => item.probability)),
-    firstPrice: Math.max(...selected.map((item) => item.firstPrice)),
-    secondPrice: Math.max(...selected.map((item) => item.secondPrice)),
+    firstPrice: bestFirst.firstPrice,
+    firstSportsbook: bestFirst.vendor,
+    secondPrice: bestSecond.secondPrice,
+    secondSportsbook: bestSecond.vendor,
   };
 }
 
@@ -139,6 +154,7 @@ export function nbaOpeningMarketByGame(args: {
   gameStartById: ReadonlyMap<number, string>;
 }): Map<number, NbaHistoricalOpeningMarket> {
   const moneylines = new Map<number, Array<{
+    vendor: string;
     probability: number;
     homePrice: number;
     awayPrice: number;
@@ -162,6 +178,7 @@ export function nbaOpeningMarketByGame(args: {
       if (Number.isFinite(total) && total > 0) {
         const values = moneylines.get(row.gameId) ?? [];
         values.push({
+          vendor: row.vendor,
           probability: home / total,
           homePrice: row.moneylineHomeOdds,
           awayPrice: row.moneylineAwayOdds,
@@ -180,6 +197,7 @@ export function nbaOpeningMarketByGame(args: {
       if (Number.isFinite(total) && total > 0) {
         const values = spreads.get(row.gameId) ?? [];
         values.push({
+          vendor: row.vendor,
           line: row.spreadHomeValue,
           probability: home / total,
           firstPrice: row.spreadHomeOdds,
@@ -195,6 +213,7 @@ export function nbaOpeningMarketByGame(args: {
       if (Number.isFinite(total) && total > 0) {
         const values = totals.get(row.gameId) ?? [];
         values.push({
+          vendor: row.vendor,
           line: row.totalValue,
           probability: over / total,
           firstPrice: row.totalOverOdds,
@@ -209,24 +228,30 @@ export function nbaOpeningMarketByGame(args: {
     const spread = exactLineConsensus(spreads.get(gameId) ?? []);
     const total = exactLineConsensus(totals.get(gameId) ?? []);
     const moneyline = moneylines.get(gameId) ?? [];
+    const bestHomeMoneyline = [...moneyline].sort((left, right) =>
+      right.homePrice - left.homePrice || left.vendor.localeCompare(right.vendor))[0] ?? null;
+    const bestAwayMoneyline = [...moneyline].sort((left, right) =>
+      right.awayPrice - left.awayPrice || left.vendor.localeCompare(right.vendor))[0] ?? null;
     return [gameId, {
       homeWinProbability: moneyline.length > 0
         ? median(moneyline.map((item) => item.probability))
         : null,
-      homeMoneylinePrice: moneyline.length > 0
-        ? Math.max(...moneyline.map((item) => item.homePrice))
-        : null,
-      awayMoneylinePrice: moneyline.length > 0
-        ? Math.max(...moneyline.map((item) => item.awayPrice))
-        : null,
+      homeMoneylinePrice: bestHomeMoneyline?.homePrice ?? null,
+      homeMoneylineSportsbook: bestHomeMoneyline?.vendor ?? null,
+      awayMoneylinePrice: bestAwayMoneyline?.awayPrice ?? null,
+      awayMoneylineSportsbook: bestAwayMoneyline?.vendor ?? null,
       homeSpread: spread?.line ?? null,
       homeCoverProbability: spread?.probability ?? null,
       homeSpreadPrice: spread?.firstPrice ?? null,
+      homeSpreadSportsbook: spread?.firstSportsbook ?? null,
       awaySpreadPrice: spread?.secondPrice ?? null,
+      awaySpreadSportsbook: spread?.secondSportsbook ?? null,
       total: total?.line ?? null,
       overProbability: total?.probability ?? null,
       overPrice: total?.firstPrice ?? null,
+      overSportsbook: total?.firstSportsbook ?? null,
       underPrice: total?.secondPrice ?? null,
+      underSportsbook: total?.secondSportsbook ?? null,
     }];
   }));
 }
