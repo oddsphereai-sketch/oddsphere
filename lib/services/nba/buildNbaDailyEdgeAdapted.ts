@@ -55,7 +55,6 @@ import {
 import type { NbaLineRow } from "./nbaMarketIntelligence";
 import {
   selectNbaComparableOpening,
-  type NbaComparableOpening,
   type NbaMovementHistoryRow,
   type NbaMovementMarket,
 } from "./nbaSameBookMovement";
@@ -83,20 +82,8 @@ import {
 export type NbaDailyEdgePipelineResult = {
   nbaDto: NbaDailyEdgeDto;
   openPricesByGame: Map<number, NbaPickSideOpenPrices>;
-  /**
-   * Auditable opener identity for each evaluated quote. Unlike the UI-only
-   * price map, this preserves sportsbook, exact line, and observation time so
-   * the tracking writer can prove that a movement comparison is like-for-like.
-   */
-  comparableOpeningsByGame: Map<number, NbaComparableOpenings>;
   /** Map of NBA game external_id → games.id (DB primary key). */
   dbIdByExternalId: Map<number, number>;
-};
-
-export type NbaComparableOpenings = {
-  ml: NbaComparableOpening | null;
-  total: NbaComparableOpening | null;
-  spread: NbaComparableOpening | null;
 };
 
 /**
@@ -350,14 +337,13 @@ export async function buildNbaDailyEdgePipeline(date: string): Promise<NbaDailyE
   // Surface only a comparable same-book, same-line opening price. Missing
   // identity is unavailable—not permission to compare unrelated quotes.
   const openPricesByGame = new Map<number, NbaPickSideOpenPrices>();
-  const comparableOpeningsByGame = new Map<number, NbaComparableOpenings>();
   for (const g of games) {
     const ext = g.game_external_id;
     const intel = g.intelligence;
     const lookup = (
       market: NbaMovementMarket,
       value: typeof intel.ml,
-    ): NbaComparableOpening | null => {
+    ): number | null => {
       return selectNbaComparableOpening({
         rows: movementHistory,
         externalGameId: ext,
@@ -366,30 +352,19 @@ export async function buildNbaDailyEdgePipeline(date: string): Promise<NbaDailyE
         sportsbook: value.current_price.sportsbook,
         line: value.consensus_line,
         currentObservedAt: value.current_price.fetched_at,
-      });
+      })?.americanPrice ?? null;
     };
-    const comparableOpenings: NbaComparableOpenings = {
+    openPricesByGame.set(ext, {
       ml: lookup("moneyline", intel.ml),
       total: lookup("total", intel.total),
       spread: lookup("spread", intel.spread),
-    };
-    comparableOpeningsByGame.set(ext, comparableOpenings);
-    openPricesByGame.set(ext, {
-      ml: comparableOpenings.ml?.americanPrice ?? null,
-      total: comparableOpenings.total?.americanPrice ?? null,
-      spread: comparableOpenings.spread?.americanPrice ?? null,
     });
   }
 
   const externalToDbId = new Map<number, number>();
   for (const [dbId, ext] of dbIdToExt.entries()) externalToDbId.set(ext, dbId);
 
-  return {
-    nbaDto,
-    openPricesByGame,
-    comparableOpeningsByGame,
-    dbIdByExternalId: externalToDbId,
-  };
+  return { nbaDto, openPricesByGame, dbIdByExternalId: externalToDbId };
 }
 
 /**

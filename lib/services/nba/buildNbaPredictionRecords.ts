@@ -36,10 +36,7 @@
  */
 
 import type { SupabaseClient } from "@supabase/supabase-js";
-import {
-  buildNbaDailyEdgePipeline,
-  type NbaComparableOpenings,
-} from "./buildNbaDailyEdgeAdapted";
+import { buildNbaDailyEdgePipeline } from "./buildNbaDailyEdgeAdapted";
 import type { NbaDailyEdgeDto } from "./buildNbaDailyEdgeDto";
 import type {
   MarketIntelligence,
@@ -50,14 +47,9 @@ import type { RecommendationGrade } from "./nbaMarketReview";
 import { isPublicallyTracked } from "../../config/officialTrackingStart";
 import { NBA_PREDICTION_RECORD_RELEASE } from "../../automodel/nba/nbaChampionRuntime";
 import {
-  type ComparableOpenToCurrentMovement,
   CONTEXT_SNAPSHOT_NOTE,
   type NbaSpreadDisplayedContext,
 } from "../../types/domain/DisplayedContextMarket";
-import {
-  buildNbaComparableMovementEvidence,
-  NBA_FORWARD_MARKET_EVIDENCE_RELEASE,
-} from "./nbaForwardMarketEvidence";
 
 /** Within this many minutes of tip-off, the lock seals the snapshot. */
 const LOCK_MINUTES_BEFORE_TIP = 60;
@@ -66,8 +58,6 @@ const LOCK_MINUTES_BEFORE_TIP = 60;
  * to dedupe properly. v0 is the active NBA model (nbaAutoModelV1). */
 export const NBA_PREDICTION_RECORD_MODEL_VERSION = NBA_PREDICTION_RECORD_RELEASE;
 
-/** Evidence schema only. This does not change projections, picks, grades, or
- * stakes and therefore stays independent of the model release identifier. */
 export type CreateNbaRecordsOptions = {
   slateDate: string;
   /** When false → dry-run; no DB writes. */
@@ -152,7 +142,6 @@ function buildNbaSpreadDisplayedContext(opts: {
   predictedSpreadHome: number;
   bookCount: number;
   hasLines: boolean;
-  movement: ComparableOpenToCurrentMovement | null;
   capturedAt: string;
 }): NbaSpreadDisplayedContext {
   const s = opts.spreadIntel;
@@ -187,7 +176,7 @@ function buildNbaSpreadDisplayedContext(opts: {
     source_evidence: {
       line_source_quality: lineSourceQuality,
       lines_observed_count: opts.bookCount,
-      open_to_current_movement: opts.movement,
+      open_to_current_movement: null,
     },
     model_projection: { predicted_spread_home: opts.predictedSpreadHome },
     snapshot_note: CONTEXT_SNAPSHOT_NOTE,
@@ -218,38 +207,24 @@ function buildSnapshot(opts: {
     total: number;
     spread_home: number;
   };
-  comparableOpenings: NbaComparableOpenings;
   capturedAt: string;
 }): Record<string, unknown> {
   // Compact snapshot — enough context for post-grade audits but no
   // payload bloat. Mirrors MLB writer's namespaced shape so the
   // calibrationReport extractor can read NBA paths consistently.
   //
-  // Field naming honesty:
-  //   • `current_price` stores the evaluated current quote.
-  //   • `open_to_current_movement` exists only for a comparable same-book,
-  //     same-side, exact-line opening; otherwise it stays null.
+  // Field naming honesty (2026-06-10):
+  //   • `current_price` (formerly `line_movement`) — stores the current
+  //     book's odds + sportsbook. Pre-fix this was labeled "line_movement"
+  //     even though no movement/delta data was tracked. The NBA pipeline
+  //     does not yet ingest open-to-current deltas; do not imply it does.
   //   • `splits_state` — explicit categorical: "available" / "unavailable".
   //     Pre-fix `public_splits` was the only signal; consumers reading
   //     `data_integrity.has_splits` could infer state but card UI did not
   //     surface it explicitly.
-  const opening = opts.market === "moneyline"
-    ? opts.comparableOpenings.ml
-    : opts.comparableOpenings.total;
-  const movement = buildNbaComparableMovementEvidence({
-    market: opts.market,
-    intel: opts.intel,
-    opening,
-  });
-  const spreadMovement = buildNbaComparableMovementEvidence({
-    market: "spread",
-    intel: opts.gameIntelligence.spread,
-    opening: opts.comparableOpenings.spread,
-  });
   return {
     sport: "nba",
     model_version: NBA_PREDICTION_RECORD_MODEL_VERSION,
-    forward_market_evidence_release: NBA_FORWARD_MARKET_EVIDENCE_RELEASE,
     as_of: opts.dto.as_of,
     matchup: opts.matchup,
     market: opts.market,
@@ -272,20 +247,11 @@ function buildSnapshot(opts: {
         }
       : null,
     splits_state: opts.sources.has_splits ? "available" : "unavailable",
-    splits_provenance: {
-      source: opts.gameIntelligence.sources.splits_source,
-      sportsbook: opts.gameIntelligence.sources.splits_sportsbook,
-      fetched_at: opts.gameIntelligence.sources.splits_fetched_at,
-    },
     current_price: {
       odds_american: opts.intel.current_price.odds_american,
       sportsbook: opts.intel.current_price.sportsbook,
-      fetched_at: opts.intel.current_price.fetched_at,
-      note: movement === null
-        ? "Comparable same-book, same-side, exact-line opening unavailable."
-        : "Comparable same-book, same-side, exact-line opening captured.",
+      note: "Current price only — open-to-current line movement is not tracked in the NBA pipeline.",
     },
-    open_to_current_movement: movement,
     data_integrity: {
       data_quality_tier: opts.dataQualityTier,
       limited_book_coverage: opts.sources.limited_book_coverage,
@@ -300,7 +266,6 @@ function buildSnapshot(opts: {
         predictedSpreadHome: opts.projection.spread_home,
         bookCount: opts.sources.book_count,
         hasLines: opts.sources.has_lines,
-        movement: spreadMovement,
         capturedAt: opts.capturedAt,
       }),
     },
@@ -343,7 +308,7 @@ export async function createNbaPredictionRecords(
     });
     return result;
   }
-  const { nbaDto, comparableOpeningsByGame, dbIdByExternalId } = pipelineResult;
+  const { nbaDto, dbIdByExternalId } = pipelineResult;
 
   const externalFilter = opts.externalIdsFilter === undefined ? null : new Set(opts.externalIdsFilter);
   const games = externalFilter === null
@@ -397,11 +362,6 @@ export async function createNbaPredictionRecords(
 
     const perGameSources = g.intelligence.sources;
     const dataQualityTier = g.data_quality_tier ?? null;
-    const comparableOpenings = comparableOpeningsByGame.get(g.game_external_id) ?? {
-      ml: null,
-      total: null,
-      spread: null,
-    };
 
     for (const market of ["moneyline", "total"] as const) {
       const intel = market === "moneyline" ? g.intelligence.ml : g.intelligence.total;
@@ -499,7 +459,6 @@ export async function createNbaPredictionRecords(
             dataQualityTier,
             sources: perGameSources,
             projection: g.projection,
-            comparableOpenings,
             capturedAt: nowIso,
           }),
           // NBA-P0 — operator-only grounding audit (raw V2 → clean baseline →

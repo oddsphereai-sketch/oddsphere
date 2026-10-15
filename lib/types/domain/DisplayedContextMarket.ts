@@ -58,23 +58,6 @@ export type DisplayedContextLineSourceQuality =
   | "consensus_fallback"
   | "unavailable";
 
-/** A like-for-like movement observation. Spread/total evidence is retained
- * only when opener and current quote have the exact same line. */
-export interface ComparableOpenToCurrentMovement {
-  comparison_scope: "same_game_same_book_same_side_exact_line";
-  market: "moneyline" | "spread" | "total";
-  side: "home" | "away" | "over" | "under";
-  sportsbook: string;
-  line: number | null;
-  opening_american_price: number;
-  opening_observed_at: string;
-  current_american_price: number;
-  current_observed_at: string;
-  opening_implied_probability: number;
-  current_implied_probability: number;
-  implied_probability_change_pp: number;
-}
-
 /** Universal shape fields shared by every sport's context-only chip. */
 export interface DisplayedContextMarketBase {
   /** Canonical market key — e.g., "spread" for NBA (Sprd*) and NHL (PL*). */
@@ -111,8 +94,8 @@ export interface DisplayedContextMarketBase {
   source_evidence: {
     line_source_quality: DisplayedContextLineSourceQuality;
     lines_observed_count: number;
-    /** Like-for-like opener/current evidence when available. */
-    open_to_current_movement: ComparableOpenToCurrentMovement | null;
+    /** Reserved for the future "true movement" P3 item. Always null in v1. */
+    open_to_current_movement: null;
   };
   /** Static disclosure string mirroring the on-card footnote. */
   snapshot_note: string;
