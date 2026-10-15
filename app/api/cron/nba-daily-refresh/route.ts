@@ -56,7 +56,7 @@ import { refreshDailyEdgeResponseSnapshot } from "@/lib/services/labResponseSnap
 import { nbaScheduleSeedDates } from "@/lib/services/nba/nbaRollingSchedule";
 
 const NBA_CRON_ENV = "NBA_CRON_ENABLED";
-const NBA_DAILY_REFRESH_RELEASE = "nba_daily_refresh_schedule_2026_10_15_r4_rolling_seven_day_slate";
+const NBA_DAILY_REFRESH_RELEASE = "nba_daily_refresh_schedule_2026_10_15_r5_espn_season_identity";
 
 /**
  * NBA-ratings season convention: Basketball Reference uses the END-year

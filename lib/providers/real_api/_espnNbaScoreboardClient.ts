@@ -42,6 +42,10 @@ export type CanonicalNbaEvent = {
   status: string;
   /** Human-readable status description for the UI ("Scheduled", "In Progress", "Final"). */
   status_label: string;
+  /** ESPN's NBA season END year (2027 for the 2026-27 season). */
+  season_year: number | null;
+  /** Provider-declared phase. Null only when ESPN omits/changes the contract. */
+  season_type: "preseason" | "regular" | "postseason" | null;
   /** "NBA Finals - Game 3" if postseason note present, else null. */
   postseason_note: string | null;
   /** Home/away team rollup. */
@@ -97,6 +101,11 @@ type EspnEvent = {
   shortName?: string;
   status?: {
     type?: { name?: string; description?: string; completed?: boolean };
+  };
+  season?: {
+    year?: number;
+    type?: number;
+    slug?: string;
   };
   competitions?: Array<EspnCompetition>;
 };
@@ -158,6 +167,24 @@ function parseScore(s: string | number | null | undefined): number | null {
   if (s === null || s === undefined) return null;
   const n = typeof s === "number" ? s : Number.parseInt(s, 10);
   return Number.isFinite(n) ? n : null;
+}
+
+export function parseEspnNbaSeason(
+  raw: { year?: unknown; type?: unknown; slug?: unknown } | null | undefined,
+): {
+  seasonYear: number | null;
+  seasonType: CanonicalNbaEvent["season_type"];
+} {
+  const numericYear = typeof raw?.year === "number" && Number.isInteger(raw.year)
+    ? raw.year
+    : null;
+  const numericType = typeof raw?.type === "number" ? raw.type : Number(raw?.type);
+  const slug = typeof raw?.slug === "string" ? raw.slug.trim().toLowerCase() : "";
+  let seasonType: CanonicalNbaEvent["season_type"] = null;
+  if (slug === "preseason" || numericType === 1) seasonType = "preseason";
+  else if (slug === "regular-season" || slug === "regular" || numericType === 2) seasonType = "regular";
+  else if (slug === "postseason" || slug === "post-season" || numericType === 3) seasonType = "postseason";
+  return { seasonYear: numericYear, seasonType };
 }
 
 function buildTeam(c: EspnCompetitor): NbaEventTeam {
@@ -223,8 +250,12 @@ export async function fetchNbaScoreboard(
   } catch {
     return [];
   }
+  return parseNbaScoreboardPayload(body);
+}
+
+export function parseNbaScoreboardPayload(body: unknown): CanonicalNbaEvent[] {
   const out: CanonicalNbaEvent[] = [];
-  for (const e of body.events ?? []) {
+  for (const e of (body as EspnScoreboardResponse).events ?? []) {
     if (typeof e.id !== "string") continue;
     const comp = e.competitions?.[0];
     if (comp === undefined) continue;
@@ -239,11 +270,14 @@ export async function fetchNbaScoreboard(
     const series = buildSeries(comp, home.espn_team_id, away.espn_team_id, postseasonNote);
     const statusName = comp.status?.type?.name ?? e.status?.type?.name ?? "STATUS_SCHEDULED";
     const statusLabel = comp.status?.type?.description ?? e.status?.type?.description ?? "Scheduled";
+    const season = parseEspnNbaSeason(e.season);
     out.push({
       espn_event_id: e.id,
       start_time: e.date ?? "",
       status: statusName,
       status_label: statusLabel,
+      season_year: season.seasonYear,
+      season_type: season.seasonType,
       postseason_note: postseasonNote,
       home,
       away,
