@@ -7,7 +7,7 @@
  */
 
 export const NBA_POINT_IN_TIME_FEATURE_RELEASE =
-  "nba_point_in_time_features_2026_10_15_r7_consensus_opening_evaluation" as const;
+  "nba_point_in_time_features_2026_10_15_r8_season_boundary_schedule_reset" as const;
 
 export type NbaHistoricalGame = {
   gameId: number;
@@ -905,7 +905,10 @@ function teamFeatures(args: {
   return {
     ...values,
     ...rotationHistoryFeatures(current.length > 0 ? current : prior),
-    ...scheduleFeatures(args.observations, args.startMs, args.venue, args.isHome),
+    // Strength and rotation priors may carry across seasons, but schedule
+    // state cannot: offseason time is not rest and the prior season's final
+    // venue is not an opening-night travel origin.
+    ...scheduleFeatures(current, args.startMs, args.venue, args.isHome),
   };
 }
 

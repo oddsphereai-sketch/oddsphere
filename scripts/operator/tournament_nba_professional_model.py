@@ -21,7 +21,7 @@ import pandas as pd
 
 
 RELEASE = "nba_professional_tournament_2026_10_15_r15_consensus_opening_selection"
-FEATURE_RELEASE = "nba_point_in_time_features_2026_10_15_r7_consensus_opening_evaluation"
+FEATURE_RELEASE = "nba_point_in_time_features_2026_10_15_r8_season_boundary_schedule_reset"
 R1_CONFIRMATION = {
     "season": 2025,
     "games": 1230,
