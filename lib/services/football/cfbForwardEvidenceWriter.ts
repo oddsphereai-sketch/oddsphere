@@ -164,13 +164,45 @@ import {
 import type { PlaybookInjuryTeamRow } from "@/lib/providers/playbook/types";
 
 export const CFB_FORWARD_WRITER_RELEASE =
-  "cfb_forward_evidence_writer_2026_10_14_r120_precutoff_card_lock_recovery" as const;
+  "cfb_forward_evidence_writer_2026_10_14_r121_t60_priority_tracking_isolation" as const;
 export const CFB_FORWARD_MAX_QB_TEAMS_PER_RUN = 24 as const;
 export const CFB_FORWARD_MAX_SHARP_FALLBACK_GAMES_PER_RUN = 32 as const;
 export const CFB_FORWARD_MAX_ESPN_PROSPECTIVE_GAMES_PER_RUN = 32 as const;
 export const CFB_FORWARD_MAX_ESPN_CURRENT_ODDS_GAMES_PER_RUN = CFB_ESPN_CURRENT_ODDS_MAX_GAMES_PER_RUN;
 export const CFB_FORWARD_RESULTS_BATCH_SIZE = 100 as const;
 export const CFB_FORWARD_MAX_PRIOR_GAME_IDS = 1200 as const;
+
+type CfbForwardCollectionNeed = ReturnType<typeof determineCfbForwardCollectionNeed>;
+
+export function resolveCfbForwardCollectionNeed(args: {
+  ordinaryNeed: CfbForwardCollectionNeed;
+  releaseNeed: CfbForwardCollectionNeed | null;
+}): CfbForwardCollectionNeed {
+  return args.ordinaryNeed.reason === "t60_due"
+    ? args.ordinaryNeed
+    : args.releaseNeed ?? args.ordinaryNeed;
+}
+
+export function filterCfbForwardCapturePlansForNeed(args: {
+  plans: CfbForwardCapturePlan[];
+  needReason: string;
+  latestByGame: ReadonlyMap<string, CfbForwardStoredEvidence>;
+  now: string;
+  auditForceUnlocked?: boolean;
+}): CfbForwardCapturePlan[] {
+  if (args.auditForceUnlocked) return args.plans;
+  if (args.needReason === "reference_line_completion_due") {
+    return args.plans.filter((plan) =>
+      plan.stage === "t60" ||
+      cfbReferenceCompletionNeeded(args.latestByGame.get(plan.game.providerGameId), args.now));
+  }
+  if (args.needReason === "provider_seed_due") {
+    return args.plans.filter((plan) =>
+      plan.stage === "t60" ||
+      cfbTheOddsApiProviderSeedNeeded(args.latestByGame.get(plan.game.providerGameId), args.now));
+  }
+  return args.plans;
+}
 
 export type CfbForwardWriterResult = {
   writerRelease: typeof CFB_FORWARD_WRITER_RELEASE;
@@ -338,14 +370,18 @@ export async function runCfbForwardEvidenceWriter(args: {
     const existing = allExisting.filter((row) => isGameInCfbWeeklyWindow({ scheduledStart: row.gameStartAt }, window));
     const lockPlanningExisting = cfbLockPlanningEvidence(existing);
     const ordinaryNeed = determineCfbForwardCollectionNeed({ existing: lockPlanningExisting, now: args.now });
-    const need = cfbForwardReleaseRefreshNeed(existing, args.now) ?? ordinaryNeed;
+    const need = resolveCfbForwardCollectionNeed({
+      ordinaryNeed,
+      releaseNeed: cfbForwardReleaseRefreshNeed(existing, args.now),
+    });
     return { window, existing, lockPlanningExisting, need };
   });
   const selected = args.auditWindowStartDate
     ? states.find((state) => state.window.boardStartDate === args.auditWindowStartDate) ?? null
     : selectCfbForwardCollectionWindow(states);
   if (!selected) {
-    const tracking = await writeOfficialTracking({
+    const memberSnapshot = await refreshCompactMemberSnapshot({ client: args.client, existing: allExisting, marketHistory, payloads: [], season: args.season, now: args.now, apply: args.apply });
+    const tracking = await writeOfficialTrackingSafely({
       client: args.client,
       candidates: cfbTrackingCandidatesForRun(allExisting, [], args.now),
       apply: args.apply,
@@ -353,7 +389,6 @@ export async function runCfbForwardEvidenceWriter(args: {
       balldontlieApiKey: args.balldontlieApiKey,
       now: args.now,
     });
-    const memberSnapshot = await refreshCompactMemberSnapshot({ client: args.client, existing: allExisting, marketHistory, payloads: [], season: args.season, now: args.now, apply: args.apply });
     return emptyResult(states.map((state) => state.need.reason).join("+"), tracking, memberSnapshot);
   }
   const { window, existing, lockPlanningExisting, need } = selected;
@@ -370,15 +405,16 @@ export async function runCfbForwardEvidenceWriter(args: {
       ? { unlockedCadenceMinutesOverride: 0 }
       : {}),
   });
-  const plans = args.auditForceUnlocked
-    ? plannedCaptures
-    : need.reason === "reference_line_completion_due"
-    ? plannedCaptures.filter((plan) => cfbReferenceCompletionNeeded(latestByGame.get(plan.game.providerGameId), args.now))
-    : need.reason === "provider_seed_due"
-      ? plannedCaptures.filter((plan) => cfbTheOddsApiProviderSeedNeeded(latestByGame.get(plan.game.providerGameId), args.now))
-      : plannedCaptures;
+  const plans = filterCfbForwardCapturePlansForNeed({
+    plans: plannedCaptures,
+    needReason: need.reason,
+    latestByGame,
+    now: args.now,
+    auditForceUnlocked: args.auditForceUnlocked,
+  });
   if (plans.length === 0) {
-    const tracking = await writeOfficialTracking({
+    const memberSnapshot = await refreshCompactMemberSnapshot({ client: args.client, existing: allExisting, marketHistory, payloads: [], season: args.season, now: args.now, apply: args.apply });
+    const tracking = await writeOfficialTrackingSafely({
       client: args.client,
       candidates: cfbTrackingCandidatesForRun(allExisting, [], args.now),
       apply: args.apply,
@@ -386,7 +422,6 @@ export async function runCfbForwardEvidenceWriter(args: {
       balldontlieApiKey: args.balldontlieApiKey,
       now: args.now,
     });
-    const memberSnapshot = await refreshCompactMemberSnapshot({ client: args.client, existing: allExisting, marketHistory, payloads: [], season: args.season, now: args.now, apply: args.apply });
     return emptyResult("capture_plan_empty", tracking, memberSnapshot);
   }
   const releaseSlateGameCount = cfbForwardReleaseSlateGameCount({ existing, plans });
@@ -1188,7 +1223,8 @@ export async function runCfbForwardEvidenceWriter(args: {
   args.auditPayloads?.(payloads);
   args.auditForecasts?.(auditForecasts);
   const write = await appendCfbForwardEvidence({ client: args.client, runId: args.runId, payloads, apply: args.apply });
-  const tracking = await writeOfficialTracking({
+  const memberSnapshot = await refreshCompactMemberSnapshot({ client: args.client, existing: allExisting, marketHistory, payloads, season: args.season, now: args.now, apply: args.apply });
+  const tracking = await writeOfficialTrackingSafely({
     client: args.client,
     candidates: cfbTrackingCandidatesForRun(allExisting, payloads, args.now),
     apply: args.apply,
@@ -1197,7 +1233,6 @@ export async function runCfbForwardEvidenceWriter(args: {
     now: args.now,
     priorGamesByWindow: new Map([[window.boardStartDate, priorResults.games]]),
   });
-  const memberSnapshot = await refreshCompactMemberSnapshot({ client: args.client, existing: allExisting, marketHistory, payloads, season: args.season, now: args.now, apply: args.apply });
   const decisions = payloads.flatMap((payload) => payload.decisions.evaluatedBets);
   return {
     writerRelease: CFB_FORWARD_WRITER_RELEASE,
@@ -1840,8 +1875,26 @@ export function isValidImmutableT60(payload: CfbForwardEvidencePayload): boolean
     );
 }
 
-type TrackingResult = { trackingAttempted: boolean; trackingRecordsProposed: number; trackingRecordsInserted: number; trackingRecordsExisting: number; trackingError: string | null; trackingProviderRequests: number };
+export type TrackingResult = { trackingAttempted: boolean; trackingRecordsProposed: number; trackingRecordsInserted: number; trackingRecordsExisting: number; trackingError: string | null; trackingProviderRequests: number };
 type MemberSnapshotResult = Pick<CfbForwardWriterResult, "memberSnapshotAttempted" | "memberSnapshotUpdated" | "memberSnapshotKey" | "memberSnapshotError">;
+
+export async function runCfbOfficialTrackingSafely(
+  operation: () => Promise<TrackingResult>,
+): Promise<TrackingResult> {
+  try {
+    return await operation();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return {
+      trackingAttempted: true,
+      trackingRecordsProposed: 0,
+      trackingRecordsInserted: 0,
+      trackingRecordsExisting: 0,
+      trackingError: `official_tracking_failed:${message.replace(/\s+/g, " ").trim().slice(0, 240) || "unknown"}`,
+      trackingProviderRequests: 0,
+    };
+  }
+}
 
 async function refreshCompactMemberSnapshot(args: {
   client: SupabaseClient;
@@ -2015,6 +2068,12 @@ async function writeOfficialTracking(args: {
       : null,
     trackingProviderRequests,
   };
+}
+
+async function writeOfficialTrackingSafely(
+  args: Parameters<typeof writeOfficialTracking>[0],
+): Promise<TrackingResult> {
+  return runCfbOfficialTrackingSafely(() => writeOfficialTracking(args));
 }
 
 export function planCfbTrackingRecordInsert(args: {

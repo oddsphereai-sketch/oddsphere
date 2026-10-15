@@ -74,11 +74,14 @@ import {
   cfbTrackingCandidatesForRun,
   fetchCfbPlaybookRowsAttempt,
   fetchCfbSharpOddsFallbackAttempt,
+  filterCfbForwardCapturePlansForNeed,
   planCfbPriorResultReads,
   planCfbTrackingRecordInsert,
   preferredCfbContextBook,
   publishCfbForwardDecisionBundle,
+  resolveCfbForwardCollectionNeed,
   retainLatestCfbPlaybookObservation,
+  runCfbOfficialTrackingSafely,
   runCfbForwardEvidenceWriter,
   selectQuarterbackTeams,
   selectCfbSharpFallbackGames,
@@ -3182,6 +3185,57 @@ assert.equal(lateT60[0]?.stage, "t60");
 assert.equal(lateT60[0]?.t60LagMinutes, 21);
 assert.ok((lateT60[0]?.t60LagMinutes ?? 0) > CFB_T60_MAX_CAPTURE_LAG_MINUTES);
 assert.deepEqual(determineCfbForwardCollectionNeed({ existing: [evidenceAt("opening", "2026-08-29T14:00:00.000Z")], now: "2026-08-29T15:00:00.000Z" }), { collect: true, reason: "t60_due", cadenceMinutes: null }, "T-60 is an event-triggered lock, not a 15-minute collection cadence");
+const openingIncompleteAtT60 = evidenceAt("opening", "2026-08-29T14:00:00.000Z");
+openingIncompleteAtT60.payload.slateGameCount = 2;
+const t60NeedDespiteIncompleteOpening = determineCfbForwardCollectionNeed({
+  existing: [openingIncompleteAtT60],
+  now: "2026-08-29T15:00:00.000Z",
+});
+assert.deepEqual(
+  t60NeedDespiteIncompleteOpening,
+  { collect: true, reason: "t60_due", cadenceMinutes: null },
+  "a due immutable T-60 must outrank incomplete opening enrichment elsewhere on the slate",
+);
+assert.deepEqual(
+  resolveCfbForwardCollectionNeed({
+    ordinaryNeed: t60NeedDespiteIncompleteOpening,
+    releaseNeed: { collect: true, reason: "reference_line_completion_due", cadenceMinutes: 0 },
+  }),
+  t60NeedDespiteIncompleteOpening,
+  "reference completion cannot override a due T-60 lock",
+);
+const dueT60Plans = planCfbForwardEvidenceCaptures({
+  games: [game],
+  existing: [openingIncompleteAtT60],
+  capturedAt: "2026-08-29T15:00:00.000Z",
+});
+assert.equal(dueT60Plans[0]?.stage, "t60");
+assert.equal(
+  filterCfbForwardCapturePlansForNeed({
+    plans: dueT60Plans,
+    needReason: "reference_line_completion_due",
+    latestByGame: new Map([[game.providerGameId, openingIncompleteAtT60]]),
+    now: "2026-08-29T15:00:00.000Z",
+  })[0]?.stage,
+  "t60",
+  "reference-completion filtering must preserve every due T-60 plan",
+);
+assert.equal(
+  filterCfbForwardCapturePlansForNeed({
+    plans: dueT60Plans,
+    needReason: "provider_seed_due",
+    latestByGame: new Map([[game.providerGameId, openingIncompleteAtT60]]),
+    now: "2026-08-29T15:00:00.000Z",
+  })[0]?.stage,
+  "t60",
+  "provider-seed filtering must preserve every due T-60 plan",
+);
+const isolatedTrackingFailure = await runCfbOfficialTrackingSafely(async () => {
+  throw new Error("historical row is ineligible");
+});
+assert.equal(isolatedTrackingFailure.trackingAttempted, true);
+assert.match(isolatedTrackingFailure.trackingError ?? "", /^official_tracking_failed:historical row is ineligible$/);
+assert.equal(isolatedTrackingFailure.trackingRecordsInserted, 0, "a malformed historical tracking row is isolated instead of aborting publication");
 
 const legacyHeldT60Base = evidenceAt("t60", "2026-08-29T15:54:00.000Z");
 const legacyHeldT60: CfbForwardStoredEvidence = {
@@ -3327,8 +3381,14 @@ const sharpFallbackIndex = writerSource.indexOf("fetchSharpApiNcaafOddsFallback"
 const sharpSplitsIndex = writerSource.indexOf("fetchCfbSharpApiSplits({ games, apiKey");
 const coherenceIndex = writerSource.indexOf("assertFootballCrossMarketCoherence({");
 const evidenceAppendIndex = writerSource.lastIndexOf("appendCfbForwardEvidence(");
+const memberSnapshotPublishIndex = writerSource.indexOf("const memberSnapshot = await refreshCompactMemberSnapshot", evidenceAppendIndex);
+const officialTrackingIndex = writerSource.indexOf("const tracking = await writeOfficialTrackingSafely", evidenceAppendIndex);
 assert.ok(quarterbackCollectionIndex >= 0 && evidenceAppendIndex > quarterbackCollectionIndex, "the writer must finish bounded QB collection before its sole evidence append");
-assert.match(writerSource, /const need = cfbForwardReleaseRefreshNeed\(existing, args\.now\) \?\? ordinaryNeed;/, "an incomplete current release must take planning priority over ordinary cadence and T-60 reasons");
+assert.ok(
+  evidenceAppendIndex < memberSnapshotPublishIndex && memberSnapshotPublishIndex < officialTrackingIndex,
+  "append-only evidence and member lock publication must complete before fallible historical tracking",
+);
+assert.match(writerSource, /const need = resolveCfbForwardCollectionNeed\(\{[\s\S]*ordinaryNeed,[\s\S]*releaseNeed: cfbForwardReleaseRefreshNeed\(existing, args\.now\),[\s\S]*\}\);/, "release refresh may outrank ordinary cadence but must pass through the immutable T-60 priority resolver");
 assert.match(writerSource, /contextualEvidenceCapture\?\.release !== CFB_FORWARD_CONTEXT_CAPTURE_RELEASE/, "a new evidence-only capture release must seed without waiting for ordinary far-slate cadence");
 assert.match(writerSource, /need\.reason === "provider_seed_due"/, "the sole leased writer must admit the one-time paid-provider seed through its existing capture planner");
 assert.ok(sharpFallbackIndex >= 0 && evidenceAppendIndex > sharpFallbackIndex, "the writer must finish bounded SharpAPI exact-event fallback before its sole evidence append");
@@ -3736,8 +3796,13 @@ const executableMigration = migration.replace(/--.*$/gm, "");
 assert.match(migration, /GRANT SELECT, INSERT ON TABLE public\.cfb_forward_evidence_snapshots TO service_role/);
 assert.match(migration, /REVOKE UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER/);
 assert.doesNotMatch(executableMigration, /GRANT[^;]*(UPDATE|DELETE)[^;]*cfb_forward_evidence_snapshots/i);
-const vercel = JSON.parse(readFileSync(path.resolve("vercel.json"), "utf8")) as { crons: Array<{ path: string }> };
+const vercel = JSON.parse(readFileSync(path.resolve("vercel.json"), "utf8")) as { crons: Array<{ path: string; schedule: string }> };
 assert.equal(vercel.crons.filter((cron) => cron.path === "/api/cron/cfb-forward-evidence").length, 1);
+assert.equal(
+  vercel.crons.find((cron) => cron.path === "/api/cron/cfb-forward-evidence")?.schedule,
+  "*/5 * * * *",
+  "the sole leased CFB writer must receive multiple attempts inside the immutable 20-minute T-60 tolerance",
+);
 const reader = readFileSync(path.resolve("app/dev/experience-preview/ActualDailyEdgePreview.tsx"), "utf8");
 assert.match(reader, /sport === "nfl" \|\| sport === "cfb" \? "Expected score"/);
 assert.match(reader, /Representative final/);

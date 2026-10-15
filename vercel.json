@@ -131,7 +131,7 @@
     },
     {
       "path": "/api/cron/cfb-forward-evidence",
-      "schedule": "9,24,39,54 * * * *"
+      "schedule": "*/5 * * * *"
     },
     {
       "path": "/api/cron/tracking-refresh",
