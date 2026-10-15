@@ -471,9 +471,11 @@ points, and 4.62 percentage points in no-vig home win probability. The 90th
 percentiles were 4.0 spread points, 6.0 total points, and 10.39 probability
 points. This is not a performance result: it demonstrates that sportsbook,
 vendor, consensus construction, and observation time materially affect the
-meaning of "the market." The complete multi-book BDL capture must be
-cross-checked before any source is allowed to select a blend weight or reader
-rule.
+meaning of "the market." The 50-game BDL trial sample contains BetMGM only,
+not multiple books. The complete BDL capture must therefore be audited for
+vendor coverage and cross-checked against the independent multi-book consensus
+before its exact-price results are qualified. It is a named-book confirmation
+source, not "the market" by itself.
 
 ### Consensus open-to-close sensitivity
 

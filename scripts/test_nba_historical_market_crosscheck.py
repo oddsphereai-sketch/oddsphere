@@ -118,6 +118,12 @@ with tempfile.TemporaryDirectory(prefix="nba-market-crosscheck-") as temporary:
         "matchedGames": 1,
         "matchedPct": 1.0,
     }
+    assert report["bdlVendorCoverage"] == {
+        "vendorCount": 2,
+        "vendors": ["betmgm", "fanduel"],
+        "gamesByVendor": {"betmgm": 1, "fanduel": 1},
+        "multiVendorGames": 1,
+    }
     assert report["rows"][0]["bdlBooks"] == 2
     assert report["rows"][0]["absoluteDifference"]["homeSpread"] == 0.0
     assert report["rows"][0]["absoluteDifference"]["total"] == 0.0

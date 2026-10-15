@@ -140,11 +140,14 @@ def main() -> None:
             }
 
     books_by_game: dict[int, list[dict[str, Any]]] = {}
+    games_by_vendor: dict[str, set[int]] = {}
     for row in read_jsonl(args.bdl_opening):
         game_id = int(row["game_id"])
         if game_id not in eligible_games:
             continue
         books_by_game.setdefault(game_id, []).append(row)
+        vendor = text(row.get("vendor")) or "unknown"
+        games_by_vendor.setdefault(vendor, set()).add(game_id)
 
     differences: dict[str, list[float]] = {
         "homeProbability": [],
@@ -206,6 +209,17 @@ def main() -> None:
             "matchedGames": matched,
             "matchedPct": matched / len(eligible_games),
         },
+        "bdlVendorCoverage": {
+            "vendorCount": len(games_by_vendor),
+            "vendors": sorted(games_by_vendor),
+            "gamesByVendor": {
+                vendor: len(game_ids) for vendor, game_ids in sorted(games_by_vendor.items())
+            },
+            "multiVendorGames": sum(
+                1 for book_rows in books_by_game.values()
+                if len({text(row.get("vendor")) or "unknown" for row in book_rows}) > 1
+            ),
+        },
         "absoluteDifference": {field: quantiles(values) for field, values in differences.items()},
         "rows": rows,
         "authority": {
@@ -219,6 +233,7 @@ def main() -> None:
     print(json.dumps({
         "output": str(args.output),
         "coverage": report["coverage"],
+        "bdlVendorCoverage": report["bdlVendorCoverage"],
         "absoluteDifference": report["absoluteDifference"],
     }, indent=2))
 
