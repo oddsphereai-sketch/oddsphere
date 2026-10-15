@@ -43,6 +43,7 @@ type ProjectedRow = {
   authoritative_status: string | null;
   final_winner_coordinator_release: string | null;
   coordinator_reason: string | null;
+  coordinator_features: Record<string, number | null> | null;
   current_books: Array<{
     provider?: string | null;
     sportsbook?: string | null;
@@ -99,6 +100,7 @@ async function main(): Promise<void> {
         "authoritative_status:payload->authoritativeForecast->>status",
         "final_winner_coordinator_release:payload->authoritativeForecast->>finalWinnerCoordinatorRelease",
         "coordinator_reason:payload->authoritativeForecast->>finalWinnerCoordinatorReason",
+        "coordinator_features:payload->authoritativeForecast->finalWinnerCoordinatorFeatureSnapshot",
         "current_books:payload->market->currentBooks",
         "coverage:payload->coverage",
         "request_budget:payload->requestBudget",
@@ -156,6 +158,7 @@ async function main(): Promise<void> {
   if (refreshError) throw new Error(`CFB refresh-log read failed: ${refreshError.message}`);
 
   const captures = games.map((row) => row.captured_at).sort();
+  const coordinatorFeatureNames = [...new Set(games.flatMap((row) => Object.keys(row.coordinator_features ?? {})))].sort();
   console.log(JSON.stringify({
     release: "cfb_current_evidence_coverage_audit_2026_10_15_r1_field_projected",
     readOnly: true,
@@ -197,6 +200,14 @@ async function main(): Promise<void> {
       coordinatorReasons: counts(games.map((row) => row.coordinator_reason ?? "not_recorded")),
       richTeamProfileUnavailable: games.filter((row) => row.coordinator_reason === "team_profile_unavailable").length,
       activeQuarterbacks: games.filter((row) => row.coverage?.activeQuarterbacks === true).length,
+      coordinatorFeatureSnapshots: games.filter((row) => row.coordinator_features !== null).length,
+      coordinatorFeatureAvailability: Object.fromEntries(coordinatorFeatureNames.map((feature) => {
+        const available = games.filter((row) => {
+          const value = row.coordinator_features?.[feature];
+          return typeof value === "number" && Number.isFinite(value);
+        }).length;
+        return [feature, { available, missing: games.length - available }];
+      })),
     },
     healthHolds: counts(games.flatMap((row) => row.coverage?.healthHolds ?? [])),
     availabilityWarnings: counts(games.flatMap((row) => row.coverage?.availabilityWarnings ?? [])),

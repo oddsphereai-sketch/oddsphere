@@ -1,7 +1,7 @@
 # CFB official-availability per-game cadence correction
 
 Date: 2026-10-15  
-Status: implementation candidate; publication requires owner approval and the normal clean-PR gates
+Status: owner-approved implementation candidate; publication still requires the normal clean-PR gates
 
 ## Problem
 
@@ -65,7 +65,42 @@ report precedence, and append-only evidence path are unchanged.
 Release identifiers:
 
 - collector: `cfb_forward_evidence_collector_2026_10_15_r58_per_game_official_availability_cadence`;
-- sole writer: `cfb_forward_evidence_writer_2026_10_15_r122_per_game_official_availability_cadence`.
+- sole writer: `cfb_forward_evidence_writer_2026_10_15_r123_bounded_lifecycle_metadata`;
+- shared publication coherence:
+  `football_cross_market_coherence_2026_10_15_r13_pmf_near_tie_representative_score`.
+
+## Production capacity repair discovered during coordination
+
+Cross-task production review found that every scheduled CFB evidence run from at least 11:45 through
+12:40 UTC failed before collection with `CFB forward evidence metadata read exceeded its bounded
+50000-row season limit`. The latest evidence had therefore stopped advancing at 01:55 UTC. Production
+contained 47,085 repeated unlocked rows, compared with 2,319 opening rows and 600 T-60 rows.
+
+The r123 reader keeps the complete opening/T-60 lifecycle trail for game identity, prior-result
+planning, immutable lock precedence, and tracking recovery. It separately reads only the preceding
+48 hours of high-volume unlocked continuity. The movement projection keeps every visible opening and
+the preceding 72 hours of observations. Stored evidence remains append-only: no row is deleted,
+updated, reconstructed, or assigned new semantics. A malformed selected payload is quarantined by ID
+while valid sibling payloads continue; its lightweight identity metadata remains available to the
+prior-result planner.
+
+A production-backed zero-write rehearsal at `2026-10-15T12:46:14.989Z` proved that the reader clears
+the old limit and that the full writer reaches collection and publication planning:
+
+- provider slate: 99 games;
+- refreshed captures proposed: 95 unlocked, zero inserted;
+- conference reports in proposed payloads: 26, versus one before;
+- model-covered FBS games with evaluated markets: 57 in that provider response;
+- Playbook was deliberately exercised with an unavailable local credential and failed in its isolated
+  provider lane without blocking the writer.
+
+The rehearsal isolated one otherwise healthy game (`457361`) because an exact-even PMF accumulated a
+home-win probability of `0.5000000000000003` while its discrete representative score was home by one.
+Coherence r13 extends the already-approved PMF-verified CFB 0.5-point near-zero mean/median tolerance
+to the representative-score direction check. Exact-even floating-point noise no longer drops that
+game; non-PMF mismatches and every mismatch outside the narrow expected-margin band remain fatal.
+This is a publication-continuity correction, not a prediction or grading change. The combined second
+rehearsal completed with zero game-level capture failures.
 
 The evidence schema, member release, forecast, PMF, reader, calibration, grade, decision, exact-price,
 stake, tracking, compact-snapshot, lease, and lock releases remain unchanged. The new verified reports
@@ -81,8 +116,8 @@ Before publication:
 4. latest `origin/main` is an ancestor of the candidate and integration safety passes;
 5. publication occurs through a protected pull request after explicit owner approval.
 
-After deployment, the next due unlocked cycle must prove the r58/r122 tuple, one shared
+After deployment, the next due unlocked cycle must prove the r58/r123 tuple, one shared
 `prediction_pipeline:cfb` lease, 26 current exact-game reports (or a source-explained newer count),
 no mixed member release, unchanged locked payloads, and no prediction/grade/stake change caused by
-the report-only correction. Roll back the collector/writer constants to r57/r121 if request cadence
+the report-only correction. Roll back the collector/writer/coherence constants to r57/r121/r12 if request cadence
 loops, reports cross game identity, the board contracts, or any locked field changes.

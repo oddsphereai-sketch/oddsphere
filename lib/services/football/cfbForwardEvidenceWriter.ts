@@ -43,7 +43,7 @@ import {
   type CfbForwardStoredEvidence,
   type CfbForwardTeamQuarterbacks,
 } from "./cfbForwardEvidence";
-import { appendCfbForwardEvidence, readCfbForwardMarketHistory, readCfbForwardWriterEvidence, type CfbForwardEvidenceMetadata } from "./cfbForwardEvidenceStore";
+import { appendCfbForwardEvidence, CFB_FORWARD_MARKET_HISTORY_CONTINUITY_HOURS, readCfbForwardMarketHistory, readCfbForwardWriterEvidence, type CfbForwardEvidenceMetadata } from "./cfbForwardEvidenceStore";
 import { buildCfbV1DecisionBundle, CFB_T60_MAX_CAPTURE_LAG_MINUTES, CFB_V1_COMPLETE_READER_PREVIOUS_DECISION_RELEASE, CFB_V1_DECISION_RELEASE, CFB_V1_FINAL_WINNER_PREVIOUS_DECISION_RELEASE, CFB_V1_EXACT_PRICE_ACTIONABILITY_PREVIOUS_DECISION_RELEASE, CFB_V1_GAP_FALLBACK_PREVIOUS_DECISION_RELEASE, CFB_V1_FCS_PRICE_PREVIOUS_DECISION_RELEASE, getCfbV1ForecastForGame, type CfbV1DecisionBundle, type CfbV1Forecast, type CfbV1Market } from "./cfbV1Decision";
 import { CFB_V1_WEEKLY_RUNTIME_RELEASE, cfbV1WeeklyGameProfileCoverage, getCfbV1WeeklyForecasts } from "./cfbV1WeeklyForecast";
 import { loadCfbCurrentAdvancedState } from "./cfbCurrentAdvancedState";
@@ -164,7 +164,7 @@ import {
 import type { PlaybookInjuryTeamRow } from "@/lib/providers/playbook/types";
 
 export const CFB_FORWARD_WRITER_RELEASE =
-  "cfb_forward_evidence_writer_2026_10_15_r122_per_game_official_availability_cadence" as const;
+  "cfb_forward_evidence_writer_2026_10_15_r123_bounded_lifecycle_metadata" as const;
 export const CFB_FORWARD_MAX_QB_TEAMS_PER_RUN = 24 as const;
 export const CFB_FORWARD_MAX_SHARP_FALLBACK_GAMES_PER_RUN = 32 as const;
 export const CFB_FORWARD_MAX_ESPN_PROSPECTIVE_GAMES_PER_RUN = 32 as const;
@@ -355,7 +355,10 @@ export async function runCfbForwardEvidenceWriter(args: {
   if (args.apply && (args.auditWindowStartDate || args.auditForceUnlocked || args.auditForceTheOddsApi || args.auditDisableIndependentPriceLane || args.auditDisableCompleteMarketReader)) {
     throw new Error("CFB audit planning overrides are forbidden when apply=true.");
   }
-  const writerEvidence = await readCfbForwardWriterEvidence({ client: args.client, season: args.season });
+  const writerEvidence = await readCfbForwardWriterEvidence({ client: args.client, season: args.season, now: args.now });
+  if (writerEvidence.quarantined.length > 0) {
+    console.error("CFB forward evidence reader quarantined malformed immutable rows", writerEvidence.quarantined);
+  }
   const allExisting = writerEvidence.evidence;
   const windows = resolveCfbVisibleWindows({ now: args.now, evidence: allExisting });
   const visibleGameIds = [...new Set(allExisting
@@ -365,6 +368,7 @@ export async function runCfbForwardEvidenceWriter(args: {
     client: args.client,
     season: args.season,
     providerGameIds: visibleGameIds,
+    capturedAfter: new Date(Date.parse(args.now) - CFB_FORWARD_MARKET_HISTORY_CONTINUITY_HOURS * 3_600_000).toISOString(),
   });
   const states: CfbForwardWindowState[] = windows.map((window) => {
     const existing = allExisting.filter((row) => isGameInCfbWeeklyWindow({ scheduledStart: row.gameStartAt }, window));

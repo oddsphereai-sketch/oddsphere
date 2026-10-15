@@ -96,8 +96,12 @@ export type CfbForwardEvidenceMetadata = Pick<CfbForwardStoredEvidence, "provide
 export const CFB_FORWARD_EVIDENCE_PAGE_SIZE = 1_000 as const;
 export const CFB_FORWARD_EVIDENCE_MAX_ROWS = 50_000 as const;
 export const CFB_FORWARD_WRITER_PAYLOAD_BATCH_SIZE = 100 as const;
+export const CFB_FORWARD_WRITER_LIFECYCLE_MAX_ROWS = 12_000 as const;
+export const CFB_FORWARD_WRITER_RECENT_UNLOCKED_MAX_ROWS = 12_000 as const;
+export const CFB_FORWARD_WRITER_UNLOCKED_CONTINUITY_HOURS = 48 as const;
 export const CFB_FORWARD_MARKET_HISTORY_PAGE_SIZE = 1_000 as const;
 export const CFB_FORWARD_MARKET_HISTORY_MAX_ROWS = 12_000 as const;
+export const CFB_FORWARD_MARKET_HISTORY_CONTINUITY_HOURS = 72 as const;
 // Keep the JSON projection query below Supabase's statement-timeout cliff as
 // the append-only evidence table grows. This changes query partitioning only;
 // row identity, ordering, compatible releases and the 12k total bound remain
@@ -132,14 +136,17 @@ export async function readCfbForwardMarketHistory(args: {
   client: SupabaseClient;
   season: number;
   providerGameIds: string[];
+  /** Keep every immutable opening plus only this recent movement horizon. */
+  capturedAfter?: string;
 }): Promise<CfbForwardMarketHistoryEvidence[]> {
   const providerGameIds = [...new Set(args.providerGameIds)].sort();
   if (providerGameIds.length === 0) return [];
+  const capturedAfter = args.capturedAfter === undefined ? null : new Date(args.capturedAfter).toISOString();
   const rows: StoredMarketHistoryRow[] = [];
   for (let gameIndex = 0; gameIndex < providerGameIds.length; gameIndex += CFB_FORWARD_MARKET_HISTORY_GAME_BATCH_SIZE) {
     const gameIds = providerGameIds.slice(gameIndex, gameIndex + CFB_FORWARD_MARKET_HISTORY_GAME_BATCH_SIZE);
     for (let from = 0; from < CFB_FORWARD_MARKET_HISTORY_MAX_ROWS; from += CFB_FORWARD_MARKET_HISTORY_PAGE_SIZE) {
-      const { data, error } = await args.client
+      let query = args.client
         .from("cfb_forward_evidence_snapshots")
         .select([
           "id",
@@ -170,7 +177,9 @@ export async function readCfbForwardMarketHistory(args: {
         ].join(","))
         .eq("season", args.season)
         .in("evidence_release", [...CFB_FORWARD_MARKET_HISTORY_COMPATIBLE_RELEASES])
-        .in("provider_game_id", gameIds)
+        .in("provider_game_id", gameIds);
+      if (capturedAfter !== null) query = query.or(`stage.eq.opening,captured_at.gte.${capturedAfter}`);
+      const { data, error } = await query
         .order("captured_at", { ascending: true })
         .order("id", { ascending: true })
         .range(from, from + CFB_FORWARD_MARKET_HISTORY_PAGE_SIZE - 1);
@@ -197,24 +206,65 @@ export async function readCfbForwardMarketHistory(args: {
 export async function readCfbForwardWriterEvidence(args: {
   client: SupabaseClient;
   season: number;
-}): Promise<{ evidence: CfbForwardStoredEvidence[]; metadata: CfbForwardEvidenceMetadata[] }> {
-  const metadataRows: StoredMetadataRow[] = [];
-  for (let from = 0; from < CFB_FORWARD_EVIDENCE_MAX_ROWS; from += CFB_FORWARD_EVIDENCE_PAGE_SIZE) {
+  now?: string;
+}): Promise<{
+  evidence: CfbForwardStoredEvidence[];
+  metadata: CfbForwardEvidenceMetadata[];
+  quarantined: Array<{ id: string; reason: string }>;
+}> {
+  const nowMs = Date.parse(args.now ?? new Date().toISOString());
+  if (!Number.isFinite(nowMs)) throw new Error("CFB forward writer evidence read requires a valid current timestamp.");
+
+  // Opening and T-60 rows are bounded lifecycle facts: one row per
+  // release/game/stage by database contract. Keep the complete season trail
+  // for prior-result identity, immutable locks, and recovery. The high-volume
+  // unlocked cadence is continuity evidence, not a second historical ledger;
+  // only its recent horizon is needed to resume the current board. This split
+  // prevents tens of thousands of old unlocked observations from blocking a
+  // new T-60 capture while leaving every stored row immutable.
+  const lifecycleRows: StoredMetadataRow[] = [];
+  for (let from = 0; from < CFB_FORWARD_WRITER_LIFECYCLE_MAX_ROWS; from += CFB_FORWARD_EVIDENCE_PAGE_SIZE) {
     const { data, error } = await args.client
       .from("cfb_forward_evidence_snapshots")
       .select("id,evidence_release,provider_game_id,stage,captured_at,game_start_at")
       .eq("season", args.season)
+      .in("stage", ["opening", "t60"])
       .order("captured_at", { ascending: true })
       .order("id", { ascending: true })
       .range(from, from + CFB_FORWARD_EVIDENCE_PAGE_SIZE - 1);
-    if (error) throw new Error(`CFB forward evidence metadata read failed: ${error.message}`);
+    if (error) throw new Error(`CFB forward lifecycle metadata read failed: ${error.message}`);
     const page = (data ?? []) as StoredMetadataRow[];
-    metadataRows.push(...page);
+    lifecycleRows.push(...page);
     if (page.length < CFB_FORWARD_EVIDENCE_PAGE_SIZE) break;
-    if (from + CFB_FORWARD_EVIDENCE_PAGE_SIZE >= CFB_FORWARD_EVIDENCE_MAX_ROWS) {
-      throw new Error(`CFB forward evidence metadata read exceeded its bounded ${CFB_FORWARD_EVIDENCE_MAX_ROWS}-row season limit.`);
+    if (from + CFB_FORWARD_EVIDENCE_PAGE_SIZE >= CFB_FORWARD_WRITER_LIFECYCLE_MAX_ROWS) {
+      throw new Error(`CFB forward lifecycle metadata read exceeded its bounded ${CFB_FORWARD_WRITER_LIFECYCLE_MAX_ROWS}-row season limit.`);
     }
   }
+
+  const unlockedRows: StoredMetadataRow[] = [];
+  const unlockedAfter = new Date(nowMs - CFB_FORWARD_WRITER_UNLOCKED_CONTINUITY_HOURS * 3_600_000).toISOString();
+  const unlockedThrough = new Date(nowMs).toISOString();
+  for (let from = 0; from < CFB_FORWARD_WRITER_RECENT_UNLOCKED_MAX_ROWS; from += CFB_FORWARD_EVIDENCE_PAGE_SIZE) {
+    const { data, error } = await args.client
+      .from("cfb_forward_evidence_snapshots")
+      .select("id,evidence_release,provider_game_id,stage,captured_at,game_start_at")
+      .eq("season", args.season)
+      .eq("stage", "unlocked")
+      .gte("captured_at", unlockedAfter)
+      .lte("captured_at", unlockedThrough)
+      .order("captured_at", { ascending: true })
+      .order("id", { ascending: true })
+      .range(from, from + CFB_FORWARD_EVIDENCE_PAGE_SIZE - 1);
+    if (error) throw new Error(`CFB forward recent unlocked metadata read failed: ${error.message}`);
+    const page = (data ?? []) as StoredMetadataRow[];
+    unlockedRows.push(...page);
+    if (page.length < CFB_FORWARD_EVIDENCE_PAGE_SIZE) break;
+    if (from + CFB_FORWARD_EVIDENCE_PAGE_SIZE >= CFB_FORWARD_WRITER_RECENT_UNLOCKED_MAX_ROWS) {
+      throw new Error(`CFB forward recent unlocked metadata read exceeded its bounded ${CFB_FORWARD_WRITER_RECENT_UNLOCKED_MAX_ROWS}-row continuity limit.`);
+    }
+  }
+  const metadataRows = [...new Map([...lifecycleRows, ...unlockedRows].map((row) => [row.id, row])).values()]
+    .sort((a, b) => a.captured_at.localeCompare(b.captured_at) || a.id.localeCompare(b.id));
 
   const latestCurrentByGameStage = new Map<string, StoredMetadataRow>();
   const latestTransitionPreviousByGame = new Map<string, StoredMetadataRow>();
@@ -302,13 +352,24 @@ export async function readCfbForwardWriterEvidence(args: {
     throw new Error(`CFB current writer evidence read returned ${storedRows.length} of ${ids.length} latest game rows.`);
   }
 
+  const evidence: CfbForwardStoredEvidence[] = [];
+  const quarantined: Array<{ id: string; reason: string }> = [];
+  for (const row of storedRows) {
+    try {
+      evidence.push(normalizeStoredRow(row));
+    } catch (error) {
+      quarantined.push({ id: row.id, reason: error instanceof Error ? error.message : String(error) });
+    }
+  }
+
   return {
-    evidence: storedRows.map(normalizeStoredRow).sort((a, b) => Date.parse(a.capturedAt) - Date.parse(b.capturedAt) || a.id.localeCompare(b.id)),
+    evidence: evidence.sort((a, b) => Date.parse(a.capturedAt) - Date.parse(b.capturedAt) || a.id.localeCompare(b.id)),
     metadata: metadataRows.map((row) => ({
       providerGameId: row.provider_game_id,
       capturedAt: new Date(row.captured_at).toISOString(),
       gameStartAt: new Date(row.game_start_at).toISOString(),
     })),
+    quarantined,
   };
 }
 

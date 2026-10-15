@@ -1,5 +1,5 @@
 export const FOOTBALL_CROSS_MARKET_COHERENCE_RELEASE =
-  "football_cross_market_coherence_2026_09_22_r12_nfl_nonpush_side_alignment" as const;
+  "football_cross_market_coherence_2026_10_15_r13_pmf_near_tie_representative_score" as const;
 
 const EPSILON = 1e-9;
 const EV_TOLERANCE = 1e-8;
@@ -359,7 +359,7 @@ function auditForecast(
     issues.push({ code: "forecast_winner_score_disagreement", detail: `Expected margin ${expectedMargin}, home win ${forecast.homeWinProbability}.` });
   }
   const representativeMargin = forecast.representativeScore.home - forecast.representativeScore.away;
-  if (direction(representativeMargin) !== forecastDirection) {
+  if (direction(representativeMargin) !== forecastDirection && !narrowVerifiedPmfMeanMedianCross) {
     issues.push({ code: "forecast_representative_winner_disagreement", detail: `Representative margin ${representativeMargin}, home win ${forecast.homeWinProbability}.` });
   }
   if (forecast.pmf) auditPmfForecast(forecast, issues);
