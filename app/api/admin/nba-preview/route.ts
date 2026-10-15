@@ -16,6 +16,7 @@
  */
 
 import { validateAdminAuth } from "@/lib/auth/admin";
+import { publicSplitsSupported } from "@/lib/config/publicSplitsCapability";
 import { buildNbaFeatureSnapshotsWithProvenance } from "@/lib/services/nba/featureSnapshot";
 import {
   fetchEspnNbaInjuries,
@@ -249,9 +250,11 @@ export async function GET(request: Request): Promise<Response> {
     // deployed Vercel preview (which intentionally does NOT have
     // SHARPAPI_KEY set) instead of looking like the data is broken.
     const marketSignalsCapability =
-      sharpKey !== undefined && sharpKey !== ""
+      sharpKey === undefined || sharpKey === ""
+        ? ("unavailable_no_api_key" as const)
+        : publicSplitsSupported("nba")
         ? ("available" as const)
-        : ("unavailable_no_api_key" as const);
+        : ("unavailable_unvalidated_source" as const);
 
     const body: NbaDailyEdgeDto = {
       as_of: new Date().toISOString(),

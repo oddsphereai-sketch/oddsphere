@@ -44,8 +44,10 @@ audit, not a historical backtest:
 - The shared public-splits capability registry correctly marks NBA
   `audit_required` and observe-only. The NBA adapter separately treats the
   mere presence of `SHARPAPI_KEY` as market-signal availability. That conflict
-  must be removed before the card can make authoritative split or sharp-signal
-  claims.
+  is removed in the r2 candidate: the row retains its sportsbook, the best
+  same-book ticket+handle observation is selected deterministically, and the
+  adapter reports `unavailable_unvalidated_source` until the shared NBA
+  capability gate clears. No member split or sharp-signal claim is authorized.
 - The NBA adapter derives `lineOpenAmerican` from the earliest price observed
   for a side and compares it with a current best price. It does not preserve
   the opening spread/Total number in that DTO, and the opening and current

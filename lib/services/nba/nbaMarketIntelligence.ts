@@ -1,7 +1,8 @@
 /**
  * Phase 7B v0c-DE — NBA per-market intelligence assembly.
  *
- * Pure function. Takes raw lines (per-book), splits (consensus only),
+ * Pure function. Takes raw lines (per-book), one provenance-retaining
+ * sportsbook split observation,
  * opportunities (sharp/cross-ref EV), the NBA model snapshot, the
  * model output, and per-game provenance — and produces a per-market
  * intelligence block ready for UI consumption.
@@ -10,7 +11,7 @@
  *   • No fake openers. No fake RLM. No fake steam.
  *   • "first_observed_at" comes from the lines table's `fetched_at`
  *     (earliest snapshot we hold).
- *   • Per-book public splits → null (SharpAPI gives consensus only).
+ *   • Split observations retain their sportsbook and remain context-only.
  *   • Book coverage flagged when only 1-2 books present.
  *
  * No DB writes. Pure transform.
@@ -107,9 +108,10 @@ export type SourceBadges = {
   books: string[];
   /** ESPN injuries fetched (true) vs not enabled. */
   injuries_source: "espn" | "none";
-  /** "consensus" when /splits returned a row; null when missing. */
-  splits_source: "consensus" | null;
-  /** When the consensus splits row was last refreshed (per SharpAPI). */
+  /** Source family when a sportsbook-specific /splits row was selected. */
+  splits_source: "sportsbook" | null;
+  splits_sportsbook: string | null;
+  /** When the selected sportsbook split row was last refreshed. */
   splits_fetched_at: string | null;
 };
 
@@ -769,7 +771,8 @@ export function buildNbaGameIntelligence(opts: {
     limited_book_coverage: books.length <= 2,
     books,
     injuries_source: opts.injuriesSource,
-    splits_source: opts.splitsRow !== null ? "consensus" : null,
+    splits_source: opts.splitsRow !== null ? "sportsbook" : null,
+    splits_sportsbook: opts.splitsRow?.sportsbook ?? null,
     splits_fetched_at: opts.splitsRow?.fetched_at ?? null,
   };
 

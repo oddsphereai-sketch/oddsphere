@@ -25,6 +25,7 @@
  */
 
 import { isBlockedSportsbook } from "../../config/blockedSportsbooks";
+import { publicSplitsSupported } from "../../config/publicSplitsCapability";
 import { buildNbaFeatureSnapshotsWithProvenance } from "./featureSnapshot";
 import { fetchEspnNbaInjuries } from "./espnNbaInjuries";
 import { runNbaAutoModelV2 } from "../../automodel/nba/nbaAutoModelV2";
@@ -327,9 +328,11 @@ export async function buildNbaDailyEdgePipeline(date: string): Promise<NbaDailyE
   });
 
   const marketSignalsCapability =
-    sharpKey !== undefined && sharpKey !== ""
+    sharpKey === undefined || sharpKey === ""
+      ? ("unavailable_no_api_key" as const)
+      : publicSplitsSupported("nba")
       ? ("available" as const)
-      : ("unavailable_no_api_key" as const);
+      : ("unavailable_unvalidated_source" as const);
 
   const nbaDto: NbaDailyEdgeDto = {
     as_of: new Date().toISOString(),
