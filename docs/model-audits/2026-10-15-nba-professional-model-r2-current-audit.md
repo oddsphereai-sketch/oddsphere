@@ -69,6 +69,100 @@ reference but not a direct like-for-like failure or victory. The old r1
 64.80%/9.600/10.925/15.607 aggregate is likewise descriptive: it does not
 carry a reproducible row-level release and cutoff contract.
 
+### Alternate-line checkpoint (+3 and +6)
+
+Release `nba_alternate_line_audit_2026_10_15_r1_frozen_confirmation` applies
+the already established Daily Edge NBA menu—three and six favorable points—to
+the exact frozen r35 confirmation decisions. The offsets were not chosen from
+2025 outcomes. A surrounding 0/2.5/3/5/6/7.5/10 sensitivity grid is diagnostic
+only.
+
+| Frozen final-model cohort | Main line | Favorable +3 | Favorable +6 |
+|---|---:|---:|---:|
+| Spread direction (context/No Play) | 603-608-1 (49.79%) | 716-495-1 (59.12%) | 830-379-3 (68.65%) |
+| All Total directions (diagnostic) | 650-563-0 (53.59%) | 712-498-3 (58.84%) | 783-427-3 (64.71%) |
+| Selection-frozen actionable Totals | 470-392-0 (54.52%) | 513-346-3 (59.72%) | 567-293-2 (65.93%) |
+
+The Spread jump is not evidence that the forecast has a three- or six-point
+global error. The selected-side result distribution has mean +0.158, median
+-0.5, and standard deviation 14.181. A normal distribution with that observed
+center and dispersion predicts 50.44%, 58.81%, and 66.79% at 0/+3/+6; the
+observed curve is 49.79%, 59.12%, and 68.65%. Most of the lift is the expected
+mathematical effect of buying points in a volatile NBA margin distribution.
+
+The more serious Spread finding is lack of market-residual signal. Against the
+opening line, the reconstructed independent residual has only 0.026 Pearson
+correlation with the actual game residual; the final blend has the same sign
+and therefore the same correlation. The 50% market blend shrinks residual
+standard deviation from 3.556 model points to 1.778, but it cannot flip the
+side because it blends toward the exact market center. Opening-market margin
+MAE was 11.086, versus 11.357 for the independent model and 11.121 for the
+final blend. Final model edge was not monotonic: the 1-2 point band went
+188-161-1 (53.87%), while 2-3 went 83-95 (46.63%) and 3-5 went 53-55
+(49.07%); the >5 band was 9-3 but contained only 12 games. This confirms the
+selection result: no defensible Spread threshold exists yet.
+
+Release `nba_spread_residual_challenger_2026_10_15_r1_chronological` then
+tested the direct repair rather than assuming one. It trained market-residual
+models on 2023, selected once on 2024, and opened 2025 only for confirmation.
+The grid combined the independent edge and market topology with ratings,
+schedule, Four Factors, and rotation groups across six ridge penalties. The
+selection winner was a strongly regularized Four Factors/schedule residual
+model (alpha 10000): it improved 2024 residual MAE from 11.006 to 10.699,
+Brier from 0.25599 to 0.24897, and direction from 51.97% to 53.90%.
+
+That apparent selection edge did not survive confirmation. In 2025 it reached
+614-597 (50.70%), with a 47.89% Wilson lower bound. Its exact-priced subset was
+482-485 over 967 wagers, -42.217 units and -4.37% ROI. On the 978-row
+timestamped BALLDONTLIE cohort specifically, direction was 49.85%; the better
+54.27% result occurred only in the 234-row timestamp-unknown consensus cohort.
+`promotionEligible` is therefore false. The challenger does improve residual
+MAE and Brier by shrinking weak opinions, but improved continuous error is not
+permission to publish economically losing Spread selections.
+
+This isolates the remaining paths. A better generic score or residual model
+has not produced stable ATS signal. The current market blend cannot correct a
+side because blending toward the evaluated line preserves the independent
+edge's sign. A market reader can add value only from genuinely new,
+timestamp-valid information—same-book movement, target-book-excluded prices,
+source-specific splits, lineup changes, or a principled abstention rule—and
+must prove that value prospectively. It cannot be approximated by a global
+three-point adjustment or by treating the favorable-cushion curve as edge.
+
+The curve is balanced enough to retain the competitor-comparable checkpoints:
+at +3/+6, selected Spread favorites were 58.03%/67.32% and underdogs were
+59.58%/69.20%; actionable Total Overs were 59.22%/66.87% and Unders were
+60.38%/64.69%. This does not rescue the main-line Spread lane. Spread remains
+No Play because no selection-frozen threshold or exact-price gate passed.
+
+The GOAT opening archive contains 7,354 rows across 1,230 games and 13 books,
+with zero duplicate game/book keys. It stores one opening quote per game/book,
+not an offered alternate-line ladder. Consequently, these are favorable-line
+outcome curves, not alternate-wager returns. Historical alternate ROI, units,
+and CLV are unavailable.
+
+For orientation only, the actionable Total cohort's empirical break-even price
+was -148.27 at +3 and -193.52 at +6. The more conservative Wilson-lower-bound
+break-even prices were -129.38 and -168.08. The Spread diagnostic equivalents
+were -144.65/-219.00 empirically and -129.00/-193.95 at the Wilson lower
+bound. These are validation ceilings, not recommended prices: an offered line
+must be better than the applicable ceiling and must survive a prospective
+exact-price confirmation before it can become a wager.
+
+The product decision is therefore:
+
+- retain +3 and +6 for Spread and Total as same-cohort, competitor-comparable
+  favorable-cushion tracking;
+- label the curves as alternate-line diagnostics rather than historical bets;
+- keep NBA alternate wagers No Play for launch; and
+- prospectively archive the exact main line/price, alternate line/price,
+  sportsbook, provider/fetch timestamps, locked decision timestamp, and model
+  and calibration releases. Only that ledger can validate alternate-line ROI.
+
+The reproducible operator is
+`scripts/operator/audit_nba_alternate_lines.py`. It hard-fails if its rebuilt
+main-line actionable Total cohort differs from the frozen tournament report.
+
 Opening-stage results remain explicitly visible. In 2025, the selected
 independent model's first-five-prior-games cohort contained 79 games and had
 10.785 team-score MAE, 10.834 margin MAE, 18.270 Total MAE, and 64.56% winner
