@@ -440,11 +440,15 @@ export type CfbForwardEvidencePayload = {
    * member-published pre-cutoff payload after a provider kickoff-time defect.
    * It never changes or reconstructs prediction economics. */
   lockRecovery?: {
-    release: "cfb_pre_t60_published_payload_recovery_2026_10_13_r1";
+    release:
+      | "cfb_pre_t60_published_payload_recovery_2026_10_13_r1"
+      | "cfb_pre_t60_published_payload_recovery_2026_10_14_r2";
     sourcePayloadSha256: string;
     sourceCapturedAt: string;
     recoveredAt: string;
-    reason: "provider_kickoff_time_changed_during_t60_cycle";
+    reason:
+      | "provider_kickoff_time_changed_during_t60_cycle"
+      | "writer_t60_cycle_interrupted";
   };
 };
 
@@ -454,8 +458,14 @@ export function isCfbPreT60PublishedPayloadRecovery(payload: CfbForwardEvidenceP
   const capturedAt = Date.parse(payload.capturedAt);
   const sourceCapturedAt = Date.parse(recovery?.sourceCapturedAt ?? "");
   const gameStartsAt = Date.parse(payload.game.scheduledStart);
-  return recovery?.release === "cfb_pre_t60_published_payload_recovery_2026_10_13_r1" &&
-    recovery.reason === "provider_kickoff_time_changed_during_t60_cycle" &&
+  const supportedRecovery = (
+    recovery?.release === "cfb_pre_t60_published_payload_recovery_2026_10_13_r1" &&
+    recovery.reason === "provider_kickoff_time_changed_during_t60_cycle"
+  ) || (
+    recovery?.release === "cfb_pre_t60_published_payload_recovery_2026_10_14_r2" &&
+    recovery.reason === "writer_t60_cycle_interrupted"
+  );
+  return supportedRecovery &&
     /^[a-f0-9]{64}$/.test(recovery.sourcePayloadSha256) &&
     payload.stage === "unlocked" &&
     payload.captureTiming === "on_time" &&

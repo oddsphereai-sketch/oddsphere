@@ -303,6 +303,25 @@ Last reviewed: 2026-10-10
 
 ## CFB Daily Edge generalized weekly production release
 
+- October 14 pre-cutoff card lock recovery correction: sole writer / member
+  fixture / game lifecycle / compact snapshot / reader advance to
+  `cfb_forward_evidence_writer_2026_10_14_r120_precutoff_card_lock_recovery` /
+  `cfb_v1_member_fixture_2026_10_14_r91_precutoff_card_lock_recovery` /
+  `cfb_member_game_lifecycle_2026_10_14_r3_precutoff_card_lock_recovery` /
+  `cfb_forward_member_snapshot_2026_10_14_r51_precutoff_card_lock_recovery` /
+  `cfb_member_snapshot_reader_2026_10_14_r36_precutoff_card_lock_recovery`.
+  If the sole writer misses the formal T-60 cycle and later stores a complete
+  pre-kickoff row held only for lateness, the member publication now freezes
+  the exact last complete card published at or before the scheduled cutoff.
+  The late row proves the incident but cannot supply replacement picks, grades,
+  prices, probabilities, or projected scores. Original append-only evidence
+  remains unchanged; the derived boundary carries the source payload hash,
+  source timestamp, recovery timestamp, and incident reason. WKU-Sam Houston
+  therefore renders `LOCKED · 7:00 PM EDT` with its exact 5:39 PM published
+  card: WKU Moneyline Watchlist, WKU -1 Spread Watchlist, Under 53.5 Lean, and
+  a 26-23 representative projection. Evidence and rollback:
+  `docs/model-audits/2026-10-14-cfb-precutoff-card-lock-recovery.md`.
+
 - October 14 late-pregame lock recovery correction: sole writer / member
   fixture / game lifecycle / compact snapshot / reader advance to
   `cfb_forward_evidence_writer_2026_10_14_r119_late_pregame_lock_recovery` /

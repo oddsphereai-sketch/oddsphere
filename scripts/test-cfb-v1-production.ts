@@ -1127,6 +1127,63 @@ assert.equal(
   latePublishedRecoveryPayload.capturedAt,
   "the member card must show the actual late pregame capture time rather than the scheduled T-60 cutoff",
 );
+const preCutoffPayload = structuredClone(payload);
+preCutoffPayload.stage = "unlocked";
+preCutoffPayload.capturedAt = "2026-08-29T14:55:00.000Z";
+preCutoffPayload.cutoffAt = null;
+preCutoffPayload.t60LagMinutes = null;
+preCutoffPayload.decisions = {
+  ...preCutoffPayload.decisions,
+  trackingEnabled: false,
+  evaluatedBets: preCutoffPayload.decisions.evaluatedBets.map((decision) => ({
+    ...decision,
+    stage: "unlocked",
+    evaluatedAt: preCutoffPayload.capturedAt,
+    lockedAt: null,
+    evaluatedQuote: {
+      ...decision.evaluatedQuote,
+      observedAt: preCutoffPayload.capturedAt,
+    },
+  })),
+};
+const preCutoffRow: CfbForwardStoredEvidence = {
+  ...evidence,
+  id: "published-pre-cutoff-row",
+  stage: "unlocked",
+  capturedAt: preCutoffPayload.capturedAt,
+  payload: preCutoffPayload,
+  payloadSha256: hashCfbForwardEvidencePayload(preCutoffPayload),
+};
+const preCutoffOpenGame = buildCfbMemberFixtureAtTime(
+  [preCutoffRow],
+  "2026-08-29T14:56:00.000Z",
+).snapshot.games[0]!;
+const recoveredPreCutoffFixture = buildCfbMemberFixtureAtTime(
+  [preCutoffRow, latePublishedRecoveryRow],
+  "2026-08-29T16:05:00.000Z",
+);
+const recoveredPreCutoffGame = recoveredPreCutoffFixture.snapshot.games[0]!;
+assert.equal(recoveredPreCutoffGame.lockState, "locked");
+assert.equal(
+  recoveredPreCutoffGame.lockedAt,
+  "2026-08-29T15:00:00.000Z",
+  "a missed writer boundary must lock the exact last published pre-cutoff card at the scheduled T-60 timestamp",
+);
+assert.deepEqual(
+  {
+    projected: recoveredPreCutoffGame.projected,
+    moneyline: recoveredPreCutoffGame.markets.moneyline.verdict,
+    spread: recoveredPreCutoffGame.markets.first_inning.verdict,
+    total: recoveredPreCutoffGame.markets.total.verdict,
+  },
+  {
+    projected: preCutoffOpenGame.projected,
+    moneyline: preCutoffOpenGame.markets.moneyline.verdict,
+    spread: preCutoffOpenGame.markets.first_inning.verdict,
+    total: preCutoffOpenGame.markets.total.verdict,
+  },
+  "the late health-hold row must not replace the pre-cutoff projection or grades with No Play",
+);
 const malformedLateRecoveryPayload = structuredClone(latePublishedRecoveryPayload);
 malformedLateRecoveryPayload.coverage.healthHolds.push("market_data_unavailable");
 assert.equal(

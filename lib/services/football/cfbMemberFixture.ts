@@ -67,6 +67,7 @@ import {
   CFB_FORWARD_INJURY_CONTRACT_PREVIOUS_MEMBER_RELEASE,
   CFB_FORWARD_PROVIDER_CONTINUITY_PREVIOUS_MEMBER_RELEASE,
   CFB_FORWARD_PROVIDER_FEED_PREVIOUS_MEMBER_RELEASE,
+  hashCfbForwardEvidencePayload,
   isCfbPublishedLateT60RecoveryPayload,
   isCfbPublishedT60AccuracyLockPayload,
   isCfbPreT60PublishedPayloadRecovery,
@@ -118,11 +119,11 @@ import { cfbTeamIdentity } from "./cfbTeamIdentity";
 import { CFB_PUBLIC_SCORE_DIRECTION_TOLERANCE_POINTS } from "./footballCrossMarketCoherence";
 
 export const CFB_MEMBER_FIXTURE_RELEASE =
-  "cfb_v1_member_fixture_2026_10_14_r90_late_pregame_lock_recovery" as const;
+  "cfb_v1_member_fixture_2026_10_14_r91_precutoff_card_lock_recovery" as const;
 export const CFB_PUBLIC_OUTCOME_CONTRACT_RELEASE =
   "cfb_market_sharp_public_outcome_contract_2026_10_14_r79_correct_qb_final_winner_coordinator" as const;
 export const CFB_MEMBER_GAME_LIFECYCLE_RELEASE =
-  "cfb_member_game_lifecycle_2026_10_14_r2_late_pregame_lock_recovery" as const;
+  "cfb_member_game_lifecycle_2026_10_14_r3_precutoff_card_lock_recovery" as const;
 export const CFB_CONTEXT_ONLY_QUOTE_CAPTURE_SKEW_MS = 5_000 as const;
 const CFB_PRE_DIRECTIONAL_MEMBER_RELEASE = "cfb_v1_member_release_2026_08_28_r14_expanded_sharp_budget" as const;
 const CFB_PRE_DIRECTIONAL_DECISION_RELEASE = "cfb_v1_daily_edge_decision_2026_08_28_r11_market_scoped_data_quality" as const;
@@ -176,9 +177,10 @@ export function buildCfbMemberFixture(
   now = new Date().toISOString(),
   marketHistory: CfbForwardMarketHistoryEvidence[] = rows,
 ): CfbMemberFixture {
-  const windows = resolveCfbVisibleWindows({ now, evidence: rows });
+  const memberRows = recoverCfbPublishedPreCutoffMemberLocks(rows);
+  const windows = resolveCfbVisibleWindows({ now, evidence: memberRows });
   const selectedWindows = windows.flatMap((window) => {
-    const evidence = rows.filter((row) => isGameInCfbWeeklyWindow({ scheduledStart: row.gameStartAt }, window));
+    const evidence = memberRows.filter((row) => isGameInCfbWeeklyWindow({ scheduledStart: row.gameStartAt }, window));
     return evidence.length === 0 ? [] : [{
       window,
       evidence,
@@ -231,6 +233,95 @@ export function buildCfbMemberFixture(
     },
     tracking: { trackingEligible: trackingGames > 0, reason: trackingGames > 0 ? `${trackingGames} game${trackingGames === 1 ? " has" : "s have"} a valid immutable T-60 exact-price tuple.` : "Official CFB tracking begins game by game only after a valid T-60 lock; unlocked grades are not counted yet." },
   };
+}
+
+/**
+ * If the sole writer misses the formal T-60 run but later persists a complete
+ * pre-kickoff payload held only for lateness, preserve the exact last complete
+ * card that members actually received before the scheduled cutoff. The late
+ * row proves the incident; it never supplies replacement picks, grades,
+ * prices, probabilities, or projected scores.
+ *
+ * The recovered row exists only in the member publication path. Both original
+ * append-only payloads remain unchanged and the source hash/timestamps remain
+ * explicit in `lockRecovery`.
+ */
+export function recoverCfbPublishedPreCutoffMemberLocks(
+  rows: CfbForwardStoredEvidence[],
+): CfbForwardStoredEvidence[] {
+  const recovered: CfbForwardStoredEvidence[] = [];
+  const byGame = new Map<string, CfbForwardStoredEvidence[]>();
+  for (const row of rows) {
+    const gameRows = byGame.get(row.providerGameId) ?? [];
+    gameRows.push(row);
+    byGame.set(row.providerGameId, gameRows);
+  }
+  for (const [providerGameId, gameRows] of byGame) {
+    if (gameRows.some((row) => isCfbPreT60PublishedPayloadRecovery(row.payload))) continue;
+    const late = gameRows
+      .filter((row) => row.stage === "t60" && isCfbPublishedLateT60RecoveryPayload(row.payload))
+      .sort((first, second) => Date.parse(second.capturedAt) - Date.parse(first.capturedAt))[0];
+    if (!late) continue;
+    const cutoffAtMs = Date.parse(late.gameStartAt) - 60 * 60_000;
+    if (!Number.isFinite(cutoffAtMs)) continue;
+    const cutoffAt = new Date(cutoffAtMs).toISOString();
+    const source = gameRows
+      .filter((row) =>
+        row.payload.schemaRelease === late.payload.schemaRelease &&
+        row.payload.memberRelease === late.payload.memberRelease &&
+        row.payload.decisions.decisionRelease === late.payload.decisions.decisionRelease &&
+        row.stage !== "t60" &&
+        Date.parse(row.capturedAt) <= cutoffAtMs &&
+        row.payload.coverage.healthHolds.length === 0 &&
+        row.payload.decisions.publicationEnabled &&
+        row.payload.decisions.evaluatedBets.length === 3 &&
+        row.payload.decisions.heldMarkets.length === 0 &&
+        row.payload.decisions.evaluatedBets.every((decision) =>
+          Date.parse(decision.evaluatedQuote.observedAt) <= Date.parse(row.capturedAt)
+        )
+      )
+      .sort((first, second) => Date.parse(second.capturedAt) - Date.parse(first.capturedAt))[0];
+    if (!source) continue;
+    const sourcePayloadSha256 = hashCfbForwardEvidencePayload(source.payload);
+    if (sourcePayloadSha256 !== source.payloadSha256) continue;
+    const payload: CfbForwardEvidencePayload = {
+      ...structuredClone(source.payload),
+      runId: late.payload.runId,
+      stage: "unlocked",
+      capturedAt: cutoffAt,
+      cutoffAt,
+      captureTiming: "on_time",
+      t60LagMinutes: 0,
+      decisions: {
+        ...structuredClone(source.payload.decisions),
+        trackingEnabled: true,
+        evaluatedBets: source.payload.decisions.evaluatedBets.map((decision) => ({
+          ...structuredClone(decision),
+          stage: "t60_locked",
+          evaluatedAt: cutoffAt,
+          lockedAt: cutoffAt,
+        })),
+      },
+      lockRecovery: {
+        release: "cfb_pre_t60_published_payload_recovery_2026_10_14_r2",
+        sourcePayloadSha256,
+        sourceCapturedAt: source.capturedAt,
+        recoveredAt: late.capturedAt,
+        reason: "writer_t60_cycle_interrupted",
+      },
+    };
+    if (!isCfbPreT60PublishedPayloadRecovery(payload)) continue;
+    recovered.push({
+      id: `member-lock-recovery:${source.id}:${late.id}`,
+      providerGameId,
+      stage: "unlocked",
+      capturedAt: cutoffAt,
+      gameStartAt: late.gameStartAt,
+      payloadSha256: hashCfbForwardEvidencePayload(payload),
+      payload,
+    });
+  }
+  return recovered.length === 0 ? rows : [...rows, ...recovered];
 }
 
 /**
