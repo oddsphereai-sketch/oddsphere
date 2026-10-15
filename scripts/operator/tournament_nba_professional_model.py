@@ -20,11 +20,13 @@ import numpy as np
 import pandas as pd
 
 
-RELEASE = "nba_professional_tournament_2026_10_15_r30_season_regime_state"
+RELEASE = "nba_professional_tournament_2026_10_15_r32_multiseason_regime_selection"
 FEATURE_RELEASE = "nba_point_in_time_features_2026_10_15_r13_season_regime_state"
-DEPLOYMENT_CANDIDATE_RELEASE = "nba_professional_deployment_candidate_2026_10_15_r10_season_regime_state"
+DEPLOYMENT_CANDIDATE_RELEASE = "nba_professional_deployment_candidate_2026_10_15_r12_multiseason_regime_selection"
 MINIMUM_CONFIRMATION_EXACT_PRICE_BETS = 100
 MINIMUM_CONFIRMATION_EXACT_PRICE_COVERAGE = 0.75
+MULTI_SEASON_SHORTLIST = 20
+MAXIMUM_WORST_SEASON_RELATIVE_JOINT_SCORE = 1.03
 R1_CONFIRMATION = {
     "season": 2025,
     "games": 1230,
@@ -147,12 +149,15 @@ def feature_catalog(frame: pd.DataFrame) -> dict[str, list[str]]:
     def chosen(tokens: tuple[str, ...]) -> list[str]:
         return [column for column in numeric if any(token in column for token in tokens)]
 
+    regime = chosen((
+        "league_current_", "league_prior_", "league_regime_",
+    ))
     ratings = chosen((
-        "league_", "adjusted_", "offRating_", "defRating_", "pace_",
+        "league_off_rating", "adjusted_", "offRating_", "defRating_", "pace_",
         "home_margin_", "away_margin_", "current_games", "prior_games", "elo_", "baseline_",
     ))
-    elo = chosen(("league_", "elo_"))
-    adjusted_ratings = chosen(("league_", "adjusted_", "baseline_", "pace_prior"))
+    elo = chosen(("league_off_rating", "elo_"))
+    adjusted_ratings = chosen(("league_off_rating", "adjusted_", "baseline_", "pace_prior"))
     schedule = chosen((
         "rest_days", "back_to_back", "games_last_4_days", "games_last_7_days",
         "travel_", "time_zones_", "consecutive_road_games_", "venue_altitude_", "altitude_change_",
@@ -190,14 +195,18 @@ def feature_catalog(frame: pd.DataFrame) -> dict[str, list[str]]:
     ))
     groups = {
         "elo_only": sorted(set(elo)),
+        "elo_season_regime": sorted(set(elo + regime)),
         "adjusted_ratings": sorted(set(adjusted_ratings)),
+        "adjusted_ratings_season_regime": sorted(set(adjusted_ratings + regime)),
         "ratings": sorted(set(ratings)),
+        "ratings_season_regime": sorted(set(ratings + regime)),
         "ratings_schedule": sorted(set(ratings + schedule)),
+        "ratings_schedule_season_regime": sorted(set(ratings + schedule + regime)),
         "four_factors_schedule": sorted(set(ratings + schedule + four_factors + volatility)),
         "rotation_schedule": sorted(set(ratings + schedule + four_factors + volatility + rotation)),
         "tracking_style": sorted(set(ratings + schedule + four_factors + volatility + rotation + tracking_style)),
         "all_declared": sorted(set(
-            ratings + schedule + four_factors + volatility + rotation + tracking_style
+            ratings + schedule + four_factors + volatility + rotation + tracking_style + regime
         )),
     }
     for name, columns in groups.items():
@@ -1745,8 +1754,75 @@ def main() -> None:
         and item["selection"]["homeWinBrier"] <= selection_baseline["homeWinBrier"]
         and item["selection"]["homeWinLogLoss"] <= selection_baseline["homeWinLogLoss"] + 0.005
     ]
-    selected = eligible_candidates[0] if eligible_candidates else candidates[0]
-    selection_gate_passed = bool(eligible_candidates)
+    # A single season can reward a model that merely matches that year's pace,
+    # officiating, or shot-profile environment. Shortlist on the designated
+    # selection season, then rank the shortlist on rolling-origin seasons that
+    # all precede confirmation. The worst-season cap prevents a strong average
+    # from hiding a material regime failure.
+    robustness_frame = frame[frame["season"] <= selection_season].copy()
+    robustness_seasons = [
+        season for season in sorted(int(value) for value in robustness_frame["season"].unique())
+        if not robustness_frame[robustness_frame["season"] < season].empty
+    ]
+    origin_baselines: dict[int, dict[str, Any]] = {}
+    for evaluation_season in robustness_seasons:
+        origin_train = robustness_frame[robustness_frame["season"] < evaluation_season].copy()
+        origin_evaluate = robustness_frame[robustness_frame["season"] == evaluation_season].copy()
+        origin_home, origin_away = rating_baseline(origin_evaluate, 2.2)
+        origin_margin_sigma, origin_total_sigma, _ = baseline_calibration_scales(origin_train)
+        origin_baselines[evaluation_season] = metrics(
+            origin_evaluate,
+            origin_home,
+            origin_away,
+            origin_margin_sigma,
+            origin_total_sigma,
+        )
+
+    shortlist = (eligible_candidates if eligible_candidates else candidates)[:MULTI_SEASON_SHORTLIST]
+    for candidate in shortlist:
+        stability = rolling_origin_stability(
+            robustness_frame,
+            selection_season,
+            groups[str(candidate["group"])],
+            dict(candidate["model"]),
+            str(candidate["architecture"]),
+        )
+        scored_origins = [{
+            **origin,
+            "relativeJointScore": joint_selection_score(
+                origin["metrics"],
+                origin_baselines[int(origin["evaluationSeason"])],
+            ),
+        } for origin in stability]
+        relative_scores = [float(origin["relativeJointScore"]) for origin in scored_origins]
+        mean_score = float(np.mean(relative_scores))
+        worst_score = float(max(relative_scores))
+        robust_score = mean_score + 0.25 * max(0.0, worst_score - 1.0)
+        candidate["multiSeasonSelection"] = {
+            "method": "selection_shortlist_then_prior_rolling_origins_with_worst_season_penalty",
+            "origins": scored_origins,
+            "meanRelativeJointScore": mean_score,
+            "worstRelativeJointScore": worst_score,
+            "robustSelectionScore": robust_score,
+            "maximumWorstSeasonRelativeJointScore": MAXIMUM_WORST_SEASON_RELATIVE_JOINT_SCORE,
+            "gatePassed": bool(
+                len(scored_origins) == len(robustness_seasons)
+                and worst_score <= MAXIMUM_WORST_SEASON_RELATIVE_JOINT_SCORE
+            ),
+        }
+    stable_shortlist = [
+        candidate for candidate in shortlist
+        if candidate["multiSeasonSelection"]["gatePassed"]
+    ]
+    ranked_shortlist = sorted(
+        stable_shortlist if stable_shortlist else shortlist,
+        key=lambda item: (
+            item["multiSeasonSelection"]["robustSelectionScore"],
+            item["jointSelectionScore"],
+        ),
+    )
+    selected = ranked_shortlist[0]
+    selection_gate_passed = bool(eligible_candidates and stable_shortlist)
 
     selected_features = groups[selected["group"]]
     selection_home, selection_away, _ = fit_predict(
@@ -2075,7 +2151,9 @@ def main() -> None:
         "selected": selected,
         "selectionGatePassed": selection_gate_passed,
         "selectionGate": {
-            "ranking": "weighted_relative_joint_score",
+            "ranking": "selection_shortlist_then_multiseason_robust_relative_joint_score",
+            "shortlistSize": MULTI_SEASON_SHORTLIST,
+            "maximumWorstSeasonRelativeJointScore": MAXIMUM_WORST_SEASON_RELATIVE_JOINT_SCORE,
             "rankingWeights": {
                 "teamScoreMae": 0.25,
                 "marginMae": 0.20,

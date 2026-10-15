@@ -220,7 +220,9 @@ with tempfile.TemporaryDirectory(prefix="nba-tournament-test-") as temporary:
     assert all(set(row["bySeason"]) == {"2023", "2024", "2025"} for row in feature_coverage["rows"])
     assert report["selectionGate"]["homeWinBrierMaximumRegression"] == 0.0
     assert report["selectionGate"]["homeWinLogLossMaximumRegression"] == 0.005
-    assert report["selectionGate"]["ranking"] == "weighted_relative_joint_score"
+    assert report["selectionGate"]["ranking"] == "selection_shortlist_then_multiseason_robust_relative_joint_score"
+    assert report["selectionGate"]["shortlistSize"] == tournament.MULTI_SEASON_SHORTLIST
+    assert report["selectionGate"]["maximumWorstSeasonRelativeJointScore"] == tournament.MAXIMUM_WORST_SEASON_RELATIVE_JOINT_SCORE
     assert abs(sum(report["selectionGate"]["rankingWeights"].values()) - 1.0) < 1e-9
     assert report["selected"]["featureQuality"]["gatePassed"] is True
     assert report["selected"]["featureQuality"]["evaluatedOn"] == "training_partition_only"
@@ -230,6 +232,8 @@ with tempfile.TemporaryDirectory(prefix="nba-tournament-test-") as temporary:
         "minimumUsableFraction": 0.8,
     }
     assert report["selected"]["jointSelectionScore"] > 0
+    assert report["selected"]["multiSeasonSelection"]["gatePassed"] is True
+    assert report["selected"]["multiSeasonSelection"]["origins"]
     assert "home_margin_5" in tournament.feature_catalog(replay_frame)["ratings"]
     assert "away_margin_5" in tournament.feature_catalog(replay_frame)["ratings"]
     assert report["confirmation"]["games"] == 48
