@@ -20,11 +20,13 @@ import numpy as np
 import pandas as pd
 
 
-RELEASE = "nba_professional_tournament_2026_10_15_r32_multiseason_regime_selection"
+RELEASE = "nba_professional_tournament_2026_10_15_r33_abstaining_market_selection"
 FEATURE_RELEASE = "nba_point_in_time_features_2026_10_15_r13_season_regime_state"
-DEPLOYMENT_CANDIDATE_RELEASE = "nba_professional_deployment_candidate_2026_10_15_r12_multiseason_regime_selection"
+DEPLOYMENT_CANDIDATE_RELEASE = "nba_professional_deployment_candidate_2026_10_15_r13_abstaining_market_selection"
 MINIMUM_CONFIRMATION_EXACT_PRICE_BETS = 100
 MINIMUM_CONFIRMATION_EXACT_PRICE_COVERAGE = 0.75
+MINIMUM_SELECTION_WILSON_LOWER = 0.50
+MINIMUM_SELECTION_EXACT_PRICE_COVERAGE = 0.75
 MULTI_SEASON_SHORTLIST = 20
 MAXIMUM_WORST_SEASON_RELATIVE_JOINT_SCORE = 1.03
 R1_CONFIRMATION = {
@@ -756,14 +758,31 @@ def select_actionable_thresholds(
             )
             for threshold in thresholds
         ]
-        eligible = [candidate for candidate in candidates if candidate["bets"] >= minimum_bets]
+        sample_eligible = [candidate for candidate in candidates if candidate["bets"] >= minimum_bets]
         if market == "moneyline":
+            # A value-moneyline strategy may intentionally choose underdogs,
+            # so raw accuracy is not its economic gate. Without timestamped
+            # exact prices in selection, however, ROI is unknowable and the
+            # professional decision is to abstain.
+            eligible = [
+                candidate for candidate in sample_eligible
+                if candidate["exactPriceCoverage"] is not None
+                and candidate["exactPriceCoverage"] >= MINIMUM_SELECTION_EXACT_PRICE_COVERAGE
+                and candidate["exactPrice"] is not None
+                and candidate["exactPrice"]["bets"] >= minimum_bets
+                and candidate["exactPrice"]["units"] > 0
+            ]
             eligible.sort(key=lambda item: (
                 -(item["exactPrice"]["roi"] if item["exactPrice"] else -math.inf),
                 -(item["wilson95Lower"] or -math.inf),
                 -item["bets"],
             ))
         else:
+            eligible = [
+                candidate for candidate in sample_eligible
+                if candidate["wilson95Lower"] is not None
+                and candidate["wilson95Lower"] >= MINIMUM_SELECTION_WILSON_LOWER
+            ]
             eligible.sort(key=lambda item: (
                 -(item["wilson95Lower"] or -math.inf),
                 -(item["accuracy"] or -math.inf),
@@ -771,6 +790,12 @@ def select_actionable_thresholds(
             ))
         selected[market] = {
             "minimumSelectionBets": minimum_bets,
+            "minimumSelectionWilsonLower": (
+                None if market == "moneyline" else MINIMUM_SELECTION_WILSON_LOWER
+            ),
+            "minimumSelectionExactPriceCoverage": (
+                MINIMUM_SELECTION_EXACT_PRICE_COVERAGE if market == "moneyline" else None
+            ),
             "selected": eligible[0] if eligible else None,
             "candidates": candidates,
         }
