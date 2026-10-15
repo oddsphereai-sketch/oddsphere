@@ -371,7 +371,7 @@ movement, CLV, split, or market-reader claim. Every row carries that provenance;
 2025-26 BALLDONTLIE timestamped openings take precedence when available.
 
 The executable tournament release is now
-`nba_professional_tournament_2026_10_15_r18_exact_price_provenance`. Its
+`nba_professional_tournament_2026_10_15_r19_feature_coverage_audit`. Its
 predeclared model grid is reproducible with the repository's NumPy runtime:
 closed-form ridge, robust iteratively reweighted Huber ridge, and bounded
 hinge-spline ridge. Feature-family ablations separately test ratings,
@@ -425,6 +425,12 @@ for each priced result, and the row-level ledger retains the exact book beside
 each Moneyline, Spread, and Total price. A numeric quote without recoverable
 book provenance may remain descriptive but cannot silently satisfy an
 authoritative exact-price gate.
+
+The tournament also writes a season-by-season coverage record for every
+declared pregame feature, including selected status, finite-value coverage,
+and distinct-value count. Fully missing, below-50%-coverage, and constant
+features are summarized in the main report so a nominally rich model cannot
+pass while most of its supposed inputs are absent or inert.
 
 The r14 tournament now evaluates three separately named lanes: independent
 scores, the market-only score reference, and the final combined distribution.

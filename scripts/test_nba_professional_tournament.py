@@ -153,6 +153,7 @@ with tempfile.TemporaryDirectory(prefix="nba-tournament-test-") as temporary:
     report = json.loads((output / "report.json").read_text())
     predictions = (output / "confirmation-predictions.jsonl").read_text().strip().splitlines()
     diagnostics = json.loads((output / "confirmation-diagnostics.json").read_text())
+    feature_coverage = json.loads((output / "feature-coverage.json").read_text())
     winner_errors = (output / "confirmation-winner-errors.jsonl").read_text().splitlines()
     spread_errors = (output / "confirmation-spread-errors.jsonl").read_text().splitlines()
     total_errors = (output / "confirmation-total-errors.jsonl").read_text().splitlines()
@@ -172,6 +173,10 @@ with tempfile.TemporaryDirectory(prefix="nba-tournament-test-") as temporary:
     assert report["promotionAuthorized"] is False
     assert isinstance(report["selectionGatePassed"], bool)
     assert report["selected"]["featureCount"] > 0
+    assert report["featureCoverage"]["features"] == len(feature_coverage["rows"])
+    assert report["featureCoverage"]["selectedFeatures"] == report["selected"]["featureCount"]
+    assert all("bySeason" in row for row in feature_coverage["rows"])
+    assert all(set(row["bySeason"]) == {"2023", "2024", "2025"} for row in feature_coverage["rows"])
     assert report["selectionGate"]["homeWinBrierMaximumRegression"] == 0.0
     assert report["selectionGate"]["homeWinLogLossMaximumRegression"] == 0.005
     assert report["selectionGate"]["ranking"] == "weighted_relative_joint_score"

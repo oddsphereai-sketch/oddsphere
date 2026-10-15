@@ -20,7 +20,7 @@ import numpy as np
 import pandas as pd
 
 
-RELEASE = "nba_professional_tournament_2026_10_15_r18_exact_price_provenance"
+RELEASE = "nba_professional_tournament_2026_10_15_r19_feature_coverage_audit"
 FEATURE_RELEASE = "nba_point_in_time_features_2026_10_15_r10_exact_price_provenance"
 R1_CONFIRMATION = {
     "season": 2025,
@@ -198,6 +198,45 @@ def feature_catalog(frame: pd.DataFrame) -> dict[str, list[str]]:
         if not columns:
             raise ValueError(f"NBA feature group {name} is empty")
     return groups
+
+
+def feature_coverage_report(
+    frame: pd.DataFrame,
+    features: list[str],
+    selected_features: list[str],
+) -> dict[str, Any]:
+    selected = set(selected_features)
+    rows: list[dict[str, Any]] = []
+    for feature in features:
+        values = pd.to_numeric(frame[feature], errors="coerce")
+        present = values.notna()
+        finite_values = values[present].to_numpy(float)
+        by_season = {}
+        for season, indexes in frame.groupby("season").groups.items():
+            season_present = present.loc[indexes]
+            by_season[str(int(season))] = {
+                "rows": int(len(indexes)),
+                "present": int(season_present.sum()),
+                "coverage": float(season_present.mean()),
+            }
+        rows.append({
+            "feature": feature,
+            "selected": feature in selected,
+            "rows": int(len(frame)),
+            "present": int(present.sum()),
+            "coverage": float(present.mean()),
+            "distinctFiniteValues": int(len(np.unique(finite_values))),
+            "bySeason": by_season,
+        })
+    return {
+        "method": "pregame_feature_nonnull_coverage_by_chronological_season",
+        "features": len(rows),
+        "selectedFeatures": len(selected),
+        "fullyMissing": [row["feature"] for row in rows if row["present"] == 0],
+        "belowHalfCoverage": [row["feature"] for row in rows if row["coverage"] < 0.5],
+        "constantWhenPresent": [row["feature"] for row in rows if row["distinctFiniteValues"] <= 1],
+        "rows": rows,
+    }
 
 
 def joint_selection_score(candidate: dict[str, Any], baseline: dict[str, Any]) -> float:
@@ -1767,6 +1806,14 @@ def main() -> None:
     diagnostics_path = args.output / "confirmation-diagnostics.json"
     diagnostics_body = json.dumps(diagnostics, indent=2, sort_keys=True) + "\n"
     diagnostics_path.write_text(diagnostics_body)
+    feature_coverage = feature_coverage_report(
+        frame,
+        groups["all_declared"],
+        selected_features,
+    )
+    feature_coverage_path = args.output / "feature-coverage.json"
+    feature_coverage_body = json.dumps(feature_coverage, indent=2, sort_keys=True) + "\n"
+    feature_coverage_path.write_text(feature_coverage_body)
 
     error_artifacts: dict[str, dict[str, Any]] = {}
     for label, rows in (
@@ -1866,6 +1913,15 @@ def main() -> None:
             "file": diagnostics_path.name,
             "sha256": hashlib.sha256(diagnostics_body.encode()).hexdigest(),
             "causeAttributionPolicy": "never infer luck from an outcome; require timestamp-valid postgame component evidence",
+        },
+        "featureCoverage": {
+            "file": feature_coverage_path.name,
+            "sha256": hashlib.sha256(feature_coverage_body.encode()).hexdigest(),
+            "features": feature_coverage["features"],
+            "selectedFeatures": feature_coverage["selectedFeatures"],
+            "fullyMissing": feature_coverage["fullyMissing"],
+            "belowHalfCoverage": feature_coverage["belowHalfCoverage"],
+            "constantWhenPresent": feature_coverage["constantWhenPresent"],
         },
         "errorLedgers": error_artifacts,
     }
