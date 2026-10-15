@@ -146,6 +146,50 @@ const cfbVerifiedDirectionCross = auditFootballCrossMarketCoherence({
 });
 assert.equal(cfbVerifiedDirectionCross.passed, true, "CFB accepts an explicitly bounded mean/median winner crossover proven by the same PMF");
 
+const cfbVerifiedNearTieRepresentativeScore = auditFootballCrossMarketCoherence({
+  sport: "cfb",
+  providerGameId: "457361",
+  awayTeam: "AWY",
+  homeTeam: "HME",
+  forecast: {
+    expectedAwayPoints: 20.5,
+    expectedHomePoints: 20.5,
+    representativeScore: { away: 20, home: 21 },
+    awayWinProbability: 0.4999999999999997,
+    homeWinProbability: 0.5000000000000003,
+    pmf: [
+      { away: 20, home: 21, probability: 0.5 },
+      { away: 21, home: 20, probability: 0.5 },
+    ],
+  },
+  decisions: [],
+  allowWholeGameOperationalHold: true,
+  publicScoreDirectionTolerancePoints: CFB_PUBLIC_SCORE_DIRECTION_TOLERANCE_POINTS,
+});
+assert.equal(cfbVerifiedNearTieRepresentativeScore.passed, true, "PMF roundoff at exactly 50% must not reject a one-point representative score near a zero expected margin");
+
+const cfbNonNearTieRepresentativeScore = auditFootballCrossMarketCoherence({
+  sport: "cfb",
+  providerGameId: "non-near-tie-control",
+  awayTeam: "AWY",
+  homeTeam: "HME",
+  forecast: {
+    expectedAwayPoints: 20,
+    expectedHomePoints: 21,
+    representativeScore: { away: 20, home: 21 },
+    awayWinProbability: 0.5,
+    homeWinProbability: 0.5,
+    pmf: [
+      { away: 20, home: 23, probability: 0.5 },
+      { away: 21, home: 20, probability: 0.5 },
+    ],
+  },
+  decisions: [],
+  allowWholeGameOperationalHold: true,
+  publicScoreDirectionTolerancePoints: CFB_PUBLIC_SCORE_DIRECTION_TOLERANCE_POINTS,
+});
+assert.equal(cfbNonNearTieRepresentativeScore.fatalIssues.some((row) => row.code === "forecast_representative_winner_disagreement"), true, "the PMF exception must not weaken a representative-score mismatch outside the narrow expected-margin band");
+
 const unverifiedDirectionCross = auditFootballCrossMarketCoherence({
   sport: "cfb",
   providerGameId: "unverified-near-tossup",

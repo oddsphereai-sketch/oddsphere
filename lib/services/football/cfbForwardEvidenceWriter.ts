@@ -43,7 +43,7 @@ import {
   type CfbForwardStoredEvidence,
   type CfbForwardTeamQuarterbacks,
 } from "./cfbForwardEvidence";
-import { appendCfbForwardEvidence, readCfbForwardMarketHistory, readCfbForwardWriterEvidence, type CfbForwardEvidenceMetadata } from "./cfbForwardEvidenceStore";
+import { appendCfbForwardEvidence, CFB_FORWARD_MARKET_HISTORY_CONTINUITY_HOURS, readCfbForwardMarketHistory, readCfbForwardWriterEvidence, type CfbForwardEvidenceMetadata } from "./cfbForwardEvidenceStore";
 import { buildCfbV1DecisionBundle, CFB_T60_MAX_CAPTURE_LAG_MINUTES, CFB_V1_COMPLETE_READER_PREVIOUS_DECISION_RELEASE, CFB_V1_DECISION_RELEASE, CFB_V1_FINAL_WINNER_PREVIOUS_DECISION_RELEASE, CFB_V1_EXACT_PRICE_ACTIONABILITY_PREVIOUS_DECISION_RELEASE, CFB_V1_GAP_FALLBACK_PREVIOUS_DECISION_RELEASE, CFB_V1_FCS_PRICE_PREVIOUS_DECISION_RELEASE, getCfbV1ForecastForGame, type CfbV1DecisionBundle, type CfbV1Forecast, type CfbV1Market } from "./cfbV1Decision";
 import { CFB_V1_WEEKLY_RUNTIME_RELEASE, cfbV1WeeklyGameProfileCoverage, getCfbV1WeeklyForecasts } from "./cfbV1WeeklyForecast";
 import { loadCfbCurrentAdvancedState } from "./cfbCurrentAdvancedState";
@@ -164,7 +164,7 @@ import {
 import type { PlaybookInjuryTeamRow } from "@/lib/providers/playbook/types";
 
 export const CFB_FORWARD_WRITER_RELEASE =
-  "cfb_forward_evidence_writer_2026_10_14_r121_t60_priority_tracking_isolation" as const;
+  "cfb_forward_evidence_writer_2026_10_15_r123_bounded_lifecycle_metadata" as const;
 export const CFB_FORWARD_MAX_QB_TEAMS_PER_RUN = 24 as const;
 export const CFB_FORWARD_MAX_SHARP_FALLBACK_GAMES_PER_RUN = 32 as const;
 export const CFB_FORWARD_MAX_ESPN_PROSPECTIVE_GAMES_PER_RUN = 32 as const;
@@ -355,7 +355,10 @@ export async function runCfbForwardEvidenceWriter(args: {
   if (args.apply && (args.auditWindowStartDate || args.auditForceUnlocked || args.auditForceTheOddsApi || args.auditDisableIndependentPriceLane || args.auditDisableCompleteMarketReader)) {
     throw new Error("CFB audit planning overrides are forbidden when apply=true.");
   }
-  const writerEvidence = await readCfbForwardWriterEvidence({ client: args.client, season: args.season });
+  const writerEvidence = await readCfbForwardWriterEvidence({ client: args.client, season: args.season, now: args.now });
+  if (writerEvidence.quarantined.length > 0) {
+    console.error("CFB forward evidence reader quarantined malformed immutable rows", writerEvidence.quarantined);
+  }
   const allExisting = writerEvidence.evidence;
   const windows = resolveCfbVisibleWindows({ now: args.now, evidence: allExisting });
   const visibleGameIds = [...new Set(allExisting
@@ -365,6 +368,7 @@ export async function runCfbForwardEvidenceWriter(args: {
     client: args.client,
     season: args.season,
     providerGameIds: visibleGameIds,
+    capturedAfter: new Date(Date.parse(args.now) - CFB_FORWARD_MARKET_HISTORY_CONTINUITY_HOURS * 3_600_000).toISOString(),
   });
   const states: CfbForwardWindowState[] = windows.map((window) => {
     const existing = allExisting.filter((row) => isGameInCfbWeeklyWindow({ scheduledStart: row.gameStartAt }, window));
@@ -1606,17 +1610,22 @@ export function shouldFetchCfbOfficialConferenceAvailability(args: {
   if (args.force) return true;
   const nowMs = Date.parse(args.now);
   if (!Number.isFinite(nowMs)) return false;
-  const pregame = args.games.some((game) => {
+  const requestedGameIds = new Set(args.games.map((game) => game.providerGameId));
+  const latestFetchByGame = new Map<string, number>();
+  for (const row of args.existing) {
+    if (!requestedGameIds.has(row.providerGameId) || (row.payload.requestBudget.officialAvailability ?? 0) <= 0) continue;
+    const capturedAt = Date.parse(row.capturedAt);
+    if (!Number.isFinite(capturedAt)) continue;
+    latestFetchByGame.set(row.providerGameId, Math.max(latestFetchByGame.get(row.providerGameId) ?? 0, capturedAt));
+  }
+  return args.games.some((game) => {
     const untilStart = Date.parse(game.scheduledStart) - nowMs;
-    return untilStart > 0 && untilStart <= 3 * 60 * 60_000;
+    const minimumMinutes = untilStart > 0 && untilStart <= 3 * 60 * 60_000
+      ? CFB_OFFICIAL_CONFERENCE_AVAILABILITY_PREGAME_REFRESH_MINUTES
+      : CFB_OFFICIAL_CONFERENCE_AVAILABILITY_REFRESH_MINUTES;
+    const lastFetch = latestFetchByGame.get(game.providerGameId) ?? 0;
+    return lastFetch === 0 || nowMs - lastFetch >= minimumMinutes * 60_000;
   });
-  const minimumMinutes = pregame
-    ? CFB_OFFICIAL_CONFERENCE_AVAILABILITY_PREGAME_REFRESH_MINUTES
-    : CFB_OFFICIAL_CONFERENCE_AVAILABILITY_REFRESH_MINUTES;
-  const lastFetch = args.existing
-    .filter((row) => (row.payload.requestBudget.officialAvailability ?? 0) > 0)
-    .reduce((latest, row) => Math.max(latest, Date.parse(row.capturedAt) || 0), 0);
-  return lastFetch === 0 || nowMs - lastFetch >= minimumMinutes * 60_000;
 }
 
 export function shouldFetchCfbCollegeFootballDataLines(args: {

@@ -58,8 +58,13 @@ import {
   CFB_FORWARD_MARKET_HISTORY_MAX_ROWS,
   CFB_FORWARD_MARKET_HISTORY_PAGE_SIZE,
   CFB_FORWARD_MARKET_HISTORY_COMPATIBLE_RELEASES,
+  CFB_FORWARD_MARKET_HISTORY_CONTINUITY_HOURS,
+  CFB_FORWARD_WRITER_LIFECYCLE_MAX_ROWS,
+  CFB_FORWARD_WRITER_RECENT_UNLOCKED_MAX_ROWS,
+  CFB_FORWARD_WRITER_UNLOCKED_CONTINUITY_HOURS,
   readCfbForwardEvidence,
   readCfbForwardMarketHistory,
+  readCfbForwardWriterEvidence,
 } from "../lib/services/football/cfbForwardEvidenceStore";
 import { normalizeCfbPlaybookLine, normalizeCfbPlaybookSplits } from "../lib/services/football/cfbPlaybookEvidence";
 import {
@@ -3518,14 +3523,21 @@ assert.equal(CFB_FORWARD_EVIDENCE_PAGE_SIZE, 1_000);
 assert.equal(CFB_FORWARD_EVIDENCE_MAX_ROWS, 50_000);
 assert.equal(CFB_FORWARD_MARKET_HISTORY_PAGE_SIZE, 1_000);
 assert.equal(CFB_FORWARD_MARKET_HISTORY_MAX_ROWS, 12_000);
+assert.equal(CFB_FORWARD_MARKET_HISTORY_CONTINUITY_HOURS, 72);
+assert.equal(CFB_FORWARD_WRITER_LIFECYCLE_MAX_ROWS, 12_000);
+assert.equal(CFB_FORWARD_WRITER_RECENT_UNLOCKED_MAX_ROWS, 12_000);
+assert.equal(CFB_FORWARD_WRITER_UNLOCKED_CONTINUITY_HOURS, 48);
 assert.match(evidenceStoreSource, /\.order\("captured_at", \{ ascending: true \}\)\s*\.order\("id", \{ ascending: true \}\)\s*\.range\(from, from \+ CFB_FORWARD_EVIDENCE_PAGE_SIZE - 1\)/, "the CFB evidence reader must paginate with a stable timestamp-and-ID order");
 assert.match(evidenceStoreSource, /exceeded its bounded.*row season limit/, "the CFB evidence reader must fail explicitly at its hard cap instead of silently truncating a release wave");
 assert.match(evidenceStoreSource, /select\("id,evidence_release,provider_game_id,stage,captured_at,game_start_at"\)/, "the writer history scan must stay payload-free");
+assert.match(evidenceStoreSource, /\.in\("stage", \["opening", "t60"\]\)/, "the complete season trail must be limited to bounded lifecycle facts");
+assert.match(evidenceStoreSource, /\.eq\("stage", "unlocked"\)[\s\S]*\.gte\("captured_at", unlockedAfter\)/, "high-volume unlocked continuity must be time bounded");
 assert.match(evidenceStoreSource, /latestCurrentByGameStage/, "the writer must retain the latest current-release opening, unlocked, and T-60 rows separately");
 assert.match(evidenceStoreSource, /latestTransitionPreviousByGame/, "the bounded writer read must retain one latest prior-release row per game so a started-game transition can publish the current member snapshot");
 assert.match(evidenceStoreSource, /latestPublishedByGameAtCutoff/, "the bounded writer read must retain the last immutable pre-boundary prediction for denominator recovery");
 assert.match(evidenceStoreSource, /CFB_FORWARD_WRITER_PAYLOAD_BATCH_SIZE = 100/, "current writer payload reads must remain bounded");
 assert.match(evidenceStoreSource, /current_books:payload->market->currentBooks/, "movement recovery must project compact market fields instead of reloading historical forecast payloads");
+assert.match(evidenceStoreSource, /stage\.eq\.opening,captured_at\.gte\./, "movement recovery must preserve openings while bounding repeated observations to the recent continuity horizon");
 assert.match(evidenceStoreSource, /exceeded its bounded.*row visible-board limit/, "movement recovery must fail explicitly at its visible-board row ceiling");
 const evidenceRanges: Array<[number, number]> = [];
 const storedEvidenceRow = {
@@ -3555,6 +3567,76 @@ const pagedEvidenceClient = {
 const pagedEvidence = await readCfbForwardEvidence({ client: pagedEvidenceClient, season: 2026 });
 assert.equal(pagedEvidence.length, 1_001, "a complete evidence read must include the second Supabase page");
 assert.deepEqual(evidenceRanges, [[0, 999], [1_000, 1_999]], "the reader must advance in exact non-overlapping 1,000-row pages");
+
+const lifecycleMetadataRow = {
+  id: "bounded-lifecycle-valid",
+  evidence_release: CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE,
+  provider_game_id: evidence.providerGameId,
+  stage: evidence.stage,
+  captured_at: evidence.capturedAt,
+  game_start_at: evidence.gameStartAt,
+};
+const malformedUnlockedMetadataRow = {
+  ...lifecycleMetadataRow,
+  id: "bounded-unlocked-malformed",
+  stage: "unlocked",
+  captured_at: new Date(Date.parse(evidence.capturedAt) + 60_000).toISOString(),
+};
+const writerMetadataFilters: string[] = [];
+const boundedWriterClient = {
+  from() {
+    let projection = "";
+    let stageEquality: string | null = null;
+    let lifecycleStages: string[] = [];
+    let ids: string[] = [];
+    const query = {
+      select(value: string) { projection = value; return query; },
+      eq(column: string, value: unknown) {
+        if (column === "stage") stageEquality = String(value);
+        return query;
+      },
+      in(column: string, values: string[]) {
+        if (column === "stage") lifecycleStages = values;
+        if (column === "id") ids = values;
+        return query;
+      },
+      gte(column: string) { writerMetadataFilters.push(`gte:${column}`); return query; },
+      lte(column: string) { writerMetadataFilters.push(`lte:${column}`); return query; },
+      order() { return query; },
+      range() {
+        if (lifecycleStages.length > 0) return Promise.resolve({ data: [lifecycleMetadataRow], error: null });
+        if (stageEquality === "unlocked") return Promise.resolve({ data: [malformedUnlockedMetadataRow], error: null });
+        return Promise.resolve({ data: null, error: new Error("an unscoped 50,001-row historical scan is forbidden") });
+      },
+      then(resolve: (value: unknown) => unknown) {
+        assert.match(projection, /payload_sha256,payload/);
+        return Promise.resolve(resolve({
+          data: ids.map((id) => id === lifecycleMetadataRow.id
+            ? { ...storedEvidenceRow, id }
+            : {
+                ...storedEvidenceRow,
+                id,
+                stage: "unlocked",
+                captured_at: malformedUnlockedMetadataRow.captured_at,
+                payload_sha256: "0".repeat(64),
+              }),
+          error: null,
+        }));
+      },
+    };
+    return query;
+  },
+} as unknown as SupabaseClient;
+const boundedWriterEvidence = await readCfbForwardWriterEvidence({
+  client: boundedWriterClient,
+  season: 2026,
+  now: new Date(Date.parse(evidence.capturedAt) + 2 * 60_000).toISOString(),
+});
+assert.deepEqual(writerMetadataFilters, ["gte:captured_at", "lte:captured_at"], "the recurring writer must never ask the database for old unlocked history");
+assert.equal(boundedWriterEvidence.evidence.length, 1, "a malformed unlocked row must not suppress its valid locked sibling");
+assert.equal(boundedWriterEvidence.evidence[0]?.id, lifecycleMetadataRow.id);
+assert.deepEqual(boundedWriterEvidence.quarantined.map((row) => row.id), [malformedUnlockedMetadataRow.id]);
+assert.equal(boundedWriterEvidence.metadata.length, 2, "payload quarantine must not erase the lightweight prior-game identity trail");
 
 const projectedMarketHistoryRow = {
   id: earlierEvidence.id,
