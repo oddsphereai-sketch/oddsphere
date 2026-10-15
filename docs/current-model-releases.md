@@ -3182,6 +3182,9 @@ The paired live-slate replay is recorded in
   `tracking-foundation-r8-nba-spread-official`, and
   `tracking-foundation-v6-nba-spread-official`; these prevent a pre-Spread
   aggregate or stored snapshot from masking the launched category
+- Schema status: additive migration v44 was applied to the primary database on
+  2026-10-15; the service-role verification returned an empty, readable table
+  and the October 20-21 member-pipeline smoke returned 14 coherent r2 games
 
 The October 15 r2 release replaces the hand-built score formula for future unlocked rows with the
 portable, leakage-safe ratings-and-schedule ridge artifact selected on 2024-25 and confirmed once

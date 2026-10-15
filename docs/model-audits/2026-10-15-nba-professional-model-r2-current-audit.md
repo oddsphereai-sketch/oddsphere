@@ -959,12 +959,15 @@ lock precedence, duplicate-lock rejection, exact DTO restoration, mismatch
 failure, and complete score/pick/exact-price/grade-input coherence. The full
 repository `verify:model-change` gate passed after these changes.
 
-The final direct member-pipeline rehearsal also proved the intended deployment
-fail-closed behavior: the primary Supabase PostgREST schema cache does not yet
-contain `nba_professional_game_inputs`, so no r2 member response can be
-published until migration v44 is applied and the same rehearsal returns the r2
-release with coherent scores. This is a deployment gate, not permission to
-fall back to default features or silently run the old model under the r2 ID.
+The initial direct member-pipeline rehearsal proved the intended deployment
+fail-closed behavior when the primary Supabase PostgREST schema cache did not
+yet contain `nba_professional_game_inputs`. Migration v44 was then applied on
+2026-10-15. A service-role verification returned an empty readable table, which
+is expected before opening night, and the exact member pipeline returned all
+three October 20 and all eleven October 21 games under
+`nba_market_marriage_2026_10_15_r2_unified_25_75`; all 14 score tuples were
+coherent and exposed all 42 Moneyline/Spread/Total slots. Default features or
+silent fallback to the old model under the r2 ID remain forbidden.
 
 ## Upset-aware evaluation
 
