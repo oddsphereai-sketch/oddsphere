@@ -579,7 +579,7 @@ check(
 check(
   "API shares the five-minute aggregate cache across server instances",
   API.includes("unstable_cache") &&
-    API.includes('"member-tracking-aggregate-v9-ucl-frozen-forecast-continuity"') &&
+    API.includes('"member-tracking-aggregate-v10-ucl-projected-forecast-continuity"') &&
     API.includes("TRACKING_RESPONSE_CACHE_TTL_MS / 1000"),
 );
 check(

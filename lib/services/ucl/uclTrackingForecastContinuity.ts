@@ -6,6 +6,10 @@ export const UCL_TRACKING_FORECAST_CONTINUITY_RELEASE =
 
 type UclTrackedMarket = Extract<TrackedMarketV17, "match_result" | "double_chance" | "total" | "btts">;
 
+type UclTrackingRecordProjection = PredictionRecordRow & {
+  member_market_at_capture?: unknown;
+};
+
 const VALID_SIDES: Readonly<Record<UclTrackedMarket, ReadonlySet<string>>> = {
   match_result: new Set(["home", "draw", "away"]),
   double_chance: new Set(["home_or_draw", "away_or_draw", "home_or_away"]),
@@ -70,7 +74,11 @@ export function uclFrozenTrackingForecastSide(record: PredictionRecordRow): stri
     || record.market_probability !== null
   ) return null;
 
-  const captured = record.snapshot_json?.member_market_at_capture;
+  // The member aggregate intentionally projects only the JSON fields it needs
+  // instead of downloading every historical snapshot_json blob. Accept that
+  // bounded PostgREST projection as well as the full record used by graders.
+  const projected = (record as UclTrackingRecordProjection).member_market_at_capture;
+  const captured = projected ?? record.snapshot_json?.member_market_at_capture;
   if (captured === null || typeof captured !== "object") return null;
   const member = captured as MarketEdgeDto;
   if (member.held !== true || member.currentPriceAmerican !== null || member.marketFairProb !== null) return null;
