@@ -33,6 +33,7 @@ async function main(): Promise<void> {
   const argv = process.argv.slice(2);
   const sport = parseSport(readStringFlag(argv, "--sport"));
   const slateDate = readStringFlag(argv, "--date") ?? todayUTC();
+  const slateDateThrough = readStringFlag(argv, "--through");
   const write = readBoolFlag(argv, "--write");
   const json = readBoolFlag(argv, "--json");
 
@@ -46,7 +47,8 @@ async function main(): Promise<void> {
 
   if (!json) {
     console.log(
-      `[market-intelligence-v2-shadow-sync] mode=${write ? "APPLY" : "DRY-RUN"} sport=${sport} date=${slateDate}`,
+      `[market-intelligence-v2-shadow-sync] mode=${write ? "APPLY" : "DRY-RUN"} sport=${sport} ` +
+        `date=${slateDate}${slateDateThrough ? ` through=${slateDateThrough}` : ""}`,
     );
   }
 
@@ -56,6 +58,7 @@ async function main(): Promise<void> {
     slateDate,
     apply: write,
     todayUtc: todayUTC(),
+    slateDateThrough,
     logger: json ? undefined : (m) => console.log(`  ${m}`),
   });
 

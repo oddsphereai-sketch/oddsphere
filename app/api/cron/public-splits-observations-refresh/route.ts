@@ -18,7 +18,7 @@
 import { cronHandlerPerSport } from "@/lib/cron/runCron";
 import { supabase } from "@/lib/db/supabase";
 import { syncPublicSplitsObservations } from "@/lib/services/syncPublicSplitsObservations";
-import { currentSlateDate } from "@/lib/dates/slateDate";
+import { addDaysToSlate, currentSlateDate } from "@/lib/dates/slateDate";
 import type { Sport } from "@/lib/types/domain/Sport";
 import { refreshDailyEdgeResponseSnapshot } from "@/lib/services/labResponseSnapshotWriter";
 import { runScheduledMarketIntelligenceV2Collection } from "@/lib/services/marketIntelligenceV2/scheduledCollection";
@@ -48,8 +48,10 @@ export async function GET(request: Request): Promise<Response> {
       });
       // NBA remains capture-only: v2 stores provenance-qualified per-book
       // observations, while its UI/model capability stays audit_required.
-      // Provider history backfill is still MLB-only inside the shared writer;
-      // NBA builds its forward trail from these repeated current snapshots.
+      // One league-level provider pull is matched against the same bounded
+      // seven-day schedule window as the member board. Provider history
+      // backfill is still MLB-only; NBA builds its forward trail from repeated
+      // current snapshots without adding one request per future date.
       const marketIntelligenceV2 = sport === "mlb" || sport === "nba"
         ? await runScheduledMarketIntelligenceV2Collection({
             supabase,
@@ -62,6 +64,7 @@ export async function GET(request: Request): Promise<Response> {
             // inventory here so those rows are recovered without waiting for
             // the hourly writer. The shared sport lease still owns the write.
             includeSharpApiHistory: true,
+            slateDateThrough: sport === "nba" ? addDaysToSlate(slate, 6) : undefined,
           })
         : null;
       const errors = [

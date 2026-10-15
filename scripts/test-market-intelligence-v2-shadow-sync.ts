@@ -8,7 +8,9 @@ import {
   findSharpApiSplitGameMatches,
   isSharpApiHistoryUniqueConflict,
   marketIntelligenceGameKey,
+  selectNbaRollingMarketGames,
   selectVerifiedSharpApiCurrentRows,
+  selectVerifiedSharpApiWindowRows,
   writeRows,
 } from "../lib/services/marketIntelligenceV2/shadowSync";
 import {
@@ -26,7 +28,7 @@ const failures: string[] = [];
 check(
   "Market Intelligence V2 exposes the versioned NBA per-book forward capture release",
   MARKET_INTELLIGENCE_V2_SHADOW_CAPTURE_RELEASE ===
-    "market_intelligence_v2_shadow_capture_2026_10_15_r1_nba_per_book_forward",
+    "market_intelligence_v2_shadow_capture_2026_10_15_r2_nba_rolling_window",
 );
 
 function check(label: string, ok: boolean, detail?: string): void {
@@ -177,6 +179,73 @@ check(
       [{ awayAbbr: "STL", homeAbbr: "CIN" }],
       "2026-08-17",
     ).length === 1,
+  );
+}
+{
+  const games = [
+    { slateDate: "2026-10-15", awayAbbr: "DAL", homeAbbr: "LAL" },
+    { slateDate: "2026-10-16", awayAbbr: "MIA", homeAbbr: "ORL" },
+    { slateDate: "2026-10-20", awayAbbr: "BOS", homeAbbr: "DET" },
+    { slateDate: "2026-10-21", awayAbbr: "GSW", homeAbbr: "LAL" },
+  ];
+  const selectedGames = selectNbaRollingMarketGames(games, "2026-10-15");
+  check(
+    "NBA rolling market window retains current rehearsal and only future tracking-eligible dates",
+    selectedGames.length === 3 &&
+      selectedGames.some((game) => game.slateDate === "2026-10-15") &&
+      !selectedGames.some((game) => game.slateDate === "2026-10-16") &&
+      selectedGames.some((game) => game.slateDate === "2026-10-20"),
+  );
+
+  const rows = [
+    {
+      event_id: "nba_boston_celtics_detroit_pistons_2026-10-20",
+      league: "nba",
+      away_team: "Boston Celtics",
+      home_team: "Detroit Pistons",
+      sportsbook: "draftkings",
+    },
+    {
+      event_id: "nba_golden_state_warriors_los_angeles_lakers_2026-10-21",
+      league: "nba",
+      away_team: "Golden State Warriors",
+      home_team: "Los Angeles Lakers",
+      sportsbook: "betmgm",
+    },
+    {
+      event_id: "nba_golden_state_warriors_los_angeles_lakers_2026-10-20",
+      league: "nba",
+      away_team: "Golden State Warriors",
+      home_team: "Los Angeles Lakers",
+      sportsbook: "draftkings",
+    },
+    {
+      event_id: "nba_boston_celtics_detroit_pistons_2026-10-22",
+      league: "nba",
+      away_team: "Boston Celtics",
+      home_team: "Detroit Pistons",
+      sportsbook: "draftkings",
+    },
+    {
+      event_id: "nba_boston_celtics_detroit_pistons_2026-10-20",
+      league: "ncaab",
+      away_team: "Boston Celtics",
+      home_team: "Detroit Pistons",
+      sportsbook: "draftkings",
+    },
+  ];
+  const accepted = selectVerifiedSharpApiWindowRows(
+    rows,
+    selectedGames,
+    "2026-10-15",
+    "2026-10-21",
+    "nba",
+  );
+  check(
+    "NBA rolling provider selection requires exact league, event date, and matchup inside the window",
+    accepted.length === 2 &&
+      accepted.some((row) => String(row.event_id).includes("2026-10-20")) &&
+      accepted.some((row) => String(row.event_id).includes("2026-10-21")),
   );
 }
 check(
