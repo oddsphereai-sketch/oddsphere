@@ -18,10 +18,16 @@ export type NbaHistoricalOpeningOdds = {
 
 export type NbaHistoricalOpeningMarket = {
   homeWinProbability: number | null;
+  homeMoneylinePrice: number | null;
+  awayMoneylinePrice: number | null;
   homeSpread: number | null;
   homeCoverProbability: number | null;
+  homeSpreadPrice: number | null;
+  awaySpreadPrice: number | null;
   total: number | null;
   overProbability: number | null;
+  overPrice: number | null;
+  underPrice: number | null;
 };
 
 function integer(value: unknown): number | null {
@@ -80,9 +86,19 @@ export function normalizeNbaHistoricalOpeningOdds(
   };
 }
 
-type ExactLineCandidate = { line: number; probability: number };
+type ExactLineCandidate = {
+  line: number;
+  probability: number;
+  firstPrice: number;
+  secondPrice: number;
+};
 
-function exactLineConsensus(candidates: ExactLineCandidate[]): { line: number; probability: number } | null {
+function exactLineConsensus(candidates: ExactLineCandidate[]): {
+  line: number;
+  probability: number;
+  firstPrice: number;
+  secondPrice: number;
+} | null {
   if (candidates.length === 0) return null;
   const lineMedian = median(candidates.map((item) => item.line));
   const byLine = new Map<string, ExactLineCandidate[]>();
@@ -99,6 +115,8 @@ function exactLineConsensus(candidates: ExactLineCandidate[]): { line: number; p
   return {
     line: selected[0]!.line,
     probability: median(selected.map((item) => item.probability)),
+    firstPrice: Math.max(...selected.map((item) => item.firstPrice)),
+    secondPrice: Math.max(...selected.map((item) => item.secondPrice)),
   };
 }
 
@@ -120,7 +138,11 @@ export function nbaOpeningMarketByGame(args: {
   rows: NbaHistoricalOpeningOdds[];
   gameStartById: ReadonlyMap<number, string>;
 }): Map<number, NbaHistoricalOpeningMarket> {
-  const moneylines = new Map<number, number[]>();
+  const moneylines = new Map<number, Array<{
+    probability: number;
+    homePrice: number;
+    awayPrice: number;
+  }>>();
   const spreads = new Map<number, ExactLineCandidate[]>();
   const totals = new Map<number, ExactLineCandidate[]>();
   const seenBook = new Set<string>();
@@ -139,7 +161,11 @@ export function nbaOpeningMarketByGame(args: {
       const total = home + away;
       if (Number.isFinite(total) && total > 0) {
         const values = moneylines.get(row.gameId) ?? [];
-        values.push(home / total);
+        values.push({
+          probability: home / total,
+          homePrice: row.moneylineHomeOdds,
+          awayPrice: row.moneylineAwayOdds,
+        });
         moneylines.set(row.gameId, values);
       }
     }
@@ -153,7 +179,12 @@ export function nbaOpeningMarketByGame(args: {
       const total = home + away;
       if (Number.isFinite(total) && total > 0) {
         const values = spreads.get(row.gameId) ?? [];
-        values.push({ line: row.spreadHomeValue, probability: home / total });
+        values.push({
+          line: row.spreadHomeValue,
+          probability: home / total,
+          firstPrice: row.spreadHomeOdds,
+          secondPrice: row.spreadAwayOdds,
+        });
         spreads.set(row.gameId, values);
       }
     }
@@ -163,7 +194,12 @@ export function nbaOpeningMarketByGame(args: {
       const total = over + under;
       if (Number.isFinite(total) && total > 0) {
         const values = totals.get(row.gameId) ?? [];
-        values.push({ line: row.totalValue, probability: over / total });
+        values.push({
+          line: row.totalValue,
+          probability: over / total,
+          firstPrice: row.totalOverOdds,
+          secondPrice: row.totalUnderOdds,
+        });
         totals.set(row.gameId, values);
       }
     }
@@ -172,12 +208,25 @@ export function nbaOpeningMarketByGame(args: {
   return new Map([...gameIds].map((gameId) => {
     const spread = exactLineConsensus(spreads.get(gameId) ?? []);
     const total = exactLineConsensus(totals.get(gameId) ?? []);
+    const moneyline = moneylines.get(gameId) ?? [];
     return [gameId, {
-      homeWinProbability: moneylines.has(gameId) ? median(moneylines.get(gameId)!) : null,
+      homeWinProbability: moneyline.length > 0
+        ? median(moneyline.map((item) => item.probability))
+        : null,
+      homeMoneylinePrice: moneyline.length > 0
+        ? Math.max(...moneyline.map((item) => item.homePrice))
+        : null,
+      awayMoneylinePrice: moneyline.length > 0
+        ? Math.max(...moneyline.map((item) => item.awayPrice))
+        : null,
       homeSpread: spread?.line ?? null,
       homeCoverProbability: spread?.probability ?? null,
+      homeSpreadPrice: spread?.firstPrice ?? null,
+      awaySpreadPrice: spread?.secondPrice ?? null,
       total: total?.line ?? null,
       overProbability: total?.probability ?? null,
+      overPrice: total?.firstPrice ?? null,
+      underPrice: total?.secondPrice ?? null,
     }];
   }));
 }

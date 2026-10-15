@@ -81,6 +81,12 @@ assert.equal(markets.get(10)?.homeSpread, -4.5, "the most-supported exact spread
 assert.equal(markets.get(10)?.total, 224.5, "the most-supported exact total line must win");
 assert.ok((markets.get(10)?.homeCoverProbability ?? 0) > 0.48);
 assert.ok((markets.get(10)?.overProbability ?? 0) < 0.51);
+assert.equal(markets.get(10)?.homeMoneylinePrice, -150);
+assert.equal(markets.get(10)?.awayMoneylinePrice, 135);
+assert.equal(markets.get(10)?.homeSpreadPrice, -108);
+assert.equal(markets.get(10)?.awaySpreadPrice, -110);
+assert.equal(markets.get(10)?.overPrice, -105);
+assert.equal(markets.get(10)?.underPrice, -108);
 assert.equal(markets.has(11), false, "post-tip rows must be rejected for every market");
 
 assert.throws(() => nbaOpeningHomeProbabilityByGame({

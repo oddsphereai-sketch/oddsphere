@@ -20,7 +20,7 @@ import numpy as np
 import pandas as pd
 
 
-RELEASE = "nba_professional_tournament_2026_10_15_r10_expanded_advanced_candidates"
+RELEASE = "nba_professional_tournament_2026_10_15_r11_exact_price_evaluation"
 FEATURE_RELEASE = "nba_point_in_time_features_2026_10_15_r6_expanded_advanced"
 R1_CONFIRMATION = {
     "season": 2025,
@@ -51,10 +51,16 @@ EVALUATION_ONLY = [
     # Optional timestamp-valid market benchmark. This may segment and score
     # independent forecasts, but it is never eligible to enter a feature set.
     "evaluation_opening_market_home_probability",
+    "evaluation_opening_moneyline_home_price",
+    "evaluation_opening_moneyline_away_price",
     "evaluation_opening_home_spread",
     "evaluation_opening_home_cover_probability",
+    "evaluation_opening_home_spread_price",
+    "evaluation_opening_away_spread_price",
     "evaluation_opening_total",
     "evaluation_opening_over_probability",
+    "evaluation_opening_over_price",
+    "evaluation_opening_under_price",
 ]
 EVALUATION_PROBABILITIES = [
     "evaluation_opening_market_home_probability",
@@ -365,6 +371,19 @@ def normal_cdf(values: np.ndarray) -> np.ndarray:
     return 0.5 * (1.0 + erf(values / math.sqrt(2.0)))
 
 
+def exact_price_return(wins: np.ndarray, prices: np.ndarray) -> dict[str, Any]:
+    profits = np.where(prices > 0, prices / 100, 100 / -prices)
+    units = np.where(wins, profits, -1.0)
+    return {
+        "bets": int(len(units)),
+        "wins": int(wins.sum()),
+        "losses": int((~wins).sum()),
+        "units": float(units.sum()),
+        "roi": float(units.mean()),
+        "averageAmericanPrice": float(prices.mean()),
+    }
+
+
 def metrics(
     frame: pd.DataFrame,
     home: np.ndarray,
@@ -434,6 +453,21 @@ def metrics(
                 "favoriteStrengthBands": strength_bands,
             }
     market_evaluation: dict[str, Any] = {}
+    home_price_column = "evaluation_opening_moneyline_home_price"
+    away_price_column = "evaluation_opening_moneyline_away_price"
+    if home_price_column in frame and away_price_column in frame:
+        home_price = frame[home_price_column].to_numpy(float)
+        away_price = frame[away_price_column].to_numpy(float)
+        selected_home = probabilities >= 0.5
+        price = np.where(selected_home, home_price, away_price)
+        available = np.isfinite(price) & (price != 0)
+        if available.any():
+            wins = selected_home[available] == (outcomes[available] > 0.5)
+            market_evaluation["moneyline"] = {
+                "games": int(available.sum()),
+                "directionAccuracy": float(wins.mean()),
+                "exactPrice": exact_price_return(wins, price[available]),
+            }
     spread_column = "evaluation_opening_home_spread"
     if spread_column in frame:
         spread = frame[spread_column].to_numpy(float)
@@ -443,10 +477,17 @@ def metrics(
                 (predicted_margin[available] + spread[available]) / max(margin_sigma, 1e-6)
             ), 0.001, 0.999)
             outcome = (actual_margin[available] + spread[available] > 0).astype(float)
+            selected_home = model_probability >= 0.5
+            home_price = frame["evaluation_opening_home_spread_price"].to_numpy(float)[available]
+            away_price = frame["evaluation_opening_away_spread_price"].to_numpy(float)[available]
+            selected_price = np.where(selected_home, home_price, away_price)
+            priced = np.isfinite(selected_price) & (selected_price != 0)
+            wins = selected_home[priced] == (outcome[priced] > 0.5)
             market_evaluation["spread"] = {
                 "games": int(available.sum()),
                 "directionAccuracy": float(((model_probability >= 0.5) == (outcome > 0.5)).mean()),
                 "brier": float(np.square(model_probability - outcome).mean()),
+                "exactPrice": exact_price_return(wins, selected_price[priced]) if priced.any() else None,
             }
     total_column = "evaluation_opening_total"
     if total_column in frame:
@@ -457,10 +498,17 @@ def metrics(
                 (predicted_total[available] - line[available]) / max(total_sigma, 1e-6)
             ), 0.001, 0.999)
             outcome = (actual_total[available] > line[available]).astype(float)
+            selected_over = model_probability >= 0.5
+            over_price = frame["evaluation_opening_over_price"].to_numpy(float)[available]
+            under_price = frame["evaluation_opening_under_price"].to_numpy(float)[available]
+            selected_price = np.where(selected_over, over_price, under_price)
+            priced = np.isfinite(selected_price) & (selected_price != 0)
+            wins = selected_over[priced] == (outcome[priced] > 0.5)
             market_evaluation["total"] = {
                 "games": int(available.sum()),
                 "directionAccuracy": float(((model_probability >= 0.5) == (outcome > 0.5)).mean()),
                 "brier": float(np.square(model_probability - outcome).mean()),
+                "exactPrice": exact_price_return(wins, selected_price[priced]) if priced.any() else None,
             }
     return {
         "games": int(len(frame)),
@@ -536,8 +584,14 @@ def build_prediction_ledger(
         winner_correct = predicted_home_win == actual_home_win
 
         market_home_probability = finite_float(row.get("evaluation_opening_market_home_probability"))
+        moneyline_home_price = finite_float(row.get("evaluation_opening_moneyline_home_price"))
+        moneyline_away_price = finite_float(row.get("evaluation_opening_moneyline_away_price"))
         opening_home_spread = finite_float(row.get("evaluation_opening_home_spread"))
+        opening_home_spread_price = finite_float(row.get("evaluation_opening_home_spread_price"))
+        opening_away_spread_price = finite_float(row.get("evaluation_opening_away_spread_price"))
         opening_total = finite_float(row.get("evaluation_opening_total"))
+        opening_over_price = finite_float(row.get("evaluation_opening_over_price"))
+        opening_under_price = finite_float(row.get("evaluation_opening_under_price"))
         spread_edge = None if opening_home_spread is None else predicted_margin + opening_home_spread
         spread_result = None if opening_home_spread is None else actual_margin + opening_home_spread
         total_edge = None if opening_total is None else predicted_total - opening_total
@@ -605,8 +659,14 @@ def build_prediction_ledger(
             },
             "openingMarketEvaluationOnly": {
                 "homeWinProbability": market_home_probability,
+                "moneylineHomePrice": moneyline_home_price,
+                "moneylineAwayPrice": moneyline_away_price,
                 "homeSpread": opening_home_spread,
+                "homeSpreadPrice": opening_home_spread_price,
+                "awaySpreadPrice": opening_away_spread_price,
                 "total": opening_total,
+                "overPrice": opening_over_price,
+                "underPrice": opening_under_price,
                 "spreadModelSide": None if spread_edge is None else ("home" if spread_edge > 0 else "away"),
                 "spreadResultSide": None if spread_result is None or math.isclose(spread_result, 0) else ("home" if spread_result > 0 else "away"),
                 "spreadDirectionCorrect": None if spread_edge is None or spread_result is None or math.isclose(spread_result, 0) else (spread_edge > 0) == (spread_result > 0),

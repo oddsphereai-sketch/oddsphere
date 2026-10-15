@@ -125,10 +125,16 @@ async function main(): Promise<void> {
     return {
       ...row,
       evaluation_opening_market_home_probability: market?.homeWinProbability ?? null,
+      evaluation_opening_moneyline_home_price: market?.homeMoneylinePrice ?? null,
+      evaluation_opening_moneyline_away_price: market?.awayMoneylinePrice ?? null,
       evaluation_opening_home_spread: market?.homeSpread ?? null,
       evaluation_opening_home_cover_probability: market?.homeCoverProbability ?? null,
+      evaluation_opening_home_spread_price: market?.homeSpreadPrice ?? null,
+      evaluation_opening_away_spread_price: market?.awaySpreadPrice ?? null,
       evaluation_opening_total: market?.total ?? null,
       evaluation_opening_over_probability: market?.overProbability ?? null,
+      evaluation_opening_over_price: market?.overPrice ?? null,
+      evaluation_opening_under_price: market?.underPrice ?? null,
     };
   });
   if (featureRows.length !== games.length) throw new Error("NBA feature build did not emit exactly one row per game.");

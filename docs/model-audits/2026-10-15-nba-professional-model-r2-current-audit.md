@@ -330,8 +330,14 @@ performance, or board coverage. Statistical uncertainty is game-clustered.
 One aggregate win is insufficient: results are segmented by month, rest state,
 injury certainty, projected pace, favorite size, and home/away status.
 
+Where timestamp-valid opening quotes exist, Moneyline, Spread, and Total are
+also graded at the exact side price selected by the independent distribution.
+The report includes units and ROI alongside direction accuracy and Brier score;
+a hit-rate headline cannot conceal unprofitable prices. Opening-price results
+remain separate from later decision-time and closing-line evidence.
+
 The executable tournament release is now
-`nba_professional_tournament_2026_10_15_r10_expanded_advanced_candidates`. Its
+`nba_professional_tournament_2026_10_15_r11_exact_price_evaluation`. Its
 predeclared model grid is reproducible with the repository's NumPy runtime:
 closed-form ridge, robust iteratively reweighted Huber ridge, and bounded
 hinge-spline ridge. Feature-family ablations separately test ratings,

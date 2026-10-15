@@ -107,10 +107,16 @@ for season_index, season in enumerate((2023, 2024, 2025)):
             "home_usageConcentration_5": 0.055 + rng.normal(0, 0.004),
             "away_usageConcentration_5": 0.052 + rng.normal(0, 0.004),
             "evaluation_opening_market_home_probability": 0.65 if home_off >= away_off else 0.35,
+            "evaluation_opening_moneyline_home_price": -130,
+            "evaluation_opening_moneyline_away_price": 115,
             "evaluation_opening_home_spread": -margin + rng.normal(0, 5),
             "evaluation_opening_home_cover_probability": 0.5,
+            "evaluation_opening_home_spread_price": -110,
+            "evaluation_opening_away_spread_price": -110,
             "evaluation_opening_total": total + rng.normal(0, 8),
             "evaluation_opening_over_probability": 0.5,
+            "evaluation_opening_over_price": -110,
+            "evaluation_opening_under_price": -110,
             "target_home_score": home_score,
             "target_away_score": away_score,
             "target_home_margin": margin,
@@ -173,6 +179,9 @@ with tempfile.TemporaryDirectory(prefix="nba-tournament-test-") as temporary:
     assert report["confirmation"]["upsetEvaluation"]["games"] == 48
     assert report["confirmation"]["openingMarketEvaluation"]["spread"]["games"] == 48
     assert report["confirmation"]["openingMarketEvaluation"]["total"]["games"] == 48
+    assert report["confirmation"]["openingMarketEvaluation"]["moneyline"]["exactPrice"]["bets"] == 48
+    assert report["confirmation"]["openingMarketEvaluation"]["spread"]["exactPrice"]["bets"] == 48
+    assert report["confirmation"]["openingMarketEvaluation"]["total"]["exactPrice"]["bets"] == 48
     assert len(predictions) == 48
     first_prediction = json.loads(predictions[0])
     assert first_prediction["causeAttribution"]["status"] == "not_attributed"
