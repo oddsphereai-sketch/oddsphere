@@ -580,9 +580,6 @@ export function determineCfbForwardCollectionNeed(args: {
   if (args.existing.length === 0) return { collect: true, reason: "opening_seed", cadenceMinutes: null };
   const byGame = groupByGame(args.existing);
   const expected = Math.max(...args.existing.map((row) => row.payload.slateGameCount));
-  if (new Set(args.existing.filter((row) => row.stage === "opening").map((row) => row.providerGameId)).size < expected) {
-    return { collect: true, reason: "opening_incomplete", cadenceMinutes: null };
-  }
   const upcoming: Array<{ startsAt: number; latest: number; cadenceMinutes: 60 }> = [];
   for (const rows of byGame.values()) {
     const latest = [...rows].sort((a, b) => Date.parse(b.capturedAt) - Date.parse(a.capturedAt))[0]!;
@@ -595,6 +592,11 @@ export function determineCfbForwardCollectionNeed(args: {
       latest: timestamp(latest.capturedAt, "stored capturedAt"),
       cadenceMinutes: unlockedCadenceMinutes(startsAt, now),
     });
+  }
+  // A due T-60 is an immutable publication boundary. Never let incomplete
+  // opening/reference enrichment for another game delay that boundary.
+  if (new Set(args.existing.filter((row) => row.stage === "opening").map((row) => row.providerGameId)).size < expected) {
+    return { collect: true, reason: "opening_incomplete", cadenceMinutes: null };
   }
   if (upcoming.length === 0) return { collect: false, reason: "no_unlocked_games_due", cadenceMinutes: null };
   const due = upcoming.filter((row) => now - row.latest >= row.cadenceMinutes * 60_000);

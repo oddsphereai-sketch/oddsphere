@@ -303,6 +303,26 @@ Last reviewed: 2026-10-10
 
 ## CFB Daily Edge generalized weekly production release
 
+- October 14 T-60 priority and tracking-failure isolation: the sole leased
+  writer advances to
+  `cfb_forward_evidence_writer_2026_10_14_r121_t60_priority_tracking_isolation`.
+  A due T-60 capture now has unconditional priority over opening completion,
+  reference-line completion, provider seeding, and ordinary unlocked refresh;
+  specialized completion filters must retain every T-60 plan. The same
+  `/api/cron/cfb-forward-evidence` writer and `prediction_pipeline:cfb` lease
+  now run every five minutes, providing multiple attempts inside the unchanged
+  20-minute on-time tolerance without adding a writer or provider hot loop.
+  Compact member publication occurs immediately after the append-only evidence
+  write and before official tracking. A malformed or ineligible historical
+  tracking candidate is therefore reported as `official_tracking_incomplete`
+  and retried idempotently, but cannot suppress the current member lock.
+  Historical and locked payloads remain byte-for-byte unchanged; no recovery
+  row becomes an official current-release T-60. Forecasts, PMFs, scores, sides,
+  probabilities, prices, grades, stakes, tracking record semantics, and board
+  counts are unchanged (0 promotions / 0 demotions / 0 actionable change).
+  Evidence and rollback:
+  `docs/model-audits/2026-10-14-cfb-t60-priority-tracking-isolation.md`.
+
 - October 14 pre-cutoff card lock recovery correction: sole writer / member
   fixture / game lifecycle / compact snapshot / reader advance to
   `cfb_forward_evidence_writer_2026_10_14_r120_precutoff_card_lock_recovery` /
