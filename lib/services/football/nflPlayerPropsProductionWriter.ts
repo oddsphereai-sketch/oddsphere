@@ -54,9 +54,13 @@ import {
   captureNflPlayerPropsPrivateTrackingSafely,
   type NflPlayerPropsPrivateTrackingSafeResult,
 } from "./nflPlayerPropsPrivateTrackingStore";
+import {
+  readNflPlayerPropsReferenceOffers,
+  writeNflPlayerPropsReferenceOffers,
+} from "./nflPlayerPropsReferenceOfferStore";
 
 export const NFL_PLAYER_PROPS_WRITER_RELEASE =
-  "nfl_player_props_writer_2026_10_15_r50_pinnacle_reference_capture" as const;
+  "nfl_player_props_writer_2026_10_15_r51_receptions_source_aware" as const;
 export const NFL_PLAYER_PROPS_PRODUCTION_INCLUDE_OPENINGS = true as const;
 export const NFL_PLAYER_PROPS_PRODUCTION_COLLECTION_CALL_MAXIMUM = (
   1
@@ -120,6 +124,21 @@ export type NflPlayerPropsWriterResult = {
   exactOffers: number;
   referenceResearchObservations: number;
   referenceResearchOffers: number;
+  referenceResearchObservationBooks: Record<string, number>;
+  referenceResearchEligibleObservations: number;
+  referenceResearchEvaluationAt: string;
+  referenceResearchExactOfferBooks: Record<string, number>;
+  referenceResearchCompleteExactOfferBooks: Record<string, number>;
+  effectiveReferenceOffers: number;
+  referenceOfferCacheError: string | null;
+  referenceResearchObservationHealth: {
+    canonicalGame: number;
+    playerName: number;
+    current: number;
+    opening: number;
+    over: number;
+    under: number;
+  };
   referenceResearchCaptureIdentities: number;
   referenceResearchRetainedBooks: Record<string, number>;
   featureRows: number;
@@ -220,17 +239,15 @@ export async function runNflPlayerPropsProductionWriter(args: {
   apply: boolean;
   ballDontLieApiKey: string;
   sharpApiKey?: string;
-  /** Read-only candidate only; production application is forbidden. */
+  /** Optional audit telemetry; production uses the qualified release regardless. */
   auditSourceAwareMarketReading?: boolean;
   fetchImpl?: typeof fetch;
 }): Promise<NflPlayerPropsWriterResult> {
-  if (args.apply && args.auditSourceAwareMarketReading === true) {
-    throw new Error("NFL props source-aware candidate cannot run with production writes enabled.");
-  }
   verifyNflPlayerPropsRuntimeParity();
-  const [priorCurrentSeasonState, previous] = await Promise.all([
+  const [priorCurrentSeasonState, previous, retainedReferenceOffers] = await Promise.all([
     readNflPlayerPropsCurrentSeasonState({ client: args.client, season: args.season }),
     readNflPlayerPropsSnapshot({ client: args.client, season: args.season, week: args.week }),
+    readNflPlayerPropsReferenceOffers({ client: args.client, season: args.season, week: args.week }).catch(() => null),
   ]);
   const currentSeason = await refreshNflPlayerPropsCurrentSeasonState({
     season: args.season,
@@ -247,7 +264,8 @@ export async function runNflPlayerPropsProductionWriter(args: {
     includeOpenings: NFL_PLAYER_PROPS_PRODUCTION_INCLUDE_OPENINGS,
     ballDontLieApiKey: args.ballDontLieApiKey,
     sharpApiKey: args.sharpApiKey,
-    includeReferenceResearch: args.auditSourceAwareMarketReading === true
+    includeReferenceResearch: retainedReferenceOffers === null
+      || args.auditSourceAwareMarketReading === true
       || shouldCaptureNflPlayerPropsReferenceResearch({ now: args.now, previous }),
     fetchImpl: args.fetchImpl,
   });
@@ -266,6 +284,10 @@ export async function runNflPlayerPropsProductionWriter(args: {
     )),
   };
   const offers = buildNflPlayerPropsExactBoard({ snapshots: [eligibleSnapshot], evaluatedAt: args.now });
+  const referenceEvaluatedAt = nflPlayerPropsReferenceEvaluationTime({
+    writerStartedAt: args.now,
+    referenceObservations: collection.referenceResearchObservations,
+  });
   const referenceResearchSnapshot = {
     ...eligibleSnapshot,
     observations: [
@@ -275,27 +297,58 @@ export async function runNflPlayerPropsProductionWriter(args: {
       )),
     ],
   };
-  const referenceResearchOffers = collection.referenceResearchObservations.length > 0
-    ? buildNflPlayerPropsExactBoard({ snapshots: [referenceResearchSnapshot], evaluatedAt: args.now })
-    : offers;
-  const sourceAwareReferenceOffers = referenceResearchOffers.filter((offer) => (
-    ["pinnacle", "novig"].includes(offer.sportsbook.toLowerCase().replace(/[^a-z0-9]/g, ""))
+  const eligibleReferenceObservations = collection.referenceResearchObservations.filter((row) => (
+    row.canonicalGameId !== null && eligibleGameIds.has(row.canonicalGameId)
   ));
+  const referenceResearchOffers = collection.referenceResearchObservations.length > 0
+    ? buildNflPlayerPropsExactBoard({
+        snapshots: [referenceResearchSnapshot],
+        evaluatedAt: referenceEvaluatedAt,
+        referenceOfferPairing: "same_fetch_player_name",
+      })
+    : offers;
+  const sourceAwareReferenceOffers = collection.referenceResearchObservations.length > 0
+    ? buildNflPlayerPropsExactBoard({
+        snapshots: [{
+          ...eligibleSnapshot,
+          observations: eligibleReferenceObservations,
+        }],
+        evaluatedAt: referenceEvaluatedAt,
+        referenceOfferPairing: "same_fetch_player_name",
+      })
+    : [];
+  const completeSourceAwareReferenceOffers = sourceAwareReferenceOffers.filter((offer) => (
+    offer.exactPriceComplete && offer.gradeEligibleMarket
+  ));
+  const effectiveReferenceOffers = completeSourceAwareReferenceOffers.length > 0
+    ? completeSourceAwareReferenceOffers
+    : [...(retainedReferenceOffers?.offers ?? [])];
+  const referenceResearchObservationBooks = countByNormalizedBook(collection.referenceResearchObservations);
+  const referenceResearchExactOfferBooks = countByNormalizedBook(sourceAwareReferenceOffers);
+  const referenceResearchCompleteExactOfferBooks = countByNormalizedBook(
+    sourceAwareReferenceOffers.filter((offer) => offer.exactPriceComplete),
+  );
+  const referenceResearchObservationHealth = {
+    canonicalGame: collection.referenceResearchObservations.filter((row) => row.canonicalGameId !== null).length,
+    playerName: collection.referenceResearchObservations.filter((row) => row.playerName !== null).length,
+    current: collection.referenceResearchObservations.filter((row) => !row.isOpening).length,
+    opening: collection.referenceResearchObservations.filter((row) => row.isOpening).length,
+    over: collection.referenceResearchObservations.filter((row) => row.side === "over").length,
+    under: collection.referenceResearchObservations.filter((row) => row.side === "under").length,
+  };
   const features = buildNflPlayerPropsRuntimeFeatureRows({
     snapshot: eligibleSnapshot,
     context,
     currentSeasonState: currentSeason.state,
   });
-  const nextBoard = buildNflPlayerPropsRuntimeBoard({ offers, features, evaluatedAt: args.now });
-  const sourceAwareCandidateBoard = args.auditSourceAwareMarketReading === true
-    ? buildNflPlayerPropsRuntimeBoard({
-        offers,
-        referenceOffers: sourceAwareReferenceOffers,
-        features,
-        evaluatedAt: args.now,
-        auditSourceAwareMarketReading: true,
-      })
-    : null;
+  const incumbentBoard = buildNflPlayerPropsRuntimeBoard({ offers, features, evaluatedAt: args.now });
+  const nextBoard = buildNflPlayerPropsRuntimeBoard({
+    offers,
+    referenceOffers: effectiveReferenceOffers,
+    features,
+    evaluatedAt: args.now,
+    auditSourceAwareMarketReading: true,
+  });
   const referenceResearchMarketEvidence = collection.referenceResearchObservations.length > 0
     ? buildNflPlayerPropsRuntimeMarketEvidence({
       offers: referenceResearchOffers,
@@ -316,38 +369,39 @@ export async function runNflPlayerPropsProductionWriter(args: {
     nextBoard,
     previous,
   });
-  const candidateImpact = sourceAwareCandidateBoard
-    ? compareNflPlayerPropsCandidateImpact(snapshot, reconcileNflPlayerPropsProductionSnapshot({
+  const candidateImpact = compareNflPlayerPropsCandidateImpact(
+    reconcileNflPlayerPropsProductionSnapshot({
         season: args.season,
         week: args.week,
         evaluatedAt: args.now,
-        nextBoard: sourceAwareCandidateBoard,
+        nextBoard: incumbentBoard,
         previous,
-      }))
-    : args.apply ? undefined : compareNflPlayerPropsCandidateImpact(
-        reconcileNflPlayerPropsProductionSnapshot({
-          season: args.season,
-          week: args.week,
-          evaluatedAt: args.now,
-          nextBoard: buildNflPlayerPropsRuntimeBoard({
-            offers,
-            features,
-            evaluatedAt: args.now,
-            auditPrecedingReceptionsOnly: true,
-          }),
-          previous,
-        }),
-        snapshot,
-      );
+      }),
+    snapshot,
+  );
   const liveImpact = !args.apply && previous
     ? compareNflPlayerPropsCandidateImpact(previous, snapshot)
     : undefined;
   let closingPricesUpdated = 0;
+  let referenceOfferCacheError: string | null = null;
   if (args.apply) {
     await writeNflPlayerPropsCurrentSeasonState({ client: args.client, state: currentSeason.state });
     await writeNflPlayerPropsSnapshot({ client: args.client, snapshot, source: NFL_PLAYER_PROPS_WRITER_RELEASE });
     await writeLockedNflPlayerPropsTracking({ client: args.client, snapshot });
     closingPricesUpdated = await updateNflPlayerPropsClosingPrices({ client: args.client, production: snapshot, observations: eligibleSnapshot });
+    if (completeSourceAwareReferenceOffers.length > 0) {
+      try {
+        await writeNflPlayerPropsReferenceOffers({
+          client: args.client,
+          season: args.season,
+          week: args.week,
+          updatedAt: args.now,
+          offers: completeSourceAwareReferenceOffers,
+        });
+      } catch (error) {
+        referenceOfferCacheError = error instanceof Error ? error.message : String(error);
+      }
+    }
   }
   // Closing price must attach while a locked record is still pending. Running
   // settlement first made same-cycle finals permanently miss CLV because the
@@ -397,6 +451,14 @@ export async function runNflPlayerPropsProductionWriter(args: {
     exactOffers: offers.length,
     referenceResearchObservations: collection.referenceResearchObservations.length,
     referenceResearchOffers: referenceResearchOffers.length,
+    referenceResearchObservationBooks,
+    referenceResearchEligibleObservations: eligibleReferenceObservations.length,
+    referenceResearchEvaluationAt: referenceEvaluatedAt,
+    referenceResearchExactOfferBooks,
+    referenceResearchCompleteExactOfferBooks,
+    effectiveReferenceOffers: effectiveReferenceOffers.length,
+    referenceOfferCacheError,
+    referenceResearchObservationHealth,
     referenceResearchCaptureIdentities: referenceResearchMarketEvidence?.i.length ?? 0,
     referenceResearchRetainedBooks,
     featureRows: features.length,
@@ -427,8 +489,36 @@ export async function runNflPlayerPropsProductionWriter(args: {
       ...(settlement.recordReadLimitReached ? ["NFL_PLAYER_PROPS_SETTLEMENT_RECORD_READ_LIMIT_REACHED"] : []),
       ...(marketObserverCapture?.error ? ["NFL_PLAYER_PROPS_MARKET_OBSERVER_CAPTURE_FAILED"] : []),
       ...(privateTrackingCapture?.error ? ["NFL_PLAYER_PROPS_PRIVATE_TRACKING_CAPTURE_FAILED"] : []),
+      ...(referenceOfferCacheError ? ["NFL_PLAYER_PROPS_REFERENCE_OFFER_CACHE_FAILED"] : []),
     ])].sort(),
   };
+}
+
+function countByNormalizedBook(rows: readonly { sportsbook: string }[]): Record<string, number> {
+  const counts: Record<string, number> = {};
+  for (const row of rows) {
+    const book = row.sportsbook.toLowerCase().replace(/[^a-z0-9]/g, "");
+    counts[book] = (counts[book] ?? 0) + 1;
+  }
+  return Object.fromEntries(Object.entries(counts).sort(([first], [second]) => first.localeCompare(second)));
+}
+
+export function nflPlayerPropsReferenceEvaluationTime(args: {
+  writerStartedAt: string;
+  referenceObservations: readonly { fetchedAt: string; observedAt: string }[];
+}): string {
+  const writerStartedAt = Date.parse(args.writerStartedAt);
+  if (!Number.isFinite(writerStartedAt)) throw new Error("NFL props writer start time is invalid.");
+  const completedAt = args.referenceObservations.reduce((latest, row) => {
+    const fetchedAt = Date.parse(row.fetchedAt);
+    const observedAt = Date.parse(row.observedAt);
+    if (!Number.isFinite(fetchedAt)) return latest;
+    const coherentObservationAt = Number.isFinite(observedAt) && observedAt <= fetchedAt + 60_000
+      ? Math.max(fetchedAt, observedAt)
+      : fetchedAt;
+    return Math.max(latest, coherentObservationAt);
+  }, writerStartedAt);
+  return new Date(completedAt).toISOString();
 }
 
 export function shouldCaptureNflPlayerPropsReferenceResearch(args: {

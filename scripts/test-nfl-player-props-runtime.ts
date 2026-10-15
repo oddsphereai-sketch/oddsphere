@@ -36,11 +36,11 @@ import {
 import type { NflPlayerPropsExactOffer } from "../lib/services/football/nflPlayerPropsMarketBoard";
 
 assert.equal(NFL_PLAYER_PROPS_PORTABLE_ARTIFACT_RELEASE, "nfl_player_props_runtime_2026_10_09_r14_independent_receiving_yards");
-assert.equal(NFL_PLAYER_PROPS_RUNTIME_RELEASE, "nfl_player_props_runtime_2026_10_09_r29_independent_receiving_yards");
-assert.equal(NFL_PLAYER_PROPS_BOARD_RELEASE, "nfl_player_props_board_2026_10_09_r32_independent_receiving_yards");
-assert.equal(NFL_PLAYER_PROPS_MODEL_RELEASE, "nfl_player_props_distribution_model_2026_10_09_r23_independent_receiving_yards");
-assert.equal(NFL_PLAYER_PROPS_CALIBRATION_RELEASE, "nfl_player_props_distribution_calibration_2026_10_09_r25_independent_receiving_yards");
-assert.equal(NFL_PLAYER_PROPS_DECISION_RELEASE, "nfl_player_props_decision_2026_10_09_r28_independent_receiving_yards");
+assert.equal(NFL_PLAYER_PROPS_RUNTIME_RELEASE, "nfl_player_props_runtime_2026_10_15_r30_receptions_source_aware");
+assert.equal(NFL_PLAYER_PROPS_BOARD_RELEASE, "nfl_player_props_board_2026_10_15_r33_receptions_source_aware");
+assert.equal(NFL_PLAYER_PROPS_MODEL_RELEASE, "nfl_player_props_distribution_model_2026_10_15_r24_receptions_source_aware");
+assert.equal(NFL_PLAYER_PROPS_CALIBRATION_RELEASE, "nfl_player_props_distribution_calibration_2026_10_15_r26_receptions_source_aware");
+assert.equal(NFL_PLAYER_PROPS_DECISION_RELEASE, "nfl_player_props_decision_2026_10_15_r29_receptions_source_aware");
 assert.equal(expectedRoleArtifact.release,
   "nfl_player_props_expected_role_runtime_2026_10_09_r6_receiving_yards");
 assert.equal(expectedRoleArtifact.marketIndependent, true);
@@ -225,7 +225,7 @@ assert.ok(nflPlayerPropsExpectedValue(0.55, -110) > 0);
 assert.ok(nflPlayerPropsExpectedValue(0.45, -110) < 0);
 
 const baseOffer: NflPlayerPropsExactOffer = {
-  release: "nfl_player_props_exact_market_board_2026_09_01_r2_cross_line_opening", offerKey: "test", canonicalGameId: "game",
+  release: "nfl_player_props_exact_market_board_2026_10_15_r3_reference_pairing", offerKey: "test", canonicalGameId: "game",
   provider: "balldontlie", providerEventId: "game", providerPlayerId: "player", playerName: "Test Player", playerTeam: "NE",
   sportsbook: "book-a", market: "receptions", offerType: "over_under", line: 4.5,
   overPrice: -110, underPrice: -110, yesPrice: null, overNoVigProbability: 0.5, underNoVigProbability: 0.5,
@@ -257,6 +257,58 @@ assert.ok(oneBook.decisions.every((row) => row.marketProbability === row.rawMode
   && row.finalProbability === row.rawModelProbability),
 "an evaluation-only ordinary quote falls back to the independent player distribution");
 assert.equal(oneBook.diagnostics.unavailableNoIndependentBenchmark, 2);
+const independentReceptionsReference: NflPlayerPropsExactOffer = {
+  ...baseOffer,
+  offerKey: "test-pinnacle-reference",
+  sportsbook: "pinnacle",
+  line: 5.5,
+  overPrice: 200,
+  underPrice: -250,
+  overNoVigProbability: 0.2857142857142857,
+  underNoVigProbability: 0.7142857142857143,
+};
+const sourceAwareReceptions = buildNflPlayerPropsRuntimeBoard({
+  offers: [baseOffer],
+  referenceOffers: [independentReceptionsReference],
+  features: [feature],
+  evaluatedAt: "2026-08-25T12:01:00.000Z",
+  auditSourceAwareMarketReading: true,
+});
+assert.equal(sourceAwareReceptions.decisions.length, 2,
+  "a complete target-excluded cross-line receptions reference supports a coherent evaluated pair");
+assert.ok(sourceAwareReceptions.decisions.every((row) => (
+  !row.healthHolds.includes("independent_same_line_confirmation_missing")
+)), "a same-player sharp reference from the same game supplies independent market confirmation");
+assert.notEqual(
+  sourceAwareReceptions.decisions.find((row) => row.side === "over")?.finalProbability,
+  oneBook.decisions.find((row) => row.side === "over")?.finalProbability,
+  "qualified cross-line receptions evidence changes the final posterior instead of being display-only",
+);
+const unqualifiedRushingTarget: NflPlayerPropsExactOffer = {
+  ...baseOffer,
+  offerKey: "rushing-target",
+  market: "rushing_yards",
+  line: 49.5,
+};
+const unqualifiedRushingReference: NflPlayerPropsExactOffer = {
+  ...unqualifiedRushingTarget,
+  offerKey: "rushing-pinnacle-reference",
+  sportsbook: "pinnacle",
+  line: 54.5,
+  overPrice: 200,
+  underPrice: -250,
+  overNoVigProbability: 0.2857142857142857,
+  underNoVigProbability: 0.7142857142857143,
+};
+const incumbentRushing = buildNflPlayerPropsRuntimeBoard({
+  offers: [unqualifiedRushingTarget], features: [feature], evaluatedAt: "2026-08-25T12:01:00.000Z",
+});
+const sourceAwareRushing = buildNflPlayerPropsRuntimeBoard({
+  offers: [unqualifiedRushingTarget], referenceOffers: [unqualifiedRushingReference],
+  features: [feature], evaluatedAt: "2026-08-25T12:01:00.000Z", auditSourceAwareMarketReading: true,
+});
+assert.deepEqual(sourceAwareRushing.decisions, incumbentRushing.decisions,
+  "an unqualified market is byte-for-byte unchanged by source-aware reference offers");
 const outOfSupport = buildNflPlayerPropsRuntimeBoard({
   offers: [{ ...baseOffer, offerKey: "provider-outlier", market: "receiving_yards", line: 999.5 }],
   features: [feature],

@@ -34,6 +34,7 @@ import {
   NFL_PLAYER_PROPS_PRODUCTION_INCLUDE_OPENINGS,
   NFL_PLAYER_PROPS_PRODUCTION_INCREMENTAL_CALL_MAXIMUM,
   NFL_PLAYER_PROPS_WRITER_RELEASE,
+  nflPlayerPropsReferenceEvaluationTime,
   shouldCaptureNflPlayerPropsReferenceResearch,
   summarizeNflPlayerPropsForecastTelemetry,
 } from "../lib/services/football/nflPlayerPropsProductionWriter";
@@ -125,9 +126,9 @@ function boardRows(rows: NflPlayerPropsRuntimeDecision[]): NflPlayerPropsRuntime
 }
 
 const unlocked = reconcileNflPlayerPropsProductionSnapshot({ season: 2026, week: 1, evaluatedAt: "2026-08-25T12:00:00.000Z", nextBoard: board(decision) });
-assert.equal(NFL_PLAYER_PROPS_PRODUCTION_CANDIDATE_RELEASE, "nfl_player_props_member_2026_10_09_r40_independent_receiving_yards");
-assert.equal(NFL_PLAYER_PROPS_WRITER_RELEASE, "nfl_player_props_writer_2026_10_15_r50_pinnacle_reference_capture");
-assert.equal(NFL_PLAYER_PROPS_TRACKING_RELEASE, "nfl_player_props_tracking_2026_10_09_r28_independent_receiving_yards");
+assert.equal(NFL_PLAYER_PROPS_PRODUCTION_CANDIDATE_RELEASE, "nfl_player_props_member_2026_10_15_r41_receptions_source_aware");
+assert.equal(NFL_PLAYER_PROPS_WRITER_RELEASE, "nfl_player_props_writer_2026_10_15_r51_receptions_source_aware");
+assert.equal(NFL_PLAYER_PROPS_TRACKING_RELEASE, "nfl_player_props_tracking_2026_10_15_r29_receptions_source_aware");
 assert.equal(NFL_PLAYER_PROPS_SETTLEMENT_RELEASE, "nfl_player_props_settlement_2026_08_25_r3_bounded_finality");
 assert.equal(NFL_PLAYER_PROPS_PRODUCTION_INCLUDE_OPENINGS, true, "production records same-book opening context for movement and CLV interpretation");
 assert.equal(NFL_PLAYER_PROPS_PRODUCTION_COLLECTION_CALL_MAXIMUM, 63, "slate/current+opening props/player identity/Sharp pagination and the isolated Pinnacle/NoVig reference lanes are explicitly bounded");
@@ -140,6 +141,19 @@ assert.equal(shouldCaptureNflPlayerPropsReferenceResearch({ now: "2026-10-15T12:
   "ordinary fifteen-minute writer wakes do not multiply reference-book calls");
 assert.equal(shouldCaptureNflPlayerPropsReferenceResearch({ now: "2026-09-01T10:50:00.000Z", previous: unlocked }), true,
   "the reference lane runs again inside the final pre-lock comparison window");
+assert.equal(nflPlayerPropsReferenceEvaluationTime({
+  writerStartedAt: "2026-10-15T12:00:00.000Z",
+  referenceObservations: [
+    { fetchedAt: "2026-10-15T12:00:08.000Z", observedAt: "2026-10-15T12:00:12.000Z" },
+    { fetchedAt: "2026-10-15T12:00:05.000Z", observedAt: "2026-10-15T12:00:06.000Z" },
+  ],
+}), "2026-10-15T12:00:12.000Z",
+"reference pairing evaluates at collection completion so same-cycle quotes are not discarded as future data");
+assert.equal(nflPlayerPropsReferenceEvaluationTime({
+  writerStartedAt: "2026-10-15T12:00:08.000Z",
+  referenceObservations: [{ fetchedAt: "2026-10-15T12:00:05.000Z", observedAt: "2026-10-15T12:02:00.000Z" }],
+}), "2026-10-15T12:00:08.000Z",
+"an older provider fetch cannot move the writer boundary backward or admit excessive provider clock skew");
 for (const release of [NFL_PLAYER_PROPS_PRODUCTION_CANDIDATE_RELEASE, NFL_PLAYER_PROPS_WRITER_RELEASE, NFL_PLAYER_PROPS_TRACKING_RELEASE, NFL_PLAYER_PROPS_SETTLEMENT_RELEASE]) {
   assert.ok(!/(shadow|provisional|review)/i.test(release), `production release must not carry non-production semantics: ${release}`);
 }
