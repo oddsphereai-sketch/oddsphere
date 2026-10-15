@@ -34,7 +34,7 @@ type Envelope = { data?: unknown; meta?: { next_cursor?: unknown } | null };
 
 export type NflPlayerPropsCollectionResult = {
   snapshot: NflPlayerPropsObservationSnapshot;
-  /** Additive internal evidence. Never enters the production forecast board. */
+  /** Separate target-book-excluded evidence for explicitly qualified market readers. */
   referenceResearchObservations: readonly NflPlayerPropPriceObservation[];
   normalization: {
     balldontlie: ReturnType<typeof normalizeBalldontlieNflPlayerProps>;
@@ -149,94 +149,15 @@ export async function collectNflPlayerPropsObservations(args: {
   let sharpComplete = false;
   if (sharpKey) {
     const sharp = new SharpApiClient(sharpKey);
-    let offset = 0;
-    let cursor: string | null = null;
-    for (let page = 0; page < MAX_SHARP_PAGES; page += 1) {
-      let response: SharpApiResponse<unknown[]>;
-      try {
-        response = await sharp.fetch<unknown[]>({
-          path: "/odds",
-          query: {
-            league: "nfl",
-            market: "props",
-            is_live: false,
-            limit: SHARP_PAGE_SIZE,
-            ...(cursor ? { cursor } : { offset }),
-          },
-          signal: AbortSignal.timeout(20_000),
-          retryRateLimitInternally: false,
-        });
-      } catch (error) {
-        if (!shouldStopSharpPropsPagination(error)) throw error;
-        healthFindings.push("SHARPAPI_PROPS_RATE_LIMITED");
-        break;
-      }
-      sharpRequests += 1;
-      if (!Array.isArray(response.data)) throw new Error("SharpAPI NFL props returned malformed data.");
-      sharpRaw.push(...response.data);
-      const next = nextSharpPropsPage(response.pagination, offset);
-      if (response.pagination?.has_more !== true) {
-        sharpComplete = true;
-        break;
-      }
-      if (!next) {
-        healthFindings.push("SHARPAPI_PROPS_CURSOR_MISSING");
-        break;
-      }
-      offset = next.offset;
-      cursor = next.cursor;
-    }
-    if (!sharpComplete) healthFindings.push("SHARPAPI_PROPS_TRUNCATED_BY_PAGE_BUDGET");
-
-    // The unfiltered catalog is large enough that later-book rows can fall
-    // beyond the generic pagination ceiling. Capture Pinnacle main lines in a
-    // separate bounded research lane. These rows are returned separately and
-    // cannot alter the published board until a release-pure outcome audit
-    // validates a source-aware policy.
-    if (args.includeReferenceResearch === true) {
-      for (const reference of SHARP_REFERENCE_RESEARCH_BOOKS) {
-        const { sportsbook } = reference;
-        let referenceOffset = 0;
-        let referenceCursor: string | null = null;
-        let referenceComplete = false;
-        try {
-          for (let page = 0; page < reference.maximumPages; page += 1) {
-            const response = await sharp.fetch<unknown[]>({
-              path: "/odds",
-              query: {
-                league: "nfl",
-                market: "props",
-                is_live: false,
-                sportsbook,
-                is_main_line: true,
-                limit: SHARP_PAGE_SIZE,
-                ...(referenceCursor ? { cursor: referenceCursor } : { offset: referenceOffset }),
-              },
-              signal: AbortSignal.timeout(20_000),
-              retryRateLimitInternally: false,
-            });
-            sharpRequests += 1;
-            if (!Array.isArray(response.data)) throw new Error(`SharpAPI ${sportsbook} NFL props returned malformed data.`);
-            sharpReferenceRaw.push(...response.data);
-            const next = nextSharpPropsPage(response.pagination, referenceOffset);
-            if (response.pagination?.has_more !== true) {
-              referenceComplete = true;
-              break;
-            }
-            if (!next) break;
-            referenceOffset = next.offset;
-            referenceCursor = next.cursor;
-          }
-        } catch (error) {
-          // This lane is diagnostic-only. It must never interrupt the sole
-          // authoritative production writer or erase a last-known-good board.
-          healthFindings.push(error instanceof SharpApiRateLimitError
-            ? `SHARPAPI_PROPS_REFERENCE_RATE_LIMITED:${sportsbook}`
-            : `SHARPAPI_PROPS_REFERENCE_CAPTURE_FAILED:${sportsbook}`);
-        }
-        if (!referenceComplete) healthFindings.push(`SHARPAPI_PROPS_REFERENCE_INCOMPLETE:${sportsbook}`);
-      }
-    }
+    const sharpCatalogs = await collectSharpPropsCatalogs({
+      sharp,
+      includeReferenceResearch: args.includeReferenceResearch === true,
+    });
+    sharpRaw.push(...sharpCatalogs.genericRows);
+    sharpReferenceRaw.push(...sharpCatalogs.referenceRows);
+    sharpRequests += sharpCatalogs.requests;
+    sharpComplete = sharpCatalogs.genericComplete;
+    healthFindings.push(...sharpCatalogs.healthFindings);
   } else {
     healthFindings.push("SHARPAPI_KEY_MISSING");
   }
@@ -287,6 +208,114 @@ export async function collectNflPlayerPropsObservations(args: {
       sharpapi: sharpNormalization,
     },
   };
+}
+
+type SharpPropsClient = Pick<SharpApiClient, "fetch">;
+
+async function collectSharpPropsCatalogs(args: {
+  sharp: SharpPropsClient;
+  includeReferenceResearch: boolean;
+}): Promise<{
+  genericRows: unknown[];
+  referenceRows: unknown[];
+  requests: number;
+  genericComplete: boolean;
+  healthFindings: string[];
+}> {
+  const genericRows: unknown[] = [];
+  const referenceRows: unknown[] = [];
+  const healthFindings: string[] = [];
+  let requests = 0;
+
+  // The qualified reference lane runs first. The shared NFL route performs
+  // other bounded SharpAPI work before props, so spending the remaining quota
+  // on an unfiltered catalog first can starve the only Pinnacle/NoVig input
+  // authorized for Receptions. BALLDONTLIE remains the complete retail board
+  // if the lower-priority generic Sharp catalog is subsequently rate limited.
+  if (args.includeReferenceResearch) {
+    for (const reference of SHARP_REFERENCE_RESEARCH_BOOKS) {
+      const { sportsbook } = reference;
+      let offset = 0;
+      let cursor: string | null = null;
+      let complete = false;
+      try {
+        for (let page = 0; page < reference.maximumPages; page += 1) {
+          const response = await args.sharp.fetch<unknown[]>({
+            path: "/odds",
+            query: {
+              league: "nfl",
+              market: "props",
+              is_live: false,
+              sportsbook,
+              is_main_line: true,
+              limit: SHARP_PAGE_SIZE,
+              ...(cursor ? { cursor } : { offset }),
+            },
+            signal: AbortSignal.timeout(20_000),
+            retryRateLimitInternally: false,
+          });
+          requests += 1;
+          if (!Array.isArray(response.data)) throw new Error(`SharpAPI ${sportsbook} NFL props returned malformed data.`);
+          referenceRows.push(...response.data);
+          const next = nextSharpPropsPage(response.pagination, offset);
+          if (response.pagination?.has_more !== true) {
+            complete = true;
+            break;
+          }
+          if (!next) break;
+          offset = next.offset;
+          cursor = next.cursor;
+        }
+      } catch (error) {
+        healthFindings.push(error instanceof SharpApiRateLimitError
+          ? `SHARPAPI_PROPS_REFERENCE_RATE_LIMITED:${sportsbook}`
+          : `SHARPAPI_PROPS_REFERENCE_CAPTURE_FAILED:${sportsbook}`);
+      }
+      if (!complete) healthFindings.push(`SHARPAPI_PROPS_REFERENCE_INCOMPLETE:${sportsbook}`);
+    }
+    if (referenceRows.length === 0) healthFindings.push("SHARPAPI_PROPS_REFERENCE_EMPTY");
+  }
+
+  let offset = 0;
+  let cursor: string | null = null;
+  let genericComplete = false;
+  for (let page = 0; page < MAX_SHARP_PAGES; page += 1) {
+    let response: SharpApiResponse<unknown[]>;
+    try {
+      response = await args.sharp.fetch<unknown[]>({
+        path: "/odds",
+        query: {
+          league: "nfl",
+          market: "props",
+          is_live: false,
+          limit: SHARP_PAGE_SIZE,
+          ...(cursor ? { cursor } : { offset }),
+        },
+        signal: AbortSignal.timeout(20_000),
+        retryRateLimitInternally: false,
+      });
+    } catch (error) {
+      if (!shouldStopSharpPropsPagination(error)) throw error;
+      healthFindings.push("SHARPAPI_PROPS_RATE_LIMITED");
+      break;
+    }
+    requests += 1;
+    if (!Array.isArray(response.data)) throw new Error("SharpAPI NFL props returned malformed data.");
+    genericRows.push(...response.data);
+    const next = nextSharpPropsPage(response.pagination, offset);
+    if (response.pagination?.has_more !== true) {
+      genericComplete = true;
+      break;
+    }
+    if (!next) {
+      healthFindings.push("SHARPAPI_PROPS_CURSOR_MISSING");
+      break;
+    }
+    offset = next.offset;
+    cursor = next.cursor;
+  }
+  if (!genericComplete) healthFindings.push("SHARPAPI_PROPS_TRUNCATED_BY_PAGE_BUDGET");
+  return { genericRows, referenceRows, requests, genericComplete, healthFindings };
 }
 
 function nextSharpPropsPage(
@@ -506,6 +535,7 @@ export const __NFL_PLAYER_PROPS_COLLECTOR_TEST__ = {
   shouldStopSharpPropsPagination,
   collectBoundedPlayerIdentities,
   dedupeObservations,
+  collectSharpPropsCatalogs,
 };
 
 function dedupeObservations(rows: readonly NflPlayerPropPriceObservation[]): NflPlayerPropPriceObservation[] {

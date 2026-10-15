@@ -33,6 +33,7 @@ import {
   NFL_PLAYER_PROPS_PRODUCTION_COLLECTION_CALL_MAXIMUM,
   NFL_PLAYER_PROPS_PRODUCTION_INCLUDE_OPENINGS,
   NFL_PLAYER_PROPS_PRODUCTION_INCREMENTAL_CALL_MAXIMUM,
+  nflPlayerPropsSourceAwareReferenceOffersAvailable,
   NFL_PLAYER_PROPS_WRITER_RELEASE,
   nflPlayerPropsReferenceEvaluationTime,
   shouldCaptureNflPlayerPropsReferenceResearch,
@@ -126,9 +127,9 @@ function boardRows(rows: NflPlayerPropsRuntimeDecision[]): NflPlayerPropsRuntime
 }
 
 const unlocked = reconcileNflPlayerPropsProductionSnapshot({ season: 2026, week: 1, evaluatedAt: "2026-08-25T12:00:00.000Z", nextBoard: board(decision) });
-assert.equal(NFL_PLAYER_PROPS_PRODUCTION_CANDIDATE_RELEASE, "nfl_player_props_member_2026_10_15_r41_receptions_source_aware");
-assert.equal(NFL_PLAYER_PROPS_WRITER_RELEASE, "nfl_player_props_writer_2026_10_15_r51_receptions_source_aware");
-assert.equal(NFL_PLAYER_PROPS_TRACKING_RELEASE, "nfl_player_props_tracking_2026_10_15_r29_receptions_source_aware");
+assert.equal(NFL_PLAYER_PROPS_PRODUCTION_CANDIDATE_RELEASE, "nfl_player_props_member_2026_10_15_r42_receptions_reference_required");
+assert.equal(NFL_PLAYER_PROPS_WRITER_RELEASE, "nfl_player_props_writer_2026_10_15_r52_reference_priority");
+assert.equal(NFL_PLAYER_PROPS_TRACKING_RELEASE, "nfl_player_props_tracking_2026_10_15_r30_receptions_reference_required");
 assert.equal(NFL_PLAYER_PROPS_SETTLEMENT_RELEASE, "nfl_player_props_settlement_2026_08_25_r3_bounded_finality");
 assert.equal(NFL_PLAYER_PROPS_PRODUCTION_INCLUDE_OPENINGS, true, "production records same-book opening context for movement and CLV interpretation");
 assert.equal(NFL_PLAYER_PROPS_PRODUCTION_COLLECTION_CALL_MAXIMUM, 63, "slate/current+opening props/player identity/Sharp pagination and the isolated Pinnacle/NoVig reference lanes are explicitly bounded");
@@ -154,6 +155,18 @@ assert.equal(nflPlayerPropsReferenceEvaluationTime({
   referenceObservations: [{ fetchedAt: "2026-10-15T12:00:05.000Z", observedAt: "2026-10-15T12:02:00.000Z" }],
 }), "2026-10-15T12:00:08.000Z",
 "an older provider fetch cannot move the writer boundary backward or admit excessive provider clock skew");
+assert.equal(nflPlayerPropsSourceAwareReferenceOffersAvailable({
+  evaluatedAt: "2026-10-15T12:00:00.000Z",
+  offers: [{ market: "receptions", observedAt: "2026-10-15T11:59:00.000Z" }],
+}), true, "a fresh reference offer in the qualified market enables the source-aware lane");
+assert.equal(nflPlayerPropsSourceAwareReferenceOffersAvailable({
+  evaluatedAt: "2026-10-15T12:00:00.000Z",
+  offers: [{ market: "rushing_yards", observedAt: "2026-10-15T11:59:00.000Z" }],
+}), false, "reference offers outside the qualified market cannot enable source-aware Receptions");
+assert.equal(nflPlayerPropsSourceAwareReferenceOffersAvailable({
+  evaluatedAt: "2026-10-15T12:00:00.000Z",
+  offers: [{ market: "receptions", observedAt: "2026-10-15T05:59:00.000Z" }],
+}), false, "stale reference offers fail closed to the incumbent board");
 for (const release of [NFL_PLAYER_PROPS_PRODUCTION_CANDIDATE_RELEASE, NFL_PLAYER_PROPS_WRITER_RELEASE, NFL_PLAYER_PROPS_TRACKING_RELEASE, NFL_PLAYER_PROPS_SETTLEMENT_RELEASE]) {
   assert.ok(!/(shadow|provisional|review)/i.test(release), `production release must not carry non-production semantics: ${release}`);
 }
@@ -602,6 +615,8 @@ assert.ok(
   "same-cycle closing prices attach before settlement makes the locked record immutable",
 );
 const cronRoute = readFileSync("app/api/cron/nfl-forward-evidence/route.ts", "utf8");
+assert.ok(cronRoute.includes("player_props_critical_health"),
+  "the sole NFL cron exposes source-aware reference failures instead of silently publishing them");
 assert.ok(cronRoute.includes('process.env.NFL_PLAYER_PROPS_ENABLED === "true"'), "props writer is exact-string opt-in");
 assert.equal((cronRoute.match(/playerProps = await runNflPlayerPropsProductionWriter/g) ?? []).length, 1, "one NFL cron invokes props exactly once and sequentially");
 assert.ok(cronRoute.includes('sport: "nfl"') && cronRoute.includes('leaseGroup: "prediction_pipeline"') && cronRoute.includes("requireLease: true"));

@@ -46,15 +46,15 @@ import {
 export const NFL_PLAYER_PROPS_PORTABLE_ARTIFACT_RELEASE =
   "nfl_player_props_runtime_2026_10_09_r14_independent_receiving_yards" as const;
 export const NFL_PLAYER_PROPS_RUNTIME_RELEASE =
-  "nfl_player_props_runtime_2026_10_15_r30_receptions_source_aware" as const;
+  "nfl_player_props_runtime_2026_10_15_r31_receptions_reference_required" as const;
 export const NFL_PLAYER_PROPS_BOARD_RELEASE =
-  "nfl_player_props_board_2026_10_15_r33_receptions_source_aware" as const;
+  "nfl_player_props_board_2026_10_15_r34_receptions_reference_required" as const;
 export const NFL_PLAYER_PROPS_DECISION_RELEASE =
-  "nfl_player_props_decision_2026_10_15_r29_receptions_source_aware" as const;
+  "nfl_player_props_decision_2026_10_15_r30_receptions_reference_required" as const;
 export const NFL_PLAYER_PROPS_MODEL_RELEASE =
-  "nfl_player_props_distribution_model_2026_10_15_r24_receptions_source_aware" as const;
+  "nfl_player_props_distribution_model_2026_10_15_r25_receptions_reference_required" as const;
 export const NFL_PLAYER_PROPS_CALIBRATION_RELEASE =
-  "nfl_player_props_distribution_calibration_2026_10_15_r26_receptions_source_aware" as const;
+  "nfl_player_props_distribution_calibration_2026_10_15_r27_receptions_reference_required" as const;
 export const NFL_PLAYER_PROPS_PASSING_MARKET_RELEASE =
   "nfl_player_props_market_residual_calibration_2026_09_03_r8_single_application" as const;
 export const NFL_PLAYER_PROPS_MARKET_COHERENT_PROJECTION_RELEASE =
@@ -80,7 +80,7 @@ export const NFL_PLAYER_PROPS_HARD_AVAILABILITY_MAX_GAME_AGE_DAYS = 6 as const;
 export const NFL_PLAYER_PROPS_MARKET_ROLE_MINIMUM_BOOKS = 2 as const;
 export const NFL_PLAYER_PROPS_RECEPTIONS_MARKET_FLIP_MINIMUM_EDGE = 0.05 as const;
 export const NFL_PLAYER_PROPS_SOURCE_AWARE_MARKET_READING_RELEASE =
-  "nfl_player_props_market_reading_2026_10_15_r2_cross_line_receptions" as const;
+  "nfl_player_props_market_reading_2026_10_15_r3_reference_required" as const;
 export const NFL_PLAYER_PROPS_SOURCE_AWARE_QUALIFIED_MARKETS = [
   "receptions",
 ] as const satisfies readonly NflPlayerPropMarket[];
