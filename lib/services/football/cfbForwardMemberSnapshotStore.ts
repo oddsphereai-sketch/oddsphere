@@ -11,17 +11,25 @@ import {
 } from "./cfbMemberFixture";
 
 export const CFB_FORWARD_MEMBER_SNAPSHOT_RELEASE =
-  "cfb_forward_member_snapshot_2026_10_14_r51_precutoff_card_lock_recovery" as const;
+  "cfb_forward_member_snapshot_2026_10_15_r52_full_product_coordinator_compatibility" as const;
 export const CFB_FORWARD_PREVIOUS_MEMBER_SNAPSHOT_RELEASE =
-  "cfb_forward_member_snapshot_2026_10_14_r50_late_pregame_lock_recovery" as const;
+  "cfb_forward_member_snapshot_2026_10_14_r51_precutoff_card_lock_recovery" as const;
 export const CFB_PREVIOUS_MEMBER_FIXTURE_RELEASE =
-  "cfb_v1_member_fixture_2026_10_14_r90_late_pregame_lock_recovery" as const;
+  "cfb_v1_member_fixture_2026_10_14_r91_precutoff_card_lock_recovery" as const;
 export const CFB_PREVIOUS_EVIDENCE_RELEASE =
   "cfb_forward_evidence_snapshot_2026_10_14_r46_correct_qb_final_winner_coordinator" as const;
 export const CFB_PREVIOUS_MEMBER_RELEASE =
   "cfb_v1_member_release_2026_10_14_r63_correct_qb_final_winner_coordinator" as const;
 export const CFB_MEMBER_SNAPSHOT_READER_RELEASE =
-  "cfb_member_snapshot_reader_2026_10_14_r36_precutoff_card_lock_recovery" as const;
+  "cfb_member_snapshot_reader_2026_10_15_r37_full_product_coordinator_compatibility" as const;
+const CFB_LATE_PREGAME_PREVIOUS_MEMBER_SNAPSHOT_RELEASE =
+  "cfb_forward_member_snapshot_2026_10_14_r50_late_pregame_lock_recovery" as const;
+const CFB_LATE_PREGAME_PREVIOUS_MEMBER_FIXTURE_RELEASE =
+  "cfb_v1_member_fixture_2026_10_14_r90_late_pregame_lock_recovery" as const;
+const CFB_LATE_PREGAME_PREVIOUS_EVIDENCE_RELEASE =
+  "cfb_forward_evidence_snapshot_2026_10_14_r46_correct_qb_final_winner_coordinator" as const;
+const CFB_LATE_PREGAME_PREVIOUS_MEMBER_RELEASE =
+  "cfb_v1_member_release_2026_10_14_r63_correct_qb_final_winner_coordinator" as const;
 const CFB_PROVIDER_IDENTITY_PREVIOUS_MEMBER_SNAPSHOT_RELEASE =
   "cfb_forward_member_snapshot_2026_10_11_r47_consensus_authority_split_specialization" as const;
 const CFB_PROVIDER_IDENTITY_PREVIOUS_MEMBER_FIXTURE_RELEASE =
@@ -100,6 +108,12 @@ const SUPPORTED_MEMBER_SNAPSHOT_RELEASES = [
     fixtureRelease: CFB_PREVIOUS_MEMBER_FIXTURE_RELEASE,
     evidenceRelease: CFB_PREVIOUS_EVIDENCE_RELEASE,
     memberRelease: CFB_PREVIOUS_MEMBER_RELEASE,
+  },
+  {
+    snapshotRelease: CFB_LATE_PREGAME_PREVIOUS_MEMBER_SNAPSHOT_RELEASE,
+    fixtureRelease: CFB_LATE_PREGAME_PREVIOUS_MEMBER_FIXTURE_RELEASE,
+    evidenceRelease: CFB_LATE_PREGAME_PREVIOUS_EVIDENCE_RELEASE,
+    memberRelease: CFB_LATE_PREGAME_PREVIOUS_MEMBER_RELEASE,
   },
   {
     snapshotRelease: CFB_PROVIDER_IDENTITY_PREVIOUS_MEMBER_SNAPSHOT_RELEASE,

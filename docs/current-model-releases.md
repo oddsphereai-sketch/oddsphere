@@ -314,6 +314,32 @@ Last reviewed: 2026-10-15
 
 ## CFB Daily Edge generalized weekly production release
 
+- October 15 full-product coordinator compatibility candidate: the independent weekly model and
+  complete professional market reader remain authoritative; the frozen r2 correct-QB final-winner
+  coordinator remains diagnostic but can no longer overwrite their final forecast. Would-be crosses
+  are stored as `full_product_compatibility_hold` with full learned/combined probability, authority,
+  and feature telemetry. On the exact 393-game official-lock replay, Moneyline improves 285-108 to
+  296-97, direct Spread remains 145-127-4, direct Total remains 168-120, Spread +3 improves 169-107
+  to 170-106, and Spread +6 improves 189-86-1 to 191-84-1. Moneyline and Spread Brier/log loss,
+  team-score MAE, and margin MAE improve; Total metrics are unchanged. The full 957-market grade
+  replay moves from 323 actions, 180-142-1, +17.0973 units and 5.29% ROI to 316 actions, 179-136-1,
+  +22.1781 units and 7.02% ROI. The narrower exact-grade subset gives back 0.5321 units and remains
+  a mandatory monitor. A 70% four-cross gate is rejected as development-only overfit.
+- Runtime / model / distribution / probability / reachable score / calibration / grade / decision
+  are `cfb_v1_joint_score_runtime_2026_10_15_r26_full_product_coordinator_compatibility` /
+  `cfb_v1_professional_score_model_2026_10_15_r25_full_product_coordinator_compatibility` /
+  `cfb_v1_professional_joint_distribution_2026_10_15_r23_full_product_coordinator_compatibility` /
+  `cfb_v1_professional_joint_probability_2026_10_15_r27_full_product_coordinator_compatibility` /
+  `cfb_v1_professional_reachable_score_2026_10_15_r23_full_product_coordinator_compatibility` /
+  `cfb_v1_exact_price_calibration_2026_10_15_r26_full_product_coordinator_compatibility` /
+  `cfb_v1_composite_grade_policy_2026_10_13_r28_exact_price_actionability` /
+  `cfb_v1_daily_edge_decision_2026_10_15_r52_full_product_coordinator_compatibility`. Candidate /
+  production reader / tuple / evidence / member are r38 / r40 / r39 / r47 / r64 with the same
+  suffix. Fixture / outcome / compact snapshot / reader / tracking are r92 / r80 / r52 / r37 / r49;
+  the sole writer is r124. The r51/r46/r63/r39 coordinator family remains explicitly readable with
+  exact locked precedence. Evidence, current-board impact, competitor context, gates, and rollback:
+  `docs/model-audits/2026-10-15-cfb-full-product-coordinator-compatibility.md`.
+
 - October 15 official-availability cadence candidate: collector / sole writer advance to
   `cfb_forward_evidence_collector_2026_10_15_r58_per_game_official_availability_cadence` /
   `cfb_forward_evidence_writer_2026_10_15_r123_bounded_lifecycle_metadata`; shared publication
