@@ -83,4 +83,72 @@ assert.equal(materiallyChangedNflPropsOffer({ previous: offer, current: { ...off
 assert.equal(materiallyChangedNflPropsOffer({ previous: offer, current: offer, previousRoleFingerprint: "role-1", currentRoleFingerprint: "role-2" }), true);
 assert.equal(materiallyChangedNflPropsOffer({ previous: offer, current: offer, previousRoleFingerprint: "role-1", currentRoleFingerprint: "role-1" }), false);
 
+const asynchronousReferenceSnapshot: NflPlayerPropsObservationSnapshot = {
+  ...snapshot,
+  observations: [
+    {
+      ...base,
+      provider: "sharpapi",
+      sportsbook: "novig",
+      providerObservationId: "novig:over",
+      providerPlayerId: "novig:over-player-id",
+      observedAt: "2026-09-09T12:00:01Z",
+      fetchedAt: "2026-09-09T12:00:05Z",
+    },
+    {
+      ...base,
+      provider: "sharpapi",
+      sportsbook: "novig",
+      providerObservationId: "novig:under",
+      providerPlayerId: "novig:under-player-id",
+      side: "under",
+      observedAt: "2026-09-09T12:00:02Z",
+      fetchedAt: "2026-09-09T12:00:05Z",
+    },
+  ],
+};
+const defaultAsynchronousReference = buildNflPlayerPropsExactBoard({
+  snapshots: [asynchronousReferenceSnapshot],
+  evaluatedAt: "2026-09-09T13:00:00Z",
+})[0]!;
+assert.equal(defaultAsynchronousReference.exactPriceComplete, false, "authoritative exact-time pairing remains unchanged");
+const coherentAsynchronousReference = buildNflPlayerPropsExactBoard({
+  snapshots: [asynchronousReferenceSnapshot],
+  evaluatedAt: "2026-09-09T13:00:00Z",
+  referenceOfferPairing: "same_fetch_player_name",
+})[0]!;
+assert.equal(coherentAsynchronousReference.exactPriceComplete, true, "reference sides from one collection cycle form one coherent offer");
+assert.equal(coherentAsynchronousReference.overPrice, -110);
+assert.equal(coherentAsynchronousReference.underPrice, -110);
+assert.equal(coherentAsynchronousReference.observedAt, "2026-09-09T12:00:01.000Z", "reference freshness is conservatively bounded by the older side");
+
+const crossFetchReferenceSnapshot: NflPlayerPropsObservationSnapshot = {
+  ...asynchronousReferenceSnapshot,
+  observations: asynchronousReferenceSnapshot.observations.map((row, index) => ({
+    ...row,
+    fetchedAt: index === 0 ? "2026-09-09T12:00:05Z" : "2026-09-09T12:00:06Z",
+  })),
+};
+const crossFetchReference = buildNflPlayerPropsExactBoard({
+  snapshots: [crossFetchReferenceSnapshot],
+  evaluatedAt: "2026-09-09T13:00:00Z",
+  referenceOfferPairing: "same_fetch_player_name",
+})[0]!;
+assert.equal(crossFetchReference.exactPriceComplete, false, "reference sides are never combined across collection cycles");
+
+const differentPlayerReferenceSnapshot: NflPlayerPropsObservationSnapshot = {
+  ...asynchronousReferenceSnapshot,
+  observations: asynchronousReferenceSnapshot.observations.map((row, index) => ({
+    ...row,
+    playerName: index === 0 ? "Test Receiver" : "Other Receiver",
+  })),
+};
+const differentPlayerReferences = buildNflPlayerPropsExactBoard({
+  snapshots: [differentPlayerReferenceSnapshot],
+  evaluatedAt: "2026-09-09T13:00:00Z",
+  referenceOfferPairing: "same_fetch_player_name",
+});
+assert.equal(differentPlayerReferences.length, 2);
+assert.ok(differentPlayerReferences.every((row) => !row.exactPriceComplete), "reference pairing never joins different players");
+
 console.log("NFL player-props exact market board: pairing, no-vig, material-change, and lock checks passed");

@@ -18,7 +18,7 @@ import {
 
 const evaluatedAt = "2026-09-02T12:00:00.000Z";
 const baseOffer: NflPlayerPropsExactOffer = {
-  release: "nfl_player_props_exact_market_board_2026_09_01_r2_cross_line_opening",
+  release: "nfl_player_props_exact_market_board_2026_10_15_r3_reference_pairing",
   offerKey: "game|player|receptions|4.5|draftkings",
   canonicalGameId: "game",
   provider: "balldontlie",

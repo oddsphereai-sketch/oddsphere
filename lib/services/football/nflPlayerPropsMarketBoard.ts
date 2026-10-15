@@ -6,7 +6,7 @@ import {
 } from "./nflPlayerPropsContract";
 
 export const NFL_PLAYER_PROPS_MARKET_BOARD_RELEASE =
-  "nfl_player_props_exact_market_board_2026_09_01_r2_cross_line_opening" as const;
+  "nfl_player_props_exact_market_board_2026_10_15_r3_reference_pairing" as const;
 export const NFL_PLAYER_PROPS_LOCK_LEAD_MINUTES = 60 as const;
 const MAX_PROVIDER_CLOCK_SKEW_MS = 60_000;
 
@@ -53,6 +53,7 @@ export function buildNflPlayerPropsExactBoard(args: {
   snapshots: NflPlayerPropsObservationSnapshot[];
   evaluatedAt: string;
   lockLeadMinutes?: number;
+  referenceOfferPairing?: "strict" | "same_fetch_player_name";
 }): NflPlayerPropsExactOffer[] {
   const evaluatedAt = timestamp(args.evaluatedAt, "evaluatedAt");
   const lockLeadMinutes = args.lockLeadMinutes ?? NFL_PLAYER_PROPS_LOCK_LEAD_MINUTES;
@@ -65,10 +66,10 @@ export function buildNflPlayerPropsExactBoard(args: {
   const openingGroups = new Map<string, NflPlayerPropPriceObservation[]>();
   for (const row of args.snapshots.flatMap((snapshot) => snapshot.observations)) {
     if (row.isLive || !row.canonicalGameId || !row.playerName) continue;
-    const key = logicalOfferKey(row);
+    const key = logicalOfferKey(row, args.referenceOfferPairing);
     groups.set(key, [...(groups.get(key) ?? []), row]);
     if (row.isOpening) {
-      const openingKey = crossLineOfferKey(row);
+      const openingKey = crossLineOfferKey(row, args.referenceOfferPairing);
       openingGroups.set(openingKey, [...(openingGroups.get(openingKey) ?? []), row]);
     }
   }
@@ -79,11 +80,15 @@ export function buildNflPlayerPropsExactBoard(args: {
     const startsAt = timestamp(game.scheduledStart, "scheduledStart");
     const lockAt = startsAt - lockLeadMinutes * 60_000;
     const cutoff = Math.min(evaluatedAt, lockAt);
-    const current = latestCapture(rows.filter((row) => !row.isOpening), cutoff);
+    const current = latestCapture(
+      rows.filter((row) => !row.isOpening),
+      cutoff,
+      args.referenceOfferPairing === "same_fetch_player_name",
+    );
     if (!current) continue;
     const first = current.rows[0]!;
     const opening = earliestCompleteOpeningCapture({
-      rows: openingGroups.get(crossLineOfferKey(first)) ?? [],
+      rows: openingGroups.get(crossLineOfferKey(first, args.referenceOfferPairing)) ?? [],
       cutoff,
       offerType: first.offerType,
       currentLine: first.line,
@@ -169,12 +174,28 @@ function noVigPair(overPrice: number | null, underPrice: number | null): { over:
   return { over: over / (over + under), under: under / (over + under) };
 }
 
-function logicalOfferKey(row: NflPlayerPropPriceObservation): string {
-  return [row.provider, row.canonicalGameId, row.providerPlayerId ?? row.playerName?.toLowerCase(), row.sportsbook, row.market, row.offerType, row.line].join("|");
+function logicalOfferKey(
+  row: NflPlayerPropPriceObservation,
+  pairing: "strict" | "same_fetch_player_name" = "strict",
+): string {
+  return [row.provider, row.canonicalGameId, playerOfferIdentity(row, pairing), row.sportsbook, row.market, row.offerType, row.line].join("|");
 }
 
-function crossLineOfferKey(row: NflPlayerPropPriceObservation): string {
-  return [row.provider, row.canonicalGameId, row.providerPlayerId ?? row.playerName?.toLowerCase(), row.sportsbook, row.market, row.offerType].join("|");
+function crossLineOfferKey(
+  row: NflPlayerPropPriceObservation,
+  pairing: "strict" | "same_fetch_player_name" = "strict",
+): string {
+  return [row.provider, row.canonicalGameId, playerOfferIdentity(row, pairing), row.sportsbook, row.market, row.offerType].join("|");
+}
+
+function playerOfferIdentity(
+  row: NflPlayerPropPriceObservation,
+  pairing: "strict" | "same_fetch_player_name",
+): string | null | undefined {
+  if (pairing === "same_fetch_player_name" && row.playerName) {
+    return row.playerName.toLowerCase().replaceAll(/[^a-z0-9]/g, "");
+  }
+  return row.providerPlayerId ?? row.playerName?.toLowerCase();
 }
 
 function captures(rows: NflPlayerPropPriceObservation[]): Capture[] {
@@ -187,9 +208,37 @@ function captures(rows: NflPlayerPropPriceObservation[]): Capture[] {
   }));
 }
 
-function latestCapture(rows: NflPlayerPropPriceObservation[], cutoff: number): Capture | null {
-  return captures(rows).filter((capture) => Date.parse(capture.observedAt) <= cutoff)
+function latestCapture(
+  rows: NflPlayerPropPriceObservation[],
+  cutoff: number,
+  allowSameFetchAsynchronousSides = false,
+): Capture | null {
+  const exact = captures(rows).filter((capture) => Date.parse(capture.observedAt) <= cutoff)
     .sort((first, second) => Date.parse(second.observedAt) - Date.parse(first.observedAt))[0] ?? null;
+  if (!allowSameFetchAsynchronousSides) return exact;
+  const byFetch = new Map<string, NflPlayerPropPriceObservation[]>();
+  for (const row of rows) {
+    if (Date.parse(row.observedAt) > cutoff) continue;
+    byFetch.set(row.fetchedAt, [...(byFetch.get(row.fetchedAt) ?? []), row]);
+  }
+  const coherent = [...byFetch].flatMap(([fetchedAt, fetchedRows]): Capture[] => {
+    const latestBySide = new Map<NflPlayerPropPriceObservation["side"], NflPlayerPropPriceObservation>();
+    for (const row of fetchedRows) {
+      const previous = latestBySide.get(row.side);
+      if (!previous || Date.parse(row.observedAt) > Date.parse(previous.observedAt)) latestBySide.set(row.side, row);
+    }
+    const first = fetchedRows[0];
+    if (!first) return [];
+    const selected = first.offerType === "milestone"
+      ? [latestBySide.get("yes")].filter((row): row is NflPlayerPropPriceObservation => row !== undefined)
+      : [latestBySide.get("over"), latestBySide.get("under")]
+          .filter((row): row is NflPlayerPropPriceObservation => row !== undefined);
+    if (selected.length !== (first.offerType === "milestone" ? 1 : 2)) return [];
+    const conservativeObservedAt = new Date(Math.min(...selected.map((row) => Date.parse(row.observedAt)))).toISOString();
+    return [{ observedAt: conservativeObservedAt, fetchedAt, rows: selected }];
+  }).sort((first, second) => Date.parse(second.observedAt) - Date.parse(first.observedAt)
+    || Date.parse(second.fetchedAt) - Date.parse(first.fetchedAt))[0] ?? null;
+  return coherent ?? exact;
 }
 
 function earliestCompleteOpeningCapture(args: {

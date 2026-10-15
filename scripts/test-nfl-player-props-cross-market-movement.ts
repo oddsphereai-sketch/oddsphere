@@ -7,7 +7,7 @@ import {
 import type { NflPlayerPropsExactOffer } from "../lib/services/football/nflPlayerPropsMarketBoard";
 
 const offer: NflPlayerPropsExactOffer = {
-  release: "nfl_player_props_exact_market_board_2026_09_01_r2_cross_line_opening",
+  release: "nfl_player_props_exact_market_board_2026_10_15_r3_reference_pairing",
   offerKey: "movement",
   canonicalGameId: "game",
   provider: "balldontlie",
