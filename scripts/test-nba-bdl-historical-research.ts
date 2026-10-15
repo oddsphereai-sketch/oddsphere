@@ -133,6 +133,8 @@ async function main(): Promise<void> {
   assert.match(operatorSource, /dataset: "advanced", gameIds/);
   assert.match(operatorSource, /--games-file requires --games-sha256 and --expected-games/);
   assert.match(operatorSource, /imported game index checksum mismatch/);
+  assert.match(operatorSource, /single-page batches can burst the trial limit/);
+  assert.match(operatorSource, /requests > 0 && args\.requestIntervalMs > 0/);
 
   console.log("NBA BALLDONTLIE historical research capture tests passed.");
 }

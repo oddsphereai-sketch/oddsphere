@@ -240,6 +240,12 @@ async function collectExactGameBatches(args: {
       reusedBatches += 1;
       usedCheckpoint = true;
     } else {
+      // fetchNbaBdlHistoricalRows throttles pages within one call. Exact-game
+      // batching creates multiple calls, so also enforce the provider interval
+      // between calls; otherwise single-page batches can burst the trial limit.
+      if (requests > 0 && args.requestIntervalMs > 0) {
+        await new Promise<void>((resolve) => setTimeout(resolve, args.requestIntervalMs));
+      }
       const result = await fetchNbaBdlHistoricalRows({
         dataset: args.dataset,
         gameIds,
