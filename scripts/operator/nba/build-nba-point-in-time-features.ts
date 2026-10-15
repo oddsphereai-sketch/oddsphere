@@ -11,7 +11,7 @@ import {
   normalizeNbaHistoricalPlayerBox,
 } from "../../../lib/services/nba/nbaPointInTimeFeatures";
 import {
-  nbaOpeningHomeProbabilityByGame,
+  nbaOpeningMarketByGame,
   normalizeNbaHistoricalOpeningOdds,
 } from "../../../lib/services/nba/nbaHistoricalOpeningMarket";
 
@@ -116,14 +116,21 @@ async function main(): Promise<void> {
     (row) => row.rowId,
     "NBA opening-odds row",
   );
-  const openingProbabilityByGame = nbaOpeningHomeProbabilityByGame({
+  const openingMarketByGame = nbaOpeningMarketByGame({
     rows: openingRows,
     gameStartById: new Map(games.map((game) => [game.gameId, game.startTime])),
   });
-  const featureRows = buildNbaPointInTimeFeatures({ games, boxes, advanced }).map((row) => ({
-    ...row,
-    evaluation_opening_market_home_probability: openingProbabilityByGame.get(row.game_id) ?? null,
-  }));
+  const featureRows = buildNbaPointInTimeFeatures({ games, boxes, advanced }).map((row) => {
+    const market = openingMarketByGame.get(row.game_id);
+    return {
+      ...row,
+      evaluation_opening_market_home_probability: market?.homeWinProbability ?? null,
+      evaluation_opening_home_spread: market?.homeSpread ?? null,
+      evaluation_opening_home_cover_probability: market?.homeCoverProbability ?? null,
+      evaluation_opening_total: market?.total ?? null,
+      evaluation_opening_over_probability: market?.overProbability ?? null,
+    };
+  });
   if (featureRows.length !== games.length) throw new Error("NBA feature build did not emit exactly one row per game.");
 
   const capturedAt = new Date().toISOString();
@@ -151,7 +158,12 @@ async function main(): Promise<void> {
     gamesWithAdvancedTeamCoverage,
     advancedTeamCoverageRate: games.length > 0 ? gamesWithAdvancedTeamCoverage / games.length : 0,
     openingOddsRows: openingRows.length,
-    openingMoneylineGames: openingProbabilityByGame.size,
+    openingMoneylineGames: [...openingMarketByGame.values()].filter((market) =>
+      market.homeWinProbability !== null).length,
+    openingSpreadGames: [...openingMarketByGame.values()].filter((market) =>
+      market.homeSpread !== null && market.homeCoverProbability !== null).length,
+    openingTotalGames: [...openingMarketByGame.values()].filter((market) =>
+      market.total !== null && market.overProbability !== null).length,
     featureCount: featureNames.length,
     featureNames,
     chronologicalContract: "Each feature row is emitted before its own finalized outcome updates state.",

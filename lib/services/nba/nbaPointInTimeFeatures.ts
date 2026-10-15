@@ -7,7 +7,7 @@
  */
 
 export const NBA_POINT_IN_TIME_FEATURE_RELEASE =
-  "nba_point_in_time_features_2026_10_15_r2" as const;
+  "nba_point_in_time_features_2026_10_15_r3" as const;
 
 export type NbaHistoricalGame = {
   gameId: number;

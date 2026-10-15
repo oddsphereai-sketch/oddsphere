@@ -24,8 +24,8 @@ from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 
 
-RELEASE = "nba_professional_tournament_2026_10_15_r2"
-FEATURE_RELEASE = "nba_point_in_time_features_2026_10_15_r2"
+RELEASE = "nba_professional_tournament_2026_10_15_r3"
+FEATURE_RELEASE = "nba_point_in_time_features_2026_10_15_r3"
 R1_CONFIRMATION = {
     "season": 2025,
     "games": 1230,
@@ -55,6 +55,15 @@ EVALUATION_ONLY = [
     # Optional timestamp-valid market benchmark. This may segment and score
     # independent forecasts, but it is never eligible to enter a feature set.
     "evaluation_opening_market_home_probability",
+    "evaluation_opening_home_spread",
+    "evaluation_opening_home_cover_probability",
+    "evaluation_opening_total",
+    "evaluation_opening_over_probability",
+]
+EVALUATION_PROBABILITIES = [
+    "evaluation_opening_market_home_probability",
+    "evaluation_opening_home_cover_probability",
+    "evaluation_opening_over_probability",
 ]
 
 
@@ -100,6 +109,9 @@ def validate(frame: pd.DataFrame) -> pd.DataFrame:
         if column not in frame:
             continue
         frame[column] = pd.to_numeric(frame[column], errors="coerce")
+    for column in EVALUATION_PROBABILITIES:
+        if column not in frame:
+            continue
         present = frame[column].dropna()
         if (present <= 0).any() or (present >= 1).any():
             raise ValueError(f"NBA evaluation probability {column} must be strictly between zero and one")
@@ -190,14 +202,20 @@ def normal_cdf(values: np.ndarray) -> np.ndarray:
     return 0.5 * (1.0 + erf(values / math.sqrt(2.0)))
 
 
-def metrics(frame: pd.DataFrame, home: np.ndarray, away: np.ndarray, sigma: float) -> dict[str, Any]:
+def metrics(
+    frame: pd.DataFrame,
+    home: np.ndarray,
+    away: np.ndarray,
+    margin_sigma: float,
+    total_sigma: float,
+) -> dict[str, Any]:
     actual_home = frame["target_home_score"].to_numpy(float)
     actual_away = frame["target_away_score"].to_numpy(float)
     actual_margin = actual_home - actual_away
     actual_total = actual_home + actual_away
     predicted_margin = home - away
     predicted_total = home + away
-    probabilities = np.clip(normal_cdf(predicted_margin / max(sigma, 1e-6)), 0.001, 0.999)
+    probabilities = np.clip(normal_cdf(predicted_margin / max(margin_sigma, 1e-6)), 0.001, 0.999)
     outcomes = (actual_margin > 0).astype(float)
     bins = np.minimum((probabilities * 10).astype(int), 9)
     calibration = []
@@ -252,6 +270,35 @@ def metrics(frame: pd.DataFrame, home: np.ndarray, away: np.ndarray, sigma: floa
                 ),
                 "favoriteStrengthBands": strength_bands,
             }
+    market_evaluation: dict[str, Any] = {}
+    spread_column = "evaluation_opening_home_spread"
+    if spread_column in frame:
+        spread = frame[spread_column].to_numpy(float)
+        available = np.isfinite(spread) & ~np.isclose(actual_margin + spread, 0.0)
+        if available.any():
+            model_probability = np.clip(normal_cdf(
+                (predicted_margin[available] + spread[available]) / max(margin_sigma, 1e-6)
+            ), 0.001, 0.999)
+            outcome = (actual_margin[available] + spread[available] > 0).astype(float)
+            market_evaluation["spread"] = {
+                "games": int(available.sum()),
+                "directionAccuracy": float(((model_probability >= 0.5) == (outcome > 0.5)).mean()),
+                "brier": float(np.square(model_probability - outcome).mean()),
+            }
+    total_column = "evaluation_opening_total"
+    if total_column in frame:
+        line = frame[total_column].to_numpy(float)
+        available = np.isfinite(line) & ~np.isclose(actual_total - line, 0.0)
+        if available.any():
+            model_probability = np.clip(normal_cdf(
+                (predicted_total[available] - line[available]) / max(total_sigma, 1e-6)
+            ), 0.001, 0.999)
+            outcome = (actual_total[available] > line[available]).astype(float)
+            market_evaluation["total"] = {
+                "games": int(available.sum()),
+                "directionAccuracy": float(((model_probability >= 0.5) == (outcome > 0.5)).mean()),
+                "brier": float(np.square(model_probability - outcome).mean()),
+            }
     return {
         "games": int(len(frame)),
         "teamScoreMae": float((np.abs(home - actual_home).mean() + np.abs(away - actual_away).mean()) / 2),
@@ -267,6 +314,7 @@ def metrics(frame: pd.DataFrame, home: np.ndarray, away: np.ndarray, sigma: floa
         "homeWinRate": float(outcomes.mean()),
         "calibration": calibration,
         "upsetEvaluation": upset,
+        "openingMarketEvaluation": market_evaluation or None,
     }
 
 
@@ -318,22 +366,30 @@ def main() -> None:
             for alpha in alphas:
                 home, away, _ = fit_predict(train, selection, features, alpha, architecture)
                 train_home, train_away, _ = fit_predict(train, train, features, alpha, architecture)
-                sigma = float(np.std(
+                margin_sigma = float(np.std(
                     train["target_home_margin"].to_numpy(float) - (train_home - train_away), ddof=1,
+                ))
+                total_sigma = float(np.std(
+                    train["target_total"].to_numpy(float) - (train_home + train_away), ddof=1,
                 ))
                 candidates.append({
                     "group": group_name,
                     "featureCount": len(features),
                     "architecture": architecture,
                     "alpha": alpha,
-                    "selection": metrics(selection, home, away, sigma),
+                    "selection": metrics(selection, home, away, margin_sigma, total_sigma),
                 })
     baseline_home, baseline_away = rating_baseline(selection, 2.2)
     baseline_fit_home, baseline_fit_away = rating_baseline(train, 2.2)
-    baseline_sigma = float(np.std(
+    baseline_margin_sigma = float(np.std(
         train["target_home_margin"].to_numpy(float) - (baseline_fit_home - baseline_fit_away), ddof=1,
     ))
-    selection_baseline = metrics(selection, baseline_home, baseline_away, baseline_sigma)
+    baseline_total_sigma = float(np.std(
+        train["target_total"].to_numpy(float) - (baseline_fit_home + baseline_fit_away), ddof=1,
+    ))
+    selection_baseline = metrics(
+        selection, baseline_home, baseline_away, baseline_margin_sigma, baseline_total_sigma
+    )
     candidates.sort(key=lambda item: (
         item["selection"]["teamScoreMae"],
         item["selection"]["marginMae"],
@@ -365,13 +421,22 @@ def main() -> None:
         float(selected["alpha"]),
         str(selected["architecture"]),
     )
-    sigma = float(np.std(
+    margin_sigma = float(np.std(
         fit["target_home_margin"].to_numpy(float) - (fit_home - fit_away), ddof=1,
     ))
-    confirmation_metrics = metrics(confirmation, home, away, sigma)
+    total_sigma = float(np.std(
+        fit["target_total"].to_numpy(float) - (fit_home + fit_away), ddof=1,
+    ))
+    confirmation_metrics = metrics(confirmation, home, away, margin_sigma, total_sigma)
 
     confirmation_baseline_home, confirmation_baseline_away = rating_baseline(confirmation, 2.2)
-    confirmation_baseline = metrics(confirmation, confirmation_baseline_home, confirmation_baseline_away, baseline_sigma)
+    confirmation_baseline = metrics(
+        confirmation,
+        confirmation_baseline_home,
+        confirmation_baseline_away,
+        baseline_margin_sigma,
+        baseline_total_sigma,
+    )
 
     r1_comparable = confirmation_season == R1_CONFIRMATION["season"] and len(confirmation) == R1_CONFIRMATION["games"]
     r1_gates = None
@@ -416,6 +481,10 @@ def main() -> None:
         },
         "selectionBaseline": selection_baseline,
         "confirmation": confirmation_metrics,
+        "confirmationDistribution": {
+            "marginSigma": margin_sigma,
+            "totalSigma": total_sigma,
+        },
         "confirmationRatingBaseline": confirmation_baseline,
         "publishedR1Confirmation": R1_CONFIRMATION,
         "publishedR1DirectlyComparable": r1_comparable,

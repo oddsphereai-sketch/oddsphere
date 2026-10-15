@@ -91,6 +91,10 @@ for season_index, season in enumerate((2023, 2024, 2025)):
             "home_usageConcentration_5": 0.055 + rng.normal(0, 0.004),
             "away_usageConcentration_5": 0.052 + rng.normal(0, 0.004),
             "evaluation_opening_market_home_probability": 0.65 if home_off >= away_off else 0.35,
+            "evaluation_opening_home_spread": -margin + rng.normal(0, 5),
+            "evaluation_opening_home_cover_probability": 0.5,
+            "evaluation_opening_total": total + rng.normal(0, 8),
+            "evaluation_opening_over_probability": 0.5,
             "target_home_score": home_score,
             "target_away_score": away_score,
             "target_home_margin": margin,
@@ -129,10 +133,13 @@ with tempfile.TemporaryDirectory(prefix="nba-tournament-test-") as temporary:
     assert report["confirmation"]["games"] == 48
     assert report["publishedR1DirectlyComparable"] is False
     assert report["confirmation"]["upsetEvaluation"]["games"] == 48
+    assert report["confirmation"]["openingMarketEvaluation"]["spread"]["games"] == 48
+    assert report["confirmation"]["openingMarketEvaluation"]["total"]["games"] == 48
     assert len(predictions) == 48
     selected_features = tournament.feature_catalog(tournament.validate(tournament.read_jsonl(features)))["all_declared"]
     assert not any(name.startswith("target_") for name in selected_features)
     assert "evaluation_opening_market_home_probability" not in selected_features
+    assert not any(name.startswith("evaluation_") for name in selected_features)
     assert "home_pointsPaintShare_5" in selected_features
     assert "away_usageConcentration_5" in selected_features
 
