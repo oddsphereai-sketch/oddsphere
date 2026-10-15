@@ -96,6 +96,14 @@ assert.match(shellSource, /Picks, probabilities, grades, and prices stay blank/)
 assert.match(shellSource, /Analysis opens game day/);
 assert.match(shellSource, /s\.scheduleLive \? "Schedule live" : "Offseason"/);
 
+const candidateReaderSource = readFileSync(
+  new URL("../app/dev/experience-preview/ActualDailyEdgePreview.tsx", import.meta.url),
+  "utf8",
+);
+assert.match(candidateReaderSource, /displaySnapshot\.nbaRollingSchedule/);
+assert.match(candidateReaderSource, /NBA · Next 7 Days/);
+assert.match(candidateReaderSource, /Analysis opens game day/);
+
 const sportsRegistrySource = readFileSync(
   new URL("../app/lab/lib/dailyEdgeSports.ts", import.meta.url),
   "utf8",

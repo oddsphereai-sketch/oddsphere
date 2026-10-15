@@ -4,7 +4,12 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
-import type { DailyEdgeGameDto, DailyEdgeResponse, MarketEdgeDto } from "@/app/lab/lib/labTypes";
+import type {
+  DailyEdgeGameDto,
+  DailyEdgeResponse,
+  MarketEdgeDto,
+  NbaRollingScheduleDto,
+} from "@/app/lab/lib/labTypes";
 import type { MarketSplitDisplaySection } from "@/lib/types/domain/RecommendationDecision";
 import { marketSplitSectionIsStale } from "@/app/lab/lib/dailyEdgeSplitFreshness";
 import type { Sport } from "@/lib/types/domain/Sport";
@@ -361,7 +366,8 @@ export default function ActualDailyEdgePreview({
   }, [displaySnapshot.date, displaySnapshot.games, embeddedSample, sport]);
 
   if (!game) {
-    return <div className="space-y-5 pb-16"><SlateHeader snapshot={displaySnapshot} sport={sport} onSportChange={switchSport} onSportPrefetch={prefetchSport} soccerCompetition={soccerCompetition} weeklySlate={renderedWeeklySlate} reviewMode={reviewMode} activePreviewSports={activePreviewSports} />{nflWeekOneEvidenceBoard ? <NflWeekOneEvidenceMonitor board={nflWeekOneEvidenceBoard} /> : sport === "nfl" && renderedWeeklySlate ? <NflEvidenceUnavailable label={renderedWeeklySlate.label} /> : renderedWeeklySlate?.unavailable ? <WeeklySlateEvidenceUnavailable sport={sport} /> : displaySnapshot.slateState === "temporarily_unavailable" ? <DailySlateEvidenceUnavailable sport={sport} displayLabel={soccerCompetition?.label} /> : <EmptyPreview sport={sport} displayLabel={soccerCompetition?.label} />}</div>;
+    const nbaRollingSchedule = sport === "nba" ? displaySnapshot.nbaRollingSchedule : undefined;
+    return <div className="space-y-5 pb-16"><SlateHeader snapshot={displaySnapshot} sport={sport} onSportChange={switchSport} onSportPrefetch={prefetchSport} soccerCompetition={soccerCompetition} weeklySlate={renderedWeeklySlate} reviewMode={reviewMode} activePreviewSports={activePreviewSports} />{nflWeekOneEvidenceBoard ? <NflWeekOneEvidenceMonitor board={nflWeekOneEvidenceBoard} /> : sport === "nfl" && renderedWeeklySlate ? <NflEvidenceUnavailable label={renderedWeeklySlate.label} /> : renderedWeeklySlate?.unavailable ? <WeeklySlateEvidenceUnavailable sport={sport} /> : displaySnapshot.slateState === "temporarily_unavailable" ? <DailySlateEvidenceUnavailable sport={sport} displayLabel={soccerCompetition?.label} /> : nbaRollingSchedule && nbaRollingSchedule.games.length > 0 ? <NbaRollingSchedule schedule={nbaRollingSchedule} /> : <EmptyPreview sport={sport} displayLabel={soccerCompetition?.label} />}</div>;
   }
 
   const market = game.markets[marketKey];
@@ -446,6 +452,10 @@ export default function ActualDailyEdgePreview({
       </div>
 
       <EdgeBoard games={scopedGames} sport={sport} activeId={game.id} activeMarket={marketKey} selectGame={selectGame} groupByDay={Boolean(renderedWeeklySlate)} cfbScopeControl={cfbScopeControl} />
+
+      {sport === "nba" && displaySnapshot.nbaRollingSchedule?.games.length ? (
+        <NbaRollingSchedule schedule={displaySnapshot.nbaRollingSchedule} />
+      ) : null}
 
       {mobileSheetOpen ? (
         <MobileReaderSheet game={game} market={market} marketKey={marketKey} sport={sport} history={history} pitcherFirstInningHistory={pitcherFirstInningHistory} availability={availability[game.id] ?? null} sample={sample} setSample={setSample} deepOpen={deepOpen} setDeepOpen={setDeepOpen} deepView={deepView} setDeepView={setDeepView} setMarket={selectMarket} onClose={collapseReader} onSportChange={switchSport} onSportPrefetch={prefetchSport} activePreviewSports={activePreviewSports} soccerCompetition={soccerCompetition} onPrev={scopedGameIndex > 0 ? () => selectAdjacentGame(-1) : null} onNext={scopedGameIndex < scopedGames.length - 1 ? () => selectAdjacentGame(1) : null} index={scopedGameIndex} total={scopedGames.length} />
@@ -727,13 +737,16 @@ function replaceReaderUrl(sport: Sport, gameId: string, market: MarketKey) {
 
 function SlateHeader({ snapshot, sport, onSportChange, onSportPrefetch, sample = false, soccerCompetition, weeklySlate, reviewMode = true, activePreviewSports = [] }: { snapshot: DailyEdgeResponse; sport: Sport; onSportChange: (sport: Sport) => void; onSportPrefetch: (sport: Sport) => void; sample?: boolean; soccerCompetition?: SoccerCompetitionPreview; weeklySlate?: WeeklySlatePreview; reviewMode?: boolean; activePreviewSports?: Sport[] }) {
   const displaySport = soccerCompetition?.label ?? sportLabel(sport);
-  const displayGameCount = weeklySlate?.displayGameCount ?? snapshot.games.length;
+  const nbaScheduleOnlyCount = sport === "nba" && snapshot.games.length === 0
+    ? snapshot.nbaRollingSchedule?.games.length ?? 0
+    : 0;
+  const displayGameCount = weeklySlate?.displayGameCount ?? (nbaScheduleOnlyCount || snapshot.games.length);
   const displayAsOf = weeklySlate?.asOf ?? snapshot.as_of;
   const sportAvailability = previewSportAvailability(activePreviewSports, soccerCompetition);
   return (
     <div>
       <div className="flex flex-col gap-2 px-1 sm:flex-row sm:items-end sm:justify-between">
-        <div><p className="text-[9px] font-black uppercase tracking-[0.2em] text-violet-300">OddSphere · {displaySport}</p><h1 className="mt-1 text-2xl font-black tracking-tight text-white sm:text-3xl">Daily Edge</h1><p className="mt-1 text-xs text-gray-500">{sample ? "Sample slate" : snapshot.date} · {displayGameCount} {displaySport} {displayGameCount === 1 ? "game" : "games"}{sample ? " · Interactive product preview" : ` · updated ${formatTimestamp(displayAsOf)}`}</p></div>
+        <div><p className="text-[9px] font-black uppercase tracking-[0.2em] text-violet-300">OddSphere · {displaySport}</p><h1 className="mt-1 text-2xl font-black tracking-tight text-white sm:text-3xl">Daily Edge</h1><p className="mt-1 text-xs text-gray-500">{sample ? "Sample slate" : snapshot.date} · {displayGameCount} {displaySport} {nbaScheduleOnlyCount > 0 ? "games in the next 7 days" : displayGameCount === 1 ? "game" : "games"}{sample ? " · Interactive product preview" : ` · updated ${formatTimestamp(displayAsOf)}`}</p></div>
         <p className="text-[8px] font-semibold uppercase tracking-[0.12em] text-gray-600"><span className="text-gray-400">Update rhythm</span> · {weeklySlate?.cadenceLabel ?? (weeklySlate ? "30-minute board" : "hourly board")} · separate market feeds · minute lock checks</p>
       </div>
       <div className="mt-5"><SportSelector active={sport} onChange={onSportChange} onPrefetch={onSportPrefetch} sports={DAILY_EDGE_TOP_LEVEL_SPORT_KEYS} showCounts={false} showPendingState availability={sportAvailability} labelOverrides={{ soccer: "Soccer" }} /></div>
@@ -2608,6 +2621,84 @@ function boardVerdictText(verdict: string): string {
 function EmptyPreview({ sport, displayLabel }: { sport: Sport; displayLabel?: string }) {
   const label = displayLabel ?? sportLabel(sport);
   return <section className="rounded-2xl border border-violet-400/15 bg-gradient-to-br from-violet-500/[0.05] to-gray-950/60 p-10 text-center"><span className="inline-flex rounded-full border border-violet-400/20 bg-violet-400/[0.06] px-3 py-1 text-[8px] font-black uppercase tracking-wider text-violet-200">Model available</span><p className="mt-4 text-[9px] font-black uppercase tracking-wider text-gray-500">{label} · Daily Edge</p><h2 className="mt-2 text-2xl font-black text-white">No {label} games today</h2><p className="mx-auto mt-2 max-w-xl text-sm leading-relaxed text-gray-500">The {label} model remains part of OddSphere. There is no current slate to analyze, so the board correctly stays empty instead of showing games from an older date.</p></section>;
+}
+
+function formatNbaScheduleDay(slateDate: string): string {
+  const timestamp = Date.parse(`${slateDate}T12:00:00.000Z`);
+  if (!Number.isFinite(timestamp)) return slateDate;
+  return new Intl.DateTimeFormat("en-US", {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    timeZone: "UTC",
+  }).format(new Date(timestamp));
+}
+
+function nbaScheduleStatusLabel(status: string): string {
+  if (status === "STATUS_POSTPONED") return "Postponed";
+  if (status === "STATUS_DELAYED") return "Delayed";
+  if (
+    status === "STATUS_IN_PROGRESS" ||
+    status === "STATUS_HALFTIME" ||
+    status === "STATUS_END_PERIOD" ||
+    status === "STATUS_SUSPENDED"
+  ) return "In progress";
+  return "Scheduled";
+}
+
+function NbaRollingSchedule({ schedule }: { schedule: NbaRollingScheduleDto }) {
+  const gamesByDate = schedule.games.reduce<Map<string, NbaRollingScheduleDto["games"]>>(
+    (groups, game) => {
+      const current = groups.get(game.slateDate) ?? [];
+      current.push(game);
+      groups.set(game.slateDate, current);
+      return groups;
+    },
+    new Map(),
+  );
+
+  return (
+    <section className="rounded-2xl border border-violet-400/20 bg-gradient-to-br from-violet-500/[0.06] via-[#11101a] to-orange-400/[0.035] p-4 shadow-[0_18px_50px_-38px_rgba(167,139,250,0.8)] sm:p-5" aria-labelledby="nba-seven-day-schedule">
+      <div className="mb-5 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <p className="text-[9px] font-black uppercase tracking-[0.2em] text-orange-300/80">Official schedule</p>
+          <h2 id="nba-seven-day-schedule" className="mt-1 text-xl font-black tracking-tight text-white sm:text-2xl">NBA · Next 7 Days</h2>
+        </div>
+        <p className="max-w-2xl text-[11px] leading-relaxed text-gray-400 sm:text-right">Matchups are live now. Picks, probabilities, grades, and prices appear only after the game-day model and market checks clear.</p>
+      </div>
+      <div className="space-y-5">
+        {[...gamesByDate.entries()].map(([slateDate, games]) => (
+          <div key={slateDate}>
+            <div className="mb-2 flex items-center gap-3">
+              <h3 className="text-[10px] font-black uppercase tracking-[0.15em] text-gray-300">{formatNbaScheduleDay(slateDate)}</h3>
+              <div className="h-px flex-1 bg-white/[0.07]" aria-hidden="true" />
+              <span className="text-[9px] tabular-nums text-gray-600">{games.length} {games.length === 1 ? "game" : "games"}</span>
+            </div>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {games.map((game) => (
+                <article key={game.id} className="rounded-xl border border-white/[0.08] bg-black/20 p-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex min-w-0 items-center gap-2">
+                      <TeamLogo src={game.awayTeamLogo} label={game.awayTeam} sport="nba" />
+                      <strong className="text-sm text-white">{game.awayTeam}</strong>
+                      <span className="text-[9px] text-gray-700">@</span>
+                      <strong className="text-sm text-white">{game.homeTeam}</strong>
+                      <TeamLogo src={game.homeTeamLogo} label={game.homeTeam} sport="nba" />
+                    </div>
+                    <LocalTime value={game.gameStartAt} className="shrink-0 text-[10px] tabular-nums font-semibold text-gray-300" />
+                  </div>
+                  <div className="mt-3 flex items-center justify-between gap-3 border-t border-white/[0.06] pt-3">
+                    <span className="text-[8px] font-black uppercase tracking-[0.13em] text-gray-500">{nbaScheduleStatusLabel(game.status)}</span>
+                    <span className="text-[8px] text-gray-500">Analysis opens game day</span>
+                  </div>
+                </article>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
 }
 
 function DailySlateEvidenceUnavailable({ sport, displayLabel }: { sport: Sport; displayLabel?: string }) {
