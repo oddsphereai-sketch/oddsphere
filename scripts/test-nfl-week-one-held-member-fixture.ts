@@ -680,8 +680,8 @@ function syntheticRow(index: number): NflForwardStoredEvidence {
     reason: index <= 8 ? "uncapped_market_led_exact_price_candidate" : "exact_price_does_not_clear_candidate_thresholds",
     footballProjection: null,
     quarterbackContext: {
-      away: { name: `Away QB ${index}`, historyMatched: true, status: "projected" },
-      home: { name: `Home QB ${index}`, historyMatched: true, status: "projected" },
+      away: { name: `Away QB ${index}`, historyMatched: true, historySource: "frozen_artifact", status: "projected" },
+      home: { name: `Home QB ${index}`, historyMatched: true, historySource: "frozen_artifact", status: "projected" },
     },
     health: {
       blockingReasons: [],

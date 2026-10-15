@@ -74,7 +74,7 @@ export type NflR6ShadowMoneylineDecision = {
   runtimeArtifactRelease: typeof NFL_R6_RUNTIME_ARTIFACT_RELEASE;
   modelRelease: typeof NFL_R6_MONEYLINE_MODEL_RELEASE;
   calibrationRelease: typeof NFL_R6_MONEYLINE_CALIBRATION_RELEASE;
-  decisionRelease: typeof NFL_R6_ARTIFACT_DECISION_RELEASE;
+  decisionRelease: typeof NFL_R6_MONEYLINE_DECISION_RELEASE;
   sourcePointModelRelease: typeof NFL_R6_SOURCE_POINT_MODEL_RELEASE;
 };
 
@@ -93,7 +93,7 @@ type RuntimeArtifact = {
   shadowOnly: true;
   modelRelease: typeof NFL_R6_MONEYLINE_MODEL_RELEASE;
   calibrationRelease: typeof NFL_R6_MONEYLINE_CALIBRATION_RELEASE;
-  decisionRelease: typeof NFL_R6_MONEYLINE_DECISION_RELEASE;
+  decisionRelease: typeof NFL_R6_ARTIFACT_DECISION_RELEASE;
   sourcePointModelRelease: typeof NFL_R6_SOURCE_POINT_MODEL_RELEASE;
   policy: {
     minimumExpectedValue: number;

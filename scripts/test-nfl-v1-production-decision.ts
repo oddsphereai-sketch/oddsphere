@@ -194,8 +194,8 @@ function shadow(args: {
     reason: args.grade === "Lean" ? "uncapped_market_led_exact_price_candidate" : "exact_price_does_not_clear_candidate_thresholds",
     footballProjection: null,
     quarterbackContext: {
-      away: { name: "Drake Maye", historyMatched: true, status: "projected" },
-      home: { name: "Sam Darnold", historyMatched: true, status: "projected" },
+      away: { name: "Drake Maye", historyMatched: true, historySource: "frozen_artifact", status: "projected" },
+      home: { name: "Sam Darnold", historyMatched: true, historySource: "frozen_artifact", status: "projected" },
     },
     health: {
       blockingReasons: [],
