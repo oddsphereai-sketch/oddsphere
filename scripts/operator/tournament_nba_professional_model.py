@@ -20,7 +20,7 @@ import numpy as np
 import pandas as pd
 
 
-RELEASE = "nba_professional_tournament_2026_10_15_r21_verified_deployment_replay"
+RELEASE = "nba_professional_tournament_2026_10_15_r22_feature_quality_gate"
 FEATURE_RELEASE = "nba_point_in_time_features_2026_10_15_r10_exact_price_provenance"
 DEPLOYMENT_CANDIDATE_RELEASE = "nba_professional_deployment_candidate_2026_10_15_r2_verified_replay"
 R1_CONFIRMATION = {
@@ -237,6 +237,35 @@ def feature_coverage_report(
         "belowHalfCoverage": [row["feature"] for row in rows if row["coverage"] < 0.5],
         "constantWhenPresent": [row["feature"] for row in rows if row["distinctFiniteValues"] <= 1],
         "rows": rows,
+    }
+
+
+def candidate_feature_quality(frame: pd.DataFrame, features: list[str]) -> dict[str, Any]:
+    """Gate nominally rich candidates whose training inputs are mostly absent or inert."""
+    rows: list[dict[str, Any]] = []
+    for feature in features:
+        values = pd.to_numeric(frame[feature], errors="coerce").to_numpy(float)
+        finite = np.isfinite(values)
+        finite_values = values[finite]
+        coverage = float(finite.mean())
+        distinct = int(len(np.unique(finite_values)))
+        rows.append({
+            "feature": feature,
+            "coverage": coverage,
+            "distinctFiniteValues": distinct,
+            "usable": bool(coverage >= 0.50 and distinct > 1),
+        })
+    usable = sum(int(row["usable"]) for row in rows)
+    minimum_usable = max(1, math.ceil(len(rows) * 0.80))
+    return {
+        "evaluatedOn": "training_partition_only",
+        "minimumCoverage": 0.50,
+        "minimumUsableFraction": 0.80,
+        "features": len(rows),
+        "usableFeatures": usable,
+        "minimumUsableFeatures": minimum_usable,
+        "gatePassed": bool(usable >= minimum_usable),
+        "unusable": [row for row in rows if not row["usable"]],
     }
 
 
@@ -1607,6 +1636,7 @@ def main() -> None:
     model_specs = candidate_model_specs()
     candidates: list[dict[str, Any]] = []
     for group_name, features in groups.items():
+        feature_quality = candidate_feature_quality(train, features)
         for architecture in ("team_scores", "margin_total"):
             for model in model_specs:
                 home, away, _ = fit_predict(train, selection, features, model, architecture)
@@ -1616,6 +1646,7 @@ def main() -> None:
                 candidates.append({
                     "group": group_name,
                     "featureCount": len(features),
+                    "featureQuality": feature_quality,
                     "architecture": architecture,
                     "model": model,
                     "probabilityCalibration": probability_calibration,
@@ -1637,7 +1668,8 @@ def main() -> None:
     ))
     eligible_candidates = [
         item for item in candidates
-        if item["selection"]["teamScoreMae"] < selection_baseline["teamScoreMae"]
+        if item["featureQuality"]["gatePassed"]
+        and item["selection"]["teamScoreMae"] < selection_baseline["teamScoreMae"]
         and item["selection"]["marginMae"] <= selection_baseline["marginMae"] + 0.10
         and item["selection"]["totalMae"] <= selection_baseline["totalMae"] + 0.10
         and item["selection"]["winnerAccuracy"] >= selection_baseline["winnerAccuracy"] - 0.005
@@ -1973,6 +2005,11 @@ def main() -> None:
                 "homeWinBrier": 0.20,
                 "homeWinLogLoss": 0.10,
                 "winnerErrorRate": 0.05,
+            },
+            "featureQuality": {
+                "evaluatedOn": "training_partition_only",
+                "minimumCoverage": 0.50,
+                "minimumUsableFraction": 0.80,
             },
             "requiresTeamScoreMaeImprovement": True,
             "marginMaeMaximumRegression": 0.10,

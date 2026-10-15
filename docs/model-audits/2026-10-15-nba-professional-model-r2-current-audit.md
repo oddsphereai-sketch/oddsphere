@@ -371,7 +371,7 @@ movement, CLV, split, or market-reader claim. Every row carries that provenance;
 2025-26 BALLDONTLIE timestamped openings take precedence when available.
 
 The executable tournament release is now
-`nba_professional_tournament_2026_10_15_r21_verified_deployment_replay`. Its
+`nba_professional_tournament_2026_10_15_r22_feature_quality_gate`. Its
 predeclared model grid is reproducible with the repository's NumPy runtime:
 closed-form ridge, robust iteratively reweighted Huber ridge, and bounded
 hinge-spline ridge. Feature-family ablations separately test ratings,
@@ -429,8 +429,12 @@ authoritative exact-price gate.
 The tournament also writes a season-by-season coverage record for every
 declared pregame feature, including selected status, finite-value coverage,
 and distinct-value count. Fully missing, below-50%-coverage, and constant
-features are summarized in the main report so a nominally rich model cannot
-pass while most of its supposed inputs are absent or inert.
+features are summarized in the main report. Candidate eligibility is also
+blocked unless at least 80% of that feature family's inputs have at least 50%
+finite coverage and more than one observed value in the training partition.
+That gate is fixed before selection and confirmation outcomes are consulted,
+so a nominally rich model cannot pass while most of its supposed inputs are
+absent or inert.
 
 After confirmation, the research operator writes a checksummed, explicitly
 non-promoted deployment candidate containing the exact feature order, training

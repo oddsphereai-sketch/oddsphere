@@ -210,6 +210,13 @@ with tempfile.TemporaryDirectory(prefix="nba-tournament-test-") as temporary:
     assert report["selectionGate"]["homeWinLogLossMaximumRegression"] == 0.005
     assert report["selectionGate"]["ranking"] == "weighted_relative_joint_score"
     assert abs(sum(report["selectionGate"]["rankingWeights"].values()) - 1.0) < 1e-9
+    assert report["selected"]["featureQuality"]["gatePassed"] is True
+    assert report["selected"]["featureQuality"]["evaluatedOn"] == "training_partition_only"
+    assert report["selectionGate"]["featureQuality"] == {
+        "evaluatedOn": "training_partition_only",
+        "minimumCoverage": 0.5,
+        "minimumUsableFraction": 0.8,
+    }
     assert report["selected"]["jointSelectionScore"] > 0
     assert report["confirmation"]["games"] == 48
     assert report["independentConfirmation"]["games"] == 48
