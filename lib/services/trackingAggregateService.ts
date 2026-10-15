@@ -84,7 +84,7 @@ export type DimensionRow<K extends string = string> = {
 export type TrackingDisplaySport = TrackedSport | "epl";
 
 export const TRACKING_AGGREGATE_CONTRACT_VERSION =
-  "tracking_aggregate_v13_alternate_line_performance_2026_10_12" as const;
+  "tracking_aggregate_v14_ucl_calendar_release_continuity_2026_10_15" as const;
 
 const UCL_PRIOR_ALT_LINE_MODEL_RELEASE =
   "ucl_goals_coherent_2026_09_03_r6_authenticated_match_stats_manifest" as const;
@@ -269,6 +269,31 @@ export function isCurrentUclTrackingRelease(record: PredictionRecordRow): boolea
  * not leak individual rows into accuracy while snapshot publication is held. */
 export function filterCompleteUclTrackingCohorts(records: PredictionRecordRow[]): PredictionRecordRow[] {
   return filterCompleteUclLockManifestCohorts(records);
+}
+
+/**
+ * Calendar tracking and current-model tracking intentionally have different
+ * release boundaries. Calendar windows are the immutable public record of
+ * what members saw on each slate, so a model deployment must never make an
+ * already locked result disappear. Lifetime/current-model accuracy remains
+ * release-pure and admits only the active UCL model+calibration tuple.
+ */
+export function selectTrackingRecordsByScope(records: PredictionRecordRow[]): {
+  calendarRecords: PredictionRecordRow[];
+  currentReleaseRecords: PredictionRecordRow[];
+} {
+  const publicRecords = records.filter((record) =>
+    isPublicallyTracked(record.sport, record.slate_date),
+  );
+  const calendarRecords = dedupePredictionRecordsForTracking(
+    filterCompleteUclTrackingCohorts(publicRecords).filter(isTrackingRecordEligible),
+  ).filter((record) => !isTossUp(record));
+  const currentReleaseRecords = dedupePredictionRecordsForTracking(
+    filterCompleteUclTrackingCohorts(
+      publicRecords.filter(isCurrentUclTrackingRelease),
+    ).filter(isTrackingRecordEligible),
+  ).filter((record) => !isTossUp(record));
+  return { calendarRecords, currentReleaseRecords };
 }
 
 export function isEplTrackingRecord(record: PredictionRecordRow): boolean {
@@ -777,9 +802,10 @@ export async function computeTrackingAggregate(opts: {
   const launchFiltered = opts.includeLaunchDay === true
     ? recordsRaw
     : recordsRaw.filter((r) => !r.launch_day);
-  const publicStartFiltered = launchFiltered.filter((r) =>
-    isPublicallyTracked(r.sport, r.slate_date) && isCurrentUclTrackingRelease(r),
-  );
+  const {
+    calendarRecords,
+    currentReleaseRecords: records,
+  } = selectTrackingRecordsByScope(launchFiltered);
 
   // UCL's prior locked release is useful line-level history, but it must never
   // be blended into the active release. Keep only the explicitly identified
@@ -805,14 +831,14 @@ export async function computeTrackingAggregate(opts: {
   //
   // ROI is a SEPARATE (HQ-only) metric and is where null-odds rows get dropped —
   // never conflate "ROI-ineligible" with "doesn't count for accuracy".
-  const trackingEligible = filterCompleteUclTrackingCohorts(publicStartFiltered).filter(isTrackingRecordEligible);
-  const records = dedupePredictionRecordsForTracking(trackingEligible).filter((r) => !isTossUp(r));
   result.rowsCounted = records.length;
 
-  // Grades — load only for current-release and separately labeled archive ids.
-  const recordIds = [...records, ...priorUclRecords]
+  // Grades — calendar rows include immutable prior-release locks so a release
+  // transition cannot erase yesterday/week/month/recent results. The current
+  // release and separately labeled archive remain release-pure below.
+  const recordIds = [...new Set([...calendarRecords, ...priorUclRecords]
     .map((r) => r.id)
-    .filter((x): x is number => x !== undefined);
+    .filter((x): x is number => x !== undefined))];
   const grades = await fetchGradesForRecordIds(opts.supabase, recordIds);
   const gradeByRecordId = new Map<number, PredictionGradeRow>(
     grades.map((g) => [g.prediction_record_id, g]),
@@ -821,6 +847,10 @@ export async function computeTrackingAggregate(opts: {
   const rows: Row[] = records.map((r) => ({
     record: r,
     grade: r.id !== undefined ? gradeByRecordId.get(r.id) ?? null : null,
+  }));
+  const calendarRows: Row[] = calendarRecords.map((record) => ({
+    record,
+    grade: record.id !== undefined ? gradeByRecordId.get(record.id) ?? null : null,
   }));
   const priorUclRows: AlternateLineSourceRow[] = priorUclRecords.map((record) => ({
     record,
@@ -831,16 +861,20 @@ export async function computeTrackingAggregate(opts: {
     ...row,
     displaySport: trackingDisplaySport(row.record),
   }));
+  const calendarAlternateRows: AlternateLineSourceRow[] = calendarRows.map((row) => ({
+    ...row,
+    displaySport: trackingDisplaySport(row.record),
+  }));
   result.alternateLinePerformance = {
     weekly: {
       from: weekFrom,
       to: today,
-      rows: buildAlternateLineCategories(alternateRows, { from: weekFrom, to: today }),
+      rows: buildAlternateLineCategories(calendarAlternateRows, { from: weekFrom, to: today }),
     },
     monthly: {
       from: monthFrom,
       to: today,
-      rows: buildAlternateLineCategories(alternateRows, { from: monthFrom, to: today }),
+      rows: buildAlternateLineCategories(calendarAlternateRows, { from: monthFrom, to: today }),
     },
     lifetime: {
       from: opts.from ?? TRACKING_LAUNCH_DATE,
@@ -857,7 +891,7 @@ export async function computeTrackingAggregate(opts: {
       sourceLabel: "Prior locked release",
     }),
   };
-  if (records.length === 0) return result;
+  if (records.length === 0 && calendarRecords.length === 0) return result;
 
   // Overall
   for (const row of rows) accumulate(result.overall, row);
@@ -989,7 +1023,7 @@ export async function computeTrackingAggregate(opts: {
   const yesterdayDate = shiftDate(today, -1);
 
   // Yesterday slice
-  const yesterdayRows = rows.filter((r) =>
+  const yesterdayRows = calendarRows.filter((r) =>
     r.record.slate_date === yesterdayDate &&
     r.grade !== null &&
     r.grade.result !== "pending"
@@ -1002,7 +1036,7 @@ export async function computeTrackingAggregate(opts: {
   }
 
   // This-week slice (trailing 7 days ending on `today`)
-  const weekRows = rows.filter((r) => r.record.slate_date >= weekFrom && r.record.slate_date <= today);
+  const weekRows = calendarRows.filter((r) => r.record.slate_date >= weekFrom && r.record.slate_date <= today);
   result.thisWeek.from = weekFrom;
   result.thisWeek.to = today;
   if (weekRows.length > 0) {
@@ -1016,7 +1050,7 @@ export async function computeTrackingAggregate(opts: {
   // and grows day-by-day until the trailing-30-day window naturally catches up
   // (~30 days post-launch). Never extend the window before launch — there's no
   // data there and the label would be misleading.
-  const monthRows = rows.filter((r) => r.record.slate_date >= monthFrom && r.record.slate_date <= today);
+  const monthRows = calendarRows.filter((r) => r.record.slate_date >= monthFrom && r.record.slate_date <= today);
   result.thisMonth.from = monthFrom;
   result.thisMonth.to = today;
   if (monthRows.length > 0) {
@@ -1027,12 +1061,12 @@ export async function computeTrackingAggregate(opts: {
 
   // 14-day trailing trend for the chart
   const trendFrom = shiftDate(today, -13);
-  const trendRows = rows.filter((r) => r.record.slate_date >= trendFrom && r.record.slate_date <= today);
+  const trendRows = calendarRows.filter((r) => r.record.slate_date >= trendFrom && r.record.slate_date <= today);
   result.dailyTrend = buildDailyTrend(trendRows, trendFrom, today);
 
   // Recent picks — most recent 20 by slate_date desc, member-safe shape.
   // Excludes launch-day rows (already filtered above).
-  result.recentPicks = [...rows]
+  result.recentPicks = [...calendarRows]
     .sort((a, b) => {
       if (a.record.slate_date !== b.record.slate_date) {
         return a.record.slate_date < b.record.slate_date ? 1 : -1;
@@ -1069,7 +1103,7 @@ export async function computeTrackingAggregate(opts: {
   // graded calls — the W/L tally counts them, so the settled feed reflects
   // them too). launch_day rows are already excluded. Slate_date is preserved
   // so the per-day rollups in dailyTrend/yesterday/thisWeek stay in sync.
-  const settledRows = rows.filter(
+  const settledRows = calendarRows.filter(
     (r) =>
       r.grade !== null &&
       r.grade.result !== "pending" &&
