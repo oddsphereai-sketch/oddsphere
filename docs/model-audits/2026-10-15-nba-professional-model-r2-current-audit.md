@@ -437,6 +437,32 @@ regular-season representative, so it cannot choose or qualify an NBA movement
 or splits rule. Those rules remain observation-only and must earn authority on
 forward timestamped evidence; they cannot alter r14 confirmation forecasts.
 
+### Regular-season market-source cross-check
+
+Preseason games are excluded from every accuracy, calibration, threshold, and
+reader-rule decision. The tournament now refuses a historical season with
+fewer than 1,200 games by default. The intended chronology is 2023-24 for
+development, 2024-25 for model and threshold selection, and 2025-26 as an
+untouched confirmation season.
+
+The independent 2025-26 consensus reference downloaded for source
+cross-validation is the CC-BY-4.0 `nba-closing-lines-ats-2025-26` CSV with
+SHA-256
+`9ff4950cd96dc97da58dd64632444e5865d39f1e02a0673533a924f895d1ecae`.
+It contains 1,224 labeled regular-season rows and omits six NBA Cup knockout
+games, so it cannot replace the canonical BDL season identity or become a
+model-selection source.
+
+A preliminary 50-game match against the available BDL opening-price sample
+found median absolute source differences of 1.0 spread point, 2.0 total
+points, and 4.62 percentage points in no-vig home win probability. The 90th
+percentiles were 4.0 spread points, 6.0 total points, and 10.39 probability
+points. This is not a performance result: it demonstrates that sportsbook,
+vendor, consensus construction, and observation time materially affect the
+meaning of "the market." The complete multi-book BDL capture must be
+cross-checked before any source is allowed to select a blend weight or reader
+rule.
+
 ## Upset-aware evaluation
 
 An upset is evaluated against a timestamp-valid, de-vigged pregame market
