@@ -20,8 +20,8 @@ import numpy as np
 import pandas as pd
 
 
-RELEASE = "nba_professional_tournament_2026_10_15_r9_recency_candidates"
-FEATURE_RELEASE = "nba_point_in_time_features_2026_10_15_r5_rotation_travel"
+RELEASE = "nba_professional_tournament_2026_10_15_r10_expanded_advanced_candidates"
+FEATURE_RELEASE = "nba_point_in_time_features_2026_10_15_r6_expanded_advanced"
 R1_CONFIRMATION = {
     "season": 2025,
     "games": 1230,
@@ -163,6 +163,13 @@ def feature_catalog(frame: pd.DataFrame) -> dict[str, list[str]]:
         "matchup_passesPer100_", "matchup_touchesPer100_", "matchup_deflectionsPer100_",
         "matchup_contestedShotsPer100_", "matchup_defendedAtRimFgPct_",
         "matchup_reboundChancesPer100_", "matchup_usageConcentration_",
+        "playerImpactEstimate_", "assistPercentage_", "turnoverRatio_",
+        "trueShootingPercentage_", "threePointAttemptShare_",
+        "offensiveReboundPercentage_", "defensiveReboundPercentage_",
+        "freeThrowAttemptRate_", "foulsDrawnPer100_", "looseBallsRecoveredPer100_",
+        "chargesDrawnPer100_", "switchesOnPer100_", "contestedFgPct_",
+        "uncontestedFgPct_", "matchupFgPct_", "matchupThreePointPct_",
+        "screenAssistsPer100_", "reboundChancesOffPer100_", "reboundChancesDefPer100_",
     ))
     groups = {
         "elo_only": sorted(set(elo)),

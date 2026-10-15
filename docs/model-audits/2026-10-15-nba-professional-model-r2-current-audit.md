@@ -253,8 +253,14 @@ rebounding chances; player-impact dispersion; usage concentration; and
 distance/speed into five-game, 15-game, and prior-season windows. The raw
 provider fields are not assumed predictive. The tournament decides whether
 each family adds stable score or calibration value beyond the simple baselines.
+The expanded candidate also tests prior-game PIE, assist and turnover rates,
+true-shooting and three-point-attempt profile, offensive and defensive rebound
+rates, foul pressure, loose-ball and charge activity, switching, contested and
+uncontested shooting, matchup field-goal defense, screen assists, and offensive
+and defensive rebound chances. Nullable provider fields stay missing and gain
+explicit missingness indicators; they are never filled with a favorable value.
 
-Feature release `nba_point_in_time_features_2026_10_15_r5_rotation_travel`
+Feature release `nba_point_in_time_features_2026_10_15_r6_expanded_advanced`
 also adds a dynamic Elo benchmark, explicit offense-versus-opponent-defense
 and Four-Factor matchup edges, prior-game player-minute rotation overlap,
 rolling expected rotation size/concentration, venue-to-venue great-circle
@@ -325,7 +331,7 @@ One aggregate win is insufficient: results are segmented by month, rest state,
 injury certainty, projected pace, favorite size, and home/away status.
 
 The executable tournament release is now
-`nba_professional_tournament_2026_10_15_r9_recency_candidates`. Its
+`nba_professional_tournament_2026_10_15_r10_expanded_advanced_candidates`. Its
 predeclared model grid is reproducible with the repository's NumPy runtime:
 closed-form ridge, robust iteratively reweighted Huber ridge, and bounded
 hinge-spline ridge. Feature-family ablations separately test ratings,

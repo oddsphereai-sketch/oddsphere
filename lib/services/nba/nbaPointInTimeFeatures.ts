@@ -7,7 +7,7 @@
  */
 
 export const NBA_POINT_IN_TIME_FEATURE_RELEASE =
-  "nba_point_in_time_features_2026_10_15_r5_rotation_travel" as const;
+  "nba_point_in_time_features_2026_10_15_r6_expanded_advanced" as const;
 
 export type NbaHistoricalGame = {
   gameId: number;
@@ -68,6 +68,25 @@ export type NbaHistoricalPlayerAdvanced = {
   reboundChancesTotal: number | null;
   distance: number | null;
   speed: number | null;
+  playerImpactEstimate?: number | null;
+  assistPercentage?: number | null;
+  turnoverRatio?: number | null;
+  trueShootingPercentage?: number | null;
+  threePointAttemptShare?: number | null;
+  offensiveReboundPercentage?: number | null;
+  defensiveReboundPercentage?: number | null;
+  freeThrowAttemptRate?: number | null;
+  foulsDrawn?: number | null;
+  looseBallsRecovered?: number | null;
+  chargesDrawn?: number | null;
+  switchesOn?: number | null;
+  contestedFgPct?: number | null;
+  uncontestedFgPct?: number | null;
+  matchupFgPct?: number | null;
+  matchupThreePointPct?: number | null;
+  screenAssists?: number | null;
+  reboundChancesOff?: number | null;
+  reboundChancesDef?: number | null;
 };
 
 type TeamBox = {
@@ -128,6 +147,25 @@ type TeamObservation = {
   usageConcentration: number | null;
   distancePer48: number | null;
   speedWeighted: number | null;
+  playerImpactEstimate: number | null;
+  assistPercentage: number | null;
+  turnoverRatio: number | null;
+  trueShootingPercentage: number | null;
+  threePointAttemptShare: number | null;
+  offensiveReboundPercentage: number | null;
+  defensiveReboundPercentage: number | null;
+  freeThrowAttemptRate: number | null;
+  foulsDrawnPer100: number | null;
+  looseBallsRecoveredPer100: number | null;
+  chargesDrawnPer100: number | null;
+  switchesOnPer100: number | null;
+  contestedFgPct: number | null;
+  uncontestedFgPct: number | null;
+  matchupFgPct: number | null;
+  matchupThreePointPct: number | null;
+  screenAssistsPer100: number | null;
+  reboundChancesOffPer100: number | null;
+  reboundChancesDefPer100: number | null;
   playerMinutes: Record<string, number>;
   venueLatitude: number | null;
   venueLongitude: number | null;
@@ -356,6 +394,25 @@ export function normalizeNbaHistoricalPlayerAdvanced(
     reboundChancesTotal: optionalNonnegative(row.rebound_chances_total),
     distance: optionalNonnegative(row.distance),
     speed: optionalNonnegative(row.speed),
+    playerImpactEstimate: optionalFinite(row.pie),
+    assistPercentage: optionalNonnegative(row.assist_percentage),
+    turnoverRatio: optionalNonnegative(row.turnover_ratio),
+    trueShootingPercentage: optionalNonnegative(row.true_shooting_percentage),
+    threePointAttemptShare: optionalNonnegative(row.pct_fga_3pt),
+    offensiveReboundPercentage: optionalNonnegative(row.offensive_rebound_percentage),
+    defensiveReboundPercentage: optionalNonnegative(row.defensive_rebound_percentage),
+    freeThrowAttemptRate: optionalNonnegative(row.free_throw_attempt_rate),
+    foulsDrawn: optionalNonnegative(row.fouls_drawn),
+    looseBallsRecovered: optionalNonnegative(row.loose_balls_recovered_total),
+    chargesDrawn: optionalNonnegative(row.charges_drawn),
+    switchesOn: optionalNonnegative(row.switches_on),
+    contestedFgPct: optionalNonnegative(row.contested_fg_pct),
+    uncontestedFgPct: optionalNonnegative(row.uncontested_fg_pct),
+    matchupFgPct: optionalNonnegative(row.matchup_fg_pct),
+    matchupThreePointPct: optionalNonnegative(row.matchup_3pt_pct),
+    screenAssists: optionalNonnegative(row.screen_assists),
+    reboundChancesOff: optionalNonnegative(row.rebound_chances_off),
+    reboundChancesDef: optionalNonnegative(row.rebound_chances_def),
   };
 }
 
@@ -464,6 +521,25 @@ function advancedFeatures(args: {
   | "usageConcentration"
   | "distancePer48"
   | "speedWeighted"
+  | "playerImpactEstimate"
+  | "assistPercentage"
+  | "turnoverRatio"
+  | "trueShootingPercentage"
+  | "threePointAttemptShare"
+  | "offensiveReboundPercentage"
+  | "defensiveReboundPercentage"
+  | "freeThrowAttemptRate"
+  | "foulsDrawnPer100"
+  | "looseBallsRecoveredPer100"
+  | "chargesDrawnPer100"
+  | "switchesOnPer100"
+  | "contestedFgPct"
+  | "uncontestedFgPct"
+  | "matchupFgPct"
+  | "matchupThreePointPct"
+  | "screenAssistsPer100"
+  | "reboundChancesOffPer100"
+  | "reboundChancesDefPer100"
 > {
   if (args.rows.length === 0) {
     return {
@@ -486,6 +562,25 @@ function advancedFeatures(args: {
       usageConcentration: null,
       distancePer48: null,
       speedWeighted: null,
+      playerImpactEstimate: null,
+      assistPercentage: null,
+      turnoverRatio: null,
+      trueShootingPercentage: null,
+      threePointAttemptShare: null,
+      offensiveReboundPercentage: null,
+      defensiveReboundPercentage: null,
+      freeThrowAttemptRate: null,
+      foulsDrawnPer100: null,
+      looseBallsRecoveredPer100: null,
+      chargesDrawnPer100: null,
+      switchesOnPer100: null,
+      contestedFgPct: null,
+      uncontestedFgPct: null,
+      matchupFgPct: null,
+      matchupThreePointPct: null,
+      screenAssistsPer100: null,
+      reboundChancesOffPer100: null,
+      reboundChancesDefPer100: null,
     };
   }
   const per100 = (value: number | null): number | null =>
@@ -533,6 +628,25 @@ function advancedFeatures(args: {
       ? distance * 48 / totalMinutes
       : null,
     speedWeighted: minuteWeighted(args.rows, minutesByPlayer, "speed"),
+    playerImpactEstimate: minuteWeighted(args.rows, minutesByPlayer, "playerImpactEstimate"),
+    assistPercentage: minuteWeighted(args.rows, minutesByPlayer, "assistPercentage"),
+    turnoverRatio: minuteWeighted(args.rows, minutesByPlayer, "turnoverRatio"),
+    trueShootingPercentage: minuteWeighted(args.rows, minutesByPlayer, "trueShootingPercentage"),
+    threePointAttemptShare: minuteWeighted(args.rows, minutesByPlayer, "threePointAttemptShare"),
+    offensiveReboundPercentage: minuteWeighted(args.rows, minutesByPlayer, "offensiveReboundPercentage"),
+    defensiveReboundPercentage: minuteWeighted(args.rows, minutesByPlayer, "defensiveReboundPercentage"),
+    freeThrowAttemptRate: minuteWeighted(args.rows, minutesByPlayer, "freeThrowAttemptRate"),
+    foulsDrawnPer100: per100(availableSum(args.rows, "foulsDrawn")),
+    looseBallsRecoveredPer100: per100(availableSum(args.rows, "looseBallsRecovered")),
+    chargesDrawnPer100: per100(availableSum(args.rows, "chargesDrawn")),
+    switchesOnPer100: per100(availableSum(args.rows, "switchesOn")),
+    contestedFgPct: minuteWeighted(args.rows, minutesByPlayer, "contestedFgPct"),
+    uncontestedFgPct: minuteWeighted(args.rows, minutesByPlayer, "uncontestedFgPct"),
+    matchupFgPct: minuteWeighted(args.rows, minutesByPlayer, "matchupFgPct"),
+    matchupThreePointPct: minuteWeighted(args.rows, minutesByPlayer, "matchupThreePointPct"),
+    screenAssistsPer100: per100(availableSum(args.rows, "screenAssists")),
+    reboundChancesOffPer100: per100(availableSum(args.rows, "reboundChancesOff")),
+    reboundChancesDefPer100: per100(availableSum(args.rows, "reboundChancesDef")),
   };
 }
 
@@ -759,6 +873,25 @@ function teamFeatures(args: {
     "usageConcentration",
     "distancePer48",
     "speedWeighted",
+    "playerImpactEstimate",
+    "assistPercentage",
+    "turnoverRatio",
+    "trueShootingPercentage",
+    "threePointAttemptShare",
+    "offensiveReboundPercentage",
+    "defensiveReboundPercentage",
+    "freeThrowAttemptRate",
+    "foulsDrawnPer100",
+    "looseBallsRecoveredPer100",
+    "chargesDrawnPer100",
+    "switchesOnPer100",
+    "contestedFgPct",
+    "uncontestedFgPct",
+    "matchupFgPct",
+    "matchupThreePointPct",
+    "screenAssistsPer100",
+    "reboundChancesOffPer100",
+    "reboundChancesDefPer100",
   ];
   for (const key of keys) {
     values[`${key}_5`] = windowMean(current, key, 5);
@@ -874,6 +1007,25 @@ function matchupFeatures(args: {
       "defendedAtRimFgPct",
       "reboundChancesPer100",
       "usageConcentration",
+      "playerImpactEstimate",
+      "assistPercentage",
+      "turnoverRatio",
+      "trueShootingPercentage",
+      "threePointAttemptShare",
+      "offensiveReboundPercentage",
+      "defensiveReboundPercentage",
+      "freeThrowAttemptRate",
+      "foulsDrawnPer100",
+      "looseBallsRecoveredPer100",
+      "chargesDrawnPer100",
+      "switchesOnPer100",
+      "contestedFgPct",
+      "uncontestedFgPct",
+      "matchupFgPct",
+      "matchupThreePointPct",
+      "screenAssistsPer100",
+      "reboundChancesOffPer100",
+      "reboundChancesDefPer100",
     ] as const) {
       result[`matchup_${key}_delta_${window}`] = pairFeature(
         args.home, `${key}_${window}`, args.away, `${key}_${window}`,
