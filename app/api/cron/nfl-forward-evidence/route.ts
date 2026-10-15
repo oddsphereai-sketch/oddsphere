@@ -117,11 +117,16 @@ export async function GET(request: Request): Promise<Response> {
         playerPropsError = error instanceof Error ? error.message : String(error);
       }
     }
+    const playerPropsCriticalHealth = playerProps?.healthFindings.filter((finding) =>
+      finding === "NFL_PLAYER_PROPS_SOURCE_AWARE_REFERENCE_OFFERS_UNAVAILABLE"
+      || finding === "NFL_PLAYER_PROPS_REFERENCE_OFFER_CACHE_FAILED") ?? [];
     return {
       records_updated: result.inserted + (playerProps?.memberRows ?? 0),
       api_calls_made: currentSeasonState.apiCalls + result.apiCallsMaximum + (playerProps?.apiCallsMaximum ?? 0),
-      partial: result.healthHolds.length > 0 || result.memberSnapshotError !== null || playerPropsError !== null,
-      error_message: [result.healthHolds.join(","), result.memberSnapshotError, playerPropsError].filter(Boolean).join(",") || null,
+      partial: result.healthHolds.length > 0 || result.memberSnapshotError !== null
+        || playerPropsError !== null || playerPropsCriticalHealth.length > 0,
+      error_message: [result.healthHolds.join(","), result.memberSnapshotError, playerPropsError, playerPropsCriticalHealth.join(",")]
+        .filter(Boolean).join(",") || null,
       details: {
         writer_release: result.writerRelease,
         calendar_week: calendarWeek,
@@ -155,6 +160,7 @@ export async function GET(request: Request): Promise<Response> {
         player_props_cadence_error: playerPropsCadenceError,
         player_props: playerProps,
         player_props_error: playerPropsError,
+        player_props_critical_health: playerPropsCriticalHealth,
       },
     };
   }, {

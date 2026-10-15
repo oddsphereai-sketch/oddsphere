@@ -5,7 +5,10 @@ import {
 } from "./nflPlayerPropsCollector";
 import { buildNflPlayerPropsInferenceContextFromForwardEvidence } from "./nflPlayerPropsInferenceContext";
 import { readNflForwardEvidence } from "./nflForwardEvidenceStore";
-import { buildNflPlayerPropsExactBoard } from "./nflPlayerPropsMarketBoard";
+import {
+  buildNflPlayerPropsExactBoard,
+  type NflPlayerPropsExactOffer,
+} from "./nflPlayerPropsMarketBoard";
 import {
   buildNflPlayerPropsRuntimeBoard,
   buildNflPlayerPropsRuntimeFeatureRows,
@@ -14,6 +17,7 @@ import {
   NFL_PLAYER_PROPS_CALIBRATION_RELEASE,
   NFL_PLAYER_PROPS_DECISION_RELEASE,
   NFL_PLAYER_PROPS_MODEL_RELEASE,
+  NFL_PLAYER_PROPS_SOURCE_AWARE_QUALIFIED_MARKETS,
   nflPlayerPropsRuntimePolicy,
   verifyNflPlayerPropsRuntimeParity,
 } from "./nflPlayerPropsRuntime";
@@ -60,7 +64,7 @@ import {
 } from "./nflPlayerPropsReferenceOfferStore";
 
 export const NFL_PLAYER_PROPS_WRITER_RELEASE =
-  "nfl_player_props_writer_2026_10_15_r51_receptions_source_aware" as const;
+  "nfl_player_props_writer_2026_10_15_r52_reference_priority" as const;
 export const NFL_PLAYER_PROPS_PRODUCTION_INCLUDE_OPENINGS = true as const;
 export const NFL_PLAYER_PROPS_PRODUCTION_COLLECTION_CALL_MAXIMUM = (
   1
@@ -130,6 +134,7 @@ export type NflPlayerPropsWriterResult = {
   referenceResearchExactOfferBooks: Record<string, number>;
   referenceResearchCompleteExactOfferBooks: Record<string, number>;
   effectiveReferenceOffers: number;
+  sourceAwareReferenceOffersAvailable: boolean;
   referenceOfferCacheError: string | null;
   referenceResearchObservationHealth: {
     canonicalGame: number;
@@ -323,6 +328,10 @@ export async function runNflPlayerPropsProductionWriter(args: {
   const effectiveReferenceOffers = completeSourceAwareReferenceOffers.length > 0
     ? completeSourceAwareReferenceOffers
     : [...(retainedReferenceOffers?.offers ?? [])];
+  const sourceAwareReferenceOffersAvailable = nflPlayerPropsSourceAwareReferenceOffersAvailable({
+    offers: effectiveReferenceOffers,
+    evaluatedAt: referenceEvaluatedAt,
+  });
   const referenceResearchObservationBooks = countByNormalizedBook(collection.referenceResearchObservations);
   const referenceResearchExactOfferBooks = countByNormalizedBook(sourceAwareReferenceOffers);
   const referenceResearchCompleteExactOfferBooks = countByNormalizedBook(
@@ -347,7 +356,7 @@ export async function runNflPlayerPropsProductionWriter(args: {
     referenceOffers: effectiveReferenceOffers,
     features,
     evaluatedAt: args.now,
-    auditSourceAwareMarketReading: true,
+    auditSourceAwareMarketReading: sourceAwareReferenceOffersAvailable,
   });
   const referenceResearchMarketEvidence = collection.referenceResearchObservations.length > 0
     ? buildNflPlayerPropsRuntimeMarketEvidence({
@@ -457,6 +466,7 @@ export async function runNflPlayerPropsProductionWriter(args: {
     referenceResearchExactOfferBooks,
     referenceResearchCompleteExactOfferBooks,
     effectiveReferenceOffers: effectiveReferenceOffers.length,
+    sourceAwareReferenceOffersAvailable,
     referenceOfferCacheError,
     referenceResearchObservationHealth,
     referenceResearchCaptureIdentities: referenceResearchMarketEvidence?.i.length ?? 0,
@@ -490,6 +500,7 @@ export async function runNflPlayerPropsProductionWriter(args: {
       ...(marketObserverCapture?.error ? ["NFL_PLAYER_PROPS_MARKET_OBSERVER_CAPTURE_FAILED"] : []),
       ...(privateTrackingCapture?.error ? ["NFL_PLAYER_PROPS_PRIVATE_TRACKING_CAPTURE_FAILED"] : []),
       ...(referenceOfferCacheError ? ["NFL_PLAYER_PROPS_REFERENCE_OFFER_CACHE_FAILED"] : []),
+      ...(!sourceAwareReferenceOffersAvailable ? ["NFL_PLAYER_PROPS_SOURCE_AWARE_REFERENCE_OFFERS_UNAVAILABLE"] : []),
     ])].sort(),
   };
 }
@@ -501,6 +512,22 @@ function countByNormalizedBook(rows: readonly { sportsbook: string }[]): Record<
     counts[book] = (counts[book] ?? 0) + 1;
   }
   return Object.fromEntries(Object.entries(counts).sort(([first], [second]) => first.localeCompare(second)));
+}
+
+export function nflPlayerPropsSourceAwareReferenceOffersAvailable(args: {
+  offers: readonly Pick<NflPlayerPropsExactOffer, "market" | "observedAt">[];
+  evaluatedAt: string;
+}): boolean {
+  const evaluatedAt = Date.parse(args.evaluatedAt);
+  if (!Number.isFinite(evaluatedAt)) throw new Error("NFL props reference availability time is invalid.");
+  const maximumAgeMs = nflPlayerPropsRuntimePolicy().maximumQuoteAgeHours * 3_600_000;
+  return args.offers.some((offer) => {
+    const observedAt = Date.parse(offer.observedAt);
+    return NFL_PLAYER_PROPS_SOURCE_AWARE_QUALIFIED_MARKETS.some((market) => market === offer.market)
+      && Number.isFinite(observedAt)
+      && observedAt <= evaluatedAt
+      && evaluatedAt - observedAt <= maximumAgeMs;
+  });
 }
 
 export function nflPlayerPropsReferenceEvaluationTime(args: {

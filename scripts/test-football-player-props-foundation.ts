@@ -19,6 +19,7 @@ import {
 } from "../lib/services/football/nflPlayerPropsCollector";
 
 const fetchedAt = "2026-08-20T16:00:00Z";
+const sharpLaneOrder: string[] = [];
 const games = [{
   season: 2026,
   week: 1,
@@ -37,7 +38,7 @@ assert.equal(canonicalNflPlayerPropMarket("player_total_receptions"), "reception
 assert.equal(canonicalNflPlayerPropMarket("player_total_rush_attempts"), "rushing_attempts");
 assert.equal(canonicalNflPlayerPropMarket("player_rushing_+_receiving_yards"), "rushing_receiving_yards");
 assert.equal(canonicalNflPlayerPropMarket("unknown_fun_prop"), null);
-assert.equal(NFL_PLAYER_PROPS_PROVIDER_SNAPSHOT_RELEASE, "nfl_player_props_provider_observation_2026_10_15_r12_pinnacle_reference_capture");
+assert.equal(NFL_PLAYER_PROPS_PROVIDER_SNAPSHOT_RELEASE, "nfl_player_props_provider_observation_2026_10_15_r13_reference_priority");
 assert.deepEqual(NFL_PLAYER_PROPS_PHASE_ONE_MARKETS, [
   "passing_attempts",
   "passing_completions",
@@ -209,8 +210,11 @@ assert.throws(
 
 assert.equal(NFL_PLAYER_PROPS_COLLECTION_LIMITS.bdlConcurrency, 3);
 assert.ok(NFL_PLAYER_PROPS_COLLECTION_LIMITS.maxSharpPages <= 8);
-assert.equal(NFL_PLAYER_PROPS_COLLECTION_LIMITS.maxSharpReferencePages, 4);
-assert.deepEqual(NFL_PLAYER_PROPS_COLLECTION_LIMITS.sharpReferenceResearchBooks, ["pinnacle"]);
+assert.equal(NFL_PLAYER_PROPS_COLLECTION_LIMITS.maxSharpReferencePages, 10);
+assert.deepEqual(NFL_PLAYER_PROPS_COLLECTION_LIMITS.sharpReferenceResearchBooks, [
+  { sportsbook: "pinnacle", maximumPages: 4 },
+  { sportsbook: "novig", maximumPages: 6 },
+]);
 
 function bdlTwoWay(id: number, vendor: string, propType: string, line: number) {
   return {
@@ -282,6 +286,27 @@ assert.equal(
   false,
   "unrelated provider failures still fail closed instead of masquerading as bounded rate limiting",
 );
+void __NFL_PLAYER_PROPS_COLLECTOR_TEST__.collectSharpPropsCatalogs({
+  includeReferenceResearch: true,
+  sharp: {
+    fetch: (async (opts: { query?: Record<string, unknown> }) => {
+      const sportsbook = typeof opts.query?.sportsbook === "string" ? opts.query.sportsbook : "generic";
+      sharpLaneOrder.push(sportsbook);
+      if (sportsbook === "generic") throw new SharpApiRateLimitError({ endpoint: "/odds" });
+      return { data: [{ sportsbook }], pagination: { has_more: false } };
+    }) as never,
+  },
+}).then((prioritized) => {
+  assert.deepEqual(sharpLaneOrder, ["pinnacle", "novig", "generic"],
+    "qualified reference books consume the remaining SharpAPI quota before the generic catalog");
+  assert.equal(prioritized.referenceRows.length, 2,
+    "a later generic rate limit cannot discard already captured reference rows");
+  assert.equal(prioritized.genericRows.length, 0);
+  assert.ok(prioritized.healthFindings.includes("SHARPAPI_PROPS_RATE_LIMITED"));
+}).catch((error) => {
+  console.error(error);
+  process.exitCode = 1;
+});
 assert.throws(() => __NFL_PLAYER_PROPS_COLLECTOR_TEST__.validateRequest(2026, 4, "preseason"), /1 through 3/);
 assert.equal(
   __NFL_PLAYER_PROPS_COLLECTOR_TEST__.inSlateWindow("2026-09-10T01:00:00Z", games),
