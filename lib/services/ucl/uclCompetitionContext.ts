@@ -4,7 +4,7 @@ export const UCL_COMPETITION = "uefa_champions_league" as const;
 export const UCL_EXTERNAL_ID_OFFSET = 30_000_000;
 export const UCL_EXTERNAL_ID_UPPER_BOUND = 40_000_000;
 export const UCL_CONTEXT_RELEASE = "ucl_competition_context_2026_09_03_r2_qualifying_truthful" as const;
-export const UCL_SETTLEMENT_RELEASE = "ucl_regulation_settlement_2026_09_03_r3_complete_lock_manifest" as const;
+export const UCL_SETTLEMENT_RELEASE = "ucl_regulation_settlement_2026_10_15_r4_frozen_member_forecast_continuity" as const;
 
 export type UclStage =
   | "league_phase"

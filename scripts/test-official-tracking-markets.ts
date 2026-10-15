@@ -61,6 +61,7 @@ check("NHL first_inning NOT officially tracked", isOfficiallyTrackedMarket("nhl"
 const trackingRouteSource = readFileSync(new URL("../app/api/lab/tracking/route.ts", import.meta.url), "utf8");
 const trackingFoundationRouteSource = readFileSync(new URL("../app/api/lab/tracking-foundation/route.ts", import.meta.url), "utf8");
 const snapshotKeySource = readFileSync(new URL("../lib/services/labResponseSnapshots.ts", import.meta.url), "utf8");
+const snapshotWriterSource = readFileSync(new URL("../lib/services/labResponseSnapshotWriter.ts", import.meta.url), "utf8");
 const nbaWriterSource = readFileSync(new URL("../lib/services/nba/buildNbaPredictionRecords.ts", import.meta.url), "utf8");
 check(
   "NHL tracking page exposes the official puck-line category",
@@ -136,8 +137,9 @@ check("legacy-compatible tracking route applies official eligibility before aggr
   /const publiclyTrackedRows = allRows\.filter\([\s\S]{0,180}isPublicallyTracked/.test(trackingRouteSource) &&
   /buildAllTime\(publiclyTrackedRows\)/.test(trackingRouteSource));
 check("tracking caches are release-bumped so prior-contract counts cannot survive deployment",
-  trackingFoundationRouteSource.includes("member-tracking-aggregate-v8-ucl-calendar-release-continuity") &&
-  snapshotKeySource.includes("tracking-foundation-r5-ucl-calendar-release-continuity") &&
+  trackingFoundationRouteSource.includes("member-tracking-aggregate-v9-ucl-frozen-forecast-continuity") &&
+  snapshotKeySource.includes("tracking-foundation-r6-ucl-frozen-forecast-continuity") &&
+  snapshotWriterSource.includes("tracking-foundation-v4-ucl-frozen-forecast-continuity") &&
   snapshotKeySource.includes("tracking::all::nba-preseason-only-window-r2"));
 
 // assertOfficialTrackingMarket — happy path doesn't throw

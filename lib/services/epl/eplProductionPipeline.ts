@@ -4,6 +4,7 @@ import type { PredictionRecordRow, TrackedMarketV17 } from "@/lib/types/domain/T
 import type { EplShadowSlate } from "./buildEplShadowSlate";
 import { EPL_SHADOW_MODEL_RELEASE } from "./eplShadowModel";
 import { mergeEplForwardEvidenceHistory, type EplForwardEvidenceCapture } from "./eplForwardEvidenceCapture";
+import { uclForecastSideFromMemberMarket } from "../ucl/uclTrackingForecastContinuity";
 
 export const EPL_COMPETITION = "english_premier_league" as const;
 export const EPL_LOCK_MINUTES = 60;
@@ -27,6 +28,8 @@ export type ClubSoccerPipelineConfig = {
    * snapshot repair or audit telemetry. */
   preservePriorPricedTupleOnMissingLock?: boolean;
   returnPreservedLockedRecordIds?: boolean;
+  preserveForecastSideWithoutPrice?: boolean;
+  trackingForecastContinuityRelease?: string;
 };
 
 export const EPL_PIPELINE_CONFIG: ClubSoccerPipelineConfig = {
@@ -131,13 +134,16 @@ function recordFromMarket(input: {
   now: Date;
   config: ClubSoccerPipelineConfig;
 }): PredictionRecordRow {
-  const side = canonicalSide(input.market, input.trackedMarket);
+  const pricedSide = canonicalSide(input.market, input.trackedMarket);
+  const side = pricedSide ?? (input.config.preserveForecastSideWithoutPrice
+    ? uclForecastSideFromMemberMarket(input.market, input.trackedMarket)
+    : null);
   const kickoffMs = Date.parse(input.game.gameStartAt ?? "");
   const lockAt = Number.isFinite(kickoffMs) ? new Date(kickoffMs - (input.config.lockMinutes ?? EPL_LOCK_MINUTES) * 60_000).toISOString() : null;
   const shouldLock = lockAt !== null && input.now.getTime() >= Date.parse(lockAt);
   const verdict = input.market.verdict?.key ?? "no_play";
   const actionable = verdict === "best_angle" || verdict === "lean";
-  const missingPrice = input.market.currentPriceAmerican === null || side === null;
+  const missingPrice = input.market.currentPriceAmerican === null || pricedSide === null;
   return {
     game_prediction_id: null,
     game_id: input.internalGameId,
@@ -179,6 +185,9 @@ function recordFromMarket(input: {
     published_at: null,
     snapshot_json: {
       competition: input.config.competition,
+      ...(input.config.trackingForecastContinuityRelease
+        ? { tracking_forecast_continuity_release: input.config.trackingForecastContinuityRelease }
+        : {}),
       ...(input.config.competition === EPL_COMPETITION
         ? { tracking_lock_policy_release: EPL_TRACKING_LOCK_POLICY_RELEASE }
         : {}),

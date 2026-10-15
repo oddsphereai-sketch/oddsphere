@@ -5,6 +5,10 @@ import type { UclSlate } from "./buildUclSlate";
 import { UCL_COMPETITION, UCL_EXTERNAL_ID_OFFSET, UCL_EXTERNAL_ID_UPPER_BOUND } from "./uclCompetitionContext";
 import { UCL_MODEL_RELEASE } from "./uclModel";
 import { supabase } from "@/lib/db/supabase";
+import {
+  UCL_TRACKING_FORECAST_CONTINUITY_RELEASE,
+  uclForecastSideFromMemberMarket,
+} from "./uclTrackingForecastContinuity";
 
 export const UCL_LOCK_MINUTES = 60;
 
@@ -20,6 +24,8 @@ export function uclPipelineConfig(slate: UclSlate): ClubSoccerPipelineConfig {
     contextForGame: (providerId) => slate.competitionContexts[providerId] ?? null,
     preservePriorPricedTupleOnMissingLock: true,
     returnPreservedLockedRecordIds: true,
+    preserveForecastSideWithoutPrice: true,
+    trackingForecastContinuityRelease: UCL_TRACKING_FORECAST_CONTINUITY_RELEASE,
   };
 }
 
@@ -96,7 +102,10 @@ function memberMarketAtCapture(row: UclLockedRecord): MarketEdgeDto | null {
 }
 
 function memberMarketMatchesRecord(market: MarketEdgeDto, row: UclLockedRecord): boolean {
-  const selectedSide = market.soccerPriceBoard?.rows.find((candidate) => candidate.selected)?.side ?? null;
+  const selectedSide = uclForecastSideFromMemberMarket(
+    market,
+    row.market as "match_result" | "double_chance" | "total" | "btts",
+  );
   const verdict = market.verdict?.key ?? "no_play";
   const actionable = verdict === "best_angle" || verdict === "lean";
   const expectedLine = row.market === "total" ? market.line : null;
@@ -168,6 +177,7 @@ export async function verifyUclAllMarketLocks(input: {
   const writerLockedIds = new Set(input.writerLockedRecordIds);
   const cohortsByProvider = new Map<number, Map<string, Map<string, UclLockedRecord>>>();
   for (const row of (data ?? []) as UclLockedRecord[]) {
+    if (!UCL_LOCK_MARKETS.includes(row.market as typeof UCL_LOCK_MARKETS[number])) continue;
     const providerId = row.external_id - UCL_EXTERNAL_ID_OFFSET;
     const currentAuthority = row.model_version === input.modelRelease
       && row.calibration_version === input.calibrationRelease;

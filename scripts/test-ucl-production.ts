@@ -497,7 +497,7 @@ assert.deepEqual(getOfficialTrackingMarkets("ucl"), ["match_result", "total", "b
 const trackingRecord = { sport: "soccer", locked_at: "2026-09-08T16:45:00Z", held: false, model_version: UCL_MODEL_RELEASE, calibration_version: UCL_CALIBRATION_RELEASE, competition: UCL_COMPETITION, snapshot_json: { competition: UCL_COMPETITION } } as unknown as PredictionRecordRow;
 assert.equal(isUclTrackingRecord(trackingRecord), true);
 assert.equal(isTrackingRecordEligible(trackingRecord), true);
-assert.equal(isTrackingRecordEligible({ ...trackingRecord, held: true }), false, "held UCL lock-manifest rows never enter public W/L");
+assert.equal(isTrackingRecordEligible({ ...trackingRecord, held: true }), false, "held UCL rows without a frozen displayed forecast never enter public W/L");
 assert.equal(isCurrentUclTrackingRelease(trackingRecord), true);
 assert.equal(isCurrentUclTrackingRelease({ ...trackingRecord, model_version: "ucl_prior_release" }), false);
 assert.equal(trackingDisplaySport(trackingRecord), "ucl");
