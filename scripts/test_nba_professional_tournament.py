@@ -122,6 +122,10 @@ with tempfile.TemporaryDirectory(prefix="nba-tournament-test-") as temporary:
         sys.argv = previous
     report = json.loads((output / "report.json").read_text())
     predictions = (output / "confirmation-predictions.jsonl").read_text().strip().splitlines()
+    diagnostics = json.loads((output / "confirmation-diagnostics.json").read_text())
+    winner_errors = (output / "confirmation-winner-errors.jsonl").read_text().splitlines()
+    spread_errors = (output / "confirmation-spread-errors.jsonl").read_text().splitlines()
+    total_errors = (output / "confirmation-total-errors.jsonl").read_text().splitlines()
     assert report["chronology"] == {
         "trainingSeasons": [2023],
         "selectionSeason": 2024,
@@ -136,6 +140,25 @@ with tempfile.TemporaryDirectory(prefix="nba-tournament-test-") as temporary:
     assert report["confirmation"]["openingMarketEvaluation"]["spread"]["games"] == 48
     assert report["confirmation"]["openingMarketEvaluation"]["total"]["games"] == 48
     assert len(predictions) == 48
+    first_prediction = json.loads(predictions[0])
+    assert first_prediction["causeAttribution"]["status"] == "not_attributed"
+    assert first_prediction["selectedFeatureState"]
+    assert first_prediction["auditFeatureState"]
+    assert "marginSigned" in first_prediction["error"]
+    assert "spreadDirectionCorrect" in first_prediction["openingMarketEvaluationOnly"]
+    assert diagnostics["overall"]["games"] == 48
+    assert diagnostics["cohorts"]["calendarMonth"]
+    assert diagnostics["cohorts"]["predictedMarginBand"]
+    assert diagnostics["cohorts"]["predictedWinnerConfidenceBand"]
+    assert diagnostics["cohorts"]["restState"]
+    assert diagnostics["cohorts"]["team"]
+    assert len(diagnostics["worstMisses"]["margin"]) == 25
+    assert len(diagnostics["worstMisses"]["total"]) == 25
+    assert len(winner_errors) == report["errorLedgers"]["winner"]["rows"]
+    assert len(spread_errors) == report["errorLedgers"]["spread"]["rows"]
+    assert len(total_errors) == report["errorLedgers"]["total"]["rows"]
+    assert report["predictions"]["rows"] == 48
+    assert report["diagnostics"]["causeAttributionPolicy"].startswith("never infer luck")
     selected_features = tournament.feature_catalog(tournament.validate(tournament.read_jsonl(features)))["all_declared"]
     assert not any(name.startswith("target_") for name in selected_features)
     assert "evaluation_opening_market_home_probability" not in selected_features

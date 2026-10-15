@@ -24,7 +24,7 @@ from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 
 
-RELEASE = "nba_professional_tournament_2026_10_15_r3"
+RELEASE = "nba_professional_tournament_2026_10_15_r4_error_ledger"
 FEATURE_RELEASE = "nba_point_in_time_features_2026_10_15_r3"
 R1_CONFIRMATION = {
     "season": 2025,
@@ -318,6 +318,270 @@ def metrics(
     }
 
 
+def finite_float(value: Any) -> float | None:
+    """Return a JSON-safe finite float without inventing a missing value."""
+    try:
+        result = float(value)
+    except (TypeError, ValueError):
+        return None
+    return result if math.isfinite(result) else None
+
+
+def selected_feature_state(row: pd.Series, features: list[str]) -> dict[str, float | None]:
+    return {feature: finite_float(row.get(feature)) for feature in features}
+
+
+def build_prediction_ledger(
+    frame: pd.DataFrame,
+    home: np.ndarray,
+    away: np.ndarray,
+    margin_sigma: float,
+    total_sigma: float,
+    selected_features: list[str],
+    audit_features: list[str] | None = None,
+    baseline_home: np.ndarray | None = None,
+    baseline_away: np.ndarray | None = None,
+) -> list[dict[str, Any]]:
+    """Persist enough row-level evidence to reproduce every aggregate claim.
+
+    Cause labels here describe observable disagreement only. They deliberately do
+    not call an error "luck"; that requires timestamp-valid postgame component
+    evidence (shooting, turnovers, availability, and rotation realization).
+    """
+    records: list[dict[str, Any]] = []
+    reset = frame.reset_index(drop=True)
+    for index, row in reset.iterrows():
+        predicted_home = float(home[index])
+        predicted_away = float(away[index])
+        predicted_margin = predicted_home - predicted_away
+        predicted_total = predicted_home + predicted_away
+        actual_home = float(row["target_home_score"])
+        actual_away = float(row["target_away_score"])
+        actual_margin = actual_home - actual_away
+        actual_total = actual_home + actual_away
+        margin_error = predicted_margin - actual_margin
+        total_error = predicted_total - actual_total
+        home_error = predicted_home - actual_home
+        away_error = predicted_away - actual_away
+        predicted_home_win_probability = float(np.clip(
+            normal_cdf(np.array([predicted_margin / max(margin_sigma, 1e-6)]))[0],
+            0.001,
+            0.999,
+        ))
+        predicted_home_win = predicted_margin > 0
+        actual_home_win = actual_margin > 0
+        winner_correct = predicted_home_win == actual_home_win
+
+        market_home_probability = finite_float(row.get("evaluation_opening_market_home_probability"))
+        opening_home_spread = finite_float(row.get("evaluation_opening_home_spread"))
+        opening_total = finite_float(row.get("evaluation_opening_total"))
+        spread_edge = None if opening_home_spread is None else predicted_margin + opening_home_spread
+        spread_result = None if opening_home_spread is None else actual_margin + opening_home_spread
+        total_edge = None if opening_total is None else predicted_total - opening_total
+        total_result = None if opening_total is None else actual_total - opening_total
+
+        error_context = "winner_correct"
+        if not winner_correct:
+            if market_home_probability is None or math.isclose(market_home_probability, 0.5):
+                error_context = "winner_wrong_market_benchmark_unavailable"
+            else:
+                market_home_favorite = market_home_probability > 0.5
+                error_context = (
+                    "model_and_opening_market_favorite_lost"
+                    if predicted_home_win == market_home_favorite
+                    else "model_upset_call_failed"
+                )
+
+        baseline = None
+        if baseline_home is not None and baseline_away is not None:
+            baseline_predicted_home = float(baseline_home[index])
+            baseline_predicted_away = float(baseline_away[index])
+            baseline_margin = baseline_predicted_home - baseline_predicted_away
+            baseline_total = baseline_predicted_home + baseline_predicted_away
+            baseline = {
+                "predictedHome": baseline_predicted_home,
+                "predictedAway": baseline_predicted_away,
+                "predictedMargin": baseline_margin,
+                "predictedTotal": baseline_total,
+                "marginAbsoluteError": abs(baseline_margin - actual_margin),
+                "totalAbsoluteError": abs(baseline_total - actual_total),
+                "winnerCorrect": (baseline_margin > 0) == actual_home_win,
+            }
+
+        records.append({
+            "gameId": int(row["game_id"]),
+            "season": int(row["season"]),
+            "featureCutoff": row["feature_cutoff"].isoformat(),
+            "homeTeam": {"id": int(row["home_team_id"]), "name": str(row["home_team"])},
+            "awayTeam": {"id": int(row["away_team_id"]), "name": str(row["away_team"])},
+            "prediction": {
+                "homeScore": predicted_home,
+                "awayScore": predicted_away,
+                "homeMargin": predicted_margin,
+                "total": predicted_total,
+                "homeWinProbability": predicted_home_win_probability,
+                "winner": "home" if predicted_home_win else "away",
+            },
+            "actual": {
+                "homeScore": actual_home,
+                "awayScore": actual_away,
+                "homeMargin": actual_margin,
+                "total": actual_total,
+                "winner": "home" if actual_home_win else "away",
+            },
+            "error": {
+                "homeScoreSigned": home_error,
+                "awayScoreSigned": away_error,
+                "homeScoreAbsolute": abs(home_error),
+                "awayScoreAbsolute": abs(away_error),
+                "marginSigned": margin_error,
+                "marginAbsolute": abs(margin_error),
+                "totalSigned": total_error,
+                "totalAbsolute": abs(total_error),
+                "winnerCorrect": winner_correct,
+            },
+            "openingMarketEvaluationOnly": {
+                "homeWinProbability": market_home_probability,
+                "homeSpread": opening_home_spread,
+                "total": opening_total,
+                "spreadModelSide": None if spread_edge is None else ("home" if spread_edge > 0 else "away"),
+                "spreadResultSide": None if spread_result is None or math.isclose(spread_result, 0) else ("home" if spread_result > 0 else "away"),
+                "spreadDirectionCorrect": None if spread_edge is None or spread_result is None or math.isclose(spread_result, 0) else (spread_edge > 0) == (spread_result > 0),
+                "totalModelSide": None if total_edge is None else ("over" if total_edge > 0 else "under"),
+                "totalResultSide": None if total_result is None or math.isclose(total_result, 0) else ("over" if total_result > 0 else "under"),
+                "totalDirectionCorrect": None if total_edge is None or total_result is None or math.isclose(total_result, 0) else (total_edge > 0) == (total_result > 0),
+                "totalModelProbability": None if total_edge is None else float(np.clip(
+                    normal_cdf(np.array([total_edge / max(total_sigma, 1e-6)]))[0], 0.001, 0.999,
+                )),
+            },
+            "ratingBaseline": baseline,
+            "errorContext": error_context,
+            "causeAttribution": {
+                "status": "not_attributed",
+                "reason": "requires timestamp-valid postgame component evidence; result surprise alone is not evidence of luck",
+            },
+            "selectedFeatureState": selected_feature_state(row, selected_features),
+            "auditFeatureState": selected_feature_state(row, audit_features or selected_features),
+        })
+    return records
+
+
+def summarize_records(records: list[dict[str, Any]]) -> dict[str, Any]:
+    if not records:
+        return {"games": 0}
+    home_errors = np.array([row["error"]["homeScoreSigned"] for row in records], dtype=float)
+    away_errors = np.array([row["error"]["awayScoreSigned"] for row in records], dtype=float)
+    margin_errors = np.array([row["error"]["marginSigned"] for row in records], dtype=float)
+    total_errors = np.array([row["error"]["totalSigned"] for row in records], dtype=float)
+    winner = np.array([row["error"]["winnerCorrect"] for row in records], dtype=bool)
+    return {
+        "games": len(records),
+        "homeScoreSignedBias": float(home_errors.mean()),
+        "awayScoreSignedBias": float(away_errors.mean()),
+        "teamScoreSignedBias": float(np.concatenate([home_errors, away_errors]).mean()),
+        "teamScoreMae": float(np.concatenate([np.abs(home_errors), np.abs(away_errors)]).mean()),
+        "marginSignedBias": float(margin_errors.mean()),
+        "marginMae": float(np.abs(margin_errors).mean()),
+        "totalSignedBias": float(total_errors.mean()),
+        "totalMae": float(np.abs(total_errors).mean()),
+        "winnerAccuracy": float(winner.mean()),
+        "winnerErrors": int((~winner).sum()),
+        "marginOvershootRate": float((margin_errors > 0).mean()),
+        "totalOvershootRate": float((total_errors > 0).mean()),
+    }
+
+
+def cohort_report(records: list[dict[str, Any]], key) -> list[dict[str, Any]]:
+    grouped: dict[str, list[dict[str, Any]]] = {}
+    for record in records:
+        label = key(record)
+        if label is None:
+            continue
+        grouped.setdefault(str(label), []).append(record)
+    return [
+        {"cohort": label, **summarize_records(grouped[label])}
+        for label in sorted(grouped)
+    ]
+
+
+def prediction_diagnostics(records: list[dict[str, Any]]) -> dict[str, Any]:
+    def margin_band(record: dict[str, Any]) -> str:
+        margin = abs(record["prediction"]["homeMargin"])
+        if margin < 3: return "00-02.99"
+        if margin < 7: return "03-06.99"
+        if margin < 12: return "07-11.99"
+        return "12-plus"
+
+    def confidence_band(record: dict[str, Any]) -> str:
+        probability = max(
+            record["prediction"]["homeWinProbability"],
+            1 - record["prediction"]["homeWinProbability"],
+        )
+        if probability < 0.60: return "50-59.99"
+        if probability < 0.70: return "60-69.99"
+        if probability < 0.80: return "70-79.99"
+        return "80-plus"
+
+    def rest_state(record: dict[str, Any]) -> str | None:
+        state = record["auditFeatureState"]
+        home = finite_float(state.get("home_rest_days"))
+        away = finite_float(state.get("away_rest_days"))
+        if home is None or away is None: return None
+        difference = home - away
+        if difference >= 2: return "home_rest_edge_2plus"
+        if difference <= -2: return "away_rest_edge_2plus"
+        return "rest_difference_under_2"
+
+    team_records: dict[str, list[dict[str, Any]]] = {}
+    for record in records:
+        for side in ("home", "away"):
+            team = record[f"{side}Team"]["name"]
+            score_error = record["error"][f"{side}ScoreSigned"]
+            margin_error = record["error"]["marginSigned"] * (1 if side == "home" else -1)
+            team_records.setdefault(team, []).append({
+                "scoreError": score_error,
+                "marginError": margin_error,
+                "winnerCorrect": record["error"]["winnerCorrect"],
+            })
+    team_cohorts = []
+    for team in sorted(team_records):
+        rows = team_records[team]
+        score = np.array([row["scoreError"] for row in rows], dtype=float)
+        margin = np.array([row["marginError"] for row in rows], dtype=float)
+        team_cohorts.append({
+            "team": team,
+            "games": len(rows),
+            "scoreSignedBias": float(score.mean()),
+            "scoreMae": float(np.abs(score).mean()),
+            "teamPerspectiveMarginSignedBias": float(margin.mean()),
+            "teamPerspectiveMarginMae": float(np.abs(margin).mean()),
+            "winnerAccuracy": float(np.mean([row["winnerCorrect"] for row in rows])),
+        })
+
+    return {
+        "method": "descriptive_error_localization_only_not_causal_attribution",
+        "overall": summarize_records(records),
+        "cohorts": {
+            "calendarMonth": cohort_report(records, lambda row: row["featureCutoff"][5:7]),
+            "predictedMarginBand": cohort_report(records, margin_band),
+            "predictedWinnerConfidenceBand": cohort_report(records, confidence_band),
+            "restState": cohort_report(records, rest_state),
+            "errorContext": cohort_report(records, lambda row: row["errorContext"]),
+            "team": team_cohorts,
+        },
+        "worstMisses": {
+            "margin": sorted(records, key=lambda row: row["error"]["marginAbsolute"], reverse=True)[:25],
+            "total": sorted(records, key=lambda row: row["error"]["totalAbsolute"], reverse=True)[:25],
+            "singleTeamScore": sorted(
+                records,
+                key=lambda row: max(row["error"]["homeScoreAbsolute"], row["error"]["awayScoreAbsolute"]),
+                reverse=True,
+            )[:25],
+        },
+        "attributionWarning": "These cohorts identify repeatable error concentration. They do not prove cause and never relabel an unexplained result as luck.",
+    }
+
+
 def rating_baseline(frame: pd.DataFrame, home_advantage: float) -> tuple[np.ndarray, np.ndarray]:
     required = [
         "home_adjusted_offense", "home_adjusted_defense",
@@ -448,21 +712,50 @@ def main() -> None:
             "winnerAccuracyNoWorse": confirmation_metrics["winnerAccuracy"] >= R1_CONFIRMATION["winnerAccuracy"],
         }
 
-    prediction_rows = []
-    for index, (_, row) in enumerate(confirmation.reset_index(drop=True).iterrows()):
-        prediction_rows.append({
-            "gameId": int(row["game_id"]),
-            "featureCutoff": row["feature_cutoff"].isoformat(),
-            "actualHome": float(row["target_home_score"]),
-            "actualAway": float(row["target_away_score"]),
-            "predictedHome": float(home[index]),
-            "predictedAway": float(away[index]),
-        })
+    prediction_rows = build_prediction_ledger(
+        confirmation,
+        home,
+        away,
+        margin_sigma,
+        total_sigma,
+        selected_features,
+        groups["all_declared"],
+        confirmation_baseline_home,
+        confirmation_baseline_away,
+    )
+    diagnostics = prediction_diagnostics(prediction_rows)
+    winner_errors = [row for row in prediction_rows if not row["error"]["winnerCorrect"]]
+    spread_errors = [
+        row for row in prediction_rows
+        if row["openingMarketEvaluationOnly"]["spreadDirectionCorrect"] is False
+    ]
+    total_errors = [
+        row for row in prediction_rows
+        if row["openingMarketEvaluationOnly"]["totalDirectionCorrect"] is False
+    ]
 
     args.output.mkdir(parents=True, exist_ok=True)
     predictions_path = args.output / "confirmation-predictions.jsonl"
     predictions_body = "".join(json.dumps(row, sort_keys=True) + "\n" for row in prediction_rows)
     predictions_path.write_text(predictions_body)
+    diagnostics_path = args.output / "confirmation-diagnostics.json"
+    diagnostics_body = json.dumps(diagnostics, indent=2, sort_keys=True) + "\n"
+    diagnostics_path.write_text(diagnostics_body)
+
+    error_artifacts: dict[str, dict[str, Any]] = {}
+    for label, rows in (
+        ("winner", winner_errors),
+        ("spread", spread_errors),
+        ("total", total_errors),
+    ):
+        path = args.output / f"confirmation-{label}-errors.jsonl"
+        body = "".join(json.dumps(row, sort_keys=True) + "\n" for row in rows)
+        path.write_text(body)
+        error_artifacts[label] = {
+            "file": path.name,
+            "rows": len(rows),
+            "sha256": hashlib.sha256(body.encode()).hexdigest(),
+        }
     report = {
         "release": RELEASE,
         "featureRelease": FEATURE_RELEASE,
@@ -494,8 +787,15 @@ def main() -> None:
         "topSelectionCandidates": candidates[:10],
         "predictions": {
             "file": predictions_path.name,
+            "rows": len(prediction_rows),
             "sha256": hashlib.sha256(predictions_body.encode()).hexdigest(),
         },
+        "diagnostics": {
+            "file": diagnostics_path.name,
+            "sha256": hashlib.sha256(diagnostics_body.encode()).hexdigest(),
+            "causeAttributionPolicy": "never infer luck from an outcome; require timestamp-valid postgame component evidence",
+        },
+        "errorLedgers": error_artifacts,
     }
     report_path = args.output / "report.json"
     report_path.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n")

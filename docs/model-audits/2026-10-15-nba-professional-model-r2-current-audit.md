@@ -6,6 +6,10 @@ Status: research and data capture only. No production score, pick, probability,
 grade, stake, lock, reader, writer, or tracking behavior is changed by this
 audit.
 
+The shared architecture, mandatory replay-error artifacts, reconstructed r1
+findings, and market-reader parity matrix are defined in
+[`2026-10-15-nba-shared-model-market-standard.md`](./2026-10-15-nba-shared-model-market-standard.md).
+
 ## October 15 opening-readiness evidence
 
 A read-only production-data and provider probe on October 15 establishes the
