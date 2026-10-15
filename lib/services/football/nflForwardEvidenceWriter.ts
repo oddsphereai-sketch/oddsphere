@@ -105,7 +105,7 @@ import {
 } from "./balldontlieNflWeeklyProjectionShadow";
 
 export const NFL_FORWARD_WRITER_RELEASE =
-  "nfl_forward_evidence_writer_2026_10_15_r62_foundational_no_weight_score" as const;
+  "nfl_forward_evidence_writer_2026_10_15_r63_personnel_coverage_repair" as const;
 
 export type NflForwardWriterResult = {
   writerRelease: typeof NFL_FORWARD_WRITER_RELEASE;
@@ -446,6 +446,7 @@ export async function runNflForwardEvidenceWriter(args: {
       capturedAt,
       t60LagMinutes,
       coverageHealthHolds: collectedEvidenceHolds,
+      currentSeasonState,
     });
     const holds = [...new Set([
       ...collectedEvidenceHolds,
@@ -650,6 +651,7 @@ export async function runNflForwardEvidenceWriter(args: {
         operationalOpening: true, rosterAndDepth, expectedQuarterbacks,
         injuries: injuries !== null, playbookSplits: playbookCoverage,
         sharpApiSplits: sharpCoverage, weather: weatherCoverage, healthHolds: holds,
+        quarterbackHistory: shadowMoneyline.quarterbackContext,
         forecastTargetExclusion: resolved.targetExclusion,
         paidProjectionShadow: Boolean(paidProjectionShadow),
       },

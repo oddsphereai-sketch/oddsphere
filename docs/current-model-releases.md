@@ -164,6 +164,32 @@ Last reviewed: 2026-10-15
 
 ## NFL Daily Edge generalized weekly production release
 
+### Personnel coverage repair (r33 candidate)
+
+- Candidate member / model / calibration / decision / grade are
+  `nfl_v1_member_release_2026_10_15_r33_personnel_coverage_repair` /
+  `nfl_v1_daily_edge_model_2026_10_15_r28_foundational_no_weight_score` /
+  `nfl_v1_daily_edge_calibration_2026_10_15_r27_foundational_no_weight_score` /
+  `nfl_v1_daily_edge_decision_2026_10_15_r36_personnel_coverage_repair` /
+  `nfl_v1_grade_policy_2026_10_15_r36_personnel_coverage_repair`.
+- The frozen independent score and categorical zero-weight market reader remain unchanged. A
+  selected quarterback absent from the preseason artifact may satisfy the existing history gate
+  only through exact provider player ID, exact team, and completed current-season passing attempts
+  strictly before the prediction week. Advanced quarterback inputs remain neutral rather than
+  inferred when that current-season store lacks them.
+- The injury collector retries transient failures within a two-request per-batch retry budget and
+  retains the existing unresolved-game fallback. Exact-game designation rows with no remaining
+  reportable player are preserved as a verified clear report; an actual omission cannot erase prior
+  evidence. The maximum declared request budget is 20 calls per team batch. Cadence and source
+  scope are unchanged.
+- Publication set is collector/writer/fixture/snapshot r22/r63/r45/r37; the shadow eligibility
+  schema/decision wrapper is r2/r7 around the byte-identical r6 artifact. The r32 foundational
+  family is the immediate immutable predecessor. The zero-write Week 6 rehearsal restores all 14
+  games / 42 markets, moves 19 to 22 actionables through three promotions and zero demotions, and
+  leaves no health holds. Exact evidence, same-input board impact, gates, and rollback are in
+  `docs/model-audits/2026-10-15-nfl-personnel-coverage-repair-predeclaration.md` and
+  `docs/model-audits/2026-10-15-nfl-personnel-coverage-repair-result.md`.
+
 ### Foundational independent score plus no-weight market reader (r32 candidate)
 
 - Candidate member / model / calibration / decision / grade are

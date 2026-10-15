@@ -23,6 +23,8 @@ export type DailyEdgeGameAvailability = {
   reportDate?: string | null;
   /** Previous-day reports remain visible as explicitly stale context. */
   freshnessStatus?: "current" | "previous_day";
+  /** Exact-game source rows were present and verified that no player remains reportable. */
+  verifiedClear?: boolean;
   reportUpdatedAt: string | null;
   teams: DailyEdgeTeamAvailability[];
 };

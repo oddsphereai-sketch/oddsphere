@@ -7,16 +7,22 @@ import type { NflForwardTeamDepthSnapshot } from "../lib/services/football/nflFo
 import {
   __NFL_R6_MONEYLINE_SHADOW_TEST__,
   buildNflR6ShadowMoneylineDecision,
+  NFL_R6_ARTIFACT_DECISION_RELEASE,
   NFL_R6_MONEYLINE_DECISION_RELEASE,
   NFL_R6_MONEYLINE_MODEL_RELEASE,
   NFL_R6_RUNTIME_ARTIFACT_RELEASE,
 } from "../lib/services/football/nflR6MoneylineShadow";
+import {
+  NFL_PLAYER_PROPS_CURRENT_SEASON_STATE_RELEASE,
+  type NflPlayerPropsCurrentSeasonState,
+} from "../lib/services/football/nflPlayerPropsCurrentSeasonState";
 import { NFL_T60_MAX_CAPTURE_LAG_MINUTES } from "../lib/services/football/nflRegularDecisionEvidence";
 
 const { artifact } = __NFL_R6_MONEYLINE_SHADOW_TEST__;
 assert.equal(artifact.artifactRelease, NFL_R6_RUNTIME_ARTIFACT_RELEASE);
 assert.equal(artifact.modelRelease, NFL_R6_MONEYLINE_MODEL_RELEASE);
-assert.equal(artifact.decisionRelease, NFL_R6_MONEYLINE_DECISION_RELEASE);
+assert.equal(artifact.decisionRelease, NFL_R6_ARTIFACT_DECISION_RELEASE);
+assert.notEqual(artifact.decisionRelease, NFL_R6_MONEYLINE_DECISION_RELEASE);
 assert.equal(artifact.shadowOnly, true);
 assert.equal(artifact.policy.maximumActionsPerWeek, null);
 assert.equal(artifact.policy.bestAngleAuthorized, false);
@@ -215,6 +221,80 @@ assert.equal(unmatchedReplacement.quarterbackContext.away.name, "Unmatched Backu
 assert.equal(unmatchedReplacement.grade, "Held");
 assert.ok(unmatchedReplacement.health.blockingReasons.includes("away_quarterback_history_unmatched"));
 
+const currentSeasonState: NflPlayerPropsCurrentSeasonState = {
+  release: NFL_PLAYER_PROPS_CURRENT_SEASON_STATE_RELEASE,
+  season: 2026,
+  completeThroughWeek: 1,
+  updatedAt: "2026-09-08T12:00:00.000Z",
+  games: [],
+  teamStats: [],
+  playMetrics: [],
+  stats: [{
+    gameId: "rookie-history",
+    season: 2026,
+    week: 1,
+    scheduledStart: "2026-09-01T12:00:00.000Z",
+    playerId: "BUF-2",
+    playerName: "Current Season Rookie",
+    team: "BUF",
+    passing_attempts: 25,
+    passing_completions: 17,
+    passing_yards: 190,
+    rushing_attempts: 4,
+    rushing_yards: 21,
+    receptions: 0,
+    receiving_yards: 0,
+    receiving_targets: 0,
+    rushing_touchdowns: 0,
+    receiving_touchdowns: 0,
+    kick_return_touchdowns: 0,
+    punt_return_touchdowns: 0,
+    fumbles_touchdowns: 0,
+  }],
+};
+const currentSeasonReplacementArgs: Parameters<typeof buildNflR6ShadowMoneylineDecision>[0] = {
+  game: { ...game, providerWeek: 2 },
+  opening,
+  comparableCurrentBooks: books,
+  startersAndDepth: {
+    away: {
+      ...depth("BUF", "Josh Allen"),
+      expectedStartingQuarterback: player("Josh Allen", "BUF", 1, "Out"),
+      quarterbackDepth: [player("Josh Allen", "BUF", 1, "Out"), player("Current Season Rookie", "BUF", 2)],
+      roster: [player("Josh Allen", "BUF", 1, "Out"), player("Current Season Rookie", "BUF", 2)],
+    },
+    home: depth("KC", "Patrick Mahomes"),
+  },
+  injuries: availability,
+  stage: "unlocked",
+  capturedAt: "2026-09-08T12:00:00.000Z",
+  t60LagMinutes: null,
+  coverageHealthHolds: [],
+  currentSeasonState,
+};
+const currentSeasonReplacement = buildNflR6ShadowMoneylineDecision(currentSeasonReplacementArgs);
+assert.equal(currentSeasonReplacement.quarterbackContext.away.name, "Current Season Rookie");
+assert.equal(currentSeasonReplacement.quarterbackContext.away.historyMatched, true);
+assert.equal(currentSeasonReplacement.quarterbackContext.away.historySource, "current_season_completed_games");
+assert.equal(currentSeasonReplacement.health.blockingReasons.includes("away_quarterback_history_unmatched"), false);
+assert.ok(currentSeasonReplacement.modelProbability !== null);
+for (const invalidState of [
+  { ...currentSeasonState, stats: currentSeasonState.stats.map((row) => ({ ...row, playerId: "different-player" })) },
+  { ...currentSeasonState, season: 2025 },
+  { ...currentSeasonState, stats: currentSeasonState.stats.map((row) => ({ ...row, season: 2025 })) },
+  { ...currentSeasonState, stats: currentSeasonState.stats.map((row) => ({ ...row, team: "KC" })) },
+  { ...currentSeasonState, stats: currentSeasonState.stats.map((row) => ({ ...row, passing_attempts: 0 })) },
+  { ...currentSeasonState, stats: currentSeasonState.stats.map((row) => ({ ...row, week: 2 })) },
+]) {
+  const invalidHistory = buildNflR6ShadowMoneylineDecision({
+    ...currentSeasonReplacementArgs,
+    currentSeasonState: invalidState,
+  });
+  assert.equal(invalidHistory.quarterbackContext.away.historyMatched, false);
+  assert.equal(invalidHistory.quarterbackContext.away.historySource, "unmatched");
+  assert.ok(invalidHistory.health.blockingReasons.includes("away_quarterback_history_unmatched"));
+}
+
 const unavailableReplacement = buildNflR6ShadowMoneylineDecision({
   game: { ...game, providerWeek: 2 },
   opening,
@@ -318,11 +398,12 @@ assert.equal(falsifiedLagT60.lockedAt, null);
 assert.ok(falsifiedLagT60.health.blockingReasons.includes("t60_capture_late"));
 
 const writer = readFileSync(path.resolve("lib/services/football/nflForwardEvidenceWriter.ts"), "utf8");
-assert.match(writer, /nfl_forward_evidence_writer_2026_10_15_r62_foundational_no_weight_score/);
+assert.match(writer, /nfl_forward_evidence_writer_2026_10_15_r63_personnel_coverage_repair/);
 assert.match(writer, /\.\.\.shadowMoneyline\.health\.blockingReasons/);
 assert.equal((writer.match(/readNflPlayerPropsCurrentSeasonState\(/g) ?? []).length, 1);
 assert.match(writer, /buildNflWeeklyPossessionMargin/);
 assert.match(writer, /buildNflR6ShadowMoneylineDecision/);
+assert.match(writer, /quarterbackHistory: shadowMoneyline\.quarterbackContext/);
 assert.doesNotMatch(
   writer,
   /buildNflV1ActionableGradeBundle/,

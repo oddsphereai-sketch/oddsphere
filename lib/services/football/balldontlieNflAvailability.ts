@@ -68,11 +68,15 @@ const NFL_INJURIES_DOCS = "https://nfl.balldontlie.io/#player-designations";
 export const NFL_INJURY_MAX_PAGES = 8;
 export const NFL_DESIGNATION_TEAM_BATCH_SIZE = 8;
 export const NFL_DESIGNATION_MAX_PAGES_PER_BATCH = 8;
+export const NFL_AVAILABILITY_TRANSIENT_RETRIES_PER_BATCH = 2;
 
 export function nflAvailabilityRequestBudgetMaximum(matchups: NflAvailabilityMatchup[]): number {
   const teamCount = new Set(matchups.flatMap((matchup) => [matchup.awayTeam, matchup.homeTeam])).size;
   const batches = Math.ceil(teamCount / NFL_DESIGNATION_TEAM_BATCH_SIZE);
-  return batches * (NFL_DESIGNATION_MAX_PAGES_PER_BATCH + NFL_INJURY_MAX_PAGES);
+  return batches * (
+    NFL_DESIGNATION_MAX_PAGES_PER_BATCH + NFL_AVAILABILITY_TRANSIENT_RETRIES_PER_BATCH +
+    NFL_INJURY_MAX_PAGES + NFL_AVAILABILITY_TRANSIENT_RETRIES_PER_BATCH
+  );
 }
 
 /**
@@ -193,6 +197,7 @@ async function fetchDesignationRows(args: {
   // intermittently rate-limited one batch and used to poison the entire slate.
   for (const teamIds of batches) {
     const rows: BdlNflDesignationRow[] = [];
+    const retryBudget = { remaining: NFL_AVAILABILITY_TRANSIENT_RETRIES_PER_BATCH };
     let cursor: string | null = null;
     let result: { rows: BdlNflDesignationRow[]; coveredTeamIds: Set<number> } | null = null;
     for (let page = 0; page < NFL_DESIGNATION_MAX_PAGES_PER_BATCH; page += 1) {
@@ -204,7 +209,12 @@ async function fetchDesignationRows(args: {
       params.append("season_types[]", String(args.seasonType));
       for (const teamId of teamIds) params.append("team_ids[]", String(teamId));
       if (cursor) params.set("cursor", cursor);
-      const body = await fetchJsonPage(`${NFL_DESIGNATIONS_ENDPOINT}?${params.toString()}`, args.apiKey, args.fetchImpl);
+      const body = await fetchJsonPage(
+        `${NFL_DESIGNATIONS_ENDPOINT}?${params.toString()}`,
+        args.apiKey,
+        args.fetchImpl,
+        retryBudget,
+      );
       if (body === null) break;
       rows.push(...body.data.filter((row): row is BdlNflDesignationRow => row !== null && typeof row === "object"));
       cursor = pageCursor(body.meta);
@@ -232,13 +242,19 @@ async function fetchLegacyInjuryRows(args: {
   const results: Array<{ rows: BdlNflInjuryRow[]; coveredTeamIds: Set<number> } | null> = [];
   for (const teamIds of batches) {
     const rows: BdlNflInjuryRow[] = [];
+    const retryBudget = { remaining: NFL_AVAILABILITY_TRANSIENT_RETRIES_PER_BATCH };
     let cursor: string | null = null;
     let result: { rows: BdlNflInjuryRow[]; coveredTeamIds: Set<number> } | null = null;
     for (let page = 0; page < NFL_INJURY_MAX_PAGES; page += 1) {
       const params = new URLSearchParams({ per_page: "100" });
       for (const teamId of teamIds) params.append("team_ids[]", String(teamId));
       if (cursor) params.set("cursor", cursor);
-      const body = await fetchJsonPage(`${NFL_INJURIES_ENDPOINT}?${params.toString()}`, args.apiKey, args.fetchImpl);
+      const body = await fetchJsonPage(
+        `${NFL_INJURIES_ENDPOINT}?${params.toString()}`,
+        args.apiKey,
+        args.fetchImpl,
+        retryBudget,
+      );
       if (body === null) break;
       rows.push(...body.data.filter((row): row is BdlNflInjuryRow => row !== null && typeof row === "object"));
       cursor = pageCursor(body.meta);
@@ -261,13 +277,37 @@ async function fetchJsonPage(
   url: string,
   apiKey: string,
   fetchImpl: typeof fetch,
+  retryBudget: { remaining: number },
 ): Promise<{ data: unknown[]; meta?: { next_cursor?: unknown } | null } | null> {
-  const response = await fetchImpl(url, {
-    headers: { Authorization: apiKey, accept: "application/json" },
-  });
-  if (!response.ok || !(response.headers.get("content-type") ?? "").toLowerCase().includes("json")) return null;
-  const body = await response.json() as BdlNflInjuryPage;
-  return Array.isArray(body.data) ? { data: body.data, meta: body.meta } : null;
+  for (;;) {
+    try {
+      const response = await fetchImpl(url, {
+        headers: { Authorization: apiKey, accept: "application/json" },
+      });
+      const retryable = response.status === 408 || response.status === 425 || response.status === 429 || response.status >= 500;
+      if (retryable && retryBudget.remaining > 0) {
+        retryBudget.remaining -= 1;
+        await boundedRetryDelay(response, retryBudget.remaining);
+        continue;
+      }
+      if (!response.ok || !(response.headers.get("content-type") ?? "").toLowerCase().includes("json")) return null;
+      const body = await response.json() as BdlNflInjuryPage;
+      return Array.isArray(body.data) ? { data: body.data, meta: body.meta } : null;
+    } catch {
+      if (retryBudget.remaining <= 0) return null;
+      retryBudget.remaining -= 1;
+      await boundedRetryDelay(null, retryBudget.remaining);
+    }
+  }
+}
+
+async function boundedRetryDelay(response: Response | null, retriesRemaining: number): Promise<void> {
+  const retryAfterHeader = response?.headers.get("retry-after") ?? null;
+  const retryAfter = retryAfterHeader === null ? Number.NaN : Number(retryAfterHeader);
+  const delayMs = Number.isFinite(retryAfter) && retryAfter >= 0
+    ? Math.min(2_000, retryAfter * 1_000)
+    : retriesRemaining > 0 ? 250 : 1_000;
+  await new Promise((resolve) => setTimeout(resolve, delayMs));
 }
 
 function pageCursor(meta: { next_cursor?: unknown } | null | undefined): string | null {
@@ -301,6 +341,9 @@ function normalizeNflDesignationGames(
   const output: DailyEdgeGameAvailability[] = [];
   for (const matchup of matchups) {
     const gameRows = rowsByGame.get(providerGameId(matchup.id)) ?? [];
+    const coveredTeams = new Set(gameRows
+      .map((row) => stringValue(row.team?.abbreviation)?.toUpperCase() ?? null)
+      .filter((abbreviation): abbreviation is string => abbreviation !== null));
     const teams = [matchup.awayTeam, matchup.homeTeam].map((abbreviation) => {
       const teamRows = gameRows.filter((row) => stringValue(row.team?.abbreviation)?.toUpperCase() === abbreviation);
       const players = teamRows.map(normalizeNflDesignationPlayer)
@@ -320,6 +363,8 @@ function normalizeNflDesignationGames(
       sourceLabel: "BALLDONTLIE NFL injury report",
       sourceUrl: NFL_INJURIES_DOCS,
       reportUpdatedAt: latestTimestamp(gameRows.map((row) => isoTimestamp(row.updated_at))),
+      verifiedClear: coveredTeams.has(matchup.awayTeam) && coveredTeams.has(matchup.homeTeam) &&
+        teams.every((team) => team.players.length === 0),
       teams,
     });
   }
@@ -467,8 +512,10 @@ export function mergeNflAvailabilityWithPrior(
 ): DailyEdgeGameAvailability | null {
   if (current === null) return prior;
   if (prior === null || !sameAvailabilityGame(current, prior)) {
-    return current.teams.some((team) => team.players.length > 0) ? current : null;
+    return current.verifiedClear === true || current.teams.some((team) => team.players.length > 0) ? current : null;
   }
+
+  if (current.verifiedClear === true) return current;
 
   const priorByTeam = new Map(prior.teams.map((team) => [team.abbreviation, team]));
   const teams = current.teams.map((team) =>
