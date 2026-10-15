@@ -46,11 +46,11 @@ import {
 export const NFL_PLAYER_PROPS_PORTABLE_ARTIFACT_RELEASE =
   "nfl_player_props_runtime_2026_10_09_r14_independent_receiving_yards" as const;
 export const NFL_PLAYER_PROPS_RUNTIME_RELEASE =
-  "nfl_player_props_runtime_2026_10_15_r31_receptions_reference_required" as const;
+  "nfl_player_props_runtime_2026_10_15_r32_member_decision_evidence" as const;
 export const NFL_PLAYER_PROPS_BOARD_RELEASE =
-  "nfl_player_props_board_2026_10_15_r34_receptions_reference_required" as const;
+  "nfl_player_props_board_2026_10_15_r35_member_decision_evidence" as const;
 export const NFL_PLAYER_PROPS_DECISION_RELEASE =
-  "nfl_player_props_decision_2026_10_15_r30_receptions_reference_required" as const;
+  "nfl_player_props_decision_2026_10_15_r31_member_decision_evidence" as const;
 export const NFL_PLAYER_PROPS_MODEL_RELEASE =
   "nfl_player_props_distribution_model_2026_10_15_r25_receptions_reference_required" as const;
 export const NFL_PLAYER_PROPS_CALIBRATION_RELEASE =
@@ -81,6 +81,10 @@ export const NFL_PLAYER_PROPS_MARKET_ROLE_MINIMUM_BOOKS = 2 as const;
 export const NFL_PLAYER_PROPS_RECEPTIONS_MARKET_FLIP_MINIMUM_EDGE = 0.05 as const;
 export const NFL_PLAYER_PROPS_SOURCE_AWARE_MARKET_READING_RELEASE =
   "nfl_player_props_market_reading_2026_10_15_r3_reference_required" as const;
+export const NFL_PLAYER_PROPS_DECISION_SUPPORT_EVIDENCE_RELEASE =
+  "nfl_player_props_decision_support_evidence_2026_10_15_r1" as const;
+export const NFL_PLAYER_PROPS_MEMBER_DECISION_SUPPORT_RELEASE =
+  "nfl_player_props_member_decision_support_2026_10_15_r1" as const;
 export const NFL_PLAYER_PROPS_SOURCE_AWARE_QUALIFIED_MARKETS = [
   "receptions",
 ] as const satisfies readonly NflPlayerPropMarket[];
@@ -363,6 +367,55 @@ export type NflPlayerPropsForecastContext = {
   opponentAllowance: NflPlayerPropsForecastMetric | null;
   modelInputTrends?: NflPlayerPropsForecastTrend[];
 };
+export type NflPlayerPropsQualifiedReferenceBookEvidence = {
+  sportsbook: "pinnacle" | "novig";
+  sourceLine: number;
+  targetLine: number;
+  sourceNoVigProbability: number;
+  transportedProbability: number;
+  confirmsSelectedSide: boolean;
+  observedAt: string;
+};
+export type NflPlayerPropsQualifiedReferenceEvidence = {
+  release: typeof NFL_PLAYER_PROPS_DECISION_SUPPORT_EVIDENCE_RELEASE;
+  source: "target_book_excluded_pinnacle_novig";
+  selectedSideProbability: number;
+  books: NflPlayerPropsQualifiedReferenceBookEvidence[];
+};
+export type NflPlayerPropsMemberDecisionSupport = {
+  release: typeof NFL_PLAYER_PROPS_MEMBER_DECISION_SUPPORT_RELEASE;
+  probability: {
+    independentSelectedSide: number;
+    publishedSelectedSide: number;
+    targetExcludedMarketSelectedSide: number;
+    fairAmericanPrice: number;
+    fairPriceSource: "derived_from_stored_published_probability";
+  };
+  price: {
+    selection: "best_available_exact_price_at_evaluation";
+    sportsbook: string;
+    americanPrice: number;
+    observedAt: string;
+  };
+  movement: {
+    opening: { observedAt: string; line: number; americanPrice: number } | null;
+    prior: null;
+    priorAvailability: "unavailable_not_persisted_in_member_snapshot";
+    current: { observedAt: string; line: number; americanPrice: number };
+  };
+  projection: {
+    independent: number | null;
+    published: number | null;
+    centralRange: NflPlayerPropsProjectionRange | null;
+  };
+  qualifiedReference:
+    | { availability: "available"; evidence: NflPlayerPropsQualifiedReferenceEvidence }
+    | { availability: "unavailable"; reason: "market_not_qualified" | "qualified_reference_not_captured_for_decision" };
+  featureEvidence: {
+    rawContextField: "forecastContext";
+    percentileAvailability: "unavailable_no_validated_reference_distribution";
+  };
+};
 export type NflPlayerPropsRuntimeDecision = {
   gameId: string; providerPlayerId: string | null; playerName: string; team: string; opponent: string;
   scheduledStart: string; market: NflPlayerPropMarket; line: number;
@@ -396,6 +449,9 @@ export type NflPlayerPropsRuntimeDecision = {
     books: number;
     benchmarkProbability: number;
   };
+  qualifiedReferenceEvidence?: NflPlayerPropsQualifiedReferenceEvidence;
+  /** Present only on newly evaluated rows. Legacy locked rows remain byte-for-byte unchanged. */
+  decisionSupport?: NflPlayerPropsMemberDecisionSupport;
   marketEvidenceId?: string;
 };
 
@@ -1486,6 +1542,15 @@ export function buildNflPlayerPropsRuntimeBoard(args: {
         && side !== forecastSide
           ? "Watchlist"
           : bridgedGrade;
+      const qualifiedReferenceEvidence = sourceAwareMarketReading
+        ? nflPlayerPropsQualifiedReferenceEvidence({
+            market: offer.market,
+            targetLine: offer.line,
+            projection,
+            side,
+            offers: independentSourceAwareOffers,
+          })
+        : undefined;
       decisions.push(decisionRow(
         offer, feature, decisionScore, side, price, publishedProjection, raw, market, final, edge, ev, grade,
         movement,
@@ -1500,6 +1565,7 @@ export function buildNflPlayerPropsRuntimeBoard(args: {
           books: independentPassingOffers.length,
           benchmarkProbability: market,
         } : undefined,
+        qualifiedReferenceEvidence,
         effectiveIndependentBooks === 0 && !passingProjection?.evidence ? undefined : posterior.range,
       ));
     }
@@ -1512,11 +1578,14 @@ export function buildNflPlayerPropsRuntimeBoard(args: {
     const previous = bestPrice.get(key);
     if (!previous || row.americanPrice > previous.americanPrice) bestPrice.set(key, row);
   }
-  const deduped = [...bestPrice.entries()].map(([key, row]) => ({
-    ...row,
-    bookEvidence: [...(evidenceByOutcome.get(key) ?? [])].sort((first, second) =>
-      second.americanPrice - first.americanPrice || first.sportsbook.localeCompare(second.sportsbook)),
-  })).sort(compareDecision);
+  const deduped = [...bestPrice.entries()].map(([key, row]) => {
+    const selected = {
+      ...row,
+      bookEvidence: [...(evidenceByOutcome.get(key) ?? [])].sort((first, second) =>
+        second.americanPrice - first.americanPrice || first.sportsbook.localeCompare(second.sportsbook)),
+    };
+    return { ...selected, decisionSupport: buildNflPlayerPropsMemberDecisionSupport(selected) };
+  }).sort(compareDecision);
   const marketEvidence = args.captureMarketEvidence === false ? null : buildNflPlayerPropsRuntimeMarketEvidence({
     offers: args.offers,
     decisions: deduped,
@@ -1719,6 +1788,57 @@ function averagePresent(values: Array<number | null>): number | null { const pre
 function normalizeBook(value: string): string { return value.toLowerCase().replace(/[^a-z0-9]/g, ""); }
 function isSharpReferenceBook(value: string): boolean { return ["pinnacle", "circa", "bookmaker"].includes(normalizeBook(value)); }
 
+function nflPlayerPropsQualifiedReferenceEvidence(args: {
+  market: NflPlayerPropMarket;
+  targetLine: number;
+  projection: number;
+  side: "over" | "under";
+  offers: readonly NflPlayerPropsExactOffer[];
+}): NflPlayerPropsQualifiedReferenceEvidence | undefined {
+  const byBook = new Map<"pinnacle" | "novig", NflPlayerPropsQualifiedReferenceBookEvidence>();
+  for (const offer of args.offers) {
+    const sportsbook = normalizeBook(offer.sportsbook);
+    if ((sportsbook !== "pinnacle" && sportsbook !== "novig") || offer.overNoVigProbability === null) continue;
+    const transportedOver = nflPlayerPropsTransportedMarketProbability({
+      market: args.market,
+      projection: args.projection,
+      sourceLine: offer.line,
+      sourceOverProbability: offer.overNoVigProbability,
+      targetLine: args.targetLine,
+    });
+    const sourceNoVigProbability = args.side === "over"
+      ? offer.overNoVigProbability
+      : 1 - offer.overNoVigProbability;
+    const transportedProbability = args.side === "over" ? transportedOver : 1 - transportedOver;
+    const evidence: NflPlayerPropsQualifiedReferenceBookEvidence = {
+      sportsbook,
+      sourceLine: offer.line,
+      targetLine: args.targetLine,
+      sourceNoVigProbability,
+      transportedProbability,
+      confirmsSelectedSide: transportedProbability >= 0.5,
+      observedAt: offer.observedAt,
+    };
+    const previous = byBook.get(sportsbook);
+    if (!previous || Date.parse(evidence.observedAt) > Date.parse(previous.observedAt)) {
+      byBook.set(sportsbook, evidence);
+    }
+  }
+  const books = [...byBook.values()].sort((first, second) => first.sportsbook.localeCompare(second.sportsbook));
+  if (!books.length) return undefined;
+  const selectedSideProbability = sourceWeightedProbability(args.market, books.map((book) => ({
+    sportsbook: book.sportsbook,
+    probability: book.transportedProbability,
+  })));
+  if (selectedSideProbability === null) return undefined;
+  return {
+    release: NFL_PLAYER_PROPS_DECISION_SUPPORT_EVIDENCE_RELEASE,
+    source: "target_book_excluded_pinnacle_novig",
+    selectedSideProbability,
+    books,
+  };
+}
+
 function nflPlayerPropsSourceWeight(market: NflPlayerPropMarket, sportsbook: string): number {
   const book = normalizeBook(sportsbook);
   if (book === "pinnacle") return 4;
@@ -1774,6 +1894,7 @@ function decisionRow(
   decisionRelease: string,
   projectionEvidence?: NflPlayerPropsRuntimeDecision["projectionEvidence"],
   passingMarketEvidence?: NflPlayerPropsRuntimeDecision["passingMarketEvidence"],
+  qualifiedReferenceEvidence?: NflPlayerPropsRuntimeDecision["qualifiedReferenceEvidence"],
   projectionRange?: NflPlayerPropsProjectionRange,
 ): NflPlayerPropsRuntimeDecision {
   const openingAmericanPrice = side === "over"
@@ -1799,7 +1920,76 @@ function decisionRow(
     decisionRelease,
     ...(projectionEvidence ? { projectionEvidence } : {}),
     ...(passingMarketEvidence ? { passingMarketEvidence } : {}),
+    ...(qualifiedReferenceEvidence ? { qualifiedReferenceEvidence } : {}),
   };
+}
+
+function buildNflPlayerPropsMemberDecisionSupport(
+  row: NflPlayerPropsRuntimeDecision,
+): NflPlayerPropsMemberDecisionSupport {
+  const selectedBook = row.bookEvidence.find((book) => normalizeBook(book.sportsbook) === normalizeBook(row.sportsbook));
+  const opening = selectedBook?.openingObservedAt !== null
+    && selectedBook?.openingObservedAt !== undefined
+    && selectedBook.openingLine !== null
+    && selectedBook.openingAmericanPrice !== null
+    ? {
+        observedAt: selectedBook.openingObservedAt,
+        line: selectedBook.openingLine,
+        americanPrice: selectedBook.openingAmericanPrice,
+      }
+    : null;
+  const independentProjection = row.projectionEvidence?.source === "market_dominant_expected_starter"
+    ? row.projectionEvidence.roleProjection
+    : row.projectionEvidence?.source === "single_posterior_distribution"
+      ? row.projectionEvidence.independentProjection
+      : row.projection;
+  return {
+    release: NFL_PLAYER_PROPS_MEMBER_DECISION_SUPPORT_RELEASE,
+    probability: {
+      independentSelectedSide: row.rawModelProbability,
+      publishedSelectedSide: row.finalProbability,
+      targetExcludedMarketSelectedSide: row.marketProbability,
+      fairAmericanPrice: nflPlayerPropsFairAmericanPrice(row.finalProbability),
+      fairPriceSource: "derived_from_stored_published_probability",
+    },
+    price: {
+      selection: "best_available_exact_price_at_evaluation",
+      sportsbook: row.sportsbook,
+      americanPrice: row.americanPrice,
+      observedAt: row.observedAt,
+    },
+    movement: {
+      opening,
+      prior: null,
+      priorAvailability: "unavailable_not_persisted_in_member_snapshot",
+      current: { observedAt: row.observedAt, line: row.line, americanPrice: row.americanPrice },
+    },
+    projection: {
+      independent: independentProjection,
+      published: row.projection,
+      centralRange: row.projectionRange,
+    },
+    qualifiedReference: row.qualifiedReferenceEvidence
+      ? { availability: "available", evidence: row.qualifiedReferenceEvidence }
+      : {
+          availability: "unavailable",
+          reason: row.market === "receptions"
+            ? "qualified_reference_not_captured_for_decision"
+            : "market_not_qualified",
+        },
+    featureEvidence: {
+      rawContextField: "forecastContext",
+      percentileAvailability: "unavailable_no_validated_reference_distribution",
+    },
+  };
+}
+
+function nflPlayerPropsFairAmericanPrice(probability: number): number {
+  if (!(probability > 0 && probability < 1)) throw new Error("NFL props fair-price probability is invalid.");
+  if (probability === 0.5) return 100;
+  return probability > 0.5
+    ? Math.round(-100 * probability / (1 - probability))
+    : Math.round(100 * (1 - probability) / probability);
 }
 
 export function nflPlayerPropsStarterAdjustedParticipationProbability(
