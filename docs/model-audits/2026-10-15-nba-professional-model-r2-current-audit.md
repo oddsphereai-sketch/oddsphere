@@ -325,7 +325,7 @@ One aggregate win is insufficient: results are segmented by month, rest state,
 injury certainty, projected pace, favorite size, and home/away status.
 
 The executable tournament release is now
-`nba_professional_tournament_2026_10_15_r6_rotation_travel_calibration_gate`. Its
+`nba_professional_tournament_2026_10_15_r9_recency_candidates`. Its
 predeclared model grid is reproducible with the repository's NumPy runtime:
 closed-form ridge, robust iteratively reweighted Huber ridge, and bounded
 hinge-spline ridge. Feature-family ablations separately test ratings,
@@ -337,6 +337,28 @@ baseline. It records rolling-origin stability before confirmation, 2,000
 deterministic game-cluster bootstrap samples, and the complete winner
 correction/harm ledger versus that baseline. These are selection safeguards,
 not evidence that a candidate has already qualified.
+
+The tournament includes Elo-only and adjusted-rating-only feature groups; a
+rich feature set cannot win merely by containing more columns. Eligible models
+are ranked by a predeclared joint relative score: team-score MAE 25%, margin
+MAE 20%, Total MAE 20%, Moneyline Brier 20%, Moneyline log loss 10%, and
+winner error rate 5%. Hard no-regression gates still apply separately. This
+keeps the final-score objective central without allowing a tiny score gain to
+mask worse winner probabilities or market distributions.
+
+The bounded estimator grid also contains predeclared one- and two-season
+half-life candidates. Recency weighting applies only to the model-fitting rows;
+it cannot move an outcome into an earlier feature cutoff or calibration block.
+The unweighted candidates remain in the same tournament, so recent form must
+outperform stable multi-season coefficients rather than being assumed better.
+
+Probability uncertainty is never estimated from the same fitted rows used to
+train the score heads. Within each development block, an earlier partition fits
+the score model and a later partition calibrates the margin scale by log loss;
+the untouched selection or confirmation season is scored only afterward. Total
+uncertainty likewise comes from those later out-of-fit residuals. This prevents
+in-sample residual shrinkage from manufacturing overconfident Moneyline,
+Spread, or Total probabilities.
 
 ## Upset-aware evaluation
 

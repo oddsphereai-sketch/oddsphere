@@ -20,7 +20,7 @@ import numpy as np
 import pandas as pd
 
 
-RELEASE = "nba_professional_tournament_2026_10_15_r6_rotation_travel_calibration_gate"
+RELEASE = "nba_professional_tournament_2026_10_15_r9_recency_candidates"
 FEATURE_RELEASE = "nba_point_in_time_features_2026_10_15_r5_rotation_travel"
 R1_CONFIRMATION = {
     "season": 2025,
@@ -134,6 +134,8 @@ def feature_catalog(frame: pd.DataFrame) -> dict[str, list[str]]:
         return [column for column in numeric if any(token in column for token in tokens)]
 
     ratings = chosen(("league_off_rating", "adjusted_", "offRating_", "defRating_", "pace_", "current_games", "prior_games", "elo_", "baseline_"))
+    elo = chosen(("league_off_rating", "elo_"))
+    adjusted_ratings = chosen(("league_off_rating", "adjusted_", "baseline_", "pace_prior"))
     schedule = chosen((
         "rest_days", "back_to_back", "games_last_4_days", "games_last_7_days",
         "travel_", "time_zones_", "consecutive_road_games_", "venue_altitude_", "altitude_change_",
@@ -163,6 +165,8 @@ def feature_catalog(frame: pd.DataFrame) -> dict[str, list[str]]:
         "matchup_reboundChancesPer100_", "matchup_usageConcentration_",
     ))
     groups = {
+        "elo_only": sorted(set(elo)),
+        "adjusted_ratings": sorted(set(adjusted_ratings)),
         "ratings": sorted(set(ratings)),
         "ratings_schedule": sorted(set(ratings + schedule)),
         "four_factors_schedule": sorted(set(ratings + schedule + four_factors + volatility)),
@@ -178,6 +182,24 @@ def feature_catalog(frame: pd.DataFrame) -> dict[str, list[str]]:
     return groups
 
 
+def joint_selection_score(candidate: dict[str, Any], baseline: dict[str, Any]) -> float:
+    """Balance score accuracy and probability quality; lower is better."""
+    weights = {
+        "teamScoreMae": 0.25,
+        "marginMae": 0.20,
+        "totalMae": 0.20,
+        "homeWinBrier": 0.20,
+        "homeWinLogLoss": 0.10,
+    }
+    score = sum(
+        weight * float(candidate[metric]) / max(float(baseline[metric]), 1e-9)
+        for metric, weight in weights.items()
+    )
+    candidate_error = 1 - float(candidate["winnerAccuracy"])
+    baseline_error = max(1e-9, 1 - float(baseline["winnerAccuracy"]))
+    return score + 0.05 * candidate_error / baseline_error
+
+
 def candidate_model_specs() -> list[dict[str, Any]]:
     """Return the predeclared, bounded-complexity estimator grid."""
     return [
@@ -186,6 +208,9 @@ def candidate_model_specs() -> list[dict[str, Any]]:
         {"family": "huber_ridge", "alpha": 10.0, "epsilon": 1.75},
         {"family": "spline_ridge", "alpha": 10.0, "knots": [0.75]},
         {"family": "spline_ridge", "alpha": 100.0, "knots": [0.75, 1.5]},
+        {"family": "ridge", "alpha": 10.0, "halfLifeDays": 365.0},
+        {"family": "ridge", "alpha": 100.0, "halfLifeDays": 730.0},
+        {"family": "huber_ridge", "alpha": 10.0, "epsilon": 1.75, "halfLifeDays": 365.0},
     ]
 
 
@@ -264,8 +289,12 @@ def fit_regressor(
     x_train: np.ndarray,
     y_train: np.ndarray,
     model: dict[str, Any],
+    base_weights: np.ndarray | None = None,
 ) -> np.ndarray:
-    coefficients = solve_ridge(x_train, y_train, float(model["alpha"]))
+    normalized_base = None
+    if base_weights is not None:
+        normalized_base = base_weights / max(float(base_weights.mean()), 1e-9)
+    coefficients = solve_ridge(x_train, y_train, float(model["alpha"]), normalized_base)
     if model["family"] != "huber_ridge":
         return coefficients
     design = np.column_stack([x_train, np.ones(len(x_train))])
@@ -280,6 +309,8 @@ def fit_regressor(
         weights = np.ones(len(residual))
         outliers = standardized > epsilon
         weights[outliers] = epsilon / standardized[outliers]
+        if normalized_base is not None:
+            weights *= normalized_base
         updated = solve_ridge(x_train, y_train, float(model["alpha"]), weights)
         if np.max(np.abs(updated - coefficients)) < 1e-7:
             coefficients = updated
@@ -300,16 +331,22 @@ def fit_predict(
     architecture: str,
 ) -> tuple[np.ndarray, np.ndarray, dict[str, Any]]:
     x_train, x_evaluate, design = design_matrices(train, evaluate, features, model)
+    weights = None
+    half_life_days = model.get("halfLifeDays")
+    if half_life_days is not None:
+        cutoff = pd.to_datetime(train["feature_cutoff"], utc=True)
+        ages = (cutoff.max() - cutoff).dt.total_seconds().to_numpy(float) / 86_400
+        weights = np.power(0.5, ages / float(half_life_days))
     models: dict[str, Any] = {"design": design, "model": model}
     if architecture == "team_scores":
         for target in ("target_home_score", "target_away_score"):
-            models[target] = fit_regressor(x_train, train[target].to_numpy(float), model)
+            models[target] = fit_regressor(x_train, train[target].to_numpy(float), model, weights)
         home = predict_regressor(x_evaluate, models["target_home_score"])
         away = predict_regressor(x_evaluate, models["target_away_score"])
         return home, away, models
     if architecture == "margin_total":
         for target in ("target_home_margin", "target_total"):
-            models[target] = fit_regressor(x_train, train[target].to_numpy(float), model)
+            models[target] = fit_regressor(x_train, train[target].to_numpy(float), model, weights)
         margin = predict_regressor(x_evaluate, models["target_home_margin"])
         total = predict_regressor(x_evaluate, models["target_total"])
         return (total + margin) / 2, (total - margin) / 2, models
@@ -736,6 +773,81 @@ def residual_sigmas(
     )
 
 
+def calibrated_distribution_scales(
+    frame: pd.DataFrame,
+    home: np.ndarray,
+    away: np.ndarray,
+) -> tuple[float, float]:
+    """Fit uncertainty on later, out-of-fit forecasts rather than training residuals."""
+    residual_margin_sigma, total_sigma = residual_sigmas(frame, home, away)
+    predicted_margin = home - away
+    outcomes = (frame["target_home_margin"].to_numpy(float) > 0).astype(float)
+    candidates = np.linspace(
+        max(1.0, residual_margin_sigma * 0.5),
+        max(1.01, residual_margin_sigma * 2.0),
+        301,
+    )
+    losses = []
+    for scale in candidates:
+        probabilities = np.clip(normal_cdf(predicted_margin / scale), 0.001, 0.999)
+        losses.append(float(-(
+            outcomes * np.log(probabilities) + (1 - outcomes) * np.log(1 - probabilities)
+        ).mean()))
+    margin_sigma = float(candidates[int(np.argmin(losses))])
+    return margin_sigma, total_sigma
+
+
+def chronological_calibration_partition(frame: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Return earlier development and later calibration rows without outcome overlap."""
+    ordered = frame.sort_values(["feature_cutoff", "game_id"]).copy()
+    seasons = sorted(int(value) for value in ordered["season"].unique())
+    if len(seasons) >= 2:
+        calibration_season = seasons[-1]
+        development = ordered[ordered["season"] < calibration_season].copy()
+        calibration = ordered[ordered["season"] == calibration_season].copy()
+    else:
+        split = max(1, min(len(ordered) - 1, int(len(ordered) * 0.70)))
+        development = ordered.iloc[:split].copy()
+        calibration = ordered.iloc[split:].copy()
+    if development.empty or calibration.empty:
+        raise ValueError("NBA probability calibration requires nonempty chronological partitions")
+    return development, calibration
+
+
+def model_calibration_scales(
+    frame: pd.DataFrame,
+    features: list[str],
+    model: dict[str, Any],
+    architecture: str,
+) -> tuple[float, float, dict[str, Any]]:
+    development, calibration = chronological_calibration_partition(frame)
+    home, away, _ = fit_predict(development, calibration, features, model, architecture)
+    margin_sigma, total_sigma = calibrated_distribution_scales(calibration, home, away)
+    return margin_sigma, total_sigma, {
+        "method": "strictly_earlier_fit_later_probability_calibration_log_loss_margin_scale",
+        "developmentRows": int(len(development)),
+        "calibrationRows": int(len(calibration)),
+        "developmentSeasons": sorted(int(value) for value in development["season"].unique()),
+        "calibrationSeasons": sorted(int(value) for value in calibration["season"].unique()),
+        "marginSigma": margin_sigma,
+        "totalSigma": total_sigma,
+    }
+
+
+def baseline_calibration_scales(frame: pd.DataFrame) -> tuple[float, float, dict[str, Any]]:
+    development, calibration = chronological_calibration_partition(frame)
+    del development
+    home, away = rating_baseline(calibration, 2.2)
+    margin_sigma, total_sigma = calibrated_distribution_scales(calibration, home, away)
+    return margin_sigma, total_sigma, {
+        "method": "later_chronological_rating_baseline_probability_calibration",
+        "calibrationRows": int(len(calibration)),
+        "calibrationSeasons": sorted(int(value) for value in calibration["season"].unique()),
+        "marginSigma": margin_sigma,
+        "totalSigma": total_sigma,
+    }
+
+
 def winner_corrections_and_harms(
     frame: pd.DataFrame,
     candidate_home: np.ndarray,
@@ -830,11 +942,13 @@ def rolling_origin_stability(
         if train.empty or evaluate.empty:
             continue
         home, away, _ = fit_predict(train, evaluate, features, model, architecture)
-        train_home, train_away, _ = fit_predict(train, train, features, model, architecture)
-        margin_sigma, total_sigma = residual_sigmas(train, train_home, train_away)
+        margin_sigma, total_sigma, calibration = model_calibration_scales(
+            train, features, model, architecture
+        )
         rows.append({
             "trainingSeasons": sorted(int(value) for value in train["season"].unique()),
             "evaluationSeason": evaluation_season,
+            "probabilityCalibration": calibration,
             "metrics": metrics(evaluate, home, away, margin_sigma, total_sigma),
         })
     return rows
@@ -863,31 +977,30 @@ def main() -> None:
         for architecture in ("team_scores", "margin_total"):
             for model in model_specs:
                 home, away, _ = fit_predict(train, selection, features, model, architecture)
-                train_home, train_away, _ = fit_predict(train, train, features, model, architecture)
-                margin_sigma, total_sigma = residual_sigmas(train, train_home, train_away)
+                margin_sigma, total_sigma, probability_calibration = model_calibration_scales(
+                    train, features, model, architecture
+                )
                 candidates.append({
                     "group": group_name,
                     "featureCount": len(features),
                     "architecture": architecture,
                     "model": model,
+                    "probabilityCalibration": probability_calibration,
                     "selection": metrics(selection, home, away, margin_sigma, total_sigma),
                 })
     baseline_home, baseline_away = rating_baseline(selection, 2.2)
-    baseline_fit_home, baseline_fit_away = rating_baseline(train, 2.2)
-    baseline_margin_sigma = float(np.std(
-        train["target_home_margin"].to_numpy(float) - (baseline_fit_home - baseline_fit_away), ddof=1,
-    ))
-    baseline_total_sigma = float(np.std(
-        train["target_total"].to_numpy(float) - (baseline_fit_home + baseline_fit_away), ddof=1,
-    ))
+    baseline_margin_sigma, baseline_total_sigma, baseline_calibration = baseline_calibration_scales(train)
     selection_baseline = metrics(
         selection, baseline_home, baseline_away, baseline_margin_sigma, baseline_total_sigma
     )
+    for candidate in candidates:
+        candidate["jointSelectionScore"] = joint_selection_score(
+            candidate["selection"], selection_baseline
+        )
     candidates.sort(key=lambda item: (
+        item["jointSelectionScore"],
         item["selection"]["teamScoreMae"],
         item["selection"]["homeWinBrier"],
-        item["selection"]["marginMae"],
-        item["selection"]["totalMae"],
     ))
     eligible_candidates = [
         item for item in candidates
@@ -910,23 +1023,24 @@ def main() -> None:
         dict(selected["model"]),
         str(selected["architecture"]),
     )
-    fit_home, fit_away, _ = fit_predict(
-        fit,
+    margin_sigma, total_sigma, confirmation_probability_calibration = model_calibration_scales(
         fit,
         selected_features,
         dict(selected["model"]),
         str(selected["architecture"]),
     )
-    margin_sigma, total_sigma = residual_sigmas(fit, fit_home, fit_away)
     confirmation_metrics = metrics(confirmation, home, away, margin_sigma, total_sigma)
 
     confirmation_baseline_home, confirmation_baseline_away = rating_baseline(confirmation, 2.2)
+    confirmation_baseline_margin_sigma, confirmation_baseline_total_sigma, confirmation_baseline_calibration = (
+        baseline_calibration_scales(fit)
+    )
     confirmation_baseline = metrics(
         confirmation,
         confirmation_baseline_home,
         confirmation_baseline_away,
-        baseline_margin_sigma,
-        baseline_total_sigma,
+        confirmation_baseline_margin_sigma,
+        confirmation_baseline_total_sigma,
     )
     correction_ledger = winner_corrections_and_harms(
         confirmation,
@@ -1015,6 +1129,15 @@ def main() -> None:
         "selected": selected,
         "selectionGatePassed": selection_gate_passed,
         "selectionGate": {
+            "ranking": "weighted_relative_joint_score",
+            "rankingWeights": {
+                "teamScoreMae": 0.25,
+                "marginMae": 0.20,
+                "totalMae": 0.20,
+                "homeWinBrier": 0.20,
+                "homeWinLogLoss": 0.10,
+                "winnerErrorRate": 0.05,
+            },
             "requiresTeamScoreMaeImprovement": True,
             "marginMaeMaximumRegression": 0.10,
             "totalMaeMaximumRegression": 0.10,
@@ -1023,12 +1146,15 @@ def main() -> None:
             "homeWinLogLossMaximumRegression": 0.005,
         },
         "selectionBaseline": selection_baseline,
+        "selectionBaselineProbabilityCalibration": baseline_calibration,
         "confirmation": confirmation_metrics,
         "confirmationDistribution": {
             "marginSigma": margin_sigma,
             "totalSigma": total_sigma,
         },
+        "confirmationProbabilityCalibration": confirmation_probability_calibration,
         "confirmationRatingBaseline": confirmation_baseline,
+        "confirmationRatingBaselineProbabilityCalibration": confirmation_baseline_calibration,
         "confirmationWinnerChangesVsRatingBaseline": correction_ledger,
         "confirmationUncertainty": uncertainty,
         "rollingOriginStability": stability,

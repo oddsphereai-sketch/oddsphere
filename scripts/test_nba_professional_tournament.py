@@ -40,6 +40,10 @@ for season_index, season in enumerate((2023, 2024, 2025)):
             "home_team": f"H{game_index % 30}",
             "away_team": f"A{(game_index + 9) % 30}",
             "league_off_rating": 110 + season_index,
+            "elo_home_rating": 1510 + home_off - away_off,
+            "elo_away_rating": 1490 + away_off - home_off,
+            "elo_rating_delta": 20 + 2 * (home_off - away_off),
+            "elo_home_win_probability": 0.55,
             "home_adjusted_offense": home_off,
             "home_adjusted_defense": home_def,
             "away_adjusted_offense": away_off,
@@ -148,7 +152,14 @@ with tempfile.TemporaryDirectory(prefix="nba-tournament-test-") as temporary:
     assert report["selected"]["featureCount"] > 0
     assert report["selectionGate"]["homeWinBrierMaximumRegression"] == 0.0
     assert report["selectionGate"]["homeWinLogLossMaximumRegression"] == 0.005
+    assert report["selectionGate"]["ranking"] == "weighted_relative_joint_score"
+    assert abs(sum(report["selectionGate"]["rankingWeights"].values()) - 1.0) < 1e-9
+    assert report["selected"]["jointSelectionScore"] > 0
     assert report["confirmation"]["games"] == 48
+    assert report["confirmationProbabilityCalibration"]["developmentRows"] > 0
+    assert report["confirmationProbabilityCalibration"]["calibrationRows"] > 0
+    assert report["confirmationProbabilityCalibration"]["method"].startswith("strictly_earlier_fit")
+    assert report["selectionBaselineProbabilityCalibration"]["calibrationRows"] > 0
     assert report["selected"]["model"]["family"] in {"ridge", "huber_ridge", "spline_ridge"}
     assert report["confirmationWinnerChangesVsRatingBaseline"]["corrections"] >= 0
     assert report["confirmationWinnerChangesVsRatingBaseline"]["harms"] >= 0
@@ -190,5 +201,6 @@ with tempfile.TemporaryDirectory(prefix="nba-tournament-test-") as temporary:
     assert "away_usageConcentration_5" in selected_features
     assert "home_rotation_continuity_5" in selected_features
     assert "away_travel_distance_miles" in selected_features
+    assert tournament.feature_catalog(tournament.validate(tournament.read_jsonl(features)))["elo_only"]
 
 print("NBA professional tournament chronological and promotion-boundary tests passed.")
