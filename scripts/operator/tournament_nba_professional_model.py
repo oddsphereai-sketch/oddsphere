@@ -20,7 +20,7 @@ import numpy as np
 import pandas as pd
 
 
-RELEASE = "nba_professional_tournament_2026_10_15_r13_actionable_market_holdout"
+RELEASE = "nba_professional_tournament_2026_10_15_r14_chronological_market_marriage"
 FEATURE_RELEASE = "nba_point_in_time_features_2026_10_15_r6_expanded_advanced"
 R1_CONFIRMATION = {
     "season": 2025,
@@ -660,6 +660,205 @@ def metrics(
     }
 
 
+def apply_reference_market_marriage(
+    frame: pd.DataFrame,
+    independent_home: np.ndarray,
+    independent_away: np.ndarray,
+    margin_independent_weight: float,
+    total_independent_weight: float,
+) -> tuple[np.ndarray, np.ndarray, dict[str, int]]:
+    """Blend scores with a pregame market reference without breaking coherence.
+
+    The spread is converted to expected home margin, while the total remains in
+    points. Missing market heads fall back to the independent projection. This
+    is deliberately limited to score-level evidence that can be replayed; line
+    movement and public splits are not silently approximated.
+    """
+    independent_margin = independent_home - independent_away
+    independent_total = independent_home + independent_away
+    spread = frame.get(
+        "evaluation_opening_home_spread",
+        pd.Series(np.nan, index=frame.index),
+    ).to_numpy(float)
+    market_total = frame.get(
+        "evaluation_opening_total",
+        pd.Series(np.nan, index=frame.index),
+    ).to_numpy(float)
+    margin_available = np.isfinite(spread)
+    total_available = np.isfinite(market_total)
+    market_margin = -spread
+    final_margin = np.where(
+        margin_available,
+        margin_independent_weight * independent_margin
+        + (1 - margin_independent_weight) * market_margin,
+        independent_margin,
+    )
+    final_total = np.where(
+        total_available,
+        total_independent_weight * independent_total
+        + (1 - total_independent_weight) * market_total,
+        independent_total,
+    )
+    return (
+        (final_total + final_margin) / 2,
+        (final_total - final_margin) / 2,
+        {
+            "games": int(len(frame)),
+            "marginAvailable": int(margin_available.sum()),
+            "totalAvailable": int(total_available.sum()),
+            "bothAvailable": int((margin_available & total_available).sum()),
+        },
+    )
+
+
+def chronological_market_marriage_partition(
+    frame: pd.DataFrame,
+) -> tuple[pd.DataFrame, pd.DataFrame, int]:
+    """Reserve later selection games for threshold choice after blend choice."""
+    ordered = frame.sort_values(["feature_cutoff", "game_id"]).copy()
+    if len(ordered) < 10:
+        raise ValueError("NBA market marriage requires at least 10 selection games")
+    split = max(1, min(len(ordered) - 1, int(round(len(ordered) * 0.60))))
+    return ordered.iloc[:split].copy(), ordered.iloc[split:].copy(), split
+
+
+def select_reference_market_marriage(
+    frame: pd.DataFrame,
+    independent_home: np.ndarray,
+    independent_away: np.ndarray,
+    independent_margin_sigma: float,
+    independent_total_sigma: float,
+) -> dict[str, Any]:
+    """Select bounded market weights before the confirmation season is opened."""
+    marriage_fit, threshold_selection, split = chronological_market_marriage_partition(frame)
+    fit_home = independent_home[:split]
+    fit_away = independent_away[:split]
+    threshold_home = independent_home[split:]
+    threshold_away = independent_away[split:]
+    independent_fit_metrics = metrics(
+        marriage_fit,
+        fit_home,
+        fit_away,
+        independent_margin_sigma,
+        independent_total_sigma,
+    )
+    candidates: list[dict[str, Any]] = []
+    for margin_weight in (0.0, 0.25, 0.50, 0.75, 1.0):
+        for total_weight in (0.0, 0.25, 0.50, 0.75, 1.0):
+            home, away, coverage = apply_reference_market_marriage(
+                marriage_fit,
+                fit_home,
+                fit_away,
+                margin_weight,
+                total_weight,
+            )
+            candidate_metrics = metrics(
+                marriage_fit,
+                home,
+                away,
+                independent_margin_sigma,
+                independent_total_sigma,
+            )
+            score = joint_selection_score(candidate_metrics, independent_fit_metrics)
+            eligible = (
+                candidate_metrics["teamScoreMae"] <= independent_fit_metrics["teamScoreMae"] + 0.05
+                and candidate_metrics["marginMae"] <= independent_fit_metrics["marginMae"] + 0.05
+                and candidate_metrics["totalMae"] <= independent_fit_metrics["totalMae"] + 0.05
+                and candidate_metrics["winnerAccuracy"] >= independent_fit_metrics["winnerAccuracy"] - 0.002
+                and candidate_metrics["homeWinBrier"] <= independent_fit_metrics["homeWinBrier"] + 0.001
+            )
+            candidates.append({
+                "marginIndependentWeight": margin_weight,
+                "totalIndependentWeight": total_weight,
+                "metrics": candidate_metrics,
+                "coverage": coverage,
+                "relativeJointScore": score,
+                "eligible": bool(eligible),
+            })
+    candidates.sort(key=lambda item: (
+        not item["eligible"],
+        item["relativeJointScore"],
+        item["metrics"]["teamScoreMae"],
+    ))
+    selected = candidates[0]
+    if not selected["eligible"] or selected["relativeJointScore"] >= 0.998:
+        selected = next(
+            item for item in candidates
+            if item["marginIndependentWeight"] == 1.0
+            and item["totalIndependentWeight"] == 1.0
+        )
+    fit_final_home, fit_final_away, _ = apply_reference_market_marriage(
+        marriage_fit,
+        fit_home,
+        fit_away,
+        float(selected["marginIndependentWeight"]),
+        float(selected["totalIndependentWeight"]),
+    )
+    margin_sigma, total_sigma = calibrated_distribution_scales(
+        marriage_fit,
+        fit_final_home,
+        fit_final_away,
+    )
+    threshold_final_home, threshold_final_away, threshold_coverage = apply_reference_market_marriage(
+        threshold_selection,
+        threshold_home,
+        threshold_away,
+        float(selected["marginIndependentWeight"]),
+        float(selected["totalIndependentWeight"]),
+    )
+    market_only_home, market_only_away, market_only_coverage = apply_reference_market_marriage(
+        marriage_fit,
+        fit_home,
+        fit_away,
+        0.0,
+        0.0,
+    )
+    market_only_margin_sigma, market_only_total_sigma = calibrated_distribution_scales(
+        marriage_fit,
+        market_only_home,
+        market_only_away,
+    )
+    return {
+        "method": "earlier_selection_market_weights_later_selection_action_thresholds",
+        "readerValidationStatus": "opening_reference_only_not_line_movement_or_splits_validation",
+        "selectionRows": int(len(frame)),
+        "weightSelectionRows": int(len(marriage_fit)),
+        "thresholdSelectionRows": int(len(threshold_selection)),
+        "selected": selected,
+        "gatePassed": bool(
+            selected["relativeJointScore"] < 0.998
+            and (
+                selected["marginIndependentWeight"] < 1.0
+                or selected["totalIndependentWeight"] < 1.0
+            )
+        ),
+        "independentWeightSelection": independent_fit_metrics,
+        "marketOnlyWeightSelection": metrics(
+            marriage_fit,
+            market_only_home,
+            market_only_away,
+            independent_margin_sigma,
+            independent_total_sigma,
+        ),
+        "marketOnlyCoverage": market_only_coverage,
+        "marketOnlyDistribution": {
+            "marginSigma": market_only_margin_sigma,
+            "totalSigma": market_only_total_sigma,
+            "calibratedOn": "earlier_weight_selection_partition",
+        },
+        "finalDistribution": {
+            "marginSigma": margin_sigma,
+            "totalSigma": total_sigma,
+            "calibratedOn": "earlier_weight_selection_partition",
+        },
+        "_thresholdFrame": threshold_selection,
+        "_thresholdHome": threshold_final_home,
+        "_thresholdAway": threshold_final_away,
+        "thresholdCoverage": threshold_coverage,
+        "candidates": candidates,
+    }
+
+
 def finite_float(value: Any) -> float | None:
     """Return a JSON-safe finite float without inventing a missing value."""
     try:
@@ -1224,36 +1423,79 @@ def main() -> None:
     )
     selection_margin_sigma = float(selected["probabilityCalibration"]["marginSigma"])
     selection_total_sigma = float(selected["probabilityCalibration"]["totalSigma"])
-    actionable_selection = select_actionable_thresholds(
+    market_marriage = select_reference_market_marriage(
         selection,
         selection_home,
         selection_away,
         selection_margin_sigma,
         selection_total_sigma,
     )
+    final_margin_sigma = float(market_marriage["finalDistribution"]["marginSigma"])
+    final_total_sigma = float(market_marriage["finalDistribution"]["totalSigma"])
+    actionable_selection = select_actionable_thresholds(
+        market_marriage["_thresholdFrame"],
+        market_marriage["_thresholdHome"],
+        market_marriage["_thresholdAway"],
+        final_margin_sigma,
+        final_total_sigma,
+    )
 
     fit = pd.concat([train, selection], ignore_index=True)
-    home, away, _ = fit_predict(
+    independent_home, independent_away, _ = fit_predict(
         fit,
         confirmation,
         selected_features,
         dict(selected["model"]),
         str(selected["architecture"]),
     )
-    margin_sigma, total_sigma, confirmation_probability_calibration = model_calibration_scales(
+    independent_margin_sigma, independent_total_sigma, confirmation_probability_calibration = model_calibration_scales(
         fit,
         selected_features,
         dict(selected["model"]),
         str(selected["architecture"]),
     )
-    confirmation_metrics = metrics(confirmation, home, away, margin_sigma, total_sigma)
+    independent_confirmation_metrics = metrics(
+        confirmation,
+        independent_home,
+        independent_away,
+        independent_margin_sigma,
+        independent_total_sigma,
+    )
+    final_home, final_away, confirmation_market_coverage = apply_reference_market_marriage(
+        confirmation,
+        independent_home,
+        independent_away,
+        float(market_marriage["selected"]["marginIndependentWeight"]),
+        float(market_marriage["selected"]["totalIndependentWeight"]),
+    )
+    final_confirmation_metrics = metrics(
+        confirmation,
+        final_home,
+        final_away,
+        final_margin_sigma,
+        final_total_sigma,
+    )
+    market_only_home, market_only_away, market_only_confirmation_coverage = apply_reference_market_marriage(
+        confirmation,
+        independent_home,
+        independent_away,
+        0.0,
+        0.0,
+    )
+    market_only_confirmation_metrics = metrics(
+        confirmation,
+        market_only_home,
+        market_only_away,
+        float(market_marriage["marketOnlyDistribution"]["marginSigma"]),
+        float(market_marriage["marketOnlyDistribution"]["totalSigma"]),
+    )
     actionable_confirmation = {
         market: None if details["selected"] is None else actionable_candidate_report(
             confirmation,
-            home,
-            away,
-            margin_sigma,
-            total_sigma,
+            final_home,
+            final_away,
+            final_margin_sigma,
+            final_total_sigma,
             market,
             float(details["selected"]["threshold"]),
         )
@@ -1300,15 +1542,48 @@ def main() -> None:
     )
     correction_ledger = winner_corrections_and_harms(
         confirmation,
-        home,
-        away,
+        final_home,
+        final_away,
         confirmation_baseline_home,
         confirmation_baseline_away,
     )
+    market_correction_ledger = winner_corrections_and_harms(
+        confirmation,
+        final_home,
+        final_away,
+        independent_home,
+        independent_away,
+    )
+    final_product_gates = {
+        "combinedTeamScoreMaeImprovesIndependent": (
+            final_confirmation_metrics["teamScoreMae"] < independent_confirmation_metrics["teamScoreMae"]
+        ),
+        "combinedMarginMaeNoMaterialRegression": (
+            final_confirmation_metrics["marginMae"] <= independent_confirmation_metrics["marginMae"] + 0.10
+        ),
+        "combinedTotalMaeNoMaterialRegression": (
+            final_confirmation_metrics["totalMae"] <= independent_confirmation_metrics["totalMae"] + 0.10
+        ),
+        "combinedWinnerAccuracyNoMaterialRegression": (
+            final_confirmation_metrics["winnerAccuracy"] >= independent_confirmation_metrics["winnerAccuracy"] - 0.005
+        ),
+        "combinedHomeWinBrierNoMaterialRegression": (
+            final_confirmation_metrics["homeWinBrier"] <= independent_confirmation_metrics["homeWinBrier"] + 0.005
+        ),
+        "combinedHomeWinLogLossNoMaterialRegression": (
+            final_confirmation_metrics["homeWinLogLoss"] <= independent_confirmation_metrics["homeWinLogLoss"] + 0.005
+        ),
+        "marketWinnerNetCorrectionsNonnegative": market_correction_ledger["netCorrections"] >= 0,
+        "marketMarriageSelectedBeforeConfirmation": True,
+        "historicalMovementReaderValidated": False,
+        "historicalSplitsReaderValidated": False,
+        **actionable_benchmark_gates,
+    }
+    final_product_gate_passed = all(final_product_gates.values())
     uncertainty = bootstrap_confirmation(
         confirmation,
-        home,
-        away,
+        final_home,
+        final_away,
         confirmation_baseline_home,
         confirmation_baseline_away,
     )
@@ -1324,18 +1599,18 @@ def main() -> None:
     r1_gates = None
     if r1_comparable:
         r1_gates = {
-            "teamScoreMaeImproves": confirmation_metrics["teamScoreMae"] < R1_CONFIRMATION["teamScoreMae"],
-            "marginMaeNoWorse": confirmation_metrics["marginMae"] <= R1_CONFIRMATION["marginMae"],
-            "totalMaeNoWorse": confirmation_metrics["totalMae"] <= R1_CONFIRMATION["totalMae"],
-            "winnerAccuracyNoWorse": confirmation_metrics["winnerAccuracy"] >= R1_CONFIRMATION["winnerAccuracy"],
+            "teamScoreMaeImproves": final_confirmation_metrics["teamScoreMae"] < R1_CONFIRMATION["teamScoreMae"],
+            "marginMaeNoWorse": final_confirmation_metrics["marginMae"] <= R1_CONFIRMATION["marginMae"],
+            "totalMaeNoWorse": final_confirmation_metrics["totalMae"] <= R1_CONFIRMATION["totalMae"],
+            "winnerAccuracyNoWorse": final_confirmation_metrics["winnerAccuracy"] >= R1_CONFIRMATION["winnerAccuracy"],
         }
 
     prediction_rows = build_prediction_ledger(
         confirmation,
-        home,
-        away,
-        margin_sigma,
-        total_sigma,
+        final_home,
+        final_away,
+        final_margin_sigma,
+        final_total_sigma,
         selected_features,
         groups["all_declared"],
         confirmation_baseline_home,
@@ -1403,10 +1678,25 @@ def main() -> None:
         },
         "selectionBaseline": selection_baseline,
         "selectionBaselineProbabilityCalibration": baseline_calibration,
-        "confirmation": confirmation_metrics,
+        "confirmation": final_confirmation_metrics,
+        "independentConfirmation": independent_confirmation_metrics,
+        "marketOnlyConfirmation": market_only_confirmation_metrics,
+        "finalCombinedConfirmation": final_confirmation_metrics,
+        "marketMarriage": {
+            **{key: value for key, value in market_marriage.items() if not key.startswith("_")},
+            "confirmationCoverage": confirmation_market_coverage,
+            "marketOnlyConfirmationCoverage": market_only_confirmation_coverage,
+            "confirmationCorrectionsVsIndependent": market_correction_ledger,
+            "limitations": [
+                "Public historical references with unknown timestamps can test score anchoring only.",
+                "Timestamped BALLDONTLIE openings are required before opener economics are authoritative.",
+                "Historical line movement and split sequences are unavailable, so those reader rules remain forward-validation only.",
+            ],
+        },
         "confirmationDistribution": {
-            "marginSigma": margin_sigma,
-            "totalSigma": total_sigma,
+            "marginSigma": final_margin_sigma,
+            "totalSigma": final_total_sigma,
+            "source": "frozen_market_marriage_selection_partition",
         },
         "confirmationProbabilityCalibration": confirmation_probability_calibration,
         "confirmationRatingBaseline": confirmation_baseline,
@@ -1421,6 +1711,8 @@ def main() -> None:
         "actionableThresholdSelection": actionable_selection,
         "actionableConfirmation": actionable_confirmation,
         "actionableBenchmarkGates": actionable_benchmark_gates,
+        "finalProductGates": final_product_gates,
+        "finalProductGatePassed": final_product_gate_passed,
         "promotionAuthorized": False,
         "promotionNote": "Score confirmation alone cannot authorize production; market, exact-price, board-impact, runtime, and lock gates remain.",
         "topSelectionCandidates": candidates[:10],
@@ -1438,7 +1730,12 @@ def main() -> None:
     }
     report_path = args.output / "report.json"
     report_path.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n")
-    print(json.dumps({"report": str(report_path), "selected": selected, "confirmation": confirmation_metrics}, indent=2))
+    print(json.dumps({
+        "report": str(report_path),
+        "selected": selected,
+        "independentConfirmation": independent_confirmation_metrics,
+        "finalCombinedConfirmation": final_confirmation_metrics,
+    }, indent=2))
 
 
 if __name__ == "__main__":

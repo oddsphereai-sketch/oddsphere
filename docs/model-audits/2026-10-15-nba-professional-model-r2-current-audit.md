@@ -344,7 +344,7 @@ movement, CLV, split, or market-reader claim. Every row carries that provenance;
 2025-26 BALLDONTLIE timestamped openings take precedence when available.
 
 The executable tournament release is now
-`nba_professional_tournament_2026_10_15_r13_actionable_market_holdout`. Its
+`nba_professional_tournament_2026_10_15_r14_chronological_market_marriage`. Its
 predeclared model grid is reproducible with the repository's NumPy runtime:
 closed-form ridge, robust iteratively reweighted Huber ridge, and bounded
 hinge-spline ridge. Feature-family ablations separately test ratings,
@@ -391,6 +391,32 @@ Moneyline and 53.2% Total lifetime hit-rate references, while also requiring
 positive exact-price units. The lifetime records are selective product results,
 so they are compared with the frozen actionable subsets—not misrepresented as
 all-game winner accuracy.
+
+The r14 tournament now evaluates three separately named lanes: independent
+scores, the market-only score reference, and the final combined distribution.
+The earlier 60% of the selection season chooses bounded independent weights
+for margin and Total; the later 40% chooses actionable thresholds. Both are
+frozen before the confirmation season is opened. The selected margin and Total
+are recombined into one home/away score pair, so Moneyline, Spread, Total, and
+representative scores cannot come from contradictory forecasts. Missing market
+heads fall back to the independent model rather than being imputed.
+
+The confirmation report makes the combined lane primary while preserving the
+independent and market-only results, exact-price economics, coverage, and a
+winner correction/harm ledger for the market adjustment versus the independent
+forecast. A combined candidate fails the final-product gate if it buys lower
+score error by materially worsening winner accuracy, Brier score, log loss, or
+an actionable market. An opening-reference blend is not labeled a fully
+validated reader: movement and split gates remain false until timestamped
+sequences exist.
+
+A paginated read-only production query on October 15 found 121,885 NBA
+`line_history` rows, but they covered only 22 preseason games from October
+11–15. That sample can verify parsing, same-book pairing, chronological
+cutoffs, and correction-ledger mechanics. It is too small and not
+regular-season representative, so it cannot choose or qualify an NBA movement
+or splits rule. Those rules remain observation-only and must earn authority on
+forward timestamped evidence; they cannot alter r14 confirmation forecasts.
 
 ## Upset-aware evaluation
 

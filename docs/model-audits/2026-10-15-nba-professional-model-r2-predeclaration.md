@@ -113,6 +113,16 @@ winner correction and harm versus the simple rating baseline. The tournament wri
 artifacts only and hard-codes `promotionAuthorized: false`; score results alone cannot change
 production.
 
+The final-product tournament keeps the independent forecast, market-only
+reference, and combined distribution distinct. Within 2024-25, the earlier
+60% selects bounded market-marriage weights for margin and Total and the later
+40% selects actionable thresholds. No confirmation outcome may choose a blend
+or threshold. The combined projection must reconstruct one coherent pair of
+team scores, and it must report every winner correction and harm versus the
+independent forecast. Opening references may select score anchoring only;
+movement and split rules require their own timestamped sequence and remain
+disabled when that evidence does not exist.
+
 ## Initial shadow schema
 
 `schema-migration-v43-nba-goat-shadow-features.sql` adds immutable capture batches and team-stat

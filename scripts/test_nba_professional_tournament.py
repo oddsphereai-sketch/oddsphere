@@ -163,6 +163,22 @@ with tempfile.TemporaryDirectory(prefix="nba-tournament-test-") as temporary:
     assert abs(sum(report["selectionGate"]["rankingWeights"].values()) - 1.0) < 1e-9
     assert report["selected"]["jointSelectionScore"] > 0
     assert report["confirmation"]["games"] == 48
+    assert report["independentConfirmation"]["games"] == 48
+    assert report["marketOnlyConfirmation"]["games"] == 48
+    assert report["finalCombinedConfirmation"] == report["confirmation"]
+    assert report["marketMarriage"]["readerValidationStatus"] == "opening_reference_only_not_line_movement_or_splits_validation"
+    assert report["marketMarriage"]["weightSelectionRows"] > 0
+    assert report["marketMarriage"]["thresholdSelectionRows"] > 0
+    assert report["marketMarriage"]["weightSelectionRows"] + report["marketMarriage"]["thresholdSelectionRows"] == 48
+    assert report["marketMarriage"]["selected"]["marginIndependentWeight"] in {0.0, 0.25, 0.5, 0.75, 1.0}
+    assert report["marketMarriage"]["selected"]["totalIndependentWeight"] in {0.0, 0.25, 0.5, 0.75, 1.0}
+    assert report["marketMarriage"]["confirmationCoverage"]["bothAvailable"] == 48
+    assert report["marketMarriage"]["confirmationCorrectionsVsIndependent"]["corrections"] >= 0
+    assert report["marketMarriage"]["confirmationCorrectionsVsIndependent"]["harms"] >= 0
+    assert len(report["marketMarriage"]["limitations"]) == 3
+    assert report["finalProductGatePassed"] is False
+    assert report["finalProductGates"]["historicalMovementReaderValidated"] is False
+    assert report["finalProductGates"]["historicalSplitsReaderValidated"] is False
     assert report["confirmationProbabilityCalibration"]["developmentRows"] > 0
     assert report["confirmationProbabilityCalibration"]["calibrationRows"] > 0
     assert report["confirmationProbabilityCalibration"]["method"].startswith("strictly_earlier_fit")
@@ -183,12 +199,12 @@ with tempfile.TemporaryDirectory(prefix="nba-tournament-test-") as temporary:
     assert report["confirmation"]["openingMarketEvaluation"]["moneyline"]["exactPrice"]["bets"] == 48
     assert report["confirmation"]["openingMarketEvaluation"]["spread"]["exactPrice"]["bets"] == 48
     assert report["confirmation"]["openingMarketEvaluation"]["total"]["exactPrice"]["bets"] == 48
-    assert report["actionableThresholdSelection"]["moneyline"]["selected"] is not None
-    assert report["actionableThresholdSelection"]["spread"]["selected"] is not None
-    assert report["actionableThresholdSelection"]["total"]["selected"] is not None
-    assert report["actionableConfirmation"]["moneyline"]["bets"] >= 0
-    assert report["actionableConfirmation"]["spread"]["bets"] >= 0
-    assert report["actionableConfirmation"]["total"]["bets"] >= 0
+    for market in ("moneyline", "spread", "total"):
+        threshold = report["actionableThresholdSelection"][market]["selected"]
+        confirmation = report["actionableConfirmation"][market]
+        assert (threshold is None) == (confirmation is None)
+        if confirmation is not None:
+            assert confirmation["bets"] >= 0
     assert set(report["actionableBenchmarkGates"]) == {
         "moneylineAccuracyMeetsLifetimeReference",
         "totalAccuracyMeetsLifetimeReference",
