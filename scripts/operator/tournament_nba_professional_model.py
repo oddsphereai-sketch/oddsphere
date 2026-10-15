@@ -20,9 +20,9 @@ import numpy as np
 import pandas as pd
 
 
-RELEASE = "nba_professional_tournament_2026_10_15_r28_all_missing_calibration_feature"
+RELEASE = "nba_professional_tournament_2026_10_15_r29_regime_anchored_residuals"
 FEATURE_RELEASE = "nba_point_in_time_features_2026_10_15_r12_date_only_start_fallback"
-DEPLOYMENT_CANDIDATE_RELEASE = "nba_professional_deployment_candidate_2026_10_15_r8_all_missing_calibration_feature"
+DEPLOYMENT_CANDIDATE_RELEASE = "nba_professional_deployment_candidate_2026_10_15_r9_regime_anchored_residuals"
 MINIMUM_CONFIRMATION_EXACT_PRICE_BETS = 100
 MINIMUM_CONFIRMATION_EXACT_PRICE_COVERAGE = 0.75
 R1_CONFIRMATION = {
@@ -481,7 +481,52 @@ def predict_deployment_candidate(
         margin = predict_regressor(transformed, coefficients["target_home_margin"])
         total = predict_regressor(transformed, coefficients["target_total"])
         return (total + margin) / 2, (total - margin) / 2
+    if artifact["architecture"] == "residual_margin_total":
+        anchor_margin, anchor_total = regime_anchors(frame)
+        margin = anchor_margin + predict_regressor(
+            transformed, coefficients["target_home_margin_residual"],
+        )
+        total = anchor_total + predict_regressor(
+            transformed, coefficients["target_total_residual"],
+        )
+        return (total + margin) / 2, (total - margin) / 2
     raise ValueError(f"unsupported deployment architecture {artifact['architecture']}")
+
+
+def regime_anchors(frame: pd.DataFrame) -> tuple[np.ndarray, np.ndarray]:
+    """Build leakage-safe score anchors on each game's own league and pace regime."""
+    pace = np.full(len(frame), np.nan, dtype=float)
+    for column in ("matchup_pace_mean_15", "matchup_pace_mean_5", "matchup_pace_mean_prior"):
+        if column in frame:
+            values = frame[column].to_numpy(float)
+            pace = np.where(np.isfinite(pace), pace, values)
+    for window in ("15", "5", "prior"):
+        home_column = f"home_pace_{window}"
+        away_column = f"away_pace_{window}"
+        if home_column in frame and away_column in frame:
+            values = (
+                frame[home_column].to_numpy(float) + frame[away_column].to_numpy(float)
+            ) / 2
+            pace = np.where(np.isfinite(pace), pace, values)
+    pace = np.where(np.isfinite(pace), pace, 100.0)
+    home_offense = frame["home_adjusted_offense"].to_numpy(float)
+    home_defense = frame["home_adjusted_defense"].to_numpy(float)
+    away_offense = frame["away_adjusted_offense"].to_numpy(float)
+    away_defense = frame["away_adjusted_defense"].to_numpy(float)
+    derived_margin = home_offense + away_defense - away_offense - home_defense
+    league_total = 2 * frame["league_off_rating"].to_numpy(float)
+    derived_total = home_offense + away_defense + away_offense + home_defense - league_total
+    margin_pp100 = (
+        frame["baseline_expected_margin_pp100"].to_numpy(float)
+        if "baseline_expected_margin_pp100" in frame else derived_margin
+    )
+    total_pp100 = (
+        frame["baseline_expected_total_pp100"].to_numpy(float)
+        if "baseline_expected_total_pp100" in frame else derived_total
+    )
+    margin_pp100 = np.where(np.isfinite(margin_pp100), margin_pp100, 0.0)
+    total_pp100 = np.where(np.isfinite(total_pp100), total_pp100, league_total)
+    return margin_pp100 * pace / 100, total_pp100 * pace / 100
 
 
 def fit_predict(
@@ -510,6 +555,22 @@ def fit_predict(
             models[target] = fit_regressor(x_train, train[target].to_numpy(float), model, weights)
         margin = predict_regressor(x_evaluate, models["target_home_margin"])
         total = predict_regressor(x_evaluate, models["target_total"])
+        return (total + margin) / 2, (total - margin) / 2, models
+    if architecture == "residual_margin_total":
+        train_anchor_margin, train_anchor_total = regime_anchors(train)
+        evaluate_anchor_margin, evaluate_anchor_total = regime_anchors(evaluate)
+        residual_targets = {
+            "target_home_margin_residual": train["target_home_margin"].to_numpy(float) - train_anchor_margin,
+            "target_total_residual": train["target_total"].to_numpy(float) - train_anchor_total,
+        }
+        for target, values in residual_targets.items():
+            models[target] = fit_regressor(x_train, values, model, weights)
+        margin = evaluate_anchor_margin + predict_regressor(
+            x_evaluate, models["target_home_margin_residual"],
+        )
+        total = evaluate_anchor_total + predict_regressor(
+            x_evaluate, models["target_total_residual"],
+        )
         return (total + margin) / 2, (total - margin) / 2, models
     raise ValueError(f"unsupported architecture {architecture}")
 
@@ -1645,7 +1706,7 @@ def main() -> None:
     candidates: list[dict[str, Any]] = []
     for group_name, features in groups.items():
         feature_quality = candidate_feature_quality(train, features)
-        for architecture in ("team_scores", "margin_total"):
+        for architecture in ("team_scores", "margin_total", "residual_margin_total"):
             for model in model_specs:
                 home, away, _ = fit_predict(train, selection, features, model, architecture)
                 margin_sigma, total_sigma, probability_calibration = model_calibration_scales(
