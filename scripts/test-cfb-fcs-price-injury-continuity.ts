@@ -224,13 +224,28 @@ assert.equal(shouldFetchCfbOfficialConferenceAvailability({ games: [game], exist
 assert.equal(shouldFetchCfbOfficialConferenceAvailability({
   games: [game],
   now: "2026-10-07T17:00:00.000Z",
-  existing: [{ capturedAt: "2026-10-07T16:30:00.000Z", payload: { requestBudget: { officialAvailability: 4 } } }] as never,
+  existing: [{ providerGameId: game.providerGameId, capturedAt: "2026-10-07T16:30:00.000Z", payload: { requestBudget: { officialAvailability: 4 } } }] as never,
 }), false, "the conference endpoint must not be polled repeatedly inside its bounded cadence");
 assert.equal(shouldFetchCfbOfficialConferenceAvailability({
   games: [{ ...game, scheduledStart: "2026-10-07T19:30:00.000Z" }],
   now: "2026-10-07T18:00:00.000Z",
-  existing: [{ capturedAt: "2026-10-07T16:30:00.000Z", payload: { requestBudget: { officialAvailability: 4 } } }] as never,
+  existing: [{ providerGameId: game.providerGameId, capturedAt: "2026-10-07T16:30:00.000Z", payload: { requestBudget: { officialAvailability: 4 } } }] as never,
 }), true, "a scheduled pregame refresh must pick up the final official report");
+
+const otherGame = { ...game, providerGameId: "987654", scheduledStart: "2026-10-08T23:30:00.000Z" };
+assert.equal(shouldFetchCfbOfficialConferenceAvailability({
+  games: [game, otherGame],
+  now: "2026-10-07T17:00:00.000Z",
+  existing: [{ providerGameId: game.providerGameId, capturedAt: "2026-10-07T16:30:00.000Z", payload: { requestBudget: { officialAvailability: 4 } } }] as never,
+}), true, "a recent fetch for one capture subset must not suppress official reports for an unattempted game");
+assert.equal(shouldFetchCfbOfficialConferenceAvailability({
+  games: [game, otherGame],
+  now: "2026-10-07T17:00:00.000Z",
+  existing: [
+    { providerGameId: game.providerGameId, capturedAt: "2026-10-07T16:30:00.000Z", payload: { requestBudget: { officialAvailability: 4 } } },
+    { providerGameId: otherGame.providerGameId, capturedAt: "2026-10-07T16:30:00.000Z", payload: { requestBudget: { officialAvailability: 4 } } },
+  ] as never,
+}), false, "the conference endpoint remains bounded when every planned game has a recent attempt");
 
 assert.equal(shouldFetchCfbCollegeFootballDataLines({ games: [game], existing: [], now: "2026-10-07T16:00:00.000Z" }), true);
 assert.equal(shouldFetchCfbCollegeFootballDataLines({

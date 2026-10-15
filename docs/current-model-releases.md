@@ -4,7 +4,7 @@ This file is the human-readable production handoff registry. Runtime constants a
 prediction snapshots remain the machine authority. Future model work must start here, verify the
 constants, and preserve the precedence and writer ownership below.
 
-Last reviewed: 2026-10-10
+Last reviewed: 2026-10-15
 
 ## Cross-sport confidence / execution contract
 
@@ -302,6 +302,22 @@ Last reviewed: 2026-10-10
 - Evidence: `docs/model-audits/2026-08-28-football-cross-market-coherence-predeclaration.md`, `docs/model-audits/2026-08-28-football-cross-market-coherence-r19.md`, `docs/model-audits/2026-08-26-football-market-scoped-t60-predeclaration.md`, `docs/model-audits/2026-08-25-nfl-odds-history-reader-repair.md`, `docs/model-audits/2026-08-25-nfl-public-release-transition.md`, `docs/model-audits/2026-08-25-nfl-actionable-grades-production-r9.md`, `docs/model-audits/2026-08-25-nfl-actionable-grades-r9.md`, `docs/model-audits/2026-08-25-nfl-projected-qb-context-r11.md`, `docs/model-audits/2026-08-23-nfl-discrete-drive-joint-r10.md`, and `docs/model-audits/2026-08-23-nfl-v1-comprehensive-outcome.md`.
 
 ## CFB Daily Edge generalized weekly production release
+
+- October 15 official-availability cadence candidate: collector / sole writer advance to
+  `cfb_forward_evidence_collector_2026_10_15_r58_per_game_official_availability_cadence` /
+  `cfb_forward_evidence_writer_2026_10_15_r122_per_game_official_availability_cadence`.
+  Official conference refresh eligibility is now tracked per planned provider game, so a recent
+  request for one small capture subset cannot suppress reports for unattempted games in a later
+  subset. The four-request ceiling, exact event/team/date identity, six-hour ordinary and one-hour
+  final-pregame cadence, last-known report precedence, sole writer, and shared lease are unchanged.
+  A zero-write current-board replay raises verified report coverage from 1/97 to 26/97 by recovering
+  25 exact-game reports. Conference reports remain display/continuity evidence only in this release;
+  seven exact expected-QB matches are retained for a separate release-pure model-authority audit.
+  All 60 FBS-involved current games already have a reliable canonical market anchor; the 37 current
+  anchor holds are FCS-only, and all 97 games have current rich-team/QB profile coverage. Evidence,
+  remaining source limits, FBS-only model benchmark, injury-authority decision, gates, and rollback:
+  `docs/model-audits/2026-10-15-cfb-official-availability-per-game-cadence.md` and
+  `docs/model-audits/2026-10-15-cfb-fbs-benchmark-and-injury-authority.md`.
 
 - October 14 T-60 priority and tracking-failure isolation: the sole leased
   writer advances to

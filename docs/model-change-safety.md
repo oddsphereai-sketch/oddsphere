@@ -1,5 +1,24 @@
 # Model change safety protocol
 
+## Owner-approved correctness exception: CFB official-availability per-game cadence
+
+On 2026-10-15 Daniel Mengel directed Oddsphere to stop losing future CFB injury evidence before
+continuing model work. This exception is limited to the collection-cadence correction and evidence
+in `docs/model-audits/2026-10-15-cfb-official-availability-per-game-cadence.md`.
+
+The sole CFB writer may decide the bounded official-conference refresh per planned provider game
+instead of from the newest attempt anywhere on the slate. A recent attempt for one capture subset
+cannot suppress an unattempted game in another subset. Exact event/team/date matching, source
+timestamps, last-known report precedence, append-only evidence, the four-request ceiling, the sole
+`prediction_pipeline:cfb` lease, and immutable locked payloads remain mandatory. This exception does
+not authorize conference reports to alter a prediction, probability, projected score, side, grade,
+stake, or lock; quarterback authority requires a separate release-pure promotion/demotion audit.
+
+Publication requires focused tests, full model-change verification, current-main integration safety,
+protected PR checks, and post-deploy proof of the release tuple, request cadence, report coverage,
+single writer/lease, stable board, and unchanged locks. Roll back to collector r57 / writer r121 on
+request looping, identity mismatch, mixed release, board contraction, or lock mutation.
+
 ## Owner-approved provisional exception: CFB correct-QB final-winner coordinator
 
 On 2026-10-14 Daniel Mengel directed Oddsphere to close the validated

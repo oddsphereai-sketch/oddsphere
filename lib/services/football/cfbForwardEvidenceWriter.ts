@@ -164,7 +164,7 @@ import {
 import type { PlaybookInjuryTeamRow } from "@/lib/providers/playbook/types";
 
 export const CFB_FORWARD_WRITER_RELEASE =
-  "cfb_forward_evidence_writer_2026_10_14_r121_t60_priority_tracking_isolation" as const;
+  "cfb_forward_evidence_writer_2026_10_15_r122_per_game_official_availability_cadence" as const;
 export const CFB_FORWARD_MAX_QB_TEAMS_PER_RUN = 24 as const;
 export const CFB_FORWARD_MAX_SHARP_FALLBACK_GAMES_PER_RUN = 32 as const;
 export const CFB_FORWARD_MAX_ESPN_PROSPECTIVE_GAMES_PER_RUN = 32 as const;
@@ -1606,17 +1606,22 @@ export function shouldFetchCfbOfficialConferenceAvailability(args: {
   if (args.force) return true;
   const nowMs = Date.parse(args.now);
   if (!Number.isFinite(nowMs)) return false;
-  const pregame = args.games.some((game) => {
+  const requestedGameIds = new Set(args.games.map((game) => game.providerGameId));
+  const latestFetchByGame = new Map<string, number>();
+  for (const row of args.existing) {
+    if (!requestedGameIds.has(row.providerGameId) || (row.payload.requestBudget.officialAvailability ?? 0) <= 0) continue;
+    const capturedAt = Date.parse(row.capturedAt);
+    if (!Number.isFinite(capturedAt)) continue;
+    latestFetchByGame.set(row.providerGameId, Math.max(latestFetchByGame.get(row.providerGameId) ?? 0, capturedAt));
+  }
+  return args.games.some((game) => {
     const untilStart = Date.parse(game.scheduledStart) - nowMs;
-    return untilStart > 0 && untilStart <= 3 * 60 * 60_000;
+    const minimumMinutes = untilStart > 0 && untilStart <= 3 * 60 * 60_000
+      ? CFB_OFFICIAL_CONFERENCE_AVAILABILITY_PREGAME_REFRESH_MINUTES
+      : CFB_OFFICIAL_CONFERENCE_AVAILABILITY_REFRESH_MINUTES;
+    const lastFetch = latestFetchByGame.get(game.providerGameId) ?? 0;
+    return lastFetch === 0 || nowMs - lastFetch >= minimumMinutes * 60_000;
   });
-  const minimumMinutes = pregame
-    ? CFB_OFFICIAL_CONFERENCE_AVAILABILITY_PREGAME_REFRESH_MINUTES
-    : CFB_OFFICIAL_CONFERENCE_AVAILABILITY_REFRESH_MINUTES;
-  const lastFetch = args.existing
-    .filter((row) => (row.payload.requestBudget.officialAvailability ?? 0) > 0)
-    .reduce((latest, row) => Math.max(latest, Date.parse(row.capturedAt) || 0), 0);
-  return lastFetch === 0 || nowMs - lastFetch >= minimumMinutes * 60_000;
 }
 
 export function shouldFetchCfbCollegeFootballDataLines(args: {
