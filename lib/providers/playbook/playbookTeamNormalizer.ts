@@ -18,7 +18,8 @@
  *   match can't silently feed a public-splits row.
  *
  *   WNBA is fully populated from the canonical WNBA team map (single source of
- *   truth). NBA/NHL/NFL/NCAAF are scaffolded with empty registries + a generic
+ *   truth). NBA is populated from the league's stable club identities.
+ *   NHL/NFL/NCAAF are scaffolded with empty registries + a generic
  *   mascot-slug fallback so they work best-effort today and can be promoted to
  *   exact registries later WITHOUT changing call sites.
  *
@@ -104,11 +105,44 @@ function buildWnbaRegistry(): TeamEntry[] {
   });
 }
 
+/** NBA — stable BDL/database abbreviations plus common provider aliases. */
+function buildNbaRegistry(): TeamEntry[] {
+  const teams: Array<[string, string, string[]?]> = [
+    ["ATL", "Atlanta Hawks"], ["BOS", "Boston Celtics"], ["BKN", "Brooklyn Nets"],
+    ["CHA", "Charlotte Hornets"], ["CHI", "Chicago Bulls"], ["CLE", "Cleveland Cavaliers", ["Cavs"]],
+    ["DAL", "Dallas Mavericks", ["Mavs"]], ["DEN", "Denver Nuggets"], ["DET", "Detroit Pistons"],
+    ["GSW", "Golden State Warriors", ["Golden State", "GS Warriors"]],
+    ["HOU", "Houston Rockets"], ["IND", "Indiana Pacers"],
+    ["LAC", "LA Clippers", ["Los Angeles Clippers", "L.A. Clippers"]],
+    ["LAL", "Los Angeles Lakers", ["LA Lakers", "L.A. Lakers"]],
+    ["MEM", "Memphis Grizzlies"], ["MIA", "Miami Heat"], ["MIL", "Milwaukee Bucks"],
+    ["MIN", "Minnesota Timberwolves", ["Minnesota Wolves", "T-Wolves"]],
+    ["NOP", "New Orleans Pelicans", ["NO Pelicans"]],
+    ["NYK", "New York Knicks", ["NY Knicks"]], ["OKC", "Oklahoma City Thunder", ["OKC Thunder"]],
+    ["ORL", "Orlando Magic"], ["PHI", "Philadelphia 76ers", ["Philadelphia Sixers", "Sixers"]],
+    ["PHX", "Phoenix Suns"], ["POR", "Portland Trail Blazers", ["Portland Trailblazers", "Blazers"]],
+    ["SAC", "Sacramento Kings"], ["SAS", "San Antonio Spurs", ["SA Spurs"]],
+    ["TOR", "Toronto Raptors"], ["UTA", "Utah Jazz"], ["WAS", "Washington Wizards"],
+  ];
+  return teams.map(([abbr, name, aliases]) => {
+    const cleaned = cleanName(name);
+    const mascot = lastToken(cleaned);
+    const city = cleaned.slice(0, cleaned.length - mascot.length).trim();
+    return {
+      abbr,
+      name,
+      city,
+      mascot,
+      aliases: [abbr, ...(aliases ?? [])].map(cleanName),
+    };
+  });
+}
+
 const REGISTRIES: Record<NormalizerSport, TeamEntry[]> = {
   wnba: buildWnbaRegistry(),
+  nba: buildNbaRegistry(),
   // Scaffolded for later exact population (o-* follow-up tickets). Until
   // populated, these sports use the generic mascot-slug fallback below.
-  nba: [],
   nhl: [],
   nfl: [],
   ncaaf: [],

@@ -46,7 +46,11 @@ export async function GET(request: Request): Promise<Response> {
         apply: true,
         todayUtc: slate,
       });
-      const marketIntelligenceV2 = sport === "mlb"
+      // NBA remains capture-only: v2 stores provenance-qualified per-book
+      // observations, while its UI/model capability stays audit_required.
+      // Provider history backfill is still MLB-only inside the shared writer;
+      // NBA builds its forward trail from these repeated current snapshots.
+      const marketIntelligenceV2 = sport === "mlb" || sport === "nba"
         ? await runScheduledMarketIntelligenceV2Collection({
             supabase,
             sport,

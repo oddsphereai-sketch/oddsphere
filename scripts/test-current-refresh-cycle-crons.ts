@@ -130,6 +130,7 @@ assert.match(source("app/api/cron/lineup-watch/route.ts"), /refreshDailyEdgeResp
 assert.match(source("app/api/cron/pregame-sweep/route.ts"), /refreshDailyEdgeResponseSnapshot/, "locks republish Daily Edge");
 assert.match(source("app/api/cron/public-splits-observations-refresh/route.ts"), /refreshDailyEdgeResponseSnapshot/, "split changes republish Daily Edge");
 assert.match(source("app/api/cron/public-splits-observations-refresh/route.ts"), /runScheduledMarketIntelligenceV2Collection/, "split refresh retries source-aware MLB splits");
+assert.match(source("app/api/cron/public-splits-observations-refresh/route.ts"), /sport === "mlb" \|\| sport === "nba"/, "split refresh persists NBA per-book v2 observations in audit-only mode");
 assert.match(source("app/api/cron/public-splits-observations-refresh/route.ts"), /includeSharpApiHistory:\s*true/, "fast split refresh recovers event-specific Sharp history every 15 minutes");
 assert.match(source("app/api/cron/public-splits-observations-refresh/route.ts"), /\["mlb", "wnba", "nhl", "nba"\]/, "NBA Playbook splits are collected in observe-only mode before regular-season activation");
 assert.match(source("lib/services/marketIntelligenceV2/shadowSync.ts"), /path:\s*["']\/events["']/, "Sharp recovery discovers event IDs independently of the league split snapshot");
@@ -182,7 +183,7 @@ assert.match(source("app/api/cron/nba-daily-refresh/route.ts"), /leaseGroup:\s*"
 assert.match(source("app/api/cron/nba-daily-refresh/route.ts"), /requireLease:\s*true/, "NBA snapshot publication requires the shared lease");
 assert.match(source("app/api/cron/nhl-daily-refresh/route.ts"), /process\.env\[NHL_CRON_ENV\] !== "true"/, "NHL refresh remains fail-closed behind its runtime gate");
 assert.match(source("app/api/cron/nba-daily-refresh/route.ts"), /nba_daily_refresh_schedule_2026_10_07_r3_readiness_gated_rollover/, "NBA refresh exposes its immutable readiness-gated operational release");
-assert.match(source("app/api/cron/nhl-daily-refresh/route.ts"), /nhl_daily_refresh_schedule_2026_10_07_r9_readiness_gated_rollover/, "NHL refresh exposes its immutable readiness-gated operational release");
+assert.match(source("app/api/cron/nhl-daily-refresh/route.ts"), /nhl_daily_refresh_schedule_2026_10_08_r10_pregame_coverage_gate/, "NHL refresh exposes its immutable readiness-gated operational release");
 assert.ok(crons.some((cron) => cron.path === "/api/cron/pregame-sweep?lockOnly=true" && cron.schedule?.startsWith("* ")), "lock sweep runs every minute while remaining targeted");
 assert.ok(crons.some((cron) => cron.path === "/api/cron/public-splits-observations-refresh" && cron.schedule === "*/15 11-12 * * *"), "split recovery starts at 07:00 ET");
 assert.match(source("app/api/cron/pregame-sweep/route.ts"), /leaseRetryMaxWaitMs:\s*!dryRun && gateActive \? 20_000/, "lock sweep briefly waits for the shared lease before deferring");
