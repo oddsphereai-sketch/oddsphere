@@ -154,6 +154,7 @@ with tempfile.TemporaryDirectory(prefix="nba-tournament-test-") as temporary:
     predictions = (output / "confirmation-predictions.jsonl").read_text().strip().splitlines()
     diagnostics = json.loads((output / "confirmation-diagnostics.json").read_text())
     feature_coverage = json.loads((output / "feature-coverage.json").read_text())
+    deployment_candidate = json.loads((output / "deployment-candidate.json").read_text())
     winner_errors = (output / "confirmation-winner-errors.jsonl").read_text().splitlines()
     spread_errors = (output / "confirmation-spread-errors.jsonl").read_text().splitlines()
     total_errors = (output / "confirmation-total-errors.jsonl").read_text().splitlines()
@@ -171,6 +172,15 @@ with tempfile.TemporaryDirectory(prefix="nba-tournament-test-") as temporary:
         "gamesBySeason": {"2023": 48, "2024": 48, "2025": 48},
     }
     assert report["promotionAuthorized"] is False
+    assert report["deploymentCandidate"]["release"] == tournament.DEPLOYMENT_CANDIDATE_RELEASE
+    assert report["deploymentCandidate"]["promotionAuthorized"] is False
+    assert deployment_candidate["promotionAuthorized"] is False
+    assert deployment_candidate["featureFileSha256"]
+    assert deployment_candidate["design"]["features"]
+    assert len(deployment_candidate["design"]["rawFeatureMedians"]) == report["selected"]["featureCount"]
+    assert len(deployment_candidate["design"]["designMeans"]) == deployment_candidate["design"]["preSplineDesignColumns"]
+    assert deployment_candidate["coefficients"]
+    assert deployment_candidate["trainingSeasons"] == [2023, 2024, 2025]
     assert isinstance(report["selectionGatePassed"], bool)
     assert report["selected"]["featureCount"] > 0
     assert report["featureCoverage"]["features"] == len(feature_coverage["rows"])

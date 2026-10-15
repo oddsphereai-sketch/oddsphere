@@ -20,8 +20,9 @@ import numpy as np
 import pandas as pd
 
 
-RELEASE = "nba_professional_tournament_2026_10_15_r19_feature_coverage_audit"
+RELEASE = "nba_professional_tournament_2026_10_15_r20_reproducible_deployment_candidate"
 FEATURE_RELEASE = "nba_point_in_time_features_2026_10_15_r10_exact_price_provenance"
+DEPLOYMENT_CANDIDATE_RELEASE = "nba_professional_deployment_candidate_2026_10_15_r1_reproducible_state"
 R1_CONFIRMATION = {
     "season": 2025,
     "games": 1230,
@@ -292,6 +293,7 @@ def design_matrices(
     means = x_train.mean(axis=0)
     deviations = x_train.std(axis=0)
     deviations = np.where(deviations > 1e-12, deviations, 1.0)
+    pre_spline_design_columns = int(x_train.shape[1])
     x_train = (x_train - means) / deviations
     x_evaluate = (x_evaluate - means) / deviations
     if model["family"] == "spline_ridge":
@@ -314,6 +316,11 @@ def design_matrices(
     return x_train, x_evaluate, {
         "features": features,
         "missingIndicatorColumns": [features[index] for index in np.flatnonzero(missing_columns)],
+        "rawFeatureMedians": medians.tolist(),
+        "designMeans": means.tolist(),
+        "designStandardDeviations": deviations.tolist(),
+        "preSplineDesignColumns": pre_spline_design_columns,
+        "splineKnots": list(model.get("knots", [])),
         "designColumns": int(x_train.shape[1]),
     }
 
@@ -1800,6 +1807,54 @@ def main() -> None:
     ]
 
     args.output.mkdir(parents=True, exist_ok=True)
+    _, _, deployment_state = fit_predict(
+        frame,
+        frame.iloc[:1].copy(),
+        selected_features,
+        dict(selected["model"]),
+        str(selected["architecture"]),
+    )
+    deployment_coefficients = {
+        key: value.tolist()
+        for key, value in deployment_state.items()
+        if isinstance(value, np.ndarray)
+    }
+    deployment_artifact = {
+        "release": DEPLOYMENT_CANDIDATE_RELEASE,
+        "tournamentRelease": RELEASE,
+        "featureRelease": FEATURE_RELEASE,
+        "status": "research_candidate_not_authorized_for_production",
+        "promotionAuthorized": False,
+        "trainingRows": int(len(frame)),
+        "trainingSeasons": seasons,
+        "featureFileSha256": hashlib.sha256(args.features.read_bytes()).hexdigest(),
+        "featureGroup": selected["group"],
+        "architecture": selected["architecture"],
+        "model": selected["model"],
+        "design": deployment_state["design"],
+        "coefficients": deployment_coefficients,
+        "marketMarriage": {
+            "marginIndependentWeight": market_marriage["selected"]["marginIndependentWeight"],
+            "totalIndependentWeight": market_marriage["selected"]["totalIndependentWeight"],
+        },
+        "distribution": {
+            "family": "normal_residual",
+            "marginSigma": final_margin_sigma,
+            "totalSigma": final_total_sigma,
+            "calibratedOn": "earlier_weight_selection_partition",
+        },
+        "actionableThresholds": {
+            market: None if details["selected"] is None else {
+                "selectionRule": details["selected"]["selectionRule"],
+                "threshold": details["selected"]["threshold"],
+                "minimumSelectionBets": details["minimumSelectionBets"],
+            }
+            for market, details in actionable_selection.items()
+        },
+    }
+    deployment_artifact_path = args.output / "deployment-candidate.json"
+    deployment_artifact_body = json.dumps(deployment_artifact, indent=2, sort_keys=True) + "\n"
+    deployment_artifact_path.write_text(deployment_artifact_body)
     predictions_path = args.output / "confirmation-predictions.jsonl"
     predictions_body = "".join(json.dumps(row, sort_keys=True) + "\n" for row in prediction_rows)
     predictions_path.write_text(predictions_body)
@@ -1903,6 +1958,12 @@ def main() -> None:
         "finalProductGatePassed": final_product_gate_passed,
         "promotionAuthorized": False,
         "promotionNote": "Score confirmation alone cannot authorize production; market, exact-price, board-impact, runtime, and lock gates remain.",
+        "deploymentCandidate": {
+            "release": DEPLOYMENT_CANDIDATE_RELEASE,
+            "file": deployment_artifact_path.name,
+            "sha256": hashlib.sha256(deployment_artifact_body.encode()).hexdigest(),
+            "promotionAuthorized": False,
+        },
         "topSelectionCandidates": candidates[:10],
         "predictions": {
             "file": predictions_path.name,

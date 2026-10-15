@@ -371,7 +371,7 @@ movement, CLV, split, or market-reader claim. Every row carries that provenance;
 2025-26 BALLDONTLIE timestamped openings take precedence when available.
 
 The executable tournament release is now
-`nba_professional_tournament_2026_10_15_r19_feature_coverage_audit`. Its
+`nba_professional_tournament_2026_10_15_r20_reproducible_deployment_candidate`. Its
 predeclared model grid is reproducible with the repository's NumPy runtime:
 closed-form ridge, robust iteratively reweighted Huber ridge, and bounded
 hinge-spline ridge. Feature-family ablations separately test ratings,
@@ -431,6 +431,14 @@ declared pregame feature, including selected status, finite-value coverage,
 and distinct-value count. Fully missing, below-50%-coverage, and constant
 features are summarized in the main report so a nominally rich model cannot
 pass while most of its supposed inputs are absent or inert.
+
+After confirmation, the research operator writes a checksummed, explicitly
+non-promoted deployment candidate containing the exact feature order, training
+medians, missingness indicators, standardization state, spline construction,
+target coefficients, frozen market weights, probability scales, and actionable
+thresholds. This closes the gap between naming a tournament winner and being
+able to reproduce it in a future-game scorer; the artifact remains ineligible
+for production until every promotion gate clears.
 
 The r14 tournament now evaluates three separately named lanes: independent
 scores, the market-only score reference, and the final combined distribution.
