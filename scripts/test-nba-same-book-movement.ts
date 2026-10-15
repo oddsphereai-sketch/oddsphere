@@ -18,6 +18,7 @@ assert.deepEqual(selectNbaComparableOpening({
   side: "home",
   sportsbook: "DraftKings",
   line: -4.5,
+  currentObservedAt: "2026-10-20T16:00:00Z",
 }), {
   americanPrice: -115,
   sportsbook: "draftkings",
@@ -31,6 +32,7 @@ assert.equal(selectNbaComparableOpening({
   side: "home",
   sportsbook: "fanduel",
   line: -4.5,
+  currentObservedAt: "2026-10-20T16:00:00Z",
 }), null, "a different sportsbook may not donate an opener");
 assert.equal(selectNbaComparableOpening({
   rows,
@@ -39,6 +41,16 @@ assert.equal(selectNbaComparableOpening({
   side: "home",
   sportsbook: "draftkings",
   line: -5.5,
+  currentObservedAt: "2026-10-20T16:00:00Z",
 }), null, "a different spread number may not donate an opener");
+assert.equal(selectNbaComparableOpening({
+  rows,
+  externalGameId: 1,
+  market: "spread",
+  side: "home",
+  sportsbook: "draftkings",
+  line: -4.5,
+  currentObservedAt: "2026-10-20T12:00:00Z",
+}), null, "the current observation cannot also masquerade as an earlier opener");
 
 console.log("NBA same-book exact-line movement boundary tests passed.");

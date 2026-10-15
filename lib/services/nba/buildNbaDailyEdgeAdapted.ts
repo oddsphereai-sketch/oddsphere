@@ -351,6 +351,7 @@ export async function buildNbaDailyEdgePipeline(date: string): Promise<NbaDailyE
         side: value.pick_side,
         sportsbook: value.current_price.sportsbook,
         line: value.consensus_line,
+        currentObservedAt: value.current_price.fetched_at,
       })?.americanPrice ?? null;
     };
     openPricesByGame.set(ext, {

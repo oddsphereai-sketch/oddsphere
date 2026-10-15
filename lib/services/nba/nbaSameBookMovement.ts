@@ -43,9 +43,12 @@ export function selectNbaComparableOpening(args: {
   side: string | null;
   sportsbook: string | null;
   line: number | null;
+  currentObservedAt: string | null;
   maximumImpliedOutlier?: number;
 }): NbaComparableOpening | null {
   if (args.side === null || args.sportsbook === null) return null;
+  const currentObservedMs = Date.parse(args.currentObservedAt ?? "");
+  if (!Number.isFinite(currentObservedMs)) return null;
   const targetLine = lineToken(args.market, args.line);
   if (targetLine === null) return null;
   const book = normalizedBook(args.sportsbook);
@@ -57,7 +60,8 @@ export function selectNbaComparableOpening(args: {
       normalizedBook(row.sportsbook) === book &&
       lineToken(row.market, row.line) === targetLine &&
       row.americanPrice !== null && row.americanPrice !== 0 &&
-      row.observedAt !== null && Number.isFinite(Date.parse(row.observedAt)))
+      row.observedAt !== null && Number.isFinite(Date.parse(row.observedAt)) &&
+      Date.parse(row.observedAt) < currentObservedMs)
     .sort((left, right) => Date.parse(left.observedAt!) - Date.parse(right.observedAt!));
   if (candidates.length === 0) return null;
   const probabilities = candidates.map((row) => implied(row.americanPrice!)).sort((a, b) => a - b);
