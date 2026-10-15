@@ -24,6 +24,11 @@ type Decision = {
   rawModelProbability: number;
   marketProbability: number;
   finalProbability: number;
+  probabilityEdge: number;
+  expectedValue: number;
+  participationProbability: number;
+  grade: "Best Angle" | "Lean" | "Watchlist" | "No Play" | "Held";
+  healthHolds: string[];
   marketMovement: string;
   decisionRelease: string;
   projectionEvidence?: Record<string, unknown> | null;
@@ -49,6 +54,7 @@ type LedgerRow = {
   actual_value: number | null;
   locked_at: string;
   decision_release: string;
+  play_grade: "Best Angle" | "Lean";
   snapshot_json: { decision?: Decision };
 };
 
@@ -71,6 +77,11 @@ type ReplayRow = {
   rawProvenance: "locked_independent" | "unavailable_market_dominant_point";
   marketProbability: number;
   final: number;
+  probabilityEdge: number;
+  expectedValue: number;
+  participationProbability: number;
+  grade: Decision["grade"];
+  healthHolds: string[];
   independentProjection: number | null;
   publishedProjection: number | null;
   movement: string;
@@ -94,15 +105,21 @@ type ProbabilitySummary = {
 const WEIGHTS = [0, 0.2, 0.35, 0.5, 0.65, 0.8, 1];
 
 async function main(): Promise<void> {
+  const throughWeek = numericArgument("through-week", 4);
+  if (!Number.isInteger(throughWeek) || throughWeek < 1 || throughWeek > 18) {
+    throw new Error("--through-week must be an integer from 1 through 18.");
+  }
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!url || !key) throw new Error("Supabase read credentials are required.");
   const client = createClient(url, key, { auth: { persistSession: false } });
   const state = await readNflPlayerPropsCurrentSeasonState({ client, season: 2026 });
-  if (!state || state.completeThroughWeek < 4) throw new Error("2026 current-season state is not complete through Week 4.");
+  if (!state || state.completeThroughWeek < throughWeek) {
+    throw new Error(`2026 current-season state is not complete through Week ${throughWeek}.`);
+  }
 
   const { data, error } = await client.from("nfl_player_prop_records")
-    .select("provider_game_id,provider_player_id,player_name,market,line,side,sportsbook,result,actual_value,locked_at,decision_release,snapshot_json")
+    .select("provider_game_id,provider_player_id,player_name,market,line,side,sportsbook,result,actual_value,locked_at,decision_release,play_grade,snapshot_json")
     .order("locked_at", { ascending: true });
   if (error) throw new Error(`NFL player-props ledger read failed: ${error.message}`);
   const ledger = (data ?? []) as LedgerRow[];
@@ -117,7 +134,7 @@ async function main(): Promise<void> {
     const decision = row.snapshot_json?.decision;
     if (!decision) { malformedLockedPayloads += 1; continue; }
     const game = indexed.games.get(row.provider_game_id);
-    if (!game || game.week > 4) continue;
+    if (!game || game.week > throughWeek) continue;
     const stat = findStat(indexed, row, decision);
     const actual = stat ? actualFor(row.market, stat) : finite(row.actual_value);
     if (actual === null) { unmatchedOutcomes += 1; continue; }
@@ -152,6 +169,11 @@ async function main(): Promise<void> {
         : "locked_independent",
       marketProbability: clampProbability(decision.marketProbability),
       final: clampProbability(decision.finalProbability),
+      probabilityEdge: Number(decision.probabilityEdge),
+      expectedValue: Number(decision.expectedValue),
+      participationProbability: Number(decision.participationProbability),
+      grade: decision.grade ?? row.play_grade,
+      healthHolds: Array.isArray(decision.healthHolds) ? decision.healthHolds : [],
       independentProjection: independentProjection(decision),
       publishedProjection: finite(decision.projection),
       movement: decision.marketMovement ?? "unknown",
@@ -166,7 +188,9 @@ async function main(): Promise<void> {
   const outputPath = outputIndex >= 0 ? process.argv[outputIndex + 1] : undefined;
   if (outputPath) {
     writeFileSync(outputPath, JSON.stringify({
-      release: "nfl_player_props_2026_locked_replay_rows_2026_10_08_r1",
+      release: throughWeek === 4
+        ? "nfl_player_props_2026_locked_replay_rows_2026_10_08_r1"
+        : `nfl_player_props_2026_locked_replay_rows_through_week_${throughWeek}_2026_10_15_r2`,
       readOnlySource: true,
       rows: canonical,
     }, null, 2) + "\n", "utf8");
@@ -189,14 +213,17 @@ async function main(): Promise<void> {
   });
 
   const report = {
-    release: "nfl_player_props_2026_current_season_replay_2026_10_08_r1",
+    release: throughWeek === 4
+      ? "nfl_player_props_2026_current_season_replay_2026_10_08_r1"
+      : `nfl_player_props_2026_current_season_replay_through_week_${throughWeek}_2026_10_15_r2`,
     readOnly: true,
     writes: 0,
     providerCalls: 0,
     scope: {
       season: 2026,
-      completedThroughWeek: state.completeThroughWeek,
-      completedGames: state.games.filter((game) => game.week <= 4).length,
+      completedThroughWeek: throughWeek,
+      sourceCompleteThroughWeek: state.completeThroughWeek,
+      completedGames: state.games.filter((game) => game.week <= throughWeek).length,
       ledgerRecords: ledger.length,
       coveredGames: new Set(ledger.map((row) => row.provider_game_id)).size,
       outcomeMatchedExactRecords: replay.length,
@@ -207,9 +234,13 @@ async function main(): Promise<void> {
       unmatchedOutcomes,
       researchMatchedPending,
       ledgerOutcomeDisagreements,
-      fullBoardRetention: {
+      fullBoardRetention: throughWeek === 4 ? {
         weeks1To3: "unavailable",
         week4: "available_as_separate_exact_board_replay",
+        blendedIntoLedgerMetrics: false,
+      } : {
+        historicalWeeks: "mixed_by_original_lock_policy",
+        throughWeek,
         blendedIntoLedgerMetrics: false,
       },
     },
@@ -233,7 +264,7 @@ async function main(): Promise<void> {
     interpretationContract: {
       probabilityDirectionallySupported: false,
       productionPromotionAuthorized: false,
-      reason: "Four completed weeks are diagnostic and any residual weight selected here would be evaluated in-sample; an untouched later confirmation window is required.",
+      reason: `${throughWeek} completed weeks are diagnostic and any residual weight selected here would be evaluated in-sample; an untouched later confirmation window is required.`,
     },
   };
   const raw = report.archiveAggregateNotCurrentModelPerformance.probability.raw.brier;
@@ -245,6 +276,15 @@ async function main(): Promise<void> {
     && rawFinalInterval.upper !== null && rawMarketInterval.upper !== null
     && raw < market && raw < final && rawFinalInterval.upper < 0 && rawMarketInterval.upper < 0;
   console.log(JSON.stringify(report, null, 2));
+}
+
+function numericArgument(name: string, fallback: number): number {
+  const prefix = `--${name}=`;
+  const inline = process.argv.find((value) => value.startsWith(prefix));
+  if (inline) return Number(inline.slice(prefix.length));
+  const index = process.argv.indexOf(`--${name}`);
+  if (index >= 0) return Number(process.argv[index + 1]);
+  return fallback;
 }
 
 function summarize(rows: ReplayRow[]) {
