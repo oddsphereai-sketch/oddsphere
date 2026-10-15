@@ -2,10 +2,11 @@
  * Capture raw NBA research evidence to ignored local artifacts.
  *
  * Full paid-tier capture:
- *   npm run research:nba-capture -- --season 2025
+ *   npx tsx --env-file=.env.local scripts/operator/nba/capture-nba-goat-historical-research.ts --season 2025
  *
  * Trial-safe contract smoke (incomplete and never backtest-eligible):
- *   npm run research:nba-capture -- --season 2025 --datasets games --sample-pages 1 \
+ *   npx tsx --env-file=.env.local scripts/operator/nba/capture-nba-goat-historical-research.ts \
+ *     --season 2025 --datasets games --sample-pages 1 \
  *     --request-interval-ms 12500
  */
 
