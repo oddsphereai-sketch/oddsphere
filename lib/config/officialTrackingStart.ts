@@ -42,6 +42,9 @@ export const PUBLIC_TRACKING_EXCLUSION_WINDOWS: Partial<
   nba: [{ from: "2026-07-01", through: "2026-10-19" }],
 };
 
+/** Prospective NBA Spread launch; historical context-only displays stay out. */
+export const NBA_SPREAD_OFFICIAL_TRACKING_START = "2026-10-20" as const;
+
 /** The official public-tracking start date for a sport, or null if not launched. */
 export function officialTrackingStart(sport: Sport): string | null {
   return OFFICIAL_TRACKING_START[sport] ?? null;

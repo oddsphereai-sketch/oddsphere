@@ -58,7 +58,7 @@ const SPORT_DISPLAY_ORDER: Sport[] = ["mlb", "nba", "wnba", "cbb", "nfl", "cfb",
 // data exists yet. Keeps the table honest about coverage gaps.
 const SPORT_MARKETS: Record<Sport, string[]> = {
   mlb: ["ML", "O/U", "NRFI", "YRFI", "NRFI/YRFI"],
-  nba: ["ML", "O/U"],
+  nba: ["ML", "O/U", "Spread"],
   cbb: ["ML", "O/U"],
   nfl: ["ML", "O/U", "Spread"],
   cfb: ["ML", "O/U", "Spread"],

@@ -1999,6 +1999,12 @@ The four-season chronological tournament selected the runtime configuration on 2
 - Writer/member boundary: `ucl-daily-refresh` and `ucl-pregame-lock` use the existing `prediction_pipeline:soccer` lease and shared soccer writer implementation. UCL alone enables prior-priced-tuple recovery, so EPL lifecycle behavior remains unchanged. A disappearing T-60 quote locks the prior complete tuple without rewriting it. When a quote has always been missing, the row remains held for exact-price economics but now stores the exact displayed forecast side from the immutable member context; the prediction therefore remains trackable while ROI remains ineligible. Snapshot repair can authenticate already-locked current-authority IDs without changing their T1 payload. Both the regular refresh and targeted lock path verify every T-60-due game before publication: all four exact model/calibration/competition rows and every persisted scalar must pass identity and immutable-field checks, and the locked card is reconstructed from each DB row's stored `member_market_at_capture`; no fresh held tuple can stand in for a prior priced tuple. An incomplete refresh preserves the prior member LKG and publishes nothing. A refresh whose current-price coverage collapses from a nonzero prior member board to zero is also a publication/write error and preserves that priced LKG. Partial 1–3-market locks stay outside member publication, settlement, aggregate Tracking, and winner scorecards until the exact four-market manifest exists. A held row without a frozen displayed forecast remains void; a held row with that exact frozen forecast enters prediction accuracy only and never price ROI. One master-gated flag contract controls providers, writes, publication, member/API/navigation exposure, foundation writes, locks, and settlement. All 36 current clubs have deterministic ESPN-family crest IDs and primary colors through the same shared card components used by EPL.
 - Board lifecycle: the default member board selects one UCL round/matchweek. All fixtures played on the current `America/New_York` calendar day remain through ET midnight even after final whistle. On the next ET day, completed prior-day fixtures fall off while scheduled or in-progress fixtures in the same multi-day round remain; once that round has no current-day or future fixture, the complete upcoming round populates. The default slate cache is ET-day-keyed, and that selected ET day is frozen through preview construction and locked-card snapshot merging, so neither cache nor the shared EPL 2 a.m. carryover can retain the prior UCL board across midnight. Explicit requested historical/manual matchweek navigation remains complete and unchanged.
 - Tracking boundary: UCL records stay `sport=soccer` with exact competition identity and T-60 lock eligibility, then display under `ucl`. Generic soccer settlement always excludes UCL; only the exact UCL pass may grade it, and that pass requires the master/write settlement gate plus a complete same-game/external-event/slate/model/calibration four-market lock manifest. Current-release aggregate and release-pure winner-accuracy readers enforce the same manifest and admit only the exact active model plus calibration pair for Current release. Calendar windows (yesterday, trailing week, trailing month, daily trend, recent picks, recently settled, and weekly/monthly alternate-line results) retain every exact immutable side-bearing lock in their date range across release transitions; advancing the active release can never make a prior public result disappear. Twelve legacy missing-price rows from four October 14 fixtures recover only the displayed side already frozen inside their own `member_market_at_capture`; no row is mutated, no post-lock forecast is consulted, and their null prices remain excluded from ROI. The bounded aggregate query explicitly projects `member_market_at_capture`, preventing cold reads from dropping those forecasts while still avoiding complete historical snapshot payloads. The member aggregate cache is `member-tracking-aggregate-v10-ucl-projected-forecast-continuity`, its stored snapshot key is `tracking-foundation-r7-ucl-projected-forecast-continuity`, and the writer payload is `tracking-foundation-v5-ucl-projected-forecast-continuity`, so a pre-repair payload cannot mask the corrected reader after deployment. When the master/member gate is off, direct UCL tracking returns unavailable and member, homepage, and public track-record API reads exclude stored current UCL rows and dynamic baselines without deleting them or reusing an enabled-state cache/snapshot; if a mixed public aggregate cannot be safely separated, the current composite fails closed. The separately rendered static historical UCL archive remains visible with legacy provenance. Older row-level releases and the two aggregate-only legacy baselines remain labeled archive data and are never blended with current-release/lifetime accuracy. Tracking aggregation contract is `tracking_aggregate_v16_ucl_projected_forecast_continuity_2026_10_15`. Evidence: `docs/model-audits/2026-10-15-ucl-frozen-member-forecast-continuity.md`.
+- Shared-cache successor: the later NBA Spread launch supersedes the cache
+  identifiers named in the preceding UCL boundary with
+  `member-tracking-aggregate-v11-nba-spread-official`,
+  `tracking-foundation-r8-nba-spread-official`, and
+  `tracking-foundation-v6-nba-spread-official`; the UCL reader contract itself
+  is unchanged.
 - Evidence and validation boundary: `docs/model-audits/2026-09-03-ucl-chronological-r2-predeclaration.md`, `docs/model-audits/2026-09-03-ucl-chronological-r4-result.md`, `docs/model-audits/2026-09-03-ucl-opening-odds-actionability-predeclaration.md`, `docs/model-audits/2026-09-03-ucl-opening-odds-actionability-result.md`, `docs/model-audits/2026-09-03-ucl-epl-grade-transfer-r6-predeclaration.md`, and `docs/model-audits/2026-09-03-ucl-epl-grade-transfer-r6-result.md` retain the historical release record. Active r8u/r10 evidence is release-pure and documented in `docs/model-audits/2026-10-14-ucl-elo-late-consensus-r8u-r10.md`; forward results must continue to be evaluated by exact release and T-60 lock.
 - October 10 professional market-reader audit: r7 remains unchanged. The exact locked forward release was 13-3 across 16 actionables (+5.461 flat-stake units), with every actionable positive at its exact offered price. Same-book no-vig movement-toward rows went 9-1, movement-against rows 1-2, and flat rows 3-0, but the required paired promotion pool was only 3-3; therefore movement remains audit context instead of an automatic switch. Authentic public splits were absent and remain neutral. The live 18-fixture readiness replay had 16 actionables, zero nonpositive-EV actionables and zero incoherent rows. Evidence and limitations: `docs/model-audits/2026-10-10-ucl-professional-market-reader-r7-result.md`.
 - October 14 full-slate market identity repair: common UCL provider aliases now resolve Manchester City/Man City, Real Betis/Betis, Shakhtar Donetsk/Shakhtar, Slovan Bratislava/S Bratislava, and VfB Stuttgart/Stuttgart without enabling substring matching. The exact live nine-fixture probe advances from 24/36 selected prices and 62/90 outcome prices to 36/36 and 90/90, including a complete 18-row multi-book PSG-Manchester City BTTS market. Against the stored still-unlocked board, 13 previously held market tuples become coherently priced, with zero prediction-side changes, six actionable promotions and zero demotions. Existing locked records remain byte-for-byte authoritative; no score, probability, prediction formula, threshold, stake, copy, label, layout, provider cadence, writer or lease changes. Evidence: `docs/model-audits/2026-10-14-ucl-full-market-identity-coverage-r8.md`.
@@ -3166,24 +3172,42 @@ The paired live-slate replay is recorded in
 
 ## NBA regular-season champion (active from 2026-10-20)
 
-- Model / prediction record: `nba_v2_independent_first_2026_10_06_r1`
-- Market marriage: `nba_market_marriage_2026_10_06_r1_independent_first`
-- Grade policy: `nba_grade_policy_2026_10_06_r1_coherent_exact_price`
-- Lock coherence: `nba_lock_coherence_2026_10_06_r1_official_and_context_tuple`
-- Official markets: moneyline and total; Spread remains the existing context-only card market
+- Model / prediction record: `nba_professional_unified_2026_10_15_r2_portable_ridge`
+- Market marriage: `nba_market_marriage_2026_10_15_r2_unified_25_75`
+- Grade policy: `nba_grade_policy_2026_10_15_r2_calibrated_residual_exact_price`
+- Lock coherence: `nba_lock_coherence_2026_10_15_r2_unified_score_tuple`
+- Official markets: moneyline, spread, and total prospectively from October 20;
+  no historical Spread rows are backfilled
+- Tracking caches: `member-tracking-aggregate-v11-nba-spread-official`,
+  `tracking-foundation-r8-nba-spread-official`, and
+  `tracking-foundation-v6-nba-spread-official`; these prevent a pre-Spread
+  aggregate or stored snapshot from masking the launched category
+- Schema status: additive migration v44 was applied to the primary database on
+  2026-10-15; the service-role verification returned an empty, readable table
+  and the October 20-21 member-pipeline smoke returned 14 coherent r2 games
 
-The October 6 r1 release corrects NBA season identity, excludes unfinished/preseason rows from the
+The October 15 r2 release replaces the hand-built score formula for future unlocked rows with the
+portable, leakage-safe ratings-and-schedule ridge artifact selected on 2024-25 and confirmed once
+on 2025-26. A compact five-season bootstrap plus append-only finalized current-season inputs
+reproduces its 75 selected point-in-time fields. The final projection gives 25% weight to the
+independent margin and Total and 75% to complete multi-book pregame consensus; a verified
+first-tracked spread move of at least two points may only determine the sign of the remaining
+spread residual. One final score owns Moneyline, Spread, Total, probabilities, exact-price grades,
+lock snapshots, and tracking. Target-book prices remain excluded from the fair reference and
+public splits remain context-only. Existing locked rows retain exact payload precedence.
+
+The superseded October 6 r1 release corrected NBA season identity, excluded unfinished/preseason rows from the
 early-season sample, uses the regular-season context outside the playoffs, and replaces the old
 continuous market-grounded score with the independent possession/efficiency/Four-Factors score. A
 regressed prior-season handoff owns October-November until current-season evidence accumulates. Market
 evidence remains downstream for exact-line probability, coherent same-book fair-price economics and
 grades. Spread and Total are solved at the exact displayed consensus line; books or handicap points are
 never crossed to fabricate a no-vig pair. Missing selected-side price/fair evidence cannot create an
-actionable grade. No unvalidated NBA score flip is active.
+actionable grade.
 
 The existing pregame sweep now performs a bounded final NBA line refresh and sole-writer pass at T-60,
-verifies a coherent current-release Moneyline/Total tuple plus the captured context Spread, and only then
-locks both official rows. Prior locks remain immutable. An official schedule-only layer may show the next
+verifies one coherent current-release Moneyline/Spread/Total tuple, and only then
+locks all three official rows. Prior locks remain immutable. An official schedule-only layer may show the next
 seven ET dates beginning October 14, one week before the October 20 opener, but analyzed game cards remain closed through October 19 and future
 dates remain schedule-only. Current-day regular-season model behavior begins on October 20. Evidence and
 explicit limitations: `docs/model-audits/2026-10-06-nba-independent-first-regular-season-r1.md` and
@@ -3191,7 +3215,7 @@ explicit limitations: `docs/model-audits/2026-10-06-nba-independent-first-regula
 
 ## NBA/NHL operational refresh schedules
 
-- NBA refresh release: `nba_daily_refresh_schedule_2026_10_15_r5_espn_season_identity`
+- NBA refresh release: `nba_daily_refresh_schedule_2026_10_15_r6_professional_state`
 - NBA member schedule release: `nba_rolling_member_schedule_2026_10_15_r1_schedule_only`
 - NBA schedule: stable-input refresh once daily at `30 11 * * *`; volatile seed/line/snapshot refresh hourly at `12 6-10,12 * * *` and every 30 minutes at `12,42 0-5,13-23 * * *`; all writes fail closed unless `NBA_CRON_ENABLED=true`
 - NBA public-tracking eligibility: `nba_tracking_window_2026_10_05_r2_preseason_only`; valid prior-season history remains eligible, dates `2026-07-01` through `2026-10-19` are excluded, and the 2026-27 regular season is eligible from `2026-10-20`

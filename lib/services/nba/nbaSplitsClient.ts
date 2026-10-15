@@ -1,16 +1,15 @@
 /**
  * Phase 7B v0c-DE — NBA public-splits client.
  *
- * Fetches `/splits?league=nba` from SharpAPI and parses the consensus
- * splits row per event. Returns typed shape with bets_pct/handle_pct
- * for ML, spread, and total. NBA splits are CONSENSUS-only (single row
- * per game; no per-book splits available from SharpAPI).
+ * Fetches `/splits?league=nba` from SharpAPI and preserves each sportsbook
+ * split row. Returns typed shape with bets_pct/handle_pct for ML, spread,
+ * and total. Rows must never be relabeled or collapsed as consensus.
  *
  * Caveats baked into the type:
  *   • Spread row's away_odds/home_odds are the LINE NUMBERS, not juice.
  *   • Total row has the line + over/under bets/handle.
  *   • Moneyline row has the actual American odds for each side.
- *   • Single "consensus" sportsbook; no per-book breakdown.
+ *   • Sportsbook identity is required provenance, not a quality label.
  *
  * Read-only. No DB writes. No external state.
  */
@@ -65,7 +64,7 @@ export type NbaSplitsRow = {
   event_id: string;
   home_team: string;
   away_team: string;
-  sportsbook: string;     // typically "consensus"
+  sportsbook: string;
   fetched_at: string | null;
   ml: NbaSplitsMl | null;
   spread: NbaSplitsSpread | null;
@@ -145,7 +144,7 @@ export async function fetchNbaSplits(apiKey: string): Promise<NbaSplitsRow[]> {
       event_id: r.event_id,
       home_team: r.home_team,
       away_team: r.away_team,
-      sportsbook: r.sportsbook ?? "consensus",
+      sportsbook: r.sportsbook ?? "unknown",
       fetched_at: r.fetched_at ?? null,
       ml: parseMl(r.moneyline),
       spread: parseSpread(r.spread),
@@ -204,15 +203,27 @@ export function matchSplitsRow(
 ): NbaSplitsRow | null {
   const homeKey = teamMatchKey(homeName);
   const awayKey = teamMatchKey(awayName);
-  for (const s of splits) {
+  const matches = splits.filter((s) => {
     const sh = teamRowKeys(s.home_team);
     const sa = teamRowKeys(s.away_team);
     const homeHit = sh.includes(homeKey) || sh.some((x) => x.endsWith(` ${homeKey}`));
     const awayHit = sa.includes(awayKey) || sa.some((x) => x.endsWith(` ${awayKey}`));
-    if (homeHit && awayHit) return s;
+    if (homeHit && awayHit) return true;
     const homeHitS = sa.includes(homeKey) || sa.some((x) => x.endsWith(` ${homeKey}`));
     const awayHitS = sh.includes(awayKey) || sh.some((x) => x.endsWith(` ${awayKey}`));
-    if (homeHitS && awayHitS) return s;
-  }
-  return null;
+    return homeHitS && awayHitS;
+  });
+  const pairedFields = (row: NbaSplitsRow): number => {
+    let score = 0;
+    for (const market of [row.ml, row.spread]) {
+      if (market?.bets_pct && market.handle_pct) score += 1;
+    }
+    if (row.total?.bets_pct && row.total.handle_pct) score += 1;
+    return score;
+  };
+  return matches.sort((left, right) =>
+    pairedFields(right) - pairedFields(left) ||
+    (Date.parse(right.fetched_at ?? "") || 0) - (Date.parse(left.fetched_at ?? "") || 0) ||
+    left.sportsbook.localeCompare(right.sportsbook)
+  )[0] ?? null;
 }

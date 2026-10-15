@@ -11,8 +11,8 @@
  *
  *   2. Internal audit / lock provenance — UNIVERSAL.
  *      Every displayed model output must be captured at lock for the
- *      auditor. This includes context-only markets that are shown but
- *      NOT publicly tracked (currently NBA spread).
+ *      auditor. This includes any context-only market that is shown but
+ *      not publicly tracked.
  *
  * This module covers (1) only. The internal audit substrate
  * (`displayed_context_markets`) is a separate P1 follow-up.
@@ -42,9 +42,7 @@
  *     markets).
  *
  * NEVER:
- *   • Add NBA spread to OFFICIAL_TRACKING_MARKETS without explicit product
- *     approval. NHL puck-line has already completed that launch and is
- *     officially tracked as `spread`.
+ *   • Add or remove a market without explicit product approval.
  *   • Remove MLB first_inning, NBA total, or any other entry below
  *     without an intentional product decision.
  *   • Pollute prediction_records with markets that are not in
@@ -67,7 +65,9 @@ export const OFFICIAL_TRACKING_MARKETS: Readonly<
   Record<Sport, ReadonlyArray<TrackedMarketV17>>
 > = {
   mlb: ["moneyline", "total", "first_inning"],
-  nba: ["moneyline", "total"],
+  // Owner-approved 2026-10-15: Spread joins ML/Total prospectively for the
+  // 2026-27 regular-season opener. No historical rows are backfilled.
+  nba: ["moneyline", "total", "spread"],
   nhl: ["moneyline", "total", "spread"],
   // NFL launches forward-only with the 2026 regular season. Preseason is
   // excluded independently by the football tracking lifecycle and the
@@ -96,15 +96,14 @@ export const OFFICIAL_TRACKING_MARKETS: Readonly<
 
 /**
  * Markets that ARE rendered in the reader as model context but are NOT
- * officially tracked. The UI labels them explicitly (e.g., "Sprd*",
- * "PL*") with a footnote: "* Model context · Not part of official
+ * officially tracked. The UI labels them explicitly (for example "PL*")
+ * with a footnote: "* Model context · Not part of official
  * tracking". These markets MUST NOT generate `prediction_records`
  * rows for grading until they are intentionally launched as tracked
  * categories.
  *
  * Each entry is a string rather than `TrackedMarketV17` because some
- * context-only markets (currently NBA spread, stored via the
- * `first_inning` DTO slot) intentionally do not align 1:1 with
+ * context-only markets intentionally do not align 1:1 with
  * the public tracking enum. See `DailyEdgeShell.tsx` for the UI label
  * mapping.
  */
@@ -112,7 +111,7 @@ export const CONTEXT_ONLY_DISPLAY_MARKETS: Readonly<
   Record<Sport, ReadonlyArray<string>>
 > = {
   mlb: [],
-  nba: ["spread"],
+  nba: [],
   nhl: [],
   nfl: [],
   cbb: [],

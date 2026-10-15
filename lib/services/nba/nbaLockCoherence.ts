@@ -1,7 +1,7 @@
 import { NBA_PREDICTION_RECORD_RELEASE } from "../../automodel/nba/nbaChampionRuntime";
 
 export const NBA_LOCK_COHERENCE_RELEASE =
-  "nba_lock_coherence_2026_10_06_r1_official_and_context_tuple" as const;
+  "nba_lock_coherence_2026_10_15_r2_unified_score_tuple" as const;
 
 export type NbaLockRow = {
   game_id: number;
@@ -44,15 +44,15 @@ export function assessNbaLockCoherence(opts: {
   const coherentGameIds: number[] = [];
   const blockedGameIds: number[] = [];
   const errors: string[] = [];
-  const requiredMarkets = ["moneyline", "total"];
+  const requiredMarkets = ["moneyline", "spread", "total"];
 
   for (const gameId of opts.gameIds) {
     const rows = opts.rows.filter((row) => row.game_id === gameId);
     const byMarket = new Map(rows.map((row) => [row.market, row]));
     const missing = requiredMarkets.filter((market) => !byMarket.has(market));
-    if (rows.length !== 2 || missing.length > 0) {
+    if (rows.length !== 3 || missing.length > 0) {
       blockedGameIds.push(gameId);
-      errors.push(`game_id=${gameId}: incomplete current NBA tuple (${rows.length}/2; missing=${missing.join(",") || "none"})`);
+      errors.push(`game_id=${gameId}: incomplete current NBA tuple (${rows.length}/3; missing=${missing.join(",") || "none"})`);
       continue;
     }
     const decoded = rows.map((row) => ({ row, snapshot: row.snapshot_json as NbaLockSnapshot | null }));
@@ -84,14 +84,18 @@ export function assessNbaLockCoherence(opts: {
     }
     const margin = first.predicted_home_score! - first.predicted_away_score!;
     const ml = byMarket.get("moneyline")!;
+    const spreadRow = byMarket.get("spread")!;
     const total = byMarket.get("total")!;
-    const spread = first.displayed_context_markets?.spread;
     const mlExpected = margin >= 0 ? "home" : "away";
     const totalExpected = total.line_value === null || first.predicted_total! >= total.line_value ? "over" : "under";
-    const spreadEdge = spread?.line === null || spread?.line === undefined || spread.side === null || spread.side === undefined
+    const spreadEdge = spreadRow.line_value === null
       ? null
-      : spread.side === "home" ? margin + spread.line : -margin + spread.line;
-    const spreadCoherent = spread?.displayed_at_lock !== true || spreadEdge === null || spreadEdge >= 0;
+      : spreadRow.pick === "home"
+        ? margin + spreadRow.line_value
+        : spreadRow.pick === "away"
+          ? -margin + spreadRow.line_value
+          : Number.NEGATIVE_INFINITY;
+    const spreadCoherent = spreadEdge === null || spreadEdge >= 0;
     const picksCoherent = ml.pick === mlExpected &&
       total.pick === totalExpected &&
       spreadCoherent;

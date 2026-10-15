@@ -25,14 +25,19 @@
  */
 
 import { isBlockedSportsbook } from "../../config/blockedSportsbooks";
+import { publicSplitsSupported } from "../../config/publicSplitsCapability";
 import { buildNbaFeatureSnapshotsWithProvenance } from "./featureSnapshot";
 import { fetchEspnNbaInjuries } from "./espnNbaInjuries";
 import { runNbaAutoModelV2 } from "../../automodel/nba/nbaAutoModelV2";
-import { buildNbaMarketConsensus } from "../../automodel/nba/nbaMarketConsensus";
 import {
   assertNbaChampionRuntime,
   NBA_MARKET_MARRIAGE_RELEASE,
 } from "../../automodel/nba/nbaChampionRuntime";
+import {
+  buildNbaProfessionalRuntimeFeatures,
+  NBA_PROFESSIONAL_MODEL_ARTIFACT,
+  selectNbaProfessionalPortableFeatures,
+} from "../../automodel/nba/nbaProfessionalRuntimeArtifacts";
 import { etSlateDateToUtcWindow } from "./etSlateDate";
 import {
   buildNbaDailyEdgeGameDto,
@@ -53,6 +58,11 @@ import {
 } from "./nbaOpportunitiesClient";
 import type { NbaLineRow } from "./nbaMarketIntelligence";
 import {
+  selectNbaComparableOpening,
+  type NbaMovementHistoryRow,
+  type NbaMovementMarket,
+} from "./nbaSameBookMovement";
+import {
   adaptNbaToDailyEdgeResponse,
   type NbaPickSideOpenPrices,
 } from "./adaptNbaToDailyEdgeResponse";
@@ -63,6 +73,23 @@ import {
   loadNbaRollingSchedule,
   nbaMemberAnalysisEligible,
 } from "./nbaRollingSchedule";
+import {
+  applyNbaProfessionalCandidate,
+  buildNbaProfessionalCandidate,
+} from "./nbaProfessionalCandidate";
+import { loadNbaProfessionalCurrentState } from "./nbaProfessionalGameInputs";
+import {
+  applyNbaLockedMemberSnapshotPrecedence,
+  type NbaLockedMemberRecord,
+} from "./nbaLockedMemberSnapshot";
+
+function nbaProviderSeasonForSlate(date: string): number {
+  const match = /^(\d{4})-(\d{2})-\d{2}$/.exec(date);
+  if (!match) throw new Error(`Invalid NBA slate date: ${date}`);
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  return month >= 7 ? year : year - 1;
+}
 
 /**
  * Phase 7H — internal NBA pipeline result. Returned by
@@ -134,6 +161,26 @@ export async function buildNbaDailyEdgePipeline(date: string): Promise<NbaDailyE
     }
   }
   const provenanceByGame = new Map(provenance.map((p) => [p.game_external_id, p]));
+  const providerSeason = nbaProviderSeasonForSlate(date);
+  const currentState = snapshots.length === 0
+    ? { games: [], boxes: [] }
+    : await loadNbaProfessionalCurrentState({ supabase, season: providerSeason });
+  const professionalFeatures = buildNbaProfessionalRuntimeFeatures({
+    upcomingGames: snapshots.map((snapshot) => {
+      if (snapshot.game_time_iso === null) {
+        throw new Error(`NBA professional runtime game ${snapshot.game_external_id} has no tip time.`);
+      }
+      return {
+        gameId: snapshot.game_external_id,
+        season: providerSeason,
+        startTime: snapshot.game_time_iso,
+        homeTeam: snapshot.home_team.abbreviation,
+        awayTeam: snapshot.away_team.abbreviation,
+      };
+    }),
+    currentGames: currentState.games,
+    currentBoxes: currentState.boxes,
+  });
 
   // Resolve external_id → games.id so we can pull lines from DB.
   const gameExternalIds = snapshots.map((s) => s.game_external_id);
@@ -203,15 +250,14 @@ export async function buildNbaDailyEdgePipeline(date: string): Promise<NbaDailyE
     }
   }
 
-  // Earliest-recorded price per (game, market, side) → "line open" lookup.
-  // Mirrors the MLB extractor in /api/lab/daily-edge so the Reader's line
-  // move row renders for NBA the same way.
-  const openByGameMarketSide = new Map<string, number | null>();
+  // Preserve the complete history rows so opening comparison can require the
+  // same sportsbook and exact Spread/Total line as the evaluated current quote.
+  const movementHistory: NbaMovementHistoryRow[] = [];
   if ((gameRows ?? []).length > 0) {
     const dbIds = (gameRows ?? []).map((g) => g.id);
     const { data: histRows } = await supabase
       .from("line_history")
-      .select("game_id, market_type, side, odds_american, recorded_at, sportsbook")
+      .select("game_id, market_type, side, line_value, odds_american, recorded_at, sportsbook")
       .in("game_id", dbIds)
       .in("market_type", ["moneyline", "spread", "total"])
       .order("recorded_at", { ascending: true });
@@ -219,54 +265,46 @@ export async function buildNbaDailyEdgePipeline(date: string): Promise<NbaDailyE
       game_id: number;
       market_type: string;
       side: string | null;
+      line_value: number | null;
       odds_american: number | null;
       recorded_at: string | null;
       sportsbook: string | null;
-    }>).filter((r) => !isBlockedSportsbook(r.sportsbook)); // never open off a blocked book
-    const toImplied = (a: number | null): number | null =>
-      a === null ? null : a > 0 ? 100 / (a + 100) : -a / (-a + 100);
-    // 2026-06-13 — opener outlier guard. The opener is the EARLIEST observed
-    // price per side, but a rejected/corrupted book can be that earliest row and
-    // fake a huge line move (e.g. fliff lists tonight's -205 Spurs favorite at
-    // +385 — teams flipped — AND quotes a normal -205, so comparing opener vs
-    // "current" fails). Compare each candidate to the MEDIAN implied probability
-    // across ALL observed lines for that side instead — corrupted outliers can't
-    // move the median — and skip candidates > 0.30 off it. The first sane
-    // earliest line wins.
-    const impliedByKey = new Map<string, number[]>();
+    }>).filter((r) => !isBlockedSportsbook(r.sportsbook));
     for (const r of rows) {
       const ext = dbIdToExt.get(r.game_id);
-      if (ext === undefined) continue;
-      const imp = toImplied(r.odds_american);
-      if (imp === null) continue;
-      const key = `${ext}::${r.market_type}::${r.side ?? "null"}`;
-      (impliedByKey.get(key) ?? impliedByKey.set(key, []).get(key)!).push(imp);
-    }
-    const medianImpliedByKey = new Map<string, number>();
-    for (const [key, arr] of impliedByKey) {
-      const s = [...arr].sort((a, b) => a - b);
-      medianImpliedByKey.set(key, s.length % 2 ? s[(s.length - 1) / 2]! : (s[s.length / 2 - 1]! + s[s.length / 2]!) / 2);
-    }
-    const OPENER_OUTLIER = 0.30;
-    for (const r of rows) {
-      const ext = dbIdToExt.get(r.game_id);
-      if (ext === undefined) continue;
-      const key = `${ext}::${r.market_type}::${r.side ?? "null"}`;
-      if (openByGameMarketSide.has(key)) continue;
-      const med = medianImpliedByKey.get(key);
-      const op = toImplied(r.odds_american);
-      if (med !== undefined && op !== null && Math.abs(op - med) > OPENER_OUTLIER) continue;
-      openByGameMarketSide.set(key, r.odds_american);
+      if (
+        ext === undefined || r.side === null || r.sportsbook === null ||
+        !["moneyline", "spread", "total"].includes(r.market_type)
+      ) continue;
+      movementHistory.push({
+        externalGameId: ext,
+        market: r.market_type as NbaMovementMarket,
+        side: r.side,
+        sportsbook: r.sportsbook,
+        line: r.line_value,
+        americanPrice: r.odds_american,
+        observedAt: r.recorded_at,
+      });
     }
   }
 
-  const games: NbaDailyEdgeGameDto[] = snapshots.flatMap((s) => {
+  const dynamicGames: NbaDailyEdgeGameDto[] = snapshots.flatMap((s) => {
     const prov = provenanceByGame.get(s.game_external_id);
     if (prov === undefined) return [];
     const lines = linesByExtId.get(s.game_external_id) ?? [];
-    const pred = runNbaAutoModelV2(s, "t60_locked", {
+    const baseline = runNbaAutoModelV2(s, "t60_locked", {
       bookCount: new Set(lines.map((line) => line.sportsbook)).size,
     });
+    const featureRow = professionalFeatures.get(s.game_external_id);
+    if (!featureRow) throw new Error(`Missing NBA professional feature row for ${s.game_external_id}.`);
+    const candidate = buildNbaProfessionalCandidate({
+      artifact: NBA_PROFESSIONAL_MODEL_ARTIFACT,
+      featureRow: selectNbaProfessionalPortableFeatures(featureRow),
+      lines,
+      history: movementHistory,
+      externalGameId: s.game_external_id,
+    });
+    const pred = applyNbaProfessionalCandidate({ baseline, candidate });
     const splitsRow = matchSplitsRow(
       splits,
       s.home_team.abbreviation,
@@ -285,51 +323,68 @@ export async function buildNbaDailyEdgePipeline(date: string): Promise<NbaDailyE
       splitsRow,
       opportunities: gameOpps,
     });
-    // Internal-only market-marriage audit. The score remains independent-first;
-    // robust same-book market evidence still informs exact-price economics and
-    // grades through buildNbaGameIntelligence. No unvalidated continuous market
-    // blend or split-only flip is allowed to rewrite the score.
-    const consensus = buildNbaMarketConsensus(lines
-      .filter((line) => line.side !== null && (line.market_type === "moneyline" || line.market_type === "spread" || line.market_type === "total"))
-      .map((line) => ({
-        sportsbook: line.sportsbook,
-        market_type: line.market_type as "moneyline" | "spread" | "total",
-        side: line.side!,
-        line_value: line.line_value,
-        odds_american: line.odds_american,
-      })));
     dto.grounding_audit = {
       release: NBA_MARKET_MARRIAGE_RELEASE,
-      independent_primary: true,
+      independent_primary: false,
       independent_projection: {
-        home_score: pred.predicted_home_score,
-        away_score: pred.predicted_away_score,
-        total: pred.predicted_total,
-        margin_home: pred.predicted_home_score - pred.predicted_away_score,
+        home_score: candidate.independent.homeScore,
+        away_score: candidate.independent.awayScore,
+        total: candidate.independent.total,
+        margin_home: candidate.independent.marginHome,
       },
       market_consensus: {
-        home_moneyline_probability: consensus.mlHomeNoVig,
-        spread_home: consensus.spreadHome,
-        total: consensus.totalLine,
-        strength: consensus.consensusStrength,
+        home_moneyline_probability: candidate.consensus.mlHomeNoVig,
+        spread_home: candidate.consensus.spreadHome,
+        total: candidate.consensus.totalLine,
+        strength: candidate.consensus.consensusStrength,
         accepted_books: {
-          moneyline: consensus.mlAcceptedBooks,
-          spread: consensus.spreadAcceptedBooks,
-          total: consensus.totalAcceptedBooks,
+          moneyline: candidate.consensus.mlAcceptedBooks,
+          spread: candidate.consensus.spreadAcceptedBooks,
+          total: candidate.consensus.totalAcceptedBooks,
         },
       },
       forecast_correction: {
-        applied: false,
-        reason: "no NBA forecast correction has cleared chronological validation",
+        applied: candidate.final.marketApplied.margin || candidate.final.marketApplied.total,
+        release: candidate.final.release,
+        movement_applied: candidate.final.movementApplied,
+        opening_spread_home: candidate.openingSpread?.spreadHome ?? null,
+        final_projection: {
+          home_score: candidate.final.homeScore,
+          away_score: candidate.final.awayScore,
+          total: candidate.final.total,
+          margin_home: candidate.final.marginHome,
+        },
       },
     };
     return [dto];
   });
 
+  const externalToDbId = new Map<number, number>();
+  for (const [dbId, ext] of dbIdToExt.entries()) externalToDbId.set(ext, dbId);
+  let lockedRows: NbaLockedMemberRecord[] = [];
+  if ((gameRows ?? []).length > 0) {
+    const { data, error } = await supabase
+      .from("prediction_records")
+      .select("game_id,market,locked_at,snapshot_json")
+      .eq("sport", "nba")
+      .eq("slate_date", date)
+      .in("game_id", (gameRows ?? []).map((game) => game.id))
+      .not("locked_at", "is", null);
+    if (error) throw new Error(`NBA locked member snapshot lookup failed: ${error.message}`);
+    lockedRows = (data ?? []) as NbaLockedMemberRecord[];
+  }
+  const games = applyNbaLockedMemberSnapshotPrecedence({
+    games: dynamicGames,
+    dbIdByExternalId: externalToDbId,
+    rows: lockedRows,
+  });
+
   const marketSignalsCapability =
-    sharpKey !== undefined && sharpKey !== ""
+    sharpKey === undefined || sharpKey === ""
+      ? ("unavailable_no_api_key" as const)
+      : publicSplitsSupported("nba")
       ? ("available" as const)
-      : ("unavailable_no_api_key" as const);
+      : ("unavailable_unvalidated_source" as const);
 
   const nbaDto: NbaDailyEdgeDto = {
     as_of: new Date().toISOString(),
@@ -345,26 +400,32 @@ export async function buildNbaDailyEdgePipeline(date: string): Promise<NbaDailyE
     games,
   };
 
-  // Build per-game open-price map keyed on each market's *picked* side.
-  // Adapter then surfaces these as `lineOpenAmerican` so the line move
-  // renderer can compare them to `priceAmerican`.
+  // Surface only a comparable same-book, same-line opening price. Missing
+  // identity is unavailable—not permission to compare unrelated quotes.
   const openPricesByGame = new Map<number, NbaPickSideOpenPrices>();
   for (const g of games) {
     const ext = g.game_external_id;
     const intel = g.intelligence;
-    const lookup = (market: "moneyline" | "spread" | "total", pickSide: string | null): number | null => {
-      if (pickSide === null) return null;
-      return openByGameMarketSide.get(`${ext}::${market}::${pickSide}`) ?? null;
+    const lookup = (
+      market: NbaMovementMarket,
+      value: typeof intel.ml,
+    ): number | null => {
+      return selectNbaComparableOpening({
+        rows: movementHistory,
+        externalGameId: ext,
+        market,
+        side: value.pick_side,
+        sportsbook: value.current_price.sportsbook,
+        line: value.consensus_line,
+        currentObservedAt: value.current_price.fetched_at,
+      })?.americanPrice ?? null;
     };
     openPricesByGame.set(ext, {
-      ml: lookup("moneyline", intel.ml.pick_side),
-      total: lookup("total", intel.total.pick_side),
-      spread: lookup("spread", intel.spread.pick_side),
+      ml: lookup("moneyline", intel.ml),
+      total: lookup("total", intel.total),
+      spread: lookup("spread", intel.spread),
     });
   }
-
-  const externalToDbId = new Map<number, number>();
-  for (const [dbId, ext] of dbIdToExt.entries()) externalToDbId.set(ext, dbId);
 
   return { nbaDto, openPricesByGame, dbIdByExternalId: externalToDbId };
 }

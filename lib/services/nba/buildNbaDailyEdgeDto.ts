@@ -211,8 +211,15 @@ export type NbaDailyEdgeGameDto = {
  *                               does not have public-market access"
  *                               empty state instead of "no splits for
  *                               this matchup" (which would be misleading).
+ *   • "unavailable_unvalidated_source" — rows may be observed internally,
+ *                               but NBA source quality has not cleared the
+ *                               shared capability gate and cannot be exposed
+ *                               as an authoritative split or sharp signal.
  */
-export type NbaMarketSignalsCapability = "available" | "unavailable_no_api_key";
+export type NbaMarketSignalsCapability =
+  | "available"
+  | "unavailable_no_api_key"
+  | "unavailable_unvalidated_source";
 
 export type NbaDailyEdgeDto = {
   as_of: string;

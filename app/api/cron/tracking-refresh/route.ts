@@ -16,8 +16,9 @@
  *   2. ingestNbaFinalScores({date})              (ESPN scoreboard)
  *   3. gradePredictionsForSlate({sport:"nba"})   (shared sport-generic)
  *
- * NBA writes ONLY moneyline + total prediction_records. Spread is
- * intentionally deferred. There are NO FI/NRFI rows for NBA.
+ * NBA writes moneyline + total prediction_records for legacy eligible dates,
+ * then moneyline + spread + total prospectively from the 2026-10-20 regular-
+ * season opener. There are NO FI/NRFI rows for NBA and no Spread backfill.
  *
  * WNBA writes moneyline + total + spread prediction_records and grades
  * them through the shared sport-generic grader once finals land.

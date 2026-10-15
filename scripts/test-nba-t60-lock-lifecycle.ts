@@ -14,9 +14,9 @@ assert.match(sweep, /sport === "nba"[\s\S]+refreshNbaLines\(\{[\s\S]+externalIds
 assert.match(sweep, /createNbaPredictionRecords\(\{[\s\S]+deferLock: true,[\s\S]+externalIdsFilter: enteringExternalIds/);
 assert.match(sweep, /assessNbaLockCoherence/);
 assert.match(sweep, /NBA_PREDICTION_RECORD_RELEASE/);
-assert.match(sweep, /\.in\("market", \["moneyline", "total"\]\)/);
+assert.match(sweep, /\.in\("market", \["moneyline", "spread", "total"\]\)/);
 assert.match(writer, /externalIdsFilter\?: readonly number\[\]/);
-assert.match(writer, /for \(const market of \["moneyline", "total"\]/);
-assert.match(writer, /displayed_context_markets:[\s\S]+spread:/);
+assert.match(writer, /\["moneyline", "spread", "total"\]/);
+assert.match(writer, /NBA_SPREAD_OFFICIAL_TRACKING_START/);
 
 console.log("NBA T-60 lock lifecycle tests passed");

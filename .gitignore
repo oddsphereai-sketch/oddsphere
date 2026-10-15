@@ -51,6 +51,8 @@ wnba-research/espn-cache/
 wnba-research/*.json
 wnba-research/*.jsonl
 wnba-research/*.log
+nba-research/raw/
+nba-research/reports/
 tmp/mlb-props/provider-samples/
 tmp/mlb-props/reports/
 scripts/operator/__pycache__/

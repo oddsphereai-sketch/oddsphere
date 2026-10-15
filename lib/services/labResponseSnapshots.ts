@@ -33,14 +33,14 @@ export function dailyEdgeSnapshotKey(input: DailyEdgeSnapshotKeyInput): string {
 }
 
 export function trackingSnapshotKey(): string {
-  return "tracking::all::nba-preseason-only-window-r2";
+  return "tracking::all::nba-spread-official-r3";
 }
 
 export function trackingFoundationSnapshotKey(input: {
   sport?: string | null;
   date: string;
 }): string {
-  return ["tracking-foundation-r7-ucl-projected-forecast-continuity", input.sport ?? "all", input.date].join("::");
+  return ["tracking-foundation-r8-nba-spread-official", input.sport ?? "all", input.date].join("::");
 }
 
 export async function readLabResponseSnapshot<T extends LabResponseSnapshotPayload>(

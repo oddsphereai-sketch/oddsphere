@@ -29,7 +29,7 @@ const EXPECTED_MARKETS: Record<Sport, readonly string[]> = {
   mlb: ["moneyline", "total", "first_inning"],
   wnba: ["moneyline", "total", "spread"],
   soccer: ["match_result", "total", "btts", "double_chance"],
-  nba: ["moneyline", "total"],
+  nba: ["moneyline", "total", "spread"],
   nhl: ["moneyline", "total", "spread"],
 };
 
