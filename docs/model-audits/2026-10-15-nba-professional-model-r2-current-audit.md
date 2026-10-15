@@ -441,9 +441,11 @@ forward timestamped evidence; they cannot alter r14 confirmation forecasts.
 
 Preseason games are excluded from every accuracy, calibration, threshold, and
 reader-rule decision. The tournament now refuses a historical season with
-fewer than 1,200 games by default. The intended chronology is 2023-24 for
-development, 2024-25 for model and threshold selection, and 2025-26 as an
-untouched confirmation season.
+fewer than 1,200 games by default. The intended chronology is 2022-23 as a
+warm-up/training season, 2023-24 for additional development, 2024-25 for model
+and threshold selection, and 2025-26 as an untouched confirmation season. The
+warm-up season prevents the first development season's early games from being
+evaluated without a prior-season state.
 
 The independent 2025-26 consensus reference downloaded for source
 cross-validation is the CC-BY-4.0 `nba-closing-lines-ats-2025-26` CSV with
