@@ -10,6 +10,114 @@ The shared architecture, mandatory replay-error artifacts, reconstructed r1
 findings, and market-reader parity matrix are defined in
 [`2026-10-15-nba-shared-model-market-standard.md`](./2026-10-15-nba-shared-model-market-standard.md).
 
+## Current decision checkpoint (r35, after latest-main integration)
+
+This section supersedes earlier intermediate r14/r29 readiness conclusions in
+this document. The historical notes remain below as an audit trail; they must
+not be mistaken for the current candidate.
+
+- Point-in-time feature release:
+  `nba_point_in_time_features_2026_10_15_r13_season_regime_state`
+- Tournament release:
+  `nba_professional_tournament_2026_10_15_r35_comparable_benchmark_gates`
+- Research deployment candidate:
+  `nba_professional_deployment_candidate_2026_10_15_r15_comparable_benchmark_gates`
+- Historical scope: 6,152 games across five completed seasons, with 2022,
+  2023, and 2024 used as rolling-origin selection tests before the 2025
+  confirmation season was opened.
+- Selected independent architecture: `ratings_schedule`, coherent
+  margin-plus-Total heads, ridge alpha 1000. Its relative joint score versus
+  the simple rating baseline was 0.9980, 0.9940, and 0.9928 in the three
+  rolling-origin seasons. This stability, rather than one pooled average,
+  selected the model.
+
+Season scoring and pace are not pooled into one timeless NBA baseline. Every
+feature row now contains the current and prior season's observed team-game
+count, league offensive rating, league pace, their deltas, and a smoothed
+current-regime state. The prior season contributes a 60-team-game equivalent
+(30 NBA games) while current-season observations progressively take over. This
+state is computed strictly before the predicted game. Early, developing, and
+established-season cohorts are reported separately.
+
+### Frozen 2025 confirmation
+
+| Lane | Winner direction | Team-score MAE | Margin MAE | Total MAE |
+|---|---:|---:|---:|---:|
+| Independent | 68.13% | 9.562 | 11.371 | 15.224 |
+| Final independent + bounded opening-market blend | 69.02% | 9.341 | 11.138 | 14.814 |
+
+The final blend improves all four aggregate forecast measures. It does not
+make every betting market actionable:
+
+- **Total:** the selection-frozen 0.01 probability-edge rule confirmed at
+  470-392 (54.52%) over 862 decisions. Of those, 697 retained an exact
+  side-specific price and sportsbook, returning +24.683 units and +3.54% ROI.
+  The direction Wilson 95% lower bound was 51.19%. This is the only historical
+  actionable lane that cleared the current evidence gate.
+- **Spread:** 49.79% direction accuracy and -6.19% exact-price ROI. No
+  actionable Spread threshold survived selection and confirmation. Spread must
+  remain context-only/No Play.
+- **Moneyline:** all-game winner direction is a forecast metric, not an
+  automatic wager. The exact-price value strategy did not clear the required
+  selection evidence and coverage gates, so the actionable Moneyline threshold
+  is null/No Play.
+
+The product's historical 69.4% Moneyline record is a selective released-pick
+result. It has no preserved per-game release/cutoff ledger equivalent to this
+all-game confirmation set, so 69.02% all-game winner direction is a useful
+reference but not a direct like-for-like failure or victory. The old r1
+64.80%/9.600/10.925/15.607 aggregate is likewise descriptive: it does not
+carry a reproducible row-level release and cutoff contract.
+
+Opening-stage results remain explicitly visible. In 2025, the selected
+independent model's first-five-prior-games cohort contained 79 games and had
+10.785 team-score MAE, 10.834 margin MAE, 18.270 Total MAE, and 64.56% winner
+direction. The season-regime state removed the temptation to hard-code a
+single historical opening-week scoring adjustment; the sign and magnitude of
+opening Total bias did not repeat consistently across seasons.
+
+### Nonlinear challenge rejected
+
+Release `nba_nonlinear_challenger_audit_2026_10_15_r1_season_robust` compared
+12 predeclared random-forest, extra-trees, and histogram-gradient-boosting
+candidates across ratings, Four Factors, rotation, schedule, and season-regime
+features. Every challenger was worse than the regularized incumbent on the
+pre-confirmation rolling-origin joint score. The best random forest averaged
+1.0046 relative to the incumbent (lower is better) and failed its selection
+gate. It later happened to reach 69.19% winner direction in 2025, but that
+single-season improvement is rejected as unstable rather than promoted.
+
+### Forward 2026 market-reader state at 2026-10-15 16:16 ET
+
+The latest production base owns the authoritative seven-day schedule and
+Market Intelligence V2 observation path. No second writer is permitted. The
+October 20 slate contains three scheduled games. The shared reader audit found:
+
+- 562 provenance-bearing split observations across the three games;
+- 100% event coverage for Moneyline, Spread, and Total splits;
+- DraftKings ticket-plus-handle rows and BetMGM ticket-only rows preserved as
+  different evidence rather than collapsed or imputed;
+- zero `market_price_observations_v2` rows and therefore zero same-book price
+  pairs or movement trails; and
+- zero official candidates, correctly leaving the markets non-actionable.
+
+A bounded SharpAPI odds probe returned 1,000 unique quotes, all for October
+15-16, even when the request supplied October 20 or 21 as the date. It returned
+zero opening-night prices. The current absence of October 20 prices is provider
+availability, not permission to compare a split row with a fabricated price.
+Schedule cards may populate; predictions and market reads must wait for real
+playable quotes.
+
+### Current promotion verdict
+
+`promotionEligible` remains **false**. The current production champion and its
+locked records remain unchanged. The research score core and Total lane are
+validated historical candidates; Moneyline wagering, Spread wagering, split
+influence, and movement-driven corrections are not validated. Forward 2026
+captures must produce exact-book, exact-line, timestamped price sequences and
+settled outcomes before any source-specific reader rule can receive prediction
+or grade authority.
+
 ## October 15 opening-readiness evidence
 
 A read-only production-data and provider probe on October 15 establishes the
