@@ -238,6 +238,21 @@ chronological tournament must run:
   architecture plus a timestamped downstream market reader; it does not
   justify feeding the evaluated closing line into the independent score
   ([Gandar et al.](https://doi.org/10.1111/0022-1082.155346)).
+- Long-run NBA betting research treats the point spread as a strong market
+  forecast and finds approximately symmetric forecast errors. The market-only
+  score must therefore appear beside every independent and combined result;
+  beating an internal rating baseline alone is not enough
+  ([Price and Wolfers](https://doi.org/10.2202/1559-0410.1112)).
+- Evidence of sentiment-based NBA price shading did not translate into higher
+  bettor returns in a sample of more than 32,000 games. Public popularity,
+  ticket share, or a money-ticket divergence can be a candidate interaction,
+  but none is inherently a profitable `sharp` signal
+  ([Feddersen, Humphreys, and Soebbing](https://doi.org/10.1177/1527002516656726)).
+- Thirty-four-season evidence finds that streaks affected both point spreads
+  and outcomes, with season-dependent differences at long streaks. That is a
+  reason to test nonlinear recent-form residuals and market response, not to
+  hard-code a hot-hand or contrarian rule
+  ([Waggoner et al.](https://doi.org/10.3390/ijfs2040359)).
 
 These findings support a layered model: stable team strength, opponent and
 style interaction, expected rotation and minutes, schedule/travel state,
